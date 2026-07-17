@@ -56,6 +56,9 @@ BTN_ROUNDNESS :: f32(0.3)
 BTN_SEGMENTS  :: i32(6)
 BTN_BORDER_W  :: f32(1.0)
 
+// Tinted-pill background alpha (fg color at this alpha = pill bg).
+PILL_TINT_ALPHA :: u8(38)
+
 // Input limits (character counts, not pixels).
 INPUT_MAX_LEN :: 65536
 

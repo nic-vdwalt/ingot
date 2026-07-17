@@ -1207,3 +1207,49 @@ find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: in
 	}
 	return
 }
+
+// section_header draws an uppercase small label with a hairline underneath —
+// the unified section divider used inside panels/cards. Returns the y below.
+section_header :: proc(x, y, w: i32, label: string) -> i32 {
+	lc := strings.clone_to_cstring(label, context.temp_allocator)
+	draw_text(lc, x, y, FONT_SIZE_SMALL, FG_LABEL)
+	rl.DrawRectangle(x, y + FONT_SIZE_SMALL + sc(5), w, 1, BORDER_SUBTLE)
+	return y + FONT_SIZE_SMALL + sc(11)
+}
+
+// status_pill draws a pill whose background is the fg color tinted to
+// PILL_TINT_ALPHA. Returns the pill width.
+status_pill :: proc(text: string, x, y, font_size: i32, color: rl.Color) -> i32 {
+	return draw_pill(text, x, y, font_size, color,
+		{color.r, color.g, color.b, PILL_TINT_ALPHA})
+}
+
+// progress_bar draws a rounded track + fill; frac clamped to [0,1].
+progress_bar :: proc(x, y, w, h: i32, frac: f32, color: rl.Color) {
+	track := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	rl.DrawRectangleRounded(track, 1.0, 4, BG_ACTIVE)
+	fw := f32(w) * clamp(frac, 0, 1)
+	if fw >= f32(h) { // avoid degenerate rounding on tiny fills
+		rl.DrawRectangleRounded({f32(x), f32(y), fw, f32(h)}, 1.0, 4, color)
+	} else if fw > 0 {
+		rl.DrawRectangleRec({f32(x), f32(y), fw, f32(h)}, color)
+	}
+}
+
+// kv_row draws key (left, truncated) and value (right-aligned) on one line.
+kv_row :: proc(x, y, w: i32, key, value: string, key_col, val_col: rl.Color, font_size: i32 = 0) {
+	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
+	vc := strings.clone_to_cstring(value, context.temp_allocator)
+	vw := measure_text(vc, fs)
+	draw_text(vc, x + w - vw, y, fs, val_col)
+	draw_text_truncated(key, x, y, w - vw - sc(8), fs, key_col)
+}
+
+// list_row_bg draws the unified rounded row background for hover/selection.
+list_row_bg :: proc(rect: rl.Rectangle, selected, hovered: bool) {
+	if selected {
+		rl.DrawRectangleRounded(rect, 0.25, 4, BG_ACTIVE)
+	} else if hovered {
+		rl.DrawRectangleRounded(rect, 0.25, 4, BG_HOVER)
+	}
+}
