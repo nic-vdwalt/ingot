@@ -3,6 +3,7 @@
 package ui
 
 import rl "vendor:raylib"
+import "core:math"
 import "core:strings"
 import "core:unicode/utf8"
 
@@ -342,8 +343,8 @@ selection_delete :: proc(sb: ^strings.Builder) -> int {
 // Map a pane-local mouse position to a byte offset within the input's visible
 // window. Rows clamp to the visible band; x clamps to line ends.
 @(private = "file")
-input_mouse_to_byte :: proc(vlines: []Wrap_Line, text: string, mouse: rl.Vector2, inner_x, y: i32, vis_start, vis_end: int) -> int {
-	row := vis_start + int((mouse.y - f32(y + 6)) / f32(LINE_HEIGHT))
+input_mouse_to_byte :: proc(vlines: []Wrap_Line, text: string, mouse: rl.Vector2, inner_x, text_top: i32, vis_start, vis_end: int) -> int {
+	row := vis_start + int((mouse.y - f32(text_top)) / f32(LINE_HEIGHT))
 	if row < vis_start do row = vis_start
 	if row > vis_end - 1 do row = vis_end - 1
 	if row < 0 do row = 0
@@ -440,28 +441,31 @@ Btn_Style :: enum {
 	Ghost,     // Nearly transparent, text-driven, accent color on hover.
 }
 
-// Unified button. Returns true if clicked this frame.
+// Unified button. Returns true if clicked this frame. When enabled is false
+// the button renders dimmed, ignores hover/clicks, and never returns true.
 btn :: proc(
 	x, y, w, h: i32,
 	label: string,
 	style: Btn_Style = .Secondary,
 	font_size: i32 = 0,
+	enabled: bool = true,
 ) -> bool {
 	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	mouse := rl.GetMousePosition()
-	hovered := rl.CheckCollisionPointRec(mouse, rect)
+	hovered := enabled && rl.CheckCollisionPointRec(mouse, rect)
+	pressed := hovered && rl.IsMouseButtonDown(.LEFT)
 	clicked := hovered && rl.IsMouseButtonReleased(.LEFT)
 	if hovered do request_cursor(.POINTING_HAND)
 
 	bg, fg, border: rl.Color
 	switch style {
 	case .Primary:
-		bg = BUTTON_HOVER if hovered else BUTTON_BG
+		bg = BUTTON_PRESSED if pressed else BUTTON_HOVER if hovered else BUTTON_BG
 		fg = BUTTON_TEXT
 		border = FG_ACCENT if hovered else BUTTON_BG
 	case .Secondary:
-		bg = BG_HOVER if hovered else BG_ACTIVE
+		bg = BG_ACTIVE if pressed else BG_HOVER if hovered else BG_ACTIVE
 		fg = FG_PRIMARY if hovered else FG_SECONDARY
 		border = FG_ACCENT if hovered else rl.Color{0, 0, 0, 0}
 	case .Danger:
@@ -471,6 +475,11 @@ btn :: proc(
 	case .Ghost:
 		bg = BG_HOVER if hovered else rl.Color{0, 0, 0, 0}
 		fg = FG_ACCENT_LIGHT if hovered else FG_SECONDARY
+		border = rl.Color{0, 0, 0, 0}
+	}
+	if !enabled {
+		bg = BUTTON_DISABLED_BG
+		fg = FG_MUTED_DIM
 		border = rl.Color{0, 0, 0, 0}
 	}
 
@@ -483,7 +492,21 @@ btn :: proc(
 	text_w := measure_text(label_c, fs)
 	draw_text(label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 
-	return clicked
+	return clicked && enabled
+}
+
+// Indeterminate spinner: a rotating ring arc centered at (cx, cy). Phase is
+// derived from wall time (same absolute-phase pattern as the caret blink), so
+// no per-widget state is needed.
+spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = FG_ACCENT_LIGHT) {
+	start := f32(math.mod(rl.GetTime()*360.0, 360.0))
+	thickness := max(radius * 0.28, 2.0)
+	rl.DrawRing(
+		rl.Vector2{f32(cx), f32(cy)},
+		radius - thickness, radius,
+		start, start + 270.0,
+		24, color,
+	)
 }
 
 // Build the soft-wrapped visual lines for an input's text. Each logical line
@@ -814,6 +837,14 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		vis_end = min(len(vlines), vis_start + int(visible_lines))
 	}
 
+	// Vertical origin of the first visual text row. Single-line caret inputs
+	// center the text in the box (matching the placeholder / legacy single-
+	// line paths); multi-line composers keep the fixed top padding.
+	text_top := y + 6
+	if use_caret_render && !has_newlines && len(vlines) <= 1 {
+		text_top = y + (h - FONT_SIZE) / 2
+	}
+
 	// Mouse selection (caret inputs): press places the caret / starts a drag,
 	// double-click selects a word, triple-click the logical line, drag extends
 	// by character.
@@ -822,7 +853,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		mouse.x -= f32(pane_origin_x)
 		if rl.IsMouseButtonPressed(.LEFT) {
 			if rl.CheckCollisionPointRec(mouse, rect) {
-				off := input_mouse_to_byte(vlines, text, mouse, inner_x, y, vis_start, vis_end)
+				off := input_mouse_to_byte(vlines, text, mouse, inner_x, text_top, vis_start, vis_end)
 				now := rl.GetTime()
 				if now - input_sel.last_click_time < 0.4 && abs(off - input_sel.last_click_byte) <= 2 {
 					input_sel.click_count = min(input_sel.click_count + 1, 3)
@@ -857,7 +888,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 			}
 		}
 		if input_sel.dragging && input_sel.sb == sb && rl.IsMouseButtonDown(.LEFT) {
-			off := input_mouse_to_byte(vlines, text, mouse, inner_x, y, vis_start, vis_end)
+			off := input_mouse_to_byte(vlines, text, mouse, inner_x, text_top, vis_start, vis_end)
 			if off != input_sel.extent {
 				input_sel.extent = off
 				input_sel.active = input_sel.anchor != input_sel.extent
@@ -889,7 +920,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 			vl := vlines[vi]
 			line := text[vl.start:vl.end]
 			line_c := strings.clone_to_cstring(line, context.temp_allocator)
-			line_y := y + 6 + render_idx * LINE_HEIGHT
+			line_y := text_top + render_idx * LINE_HEIGHT
 			// Selection highlight: overlap of this visual line with the range.
 			if input_sel.active && input_sel.sb == sb {
 				lo, hi := input_sel_range()
@@ -978,7 +1009,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 				// Caret at its true visual (row, x) within the visible window.
 				if cur_vrow >= vis_start && cur_vrow < vis_end {
 					cursor_x := inner_x + cur_caret_x
-					cursor_line_y := y + 6 + i32(cur_vrow - vis_start) * LINE_HEIGHT
+					cursor_line_y := text_top + i32(cur_vrow - vis_start) * LINE_HEIGHT
 					rl.DrawRectangle(cursor_x, cursor_line_y, caret_w, FONT_SIZE, FG_ACCENT_LIGHT)
 				}
 			} else if has_newlines {

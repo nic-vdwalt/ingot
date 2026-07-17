@@ -38,7 +38,9 @@ BADGE_COLOR      :: rl.Color{242, 63, 66, 255}   // Unread badge
 
 BUTTON_BG        :: rl.Color{88, 101, 242, 255}  // Button background (blurple)
 BUTTON_HOVER     :: rl.Color{71, 82, 196, 255}   // Button hover
+BUTTON_PRESSED   :: rl.Color{58, 67, 160, 255}   // Button pressed (mouse held)
 BUTTON_TEXT      :: rl.Color{255, 255, 255, 255} // Button text
+BUTTON_DISABLED_BG :: rl.Color{47, 49, 54, 255}  // Disabled button background
 
 BUTTON_DANGER_BG    :: rl.Color{80, 35, 35, 255}   // Danger button background
 BUTTON_DANGER_HOVER :: rl.Color{62, 36, 36, 255}   // Danger button hover

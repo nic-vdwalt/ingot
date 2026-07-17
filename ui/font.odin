@@ -26,9 +26,20 @@ font_cache: map[i32]rl.Font
 font_codepoints: []rune
 
 // set_font_dpi sets the atlas rasterization multiplier. Call before
-// init_font / any drawing; changing it later would require a cache flush.
+// init_font / any drawing; changing it later requires reset_font_atlases().
 set_font_dpi :: proc(scale: f32) {
 	font_dpi = scale if scale > 0 else 1.0
+}
+
+// reset_font_atlases unloads every cached atlas so the next draw re-rasterizes
+// at the current font_dpi. Call when the window's DPI scale changes (e.g. the
+// window moved between a retina and a non-retina display).
+reset_font_atlases :: proc() {
+	if !font_loaded do return
+	for _, f in font_cache {
+		rl.UnloadFont(f)
+	}
+	clear(&font_cache)
 }
 
 // --- measure_text memoization ------------------------------------------------
