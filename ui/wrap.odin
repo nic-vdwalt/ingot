@@ -85,10 +85,11 @@ wrap_compute :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -
 	last_space := -1
 	line_w: i32 = 0     // accumulated pixel width of current line
 	w_at_space: i32 = 0 // line_w up to and including last_space
-	// Per-glyph spacing raylib adds between characters (mirrors draw_text /
-	// measure_text). floor+1 guarantees at least 1 px of surplus at every DPI
-	// scale, covering the truncation error from rune_width's i32 cast.
-	sp := i32(f32(font_size) * 0.05) + 1
+	// draw_text and measure_text use zero inter-glyph spacing, so wrapping must
+	// too — otherwise lines break earlier than they render. The lone +1 px is
+	// surplus covering rune_width's i32 truncation (~0.5 px/glyph), so wrapped
+	// text never overflows at any DPI scale.
+	sp: i32 = 1
 	i := 0
 	for i < len(text) {
 		c := text[i]
