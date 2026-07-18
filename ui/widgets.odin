@@ -1236,6 +1236,28 @@ progress_bar :: proc(x, y, w, h: i32, frac: f32, color: rl.Color) {
 	}
 }
 
+// eased moves current toward target at `speed` units per second (frame-rate
+// independent exponential ease). Returns the updated value for convenience.
+eased :: proc(current: ^f32, target, dt, speed: f32) -> f32 {
+	k := clamp(speed * dt, 0, 1)
+	current^ += (target - current^) * k
+	if abs(target - current^) < 0.001 do current^ = target
+	return current^
+}
+
+// progress_bar_animated draws a progress bar whose fill eases toward frac.
+// `anim` is caller-owned eased state (reset it to 0 to replay the fill).
+progress_bar_animated :: proc(x, y, w, h: i32, frac: f32, anim: ^f32, color: rl.Color) {
+	eased(anim, clamp(frac, 0, 1), rl.GetFrameTime(), 10.0)
+	progress_bar(x, y, w, h, anim^, color)
+}
+
+// icon_btn draws a small square ghost button (for ✕ / ◀ / ▶ style glyphs).
+// Returns true if clicked this frame.
+icon_btn :: proc(x, y, size: i32, label: string, enabled: bool = true) -> bool {
+	return btn(x, y, size, size, label, .Ghost, FONT_SIZE_SMALL, enabled)
+}
+
 // kv_row draws key (left, truncated) and value (right-aligned) on one line.
 kv_row :: proc(x, y, w: i32, key, value: string, key_col, val_col: rl.Color, font_size: i32 = 0) {
 	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
