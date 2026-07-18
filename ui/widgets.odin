@@ -3,6 +3,7 @@
 package ui
 
 import rl "vendor:raylib"
+import "core:fmt"
 import "core:math"
 import "core:strings"
 import "core:unicode/utf8"
@@ -1274,4 +1275,85 @@ list_row_bg :: proc(rect: rl.Rectangle, selected, hovered: bool) {
 	} else if hovered {
 		rl.DrawRectangleRounded(rect, 0.25, 4, BG_HOVER)
 	}
+}
+
+// --- scroll pane -----------------------------------------------------------
+
+// Pane is caller-owned state for a scissored, wheel-scrollable region with a
+// measured content height (clamps scroll on the next frame) and a scrollbar.
+Pane :: struct {
+	scroll:    f32,
+	content_h: i32, // measured by pane_end, consumed next frame
+}
+
+pane_reset :: proc(p: ^Pane) {
+	p.scroll = 0
+	p.content_h = 0
+}
+
+// pane_begin handles wheel input over the pane rect, clamps scroll, begins the
+// scissor, and returns the y cursor the caller should start drawing at.
+pane_begin :: proc(p: ^Pane, x, y, w, h: i32, pad: i32 = 10) -> (cursor_y: i32) {
+	if rl.CheckCollisionPointRec(rl.GetMousePosition(), {f32(x), f32(y), f32(w), f32(h)}) {
+		p.scroll -= get_wheel_move() * f32(sc(24))
+	}
+	p.scroll = clamp(p.scroll, 0, f32(max(p.content_h - h, 0)))
+	begin_pane_scissor(x, y, w, h)
+	return y + sc(pad) - i32(p.scroll)
+}
+
+// pane_end ends the scissor, records the measured content height from the
+// caller's final y cursor, and draws/handles the scrollbar when content
+// overflows the pane.
+pane_end :: proc(p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i32 = 10) {
+	rl.EndScissorMode()
+	start_y := y + sc(pad) - i32(p.scroll)
+	p.content_h = end_y - start_y + sc(pad)
+	if p.content_h > h {
+		off := scrollbar(x + w - sc(9), y + sc(2), sc(5), h - sc(4),
+			int(p.content_h), int(h), int(p.scroll))
+		p.scroll = f32(off)
+	}
+}
+
+// --- standardized back button ----------------------------------------------
+
+// back_btn_w returns the width the standard back button occupies for a label,
+// so callers can right-align it before drawing.
+back_btn_w :: proc(label: string) -> i32 {
+	txt := fmt.ctprintf("\u2190 %s", label)
+	return measure_text(txt, FONT_SIZE_SMALL) + sc(14)
+}
+
+// back_btn draws the standard Ghost-style "← label" navigation button.
+// Returns true if clicked this frame.
+back_btn :: proc(x, y: i32, label: string) -> bool {
+	txt := fmt.tprintf("\u2190 %s", label)
+	return btn(x, y, back_btn_w(label), sc(22), txt, .Ghost)
+}
+
+// --- standardized collapsible section header -------------------------------
+
+// collapsible_header draws a full-width clickable header band with the label
+// on the left and a chevron state indicator on the right. Toggles open^ on
+// click; returns true on the frame it toggled (caller persists open state).
+collapsible_header :: proc(x, y, w: i32, label: string, open: ^bool,
+	font_size: i32 = FONT_SIZE_SMALL) -> (toggled: bool) {
+	h := sc(26)
+	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	hovered := rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
+	if hovered {
+		request_cursor(.POINTING_HAND)
+		if rl.IsMouseButtonReleased(.LEFT) {
+			open^ = !open^
+			toggled = true
+		}
+	}
+	lbl := strings.clone_to_cstring(label, context.temp_allocator)
+	draw_text(lbl, x + sc(10), y + sc(6), font_size, FG_LABEL)
+	ind: cstring = "\u25BE" if open^ else "\u25B8"
+	iw := measure_text(ind, font_size)
+	draw_text(ind, x + w - iw - sc(10), y + sc(6), font_size,
+		FG_PRIMARY if hovered else FG_SECONDARY)
+	return
 }
