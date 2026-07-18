@@ -54,6 +54,28 @@ Measure_Key :: struct {
 @(private)
 measure_cache: map[Measure_Key]i32
 
+// Swappable measurement backend. nil = use raylib (production). Tests install a
+// deterministic monospace model via set_measure_backend so width-dependent
+// layout (wrap, caret hit-testing) is reproducible without an open window.
+@(private)
+measure_backend: proc(text: cstring, size: i32) -> i32 = nil
+
+// set_measure_backend installs (or clears, with nil) a custom width backend and
+// flushes the measurement + wrap caches so stale widths are dropped.
+set_measure_backend :: proc(fn: proc(text: cstring, size: i32) -> i32) {
+	measure_backend = fn
+	clear_measure_cache()
+	clear_wrap_cache()
+}
+
+// measure_raw returns an uncached width from the active backend.
+@(private)
+measure_raw :: proc(text: cstring, size: i32) -> i32 {
+	if measure_backend != nil do return measure_backend(text, size)
+	if font_loaded do return i32(rl.MeasureTextEx(get_font(size), text, f32(size), 0).x)
+	return rl.MeasureText(text, size)
+}
+
 // A contiguous range of Unicode codepoints to rasterize.
 Codepoint_Range :: struct {
 	start: rune,
@@ -170,35 +192,34 @@ MEASURE_CACHE_MAX_KEY_LEN :: 256
 
 // Measure text width using the custom font.
 measure_text :: proc(text: cstring, size: i32) -> i32 {
-	if font_loaded {
-		key := Measure_Key{text = string(text), size = size}
-		if cached, ok := measure_cache[key]; ok {
-			return cached
-		}
-		v := rl.MeasureTextEx(get_font(size), text, f32(size), 0)
-		w := i32(v.x)
-		if len(key.text) <= MEASURE_CACHE_MAX_KEY_LEN {
-			if len(measure_cache) >= MEASURE_CACHE_MAX {
-				// Evict ~half instead of flushing everything — a full flush
-				// causes a hitch frame where all visible text re-measures at
-				// once. Map order is effectively random, so this is random
-				// eviction.
-				doomed := make([dynamic]Measure_Key, 0, MEASURE_CACHE_MAX / 2, context.temp_allocator)
-				for k in measure_cache {
-					if len(doomed) >= MEASURE_CACHE_MAX / 2 do break
-					append(&doomed, k)
-				}
-				for k in doomed {
-					delete_key(&measure_cache, k)
-					delete(k.text)
-				}
-			}
-			// Own the key string so it survives the caller's temp allocator.
-			measure_cache[Measure_Key{text = strings.clone(string(text)), size = size}] = w
-		}
-		return w
+	// Only memoize once a real font is loaded; the backend / pre-init path is
+	// cheap and keeps window-less entries out of the cache.
+	if !font_loaded do return measure_raw(text, size)
+	key := Measure_Key{text = string(text), size = size}
+	if cached, ok := measure_cache[key]; ok {
+		return cached
 	}
-	return rl.MeasureText(text, size)
+	w := measure_raw(text, size)
+	if len(key.text) <= MEASURE_CACHE_MAX_KEY_LEN {
+		if len(measure_cache) >= MEASURE_CACHE_MAX {
+			// Evict ~half instead of flushing everything — a full flush
+			// causes a hitch frame where all visible text re-measures at
+			// once. Map order is effectively random, so this is random
+			// eviction.
+			doomed := make([dynamic]Measure_Key, 0, MEASURE_CACHE_MAX / 2, context.temp_allocator)
+			for k in measure_cache {
+				if len(doomed) >= MEASURE_CACHE_MAX / 2 do break
+				append(&doomed, k)
+			}
+			for k in doomed {
+				delete_key(&measure_cache, k)
+				delete(k.text)
+			}
+		}
+		// Own the key string so it survives the caller's temp allocator.
+		measure_cache[Measure_Key{text = strings.clone(string(text)), size = size}] = w
+	}
+	return w
 }
 
 // Pixel width of a single rune at the given size, backed by measure_cache.

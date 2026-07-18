@@ -73,7 +73,7 @@ wrap_text :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> [
 
 // wrap_compute does the actual greedy word-wrap. Width is accumulated
 // additively from per-rune widths (rune_width is cache-backed and bounded).
-@(private = "file")
+@(private)
 wrap_compute :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> []Wrap_Line {
 	lines := make([dynamic]Wrap_Line, context.temp_allocator)
 	if len(text) == 0 {

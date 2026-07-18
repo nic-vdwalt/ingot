@@ -52,88 +52,11 @@ term_handle_input :: proc(ts: ^Term_Instance, skip_ctrl_shift: []rl.KeyboardKey 
 		}
 
 		// Ctrl+letter — send control codes 0x01–0x1A.
-		if ctrl && !super {
-			// Host-app Ctrl+Shift chords are consumed by the app's shortcut
-			// handling and never forwarded.
-			if shift {
-				skipped := false
-				for sk in skip_ctrl_shift {
-					if key == sk {
-						skipped = true
-						break
-					}
-				}
-				if skipped do continue
-			}
-			#partial switch key {
-			case .A: pty.write_byte(&ts.pty, 0x01); sent = true
-			case .B: pty.write_byte(&ts.pty, 0x02); sent = true
-			case .C: pty.write_byte(&ts.pty, 0x03); sent = true
-			case .D: pty.write_byte(&ts.pty, 0x04); sent = true
-			case .E: pty.write_byte(&ts.pty, 0x05); sent = true
-			case .F: pty.write_byte(&ts.pty, 0x06); sent = true
-			case .G: pty.write_byte(&ts.pty, 0x07); sent = true
-			case .H: pty.write_byte(&ts.pty, 0x08); sent = true
-			case .I: pty.write_byte(&ts.pty, 0x09); sent = true // Tab
-			case .J: pty.write_byte(&ts.pty, 0x0A); sent = true
-			case .K: pty.write_byte(&ts.pty, 0x0B); sent = true
-			case .L: pty.write_byte(&ts.pty, 0x0C); sent = true
-			case .M: pty.write_byte(&ts.pty, 0x0D); sent = true // CR
-			case .N: pty.write_byte(&ts.pty, 0x0E); sent = true
-			case .O: pty.write_byte(&ts.pty, 0x0F); sent = true
-			case .P: pty.write_byte(&ts.pty, 0x10); sent = true
-			case .Q: pty.write_byte(&ts.pty, 0x11); sent = true
-			case .R: pty.write_byte(&ts.pty, 0x12); sent = true
-			case .S: pty.write_byte(&ts.pty, 0x13); sent = true
-			case .T: pty.write_byte(&ts.pty, 0x14); sent = true
-			case .U: pty.write_byte(&ts.pty, 0x15); sent = true
-			case .V: pty.write_byte(&ts.pty, 0x16); sent = true
-			case .W: pty.write_byte(&ts.pty, 0x17); sent = true
-			case .X: pty.write_byte(&ts.pty, 0x18); sent = true
-			case .Y: pty.write_byte(&ts.pty, 0x19); sent = true
-			case .Z: pty.write_byte(&ts.pty, 0x1A); sent = true
-			case .LEFT_BRACKET:  pty.write_byte(&ts.pty, 0x1B); sent = true // Ctrl+[  → ESC
-			case .BACKSLASH:     pty.write_byte(&ts.pty, 0x1C); sent = true
-			case .RIGHT_BRACKET: pty.write_byte(&ts.pty, 0x1D); sent = true
-			case .GRAVE:         pty.write_byte(&ts.pty, 0x1E); sent = true
-			}
-			continue
-		}
-
 		// Navigation / function keys — VT100/xterm sequences.
-		#partial switch key {
-		case .ENTER:     pty.write_byte(&ts.pty, '\r');            sent = true
-		case .BACKSPACE: pty.write_byte(&ts.pty, 0x7f);            sent = true
-		case .TAB:
-			if shift {
-				pty.write_string(&ts.pty, "\x1b[Z")
-			} else {
-				pty.write_byte(&ts.pty, '\t')
-			}
+		b: [8]u8
+		if n, ok := vt_bytes_for_key(key, ctrl, shift, super, skip_ctrl_shift, b[:]); ok {
+			pty.write_bytes(&ts.pty, b[:n])
 			sent = true
-		case .ESCAPE:    pty.write_byte(&ts.pty, 0x1b);            sent = true
-		case .UP:        pty.write_string(&ts.pty, "\x1b[A");      sent = true
-		case .DOWN:      pty.write_string(&ts.pty, "\x1b[B");      sent = true
-		case .RIGHT:     pty.write_string(&ts.pty, "\x1b[C");      sent = true
-		case .LEFT:      pty.write_string(&ts.pty, "\x1b[D");      sent = true
-		case .HOME:      pty.write_string(&ts.pty, "\x1b[H");      sent = true
-		case .END:       pty.write_string(&ts.pty, "\x1b[F");      sent = true
-		case .PAGE_UP:   pty.write_string(&ts.pty, "\x1b[5~");     sent = true
-		case .PAGE_DOWN: pty.write_string(&ts.pty, "\x1b[6~");     sent = true
-		case .INSERT:    pty.write_string(&ts.pty, "\x1b[2~");     sent = true
-		case .DELETE:    pty.write_string(&ts.pty, "\x1b[3~");     sent = true
-		case .F1:        pty.write_string(&ts.pty, "\x1bOP");      sent = true
-		case .F2:        pty.write_string(&ts.pty, "\x1bOQ");      sent = true
-		case .F3:        pty.write_string(&ts.pty, "\x1bOR");      sent = true
-		case .F4:        pty.write_string(&ts.pty, "\x1bOS");      sent = true
-		case .F5:        pty.write_string(&ts.pty, "\x1b[15~");    sent = true
-		case .F6:        pty.write_string(&ts.pty, "\x1b[17~");    sent = true
-		case .F7:        pty.write_string(&ts.pty, "\x1b[18~");    sent = true
-		case .F8:        pty.write_string(&ts.pty, "\x1b[19~");    sent = true
-		case .F9:        pty.write_string(&ts.pty, "\x1b[20~");    sent = true
-		case .F10:       pty.write_string(&ts.pty, "\x1b[21~");    sent = true
-		case .F11:       pty.write_string(&ts.pty, "\x1b[23~");    sent = true
-		case .F12:       pty.write_string(&ts.pty, "\x1b[24~");    sent = true
 		}
 	}
 	// Typing snaps the view back to the live screen.
@@ -141,4 +64,92 @@ term_handle_input :: proc(ts: ^Term_Instance, skip_ctrl_shift: []rl.KeyboardKey 
 		ts.sb_view_offset = 0
 	}
 	return
+}
+
+// vt_bytes_for_key maps a single key event to the VT byte sequence a terminal
+// expects. Pure: no raylib input, no clipboard. Writes into buf and returns the
+// byte count; ok=false means "emit nothing" (unmapped key, or a host-app
+// Ctrl+Shift chord listed in skip_ctrl_shift). Paste (Cmd/Ctrl+Shift+V) is NOT
+// handled here — the caller intercepts it first because it needs the clipboard.
+@(private)
+vt_bytes_for_key :: proc(
+	key: rl.KeyboardKey,
+	ctrl, shift, super: bool,
+	skip_ctrl_shift: []rl.KeyboardKey,
+	buf: []u8,
+) -> (n: int, ok: bool) {
+	// Ctrl+letter — send control codes 0x01–0x1A.
+	if ctrl && !super {
+		// Host-app Ctrl+Shift chords are consumed by the app's shortcut
+		// handling and never forwarded.
+		if shift {
+			for sk in skip_ctrl_shift do if key == sk do return 0, false
+		}
+		#partial switch key {
+		case .A: buf[0] = 0x01; return 1, true
+		case .B: buf[0] = 0x02; return 1, true
+		case .C: buf[0] = 0x03; return 1, true
+		case .D: buf[0] = 0x04; return 1, true
+		case .E: buf[0] = 0x05; return 1, true
+		case .F: buf[0] = 0x06; return 1, true
+		case .G: buf[0] = 0x07; return 1, true
+		case .H: buf[0] = 0x08; return 1, true
+		case .I: buf[0] = 0x09; return 1, true // Tab
+		case .J: buf[0] = 0x0A; return 1, true
+		case .K: buf[0] = 0x0B; return 1, true
+		case .L: buf[0] = 0x0C; return 1, true
+		case .M: buf[0] = 0x0D; return 1, true // CR
+		case .N: buf[0] = 0x0E; return 1, true
+		case .O: buf[0] = 0x0F; return 1, true
+		case .P: buf[0] = 0x10; return 1, true
+		case .Q: buf[0] = 0x11; return 1, true
+		case .R: buf[0] = 0x12; return 1, true
+		case .S: buf[0] = 0x13; return 1, true
+		case .T: buf[0] = 0x14; return 1, true
+		case .U: buf[0] = 0x15; return 1, true
+		case .V: buf[0] = 0x16; return 1, true
+		case .W: buf[0] = 0x17; return 1, true
+		case .X: buf[0] = 0x18; return 1, true
+		case .Y: buf[0] = 0x19; return 1, true
+		case .Z: buf[0] = 0x1A; return 1, true
+		case .LEFT_BRACKET:  buf[0] = 0x1B; return 1, true // Ctrl+[  → ESC
+		case .BACKSLASH:     buf[0] = 0x1C; return 1, true
+		case .RIGHT_BRACKET: buf[0] = 0x1D; return 1, true
+		case .GRAVE:         buf[0] = 0x1E; return 1, true
+		}
+		return 0, false
+	}
+
+	// Navigation / function keys — VT100/xterm sequences.
+	#partial switch key {
+	case .ENTER:     buf[0] = '\r';   return 1, true
+	case .BACKSPACE: buf[0] = 0x7f;   return 1, true
+	case .TAB:
+		if shift do return copy(buf, "\x1b[Z"), true
+		buf[0] = '\t'; return 1, true
+	case .ESCAPE:    buf[0] = 0x1b;   return 1, true
+	case .UP:        return copy(buf, "\x1b[A"),   true
+	case .DOWN:      return copy(buf, "\x1b[B"),   true
+	case .RIGHT:     return copy(buf, "\x1b[C"),   true
+	case .LEFT:      return copy(buf, "\x1b[D"),   true
+	case .HOME:      return copy(buf, "\x1b[H"),   true
+	case .END:       return copy(buf, "\x1b[F"),   true
+	case .PAGE_UP:   return copy(buf, "\x1b[5~"),  true
+	case .PAGE_DOWN: return copy(buf, "\x1b[6~"),  true
+	case .INSERT:    return copy(buf, "\x1b[2~"),  true
+	case .DELETE:    return copy(buf, "\x1b[3~"),  true
+	case .F1:        return copy(buf, "\x1bOP"),   true
+	case .F2:        return copy(buf, "\x1bOQ"),   true
+	case .F3:        return copy(buf, "\x1bOR"),   true
+	case .F4:        return copy(buf, "\x1bOS"),   true
+	case .F5:        return copy(buf, "\x1b[15~"), true
+	case .F6:        return copy(buf, "\x1b[17~"), true
+	case .F7:        return copy(buf, "\x1b[18~"), true
+	case .F8:        return copy(buf, "\x1b[19~"), true
+	case .F9:        return copy(buf, "\x1b[20~"), true
+	case .F10:       return copy(buf, "\x1b[21~"), true
+	case .F11:       return copy(buf, "\x1b[23~"), true
+	case .F12:       return copy(buf, "\x1b[24~"), true
+	}
+	return 0, false
 }

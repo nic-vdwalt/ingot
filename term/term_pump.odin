@@ -19,7 +19,7 @@ TERM_PUMP_MAX_BUFS :: 16
 // does not end in an incomplete multi-byte UTF-8 sequence.  At most the last
 // 3 bytes can belong to an unfinished sequence (a 4-byte sequence missing
 // its final byte).
-@(private = "file")
+@(private)
 _utf8_complete_prefix :: proc(buf: []u8) -> int {
 	n := len(buf)
 	i := n - 1
