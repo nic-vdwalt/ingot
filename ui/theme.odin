@@ -84,6 +84,12 @@ ROW_H_MD: i32       = 32
 PANEL_HEADER_H: i32 = 48
 CARD_RADIUS_PX: f32 = 6
 
+// Window chrome (app header / custom title bar). TAB_BAR_HEIGHT is the header
+// strip height; CAPTION_BTN_W is the width of each min/max/close caption button
+// on the Windows custom title bar (see titlebar_windows.odin).
+TAB_BAR_HEIGHT: i32 = 35
+CAPTION_BTN_W: i32  = 46
+
 // Markdown layout.
 CODE_BLOCK_PAD: i32 = 8
 BULLET_INDENT: i32  = 20

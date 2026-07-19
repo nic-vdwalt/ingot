@@ -31,6 +31,10 @@ set_ui_scale :: proc(scale: f32) {
 	PANEL_HEADER_H = i32(48.0 * s + 0.5)
 	CARD_RADIUS_PX = 6.0 * s
 
+	// Window chrome.
+	TAB_BAR_HEIGHT = i32(35.0 * s + 0.5)
+	CAPTION_BTN_W  = i32(46.0 * s + 0.5)
+
 	// Markdown.
 	CODE_BLOCK_PAD = i32(8.0 * s + 0.5)
 	BULLET_INDENT  = i32(20.0 * s + 0.5)

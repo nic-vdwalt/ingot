@@ -25,6 +25,10 @@ libs so consumers still need zero linker flags.
 | `cursor.odin`        | deferred, focus-gated OS cursor management |
 | `pace.odin`          | adaptive frame pacing (`Frame_Pacer`: full rate on activity, idle FPS when quiet) |
 | `settings_scale.odin`| generic UI-scale settings modal (caller-owned state) |
+| `header.odin`        | one-call app header strip (`draw_app_header`) + window chrome glue |
+| `caption_buttons.odin` | Win11-style min/max/close caption glyphs for the custom title bar |
+| `window_style_*.odin`| per-OS window backdrop (`apply_window_style`: macOS vibrancy / Windows Mica) |
+| `titlebar_*.odin`    | Windows frameless custom title bar (native frame hidden, own hit-testing) |
 
 ### `ingot:prefs`
 
@@ -79,6 +83,49 @@ Add as a submodule and register a collection:
         ui.dpi_refresh()      // re-rasterizes on monitor-move scale changes
         // ... draw ...
     }
+
+### Window chrome (backdrop + custom title bar)
+
+Ports openalloy/alloy's window styling: a macOS vibrancy ("glass") backdrop, a
+Windows 11 Mica + dark title bar, and a **frameless custom title bar on
+Windows** where a top header strip hosts drawn min/max/close caption buttons and
+doubles as the drag region. macOS/Linux keep their native title bar.
+
+    // macOS needs a transparent framebuffer so the vibrancy backdrop shows
+    // through — add .WINDOW_TRANSPARENT to the config flags on Darwin.
+    when ODIN_OS == .Darwin {
+        rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT, .WINDOW_HIGHDPI, .WINDOW_TRANSPARENT})
+    } else {
+        rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
+    }
+    rl.InitWindow(w, h, title)
+
+    ui.apply_window_style()   // macOS: vibrancy / Windows: Mica + dark titlebar
+    ui.titlebar_init()        // Windows: strip native frame + install subclass
+
+    for !rl.WindowShouldClose() {
+        header_h := ui.TAB_BAR_HEIGHT   // inset your content below the header
+        // ... draw map / panels starting at y = header_h ...
+
+        ui.draw_app_header(title, screen_w)  // drawn last; on top of content
+
+        busy := app_activity
+        busy = busy || ui.titlebar_consume_activity()  // wake on caption hover
+        ui.pacer_frame(&pacer, busy)
+    }
+
+`draw_app_header(title, screen_w) -> header_h` draws the `BG_SECONDARY` strip of
+height `TAB_BAR_HEIGHT`, the title, a hairline border, and (Windows) the caption
+buttons, then publishes the non-client layout so the whole strip drags the
+window. `CAPTION_BTN_W` sizes each caption button. Both constants are DPI-scaled
+by `set_ui_scale`.
+
+The other procedures are platform-shimmed no-ops off Windows: `titlebar_init`,
+`titlebar_enabled`, `titlebar_state`, `titlebar_set_layout`,
+`titlebar_consume_activity`. The Win32 subclass uses a fixed id
+`TITLEBAR_SUBCLASS_ID :: 2` — if a consumer installs its own subclass, avoid
+that id. Dependencies stay within the Odin stdlib (`core:sys/darwin`,
+`core:sys/windows`, `base:intrinsics`) — no external linker flags.
 
 ### Frame pacing
 
