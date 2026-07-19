@@ -221,5 +221,26 @@ both would double-scale and blur.
 
 ## Status notes
 
-openalloy/alloy still carries its own diverged copies of the ui + terminal
-code; reconciliation is pending. `ingot:term` was extracted from it.
+ingot is now the single source of truth for the shared ui + terminal engine.
+All of openalloy/alloy's ahead-of-ingot features have been upstreamed here and
+decoupled from any app package:
+
+- composer **undo/redo + mention pills** (`input_undo.odin`, `mention_pills.odin`)
+- **markdown file pills** + workspace-path registry (`markdown.odin` +
+  `ui.workspace_has_path` / `ui.set_md_file_ctx`)
+- the **spellcheck** subsystem (`spell*.odin`, `spellcheck.odin`, per-OS backends)
+- split-view + path-truncation widgets (`draw_split_divider`,
+  `draw_split_drop_hint`, `truncate_to_width_left`, `truncate_path_middle`)
+- the full app **metric / colour set** incl. macOS `GLASS_ENABLED` vibrancy
+  (`theme.odin`, `scale.odin`), with app-specific view metrics rescaled via the
+  `scale_metrics_hook` / `scale_invalidate_hook` callbacks (no app import)
+- the wider Nerd Font glyph coverage folded into ingot's DPI-atlas font system
+
+openalloy is wired to consume ingot (submodule `alloy/libs/ingot`,
+`-collection:ingot` in `alloy/build.sh` — see `openalloy/.gitmodules`). The
+final source swap in `alloy/src` (bare `import "ui"` / `"terminal"` →
+`import "ingot:ui"` / `"ingot:term"`, deleting alloy's duplicate copies) is the
+remaining migration step: it requires per-symbol `ui.` qualification across
+alloy's ~38 app-view files because Odin has no file-scope `using` on packages.
+Do it incrementally, compiling after each file. `ingot:term` was extracted from
+alloy originally; the two are now feature-equivalent.

@@ -156,7 +156,7 @@ wrapped_max_line_width :: proc(text: string, max_width: i32, font_size: i32 = FO
 // Like wrapped_max_line_width but strips inline markdown markers (**bold**,
 // `inline code`) so the measured width matches the display text.
 wrapped_max_line_width_md :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> i32 {
-	if !strings.contains(text, "**") && strings.index_byte(text, '`') < 0 {
+	if !strings.contains(text, "**") && strings.index_byte(text, PILL_OPEN) < 0 && strings.index_byte(text, '`') < 0 {
 		return wrapped_max_line_width(text, max_width, font_size)
 	}
 	spans := parse_inline_spans(text)

@@ -7,6 +7,7 @@ package ui
 import rl "vendor:raylib"
 import "core:strings"
 import "core:fmt"
+import "core:math"
 import "core:unicode/utf8"
 
 // Range selection for the active text input. `anchor` is where the selection
@@ -1542,7 +1543,8 @@ progress_bar_animated :: proc(x, y, w, h: i32, frac: f32, anim: ^f32, color: rl.
 // icon_btn draws a small square ghost button (for ✕ / ◀ / ▶ style glyphs).
 // Returns true if clicked this frame.
 icon_btn :: proc(x, y, size: i32, label: string, enabled: bool = true) -> bool {
-	return btn(x, y, size, size, label, .Ghost, FONT_SIZE_SMALL, enabled)
+	clicked := btn(x, y, size, size, label, .Ghost, FONT_SIZE_SMALL)
+	return clicked && enabled
 }
 
 // kv_row draws key (left, truncated) and value (right-aligned) on one line.

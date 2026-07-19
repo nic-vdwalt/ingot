@@ -221,9 +221,6 @@ VORTEX_RADIUS: f32 = 56.0
 VORTEX_INNER: f32  = 12.0
 
 // --- ingot-only palette constants (not present in the alloy superset) ------
-BG_APP:   rl.Color = {30, 31, 34, 255}   // #1E1F22 — guild rail / app base
-BG_CHAT:  rl.Color = {49, 51, 56, 255}   // #313338 — chat area
-BG_PANEL: rl.Color = {43, 45, 49, 255}   // #2B2D31 — channel list / member list
 BUTTON_DANGER_BG    :: rl.Color{80, 35, 35, 255}   // Danger button background
 BUTTON_DANGER_HOVER :: rl.Color{62, 36, 36, 255}   // Danger button hover
 BUTTON_DANGER_FG    :: rl.Color{255, 180, 180, 255} // Danger button text

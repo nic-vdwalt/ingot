@@ -54,6 +54,16 @@ Measure_Key :: struct {
 @(private)
 measure_cache: map[Measure_Key]i32
 
+// Number of eviction events (PERF_HUD diagnostic — a steadily climbing count
+// during streaming means the cache is thrashing).
+@(private)
+measure_cache_evictions: int
+
+// PERF_HUD introspection: current entry count and eviction events.
+measure_cache_stats :: proc() -> (entries: int, evictions: int) {
+	return len(measure_cache), measure_cache_evictions
+}
+
 // Swappable measurement backend. nil = use raylib (production). Tests install a
 // deterministic monospace model via set_measure_backend so width-dependent
 // layout (wrap, caret hit-testing) is reproducible without an open window.
@@ -82,22 +92,42 @@ Codepoint_Range :: struct {
 	end:   rune,
 }
 
-// Codepoint ranges to load — standard Unicode + a slice of Nerd Font PUA glyphs.
+// Codepoint ranges to load — standard Unicode + Nerd Font PUA glyphs.
 CODEPOINT_RANGES :: [?]Codepoint_Range{
+	// Standard Unicode
 	{0x0020, 0x007E}, // Basic Latin
 	{0x00A0, 0x00FF}, // Latin-1 Supplement
 	{0x0100, 0x024F}, // Latin Extended-A & B
 	{0x2000, 0x206F}, // General Punctuation
 	{0x2190, 0x21FF}, // Arrows
+	{0x2200, 0x22FF}, // Mathematical Operators
+	{0x2300, 0x23FF}, // Miscellaneous Technical
 	{0x2500, 0x257F}, // Box Drawing
+	{0x2580, 0x259F}, // Block Elements
 	{0x25A0, 0x25FF}, // Geometric Shapes
 	{0x2600, 0x26FF}, // Miscellaneous Symbols
 	{0x2700, 0x27BF}, // Dingbats
+	{0x2800, 0x28FF}, // Braille Patterns
+	{0x2B00, 0x2B73}, // Misc Symbols and Arrows
+	{0x23FB, 0x23FE}, // IEC Power Symbols
+	{0x2B58, 0x2B58}, // IEC Power (heavy circle)
+
+	// Nerd Font PUA ranges
+	{0xE000, 0xE00A}, // Pomicons
 	{0xE0A0, 0xE0A3}, // Powerline Symbols
 	{0xE0B0, 0xE0D4}, // Powerline Extra
+	{0xE200, 0xE2A9}, // Font Awesome Extension
+	{0xE300, 0xE3E3}, // Weather Icons
+	{0xE5FA, 0xE6B5}, // Seti-UI + Custom
+	{0xE700, 0xE7C5}, // Devicons
 	{0xEA60, 0xEC1E}, // Codicons
+	{0xED00, 0xEFC1}, // Font Awesome
 	{0xF000, 0xF2FF}, // Font Awesome (classic)
+	{0xF300, 0xF375}, // Font Logos
 	{0xF400, 0xF533}, // Octicons
+	// NOTE: the plane-15 Material Design range {0xF0001, 0xF1AF0} (~6,900
+	// glyphs) is deliberately not loaded: nothing references those codepoints
+	// and rasterizing them dominated startup time and atlas GPU memory.
 }
 
 // Initialize the custom font system. Call after rl.InitWindow().
@@ -202,6 +232,7 @@ measure_text :: proc(text: cstring, size: i32) -> i32 {
 	w := measure_raw(text, size)
 	if len(key.text) <= MEASURE_CACHE_MAX_KEY_LEN {
 		if len(measure_cache) >= MEASURE_CACHE_MAX {
+			measure_cache_evictions += 1
 			// Evict ~half instead of flushing everything — a full flush
 			// causes a hitch frame where all visible text re-measures at
 			// once. Map order is effectively random, so this is random
