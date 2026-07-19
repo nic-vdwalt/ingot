@@ -1,9 +1,9 @@
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 // Adaptive frame pacing: run at full rate while anything is happening, drop
 // to a low idle rate when the app is quiet. Ported from Alloy's main loop.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 // Frame_Pacer drops the render loop to idle_fps when there has been no user
 // input or caller-reported activity for `grace` seconds, and restores full

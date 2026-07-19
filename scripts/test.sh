@@ -4,7 +4,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 col="-collection:ingot=$root"
-for pkg in ui term prefs; do
+for pkg in gfx ui term prefs; do
 	echo "== testing $pkg =="
 	odin test "$root/$pkg" $col -define:ODIN_TEST_FAIL_ON_EMPTY=true "$@"
 done

@@ -1,8 +1,8 @@
 #+build !windows
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 // No-op custom title bar on non-Windows platforms (native title bar is used).
 

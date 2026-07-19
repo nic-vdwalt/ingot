@@ -1,11 +1,11 @@
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 // Mention-pill geometry, encode/strip, and the workspace-path registry the
 // markdown renderer consults for inline file pills. Extracted from alloy;
 // decoupled from the app state package (uses ui.Mention_Span).
 package ui
 
 import "core:strings"
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 // Sentinel bytes that bracket a mention path in stored message content. These
 // are control chars that never appear in normal paths or prose.

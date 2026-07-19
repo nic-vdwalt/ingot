@@ -1,17 +1,47 @@
 # ingot
 
-Immediate-mode raylib UI toolkit for Odin. Internal shared library for
-ww-concord, cc-predev-scout, and (planned) openalloy/alloy.
+The **raylib + raygui of WebGPU**, in pure Odin. `ingot:gfx` is a self-contained
+immediate-mode graphics core (window, input, 2D batched rendering, textures,
+font/text) built on Odin's bundled `vendor:wgpu` — no raylib, no OpenGL. Its
+public API deliberately mirrors raylib's shapes (`Color`, `Vector2`,
+`Rectangle`, `KeyboardKey`, `Font`, `Texture2D`, `Draw*`, `IsKey*`, …) so
+existing Odin apps migrate mechanically: swap `import rl "vendor:raylib"` for
+`import rl "ingot:gfx"` and the `rl.*` call sites keep resolving. `ingot:ui` is
+the immediate-mode widget layer (raygui's role) that runs on top.
+
+Internal shared library for ww-concord, cc-predev-scout, and openalloy/alloy.
 
 All UI code is immediate-mode: callers own every piece of state and pass it in
-each frame. `ingot:ui` imports only `core:*` and `vendor:raylib`; `ingot:prefs`
-is `core:*`-only. The terminal stack (`ingot:term` / `ingot:libvterm` /
-`ingot:pty`) is the sanctioned exception — it ships its own prebuilt native
-libs so consumers still need zero linker flags.
+each frame. `ingot:ui` imports only `core:*` and `ingot:gfx`; `ingot:prefs` is
+`core:*`-only. The terminal stack (`ingot:term` / `ingot:libvterm` / `ingot:pty`)
+ships its own prebuilt native libs so consumers still need zero linker flags.
+
+WebGPU means one renderer targets native (macOS/Metal, Windows/D3D12,
+Linux/Vulkan) **and** the browser (WASM + WebGPU) — see "Web / WASM" below.
 
 ## Packages
 
+### `ingot:gfx`
+
+The graphics + windowing core ("raylib of WebGPU"). Over `vendor:wgpu` +
+`vendor:glfw` (native) it provides raylib-named:
+
+| Area | Contents |
+|------|----------|
+| window/context | `InitWindow`/`CloseWindow`/`BeginDrawing`/`EndDrawing`/`ClearBackground`, DPI (`GetWindowScaleDPI`), frame pacing (`SetTargetFPS`), `GetWindowHandle` |
+| 2D shapes | `DrawRectangle*`/`Rounded*`/`Lines*`, `DrawLine*`, `DrawCircle*`, `DrawRing`, `DrawTriangle`, gradients, `BeginScissorMode`, `CheckCollisionPointRec` |
+| text | glyph-atlas stack (`LoadFontFromMemory`/`DrawTextEx`/`MeasureTextEx`/`DrawTextCodepoint`/`SetTextureFilter`) via `vendor:stb/truetype` into an R8 wgpu atlas |
+| textures | `LoadImageFromMemory`/`LoadTextureFromImage`/`UpdateTexture`/`UnloadTexture`/`DrawTexture*`/`DrawTexturePro`, `SetWindowIcon` |
+| input | keyboard/mouse/wheel/clipboard/cursor queries with raylib edge/repeat semantics |
+| math | `Vector2*` helpers, `Camera2D`/`Camera3D`, CPU-projected `DrawLine3D`/`GetWorldToScreen` |
+
+`ingot:gfx/rlgl` is a thin shim for the low-level `rl*` calls apps use
+(`DrawRenderBatchActive` → batch flush; cull/vertex-array/framebuffer calls are
+no-ops on the 2D batch). See "Status notes" for the deferred 3D/shader surface.
+
 ### `ingot:ui`
+
+Immediate-mode widget toolkit (raygui's role), now running on `ingot:gfx`.
 
 | Module               | Contents |
 |----------------------|----------|
@@ -62,9 +92,18 @@ Add as a submodule and register a collection:
     git submodule add <url> libs/ingot
     odin build src -collection:ingot=libs/ingot
 
+    import rl    "ingot:gfx"    // the raylib-shaped graphics core
     import ui    "ingot:ui"
     import prefs "ingot:prefs"
     import term  "ingot:term"
+
+Migrating an existing raylib app is mechanical: replace
+`import rl "vendor:raylib"` with `import rl "ingot:gfx"` (and
+`import rlgl "vendor:raylib/rlgl"` with `import rlgl "ingot:gfx/rlgl"`). The
+`rl.*` call sites keep resolving because `ingot:gfx` mirrors raylib's type and
+proc names. `vendor:wgpu`, `vendor:glfw`, and `vendor:stb` ship with Odin — no
+external libraries to vendor. The wgpu-native prebuilt lib must be present under
+`<odin>/vendor/wgpu/lib/` (Odin's build error links the download if missing).
 
 ## Quick start
 
@@ -75,7 +114,7 @@ Add as a submodule and register a collection:
     } else {
         rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
     }
-    rl.InitWindow(w, h, title)
+    rl.InitWindow(w, h, title)   // rl == ingot:gfx
     ui.apply_platform_dpi()   // user_scale > 0 to override the OS default
     ui.init_font()
 
@@ -200,6 +239,23 @@ Call `ui.pacer_note_activity(&pacer)` for activity the pacer can't observe
 `term_start` takes optional `default_fg` / `default_bg` RGB params so the
 palette matches the host app's theme.
 
+## Web / WASM (browser WebGPU)
+
+Because the renderer is built on `vendor:wgpu`, the same GPU code path targets
+the browser via WASM + WebGPU (`ODIN_OS == .JS`, canvas surface via
+`SurfaceSourceCanvasHTMLSelector`). A self-contained demo lives in `web/`:
+
+    bash build_web.sh                       # -> web/ingot_web.wasm (+ odin.js, wgpu.js)
+    (cd web && python3 -m http.server 8000) # open http://localhost:8000
+
+`web/demo.odin` mirrors the native path (canvas surface, async-chained
+adapter/device request, a `step(dt)` frame loop driven by `odin.js`) and draws a
+cleared frame with a batched rectangle. Requires a WebGPU browser (Chrome/Edge
+113+, Safari 18+) and Odin's `--export-table` linker flag (set by the script) so
+the browser glue can invoke Odin callbacks. The native window/input layer is
+GLFW-backed and desktop-only; the full `ingot:ui` widget set on the web target
+(DOM input + browser text atlas) is the next step on top of this demo.
+
 ## DPI & text readability
 
 Text stays crisp on every platform via per-size glyph atlases rasterized at
@@ -221,9 +277,38 @@ both would double-scale and blur.
 
 ## Status notes
 
-ingot is now the single source of truth for the shared ui + terminal engine.
-All of openalloy/alloy's ahead-of-ingot features have been upstreamed here and
-decoupled from any app package:
+ingot is now the **WebGPU** graphics + UI + terminal engine (no raylib, no
+OpenGL). `ingot:gfx` replaces `vendor:raylib` as the graphics core; `ingot:ui`,
+`ingot:term`, and all three consumer apps (ww-concord, cc-predev-scout,
+openalloy/alloy) build and run against it on native (macOS/Metal verified).
+
+Migration status per consumer:
+
+- **ww-concord** — fully migrated (2D UI + terminal + screen-share textures +
+  voice). Builds and runs on WebGPU.
+- **cc-predev-scout** — fully migrated (map tiles, 2D massing via `DrawTriangle`,
+  gradients, textures). Builds and runs on WebGPU.
+- **openalloy/alloy** — core (chat + terminal + 2D UI) migrated and running on
+  WebGPU. Its **galaxy view** (a 7-shader HDR bloom + soft-particle +
+  instanced-mesh 3D pipeline) is the one **deferred** piece: `ingot:gfx` exposes
+  its 3D/shader/render-target API surface (`Shader`, `RenderTexture2D`, `Mesh`,
+  `Material`, `LoadShaderFromMemory`, `BeginTextureMode`, `DrawMesh`, the
+  `ingot:gfx/rlgl` vertex/framebuffer calls, …) as **runtime-safe no-ops** so the
+  app builds and its UI runs, with offscreen render-target draws suppressed
+  (blank galaxy) rather than corrupting the frame. Porting that pipeline to
+  WebGPU — GLSL→WGSL for each shader, render-target ping-pong with mip chains,
+  and instanced mesh drawing — is the tracked remaining work.
+
+Deferred / follow-up:
+
+- alloy galaxy 3D + custom-shader renderer (above).
+- `BeginBlendMode` additive/custom blending (galaxy glow) — currently no-op.
+- macOS `WINDOW_TRANSPARENT` vibrancy uses the surface's supported alpha mode
+  (`Unpremultiplied`) while the batch outputs premultiplied alpha; fully-opaque
+  UI composites correctly, semi-transparent backdrop blending is approximate.
+- full `ingot:ui` on the browser/WASM target (see "Web / WASM").
+
+Previously upstreamed app features (all live in ingot):
 
 - composer **undo/redo + mention pills** (`input_undo.odin`, `mention_pills.odin`)
 - **markdown file pills** + workspace-path registry (`markdown.odin` +
@@ -235,12 +320,3 @@ decoupled from any app package:
   (`theme.odin`, `scale.odin`), with app-specific view metrics rescaled via the
   `scale_metrics_hook` / `scale_invalidate_hook` callbacks (no app import)
 - the wider Nerd Font glyph coverage folded into ingot's DPI-atlas font system
-
-openalloy is wired to consume ingot (submodule `alloy/libs/ingot`,
-`-collection:ingot` in `alloy/build.sh` — see `openalloy/.gitmodules`). The
-final source swap in `alloy/src` (bare `import "ui"` / `"terminal"` →
-`import "ingot:ui"` / `"ingot:term"`, deleting alloy's duplicate copies) is the
-remaining migration step: it requires per-symbol `ui.` qualification across
-alloy's ~38 app-view files because Odin has no file-scope `using` on packages.
-Do it incrementally, compiling after each file. `ingot:term` was extracted from
-alloy originally; the two are now feature-equivalent.

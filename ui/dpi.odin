@@ -1,7 +1,7 @@
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 // Cross-platform DPI policy for crisp text on every display.
 //

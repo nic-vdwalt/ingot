@@ -1,2 +1,8 @@
 dist/
 *.bin
+
+# web build artifacts (staged by build_web.sh from source: web/demo.odin,
+# web/index.html). Regenerate with `bash build_web.sh`.
+web/ingot_web.wasm
+web/odin.js
+web/wgpu.js

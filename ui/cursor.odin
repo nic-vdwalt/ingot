@@ -1,7 +1,7 @@
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 // Deferred, focus-gated mouse-cursor management.
 //

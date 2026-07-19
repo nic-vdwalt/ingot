@@ -1,7 +1,7 @@
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 import "core:strings"
 
 // Embed the TTF font at compile time (Nerd Font Mono — single-cell-width icons).

@@ -4,7 +4,7 @@ package term
 // Call term_handle_input once per frame when the terminal pane is focused.
 
 import "core:unicode/utf8"
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 import "../pty"
 
 // term_handle_input drains all pending key events from Raylib and forwards

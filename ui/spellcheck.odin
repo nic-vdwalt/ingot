@@ -5,7 +5,7 @@ package ui
 // rendering. The scan is memoized on (text hash, len, caret, pill count) so
 // an unchanged composer costs nothing per frame.
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 // A misspelled word as a byte range [start, end) into the composer text.
 Spell_Range :: struct {

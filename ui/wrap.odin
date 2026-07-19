@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
 import "core:strings"

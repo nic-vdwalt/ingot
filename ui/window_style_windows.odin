@@ -1,8 +1,8 @@
 #+build windows
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 import win32 "core:sys/windows"
 
 // DWM attribute constants (not in core:sys/windows).

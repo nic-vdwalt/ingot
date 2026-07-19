@@ -1,7 +1,7 @@
-// LIB-CANDIDATE: this package must import only core:* and vendor:raylib.
+// LIB-CANDIDATE: this package must import only core:* and ingot:gfx.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 // Caption buttons for the custom Windows title bar (min / max-restore / close),
 // drawn Win11-style at the top-right of the header row. Platform-agnostic:

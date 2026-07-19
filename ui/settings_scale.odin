@@ -1,10 +1,10 @@
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 // Generic UI-scale settings modal. The caller owns all state: whether the
 // panel is open, the highlighted row index, and the currently stored scale.
 // Ported from Alloy's settings_panel.odin with the app coupling removed.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 import "core:fmt"
 import "core:strings"
 

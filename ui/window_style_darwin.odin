@@ -1,5 +1,5 @@
 #+build darwin
-// LIB-CANDIDATE: imports only core:*, base:intrinsics and vendor:raylib.
+// LIB-CANDIDATE: imports only core:*, base:intrinsics and ingot:gfx.
 package ui
 
 // macOS: give the window a native vibrancy ("glass") backdrop. We make the
@@ -10,7 +10,7 @@ package ui
 
 import NS "core:sys/darwin/Foundation"
 import "base:intrinsics"
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 // Typed Objective-C class wrappers so intrinsics.objc_send can resolve the
 // receiver's class for message dispatch.

@@ -1,10 +1,10 @@
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 // Widgets take plain data and return events; callers own all state.
 // Merged from openalloy/alloy (superset input/undo/pill/split features)
 // plus ingot-only generic widgets (spinner, panes, back_btn, etc.).
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 import "core:strings"
 import "core:fmt"
 import "core:math"

@@ -1,10 +1,10 @@
-// LIB-CANDIDATE: this package must import only core:* and vendor:raylib.
+// LIB-CANDIDATE: this package must import only core:* and ingot:gfx.
 // Never import app packages — destined for a standalone Odin GUI library.
 // Merged from openalloy/alloy (full app palette + macOS glass) plus
 // ingot-only re-theme constants preserved for other consumers.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 // GLASS_ENABLED is true on macOS, where window_style_darwin.odin installs an
 // NSVisualEffectView vibrancy backdrop behind the GL view. Large surface fills

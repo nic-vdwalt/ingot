@@ -1,10 +1,10 @@
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 // Inline markdown (bold/code/links/pills), GFM tables, headings. Merged
 // from openalloy/alloy (adds file pills via ui.workspace_has_path +
 // PILL_OPEN/CLOSE from mention_pills.odin). No app-package imports.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 import "core:strings"
 
 // --- Inline bold (**) parsing ---

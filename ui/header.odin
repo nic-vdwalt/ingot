@@ -1,7 +1,7 @@
-// LIB-CANDIDATE: imports only core:* and vendor:raylib.
+// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 // draw_app_header renders the app header strip: a BG_SECONDARY bar of height
 // TAB_BAR_HEIGHT with a left-aligned title and a hairline bottom border. On

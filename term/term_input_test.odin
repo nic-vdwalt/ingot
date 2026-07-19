@@ -1,7 +1,7 @@
 package term
 
 import "core:testing"
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 @(test)
 vt_key_map :: proc(t: ^testing.T) {

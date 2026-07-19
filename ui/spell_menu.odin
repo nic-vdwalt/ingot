@@ -6,7 +6,7 @@ package ui
 // Module-level state, like input_sel: only one composer is focused at a time.
 
 import "core:strings"
-import rl "vendor:raylib"
+import rl "ingot:gfx"
 
 SPELL_MENU_W :: 240
 SPELL_MENU_ITEM_H :: 26
