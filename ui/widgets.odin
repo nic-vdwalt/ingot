@@ -528,11 +528,12 @@ btn :: proc(
 	label: string,
 	style: Btn_Style = .Secondary,
 	font_size: i32 = 0,
+	enabled: bool = true,
 ) -> bool {
 	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	mouse := rl.GetMousePosition()
-	hovered := rl.CheckCollisionPointRec(mouse, rect)
+	hovered := enabled && rl.CheckCollisionPointRec(mouse, rect)
 	clicked := hovered && rl.IsMouseButtonReleased(.LEFT)
 	if hovered do request_cursor(.POINTING_HAND)
 
@@ -555,6 +556,11 @@ btn :: proc(
 		fg = FG_ACCENT if hovered else FG_SECONDARY
 		border = rl.Color{0, 0, 0, 0}
 	}
+	if !enabled {
+		bg = BUTTON_DISABLED_BG
+		fg = FG_MUTED_DIM
+		border = rl.Color{0, 0, 0, 0}
+	}
 
 	rl.DrawRectangleRounded(rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
 	if border.a > 0 {
@@ -565,7 +571,7 @@ btn :: proc(
 	text_w := measure_text(label_c, fs)
 	draw_text(label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 
-	return clicked
+	return clicked && enabled
 }
 
 // Build the soft-wrapped visual lines for an input's text. Each logical line
@@ -1543,8 +1549,7 @@ progress_bar_animated :: proc(x, y, w, h: i32, frac: f32, anim: ^f32, color: rl.
 // icon_btn draws a small square ghost button (for ✕ / ◀ / ▶ style glyphs).
 // Returns true if clicked this frame.
 icon_btn :: proc(x, y, size: i32, label: string, enabled: bool = true) -> bool {
-	clicked := btn(x, y, size, size, label, .Ghost, FONT_SIZE_SMALL)
-	return clicked && enabled
+	return btn(x, y, size, size, label, .Ghost, FONT_SIZE_SMALL, enabled)
 }
 
 // kv_row draws key (left, truncated) and value (right-aligned) on one line.
