@@ -189,6 +189,7 @@ renderer_frame_begin :: proc(r: ^Renderer) {
 // first if the state differs.
 @(private)
 batch_set :: proc(r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
+	_ensure_pass()
 	if kind != r.cur_kind || bind != r.cur_bind {
 		if g.frame.pass_begun do renderer_flush(r, g.frame.pass)
 		r.cur_kind = kind

@@ -216,6 +216,7 @@ BeginDrawing :: proc() {
 	g.frame.clear_color = Color{0, 0, 0, 255}
 	g.frame.pass_begun = false
 	g.frame.has_frame = true
+	renderer_frame_begin(&g.rend)
 }
 
 ClearBackground :: proc(c: Color) {
@@ -244,7 +245,6 @@ _ensure_pass :: proc() {
 		},
 	})
 	g.frame.pass_begun = true
-	renderer_frame_begin(&g.rend)
 }
 
 EndDrawing :: proc() {
