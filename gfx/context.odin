@@ -126,7 +126,18 @@ InitWindow :: proc(width, height: i32, title: cstring) {
 	g.queue = wg.DeviceGetQueue(g.device)
 
 	caps, _ := wg.SurfaceGetCapabilities(g.surface, g.adapter)
+	// Prefer a non-sRGB (linear UNORM) surface. raylib writes 8-bit sRGB color
+	// values straight to a UNORM framebuffer with no gamma applied; an sRGB
+	// surface re-encodes them linear->sRGB on output, washing the frame out
+	// (too bright). Match raylib by choosing the *Unorm format when offered.
 	g.format = caps.formats[0]
+	for i in 0 ..< int(caps.formatCount) {
+		f := caps.formats[i]
+		if f == .BGRA8Unorm || f == .RGBA8Unorm {
+			g.format = f
+			break
+		}
+	}
 
 	g.width, g.height = width, height
 	fbw, fbh := glfw.GetFramebufferSize(g.win)
