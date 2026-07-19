@@ -1,11 +1,12 @@
 // LIB-CANDIDATE: imports only core:* and vendor:raylib.
 // Widgets take plain data and return events; callers own all state.
+// Merged from openalloy/alloy (superset input/undo/pill/split features)
+// plus ingot-only generic widgets (spinner, panes, back_btn, etc.).
 package ui
 
 import rl "vendor:raylib"
-import "core:fmt"
-import "core:math"
 import "core:strings"
+import "core:fmt"
 import "core:unicode/utf8"
 
 // Range selection for the active text input. `anchor` is where the selection
@@ -24,24 +25,27 @@ Input_Sel :: struct {
 }
 input_sel: Input_Sel
 
-// Caret blink state: the blink phase re-anchors whenever the active input's
-// content or caret moves, so the caret is solid while typing and blinks when
-// idle. Snapshot keyed by builder pointer + text length + caret offset.
-@(private = "file") blink_sb: ^strings.Builder
-@(private = "file") blink_len: int
-@(private = "file") blink_cursor: int
-@(private = "file") blink_anchor: f64
-
-// Horizontal origin of the pane currently being drawn. Drawing may be
+// Horizontal origin of the pane currently being drawn. draw_chat sets this for
+// a split secondary (right) pane and resets it to 0 afterward. Drawing is
 // translated by the rlgl matrix, but BeginScissorMode rectangles live in
-// framebuffer space and are NOT affected by that matrix, so any in-pane
-// scissor must add this offset. When not drawing a translated pane it is 0.
+// framebuffer space and are NOT affected by that matrix, so any in-pane scissor
+// must add this offset. When not drawing a split pane it is 0 (no effect).
 pane_origin_x: i32
 
-// begin_pane_scissor starts a scissor whose x is shifted by pane_origin_x so
-// it lines up with rlgl-translated drawing of the current pane.
+// begin_pane_scissor starts a scissor whose x is shifted by pane_origin_x so it
+// lines up with the rlgl-translated drawing of the current pane.
 begin_pane_scissor :: proc(x, y, w, h: i32) {
 	rl.BeginScissorMode(x + pane_origin_x, y, w, h)
+}
+
+// draw_split_divider draws the vertical drag handle between the chat pane and
+// the embedded nvim pane of a split Chat tab. x is the divider's left edge.
+draw_split_divider :: proc(x, screen_h: i32, hovered: bool) {
+	col := BORDER_COLOR
+	if hovered {
+		col = FG_ACCENT
+	}
+	rl.DrawRectangle(x, TAB_BAR_HEIGHT, SPLIT_DIVIDER_W, screen_h - TAB_BAR_HEIGHT, col)
 }
 
 // draw_panel_header draws the unified header band used by side panels: a
@@ -68,7 +72,25 @@ draw_card_bg :: proc(rect: rl.Rectangle, bg: rl.Color, accent: rl.Color = {}, ac
 	}
 }
 
+// draw_split_drop_hint previews where a tab dragged into the content area will
+// land: it dims the content region and highlights the target half (left/right)
+// with a divider preview down the middle.
+draw_split_drop_hint :: proc(screen_w, screen_h: i32, side_left: bool) {
+	top: i32 = TAB_BAR_HEIGHT
+	h := screen_h - top
+	rl.DrawRectangle(0, top, screen_w, h, rl.Color{0, 0, 0, 70})
+	half := screen_w / 2
+	hl := rl.Color{FG_ACCENT.r, FG_ACCENT.g, FG_ACCENT.b, 70}
+	if side_left {
+		rl.DrawRectangle(0, top, half, h, hl)
+	} else {
+		rl.DrawRectangle(half, top, screen_w - half, h, hl)
+	}
+	rl.DrawRectangle(half - 1, top, 2, h, FG_ACCENT)
+}
+
 // input_is_selecting reports whether a text input currently holds a selection.
+// Used by chat/main to avoid hijacking Cmd+A/Cmd+C.
 input_is_selecting :: proc() -> bool {
 	return input_sel.active
 }
@@ -80,16 +102,19 @@ mod_down :: proc() -> bool {
 		rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL)
 }
 
-// Returns true if the mouse moved since the last frame. Used so keyboard
-// arrow navigation in selection menus isn't overridden by a stationary cursor
-// that happens to sit over an item.
+// Returns true if the mouse moved since the last frame.
+// Used so keyboard arrow navigation in selection menus isn't overridden by a
+// stationary cursor that happens to sit over an item. Mouse hover only changes
+// the selection when the user is actively moving the mouse.
 mouse_moved :: proc() -> bool {
 	delta := rl.GetMouseDelta()
 	return delta.x != 0 || delta.y != 0
 }
 
-// get_wheel_move returns this frame's mouse-wheel delta scaled by a platform
-// multiplier so scroll speed feels consistent across OSes.
+// get_wheel_move returns this frame's mouse-wheel delta scaled by a
+// platform multiplier so scroll speed feels consistent across OSes.
+// Windows mouse wheels produce 1.0 per notch while macOS trackpads
+// deliver larger inertia-driven values; the multiplier compensates.
 get_wheel_move :: proc() -> f32 {
 	wheel := rl.GetMouseWheelMove()
 	when ODIN_OS == .Windows {
@@ -101,6 +126,8 @@ get_wheel_move :: proc() -> f32 {
 
 // Convert this frame's mouse-wheel delta into whole row steps, carrying
 // fractional remainders in accum so small trackpad deltas are not lost.
+// Resets the accumulator on direction reversal. Returns rows to scroll
+// (positive = down the list).
 wheel_row_steps :: proc(accum: ^f32) -> int {
 	wheel := get_wheel_move()
 	if wheel == 0 do return 0
@@ -115,7 +142,7 @@ wheel_row_steps :: proc(accum: ^f32) -> int {
 
 // --- Caret helpers for multi-line text inputs -------------------------------
 // All offsets are byte offsets into `s` on rune boundaries. Lines are split on
-// '\n' only (the input does not soft-wrap logically).
+// '\n' only (the input does not soft-wrap).
 
 // Byte offset of the start of the logical line containing `pos`.
 caret_line_start :: proc(s: string, pos: int) -> int {
@@ -124,7 +151,7 @@ caret_line_start :: proc(s: string, pos: int) -> int {
 	return i
 }
 
-// Byte offset of the end of the logical line containing `pos`.
+// Byte offset of the end of the logical line containing `pos` (the '\n' or len).
 caret_line_end :: proc(s: string, pos: int) -> int {
 	i := pos
 	for i < len(s) && s[i] != '\n' do i += 1
@@ -224,7 +251,7 @@ caret_clamp :: proc(s: string, pos: int) -> int {
 	return p
 }
 
-// Insert `text` at `pos`, returning the new caret position.
+// Insert `text` at `pos`, returning the new caret position (pos + len(inserted)).
 caret_insert :: proc(sb: ^strings.Builder, pos: int, text: string) -> int {
 	old := strings.to_string(sb^)
 	insert := text
@@ -302,7 +329,7 @@ caret_delete_next :: proc(sb: ^strings.Builder, pos: int) -> int {
 	return pos
 }
 
-// --- Range selection helpers for text inputs --------------------------------
+// --- Range selection / undo helpers for text inputs -------------------------
 
 // Normalized selection range (lo <= hi).
 input_sel_range :: proc() -> (lo, hi: int) {
@@ -323,9 +350,10 @@ input_sel_clear :: proc() {
 	input_sel.dragging = false
 }
 
-// Delete the selected range from sb. Returns the new caret (range start).
-@(private = "file")
-selection_delete :: proc(sb: ^strings.Builder) -> int {
+// Delete the selected range from sb, dropping mention pills that intersect it
+// and shifting later pills left. Returns the new caret (range start).
+@(private="file")
+selection_delete :: proc(sb: ^strings.Builder, pills: ^[dynamic]Mention_Span) -> int {
 	old := strings.to_string(sb^)
 	lo, hi := input_sel_range()
 	lo = caret_clamp(old, lo)
@@ -333,6 +361,19 @@ selection_delete :: proc(sb: ^strings.Builder) -> int {
 	if lo >= hi {
 		input_sel_clear()
 		return lo
+	}
+	if pills != nil {
+		kept := make([dynamic]Mention_Span, 0, len(pills), context.temp_allocator)
+		for p in pills {
+			if p.end <= lo {
+				append(&kept, p)
+			} else if p.start >= hi {
+				append(&kept, Mention_Span{p.start - (hi - lo), p.end - (hi - lo)})
+			}
+			// Pills intersecting the deleted range are dropped.
+		}
+		clear(pills)
+		for p in kept do append(pills, p)
 	}
 	combined := strings.concatenate({old[:lo], old[hi:]}, context.temp_allocator)
 	strings.builder_reset(sb)
@@ -343,9 +384,9 @@ selection_delete :: proc(sb: ^strings.Builder) -> int {
 
 // Map a pane-local mouse position to a byte offset within the input's visible
 // window. Rows clamp to the visible band; x clamps to line ends.
-@(private = "file")
-input_mouse_to_byte :: proc(vlines: []Wrap_Line, text: string, mouse: rl.Vector2, inner_x, text_top: i32, vis_start, vis_end: int) -> int {
-	row := vis_start + int((mouse.y - f32(text_top)) / f32(LINE_HEIGHT))
+@(private="file")
+input_mouse_to_byte :: proc(vlines: []Wrap_Line, text: string, mouse: rl.Vector2, inner_x, y: i32, vis_start, vis_end: int) -> int {
+	row := vis_start + int((mouse.y - f32(y + 6)) / f32(LINE_HEIGHT))
 	if row < vis_start do row = vis_start
 	if row > vis_end - 1 do row = vis_end - 1
 	if row < 0 do row = 0
@@ -356,9 +397,46 @@ input_mouse_to_byte :: proc(vlines: []Wrap_Line, text: string, mouse: rl.Vector2
 	return vl.start + caret_col_to_byte(line, col)
 }
 
+// Record an undo snapshot before a mutation (nil-safe).
+@(private="file")
+undo_record :: proc(u: ^Input_Undo, sb: ^strings.Builder, cursor: ^int, pills: ^[dynamic]Mention_Span, kind: Input_Edit_Kind) {
+	if u == nil do return
+	cur := 0
+	if cursor != nil do cur = cursor^
+	ps: []Mention_Span
+	if pills != nil do ps = pills[:]
+	input_undo_record(u, strings.to_string(sb^), cur, ps, kind, rl.GetTime())
+}
+
+// Restore the top snapshot of the undo (or redo) stack, pushing the current
+// state onto the opposite stack.
+@(private="file")
+undo_apply :: proc(u: ^Input_Undo, sb: ^strings.Builder, cursor: ^int, pills: ^[dynamic]Mention_Span, redo: bool) {
+	from := &u.undo
+	to := &u.redo
+	if redo do from, to = to, from
+	if len(from) == 0 do return
+	cur := 0
+	if cursor != nil do cur = cursor^
+	ps: []Mention_Span
+	if pills != nil do ps = pills[:]
+	append(to, make_input_snapshot(strings.to_string(sb^), cur, ps))
+	snap := pop(from)
+	strings.builder_reset(sb)
+	strings.write_string(sb, snap.text)
+	if cursor != nil do cursor^ = caret_clamp(snap.text, snap.cursor)
+	if pills != nil {
+		clear(pills)
+		for p in snap.pills do append(pills, p)
+	}
+	input_snapshot_destroy(&snap)
+	u.last_edit_kind = .None
+	input_sel_clear()
+}
+
 // Shared pre/post logic for caret navigation keys. Returns true when a
 // non-shift key collapsed an active selection (Left/Right skip the move).
-@(private = "file")
+@(private="file")
 nav_begin :: proc(sb: ^strings.Builder, cursor: ^int, shift, collapse_to_lo: bool) -> bool {
 	sel_owner := input_sel.active && input_sel.sb == sb
 	if shift {
@@ -374,7 +452,7 @@ nav_begin :: proc(sb: ^strings.Builder, cursor: ^int, shift, collapse_to_lo: boo
 	return false
 }
 
-@(private = "file")
+@(private="file")
 nav_end :: proc(cursor: ^int, shift: bool) {
 	if shift {
 		input_sel.extent = cursor^
@@ -384,11 +462,12 @@ nav_end :: proc(cursor: ^int, shift: bool) {
 
 // --- Interactive vertical scrollbar ----------------------------------------
 // Only one scrollbar can be dragged at a time, so drag state is module-level.
-@(private = "file") sbar_dragging: bool
-@(private = "file") sbar_grab_dy: f32
+@(private="file") sbar_dragging: bool
+@(private="file") sbar_grab_dy: f32
 
 // Draw a draggable vertical scrollbar (track + thumb) and return the updated
-// first-visible-row offset. total and visible are row counts.
+// first-visible-row offset. total and visible are row counts; offset is the
+// current first visible row. Supports thumb dragging and track-click jumps.
 scrollbar :: proc(x, y, w, h: i32, total, visible, offset: int) -> int {
 	if total <= visible || h <= 0 {
 		sbar_dragging = false
@@ -397,7 +476,7 @@ scrollbar :: proc(x, y, w, h: i32, total, visible, offset: int) -> int {
 	max_off := total - visible
 	off := clamp(offset, 0, max_off)
 
-	rl.DrawRectangle(x, y, w, h, BG_APP)
+	rl.DrawRectangle(x, y, w, h, BG_SECONDARY)
 	thumb_h := max(i32(20), h * i32(visible) / i32(total))
 	track_range := max(h - thumb_h, 1)
 	thumb_y := y + i32(f32(track_range) * f32(off) / f32(max_off))
@@ -430,57 +509,49 @@ scrollbar :: proc(x, y, w, h: i32, total, visible, offset: int) -> int {
 	thumb_hover := rl.CheckCollisionPointRec(mouse, rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)})
 	col := BORDER_COLOR
 	if sbar_dragging || thumb_hover do col = FG_ACCENT
-	rl.DrawRectangleRounded(rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)}, 1.0, 8, col)
+	rl.DrawRectangle(x, thumb_y, w, thumb_h, col)
 	return off
 }
 
 // Button visual style variants.
 Btn_Style :: enum {
-	Primary,   // Accent-colored bg, white text.
-	Secondary, // Muted bg, brightens on hover, accent border on hover.
-	Danger,    // Red-tinted bg, light-red text.
-	Ghost,     // Nearly transparent, text-driven, accent color on hover.
+	Primary,    // Accent-colored bg, white text.
+	Secondary,  // Muted bg, brightens on hover, accent border on hover.
+	Danger,     // Red-tinted bg, light-red text.
+	Ghost,      // Nearly transparent, text-driven, accent color on hover.
 }
 
-// Unified button. Returns true if clicked this frame. When enabled is false
-// the button renders dimmed, ignores hover/clicks, and never returns true.
+// Unified button. Returns true if clicked this frame.
 btn :: proc(
 	x, y, w, h: i32,
 	label: string,
 	style: Btn_Style = .Secondary,
 	font_size: i32 = 0,
-	enabled: bool = true,
 ) -> bool {
 	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	mouse := rl.GetMousePosition()
-	hovered := enabled && rl.CheckCollisionPointRec(mouse, rect)
-	pressed := hovered && rl.IsMouseButtonDown(.LEFT)
+	hovered := rl.CheckCollisionPointRec(mouse, rect)
 	clicked := hovered && rl.IsMouseButtonReleased(.LEFT)
 	if hovered do request_cursor(.POINTING_HAND)
 
 	bg, fg, border: rl.Color
 	switch style {
 	case .Primary:
-		bg = BUTTON_PRESSED if pressed else BUTTON_HOVER if hovered else BUTTON_BG
+		bg = BUTTON_HOVER if hovered else BUTTON_BG
 		fg = BUTTON_TEXT
 		border = FG_ACCENT if hovered else BUTTON_BG
 	case .Secondary:
-		bg = BG_ACTIVE if pressed else BG_HOVER if hovered else BG_ACTIVE
+		bg = BG_HOVER if hovered else BG_ACTIVE
 		fg = FG_PRIMARY if hovered else FG_SECONDARY
 		border = FG_ACCENT if hovered else rl.Color{0, 0, 0, 0}
 	case .Danger:
-		bg = BUTTON_DANGER_BG if hovered else BUTTON_DANGER_HOVER
-		fg = BUTTON_DANGER_FG
+		bg = rl.Color{80, 35, 35, 255} if hovered else rl.Color{62, 36, 36, 255}
+		fg = rl.Color{255, 180, 180, 255}
 		border = FG_ERROR if hovered else rl.Color{0, 0, 0, 0}
 	case .Ghost:
 		bg = BG_HOVER if hovered else rl.Color{0, 0, 0, 0}
-		fg = FG_ACCENT_LIGHT if hovered else FG_SECONDARY
-		border = rl.Color{0, 0, 0, 0}
-	}
-	if !enabled {
-		bg = BUTTON_DISABLED_BG
-		fg = FG_MUTED_DIM
+		fg = FG_ACCENT if hovered else FG_SECONDARY
 		border = rl.Color{0, 0, 0, 0}
 	}
 
@@ -493,31 +564,19 @@ btn :: proc(
 	text_w := measure_text(label_c, fs)
 	draw_text(label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 
-	return clicked && enabled
-}
-
-// Indeterminate spinner: a rotating ring arc centered at (cx, cy). Phase is
-// derived from wall time (same absolute-phase pattern as the caret blink), so
-// no per-widget state is needed.
-spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = FG_ACCENT_LIGHT) {
-	start := f32(math.mod(rl.GetTime()*360.0, 360.0))
-	thickness := max(radius * 0.28, 2.0)
-	rl.DrawRing(
-		rl.Vector2{f32(cx), f32(cy)},
-		radius - thickness, radius,
-		start, start + 270.0,
-		24, color,
-	)
+	return clicked
 }
 
 // Build the soft-wrapped visual lines for an input's text. Each logical line
 // (split on '\n') is word-wrapped to inner_w; the returned ranges are absolute
 // byte offsets into `text`. Always returns at least one (possibly empty) line.
-@(private = "file")
-IVL_Key :: struct { hash: u64, len: int, width: i32 }
-@(private = "file") ivl_key: IVL_Key
-@(private = "file") ivl_val: []Wrap_Line
-@(private = "file") ivl_valid: bool
+// The memo keeps a heap clone of the last text and compares by memcmp (string
+// equality short-circuits on length), so a hit costs no full-text hashing.
+@(private="file") ivl_text: string
+@(private="file") ivl_width: i32
+@(private="file") ivl_val: []Wrap_Line
+@(private="file") ivl_valid: bool
+@(private="file") ivl_owned: bool
 
 // invalidate_input_visual_lines drops the composer's wrapped-line memo. Call
 // when the UI scale changes (the memo key omits font size).
@@ -526,25 +585,32 @@ invalidate_input_visual_lines :: proc() {
 }
 
 input_visual_lines :: proc(text: string, inner_w: i32) -> []Wrap_Line {
-	key := IVL_Key{hash = fnv1a64(text), len = len(text), width = inner_w}
-	if ivl_valid && key == ivl_key {
+	if ivl_valid && inner_w == ivl_width && text == ivl_text {
 		return ivl_val
 	}
 	vlines := make([dynamic]Wrap_Line, context.temp_allocator)
 	base := 0
 	for logical in strings.split(text, "\n", context.temp_allocator) {
-		for seg in wrap_text(logical, inner_w, FONT_SIZE) {
+		// Uncached wrap: the memo above already ensures this only runs when
+		// the text/width changed, and routing a large paste through the
+		// global wrap_text cache would evict the transcript's layouts.
+		for seg in wrap_compute(logical, inner_w, FONT_SIZE) {
 			append(&vlines, Wrap_Line{base + seg.start, base + seg.end})
 		}
 		base += len(logical) + 1 // +1 for the consumed '\n'
 	}
 	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
-	// Persist a copy so the memo survives the temp allocator reset.
-	if ivl_valid do delete(ivl_val)
+	// Persist copies so the memo survives the temp allocator reset.
+	if ivl_owned {
+		delete(ivl_val)
+		delete(ivl_text)
+	}
 	ivl_val = make([]Wrap_Line, len(vlines))
 	copy(ivl_val, vlines[:])
-	ivl_key = key
+	ivl_text = strings.clone(text)
+	ivl_width = inner_w
 	ivl_valid = true
+	ivl_owned = true
 	return ivl_val
 }
 
@@ -567,17 +633,17 @@ input_caret_visual :: proc(vlines: []Wrap_Line, text: string, pos: int) -> (row:
 }
 
 // Draw a text input box. Returns true if Enter was pressed.
-// When masked is true, displays asterisks instead of actual text (passwords).
+// When masked is true, displays asterisks instead of actual text (for passwords).
 // `cursor` is an optional byte-offset caret; pass nil for single-line, end-
-// anchored inputs. When non-nil the input supports Left/Right/Up/Down/Home/End
-// navigation and inserts/deletes at the caret. `desired_col` (optional)
-// remembers the rune column across vertical moves and `scroll_line` (optional)
-// persists the top visible logical line.
-text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, active: bool, masked: bool = false, cursor: ^int = nil, desired_col: ^int = nil, scroll_line: ^int = nil) -> bool {
+// anchored inputs (file browser, token field). When non-nil the input supports
+// Left/Right/Up/Down/Home/End navigation and inserts/deletes at the caret.
+// `desired_col` (optional) remembers the rune column across vertical moves and
+// `scroll_line` (optional) persists the top visible logical line.
+text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, active: bool, masked: bool = false, cursor: ^int = nil, desired_col: ^int = nil, scroll_line: ^int = nil, pills: ^[dynamic]Mention_Span = nil, undo: ^Input_Undo = nil) -> bool {
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	bg := BG_INPUT if active else BG_SECONDARY
-	rl.DrawRectangleRounded(rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
-	rl.DrawRectangleRoundedLinesEx(rect, BTN_ROUNDNESS, BTN_SEGMENTS, BTN_BORDER_W, BORDER_COLOR if !active else FG_ACCENT)
+	rl.DrawRectangleRec(rect, bg)
+	rl.DrawRectangleLinesEx(rect, 1, BORDER_COLOR if !active else FG_ACCENT)
 
 	entered := false
 
@@ -597,7 +663,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 			input_sel_clear()
 			sel_owner = false
 		}
-		// Clamp against external buffer rewrites.
+		// Clamp against external buffer rewrites (mention completion).
 		if sel_owner {
 			s := strings.to_string(sb^)
 			input_sel.anchor = caret_clamp(s, input_sel.anchor)
@@ -606,12 +672,14 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 			sel_owner = input_sel.active
 		}
 
-		// Keep the caret within bounds (the buffer may have been rewritten).
+		// Keep the caret within bounds (the buffer may have been rewritten by
+		// command/mention completion since the last frame).
 		if caret_active {
 			cursor^ = caret_clamp(strings.to_string(sb^), cursor^)
 		}
 
-		// Non-caret inputs: clicking inside clears the selection.
+		// Non-caret inputs: clicking inside clears the selection (caret inputs
+		// handle mouse press/drag in the render section below).
 		if !caret_active && sel_owner && rl.IsMouseButtonPressed(.LEFT) {
 			if rl.CheckCollisionPointRec(rl.GetMousePosition(), rect) {
 				input_sel_clear()
@@ -643,27 +711,37 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 			lo, hi := input_sel_range()
 			if lo < hi && hi <= len(s) {
 				rl.SetClipboardText(strings.clone_to_cstring(s[lo:hi], context.temp_allocator))
-				nc := selection_delete(sb)
+				undo_record(undo, sb, cursor, pills, .Other)
+				nc := selection_delete(sb, pills)
 				if caret_active do cursor^ = nc
 				sel_owner = false
 			}
 		}
 
-		// Handle character input. Ignore characters while a modifier is held
-		// so shortcuts (Cmd+A/C/X/V) don't insert their letters.
+		// Undo / Redo (Cmd/Ctrl+Z, +Shift for redo).
+		if mods && undo != nil && (rl.IsKeyPressed(.Z) || rl.IsKeyPressedRepeat(.Z)) {
+			undo_apply(undo, sb, cursor, pills, redo = shift)
+			sel_owner = false
+		}
+
+		// Handle character input. Ignore characters while a modifier is held so
+		// shortcuts (Cmd+A/C/X/V/Z) don't insert their letters.
 		for {
 			ch := rl.GetCharPressed()
 			if ch == 0 do break
 			if mods do continue
-			// Typing over a selection replaces it.
+			// Typing over a selection replaces it (one undo step).
+			undo_record(undo, sb, cursor, pills, sel_owner ? .Other : .Insert)
 			if sel_owner {
-				nc := selection_delete(sb)
+				nc := selection_delete(sb, pills)
 				if caret_active do cursor^ = nc
 				sel_owner = false
 			}
 			if caret_active {
 				buf, n := utf8.encode_rune(rune(ch))
+				before := cursor^
 				cursor^ = caret_insert(sb, cursor^, string(buf[:n]))
+				if pills != nil do pills_shift_after_insert(pills, before, cursor^ - before)
 			} else if strings.builder_len(sb^) < INPUT_MAX_LEN {
 				strings.write_rune(sb, rune(ch))
 			}
@@ -673,14 +751,18 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		if rl.IsKeyPressed(.V) && mods {
 			clip := rl.GetClipboardText()
 			if clip != nil && len(string(clip)) > 0 {
+				undo_record(undo, sb, cursor, pills, .Other)
+				// Pasting over a selection replaces it.
 				if sel_owner {
-					nc := selection_delete(sb)
+					nc := selection_delete(sb, pills)
 					if caret_active do cursor^ = nc
 					sel_owner = false
 				}
 				clip_str := string(clip)
 				if caret_active {
+					before := cursor^
 					cursor^ = caret_insert(sb, cursor^, clip_str)
+					if pills != nil do pills_shift_after_insert(pills, before, cursor^ - before)
 				} else {
 					for ch in clip_str {
 						if strings.builder_len(sb^) >= INPUT_MAX_LEN do break
@@ -693,14 +775,35 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		// Handle backspace.
 		if rl.IsKeyPressed(.BACKSPACE) || rl.IsKeyPressedRepeat(.BACKSPACE) {
 			if sel_owner {
-				nc := selection_delete(sb)
+				// Delete the selected range.
+				undo_record(undo, sb, cursor, pills, .Other)
+				nc := selection_delete(sb, pills)
 				if caret_active do cursor^ = nc
 				sel_owner = false
 			} else if caret_active {
-				cursor^ = caret_delete_prev(sb, cursor^)
+				undo_record(undo, sb, cursor, pills, .Delete)
+				if pills != nil {
+					if idx, ok := pill_ending_at(pills, cursor^); ok {
+						// Atomic: delete the whole pill range in one keystroke.
+						ps, pe := pill_remove(pills, idx)
+						old := strings.to_string(sb^)
+						combined := strings.concatenate({old[:ps], old[pe:]}, context.temp_allocator)
+						strings.builder_reset(sb)
+						strings.write_string(sb, combined)
+						pills_shift_after_delete(pills, ps, pe - ps)
+						cursor^ = ps
+					} else {
+						before := cursor^
+						cursor^ = caret_delete_prev(sb, cursor^)
+						pills_shift_after_delete(pills, cursor^, before - cursor^)
+					}
+				} else {
+					cursor^ = caret_delete_prev(sb, cursor^)
+				}
 			} else {
 				s := strings.to_string(sb^)
 				if len(s) > 0 {
+					undo_record(undo, sb, cursor, pills, .Delete)
 					// Remove last rune.
 					last_rune_start := len(s)
 					for last_rune_start > 0 {
@@ -716,15 +819,34 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		// Handle forward delete.
 		if caret_active && (rl.IsKeyPressed(.DELETE) || rl.IsKeyPressedRepeat(.DELETE)) {
 			if sel_owner {
-				cursor^ = selection_delete(sb)
+				undo_record(undo, sb, cursor, pills, .Other)
+				cursor^ = selection_delete(sb, pills)
 				sel_owner = false
+			} else if pills != nil {
+				undo_record(undo, sb, cursor, pills, .Delete)
+				if idx, ok := pill_starting_at(pills, cursor^); ok {
+					// Atomic: delete the whole pill range in one keystroke.
+					ps, pe := pill_remove(pills, idx)
+					old := strings.to_string(sb^)
+					combined := strings.concatenate({old[:ps], old[pe:]}, context.temp_allocator)
+					strings.builder_reset(sb)
+					strings.write_string(sb, combined)
+					pills_shift_after_delete(pills, ps, pe - ps)
+					cursor^ = ps
+				} else {
+					old_len := strings.builder_len(sb^)
+					cursor^ = caret_delete_next(sb, cursor^)
+					pills_shift_after_delete(pills, cursor^, old_len - strings.builder_len(sb^))
+				}
 			} else {
+				undo_record(undo, sb, cursor, pills, .Delete)
 				cursor^ = caret_delete_next(sb, cursor^)
 			}
 		}
 
-		// Handle Enter (submit).
-		if rl.IsKeyPressed(.ENTER) && !rl.IsKeyDown(.LEFT_SHIFT) && !rl.IsKeyDown(.RIGHT_SHIFT) {
+		// Handle Enter (submit). Suppressed while the spell menu is open so
+		// Enter applies the highlighted suggestion instead of sending.
+		if rl.IsKeyPressed(.ENTER) && !rl.IsKeyDown(.LEFT_SHIFT) && !rl.IsKeyDown(.RIGHT_SHIFT) && !spell_menu_active(sb) {
 			entered = true
 			input_sel_clear()
 			sel_owner = false
@@ -732,13 +854,16 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 
 		// Handle Shift+Enter (insert newline).
 		if rl.IsKeyPressed(.ENTER) && (rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)) {
+			undo_record(undo, sb, cursor, pills, .Other)
 			if sel_owner {
-				nc := selection_delete(sb)
+				nc := selection_delete(sb, pills)
 				if caret_active do cursor^ = nc
 				sel_owner = false
 			}
 			if caret_active {
+				before := cursor^
 				cursor^ = caret_insert(sb, cursor^, "\n")
+				if pills != nil do pills_shift_after_insert(pills, before, cursor^ - before)
 			} else if strings.builder_len(sb^) < INPUT_MAX_LEN {
 				strings.write_byte(sb, '\n')
 			}
@@ -754,16 +879,18 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 			if rl.IsKeyPressed(.LEFT) || rl.IsKeyPressedRepeat(.LEFT) {
 				if !nav_begin(sb, cursor, shift, true) {
 					cursor^ = word ? caret_word_left(s, cursor^) : caret_prev_rune(s, cursor^)
+					if pills != nil do cursor^ = pill_snap_left(pills, cursor^)
 				}
 				nav_end(cursor, shift)
 			}
 			if rl.IsKeyPressed(.RIGHT) || rl.IsKeyPressedRepeat(.RIGHT) {
 				if !nav_begin(sb, cursor, shift, false) {
 					cursor^ = word ? caret_word_right(s, cursor^) : caret_next_rune(s, cursor^)
+					if pills != nil do cursor^ = pill_snap_right(pills, cursor^)
 				}
 				nav_end(cursor, shift)
 			}
-			if rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP) {
+			if (rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP)) && !spell_menu_active(sb) {
 				nav_begin(sb, cursor, shift, true)
 				row, col := caret_row_col(s, cursor^)
 				want := col
@@ -774,7 +901,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 				}
 				nav_end(cursor, shift)
 			}
-			if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN) {
+			if (rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN)) && !spell_menu_active(sb) {
 				nav_begin(sb, cursor, shift, false)
 				row, col := caret_row_col(s, cursor^)
 				want := col
@@ -804,6 +931,22 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 				desired_col^ = c
 			}
 		}
+
+		// Safety net: drop any pill ranges left out of bounds after a
+		// whole-text reset (select-all replace/cut/clear empties the buffer).
+		if pills != nil && len(pills) > 0 {
+			blen := strings.builder_len(sb^)
+			valid := make([dynamic]Mention_Span, 0, len(pills), context.temp_allocator)
+			for p in pills {
+				if p.start >= 0 && p.end <= blen && p.start < p.end {
+					append(&valid, p)
+				}
+			}
+			if len(valid) != len(pills) {
+				clear(pills)
+				for p in valid do append(pills, p)
+			}
+		}
 	}
 
 	// Clip all drawing to the input rect interior.
@@ -816,7 +959,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 	has_newlines := !masked && strings.contains_rune(text, '\n')
 
 	// Precompute layout for the caret-aware (soft-wrapping) renderer. Visual
-	// rows are render-only; caret navigation still uses logical lines.
+	// rows are render-only; caret navigation/history still use logical lines.
 	use_caret_render := caret_active && !masked
 	visible_lines := max(1, (h - 12) / LINE_HEIGHT)
 	vlines: []Wrap_Line
@@ -831,30 +974,25 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		if cur_vrow < vis_start do vis_start = cur_vrow
 		if cur_vrow >= vis_start + int(visible_lines) do vis_start = cur_vrow - int(visible_lines) + 1
 		if vis_start < 0 do vis_start = 0
-		// Never scroll further than needed to fill the visible window.
+		// Never scroll further than needed to fill the visible window, so the
+		// view pulls back up when the input grows (e.g. after a line wraps and
+		// the bar height increases).
 		max_start := max(0, len(vlines) - int(visible_lines))
 		if vis_start > max_start do vis_start = max_start
 		if scroll_line != nil do scroll_line^ = vis_start
 		vis_end = min(len(vlines), vis_start + int(visible_lines))
 	}
 
-	// Vertical origin of the first visual text row. Single-line caret inputs
-	// center the text in the box (matching the placeholder / legacy single-
-	// line paths); multi-line composers keep the fixed top padding.
-	text_top := y + 6
-	if use_caret_render && !has_newlines && len(vlines) <= 1 {
-		text_top = y + (h - FONT_SIZE) / 2
-	}
-
 	// Mouse selection (caret inputs): press places the caret / starts a drag,
 	// double-click selects a word, triple-click the logical line, drag extends
-	// by character.
+	// by character. Mouse is converted to pane-local coordinates because split
+	// panes draw rlgl-translated while the mouse is in screen space.
 	if active && use_caret_render {
 		mouse := rl.GetMousePosition()
 		mouse.x -= f32(pane_origin_x)
 		if rl.IsMouseButtonPressed(.LEFT) {
 			if rl.CheckCollisionPointRec(mouse, rect) {
-				off := input_mouse_to_byte(vlines, text, mouse, inner_x, text_top, vis_start, vis_end)
+				off := input_mouse_to_byte(vlines, text, mouse, inner_x, y, vis_start, vis_end)
 				now := rl.GetTime()
 				if now - input_sel.last_click_time < 0.4 && abs(off - input_sel.last_click_byte) <= 2 {
 					input_sel.click_count = min(input_sel.click_count + 1, 3)
@@ -877,6 +1015,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 					cursor^ = le
 				case:
 					cursor^ = off
+					if pills != nil do cursor^ = pill_snap_caret(pills, cursor^)
 					input_sel_set(sb, cursor^, cursor^)
 					input_sel.dragging = true
 				}
@@ -889,7 +1028,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 			}
 		}
 		if input_sel.dragging && input_sel.sb == sb && rl.IsMouseButtonDown(.LEFT) {
-			off := input_mouse_to_byte(vlines, text, mouse, inner_x, text_top, vis_start, vis_end)
+			off := input_mouse_to_byte(vlines, text, mouse, inner_x, y, vis_start, vis_end)
 			if off != input_sel.extent {
 				input_sel.extent = off
 				input_sel.active = input_sel.anchor != input_sel.extent
@@ -905,6 +1044,28 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		cur_vrow, cur_caret_x = input_caret_visual(vlines, text, cursor^)
 	}
 
+	// Spellcheck: scan the composer for misspelled words (memoized on text
+	// hash) and open the suggestions menu on right-click over one. Only the
+	// chat composer qualifies (caret-aware, with pills + undo).
+	spell_squiggles: []Spell_Range
+	if active && use_caret_render && pills != nil && undo != nil {
+		spell_squiggles = spellcheck_ranges(text, cursor^, pills)
+		if rl.IsMouseButtonPressed(.RIGHT) {
+			mouse := rl.GetMousePosition()
+			mouse.x -= f32(pane_origin_x)
+			if rl.CheckCollisionPointRec(mouse, rect) {
+				off := input_mouse_to_byte(vlines, text, mouse, inner_x, y, vis_start, vis_end)
+				ws, we, misspelled := spellcheck_word_at(text, off, pills)
+				if misspelled {
+					_, word_x := input_caret_visual(vlines, text, ws)
+					spell_menu_open(sb, cursor, pills, undo, ws, we, inner_x + word_x, y)
+				} else if spell_menu_active(sb) {
+					spell_menu_close()
+				}
+			}
+		}
+	}
+
 	// Legacy (non-caret) render paths only show a highlight when the selection
 	// covers the whole text (Cmd+A on simple inputs).
 	sel_all := input_sel.active && input_sel.sb == sb &&
@@ -916,12 +1077,13 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		draw_text(ph_c, inner_x, y + (h - FONT_SIZE) / 2, FONT_SIZE, FG_SECONDARY)
 	} else if use_caret_render {
 		// Caret-aware soft-wrapped rendering: draw a window of visual lines.
+		// Text fits inner_w by construction, so no horizontal scroll is needed.
 		render_idx: i32 = 0
 		for vi := vis_start; vi < vis_end; vi += 1 {
 			vl := vlines[vi]
 			line := text[vl.start:vl.end]
 			line_c := strings.clone_to_cstring(line, context.temp_allocator)
-			line_y := text_top + render_idx * LINE_HEIGHT
+			line_y := y + 6 + render_idx * LINE_HEIGHT
 			// Selection highlight: overlap of this visual line with the range.
 			if input_sel.active && input_sel.sb == sb {
 				lo, hi := input_sel_range()
@@ -935,7 +1097,43 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 					rl.DrawRectangle(hx, line_y, hw, FONT_SIZE, BG_SELECTION)
 				}
 			}
+			// Pill backgrounds behind any mention chips on this visual line.
+			if pills != nil {
+				for p in pills {
+					ps := max(p.start, vl.start)
+					pe := min(p.end, vl.end)
+					if ps >= pe do continue
+					pre_c := strings.clone_to_cstring(text[vl.start:ps], context.temp_allocator)
+					seg_c := strings.clone_to_cstring(text[ps:pe], context.temp_allocator)
+					px := inner_x + measure_text(pre_c, FONT_SIZE)
+					pw := measure_text(seg_c, FONT_SIZE)
+					draw_input_pill_bg(px, line_y, pw)
+				}
+			}
 			draw_text(line_c, inner_x, line_y, FONT_SIZE, FG_PRIMARY)
+			// Redraw pill substrings in the accent color over the chip bg.
+			if pills != nil {
+				for p in pills {
+					ps := max(p.start, vl.start)
+					pe := min(p.end, vl.end)
+					if ps >= pe do continue
+					pre_c := strings.clone_to_cstring(text[vl.start:ps], context.temp_allocator)
+					seg_c := strings.clone_to_cstring(text[ps:pe], context.temp_allocator)
+					px := inner_x + measure_text(pre_c, FONT_SIZE)
+					draw_text(seg_c, px, line_y, FONT_SIZE, FG_ACCENT)
+				}
+			}
+			// Red squiggles under misspelled words on this visual line.
+			for r in spell_squiggles {
+				rs := max(r.start, vl.start)
+				re := min(r.end, vl.end)
+				if rs >= re do continue
+				pre_c := strings.clone_to_cstring(text[vl.start:rs], context.temp_allocator)
+				seg_c := strings.clone_to_cstring(text[rs:re], context.temp_allocator)
+				sx := inner_x + measure_text(pre_c, FONT_SIZE)
+				sw := measure_text(seg_c, FONT_SIZE)
+				draw_squiggle(sx, line_y + FONT_SIZE + 1, sw, SPELL_SQUIGGLE_COLOR)
+			}
 			render_idx += 1
 		}
 	} else if has_newlines {
@@ -947,7 +1145,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 			line := lines[i]
 			line_c := strings.clone_to_cstring(line, context.temp_allocator)
 			line_y := y + 6 + render_idx * LINE_HEIGHT
-			// Only the last line gets horizontal scrolling (cursor at end).
+			// Only the last line gets horizontal scrolling (cursor is always at end).
 			if i == i32(len(lines)) - 1 {
 				line_pixel_w := measure_text(line_c, FONT_SIZE)
 				line_offset: i32 = 0
@@ -969,7 +1167,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 			render_idx += 1
 		}
 	} else {
-		// Single-line rendering.
+		// Single-line rendering (original behavior).
 		display_text: string
 		if masked {
 			mask_sb := strings.builder_make(context.temp_allocator)
@@ -996,22 +1194,13 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 	// Draw cursor if active.
 	if active {
 		t := rl.GetTime()
-		// Re-anchor the blink phase on any edit or caret movement.
-		cur := cursor^ if cursor != nil else strings.builder_len(sb^)
-		if blink_sb != sb || blink_len != strings.builder_len(sb^) || blink_cursor != cur {
-			blink_sb = sb
-			blink_len = strings.builder_len(sb^)
-			blink_cursor = cur
-			blink_anchor = t
-		}
-		caret_w := max(i32(1), sc(1))
-		if int((t-blink_anchor)*2)%2 == 0 {
+		if int(t * 2) % 2 == 0 {
 			if use_caret_render {
 				// Caret at its true visual (row, x) within the visible window.
 				if cur_vrow >= vis_start && cur_vrow < vis_end {
 					cursor_x := inner_x + cur_caret_x
-					cursor_line_y := text_top + i32(cur_vrow - vis_start) * LINE_HEIGHT
-					rl.DrawRectangle(cursor_x, cursor_line_y, caret_w, FONT_SIZE, FG_ACCENT_LIGHT)
+					cursor_line_y := y + 6 + i32(cur_vrow - vis_start) * LINE_HEIGHT
+					rl.DrawLine(cursor_x, cursor_line_y, cursor_x, cursor_line_y + FONT_SIZE, FG_ACCENT)
 				}
 			} else if has_newlines {
 				// Multiline cursor: position at end of last line.
@@ -1026,9 +1215,9 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 				cursor_x := inner_x + cursor_text_w - cursor_offset
 				visible_count := min(i32(len(lines)), visible_lines)
 				cursor_line_y := y + 6 + (visible_count - 1) * LINE_HEIGHT
-				rl.DrawRectangle(cursor_x, cursor_line_y, caret_w, FONT_SIZE, FG_ACCENT_LIGHT)
+				rl.DrawLine(cursor_x, cursor_line_y, cursor_x, cursor_line_y + FONT_SIZE, FG_ACCENT)
 			} else {
-				// Single-line cursor.
+				// Single-line cursor (original behavior).
 				display_for_cursor: string
 				if masked {
 					mask_sb := strings.builder_make(context.temp_allocator)
@@ -1045,18 +1234,24 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 					cursor_offset = cursor_text_w - inner_w
 				}
 				cursor_x := inner_x + cursor_text_w - cursor_offset
-				rl.DrawRectangle(cursor_x, y + 5, caret_w, h - 10, FG_ACCENT_LIGHT)
+				rl.DrawLine(cursor_x, y + 5, cursor_x, y + h - 5, FG_ACCENT)
 			}
 		}
 	}
 
 	rl.EndScissorMode()
 
+	// Suggestions popup for a right-clicked misspelled word. Drawn after the
+	// scissor ends so it renders unclipped above the input box.
+	if spell_menu_active(sb) {
+		draw_spell_menu(x, y, w)
+	}
+
 	return entered
 }
 
-// Hit-test wrapped text. Returns byte offset into text at (mouse_x, mouse_y),
-// or -1 if miss. Must mirror draw_text_wrapped wrapping logic exactly.
+// Hit-test wrapped text. Returns byte offset into text at (mouse_x, mouse_y), or -1 if miss.
+// Must mirror draw_text_wrapped wrapping logic exactly.
 hit_test_wrapped :: proc(x, y, max_width: i32, text: string, mouse_x, mouse_y: i32, font_size: i32 = FONT_SIZE) -> int {
 	if len(text) == 0 do return -1
 
@@ -1071,6 +1266,7 @@ hit_test_wrapped :: proc(x, y, max_width: i32, text: string, mouse_x, mouse_y: i
 }
 
 // Draw a single line with optional selection highlight behind it.
+// Uses measure_text on actual substrings for pixel-accurate highlight positioning.
 draw_line_with_selection :: proc(x, y: i32, line: string, font_size: i32, color: rl.Color, line_byte_start, sel_start, sel_end: int) {
 	line_byte_end := line_byte_start + len(line)
 
@@ -1092,11 +1288,12 @@ draw_line_with_selection :: proc(x, y: i32, line: string, font_size: i32, color:
 	draw_text(line_c, x, y, font_size, color)
 }
 
-// Vertical viewport cull band for wrapped-text draw loops. When set, per-line
-// drawing skips lines fully outside [top, bottom] while still advancing layout
-// so heights stay correct. Defaults to unbounded.
-@(private = "file") text_cull_top: i32 = min(i32)
-@(private = "file") text_cull_bottom: i32 = max(i32)
+// Vertical viewport cull band for wrapped-text draw loops. When set by the
+// chat renderer, per-line drawing skips lines fully outside [top, bottom] while
+// still advancing layout so heights stay correct. Defaults to unbounded so
+// non-chat callers (modals, sidebar) draw every line.
+@(private="file") text_cull_top: i32 = min(i32)
+@(private="file") text_cull_bottom: i32 = max(i32)
 
 // set_text_cull_band restricts subsequent wrapped-text draws to the given
 // vertical band. Pair with clear_text_cull_band.
@@ -1147,7 +1344,7 @@ draw_text_wrapped :: proc(x, y, max_width: i32, text: string, color: rl.Color, f
 }
 
 // Draw a single line of text, cutting it with an ellipsis if it would exceed
-// max_width.
+// max_width. Used for labels/paths in modals that must never overflow.
 draw_text_truncated :: proc(text: string, x, y, max_width, font_size: i32, color: rl.Color) {
 	if len(text) == 0 do return
 	out := truncate_to_width(text, max_width, font_size)
@@ -1156,7 +1353,7 @@ draw_text_truncated :: proc(text: string, x, y, max_width, font_size: i32, color
 }
 
 // Draw a rounded "pill" badge with text. Returns the pill's full width so the
-// caller can advance horizontally.
+// caller can advance horizontally. Background and foreground are caller-chosen.
 draw_pill :: proc(text: string, x, y, font_size: i32, fg, bg: rl.Color) -> i32 {
 	c := strings.clone_to_cstring(text, context.temp_allocator)
 	tw := measure_text(c, font_size)
@@ -1192,6 +1389,82 @@ truncate_to_width :: proc(text: string, max_width, font_size: i32) -> string {
 	return strings.concatenate({text[:end], "…"}, context.temp_allocator)
 }
 
+// Return text truncated with a LEADING ellipsis so the trailing portion (e.g. a
+// file's name and extension) stays visible when it would overflow max_width.
+// The returned string is allocated in the temp allocator.
+truncate_to_width_left :: proc(text: string, max_width, font_size: i32) -> string {
+	if len(text) == 0 do return text
+	full_c := strings.clone_to_cstring(text, context.temp_allocator)
+	if measure_text(full_c, font_size) <= max_width {
+		return text
+	}
+	ell_c := strings.clone_to_cstring("…", context.temp_allocator)
+	ell_w := measure_text(ell_c, font_size)
+	avail := max_width - ell_w
+	// Walk runes backward accumulating width until we run out of room.
+	start := len(text)
+	for start > 0 {
+		prev := start - 1
+		for prev > 0 && (text[prev] & 0xC0) == 0x80 do prev -= 1
+		seg_c := strings.clone_to_cstring(text[prev:], context.temp_allocator)
+		if measure_text(seg_c, font_size) > avail do break
+		start = prev
+	}
+	return strings.concatenate({"…", text[start:]}, context.temp_allocator)
+}
+
+// Return a path truncated in the MIDDLE so the first directory segment and the
+// final segment (filename) stay visible when it would otherwise overflow
+// max_width, e.g. "alloy/…/widgets.odin". A trailing '/' on directory entries
+// is preserved. Allocated in the temp allocator.
+truncate_path_middle :: proc(path: string, max_width, font_size: i32) -> string {
+	if len(path) == 0 do return path
+	full_c := strings.clone_to_cstring(path, context.temp_allocator)
+	if measure_text(full_c, font_size) <= max_width {
+		return path
+	}
+
+	// Peel an optional trailing separator (directory entries end with '/').
+	body := path
+	trailing := ""
+	if body[len(body) - 1] == '/' || body[len(body) - 1] == '\\' {
+		trailing = body[len(body) - 1:]
+		body = body[:len(body) - 1]
+	}
+
+	// Paths use '/' or '\' (Windows); reuse the path's own separator style.
+	last_sep := max(strings.last_index_byte(body, '/'), strings.last_index_byte(body, '\\'))
+	if last_sep < 0 {
+		// No directory component — keep the tail of the bare name visible.
+		return truncate_to_width_left(path, max_width, font_size)
+	}
+	sep := body[last_sep:last_sep + 1]
+	last_seg := body[last_sep + 1:]
+	first_sep := strings.index_byte(body, '/')
+	if bs := strings.index_byte(body, '\\'); bs >= 0 && (first_sep < 0 || bs < first_sep) {
+		first_sep = bs
+	}
+	first_seg := body[:first_sep]
+
+	// Candidate 1: first/…/last (+ optional trailing separator).
+	cand := strings.concatenate({first_seg, sep, "…", sep, last_seg, trailing}, context.temp_allocator)
+	cand_c := strings.clone_to_cstring(cand, context.temp_allocator)
+	if measure_text(cand_c, font_size) <= max_width {
+		return cand
+	}
+
+	// Candidate 2: …/last — drop the leading segment.
+	cand2 := strings.concatenate({"…", sep, last_seg, trailing}, context.temp_allocator)
+	cand2_c := strings.clone_to_cstring(cand2, context.temp_allocator)
+	if measure_text(cand2_c, font_size) <= max_width {
+		return cand2
+	}
+
+	// Candidate 3: even …/last is too wide — left-truncate the whole thing so
+	// the filename's tail/extension stays visible.
+	return truncate_to_width_left(path, max_width, font_size)
+}
+
 // Find word boundaries around a byte offset. A word is alphanumeric + underscore.
 find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: int) {
 	start = byte_offset
@@ -1209,8 +1482,21 @@ find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: in
 	return
 }
 
-// section_header draws an uppercase small label with a hairline underneath —
-// the unified section divider used inside panels/cards. Returns the y below.
+// ------------------------------------------------------------------
+// ingot-only generic widgets (not present in the alloy superset).
+// ------------------------------------------------------------------
+
+spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = FG_ACCENT_LIGHT) {
+	start := f32(math.mod(rl.GetTime()*360.0, 360.0))
+	thickness := max(radius * 0.28, 2.0)
+	rl.DrawRing(
+		rl.Vector2{f32(cx), f32(cy)},
+		radius - thickness, radius,
+		start, start + 270.0,
+		24, color,
+	)
+}
+
 section_header :: proc(x, y, w: i32, label: string) -> i32 {
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
 	draw_text(lc, x, y, FONT_SIZE_SMALL, FG_LABEL)
