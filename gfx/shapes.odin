@@ -180,7 +180,7 @@ DrawRing :: proc(center: Vector2, innerRadius, outerRadius, startAngle, endAngle
 // --- scissor ---------------------------------------------------------------
 
 BeginScissorMode :: proc(x, y, width, height: i32) {
-	if !g.frame.has_frame || g.frame.tex_mode do return
+	if !g.frame.has_frame do return
 	_ensure_pass()
 	renderer_flush(&g.rend, g.frame.pass)
 	sx := f32(g.fb_width) / f32(max(g.width, 1))
@@ -223,7 +223,7 @@ DrawCircleLinesV :: proc(center: Vector2, radius: f32, color: Color) {
 
 // DrawRectangleGradientH draws a rect with a left→right color gradient.
 DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Color) {
-	if !g.frame.has_frame || g.frame.tex_mode do return
+	if !g.frame.has_frame do return
 	batch_set(&g.rend, .Solid, nil)
 	x0, y0 := f32(posX), f32(posY)
 	x1, y1 := x0 + f32(width), y0 + f32(height)
@@ -241,7 +241,7 @@ DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Colo
 
 // DrawRectangleGradientV draws a rect with a top→bottom color gradient.
 DrawRectangleGradientV :: proc(posX, posY, width, height: i32, top, bottom: Color) {
-	if !g.frame.has_frame || g.frame.tex_mode do return
+	if !g.frame.has_frame do return
 	batch_set(&g.rend, .Solid, nil)
 	x0, y0 := f32(posX), f32(posY)
 	x1, y1 := x0 + f32(width), y0 + f32(height)

@@ -21,10 +21,21 @@ Pipe_Kind :: enum {
 	Image,
 }
 
+// Blend_Slot enumerates the precompiled blend states each pipeline kind is
+// built against. Alpha is the default premultiplied over-blend; Additive is
+// One/One (inputs are premultiplied so this is true additive); Multiplied is
+// raylib's DST_COLOR × ONE_MINUS_SRC_ALPHA; Custom is rebuilt on demand from
+// rlgl.SetBlendFactors.
+Blend_Slot :: enum {
+	Alpha,
+	Additive,
+	Multiplied,
+	Custom,
+}
+
 Renderer :: struct {
-	solid_pipe: wg.RenderPipeline,
-	text_pipe:  wg.RenderPipeline,
-	image_pipe: wg.RenderPipeline,
+	shader: wg.ShaderModule, // kept alive so Custom pipelines can be rebuilt
+	pipes:  [Pipe_Kind][Blend_Slot]wg.RenderPipeline,
 
 	ubuf:         wg.Buffer,
 	ubind:        wg.BindGroup,
@@ -32,14 +43,93 @@ Renderer :: struct {
 	tex_layout:   wg.BindGroupLayout, // group(1): texture + sampler
 
 	// current run
-	verts:    [dynamic]Vertex,
-	cur_kind: Pipe_Kind,
-	cur_bind: wg.BindGroup,
+	verts:     [dynamic]Vertex,
+	cur_kind:  Pipe_Kind,
+	cur_bind:  wg.BindGroup,
+	cur_blend: Blend_Slot,
+
+	// Custom blend factors (set by rlgl.SetBlendFactors; default = Alpha).
+	cust_src: wg.BlendFactor,
+	cust_dst: wg.BlendFactor,
+	cust_op:  wg.BlendOperation,
 
 	// transient per-frame vertex buffers (released at next frame begin)
 	frame_buffers: [dynamic]wg.Buffer,
 
 	proj_w, proj_h: i32,
+}
+
+// _blend_for returns the wgpu blend state for a slot. Colour and alpha share
+// the same factors (the batch outputs premultiplied rgb).
+@(private)
+_blend_for :: proc(r: ^Renderer, slot: Blend_Slot) -> wg.BlendState {
+	c: wg.BlendComponent
+	switch slot {
+	case .Alpha:
+		c = {srcFactor = .One, dstFactor = .OneMinusSrcAlpha, operation = .Add}
+	case .Additive:
+		c = {srcFactor = .One, dstFactor = .One, operation = .Add}
+	case .Multiplied:
+		c = {srcFactor = .Dst, dstFactor = .OneMinusSrcAlpha, operation = .Add}
+	case .Custom:
+		c = {srcFactor = r.cust_src, dstFactor = r.cust_dst, operation = r.cust_op}
+	}
+	return {color = c, alpha = c}
+}
+
+// _make_pipe builds one (kind × blend) render pipeline over the shared batch
+// vertex layout. File-scope so both renderer_init and _rebuild_custom_pipes
+// can call it.
+@(private)
+_make_pipe :: proc(r: ^Renderer, slot: Blend_Slot, fs: string, textured: bool) -> wg.RenderPipeline {
+	attrs := [3]wg.VertexAttribute{
+		{format = .Float32x2, offset = 0, shaderLocation = 0},
+		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
+		{format = .Float32x2, offset = u64(offset_of(Vertex, uv)), shaderLocation = 2},
+	}
+	vbl := wg.VertexBufferLayout{
+		arrayStride = size_of(Vertex), stepMode = .Vertex,
+		attributeCount = 3, attributes = raw_data(attrs[:]),
+	}
+	blend := _blend_for(r, slot)
+	target := wg.ColorTargetState{format = g.format, blend = &blend, writeMask = wg.ColorWriteMaskFlags_All}
+	layouts := [2]wg.BindGroupLayout{r.ubind_layout, r.tex_layout}
+	pl := wg.DeviceCreatePipelineLayout(g.device, &{
+		bindGroupLayoutCount = textured ? 2 : 1,
+		bindGroupLayouts = raw_data(layouts[:]),
+	})
+	return wg.DeviceCreateRenderPipeline(g.device, &{
+		layout = pl,
+		vertex = {module = r.shader, entryPoint = "vs_main", bufferCount = 1, buffers = &vbl},
+		primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .None},
+		multisample = {count = 1, mask = ~u32(0)},
+		fragment = &wg.FragmentState{module = r.shader, entryPoint = fs, targetCount = 1, targets = &target},
+	})
+}
+
+// _fs_for maps a pipeline kind to its fragment entry point + whether it samples
+// a texture (needs group(1)).
+@(private)
+_fs_for :: proc(kind: Pipe_Kind) -> (string, bool) {
+	switch kind {
+	case .Solid: return "fs_solid", false
+	case .Text:  return "fs_text", true
+	case .Image: return "fs_image", true
+	}
+	return "fs_solid", false
+}
+
+// _rebuild_custom_pipes recreates the Custom-slot pipelines after the custom
+// blend factors change.
+@(private)
+_rebuild_custom_pipes :: proc(r: ^Renderer) {
+	for kind in Pipe_Kind {
+		if r.pipes[kind][.Custom] != nil {
+			wg.RenderPipelineRelease(r.pipes[kind][.Custom])
+		}
+		fs, textured := _fs_for(kind)
+		r.pipes[kind][.Custom] = _make_pipe(r, .Custom, fs, textured)
+	}
 }
 
 BATCH_SHADER := `
@@ -91,7 +181,7 @@ renderer_init :: proc(r: ^Renderer) {
 			code  = BATCH_SHADER,
 		},
 	})
-	defer wg.ShaderModuleRelease(shader)
+	r.shader = shader
 
 	// group(0): projection uniform
 	r.ubind_layout = wg.DeviceCreateBindGroupLayout(g.device, &{
@@ -118,51 +208,33 @@ renderer_init :: proc(r: ^Renderer) {
 		entryCount = 2, entries = raw_data(tex_entries[:]),
 	})
 
-	attrs := [3]wg.VertexAttribute{
-		{format = .Float32x2, offset = 0, shaderLocation = 0},
-		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
-		{format = .Float32x2, offset = u64(offset_of(Vertex, uv)), shaderLocation = 2},
-	}
-	vbl := wg.VertexBufferLayout{
-		arrayStride = size_of(Vertex), stepMode = .Vertex,
-		attributeCount = 3, attributes = raw_data(attrs[:]),
-	}
-	// premultiplied-alpha blending (shaders output premultiplied rgb)
-	blend := wg.BlendState{
-		color = {srcFactor = .One, dstFactor = .OneMinusSrcAlpha, operation = .Add},
-		alpha = {srcFactor = .One, dstFactor = .OneMinusSrcAlpha, operation = .Add},
-	}
-	target := wg.ColorTargetState{format = g.format, blend = &blend, writeMask = wg.ColorWriteMaskFlags_All}
+	// Custom blend defaults to premultiplied over-blend until SetBlendFactors.
+	r.cust_src = .One
+	r.cust_dst = .OneMinusSrcAlpha
+	r.cust_op  = .Add
 
-	make_pipe :: proc(r: ^Renderer, shader: wg.ShaderModule, vbl: ^wg.VertexBufferLayout, target: ^wg.ColorTargetState, fs: string, textured: bool) -> wg.RenderPipeline {
-		layouts := [2]wg.BindGroupLayout{r.ubind_layout, r.tex_layout}
-		pl := wg.DeviceCreatePipelineLayout(g.device, &{
-			bindGroupLayoutCount = textured ? 2 : 1,
-			bindGroupLayouts = raw_data(layouts[:]),
-		})
-		return wg.DeviceCreateRenderPipeline(g.device, &{
-			layout = pl,
-			vertex = {module = shader, entryPoint = "vs_main", bufferCount = 1, buffers = vbl},
-			primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .None},
-			multisample = {count = 1, mask = ~u32(0)},
-			fragment = &wg.FragmentState{module = shader, entryPoint = fs, targetCount = 1, targets = target},
-		})
+	// build every (kind × blend_slot) pipeline once.
+	for kind in Pipe_Kind {
+		fs, textured := _fs_for(kind)
+		for slot in Blend_Slot {
+			r.pipes[kind][slot] = _make_pipe(r, slot, fs, textured)
+		}
 	}
-
-	r.solid_pipe = make_pipe(r, shader, &vbl, &target, "fs_solid", false)
-	r.text_pipe  = make_pipe(r, shader, &vbl, &target, "fs_text", true)
-	r.image_pipe = make_pipe(r, shader, &vbl, &target, "fs_image", true)
 
 	r.cur_kind = .Solid
+	r.cur_blend = .Alpha
 }
 
 renderer_shutdown :: proc(r: ^Renderer) {
 	for b in r.frame_buffers do wg.BufferRelease(b)
 	delete(r.frame_buffers)
 	delete(r.verts)
-	if r.solid_pipe != nil do wg.RenderPipelineRelease(r.solid_pipe)
-	if r.text_pipe != nil do wg.RenderPipelineRelease(r.text_pipe)
-	if r.image_pipe != nil do wg.RenderPipelineRelease(r.image_pipe)
+	for kind in Pipe_Kind {
+		for slot in Blend_Slot {
+			if r.pipes[kind][slot] != nil do wg.RenderPipelineRelease(r.pipes[kind][slot])
+		}
+	}
+	if r.shader != nil do wg.ShaderModuleRelease(r.shader)
 	if r.ubind != nil do wg.BindGroupRelease(r.ubind)
 	if r.ubuf != nil do wg.BufferRelease(r.ubuf)
 	if r.ubind_layout != nil do wg.BindGroupLayoutRelease(r.ubind_layout)
@@ -176,6 +248,7 @@ renderer_frame_begin :: proc(r: ^Renderer) {
 	clear(&r.verts)
 	r.cur_kind = .Solid
 	r.cur_bind = nil
+	r.cur_blend = .Alpha
 
 	// keep projection in sync with the logical window size
 	if r.proj_w != g.width || r.proj_h != g.height {
@@ -200,7 +273,7 @@ batch_set :: proc(r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
 // push_quad emits two triangles for rect `d` sampling uv rect `s`.
 @(private)
 push_quad :: proc(r: ^Renderer, d: Rectangle, s: Rectangle, col: [4]f32) {
-	if !g.frame.has_frame || g.frame.tex_mode do return
+	if !g.frame.has_frame do return
 	x0, y0 := d.x, d.y
 	x1, y1 := d.x + d.width, d.y + d.height
 	u0, v0 := s.x, s.y
@@ -217,7 +290,7 @@ push_quad :: proc(r: ^Renderer, d: Rectangle, s: Rectangle, col: [4]f32) {
 
 @(private)
 push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
-	if !g.frame.has_frame || g.frame.tex_mode do return
+	if !g.frame.has_frame do return
 	append(&r.verts,
 		Vertex{a, col, {0, 0}},
 		Vertex{b, col, {0, 0}},
@@ -229,7 +302,7 @@ push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 // Corners must be given in order tl, tr, br, bl.
 @(private)
 push_quad4 :: proc(r: ^Renderer, tl, tr, br, bl: [2]f32, uv_tl, uv_tr, uv_br, uv_bl: [2]f32, col: [4]f32) {
-	if !g.frame.has_frame || g.frame.tex_mode do return
+	if !g.frame.has_frame do return
 	append(&r.verts,
 		Vertex{tl, col, uv_tl},
 		Vertex{bl, col, uv_bl},
@@ -247,14 +320,7 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder) {
 	vbuf := wg.DeviceCreateBufferWithData(g.device, &{usage = {.Vertex}}, r.verts[:])
 	append(&r.frame_buffers, vbuf)
 
-	switch r.cur_kind {
-	case .Solid:
-		wg.RenderPassEncoderSetPipeline(pass, r.solid_pipe)
-	case .Text:
-		wg.RenderPassEncoderSetPipeline(pass, r.text_pipe)
-	case .Image:
-		wg.RenderPassEncoderSetPipeline(pass, r.image_pipe)
-	}
+	wg.RenderPassEncoderSetPipeline(pass, r.pipes[r.cur_kind][r.cur_blend])
 	wg.RenderPassEncoderSetBindGroup(pass, 0, r.ubind)
 	if r.cur_kind != .Solid && r.cur_bind != nil {
 		wg.RenderPassEncoderSetBindGroup(pass, 1, r.cur_bind)

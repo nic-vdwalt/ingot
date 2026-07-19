@@ -20,7 +20,14 @@ Frame_State :: struct {
 	clear_color: Color,
 	pass_begun:  bool,
 	has_frame:   bool,
-	tex_mode:    bool, // drawing redirected to an (unsupported) render target
+
+	// Render-target redirection (Phase 2): when rt != 0 the batch records into
+	// rt_pass (targeting an offscreen texture) instead of the swapchain pass.
+	rt:            u32,
+	rt_pass:       wg.RenderPassEncoder,
+	rt_pass_begun: bool,
+	// 3D mode (Phase 4): a depth-enabled pass replaces the current 2D pass.
+	depth_view:    wg.TextureView,
 }
 
 Context :: struct {
