@@ -115,3 +115,52 @@ draw_caption_buttons :: proc(screen_w: i32, st: Caption_Input) -> (min_r, max_r,
 
 	return
 }
+
+// draw_fullscreen_button renders a single caption-style button flush to the
+// top-right corner (used on web builds, which have no OS title bar). It draws
+// an enter/exit-fullscreen corner-bracket glyph, applies a Win11-style hover
+// fill when the mouse is over it, and returns the button rect plus whether it
+// is hovered so the caller can handle clicks.
+draw_fullscreen_button :: proc(screen_w: i32, is_fs: bool, mouse: rl.Vector2) -> (r: rl.Rectangle, hovered: bool) {
+	w := f32(CAPTION_BTN_W)
+	h := f32(TAB_BAR_HEIGHT)
+	r = rl.Rectangle{f32(screen_w) - w, 0, w, h}
+	hovered = rl.CheckCollisionPointRec(mouse, r)
+
+	// Opaque base + hover fill (matches the Windows caption buttons).
+	rl.DrawRectangleRec(r, BG_SECONDARY)
+	if hovered {
+		rl.DrawRectangleRec(r, CAPTION_HOVER_FILL)
+	}
+
+	focused := rl.IsWindowFocused()
+	col := FG_PRIMARY if focused else FG_SECONDARY
+
+	stroke := scf(1.0)
+	g := scf(10.0) // glyph box size
+	arm := scf(3.5) // corner arm length
+	gx := r.x + (w - g) / 2
+	gy := r.y + (h - g) / 2
+
+	// One L-shaped corner bracket. (sx, sy) point the arms away from the vertex.
+	corner :: proc(cx, cy, sx, sy, arm, stroke: f32, col: rl.Color) {
+		rl.DrawLineEx(rl.Vector2{cx, cy}, rl.Vector2{cx + sx * arm, cy}, stroke, col)
+		rl.DrawLineEx(rl.Vector2{cx, cy}, rl.Vector2{cx, cy + sy * arm}, stroke, col)
+	}
+
+	if is_fs {
+		// Exit: brackets inset toward the center, arms pointing outward.
+		corner(gx + arm,     gy + arm,     -1, -1, arm, stroke, col)
+		corner(gx + g - arm, gy + arm,     +1, -1, arm, stroke, col)
+		corner(gx + arm,     gy + g - arm, -1, +1, arm, stroke, col)
+		corner(gx + g - arm, gy + g - arm, +1, +1, arm, stroke, col)
+	} else {
+		// Enter: brackets at the outer corners, arms pointing inward.
+		corner(gx,     gy,     +1, +1, arm, stroke, col)
+		corner(gx + g, gy,     -1, +1, arm, stroke, col)
+		corner(gx,     gy + g, +1, -1, arm, stroke, col)
+		corner(gx + g, gy + g, -1, -1, arm, stroke, col)
+	}
+
+	return
+}

@@ -24,6 +24,8 @@ foreign dom {
 	@(link_name = "ingot_canvas_css_height")   _js_css_height :: proc() -> f64 ---
 	@(link_name = "ingot_device_pixel_ratio")  _js_dpr        :: proc() -> f64 ---
 	@(link_name = "ingot_set_cursor")          _js_set_cursor :: proc(cur: i32) ---
+	@(link_name = "ingot_is_fullscreen")       _js_is_fullscreen     :: proc() -> i32 ---
+	@(link_name = "ingot_toggle_fullscreen")   _js_toggle_fullscreen :: proc() ---
 }
 
 // A non-nil sentinel so the shared `g.win == nil` guards treat the web target as
@@ -266,7 +268,11 @@ platform_drop_init :: proc() {}
 GetWindowHandle    :: proc() -> rawptr { return nil }
 IsWindowMinimized  :: proc() -> bool   { return false }
 IsWindowHidden     :: proc() -> bool   { return false }
-IsWindowFullscreen :: proc() -> bool   { return false }
+IsWindowFullscreen :: proc() -> bool   { return _js_is_fullscreen() != 0 }
+// ToggleFullscreen requests (or exits) the browser Fullscreen API on the canvas.
+// Must be called from a user-gesture handler; the header's fullscreen button
+// forwards a click here, satisfying that requirement.
+ToggleFullscreen   :: proc() { _js_toggle_fullscreen() }
 RestoreWindow      :: proc() {}
 
 IsFileDropped :: proc() -> bool { return false }

@@ -57,6 +57,30 @@
 				const c = document.getElementById(CANVAS_ID);
 				if (c) c.style.cursor = CURSORS[cur] || "default";
 			},
+			ingot_is_fullscreen: () => {
+				const fs = document.fullscreenElement ||
+					document.webkitFullscreenElement;
+				return fs ? 1 : 0;
+			},
+			ingot_toggle_fullscreen: () => {
+				const fs = document.fullscreenElement ||
+					document.webkitFullscreenElement;
+				if (fs) {
+					const exit = document.exitFullscreen ||
+						document.webkitExitFullscreen;
+					if (exit) exit.call(document);
+					return;
+				}
+				const c = document.getElementById(CANVAS_ID);
+				const target = (c && c.parentElement) || c ||
+					document.documentElement;
+				const req = target.requestFullscreen ||
+					target.webkitRequestFullscreen;
+				if (req) {
+					const p = req.call(target);
+					if (p && p.catch) p.catch(() => {});
+				}
+			},
 		};
 	}
 

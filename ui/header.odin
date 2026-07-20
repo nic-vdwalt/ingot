@@ -43,5 +43,17 @@ draw_app_header :: proc(title: cstring, screen_w: i32) -> (header_h: i32) {
 		}
 	}
 
+	// Web build: no OS title bar, so offer a fullscreen toggle at the top-right.
+	when ODIN_OS == .JS {
+		is_fs := rl.IsWindowFullscreen()
+		_, hovered := draw_fullscreen_button(screen_w, is_fs, rl.GetMousePosition())
+		if hovered {
+			rl.SetMouseCursor(.POINTING_HAND)
+			if rl.IsMouseButtonPressed(.LEFT) {
+				rl.ToggleFullscreen()
+			}
+		}
+	}
+
 	return
 }
