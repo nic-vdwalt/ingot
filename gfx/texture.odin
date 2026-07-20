@@ -14,13 +14,14 @@ import wg "vendor:wgpu"
 TEX_ID_BASE :: u32(0x4000_0000)
 
 Tex_Entry :: struct {
-	tex:     wg.Texture,
-	view:    wg.TextureView,
-	sampler: wg.Sampler,
-	bind:    wg.BindGroup,
-	width:   i32,
-	height:  i32,
-	filter:  TextureFilter,
+	tex:      wg.Texture,
+	view:     wg.TextureView,
+	sampler:  wg.Sampler,
+	bind:     wg.BindGroup,
+	width:    i32,
+	height:   i32,
+	filter:   TextureFilter,
+	wgformat: wg.TextureFormat, // backing wgpu format (for render-target pipelines)
 }
 
 @(private) g_textures: [dynamic]^Tex_Entry
@@ -69,6 +70,73 @@ _to_rgba :: proc(src: [^]byte, w, h: i32, format: PixelFormat) -> []byte {
 	return out
 }
 
+// _new_rt_color creates a sampleable colour texture usable as a render-target
+// attachment, registered in the texture registry, and returns its Texture2D.
+// Backs LoadRenderTexture (color-only) and the rlgl framebuffer path.
+@(private)
+_new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
+	e := new(Tex_Entry)
+	e.width = w
+	e.height = h
+	e.filter = .BILINEAR
+	e.wgformat = format
+	e.tex = wg.DeviceCreateTexture(g.device, &{
+		usage = {.RenderAttachment, .TextureBinding, .CopyDst},
+		dimension = ._2D,
+		size = {u32(max(w, 1)), u32(max(h, 1)), 1},
+		format = format,
+		mipLevelCount = 1,
+		sampleCount = 1,
+	})
+	e.view = wg.TextureCreateView(e.tex, nil)
+	_tex_build_bind(e)
+	append(&g_textures, e)
+	id := TEX_ID_BASE + u32(len(g_textures) - 1)
+	pf: PixelFormat = .UNCOMPRESSED_R8G8B8A8
+	#partial switch format {
+	case .R32Float:    pf = .UNCOMPRESSED_R32
+	case .RGBA16Float: pf = .UNCOMPRESSED_R16G16B16A16
+	}
+	return Texture2D{id = id, width = w, height = h, mipmaps = 1, format = pf}
+}
+
+// _texture_view returns the wgpu view backing a registered texture id (used as
+// a render-target attachment). nil if not found.
+@(private)
+_texture_view :: proc(id: u32) -> wg.TextureView {
+	e := get_texture(id)
+	if e == nil do return nil
+	return e.view
+}
+
+// _new_rt_depth creates a Depth24Plus depth attachment registered in the
+// texture registry (no sampler/bind — never sampled). Returns its Texture2D.
+@(private)
+_new_rt_depth :: proc(w, h: i32) -> Texture2D {
+	e := new(Tex_Entry)
+	e.width = w
+	e.height = h
+	e.wgformat = .Depth24Plus
+	e.tex = wg.DeviceCreateTexture(g.device, &{
+		usage = {.RenderAttachment},
+		dimension = ._2D,
+		size = {u32(max(w, 1)), u32(max(h, 1)), 1},
+		format = .Depth24Plus,
+		mipLevelCount = 1,
+		sampleCount = 1,
+	})
+	e.view = wg.TextureCreateView(e.tex, nil)
+	append(&g_textures, e)
+	id := TEX_ID_BASE + u32(len(g_textures) - 1)
+	return Texture2D{id = id, width = w, height = h, mipmaps = 1, format = .UNCOMPRESSED_R32}
+}
+
+// _unload_depth releases a depth texture created by _new_rt_depth.
+@(private)
+_unload_depth :: proc(depth: Texture2D) {
+	UnloadTexture(depth)
+}
+
 LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 	if image.data == nil || image.width <= 0 || image.height <= 0 do return Texture2D{}
 	rgba := _to_rgba(([^]byte)(image.data), image.width, image.height, image.format)
@@ -78,6 +146,7 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 	e.width = image.width
 	e.height = image.height
 	e.filter = .BILINEAR
+	e.wgformat = .RGBA8Unorm
 	e.tex = wg.DeviceCreateTexture(g.device, &{
 		usage = {.TextureBinding, .CopyDst},
 		dimension = ._2D,
@@ -183,10 +252,25 @@ DrawTexturePro :: proc(texture: Texture2D, source, dest: Rectangle, origin: Vect
 
 	tw := f32(e.width)
 	th := f32(e.height)
-	u0 := source.x / tw
-	v0 := source.y / th
-	u1 := (source.x + source.width) / tw
-	v1 := (source.y + source.height) / th
+	// Replicate raylib's negative-source-dimension handling: a negative width or
+	// height flips the sampled region (used by RenderTexture blits which pass a
+	// negative source height to compensate for the flipped-Y target).
+	src := source
+	flipX := false
+	if src.width < 0 {
+		flipX = true
+		src.width = -src.width
+	}
+	if src.height < 0 {
+		src.y -= src.height // keep height negative; shift origin to stay in-range
+	}
+	u0 := src.x / tw
+	v0 := src.y / th
+	u1 := (src.x + src.width) / tw
+	v1 := (src.y + src.height) / th
+	if flipX {
+		u0, u1 = u1, u0
+	}
 
 	// dest quad corners relative to top-left, offset by -origin, rotated, then
 	// translated to dest.x/dest.y (matches raylib DrawTexturePro).

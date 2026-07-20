@@ -22,12 +22,18 @@ Frame_State :: struct {
 	has_frame:   bool,
 
 	// Render-target redirection (Phase 2): when rt != 0 the batch records into
-	// rt_pass (targeting an offscreen texture) instead of the swapchain pass.
+	// rt_pass (targeting an offscreen texture) on its own command encoder,
+	// submitted at EndTextureMode, instead of the swapchain pass.
 	rt:            u32,
+	rt_encoder:    wg.CommandEncoder,
 	rt_pass:       wg.RenderPassEncoder,
 	rt_pass_begun: bool,
+	rt_clear:      Color,
+	rt_w, rt_h:    i32,
+	rt_depth:      bool,          // RT pass carries a depth attachment (3D)
 	// 3D mode (Phase 4): a depth-enabled pass replaces the current 2D pass.
 	depth_view:    wg.TextureView,
+	mode3d:        bool,
 }
 
 Context :: struct {
@@ -227,6 +233,13 @@ BeginDrawing :: proc() {
 }
 
 ClearBackground :: proc(c: Color) {
+	// While a render target is bound but its pass hasn't begun yet, the clear
+	// applies to the target (raylib: ClearBackground after BeginTextureMode
+	// clears the target). Otherwise it sets the swapchain clear.
+	if g.frame.rt != 0 && !g.frame.rt_pass_begun {
+		g.frame.rt_clear = c
+		return
+	}
 	g.frame.clear_color = c
 }
 
@@ -359,7 +372,49 @@ IsWindowFocused :: proc() -> bool {
 // FlushBatch forces pending 2D geometry to record into the current render pass
 // (raylib rlDrawRenderBatchActive parity — used to order custom draws).
 FlushBatch :: proc() {
-	if g.frame.has_frame && g.frame.pass_begun {
-		renderer_flush(&g.rend, g.frame.pass)
+	if g.frame.has_frame && _active_pass_begun() {
+		renderer_flush(&g.rend, active_pass())
+	}
+}
+
+// --- active pass routing (render targets) ----------------------------------
+// When a render target is bound (BeginTextureMode) the batch records into the
+// target's pass on its own command encoder; otherwise the swapchain pass.
+
+// active_pass returns the render pass the batch renderer should record into.
+@(private)
+active_pass :: proc() -> wg.RenderPassEncoder {
+	if g.frame.rt != 0 do return g.frame.rt_pass
+	return g.frame.pass
+}
+
+// _cur_target_format returns the wgpu colour format of the pass draws currently
+// target (the swapchain, or the bound render target). Custom-shader pipelines
+// are format-specific, so they are built lazily per target format.
+@(private)
+_cur_target_format :: proc() -> wg.TextureFormat {
+	if g.frame.rt != 0 {
+		e := get_texture(g.frame.rt)
+		if e != nil && e.wgformat != .Undefined do return e.wgformat
+	}
+	return g.format
+}
+
+// _active_pass_begun reports whether the pass active_pass() returns has begun.
+@(private)
+_active_pass_begun :: proc() -> bool {
+	if !g.frame.has_frame do return false
+	if g.frame.rt != 0 do return g.frame.rt_pass_begun
+	return g.frame.pass_begun
+}
+
+// _ensure_active_pass lazily begins whichever pass is current: the render
+// target's pass while one is bound, otherwise the swapchain pass.
+@(private)
+_ensure_active_pass :: proc() {
+	if g.frame.rt != 0 {
+		_ensure_rt_pass()
+	} else {
+		_ensure_pass()
 	}
 }

@@ -288,21 +288,43 @@ Migration status per consumer:
   voice). Builds and runs on WebGPU.
 - **cc-predev-scout** — fully migrated (map tiles, 2D massing via `DrawTriangle`,
   gradients, textures). Builds and runs on WebGPU.
-- **openalloy/alloy** — core (chat + terminal + 2D UI) migrated and running on
-  WebGPU. Its **galaxy view** (a 7-shader HDR bloom + soft-particle +
-  instanced-mesh 3D pipeline) is the one **deferred** piece: `ingot:gfx` exposes
-  its 3D/shader/render-target API surface (`Shader`, `RenderTexture2D`, `Mesh`,
-  `Material`, `LoadShaderFromMemory`, `BeginTextureMode`, `DrawMesh`, the
-  `ingot:gfx/rlgl` vertex/framebuffer calls, …) as **runtime-safe no-ops** so the
-  app builds and its UI runs, with offscreen render-target draws suppressed
-  (blank galaxy) rather than corrupting the frame. Porting that pipeline to
-  WebGPU — GLSL→WGSL for each shader, render-target ping-pong with mip chains,
-  and instanced mesh drawing — is the tracked remaining work.
+- **openalloy/alloy** — fully migrated. Core (chat + terminal + 2D UI) runs on
+  WebGPU. The **embedded nvim / Ctrl+E editor** — which caches its grid into a
+  `RenderTexture` and blits it — renders again now that render targets are real
+  (was blank while `BeginTextureMode` discarded offscreen draws). The **galaxy
+  view** is no longer no-op'd: `ingot:gfx` now implements the 3D/shader/render-
+  target/rlgl surface it needs — per-pipeline blend modes (additive/custom),
+  real offscreen render targets, WGSL custom-shader objects with uniform
+  reflection, format-aware batch pipelines (for the HDR `RGBA16Float` targets),
+  a CPU-projected 3D layer (`BeginMode3D`/`DrawBillboard`/`DrawMesh`/`DrawLine3D`),
+  the rlgl matrix stack + framebuffer helpers, and **real GPU instancing**
+  (`LoadVertexArray`/`SetVertexAttribute(+Divisor)`/`DrawVertexArrayInstanced`)
+  that backs the 2D bubble/node/star fields and 3D starfield. All 21 galaxy
+  shaders are ported GLSL→WGSL.
 
-Deferred / follow-up:
+### Engine capabilities added (WebGPU)
 
-- alloy galaxy 3D + custom-shader renderer (above).
-- `BeginBlendMode` additive/custom blending (galaxy glow) — currently no-op.
+| Area | Status |
+|------|--------|
+| Per-pipeline blend modes (`BeginBlendMode` ALPHA/ADDITIVE/MULTIPLIED/CUSTOM, `rlgl.SetBlendFactors`) | implemented — inputs premultiplied, additive = One/One |
+| Render targets (`LoadRenderTexture`/`BeginTextureMode`/`EndTextureMode`) | implemented — own command encoder, y-flipped to match raylib; fixes the nvim editor |
+| Custom shaders (`LoadShaderFromMemory`/`GetShaderLocation`/`SetShaderValue*`/`BeginShaderMode`) | implemented — WGSL modules, `struct U` uniform reflection, per-target-format pipelines, extra-texture bindings |
+| rlgl framebuffers (`LoadFramebuffer`/`LoadTexture`/`LoadTextureDepth`/…) | implemented — back the galaxy HDR (`RGBA16Float`) + depth targets |
+| rlgl instancing (VAO/VBO + `DrawVertexArrayInstanced`) | implemented — generic per-vertex + per-instance attribute layouts → real instanced draws |
+| rlgl matrix stack (`PushMatrix`/`Translatef`/`PopMatrix`) + depth mask + `GetMatrixProjection` | implemented — 2D model-translate (galaxy pane origin) |
+| 3D (`BeginMode3D`/`DrawMesh`/`DrawBillboard(Pro)`/`DrawLine3D`) | CPU-projected over the 2D batch (camera-facing quads / shaded discs) |
+
+### Remaining / needs on-device tuning
+
+- The galaxy render is now **functional but visually unvalidated** on-device:
+  the whole pipeline compiles, links, and runs without GPU validation errors,
+  but exact HDR bloom/tonemap tuning, the render-target Y-flip across the
+  multi-pass bloom chain, the CPU-projected 3D approximation (billboards/discs
+  vs. true lit instanced spheres), and **indexed** instancing for the 3D node
+  spheres (`DrawVertexArrayElementsInstanced`, currently a no-op — the 3D node
+  bodies use the CPU disc path) still need visual verification/iteration on a
+  Metal/D3D12/Vulkan display. A true GPU 3D mesh pipeline (real depth-tested
+  instanced spheres) is the natural follow-up to replace the CPU approximation.
 - macOS `WINDOW_TRANSPARENT` vibrancy uses the surface's supported alpha mode
   (`Unpremultiplied`) while the batch outputs premultiplied alpha; fully-opaque
   UI composites correctly, semi-transparent backdrop blending is approximate.

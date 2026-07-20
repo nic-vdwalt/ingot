@@ -37,16 +37,41 @@ Renderer :: struct {
 	shader: wg.ShaderModule, // kept alive so Custom pipelines can be rebuilt
 	pipes:  [Pipe_Kind][Blend_Slot]wg.RenderPipeline,
 
+	// Lazy batch pipelines for non-swapchain target formats (e.g. the galaxy
+	// HDR RGBA16Float render targets). Keyed by colour format.
+	alt_fmt:   [4]wg.TextureFormat,
+	alt_pipes: [4][Pipe_Kind][Blend_Slot]wg.RenderPipeline,
+	alt_n:     int,
+
 	ubuf:         wg.Buffer,
 	ubind:        wg.BindGroup,
 	ubind_layout: wg.BindGroupLayout,
 	tex_layout:   wg.BindGroupLayout, // group(1): texture + sampler
+
+	// Alternate group(0) uniform for render-target passes: an RT renders in its
+	// own pixel space, so it needs its own ortho projection that must NOT clobber
+	// the window projection used by the main pass in the same frame. cur_u is the
+	// group(0) bind the next flush uses (r.ubind for the window, r.rt_ubind for
+	// the active render target).
+	rt_ubuf:  wg.Buffer,
+	rt_ubind: wg.BindGroup,
+	cur_u:    wg.BindGroup,
 
 	// current run
 	verts:     [dynamic]Vertex,
 	cur_kind:  Pipe_Kind,
 	cur_bind:  wg.BindGroup,
 	cur_blend: Blend_Slot,
+
+	// Active custom shader (BeginShaderMode); 0 = none. When set, Image-kind
+	// flushes use the shader's pipeline + uniform/extra-texture bind groups.
+	active_shader: u32,
+
+	// 2D model translation (rlgl matrix stack): applied to every emitted vertex
+	// so rlgl.PushMatrix/Translatef/PopMatrix shift subsequent draws (the galaxy
+	// pane origin transform).
+	model_off:   [2]f32,
+	model_stack: [dynamic][2]f32,
 
 	// Custom blend factors (set by rlgl.SetBlendFactors; default = Alpha).
 	cust_src: wg.BlendFactor,
@@ -81,7 +106,7 @@ _blend_for :: proc(r: ^Renderer, slot: Blend_Slot) -> wg.BlendState {
 // vertex layout. File-scope so both renderer_init and _rebuild_custom_pipes
 // can call it.
 @(private)
-_make_pipe :: proc(r: ^Renderer, slot: Blend_Slot, fs: string, textured: bool) -> wg.RenderPipeline {
+_make_pipe :: proc(r: ^Renderer, slot: Blend_Slot, fs: string, textured: bool, format: wg.TextureFormat) -> wg.RenderPipeline {
 	attrs := [3]wg.VertexAttribute{
 		{format = .Float32x2, offset = 0, shaderLocation = 0},
 		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
@@ -92,7 +117,7 @@ _make_pipe :: proc(r: ^Renderer, slot: Blend_Slot, fs: string, textured: bool) -
 		attributeCount = 3, attributes = raw_data(attrs[:]),
 	}
 	blend := _blend_for(r, slot)
-	target := wg.ColorTargetState{format = g.format, blend = &blend, writeMask = wg.ColorWriteMaskFlags_All}
+	target := wg.ColorTargetState{format = format, blend = &blend, writeMask = wg.ColorWriteMaskFlags_All}
 	layouts := [2]wg.BindGroupLayout{r.ubind_layout, r.tex_layout}
 	pl := wg.DeviceCreatePipelineLayout(g.device, &{
 		bindGroupLayoutCount = textured ? 2 : 1,
@@ -120,7 +145,7 @@ _fs_for :: proc(kind: Pipe_Kind) -> (string, bool) {
 }
 
 // _rebuild_custom_pipes recreates the Custom-slot pipelines after the custom
-// blend factors change.
+// blend factors change (swapchain-format set only).
 @(private)
 _rebuild_custom_pipes :: proc(r: ^Renderer) {
 	for kind in Pipe_Kind {
@@ -128,12 +153,51 @@ _rebuild_custom_pipes :: proc(r: ^Renderer) {
 			wg.RenderPipelineRelease(r.pipes[kind][.Custom])
 		}
 		fs, textured := _fs_for(kind)
-		r.pipes[kind][.Custom] = _make_pipe(r, .Custom, fs, textured)
+		r.pipes[kind][.Custom] = _make_pipe(r, .Custom, fs, textured, g.format)
+	}
+	// invalidate alt-format Custom variants so they rebuild on next use
+	for i in 0 ..< r.alt_n {
+		if r.alt_pipes[i][.Solid][.Custom] != nil do wg.RenderPipelineRelease(r.alt_pipes[i][.Solid][.Custom])
+		if r.alt_pipes[i][.Text][.Custom] != nil do wg.RenderPipelineRelease(r.alt_pipes[i][.Text][.Custom])
+		if r.alt_pipes[i][.Image][.Custom] != nil do wg.RenderPipelineRelease(r.alt_pipes[i][.Image][.Custom])
+		fs_s, ts := _fs_for(.Solid)
+		fs_t, tt := _fs_for(.Text)
+		fs_i, ti := _fs_for(.Image)
+		r.alt_pipes[i][.Solid][.Custom] = _make_pipe(r, .Custom, fs_s, ts, r.alt_fmt[i])
+		r.alt_pipes[i][.Text][.Custom] = _make_pipe(r, .Custom, fs_t, tt, r.alt_fmt[i])
+		r.alt_pipes[i][.Image][.Custom] = _make_pipe(r, .Custom, fs_i, ti, r.alt_fmt[i])
 	}
 }
 
+// _pipe_for returns the batch pipeline for (kind, blend) at the current target
+// colour format. Swapchain-format pipelines are prebuilt; other formats (e.g.
+// the galaxy HDR RGBA16Float targets) are built lazily and cached.
+@(private)
+_pipe_for :: proc(r: ^Renderer, kind: Pipe_Kind, slot: Blend_Slot) -> wg.RenderPipeline {
+	fmt := _cur_target_format()
+	if fmt == g.format do return r.pipes[kind][slot]
+	// find or create the alt-format set
+	idx := -1
+	for i in 0 ..< r.alt_n {
+		if r.alt_fmt[i] == fmt { idx = i; break }
+	}
+	if idx < 0 {
+		if r.alt_n >= len(r.alt_fmt) do return r.pipes[kind][slot] // cache full: fall back
+		idx = r.alt_n
+		r.alt_n += 1
+		r.alt_fmt[idx] = fmt
+		for k in Pipe_Kind {
+			fs, textured := _fs_for(k)
+			for s in Blend_Slot {
+				r.alt_pipes[idx][k][s] = _make_pipe(r, s, fs, textured, fmt)
+			}
+		}
+	}
+	return r.alt_pipes[idx][kind][slot]
+}
+
 BATCH_SHADER := `
-struct Uniforms { inv: vec2<f32> };
+struct Uniforms { p: vec4<f32> };  // p.xy = 1/size, p.z = y-flip (+1 screen, -1 RT)
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
 struct VSOut {
@@ -145,8 +209,9 @@ struct VSOut {
 @vertex
 fn vs_main(@location(0) pos: vec2<f32>, @location(1) col: vec4<f32>, @location(2) uv: vec2<f32>) -> VSOut {
 	var o: VSOut;
-	let ndc = vec2<f32>(pos.x * u.inv.x * 2.0 - 1.0, 1.0 - pos.y * u.inv.y * 2.0);
-	o.pos = vec4<f32>(ndc, 0.0, 1.0);
+	let sx = pos.x * u.p.x * 2.0 - 1.0;
+	let sy = 1.0 - pos.y * u.p.y * 2.0;
+	o.pos = vec4<f32>(sx, sy * u.p.z, 0.0, 1.0);
 	o.col = col;
 	o.uv = uv;
 	return o;
@@ -189,15 +254,24 @@ renderer_init :: proc(r: ^Renderer) {
 		entries = &wg.BindGroupLayoutEntry{
 			binding = 0,
 			visibility = {.Vertex},
-			buffer = {type = .Uniform, minBindingSize = size_of([2]f32)},
+			buffer = {type = .Uniform, minBindingSize = size_of([4]f32)},
 		},
 	})
-	r.ubuf = wg.DeviceCreateBuffer(g.device, &{usage = {.Uniform, .CopyDst}, size = size_of([2]f32)})
+	r.ubuf = wg.DeviceCreateBuffer(g.device, &{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)})
 	r.ubind = wg.DeviceCreateBindGroup(g.device, &{
 		layout = r.ubind_layout,
 		entryCount = 1,
-		entries = &wg.BindGroupEntry{binding = 0, buffer = r.ubuf, size = size_of([2]f32)},
+		entries = &wg.BindGroupEntry{binding = 0, buffer = r.ubuf, size = size_of([4]f32)},
 	})
+
+	// Separate uniform + bind for render-target passes (see struct comment).
+	r.rt_ubuf = wg.DeviceCreateBuffer(g.device, &{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)})
+	r.rt_ubind = wg.DeviceCreateBindGroup(g.device, &{
+		layout = r.ubind_layout,
+		entryCount = 1,
+		entries = &wg.BindGroupEntry{binding = 0, buffer = r.rt_ubuf, size = size_of([4]f32)},
+	})
+	r.cur_u = r.ubind
 
 	// group(1): texture + sampler (used by text + image pipelines)
 	tex_entries := [2]wg.BindGroupLayoutEntry{
@@ -217,7 +291,7 @@ renderer_init :: proc(r: ^Renderer) {
 	for kind in Pipe_Kind {
 		fs, textured := _fs_for(kind)
 		for slot in Blend_Slot {
-			r.pipes[kind][slot] = _make_pipe(r, slot, fs, textured)
+			r.pipes[kind][slot] = _make_pipe(r, slot, fs, textured, g.format)
 		}
 	}
 
@@ -229,14 +303,24 @@ renderer_shutdown :: proc(r: ^Renderer) {
 	for b in r.frame_buffers do wg.BufferRelease(b)
 	delete(r.frame_buffers)
 	delete(r.verts)
+	delete(r.model_stack)
 	for kind in Pipe_Kind {
 		for slot in Blend_Slot {
 			if r.pipes[kind][slot] != nil do wg.RenderPipelineRelease(r.pipes[kind][slot])
 		}
 	}
+	for i in 0 ..< r.alt_n {
+		for kind in Pipe_Kind {
+			for slot in Blend_Slot {
+				if r.alt_pipes[i][kind][slot] != nil do wg.RenderPipelineRelease(r.alt_pipes[i][kind][slot])
+			}
+		}
+	}
 	if r.shader != nil do wg.ShaderModuleRelease(r.shader)
 	if r.ubind != nil do wg.BindGroupRelease(r.ubind)
 	if r.ubuf != nil do wg.BufferRelease(r.ubuf)
+	if r.rt_ubind != nil do wg.BindGroupRelease(r.rt_ubind)
+	if r.rt_ubuf != nil do wg.BufferRelease(r.rt_ubuf)
 	if r.ubind_layout != nil do wg.BindGroupLayoutRelease(r.ubind_layout)
 	if r.tex_layout != nil do wg.BindGroupLayoutRelease(r.tex_layout)
 }
@@ -249,22 +333,27 @@ renderer_frame_begin :: proc(r: ^Renderer) {
 	r.cur_kind = .Solid
 	r.cur_bind = nil
 	r.cur_blend = .Alpha
+	r.cur_u = r.ubind
+	r.active_shader = 0
+	r.model_off = {0, 0}
+	clear(&r.model_stack)
 
-	// keep projection in sync with the logical window size
+	// keep projection in sync with the logical window size (p.z = +1: no flip)
 	if r.proj_w != g.width || r.proj_h != g.height {
-		inv := [2]f32{1.0 / f32(max(g.width, 1)), 1.0 / f32(max(g.height, 1))}
-		wg.QueueWriteBuffer(g.queue, r.ubuf, 0, &inv, size_of(inv))
+		p := [4]f32{1.0 / f32(max(g.width, 1)), 1.0 / f32(max(g.height, 1)), 1.0, 0.0}
+		wg.QueueWriteBuffer(g.queue, r.ubuf, 0, &p, size_of(p))
 		r.proj_w, r.proj_h = g.width, g.height
 	}
 }
 
 // batch_set switches the active pipeline/texture, flushing the pending run
-// first if the state differs.
+// first if the state differs. Routes to the render-target pass when one is
+// bound (BeginTextureMode).
 @(private)
 batch_set :: proc(r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
-	_ensure_pass()
+	_ensure_active_pass()
 	if kind != r.cur_kind || bind != r.cur_bind {
-		if g.frame.pass_begun do renderer_flush(r, g.frame.pass)
+		if _active_pass_begun() do renderer_flush(r, active_pass())
 		r.cur_kind = kind
 		r.cur_bind = bind
 	}
@@ -274,8 +363,9 @@ batch_set :: proc(r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
 @(private)
 push_quad :: proc(r: ^Renderer, d: Rectangle, s: Rectangle, col: [4]f32) {
 	if !g.frame.has_frame do return
-	x0, y0 := d.x, d.y
-	x1, y1 := d.x + d.width, d.y + d.height
+	ox, oy := r.model_off.x, r.model_off.y
+	x0, y0 := d.x + ox, d.y + oy
+	x1, y1 := d.x + d.width + ox, d.y + d.height + oy
 	u0, v0 := s.x, s.y
 	u1, v1 := s.x + s.width, s.y + s.height
 	append(&r.verts,
@@ -291,10 +381,11 @@ push_quad :: proc(r: ^Renderer, d: Rectangle, s: Rectangle, col: [4]f32) {
 @(private)
 push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 	if !g.frame.has_frame do return
+	o := r.model_off
 	append(&r.verts,
-		Vertex{a, col, {0, 0}},
-		Vertex{b, col, {0, 0}},
-		Vertex{c, col, {0, 0}},
+		Vertex{{a.x + o.x, a.y + o.y}, col, {0, 0}},
+		Vertex{{b.x + o.x, b.y + o.y}, col, {0, 0}},
+		Vertex{{c.x + o.x, c.y + o.y}, col, {0, 0}},
 	)
 }
 
@@ -303,14 +394,37 @@ push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 @(private)
 push_quad4 :: proc(r: ^Renderer, tl, tr, br, bl: [2]f32, uv_tl, uv_tr, uv_br, uv_bl: [2]f32, col: [4]f32) {
 	if !g.frame.has_frame do return
+	o := r.model_off
+	tlo := [2]f32{tl.x + o.x, tl.y + o.y}
+	tro := [2]f32{tr.x + o.x, tr.y + o.y}
+	bro := [2]f32{br.x + o.x, br.y + o.y}
+	blo := [2]f32{bl.x + o.x, bl.y + o.y}
 	append(&r.verts,
-		Vertex{tl, col, uv_tl},
-		Vertex{bl, col, uv_bl},
-		Vertex{tr, col, uv_tr},
-		Vertex{tr, col, uv_tr},
-		Vertex{bl, col, uv_bl},
-		Vertex{br, col, uv_br},
+		Vertex{tlo, col, uv_tl},
+		Vertex{blo, col, uv_bl},
+		Vertex{tro, col, uv_tr},
+		Vertex{tro, col, uv_tr},
+		Vertex{blo, col, uv_bl},
+		Vertex{bro, col, uv_br},
 	)
+}
+
+// --- rlgl matrix-stack backing (2D model translation) ----------------------
+
+MatrixModePush :: proc() {
+	append(&g.rend.model_stack, g.rend.model_off)
+}
+MatrixModePop :: proc() {
+	if _active_pass_begun() do renderer_flush(&g.rend, active_pass())
+	n := len(g.rend.model_stack)
+	if n == 0 { g.rend.model_off = {0, 0}; return }
+	g.rend.model_off = g.rend.model_stack[n - 1]
+	pop(&g.rend.model_stack)
+}
+MatrixModeTranslate :: proc(x, y: f32) {
+	if _active_pass_begun() do renderer_flush(&g.rend, active_pass())
+	g.rend.model_off.x += x
+	g.rend.model_off.y += y
 }
 
 renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder) {
@@ -320,8 +434,17 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder) {
 	vbuf := wg.DeviceCreateBufferWithData(g.device, &{usage = {.Vertex}}, r.verts[:])
 	append(&r.frame_buffers, vbuf)
 
-	wg.RenderPassEncoderSetPipeline(pass, r.pipes[r.cur_kind][r.cur_blend])
-	wg.RenderPassEncoderSetBindGroup(pass, 0, r.ubind)
+	// Custom-shader path: an active shader overrides the pipeline + bind groups
+	// for the current draw (fullscreen post-process / custom 2D passes).
+	if r.active_shader != 0 {
+		if _shader_flush(r, pass, vbuf, u32(n)) {
+			clear(&r.verts)
+			return
+		}
+	}
+
+	wg.RenderPassEncoderSetPipeline(pass, _pipe_for(r, r.cur_kind, r.cur_blend))
+	wg.RenderPassEncoderSetBindGroup(pass, 0, r.cur_u != nil ? r.cur_u : r.ubind)
 	if r.cur_kind != .Solid && r.cur_bind != nil {
 		wg.RenderPassEncoderSetBindGroup(pass, 1, r.cur_bind)
 	}
@@ -335,4 +458,51 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder) {
 @(private)
 col_f :: proc(c: Color) -> [4]f32 {
 	return {f32(c.r) / 255.0, f32(c.g) / 255.0, f32(c.b) / 255.0, f32(c.a) / 255.0}
+}
+
+// SetCustomBlend records custom blend factors and rebuilds the Custom-slot
+// pipelines. Called by rlgl.SetBlendFactors (GL enums already mapped to wgpu).
+SetCustomBlend :: proc(src, dst: BlendFactorRL, op: BlendOpRL) {
+	ns := _rl_factor(src)
+	nd := _rl_factor(dst)
+	no := _rl_op(op)
+	if ns == g.rend.cust_src && nd == g.rend.cust_dst && no == g.rend.cust_op do return
+	g.rend.cust_src = ns
+	g.rend.cust_dst = nd
+	g.rend.cust_op = no
+	_rebuild_custom_pipes(&g.rend)
+}
+
+// GL blend enum aliases (values match rlgl / OpenGL) so rlgl can forward raw
+// ints without importing wgpu.
+BlendFactorRL :: distinct i32
+BlendOpRL :: distinct i32
+
+@(private)
+_rl_factor :: proc(v: BlendFactorRL) -> wg.BlendFactor {
+	switch i32(v) {
+	case 0:      return .Zero               // GL_ZERO
+	case 1:      return .One                // GL_ONE
+	case 0x0300: return .Src                // GL_SRC_COLOR
+	case 0x0301: return .OneMinusSrc        // GL_ONE_MINUS_SRC_COLOR
+	case 0x0302: return .SrcAlpha           // GL_SRC_ALPHA
+	case 0x0303: return .OneMinusSrcAlpha   // GL_ONE_MINUS_SRC_ALPHA
+	case 0x0304: return .DstAlpha           // GL_DST_ALPHA
+	case 0x0305: return .OneMinusDstAlpha   // GL_ONE_MINUS_DST_ALPHA
+	case 0x0306: return .Dst                // GL_DST_COLOR
+	case 0x0307: return .OneMinusDst        // GL_ONE_MINUS_DST_COLOR
+	}
+	return .One
+}
+
+@(private)
+_rl_op :: proc(v: BlendOpRL) -> wg.BlendOperation {
+	switch i32(v) {
+	case 0x8006: return .Add                // GL_FUNC_ADD
+	case 0x800A: return .Subtract           // GL_FUNC_SUBTRACT
+	case 0x800B: return .ReverseSubtract    // GL_FUNC_REVERSE_SUBTRACT
+	case 0x8007: return .Min                // GL_MIN
+	case 0x8008: return .Max                // GL_MAX
+	}
+	return .Add
 }

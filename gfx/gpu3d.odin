@@ -93,43 +93,19 @@ ShaderLocationIndex :: enum i32 {
 	BONE_MATRICES,
 }
 
-// --- shaders (deferred: no-op) ---------------------------------------------
+// --- shaders ---------------------------------------------------------------
+// Implemented in shader.odin (real WGSL shader objects + uniform reflection):
+//   LoadShaderFromMemory / UnloadShader / BeginShaderMode / EndShaderMode
+//   GetShaderLocation / SetShaderValue{,V,Matrix,Texture}
 
-LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader { return Shader{} }
-UnloadShader :: proc(shader: Shader) {}
-BeginShaderMode :: proc(shader: Shader) {}
-EndShaderMode :: proc() {}
-GetShaderLocation :: proc(shader: Shader, uniformName: cstring) -> i32 { return -1 }
-SetShaderValue :: proc(shader: Shader, #any_int locIndex: i32, value: rawptr, uniformType: ShaderUniformDataType) {}
-SetShaderValueV :: proc(shader: Shader, #any_int locIndex: i32, value: rawptr, uniformType: ShaderUniformDataType, count: i32) {}
-SetShaderValueMatrix :: proc(shader: Shader, #any_int locIndex: i32, mat: Matrix) {}
-SetShaderValueTexture :: proc(shader: Shader, #any_int locIndex: i32, texture: Texture2D) {}
+// --- render targets --------------------------------------------------------
+// Implemented in render_target.odin (real offscreen WebGPU passes):
+//   LoadRenderTexture / LoadRenderTextureEx / UnloadRenderTexture
+//   BeginTextureMode / EndTextureMode
 
-// --- render targets (deferred: draws suppressed while active) --------------
-
-LoadRenderTexture :: proc(width, height: i32) -> RenderTexture2D {
-	return RenderTexture2D{}
-}
-UnloadRenderTexture :: proc(target: RenderTexture2D) {}
-
-BeginTextureMode :: proc(target: RenderTexture2D) {
-	if g.frame.has_frame && g.frame.pass_begun {
-		renderer_flush(&g.rend, g.frame.pass)
-	}
-	g.frame.tex_mode = true
-}
-EndTextureMode :: proc() {
-	// discard anything the caller tried to draw into the offscreen target
-	clear(&g.rend.verts)
-	g.frame.tex_mode = false
-}
-
-// --- meshes / materials (deferred: no-op) ----------------------------------
-
-GenMeshSphere :: proc(radius: f32, rings, slices: i32) -> Mesh { return Mesh{} }
-UnloadMesh :: proc(mesh: Mesh) {}
-DrawMesh :: proc(mesh: Mesh, material: Material, transform: Matrix) {}
-LoadMaterialDefault :: proc() -> Material { return Material{} }
+// --- meshes / materials ----------------------------------------------------
+// GenMeshSphere / LoadMaterialDefault / DrawMesh are implemented in
+// render3d.odin (CPU-projected billboard/disc approximation over the 2D batch).
 
 // --- blend modes / billboards ----------------------------------------------
 
@@ -144,10 +120,21 @@ BlendMode :: enum i32 {
 	CUSTOM_SEPARATE,
 }
 
-// Blend-mode switching isn't wired into the batch pipeline yet (additive glow
-// for the galaxy is part of the deferred 3D port); no-op keeps apps building.
-BeginBlendMode :: proc(mode: BlendMode) {}
-EndBlendMode :: proc() {}
+// BeginBlendMode selects one of the precompiled batch blend pipelines. Inputs
+// are premultiplied, so ADDITIVE = One/One. CUSTOM uses the factors last set by
+// rlgl.SetBlendFactors. Switching flushes the pending run first.
+BeginBlendMode :: proc(mode: BlendMode) {
+	slot: Blend_Slot = .Alpha
+	#partial switch mode {
+	case .ADDITIVE, .ADD_COLORS: slot = .Additive
+	case .MULTIPLIED:            slot = .Multiplied
+	case .CUSTOM, .CUSTOM_SEPARATE: slot = .Custom
+	}
+	if slot != g.rend.cur_blend {
+		if _active_pass_begun() do renderer_flush(&g.rend, active_pass())
+		g.rend.cur_blend = slot
+	}
+}
+EndBlendMode :: proc() { BeginBlendMode(.ALPHA) }
 
-DrawBillboardPro :: proc(camera: Camera, texture: Texture2D, source: Rectangle, position: Vector3, up: Vector3, size: Vector2, origin: Vector2, rotation: f32, tint: Color) {}
-DrawBillboard :: proc(camera: Camera, texture: Texture2D, position: Vector3, scale: f32, tint: Color) {}
+// DrawBillboard / DrawBillboardPro implemented in render3d.odin.

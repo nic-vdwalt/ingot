@@ -181,21 +181,39 @@ DrawRing :: proc(center: Vector2, innerRadius, outerRadius, startAngle, endAngle
 
 BeginScissorMode :: proc(x, y, width, height: i32) {
 	if !g.frame.has_frame do return
-	_ensure_pass()
-	renderer_flush(&g.rend, g.frame.pass)
-	sx := f32(g.fb_width) / f32(max(g.width, 1))
-	sy := f32(g.fb_height) / f32(max(g.height, 1))
-	px := u32(clamp(f32(x) * sx, 0, f32(g.fb_width)))
-	py := u32(clamp(f32(y) * sy, 0, f32(g.fb_height)))
-	pw := u32(clamp(f32(width) * sx, 0, f32(g.fb_width) - f32(px)))
-	ph := u32(clamp(f32(height) * sy, 0, f32(g.fb_height) - f32(py)))
-	wg.RenderPassEncoderSetScissorRect(g.frame.pass, px, py, pw, ph)
+	_ensure_active_pass()
+	if !_active_pass_begun() do return
+	pass := active_pass()
+	renderer_flush(&g.rend, pass)
+	// In render-target mode geometry is drawn in the target's pixel space (1:1);
+	// otherwise scale logical coords to swapchain framebuffer pixels.
+	fbw, fbh, sx, sy: f32
+	if g.frame.rt != 0 {
+		fbw, fbh = f32(g.frame.rt_w), f32(g.frame.rt_h)
+		sx, sy = 1, 1
+	} else {
+		fbw, fbh = f32(g.fb_width), f32(g.fb_height)
+		sx = fbw / f32(max(g.width, 1))
+		sy = fbh / f32(max(g.height, 1))
+	}
+	px := u32(clamp(f32(x) * sx, 0, fbw))
+	py := u32(clamp(f32(y) * sy, 0, fbh))
+	pw := u32(clamp(f32(width) * sx, 0, fbw - f32(px)))
+	ph := u32(clamp(f32(height) * sy, 0, fbh - f32(py)))
+	wg.RenderPassEncoderSetScissorRect(pass, px, py, pw, ph)
 }
 
 EndScissorMode :: proc() {
-	if !g.frame.has_frame || !g.frame.pass_begun do return
-	renderer_flush(&g.rend, g.frame.pass)
-	wg.RenderPassEncoderSetScissorRect(g.frame.pass, 0, 0, u32(g.fb_width), u32(g.fb_height))
+	if !g.frame.has_frame || !_active_pass_begun() do return
+	pass := active_pass()
+	renderer_flush(&g.rend, pass)
+	fbw, fbh: u32
+	if g.frame.rt != 0 {
+		fbw, fbh = u32(g.frame.rt_w), u32(g.frame.rt_h)
+	} else {
+		fbw, fbh = u32(g.fb_width), u32(g.fb_height)
+	}
+	wg.RenderPassEncoderSetScissorRect(pass, 0, 0, fbw, fbh)
 }
 
 // --- collision helper ------------------------------------------------------

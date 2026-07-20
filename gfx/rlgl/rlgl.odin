@@ -47,44 +47,60 @@ DrawRenderBatchActive  :: proc() { gfx.FlushBatch() }
 EnableBackfaceCulling  :: proc() {}
 DisableBackfaceCulling :: proc() {}
 
-// --- matrix stack (deferred: no-op) ----------------------------------------
+// --- matrix stack (2D model translation) -----------------------------------
 
-PushMatrix :: proc() {}
-PopMatrix  :: proc() {}
-Translatef :: proc(x, y, z: f32) {}
-GetMatrixProjection :: proc() -> gfx.Matrix { return gfx.Matrix(1) }
+PushMatrix :: proc() { gfx.MatrixModePush() }
+PopMatrix  :: proc() { gfx.MatrixModePop() }
+Translatef :: proc(x, y, z: f32) { gfx.MatrixModeTranslate(x, y) }
+GetMatrixProjection :: proc() -> gfx.Matrix { return gfx.GetProjectionMatrix() }
 
-// --- depth / shader / clip (deferred: no-op) -------------------------------
+// --- depth / shader / clip -------------------------------------------------
 
-EnableDepthMask  :: proc() {}
-DisableDepthMask :: proc() {}
-EnableShader     :: proc(id: u32) {}
-DisableShader    :: proc() {}
+EnableDepthMask  :: proc() { gfx.SetDepthMask(true) }
+DisableDepthMask :: proc() { gfx.SetDepthMask(false) }
+EnableShader     :: proc(id: u32) { gfx.RlEnableInstShader(id) }
+DisableShader    :: proc() { gfx.RlDisableInstShader() }
 SetClipPlanes    :: proc(near, far: f64) {}
-SetBlendFactors  :: proc(glSrcFactor, glDstFactor, glEquation: i32) {}
+
+// SetBlendFactors records custom blend factors for the Custom blend slot (used
+// by the galaxy dust extinction pass). Forwards the GL enums to gfx which maps
+// them to wgpu and rebuilds the Custom pipelines.
+SetBlendFactors  :: proc(glSrcFactor, glDstFactor, glEquation: i32) {
+	gfx.SetCustomBlend(gfx.BlendFactorRL(glSrcFactor), gfx.BlendFactorRL(glDstFactor), gfx.BlendOpRL(glEquation))
+}
 
 // --- vertex arrays / buffers (deferred: no-op) -----------------------------
 
-LoadVertexArray    :: proc() -> u32 { return 0 }
-EnableVertexArray  :: proc(vaoId: u32) -> bool { return false }
-DisableVertexArray :: proc() {}
-UnloadVertexArray  :: proc(vaoId: u32) {}
-LoadVertexBuffer   :: proc(buffer: rawptr, size: i32, is_dynamic: bool) -> u32 { return 0 }
-UpdateVertexBuffer :: proc(bufferId: u32, data: rawptr, dataSize: i32, offset: i32) {}
-UnloadVertexBuffer :: proc(vboId: u32) {}
-EnableVertexAttribute     :: proc(index: u32) {}
-SetVertexAttribute        :: proc(index: u32, compSize: i32, type: i32, normalized: bool, stride: i32, offset: i32) {}
-SetVertexAttributeDivisor :: proc(index: u32, divisor: i32) {}
-DrawVertexArrayInstanced         :: proc(offset, count, instances: i32) {}
-DrawVertexArrayElementsInstanced :: proc(offset, count: i32, buffer: rawptr, instances: i32) {}
+LoadVertexArray    :: proc() -> u32 { return gfx.RlLoadVertexArray() }
+EnableVertexArray  :: proc(vaoId: u32) -> bool { return gfx.RlEnableVertexArray(vaoId) }
+DisableVertexArray :: proc() { gfx.RlDisableVertexArray() }
+UnloadVertexArray  :: proc(vaoId: u32) { gfx.RlUnloadVertexArray(vaoId) }
+LoadVertexBuffer   :: proc(buffer: rawptr, size: i32, is_dynamic: bool) -> u32 { return gfx.RlLoadVertexBuffer(buffer, size, is_dynamic) }
+UpdateVertexBuffer :: proc(bufferId: u32, data: rawptr, dataSize: i32, offset: i32) { gfx.RlUpdateVertexBuffer(bufferId, data, dataSize, offset) }
+UnloadVertexBuffer :: proc(vboId: u32) { gfx.RlUnloadVertexBuffer(vboId) }
+EnableVertexAttribute     :: proc(index: u32) { gfx.RlEnableVertexAttribute(index) }
+SetVertexAttribute        :: proc(index: u32, compSize: i32, type: i32, normalized: bool, stride: i32, offset: i32) { gfx.RlSetVertexAttribute(index, compSize, type, normalized, stride, offset) }
+SetVertexAttributeDivisor :: proc(index: u32, divisor: i32) { gfx.RlSetVertexAttributeDivisor(index, divisor) }
+DrawVertexArrayInstanced         :: proc(offset, count, instances: i32) { gfx.RlDrawVertexArrayInstanced(offset, count, instances) }
+DrawVertexArrayElementsInstanced :: proc(offset, count: i32, buffer: rawptr, instances: i32) { gfx.RlDrawVertexArrayElementsInstanced(offset, count, buffer, instances) }
 
-// --- framebuffers / textures (deferred: no-op) -----------------------------
+// --- framebuffers / textures -----------------------------------------------
+// The galaxy builds HDR render targets from these raw calls. LoadFramebuffer
+// returns an opaque non-zero id; the real colour/depth attachments are created
+// by LoadTexture/LoadTextureDepth (backed by gfx render-target textures) and
+// carried on the RenderTexture2D, so Attach/Complete are bookkeeping only.
 
-LoadFramebuffer    :: proc() -> u32 { return 0 }
+@(private) _fbo_counter: u32 = 0
+
+LoadFramebuffer    :: proc() -> u32 { _fbo_counter += 1; return _fbo_counter }
 EnableFramebuffer  :: proc(id: u32) {}
 DisableFramebuffer :: proc() {}
 FramebufferAttach  :: proc(fboId, texId: u32, attachType, texType, mipLevel: i32) {}
-FramebufferComplete :: proc(id: u32) -> bool { return false }
-LoadTexture      :: proc(data: rawptr, width, height, format, mipmapCount: i32) -> u32 { return 0 }
-LoadTextureDepth :: proc(width, height: i32, useRenderBuffer: bool) -> u32 { return 0 }
-UnloadTexture    :: proc(id: u32) {}
+FramebufferComplete :: proc(id: u32) -> bool { return id != 0 }
+LoadTexture      :: proc(data: rawptr, width, height, format, mipmapCount: i32) -> u32 {
+	return gfx.RlLoadColorTexture(width, height, gfx.PixelFormat(format))
+}
+LoadTextureDepth :: proc(width, height: i32, useRenderBuffer: bool) -> u32 {
+	return gfx.RlLoadDepthTexture(width, height)
+}
+UnloadTexture    :: proc(id: u32) { gfx.RlUnloadTextureId(id) }
