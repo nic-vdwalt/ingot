@@ -16,6 +16,20 @@ import "core:time"
 // http_get performs a blocking GET and returns the response body (allocated
 // with the given allocator). Only 200 responses return ok.
 http_get :: proc(host: string, port: int, path: string, allocator := context.allocator) -> (body: []u8, ok: bool) {
+	return http_get_impl(nil, 0, host, port, path, allocator)
+}
+
+// http_get_interruptible is http_get with cancellation: the worker's live
+// socket is published in f.active_socks[idx] under f.sock_mutex, so
+// fetcher_stop can close it to unblock a parked dial/recv. The same mutex
+// guards this worker's own close so the two never double-close the fd.
+@(private = "file")
+http_get_interruptible :: proc(f: ^Fetcher, idx: int, host: string, port: int, path: string, allocator := context.allocator) -> (body: []u8, ok: bool) {
+	return http_get_impl(f, idx, host, port, path, allocator)
+}
+
+@(private = "file")
+http_get_impl :: proc(f: ^Fetcher, idx: int, host: string, port: int, path: string, allocator := context.allocator) -> (body: []u8, ok: bool) {
 	ep: cnet.Endpoint
 	if addr, addr_ok := cnet.parse_ip4_address(host); addr_ok {
 		ep = cnet.Endpoint{address = addr, port = port}
@@ -27,7 +41,32 @@ http_get :: proc(host: string, port: int, path: string, allocator := context.all
 	}
 	sock, dial_err := cnet.dial_tcp(ep)
 	if dial_err != nil do return nil, false
-	defer cnet.close(sock)
+
+	// Publish the socket so fetcher_stop can close it to unblock a parked
+	// recv; clear + close it under the same mutex on the way out so a
+	// concurrent fetcher_stop can never double-close this fd.
+	if f != nil {
+		sync.mutex_lock(&f.sock_mutex)
+		// Stop already requested before we registered: close now and bail.
+		if !f.running {
+			sync.mutex_unlock(&f.sock_mutex)
+			cnet.close(sock)
+			return nil, false
+		}
+		f.active_socks[idx] = sock
+		f.active_open[idx] = true
+		sync.mutex_unlock(&f.sock_mutex)
+	}
+	defer if f != nil {
+		sync.mutex_lock(&f.sock_mutex)
+		if f.active_open[idx] {
+			cnet.close(f.active_socks[idx])
+			f.active_open[idx] = false
+		}
+		sync.mutex_unlock(&f.sock_mutex)
+	} else {
+		cnet.close(sock)
+	}
 
 	request := fmt.tprintf(
 		"GET %s HTTP/1.1\r\nHost: %s:%d\r\nConnection: close\r\nUser-Agent: ingot-net/0.1\r\n\r\n",
@@ -37,7 +76,10 @@ http_get :: proc(host: string, port: int, path: string, allocator := context.all
 		return nil, false
 	}
 
-	_ = cnet.set_option(sock, .Receive_Timeout, 30 * time.Second)
+	// Bound each recv so a wedged server can never park a worker indefinitely
+	// (kept short so the whole body still arrives well within it for local
+	// responses; a genuinely slow upstream fails fast rather than stalling).
+	_ = cnet.set_option(sock, .Receive_Timeout, 5 * time.Second)
 	buf: [dynamic]u8
 	buf.allocator = context.temp_allocator
 	chunk: [16384]u8
@@ -100,6 +142,13 @@ Fetch_Job :: struct {
 	cache_path: string, // owned; "" = no disk cache
 }
 
+// Per-worker thread payload: the fetcher plus this worker's index, so the
+// worker can register its in-flight socket in the fetcher's per-worker slot.
+Fetch_Worker_Ctx :: struct {
+	f:   ^Fetcher,
+	idx: int,
+}
+
 Fetcher :: struct {
 	host:    string,
 	port:    int,
@@ -112,6 +161,14 @@ Fetcher :: struct {
 	mutex:   sync.Mutex,
 	workers: [FETCH_WORKERS]^thread.Thread,
 	running: bool,
+
+	// In-flight socket registry: each worker publishes its active socket here
+	// (guarded by sock_mutex) so fetcher_stop can close it to unblock a parked
+	// dial/recv — mirrors the WebSocket sock_mutex/socket_open pattern.
+	sock_mutex:   sync.Mutex,
+	active_socks: [FETCH_WORKERS]cnet.TCP_Socket,
+	active_open:  [FETCH_WORKERS]bool,
+	worker_ctx:   [FETCH_WORKERS]Fetch_Worker_Ctx,
 }
 
 fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
@@ -119,16 +176,32 @@ fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
 	f.port = port
 	f.running = true
 	for i in 0 ..< FETCH_WORKERS {
+		f.worker_ctx[i] = Fetch_Worker_Ctx{f = f, idx = i}
 		f.workers[i] = thread.create(proc(t: ^thread.Thread) {
-			fetch_worker(cast(^Fetcher)t.data)
+			ctx := cast(^Fetch_Worker_Ctx)t.data
+			fetch_worker(ctx.f, ctx.idx)
 		})
-		f.workers[i].data = f
+		f.workers[i].data = &f.worker_ctx[i]
 		thread.start(f.workers[i])
 	}
 }
 
 fetcher_stop :: proc(f: ^Fetcher) {
 	f.running = false
+
+	// Unblock any worker parked in a dial/recv by closing its live socket.
+	// The worker guards its own close under the same mutex, so it can never
+	// double-close a slot we clear here. This is what removes the shutdown
+	// freeze — otherwise the join below waits for the slowest in-flight fetch.
+	sync.mutex_lock(&f.sock_mutex)
+	for i in 0 ..< FETCH_WORKERS {
+		if f.active_open[i] {
+			cnet.close(f.active_socks[i])
+			f.active_open[i] = false
+		}
+	}
+	sync.mutex_unlock(&f.sock_mutex)
+
 	for i in 0 ..< FETCH_WORKERS {
 		if f.workers[i] == nil do continue
 		thread.join(f.workers[i])
@@ -192,7 +265,7 @@ fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 }
 
 @(private = "file")
-fetch_worker :: proc(f: ^Fetcher) {
+fetch_worker :: proc(f: ^Fetcher, idx: int) {
 	for f.running {
 		sync.mutex_lock(&f.mutex)
 		if len(f.jobs) == 0 {
@@ -224,7 +297,7 @@ fetch_worker :: proc(f: ^Fetcher) {
 			}
 		}
 		if !ok {
-			body, ok = http_get(f.host, f.port, job.path)
+			body, ok = http_get_interruptible(f, idx, f.host, f.port, job.path)
 			// only cache bodies the app accepts so a transient upstream error
 			// page can't poison the on-disk cache
 			if ok && (validate == nil || validate(body)) && job.cache_path != "" {
