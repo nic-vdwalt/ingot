@@ -43,7 +43,7 @@ platform_create_window :: proc(width, height: i32, title: cstring, flags: Config
 	g.win = WEB_WIN_SENTINEL
 	g.width, g.height = width, height
 	g.fb_width, g.fb_height = width, height
-	g.dpi = 1
+	g.dpi = platform_content_scale()
 	return true
 }
 

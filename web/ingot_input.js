@@ -94,10 +94,29 @@
 		canvas.addEventListener("wheel", function (e) {
 			const x = ex();
 			if (!x) return;
-			// Normalize to "notches" and flip sign: browser deltaY>0 = scroll
-			// down; GLFW yoffset>0 = scroll up (raylib GetMouseWheelMove parity).
+			// Convert the browser wheel delta into the same "notch" units the
+			// native GLFW backend feeds the engine, so scroll feels identical.
+			// Sign is flipped: browser deltaY>0 = scroll down; GLFW yoffset>0 =
+			// scroll up (raylib GetMouseWheelMove parity).
+			//
+			// GLFW on macOS scales precise (trackpad) Cocoa scrollingDeltaY by
+			// 0.1 and passes mouse-wheel line deltas through as ~1/notch. The
+			// browser's pixel deltaY is the same underlying NSEvent delta, so:
+			//   - trackpad (fine pixel deltas): ×0.1  -> 1:1 with native momentum
+			//   - mouse wheel (deltas quantized to ~100/120 px per notch, or line
+			//     mode): normalize to ≈1 unit/notch, matching GLFW's coarse path
 			let dx = e.deltaX, dy = e.deltaY;
-			if (e.deltaMode === 0) { dx /= 100; dy /= 100; } // pixel → notch
+			if (e.deltaMode !== 0) {
+				// line (1) or page (2) units — discrete mouse wheel, already ~notches.
+			} else {
+				// pixel units. A physical wheel emits large deltas that are integer
+				// multiples of a fixed step (120 in Chrome, 100 elsewhere); trackpad
+				// deltas are small and finely grained (often fractional).
+				const ay = Math.abs(dy);
+				const coarse = ay >= 100 && (ay % 120 === 0 || ay % 100 === 0);
+				const k = coarse ? 0.01 : 0.1;
+				dx *= k; dy *= k;
+			}
 			x.ingot_web_wheel(-dx, -dy);
 			e.preventDefault();
 		}, { passive: false });

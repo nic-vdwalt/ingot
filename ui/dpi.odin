@@ -33,7 +33,7 @@ import rl "ingot:gfx"
 // 1.0 on macOS (the compositor handles HiDPI) or the OS DPI factor on
 // Windows/Linux.
 auto_scale :: proc() -> f32 {
-	when ODIN_OS == .Darwin {
+	when ODIN_OS == .Darwin || ODIN_OS == .JS {
 		return 1.0
 	} else {
 		s := rl.GetWindowScaleDPI().x
@@ -48,7 +48,7 @@ auto_scale :: proc() -> f32 {
 apply_platform_dpi :: proc(user_scale: f32 = 0) {
 	dpi := rl.GetWindowScaleDPI().x
 	if dpi <= 0 do dpi = 1.0
-	when ODIN_OS == .Darwin {
+	when ODIN_OS == .Darwin || ODIN_OS == .JS {
 		set_ui_scale(user_scale if user_scale > 0 else 1.0)
 		set_font_dpi(dpi)
 	} else {
@@ -75,7 +75,7 @@ dpi_refresh :: proc(user_scale: f32 = 0) -> bool {
 	if dpi == dpi_last do return false
 	dpi_last = dpi
 
-	when ODIN_OS == .Darwin {
+	when ODIN_OS == .Darwin || ODIN_OS == .JS {
 		// ui_scale stays at its point value; only the atlas resolution tracks
 		// the physical-pixel ratio.
 		set_font_dpi(dpi)
