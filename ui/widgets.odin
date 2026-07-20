@@ -1493,14 +1493,14 @@ find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: in
 // ingot-only generic widgets (not present in the alloy superset).
 // ------------------------------------------------------------------
 
-spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = FG_ACCENT_LIGHT) {
+spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = FG_ACCENT_LIGHT, segments: i32 = 24) {
 	start := f32(math.mod(rl.GetTime()*360.0, 360.0))
 	thickness := max(radius * 0.28, 2.0)
 	rl.DrawRing(
 		rl.Vector2{f32(cx), f32(cy)},
 		radius - thickness, radius,
 		start, start + 270.0,
-		24, color,
+		segments, color,
 	)
 }
 
