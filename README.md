@@ -348,7 +348,10 @@ Migration status per consumer:
 - macOS `WINDOW_TRANSPARENT` vibrancy uses the surface's supported alpha mode
   (`Unpremultiplied`) while the batch outputs premultiplied alpha; fully-opaque
   UI composites correctly, semi-transparent backdrop blending is approximate.
-- full `ingot:ui` on the browser/WASM target (see "Web / WASM").
+- full `ingot:ui` on the browser/WASM target — **done** (see "Web / WASM"):
+  `gfx` + `ui` + text atlas run on web via the platform seam. Remaining web work
+  is on-device validation of the 3D/galaxy path (its wgpu features may lag on the
+  JS backend) and clipboard/drag-drop parity.
 
 Previously upstreamed app features (all live in ingot):
 
