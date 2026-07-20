@@ -4,6 +4,7 @@
 // (batch, shapes, text, texture, input) shares one context.
 package gfx
 
+import "base:runtime"
 import "core:fmt"
 import "core:time"
 import "vendor:glfw"
@@ -87,9 +88,23 @@ _on_adapter :: proc "c" (status: wg.RequestAdapterStatus, adapter: wg.Adapter, m
 
 @(private)
 _on_device :: proc "c" (status: wg.RequestDeviceStatus, device: wg.Device, msg: wg.StringView, u1, u2: rawptr) {
+	if status != .Success {
+		context = runtime.default_context()
+		fmt.eprintfln("gfx: device request failed (status=%v): %s", status, string(msg))
+	}
 	r := (^Device_Res)(u1)
 	r.device = device
 	r.done = true
+}
+
+// Uncaptured GPU errors (e.g. an invalid pipeline/vertex layout) would
+// otherwise reach wgpu-native's default handler, which panics and aborts the
+// whole process with no message. Logging them here keeps the app alive and
+// surfaces a diagnosable error instead of a bare SIGABRT.
+@(private)
+_on_uncaptured_error :: proc "c" (device: ^wg.Device, type: wg.ErrorType, message: wg.StringView, u1, u2: rawptr) {
+	context = runtime.default_context()
+	fmt.eprintfln("gfx: wgpu uncaptured error (%v): %s", type, string(message))
 }
 
 // --- window lifecycle ------------------------------------------------------
@@ -131,7 +146,10 @@ InitWindow :: proc(width, height: i32, title: cstring) {
 	g.adapter = ares.adapter
 
 	dres: Device_Res
-	wg.AdapterRequestDevice(g.adapter, nil, {
+	dev_desc := wg.DeviceDescriptor{
+		uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error},
+	}
+	wg.AdapterRequestDevice(g.adapter, &dev_desc, {
 		mode = .AllowProcessEvents, callback = _on_device, userdata1 = &dres,
 	})
 	for !dres.done { wg.InstanceProcessEvents(g.instance) }

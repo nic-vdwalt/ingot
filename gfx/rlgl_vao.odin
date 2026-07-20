@@ -116,6 +116,45 @@ RlUnloadVertexBuffer :: proc(vboId: u32) {
 		wg.BufferRelease(buf)
 		g_vbos[vboId - 1] = nil
 	}
+	// Detach this buffer from every VAO that references it. Without this the
+	// stale Vao_Buffer slot (and its attributes) would linger; a subsequent
+	// LoadVertexBuffer + re-setup would append duplicate shaderLocations and
+	// wgpu would reject the resulting pipeline (an uncaptured validation error
+	// that aborts the process).
+	for v in g_vaos {
+		if v == nil do continue
+		k := -1
+		for b, i in v.buffers {
+			if b.id == vboId {
+				k = i
+				break
+			}
+		}
+		if k < 0 do continue
+
+		ordered_remove(&v.buffers, k)
+
+		// Drop attributes bound to the removed buffer; reindex those after it.
+		for i := len(v.attrs) - 1; i >= 0; i -= 1 {
+			if v.attrs[i].buffer_idx == k {
+				ordered_remove(&v.attrs, i)
+			} else if v.attrs[i].buffer_idx > k {
+				v.attrs[i].buffer_idx -= 1
+			}
+		}
+
+		if v.cur_buffer > k {
+			v.cur_buffer -= 1
+		} else if v.cur_buffer == k {
+			v.cur_buffer = len(v.buffers) - 1
+		}
+
+		// The buffer set changed, so any cached pipelines are stale.
+		for c in v.caches {
+			if c.pipe != nil do wg.RenderPipelineRelease(c.pipe)
+		}
+		clear(&v.caches)
+	}
 }
 
 // --- attribute recording ----------------------------------------------------
@@ -123,14 +162,25 @@ RlUnloadVertexBuffer :: proc(vboId: u32) {
 RlSetVertexAttribute :: proc(index: u32, compSize: i32, type: i32, normalized: bool, stride: i32, offset: i32) {
 	v := _vao_get(g_cur_vao)
 	if v == nil do return
-	append(&v.attrs, Vao_Attr{
+	attr := Vao_Attr{
 		location   = index,
 		comps      = u32(clamp(compSize, 1, 4)),
 		offset     = u32(offset),
 		stride     = u32(stride),
 		buffer_idx = v.cur_buffer,
 		divisor    = 0,
-	})
+	}
+	// Overwrite an existing attribute at the same shaderLocation instead of
+	// appending (matches glVertexAttribPointer semantics). Appending would let
+	// a re-setup path register the same location twice, producing an invalid
+	// wgpu vertex layout.
+	for &a in v.attrs {
+		if a.location == index {
+			a = attr
+			return
+		}
+	}
+	append(&v.attrs, attr)
 }
 
 RlSetVertexAttributeDivisor :: proc(index: u32, divisor: i32) {
