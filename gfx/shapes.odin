@@ -186,34 +186,36 @@ BeginScissorMode :: proc(x, y, width, height: i32) {
 	pass := active_pass()
 	renderer_flush(&g.rend, pass)
 	// In render-target mode geometry is drawn in the target's pixel space (1:1);
-	// otherwise scale logical coords to swapchain framebuffer pixels.
-	fbw, fbh, sx, sy: f32
-	if g.frame.rt != 0 {
-		fbw, fbh = f32(g.frame.rt_w), f32(g.frame.rt_h)
-		sx, sy = 1, 1
-	} else {
-		fbw, fbh = f32(g.fb_width), f32(g.fb_height)
+	// otherwise scale logical coords to the real attachment pixel size. Using
+	// the authoritative attachment size (not g.fb_width, which can lag an async
+	// web resize) keeps the rect in sync with the texture and drawn geometry.
+	fbw, fbh := _attachment_px()
+	sx, sy: f32 = 1, 1
+	if g.frame.rt == 0 {
 		sx = fbw / f32(max(g.width, 1))
 		sy = fbh / f32(max(g.height, 1))
 	}
-	px := u32(clamp(f32(x) * sx, 0, fbw))
-	py := u32(clamp(f32(y) * sy, 0, fbh))
-	pw := u32(clamp(f32(width) * sx, 0, fbw - f32(px)))
-	ph := u32(clamp(f32(height) * sy, 0, fbh - f32(py)))
+	fx := clamp(f32(x) * sx, 0, fbw)
+	fy := clamp(f32(y) * sy, 0, fbh)
+	px := u32(fx)
+	py := u32(fy)
+	pw := u32(clamp(f32(width) * sx, 0, fbw - fx))
+	ph := u32(clamp(f32(height) * sy, 0, fbh - fy))
 	wg.RenderPassEncoderSetScissorRect(pass, px, py, pw, ph)
+	// Remember window-pass clips so _ensure_pass can re-apply after a pass reset.
+	if g.frame.rt == 0 {
+		g.frame.scissor_on = true
+		g.frame.sc_x, g.frame.sc_y, g.frame.sc_w, g.frame.sc_h = px, py, pw, ph
+	}
 }
 
 EndScissorMode :: proc() {
 	if !g.frame.has_frame || !_active_pass_begun() do return
 	pass := active_pass()
 	renderer_flush(&g.rend, pass)
-	fbw, fbh: u32
-	if g.frame.rt != 0 {
-		fbw, fbh = u32(g.frame.rt_w), u32(g.frame.rt_h)
-	} else {
-		fbw, fbh = u32(g.fb_width), u32(g.fb_height)
-	}
-	wg.RenderPassEncoderSetScissorRect(pass, 0, 0, fbw, fbh)
+	fbw, fbh := _attachment_px()
+	wg.RenderPassEncoderSetScissorRect(pass, 0, 0, u32(fbw), u32(fbh))
+	if g.frame.rt == 0 do g.frame.scissor_on = false
 }
 
 // --- collision helper ------------------------------------------------------

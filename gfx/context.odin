@@ -19,6 +19,11 @@ Frame_State :: struct {
 	pass_begun:  bool,
 	has_frame:   bool,
 
+	// Active window-pass scissor (framebuffer pixels). Re-applied whenever the
+	// window pass begins, since a fresh WebGPU pass resets scissor to full.
+	scissor_on:  bool,
+	sc_x, sc_y, sc_w, sc_h: u32,
+
 	// Render-target redirection (Phase 2): when rt != 0 the batch records into
 	// rt_pass (targeting an offscreen texture) on its own command encoder,
 	// submitted at EndTextureMode, instead of the swapchain pass.
@@ -228,6 +233,7 @@ BeginDrawing :: proc() {
 	g.frame.clear_color = Color{0, 0, 0, 255}
 	g.frame.pass_begun = false
 	g.frame.has_frame = true
+	g.frame.scissor_on = false
 	renderer_frame_begin(&g.rend)
 }
 
@@ -264,6 +270,10 @@ _ensure_pass :: proc() {
 		},
 	})
 	g.frame.pass_begun = true
+	// A new pass starts with a full-attachment scissor; restore any active clip.
+	if g.frame.scissor_on {
+		wg.RenderPassEncoderSetScissorRect(g.frame.pass, g.frame.sc_x, g.frame.sc_y, g.frame.sc_w, g.frame.sc_h)
+	}
 }
 
 EndDrawing :: proc() {
@@ -404,6 +414,17 @@ _active_pass_begun :: proc() -> bool {
 	if !g.frame.has_frame do return false
 	if g.frame.rt != 0 do return g.frame.rt_pass_begun
 	return g.frame.pass_begun
+}
+
+// _attachment_px returns the real pixel dimensions of the current 2D pass
+// target: the bound render target, else the configured swapchain surface.
+// g.config is authoritative for the swapchain texture size (kept in lockstep
+// with SurfaceConfigure), so scissor rects computed from it can never exceed
+// the attachment even if g.fb_width lags an async web resize for a frame.
+@(private)
+_attachment_px :: proc() -> (f32, f32) {
+	if g.frame.rt != 0 do return f32(g.frame.rt_w), f32(g.frame.rt_h)
+	return f32(max(g.config.width, 1)), f32(max(g.config.height, 1))
 }
 
 // _ensure_active_pass lazily begins whichever pass is current: the render

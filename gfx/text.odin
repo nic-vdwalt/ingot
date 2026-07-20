@@ -32,6 +32,7 @@ Atlas :: struct {
 	glyphs:      map[rune]Glyph,
 	bitmap:      []byte, // ATLAS_DIM*ATLAS_DIM, single channel
 	cur_x, cur_y, shelf_h: i32,
+	dirty:       bool,   // CPU bitmap has un-uploaded glyphs (lazy bake/measure)
 
 	tex:    wg.Texture,
 	view:   wg.TextureView,
@@ -119,6 +120,7 @@ _bake_glyph :: proc(a: ^Atlas, cp: rune) -> bool {
 	// render directly into the atlas bitmap at (px,py) with atlas stride
 	dst := raw_data(a.bitmap[py * ATLAS_DIM + px:])
 	tt.MakeCodepointBitmap(&a.info, dst, c.int(gw), c.int(gh), c.int(ATLAS_DIM), a.scale, a.scale, cp)
+	a.dirty = true
 
 	a.glyphs[cp] = Glyph{
 		x = u16(px), y = u16(py), w = u16(gw), h = u16(gh),
@@ -161,6 +163,7 @@ _atlas_gpu_init :: proc(a: ^Atlas) {
 		&{bytesPerRow = ATLAS_DIM, rowsPerImage = ATLAS_DIM},
 		&{ATLAS_DIM, ATLAS_DIM, 1},
 	)
+	a.dirty = false
 	a.view = wg.TextureCreateView(a.tex, nil)
 	_atlas_build_bind(a)
 }
@@ -232,8 +235,7 @@ DrawTextEx :: proc(font: Font, text: cstring, position: Vector2, fontSize, spaci
 		}
 		gl, ok := a.glyphs[cp]
 		if !ok {
-			ok2 := _bake_glyph(a, cp)
-			if ok2 { _atlas_gpu_reupload(a) }
+			_bake_glyph(a, cp)
 			gl = a.glyphs[cp]
 		}
 		if gl.valid {
@@ -249,6 +251,7 @@ DrawTextEx :: proc(font: Font, text: cstring, position: Vector2, fontSize, spaci
 		}
 		pen_x += gl.xadvance * sf + spacing
 	}
+	if a.dirty do _atlas_gpu_reupload(a)
 }
 
 DrawTextCodepoint :: proc(font: Font, codepoint: rune, position: Vector2, fontSize: f32, tint: Color) {
@@ -299,6 +302,7 @@ _atlas_gpu_reupload :: proc(a: ^Atlas) {
 		&{bytesPerRow = ATLAS_DIM, rowsPerImage = ATLAS_DIM},
 		&{ATLAS_DIM, ATLAS_DIM, 1},
 	)
+	a.dirty = false
 }
 
 // utf8_encode writes `r` into buf as null-terminated UTF-8, returns the slice.
