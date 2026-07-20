@@ -152,6 +152,20 @@ fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) {
 	fetcher_request_cached(f, tag, path, "")
 }
 
+// fetcher_request_priority queues a GET at the FRONT of the job queue so a
+// free worker picks it before the existing backlog. Use for low-volume,
+// user-driven API calls (runs list, replay, geocode) that must not wait behind
+// a burst of slow tile fetches. No on-disk cache.
+fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
+	sync.mutex_lock(&f.mutex)
+	inject_at(&f.jobs, 0, Fetch_Job{
+		tag = tag,
+		path = strings.clone(path),
+		cache_path = strings.clone(""),
+	})
+	sync.mutex_unlock(&f.mutex)
+}
+
 // fetcher_request_cached is fetcher_request with an on-disk cache: if
 // `cache_path` exists the file is returned without touching the network;
 // otherwise a successful fetch is written there for next time.

@@ -92,6 +92,15 @@ fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) {
 	_pump(f)
 }
 
+// fetcher_request_priority enqueues a GET at the FRONT of the pending queue so
+// it dispatches before the existing backlog. Use for low-volume, user-driven
+// API calls (runs list, replay, geocode) that must not wait behind a burst of
+// slow tile fetches.
+fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
+	inject_at(&f.pending, 0, Pending{tag = tag, path = strings.clone(path)})
+	_pump(f)
+}
+
 // _pump starts queued requests (FIFO) until MAX_INFLIGHT are in flight.
 @(private = "file")
 _pump :: proc(f: ^Fetcher) {
