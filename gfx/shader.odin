@@ -350,7 +350,8 @@ _shader_pipeline :: proc(e: ^Shader_Entry, format: wg.TextureFormat) -> wg.Rende
 		attributeCount = 3, attributes = raw_data(attrs[:]),
 	}
 	blend := _blend_for(&g.rend, g.rend.cur_blend)
-	target := wg.ColorTargetState{format = format, blend = &blend, writeMask = wg.ColorWriteMaskFlags_All}
+	target := wg.ColorTargetState{format = format, writeMask = wg.ColorWriteMaskFlags_All}
+	if _format_blendable(format) do target.blend = &blend
 
 	layouts: [4]wg.BindGroupLayout
 	n_layouts := 3

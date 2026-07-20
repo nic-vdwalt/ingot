@@ -7,7 +7,6 @@
 package gfx
 
 import "core:math"
-import "vendor:glfw"
 import stbi "vendor:stb/image"
 import wg "vendor:wgpu"
 
@@ -314,10 +313,8 @@ UnloadImage :: proc(image: Image) {
 
 LoadTexture :: proc(fileName: cstring) -> Texture2D { return Texture2D{} } // path load unsupported (no fs image loader wired)
 
-// SetWindowIcon sets the GLFW window icon from a decoded RGBA image.
+// SetWindowIcon sets the window icon from a decoded RGBA image (native only;
+// no-op on web where the browser owns the tab/favicon).
 SetWindowIcon :: proc(image: Image) {
-	if g.win == nil || image.data == nil do return
-	img := glfw.Image{width = image.width, height = image.height, pixels = ([^]u8)(image.data)}
-	imgs := [1]glfw.Image{img}
-	glfw.SetWindowIcon(g.win, imgs[:])
+	platform_set_window_icon(image)
 }

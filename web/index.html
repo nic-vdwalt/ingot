@@ -3,14 +3,15 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>ingot — WebGPU (Odin) demo</title>
+	<title>ingot — WebGPU (Odin)</title>
 	<style>
 		html, body { margin: 0; height: 100%; background: #1e1e1e; color: #ddd;
 			font-family: ui-monospace, monospace; }
 		#wrap { display: flex; flex-direction: column; align-items: center; gap: 12px;
-			padding: 24px; }
-		#ingot-canvas { width: 1280px; max-width: 90vw; height: 720px; max-height: 70vh;
-			border: 1px solid #46464f; border-radius: 8px; background: #000; }
+			padding: 24px; box-sizing: border-box; height: 100%; }
+		#ingot-canvas { width: 1280px; max-width: 92vw; height: 720px; max-height: 78vh;
+			border: 1px solid #46464f; border-radius: 8px; background: #000;
+			outline: none; touch-action: none; }
 		#msg { font-size: 13px; color: #a0a0aa; }
 		a { color: #64a0ff; }
 	</style>
@@ -18,28 +19,22 @@
 <body>
 	<div id="wrap">
 		<h3>ingot on WebGPU — Odin → WASM</h3>
-		<canvas id="ingot-canvas" width="1280" height="720"></canvas>
+		<!-- tabindex makes the canvas focusable so it receives keyboard events -->
+		<canvas id="ingot-canvas" width="1280" height="720" tabindex="0"></canvas>
 		<div id="msg">initializing…</div>
 	</div>
 
 	<!-- Odin JS runtime + vendor:wgpu browser glue (staged by build_web.sh). -->
 	<script src="odin.js"></script>
 	<script src="wgpu.js"></script>
+	<!-- ingot host glue: "ingot" import module, canvas sizing, boot. -->
+	<script src="ingot_input.js"></script>
+	<script src="ingot_web.js"></script>
 	<script>
 		const msg = document.getElementById("msg");
-		if (!navigator.gpu) {
-			msg.textContent = "WebGPU is not available in this browser. " +
-				"Use Chrome/Edge 113+ or Safari 18+.";
-		} else {
-			// Wire the wgpu browser interface into the Odin wasm imports under the
-			// "wgpu" foreign-import module, then let odin.js drive main()+step().
-			const wmi = new window.odin.WasmMemoryInterface();
-			const webgpu = new window.odin.WebGPUInterface(wmi);
-			const extra = { wgpu: webgpu.getInterface() };
-			window.odin.runWasm("ingot_web.wasm", null, extra, wmi)
-				.then(() => { msg.textContent = "running (WebGPU)"; })
-				.catch((e) => { msg.textContent = "error: " + e; console.error(e); });
-		}
+		window.ingotWeb.run("ingot_web.wasm")
+			.then(() => { msg.textContent = "running (WebGPU)"; })
+			.catch((e) => { msg.textContent = "error: " + e; console.error(e); });
 	</script>
 </body>
 </html>

@@ -1,167 +1,84 @@
-// ingot web demo — WebGPU in the browser via Odin's vendor:wgpu JS backend
-// (ODIN_OS == .JS). Mirrors the native spike: canvas surface, a solid-color
-// pipeline, and a cleared frame with a batched rectangle, driven by
-// requestAnimationFrame from the HTML shell. This is the "dividend" of building
-// ingot on WebGPU — the same wgpu renderer code path targets the browser.
+// ingot web demo — the REAL ingot:gfx engine compiled to WASM + WebGPU.
+//
+// Unlike the original standalone spike (which hand-rolled its own wgpu surface
+// and pipeline), this drives the actual engine: InitWindow → run(frame), the
+// same source that runs natively. Proves the platform seam (canvas surface,
+// async device init, performance.now timing, RAF-driven loop) end-to-end.
 //
 // Build:  bash build_web.sh   (see that script)
-// Serve:  any static server over the web/ dir, open index.html in a WebGPU
+// Serve:  (cd web && python3 -m http.server 8000), open index.html in a WebGPU
 //         browser (Chrome/Edge 113+, Safari 18+).
 package web
 
-import "base:runtime"
-import wgpu "vendor:wgpu"
+import rl "ingot:gfx"
 
-Vertex :: struct {
-	pos: [2]f32,
-	col: [4]f32,
+// Embed a font so the demo exercises the real text atlas (stb_truetype → R8 wgpu
+// upload) in-browser, proving the text stack works on the web target.
+FONT_TTF := #load("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
+DEMO_CPS := [?]rune{
+	' ', '!', ':', 'A', 'G', 'P', 'U', 'W', 'b', 'c', 'd', 'e', 'f',
+	'g', 'h', 'i', 'l', 'n', 'o', 'p', 'r', 's', 't', 'u', 'w', 'x', 'y',
 }
 
-State :: struct {
-	ctx:      runtime.Context,
-	instance: wgpu.Instance,
-	surface:  wgpu.Surface,
-	adapter:  wgpu.Adapter,
-	device:   wgpu.Device,
-	queue:    wgpu.Queue,
-	config:   wgpu.SurfaceConfiguration,
-	pipeline: wgpu.RenderPipeline,
-	ready:    bool,
-	width:    u32,
-	height:   u32,
-	t:        f32,
-}
-
-s: State
-
-SHADER := `
-struct VSOut { @builtin(position) pos: vec4<f32>, @location(0) col: vec4<f32> };
-@vertex
-fn vs_main(@location(0) pos: vec2<f32>, @location(1) col: vec4<f32>) -> VSOut {
-	var o: VSOut;
-	o.pos = vec4<f32>(pos, 0.0, 1.0);
-	o.col = col;
-	return o;
-}
-@fragment
-fn fs_main(in: VSOut) -> @location(0) vec4<f32> { return in.col; }
-`
+font: rl.Font
+font_ready: bool
 
 main :: proc() {
-	s.ctx = context
-	s.width = 1280
-	s.height = 720
-
-	s.instance = wgpu.CreateInstance()
-	s.surface = wgpu.InstanceCreateSurface(s.instance, &wgpu.SurfaceDescriptor{
-		nextInChain = &wgpu.SurfaceSourceCanvasHTMLSelector{
-			chain = {sType = .SurfaceSourceCanvasHTMLSelector},
-			selector = "#ingot-canvas",
-		},
-	})
-
-	// async, callback-chained (the browser event loop resolves these)
-	wgpu.InstanceRequestAdapter(s.instance, &{compatibleSurface = s.surface}, {
-		callback = on_adapter,
-	})
+	rl.InitWindow(1280, 720, "ingot web demo")
+	rl.SetTargetFPS(60)
+	rl.run(frame) // native: blocks; web: returns, RAF drives frame()
 }
 
-on_adapter :: proc "c" (status: wgpu.RequestAdapterStatus, adapter: wgpu.Adapter, msg: wgpu.StringView, u1, u2: rawptr) {
-	context = s.ctx
-	s.adapter = adapter
-	wgpu.AdapterRequestDevice(s.adapter, nil, {callback = on_device})
-}
+t: f32
 
-on_device :: proc "c" (status: wgpu.RequestDeviceStatus, device: wgpu.Device, msg: wgpu.StringView, u1, u2: rawptr) {
-	context = s.ctx
-	s.device = device
-	s.queue = wgpu.DeviceGetQueue(s.device)
+// frame draws one frame; identical on native and web.
+frame :: proc() {
+	t += rl.GetFrameTime()
 
-	caps, _ := wgpu.SurfaceGetCapabilities(s.surface, s.adapter)
-	format := caps.formats[0]
-	s.config = wgpu.SurfaceConfiguration{
-		device = s.device, format = format, usage = {.RenderAttachment},
-		width = s.width, height = s.height, alphaMode = .Opaque, presentMode = .Fifo,
+	// Bake the font atlas on the first frame after the GPU device is ready.
+	if !font_ready {
+		font = rl.LoadFontFromMemory(".ttf", raw_data(FONT_TTF), i32(len(FONT_TTF)), 28, raw_data(DEMO_CPS[:]), i32(len(DEMO_CPS)))
+		font_ready = font.glyphCount > 0
 	}
-	wgpu.SurfaceConfigure(s.surface, &s.config)
 
-	shader := wgpu.DeviceCreateShaderModule(s.device, &{
-		nextInChain = &wgpu.ShaderSourceWGSL{chain = {sType = .ShaderSourceWGSL}, code = SHADER},
-	})
-	attrs := [2]wgpu.VertexAttribute{
-		{format = .Float32x2, offset = 0, shaderLocation = 0},
-		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
+	rl.BeginDrawing()
+	rl.ClearBackground(rl.Color{30, 34, 48, 255})
+
+	// a couple of moving shapes so motion is visible and the batch renderer,
+	// ortho projection, and per-frame timing are all exercised
+	w := rl.GetScreenWidth()
+	h := rl.GetScreenHeight()
+	cx := f32(w) * 0.5
+	cy := f32(h) * 0.5
+	off := 120.0 * _sin(t)
+
+	rl.DrawRectangle(i32(cx - 100 + off), i32(cy - 60), 200, 120, rl.Color{60, 100, 255, 255})
+	rl.DrawCircle(i32(cx - off), i32(cy), 48, rl.Color{255, 140, 60, 255})
+
+	// real text via the stb_truetype atlas (not the DrawText stub)
+	if font_ready {
+		rl.DrawTextEx(font, "ingot gfx on WebGPU", rl.Vector2{24, 24}, 28, 1, rl.Color{230, 230, 235, 255})
 	}
-	vbl := wgpu.VertexBufferLayout{arrayStride = size_of(Vertex), stepMode = .Vertex, attributeCount = 2, attributes = raw_data(attrs[:])}
-	target := wgpu.ColorTargetState{format = format, writeMask = wgpu.ColorWriteMaskFlags_All}
-	s.pipeline = wgpu.DeviceCreateRenderPipeline(s.device, &{
-		vertex = {module = shader, entryPoint = "vs_main", bufferCount = 1, buffers = &vbl},
-		primitive = {topology = .TriangleList, cullMode = .None},
-		multisample = {count = 1, mask = ~u32(0)},
-		fragment = &wgpu.FragmentState{module = shader, entryPoint = "fs_main", targetCount = 1, targets = &target},
-	})
-	s.ready = true
-}
 
-// step is exported and called each frame by the Odin JS runtime (odin.js)
-// via requestAnimationFrame; returning true keeps the loop running.
-@(export)
-step :: proc(dt: f32) -> bool {
-	if !s.ready do return true
-	s.t += dt
-
-	st := wgpu.SurfaceGetCurrentTexture(s.surface)
-	if st.status != .SuccessOptimal && st.status != .SuccessSuboptimal do return true
-	view := wgpu.TextureCreateView(st.texture, nil)
-	defer wgpu.TextureViewRelease(view)
-
-	enc := wgpu.DeviceCreateCommandEncoder(s.device, nil)
-	pass := wgpu.CommandEncoderBeginRenderPass(enc, &{
-		colorAttachmentCount = 1,
-		colorAttachments = &wgpu.RenderPassColorAttachment{
-			view = view, depthSlice = wgpu.DEPTH_SLICE_UNDEFINED,
-			loadOp = .Clear, storeOp = .Store,
-			clearValue = {30.0 / 255.0, 30.0 / 255.0, 30.0 / 255.0, 1.0},
-		},
-	})
-
-	// a centered rectangle in NDC, gently pulsing
-	h := 0.3 + 0.1 * (0.5 + 0.5 * sin_poly(s.t))
-	col := [4]f32{0.24, 0.39, 1.0, 1.0}
-	verts := [6]Vertex{
-		{{-0.5, -h}, col}, {{-0.5, h}, col}, {{0.5, -h}, col},
-		{{0.5, -h}, col}, {{-0.5, h}, col}, {{0.5, h}, col},
+	// input demo: a marker follows the mouse; it turns green while held. Proves
+	// the DOM→engine input path (pointer move + button) end-to-end in-browser.
+	m := rl.GetMousePosition()
+	held := rl.IsMouseButtonDown(.LEFT)
+	mc := held ? rl.Color{80, 220, 120, 255} : rl.Color{220, 220, 230, 255}
+	rl.DrawCircle(i32(m.x), i32(m.y), 10, mc)
+	if rl.IsKeyPressed(.SPACE) {
+		t = 0 // press Space to reset the animation — proves key events arrive
 	}
-	vbuf := wgpu.DeviceCreateBufferWithData(s.device, &{usage = {.Vertex}}, verts[:])
-	defer wgpu.BufferRelease(vbuf)
 
-	wgpu.RenderPassEncoderSetPipeline(pass, s.pipeline)
-	wgpu.RenderPassEncoderSetVertexBuffer(pass, 0, vbuf, 0, size_of(verts))
-	wgpu.RenderPassEncoderDraw(pass, 6, 1, 0, 0)
-	wgpu.RenderPassEncoderEnd(pass)
-	wgpu.RenderPassEncoderRelease(pass)
-
-	cmd := wgpu.CommandEncoderFinish(enc, nil)
-	wgpu.QueueSubmit(s.queue, {cmd})
-	wgpu.CommandBufferRelease(cmd)
-	wgpu.CommandEncoderRelease(enc)
-	wgpu.SurfacePresent(s.surface)
-	return true
+	rl.EndDrawing()
 }
 
-@(private)
-_sin :: proc "contextless" (x: f32) -> f32 {
-	return sin_poly(x)
-}
-
-// minimal periodic sine (good enough for a pulsing demo) to avoid pulling
-// core:math on the wasm target
-@(private)
-sin_poly :: proc "contextless" (x: f32) -> f32 {
+// small periodic sine to avoid pulling extra deps on the wasm target
+_sin :: proc(x: f32) -> f32 {
 	PI :: f32(3.14159265)
 	xx := x
 	for xx > PI do xx -= 2 * PI
 	for xx < -PI do xx += 2 * PI
-	abs_xx := xx < 0 ? -xx : xx
-	return 4.0 / PI * xx - 4.0 / (PI * PI) * xx * abs_xx
+	a := xx < 0 ? -xx : xx
+	return 4.0 / PI * xx - 4.0 / (PI * PI) * xx * a
 }

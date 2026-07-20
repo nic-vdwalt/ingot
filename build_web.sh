@@ -22,14 +22,17 @@ fi
 echo "Building wasm..."
 # --export-table is REQUIRED by vendor:wgpu on JS so the browser glue can invoke
 # Odin callbacks (adapter/device requests) through the function table.
+# The demo drives the real ingot:gfx engine, so the ingot collection is needed.
 odin build "$WEB" \
 	-target:js_wasm32 \
+	-collection:ingot="$ROOT" \
 	-out:"$WEB/ingot_web.wasm" \
 	-extra-linker-flags:"--export-table"
 
 echo "Staging JS runtimes..."
 cp "$ODIN_ROOT/core/sys/wasm/js/odin.js" "$WEB/odin.js"
 cp "$ODIN_ROOT/vendor/wgpu/wgpu.js"       "$WEB/wgpu.js"
+# ingot_web.js / ingot_input.js are committed host glue (not staged from Odin).
 
 echo "Done. Serve web/ and open index.html in a WebGPU browser:"
 echo "  (cd '$WEB' && python3 -m http.server 8000) then open http://localhost:8000"

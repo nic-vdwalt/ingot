@@ -1,45 +1,32 @@
+#+build !js
 // ingot:gfx — additional raylib-named window/mouse/drag-drop procs used by
-// consumer apps (alloy). GLFW-backed where meaningful.
+// consumer apps (alloy). GLFW-backed; native-only. The web target provides the
+// window-state and drag-drop equivalents in platform_web.odin.
 package gfx
 
 import "base:runtime"
 import "core:strings"
 import "vendor:glfw"
 
-// --- mouse convenience -----------------------------------------------------
-
-GetMouseX :: proc() -> i32 { return i32(g.inp.mouse.x) }
-GetMouseY :: proc() -> i32 { return i32(g.inp.mouse.y) }
-
-// raylib mouse coordinate offset/scale — unused by the GLFW-native path; kept
-// for API parity (no-op).
-SetMouseOffset :: proc(offsetX, offsetY: i32) {}
-
 // --- window state ----------------------------------------------------------
 
 IsWindowMinimized :: proc() -> bool {
 	if g.win == nil do return false
-	return glfw.GetWindowAttrib(g.win, glfw.ICONIFIED) != 0
+	return glfw.GetWindowAttrib(glfw.WindowHandle(g.win), glfw.ICONIFIED) != 0
 }
 IsWindowHidden :: proc() -> bool {
 	if g.win == nil do return false
-	return glfw.GetWindowAttrib(g.win, glfw.VISIBLE) == 0
+	return glfw.GetWindowAttrib(glfw.WindowHandle(g.win), glfw.VISIBLE) == 0
 }
 IsWindowFullscreen :: proc() -> bool {
 	if g.win == nil do return false
-	return glfw.GetWindowMonitor(g.win) != nil
+	return glfw.GetWindowMonitor(glfw.WindowHandle(g.win)) != nil
 }
 RestoreWindow :: proc() {
-	if g.win != nil do glfw.RestoreWindow(g.win)
+	if g.win != nil do glfw.RestoreWindow(glfw.WindowHandle(g.win))
 }
 
 // --- drag & drop -----------------------------------------------------------
-
-FilePathList :: struct {
-	capacity: u32,
-	count:    u32,
-	paths:    [^]cstring,
-}
 
 @(private) g_drop_paths: [dynamic]cstring
 @(private) g_drop_ready: bool
@@ -68,10 +55,3 @@ LoadDroppedFiles :: proc() -> FilePathList {
 UnloadDroppedFiles :: proc(files: FilePathList) {
 	g_drop_ready = false
 }
-
-// install the drop callback (called from InitWindow)
-@(private)
-_drop_init :: proc() {
-	if g.win != nil do glfw.SetDropCallback(g.win, _drop_cb)
-}
-

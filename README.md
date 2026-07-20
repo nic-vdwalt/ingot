@@ -243,18 +243,38 @@ palette matches the host app's theme.
 
 Because the renderer is built on `vendor:wgpu`, the same GPU code path targets
 the browser via WASM + WebGPU (`ODIN_OS == .JS`, canvas surface via
-`SurfaceSourceCanvasHTMLSelector`). A self-contained demo lives in `web/`:
+`SurfaceSourceCanvasHTMLSelector`). The **whole engine** — `gfx` batch renderer,
+`ui` widgets, and the stb_truetype text atlas — now runs on the web target, not
+just a rendering spike. Build and serve the demo:
 
     bash build_web.sh                       # -> web/ingot_web.wasm (+ odin.js, wgpu.js)
     (cd web && python3 -m http.server 8000) # open http://localhost:8000
 
-`web/demo.odin` mirrors the native path (canvas surface, async-chained
-adapter/device request, a `step(dt)` frame loop driven by `odin.js`) and draws a
-cleared frame with a batched rectangle. Requires a WebGPU browser (Chrome/Edge
-113+, Safari 18+) and Odin's `--export-table` linker flag (set by the script) so
-the browser glue can invoke Odin callbacks. The native window/input layer is
-GLFW-backed and desktop-only; the full `ingot:ui` widget set on the web target
-(DOM input + browser text atlas) is the next step on top of this demo.
+`web/demo.odin` drives the real engine (`InitWindow` → `run(frame)`, a baked font
+via `DrawTextEx`, mouse + keyboard input) — the *same source* that runs natively.
+Requires a WebGPU browser (Chrome/Edge 113+, Safari 18+) and Odin's
+`--export-table` linker flag (set by the script).
+
+### The platform seam (`when ODIN_OS == .JS`)
+
+All OS-specific plumbing lives behind a small platform seam so `gfx` carries no
+windowing-backend import. Every `platform_*` proc has two implementations,
+selected by build tag:
+
+| Concern | Native (`platform_native.odin`, `#+build !js`) | Web (`platform_web.odin`, `#+build js`) |
+|---------|------------------------------------------------|------------------------------------------|
+| Window + surface | GLFW window → `glfwglue.GetSurface` | canvas → `SurfaceSourceCanvasHTMLSelector` |
+| GPU init | synchronous busy-wait (`InstanceProcessEvents`) | async adapter→device callback → `_gpu_finish` |
+| Frame loop | `run()` blocks in `for !WindowShouldClose()` | `run()` stores the callback; RAF drives exported `step(dt)` |
+| Input | GLFW key/char/scroll callbacks | DOM events (`ingot_web.js`/`ingot_input.js`) → staging buffer → same `Input` struct |
+| Timing | `core:time` (monotonic) | `performance.now` |
+| DPI / resize | GLFW content scale + framebuffer size | canvas CSS size × `devicePixelRatio` |
+
+Consumer apps write `main()` once — `InitWindow` … `gfx.run(frame)` — and it
+compiles to both native and web. The native GLFW path is unchanged; the web path
+is purely additive (`#+build js` siblings). The browser host glue (`web/ingot_web.js`
++ `web/ingot_input.js`) provides the `ingot` foreign-import module (timing, canvas
+geometry, cursor) and forwards DOM input into the engine's exported entry points.
 
 ## DPI & text readability
 

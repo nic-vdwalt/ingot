@@ -1,20 +1,20 @@
-// ingot:gfx — GLFW-backed input with raylib-parity queries. Edge (pressed /
-// released) and repeat state is collected via GLFW callbacks during PollEvents
-// (driven from EndDrawing) and read by the app on the following frame, matching
-// raylib's poll-at-end-of-frame model. Held state and mouse position are polled
-// directly. Values match raylib names/semantics so `rl.*` input call sites port
-// unchanged.
+// ingot:gfx — input state with raylib-parity queries. Edge (pressed /
+// released) and repeat state is collected by the platform backend during the
+// poll cycle (driven from EndDrawing) and read by the app on the following
+// frame, matching raylib's poll-at-end-of-frame model. Held state and mouse
+// position are polled directly. Values match raylib names/semantics so `rl.*`
+// input call sites port unchanged. The Input struct is backend-neutral; the
+// GLFW/DOM plumbing that fills it lives in platform_native.odin / platform_web.odin.
 package gfx
 
 import "core:strings"
-import "vendor:glfw"
 
 CHAR_Q :: 64
 
 Input :: struct {
 	exit_key: KeyboardKey,
 
-	// per-frame edge/repeat (set by callbacks, cleared each poll cycle)
+	// per-frame edge/repeat (set by the backend, cleared each poll cycle)
 	pressed:  [KEY_COUNT]bool,
 	released: [KEY_COUNT]bool,
 	repeat:   [KEY_COUNT]bool,
@@ -39,35 +39,12 @@ Input :: struct {
 
 	cursor_on_screen: bool,
 
-	cursors:     [11]glfw.CursorHandle,
 	cur_cursor:  MouseCursor,
 }
 
-input_init :: proc() {
-	if g.win == nil do return
-	glfw.SetKeyCallback(g.win, _key_cb)
-	glfw.SetCharCallback(g.win, _char_cb)
-	glfw.SetScrollCallback(g.win, _scroll_cb)
-
-	g.inp.cursors[MouseCursor.DEFAULT]       = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
-	g.inp.cursors[MouseCursor.ARROW]         = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
-	g.inp.cursors[MouseCursor.IBEAM]         = glfw.CreateStandardCursor(glfw.IBEAM_CURSOR)
-	g.inp.cursors[MouseCursor.CROSSHAIR]     = glfw.CreateStandardCursor(glfw.CROSSHAIR_CURSOR)
-	g.inp.cursors[MouseCursor.POINTING_HAND] = glfw.CreateStandardCursor(glfw.POINTING_HAND_CURSOR)
-	g.inp.cursors[MouseCursor.RESIZE_EW]     = glfw.CreateStandardCursor(glfw.RESIZE_EW_CURSOR)
-	g.inp.cursors[MouseCursor.RESIZE_NS]     = glfw.CreateStandardCursor(glfw.RESIZE_NS_CURSOR)
-	g.inp.cursors[MouseCursor.RESIZE_NWSE]   = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
-	g.inp.cursors[MouseCursor.RESIZE_NESW]   = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
-	g.inp.cursors[MouseCursor.RESIZE_ALL]    = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
-	g.inp.cursors[MouseCursor.NOT_ALLOWED]   = glfw.CreateStandardCursor(glfw.NOT_ALLOWED_CURSOR)
-
-	mx, my := glfw.GetCursorPos(g.win)
-	g.inp.mouse = {f32(mx), f32(my)}
-	g.inp.mouse_prev = g.inp.mouse
-}
-
 // input_poll runs once per frame from EndDrawing: reset frame-scoped state,
-// pump GLFW events (fills callbacks), then finalize mouse/wheel/button deltas.
+// pump backend events (fills queues/edges), then finalize mouse/wheel/button
+// deltas via the platform seam.
 input_poll :: proc() {
 	inp := &g.inp
 	for i in 0 ..< KEY_COUNT {
@@ -80,48 +57,23 @@ input_poll :: proc() {
 	inp.wheel_pending = {0, 0}
 	inp.mouse_prev = inp.mouse
 
-	glfw.PollEvents()
+	platform_poll_events()
 
-	mx, my := glfw.GetCursorPos(g.win)
+	mx, my := platform_cursor_pos()
 	inp.mouse = {f32(mx), f32(my)}
 	inp.mouse_delta = {inp.mouse.x - inp.mouse_prev.x, inp.mouse.y - inp.mouse_prev.y}
 	inp.wheel = inp.wheel_pending
 
 	for b in 0 ..< 8 {
-		cur := glfw.GetMouseButton(g.win, i32(b)) == glfw.PRESS
+		cur := platform_mouse_button(i32(b))
 		inp.mb_pressed[b] = cur && !inp.mb_down[b]
 		inp.mb_released[b] = !cur && inp.mb_down[b]
 		inp.mb_down[b] = cur
 	}
-	inp.cursor_on_screen = glfw.GetWindowAttrib(g.win, glfw.HOVERED) != 0
+	inp.cursor_on_screen = platform_window_hovered()
 }
 
-// --- GLFW callbacks --------------------------------------------------------
-
-@(private)
-_key_cb :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: i32) {
-	if key < 0 || key >= KEY_COUNT do return
-	switch action {
-	case glfw.PRESS:
-		g.inp.pressed[key] = true
-		_push_key(KeyboardKey(key))
-	case glfw.RELEASE:
-		g.inp.released[key] = true
-	case glfw.REPEAT:
-		g.inp.repeat[key] = true
-	}
-}
-
-@(private)
-_char_cb :: proc "c" (win: glfw.WindowHandle, codepoint: rune) {
-	_push_char(codepoint)
-}
-
-@(private)
-_scroll_cb :: proc "c" (win: glfw.WindowHandle, xoffset, yoffset: f64) {
-	g.inp.wheel_pending.x += f32(xoffset)
-	g.inp.wheel_pending.y += f32(yoffset)
-}
+// --- queue helpers (shared; called by the platform input backend) ----------
 
 @(private)
 _push_char :: proc "c" (r: rune) {
@@ -160,8 +112,7 @@ IsKeyReleased :: proc(key: KeyboardKey) -> bool {
 }
 
 IsKeyDown :: proc(key: KeyboardKey) -> bool {
-	if g.win == nil do return false
-	return glfw.GetKey(g.win, i32(key)) == glfw.PRESS
+	return platform_key_down(i32(key))
 }
 
 GetCharPressed :: proc() -> rune {
@@ -191,12 +142,18 @@ IsMouseButtonReleased :: proc(button: MouseButton) -> bool {
 }
 
 IsMouseButtonDown :: proc(button: MouseButton) -> bool {
-	if g.win == nil do return false
-	return glfw.GetMouseButton(g.win, i32(button)) == glfw.PRESS
+	return platform_mouse_button(i32(button))
 }
 
 GetMousePosition :: proc() -> Vector2 { return g.inp.mouse }
 GetMouseDelta    :: proc() -> Vector2 { return g.inp.mouse_delta }
+
+GetMouseX :: proc() -> i32 { return i32(g.inp.mouse.x) }
+GetMouseY :: proc() -> i32 { return i32(g.inp.mouse.y) }
+
+// raylib mouse coordinate offset/scale — unused by the current backends; kept
+// for API parity (no-op).
+SetMouseOffset :: proc(offsetX, offsetY: i32) {}
 
 GetMouseWheelMove :: proc() -> f32 {
 	if abs(g.inp.wheel.x) > abs(g.inp.wheel.y) do return g.inp.wheel.x
@@ -205,23 +162,20 @@ GetMouseWheelMove :: proc() -> f32 {
 GetMouseWheelMoveV :: proc() -> Vector2 { return g.inp.wheel }
 
 GetClipboardText :: proc() -> cstring {
-	if g.win == nil do return ""
-	s := glfw.GetClipboardString(g.win)
+	s := platform_get_clipboard()
 	return strings.clone_to_cstring(s, context.temp_allocator)
 }
 
 SetClipboardText :: proc(text: cstring) {
-	if g.win == nil do return
-	glfw.SetClipboardString(g.win, text)
+	platform_set_clipboard(text)
 }
 
 SetMouseCursor :: proc(cursor: MouseCursor) {
-	if g.win == nil do return
 	i := int(cursor)
-	if i < 0 || i >= len(g.inp.cursors) do return
+	if i < 0 || i >= 11 do return
 	if cursor == g.inp.cur_cursor do return
 	g.inp.cur_cursor = cursor
-	glfw.SetCursor(g.win, g.inp.cursors[i])
+	platform_set_mouse_cursor(cursor)
 }
 
 IsCursorOnScreen :: proc() -> bool { return g.inp.cursor_on_screen }

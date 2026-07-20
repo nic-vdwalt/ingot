@@ -6,10 +6,7 @@ package gfx
 
 import "base:runtime"
 import "core:fmt"
-import "core:time"
-import "vendor:glfw"
 import wg "vendor:wgpu"
-import wgglue "vendor:wgpu/glfwglue"
 
 KEY_COUNT :: 349 // KB_MENU (348) + 1
 
@@ -38,7 +35,7 @@ Frame_State :: struct {
 }
 
 Context :: struct {
-	win:      glfw.WindowHandle,
+	win:      Window_Handle,
 	instance: wg.Instance,
 	surface:  wg.Surface,
 	adapter:  wg.Adapter,
@@ -55,13 +52,18 @@ Context :: struct {
 	fb_width, fb_height: i32,
 	dpi:                 f32,
 
+	// requested window size, stashed at InitWindow for _gpu_finish (needed
+	// because on web the GPU device resolves asynchronously, after InitWindow
+	// has returned).
+	pending_w, pending_h: i32,
+
 	frame: Frame_State,
 
 	// timing
-	start_time:  time.Time,
-	last_time:   f64,
-	frame_time:  f32,
-	target_fps:  i32,
+	start_time_s: f64,
+	last_time:    f64,
+	frame_time:   f32,
+	target_fps:   i32,
 
 	// renderer (batch.odin)
 	rend: Renderer,
@@ -115,46 +117,28 @@ SetConfigFlags :: proc(flags: ConfigFlags) {
 }
 
 InitWindow :: proc(width, height: i32, title: cstring) {
-	if !glfw.Init() {
-		fmt.eprintln("gfx: glfw init failed")
-		return
-	}
-
-	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-	glfw.WindowHint(glfw.RESIZABLE, .WINDOW_RESIZABLE in g.config_flags ? 1 : 0)
-	if .WINDOW_TRANSPARENT in g.config_flags {
-		glfw.WindowHint(glfw.TRANSPARENT_FRAMEBUFFER, 1)
-	}
-	if .WINDOW_UNDECORATED in g.config_flags {
-		glfw.WindowHint(glfw.DECORATED, 0)
-	}
-
-	g.win = glfw.CreateWindow(width, height, title, nil, nil)
-	if g.win == nil {
+	if !platform_create_window(width, height, title, g.config_flags) {
 		fmt.eprintln("gfx: window creation failed")
 		return
 	}
 
 	g.instance = wg.CreateInstance()
-	g.surface = wgglue.GetSurface(g.instance, g.win)
+	g.surface = platform_create_surface(g.instance)
+	g.pending_w, g.pending_h = width, height
 
-	ares: Adapter_Res
-	wg.InstanceRequestAdapter(g.instance, &{compatibleSurface = g.surface}, {
-		mode = .AllowProcessEvents, callback = _on_adapter, userdata1 = &ares,
-	})
-	for !ares.done { wg.InstanceProcessEvents(g.instance) }
-	g.adapter = ares.adapter
+	// Acquire the GPU adapter+device. On native this resolves synchronously
+	// (busy-wait) and calls _gpu_finish before returning; on web the requests
+	// resolve on the browser event loop and _gpu_finish runs from the device
+	// callback a few RAF ticks later (g.initialized stays false until then).
+	platform_start_gpu()
+}
 
-	dres: Device_Res
-	dev_desc := wg.DeviceDescriptor{
-		uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error},
-	}
-	wg.AdapterRequestDevice(g.adapter, &dev_desc, {
-		mode = .AllowProcessEvents, callback = _on_device, userdata1 = &dres,
-	})
-	for !dres.done { wg.InstanceProcessEvents(g.instance) }
-	g.device = dres.device
-	g.queue = wg.DeviceGetQueue(g.device)
+// _gpu_finish completes context setup once g.adapter/g.device/g.queue are ready.
+// Shared by both targets (native calls it inline from platform_start_gpu; web
+// calls it from the async device callback). Everything here is pure wgpu.
+@(private)
+_gpu_finish :: proc() {
+	width, height := g.pending_w, g.pending_h
 
 	caps, _ := wg.SurfaceGetCapabilities(g.surface, g.adapter)
 	// Prefer a non-sRGB (linear UNORM) surface. raylib writes 8-bit sRGB color
@@ -171,10 +155,9 @@ InitWindow :: proc(width, height: i32, title: cstring) {
 	}
 
 	g.width, g.height = width, height
-	fbw, fbh := glfw.GetFramebufferSize(g.win)
+	fbw, fbh := platform_framebuffer_size()
 	g.fb_width, g.fb_height = fbw, fbh
-	sx, _ := glfw.GetWindowContentScale(g.win)
-	g.dpi = sx
+	g.dpi = platform_content_scale()
 
 	alpha: wg.CompositeAlphaMode = .Opaque
 	if .WINDOW_TRANSPARENT in g.config_flags {
@@ -200,13 +183,13 @@ InitWindow :: proc(width, height: i32, title: cstring) {
 	}
 	wg.SurfaceConfigure(g.surface, &g.config)
 
-	g.start_time = time.now()
+	g.start_time_s = platform_now()
 	g.last_time = _now()
 	g.target_fps = 0
 
 	renderer_init(&g.rend)
-	input_init()
-	_drop_init()
+	platform_input_init()
+	platform_drop_init()
 
 	g.initialized = true
 }
@@ -219,14 +202,12 @@ CloseWindow :: proc() {
 	if g.device != nil do wg.DeviceRelease(g.device)
 	if g.adapter != nil do wg.AdapterRelease(g.adapter)
 	if g.instance != nil do wg.InstanceRelease(g.instance)
-	if g.win != nil do glfw.DestroyWindow(g.win)
-	glfw.Terminate()
+	platform_terminate()
 	g.initialized = false
 }
 
 WindowShouldClose :: proc() -> bool {
-	if g.win == nil do return true
-	return bool(glfw.WindowShouldClose(g.win))
+	return platform_should_close()
 }
 
 // --- per-frame -------------------------------------------------------------
@@ -311,8 +292,8 @@ EndDrawing :: proc() {
 
 @(private)
 _maybe_reconfigure :: proc() {
-	fbw, fbh := glfw.GetFramebufferSize(g.win)
-	w, h := glfw.GetWindowSize(g.win)
+	fbw, fbh := platform_framebuffer_size()
+	w, h := platform_window_size()
 	changed := fbw != g.fb_width || fbh != g.fb_height
 	g.width, g.height = w, h
 	if changed && fbw > 0 && fbh > 0 {
@@ -321,21 +302,25 @@ _maybe_reconfigure :: proc() {
 		g.config.height = u32(fbh)
 		wg.SurfaceConfigure(g.surface, &g.config)
 	}
-	sx, _ := glfw.GetWindowContentScale(g.win)
-	g.dpi = sx
+	g.dpi = platform_content_scale()
 }
 
 @(private)
 _frame_timing :: proc() {
-	if g.target_fps > 0 {
-		target := 1.0 / f64(g.target_fps)
-		for {
-			now := _now()
-			elapsed := now - g.last_time
-			if elapsed >= target do break
-			remaining := target - elapsed
-			if remaining > 0.002 {
-				time.sleep(time.Duration((remaining - 0.001) * f64(time.Second)))
+	// Native paces frames via an optional busy-wait to hit target_fps. On web
+	// the browser's requestAnimationFrame already paces the loop, and a
+	// busy-wait would block the event loop — so the cap is native-only.
+	when ODIN_OS != .JS {
+		if g.target_fps > 0 {
+			target := 1.0 / f64(g.target_fps)
+			for {
+				now := _now()
+				elapsed := now - g.last_time
+				if elapsed >= target do break
+				remaining := target - elapsed
+				if remaining > 0.002 {
+					platform_sleep(remaining - 0.001)
+				}
 			}
 		}
 	}
@@ -346,7 +331,7 @@ _frame_timing :: proc() {
 
 @(private)
 _now :: proc() -> f64 {
-	return time.duration_seconds(time.since(g.start_time))
+	return platform_now() - g.start_time_s
 }
 
 // --- window/screen queries (raylib-named) ----------------------------------
@@ -366,25 +351,20 @@ GetFPS       :: proc() -> i32 {
 }
 
 SetWindowMinSize :: proc(w, h: i32) {
-	if g.win != nil do glfw.SetWindowSizeLimits(g.win, w, h, glfw.DONT_CARE, glfw.DONT_CARE)
+	platform_set_window_min_size(w, h)
 }
 SetWindowSize :: proc(w, h: i32) {
-	if g.win != nil do glfw.SetWindowSize(g.win, w, h)
+	platform_set_window_size(w, h)
 }
 SetExitKey :: proc(key: KeyboardKey) { g.inp.exit_key = key }
 
 GetMonitorRefreshRate :: proc(monitor: i32) -> i32 {
-	m := glfw.GetPrimaryMonitor()
-	if m == nil do return 60
-	mode := glfw.GetVideoMode(m)
-	if mode == nil do return 60
-	return mode.refresh_rate
+	return platform_monitor_refresh_rate()
 }
 GetCurrentMonitor :: proc() -> i32 { return 0 }
 
 IsWindowFocused :: proc() -> bool {
-	if g.win == nil do return false
-	return glfw.GetWindowAttrib(g.win, glfw.FOCUSED) != 0
+	return platform_window_focused()
 }
 
 // FlushBatch forces pending 2D geometry to record into the current render pass

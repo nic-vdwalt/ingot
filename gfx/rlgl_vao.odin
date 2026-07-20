@@ -245,7 +245,8 @@ _vao_pipeline :: proc(v: ^Vao, se: ^Shader_Entry, format: wg.TextureFormat, blen
 	}
 
 	bl := _blend_for(&g.rend, blend)
-	target := wg.ColorTargetState{format = format, blend = &bl, writeMask = wg.ColorWriteMaskFlags_All}
+	target := wg.ColorTargetState{format = format, writeMask = wg.ColorWriteMaskFlags_All}
+	if _format_blendable(format) do target.blend = &bl
 	gl := [1]wg.BindGroupLayout{se.u_layout}
 	pl := wg.DeviceCreatePipelineLayout(g.device, &{
 		bindGroupLayoutCount = 1, bindGroupLayouts = raw_data(gl[:]),

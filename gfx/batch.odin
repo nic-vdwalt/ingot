@@ -102,6 +102,20 @@ _blend_for :: proc(r: ^Renderer, slot: Blend_Slot) -> wg.BlendState {
 	return {color = c, alpha = c}
 }
 
+// _format_blendable reports whether a colour target format supports blending.
+// 32-bit float formats are not blendable under WebGPU without the optional
+// float32-blendable feature, so a pipeline that attaches a blend state to such
+// a target is invalid and aborts the process on submit. Callers drop the blend
+// state (plain overwrite) for these formats instead of building a doomed pipe.
+@(private)
+_format_blendable :: proc(format: wg.TextureFormat) -> bool {
+	#partial switch format {
+	case .R32Float, .RG32Float, .RGBA32Float:
+		return false
+	}
+	return true
+}
+
 // _make_pipe builds one (kind × blend) render pipeline over the shared batch
 // vertex layout. File-scope so both renderer_init and _rebuild_custom_pipes
 // can call it.
@@ -117,7 +131,8 @@ _make_pipe :: proc(r: ^Renderer, slot: Blend_Slot, fs: string, textured: bool, f
 		attributeCount = 3, attributes = raw_data(attrs[:]),
 	}
 	blend := _blend_for(r, slot)
-	target := wg.ColorTargetState{format = format, blend = &blend, writeMask = wg.ColorWriteMaskFlags_All}
+	target := wg.ColorTargetState{format = format, writeMask = wg.ColorWriteMaskFlags_All}
+	if _format_blendable(format) do target.blend = &blend
 	layouts := [2]wg.BindGroupLayout{r.ubind_layout, r.tex_layout}
 	pl := wg.DeviceCreatePipelineLayout(g.device, &{
 		bindGroupLayoutCount = textured ? 2 : 1,
