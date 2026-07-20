@@ -1,7 +1,10 @@
+#+build !js
 // LIB-CANDIDATE: imports only core:*.
-// Per-app preference-file persistence: resolves the platform data directory,
-// creates it on demand, and reads/writes small settings files. Callers own
-// the file format (usually hand-rolled JSON). Ported from Alloy's persist.odin.
+// Per-app preference-file persistence (native): resolves the platform data
+// directory, creates it on demand, and reads/writes small settings files.
+// Callers own the file format (usually hand-rolled JSON). Ported from Alloy's
+// persist.odin. The web target uses prefs_web.odin (localStorage), same
+// read/write signatures so callers stay target-agnostic.
 package prefs
 
 import "core:fmt"

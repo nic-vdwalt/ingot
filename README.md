@@ -37,12 +37,17 @@ existing Odin app is mechanical: swap `import rl "vendor:raylib"` for
 |------------------|------|---------|
 | `ingot:gfx`      | graphics core (raylib) | window/context, 2D shapes, textures, text atlas, input, math, `Camera2D`/`Camera3D`, plus an `rlgl` shim |
 | `ingot:ui`       | widget toolkit (raygui) | buttons, text input, panels, scroll panes, markdown, word wrap, theming, HiDPI scaling, custom title bar & window chrome, frame pacing |
-| `ingot:prefs`    | persistence | per-app settings-file storage (`core:*`-only) |
+| `ingot:prefs`    | persistence | per-app settings storage — native settings file (`core:*`-only) + web `localStorage` backend, same `read`/`write` API |
+| `ingot:net`      | networking | background HTTP GET `Fetcher` (native `core:net` + worker threads / web `fetch()`) with optional cache validator, and an RFC 6455 `WebSocket` client (native hand-rolled / web `WebSocket`) |
+| `ingot:sys`      | system integration | `open_url` — launch the default browser (native `open`/`xdg-open`/`ShellExecuteW` / web `window.open`) |
 | `ingot:term`     | terminal core | libvterm + PTY, per-frame pump, key→VT input translation (rendering is app-side) |
 | `ingot:libvterm` | bindings | Odin bindings for libvterm 0.3.3, prebuilt static libs committed for macOS/Windows |
 | `ingot:pty`      | PTY | `forkpty` on unix, ConPTY on Windows |
 
-`ingot:ui` imports only `core:*` and `ingot:gfx`; `ingot:prefs` is `core:*`-only.
+`ingot:ui` imports only `core:*` and `ingot:gfx`; `ingot:prefs`, `ingot:net`,
+and `ingot:sys` are `core:*`-only. The web targets of `ingot:net`/`ingot:sys`/
+`ingot:prefs` call JS bridges provided by `web/ingot_app.js` (merged into the
+wasm imports by the app boot script — `window.ingotApp.{ws,http,store,open}Imports`).
 The terminal stack ships prebuilt native libs, so consumers need **zero linker
 flags**.
 

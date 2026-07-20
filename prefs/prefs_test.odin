@@ -1,3 +1,4 @@
+#+build !js
 package prefs
 
 import "core:fmt"
