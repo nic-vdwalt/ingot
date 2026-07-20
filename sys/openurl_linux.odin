@@ -1,11 +1,16 @@
 // open_url (Linux): launch the default browser via xdg-open.
 package sys
 
-import "core:c/libc"
-import "core:fmt"
-import "core:strings"
+import "core:os"
+import "core:time"
 
 open_url :: proc(url: string) {
-	cmd := fmt.tprintf("xdg-open '%s' >/dev/null 2>&1 &", url)
-	libc.system(strings.clone_to_cstring(cmd, context.temp_allocator))
+	// argv spawn (no shell) so URLs/paths with quotes or spaces can't be
+	// misinterpreted or injected into a shell command line.
+	p, err := os.process_start({command = {"xdg-open", url}})
+	if err == nil {
+		// xdg-open hands off to the browser and exits almost immediately; reap
+		// with a short timeout so the child doesn't linger as a zombie.
+		_, _ = os.process_wait(p, time.Second)
+	}
 }
