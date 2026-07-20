@@ -1,6 +1,6 @@
 # ingot
 
-**The raylib + raygui of WebGPU — in pure Odin.**
+**A pure-Odin, immediate-mode app engine on WebGPU — the same source runs natively and in the browser.**
 
 ingot is a self-contained, immediate-mode game/app engine built on Odin's
 bundled `vendor:wgpu`. One renderer targets **native** (macOS/Metal,
