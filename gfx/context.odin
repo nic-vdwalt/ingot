@@ -21,7 +21,8 @@ Frame_State :: struct {
 
 	// Active window-pass scissor (framebuffer pixels). Re-applied whenever the
 	// window pass begins, since a fresh WebGPU pass resets scissor to full.
-	scissor_on:  bool,
+	scissor_on:    bool,
+	scissor_empty: bool,
 	sc_x, sc_y, sc_w, sc_h: u32,
 
 	// Render-target redirection (Phase 2): when rt != 0 the batch records into
@@ -254,6 +255,7 @@ BeginDrawing :: proc() {
 	g.frame.pass_begun = false
 	g.frame.has_frame = true
 	g.frame.scissor_on = false
+	g.frame.scissor_empty = false
 }
 
 ClearBackground :: proc(c: Color) {
@@ -292,15 +294,28 @@ _ensure_pass :: proc() {
 	_stats_render_pass()
 	g.frame.pass_begun = true
 	// A new pass starts with a full-attachment scissor; restore any active clip.
-	if g.frame.scissor_on {
-		wg.RenderPassEncoderSetScissorRect(g.frame.pass, g.frame.sc_x, g.frame.sc_y, g.frame.sc_w, g.frame.sc_h)
+	if g.frame.scissor_on && !g.frame.scissor_empty {
+		assert(g.frame.sc_w > 0)
+		assert(g.frame.sc_h > 0)
+		wg.RenderPassEncoderSetScissorRect(
+			g.frame.pass,
+			g.frame.sc_x,
+			g.frame.sc_y,
+			g.frame.sc_w,
+			g.frame.sc_h,
+		)
 	}
 }
 
 EndDrawing :: proc() {
 	if g.frame.has_frame {
 		_ensure_pass() // guarantee a clear even on empty frames
-		renderer_flush(&g.rend, g.frame.pass)
+		if !g.frame.scissor_empty {
+			renderer_flush(&g.rend, g.frame.pass)
+		} else {
+			clear(&g.rend.verts)
+			clear(&g.rend.indices)
+		}
 		wg.RenderPassEncoderEnd(g.frame.pass)
 		wg.RenderPassEncoderRelease(g.frame.pass)
 
@@ -405,7 +420,7 @@ IsWindowFocused :: proc() -> bool {
 // FlushBatch forces pending 2D geometry to record into the current render pass
 // (raylib rlDrawRenderBatchActive parity — used to order custom draws).
 FlushBatch :: proc() {
-	if g.frame.has_frame && _active_pass_begun() {
+	if g.frame.has_frame && _active_pass_begun() && !g.frame.scissor_empty {
 		renderer_flush(&g.rend, active_pass())
 	}
 }

@@ -179,30 +179,58 @@ DrawRing :: proc(center: Vector2, innerRadius, outerRadius, startAngle, endAngle
 
 // --- scissor ---------------------------------------------------------------
 
+@(private)
+_scissor_rect :: proc(
+	x, y, width, height: i32,
+	logical_w, logical_h, attachment_w, attachment_h: f32,
+) -> (u32, u32, u32, u32, bool) {
+	if width <= 0 || height <= 0 || attachment_w <= 0 || attachment_h <= 0 {
+		return 0, 0, 0, 0, false
+	}
+	assert(logical_w > 0)
+	assert(logical_h > 0)
+	sx := attachment_w / logical_w
+	sy := attachment_h / logical_h
+	fx := clamp(f32(x) * sx, 0, attachment_w)
+	fy := clamp(f32(y) * sy, 0, attachment_h)
+	pw := u32(clamp(f32(width) * sx, 0, attachment_w - fx))
+	ph := u32(clamp(f32(height) * sy, 0, attachment_h - fy))
+	return u32(fx), u32(fy), pw, ph, pw > 0 && ph > 0
+}
+
 BeginScissorMode :: proc(x, y, width, height: i32) {
 	if !g.frame.has_frame do return
 	_ensure_active_pass()
 	if !_active_pass_begun() do return
 	pass := active_pass()
-	renderer_flush(&g.rend, pass)
-	// In render-target mode geometry is drawn in the target's pixel space (1:1);
-	// otherwise scale logical coords to the real attachment pixel size. Using
-	// the authoritative attachment size (not g.fb_width, which can lag an async
-	// web resize) keeps the rect in sync with the texture and drawn geometry.
-	fbw, fbh := _attachment_px()
-	sx, sy: f32 = 1, 1
-	if g.frame.rt == 0 {
-		sx = fbw / f32(max(g.width, 1))
-		sy = fbh / f32(max(g.height, 1))
+	if !g.frame.scissor_empty {
+		renderer_flush(&g.rend, pass)
+	} else {
+		clear(&g.rend.verts)
+		clear(&g.rend.indices)
 	}
-	fx := clamp(f32(x) * sx, 0, fbw)
-	fy := clamp(f32(y) * sy, 0, fbh)
-	px := u32(fx)
-	py := u32(fy)
-	pw := u32(clamp(f32(width) * sx, 0, fbw - fx))
-	ph := u32(clamp(f32(height) * sy, 0, fbh - fy))
-	wg.RenderPassEncoderSetScissorRect(pass, px, py, pw, ph)
-	// Remember window-pass clips so _ensure_pass can re-apply after a pass reset.
+	fbw, fbh := _attachment_px()
+	logical_w, logical_h := fbw, fbh
+	if g.frame.rt == 0 {
+		logical_w = f32(max(g.width, 1))
+		logical_h = f32(max(g.height, 1))
+	}
+	px, py, pw, ph, visible := _scissor_rect(
+		x,
+		y,
+		width,
+		height,
+		logical_w,
+		logical_h,
+		fbw,
+		fbh,
+	)
+	g.frame.scissor_empty = !visible
+	if visible {
+		assert(pw > 0)
+		assert(ph > 0)
+		wg.RenderPassEncoderSetScissorRect(pass, px, py, pw, ph)
+	}
 	if g.frame.rt == 0 {
 		g.frame.scissor_on = true
 		g.frame.sc_x, g.frame.sc_y, g.frame.sc_w, g.frame.sc_h = px, py, pw, ph
@@ -212,9 +240,17 @@ BeginScissorMode :: proc(x, y, width, height: i32) {
 EndScissorMode :: proc() {
 	if !g.frame.has_frame || !_active_pass_begun() do return
 	pass := active_pass()
-	renderer_flush(&g.rend, pass)
+	if !g.frame.scissor_empty {
+		renderer_flush(&g.rend, pass)
+	} else {
+		clear(&g.rend.verts)
+		clear(&g.rend.indices)
+	}
 	fbw, fbh := _attachment_px()
+	assert(fbw > 0)
+	assert(fbh > 0)
 	wg.RenderPassEncoderSetScissorRect(pass, 0, 0, u32(fbw), u32(fbh))
+	g.frame.scissor_empty = false
 	if g.frame.rt == 0 do g.frame.scissor_on = false
 }
 
