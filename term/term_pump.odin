@@ -22,6 +22,9 @@ TERM_PUMP_MAX_BUFS :: 16
 @(private)
 _utf8_complete_prefix :: proc(buf: []u8) -> int {
 	n := len(buf)
+	// The result is always a prefix length in [0, n]. At most the last 3 bytes
+	// can be withheld (an unfinished 4-byte sequence), so any early return is
+	// still within bounds.
 	i := n - 1
 	for _ in 0 ..< 3 {
 		if i < 0 do break
@@ -70,15 +73,28 @@ term_pump :: proc(ts: ^Term_Instance) -> (bytes_read: int) {
 		// Place held-back partial sequence bytes at the front of the buffer
 		// and read new data after them so both are fed in a single write.
 		hold := ts.utf8_hold_len
+		// A held prefix is at most 3 bytes (an unfinished 4-byte sequence) and
+		// must always fit ahead of the fresh read, or the copy below corrupts
+		// the buffer. Assert the invariant on both operands.
+		assert(hold >= 0)
+		assert(hold <= len(ts.utf8_hold))
+		assert(hold < len(ts.read_buf))
 		copy(ts.read_buf[:hold], ts.utf8_hold[:hold])
 		data, eof := pty.drain(&ts.pty, ts.read_buf[hold:])
 		total := hold + len(data)
+		// drain never returns more than the slice it was handed, so the held
+		// prefix plus the new bytes cannot exceed the buffer.
+		assert(total <= len(ts.read_buf))
 		ts.utf8_hold_len = 0
 
 		if total > 0 {
 			complete := total
 			if !eof {
 				complete = _utf8_complete_prefix(ts.read_buf[:total])
+				// The complete prefix is a prefix of total, never longer.
+				// Split so a failure points at the exact bound.
+				assert(complete >= 0)
+				assert(complete <= total)
 				tail := total - complete
 				if tail > 0 && tail <= len(ts.utf8_hold) {
 					copy(ts.utf8_hold[:tail], ts.read_buf[complete:total])

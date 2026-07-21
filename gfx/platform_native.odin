@@ -9,7 +9,6 @@
 // unchanged.
 package gfx
 
-import "core:strings"
 import "core:time"
 import "vendor:glfw"
 import wg "vendor:wgpu"

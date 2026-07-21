@@ -1,6 +1,8 @@
 package testx
 
-import "core:log"
+// log is used only under `when UPDATE_SNAPSHOTS`; @(require) keeps the import
+// from tripping the -strict-style unused-import check in normal builds.
+@(require) import "core:log"
 import "core:testing"
 
 // Set with -define:ODIN_TEST_UPDATE_SNAPSHOTS=true to print actual output for

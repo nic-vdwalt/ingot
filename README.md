@@ -347,6 +347,15 @@ scripts/build-libvterm.sh    # macOS
 scripts/build-libvterm.bat   # Windows
 ```
 
+## Coding style
+
+`ingot` follows **Tiger Style** (adapted from TigerBeetle for Odin): safety >
+performance > developer experience, assertions everywhere (≥ 2 per procedure),
+bounded loops, no recursion, explicit sized types, 70-line procedures, and
+100-column lines. See [`docs/TIGER_STYLE.md`](docs/TIGER_STYLE.md) and
+[`AGENTS.md`](AGENTS.md). The Tiger Style gate is `bash scripts/check.sh`
+(`odin check -vet -strict-style`); format with `odinfmt -w .`.
+
 ## License
 
 See repository for license details.
