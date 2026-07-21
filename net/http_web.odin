@@ -1,167 +1,108 @@
 #+build js
-// Web HTTP backend — same public Fetcher API as net/http.odin, backed by the
-// browser fetch() API instead of core:net + worker threads. Requests are issued
-// to JS (which performs fetch asynchronously) and completed bodies are pulled in
-// fetcher_drain. There is no on-disk cache in the browser, so the cached variant
-// falls through to a normal request.
 package ingotnet
 
 import "base:runtime"
 import "core:fmt"
 import "core:strings"
 
-// JS bridge (provided by the app web shell). Each request has an integer id.
+DEFAULT_MAXIMUM_BODY :: 64 * 1024 * 1024
+
+Http_Method :: enum u8 { Get, Post, Put, Patch, Delete }
+Http_Header :: struct { name: string, value: string }
+Http_Request :: struct { method: Http_Method, path: string, headers: []Http_Header, body: []u8, maximum_body: u64 }
+Http_Response :: struct { status: u16, headers: []Http_Header, body: []u8 }
+
 foreign import httpjs "ingot_http"
 @(default_calling_convention = "c")
 foreign httpjs {
-	ingot_http_get       :: proc(url: [^]byte, url_len: i32) -> i32 --- // -1 fail
-	ingot_http_poll      :: proc(id: i32) -> i32 --- // 0 pending,1 ok,2 fail
-	ingot_http_body_len  :: proc(id: i32) -> i32 ---
-	ingot_http_body_copy :: proc(id: i32, dst: [^]byte, cap: i32) -> i32 --- // frees slot
+	ingot_http_request :: proc(method: i32, url: [^]byte, url_len: i32, headers: [^]byte, headers_len: i32, body: [^]byte, body_len: i32, maximum_body: i32) -> i32 ---
+	ingot_http_poll :: proc(id: i32) -> i32 ---
+	ingot_http_status :: proc(id: i32) -> i32 ---
+	ingot_http_body_len :: proc(id: i32) -> i32 ---
+	ingot_http_body_copy :: proc(id: i32, dst: [^]byte, cap: i32) -> i32 ---
 }
 
-Fetch_Result :: struct {
-	tag:  u64,
-	body: []u8, // heap-allocated; receiver owns
-	ok:   bool,
+http_response_destroy :: proc(response: ^Http_Response) {
+	delete(response.body)
+	response^ = {}
 }
 
-@(private = "file")
-In_Flight :: struct {
-	id:  i32,
-	tag: u64,
+http_get :: proc(host: string, port: int, path: string, allocator := context.allocator) -> (body: []u8, ok: bool) {
+	_ = allocator
+	response, request_ok := http_request(host, port, Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY})
+	if !request_ok || response.status != 200 do return nil, false
+	return response.body, true
 }
 
-// MAX_INFLIGHT caps concurrent browser fetch() calls. Browsers serialise more
-// than ~6 HTTP/1.1 requests per host; issuing every visible tile at once (base +
-// SAR + feasibility can be dozens per frame) left most requests sitting in the
-// browser's connection queue while the JS-side 30s timeout ticked, so many
-// timed out and the overlays flickered as failed tiles retried. Mirrors the
-// native fetcher's FETCH_WORKERS pool (net/http.odin) via a pending queue.
-@(private = "file")
-MAX_INFLIGHT :: 6
-
-@(private = "file")
-Pending :: struct {
-	tag:  u64,
-	path: string, // owned (cloned at enqueue)
+http_request :: proc(host: string, port: int, request: Http_Request, allocator := context.allocator) -> (response: Http_Response, ok: bool) {
+	_ = host; _ = port; _ = request; _ = allocator
+	return {}, false
 }
+
+Fetch_Result :: struct { tag: u64, body: []u8, ok: bool }
+@(private = "file") In_Flight :: struct { id: i32, tag: u64 }
+@(private = "file") Pending :: struct { tag: u64, path: string }
+@(private = "file") MAX_INFLIGHT :: 6
 
 Fetcher :: struct {
-	host:      string,
-	port:      int,
-	// Present for API parity with the native Fetcher; unused on web (the
-	// browser has no on-disk cache to validate).
+	host: string,
+	port: int,
 	cache_validator: proc(body: []u8) -> bool,
 	in_flight: [dynamic]In_Flight,
-	pending:   [dynamic]Pending,
+	pending: [dynamic]Pending,
 }
 
 fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
-	f.host = host
-	f.port = port
+	f.host = host; f.port = port
 	f.in_flight = make([dynamic]In_Flight)
 	f.pending = make([dynamic]Pending)
 }
 
 fetcher_stop :: proc(f: ^Fetcher) {
-	// Drain any completed bodies so JS frees its slots, then drop the list.
 	for it in f.in_flight {
 		if ingot_http_poll(it.id) != 0 {
 			n := ingot_http_body_len(it.id)
-			if n > 0 {
-				buf := make([]byte, int(n))
-				ingot_http_body_copy(it.id, raw_data(buf), i32(len(buf)))
-				delete(buf)
-			}
+			if n > 0 { buf := make([]byte, int(n)); ingot_http_body_copy(it.id, raw_data(buf), i32(len(buf))); delete(buf) } else { ingot_http_body_copy(it.id, nil, 0) }
 		}
 	}
-	delete(f.in_flight)
-	f.in_flight = nil
-	for p in f.pending do delete(p.path)
-	delete(f.pending)
-	f.pending = nil
+	delete(f.in_flight); f.in_flight = nil
+	for pending in f.pending do delete(pending.path)
+	delete(f.pending); f.pending = nil
 }
 
-// fetcher_request enqueues a GET for `path`. It dispatches immediately when a
-// concurrency slot is free, otherwise it waits in the pending queue and is
-// started by _pump as in-flight requests complete. Results arrive via
-// fetcher_drain.
-fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) {
-	append(&f.pending, Pending{tag = tag, path = strings.clone(path)})
-	_pump(f)
-}
+fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) { append(&f.pending, Pending{tag = tag, path = strings.clone(path)}); pump(f) }
+fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) { inject_at(&f.pending, 0, Pending{tag = tag, path = strings.clone(path)}); pump(f) }
+fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) { _ = cache_path; fetcher_request(f, tag, path) }
 
-// fetcher_request_priority enqueues a GET at the FRONT of the pending queue so
-// it dispatches before the existing backlog. Use for low-volume, user-driven
-// API calls (runs list, replay, geocode) that must not wait behind a burst of
-// slow tile fetches.
-fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
-	inject_at(&f.pending, 0, Pending{tag = tag, path = strings.clone(path)})
-	_pump(f)
-}
-
-// _pump starts queued requests (FIFO) until MAX_INFLIGHT are in flight.
 @(private = "file")
-_pump :: proc(f: ^Fetcher) {
+pump :: proc(f: ^Fetcher) {
 	for len(f.in_flight) < MAX_INFLIGHT && len(f.pending) > 0 {
-		p := f.pending[0]
-		ordered_remove(&f.pending, 0)
-		url := fmt.tprintf("http://%s:%d%s", f.host, f.port, p.path)
-		delete(p.path)
-		ub := transmute([]byte)url
-		id := ingot_http_get(raw_data(ub), i32(len(ub)))
-		if id >= 0 {
-			append(&f.in_flight, In_Flight{id = id, tag = p.tag})
-		}
-		// id < 0: the JS bridge refused the request; drop it (the layer will
-		// re-request the tile on a later frame), same as the old direct path.
+		pending := f.pending[0]; ordered_remove(&f.pending, 0)
+		url := fmt.tprintf("http://%s:%d%s", f.host, f.port, pending.path); delete(pending.path)
+		bytes := transmute([]byte)url
+		id := ingot_http_request(i32(Http_Method.Get), raw_data(bytes), i32(len(bytes)), nil, 0, nil, 0, DEFAULT_MAXIMUM_BODY)
+		if id >= 0 do append(&f.in_flight, In_Flight{id = id, tag = pending.tag})
 	}
 }
 
-// The browser has no filesystem cache, so the cached variant is a plain request.
-fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) {
-	fetcher_request(f, tag, path)
-}
-
-// fetcher_drain returns completed results (temp-allocated slice; bodies are
-// heap-allocated and owned by the caller).
 fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
-	out: [dynamic]Fetch_Result
-	out.allocator = context.temp_allocator
-
+	out: [dynamic]Fetch_Result; out.allocator = context.temp_allocator
 	i := 0
 	for i < len(f.in_flight) {
-		it := f.in_flight[i]
-		st := ingot_http_poll(it.id)
-		if st == 0 {
-			i += 1 // still pending
-			continue
-		}
-		ok := st == 1
+		item := f.in_flight[i]; state := ingot_http_poll(item.id)
+		if state == 0 { i += 1; continue }
+		status := ingot_http_status(item.id)
+		request_ok := state == 1 && status >= 200 && status < 300
 		body: []u8
-		if ok {
-			n := ingot_http_body_len(it.id)
-			if n > 0 {
-				body = make([]byte, int(n))
-				got := ingot_http_body_copy(it.id, raw_data(body), i32(len(body)))
-				if got < 0 { delete(body); body = nil; ok = false }
-			} else {
-				// zero-length success still frees the JS slot
-				ingot_http_body_copy(it.id, nil, 0)
-			}
-		} else {
-			ingot_http_body_copy(it.id, nil, 0) // free the failed slot
-		}
-		append(&out, Fetch_Result{tag = it.tag, body = body, ok = ok})
-		unordered_remove(&f.in_flight, i)
+		if request_ok {
+			n := ingot_http_body_len(item.id)
+			if n > 0 { body = make([]byte, int(n)); got := ingot_http_body_copy(item.id, raw_data(body), i32(len(body))); if got < 0 { delete(body); body = nil; request_ok = false } } else { ingot_http_body_copy(item.id, nil, 0) }
+		} else { ingot_http_body_copy(item.id, nil, 0) }
+		append(&out, Fetch_Result{tag = item.tag, body = body, ok = request_ok}); unordered_remove(&f.in_flight, i)
 	}
-
-	_pump(f) // fill slots freed by completed requests from the pending queue
-
+	pump(f)
 	if len(out) == 0 do return nil
 	return out[:]
 }
 
-// keep imports referenced
 _ :: runtime

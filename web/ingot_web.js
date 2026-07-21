@@ -17,6 +17,65 @@
 	"use strict";
 
 	const CANVAS_ID = "ingot-canvas";
+	const httpSlots = [];
+	let wasmMemoryInterface = null;
+
+	function wasmBytes(pointer, length) {
+		if (!pointer || length <= 0 || !wasmMemoryInterface) return new Uint8Array();
+		return new Uint8Array(wasmMemoryInterface.memory.buffer, pointer, length);
+	}
+
+	function wasmText(pointer, length) {
+		return new TextDecoder().decode(wasmBytes(pointer, length));
+	}
+
+	function httpImports() {
+		const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+		return {
+			ingot_http_request: (method, urlPointer, urlLength, headersPointer,
+				headersLength, bodyPointer, bodyLength, maximumBody) => {
+				const id = httpSlots.length;
+				const slot = { state: 0, status: 0, body: new Uint8Array() };
+				httpSlots.push(slot);
+				let headers = {};
+				try {
+					const encoded = wasmText(headersPointer, headersLength);
+					if (encoded) headers = JSON.parse(encoded);
+				} catch (_) {
+					slot.state = 2;
+					return id;
+				}
+				const body = bodyLength > 0 ? wasmBytes(bodyPointer, bodyLength).slice() : undefined;
+				const controller = new AbortController();
+				const timeout = setTimeout(() => controller.abort(), 30000);
+				fetch(wasmText(urlPointer, urlLength), {
+					method: methods[method] || "GET",
+					headers,
+					body,
+					credentials: "same-origin",
+					signal: controller.signal,
+				}).then(async (response) => {
+					const bytes = new Uint8Array(await response.arrayBuffer());
+					if (bytes.length > maximumBody) throw new Error("response too large");
+					slot.status = response.status;
+					slot.body = bytes;
+					slot.state = 1;
+				}).catch(() => { slot.state = 2; }).finally(() => clearTimeout(timeout));
+				return id;
+			},
+			ingot_http_poll: (id) => httpSlots[id] ? httpSlots[id].state : 2,
+			ingot_http_status: (id) => httpSlots[id] ? httpSlots[id].status : 0,
+			ingot_http_body_len: (id) => httpSlots[id] ? httpSlots[id].body.length : 0,
+			ingot_http_body_copy: (id, destination, capacity) => {
+				const slot = httpSlots[id];
+				if (!slot) return -1;
+				const count = Math.min(capacity, slot.body.length);
+				if (count > 0) wasmBytes(destination, count).set(slot.body.subarray(0, count));
+				httpSlots[id] = null;
+				return count;
+			},
+		};
+	}
 
 	// Resize the canvas backing store to match its CSS box × devicePixelRatio.
 	// gfx reads css size + dpr each frame (_maybe_reconfigure) and reconfigures
@@ -98,11 +157,13 @@
 		window.addEventListener("resize", fitCanvas);
 
 		const wmi = new window.odin.WasmMemoryInterface();
+		wasmMemoryInterface = wmi;
 		const webgpu = new window.odin.WebGPUInterface(wmi);
 
 		const extra = {
 			wgpu: webgpu.getInterface(),
 			ingot: ingotImports(),
+			ingot_http: httpImports(),
 		};
 
 		// ingot_input.js (Step 4) registers DOM listeners that push into the
@@ -116,5 +177,10 @@
 		return window.odin.runWasm(wasmPath, null, extra, wmi);
 	}
 
-	window.ingotWeb = { run: ingotRun, fitCanvas: fitCanvas, ingotImports: ingotImports };
+	window.ingotWeb = {
+		run: ingotRun,
+		fitCanvas: fitCanvas,
+		ingotImports: ingotImports,
+		httpImports: httpImports,
+	};
 })();
