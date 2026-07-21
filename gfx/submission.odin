@@ -40,7 +40,10 @@ _submission_track :: proc(tracker: ^Submission_Tracker) -> u64 {
 	assert(tracker != nil)
 	assert(g.queue != nil)
 	_submission_poll(tracker)
-	if tracker.count >= MAX_IN_FLIGHT_SUBMISSIONS do return 0
+	if tracker.count >= MAX_IN_FLIGHT_SUBMISSIONS {
+		_stats_submission_tracking_failure()
+		return 0
+	}
 
 	index := (tracker.head + tracker.count) % MAX_IN_FLIGHT_SUBMISSIONS
 	ticket := &tracker.tickets[index]

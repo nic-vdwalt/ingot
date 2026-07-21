@@ -21,6 +21,11 @@
 	const httpSlots = new Array(HTTP_MAXIMUM_SLOTS).fill(null);
 	let wasmMemoryInterface = null;
 	let clipboardText = "";
+	let semanticFrame = 0;
+	const semanticInputs = new Map();
+	const semanticForms = new Map();
+	const INPUT_TYPES = ["text", "email", "password"];
+	const AUTOCOMPLETE = ["off", "username", "current-password", "new-password"];
 
 	function wasmBytes(pointer, length) {
 		if (!pointer || length <= 0 || !wasmMemoryInterface) return new Uint8Array();
@@ -96,6 +101,155 @@
 		if (c.height !== h) c.height = h;
 	}
 
+	function semanticForm(formId) {
+		let state = semanticForms.get(formId);
+		if (state) return state;
+		const form = document.createElement("form");
+		form.id = formId;
+		form.autocomplete = "on";
+		form.method = "post";
+		form.action = window.location.href;
+		form.noValidate = true;
+		state = { form, submitted: false, seen: semanticFrame, button: null };
+		form.addEventListener("submit", (event) => {
+			event.preventDefault();
+			if (!state.button || !state.button.disabled) state.submitted = true;
+		});
+		document.body.appendChild(form);
+		semanticForms.set(formId, state);
+		return state;
+	}
+
+	function semanticBounds(element, x, y, width, height) {
+		const canvas = document.getElementById(CANVAS_ID);
+		if (!canvas) return;
+		const rect = canvas.getBoundingClientRect();
+		element.style.position = "fixed";
+		element.style.left = `${rect.left + x}px`;
+		element.style.top = `${rect.top + y}px`;
+		element.style.width = `${width}px`;
+		element.style.height = `${height}px`;
+		element.style.zIndex = "10";
+		element.style.boxSizing = "border-box";
+	}
+
+	function createSemanticInput(formState, fieldId) {
+		const input = document.createElement("input");
+		input.id = fieldId;
+		input.spellcheck = false;
+		input.autocapitalize = "none";
+		input.style.background = "#2d2d32";
+		input.style.color = "#dcdcdc";
+		input.style.border = "1px solid #464650";
+		input.style.borderRadius = "0";
+		input.style.padding = "0 8px";
+		input.style.font = "16px sans-serif";
+		input.style.outline = "none";
+		const state = {
+			input,
+			formState,
+			seen: semanticFrame,
+			lastOdinValue: "",
+			wasActive: false,
+		};
+		input.addEventListener("focus", () => {
+			input.style.borderColor = "#64a0ff";
+		});
+		input.addEventListener("blur", () => {
+			input.style.borderColor = "#464650";
+		});
+		input.addEventListener("keydown", (event) => {
+			const fields = Array.from(formState.form.querySelectorAll("input"));
+			const index = fields.indexOf(input);
+			if (index < 0 || fields.length === 0) return;
+			if (event.key === "Tab") {
+				event.preventDefault();
+				const delta = event.shiftKey ? -1 : 1;
+				fields[(index + delta + fields.length) % fields.length].focus();
+			} else if (event.key === "Enter" && index < fields.length - 1) {
+				event.preventDefault();
+				fields[index + 1].focus();
+			}
+		});
+		formState.form.appendChild(input);
+		semanticInputs.set(fieldId, state);
+		return state;
+	}
+
+	function syncSemanticInput(formId, fieldId, name, placeholder, odinValue,
+		x, y, width, height, inputType, autocomplete, active) {
+		const formState = semanticForm(formId);
+		formState.seen = semanticFrame;
+		let state = semanticInputs.get(fieldId);
+		if (!state) state = createSemanticInput(formState, fieldId);
+		state.seen = semanticFrame;
+		const input = state.input;
+		input.name = name;
+		input.type = INPUT_TYPES[inputType] || "text";
+		input.autocomplete = AUTOCOMPLETE[autocomplete] || "off";
+		input.placeholder = placeholder;
+		input.setAttribute("aria-label", placeholder);
+		semanticBounds(input, x, y, width, height);
+		if (odinValue !== state.lastOdinValue && input.value === state.lastOdinValue) {
+			input.value = odinValue;
+		}
+		state.lastOdinValue = odinValue;
+		const canvas = document.getElementById(CANVAS_ID);
+		if (active && !state.wasActive && document.activeElement === canvas) {
+			input.focus();
+		}
+		state.wasActive = active;
+		return (input.value !== odinValue ? 1 : 0) |
+			(document.activeElement === input ? 2 : 0);
+	}
+
+	function syncSemanticSubmit(formId, label, x, y, width, height, style, fontSize, enabled) {
+		const state = semanticForm(formId);
+		state.seen = semanticFrame;
+		if (!state.button) {
+			state.button = document.createElement("button");
+			state.button.type = "submit";
+			state.button.tabIndex = -1;
+			state.form.appendChild(state.button);
+		}
+		const button = state.button;
+		button.textContent = label;
+		button.disabled = !enabled;
+		button.style.background = enabled ? "#3c64b4" : "#323237";
+		button.style.color = enabled ? "#fff" : "#5a5a64";
+		button.style.border = enabled ? "1px solid #3c64b4" : "1px solid #323237";
+		button.style.borderRadius = "6px";
+		button.style.padding = "0";
+		button.style.font = `${fontSize}px sans-serif`;
+		button.style.cursor = enabled ? "pointer" : "default";
+		semanticBounds(button, x, y, width, height);
+		const submitted = state.submitted;
+		state.submitted = false;
+		return submitted ? 1 : 0;
+	}
+
+	function semanticInputState(fieldId) {
+		return semanticInputs.get(fieldId) || null;
+	}
+
+	function semanticCursorByteOffset(input) {
+		const end = input.selectionStart === null ? input.value.length : input.selectionStart;
+		return new TextEncoder().encode(input.value.slice(0, end)).length;
+	}
+
+	function endSemanticFrame() {
+		for (const [fieldId, state] of semanticInputs) {
+			if (state.seen === semanticFrame) continue;
+			state.input.remove();
+			semanticInputs.delete(fieldId);
+		}
+		for (const [formId, state] of semanticForms) {
+			if (state.seen === semanticFrame) continue;
+			state.form.remove();
+			semanticForms.delete(formId);
+		}
+	}
+
 	// browser CSS cursor strings indexed by ingot MouseCursor enum (gfx/types.odin)
 	const CURSORS = [
 		"default", "default", "text", "crosshair", "pointer",
@@ -137,6 +291,39 @@
 					navigator.clipboard.writeText(clipboardText).catch(() => {});
 				}
 			},
+			ingot_web_input_frame_begin: () => { semanticFrame += 1; },
+			ingot_web_input_frame_end: endSemanticFrame,
+			ingot_web_input_sync: (formPointer, formLength, fieldPointer, fieldLength,
+				namePointer, nameLength, placeholderPointer, placeholderLength,
+				valuePointer, valueLength, x, y, width, height, inputType,
+				autocomplete, active) => syncSemanticInput(
+				wasmText(formPointer, formLength), wasmText(fieldPointer, fieldLength),
+				wasmText(namePointer, nameLength),
+				wasmText(placeholderPointer, placeholderLength),
+				wasmText(valuePointer, valueLength), x, y, width, height,
+				inputType, autocomplete, active !== 0,
+			),
+			ingot_web_input_value_len: (fieldPointer, fieldLength) => {
+				const state = semanticInputState(wasmText(fieldPointer, fieldLength));
+				return state ? new TextEncoder().encode(state.input.value).length : 0;
+			},
+			ingot_web_input_value_copy: (fieldPointer, fieldLength, destination, capacity) => {
+				const state = semanticInputState(wasmText(fieldPointer, fieldLength));
+				if (!state) return 0;
+				const bytes = new TextEncoder().encode(state.input.value);
+				const count = Math.min(capacity, bytes.length);
+				if (count > 0) wasmBytes(destination, count).set(bytes.subarray(0, count));
+				return count;
+			},
+			ingot_web_input_cursor: (fieldPointer, fieldLength) => {
+				const state = semanticInputState(wasmText(fieldPointer, fieldLength));
+				return state ? semanticCursorByteOffset(state.input) : 0;
+			},
+			ingot_web_submit_sync: (formPointer, formLength, labelPointer, labelLength,
+				x, y, width, height, style, fontSize, enabled) => syncSemanticSubmit(
+				wasmText(formPointer, formLength), wasmText(labelPointer, labelLength),
+				x, y, width, height, style, fontSize, enabled !== 0,
+			),
 			ingot_is_fullscreen: () => {
 				const fs = document.fullscreenElement ||
 					document.webkitFullscreenElement;

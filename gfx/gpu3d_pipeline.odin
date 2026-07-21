@@ -252,8 +252,10 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	cmd := wg.CommandEncoderFinish(pass.encoder, nil)
 	wg.QueueSubmit(g.queue, {cmd})
 	_stats_queue_submission()
-	retirement := _submission_track(&g.submissions)
-	_uniform_submitted(&g.rend, retirement)
+	if !g.frame.has_frame {
+		retirement := _submission_track(&g.submissions)
+		_uniform_submitted(&g.rend, retirement)
+	}
 	wg.CommandBufferRelease(cmd)
 	wg.CommandEncoderRelease(pass.encoder)
 	pass.active = false

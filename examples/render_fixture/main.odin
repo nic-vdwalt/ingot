@@ -29,6 +29,7 @@ frame :: proc() {
 	if resources_ready {
 		draw_render_targets()
 		draw_main_fixture()
+		draw_stream_lifetime_stress()
 	}
 	rl.EndDrawing()
 
@@ -171,5 +172,35 @@ draw_main_fixture :: proc() {
 
 	if font_ready {
 		rl.DrawTextEx(font, "FIXTURE: 2D / RT / SCISSOR", {24, 504}, 20, 1, rl.RAYWHITE)
+	}
+}
+
+draw_stream_lifetime_stress :: proc() {
+	for _ in 0 ..< 70 {
+		rl.BeginTextureMode(ping_rt)
+		rl.DrawRectangle(0, 0, 1, 1, rl.WHITE)
+		rl.EndTextureMode()
+	}
+
+	for i in 0 ..< 48 {
+		x := 24 + i32(i % 12) * 74
+		y := 548 + i32(i / 12) * 34
+		rl.DrawTexturePro(
+			source_texture,
+			{0, 0, 2, 2},
+			{f32(x), f32(y), 24, 24},
+			{0, 0},
+			0,
+			rl.WHITE,
+		)
+		rl.DrawRectangle(x + 26, y, 44, 24, rl.Color{48, 58, 82, 210})
+		rl.BeginScissorMode(x + 28, y + 2, 40, 20)
+		rl.DrawRectangle(x + 26, y, 44, 24, rl.Color{90, 170, 230, 96})
+		rl.EndScissorMode()
+	}
+
+	rl.DrawRectangle(24, 684, 912, 28, rl.Color{28, 32, 44, 255})
+	if font_ready {
+		rl.DrawTextEx(font, "STABLE UI OVER STREAM STRESS", {36, 688}, 16, 1, rl.RAYWHITE)
 	}
 }

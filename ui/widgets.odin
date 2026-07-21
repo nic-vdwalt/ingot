@@ -529,12 +529,18 @@ btn :: proc(
 	style: Btn_Style = .Secondary,
 	font_size: i32 = 0,
 	enabled: bool = true,
+	web_form_id: string = "",
 ) -> bool {
 	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	mouse := rl.GetMousePosition()
 	hovered := enabled && rl.CheckCollisionPointRec(mouse, rect)
 	clicked := hovered && rl.IsMouseButtonReleased(.LEFT)
+	if web_form_id != "" {
+		clicked = clicked || rl.SyncWebSubmitButton(
+			web_form_id, label, x, y, w, h, i32(style), fs, enabled,
+		)
+	}
 	if hovered do request_cursor(.POINTING_HAND)
 
 	bg, fg, border: rl.Color
@@ -639,6 +645,29 @@ input_caret_visual :: proc(vlines: []Wrap_Line, text: string, pos: int) -> (row:
 	return 0, 0
 }
 
+Text_Input_Type :: enum i32 {
+	Text,
+	Email,
+	Password,
+}
+
+Text_Input_Autocomplete :: enum i32 {
+	None,
+	Username,
+	Current_Password,
+	New_Password,
+}
+
+Text_Input_Semantics :: struct {
+	form_id: string,
+	field_id: string,
+	name: string,
+	input_type: Text_Input_Type,
+	autocomplete: Text_Input_Autocomplete,
+	focus: ^int,
+	focus_id: int,
+}
+
 // Draw a text input box. Returns true if Enter was pressed.
 // When masked is true, displays asterisks instead of actual text (for passwords).
 // `cursor` is an optional byte-offset caret; pass nil for single-line, end-
@@ -646,11 +675,28 @@ input_caret_visual :: proc(vlines: []Wrap_Line, text: string, pos: int) -> (row:
 // Left/Right/Up/Down/Home/End navigation and inserts/deletes at the caret.
 // `desired_col` (optional) remembers the rune column across vertical moves and
 // `scroll_line` (optional) persists the top visible logical line.
-text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, active: bool, masked: bool = false, cursor: ^int = nil, desired_col: ^int = nil, scroll_line: ^int = nil, pills: ^[dynamic]Mention_Span = nil, undo: ^Input_Undo = nil) -> bool {
+text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, active: bool, masked: bool = false, cursor: ^int = nil, desired_col: ^int = nil, scroll_line: ^int = nil, pills: ^[dynamic]Mention_Span = nil, undo: ^Input_Undo = nil, semantics: Text_Input_Semantics = {}) -> bool {
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	bg := BG_INPUT if active else BG_SECONDARY
+	input_active := active
+	if semantics.field_id != "" {
+		web := rl.SyncWebTextInput(
+			semantics.form_id, semantics.field_id, semantics.name,
+			placeholder, strings.to_string(sb^), x, y, w, h,
+			i32(semantics.input_type), i32(semantics.autocomplete), active,
+		)
+		if web.changed {
+			strings.builder_reset(sb)
+			strings.write_string(sb, web.value)
+		}
+		if web.focused {
+			input_active = true
+			if cursor != nil do cursor^ = caret_clamp(strings.to_string(sb^), web.cursor)
+			if semantics.focus != nil do semantics.focus^ = semantics.focus_id
+		}
+	}
+	bg := BG_INPUT if input_active else BG_SECONDARY
 	rl.DrawRectangleRec(rect, bg)
-	rl.DrawRectangleLinesEx(rect, 1, BORDER_COLOR if !active else FG_ACCENT)
+	rl.DrawRectangleLinesEx(rect, 1, BORDER_COLOR if !input_active else FG_ACCENT)
 
 	entered := false
 
@@ -660,7 +706,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 	// Whether this input uses the caret model.
 	caret_active := cursor != nil
 
-	if active {
+	if input_active {
 		mods := mod_down()
 		shift := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
 
@@ -995,7 +1041,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 	// double-click selects a word, triple-click the logical line, drag extends
 	// by character. Mouse is converted to pane-local coordinates because split
 	// panes draw rlgl-translated while the mouse is in screen space.
-	if active && use_masked_caret && rl.IsMouseButtonPressed(.LEFT) {
+	if input_active && use_masked_caret && rl.IsMouseButtonPressed(.LEFT) {
 		mouse := rl.GetMousePosition()
 		mouse.x -= f32(pane_origin_x)
 		if rl.CheckCollisionPointRec(mouse, rect) {
@@ -1011,7 +1057,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		}
 	}
 
-	if active && use_caret_render {
+	if input_active && use_caret_render {
 		mouse := rl.GetMousePosition()
 		mouse.x -= f32(pane_origin_x)
 		if rl.IsMouseButtonPressed(.LEFT) {
@@ -1072,7 +1118,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 	// hash) and open the suggestions menu on right-click over one. Only the
 	// chat composer qualifies (caret-aware, with pills + undo).
 	spell_squiggles: []Spell_Range
-	if active && use_caret_render && pills != nil && undo != nil {
+	if input_active && use_caret_render && pills != nil && undo != nil {
 		spell_squiggles = spellcheck_ranges(text, cursor^, pills)
 		if rl.IsMouseButtonPressed(.RIGHT) {
 			mouse := rl.GetMousePosition()
@@ -1216,7 +1262,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 	}
 
 	// Draw cursor if active.
-	if active {
+	if input_active {
 		t := rl.GetTime()
 		if int(t * 2) % 2 == 0 {
 			if use_caret_render {

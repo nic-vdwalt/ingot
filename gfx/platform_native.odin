@@ -195,6 +195,30 @@ platform_input_init :: proc() {
 }
 
 @(private)
+platform_web_input_frame_begin :: proc() {}
+
+@(private)
+platform_web_input_frame_end :: proc() {}
+
+@(private)
+platform_sync_web_text_input :: proc(
+	form_id, field_id, name, placeholder, value: string,
+	x, y, w, h, input_type, autocomplete: i32,
+	active: bool,
+) -> Web_Input_Result {
+	return {}
+}
+
+@(private)
+platform_sync_web_submit_button :: proc(
+	form_id, label: string,
+	x, y, w, h, style, font_size: i32,
+	enabled: bool,
+) -> bool {
+	return false
+}
+
+@(private)
 platform_cursor_pos :: proc() -> (f64, f64) {
 	return glfw.GetCursorPos(_win())
 }

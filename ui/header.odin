@@ -48,7 +48,7 @@ draw_app_header :: proc(title: cstring, screen_w: i32) -> (header_h: i32) {
 		is_fs := rl.IsWindowFullscreen()
 		_, hovered := draw_fullscreen_button(screen_w, is_fs, rl.GetMousePosition())
 		if hovered {
-			rl.SetMouseCursor(.POINTING_HAND)
+			request_cursor(.POINTING_HAND)
 			if rl.IsMouseButtonPressed(.LEFT) {
 				rl.ToggleFullscreen()
 			}

@@ -15,10 +15,14 @@ Renderer_Stats :: struct {
 	pipeline_switches:           u32,
 	bind_group_switches:         u32,
 	render_passes:               u32,
-	queue_submissions:           u32,
-	peak_geometry_arena_bytes:   u64,
-	peak_uniform_arena_bytes:    u64,
-	composite_alpha_mode:        wg.CompositeAlphaMode,
+	queue_submissions:             u32,
+	peak_geometry_arena_bytes:     u64,
+	peak_uniform_arena_bytes:      u64,
+	geometry_reservation_failures: u32,
+	uniform_reservation_failures:  u32,
+	submission_tracking_failures:  u32,
+	stream_retirement_failures:    u32,
+	composite_alpha_mode:          wg.CompositeAlphaMode,
 }
 
 @(private) renderer_stats_current: Renderer_Stats
@@ -110,5 +114,30 @@ _stats_render_pass :: proc() {
 _stats_queue_submission :: proc() {
 	when RENDER_STATS_ENABLED {
 		renderer_stats_current.queue_submissions += 1
+	}
+}
+
+@(private)
+_stats_reservation_failure :: proc(uniform: bool) {
+	when RENDER_STATS_ENABLED {
+		if uniform {
+			renderer_stats_current.uniform_reservation_failures += 1
+		} else {
+			renderer_stats_current.geometry_reservation_failures += 1
+		}
+	}
+}
+
+@(private)
+_stats_submission_tracking_failure :: proc() {
+	when RENDER_STATS_ENABLED {
+		renderer_stats_current.submission_tracking_failures += 1
+	}
+}
+
+@(private)
+_stats_stream_retirement_failure :: proc() {
+	when RENDER_STATS_ENABLED {
+		renderer_stats_current.stream_retirement_failures += 1
 	}
 }

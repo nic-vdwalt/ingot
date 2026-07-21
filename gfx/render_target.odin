@@ -123,9 +123,6 @@ EndTextureMode :: proc() {
 		cmd := wg.CommandEncoderFinish(g.frame.rt_encoder, nil)
 		wg.QueueSubmit(g.queue, {cmd})
 		_stats_queue_submission()
-		retirement := _submission_track(&g.submissions)
-		_geometry_submitted(&g.rend, retirement)
-		_uniform_submitted(&g.rend, retirement)
 		wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(g.frame.rt_encoder)
 	}

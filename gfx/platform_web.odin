@@ -27,6 +27,24 @@ foreign dom {
 	@(link_name = "ingot_clipboard_len")       _js_clipboard_len  :: proc() -> i32 ---
 	@(link_name = "ingot_clipboard_copy")      _js_clipboard_copy :: proc(dst: rawptr, cap: i32) -> i32 ---
 	@(link_name = "ingot_set_clipboard")       _js_set_clipboard  :: proc(text: cstring) ---
+	@(link_name = "ingot_web_input_frame_begin") _js_web_input_frame_begin :: proc() ---
+	@(link_name = "ingot_web_input_frame_end")   _js_web_input_frame_end   :: proc() ---
+	@(link_name = "ingot_web_input_sync") _js_web_input_sync :: proc(
+		form_ptr: rawptr, form_len: i32,
+		field_ptr: rawptr, field_len: i32,
+		name_ptr: rawptr, name_len: i32,
+		placeholder_ptr: rawptr, placeholder_len: i32,
+		value_ptr: rawptr, value_len: i32,
+		x, y, w, h, input_type, autocomplete, active: i32,
+	) -> i32 ---
+	@(link_name = "ingot_web_input_value_len") _js_web_input_value_len :: proc(field_ptr: rawptr, field_len: i32) -> i32 ---
+	@(link_name = "ingot_web_input_value_copy") _js_web_input_value_copy :: proc(field_ptr: rawptr, field_len: i32, dst: rawptr, cap: i32) -> i32 ---
+	@(link_name = "ingot_web_input_cursor") _js_web_input_cursor :: proc(field_ptr: rawptr, field_len: i32) -> i32 ---
+	@(link_name = "ingot_web_submit_sync") _js_web_submit_sync :: proc(
+		form_ptr: rawptr, form_len: i32,
+		label_ptr: rawptr, label_len: i32,
+		x, y, w, h, style, font_size, enabled: i32,
+	) -> i32 ---
 	@(link_name = "ingot_is_fullscreen")       _js_is_fullscreen     :: proc() -> i32 ---
 	@(link_name = "ingot_toggle_fullscreen")   _js_toggle_fullscreen :: proc() ---
 }
@@ -227,6 +245,68 @@ _input_drain :: proc() {
 
 @(private)
 platform_input_init :: proc() {}
+
+@(private)
+platform_web_input_frame_begin :: proc() {
+	_js_web_input_frame_begin()
+}
+
+@(private)
+platform_web_input_frame_end :: proc() {
+	_js_web_input_frame_end()
+}
+
+@(private)
+web_string_data :: proc(value: string) -> rawptr {
+	if len(value) == 0 do return nil
+	bytes := transmute([]byte)value
+	return raw_data(bytes)
+}
+
+@(private)
+platform_sync_web_text_input :: proc(
+	form_id, field_id, name, placeholder, value: string,
+	x, y, w, h, input_type, autocomplete: i32,
+	active: bool,
+) -> Web_Input_Result {
+	field_data := web_string_data(field_id)
+	field_len := i32(len(field_id))
+	flags := _js_web_input_sync(
+		web_string_data(form_id), i32(len(form_id)),
+		field_data, field_len,
+		web_string_data(name), i32(len(name)),
+		web_string_data(placeholder), i32(len(placeholder)),
+		web_string_data(value), i32(len(value)),
+		x, y, w, h, input_type, autocomplete, active ? 1 : 0,
+	)
+	result := Web_Input_Result{
+		cursor = int(_js_web_input_cursor(field_data, field_len)),
+		changed = flags & 1 != 0,
+		focused = flags & 2 != 0,
+	}
+	if result.changed {
+		length := _js_web_input_value_len(field_data, field_len)
+		if length > 0 {
+			buffer := make([]byte, length, context.temp_allocator)
+			copied := _js_web_input_value_copy(field_data, field_len, raw_data(buffer), length)
+			if copied > 0 do result.value = string(buffer[:copied])
+		}
+	}
+	return result
+}
+
+@(private)
+platform_sync_web_submit_button :: proc(
+	form_id, label: string,
+	x, y, w, h, style, font_size: i32,
+	enabled: bool,
+) -> bool {
+	return _js_web_submit_sync(
+		web_string_data(form_id), i32(len(form_id)),
+		web_string_data(label), i32(len(label)),
+		x, y, w, h, style, font_size, enabled ? 1 : 0,
+	) != 0
+}
 
 @(private)
 platform_cursor_pos :: proc() -> (f64, f64) {

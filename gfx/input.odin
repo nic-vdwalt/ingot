@@ -170,6 +170,34 @@ SetClipboardText :: proc(text: cstring) {
 	platform_set_clipboard(text)
 }
 
+Web_Input_Result :: struct {
+	value: string,
+	cursor: int,
+	changed: bool,
+	focused: bool,
+}
+
+SyncWebTextInput :: proc(
+	form_id, field_id, name, placeholder, value: string,
+	x, y, w, h, input_type, autocomplete: i32,
+	active: bool,
+) -> Web_Input_Result {
+	return platform_sync_web_text_input(
+		form_id, field_id, name, placeholder, value,
+		x, y, w, h, input_type, autocomplete, active,
+	)
+}
+
+SyncWebSubmitButton :: proc(
+	form_id, label: string,
+	x, y, w, h, style, font_size: i32,
+	enabled: bool,
+) -> bool {
+	return platform_sync_web_submit_button(
+		form_id, label, x, y, w, h, style, font_size, enabled,
+	)
+}
+
 SetMouseCursor :: proc(cursor: MouseCursor) {
 	i := int(cursor)
 	if i < 0 || i >= 11 do return

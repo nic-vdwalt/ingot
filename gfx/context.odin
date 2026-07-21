@@ -233,6 +233,7 @@ WindowShouldClose :: proc() -> bool {
 BeginDrawing :: proc() {
 	_maybe_reconfigure()
 	_stats_frame_begin()
+	platform_web_input_frame_begin()
 
 	g.frame.surf_tex = wg.SurfaceGetCurrentTexture(g.surface)
 	#partial switch g.frame.surf_tex.status {
@@ -303,8 +304,9 @@ EndDrawing :: proc() {
 		wg.QueueSubmit(g.queue, {cmd})
 		_stats_queue_submission()
 		retirement := _submission_track(&g.submissions)
-		_geometry_submitted(&g.rend, retirement)
-		_uniform_submitted(&g.rend, retirement)
+		geometry_ok := _geometry_submitted(&g.rend, retirement)
+		uniform_ok := _uniform_submitted(&g.rend, retirement)
+		if !geometry_ok || !uniform_ok do _stats_stream_retirement_failure()
 		wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(g.frame.encoder)
 		wg.SurfacePresent(g.surface)
@@ -314,8 +316,10 @@ EndDrawing :: proc() {
 		// frame was skipped (surface not ready): drop any accumulated draw
 		// state so it can't flush into the next frame's pass with stale binds.
 		clear(&g.rend.verts)
+		clear(&g.rend.indices)
 	}
 
+	platform_web_input_frame_end()
 	_stats_frame_end()
 	input_poll()
 	_frame_timing()
