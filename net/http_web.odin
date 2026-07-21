@@ -2,10 +2,13 @@
 package ingotnet
 
 import "base:runtime"
+import "core:encoding/json"
 import "core:fmt"
 import "core:strings"
 
 DEFAULT_MAXIMUM_BODY :: 64 * 1024 * 1024
+FETCH_MAXIMUM_PENDING :: 64
+FETCH_MAXIMUM_DRAIN :: 64
 
 Http_Method :: enum u8 { Get, Post, Put, Patch, Delete }
 Http_Header :: struct { name: string, value: string }
@@ -39,9 +42,9 @@ http_request :: proc(host: string, port: int, request: Http_Request, allocator :
 	return {}, false
 }
 
-Fetch_Result :: struct { tag: u64, body: []u8, ok: bool }
+Fetch_Result :: struct { tag: u64, status: u16, body: []u8, ok: bool }
 @(private = "file") In_Flight :: struct { id: i32, tag: u64 }
-@(private = "file") Pending :: struct { tag: u64, path: string }
+@(private = "file") Pending :: struct { tag: u64, request: Http_Request }
 @(private = "file") MAX_INFLIGHT :: 6
 
 Fetcher :: struct {
@@ -66,39 +69,77 @@ fetcher_stop :: proc(f: ^Fetcher) {
 		}
 	}
 	delete(f.in_flight); f.in_flight = nil
-	for pending in f.pending do delete(pending.path)
+	for &pending in f.pending do pending_destroy(&pending)
 	delete(f.pending); f.pending = nil
 }
 
-fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) { append(&f.pending, Pending{tag = tag, path = strings.clone(path)}); pump(f) }
-fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) { inject_at(&f.pending, 0, Pending{tag = tag, path = strings.clone(path)}); pump(f) }
+fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
+	if request.path == "" || request.path[0] != '/' || len(f.pending) >= FETCH_MAXIMUM_PENDING do return false
+	append(&f.pending, Pending{tag = tag, request = request_clone(request)})
+	pump(f)
+	return true
+}
+fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) { _ = fetcher_request_http(f, tag, Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}) }
+fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
+	request := Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}
+	if request.path == "" || request.path[0] != '/' || len(f.pending) >= FETCH_MAXIMUM_PENDING do return
+	inject_at(&f.pending, 0, Pending{tag = tag, request = request_clone(request)}); pump(f)
+}
 fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) { _ = cache_path; fetcher_request(f, tag, path) }
+
+@(private = "file")
+request_clone :: proc(request: Http_Request) -> Http_Request {
+	headers := make([]Http_Header, len(request.headers))
+	for header, i in request.headers do headers[i] = Http_Header{name = strings.clone(header.name), value = strings.clone(header.value)}
+	body := make([]u8, len(request.body)); copy(body, request.body)
+	return Http_Request{method = request.method, path = strings.clone(request.path), headers = headers, body = body, maximum_body = request.maximum_body}
+}
+
+@(private = "file")
+pending_destroy :: proc(pending: ^Pending) {
+	delete(pending.request.path)
+	for header in pending.request.headers { delete(header.name); delete(header.value) }
+	delete(pending.request.headers); delete(pending.request.body)
+	pending^ = {}
+}
+
+@(private = "file")
+encode_headers_json :: proc(headers: []Http_Header) -> []u8 {
+	values := make(map[string]string, context.temp_allocator)
+	for header in headers do values[header.name] = header.value
+	encoded, err := json.marshal(values, allocator = context.temp_allocator)
+	if err != nil do return nil
+	return encoded
+}
 
 @(private = "file")
 pump :: proc(f: ^Fetcher) {
 	for len(f.in_flight) < MAX_INFLIGHT && len(f.pending) > 0 {
 		pending := f.pending[0]; ordered_remove(&f.pending, 0)
-		url := fmt.tprintf("http://%s:%d%s", f.host, f.port, pending.path); delete(pending.path)
+		url := pending.request.path
+		if f.host != "" do url = fmt.tprintf("http://%s:%d%s", f.host, f.port, pending.request.path)
 		bytes := transmute([]byte)url
-		id := ingot_http_request(i32(Http_Method.Get), raw_data(bytes), i32(len(bytes)), nil, 0, nil, 0, DEFAULT_MAXIMUM_BODY)
-		if id >= 0 do append(&f.in_flight, In_Flight{id = id, tag = pending.tag})
+		headers := encode_headers_json(pending.request.headers)
+		maximum_body := pending.request.maximum_body
+		if maximum_body == 0 do maximum_body = DEFAULT_MAXIMUM_BODY
+		id := ingot_http_request(i32(pending.request.method), raw_data(bytes), i32(len(bytes)), raw_data(headers), i32(len(headers)), raw_data(pending.request.body), i32(len(pending.request.body)), i32(maximum_body))
+		tag := pending.tag; pending_destroy(&pending)
+		if id >= 0 do append(&f.in_flight, In_Flight{id = id, tag = tag})
 	}
 }
 
 fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 	out: [dynamic]Fetch_Result; out.allocator = context.temp_allocator
 	i := 0
-	for i < len(f.in_flight) {
+	for i < len(f.in_flight) && len(out) < FETCH_MAXIMUM_DRAIN {
 		item := f.in_flight[i]; state := ingot_http_poll(item.id)
 		if state == 0 { i += 1; continue }
 		status := ingot_http_status(item.id)
-		request_ok := state == 1 && status >= 200 && status < 300
+		request_ok := state == 1
 		body: []u8
-		if request_ok {
-			n := ingot_http_body_len(item.id)
-			if n > 0 { body = make([]byte, int(n)); got := ingot_http_body_copy(item.id, raw_data(body), i32(len(body))); if got < 0 { delete(body); body = nil; request_ok = false } } else { ingot_http_body_copy(item.id, nil, 0) }
-		} else { ingot_http_body_copy(item.id, nil, 0) }
-		append(&out, Fetch_Result{tag = item.tag, body = body, ok = request_ok}); unordered_remove(&f.in_flight, i)
+		n := ingot_http_body_len(item.id)
+		if n > 0 { body = make([]byte, int(n)); got := ingot_http_body_copy(item.id, raw_data(body), i32(len(body))); if got < 0 { delete(body); body = nil; request_ok = false } } else { ingot_http_body_copy(item.id, nil, 0) }
+		append(&out, Fetch_Result{tag = item.tag, status = u16(status), body = body, ok = request_ok}); unordered_remove(&f.in_flight, i)
 	}
 	pump(f)
 	if len(out) == 0 do return nil

@@ -17,7 +17,8 @@
 	"use strict";
 
 	const CANVAS_ID = "ingot-canvas";
-	const httpSlots = [];
+	const HTTP_MAXIMUM_SLOTS = 64;
+	const httpSlots = new Array(HTTP_MAXIMUM_SLOTS).fill(null);
 	let wasmMemoryInterface = null;
 
 	function wasmBytes(pointer, length) {
@@ -34,9 +35,10 @@
 		return {
 			ingot_http_request: (method, urlPointer, urlLength, headersPointer,
 				headersLength, bodyPointer, bodyLength, maximumBody) => {
-				const id = httpSlots.length;
+				const id = httpSlots.findIndex((slot) => slot === null);
+				if (id < 0) return -1;
 				const slot = { state: 0, status: 0, body: new Uint8Array() };
-				httpSlots.push(slot);
+				httpSlots[id] = slot;
 				let headers = {};
 				try {
 					const encoded = wasmText(headersPointer, headersLength);
@@ -51,7 +53,7 @@
 				fetch(wasmText(urlPointer, urlLength), {
 					method: methods[method] || "GET",
 					headers,
-					body,
+					body: method === 0 ? undefined : body,
 					credentials: "same-origin",
 					signal: controller.signal,
 				}).then(async (response) => {

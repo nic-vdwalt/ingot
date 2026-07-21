@@ -292,9 +292,11 @@ decode_chunked :: proc(data: []u8, maximum_body: int, allocator: mem.Allocator) 
 }
 
 FETCH_WORKERS :: 8
+FETCH_MAXIMUM_PENDING :: 64
+FETCH_MAXIMUM_DRAIN :: 64
 
-Fetch_Result :: struct { tag: u64, body: []u8, ok: bool }
-Fetch_Job :: struct { tag: u64, path: string, cache_path: string }
+Fetch_Result :: struct { tag: u64, status: u16, body: []u8, ok: bool }
+Fetch_Job :: struct { tag: u64, request: Http_Request, cache_path: string }
 Fetch_Worker_Ctx :: struct { f: ^Fetcher, idx: int }
 Fetcher :: struct {
 	host: string,
@@ -330,28 +332,71 @@ fetcher_stop :: proc(f: ^Fetcher) {
 	sync.mutex_unlock(&f.sock_mutex)
 	for i in 0 ..< FETCH_WORKERS { if f.workers[i] != nil { thread.join(f.workers[i]); thread.destroy(f.workers[i]); f.workers[i] = nil } }
 	sync.mutex_lock(&f.mutex)
-	for job in f.jobs { delete(job.path); delete(job.cache_path) }
+	for &job in f.jobs do fetch_job_destroy(&job)
 	delete(f.jobs)
 	for result in f.results do delete(result.body)
 	delete(f.results)
 	sync.mutex_unlock(&f.mutex)
 }
 
-fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) { fetcher_request_cached(f, tag, path, "") }
-fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
+fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
+	if !valid_request(request) do return false
+	job := Fetch_Job{tag = tag, request = http_request_clone(request)}
 	sync.mutex_lock(&f.mutex)
-	inject_at(&f.jobs, 0, Fetch_Job{tag = tag, path = strings.clone(path), cache_path = strings.clone("")})
-	sync.mutex_unlock(&f.mutex)
+	defer sync.mutex_unlock(&f.mutex)
+	if !f.running || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
+		fetch_job_destroy(&job)
+		return false
+	}
+	append(&f.jobs, job)
+	return true
+}
+fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) {
+	_ = fetcher_request_http(f, tag, Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY})
+}
+fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
+	request := Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}
+	if !valid_request(request) do return
+	job := Fetch_Job{tag = tag, request = http_request_clone(request)}
+	sync.mutex_lock(&f.mutex)
+	defer sync.mutex_unlock(&f.mutex)
+	if !f.running || len(f.jobs) >= FETCH_MAXIMUM_PENDING { fetch_job_destroy(&job); return }
+	inject_at(&f.jobs, 0, job)
 }
 fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) {
+	request := Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}
+	if !valid_request(request) do return
+	job := Fetch_Job{tag = tag, request = http_request_clone(request), cache_path = strings.clone(cache_path)}
 	sync.mutex_lock(&f.mutex)
-	append(&f.jobs, Fetch_Job{tag = tag, path = strings.clone(path), cache_path = strings.clone(cache_path)})
-	sync.mutex_unlock(&f.mutex)
+	defer sync.mutex_unlock(&f.mutex)
+	if !f.running || len(f.jobs) >= FETCH_MAXIMUM_PENDING { fetch_job_destroy(&job); return }
+	append(&f.jobs, job)
 }
 fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 	sync.mutex_lock(&f.mutex); defer sync.mutex_unlock(&f.mutex)
 	if len(f.results) == 0 do return nil
-	out := make([]Fetch_Result, len(f.results), context.temp_allocator); copy(out, f.results[:]); clear(&f.results); return out
+	count := min(len(f.results), FETCH_MAXIMUM_DRAIN)
+	out := make([]Fetch_Result, count, context.temp_allocator)
+	copy(out, f.results[:count])
+	copy(f.results[:], f.results[count:])
+	resize(&f.results, len(f.results) - count)
+	return out
+}
+
+@(private = "file")
+http_request_clone :: proc(request: Http_Request) -> Http_Request {
+	headers := make([]Http_Header, len(request.headers))
+	for header, i in request.headers do headers[i] = Http_Header{name = strings.clone(header.name), value = strings.clone(header.value)}
+	body := make([]u8, len(request.body)); copy(body, request.body)
+	return Http_Request{method = request.method, path = strings.clone(request.path), headers = headers, body = body, maximum_body = request.maximum_body}
+}
+
+@(private = "file")
+fetch_job_destroy :: proc(job: ^Fetch_Job) {
+	delete(job.request.path)
+	for header in job.request.headers { delete(header.name); delete(header.value) }
+	delete(job.request.headers); delete(job.request.body); delete(job.cache_path)
+	job^ = {}
 }
 
 @(private = "file")
@@ -361,17 +406,21 @@ fetch_worker :: proc(f: ^Fetcher, idx: int) {
 		if len(f.jobs) == 0 { sync.mutex_unlock(&f.mutex); time.sleep(10 * time.Millisecond); continue }
 		job := f.jobs[0]; ordered_remove(&f.jobs, 0); sync.mutex_unlock(&f.mutex)
 		free_all(context.temp_allocator)
-		body: []u8; ok: bool; validate := f.cache_validator
+		body: []u8; status: u16; ok: bool; validate := f.cache_validator
 		if job.cache_path != "" {
 			if cached, read_err := os.read_entire_file_from_path(job.cache_path, context.allocator); read_err == nil && len(cached) > 0 {
-				if validate == nil || validate(cached) { body = cached; ok = true } else { delete(cached); os.remove(job.cache_path) }
+				if validate == nil || validate(cached) { body = cached; status = 200; ok = true } else { delete(cached); os.remove(job.cache_path) }
 			}
 		}
 		if !ok {
-			body, ok = http_get_interruptible(f, idx, f.host, f.port, job.path)
-			if ok && (validate == nil || validate(body)) && job.cache_path != "" { dir, _ := os.split_path(job.cache_path); os.make_directory_all(dir); _ = os.write_entire_file(job.cache_path, body) }
+			response: Http_Response
+			response, ok = http_request_impl(f, idx, f.host, f.port, job.request)
+			status = response.status; body = response.body; response.body = nil
+			http_response_destroy(&response)
+			if ok && status >= 200 && status < 300 && (validate == nil || validate(body)) && job.cache_path != "" { dir, _ := os.split_path(job.cache_path); os.make_directory_all(dir); _ = os.write_entire_file(job.cache_path, body) }
 		}
-		delete(job.path); delete(job.cache_path)
-		sync.mutex_lock(&f.mutex); append(&f.results, Fetch_Result{tag = job.tag, body = body, ok = ok}); sync.mutex_unlock(&f.mutex)
+		tag := job.tag
+		fetch_job_destroy(&job)
+		sync.mutex_lock(&f.mutex); append(&f.results, Fetch_Result{tag = tag, status = status, body = body, ok = ok}); sync.mutex_unlock(&f.mutex)
 	}
 }
