@@ -36,38 +36,26 @@ Blend_Slot :: enum {
 GEOMETRY_STREAM_BYTES :: u64(16 * 1024 * 1024)
 GEOMETRY_STREAM_ALIGN :: u64(4)
 UNIFORM_STREAM_BYTES :: u64(16 * 1024 * 1024)
-STREAM_RETIREMENTS_MAX :: 64
+STREAM_SLOT_COUNT :: 3
 BATCH_MAX_VERTICES :: 262_144
 BATCH_MAX_INDICES :: 393_216
 BATCH_TRANSIENT_BUFFERS_MAX :: 4096
 MODEL_STACK_MAX :: 64
 STREAMED_RENDERER_ENABLED :: #config(INGOT_STREAMED_RENDERER, true)
 
-Stream_Retirement :: struct {
-	ticket: u64,
-	end:    u64,
+Stream_Slot_State :: enum {
+	Free,
+	Recording,
+	Submitted,
 }
 
-Stream_Arena :: struct {
-	capacity:    u64,
-	write:       u64,
-	reclaim:     u64,
-	frame_begin: u64,
-	retirements: [STREAM_RETIREMENTS_MAX]Stream_Retirement,
-	head:        u32,
-	count:       u32,
-}
-
-Geometry_Stream :: struct {
-	buffer: wg.Buffer,
-	arena:  Stream_Arena,
-	used:   u64,
-}
-
-Uniform_Stream :: struct {
-	buffer:    wg.Buffer,
-	arena:     Stream_Arena,
-	alignment: u64,
+Stream_Slot :: struct {
+	geometry_buffer: wg.Buffer,
+	uniform_buffer:  wg.Buffer,
+	geometry_write:  u64,
+	uniform_write:   u64,
+	ticket:          u64,
+	state:           Stream_Slot_State,
 }
 
 Renderer :: struct {
@@ -116,8 +104,9 @@ Renderer :: struct {
 	cust_dst: wg.BlendFactor,
 	cust_op:  wg.BlendOperation,
 
-	geometry: Geometry_Stream,
-	uniforms: Uniform_Stream,
+	stream_slots:      [STREAM_SLOT_COUNT]Stream_Slot,
+	active_stream_slot: i32,
+	uniform_alignment: u64,
 	transient_buffers: [dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
 
 	proj_w, proj_h: i32,
@@ -301,7 +290,7 @@ renderer_init :: proc(r: ^Renderer) {
 		},
 	})
 	r.shader = shader
-	_uniform_stream_init(r)
+	_stream_slots_init(r)
 
 	// group(0): projection uniform
 	r.ubind_layout = wg.DeviceCreateBindGroupLayout(g.device, &{
@@ -357,8 +346,10 @@ renderer_init :: proc(r: ^Renderer) {
 renderer_shutdown :: proc(r: ^Renderer) {
 	for buffer in r.transient_buffers do wg.BufferRelease(buffer)
 	clear(&r.transient_buffers)
-	if r.uniforms.buffer != nil do wg.BufferRelease(r.uniforms.buffer)
-	if r.geometry.buffer != nil do wg.BufferRelease(r.geometry.buffer)
+	for &slot in r.stream_slots {
+		if slot.uniform_buffer != nil do wg.BufferRelease(slot.uniform_buffer)
+		if slot.geometry_buffer != nil do wg.BufferRelease(slot.geometry_buffer)
+	}
 	for kind in Pipe_Kind {
 		for slot in Blend_Slot {
 			if r.pipes[kind][slot] != nil do wg.RenderPipelineRelease(r.pipes[kind][slot])
@@ -380,11 +371,13 @@ renderer_shutdown :: proc(r: ^Renderer) {
 	if r.tex_layout != nil do wg.BindGroupLayoutRelease(r.tex_layout)
 }
 
-renderer_frame_begin :: proc(r: ^Renderer) {
+renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 	for buffer in r.transient_buffers do wg.BufferRelease(buffer)
 	clear(&r.transient_buffers)
-	_geometry_poll(r)
-	_uniform_poll(r)
+	if !_stream_slot_acquire(r, _submission_completed(&g.submissions)) {
+		_stats_stream_slot_exhaustion()
+		return false
+	}
 	clear(&r.verts)
 	clear(&r.indices)
 	r.cur_kind = .Solid
@@ -401,6 +394,7 @@ renderer_frame_begin :: proc(r: ^Renderer) {
 		wg.QueueWriteBuffer(g.queue, r.ubuf, 0, &p, size_of(p))
 		r.proj_w, r.proj_h = g.width, g.height
 	}
+	return true
 }
 
 // batch_set switches the active pipeline/texture, flushing the pending run
@@ -564,85 +558,143 @@ _geometry_upload_indexed :: proc(
 	assert(vertex_bytes > 0)
 	assert(index_data != nil)
 	assert(index_bytes > 0)
-	_geometry_poll(r)
-	stream := &r.geometry
-	if stream.buffer == nil {
-		_geometry_create(stream)
-	}
-
-	vertex_physical, index_physical, ok := _stream_reserve_indexed(
-		&stream.arena,
+	if r.active_stream_slot < 0 do return nil, 0, 0, false
+	slot := &r.stream_slots[r.active_stream_slot]
+	vertex_offset, index_offset, ok := _stream_slot_reserve_indexed(
+		slot,
 		vertex_bytes,
 		index_bytes,
+		GEOMETRY_STREAM_BYTES,
 	)
 	if !ok {
 		_stats_reservation_failure(false)
 		return nil, 0, 0, false
 	}
 
-	wg.QueueWriteBuffer(g.queue, stream.buffer, vertex_physical, vertex_data, uint(vertex_bytes))
-	wg.QueueWriteBuffer(g.queue, stream.buffer, index_physical, index_data, uint(index_bytes))
-	stream.used = max(stream.used, stream.arena.write - stream.arena.reclaim)
+	wg.QueueWriteBuffer(g.queue, slot.geometry_buffer, vertex_offset, vertex_data, uint(vertex_bytes))
+	wg.QueueWriteBuffer(g.queue, slot.geometry_buffer, index_offset, index_data, uint(index_bytes))
 	when RENDER_STATS_ENABLED {
 		renderer_stats_current.peak_geometry_arena_bytes = max(
 			renderer_stats_current.peak_geometry_arena_bytes,
-			stream.used,
+			slot.geometry_write,
 		)
 	}
-	assert(vertex_physical + vertex_bytes <= stream.arena.capacity)
-	assert(index_physical + index_bytes <= stream.arena.capacity)
-	return stream.buffer, vertex_physical, index_physical, true
+	return slot.geometry_buffer, vertex_offset, index_offset, true
 }
 
 @(private)
-_geometry_create :: proc(stream: ^Geometry_Stream) {
-	assert(stream != nil)
-	assert(stream.buffer == nil)
-	stream^ = {
-		buffer = wg.DeviceCreateBuffer(g.device, &{
-			usage = {.Vertex, .Index, .CopyDst},
-			size = GEOMETRY_STREAM_BYTES,
-		}),
-		arena = {capacity = GEOMETRY_STREAM_BYTES},
-	}
-	_stats_buffer_created(false)
-	assert(stream.buffer != nil)
-	assert(stream.arena.capacity == GEOMETRY_STREAM_BYTES)
-}
-
-@(private)
-_geometry_poll :: proc(r: ^Renderer) {
-	assert(r != nil)
-	stream := &r.geometry
-	completed := _submission_completed(&g.submissions)
-	_stream_poll(&stream.arena, completed)
-	stream.used = stream.arena.write - stream.arena.reclaim
-	assert(stream.used <= stream.arena.capacity || stream.buffer == nil)
-}
-
-@(private)
-_geometry_submitted :: proc(r: ^Renderer, retirement: u64) -> bool {
-	assert(r != nil)
-	return _stream_submit(&r.geometry.arena, retirement)
-}
-
-@(private)
-_uniform_stream_init :: proc(r: ^Renderer) {
+_stream_slots_init :: proc(r: ^Renderer) {
 	assert(r != nil)
 	limits, status := wg.DeviceGetLimits(g.device)
-	alignment := u64(limits.minUniformBufferOffsetAlignment)
-	if status != .Success || alignment == 0 do alignment = 256
-	r.uniforms = {
-		buffer = wg.DeviceCreateBuffer(g.device, &{
+	r.uniform_alignment = u64(limits.minUniformBufferOffsetAlignment)
+	if status != .Success || r.uniform_alignment == 0 do r.uniform_alignment = 256
+	r.active_stream_slot = -1
+	for &slot in r.stream_slots {
+		slot.geometry_buffer = wg.DeviceCreateBuffer(g.device, &{
+			usage = {.Vertex, .Index, .CopyDst},
+			size = GEOMETRY_STREAM_BYTES,
+		})
+		slot.uniform_buffer = wg.DeviceCreateBuffer(g.device, &{
 			usage = {.Uniform, .CopyDst},
 			size = UNIFORM_STREAM_BYTES,
-		}),
-		arena = {capacity = UNIFORM_STREAM_BYTES},
-		alignment = alignment,
+		})
+		_stats_buffer_created(false)
+		_stats_buffer_created(false)
+		assert(slot.geometry_buffer != nil)
+		assert(slot.uniform_buffer != nil)
 	}
-	_stats_buffer_created(false)
-	assert(r.uniforms.buffer != nil)
-	assert(r.uniforms.alignment > 0)
+}
+
+@(private)
+_stream_slots_poll :: proc(slots: []Stream_Slot, completed: u64) {
+	for &slot in slots {
+		if slot.state == .Submitted && completed >= slot.ticket {
+			slot.geometry_write = 0
+			slot.uniform_write = 0
+			slot.ticket = 0
+			slot.state = .Free
+		}
+	}
+}
+
+@(private)
+_stream_slots_acquire :: proc(slots: []Stream_Slot, completed: u64) -> i32 {
+	_stream_slots_poll(slots, completed)
+	for &slot, index in slots {
+		if slot.state == .Free {
+			slot.geometry_write = 0
+			slot.uniform_write = 0
+			slot.ticket = 0
+			slot.state = .Recording
+			return i32(index)
+		}
+	}
+	return -1
+}
+
+@(private)
+_stream_slot_acquire :: proc(r: ^Renderer, completed: u64) -> bool {
+	assert(r != nil)
+	assert(r.active_stream_slot < 0)
+	r.active_stream_slot = _stream_slots_acquire(r.stream_slots[:], completed)
+	return r.active_stream_slot >= 0
+}
+
+@(private)
+_stream_slot_submit :: proc(slot: ^Stream_Slot, ticket: u64) -> bool {
+	assert(slot != nil)
+	if slot.state != .Recording || ticket == 0 do return false
+	slot.ticket = ticket
+	slot.state = .Submitted
+	return true
+}
+
+@(private)
+_stream_slot_submitted :: proc(r: ^Renderer, ticket: u64) -> bool {
+	assert(r != nil)
+	if r.active_stream_slot < 0 do return false
+	ok := _stream_slot_submit(&r.stream_slots[r.active_stream_slot], ticket)
+	if ok do r.active_stream_slot = -1
+	return ok
+}
+
+@(private)
+_stream_slot_abandon :: proc(r: ^Renderer) {
+	assert(r != nil)
+	if r.active_stream_slot < 0 do return
+	slot := &r.stream_slots[r.active_stream_slot]
+	assert(slot.state == .Recording)
+	slot.geometry_write = 0
+	slot.uniform_write = 0
+	slot.ticket = 0
+	slot.state = .Free
+	r.active_stream_slot = -1
+}
+
+@(private)
+_stream_slot_reserve_indexed :: proc(slot: ^Stream_Slot, vertex_bytes, index_bytes, capacity: u64) -> (vertex, index: u64, ok: bool) {
+	assert(slot != nil)
+	assert(slot.state == .Recording)
+	assert(vertex_bytes > 0)
+	assert(index_bytes > 0)
+	vertex = _align_u64(slot.geometry_write, GEOMETRY_STREAM_ALIGN)
+	index = _align_u64(vertex + vertex_bytes, GEOMETRY_STREAM_ALIGN)
+	end := index + index_bytes
+	if end > capacity do return 0, 0, false
+	slot.geometry_write = end
+	return vertex, index, true
+}
+
+@(private)
+_stream_slot_reserve_uniform :: proc(slot: ^Stream_Slot, size, alignment, capacity: u64) -> (offset: u64, ok: bool) {
+	assert(slot != nil)
+	assert(slot.state == .Recording)
+	assert(size > 0)
+	assert(alignment > 0)
+	offset = _align_u64(slot.uniform_write, alignment)
+	if offset + size > capacity do return 0, false
+	slot.uniform_write = offset + size
+	return offset, true
 }
 
 @(private)
@@ -650,17 +702,18 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 	assert(r != nil)
 	assert(data != nil)
 	assert(size > 0)
-	_uniform_poll(r)
-	_, offset, ok := _stream_reserve(&r.uniforms.arena, size, r.uniforms.alignment)
+	if r.active_stream_slot < 0 do return 0, false
+	slot := &r.stream_slots[r.active_stream_slot]
+	offset, ok := _stream_slot_reserve_uniform(slot, size, r.uniform_alignment, UNIFORM_STREAM_BYTES)
 	if !ok {
 		_stats_reservation_failure(true)
 		return 0, false
 	}
-	wg.QueueWriteBuffer(g.queue, r.uniforms.buffer, offset, data, uint(size))
+	wg.QueueWriteBuffer(g.queue, slot.uniform_buffer, offset, data, uint(size))
 	when RENDER_STATS_ENABLED {
 		renderer_stats_current.peak_uniform_arena_bytes = max(
 			renderer_stats_current.peak_uniform_arena_bytes,
-			r.uniforms.arena.write - r.uniforms.arena.reclaim,
+			slot.uniform_write,
 		)
 	}
 	assert(offset <= u64(max(u32)))
@@ -668,103 +721,10 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 }
 
 @(private)
-_uniform_poll :: proc(r: ^Renderer) {
+_active_uniform_buffer :: proc(r: ^Renderer) -> wg.Buffer {
 	assert(r != nil)
-	completed := _submission_completed(&g.submissions)
-	_stream_poll(&r.uniforms.arena, completed)
-	assert(r.uniforms.arena.write - r.uniforms.arena.reclaim <= r.uniforms.arena.capacity)
-}
-
-@(private)
-_uniform_submitted :: proc(r: ^Renderer, retirement: u64) -> bool {
-	assert(r != nil)
-	return _stream_submit(&r.uniforms.arena, retirement)
-}
-
-@(private)
-_stream_reserve_indexed :: proc(arena: ^Stream_Arena, vertex_bytes, index_bytes: u64) -> (vertex, index: u64, ok: bool) {
-	assert(arena != nil)
-	assert(arena.capacity > 0)
-	assert(vertex_bytes > 0)
-	assert(index_bytes > 0)
-	if vertex_bytes + index_bytes > arena.capacity do return 0, 0, false
-
-	vertex_start := _align_u64(arena.write, GEOMETRY_STREAM_ALIGN)
-	vertex = vertex_start % arena.capacity
-	if vertex + vertex_bytes > arena.capacity {
-		vertex_start = _align_u64(vertex_start + arena.capacity - vertex, GEOMETRY_STREAM_ALIGN)
-		vertex = vertex_start % arena.capacity
-	}
-	index_start := _align_u64(vertex_start + vertex_bytes, GEOMETRY_STREAM_ALIGN)
-	index = index_start % arena.capacity
-	if index + index_bytes > arena.capacity {
-		index_start = _align_u64(index_start + arena.capacity - index, GEOMETRY_STREAM_ALIGN)
-		index = index_start % arena.capacity
-	}
-	end := index_start + index_bytes
-	if end - arena.reclaim > arena.capacity do return 0, 0, false
-
-	arena.write = end
-	assert(vertex + vertex_bytes <= arena.capacity)
-	assert(index + index_bytes <= arena.capacity)
-	assert(arena.write - arena.reclaim <= arena.capacity)
-	return vertex, index, true
-}
-
-@(private)
-_stream_reserve :: proc(arena: ^Stream_Arena, size, alignment: u64) -> (virtual, physical: u64, ok: bool) {
-	assert(arena != nil)
-	assert(arena.capacity > 0)
-	assert(size > 0)
-	assert(alignment > 0)
-	if size > arena.capacity do return 0, 0, false
-
-	virtual = _align_u64(arena.write, alignment)
-	physical = virtual % arena.capacity
-	if physical + size > arena.capacity {
-		virtual = _align_u64(virtual + arena.capacity - physical, alignment)
-		physical = virtual % arena.capacity
-	}
-	if virtual + size - arena.reclaim > arena.capacity do return 0, 0, false
-
-	arena.write = virtual + size
-	assert(physical + size <= arena.capacity)
-	assert(arena.write >= arena.reclaim)
-	assert(arena.write - arena.reclaim <= arena.capacity)
-	return virtual, physical, true
-}
-
-@(private)
-_stream_submit :: proc(arena: ^Stream_Arena, ticket: u64) -> bool {
-	assert(arena != nil)
-	assert(arena.frame_begin <= arena.write)
-	if arena.frame_begin == arena.write do return true
-	if ticket == 0 || arena.count >= STREAM_RETIREMENTS_MAX do return false
-
-	index := (arena.head + arena.count) % STREAM_RETIREMENTS_MAX
-	arena.retirements[index] = {ticket = ticket, end = arena.write}
-	arena.count += 1
-	arena.frame_begin = arena.write
-	assert(arena.count <= STREAM_RETIREMENTS_MAX)
-	return true
-}
-
-@(private)
-_stream_poll :: proc(arena: ^Stream_Arena, completed: u64) {
-	assert(arena != nil)
-	for arena.count > 0 {
-		retirement := &arena.retirements[arena.head]
-		if completed < retirement.ticket do break
-		assert(retirement.end >= arena.reclaim)
-		assert(retirement.end <= arena.frame_begin)
-		arena.reclaim = retirement.end
-		retirement^ = {}
-		arena.head = (arena.head + 1) % STREAM_RETIREMENTS_MAX
-		arena.count -= 1
-	}
-	assert(arena.reclaim <= arena.frame_begin)
-	assert(arena.frame_begin <= arena.write)
-	assert(arena.write - arena.reclaim <= arena.capacity)
+	if r.active_stream_slot < 0 do return nil
+	return r.stream_slots[r.active_stream_slot].uniform_buffer
 }
 
 @(private)

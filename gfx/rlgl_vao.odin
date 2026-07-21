@@ -278,10 +278,10 @@ RlDrawVertexArrayInstanced :: proc(offset, count, instances: i32) {
 	if pipe == nil do return
 
 	u_offset, ok := _uniform_upload(&g.rend, raw_data(se.ushadow), u64(len(se.ushadow)))
-	if !ok do return
+	if !ok || g.rend.active_stream_slot < 0 do return
 	wg.RenderPassEncoderSetPipeline(pass, pipe)
 	_stats_pipeline_switch()
-	wg.RenderPassEncoderSetBindGroup(pass, 0, se.u_bind, {u_offset})
+	wg.RenderPassEncoderSetBindGroup(pass, 0, se.u_bind[g.rend.active_stream_slot], {u_offset})
 	_stats_bind_group_switches(1)
 	for b, i in v.buffers {
 		if b.buf != nil {

@@ -26,9 +26,10 @@ Gpu_3D_Load_Action :: enum {
 Gpu_3D_Pass :: struct {
 	encoder:    wg.CommandEncoder,
 	pass:       wg.RenderPassEncoder,
-	target:     ^Gpu_3D_Target,
-	generation: u64,
-	active:     bool,
+	target:      ^Gpu_3D_Target,
+	generation:  u64,
+	active:      bool,
+	owns_stream: bool,
 }
 
 Gpu_3D_Vertex :: struct {
@@ -61,7 +62,7 @@ Gpu_3D_Pipeline_Entry :: struct {
 @(private) gpu_3d_pipeline_count: u32
 @(private) gpu_3d_shader: wg.ShaderModule
 @(private) gpu_3d_layout: wg.BindGroupLayout
-@(private) gpu_3d_bind: wg.BindGroup
+@(private) gpu_3d_bind: [STREAM_SLOT_COUNT]wg.BindGroup
 @(private) gpu_3d_generation: u64
 
 GPU_3D_SHADER :: `
@@ -178,6 +179,11 @@ begin_gpu_3d :: proc(
 	color_view := _texture_view(target.texture.texture.id)
 	depth_view := _texture_view(target.texture.depth.id)
 	if color_view == nil || depth_view == nil do return {}, false
+	owns_stream := !g.frame.has_frame
+	if owns_stream && !_stream_slot_acquire(&g.rend, _submission_completed(&g.submissions)) {
+		_stats_stream_slot_exhaustion()
+		return {}, false
+	}
 
 	color := wg.RenderPassColorAttachment{
 		view = color_view,
@@ -208,6 +214,7 @@ begin_gpu_3d :: proc(
 		target = target,
 		generation = gpu_3d_generation,
 		active = true,
+		owns_stream = owns_stream,
 	}
 	_gpu_3d_set_camera(&result, camera)
 	return result, true
@@ -234,9 +241,9 @@ draw_gpu_mesh :: proc(
 		color = col_f(material.color),
 	}
 	offset, ok := _uniform_upload(&g.rend, &uniforms, size_of(uniforms))
-	if !ok do return
+	if !ok || g.rend.active_stream_slot < 0 do return
 	wg.RenderPassEncoderSetPipeline(pass.pass, pipeline)
-	wg.RenderPassEncoderSetBindGroup(pass.pass, 0, gpu_3d_bind, {offset})
+	wg.RenderPassEncoderSetBindGroup(pass.pass, 0, gpu_3d_bind[g.rend.active_stream_slot], {offset})
 	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderSetIndexBuffer(pass.pass, entry.index_buffer, .Uint32, 0, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderDrawIndexed(pass.pass, entry.index_count, 1, 0, 0, 0)
@@ -252,9 +259,9 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	cmd := wg.CommandEncoderFinish(pass.encoder, nil)
 	wg.QueueSubmit(g.queue, {cmd})
 	_stats_queue_submission()
-	if !g.frame.has_frame {
+	if pass.owns_stream {
 		retirement := _submission_track(&g.submissions)
-		_uniform_submitted(&g.rend, retirement)
+		if !_stream_slot_submitted(&g.rend, retirement) do _stats_stream_retirement_failure()
 	}
 	wg.CommandBufferRelease(cmd)
 	wg.CommandEncoderRelease(pass.encoder)
@@ -367,15 +374,17 @@ _gpu_3d_init_shared :: proc() {
 			},
 		},
 	})
-	gpu_3d_bind = wg.DeviceCreateBindGroup(g.device, &{
-		layout = gpu_3d_layout,
-		entryCount = 1,
-		entries = &wg.BindGroupEntry{
-			binding = 0,
-			buffer = g.rend.uniforms.buffer,
-			size = size_of(Gpu_3D_Uniforms),
-		},
-	})
+	for &bind, index in gpu_3d_bind {
+		bind = wg.DeviceCreateBindGroup(g.device, &{
+			layout = gpu_3d_layout,
+			entryCount = 1,
+			entries = &wg.BindGroupEntry{
+				binding = 0,
+				buffer = g.rend.stream_slots[index].uniform_buffer,
+				size = size_of(Gpu_3D_Uniforms),
+			},
+		})
+	}
 	assert(gpu_3d_shader != nil)
 	assert(gpu_3d_layout != nil)
 }

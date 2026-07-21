@@ -35,7 +35,7 @@ Shader_Entry :: struct {
 	uniforms:     []Shader_Uniform,
 	ushadow:      []u8,
 	u_layout:     wg.BindGroupLayout,
-	u_bind:       wg.BindGroup,
+	u_bind:       [STREAM_SLOT_COUNT]wg.BindGroup,
 
 	tex_names:    []string, // extra texture binding names (group 3)
 	extra_count:  int,
@@ -197,15 +197,17 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 			},
 		},
 	})
-	e.u_bind = wg.DeviceCreateBindGroup(g.device, &{
-		layout = e.u_layout,
-		entryCount = 1,
-		entries = &wg.BindGroupEntry{
-			binding = 0,
-			buffer = g.rend.uniforms.buffer,
-			size = u64(total),
-		},
-	})
+	for &bind, index in e.u_bind {
+		bind = wg.DeviceCreateBindGroup(g.device, &{
+			layout = e.u_layout,
+			entryCount = 1,
+			entries = &wg.BindGroupEntry{
+				binding = 0,
+				buffer = g.rend.stream_slots[index].uniform_buffer,
+				size = u64(total),
+			},
+		})
+	}
 
 	e.tex_names = _reflect_textures(src)
 	e.extra_count = len(e.tex_names)
@@ -242,7 +244,9 @@ UnloadShader :: proc(shader: Shader) {
 	}
 	if e.extra_bind != nil do wg.BindGroupRelease(e.extra_bind)
 	if e.extra_layout != nil do wg.BindGroupLayoutRelease(e.extra_layout)
-	if e.u_bind != nil do wg.BindGroupRelease(e.u_bind)
+	for bind in e.u_bind {
+		if bind != nil do wg.BindGroupRelease(bind)
+	}
 	if e.u_layout != nil do wg.BindGroupLayoutRelease(e.u_layout)
 	if e.module != nil do wg.ShaderModuleRelease(e.module)
 	delete(e.ushadow)
@@ -440,7 +444,8 @@ _shader_flush :: proc(
 		wg.RenderPassEncoderSetBindGroup(pass, 1, r.cur_bind)
 		_stats_bind_group_switches(1)
 	}
-	wg.RenderPassEncoderSetBindGroup(pass, 2, e.u_bind, {u_offset})
+	if r.active_stream_slot < 0 do return false
+	wg.RenderPassEncoderSetBindGroup(pass, 2, e.u_bind[r.active_stream_slot], {u_offset})
 	_stats_bind_group_switches(1)
 	if e.extra_count > 0 && e.extra_bind != nil {
 		wg.RenderPassEncoderSetBindGroup(pass, 3, e.extra_bind)

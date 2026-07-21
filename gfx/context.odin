@@ -244,12 +244,16 @@ BeginDrawing :: proc() {
 		return
 	}
 	g.frame.view = wg.TextureCreateView(g.frame.surf_tex.texture, nil)
+	if !renderer_frame_begin(&g.rend) {
+		wg.TextureViewRelease(g.frame.view)
+		g.frame.has_frame = false
+		return
+	}
 	g.frame.encoder = wg.DeviceCreateCommandEncoder(g.device, nil)
 	g.frame.clear_color = Color{0, 0, 0, 255}
 	g.frame.pass_begun = false
 	g.frame.has_frame = true
 	g.frame.scissor_on = false
-	renderer_frame_begin(&g.rend)
 }
 
 ClearBackground :: proc(c: Color) {
@@ -304,17 +308,13 @@ EndDrawing :: proc() {
 		wg.QueueSubmit(g.queue, {cmd})
 		_stats_queue_submission()
 		retirement := _submission_track(&g.submissions)
-		geometry_ok := _geometry_submitted(&g.rend, retirement)
-		uniform_ok := _uniform_submitted(&g.rend, retirement)
-		if !geometry_ok || !uniform_ok do _stats_stream_retirement_failure()
+		if !_stream_slot_submitted(&g.rend, retirement) do _stats_stream_retirement_failure()
 		wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(g.frame.encoder)
 		wg.SurfacePresent(g.surface)
 		wg.TextureViewRelease(g.frame.view)
 		g.frame.has_frame = false
 	} else {
-		// frame was skipped (surface not ready): drop any accumulated draw
-		// state so it can't flush into the next frame's pass with stale binds.
 		clear(&g.rend.verts)
 		clear(&g.rend.indices)
 	}

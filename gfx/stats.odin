@@ -20,6 +20,7 @@ Renderer_Stats :: struct {
 	peak_uniform_arena_bytes:      u64,
 	geometry_reservation_failures: u32,
 	uniform_reservation_failures:  u32,
+	stream_slot_exhaustions:       u32,
 	submission_tracking_failures:  u32,
 	stream_retirement_failures:    u32,
 	composite_alpha_mode:          wg.CompositeAlphaMode,
@@ -125,6 +126,13 @@ _stats_reservation_failure :: proc(uniform: bool) {
 		} else {
 			renderer_stats_current.geometry_reservation_failures += 1
 		}
+	}
+}
+
+@(private)
+_stats_stream_slot_exhaustion :: proc() {
+	when RENDER_STATS_ENABLED {
+		renderer_stats_current.stream_slot_exhaustions += 1
 	}
 }
 
