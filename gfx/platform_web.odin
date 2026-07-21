@@ -24,6 +24,9 @@ foreign dom {
 	@(link_name = "ingot_canvas_css_height")   _js_css_height :: proc() -> f64 ---
 	@(link_name = "ingot_device_pixel_ratio")  _js_dpr        :: proc() -> f64 ---
 	@(link_name = "ingot_set_cursor")          _js_set_cursor :: proc(cur: i32) ---
+	@(link_name = "ingot_clipboard_len")       _js_clipboard_len  :: proc() -> i32 ---
+	@(link_name = "ingot_clipboard_copy")      _js_clipboard_copy :: proc(dst: rawptr, cap: i32) -> i32 ---
+	@(link_name = "ingot_set_clipboard")       _js_set_clipboard  :: proc(text: cstring) ---
 	@(link_name = "ingot_is_fullscreen")       _js_is_fullscreen     :: proc() -> i32 ---
 	@(link_name = "ingot_toggle_fullscreen")   _js_toggle_fullscreen :: proc() ---
 }
@@ -254,11 +257,18 @@ platform_set_mouse_cursor :: proc(cursor: MouseCursor) {
 
 @(private)
 platform_get_clipboard :: proc() -> string {
-	return ""
+	length := _js_clipboard_len()
+	if length <= 0 do return ""
+	buffer := make([]byte, length, context.temp_allocator)
+	copied := _js_clipboard_copy(raw_data(buffer), length)
+	if copied <= 0 do return ""
+	return string(buffer[:copied])
 }
 
 @(private)
-platform_set_clipboard :: proc(text: cstring) {}
+platform_set_clipboard :: proc(text: cstring) {
+	_js_set_clipboard(text)
+}
 
 @(private)
 platform_drop_init :: proc() {}

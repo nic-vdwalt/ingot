@@ -33,6 +33,36 @@ Blend_Slot :: enum {
 	Custom,
 }
 
+GEOMETRY_STREAM_INITIAL_BYTES :: u64(256 * 1024)
+GEOMETRY_STREAM_MAX_BYTES :: u64(64 * 1024 * 1024)
+GEOMETRY_STREAM_ALIGN :: u64(4)
+UNIFORM_STREAM_BYTES :: u64(16 * 1024 * 1024)
+
+Geometry_Stream :: struct {
+	buffer:              wg.Buffer,
+	capacity:            u64,
+	cursor:              u64,
+	used:                u64,
+	retirement:          u64,
+	pending:             bool,
+	in_flight:           bool,
+	grow_pending:        bool,
+	fallback_buffers:    [dynamic]wg.Buffer,
+	fallback_retirement: u64,
+}
+
+Uniform_Stream :: struct {
+	buffer:           wg.Buffer,
+	capacity:         u64,
+	cursor:           u64,
+	alignment:        u64,
+	retirement:       u64,
+	pending:          bool,
+	in_flight:        bool,
+	transient_binds:  [dynamic]wg.BindGroup,
+	bind_retirement:  u64,
+}
+
 Renderer :: struct {
 	shader: wg.ShaderModule, // kept alive so Custom pipelines can be rebuilt
 	pipes:  [Pipe_Kind][Blend_Slot]wg.RenderPipeline,
@@ -59,6 +89,7 @@ Renderer :: struct {
 
 	// current run
 	verts:     [dynamic]Vertex,
+	indices:   [dynamic]u32,
 	cur_kind:  Pipe_Kind,
 	cur_bind:  wg.BindGroup,
 	cur_blend: Blend_Slot,
@@ -78,8 +109,8 @@ Renderer :: struct {
 	cust_dst: wg.BlendFactor,
 	cust_op:  wg.BlendOperation,
 
-	// transient per-frame vertex buffers (released at next frame begin)
-	frame_buffers: [dynamic]wg.Buffer,
+	geometry: Geometry_Stream,
+	uniforms: Uniform_Stream,
 
 	proj_w, proj_h: i32,
 }
@@ -262,6 +293,7 @@ renderer_init :: proc(r: ^Renderer) {
 		},
 	})
 	r.shader = shader
+	_uniform_stream_init(r)
 
 	// group(0): projection uniform
 	r.ubind_layout = wg.DeviceCreateBindGroupLayout(g.device, &{
@@ -315,9 +347,14 @@ renderer_init :: proc(r: ^Renderer) {
 }
 
 renderer_shutdown :: proc(r: ^Renderer) {
-	for b in r.frame_buffers do wg.BufferRelease(b)
-	delete(r.frame_buffers)
+	for bind in r.uniforms.transient_binds do wg.BindGroupRelease(bind)
+	delete(r.uniforms.transient_binds)
+	if r.uniforms.buffer != nil do wg.BufferRelease(r.uniforms.buffer)
+	if r.geometry.buffer != nil do wg.BufferRelease(r.geometry.buffer)
+	for buffer in r.geometry.fallback_buffers do wg.BufferRelease(buffer)
+	delete(r.geometry.fallback_buffers)
 	delete(r.verts)
+	delete(r.indices)
 	delete(r.model_stack)
 	for kind in Pipe_Kind {
 		for slot in Blend_Slot {
@@ -341,10 +378,10 @@ renderer_shutdown :: proc(r: ^Renderer) {
 }
 
 renderer_frame_begin :: proc(r: ^Renderer) {
-	// release previous frame's transient vertex buffers
-	for b in r.frame_buffers do wg.BufferRelease(b)
-	clear(&r.frame_buffers)
+	_geometry_poll(r)
+	_uniform_poll(r)
 	clear(&r.verts)
+	clear(&r.indices)
 	r.cur_kind = .Solid
 	r.cur_bind = nil
 	r.cur_blend = .Alpha
@@ -383,25 +420,27 @@ push_quad :: proc(r: ^Renderer, d: Rectangle, s: Rectangle, col: [4]f32) {
 	x1, y1 := d.x + d.width + ox, d.y + d.height + oy
 	u0, v0 := s.x, s.y
 	u1, v1 := s.x + s.width, s.y + s.height
+	base := u32(len(r.verts))
 	append(&r.verts,
 		Vertex{{x0, y0}, col, {u0, v0}},
 		Vertex{{x0, y1}, col, {u0, v1}},
 		Vertex{{x1, y0}, col, {u1, v0}},
-		Vertex{{x1, y0}, col, {u1, v0}},
-		Vertex{{x0, y1}, col, {u0, v1}},
 		Vertex{{x1, y1}, col, {u1, v1}},
 	)
+	append(&r.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }
 
 @(private)
 push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 	if !g.frame.has_frame do return
 	o := r.model_off
+	base := u32(len(r.verts))
 	append(&r.verts,
 		Vertex{{a.x + o.x, a.y + o.y}, col, {0, 0}},
 		Vertex{{b.x + o.x, b.y + o.y}, col, {0, 0}},
 		Vertex{{c.x + o.x, c.y + o.y}, col, {0, 0}},
 	)
+	append(&r.indices, base, base + 1, base + 2)
 }
 
 // push_quad4 emits an arbitrary (possibly rotated) quad with per-corner uv.
@@ -414,14 +453,14 @@ push_quad4 :: proc(r: ^Renderer, tl, tr, br, bl: [2]f32, uv_tl, uv_tr, uv_br, uv
 	tro := [2]f32{tr.x + o.x, tr.y + o.y}
 	bro := [2]f32{br.x + o.x, br.y + o.y}
 	blo := [2]f32{bl.x + o.x, bl.y + o.y}
+	base := u32(len(r.verts))
 	append(&r.verts,
 		Vertex{tlo, col, uv_tl},
 		Vertex{blo, col, uv_bl},
 		Vertex{tro, col, uv_tr},
-		Vertex{tro, col, uv_tr},
-		Vertex{blo, col, uv_bl},
 		Vertex{bro, col, uv_br},
 	)
+	append(&r.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }
 
 // --- rlgl matrix-stack backing (2D model translation) ----------------------
@@ -446,27 +485,217 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder) {
 	n := len(r.verts)
 	if n == 0 do return
 
-	vbuf := wg.DeviceCreateBufferWithData(g.device, &{usage = {.Vertex}}, r.verts[:])
-	append(&r.frame_buffers, vbuf)
+	index_count := len(r.indices)
+	assert(index_count > 0)
+	vertex_bytes := u64(n) * size_of(Vertex)
+	index_bytes := u64(index_count) * size_of(u32)
+	vbuf, vertex_offset, _ := _geometry_upload(r, raw_data(r.verts), vertex_bytes, {.Vertex})
+	ibuf, index_offset, _ := _geometry_upload(r, raw_data(r.indices), index_bytes, {.Index})
+	if vbuf == nil || ibuf == nil do return
+	_stats_flush(u64(n), vertex_bytes + index_bytes)
+	when RENDER_STATS_ENABLED {
+		renderer_stats_current.indices_uploaded += u64(index_count)
+	}
 
 	// Custom-shader path: an active shader overrides the pipeline + bind groups
 	// for the current draw (fullscreen post-process / custom 2D passes).
 	if r.active_shader != 0 {
-		if _shader_flush(r, pass, vbuf, u32(n)) {
+		if _shader_flush(r, pass, vbuf, vertex_offset, ibuf, index_offset, u32(index_count)) {
 			clear(&r.verts)
+			clear(&r.indices)
 			return
 		}
 	}
 
 	wg.RenderPassEncoderSetPipeline(pass, _pipe_for(r, r.cur_kind, r.cur_blend))
+	_stats_pipeline_switch()
 	wg.RenderPassEncoderSetBindGroup(pass, 0, r.cur_u != nil ? r.cur_u : r.ubind)
+	_stats_bind_group_switches(1)
 	if r.cur_kind != .Solid && r.cur_bind != nil {
 		wg.RenderPassEncoderSetBindGroup(pass, 1, r.cur_bind)
+		_stats_bind_group_switches(1)
 	}
-	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vbuf, 0, u64(n * size_of(Vertex)))
-	wg.RenderPassEncoderDraw(pass, u32(n), 1, 0, 0)
+	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vbuf, vertex_offset, vertex_bytes)
+	wg.RenderPassEncoderSetIndexBuffer(pass, ibuf, .Uint32, index_offset, index_bytes)
+	wg.RenderPassEncoderDrawIndexed(pass, u32(index_count), 1, 0, 0, 0)
 
 	clear(&r.verts)
+	clear(&r.indices)
+}
+
+@(private)
+_geometry_upload :: proc(
+	r: ^Renderer,
+	data: rawptr,
+	size: u64,
+	usage: wg.BufferUsageFlags,
+) -> (wg.Buffer, u64, bool) {
+	assert(r != nil)
+	assert(data != nil)
+	assert(size > 0)
+	_geometry_poll(r)
+	stream := &r.geometry
+	if stream.buffer == nil || stream.grow_pending {
+		_geometry_create(stream, max(size, GEOMETRY_STREAM_INITIAL_BYTES), usage)
+	}
+	offset := _align_u64(stream.cursor, GEOMETRY_STREAM_ALIGN)
+	if offset + size > stream.capacity {
+		stream.grow_pending = true
+		return nil, 0, false
+	}
+	wg.QueueWriteBuffer(g.queue, stream.buffer, offset, data, uint(size))
+	stream.cursor = offset + size
+	stream.used = max(stream.used, stream.cursor)
+	stream.pending = true
+	when RENDER_STATS_ENABLED {
+		renderer_stats_current.peak_geometry_arena_bytes = max(
+			renderer_stats_current.peak_geometry_arena_bytes,
+			stream.used,
+		)
+	}
+	return stream.buffer, offset, true
+}
+
+@(private)
+_geometry_create :: proc(stream: ^Geometry_Stream, need: u64, usage: wg.BufferUsageFlags) {
+	assert(stream != nil)
+	assert(need > 0)
+	if stream.buffer != nil && stream.in_flight do return
+	capacity := GEOMETRY_STREAM_INITIAL_BYTES
+	for capacity < need && capacity < GEOMETRY_STREAM_MAX_BYTES do capacity *= 2
+	if capacity > GEOMETRY_STREAM_MAX_BYTES do capacity = GEOMETRY_STREAM_MAX_BYTES
+	if capacity < need do return
+	growth := stream.buffer != nil
+	if stream.buffer != nil do wg.BufferRelease(stream.buffer)
+	stream^ = {
+		buffer = wg.DeviceCreateBuffer(g.device, &{
+			usage = {.Vertex, .Index, .CopyDst},
+			size = capacity,
+		}),
+		capacity = capacity,
+	}
+	_stats_buffer_created(growth)
+	assert(stream.buffer != nil)
+	assert(stream.capacity >= need)
+}
+
+@(private)
+_geometry_poll :: proc(r: ^Renderer) {
+	assert(r != nil)
+	stream := &r.geometry
+	completed := _submission_completed(&g.submissions)
+	if stream.in_flight && completed >= stream.retirement {
+		stream.in_flight = false
+		stream.retirement = 0
+		stream.cursor = 0
+		stream.used = 0
+	}
+	if stream.fallback_retirement > 0 && completed >= stream.fallback_retirement {
+		for buffer in stream.fallback_buffers do wg.BufferRelease(buffer)
+		clear(&stream.fallback_buffers)
+		stream.fallback_retirement = 0
+	}
+	if stream.grow_pending && !stream.in_flight {
+		need := min(max(stream.capacity * 2, GEOMETRY_STREAM_INITIAL_BYTES), GEOMETRY_STREAM_MAX_BYTES)
+		_geometry_create(stream, need, {.Vertex, .Index})
+		stream.grow_pending = false
+	}
+	assert(stream.cursor <= stream.capacity || stream.buffer == nil)
+}
+
+@(private)
+_geometry_submitted :: proc(r: ^Renderer, retirement: u64) {
+	assert(r != nil)
+	if !r.geometry.pending do return
+	if retirement == 0 {
+		r.geometry.grow_pending = true
+		return
+	}
+	r.geometry.pending = false
+	r.geometry.in_flight = true
+	r.geometry.retirement = retirement
+	if len(r.geometry.fallback_buffers) > 0 {
+		r.geometry.fallback_retirement = retirement
+	}
+	assert(r.geometry.retirement > 0)
+}
+
+@(private)
+_uniform_stream_init :: proc(r: ^Renderer) {
+	assert(r != nil)
+	limits, status := wg.DeviceGetLimits(g.device)
+	alignment := u64(limits.minUniformBufferOffsetAlignment)
+	if status != .Success || alignment == 0 do alignment = 256
+	r.uniforms = {
+		buffer = wg.DeviceCreateBuffer(g.device, &{
+			usage = {.Uniform, .CopyDst},
+			size = UNIFORM_STREAM_BYTES,
+		}),
+		capacity = UNIFORM_STREAM_BYTES,
+		alignment = alignment,
+	}
+	_stats_buffer_created(false)
+	assert(r.uniforms.buffer != nil)
+	assert(r.uniforms.alignment > 0)
+}
+
+@(private)
+_uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
+	assert(r != nil)
+	assert(data != nil)
+	assert(size > 0)
+	_uniform_poll(r)
+	offset := _align_u64(r.uniforms.cursor, r.uniforms.alignment)
+	if offset + size > r.uniforms.capacity do return 0, false
+	wg.QueueWriteBuffer(g.queue, r.uniforms.buffer, offset, data, uint(size))
+	r.uniforms.cursor = offset + size
+	r.uniforms.pending = true
+	when RENDER_STATS_ENABLED {
+		renderer_stats_current.peak_uniform_arena_bytes = max(
+			renderer_stats_current.peak_uniform_arena_bytes,
+			r.uniforms.cursor,
+		)
+	}
+	assert(offset <= u64(max(u32)))
+	return u32(offset), true
+}
+
+@(private)
+_uniform_poll :: proc(r: ^Renderer) {
+	assert(r != nil)
+	completed := _submission_completed(&g.submissions)
+	if r.uniforms.in_flight && completed >= r.uniforms.retirement {
+		r.uniforms.in_flight = false
+		r.uniforms.retirement = 0
+		r.uniforms.cursor = 0
+	}
+	if r.uniforms.bind_retirement > 0 && completed >= r.uniforms.bind_retirement {
+		for bind in r.uniforms.transient_binds do wg.BindGroupRelease(bind)
+		clear(&r.uniforms.transient_binds)
+		r.uniforms.bind_retirement = 0
+	}
+	assert(r.uniforms.cursor <= r.uniforms.capacity)
+}
+
+@(private)
+_uniform_submitted :: proc(r: ^Renderer, retirement: u64) {
+	assert(r != nil)
+	if !r.uniforms.pending || retirement == 0 do return
+	r.uniforms.pending = false
+	r.uniforms.in_flight = true
+	r.uniforms.retirement = retirement
+	if len(r.uniforms.transient_binds) > 0 {
+		r.uniforms.bind_retirement = retirement
+	}
+	assert(r.uniforms.retirement > 0)
+}
+
+@(private)
+_align_u64 :: proc(value, alignment: u64) -> u64 {
+	assert(alignment > 0)
+	aligned := (value + alignment - 1) / alignment * alignment
+	assert(aligned >= value)
+	return aligned
 }
 
 // col_f converts an 8-bit Color to normalized rgba for the vertex stream.

@@ -1,381 +1,500 @@
-# ingot:gfx — Best-practice WebGPU renderer + API modernization
+# ingot:gfx — WebGPU renderer modernization (reviewed v2)
 
-> Status: **PLAN (not yet implemented).** This document is the agreed design for
-> modernizing how `ingot:gfx` uses `vendor:wgpu`, plus an additive idiomatic-Odin
-> API. It also records a consumer-compatibility analysis (see
-> [Consumer compatibility](#consumer-compatibility)) that gates how some
-> workstreams may safely land.
+> Destination when approved: `ingot/docs/rendering.md`.
+>
+> Status: **reviewed plan only — not implemented**.
+>
+> This supersedes the first draft. The review found correctness problems in the
+> original persistent-buffer, dynamic-uniform, indexed-batch, depth-pass, API
+> aliasing, and verification proposals. Those designs must not be implemented as
+> originally written.
 
-## Overview
+## Review verdict
 
-Keep ingot in **Odin**. Modernize how `ingot:gfx` uses `vendor:wgpu` so the
-renderer follows current WebGPU best practice, and (separately) evolve the public
-API away from raylib name-mimicry toward idiomatic Odin (`Rect`, `Vec2`,
-`draw_text`, an explicit `Canvas`/`Frame` handle). Five independent workstreams,
-native-first, each shippable on its own:
+The direction is sound, but the original plan is **not safe to implement
+verbatim**.
 
-1. **Buffers** — replace per-flush `DeviceCreateBufferWithData` with a persistent,
-   growing vertex+index buffer written via `QueueWriteBuffer`; quads become
-   4 verts + shared index buffer.
-2. **Uniforms & bind groups** — collapse `ubuf`/`rt_ubuf` into one uniform buffer
-   with dynamic offsets; cut needless flush triggers.
-3. **Real GPU 3D** — depth-tested, instanced mesh pipeline replacing the
-   CPU-projected billboard/disc approximation in `render3d.odin`.
-4. **Render-target correctness** — fix Y-flip across the multi-pass bloom chain and
-   macOS premultiplied transparent-window blending.
-5. **API modernization** — an idiomatic Odin façade (`Canvas`, `Rect`, `Vec2`,
-   `draw_*`) layered over the same renderer, with raylib names kept as a thin
-   deprecated shim for migration.
+### Critical corrections
 
-Workstreams 1–4 are internal (no call-site churn). Workstream 5 is additive and
-gated behind a shim so existing consumers keep compiling.
+1. A persistent vertex buffer cannot be overwritten at offset 0 on every flush.
+   Draws are encoded before `QueueSubmit` (`gfx/context.odin:287-300`), so all
+   encoded draws could observe the last write. Every encoded run needs an
+   immutable range until its submission retires.
+2. Dynamic uniform offsets do not make overwritten uniform data immutable. Each
+   differing projection/shader state needs a unique aligned record until its
+   submission retires.
+3. A static quad index stream cannot be mixed with the current arbitrary triangle
+   and six-vertex quad stream in one draw. If indexing is introduced, all batch
+   primitives and custom-shader draws must use a universal indexed stream, or the
+   renderer must split geometry modes.
+4. Depth attachments are fixed when a render pass begins. `BeginMode3D` cannot add
+   depth to the already-open color-only pass (`gfx/context.odin:259-285`,
+   `gfx/camera.odin:51-69`). A real 3D path needs an explicit depth-capable pass
+   selected before pass creation, or a separate pass.
+5. `Rect` cannot replace `Rectangle` if it changes `.width/.height` to `.w/.h`.
+   Existing ingot UI and downstream code rely on the old field names and layout.
+6. The current macOS surface setup already prefers `.Premultiplied` before
+   `.Unpremultiplied` (`gfx/context.odin:174-185`). The original alpha step partly
+   proposed work that already exists; fallback behavior must be measured first.
+7. There is no graphics snapshot suite. `testx.snap` is only an inline string
+   helper and currently has no graphics users (`testx/snapshot.odin:8-25`).
 
-## Approach Discussion
+## Goals
 
-**Why persistent buffers + index buffers (WS1).** `renderer_flush`
-(`gfx/batch.odin:445-470`) currently calls `wg.DeviceCreateBufferWithData` on
-*every* flush and defers release to next frame via `frame_buffers`
-(`batch.odin:82,317-319,343-346`). A UI-heavy frame flushes on every
-pipeline/texture/scissor/matrix/blend change, so this allocates and frees dozens
-of GPU buffers per frame — the single biggest deviation from WebGPU best practice.
-A persistent buffer + `QueueWriteBuffer` with a grow-on-demand policy removes all
-per-frame allocation. `push_quad` (`batch.odin:379-394`) emits 6 verts per quad;
-switching to 4 verts + a static index buffer cuts vertex bandwidth by a third for
-the common case.
-  - *Rejected: ring of mapped staging buffers.* Lower latency but much more
-    complex (fences, `MapAsync`), and `QueueWriteBuffer` already double-buffers
-    internally in wgpu-native. Revisit only if profiling shows a stall.
-  - *Rejected: one giant buffer sized to worst case.* Wastes memory and still
-    needs a grow path; grow-on-demand is strictly better.
+- Keep ingot in Odin and preserve native/web source parity.
+- Remove unsafe/per-flush GPU allocation only with correct submission lifetime
+  handling.
+- Preserve draw ordering, render-target load behavior, public `rlgl` signatures,
+  and public type layouts.
+- Add real GPU 3D as a new explicit path; do not silently change the legacy
+  `BeginMode3D` behavior used by openalloy.
+- Keep the existing render-target orientation by default.
+- Add an idiomatic additive API without deprecating or moving the current API yet.
+- Establish renderer-specific verification before relying on visual claims.
 
-**Why one uniform + dynamic offsets (WS2).** The window pass and each render
-target keep *separate* uniform buffers/bind groups (`ubuf`/`ubind` vs
-`rt_ubuf`/`rt_ubind`, `batch.odin:46-58,275-289`; swapped in
-`render_target.odin:65-66`). A single uniform buffer addressed by dynamic offset
-is the idiomatic way to switch projections without a second bind group, and scales
-to nested/multiple targets (needed by the bloom chain). Also audit flush triggers
-(`batch_set` `batch.odin:368-375`, matrix ops `batch.odin:429-443`) to skip
-no-op flushes (e.g. `MatrixModeTranslate` by zero).
-  - *Rejected: push constants.* Not in the WebGPU core spec / `vendor:wgpu`.
+## Non-goals for the first rollout
 
-**Why a real 3D pipeline (WS3).** `render3d.odin` fakes 3D by projecting on the
-CPU and drawing discs/quads — no depth test, meshes are discs
-(`render3d.odin:1-11,35-50`). The RT pass deliberately attaches **no depth**
-(`render_target.odin:90-93`). A proper solution adds a depth-stencil texture, a 3D
-vertex layout, and instanced `DrawIndexedInstanced`, matching the roadmap's "true
-GPU 3D mesh pipeline" and "indexed instancing" items (README:274-282).
-  - *Rejected: keep CPU projection.* Cannot depth-sort transparent node bodies;
-    already flagged as a roadmap gap.
+- Removing the raylib-shaped API.
+- Renaming or changing fields in `Vector2`, `Rectangle`, `Color`, `Mesh`,
+  `Texture`, or `RenderTexture`.
+- Changing the default render-target origin.
+- Automatically attaching depth to existing `BeginTextureMode` or
+  `BeginMode3D` calls.
+- Reworking openalloy's galaxy shaders or bloom chain inside the ingot repository.
+- Adding render bundles before profiling demonstrates stable, reusable command
+  sequences. Immediate-mode UI with changing vertices is usually a poor initial
+  render-bundle target.
 
-**Why fix RT/bloom now (WS4).** Y-flip lives in the uniform (`p.z = -1`,
-`render_target.odin:63-66`, shader `batch.odin:215,228-229`). Multi-pass bloom
-ping-pongs targets; each blit can re-flip, so parity must be defined once. macOS
-transparent windows want premultiplied output reconciled with the surface's
-`Unpremultiplied` alpha mode (README:278-281). Both are "Now" roadmap items and
-block on-device 3D validation.
+## Compatibility contract
 
-**Why an additive API façade (WS5).** The raylib shape assumes hidden global state
-(`BeginDrawing`/`EndDrawing` mutate the package global `g`, `context.odin`). We
-keep that engine, but add an explicit-handle façade so new code reads idiomatically
-and the borrow-free global is an implementation detail. Old names stay as a
-`@(deprecated)` shim so no consumer breaks.
-  - *Rejected: hard rename.* Breaks every downstream call site at once; the README
-    sells mechanical raylib migration, so we preserve it during transition.
+The following remain source- and behavior-compatible throughout the rollout:
 
-## Files Changed
+- Existing PascalCase procedures and all `ingot:gfx/rlgl` signatures.
+- `Vector2`, `Vector3`, `Vector4`, `Color`, `Rectangle`, `Texture`, `Font`,
+  `RenderTexture`, `Mesh`, and related public field layouts.
+- Render-target preserve-by-default behavior. `BeginTextureMode` does not clear;
+  `ClearBackground` explicitly selects clear. The nvim dirty-row renderer and
+  galaxy accumulation depend on this (`gfx/context.odin:35-40`).
+- Current RT orientation (`p.z = -1`) and negative-source-height consumer
+  convention.
+- Existing legacy 3D path unless a caller opts into the new GPU 3D pass.
 
-### Workstream 1 — Buffers
+Downstream status:
 
-**`gfx/batch.odin`** — persistent vertex+index buffers; grow-on-demand; index
-buffer for quads.
+| Consumer | Contract needed |
+|---|---|
+| `cc-predev-scout` | PascalCase 2D + limited 2D `rlgl` remain unchanged |
+| `ww-concord` | PascalCase 2D remains unchanged |
+| `openalloy` | All above, plus frozen `rlgl` signatures, `RenderTexture`/`Mesh` layouts, RT preserve/orientation, and opt-in depth |
 
-```diff
- Renderer :: struct {
- 	shader: wg.ShaderModule,
- 	pipes:  [Pipe_Kind][Blend_Slot]wg.RenderPipeline,
-@@
--	// transient per-frame vertex buffers (released at next frame begin)
--	frame_buffers: [dynamic]wg.Buffer,
-+	// persistent GPU geometry buffers, grown on demand
-+	vbuf:      wg.Buffer,      // usage {.Vertex, .CopyDst}
-+	vbuf_cap:  u64,            // bytes
-+	ibuf:      wg.Buffer,      // static quad indices {.Index, .CopyDst}
-+	ibuf_quads: u32,           // number of quads the index buffer covers
-+	// CPU staging for indexed draws
-+	indices:   [dynamic]u32,
+## Phase 0 — Baseline, instrumentation, and renderer fixtures
 
- 	proj_w, proj_h: i32,
- }
-```
+Optimization should follow measurements rather than assumptions.
 
-```diff
- renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder) {
- 	n := len(r.verts)
- 	if n == 0 do return
--
--	vbuf := wg.DeviceCreateBufferWithData(g.device, &{usage = {.Vertex}}, r.verts[:])
--	append(&r.frame_buffers, vbuf)
-+	// ensure the persistent vertex buffer is large enough, then upload
-+	need := u64(n) * size_of(Vertex)
-+	_ensure_vbuf(r, need)
-+	wg.QueueWriteBuffer(g.queue, r.vbuf, 0, raw_data(r.verts), int(need))
-@@
--	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vbuf, 0, u64(n * size_of(Vertex)))
--	wg.RenderPassEncoderDraw(pass, u32(n), 1, 0, 0)
-+	wg.RenderPassEncoderSetVertexBuffer(pass, 0, r.vbuf, 0, need)
-+	wg.RenderPassEncoderDraw(pass, u32(n), 1, 0, 0)
+### Files
 
- 	clear(&r.verts)
- }
-```
+- `gfx/stats.odin` (new)
+- `gfx/render_test_fixture.odin` or a separate `examples/render_fixture/` app
+- `docs/rendering.md`
 
-New helper `_ensure_vbuf(r, need)`: if `need > r.vbuf_cap`, release old buffer and
-create a new one at `next_pow2(need)`; update `vbuf_cap`. `renderer_frame_begin`
-(`batch.odin:343-362`) drops the `frame_buffers` release loop. `renderer_shutdown`
-(`batch.odin:317-341`) releases `vbuf`/`ibuf` instead of `frame_buffers`.
+### Work
 
-*Phase 1b (optional, same file):* switch `push_quad` to append 4 verts + 6 indices
-into `r.indices`, build a static quad index buffer once, and use
-`RenderPassEncoderSetIndexBuffer`/`DrawIndexed`. Keep `push_tri` on the non-indexed
-path or emit a degenerate index run. Gate behind a `USE_INDEXED :: true` const so
-it can be toggled if a regression appears.
+Add bounded debug counters, disabled in release builds unless configured:
 
-### Workstream 2 — Uniforms & bind groups
+- flush count;
+- vertices and indices uploaded;
+- bytes uploaded;
+- GPU buffer creations/growths;
+- pipeline switches;
+- bind-group switches;
+- render-pass count;
+- queue submissions;
+- peak per-submission geometry/uniform arena usage.
 
-**`gfx/batch.odin`** — one uniform buffer, dynamic-offset bind group.
+Create a deterministic fixture at fixed window/target dimensions covering:
 
-```diff
--	ubuf:         wg.Buffer,
--	ubind:        wg.BindGroup,
- 	ubind_layout: wg.BindGroupLayout,
- 	tex_layout:   wg.BindGroupLayout,
--	rt_ubuf:  wg.Buffer,
--	rt_ubind: wg.BindGroup,
--	cur_u:    wg.BindGroup,
-+	ubuf:     wg.Buffer,       // holds N projection slots, 256-byte aligned
-+	ubind:    wg.BindGroup,    // single dynamic-offset bind group
-+	u_slots:  u32,             // allocated projection slots
-+	cur_off:  u32,             // dynamic offset (bytes) for the next flush
-```
+1. solid, text, and image batches;
+2. interleaved quads and triangles;
+3. texture/pipeline/scissor/blend changes that force multiple flushes;
+4. main-pass drawing before and after an immediate RT submission;
+5. preserve-vs-clear render-target behavior;
+6. negative-height render-target blit orientation;
+7. two RT ping-pong passes;
+8. custom shader uniforms changed between draws;
+9. raw `rlgl` instanced drawing;
+10. overlapping near/far geometry for the future opt-in 3D path.
 
-- Bind-group layout entry gains `hasDynamicOffset = true`; `minBindingSize` stays
-  `size_of([4]f32)` (`batch.odin:267-274`).
-- `renderer_flush` `SetBindGroup(pass, 0, r.ubind, {r.cur_off})` (dynamic offsets
-  array).
-- Window projection = slot 0; each `BeginTextureMode` writes its y-flipped
-  projection into the target's slot and sets `cur_off`; `EndTextureMode` resets
-  `cur_off = 0` (replaces the `cur_u` swap in `render_target.odin:65-66,102,122`).
-- Flush-trigger audit: `MatrixModeTranslate` (`batch.odin:439-443`) returns early
-  when `x==0 && y==0`; `batch_set` (`batch.odin:368-375`) already guards on change.
+The fixture is initially a manual visual/runtime-validation tool. A later GPU
+readback harness may add checked-in image baselines, row-pitch normalization, and
+explicit tolerance. Do not call this a snapshot suite until that exists.
 
-### Workstream 3 — Real GPU 3D
+### Acceptance
 
-**`gfx/render3d.odin`** — replace CPU projection internals with GPU mesh submission
-(public proc names/signatures unchanged so call sites are stable). `GenMeshSphere`
-generates real vertex/index data instead of a marker (`render3d.odin:16-25`);
-`DrawMesh` records an instance (transform + color) into a per-frame instance buffer
-instead of drawing a disc (`render3d.odin:35-50`).
+- Baseline stats and screenshots/observations are recorded before changing the
+  renderer.
+- The fixture runs without uncaptured WebGPU errors on native Metal.
+- The fixture builds for WASM even if browser inspection remains manual.
 
-**`gfx/gpu3d_pipeline.odin`** *(new)* — a depth-tested instanced pipeline:
-```
-Mesh3DVertex :: struct { pos: [3]f32, normal: [3]f32 }
-Instance3D   :: struct { model: matrix[4,4]f32, color: [4]f32 }
-```
-WGSL with `@builtin(position)` from `view_proj * model * pos`, simple lambert
-shade; `depthStencil = { format = .Depth24Plus, depthWriteEnabled = true,
-depthCompare = .Less }`; instance step-mode buffer via the existing VAO backing
-(`gfx/rlgl_vao.odin`). Flushed in `EndMode3D` (`gfx/camera.odin:51-66`).
+## Phase 1 — Submission-safe streamed geometry
 
-**`gfx/render_target.odin`** — attach depth in the RT pass for 3D targets. Replace
-the "no depth" note (`render_target.odin:90-96`):
-```diff
--	desc := wg.RenderPassDescriptor{colorAttachmentCount = 1, colorAttachments = &color}
--	// NOTE: ... intentionally do not attach a depth buffer here ...
-+	depth_att: wg.RenderPassDepthStencilAttachment
-+	desc := wg.RenderPassDescriptor{colorAttachmentCount = 1, colorAttachments = &color}
-+	if g.frame.rt_depth && g.frame.depth_view != nil {
-+		depth_att = {
-+			view = g.frame.depth_view,
-+			depthLoadOp = .Clear, depthStoreOp = .Store, depthClearValue = 1.0,
-+		}
-+		desc.depthStencilAttachment = &depth_att
-+	}
-```
-Window-pass 3D also needs a depth attachment: add a lazily-created depth texture to
-`Frame_State`/`_ensure_pass` (`gfx/context.odin`) used when `mode3d` is active.
+### Problem
 
-### Workstream 4 — Render-target / bloom correctness
+`renderer_flush` creates one immutable GPU vertex buffer per run
+(`gfx/batch.odin:445-470`) and retires those buffers next frame
+(`gfx/batch.odin:317-319,343-346`). This is allocation-heavy but preserves each
+encoded draw's data.
 
-**`gfx/render_target.odin`** + **`gfx/batch.odin` shader** — define the y-flip
-convention in exactly one place. Document that RT content is stored top-left origin
-(`p.z = +1`) and the blit does the visual flip, OR bottom-left (`p.z = -1`) with
-straight blits — pick one and make every bloom pass consistent so an even number of
-ping-pongs is not required. Add a `RT_FLIP :: ...` const and reference it from
-`BeginTextureMode` (`render_target.odin:63-66`) and any blit helper.
+The original replacement—one buffer repeatedly written at offset 0—is invalid.
+`QueueWriteBuffer` writes are not per-draw snapshots, while the main command buffer
+is submitted only in `EndDrawing` (`gfx/context.odin:287-300`). Render-target
+command buffers may also be submitted while an earlier main pass remains encoded
+(`gfx/render_target.odin:41-53,98-126`).
 
-**`gfx/context.odin`** (macOS transparent path) — when
-`.WINDOW_TRANSPARENT` is set and the surface alpha mode is `Unpremultiplied`, either
-configure the surface `alphaMode` to `Premultiplied` if supported, or add an
-un-premultiply step in the final composite so semi-transparent backdrops blend
-correctly (README:278-281). Guard behind `when ODIN_OS == .Darwin`.
+### Design
 
-### Workstream 5 — API modernization (additive)
+Introduce a **submission-aware geometry arena**:
 
-**`gfx/api.odin`** *(new)* — idiomatic Odin façade over the same globals:
 ```odin
-Vec2 :: [2]f32
-Rect :: struct { x, y, w, h: f32 }
-RGBA :: distinct [4]u8
+Geometry_Chunk :: struct {
+	buffer:   wg.Buffer,
+	capacity: u64,
+	cursor:   u64,
+}
 
-Canvas :: struct {}   // zero-size handle; methods forward to package globals
-
-begin_frame :: proc() -> Canvas          // == BeginDrawing
-end_frame   :: proc(c: Canvas)            // == EndDrawing
-clear       :: proc(c: Canvas, col: RGBA) // == ClearBackground
-draw_rect   :: proc(c: Canvas, r: Rect, col: RGBA)
-draw_text   :: proc(c: Canvas, font: Font, s: string, at: Vec2, size: f32, col: RGBA)
-measure_text:: proc(font: Font, s: string, size: f32) -> Vec2
-// ... draw_circle, draw_line, draw_texture, key_down, mouse_pos ...
+Submission_Resources :: struct {
+	chunks:          [MAX_GEOMETRY_CHUNKS]Geometry_Chunk,
+	chunk_count:     u32,
+	active_chunk:    u32,
+	retirement_id:   u64,
+	in_flight:       bool,
+}
 ```
-Names are snake_case; the `Canvas` param makes frame scoping explicit even though
-state is global (threading a handle now lets us move state off the global later
-without touching call sites).
 
-**`gfx/compat.odin`** *(new; move existing raylib-named procs here or wrap)* — mark
-the raylib-shaped API `@(deprecated="use ingot:gfx draw_* / Canvas API")` thin
-wrappers that call the new façade. Keep `Vector2`/`Rectangle`/`Color` as aliases of
-`Vec2`/`Rect`/`RGBA` so both spellings resolve during migration.
+Rules:
 
-**`ui/*`** — no change required initially (still calls raylib-named procs via the
-shim). A follow-up migrates `ingot:ui` to the `draw_*` façade file-by-file.
+- Every flush reserves a unique aligned range and writes only that range.
+- `SetVertexBuffer` uses the reserved offset and exact size.
+- A chunk that has already been referenced by an encoded draw is never replaced
+  or released during that submission.
+- If a chunk is full, allocate/select another bounded chunk; do not replace the
+  active buffer under already encoded commands.
+- Associate chunks with the queue submission that references them.
+- Recycle only after `QueueOnSubmittedWorkDone` (or the exact callback available
+  in the bundled `vendor:wgpu`) reports completion. If that API cannot be used
+  reliably on both native and JS, use a conservative bounded frame ring and prove
+  its safety against the backend before implementation; never assume N frames is
+  sufficient without a completion guarantee.
+- Put explicit limits on chunk count and total bytes, with assertions and a
+  handled overflow path, per `AGENTS.md:43-65`.
+- Keep the current per-flush buffers as a fallback until the arena passes the
+  fixture and consumer tests.
 
-## New Dependencies / Config Changes
+A simpler acceptable implementation is one CPU command/geometry stream per
+encoder, uploaded once before that encoder is submitted, followed by encoding its
+recorded draw records. That requires deferring render-pass draw encoding and is a
+larger refactor, but it naturally creates immutable offsets.
 
-None. All work stays within `vendor:wgpu` and `core:*`. No new env vars, config
-keys, or external libs. A new build-tag-free source file per new `.odin` above.
+### Affected files
 
-## Impact & Risks
+- `gfx/batch.odin`
+- `gfx/context.odin`
+- `gfx/render_target.odin`
+- `gfx/shader.odin` (accept vertex offset/range rather than a per-flush buffer)
 
-- **WS1 index buffer** changes vertex winding assumptions — verify
-  `frontFace = .CCW, cullMode = .None` (`batch.odin:144`) still produces identical
-  output; gate behind `USE_INDEXED` const for quick rollback.
-- **WS2 dynamic offsets** require 256-byte alignment of uniform slots; a wrong
-  offset silently reads the wrong projection → verify RT + window in the same frame
-  (galaxy pane) still render correctly.
-- **WS3 depth** interacts with existing 2D batch pipelines, which carry **no**
-  depth-stencil state (`batch.odin:141-147`). A pass with a depth attachment
-  requires every pipeline used in it to declare matching depth-stencil state.
-  Mitigation: keep 2D and 3D in separate passes/targets, or give 2D pipelines a
-  `depthWriteEnabled = false, depthCompare = .Always` state when a depth attachment
-  is present. This is the highest-risk item — do it last.
-- **WS4** wrong flip fix can invert all RT output; snapshot-test before/after.
-- **WS5** deprecation warnings will appear across `ingot:ui`; acceptable during
-  transition, silence per-file as `ui` migrates.
-- Backwards compatibility: WS1–4 are internal; WS5 is additive with a shim, so no
-  external call site breaks — **but see the consumer analysis below: WS3 and WS4
-  touch behavior that `openalloy` depends on.**
+### Acceptance
 
-## Consumer compatibility
+- A fixture frame with at least three differently colored runs renders all colors,
+  proving earlier runs are not overwritten by the last upload.
+- Main-pass → RT submission → main-pass ordering remains correct.
+- No per-flush `DeviceCreateBufferWithData` remains in the batch path.
+- Buffer growth is bounded and does not release referenced buffers.
+- Stats show buffer creation tied to growth/chunks, not flush count.
 
-Three downstream consumers were audited for how they use `ingot:gfx`. Summary:
+## Phase 2 — Correct state/uniform lifetime; defer needless consolidation
 
-| Consumer | ingot:gfx usage | WS1 | WS2 | WS3 | WS4 | WS5 |
-|---|---|---|---|---|---|---|
-| **cc-predev-scout** | pure 2D, ~218 `rl.*`, 4 `rlgl` 2D-batch calls, no RT/3D/shaders | safe | safe | n/a | safe | safe* |
-| **ww-concord** | pure 2D, ~123 `rl.*`, no rlgl/3D/RT | safe | safe | n/a | safe | safe* |
-| **openalloy** | 2D + **nvim render-texture pane** + full HDR/bloom/galaxy 3D, heavy `rlgl.*` | safe† | safe† | ⚠ **breaks galaxy** | ⚠ **breaks nvim pane + galaxy** | safe* |
+### Review correction
 
-\* WS5 is safe for all **only if** the raylib PascalCase names are kept as working
-shims (never removed). Deprecation warnings are fine; no consumer builds with
-`-warnings-as-errors`.
+The two projection buffers are currently deliberate: the RT projection must not
+clobber the unsubmitted window projection (`gfx/batch.odin:51-58`). Combining them
+is not inherently a best practice and has no demonstrated performance benefit.
+Keep `ubuf` and `rt_ubuf` initially.
 
-† Safe **only if** the public `rlgl.*` signatures and the `RenderTexture` struct
-field layout (`.texture.id`, `.depth.id`, `.width`, `.height`) are preserved.
-openalloy writes those fields by hand and calls `rlgl.LoadFramebuffer` /
-`LoadVertexBuffer` / `DrawVertexArrayInstanced` directly.
+More importantly, existing custom-shader paths can overwrite one uniform buffer
+multiple times before submission:
 
-### Where openalloy is affected
+- `_shader_flush` writes `e.ubuf` at offset 0 (`gfx/shader.odin:418-435`);
+- `RlDrawVertexArrayInstanced` does the same (`gfx/rlgl_vao.odin:265-290`).
 
-- **WS4 (Y-flip) — not galaxy-only.** The everyday **Neovim editor pane** caches
-  its grid to a render texture and blits it with a Y-flip-compensating negative
-  source height:
-  - `alloy/src/ui/nvim_render.odin:310` — `LoadRenderTexture`
-  - `alloy/src/ui/nvim_render.odin:455` — `src := rl.Rectangle{0, 0, w, -h}`
-  Changing the default RT convention makes the **editor render upside-down**. The
-  galaxy view has the same pattern at `alloy/src/ui/galaxy_shaders.odin:403`.
-- **WS3 (depth) — galaxy only.** The galaxy already runs its own depth strategy: a
-  hand-built HDR framebuffer with a depth renderbuffer
-  (`galaxy_shaders.odin:29-39`), a depth prepass (`galaxy3d.odin:406-414`), and
-  explicit `rlgl.DisableDepthMask`/`EnableDepthMask` around the additive pass
-  (`galaxy3d.odin:441,540`). If `BeginMode3D`/`BeginTextureMode` start
-  auto-attaching/clearing depth, it double-ups and the "cardboard panel" artifact
-  it works around (`galaxy3d.odin:432-440`) likely returns.
-- Files reaching into these internals: `nvim_render.odin`, `galaxy_shaders.odin`,
-  `galaxy_planet.odin`, `galaxy_instanced_stars.odin`, `galaxy_instanced_2d.odin`,
-  `galaxy3d.odin`.
+If shader values differ between encoded draws in one unsubmitted pass, earlier
+draws may observe the final values.
 
-### Recommended guardrails (make the plan fully non-breaking)
+### Design
 
-1. **WS4 — do not change the default.** Keep the existing `p.z = -1` RT convention.
-   Only *document* it in one place (`RT_FLIP` const referencing today's value). Any
-   new convention must be opt-in via a new proc, never a change to the value
-   consumers compensate for. Protects both the nvim pane and galaxy.
-2. **WS3 — depth is opt-in, off by default.** Only attach/clear depth when a new
-   flag/param requests it. `BeginMode3D`/`BeginTextureMode` keep today's no-depth
-   behavior unless asked, so openalloy's manual depth path is untouched.
-3. **WS1/WS2 — freeze the public surface.** Change internals freely, but keep every
-   `rlgl.*` signature and every `RenderTexture` field openalloy touches identical.
+- Add an immutable, aligned **uniform arena per submission**, using the same
+  retirement model as Phase 1.
+- Query/store the adapter/device minimum uniform-buffer offset alignment; do not
+  hard-code 256 without validating the actual limit.
+- Allocate one record for each changed custom-shader uniform state and bind it via
+  a dynamic offset.
+- Preserve projection `ubuf`/`rt_ubuf` until profiling proves consolidation is
+  useful. If later consolidated, window and every RT projection get unique arena
+  records and the bind group is recreated when its backing buffer changes.
+- Include extra texture/sampler bind-group lifetime in the audit; do not rebuild or
+  release a bind group while encoded commands still reference it.
+- Skip proven no-op state changes, such as zero translation, only after assertions
+  preserve ordering invariants.
 
-With these guardrails, all three consumers compile and render unchanged, and the
-improvements land internally + via new opt-in APIs.
+### Acceptance
 
-### Suggested phasing given the analysis
+- Fixture draws using one shader with different uniforms retain distinct values.
+- Raw instanced draws with different uniform values retain distinct values.
+- No dynamic offset violates device alignment.
+- No bind group references a replaced/released backing buffer.
+- Existing window + differently sized RT projections render correctly in one frame.
 
-- **Non-breaking now:** WS1 (buffers), WS2 (uniforms), WS5 (API façade) — safe for
-  every consumer with the shim + frozen-surface guardrails.
-- **Gated / opt-in:** WS3 (depth) and WS4 (Y-flip) — implement behind the guardrails
-  above, or defer until openalloy's nvim pane + galaxy path migrate in lockstep.
+## Phase 3 — Universal indexed batching (separate optimization)
 
-## Verification Steps
+Do not combine this with Phase 1. First make non-indexed streaming correct and
+measurable.
 
-1. Build native: `odin build web/demo.odin -file -collection:ingot=.` (or the
-   project's existing native build command) — expect no compile/validation errors.
-2. Run the existing headless test(s): `bash scripts/test.sh` (covers
-   `text_test.odin`, wrap/markdown/scale tests). Expect all pass.
-3. `testx` snapshot tests: run the snapshot suite and diff `Snapshot` outputs for
-   the batch/text paths; regenerate goldens only for intended visual changes.
-4. Visual smoke (native macOS/Metal): launch the demo; confirm 2D shapes, text,
-   textures, scissor, and a render-target blit render identically to `main`.
-5. WS3: render a depth-tested sphere/instanced meshes; confirm correct occlusion
-   (near hides far) — the current disc approximation cannot do this.
-6. WS4: verify RT content is upright through a 2+ pass bloom ping-pong (no
-   parity-dependent flip); on macOS verify a semi-transparent backdrop composites
-   without haloing.
-7. Frame-allocation check: confirm no `DeviceCreateBufferWithData` per flush
-   (grep the flush path) and that `frame_buffers` is gone.
-8. **Consumer regression:** build `openalloy` against the modified ingot and
-   verify the nvim editor pane renders upright and the galaxy/HDR view is unchanged
-   (this is the canary for WS3/WS4).
+### Design
 
-## Implementation Steps
+Use one universal indexed stream:
 
-1. Copy this plan to docs/rendering.md
-2. WS1: add persistent vbuf + _ensure_vbuf, rewrite renderer_flush
-3. WS1: remove frame_buffers from init/frame_begin/shutdown
-4. WS1: add quad index buffer behind USE_INDEXED and switch push_quad
-5. WS2: collapse ubuf/rt_ubuf into one dynamic-offset uniform buffer
-6. WS2: update BeginTextureMode/EndTextureMode to use dynamic offsets
-7. WS2: prune no-op flush triggers (MatrixModeTranslate zero, etc.)
-8. WS4: define single RT_FLIP convention; make bloom passes consistent
-   *(guardrail: keep today's default value; new conventions opt-in only)*
-9. WS4: fix macOS premultiplied transparent-window compositing
-10. WS3: add gpu3d_pipeline.odin (depth-tested instanced mesh pipeline)
-11. WS3: real GenMeshSphere geometry + DrawMesh instance recording
-12. WS3: attach depth in RT pass and window pass for 3D mode
-    *(guardrail: depth opt-in / off by default)*
-13. WS3: reconcile 2D pipelines with depth attachment (depthCompare Always)
-14. WS5: add gfx/api.odin idiomatic façade (Canvas/Rect/Vec2/draw_*)
-15. WS5: add gfx/compat.odin deprecated raylib-name shim + type aliases
-    *(guardrail: never remove PascalCase names; freeze rlgl + RenderTexture layout)*
-16. Run scripts/test.sh + snapshot suite; visual smoke on native; build openalloy
-17. Update README rendering section + docs/rendering.md status
+- `push_tri`: 3 vertices + 3 indices;
+- `push_quad`: 4 vertices + 6 indices;
+- `push_quad4`: 4 vertices + 6 indices;
+- all indices are relative to the run's base vertex;
+- custom-shader batch flushing supports indexed draws too.
+
+Use a submission-safe index arena governed by the same lifetime rules as the
+vertex arena. A static repeating quad index buffer is insufficient because runs
+can interleave arbitrary triangles and quads.
+
+Keep an internal/config build switch to compare indexed and non-indexed paths, but
+avoid leaving two permanently divergent implementations. Remove the losing path
+after profiling and visual validation.
+
+### Acceptance
+
+- The mixed primitive fixture renders identically.
+- Winding and scissor behavior remain unchanged.
+- Vertex upload volume for quad-heavy scenes falls by approximately one third.
+- Measured CPU/GPU frame time does not regress; otherwise retain non-indexed
+  batching.
+
+## Phase 4 — Render-target orientation and alpha correctness
+
+### Render-target orientation
+
+- Define the existing `p.z = -1` behavior as a named internal convention.
+- Do **not** change the default.
+- Test preserve/clear behavior and negative-source-height blits.
+- Any top-left-origin alternative is a new opt-in target/texture-view mode with
+  explicit metadata; it must not require guessing from texture identity.
+- Bloom consistency belongs partly to openalloy. Ingot supplies explicit,
+  documented orientation; openalloy's multipass chain must migrate separately if
+  it chooses a new convention.
+
+### Transparent surfaces
+
+The current configuration already selects `.Premultiplied` first when supported
+(`gfx/context.odin:174-185`), matching the batch shader's premultiplied output
+(`gfx/batch.odin:235-254`). Therefore:
+
+1. store the selected composite alpha mode in `Context`;
+2. expose it to diagnostics/stats;
+3. validate actual macOS capabilities and output before changing shaders;
+4. if only `.Unpremultiplied` is available, design a separate final-composite
+   path (premultiplied intermediate texture → un-premultiply overwrite into the
+   surface). Do not change batch blend math globally because offscreen targets
+   still rely on premultiplied blending.
+
+### Acceptance
+
+- openalloy's nvim render texture remains upright and incremental redraw remains
+  preserved.
+- openalloy's existing galaxy composite remains upright.
+- Two-pass fixture orientation is independent of pass count.
+- Transparent macOS output has no halos with the actually selected alpha mode.
+
+## Phase 5 — Explicit opt-in GPU 3D pass
+
+### Review correction
+
+Do not replace `DrawMesh`/`GenMeshSphere` internals or add depth automatically to
+legacy passes. `Mesh` layout and legacy behavior are compatibility surfaces, and
+attachments cannot be added after a pass starts.
+
+### New API shape
+
+Introduce a separate explicit API, names illustrative and finalized against Odin
+style during implementation:
+
+```odin
+Gpu_Mesh :: struct { /* opaque registry handle, public layout deliberately small */ }
+Gpu_3D_Target :: struct { /* color + depth target handles */ }
+Gpu_3D_Pass :: struct { /* generation-checked active pass token */ }
+
+create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool)
+begin_gpu_3d :: proc(target: ^Gpu_3D_Target, camera: Camera3D,
+                     load: Load_Action) -> (Gpu_3D_Pass, bool)
+draw_gpu_mesh :: proc(pass: ^Gpu_3D_Pass, mesh: Gpu_Mesh,
+                      transform: Matrix, material: Gpu_Material)
+end_gpu_3d :: proc(pass: ^Gpu_3D_Pass)
+```
+
+The new pass chooses color and depth attachments before
+`CommandEncoderBeginRenderPass`. It owns explicit load/store actions so a caller
+can preserve or clear color/depth deliberately. It does not share a render pass
+with depthless 2D pipelines.
+
+### Pipeline
+
+- indexed mesh vertex/index buffers;
+- per-instance model/color data in a submission-safe arena;
+- view/projection uniform record with correct alignment/lifetime;
+- `.Depth24Plus`, depth write enabled, compare `.Less` for opaque geometry;
+- distinct transparent/additive pipeline with depth test configurable and depth
+  writes disabled where required;
+- bounded mesh/instance counts and explicit ownership/unload procedures;
+- pipeline cache keyed by color format, depth format, sample count, blend state,
+  culling, and topology.
+
+Billboards and lines remain on the legacy path initially. Port them only after the
+mesh path is correct; soft particles require deliberate depth-texture sampling and
+are not equivalent to ordinary alpha billboards.
+
+### Acceptance
+
+- Near geometry occludes far geometry independent of submission order.
+- Opaque and additive/depth-read-only behavior are distinct and tested.
+- Legacy openalloy galaxy remains unchanged until explicitly migrated.
+- New 3D fixture has no validation errors on native Metal and builds for WASM.
+
+## Phase 6 — Additive idiomatic Odin API
+
+### Review correction
+
+Do not move old procedures into `compat.odin`, change old public types, or mark the
+whole existing API deprecated yet. `ingot:ui` imports and uses the PascalCase API
+pervasively; broad deprecation diagnostics would create repository noise.
+
+Add wrappers over the current stable API:
+
+```odin
+Vec2 :: Vector2
+Vec3 :: Vector3
+RGBA :: Color
+Rect :: Rectangle // retains x, y, width, height
+
+Frame :: struct {
+	generation: u64,
+}
+
+begin_frame :: proc() -> (Frame, bool)
+end_frame :: proc(frame: ^Frame)
+clear :: proc(frame: ^Frame, color: RGBA)
+draw_rect :: proc(frame: ^Frame, rect: Rect, color: RGBA)
+draw_line :: proc(frame: ^Frame, start, end: Vec2, thick: f32, color: RGBA)
+draw_circle :: proc(frame: ^Frame, center: Vec2, radius: f32, color: RGBA)
+draw_texture :: proc(frame: ^Frame, texture: Texture2D, source, dest: Rect,
+                     origin: Vec2, rotation: f32, tint: RGBA)
+```
+
+`Frame` is not a zero-size cosmetic handle. Its generation is checked against the
+active frame so stale/double-ended handles fail assertions in development and are
+handled safely in release. New procedures carry the assertions required by
+`AGENTS.md:43-65`.
+
+Text needs an explicit decision: current `DrawTextEx` accepts `cstring`
+(`gfx/text.odin:221`). Either:
+
+- initially make `draw_text` accept `cstring`; or
+- first refactor internal text iteration to accept Odin `string` without unsafe
+  temporary NUL assumptions, then provide both forms.
+
+Do not promise `string` until that refactor exists.
+
+Keep every existing PascalCase proc as-is. Deprecation is a later project after
+`ingot:ui` and downstream consumers migrate and all build gates stay diagnostic
+clean.
+
+### Acceptance
+
+- Existing ingot and all three consumers compile unchanged.
+- `Vec2`, `RGBA`, and `Rect` preserve old literals, fields, layout, and parameter
+  compatibility.
+- Frame generation rejects stale/double-ended use in tests.
+- No new deprecation diagnostics.
+
+## Verification and exact commands
+
+Run from `/Users/nicolasvanderwalt_1/Development/git/ingot`:
+
+```sh
+bash scripts/test.sh
+bash scripts/check.sh
+odin build web/demo.odin -file -collection:ingot=.
+bash build_web.sh
+```
+
+What these prove:
+
+- `scripts/test.sh` runs unit tests for `gfx`, `ui`, `term`, and `prefs`, and
+  type-checks `net`/`sys` (`scripts/test.sh:7-15`). It does **not** prove visual
+  renderer correctness.
+- `scripts/check.sh` runs strict type-check/vet/style checks and `odinfmt -l` when
+  available (`scripts/check.sh:10-29`).
+- `odin build` compiles the native demo; it does not run it.
+- `build_web.sh` builds the JS/WASM target; browser behavior still needs a smoke
+  run.
+
+Manual smoke currently supported by the existing demo:
+
+```sh
+odin run web/demo.odin -file -collection:ingot=.
+```
+
+It covers initialization, moving rectangle/circle, text atlas, mouse input, and
+keyboard input (`web/demo.odin:26-73`). It does **not** cover textures, scissor,
+RTs, bloom, transparent composition, depth, or instancing; use the Phase 0 fixture
+for those.
+
+After each renderer phase, also build affected consumers against the modified
+local ingot checkout and run the relevant UI manually:
+
+- openalloy: nvim pane and galaxy/HDR view;
+- cc-predev-scout: representative map/massing screens and 2D culling toggles;
+- ww-concord: representative 2D UI.
+
+Consumer commands must be taken from each repository's own instructions at
+implementation time; do not invent or hard-code them in this plan.
+
+## Revised implementation order
+
+1. Replace `ingot/docs/rendering.md` with this reviewed v2 plan.
+2. Add bounded renderer stats and a deterministic renderer fixture.
+3. Record baseline native results and run all existing build/check gates.
+4. Implement submission retirement/resource lifetime infrastructure.
+5. Implement unique-offset non-indexed geometry streaming with fallback.
+6. Validate geometry streaming, then remove per-flush batch buffers.
+7. Fix custom-shader and raw-instancing uniform overwrite hazards using immutable
+   aligned records.
+8. Profile; consolidate projection uniforms only if measurements justify it.
+9. Add universal indexed batching as a separate measured experiment.
+10. Name/document/test the existing RT orientation without changing its default.
+11. Record and validate selected surface alpha mode; add fallback composite only
+    if a real unsupported-premultiplied case is reproduced.
+12. Add the explicit opt-in depth-capable GPU 3D pass and mesh pipeline.
+13. Add the generation-checked idiomatic API wrappers without deprecation.
+14. Run ingot gates, native/web fixtures, and all three downstream builds/smokes.
+15. Update README and mark only completed, measured phases as shipped.
+
+## Ship/rollback policy
+
+Each phase lands independently and keeps the old path available until its fixture,
+native/web build, and affected consumer checks pass. Do not land buffer lifetime,
+uniform lifetime, indexing, 3D, and API changes in one unreviewable change. If a
+phase fails visual or validation checks, retain the preceding proven path rather
+than weakening assertions or accepting undefined resource lifetime.

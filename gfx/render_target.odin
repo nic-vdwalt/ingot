@@ -12,6 +12,8 @@ package gfx
 
 import wg "vendor:wgpu"
 
+RT_PROJECTION_Y_FLIP :: f32(-1.0)
+
 // LoadRenderTexture creates a colour render target in the swapchain format
 // (so the existing batch pipelines, built against g.format, can render into it).
 LoadRenderTexture :: proc(width, height: i32) -> RenderTexture2D {
@@ -62,7 +64,12 @@ BeginTextureMode :: proc(target: RenderTexture2D) {
 	g.frame.depth_view = g.frame.rt_depth ? _texture_view(target.depth.id) : nil
 
 	// RT projection: y-flipped (p.z = -1) so the texture matches raylib.
-	p := [4]f32{1.0 / f32(max(e.width, 1)), 1.0 / f32(max(e.height, 1)), -1.0, 0.0}
+	p := [4]f32{
+		1.0 / f32(max(e.width, 1)),
+		1.0 / f32(max(e.height, 1)),
+		RT_PROJECTION_Y_FLIP,
+		0.0,
+	}
 	wg.QueueWriteBuffer(g.queue, g.rend.rt_ubuf, 0, &p, size_of(p))
 	g.rend.cur_u = g.rend.rt_ubind
 
@@ -97,6 +104,7 @@ _ensure_rt_pass :: proc() {
 	// attach a depth buffer here (attaching one would mismatch those pipelines).
 	// depth textures created via rlgl.LoadTextureDepth are simply unused.
 	g.frame.rt_pass = wg.CommandEncoderBeginRenderPass(g.frame.rt_encoder, &desc)
+	_stats_render_pass()
 	g.frame.rt_pass_begun = true
 }
 
@@ -114,6 +122,10 @@ EndTextureMode :: proc() {
 		wg.RenderPassEncoderRelease(g.frame.rt_pass)
 		cmd := wg.CommandEncoderFinish(g.frame.rt_encoder, nil)
 		wg.QueueSubmit(g.queue, {cmd})
+		_stats_queue_submission()
+		retirement := _submission_track(&g.submissions)
+		_geometry_submitted(&g.rend, retirement)
+		_uniform_submitted(&g.rend, retirement)
 		wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(g.frame.rt_encoder)
 	}

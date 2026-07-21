@@ -20,6 +20,7 @@
 	const HTTP_MAXIMUM_SLOTS = 64;
 	const httpSlots = new Array(HTTP_MAXIMUM_SLOTS).fill(null);
 	let wasmMemoryInterface = null;
+	let clipboardText = "";
 
 	function wasmBytes(pointer, length) {
 		if (!pointer || length <= 0 || !wasmMemoryInterface) return new Uint8Array();
@@ -119,6 +120,23 @@
 				const c = document.getElementById(CANVAS_ID);
 				if (c) c.style.cursor = CURSORS[cur] || "default";
 			},
+			ingot_clipboard_len: () => new TextEncoder().encode(clipboardText).length,
+			ingot_clipboard_copy: (destination, capacity) => {
+				const bytes = new TextEncoder().encode(clipboardText);
+				const count = Math.min(capacity, bytes.length);
+				if (count > 0) wasmBytes(destination, count).set(bytes.subarray(0, count));
+				return count;
+			},
+			ingot_set_clipboard: (pointer) => {
+				if (!wasmMemoryInterface || !pointer) return;
+				const memory = new Uint8Array(wasmMemoryInterface.memory.buffer);
+				let end = pointer;
+				while (end < memory.length && memory[end] !== 0) end += 1;
+				clipboardText = new TextDecoder().decode(memory.subarray(pointer, end));
+				if (navigator.clipboard && navigator.clipboard.writeText) {
+					navigator.clipboard.writeText(clipboardText).catch(() => {});
+				}
+			},
 			ingot_is_fullscreen: () => {
 				const fs = document.fullscreenElement ||
 					document.webkitFullscreenElement;
@@ -158,6 +176,10 @@
 
 		fitCanvas();
 		window.addEventListener("resize", fitCanvas);
+		window.addEventListener("paste", (event) => {
+			const text = event.clipboardData && event.clipboardData.getData("text/plain");
+			if (typeof text === "string") clipboardText = text;
+		});
 
 		const wmi = new window.odin.WasmMemoryInterface();
 		wasmMemoryInterface = wmi;

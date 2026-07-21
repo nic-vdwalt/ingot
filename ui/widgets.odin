@@ -968,6 +968,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 	// Precompute layout for the caret-aware (soft-wrapping) renderer. Visual
 	// rows are render-only; caret navigation/history still use logical lines.
 	use_caret_render := caret_active && !masked
+	use_masked_caret := caret_active && masked
 	visible_lines := max(1, (h - 12) / LINE_HEIGHT)
 	vlines: []Wrap_Line
 	vis_start: int
@@ -994,6 +995,22 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 	// double-click selects a word, triple-click the logical line, drag extends
 	// by character. Mouse is converted to pane-local coordinates because split
 	// panes draw rlgl-translated while the mouse is in screen space.
+	if active && use_masked_caret && rl.IsMouseButtonPressed(.LEFT) {
+		mouse := rl.GetMousePosition()
+		mouse.x -= f32(pane_origin_x)
+		if rl.CheckCollisionPointRec(mouse, rect) {
+			mask_sb := strings.builder_make(context.temp_allocator)
+			for _ in text do strings.write_byte(&mask_sb, '*')
+			masked_text := strings.to_string(mask_sb)
+			masked_c := strings.clone_to_cstring(masked_text, context.temp_allocator)
+			masked_w := measure_text(masked_c, FONT_SIZE)
+			masked_offset := max(0, masked_w - inner_w)
+			col := caret_pixel_to_col(masked_text, i32(mouse.x) - inner_x + masked_offset)
+			cursor^ = caret_col_to_byte(text, col)
+			input_sel_set(sb, cursor^, cursor^)
+		}
+	}
+
 	if active && use_caret_render {
 		mouse := rl.GetMousePosition()
 		mouse.x -= f32(pane_origin_x)
@@ -1224,7 +1241,6 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 				cursor_line_y := y + 6 + (visible_count - 1) * LINE_HEIGHT
 				rl.DrawLine(cursor_x, cursor_line_y, cursor_x, cursor_line_y + FONT_SIZE, FG_ACCENT)
 			} else {
-				// Single-line cursor (original behavior).
 				display_for_cursor: string
 				if masked {
 					mask_sb := strings.builder_make(context.temp_allocator)
@@ -1240,7 +1256,19 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 				if cursor_text_w > inner_w {
 					cursor_offset = cursor_text_w - inner_w
 				}
-				cursor_x := inner_x + cursor_text_w - cursor_offset
+				cursor_prefix := display_for_cursor
+				if caret_active {
+					col := 0
+					byte := 0
+					for byte < cursor^ {
+						byte = caret_next_rune(text, byte)
+						col += 1
+					}
+					prefix_end := caret_col_to_byte(display_for_cursor, col)
+					cursor_prefix = display_for_cursor[:prefix_end]
+				}
+				cursor_prefix_w := measure_text(strings.clone_to_cstring(cursor_prefix, context.temp_allocator), FONT_SIZE)
+				cursor_x := inner_x + cursor_prefix_w - cursor_offset
 				rl.DrawLine(cursor_x, y + 5, cursor_x, y + h - 5, FG_ACCENT)
 			}
 		}

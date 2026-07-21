@@ -34,8 +34,6 @@ Shader_Entry :: struct {
 	module:       wg.ShaderModule,
 	uniforms:     []Shader_Uniform,
 	ushadow:      []u8,
-	ubuf:         wg.Buffer,
-	ubind:        wg.BindGroup,
 	u_layout:     wg.BindGroupLayout,
 
 	tex_names:    []string, // extra texture binding names (group 3)
@@ -191,14 +189,12 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 		entries = &wg.BindGroupLayoutEntry{
 			binding = 0,
 			visibility = {.Vertex, .Fragment},
-			buffer = {type = .Uniform, minBindingSize = u64(total)},
+			buffer = {
+				type = .Uniform,
+				hasDynamicOffset = true,
+				minBindingSize = u64(total),
+			},
 		},
-	})
-	e.ubuf = wg.DeviceCreateBuffer(g.device, &{usage = {.Uniform, .CopyDst}, size = u64(total)})
-	e.ubind = wg.DeviceCreateBindGroup(g.device, &{
-		layout = e.u_layout,
-		entryCount = 1,
-		entries = &wg.BindGroupEntry{binding = 0, buffer = e.ubuf, size = u64(total)},
 	})
 
 	e.tex_names = _reflect_textures(src)
@@ -236,8 +232,6 @@ UnloadShader :: proc(shader: Shader) {
 	}
 	if e.extra_bind != nil do wg.BindGroupRelease(e.extra_bind)
 	if e.extra_layout != nil do wg.BindGroupLayoutRelease(e.extra_layout)
-	if e.ubind != nil do wg.BindGroupRelease(e.ubind)
-	if e.ubuf != nil do wg.BufferRelease(e.ubuf)
 	if e.u_layout != nil do wg.BindGroupLayoutRelease(e.u_layout)
 	if e.module != nil do wg.ShaderModuleRelease(e.module)
 	delete(e.ushadow)
@@ -408,29 +402,51 @@ _shader_rebuild_extra :: proc(e: ^Shader_Entry) {
 // _shader_flush records the pending run through the active custom shader.
 // Returns true if it handled the draw.
 @(private)
-_shader_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, vbuf: wg.Buffer, n: u32) -> bool {
+_shader_flush :: proc(
+	r: ^Renderer,
+	pass: wg.RenderPassEncoder,
+	vbuf: wg.Buffer,
+	vertex_offset: u64,
+	ibuf: wg.Buffer,
+	index_offset: u64,
+	index_count: u32,
+) -> bool {
 	e := _shader_get(r.active_shader)
 	if e == nil do return false
 	format := _cur_target_format()
 	pipe := _shader_pipeline(e, format)
 	if pipe == nil do return false
 
-	// upload uniform shadow
-	if len(e.ushadow) > 0 {
-		wg.QueueWriteBuffer(g.queue, e.ubuf, 0, raw_data(e.ushadow), uint(len(e.ushadow)))
-	}
+	u_offset, ok := _uniform_upload(r, raw_data(e.ushadow), u64(len(e.ushadow)))
+	if !ok do return false
 	if e.extra_dirty do _shader_rebuild_extra(e)
+	u_bind := wg.DeviceCreateBindGroup(g.device, &{
+		layout = e.u_layout,
+		entryCount = 1,
+		entries = &wg.BindGroupEntry{
+			binding = 0,
+			buffer = r.uniforms.buffer,
+			size = u64(len(e.ushadow)),
+		},
+	})
+	append(&r.uniforms.transient_binds, u_bind)
 
 	wg.RenderPassEncoderSetPipeline(pass, pipe)
+	_stats_pipeline_switch()
 	wg.RenderPassEncoderSetBindGroup(pass, 0, r.cur_u != nil ? r.cur_u : r.ubind)
+	_stats_bind_group_switches(1)
 	if r.cur_bind != nil {
 		wg.RenderPassEncoderSetBindGroup(pass, 1, r.cur_bind)
+		_stats_bind_group_switches(1)
 	}
-	wg.RenderPassEncoderSetBindGroup(pass, 2, e.ubind)
+	wg.RenderPassEncoderSetBindGroup(pass, 2, u_bind, {u_offset})
+	_stats_bind_group_switches(1)
 	if e.extra_count > 0 && e.extra_bind != nil {
 		wg.RenderPassEncoderSetBindGroup(pass, 3, e.extra_bind)
+		_stats_bind_group_switches(1)
 	}
-	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vbuf, 0, u64(n) * size_of(Vertex))
-	wg.RenderPassEncoderDraw(pass, n, 1, 0, 0)
+	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vbuf, vertex_offset, wg.WHOLE_SIZE)
+	wg.RenderPassEncoderSetIndexBuffer(pass, ibuf, .Uint32, index_offset, wg.WHOLE_SIZE)
+	wg.RenderPassEncoderDrawIndexed(pass, index_count, 1, 0, 0, 0)
 	return true
 }

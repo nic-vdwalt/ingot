@@ -83,7 +83,9 @@ Context :: struct {
 	// input (input.odin)
 	inp: Input,
 
-	initialized: bool,
+	submissions:     Submission_Tracker,
+	initialized:     bool,
+	composite_alpha: wg.CompositeAlphaMode,
 }
 
 @(private) g: Context
@@ -184,6 +186,8 @@ _gpu_finish :: proc() {
 			}
 		}
 	}
+	g.composite_alpha = alpha
+	_stats_set_alpha_mode(alpha)
 	g.config = wg.SurfaceConfiguration{
 		device      = g.device,
 		format      = g.format,
@@ -199,6 +203,7 @@ _gpu_finish :: proc() {
 	g.last_time = _now()
 	g.target_fps = 0
 
+	_submission_init(&g.submissions)
 	renderer_init(&g.rend)
 	platform_input_init()
 	platform_drop_init()
@@ -209,6 +214,7 @@ _gpu_finish :: proc() {
 CloseWindow :: proc() {
 	if !g.initialized do return
 	renderer_shutdown(&g.rend)
+	_submission_shutdown(&g.submissions)
 	if g.surface != nil do wg.SurfaceRelease(g.surface)
 	if g.queue != nil do wg.QueueRelease(g.queue)
 	if g.device != nil do wg.DeviceRelease(g.device)
@@ -226,6 +232,7 @@ WindowShouldClose :: proc() -> bool {
 
 BeginDrawing :: proc() {
 	_maybe_reconfigure()
+	_stats_frame_begin()
 
 	g.frame.surf_tex = wg.SurfaceGetCurrentTexture(g.surface)
 	#partial switch g.frame.surf_tex.status {
@@ -277,6 +284,7 @@ _ensure_pass :: proc() {
 			},
 		},
 	})
+	_stats_render_pass()
 	g.frame.pass_begun = true
 	// A new pass starts with a full-attachment scissor; restore any active clip.
 	if g.frame.scissor_on {
@@ -293,6 +301,10 @@ EndDrawing :: proc() {
 
 		cmd := wg.CommandEncoderFinish(g.frame.encoder, nil)
 		wg.QueueSubmit(g.queue, {cmd})
+		_stats_queue_submission()
+		retirement := _submission_track(&g.submissions)
+		_geometry_submitted(&g.rend, retirement)
+		_uniform_submitted(&g.rend, retirement)
 		wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(g.frame.encoder)
 		wg.SurfacePresent(g.surface)
@@ -304,6 +316,7 @@ EndDrawing :: proc() {
 		clear(&g.rend.verts)
 	}
 
+	_stats_frame_end()
 	input_poll()
 	_frame_timing()
 }
