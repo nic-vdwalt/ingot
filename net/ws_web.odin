@@ -27,6 +27,7 @@ foreign wsjs {
 WS_State :: enum {
 	Disconnected,
 	Connecting,
+	Reconnecting, // parity with the native backend (browser reconnect is its own concern)
 	Connected,
 	Error,
 }
@@ -45,6 +46,7 @@ WebSocket :: struct {
 	state:      WS_State,
 	host:       string,
 	port:       int,
+	conn_gen:   int, // bumped on each transition into Connected (API parity)
 	recv_queue: [dynamic]WS_Message,
 }
 
@@ -75,12 +77,24 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 @(private = "file")
 ws_poll_state :: proc(ws: ^WebSocket) {
 	if ws.id < 0 { ws.state = .Error; return }
+	prev := ws.state
 	switch ingot_ws_state(ws.id) {
 	case 0: ws.state = .Disconnected
 	case 1: ws.state = .Connecting
 	case 2: ws.state = .Connected
 	case:   ws.state = .Error
 	}
+	// Bump the generation on each transition into Connected so consumers can
+	// re-establish subscriptions, mirroring the native backend.
+	if ws.state == .Connected && prev != .Connected {
+		ws.conn_gen += 1
+	}
+}
+
+// ws_conn_gen mirrors the native accessor (see net/ws.odin).
+ws_conn_gen :: proc(ws: ^WebSocket) -> int {
+	ws_poll_state(ws)
+	return ws.conn_gen
 }
 
 ws_send :: proc(ws: ^WebSocket, data: string) -> bool {

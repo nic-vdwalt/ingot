@@ -207,6 +207,41 @@ term.term_handle_input(&ts, {.W, .T})  // optionally skip chords the app owns
 `term_start` takes optional `default_fg` / `default_bg` RGB params so the
 palette matches the host app's theme.
 
+### Self-healing WebSocket
+
+`ingot:net`'s `WebSocket` client auto-reconnects by default. A background worker
+runs dial → RFC 6455 handshake → receive loop, and **re-dials on every drop**
+until `ws_close`, so a transient network blip recovers on its own. The live
+socket also carries a recv read deadline + PING heartbeat, so a silent half-open
+drop (Wi-Fi hand-off, VPN change, laptop sleep — no FIN/RST) is detected within
+`WS_DEAD_AFTER` (~15 s) instead of hanging the worker forever.
+
+```odin
+import net "ingot:net"
+
+sock := net.ws_init()
+net.ws_start_connect(&sock, host, port, 9999)  // never blocks; retries internally
+
+last_gen := 0
+// each frame:
+gen := net.ws_conn_gen(&sock)                  // ++ on each successful (re)handshake
+if gen != last_gen && sock.state == .Connected {
+    // A fresh connection is live — the previous server-side subscription (if
+    // any) is gone. Re-establish app-level state here (e.g. resend a subscribe
+    // message with your last-seen sequence so the server backfills the gap).
+    resubscribe(&sock)
+    last_gen = gen
+}
+for msg in net.ws_drain(&sock) { /* handle */ }
+```
+
+`sock.state` exposes `.Connecting` / `.Reconnecting` / `.Connected` /
+`.Disconnected` for a connection-status UI. The library is protocol-agnostic —
+it recovers the *transport*; re-establishing any app-level subscription is the
+consumer's job, keyed off `ws_conn_gen`. Pass `auto_reconnect = false` semantics
+via a one-shot caller if you need the legacy behaviour (worker exits on the
+first drop).
+
 ## Web / WASM
 
 Because the renderer is built on `vendor:wgpu`, the **whole engine** — the `gfx`

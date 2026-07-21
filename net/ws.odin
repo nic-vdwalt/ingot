@@ -19,6 +19,7 @@ import "core:time"
 WS_State :: enum {
 	Disconnected,
 	Connecting,
+	Reconnecting, // recovering an established connection after a drop
 	Connected,
 	Error,
 }
@@ -32,6 +33,15 @@ WS_OP_PONG   :: 0xA
 
 // Maximum accepted payload per frame (matches the server's 1 MiB cap).
 WS_MAX_PAYLOAD :: 1 << 20
+
+// Liveness/reconnect tuning. The live socket carries a recv read deadline so a
+// half-open TCP drop (Wi-Fi/VPN/sleep — no FIN/RST) is detected instead of
+// blocking the worker forever: each timeout window sends a PING (the server
+// auto-replies PONG), and the connection is declared dead once no bytes arrive
+// for WS_DEAD_AFTER. WS_RECONNECT_WAIT backs off between dial cycles.
+WS_RECV_TIMEOUT   :: 5 * time.Second
+WS_DEAD_AFTER     :: 15 * time.Second
+WS_RECONNECT_WAIT :: 1 * time.Second
 
 // Thread-safe message queue entry for received WebSocket messages.
 WS_Message :: struct {
@@ -51,6 +61,14 @@ WebSocket :: struct {
 	host:         string,
 	port:         int,
 	max_attempts: int,
+
+	// Self-healing: the worker re-dials on every drop until ws_close, so the
+	// thread lives for the whole session. conn_gen is bumped on each successful
+	// (re)handshake — consumers poll it (ws_conn_gen) to re-establish app-level
+	// subscriptions after a recovery. auto_reconnect=false restores the legacy
+	// one-shot behaviour (worker exits after the first drop).
+	conn_gen:       int,
+	auto_reconnect: bool,
 
 	// Thread-safe receive queue.
 	recv_queue: [dynamic]WS_Message,
@@ -86,6 +104,8 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 	ws.host = host
 	ws.port = port
 	ws.max_attempts = max_attempts
+	ws.auto_reconnect = true
+	ws.conn_gen = 0
 	ws.state = .Connecting
 	ws.running = true
 
@@ -117,9 +137,12 @@ resolve_host :: proc(host: string, port: int) -> (cnet.Endpoint, bool) {
 	return ep, true
 }
 
-// Worker thread body: dial -> handshake -> recv loop.
+// One dial cycle: resolve -> dial -> publish socket -> HTTP upgrade handshake,
+// retried up to max_attempts. Returns true with ws.socket live + a recv read
+// deadline set (see ws_recv_loop's heartbeat). Returns false if every attempt
+// failed or ws_close cut in. The socket is left retracted on failure.
 @(private = "file")
-ws_connect_worker :: proc(ws: ^WebSocket) {
+ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
 	for attempt := 0; attempt < ws.max_attempts && ws.running; attempt += 1 {
 		addr, resolved := resolve_host(ws.host, ws.port)
 		if !resolved {
@@ -137,16 +160,17 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 		if !ws.running {
 			sync.mutex_unlock(&ws.sock_mutex)
 			cnet.close(sock)
-			break
+			return false
 		}
 		ws.socket = sock
 		ws.socket_open = true
 		sync.mutex_unlock(&ws.sock_mutex)
 
 		if ws_handshake(ws, sock) {
-			ws.state = .Connected
-			ws_recv_loop(ws)
-			return
+			// Live read deadline: ws_handshake resets the socket to blocking
+			// after the 101 response, so re-arm it here for the recv loop.
+			_ = cnet.set_option(sock, .Receive_Timeout, WS_RECV_TIMEOUT)
+			return true
 		}
 
 		// Handshake failed: retract the socket and retry.
@@ -158,9 +182,48 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 		sync.mutex_unlock(&ws.sock_mutex)
 		time.sleep(50 * time.Millisecond)
 	}
+	return false
+}
+
+// Worker thread body: a self-healing loop of dial -> handshake -> recv loop.
+// The thread lives for the whole session; every drop re-dials (unless
+// auto_reconnect is off or ws_close set running=false). conn_gen is bumped on
+// each successful handshake so consumers can re-establish subscriptions.
+@(private = "file")
+ws_connect_worker :: proc(ws: ^WebSocket) {
+	first := true
+	for ws.running {
+		ws.state = first ? .Connecting : .Reconnecting
+
+		if !ws_dial_and_handshake(ws) {
+			if !ws.auto_reconnect || !ws.running {
+				break
+			}
+			time.sleep(WS_RECONNECT_WAIT)
+			continue
+		}
+
+		first = false
+		sync.atomic_add(&ws.conn_gen, 1)
+		ws.state = .Connected
+		ws_recv_loop(ws) // returns when the socket drops
+
+		// Retract the dropped socket before the next dial cycle.
+		sync.mutex_lock(&ws.sock_mutex)
+		if ws.socket_open {
+			cnet.close(ws.socket)
+			ws.socket_open = false
+		}
+		sync.mutex_unlock(&ws.sock_mutex)
+
+		if !ws.auto_reconnect || !ws.running {
+			break
+		}
+		time.sleep(WS_RECONNECT_WAIT)
+	}
 
 	if ws.state != .Connected {
-		ws.state = .Error
+		ws.state = .Disconnected
 	}
 	ws.running = false
 }
@@ -210,20 +273,42 @@ ws_accept_for_key :: proc(key: string) -> string {
 	return base64.encode(digest[:], allocator = context.temp_allocator)
 }
 
-// Background receive loop.
+// Background receive loop. Returns (without clearing ws.running) when the
+// socket drops, so ws_connect_worker can re-dial. A recv read deadline
+// (WS_RECV_TIMEOUT, set after the handshake) makes a silent half-open drop
+// detectable: each timeout window sends a PING and, if no bytes have arrived
+// for WS_DEAD_AFTER, declares the connection dead. Only ws_close clears
+// ws.running (which ends the whole session).
 @(private = "file")
 ws_recv_loop :: proc(ws: ^WebSocket) {
 	scratch: [65536]u8
 	acc := make([dynamic]u8) // growable accumulator (handles frames > 64 KB)
 	defer delete(acc)
 
+	last_activity := time.now()
 	for ws.running {
 		n, err := cnet.recv(ws.socket, scratch[:])
-		if err != nil || n == 0 {
+		if err != nil {
+			// A recv timeout is not a disconnect: probe liveness with a PING
+			// (the server auto-replies PONG, counted as activity below) and
+			// only give up once the connection has been silent too long.
+			if err == .Timeout || err == .Would_Block {
+				ws_send_frame(ws, WS_OP_PING, nil)
+				if time.since(last_activity) > WS_DEAD_AFTER {
+					ws.state = .Disconnected
+					return
+				}
+				continue
+			}
 			ws.state = .Disconnected
-			ws.running = false
 			return
 		}
+		if n == 0 {
+			// Graceful close (per core:net: 0 bytes + nil err == peer closed).
+			ws.state = .Disconnected
+			return
+		}
+		last_activity = time.now() // any bytes (events OR a PONG) = alive
 		append(&acc, ..scratch[:n])
 		total := len(acc)
 		buf := acc[:]
@@ -251,11 +336,10 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 				header_size = 10
 			}
 
-			// Oversized frame: protocol violation — disconnect rather than
-			// buffering unbounded data.
+			// Oversized frame: protocol violation — drop the connection rather
+			// than buffering unbounded data (worker will re-dial).
 			if payload_len > WS_MAX_PAYLOAD {
 				ws.state = .Disconnected
-				ws.running = false
 				return
 			}
 
@@ -292,9 +376,8 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 
 			case 0x0:
 				// Continuation frames are unsupported (server never fragments
-				// per PROTOCOL.md); treat as a protocol error.
+				// per PROTOCOL.md); treat as a protocol error and re-dial.
 				ws.state = .Disconnected
-				ws.running = false
 				return
 
 			case WS_OP_PING:
@@ -302,7 +385,6 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 
 			case WS_OP_CLOSE:
 				ws.state = .Disconnected
-				ws.running = false
 				return
 			}
 
@@ -410,6 +492,14 @@ ws_has_pending :: proc(ws: ^WebSocket) -> bool {
 	sync.mutex_lock(&ws.recv_mutex)
 	defer sync.mutex_unlock(&ws.recv_mutex)
 	return len(ws.recv_queue) > 0
+}
+
+// ws_conn_gen returns a counter incremented on each successful (re)handshake.
+// Consumers poll it to re-establish app-level subscriptions after a recovery:
+// when the value advances, a fresh connection is live and any prior server-side
+// subscription (bound to the old socket) is gone.
+ws_conn_gen :: proc(ws: ^WebSocket) -> int {
+	return sync.atomic_load(&ws.conn_gen)
 }
 
 // Close the WebSocket connection. Stops the worker thread: closing the
