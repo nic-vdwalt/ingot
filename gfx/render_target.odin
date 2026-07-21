@@ -56,6 +56,7 @@ BeginTextureMode :: proc(target: RenderTexture2D) {
 	g.frame.rt_w = e.width
 	g.frame.rt_h = e.height
 	g.frame.rt_clear = Color{0, 0, 0, 0}
+	g.frame.rt_should_clear = false
 	g.frame.rt_pass_begun = false
 	g.frame.rt_depth = target.depth.id != 0
 	g.frame.depth_view = g.frame.rt_depth ? _texture_view(target.depth.id) : nil
@@ -79,10 +80,14 @@ _ensure_rt_pass :: proc() {
 	if view == nil do return
 	g.frame.rt_encoder = wg.DeviceCreateCommandEncoder(g.device, nil)
 	cc := g.frame.rt_clear
+	// Preserve the target's contents by default (raylib: BeginTextureMode does
+	// not clear). Only clear when ClearBackground was called after
+	// BeginTextureMode this frame.
+	load_op := wg.LoadOp.Load if !g.frame.rt_should_clear else wg.LoadOp.Clear
 	color := wg.RenderPassColorAttachment{
 		view       = view,
 		depthSlice = wg.DEPTH_SLICE_UNDEFINED,
-		loadOp     = .Clear,
+		loadOp     = load_op,
 		storeOp    = .Store,
 		clearValue = {f64(cc.r) / 255.0, f64(cc.g) / 255.0, f64(cc.b) / 255.0, f64(cc.a) / 255.0},
 	}

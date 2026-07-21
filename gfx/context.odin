@@ -32,6 +32,13 @@ Frame_State :: struct {
 	rt_pass:       wg.RenderPassEncoder,
 	rt_pass_begun: bool,
 	rt_clear:      Color,
+	// True when ClearBackground was called after BeginTextureMode (before the
+	// RT pass began). Selects loadOp = .Clear; otherwise the RT pass uses
+	// loadOp = .Load to preserve the target's prior contents (raylib parity —
+	// BeginTextureMode alone does not clear). Incremental renderers (the nvim
+	// grid's per-row dirty redraw) and additive-accumulation passes (galaxy
+	// streak combine) depend on this preserve-by-default behaviour.
+	rt_should_clear: bool,
 	rt_w, rt_h:    i32,
 	rt_depth:      bool,          // RT pass carries a depth attachment (3D)
 	// 3D mode (Phase 4): a depth-enabled pass replaces the current 2D pass.
@@ -243,6 +250,7 @@ ClearBackground :: proc(c: Color) {
 	// clears the target). Otherwise it sets the swapchain clear.
 	if g.frame.rt != 0 && !g.frame.rt_pass_begun {
 		g.frame.rt_clear = c
+		g.frame.rt_should_clear = true
 		return
 	}
 	g.frame.clear_color = c
