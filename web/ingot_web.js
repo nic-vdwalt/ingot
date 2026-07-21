@@ -30,7 +30,8 @@
 		return new TextDecoder().decode(wasmBytes(pointer, length));
 	}
 
-	function httpImports() {
+	function httpImports(wmi) {
+		if (wmi) wasmMemoryInterface = wmi;
 		const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 		return {
 			ingot_http_request: (method, urlPointer, urlLength, headersPointer,
