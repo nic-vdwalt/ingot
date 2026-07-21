@@ -2,7 +2,10 @@
 
 > Destination when approved: `ingot/docs/rendering.md`.
 >
-> Status: **reviewed plan only — not implemented**.
+> Status: **implemented and verified on native Metal; native/web builds pass.**
+> openalloy and cc-predev-scout compile against this checkout. ww-concord is
+> blocked by its pre-existing exhaustive switch over the newer net
+> `WS_State.Reconnecting` variant, unrelated to gfx.
 >
 > This supersedes the first draft. The review found correctness problems in the
 > original persistent-buffer, dynamic-uniform, indexed-batch, depth-pass, API
@@ -473,23 +476,43 @@ implementation time; do not invent or hard-code them in this plan.
 
 ## Revised implementation order
 
-1. Replace `ingot/docs/rendering.md` with this reviewed v2 plan.
-2. Add bounded renderer stats and a deterministic renderer fixture.
-3. Record baseline native results and run all existing build/check gates.
-4. Implement submission retirement/resource lifetime infrastructure.
-5. Implement unique-offset non-indexed geometry streaming with fallback.
-6. Validate geometry streaming, then remove per-flush batch buffers.
-7. Fix custom-shader and raw-instancing uniform overwrite hazards using immutable
-   aligned records.
-8. Profile; consolidate projection uniforms only if measurements justify it.
-9. Add universal indexed batching as a separate measured experiment.
-10. Name/document/test the existing RT orientation without changing its default.
-11. Record and validate selected surface alpha mode; add fallback composite only
-    if a real unsupported-premultiplied case is reproduced.
-12. Add the explicit opt-in depth-capable GPU 3D pass and mesh pipeline.
-13. Add the generation-checked idiomatic API wrappers without deprecation.
-14. Run ingot gates, native/web fixtures, and all three downstream builds/smokes.
-15. Update README and mark only completed, measured phases as shipped.
+1. [x] Replace `ingot/docs/rendering.md` with this reviewed v2 plan.
+2. [x] Add bounded renderer stats and a deterministic renderer fixture.
+3. [x] Record baseline native results and run all existing build/check gates.
+4. [x] Implement submission retirement/resource lifetime infrastructure.
+5. [x] Implement unique-offset non-indexed geometry streaming.
+6. [x] Validate geometry streaming, then remove per-flush batch buffers.
+7. [x] Fix custom-shader and raw-instancing uniform overwrite hazards using immutable aligned records.
+8. [x] Profile projection uniforms; retain the deliberate window/RT split.
+9. [x] Add universal indexed batching and validate mixed primitives.
+10. [x] Name/document/test the existing RT orientation without changing its default.
+11. [x] Record selected surface alpha mode; no fallback added because Metal exposes premultiplied mode.
+12. [x] Add the explicit opt-in depth-capable GPU 3D pass and mesh pipeline.
+13. [x] Add the generation-checked idiomatic API wrappers without deprecation.
+14. [x] Run ingot gates, native/web fixtures, and downstream compile checks.
+15. [x] Update README and mark only completed, measured phases as shipped.
+
+## Implementation results
+
+- Fixture baseline before streaming: 10 flushes, 846 vertices, 27,072 uploaded
+  bytes, and 10 batch-buffer creations in its first frame.
+- Indexed streaming result: 10 flushes, 788 vertices, 846 indices, 28,600 uploaded
+  bytes, and one fixed-capacity geometry-buffer creation. The fixture rendered
+  correctly on native Metal with no WebGPU validation error.
+- Geometry, index, uniform, and matrix-stack hot paths use bounded fixed-capacity
+  storage; resource construction may allocate, but frame/draw submission does not.
+- Opt-in GPU 3D result: two depth-tested sphere draws rendered through a separate
+  depth-capable pass; peak first-frame uniform arena usage was 416 bytes.
+- `scripts/test.sh -define:ODIN_TEST_THREADS=1`, `scripts/check.sh`, native demo,
+  fixture, and web build pass. The default parallel UI test run has a pre-existing
+  shared-global scale test race; the serialized suite is clean. `odinfmt` was not
+  installed, so `scripts/check.sh` skipped its optional format check.
+- openalloy and cc-predev-scout compile against this checkout unchanged.
+  ww-concord compiles against its older bundled ingot but sees the newer
+  `WS_State.Reconnecting` variant in this checkout; its exhaustive switch must be
+  updated before it can consume current ingot. This is unrelated to gfx.
+- `Rect`, `Vec2`, `Vec3`, and `RGBA` preserve existing type layouts. PascalCase,
+  legacy 3D, RT orientation/preserve behavior, and public `rlgl` remain unchanged.
 
 ## Ship/rollback policy
 

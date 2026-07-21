@@ -32,6 +32,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	g.device = dres.device
 	g.queue = wg.DeviceGetQueue(g.device)
 	g.format = .BGRA8Unorm
+	_submission_init(&g.submissions)
 	renderer_init(&g.rend)
 
 	cps: [95]rune
@@ -40,6 +41,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	defer {
 		UnloadFont(f)
 		renderer_shutdown(&g.rend)
+		_submission_shutdown(&g.submissions)
 		wg.QueueRelease(g.queue)
 		wg.DeviceRelease(g.device)
 		wg.AdapterRelease(g.adapter)

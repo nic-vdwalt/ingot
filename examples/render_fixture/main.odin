@@ -12,6 +12,8 @@ source_texture: rl.Texture2D
 primary_rt: rl.RenderTexture2D
 ping_rt: rl.RenderTexture2D
 pong_rt: rl.RenderTexture2D
+gpu_target: rl.Gpu_3D_Target
+gpu_sphere: rl.Gpu_Mesh
 resources_ready: bool
 
 main :: proc() {
@@ -71,11 +73,33 @@ ensure_resources :: proc() {
 	primary_rt = rl.LoadRenderTexture(256, 160)
 	ping_rt = rl.LoadRenderTexture(128, 80)
 	pong_rt = rl.LoadRenderTexture(128, 80)
+	target_ok, sphere_ok: bool
+	gpu_target, target_ok = rl.create_gpu_3d_target(384, 240)
+	gpu_sphere, sphere_ok = rl.create_sphere_mesh(1, 16, 24)
 	resources_ready = font_ready && source_texture.id != 0 &&
-		primary_rt.texture.id != 0 && ping_rt.texture.id != 0 && pong_rt.texture.id != 0
+		primary_rt.texture.id != 0 && ping_rt.texture.id != 0 && pong_rt.texture.id != 0 &&
+		target_ok && sphere_ok
 }
 
 draw_render_targets :: proc() {
+	camera := rl.Camera3D{
+		position = {0, 0, 5},
+		target = {0, 0, 0},
+		up = {0, 1, 0},
+		fovy = 45,
+		projection = .PERSPECTIVE,
+	}
+	gpu_pass, ok := rl.begin_gpu_3d(&gpu_target, camera)
+	if ok {
+		rl.draw_gpu_mesh(&gpu_pass, gpu_sphere, rl.MatrixTranslate(-0.65, 0, 0), {
+			color = rl.Color{80, 160, 255, 255},
+		})
+		rl.draw_gpu_mesh(&gpu_pass, gpu_sphere, rl.MatrixTranslate(0.65, 0, -1), {
+			color = rl.Color{255, 120, 80, 255},
+		})
+		rl.end_gpu_3d(&gpu_pass)
+	}
+
 	rl.BeginTextureMode(primary_rt)
 	rl.ClearBackground(rl.Color{12, 16, 28, 255})
 	rl.DrawRectangle(8, 8, 240, 144, rl.Color{38, 50, 82, 255})
@@ -137,8 +161,8 @@ draw_main_fixture :: proc() {
 		rl.WHITE,
 	)
 	rl.DrawTexturePro(
-		pong_rt.texture,
-		{0, 0, 128, -80},
+		gpu_target.texture.texture,
+		{0, 0, 384, -240},
 		{432, 236, 384, 240},
 		{0, 0},
 		0,

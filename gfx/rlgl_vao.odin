@@ -279,19 +279,9 @@ RlDrawVertexArrayInstanced :: proc(offset, count, instances: i32) {
 
 	u_offset, ok := _uniform_upload(&g.rend, raw_data(se.ushadow), u64(len(se.ushadow)))
 	if !ok do return
-	u_bind := wg.DeviceCreateBindGroup(g.device, &{
-		layout = se.u_layout,
-		entryCount = 1,
-		entries = &wg.BindGroupEntry{
-			binding = 0,
-			buffer = g.rend.uniforms.buffer,
-			size = u64(len(se.ushadow)),
-		},
-	})
-	append(&g.rend.uniforms.transient_binds, u_bind)
 	wg.RenderPassEncoderSetPipeline(pass, pipe)
 	_stats_pipeline_switch()
-	wg.RenderPassEncoderSetBindGroup(pass, 0, u_bind, {u_offset})
+	wg.RenderPassEncoderSetBindGroup(pass, 0, se.u_bind, {u_offset})
 	_stats_bind_group_switches(1)
 	for b, i in v.buffers {
 		if b.buf != nil {

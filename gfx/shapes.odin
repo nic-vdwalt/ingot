@@ -249,14 +249,14 @@ DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Colo
 	x1, y1 := x0 + f32(width), y0 + f32(height)
 	cl := col_f(left)
 	cr := col_f(right)
+	base := u32(len(g.rend.verts))
 	append(&g.rend.verts,
 		Vertex{{x0, y0}, cl, {0, 0}},
 		Vertex{{x0, y1}, cl, {0, 0}},
 		Vertex{{x1, y0}, cr, {0, 0}},
-		Vertex{{x1, y0}, cr, {0, 0}},
-		Vertex{{x0, y1}, cl, {0, 0}},
 		Vertex{{x1, y1}, cr, {0, 0}},
 	)
+	append(&g.rend.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }
 
 // DrawRectangleGradientV draws a rect with a top→bottom color gradient.
@@ -267,12 +267,12 @@ DrawRectangleGradientV :: proc(posX, posY, width, height: i32, top, bottom: Colo
 	x1, y1 := x0 + f32(width), y0 + f32(height)
 	ct := col_f(top)
 	cb := col_f(bottom)
+	base := u32(len(g.rend.verts))
 	append(&g.rend.verts,
 		Vertex{{x0, y0}, ct, {0, 0}},
 		Vertex{{x0, y1}, cb, {0, 0}},
 		Vertex{{x1, y0}, ct, {0, 0}},
-		Vertex{{x1, y0}, ct, {0, 0}},
-		Vertex{{x0, y1}, cb, {0, 0}},
 		Vertex{{x1, y1}, cb, {0, 0}},
 	)
+	append(&g.rend.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }

@@ -300,20 +300,20 @@ remaining GPU-heavy and cross-platform work.
 
 ### Now (in progress)
 
-- **On-device validation of the 3D / advanced-GPU path.** The HDR bloom/tonemap
-  chain, custom WGSL shaders, offscreen render targets, and GPU instancing
-  compile and run without validation errors, but need visual verification and
-  tuning on real Metal/D3D12/Vulkan displays.
-- **Render-target Y-flip correctness** across the multi-pass bloom chain.
+- **On-device validation of the opt-in GPU 3D path.** Depth-tested indexed
+  sphere meshes render through a separate pass without changing legacy
+  `BeginMode3D`; Metal is verified, while D3D12/Vulkan and browser validation
+  remain.
+- **HDR bloom/tonemap consumer migration.** ingot now names and preserves its
+  render-target Y-flip convention; openalloy's multipass galaxy chain can migrate
+  independently without changing nvim render-texture behavior.
 
 ### Next
 
-- **A true GPU 3D mesh pipeline** — depth-tested instanced spheres to replace
-  the current CPU-projected billboard/disc approximation.
 - **Indexed instancing** (`DrawVertexArrayElementsInstanced`) for 3D node bodies.
-- **macOS transparent-window blending** — reconcile premultiplied batch output
-  with the surface's `Unpremultiplied` alpha mode for correct semi-transparent
-  backdrops.
+- **Transparent/additive GPU 3D pipelines** with explicit depth-read/write policy.
+- **macOS transparent-window fallback compositing** if a device exposes only
+  `Unpremultiplied`; premultiplied mode is already preferred when supported.
 
 ### Later
 
@@ -323,6 +323,13 @@ remaining GPU-heavy and cross-platform work.
 
 ### Recently shipped
 
+- Submission-tracked geometry streaming with unique vertex/index ranges replaces
+  per-flush GPU buffer creation; universal indexed 2D batching cuts duplicated
+  quad vertices, and dynamic uniform records preserve per-draw shader state.
+- A deterministic renderer fixture, opt-in depth-tested GPU sphere pass, selected
+  surface-alpha diagnostics, and additive generation-checked `Frame`/`draw_*`
+  wrappers. Existing PascalCase, `rlgl`, RT orientation, and public layouts remain
+  compatible.
 - Full `ingot:ui` + text atlas running on the browser/WASM target via the
   platform seam.
 - WebGPU engine capabilities: per-pipeline blend modes

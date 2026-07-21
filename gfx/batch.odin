@@ -33,10 +33,12 @@ Blend_Slot :: enum {
 	Custom,
 }
 
-GEOMETRY_STREAM_INITIAL_BYTES :: u64(256 * 1024)
-GEOMETRY_STREAM_MAX_BYTES :: u64(64 * 1024 * 1024)
+GEOMETRY_STREAM_BYTES :: u64(16 * 1024 * 1024)
 GEOMETRY_STREAM_ALIGN :: u64(4)
 UNIFORM_STREAM_BYTES :: u64(16 * 1024 * 1024)
+BATCH_MAX_VERTICES :: 262_144
+BATCH_MAX_INDICES :: 393_216
+MODEL_STACK_MAX :: 64
 
 Geometry_Stream :: struct {
 	buffer:              wg.Buffer,
@@ -45,22 +47,17 @@ Geometry_Stream :: struct {
 	used:                u64,
 	retirement:          u64,
 	pending:             bool,
-	in_flight:           bool,
-	grow_pending:        bool,
-	fallback_buffers:    [dynamic]wg.Buffer,
-	fallback_retirement: u64,
+	in_flight: bool,
 }
 
 Uniform_Stream :: struct {
-	buffer:           wg.Buffer,
-	capacity:         u64,
-	cursor:           u64,
-	alignment:        u64,
-	retirement:       u64,
-	pending:          bool,
-	in_flight:        bool,
-	transient_binds:  [dynamic]wg.BindGroup,
-	bind_retirement:  u64,
+	buffer:     wg.Buffer,
+	capacity:   u64,
+	cursor:     u64,
+	alignment:  u64,
+	retirement: u64,
+	pending:    bool,
+	in_flight:  bool,
 }
 
 Renderer :: struct {
@@ -88,8 +85,8 @@ Renderer :: struct {
 	cur_u:    wg.BindGroup,
 
 	// current run
-	verts:     [dynamic]Vertex,
-	indices:   [dynamic]u32,
+	verts:     [dynamic; BATCH_MAX_VERTICES]Vertex,
+	indices:   [dynamic; BATCH_MAX_INDICES]u32,
 	cur_kind:  Pipe_Kind,
 	cur_bind:  wg.BindGroup,
 	cur_blend: Blend_Slot,
@@ -102,7 +99,7 @@ Renderer :: struct {
 	// so rlgl.PushMatrix/Translatef/PopMatrix shift subsequent draws (the galaxy
 	// pane origin transform).
 	model_off:   [2]f32,
-	model_stack: [dynamic][2]f32,
+	model_stack: [dynamic; MODEL_STACK_MAX][2]f32,
 
 	// Custom blend factors (set by rlgl.SetBlendFactors; default = Alpha).
 	cust_src: wg.BlendFactor,
@@ -347,15 +344,8 @@ renderer_init :: proc(r: ^Renderer) {
 }
 
 renderer_shutdown :: proc(r: ^Renderer) {
-	for bind in r.uniforms.transient_binds do wg.BindGroupRelease(bind)
-	delete(r.uniforms.transient_binds)
 	if r.uniforms.buffer != nil do wg.BufferRelease(r.uniforms.buffer)
 	if r.geometry.buffer != nil do wg.BufferRelease(r.geometry.buffer)
-	for buffer in r.geometry.fallback_buffers do wg.BufferRelease(buffer)
-	delete(r.geometry.fallback_buffers)
-	delete(r.verts)
-	delete(r.indices)
-	delete(r.model_stack)
 	for kind in Pipe_Kind {
 		for slot in Blend_Slot {
 			if r.pipes[kind][slot] != nil do wg.RenderPipelineRelease(r.pipes[kind][slot])
@@ -489,8 +479,8 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder) {
 	assert(index_count > 0)
 	vertex_bytes := u64(n) * size_of(Vertex)
 	index_bytes := u64(index_count) * size_of(u32)
-	vbuf, vertex_offset, _ := _geometry_upload(r, raw_data(r.verts), vertex_bytes, {.Vertex})
-	ibuf, index_offset, _ := _geometry_upload(r, raw_data(r.indices), index_bytes, {.Index})
+	vbuf, vertex_offset, _ := _geometry_upload(r, raw_data(r.verts[:]), vertex_bytes, {.Vertex})
+	ibuf, index_offset, _ := _geometry_upload(r, raw_data(r.indices[:]), index_bytes, {.Index})
 	if vbuf == nil || ibuf == nil do return
 	_stats_flush(u64(n), vertex_bytes + index_bytes)
 	when RENDER_STATS_ENABLED {
@@ -535,14 +525,11 @@ _geometry_upload :: proc(
 	assert(size > 0)
 	_geometry_poll(r)
 	stream := &r.geometry
-	if stream.buffer == nil || stream.grow_pending {
-		_geometry_create(stream, max(size, GEOMETRY_STREAM_INITIAL_BYTES), usage)
+	if stream.buffer == nil {
+		_geometry_create(stream, usage)
 	}
 	offset := _align_u64(stream.cursor, GEOMETRY_STREAM_ALIGN)
-	if offset + size > stream.capacity {
-		stream.grow_pending = true
-		return nil, 0, false
-	}
+	if offset + size > stream.capacity do return nil, 0, false
 	wg.QueueWriteBuffer(g.queue, stream.buffer, offset, data, uint(size))
 	stream.cursor = offset + size
 	stream.used = max(stream.used, stream.cursor)
@@ -557,26 +544,19 @@ _geometry_upload :: proc(
 }
 
 @(private)
-_geometry_create :: proc(stream: ^Geometry_Stream, need: u64, usage: wg.BufferUsageFlags) {
+_geometry_create :: proc(stream: ^Geometry_Stream, usage: wg.BufferUsageFlags) {
 	assert(stream != nil)
-	assert(need > 0)
-	if stream.buffer != nil && stream.in_flight do return
-	capacity := GEOMETRY_STREAM_INITIAL_BYTES
-	for capacity < need && capacity < GEOMETRY_STREAM_MAX_BYTES do capacity *= 2
-	if capacity > GEOMETRY_STREAM_MAX_BYTES do capacity = GEOMETRY_STREAM_MAX_BYTES
-	if capacity < need do return
-	growth := stream.buffer != nil
-	if stream.buffer != nil do wg.BufferRelease(stream.buffer)
+	assert(stream.buffer == nil)
 	stream^ = {
 		buffer = wg.DeviceCreateBuffer(g.device, &{
 			usage = {.Vertex, .Index, .CopyDst},
-			size = capacity,
+			size = GEOMETRY_STREAM_BYTES,
 		}),
-		capacity = capacity,
+		capacity = GEOMETRY_STREAM_BYTES,
 	}
-	_stats_buffer_created(growth)
+	_stats_buffer_created(false)
 	assert(stream.buffer != nil)
-	assert(stream.capacity >= need)
+	assert(stream.capacity == GEOMETRY_STREAM_BYTES)
 }
 
 @(private)
@@ -590,16 +570,6 @@ _geometry_poll :: proc(r: ^Renderer) {
 		stream.cursor = 0
 		stream.used = 0
 	}
-	if stream.fallback_retirement > 0 && completed >= stream.fallback_retirement {
-		for buffer in stream.fallback_buffers do wg.BufferRelease(buffer)
-		clear(&stream.fallback_buffers)
-		stream.fallback_retirement = 0
-	}
-	if stream.grow_pending && !stream.in_flight {
-		need := min(max(stream.capacity * 2, GEOMETRY_STREAM_INITIAL_BYTES), GEOMETRY_STREAM_MAX_BYTES)
-		_geometry_create(stream, need, {.Vertex, .Index})
-		stream.grow_pending = false
-	}
 	assert(stream.cursor <= stream.capacity || stream.buffer == nil)
 }
 
@@ -607,16 +577,10 @@ _geometry_poll :: proc(r: ^Renderer) {
 _geometry_submitted :: proc(r: ^Renderer, retirement: u64) {
 	assert(r != nil)
 	if !r.geometry.pending do return
-	if retirement == 0 {
-		r.geometry.grow_pending = true
-		return
-	}
+	if retirement == 0 do return
 	r.geometry.pending = false
 	r.geometry.in_flight = true
 	r.geometry.retirement = retirement
-	if len(r.geometry.fallback_buffers) > 0 {
-		r.geometry.fallback_retirement = retirement
-	}
 	assert(r.geometry.retirement > 0)
 }
 
@@ -669,11 +633,6 @@ _uniform_poll :: proc(r: ^Renderer) {
 		r.uniforms.retirement = 0
 		r.uniforms.cursor = 0
 	}
-	if r.uniforms.bind_retirement > 0 && completed >= r.uniforms.bind_retirement {
-		for bind in r.uniforms.transient_binds do wg.BindGroupRelease(bind)
-		clear(&r.uniforms.transient_binds)
-		r.uniforms.bind_retirement = 0
-	}
 	assert(r.uniforms.cursor <= r.uniforms.capacity)
 }
 
@@ -684,9 +643,6 @@ _uniform_submitted :: proc(r: ^Renderer, retirement: u64) {
 	r.uniforms.pending = false
 	r.uniforms.in_flight = true
 	r.uniforms.retirement = retirement
-	if len(r.uniforms.transient_binds) > 0 {
-		r.uniforms.bind_retirement = retirement
-	}
 	assert(r.uniforms.retirement > 0)
 }
 
