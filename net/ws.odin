@@ -31,8 +31,10 @@ WS_OP_CLOSE  :: 0x8
 WS_OP_PING   :: 0x9
 WS_OP_PONG   :: 0xA
 
-// Maximum accepted payload per frame (matches the server's 1 MiB cap).
-WS_MAX_PAYLOAD :: 1 << 20
+// Maximum accepted payload per frame. Session-resume history is sent in one
+// outbound server frame and can exceed 1 MiB for long chats; match the server's
+// inbound ceiling so valid history does not look like a dropped connection.
+WS_MAX_PAYLOAD :: 32 * 1024 * 1024
 
 // Liveness/reconnect tuning. The live socket carries a recv read deadline so a
 // half-open TCP drop (Wi-Fi/VPN/sleep — no FIN/RST) is detected instead of
@@ -338,7 +340,7 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 
 			// Oversized frame: protocol violation — drop the connection rather
 			// than buffering unbounded data (worker will re-dial).
-			if payload_len > WS_MAX_PAYLOAD {
+			if payload_len < 0 || payload_len > WS_MAX_PAYLOAD {
 				ws.state = .Disconnected
 				return
 			}
