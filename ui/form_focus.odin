@@ -1,3 +1,8 @@
+// Keyboard focus cycling for forms. The caller owns a single int focus slot;
+// widget ids are 1-BASED (1..count) and 0 means "nothing focused". Tab moves
+// forward, Shift+Tab backward, both wrapping. Widgets pair the slot with
+// Focus_Opt (focus_ring.odin) for focus-visible rings and Space/Enter
+// activation.
 package ui
 
 import rl "ingot:gfx"

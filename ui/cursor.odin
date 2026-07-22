@@ -30,10 +30,12 @@ g_applied_cursor: rl.MouseCursor = .DEFAULT
 @(private = "file")
 g_cursor_initialized: bool
 
-// begin_cursor_frame resets the requested cursor to DEFAULT. Call once at the
-// start of each frame, before any UI is drawn.
+// begin_cursor_frame resets the requested cursor to DEFAULT and rotates the
+// input router's claim buffer. Call once at the start of each frame, before
+// any UI is drawn.
 begin_cursor_frame :: proc() {
 	g_requested_cursor = .DEFAULT
+	route_begin_frame()
 }
 
 // request_cursor records the desired cursor for this frame. Hover handlers
@@ -42,9 +44,11 @@ request_cursor :: proc(c: rl.MouseCursor) {
 	g_requested_cursor = c
 }
 
-// apply_cursor applies the requested cursor once per frame. Call once at the
-// end of each frame, after all UI is drawn.
+// apply_cursor replays any recorded overlay draws (popups/tooltips paint
+// above all main content) and applies the requested cursor once per frame.
+// Call once at the end of each frame, after all UI is drawn.
 apply_cursor :: proc() {
+	overlay_flush()
 	if !rl.IsWindowFocused() || !rl.IsCursorOnScreen() {
 		g_cursor_initialized = false
 		return

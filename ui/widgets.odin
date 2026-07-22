@@ -510,6 +510,8 @@ btn_gloss :: proc(rect: rl.Rectangle) {
 
 // Unified button. Returns true if clicked this frame. Hover eases in/out via
 // hover_anim_frac (frame-rate independent); pressed state darkens instantly.
+// Pass `focus` to make the button keyboard-operable: clicking acquires the
+// slot, the ring draws while focused, and Space/Enter activates.
 btn :: proc(
 	x, y, w, h: i32,
 	label: string,
@@ -517,12 +519,17 @@ btn :: proc(
 	font_size: i32 = 0,
 	enabled: bool = true,
 	web_form_id: string = "",
+	focus: Focus_Opt = {},
 ) -> bool {
 	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	mouse := rl.GetMousePosition()
 	hovered := enabled && rl.CheckCollisionPointRec(mouse, rect)
 	clicked := hovered && rl.IsMouseButtonReleased(.LEFT)
+	if enabled {
+		focus_opt_click(focus, x, y, w, h)
+		clicked = clicked || focus_opt_activated(focus)
+	}
 	if web_form_id != "" {
 		clicked = clicked || rl.SyncWebSubmitButton(
 			web_form_id, label, x, y, w, h, i32(style), fs, enabled,
@@ -549,6 +556,9 @@ btn :: proc(
 	if style == .Primary && enabled do btn_gloss(rect)
 	if border.a > 0 {
 		rl.DrawRectangleRoundedLinesEx(rect, BTN_ROUNDNESS, BTN_SEGMENTS, BTN_BORDER_W, border)
+	}
+	if enabled && focus_opt_focused(focus) {
+		draw_focus_ring(x, y, w, h)
 	}
 
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
@@ -869,8 +879,8 @@ progress_bar_animated :: proc(x, y, w, h: i32, frac: f32, anim: ^f32, color: rl.
 
 // icon_btn draws a small square ghost button (for ✕ / ◀ / ▶ style glyphs).
 // Returns true if clicked this frame.
-icon_btn :: proc(x, y, size: i32, label: string, enabled: bool = true) -> bool {
-	return btn(x, y, size, size, label, .Ghost, FONT_SIZE_SMALL, enabled)
+icon_btn :: proc(x, y, size: i32, label: string, enabled: bool = true, focus: Focus_Opt = {}) -> bool {
+	return btn(x, y, size, size, label, .Ghost, FONT_SIZE_SMALL, enabled, focus = focus)
 }
 
 // kv_row draws key (left, truncated) and value (right-aligned) on one line.
@@ -909,19 +919,41 @@ pane_reset :: proc(p: ^Pane) {
 }
 
 // pane_begin handles wheel input over the pane rect, clamps scroll, begins the
-// scissor, and returns the y cursor the caller should start drawing at.
-pane_begin :: proc(p: ^Pane, x, y, w, h: i32, pad: i32 = 10) -> (cursor_y: i32) {
+// scissor, and returns the y cursor the caller should start drawing at. When
+// `keyboard` is true and the mouse hovers the pane, PageUp/PageDown/Home/End
+// and Up/Down arrows scroll it — leave it off for panes that host text inputs
+// (their caret owns those keys).
+pane_begin :: proc(p: ^Pane, x, y, w, h: i32, pad: i32 = 10, keyboard: bool = false) -> (cursor_y: i32) {
 	// Why assert: an already-open pane means a missing pane_end — the scissor
 	// stack would corrupt every subsequent draw.
 	assert(!p.open, "pane_begin: pane already begun (missing pane_end)")
 	assert(w >= 0 && h >= 0, "pane_begin: negative pane size")
 	p.open = true
-	if rl.CheckCollisionPointRec(rl.GetMousePosition(), {f32(x), f32(y), f32(w), f32(h)}) {
+	hovered := rl.CheckCollisionPointRec(rl.GetMousePosition(), {f32(x), f32(y), f32(w), f32(h)})
+	if hovered {
 		p.scroll -= get_wheel_move() * f32(sc(24))
+	}
+	if keyboard && hovered {
+		pane_keyboard_scroll(p, h)
 	}
 	p.scroll = clamp(p.scroll, 0, f32(max(p.content_h - h, 0)))
 	begin_pane_scissor(x, y, w, h)
 	return y + sc(pad) - i32(p.scroll)
+}
+
+// pane_keyboard_scroll applies PageUp/PageDown/Home/End and Up/Down arrow
+// scrolling to a hovered pane. Scroll is clamped by pane_begin right after.
+@(private = "file")
+pane_keyboard_scroll :: proc(p: ^Pane, h: i32) {
+	assert(p != nil, "pane_keyboard_scroll: nil pane")
+	assert(p.open, "pane_keyboard_scroll: pane not begun")
+	step := f32(LINE_HEIGHT)
+	if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN) do p.scroll += step
+	if rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP) do p.scroll -= step
+	if rl.IsKeyPressed(.PAGE_DOWN) || rl.IsKeyPressedRepeat(.PAGE_DOWN) do p.scroll += f32(h)
+	if rl.IsKeyPressed(.PAGE_UP) || rl.IsKeyPressedRepeat(.PAGE_UP) do p.scroll -= f32(h)
+	if rl.IsKeyPressed(.HOME) do p.scroll = 0
+	if rl.IsKeyPressed(.END) do p.scroll = f32(max(p.content_h - h, 0))
 }
 
 // pane_end ends the scissor, records the measured content height from the
@@ -954,27 +986,38 @@ back_btn_w :: proc(label: string) -> i32 {
 
 // back_btn draws the standard Ghost-style "← label" navigation button.
 // Returns true if clicked this frame.
-back_btn :: proc(x, y: i32, label: string) -> bool {
+back_btn :: proc(x, y: i32, label: string, focus: Focus_Opt = {}) -> bool {
 	txt := fmt.tprintf("\u2190 %s", label)
-	return btn(x, y, back_btn_w(label), sc(22), txt, .Ghost)
+	return btn(x, y, back_btn_w(label), sc(22), txt, .Ghost, focus = focus)
 }
 
 // --- standardized collapsible section header -------------------------------
 
 // collapsible_header draws a full-width clickable header band with the label
 // on the left and a chevron state indicator on the right. Toggles open^ on
-// click; returns true on the frame it toggled (caller persists open state).
+// click (or Space/Enter while focused); returns true on the frame it toggled
+// (caller persists open state).
 collapsible_header :: proc(x, y, w: i32, label: string, open: ^bool,
-	font_size: i32 = FONT_SIZE_SMALL) -> (toggled: bool) {
+	font_size: i32 = FONT_SIZE_SMALL, focus: Focus_Opt = {}) -> (toggled: bool) {
+	assert(open != nil, "collapsible_header: nil open state")
+	assert(w > 0, "collapsible_header: non-positive width")
 	h := sc(26)
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	hovered := rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
+	focus_opt_click(focus, x, y, w, h)
 	if hovered {
 		request_cursor(.POINTING_HAND)
 		if rl.IsMouseButtonReleased(.LEFT) {
 			open^ = !open^
 			toggled = true
 		}
+	}
+	if focus_opt_activated(focus) {
+		open^ = !open^
+		toggled = true
+	}
+	if focus_opt_focused(focus) {
+		draw_focus_ring(x, y, w, h)
 	}
 	lbl := strings.clone_to_cstring(label, context.temp_allocator)
 	draw_text(lbl, x + sc(10), y + sc(6), font_size, theme.fg_label)

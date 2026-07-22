@@ -116,6 +116,7 @@ Theme :: struct {
 	fg_accent_light:     rl.Color, // Lighter accent for text on dark
 	fg_muted_dim:        rl.Color, // Dimmed text (muted users, disabled)
 	modal_dim:           rl.Color, // Backdrop dim behind modals
+	focus_ring:          rl.Color, // Keyboard focus-visible ring around widgets
 
 	// Depth & flare (additive fields; zero alpha disables the effect).
 	shadow_color:               rl.Color, // Soft drop-shadow tint under cards
@@ -228,6 +229,7 @@ THEME_DARK :: Theme {
 	fg_accent_light     = rl.Color{129, 140, 248, 255},
 	fg_muted_dim        = rl.Color{110, 115, 122, 255},
 	modal_dim           = rl.Color{0, 0, 0, 140},
+	focus_ring          = rl.Color{129, 160, 255, 220},
 	shadow_color        = rl.Color{0, 0, 0, 120},
 	button_primary_grad_top = rl.Color{255, 255, 255, 20},
 	button_primary_grad_bottom = rl.Color{0, 0, 0, 0},
@@ -306,6 +308,7 @@ THEME_LIGHT :: Theme {
 	fg_accent_light     = rl.Color{80, 95, 220, 255},
 	fg_muted_dim        = rl.Color{150, 155, 165, 255},
 	modal_dim           = rl.Color{0, 0, 0, 90},
+	focus_ring          = rl.Color{30, 100, 220, 220},
 	shadow_color        = rl.Color{40, 45, 70, 70},
 	button_primary_grad_top = rl.Color{255, 255, 255, 55},
 	button_primary_grad_bottom = rl.Color{0, 0, 0, 0},
