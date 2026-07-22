@@ -51,6 +51,122 @@ WS_Message :: struct {
 	binary: bool,
 }
 
+// Result of parsing one frame with ws_parse_frame.
+WS_Parse_Status :: enum {
+	Ok,        // one complete frame parsed; payload is unmasked
+	Need_More, // buf does not yet hold a complete frame (consumed == 0)
+	Too_Big,   // declared length is negative (64-bit overflow) or > WS_MAX_PAYLOAD
+}
+
+// A single parsed RFC 6455 frame. payload slices into the caller's buffer
+// (unmasked in place) and is only valid until that buffer is mutated/freed.
+WS_Frame :: struct {
+	opcode:  u8,
+	payload: []u8,
+	masked:  bool,
+}
+
+// Parse one WebSocket frame from the front of buf. Pure except for in-place
+// unmasking of the payload (deterministic — no I/O, no shared state), so it
+// is directly fuzzable. Quirks preserved from the original inline parser:
+// FIN/RSV bits are ignored and masked server frames are tolerated even
+// though RFC 6455 forbids them.
+//
+// On .Ok, consumed is the full frame size (header [+4 mask] + payload) and
+// frame.payload lies within buf[:consumed]. On .Need_More / .Too_Big,
+// consumed is 0; .Too_Big is a protocol violation — the caller should drop
+// the connection rather than buffer unbounded data.
+ws_parse_frame :: proc(buf: []u8) -> (frame: WS_Frame, consumed: int, status: WS_Parse_Status) {
+	total := len(buf)
+	if total < 2 do return {}, 0, .Need_More
+
+	opcode := buf[0] & 0x0F
+	masked := (buf[1] & 0x80) != 0
+	payload_len := int(buf[1] & 0x7F)
+	header_size := 2
+
+	if payload_len == 126 {
+		if total < 4 do return {}, 0, .Need_More
+		payload_len = int(buf[2]) << 8 | int(buf[3])
+		header_size = 4
+	} else if payload_len == 127 {
+		if total < 10 do return {}, 0, .Need_More
+		payload_len = 0
+		for i := 0; i < 8; i += 1 {
+			payload_len = payload_len << 8 | int(buf[2 + i])
+		}
+		header_size = 10
+	}
+
+	// payload_len < 0 catches a 64-bit length overflowing signed int.
+	if payload_len < 0 || payload_len > WS_MAX_PAYLOAD {
+		return {}, 0, .Too_Big
+	}
+
+	mask_offset := header_size
+	if masked {
+		header_size += 4
+	}
+
+	total_frame := header_size + payload_len
+	if total_frame > total do return {}, 0, .Need_More
+
+	payload := buf[header_size:header_size + payload_len]
+	if masked {
+		mask_key := buf[mask_offset:mask_offset + 4]
+		for i := 0; i < payload_len; i += 1 {
+			payload[i] ~= mask_key[i % 4]
+		}
+	}
+
+	return WS_Frame{opcode = opcode, payload = payload, masked = masked}, total_frame, .Ok
+}
+
+// Build a complete client frame (FIN set, mask bit set, payload XOR-masked)
+// without touching the socket. The mask key is injected so tests can encode
+// deterministically; ws_send_frame supplies a random key. The returned slice
+// is owned by the caller.
+ws_encode_frame :: proc(opcode: u8, payload: []u8, mask_key: [4]u8, allocator := context.allocator) -> []u8 {
+	header_size := 2
+	if len(payload) >= 65536 {
+		header_size = 10
+	} else if len(payload) >= 126 {
+		header_size = 4
+	}
+	frame := make([]u8, header_size + 4 + len(payload), allocator)
+
+	// FIN bit + opcode.
+	frame[0] = 0x80 | opcode
+
+	// Payload length with mask bit set (client must mask).
+	mask_bit: u8 = 0x80
+	if len(payload) < 126 {
+		frame[1] = mask_bit | u8(len(payload))
+	} else if len(payload) < 65536 {
+		frame[1] = mask_bit | 126
+		frame[2] = u8(len(payload) >> 8)
+		frame[3] = u8(len(payload) & 0xFF)
+	} else {
+		frame[1] = mask_bit | 127
+		for i := 7; i >= 0; i -= 1 {
+			frame[2 + (7 - i)] = u8((len(payload) >> uint(i * 8)) & 0xFF)
+		}
+	}
+
+	// Parameters are not addressable in Odin; copy the key to a local so it
+	// can be sliced.
+	key := mask_key
+	copy(frame[header_size:], key[:])
+
+	// Masked payload: bulk-copy then XOR in place.
+	body := header_size + 4
+	copy(frame[body:], payload)
+	for i := 0; i < len(payload); i += 1 {
+		frame[body + i] ~= key[i % 4]
+	}
+	return frame
+}
+
 WebSocket :: struct {
 	// Socket lifecycle is shared between the worker thread (dial/assign) and
 	// ws_close on the main thread (close). sock_mutex guards socket +
@@ -318,60 +434,24 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 		// Parse WebSocket frame(s) from buffer.
 		offset := 0
 		for offset < total {
-			if total - offset < 2 do break
-
-			opcode := buf[offset] & 0x0F
-			masked := (buf[offset + 1] & 0x80) != 0
-			payload_len := int(buf[offset + 1] & 0x7F)
-			header_size := 2
-
-			if payload_len == 126 {
-				if total - offset < 4 do break
-				payload_len = int(buf[offset + 2]) << 8 | int(buf[offset + 3])
-				header_size = 4
-			} else if payload_len == 127 {
-				if total - offset < 10 do break
-				payload_len = 0
-				for i := 0; i < 8; i += 1 {
-					payload_len = payload_len << 8 | int(buf[offset + 2 + i])
-				}
-				header_size = 10
-			}
-
-			// Oversized frame: protocol violation — drop the connection rather
-			// than buffering unbounded data (worker will re-dial).
-			if payload_len < 0 || payload_len > WS_MAX_PAYLOAD {
+			frame, consumed, status := ws_parse_frame(buf[offset:])
+			if status == .Need_More do break
+			if status == .Too_Big {
+				// Oversized frame: protocol violation — drop the connection
+				// rather than buffering unbounded data (worker will re-dial).
 				ws.state = .Disconnected
 				return
 			}
 
-			mask_offset := header_size
-			if masked {
-				header_size += 4
-			}
-
-			total_frame := header_size + payload_len
-			if offset + total_frame > total do break
-
-			payload_start := offset + header_size
-			payload := buf[payload_start:payload_start + payload_len]
-
-			if masked {
-				mask_key := buf[offset + mask_offset:offset + mask_offset + 4]
-				for i := 0; i < payload_len; i += 1 {
-					payload[i] ~= mask_key[i % 4]
-				}
-			}
-
-			switch opcode {
+			switch frame.opcode {
 			case WS_OP_TEXT:
-				msg_data := strings.clone(string(payload))
+				msg_data := strings.clone(string(frame.payload))
 				sync.mutex_lock(&ws.recv_mutex)
 				append(&ws.recv_queue, WS_Message{data = msg_data, binary = false})
 				sync.mutex_unlock(&ws.recv_mutex)
 
 			case WS_OP_BINARY:
-				msg_data := strings.clone(string(payload))
+				msg_data := strings.clone(string(frame.payload))
 				sync.mutex_lock(&ws.recv_mutex)
 				append(&ws.recv_queue, WS_Message{data = msg_data, binary = true})
 				sync.mutex_unlock(&ws.recv_mutex)
@@ -383,14 +463,14 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 				return
 
 			case WS_OP_PING:
-				ws_send_frame(ws, WS_OP_PONG, payload)
+				ws_send_frame(ws, WS_OP_PONG, frame.payload)
 
 			case WS_OP_CLOSE:
 				ws.state = .Disconnected
 				return
 			}
 
-			offset += total_frame
+			offset += consumed
 		}
 
 		// Drop consumed bytes; keep any partial-frame tail for the next recv.
@@ -415,47 +495,13 @@ ws_send_binary :: proc(ws: ^WebSocket, data: []u8) -> bool {
 
 // Send a raw WebSocket frame.
 ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
-	// Reserve the whole frame up-front (header ≤14 bytes + payload) — large
-	// payloads with per-byte append reallocation are slow.
-	frame: [dynamic]u8
-	defer delete(frame)
-	reserve(&frame, 14 + len(payload))
-
-	// FIN bit + opcode.
-	append(&frame, 0x80 | opcode)
-
-	// Payload length with mask bit set (client must mask).
-	mask_bit: u8 = 0x80
-	if len(payload) < 126 {
-		append(&frame, mask_bit | u8(len(payload)))
-	} else if len(payload) < 65536 {
-		append(&frame, mask_bit | 126)
-		append(&frame, u8(len(payload) >> 8))
-		append(&frame, u8(len(payload) & 0xFF))
-	} else {
-		append(&frame, mask_bit | 127)
-		for i := 7; i >= 0; i -= 1 {
-			append(&frame, u8((len(payload) >> uint(i * 8)) & 0xFF))
-		}
-	}
-
 	// Masking key (4 random bytes).
 	mask_key: [4]u8
 	for i in 0..<4 {
 		mask_key[i] = u8(rand.uint32() & 0xFF)
 	}
-	append(&frame, mask_key[0])
-	append(&frame, mask_key[1])
-	append(&frame, mask_key[2])
-	append(&frame, mask_key[3])
-
-	// Masked payload: bulk-copy then XOR in place (no per-byte append).
-	body := len(frame)
-	resize(&frame, body + len(payload))
-	copy(frame[body:], payload)
-	for i := 0; i < len(payload); i += 1 {
-		frame[body + i] ~= mask_key[i % 4]
-	}
+	frame := ws_encode_frame(opcode, payload, mask_key)
+	defer delete(frame)
 
 	// A single net.send may write only part of the frame; loop until the
 	// whole frame is sent so the server never sees a truncated frame.

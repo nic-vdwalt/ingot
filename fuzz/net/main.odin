@@ -3,10 +3,10 @@ package fuzz_net
 // Memory-safety fuzzer for ingot:net (TigerBeetle VOPR style).
 //
 // Structured-random hostile input is driven through the public parsing surface
-// (parse_http_response) and — when built with -define:INGOT_NET_SIM=true —
-// through the full simulated Fetcher loop. Every allocation is tracked; a leak
-// or bad free fails the run. Build with -sanitize:address for use-after-free /
-// out-of-bounds detection on top.
+// (parse_http_response + ws_parse_frame) and — when built with
+// -define:INGOT_NET_SIM=true — through the full simulated Fetcher loop. Every
+// allocation is tracked; a leak or bad free fails the run. Build with
+// -sanitize:address for use-after-free / out-of-bounds detection on top.
 //
 // The seed is printed FIRST so any crash reproduces exactly:
 //   fuzz_net -seed:12345 -iterations:100000
@@ -94,6 +94,53 @@ exercise_parse :: proc(p: ^Prng) {
 	}
 }
 
+WS_OPCODES := [?]u8{0x0, ingotnet.WS_OP_TEXT, ingotnet.WS_OP_BINARY, ingotnet.WS_OP_CLOSE, ingotnet.WS_OP_PING, ingotnet.WS_OP_PONG}
+
+// A valid frame corrupted by byte flips and truncation reaches deep into the
+// extended-length and mask-offset arithmetic of ws_parse_frame.
+mutated_ws_frame :: proc(p: ^Prng) -> []u8 {
+	opcode := WS_OPCODES[int_range(p, 0, len(WS_OPCODES))]
+	// Payload sized to hit all three header length classes.
+	n: int
+	switch int_range(p, 0, 3) {
+	case 0:
+		n = int_range(p, 0, 126)
+	case 1:
+		n = int_range(p, 126, 65536)
+	case:
+		n = int_range(p, 65536, 128 * 1024)
+	}
+	payload := make([]u8, n, context.temp_allocator)
+	for i in 0 ..< n do payload[i] = u8(next_u64(p) & 0xFF)
+	r := next_u64(p)
+	mask_key := [4]u8{u8(r), u8(r >> 8), u8(r >> 16), u8(r >> 24)}
+	buf := ingotnet.ws_encode_frame(opcode, payload, mask_key, context.temp_allocator)
+	for _ in 0 ..< int_range(p, 1, 8) {
+		buf[int_range(p, 0, len(buf))] = u8(next_u64(p) & 0xFF)
+	}
+	cut := int_range(p, 0, len(buf) + 1)
+	return buf[:cut]
+}
+
+exercise_ws_parse :: proc(p: ^Prng) {
+	data := random_bytes(p, MAXIMUM_WIRE_BYTES) if int_range(p, 0, 2) == 0 else mutated_ws_frame(p)
+	frame, consumed, status := ingotnet.ws_parse_frame(data)
+	ensure(consumed >= 0, "ws parser reported negative consumed")
+	ensure(consumed <= len(data), "ws parser consumed past the buffer")
+	switch status {
+	case .Need_More, .Too_Big:
+		ensure(consumed == 0, "ws parser consumed bytes without a complete frame")
+	case .Ok:
+		ensure(len(frame.payload) <= ingotnet.WS_MAX_PAYLOAD, "ws parser exceeded WS_MAX_PAYLOAD")
+		if len(frame.payload) > 0 {
+			start := uintptr(raw_data(data))
+			payload_start := uintptr(raw_data(frame.payload))
+			ensure(payload_start >= start, "ws payload starts before the buffer")
+			ensure(payload_start + uintptr(len(frame.payload)) <= start + uintptr(consumed), "ws payload extends past the consumed frame")
+		}
+	}
+}
+
 main :: proc() {
 	seed, iterations := parse_options()
 	fmt.printfln("fuzz_net seed=%d iterations=%d", seed, iterations)
@@ -105,6 +152,7 @@ main :: proc() {
 	p := prng_make(seed)
 	for _ in 0 ..< iterations {
 		exercise_parse(&p)
+		exercise_ws_parse(&p)
 		free_all(context.temp_allocator)
 	}
 
