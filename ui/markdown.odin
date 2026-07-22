@@ -458,6 +458,10 @@ layout_table :: proc(
 	mouse_x: i32 = 0, mouse_y: i32 = 0, out_hit: ^int = nil,
 	out_table_w: ^i32 = nil,
 ) -> (next: int, height: i32) {
+	// Why assert: blk_start must reference a real line start inside text or
+	// every row scan below slices out of bounds.
+	assert(blk_start >= 0 && blk_start <= len(text), "layout_table: blk_start out of bounds")
+	assert(max_width > 0, "layout_table: non-positive max_width")
 	Row :: struct {
 		cells:  []string,
 		starts: []int,
@@ -725,6 +729,10 @@ draw_heading :: proc(x, y, max_width: i32, text: string, level: int, text_byte_s
 // Supports: # headings (H1-H3), - * + bullets, ``` fenced code blocks.
 // Returns the total height drawn.
 draw_markdown :: proc(x, y, max_width: i32, text: string, base_color: rl.Color, sel_start: int = -1, sel_end: int = -1, out_w: ^i32 = nil, draw: bool = true) -> i32 {
+	// Why assert: a non-positive wrap width sends the wrapper into degenerate
+	// one-rune lines; an inverted selection breaks every highlight overlap.
+	assert(max_width > 0, "draw_markdown: non-positive max_width")
+	assert(sel_start < 0 || sel_end < 0 || sel_start <= sel_end, "draw_markdown: inverted selection")
 	if len(text) == 0 do return 0
 
 	current_y := y
@@ -908,6 +916,10 @@ measure_markdown :: proc(width: i32, text: string, out_w: ^i32 = nil) -> i32 {
 // Returns valid byte offsets for all positions within the content area, including
 // empty-line gaps, code fence margins, heading/bullet margins, and past-end areas.
 hit_test_markdown :: proc(x, y, max_width: i32, text: string, mouse_x, mouse_y: i32) -> int {
+	// Why assert: layout must mirror draw_markdown exactly, so it shares the
+	// same argument contract (positive wrap width).
+	assert(max_width > 0, "hit_test_markdown: non-positive max_width")
+	assert(x >= min(i32) / 2 && y >= min(i32) / 2, "hit_test_markdown: origin overflow risk")
 	if len(text) == 0 do return -1
 
 	// Mouse is above the content area.

@@ -61,6 +61,23 @@ pills_shift_after_delete :: proc(pills: ^[dynamic]Mention_Span, at, n: int) {
 	for p in keep do append(pills, p)
 }
 
+// pills_drop_invalid removes pill ranges that fall outside [0, blen) after a
+// whole-text rewrite (select-all replace / cut / clear / external reset).
+pills_drop_invalid :: proc(pills: ^[dynamic]Mention_Span, blen: int) {
+	assert(pills != nil, "pills_drop_invalid: nil pills")
+	assert(blen >= 0, "pills_drop_invalid: negative buffer length")
+	valid := make([dynamic]Mention_Span, 0, len(pills), context.temp_allocator)
+	for p in pills {
+		if p.start >= 0 && p.end <= blen && p.start < p.end {
+			append(&valid, p)
+		}
+	}
+	if len(valid) != len(pills) {
+		clear(pills)
+		for p in valid do append(pills, p)
+	}
+}
+
 // Return the index of a pill whose END is exactly `pos`, or that strictly
 // contains `pos` (start < pos < end). Used to decide atomic backspace.
 pill_ending_at :: proc(pills: ^[dynamic]Mention_Span, pos: int) -> (int, bool) {

@@ -83,7 +83,7 @@ draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 	if selected^ >= n do selected^ = n - 1
 
 	// Dim background.
-	rl.DrawRectangle(0, 0, screen_width, screen_height, rl.Color{0, 0, 0, 150})
+	rl.DrawRectangle(0, 0, screen_width, screen_height, theme.modal_dim)
 
 	// Modal dimensions.
 	item_h: i32 = sc(28)

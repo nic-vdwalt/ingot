@@ -116,6 +116,11 @@ Theme :: struct {
 	fg_accent_light:     rl.Color, // Lighter accent for text on dark
 	fg_muted_dim:        rl.Color, // Dimmed text (muted users, disabled)
 	modal_dim:           rl.Color, // Backdrop dim behind modals
+
+	// Depth & flare (additive fields; zero alpha disables the effect).
+	shadow_color:               rl.Color, // Soft drop-shadow tint under cards
+	button_primary_grad_top:    rl.Color, // Gloss sheen on primary buttons (top)
+	button_primary_grad_bottom: rl.Color, // Gloss fade-out color (bottom)
 }
 
 // Glass surface source values per theme. On glass platforms (macOS) the
@@ -215,14 +220,17 @@ THEME_DARK :: Theme {
 	border_user_card    = rl.Color{78, 96, 140, 255},
 	bg_band_error       = rl.Color{52, 34, 34, 255},
 	fg_label            = rl.Color{130, 135, 150, 255},
-	button_danger_bg    = rl.Color{80, 35, 35, 255},
-	button_danger_hover = rl.Color{62, 36, 36, 255},
+	button_danger_bg    = rl.Color{62, 36, 36, 255},
+	button_danger_hover = rl.Color{80, 35, 35, 255},
 	button_danger_fg    = rl.Color{255, 180, 180, 255},
 	button_disabled_bg  = rl.Color{47, 49, 54, 255},
 	button_pressed      = rl.Color{58, 67, 160, 255},
 	fg_accent_light     = rl.Color{129, 140, 248, 255},
 	fg_muted_dim        = rl.Color{110, 115, 122, 255},
 	modal_dim           = rl.Color{0, 0, 0, 140},
+	shadow_color        = rl.Color{0, 0, 0, 120},
+	button_primary_grad_top = rl.Color{255, 255, 255, 20},
+	button_primary_grad_bottom = rl.Color{0, 0, 0, 0},
 }
 
 // THEME_LIGHT is a light counterpart tuned for equivalent contrast roles.
@@ -298,10 +306,19 @@ THEME_LIGHT :: Theme {
 	fg_accent_light     = rl.Color{80, 95, 220, 255},
 	fg_muted_dim        = rl.Color{150, 155, 165, 255},
 	modal_dim           = rl.Color{0, 0, 0, 90},
+	shadow_color        = rl.Color{40, 45, 70, 70},
+	button_primary_grad_top = rl.Color{255, 255, 255, 55},
+	button_primary_grad_bottom = rl.Color{0, 0, 0, 0},
 }
 
 // theme is the active palette. Dark by default (original values).
 theme: Theme = THEME_DARK
+
+// THEME_COLOR is the zero-color sentinel for widget color parameters whose
+// real default is a theme field. Odin default parameter values must be
+// compile-time constants while the theme is runtime data, so widgets compare
+// against this named sentinel and substitute the theme color at call time.
+THEME_COLOR :: rl.Color{0, 0, 0, 0}
 
 // theme_dark returns the built-in dark palette (the original constants).
 theme_dark :: proc() -> Theme {

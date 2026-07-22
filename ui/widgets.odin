@@ -52,11 +52,11 @@ draw_split_divider :: proc(x, screen_h: i32, hovered: bool) {
 // draw_panel_header draws the unified header band used by side panels: a
 // small label in the given accent color plus a hairline divider underneath.
 // Returns the y just below the divider.
-draw_panel_header :: proc(x, y, w: i32, label: string, accent: rl.Color = {}) -> i32 {
-	// Zero-value default resolves to the theme label color at call time
+draw_panel_header :: proc(x, y, w: i32, label: string, accent: rl.Color = THEME_COLOR) -> i32 {
+	// The sentinel default resolves to the theme label color at call time
 	// (defaults must be compile-time constants; the theme is runtime).
 	accent := accent
-	if accent == {} do accent = theme.fg_label
+	if accent == THEME_COLOR do accent = theme.fg_label
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
 	draw_text(lc, x + PADDING, y + (PANEL_HEADER_H - FONT_SIZE_SMALL) / 2, FONT_SIZE_SMALL, accent)
 	rl.DrawRectangle(x, y + PANEL_HEADER_H - 1, w, 1, theme.border_subtle)
@@ -65,7 +65,7 @@ draw_panel_header :: proc(x, y, w: i32, label: string, accent: rl.Color = {}) ->
 
 // draw_card_bg draws the unified card container: rounded background fill +
 // hairline border + optional left accent bar.
-draw_card_bg :: proc(rect: rl.Rectangle, bg: rl.Color, accent: rl.Color = {}, accent_w: i32 = 0) {
+draw_card_bg :: proc(rect: rl.Rectangle, bg: rl.Color, accent: rl.Color = THEME_COLOR, accent_w: i32 = 0) {
 	min_dim := min(rect.width, rect.height)
 	if min_dim <= 0 do return
 	round := (CARD_RADIUS_PX * 2) / min_dim
@@ -209,6 +209,8 @@ caret_line_count :: proc(s: string) -> int {
 
 // Move one rune left from `pos`, returning the new byte offset.
 caret_prev_rune :: proc(s: string, pos: int) -> int {
+	assert(pos >= 0, "caret_prev_rune: negative offset")
+	assert(pos <= len(s), "caret_prev_rune: offset past end")
 	if pos <= 0 do return 0
 	i := pos - 1
 	for i > 0 && (s[i] & 0xC0) == 0x80 do i -= 1
@@ -217,6 +219,8 @@ caret_prev_rune :: proc(s: string, pos: int) -> int {
 
 // Move one rune right from `pos`, returning the new byte offset.
 caret_next_rune :: proc(s: string, pos: int) -> int {
+	assert(pos >= 0, "caret_next_rune: negative offset")
+	assert(pos <= len(s), "caret_next_rune: offset past end")
 	if pos >= len(s) do return len(s)
 	i := pos + 1
 	for i < len(s) && (s[i] & 0xC0) == 0x80 do i += 1
@@ -253,6 +257,11 @@ caret_clamp :: proc(s: string, pos: int) -> int {
 	if p < 0 do p = 0
 	if p > len(s) do p = len(s)
 	for p > 0 && p < len(s) && (s[p] & 0xC0) == 0x80 do p -= 1
+	// Why assert: every caller trusts the result as a safe slicing offset;
+	// a mid-rune result would split a UTF-8 sequence on the next edit. p == 0
+	// is exempt because malformed input may begin with a continuation byte.
+	assert(p >= 0 && p <= len(s), "caret_clamp: result out of bounds")
+	assert(p == 0 || p == len(s) || (s[p] & 0xC0) != 0x80, "caret_clamp: mid-rune result")
 	return p
 }
 
@@ -368,17 +377,7 @@ selection_delete :: proc(sb: ^strings.Builder, pills: ^[dynamic]Mention_Span) ->
 		return lo
 	}
 	if pills != nil {
-		kept := make([dynamic]Mention_Span, 0, len(pills), context.temp_allocator)
-		for p in pills {
-			if p.end <= lo {
-				append(&kept, p)
-			} else if p.start >= hi {
-				append(&kept, Mention_Span{p.start - (hi - lo), p.end - (hi - lo)})
-			}
-			// Pills intersecting the deleted range are dropped.
-		}
-		clear(pills)
-		for p in kept do append(pills, p)
+		pills_shift_after_delete(pills, lo, hi - lo)
 	}
 	combined := strings.concatenate({old[:lo], old[hi:]}, context.temp_allocator)
 	strings.builder_reset(sb)
@@ -387,10 +386,44 @@ selection_delete :: proc(sb: ^strings.Builder, pills: ^[dynamic]Mention_Span) ->
 	return lo
 }
 
+// masked_display returns a temp-allocated string of one '*' per rune of
+// `text`, used by password-style inputs so measured glyph widths match what
+// is actually drawn.
+masked_display :: proc(text: string) -> string {
+	mask_sb := strings.builder_make(context.temp_allocator)
+	for _ in text do strings.write_byte(&mask_sb, '*')
+	out := strings.to_string(mask_sb)
+	// Why assert: one output byte per input rune is the contract callers use
+	// to map masked columns back to real byte offsets.
+	assert(len(out) <= len(text), "masked_display: more stars than bytes")
+	assert(len(text) == 0 || len(out) > 0, "masked_display: empty mask for text")
+	return out
+}
+
+// pill_delete_atomic removes pill `idx` and its text range from sb in one
+// keystroke, shifting later pills left. Returns the new caret position.
+@(private = "file")
+pill_delete_atomic :: proc(sb: ^strings.Builder, pills: ^[dynamic]Mention_Span, idx: int) -> int {
+	assert(sb != nil && pills != nil, "pill_delete_atomic: nil argument")
+	assert(idx >= 0 && idx < len(pills), "pill_delete_atomic: index out of range")
+	ps, pe := pill_remove(pills, idx)
+	old := strings.to_string(sb^)
+	assert(ps >= 0 && pe <= len(old) && ps < pe, "pill_delete_atomic: pill range out of bounds")
+	combined := strings.concatenate({old[:ps], old[pe:]}, context.temp_allocator)
+	strings.builder_reset(sb)
+	strings.write_string(sb, combined)
+	pills_shift_after_delete(pills, ps, pe - ps)
+	return ps
+}
+
 // Map a pane-local mouse position to a byte offset within the input's visible
 // window. Rows clamp to the visible band; x clamps to line ends.
 @(private="file")
 input_mouse_to_byte :: proc(vlines: []Wrap_Line, text: string, mouse: rl.Vector2, inner_x, y: i32, vis_start, vis_end: int) -> int {
+	// Why assert: a caller passing an empty layout or an inverted visible
+	// band would index vlines out of range below.
+	assert(len(vlines) > 0, "input_mouse_to_byte: empty visual lines")
+	assert(vis_start <= vis_end, "input_mouse_to_byte: inverted visible band")
 	row := vis_start + int((mouse.y - f32(y + 6)) / f32(LINE_HEIGHT))
 	if row < vis_start do row = vis_start
 	if row > vis_end - 1 do row = vis_end - 1
@@ -474,6 +507,10 @@ nav_end :: proc(cursor: ^int, shift: bool) {
 // first-visible-row offset. total and visible are row counts; offset is the
 // current first visible row. Supports thumb dragging and track-click jumps.
 scrollbar :: proc(x, y, w, h: i32, total, visible, offset: int) -> int {
+	// Why assert: negative row counts mean the caller mixed up pixel and row
+	// units; every later division would silently produce garbage offsets.
+	assert(total >= 0 && visible >= 0, "scrollbar: negative row counts")
+	assert(w > 0, "scrollbar: non-positive width")
 	if total <= visible || h <= 0 {
 		sbar_dragging = false
 		return 0
@@ -526,7 +563,113 @@ Btn_Style :: enum {
 	Ghost,      // Nearly transparent, text-driven, accent color on hover.
 }
 
-// Unified button. Returns true if clicked this frame.
+// color_mix linearly blends a toward b by t (0..1) per channel, alpha
+// included, so widgets can fade between two theme states over time.
+color_mix :: proc(a, b: rl.Color, t: f32) -> rl.Color {
+	assert(t >= 0 && t <= 1, "color_mix: t out of range")
+	mix_u8 :: proc(x, y: u8, t: f32) -> u8 {
+		return u8(clamp(f32(x) + (f32(y) - f32(x)) * t, 0, 255))
+	}
+	return rl.Color{
+		mix_u8(a.r, b.r, t), mix_u8(a.g, b.g, t), mix_u8(a.b, b.b, t), mix_u8(a.a, b.a, t),
+	}
+}
+
+// draw_shadow_rounded draws a soft drop shadow behind a rounded rect by
+// stacking expanded translucent rings (gfx has no blur primitive). Draw it
+// *before* the card fill so only the fringe remains visible. strength scales
+// the theme.shadow_color alpha; 1.0 is the standard card shadow.
+draw_shadow_rounded :: proc(rect: rl.Rectangle, roundness: f32, strength: f32 = 1.0) {
+	assert(rect.width > 0 && rect.height > 0, "draw_shadow_rounded: empty rect")
+	assert(strength >= 0 && strength <= 4, "draw_shadow_rounded: strength out of range")
+	base := theme.shadow_color
+	if base.a == 0 || strength == 0 do return
+	// Fixed layer count: bounded work per call ("put a limit on everything").
+	SHADOW_LAYERS :: 4
+	alpha := clamp(f32(base.a) * strength / f32(SHADOW_LAYERS + 2), 0, 255)
+	for i := SHADOW_LAYERS; i >= 1; i -= 1 {
+		spread := f32(i) * 2
+		layer := rl.Rectangle{
+			rect.x - spread,
+			rect.y - spread + 3, // bias downward for a lit-from-above look
+			rect.width + spread * 2,
+			rect.height + spread * 2,
+		}
+		rl.DrawRectangleRounded(layer, roundness, BTN_SEGMENTS, {base.r, base.g, base.b, u8(alpha)})
+	}
+}
+
+// Per-widget hover-fade state keyed by geometry. Bounded: the whole map is
+// cleared when a new key would exceed HOVER_ANIM_MAX (layout changes strand
+// stale keys; a rare full clear only restarts in-flight fades).
+HOVER_ANIM_MAX :: 256
+@(private = "file") hover_anim: map[u64]f32
+
+// hover_anim_frac advances (and stores) the eased hover fraction for the
+// widget at this geometry. Returns 0..1; requests redraws until settled.
+hover_anim_frac :: proc(x, y, w, h: i32, hovered: bool) -> f32 {
+	assert(w > 0 && h > 0, "hover_anim_frac: empty widget rect")
+	// Mix all four coordinates so distinct widgets rarely share a fade slot;
+	// a collision is cosmetic only (two widgets share one fade value).
+	key := (u64(u32(x)) | u64(u32(y)) << 32) ~
+		((u64(u32(w)) | u64(u32(h)) << 32) * 0x100000001b3)
+	if key not_in hover_anim {
+		if !hovered do return 0 // steady state: avoid populating the map
+		if len(hover_anim) >= HOVER_ANIM_MAX do clear(&hover_anim)
+	}
+	t := hover_anim[key]
+	target: f32 = 1 if hovered else 0
+	eased(&t, target, rl.GetFrameTime(), 14.0)
+	if t != target do rl.RequestRedraw()
+	if t == 0 {
+		delete_key(&hover_anim, key)
+	} else {
+		hover_anim[key] = t
+	}
+	assert(t >= 0 && t <= 1, "hover_anim_frac: fraction out of range")
+	return t
+}
+
+// btn_palette returns the (rest, hovered) bg/fg/border colors for a style so
+// btn can blend between them with the eased hover fraction.
+@(private = "file")
+btn_palette :: proc(style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0, bd1: rl.Color) {
+	switch style {
+	case .Primary:
+		return theme.button_bg, theme.button_hover, theme.button_text, theme.button_text,
+			theme.button_bg, theme.fg_accent
+	case .Secondary:
+		return theme.bg_active, theme.bg_hover, theme.fg_secondary, theme.fg_primary,
+			rl.Color{0, 0, 0, 0}, theme.fg_accent
+	case .Danger:
+		return theme.button_danger_bg, theme.button_danger_hover, theme.button_danger_fg,
+			theme.button_danger_fg, rl.Color{0, 0, 0, 0}, theme.fg_error
+	case .Ghost:
+		return rl.Color{0, 0, 0, 0}, theme.bg_hover, theme.fg_secondary, theme.fg_accent,
+			rl.Color{0, 0, 0, 0}, rl.Color{0, 0, 0, 0}
+	}
+	return
+}
+
+// btn_gloss overlays a subtle top-half sheen on a button. The gradient quad
+// is inset past the corner radius because scissor modes don't nest in gfx and
+// a raw full-width quad would spill outside the rounded corners.
+@(private = "file")
+btn_gloss :: proc(rect: rl.Rectangle) {
+	top := theme.button_primary_grad_top
+	if top.a == 0 do return
+	radius := BTN_ROUNDNESS * min(rect.width, rect.height) * 0.5
+	inset := i32(radius) + 1
+	gw := i32(rect.width) - inset * 2
+	if gw <= 0 do return
+	rl.DrawRectangleGradientV(
+		i32(rect.x) + inset, i32(rect.y) + 1, gw, i32(rect.height / 2),
+		top, theme.button_primary_grad_bottom,
+	)
+}
+
+// Unified button. Returns true if clicked this frame. Hover eases in/out via
+// hover_anim_frac (frame-rate independent); pressed state darkens instantly.
 btn :: proc(
 	x, y, w, h: i32,
 	label: string,
@@ -547,24 +690,14 @@ btn :: proc(
 	}
 	if hovered do request_cursor(.POINTING_HAND)
 
-	bg, fg, border: rl.Color
-	switch style {
-	case .Primary:
-		bg = theme.button_hover if hovered else theme.button_bg
-		fg = theme.button_text
-		border = theme.fg_accent if hovered else theme.button_bg
-	case .Secondary:
-		bg = theme.bg_hover if hovered else theme.bg_active
-		fg = theme.fg_primary if hovered else theme.fg_secondary
-		border = theme.fg_accent if hovered else rl.Color{0, 0, 0, 0}
-	case .Danger:
-		bg = rl.Color{80, 35, 35, 255} if hovered else rl.Color{62, 36, 36, 255}
-		fg = rl.Color{255, 180, 180, 255}
-		border = theme.fg_error if hovered else rl.Color{0, 0, 0, 0}
-	case .Ghost:
-		bg = theme.bg_hover if hovered else rl.Color{0, 0, 0, 0}
-		fg = theme.fg_accent if hovered else theme.fg_secondary
-		border = rl.Color{0, 0, 0, 0}
+	t := hover_anim_frac(x, y, w, h, hovered) if enabled else 0
+	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style)
+	bg := color_mix(bg0, bg1, t)
+	fg := color_mix(fg0, fg1, t)
+	border := color_mix(bd0, bd1, t)
+	// Pressed feedback while the mouse button is held over the button.
+	if hovered && rl.IsMouseButtonDown(.LEFT) && (style == .Primary || style == .Secondary) {
+		bg = theme.button_pressed
 	}
 	if !enabled {
 		bg = theme.button_disabled_bg
@@ -573,6 +706,7 @@ btn :: proc(
 	}
 
 	rl.DrawRectangleRounded(rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
+	if style == .Primary && enabled do btn_gloss(rect)
 	if border.a > 0 {
 		rl.DrawRectangleRoundedLinesEx(rect, BTN_ROUNDNESS, BTN_SEGMENTS, BTN_BORDER_W, border)
 	}
@@ -842,13 +976,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 				if pills != nil {
 					if idx, ok := pill_ending_at(pills, cursor^); ok {
 						// Atomic: delete the whole pill range in one keystroke.
-						ps, pe := pill_remove(pills, idx)
-						old := strings.to_string(sb^)
-						combined := strings.concatenate({old[:ps], old[pe:]}, context.temp_allocator)
-						strings.builder_reset(sb)
-						strings.write_string(sb, combined)
-						pills_shift_after_delete(pills, ps, pe - ps)
-						cursor^ = ps
+						cursor^ = pill_delete_atomic(sb, pills, idx)
 					} else {
 						before := cursor^
 						cursor^ = caret_delete_prev(sb, cursor^)
@@ -883,13 +1011,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 				undo_record(undo, sb, cursor, pills, .Delete)
 				if idx, ok := pill_starting_at(pills, cursor^); ok {
 					// Atomic: delete the whole pill range in one keystroke.
-					ps, pe := pill_remove(pills, idx)
-					old := strings.to_string(sb^)
-					combined := strings.concatenate({old[:ps], old[pe:]}, context.temp_allocator)
-					strings.builder_reset(sb)
-					strings.write_string(sb, combined)
-					pills_shift_after_delete(pills, ps, pe - ps)
-					cursor^ = ps
+					cursor^ = pill_delete_atomic(sb, pills, idx)
 				} else {
 					old_len := strings.builder_len(sb^)
 					cursor^ = caret_delete_next(sb, cursor^)
@@ -992,17 +1114,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		// Safety net: drop any pill ranges left out of bounds after a
 		// whole-text reset (select-all replace/cut/clear empties the buffer).
 		if pills != nil && len(pills) > 0 {
-			blen := strings.builder_len(sb^)
-			valid := make([dynamic]Mention_Span, 0, len(pills), context.temp_allocator)
-			for p in pills {
-				if p.start >= 0 && p.end <= blen && p.start < p.end {
-					append(&valid, p)
-				}
-			}
-			if len(valid) != len(pills) {
-				clear(pills)
-				for p in valid do append(pills, p)
-			}
+			pills_drop_invalid(pills, strings.builder_len(sb^))
 		}
 	}
 
@@ -1049,9 +1161,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		mouse := rl.GetMousePosition()
 		mouse.x -= f32(pane_origin_x)
 		if rl.CheckCollisionPointRec(mouse, rect) {
-			mask_sb := strings.builder_make(context.temp_allocator)
-			for _ in text do strings.write_byte(&mask_sb, '*')
-			masked_text := strings.to_string(mask_sb)
+			masked_text := masked_display(text)
 			masked_c := strings.clone_to_cstring(masked_text, context.temp_allocator)
 			masked_w := measure_text(masked_c, FONT_SIZE)
 			masked_offset := max(0, masked_w - inner_w)
@@ -1244,11 +1354,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		// Single-line rendering (original behavior).
 		display_text: string
 		if masked {
-			mask_sb := strings.builder_make(context.temp_allocator)
-			for _ in text {
-				strings.write_byte(&mask_sb, '*')
-			}
-			display_text = strings.to_string(mask_sb)
+			display_text = masked_display(text)
 		} else {
 			display_text = text
 		}
@@ -1306,11 +1412,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		} else {
 			display_for_cursor: string
 			if masked {
-				mask_sb := strings.builder_make(context.temp_allocator)
-				for _ in text {
-					strings.write_byte(&mask_sb, '*')
-				}
-				display_for_cursor = strings.to_string(mask_sb)
+				display_for_cursor = masked_display(text)
 			} else {
 				display_for_cursor = text
 			}
@@ -1466,41 +1568,37 @@ draw_pill :: proc(text: string, x, y, font_size: i32, fg, bg: rl.Color) -> i32 {
 	return pill_w
 }
 
-// Return text truncated with a trailing ellipsis so it fits within max_width.
-// The returned string is allocated in the temp allocator.
-truncate_to_width :: proc(text: string, max_width, font_size: i32) -> string {
-	if len(text) == 0 do return text
-	full_c := strings.clone_to_cstring(text, context.temp_allocator)
-	if measure_text(full_c, font_size) <= max_width {
-		return text
-	}
-	ell_c := strings.clone_to_cstring("…", context.temp_allocator)
-	ell_w := measure_text(ell_c, font_size)
-	avail := max_width - ell_w
-	// Walk runes accumulating width until we run out of room.
-	end := 0
-	for end < len(text) {
-		next := end + 1
-		for next < len(text) && (text[next] & 0xC0) == 0x80 do next += 1
-		seg_c := strings.clone_to_cstring(text[:next], context.temp_allocator)
-		if measure_text(seg_c, font_size) > avail do break
-		end = next
-	}
-	return strings.concatenate({text[:end], "…"}, context.temp_allocator)
+// Truncate_Side selects which side of the text an ellipsis replaces.
+Truncate_Side :: enum u8 {
+	Tail, // trailing ellipsis — keep the head visible
+	Head, // leading ellipsis — keep the tail visible
 }
 
-// Return text truncated with a LEADING ellipsis so the trailing portion (e.g. a
-// file's name and extension) stays visible when it would overflow max_width.
-// The returned string is allocated in the temp allocator.
-truncate_to_width_left :: proc(text: string, max_width, font_size: i32) -> string {
+// Return text truncated with an ellipsis on `side` so it fits max_width.
+// The returned string is allocated in the temp allocator (or is the input
+// unchanged when it already fits).
+truncate_to_width_dir :: proc(text: string, max_width, font_size: i32, side: Truncate_Side) -> string {
+	assert(max_width >= 0, "truncate_to_width_dir: negative width")
+	assert(font_size > 0, "truncate_to_width_dir: non-positive font size")
 	if len(text) == 0 do return text
 	full_c := strings.clone_to_cstring(text, context.temp_allocator)
 	if measure_text(full_c, font_size) <= max_width {
 		return text
 	}
 	ell_c := strings.clone_to_cstring("…", context.temp_allocator)
-	ell_w := measure_text(ell_c, font_size)
-	avail := max_width - ell_w
+	avail := max_width - measure_text(ell_c, font_size)
+	if side == .Tail {
+		// Walk runes forward accumulating width until we run out of room.
+		end := 0
+		for end < len(text) {
+			next_i := end + 1
+			for next_i < len(text) && (text[next_i] & 0xC0) == 0x80 do next_i += 1
+			seg_c := strings.clone_to_cstring(text[:next_i], context.temp_allocator)
+			if measure_text(seg_c, font_size) > avail do break
+			end = next_i
+		}
+		return strings.concatenate({text[:end], "…"}, context.temp_allocator)
+	}
 	// Walk runes backward accumulating width until we run out of room.
 	start := len(text)
 	for start > 0 {
@@ -1511,6 +1609,17 @@ truncate_to_width_left :: proc(text: string, max_width, font_size: i32) -> strin
 		start = prev
 	}
 	return strings.concatenate({"…", text[start:]}, context.temp_allocator)
+}
+
+// Return text truncated with a trailing ellipsis so it fits within max_width.
+truncate_to_width :: proc(text: string, max_width, font_size: i32) -> string {
+	return truncate_to_width_dir(text, max_width, font_size, .Tail)
+}
+
+// Return text truncated with a LEADING ellipsis so the trailing portion (e.g.
+// a file's name and extension) stays visible when it would overflow max_width.
+truncate_to_width_left :: proc(text: string, max_width, font_size: i32) -> string {
+	return truncate_to_width_dir(text, max_width, font_size, .Head)
 }
 
 // Return a path truncated in the MIDDLE so the first directory segment and the
@@ -1586,11 +1695,11 @@ find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: in
 // ingot-only generic widgets (not present in the alloy superset).
 // ------------------------------------------------------------------
 
-spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = {}, segments: i32 = 24) {
-	// Zero-value default resolves to the theme accent at call time
+spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = THEME_COLOR, segments: i32 = 24) {
+	// The sentinel default resolves to the theme accent at call time
 	// (defaults must be compile-time constants; the theme is runtime).
 	color := color
-	if color == {} do color = theme.fg_accent_light
+	if color == THEME_COLOR do color = theme.fg_accent_light
 	// Continuous animation: keep frames coming while a spinner is visible
 	// (no-op in the default continuous frame strategy).
 	rl.RequestRedraw()
@@ -1680,17 +1789,24 @@ list_row_bg :: proc(rect: rl.Rectangle, selected, hovered: bool) {
 // measured content height (clamps scroll on the next frame) and a scrollbar.
 Pane :: struct {
 	scroll:    f32,
-	content_h: i32, // measured by pane_end, consumed next frame
+	content_h: i32,  // measured by pane_end, consumed next frame
+	open:      bool, // set by pane_begin, cleared by pane_end (balance check)
 }
 
 pane_reset :: proc(p: ^Pane) {
 	p.scroll = 0
 	p.content_h = 0
+	p.open = false
 }
 
 // pane_begin handles wheel input over the pane rect, clamps scroll, begins the
 // scissor, and returns the y cursor the caller should start drawing at.
 pane_begin :: proc(p: ^Pane, x, y, w, h: i32, pad: i32 = 10) -> (cursor_y: i32) {
+	// Why assert: an already-open pane means a missing pane_end — the scissor
+	// stack would corrupt every subsequent draw.
+	assert(!p.open, "pane_begin: pane already begun (missing pane_end)")
+	assert(w >= 0 && h >= 0, "pane_begin: negative pane size")
+	p.open = true
 	if rl.CheckCollisionPointRec(rl.GetMousePosition(), {f32(x), f32(y), f32(w), f32(h)}) {
 		p.scroll -= get_wheel_move() * f32(sc(24))
 	}
@@ -1703,6 +1819,11 @@ pane_begin :: proc(p: ^Pane, x, y, w, h: i32, pad: i32 = 10) -> (cursor_y: i32) 
 // caller's final y cursor, and draws/handles the scrollbar when content
 // overflows the pane.
 pane_end :: proc(p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i32 = 10) {
+	// Why assert: pane_end without pane_begin would pop a scissor the pane
+	// never pushed, clipping unrelated draws.
+	assert(p.open, "pane_end: pane not begun")
+	assert(h >= 0, "pane_end: negative pane height")
+	p.open = false
 	rl.EndScissorMode()
 	start_y := y + sc(pad) - i32(p.scroll)
 	p.content_h = end_y - start_y + sc(pad)
