@@ -180,8 +180,8 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	}
 	spell_menu.just_opened = false
 
-	rl.DrawRectangleRec(menu_rect, BG_POPUP)
-	rl.DrawRectangleLinesEx(menu_rect, 1, BORDER_COLOR)
+	rl.DrawRectangleRec(menu_rect, theme.bg_popup)
+	rl.DrawRectangleLinesEx(menu_rect, 1, theme.border_color)
 
 	item_x := mx + 2
 	item_w := menu_w - 4
@@ -192,7 +192,7 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 		hovered := rl.CheckCollisionPointRec(mouse, row_rect)
 		if hovered && mouse_moved() do spell_menu.selected = nav_idx
 		if spell_menu.selected == nav_idx {
-			rl.DrawRectangleRec(row_rect, BG_ACTIVE)
+			rl.DrawRectangleRec(row_rect, theme.bg_active)
 		}
 		if hovered do request_cursor(.POINTING_HAND)
 		draw_text_truncated(label, item_x + 8, item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2, item_w - 16, FONT_SIZE, color)
@@ -200,11 +200,11 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	}
 
 	if n == 0 {
-		draw_text_truncated("No suggestions", item_x + 8, item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2, item_w - 16, FONT_SIZE, FG_DISABLED)
+		draw_text_truncated("No suggestions", item_x + 8, item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2, item_w - 16, FONT_SIZE, theme.fg_disabled)
 		item_y += SPELL_MENU_ITEM_H
 	} else {
 		for s, i in spell_menu.suggestions {
-			if draw_row(item_x, item_y, item_w, s, i, mouse, FG_PRIMARY) {
+			if draw_row(item_x, item_y, item_w, s, i, mouse, theme.fg_primary) {
 				spell_menu_apply(i)
 				return
 			}
@@ -213,17 +213,17 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	}
 
 	// Separator.
-	rl.DrawRectangle(mx + 6, item_y + sep_h/2, menu_w - 12, 1, BORDER_COLOR)
+	rl.DrawRectangle(mx + 6, item_y + sep_h/2, menu_w - 12, 1, theme.border_color)
 	item_y += sep_h
 
 	learn_label := strings.concatenate({"Learn \"", spell_menu.word, "\""}, context.temp_allocator)
-	if draw_row(item_x, item_y, item_w, learn_label, n, mouse, FG_SECONDARY) {
+	if draw_row(item_x, item_y, item_w, learn_label, n, mouse, theme.fg_secondary) {
 		spell_menu_apply(n)
 		return
 	}
 	item_y += SPELL_MENU_ITEM_H
 
-	if draw_row(item_x, item_y, item_w, "Ignore", n + 1, mouse, FG_SECONDARY) {
+	if draw_row(item_x, item_y, item_w, "Ignore", n + 1, mouse, theme.fg_secondary) {
 		spell_menu_apply(n + 1)
 		return
 	}

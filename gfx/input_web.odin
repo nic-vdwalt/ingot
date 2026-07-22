@@ -36,6 +36,53 @@ ingot_web_char :: proc "contextless" (codepoint: rune) {
 	_st_push_char(codepoint)
 }
 
+// ingot_web_preedit_clear resets the staged IME composition string. Called
+// from JS on compositionstart/compositionend and before each update.
+@(export)
+ingot_web_preedit_clear :: proc "contextless" () {
+	_idle_note_activity(&g.idle)
+	preedit_len = 0
+	preedit_caret = 0
+}
+
+// ingot_web_preedit_char appends one codepoint of the in-progress composition
+// (compositionupdate forwards the preedit string codepoint-by-codepoint).
+// Manual UTF-8 encode: core:unicode/utf8 needs a context, this is contextless.
+@(export)
+ingot_web_preedit_char :: proc "contextless" (codepoint: rune) {
+	_idle_note_activity(&g.idle)
+	c := u32(codepoint)
+	if c > 0x10FFFF do return
+	n: int
+	buf: [4]u8
+	switch {
+	case c < 0x80:
+		buf[0] = u8(c)
+		n = 1
+	case c < 0x800:
+		buf[0] = 0xC0 | u8(c >> 6)
+		buf[1] = 0x80 | u8(c & 0x3F)
+		n = 2
+	case c < 0x10000:
+		buf[0] = 0xE0 | u8(c >> 12)
+		buf[1] = 0x80 | u8(c >> 6 & 0x3F)
+		buf[2] = 0x80 | u8(c & 0x3F)
+		n = 3
+	case:
+		buf[0] = 0xF0 | u8(c >> 18)
+		buf[1] = 0x80 | u8(c >> 12 & 0x3F)
+		buf[2] = 0x80 | u8(c >> 6 & 0x3F)
+		buf[3] = 0x80 | u8(c & 0x3F)
+		n = 4
+	}
+	if preedit_len + n > PREEDIT_MAX do return // bounded: drop overflow
+	for i in 0 ..< n {
+		preedit_buf[preedit_len + i] = buf[i]
+	}
+	preedit_len += n
+	preedit_caret = preedit_len
+}
+
 // x, y are in CSS pixels (logical points) — matching GetScreenWidth/Height and
 // the native macOS GetCursorPos convention.
 @(export)

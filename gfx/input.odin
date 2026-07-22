@@ -42,6 +42,23 @@ Input :: struct {
 	cur_cursor:  MouseCursor,
 }
 
+// --- IME / text input ------------------------------------------------------
+
+// PREEDIT_MAX bounds the staged composition (preedit) string in bytes.
+PREEDIT_MAX :: 256
+
+// Preedit staging: written by the platform backend while an OS input method
+// is composing (web composition events; native 3c later), read by the UI via
+// GetPreedit. Absolute state like the mouse position — no edge semantics.
+@(private) preedit_buf: [PREEDIT_MAX]u8
+@(private) preedit_len: int
+@(private) preedit_caret: int
+
+// ime_rect_armed tracks whether any text field reported its caret rect this
+// frame; input_poll deactivates platform text input when none did.
+@(private) ime_rect_armed: bool
+
+
 // input_poll runs once per frame from EndDrawing: reset frame-scoped state,
 // pump backend events (fills queues/edges), then finalize mouse/wheel/button
 // deltas via the platform seam.
@@ -79,6 +96,12 @@ input_poll :: proc() {
 		inp.mb_down[b] = cur
 	}
 	inp.cursor_on_screen = platform_window_hovered()
+
+	// IME: if no text field reported a caret rect since the last poll, tell
+	// the platform text input is inactive (web blurs the IME proxy; native
+	// clears the candidate-window rect). Active fields re-arm every frame.
+	if !ime_rect_armed do platform_text_input_deactivate()
+	ime_rect_armed = false
 }
 
 // --- queue helpers (shared; called by the platform input backend) ----------
@@ -215,3 +238,24 @@ SetMouseCursor :: proc(cursor: MouseCursor) {
 }
 
 IsCursorOnScreen :: proc() -> bool { return g.inp.cursor_on_screen }
+
+// SetTextInputRect reports the focused text field's caret rect (UI logical
+// pixels, top-left origin). Call every frame while a field is active; the OS
+// input method uses it to place the composition candidate window (macOS /
+// Windows) or the hidden IME proxy element (web). Cheap; safe to call even
+// when no IME is composing.
+SetTextInputRect :: proc(x, y, w, h: i32) {
+	assert(w >= 0 && h >= 0, "SetTextInputRect: negative size")
+	assert(g.win != nil, "SetTextInputRect: window not initialized")
+	ime_rect_armed = true
+	platform_set_text_input_rect(x, y, w, h)
+}
+
+// GetPreedit returns the in-progress IME composition string (empty when not
+// composing) and the caret byte offset within it. The string aliases an
+// internal buffer valid until the next composition event; clone to keep.
+GetPreedit :: proc() -> (text: string, caret: int) {
+	assert(preedit_len >= 0 && preedit_len <= PREEDIT_MAX, "GetPreedit: corrupt length")
+	assert(preedit_caret >= 0 && preedit_caret <= preedit_len, "GetPreedit: corrupt caret")
+	return string(preedit_buf[:preedit_len]), preedit_caret
+}

@@ -324,6 +324,30 @@
 				wasmText(formPointer, formLength), wasmText(labelPointer, labelLength),
 				x, y, width, height, style, fontSize, enabled !== 0,
 			),
+			ingot_ime_rect: (x, y, w, h, active) => {
+				// Position/focus the hidden IME proxy (created by
+				// ingot_input.js) at the caret so browser composition events
+				// fire there. Inactive → return focus to the canvas.
+				const ime = document.getElementById("ingot-ime");
+				const c = document.getElementById(CANVAS_ID);
+				if (!ime || !c) return;
+				if (active) {
+					const r = c.getBoundingClientRect();
+					ime.style.left = (r.left + window.scrollX + x) + "px";
+					ime.style.top = (r.top + window.scrollY + y) + "px";
+					ime.style.height = Math.max(h, 1) + "px";
+					// Only steal focus from ourselves — never from semantic
+					// DOM form inputs (ingot-web-input overlays).
+					const a = document.activeElement;
+					if (a !== ime && (a === c || a === document.body || a === null)) {
+						ime.focus({ preventScroll: true });
+					}
+				} else if (document.activeElement === ime) {
+					ime.blur();
+					ime.value = "";
+					c.focus({ preventScroll: true });
+				}
+			},
 			ingot_is_fullscreen: () => {
 				const fs = document.fullscreenElement ||
 					document.webkitFullscreenElement;

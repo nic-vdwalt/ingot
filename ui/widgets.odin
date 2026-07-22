@@ -42,9 +42,9 @@ begin_pane_scissor :: proc(x, y, w, h: i32) {
 // draw_split_divider draws the vertical drag handle between the chat pane and
 // the embedded nvim pane of a split Chat tab. x is the divider's left edge.
 draw_split_divider :: proc(x, screen_h: i32, hovered: bool) {
-	col := BORDER_COLOR
+	col := theme.border_color
 	if hovered {
-		col = FG_ACCENT
+		col = theme.fg_accent
 	}
 	rl.DrawRectangle(x, TAB_BAR_HEIGHT, SPLIT_DIVIDER_W, screen_h - TAB_BAR_HEIGHT, col)
 }
@@ -52,10 +52,14 @@ draw_split_divider :: proc(x, screen_h: i32, hovered: bool) {
 // draw_panel_header draws the unified header band used by side panels: a
 // small label in the given accent color plus a hairline divider underneath.
 // Returns the y just below the divider.
-draw_panel_header :: proc(x, y, w: i32, label: string, accent: rl.Color = FG_LABEL) -> i32 {
+draw_panel_header :: proc(x, y, w: i32, label: string, accent: rl.Color = {}) -> i32 {
+	// Zero-value default resolves to the theme label color at call time
+	// (defaults must be compile-time constants; the theme is runtime).
+	accent := accent
+	if accent == {} do accent = theme.fg_label
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
 	draw_text(lc, x + PADDING, y + (PANEL_HEADER_H - FONT_SIZE_SMALL) / 2, FONT_SIZE_SMALL, accent)
-	rl.DrawRectangle(x, y + PANEL_HEADER_H - 1, w, 1, BORDER_SUBTLE)
+	rl.DrawRectangle(x, y + PANEL_HEADER_H - 1, w, 1, theme.border_subtle)
 	return y + PANEL_HEADER_H
 }
 
@@ -67,7 +71,7 @@ draw_card_bg :: proc(rect: rl.Rectangle, bg: rl.Color, accent: rl.Color = {}, ac
 	round := (CARD_RADIUS_PX * 2) / min_dim
 	if round > 1 do round = 1
 	rl.DrawRectangleRounded(rect, round, 6, bg)
-	rl.DrawRectangleRoundedLinesEx(rect, round, 6, 1.0, BORDER_SUBTLE)
+	rl.DrawRectangleRoundedLinesEx(rect, round, 6, 1.0, theme.border_subtle)
 	if accent_w > 0 {
 		rl.DrawRectangle(i32(rect.x), i32(rect.y) + 2, accent_w, i32(rect.height) - 4, accent)
 	}
@@ -81,13 +85,13 @@ draw_split_drop_hint :: proc(screen_w, screen_h: i32, side_left: bool) {
 	h := screen_h - top
 	rl.DrawRectangle(0, top, screen_w, h, rl.Color{0, 0, 0, 70})
 	half := screen_w / 2
-	hl := rl.Color{FG_ACCENT.r, FG_ACCENT.g, FG_ACCENT.b, 70}
+	hl := rl.Color{theme.fg_accent.r, theme.fg_accent.g, theme.fg_accent.b, 70}
 	if side_left {
 		rl.DrawRectangle(0, top, half, h, hl)
 	} else {
 		rl.DrawRectangle(half, top, screen_w - half, h, hl)
 	}
-	rl.DrawRectangle(half - 1, top, 2, h, FG_ACCENT)
+	rl.DrawRectangle(half - 1, top, 2, h, theme.fg_accent)
 }
 
 // input_is_selecting reports whether a text input currently holds a selection.
@@ -477,7 +481,7 @@ scrollbar :: proc(x, y, w, h: i32, total, visible, offset: int) -> int {
 	max_off := total - visible
 	off := clamp(offset, 0, max_off)
 
-	rl.DrawRectangle(x, y, w, h, BG_SECONDARY)
+	rl.DrawRectangle(x, y, w, h, theme.bg_secondary)
 	thumb_h := max(i32(20), h * i32(visible) / i32(total))
 	track_range := max(h - thumb_h, 1)
 	thumb_y := y + i32(f32(track_range) * f32(off) / f32(max_off))
@@ -508,8 +512,8 @@ scrollbar :: proc(x, y, w, h: i32, total, visible, offset: int) -> int {
 	// Recompute the thumb position after a drag update.
 	thumb_y = y + i32(f32(track_range) * f32(off) / f32(max_off))
 	thumb_hover := rl.CheckCollisionPointRec(mouse, rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)})
-	col := BORDER_COLOR
-	if sbar_dragging || thumb_hover do col = FG_ACCENT
+	col := theme.border_color
+	if sbar_dragging || thumb_hover do col = theme.fg_accent
 	rl.DrawRectangle(x, thumb_y, w, thumb_h, col)
 	return off
 }
@@ -546,25 +550,25 @@ btn :: proc(
 	bg, fg, border: rl.Color
 	switch style {
 	case .Primary:
-		bg = BUTTON_HOVER if hovered else BUTTON_BG
-		fg = BUTTON_TEXT
-		border = FG_ACCENT if hovered else BUTTON_BG
+		bg = theme.button_hover if hovered else theme.button_bg
+		fg = theme.button_text
+		border = theme.fg_accent if hovered else theme.button_bg
 	case .Secondary:
-		bg = BG_HOVER if hovered else BG_ACTIVE
-		fg = FG_PRIMARY if hovered else FG_SECONDARY
-		border = FG_ACCENT if hovered else rl.Color{0, 0, 0, 0}
+		bg = theme.bg_hover if hovered else theme.bg_active
+		fg = theme.fg_primary if hovered else theme.fg_secondary
+		border = theme.fg_accent if hovered else rl.Color{0, 0, 0, 0}
 	case .Danger:
 		bg = rl.Color{80, 35, 35, 255} if hovered else rl.Color{62, 36, 36, 255}
 		fg = rl.Color{255, 180, 180, 255}
-		border = FG_ERROR if hovered else rl.Color{0, 0, 0, 0}
+		border = theme.fg_error if hovered else rl.Color{0, 0, 0, 0}
 	case .Ghost:
-		bg = BG_HOVER if hovered else rl.Color{0, 0, 0, 0}
-		fg = FG_ACCENT if hovered else FG_SECONDARY
+		bg = theme.bg_hover if hovered else rl.Color{0, 0, 0, 0}
+		fg = theme.fg_accent if hovered else theme.fg_secondary
 		border = rl.Color{0, 0, 0, 0}
 	}
 	if !enabled {
-		bg = BUTTON_DISABLED_BG
-		fg = FG_MUTED_DIM
+		bg = theme.button_disabled_bg
+		fg = theme.fg_muted_dim
 		border = rl.Color{0, 0, 0, 0}
 	}
 
@@ -694,9 +698,9 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 			if semantics.focus != nil do semantics.focus^ = semantics.focus_id
 		}
 	}
-	bg := BG_INPUT if input_active else BG_SECONDARY
+	bg := theme.bg_input if input_active else theme.bg_secondary
 	rl.DrawRectangleRec(rect, bg)
-	rl.DrawRectangleLinesEx(rect, 1, BORDER_COLOR if !input_active else FG_ACCENT)
+	rl.DrawRectangleLinesEx(rect, 1, theme.border_color if !input_active else theme.fg_accent)
 
 	entered := false
 
@@ -1144,7 +1148,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 
 	if len(text) == 0 {
 		ph_c := strings.clone_to_cstring(placeholder, context.temp_allocator)
-		draw_text(ph_c, inner_x, y + (h - FONT_SIZE) / 2, FONT_SIZE, FG_SECONDARY)
+		draw_text(ph_c, inner_x, y + (h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_secondary)
 	} else if use_caret_render {
 		// Caret-aware soft-wrapped rendering: draw a window of visual lines.
 		// Text fits inner_w by construction, so no horizontal scroll is needed.
@@ -1164,7 +1168,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 					hx := inner_x + measure_text(pre_c, FONT_SIZE)
 					span_c := strings.clone_to_cstring(text[hs:he], context.temp_allocator)
 					hw := measure_text(span_c, FONT_SIZE)
-					rl.DrawRectangle(hx, line_y, hw, FONT_SIZE, BG_SELECTION)
+					rl.DrawRectangle(hx, line_y, hw, FONT_SIZE, theme.bg_selection)
 				}
 			}
 			// Pill backgrounds behind any mention chips on this visual line.
@@ -1180,7 +1184,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 					draw_input_pill_bg(px, line_y, pw)
 				}
 			}
-			draw_text(line_c, inner_x, line_y, FONT_SIZE, FG_PRIMARY)
+			draw_text(line_c, inner_x, line_y, FONT_SIZE, theme.fg_primary)
 			// Redraw pill substrings in the accent color over the chip bg.
 			if pills != nil {
 				for p in pills {
@@ -1190,7 +1194,7 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 					pre_c := strings.clone_to_cstring(text[vl.start:ps], context.temp_allocator)
 					seg_c := strings.clone_to_cstring(text[ps:pe], context.temp_allocator)
 					px := inner_x + measure_text(pre_c, FONT_SIZE)
-					draw_text(seg_c, px, line_y, FONT_SIZE, FG_ACCENT)
+					draw_text(seg_c, px, line_y, FONT_SIZE, theme.fg_accent)
 				}
 			}
 			// Red squiggles under misspelled words on this visual line.
@@ -1224,15 +1228,15 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 				}
 				if sel_all {
 					hl_w := min(line_pixel_w, inner_w)
-					rl.DrawRectangle(inner_x, line_y, hl_w, FONT_SIZE, BG_SELECTION)
+					rl.DrawRectangle(inner_x, line_y, hl_w, FONT_SIZE, theme.bg_selection)
 				}
-				draw_text(line_c, inner_x - line_offset, line_y, FONT_SIZE, FG_PRIMARY)
+				draw_text(line_c, inner_x - line_offset, line_y, FONT_SIZE, theme.fg_primary)
 			} else {
 				if sel_all {
 					hl_w := min(measure_text(line_c, FONT_SIZE), inner_w)
-					rl.DrawRectangle(inner_x, line_y, hl_w, FONT_SIZE, BG_SELECTION)
+					rl.DrawRectangle(inner_x, line_y, hl_w, FONT_SIZE, theme.bg_selection)
 				}
-				draw_text(line_c, inner_x, line_y, FONT_SIZE, FG_PRIMARY)
+				draw_text(line_c, inner_x, line_y, FONT_SIZE, theme.fg_primary)
 			}
 			render_idx += 1
 		}
@@ -1256,9 +1260,9 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		}
 		if sel_all {
 			hl_w := min(text_pixel_w, inner_w)
-			rl.DrawRectangle(inner_x, y + (h - FONT_SIZE) / 2, hl_w, FONT_SIZE, BG_SELECTION)
+			rl.DrawRectangle(inner_x, y + (h - FONT_SIZE) / 2, hl_w, FONT_SIZE, theme.bg_selection)
 		}
-		draw_text(display_c, inner_x - text_offset, y + (h - FONT_SIZE) / 2, FONT_SIZE, FG_PRIMARY)
+		draw_text(display_c, inner_x - text_offset, y + (h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_primary)
 	}
 
 	// Draw cursor if active.
@@ -1268,58 +1272,69 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 		// repaint while the user pauses typing, so schedule one at the next
 		// half-second toggle boundary.
 		rl.RequestRedrawIn(0.5 - math.mod(t, 0.5))
-		if int(t * 2) % 2 == 0 {
-			if use_caret_render {
-				// Caret at its true visual (row, x) within the visible window.
-				if cur_vrow >= vis_start && cur_vrow < vis_end {
-					cursor_x := inner_x + cur_caret_x
-					cursor_line_y := y + 6 + i32(cur_vrow - vis_start) * LINE_HEIGHT
-					rl.DrawLine(cursor_x, cursor_line_y, cursor_x, cursor_line_y + FONT_SIZE, FG_ACCENT)
+		// Caret position is computed every frame (not only blink-on) so the
+		// OS input method's candidate window tracks it via SetTextInputRect;
+		// only the caret line itself blinks.
+		blink_on := int(t * 2) % 2 == 0
+		if use_caret_render {
+			// Caret at its true visual (row, x) within the visible window.
+			if cur_vrow >= vis_start && cur_vrow < vis_end {
+				cursor_x := inner_x + cur_caret_x
+				cursor_line_y := y + 6 + i32(cur_vrow - vis_start) * LINE_HEIGHT
+				rl.SetTextInputRect(cursor_x, cursor_line_y, 1, FONT_SIZE)
+				if blink_on {
+					rl.DrawLine(cursor_x, cursor_line_y, cursor_x, cursor_line_y + FONT_SIZE, theme.fg_accent)
 				}
-			} else if has_newlines {
-				// Multiline cursor: position at end of last line.
-				lines := strings.split(text, "\n", context.temp_allocator)
-				last_line := lines[len(lines) - 1]
-				last_line_c := strings.clone_to_cstring(last_line, context.temp_allocator)
-				cursor_text_w := measure_text(last_line_c, FONT_SIZE)
-				cursor_offset: i32 = 0
-				if cursor_text_w > inner_w {
-					cursor_offset = cursor_text_w - inner_w
+			}
+		} else if has_newlines {
+			// Multiline cursor: position at end of last line.
+			lines := strings.split(text, "\n", context.temp_allocator)
+			last_line := lines[len(lines) - 1]
+			last_line_c := strings.clone_to_cstring(last_line, context.temp_allocator)
+			cursor_text_w := measure_text(last_line_c, FONT_SIZE)
+			cursor_offset: i32 = 0
+			if cursor_text_w > inner_w {
+				cursor_offset = cursor_text_w - inner_w
+			}
+			cursor_x := inner_x + cursor_text_w - cursor_offset
+			visible_count := min(i32(len(lines)), visible_lines)
+			cursor_line_y := y + 6 + (visible_count - 1) * LINE_HEIGHT
+			rl.SetTextInputRect(cursor_x, cursor_line_y, 1, FONT_SIZE)
+			if blink_on {
+				rl.DrawLine(cursor_x, cursor_line_y, cursor_x, cursor_line_y + FONT_SIZE, theme.fg_accent)
+			}
+		} else {
+			display_for_cursor: string
+			if masked {
+				mask_sb := strings.builder_make(context.temp_allocator)
+				for _ in text {
+					strings.write_byte(&mask_sb, '*')
 				}
-				cursor_x := inner_x + cursor_text_w - cursor_offset
-				visible_count := min(i32(len(lines)), visible_lines)
-				cursor_line_y := y + 6 + (visible_count - 1) * LINE_HEIGHT
-				rl.DrawLine(cursor_x, cursor_line_y, cursor_x, cursor_line_y + FONT_SIZE, FG_ACCENT)
+				display_for_cursor = strings.to_string(mask_sb)
 			} else {
-				display_for_cursor: string
-				if masked {
-					mask_sb := strings.builder_make(context.temp_allocator)
-					for _ in text {
-						strings.write_byte(&mask_sb, '*')
-					}
-					display_for_cursor = strings.to_string(mask_sb)
-				} else {
-					display_for_cursor = text
+				display_for_cursor = text
+			}
+			cursor_text_w := measure_text(strings.clone_to_cstring(display_for_cursor, context.temp_allocator), FONT_SIZE)
+			cursor_offset: i32 = 0
+			if cursor_text_w > inner_w {
+				cursor_offset = cursor_text_w - inner_w
+			}
+			cursor_prefix := display_for_cursor
+			if caret_active {
+				col := 0
+				byte := 0
+				for byte < cursor^ {
+					byte = caret_next_rune(text, byte)
+					col += 1
 				}
-				cursor_text_w := measure_text(strings.clone_to_cstring(display_for_cursor, context.temp_allocator), FONT_SIZE)
-				cursor_offset: i32 = 0
-				if cursor_text_w > inner_w {
-					cursor_offset = cursor_text_w - inner_w
-				}
-				cursor_prefix := display_for_cursor
-				if caret_active {
-					col := 0
-					byte := 0
-					for byte < cursor^ {
-						byte = caret_next_rune(text, byte)
-						col += 1
-					}
-					prefix_end := caret_col_to_byte(display_for_cursor, col)
-					cursor_prefix = display_for_cursor[:prefix_end]
-				}
-				cursor_prefix_w := measure_text(strings.clone_to_cstring(cursor_prefix, context.temp_allocator), FONT_SIZE)
-				cursor_x := inner_x + cursor_prefix_w - cursor_offset
-				rl.DrawLine(cursor_x, y + 5, cursor_x, y + h - 5, FG_ACCENT)
+				prefix_end := caret_col_to_byte(display_for_cursor, col)
+				cursor_prefix = display_for_cursor[:prefix_end]
+			}
+			cursor_prefix_w := measure_text(strings.clone_to_cstring(cursor_prefix, context.temp_allocator), FONT_SIZE)
+			cursor_x := inner_x + cursor_prefix_w - cursor_offset
+			rl.SetTextInputRect(cursor_x, y + 5, 1, h - 10)
+			if blink_on {
+				rl.DrawLine(cursor_x, y + 5, cursor_x, y + h - 5, theme.fg_accent)
 			}
 		}
 	}
@@ -1366,7 +1381,7 @@ draw_line_with_selection :: proc(x, y: i32, line: string, font_size: i32, color:
 		hl_x := x + measure_text(prefix_c, font_size)
 		span_c := strings.clone_to_cstring(line[local_start:local_end], context.temp_allocator)
 		hl_w := measure_text(span_c, font_size)
-		rl.DrawRectangle(hl_x, y, hl_w, i32(LINE_HEIGHT), BG_SELECTION)
+		rl.DrawRectangle(hl_x, y, hl_w, i32(LINE_HEIGHT), theme.bg_selection)
 	}
 
 	line_c := strings.clone_to_cstring(line, context.temp_allocator)
@@ -1571,7 +1586,11 @@ find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: in
 // ingot-only generic widgets (not present in the alloy superset).
 // ------------------------------------------------------------------
 
-spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = FG_ACCENT_LIGHT, segments: i32 = 24) {
+spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = {}, segments: i32 = 24) {
+	// Zero-value default resolves to the theme accent at call time
+	// (defaults must be compile-time constants; the theme is runtime).
+	color := color
+	if color == {} do color = theme.fg_accent_light
 	// Continuous animation: keep frames coming while a spinner is visible
 	// (no-op in the default continuous frame strategy).
 	rl.RequestRedraw()
@@ -1587,8 +1606,8 @@ spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = FG_ACCENT_LIGHT, seg
 
 section_header :: proc(x, y, w: i32, label: string) -> i32 {
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text(lc, x, y, FONT_SIZE_SMALL, FG_LABEL)
-	rl.DrawRectangle(x, y + FONT_SIZE_SMALL + sc(5), w, 1, BORDER_SUBTLE)
+	draw_text(lc, x, y, FONT_SIZE_SMALL, theme.fg_label)
+	rl.DrawRectangle(x, y + FONT_SIZE_SMALL + sc(5), w, 1, theme.border_subtle)
 	return y + FONT_SIZE_SMALL + sc(11)
 }
 
@@ -1602,7 +1621,7 @@ status_pill :: proc(text: string, x, y, font_size: i32, color: rl.Color) -> i32 
 // progress_bar draws a rounded track + fill; frac clamped to [0,1].
 progress_bar :: proc(x, y, w, h: i32, frac: f32, color: rl.Color) {
 	track := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	rl.DrawRectangleRounded(track, 1.0, 4, BG_ACTIVE)
+	rl.DrawRectangleRounded(track, 1.0, 4, theme.bg_active)
 	fw := f32(w) * clamp(frac, 0, 1)
 	if fw >= f32(h) { // avoid degenerate rounding on tiny fills
 		rl.DrawRectangleRounded({f32(x), f32(y), fw, f32(h)}, 1.0, 4, color)
@@ -1649,9 +1668,9 @@ kv_row :: proc(x, y, w: i32, key, value: string, key_col, val_col: rl.Color, fon
 // list_row_bg draws the unified rounded row background for hover/selection.
 list_row_bg :: proc(rect: rl.Rectangle, selected, hovered: bool) {
 	if selected {
-		rl.DrawRectangleRounded(rect, 0.25, 4, BG_ACTIVE)
+		rl.DrawRectangleRounded(rect, 0.25, 4, theme.bg_active)
 	} else if hovered {
-		rl.DrawRectangleRounded(rect, 0.25, 4, BG_HOVER)
+		rl.DrawRectangleRounded(rect, 0.25, 4, theme.bg_hover)
 	}
 }
 
@@ -1728,10 +1747,10 @@ collapsible_header :: proc(x, y, w: i32, label: string, open: ^bool,
 		}
 	}
 	lbl := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text(lbl, x + sc(10), y + sc(6), font_size, FG_LABEL)
+	draw_text(lbl, x + sc(10), y + sc(6), font_size, theme.fg_label)
 	ind: cstring = "\u25BE" if open^ else "\u25B8"
 	iw := measure_text(ind, font_size)
 	draw_text(ind, x + w - iw - sc(10), y + sc(6), font_size,
-		FG_PRIMARY if hovered else FG_SECONDARY)
+		theme.fg_primary if hovered else theme.fg_secondary)
 	return
 }

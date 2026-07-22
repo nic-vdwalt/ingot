@@ -112,7 +112,7 @@ wrap_compute :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -
 			w_at_space = line_w + rw
 		}
 
-		if line_w + rw > max_width && next - line_start > 1 {
+		if line_w + rw > max_width && i > line_start {
 			if last_space > line_start {
 				append(&lines, Wrap_Line{line_start, last_space})
 				line_start = last_space + 1

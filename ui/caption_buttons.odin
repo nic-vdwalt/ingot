@@ -45,10 +45,10 @@ draw_caption_buttons :: proc(screen_w: i32, st: Caption_Input) -> (min_r, max_r,
 
 	// Opaque base under the block: masks any header overflow and keeps the
 	// translucent hover fills consistent on every screen.
-	rl.DrawRectangleRec(rl.Rectangle{min_r.x, 0, 3 * w, h}, BG_SECONDARY)
+	rl.DrawRectangleRec(rl.Rectangle{min_r.x, 0, 3 * w, h}, theme.bg_secondary)
 
 	focused := rl.IsWindowFocused()
-	glyph_base := FG_PRIMARY if focused else FG_SECONDARY
+	glyph_base := theme.fg_primary if focused else theme.fg_secondary
 
 	// Hover / pressed backgrounds.
 	draw_btn_bg :: proc(r: rl.Rectangle, btn: Caption_Button, st: Caption_Input) {
@@ -128,13 +128,13 @@ draw_fullscreen_button :: proc(screen_w: i32, is_fs: bool, mouse: rl.Vector2) ->
 	hovered = rl.CheckCollisionPointRec(mouse, r)
 
 	// Opaque base + hover fill (matches the Windows caption buttons).
-	rl.DrawRectangleRec(r, BG_SECONDARY)
+	rl.DrawRectangleRec(r, theme.bg_secondary)
 	if hovered {
 		rl.DrawRectangleRec(r, CAPTION_HOVER_FILL)
 	}
 
 	focused := rl.IsWindowFocused()
-	col := FG_PRIMARY if focused else FG_SECONDARY
+	col := theme.fg_primary if focused else theme.fg_secondary
 
 	stroke := scf(1.0)
 	g := scf(10.0) // glyph box size

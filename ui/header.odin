@@ -3,7 +3,7 @@ package ui
 
 import rl "ingot:gfx"
 
-// draw_app_header renders the app header strip: a BG_SECONDARY bar of height
+// draw_app_header renders the app header strip: a theme.bg_secondary bar of height
 // TAB_BAR_HEIGHT with a left-aligned title and a hairline bottom border. On
 // Windows (custom title bar) it also draws the min/max/close caption buttons at
 // the top-right and publishes the non-client layout so the whole strip drags
@@ -16,16 +16,16 @@ draw_app_header :: proc(title: cstring, screen_w: i32) -> (header_h: i32) {
 	h := f32(header_h)
 
 	// Bar background + hairline bottom border.
-	rl.DrawRectangle(0, 0, screen_w, header_h, BG_SECONDARY)
+	rl.DrawRectangle(0, 0, screen_w, header_h, theme.bg_secondary)
 	rl.DrawLineEx(
 		rl.Vector2{0, h}, rl.Vector2{f32(screen_w), h},
-		scf(1.0), BORDER_SUBTLE,
+		scf(1.0), theme.border_subtle,
 	)
 
 	// Left-aligned, vertically centered title.
 	if title != nil && len(title) > 0 {
 		ty := (header_h - FONT_SIZE) / 2
-		draw_text(title, PADDING, ty, FONT_SIZE, FG_SECONDARY)
+		draw_text(title, PADDING, ty, FONT_SIZE, theme.fg_secondary)
 	}
 
 	// Windows custom title bar: caption buttons + non-client layout publish.

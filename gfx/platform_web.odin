@@ -47,6 +47,7 @@ foreign dom {
 	) -> i32 ---
 	@(link_name = "ingot_is_fullscreen")       _js_is_fullscreen     :: proc() -> i32 ---
 	@(link_name = "ingot_toggle_fullscreen")   _js_toggle_fullscreen :: proc() ---
+	@(link_name = "ingot_ime_rect")            _js_ime_rect          :: proc(x, y, w, h, active: i32) ---
 }
 
 // A non-nil sentinel so the shared `g.win == nil` guards treat the web target as
@@ -258,6 +259,19 @@ _input_drain :: proc() {
 
 @(private)
 platform_input_init :: proc() {}
+
+// IME proxy: a hidden DOM textarea (web/ingot_input.js) is positioned at the
+// caret and focused so browser composition events (Pinyin, Japanese, dead
+// keys) fire; the canvas alone never receives them.
+@(private)
+platform_set_text_input_rect :: proc(x, y, w, h: i32) {
+	_js_ime_rect(x, y, w, h, 1)
+}
+
+@(private)
+platform_text_input_deactivate :: proc() {
+	_js_ime_rect(0, 0, 0, 0, 0)
+}
 
 @(private)
 platform_web_input_frame_begin :: proc() {

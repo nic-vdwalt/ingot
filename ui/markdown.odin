@@ -279,7 +279,7 @@ draw_markdown_line_spans :: proc(x, y: i32, display_line: string, dl_start, dl_e
 				span_c := strings.clone_to_cstring(seg_text[hl_s - seg_start:hl_e - seg_start], context.temp_allocator)
 				hl_x := cursor_x + measure_text(pre_c, FONT_SIZE)
 				hl_w := measure_text(span_c, FONT_SIZE)
-				rl.DrawRectangle(hl_x, y, hl_w, LINE_HEIGHT, BG_SELECTION)
+				rl.DrawRectangle(hl_x, y, hl_w, LINE_HEIGHT, theme.bg_selection)
 			}
 		}
 
@@ -287,28 +287,28 @@ draw_markdown_line_spans :: proc(x, y: i32, display_line: string, dl_start, dl_e
 			// File-mention chip: rounded background + accent text.
 			seg_w := measure_text(seg_c, FONT_SIZE)
 			rect := rl.Rectangle{f32(cursor_x - 3), f32(y - 1), f32(seg_w + 6), f32(FONT_SIZE + 4)}
-			rl.DrawRectangleRounded(rect, 0.5, 6, BG_CHIP)
-			draw_text(seg_c, cursor_x, y, FONT_SIZE, FG_ACCENT)
+			rl.DrawRectangleRounded(rect, 0.5, 6, theme.bg_chip)
+			draw_text(seg_c, cursor_x, y, FONT_SIZE, theme.fg_accent)
 		} else if s.code {
 			// Inline code: render as a clickable file/dir pill when the text
 			// names a real workspace path; otherwise as plain inline-code text.
 			if workspace_has_path(s.text) {
 				seg_w := measure_text(seg_c, FONT_SIZE)
 				rect := rl.Rectangle{f32(cursor_x - 3), f32(y - 1), f32(seg_w + 6), f32(FONT_SIZE + 4)}
-				rl.DrawRectangleRounded(rect, 0.5, 6, BG_CHIP)
-				draw_text(seg_c, cursor_x, y, FONT_SIZE, FG_ACCENT)
+				rl.DrawRectangleRounded(rect, 0.5, 6, theme.bg_chip)
+				draw_text(seg_c, cursor_x, y, FONT_SIZE, theme.fg_accent)
 			} else {
-				draw_text(seg_c, cursor_x, y, FONT_SIZE, FG_CODE_INLINE)
+				draw_text(seg_c, cursor_x, y, FONT_SIZE, theme.fg_code_inline)
 			}
 		} else if s.bold {
 			// Faux-bold: draw text twice with 1px horizontal offset.
-			draw_text(seg_c, cursor_x + 1, y, FONT_SIZE, FG_BOLD)
-			draw_text(seg_c, cursor_x, y, FONT_SIZE, FG_BOLD)
+			draw_text(seg_c, cursor_x + 1, y, FONT_SIZE, theme.fg_bold)
+			draw_text(seg_c, cursor_x, y, FONT_SIZE, theme.fg_bold)
 		} else if s.link {
 			// Hyperlink: accent text + underline; click handling lives in chat.odin.
 			seg_w := measure_text(seg_c, FONT_SIZE)
-			draw_text(seg_c, cursor_x, y, FONT_SIZE, FG_ACCENT)
-			rl.DrawLine(cursor_x, y + FONT_SIZE + 1, cursor_x + seg_w, y + FONT_SIZE + 1, FG_ACCENT)
+			draw_text(seg_c, cursor_x, y, FONT_SIZE, theme.fg_accent)
+			rl.DrawLine(cursor_x, y + FONT_SIZE + 1, cursor_x + seg_w, y + FONT_SIZE + 1, theme.fg_accent)
 		} else {
 			draw_text(seg_c, cursor_x, y, FONT_SIZE, base_color)
 		}
@@ -596,16 +596,16 @@ layout_table :: proc(
 
 		if draw {
 			if is_header {
-				rl.DrawRectangle(x, row_y, table_w, row_h, BG_TABLE_HEADER)
+				rl.DrawRectangle(x, row_y, table_w, row_h, theme.bg_table_header)
 			}
 			cell_x := x
 			for ci in 0 ..< cols {
 				if ci > 0 {
-					rl.DrawRectangle(cell_x, row_y, 1, row_h, BORDER_COLOR)
+					rl.DrawRectangle(cell_x, row_y, 1, row_h, theme.border_color)
 				}
 				if ci < len(row.cells) && len(row.cells[ci]) > 0 {
 					cell := row.cells[ci]
-					cell_color := FG_BOLD if is_header else base_color
+					cell_color := theme.fg_bold if is_header else base_color
 					inner := col_widths[ci] - pad * 2
 					if inner < 1 do inner = 1
 					ty := row_y + cell_pad_y
@@ -620,7 +620,7 @@ layout_table :: proc(
 				cell_x += col_widths[ci]
 			}
 			if is_header {
-				rl.DrawRectangle(x, row_y + row_h, table_w, 1, BORDER_COLOR)
+				rl.DrawRectangle(x, row_y + row_h, table_w, 1, theme.border_color)
 			}
 		} else if out_hit != nil && mouse_y >= row_y && mouse_y < row_y + row_h {
 			// Find the column under the mouse by walking the variable widths.
@@ -650,7 +650,7 @@ layout_table :: proc(
 
 	total_h := row_y - y + 1 // +1 for header separator rule
 	if draw {
-		rl.DrawRectangleLines(x, y, table_w, total_h, BORDER_COLOR)
+		rl.DrawRectangleLines(x, y, table_w, total_h, theme.border_color)
 	}
 	total_h += 4 // bottom margin
 
@@ -702,13 +702,13 @@ draw_heading :: proc(x, y, max_width: i32, text: string, level: int, text_byte_s
 		}
 	}
 
-	text_h := draw_text_wrapped(x, y, max_width, text, FG_HEADING, font_size, sub_sel_s, sub_sel_e, draw)
+	text_h := draw_text_wrapped(x, y, max_width, text, theme.fg_heading, font_size, sub_sel_s, sub_sel_e, draw)
 	if text_h == 0 do text_h = font_size + 4
 
 	total_h := text_h
 
 	if level == 1 {
-		if draw do rl.DrawRectangle(x, y + total_h, max_width, 1, BORDER_COLOR)
+		if draw do rl.DrawRectangle(x, y + total_h, max_width, 1, theme.border_color)
 		total_h += 1
 	}
 
@@ -744,11 +744,11 @@ draw_markdown :: proc(x, y, max_width: i32, text: string, base_color: rl.Color, 
 		if is_code_fence(line) {
 			if !in_code_block {
 				in_code_block = true
-				if draw do rl.DrawRectangle(x, current_y + 2, max_width, 1, BORDER_COLOR)
+				if draw do rl.DrawRectangle(x, current_y + 2, max_width, 1, theme.border_color)
 				current_y += 6
 			} else {
 				in_code_block = false
-				if draw do rl.DrawRectangle(x, current_y, max_width, 1, BORDER_COLOR)
+				if draw do rl.DrawRectangle(x, current_y, max_width, 1, theme.border_color)
 				current_y += 8
 			}
 			line_start = i + 1
@@ -758,16 +758,16 @@ draw_markdown :: proc(x, y, max_width: i32, text: string, base_color: rl.Color, 
 		// Code block line.
 		if in_code_block {
 			if draw && !line_culled(current_y) {
-				rl.DrawRectangle(x, current_y, max_width, LINE_HEIGHT, BG_CODE)
+				rl.DrawRectangle(x, current_y, max_width, LINE_HEIGHT, theme.bg_code)
 				// Left accent so the block reads as one unit in the flat transcript.
-				rl.DrawRectangle(x, current_y, 2, LINE_HEIGHT, BORDER_SUBTLE)
+				rl.DrawRectangle(x, current_y, 2, LINE_HEIGHT, theme.border_subtle)
 				// Truncate long lines to available width (pixel-accurate, with ellipsis).
 				display_line := truncate_to_width(line, max_width - CODE_BLOCK_PAD * 2, FONT_SIZE)
 				if has_sel {
-					draw_line_with_selection(x + CODE_BLOCK_PAD, current_y, display_line, FONT_SIZE, FG_PRIMARY, line_start, sel_start, sel_end)
+					draw_line_with_selection(x + CODE_BLOCK_PAD, current_y, display_line, FONT_SIZE, theme.fg_primary, line_start, sel_start, sel_end)
 				} else {
 					line_c := strings.clone_to_cstring(display_line, context.temp_allocator)
-					draw_text(line_c, x + CODE_BLOCK_PAD, current_y, FONT_SIZE, FG_PRIMARY)
+					draw_text(line_c, x + CODE_BLOCK_PAD, current_y, FONT_SIZE, theme.fg_primary)
 				}
 			}
 			if out_w != nil {
@@ -813,7 +813,7 @@ draw_markdown :: proc(x, y, max_width: i32, text: string, base_color: rl.Color, 
 
 		// Bullet point.
 		if len(line) >= 2 && (line[0] == '-' || line[0] == '*' || line[0] == '+') && line[1] == ' ' {
-			if draw do rl.DrawCircle(x + 8, current_y + FONT_SIZE / 2 + 1, 2.5, FG_BULLET)
+			if draw do rl.DrawCircle(x + 8, current_y + FONT_SIZE / 2 + 1, 2.5, theme.fg_bullet)
 
 			content := line[2:]
 			content_x := x + BULLET_INDENT
@@ -901,7 +901,7 @@ draw_markdown :: proc(x, y, max_width: i32, text: string, base_color: rl.Color, 
 measure_markdown :: proc(width: i32, text: string, out_w: ^i32 = nil) -> i32 {
 	if len(text) == 0 do return 0
 	// draw=false runs the identical layout math but emits no glyph quads.
-	h := draw_markdown(0, 0, width, text, FG_ASSISTANT, -1, -1, out_w, false)
+	h := draw_markdown(0, 0, width, text, theme.fg_assistant, -1, -1, out_w, false)
 	return h
 }
 // Mirrors draw_markdown layout exactly.
@@ -1029,7 +1029,7 @@ hit_test_markdown :: proc(x, y, max_width: i32, text: string, mouse_x, mouse_y: 
 			next_line := text[i + 1:next_end]
 			if strings.contains(next_line, "|") && is_table_separator(next_line) {
 				offset := -1
-				next_byte, h := layout_table(x, current_y, max_width, text, line_start, FG_PRIMARY, false, mouse_x, mouse_y, &offset)
+				next_byte, h := layout_table(x, current_y, max_width, text, line_start, theme.fg_primary, false, mouse_x, mouse_y, &offset)
 				if mouse_y >= current_y && mouse_y < current_y + h {
 					if offset >= 0 do return offset
 					return line_start

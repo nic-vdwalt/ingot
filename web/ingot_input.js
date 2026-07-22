@@ -49,10 +49,34 @@
 		// Exports may not be set at attach time; read lazily at event time.
 		const ex = () => (wmi && wmi.exports) ? wmi.exports : null;
 
-		canvas.addEventListener("keydown", function (e) {
-			const k = KEY[e.code];
+		// Hidden IME proxy: a transparent textarea positioned at the caret by
+		// the engine (ingot_ime_rect in ingot_web.js). The canvas never gets
+		// browser composition events; this element does, giving canvas-drawn
+		// text fields real IME (Pinyin, Japanese, dead keys).
+		let ime = document.getElementById("ingot-ime");
+		if (!ime) {
+			ime = document.createElement("textarea");
+			ime.id = "ingot-ime";
+			ime.setAttribute("autocomplete", "off");
+			ime.setAttribute("autocapitalize", "off");
+			ime.setAttribute("autocorrect", "off");
+			ime.setAttribute("spellcheck", "false");
+			ime.setAttribute("tabindex", "-1");
+			ime.style.cssText =
+				"position:absolute;width:1px;height:1px;padding:0;border:0;" +
+				"margin:0;outline:none;opacity:0;overflow:hidden;resize:none;" +
+				"background:transparent;color:transparent;caret-color:transparent;" +
+				"pointer-events:none;left:0;top:0;";
+			document.body.appendChild(ime);
+		}
+
+		function onKeydown(e) {
 			const x = ex();
 			if (!x) return;
+			// While the OS input method is composing, keydowns are IME-internal
+			// (keyCode 229); the result arrives via compositionend instead.
+			if (e.isComposing || e.keyCode === 229) return;
+			const k = KEY[e.code];
 			if (k !== undefined) {
 				x.ingot_web_key(k, true, e.repeat);
 				if (CONSUME.has(k)) e.preventDefault();
@@ -61,12 +85,45 @@
 			if (!e.ctrlKey && !e.metaKey && e.key && e.key.length === 1) {
 				x.ingot_web_char(e.key.codePointAt(0));
 			}
-		});
+		}
 
-		canvas.addEventListener("keyup", function (e) {
+		function onKeyup(e) {
 			const k = KEY[e.code];
 			const x = ex();
 			if (x && k !== undefined) x.ingot_web_key(k, false, false);
+		}
+
+		canvas.addEventListener("keydown", onKeydown);
+		canvas.addEventListener("keyup", onKeyup);
+		ime.addEventListener("keydown", onKeydown);
+		ime.addEventListener("keyup", onKeyup);
+
+		// Composition events fire only on the proxy. Preedit updates stage the
+		// in-progress string; the final composed text enters the same char
+		// queue keystrokes use, so the Odin side needs no special casing.
+		const forwardPreedit = (s) => {
+			const x = ex();
+			if (!x || !x.ingot_web_preedit_clear) return;
+			x.ingot_web_preedit_clear();
+			if (s) for (const ch of s) x.ingot_web_preedit_char(ch.codePointAt(0));
+		};
+		ime.addEventListener("compositionstart", function () {
+			forwardPreedit("");
+		});
+		ime.addEventListener("compositionupdate", function (e) {
+			forwardPreedit(e.data || "");
+		});
+		ime.addEventListener("compositionend", function (e) {
+			forwardPreedit("");
+			const x = ex();
+			if (x && e.data) for (const ch of e.data) x.ingot_web_char(ch.codePointAt(0));
+			ime.value = ""; // the engine owns the text; proxy is a conduit
+		});
+		// Non-composition input still mutates the proxy's value (chars are
+		// forwarded from keydown); keep it empty so stale text can't leak into
+		// the next composition.
+		ime.addEventListener("input", function (e) {
+			if (!e.isComposing) ime.value = "";
 		});
 
 		canvas.addEventListener("pointermove", function (e) {
@@ -127,7 +184,10 @@
 		canvas.addEventListener("pointerleave", function () {
 			const x = ex(); if (x) x.ingot_web_hover(false);
 		});
-		canvas.addEventListener("blur", function () {
+		canvas.addEventListener("blur", function (e) {
+			// Focus moving to the IME proxy is still "ours" — don't clear
+			// held keys mid-typing.
+			if (e.relatedTarget && e.relatedTarget.id === "ingot-ime") return;
 			const x = ex(); if (x) x.ingot_web_hover(false);
 		});
 		// Suppress the browser context menu so right-click works as a UI button.

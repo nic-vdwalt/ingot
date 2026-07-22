@@ -97,20 +97,20 @@ draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 	modal_y := (screen_height - modal_h) / 2
 
 	// Draw modal background.
-	rl.DrawRectangle(modal_x, modal_y, modal_w, modal_h, BG_SECONDARY)
-	rl.DrawRectangleLines(modal_x, modal_y, modal_w, modal_h, BORDER_COLOR)
+	rl.DrawRectangle(modal_x, modal_y, modal_w, modal_h, theme.bg_secondary)
+	rl.DrawRectangleLines(modal_x, modal_y, modal_w, modal_h, theme.border_color)
 
 	// Clip body content to the modal interior.
 	rl.BeginScissorMode(modal_x, modal_y, modal_w, modal_h)
 
 	// Title.
 	title_c := strings.clone_to_cstring("Settings", context.temp_allocator)
-	draw_text(title_c, modal_x + modal_padding, modal_y + modal_padding, FONT_SIZE_LARGE, FG_PRIMARY)
+	draw_text(title_c, modal_x + modal_padding, modal_y + modal_padding, FONT_SIZE_LARGE, theme.fg_primary)
 
 	// Section header.
 	section_y := modal_y + title_h
 	section_c := strings.clone_to_cstring("UI SCALE", context.temp_allocator)
-	draw_text(section_c, modal_x + modal_padding, section_y + 4, FONT_SIZE_SMALL, FG_LABEL)
+	draw_text(section_c, modal_x + modal_padding, section_y + 4, FONT_SIZE_SMALL, theme.fg_label)
 
 	auto_scale := settings_auto_scale()
 
@@ -139,14 +139,14 @@ draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 		is_current := abs(p.value - current_scale) < 0.001
 
 		if is_selected {
-			rl.DrawRectangleRec(item_rect, BG_ACTIVE)
+			rl.DrawRectangleRec(item_rect, theme.bg_active)
 		}
 
 		// Current-value marker.
 		text_x := modal_x + modal_padding
 		if is_current {
 			marker_c := strings.clone_to_cstring("*", context.temp_allocator)
-			draw_text(marker_c, text_x, list_y + (item_h - FONT_SIZE) / 2, FONT_SIZE, FG_ACCENT)
+			draw_text(marker_c, text_x, list_y + (item_h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_accent)
 		}
 		text_x += sc(16)
 
@@ -156,14 +156,14 @@ draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 			label = fmt.tprintf("Auto (system \u2014 %d%%)", int(auto_scale * 100 + 0.5))
 		}
 		label_c := strings.clone_to_cstring(label, context.temp_allocator)
-		draw_text(label_c, text_x, list_y + (item_h - FONT_SIZE) / 2, FONT_SIZE, FG_PRIMARY)
+		draw_text(label_c, text_x, list_y + (item_h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_primary)
 
 		// Effective pixel percentage on the far right for non-auto rows.
 		if idx != 0 {
 			pct := fmt.tprintf("%d%%", int(p.value * 100 + 0.5))
 			pct_c := strings.clone_to_cstring(pct, context.temp_allocator)
 			pct_w := measure_text(pct_c, FONT_SIZE_SMALL)
-			draw_text(pct_c, right_edge - pct_w, list_y + (item_h - FONT_SIZE_SMALL) / 2, FONT_SIZE_SMALL, FG_SECONDARY)
+			draw_text(pct_c, right_edge - pct_w, list_y + (item_h - FONT_SIZE_SMALL) / 2, FONT_SIZE_SMALL, theme.fg_secondary)
 		}
 
 		// Mouse click applies this preset.
@@ -178,7 +178,7 @@ draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 	// Footer hint.
 	footer_y := modal_y + modal_h - modal_padding - footer_h + 4
 	hint_c := strings.clone_to_cstring("Enter apply  \u00b7  Esc close", context.temp_allocator)
-	draw_text(hint_c, modal_x + modal_padding, footer_y, FONT_SIZE_SMALL, FG_SECONDARY)
+	draw_text(hint_c, modal_x + modal_padding, footer_y, FONT_SIZE_SMALL, theme.fg_secondary)
 
 	rl.EndScissorMode()
 

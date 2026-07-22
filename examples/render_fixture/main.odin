@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import rl "ingot:gfx"
+import "ingot:ui"
 
 FONT_TTF := #load("../../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
 FIXTURE_CPS := [?]rune{' ', ':', 'A', 'B', 'C', 'F', 'G', 'P', 'R', 'T', 'U', 'a', 'c', 'e', 'f', 'g', 'i', 'm', 'n', 'o', 'r', 's', 't', 'x'}
@@ -182,22 +183,34 @@ draw_stream_lifetime_stress :: proc() {
 		rl.EndTextureMode()
 	}
 
-	for i in 0 ..< 48 {
-		x := 24 + i32(i % 12) * 74
-		y := 548 + i32(i / 12) * 34
-		rl.DrawTexturePro(
-			source_texture,
-			{0, 0, 2, 2},
-			{f32(x), f32(y), 24, 24},
-			{0, 0},
-			0,
-			rl.WHITE,
-		)
-		rl.DrawRectangle(x + 26, y, 44, 24, rl.Color{48, 58, 82, 210})
-		rl.BeginScissorMode(x + 28, y + 2, 40, 20)
-		rl.DrawRectangle(x + 26, y, 44, 24, rl.Color{90, 170, 230, 96})
-		rl.EndScissorMode()
+	// Living documentation for ui.Layout: the 12x4 chip grid below is laid
+	// out with rows carved from a column instead of hand-computed offsets.
+	// Cell geometry matches the original arithmetic exactly:
+	// x = 24 + col*74, y = 548 + row*34, chip 24px + label 44px, 10px gap.
+	l: ui.Layout
+	ui.layout_begin(&l, 24, 548, 12*74, 4*34, gap = 10)
+	for _ in 0 ..< 4 {
+		ui.push_row(&l, 24, gap = 2)
+		for _ in 0 ..< 12 {
+			icon := ui.next(&l, 24)
+			label := ui.next(&l, 44)
+			ui.spacer(&l, 2) // pad to the 74px cell pitch (24+2+44+2+2)
+			rl.DrawTexturePro(
+				source_texture,
+				{0, 0, 2, 2},
+				{f32(icon.x), f32(icon.y), f32(icon.w), f32(icon.h)},
+				{0, 0},
+				0,
+				rl.WHITE,
+			)
+			rl.DrawRectangle(label.x, label.y, label.w, label.h, rl.Color{48, 58, 82, 210})
+			rl.BeginScissorMode(label.x + 2, label.y + 2, label.w - 4, label.h - 4)
+			rl.DrawRectangle(label.x, label.y, label.w, label.h, rl.Color{90, 170, 230, 96})
+			rl.EndScissorMode()
+		}
+		ui.layout_pop(&l)
 	}
+	ui.layout_end(&l)
 
 	rl.DrawRectangle(24, 684, 912, 28, rl.Color{28, 32, 44, 255})
 	if font_ready {

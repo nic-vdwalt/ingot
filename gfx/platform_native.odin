@@ -250,6 +250,22 @@ platform_sync_web_submit_button :: proc(
 	return false
 }
 
+// IME candidate-window positioning: GLFW delivers final composed characters
+// via the char callback but has no preedit/candidate-rect API, so the per-OS
+// _ime_* seams (ime_darwin.odin / ime_windows.odin / ime_other.odin) talk to
+// the OS input method directly.
+@(private)
+platform_set_text_input_rect :: proc(x, y, w, h: i32) {
+	if g.win == nil do return
+	_ime_set_rect(x, y, w, h)
+}
+
+@(private)
+platform_text_input_deactivate :: proc() {
+	if g.win == nil do return
+	_ime_deactivate()
+}
+
 @(private)
 platform_cursor_pos :: proc() -> (f64, f64) {
 	return glfw.GetCursorPos(_win())

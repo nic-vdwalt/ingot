@@ -152,5 +152,5 @@ strip_pill_markers :: proc(text: string) -> string {
 draw_input_pill_bg :: proc(x, y, w: i32) {
 	pad: i32 = 3
 	rect := rl.Rectangle{f32(x - pad), f32(y - 1), f32(w + pad * 2), f32(FONT_SIZE + 4)}
-	rl.DrawRectangleRounded(rect, 0.5, 6, BG_CHIP)
+	rl.DrawRectangleRounded(rect, 0.5, 6, theme.bg_chip)
 }
