@@ -68,6 +68,20 @@ settings_open := false
 settings_sel := 0
 stored_scale: f32 = 0 // 0 = auto
 
+// Form controls (Widgets section).
+check_a := true
+check_b := false
+radio_choice: i32
+volume: f32 = 40
+dd_selected: i32
+dd_state: ui.Dropdown_State
+tip_state: ui.Tooltip_State
+
+// Generic modal + context menu (Overlay section).
+about_modal: ui.Modal_State
+ctx_menu: ui.Context_Menu_State
+ctx_note := "right-click in this section for a context menu"
+
 popup_open := false
 shielded_clicks := 0
 leaked_clicks := 0
@@ -281,7 +295,29 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 }
 
 draw_widgets :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(x, y0, w, "PROGRESS / SPINNER / PILLS")
+	y := ui.section_header(x, y0, w, "FORM CONTROLS (checkbox / radio / slider / dropdown)")
+	ch := ui.sc(24)
+	ui.checkbox(ui.Rect_I32{x, y, ui.sc(170), ch}, "Enable widgets", &check_a)
+	ui.checkbox(ui.Rect_I32{x + ui.sc(180), y, ui.sc(170), ch}, "Verbose logs", &check_b)
+	y += ch + ui.sc(6)
+	ui.radio(ui.Rect_I32{x, y, ui.sc(110), ch}, "Small", &radio_choice, 0)
+	ui.radio(ui.Rect_I32{x + ui.sc(120), y, ui.sc(110), ch}, "Medium", &radio_choice, 1)
+	ui.radio(ui.Rect_I32{x + ui.sc(240), y, ui.sc(110), ch}, "Large", &radio_choice, 2)
+	y += ch + ui.sc(8)
+	slider_rect := ui.Rect_I32{x, y, ui.sc(240), ch}
+	ui.slider(slider_rect, &volume, 0, 100, 5)
+	ui.tooltip(&tip_state, slider_rect, "drag, or use \u2190/\u2192 when focused",
+		rl.GetScreenWidth(), rl.GetScreenHeight())
+	vol := fmt.tprintf("%.0f%%", volume)
+	ui.draw_text(strings.clone_to_cstring(vol, context.temp_allocator),
+		x + ui.sc(250), y + (ch - ui.FONT_SIZE) / 2, ui.FONT_SIZE, ui.theme.fg_secondary)
+	y += ch + ui.sc(8)
+	backends := []string{"Metal", "Vulkan", "D3D12", "WebGPU"}
+	ui.dropdown(ui.Rect_I32{x, y, ui.sc(200), ui.sc(28)}, backends, &dd_selected,
+		&dd_state, rl.GetScreenWidth(), rl.GetScreenHeight())
+	y += ui.sc(28) + ui.sc(14)
+
+	y = ui.section_header(x, y, w, "PROGRESS / SPINNER / PILLS")
 	ui.spinner(x + ui.sc(16), y + ui.sc(16), ui.scf(14))
 	ui.progress_bar(x + ui.sc(48), y + ui.sc(4), ui.sc(200), ui.sc(8), 0.65, ui.theme.fg_accent)
 	ui.progress_bar_animated(x + ui.sc(48), y + ui.sc(20), ui.sc(200), ui.sc(8),
@@ -408,11 +444,49 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 	if ui.btn(x + bw + ui.sc(30), y, ui.sc(150), bh, "Toggle popup", .Primary) {
 		popup_open = !popup_open
 	}
+	if ui.btn(x + bw + ui.sc(30), y + bh + ui.sc(8), ui.sc(150), bh, "Open modal") {
+		about_modal.open = true
+	}
+
+	// Generic context menu: right-click anywhere in this section opens it.
+	if rl.IsMouseButtonPressed(.RIGHT) && !ctx_menu.open && !about_modal.open {
+		m := rl.GetMousePosition()
+		ui.context_menu_open(&ctx_menu, i32(m.x), i32(m.y))
+	}
+	if ctx_menu.open {
+		items := []ui.Menu_Item{
+			{label = "Reset shielded clicks"},
+			{label = "Unavailable action", disabled = true},
+			{separator = true},
+			{label = "Close menu"},
+		}
+		chosen := ui.context_menu(&ctx_menu, items, rl.GetScreenWidth(), rl.GetScreenHeight())
+		if chosen == 0 {
+			shielded_clicks = 0
+			ctx_note = "shielded clicks reset via context menu"
+		}
+	}
+	ui.draw_text(strings.clone_to_cstring(ctx_note, context.temp_allocator),
+		x, info_y + ui.sc(22), ui.FONT_SIZE_SMALL, ui.theme.fg_label)
 
 	if popup_open {
 		draw_demo_popup(x + ui.sc(60), y + ui.sc(12))
 	}
-	return info_y + ui.sc(30)
+
+	// Generic modal: dims, claims all input, Escape / click-outside dismisses.
+	if about_modal.open {
+		body := ui.modal_begin(&about_modal, "Generic modal", ui.sc(420), ui.sc(190),
+			rl.GetScreenWidth(), rl.GetScreenHeight())
+		ui.draw_text_wrapped(body.x + ui.PADDING, body.y + ui.sc(4), body.w - ui.PADDING * 2,
+			"The settings panel is built on this same modal_begin/modal_end pair. " +
+			"Escape or a click outside dismisses it.",
+			ui.theme.fg_primary)
+		if ui.btn(body.x + ui.PADDING, body.y + body.h - ui.sc(44), ui.sc(90), ui.sc(28), "Close", .Primary) {
+			about_modal.open = false
+		}
+		ui.modal_end(&about_modal)
+	}
+	return info_y + ui.sc(52)
 }
 
 // draw_demo_popup records a popup on the overlay layer (drawn above content

@@ -108,6 +108,46 @@ exercise_table :: proc(p: ^Prng, line: string) {
 	}
 }
 
+// exercise_widget_math fuzzes the pure widget helpers: menu navigation must
+// always land on a selectable row (or stay put) and stay in bounds, and
+// slider stepping must never escape [lo, hi] for any ratio/step combination.
+exercise_widget_math :: proc(p: ^Prng) {
+	// Menu navigation over a random mix of items/separators/disabled rows.
+	n := int_range(p, 1, 12)
+	items := make([]ui.Menu_Item, n, context.temp_allocator)
+	for i in 0 ..< n {
+		items[i] = ui.Menu_Item {
+			label     = "x",
+			disabled  = int_range(p, 0, 4) == 0,
+			separator = int_range(p, 0, 4) == 0,
+		}
+	}
+	current := int_range(p, 0, n)
+	delta := 1 if next_u64(p) % 2 == 0 else -1
+	next := ui.menu_nav_next(items, current, delta)
+	ensure(next >= 0 && next < n, "menu_nav_next index in range")
+	if next != current {
+		ensure(!items[next].separator, "menu_nav_next landed on a separator")
+		ensure(!items[next].disabled, "menu_nav_next landed on a disabled row")
+	}
+
+	// Slider stepping: any ratio and step must clamp into [lo, hi].
+	lo := f32(int_range(p, -1000, 1000))
+	hi := lo + f32(int_range(p, 1, 2000))
+	step := f32(int_range(p, 0, 50))
+	t := f32(next_u64(p) % 1001) / 1000.0
+	v := ui.slider_step_value(lo, hi, step, t)
+	ensure(v >= lo && v <= hi, "slider_step_value escaped [lo, hi]")
+	d := ui.slider_keyboard_delta(lo, hi, step)
+	ensure(d > 0, "slider_keyboard_delta must be positive")
+
+	// Wheel accumulation: remainder must stay under one row either way.
+	accum := f32(next_u64(p) % 100) / 100.0 - 0.5
+	wheel := f32(int_range(p, -300, 300)) / 100.0
+	_ = ui.wheel_accum_steps(&accum, wheel)
+	ensure(accum > -1 && accum < 1, "wheel remainder out of range")
+}
+
 main :: proc() {
 	seed, iterations := parse_options()
 	fmt.printfln("fuzz_ui seed=%d iterations=%d", seed, iterations)
@@ -121,6 +161,7 @@ main :: proc() {
 		line := random_line(&p)
 		exercise_spans(&p, line)
 		exercise_table(&p, line)
+		exercise_widget_math(&p)
 		free_all(context.temp_allocator)
 	}
 
