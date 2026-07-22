@@ -158,6 +158,34 @@ for !rl.WindowShouldClose() {
 Call `ui.pacer_note_activity(&pacer)` for activity the pacer can't observe
 (e.g. data arriving on a background channel).
 
+### Event-driven frames (power-save mode)
+
+For tools/UI apps that don't need continuous rendering, the engine can idle
+completely between events — no frame, no GPU submit, ~0% CPU while nothing
+changes. The swapchain keeps the last image on screen; frames resume instantly
+on input, OS damage (uncover/resize), or an explicit redraw request:
+
+```odin
+rl.InitWindow(640, 400, "my tool")
+rl.EnableEventWaiting()               // or rl.SetFrameStrategy(.Event_Driven)
+
+rl.run(frame)                          // both run() and manual loops idle
+```
+
+- `rl.RequestRedraw()` — schedule a frame now. Thread-safe: call it from net
+  callbacks or workers when background data changes the UI.
+- `rl.RequestRedrawIn(0.5)` — schedule a timed repaint (caret blink,
+  delayed animations). The earliest pending deadline wins.
+- `rl.DisableEventWaiting()` — back to continuous mode (the default; games
+  should stay continuous).
+
+After any activity a short settle burst (3 frames) runs so hover/release
+visuals finish. `ingot:ui` widgets already request what they need: the
+text-input caret blinks via `RequestRedrawIn`, and `spinner` /
+`progress_bar_animated` keep frames coming while animating. On web the rAF
+loop stays alive but skips idle frames; hidden tabs are suspended by the
+browser for free. See `examples/idle_demo` and `docs/rendering.md`.
+
 ### Scroll panes
 
 ```odin
@@ -323,6 +351,10 @@ remaining GPU-heavy and cross-platform work.
 
 ### Recently shipped
 
+- Event-driven frame scheduling (`SetFrameStrategy(.Event_Driven)` /
+  `EnableEventWaiting`): idle apps render no frames at all — the native pump
+  blocks in `glfw.WaitEventsTimeout`, the web `step()` early-outs under rAF —
+  with `RequestRedraw` / `RequestRedrawIn` for background and timed repaints.
 - Submission-tracked geometry streaming with unique vertex/index ranges replaces
   per-flush GPU buffer creation; universal indexed 2D batching cuts duplicated
   quad vertices, and dynamic uniform records preserve per-draw shader state.

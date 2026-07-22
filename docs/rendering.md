@@ -521,3 +521,41 @@ native/web build, and affected consumer checks pass. Do not land buffer lifetime
 uniform lifetime, indexing, 3D, and API changes in one unreviewable change. If a
 phase fails visual or validation checks, retain the preceding proven path rather
 than weakening assertions or accepting undefined resource lifetime.
+
+## Frame scheduling (event-driven idle)
+
+Immediate-mode rendering normally rebuilds and presents every frame even when
+nothing changes. `gfx/idle.odin` adds an opt-in scheduler that renders no frame
+at all while idle — the swapchain keeps the last presented image.
+
+- **Policy (shared, `gfx/idle.odin`).** `SetFrameStrategy(.Continuous |
+  .Event_Driven)` (default `.Continuous`, today's behavior). After any activity
+  a settle burst of `IDLE_SETTLE_FRAMES` (3) full frames runs so hover/release
+  visuals finish, then the engine idles. `RequestRedraw()` (contextless,
+  thread-safe — wakes a blocked native wait via `platform_wake`) schedules an
+  immediate frame; `RequestRedrawIn(seconds)` schedules a timed repaint, with
+  the earliest pending deadline winning. `EnableEventWaiting` /
+  `DisableEventWaiting` are the raylib-compat aliases.
+- **Native seam.** The gate lives in `input_poll`'s pump (`gfx/input.odin`):
+  when idle it calls `platform_wait_events` → `glfw.WaitEventsTimeout`, capped
+  at `IDLE_MAX_WAIT` (1 s) so close-button latency stays bounded and a ~1 fps
+  idle floor keeps content fresh. GLFW cursor/button/refresh/focus/iconify/
+  framebuffer-size callbacks mark activity; `WindowRefresh` is the OS damage
+  signal, without which an idle window would show stale content on uncover.
+  While minimized the engine waits without consuming settle credit.
+- **Web seam.** The rAF loop stays alive (returning `false` from `step` would
+  permanently end the module per `web/odin.js`), but `step()` early-outs
+  without running the app frame when idle. Input exports and the JS resize
+  hook (`ingot_web_resize`) mark activity. Hidden tabs are suspended by the
+  browser for free.
+- **Frame-time clamp.** `_frame_timing` clamps `GetFrameTime` to
+  `MAX_FRAME_TIME` (0.25 s) so idle waits and browser tab-resume gaps don't
+  feed huge deltas into animations; `GetFPS` uses the unclamped time.
+- **Invariant.** `_idle_take_frame` must be consumed exactly once per frame per
+  target: natively from `_idle_timeout` (input pump), on web from `step()`.
+  Any future polled (non-callback) input source must call `_idle_note_activity`
+  or event-driven apps will not wake for it.
+
+Verification: `gfx/idle_test.odin` covers the policy headless;
+`examples/idle_demo` demonstrates the frozen frame counter while idle, instant
+wake on input, and caret blink via timed repaints.

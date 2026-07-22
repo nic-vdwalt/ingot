@@ -1264,6 +1264,10 @@ text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, a
 	// Draw cursor if active.
 	if input_active {
 		t := rl.GetTime()
+		// Blink is time-driven: in event-driven frame mode nothing else forces a
+		// repaint while the user pauses typing, so schedule one at the next
+		// half-second toggle boundary.
+		rl.RequestRedrawIn(0.5 - math.mod(t, 0.5))
 		if int(t * 2) % 2 == 0 {
 			if use_caret_render {
 				// Caret at its true visual (row, x) within the visible window.
@@ -1568,6 +1572,9 @@ find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: in
 // ------------------------------------------------------------------
 
 spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = FG_ACCENT_LIGHT, segments: i32 = 24) {
+	// Continuous animation: keep frames coming while a spinner is visible
+	// (no-op in the default continuous frame strategy).
+	rl.RequestRedraw()
 	start := f32(math.mod(rl.GetTime()*360.0, 360.0))
 	thickness := max(radius * 0.28, 2.0)
 	rl.DrawRing(
@@ -1617,6 +1624,10 @@ eased :: proc(current: ^f32, target, dt, speed: f32) -> f32 {
 // `anim` is caller-owned eased state (reset it to 0 to replay the fill).
 progress_bar_animated :: proc(x, y, w, h: i32, frac: f32, anim: ^f32, color: rl.Color) {
 	eased(anim, clamp(frac, 0, 1), rl.GetFrameTime(), 10.0)
+	if abs(clamp(frac, 0, 1) - anim^) >= 0.001 {
+		// Still easing: keep frames coming until the fill settles.
+		rl.RequestRedraw()
+	}
 	progress_bar(x, y, w, h, anim^, color)
 }
 

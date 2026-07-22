@@ -1,6 +1,11 @@
 // LIB-CANDIDATE: imports only core:* and ingot:gfx.
 // Adaptive frame pacing: run at full rate while anything is happening, drop
 // to a low idle rate when the app is quiet. Ported from Alloy's main loop.
+//
+// See also gfx.SetFrameStrategy(.Event_Driven): the engine-level scheduler
+// idles completely (no frames at all) between events, which saves more power
+// than this pacer's low-rate polling. The pacer remains useful for apps that
+// want a bounded idle poll rate instead of full event-driven idling.
 package ui
 
 import rl "ingot:gfx"
