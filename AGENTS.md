@@ -9,7 +9,7 @@ WebGPU). See `README.md` for the full tour of packages and recipes.
 | Package          | Role |
 |------------------|------|
 | `ingot:gfx`      | graphics core (raylib-shaped): window/context, 2D shapes, textures, text atlas, input, math, cameras, `rlgl` shim |
-| `ingot:ui`       | immediate-mode widget toolkit: buttons, text input, panels, scroll panes, markdown, theming, HiDPI, window chrome, frame pacing |
+| `ingot:ui`       | immediate-mode widget toolkit: buttons, text input, checkbox/radio/slider, dropdown, modal, context menu, tooltip, panels, scroll panes, markdown, theming, HiDPI, keyboard focus, window chrome, frame pacing. New widgets take a `Rect_I32` plus config/state structs (not positional scalars) and an optional `Focus_Opt` for keyboard operation |
 | `ingot:prefs`    | per-app settings persistence (native file / web `localStorage`) |
 | `ingot:net`      | background HTTP `Fetcher` + self-healing RFC 6455 `WebSocket` client |
 | `ingot:sys`      | system integration (`open_url`) |

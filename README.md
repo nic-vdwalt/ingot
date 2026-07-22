@@ -36,7 +36,7 @@ existing Odin app is mechanical: swap `import rl "vendor:raylib"` for
 | Package          | Role | Summary |
 |------------------|------|---------|
 | `ingot:gfx`      | graphics core (raylib) | window/context, 2D shapes, textures, text atlas, input, math, `Camera2D`/`Camera3D`, plus an `rlgl` shim |
-| `ingot:ui`       | widget toolkit (raygui) | buttons, text input, panels, scroll panes, markdown, word wrap, theming, HiDPI scaling, custom title bar & window chrome, frame pacing |
+| `ingot:ui`       | widget toolkit (raygui) | buttons, text input, checkbox/radio/slider, dropdown, modal, context menu, tooltip, panels, scroll panes, markdown, word wrap, theming, HiDPI scaling, keyboard focus rings, custom title bar & window chrome, frame pacing |
 | `ingot:prefs`    | persistence | per-app settings storage — native settings file (`core:*`-only) + web `localStorage` backend, same `read`/`write` API |
 | `ingot:net`      | networking | background HTTP GET `Fetcher` (native `core:net` + worker threads / web `fetch()`) with optional cache validator, and an RFC 6455 `WebSocket` client (native hand-rolled / web `WebSocket`) |
 | `ingot:sys`      | system integration | `open_url` — launch the default browser (native `open`/`xdg-open`/`ShellExecuteW` / web `window.open`) |
@@ -136,6 +136,45 @@ Modal panels call `ui.route_claim_all()` while open. Widgets built on
 claims automatically; custom widgets can call `ui.route_occluded(mouse)`.
 `ui.interact(rect, &latch)` is the shared press/drag/release protocol —
 caller-owned latch, one active drag at a time.
+
+### Form controls, popups & keyboard focus
+
+Checkbox, radio, slider, dropdown, tooltip, modal, and context menu are plain
+calls with caller-owned state and `Rect_I32` geometry (the convention for all
+new widgets — a rect plus a config/state struct, not positional scalar
+soup). Every control takes an optional `ui.Focus_Opt{&focus, id}` linking it
+to a `form_focus` cycler slot: Tab/Shift+Tab move focus (ids are 1-based),
+a theme-colored ring marks the focused control, and Space/Enter activates it
+(arrows adjust sliders; panes opt into PageUp/PageDown/Home/End scrolling via
+`pane_begin(..., keyboard = true)`).
+
+```odin
+focus: int                     // 0 = nothing focused
+dd: ui.Dropdown_State
+modal: ui.Modal_State
+menu: ui.Context_Menu_State
+tip: ui.Tooltip_State
+
+ui.form_focus_cycle(&focus, 3)  // Tab / Shift+Tab across 3 controls
+ui.checkbox({x, y, w, 24}, "Enable", &enabled, {&focus, 1})
+ui.slider({x, y2, w, 24}, &volume, 0, 100, 5, {&focus, 2})
+ui.dropdown({x, y3, w, 28}, backends, &sel, &dd, sw, sh, {&focus, 3})
+ui.tooltip(&tip, {x, y2, w, 24}, "hover hint", sw, sh)
+
+if open_clicked do modal.open = true
+if modal.open {
+    body := ui.modal_begin(&modal, "Title", ui.sc(420), ui.sc(200), sw, sh)
+    // ... draw inside body; Tab-cycle only modal widgets (focus trap) ...
+    ui.modal_end(&modal) // Escape / click-outside sets modal.dismissed
+}
+
+if right_clicked do ui.context_menu_open(&menu, mx, my)
+chosen := ui.context_menu(&menu, items, sw, sh) // -1 until a row is picked
+```
+
+The UI-scale settings panel is built on `modal_begin`/`modal_end`; the spell
+menu popup rides the same overlay/routing layer. See `examples/gallery`
+(Widgets + Overlay sections) for all of these live.
 
 ### Metrics/debug overlay
 
