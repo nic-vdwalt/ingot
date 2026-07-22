@@ -386,6 +386,25 @@ scripts/build-libvterm.sh    # macOS
 scripts/build-libvterm.bat   # Windows
 ```
 
+## Memory-safety testing
+
+Deterministic fuzz harnesses run under **AddressSanitizer** with a
+`mem.Tracking_Allocator` (leaks / bad frees fail the run):
+
+```sh
+fuzz/run.sh net            # simulated transport + response parser (random seed)
+fuzz/run.sh net 12345      # reproduce a specific seed
+fuzz/run.sh ui             # widget toolkit harness
+fuzz/run.sh term           # in-package fuzz tests via `odin test` (private procs)
+```
+
+All targets build with `-debug -sanitize:address`; `net` adds
+`-define:INGOT_NET_SIM=true` so the simulated transport's clone/deliver/free
+cycle is exercised. Harnesses live in `fuzz/net/main.odin`, `fuzz/ui/main.odin`,
+and `term/term_input_fuzz_test.odin` (mirrored by `net/http_fuzz_test.odin`).
+These run locally only — they are not part of CI. Regular builds keep Odin's
+bounds checks enabled (never pass `-no-bounds-check`).
+
 ## Coding style
 
 `ingot` follows **Tiger Style** (adapted from TigerBeetle for Odin): safety >
