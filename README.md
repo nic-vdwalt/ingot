@@ -104,6 +104,46 @@ keep resolving.
 
 ## Recipes
 
+### Widget gallery
+
+`examples/gallery` is the imgui_demo.cpp equivalent: every widget (buttons,
+inputs, panes, charts, markdown, layout, overlays) plus a 1000-button stress
+tab and an F12 metrics overlay. Living documentation and copy-paste cookbook:
+
+```sh
+odin run examples/gallery -collection:ingot=.
+# renderer counters in the F12 overlay need:
+odin run examples/gallery -collection:ingot=. -define:INGOT_RENDER_STATS=true
+```
+
+### Overlay popups + input routing (occlusion)
+
+Popups/tooltips record their draws on a one-frame **overlay layer** so they
+paint above everything drawn later, and **claim** their rect with the input
+router so clicks never leak through to the widgets underneath (claims occlude
+on the next frame — bounded double buffer, no retained widget state):
+
+```odin
+ui.overlay_begin(rect, claim_input = true)   // claim_input=false for passive tooltips
+ui.overlay_rounded(rect, 0.1, 6, ui.theme.bg_popup)
+ui.overlay_text("Hello", x, y, ui.FONT_SIZE, ui.theme.fg_primary)
+ui.overlay_end()
+// replayed automatically by ui.apply_cursor() before rl.EndDrawing()
+```
+
+Modal panels call `ui.route_claim_all()` while open. Widgets built on
+`ui.interact` (btn, scrollbar, collapsible_header, text inputs) consult the
+claims automatically; custom widgets can call `ui.route_occluded(mouse)`.
+`ui.interact(rect, &latch)` is the shared press/drag/release protocol —
+caller-owned latch, one active drag at a time.
+
+### Metrics/debug overlay
+
+`ui.draw_debug_overlay(x, y)` renders FPS, frame time, flush counts **by
+cause** (pipeline/texture/scissor/...), upload bytes, buffer churn, the text
+measure cache, and overlay/router counters. Renderer counters are compile-
+gated: build with `-define:INGOT_RENDER_STATS=true` (zero cost by default).
+
 ### Window chrome (backdrop + custom title bar)
 
 A macOS vibrancy ("glass") backdrop, a Windows 11 Mica + dark title bar, and a
