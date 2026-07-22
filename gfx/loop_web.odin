@@ -22,11 +22,21 @@ run :: proc(frame: Run_Proc) {
 // (web/ingot_web.js). It runs one frame of the app callback once the device is
 // ready; before then it no-ops so the browser keeps polling. Returning true
 // keeps the RAF loop alive.
+//
+// Event-driven idle gate: when the app opted into .Event_Driven and no settle
+// frames or due deadlines remain, the app frame is skipped entirely (no
+// BeginDrawing, no GPU work) while rAF keeps ticking cheaply. Input exports
+// (input_web.odin) mark activity, so the next tick after an event runs a real
+// frame. Returning false instead would end the module permanently (odin.js
+// stops scheduling), so the loop always stays alive.
 @(export)
 step :: proc(dt: f32) -> bool {
 	context = g_web_ctx
 	if !g.initialized {
 		return true // GPU device still resolving; retry next frame
+	}
+	if !_idle_take_frame(&g.idle, _now()) {
+		return true // idle: keep rAF alive, skip the app frame
 	}
 	if g_web_frame != nil {
 		g_web_frame()

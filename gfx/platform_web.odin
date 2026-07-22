@@ -163,6 +163,19 @@ platform_now :: proc() -> f64 {
 @(private)
 platform_sleep :: proc(seconds: f64) {}
 
+// Web never blocks for events — rAF paces the loop and the idle gate lives in
+// step() (loop_web.odin). No-ops keep the shared pump code target-neutral.
+@(private)
+platform_wait_events :: proc(timeout: f64) {}
+
+@(private)
+platform_wake :: proc "contextless" () {}
+
+@(private)
+platform_window_iconified :: proc() -> bool {
+	return false
+}
+
 @(private)
 platform_set_window_min_size :: proc(w, h: i32) {}
 

@@ -363,6 +363,12 @@
 
 		fitCanvas();
 		window.addEventListener("resize", fitCanvas);
+		// Wake the engine's event-driven idle gate on resize so an idle app
+		// re-renders at the new canvas size (see gfx/input_web.odin).
+		window.addEventListener("resize", () => {
+			const x = wasmMemoryInterface && wasmMemoryInterface.exports;
+			if (x && x.ingot_web_resize) x.ingot_web_resize();
+		});
 		window.addEventListener("paste", (event) => {
 			const text = event.clipboardData && event.clipboardData.getData("text/plain");
 			if (typeof text === "string") clipboardText = text;
