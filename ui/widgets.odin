@@ -364,31 +364,28 @@ scrollbar_ex :: proc(st: ^Scrollbar_State, x, y, w, h: i32, total, visible, offs
 	thumb_y := y + i32(f32(track_range) * f32(off) / f32(max_off))
 
 	mouse := rl.GetMousePosition()
+	mouse.x -= f32(pane_origin_x)
 	thumb_rect := rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)}
 	track_rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 
-	if rl.IsMouseButtonPressed(.LEFT) {
+	it := interact(track_rect, &st.dragging)
+	if it.pressed {
 		if rl.CheckCollisionPointRec(mouse, thumb_rect) {
-			st.dragging = true
 			st.grab_dy = mouse.y - f32(thumb_y)
-		} else if rl.CheckCollisionPointRec(mouse, track_rect) {
+		} else {
 			// Jump: center the thumb on the click, then keep dragging.
-			st.dragging = true
 			st.grab_dy = f32(thumb_h) / 2
 		}
 	}
-	if st.dragging {
-		if rl.IsMouseButtonDown(.LEFT) {
-			t := (mouse.y - st.grab_dy - f32(y)) / f32(track_range)
-			off = clamp(int(t*f32(max_off) + 0.5), 0, max_off)
-		} else {
-			st.dragging = false
-		}
+	if it.held {
+		t := (mouse.y - st.grab_dy - f32(y)) / f32(track_range)
+		off = clamp(int(t*f32(max_off) + 0.5), 0, max_off)
 	}
 
 	// Recompute the thumb position after a drag update.
 	thumb_y = y + i32(f32(track_range) * f32(off) / f32(max_off))
-	thumb_hover := rl.CheckCollisionPointRec(mouse, rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)})
+	thumb_hover := it.hovered &&
+		rl.CheckCollisionPointRec(mouse, rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)})
 	col := theme.border_color
 	if st.dragging || thumb_hover do col = theme.fg_accent
 	rl.DrawRectangle(x, thumb_y, w, thumb_h, col)
@@ -523,9 +520,9 @@ btn :: proc(
 ) -> bool {
 	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	mouse := rl.GetMousePosition()
-	hovered := enabled && rl.CheckCollisionPointRec(mouse, rect)
-	clicked := hovered && rl.IsMouseButtonReleased(.LEFT)
+	it := interact(rect)
+	hovered := enabled && it.hovered
+	clicked := enabled && it.clicked
 	if enabled {
 		focus_opt_click(focus, x, y, w, h)
 		clicked = clicked || focus_opt_activated(focus)
@@ -929,7 +926,9 @@ pane_begin :: proc(p: ^Pane, x, y, w, h: i32, pad: i32 = 10, keyboard: bool = fa
 	assert(!p.open, "pane_begin: pane already begun (missing pane_end)")
 	assert(w >= 0 && h >= 0, "pane_begin: negative pane size")
 	p.open = true
-	hovered := rl.CheckCollisionPointRec(rl.GetMousePosition(), {f32(x), f32(y), f32(w), f32(h)})
+	mouse := rl.GetMousePosition()
+	hovered := rl.CheckCollisionPointRec(mouse, {f32(x), f32(y), f32(w), f32(h)}) &&
+		!route_occluded(mouse)
 	if hovered {
 		p.scroll -= get_wheel_move() * f32(sc(24))
 	}
@@ -1003,14 +1002,15 @@ collapsible_header :: proc(x, y, w: i32, label: string, open: ^bool,
 	assert(w > 0, "collapsible_header: non-positive width")
 	h := sc(26)
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	hovered := rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
+	it := interact(rect)
+	hovered := it.hovered
 	focus_opt_click(focus, x, y, w, h)
 	if hovered {
 		request_cursor(.POINTING_HAND)
-		if rl.IsMouseButtonReleased(.LEFT) {
-			open^ = !open^
-			toggled = true
-		}
+	}
+	if it.clicked {
+		open^ = !open^
+		toggled = true
 	}
 	if focus_opt_activated(focus) {
 		open^ = !open^

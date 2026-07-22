@@ -472,6 +472,22 @@ ROW_H_MD: i32       = 28 // primary list rows (browser, pickers)
 PANEL_HEADER_H: i32 = 34 // shared panel header band
 CARD_RADIUS_PX: f32 = 6  // shared card corner radius
 
+// Form controls (checkbox / radio / slider).
+CONTROL_BOX: i32    = 18 // checkbox/radio box edge length
+CONTROL_GAP: i32    = 8  // gap between control box and its label
+SLIDER_TRACK_H: i32 = 4  // slider track thickness
+SLIDER_KNOB_R: f32  = 7  // slider knob radius
+
+// Popup menus (context menu / dropdown).
+MENU_ITEM_H: i32 = 26  // menu row height
+MENU_PAD: i32    = 4   // inner padding above/below the item list
+MENU_MIN_W: i32  = 160 // minimum popup width
+
+// Tooltips.
+TOOLTIP_PAD: i32 = 6 // padding around tooltip text
+// Hover dwell before a tooltip appears (seconds; not a pixel size).
+TOOLTIP_DELAY :: 0.55
+
 // Markdown layout.
 CODE_BLOCK_PAD: i32 = 8
 BULLET_INDENT: i32  = 20

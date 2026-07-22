@@ -57,6 +57,16 @@ set_ui_scale :: proc(scale: f32) {
 	PANEL_HEADER_H = i32(34.0 * s + 0.5)
 	CARD_RADIUS_PX = 6.0 * s
 
+	// Form controls and popups.
+	CONTROL_BOX    = i32(18.0 * s + 0.5)
+	CONTROL_GAP    = i32(8.0 * s + 0.5)
+	SLIDER_TRACK_H = i32(4.0 * s + 0.5)
+	SLIDER_KNOB_R  = 7.0 * s
+	MENU_ITEM_H    = i32(26.0 * s + 0.5)
+	MENU_PAD       = i32(4.0 * s + 0.5)
+	MENU_MIN_W     = i32(160.0 * s + 0.5)
+	TOOLTIP_PAD    = i32(6.0 * s + 0.5)
+
 	// Attachment / drop zone.
 	ATTACHMENT_CHIP_ROW_H = i32(28.0 * s + 0.5)
 	DROP_ZONE_H           = i32(56.0 * s + 0.5)

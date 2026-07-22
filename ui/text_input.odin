@@ -478,7 +478,8 @@ ti_keys_select :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 	// Non-caret inputs: clicking inside clears the selection (caret inputs
 	// handle mouse press/drag in the render section).
 	if !ctx.caret && ti_sel_owner(ctx) && rl.IsMouseButtonPressed(.LEFT) {
-		if rl.CheckCollisionPointRec(rl.GetMousePosition(), ctx.rect) {
+		screen_mouse := rl.GetMousePosition()
+		if rl.CheckCollisionPointRec(screen_mouse, ctx.rect) && !route_occluded(screen_mouse) {
 			sel_reset(sel)
 		}
 	}
@@ -791,6 +792,7 @@ ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string) {
 	assert(ctx.masked, "ti_mouse_masked: masked input required")
 	if !rl.IsMouseButtonPressed(.LEFT) do return
 	mouse := rl.GetMousePosition()
+	if route_occluded(mouse) do return
 	mouse.x -= f32(pane_origin_x)
 	if !rl.CheckCollisionPointRec(mouse, ctx.rect) do return
 	masked_text := masked_display(text)
@@ -811,8 +813,9 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	assert(v.caret_render, "ti_mouse_caret: caret renderer required")
 	sel := ctx.sel
 	mouse := rl.GetMousePosition()
+	occluded := route_occluded(mouse)
 	mouse.x -= f32(pane_origin_x)
-	if rl.IsMouseButtonPressed(.LEFT) {
+	if rl.IsMouseButtonPressed(.LEFT) && !occluded {
 		if rl.CheckCollisionPointRec(mouse, ctx.rect) {
 			off := input_mouse_to_byte(v.vlines, text, mouse, ctx.inner_x, ctx.y, v.vis_start, v.vis_end)
 			now := rl.GetTime()
@@ -874,8 +877,9 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 	squiggles := spellcheck_ranges(text, ctx.cursor^, ctx.pills)
 	if rl.IsMouseButtonPressed(.RIGHT) {
 		mouse := rl.GetMousePosition()
+		occluded := route_occluded(mouse)
 		mouse.x -= f32(pane_origin_x)
-		if rl.CheckCollisionPointRec(mouse, ctx.rect) {
+		if !occluded && rl.CheckCollisionPointRec(mouse, ctx.rect) {
 			off := input_mouse_to_byte(v.vlines, text, mouse, ctx.inner_x, ctx.y, v.vis_start, v.vis_end)
 			ws, we, misspelled := spellcheck_word_at(text, off, ctx.pills)
 			if misspelled {
