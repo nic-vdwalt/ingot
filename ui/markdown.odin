@@ -451,10 +451,12 @@ split_table_row_offsets :: proc(text: string, line_start, line_end: int) -> (cel
 // calls so the same routine measures/hit-tests; both paths compute identical
 // heights so scroll/selection stay in sync. When draw==false and out_hit != nil,
 // out_hit is set to a source byte offset if the mouse falls inside the table.
+// When out_table_w != nil it receives the rendered table width in pixels.
 layout_table :: proc(
 	x, y, max_width: i32, text: string, blk_start: int,
 	base_color: rl.Color, draw: bool,
 	mouse_x: i32 = 0, mouse_y: i32 = 0, out_hit: ^int = nil,
+	out_table_w: ^i32 = nil,
 ) -> (next: int, height: i32) {
 	Row :: struct {
 		cells:  []string,
@@ -493,50 +495,160 @@ layout_table :: proc(
 		return blk_start, 0
 	}
 
-	col_w := max_width / i32(cols)
-	if col_w < 1 do col_w = 1
-	table_w := col_w * i32(cols)
-	row_h := i32(LINE_HEIGHT)
-	cell_pad_y := (row_h - FONT_SIZE) / 2
+	pad := TABLE_CELL_PAD
+	// Natural width per column: widest cell plus horizontal padding.
+	naturals := make([]i32, cols, context.temp_allocator)
+	for row in rows {
+		for cell, ci in row.cells {
+			if len(cell) == 0 do continue
+			cell_c := strings.clone_to_cstring(cell, context.temp_allocator)
+			w := measure_text(cell_c, FONT_SIZE) + pad * 2
+			if w > naturals[ci] do naturals[ci] = w
+		}
+	}
+	fair := max_width / i32(cols)
+	min_w := pad * 2 + FONT_SIZE * 2
+	if min_w > fair do min_w = fair
+	if min_w < 1 do min_w = 1
+	for ci in 0 ..< cols {
+		if naturals[ci] < min_w do naturals[ci] = min_w
+	}
+
+	col_widths := make([]i32, cols, context.temp_allocator)
+	natural_total: i32 = 0
+	for ci in 0 ..< cols do natural_total += naturals[ci]
+
+	shrunk := natural_total > max_width
+	if !shrunk {
+		// Everything fits at natural width — table may be narrower than max_width.
+		copy(col_widths, naturals)
+	} else {
+		// Columns at/below their fair share keep natural width; wide columns
+		// split the remaining space proportionally to their natural widths.
+		// Fixing a column changes the fair share of the rest, so iterate.
+		fixed := make([]bool, cols, context.temp_allocator)
+		remaining := max_width
+		flex := cols
+		for {
+			changed := false
+			share := remaining / i32(max(flex, 1))
+			for ci in 0 ..< cols {
+				if fixed[ci] do continue
+				if naturals[ci] <= share {
+					fixed[ci] = true
+					col_widths[ci] = naturals[ci]
+					remaining -= naturals[ci]
+					flex -= 1
+					changed = true
+				}
+			}
+			if !changed || flex == 0 do break
+		}
+		if flex > 0 {
+			flex_natural: i32 = 0
+			for ci in 0 ..< cols {
+				if !fixed[ci] do flex_natural += naturals[ci]
+			}
+			left := remaining
+			last := -1
+			for ci in 0 ..< cols {
+				if fixed[ci] do continue
+				w := remaining * naturals[ci] / max(flex_natural, 1)
+				if w < min_w do w = min_w
+				col_widths[ci] = w
+				left -= w
+				last = ci
+			}
+			// Give rounding leftovers to the last flexible column.
+			if last >= 0 && left > 0 do col_widths[last] += left
+		}
+	}
+
+	table_w: i32 = 0
+	for ci in 0 ..< cols do table_w += col_widths[ci]
+	if out_table_w != nil {
+		// When columns were shrunk the layout depends on max_width; report
+		// max_width so re-layout at the reported width is identical.
+		out_table_w^ = max_width if shrunk else table_w
+	}
+
+	// Per-row height: tallest wrapped cell (min one line).
+	row_heights := make([]i32, len(rows), context.temp_allocator)
+	for row, ri in rows {
+		h := i32(LINE_HEIGHT)
+		for cell, ci in row.cells {
+			if ci >= cols || len(cell) == 0 do continue
+			inner := col_widths[ci] - pad * 2
+			if inner < 1 do inner = 1
+			ch := wrapped_height_px(cell, inner, FONT_SIZE)
+			if ch > h do h = ch
+		}
+		row_heights[ri] = h
+	}
+
+	cell_pad_y := (i32(LINE_HEIGHT) - FONT_SIZE) / 2
 	if cell_pad_y < 0 do cell_pad_y = 0
 
+	row_y := y
 	for row, ri in rows {
-		row_y := y + i32(ri) * row_h
+		row_h := row_heights[ri]
 		is_header := ri == 0
 
 		if draw {
 			if is_header {
 				rl.DrawRectangle(x, row_y, table_w, row_h, BG_TABLE_HEADER)
 			}
+			cell_x := x
 			for ci in 0 ..< cols {
-				cell_x := x + i32(ci) * col_w
 				if ci > 0 {
 					rl.DrawRectangle(cell_x, row_y, 1, row_h, BORDER_COLOR)
 				}
-				if ci < len(row.cells) {
+				if ci < len(row.cells) && len(row.cells[ci]) > 0 {
+					cell := row.cells[ci]
 					cell_color := FG_BOLD if is_header else base_color
-					draw_text_truncated(row.cells[ci], cell_x + TABLE_CELL_PAD, row_y + cell_pad_y, col_w - TABLE_CELL_PAD * 2, FONT_SIZE, cell_color)
+					inner := col_widths[ci] - pad * 2
+					if inner < 1 do inner = 1
+					ty := row_y + cell_pad_y
+					for ln in wrap_text(cell, inner, FONT_SIZE) {
+						if ln.end > ln.start {
+							line_c := strings.clone_to_cstring(cell[ln.start:ln.end], context.temp_allocator)
+							draw_text(line_c, cell_x + pad, ty, FONT_SIZE, cell_color)
+						}
+						ty += i32(LINE_HEIGHT)
+					}
 				}
+				cell_x += col_widths[ci]
 			}
 			if is_header {
 				rl.DrawRectangle(x, row_y + row_h, table_w, 1, BORDER_COLOR)
 			}
 		} else if out_hit != nil && mouse_y >= row_y && mouse_y < row_y + row_h {
-			ci := int((mouse_x - x) / col_w)
-			if ci < 0 do ci = 0
-			if ci >= cols do ci = cols - 1
-			if ci < len(row.cells) {
-				cell_x := x + i32(ci) * col_w
-				col := caret_pixel_to_col(row.cells[ci], mouse_x - (cell_x + TABLE_CELL_PAD))
-				local := caret_col_to_byte(row.cells[ci], col)
+			// Find the column under the mouse by walking the variable widths.
+			ci := cols - 1
+			cx := x
+			for c in 0 ..< cols {
+				if mouse_x < cx + col_widths[c] {
+					ci = c
+					break
+				}
+				cx += col_widths[c]
+			}
+			cell_x := x
+			for c in 0 ..< ci do cell_x += col_widths[c]
+			if ci < len(row.cells) && len(row.cells[ci]) > 0 {
+				inner := col_widths[ci] - pad * 2
+				if inner < 1 do inner = 1
+				local := hit_test_wrapped(cell_x + pad, row_y + cell_pad_y, inner, row.cells[ci], mouse_x, mouse_y)
+				if local < 0 do local = 0
 				out_hit^ = row.starts[ci] + local
 			} else {
 				out_hit^ = blk_start
 			}
 		}
+		row_y += row_h
 	}
 
-	total_h := i32(len(rows)) * row_h + 1 // +1 for header separator rule
+	total_h := row_y - y + 1 // +1 for header separator rule
 	if draw {
 		rl.DrawRectangleLines(x, y, table_w, total_h, BORDER_COLOR)
 	}
@@ -737,9 +849,10 @@ draw_markdown :: proc(x, y, max_width: i32, text: string, base_color: rl.Color, 
 			next_end := len(text) if nl < 0 else i + 1 + nl
 			next_line := text[i + 1:next_end]
 			if strings.contains(next_line, "|") && is_table_separator(next_line) {
-				next_byte, h := layout_table(x, current_y, max_width, text, line_start, base_color, draw)
+				tbl_w: i32 = 0
+				next_byte, h := layout_table(x, current_y, max_width, text, line_start, base_color, draw, out_table_w = &tbl_w)
 				current_y += h
-				max_w = max_width   // tables are laid out full width
+				if tbl_w > max_w do max_w = tbl_w
 				line_start = next_byte
 				i = next_byte - 1 // loop will i += 1
 				continue

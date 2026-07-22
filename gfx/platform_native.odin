@@ -117,6 +117,27 @@ platform_poll_events :: proc() {
 	glfw.PollEvents()
 }
 
+// platform_wait_events blocks until an event arrives or `timeout` seconds
+// elapse (event-driven idle). glfw.PostEmptyEvent (platform_wake) unblocks it
+// from any thread.
+@(private)
+platform_wait_events :: proc(timeout: f64) {
+	glfw.WaitEventsTimeout(timeout)
+}
+
+// platform_wake unblocks a platform_wait_events in progress. Thread-safe
+// (GLFW documents PostEmptyEvent as callable from any thread).
+@(private)
+platform_wake :: proc "contextless" () {
+	if g.win != nil do glfw.PostEmptyEvent()
+}
+
+@(private)
+platform_window_iconified :: proc() -> bool {
+	if g.win == nil do return false
+	return glfw.GetWindowAttrib(_win(), glfw.ICONIFIED) != 0
+}
+
 @(private)
 platform_terminate :: proc() {
 	if g.win != nil do glfw.DestroyWindow(_win())
@@ -176,6 +197,17 @@ platform_input_init :: proc() {
 	glfw.SetKeyCallback(_win(), _key_cb)
 	glfw.SetCharCallback(_win(), _char_cb)
 	glfw.SetScrollCallback(_win(), _scroll_cb)
+
+	// Activity marks for event-driven frame scheduling (idle.odin). Cursor,
+	// button, focus and size events have no state to store (they are polled),
+	// but must still wake the idle gate; WindowRefresh is the OS damage signal
+	// (uncover/resize) — without it an idle window would show stale content.
+	glfw.SetCursorPosCallback(_win(), _cursor_pos_cb)
+	glfw.SetMouseButtonCallback(_win(), _mouse_button_cb)
+	glfw.SetWindowRefreshCallback(_win(), _refresh_cb)
+	glfw.SetWindowFocusCallback(_win(), _focus_cb)
+	glfw.SetWindowIconifyCallback(_win(), _iconify_cb)
+	glfw.SetFramebufferSizeCallback(_win(), _fb_size_cb)
 
 	g_cursors[MouseCursor.DEFAULT]       = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
 	g_cursors[MouseCursor.ARROW]         = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
@@ -271,6 +303,7 @@ platform_drop_init :: proc() {
 
 @(private)
 _key_cb :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: i32) {
+	_idle_note_activity(&g.idle)
 	if key < 0 || key >= KEY_COUNT do return
 	switch action {
 	case glfw.PRESS:
@@ -285,13 +318,48 @@ _key_cb :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: i32) {
 
 @(private)
 _char_cb :: proc "c" (win: glfw.WindowHandle, codepoint: rune) {
+	_idle_note_activity(&g.idle)
 	_push_char(codepoint)
 }
 
 @(private)
 _scroll_cb :: proc "c" (win: glfw.WindowHandle, xoffset, yoffset: f64) {
+	_idle_note_activity(&g.idle)
 	g.inp.wheel_pending.x += f32(xoffset)
 	g.inp.wheel_pending.y += f32(yoffset)
+}
+
+// The callbacks below carry no input state (their data is polled per frame);
+// they exist solely to wake the event-driven idle gate.
+
+@(private)
+_cursor_pos_cb :: proc "c" (win: glfw.WindowHandle, xpos, ypos: f64) {
+	_idle_note_activity(&g.idle)
+}
+
+@(private)
+_mouse_button_cb :: proc "c" (win: glfw.WindowHandle, button, action, mods: i32) {
+	_idle_note_activity(&g.idle)
+}
+
+@(private)
+_refresh_cb :: proc "c" (win: glfw.WindowHandle) {
+	_idle_note_activity(&g.idle)
+}
+
+@(private)
+_focus_cb :: proc "c" (win: glfw.WindowHandle, focused: i32) {
+	_idle_note_activity(&g.idle)
+}
+
+@(private)
+_iconify_cb :: proc "c" (win: glfw.WindowHandle, iconified: i32) {
+	_idle_note_activity(&g.idle)
+}
+
+@(private)
+_fb_size_cb :: proc "c" (win: glfw.WindowHandle, width, height: i32) {
+	_idle_note_activity(&g.idle)
 }
 
 // --- frame loop ------------------------------------------------------------

@@ -34,6 +34,7 @@ RestoreWindow :: proc() {
 @(private)
 _drop_cb :: proc "c" (win: glfw.WindowHandle, count: i32, paths: [^]cstring) {
 	context = runtime.default_context()
+	_idle_note_activity(&g.idle)
 	for p in g_drop_paths do delete(p)
 	clear(&g_drop_paths)
 	for i in 0 ..< int(count) {

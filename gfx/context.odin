@@ -75,8 +75,12 @@ Context :: struct {
 	// timing
 	start_time_s: f64,
 	last_time:    f64,
-	frame_time:   f32,
+	frame_time:      f32, // clamped to MAX_FRAME_TIME (what GetFrameTime returns)
+	real_frame_time: f32, // unclamped, for GetFPS accuracy
 	target_fps:   i32,
+
+	// event-driven frame scheduling (idle.odin)
+	idle: Idle_State,
 
 	// renderer (batch.odin)
 	rend: Renderer,
@@ -398,9 +402,16 @@ _frame_timing :: proc() {
 		}
 	}
 	now := _now()
-	g.frame_time = f32(now - g.last_time)
+	raw := f32(now - g.last_time)
+	g.real_frame_time = raw
+	// Clamp dt so a long gap (idle wait, browser tab hidden then resumed)
+	// doesn't feed a huge step into animations/physics on the next frame.
+	g.frame_time = min(raw, MAX_FRAME_TIME)
 	g.last_time = now
 }
+
+// MAX_FRAME_TIME caps GetFrameTime's reported delta (seconds).
+MAX_FRAME_TIME :: 0.25
 
 @(private)
 _now :: proc() -> f64 {
@@ -419,8 +430,8 @@ SetTargetFPS :: proc(fps: i32) { g.target_fps = fps }
 GetFrameTime :: proc() -> f32 { return g.frame_time }
 GetTime      :: proc() -> f64 { return _now() }
 GetFPS       :: proc() -> i32 {
-	if g.frame_time <= 0 do return 0
-	return i32(1.0 / g.frame_time + 0.5)
+	if g.real_frame_time <= 0 do return 0
+	return i32(1.0 / g.real_frame_time + 0.5)
 }
 
 SetWindowMinSize :: proc(w, h: i32) {

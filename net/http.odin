@@ -41,15 +41,19 @@ Http_Response :: struct {
 	body:    []u8,
 }
 
-http_response_destroy :: proc(response: ^Http_Response) {
+http_response_destroy :: proc(response: ^Http_Response, allocator := context.allocator) {
 	for header in response.headers {
-		delete(header.name)
-		delete(header.value)
+		delete(header.name, allocator)
+		delete(header.value, allocator)
 	}
-	delete(response.headers)
-	delete(response.body)
+	delete(response.headers, allocator)
+	delete(response.body, allocator)
 	response^ = {}
 }
+
+// The real native transport below is compiled out when the deterministic
+// simulated transport (http_sim.odin) is enabled via -define:INGOT_NET_SIM=true.
+when !INGOT_NET_SIM {
 
 http_get :: proc(host: string, port: int, path: string, allocator := context.allocator) -> (body: []u8, ok: bool) {
 	response, request_ok := http_request(host, port, Http_Request{
@@ -198,6 +202,8 @@ send_all :: proc(sock: cnet.TCP_Socket, data: []u8) -> bool {
 	return true
 }
 
+} // when !INGOT_NET_SIM
+
 parse_http_response :: proc(data: []u8, maximum_body := DEFAULT_MAXIMUM_BODY, allocator := context.allocator) -> (response: Http_Response, ok: bool) {
 	text := string(data)
 	header_end := strings.index(text, "\r\n\r\n")
@@ -213,7 +219,9 @@ parse_http_response :: proc(data: []u8, maximum_body := DEFAULT_MAXIMUM_BODY, al
 	for line in lines[1:] {
 		colon := strings.index(line, ":")
 		if colon <= 0 {
-			http_response_destroy(&response)
+			// Free with the SAME allocator we allocated with — the caller may
+			// have passed a temp allocator (pair-asserted by the fuzz harness).
+			http_response_destroy(&response, allocator)
 			return {}, false
 		}
 		append(&header_array, Http_Header{
@@ -226,7 +234,7 @@ parse_http_response :: proc(data: []u8, maximum_body := DEFAULT_MAXIMUM_BODY, al
 	if transfer_chunked(response.headers) {
 		decoded, decoded_ok := decode_chunked(raw_body, maximum_body, allocator)
 		if !decoded_ok {
-			http_response_destroy(&response)
+			http_response_destroy(&response, allocator)
 			return {}, false
 		}
 		response.body = decoded
@@ -234,12 +242,12 @@ parse_http_response :: proc(data: []u8, maximum_body := DEFAULT_MAXIMUM_BODY, al
 	}
 	if length, has_length := header_content_length(response.headers); has_length {
 		if length > maximum_body || len(raw_body) < length {
-			http_response_destroy(&response)
+			http_response_destroy(&response, allocator)
 			return {}, false
 		}
 		raw_body = raw_body[:length]
 	} else if len(raw_body) > maximum_body {
-		http_response_destroy(&response)
+		http_response_destroy(&response, allocator)
 		return {}, false
 	}
 	response.body = make([]u8, len(raw_body), allocator)
@@ -294,6 +302,8 @@ decode_chunked :: proc(data: []u8, maximum_body: int, allocator: mem.Allocator) 
 FETCH_WORKERS :: 8
 FETCH_MAXIMUM_PENDING :: 64
 FETCH_MAXIMUM_DRAIN :: 64
+
+when !INGOT_NET_SIM {
 
 Fetch_Result :: struct { tag: u64, status: u16, body: []u8, ok: bool }
 Fetch_Job :: struct { tag: u64, request: Http_Request, cache_path: string }
@@ -424,3 +434,13 @@ fetch_worker :: proc(f: ^Fetcher, idx: int) {
 		sync.mutex_lock(&f.mutex); append(&f.results, Fetch_Result{tag = tag, status = status, body = body, ok = ok}); sync.mutex_unlock(&f.mutex)
 	}
 }
+
+} // when !INGOT_NET_SIM
+
+// Suppress unused-import errors when the sim compiles the transport out.
+_ :: fmt
+_ :: cnet
+_ :: os
+_ :: sync
+_ :: thread
+_ :: time

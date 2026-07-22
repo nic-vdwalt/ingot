@@ -44,3 +44,13 @@ ascii_string :: proc(p: ^Prng, max_len: int, allocator := context.temp_allocator
 	}
 	return string(b)
 }
+
+// random_bytes fills arbitrary bytes, including invalid UTF-8 sequences —
+// intended for fuzzing parsers that consume untrusted input. Length is in
+// [0, max_len). Allocated with the given allocator (default: temp).
+random_bytes :: proc(p: ^Prng, max_len: int, allocator := context.temp_allocator) -> []u8 {
+	n := int_range(p, 0, max_len)
+	b := make([]u8, n, allocator)
+	for i in 0 ..< n do b[i] = u8(next_u64(p) & 0xFF)
+	return b
+}

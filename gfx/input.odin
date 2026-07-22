@@ -57,7 +57,15 @@ input_poll :: proc() {
 	inp.wheel_pending = {0, 0}
 	inp.mouse_prev = inp.mouse
 
-	platform_poll_events()
+	// Pump backend events. In event-driven mode the gate may block here
+	// (platform_wait_events) until input/OS damage arrives or the timeout
+	// elapses — this is where idle power saving happens. Web never waits;
+	// its gate lives in step() (loop_web.odin).
+	if should_wait, timeout := _idle_timeout(); should_wait {
+		platform_wait_events(timeout)
+	} else {
+		platform_poll_events()
+	}
 
 	mx, my := platform_cursor_pos()
 	inp.mouse = {f32(mx), f32(my)}

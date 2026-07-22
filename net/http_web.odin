@@ -15,6 +15,10 @@ Http_Header :: struct { name: string, value: string }
 Http_Request :: struct { method: Http_Method, path: string, headers: []Http_Header, body: []u8, maximum_body: u64 }
 Http_Response :: struct { status: u16, headers: []Http_Header, body: []u8 }
 
+// The real JS-interop transport below is compiled out when the deterministic
+// simulated transport (http_sim.odin) is enabled via -define:INGOT_NET_SIM=true.
+when !INGOT_NET_SIM {
+
 foreign import httpjs "ingot_http"
 @(default_calling_convention = "c")
 foreign httpjs {
@@ -24,6 +28,8 @@ foreign httpjs {
 	ingot_http_body_len :: proc(id: i32) -> i32 ---
 	ingot_http_body_copy :: proc(id: i32, dst: [^]byte, cap: i32) -> i32 ---
 }
+
+} // when !INGOT_NET_SIM
 
 http_response_destroy :: proc(response: ^Http_Response) {
 	delete(response.body)
@@ -41,6 +47,8 @@ http_request :: proc(host: string, port: int, request: Http_Request, allocator :
 	_ = host; _ = port; _ = request; _ = allocator
 	return {}, false
 }
+
+when !INGOT_NET_SIM {
 
 Fetch_Result :: struct { tag: u64, status: u16, body: []u8, ok: bool }
 @(private = "file") In_Flight :: struct { id: i32, tag: u64 }
@@ -146,4 +154,9 @@ fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 	return out[:]
 }
 
+} // when !INGOT_NET_SIM
+
 _ :: runtime
+_ :: json
+_ :: fmt
+_ :: strings
