@@ -240,13 +240,24 @@ BeginDrawing :: proc() {
 	#partial switch g.frame.surf_tex.status {
 	case .SuccessOptimal, .SuccessSuboptimal:
 		// ok
+	case .Outdated, .Lost:
+		// The swapchain is stale (e.g. display change); reconfigure so the
+		// next frame can acquire a fresh texture.
+		_release_surface_texture()
+		if g.fb_width > 0 && g.fb_height > 0 {
+			wg.SurfaceConfigure(g.surface, &g.config)
+		}
+		g.frame.has_frame = false
+		return
 	case:
+		_release_surface_texture()
 		g.frame.has_frame = false
 		return
 	}
 	g.frame.view = wg.TextureCreateView(g.frame.surf_tex.texture, nil)
 	if !renderer_frame_begin(&g.rend) {
 		wg.TextureViewRelease(g.frame.view)
+		_release_surface_texture()
 		g.frame.has_frame = false
 		return
 	}
@@ -328,6 +339,7 @@ EndDrawing :: proc() {
 		wg.CommandEncoderRelease(g.frame.encoder)
 		wg.SurfacePresent(g.surface)
 		wg.TextureViewRelease(g.frame.view)
+		_release_surface_texture()
 		g.frame.has_frame = false
 	} else {
 		clear(&g.rend.verts)
@@ -338,6 +350,17 @@ EndDrawing :: proc() {
 	_stats_frame_end()
 	input_poll()
 	_frame_timing()
+}
+
+// _release_surface_texture drops the owned reference returned by
+// SurfaceGetCurrentTexture. Failing to do this leaks one texture per frame
+// until the process runs out of address space.
+@(private)
+_release_surface_texture :: proc() {
+	if g.frame.surf_tex.texture != nil {
+		wg.TextureRelease(g.frame.surf_tex.texture)
+		g.frame.surf_tex.texture = nil
+	}
 }
 
 @(private)
