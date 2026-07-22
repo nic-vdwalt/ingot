@@ -326,7 +326,7 @@ EndDrawing :: proc() {
 	if g.frame.has_frame {
 		_ensure_pass() // guarantee a clear even on empty frames
 		if !g.frame.scissor_empty {
-			renderer_flush(&g.rend, g.frame.pass)
+			renderer_flush(&g.rend, g.frame.pass, .Frame_End)
 		} else {
 			clear(&g.rend.verts)
 			clear(&g.rend.indices)

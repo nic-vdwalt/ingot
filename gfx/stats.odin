@@ -4,6 +4,20 @@ import wg "vendor:wgpu"
 
 RENDER_STATS_ENABLED :: #config(INGOT_RENDER_STATS, false)
 
+// Flush_Cause tags why a batch flush (== one draw call) happened, so hosts
+// can see which state changes fragment their batches.
+Flush_Cause :: enum u8 {
+	Manual,    // FlushBatch / rlgl VAO ordering / uncategorized
+	Pipeline,  // pipeline kind switch (solid <-> text <-> image)
+	Texture,   // texture bind-group switch within one pipeline
+	Blend,     // blend-mode switch
+	Scissor,   // Begin/EndScissorMode
+	Matrix,    // rlgl model-matrix pop/translate
+	Target,    // render-target begin/end
+	Shader,    // custom shader begin/end
+	Frame_End, // end-of-frame flush in EndDrawing
+}
+
 Renderer_Stats :: struct {
 	frame_index:                 u64,
 	flush_count:                 u32,
@@ -24,6 +38,7 @@ Renderer_Stats :: struct {
 	submission_tracking_failures:  u32,
 	stream_retirement_failures:    u32,
 	composite_alpha_mode:          wg.CompositeAlphaMode,
+	flush_causes:                  [Flush_Cause]u32,
 }
 
 @(private) renderer_stats_current: Renderer_Stats
@@ -74,11 +89,12 @@ _stats_set_alpha_mode :: proc(mode: wg.CompositeAlphaMode) {
 }
 
 @(private)
-_stats_flush :: proc(vertices, bytes: u64) {
+_stats_flush :: proc(vertices, bytes: u64, cause: Flush_Cause) {
 	when RENDER_STATS_ENABLED {
 		renderer_stats_current.flush_count += 1
 		renderer_stats_current.vertices_uploaded += vertices
 		renderer_stats_current.bytes_uploaded += bytes
+		renderer_stats_current.flush_causes[cause] += 1
 	}
 }
 

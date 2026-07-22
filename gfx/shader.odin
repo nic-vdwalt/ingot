@@ -309,23 +309,23 @@ SetShaderValueTexture :: proc(shader: Shader, #any_int locIndex: i32, texture: T
 }
 
 BeginShaderMode :: proc(shader: Shader) {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass())
+	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Shader)
 	g.rend.active_shader = shader.id
 }
 
 EndShaderMode :: proc() {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass())
+	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Shader)
 	g.rend.active_shader = 0
 }
 
 // ShaderBindRaw / ShaderUnbindRaw back rlgl.EnableShader/DisableShader: the raw
 // program id equals the registry id assigned by LoadShaderFromMemory.
 ShaderBindRaw :: proc(id: u32) {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass())
+	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Shader)
 	g.rend.active_shader = id
 }
 ShaderUnbindRaw :: proc() {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass())
+	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Shader)
 	g.rend.active_shader = 0
 }
 

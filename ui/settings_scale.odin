@@ -64,9 +64,12 @@ settings_scale_preset_index :: proc(ui_scale: f32) -> int {
 // highlighted row; `current_scale` is the stored preference (0 = auto).
 // Applying a preset keeps the panel open so the user can preview other
 // scales; Escape (or clicking outside) dismisses — the caller closes the
-// panel on `dismissed`.
+// panel on `dismissed`. Chrome, input claiming, and dismissal ride on the
+// generic modal widget (popups.odin); this proc owns only the preset rows.
 draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 	screen_width, screen_height: i32) -> Settings_Panel_Result {
+	assert(selected != nil, "draw_scale_settings_panel: nil selected")
+	assert(screen_width > 0 && screen_height > 0, "draw_scale_settings_panel: empty screen")
 	presets := SETTINGS_SCALE_PRESETS
 	n := len(presets)
 
@@ -82,74 +85,77 @@ draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 	if selected^ < 0 do selected^ = 0
 	if selected^ >= n do selected^ = n - 1
 
-	// Dim background.
-	rl.DrawRectangle(0, 0, screen_width, screen_height, theme.modal_dim)
-
 	// Modal dimensions.
 	item_h: i32 = sc(28)
-	title_h: i32 = sc(40)
 	section_h: i32 = sc(26)
 	footer_h: i32 = sc(24)
 	modal_padding: i32 = PADDING
 	modal_w: i32 = min(sc(440), screen_width - PADDING * 4)
-	modal_h: i32 = title_h + section_h + i32(n) * item_h + footer_h + modal_padding * 2
-	modal_x := (screen_width - modal_w) / 2
-	modal_y := (screen_height - modal_h) / 2
+	modal_h: i32 = sc(40) + section_h + i32(n) * item_h + footer_h + modal_padding * 2
 
-	// Draw modal background.
-	rl.DrawRectangle(modal_x, modal_y, modal_w, modal_h, theme.bg_secondary)
-	rl.DrawRectangleLines(modal_x, modal_y, modal_w, modal_h, theme.border_color)
-
-	// Clip body content to the modal interior.
-	rl.BeginScissorMode(modal_x, modal_y, modal_w, modal_h)
-
-	// Title.
-	title_c := strings.clone_to_cstring("Settings", context.temp_allocator)
-	draw_text(title_c, modal_x + modal_padding, modal_y + modal_padding, FONT_SIZE_LARGE, theme.fg_primary)
+	st := Modal_State {
+		open = true,
+	}
+	body := modal_begin(&st, "Settings", modal_w, modal_h, screen_width, screen_height)
+	modal_x := st.rect.x
+	modal_y := st.rect.y
 
 	// Section header.
-	section_y := modal_y + title_h
 	section_c := strings.clone_to_cstring("UI SCALE", context.temp_allocator)
-	draw_text(section_c, modal_x + modal_padding, section_y + 4, FONT_SIZE_SMALL, theme.fg_label)
+	draw_text(section_c, modal_x + modal_padding, body.y + 4, FONT_SIZE_SMALL, theme.fg_label)
 
+	pending_result, have_result := settings_scale_rows(
+		selected, current_scale, modal_x, body.y + section_h, st.rect.w, item_h)
+
+	// Footer hint.
+	footer_y := modal_y + modal_h - modal_padding - footer_h + 4
+	hint_c := strings.clone_to_cstring("Enter apply  \u00b7  Esc close", context.temp_allocator)
+	draw_text(hint_c, modal_x + modal_padding, footer_y, FONT_SIZE_SMALL, theme.fg_secondary)
+
+	modal_end(&st)
+	if st.dismissed {
+		return Settings_Panel_Result{dismissed = true}
+	}
+	if have_result {
+		return pending_result
+	}
+	// Enter — apply the highlighted preset.
+	if rl.IsKeyPressed(.ENTER) {
+		return Settings_Panel_Result{applied = true, ui_scale = presets[selected^].value}
+	}
+	return {}
+}
+
+// settings_scale_rows draws the preset rows inside the modal body and reports
+// a click-applied result. Hover moves the highlight only while the mouse
+// moves so keyboard navigation isn't overridden by a stationary cursor.
+@(private = "file")
+settings_scale_rows :: proc(selected: ^int, current_scale: f32,
+	modal_x, top, modal_w, item_h: i32) -> (result: Settings_Panel_Result, applied: bool) {
+	assert(selected != nil, "settings_scale_rows: nil selected")
+	assert(item_h > 0, "settings_scale_rows: non-positive row height")
+	presets := SETTINGS_SCALE_PRESETS
 	auto_scale := settings_auto_scale()
-
-	// Preset rows. Captured during the loop and returned after EndScissorMode
-	// so an open scissor rect never leaks into subsequent draws.
-	pending_result: Settings_Panel_Result
-	have_result := false
-	list_y := section_y + section_h
+	modal_padding: i32 = PADDING
 	right_edge := modal_x + modal_w - modal_padding
+	list_y := top
 	for p, idx in presets {
-		item_rect := rl.Rectangle{
-			f32(modal_x + 2),
-			f32(list_y),
-			f32(modal_w - 4),
-			f32(item_h),
-		}
-
-		// Mouse hover only changes the selection when the cursor actually
-		// moves, so keyboard navigation isn't overridden by a stationary cursor.
+		item_rect := rl.Rectangle{f32(modal_x + 2), f32(list_y), f32(modal_w - 4), f32(item_h)}
 		mouse := rl.GetMousePosition()
 		hovered := rl.CheckCollisionPointRec(mouse, item_rect)
 		if hovered && mouse_moved() {
 			selected^ = idx
 		}
-		is_selected := idx == selected^
-		is_current := abs(p.value - current_scale) < 0.001
-
-		if is_selected {
+		if idx == selected^ {
 			rl.DrawRectangleRec(item_rect, theme.bg_active)
 		}
-
 		// Current-value marker.
 		text_x := modal_x + modal_padding
-		if is_current {
+		if abs(p.value - current_scale) < 0.001 {
 			marker_c := strings.clone_to_cstring("*", context.temp_allocator)
 			draw_text(marker_c, text_x, list_y + (item_h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_accent)
 		}
 		text_x += sc(16)
-
 		// Label (Auto shows the resolved system scale on the right).
 		label := p.label
 		if idx == 0 {
@@ -157,7 +163,6 @@ draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 		}
 		label_c := strings.clone_to_cstring(label, context.temp_allocator)
 		draw_text(label_c, text_x, list_y + (item_h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_primary)
-
 		// Effective pixel percentage on the far right for non-auto rows.
 		if idx != 0 {
 			pct := fmt.tprintf("%d%%", int(p.value * 100 + 0.5))
@@ -165,43 +170,12 @@ draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 			pct_w := measure_text(pct_c, FONT_SIZE_SMALL)
 			draw_text(pct_c, right_edge - pct_w, list_y + (item_h - FONT_SIZE_SMALL) / 2, FONT_SIZE_SMALL, theme.fg_secondary)
 		}
-
 		// Mouse click applies this preset.
 		if hovered && rl.IsMouseButtonReleased(.LEFT) {
-			pending_result = Settings_Panel_Result{applied = true, ui_scale = p.value}
-			have_result = true
+			result = Settings_Panel_Result{applied = true, ui_scale = p.value}
+			applied = true
 		}
-
 		list_y += item_h
 	}
-
-	// Footer hint.
-	footer_y := modal_y + modal_h - modal_padding - footer_h + 4
-	hint_c := strings.clone_to_cstring("Enter apply  \u00b7  Esc close", context.temp_allocator)
-	draw_text(hint_c, modal_x + modal_padding, footer_y, FONT_SIZE_SMALL, theme.fg_secondary)
-
-	rl.EndScissorMode()
-
-	if have_result {
-		return pending_result
-	}
-
-	// Enter — apply the highlighted preset.
-	if rl.IsKeyPressed(.ENTER) {
-		return Settings_Panel_Result{applied = true, ui_scale = presets[selected^].value}
-	}
-
-	// Escape — dismiss.
-	if rl.IsKeyPressed(.ESCAPE) {
-		return Settings_Panel_Result{dismissed = true}
-	}
-
-	// Click outside the modal — dismiss.
-	modal_rect := rl.Rectangle{f32(modal_x), f32(modal_y), f32(modal_w), f32(modal_h)}
-	if rl.IsMouseButtonReleased(.LEFT) &&
-		!rl.CheckCollisionPointRec(rl.GetMousePosition(), modal_rect) {
-		return Settings_Panel_Result{dismissed = true}
-	}
-
-	return {}
+	return result, applied
 }

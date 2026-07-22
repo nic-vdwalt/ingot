@@ -319,6 +319,9 @@ chart_draw_legend :: proc(cl: Chart_Layout, series: []Chart_Series) {
 
 // chart_draw_tooltip draws a value readout card near the cursor, clamped to
 // the widget bounds: optional x label header plus one swatched row per series.
+// Recorded on the overlay layer (passive — no input claim) so the card paints
+// above any widgets drawn after the chart; coords are shifted to screen space
+// because the overlay replays after pane translation is popped.
 @(private = "file")
 chart_draw_tooltip :: proc(
 	cl: Chart_Layout,
@@ -363,30 +366,31 @@ chart_draw_tooltip :: proc(
 		i32(cl.chart.y),
 		max(i32(cl.chart.y + cl.chart.height) - th, i32(cl.chart.y)),
 	)
-	rect := rl.Rectangle{f32(tx), f32(ty), f32(tw), f32(th)}
-	rl.DrawRectangleRounded(rect, 0.2, 4, theme.bg_popup)
-	rl.DrawRectangleRoundedLinesEx(rect, 0.2, 4, 1.0, theme.border_color)
+	ox := pane_origin_x
+	rect := rl.Rectangle{f32(tx + ox), f32(ty), f32(tw), f32(th)}
+	overlay_begin(rect, claim_input = false)
+	overlay_rounded(rect, 0.2, 4, theme.bg_popup)
+	overlay_rounded_lines(rect, 0.2, 4, 1.0, theme.border_color)
 
 	// Draw pass.
 	ry := ty + pad
 	if has_header {
-		c := strings.clone_to_cstring(opts.labels[idx], context.temp_allocator)
-		draw_text(c, tx + pad, ry, FONT_SIZE_SMALL, theme.fg_primary)
+		overlay_text(opts.labels[idx], tx + ox + pad, ry, FONT_SIZE_SMALL, theme.fg_primary)
 		ry += row_h
 	}
 	for s, si in series {
 		if idx >= len(s.values) do continue
 		col := s.color if s.color != {} else chart_series_color(si)
-		rl.DrawRectangleRounded(
-			{f32(tx + pad), f32(ry + (FONT_SIZE_SMALL - sw)/2), f32(sw), f32(sw)},
+		overlay_rounded(
+			{f32(tx + ox + pad), f32(ry + (FONT_SIZE_SMALL - sw)/2), f32(sw), f32(sw)},
 			0.5, 4, col,
 		)
 		val := chart_format_value(opts, s.values[idx], buf[:])
 		name := s.name if len(s.name) > 0 else fmt.tprintf("series %d", si+1)
-		c := strings.clone_to_cstring(fmt.tprintf("%s: %s", name, val), context.temp_allocator)
-		draw_text(c, tx + pad + sw + sc(5), ry, FONT_SIZE_SMALL, theme.fg_secondary)
+		overlay_text(fmt.tprintf("%s: %s", name, val), tx + ox + pad + sw + sc(5), ry, FONT_SIZE_SMALL, theme.fg_secondary)
 		ry += row_h
 	}
+	overlay_end()
 }
 
 // chart_point_y maps a value to its animated pixel y: during the enter

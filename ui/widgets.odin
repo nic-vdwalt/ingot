@@ -113,7 +113,15 @@ get_wheel_move :: proc() -> f32 {
 // Resets the accumulator on direction reversal. Returns rows to scroll
 // (positive = down the list).
 wheel_row_steps :: proc(accum: ^f32) -> int {
-	wheel := get_wheel_move()
+	return wheel_accum_steps(accum, get_wheel_move())
+}
+
+// wheel_accum_steps is the pure core of wheel_row_steps: fold one frame's
+// wheel delta into the accumulator and return whole row steps (positive =
+// down the list). Split out so the carry/reversal logic is unit-testable
+// without live mouse input.
+wheel_accum_steps :: proc(accum: ^f32, wheel: f32) -> int {
+	assert(accum != nil, "wheel_accum_steps: nil accumulator")
 	if wheel == 0 do return 0
 	if (accum^ > 0 && wheel < 0) || (accum^ < 0 && wheel > 0) {
 		accum^ = 0
@@ -121,6 +129,9 @@ wheel_row_steps :: proc(accum: ^f32) -> int {
 	accum^ += wheel
 	steps := int(accum^)
 	accum^ -= f32(steps)
+	// Why assert: the fractional remainder must stay below one full row or
+	// steps were computed wrong.
+	assert(accum^ > -1 && accum^ < 1, "wheel_accum_steps: remainder out of range")
 	return -steps
 }
 

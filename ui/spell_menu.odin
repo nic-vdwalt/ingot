@@ -124,9 +124,13 @@ spell_replace_word :: proc(replacement: string) {
 	spell_menu_close()
 }
 
-// draw_spell_menu renders and drives the popup. Called from text_input after
-// its scissor ends so the panel draws unclipped above the input box. Input
-// coords are pane-local, matching the composer's drawing space.
+// draw_spell_menu renders and drives the popup. Called from text_input while
+// its scissor may still be active: the panel's draws are recorded on the
+// overlay layer, so they replay above all main content at overlay_flush time
+// (and the menu rect is claimed with the input router, so clicks on the menu
+// never leak through to the widgets underneath). Input coords are pane-local,
+// matching the composer's drawing space; recorded draw coords are shifted to
+// screen space because the overlay replays after pane translation is popped.
 draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	if !spell_menu.open do return
 
@@ -180,51 +184,63 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	}
 	spell_menu.just_opened = false
 
-	rl.DrawRectangleRec(menu_rect, theme.bg_popup)
-	rl.DrawRectangleLinesEx(menu_rect, 1, theme.border_color)
+	// Record all panel draws on the overlay layer in screen space; the group
+	// rect also claims the covered area with the input router.
+	ox := pane_origin_x
+	screen_rect := rl.Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
+	overlay_begin(screen_rect, claim_input = true)
+	overlay_rect(screen_rect, theme.bg_popup)
+	overlay_rect_lines(screen_rect, 1, theme.border_color)
 
 	item_x := mx + 2
 	item_w := menu_w - 4
 	item_y := my + SPELL_MENU_PAD
 
-	draw_row :: proc(item_x, item_y, item_w: i32, label: string, nav_idx: int, mouse: rl.Vector2, color: rl.Color) -> bool {
+	draw_row :: proc(ox, item_x, item_y, item_w: i32, label: string, nav_idx: int, mouse: rl.Vector2, color: rl.Color) -> bool {
 		row_rect := rl.Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(SPELL_MENU_ITEM_H)}
 		hovered := rl.CheckCollisionPointRec(mouse, row_rect)
 		if hovered && mouse_moved() do spell_menu.selected = nav_idx
 		if spell_menu.selected == nav_idx {
-			rl.DrawRectangleRec(row_rect, theme.bg_active)
+			overlay_rect({f32(item_x + ox), f32(item_y), f32(item_w), f32(SPELL_MENU_ITEM_H)}, theme.bg_active)
 		}
 		if hovered do request_cursor(.POINTING_HAND)
-		draw_text_truncated(label, item_x + 8, item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2, item_w - 16, FONT_SIZE, color)
+		txt := truncate_to_width(label, item_w - 16, FONT_SIZE)
+		overlay_text(txt, item_x + ox + 8, item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2, FONT_SIZE, color)
 		return hovered && rl.IsMouseButtonReleased(.LEFT)
 	}
 
+	// Collect the clicked action and apply it only after the overlay group is
+	// closed, so every path leaves the recorder balanced.
+	apply_idx := -1
 	if n == 0 {
-		draw_text_truncated("No suggestions", item_x + 8, item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2, item_w - 16, FONT_SIZE, theme.fg_disabled)
+		txt := truncate_to_width("No suggestions", item_w - 16, FONT_SIZE)
+		overlay_text(txt, item_x + ox + 8, item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2, FONT_SIZE, theme.fg_disabled)
 		item_y += SPELL_MENU_ITEM_H
 	} else {
 		for s, i in spell_menu.suggestions {
-			if draw_row(item_x, item_y, item_w, s, i, mouse, theme.fg_primary) {
-				spell_menu_apply(i)
-				return
+			if draw_row(ox, item_x, item_y, item_w, s, i, mouse, theme.fg_primary) {
+				apply_idx = i
 			}
 			item_y += SPELL_MENU_ITEM_H
 		}
 	}
 
 	// Separator.
-	rl.DrawRectangle(mx + 6, item_y + sep_h/2, menu_w - 12, 1, theme.border_color)
+	overlay_rect({f32(mx + ox + 6), f32(item_y + sep_h/2), f32(menu_w - 12), 1}, theme.border_color)
 	item_y += sep_h
 
 	learn_label := strings.concatenate({"Learn \"", spell_menu.word, "\""}, context.temp_allocator)
-	if draw_row(item_x, item_y, item_w, learn_label, n, mouse, theme.fg_secondary) {
-		spell_menu_apply(n)
-		return
+	if draw_row(ox, item_x, item_y, item_w, learn_label, n, mouse, theme.fg_secondary) {
+		apply_idx = n
 	}
 	item_y += SPELL_MENU_ITEM_H
 
-	if draw_row(item_x, item_y, item_w, "Ignore", n + 1, mouse, theme.fg_secondary) {
-		spell_menu_apply(n + 1)
-		return
+	if draw_row(ox, item_x, item_y, item_w, "Ignore", n + 1, mouse, theme.fg_secondary) {
+		apply_idx = n + 1
+	}
+	overlay_end()
+
+	if apply_idx >= 0 {
+		spell_menu_apply(apply_idx)
 	}
 }

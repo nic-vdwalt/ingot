@@ -104,7 +104,7 @@ spellcheck_word_at :: proc(text: string, off: int, pills: ^[dynamic]Mention_Span
 // Word bytes: letters, digits, underscore, apostrophe, and UTF-8 continuation
 // or lead bytes. Digits/underscores make identifiers form one token which is
 // then rejected whole by spell_skip_token instead of leaking fragments.
-@(private = "file")
+@(private)
 spell_word_byte :: proc(c: u8) -> bool {
 	switch {
 	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
@@ -120,7 +120,7 @@ spell_word_byte :: proc(c: u8) -> bool {
 }
 
 // Strip leading/trailing apostrophes ("'tis", "users'").
-@(private = "file")
+@(private)
 spell_trim_token :: proc(text: string, start, end: int) -> (int, int) {
 	s, e := start, end
 	for s < e && text[s] == '\'' do s += 1
@@ -130,7 +130,7 @@ spell_trim_token :: proc(text: string, start, end: int) -> (int, int) {
 
 // Punctuation that joins word fragments into larger tokens (URLs, paths,
 // emails, dotted names) that should not be spellchecked piecewise.
-@(private = "file")
+@(private)
 spell_join_punct :: proc(c: u8) -> bool {
 	switch c {
 	case '.', '/', '\\', ':', '-', '@', '#', '~':
@@ -142,7 +142,7 @@ spell_join_punct :: proc(c: u8) -> bool {
 // spell_skip_token rejects tokens that are not prose words: identifiers
 // (digits/underscores/camelCase), acronyms (all caps), and fragments of
 // larger dotted/slashed tokens like "example.com" or "src/main.odin".
-@(private = "file")
+@(private)
 spell_skip_token :: proc(text: string, start, end: int) -> bool {
 	upper := 0
 	inner_upper := false
@@ -167,7 +167,7 @@ spell_skip_token :: proc(text: string, start, end: int) -> bool {
 	return false
 }
 
-@(private = "file")
+@(private)
 spell_in_pill :: proc(pills: ^[dynamic]Mention_Span, start, end: int) -> bool {
 	if pills == nil do return false
 	for p in pills {

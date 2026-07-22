@@ -131,7 +131,7 @@ BeginBlendMode :: proc(mode: BlendMode) {
 	case .CUSTOM, .CUSTOM_SEPARATE: slot = .Custom
 	}
 	if slot != g.rend.cur_blend {
-		if _active_pass_begun() do renderer_flush(&g.rend, active_pass())
+		if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Blend)
 		g.rend.cur_blend = slot
 	}
 }

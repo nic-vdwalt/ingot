@@ -404,7 +404,8 @@ renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 batch_set :: proc(r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
 	_ensure_active_pass()
 	if kind != r.cur_kind || bind != r.cur_bind {
-		if _active_pass_begun() do renderer_flush(r, active_pass())
+		cause: Flush_Cause = kind != r.cur_kind ? .Pipeline : .Texture
+		if _active_pass_begun() do renderer_flush(r, active_pass(), cause)
 		r.cur_kind = kind
 		r.cur_bind = bind
 	}
@@ -468,19 +469,19 @@ MatrixModePush :: proc() {
 	append(&g.rend.model_stack, g.rend.model_off)
 }
 MatrixModePop :: proc() {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass())
+	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
 	n := len(g.rend.model_stack)
 	if n == 0 { g.rend.model_off = {0, 0}; return }
 	g.rend.model_off = g.rend.model_stack[n - 1]
 	pop(&g.rend.model_stack)
 }
 MatrixModeTranslate :: proc(x, y: f32) {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass())
+	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
 	g.rend.model_off.x += x
 	g.rend.model_off.y += y
 }
 
-renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder) {
+renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Cause = .Manual) {
 	n := len(r.verts)
 	if n == 0 do return
 
@@ -514,7 +515,7 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder) {
 		_stats_buffer_created(false)
 		_stats_buffer_created(false)
 	}
-	_stats_flush(u64(n), vertex_bytes + index_bytes)
+	_stats_flush(u64(n), vertex_bytes + index_bytes, cause)
 	when RENDER_STATS_ENABLED {
 		renderer_stats_current.indices_uploaded += u64(index_count)
 	}
