@@ -16,6 +16,9 @@ MAX_LAYOUT_DEPTH :: 16
 // MAX_LAYOUT_WEIGHTS bounds the number of weighted children in one frame.
 MAX_LAYOUT_WEIGHTS :: 32
 
+// MAX_LAYOUT_FLEX bounds one flex declaration to fixed caller-owned storage.
+MAX_LAYOUT_FLEX :: 32
+
 // Rect_I32 is an integer-pixel rect matching the x/y/w/h widget convention.
 Rect_I32 :: struct {
 	x, y, w, h: i32,
@@ -33,6 +36,24 @@ Cross_Align :: enum u8 {
 	End,
 }
 
+Flex_Kind :: enum u8 {
+	Fit,
+	Grow,
+	Fixed,
+	Percent,
+}
+
+// Flex_Size describes one sibling on the active frame's main axis. max_size
+// is inclusive; zero means unbounded so the zero value remains useful.
+Flex_Size :: struct {
+	kind:     Flex_Kind,
+	basis:    i32,
+	weight:   i32,
+	percent:  f32,
+	min_size: i32,
+	max_size: i32,
+}
+
 Layout_Frame :: struct {
 	kind:         Layout_Kind,
 	rect:         Rect_I32, // full frame area
@@ -44,12 +65,50 @@ Layout_Frame :: struct {
 	weight_space: i32, // main-axis pixels being divided
 	weight_acc:   i32, // sum of weights consumed so far
 	weight_left:  i32, // declared children not yet consumed
+	// Flex sizing is resolved up front and consumed by flex_next in order.
+	flex_sizes: [MAX_LAYOUT_FLEX]i32,
+	flex_count: i32,
+	flex_index: i32,
 }
 
 // Layout is caller-owned per-frame scratch state; zero value is ready to use.
 Layout :: struct {
 	stack: [MAX_LAYOUT_DEPTH]Layout_Frame,
 	depth: int,
+}
+
+// flex_fit uses a caller-measured intrinsic size and may compress to min_size.
+flex_fit :: proc(intrinsic: i32, min_size: i32 = 0, max_size: i32 = 0) -> Flex_Size {
+	assert(intrinsic >= 0, "flex_fit: negative intrinsic size")
+	assert(min_size >= 0 && (max_size == 0 || max_size >= min_size),
+		"flex_fit: invalid constraints")
+	return Flex_Size{kind = .Fit, basis = intrinsic, min_size = min_size, max_size = max_size}
+}
+
+// flex_grow shares free space by weight after fixed, fit, and percent bases.
+flex_grow :: proc(weight: i32 = 1, min_size: i32 = 0, max_size: i32 = 0) -> Flex_Size {
+	assert(weight > 0, "flex_grow: weight must be positive")
+	assert(min_size >= 0 && (max_size == 0 || max_size >= min_size),
+		"flex_grow: invalid constraints")
+	return Flex_Size{kind = .Grow, weight = weight, min_size = min_size, max_size = max_size}
+}
+
+flex_fixed :: proc(size: i32) -> Flex_Size {
+	assert(size >= 0, "flex_fixed: negative size")
+	return Flex_Size{kind = .Fixed, basis = size, min_size = size, max_size = size}
+}
+
+// flex_percent uses a fraction of remaining frame space after inter-item gaps.
+flex_percent :: proc(percent: f32, min_size: i32 = 0, max_size: i32 = 0) -> Flex_Size {
+	assert(percent >= 0 && percent <= 1, "flex_percent: percent outside 0..1")
+	assert(min_size >= 0 && (max_size == 0 || max_size >= min_size),
+		"flex_percent: invalid constraints")
+	return Flex_Size {
+		kind = .Percent,
+		percent = percent,
+		min_size = min_size,
+		max_size = max_size,
+	}
 }
 
 // layout_begin opens the root column over the given area. Must be balanced
@@ -69,6 +128,8 @@ layout_begin :: proc(l: ^Layout, x, y, w, h: i32, gap: i32 = 0) {
 layout_end :: proc(l: ^Layout) {
 	assert(l.depth == 1, "layout_end: unbalanced push/pop")
 	assert(l.stack[0].cursor >= 0, "layout_end: corrupt cursor")
+	assert(l.stack[0].flex_index == l.stack[0].flex_count,
+		"layout_end: declared flex sizes not fully consumed")
 	l.depth = 0
 }
 
@@ -111,7 +172,35 @@ push_column :: proc(l: ^Layout, gap: i32 = 0, cross_align: Cross_Align = .Stretc
 layout_pop :: proc(l: ^Layout) {
 	assert(l.depth > 1, "layout_pop: nothing pushed above the root")
 	assert(_top(l).weight_left == 0, "layout_pop: declared weights not fully consumed")
+	assert(_top(l).flex_index == _top(l).flex_count,
+		"layout_pop: declared flex sizes not fully consumed")
 	l.depth -= 1
+}
+
+// flex_begin resolves one bounded sibling sequence before any child is drawn.
+flex_begin :: proc(l: ^Layout, sizes: []Flex_Size) {
+	assert(l.depth > 0, "flex_begin: layout not begun")
+	assert(len(sizes) > 0 && len(sizes) <= MAX_LAYOUT_FLEX,
+		"flex_begin: count out of bounds")
+	f := _top(l)
+	assert(f.weight_left == 0, "flex_begin: weighted sequence is active")
+	assert(f.flex_index == f.flex_count, "flex_begin: previous flex sequence not consumed")
+	space := max(_main_extent(f^) - f.cursor - f.gap * i32(len(sizes) - 1), 0)
+	_flex_resolve(f, sizes, space)
+}
+
+// flex_next emits the next pre-resolved sibling using ordinary cursor advance.
+flex_next :: proc(l: ^Layout) -> Rect_I32 {
+	assert(l.depth > 0, "flex_next: layout not begun")
+	f := _top(l)
+	assert(f.flex_index < f.flex_count, "flex_next: no flex size available")
+	size := f.flex_sizes[f.flex_index]
+	f.flex_index += 1
+	if f.flex_index == f.flex_count {
+		f.flex_count = 0
+		f.flex_index = 0
+	}
+	return next(l, size)
 }
 
 // next carves main_size pixels along the main axis, spanning the full cross
@@ -198,6 +287,7 @@ row_weights :: proc(l: ^Layout, weights: []i32) {
 	assert(l.depth > 0, "row_weights: layout not begun")
 	assert(len(weights) > 0 && len(weights) <= MAX_LAYOUT_WEIGHTS, "row_weights: count out of bounds")
 	f := _top(l)
+	assert(f.flex_index == f.flex_count, "row_weights: flex sequence is active")
 	assert(f.weight_left == 0, "row_weights: previous weights not consumed")
 	total: i32 = 0
 	for w in weights {
@@ -234,6 +324,109 @@ next_weighted :: proc(l: ^Layout, weight: i32) -> Rect_I32 {
 		f.weight_acc = 0
 	}
 	return next(l, after - before)
+}
+
+@(private = "file")
+_flex_clamp :: proc(size, min_size, max_size: i32) -> i32 {
+	assert(size >= 0 && min_size >= 0, "_flex_clamp: negative size")
+	assert(max_size == 0 || max_size >= min_size, "_flex_clamp: invalid maximum")
+	result := max(size, min_size)
+	if max_size > 0 do result = min(result, max_size)
+	assert(result >= min_size, "_flex_clamp: result below minimum")
+	return result
+}
+
+@(private = "file")
+_flex_compress :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Flex_Size, overflow: i32) {
+	assert(resolved != nil, "_flex_compress: nil sizes")
+	assert(overflow > 0, "_flex_compress: non-positive overflow")
+	capacity: i64
+	for size, index in sizes {
+		if size.kind == .Fit || size.kind == .Grow {
+			capacity += i64(resolved[index] - size.min_size)
+		}
+	}
+	shrink := min(i64(overflow), capacity)
+	consumed: i64
+	acc: i64
+	for size, index in sizes {
+		if size.kind != .Fit && size.kind != .Grow do continue
+		item_capacity := i64(resolved[index] - size.min_size)
+		before := acc * shrink / max(capacity, 1)
+		acc += item_capacity
+		after := acc * shrink / max(capacity, 1)
+		resolved[index] -= i32(after - before)
+		consumed += after - before
+	}
+	assert(consumed == shrink, "_flex_compress: incomplete distribution")
+}
+
+@(private = "file")
+_flex_expand :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Flex_Size, free: i32) {
+	assert(resolved != nil, "_flex_expand: nil sizes")
+	assert(free > 0, "_flex_expand: non-positive free space")
+	remaining_free := free
+	for pass in 0 ..< MAX_LAYOUT_FLEX {
+		total_weight: i64
+		for size, index in sizes {
+			uncapped := size.kind == .Grow && (size.max_size == 0 || resolved[index] < size.max_size)
+			if uncapped do total_weight += i64(size.weight)
+		}
+		if total_weight == 0 || remaining_free == 0 do break
+		applied: i32
+		weight_acc: i64
+		for size, index in sizes {
+			uncapped := size.kind == .Grow && (size.max_size == 0 || resolved[index] < size.max_size)
+			if !uncapped do continue
+			before := weight_acc * i64(remaining_free) / total_weight
+			weight_acc += i64(size.weight)
+			after := weight_acc * i64(remaining_free) / total_weight
+			share := i32(after - before)
+			if size.max_size > 0 do share = min(share, size.max_size - resolved[index])
+			resolved[index] += share
+			applied += share
+		}
+		assert(applied >= 0 && applied <= remaining_free, "_flex_expand: invalid distribution")
+		if applied == 0 do break
+		remaining_free -= applied
+	}
+	assert(remaining_free >= 0, "_flex_expand: negative remainder")
+}
+
+@(private = "file")
+_flex_resolve :: proc(f: ^Layout_Frame, sizes: []Flex_Size, space: i32) {
+	assert(f != nil, "_flex_resolve: nil frame")
+	assert(space >= 0 && len(sizes) <= MAX_LAYOUT_FLEX, "_flex_resolve: invalid input")
+	total: i64
+	for size, index in sizes {
+		assert(size.min_size >= 0 && (size.max_size == 0 || size.max_size >= size.min_size),
+			"_flex_resolve: invalid constraints")
+		resolved: i32
+		switch size.kind {
+		case .Fit:
+			assert(size.basis >= 0, "_flex_resolve: negative fit basis")
+			resolved = _flex_clamp(size.basis, size.min_size, size.max_size)
+		case .Grow:
+			assert(size.weight > 0, "_flex_resolve: invalid grow weight")
+			resolved = size.min_size
+		case .Fixed:
+			assert(size.basis >= 0, "_flex_resolve: negative fixed basis")
+			resolved = size.basis
+		case .Percent:
+			assert(size.percent >= 0 && size.percent <= 1, "_flex_resolve: invalid percent")
+			resolved = _flex_clamp(i32(f32(space) * size.percent), size.min_size, size.max_size)
+		}
+		f.flex_sizes[index] = resolved
+		total += i64(resolved)
+	}
+	if total > i64(space) {
+		_flex_compress(&f.flex_sizes, sizes, i32(min(total - i64(space), i64(max(i32)))))
+	} else if total < i64(space) {
+		_flex_expand(&f.flex_sizes, sizes, i32(i64(space) - total))
+	}
+	f.flex_count = i32(len(sizes))
+	f.flex_index = 0
+	assert(f.flex_count > 0 && f.flex_count <= MAX_LAYOUT_FLEX, "_flex_resolve: invalid result")
 }
 
 // _top returns the active frame. Internal; callers use the procs above.

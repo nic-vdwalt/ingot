@@ -123,3 +123,111 @@ layout_reusable_after_end :: proc(t: ^testing.T) {
 	layout_end(&l)
 	testing.expect_value(t, a, Rect_I32{5, 5, 90, 10})
 }
+
+@(test)
+layout_flex_fixed_fit_grow :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 400, 40)
+	push_row(&l, 40, gap = 10)
+	flex_begin(&l, {flex_fixed(80), flex_fit(100), flex_grow()})
+	a := flex_next(&l)
+	b := flex_next(&l)
+	c := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, a.w, i32(80))
+	testing.expect_value(t, b.w, i32(100))
+	testing.expect_value(t, c.w, i32(200))
+}
+
+@(test)
+layout_flex_percent_uses_content_space :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 400, 40)
+	push_row(&l, 40, gap = 10)
+	flex_begin(&l, {flex_percent(0.25), flex_grow()})
+	a := flex_next(&l)
+	b := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, a.w, i32(97))
+	testing.expect_value(t, b.w, i32(293))
+}
+
+@(test)
+layout_flex_grow_respects_weight_and_max :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 500, 40)
+	push_row(&l, 40)
+	flex_begin(&l, {flex_grow(1, max_size = 100), flex_grow(1), flex_grow(2)})
+	a := flex_next(&l)
+	b := flex_next(&l)
+	c := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, a.w, i32(100))
+	testing.expect_value(t, a.w + b.w + c.w, i32(500))
+	testing.expect(t, c.w == b.w * 2 || c.w == b.w * 2 + 1)
+}
+
+@(test)
+layout_flex_compresses_fit_to_minimum :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 180, 40)
+	push_row(&l, 40)
+	flex_begin(&l, {flex_fixed(100), flex_fit(120, min_size = 40)})
+	a := flex_next(&l)
+	b := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, a.w, i32(100))
+	testing.expect_value(t, b.w, i32(80))
+}
+
+@(test)
+layout_flex_constraints_rounding_and_column :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 40, 303, gap = 1)
+	flex_begin(&l, {
+		flex_fit(100, max_size = 60),
+		flex_percent(0.5, max_size = 80),
+		flex_grow(1),
+		flex_grow(2),
+	})
+	a := flex_next(&l)
+	b := flex_next(&l)
+	c := flex_next(&l)
+	d := flex_next(&l)
+	layout_end(&l)
+	testing.expect_value(t, a.h, i32(60))
+	testing.expect_value(t, b.h, i32(80))
+	testing.expect_value(t, a.h + b.h + c.h + d.h, i32(300))
+	testing.expect(t, d.h == c.h * 2 || d.h == c.h * 2 + 1)
+}
+
+@(test)
+layout_flex_overflow_clips_and_reuses_layout :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 100, 20)
+	push_row(&l, 20)
+	flex_begin(&l, {flex_fixed(80), flex_fixed(80), flex_grow()})
+	a := flex_next(&l)
+	b := flex_next(&l)
+	c := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, a.w, i32(80))
+	testing.expect_value(t, b.w, i32(20))
+	testing.expect_value(t, c.w, i32(0))
+
+	layout_begin(&l, 0, 0, 100, 20)
+	push_row(&l, 20)
+	flex_begin(&l, {flex_fixed(20)})
+	_ = flex_next(&l)
+	row_weights(&l, {1, 1})
+	d := next_weighted(&l, 1)
+	e := next_weighted(&l, 1)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, d.w + e.w, i32(80))
+}

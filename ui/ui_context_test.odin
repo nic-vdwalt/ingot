@@ -59,3 +59,17 @@ test_ui_space_advances_cursor :: proc(t: ^testing.T) {
 	testing.expect_value(t, r, Rect_I32{0, 25, 100, 10})
 	ui_end(&u)
 }
+
+@(test)
+test_ui_flex_slots_preserve_cross_trim :: proc(t: ^testing.T) {
+	u: Ui
+	ui_begin(&u, 10, 20, 300, 100)
+	ui_row(&u, 40, gap = 10)
+	ui_flex_begin(&u, {flex_fixed(80), flex_grow()})
+	a := ui_flex_slot(&u, 20)
+	b := ui_flex_slot(&u, 30)
+	ui_row_end(&u)
+	ui_end(&u)
+	testing.expect_value(t, a, Rect_I32{10, 20, 80, 20})
+	testing.expect_value(t, b, Rect_I32{100, 20, 210, 30})
+}

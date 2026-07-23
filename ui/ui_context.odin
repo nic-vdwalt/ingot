@@ -79,6 +79,26 @@ ui_slot :: proc(u: ^Ui, w, h: i32) -> Rect_I32 {
 	return r
 }
 
+// ui_flex_begin resolves sibling main-axis sizes on the active Ui frame.
+ui_flex_begin :: proc(u: ^Ui, sizes: []Flex_Size) {
+	assert(u != nil, "ui_flex_begin: nil Ui")
+	assert(u.open, "ui_flex_begin: frame not open")
+	flex_begin(&u.layout, sizes)
+}
+
+// ui_flex_slot consumes one flex size and trims only the cross axis.
+ui_flex_slot :: proc(u: ^Ui, cross_size: i32) -> Rect_I32 {
+	assert(u != nil, "ui_flex_slot: nil Ui")
+	assert(u.open && cross_size >= 0, "ui_flex_slot: invalid call")
+	r := flex_next(&u.layout)
+	if layout_kind(&u.layout) == .Column {
+		r.w = min(r.w, cross_size)
+	} else {
+		r.h = min(r.h, cross_size)
+	}
+	return r
+}
+
 // ui_row / ui_row_end / ui_space: thin conveniences over the Layout the Ui
 // already owns; callers may equally use push_row(&u.layout, …) directly.
 ui_row :: proc(u: ^Ui, h: i32, gap: i32 = 0) {
