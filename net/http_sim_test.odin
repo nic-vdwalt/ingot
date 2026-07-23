@@ -33,8 +33,7 @@ run_workload :: proc(seed: u64, fault_rate: f32, record: ^Run_Record) {
 	next_tag: u64 = 1
 	for tick in 0 ..< 2_000 {
 		if tick % 3 == 0 {
-			fetcher_request(&f, next_tag, "/projects")
-			next_tag += 1
+			if fetcher_request(&f, next_tag, "/projects") do next_tag += 1
 		}
 		sim_tick(&f)
 		results := fetcher_drain(&f)
@@ -118,6 +117,21 @@ test_sim_rejects_invalid_path :: proc(t: ^testing.T) {
 	testing.expect(t, !fetcher_request_http(&f, 1, Http_Request{method = .Get, path = "no-slash"}))
 	testing.expect(t, !fetcher_request_http(&f, 2, Http_Request{method = .Get, path = ""}))
 	testing.expect_value(t, len(f.in_flight), 0)
+}
+
+@(test)
+test_sim_convenience_requests_report_backpressure :: proc(t: ^testing.T) {
+	f: Fetcher
+	sim_fetcher_init(&f, 10, 0, test_respond)
+	fetcher_start(&f, "sim", 0)
+	for tag in 1 ..= SIM_MAX_IN_FLIGHT {
+		testing.expect(t, fetcher_request(&f, u64(tag), "/x"))
+	}
+	testing.expect(t, !fetcher_request_priority(&f, 65, "/priority"))
+	testing.expect(t, !fetcher_request_cached(&f, 66, "/cached", "ignored"))
+	fetcher_stop(&f)
+	testing.expect(t, !fetcher_request(&f, 67, "/after-stop"))
+	fetcher_stop(&f)
 }
 
 } // when INGOT_NET_SIM

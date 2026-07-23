@@ -149,19 +149,19 @@ fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bo
 	return true
 }
 
-fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) {
-	_ = fetcher_request_http(f, tag, Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY})
+fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
+	return fetcher_request_http(f, tag, Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY})
 }
 
-fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
+fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
 	// Priority ordering is a real-transport concern; the sim's random latency
 	// already explores every ordering, so this is a plain request.
-	fetcher_request(f, tag, path)
+	return fetcher_request(f, tag, path)
 }
 
-fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) {
+fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) -> bool {
 	_ = cache_path // the sim has no disk cache — always go through the model
-	fetcher_request(f, tag, path)
+	return fetcher_request(f, tag, path)
 }
 
 // Advance simulated time one tick: deliver every due message through the
@@ -200,6 +200,9 @@ sim_tick :: proc(f: ^Fetcher) {
 	}
 }
 
+// The returned slice uses context.temp_allocator and must not be retained.
+// Every result body transfers to the caller and must be deleted exactly once.
+// fetcher_stop frees only messages and results still owned by this Fetcher.
 fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 	if len(f.results) == 0 do return nil
 	count := min(len(f.results), FETCH_MAXIMUM_DRAIN)

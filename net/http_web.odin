@@ -27,6 +27,7 @@ foreign httpjs {
 	ingot_http_status :: proc(id: i32) -> i32 ---
 	ingot_http_body_len :: proc(id: i32) -> i32 ---
 	ingot_http_body_copy :: proc(id: i32, dst: [^]byte, cap: i32) -> i32 ---
+	ingot_http_cancel :: proc(id: i32) -> i32 ---
 }
 
 } // when !INGOT_NET_SIM
@@ -65,39 +66,45 @@ Fetcher :: struct {
 	// every target; the web backend is single-threaded (JS completions are
 	// polled from the rAF-driven loop) and never calls it.
 	wake: proc "contextless" (),
+	running: bool,
 }
 
 fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
+	if f.running do return
 	f.host = host; f.port = port
 	f.in_flight = make([dynamic]In_Flight)
 	f.pending = make([dynamic]Pending)
+	f.running = true
 }
 
 fetcher_stop :: proc(f: ^Fetcher) {
-	for it in f.in_flight {
-		if ingot_http_poll(it.id) != 0 {
-			n := ingot_http_body_len(it.id)
-			if n > 0 { buf := make([]byte, int(n)); ingot_http_body_copy(it.id, raw_data(buf), i32(len(buf))); delete(buf) } else { ingot_http_body_copy(it.id, nil, 0) }
-		}
-	}
+	if !f.running do return
+	f.running = false
+	for it in f.in_flight do _ = ingot_http_cancel(it.id)
 	delete(f.in_flight); f.in_flight = nil
 	for &pending in f.pending do pending_destroy(&pending)
 	delete(f.pending); f.pending = nil
 }
 
 fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
-	if request.path == "" || request.path[0] != '/' || len(f.pending) >= FETCH_MAXIMUM_PENDING do return false
+	if !f.running || request.path == "" || request.path[0] != '/' || len(f.pending) >= FETCH_MAXIMUM_PENDING do return false
 	append(&f.pending, Pending{tag = tag, request = request_clone(request)})
 	pump(f)
 	return true
 }
-fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) { _ = fetcher_request_http(f, tag, Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}) }
-fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
-	request := Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}
-	if request.path == "" || request.path[0] != '/' || len(f.pending) >= FETCH_MAXIMUM_PENDING do return
-	inject_at(&f.pending, 0, Pending{tag = tag, request = request_clone(request)}); pump(f)
+fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
+	return fetcher_request_http(f, tag, Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY})
 }
-fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) { _ = cache_path; fetcher_request(f, tag, path) }
+fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
+	request := Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}
+	if !f.running || request.path == "" || request.path[0] != '/' || len(f.pending) >= FETCH_MAXIMUM_PENDING do return false
+	inject_at(&f.pending, 0, Pending{tag = tag, request = request_clone(request)}); pump(f)
+	return true
+}
+fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) -> bool {
+	_ = cache_path
+	return fetcher_request(f, tag, path)
+}
 
 @(private = "file")
 request_clone :: proc(request: Http_Request) -> Http_Request {
@@ -135,11 +142,18 @@ pump :: proc(f: ^Fetcher) {
 		maximum_body := pending.request.maximum_body
 		if maximum_body == 0 do maximum_body = DEFAULT_MAXIMUM_BODY
 		id := ingot_http_request(i32(pending.request.method), raw_data(bytes), i32(len(bytes)), raw_data(headers), i32(len(headers)), raw_data(pending.request.body), i32(len(pending.request.body)), i32(maximum_body))
+		if id < 0 {
+			inject_at(&f.pending, 0, pending)
+			return
+		}
 		tag := pending.tag; pending_destroy(&pending)
-		if id >= 0 do append(&f.in_flight, In_Flight{id = id, tag = tag})
+		append(&f.in_flight, In_Flight{id = id, tag = tag})
 	}
 }
 
+// The returned slice uses context.temp_allocator and must not be retained.
+// Every result body transfers to the caller and must be deleted exactly once.
+// fetcher_stop frees only requests still owned by this Fetcher.
 fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 	out: [dynamic]Fetch_Result; out.allocator = context.temp_allocator
 	i := 0

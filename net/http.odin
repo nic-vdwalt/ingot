@@ -387,37 +387,42 @@ fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bo
 	sync.cond_signal(&f.jobs_cond)
 	return true
 }
-fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) {
-	_ = fetcher_request_http(f, tag, Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY})
+fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
+	return fetcher_request_http(f, tag, Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY})
 }
-fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
+fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
 	request := Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}
-	if !valid_request(request) do return
+	if !valid_request(request) do return false
 	job := Fetch_Job{tag = tag, request = http_request_clone(request, f.allocator)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
 	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
 		fetch_job_destroy(&job, f.allocator)
-		return
+		return false
 	}
 	if f.jobs == nil do f.jobs.allocator = f.allocator
 	inject_at(&f.jobs, 0, job)
 	sync.cond_signal(&f.jobs_cond)
+	return true
 }
-fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) {
+fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) -> bool {
 	request := Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}
-	if !valid_request(request) do return
+	if !valid_request(request) do return false
 	job := Fetch_Job{tag = tag, request = http_request_clone(request, f.allocator), cache_path = strings.clone(cache_path, f.allocator)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
 	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
 		fetch_job_destroy(&job, f.allocator)
-		return
+		return false
 	}
 	if f.jobs == nil do f.jobs.allocator = f.allocator
 	append(&f.jobs, job)
 	sync.cond_signal(&f.jobs_cond)
+	return true
 }
+// The returned slice uses context.temp_allocator and must not be retained.
+// Every result body transfers to the caller and must be deleted exactly once.
+// fetcher_stop frees only jobs and results still owned by this Fetcher.
 fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 	sync.mutex_lock(&f.mutex); defer sync.mutex_unlock(&f.mutex)
 	if len(f.results) == 0 do return nil

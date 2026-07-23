@@ -50,7 +50,7 @@
 				headersLength, bodyPointer, bodyLength, maximumBody) => {
 				const id = httpSlots.findIndex((slot) => slot === null);
 				if (id < 0) return -1;
-				const slot = { state: 0, status: 0, body: new Uint8Array() };
+				const slot = { state: 0, status: 0, body: new Uint8Array(), controller: null };
 				httpSlots[id] = slot;
 				let headers = {};
 				try {
@@ -62,6 +62,7 @@
 				}
 				const body = bodyLength > 0 ? wasmBytes(bodyPointer, bodyLength).slice() : undefined;
 				const controller = new AbortController();
+				slot.controller = controller;
 				const timeout = setTimeout(() => controller.abort(), 30000);
 				fetch(wasmText(urlPointer, urlLength), {
 					method: methods[method] || "GET",
@@ -88,6 +89,13 @@
 				if (count > 0) wasmBytes(destination, count).set(slot.body.subarray(0, count));
 				httpSlots[id] = null;
 				return count;
+			},
+			ingot_http_cancel: (id) => {
+				const slot = httpSlots[id];
+				if (!slot) return 0;
+				if (slot.controller) slot.controller.abort();
+				httpSlots[id] = null;
+				return 1;
 			},
 		};
 	}

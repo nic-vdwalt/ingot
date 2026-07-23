@@ -68,6 +68,9 @@ git submodule add <url> libs/ingot
 odin build src -collection:ingot=libs/ingot
 ```
 
+Commit the submodule gitlink so every build uses one reviewed Ingot revision.
+Update that pointer explicitly rather than building consumers against a floating branch.
+
 ```odin
 import rl    "ingot:gfx"    // the raylib-shaped graphics core
 import ui    "ingot:ui"
@@ -77,10 +80,21 @@ import term  "ingot:term"
 
 **Requirements**
 
-- A recent Odin toolchain (`vendor:wgpu`, `vendor:glfw`, `vendor:stb` ship with it).
+- Tested Odin toolchain: `dev-2026-06:285f6d87b`. Pin this revision in consumer CI.
 - The wgpu-native prebuilt lib under `<odin>/vendor/wgpu/lib/` (Odin's build
   error links the download if missing).
 - For the web target: a WebGPU browser (Chrome/Edge 113+, Safari 18+).
+
+### HTTP Fetcher ownership and backpressure
+
+Every Fetcher submission returns `bool`. Only mark application work pending when the
+submission returns `true`; `false` means the request was invalid, stopped, or rejected
+by a bounded queue. Call `fetcher_stop` during orderly shutdown.
+
+`fetcher_drain` returns temporary slice storage that must be consumed before the next
+`free_all(context.temp_allocator)`. Each returned `Fetch_Result.body` transfers to the
+caller and must be deleted exactly once. The Fetcher frees only undrained results and
+unsubmitted work that it still owns when stopped.
 
 ## Quick start
 
