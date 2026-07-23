@@ -1,11 +1,13 @@
 # ingot
 
-**A pure-Odin, immediate-mode app engine on WebGPU — the same source runs natively and in the browser.**
+**The app framework for Odin — ship a polished, fast, native + web desktop
+tool without Electron.**
 
-ingot is a self-contained, immediate-mode game/app engine built on Odin's
-bundled `vendor:wgpu`. One renderer targets **native** (macOS/Metal,
-Windows/D3D12, Linux/Vulkan) **and the browser** (WASM + WebGPU) — no raylib,
-no OpenGL, no external libraries to vendor.
+ingot is a self-contained, immediate-mode app framework with game-engine DNA,
+built on Odin's bundled `vendor:wgpu`. One renderer targets **native**
+(macOS/Metal, Windows/D3D12, Linux/Vulkan) **and the browser** (WASM + WebGPU)
+— no raylib, no OpenGL, no external libraries to vendor. 2D games are a
+supported use case; polished desktop tools are the mission.
 
 Its public API deliberately mirrors raylib's shape (`Color`, `Vector2`,
 `Rectangle`, `Font`, `Texture2D`, `Draw*`, `IsKey*`, …), so migrating an
@@ -23,7 +25,13 @@ existing Odin app is mechanical: swap `import rl "vendor:raylib"` for
 - **raylib-shaped API.** Drop-in type and procedure names ease migration and
   flatten the learning curve.
 - **Immediate-mode all the way up.** Callers own their state and pass it in each
-  frame — no hidden retained trees.
+  frame — no hidden retained trees, no widget-ID hashing, no state that can
+  accumulate invisibly.
+- **Native feel, not lowest-common-denominator.** macOS vibrancy, Windows 11
+  Mica, frameless custom title bars, platform-correct HiDPI — apps look like
+  they belong on the OS.
+- **Energy-efficient by design.** Event-driven frames idle at ~0% CPU between
+  events; a frame pacer matches monitor refresh only while busy.
 - **Batteries included.** Windowing, 2D batched rendering, textures, an
   stb_truetype glyph-atlas text stack, an immediate-mode widget toolkit, HiDPI
   handling, custom window chrome, frame pacing, a terminal stack, and settings
