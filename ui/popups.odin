@@ -53,8 +53,9 @@ modal_begin :: proc(st: ^Modal_State, title: string, w, h, screen_w, screen_h: i
 }
 
 // modal_end closes the scissor and applies dismissal: Escape or a click
-// released outside the panel clears `open` and sets `dismissed` for this
-// frame.
+// pressed outside the panel clears `open` and sets `dismissed` for this
+// frame. Press (not release) is used so the release of the click that
+// opened the modal cannot dismiss it on the same frame.
 modal_end :: proc(st: ^Modal_State) {
 	assert(st != nil, "modal_end: nil state")
 	assert(st.drawing, "modal_end: modal_begin not called")
@@ -66,7 +67,7 @@ modal_end :: proc(st: ^Modal_State) {
 		return
 	}
 	mrect := rl.Rectangle{f32(st.rect.x), f32(st.rect.y), f32(st.rect.w), f32(st.rect.h)}
-	if rl.IsMouseButtonReleased(.LEFT) &&
+	if rl.IsMouseButtonPressed(.LEFT) &&
 	   !rl.CheckCollisionPointRec(rl.GetMousePosition(), mrect) {
 		st.open = false
 		st.dismissed = true
@@ -161,7 +162,6 @@ context_menu :: proc(st: ^Context_Menu_State, items: []Menu_Item, screen_w, scre
 	mx := clamp(st.anchor_x, 0, max(screen_w - menu_w, 0))
 	my := clamp(st.anchor_y, 0, max(screen_h - menu_h, 0))
 	menu_rect := rl.Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
-	route_claim(rl.Rectangle{f32(mx + pane_origin_x), f32(my), f32(menu_w), f32(menu_h)})
 
 	// Ensure the selection starts on a selectable row.
 	if items[st.selected].separator || items[st.selected].disabled {
@@ -192,24 +192,34 @@ context_menu :: proc(st: ^Context_Menu_State, items: []Menu_Item, screen_w, scre
 	}
 	st.just_opened = false
 
-	rl.DrawRectangleRec(menu_rect, theme.bg_popup)
-	rl.DrawRectangleLinesEx(menu_rect, 1, theme.border_color)
-	return context_menu_rows(st, items, mx, my, menu_w, mouse)
+	// Record all panel draws on the overlay layer in screen space so the menu
+	// replays above content painted later in the frame (and outside any pane
+	// scissor); the group rect also claims the covered area with the router.
+	ox := pane_origin_x
+	screen_rect := rl.Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
+	overlay_begin(screen_rect, claim_input = true)
+	overlay_rect(screen_rect, theme.bg_popup)
+	overlay_rect_lines(screen_rect, 1, theme.border_color)
+	chosen := context_menu_rows(st, items, mx, my, menu_w, ox, mouse)
+	overlay_end()
+	return chosen
 }
 
-// context_menu_rows draws the rows and handles hover/click. Returns the
-// clicked index or -1.
+// context_menu_rows records the rows on the overlay layer and handles
+// hover/click (hit-testing in pane-local coords, drawing in screen space via
+// `ox`). Returns the clicked index or -1.
 @(private = "file")
-context_menu_rows :: proc(st: ^Context_Menu_State, items: []Menu_Item, mx, my, menu_w: i32, mouse: rl.Vector2) -> int {
+context_menu_rows :: proc(st: ^Context_Menu_State, items: []Menu_Item, mx, my, menu_w, ox: i32, mouse: rl.Vector2) -> int {
 	assert(st.open, "context_menu_rows: menu not open")
 	assert(len(items) > 0, "context_menu_rows: empty items")
 	item_x := mx + 2
 	item_w := menu_w - 4
 	item_y := my + MENU_PAD
+	chosen := -1
 	for it, i in items {
 		if it.separator {
 			sep_h := sc(5)
-			rl.DrawRectangle(mx + 6, item_y + sep_h / 2, menu_w - 12, 1, theme.border_color)
+			overlay_rect({f32(mx + ox + 6), f32(item_y + sep_h / 2), f32(menu_w - 12), 1}, theme.border_color)
 			item_y += sep_h
 			continue
 		}
@@ -217,18 +227,19 @@ context_menu_rows :: proc(st: ^Context_Menu_State, items: []Menu_Item, mx, my, m
 		hovered := rl.CheckCollisionPointRec(mouse, row_rect)
 		if hovered && !it.disabled && mouse_moved() do st.selected = i
 		if st.selected == i {
-			rl.DrawRectangleRec(row_rect, theme.bg_active)
+			overlay_rect({f32(item_x + ox), f32(item_y), f32(item_w), f32(MENU_ITEM_H)}, theme.bg_active)
 		}
 		if hovered && !it.disabled do request_cursor(.POINTING_HAND)
 		col := theme.fg_disabled if it.disabled else theme.fg_primary
-		draw_text_truncated(it.label, item_x + 8, item_y + (MENU_ITEM_H - FONT_SIZE) / 2, item_w - 16, FONT_SIZE, col)
+		txt := truncate_to_width(it.label, item_w - 16, FONT_SIZE)
+		overlay_text(txt, item_x + ox + 8, item_y + (MENU_ITEM_H - FONT_SIZE) / 2, FONT_SIZE, col)
 		if hovered && !it.disabled && rl.IsMouseButtonReleased(.LEFT) {
 			st.open = false
-			return i
+			chosen = i
 		}
 		item_y += MENU_ITEM_H
 	}
-	return -1
+	return chosen
 }
 
 // --- Tooltip -----------------------------------------------------------------

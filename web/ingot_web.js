@@ -435,6 +435,121 @@
 		};
 	}
 
+	// WebAudio bridge ("ingot_audio" import module — gfx/audio_web.odin).
+	// Each slot is one voice: a decoded AudioBuffer + per-slot GainNode,
+	// mirroring the native miniaudio pool. The AudioContext starts suspended
+	// under browser autoplay policy; the first user gesture resumes it, and
+	// plays issued before the unlock are dropped silently.
+	const AUDIO_MAX_SLOTS = 256;
+	const audioState = {
+		ctx: null,
+		master: null,
+		slots: new Array(AUDIO_MAX_SLOTS).fill(null),
+	};
+
+	function audioResume() {
+		if (audioState.ctx && audioState.ctx.state === "suspended") {
+			audioState.ctx.resume().catch(() => {});
+		}
+	}
+
+	function audioImports() {
+		return {
+			ingot_audio_init: () => {
+				const Ctx = window.AudioContext || window.webkitAudioContext;
+				if (!Ctx) return 0;
+				if (!audioState.ctx) {
+					audioState.ctx = new Ctx();
+					audioState.master = audioState.ctx.createGain();
+					audioState.master.connect(audioState.ctx.destination);
+					const unlock = () => audioResume();
+					window.addEventListener("pointerdown", unlock);
+					window.addEventListener("keydown", unlock);
+				}
+				return 1;
+			},
+			ingot_audio_pcm: (pcmPtr, frames, channels, rate) => {
+				if (!audioState.ctx || frames <= 0 || channels <= 0) return -1;
+				const slot = audioState.slots.findIndex((s) => s === null);
+				if (slot < 0) return -1;
+				const interleaved = new Float32Array(
+					wasmMemoryInterface.memory.buffer, pcmPtr, frames * channels);
+				const buffer = audioState.ctx.createBuffer(channels, frames, rate);
+				for (let ch = 0; ch < channels; ch += 1) {
+					const dst = buffer.getChannelData(ch);
+					for (let i = 0; i < frames; i += 1) {
+						dst[i] = interleaved[i * channels + ch];
+					}
+				}
+				const gain = audioState.ctx.createGain();
+				gain.connect(audioState.master);
+				audioState.slots[slot] = {
+					buffer, gain, source: null,
+					playing: false, looping: false, pitch: 1,
+				};
+				return slot;
+			},
+			ingot_audio_unload: (slot) => {
+				const s = audioState.slots[slot];
+				if (!s) return;
+				if (s.source) { try { s.source.stop(); } catch (_) {} }
+				s.gain.disconnect();
+				audioState.slots[slot] = null;
+			},
+			ingot_audio_play: (slot, restart) => {
+				const s = audioState.slots[slot];
+				if (!s || !audioState.ctx) return;
+				audioResume();
+				if (audioState.ctx.state !== "running") return; // pre-gesture: drop
+				if (s.source && (restart || !s.playing)) {
+					try { s.source.stop(); } catch (_) {}
+					s.source = null;
+					s.playing = false;
+				}
+				if (s.playing && !restart) return;
+				const src = audioState.ctx.createBufferSource();
+				src.buffer = s.buffer;
+				src.loop = s.looping;
+				src.playbackRate.value = s.pitch;
+				src.connect(s.gain);
+				src.onended = () => { if (s.source === src) s.playing = false; };
+				s.source = src;
+				s.playing = true;
+				src.start();
+			},
+			ingot_audio_stop: (slot) => {
+				const s = audioState.slots[slot];
+				if (!s || !s.source) return;
+				try { s.source.stop(); } catch (_) {}
+				s.source = null;
+				s.playing = false;
+			},
+			ingot_audio_playing: (slot) => {
+				const s = audioState.slots[slot];
+				return s && s.playing ? 1 : 0;
+			},
+			ingot_audio_volume: (slot, volume) => {
+				const s = audioState.slots[slot];
+				if (s) s.gain.gain.value = volume;
+			},
+			ingot_audio_pitch: (slot, pitch) => {
+				const s = audioState.slots[slot];
+				if (!s) return;
+				s.pitch = pitch;
+				if (s.source) s.source.playbackRate.value = pitch;
+			},
+			ingot_audio_loop: (slot, looping) => {
+				const s = audioState.slots[slot];
+				if (!s) return;
+				s.looping = looping !== 0;
+				if (s.source) s.source.loop = s.looping;
+			},
+			ingot_audio_master: (volume) => {
+				if (audioState.master) audioState.master.gain.value = volume;
+			},
+		};
+	}
+
 	// Canvas drag-and-drop: stage dropped file names + contents, then notify
 	// the engine (ingot_web_drop_notify export) so IsFileDropped flips on the
 	// next frame. Bounded to MAX_DROP_FILES files of MAX_DROP_BYTES each.
@@ -495,6 +610,7 @@
 			wgpu: webgpu.getInterface(),
 			ingot: ingotImports(),
 			ingot_http: httpImports(),
+			ingot_audio: audioImports(),
 		};
 
 		// ingot_input.js (Step 4) registers DOM listeners that push into the
@@ -514,5 +630,6 @@
 		fitCanvas: fitCanvas,
 		ingotImports: ingotImports,
 		httpImports: httpImports,
+		audioImports: audioImports,
 	};
 })();

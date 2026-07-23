@@ -23,7 +23,15 @@ echo "Building wasm..."
 # --export-table is REQUIRED by vendor:wgpu on JS so the browser glue can invoke
 # Odin callbacks (adapter/device requests) through the function table.
 # The demo drives the real ingot:gfx engine, so the ingot collection is needed.
-odin build "$WEB/demo.odin" -file \
+#
+# An optional argument selects a different entry point, e.g.:
+#   bash build_web.sh examples/breakout    # a package directory
+#   bash build_web.sh web/demo.odin        # a single file (default)
+SRC="${1:-$WEB/demo.odin}"
+FILE_FLAG="-file"
+if [ -d "$SRC" ]; then FILE_FLAG=""; fi
+# shellcheck disable=SC2086
+odin build "$SRC" $FILE_FLAG \
 	-target:js_wasm32 \
 	-collection:ingot="$ROOT" \
 	-out:"$WEB/ingot_web.wasm" \

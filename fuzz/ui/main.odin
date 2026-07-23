@@ -183,6 +183,61 @@ exercise_widget_math :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	fuzzx.check(c, accum > -1 && accum < 1, "wheel remainder out of range")
 }
 
+// exercise_eased property-fuzzes the animation easing primitive: band
+// containment, monotone convergence, hostile dt/speed, and the one-sided
+// frame-partition property (sub-steps never get closer than one big step).
+exercise_eased :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
+	// Magnitudes stay under 4096 so one f32 ulp is well below the 0.001
+	// snap threshold; a wider range would make band checks flaky by ulps.
+	current0 := f32(fuzzx.int_range(p, -64_000, 64_000)) / 16.0
+	target := f32(fuzzx.int_range(p, -64_000, 64_000)) / 16.0
+	dt := f32(fuzzx.int_range(p, 0, 4_000)) / 1000.0 // 0..4 s
+	speed := f32(fuzzx.int_range(p, 0, 64_000)) / 1000.0 // 0..64 units/s
+	lo, hi := min(current0, target), max(current0, target)
+
+	// Single step: never escapes [current, target], never moves away.
+	single := current0
+	ui.eased(&single, target, dt, speed)
+	fuzzx.check(c, single >= lo && single <= hi, "eased escaped [current, target]")
+	fuzzx.check(c, abs(target - single) <= abs(target - current0), "eased moved away from target")
+
+	// Hostile inputs: negative and NaN dt/speed must hold position
+	// (the terminal snap may still fire when already within 0.001).
+	nan := transmute(f32)u32(0x7FC0_0000)
+	hostile := [4][2]f32{{-dt, speed}, {dt, -speed}, {nan, speed}, {dt, nan}}
+	for hd in hostile {
+		v := current0
+		ui.eased(&v, target, hd[0], hd[1])
+		fuzzx.check(c, v == current0 || v == target, "eased moved on hostile dt/speed")
+	}
+
+	// Convergence: any meaningful per-frame factor must settle exactly.
+	if speed * dt >= 0.01 {
+		v := current0
+		settled := false
+		for _ in 0 ..< 5_000 {
+			if ui.eased(&v, target, dt, speed) == target {
+				settled = true
+				break
+			}
+		}
+		fuzzx.check(c, settled, "eased failed to converge to target")
+	}
+
+	// Partition: m sub-steps stay in band and end no closer than one step —
+	// unless a sub-step hit the f32-stall terminal snap (split == target).
+	steps := fuzzx.int_range(p, 2, 9)
+	split := current0
+	for _ in 0 ..< steps do ui.eased(&split, target, dt / f32(steps), speed)
+	fuzzx.check(c, split >= lo && split <= hi, "split eased escaped [current, target]")
+	tolerance := 0.002 + abs(target - current0) * 1e-5
+	fuzzx.check(
+		c,
+		split == target || abs(target - split) + tolerance >= abs(target - single),
+		"split steps overtook the single step",
+	)
+}
+
 main :: proc() {
 	seed, iterations, rounds := fuzzx.parse_options(ITERATIONS_DEFAULT)
 	fmt.printfln("fuzz_ui seed=%d iterations=%d rounds=%d", seed, iterations, rounds)
@@ -204,6 +259,7 @@ main :: proc() {
 			exercise_table(&c, &p, line)
 			if i % 8 == 0 do exercise_document(&c, &p)
 			exercise_widget_math(&c, &p)
+			exercise_eased(&c, &p)
 			free_all(context.temp_allocator)
 		}
 	}

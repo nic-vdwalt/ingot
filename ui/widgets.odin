@@ -453,27 +453,39 @@ draw_shadow_rounded :: proc(rect: rl.Rectangle, roundness: f32, strength: f32 = 
 HOVER_ANIM_MAX :: 256
 @(private = "file") hover_anim: map[u64]f32
 
+// hover_anim_key mixes all four rect coordinates so distinct widgets rarely
+// share a fade slot; a collision is cosmetic only (two widgets share a fade).
+hover_anim_key :: proc "contextless" (x, y, w, h: i32) -> u64 {
+	return (u64(u32(x)) | u64(u32(y)) << 32) ~
+		((u64(u32(w)) | u64(u32(h)) << 32) * 0x100000001b3)
+}
+
+// hover_anim_step advances one hover fade in `state` by `dt`. Headless core
+// of hover_anim_frac: no frame clock, no redraw requests, caller-owned map —
+// this is the seam the fuzz harnesses drive.
+hover_anim_step :: proc(state: ^map[u64]f32, key: u64, hovered: bool, dt: f32) -> f32 {
+	if key not_in state^ {
+		if !hovered do return 0 // steady state: avoid populating the map
+		if len(state^) >= HOVER_ANIM_MAX do clear(state)
+	}
+	t := state^[key]
+	target: f32 = 1 if hovered else 0
+	eased(&t, target, dt, 14.0)
+	if t == 0 {
+		delete_key(state, key)
+	} else {
+		state^[key] = t
+	}
+	return t
+}
+
 // hover_anim_frac advances (and stores) the eased hover fraction for the
 // widget at this geometry. Returns 0..1; requests redraws until settled.
 hover_anim_frac :: proc(x, y, w, h: i32, hovered: bool) -> f32 {
 	assert(w > 0 && h > 0, "hover_anim_frac: empty widget rect")
-	// Mix all four coordinates so distinct widgets rarely share a fade slot;
-	// a collision is cosmetic only (two widgets share one fade value).
-	key := (u64(u32(x)) | u64(u32(y)) << 32) ~
-		((u64(u32(w)) | u64(u32(h)) << 32) * 0x100000001b3)
-	if key not_in hover_anim {
-		if !hovered do return 0 // steady state: avoid populating the map
-		if len(hover_anim) >= HOVER_ANIM_MAX do clear(&hover_anim)
-	}
-	t := hover_anim[key]
+	t := hover_anim_step(&hover_anim, hover_anim_key(x, y, w, h), hovered, rl.GetFrameTime())
 	target: f32 = 1 if hovered else 0
-	eased(&t, target, rl.GetFrameTime(), 14.0)
 	if t != target do rl.RequestRedraw()
-	if t == 0 {
-		delete_key(&hover_anim, key)
-	} else {
-		hover_anim[key] = t
-	}
 	assert(t >= 0 && t <= 1, "hover_anim_frac: fraction out of range")
 	return t
 }
@@ -867,10 +879,16 @@ progress_bar :: proc(x, y, w, h: i32, frac: f32, color: rl.Color) {
 
 // eased moves current toward target at `speed` units per second (frame-rate
 // independent exponential ease). Returns the updated value for convenience.
+// Guaranteed to terminate: a step that makes no f32 progress (increment
+// rounds to zero at large magnitudes) snaps to target, so "redraw until
+// settled" callers can never spin forever.
 eased :: proc(current: ^f32, target, dt, speed: f32) -> f32 {
 	k := clamp(speed * dt, 0, 1)
+	if k != k do k = 0 // NaN dt/speed: hold position rather than poison state
+	prev := current^
 	current^ += (target - current^) * k
 	if abs(target - current^) < 0.001 do current^ = target
+	if k > 0 && current^ == prev do current^ = target // f32 stall: settle now
 	return current^
 }
 

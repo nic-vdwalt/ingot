@@ -33,9 +33,9 @@ existing Odin app is mechanical: swap `import rl "vendor:raylib"` for
 - **Energy-efficient by design.** Event-driven frames idle at ~0% CPU between
   events; a frame pacer matches monitor refresh only while busy.
 - **Batteries included.** Windowing, 2D batched rendering, textures, an
-  stb_truetype glyph-atlas text stack, an immediate-mode widget toolkit, HiDPI
-  handling, custom window chrome, frame pacing, a terminal stack, and settings
-  persistence.
+  stb_truetype glyph-atlas text stack, an immediate-mode widget toolkit, audio
+  (miniaudio native / WebAudio web), gamepad input, HiDPI handling, custom
+  window chrome, frame pacing, a terminal stack, and settings persistence.
 - **Crisp on every display.** Per-size glyph atlases rasterized at native
   resolution × DPI, integer-pixel layout, platform-correct scaling policy.
 
@@ -47,7 +47,7 @@ existing Odin app is mechanical: swap `import rl "vendor:raylib"` for
 | `ingot:ui`       | widget toolkit (raygui) | buttons, text input, checkbox/radio/slider, dropdown, modal, context menu, tooltip, panels, scroll panes, markdown, word wrap, theming, HiDPI scaling, keyboard focus rings, custom title bar & window chrome, frame pacing |
 | `ingot:prefs`    | persistence | per-app settings storage — native settings file (`core:*`-only) + web `localStorage` backend, same `read`/`write` API |
 | `ingot:net`      | networking | background HTTP GET `Fetcher` (native `core:net` + worker threads / web `fetch()`) with optional cache validator, and an RFC 6455 `WebSocket` client (native hand-rolled / web `WebSocket`) |
-| `ingot:sys`      | system integration | `open_url` — launch the default browser (native `open`/`xdg-open`/`ShellExecuteW` / web `window.open`) |
+| `ingot:sys`      | system integration | `open_url` — launch the default browser (native `open`/`xdg-open`/`ShellExecuteW` / web `window.open`); `open_file_dialog`/`save_file_dialog` — native file dialogs (osascript / comdlg32 / zenity·kdialog; web returns `ok = false` — use canvas drag-and-drop) |
 | `ingot:term`     | terminal core | libvterm + PTY, per-frame pump, key→VT input translation (rendering is app-side) |
 | `ingot:libvterm` | bindings | Odin bindings for libvterm 0.3.3, prebuilt static libs committed for macOS/Windows |
 | `ingot:pty`      | PTY | `forkpty` on unix, ConPTY on Windows |
@@ -122,6 +122,83 @@ tab and an F12 metrics overlay. Living documentation and copy-paste cookbook:
 odin run examples/gallery -collection:ingot=.
 # renderer counters in the F12 overlay need:
 odin run examples/gallery -collection:ingot=. -define:INGOT_RENDER_STATS=true
+```
+
+### Breakout (audio + gamepad + web, one source)
+
+`examples/breakout` is the Phase 1 proof game: synthesized sounds (no asset
+files), keyboard + gamepad control, and the same source running natively and
+in the browser:
+
+```sh
+odin run examples/breakout -collection:ingot=.
+bash build_web.sh examples/breakout    # then serve web/ and open it
+```
+
+### Audio
+
+Raylib-shaped: `vendor:miniaudio` natively (fixed generation-checked sound
+pool, no per-play allocation), WebAudio in the browser. If no output device is
+available, `IsAudioDeviceReady()` stays false and every call is a safe no-op.
+
+```odin
+rl.InitAudioDevice()
+
+snd := rl.LoadSound("hit.wav")         // wav/ogg/mp3/flac — native only
+beep := rl.LoadSoundFromWave(wave)     // caller-owned PCM — native AND web
+rl.PlaySound(beep)                     // restarts from the top (raylib parity)
+rl.SetSoundVolume(beep, 0.6)
+rl.SetSoundPitch(beep, 1.2)
+
+music := rl.LoadMusicStream("bgm.ogg") // streamed on the device thread
+rl.PlayMusicStream(music)
+rl.UpdateMusicStream(music)            // no-op both targets; call-site parity
+```
+
+Web notes: browsers have no file paths, so `LoadSound`/`LoadMusicStream`
+return invalid handles there — embed bytes (`#load`) and use
+`LoadSoundFromWave` (see `examples/breakout`). Autoplay policy suspends the
+AudioContext until the first click/keypress; earlier plays are dropped
+silently.
+
+### Gamepad
+
+Polled per frame like the rest of the input state. Native uses GLFW's SDL
+mapping database; the browser uses the W3C standard mapping — both remap into
+the same raylib button layout (unit-tested tables in `gfx/types.odin`).
+
+```odin
+if rl.IsGamepadAvailable(0) {
+    x := rl.GetGamepadAxisMovement(0, .LEFT_X)      // -1..1, triggers rest at -1
+    if rl.IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) do jump()
+    name := rl.GetGamepadName(0)                    // temp-allocated
+}
+```
+
+### File dialogs & dropped files
+
+```odin
+import "ingot:sys"
+
+if path, ok := sys.open_file_dialog("Open project"); ok { load(path) }
+if path, ok := sys.save_file_dialog("Export", "out.json"); ok { save(path) }
+```
+
+Native dialogs block until dismissed (osascript / comdlg32 / zenity·kdialog;
+missing zenity on Linux → `ok = false`). On web both return `ok = false` —
+the browser path is drag-and-drop onto the canvas, which now works on both
+targets with contents access:
+
+```odin
+if rl.IsFileDropped() {
+    files := rl.LoadDroppedFiles()
+    for i in 0 ..< i32(files.count) {
+        data := rl.GetDroppedFileData(i)  // bytes on native AND web
+        defer delete(data)
+        ingest(string(files.paths[i]), data)
+    }
+    rl.UnloadDroppedFiles(files)
+}
 ```
 
 ### Overlay popups + input routing (occlusion)
@@ -417,14 +494,6 @@ evidence, then build the depth that makes people stay.
 
 ### Phase 1 — Close the gaps (now)
 
-- **Audio** via `vendor:miniaudio` behind the raylib-shaped API (`LoadSound`,
-  `PlaySound`, streams) — unlocks games and app notification sounds.
-- **Gamepad input** through the existing GLFW layer (`IsGamepadButtonDown`,
-  axes), with a web Gamepad API bridge behind the platform seam.
-- **Desktop table stakes:** native file dialogs, drag-and-drop, and clipboard
-  parity on the web target.
-- **One complete tiny game** in `examples/` proving the 2D + audio + gamepad
-  loop end-to-end.
 - **On-device validation of the opt-in GPU 3D path.** Depth-tested indexed
   sphere meshes render through a separate pass without changing legacy
   `BeginMode3D`; Metal is verified, while D3D12/Vulkan and browser validation
@@ -467,6 +536,22 @@ evidence, then build the depth that makes people stay.
 
 ### Recently shipped
 
+- **Audio** (`InitAudioDevice`, `LoadSound`, `LoadSoundFromWave`, `PlaySound`,
+  music streams): native `vendor:miniaudio` engine with a fixed generation-
+  checked sound pool, web WebAudio bridge — same raylib-shaped API on both
+  targets.
+- **Gamepad input** (`IsGamepadAvailable`, `IsGamepadButtonDown/Pressed/
+  Released`, `GetGamepadAxisMovement`): GLFW's SDL mapping database natively,
+  the W3C standard mapping in the browser, remapped through unit-tested tables.
+- **Web drag-and-drop parity** (`IsFileDropped` / `LoadDroppedFiles` now work
+  in-browser) plus target-portable `GetDroppedFileData` — browsers deliver
+  names + bytes, native reads the dropped path lazily.
+- **Native file dialogs** in `ingot:sys` (`open_file_dialog`,
+  `save_file_dialog`): osascript on macOS, comdlg32 on Windows,
+  zenity/kdialog on Linux — zero new dependencies.
+- **`examples/breakout`** — a complete tiny game proving audio + gamepad +
+  web export end-to-end, with sounds synthesized at startup (zero asset
+  files); `bash build_web.sh examples/breakout` runs it in the browser.
 - Event-driven frame scheduling (`SetFrameStrategy(.Event_Driven)` /
   `EnableEventWaiting`): idle apps render no frames at all — the native pump
   blocks in `glfw.WaitEventsTimeout`, the web `step()` early-outs under rAF —

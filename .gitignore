@@ -6,3 +6,8 @@ dist/
 web/ingot_web.wasm
 web/odin.js
 web/wgpu.js
+
+# build artifacts
+*.dSYM/
+fuzz/net/fuzz_net
+fuzz/ui/fuzz_ui
