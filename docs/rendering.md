@@ -321,6 +321,49 @@ The current configuration already selects `.Premultiplied` first when supported
 - Two-pass fixture orientation is independent of pass count.
 - Transparent macOS output has no halos with the actually selected alpha mode.
 
+### Consumer migration guide — HDR bloom/tonemap (openalloy galaxy)
+
+Reworking the galaxy chain inside ingot is a non-goal; openalloy migrates its
+multipass HDR chain independently against these contracts. The invariant that
+must survive the migration: **nvim's render-texture behavior does not change**
+(upright output, preserve-by-default, incremental redraw).
+
+What ingot guarantees (the regression fence):
+
+- **Orientation.** Every RT renders with the named y-flip
+  (`RT_PROJECTION_Y_FLIP`, `gfx/render_target.odin`); stored textures are
+  bottom-left-origin, displayed upright via a negative source height in the
+  blit. Locked by `gfx/render_target_test.odin` (pure projection math) and
+  `examples/render_fixture` (two-pass ping-pong chain — orientation is
+  independent of pass count, so each bloom pass samples the previous target
+  with the same rule; no per-pass flip bookkeeping is needed).
+- **HDR targets.** `LoadRenderTextureEx(w, h, .RGBA16Float, with_depth)` (or
+  the rlgl parity path `RlLoadColorTexture`/`RlLoadDepthTexture`) creates the
+  raw HDR targets; `BeginTextureMode` works on them unchanged.
+- **Preserve semantics.** `BeginTextureMode` does not clear; only
+  `ClearBackground` inside the target scope clears (raylib parity) — additive
+  accumulation passes rely on this.
+
+What the openalloy port must do per pass:
+
+1. Translate each GLSL shader (7-shader bloom + soft-particle + instanced
+   mesh chain) to WGSL; the legacy GLSL procs in `gfx/gpu3d.odin` are
+   deliberate safe no-ops until then (draws into RTs are suppressed, the
+   galaxy renders blank rather than corrupt).
+2. Ping-pong between two `LoadRenderTextureEx` targets for blur passes,
+   sampling the previous pass's texture with the standard orientation rule
+   (see above — same rule every pass).
+3. Mind blending on float formats: 32-bit float targets are not blendable
+   without WebGPU's optional `float32-blendable` feature; ingot drops the
+   blend state (overwrite) for those formats (`gfx/batch.odin`,
+   `_format_blendable`). Use `.RGBA16Float` for passes that need blending.
+4. Soft particles need deliberate depth-texture sampling via the explicit
+   GPU 3D pass (`begin_gpu_3d` targets carry `.Depth24Plus`); they are not
+   ordinary alpha billboards.
+5. Validate against `examples/render_fixture` conventions, then run the
+   openalloy consumer smoke (nvim pane + galaxy view) per "Verification and
+   exact commands".
+
 ## Phase 5 — Explicit opt-in GPU 3D pass
 
 ### Review correction
@@ -374,6 +417,32 @@ are not equivalent to ordinary alpha billboards.
 - Opaque and additive/depth-read-only behavior are distinct and tested.
 - Legacy openalloy galaxy remains unchanged until explicitly migrated.
 - New 3D fixture has no validation errors on native Metal and builds for WASM.
+
+### On-device validation matrix
+
+The GPU 3D path is written once against WebGPU (`gfx/gpu3d_pipeline.odin`);
+native backends come via wgpu-native's backend selection, the browser via its
+own WebGPU implementation. `examples/render_fixture` is the validation scene:
+two depth-overlapping spheres (blue at z=0 must occlude orange at z=-1 —
+proves `depthCompare = .Less`), one behind-camera sphere that must contribute
+no pixels (green anywhere = broken projection), blitted to the window with
+the standard negative-source-height convention. Headless invariants (sphere
+geometry counts/bounds/normals, pool-handle mapping, uniform layout
+`#assert`s) live in `gfx/gpu3d_test.odin`.
+
+| Backend | Platform | Status | Notes |
+| --- | --- | --- | --- |
+| Metal | macOS | validated | Baseline; fixture renders clean, no validation errors. |
+| D3D12 | Windows | pending hardware | Run `examples/render_fixture` via wgpu-native (`WGPU_BACKEND=dx12`); record result here. |
+| Vulkan | Windows | pending hardware | Same fixture, `WGPU_BACKEND=vulkan`. |
+| Vulkan | Linux | pending hardware | Same fixture. |
+| Browser WebGPU | Chrome 113+ / Safari 18+ | pending run | `bash build_web.sh examples/render_fixture`, serve `web/`, verify the sphere panel; checks `Depth24Plus` support and the separate-encoder submit under the browser queue. |
+
+Recording protocol: run the fixture, confirm (a) blue-over-orange occlusion,
+(b) zero green pixels, (c) no validation/console errors, then flip the row to
+`validated` with driver/OS notes. Fixed-pool exhaustion (mesh or pipeline
+slots) is observable as `renderer_stats().gpu3d_pool_exhaustions` with
+`-define:INGOT_RENDER_STATS=true`.
 
 ## Phase 6 — Additive idiomatic Odin API
 

@@ -14,6 +14,15 @@ import wg "vendor:wgpu"
 
 RT_PROJECTION_Y_FLIP :: f32(-1.0)
 
+// _rt_projection_vec builds the group(0) projection vector for a render
+// target: reciprocal pixel scale in x/y, the named y-flip in z, 0 in w.
+// Pure — split out of BeginTextureMode so the orientation contract
+// (docs/rendering.md "Render-target orientation") is locked by a unit test.
+@(private)
+_rt_projection_vec :: proc "contextless" (width, height: i32) -> [4]f32 {
+	return [4]f32{1.0 / f32(max(width, 1)), 1.0 / f32(max(height, 1)), RT_PROJECTION_Y_FLIP, 0.0}
+}
+
 // LoadRenderTexture creates a colour render target in the swapchain format
 // (so the existing batch pipelines, built against g.format, can render into it).
 LoadRenderTexture :: proc(width, height: i32) -> RenderTexture2D {
@@ -74,7 +83,7 @@ BeginTextureMode :: proc(target: RenderTexture2D) {
 	g.frame.depth_view = g.frame.rt_depth ? _texture_view(target.depth.id) : nil
 
 	// RT projection: y-flipped (p.z = -1) so the texture matches raylib.
-	p := [4]f32{1.0 / f32(max(e.width, 1)), 1.0 / f32(max(e.height, 1)), RT_PROJECTION_Y_FLIP, 0.0}
+	p := _rt_projection_vec(e.width, e.height)
 	wg.QueueWriteBuffer(g.queue, g.rend.rt_ubuf, 0, &p, size_of(p))
 	g.rend.cur_u = g.rend.rt_ubind
 

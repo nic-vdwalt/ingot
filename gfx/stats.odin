@@ -37,6 +37,7 @@ Renderer_Stats :: struct {
 	stream_slot_exhaustions:       u32,
 	submission_tracking_failures:  u32,
 	stream_retirement_failures:    u32,
+	gpu3d_pool_exhaustions:        u32,
 	composite_alpha_mode:          wg.CompositeAlphaMode,
 	flush_causes:                  [Flush_Cause]u32,
 }
@@ -151,6 +152,15 @@ _stats_reservation_failure :: proc(uniform: bool) {
 _stats_stream_slot_exhaustion :: proc() {
 	when RENDER_STATS_ENABLED {
 		renderer_stats_current.stream_slot_exhaustions += 1
+	}
+}
+
+// _stats_gpu3d_pool_exhaustion counts GPU-3D fixed-pool exhaustion (mesh or
+// pipeline slots) so hosts can see why 3D draws stopped appearing.
+@(private)
+_stats_gpu3d_pool_exhaustion :: proc() {
+	when RENDER_STATS_ENABLED {
+		renderer_stats_current.gpu3d_pool_exhaustions += 1
 	}
 }
 

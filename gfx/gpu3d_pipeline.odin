@@ -3,6 +3,10 @@ package gfx
 import "core:math"
 import wg "vendor:wgpu"
 
+// Fixed pools (Tiger Style: every pool has a static upper bound). Exhaustion
+// is an operating condition, not a programmer error: create_sphere_mesh
+// returns ok=false and draw_gpu_mesh skips draws once the pipeline pool is
+// full — both are counted in renderer_stats().gpu3d_pool_exhaustions.
 GPU_3D_MAX_MESHES :: 256
 GPU_3D_MAX_PIPELINES :: 8
 
@@ -42,6 +46,17 @@ Gpu_3D_Uniforms :: struct {
 	model:           Matrix,
 	color:           [4]f32,
 }
+
+// The dynamic-offset uniform bind group declares minBindingSize =
+// size_of(Gpu_3D_Uniforms). The WGSL view of the struct is 144 bytes (two
+// mat4x4 + vec4); Odin may append tail padding (matrix alignment is
+// target-dependent: 160 on native SIMD, 144 on wasm), and WebGPU permits a
+// binding larger than the shader view. Lock the invariants a struct edit
+// could silently break: never smaller than the shader view, always 16-byte
+// aligned as dynamic offsets require.
+#assert(size_of(Gpu_3D_Uniforms) >= 144)
+#assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
+#assert(size_of(Gpu_3D_Vertex) == 24)
 
 @(private)
 Gpu_3D_Mesh_Entry :: struct {
@@ -118,15 +133,18 @@ destroy_gpu_3d_target :: proc(target: ^Gpu_3D_Target) {
 	assert(target.texture.texture.id == 0)
 }
 
-create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) {
+// _sphere_mesh_geometry generates a UV sphere's vertex/index lists — pure
+// CPU, no GPU calls — split out of create_sphere_mesh so headless tests can
+// validate counts, bounds, and normals without a device.
+@(private)
+_sphere_mesh_geometry :: proc(
+	radius: f32,
+	rings, slices: u32,
+	vertices: ^[dynamic]Gpu_3D_Vertex,
+	indices: ^[dynamic]u32,
+) {
 	assert(radius > 0)
-	if !g.initialized || rings < 2 || slices < 3 do return {}, false
-	if gpu_3d_mesh_count >= GPU_3D_MAX_MESHES do return {}, false
-
-	vertices := make([dynamic]Gpu_3D_Vertex, 0, int((rings + 1) * (slices + 1)))
-	indices := make([dynamic]u32, 0, int(rings * slices * 6))
-	defer delete(vertices)
-	defer delete(indices)
+	assert(rings >= 2 && slices >= 3)
 	for ring: u32 = 0; ring <= rings; ring += 1 {
 		v := f32(ring) / f32(rings)
 		phi := v * f32(math.PI)
@@ -138,7 +156,7 @@ create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) 
 				f32(math.cos(f64(phi))),
 				f32(math.sin(f64(phi))) * f32(math.sin(f64(theta))),
 			}
-			append(&vertices, Gpu_3D_Vertex{position = normal * radius, normal = normal})
+			append(vertices, Gpu_3D_Vertex{position = normal * radius, normal = normal})
 		}
 	}
 	row := slices + 1
@@ -146,9 +164,27 @@ create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) 
 		for slice: u32 = 0; slice < slices; slice += 1 {
 			a := ring * row + slice
 			b := a + row
-			append(&indices, a, b, a + 1, a + 1, b, b + 1)
+			append(indices, a, b, a + 1, a + 1, b, b + 1)
 		}
 	}
+	assert(len(vertices) == int((rings + 1) * (slices + 1)))
+	assert(len(indices) == int(rings * slices * 6))
+}
+
+create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) {
+	assert(radius > 0)
+	if !g.initialized || rings < 2 || slices < 3 do return {}, false
+	if gpu_3d_mesh_count >= GPU_3D_MAX_MESHES {
+		// Pool full: operating condition — caller gets ok=false (counted).
+		_stats_gpu3d_pool_exhaustion()
+		return {}, false
+	}
+
+	vertices := make([dynamic]Gpu_3D_Vertex, 0, int((rings + 1) * (slices + 1)))
+	indices := make([dynamic]u32, 0, int(rings * slices * 6))
+	defer delete(vertices)
+	defer delete(indices)
+	_sphere_mesh_geometry(radius, rings, slices, &vertices, &indices)
 
 	entry := new(Gpu_3D_Mesh_Entry)
 	entry.vertex_buffer = _gpu_3d_buffer(
@@ -326,7 +362,12 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 	for index in 0 ..< gpu_3d_pipeline_count {
 		if gpu_3d_pipelines[index].format == format do return gpu_3d_pipelines[index].pipeline
 	}
-	if gpu_3d_pipeline_count >= GPU_3D_MAX_PIPELINES do return nil
+	if gpu_3d_pipeline_count >= GPU_3D_MAX_PIPELINES {
+		// Pool full: draws to targets in unseen formats are skipped from now
+		// on (bounded pool, never grows) — operating condition, counted.
+		_stats_gpu3d_pool_exhaustion()
+		return nil
+	}
 	_gpu_3d_init_shared()
 	attrs := [2]wg.VertexAttribute {
 		{format = .Float32x3, offset = 0, shaderLocation = 0},
