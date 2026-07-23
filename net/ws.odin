@@ -380,7 +380,8 @@ ws_handshake :: proc(ws: ^WebSocket, sock: cnet.TCP_Socket) -> bool {
 
 // ws_accept_for_key computes the expected Sec-WebSocket-Accept value for a
 // handshake key: base64(sha1(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")).
-@(private = "file")
+// Package-private (not file-private) so ws_fuzz_test.odin can fuzz it.
+@(private)
 ws_accept_for_key :: proc(key: string) -> string {
 	combined := fmt.tprintf("%s258EAFA5-E914-47DA-95CA-C5AB0DC85B11", key)
 	ctx: sha1.Context

@@ -26,6 +26,11 @@
 	const semanticForms = new Map();
 	const INPUT_TYPES = ["text", "email", "password"];
 	const AUTOCOMPLETE = ["off", "username", "current-password", "new-password"];
+	// Dropped files staged for the engine (names + bytes; browsers never expose
+	// real paths). Bounded: MAX_DROP_FILES files, MAX_DROP_BYTES each.
+	const MAX_DROP_FILES = 16;
+	const MAX_DROP_BYTES = 32 * 1024 * 1024;
+	let dropFiles = [];
 
 	function wasmBytes(pointer, length) {
 		if (!pointer || length <= 0 || !wasmMemoryInterface) return new Uint8Array();
@@ -348,6 +353,61 @@
 					c.focus({ preventScroll: true });
 				}
 			},
+			// Gamepad bridge: fills W3C standard-mapping buttons (digital),
+			// 6 axes (triggers converted from 0..1 button values to the -1..1
+			// GLFW convention), and the id string. Returns the name length, or
+			// -1 when the slot has no standard-mapping gamepad.
+			ingot_gamepad_state: (slot, buttonsPtr, buttonsCap, axesPtr, axesCap,
+				namePtr, nameCap) => {
+				const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+				const pad = pads && pads[slot];
+				if (!pad || !pad.connected || pad.mapping !== "standard") return -1;
+				const buttons = wasmBytes(buttonsPtr, buttonsCap);
+				const nb = Math.min(buttonsCap, pad.buttons.length, 17);
+				for (let i = 0; i < nb; i += 1) {
+					buttons[i] = pad.buttons[i].pressed ? 1 : 0;
+				}
+				if (axesCap >= 6 && wasmMemoryInterface) {
+					const axes = new Float32Array(
+						wasmMemoryInterface.memory.buffer, axesPtr, axesCap);
+					const na = Math.min(4, pad.axes.length);
+					for (let i = 0; i < na; i += 1) axes[i] = pad.axes[i];
+					const lt = pad.buttons[6] ? pad.buttons[6].value : 0;
+					const rt = pad.buttons[7] ? pad.buttons[7].value : 0;
+					axes[4] = lt * 2 - 1;
+					axes[5] = rt * 2 - 1;
+				}
+				const id = new TextEncoder().encode(pad.id || "");
+				const n = Math.min(nameCap, id.length);
+				if (n > 0) wasmBytes(namePtr, n).set(id.subarray(0, n));
+				return n;
+			},
+			// Drag-and-drop staging (see attachDrop): names + bytes queried by
+			// the engine through the len/copy pattern used for the clipboard.
+			ingot_drop_count: () => dropFiles.length,
+			ingot_drop_name_len: (index) => {
+				const f = dropFiles[index];
+				return f ? f.name.length : 0;
+			},
+			ingot_drop_name_copy: (index, destination, capacity) => {
+				const f = dropFiles[index];
+				if (!f) return 0;
+				const count = Math.min(capacity, f.name.length);
+				if (count > 0) wasmBytes(destination, count).set(f.name.subarray(0, count));
+				return count;
+			},
+			ingot_drop_data_len: (index) => {
+				const f = dropFiles[index];
+				return f ? f.data.length : 0;
+			},
+			ingot_drop_data_copy: (index, destination, capacity) => {
+				const f = dropFiles[index];
+				if (!f) return 0;
+				const count = Math.min(capacity, f.data.length);
+				if (count > 0) wasmBytes(destination, count).set(f.data.subarray(0, count));
+				return count;
+			},
+			ingot_drop_clear: () => { dropFiles = []; },
 			ingot_is_fullscreen: () => {
 				const fs = document.fullscreenElement ||
 					document.webkitFullscreenElement;
@@ -373,6 +433,35 @@
 				}
 			},
 		};
+	}
+
+	// Canvas drag-and-drop: stage dropped file names + contents, then notify
+	// the engine (ingot_web_drop_notify export) so IsFileDropped flips on the
+	// next frame. Bounded to MAX_DROP_FILES files of MAX_DROP_BYTES each.
+	function attachDrop(wmi) {
+		const c = document.getElementById(CANVAS_ID);
+		if (!c) return;
+		c.addEventListener("dragover", (event) => { event.preventDefault(); });
+		c.addEventListener("drop", async (event) => {
+			event.preventDefault();
+			const files = Array.from(event.dataTransfer ? event.dataTransfer.files : [])
+				.slice(0, MAX_DROP_FILES);
+			const staged = [];
+			for (const file of files) {
+				if (file.size > MAX_DROP_BYTES) continue;
+				try {
+					const buf = await file.arrayBuffer();
+					staged.push({
+						name: new TextEncoder().encode(file.name),
+						data: new Uint8Array(buf),
+					});
+				} catch (_) { /* unreadable file: skip */ }
+			}
+			if (staged.length === 0) return;
+			dropFiles = staged;
+			const x = wmi && wmi.exports;
+			if (x && x.ingot_web_drop_notify) x.ingot_web_drop_notify();
+		});
 	}
 
 	// Boot an ingot wasm app. `wasmPath` defaults to "ingot_web.wasm".
@@ -413,6 +502,7 @@
 		if (window.ingotInput && typeof window.ingotInput.attach === "function") {
 			window.ingotInput.attach(CANVAS_ID, wmi);
 		}
+		attachDrop(wmi);
 
 		// odin.js runs main() (_start), then drives the exported step() via
 		// requestAnimationFrame until it returns false.

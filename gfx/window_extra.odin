@@ -5,6 +5,7 @@
 package gfx
 
 import "base:runtime"
+import "core:os"
 import "core:strings"
 import "vendor:glfw"
 
@@ -55,4 +56,17 @@ LoadDroppedFiles :: proc() -> FilePathList {
 
 UnloadDroppedFiles :: proc(files: FilePathList) {
 	g_drop_ready = false
+}
+
+// GetDroppedFileData returns the contents of dropped file `index`, allocated
+// from `allocator` (caller frees), or nil on a bad index / read failure.
+// Web parity: browsers deliver bytes without real paths, so target-portable
+// consumers should read drops through this instead of opening paths.
+GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
+	if index < 0 || int(index) >= len(g_drop_paths) do return nil
+	path := string(g_drop_paths[index])
+	assert(len(path) > 0, "GetDroppedFileData: empty dropped path")
+	data, err := os.read_entire_file(path, allocator)
+	if err != nil do return nil
+	return data
 }

@@ -48,6 +48,18 @@ foreign dom {
 	@(link_name = "ingot_is_fullscreen")       _js_is_fullscreen     :: proc() -> i32 ---
 	@(link_name = "ingot_toggle_fullscreen")   _js_toggle_fullscreen :: proc() ---
 	@(link_name = "ingot_ime_rect")            _js_ime_rect          :: proc(x, y, w, h, active: i32) ---
+	@(link_name = "ingot_gamepad_state") _js_gamepad_state :: proc(
+		slot: i32,
+		buttons: [^]u8, buttons_cap: i32,
+		axes: [^]f32, axes_cap: i32,
+		name: [^]u8, name_cap: i32,
+	) -> i32 ---
+	@(link_name = "ingot_drop_count")    _js_drop_count     :: proc() -> i32 ---
+	@(link_name = "ingot_drop_name_len") _js_drop_name_len  :: proc(index: i32) -> i32 ---
+	@(link_name = "ingot_drop_name_copy") _js_drop_name_copy :: proc(index: i32, dst: rawptr, cap: i32) -> i32 ---
+	@(link_name = "ingot_drop_data_len")  _js_drop_data_len  :: proc(index: i32) -> i32 ---
+	@(link_name = "ingot_drop_data_copy") _js_drop_data_copy :: proc(index: i32, dst: rawptr, cap: i32) -> i32 ---
+	@(link_name = "ingot_drop_clear")     _js_drop_clear     :: proc() ---
 }
 
 // A non-nil sentinel so the shared `g.win == nil` guards treat the web target as
@@ -380,6 +392,48 @@ platform_set_clipboard :: proc(text: cstring) {
 @(private)
 platform_drop_init :: proc() {}
 
+// platform_gamepad_poll snapshots each pad from the browser Gamepad API. The
+// JS bridge reports W3C standard-mapping buttons (17, digital) and 6 axes
+// (triggers already converted to the -1..1 GLFW convention); buttons are
+// remapped to the raylib GamepadButton layout via _W3C_PAD_REMAP.
+@(private)
+platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {
+	assert(pads != nil, "platform_gamepad_poll: nil pads")
+	w3c_buttons: [17]u8
+	for slot in 0 ..< MAX_GAMEPADS {
+		pad := &pads[slot]
+		w3c_buttons = {}
+		name_len := _js_gamepad_state(
+			i32(slot),
+			raw_data(w3c_buttons[:]), i32(len(w3c_buttons)),
+			raw_data(pad.axes[:]), i32(len(pad.axes)),
+			raw_data(pad.name[:]), i32(len(pad.name)),
+		)
+		connected := name_len >= 0
+		if connected != pad.connected {
+			_idle_note_activity(&g.idle)
+		}
+		pad.connected = connected
+		if !connected {
+			pad.buttons = {}
+			pad.axes = {}
+			pad.name_len = 0
+			continue
+		}
+		assert(name_len <= GAMEPAD_NAME_MAX, "platform_gamepad_poll: name overflow")
+		pad.name_len = min(name_len, GAMEPAD_NAME_MAX)
+		pad.buttons = {}
+		for b in 0 ..< len(w3c_buttons) {
+			if w3c_buttons[b] != 0 {
+				pad.buttons[int(_W3C_PAD_REMAP[b])] = true
+			}
+		}
+		if pad.buttons != pad.prev_buttons {
+			_idle_note_activity(&g.idle)
+		}
+	}
+}
+
 // --- public window procs (native equivalents live in window_native/extra) --
 
 GetWindowHandle    :: proc() -> rawptr { return nil }
@@ -392,6 +446,57 @@ IsWindowFullscreen :: proc() -> bool   { return _js_is_fullscreen() != 0 }
 ToggleFullscreen   :: proc() { _js_toggle_fullscreen() }
 RestoreWindow      :: proc() {}
 
-IsFileDropped :: proc() -> bool { return false }
-LoadDroppedFiles :: proc() -> FilePathList { return FilePathList{} }
-UnloadDroppedFiles :: proc(files: FilePathList) {}
+// --- drag & drop (web) ------------------------------------------------------
+//
+// JS (ingot_web.js attachDrop) stages dropped file names + bytes and calls the
+// ingot_web_drop_notify export; the queries below pull the staged names into
+// fixed buffers so FilePathList needs no allocation. Browsers never expose
+// real paths — "paths" here are bare file names; use GetDroppedFileData for
+// the contents.
+
+MAX_DROPPED_FILES :: 16
+DROP_NAME_MAX :: 256
+
+@(private) g_drop_ready: bool
+@(private) g_drop_names: [MAX_DROPPED_FILES][DROP_NAME_MAX]u8
+@(private) g_drop_cstrs: [MAX_DROPPED_FILES]cstring
+
+IsFileDropped :: proc() -> bool { return g_drop_ready }
+
+LoadDroppedFiles :: proc() -> FilePathList {
+	count := clamp(_js_drop_count(), 0, MAX_DROPPED_FILES)
+	assert(count >= 0 && count <= MAX_DROPPED_FILES, "LoadDroppedFiles: count out of bounds")
+	for i in 0 ..< count {
+		g_drop_names[i] = {}
+		n := _js_drop_name_copy(i, raw_data(g_drop_names[i][:]), DROP_NAME_MAX - 1)
+		assert(n < DROP_NAME_MAX, "LoadDroppedFiles: name overflow")
+		g_drop_cstrs[i] = cstring(raw_data(g_drop_names[i][:]))
+	}
+	return FilePathList{
+		capacity = u32(count),
+		count    = u32(count),
+		paths    = raw_data(g_drop_cstrs[:]),
+	}
+}
+
+UnloadDroppedFiles :: proc(files: FilePathList) {
+	g_drop_ready = false
+	_js_drop_clear()
+}
+
+// GetDroppedFileData returns the contents of dropped file `index`, allocated
+// from `allocator` (caller frees), or nil when the index is empty. This is
+// the target-portable way to read a drop: on web there is no path to open.
+GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
+	if index < 0 || index >= _js_drop_count() do return nil
+	length := _js_drop_data_len(index)
+	assert(length >= 0, "GetDroppedFileData: negative length")
+	if length <= 0 do return nil
+	buffer := make([]byte, int(length), allocator)
+	copied := _js_drop_data_copy(index, raw_data(buffer), length)
+	if copied <= 0 {
+		delete(buffer, allocator)
+		return nil
+	}
+	return buffer[:copied]
+}

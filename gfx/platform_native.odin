@@ -9,6 +9,7 @@
 // unchanged.
 package gfx
 
+import "core:c"
 import "core:time"
 import "vendor:glfw"
 import wg "vendor:wgpu"
@@ -312,6 +313,56 @@ platform_set_clipboard :: proc(text: cstring) {
 @(private)
 platform_drop_init :: proc() {
 	if g.win != nil do glfw.SetDropCallback(_win(), _drop_cb)
+}
+
+// platform_gamepad_poll snapshots every gamepad slot from GLFW's SDL-mapping
+// database. Buttons arrive in GLFW order and are remapped to the raylib
+// GamepadButton layout via _GLFW_PAD_REMAP; the analog triggers additionally
+// set the digital LEFT/RIGHT_TRIGGER_2 buttons (raylib parity — GLFW exposes
+// triggers only as axes).
+@(private)
+platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {
+	assert(pads != nil, "platform_gamepad_poll: nil pads")
+	#assert(MAX_GAMEPADS <= glfw.JOYSTICK_LAST + 1)
+	for jid in 0 ..< MAX_GAMEPADS {
+		pad := &pads[jid]
+		connected := bool(glfw.JoystickIsGamepad(c.int(jid)))
+		if connected != pad.connected {
+			_idle_note_activity(&g.idle)
+		}
+		pad.connected = connected
+		if !connected {
+			pad.buttons = {}
+			pad.axes = {}
+			pad.name_len = 0
+			continue
+		}
+		state: glfw.GamepadState
+		if !glfw.GetGamepadState(c.int(jid), &state) {
+			continue
+		}
+		pad.buttons = {}
+		for b in 0 ..< len(state.buttons) {
+			if state.buttons[b] == glfw.PRESS {
+				pad.buttons[int(_GLFW_PAD_REMAP[b])] = true
+			}
+		}
+		for a in 0 ..< len(state.axes) {
+			pad.axes[a] = state.axes[a]
+		}
+		// Digital trigger buttons derived from the analog axes (rest at -1).
+		pad.buttons[int(GamepadButton.LEFT_TRIGGER_2)] = state.axes[4] > TRIGGER_PRESS_THRESHOLD
+		pad.buttons[int(GamepadButton.RIGHT_TRIGGER_2)] = state.axes[5] > TRIGGER_PRESS_THRESHOLD
+		if pad.buttons != pad.prev_buttons {
+			_idle_note_activity(&g.idle)
+		}
+		name := glfw.GetGamepadName(c.int(jid))
+		n := min(len(name), GAMEPAD_NAME_MAX)
+		for i in 0 ..< n {
+			pad.name[i] = name[i]
+		}
+		pad.name_len = i32(n)
+	}
 }
 
 // --- GLFW input callbacks --------------------------------------------------

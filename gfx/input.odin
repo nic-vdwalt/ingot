@@ -40,6 +40,23 @@ Input :: struct {
 	cursor_on_screen: bool,
 
 	cur_cursor:  MouseCursor,
+
+	// Gamepads: fixed pool, snapshot-polled once per frame through the
+	// platform seam (GLFW GetGamepadState native, navigator.getGamepads()
+	// web). prev_buttons gives pressed/released edge detection.
+	pads: [MAX_GAMEPADS]Gamepad_State,
+}
+
+MAX_GAMEPADS :: 4
+GAMEPAD_NAME_MAX :: 64
+
+Gamepad_State :: struct {
+	connected:    bool,
+	name:         [GAMEPAD_NAME_MAX]u8,
+	name_len:     i32,
+	buttons:      [GAMEPAD_BUTTON_COUNT]bool,
+	prev_buttons: [GAMEPAD_BUTTON_COUNT]bool,
+	axes:         [GAMEPAD_AXIS_COUNT]f32,
 }
 
 // --- IME / text input ------------------------------------------------------
@@ -96,6 +113,12 @@ input_poll :: proc() {
 		inp.mb_down[b] = cur
 	}
 	inp.cursor_on_screen = platform_window_hovered()
+
+	// Gamepads: snapshot previous button state for edge queries, then poll.
+	for p in 0 ..< MAX_GAMEPADS {
+		inp.pads[p].prev_buttons = inp.pads[p].buttons
+	}
+	platform_gamepad_poll(&inp.pads)
 
 	// IME: if no text field reported a caret rect since the last poll, tell
 	// the platform text input is inactive (web blurs the IME proxy; native
@@ -174,6 +197,57 @@ IsMouseButtonReleased :: proc(button: MouseButton) -> bool {
 
 IsMouseButtonDown :: proc(button: MouseButton) -> bool {
 	return platform_mouse_button(i32(button))
+}
+
+// --- gamepad queries (raylib-named) ----------------------------------------
+
+IsGamepadAvailable :: proc(gamepad: i32) -> bool {
+	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
+	return g.inp.pads[gamepad].connected
+}
+
+// GetGamepadName returns the backend-reported device name (empty when the
+// slot is empty). The cstring is temp-allocated; clone to keep past the frame.
+GetGamepadName :: proc(gamepad: i32) -> cstring {
+	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return ""
+	pad := &g.inp.pads[gamepad]
+	assert(pad.name_len >= 0 && pad.name_len <= GAMEPAD_NAME_MAX, "GetGamepadName: corrupt length")
+	return strings.clone_to_cstring(string(pad.name[:pad.name_len]), context.temp_allocator)
+}
+
+IsGamepadButtonDown :: proc(gamepad: i32, button: GamepadButton) -> bool {
+	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
+	b := i32(button)
+	if b < 0 || b >= GAMEPAD_BUTTON_COUNT do return false
+	return g.inp.pads[gamepad].buttons[b]
+}
+
+IsGamepadButtonPressed :: proc(gamepad: i32, button: GamepadButton) -> bool {
+	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
+	b := i32(button)
+	if b < 0 || b >= GAMEPAD_BUTTON_COUNT do return false
+	pad := &g.inp.pads[gamepad]
+	return pad.buttons[b] && !pad.prev_buttons[b]
+}
+
+IsGamepadButtonReleased :: proc(gamepad: i32, button: GamepadButton) -> bool {
+	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
+	b := i32(button)
+	if b < 0 || b >= GAMEPAD_BUTTON_COUNT do return false
+	pad := &g.inp.pads[gamepad]
+	return !pad.buttons[b] && pad.prev_buttons[b]
+}
+
+// GetGamepadAxisMovement returns the axis position in -1..1 (triggers rest at
+// -1, matching raylib/GLFW). 0 for disconnected pads or out-of-range axes.
+GetGamepadAxisMovement :: proc(gamepad: i32, axis: GamepadAxis) -> f32 {
+	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return 0
+	a := i32(axis)
+	if a < 0 || a >= GAMEPAD_AXIS_COUNT do return 0
+	if !g.inp.pads[gamepad].connected do return 0
+	v := g.inp.pads[gamepad].axes[a]
+	assert(v >= -1.001 && v <= 1.001, "GetGamepadAxisMovement: axis out of range")
+	return v
 }
 
 GetMousePosition :: proc() -> Vector2 { return g.inp.mouse }

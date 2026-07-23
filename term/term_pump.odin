@@ -52,6 +52,34 @@ _utf8_complete_prefix :: proc(buf: []u8) -> int {
 	return n
 }
 
+// _term_ingest feeds ts.read_buf[:total] to the emulator, holding back any
+// incomplete trailing UTF-8 sequence (unless eof) so a multi-byte character
+// is never split across vterm_input_write calls. Extracted from term_pump so
+// hostile-input fuzzing drives the production ingestion path directly.
+@(private)
+_term_ingest :: proc(ts: ^Term_Instance, total: int, eof: bool) {
+	if total <= 0 do return
+	complete := total
+	if !eof {
+		complete = _utf8_complete_prefix(ts.read_buf[:total])
+		// The complete prefix is a prefix of total, never longer.
+		// Split so a failure points at the exact bound.
+		assert(complete >= 0)
+		assert(complete <= total)
+		tail := total - complete
+		if tail > 0 && tail <= len(ts.utf8_hold) {
+			copy(ts.utf8_hold[:tail], ts.read_buf[complete:total])
+			ts.utf8_hold_len = tail
+		} else {
+			// Invalid or oversized tail — feed everything as-is.
+			complete = total
+		}
+	}
+	if complete > 0 {
+		lv.vterm_input_write(ts.vt, raw_data(ts.read_buf[:]), c.size_t(complete))
+	}
+}
+
 // term_pump reads all available PTY output and feeds it to the terminal
 // emulator.  Sets ts.pty_running = false on EOF.  Title updates happen
 // automatically via the settermprop callback registered in term_start.
@@ -87,27 +115,7 @@ term_pump :: proc(ts: ^Term_Instance) -> (bytes_read: int) {
 		assert(total <= len(ts.read_buf))
 		ts.utf8_hold_len = 0
 
-		if total > 0 {
-			complete := total
-			if !eof {
-				complete = _utf8_complete_prefix(ts.read_buf[:total])
-				// The complete prefix is a prefix of total, never longer.
-				// Split so a failure points at the exact bound.
-				assert(complete >= 0)
-				assert(complete <= total)
-				tail := total - complete
-				if tail > 0 && tail <= len(ts.utf8_hold) {
-					copy(ts.utf8_hold[:tail], ts.read_buf[complete:total])
-					ts.utf8_hold_len = tail
-				} else {
-					// Invalid or oversized tail — feed everything as-is.
-					complete = total
-				}
-			}
-			if complete > 0 {
-				lv.vterm_input_write(ts.vt, raw_data(ts.read_buf[:]), c.size_t(complete))
-			}
-		}
+		_term_ingest(ts, total, eof)
 		bytes_read += len(data)
 		if eof {
 			ts.pty_running = false

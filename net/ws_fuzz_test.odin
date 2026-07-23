@@ -178,3 +178,23 @@ fuzz_ws_stream_reassembly :: proc(t: ^testing.T) {
 		free_all(context.temp_allocator)
 	}
 }
+
+// Property: ws_accept_for_key must produce a 28-character base64 digest for
+// ANY key — arbitrary bytes, invalid UTF-8, embedded NULs, 0–256 bytes —
+// without reading past the key or corrupting memory (sha1 + base64 over a
+// tprintf-combined string).
+@(test)
+fuzz_ws_accept_for_key :: proc(t: ^testing.T) {
+	p := testx.prng_make(0xACC3_9704)
+	for _ in 0 ..< 20_000 {
+		key := testx.random_bytes(&p, 257)
+		accept := ws_accept_for_key(string(key))
+		testing.expect_value(t, len(accept), 28) // base64(20-byte sha1) incl. padding
+		for ch in transmute([]u8)accept {
+			valid := (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
+				(ch >= '0' && ch <= '9') || ch == '+' || ch == '/' || ch == '='
+			testing.expect(t, valid, "accept digest contains non-base64 byte")
+		}
+		free_all(context.temp_allocator)
+	}
+}

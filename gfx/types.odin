@@ -141,6 +141,94 @@ MouseCursor :: enum i32 {
 	NOT_ALLOWED   = 10,
 }
 
+// GamepadButton mirrors raylib's face-direction ordering (not GLFW's A/B/X/Y
+// order); the platform backends remap into this via _GLFW_PAD_REMAP /
+// _W3C_PAD_REMAP so `rl.IsGamepadButtonDown(0, .RIGHT_FACE_DOWN)` ports as-is.
+GamepadButton :: enum i32 {
+	UNKNOWN = 0,
+	LEFT_FACE_UP,
+	LEFT_FACE_RIGHT,
+	LEFT_FACE_DOWN,
+	LEFT_FACE_LEFT,
+	RIGHT_FACE_UP,
+	RIGHT_FACE_RIGHT,
+	RIGHT_FACE_DOWN,
+	RIGHT_FACE_LEFT,
+	LEFT_TRIGGER_1,
+	LEFT_TRIGGER_2,
+	RIGHT_TRIGGER_1,
+	RIGHT_TRIGGER_2,
+	MIDDLE_LEFT,
+	MIDDLE,
+	MIDDLE_RIGHT,
+	LEFT_THUMB,
+	RIGHT_THUMB,
+}
+
+GamepadAxis :: enum i32 {
+	LEFT_X        = 0,
+	LEFT_Y        = 1,
+	RIGHT_X       = 2,
+	RIGHT_Y       = 3,
+	LEFT_TRIGGER  = 4,
+	RIGHT_TRIGGER = 5,
+}
+
+// GAMEPAD_BUTTON_COUNT bounds the per-pad button state arrays (raylib exposes
+// 17 buttons + UNKNOWN sentinel).
+GAMEPAD_BUTTON_COUNT :: 18
+GAMEPAD_AXIS_COUNT :: 6
+
+// TRIGGER_PRESS_THRESHOLD converts the analog trigger axes (-1..1, rest -1)
+// into the digital LEFT/RIGHT_TRIGGER_2 buttons.
+TRIGGER_PRESS_THRESHOLD :: f32(0.1)
+
+// _GLFW_PAD_REMAP maps a GLFW gamepad button index (SDL mapping order: A, B,
+// X, Y, LB, RB, back, start, guide, L3, R3, dpad U/R/D/L) to the raylib
+// GamepadButton above. Kept as data (not a switch) so it is unit-testable.
+@(rodata)
+_GLFW_PAD_REMAP := [15]GamepadButton{
+	.RIGHT_FACE_DOWN, // A / cross
+	.RIGHT_FACE_RIGHT, // B / circle
+	.RIGHT_FACE_LEFT, // X / square
+	.RIGHT_FACE_UP, // Y / triangle
+	.LEFT_TRIGGER_1, // left bumper
+	.RIGHT_TRIGGER_1, // right bumper
+	.MIDDLE_LEFT, // back / select
+	.MIDDLE_RIGHT, // start
+	.MIDDLE, // guide
+	.LEFT_THUMB,
+	.RIGHT_THUMB,
+	.LEFT_FACE_UP, // dpad up
+	.LEFT_FACE_RIGHT, // dpad right
+	.LEFT_FACE_DOWN, // dpad down
+	.LEFT_FACE_LEFT, // dpad left
+}
+
+// _W3C_PAD_REMAP maps a W3C standard-gamepad button index (browser Gamepad
+// API) to the raylib GamepadButton. Differs from GLFW: triggers are digital
+// buttons 6/7 and the dpad order is U/D/L/R.
+@(rodata)
+_W3C_PAD_REMAP := [17]GamepadButton{
+	.RIGHT_FACE_DOWN, // 0 A / cross
+	.RIGHT_FACE_RIGHT, // 1 B / circle
+	.RIGHT_FACE_LEFT, // 2 X / square
+	.RIGHT_FACE_UP, // 3 Y / triangle
+	.LEFT_TRIGGER_1, // 4 left bumper
+	.RIGHT_TRIGGER_1, // 5 right bumper
+	.LEFT_TRIGGER_2, // 6 left trigger (analog button)
+	.RIGHT_TRIGGER_2, // 7 right trigger (analog button)
+	.MIDDLE_LEFT, // 8 back / select
+	.MIDDLE_RIGHT, // 9 start
+	.LEFT_THUMB, // 10
+	.RIGHT_THUMB, // 11
+	.LEFT_FACE_UP, // 12 dpad up
+	.LEFT_FACE_DOWN, // 13 dpad down
+	.LEFT_FACE_LEFT, // 14 dpad left
+	.LEFT_FACE_RIGHT, // 15 dpad right
+	.MIDDLE, // 16 guide
+}
+
 KeyboardKey :: enum i32 {
 	KEY_NULL      = 0,
 	// Android buttons
