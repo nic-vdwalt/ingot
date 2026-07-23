@@ -21,6 +21,7 @@ INGOT_NET_SIM :: #config(INGOT_NET_SIM, false)
 when INGOT_NET_SIM {
 
 SIM_MAX_IN_FLIGHT :: 64 // Tiger Style: every queue has a fixed upper bound.
+SIM_RESULT_RESERVATION :: 2
 SIM_MAX_LATENCY_TICKS :: 120 // worst-case base delivery delay (~2 s at 60 ticks/s)
 SIM_EXTRA_DELAY_TICKS :: 240 // additional delay applied by .Delay / .Slow_Trickle
 SIM_MAX_CORRUPT_FLIPS :: 8 // maximum byte flips applied by .Corrupt_Body
@@ -47,6 +48,7 @@ Sim_Message :: struct {
 	sent_tick:    u64, // for visualizers: animation progress along the channel
 	deliver_tick: u64,
 	fault:        Sim_Fault,
+	result_slots: int,
 }
 
 Fetch_Result :: struct { tag: u64, status: u16, body: []u8, ok: bool }
@@ -67,6 +69,7 @@ Fetcher :: struct {
 	respond:         Sim_Respond,
 	in_flight:       [dynamic]Sim_Message,
 	results:         [dynamic]Fetch_Result,
+	result_slots:    int,
 	stats:           Sim_Stats,
 	running:         bool,
 	// API parity with the native Fetcher so app code can set a wake hook on
@@ -117,17 +120,25 @@ fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
 
 fetcher_stop :: proc(f: ^Fetcher) {
 	f.running = false
-	for &message in f.in_flight do sim_message_destroy(&message)
+	reserved := 0
+	for &message in f.in_flight {
+		reserved += message.result_slots
+		sim_message_destroy(&message)
+	}
+	assert(f.result_slots == reserved + len(f.results))
+	assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 	delete(f.in_flight)
 	f.in_flight = nil
 	for result in f.results do delete(result.body)
 	delete(f.results)
 	f.results = nil
+	f.result_slots = 0
 }
 
 fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
 	if request.path == "" || request.path[0] != '/' do return false
-	if !f.running || len(f.in_flight) >= SIM_MAX_IN_FLIGHT {
+	if !f.running || len(f.in_flight) >= SIM_MAX_IN_FLIGHT ||
+	   f.result_slots + SIM_RESULT_RESERVATION > FETCH_MAXIMUM_RESULTS {
 		f.stats.rejected += 1
 		return false
 	}
@@ -143,9 +154,12 @@ fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bo
 		sent_tick    = f.tick,
 		deliver_tick = f.tick + latency,
 		fault        = fault,
+		result_slots = SIM_RESULT_RESERVATION,
 	})
+	f.result_slots += SIM_RESULT_RESERVATION
 	f.stats.sent += 1
 	assert(len(f.in_flight) <= SIM_MAX_IN_FLIGHT)
+	assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 	return true
 }
 
@@ -178,24 +192,32 @@ sim_tick :: proc(f: ^Fetcher) {
 		}
 		message := f.in_flight[index]
 		ordered_remove(&f.in_flight, index)
+		produced := 0
 		switch message.fault {
 		case .Drop:
 			f.stats.dropped += 1
 		case .Error_500:
-			append(&f.results, Fetch_Result{tag = message.tag, status = 500, ok = true})
+			sim_result_append(f, Fetch_Result{tag = message.tag, status = 500, ok = true})
 			f.stats.errored += 1
 			f.stats.delivered += 1
+			produced = 1
 		case .Error_401:
-			append(&f.results, Fetch_Result{tag = message.tag, status = 401, ok = true})
+			sim_result_append(f, Fetch_Result{tag = message.tag, status = 401, ok = true})
 			f.stats.errored += 1
 			f.stats.delivered += 1
+			produced = 1
 		case .Duplicate:
 			sim_deliver(f, &message)
 			sim_deliver(f, &message)
 			f.stats.duplicated += 1
+			produced = 2
 		case .None, .Delay, .Slow_Trickle, .Corrupt_Body, .Truncate:
 			sim_deliver(f, &message)
+			produced = 1
 		}
+		assert(produced <= message.result_slots)
+		f.result_slots -= message.result_slots - produced
+		assert(len(f.results) <= f.result_slots)
 		sim_message_destroy(&message)
 	}
 }
@@ -204,12 +226,16 @@ sim_tick :: proc(f: ^Fetcher) {
 // Every result body transfers to the caller and must be deleted exactly once.
 // fetcher_stop frees only messages and results still owned by this Fetcher.
 fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
+	assert(len(f.results) <= f.result_slots)
+	assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 	if len(f.results) == 0 do return nil
 	count := min(len(f.results), FETCH_MAXIMUM_DRAIN)
 	out := make([]Fetch_Result, count, context.temp_allocator)
 	copy(out, f.results[:count])
 	copy(f.results[:], f.results[count:])
 	resize(&f.results, len(f.results) - count)
+	f.result_slots -= count
+	assert(len(f.results) <= f.result_slots)
 	return out
 }
 
@@ -249,8 +275,16 @@ sim_deliver :: proc(f: ^Fetcher, message: ^Sim_Message) {
 		}
 		f.stats.truncated += 1
 	}
-	append(&f.results, result)
+	sim_result_append(f, result)
 	f.stats.delivered += 1
+}
+
+@(private = "file")
+sim_result_append :: proc(f: ^Fetcher, result: Fetch_Result) {
+	assert(len(f.results) < f.result_slots)
+	assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
+	append(&f.results, result)
+	assert(len(f.results) <= FETCH_MAXIMUM_RESULTS)
 }
 
 @(private = "file")

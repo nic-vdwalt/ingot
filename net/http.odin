@@ -306,6 +306,7 @@ decode_chunked :: proc(data: []u8, maximum_body: int, allocator: mem.Allocator) 
 
 FETCH_WORKERS :: 8
 FETCH_MAXIMUM_PENDING :: 64
+FETCH_MAXIMUM_RESULTS :: 64
 FETCH_MAXIMUM_DRAIN :: 64
 
 when !INGOT_NET_SIM {
@@ -319,6 +320,7 @@ Fetcher :: struct {
 	cache_validator: proc(body: []u8) -> bool,
 	jobs: [dynamic]Fetch_Job,
 	results: [dynamic]Fetch_Result,
+	result_slots: int,
 	mutex: sync.Mutex,
 	workers: [FETCH_WORKERS]^thread.Thread,
 	// Cross-thread stop flag — access with sync.atomic_load / atomic_store.
@@ -366,10 +368,13 @@ fetcher_stop :: proc(f: ^Fetcher) {
 	sync.mutex_unlock(&f.sock_mutex)
 	for i in 0 ..< FETCH_WORKERS { if f.workers[i] != nil { thread.join(f.workers[i]); thread.destroy(f.workers[i]); f.workers[i] = nil } }
 	sync.mutex_lock(&f.mutex)
+	assert(f.result_slots == len(f.jobs) + len(f.results))
+	assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 	for &job in f.jobs do fetch_job_destroy(&job, f.allocator)
 	delete(f.jobs)
 	for result in f.results do delete(result.body, f.allocator)
 	delete(f.results)
+	f.result_slots = 0
 	sync.mutex_unlock(&f.mutex)
 }
 
@@ -378,10 +383,13 @@ fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bo
 	job := Fetch_Job{tag = tag, request = http_request_clone(request, f.allocator)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
-	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
+	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING ||
+	   f.result_slots >= FETCH_MAXIMUM_RESULTS {
 		fetch_job_destroy(&job, f.allocator)
 		return false
 	}
+	f.result_slots += 1
+	assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 	if f.jobs == nil do f.jobs.allocator = f.allocator
 	append(&f.jobs, job)
 	sync.cond_signal(&f.jobs_cond)
@@ -396,10 +404,13 @@ fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
 	job := Fetch_Job{tag = tag, request = http_request_clone(request, f.allocator)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
-	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
+	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING ||
+	   f.result_slots >= FETCH_MAXIMUM_RESULTS {
 		fetch_job_destroy(&job, f.allocator)
 		return false
 	}
+	f.result_slots += 1
+	assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 	if f.jobs == nil do f.jobs.allocator = f.allocator
 	inject_at(&f.jobs, 0, job)
 	sync.cond_signal(&f.jobs_cond)
@@ -411,10 +422,13 @@ fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: 
 	job := Fetch_Job{tag = tag, request = http_request_clone(request, f.allocator), cache_path = strings.clone(cache_path, f.allocator)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
-	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
+	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING ||
+	   f.result_slots >= FETCH_MAXIMUM_RESULTS {
 		fetch_job_destroy(&job, f.allocator)
 		return false
 	}
+	f.result_slots += 1
+	assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 	if f.jobs == nil do f.jobs.allocator = f.allocator
 	append(&f.jobs, job)
 	sync.cond_signal(&f.jobs_cond)
@@ -425,12 +439,16 @@ fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: 
 // fetcher_stop frees only jobs and results still owned by this Fetcher.
 fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 	sync.mutex_lock(&f.mutex); defer sync.mutex_unlock(&f.mutex)
+	assert(len(f.results) <= f.result_slots)
+	assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 	if len(f.results) == 0 do return nil
 	count := min(len(f.results), FETCH_MAXIMUM_DRAIN)
 	out := make([]Fetch_Result, count, context.temp_allocator)
 	copy(out, f.results[:count])
 	copy(f.results[:], f.results[count:])
 	resize(&f.results, len(f.results) - count)
+	f.result_slots -= count
+	assert(len(f.results) <= f.result_slots)
 	return out
 }
 
@@ -501,8 +519,11 @@ fetch_worker :: proc(f: ^Fetcher, idx: int) {
 		tag := job.tag
 		fetch_job_destroy(&job, f.allocator)
 		sync.mutex_lock(&f.mutex)
+		assert(len(f.results) < f.result_slots)
+		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 		if f.results == nil do f.results.allocator = f.allocator
 		append(&f.results, Fetch_Result{tag = tag, status = status, body = body, ok = ok})
+		assert(len(f.results) <= FETCH_MAXIMUM_RESULTS)
 		sync.mutex_unlock(&f.mutex)
 		// Nudge the frame loop so the result is drained promptly even when the
 		// app idles in event-driven frame mode.
