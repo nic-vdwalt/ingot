@@ -144,12 +144,9 @@ vlines_memo_two_instances_and_invalidation :: proc(t: ^testing.T) {
 	testing.expect(t, len(la1) > 1)
 	testing.expect(t, len(lb1) >= 1)
 
-	// A global invalidation (scale change) must expire per-instance memos:
-	// the next lookup recomputes and stamps the new generation.
-	gen_before := memo_a.gen
-	invalidate_input_visual_lines()
-	la3 := input_visual_lines_memo(&memo_a, text_a, w)
-	testing.expect(t, memo_a.gen != gen_before)
+	// Font size is part of the key, so scale changes cannot reuse stale lines.
+	la3 := input_visual_lines_memo(&memo_a, text_a, w, FONT_SIZE + 1)
+	testing.expect_value(t, memo_a.font_size, FONT_SIZE + 1)
 	testing.expect_value(t, len(la3), len(la1))
 }
 

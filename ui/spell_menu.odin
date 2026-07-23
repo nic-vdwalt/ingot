@@ -82,11 +82,9 @@ spell_menu_apply :: proc(idx: int) {
 		spell_replace_word(spell_menu.suggestions[idx])
 	case idx == n:
 		spell_learn(spell_menu.word)
-		spellcheck_invalidate()
 		spell_menu_close()
 	case:
 		spell_ignore_session(spell_menu.word)
-		spellcheck_invalidate()
 		spell_menu_close()
 	}
 }
@@ -127,7 +125,6 @@ spell_replace_word :: proc(replacement: string) {
 		}
 	}
 	if spell_menu.cursor != nil do spell_menu.cursor^ = ws + len(replacement)
-	spellcheck_invalidate()
 	spell_menu_close()
 }
 

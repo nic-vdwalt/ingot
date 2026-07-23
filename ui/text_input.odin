@@ -33,6 +33,8 @@ Input_Sel :: struct {
 // point. Only one such input holds a selection at a time (keyed by builder
 // pointer). State-based inputs each own an Input_Sel instead.
 input_sel: Input_Sel
+module_ivl: Input_Vlines_Memo
+module_spell_memo: Spellcheck_Memo
 
 // input_is_selecting reports whether a legacy text input currently holds a
 // selection. Used by hosts to avoid hijacking Cmd+A/Cmd+C.
@@ -256,28 +258,12 @@ nav_end :: proc(sel: ^Input_Sel, cursor: ^int, shift: bool) {
 // The memo keeps a heap clone of the last text and compares by string equality
 // (which short-circuits on length), so a hit costs no full-text hashing.
 Input_Vlines_Memo :: struct {
-	text:  string,
-	width: i32,
-	val:   []Wrap_Line,
-	valid: bool,
-	owned: bool,
-	gen:   u64, // must match ivl_gen for a hit (see invalidate below)
-}
-
-// ivl_gen is bumped by invalidate_input_visual_lines so every memo — the
-// module slot and all per-instance Text_Input_State memos — expires at once
-// (the memo key omits font size, so scale changes must force a rebuild).
-@(private = "file")
-ivl_gen: u64
-
-// Module-level memo used by the legacy input_visual_lines entry point.
-@(private = "file")
-module_ivl: Input_Vlines_Memo
-
-// invalidate_input_visual_lines drops every wrapped-line memo. Call when the
-// UI scale changes (the memo key omits font size).
-invalidate_input_visual_lines :: proc() {
-	ivl_gen += 1
+	text:      string,
+	width:     i32,
+	font_size: i32,
+	val:       []Wrap_Line,
+	valid:     bool,
+	owned:     bool,
 }
 
 // Build the soft-wrapped visual lines for an input's text using an explicit
@@ -288,10 +274,11 @@ input_visual_lines_memo :: proc(
 	memo: ^Input_Vlines_Memo,
 	text: string,
 	inner_w: i32,
+	font_size: i32 = FONT_SIZE,
 ) -> []Wrap_Line {
 	assert(memo != nil, "input_visual_lines_memo: nil memo")
-	assert(inner_w >= 0, "input_visual_lines_memo: negative width")
-	if memo.valid && memo.gen == ivl_gen && inner_w == memo.width && text == memo.text {
+	assert(inner_w >= 0 && font_size > 0, "input_visual_lines_memo: invalid dimensions")
+	if memo.valid && inner_w == memo.width && font_size == memo.font_size && text == memo.text {
 		return memo.val
 	}
 	vlines := make([dynamic]Wrap_Line, context.temp_allocator)
@@ -300,7 +287,7 @@ input_visual_lines_memo :: proc(
 		// Uncached wrap: the memo above already ensures this only runs when
 		// the text/width changed, and routing a large paste through the
 		// global wrap_text cache would evict the transcript's layouts.
-		for seg in wrap_compute(logical, inner_w, FONT_SIZE) {
+		for seg in wrap_compute(logical, inner_w, font_size) {
 			append(&vlines, Wrap_Line{base + seg.start, base + seg.end})
 		}
 		base += len(logical) + 1 // +1 for the consumed '\n'
@@ -315,15 +302,10 @@ input_visual_lines_memo :: proc(
 	copy(memo.val, vlines[:])
 	memo.text = strings.clone(text)
 	memo.width = inner_w
+	memo.font_size = font_size
 	memo.valid = true
 	memo.owned = true
-	memo.gen = ivl_gen
 	return memo.val
-}
-
-// input_visual_lines is the legacy single-slot entry point (module memo).
-input_visual_lines :: proc(text: string, inner_w: i32) -> []Wrap_Line {
-	return input_visual_lines_memo(&module_ivl, text, inner_w)
 }
 
 // input_vlines_memo_destroy releases a memo's owned clones.
@@ -400,6 +382,7 @@ Text_Input_State :: struct {
 	undo:        Input_Undo,
 	pills:       [dynamic]Mention_Span,
 	memo:        Input_Vlines_Memo,
+	spell_memo:  Spellcheck_Memo,
 }
 
 // text_input_state_destroy releases all heap state owned by a state struct.
@@ -408,6 +391,7 @@ text_input_state_destroy :: proc(st: ^Text_Input_State) {
 	input_undo_destroy(&st.undo)
 	delete(st.pills)
 	input_vlines_memo_destroy(&st.memo)
+	spellcheck_memo_destroy(&st.spell_memo)
 	st^ = {}
 	assert(!st.sel.active, "text_input_state_destroy: state not cleared")
 }
@@ -416,6 +400,25 @@ text_input_state_destroy :: proc(st: ^Text_Input_State) {
 text_input_selecting :: proc(st: ^Text_Input_State) -> bool {
 	assert(st != nil, "text_input_selecting: nil state")
 	return st.sel.active
+}
+
+text_input_selection_range :: proc(st: ^Text_Input_State) -> (lo, hi: int) {
+	assert(st != nil, "text_input_selection_range: nil state")
+	return sel_range(&st.sel)
+}
+
+text_input_selection_set :: proc(
+	st: ^Text_Input_State,
+	sb: ^strings.Builder,
+	anchor, extent: int,
+) {
+	assert(st != nil && sb != nil, "text_input_selection_set: nil state or builder")
+	sel_set(&st.sel, sb, anchor, extent)
+}
+
+text_input_selection_clear :: proc(st: ^Text_Input_State) {
+	assert(st != nil, "text_input_selection_clear: nil state")
+	sel_reset(&st.sel)
 }
 
 // --- Internal frame context --------------------------------------------------
@@ -432,6 +435,7 @@ TI_Ctx :: struct {
 	undo:        ^Input_Undo,
 	sel:         ^Input_Sel,
 	memo:        ^Input_Vlines_Memo,
+	spell_memo:  ^Spellcheck_Memo,
 	x, y, w, h:  i32,
 	rect:        rl.Rectangle,
 	inner_x:     i32,
@@ -960,7 +964,13 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 	assert(ctx.pills != nil && ctx.undo != nil, "ti_spell: pills and undo required")
 	assert(v.caret_render, "ti_spell: caret renderer required")
-	squiggles := spellcheck_ranges(text, ctx.cursor^, ctx.pills)
+	squiggles := spellcheck_ranges_with(
+		&default_spell_system,
+		ctx.spell_memo,
+		text,
+		ctx.cursor^,
+		ctx.pills,
+	)
 	if rl.IsMouseButtonPressed(.RIGHT) {
 		mouse := rl.GetMousePosition()
 		occluded := route_occluded(mouse)
@@ -975,7 +985,12 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 				v.vis_start,
 				v.vis_end,
 			)
-			ws, we, misspelled := spellcheck_word_at(text, off, ctx.pills)
+			ws, we, misspelled := spellcheck_word_at_with(
+				&default_spell_system,
+				text,
+				off,
+				ctx.pills,
+			)
 			if misspelled {
 				_, word_x := input_caret_visual(v.vlines, text, ws)
 				spell_menu_open(
@@ -1334,6 +1349,7 @@ text_input_box :: proc(
 		undo        = &st.undo if cfg.enable_undo else nil,
 		sel         = &st.sel,
 		memo        = &st.memo,
+		spell_memo  = &st.spell_memo,
 		x           = cfg.rect.x,
 		y           = cfg.rect.y,
 		w           = cfg.rect.w,
@@ -1389,6 +1405,7 @@ text_input :: proc(
 		undo        = undo,
 		sel         = &input_sel,
 		memo        = &module_ivl,
+		spell_memo  = &module_spell_memo,
 		x           = x,
 		y           = y,
 		w           = w,

@@ -43,6 +43,7 @@ input_box_reset :: proc(b: ^Input_Box) {
 	input_undo_reset(&b.st.undo)
 	clear(&b.st.pills)
 	input_vlines_memo_destroy(&b.st.memo)
+	spellcheck_memo_destroy(&b.st.spell_memo)
 	assert(!b.st.sel.active && b.st.cursor == 0, "input_box_reset: state not cleared")
 }
 
@@ -50,6 +51,26 @@ input_box_reset :: proc(b: ^Input_Box) {
 input_box_text :: proc(b: ^Input_Box) -> string {
 	assert(b != nil, "input_box_text: nil box")
 	return strings.to_string(b.sb)
+}
+
+input_box_selecting :: proc(b: ^Input_Box) -> bool {
+	assert(b != nil, "input_box_selecting: nil box")
+	return text_input_selecting(&b.st)
+}
+
+input_box_selection_range :: proc(b: ^Input_Box) -> (lo, hi: int) {
+	assert(b != nil, "input_box_selection_range: nil box")
+	return text_input_selection_range(&b.st)
+}
+
+input_box_selection_set :: proc(b: ^Input_Box, anchor, extent: int) {
+	assert(b != nil, "input_box_selection_set: nil box")
+	text_input_selection_set(&b.st, &b.sb, anchor, extent)
+}
+
+input_box_selection_clear :: proc(b: ^Input_Box) {
+	assert(b != nil, "input_box_selection_clear: nil box")
+	text_input_selection_clear(&b.st)
 }
 
 // input draws a caret-aware text input backed by an Input_Box, with pills and

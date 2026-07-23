@@ -155,6 +155,5 @@ scale_invalidate_hook: proc()
 invalidate_scale_caches :: proc() {
 	clear_measure_cache()
 	clear_wrap_cache()
-	invalidate_input_visual_lines()
 	if scale_invalidate_hook != nil do scale_invalidate_hook()
 }
