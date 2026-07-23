@@ -157,12 +157,20 @@ spell_join_punct :: proc(c: u8) -> bool {
 
 @(private)
 spell_skip_token :: proc(text: string, start, end: int) -> bool {
+	upper := 0
+	inner_upper := false
 	for i in start ..< end {
 		c := text[i]
 		if c >= '0' && c <= '9' || c == '_' do return true
+		if c >= 'A' && c <= 'Z' {
+			upper += 1
+			if i > start do inner_upper = true
+		}
 	}
-	if start > 0 && spell_join_punct(text[start - 1]) do return true
-	if end < len(text) && spell_join_punct(text[end]) do return true
+	if upper == end - start || inner_upper do return true
+	if start >= 2 && spell_join_punct(text[start - 1]) && spell_word_byte(text[start - 2]) do return true
+	if end + 1 < len(text) && spell_join_punct(text[end]) && spell_word_byte(text[end + 1]) do return true
+	if start >= 1 && (text[start - 1] == '@' || text[start - 1] == '#') do return true
 	return false
 }
 
