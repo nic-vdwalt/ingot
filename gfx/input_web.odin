@@ -117,13 +117,19 @@ ingot_web_hover :: proc "contextless" (hovered: bool) {
 	}
 }
 
+@(export)
+ingot_web_file_drag_over :: proc "contextless" (over: bool) {
+	_idle_note_activity(&g.idle)
+	_drop_hover_stage(over)
+}
+
 // ingot_web_drop_notify is called from JS (ingot_web.js attachDrop) after
 // dropped files are staged; IsFileDropped flips on the next frame and the
 // idle gate wakes so an event-driven app processes the drop immediately.
 @(export)
 ingot_web_drop_notify :: proc "contextless" () {
 	_idle_note_activity(&g.idle)
-	g_drop_ready = true
+	_drop_complete()
 }
 
 // ingot_web_resize is called from web/ingot_web.js on window resize so an

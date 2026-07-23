@@ -291,6 +291,7 @@ _gpu_finish :: proc() {
 
 CloseWindow :: proc() {
 	if !g.initialized do return
+	platform_drop_shutdown()
 	renderer_shutdown(&g.rend)
 	_submission_shutdown(&g.submissions)
 	if g.surface != nil do wg.SurfaceRelease(g.surface)

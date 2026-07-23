@@ -19,9 +19,8 @@ Window_Handle :: distinct rawptr
 // perform one frame: BeginDrawing → draw → EndDrawing.
 Run_Proc :: proc()
 
-// FilePathList mirrors raylib's dropped-file list (drag & drop). Declared here
-// (shared) so both native and web targets see the type even though the drop
-// mechanism itself is platform-specific.
+// FilePathList mirrors raylib's dropped-file list. Its paths are borrowed until
+// UnloadDroppedFiles, the next completed drop, or CloseWindow.
 FilePathList :: struct {
 	capacity: u32,
 	count:    u32,

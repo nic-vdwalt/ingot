@@ -424,7 +424,21 @@ platform_set_clipboard :: proc(text: cstring) {
 }
 
 @(private)
-platform_drop_init :: proc() {}
+platform_drop_init :: proc() {
+	_drop_state_reset()
+}
+
+@(private)
+platform_drop_prepare_events :: proc() {}
+
+@(private)
+platform_drop_finish_events :: proc() {}
+
+@(private)
+platform_drop_shutdown :: proc() {
+	_drop_state_reset()
+	_js_drop_clear()
+}
 
 // platform_gamepad_poll snapshots each pad from the browser Gamepad API. The
 // JS bridge reports W3C standard-mapping buttons (17, digital) and 6 axes
@@ -488,10 +502,6 @@ RestoreWindow      :: proc() {}
 // real paths — "paths" here are bare file names; use GetDroppedFileData for
 // the contents.
 
-MAX_DROPPED_FILES :: 16
-DROP_NAME_MAX :: 256
-
-@(private) g_drop_ready: bool
 @(private) g_drop_names: [MAX_DROPPED_FILES][DROP_NAME_MAX]u8
 @(private) g_drop_cstrs: [MAX_DROPPED_FILES]cstring
 
@@ -515,6 +525,10 @@ LoadDroppedFiles :: proc() -> FilePathList {
 
 UnloadDroppedFiles :: proc(files: FilePathList) {
 	g_drop_ready = false
+	for i in 0 ..< MAX_DROPPED_FILES {
+		g_drop_names[i] = {}
+		g_drop_cstrs[i] = nil
+	}
 	_js_drop_clear()
 }
 

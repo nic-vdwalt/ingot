@@ -321,7 +321,26 @@ platform_set_clipboard :: proc(text: cstring) {
 
 @(private)
 platform_drop_init :: proc() {
+	_drop_state_reset()
 	if g.win != nil do glfw.SetDropCallback(_win(), _drop_cb)
+	platform_dragdrop_init()
+}
+
+@(private)
+platform_drop_prepare_events :: proc() {
+	platform_dragdrop_tick()
+}
+
+@(private)
+platform_drop_finish_events :: proc() {
+	platform_dragdrop_tick()
+}
+
+@(private)
+platform_drop_shutdown :: proc() {
+	platform_dragdrop_shutdown()
+	if g.win != nil do glfw.SetDropCallback(_win(), nil)
+	_drop_native_shutdown()
 }
 
 // platform_gamepad_poll snapshots every gamepad slot from GLFW's SDL-mapping
@@ -426,11 +445,13 @@ _refresh_cb :: proc "c" (win: glfw.WindowHandle) {
 @(private)
 _focus_cb :: proc "c" (win: glfw.WindowHandle, focused: i32) {
 	_idle_note_activity(&g.idle)
+	if focused == 0 && !g_drop_hover_staged do _drop_hover_stage(false)
 }
 
 @(private)
 _iconify_cb :: proc "c" (win: glfw.WindowHandle, iconified: i32) {
 	_idle_note_activity(&g.idle)
+	if iconified != 0 do _drop_hover_stage(false)
 }
 
 @(private)

@@ -95,11 +95,14 @@ input_poll :: proc() {
 	// (platform_wait_events) until input/OS damage arrives or the timeout
 	// elapses — this is where idle power saving happens. Web never waits;
 	// its gate lives in step() (loop_web.odin).
+	platform_drop_prepare_events()
 	if should_wait, timeout := _idle_timeout(); should_wait {
 		platform_wait_events(timeout)
 	} else {
 		platform_poll_events()
 	}
+	platform_drop_finish_events()
+	_drop_hover_publish()
 
 	mx, my := platform_cursor_pos()
 	inp.mouse = {f32(mx), f32(my)}

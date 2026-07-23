@@ -30,18 +30,40 @@ RestoreWindow :: proc() {
 // --- drag & drop -----------------------------------------------------------
 
 @(private) g_drop_paths: [dynamic]cstring
-@(private) g_drop_ready: bool
+
+@(private)
+_drop_paths_clear :: proc() {
+	for path in g_drop_paths do delete(path)
+	delete(g_drop_paths)
+	g_drop_paths = nil
+}
+
+@(private)
+_drop_paths_replace :: proc(paths: []string) -> bool {
+	assert(len(paths) <= MAX_DROPPED_FILES, "_drop_paths_replace: too many paths")
+	total_bytes := 0
+	for path in paths {
+		if len(path) == 0 || len(path) > MAX_DROPPED_PATH_BYTES - total_bytes do return false
+		total_bytes += len(path)
+	}
+	_drop_paths_clear()
+	if len(paths) == 0 do return false
+	g_drop_paths = make([dynamic]cstring, 0, len(paths))
+	for path in paths do append(&g_drop_paths, strings.clone_to_cstring(path))
+	_drop_complete()
+	return true
+}
 
 @(private)
 _drop_cb :: proc "c" (win: glfw.WindowHandle, count: i32, paths: [^]cstring) {
 	context = runtime.default_context()
 	_idle_note_activity(&g.idle)
-	for p in g_drop_paths do delete(p)
-	clear(&g_drop_paths)
-	for i in 0 ..< int(count) {
-		append(&g_drop_paths, strings.clone_to_cstring(string(paths[i])))
-	}
-	g_drop_ready = true
+	_drop_hover_stage(false)
+	if count <= 0 || paths == nil do return
+	accepted_count := min(int(count), MAX_DROPPED_FILES)
+	accepted: [MAX_DROPPED_FILES]string
+	for i in 0 ..< accepted_count do accepted[i] = string(paths[i])
+	_drop_paths_replace(accepted[:accepted_count])
 }
 
 IsFileDropped :: proc() -> bool { return g_drop_ready }
@@ -56,6 +78,7 @@ LoadDroppedFiles :: proc() -> FilePathList {
 
 UnloadDroppedFiles :: proc(files: FilePathList) {
 	g_drop_ready = false
+	_drop_paths_clear()
 }
 
 // GetDroppedFileData returns the contents of dropped file `index`, allocated
@@ -69,4 +92,10 @@ GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte
 	data, err := os.read_entire_file(path, allocator)
 	if err != nil do return nil
 	return data
+}
+
+@(private)
+_drop_native_shutdown :: proc() {
+	_drop_paths_clear()
+	_drop_state_reset()
 }
