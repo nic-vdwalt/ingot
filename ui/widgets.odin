@@ -585,6 +585,9 @@ btn :: proc(
 	text_w := measure_text(label_c, fs)
 	draw_text(label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 
+	sem: Sem_State
+	if !enabled do sem += {.Disabled}
+	semantic_push(.Button, {x, y, w, h}, label, sem, focus)
 	return clicked && enabled
 }
 

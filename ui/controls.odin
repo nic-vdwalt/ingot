@@ -44,6 +44,9 @@ checkbox :: proc(rect: Rect_I32, label: string, checked: ^bool, focus: Focus_Opt
 	}
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	draw_text(label_c, bx + box + CONTROL_GAP, rect.y + (rect.h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_primary)
+	sem: Sem_State
+	if checked^ do sem += {.Checked}
+	semantic_push(.Checkbox, rect, label, sem, focus)
 	return changed
 }
 
@@ -78,6 +81,9 @@ radio :: proc(rect: Rect_I32, label: string, selected: ^i32, value: i32, focus: 
 	}
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	draw_text(label_c, rect.x + box + CONTROL_GAP, rect.y + (rect.h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_primary)
+	sem: Sem_State
+	if is_on do sem += {.Checked}
+	semantic_push(.Radio, rect, label, sem, focus)
 	return changed
 }
 
@@ -109,7 +115,14 @@ slider_keyboard_delta :: proc(lo, hi, step: f32) -> f32 {
 // slider draws a horizontal slider over [lo, hi] with optional stepping.
 // Dragging or clicking the track moves the value; Left/Right adjust it while
 // focused. Returns true on the frame the value changed.
-slider :: proc(rect: Rect_I32, value: ^f32, lo, hi: f32, step: f32 = 0, focus: Focus_Opt = {}) -> (changed: bool) {
+slider :: proc(
+	rect: Rect_I32,
+	value: ^f32,
+	lo, hi: f32,
+	step: f32 = 0,
+	focus: Focus_Opt = {},
+	a11y_label: string = "",
+) -> (changed: bool) {
 	assert(value != nil, "slider: nil value")
 	assert(hi > lo, "slider: hi must exceed lo")
 	assert(rect.w > 0 && rect.h > 0, "slider: empty rect")
@@ -161,5 +174,6 @@ slider :: proc(rect: Rect_I32, value: ^f32, lo, hi: f32, step: f32 = 0, focus: F
 	if focus_opt_focused(focus) {
 		draw_focus_ring(rect.x, rect.y, rect.w, rect.h)
 	}
+	semantic_push(.Slider, rect, a11y_label, {}, focus, value = value^, lo = lo, hi = hi)
 	return value^ != old
 }

@@ -30,12 +30,13 @@ g_applied_cursor: rl.MouseCursor = .DEFAULT
 @(private = "file")
 g_cursor_initialized: bool
 
-// begin_cursor_frame resets the requested cursor to DEFAULT and rotates the
-// input router's claim buffer. Call once at the start of each frame, before
-// any UI is drawn.
+// begin_cursor_frame resets the requested cursor to DEFAULT, rotates the
+// input router's claim buffer, and resets the semantic recording buffer.
+// Call once at the start of each frame, before any UI is drawn.
 begin_cursor_frame :: proc() {
 	g_requested_cursor = .DEFAULT
 	route_begin_frame()
+	sem_begin_frame()
 }
 
 // request_cursor records the desired cursor for this frame. Hover handlers

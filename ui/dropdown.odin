@@ -20,6 +20,7 @@ dropdown :: proc(
 	st: ^Dropdown_State,
 	screen_w, screen_h: i32,
 	focus: Focus_Opt = {},
+	a11y_label: string = "",
 ) -> (changed: bool) {
 	assert(st != nil && selected != nil, "dropdown: nil state")
 	assert(len(items) > 0, "dropdown: empty items")
@@ -56,6 +57,10 @@ dropdown :: proc(
 		context_menu_open(&st.menu, rect.x, rect.y + rect.h + 2)
 		st.menu.selected = int(selected^)
 	}
+	sem: Sem_State
+	if st.menu.open do sem += {.Expanded}
+	sem_label := a11y_label if a11y_label != "" else items[selected^]
+	semantic_push(.Dropdown, rect, sem_label, sem, focus)
 	if !st.menu.open do return false
 
 	menu_items := make([]Menu_Item, len(items), context.temp_allocator)

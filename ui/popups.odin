@@ -45,6 +45,7 @@ modal_begin :: proc(st: ^Modal_State, title: string, w, h, screen_w, screen_h: i
 	rl.DrawRectangle(mx, my, mw, mh, theme.bg_secondary)
 	rl.DrawRectangleLines(mx, my, mw, mh, theme.border_color)
 	rl.BeginScissorMode(mx, my, mw, mh)
+	semantic_push(.Modal, st.rect, title)
 
 	title_h := sc(40)
 	title_c := strings.clone_to_cstring(title, context.temp_allocator)
@@ -225,6 +226,9 @@ context_menu_rows :: proc(st: ^Context_Menu_State, items: []Menu_Item, mx, my, m
 		}
 		row_rect := rl.Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(MENU_ITEM_H)}
 		hovered := rl.CheckCollisionPointRec(mouse, row_rect)
+		sem: Sem_State
+		if it.disabled do sem += {.Disabled}
+		semantic_push(.Menu_Item, {item_x + ox, item_y, item_w, MENU_ITEM_H}, it.label, sem)
 		if hovered && !it.disabled && mouse_moved() do st.selected = i
 		if st.selected == i {
 			overlay_rect({f32(item_x + ox), f32(item_y), f32(item_w), f32(MENU_ITEM_H)}, theme.bg_active)

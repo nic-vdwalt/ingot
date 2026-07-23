@@ -517,8 +517,29 @@ evidence, then build the depth that makes people stay.
 - **Docking / panel system** — first-class, renderer-owned (no bolt-on seams).
 - **Virtualized lists and tables** that stay smooth at millions of rows,
   extending the existing chart widgets.
-- **Accessibility** via AccessKit's C API — the honest requirement for calling
-  ingot an app engine.
+- **Accessibility** — the honest requirement for calling ingot an app engine.
+  egui proves immediate-mode can drive screen readers (it pushes a full
+  AccessKit tree each frame); Dear ImGui still can't. ingot can match egui
+  natively and beat it on the web, in this order:
+  - **Per-frame semantic recording layer** — widgets already receive rect,
+    label, and state; add a `semantic_push` alongside draw calls,
+    double-buffered like the input route claims. No retained tree; full-frame
+    pushes fit AccessKit's diffing model.
+  - **Stable node identity without ID hashing** — derive node IDs from the
+    existing focus ids and text-input `field_id`s, falling back to frame call
+    order for static text, keeping the "no widget-ID hashing" promise.
+  - **AccessKit C API adapters on native** — NSAccessibility/UIA/AT-SPI via
+    the same platform-hook precedents as the macOS IME swizzle and Windows
+    titlebar subclassing.
+  - **Extend the web semantic DOM mirror beyond text inputs** — mirror
+    buttons, checkboxes, and sliders as real ARIA-role DOM controls; real DOM
+    beats canvas-side AccessKit for browser assistive tech.
+  - **App-global focus order** — a frame-ordered focus registry so Tab
+    traverses across forms and panes, and AccessKit focus events flow from
+    the one existing choke point (the focus-ring helpers).
+  - **High-contrast theme and reduced-motion flag**, plus asserts that
+    interactive widgets carry non-empty accessible names — same spirit as the
+    existing focus-ring visibility assert.
 - **IME and complex text shaping** for non-Latin input.
 - **Indexed instancing** (`DrawVertexArrayElementsInstanced`) for 3D node bodies.
 - **Transparent/additive GPU 3D pipelines** with explicit depth-read/write policy.

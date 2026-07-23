@@ -45,6 +45,13 @@ Term_Instance :: struct {
 	// indices (used by text selection) are sb_base + scrollback index, so
 	// they stay stable when old lines are dropped.
 	sb_base:        int,
+
+	// Owner of all emulator heap state (title, scrollback rows, sb_lines
+	// backing). Captured in term_init_emulator; the C callbacks re-enter
+	// Odin with default_context(), so they must restore this allocator or
+	// alloc/free pairs split across allocators (bad frees under tracking
+	// allocators, mismatches for custom-allocator embedders).
+	allocator:      runtime.Allocator,
 }
 
 // _screen_settermprop captures title changes and cursor visibility updates.
@@ -53,6 +60,7 @@ Term_Instance :: struct {
 _screen_settermprop :: proc "c" (prop: lv.VTerm_Prop, val: ^lv.VTerm_Value, user: rawptr) -> c.int {
 	context = runtime.default_context()
 	ts := cast(^Term_Instance)user
+	context.allocator = ts.allocator
 	#partial switch prop {
 	case .Title:
 		frag := &val.string
@@ -85,6 +93,7 @@ _screen_settermprop :: proc "c" (prop: lv.VTerm_Prop, val: ^lv.VTerm_Value, user
 _screen_sb_pushline :: proc "c" (cols: c.int, cells: [^]lv.VTerm_Screen_Cell, user: rawptr) -> c.int {
 	context = runtime.default_context()
 	ts := cast(^Term_Instance)user
+	context.allocator = ts.allocator
 	line := make([]lv.VTerm_Screen_Cell, int(cols))
 	copy(line, cells[:int(cols)])
 	if len(ts.sb_lines) >= TERM_SCROLLBACK_MAX {
@@ -107,6 +116,7 @@ _screen_sb_pushline :: proc "c" (cols: c.int, cells: [^]lv.VTerm_Screen_Cell, us
 _screen_sb_popline :: proc "c" (cols: c.int, cells: [^]lv.VTerm_Screen_Cell, user: rawptr) -> c.int {
 	context = runtime.default_context()
 	ts := cast(^Term_Instance)user
+	context.allocator = ts.allocator
 	if len(ts.sb_lines) == 0 do return 0
 	line := pop(&ts.sb_lines)
 	n := min(int(cols), len(line))
@@ -128,6 +138,7 @@ _screen_sb_popline :: proc "c" (cols: c.int, cells: [^]lv.VTerm_Screen_Cell, use
 _screen_sb_clear :: proc "c" (user: rawptr) -> c.int {
 	context = runtime.default_context()
 	ts := cast(^Term_Instance)user
+	context.allocator = ts.allocator
 	// Advance sb_base past the dropped lines so stale content-absolute
 	// selection rows resolve to nothing instead of wrong screen rows.
 	ts.sb_base += len(ts.sb_lines)
@@ -146,6 +157,7 @@ _screen_sb_clear :: proc "c" (user: rawptr) -> c.int {
 // Returns false if libvterm allocation fails.
 term_init_emulator :: proc(ts: ^Term_Instance, cols, rows: u16,
 	default_fg: [3]u8 = {220, 220, 220}, default_bg: [3]u8 = {27, 27, 27}) -> bool {
+	ts.allocator      = context.allocator
 	ts.cols           = cols
 	ts.rows           = rows
 	ts.cursor_visible = true
@@ -198,6 +210,7 @@ term_init_emulator :: proc(ts: ^Term_Instance, cols, rows: u16,
 // everything term_destroy frees except the PTY. Counterpart of
 // term_init_emulator for instances that never spawned a shell.
 term_free_emulator :: proc(ts: ^Term_Instance) {
+	context.allocator = ts.allocator
 	lv.vterm_free(ts.vt)
 	for line in ts.sb_lines {
 		delete(line)

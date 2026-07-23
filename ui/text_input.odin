@@ -450,6 +450,22 @@ ti_sync_web :: proc(ctx: ^TI_Ctx) {
 	}
 }
 
+// ti_semantic_push records the input in the semantic layer. Label prefers
+// the field's human name over the placeholder; the field_id string is the
+// stable identity when no focus link exists.
+@(private = "file")
+ti_semantic_push :: proc(ctx: ^TI_Ctx) {
+	sem: Sem_State
+	if ctx.active do sem += {.Focused}
+	sfoc: Focus_Opt
+	if ctx.semantics.focus != nil && ctx.semantics.focus_id > 0 {
+		sfoc = {ctx.semantics.focus, ctx.semantics.focus_id}
+	}
+	label := ctx.semantics.name if ctx.semantics.name != "" else ctx.placeholder
+	semantic_push(.Text_Input, {ctx.x, ctx.y, ctx.w, ctx.h}, label, sem, sfoc,
+		ctx.semantics.field_id)
+}
+
 // ti_keys_select handles selection ownership upkeep plus Cmd/Ctrl+A/C/X and
 // undo/redo shortcuts.
 @(private = "file")
@@ -1102,6 +1118,7 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	assert(ctx.sb != nil, "ti_run: nil builder")
 	assert(ctx.sel != nil && ctx.memo != nil, "ti_run: nil selection or memo")
 	ti_sync_web(ctx)
+	ti_semantic_push(ctx)
 	bg := theme.bg_input if ctx.active else theme.bg_secondary
 	rl.DrawRectangleRec(ctx.rect, bg)
 	rl.DrawRectangleLinesEx(ctx.rect, 1, theme.border_color if !ctx.active else theme.fg_accent)
