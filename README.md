@@ -164,6 +164,14 @@ does not change.
 The sizing model was inspired by [Clay](https://github.com/nicbarker/clay),
 Nic Barker's high-performance C UI layout library.
 
+Use `Fit_Column` when a container must fit fixed or caller-measured child heights.
+Resolve the child rectangles first, call `fit_column_end` for the exact content
+bounds, then draw the container followed by its children. Unlike bounded
+`Layout`, it does not clamp against a supplied height. It remains single-pass
+and allocation-free: there is no retained tree, hidden state, recursive
+measurement, or second widget invocation. Intrinsic text and widget dimensions
+remain explicit caller inputs; `GROW` and `PERCENT` belong in bounded layouts.
+
 ### Breakout (audio + gamepad + web, one source)
 
 `examples/breakout` is the Phase 1 proof game: synthesized sounds (no asset

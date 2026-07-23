@@ -24,9 +24,63 @@ Rect_I32 :: struct {
 	x, y, w, h: i32,
 }
 
+MAX_FIT_COLUMN_ITEMS :: 64
+
+Fit_Column :: struct {
+	x, y, w: i32,
+	cursor:  i32,
+	gap:     i32,
+	items:   i32,
+	open:    bool,
+}
+
+fit_column_begin :: proc(column: ^Fit_Column, x, y, w: i32, gap: i32 = 0) {
+	assert(column != nil, "fit_column_begin: nil column")
+	assert(!column.open, "fit_column_begin: column already open")
+	assert(w >= 0 && gap >= 0, "fit_column_begin: negative dimension")
+	column^ = Fit_Column {
+		x    = x,
+		y    = y,
+		w    = w,
+		gap  = gap,
+		open = true,
+	}
+}
+
+fit_column_next :: proc(column: ^Fit_Column, height: i32) -> Rect_I32 {
+	assert(column != nil && column.open, "fit_column_next: column not open")
+	assert(height >= 0, "fit_column_next: negative height")
+	assert(column.items < MAX_FIT_COLUMN_ITEMS, "fit_column_next: too many items")
+	before := column.gap if column.items > 0 else 0
+	assert(column.cursor <= 0x7fff_ffff - before - height, "fit_column_next: extent overflow")
+	column.cursor += before
+	result := Rect_I32{column.x, column.y + column.cursor, column.w, height}
+	column.cursor += height
+	column.items += 1
+	return result
+}
+
+fit_column_space :: proc(column: ^Fit_Column, height: i32) {
+	assert(column != nil && column.open, "fit_column_space: column not open")
+	assert(height >= 0, "fit_column_space: negative height")
+	assert(column.cursor <= 0x7fff_ffff - height, "fit_column_space: extent overflow")
+	column.cursor += height
+}
+
+fit_column_end :: proc(column: ^Fit_Column) -> Rect_I32 {
+	assert(column != nil && column.open, "fit_column_end: column not open")
+	assert(
+		column.cursor >= 0 && column.items <= MAX_FIT_COLUMN_ITEMS,
+		"fit_column_end: corrupt column",
+	)
+	result := Rect_I32{column.x, column.y, column.w, column.cursor}
+	column.open = false
+	return result
+}
+
 Layout_Kind :: enum u8 {
 	Column, // children stack vertically; main axis = y
-	Row,    // children stack horizontally; main axis = x
+	Row, // children stack horizontally; main axis = x
 }
 
 Cross_Align :: enum u8 {
@@ -57,8 +111,8 @@ Flex_Size :: struct {
 Layout_Frame :: struct {
 	kind:         Layout_Kind,
 	rect:         Rect_I32, // full frame area
-	cursor:       i32,      // advance along the main axis, relative to rect
-	gap:          i32,      // spacing inserted between consecutive items
+	cursor:       i32, // advance along the main axis, relative to rect
+	gap:          i32, // spacing inserted between consecutive items
 	cross_align:  Cross_Align,
 	// Weighted-division state (row_weights / next_weighted).
 	weight_total: i32, // sum of declared weights; 0 = none declared
@@ -66,9 +120,9 @@ Layout_Frame :: struct {
 	weight_acc:   i32, // sum of weights consumed so far
 	weight_left:  i32, // declared children not yet consumed
 	// Flex sizing is resolved up front and consumed by flex_next in order.
-	flex_sizes: [MAX_LAYOUT_FLEX]i32,
-	flex_count: i32,
-	flex_index: i32,
+	flex_sizes:   [MAX_LAYOUT_FLEX]i32,
+	flex_count:   i32,
+	flex_index:   i32,
 }
 
 // Layout is caller-owned per-frame scratch state; zero value is ready to use.
@@ -80,16 +134,20 @@ Layout :: struct {
 // flex_fit uses a caller-measured intrinsic size and may compress to min_size.
 flex_fit :: proc(intrinsic: i32, min_size: i32 = 0, max_size: i32 = 0) -> Flex_Size {
 	assert(intrinsic >= 0, "flex_fit: negative intrinsic size")
-	assert(min_size >= 0 && (max_size == 0 || max_size >= min_size),
-		"flex_fit: invalid constraints")
+	assert(
+		min_size >= 0 && (max_size == 0 || max_size >= min_size),
+		"flex_fit: invalid constraints",
+	)
 	return Flex_Size{kind = .Fit, basis = intrinsic, min_size = min_size, max_size = max_size}
 }
 
 // flex_grow shares free space by weight after fixed, fit, and percent bases.
 flex_grow :: proc(weight: i32 = 1, min_size: i32 = 0, max_size: i32 = 0) -> Flex_Size {
 	assert(weight > 0, "flex_grow: weight must be positive")
-	assert(min_size >= 0 && (max_size == 0 || max_size >= min_size),
-		"flex_grow: invalid constraints")
+	assert(
+		min_size >= 0 && (max_size == 0 || max_size >= min_size),
+		"flex_grow: invalid constraints",
+	)
 	return Flex_Size{kind = .Grow, weight = weight, min_size = min_size, max_size = max_size}
 }
 
@@ -101,14 +159,11 @@ flex_fixed :: proc(size: i32) -> Flex_Size {
 // flex_percent uses a fraction of remaining frame space after inter-item gaps.
 flex_percent :: proc(percent: f32, min_size: i32 = 0, max_size: i32 = 0) -> Flex_Size {
 	assert(percent >= 0 && percent <= 1, "flex_percent: percent outside 0..1")
-	assert(min_size >= 0 && (max_size == 0 || max_size >= min_size),
-		"flex_percent: invalid constraints")
-	return Flex_Size {
-		kind = .Percent,
-		percent = percent,
-		min_size = min_size,
-		max_size = max_size,
-	}
+	assert(
+		min_size >= 0 && (max_size == 0 || max_size >= min_size),
+		"flex_percent: invalid constraints",
+	)
+	return Flex_Size{kind = .Percent, percent = percent, min_size = min_size, max_size = max_size}
 }
 
 // layout_begin opens the root column over the given area. Must be balanced
@@ -128,8 +183,10 @@ layout_begin :: proc(l: ^Layout, x, y, w, h: i32, gap: i32 = 0) {
 layout_end :: proc(l: ^Layout) {
 	assert(l.depth == 1, "layout_end: unbalanced push/pop")
 	assert(l.stack[0].cursor >= 0, "layout_end: corrupt cursor")
-	assert(l.stack[0].flex_index == l.stack[0].flex_count,
-		"layout_end: declared flex sizes not fully consumed")
+	assert(
+		l.stack[0].flex_index == l.stack[0].flex_count,
+		"layout_end: declared flex sizes not fully consumed",
+	)
 	l.depth = 0
 }
 
@@ -172,16 +229,17 @@ push_column :: proc(l: ^Layout, gap: i32 = 0, cross_align: Cross_Align = .Stretc
 layout_pop :: proc(l: ^Layout) {
 	assert(l.depth > 1, "layout_pop: nothing pushed above the root")
 	assert(_top(l).weight_left == 0, "layout_pop: declared weights not fully consumed")
-	assert(_top(l).flex_index == _top(l).flex_count,
-		"layout_pop: declared flex sizes not fully consumed")
+	assert(
+		_top(l).flex_index == _top(l).flex_count,
+		"layout_pop: declared flex sizes not fully consumed",
+	)
 	l.depth -= 1
 }
 
 // flex_begin resolves one bounded sibling sequence before any child is drawn.
 flex_begin :: proc(l: ^Layout, sizes: []Flex_Size) {
 	assert(l.depth > 0, "flex_begin: layout not begun")
-	assert(len(sizes) > 0 && len(sizes) <= MAX_LAYOUT_FLEX,
-		"flex_begin: count out of bounds")
+	assert(len(sizes) > 0 && len(sizes) <= MAX_LAYOUT_FLEX, "flex_begin: count out of bounds")
 	f := _top(l)
 	assert(f.weight_left == 0, "flex_begin: weighted sequence is active")
 	assert(f.flex_index == f.flex_count, "flex_begin: previous flex sequence not consumed")
@@ -285,7 +343,10 @@ layout_kind :: proc(l: ^Layout) -> Layout_Kind {
 // single deterministic pass by subsequent next_weighted calls.
 row_weights :: proc(l: ^Layout, weights: []i32) {
 	assert(l.depth > 0, "row_weights: layout not begun")
-	assert(len(weights) > 0 && len(weights) <= MAX_LAYOUT_WEIGHTS, "row_weights: count out of bounds")
+	assert(
+		len(weights) > 0 && len(weights) <= MAX_LAYOUT_WEIGHTS,
+		"row_weights: count out of bounds",
+	)
 	f := _top(l)
 	assert(f.flex_index == f.flex_count, "row_weights: flex sequence is active")
 	assert(f.weight_left == 0, "row_weights: previous weights not consumed")
@@ -369,14 +430,16 @@ _flex_expand :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Flex_Size, free: 
 	for _ in 0 ..< MAX_LAYOUT_FLEX {
 		total_weight: i64
 		for size, index in sizes {
-			uncapped := size.kind == .Grow && (size.max_size == 0 || resolved[index] < size.max_size)
+			uncapped :=
+				size.kind == .Grow && (size.max_size == 0 || resolved[index] < size.max_size)
 			if uncapped do total_weight += i64(size.weight)
 		}
 		if total_weight == 0 || remaining_free == 0 do break
 		applied: i32
 		weight_acc: i64
 		for size, index in sizes {
-			uncapped := size.kind == .Grow && (size.max_size == 0 || resolved[index] < size.max_size)
+			uncapped :=
+				size.kind == .Grow && (size.max_size == 0 || resolved[index] < size.max_size)
 			if !uncapped do continue
 			before := weight_acc * i64(remaining_free) / total_weight
 			weight_acc += i64(size.weight)
@@ -399,8 +462,10 @@ _flex_resolve :: proc(f: ^Layout_Frame, sizes: []Flex_Size, space: i32) {
 	assert(space >= 0 && len(sizes) <= MAX_LAYOUT_FLEX, "_flex_resolve: invalid input")
 	total: i64
 	for size, index in sizes {
-		assert(size.min_size >= 0 && (size.max_size == 0 || size.max_size >= size.min_size),
-			"_flex_resolve: invalid constraints")
+		assert(
+			size.min_size >= 0 && (size.max_size == 0 || size.max_size >= size.min_size),
+			"_flex_resolve: invalid constraints",
+		)
 		resolved: i32
 		switch size.kind {
 		case .Fit:

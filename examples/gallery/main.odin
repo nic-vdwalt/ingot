@@ -510,7 +510,33 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		ui.FONT_SIZE_SMALL,
 		ui.theme.fg_secondary,
 	)
-	return y + i32(card.height) + ui.sc(16)
+	y += i32(card.height) + ui.sc(16)
+
+	y = ui.section_header(x, y, w, "FIT-CONTENT CARD")
+	fit_w := min(w, ui.sc(360))
+	pad := ui.sc(12)
+	column: ui.Fit_Column
+	ui.fit_column_begin(&column, x + pad, y + pad, fit_w - pad * 2, gap = ui.sc(6))
+	title := ui.fit_column_next(&column, ui.sc(18))
+	detail := ui.fit_column_next(&column, ui.sc(18))
+	content := ui.fit_column_end(&column)
+	fit_card := rl.Rectangle{f32(x), f32(y), f32(fit_w), f32(content.h + pad * 2)}
+	ui.draw_card_bg(fit_card, ui.theme.bg_secondary)
+	ui.draw_text(
+		"Geometry resolved before drawing",
+		title.x,
+		title.y,
+		ui.FONT_SIZE_SMALL,
+		ui.theme.fg_primary,
+	)
+	ui.draw_text(
+		"No retained tree or trailing gap",
+		detail.x,
+		detail.y,
+		ui.FONT_SIZE_SMALL,
+		ui.theme.fg_secondary,
+	)
+	return y + i32(fit_card.height) + ui.sc(16)
 }
 
 draw_charts :: proc(x, y0, w: i32) -> i32 {
