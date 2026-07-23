@@ -55,9 +55,16 @@ export class StubElement {
 		if (!this.listeners.has(type)) this.listeners.set(type, []);
 		this.listeners.get(type).push(fn);
 	}
+	removeEventListener(type, fn) {
+		const listeners = this.listeners.get(type);
+		if (!listeners) return;
+		const index = listeners.indexOf(fn);
+		if (index >= 0) listeners.splice(index, 1);
+		if (listeners.length === 0) this.listeners.delete(type);
+	}
 	dispatch(type, event = {}) {
 		event.preventDefault ||= () => {};
-		for (const fn of this.listeners.get(type) || []) fn(event);
+		return Promise.all((this.listeners.get(type) || []).map((fn) => fn(event)));
 	}
 	focus() {
 		stubDocument.activeElement = this;
@@ -89,6 +96,18 @@ export const stubDocument = {
 	_all: new Set(),
 	body: null,
 	activeElement: null,
+	listeners: new Map(),
+	addEventListener(type, fn) {
+		if (!this.listeners.has(type)) this.listeners.set(type, []);
+		this.listeners.get(type).push(fn);
+	},
+	removeEventListener(type, fn) {
+		const listeners = this.listeners.get(type);
+		if (!listeners) return;
+		const index = listeners.indexOf(fn);
+		if (index >= 0) listeners.splice(index, 1);
+		if (listeners.length === 0) this.listeners.delete(type);
+	},
 	createElement(tag) { return new StubElement(tag); },
 	getElementById(id) {
 		for (const el of this._all) if (el.id === id) return el;
@@ -111,6 +130,9 @@ export async function install() {
 
 	globalThis.document = stubDocument;
 	globalThis.window = globalThis; // ingot_web.js sets window.ingotWeb
+	globalThis.listeners = stubDocument.listeners;
+	globalThis.addEventListener = stubDocument.addEventListener.bind(stubDocument);
+	globalThis.removeEventListener = stubDocument.removeEventListener.bind(stubDocument);
 	globalThis.performance ||= { now: () => 0 };
 	globalThis.navigator ||= {};
 	globalThis.location = { href: "http://test.local/" };

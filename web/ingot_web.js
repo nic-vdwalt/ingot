@@ -32,6 +32,8 @@
 	const MAX_DROP_FILES = 16;
 	const MAX_DROP_BYTES = 32 * 1024 * 1024;
 	let dropFiles = [];
+	let detachDrop = null;
+	let dropGeneration = 0;
 
 	function wasmBytes(pointer, length) {
 		if (!pointer || length <= 0 || !wasmMemoryInterface) return new Uint8Array();
@@ -645,33 +647,84 @@
 		};
 	}
 
-	// Canvas drag-and-drop: stage dropped file names + contents, then notify
-	// the engine (ingot_web_drop_notify export) so IsFileDropped flips on the
-	// next frame. Bounded to MAX_DROP_FILES files of MAX_DROP_BYTES each.
 	function attachDrop(wmi) {
-		const c = document.getElementById(CANVAS_ID);
-		if (!c) return;
-		c.addEventListener("dragover", (event) => { event.preventDefault(); });
-		c.addEventListener("drop", async (event) => {
+		if (detachDrop) detachDrop();
+		const canvas = document.getElementById(CANVAS_ID);
+		if (!canvas) return () => {};
+		let active = true;
+		let depth = 0;
+		const generation = ++dropGeneration;
+		const exports = () => wmi && wmi.exports;
+		const hasFiles = (event) => Array.from(
+			event.dataTransfer ? event.dataTransfer.types || [] : []).includes("Files");
+		const notifyHover = (over) => {
+			const x = exports();
+			if (x && x.ingot_web_file_drag_over) x.ingot_web_file_drag_over(over);
+		};
+		const onDragEnter = (event) => {
+			if (!hasFiles(event)) return;
 			event.preventDefault();
+			depth = Math.min(depth + 1, 1024);
+			if (depth === 1) notifyHover(true);
+		};
+		const onDragOver = (event) => {
+			if (!hasFiles(event)) return;
+			event.preventDefault();
+			if (depth === 0) depth = 1;
+			notifyHover(true);
+		};
+		const onDragLeave = (event) => {
+			if (depth === 0) return;
+			event.preventDefault();
+			depth -= 1;
+			if (depth === 0) notifyHover(false);
+		};
+		const onDrop = async (event) => {
+			if (!hasFiles(event)) return;
+			event.preventDefault();
+			depth = 0;
+			notifyHover(false);
 			const files = Array.from(event.dataTransfer ? event.dataTransfer.files : [])
 				.slice(0, MAX_DROP_FILES);
 			const staged = [];
 			for (const file of files) {
 				if (file.size > MAX_DROP_BYTES) continue;
 				try {
-					const buf = await file.arrayBuffer();
+					const buffer = await file.arrayBuffer();
 					staged.push({
 						name: new TextEncoder().encode(file.name),
-						data: new Uint8Array(buf),
+						data: new Uint8Array(buffer),
 					});
 				} catch (_) { /* unreadable file: skip */ }
 			}
-			if (staged.length === 0) return;
+			if (!active || generation !== dropGeneration || staged.length === 0) return;
 			dropFiles = staged;
-			const x = wmi && wmi.exports;
+			const x = exports();
 			if (x && x.ingot_web_drop_notify) x.ingot_web_drop_notify();
-		});
+		};
+		const onCancel = () => {
+			if (depth > 0) notifyHover(false);
+			depth = 0;
+		};
+		canvas.addEventListener("dragenter", onDragEnter);
+		canvas.addEventListener("dragover", onDragOver);
+		canvas.addEventListener("dragleave", onDragLeave);
+		canvas.addEventListener("drop", onDrop);
+		window.addEventListener("blur", onCancel);
+		const cleanup = () => {
+			if (!active) return;
+			active = false;
+			dropGeneration += 1;
+			onCancel();
+			canvas.removeEventListener("dragenter", onDragEnter);
+			canvas.removeEventListener("dragover", onDragOver);
+			canvas.removeEventListener("dragleave", onDragLeave);
+			canvas.removeEventListener("drop", onDrop);
+			window.removeEventListener("blur", onCancel);
+			if (detachDrop === cleanup) detachDrop = null;
+		};
+		detachDrop = cleanup;
+		return cleanup;
 	}
 
 	// Boot an ingot wasm app. `wasmPath` defaults to "ingot_web.wasm".
@@ -739,6 +792,7 @@
 			endSemanticFrame,
 			beginSemanticFrame: () => { semanticFrame += 1; },
 			semanticState: () => ({ semanticInputs, semanticForms, semanticControls }),
+			attachDrop,
 		});
 	}
 })();

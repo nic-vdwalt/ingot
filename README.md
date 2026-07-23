@@ -227,9 +227,14 @@ if path, ok := sys.save_file_dialog("Export", "out.json"); ok { save(path) }
 Native dialogs block until dismissed (osascript / comdlg32 / zenity·kdialog;
 missing zenity on Linux → `ok = false`). On web both return `ok = false` —
 the browser path is drag-and-drop onto the canvas, which now works on both
-targets with contents access:
+targets with contents access. Hover is absolute current state; applications own
+target selection and can derive enter/leave edges from their previous value:
 
 ```odin
+if rl.IsFileDragOver() {
+    draw_drop_target()
+}
+
 if rl.IsFileDropped() {
     files := rl.LoadDroppedFiles()
     for i in 0 ..< i32(files.count) {
@@ -240,6 +245,14 @@ if rl.IsFileDropped() {
     rl.UnloadDroppedFiles(files)
 }
 ```
+
+`IsFileDropped` stays true until `UnloadDroppedFiles`. `FilePathList` paths are
+borrowed until unload, replacement by a later drop, or `CloseWindow`; data from
+`GetDroppedFileData` is caller-owned. A drop retains at most 16 paths with 64
+KiB aggregate native path bytes. Browser drops retain at most 16 files of 32
+MiB each and expose bare names plus bytes. Native hover uses AppKit on macOS,
+OLE on Windows, and best-effort XDND observation on X11; Wayland and unsupported
+native backends preserve completed drops but report hover as false.
 
 ### Overlay popups + input routing (occlusion)
 
@@ -630,9 +643,9 @@ evidence, then build the depth that makes people stay.
 - **Gamepad input** (`IsGamepadAvailable`, `IsGamepadButtonDown/Pressed/
   Released`, `GetGamepadAxisMovement`): GLFW's SDL mapping database natively,
   the W3C standard mapping in the browser, remapped through unit-tested tables.
-- **Web drag-and-drop parity** (`IsFileDropped` / `LoadDroppedFiles` now work
-  in-browser) plus target-portable `GetDroppedFileData` — browsers deliver
-  names + bytes, native reads the dropped path lazily.
+- **Cross-platform file drag lifecycle** (`IsFileDragOver`, `IsFileDropped`,
+  `LoadDroppedFiles`) plus target-portable `GetDroppedFileData` — browsers
+  deliver names + bytes, native reads the dropped path lazily.
 - **Native file dialogs** in `ingot:sys` (`open_file_dialog`,
   `save_file_dialog`): osascript on macOS, comdlg32 on Windows,
   zenity/kdialog on Linux — zero new dependencies.

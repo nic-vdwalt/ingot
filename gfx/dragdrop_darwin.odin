@@ -7,8 +7,8 @@ import "base:intrinsics"
 foreign import dd_objc "system:objc"
 @(default_calling_convention = "c")
 foreign dd_objc {
-	class_allocateClassPair :: proc(superclass: rawptr, name: cstring, extra_bytes: uint) -> rawptr ---
-	objc_registerClassPair  :: proc(class: rawptr) ---
+	objc_allocateClassPair :: proc(superclass: rawptr, name: cstring, extra_bytes: uint) -> rawptr ---
+	objc_registerClassPair :: proc(class: rawptr) ---
 	objc_disposeClassPair   :: proc(class: rawptr) ---
 	object_setClass         :: proc(object, class: rawptr) -> rawptr ---
 }
@@ -74,7 +74,7 @@ platform_dragdrop_init :: proc() {
 	if view == nil do return
 	original_class := rawptr(NS.object_getClass(view))
 	if original_class == nil do return
-	subclass := class_allocateClassPair(original_class, "IngotDropContentView", 0)
+	subclass := objc_allocateClassPair(original_class, "IngotDropContentView", 0)
 	if subclass == nil do return
 	if !dd_install_methods(original_class, subclass) {
 		objc_disposeClassPair(subclass)
@@ -96,11 +96,11 @@ dd_install_methods :: proc(original_class, subclass: rawptr) -> bool {
 	g_dd_orig_perform = dd_original_bool(original_class, "performDragOperation:")
 	if g_dd_orig_entered == nil || g_dd_orig_perform == nil do return false
 	class := NS.Class(subclass)
-	NS.class_addMethod(class, NS.sel_registerName("draggingEntered:"), transmute(NS.IMP)dd_entered_hook, "Q@:@")
-	NS.class_addMethod(class, NS.sel_registerName("draggingUpdated:"), transmute(NS.IMP)dd_updated_hook, "Q@:@")
-	NS.class_addMethod(class, NS.sel_registerName("draggingExited:"), transmute(NS.IMP)dd_exited_hook, "v@:@")
-	NS.class_addMethod(class, NS.sel_registerName("draggingEnded:"), transmute(NS.IMP)dd_ended_hook, "v@:@")
-	NS.class_addMethod(class, NS.sel_registerName("performDragOperation:"), transmute(NS.IMP)dd_perform_hook, "B@:@")
+	NS.class_addMethod(class, NS.sel_registerName("draggingEntered:"), cast(NS.IMP)dd_entered_hook, "Q@:@")
+	NS.class_addMethod(class, NS.sel_registerName("draggingUpdated:"), cast(NS.IMP)dd_updated_hook, "Q@:@")
+	NS.class_addMethod(class, NS.sel_registerName("draggingExited:"), cast(NS.IMP)dd_exited_hook, "v@:@")
+	NS.class_addMethod(class, NS.sel_registerName("draggingEnded:"), cast(NS.IMP)dd_ended_hook, "v@:@")
+	NS.class_addMethod(class, NS.sel_registerName("performDragOperation:"), cast(NS.IMP)dd_perform_hook, "B@:@")
 	return true
 }
 
@@ -108,21 +108,21 @@ dd_install_methods :: proc(original_class, subclass: rawptr) -> bool {
 dd_original_op :: proc(class: rawptr, name: cstring) -> Drag_Op_Proc {
 	method := NS.class_getInstanceMethod(NS.Class(class), NS.sel_registerName(name))
 	if method == nil do return nil
-	return transmute(Drag_Op_Proc)NS.method_getImplementation(method)
+	return cast(Drag_Op_Proc)NS.method_getImplementation(method)
 }
 
 @(private = "file")
 dd_original_void :: proc(class: rawptr, name: cstring) -> Drag_Void_Proc {
 	method := NS.class_getInstanceMethod(NS.Class(class), NS.sel_registerName(name))
 	if method == nil do return nil
-	return transmute(Drag_Void_Proc)NS.method_getImplementation(method)
+	return cast(Drag_Void_Proc)NS.method_getImplementation(method)
 }
 
 @(private = "file")
 dd_original_bool :: proc(class: rawptr, name: cstring) -> Drag_Bool_Proc {
 	method := NS.class_getInstanceMethod(NS.Class(class), NS.sel_registerName(name))
 	if method == nil do return nil
-	return transmute(Drag_Bool_Proc)NS.method_getImplementation(method)
+	return cast(Drag_Bool_Proc)NS.method_getImplementation(method)
 }
 
 @(private)
