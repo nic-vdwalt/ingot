@@ -61,6 +61,10 @@ Fetcher :: struct {
 	cache_validator: proc(body: []u8) -> bool,
 	in_flight: [dynamic]In_Flight,
 	pending: [dynamic]Pending,
+	// API parity with the native Fetcher so app code can set a wake hook on
+	// every target; the web backend is single-threaded (JS completions are
+	// polled from the rAF-driven loop) and never calls it.
+	wake: proc "contextless" (),
 }
 
 fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {

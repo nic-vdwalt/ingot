@@ -36,6 +36,11 @@ WS_OP_PONG   :: 0xA
 // inbound ceiling so valid history does not look like a dropped connection.
 WS_MAX_PAYLOAD :: 32 * 1024 * 1024
 
+// Bound on undrained received messages (Tiger Style: every queue has a fixed
+// upper bound). If the consumer stops draining, the oldest message is dropped
+// (counted in recv_dropped) instead of growing memory without limit.
+WS_MAX_QUEUED_MESSAGES :: 1024
+
 // Liveness/reconnect tuning. The live socket carries a recv read deadline so a
 // half-open TCP drop (Wi-Fi/VPN/sleep — no FIN/RST) is detected instead of
 // blocking the worker forever: each timeout window sends a PING (the server
@@ -175,6 +180,8 @@ WebSocket :: struct {
 	socket_open: bool,
 	sock_mutex:  sync.Mutex,
 
+	// Written by the worker thread, read by the main thread — always access
+	// with sync.atomic_load / atomic_store (ws_state is the public read).
 	state:        WS_State,
 	host:         string,
 	port:         int,
@@ -188,15 +195,29 @@ WebSocket :: struct {
 	conn_gen:       int,
 	auto_reconnect: bool,
 
-	// Thread-safe receive queue.
-	recv_queue: [dynamic]WS_Message,
-	recv_mutex: sync.Mutex,
+	// Thread-safe receive queue, bounded at WS_MAX_QUEUED_MESSAGES.
+	recv_queue:   [dynamic]WS_Message,
+	recv_mutex:   sync.Mutex,
+	recv_dropped: u64, // messages discarded because recv_queue hit its cap
+
+	// Optional wake hook, called from the worker thread after a message is
+	// queued or the state changes, so an event-driven-idle frame loop repaints
+	// promptly instead of waiting for its idle-floor tick (gfx.RequestRedraw
+	// fits the signature). Set before ws_start_connect; nil means no-op.
+	wake: proc "contextless" (),
+
+	// ws_close broadcasts stop_cond so worker backoff waits (dial retry,
+	// reconnect) end early instead of sleeping out their full duration.
+	stop_mutex: sync.Mutex,
+	stop_cond:  sync.Cond,
 
 	// Send serialization (PONG frames go out from the recv thread while text
 	// frames are sent from the main thread).
 	send_mutex: sync.Mutex,
 
-	// Background thread: runs dial + handshake, then the recv loop.
+	// Background thread: runs dial + handshake, then the recv loop. running
+	// is written by ws_close and the worker and read across threads — always
+	// access it with sync.atomic_load / atomic_store.
 	recv_thread: ^thread.Thread,
 	running:     bool,
 }
@@ -224,15 +245,15 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 	ws.max_attempts = max_attempts
 	ws.auto_reconnect = true
 	ws.conn_gen = 0
-	ws.state = .Connecting
-	ws.running = true
+	sync.atomic_store(&ws.state, WS_State.Connecting)
+	sync.atomic_store(&ws.running, true)
 
 	ws.recv_thread = thread.create(proc(t: ^thread.Thread) {
 		ws_connect_worker(cast(^WebSocket)t.data)
 	})
 	if ws.recv_thread == nil {
-		ws.running = false
-		ws.state = .Error
+		sync.atomic_store(&ws.running, false)
+		sync.atomic_store(&ws.state, WS_State.Error)
 		return
 	}
 	ws.recv_thread.data = ws
@@ -255,27 +276,76 @@ resolve_host :: proc(host: string, port: int) -> (cnet.Endpoint, bool) {
 	return ep, true
 }
 
+// ws_stop_wait sleeps up to d but wakes early when ws_close clears running,
+// so dial-retry and reconnect backoffs never delay shutdown by their full
+// length. Timeout expiry is the normal path — nothing signals during routine
+// backoff, only ws_close broadcasts.
+@(private = "file")
+ws_stop_wait :: proc(ws: ^WebSocket, d: time.Duration) {
+	assert(d > 0, "backoff wait must be positive")
+	sync.mutex_lock(&ws.stop_mutex)
+	defer sync.mutex_unlock(&ws.stop_mutex)
+	if !sync.atomic_load(&ws.running) do return
+	_ = sync.cond_wait_with_timeout(&ws.stop_cond, &ws.stop_mutex, d)
+}
+
+// ws_notify nudges the app's frame loop (if a wake hook is installed) so a
+// queued message or state change is rendered promptly even when the app idles
+// in event-driven frame mode between inputs.
+@(private = "file")
+ws_notify :: proc(ws: ^WebSocket) {
+	if ws.wake != nil do ws.wake()
+}
+
+// ws_set_state publishes a state transition from the worker thread (atomic —
+// the main thread reads concurrently) and wakes the frame loop so connection
+// status changes appear without waiting for the idle floor.
+@(private = "file")
+ws_set_state :: proc(ws: ^WebSocket, s: WS_State) {
+	sync.atomic_store(&ws.state, s)
+	ws_notify(ws)
+}
+
+// ws_enqueue appends one received message under recv_mutex, keeping the queue
+// bounded: if the main thread stalls and stops draining, the oldest message
+// is dropped (and counted) rather than letting memory grow without limit —
+// for a UI consumer the latest data wins.
+@(private = "file")
+ws_enqueue :: proc(ws: ^WebSocket, data: string, binary: bool) {
+	sync.mutex_lock(&ws.recv_mutex)
+	if len(ws.recv_queue) >= WS_MAX_QUEUED_MESSAGES {
+		oldest := ws.recv_queue[0]
+		ordered_remove(&ws.recv_queue, 0)
+		delete(oldest.data)
+		ws.recv_dropped += 1
+	}
+	append(&ws.recv_queue, WS_Message{data = data, binary = binary})
+	assert(len(ws.recv_queue) <= WS_MAX_QUEUED_MESSAGES, "recv queue bound violated")
+	sync.mutex_unlock(&ws.recv_mutex)
+	ws_notify(ws)
+}
+
 // One dial cycle: resolve -> dial -> publish socket -> HTTP upgrade handshake,
 // retried up to max_attempts. Returns true with ws.socket live + a recv read
 // deadline set (see ws_recv_loop's heartbeat). Returns false if every attempt
 // failed or ws_close cut in. The socket is left retracted on failure.
 @(private = "file")
 ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
-	for attempt := 0; attempt < ws.max_attempts && ws.running; attempt += 1 {
+	for attempt := 0; attempt < ws.max_attempts && sync.atomic_load(&ws.running); attempt += 1 {
 		addr, resolved := resolve_host(ws.host, ws.port)
 		if !resolved {
-			time.sleep(200 * time.Millisecond)
+			ws_stop_wait(ws, 200 * time.Millisecond)
 			continue
 		}
 		sock, err := cnet.dial_tcp(addr)
 		if err != nil {
-			time.sleep(50 * time.Millisecond)
+			ws_stop_wait(ws, 50 * time.Millisecond)
 			continue
 		}
 
 		// Publish the socket so ws_close can close it to unblock a recv.
 		sync.mutex_lock(&ws.sock_mutex)
-		if !ws.running {
+		if !sync.atomic_load(&ws.running) {
 			sync.mutex_unlock(&ws.sock_mutex)
 			cnet.close(sock)
 			return false
@@ -298,7 +368,7 @@ ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
 			ws.socket_open = false
 		}
 		sync.mutex_unlock(&ws.sock_mutex)
-		time.sleep(50 * time.Millisecond)
+		ws_stop_wait(ws, 50 * time.Millisecond)
 	}
 	return false
 }
@@ -310,20 +380,20 @@ ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
 @(private = "file")
 ws_connect_worker :: proc(ws: ^WebSocket) {
 	first := true
-	for ws.running {
-		ws.state = first ? .Connecting : .Reconnecting
+	for sync.atomic_load(&ws.running) {
+		ws_set_state(ws, first ? .Connecting : .Reconnecting)
 
 		if !ws_dial_and_handshake(ws) {
-			if !ws.auto_reconnect || !ws.running {
+			if !ws.auto_reconnect || !sync.atomic_load(&ws.running) {
 				break
 			}
-			time.sleep(WS_RECONNECT_WAIT)
+			ws_stop_wait(ws, WS_RECONNECT_WAIT)
 			continue
 		}
 
 		first = false
 		sync.atomic_add(&ws.conn_gen, 1)
-		ws.state = .Connected
+		ws_set_state(ws, .Connected)
 		ws_recv_loop(ws) // returns when the socket drops
 
 		// Retract the dropped socket before the next dial cycle.
@@ -334,16 +404,16 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 		}
 		sync.mutex_unlock(&ws.sock_mutex)
 
-		if !ws.auto_reconnect || !ws.running {
+		if !ws.auto_reconnect || !sync.atomic_load(&ws.running) {
 			break
 		}
-		time.sleep(WS_RECONNECT_WAIT)
+		ws_stop_wait(ws, WS_RECONNECT_WAIT)
 	}
 
-	if ws.state != .Connected {
-		ws.state = .Disconnected
+	if sync.atomic_load(&ws.state) != .Connected {
+		ws_set_state(ws, .Disconnected)
 	}
-	ws.running = false
+	sync.atomic_store(&ws.running, false)
 }
 
 // Send the HTTP upgrade request and validate the 101 response, including the
@@ -405,7 +475,7 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 	defer delete(acc)
 
 	last_activity := time.now()
-	for ws.running {
+	for sync.atomic_load(&ws.running) {
 		n, err := cnet.recv(ws.socket, scratch[:])
 		if err != nil {
 			// A recv timeout is not a disconnect: probe liveness with a PING
@@ -414,17 +484,17 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 			if err == .Timeout || err == .Would_Block {
 				ws_send_frame(ws, WS_OP_PING, nil)
 				if time.since(last_activity) > WS_DEAD_AFTER {
-					ws.state = .Disconnected
+					ws_set_state(ws, .Disconnected)
 					return
 				}
 				continue
 			}
-			ws.state = .Disconnected
+			ws_set_state(ws, .Disconnected)
 			return
 		}
 		if n == 0 {
 			// Graceful close (per core:net: 0 bytes + nil err == peer closed).
-			ws.state = .Disconnected
+			ws_set_state(ws, .Disconnected)
 			return
 		}
 		last_activity = time.now() // any bytes (events OR a PONG) = alive
@@ -440,34 +510,28 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 			if status == .Too_Big {
 				// Oversized frame: protocol violation — drop the connection
 				// rather than buffering unbounded data (worker will re-dial).
-				ws.state = .Disconnected
+				ws_set_state(ws, .Disconnected)
 				return
 			}
 
 			switch frame.opcode {
 			case WS_OP_TEXT:
-				msg_data := strings.clone(string(frame.payload))
-				sync.mutex_lock(&ws.recv_mutex)
-				append(&ws.recv_queue, WS_Message{data = msg_data, binary = false})
-				sync.mutex_unlock(&ws.recv_mutex)
+				ws_enqueue(ws, strings.clone(string(frame.payload)), false)
 
 			case WS_OP_BINARY:
-				msg_data := strings.clone(string(frame.payload))
-				sync.mutex_lock(&ws.recv_mutex)
-				append(&ws.recv_queue, WS_Message{data = msg_data, binary = true})
-				sync.mutex_unlock(&ws.recv_mutex)
+				ws_enqueue(ws, strings.clone(string(frame.payload)), true)
 
 			case 0x0:
 				// Continuation frames are unsupported (server never fragments
 				// per PROTOCOL.md); treat as a protocol error and re-dial.
-				ws.state = .Disconnected
+				ws_set_state(ws, .Disconnected)
 				return
 
 			case WS_OP_PING:
 				ws_send_frame(ws, WS_OP_PONG, frame.payload)
 
 			case WS_OP_CLOSE:
-				ws.state = .Disconnected
+				ws_set_state(ws, .Disconnected)
 				return
 			}
 
@@ -483,19 +547,22 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 
 // Send a text message over WebSocket.
 ws_send :: proc(ws: ^WebSocket, data: string) -> bool {
-	if ws.state != .Connected do return false
+	if ws_state(ws) != .Connected do return false
 	return ws_send_frame(ws, WS_OP_TEXT, transmute([]u8)data)
 }
 
 // Send a binary message over WebSocket.
 ws_send_binary :: proc(ws: ^WebSocket, data: []u8) -> bool {
-	if ws.state != .Connected do return false
+	if ws_state(ws) != .Connected do return false
 	if len(data) > WS_MAX_PAYLOAD do return false
 	return ws_send_frame(ws, WS_OP_BINARY, data)
 }
 
 // Send a raw WebSocket frame.
 ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
+	assert(opcode <= 0x0F, "opcode is a 4-bit field")
+	assert(len(payload) <= WS_MAX_PAYLOAD, "payload exceeds WS_MAX_PAYLOAD")
+
 	// Masking key (4 random bytes).
 	mask_key: [4]u8
 	for i in 0..<4 {
@@ -504,14 +571,25 @@ ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
 	frame := ws_encode_frame(opcode, payload, mask_key)
 	defer delete(frame)
 
-	// A single net.send may write only part of the frame; loop until the
-	// whole frame is sent so the server never sees a truncated frame.
-	// Serialize writes across threads.
+	// Serialize writes across threads (PONGs from the worker vs. text from
+	// the main thread), then snapshot the socket under sock_mutex so a send
+	// cannot use a handle that ws_close or a reconnect already retired.
 	sync.mutex_lock(&ws.send_mutex)
 	defer sync.mutex_unlock(&ws.send_mutex)
+
+	sync.mutex_lock(&ws.sock_mutex)
+	if !ws.socket_open {
+		sync.mutex_unlock(&ws.sock_mutex)
+		return false
+	}
+	sock := ws.socket
+	sync.mutex_unlock(&ws.sock_mutex)
+
+	// A single net.send may write only part of the frame; loop until the
+	// whole frame is sent so the server never sees a truncated frame.
 	total := 0
 	for total < len(frame) {
-		n, err := cnet.send(ws.socket, frame[total:])
+		n, err := cnet.send(sock, frame[total:])
 		if err != nil do return false
 		if n <= 0 do return false
 		total += n
@@ -551,22 +629,39 @@ ws_conn_gen :: proc(ws: ^WebSocket) -> int {
 	return sync.atomic_load(&ws.conn_gen)
 }
 
-// Close the WebSocket connection. Stops the worker thread: closing the
-// socket unblocks a blocking recv (handshake or recv loop); a dial in flight
-// fails on its own and the worker exits on running == false.
+// ws_state returns the connection state with an atomic read — the worker
+// thread writes it concurrently, so a plain field read would be racy.
+ws_state :: proc(ws: ^WebSocket) -> WS_State {
+	return sync.atomic_load(&ws.state)
+}
+
+// Close the WebSocket connection. Stops the worker thread: broadcasting
+// stop_cond ends any backoff wait early, closing the socket unblocks a
+// blocking recv (handshake or recv loop), and a dial in flight fails on its
+// own — the worker then exits on running == false.
 ws_close :: proc(ws: ^WebSocket) {
-	ws.running = false
+	sync.atomic_store(&ws.running, false)
+
+	// Wake a worker parked in ws_stop_wait so shutdown is prompt (broadcast
+	// under the mutex — never lost against a concurrent wait).
+	sync.mutex_lock(&ws.stop_mutex)
+	sync.cond_broadcast(&ws.stop_cond)
+	sync.mutex_unlock(&ws.stop_mutex)
+
+	// Best-effort CLOSE frame while the socket is still open. Must run before
+	// the close below and outside sock_mutex — ws_send_frame takes sock_mutex
+	// itself to snapshot the socket.
+	if sync.atomic_load(&ws.state) == .Connected {
+		ws_send_frame(ws, WS_OP_CLOSE, nil)
+	}
 
 	sync.mutex_lock(&ws.sock_mutex)
 	if ws.socket_open {
-		if ws.state == .Connected {
-			ws_send_frame(ws, WS_OP_CLOSE, nil)
-		}
 		cnet.close(ws.socket)
 		ws.socket_open = false
 	}
 	sync.mutex_unlock(&ws.sock_mutex)
-	ws.state = .Disconnected
+	sync.atomic_store(&ws.state, WS_State.Disconnected)
 
 	if ws.recv_thread != nil {
 		thread.join(ws.recv_thread)

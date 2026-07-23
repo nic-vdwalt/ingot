@@ -69,6 +69,9 @@ Fetcher :: struct {
 	results:         [dynamic]Fetch_Result,
 	stats:           Sim_Stats,
 	running:         bool,
+	// API parity with the native Fetcher so app code can set a wake hook on
+	// every target; the sim is single-threaded and never calls it.
+	wake:            proc "contextless" (),
 }
 
 // xorshift64* — deterministic, identical on every target (mirrors testx.Prng,

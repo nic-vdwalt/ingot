@@ -147,6 +147,66 @@ _a11y_apply :: proc(action: rl.A11y_Action) {
 	}
 }
 
+// A11y_Node_Desc is the pure, platform-free description of one accessibility
+// node — everything the AccessKit push (or any other consumer) needs,
+// computed without touching the C API so it is unit- and fuzz-testable.
+A11y_Node_Desc :: struct {
+	id:          u64,
+	role:        ak.Role,
+	label:       string, // view into the sem node's fixed buffer
+	rect:        Rect_I32,
+	toggled:     bool, // meaningful for Check_Box / Radio_Button
+	has_toggle:  bool,
+	disabled:    bool,
+	expanded:    bool, // meaningful for Combo_Box
+	has_expand:  bool,
+	value:       f32,
+	lo, hi:      f32,
+	has_numeric: bool,
+	interactive: bool, // gets Click/Focus actions
+}
+
+// a11y_build_nodes converts the semantic frame into node descriptions plus
+// the focused node id (SEM_ID_ROOT when nothing is focused). Pure — the
+// AccessKit factory consumes it; fuzz/ui exercises it headlessly.
+a11y_build_nodes :: proc(
+	frame: ^Sem_Frame,
+	allocator := context.temp_allocator,
+) -> (nodes: []A11y_Node_Desc, focus_id: u64) {
+	assert(frame != nil, "a11y_build_nodes: nil frame")
+	assert(frame.count >= 0 && frame.count <= MAX_SEM_NODES, "a11y_build_nodes: corrupt frame")
+
+	focus_id = SEM_ID_ROOT
+	for i in 0 ..< frame.count {
+		if .Focused in frame.nodes[i].state {
+			focus_id = frame.nodes[i].id
+			break
+		}
+	}
+
+	nodes = make([]A11y_Node_Desc, frame.count, allocator)
+	for i in 0 ..< frame.count {
+		sem := &frame.nodes[i]
+		nodes[i] = {
+			id          = sem.id,
+			role        = a11y_role(sem.role),
+			label       = sem_node_label(sem),
+			rect        = sem.rect,
+			toggled     = .Checked in sem.state,
+			has_toggle  = sem.role == .Checkbox || sem.role == .Radio,
+			disabled    = .Disabled in sem.state,
+			expanded    = .Expanded in sem.state,
+			has_expand  = sem.role == .Dropdown,
+			value       = sem.value,
+			lo          = sem.lo,
+			hi          = sem.hi,
+			has_numeric = sem.role == .Slider,
+			interactive = sem.role != .Label && sem.role != .Pane && sem.role != .Modal,
+		}
+	}
+	return nodes, focus_id
+}
+
 // _a11y_factory builds the full tree update AccessKit requested: one window
 // root plus this frame's flat node list. Runs on the main thread (AccessKit
 // calls the factory synchronously from update_if_active / activation).
@@ -154,48 +214,33 @@ _a11y_apply :: proc(action: rl.A11y_Action) {
 _a11y_factory :: proc "c" (userdata: rawptr) -> ak.Tree_Update {
 	context = runtime.default_context()
 	when rl.A11Y_ENABLED {
-		frame := sem_frame()
-		assert(frame.count >= 0 && frame.count <= MAX_SEM_NODES, "_a11y_factory: corrupt frame")
+		nodes, focus_id := a11y_build_nodes(sem_frame())
 
-		focus_id := SEM_ID_ROOT
-		for i in 0 ..< frame.count {
-			if .Focused in frame.nodes[i].state {
-				focus_id = frame.nodes[i].id
-				break
-			}
-		}
-
-		update := ak.tree_update_with_capacity_and_focus(uint(frame.count + 1), focus_id)
+		update := ak.tree_update_with_capacity_and_focus(uint(len(nodes) + 1), focus_id)
 		root := ak.node_new(.Window)
-		for i in 0 ..< frame.count {
-			sem := &frame.nodes[i]
-			ak.node_push_child(root, sem.id)
-			node := ak.node_new(a11y_role(sem.role))
-			label := sem_node_label(sem)
-			if len(label) > 0 {
-				ak.node_set_label_with_length(node, raw_data(label), len(label))
+		for &d in nodes {
+			ak.node_push_child(root, d.id)
+			node := ak.node_new(d.role)
+			if len(d.label) > 0 {
+				ak.node_set_label_with_length(node, raw_data(d.label), len(d.label))
 			}
 			ak.node_set_bounds(node, ak.Rect{
-				f64(sem.rect.x), f64(sem.rect.y),
-				f64(sem.rect.x + sem.rect.w), f64(sem.rect.y + sem.rect.h),
+				f64(d.rect.x), f64(d.rect.y),
+				f64(d.rect.x + d.rect.w), f64(d.rect.y + d.rect.h),
 			})
-			if sem.role == .Checkbox || sem.role == .Radio {
-				ak.node_set_toggled(node, .True if .Checked in sem.state else .False)
+			if d.has_toggle do ak.node_set_toggled(node, .True if d.toggled else .False)
+			if d.disabled do ak.node_set_disabled(node)
+			if d.has_expand do ak.node_set_expanded(node, d.expanded)
+			if d.has_numeric {
+				ak.node_set_numeric_value(node, f64(d.value))
+				ak.node_set_min_numeric_value(node, f64(d.lo))
+				ak.node_set_max_numeric_value(node, f64(d.hi))
 			}
-			if .Disabled in sem.state do ak.node_set_disabled(node)
-			if sem.role == .Dropdown {
-				ak.node_set_expanded(node, .Expanded in sem.state)
-			}
-			if sem.role == .Slider {
-				ak.node_set_numeric_value(node, f64(sem.value))
-				ak.node_set_min_numeric_value(node, f64(sem.lo))
-				ak.node_set_max_numeric_value(node, f64(sem.hi))
-			}
-			if sem.role != .Label && sem.role != .Pane && sem.role != .Modal {
+			if d.interactive {
 				ak.node_add_action(node, .Click)
 				ak.node_add_action(node, .Focus)
 			}
-			ak.tree_update_push_node(update, sem.id, node)
+			ak.tree_update_push_node(update, d.id, node)
 		}
 		ak.tree_update_push_node(update, SEM_ID_ROOT, root)
 		ak.tree_update_set_tree(update, ak.tree_new(SEM_ID_ROOT))

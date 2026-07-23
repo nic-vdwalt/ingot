@@ -180,14 +180,25 @@ _on_device :: proc "c" (status: wg.RequestDeviceStatus, device: wg.Device, msg: 
 	r.done = true
 }
 
+// INGOT_GPU_STRICT turns any uncaptured wgpu validation message into an
+// immediate abort. Fuzz harnesses build with it (fuzz/run.sh gfx-frame) so
+// GPU misuse that would otherwise be logged and survived fails the run —
+// partial compensation for wgpu-native being a prebuilt release library
+// outside AddressSanitizer's reach.
+INGOT_GPU_STRICT :: #config(INGOT_GPU_STRICT, false)
+
 // Uncaptured GPU errors (e.g. an invalid pipeline/vertex layout) would
 // otherwise reach wgpu-native's default handler, which panics and aborts the
 // whole process with no message. Logging them here keeps the app alive and
-// surfaces a diagnosable error instead of a bare SIGABRT.
+// surfaces a diagnosable error instead of a bare SIGABRT. Under
+// INGOT_GPU_STRICT the error is fatal by design.
 @(private)
 _on_uncaptured_error :: proc "c" (device: ^wg.Device, type: wg.ErrorType, message: wg.StringView, u1, u2: rawptr) {
 	context = runtime.default_context()
 	fmt.eprintfln("gfx: wgpu uncaptured error (%v): %s", type, string(message))
+	when INGOT_GPU_STRICT {
+		panic("INGOT_GPU_STRICT: aborting on wgpu validation error")
+	}
 }
 
 // --- window lifecycle ------------------------------------------------------

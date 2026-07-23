@@ -16,6 +16,8 @@
 // non-interactive roles (screen readers re-read labels).
 package ui
 
+import "core:unicode/utf8"
+
 // MAX_SEM_NODES bounds semantic nodes per frame (Tiger Style: put a limit on
 // everything). Saturation drops nodes rather than corrupting the buffer —
 // under-reporting is the safe failure mode for assistive tech.
@@ -167,14 +169,20 @@ sem_node_id :: proc(role: Sem_Role, focus: Focus_Opt, field_id: string, ordinal:
 	return id
 }
 
-// sem_label_clip returns the byte length of `label` that fits SEM_LABEL_MAX,
-// backing off to a rune boundary so truncation never splits UTF-8. Pure.
+// sem_label_clip returns the byte length of the longest valid-UTF-8 prefix
+// of `label` that fits SEM_LABEL_MAX. Truncation never splits a rune, and an
+// invalid byte sequence ends the label early — stored labels must always be
+// valid UTF-8 because they cross into AccessKit (Rust: panics on invalid
+// str) and the browser DOM. Pure.
 sem_label_clip :: proc(label: string) -> int {
-	n := min(len(label), SEM_LABEL_MAX)
-	// A UTF-8 continuation byte is 10xxxxxx; back up until the cut points at
-	// a rune start (or the string head).
-	for n > 0 && n < len(label) && (label[n] & 0xC0) == 0x80 {
-		n -= 1
+	n := 0
+	for n < len(label) && n < SEM_LABEL_MAX {
+		r, size := utf8.decode_rune(label[n:])
+		// decode_rune reports a malformed sequence as RUNE_ERROR with
+		// size 1; a genuine U+FFFD in the input decodes with size 3.
+		if r == utf8.RUNE_ERROR && size == 1 do break
+		if n + size > SEM_LABEL_MAX do break
+		n += size
 	}
 	assert(n >= 0 && n <= SEM_LABEL_MAX, "sem_label_clip: clip out of range")
 	return n

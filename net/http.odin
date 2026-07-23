@@ -116,7 +116,7 @@ http_request_impl :: proc(f: ^Fetcher, idx: int, host: string, port: int, reques
 	if dial_err != nil do return {}, false
 	if f != nil {
 		sync.mutex_lock(&f.sock_mutex)
-		if !f.running {
+		if !sync.atomic_load(&f.running) {
 			sync.mutex_unlock(&f.sock_mutex)
 			cnet.close(sock)
 			return {}, false
@@ -316,7 +316,15 @@ Fetcher :: struct {
 	results: [dynamic]Fetch_Result,
 	mutex: sync.Mutex,
 	workers: [FETCH_WORKERS]^thread.Thread,
+	// Cross-thread stop flag — access with sync.atomic_load / atomic_store.
 	running: bool,
+	// Workers park on jobs_cond (under mutex) until a job arrives or
+	// fetcher_stop broadcasts — no sleep-polling.
+	jobs_cond: sync.Cond,
+	// Optional wake hook, called from a worker after a result is queued so an
+	// event-driven-idle frame loop repaints promptly instead of waiting for
+	// its idle-floor tick (gfx.RequestRedraw fits). Set before fetcher_start.
+	wake: proc "contextless" (),
 	sock_mutex: sync.Mutex,
 	active_socks: [FETCH_WORKERS]cnet.TCP_Socket,
 	active_open: [FETCH_WORKERS]bool,
@@ -326,7 +334,7 @@ Fetcher :: struct {
 fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
 	f.host = host
 	f.port = port
-	f.running = true
+	sync.atomic_store(&f.running, true)
 	for i in 0 ..< FETCH_WORKERS {
 		f.worker_ctx[i] = Fetch_Worker_Ctx{f = f, idx = i}
 		f.workers[i] = thread.create(proc(t: ^thread.Thread) { ctx := cast(^Fetch_Worker_Ctx)t.data; fetch_worker(ctx.f, ctx.idx) })
@@ -336,7 +344,14 @@ fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
 }
 
 fetcher_stop :: proc(f: ^Fetcher) {
-	f.running = false
+	// Order matters: clear running and wake every parked worker under the job
+	// mutex (broadcast under the mutex is never lost against a concurrent
+	// cond_wait), then unblock in-flight recvs by closing their sockets, then
+	// join.
+	sync.mutex_lock(&f.mutex)
+	sync.atomic_store(&f.running, false)
+	sync.cond_broadcast(&f.jobs_cond)
+	sync.mutex_unlock(&f.mutex)
 	sync.mutex_lock(&f.sock_mutex)
 	for i in 0 ..< FETCH_WORKERS { if f.active_open[i] { cnet.close(f.active_socks[i]); f.active_open[i] = false } }
 	sync.mutex_unlock(&f.sock_mutex)
@@ -354,11 +369,12 @@ fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bo
 	job := Fetch_Job{tag = tag, request = http_request_clone(request)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
-	if !f.running || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
+	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
 		fetch_job_destroy(&job)
 		return false
 	}
 	append(&f.jobs, job)
+	sync.cond_signal(&f.jobs_cond)
 	return true
 }
 fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) {
@@ -370,8 +386,12 @@ fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
 	job := Fetch_Job{tag = tag, request = http_request_clone(request)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
-	if !f.running || len(f.jobs) >= FETCH_MAXIMUM_PENDING { fetch_job_destroy(&job); return }
+	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
+		fetch_job_destroy(&job)
+		return
+	}
 	inject_at(&f.jobs, 0, job)
+	sync.cond_signal(&f.jobs_cond)
 }
 fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) {
 	request := Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}
@@ -379,8 +399,12 @@ fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: 
 	job := Fetch_Job{tag = tag, request = http_request_clone(request), cache_path = strings.clone(cache_path)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
-	if !f.running || len(f.jobs) >= FETCH_MAXIMUM_PENDING { fetch_job_destroy(&job); return }
+	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
+		fetch_job_destroy(&job)
+		return
+	}
 	append(&f.jobs, job)
+	sync.cond_signal(&f.jobs_cond)
 }
 fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 	sync.mutex_lock(&f.mutex); defer sync.mutex_unlock(&f.mutex)
@@ -411,9 +435,19 @@ fetch_job_destroy :: proc(job: ^Fetch_Job) {
 
 @(private = "file")
 fetch_worker :: proc(f: ^Fetcher, idx: int) {
-	for f.running {
+	assert(idx >= 0 && idx < FETCH_WORKERS, "worker index out of range")
+	for {
 		sync.mutex_lock(&f.mutex)
-		if len(f.jobs) == 0 { sync.mutex_unlock(&f.mutex); time.sleep(10 * time.Millisecond); continue }
+		// Park until a job arrives or fetcher_stop broadcasts — blocking on the
+		// condvar replaces the old 10 ms sleep-poll, so idle workers cost
+		// nothing and job pickup is immediate.
+		for len(f.jobs) == 0 && sync.atomic_load(&f.running) {
+			sync.cond_wait(&f.jobs_cond, &f.mutex)
+		}
+		if !sync.atomic_load(&f.running) {
+			sync.mutex_unlock(&f.mutex)
+			return
+		}
 		job := f.jobs[0]; ordered_remove(&f.jobs, 0); sync.mutex_unlock(&f.mutex)
 		free_all(context.temp_allocator)
 		body: []u8; status: u16; ok: bool; validate := f.cache_validator
@@ -432,6 +466,9 @@ fetch_worker :: proc(f: ^Fetcher, idx: int) {
 		tag := job.tag
 		fetch_job_destroy(&job)
 		sync.mutex_lock(&f.mutex); append(&f.results, Fetch_Result{tag = tag, status = status, body = body, ok = ok}); sync.mutex_unlock(&f.mutex)
+		// Nudge the frame loop so the result is drained promptly even when the
+		// app idles in event-driven frame mode.
+		if f.wake != nil do f.wake()
 	}
 }
 

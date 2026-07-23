@@ -15,6 +15,7 @@ package fuzz_ui
 
 import "core:fmt"
 import "core:mem"
+import "core:unicode/utf8"
 import fuzzx "ingot:fuzz/fuzzx"
 import "ingot:ui"
 
@@ -238,6 +239,79 @@ exercise_eased :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	)
 }
 
+// exercise_semantics storms the accessibility semantic buffer: random roles,
+// labels straddling truncation boundaries (multi-byte runes at SEM_LABEL_MAX),
+// saturation past MAX_SEM_NODES, frame churn, and focus-registry
+// interleaving — then validates the pure AccessKit node build.
+exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
+	ui.sem_reset()
+	defer ui.sem_reset()
+	ui.sem_enable(true)
+
+	roles := [?]ui.Sem_Role{.Button, .Checkbox, .Radio, .Slider, .Dropdown, .Menu_Item, .Label, .Pane, .Modal}
+	slots: [4]int
+	// (slot, id) pairs must be unique per frame the way real widget code is
+	// unique — the same pair IS the same widget and legitimately shares a
+	// node id, so the fuzzer allocates ids sequentially per slot.
+	next_focus_id: [4]int
+
+	frames := fuzzx.int_range(p, 1, 4)
+	for _ in 0 ..< frames {
+		ui.sem_begin_frame()
+		for i in 0 ..< len(next_focus_id) do next_focus_id[i] = 1
+		pushes := fuzzx.int_range(p, 0, ui.MAX_SEM_NODES + 40) // past saturation sometimes
+		for _ in 0 ..< pushes {
+			role := roles[fuzzx.int_range(p, 0, len(roles))]
+			// Label biased to straddle the truncation cap with multi-byte runes.
+			label_bytes := fuzzx.random_bytes(p, ui.SEM_LABEL_MAX + 8)
+			if fuzzx.int_range(p, 0, 2) == 0 && len(label_bytes) >= 4 {
+				copy(label_bytes[len(label_bytes) - 4:], "€") // 3-byte rune near the end
+			}
+			focus := ui.Focus_Opt{}
+			if fuzzx.int_range(p, 0, 3) == 0 {
+				slot := fuzzx.int_range(p, 0, len(slots))
+				focus = {&slots[slot], next_focus_id[slot]}
+				next_focus_id[slot] += 1
+			}
+			ui.semantic_push(
+				role,
+				{i32(fuzzx.int_range(p, -50, 2000)), i32(fuzzx.int_range(p, -50, 2000)),
+					i32(fuzzx.int_range(p, 1, 500)), i32(fuzzx.int_range(p, 1, 200))},
+				string(label_bytes),
+				{},
+				focus,
+				value = f32(fuzzx.int_range(p, 0, 100)),
+				lo = 0,
+				hi = 100,
+			)
+		}
+
+		frame := ui.sem_frame()
+		fuzzx.check(c, frame.count >= 0 && frame.count <= ui.MAX_SEM_NODES, "sem buffer overflow")
+		for i in 0 ..< frame.count {
+			label := ui.sem_node_label(&frame.nodes[i])
+			fuzzx.check(c, len(label) <= ui.SEM_LABEL_MAX, "sem label exceeds cap")
+			fuzzx.check(c, utf8.valid_string(label), "sem label not valid UTF-8 after truncation")
+		}
+		fuzzx.check(c, ui.sem_focus_list().count <= ui.MAX_SEM_FOCUS, "focus registry overflow")
+
+		// Pure AccessKit node build: ids unique, non-reserved; every desc
+		// mirrors its source node.
+		nodes, focus_id := ui.a11y_build_nodes(frame, context.temp_allocator)
+		fuzzx.check(c, len(nodes) == frame.count, "a11y node count mismatch")
+		fuzzx.check(c, focus_id != 0, "a11y focus id zero")
+		for i in 0 ..< len(nodes) {
+			fuzzx.check(c, nodes[i].id > 1, "a11y node id reserved")
+			fuzzx.check(c, len(nodes[i].label) <= ui.SEM_LABEL_MAX, "a11y label exceeds cap")
+			// Interactive nodes must not collide on ids (AT targets them).
+			if frame.nodes[i].focus == nil do continue
+			for j in i + 1 ..< len(nodes) {
+				fuzzx.check(c, nodes[i].id != nodes[j].id, "a11y duplicate interactive node id")
+			}
+		}
+	}
+}
+
 main :: proc() {
 	seed, iterations, rounds := fuzzx.parse_options(ITERATIONS_DEFAULT)
 	fmt.printfln("fuzz_ui seed=%d iterations=%d rounds=%d", seed, iterations, rounds)
@@ -258,6 +332,7 @@ main :: proc() {
 			exercise_spans(&c, &p, line)
 			exercise_table(&c, &p, line)
 			if i % 8 == 0 do exercise_document(&c, &p)
+			if i % 16 == 0 do exercise_semantics(&c, &p)
 			exercise_widget_math(&c, &p)
 			exercise_eased(&c, &p)
 			free_all(context.temp_allocator)

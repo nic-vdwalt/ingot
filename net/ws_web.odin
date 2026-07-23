@@ -48,6 +48,9 @@ WebSocket :: struct {
 	port:       int,
 	conn_gen:   int, // bumped on each transition into Connected (API parity)
 	recv_queue: [dynamic]WS_Message,
+	// API parity with the native backend so app code can set a wake hook on
+	// every target; the browser's rAF-driven loop polls, so it is never called.
+	wake:       proc "contextless" (),
 }
 
 ws_init :: proc() -> WebSocket {
@@ -95,6 +98,13 @@ ws_poll_state :: proc(ws: ^WebSocket) {
 ws_conn_gen :: proc(ws: ^WebSocket) -> int {
 	ws_poll_state(ws)
 	return ws.conn_gen
+}
+
+// ws_state mirrors the native accessor; the web backend is single-threaded,
+// so it just refreshes from the JS socket and returns the field.
+ws_state :: proc(ws: ^WebSocket) -> WS_State {
+	ws_poll_state(ws)
+	return ws.state
 }
 
 ws_send :: proc(ws: ^WebSocket, data: string) -> bool {
