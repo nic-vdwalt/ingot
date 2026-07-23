@@ -126,6 +126,30 @@ odin run examples/gallery -collection:ingot=. -define:INGOT_RENDER_STATS=true
 scripts/smoke-gallery.sh
 ```
 
+Flex sizing is opt-in and remains immediate-mode. Declare sibling sizes before
+emitting them, then draw in source order:
+
+```odin
+ui.push_row(&layout, 40, gap = 8)
+ui.flex_begin(&layout, {
+	ui.flex_fixed(80),
+	ui.flex_fit(measured_label_width, min_size = 48),
+	ui.flex_grow(),
+})
+draw_sidebar(ui.flex_next(&layout))
+draw_label(ui.flex_next(&layout))
+draw_content(ui.flex_next(&layout))
+ui.layout_pop(&layout)
+```
+
+`FIT` receives an intrinsic pixel size measured by the caller. `GROW` divides
+free space by weight, `PERCENT` uses the gap-free content extent, and min/max
+constraints are inclusive. Existing `next`, `row_weights`, and `ui_slot` code
+does not change.
+
+The sizing model was inspired by [Clay](https://github.com/nicbarker/clay),
+Nic Barker's high-performance C UI layout library.
+
 ### Breakout (audio + gamepad + web, one source)
 
 `examples/breakout` is the Phase 1 proof game: synthesized sounds (no asset

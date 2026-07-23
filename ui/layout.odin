@@ -366,7 +366,7 @@ _flex_expand :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Flex_Size, free: 
 	assert(resolved != nil, "_flex_expand: nil sizes")
 	assert(free > 0, "_flex_expand: non-positive free space")
 	remaining_free := free
-	for pass in 0 ..< MAX_LAYOUT_FLEX {
+	for _ in 0 ..< MAX_LAYOUT_FLEX {
 		total_weight: i64
 		for size, index in sizes {
 			uncapped := size.kind == .Grow && (size.max_size == 0 || resolved[index] < size.max_size)

@@ -409,10 +409,10 @@ draw_charts :: proc(x, y0, w: i32) -> i32 {
 }
 
 draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(x, y0, w, "SINGLE-PASS LAYOUT (row_weights declared up front)")
+	y := ui.section_header(x, y0, w, "SINGLE-PASS LAYOUT (weights + flex sizing)")
 	l: ui.Layout
 	lw := min(w, ui.sc(520))
-	ui.layout_begin(&l, x, y, lw, ui.sc(200), gap = ui.sc(8))
+	ui.layout_begin(&l, x, y, lw, ui.sc(248), gap = ui.sc(8))
 
 	ui.push_row(&l, ui.sc(40), gap = ui.sc(8))
 	ui.row_weights(&l, {1, 2, 1})
@@ -430,8 +430,21 @@ draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
 	cell(ui.next_sized(&l, ui.sc(160), ui.sc(50)), "centered")
 	ui.layout_pop(&l)
 
+	ui.push_row(&l, ui.sc(40), gap = ui.sc(8))
+	ui.flex_begin(&l, {
+		ui.flex_fixed(ui.sc(72)),
+		ui.flex_fit(ui.sc(96), min_size = ui.sc(56)),
+		ui.flex_percent(0.2),
+		ui.flex_grow(),
+	})
+	cell(ui.flex_next(&l), "fixed")
+	cell(ui.flex_next(&l), "fit")
+	cell(ui.flex_next(&l), "20%")
+	cell(ui.flex_next(&l), "grow")
+	ui.layout_pop(&l)
+
 	ui.layout_end(&l)
-	return y + ui.sc(210)
+	return y + ui.sc(258)
 }
 
 cell :: proc(r: ui.Rect_I32, label: string) {
