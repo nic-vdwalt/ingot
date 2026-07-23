@@ -567,24 +567,20 @@ ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
 	defer delete(frame)
 
 	// Serialize writes across threads (PONGs from the worker vs. text from
-	// the main thread), then snapshot the socket under sock_mutex so a send
-	// cannot use a handle that ws_close or a reconnect already retired.
+	// the main thread), then keep sock_mutex through the complete write so
+	// ws_close or reconnect cannot retire the handle between partial sends.
 	sync.mutex_lock(&ws.send_mutex)
 	defer sync.mutex_unlock(&ws.send_mutex)
 
 	sync.mutex_lock(&ws.sock_mutex)
-	if !ws.socket_open {
-		sync.mutex_unlock(&ws.sock_mutex)
-		return false
-	}
-	sock := ws.socket
-	sync.mutex_unlock(&ws.sock_mutex)
+	defer sync.mutex_unlock(&ws.sock_mutex)
+	if !ws.socket_open do return false
 
 	// A single net.send may write only part of the frame; loop until the
 	// whole frame is sent so the server never sees a truncated frame.
 	total := 0
 	for total < len(frame) {
-		n, err := ws_net_send(sock, frame[total:])
+		n, err := ws_net_send(ws.socket, frame[total:])
 		if err != .None do return false
 		if n <= 0 do return false
 		total += n

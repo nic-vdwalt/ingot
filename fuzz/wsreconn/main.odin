@@ -22,6 +22,7 @@ package fuzz_wsreconn
 
 import "core:fmt"
 import "core:mem"
+import "core:sync"
 import "core:time"
 import fuzzx "ingot:fuzz/fuzzx"
 import ingotnet "ingot:net"
@@ -31,6 +32,15 @@ SESSION_BUDGET :: 5 * time.Second // watchdog: worker must finish/join well with
 
 Prng :: fuzzx.Prng
 
+wake_count: int
+wake_after_close: bool
+closed: bool
+
+wake_probe :: proc "contextless" () {
+	if sync.atomic_load(&closed) do sync.atomic_store(&wake_after_close, true)
+	sync.atomic_add(&wake_count, 1)
+}
+
 EVENTS := [?]ingotnet.Ws_Sim_Event {
 	.Dial_Fail,
 	.Handshake_Garbage,
@@ -39,6 +49,7 @@ EVENTS := [?]ingotnet.Ws_Sim_Event {
 	.Frame_Binary,
 	.Frame_Ping,
 	.Frame_Split,
+	.Frame_Burst,
 	.Frame_Garbage,
 	.Server_Close,
 	.Cut,
@@ -89,6 +100,10 @@ main :: proc() {
 			ingotnet.ws_sim_load(tape, fuzzx.next_u64(&p))
 
 			ws := ingotnet.ws_init()
+			sync.atomic_store(&wake_count, 0)
+			sync.atomic_store(&wake_after_close, false)
+			sync.atomic_store(&closed, false)
+			ws.wake = wake_probe
 			ingotnet.ws_start_connect(&ws, "sim", 1, max_attempts = 3)
 
 			last_gen := 0
@@ -138,6 +153,7 @@ main :: proc() {
 				context.allocator = worker_allocator
 				ingotnet.ws_close(&ws)
 			}
+			sync.atomic_store(&closed, true)
 
 			fuzzx.check(&c, ingotnet.ws_state(&ws) == .Disconnected, "state not Disconnected after close")
 			when #config(FUZZ_TRACE, false) {
@@ -151,6 +167,12 @@ main :: proc() {
 			if saw_connected do fuzzx.check(&c, gen >= 1, "connected session ended with gen 0")
 			fuzzx.check(&c, drained <= ingotnet.ws_sim_frames_served(),
 				"drained more messages than the sim served")
+			if saw_connected || ingotnet.ws_sim_frames_served() > 0 {
+				fuzzx.check(&c, sync.atomic_load(&wake_count) > 0,
+					"worker activity did not invoke wake hook")
+			}
+			fuzzx.check(&c, !sync.atomic_load(&wake_after_close),
+				"wake hook ran after ws_close returned")
 			fuzzx.check(&c, time.since(session_start) < SESSION_BUDGET,
 				"close watchdog exceeded (join wedged?)")
 

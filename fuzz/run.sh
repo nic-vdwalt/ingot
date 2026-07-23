@@ -17,7 +17,7 @@
 #                              # is a separate phase, appended to each soak round
 #   fuzz/run.sh gfx-frame      # WINDOWED GPU lifecycle fuzzer (needs a display;
 #                              # NOT part of `all`/`soak` — run explicitly)
-#   fuzz/run.sh all            # net + ui + term + interact + input (headless only)
+#   fuzz/run.sh all            # headless fuzzers + threaded TSan stress phase
 #   fuzz/run.sh soak           # `all` for ROUNDS rounds with fresh seeds
 #
 # Sanitizer scope note: wgpu-native is a prebuilt release library, so ASan
@@ -121,10 +121,11 @@ run_tsan() {
 	# shellcheck disable=SC2086
 	odin build "$ROOT/fuzz/wsreconn" $COL $TS -define:INGOT_WS_SIM=true -out:"$ROOT/fuzz/wsreconn/fuzz_wsreconn_tsan"
 	"$ROOT/fuzz/wsreconn/fuzz_wsreconn_tsan" "$@"
-	# Fetch-pool lifecycle + WS unit tests under TSan; single-threaded test
-	# runner so runner threads don't drown the signal.
+	# Native eight-worker fetch pool: deterministic transport stresses parked
+	# condvar wakeups, result publication/wake hooks, partial sends, allocator
+	# ownership, and prompt broadcast shutdown under TSan.
 	# shellcheck disable=SC2086
-	odin test "$ROOT/net" $COL $TS -define:ODIN_TEST_THREADS=1
+	odin test "$ROOT/net" $COL $TS -define:INGOT_HTTP_STRESS=true -define:ODIN_TEST_THREADS=1
 	# a11y action queue: threaded producer vs main-thread drain (in gfx,
 	# where the queue lives).
 	# shellcheck disable=SC2086
@@ -163,6 +164,7 @@ all)
 	run_wsreconn "${ARGS[@]+"${ARGS[@]}"}"
 	run_input
 	run_term
+	run_tsan "${ARGS[@]+"${ARGS[@]}"}"
 	;;
 soak)
 	# Multi-round soak: each round uses a fresh random seed so repeated CI

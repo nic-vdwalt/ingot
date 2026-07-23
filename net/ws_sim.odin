@@ -37,6 +37,7 @@ when INGOT_WS_SIM {
 		Frame_Binary,      // one clean binary frame
 		Frame_Ping,        // server PING (worker must PONG)
 		Frame_Split,       // text frame delivered in two recv calls
+		Frame_Burst,       // many text frames, enough to overflow recv_queue
 		Frame_Garbage,     // random bytes (parse rejects -> disconnect)
 		Server_Close,      // clean CLOSE frame
 		Cut,               // recv error mid-connection
@@ -44,6 +45,7 @@ when INGOT_WS_SIM {
 	}
 
 	MAX_SIM_EVENTS :: 256
+	WS_SIM_BURST_FRAMES :: WS_MAX_QUEUED_MESSAGES + 17
 
 	@(private = "file") Ws_Sim :: struct {
 		tape:      [MAX_SIM_EVENTS]Ws_Sim_Event,
@@ -56,6 +58,7 @@ when INGOT_WS_SIM {
 		split_tail_len: int,
 		handle_seq: i64,
 		frames_served: int, // atomic; harness-side observability
+		burst_remaining: int, // worker-thread only; Frame_Burst expansion
 		mutex:     sync.Mutex,
 	}
 
@@ -73,6 +76,7 @@ when INGOT_WS_SIM {
 		g_ws_sim.payload_seed = payload_seed
 		g_ws_sim.split_tail_len = 0
 		g_ws_sim.pending_key_len = 0
+		g_ws_sim.burst_remaining = 0
 		sync.atomic_store(&g_ws_sim.frames_served, 0)
 	}
 
@@ -153,6 +157,16 @@ when INGOT_WS_SIM {
 	}
 
 	ws_net_recv :: proc(sock: cnet.TCP_Socket, buf: []u8) -> (int, Ws_Net_Err) {
+		// Expand Frame_Burst without requiring a tape longer than
+		// MAX_SIM_EVENTS. The worker is the only reader/writer after start.
+		if g_ws_sim.burst_remaining > 0 {
+			payload: [8]u8
+			for i in 0 ..< len(payload) do payload[i] = u8('a' + (sim_rand() % 26))
+			g_ws_sim.burst_remaining -= 1
+			sync.atomic_add(&g_ws_sim.frames_served, 1)
+			return sim_server_frame(buf, WS_OP_TEXT, payload[:]), .None
+		}
+
 		// Serve a deferred split tail first.
 		{
 			sync.mutex_lock(&g_ws_sim.mutex)
@@ -224,6 +238,12 @@ when INGOT_WS_SIM {
 			sync.mutex_unlock(&g_ws_sim.mutex)
 			sync.atomic_add(&g_ws_sim.frames_served, 1)
 			return copy(buf, frame[:half]), .None
+		case .Frame_Burst:
+			g_ws_sim.burst_remaining = WS_SIM_BURST_FRAMES - 1
+			payload: [8]u8
+			for i in 0 ..< len(payload) do payload[i] = u8('a' + (sim_rand() % 26))
+			sync.atomic_add(&g_ws_sim.frames_served, 1)
+			return sim_server_frame(buf, WS_OP_TEXT, payload[:]), .None
 		case .Frame_Garbage:
 			// Unmasked garbage that parses as an unsupported continuation
 			// frame (opcode 0) — the recv loop must drop the connection.

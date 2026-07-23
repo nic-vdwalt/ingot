@@ -3,6 +3,7 @@ package ingotnet
 
 import "core:fmt"
 import "core:mem"
+import "core:math/rand"
 import cnet "core:net"
 import "core:os"
 import "core:strconv"
@@ -104,21 +105,25 @@ http_get_interruptible :: proc(f: ^Fetcher, idx: int, host: string, port: int, p
 http_request_impl :: proc(f: ^Fetcher, idx: int, host: string, port: int, request: Http_Request, allocator := context.allocator) -> (response: Http_Response, ok: bool) {
 	if !valid_request(request) do return {}, false
 	ep: cnet.Endpoint
-	if addr, addr_ok := cnet.parse_ip4_address(host); addr_ok {
-		ep = cnet.Endpoint{address = addr, port = port}
+	when HTTP_STRESS {
+		ep = cnet.Endpoint{port = port}
 	} else {
-		resolved, err := cnet.resolve_ip4(host)
-		if err != nil do return {}, false
-		ep = resolved
-		ep.port = port
+		if addr, addr_ok := cnet.parse_ip4_address(host); addr_ok {
+			ep = cnet.Endpoint{address = addr, port = port}
+		} else {
+			resolved, err := cnet.resolve_ip4(host)
+			if err != nil do return {}, false
+			ep = resolved
+			ep.port = port
+		}
 	}
-	sock, dial_err := cnet.dial_tcp(ep)
-	if dial_err != nil do return {}, false
+	sock, dial_ok := http_net_dial(ep)
+	if !dial_ok do return {}, false
 	if f != nil {
 		sync.mutex_lock(&f.sock_mutex)
 		if !sync.atomic_load(&f.running) {
 			sync.mutex_unlock(&f.sock_mutex)
-			cnet.close(sock)
+			http_net_close(sock)
 			return {}, false
 		}
 		f.active_socks[idx] = sock
@@ -128,30 +133,30 @@ http_request_impl :: proc(f: ^Fetcher, idx: int, host: string, port: int, reques
 	defer if f != nil {
 		sync.mutex_lock(&f.sock_mutex)
 		if f.active_open[idx] {
-			cnet.close(f.active_socks[idx])
+			http_net_close(f.active_socks[idx])
 			f.active_open[idx] = false
 		}
 		sync.mutex_unlock(&f.sock_mutex)
 	} else {
-		cnet.close(sock)
+		http_net_close(sock)
 	}
 
 	wire := build_request(host, port, request)
 	if len(wire) == 0 do return {}, false
 	if !send_all(sock, wire) do return {}, false
-	_ = cnet.set_option(sock, .Receive_Timeout, 5 * time.Second)
+	http_net_set_recv_timeout(sock, 5 * time.Second)
 	maximum := int(request.maximum_body)
 	if maximum <= 0 do maximum = DEFAULT_MAXIMUM_BODY
 	buf: [dynamic]u8
 	buf.allocator = context.temp_allocator
 	chunk: [16384]u8
 	for {
-		n, recv_err := cnet.recv(sock, chunk[:])
+		n, recv_ok := http_net_recv(sock, chunk[:])
 		if n > 0 {
 			append(&buf, ..chunk[:n])
 			if len(buf) > maximum + MAXIMUM_HEADER_BYTES do return {}, false
 		}
-		if recv_err != nil || n == 0 do break
+		if !recv_ok || n == 0 do break
 	}
 	if len(buf) == 0 do return {}, false
 	return parse_http_response(buf[:], maximum, allocator)
@@ -195,8 +200,8 @@ build_request :: proc(host: string, port: int, request: Http_Request) -> []u8 {
 send_all :: proc(sock: cnet.TCP_Socket, data: []u8) -> bool {
 	total := 0
 	for total < len(data) {
-		n, err := cnet.send(sock, data[total:])
-		if err != nil || n <= 0 do return false
+		n, ok := http_net_send(sock, data[total:])
+		if !ok || n <= 0 do return false
 		total += n
 	}
 	return true
@@ -329,11 +334,15 @@ Fetcher :: struct {
 	active_socks: [FETCH_WORKERS]cnet.TCP_Socket,
 	active_open: [FETCH_WORKERS]bool,
 	worker_ctx: [FETCH_WORKERS]Fetch_Worker_Ctx,
+	// Worker threads have their own context, so every cross-thread job/result
+	// allocation explicitly uses the allocator captured by fetcher_start.
+	allocator: mem.Allocator,
 }
 
 fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
 	f.host = host
 	f.port = port
+	f.allocator = context.allocator
 	sync.atomic_store(&f.running, true)
 	for i in 0 ..< FETCH_WORKERS {
 		f.worker_ctx[i] = Fetch_Worker_Ctx{f = f, idx = i}
@@ -353,26 +362,27 @@ fetcher_stop :: proc(f: ^Fetcher) {
 	sync.cond_broadcast(&f.jobs_cond)
 	sync.mutex_unlock(&f.mutex)
 	sync.mutex_lock(&f.sock_mutex)
-	for i in 0 ..< FETCH_WORKERS { if f.active_open[i] { cnet.close(f.active_socks[i]); f.active_open[i] = false } }
+	for i in 0 ..< FETCH_WORKERS { if f.active_open[i] { http_net_close(f.active_socks[i]); f.active_open[i] = false } }
 	sync.mutex_unlock(&f.sock_mutex)
 	for i in 0 ..< FETCH_WORKERS { if f.workers[i] != nil { thread.join(f.workers[i]); thread.destroy(f.workers[i]); f.workers[i] = nil } }
 	sync.mutex_lock(&f.mutex)
-	for &job in f.jobs do fetch_job_destroy(&job)
+	for &job in f.jobs do fetch_job_destroy(&job, f.allocator)
 	delete(f.jobs)
-	for result in f.results do delete(result.body)
+	for result in f.results do delete(result.body, f.allocator)
 	delete(f.results)
 	sync.mutex_unlock(&f.mutex)
 }
 
 fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
 	if !valid_request(request) do return false
-	job := Fetch_Job{tag = tag, request = http_request_clone(request)}
+	job := Fetch_Job{tag = tag, request = http_request_clone(request, f.allocator)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
 	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
-		fetch_job_destroy(&job)
+		fetch_job_destroy(&job, f.allocator)
 		return false
 	}
+	if f.jobs == nil do f.jobs.allocator = f.allocator
 	append(&f.jobs, job)
 	sync.cond_signal(&f.jobs_cond)
 	return true
@@ -383,26 +393,28 @@ fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) {
 fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) {
 	request := Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}
 	if !valid_request(request) do return
-	job := Fetch_Job{tag = tag, request = http_request_clone(request)}
+	job := Fetch_Job{tag = tag, request = http_request_clone(request, f.allocator)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
 	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
-		fetch_job_destroy(&job)
+		fetch_job_destroy(&job, f.allocator)
 		return
 	}
+	if f.jobs == nil do f.jobs.allocator = f.allocator
 	inject_at(&f.jobs, 0, job)
 	sync.cond_signal(&f.jobs_cond)
 }
 fetcher_request_cached :: proc(f: ^Fetcher, tag: u64, path: string, cache_path: string) {
 	request := Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY}
 	if !valid_request(request) do return
-	job := Fetch_Job{tag = tag, request = http_request_clone(request), cache_path = strings.clone(cache_path)}
+	job := Fetch_Job{tag = tag, request = http_request_clone(request, f.allocator), cache_path = strings.clone(cache_path, f.allocator)}
 	sync.mutex_lock(&f.mutex)
 	defer sync.mutex_unlock(&f.mutex)
 	if !sync.atomic_load(&f.running) || len(f.jobs) >= FETCH_MAXIMUM_PENDING {
-		fetch_job_destroy(&job)
+		fetch_job_destroy(&job, f.allocator)
 		return
 	}
+	if f.jobs == nil do f.jobs.allocator = f.allocator
 	append(&f.jobs, job)
 	sync.cond_signal(&f.jobs_cond)
 }
@@ -418,18 +430,33 @@ fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 }
 
 @(private = "file")
-http_request_clone :: proc(request: Http_Request) -> Http_Request {
-	headers := make([]Http_Header, len(request.headers))
-	for header, i in request.headers do headers[i] = Http_Header{name = strings.clone(header.name), value = strings.clone(header.value)}
-	body := make([]u8, len(request.body)); copy(body, request.body)
-	return Http_Request{method = request.method, path = strings.clone(request.path), headers = headers, body = body, maximum_body = request.maximum_body}
+http_request_clone :: proc(request: Http_Request, allocator: mem.Allocator) -> Http_Request {
+	headers := make([]Http_Header, len(request.headers), allocator)
+	for header, i in request.headers do headers[i] = Http_Header{
+		name = strings.clone(header.name, allocator),
+		value = strings.clone(header.value, allocator),
+	}
+	body := make([]u8, len(request.body), allocator)
+	copy(body, request.body)
+	return Http_Request{
+		method = request.method,
+		path = strings.clone(request.path, allocator),
+		headers = headers,
+		body = body,
+		maximum_body = request.maximum_body,
+	}
 }
 
 @(private = "file")
-fetch_job_destroy :: proc(job: ^Fetch_Job) {
-	delete(job.request.path)
-	for header in job.request.headers { delete(header.name); delete(header.value) }
-	delete(job.request.headers); delete(job.request.body); delete(job.cache_path)
+fetch_job_destroy :: proc(job: ^Fetch_Job, allocator: mem.Allocator) {
+	delete(job.request.path, allocator)
+	for header in job.request.headers {
+		delete(header.name, allocator)
+		delete(header.value, allocator)
+	}
+	delete(job.request.headers, allocator)
+	delete(job.request.body, allocator)
+	delete(job.cache_path, allocator)
 	job^ = {}
 }
 
@@ -452,20 +479,26 @@ fetch_worker :: proc(f: ^Fetcher, idx: int) {
 		free_all(context.temp_allocator)
 		body: []u8; status: u16; ok: bool; validate := f.cache_validator
 		if job.cache_path != "" {
-			if cached, read_err := os.read_entire_file_from_path(job.cache_path, context.allocator); read_err == nil && len(cached) > 0 {
+			if cached, read_err := os.read_entire_file_from_path(job.cache_path, f.allocator); read_err == nil && len(cached) > 0 {
 				if validate == nil || validate(cached) { body = cached; status = 200; ok = true } else { delete(cached); os.remove(job.cache_path) }
 			}
 		}
 		if !ok {
+			// Jitter worker scheduling in the native stress build so TSan explores
+			// different condvar/result interleavings while production stays exact.
+			when HTTP_STRESS do time.sleep(time.Duration(rand.int63() % 100) * time.Microsecond)
 			response: Http_Response
-			response, ok = http_request_impl(f, idx, f.host, f.port, job.request)
+			response, ok = http_request_impl(f, idx, f.host, f.port, job.request, f.allocator)
 			status = response.status; body = response.body; response.body = nil
-			http_response_destroy(&response)
+			http_response_destroy(&response, f.allocator)
 			if ok && status >= 200 && status < 300 && (validate == nil || validate(body)) && job.cache_path != "" { dir, _ := os.split_path(job.cache_path); os.make_directory_all(dir); _ = os.write_entire_file(job.cache_path, body) }
 		}
 		tag := job.tag
-		fetch_job_destroy(&job)
-		sync.mutex_lock(&f.mutex); append(&f.results, Fetch_Result{tag = tag, status = status, body = body, ok = ok}); sync.mutex_unlock(&f.mutex)
+		fetch_job_destroy(&job, f.allocator)
+		sync.mutex_lock(&f.mutex)
+		if f.results == nil do f.results.allocator = f.allocator
+		append(&f.results, Fetch_Result{tag = tag, status = status, body = body, ok = ok})
+		sync.mutex_unlock(&f.mutex)
 		// Nudge the frame loop so the result is drained promptly even when the
 		// app idles in event-driven frame mode.
 		if f.wake != nil do f.wake()
@@ -476,6 +509,7 @@ fetch_worker :: proc(f: ^Fetcher, idx: int) {
 
 // Suppress unused-import errors when the sim compiles the transport out.
 _ :: fmt
+_ :: rand
 _ :: cnet
 _ :: os
 _ :: sync
