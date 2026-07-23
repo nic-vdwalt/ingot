@@ -16,11 +16,12 @@ import rl "ingot:gfx"
 // currently holds focus (its slot equals its id), or -1. Pure.
 focus_scope_focused_index :: proc(list: ^Sem_Focus_List) -> int {
 	assert(list != nil, "focus_scope_focused_index: nil list")
-	assert(list.count >= 0 && list.count <= MAX_SEM_FOCUS,
-		"focus_scope_focused_index: corrupt count")
+	assert(
+		list.count >= 0 && list.count <= MAX_SEM_FOCUS,
+		"focus_scope_focused_index: corrupt count",
+	)
 	for i in 0 ..< list.count {
-		e := list.entries[i]
-		if e.focus != nil && e.id > 0 && e.focus^ == e.id do return i
+		if focus_opt_focused(list.entries[i].focus) do return i
 	}
 	return -1
 }
@@ -46,14 +47,11 @@ focus_scope_next_index :: proc(current, count: int, backwards: bool) -> int {
 focus_scope_apply :: proc(list: ^Sem_Focus_List, current, next: int) {
 	assert(list != nil, "focus_scope_apply: nil list")
 	assert(next >= 0 && next < list.count, "focus_scope_apply: next out of range")
-	if current >= 0 {
-		e := list.entries[current]
-		if e.focus != nil do e.focus^ = 0
-	}
+	if current >= 0 do focus_opt_clear(list.entries[current].focus)
 	e := list.entries[next]
-	assert(e.focus != nil && e.id > 0, "focus_scope_apply: registry entry without focus link")
-	e.focus^ = e.id
-	assert(e.focus^ == e.id, "focus_scope_apply: slot not set")
+	assert(e.focus.focus != nil, "focus_scope_apply: registry entry without focus link")
+	focus_opt_set(e.focus)
+	assert(focus_opt_focused(e.focus), "focus_scope_apply: focus not set")
 }
 
 // focus_scope_cycle is the app-level Tab handler: call once per frame

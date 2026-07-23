@@ -19,6 +19,25 @@ form_focus_next :: proc(current, count: int, backwards: bool) -> int {
 	return 1 if current == count else current + 1
 }
 
+focus_order_index :: proc(ids: []Focus_Id, active: Focus_Id) -> int {
+	assert(len(ids) > 0, "focus_order_index: empty order")
+	assert(len(ids) <= MAX_FOCUSABLES, "focus_order_index: order exceeds limit")
+	for id, index in ids {
+		assert(id != FOCUS_ID_NONE, "focus_order_index: zero id")
+		if id == active do return index
+	}
+	return -1
+}
+
+focus_order_next :: proc(ids: []Focus_Id, active: Focus_Id, backwards: bool) -> Focus_Id {
+	assert(len(ids) > 0, "focus_order_next: empty order")
+	assert(len(ids) <= MAX_FOCUSABLES, "focus_order_next: order exceeds limit")
+	current := focus_order_index(ids, active)
+	if current < 0 do return ids[len(ids) - 1] if backwards else ids[0]
+	if backwards do return ids[len(ids) - 1] if current == 0 else ids[current - 1]
+	return ids[0] if current == len(ids) - 1 else ids[current + 1]
+}
+
 form_focus_cycle :: proc(focus: ^int, count: int) {
 	assert(focus != nil)
 	assert(count > 0)

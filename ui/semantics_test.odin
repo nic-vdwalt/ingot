@@ -124,9 +124,9 @@ semantics_focus_registry :: proc(t: ^testing.T) {
 	sem_begin_frame()
 	list := sem_focus_list()
 	testing.expect_value(t, list.count, 3)
-	testing.expect(t, list.entries[0] == Sem_Focus_Entry{&slot_a, 1})
-	testing.expect(t, list.entries[1] == Sem_Focus_Entry{&slot_a, 2})
-	testing.expect(t, list.entries[2] == Sem_Focus_Entry{&slot_b, 1})
+	testing.expect(t, list.entries[0] == Sem_Focus_Entry{Focus_Opt{&slot_a, 1}})
+	testing.expect(t, list.entries[1] == Sem_Focus_Entry{Focus_Opt{&slot_a, 2}})
+	testing.expect(t, list.entries[2] == Sem_Focus_Entry{Focus_Opt{&slot_b, 1}})
 	sem_begin_frame()
 	testing.expect_value(t, sem_focus_list().count, 0) // not renewed: expired
 }

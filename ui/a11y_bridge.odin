@@ -55,7 +55,8 @@ a11y_role :: proc(role: Sem_Role) -> ak.Role {
 
 // Pending AT click, keyed by the focus-link node id; consumed by
 // focus_activated as a synthetic activation on the next frame.
-@(private = "file") g_a11y_pending_click: u64
+@(private = "file")
+g_a11y_pending_click: u64
 
 // a11y_init enables semantic recording and attaches the platform adapter.
 // Call once after InitWindow. On native this registers the AccessKit
@@ -102,9 +103,17 @@ _a11y_sync_web_controls :: proc() {
 			continue
 		}
 		res := rl.SyncWebControl(
-			i32(sem.role), sem.id, sem_node_label(sem),
-			sem.rect.x, sem.rect.y, sem.rect.w, sem.rect.h,
-			transmute(u8)sem.state, sem.value, sem.lo, sem.hi,
+			i32(sem.role),
+			sem.id,
+			sem_node_label(sem),
+			sem.rect.x,
+			sem.rect.y,
+			sem.rect.w,
+			sem.rect.h,
+			transmute(u8)sem.state,
+			sem.value,
+			sem.lo,
+			sem.hi,
 		)
 		if res.activated {
 			g_a11y_pending_click = sem.id
@@ -138,8 +147,8 @@ _a11y_apply :: proc(action: rl.A11y_Action) {
 		for i in 0 ..< frame.count {
 			node := &frame.nodes[i]
 			if node.id != u64(action.node) do continue
-			if node.focus != nil && node.focus_id > 0 {
-				node.focus^ = node.focus_id
+			if node.focus.focus != nil {
+				focus_opt_set(node.focus)
 				rl.RequestRedraw()
 			}
 			return
@@ -172,7 +181,10 @@ A11y_Node_Desc :: struct {
 a11y_build_nodes :: proc(
 	frame: ^Sem_Frame,
 	allocator := context.temp_allocator,
-) -> (nodes: []A11y_Node_Desc, focus_id: u64) {
+) -> (
+	nodes: []A11y_Node_Desc,
+	focus_id: u64,
+) {
 	assert(frame != nil, "a11y_build_nodes: nil frame")
 	assert(frame.count >= 0 && frame.count <= MAX_SEM_NODES, "a11y_build_nodes: corrupt frame")
 
@@ -224,10 +236,15 @@ _a11y_factory :: proc "c" (userdata: rawptr) -> ak.Tree_Update {
 			if len(d.label) > 0 {
 				ak.node_set_label_with_length(node, raw_data(d.label), len(d.label))
 			}
-			ak.node_set_bounds(node, ak.Rect{
-				f64(d.rect.x), f64(d.rect.y),
-				f64(d.rect.x + d.rect.w), f64(d.rect.y + d.rect.h),
-			})
+			ak.node_set_bounds(
+				node,
+				ak.Rect {
+					f64(d.rect.x),
+					f64(d.rect.y),
+					f64(d.rect.x + d.rect.w),
+					f64(d.rect.y + d.rect.h),
+				},
+			)
 			if d.has_toggle do ak.node_set_toggled(node, .True if d.toggled else .False)
 			if d.disabled do ak.node_set_disabled(node)
 			if d.has_expand do ak.node_set_expanded(node, d.expanded)

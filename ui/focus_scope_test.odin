@@ -8,9 +8,9 @@ focus_scope_pure_cycle :: proc(t: ^testing.T) {
 	// Two forms, three widgets in draw order: a1, a2, b1.
 	slot_a, slot_b: int
 	list: Sem_Focus_List
-	list.entries[0] = {&slot_a, 1}
-	list.entries[1] = {&slot_a, 2}
-	list.entries[2] = {&slot_b, 1}
+	list.entries[0] = {Focus_Opt{&slot_a, 1}}
+	list.entries[1] = {Focus_Opt{&slot_a, 2}}
+	list.entries[2] = {Focus_Opt{&slot_b, 1}}
 	list.count = 3
 
 	// Nothing focused: Tab lands on the first entry, Shift+Tab on the last.
@@ -36,4 +36,18 @@ focus_scope_pure_cycle :: proc(t: ^testing.T) {
 	focus_scope_apply(&list, 0, focus_scope_next_index(0, 3, true))
 	testing.expect_value(t, slot_a, 0)
 	testing.expect_value(t, slot_b, 1)
+}
+
+@(test)
+focus_scope_cycles_stable_links_across_owners :: proc(t: ^testing.T) {
+	a, b: Focus_State
+	list: Sem_Focus_List
+	list.entries[0] = {focus_link(&a, focus_id(10))}
+	list.entries[1] = {focus_link(&b, focus_id(20))}
+	list.count = 2
+	focus_scope_apply(&list, -1, 0)
+	testing.expect_value(t, a.active, focus_id(10))
+	focus_scope_apply(&list, 0, 1)
+	testing.expect_value(t, a.active, FOCUS_ID_NONE)
+	testing.expect_value(t, b.active, focus_id(20))
 }

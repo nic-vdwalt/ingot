@@ -40,3 +40,26 @@ focus_opt_focused_matches_slot :: proc(t: ^testing.T) {
 	slot = 0 // nothing focused: no id may match
 	testing.expect(t, !focus_opt_focused(Focus_Opt{&slot, 2}))
 }
+
+@(test)
+stable_focus_link_matches_state :: proc(t: ^testing.T) {
+	state: Focus_State
+	id := focus_id(42)
+	link := focus_link(&state, id)
+	testing.expect(t, !focus_focused(&state, id))
+	focus_opt_set(link)
+	testing.expect(t, focus_focused(&state, id))
+	testing.expect(t, focus_opt_focused(link))
+	focus_opt_clear(link)
+	testing.expect(t, !focus_focused(&state, id))
+}
+
+@(test)
+stable_focus_clear_is_idempotent :: proc(t: ^testing.T) {
+	state := Focus_State {
+		active = focus_id(7),
+	}
+	focus_clear(&state)
+	focus_clear(&state)
+	testing.expect_value(t, state.active, FOCUS_ID_NONE)
+}

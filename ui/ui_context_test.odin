@@ -35,6 +35,47 @@ test_ui_focus_ids_sequential_and_counted :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_ui_stable_focus_survives_insert_and_reorder :: proc(t: ^testing.T) {
+	u: Ui
+	a, b, inserted := focus_id(11), focus_id(22), focus_id(33)
+	ui_begin(&u, 0, 0, 100, 100)
+	ui_focus(&u, a)
+	focus_opt_set(ui_focus(&u, b))
+	ui_end(&u)
+
+	ui_begin(&u, 0, 0, 100, 100)
+	ui_focus(&u, inserted)
+	ui_focus(&u, b)
+	ui_focus(&u, a)
+	ui_end(&u)
+	testing.expect_value(t, u.stable_focus.active, b)
+	testing.expect_value(t, u.stable_count, 3)
+}
+
+@(test)
+test_ui_stable_focus_clears_missing_target :: proc(t: ^testing.T) {
+	u: Ui
+	a, b := focus_id(1), focus_id(2)
+	ui_begin(&u, 0, 0, 100, 100)
+	ui_focus(&u, a)
+	focus_opt_set(ui_focus(&u, b))
+	ui_end(&u)
+	ui_begin(&u, 0, 0, 100, 100)
+	ui_focus(&u, a)
+	ui_end(&u)
+	testing.expect_value(t, u.stable_focus.active, FOCUS_ID_NONE)
+}
+
+@(test)
+test_focus_order_wraps_and_recovers :: proc(t: ^testing.T) {
+	ids := [?]Focus_Id{focus_id(4), focus_id(8), focus_id(12)}
+	testing.expect_value(t, focus_order_next(ids[:], FOCUS_ID_NONE, false), ids[0])
+	testing.expect_value(t, focus_order_next(ids[:], FOCUS_ID_NONE, true), ids[2])
+	testing.expect_value(t, focus_order_next(ids[:], ids[2], false), ids[0])
+	testing.expect_value(t, focus_order_next(ids[:], ids[0], true), ids[2])
+}
+
+@(test)
 test_ui_slot_row_cross_trim :: proc(t: ^testing.T) {
 	u: Ui
 	ui_begin(&u, 10, 10, 300, 200, gap = 4)

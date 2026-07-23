@@ -16,6 +16,7 @@ Dropdown_State :: struct {
 dropdown :: proc {
 	dropdown_at,
 	dropdown_ui,
+	dropdown_ui_id,
 }
 
 // dropdown_ui carves its slot (width w, 0 = sensible default), reads screen
@@ -27,10 +28,28 @@ dropdown_ui :: proc(
 	st: ^Dropdown_State,
 	w: i32 = 0,
 	a11y_label: string = "",
-) -> (changed: bool) {
+) -> (
+	changed: bool,
+) {
 	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 2
 	r := ui_slot(u, ww, ROW_H_MD)
 	return dropdown_at(r, items, selected, st, u.screen_w, u.screen_h, ui_focus(u), a11y_label)
+}
+
+dropdown_ui_id :: proc(
+	u: ^Ui,
+	id: Focus_Id,
+	items: []string,
+	selected: ^i32,
+	st: ^Dropdown_State,
+	w: i32 = 0,
+	a11y_label: string = "",
+) -> (
+	changed: bool,
+) {
+	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 2
+	r := ui_slot(u, ww, ROW_H_MD)
+	return dropdown_at(r, items, selected, st, u.screen_w, u.screen_h, ui_focus(u, id), a11y_label)
 }
 
 dropdown_at :: proc(
@@ -41,7 +60,9 @@ dropdown_at :: proc(
 	screen_w, screen_h: i32,
 	focus: Focus_Opt = {},
 	a11y_label: string = "",
-) -> (changed: bool) {
+) -> (
+	changed: bool,
+) {
 	assert(st != nil && selected != nil, "dropdown: nil state")
 	assert(len(items) > 0, "dropdown: empty items")
 	assert(rect.w > 0 && rect.h > 0, "dropdown: empty rect")
@@ -55,17 +76,29 @@ dropdown_at :: proc(
 
 	// Closed chrome: input-style box, current label, chevron.
 	bg := theme.bg_input if st.menu.open || it.hovered else theme.bg_secondary
-	border := theme.fg_accent if st.menu.open || it.hovered || focus_opt_focused(focus) else theme.border_color
+	border :=
+		theme.fg_accent if st.menu.open || it.hovered || focus_opt_focused(focus) else theme.border_color
 	rl.DrawRectangleRec(rrect, bg)
 	rl.DrawRectangleLinesEx(rrect, 1, border)
 	chev: cstring = "\u25BE"
 	chev_w := measure_text(chev, FONT_SIZE_SMALL)
-	draw_text(chev, rect.x + rect.w - chev_w - sc(8), rect.y + (rect.h - FONT_SIZE_SMALL) / 2,
-		FONT_SIZE_SMALL, theme.fg_secondary)
+	draw_text(
+		chev,
+		rect.x + rect.w - chev_w - sc(8),
+		rect.y + (rect.h - FONT_SIZE_SMALL) / 2,
+		FONT_SIZE_SMALL,
+		theme.fg_secondary,
+	)
 	label_w := rect.w - chev_w - sc(8) - PADDING * 2
 	if label_w > 0 {
-		draw_text_truncated(items[selected^], rect.x + PADDING,
-			rect.y + (rect.h - FONT_SIZE) / 2, label_w, FONT_SIZE, theme.fg_primary)
+		draw_text_truncated(
+			items[selected^],
+			rect.x + PADDING,
+			rect.y + (rect.h - FONT_SIZE) / 2,
+			label_w,
+			FONT_SIZE,
+			theme.fg_primary,
+		)
 	}
 	if focus_opt_focused(focus) {
 		draw_focus_ring(rect.x, rect.y, rect.w, rect.h)
@@ -85,7 +118,9 @@ dropdown_at :: proc(
 
 	menu_items := make([]Menu_Item, len(items), context.temp_allocator)
 	for item, i in items {
-		menu_items[i] = Menu_Item{label = item}
+		menu_items[i] = Menu_Item {
+			label = item,
+		}
 	}
 	chosen := context_menu(&st.menu, menu_items, screen_w, screen_h)
 	if chosen >= 0 {

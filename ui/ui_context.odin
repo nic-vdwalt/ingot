@@ -1,13 +1,7 @@
 // LIB-CANDIDATE: imports only core:* and ingot:gfx.
-// Ui is a caller-owned context bundling the cursor Layout, a keyboard-focus
-// slot with automatic sequential ids, and cached screen size. Widgets with a
-// ^Ui variant carve their own rect and register for Tab focus, removing the
-// manual rect math and 1-based hand-numbering the rect API requires.
-// Immediate-mode contract holds: the caller declares the Ui, owns it, and
-// passes it each frame. No hashing, no hidden storage: a widget's focus id is
-// simply its registration order this frame. Consequence: if the set of
-// focusable widgets changes between frames, focus can land on a neighbour for
-// one frame — the same failure mode as hand-numbered ids.
+// Ui is a caller-owned context bundling layout and keyboard focus. Static
+// forms may use sequential registration; conditional and dynamic forms pass
+// stable caller IDs whose traversal order is rebuilt in bounded frame arrays.
 package ui
 
 import "core:strings"
@@ -17,16 +11,28 @@ import rl "ingot:gfx"
 // limit on everything).
 MAX_FOCUSABLES :: 256
 
-// Ui is caller-owned. focus_slot/focus_count persist across frames; the rest
-// is per-frame scratch reset by ui_begin.
+Ui_Focus_Mode :: enum u8 {
+	None,
+	Sequential,
+	Stable,
+}
+
+// Ui is caller-owned. Stable arrays retain only bounded traversal identity;
+// widgets and their values remain entirely caller-owned.
 Ui :: struct {
-	layout:      Layout,
-	focus_slot:  int, // 0 = nothing focused; ids are 1-based
-	focus_count: int, // focusables registered last frame (Tab cycle bound)
-	focus_seq:   int, // per-frame registration counter
-	screen_w:    i32,
-	screen_h:    i32,
-	open:        bool,
+	layout:       Layout,
+	focus_slot:   int,
+	focus_count:  int,
+	focus_seq:    int,
+	stable_focus: Focus_State,
+	stable_prev:  [MAX_FOCUSABLES]Focus_Id,
+	stable_cur:   [MAX_FOCUSABLES]Focus_Id,
+	stable_count: int,
+	stable_seq:   int,
+	focus_mode:   Ui_Focus_Mode,
+	screen_w:     i32,
+	screen_h:     i32,
+	open:         bool,
 }
 
 // ui_begin opens the frame over the given area: caches screen size, runs Tab
@@ -36,31 +42,70 @@ ui_begin :: proc(u: ^Ui, x, y, w, h: i32, gap: i32 = 0) {
 	assert(!u.open, "ui_begin: frame already open")
 	u.screen_w = rl.GetScreenWidth()
 	u.screen_h = rl.GetScreenHeight()
-	// One-frame latency on count, same double-buffer idea as route claims
-	// (input_route.odin): last frame's registrations bound this frame's Tab.
-	if u.focus_count > 0 {
-		form_focus_cycle(&u.focus_slot, u.focus_count)
+	if u.focus_count > 0 do form_focus_cycle(&u.focus_slot, u.focus_count)
+	if u.stable_count > 0 && rl.IsKeyPressed(.TAB) {
+		backwards := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+		ids := u.stable_prev[:u.stable_count]
+		u.stable_focus.active = focus_order_next(ids, u.stable_focus.active, backwards)
 	}
 	u.focus_seq = 0
+	u.stable_seq = 0
+	u.focus_mode = .None
 	layout_begin(&u.layout, x, y, w, h, gap)
 	u.open = true
 }
 
-// ui_end closes the root layout and latches the focusable count.
 ui_end :: proc(u: ^Ui) {
 	assert(u.open, "ui_end: frame not open")
 	layout_end(&u.layout)
-	u.focus_count = u.focus_seq
+	if u.focus_mode == .Stable {
+		if u.stable_focus.active != FOCUS_ID_NONE &&
+		   focus_order_index(u.stable_cur[:u.stable_seq], u.stable_focus.active) < 0 {
+			focus_clear(&u.stable_focus)
+		}
+		copy(u.stable_prev[:u.stable_seq], u.stable_cur[:u.stable_seq])
+		u.stable_count = u.stable_seq
+		u.focus_count = 0
+	} else {
+		u.focus_count = u.focus_seq
+		u.stable_count = 0
+	}
 	u.open = false
 }
 
-// ui_focus registers the next focusable widget and returns its Focus_Opt.
-// Deterministic: id = registration order this frame (1-based).
-ui_focus :: proc(u: ^Ui) -> Focus_Opt {
+ui_focus_sequential :: proc(u: ^Ui) -> Focus_Opt {
 	assert(u.open, "ui_focus: frame not open")
+	assert(u.focus_mode != .Stable, "ui_focus: mixed focus registration")
 	assert(u.focus_seq < MAX_FOCUSABLES, "ui_focus: too many focusables")
+	u.focus_mode = .Sequential
 	u.focus_seq += 1
 	return Focus_Opt{&u.focus_slot, u.focus_seq}
+}
+
+ui_focus_id :: proc(u: ^Ui, id: Focus_Id) -> Focus_Opt {
+	assert(u.open, "ui_focus: frame not open")
+	assert(id != FOCUS_ID_NONE, "ui_focus: zero stable id")
+	assert(u.focus_mode != .Sequential, "ui_focus: mixed focus registration")
+	assert(u.stable_seq < MAX_FOCUSABLES, "ui_focus: too many focusables")
+	for registered in u.stable_cur[:u.stable_seq] {
+		assert(registered != id, "ui_focus: duplicate stable id")
+	}
+	u.focus_mode = .Stable
+	u.stable_cur[u.stable_seq] = id
+	u.stable_seq += 1
+	return focus_link(&u.stable_focus, id)
+}
+
+ui_focus :: proc {
+	ui_focus_sequential,
+	ui_focus_id,
+}
+
+ui_focus_clear :: proc(u: ^Ui) {
+	assert(u != nil, "ui_focus_clear: nil Ui")
+	assert(!u.open, "ui_focus_clear: frame open")
+	u.focus_slot = 0
+	focus_clear(&u.stable_focus)
 }
 
 // ui_slot carves a w×h rect from the active layout frame. In a column the

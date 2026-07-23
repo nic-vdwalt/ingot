@@ -280,23 +280,23 @@ caller-owned latch, one active drag at a time.
 Checkbox, radio, slider, dropdown, tooltip, modal, and context menu are plain
 calls with caller-owned state and `Rect_I32` geometry (the convention for all
 new widgets — a rect plus a config/state struct, not positional scalar
-soup). Every control takes an optional `ui.Focus_Opt{&focus, id}` linking it
-to a `form_focus` cycler slot: Tab/Shift+Tab move focus (ids are 1-based),
-a theme-colored ring marks the focused control, and Space/Enter activates it
-(arrows adjust sliders; panes opt into PageUp/PageDown/Home/End scrolling via
-`pane_begin(..., keyboard = true)`).
+soup). Auto-layout controls accept explicit `Focus_Id` values: Tab order still
+follows draw order, while logical identity survives insertion and reorder. A
+theme-colored ring marks focus, Space/Enter activates it, and arrows adjust
+sliders. Calls without IDs remain available for fixed, unconditional forms.
 
 ```odin
-focus: int                     // 0 = nothing focused
+form: ui.Ui
 dd: ui.Dropdown_State
 modal: ui.Modal_State
 menu: ui.Context_Menu_State
 tip: ui.Tooltip_State
 
-ui.form_focus_cycle(&focus, 3)  // Tab / Shift+Tab across 3 controls
-ui.checkbox({x, y, w, 24}, "Enable", &enabled, {&focus, 1})
-ui.slider({x, y2, w, 24}, &volume, 0, 100, 5, {&focus, 2})
-ui.dropdown({x, y3, w, 28}, backends, &sel, &dd, sw, sh, {&focus, 3})
+ui.ui_begin(&form, x, y, w, h)
+ui.checkbox(&form, ui.Focus_Id(1), "Enable", &enabled)
+ui.slider(&form, ui.Focus_Id(2), &volume, 0, 100, 5)
+ui.dropdown(&form, ui.Focus_Id(3), backends, &sel, &dd)
+ui.ui_end(&form)
 ui.tooltip(&tip, {x, y2, w, 24}, "hover hint", sw, sh)
 
 if open_clicked do modal.open = true
@@ -312,7 +312,9 @@ chosen := ui.context_menu(&menu, items, sw, sh) // -1 until a row is picked
 
 The UI-scale settings panel is built on `modal_begin`/`modal_end`; the spell
 menu popup rides the same overlay/routing layer. See `examples/gallery`
-(Widgets + Overlay sections) for all of these live.
+(Widgets + Overlay sections) for all of these live. State ownership, teardown,
+stable dynamic-list IDs, and sequential compatibility are detailed in
+[`docs/ui-state.md`](docs/ui-state.md).
 
 ### Accessibility (screen readers, high contrast, reduced motion)
 

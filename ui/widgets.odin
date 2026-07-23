@@ -4,10 +4,10 @@
 // plus ingot-only generic widgets (spinner, panes, back_btn, etc.).
 package ui
 
-import rl "ingot:gfx"
-import "core:strings"
 import "core:fmt"
 import "core:math"
+import "core:strings"
+import rl "ingot:gfx"
 
 // Horizontal origin of the pane currently being drawn. draw_chat sets this for
 // a split secondary (right) pane and resets it to 0 afterward. Drawing is
@@ -48,7 +48,12 @@ draw_panel_header :: proc(x, y, w: i32, label: string, accent: rl.Color = THEME_
 
 // draw_card_bg draws the unified card container: rounded background fill +
 // hairline border + optional left accent bar.
-draw_card_bg :: proc(rect: rl.Rectangle, bg: rl.Color, accent: rl.Color = THEME_COLOR, accent_w: i32 = 0) {
+draw_card_bg :: proc(
+	rect: rl.Rectangle,
+	bg: rl.Color,
+	accent: rl.Color = THEME_COLOR,
+	accent_w: i32 = 0,
+) {
 	min_dim := min(rect.width, rect.height)
 	if min_dim <= 0 do return
 	round := (CARD_RADIUS_PX * 2) / min_dim
@@ -82,8 +87,12 @@ draw_split_drop_hint :: proc(screen_w, screen_h: i32, side_left: bool) {
 // mod_down reports whether a clipboard modifier (Cmd on macOS, Ctrl elsewhere)
 // is currently held.
 mod_down :: proc() -> bool {
-	return rl.IsKeyDown(.LEFT_SUPER) || rl.IsKeyDown(.RIGHT_SUPER) ||
-		rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL)
+	return(
+		rl.IsKeyDown(.LEFT_SUPER) ||
+		rl.IsKeyDown(.RIGHT_SUPER) ||
+		rl.IsKeyDown(.LEFT_CONTROL) ||
+		rl.IsKeyDown(.RIGHT_CONTROL) \
+	)
 }
 
 // Returns true if the mouse moved since the last frame.
@@ -142,7 +151,7 @@ wheel_accum_steps :: proc(accum: ^f32, wheel: f32) -> int {
 // Byte offset of the start of the logical line containing `pos`.
 caret_line_start :: proc(s: string, pos: int) -> int {
 	i := pos
-	for i > 0 && s[i-1] != '\n' do i -= 1
+	for i > 0 && s[i - 1] != '\n' do i -= 1
 	return i
 }
 
@@ -220,9 +229,9 @@ caret_next_rune :: proc(s: string, pos: int) -> int {
 // Word-jump left (skip trailing whitespace/newlines, then a run of non-space).
 caret_word_left :: proc(s: string, pos: int) -> int {
 	i := pos
-	for i > 0 && (s[i-1] == ' ' || s[i-1] == '\n') do i -= 1
+	for i > 0 && (s[i - 1] == ' ' || s[i - 1] == '\n') do i -= 1
 	for i > 0 {
-		c := s[i-1]
+		c := s[i - 1]
 		if c == ' ' || c == '\n' do break
 		i -= 1
 	}
@@ -345,7 +354,8 @@ Scrollbar_State :: struct {
 
 // Module-level slot for the legacy scrollbar entry point: only one scrollbar
 // can be dragged at a time through that path.
-@(private = "file") sbar: Scrollbar_State
+@(private = "file")
+sbar: Scrollbar_State
 
 // Draw a draggable vertical scrollbar (track + thumb) and return the updated
 // first-visible-row offset. total and visible are row counts; offset is the
@@ -390,12 +400,13 @@ scrollbar_ex :: proc(st: ^Scrollbar_State, x, y, w, h: i32, total, visible, offs
 	}
 	if it.held {
 		t := (mouse.y - st.grab_dy - f32(y)) / f32(track_range)
-		off = clamp(int(t*f32(max_off) + 0.5), 0, max_off)
+		off = clamp(int(t * f32(max_off) + 0.5), 0, max_off)
 	}
 
 	// Recompute the thumb position after a drag update.
 	thumb_y = y + i32(f32(track_range) * f32(off) / f32(max_off))
-	thumb_hover := it.hovered &&
+	thumb_hover :=
+		it.hovered &&
 		rl.CheckCollisionPointRec(mouse, rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)})
 	col := theme.border_color
 	if st.dragging || thumb_hover do col = theme.fg_accent
@@ -405,10 +416,10 @@ scrollbar_ex :: proc(st: ^Scrollbar_State, x, y, w, h: i32, total, visible, offs
 
 // Button visual style variants.
 Btn_Style :: enum {
-	Primary,    // Accent-colored bg, white text.
-	Secondary,  // Muted bg, brightens on hover, accent border on hover.
-	Danger,     // Red-tinted bg, light-red text.
-	Ghost,      // Nearly transparent, text-driven, accent color on hover.
+	Primary, // Accent-colored bg, white text.
+	Secondary, // Muted bg, brightens on hover, accent border on hover.
+	Danger, // Red-tinted bg, light-red text.
+	Ghost, // Nearly transparent, text-driven, accent color on hover.
 }
 
 // color_mix linearly blends a toward b by t (0..1) per channel, alpha
@@ -418,8 +429,11 @@ color_mix :: proc(a, b: rl.Color, t: f32) -> rl.Color {
 	mix_u8 :: proc(x, y: u8, t: f32) -> u8 {
 		return u8(clamp(f32(x) + (f32(y) - f32(x)) * t, 0, 255))
 	}
-	return rl.Color{
-		mix_u8(a.r, b.r, t), mix_u8(a.g, b.g, t), mix_u8(a.b, b.b, t), mix_u8(a.a, b.a, t),
+	return rl.Color {
+		mix_u8(a.r, b.r, t),
+		mix_u8(a.g, b.g, t),
+		mix_u8(a.b, b.b, t),
+		mix_u8(a.a, b.a, t),
 	}
 }
 
@@ -437,13 +451,18 @@ draw_shadow_rounded :: proc(rect: rl.Rectangle, roundness: f32, strength: f32 = 
 	alpha := clamp(f32(base.a) * strength / f32(SHADOW_LAYERS + 2), 0, 255)
 	for i := SHADOW_LAYERS; i >= 1; i -= 1 {
 		spread := f32(i) * 2
-		layer := rl.Rectangle{
+		layer := rl.Rectangle {
 			rect.x - spread,
 			rect.y - spread + 3, // bias downward for a lit-from-above look
 			rect.width + spread * 2,
 			rect.height + spread * 2,
 		}
-		rl.DrawRectangleRounded(layer, roundness, BTN_SEGMENTS, {base.r, base.g, base.b, u8(alpha)})
+		rl.DrawRectangleRounded(
+			layer,
+			roundness,
+			BTN_SEGMENTS,
+			{base.r, base.g, base.b, u8(alpha)},
+		)
 	}
 }
 
@@ -451,13 +470,13 @@ draw_shadow_rounded :: proc(rect: rl.Rectangle, roundness: f32, strength: f32 = 
 // cleared when a new key would exceed HOVER_ANIM_MAX (layout changes strand
 // stale keys; a rare full clear only restarts in-flight fades).
 HOVER_ANIM_MAX :: 256
-@(private = "file") hover_anim: map[u64]f32
+@(private = "file")
+hover_anim: map[u64]f32
 
 // hover_anim_key mixes all four rect coordinates so distinct widgets rarely
 // share a fade slot; a collision is cosmetic only (two widgets share a fade).
 hover_anim_key :: proc "contextless" (x, y, w, h: i32) -> u64 {
-	return (u64(u32(x)) | u64(u32(y)) << 32) ~
-		((u64(u32(w)) | u64(u32(h)) << 32) * 0x100000001b3)
+	return (u64(u32(x)) | u64(u32(y)) << 32) ~ ((u64(u32(w)) | u64(u32(h)) << 32) * 0x100000001b3)
 }
 
 // hover_anim_step advances one hover fade in `state` by `dt`. Headless core
@@ -501,17 +520,33 @@ hover_anim_frac :: proc(x, y, w, h: i32, hovered: bool) -> f32 {
 btn_palette :: proc(style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0, bd1: rl.Color) {
 	switch style {
 	case .Primary:
-		return theme.button_bg, theme.button_hover, theme.button_text, theme.button_text,
-			theme.button_bg, theme.fg_accent
+		return theme.button_bg,
+			theme.button_hover,
+			theme.button_text,
+			theme.button_text,
+			theme.button_bg,
+			theme.fg_accent
 	case .Secondary:
-		return theme.bg_active, theme.bg_hover, theme.fg_secondary, theme.fg_primary,
-			rl.Color{0, 0, 0, 0}, theme.fg_accent
+		return theme.bg_active,
+			theme.bg_hover,
+			theme.fg_secondary,
+			theme.fg_primary,
+			rl.Color{0, 0, 0, 0},
+			theme.fg_accent
 	case .Danger:
-		return theme.button_danger_bg, theme.button_danger_hover, theme.button_danger_fg,
-			theme.button_danger_fg, rl.Color{0, 0, 0, 0}, theme.fg_error
+		return theme.button_danger_bg,
+			theme.button_danger_hover,
+			theme.button_danger_fg,
+			theme.button_danger_fg,
+			rl.Color{0, 0, 0, 0},
+			theme.fg_error
 	case .Ghost:
-		return rl.Color{0, 0, 0, 0}, theme.bg_hover, theme.fg_secondary, theme.fg_accent,
-			rl.Color{0, 0, 0, 0}, rl.Color{0, 0, 0, 0}
+		return rl.Color {
+			0,
+			0,
+			0,
+			0,
+		}, theme.bg_hover, theme.fg_secondary, theme.fg_accent, rl.Color{0, 0, 0, 0}, rl.Color{0, 0, 0, 0}
 	}
 	return
 }
@@ -528,8 +563,12 @@ btn_gloss :: proc(rect: rl.Rectangle) {
 	gw := i32(rect.width) - inset * 2
 	if gw <= 0 do return
 	rl.DrawRectangleGradientV(
-		i32(rect.x) + inset, i32(rect.y) + 1, gw, i32(rect.height / 2),
-		top, theme.button_primary_grad_bottom,
+		i32(rect.x) + inset,
+		i32(rect.y) + 1,
+		gw,
+		i32(rect.height / 2),
+		top,
+		theme.button_primary_grad_bottom,
 	)
 }
 
@@ -540,14 +579,35 @@ btn_gloss :: proc(rect: rl.Rectangle) {
 btn :: proc {
 	btn_at,
 	btn_ui,
+	btn_ui_id,
 }
 
 // btn_ui sizes to its label (+padding) and auto-registers focus.
-btn_ui :: proc(u: ^Ui, label: string, style: Btn_Style = .Secondary, enabled: bool = true) -> bool {
+btn_ui :: proc(
+	u: ^Ui,
+	label: string,
+	style: Btn_Style = .Secondary,
+	enabled: bool = true,
+) -> bool {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	w := measure_text(label_c, FONT_SIZE_SMALL) + PADDING * 2
 	r := ui_slot(u, w, ROW_H_MD)
-	return btn_at(r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = ui_focus(u))
+	fo := ui_focus(u) if enabled else Focus_Opt{}
+	return btn_at(r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
+}
+
+btn_ui_id :: proc(
+	u: ^Ui,
+	id: Focus_Id,
+	label: string,
+	style: Btn_Style = .Secondary,
+	enabled: bool = true,
+) -> bool {
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	w := measure_text(label_c, FONT_SIZE_SMALL) + PADDING * 2
+	r := ui_slot(u, w, ROW_H_MD)
+	fo := ui_focus(u, id) if enabled else Focus_Opt{}
+	return btn_at(r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
 
 btn_at :: proc(
@@ -571,9 +631,9 @@ btn_at :: proc(
 		clicked = clicked || focus_opt_activated(focus)
 	}
 	if web_form_id != "" {
-		clicked = clicked || rl.SyncWebSubmitButton(
-			web_form_id, label, x, y, w, h, i32(style), fs, enabled,
-		)
+		clicked =
+			clicked ||
+			rl.SyncWebSubmitButton(web_form_id, label, x, y, w, h, i32(style), fs, enabled)
 	}
 	if hovered do request_cursor(.POINTING_HAND)
 
@@ -612,10 +672,14 @@ btn_at :: proc(
 }
 
 
-
 // Hit-test wrapped text. Returns byte offset into text at (mouse_x, mouse_y), or -1 if miss.
 // Must mirror draw_text_wrapped wrapping logic exactly.
-hit_test_wrapped :: proc(x, y, max_width: i32, text: string, mouse_x, mouse_y: i32, font_size: i32 = FONT_SIZE) -> int {
+hit_test_wrapped :: proc(
+	x, y, max_width: i32,
+	text: string,
+	mouse_x, mouse_y: i32,
+	font_size: i32 = FONT_SIZE,
+) -> int {
 	if len(text) == 0 do return -1
 
 	lines := wrap_text(text, max_width, font_size)
@@ -630,7 +694,13 @@ hit_test_wrapped :: proc(x, y, max_width: i32, text: string, mouse_x, mouse_y: i
 
 // Draw a single line with optional selection highlight behind it.
 // Uses measure_text on actual substrings for pixel-accurate highlight positioning.
-draw_line_with_selection :: proc(x, y: i32, line: string, font_size: i32, color: rl.Color, line_byte_start, sel_start, sel_end: int) {
+draw_line_with_selection :: proc(
+	x, y: i32,
+	line: string,
+	font_size: i32,
+	color: rl.Color,
+	line_byte_start, sel_start, sel_end: int,
+) {
 	line_byte_end := line_byte_start + len(line)
 
 	// Compute overlap of [line_byte_start, line_byte_end) and [sel_start, sel_end).
@@ -655,8 +725,10 @@ draw_line_with_selection :: proc(x, y: i32, line: string, font_size: i32, color:
 // chat renderer, per-line drawing skips lines fully outside [top, bottom] while
 // still advancing layout so heights stay correct. Defaults to unbounded so
 // non-chat callers (modals, sidebar) draw every line.
-@(private="file") text_cull_top: i32 = min(i32)
-@(private="file") text_cull_bottom: i32 = max(i32)
+@(private = "file")
+text_cull_top: i32 = min(i32)
+@(private = "file")
+text_cull_bottom: i32 = max(i32)
 
 // set_text_cull_band restricts subsequent wrapped-text draws to the given
 // vertical band. Pair with clear_text_cull_band.
@@ -678,7 +750,15 @@ line_culled :: proc(y: i32) -> bool {
 }
 
 // Draw a scrollable text area with optional selection highlighting.
-draw_text_wrapped :: proc(x, y, max_width: i32, text: string, color: rl.Color, font_size: i32 = FONT_SIZE, sel_start: int = -1, sel_end: int = -1, draw: bool = true) -> i32 {
+draw_text_wrapped :: proc(
+	x, y, max_width: i32,
+	text: string,
+	color: rl.Color,
+	font_size: i32 = FONT_SIZE,
+	sel_start: int = -1,
+	sel_end: int = -1,
+	draw: bool = true,
+) -> i32 {
 	if len(text) == 0 do return 0
 
 	has_sel := sel_start >= 0 && sel_end > sel_start
@@ -695,7 +775,16 @@ draw_text_wrapped :: proc(x, y, max_width: i32, text: string, color: rl.Color, f
 		}
 		line := text[ln.start:ln.end]
 		if has_sel {
-			draw_line_with_selection(x, current_y, line, font_size, color, ln.start, sel_start, sel_end)
+			draw_line_with_selection(
+				x,
+				current_y,
+				line,
+				font_size,
+				color,
+				ln.start,
+				sel_start,
+				sel_end,
+			)
 		} else {
 			line_c := strings.clone_to_cstring(line, context.temp_allocator)
 			draw_text(line_c, x, current_y, font_size, color)
@@ -738,7 +827,11 @@ Truncate_Side :: enum u8 {
 // Return text truncated with an ellipsis on `side` so it fits max_width.
 // The returned string is allocated in the temp allocator (or is the input
 // unchanged when it already fits).
-truncate_to_width_dir :: proc(text: string, max_width, font_size: i32, side: Truncate_Side) -> string {
+truncate_to_width_dir :: proc(
+	text: string,
+	max_width, font_size: i32,
+	side: Truncate_Side,
+) -> string {
 	assert(max_width >= 0, "truncate_to_width_dir: negative width")
 	assert(font_size > 0, "truncate_to_width_dir: non-positive font size")
 	if len(text) == 0 do return text
@@ -817,7 +910,10 @@ truncate_path_middle :: proc(path: string, max_width, font_size: i32) -> string 
 	first_seg := body[:first_sep]
 
 	// Candidate 1: first/…/last (+ optional trailing separator).
-	cand := strings.concatenate({first_seg, sep, "…", sep, last_seg, trailing}, context.temp_allocator)
+	cand := strings.concatenate(
+		{first_seg, sep, "…", sep, last_seg, trailing},
+		context.temp_allocator,
+	)
 	cand_c := strings.clone_to_cstring(cand, context.temp_allocator)
 	if measure_text(cand_c, font_size) <= max_width {
 		return cand
@@ -864,13 +960,16 @@ spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = THEME_COLOR, segment
 	// Continuous animation: keep frames coming while a spinner is visible
 	// (no-op in the default continuous frame strategy).
 	rl.RequestRedraw()
-	start := f32(math.mod(rl.GetTime()*360.0, 360.0))
+	start := f32(math.mod(rl.GetTime() * 360.0, 360.0))
 	thickness := max(radius * 0.28, 2.0)
 	rl.DrawRing(
 		rl.Vector2{f32(cx), f32(cy)},
-		radius - thickness, radius,
-		start, start + 270.0,
-		segments, color,
+		radius - thickness,
+		radius,
+		start,
+		start + 270.0,
+		segments,
+		color,
 	)
 }
 
@@ -884,8 +983,7 @@ section_header :: proc(x, y, w: i32, label: string) -> i32 {
 // status_pill draws a pill whose background is the fg color tinted to
 // PILL_TINT_ALPHA. Returns the pill width.
 status_pill :: proc(text: string, x, y, font_size: i32, color: rl.Color) -> i32 {
-	return draw_pill(text, x, y, font_size, color,
-		{color.r, color.g, color.b, PILL_TINT_ALPHA})
+	return draw_pill(text, x, y, font_size, color, {color.r, color.g, color.b, PILL_TINT_ALPHA})
 }
 
 // progress_bar draws a rounded track + fill; frac clamped to [0,1].
@@ -893,7 +991,7 @@ progress_bar :: proc(x, y, w, h: i32, frac: f32, color: rl.Color) {
 	track := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	rl.DrawRectangleRounded(track, 1.0, 4, theme.bg_active)
 	fw := f32(w) * clamp(frac, 0, 1)
-	if fw >= f32(h) { // avoid degenerate rounding on tiny fills
+	if fw >= f32(h) { 	// avoid degenerate rounding on tiny fills
 		rl.DrawRectangleRounded({f32(x), f32(y), fw, f32(h)}, 1.0, 4, color)
 	} else if fw > 0 {
 		rl.DrawRectangleRec({f32(x), f32(y), fw, f32(h)}, color)
@@ -928,7 +1026,12 @@ progress_bar_animated :: proc(x, y, w, h: i32, frac: f32, anim: ^f32, color: rl.
 
 // icon_btn draws a small square ghost button (for ✕ / ◀ / ▶ style glyphs).
 // Returns true if clicked this frame.
-icon_btn :: proc(x, y, size: i32, label: string, enabled: bool = true, focus: Focus_Opt = {}) -> bool {
+icon_btn :: proc(
+	x, y, size: i32,
+	label: string,
+	enabled: bool = true,
+	focus: Focus_Opt = {},
+) -> bool {
 	return btn(x, y, size, size, label, .Ghost, FONT_SIZE_SMALL, enabled, focus = focus)
 }
 
@@ -956,8 +1059,8 @@ list_row_bg :: proc(rect: rl.Rectangle, selected, hovered: bool) {
 // measured content height (clamps scroll on the next frame) and a scrollbar.
 Pane :: struct {
 	scroll:    f32,
-	content_h: i32,             // measured by pane_end, consumed next frame
-	open:      bool,            // set by pane_begin, cleared by pane_end (balance check)
+	content_h: i32, // measured by pane_end, consumed next frame
+	open:      bool, // set by pane_begin, cleared by pane_end (balance check)
 	sbar:      Scrollbar_State, // per-pane scrollbar drag state
 }
 
@@ -972,14 +1075,22 @@ pane_reset :: proc(p: ^Pane) {
 // `keyboard` is true and the mouse hovers the pane, PageUp/PageDown/Home/End
 // and Up/Down arrows scroll it — leave it off for panes that host text inputs
 // (their caret owns those keys).
-pane_begin :: proc(p: ^Pane, x, y, w, h: i32, pad: i32 = 10, keyboard: bool = false) -> (cursor_y: i32) {
+pane_begin :: proc(
+	p: ^Pane,
+	x, y, w, h: i32,
+	pad: i32 = 10,
+	keyboard: bool = false,
+) -> (
+	cursor_y: i32,
+) {
 	// Why assert: an already-open pane means a missing pane_end — the scissor
 	// stack would corrupt every subsequent draw.
 	assert(!p.open, "pane_begin: pane already begun (missing pane_end)")
 	assert(w >= 0 && h >= 0, "pane_begin: negative pane size")
 	p.open = true
 	mouse := rl.GetMousePosition()
-	hovered := rl.CheckCollisionPointRec(mouse, {f32(x), f32(y), f32(w), f32(h)}) &&
+	hovered :=
+		rl.CheckCollisionPointRec(mouse, {f32(x), f32(y), f32(w), f32(h)}) &&
 		!route_occluded(mouse)
 	if hovered {
 		p.scroll -= get_wheel_move() * f32(sc(24))
@@ -1020,8 +1131,16 @@ pane_end :: proc(p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i32 = 10) {
 	start_y := y + sc(pad) - i32(p.scroll)
 	p.content_h = end_y - start_y + sc(pad)
 	if p.content_h > h {
-		off := scrollbar_ex(&p.sbar, x + w - sc(9), y + sc(2), sc(5), h - sc(4),
-			int(p.content_h), int(h), int(p.scroll))
+		off := scrollbar_ex(
+			&p.sbar,
+			x + w - sc(9),
+			y + sc(2),
+			sc(5),
+			h - sc(4),
+			int(p.content_h),
+			int(h),
+			int(p.scroll),
+		)
 		p.scroll = f32(off)
 	}
 }
@@ -1048,8 +1167,15 @@ back_btn :: proc(x, y: i32, label: string, focus: Focus_Opt = {}) -> bool {
 // on the left and a chevron state indicator on the right. Toggles open^ on
 // click (or Space/Enter while focused); returns true on the frame it toggled
 // (caller persists open state).
-collapsible_header :: proc(x, y, w: i32, label: string, open: ^bool,
-	font_size: i32 = FONT_SIZE_SMALL, focus: Focus_Opt = {}) -> (toggled: bool) {
+collapsible_header :: proc(
+	x, y, w: i32,
+	label: string,
+	open: ^bool,
+	font_size: i32 = FONT_SIZE_SMALL,
+	focus: Focus_Opt = {},
+) -> (
+	toggled: bool,
+) {
 	assert(open != nil, "collapsible_header: nil open state")
 	assert(w > 0, "collapsible_header: non-positive width")
 	h := sc(26)
@@ -1075,7 +1201,12 @@ collapsible_header :: proc(x, y, w: i32, label: string, open: ^bool,
 	draw_text(lbl, x + sc(10), y + sc(6), font_size, theme.fg_label)
 	ind: cstring = "\u25BE" if open^ else "\u25B8"
 	iw := measure_text(ind, font_size)
-	draw_text(ind, x + w - iw - sc(10), y + sc(6), font_size,
-		theme.fg_primary if hovered else theme.fg_secondary)
+	draw_text(
+		ind,
+		x + w - iw - sc(10),
+		y + sc(6),
+		font_size,
+		theme.fg_primary if hovered else theme.fg_secondary,
+	)
 	return
 }

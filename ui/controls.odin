@@ -13,6 +13,7 @@ import rl "ingot:gfx"
 checkbox :: proc {
 	checkbox_at,
 	checkbox_ui,
+	checkbox_ui_id,
 }
 
 // checkbox_ui carves its own slot (content-sized) and auto-registers focus.
@@ -23,7 +24,21 @@ checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
 	return checkbox_at(r, label, checked, ui_focus(u))
 }
 
-checkbox_at :: proc(rect: Rect_I32, label: string, checked: ^bool, focus: Focus_Opt = {}) -> (changed: bool) {
+checkbox_ui_id :: proc(u: ^Ui, id: Focus_Id, label: string, checked: ^bool) -> (changed: bool) {
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE)
+	r := ui_slot(u, w, ROW_H_SM)
+	return checkbox_at(r, label, checked, ui_focus(u, id))
+}
+
+checkbox_at :: proc(
+	rect: Rect_I32,
+	label: string,
+	checked: ^bool,
+	focus: Focus_Opt = {},
+) -> (
+	changed: bool,
+) {
 	assert(checked != nil, "checkbox: nil checked state")
 	assert(rect.w > 0 && rect.h > 0, "checkbox: empty rect")
 	// Why assert: a nameless control is invisible to assistive tech.
@@ -51,14 +66,30 @@ checkbox_at :: proc(rect: Rect_I32, label: string, checked: ^bool, focus: Focus_
 		cx := f32(bx)
 		cy := f32(by)
 		s := f32(box)
-		rl.DrawLineEx({cx + s * 0.22, cy + s * 0.52}, {cx + s * 0.44, cy + s * 0.74}, 2.0, theme.button_text)
-		rl.DrawLineEx({cx + s * 0.44, cy + s * 0.74}, {cx + s * 0.80, cy + s * 0.28}, 2.0, theme.button_text)
+		rl.DrawLineEx(
+			{cx + s * 0.22, cy + s * 0.52},
+			{cx + s * 0.44, cy + s * 0.74},
+			2.0,
+			theme.button_text,
+		)
+		rl.DrawLineEx(
+			{cx + s * 0.44, cy + s * 0.74},
+			{cx + s * 0.80, cy + s * 0.28},
+			2.0,
+			theme.button_text,
+		)
 	}
 	if focus_opt_focused(focus) {
 		draw_focus_ring(bx, by, box, box)
 	}
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text(label_c, bx + box + CONTROL_GAP, rect.y + (rect.h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_primary)
+	draw_text(
+		label_c,
+		bx + box + CONTROL_GAP,
+		rect.y + (rect.h - FONT_SIZE) / 2,
+		FONT_SIZE,
+		theme.fg_primary,
+	)
 	sem: Sem_State
 	if checked^ do sem += {.Checked}
 	semantic_push(.Checkbox, rect, label, sem, focus)
@@ -70,6 +101,7 @@ checkbox_at :: proc(rect: Rect_I32, label: string, checked: ^bool, focus: Focus_
 radio :: proc {
 	radio_at,
 	radio_ui,
+	radio_ui_id,
 }
 
 // radio_ui carves its own slot (content-sized) and auto-registers focus.
@@ -80,7 +112,30 @@ radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed:
 	return radio_at(r, label, selected, value, ui_focus(u))
 }
 
-radio_at :: proc(rect: Rect_I32, label: string, selected: ^i32, value: i32, focus: Focus_Opt = {}) -> (changed: bool) {
+radio_ui_id :: proc(
+	u: ^Ui,
+	id: Focus_Id,
+	label: string,
+	selected: ^i32,
+	value: i32,
+) -> (
+	changed: bool,
+) {
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE)
+	r := ui_slot(u, w, ROW_H_SM)
+	return radio_at(r, label, selected, value, ui_focus(u, id))
+}
+
+radio_at :: proc(
+	rect: Rect_I32,
+	label: string,
+	selected: ^i32,
+	value: i32,
+	focus: Focus_Opt = {},
+) -> (
+	changed: bool,
+) {
 	assert(selected != nil, "radio: nil selected state")
 	assert(rect.w > 0 && rect.h > 0, "radio: empty rect")
 	// Why assert: a nameless control is invisible to assistive tech.
@@ -100,7 +155,8 @@ radio_at :: proc(rect: Rect_I32, label: string, selected: ^i32, value: i32, focu
 	ccx := f32(rect.x) + r
 	ccy := f32(rect.y) + f32(rect.h) / 2
 	is_on := selected^ == value
-	border := theme.fg_accent if hovered || focus_opt_focused(focus) || is_on else theme.border_color
+	border :=
+		theme.fg_accent if hovered || focus_opt_focused(focus) || is_on else theme.border_color
 	rl.DrawCircleV({ccx, ccy}, r, theme.bg_input)
 	rl.DrawCircleLinesV({ccx, ccy}, r, border)
 	if is_on {
@@ -110,7 +166,13 @@ radio_at :: proc(rect: Rect_I32, label: string, selected: ^i32, value: i32, focu
 		draw_focus_ring(rect.x, rect.y + (rect.h - box) / 2, box, box)
 	}
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text(label_c, rect.x + box + CONTROL_GAP, rect.y + (rect.h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_primary)
+	draw_text(
+		label_c,
+		rect.x + box + CONTROL_GAP,
+		rect.y + (rect.h - FONT_SIZE) / 2,
+		FONT_SIZE,
+		theme.fg_primary,
+	)
 	sem: Sem_State
 	if is_on do sem += {.Checked}
 	semantic_push(.Radio, rect, label, sem, focus)
@@ -140,7 +202,8 @@ slider_keyboard_delta :: proc(lo, hi, step: f32) -> f32 {
 
 // The slider currently being dragged, keyed by its value pointer so multiple
 // sliders never fight over one drag (only one mouse exists).
-@(private = "file") slider_active: ^f32
+@(private = "file")
+slider_active: ^f32
 
 // slider draws a horizontal slider over [lo, hi] with optional stepping.
 // Dragging or clicking the track moves the value; Left/Right adjust it while
@@ -148,6 +211,7 @@ slider_keyboard_delta :: proc(lo, hi, step: f32) -> f32 {
 slider :: proc {
 	slider_at,
 	slider_ui,
+	slider_ui_id,
 }
 
 // slider_ui carves its own slot (width w, 0 = sensible default) and
@@ -159,10 +223,28 @@ slider_ui :: proc(
 	step: f32 = 0,
 	w: i32 = 0,
 	a11y_label: string = "",
-) -> (changed: bool) {
+) -> (
+	changed: bool,
+) {
 	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
 	r := ui_slot(u, ww, ROW_H_SM)
 	return slider_at(r, value, lo, hi, step, ui_focus(u), a11y_label)
+}
+
+slider_ui_id :: proc(
+	u: ^Ui,
+	id: Focus_Id,
+	value: ^f32,
+	lo, hi: f32,
+	step: f32 = 0,
+	w: i32 = 0,
+	a11y_label: string = "",
+) -> (
+	changed: bool,
+) {
+	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
+	r := ui_slot(u, ww, ROW_H_SM)
+	return slider_at(r, value, lo, hi, step, ui_focus(u, id), a11y_label)
 }
 
 slider_at :: proc(
@@ -172,7 +254,9 @@ slider_at :: proc(
 	step: f32 = 0,
 	focus: Focus_Opt = {},
 	a11y_label: string = "",
-) -> (changed: bool) {
+) -> (
+	changed: bool,
+) {
 	assert(value != nil, "slider: nil value")
 	assert(hi > lo, "slider: hi must exceed lo")
 	assert(rect.w > 0 && rect.h > 0, "slider: empty rect")
@@ -217,7 +301,8 @@ slider_at :: proc(
 		rl.DrawRectangleRounded({track_x, cy - th / 2, fill_w, th}, 1.0, 4, theme.fg_accent)
 	}
 	knob_x := track_x + track_w * frac
-	knob_col := theme.fg_accent if hovered || slider_active == value || focus_opt_focused(focus) else theme.fg_secondary
+	knob_col :=
+		theme.fg_accent if hovered || slider_active == value || focus_opt_focused(focus) else theme.fg_secondary
 	rl.DrawCircleV({knob_x, cy}, knob_r, theme.bg_input)
 	rl.DrawCircleLinesV({knob_x, cy}, knob_r, knob_col)
 	rl.DrawCircleV({knob_x, cy}, knob_r * 0.55, knob_col)

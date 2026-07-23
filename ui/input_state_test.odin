@@ -46,5 +46,27 @@ input_box_reset_clears_but_keeps_capacity :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(b.st.pills), 0)
 	testing.expect_value(t, len(b.st.undo.undo), 0)
 	testing.expect(t, !b.st.sel.active)
+	testing.expect(t, !b.st.memo.valid)
 	testing.expect_value(t, cap(b.sb.buf), cap_before)
+}
+
+@(test)
+input_box_destroy_is_idempotent :: proc(t: ^testing.T) {
+	b: Input_Box
+	strings.write_string(&b.sb, "owned text")
+	input_box_destroy(&b)
+	input_box_destroy(&b)
+	testing.expect_value(t, input_box_text(&b), "")
+}
+
+@(test)
+input_box_reset_clears_wrapped_line_memo :: proc(t: ^testing.T) {
+	b: Input_Box
+	defer input_box_destroy(&b)
+	strings.write_string(&b.sb, "wrapped text")
+	input_visual_lines_memo(&b.st.memo, input_box_text(&b), 40)
+	testing.expect(t, b.st.memo.valid)
+	input_box_reset(&b)
+	testing.expect(t, !b.st.memo.valid)
+	testing.expect_value(t, b.st.memo.text, "")
 }

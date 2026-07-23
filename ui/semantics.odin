@@ -63,8 +63,7 @@ Sem_Node :: struct {
 	value:     f32, // slider/progress current value
 	lo:        f32, // slider range low
 	hi:        f32, // slider range high
-	focus:     ^int, // caller's focus slot, for action/focus routing
-	focus_id:  int, // 1-based id within that slot's cycle
+	focus:     Focus_Opt,
 }
 
 Sem_Frame :: struct {
@@ -75,8 +74,7 @@ Sem_Frame :: struct {
 // Sem_Focus_Entry is one focusable widget recorded in draw order; the
 // app-global Tab cycler (focus_scope.odin) walks these.
 Sem_Focus_Entry :: struct {
-	focus: ^int,
-	id:    int,
+	focus: Focus_Opt,
 }
 
 Sem_Focus_List :: struct {
@@ -84,11 +82,16 @@ Sem_Focus_List :: struct {
 	count:   int,
 }
 
-@(private = "file") sem_cur: Sem_Frame
-@(private = "file") sem_on: bool
-@(private = "file") sem_ordinals: [Sem_Role]int
-@(private = "file") sem_focus_cur: Sem_Focus_List
-@(private = "file") sem_focus_prev: Sem_Focus_List
+@(private = "file")
+sem_cur: Sem_Frame
+@(private = "file")
+sem_on: bool
+@(private = "file")
+sem_ordinals: [Sem_Role]int
+@(private = "file")
+sem_focus_cur: Sem_Focus_List
+@(private = "file")
+sem_focus_prev: Sem_Focus_List
 
 // sem_enable turns semantic node recording on or off. Off by default so apps
 // without an accessibility consumer pay only a branch per widget. The focus
@@ -105,10 +108,14 @@ sem_enabled :: proc() -> bool {
 // focus registry. Called once per frame from begin_cursor_frame, next to
 // route_begin_frame.
 sem_begin_frame :: proc() {
-	assert(sem_cur.count >= 0 && sem_cur.count <= MAX_SEM_NODES,
-		"sem_begin_frame: corrupt node count")
-	assert(sem_focus_cur.count >= 0 && sem_focus_cur.count <= MAX_SEM_FOCUS,
-		"sem_begin_frame: corrupt focus count")
+	assert(
+		sem_cur.count >= 0 && sem_cur.count <= MAX_SEM_NODES,
+		"sem_begin_frame: corrupt node count",
+	)
+	assert(
+		sem_focus_cur.count >= 0 && sem_focus_cur.count <= MAX_SEM_FOCUS,
+		"sem_begin_frame: corrupt focus count",
+	)
 	sem_cur.count = 0
 	sem_ordinals = {}
 	// Focus registry double-buffers: the Tab cycler consults last frame's
@@ -130,8 +137,10 @@ sem_reset :: proc() {
 // convention). Derived widget ids start above both.
 SEM_ID_ROOT :: u64(1)
 
-@(private = "file") SEM_FNV_OFFSET :: u64(0xcbf29ce484222325)
-@(private = "file") SEM_FNV_PRIME :: u64(0x00000100000001b3)
+@(private = "file")
+SEM_FNV_OFFSET :: u64(0xcbf29ce484222325)
+@(private = "file")
+SEM_FNV_PRIME :: u64(0x00000100000001b3)
 
 // sem_node_id derives a stable node id without call-site hashing, in
 // priority order:
@@ -206,7 +215,7 @@ semantic_push :: proc(
 ) -> ^Sem_Node {
 	assert(role != .None, "semantic_push: role required")
 	if focus.focus != nil && sem_focus_cur.count < MAX_SEM_FOCUS {
-		sem_focus_cur.entries[sem_focus_cur.count] = {focus.focus, focus.id}
+		sem_focus_cur.entries[sem_focus_cur.count] = {focus}
 		sem_focus_cur.count += 1
 	}
 	if !sem_on do return nil
@@ -218,15 +227,14 @@ semantic_push :: proc(
 	node := &sem_cur.nodes[sem_cur.count]
 	sem_cur.count += 1
 	node^ = {
-		id       = sem_node_id(role, focus, field_id, ordinal),
-		role     = role,
-		rect     = rect,
-		state    = state,
-		value    = value,
-		lo       = lo,
-		hi       = hi,
-		focus    = focus.focus,
-		focus_id = focus.id,
+		id    = sem_node_id(role, focus, field_id, ordinal),
+		role  = role,
+		rect  = rect,
+		state = state,
+		value = value,
+		lo    = lo,
+		hi    = hi,
+		focus = focus,
 	}
 	n := sem_label_clip(label)
 	copy(node.label[:n], label[:n])

@@ -7,8 +7,9 @@ package ui
 
 import "core:strings"
 
-// Input_Box bundles everything one text input persists across frames. The
-// zero value is ready to use; call input_box_destroy when done.
+// Input_Box owns its builder, undo snapshots, pills, and wrap memo. The zero
+// value is ready to use. Do not copy it after first use; destroy it before its
+// owner is discarded.
 Input_Box :: struct {
 	sb: strings.Builder,
 	st: Text_Input_State,
@@ -41,6 +42,8 @@ input_box_reset :: proc(b: ^Input_Box) {
 	sel_reset(&b.st.sel)
 	input_undo_reset(&b.st.undo)
 	clear(&b.st.pills)
+	input_vlines_memo_destroy(&b.st.memo)
+	assert(!b.st.sel.active && b.st.cursor == 0, "input_box_reset: state not cleared")
 }
 
 // input_box_text returns the current text (a view into the builder).
@@ -55,6 +58,7 @@ input_box_text :: proc(b: ^Input_Box) -> string {
 input :: proc {
 	input_at,
 	input_ui,
+	input_ui_id,
 }
 
 // input_ui carves a full-width slot (height h, 0 = single-line default),
@@ -71,7 +75,29 @@ input_ui :: proc(
 	hh := h if h > 0 else ROW_H_MD + CONTROL_GAP
 	r := ui_slot(u, remaining(&u.layout).w, hh)
 	focus_opt_click(fo, r.x, r.y, r.w, r.h)
-	return input_at(r.x, r.y, r.w, r.h, b, placeholder, focus_opt_focused(fo), masked, semantics)
+	sem := semantics
+	sem.focus = fo.focus
+	sem.focus_id = fo.id
+	return input_at(r.x, r.y, r.w, r.h, b, placeholder, focus_opt_focused(fo), masked, sem)
+}
+
+input_ui_id :: proc(
+	u: ^Ui,
+	id: Focus_Id,
+	b: ^Input_Box,
+	placeholder: string,
+	h: i32 = 0,
+	masked: bool = false,
+	semantics: Text_Input_Semantics = {},
+) -> bool {
+	fo := ui_focus(u, id)
+	hh := h if h > 0 else ROW_H_MD + CONTROL_GAP
+	r := ui_slot(u, remaining(&u.layout).w, hh)
+	focus_opt_click(fo, r.x, r.y, r.w, r.h)
+	sem := semantics
+	sem.focus = fo.focus
+	sem.focus_id = fo.id
+	return input_at(r.x, r.y, r.w, r.h, b, placeholder, focus_opt_focused(fo), masked, sem)
 }
 
 input_at :: proc(
