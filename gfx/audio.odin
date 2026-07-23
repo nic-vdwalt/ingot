@@ -88,9 +88,11 @@ SetMasterVolume :: proc(volume: f32) {
 
 // --- sounds -----------------------------------------------------------------
 
-// LoadSound decodes a file (wav/ogg/mp3/flac) into memory. Web builds return
-// an invalid Sound — browsers have no file paths; embed bytes and use
-// LoadSoundFromWave instead (see examples/breakout).
+// LoadSound decodes a file (wav/ogg/mp3/flac) into memory. On web the name
+// is treated as a URL (relative to the page origin) and fetched + decoded
+// asynchronously: the returned handle is valid immediately but stays silent
+// until the decode resolves — poll IsSoundReady. A play issued while the
+// fetch is in flight is applied when the decode lands.
 LoadSound :: proc(fileName: cstring) -> Sound {
 	assert(fileName != nil, "LoadSound: nil fileName")
 	if !g_audio_ready do return Sound{}
@@ -168,10 +170,22 @@ SetSoundPitch :: proc(sound: Sound, pitch: f32) {
 	platform_audio_pitch(sound._handle, pitch)
 }
 
+// IsSoundReady reports whether the sound's samples are decoded and playable.
+// Native loads are synchronous, so any live handle is ready; on web a
+// file-backed Sound resolves asynchronously (fetch + decodeAudioData) and
+// stays unready — silent to play — until the decode lands. A failed fetch
+// leaves it permanently unready (operating condition, not an error).
+IsSoundReady :: proc(sound: Sound) -> bool {
+	if !g_audio_ready || sound._handle == 0 do return false
+	assert(_audio_handle_slot(sound._handle) >= 0, "IsSoundReady: corrupt handle")
+	return platform_audio_loaded(sound._handle)
+}
+
 // --- music (streamed) -------------------------------------------------------
 
-// LoadMusicStream opens a file for streamed playback (native only; web
-// returns an invalid Music for the same reason as LoadSound).
+// LoadMusicStream opens a file for streamed playback. Native streams from
+// disk on the device thread; web fetches + decodes the whole file into a
+// buffer asynchronously (same story as LoadSound — poll IsMusicReady).
 LoadMusicStream :: proc(fileName: cstring) -> Music {
 	assert(fileName != nil, "LoadMusicStream: nil fileName")
 	if !g_audio_ready do return Music{}
@@ -200,7 +214,8 @@ StopMusicStream :: proc(music: Music) {
 }
 
 // UpdateMusicStream is a no-op on both targets (native streams on the device
-// thread; web plays decoded buffers). Kept for raylib call-site parity.
+// thread; web plays fully decoded buffers, refilled by the browser). Kept
+// for raylib call-site parity.
 UpdateMusicStream :: proc(music: Music) {
 	assert(
 		music._handle == 0 || _audio_handle_slot(music._handle) >= 0,
@@ -219,4 +234,12 @@ IsMusicStreamPlaying :: proc(music: Music) -> bool {
 	if !g_audio_ready || music._handle == 0 do return false
 	assert(_audio_handle_slot(music._handle) >= 0, "IsMusicStreamPlaying: corrupt handle")
 	return platform_audio_playing(music._handle)
+}
+
+// IsMusicReady mirrors IsSoundReady for streamed music (see that proc for
+// the web async-load semantics).
+IsMusicReady :: proc(music: Music) -> bool {
+	if !g_audio_ready || music._handle == 0 do return false
+	assert(_audio_handle_slot(music._handle) >= 0, "IsMusicReady: corrupt handle")
+	return platform_audio_loaded(music._handle)
 }

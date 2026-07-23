@@ -550,6 +550,29 @@
 		}
 	}
 
+	// Start (or restart) playback on a decoded slot. Shared by ingot_audio_play
+	// and the deferred start applied when an async decode completes.
+	function audioStart(s, restart) {
+		if (!s.buffer || !audioState.ctx) return;
+		audioResume();
+		if (audioState.ctx.state !== "running") return; // pre-gesture: drop
+		if (s.source && (restart || !s.playing)) {
+			try { s.source.stop(); } catch (_) {}
+			s.source = null;
+			s.playing = false;
+		}
+		if (s.playing && !restart) return;
+		const src = audioState.ctx.createBufferSource();
+		src.buffer = s.buffer;
+		src.loop = s.looping;
+		src.playbackRate.value = s.pitch;
+		src.connect(s.gain);
+		src.onended = () => { if (s.source === src) s.playing = false; };
+		s.source = src;
+		s.playing = true;
+		src.start();
+	}
+
 	function audioImports() {
 		return {
 			ingot_audio_init: () => {
@@ -583,8 +606,53 @@
 				audioState.slots[slot] = {
 					buffer, gain, source: null,
 					playing: false, looping: false, pitch: 1,
+					load: 1, frames, pendingPlay: false, pendingRestart: false,
 				};
 				return slot;
+			},
+			// Async file loading: the slot is allocated eagerly so the engine
+			// gets a valid handle immediately; fetch + decodeAudioData resolve
+			// behind it. load: 0 = pending, 1 = ready, 2 = error (slot stays
+			// allocated but permanently silent — mirrors httpSlots' error state).
+			ingot_audio_load: (urlPtr, urlLen, looping) => {
+				if (!audioState.ctx) return -1;
+				const slot = audioState.slots.findIndex((v) => v === null);
+				if (slot < 0) return -1;
+				const s = {
+					buffer: null, gain: audioState.ctx.createGain(), source: null,
+					playing: false, looping: looping !== 0, pitch: 1,
+					load: 0, frames: 0, pendingPlay: false, pendingRestart: false,
+				};
+				s.gain.connect(audioState.master);
+				audioState.slots[slot] = s;
+				fetch(wasmText(urlPtr, urlLen), { credentials: "same-origin" })
+					.then((response) => {
+						if (!response.ok) throw new Error("http " + response.status);
+						return response.arrayBuffer();
+					})
+					.then((bytes) => audioState.ctx.decodeAudioData(bytes))
+					.then((buffer) => {
+						if (audioState.slots[slot] !== s) return; // unloaded mid-flight
+						s.buffer = buffer;
+						s.frames = buffer.length;
+						s.load = 1;
+						// Apply intent recorded while the decode was in flight so
+						// PlaySound-right-after-LoadSound "just works".
+						if (s.pendingPlay) {
+							s.pendingPlay = false;
+							audioStart(s, s.pendingRestart);
+						}
+					})
+					.catch(() => { if (audioState.slots[slot] === s) s.load = 2; });
+				return slot;
+			},
+			ingot_audio_ready: (slot) => {
+				const s = audioState.slots[slot];
+				return s ? s.load : 2;
+			},
+			ingot_audio_frames: (slot) => {
+				const s = audioState.slots[slot];
+				return s ? s.frames : 0;
 			},
 			ingot_audio_unload: (slot) => {
 				const s = audioState.slots[slot];
@@ -595,28 +663,19 @@
 			},
 			ingot_audio_play: (slot, restart) => {
 				const s = audioState.slots[slot];
-				if (!s || !audioState.ctx) return;
-				audioResume();
-				if (audioState.ctx.state !== "running") return; // pre-gesture: drop
-				if (s.source && (restart || !s.playing)) {
-					try { s.source.stop(); } catch (_) {}
-					s.source = null;
-					s.playing = false;
+				if (!s) return;
+				if (!s.buffer) {
+					// Decode still in flight: record intent, applied on completion.
+					if (s.load === 0) { s.pendingPlay = true; s.pendingRestart = !!restart; }
+					return;
 				}
-				if (s.playing && !restart) return;
-				const src = audioState.ctx.createBufferSource();
-				src.buffer = s.buffer;
-				src.loop = s.looping;
-				src.playbackRate.value = s.pitch;
-				src.connect(s.gain);
-				src.onended = () => { if (s.source === src) s.playing = false; };
-				s.source = src;
-				s.playing = true;
-				src.start();
+				audioStart(s, restart);
 			},
 			ingot_audio_stop: (slot) => {
 				const s = audioState.slots[slot];
-				if (!s || !s.source) return;
+				if (!s) return;
+				s.pendingPlay = false; // cancel a deferred start too
+				if (!s.source) return;
 				try { s.source.stop(); } catch (_) {}
 				s.source = null;
 				s.playing = false;

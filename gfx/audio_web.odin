@@ -5,9 +5,12 @@
 // AudioContext unlocks on the first user gesture (browser autoplay policy) —
 // PlaySound calls before that are dropped silently.
 //
-// LoadSound/LoadMusicStream (file paths) return invalid handles on web:
-// browsers have no file paths. Embed bytes and use LoadSoundFromWave, the
-// target-portable path (see examples/breakout).
+// LoadSound/LoadMusicStream treat the file name as a URL (relative to the
+// page origin): the JS bridge allocates the slot eagerly — so the handle is
+// valid immediately — then fetch()es and decodeAudioData()s behind it. Plays
+// issued while the decode is in flight are recorded and applied when it
+// lands; poll IsSoundReady/IsMusicReady for completion. Embedded bytes via
+// LoadSoundFromWave remain the synchronous path (see examples/breakout).
 package gfx
 
 foreign import audio_js "ingot_audio"
@@ -15,6 +18,9 @@ foreign import audio_js "ingot_audio"
 foreign audio_js {
 	ingot_audio_init :: proc() -> i32 ---
 	ingot_audio_pcm :: proc(pcm: [^]f32, frames: i32, channels: i32, rate: i32) -> i32 ---
+	ingot_audio_load :: proc(url: [^]u8, url_len: i32, looping: i32) -> i32 ---
+	ingot_audio_ready :: proc(slot: i32) -> i32 ---
+	ingot_audio_frames :: proc(slot: i32) -> i32 ---
 	ingot_audio_unload :: proc(slot: i32) ---
 	ingot_audio_play :: proc(slot: i32, restart: i32) ---
 	ingot_audio_stop :: proc(slot: i32) ---
@@ -54,13 +60,28 @@ _audio_web_resolve :: proc(handle: u32) -> i32 {
 	return slot
 }
 
-// platform_audio_load_file: no file system on web — operating condition, not
-// a programmer error. Returns the invalid handle.
+// platform_audio_load_file: the name is a URL fetched + decoded by the JS
+// bridge. The slot (and thus the handle) is allocated eagerly; frames stays
+// 0 until the async decode resolves (a failed fetch leaves the slot
+// permanently silent — an operating condition, not a programmer error).
+// `stream` maps to looping intent recorded on the JS slot.
 @(private)
 platform_audio_load_file :: proc(fileName: cstring, stream: bool) -> (handle: u32, frames: u32) {
 	assert(fileName != nil, "platform_audio_load_file: nil fileName")
 	assert(g_audio_ready, "platform_audio_load_file: device not ready")
-	return 0, 0
+	url := string(fileName)
+	slot := ingot_audio_load(raw_data(url), i32(len(url)), stream ? 1 : 0)
+	if slot < 0 || slot >= MAX_SOUNDS do return 0, 0
+	return _audio_handle_pack(slot, g_audio_gens[slot]), u32(max(ingot_audio_frames(slot), 0))
+}
+
+// platform_audio_loaded: ready only once the JS-side fetch + decode landed
+// (state 1); pending (0) and failed (2) slots are not playable.
+@(private)
+platform_audio_loaded :: proc(handle: u32) -> bool {
+	slot := _audio_web_resolve(handle)
+	if slot < 0 do return false
+	return ingot_audio_ready(slot) == 1
 }
 
 @(private)

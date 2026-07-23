@@ -146,6 +146,13 @@ platform_audio_unload :: proc(handle: u32) {
 	_audio_slot_free(slot)
 }
 
+// platform_audio_loaded: native loads are synchronous, so any handle that
+// still resolves (live slot, matching generation) is ready to play.
+@(private)
+platform_audio_loaded :: proc(handle: u32) -> bool {
+	return _audio_slot_resolve(handle) >= 0
+}
+
 @(private)
 platform_audio_play :: proc(handle: u32, restart: bool) {
 	slot := _audio_slot_resolve(handle)
