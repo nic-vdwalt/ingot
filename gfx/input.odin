@@ -166,7 +166,11 @@ IsKeyReleased :: proc(key: KeyboardKey) -> bool {
 }
 
 IsKeyDown :: proc(key: KeyboardKey) -> bool {
-	return platform_key_down(i32(key))
+	when INGOT_INPUT_SIM {
+		return sim_key_down(i32(key))
+	} else {
+		return platform_key_down(i32(key))
+	}
 }
 
 GetCharPressed :: proc() -> rune {
@@ -196,7 +200,11 @@ IsMouseButtonReleased :: proc(button: MouseButton) -> bool {
 }
 
 IsMouseButtonDown :: proc(button: MouseButton) -> bool {
-	return platform_mouse_button(i32(button))
+	when INGOT_INPUT_SIM {
+		return sim_mouse_button_down(i32(button))
+	} else {
+		return platform_mouse_button(i32(button))
+	}
 }
 
 // --- gamepad queries (raylib-named) ----------------------------------------
