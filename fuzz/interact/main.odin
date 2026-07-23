@@ -119,9 +119,9 @@ draw_scene :: proc(s: ^Scene, p: ^Prng) -> (overlay_active: bool) {
 	ui.form_focus_cycle(&s.focus, FOCUS_COUNT)
 
 	_ = ui.btn(R_BTN.x, R_BTN.y, R_BTN.w, R_BTN.h, "Fuzz", focus = {&s.focus, 1})
-	_ = ui.checkbox(R_CHECK, "Check", &s.checked, {&s.focus, 2})
-	_ = ui.radio(R_RADIO_A, "Radio A", &s.radio_sel, 0, {&s.focus, 3})
-	_ = ui.radio(R_RADIO_B, "Radio B", &s.radio_sel, 1, {&s.focus, 4})
+	_ = ui.checkbox(R_CHECK, "Check", &s.checked, ui.Focus_Opt{&s.focus, 2})
+	_ = ui.radio(R_RADIO_A, "Radio A", &s.radio_sel, 0, ui.Focus_Opt{&s.focus, 3})
+	_ = ui.radio(R_RADIO_B, "Radio B", &s.radio_sel, 1, ui.Focus_Opt{&s.focus, 4})
 	_ = ui.slider(R_SLIDER, &s.slider_val, 0, 100, 5, ui.Focus_Opt{&s.focus, 5})
 	overlay_active |= s.dd_state.menu.open
 	_ = ui.dropdown(R_DROP, DD_ITEMS[:], &s.dd_sel, &s.dd_state, SCREEN_W, SCREEN_H)
@@ -186,7 +186,7 @@ check_invariants :: proc(c: ^fuzzx.Ctx, s: ^Scene, overlay_free_frames: int) {
 	for i in 0 ..< frame.count {
 		fuzzx.check(c, frame.nodes[i].id > 1, "semantic node id reserved/zero")
 		for j in i + 1 ..< frame.count {
-			if frame.nodes[i].focus == nil do continue
+			if frame.nodes[i].focus.focus == nil do continue
 			same := frame.nodes[i].id == frame.nodes[j].id
 			fuzzx.check(c, !same, "duplicate interactive semantic node id")
 		}

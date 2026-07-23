@@ -12,12 +12,22 @@ interact_step_hover_only :: proc(t: ^testing.T) {
 
 @(test)
 interact_step_latchless_click_on_release_over :: proc(t: ^testing.T) {
-	// Legacy button semantics: release over the rect activates.
-	it := interact_step(Interact_Event{over = true, released = true}, nil)
+	// Release over the rect activates when the press also began on it.
+	it := interact_step(Interact_Event{over = true, released = true, press_over = true}, nil)
 	testing.expect(t, it.clicked)
 	// Release outside does not.
-	it = interact_step(Interact_Event{over = false, released = true}, nil)
+	it = interact_step(Interact_Event{over = false, released = true, press_over = true}, nil)
 	testing.expect(t, !it.clicked)
+}
+
+@(test)
+interact_step_latchless_press_elsewhere_no_click :: proc(t: ^testing.T) {
+	// A press that began off the widget (e.g. on an overlay covering it)
+	// must not click on release-over — that would leak overlay clicks to
+	// the widgets underneath.
+	it := interact_step(Interact_Event{over = true, released = true, press_over = false}, nil)
+	testing.expect(t, !it.clicked)
+	testing.expect(t, it.hovered)
 }
 
 @(test)

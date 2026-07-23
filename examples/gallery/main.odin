@@ -658,10 +658,10 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 		ui.theme.fg_secondary,
 	)
 
-	if ui.btn(x + bw + ui.sc(30), y, ui.sc(150), bh, "Toggle popup", ui.Btn_Style.Primary) {
+	if ui.btn(x + bw + ui.sc(100), y, ui.sc(150), bh, "Toggle popup", ui.Btn_Style.Primary) {
 		popup_open = !popup_open
 	}
-	if ui.btn(x + bw + ui.sc(30), y + bh + ui.sc(8), ui.sc(150), bh, "Open modal") {
+	if ui.btn(x + bw + ui.sc(100), y + bh + ui.sc(8), ui.sc(150), bh, "Open modal") {
 		about_modal.open = true
 	}
 
@@ -692,7 +692,9 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 	)
 
 	if popup_open {
-		draw_demo_popup(x + ui.sc(60), y + ui.sc(12))
+		// Fully covers all three shielded buttons (and nothing else), so any
+		// click on them while the popup is open would be a routing leak.
+		draw_demo_popup(x - ui.sc(8), y - ui.sc(8))
 	}
 
 	// Generic modal: dims, claims all input, Escape / click-outside dismisses.
@@ -732,7 +734,7 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 // painted later) and claims its rect so widgets underneath are inert.
 draw_demo_popup :: proc(x, y: i32) {
 	w := ui.sc(220)
-	h := ui.sc(110)
+	h := ui.sc(130)
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	ui.overlay_begin(rect, claim_input = true)
 	ui.overlay_rounded(rect, 0.1, 6, ui.theme.bg_popup)

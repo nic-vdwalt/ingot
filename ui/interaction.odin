@@ -21,11 +21,12 @@ Interaction :: struct {
 // Interact_Event is the raw input snapshot interact_step consumes. Split out
 // so the protocol core is pure and unit-testable without a window.
 Interact_Event :: struct {
-	over:     bool, // pointer inside the rect (already occlusion-resolved)
-	pressed:  bool, // primary button press edge this frame
-	released: bool, // primary button release edge this frame
-	down:     bool, // primary button currently held
-	blocked:  bool, // another widget's drag latch is active
+	over:       bool, // pointer inside the rect (already occlusion-resolved)
+	pressed:    bool, // primary button press edge this frame
+	released:   bool, // primary button release edge this frame
+	down:       bool, // primary button currently held
+	blocked:    bool, // another widget's drag latch is active
+	press_over: bool, // the active press began inside the rect, unoccluded
 }
 
 // interact_step advances the interaction protocol one frame. Pure logic:
@@ -34,7 +35,10 @@ Interact_Event :: struct {
 //     anywhere, `clicked` only when the release lands inside;
 //   - a missed release event (button no longer down) drops the latch;
 //   - while another widget holds a latch, this widget stays inert;
-//   - latch-less widgets report release-over as `clicked`.
+//   - latch-less widgets report release-over as `clicked`, but only when
+//     the press also began on the widget (press_over) — otherwise a press
+//     that starts on an overlay and slides off it would leak a click to
+//     the widget underneath.
 interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 	it: Interaction
 	if latch != nil && latch^ {
@@ -62,7 +66,7 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 		}
 	}
 	if latch == nil {
-		it.clicked = ev.over && ev.released
+		it.clicked = ev.over && ev.released && ev.press_over
 	}
 	return it
 }
@@ -73,9 +77,35 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 @(private = "file")
 active_latch: ^bool
 
-// interact_reset clears the drag arbitration slot (tests / teardown).
+// Screen-space origin of the current primary press and whether an overlay
+// claim covered it at press time. Snapshotted once per frame on the press
+// edge (interact_frame_begin) so latch-less widgets can require the press
+// to have started on them before reporting a release-over click.
+@(private = "file")
+press_pos: rl.Vector2
+@(private = "file")
+press_occluded: bool
+@(private = "file")
+press_seen: bool
+
+// interact_frame_begin snapshots the primary press origin for this frame.
+// Called once per frame from begin_cursor_frame, after route_begin_frame
+// (so the occlusion test sees the claims active this frame).
+interact_frame_begin :: proc() {
+	if rl.IsMouseButtonPressed(.LEFT) {
+		press_pos = rl.GetMousePosition()
+		press_occluded = route_occluded(press_pos)
+		press_seen = true
+	}
+}
+
+// interact_reset clears the drag arbitration slot and the recorded press
+// origin (tests / teardown).
 interact_reset :: proc() {
 	active_latch = nil
+	press_pos = {}
+	press_occluded = false
+	press_seen = false
 }
 
 // interact runs the interaction protocol for a widget rect. `rect` is in the
@@ -91,12 +121,17 @@ interact :: proc(rect: rl.Rectangle, latch: ^bool = nil) -> Interaction {
 	mouse := rl.GetMousePosition()
 	local := mouse
 	local.x -= f32(pane_origin_x)
+	local_press := press_pos
+	local_press.x -= f32(pane_origin_x)
 	ev := Interact_Event {
-		over     = rl.CheckCollisionPointRec(local, rect) && !route_occluded(mouse),
-		pressed  = rl.IsMouseButtonPressed(.LEFT),
-		released = rl.IsMouseButtonReleased(.LEFT),
-		down     = rl.IsMouseButtonDown(.LEFT),
-		blocked  = active_latch != nil && active_latch != latch,
+		over       = rl.CheckCollisionPointRec(local, rect) && !route_occluded(mouse),
+		pressed    = rl.IsMouseButtonPressed(.LEFT),
+		released   = rl.IsMouseButtonReleased(.LEFT),
+		down       = rl.IsMouseButtonDown(.LEFT),
+		blocked    = active_latch != nil && active_latch != latch,
+		press_over = press_seen &&
+			!press_occluded &&
+			rl.CheckCollisionPointRec(local_press, rect),
 	}
 	it := interact_step(ev, latch)
 	if latch != nil {
