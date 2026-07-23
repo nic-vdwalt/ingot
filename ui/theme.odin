@@ -9,6 +9,7 @@
 // variables rescaled by set_ui_scale() in scale.odin.
 package ui
 
+import "core:math"
 import rl "ingot:gfx"
 
 // GLASS_ENABLED is true on macOS, where window_style_darwin.odin installs an
@@ -122,6 +123,10 @@ Theme :: struct {
 	shadow_color:               rl.Color, // Soft drop-shadow tint under cards
 	button_primary_grad_top:    rl.Color, // Gloss sheen on primary buttons (top)
 	button_primary_grad_bottom: rl.Color, // Gloss fade-out color (bottom)
+
+	// Accessibility. reduced_motion snaps animations (hover ease, caret
+	// blink) to their final state for vestibular/motion-sensitive users.
+	reduced_motion:             bool,
 }
 
 // Glass surface source values per theme. On glass platforms (macOS) the
@@ -317,6 +322,88 @@ THEME_LIGHT :: Theme {
 // theme is the active palette. Dark by default (original values).
 theme: Theme = THEME_DARK
 
+// THEME_HIGH_CONTRAST is a maximum-legibility palette: opaque black
+// surfaces, white text, yellow accents (the highest-luminance hue), no
+// translucency or glass. Every text/background role pair clears WCAG AA by a
+// wide margin; the focus ring is fully opaque.
+THEME_HIGH_CONTRAST :: Theme {
+	bg_app              = rl.Color{0, 0, 0, 255},
+	bg_chat             = rl.Color{0, 0, 0, 255},
+	bg_panel            = rl.Color{0, 0, 0, 255},
+	bg_app_windowed     = rl.Color{0, 0, 0, 255},
+	bg_chat_windowed    = rl.Color{0, 0, 0, 255},
+	bg_panel_windowed   = rl.Color{0, 0, 0, 255},
+	bg_app_fullscreen   = rl.Color{0, 0, 0, 255},
+	bg_chat_fullscreen  = rl.Color{0, 0, 0, 255},
+	bg_panel_fullscreen = rl.Color{0, 0, 0, 255},
+	bg_color            = rl.Color{0, 0, 0, 255},
+	bg_secondary        = rl.Color{15, 15, 15, 255},
+	bg_active           = rl.Color{60, 60, 60, 255},
+	bg_hover            = rl.Color{40, 40, 40, 255},
+	bg_input            = rl.Color{0, 0, 0, 255},
+	bg_code             = rl.Color{15, 15, 15, 255},
+	fg_primary          = rl.Color{255, 255, 255, 255},
+	fg_secondary        = rl.Color{255, 255, 255, 255},
+	fg_accent           = rl.Color{255, 215, 0, 255},
+	fg_user             = rl.Color{255, 255, 255, 255},
+	fg_assistant        = rl.Color{255, 255, 255, 255},
+	fg_error            = rl.Color{255, 100, 100, 255},
+	fg_success          = rl.Color{100, 255, 100, 255},
+	fg_tool             = rl.Color{255, 215, 0, 255},
+	fg_diff_remove      = rl.Color{255, 130, 130, 255},
+	fg_diff_add         = rl.Color{130, 255, 130, 255},
+	bg_diff_remove      = rl.Color{60, 0, 0, 255},
+	bg_diff_add         = rl.Color{0, 50, 0, 255},
+	fg_diff_gutter      = rl.Color{255, 255, 255, 255},
+	border_color        = rl.Color{255, 255, 255, 255},
+	border_subtle       = rl.Color{200, 200, 200, 255},
+	badge_color         = rl.Color{255, 100, 100, 255},
+	merge_link_color    = rl.Color{255, 215, 0, 255},
+	button_bg           = rl.Color{255, 215, 0, 255},
+	button_hover        = rl.Color{255, 255, 255, 255},
+	button_text         = rl.Color{0, 0, 0, 255},
+	bg_popup            = rl.Color{0, 0, 0, 255},
+	fg_disabled         = rl.Color{160, 160, 160, 255},
+	bg_plan_bar         = rl.Color{45, 45, 0, 255},
+	fg_plan             = rl.Color{255, 215, 0, 255},
+	fg_planning         = rl.Color{255, 215, 0, 255},
+	bg_selection        = rl.Color{90, 90, 0, 255},
+	bg_plan_title       = rl.Color{30, 30, 0, 255},
+	bg_tool_card        = rl.Color{15, 15, 15, 255},
+	bg_tool_card_hover  = rl.Color{40, 40, 40, 255},
+	fg_heading          = rl.Color{255, 255, 255, 255},
+	fg_bullet           = rl.Color{255, 215, 0, 255},
+	fg_bold             = rl.Color{255, 255, 255, 255},
+	fg_code_inline      = rl.Color{255, 215, 0, 255},
+	bg_table_header     = rl.Color{30, 30, 30, 255},
+	wave_color_a        = rl.Color{255, 215, 0, 255},
+	wave_color_b        = rl.Color{255, 255, 255, 255},
+	drop_zone_bg        = rl.Color{45, 45, 0, 255},
+	drop_zone_border    = rl.Color{255, 215, 0, 255},
+	fg_debug            = rl.Color{255, 215, 0, 255},
+	bg_debug_title      = rl.Color{30, 30, 30, 255},
+	fg_debug_changed    = rl.Color{255, 215, 0, 255},
+	fg_debug_annotation = rl.Color{255, 255, 255, 255},
+	bg_chip             = rl.Color{30, 30, 30, 255},
+	bg_chip_hover       = rl.Color{55, 55, 55, 255},
+	bg_user_card        = rl.Color{20, 20, 20, 255},
+	border_user_card    = rl.Color{255, 255, 255, 255},
+	bg_band_error       = rl.Color{60, 0, 0, 255},
+	fg_label            = rl.Color{255, 255, 255, 255},
+	button_danger_bg    = rl.Color{90, 0, 0, 255},
+	button_danger_hover = rl.Color{130, 0, 0, 255},
+	button_danger_fg    = rl.Color{255, 130, 130, 255},
+	button_disabled_bg  = rl.Color{30, 30, 30, 255},
+	button_pressed      = rl.Color{255, 255, 255, 255},
+	fg_accent_light     = rl.Color{255, 215, 0, 255},
+	fg_muted_dim        = rl.Color{190, 190, 190, 255},
+	modal_dim           = rl.Color{0, 0, 0, 210},
+	focus_ring          = rl.Color{255, 215, 0, 255},
+	shadow_color        = rl.Color{0, 0, 0, 0},
+	button_primary_grad_top = rl.Color{0, 0, 0, 0},
+	button_primary_grad_bottom = rl.Color{0, 0, 0, 0},
+}
+
 // THEME_COLOR is the zero-color sentinel for widget color parameters whose
 // real default is a theme field. Odin default parameter values must be
 // compile-time constants while the theme is runtime data, so widgets compare
@@ -333,6 +420,37 @@ theme_light :: proc() -> Theme {
 	return THEME_LIGHT
 }
 
+// theme_high_contrast returns the built-in high-contrast palette.
+theme_high_contrast :: proc() -> Theme {
+	return THEME_HIGH_CONTRAST
+}
+
+// relative_luminance returns the WCAG relative luminance of a color
+// (0 = black, 1 = white). Pure; alpha is ignored.
+relative_luminance :: proc(c: rl.Color) -> f64 {
+	linearize :: proc(channel: u8) -> f64 {
+		v := f64(channel) / 255.0
+		if v <= 0.04045 do return v / 12.92
+		return math.pow((v + 0.055) / 1.055, 2.4)
+	}
+	return 0.2126 * linearize(c.r) + 0.7152 * linearize(c.g) + 0.0722 * linearize(c.b)
+}
+
+// contrast_ratio returns the WCAG contrast ratio between two colors, in
+// [1, 21]. Pure; order of arguments does not matter.
+contrast_ratio :: proc(a, b: rl.Color) -> f64 {
+	la := relative_luminance(a)
+	lb := relative_luminance(b)
+	hi := max(la, lb)
+	lo := min(la, lb)
+	ratio := (hi + 0.05) / (lo + 0.05)
+	assert(ratio >= 1 && ratio <= 21, "contrast_ratio: out of WCAG range")
+	return ratio
+}
+
+// MIN_TEXT_CONTRAST is WCAG 2.1 AA for normal text.
+MIN_TEXT_CONTRAST :: 4.5
+
 // set_theme swaps the active palette and clears any color-derived caches via
 // the host invalidate hook. Glass surfaces reset to windowed variants; call
 // set_glass_fullscreen() afterwards if currently fullscreen.
@@ -341,6 +459,12 @@ set_theme :: proc(t: Theme) {
 	// uninitialized Theme — every widget would render invisibly.
 	assert(t.fg_primary.a != 0, "set_theme: fg_primary must be opaque-ish")
 	assert(t.bg_color.a != 0, "set_theme: bg_color must have alpha")
+	// Why assert: sub-AA text contrast silently excludes low-vision users —
+	// same spirit as the focus-ring visibility assert (focus_ring.odin).
+	assert(contrast_ratio(t.fg_primary, t.bg_color) >= MIN_TEXT_CONTRAST,
+		"set_theme: fg_primary on bg_color below WCAG AA (4.5:1)")
+	assert(contrast_ratio(t.button_text, t.button_bg) >= MIN_TEXT_CONTRAST,
+		"set_theme: button_text on button_bg below WCAG AA (4.5:1)")
 	theme = t
 	theme.bg_app = t.bg_app_windowed
 	theme.bg_chat = t.bg_chat_windowed
