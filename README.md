@@ -642,12 +642,14 @@ Deterministic fuzz harnesses run under **AddressSanitizer** with a
 `mem.Tracking_Allocator` (leaks / bad frees fail the run):
 
 ```sh
-fuzz/run.sh net            # sim transport + HTTP response parser + WS frame parser (random seed)
+fuzz/run.sh net            # sim HTTP transport + HTTP/WS parsers
 fuzz/run.sh net 12345      # reproduce a specific seed
 fuzz/run.sh ui             # parsers + widget math + a11y semantic buffer
-fuzz/run.sh term           # in-package fuzz tests via `odin test` (private procs)
+fuzz/run.sh term           # input bytes + vterm + PTY pump/resize/EOF fuzz
 fuzz/run.sh interact       # widget interaction sequences (headless synthetic input)
-fuzz/run.sh input          # text-input edit ops: caret/selection/undo/pills (in-package)
+fuzz/run.sh input          # text-input edit ops: caret/selection/undo/pills
+fuzz/run.sh wsreconn       # concurrent WS reconnect state machine vs sim transport
+fuzz/run.sh tsan           # TSan: WS worker + HTTP pool + a11y action queue
 fuzz/run.sh gfx-frame      # WINDOWED: GPU resource-lifecycle fuzzer (see below)
 ```
 
@@ -657,6 +659,20 @@ compile-gated input sim seam (`-define:INGOT_INPUT_SIM=true`,
 `gfx/input_sim.odin`) and checks routing/focus/latch/semantic invariants
 under any ordering. `input` fuzzes the text-input edit state machine
 in-package at 200k ops (the same test runs at 2k ops in `scripts/test.sh`).
+`term` additionally drives `term_pump`'s real drain/EOF loop and public
+`term_resize` path through the scripted PTY (`INGOT_PTY_SIM`), including
+resizes between split UTF-8 chunks.
+
+`wsreconn` keeps the **real worker thread, mutexes, atomics, condition
+variable, queue, and reconnect loop**, replacing only socket I/O with a
+seed-scripted transport (`INGOT_WS_SIM`) that produces dial failures,
+handshake faults, split/garbage frames, server closes, cuts, and liveness
+timeouts. It checks `conn_gen`, close/join, queue ownership, and watchdog
+invariants under concurrent send/drain/state polls. `tsan` runs this harness,
+the 8-worker HTTP fetch-pool tests, and the a11y action-queue producer/drain
+stress under ThreadSanitizer; ASan and TSan are separate binaries because
+they cannot compose. Every `soak` round appends this TSan phase. term/pty are
+single-threaded by design, so TSan there would exercise nothing.
 
 `gfx-frame` opens a real window and interleaves resource destruction —
 font-atlas resets, texture/render-target unloads, UI rescaling, window
@@ -669,8 +685,8 @@ same class end-to-end through the gallery's real event handlers, and
 `scripts/check-web.sh` gates the web target (wasm compile of both examples +
 `node --test` of the semantic DOM overlay against a dependency-free stub).
 
-Known limitation: wgpu-native is a prebuilt release library, so
-AddressSanitizer instruments the Odin side only.
+Known limitation: wgpu-native and AccessKit are prebuilt release libraries,
+so ASan/TSan instrument the Odin side only.
 
 All targets build with `-debug -sanitize:address`; `net` adds
 `-define:INGOT_NET_SIM=true` so the simulated transport's clone/deliver/free

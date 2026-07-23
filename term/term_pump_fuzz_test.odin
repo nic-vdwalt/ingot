@@ -9,11 +9,19 @@ package term
 // (it passes it — see scripts/test.sh). Iterations scale with
 // -define:INGOT_FUZZ_ITER for fuzz/run.sh term.
 
+import "core:c"
 import "core:log"
 import "core:testing"
 import "core:time"
+import lv "../libvterm"
 import "ingot:pty"
 import "ingot:testx"
+
+// Used only under `when pty.INGOT_PTY_SIM`; anchor for plain checks.
+_ :: c
+_ :: lv
+_ :: testx
+_ :: time
 
 TERM_PUMP_FUZZ_ITER :: #config(INGOT_FUZZ_ITER, 300)
 
@@ -62,17 +70,29 @@ term_pump_resize_fuzz :: proc(t: ^testing.T) {
 				// Hold prefix: at most 3 bytes and never after EOF ingest.
 				testing.expect(t, ts.utf8_hold_len >= 0 && ts.utf8_hold_len <= 3,
 					"utf8 hold length out of range")
-				// Resize bookkeeping matches the emulator.
+				// Resize bookkeeping must agree with the emulator's real grid —
+				// renderers size their cell loops from ts.cols/rows while cell
+				// reads hit vterm; divergence reads out of grid bounds.
+				vrows, vcols: c.int
+				lv.vterm_get_size(ts.vt, &vrows, &vcols)
+				testing.expect(t, int(ts.cols) == int(vcols), "ts.cols diverged from vterm grid")
+				testing.expect(t, int(ts.rows) == int(vrows), "ts.rows diverged from vterm grid")
 				fuzz_vt_check_invariants(t, ts)
 			}
 
-			// Drain to completion: EOF must stop the pump exactly once.
+			// Drain to completion: EOF must stop the pump exactly once,
+			// within a bounded number of calls — an unbounded loop here
+			// would turn a wedged pump (e.g. a hold prefix that is re-held
+			// forever) into a test hang instead of a failure.
 			if eof_now {
-				for ts.pty_running {
+				for _ in 0 ..< 1000 {
+					if !ts.pty_running do break
 					_ = term_pump(ts)
 				}
-				testing.expect(t, !ts.pty_running, "pump did not stop at EOF")
-				testing.expect(t, term_pump(ts) == 0, "pump read after EOF")
+				testing.expect(t, !ts.pty_running, "pump did not reach EOF within bound (wedged)")
+				if !ts.pty_running {
+					testing.expect(t, term_pump(ts) == 0, "pump read after EOF")
+				}
 			}
 
 			// doc is temp-allocated (fuzz_vt_document); freed with the arena.

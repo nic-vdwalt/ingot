@@ -58,6 +58,19 @@ when A11Y_ENABLED {
 	}
 }
 
+// _a11y_stage appends one action to the bounded queue. Package-private (not
+// file-private) so the TSan stress test can drive it from a producer thread
+// exactly like the adapter callback does.
+@(private)
+_a11y_stage :: proc(action: ak.Action, node: ak.Node_Id) {
+	sync.mutex_lock(&g_a11y.action_mu)
+	if g_a11y.action_len < MAX_A11Y_ACTIONS {
+		g_a11y.actions[g_a11y.action_len] = {action, node}
+		g_a11y.action_len += 1
+	}
+	sync.mutex_unlock(&g_a11y.action_mu)
+}
+
 // _a11y_on_action stages an AT action; AccessKit may invoke it off the main
 // thread (documented for unix, permitted on macOS/Windows), hence the mutex.
 @(private = "file")
@@ -65,12 +78,7 @@ _a11y_on_action :: proc "c" (request: ^ak.Action_Request, userdata: rawptr) {
 	context = runtime.default_context()
 	when A11Y_ENABLED {
 		if request == nil do return
-		sync.mutex_lock(&g_a11y.action_mu)
-		if g_a11y.action_len < MAX_A11Y_ACTIONS {
-			g_a11y.actions[g_a11y.action_len] = {request.action, request.target_node}
-			g_a11y.action_len += 1
-		}
-		sync.mutex_unlock(&g_a11y.action_mu)
+		_a11y_stage(request.action, request.target_node)
 		ak.action_request_free(request)
 	}
 }

@@ -17,6 +17,12 @@ import "core:strings"
 import "core:sync"
 import "core:time"
 
+// Used only under `when INGOT_WS_SIM`; anchor for plain checks.
+_ :: time
+_ :: strings
+_ :: sync
+_ :: cnet
+
 when INGOT_WS_SIM {
 
 	// One scripted transport event, consumed in order per dial attempt /

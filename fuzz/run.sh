@@ -125,9 +125,10 @@ run_tsan() {
 	# runner so runner threads don't drown the signal.
 	# shellcheck disable=SC2086
 	odin test "$ROOT/net" $COL $TS -define:ODIN_TEST_THREADS=1
-	# a11y action queue: threaded producer vs main-thread drain.
+	# a11y action queue: threaded producer vs main-thread drain (in gfx,
+	# where the queue lives).
 	# shellcheck disable=SC2086
-	odin test "$ROOT/ui" $COL $TS -define:ODIN_TEST_THREADS=1 -define:ODIN_TEST_NAMES=ui.a11y_action_queue_stress
+	odin test "$ROOT/gfx" $COL $TS -define:ODIN_TEST_THREADS=1 -define:ODIN_TEST_NAMES=gfx.a11y_action_queue_stress
 }
 
 case "$TARGET" in
