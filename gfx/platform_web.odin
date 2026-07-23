@@ -350,8 +350,8 @@ platform_sync_web_control :: proc(
 	// Node ids exceed JS's 2^53 safe-integer range (fallback ids pack the
 	// role into bits 56+), so the id crosses as two i32 halves and keys a
 	// string map on the JS side.
-	id_lo := transmute(i32)u32(id & 0xFFFFFFFF)
-	id_hi := transmute(i32)u32(id >> 32)
+	id_lo := i32(u32(id & 0xFFFFFFFF))
+	id_hi := i32(u32(id >> 32))
 	flags := _js_web_control_sync(
 		id_lo, id_hi, role,
 		web_string_data(label), i32(len(label)),
