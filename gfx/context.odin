@@ -109,12 +109,23 @@ Retired_Texture :: struct {
 	tex:     wg.Texture,
 }
 
+// MAX_RETIRED_PER_FRAME bounds mid-frame texture retirements (Tiger Style:
+// put a limit on everything). Real apps unload a handful per frame; hitting
+// the bound means a caller is leaking unloads in a loop.
+MAX_RETIRED_PER_FRAME :: 64
+
 // _retire_texture destroys a texture's GPU handles, deferring to after this
 // frame's queue submit while a frame is recording (wgpu validates that
 // submitted command buffers reference no destroyed textures).
 @(private)
 _retire_texture :: proc(bind: wg.BindGroup, sampler: wg.Sampler, view: wg.TextureView, tex: wg.Texture) {
+	// Why assert: all-nil handles mean the entry was already destroyed — a
+	// double-unload of the same font/texture.
+	assert(bind != nil || sampler != nil || view != nil || tex != nil,
+		"_retire_texture: all handles nil (double unload?)")
 	if g.frame.has_frame {
+		assert(len(g.retire) < MAX_RETIRED_PER_FRAME,
+			"_retire_texture: retire queue full (unload loop within one frame?)")
 		append(&g.retire, Retired_Texture{bind, sampler, view, tex})
 		return
 	}
@@ -137,6 +148,9 @@ _destroy_retired :: proc(r: Retired_Texture) {
 // alive internally, so destroy is safe.
 @(private)
 _flush_retired :: proc() {
+	// Why assert: flushing while a frame still records would recreate the
+	// destroy-before-submit validation abort this queue exists to prevent.
+	assert(!g.frame.has_frame, "_flush_retired: called while a frame is recording")
 	for r in g.retire do _destroy_retired(r)
 	clear(&g.retire)
 }

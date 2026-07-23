@@ -122,6 +122,8 @@ tab and an F12 metrics overlay. Living documentation and copy-paste cookbook:
 odin run examples/gallery -collection:ingot=.
 # renderer counters in the F12 overlay need:
 odin run examples/gallery -collection:ingot=. -define:INGOT_RENDER_STATS=true
+# self-driving crash smoke (steps every scale preset, theme, and section):
+scripts/smoke-gallery.sh
 ```
 
 ### Breakout (audio + gamepad + web, one source)
@@ -644,7 +646,16 @@ fuzz/run.sh net            # sim transport + HTTP response parser + WS frame par
 fuzz/run.sh net 12345      # reproduce a specific seed
 fuzz/run.sh ui             # widget toolkit harness
 fuzz/run.sh term           # in-package fuzz tests via `odin test` (private procs)
+fuzz/run.sh gfx-frame      # WINDOWED: GPU resource-lifecycle fuzzer (see below)
 ```
+
+`gfx-frame` opens a real window and interleaves resource destruction —
+font-atlas resets, texture/render-target unloads, UI rescaling — *inside*
+live frames, catching the destroy-before-submit bug class (wgpu validation
+aborts) that headless tests can't reach. It needs a display, so it is
+excluded from `all`/`soak`; run it explicitly after touching GPU resource
+lifetimes. `scripts/smoke-gallery.sh` covers the same class end-to-end
+through the gallery's real event handlers.
 
 All targets build with `-debug -sanitize:address`; `net` adds
 `-define:INGOT_NET_SIM=true` so the simulated transport's clone/deliver/free

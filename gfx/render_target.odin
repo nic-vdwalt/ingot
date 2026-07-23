@@ -35,6 +35,9 @@ LoadRenderTextureEx :: proc(width, height: i32, format: wg.TextureFormat, with_d
 	return rt
 }
 
+// UnloadRenderTexture releases the color (and optional depth) textures.
+// Both route through the retire queue (context.odin), so unloading is safe
+// at any point in a frame — destruction defers past this frame's submit.
 UnloadRenderTexture :: proc(target: RenderTexture2D) {
 	if target.texture.id != 0 do UnloadTexture(target.texture)
 	if target.depth.id != 0 do _unload_depth(target.depth)

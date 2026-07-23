@@ -2,11 +2,13 @@
 # Build and run the ingot memory-safety fuzz harnesses under a sanitizer
 # with a tracking allocator (leaks / bad frees fail the run).
 #
-# Usage: fuzz/run.sh [net|ui|term|all|soak] [seed] [iterations]
+# Usage: fuzz/run.sh [net|ui|term|gfx-frame|all|soak] [seed] [iterations]
 #   fuzz/run.sh net            # random seed, default iterations
 #   fuzz/run.sh net 12345      # reproduce a specific seed
 #   fuzz/run.sh term           # in-package fuzz tests (private procs) via odin test
-#   fuzz/run.sh all            # net + ui + term sequentially
+#   fuzz/run.sh gfx-frame      # WINDOWED GPU lifecycle fuzzer (needs a display;
+#                              # NOT part of `all`/`soak` — run explicitly)
+#   fuzz/run.sh all            # net + ui + term sequentially (headless only)
 #   fuzz/run.sh soak           # `all` for ROUNDS rounds with fresh seeds
 #
 # Environment:
@@ -57,6 +59,16 @@ run_term() {
 	odin test "$ROOT/term" $COL $SANFLAGS
 }
 
+run_gfx_frame() {
+	# Windowed: opens a real window + WebGPU device and interleaves resource
+	# destruction (fonts, textures, render targets, UI rescale) inside live
+	# frames — the destroy-before-submit bug class that headless tests can't
+	# reach. Built without a sanitizer flag override is fine, but ASan works.
+	# shellcheck disable=SC2086
+	odin build "$ROOT/fuzz/gfx_frame" $COL $SANFLAGS -out:"$ROOT/fuzz/gfx_frame/fuzz_gfx_frame"
+	"$ROOT/fuzz/gfx_frame/fuzz_gfx_frame" "$@"
+}
+
 case "$TARGET" in
 net)
 	run_net "${ARGS[@]+"${ARGS[@]}"}"
@@ -66,6 +78,9 @@ ui)
 	;;
 term)
 	run_term
+	;;
+gfx-frame)
+	run_gfx_frame "${ARGS[@]+"${ARGS[@]}"}"
 	;;
 all)
 	run_net "${ARGS[@]+"${ARGS[@]}"}"
@@ -93,7 +108,7 @@ soak)
 	done
 	;;
 *)
-	echo "unknown target '$TARGET' (expected net|ui|term|all|soak)" >&2
+	echo "unknown target '$TARGET' (expected net|ui|term|gfx-frame|all|soak)" >&2
 	exit 2
 	;;
 esac
