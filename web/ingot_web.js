@@ -719,4 +719,18 @@
 		httpImports: httpImports,
 		audioImports: audioImports,
 	};
+
+	// Test-only export hook: node --test (web/test/) exercises the semantic
+	// overlay logic against a DOM stub. Guarded so browsers never see it and
+	// no behavior changes.
+	if (typeof globalThis.__ingot_test_hook === "function") {
+		globalThis.__ingot_test_hook({
+			syncSemanticInput,
+			syncSemanticControl,
+			syncSemanticSubmit,
+			endSemanticFrame,
+			beginSemanticFrame: () => { semanticFrame += 1; },
+			semanticState: () => ({ semanticInputs, semanticForms, semanticControls }),
+		});
+	}
 })();

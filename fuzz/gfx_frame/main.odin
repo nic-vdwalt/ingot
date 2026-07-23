@@ -76,7 +76,7 @@ draw_some :: proc(p: ^Prng) {
 // half of the interleave. Weighted so unload/rescale (the dangerous ops)
 // dominate.
 mutate_resources :: proc(p: ^Prng) {
-	switch fuzzx.int_range(p, 0, 10) {
+	switch fuzzx.int_range(p, 0, 13) {
 	case 0, 1:
 		// Load a texture into a random slot (unloading any occupant first).
 		slot := fuzzx.int_range(p, 0, MAX_LIVE_TEXTURES)
@@ -117,6 +117,25 @@ mutate_resources :: proc(p: ^Prng) {
 	case 9:
 		ui.set_font_dpi(f32(fuzzx.int_range(p, 100, 301)) / 100.0)
 		ui.reset_font_atlases()
+	case 10, 11:
+		// Surface lifecycle: resize mid-frame (swapchain reconfigure),
+		// including repeated same-size calls (must be idempotent).
+		w := i32(fuzzx.int_range(p, 200, 2001))
+		h := i32(fuzzx.int_range(p, 150, 1501))
+		if fuzzx.int_range(p, 0, 4) == 0 {
+			w = rl.GetScreenWidth() // same-size resize
+			h = rl.GetScreenHeight()
+		}
+		rl.SetWindowSize(w, h)
+	case 12:
+		// Compound case: resize immediately followed by UI rescale — the
+		// swapchain reconfigure + atlas churn interleaving.
+		rl.SetWindowSize(
+			i32(fuzzx.int_range(p, 300, 1601)), i32(fuzzx.int_range(p, 200, 1201)),
+		)
+		ui.set_ui_scale(f32(fuzzx.int_range(p, 50, 301)) / 100.0)
+		ui.reset_font_atlases()
+		ui.invalidate_scale_caches()
 	}
 }
 
