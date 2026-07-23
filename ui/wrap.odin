@@ -4,39 +4,38 @@ package ui
 import "core:strings"
 import "core:unicode/utf8"
 
-// One visual (wrapped) line: byte range [start, end) into the source string.
-// `end` excludes the trailing space/newline that triggered the break.
 Wrap_Line :: struct {
 	start: int,
 	end:   int,
 }
 
-// --- Global wrap memo --------------------------------------------------------
-// Repeated frames re-wrap identical (text, width, size). Cache the resulting
-// visual lines keyed by a cheap content hash so the steady state is O(1).
-@(private = "file")
 Wrap_Key :: struct {
-	hash:  u64,
-	len:   int,
+	text:  string,
 	width: i32,
 	size:  i32,
 }
 
-@(private = "file")
-wrap_cache: map[Wrap_Key][]Wrap_Line
-@(private = "file")
-WRAP_CACHE_MAX :: 4096
-
-// clear_wrap_cache flushes all cached wrapped-line layouts. Call when the UI
-// scale changes so lines wrapped at the old font size/spacing are dropped.
-clear_wrap_cache :: proc() {
-	for k in wrap_cache {
-		delete(wrap_cache[k])
-	}
-	clear(&wrap_cache)
+Wrap_Entry :: struct {
+	lines: []Wrap_Line,
+	stamp: u64,
 }
 
-// FNV-1a 64-bit hash of a byte string. Shared with other UI memos.
+WRAP_CACHE_MAX :: 4096
+
+clear_wrap_cache_with :: proc(system: ^Text_System) {
+	assert(system != nil)
+	for key, entry in system.wrap_cache {
+		delete(key.text)
+		delete(entry.lines)
+	}
+	clear(&system.wrap_cache)
+	system.wrap_stamp = 0
+}
+
+clear_wrap_cache :: proc() {
+	clear_wrap_cache_with(&default_text_system)
+}
+
 fnv1a64 :: proc(s: string) -> u64 {
 	h: u64 = 0xcbf29ce484222325
 	for i := 0; i < len(s); i += 1 {
@@ -45,141 +44,195 @@ fnv1a64 :: proc(s: string) -> u64 {
 	return h
 }
 
-// Pixel-accurate greedy word wrap. Returns cached visual lines for repeated
-// (text, width, size). On a miss it computes via wrap_compute and stores a
-// heap-owned copy. The returned slice is read-only and owned by the cache.
-wrap_text :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> []Wrap_Line {
+@(private)
+wrap_evict_oldest :: proc(system: ^Text_System) {
+	assert(system != nil)
+	assert(len(system.wrap_cache) > 0)
+	oldest: Wrap_Key
+	oldest_stamp := max(u64)
+	for key, entry in system.wrap_cache {
+		if entry.stamp < oldest_stamp {
+			oldest = key
+			oldest_stamp = entry.stamp
+		}
+	}
+	entry := system.wrap_cache[oldest]
+	delete_key(&system.wrap_cache, oldest)
+	delete(oldest.text)
+	delete(entry.lines)
+	system.wrap_cache_evictions += 1
+}
+
+wrap_text_with :: proc(
+	system: ^Text_System,
+	text: string,
+	max_width: i32,
+	font_size: i32,
+) -> []Wrap_Line {
+	assert(system != nil)
+	assert(max_width >= 0 && font_size > 0)
 	key := Wrap_Key {
-		hash  = fnv1a64(text),
-		len   = len(text),
+		text  = text,
 		width = max_width,
 		size  = font_size,
 	}
-	if cached, ok := wrap_cache[key]; ok {
-		return cached
+	if entry, ok := system.wrap_cache[key]; ok {
+		system.wrap_stamp += 1
+		entry.stamp = system.wrap_stamp
+		system.wrap_cache[key] = entry
+		return entry.lines
 	}
-	lines := wrap_compute(text, max_width, font_size)
-	if len(wrap_cache) >= WRAP_CACHE_MAX {
-		// Evict ~half the entries instead of flushing everything — a full
-		// flush causes a hitch frame where all visible text re-wraps at once.
-		doomed := make([dynamic]Wrap_Key, 0, WRAP_CACHE_MAX / 2, context.temp_allocator)
-		for k in wrap_cache {
-			if len(doomed) >= WRAP_CACHE_MAX / 2 do break
-			append(&doomed, k)
-		}
-		for k in doomed {
-			delete(wrap_cache[k])
-			delete_key(&wrap_cache, k)
-		}
+	lines := wrap_compute_with(system, text, max_width, font_size)
+	if len(system.wrap_cache) >= WRAP_CACHE_MAX do wrap_evict_oldest(system)
+	owned_lines := make([]Wrap_Line, len(lines))
+	copy(owned_lines, lines)
+	system.wrap_stamp += 1
+	owned_key := Wrap_Key {
+		text  = strings.clone(text),
+		width = max_width,
+		size  = font_size,
 	}
-	owned := make([]Wrap_Line, len(lines))
-	copy(owned, lines)
-	wrap_cache[key] = owned
-	return owned
+	system.wrap_cache[owned_key] = Wrap_Entry {
+		lines = owned_lines,
+		stamp = system.wrap_stamp,
+	}
+	return owned_lines
 }
 
-// wrap_compute does the actual greedy word-wrap. Width is accumulated
-// additively from per-rune widths (rune_width is cache-backed and bounded).
+wrap_text :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> []Wrap_Line {
+	return wrap_text_with(&default_text_system, text, max_width, font_size)
+}
+
 @(private)
-wrap_compute :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> []Wrap_Line {
+wrap_compute_with :: proc(
+	system: ^Text_System,
+	text: string,
+	max_width: i32,
+	font_size: i32,
+) -> []Wrap_Line {
+	assert(system != nil)
+	assert(max_width >= 0 && font_size > 0)
 	lines := make([dynamic]Wrap_Line, context.temp_allocator)
 	if len(text) == 0 {
 		append(&lines, Wrap_Line{0, 0})
 		return lines[:]
 	}
-
 	line_start := 0
 	last_space := -1
-	line_w: i32 = 0 // accumulated pixel width of current line
-	w_at_space: i32 = 0 // line_w up to and including last_space
-	// draw_text and measure_text use zero inter-glyph spacing, so wrapping must
-	// too — otherwise lines break earlier than they render. The lone +1 px is
-	// surplus covering rune_width's i32 truncation (~0.5 px/glyph), so wrapped
-	// text never overflows at any DPI scale.
-	sp: i32 = 1
+	line_width: i32
+	width_at_space: i32
 	i := 0
 	for i < len(text) {
-		c := text[i]
-		if c == '\n' {
+		value := text[i]
+		if value == '\n' {
 			append(&lines, Wrap_Line{line_start, i})
 			line_start = i + 1
 			last_space = -1
-			line_w = 0
+			line_width = 0
 			i += 1
 			continue
 		}
-
-		// Decode the current rune and its advance (glyph width + spacing).
 		next := i + 1
 		for next < len(text) && (text[next] & 0xC0) == 0x80 do next += 1
-		r, _ := utf8.decode_rune(text[i:next])
-		rw := rune_width(r, font_size) + sp
-		if c == ' ' {
+		decoded, _ := utf8.decode_rune(text[i:next])
+		advance := rune_width_with(system, decoded, font_size) + 1
+		if value == ' ' {
 			last_space = i
-			w_at_space = line_w + rw
+			width_at_space = line_width + advance
 		}
-
-		if line_w + rw > max_width && i > line_start {
+		if line_width + advance > max_width && i > line_start {
 			if last_space > line_start {
 				append(&lines, Wrap_Line{line_start, last_space})
 				line_start = last_space + 1
-				line_w -= w_at_space // carry the remainder after the space
+				line_width -= width_at_space
 			} else {
-				// No space to break on: break before the current rune.
 				append(&lines, Wrap_Line{line_start, i})
 				line_start = i
-				line_w = 0
+				line_width = 0
 			}
 			last_space = -1
-			continue // re-evaluate the current rune against the fresh line
+			continue
 		}
-		line_w += rw
+		line_width += advance
 		i = next
 	}
-
 	append(&lines, Wrap_Line{line_start, len(text)})
 	return lines[:]
 }
 
-// Total pixel height a wrapped block occupies.
+wrap_compute :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> []Wrap_Line {
+	return wrap_compute_with(&default_text_system, text, max_width, font_size)
+}
+
+wrapped_height_px_with :: proc(
+	system: ^Text_System,
+	text: string,
+	max_width, font_size, line_height: i32,
+) -> i32 {
+	assert(system != nil)
+	assert(line_height > 0)
+	return i32(len(wrap_text_with(system, text, max_width, font_size))) * line_height
+}
+
 wrapped_height_px :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> i32 {
-	return i32(len(wrap_text(text, max_width, font_size))) * i32(LINE_HEIGHT)
+	return wrapped_height_px_with(&default_text_system, text, max_width, font_size, LINE_HEIGHT)
 }
 
-// Widest visual (wrapped) line in pixels, capped at max_width.
-wrapped_max_line_width :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> i32 {
-	w: i32 = 0
-	for ln in wrap_text(text, max_width, font_size) {
-		if ln.end <= ln.start do continue
-		slice := text[ln.start:ln.end]
-		lc := strings.clone_to_cstring(slice, context.temp_allocator)
-		lw := measure_text(lc, font_size)
-		if lw > w do w = lw
+wrapped_max_line_width_with :: proc(
+	system: ^Text_System,
+	text: string,
+	max_width, font_size: i32,
+) -> i32 {
+	assert(system != nil)
+	width: i32
+	for line in wrap_text_with(system, text, max_width, font_size) {
+		if line.end <= line.start do continue
+		value := strings.clone_to_cstring(text[line.start:line.end], context.temp_allocator)
+		line_width := measure_text_with(system, value, font_size)
+		if line_width > width do width = line_width
 	}
-	if w > max_width do w = max_width
-	return w
+	return min(width, max_width)
 }
 
-// Like wrapped_max_line_width but strips inline markdown markers (**bold**,
-// `inline code`) so the measured width matches the display text.
+wrapped_max_line_width :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> i32 {
+	return wrapped_max_line_width_with(&default_text_system, text, max_width, font_size)
+}
+
+wrapped_max_line_width_md_with :: proc(
+	system: ^Text_System,
+	text: string,
+	max_width, font_size: i32,
+) -> i32 {
+	assert(system != nil)
+	if !strings.contains(text, "**") &&
+	   strings.index_byte(text, PILL_OPEN) < 0 &&
+	   strings.index_byte(text, '`') < 0 {
+		return wrapped_max_line_width_with(system, text, max_width, font_size)
+	}
+	spans := parse_inline_spans(text)
+	display := spans_display_string(spans)
+	return wrapped_max_line_width_with(system, display, max_width, font_size)
+}
+
 wrapped_max_line_width_md :: proc(
 	text: string,
 	max_width: i32,
 	font_size: i32 = FONT_SIZE,
 ) -> i32 {
-	if !strings.contains(text, "**") &&
-	   strings.index_byte(text, PILL_OPEN) < 0 &&
-	   strings.index_byte(text, '`') < 0 {
-		return wrapped_max_line_width(text, max_width, font_size)
-	}
-	spans := parse_inline_spans(text)
-	display := spans_display_string(spans)
-	return wrapped_max_line_width(display, max_width, font_size)
+	return wrapped_max_line_width_md_with(&default_text_system, text, max_width, font_size)
 }
 
-// Byte offset of the start of the last visual line (used to place the caret).
-wrapped_last_line_start :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> int {
-	lines := wrap_text(text, max_width, font_size)
+wrapped_last_line_start_with :: proc(
+	system: ^Text_System,
+	text: string,
+	max_width, font_size: i32,
+) -> int {
+	assert(system != nil)
+	lines := wrap_text_with(system, text, max_width, font_size)
 	if len(lines) == 0 do return 0
 	return lines[len(lines) - 1].start
+}
+
+wrapped_last_line_start :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> int {
+	return wrapped_last_line_start_with(&default_text_system, text, max_width, font_size)
 }
