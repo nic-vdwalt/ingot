@@ -644,18 +644,33 @@ Deterministic fuzz harnesses run under **AddressSanitizer** with a
 ```sh
 fuzz/run.sh net            # sim transport + HTTP response parser + WS frame parser (random seed)
 fuzz/run.sh net 12345      # reproduce a specific seed
-fuzz/run.sh ui             # widget toolkit harness
+fuzz/run.sh ui             # parsers + widget math + a11y semantic buffer
 fuzz/run.sh term           # in-package fuzz tests via `odin test` (private procs)
+fuzz/run.sh interact       # widget interaction sequences (headless synthetic input)
+fuzz/run.sh input          # text-input edit ops: caret/selection/undo/pills (in-package)
 fuzz/run.sh gfx-frame      # WINDOWED: GPU resource-lifecycle fuzzer (see below)
 ```
 
+`interact` drives real widgets (buttons, checkboxes, sliders, dropdown,
+modal, context menu) with random synthetic event sequences through the
+compile-gated input sim seam (`-define:INGOT_INPUT_SIM=true`,
+`gfx/input_sim.odin`) and checks routing/focus/latch/semantic invariants
+under any ordering. `input` fuzzes the text-input edit state machine
+in-package at 200k ops (the same test runs at 2k ops in `scripts/test.sh`).
+
 `gfx-frame` opens a real window and interleaves resource destruction —
-font-atlas resets, texture/render-target unloads, UI rescaling — *inside*
-live frames, catching the destroy-before-submit bug class (wgpu validation
-aborts) that headless tests can't reach. It needs a display, so it is
-excluded from `all`/`soak`; run it explicitly after touching GPU resource
-lifetimes. `scripts/smoke-gallery.sh` covers the same class end-to-end
-through the gallery's real event handlers.
+font-atlas resets, texture/render-target unloads, UI rescaling, window
+resizes — *inside* live frames, catching the destroy-before-submit bug class
+(wgpu validation aborts) that headless tests can't reach. It builds with
+`-define:INGOT_GPU_STRICT=true` so any validation message aborts the run. It
+needs a display, so it is excluded from `all`/`soak`; run it explicitly
+after touching GPU resource lifetimes. `scripts/smoke-gallery.sh` covers the
+same class end-to-end through the gallery's real event handlers, and
+`scripts/check-web.sh` gates the web target (wasm compile of both examples +
+`node --test` of the semantic DOM overlay against a dependency-free stub).
+
+Known limitation: wgpu-native is a prebuilt release library, so
+AddressSanitizer instruments the Odin side only.
 
 All targets build with `-debug -sanitize:address`; `net` adds
 `-define:INGOT_NET_SIM=true` so the simulated transport's clone/deliver/free
