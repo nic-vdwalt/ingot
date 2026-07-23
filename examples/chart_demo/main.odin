@@ -12,6 +12,8 @@ import "ingot:ui"
 dark := true
 line_state: ui.Chart_State
 bar_state: ui.Chart_State
+ui_runtime: ui.Ui_Runtime
+ui_frame: ui.Ui_Frame
 
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
 costs := [12]f32{8.1, 8.4, 9.0, 9.7, 10.2, 11.5, 11.1, 12.4, 12.0, 13.6, 13.1, 14.0}
@@ -43,11 +45,14 @@ main :: proc() {
 	rl.EnableEventWaiting()
 	ui.apply_platform_dpi()
 	ui.init_font()
+	ui.ui_runtime_init(&ui_runtime)
 	rl.run(frame)
+	ui.ui_runtime_destroy(&ui_runtime)
 }
 
 frame :: proc() {
 	ui.dpi_refresh()
+	ui.ui_frame_begin(&ui_frame, &ui_runtime)
 	ui.begin_cursor_frame()
 	rl.BeginDrawing()
 	rl.ClearBackground(ui.theme.bg_color)
@@ -93,6 +98,7 @@ frame :: proc() {
 	stat_card(628, 272, 308, 92, "AVG HOURS / DAY", "5.1", spark_flat[:], ui.theme.fg_accent)
 
 	ui.apply_cursor()
+	ui.ui_frame_end(&ui_frame)
 	rl.EndDrawing()
 }
 

@@ -17,6 +17,32 @@ test_ui_slot_column_and_row :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_ui_runtime_frames_are_isolated_and_share_roots :: proc(t: ^testing.T) {
+	a, b: Ui_Runtime
+	ui_runtime_init(&a)
+	ui_runtime_init(&b)
+	defer ui_runtime_destroy(&a)
+	defer ui_runtime_destroy(&b)
+	ui_runtime_set_scale(&a, 2)
+	testing.expect_value(t, a.scale, f32(2))
+	testing.expect_value(t, b.scale, f32(1))
+
+	frame_a, frame_b: Ui_Frame
+	ui_frame_begin(&frame_a, &a)
+	ui_frame_begin(&frame_b, &b)
+	u1, u2: Ui
+	ui_begin_frame(&u1, &frame_a, 0, 0, 100, 100)
+	ui_begin_frame(&u2, &frame_a, 0, 0, 100, 100)
+	testing.expect_value(t, frame_a.open_roots, 2)
+	testing.expect_value(t, frame_b.open_roots, 0)
+	ui_end(&u2)
+	ui_end(&u1)
+	ui_frame_end(&frame_a)
+	ui_frame_end(&frame_b)
+	testing.expect(t, u1.frame == nil && u2.frame == nil)
+}
+
+@(test)
 test_ui_focus_ids_sequential_and_counted :: proc(t: ^testing.T) {
 	u: Ui
 	ui_begin(&u, 0, 0, 100, 100)

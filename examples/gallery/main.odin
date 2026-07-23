@@ -90,6 +90,8 @@ spark := [10]f32{3, 4, 3.6, 5, 6.2, 5.8, 7, 8.4, 8.1, 9.3}
 settings_open := false
 settings_sel := 0
 stored_scale: f32 = 0 // 0 = auto
+ui_runtime: ui.Ui_Runtime
+ui_frame: ui.Ui_Frame
 
 Widget_State :: struct {
 	ctx:          ui.Ui,
@@ -155,9 +157,11 @@ main :: proc() {
 	when !SMOKE do rl.EnableEventWaiting() // smoke needs continuous frames
 	ui.apply_platform_dpi()
 	ui.init_font()
+	ui.ui_runtime_init(&ui_runtime)
 	ui.a11y_init()
 	rl.run(frame)
 	input_state_destroy(&input_state)
+	ui.ui_runtime_destroy(&ui_runtime)
 }
 
 input_state_destroy :: proc(state: ^Input_State) {
@@ -169,6 +173,7 @@ input_state_destroy :: proc(state: ^Input_State) {
 
 frame :: proc() {
 	ui.dpi_refresh()
+	ui.ui_frame_begin(&ui_frame, &ui_runtime)
 	ui.begin_cursor_frame()
 	rl.BeginDrawing()
 	rl.ClearBackground(ui.theme.bg_color)
@@ -198,6 +203,7 @@ frame :: proc() {
 
 	ui.apply_cursor()
 	ui.a11y_frame_end()
+	ui.ui_frame_end(&ui_frame)
 	rl.EndDrawing()
 }
 
@@ -368,7 +374,7 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 	iw := min(w, ui.sc(420))
 
 	state := &input_state
-	ui.ui_begin(&state.ctx, x, y, iw, ui.sc(600), gap = ui.sc(10))
+	ui.ui_begin_frame(&state.ctx, &ui_frame, x, y, iw, ui.sc(600), gap = ui.sc(10))
 	ui.input(&state.ctx, INPUT_NAME_ID, &state.name, "Your name (undo, selection, spellcheck)")
 	ui.input(&state.ctx, INPUT_PASS_ID, &state.pass, "Password (masked)", masked = true)
 	ui.input(
@@ -401,7 +407,7 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	y := ui.section_header(x, y0, w, "FORM CONTROLS (checkbox / radio / slider / dropdown)")
 	state := &widget_state
-	ui.ui_begin(&state.ctx, x, y, w, ui.sc(400), gap = ui.sc(8))
+	ui.ui_begin_frame(&state.ctx, &ui_frame, x, y, w, ui.sc(400), gap = ui.sc(8))
 	ui.ui_row(&state.ctx, ui.ROW_H_SM, gap = ui.sc(10))
 	ui.checkbox(&state.ctx, WIDGET_ENABLE_ID, "Enable widgets", &state.check_a)
 	ui.checkbox(&state.ctx, WIDGET_VERBOSE_ID, "Verbose logs", &state.check_b)

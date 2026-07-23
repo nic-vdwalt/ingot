@@ -18,10 +18,36 @@ editor_form_destroy :: proc(form: ^Editor_Form) {
 ```
 
 Most state bundles are zero-value ready. `Input_Box` owns allocations for text,
-undo history, mention pills, and wrapped-line memoization. Do not copy an
-`Input_Box` after first use. Call `input_box_destroy` before discarding its
-owner. `input_box_reset` clears logical state while retaining reusable builder
-and undo-stack capacity.
+undo history, mention pills, wrapped-line memoization, and spell scan results.
+Do not copy it after first use. Call `input_box_destroy` before discarding its
+owner. `input_box_reset` clears logical state while retaining reusable capacity.
+
+## Runtime and frame ownership
+
+Each window owns one `Ui_Runtime`; each rendered frame owns one `Ui_Frame`.
+Initialize and destroy the runtime with the window, bracket drawing with
+`ui_frame_begin` and `ui_frame_end`, and bind every layout root through
+`ui_begin_frame`. Several roots may share a frame, while separate windows and
+tests use separate runtime/frame pairs.
+
+`Ui_Runtime` owns text and spell systems plus style generations. Cache results
+are borrowed until the owning system is reset or destroyed. Persistent widget
+behavior never lives in the runtime: keep `Button_State`, `Slider_State`,
+`Input_Box`, and other state bundles in the component that draws them. Stable
+IDs identify focus targets; they do not own widget state.
+
+```odin
+runtime: ui.Ui_Runtime
+frame: ui.Ui_Frame
+form: Editor_Form
+
+ui.ui_runtime_init(&runtime)
+ui.ui_frame_begin(&frame, &runtime)
+ui.ui_begin_frame(&form.ui, &frame, x, y, w, h)
+// Draw roots in the order their overlays and semantics should appear.
+ui.ui_end(&form.ui)
+ui.ui_frame_end(&frame)
+```
 
 ## Stable focus
 

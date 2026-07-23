@@ -19,7 +19,73 @@ Ui_Focus_Mode :: enum u8 {
 
 // Ui is caller-owned. Stable arrays retain only bounded traversal identity;
 // widgets and their values remain entirely caller-owned.
+Ui_Runtime :: struct {
+	text:          Text_System,
+	spell:         Spell_System,
+	style:         Theme,
+	scale:         f32,
+	generation:    u64,
+	pending_click: u64,
+	initialized:   bool,
+}
+
+Ui_Frame :: struct {
+	runtime:            ^Ui_Runtime,
+	requested_cursor:   rl.MouseCursor,
+	applied_cursor:     rl.MouseCursor,
+	cursor_initialized: bool,
+	open_roots:         int,
+	open:               bool,
+}
+
+ui_runtime_init :: proc(runtime: ^Ui_Runtime) {
+	assert(runtime != nil, "ui_runtime_init: nil runtime")
+	assert(!runtime.initialized, "ui_runtime_init: already initialized")
+	runtime.scale = 1
+	runtime.style = theme
+	runtime.initialized = true
+}
+
+ui_runtime_destroy :: proc(runtime: ^Ui_Runtime) {
+	assert(runtime != nil, "ui_runtime_destroy: nil runtime")
+	text_system_destroy(&runtime.text)
+	spell_system_destroy(&runtime.spell)
+	runtime^ = {}
+}
+
+ui_runtime_set_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
+	assert(runtime != nil && runtime.initialized, "ui_runtime_set_theme: invalid runtime")
+	runtime.style = value
+	runtime.generation += 1
+}
+
+ui_runtime_set_scale :: proc(runtime: ^Ui_Runtime, value: f32) {
+	assert(runtime != nil && runtime.initialized, "ui_runtime_set_scale: invalid runtime")
+	runtime.scale = clamp(value, 0.5, 3)
+	reset_font_atlases_with(&runtime.text)
+	clear_measure_cache_with(&runtime.text)
+	clear_wrap_cache_with(&runtime.text)
+	runtime.generation += 1
+}
+
+ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime) {
+	assert(frame != nil && runtime != nil, "ui_frame_begin: nil frame or runtime")
+	assert(runtime.initialized && !frame.open, "ui_frame_begin: invalid lifetime")
+	frame.runtime = runtime
+	frame.requested_cursor = .DEFAULT
+	frame.open_roots = 0
+	frame.open = true
+}
+
+ui_frame_end :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "ui_frame_end: frame not open")
+	assert(frame.open_roots == 0, "ui_frame_end: UI root still open")
+	frame.runtime = nil
+	frame.open = false
+}
+
 Ui :: struct {
+	frame:        ^Ui_Frame,
 	layout:       Layout,
 	focus_slot:   int,
 	focus_count:  int,
@@ -37,6 +103,14 @@ Ui :: struct {
 
 // ui_begin opens the frame over the given area: caches screen size, runs Tab
 // cycling against last frame's focusable count, and opens the root column.
+ui_begin_frame :: proc(u: ^Ui, frame: ^Ui_Frame, x, y, w, h: i32, gap: i32 = 0) {
+	assert(u != nil && frame != nil, "ui_begin_frame: nil Ui or frame")
+	assert(frame.open, "ui_begin_frame: frame not open")
+	u.frame = frame
+	frame.open_roots += 1
+	ui_begin(u, x, y, w, h, gap)
+}
+
 ui_begin :: proc(u: ^Ui, x, y, w, h: i32, gap: i32 = 0) {
 	assert(u != nil, "ui_begin: nil Ui")
 	assert(!u.open, "ui_begin: frame already open")
@@ -71,6 +145,11 @@ ui_end :: proc(u: ^Ui) {
 		u.stable_count = 0
 	}
 	u.open = false
+	if u.frame != nil {
+		assert(u.frame.open_roots > 0, "ui_end: corrupt root count")
+		u.frame.open_roots -= 1
+		u.frame = nil
+	}
 }
 
 ui_focus_sequential :: proc(u: ^Ui) -> Focus_Opt {
