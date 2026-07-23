@@ -24,6 +24,7 @@
 	let semanticFrame = 0;
 	const semanticInputs = new Map();
 	const semanticForms = new Map();
+	const semanticControls = new Map();
 	const INPUT_TYPES = ["text", "email", "password"];
 	const AUTOCOMPLETE = ["off", "username", "current-password", "new-password"];
 	// Dropped files staged for the engine (names + bytes; browsers never expose
@@ -237,6 +238,77 @@
 		return semanticInputs.get(fieldId) || null;
 	}
 
+	// Semantic control mirror: buttons/checkboxes/radios/sliders/dropdowns
+	// recorded by the engine's semantic layer (ui/semantics.odin) become real
+	// DOM controls assistive tech can reach. They sit over the canvas but are
+	// invisible and mouse-transparent (opacity 0, pointer-events none); AT
+	// activation still fires click/change events, staged here and pulled by
+	// the engine on the next sync. Sem_Role ordinals; Sem_State bits:
+	// 1 checked, 2 disabled, 4 focused, 8 expanded.
+	const CONTROL_ROLES = {
+		1: { tag: "button" },                     // Button
+		2: { tag: "input", type: "checkbox" },    // Checkbox
+		3: { tag: "input", type: "radio" },       // Radio
+		4: { tag: "input", type: "range" },       // Slider
+		6: { tag: "button", listbox: true },      // Dropdown
+		7: { tag: "button" },                     // Menu_Item
+	};
+
+	function createSemanticControl(key, role) {
+		const spec = CONTROL_ROLES[role];
+		if (!spec) return null;
+		const el = document.createElement(spec.tag);
+		if (spec.type) el.type = spec.type;
+		if (spec.tag === "button") el.type = "button";
+		if (spec.listbox) el.setAttribute("aria-haspopup", "listbox");
+		el.tabIndex = -1; // reachable by AT virtual cursors, not by page Tab
+		el.style.opacity = "0";
+		el.style.pointerEvents = "none";
+		const state = { el, role, seen: semanticFrame, activated: false, changed: false, value: 0 };
+		if (spec.type === "checkbox" || spec.type === "radio") {
+			el.addEventListener("change", () => { state.activated = true; });
+		} else if (spec.type === "range") {
+			el.addEventListener("change", () => {
+				state.changed = true;
+				state.value = parseFloat(el.value) || 0;
+			});
+		} else {
+			el.addEventListener("click", () => { state.activated = true; });
+		}
+		document.body.appendChild(el);
+		semanticControls.set(key, state);
+		return state;
+	}
+
+	function syncSemanticControl(key, role, label, x, y, width, height, stateBits, value, lo, hi) {
+		let state = semanticControls.get(key);
+		if (state && state.role !== role) {
+			state.el.remove();
+			semanticControls.delete(key);
+			state = null;
+		}
+		if (!state) state = createSemanticControl(key, role);
+		if (!state) return 0;
+		state.seen = semanticFrame;
+		const el = state.el;
+		el.setAttribute("aria-label", label);
+		if (el.tagName === "BUTTON") el.textContent = label;
+		semanticBounds(el, x, y, width, height);
+		el.disabled = (stateBits & 2) !== 0;
+		if (state.role === 2 || state.role === 3) el.checked = (stateBits & 1) !== 0;
+		if (state.role === 6) el.setAttribute("aria-expanded", (stateBits & 8) !== 0 ? "true" : "false");
+		if (state.role === 4 && !state.changed) {
+			el.min = String(lo);
+			el.max = String(hi);
+			el.step = "any";
+			el.value = String(value);
+		}
+		const flags = (state.activated ? 1 : 0) | (state.changed ? 2 : 0);
+		state.activated = false;
+		state.changed = false;
+		return flags;
+	}
+
 	function semanticCursorByteOffset(input) {
 		const end = input.selectionStart === null ? input.value.length : input.selectionStart;
 		return new TextEncoder().encode(input.value.slice(0, end)).length;
@@ -252,6 +324,11 @@
 			if (state.seen === semanticFrame) continue;
 			state.form.remove();
 			semanticForms.delete(formId);
+		}
+		for (const [key, state] of semanticControls) {
+			if (state.seen === semanticFrame) continue;
+			state.el.remove();
+			semanticControls.delete(key);
 		}
 	}
 
@@ -329,6 +406,16 @@
 				wasmText(formPointer, formLength), wasmText(labelPointer, labelLength),
 				x, y, width, height, style, fontSize, enabled !== 0,
 			),
+			ingot_web_control_sync: (idLo, idHi, role, labelPointer, labelLength,
+				x, y, width, height, stateBits, value, lo, hi) => syncSemanticControl(
+				`${idHi >>> 0}:${idLo >>> 0}`, role,
+				wasmText(labelPointer, labelLength),
+				x, y, width, height, stateBits, value, lo, hi,
+			),
+			ingot_web_control_value: (idLo, idHi) => {
+				const state = semanticControls.get(`${idHi >>> 0}:${idLo >>> 0}`);
+				return state ? state.value : 0;
+			},
 			ingot_ime_rect: (x, y, w, h, active) => {
 				// Position/focus the hidden IME proxy (created by
 				// ingot_input.js) at the caret so browser composition events

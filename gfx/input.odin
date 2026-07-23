@@ -303,6 +303,26 @@ SyncWebSubmitButton :: proc(
 	)
 }
 
+Web_Control_Result :: struct {
+	value:     f32,
+	activated: bool,
+	changed:   bool,
+}
+
+// SyncWebControl mirrors one semantic node (ui/semantics.odin) into a real
+// DOM control with an ARIA role — buttons, checkboxes, radios, sliders,
+// dropdowns become genuine browser elements assistive tech can reach, which
+// is stronger than a canvas-side accessibility tree. No-op on native targets
+// (AccessKit covers those). `role` is the Sem_Role ordinal; `state` is the
+// Sem_State bit_set transmuted to its u8 backing.
+SyncWebControl :: proc(
+	role: i32, id: u64, label: string,
+	x, y, w, h: i32, state: u8,
+	value, lo, hi: f32,
+) -> Web_Control_Result {
+	return platform_sync_web_control(role, id, label, x, y, w, h, state, value, lo, hi)
+}
+
 SetMouseCursor :: proc(cursor: MouseCursor) {
 	i := int(cursor)
 	if i < 0 || i >= 11 do return

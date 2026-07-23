@@ -251,6 +251,15 @@ platform_sync_web_submit_button :: proc(
 	return false
 }
 
+@(private)
+platform_sync_web_control :: proc(
+	role: i32, id: u64, label: string,
+	x, y, w, h: i32, state: u8,
+	value, lo, hi: f32,
+) -> Web_Control_Result {
+	return {}
+}
+
 // IME candidate-window positioning: GLFW delivers final composed characters
 // via the char callback but has no preedit/candidate-rect API, so the per-OS
 // _ime_* seams (ime_darwin.odin / ime_windows.odin / ime_other.odin) talk to

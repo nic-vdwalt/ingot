@@ -45,6 +45,13 @@ foreign dom {
 		label_ptr: rawptr, label_len: i32,
 		x, y, w, h, style, font_size, enabled: i32,
 	) -> i32 ---
+	@(link_name = "ingot_web_control_sync") _js_web_control_sync :: proc(
+		id_lo, id_hi, role: i32,
+		label_ptr: rawptr, label_len: i32,
+		x, y, w, h, state: i32,
+		value, lo, hi: f32,
+	) -> i32 ---
+	@(link_name = "ingot_web_control_value") _js_web_control_value :: proc(id_lo, id_hi: i32) -> f64 ---
 	@(link_name = "ingot_is_fullscreen")       _js_is_fullscreen     :: proc() -> i32 ---
 	@(link_name = "ingot_toggle_fullscreen")   _js_toggle_fullscreen :: proc() ---
 	@(link_name = "ingot_ime_rect")            _js_ime_rect          :: proc(x, y, w, h, active: i32) ---
@@ -330,6 +337,33 @@ platform_sync_web_text_input :: proc(
 			copied := _js_web_input_value_copy(field_data, field_len, raw_data(buffer), length)
 			if copied > 0 do result.value = string(buffer[:copied])
 		}
+	}
+	return result
+}
+
+@(private)
+platform_sync_web_control :: proc(
+	role: i32, id: u64, label: string,
+	x, y, w, h: i32, state: u8,
+	value, lo, hi: f32,
+) -> Web_Control_Result {
+	// Node ids exceed JS's 2^53 safe-integer range (fallback ids pack the
+	// role into bits 56+), so the id crosses as two i32 halves and keys a
+	// string map on the JS side.
+	id_lo := transmute(i32)u32(id & 0xFFFFFFFF)
+	id_hi := transmute(i32)u32(id >> 32)
+	flags := _js_web_control_sync(
+		id_lo, id_hi, role,
+		web_string_data(label), i32(len(label)),
+		x, y, w, h, i32(state),
+		value, lo, hi,
+	)
+	result := Web_Control_Result{
+		activated = flags & 1 != 0,
+		changed   = flags & 2 != 0,
+	}
+	if result.changed {
+		result.value = f32(_js_web_control_value(id_lo, id_hi))
 	}
 	return result
 }

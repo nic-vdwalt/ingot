@@ -57,22 +57,59 @@ a11y_role :: proc(role: Sem_Role) -> ak.Role {
 // focus_activated as a synthetic activation on the next frame.
 @(private = "file") g_a11y_pending_click: u64
 
-// a11y_init attaches the AccessKit adapter and registers the semantic-buffer
-// factory. Call once after InitWindow; returns false when accessibility is
-// compiled out (web target, -define:INGOT_ACCESSKIT=false) or no window.
+// a11y_init enables semantic recording and attaches the platform adapter.
+// Call once after InitWindow. On native this registers the AccessKit
+// factory; on web the DOM control mirror (driven from a11y_frame_end) is the
+// consumer, so this returns true with no adapter. Returns false only when
+// accessibility is compiled out (-define:INGOT_ACCESSKIT=false on native).
 a11y_init :: proc() -> bool {
-	return rl.InitAccessibility(_a11y_factory, nil)
+	sem_enable(true)
+	when rl.A11Y_ENABLED {
+		return rl.InitAccessibility(_a11y_factory, nil)
+	} else when ODIN_OS == .JS {
+		return true
+	} else {
+		return false
+	}
 }
 
-// a11y_frame_end pushes this frame's semantic buffer to the platform adapter
-// and applies any staged AT actions. Call once at end of frame, after all UI
-// is drawn.
+// a11y_frame_end pushes this frame's semantic buffer to the platform
+// consumer — the web DOM mirror and/or the AccessKit adapter — and applies
+// any staged AT actions. Call once at end of frame, after all UI is drawn.
 a11y_frame_end :: proc() {
+	_a11y_sync_web_controls()
 	rl.PushAccessibilityUpdate()
 	for {
 		action, ok := rl.PollAccessibilityAction()
 		if !ok do break
 		_a11y_apply(action)
+	}
+}
+
+// _a11y_sync_web_controls mirrors interactive nodes into real DOM controls
+// (no-op on native). Text inputs are skipped — they already have the richer
+// autofill-capable mirror (ti_sync_web). AT activations come back as
+// synthetic clicks through the same pending path as AccessKit actions.
+@(private = "file")
+_a11y_sync_web_controls :: proc() {
+	if !sem_enabled() do return
+	frame := sem_frame()
+	for i in 0 ..< frame.count {
+		sem := &frame.nodes[i]
+		#partial switch sem.role {
+		case .Button, .Checkbox, .Radio, .Slider, .Dropdown, .Menu_Item:
+		case:
+			continue
+		}
+		res := rl.SyncWebControl(
+			i32(sem.role), sem.id, sem_node_label(sem),
+			sem.rect.x, sem.rect.y, sem.rect.w, sem.rect.h,
+			transmute(u8)sem.state, sem.value, sem.lo, sem.hi,
+		)
+		if res.activated {
+			g_a11y_pending_click = sem.id
+			rl.RequestRedraw()
+		}
 	}
 }
 
