@@ -63,8 +63,8 @@ chart_nice_ticks_degenerate :: proc(t: ^testing.T) {
 chart_map_y_endpoints :: proc(t: ^testing.T) {
 	plot := rl.Rectangle{0, 0, 100, 100}
 	expect_close(t, map_y(0, 0, 10, plot), 100) // lo → bottom
-	expect_close(t, map_y(10, 0, 10, plot), 0)  // hi → top
-	expect_close(t, map_y(5, 0, 10, plot), 50)  // mid
+	expect_close(t, map_y(10, 0, 10, plot), 0) // hi → top
+	expect_close(t, map_y(5, 0, 10, plot), 50) // mid
 	// Out-of-range values clamp to the plot edges.
 	expect_close(t, map_y(-5, 0, 10, plot), 100)
 	expect_close(t, map_y(20, 0, 10, plot), 0)

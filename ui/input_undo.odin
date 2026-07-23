@@ -48,7 +48,10 @@ input_snapshot_destroy :: proc(s: ^Input_Snapshot) {
 }
 
 make_input_snapshot :: proc(text: string, cursor: int, pills: []Mention_Span) -> Input_Snapshot {
-	s := Input_Snapshot{text = strings.clone(text), cursor = cursor}
+	s := Input_Snapshot {
+		text   = strings.clone(text),
+		cursor = cursor,
+	}
 	s.pills = make([dynamic]Mention_Span, 0, len(pills))
 	for p in pills do append(&s.pills, p)
 	return s
@@ -57,11 +60,21 @@ make_input_snapshot :: proc(text: string, cursor: int, pills: []Mention_Span) ->
 // input_undo_record captures the current composer state before a mutation of
 // `kind`. Same-kind edits inside the coalesce window fold into the previous
 // snapshot. Any recorded edit invalidates the redo stack.
-input_undo_record :: proc(u: ^Input_Undo, text: string, cursor: int, pills: []Mention_Span, kind: Input_Edit_Kind, now: f64) {
+input_undo_record :: proc(
+	u: ^Input_Undo,
+	text: string,
+	cursor: int,
+	pills: []Mention_Span,
+	kind: Input_Edit_Kind,
+	now: f64,
+) {
 	for &s in u.redo do input_snapshot_destroy(&s)
 	clear(&u.redo)
-	coalesce := kind != .Other && kind == u.last_edit_kind &&
-		now - u.last_edit_time < INPUT_UNDO_COALESCE_SECS && len(u.undo) > 0
+	coalesce :=
+		kind != .Other &&
+		kind == u.last_edit_kind &&
+		now - u.last_edit_time < INPUT_UNDO_COALESCE_SECS &&
+		len(u.undo) > 0
 	u.last_edit_time = now
 	u.last_edit_kind = kind
 	if coalesce do return

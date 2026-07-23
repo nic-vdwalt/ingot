@@ -137,7 +137,8 @@ draw_scene :: proc(s: ^Scene, p: ^Prng) -> (overlay_active: bool) {
 	if !s.menu.open && fuzzx.int_range(p, 0, 89) == 0 {
 		ui.context_menu_open(
 			&s.menu,
-			i32(fuzzx.int_range(p, 0, SCREEN_W)), i32(fuzzx.int_range(p, 0, SCREEN_H)),
+			i32(fuzzx.int_range(p, 0, SCREEN_W)),
+			i32(fuzzx.int_range(p, 0, SCREEN_H)),
 		)
 	}
 	overlay_active |= s.menu.open
@@ -164,11 +165,19 @@ check_invariants :: proc(c: ^fuzzx.Ctx, s: ^Scene, overlay_free_frames: int) {
 
 	fuzzx.check(c, s.slider_val >= 0 && s.slider_val <= 100, "slider escaped [lo, hi]")
 	fuzzx.check(c, s.radio_sel == 0 || s.radio_sel == 1, "radio selected invalid value")
-	fuzzx.check(c, s.dd_sel >= 0 && int(s.dd_sel) < len(DD_ITEMS), "dropdown selection out of range")
+	fuzzx.check(
+		c,
+		s.dd_sel >= 0 && int(s.dd_sel) < len(DD_ITEMS),
+		"dropdown selection out of range",
+	)
 	fuzzx.check(c, !s.modal.drawing, "modal begin/end unbalanced")
 	if s.menu.open {
 		it := MENU_ITEMS[s.menu.selected]
-		fuzzx.check(c, s.menu.selected >= 0 && s.menu.selected < len(MENU_ITEMS), "menu selection out of range")
+		fuzzx.check(
+			c,
+			s.menu.selected >= 0 && s.menu.selected < len(MENU_ITEMS),
+			"menu selection out of range",
+		)
 		fuzzx.check(c, !it.separator || s.menu.selected == 0, "menu selection on separator")
 	}
 
@@ -196,9 +205,14 @@ main :: proc() {
 		round_seed := seed + u64(round)
 		if rounds > 1 do fmt.printfln("fuzz_interact round %d seed=%d", round, round_seed)
 		p := fuzzx.prng_make(round_seed)
-		c := fuzzx.Ctx{name = "fuzz_interact", seed = round_seed}
+		c := fuzzx.Ctx {
+			name = "fuzz_interact",
+			seed = round_seed,
+		}
 
-		s := Scene{slider_val = 40}
+		s := Scene {
+			slider_val = 40,
+		}
 		rl.SimReset()
 		ui.interact_reset()
 		ui.route_reset()

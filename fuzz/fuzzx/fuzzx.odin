@@ -82,21 +82,26 @@ mutate :: proc(p: ^Prng, data: []u8) -> []u8 {
 	append(&buf, ..data)
 	for _ in 0 ..< int_range(p, 1, 5) {
 		switch int_range(p, 0, 7) {
-		case 0: // byte replace
+		case 0:
+			// byte replace
 			if len(buf) > 0 do buf[int_range(p, 0, len(buf))] = u8(next_u64(p) & 0xFF)
-		case 1: // bit flip
+		case 1:
+			// bit flip
 			if len(buf) > 0 do buf[int_range(p, 0, len(buf))] ~= 1 << uint(int_range(p, 0, 8))
-		case 2: // insert 1–8 random bytes
+		case 2:
+			// insert 1–8 random bytes
 			at := int_range(p, 0, len(buf) + 1)
 			count := int_range(p, 1, 9)
 			for _ in 0 ..< count do insert_byte(&buf, at, u8(next_u64(p) & 0xFF))
-		case 3: // delete a range
+		case 3:
+			// delete a range
 			if len(buf) > 0 {
 				start := int_range(p, 0, len(buf))
 				end := min(start + int_range(p, 1, 17), len(buf))
 				remove_range(&buf, start, end)
 			}
-		case 4: // duplicate a range in place
+		case 4:
+			// duplicate a range in place
 			if len(buf) > 0 {
 				start := int_range(p, 0, len(buf))
 				end := min(start + int_range(p, 1, 17), len(buf))
@@ -105,10 +110,12 @@ mutate :: proc(p: ^Prng, data: []u8) -> []u8 {
 				at := int_range(p, 0, len(buf) + 1)
 				#reverse for b in chunk do insert_byte(&buf, at, b)
 			}
-		case 5: // boundary-byte injection
+		case 5:
+			// boundary-byte injection
 			at := int_range(p, 0, len(buf) + 1)
 			insert_byte(&buf, at, BOUNDARY_BYTES[int_range(p, 0, len(BOUNDARY_BYTES))])
-		case 6: // ASCII digit run — poisons length/chunk-size fields
+		case 6:
+			// ASCII digit run — poisons length/chunk-size fields
 			at := int_range(p, 0, len(buf) + 1)
 			count := int_range(p, 1, 21)
 			digits := "0123456789ABCDEFabcdef"
@@ -173,11 +180,21 @@ report :: proc(track: ^mem.Tracking_Allocator, name: string, seed: u64) {
 		for _, entry in track.allocation_map {
 			fmt.eprintfln("LEAK %v bytes @ %v", entry.size, entry.location)
 		}
-		fmt.eprintfln("%s FAILED: %d leaks — reproduce with -seed:%d", name, len(track.allocation_map), seed)
+		fmt.eprintfln(
+			"%s FAILED: %d leaks — reproduce with -seed:%d",
+			name,
+			len(track.allocation_map),
+			seed,
+		)
 		os.exit(1)
 	}
 	if len(track.bad_free_array) > 0 {
-		fmt.eprintfln("%s FAILED: %d bad frees — reproduce with -seed:%d", name, len(track.bad_free_array), seed)
+		fmt.eprintfln(
+			"%s FAILED: %d bad frees — reproduce with -seed:%d",
+			name,
+			len(track.bad_free_array),
+			seed,
+		)
 		os.exit(1)
 	}
 }

@@ -17,11 +17,13 @@ import wgglue "vendor:wgpu/glfwglue"
 
 // Native cursor handles. Kept as a package global (not in the shared Input
 // struct) so Input carries no glfw type.
-@(private) g_cursors: [11]glfw.CursorHandle
+@(private)
+g_cursors: [11]glfw.CursorHandle
 
 // Monotonic clock epoch for platform_now(); the caller-side offset cancels, so
 // this only needs to be a stable monotonic base.
-@(private) _mono_epoch := time.tick_now()
+@(private)
+_mono_epoch := time.tick_now()
 
 // _win returns g.win as a glfw handle for the native calls below.
 @(private)
@@ -63,20 +65,24 @@ platform_create_surface :: proc(instance: wg.Instance) -> wg.Surface {
 @(private)
 platform_start_gpu :: proc() {
 	ares: Adapter_Res
-	wg.InstanceRequestAdapter(g.instance, &{compatibleSurface = g.surface}, {
-		mode = .AllowProcessEvents, callback = _on_adapter, userdata1 = &ares,
-	})
-	for !ares.done { wg.InstanceProcessEvents(g.instance) }
+	wg.InstanceRequestAdapter(
+		g.instance,
+		&{compatibleSurface = g.surface},
+		{mode = .AllowProcessEvents, callback = _on_adapter, userdata1 = &ares},
+	)
+	for !ares.done {wg.InstanceProcessEvents(g.instance)}
 	g.adapter = ares.adapter
 
 	dres: Device_Res
-	dev_desc := wg.DeviceDescriptor{
+	dev_desc := wg.DeviceDescriptor {
 		uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error},
 	}
-	wg.AdapterRequestDevice(g.adapter, &dev_desc, {
-		mode = .AllowProcessEvents, callback = _on_device, userdata1 = &dres,
-	})
-	for !dres.done { wg.InstanceProcessEvents(g.instance) }
+	wg.AdapterRequestDevice(
+		g.adapter,
+		&dev_desc,
+		{mode = .AllowProcessEvents, callback = _on_device, userdata1 = &dres},
+	)
+	for !dres.done {wg.InstanceProcessEvents(g.instance)}
 	g.device = dres.device
 	g.queue = wg.DeviceGetQueue(g.device)
 
@@ -185,7 +191,11 @@ platform_window_focused :: proc() -> bool {
 @(private)
 platform_set_window_icon :: proc(image: Image) {
 	if g.win == nil || image.data == nil do return
-	img := glfw.Image{width = image.width, height = image.height, pixels = ([^]u8)(image.data)}
+	img := glfw.Image {
+		width  = image.width,
+		height = image.height,
+		pixels = ([^]u8)(image.data),
+	}
 	imgs := [1]glfw.Image{img}
 	glfw.SetWindowIcon(_win(), imgs[:])
 }
@@ -210,17 +220,17 @@ platform_input_init :: proc() {
 	glfw.SetWindowIconifyCallback(_win(), _iconify_cb)
 	glfw.SetFramebufferSizeCallback(_win(), _fb_size_cb)
 
-	g_cursors[MouseCursor.DEFAULT]       = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
-	g_cursors[MouseCursor.ARROW]         = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
-	g_cursors[MouseCursor.IBEAM]         = glfw.CreateStandardCursor(glfw.IBEAM_CURSOR)
-	g_cursors[MouseCursor.CROSSHAIR]     = glfw.CreateStandardCursor(glfw.CROSSHAIR_CURSOR)
+	g_cursors[MouseCursor.DEFAULT] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
+	g_cursors[MouseCursor.ARROW] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
+	g_cursors[MouseCursor.IBEAM] = glfw.CreateStandardCursor(glfw.IBEAM_CURSOR)
+	g_cursors[MouseCursor.CROSSHAIR] = glfw.CreateStandardCursor(glfw.CROSSHAIR_CURSOR)
 	g_cursors[MouseCursor.POINTING_HAND] = glfw.CreateStandardCursor(glfw.POINTING_HAND_CURSOR)
-	g_cursors[MouseCursor.RESIZE_EW]     = glfw.CreateStandardCursor(glfw.RESIZE_EW_CURSOR)
-	g_cursors[MouseCursor.RESIZE_NS]     = glfw.CreateStandardCursor(glfw.RESIZE_NS_CURSOR)
-	g_cursors[MouseCursor.RESIZE_NWSE]   = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
-	g_cursors[MouseCursor.RESIZE_NESW]   = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
-	g_cursors[MouseCursor.RESIZE_ALL]    = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
-	g_cursors[MouseCursor.NOT_ALLOWED]   = glfw.CreateStandardCursor(glfw.NOT_ALLOWED_CURSOR)
+	g_cursors[MouseCursor.RESIZE_EW] = glfw.CreateStandardCursor(glfw.RESIZE_EW_CURSOR)
+	g_cursors[MouseCursor.RESIZE_NS] = glfw.CreateStandardCursor(glfw.RESIZE_NS_CURSOR)
+	g_cursors[MouseCursor.RESIZE_NWSE] = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
+	g_cursors[MouseCursor.RESIZE_NESW] = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
+	g_cursors[MouseCursor.RESIZE_ALL] = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
+	g_cursors[MouseCursor.NOT_ALLOWED] = glfw.CreateStandardCursor(glfw.NOT_ALLOWED_CURSOR)
 
 	mx, my := glfw.GetCursorPos(_win())
 	g.inp.mouse = {f32(mx), f32(my)}
@@ -253,8 +263,11 @@ platform_sync_web_submit_button :: proc(
 
 @(private)
 platform_sync_web_control :: proc(
-	role: i32, id: u64, label: string,
-	x, y, w, h: i32, state: u8,
+	role: i32,
+	id: u64,
+	label: string,
+	x, y, w, h: i32,
+	state: u8,
 	value, lo, hi: f32,
 ) -> Web_Control_Result {
 	return {}

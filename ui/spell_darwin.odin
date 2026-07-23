@@ -9,8 +9,8 @@ package ui
 // drained with a scoped pool so nothing accumulates under GLFW's event pump.
 
 import "base:intrinsics"
-import NS "core:sys/darwin/Foundation"
 import "core:strings"
+import NS "core:sys/darwin/Foundation"
 
 @(objc_class = "NSSpellChecker")
 NS_Spell_Checker :: struct {
@@ -19,12 +19,18 @@ NS_Spell_Checker :: struct {
 
 // NSNotFound: checkSpellingOfString: returns it as the range location when no
 // misspelling was found.
-@(private = "file") NS_NOT_FOUND :: NS.UInteger(max(NS.Integer))
+@(private = "file")
+NS_NOT_FOUND :: NS.UInteger(max(NS.Integer))
 
-@(private = "file") g_spell_checker: ^NS_Spell_Checker
+@(private = "file")
+g_spell_checker: ^NS_Spell_Checker
 
 _spell_backend_init :: proc() -> bool {
-	g_spell_checker = intrinsics.objc_send(^NS_Spell_Checker, NS_Spell_Checker, "sharedSpellChecker")
+	g_spell_checker = intrinsics.objc_send(
+		^NS_Spell_Checker,
+		NS_Spell_Checker,
+		"sharedSpellChecker",
+	)
 	return g_spell_checker != nil
 }
 

@@ -126,15 +126,18 @@ BlendMode :: enum i32 {
 BeginBlendMode :: proc(mode: BlendMode) {
 	slot: Blend_Slot = .Alpha
 	#partial switch mode {
-	case .ADDITIVE, .ADD_COLORS: slot = .Additive
-	case .MULTIPLIED:            slot = .Multiplied
-	case .CUSTOM, .CUSTOM_SEPARATE: slot = .Custom
+	case .ADDITIVE, .ADD_COLORS:
+		slot = .Additive
+	case .MULTIPLIED:
+		slot = .Multiplied
+	case .CUSTOM, .CUSTOM_SEPARATE:
+		slot = .Custom
 	}
 	if slot != g.rend.cur_blend {
 		if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Blend)
 		g.rend.cur_blend = slot
 	}
 }
-EndBlendMode :: proc() { BeginBlendMode(.ALPHA) }
+EndBlendMode :: proc() {BeginBlendMode(.ALPHA)}
 
 // DrawBillboard / DrawBillboardPro implemented in render3d.odin.

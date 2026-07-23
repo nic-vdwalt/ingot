@@ -105,7 +105,14 @@ spell_replace_word :: proc(replacement: string) {
 	if spell_menu.undo != nil && spell_menu.cursor != nil {
 		pill_slice: []Mention_Span
 		if spell_menu.pills != nil do pill_slice = spell_menu.pills[:]
-		input_undo_record(spell_menu.undo, old, spell_menu.cursor^, pill_slice, .Other, rl.GetTime())
+		input_undo_record(
+			spell_menu.undo,
+			old,
+			spell_menu.cursor^,
+			pill_slice,
+			.Other,
+			rl.GetTime(),
+		)
 	}
 	new_text := strings.concatenate({old[:ws], replacement, old[we:]}, context.temp_allocator)
 	strings.builder_reset(sb)
@@ -145,7 +152,7 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	rows := max(n, 1) + 2 // suggestions (or "No suggestions") + Learn + Ignore
 	sep_h: i32 = 5
 	menu_w: i32 = SPELL_MENU_W
-	menu_h := i32(rows)*SPELL_MENU_ITEM_H + SPELL_MENU_PAD*2 + sep_h
+	menu_h := i32(rows) * SPELL_MENU_ITEM_H + SPELL_MENU_PAD * 2 + sep_h
 
 	mx := spell_menu.anchor_x
 	if mx + menu_w > input_x + input_w do mx = input_x + input_w - menu_w
@@ -196,16 +203,31 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	item_w := menu_w - 4
 	item_y := my + SPELL_MENU_PAD
 
-	draw_row :: proc(ox, item_x, item_y, item_w: i32, label: string, nav_idx: int, mouse: rl.Vector2, color: rl.Color) -> bool {
+	draw_row :: proc(
+		ox, item_x, item_y, item_w: i32,
+		label: string,
+		nav_idx: int,
+		mouse: rl.Vector2,
+		color: rl.Color,
+	) -> bool {
 		row_rect := rl.Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(SPELL_MENU_ITEM_H)}
 		hovered := rl.CheckCollisionPointRec(mouse, row_rect)
 		if hovered && mouse_moved() do spell_menu.selected = nav_idx
 		if spell_menu.selected == nav_idx {
-			overlay_rect({f32(item_x + ox), f32(item_y), f32(item_w), f32(SPELL_MENU_ITEM_H)}, theme.bg_active)
+			overlay_rect(
+				{f32(item_x + ox), f32(item_y), f32(item_w), f32(SPELL_MENU_ITEM_H)},
+				theme.bg_active,
+			)
 		}
 		if hovered do request_cursor(.POINTING_HAND)
 		txt := truncate_to_width(label, item_w - 16, FONT_SIZE)
-		overlay_text(txt, item_x + ox + 8, item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2, FONT_SIZE, color)
+		overlay_text(
+			txt,
+			item_x + ox + 8,
+			item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2,
+			FONT_SIZE,
+			color,
+		)
 		return hovered && rl.IsMouseButtonReleased(.LEFT)
 	}
 
@@ -214,7 +236,13 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	apply_idx := -1
 	if n == 0 {
 		txt := truncate_to_width("No suggestions", item_w - 16, FONT_SIZE)
-		overlay_text(txt, item_x + ox + 8, item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2, FONT_SIZE, theme.fg_disabled)
+		overlay_text(
+			txt,
+			item_x + ox + 8,
+			item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2,
+			FONT_SIZE,
+			theme.fg_disabled,
+		)
 		item_y += SPELL_MENU_ITEM_H
 	} else {
 		for s, i in spell_menu.suggestions {
@@ -226,7 +254,10 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	}
 
 	// Separator.
-	overlay_rect({f32(mx + ox + 6), f32(item_y + sep_h/2), f32(menu_w - 12), 1}, theme.border_color)
+	overlay_rect(
+		{f32(mx + ox + 6), f32(item_y + sep_h / 2), f32(menu_w - 12), 1},
+		theme.border_color,
+	)
 	item_y += sep_h
 
 	learn_label := strings.concatenate({"Learn \"", spell_menu.word, "\""}, context.temp_allocator)

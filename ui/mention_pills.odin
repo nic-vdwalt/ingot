@@ -17,10 +17,11 @@ PILL_CLOSE :: '\x03'
 // Workspace-relative file/dir list (app.mention_files) made available to the
 // markdown renderer so inline `code` that names a real path renders as a
 // clickable pill. Set around the visible chat draw; empty elsewhere.
-@(private="file") md_ws_files: []string
+@(private = "file")
+md_ws_files: []string
 
-set_md_file_ctx :: proc(files: []string) { md_ws_files = files }
-clear_md_file_ctx :: proc() { md_ws_files = nil }
+set_md_file_ctx :: proc(files: []string) {md_ws_files = files}
+clear_md_file_ctx :: proc() {md_ws_files = nil}
 
 // workspace_has_path reports whether `rel` names a known workspace file or
 // directory. Directory entries in the list carry a trailing '/', so both `rel`

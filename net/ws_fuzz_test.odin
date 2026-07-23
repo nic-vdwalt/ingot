@@ -87,7 +87,12 @@ fuzz_ws_parse_mutated_valid :: proc(t: ^testing.T) {
 	p := testx.prng_make(0x12)
 	for _ in 0 ..< 20_000 {
 		opcode := FUZZ_WS_OPCODES[testx.int_range(&p, 0, len(FUZZ_WS_OPCODES))]
-		buf := ws_encode_frame(opcode, fuzz_ws_payload(&p), fuzz_ws_mask_key(&p), context.temp_allocator)
+		buf := ws_encode_frame(
+			opcode,
+			fuzz_ws_payload(&p),
+			fuzz_ws_mask_key(&p),
+			context.temp_allocator,
+		)
 		for _ in 0 ..< testx.int_range(&p, 1, 8) {
 			buf[testx.int_range(&p, 0, len(buf))] = u8(testx.next_u64(&p) & 0xFF)
 		}
@@ -141,7 +146,12 @@ fuzz_ws_stream_reassembly :: proc(t: ^testing.T) {
 			payload := make([]u8, n, context.temp_allocator)
 			for j in 0 ..< n do payload[j] = u8(testx.next_u64(&p) & 0xFF)
 			payloads[i] = payload
-			encoded := ws_encode_frame(opcodes[i], payload, fuzz_ws_mask_key(&p), context.temp_allocator)
+			encoded := ws_encode_frame(
+				opcodes[i],
+				payload,
+				fuzz_ws_mask_key(&p),
+				context.temp_allocator,
+			)
 			append(&stream, ..encoded)
 		}
 
@@ -179,6 +189,51 @@ fuzz_ws_stream_reassembly :: proc(t: ^testing.T) {
 	}
 }
 
+// Property: any valid fragmentation of a message (TEXT/BINARY with FIN=0
+// followed by 0..n continuations, last one FIN=1) reassembles into exactly
+// one logical message whose bytes equal the concatenated parts, with frag
+// state fully reset afterwards.
+@(test)
+fuzz_ws_fragment_reassembly :: proc(t: ^testing.T) {
+	p := testx.prng_make(0x15)
+	ws := ws_init()
+	defer ws_close(&ws)
+	frag: WS_Frag_State
+	defer delete(frag.buf)
+
+	for _ in 0 ..< 5_000 {
+		parts := testx.int_range(&p, 1, 6)
+		binary := testx.int_range(&p, 0, 2) == 1
+		expected := make([dynamic]u8, context.temp_allocator)
+
+		for part in 0 ..< parts {
+			n := testx.int_range(&p, 0, 64)
+			payload := make([]u8, n, context.temp_allocator)
+			for j in 0 ..< n do payload[j] = u8(testx.next_u64(&p) & 0xFF)
+			append(&expected, ..payload)
+
+			opcode := u8(WS_OP_CONTINUATION)
+			if part == 0 do opcode = binary ? u8(WS_OP_BINARY) : u8(WS_OP_TEXT)
+			frame := WS_Frame {
+				opcode  = opcode,
+				payload = payload,
+				fin     = part == parts - 1,
+			}
+			testing.expect(t, ws_handle_data_frame(&ws, &frag, frame))
+		}
+
+		testing.expect_value(t, frag.active, false)
+		msgs := ws_drain(&ws)
+		testing.expect_value(t, len(msgs), 1)
+		if len(msgs) == 1 {
+			testing.expect_value(t, msgs[0].data, string(expected[:]))
+			testing.expect_value(t, msgs[0].binary, binary)
+			delete(msgs[0].data)
+		}
+		free_all(context.temp_allocator)
+	}
+}
+
 // Property: ws_accept_for_key must produce a 28-character base64 digest for
 // ANY key — arbitrary bytes, invalid UTF-8, embedded NULs, 0–256 bytes —
 // without reading past the key or corrupting memory (sha1 + base64 over a
@@ -191,8 +246,13 @@ fuzz_ws_accept_for_key :: proc(t: ^testing.T) {
 		accept := ws_accept_for_key(string(key))
 		testing.expect_value(t, len(accept), 28) // base64(20-byte sha1) incl. padding
 		for ch in transmute([]u8)accept {
-			valid := (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
-				(ch >= '0' && ch <= '9') || ch == '+' || ch == '/' || ch == '='
+			valid :=
+				(ch >= 'A' && ch <= 'Z') ||
+				(ch >= 'a' && ch <= 'z') ||
+				(ch >= '0' && ch <= '9') ||
+				ch == '+' ||
+				ch == '/' ||
+				ch == '='
 			testing.expect(t, valid, "accept digest contains non-base64 byte")
 		}
 		free_all(context.temp_allocator)

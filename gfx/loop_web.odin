@@ -10,7 +10,8 @@
 // both targets.
 package gfx
 
-@(private) g_web_frame: Run_Proc
+@(private)
+g_web_frame: Run_Proc
 
 // run stores the per-frame callback and returns immediately. The browser's
 // requestAnimationFrame loop calls `step` each tick.

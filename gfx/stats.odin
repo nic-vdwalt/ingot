@@ -7,28 +7,28 @@ RENDER_STATS_ENABLED :: #config(INGOT_RENDER_STATS, false)
 // Flush_Cause tags why a batch flush (== one draw call) happened, so hosts
 // can see which state changes fragment their batches.
 Flush_Cause :: enum u8 {
-	Manual,    // FlushBatch / rlgl VAO ordering / uncategorized
-	Pipeline,  // pipeline kind switch (solid <-> text <-> image)
-	Texture,   // texture bind-group switch within one pipeline
-	Blend,     // blend-mode switch
-	Scissor,   // Begin/EndScissorMode
-	Matrix,    // rlgl model-matrix pop/translate
-	Target,    // render-target begin/end
-	Shader,    // custom shader begin/end
+	Manual, // FlushBatch / rlgl VAO ordering / uncategorized
+	Pipeline, // pipeline kind switch (solid <-> text <-> image)
+	Texture, // texture bind-group switch within one pipeline
+	Blend, // blend-mode switch
+	Scissor, // Begin/EndScissorMode
+	Matrix, // rlgl model-matrix pop/translate
+	Target, // render-target begin/end
+	Shader, // custom shader begin/end
 	Frame_End, // end-of-frame flush in EndDrawing
 }
 
 Renderer_Stats :: struct {
-	frame_index:                 u64,
-	flush_count:                 u32,
-	vertices_uploaded:           u64,
-	indices_uploaded:            u64,
-	bytes_uploaded:              u64,
-	buffer_creations:            u32,
-	buffer_growths:              u32,
-	pipeline_switches:           u32,
-	bind_group_switches:         u32,
-	render_passes:               u32,
+	frame_index:                   u64,
+	flush_count:                   u32,
+	vertices_uploaded:             u64,
+	indices_uploaded:              u64,
+	bytes_uploaded:                u64,
+	buffer_creations:              u32,
+	buffer_growths:                u32,
+	pipeline_switches:             u32,
+	bind_group_switches:           u32,
+	render_passes:                 u32,
 	queue_submissions:             u32,
 	peak_geometry_arena_bytes:     u64,
 	peak_uniform_arena_bytes:      u64,
@@ -41,8 +41,10 @@ Renderer_Stats :: struct {
 	flush_causes:                  [Flush_Cause]u32,
 }
 
-@(private) renderer_stats_current: Renderer_Stats
-@(private) renderer_stats_latest: Renderer_Stats
+@(private)
+renderer_stats_current: Renderer_Stats
+@(private)
+renderer_stats_latest: Renderer_Stats
 
 renderer_stats :: proc() -> Renderer_Stats {
 	when RENDER_STATS_ENABLED {

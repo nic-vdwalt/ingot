@@ -27,7 +27,7 @@ slider_keyboard_delta_prefers_step :: proc(t: ^testing.T) {
 
 @(test)
 menu_nav_skips_separators_and_disabled :: proc(t: ^testing.T) {
-	items := []Menu_Item{
+	items := []Menu_Item {
 		{label = "a"},
 		{separator = true},
 		{label = "b", disabled = true},
@@ -43,20 +43,13 @@ menu_nav_skips_separators_and_disabled :: proc(t: ^testing.T) {
 
 @(test)
 menu_nav_all_unselectable_stays_put :: proc(t: ^testing.T) {
-	items := []Menu_Item{
-		{separator = true},
-		{label = "x", disabled = true},
-	}
+	items := []Menu_Item{{separator = true}, {label = "x", disabled = true}}
 	testing.expect_value(t, menu_nav_next(items, 1, 1), 1)
 }
 
 @(test)
 context_menu_height_counts_rows :: proc(t: ^testing.T) {
-	items := []Menu_Item{
-		{label = "a"},
-		{separator = true},
-		{label = "b"},
-	}
+	items := []Menu_Item{{label = "a"}, {separator = true}, {label = "b"}}
 	want := MENU_PAD * 2 + MENU_ITEM_H * 2 + sc(5)
 	testing.expect_value(t, context_menu_height(items), want)
 }

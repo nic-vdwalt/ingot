@@ -6,42 +6,42 @@
 // `text` pipeline (atlas red channel = coverage).
 package gfx
 
-import "core:strings"
-import "core:math"
 import "core:c"
-import wg "vendor:wgpu"
+import "core:math"
+import "core:strings"
 import tt "vendor:stb/truetype"
+import wg "vendor:wgpu"
 
 ATLAS_DIM :: 2048 // multiple of 256 so R8 bytesPerRow is copy-aligned
 ATLAS_PAD :: 1
 
 Glyph :: struct {
-	x, y, w, h:   u16, // atlas cell (pixels)
-	xoff, yoff:   f32, // draw offset from pen (baked px, top-left of cell)
-	xadvance:     f32, // baked px
-	valid:        bool,
+	x, y, w, h: u16, // atlas cell (pixels)
+	xoff, yoff: f32, // draw offset from pen (baked px, top-left of cell)
+	xadvance:   f32, // baked px
+	valid:      bool,
 }
 
 Atlas :: struct {
-	info:        tt.fontinfo,
-	data:        []byte, // owned copy of the TTF (InitFont holds a pointer)
-	px:          f32,    // baked pixel size
-	scale:       f32,
-	ascent:      f32,    // baked px
-	line_adv:    f32,    // baked px (ascent - descent + line gap)
-	glyphs:      map[rune]Glyph,
-	bitmap:      []byte, // ATLAS_DIM*ATLAS_DIM, single channel
+	info:                  tt.fontinfo,
+	data:                  []byte, // owned copy of the TTF (InitFont holds a pointer)
+	px:                    f32, // baked pixel size
+	scale:                 f32,
+	ascent:                f32, // baked px
+	line_adv:              f32, // baked px (ascent - descent + line gap)
+	glyphs:                map[rune]Glyph,
+	bitmap:                []byte, // ATLAS_DIM*ATLAS_DIM, single channel
 	cur_x, cur_y, shelf_h: i32,
-	dirty:       bool,   // CPU bitmap has un-uploaded glyphs (lazy bake/measure)
-
-	tex:    wg.Texture,
-	view:   wg.TextureView,
-	sampler: wg.Sampler,
-	bind:   wg.BindGroup,
-	filter: TextureFilter,
+	dirty:                 bool, // CPU bitmap has un-uploaded glyphs (lazy bake/measure)
+	tex:                   wg.Texture,
+	view:                  wg.TextureView,
+	sampler:               wg.Sampler,
+	bind:                  wg.BindGroup,
+	filter:                TextureFilter,
 }
 
-@(private) g_atlases: [dynamic]^Atlas // ids are 1-based indices
+@(private)
+g_atlases: [dynamic]^Atlas // ids are 1-based indices
 
 @(private)
 get_atlas :: proc(id: u32) -> ^Atlas {
@@ -49,7 +49,14 @@ get_atlas :: proc(id: u32) -> ^Atlas {
 	return g_atlases[id - 1]
 }
 
-LoadFontFromMemory :: proc(fileType: cstring, fileData: [^]u8, dataSize: i32, fontSize: i32, codepoints: [^]rune, codepointCount: i32) -> Font {
+LoadFontFromMemory :: proc(
+	fileType: cstring,
+	fileData: [^]u8,
+	dataSize: i32,
+	fontSize: i32,
+	codepoints: [^]rune,
+	codepointCount: i32,
+) -> Font {
 	a := new(Atlas)
 	a.data = make([]byte, int(dataSize))
 	copy(a.data, fileData[:dataSize])
@@ -83,7 +90,13 @@ LoadFontFromMemory :: proc(fileType: cstring, fileData: [^]u8, dataSize: i32, fo
 	f.glyphCount = baked
 	f.glyphPadding = ATLAS_PAD
 	f._atlas = id
-	f.texture = Texture{id = id, width = ATLAS_DIM, height = ATLAS_DIM, mipmaps = 1, format = .UNCOMPRESSED_GRAYSCALE}
+	f.texture = Texture {
+		id      = id,
+		width   = ATLAS_DIM,
+		height  = ATLAS_DIM,
+		mipmaps = 1,
+		format  = .UNCOMPRESSED_GRAYSCALE,
+	}
 	return f
 }
 
@@ -98,7 +111,10 @@ _bake_glyph :: proc(a: ^Atlas, cp: rune) -> bool {
 
 	if gi == 0 && cp != ' ' {
 		// no glyph in font; still record advance so layout matches
-		a.glyphs[cp] = Glyph{xadvance = xadvance, valid = false}
+		a.glyphs[cp] = Glyph {
+			xadvance = xadvance,
+			valid    = false,
+		}
 		return false
 	}
 
@@ -107,25 +123,45 @@ _bake_glyph :: proc(a: ^Atlas, cp: rune) -> bool {
 	gw := i32(ix1 - ix0)
 	gh := i32(iy1 - iy0)
 	if gw <= 0 || gh <= 0 {
-		a.glyphs[cp] = Glyph{xadvance = xadvance, valid = false}
+		a.glyphs[cp] = Glyph {
+			xadvance = xadvance,
+			valid    = false,
+		}
 		return true // e.g. space
 	}
 
 	px, py, ok := _atlas_pack(a, gw, gh)
 	if !ok {
-		a.glyphs[cp] = Glyph{xadvance = xadvance, valid = false}
+		a.glyphs[cp] = Glyph {
+			xadvance = xadvance,
+			valid    = false,
+		}
 		return false
 	}
 
 	// render directly into the atlas bitmap at (px,py) with atlas stride
 	dst := raw_data(a.bitmap[py * ATLAS_DIM + px:])
-	tt.MakeCodepointBitmap(&a.info, dst, c.int(gw), c.int(gh), c.int(ATLAS_DIM), a.scale, a.scale, cp)
+	tt.MakeCodepointBitmap(
+		&a.info,
+		dst,
+		c.int(gw),
+		c.int(gh),
+		c.int(ATLAS_DIM),
+		a.scale,
+		a.scale,
+		cp,
+	)
 	a.dirty = true
 
-	a.glyphs[cp] = Glyph{
-		x = u16(px), y = u16(py), w = u16(gw), h = u16(gh),
-		xoff = f32(ix0), yoff = a.ascent + f32(iy0),
-		xadvance = xadvance, valid = true,
+	a.glyphs[cp] = Glyph {
+		x        = u16(px),
+		y        = u16(py),
+		w        = u16(gw),
+		h        = u16(gh),
+		xoff     = f32(ix0),
+		yoff     = a.ascent + f32(iy0),
+		xadvance = xadvance,
+		valid    = true,
 	}
 	return true
 }
@@ -149,17 +185,22 @@ _atlas_pack :: proc(a: ^Atlas, w, h: i32) -> (x, y: i32, ok: bool) {
 
 @(private)
 _atlas_gpu_init :: proc(a: ^Atlas) {
-	a.tex = wg.DeviceCreateTexture(g.device, &{
-		usage = {.TextureBinding, .CopyDst},
-		dimension = ._2D,
-		size = {ATLAS_DIM, ATLAS_DIM, 1},
-		format = .R8Unorm,
-		mipLevelCount = 1,
-		sampleCount = 1,
-	})
-	wg.QueueWriteTexture(g.queue,
+	a.tex = wg.DeviceCreateTexture(
+		g.device,
+		&{
+			usage = {.TextureBinding, .CopyDst},
+			dimension = ._2D,
+			size = {ATLAS_DIM, ATLAS_DIM, 1},
+			format = .R8Unorm,
+			mipLevelCount = 1,
+			sampleCount = 1,
+		},
+	)
+	wg.QueueWriteTexture(
+		g.queue,
 		&{texture = a.tex},
-		raw_data(a.bitmap), uint(len(a.bitmap)),
+		raw_data(a.bitmap),
+		uint(len(a.bitmap)),
 		&{bytesPerRow = ATLAS_DIM, rowsPerImage = ATLAS_DIM},
 		&{ATLAS_DIM, ATLAS_DIM, 1},
 	)
@@ -173,18 +214,26 @@ _atlas_build_bind :: proc(a: ^Atlas) {
 	if a.sampler != nil do wg.SamplerRelease(a.sampler)
 	if a.bind != nil do wg.BindGroupRelease(a.bind)
 	filt: wg.FilterMode = a.filter == .POINT ? .Nearest : .Linear
-	a.sampler = wg.DeviceCreateSampler(g.device, &{
-		magFilter = filt, minFilter = filt, mipmapFilter = .Nearest,
-		addressModeU = .ClampToEdge, addressModeV = .ClampToEdge, addressModeW = .ClampToEdge,
-		maxAnisotropy = 1,
-	})
-	entries := [2]wg.BindGroupEntry{
+	a.sampler = wg.DeviceCreateSampler(
+		g.device,
+		&{
+			magFilter = filt,
+			minFilter = filt,
+			mipmapFilter = .Nearest,
+			addressModeU = .ClampToEdge,
+			addressModeV = .ClampToEdge,
+			addressModeW = .ClampToEdge,
+			maxAnisotropy = 1,
+		},
+	)
+	entries := [2]wg.BindGroupEntry {
 		{binding = 0, textureView = a.view},
 		{binding = 1, sampler = a.sampler},
 	}
-	a.bind = wg.DeviceCreateBindGroup(g.device, &{
-		layout = g.rend.tex_layout, entryCount = 2, entries = raw_data(entries[:]),
-	})
+	a.bind = wg.DeviceCreateBindGroup(
+		g.device,
+		&{layout = g.rend.tex_layout, entryCount = 2, entries = raw_data(entries[:])},
+	)
 }
 
 UnloadFont :: proc(font: Font) {
@@ -217,7 +266,13 @@ SetTextureFilter :: proc(texture: Texture2D, filter: TextureFilter) {
 
 // DrawTextEx draws `text` at `position` scaled from the baked px size down to
 // `fontSize` (raylib semantics: the atlas may be baked larger for HiDPI).
-DrawTextEx :: proc(font: Font, text: cstring, position: Vector2, fontSize, spacing: f32, tint: Color) {
+DrawTextEx :: proc(
+	font: Font,
+	text: cstring,
+	position: Vector2,
+	fontSize, spacing: f32,
+	tint: Color,
+) {
 	a := get_atlas(font._atlas)
 	if a == nil do return
 	sf := fontSize / a.px
@@ -242,9 +297,11 @@ DrawTextEx :: proc(font: Font, text: cstring, position: Vector2, fontSize, spaci
 			dy := pen_y + gl.yoff * sf
 			dw := f32(gl.w) * sf
 			dh := f32(gl.h) * sf
-			uv := Rectangle{
-				f32(gl.x) / ATLAS_DIM, f32(gl.y) / ATLAS_DIM,
-				f32(gl.w) / ATLAS_DIM, f32(gl.h) / ATLAS_DIM,
+			uv := Rectangle {
+				f32(gl.x) / ATLAS_DIM,
+				f32(gl.y) / ATLAS_DIM,
+				f32(gl.w) / ATLAS_DIM,
+				f32(gl.h) / ATLAS_DIM,
 			}
 			push_quad(&g.rend, {dx, dy, dw, dh}, uv, col)
 		}
@@ -253,7 +310,13 @@ DrawTextEx :: proc(font: Font, text: cstring, position: Vector2, fontSize, spaci
 	if a.dirty do _atlas_gpu_reupload(a)
 }
 
-DrawTextCodepoint :: proc(font: Font, codepoint: rune, position: Vector2, fontSize: f32, tint: Color) {
+DrawTextCodepoint :: proc(
+	font: Font,
+	codepoint: rune,
+	position: Vector2,
+	fontSize: f32,
+	tint: Color,
+) {
 	buf: [8]byte
 	n := 0
 	// encode rune to a temporary cstring-ish; simplest is a small local string
@@ -295,9 +358,11 @@ MeasureText :: proc(text: cstring, fontSize: i32) -> i32 {
 // Re-upload the whole atlas after a lazy on-demand glyph bake.
 @(private)
 _atlas_gpu_reupload :: proc(a: ^Atlas) {
-	wg.QueueWriteTexture(g.queue,
+	wg.QueueWriteTexture(
+		g.queue,
 		&{texture = a.tex},
-		raw_data(a.bitmap), uint(len(a.bitmap)),
+		raw_data(a.bitmap),
+		uint(len(a.bitmap)),
 		&{bytesPerRow = ATLAS_DIM, rowsPerImage = ATLAS_DIM},
 		&{ATLAS_DIM, ATLAS_DIM, 1},
 	)

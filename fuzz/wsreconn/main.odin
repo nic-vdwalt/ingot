@@ -49,6 +49,7 @@ EVENTS := [?]ingotnet.Ws_Sim_Event {
 	.Frame_Binary,
 	.Frame_Ping,
 	.Frame_Split,
+	.Frame_Fragmented,
 	.Frame_Burst,
 	.Frame_Garbage,
 	.Server_Close,
@@ -64,7 +65,13 @@ build_tape :: proc(p: ^Prng, buf: []ingotnet.Ws_Sim_Event) -> []ingotnet.Ws_Sim_
 	for i in 0 ..< n {
 		if fuzzx.int_range(p, 0, 3) != 0 {
 			// Bias: clean frames keep the connection alive.
-			frames := [?]ingotnet.Ws_Sim_Event{.Frame_Text, .Frame_Binary, .Frame_Ping, .Frame_Split}
+			frames := [?]ingotnet.Ws_Sim_Event {
+				.Frame_Text,
+				.Frame_Binary,
+				.Frame_Ping,
+				.Frame_Split,
+				.Frame_Fragmented,
+			}
 			buf[i] = frames[fuzzx.int_range(p, 0, len(frames))]
 		} else {
 			buf[i] = EVENTS[fuzzx.int_range(p, 0, len(EVENTS))]
@@ -89,7 +96,10 @@ main :: proc() {
 		round_seed := seed + u64(round)
 		if rounds > 1 do fmt.printfln("fuzz_wsreconn round %d seed=%d", round, round_seed)
 		p := fuzzx.prng_make(round_seed)
-		c := fuzzx.Ctx{name = "fuzz_wsreconn", seed = round_seed}
+		c := fuzzx.Ctx {
+			name = "fuzz_wsreconn",
+			seed = round_seed,
+		}
 
 		tape_buf: [64]ingotnet.Ws_Sim_Event
 		for i in 0 ..< iterations {
@@ -123,8 +133,11 @@ main :: proc() {
 					st := ingotnet.ws_state(&ws)
 					if st == .Connected {
 						saw_connected = true
-						fuzzx.check(&c, ingotnet.ws_conn_gen(&ws) >= 1,
-							"Connected observed with conn_gen == 0")
+						fuzzx.check(
+							&c,
+							ingotnet.ws_conn_gen(&ws) >= 1,
+							"Connected observed with conn_gen == 0",
+						)
 					}
 				case 3:
 					gen := ingotnet.ws_conn_gen(&ws)
@@ -136,8 +149,11 @@ main :: proc() {
 					// Let the worker make progress between op bursts.
 					time.sleep(time.Duration(fuzzx.int_range(&p, 0, 3)) * time.Millisecond)
 				}
-				fuzzx.check(&c, time.since(session_start) < SESSION_BUDGET,
-					"session watchdog exceeded (worker wedged?)")
+				fuzzx.check(
+					&c,
+					time.since(session_start) < SESSION_BUDGET,
+					"session watchdog exceeded (worker wedged?)",
+				)
 			}
 
 			// Drain once more, close, and verify teardown. ws_close frees any
@@ -155,26 +171,46 @@ main :: proc() {
 			}
 			sync.atomic_store(&closed, true)
 
-			fuzzx.check(&c, ingotnet.ws_state(&ws) == .Disconnected, "state not Disconnected after close")
+			fuzzx.check(
+				&c,
+				ingotnet.ws_state(&ws) == .Disconnected,
+				"state not Disconnected after close",
+			)
 			when #config(FUZZ_TRACE, false) {
 				if ingotnet.ws_state(&ws) != .Disconnected {
-					fmt.printfln("TRACE state after close: %v gen=%d", ingotnet.ws_state(&ws), ingotnet.ws_conn_gen(&ws))
+					fmt.printfln(
+						"TRACE state after close: %v gen=%d",
+						ingotnet.ws_state(&ws),
+						ingotnet.ws_conn_gen(&ws),
+					)
 				}
 			}
 			fuzzx.check(&c, ws.recv_thread == nil, "worker thread not joined after close")
 			gen := ingotnet.ws_conn_gen(&ws)
 			fuzzx.check(&c, gen >= last_gen, "conn_gen went backwards across close")
 			if saw_connected do fuzzx.check(&c, gen >= 1, "connected session ended with gen 0")
-			fuzzx.check(&c, drained <= ingotnet.ws_sim_frames_served(),
-				"drained more messages than the sim served")
+			fuzzx.check(
+				&c,
+				drained <= ingotnet.ws_sim_frames_served(),
+				"drained more messages than the sim served",
+			)
 			if saw_connected || ingotnet.ws_sim_frames_served() > 0 {
-				fuzzx.check(&c, sync.atomic_load(&wake_count) > 0,
-					"worker activity did not invoke wake hook")
+				fuzzx.check(
+					&c,
+					sync.atomic_load(&wake_count) > 0,
+					"worker activity did not invoke wake hook",
+				)
 			}
-			fuzzx.check(&c, !sync.atomic_load(&wake_after_close),
-				"wake hook ran after ws_close returned")
-			fuzzx.check(&c, time.since(session_start) < SESSION_BUDGET,
-				"close watchdog exceeded (join wedged?)")
+			fuzzx.check(
+				&c,
+				!sync.atomic_load(&wake_after_close),
+				"wake hook ran after ws_close returned",
+			)
+			fuzzx.check(
+				&c,
+				time.since(session_start) < SESSION_BUDGET,
+				"close watchdog exceeded (join wedged?)",
+			)
 
 			free_all(context.temp_allocator)
 		}

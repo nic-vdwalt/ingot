@@ -53,10 +53,18 @@ truncate_helpers_fit_and_cut :: proc(t: ^testing.T) {
 	cut := truncate_to_width("abcdefgh", 5 * W_CELL, 16)
 	testing.expect(t, len(cut) < len("abcdefgh") + len("…"), "tail cut did not shrink")
 	testing.expect(t, strings.has_suffix(cut, "…"), "tail cut must end with ellipsis")
-	testing.expect(t, strings.has_prefix("abcdefgh", cut[:len(cut) - len("…")]), "tail cut must keep a prefix")
+	testing.expect(
+		t,
+		strings.has_prefix("abcdefgh", cut[:len(cut) - len("…")]),
+		"tail cut must keep a prefix",
+	)
 	left := truncate_to_width_left("abcdefgh", 5 * W_CELL, 16)
 	testing.expect(t, strings.has_prefix(left, "…"), "head cut must start with ellipsis")
-	testing.expect(t, strings.has_suffix("abcdefgh", left[len("…"):]), "head cut must keep a suffix")
+	testing.expect(
+		t,
+		strings.has_suffix("abcdefgh", left[len("…"):]),
+		"head cut must keep a suffix",
+	)
 	// Empty input is returned as-is.
 	testing.expect_value(t, truncate_to_width("", 100, 16), "")
 }
@@ -128,9 +136,9 @@ hit_test_wrapped_maps_rows_and_columns :: proc(t: ^testing.T) {
 
 @(test)
 settings_preset_index_lookup :: proc(t: ^testing.T) {
-	testing.expect_value(t, settings_scale_preset_index(0.0), 0)  // Auto
-	testing.expect_value(t, settings_scale_preset_index(1.0), 3)  // 100%
-	testing.expect_value(t, settings_scale_preset_index(2.0), 8)  // 200%
+	testing.expect_value(t, settings_scale_preset_index(0.0), 0) // Auto
+	testing.expect_value(t, settings_scale_preset_index(1.0), 3) // 100%
+	testing.expect_value(t, settings_scale_preset_index(2.0), 8) // 200%
 	testing.expect_value(t, settings_scale_preset_index(0.33), 0) // no match: Auto
 }
 

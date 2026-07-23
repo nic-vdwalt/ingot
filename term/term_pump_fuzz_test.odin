@@ -9,11 +9,11 @@ package term
 // (it passes it — see scripts/test.sh). Iterations scale with
 // -define:INGOT_FUZZ_ITER for fuzz/run.sh term.
 
+import lv "../libvterm"
 import "core:c"
 import "core:log"
 import "core:testing"
 import "core:time"
-import lv "../libvterm"
 import "ingot:pty"
 import "ingot:testx"
 
@@ -68,8 +68,11 @@ term_pump_resize_fuzz :: proc(t: ^testing.T) {
 				}
 
 				// Hold prefix: at most 3 bytes and never after EOF ingest.
-				testing.expect(t, ts.utf8_hold_len >= 0 && ts.utf8_hold_len <= 3,
-					"utf8 hold length out of range")
+				testing.expect(
+					t,
+					ts.utf8_hold_len >= 0 && ts.utf8_hold_len <= 3,
+					"utf8 hold length out of range",
+				)
 				// Resize bookkeeping must agree with the emulator's real grid —
 				// renderers size their cell loops from ts.cols/rows while cell
 				// reads hit vterm; divergence reads out of grid bounds.

@@ -81,7 +81,8 @@ exercise_parse :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	data: []u8
 	if fuzzx.int_range(p, 0, 3) == 0 {
 		// Rare large class: 256 KiB wire buffers (~1 in 200 overall).
-		maximum := MAXIMUM_WIRE_BYTES_LARGE if fuzzx.int_range(p, 0, 67) == 0 else MAXIMUM_WIRE_BYTES
+		maximum :=
+			MAXIMUM_WIRE_BYTES_LARGE if fuzzx.int_range(p, 0, 67) == 0 else MAXIMUM_WIRE_BYTES
 		data = fuzzx.random_bytes(p, maximum)
 	} else {
 		data = mutated_response(p)
@@ -96,7 +97,14 @@ exercise_parse :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	}
 }
 
-WS_OPCODES := [?]u8{0x0, ingotnet.WS_OP_TEXT, ingotnet.WS_OP_BINARY, ingotnet.WS_OP_CLOSE, ingotnet.WS_OP_PING, ingotnet.WS_OP_PONG}
+WS_OPCODES := [?]u8 {
+	0x0,
+	ingotnet.WS_OP_TEXT,
+	ingotnet.WS_OP_BINARY,
+	ingotnet.WS_OP_CLOSE,
+	ingotnet.WS_OP_PING,
+	ingotnet.WS_OP_PONG,
+}
 
 ws_mask_key :: proc(p: ^Prng) -> [4]u8 {
 	r := fuzzx.next_u64(p)
@@ -181,12 +189,20 @@ exercise_ws_parse :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	case .Need_More, .Too_Big:
 		fuzzx.check(c, consumed == 0, "ws parser consumed bytes without a complete frame")
 	case .Ok:
-		fuzzx.check(c, len(frame.payload) <= ingotnet.WS_MAX_PAYLOAD, "ws parser exceeded WS_MAX_PAYLOAD")
+		fuzzx.check(
+			c,
+			len(frame.payload) <= ingotnet.WS_MAX_PAYLOAD,
+			"ws parser exceeded WS_MAX_PAYLOAD",
+		)
 		if len(frame.payload) > 0 {
 			start := uintptr(raw_data(data))
 			payload_start := uintptr(raw_data(frame.payload))
 			fuzzx.check(c, payload_start >= start, "ws payload starts before the buffer")
-			fuzzx.check(c, payload_start + uintptr(len(frame.payload)) <= start + uintptr(consumed), "ws payload extends past the consumed frame")
+			fuzzx.check(
+				c,
+				payload_start + uintptr(len(frame.payload)) <= start + uintptr(consumed),
+				"ws payload extends past the consumed frame",
+			)
 		}
 	}
 }
@@ -206,7 +222,12 @@ exercise_ws_stream :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 		payload := make([]u8, n, context.temp_allocator)
 		for j in 0 ..< n do payload[j] = u8(fuzzx.next_u64(p) & 0xFF)
 		payloads[i] = payload
-		encoded := ingotnet.ws_encode_frame(opcodes[i], payload, ws_mask_key(p), context.temp_allocator)
+		encoded := ingotnet.ws_encode_frame(
+			opcodes[i],
+			payload,
+			ws_mask_key(p),
+			context.temp_allocator,
+		)
 		append(&stream, ..encoded)
 	}
 	c.input = stream[:]
@@ -226,7 +247,11 @@ exercise_ws_stream :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 			fuzzx.check(c, status == .Ok, "valid stream frame rejected")
 			fuzzx.check(c, got < frame_count, "stream produced more frames than encoded")
 			fuzzx.check(c, frame.opcode == opcodes[got], "stream frame opcode mismatch")
-			fuzzx.check(c, string(frame.payload) == string(payloads[got]), "stream frame payload mismatch")
+			fuzzx.check(
+				c,
+				string(frame.payload) == string(payloads[got]),
+				"stream frame payload mismatch",
+			)
 			got += 1
 			offset += consumed
 		}
@@ -250,7 +275,10 @@ main :: proc() {
 		round_seed := seed + u64(round)
 		if rounds > 1 do fmt.printfln("fuzz_net round %d seed=%d", round, round_seed)
 		p := fuzzx.prng_make(round_seed)
-		c := fuzzx.Ctx{name = "fuzz_net", seed = round_seed}
+		c := fuzzx.Ctx {
+			name = "fuzz_net",
+			seed = round_seed,
+		}
 		for i in 0 ..< iterations {
 			c.iteration = i
 			exercise_parse(&c, &p)
@@ -287,7 +315,9 @@ when ingotnet.INGOT_NET_SIM {
 			request := ingotnet.Http_Request {
 				method       = ingotnet.Http_Method(fuzzx.int_range(p, 0, 5)),
 				path         = "/fuzz",
-				headers      = []ingotnet.Http_Header{{name = "X-Fuzz", value = string(header_value)}},
+				headers      = []ingotnet.Http_Header {
+					{name = "X-Fuzz", value = string(header_value)},
+				},
 				body         = fuzzx.random_bytes(p, 128),
 				maximum_body = u64(fuzzx.int_range(p, 0, MAXIMUM_BODY_LIMIT)),
 			}

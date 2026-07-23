@@ -6,11 +6,11 @@ import wg "vendor:wgpu"
 
 @(test)
 vao_layout_accepts_replaced_instance_buffer :: proc(t: ^testing.T) {
-	buffers := [2]Vao_Buffer{
+	buffers := [2]Vao_Buffer {
 		{id = 1, buf = wg.Buffer(uintptr(1)), size = 96},
 		{id = 3, buf = wg.Buffer(uintptr(3)), size = 1200 * 40},
 	}
-	attrs := [5]Vao_Attr{
+	attrs := [5]Vao_Attr {
 		{location = 0, comps = 2, offset = 0, stride = 16, buffer_idx = 0},
 		{location = 1, comps = 2, offset = 8, stride = 16, buffer_idx = 0},
 		{location = 2, comps = 4, offset = 0, stride = 40, buffer_idx = 1, divisor = 1},
@@ -29,7 +29,7 @@ vao_layout_accepts_replaced_instance_buffer :: proc(t: ^testing.T) {
 @(test)
 vao_layout_rejects_duplicate_shader_locations :: proc(t: ^testing.T) {
 	buffers := [1]Vao_Buffer{{id = 1, buf = wg.Buffer(uintptr(1)), size = 96}}
-	attrs := [2]Vao_Attr{
+	attrs := [2]Vao_Attr {
 		{location = 0, comps = 2, stride = 16, buffer_idx = 0},
 		{location = 0, comps = 2, offset = 8, stride = 16, buffer_idx = 0},
 	}
@@ -52,6 +52,10 @@ vao_layout_rejects_missing_or_short_buffers :: proc(t: ^testing.T) {
 	defer delete(vao.buffers)
 	defer delete(vao.attrs)
 	testing.expect(t, !_vao_layout_valid(&vao))
-	vao.buffers[0] = {id = 1, buf = wg.Buffer(uintptr(1)), size = 16}
+	vao.buffers[0] = {
+		id   = 1,
+		buf  = wg.Buffer(uintptr(1)),
+		size = 16,
+	}
 	testing.expect(t, !_vao_layout_valid(&vao))
 }

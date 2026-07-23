@@ -25,7 +25,7 @@ PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE :: 0x00020016
 
 // Startup info extended structure.
 STARTUPINFOEXW :: struct {
-	StartupInfo:   win32.STARTUPINFOW,
+	StartupInfo:     win32.STARTUPINFOW,
 	lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST,
 }
 
@@ -39,56 +39,30 @@ foreign import kernel32 "system:kernel32.lib"
 
 @(default_calling_convention = "system")
 foreign kernel32 {
-	CreatePseudoConsole :: proc(
-		size: COORD,
-		hInput: win32.HANDLE,
-		hOutput: win32.HANDLE,
-		dwFlags: win32.DWORD,
-		phPC: ^HPCON,
-	) -> win32.HRESULT ---
+	CreatePseudoConsole :: proc(size: COORD, hInput: win32.HANDLE, hOutput: win32.HANDLE, dwFlags: win32.DWORD, phPC: ^HPCON) -> win32.HRESULT ---
 
 	ClosePseudoConsole :: proc(hPC: HPCON) ---
 
 	ResizePseudoConsole :: proc(hPC: HPCON, size: COORD) -> win32.HRESULT ---
 
-	InitializeProcThreadAttributeList :: proc(
-		lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST,
-		dwAttributeCount: win32.DWORD,
-		dwFlags: win32.DWORD,
-		lpSize: ^c.size_t,
-	) -> win32.BOOL ---
+	InitializeProcThreadAttributeList :: proc(lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST, dwAttributeCount: win32.DWORD, dwFlags: win32.DWORD, lpSize: ^c.size_t) -> win32.BOOL ---
 
-	UpdateProcThreadAttribute :: proc(
-		lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST,
-		dwFlags: win32.DWORD,
-		attribute: win32.DWORD_PTR,
-		lpValue: rawptr,
-		cbSize: c.size_t,
-		lpPreviousValue: rawptr,
-		lpReturnSize: ^c.size_t,
-	) -> win32.BOOL ---
+	UpdateProcThreadAttribute :: proc(lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST, dwFlags: win32.DWORD, attribute: win32.DWORD_PTR, lpValue: rawptr, cbSize: c.size_t, lpPreviousValue: rawptr, lpReturnSize: ^c.size_t) -> win32.BOOL ---
 
 	DeleteProcThreadAttributeList :: proc(lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST) ---
 
-	PeekNamedPipe :: proc(
-		hNamedPipe: win32.HANDLE,
-		lpBuffer: rawptr,
-		nBufferSize: win32.DWORD,
-		lpBytesRead: ^win32.DWORD,
-		lpTotalBytesAvail: ^win32.DWORD,
-		lpBytesLeftThisMessage: ^win32.DWORD,
-	) -> win32.BOOL ---
+	PeekNamedPipe :: proc(hNamedPipe: win32.HANDLE, lpBuffer: rawptr, nBufferSize: win32.DWORD, lpBytesRead: ^win32.DWORD, lpTotalBytesAvail: ^win32.DWORD, lpBytesLeftThisMessage: ^win32.DWORD) -> win32.BOOL ---
 }
 
 // Pty bundles the ConPTY handle, I/O pipes, and child process.
 Pty :: struct {
-	hpc:         HPCON,
-	pipe_in_w:   win32.HANDLE, // Write end → child stdin
-	pipe_out_r:  win32.HANDLE, // Read end ← child stdout
-	hProcess:    win32.HANDLE,
-	hThread:     win32.HANDLE,
-	cols:        u16,
-	rows:        u16,
+	hpc:        HPCON,
+	pipe_in_w:  win32.HANDLE, // Write end → child stdin
+	pipe_out_r: win32.HANDLE, // Read end ← child stdout
+	hProcess:   win32.HANDLE,
+	hThread:    win32.HANDLE,
+	cols:       u16,
+	rows:       u16,
 }
 
 spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
@@ -97,12 +71,12 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 	p.rows = rows
 
 	// Create pipes for ConPTY I/O.
-	sa := win32.SECURITY_ATTRIBUTES{
+	sa := win32.SECURITY_ATTRIBUTES {
 		nLength        = size_of(win32.SECURITY_ATTRIBUTES),
 		bInheritHandle = true,
 	}
 
-	pipe_in_r, pipe_in_w: win32.HANDLE  // Parent writes → child reads
+	pipe_in_r, pipe_in_w: win32.HANDLE // Parent writes → child reads
 	pipe_out_r, pipe_out_w: win32.HANDLE // Child writes → parent reads
 
 	if !win32.CreatePipe(&pipe_in_r, &pipe_in_w, &sa, 0) {
@@ -119,7 +93,10 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 	win32.SetHandleInformation(pipe_out_r, win32.HANDLE_FLAG_INHERIT, 0)
 
 	// Create pseudo console.
-	size := COORD{X = win32.SHORT(cols), Y = win32.SHORT(rows)}
+	size := COORD {
+		X = win32.SHORT(cols),
+		Y = win32.SHORT(rows),
+	}
 	hr := CreatePseudoConsole(size, pipe_in_r, pipe_out_w, 0, &p.hpc)
 	if hr != 0 {
 		win32.CloseHandle(pipe_in_r)
@@ -137,7 +114,10 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 	attr_size: c.size_t = 0
 	InitializeProcThreadAttributeList(nil, 1, 0, &attr_size)
 	attr_list := cast(LPPROC_THREAD_ATTRIBUTE_LIST)win32.HeapAlloc(
-		win32.GetProcessHeap(), 0, attr_size)
+		win32.GetProcessHeap(),
+		0,
+		attr_size,
+	)
 	if attr_list == nil {
 		ClosePseudoConsole(p.hpc)
 		win32.CloseHandle(pipe_in_w)
@@ -191,13 +171,13 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 	EXTENDED_STARTUPINFO_PRESENT :: 0x00080000
 
 	ok := win32.CreateProcessW(
-		nil,           // lpApplicationName
-		cmd_line_w,    // lpCommandLine
-		nil,           // lpProcessAttributes
-		nil,           // lpThreadAttributes
-		false,         // bInheritHandles — ConPTY handles inheritance itself
+		nil, // lpApplicationName
+		cmd_line_w, // lpCommandLine
+		nil, // lpProcessAttributes
+		nil, // lpThreadAttributes
+		false, // bInheritHandles — ConPTY handles inheritance itself
 		EXTENDED_STARTUPINFO_PRESENT, // dwCreationFlags
-		nil,           // lpEnvironment
+		nil, // lpEnvironment
 		working_dir_w, // lpCurrentDirectory
 		&si.StartupInfo,
 		&pi,
@@ -213,10 +193,10 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 		return {}, false
 	}
 
-	p.pipe_in_w  = pipe_in_w
+	p.pipe_in_w = pipe_in_w
 	p.pipe_out_r = pipe_out_r
-	p.hProcess   = pi.hProcess
-	p.hThread    = pi.hThread
+	p.hProcess = pi.hProcess
+	p.hThread = pi.hThread
 
 	return p, true
 }
@@ -285,7 +265,10 @@ resize :: proc(p: ^Pty, cols: u16, rows: u16) {
 	if cols == p.cols && rows == p.rows do return
 	p.cols = cols
 	p.rows = rows
-	size := COORD{X = win32.SHORT(cols), Y = win32.SHORT(rows)}
+	size := COORD {
+		X = win32.SHORT(cols),
+		Y = win32.SHORT(rows),
+	}
 	ResizePseudoConsole(p.hpc, size)
 }
 

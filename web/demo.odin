@@ -15,9 +15,34 @@ import rl "ingot:gfx"
 // Embed a font so the demo exercises the real text atlas (stb_truetype → R8 wgpu
 // upload) in-browser, proving the text stack works on the web target.
 FONT_TTF := #load("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
-DEMO_CPS := [?]rune{
-	' ', '!', ':', 'A', 'G', 'P', 'U', 'W', 'b', 'c', 'd', 'e', 'f',
-	'g', 'h', 'i', 'l', 'n', 'o', 'p', 'r', 's', 't', 'u', 'w', 'x', 'y',
+DEMO_CPS := [?]rune {
+	' ',
+	'!',
+	':',
+	'A',
+	'G',
+	'P',
+	'U',
+	'W',
+	'b',
+	'c',
+	'd',
+	'e',
+	'f',
+	'g',
+	'h',
+	'i',
+	'l',
+	'n',
+	'o',
+	'p',
+	'r',
+	's',
+	't',
+	'u',
+	'w',
+	'x',
+	'y',
 }
 
 font: rl.Font
@@ -37,7 +62,14 @@ frame :: proc() {
 
 	// Bake the font atlas on the first frame after the GPU device is ready.
 	if !font_ready {
-		font = rl.LoadFontFromMemory(".ttf", raw_data(FONT_TTF), i32(len(FONT_TTF)), 28, raw_data(DEMO_CPS[:]), i32(len(DEMO_CPS)))
+		font = rl.LoadFontFromMemory(
+			".ttf",
+			raw_data(FONT_TTF),
+			i32(len(FONT_TTF)),
+			28,
+			raw_data(DEMO_CPS[:]),
+			i32(len(DEMO_CPS)),
+		)
 		font_ready = font.glyphCount > 0
 	}
 
@@ -57,7 +89,14 @@ frame :: proc() {
 
 	// real text via the stb_truetype atlas (not the DrawText stub)
 	if font_ready {
-		rl.DrawTextEx(font, "ingot gfx on WebGPU", rl.Vector2{24, 24}, 28, 1, rl.Color{230, 230, 235, 255})
+		rl.DrawTextEx(
+			font,
+			"ingot gfx on WebGPU",
+			rl.Vector2{24, 24},
+			28,
+			1,
+			rl.Color{230, 230, 235, 255},
+		)
 	}
 
 	// input demo: a marker follows the mouse; it turns green while held. Proves

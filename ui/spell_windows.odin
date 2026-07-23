@@ -7,13 +7,23 @@ package ui
 // spellcheck.h bindings. Any HRESULT failure (Windows 7, N editions without
 // the feature, broken COM state) degrades to spell_available() == false.
 
-import win "core:sys/windows"
 import "core:strings"
+import win "core:sys/windows"
 
 @(private = "file")
-CLSID_SpellCheckerFactory := win.CLSID{0x7AB36653, 0x1796, 0x484B, {0xBD, 0xFA, 0xE7, 0x4F, 0x1D, 0xB7, 0xC1, 0xDC}}
+CLSID_SpellCheckerFactory := win.CLSID {
+	0x7AB36653,
+	0x1796,
+	0x484B,
+	{0xBD, 0xFA, 0xE7, 0x4F, 0x1D, 0xB7, 0xC1, 0xDC},
+}
 @(private = "file")
-IID_ISpellCheckerFactory := win.IID{0x8E018A9D, 0x2415, 0x4677, {0xBF, 0x08, 0x79, 0x4E, 0xA6, 0x1F, 0x94, 0xBB}}
+IID_ISpellCheckerFactory := win.IID {
+	0x8E018A9D,
+	0x2415,
+	0x4677,
+	{0xBF, 0x08, 0x79, 0x4E, 0xA6, 0x1F, 0x94, 0xBB},
+}
 
 // Vtable declarations mirror spellcheck.h IDL order exactly. The IUnknown
 // methods are redeclared with typed `this` pointers so `->` calls type-check.
@@ -22,50 +32,121 @@ ISpellCheckerFactory :: struct {
 	using _vtbl: ^ISpellCheckerFactory_VTable,
 }
 ISpellCheckerFactory_VTable :: struct {
-	QueryInterface:         proc "system" (this: ^ISpellCheckerFactory, riid: win.REFIID, ppv: ^rawptr) -> win.HRESULT,
+	QueryInterface:         proc "system" (
+		this: ^ISpellCheckerFactory,
+		riid: win.REFIID,
+		ppv: ^rawptr,
+	) -> win.HRESULT,
 	AddRef:                 proc "system" (this: ^ISpellCheckerFactory) -> win.ULONG,
 	Release:                proc "system" (this: ^ISpellCheckerFactory) -> win.ULONG,
-	get_SupportedLanguages: proc "system" (this: ^ISpellCheckerFactory, value: ^^win.IEnumString) -> win.HRESULT,
-	IsSupported:            proc "system" (this: ^ISpellCheckerFactory, languageTag: win.LPCWSTR, value: ^win.BOOL) -> win.HRESULT,
-	CreateSpellChecker:     proc "system" (this: ^ISpellCheckerFactory, languageTag: win.LPCWSTR, value: ^^ISpellChecker) -> win.HRESULT,
+	get_SupportedLanguages: proc "system" (
+		this: ^ISpellCheckerFactory,
+		value: ^^win.IEnumString,
+	) -> win.HRESULT,
+	IsSupported:            proc "system" (
+		this: ^ISpellCheckerFactory,
+		languageTag: win.LPCWSTR,
+		value: ^win.BOOL,
+	) -> win.HRESULT,
+	CreateSpellChecker:     proc "system" (
+		this: ^ISpellCheckerFactory,
+		languageTag: win.LPCWSTR,
+		value: ^^ISpellChecker,
+	) -> win.HRESULT,
 }
 
 ISpellChecker :: struct {
 	using _vtbl: ^ISpellChecker_VTable,
 }
 ISpellChecker_VTable :: struct {
-	QueryInterface:             proc "system" (this: ^ISpellChecker, riid: win.REFIID, ppv: ^rawptr) -> win.HRESULT,
+	QueryInterface:             proc "system" (
+		this: ^ISpellChecker,
+		riid: win.REFIID,
+		ppv: ^rawptr,
+	) -> win.HRESULT,
 	AddRef:                     proc "system" (this: ^ISpellChecker) -> win.ULONG,
 	Release:                    proc "system" (this: ^ISpellChecker) -> win.ULONG,
-	get_LanguageTag:            proc "system" (this: ^ISpellChecker, value: ^win.LPWSTR) -> win.HRESULT,
-	Check:                      proc "system" (this: ^ISpellChecker, text: win.LPCWSTR, value: ^^IEnumSpellingError) -> win.HRESULT,
-	Suggest:                    proc "system" (this: ^ISpellChecker, word: win.LPCWSTR, value: ^^win.IEnumString) -> win.HRESULT,
-	Add:                        proc "system" (this: ^ISpellChecker, word: win.LPCWSTR) -> win.HRESULT,
-	Ignore:                     proc "system" (this: ^ISpellChecker, word: win.LPCWSTR) -> win.HRESULT,
-	AutoCorrect:                proc "system" (this: ^ISpellChecker, from, to: win.LPCWSTR) -> win.HRESULT,
-	GetOptionValue:             proc "system" (this: ^ISpellChecker, optionId: win.LPCWSTR, value: ^win.BYTE) -> win.HRESULT,
-	get_OptionIds:              proc "system" (this: ^ISpellChecker, value: ^^win.IEnumString) -> win.HRESULT,
-	get_Id:                     proc "system" (this: ^ISpellChecker, value: ^win.LPWSTR) -> win.HRESULT,
-	ComprehensiveCheck:         proc "system" (this: ^ISpellChecker, text: win.LPCWSTR, value: ^^IEnumSpellingError) -> win.HRESULT,
-	add_SpellCheckerChanged:    proc "system" (this: ^ISpellChecker, handler: rawptr, eventCookie: ^win.DWORD) -> win.HRESULT,
-	remove_SpellCheckerChanged: proc "system" (this: ^ISpellChecker, eventCookie: win.DWORD) -> win.HRESULT,
+	get_LanguageTag:            proc "system" (
+		this: ^ISpellChecker,
+		value: ^win.LPWSTR,
+	) -> win.HRESULT,
+	Check:                      proc "system" (
+		this: ^ISpellChecker,
+		text: win.LPCWSTR,
+		value: ^^IEnumSpellingError,
+	) -> win.HRESULT,
+	Suggest:                    proc "system" (
+		this: ^ISpellChecker,
+		word: win.LPCWSTR,
+		value: ^^win.IEnumString,
+	) -> win.HRESULT,
+	Add:                        proc "system" (
+		this: ^ISpellChecker,
+		word: win.LPCWSTR,
+	) -> win.HRESULT,
+	Ignore:                     proc "system" (
+		this: ^ISpellChecker,
+		word: win.LPCWSTR,
+	) -> win.HRESULT,
+	AutoCorrect:                proc "system" (
+		this: ^ISpellChecker,
+		from, to: win.LPCWSTR,
+	) -> win.HRESULT,
+	GetOptionValue:             proc "system" (
+		this: ^ISpellChecker,
+		optionId: win.LPCWSTR,
+		value: ^win.BYTE,
+	) -> win.HRESULT,
+	get_OptionIds:              proc "system" (
+		this: ^ISpellChecker,
+		value: ^^win.IEnumString,
+	) -> win.HRESULT,
+	get_Id:                     proc "system" (
+		this: ^ISpellChecker,
+		value: ^win.LPWSTR,
+	) -> win.HRESULT,
+	ComprehensiveCheck:         proc "system" (
+		this: ^ISpellChecker,
+		text: win.LPCWSTR,
+		value: ^^IEnumSpellingError,
+	) -> win.HRESULT,
+	add_SpellCheckerChanged:    proc "system" (
+		this: ^ISpellChecker,
+		handler: rawptr,
+		eventCookie: ^win.DWORD,
+	) -> win.HRESULT,
+	remove_SpellCheckerChanged: proc "system" (
+		this: ^ISpellChecker,
+		eventCookie: win.DWORD,
+	) -> win.HRESULT,
 }
 
 IEnumSpellingError :: struct {
 	using _vtbl: ^IEnumSpellingError_VTable,
 }
 IEnumSpellingError_VTable :: struct {
-	QueryInterface: proc "system" (this: ^IEnumSpellingError, riid: win.REFIID, ppv: ^rawptr) -> win.HRESULT,
+	QueryInterface: proc "system" (
+		this: ^IEnumSpellingError,
+		riid: win.REFIID,
+		ppv: ^rawptr,
+	) -> win.HRESULT,
 	AddRef:         proc "system" (this: ^IEnumSpellingError) -> win.ULONG,
 	Release:        proc "system" (this: ^IEnumSpellingError) -> win.ULONG,
-	Next:           proc "system" (this: ^IEnumSpellingError, value: ^^ISpellingError) -> win.HRESULT,
+	Next:           proc "system" (
+		this: ^IEnumSpellingError,
+		value: ^^ISpellingError,
+	) -> win.HRESULT,
 }
 
 ISpellingError :: struct {
 	using _vtbl: ^ISpellingError_VTable,
 }
 ISpellingError_VTable :: struct {
-	QueryInterface:       proc "system" (this: ^ISpellingError, riid: win.REFIID, ppv: ^rawptr) -> win.HRESULT,
+	QueryInterface:       proc "system" (
+		this: ^ISpellingError,
+		riid: win.REFIID,
+		ppv: ^rawptr,
+	) -> win.HRESULT,
 	AddRef:               proc "system" (this: ^ISpellingError) -> win.ULONG,
 	Release:              proc "system" (this: ^ISpellingError) -> win.ULONG,
 	get_StartIndex:       proc "system" (this: ^ISpellingError, value: ^win.ULONG) -> win.HRESULT,
@@ -74,7 +155,8 @@ ISpellingError_VTable :: struct {
 	get_Replacement:      proc "system" (this: ^ISpellingError, value: ^win.LPWSTR) -> win.HRESULT,
 }
 
-@(private = "file") LOCALE_NAME_MAX_LENGTH :: 85
+@(private = "file")
+LOCALE_NAME_MAX_LENGTH :: 85
 
 foreign import kernel32_spell "system:Kernel32.lib"
 @(default_calling_convention = "system")
@@ -82,7 +164,8 @@ foreign kernel32_spell {
 	GetUserDefaultLocaleName :: proc(lpLocaleName: win.LPWSTR, cchLocaleName: win.c_int) -> win.c_int ---
 }
 
-@(private = "file") g_checker: ^ISpellChecker
+@(private = "file")
+g_checker: ^ISpellChecker
 
 _spell_backend_init :: proc() -> bool {
 	// S_FALSE / RPC_E_CHANGED_MODE mean COM is already initialised — proceed.
@@ -127,7 +210,7 @@ _spell_backend_check :: proc(word: string) -> bool {
 	if g_checker->Check(wword, &errs) < 0 || errs == nil do return true
 	defer errs->Release()
 	err: ^ISpellingError
-	if errs->Next(&err) == 0 && err != nil { // S_OK: at least one error item
+	if errs->Next(&err) == 0 && err != nil { 	// S_OK: at least one error item
 		err->Release()
 		return false
 	}

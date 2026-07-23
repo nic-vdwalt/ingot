@@ -10,8 +10,10 @@ Frame :: struct {
 	active:     bool,
 }
 
-@(private) frame_generation: u64
-@(private) frame_active: bool
+@(private)
+frame_generation: u64
+@(private)
+frame_active: bool
 
 begin_frame :: proc() -> (Frame, bool) {
 	if !g.initialized || frame_active do return {}, false
@@ -19,7 +21,10 @@ begin_frame :: proc() -> (Frame, bool) {
 	if !g.frame.has_frame do return {}, false
 	frame_generation += 1
 	frame_active = true
-	frame := Frame{generation = frame_generation, active = true}
+	frame := Frame {
+		generation = frame_generation,
+		active     = true,
+	}
 	assert(frame.generation > 0)
 	assert(frame.active)
 	return frame, true

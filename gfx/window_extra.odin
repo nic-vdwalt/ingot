@@ -29,7 +29,8 @@ RestoreWindow :: proc() {
 
 // --- drag & drop -----------------------------------------------------------
 
-@(private) g_drop_paths: [dynamic]cstring
+@(private)
+g_drop_paths: [dynamic]cstring
 
 @(private)
 _drop_paths_clear :: proc() {
@@ -66,13 +67,13 @@ _drop_cb :: proc "c" (win: glfw.WindowHandle, count: i32, paths: [^]cstring) {
 	_drop_paths_replace(accepted[:accepted_count])
 }
 
-IsFileDropped :: proc() -> bool { return g_drop_ready }
+IsFileDropped :: proc() -> bool {return g_drop_ready}
 
 LoadDroppedFiles :: proc() -> FilePathList {
-	return FilePathList{
+	return FilePathList {
 		capacity = u32(len(g_drop_paths)),
-		count    = u32(len(g_drop_paths)),
-		paths    = raw_data(g_drop_paths),
+		count = u32(len(g_drop_paths)),
+		paths = raw_data(g_drop_paths),
 	}
 }
 

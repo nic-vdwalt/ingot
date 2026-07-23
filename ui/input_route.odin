@@ -22,14 +22,18 @@ Route_Claims :: struct {
 	all:   bool, // modal: the whole screen is claimed
 }
 
-@(private = "file") route_prev: Route_Claims
-@(private = "file") route_cur: Route_Claims
+@(private = "file")
+route_prev: Route_Claims
+@(private = "file")
+route_cur: Route_Claims
 
 // route_begin_frame rotates the claim double buffer. Called once per frame
 // from begin_cursor_frame, before any UI is drawn.
 route_begin_frame :: proc() {
-	assert(route_cur.count >= 0 && route_cur.count <= MAX_ROUTE_CLAIMS,
-		"route_begin_frame: corrupt claim count")
+	assert(
+		route_cur.count >= 0 && route_cur.count <= MAX_ROUTE_CLAIMS,
+		"route_begin_frame: corrupt claim count",
+	)
 	route_prev = route_cur
 	route_cur = {}
 }

@@ -18,7 +18,7 @@ Modal_State :: struct {
 	open:      bool,
 	dismissed: bool,
 	rect:      Rect_I32, // panel rect computed by modal_begin
-	drawing:   bool,     // begin/end balance check
+	drawing:   bool, // begin/end balance check
 }
 
 // modal_begin dims the screen, claims all input (nothing under the dim layer
@@ -68,8 +68,7 @@ modal_end :: proc(st: ^Modal_State) {
 		return
 	}
 	mrect := rl.Rectangle{f32(st.rect.x), f32(st.rect.y), f32(st.rect.w), f32(st.rect.h)}
-	if rl.IsMouseButtonPressed(.LEFT) &&
-	   !rl.CheckCollisionPointRec(rl.GetMousePosition(), mrect) {
+	if rl.IsMouseButtonPressed(.LEFT) && !rl.CheckCollisionPointRec(rl.GetMousePosition(), mrect) {
 		st.open = false
 		st.dismissed = true
 	}
@@ -210,7 +209,12 @@ context_menu :: proc(st: ^Context_Menu_State, items: []Menu_Item, screen_w, scre
 // hover/click (hit-testing in pane-local coords, drawing in screen space via
 // `ox`). Returns the clicked index or -1.
 @(private = "file")
-context_menu_rows :: proc(st: ^Context_Menu_State, items: []Menu_Item, mx, my, menu_w, ox: i32, mouse: rl.Vector2) -> int {
+context_menu_rows :: proc(
+	st: ^Context_Menu_State,
+	items: []Menu_Item,
+	mx, my, menu_w, ox: i32,
+	mouse: rl.Vector2,
+) -> int {
 	assert(st.open, "context_menu_rows: menu not open")
 	assert(len(items) > 0, "context_menu_rows: empty items")
 	item_x := mx + 2
@@ -220,7 +224,10 @@ context_menu_rows :: proc(st: ^Context_Menu_State, items: []Menu_Item, mx, my, m
 	for it, i in items {
 		if it.separator {
 			sep_h := sc(5)
-			overlay_rect({f32(mx + ox + 6), f32(item_y + sep_h / 2), f32(menu_w - 12), 1}, theme.border_color)
+			overlay_rect(
+				{f32(mx + ox + 6), f32(item_y + sep_h / 2), f32(menu_w - 12), 1},
+				theme.border_color,
+			)
 			item_y += sep_h
 			continue
 		}
@@ -231,7 +238,10 @@ context_menu_rows :: proc(st: ^Context_Menu_State, items: []Menu_Item, mx, my, m
 		semantic_push(.Menu_Item, {item_x + ox, item_y, item_w, MENU_ITEM_H}, it.label, sem)
 		if hovered && !it.disabled && mouse_moved() do st.selected = i
 		if st.selected == i {
-			overlay_rect({f32(item_x + ox), f32(item_y), f32(item_w), f32(MENU_ITEM_H)}, theme.bg_active)
+			overlay_rect(
+				{f32(item_x + ox), f32(item_y), f32(item_w), f32(MENU_ITEM_H)},
+				theme.bg_active,
+			)
 		}
 		if hovered && !it.disabled do request_cursor(.POINTING_HAND)
 		col := theme.fg_disabled if it.disabled else theme.fg_primary
@@ -264,7 +274,8 @@ tooltip :: proc(st: ^Tooltip_State, rect: Rect_I32, text: string, screen_w, scre
 	assert(rect.w > 0 && rect.h > 0, "tooltip: empty target rect")
 	mouse := rl.GetMousePosition()
 	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	key := (u64(u32(rect.x)) | u64(u32(rect.y)) << 32) ~
+	key :=
+		(u64(u32(rect.x)) | u64(u32(rect.y)) << 32) ~
 		((u64(u32(rect.w)) | u64(u32(rect.h)) << 32) * 0x100000001b3)
 	if !rl.CheckCollisionPointRec(mouse, rrect) || route_occluded(mouse) {
 		if st.key == key do st^ = {}

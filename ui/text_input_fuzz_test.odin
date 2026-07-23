@@ -100,7 +100,12 @@ fz_check :: proc(t: ^testing.T, f: ^Fuzz_Input, seed: u64, i: int) -> bool {
 	if !ok {
 		log.errorf(
 			"text_input_fuzz FAILED seed=%d iteration=%d cursor=%d len=%d pills=%d undo=%d",
-			seed, i, f.cursor, len(text), len(f.pills), len(f.undo.undo),
+			seed,
+			i,
+			f.cursor,
+			len(text),
+			len(f.pills),
+			len(f.undo.undo),
 		)
 		testing.expect(t, false, "text input invariant violated (see seed above)")
 	}
@@ -145,10 +150,14 @@ text_input_edit_op_fuzz :: proc(t: ^testing.T) {
 		case 6:
 			// Caret moves.
 			switch fuzzx.int_range(&p, 0, 4) {
-			case 0: f.cursor = caret_prev_rune(text, caret_clamp(text, f.cursor))
-			case 1: f.cursor = caret_next_rune(text, caret_clamp(text, f.cursor))
-			case 2: f.cursor = 0
-			case 3: f.cursor = len(text)
+			case 0:
+				f.cursor = caret_prev_rune(text, caret_clamp(text, f.cursor))
+			case 1:
+				f.cursor = caret_next_rune(text, caret_clamp(text, f.cursor))
+			case 2:
+				f.cursor = 0
+			case 3:
+				f.cursor = len(text)
 			}
 		case 7:
 			// Word bounds selection at a random (possibly mid-rune) offset.
@@ -159,7 +168,8 @@ text_input_edit_op_fuzz :: proc(t: ^testing.T) {
 		case 8:
 			// Random (hostile, unclamped) selection.
 			sel_set(
-				&f.sel, &f.sb,
+				&f.sel,
+				&f.sb,
 				fuzzx.int_range(&p, 0, len(text) + 3),
 				fuzzx.int_range(&p, 0, len(text) + 3),
 			)
@@ -215,7 +225,12 @@ text_input_edit_op_fuzz :: proc(t: ^testing.T) {
 			if fz_text(&f) != before_text || f.cursor != before_cursor {
 				log.errorf(
 					"undo/redo round-trip mismatch seed=%d iteration=%d %q(%d) != %q(%d)",
-					seed, i, fz_text(&f), f.cursor, before_text, before_cursor,
+					seed,
+					i,
+					fz_text(&f),
+					f.cursor,
+					before_text,
+					before_cursor,
 				)
 				testing.expect(t, false, "undo/redo round-trip failed (see seed above)")
 				return

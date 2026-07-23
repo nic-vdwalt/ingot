@@ -46,10 +46,14 @@ Vao :: struct {
 	caches:     [dynamic]Vao_PipeCache,
 }
 
-@(private) g_vaos: [dynamic]^Vao
-@(private) g_vbos: [dynamic]wg.Buffer // global VBO registry (id = index+1)
-@(private) g_cur_vao: int             // bound VAO id (0 = none)
-@(private) g_inst_shader: u32         // shader bound via EnableShader
+@(private)
+g_vaos: [dynamic]^Vao
+@(private)
+g_vbos: [dynamic]wg.Buffer // global VBO registry (id = index+1)
+@(private)
+g_cur_vao: int // bound VAO id (0 = none)
+@(private)
+g_inst_shader: u32 // shader bound via EnableShader
 
 @(private)
 _vao_get :: proc(id: int) -> ^Vao {
@@ -82,7 +86,7 @@ RlEnableVertexArray :: proc(id: u32) -> bool {
 	return true
 }
 
-RlDisableVertexArray :: proc() { g_cur_vao = 0 }
+RlDisableVertexArray :: proc() {g_cur_vao = 0}
 
 RlUnloadVertexArray :: proc(id: u32) {
 	v := _vao_get(int(id))
@@ -173,13 +177,20 @@ RlUnloadVertexBuffer :: proc(vboId: u32) {
 
 // --- attribute recording ----------------------------------------------------
 
-RlSetVertexAttribute :: proc(index: u32, compSize: i32, type: i32, normalized: bool, stride: i32, offset: i32) {
+RlSetVertexAttribute :: proc(
+	index: u32,
+	compSize: i32,
+	type: i32,
+	normalized: bool,
+	stride: i32,
+	offset: i32,
+) {
 	v := _vao_get(g_cur_vao)
 	if v == nil || v.cur_buffer < 0 || v.cur_buffer >= len(v.buffers) do return
 	if compSize < 1 || compSize > 4 || stride <= 0 || offset < 0 do return
 	if offset + compSize * size_of(f32) > stride do return
 	assert(v.buffers[v.cur_buffer].buf != nil)
-	attr := Vao_Attr{
+	attr := Vao_Attr {
 		location   = index,
 		comps      = u32(compSize),
 		offset     = u32(offset),
@@ -215,18 +226,22 @@ RlEnableVertexAttribute :: proc(index: u32) {}
 
 // --- shader binding ---------------------------------------------------------
 
-RlEnableInstShader :: proc(id: u32) { g_inst_shader = id }
-RlDisableInstShader :: proc() { g_inst_shader = 0 }
+RlEnableInstShader :: proc(id: u32) {g_inst_shader = id}
+RlDisableInstShader :: proc() {g_inst_shader = 0}
 
 // --- instanced draw ---------------------------------------------------------
 
 @(private)
 _vf_for_comps :: proc(comps: u32) -> wg.VertexFormat {
 	switch comps {
-	case 1: return .Float32
-	case 2: return .Float32x2
-	case 3: return .Float32x3
-	case 4: return .Float32x4
+	case 1:
+		return .Float32
+	case 2:
+		return .Float32x2
+	case 3:
+		return .Float32x3
+	case 4:
+		return .Float32x4
 	}
 	return .Float32x2
 }
@@ -259,7 +274,12 @@ _vao_layout_valid :: proc(v: ^Vao) -> bool {
 // _vao_pipeline builds (and caches) the instanced pipeline for the given VAO
 // layout + shader + current target format + blend.
 @(private)
-_vao_pipeline :: proc(v: ^Vao, se: ^Shader_Entry, format: wg.TextureFormat, blend: Blend_Slot) -> wg.RenderPipeline {
+_vao_pipeline :: proc(
+	v: ^Vao,
+	se: ^Shader_Entry,
+	format: wg.TextureFormat,
+	blend: Blend_Slot,
+) -> wg.RenderPipeline {
 	if v == nil || se == nil || !_vao_layout_valid(v) do return nil
 	assert(len(v.buffers) > 0)
 	assert(len(v.attrs) > 0)
@@ -270,11 +290,16 @@ _vao_pipeline :: proc(v: ^Vao, se: ^Shader_Entry, format: wg.TextureFormat, blen
 	attr_store := make([][dynamic]wg.VertexAttribute, nbuf, context.temp_allocator)
 	strides := make([]u32, nbuf, context.temp_allocator)
 	stepmodes := make([]wg.VertexStepMode, nbuf, context.temp_allocator)
-	for i in 0 ..< nbuf { stepmodes[i] = .Vertex }
+	for i in 0 ..< nbuf {stepmodes[i] = .Vertex}
 	for a in v.attrs {
-		append(&attr_store[a.buffer_idx], wg.VertexAttribute{
-			format = _vf_for_comps(a.comps), offset = u64(a.offset), shaderLocation = a.location,
-		})
+		append(
+			&attr_store[a.buffer_idx],
+			wg.VertexAttribute {
+				format = _vf_for_comps(a.comps),
+				offset = u64(a.offset),
+				shaderLocation = a.location,
+			},
+		)
 		strides[a.buffer_idx] = a.stride
 		if a.divisor > 0 do stepmodes[a.buffer_idx] = .Instance
 	}
@@ -282,28 +307,48 @@ _vao_pipeline :: proc(v: ^Vao, se: ^Shader_Entry, format: wg.TextureFormat, blen
 	for i in 0 ..< nbuf {
 		if strides[i] == 0 || len(attr_store[i]) == 0 do return nil
 		layouts[i] = {
-			arrayStride = u64(strides[i]),
-			stepMode = stepmodes[i],
+			arrayStride    = u64(strides[i]),
+			stepMode       = stepmodes[i],
 			attributeCount = uint(len(attr_store[i])),
-			attributes = raw_data(attr_store[i][:]),
+			attributes     = raw_data(attr_store[i][:]),
 		}
 	}
 
 	bl := _blend_for(&g.rend, blend)
-	target := wg.ColorTargetState{format = format, writeMask = wg.ColorWriteMaskFlags_All}
+	target := wg.ColorTargetState {
+		format    = format,
+		writeMask = wg.ColorWriteMaskFlags_All,
+	}
 	if _format_blendable(format) do target.blend = &bl
 	gl := [1]wg.BindGroupLayout{se.u_layout}
-	pl := wg.DeviceCreatePipelineLayout(g.device, &{
-		bindGroupLayoutCount = 1, bindGroupLayouts = raw_data(gl[:]),
-	})
-	pipe := wg.DeviceCreateRenderPipeline(g.device, &{
-		layout = pl,
-		vertex = {module = se.module, entryPoint = "vs_main", bufferCount = uint(nbuf), buffers = raw_data(layouts)},
-		primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .None},
-		multisample = {count = 1, mask = ~u32(0)},
-		fragment = &wg.FragmentState{module = se.module, entryPoint = "fs_main", targetCount = 1, targets = &target},
-	})
-	append(&v.caches, Vao_PipeCache{shader_id = g_inst_shader, format = format, blend = blend, pipe = pipe})
+	pl := wg.DeviceCreatePipelineLayout(
+		g.device,
+		&{bindGroupLayoutCount = 1, bindGroupLayouts = raw_data(gl[:])},
+	)
+	pipe := wg.DeviceCreateRenderPipeline(
+		g.device,
+		&{
+			layout = pl,
+			vertex = {
+				module = se.module,
+				entryPoint = "vs_main",
+				bufferCount = uint(nbuf),
+				buffers = raw_data(layouts),
+			},
+			primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .None},
+			multisample = {count = 1, mask = ~u32(0)},
+			fragment = &wg.FragmentState {
+				module = se.module,
+				entryPoint = "fs_main",
+				targetCount = 1,
+				targets = &target,
+			},
+		},
+	)
+	append(
+		&v.caches,
+		Vao_PipeCache{shader_id = g_inst_shader, format = format, blend = blend, pipe = pipe},
+	)
 	return pipe
 }
 

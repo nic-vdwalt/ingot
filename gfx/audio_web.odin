@@ -13,24 +13,25 @@ package gfx
 foreign import audio_js "ingot_audio"
 @(default_calling_convention = "c")
 foreign audio_js {
-	ingot_audio_init    :: proc() -> i32 ---
-	ingot_audio_pcm     :: proc(pcm: [^]f32, frames: i32, channels: i32, rate: i32) -> i32 ---
-	ingot_audio_unload  :: proc(slot: i32) ---
-	ingot_audio_play    :: proc(slot: i32, restart: i32) ---
-	ingot_audio_stop    :: proc(slot: i32) ---
+	ingot_audio_init :: proc() -> i32 ---
+	ingot_audio_pcm :: proc(pcm: [^]f32, frames: i32, channels: i32, rate: i32) -> i32 ---
+	ingot_audio_unload :: proc(slot: i32) ---
+	ingot_audio_play :: proc(slot: i32, restart: i32) ---
+	ingot_audio_stop :: proc(slot: i32) ---
 	ingot_audio_playing :: proc(slot: i32) -> i32 ---
-	ingot_audio_volume  :: proc(slot: i32, volume: f32) ---
-	ingot_audio_pitch   :: proc(slot: i32, pitch: f32) ---
-	ingot_audio_loop    :: proc(slot: i32, looping: i32) ---
-	ingot_audio_master  :: proc(volume: f32) ---
+	ingot_audio_volume :: proc(slot: i32, volume: f32) ---
+	ingot_audio_pitch :: proc(slot: i32, pitch: f32) ---
+	ingot_audio_loop :: proc(slot: i32, looping: i32) ---
+	ingot_audio_master :: proc(volume: f32) ---
 }
 
 // Slot generations mirror the native pool so stale handles are rejected the
 // same way on both targets.
-@(private) g_audio_gens: [MAX_SOUNDS]u16
+@(private)
+g_audio_gens: [MAX_SOUNDS]u16
 
 @(private)
-platform_audio_ready :: proc() -> bool { return g_audio_ready }
+platform_audio_ready :: proc() -> bool {return g_audio_ready}
 
 @(private)
 platform_audio_init :: proc() -> bool {
@@ -63,7 +64,12 @@ platform_audio_load_file :: proc(fileName: cstring, stream: bool) -> (handle: u3
 }
 
 @(private)
-platform_audio_load_pcm :: proc(samples: [^]f32, frame_count: u32, channels: u32, rate: u32) -> u32 {
+platform_audio_load_pcm :: proc(
+	samples: [^]f32,
+	frame_count: u32,
+	channels: u32,
+	rate: u32,
+) -> u32 {
 	assert(samples != nil, "platform_audio_load_pcm: nil samples")
 	assert(channels >= 1 && channels <= 2, "platform_audio_load_pcm: bad channels")
 	slot := ingot_audio_pcm(samples, i32(frame_count), i32(channels), i32(rate))

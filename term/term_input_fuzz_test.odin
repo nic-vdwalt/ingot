@@ -2,8 +2,8 @@
 package term
 
 import "core:testing"
-import "ingot:testx"
 import rl "ingot:gfx"
+import "ingot:testx"
 
 // Fuzz vt_bytes_for_key with arbitrary key codes across the FULL i32 range
 // (raylib can surface values outside the KeyboardKey enum for unknown
@@ -19,11 +19,14 @@ fuzz_vt_bytes_for_key :: proc(t: ^testing.T) {
 	for _ in 0 ..< 100_000 {
 		key_value: i32
 		switch testx.int_range(&p, 0, 4) {
-		case 0: // boundary values on sign/enum edges
+		case 0:
+			// boundary values on sign/enum edges
 			key_value = boundary[testx.int_range(&p, 0, len(boundary))]
-		case 1: // fully random i32 (both signs)
+		case 1:
+			// fully random i32 (both signs)
 			key_value = i32(testx.next_u64(&p))
-		case: // near the real enum range, where most mappings live
+		case:
+			// near the real enum range, where most mappings live
 			key_value = i32(testx.int_range(&p, 0, 512))
 		}
 		key := rl.KeyboardKey(key_value)

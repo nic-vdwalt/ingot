@@ -28,7 +28,7 @@ g_audio: struct {
 }
 
 @(private)
-platform_audio_ready :: proc() -> bool { return g_audio_ready }
+platform_audio_ready :: proc() -> bool {return g_audio_ready}
 
 // platform_audio_init starts the engine (and its device thread). A missing
 // output device is an operating failure: report false, never assert.
@@ -101,7 +101,12 @@ platform_audio_load_file :: proc(fileName: cstring, stream: bool) -> (handle: u3
 }
 
 @(private)
-platform_audio_load_pcm :: proc(samples: [^]f32, frame_count: u32, channels: u32, rate: u32) -> u32 {
+platform_audio_load_pcm :: proc(
+	samples: [^]f32,
+	frame_count: u32,
+	channels: u32,
+	rate: u32,
+) -> u32 {
 	assert(samples != nil, "platform_audio_load_pcm: nil samples")
 	assert(channels >= 1 && channels <= 2, "platform_audio_load_pcm: bad channels")
 	slot := _audio_slot_alloc()

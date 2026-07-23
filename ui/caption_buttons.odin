@@ -27,21 +27,30 @@ caption_buttons_width :: proc() -> i32 {
 }
 
 // Win11 caption button colors.
-@(private = "file") CAPTION_HOVER_FILL   :: rl.Color{255, 255, 255, 15}
-@(private = "file") CAPTION_PRESSED_FILL :: rl.Color{255, 255, 255, 10}
-@(private = "file") CAPTION_CLOSE_HOVER  :: rl.Color{196, 43, 28, 255} // #C42B1C
-@(private = "file") CAPTION_CLOSE_PRESS  :: rl.Color{181, 43, 30, 255}
+@(private = "file")
+CAPTION_HOVER_FILL :: rl.Color{255, 255, 255, 15}
+@(private = "file")
+CAPTION_PRESSED_FILL :: rl.Color{255, 255, 255, 10}
+@(private = "file")
+CAPTION_CLOSE_HOVER :: rl.Color{196, 43, 28, 255} // #C42B1C
+@(private = "file")
+CAPTION_CLOSE_PRESS :: rl.Color{181, 43, 30, 255}
 
 // draw_caption_buttons renders the three caption buttons flush to the
 // top-right corner and returns their rects (physical client px) so the
 // caller can publish them to the non-client hit-test.
-draw_caption_buttons :: proc(screen_w: i32, st: Caption_Input) -> (min_r, max_r, close_r: rl.Rectangle) {
+draw_caption_buttons :: proc(
+	screen_w: i32,
+	st: Caption_Input,
+) -> (
+	min_r, max_r, close_r: rl.Rectangle,
+) {
 	w := f32(CAPTION_BTN_W)
 	h := f32(TAB_BAR_HEIGHT)
 
 	close_r = rl.Rectangle{f32(screen_w) - w, 0, w, h}
-	max_r   = rl.Rectangle{f32(screen_w) - 2 * w, 0, w, h}
-	min_r   = rl.Rectangle{f32(screen_w) - 3 * w, 0, w, h}
+	max_r = rl.Rectangle{f32(screen_w) - 2 * w, 0, w, h}
+	min_r = rl.Rectangle{f32(screen_w) - 3 * w, 0, w, h}
 
 	// Opaque base under the block: masks any header overflow and keeps the
 	// translucent hover fills consistent on every screen.
@@ -121,7 +130,14 @@ draw_caption_buttons :: proc(screen_w: i32, st: Caption_Input) -> (min_r, max_r,
 // an enter/exit-fullscreen corner-bracket glyph, applies a Win11-style hover
 // fill when the mouse is over it, and returns the button rect plus whether it
 // is hovered so the caller can handle clicks.
-draw_fullscreen_button :: proc(screen_w: i32, is_fs: bool, mouse: rl.Vector2) -> (r: rl.Rectangle, hovered: bool) {
+draw_fullscreen_button :: proc(
+	screen_w: i32,
+	is_fs: bool,
+	mouse: rl.Vector2,
+) -> (
+	r: rl.Rectangle,
+	hovered: bool,
+) {
 	w := f32(CAPTION_BTN_W)
 	h := f32(TAB_BAR_HEIGHT)
 	r = rl.Rectangle{f32(screen_w) - w, 0, w, h}
@@ -150,15 +166,15 @@ draw_fullscreen_button :: proc(screen_w: i32, is_fs: bool, mouse: rl.Vector2) ->
 
 	if is_fs {
 		// Exit: brackets inset toward the center, arms pointing outward.
-		corner(gx + arm,     gy + arm,     -1, -1, arm, stroke, col)
-		corner(gx + g - arm, gy + arm,     +1, -1, arm, stroke, col)
-		corner(gx + arm,     gy + g - arm, -1, +1, arm, stroke, col)
+		corner(gx + arm, gy + arm, -1, -1, arm, stroke, col)
+		corner(gx + g - arm, gy + arm, +1, -1, arm, stroke, col)
+		corner(gx + arm, gy + g - arm, -1, +1, arm, stroke, col)
 		corner(gx + g - arm, gy + g - arm, +1, +1, arm, stroke, col)
 	} else {
 		// Enter: brackets at the outer corners, arms pointing inward.
-		corner(gx,     gy,     +1, +1, arm, stroke, col)
-		corner(gx + g, gy,     -1, +1, arm, stroke, col)
-		corner(gx,     gy + g, +1, -1, arm, stroke, col)
+		corner(gx, gy, +1, +1, arm, stroke, col)
+		corner(gx + g, gy, -1, +1, arm, stroke, col)
+		corner(gx, gy + g, +1, -1, arm, stroke, col)
 		corner(gx + g, gy + g, -1, -1, arm, stroke, col)
 	}
 

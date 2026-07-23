@@ -8,14 +8,14 @@
 // the caret rect the UI reports via SetTextInputRect each frame.
 package gfx
 
-import NS "core:sys/darwin/Foundation"
 import "base:intrinsics"
+import NS "core:sys/darwin/Foundation"
 
 foreign import objc_rt "system:objc"
 @(default_calling_convention = "c")
 foreign objc_rt {
-	sel_registerName    :: proc(name: cstring) -> rawptr ---
-	object_getClass     :: proc(obj: rawptr) -> rawptr ---
+	sel_registerName :: proc(name: cstring) -> rawptr ---
+	object_getClass :: proc(obj: rawptr) -> rawptr ---
 	class_replaceMethod :: proc(cls: rawptr, sel: rawptr, imp: rawptr, types: cstring) -> rawptr ---
 }
 
@@ -32,13 +32,20 @@ IME_NS_View :: struct {
 // The caret rect in screen coordinates (bottom-left origin), precomputed in
 // _ime_set_rect so the IMP below stays a trivial load (it runs inside AppKit's
 // input-method machinery where we avoid extra message sends).
-@(private = "file") g_ime_screen_rect: NS.Rect
-@(private = "file") g_ime_swizzled: bool
+@(private = "file")
+g_ime_screen_rect: NS.Rect
+@(private = "file")
+g_ime_swizzled: bool
 
 // Replacement for -[GLFWContentView firstRectForCharacterRange:actualRange:].
 // NSRange in, NSRect out — both pass in registers on arm64/x86_64 C ABI.
 @(private = "file")
-_ime_first_rect_imp :: proc "c" (self: rawptr, cmd: rawptr, range: NS.Range, actual: rawptr) -> NS.Rect {
+_ime_first_rect_imp :: proc "c" (
+	self: rawptr,
+	cmd: rawptr,
+	range: NS.Range,
+	actual: rawptr,
+) -> NS.Rect {
 	return g_ime_screen_rect
 }
 
@@ -59,7 +66,8 @@ _ime_set_rect :: proc(x, y, w, h: i32) {
 		sel := sel_registerName("firstRectForCharacterRange:actualRange:")
 		if cls != nil && sel != nil {
 			class_replaceMethod(
-				cls, sel,
+				cls,
+				sel,
 				rawptr(_ime_first_rect_imp),
 				"{CGRect={CGPoint=dd}{CGSize=dd}}@:{_NSRange=QQ}^{_NSRange=QQ}",
 			)
@@ -71,7 +79,13 @@ _ime_set_rect :: proc(x, y, w, h: i32) {
 		origin = {NS.Float(x), NS.Float(y)},
 		size   = {NS.Float(w), NS.Float(h)},
 	}
-	win_rect := intrinsics.objc_send(NS.Rect, content, "convertRect:toView:", view_rect, rawptr(nil))
+	win_rect := intrinsics.objc_send(
+		NS.Rect,
+		content,
+		"convertRect:toView:",
+		view_rect,
+		rawptr(nil),
+	)
 	g_ime_screen_rect = intrinsics.objc_send(NS.Rect, win, "convertRectToScreen:", win_rect)
 }
 

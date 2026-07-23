@@ -17,10 +17,7 @@ draw_app_header :: proc(title: cstring, screen_w: i32) -> (header_h: i32) {
 
 	// Bar background + hairline bottom border.
 	rl.DrawRectangle(0, 0, screen_w, header_h, theme.bg_secondary)
-	rl.DrawLineEx(
-		rl.Vector2{0, h}, rl.Vector2{f32(screen_w), h},
-		scf(1.0), theme.border_subtle,
-	)
+	rl.DrawLineEx(rl.Vector2{0, h}, rl.Vector2{f32(screen_w), h}, scf(1.0), theme.border_subtle)
 
 	// Left-aligned, vertically centered title.
 	if title != nil && len(title) > 0 {
@@ -32,7 +29,7 @@ draw_app_header :: proc(title: cstring, screen_w: i32) -> (header_h: i32) {
 	when ODIN_OS == .Windows {
 		if titlebar_enabled() {
 			hover, pressed, maximized := titlebar_state()
-			cap_in := Caption_Input{
+			cap_in := Caption_Input {
 				hover     = Caption_Button(u8(hover)),
 				pressed   = Caption_Button(u8(pressed)),
 				maximized = maximized,

@@ -43,7 +43,7 @@ utf8_holdback_fuzz :: proc(t: ^testing.T) {
 		cut := testx.int_range(&p, 0, len(buf) + 1)
 		prefix := _utf8_complete_prefix(buf[:cut])
 		testing.expect(t, prefix <= cut, "prefix cannot exceed buffer")
-		testing.expect(t, cut-prefix < 4, "held-back tail must be < 4 bytes")
+		testing.expect(t, cut - prefix < 4, "held-back tail must be < 4 bytes")
 		// The completed prefix ends on a rune boundary of the original stream.
 		if prefix < len(buf) {
 			testing.expect(
@@ -69,7 +69,7 @@ utf8_holdback_arbitrary_bytes :: proc(t: ^testing.T) {
 		prefix := _utf8_complete_prefix(buf)
 		testing.expect(t, prefix >= 0, "prefix must be non-negative")
 		testing.expect(t, prefix <= len(buf), "prefix cannot exceed buffer")
-		testing.expect(t, len(buf)-prefix < 4, "held-back tail must be < 4 bytes")
+		testing.expect(t, len(buf) - prefix < 4, "held-back tail must be < 4 bytes")
 		free_all(context.temp_allocator)
 	}
 }

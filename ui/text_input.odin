@@ -83,7 +83,11 @@ sel_reset :: proc(sel: ^Input_Sel) {
 // Delete the selected range from sb, dropping mention pills that intersect it
 // and shifting later pills left. Returns the new caret (range start).
 @(private)
-selection_delete :: proc(sel: ^Input_Sel, sb: ^strings.Builder, pills: ^[dynamic]Mention_Span) -> int {
+selection_delete :: proc(
+	sel: ^Input_Sel,
+	sb: ^strings.Builder,
+	pills: ^[dynamic]Mention_Span,
+) -> int {
 	assert(sel != nil, "selection_delete: nil selection")
 	assert(sb != nil, "selection_delete: nil builder")
 	old := strings.to_string(sb^)
@@ -137,7 +141,13 @@ pill_delete_atomic :: proc(sb: ^strings.Builder, pills: ^[dynamic]Mention_Span, 
 // Map a pane-local mouse position to a byte offset within the input's visible
 // window. Rows clamp to the visible band; x clamps to line ends.
 @(private)
-input_mouse_to_byte :: proc(vlines: []Wrap_Line, text: string, mouse: rl.Vector2, inner_x, y: i32, vis_start, vis_end: int) -> int {
+input_mouse_to_byte :: proc(
+	vlines: []Wrap_Line,
+	text: string,
+	mouse: rl.Vector2,
+	inner_x, y: i32,
+	vis_start, vis_end: int,
+) -> int {
 	// Why assert: a caller passing an empty layout or an inverted visible
 	// band would index vlines out of range below.
 	assert(len(vlines) > 0, "input_mouse_to_byte: empty visual lines")
@@ -155,7 +165,13 @@ input_mouse_to_byte :: proc(vlines: []Wrap_Line, text: string, mouse: rl.Vector2
 
 // Record an undo snapshot before a mutation (nil-safe).
 @(private)
-undo_record :: proc(u: ^Input_Undo, sb: ^strings.Builder, cursor: ^int, pills: ^[dynamic]Mention_Span, kind: Input_Edit_Kind) {
+undo_record :: proc(
+	u: ^Input_Undo,
+	sb: ^strings.Builder,
+	cursor: ^int,
+	pills: ^[dynamic]Mention_Span,
+	kind: Input_Edit_Kind,
+) {
 	if u == nil do return
 	cur := 0
 	if cursor != nil do cur = cursor^
@@ -167,7 +183,14 @@ undo_record :: proc(u: ^Input_Undo, sb: ^strings.Builder, cursor: ^int, pills: ^
 // Restore the top snapshot of the undo (or redo) stack, pushing the current
 // state onto the opposite stack.
 @(private)
-undo_apply :: proc(sel: ^Input_Sel, u: ^Input_Undo, sb: ^strings.Builder, cursor: ^int, pills: ^[dynamic]Mention_Span, redo: bool) {
+undo_apply :: proc(
+	sel: ^Input_Sel,
+	u: ^Input_Undo,
+	sb: ^strings.Builder,
+	cursor: ^int,
+	pills: ^[dynamic]Mention_Span,
+	redo: bool,
+) {
 	assert(sel != nil, "undo_apply: nil selection")
 	assert(u != nil && sb != nil, "undo_apply: nil undo or builder")
 	from := &u.undo
@@ -195,7 +218,12 @@ undo_apply :: proc(sel: ^Input_Sel, u: ^Input_Undo, sb: ^strings.Builder, cursor
 // Shared pre/post logic for caret navigation keys. Returns true when a
 // non-shift key collapsed an active selection (Left/Right skip the move).
 @(private)
-nav_begin :: proc(sel: ^Input_Sel, sb: ^strings.Builder, cursor: ^int, shift, collapse_to_lo: bool) -> bool {
+nav_begin :: proc(
+	sel: ^Input_Sel,
+	sb: ^strings.Builder,
+	cursor: ^int,
+	shift, collapse_to_lo: bool,
+) -> bool {
 	assert(sel != nil, "nav_begin: nil selection")
 	assert(sb != nil && cursor != nil, "nav_begin: nil builder or cursor")
 	sel_owner := sel.active && sel.sb == sb
@@ -239,10 +267,12 @@ Input_Vlines_Memo :: struct {
 // ivl_gen is bumped by invalidate_input_visual_lines so every memo — the
 // module slot and all per-instance Text_Input_State memos — expires at once
 // (the memo key omits font size, so scale changes must force a rebuild).
-@(private = "file") ivl_gen: u64
+@(private = "file")
+ivl_gen: u64
 
 // Module-level memo used by the legacy input_visual_lines entry point.
-@(private = "file") module_ivl: Input_Vlines_Memo
+@(private = "file")
+module_ivl: Input_Vlines_Memo
 
 // invalidate_input_visual_lines drops every wrapped-line memo. Call when the
 // UI scale changes (the memo key omits font size).
@@ -254,7 +284,11 @@ invalidate_input_visual_lines :: proc() {
 // memo. Each logical line (split on '\n') is word-wrapped to inner_w; the
 // returned ranges are absolute byte offsets into `text`. Always returns at
 // least one (possibly empty) line.
-input_visual_lines_memo :: proc(memo: ^Input_Vlines_Memo, text: string, inner_w: i32) -> []Wrap_Line {
+input_visual_lines_memo :: proc(
+	memo: ^Input_Vlines_Memo,
+	text: string,
+	inner_w: i32,
+) -> []Wrap_Line {
 	assert(memo != nil, "input_visual_lines_memo: nil memo")
 	assert(inner_w >= 0, "input_visual_lines_memo: negative width")
 	if memo.valid && memo.gen == ivl_gen && inner_w == memo.width && text == memo.text {
@@ -435,9 +469,18 @@ ti_sync_web :: proc(ctx: ^TI_Ctx) {
 	assert(ctx.sb != nil, "ti_sync_web: nil builder")
 	if ctx.semantics.field_id == "" do return
 	web := rl.SyncWebTextInput(
-		ctx.semantics.form_id, ctx.semantics.field_id, ctx.semantics.name,
-		ctx.placeholder, strings.to_string(ctx.sb^), ctx.x, ctx.y, ctx.w, ctx.h,
-		i32(ctx.semantics.input_type), i32(ctx.semantics.autocomplete), ctx.active,
+		ctx.semantics.form_id,
+		ctx.semantics.field_id,
+		ctx.semantics.name,
+		ctx.placeholder,
+		strings.to_string(ctx.sb^),
+		ctx.x,
+		ctx.y,
+		ctx.w,
+		ctx.h,
+		i32(ctx.semantics.input_type),
+		i32(ctx.semantics.autocomplete),
+		ctx.active,
 	)
 	if web.changed {
 		strings.builder_reset(ctx.sb)
@@ -462,8 +505,14 @@ ti_semantic_push :: proc(ctx: ^TI_Ctx) {
 		sfoc = {ctx.semantics.focus, ctx.semantics.focus_id}
 	}
 	label := ctx.semantics.name if ctx.semantics.name != "" else ctx.placeholder
-	semantic_push(.Text_Input, {ctx.x, ctx.y, ctx.w, ctx.h}, label, sem, sfoc,
-		ctx.semantics.field_id)
+	semantic_push(
+		.Text_Input,
+		{ctx.x, ctx.y, ctx.w, ctx.h},
+		label,
+		sem,
+		sfoc,
+		ctx.semantics.field_id,
+	)
 }
 
 // ti_keys_select handles selection ownership upkeep plus Cmd/Ctrl+A/C/X and
@@ -638,7 +687,11 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx) {
 			} else {
 				old_len := strings.builder_len(sb^)
 				ctx.cursor^ = caret_delete_next(sb, ctx.cursor^)
-				pills_shift_after_delete(ctx.pills, ctx.cursor^, old_len - strings.builder_len(sb^))
+				pills_shift_after_delete(
+					ctx.pills,
+					ctx.cursor^,
+					old_len - strings.builder_len(sb^),
+				)
 			}
 		} else {
 			undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
@@ -786,7 +839,8 @@ ti_layout :: proc(ctx: ^TI_Ctx, text: string) -> TI_View {
 	if !v.caret_render do return v
 	v.vlines = input_visual_lines_memo(ctx.memo, text, ctx.inner_w)
 	v.cur_vrow, v.cur_caret_x = input_caret_visual(v.vlines, text, ctx.cursor^)
-	v.vis_start = ctx.scroll_line^ if ctx.scroll_line != nil else max(0, len(v.vlines) - int(v.visible_lines))
+	v.vis_start =
+		ctx.scroll_line^ if ctx.scroll_line != nil else max(0, len(v.vlines) - int(v.visible_lines))
 	if v.cur_vrow < v.vis_start do v.vis_start = v.cur_vrow
 	if v.cur_vrow >= v.vis_start + int(v.visible_lines) do v.vis_start = v.cur_vrow - int(v.visible_lines) + 1
 	if v.vis_start < 0 do v.vis_start = 0
@@ -833,7 +887,15 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	mouse.x -= f32(pane_origin_x)
 	if rl.IsMouseButtonPressed(.LEFT) && !occluded {
 		if rl.CheckCollisionPointRec(mouse, ctx.rect) {
-			off := input_mouse_to_byte(v.vlines, text, mouse, ctx.inner_x, ctx.y, v.vis_start, v.vis_end)
+			off := input_mouse_to_byte(
+				v.vlines,
+				text,
+				mouse,
+				ctx.inner_x,
+				ctx.y,
+				v.vis_start,
+				v.vis_end,
+			)
 			now := rl.GetTime()
 			if now - sel.last_click_time < 0.4 && abs(off - sel.last_click_byte) <= 2 {
 				sel.click_count = min(sel.click_count + 1, 3)
@@ -869,7 +931,15 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 		}
 	}
 	if sel.dragging && sel.sb == ctx.sb && rl.IsMouseButtonDown(.LEFT) {
-		off := input_mouse_to_byte(v.vlines, text, mouse, ctx.inner_x, ctx.y, v.vis_start, v.vis_end)
+		off := input_mouse_to_byte(
+			v.vlines,
+			text,
+			mouse,
+			ctx.inner_x,
+			ctx.y,
+			v.vis_start,
+			v.vis_end,
+		)
 		if off != sel.extent {
 			sel.extent = off
 			sel.active = sel.anchor != sel.extent
@@ -896,11 +966,28 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 		occluded := route_occluded(mouse)
 		mouse.x -= f32(pane_origin_x)
 		if !occluded && rl.CheckCollisionPointRec(mouse, ctx.rect) {
-			off := input_mouse_to_byte(v.vlines, text, mouse, ctx.inner_x, ctx.y, v.vis_start, v.vis_end)
+			off := input_mouse_to_byte(
+				v.vlines,
+				text,
+				mouse,
+				ctx.inner_x,
+				ctx.y,
+				v.vis_start,
+				v.vis_end,
+			)
 			ws, we, misspelled := spellcheck_word_at(text, off, ctx.pills)
 			if misspelled {
 				_, word_x := input_caret_visual(v.vlines, text, ws)
-				spell_menu_open(ctx.sb, ctx.cursor, ctx.pills, ctx.undo, ws, we, ctx.inner_x + word_x, ctx.y)
+				spell_menu_open(
+					ctx.sb,
+					ctx.cursor,
+					ctx.pills,
+					ctx.undo,
+					ws,
+					we,
+					ctx.inner_x + word_x,
+					ctx.y,
+				)
 			} else if spell_menu_active(ctx.sb) {
 				spell_menu_close()
 			}
@@ -914,7 +1001,10 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 @(private = "file")
 ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles: []Spell_Range) {
 	assert(v.caret_render, "ti_render_caret_lines: caret renderer required")
-	assert(v.vis_start >= 0 && v.vis_end <= len(v.vlines), "ti_render_caret_lines: window out of range")
+	assert(
+		v.vis_start >= 0 && v.vis_end <= len(v.vlines),
+		"ti_render_caret_lines: window out of range",
+	)
 	sel := ctx.sel
 	render_idx: i32 = 0
 	for vi := v.vis_start; vi < v.vis_end; vi += 1 {
@@ -1027,9 +1117,21 @@ ti_render_single :: proc(ctx: ^TI_Ctx, text: string, sel_all: bool) {
 	}
 	if sel_all {
 		hl_w := min(text_pixel_w, ctx.inner_w)
-		rl.DrawRectangle(ctx.inner_x, ctx.y + (ctx.h - FONT_SIZE) / 2, hl_w, FONT_SIZE, theme.bg_selection)
+		rl.DrawRectangle(
+			ctx.inner_x,
+			ctx.y + (ctx.h - FONT_SIZE) / 2,
+			hl_w,
+			FONT_SIZE,
+			theme.bg_selection,
+		)
 	}
-	draw_text(display_c, ctx.inner_x - text_offset, ctx.y + (ctx.h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_primary)
+	draw_text(
+		display_c,
+		ctx.inner_x - text_offset,
+		ctx.y + (ctx.h - FONT_SIZE) / 2,
+		FONT_SIZE,
+		theme.fg_primary,
+	)
 }
 
 // ti_draw_caret draws the blinking caret and updates the OS text-input rect
@@ -1056,7 +1158,13 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 			cursor_line_y := ctx.y + 6 + i32(v.cur_vrow - v.vis_start) * LINE_HEIGHT
 			rl.SetTextInputRect(cursor_x, cursor_line_y, 1, FONT_SIZE)
 			if blink_on {
-				rl.DrawLine(cursor_x, cursor_line_y, cursor_x, cursor_line_y + FONT_SIZE, theme.fg_accent)
+				rl.DrawLine(
+					cursor_x,
+					cursor_line_y,
+					cursor_x,
+					cursor_line_y + FONT_SIZE,
+					theme.fg_accent,
+				)
 			}
 		}
 		return
@@ -1076,7 +1184,13 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 		cursor_line_y := ctx.y + 6 + (visible_count - 1) * LINE_HEIGHT
 		rl.SetTextInputRect(cursor_x, cursor_line_y, 1, FONT_SIZE)
 		if blink_on {
-			rl.DrawLine(cursor_x, cursor_line_y, cursor_x, cursor_line_y + FONT_SIZE, theme.fg_accent)
+			rl.DrawLine(
+				cursor_x,
+				cursor_line_y,
+				cursor_x,
+				cursor_line_y + FONT_SIZE,
+				theme.fg_accent,
+			)
 		}
 		return
 	}
@@ -1090,7 +1204,10 @@ ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, blink_on: bool) {
 	assert(ctx.active, "ti_draw_caret_single: input not active")
 	assert(ctx.h > 0, "ti_draw_caret_single: non-positive height")
 	display_for_cursor := masked_display(text) if ctx.masked else text
-	cursor_text_w := measure_text(strings.clone_to_cstring(display_for_cursor, context.temp_allocator), FONT_SIZE)
+	cursor_text_w := measure_text(
+		strings.clone_to_cstring(display_for_cursor, context.temp_allocator),
+		FONT_SIZE,
+	)
 	cursor_offset: i32 = 0
 	if cursor_text_w > ctx.inner_w {
 		cursor_offset = cursor_text_w - ctx.inner_w
@@ -1106,7 +1223,10 @@ ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, blink_on: bool) {
 		prefix_end := caret_col_to_byte(display_for_cursor, col)
 		cursor_prefix = display_for_cursor[:prefix_end]
 	}
-	cursor_prefix_w := measure_text(strings.clone_to_cstring(cursor_prefix, context.temp_allocator), FONT_SIZE)
+	cursor_prefix_w := measure_text(
+		strings.clone_to_cstring(cursor_prefix, context.temp_allocator),
+		FONT_SIZE,
+	)
 	cursor_x := ctx.inner_x + cursor_prefix_w - cursor_offset
 	rl.SetTextInputRect(cursor_x, ctx.y + 5, 1, ctx.h - 10)
 	if blink_on {
@@ -1156,13 +1276,21 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	// Legacy (non-caret) render paths only show a highlight when the selection
 	// covers the whole text (Cmd+A on simple inputs).
 	sel := ctx.sel
-	sel_all := sel.active && sel.sb == ctx.sb &&
+	sel_all :=
+		sel.active &&
+		sel.sb == ctx.sb &&
 		min(sel.anchor, sel.extent) == 0 &&
 		max(sel.anchor, sel.extent) == len(text)
 
 	if len(text) == 0 {
 		ph_c := strings.clone_to_cstring(ctx.placeholder, context.temp_allocator)
-		draw_text(ph_c, ctx.inner_x, ctx.y + (ctx.h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_secondary)
+		draw_text(
+			ph_c,
+			ctx.inner_x,
+			ctx.y + (ctx.h - FONT_SIZE) / 2,
+			FONT_SIZE,
+			theme.fg_secondary,
+		)
 	} else if v.caret_render {
 		ti_render_caret_lines(ctx, text, &v, spell_squiggles)
 	} else if v.has_newlines {
@@ -1189,7 +1317,11 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 // text_input_box draws a text input using caller-owned per-instance state, so
 // any number of inputs coexist without shared-cache thrash. Always caret-
 // aware. Returns true if Enter was pressed.
-text_input_box :: proc(cfg: Text_Input_Config, sb: ^strings.Builder, st: ^Text_Input_State) -> bool {
+text_input_box :: proc(
+	cfg: Text_Input_Config,
+	sb: ^strings.Builder,
+	st: ^Text_Input_State,
+) -> bool {
 	assert(sb != nil, "text_input_box: nil builder")
 	assert(st != nil, "text_input_box: nil state")
 	assert(cfg.rect.w > 0 && cfg.rect.h > 0, "text_input_box: empty rect")
@@ -1206,7 +1338,12 @@ text_input_box :: proc(cfg: Text_Input_Config, sb: ^strings.Builder, st: ^Text_I
 		y           = cfg.rect.y,
 		w           = cfg.rect.w,
 		h           = cfg.rect.h,
-		rect        = rl.Rectangle{f32(cfg.rect.x), f32(cfg.rect.y), f32(cfg.rect.w), f32(cfg.rect.h)},
+		rect        = rl.Rectangle {
+			f32(cfg.rect.x),
+			f32(cfg.rect.y),
+			f32(cfg.rect.w),
+			f32(cfg.rect.h),
+		},
 		inner_x     = cfg.rect.x + PADDING,
 		inner_w     = cfg.rect.w - PADDING * 2,
 		placeholder = cfg.placeholder,
@@ -1228,7 +1365,19 @@ text_input_box :: proc(cfg: Text_Input_Config, sb: ^strings.Builder, st: ^Text_I
 // logical line. Selection and the wrap memo live in module-level slots, so
 // only one legacy input should be focused at a time; new code should prefer
 // text_input_box.
-text_input :: proc(x, y, w, h: i32, sb: ^strings.Builder, placeholder: string, active: bool, masked: bool = false, cursor: ^int = nil, desired_col: ^int = nil, scroll_line: ^int = nil, pills: ^[dynamic]Mention_Span = nil, undo: ^Input_Undo = nil, semantics: Text_Input_Semantics = {}) -> bool {
+text_input :: proc(
+	x, y, w, h: i32,
+	sb: ^strings.Builder,
+	placeholder: string,
+	active: bool,
+	masked: bool = false,
+	cursor: ^int = nil,
+	desired_col: ^int = nil,
+	scroll_line: ^int = nil,
+	pills: ^[dynamic]Mention_Span = nil,
+	undo: ^Input_Undo = nil,
+	semantics: Text_Input_Semantics = {},
+) -> bool {
 	assert(sb != nil, "text_input: nil builder")
 	assert(w > 0 && h > 0, "text_input: empty rect")
 	ctx := TI_Ctx {

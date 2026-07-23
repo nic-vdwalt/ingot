@@ -23,7 +23,8 @@ Tex_Entry :: struct {
 	wgformat: wg.TextureFormat, // backing wgpu format (for render-target pipelines)
 }
 
-@(private) g_textures: [dynamic]^Tex_Entry
+@(private)
+g_textures: [dynamic]^Tex_Entry
 
 @(private)
 get_texture :: proc(id: u32) -> ^Tex_Entry {
@@ -79,22 +80,27 @@ _new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
 	e.height = h
 	e.filter = .BILINEAR
 	e.wgformat = format
-	e.tex = wg.DeviceCreateTexture(g.device, &{
-		usage = {.RenderAttachment, .TextureBinding, .CopyDst},
-		dimension = ._2D,
-		size = {u32(max(w, 1)), u32(max(h, 1)), 1},
-		format = format,
-		mipLevelCount = 1,
-		sampleCount = 1,
-	})
+	e.tex = wg.DeviceCreateTexture(
+		g.device,
+		&{
+			usage = {.RenderAttachment, .TextureBinding, .CopyDst},
+			dimension = ._2D,
+			size = {u32(max(w, 1)), u32(max(h, 1)), 1},
+			format = format,
+			mipLevelCount = 1,
+			sampleCount = 1,
+		},
+	)
 	e.view = wg.TextureCreateView(e.tex, nil)
 	_tex_build_bind(e)
 	append(&g_textures, e)
 	id := TEX_ID_BASE + u32(len(g_textures) - 1)
 	pf: PixelFormat = .UNCOMPRESSED_R8G8B8A8
 	#partial switch format {
-	case .R32Float:    pf = .UNCOMPRESSED_R32
-	case .RGBA16Float: pf = .UNCOMPRESSED_R16G16B16A16
+	case .R32Float:
+		pf = .UNCOMPRESSED_R32
+	case .RGBA16Float:
+		pf = .UNCOMPRESSED_R16G16B16A16
 	}
 	return Texture2D{id = id, width = w, height = h, mipmaps = 1, format = pf}
 }
@@ -116,14 +122,17 @@ _new_rt_depth :: proc(w, h: i32) -> Texture2D {
 	e.width = w
 	e.height = h
 	e.wgformat = .Depth24Plus
-	e.tex = wg.DeviceCreateTexture(g.device, &{
-		usage = {.RenderAttachment},
-		dimension = ._2D,
-		size = {u32(max(w, 1)), u32(max(h, 1)), 1},
-		format = .Depth24Plus,
-		mipLevelCount = 1,
-		sampleCount = 1,
-	})
+	e.tex = wg.DeviceCreateTexture(
+		g.device,
+		&{
+			usage = {.RenderAttachment},
+			dimension = ._2D,
+			size = {u32(max(w, 1)), u32(max(h, 1)), 1},
+			format = .Depth24Plus,
+			mipLevelCount = 1,
+			sampleCount = 1,
+		},
+	)
 	e.view = wg.TextureCreateView(e.tex, nil)
 	append(&g_textures, e)
 	id := TEX_ID_BASE + u32(len(g_textures) - 1)
@@ -146,17 +155,22 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 	e.height = image.height
 	e.filter = .BILINEAR
 	e.wgformat = .RGBA8Unorm
-	e.tex = wg.DeviceCreateTexture(g.device, &{
-		usage = {.TextureBinding, .CopyDst},
-		dimension = ._2D,
-		size = {u32(image.width), u32(image.height), 1},
-		format = .RGBA8Unorm,
-		mipLevelCount = 1,
-		sampleCount = 1,
-	})
-	wg.QueueWriteTexture(g.queue,
+	e.tex = wg.DeviceCreateTexture(
+		g.device,
+		&{
+			usage = {.TextureBinding, .CopyDst},
+			dimension = ._2D,
+			size = {u32(image.width), u32(image.height), 1},
+			format = .RGBA8Unorm,
+			mipLevelCount = 1,
+			sampleCount = 1,
+		},
+	)
+	wg.QueueWriteTexture(
+		g.queue,
 		&{texture = e.tex},
-		raw_data(rgba), uint(len(rgba)),
+		raw_data(rgba),
+		uint(len(rgba)),
 		&{bytesPerRow = u32(image.width) * 4, rowsPerImage = u32(image.height)},
 		&{u32(image.width), u32(image.height), 1},
 	)
@@ -165,7 +179,13 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 
 	append(&g_textures, e)
 	id := TEX_ID_BASE + u32(len(g_textures) - 1)
-	return Texture2D{id = id, width = image.width, height = image.height, mipmaps = 1, format = .UNCOMPRESSED_R8G8B8A8}
+	return Texture2D {
+		id = id,
+		width = image.width,
+		height = image.height,
+		mipmaps = 1,
+		format = .UNCOMPRESSED_R8G8B8A8,
+	}
 }
 
 @(private)
@@ -173,18 +193,26 @@ _tex_build_bind :: proc(e: ^Tex_Entry) {
 	if e.sampler != nil do wg.SamplerRelease(e.sampler)
 	if e.bind != nil do wg.BindGroupRelease(e.bind)
 	filt: wg.FilterMode = e.filter == .POINT ? .Nearest : .Linear
-	e.sampler = wg.DeviceCreateSampler(g.device, &{
-		magFilter = filt, minFilter = filt, mipmapFilter = .Nearest,
-		addressModeU = .ClampToEdge, addressModeV = .ClampToEdge, addressModeW = .ClampToEdge,
-		maxAnisotropy = 1,
-	})
-	entries := [2]wg.BindGroupEntry{
+	e.sampler = wg.DeviceCreateSampler(
+		g.device,
+		&{
+			magFilter = filt,
+			minFilter = filt,
+			mipmapFilter = .Nearest,
+			addressModeU = .ClampToEdge,
+			addressModeV = .ClampToEdge,
+			addressModeW = .ClampToEdge,
+			maxAnisotropy = 1,
+		},
+	)
+	entries := [2]wg.BindGroupEntry {
 		{binding = 0, textureView = e.view},
 		{binding = 1, sampler = e.sampler},
 	}
-	e.bind = wg.DeviceCreateBindGroup(g.device, &{
-		layout = g.rend.tex_layout, entryCount = 2, entries = raw_data(entries[:]),
-	})
+	e.bind = wg.DeviceCreateBindGroup(
+		g.device,
+		&{layout = g.rend.tex_layout, entryCount = 2, entries = raw_data(entries[:])},
+	)
 }
 
 // UpdateTexture replaces the full pixel contents (same dimensions/format as the
@@ -197,9 +225,11 @@ UpdateTexture :: proc(texture: Texture2D, pixels: rawptr) {
 	// the byte count differs — otherwise treat as RGBA8.
 	rgba := _to_rgba(([^]byte)(pixels), e.width, e.height, .UNCOMPRESSED_R8G8B8)
 	defer delete(rgba)
-	wg.QueueWriteTexture(g.queue,
+	wg.QueueWriteTexture(
+		g.queue,
 		&{texture = e.tex},
-		raw_data(rgba), uint(len(rgba)),
+		raw_data(rgba),
+		uint(len(rgba)),
 		&{bytesPerRow = u32(e.width) * 4, rowsPerImage = u32(e.height)},
 		&{u32(e.width), u32(e.height), 1},
 	)
@@ -242,7 +272,13 @@ DrawTextureRec :: proc(texture: Texture2D, source: Rectangle, position: Vector2,
 	DrawTexturePro(texture, source, dst, {0, 0}, 0, tint)
 }
 
-DrawTexturePro :: proc(texture: Texture2D, source, dest: Rectangle, origin: Vector2, rotation: f32, tint: Color) {
+DrawTexturePro :: proc(
+	texture: Texture2D,
+	source, dest: Rectangle,
+	origin: Vector2,
+	rotation: f32,
+	tint: Color,
+) {
 	e := get_texture(texture.id)
 	if e == nil do return
 	batch_set(&g.rend, .Image, e.bind)
@@ -289,10 +325,17 @@ DrawTexturePro :: proc(texture: Texture2D, source, dest: Rectangle, origin: Vect
 		tl = rot(tl, c, s); tr = rot(tr, c, s); br = rot(br, c, s); bl = rot(bl, c, s)
 	}
 	off := [2]f32{dest.x, dest.y}
-	push_quad4(&g.rend,
-		{tl.x + off.x, tl.y + off.y}, {tr.x + off.x, tr.y + off.y},
-		{br.x + off.x, br.y + off.y}, {bl.x + off.x, bl.y + off.y},
-		{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}, col,
+	push_quad4(
+		&g.rend,
+		{tl.x + off.x, tl.y + off.y},
+		{tr.x + off.x, tr.y + off.y},
+		{br.x + off.x, br.y + off.y},
+		{bl.x + off.x, bl.y + off.y},
+		{u0, v0},
+		{u1, v0},
+		{u1, v1},
+		{u0, v1},
+		col,
 	)
 }
 
@@ -303,7 +346,13 @@ LoadImageFromMemory :: proc(fileType: cstring, fileData: [^]u8, dataSize: i32) -
 	w, h, comp: i32
 	pixels := stbi.load_from_memory(fileData, dataSize, &w, &h, &comp, 4)
 	if pixels == nil do return Image{}
-	return Image{data = pixels, width = w, height = h, mipmaps = 1, format = .UNCOMPRESSED_R8G8B8A8}
+	return Image {
+		data = pixels,
+		width = w,
+		height = h,
+		mipmaps = 1,
+		format = .UNCOMPRESSED_R8G8B8A8,
+	}
 }
 
 UnloadImage :: proc(image: Image) {

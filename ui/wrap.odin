@@ -22,8 +22,10 @@ Wrap_Key :: struct {
 	size:  i32,
 }
 
-@(private = "file") wrap_cache: map[Wrap_Key][]Wrap_Line
-@(private = "file") WRAP_CACHE_MAX :: 4096
+@(private = "file")
+wrap_cache: map[Wrap_Key][]Wrap_Line
+@(private = "file")
+WRAP_CACHE_MAX :: 4096
 
 // clear_wrap_cache flushes all cached wrapped-line layouts. Call when the UI
 // scale changes so lines wrapped at the old font size/spacing are dropped.
@@ -47,7 +49,12 @@ fnv1a64 :: proc(s: string) -> u64 {
 // (text, width, size). On a miss it computes via wrap_compute and stores a
 // heap-owned copy. The returned slice is read-only and owned by the cache.
 wrap_text :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> []Wrap_Line {
-	key := Wrap_Key{hash = fnv1a64(text), len = len(text), width = max_width, size = font_size}
+	key := Wrap_Key {
+		hash  = fnv1a64(text),
+		len   = len(text),
+		width = max_width,
+		size  = font_size,
+	}
 	if cached, ok := wrap_cache[key]; ok {
 		return cached
 	}
@@ -83,7 +90,7 @@ wrap_compute :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -
 
 	line_start := 0
 	last_space := -1
-	line_w: i32 = 0     // accumulated pixel width of current line
+	line_w: i32 = 0 // accumulated pixel width of current line
 	w_at_space: i32 = 0 // line_w up to and including last_space
 	// draw_text and measure_text use zero inter-glyph spacing, so wrapping must
 	// too — otherwise lines break earlier than they render. The lone +1 px is
@@ -155,8 +162,14 @@ wrapped_max_line_width :: proc(text: string, max_width: i32, font_size: i32 = FO
 
 // Like wrapped_max_line_width but strips inline markdown markers (**bold**,
 // `inline code`) so the measured width matches the display text.
-wrapped_max_line_width_md :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> i32 {
-	if !strings.contains(text, "**") && strings.index_byte(text, PILL_OPEN) < 0 && strings.index_byte(text, '`') < 0 {
+wrapped_max_line_width_md :: proc(
+	text: string,
+	max_width: i32,
+	font_size: i32 = FONT_SIZE,
+) -> i32 {
+	if !strings.contains(text, "**") &&
+	   strings.index_byte(text, PILL_OPEN) < 0 &&
+	   strings.index_byte(text, '`') < 0 {
 		return wrapped_max_line_width(text, max_width, font_size)
 	}
 	spans := parse_inline_spans(text)

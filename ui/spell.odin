@@ -19,10 +19,14 @@ import "core:strings"
 SPELL_CACHE_MAX :: 4096
 SPELL_MAX_SUGGESTIONS :: 5
 
-@(private = "file") spell_initialized: bool
-@(private = "file") spell_ok: bool
-@(private = "file") spell_word_cache: map[string]bool // word -> correctly spelled
-@(private = "file") spell_ignored: map[string]bool // session-scope ignores
+@(private = "file")
+spell_initialized: bool
+@(private = "file")
+spell_ok: bool
+@(private = "file")
+spell_word_cache: map[string]bool // word -> correctly spelled
+@(private = "file")
+spell_ignored: map[string]bool // session-scope ignores
 
 // spell_init lazily initialises the platform backend. Idempotent.
 spell_init :: proc() {

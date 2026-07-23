@@ -4,10 +4,10 @@
 // enter animation and last hover index so redraws can be event-driven).
 package ui
 
-import rl "ingot:gfx"
 import "core:fmt"
 import "core:math"
 import "core:strings"
+import rl "ingot:gfx"
 
 // Chart_State is caller-owned per-chart state. The zero value is valid; reset
 // enter_anim to 0 to replay the enter animation.
@@ -29,13 +29,13 @@ Chart_Series :: struct {
 // bare plot (no grid/axes/legend) with an auto-computed nice range.
 Chart_Opts :: struct {
 	labels:      []string, // x-axis category labels (optional)
-	y_min:       f32,      // ignored unless y_fixed
+	y_min:       f32, // ignored unless y_fixed
 	y_max:       f32,
-	y_fixed:     bool,     // false → auto-range with nice-number padding
+	y_fixed:     bool, // false → auto-range with nice-number padding
 	show_grid:   bool,
 	show_axes:   bool,
 	show_legend: bool,
-	fill:        bool,     // line chart: translucent area fill under curve
+	fill:        bool, // line chart: translucent area fill under curve
 	format:      proc(v: f32, buf: []u8) -> string, // nil → default
 }
 
@@ -92,7 +92,7 @@ line_hover_index :: proc(mouse: rl.Vector2, plot: rl.Rectangle, n: int) -> int {
 	if n <= 0 || !rl.CheckCollisionPointRec(mouse, plot) do return -1
 	if n == 1 do return 0
 	slot := plot.width / f32(n - 1)
-	idx := int((mouse.x - plot.x)/slot + 0.5)
+	idx := int((mouse.x - plot.x) / slot + 0.5)
 	return clamp(idx, 0, n - 1)
 }
 
@@ -152,8 +152,8 @@ chart_series_color :: proc(i: int) -> rl.Color {
 Chart_Layout :: struct {
 	chart:        rl.Rectangle, // full widget bounds
 	plot:         rl.Rectangle, // inner data area
-	lo, hi, step: f32,          // nice y range
-	n:            int,          // point count (max across series)
+	lo, hi, step: f32, // nice y range
+	n:            int, // point count (max across series)
 }
 
 @(private = "file")
@@ -174,7 +174,10 @@ chart_layout :: proc(
 	series: []Chart_Series,
 	opts: Chart_Opts,
 	include_zero: bool,
-) -> (cl: Chart_Layout, ok: bool) {
+) -> (
+	cl: Chart_Layout,
+	ok: bool,
+) {
 	mn, mx, n, has := chart_data_range(series)
 	if !has || w <= 0 || h <= 0 do return
 	if opts.y_fixed {
@@ -200,7 +203,7 @@ chart_layout :: proc(
 	if opts.show_axes {
 		buf: [32]u8
 		widest: i32
-		for tv := cl.lo; tv <= cl.hi + cl.step*0.5; tv += cl.step {
+		for tv := cl.lo; tv <= cl.hi + cl.step * 0.5; tv += cl.step {
 			s := chart_format_value(opts, tv, buf[:])
 			c := strings.clone_to_cstring(s, context.temp_allocator)
 			widest = max(widest, measure_text(c, FONT_SIZE_SMALL))
@@ -244,7 +247,7 @@ chart_note_hover :: proc(state: ^Chart_State, hovered: int) {
 chart_draw_axes :: proc(cl: Chart_Layout, opts: Chart_Opts, xs: []f32) {
 	buf: [32]u8
 	if opts.show_grid || opts.show_axes {
-		for tv := cl.lo; tv <= cl.hi + cl.step*0.5; tv += cl.step {
+		for tv := cl.lo; tv <= cl.hi + cl.step * 0.5; tv += cl.step {
 			py := map_y(tv, cl.lo, cl.hi, cl.plot)
 			if opts.show_grid {
 				rl.DrawLineEx(
@@ -261,7 +264,7 @@ chart_draw_axes :: proc(cl: Chart_Layout, opts: Chart_Opts, xs: []f32) {
 				draw_text(
 					c,
 					i32(cl.plot.x) - tw - sc(6),
-					i32(py) - FONT_SIZE_SMALL/2,
+					i32(py) - FONT_SIZE_SMALL / 2,
 					FONT_SIZE_SMALL,
 					theme.fg_secondary,
 				)
@@ -287,7 +290,7 @@ chart_draw_axes :: proc(cl: Chart_Layout, opts: Chart_Opts, xs: []f32) {
 			c := strings.clone_to_cstring(opts.labels[i], context.temp_allocator)
 			tw := measure_text(c, FONT_SIZE_SMALL)
 			lx := clamp(
-				i32(xs[i]) - tw/2,
+				i32(xs[i]) - tw / 2,
 				i32(cl.chart.x),
 				max(i32(cl.chart.x + cl.chart.width) - tw, i32(cl.chart.x)),
 			)
@@ -306,8 +309,10 @@ chart_draw_legend :: proc(cl: Chart_Layout, series: []Chart_Series) {
 	for s, i in series {
 		col := s.color if s.color != {} else chart_series_color(i)
 		rl.DrawRectangleRounded(
-			{f32(lx), f32(ly + (FONT_SIZE_SMALL - sw)/2), f32(sw), f32(sw)},
-			0.4, 4, col,
+			{f32(lx), f32(ly + (FONT_SIZE_SMALL - sw) / 2), f32(sw), f32(sw)},
+			0.4,
+			4,
+			col,
 		)
 		lx += sw + sc(5)
 		name := s.name if len(s.name) > 0 else "series"
@@ -347,15 +352,15 @@ chart_draw_tooltip :: proc(
 	for s, si in series {
 		if idx >= len(s.values) do continue
 		val := chart_format_value(opts, s.values[idx], buf[:])
-		name := s.name if len(s.name) > 0 else fmt.tprintf("series %d", si+1)
+		name := s.name if len(s.name) > 0 else fmt.tprintf("series %d", si + 1)
 		c := strings.clone_to_cstring(fmt.tprintf("%s: %s", name, val), context.temp_allocator)
 		wmax = max(wmax, measure_text(c, FONT_SIZE_SMALL) + sw + sc(5))
 		rows += 1
 	}
 	if rows == 0 do return
 
-	tw := wmax + pad*2
-	th := i32(rows)*row_h + pad*2
+	tw := wmax + pad * 2
+	th := i32(rows) * row_h + pad * 2
 	tx := clamp(
 		i32(mouse.x) + sc(14),
 		i32(cl.chart.x),
@@ -382,12 +387,20 @@ chart_draw_tooltip :: proc(
 		if idx >= len(s.values) do continue
 		col := s.color if s.color != {} else chart_series_color(si)
 		overlay_rounded(
-			{f32(tx + ox + pad), f32(ry + (FONT_SIZE_SMALL - sw)/2), f32(sw), f32(sw)},
-			0.5, 4, col,
+			{f32(tx + ox + pad), f32(ry + (FONT_SIZE_SMALL - sw) / 2), f32(sw), f32(sw)},
+			0.5,
+			4,
+			col,
 		)
 		val := chart_format_value(opts, s.values[idx], buf[:])
-		name := s.name if len(s.name) > 0 else fmt.tprintf("series %d", si+1)
-		overlay_text(fmt.tprintf("%s: %s", name, val), tx + ox + pad + sw + sc(5), ry, FONT_SIZE_SMALL, theme.fg_secondary)
+		name := s.name if len(s.name) > 0 else fmt.tprintf("series %d", si + 1)
+		overlay_text(
+			fmt.tprintf("%s: %s", name, val),
+			tx + ox + pad + sw + sc(5),
+			ry,
+			FONT_SIZE_SMALL,
+			theme.fg_secondary,
+		)
 		ry += row_h
 	}
 	overlay_end()
@@ -399,7 +412,7 @@ chart_draw_tooltip :: proc(
 chart_point_y :: proc(v: f32, cl: Chart_Layout, anim: f32) -> f32 {
 	yb := cl.plot.y + cl.plot.height
 	py := map_y(v, cl.lo, cl.hi, cl.plot)
-	return yb + (py - yb)*anim
+	return yb + (py - yb) * anim
 }
 
 // --- widgets -----------------------------------------------------------------
@@ -418,10 +431,10 @@ line_chart :: proc(
 
 	xs := make([]f32, cl.n, context.temp_allocator)
 	if cl.n == 1 {
-		xs[0] = cl.plot.x + cl.plot.width/2
+		xs[0] = cl.plot.x + cl.plot.width / 2
 	} else {
 		slot := cl.plot.width / f32(cl.n - 1)
-		for i in 0 ..< cl.n do xs[i] = cl.plot.x + slot*f32(i)
+		for i in 0 ..< cl.n do xs[i] = cl.plot.x + slot * f32(i)
 	}
 
 	chart_draw_axes(cl, opts, xs)
@@ -438,7 +451,7 @@ line_chart :: proc(
 		if opts.fill && nv >= 2 {
 			fill := rl.Color{col.r, col.g, col.b, 40}
 			for i in 1 ..< nv {
-				p0 := rl.Vector2{xs[i-1], chart_point_y(s.values[i-1], cl, anim)}
+				p0 := rl.Vector2{xs[i - 1], chart_point_y(s.values[i - 1], cl, anim)}
 				p1 := rl.Vector2{xs[i], chart_point_y(s.values[i], cl, anim)}
 				rl.DrawTriangle(p0, {p0.x, yb}, {p1.x, yb}, fill)
 				rl.DrawTriangle(p0, {p1.x, yb}, p1, fill)
@@ -446,7 +459,7 @@ line_chart :: proc(
 		}
 		thick := scf(2)
 		for i in 1 ..< nv {
-			p0 := rl.Vector2{xs[i-1], chart_point_y(s.values[i-1], cl, anim)}
+			p0 := rl.Vector2{xs[i - 1], chart_point_y(s.values[i - 1], cl, anim)}
 			p1 := rl.Vector2{xs[i], chart_point_y(s.values[i], cl, anim)}
 			rl.DrawLineEx(p0, p1, thick, col)
 		}
@@ -486,7 +499,7 @@ bar_chart :: proc(
 
 	slot := cl.plot.width / f32(cl.n)
 	xs := make([]f32, cl.n, context.temp_allocator)
-	for i in 0 ..< cl.n do xs[i] = cl.plot.x + slot*(f32(i) + 0.5)
+	for i in 0 ..< cl.n do xs[i] = cl.plot.x + slot * (f32(i) + 0.5)
 
 	chart_draw_axes(cl, opts, xs)
 
@@ -497,7 +510,7 @@ bar_chart :: proc(
 	if hovered >= 0 {
 		hl := theme.fg_accent
 		rl.DrawRectangleRec(
-			{cl.plot.x + slot*f32(hovered), cl.plot.y, slot, cl.plot.height},
+			{cl.plot.x + slot * f32(hovered), cl.plot.y, slot, cl.plot.height},
 			rl.Color{hl.r, hl.g, hl.b, 18},
 		)
 	}
@@ -505,19 +518,19 @@ bar_chart :: proc(
 	// Baseline at value 0 (clamped into the nice range).
 	yb := map_y(clamp(0, cl.lo, cl.hi), cl.lo, cl.hi, cl.plot)
 	gap := scf(2)
-	group_w := max(slot - gap*2, 1)
+	group_w := max(slot - gap * 2, 1)
 	bw := group_w / f32(max(len(series), 1))
 
 	for s, si in series {
 		col := s.color if s.color != {} else chart_series_color(si)
 		for i in 0 ..< min(len(s.values), cl.n) {
 			py := map_y(s.values[i], cl.lo, cl.hi, cl.plot)
-			py = yb + (py - yb)*anim
-			bx := cl.plot.x + slot*f32(i) + gap + bw*f32(si)
+			py = yb + (py - yb) * anim
+			bx := cl.plot.x + slot * f32(i) + gap + bw * f32(si)
 			bh := abs(yb - py)
 			if bh < 0.5 do continue
 			rect := rl.Rectangle{bx, min(py, yb), max(bw - 1, 1), bh}
-			if bh >= scf(6) { // avoid degenerate rounding on tiny bars
+			if bh >= scf(6) { 	// avoid degenerate rounding on tiny bars
 				rl.DrawRectangleRounded(rect, 0.25, 4, col)
 			} else {
 				rl.DrawRectangleRec(rect, col)
@@ -550,7 +563,7 @@ sparkline :: proc(x, y, w, h: i32, values: []f32, color: rl.Color = {}) {
 	for v, i in values {
 		t := f32(0.5) // all-equal values: flat mid line
 		if span > 1e-9 do t = (v - mn) / span
-		p := rl.Vector2{fx + fw*(f32(i) / f32(max(n - 1, 1))), fy + fh*(1 - t)}
+		p := rl.Vector2{fx + fw * (f32(i) / f32(max(n - 1, 1))), fy + fh * (1 - t)}
 		if i > 0 do rl.DrawLineEx(prev, p, scf(1.5), color)
 		prev = p
 		last = p

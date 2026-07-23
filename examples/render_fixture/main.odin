@@ -5,7 +5,32 @@ import rl "ingot:gfx"
 import "ingot:ui"
 
 FONT_TTF := #load("../../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
-FIXTURE_CPS := [?]rune{' ', ':', 'A', 'B', 'C', 'F', 'G', 'P', 'R', 'T', 'U', 'a', 'c', 'e', 'f', 'g', 'i', 'm', 'n', 'o', 'r', 's', 't', 'x'}
+FIXTURE_CPS := [?]rune {
+	' ',
+	':',
+	'A',
+	'B',
+	'C',
+	'F',
+	'G',
+	'P',
+	'R',
+	'T',
+	'U',
+	'a',
+	'c',
+	'e',
+	'f',
+	'g',
+	'i',
+	'm',
+	'n',
+	'o',
+	'r',
+	's',
+	't',
+	'x',
+}
 
 font: rl.Font
 font_ready: bool
@@ -60,16 +85,13 @@ ensure_resources :: proc() {
 		font_ready = font.glyphCount > 0
 	}
 
-	pixels := [16]u8{
-		255, 255, 255, 255, 255, 80, 80, 255,
-		80, 220, 120, 255, 80, 120, 255, 255,
-	}
-	image := rl.Image{
-		data = raw_data(pixels[:]),
-		width = 2,
-		height = 2,
+	pixels := [16]u8{255, 255, 255, 255, 255, 80, 80, 255, 80, 220, 120, 255, 80, 120, 255, 255}
+	image := rl.Image {
+		data    = raw_data(pixels[:]),
+		width   = 2,
+		height  = 2,
 		mipmaps = 1,
-		format = .UNCOMPRESSED_R8G8B8A8,
+		format  = .UNCOMPRESSED_R8G8B8A8,
 	}
 	source_texture = rl.LoadTextureFromImage(image)
 	primary_rt = rl.LoadRenderTexture(256, 160)
@@ -78,27 +100,38 @@ ensure_resources :: proc() {
 	target_ok, sphere_ok: bool
 	gpu_target, target_ok = rl.create_gpu_3d_target(384, 240)
 	gpu_sphere, sphere_ok = rl.create_sphere_mesh(1, 16, 24)
-	resources_ready = font_ready && source_texture.id != 0 &&
-		primary_rt.texture.id != 0 && ping_rt.texture.id != 0 && pong_rt.texture.id != 0 &&
-		target_ok && sphere_ok
+	resources_ready =
+		font_ready &&
+		source_texture.id != 0 &&
+		primary_rt.texture.id != 0 &&
+		ping_rt.texture.id != 0 &&
+		pong_rt.texture.id != 0 &&
+		target_ok &&
+		sphere_ok
 }
 
 draw_render_targets :: proc() {
-	camera := rl.Camera3D{
-		position = {0, 0, 5},
-		target = {0, 0, 0},
-		up = {0, 1, 0},
-		fovy = 45,
+	camera := rl.Camera3D {
+		position   = {0, 0, 5},
+		target     = {0, 0, 0},
+		up         = {0, 1, 0},
+		fovy       = 45,
 		projection = .PERSPECTIVE,
 	}
 	gpu_pass, ok := rl.begin_gpu_3d(&gpu_target, camera)
 	if ok {
-		rl.draw_gpu_mesh(&gpu_pass, gpu_sphere, rl.MatrixTranslate(-0.65, 0, 0), {
-			color = rl.Color{80, 160, 255, 255},
-		})
-		rl.draw_gpu_mesh(&gpu_pass, gpu_sphere, rl.MatrixTranslate(0.65, 0, -1), {
-			color = rl.Color{255, 120, 80, 255},
-		})
+		rl.draw_gpu_mesh(
+			&gpu_pass,
+			gpu_sphere,
+			rl.MatrixTranslate(-0.65, 0, 0),
+			{color = rl.Color{80, 160, 255, 255}},
+		)
+		rl.draw_gpu_mesh(
+			&gpu_pass,
+			gpu_sphere,
+			rl.MatrixTranslate(0.65, 0, -1),
+			{color = rl.Color{255, 120, 80, 255}},
+		)
 		rl.end_gpu_3d(&gpu_pass)
 	}
 
@@ -109,38 +142,17 @@ draw_render_targets :: proc() {
 	rl.BeginScissorMode(96, 48, 64, 64)
 	rl.DrawCircle(128, 80, 54, rl.Color{90, 210, 150, 220})
 	rl.EndScissorMode()
-	rl.DrawTexturePro(
-		source_texture,
-		{0, 0, 2, 2},
-		{176, 16, 64, 64},
-		{0, 0},
-		0,
-		rl.WHITE,
-	)
+	rl.DrawTexturePro(source_texture, {0, 0, 2, 2}, {176, 16, 64, 64}, {0, 0}, 0, rl.WHITE)
 	rl.EndTextureMode()
 
 	rl.BeginTextureMode(ping_rt)
 	rl.ClearBackground(rl.BLANK)
-	rl.DrawTexturePro(
-		primary_rt.texture,
-		{0, 0, 256, 160},
-		{0, 0, 128, 80},
-		{0, 0},
-		0,
-		rl.WHITE,
-	)
+	rl.DrawTexturePro(primary_rt.texture, {0, 0, 256, 160}, {0, 0, 128, 80}, {0, 0}, 0, rl.WHITE)
 	rl.EndTextureMode()
 
 	rl.BeginTextureMode(pong_rt)
 	rl.ClearBackground(rl.BLANK)
-	rl.DrawTexturePro(
-		ping_rt.texture,
-		{0, 0, 128, 80},
-		{0, 0, 128, 80},
-		{0, 0},
-		0,
-		rl.WHITE,
-	)
+	rl.DrawTexturePro(ping_rt.texture, {0, 0, 128, 80}, {0, 0, 128, 80}, {0, 0}, 0, rl.WHITE)
 	rl.EndTextureMode()
 }
 
@@ -188,7 +200,7 @@ draw_stream_lifetime_stress :: proc() {
 	// Cell geometry matches the original arithmetic exactly:
 	// x = 24 + col*74, y = 548 + row*34, chip 24px + label 44px, 10px gap.
 	l: ui.Layout
-	ui.layout_begin(&l, 24, 548, 12*74, 4*34, gap = 10)
+	ui.layout_begin(&l, 24, 548, 12 * 74, 4 * 34, gap = 10)
 	for _ in 0 ..< 4 {
 		ui.push_row(&l, 24, gap = 2)
 		for _ in 0 ..< 12 {

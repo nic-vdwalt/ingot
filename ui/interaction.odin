@@ -70,7 +70,8 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 // Pointer to the drag latch currently held, so no other widget hovers or
 // activates mid-drag. One mouse -> at most one active drag; this is frame
 // arbitration, not retained widget state (the bool itself is caller-owned).
-@(private = "file") active_latch: ^bool
+@(private = "file")
+active_latch: ^bool
 
 // interact_reset clears the drag arbitration slot (tests / teardown).
 interact_reset :: proc() {

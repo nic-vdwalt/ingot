@@ -43,7 +43,7 @@ pacer_frame :: proc(p: ^Frame_Pacer, busy: bool = false) {
 	if busy || pacer_input_active() {
 		p.last_activity = rl.GetTime()
 	}
-	if rl.GetTime()-p.last_activity < p.grace {
+	if rl.GetTime() - p.last_activity < p.grace {
 		// Match the frame limiter to the monitor's refresh rate so it never
 		// fights vsync: a 60 FPS cap on top of vsync overshoots by a whole
 		// sleep quantum and oscillates. Unknown refresh (0) → target_fps.

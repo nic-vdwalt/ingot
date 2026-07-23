@@ -10,15 +10,24 @@ import "core:math/linalg"
 
 Matrix :: matrix[4, 4]f32
 
-@(private) cam3d_active: bool
-@(private) cam3d_vp: Matrix
-@(private) cam3d_proj: Matrix
-@(private) cam3d_view: Matrix
-@(private) cam3d: Camera3D
-@(private) cam3d_right: Vector3
-@(private) cam3d_up: Vector3
-@(private) cam3d_fwd: Vector3
-@(private) depth_mask_on: bool = true
+@(private)
+cam3d_active: bool
+@(private)
+cam3d_vp: Matrix
+@(private)
+cam3d_proj: Matrix
+@(private)
+cam3d_view: Matrix
+@(private)
+cam3d: Camera3D
+@(private)
+cam3d_right: Vector3
+@(private)
+cam3d_up: Vector3
+@(private)
+cam3d_fwd: Vector3
+@(private)
+depth_mask_on: bool = true
 
 @(private)
 _vp_from :: proc(camera: Camera3D) -> Matrix {
@@ -46,7 +55,7 @@ GetProjectionMatrix :: proc() -> Matrix {
 
 // SetDepthMask records the rlgl depth-mask state (no visual effect in the
 // CPU-projected 2D approximation, kept for API parity).
-SetDepthMask :: proc(on: bool) { depth_mask_on = on }
+SetDepthMask :: proc(on: bool) {depth_mask_on = on}
 
 BeginMode3D :: proc(camera: Camera3D) {
 	cam3d_vp = _vp_from(camera)
@@ -113,5 +122,5 @@ GetCameraMatrix :: proc(camera: Camera3D) -> Matrix {
 	return linalg.matrix4_look_at_f32(camera.position, camera.target, camera.up)
 }
 
-MatrixTranslate :: proc(x, y, z: f32) -> Matrix { return linalg.matrix4_translate_f32({x, y, z}) }
-MatrixScale :: proc(x, y, z: f32) -> Matrix { return linalg.matrix4_scale_f32({x, y, z}) }
+MatrixTranslate :: proc(x, y, z: f32) -> Matrix {return linalg.matrix4_translate_f32({x, y, z})}
+MatrixScale :: proc(x, y, z: f32) -> Matrix {return linalg.matrix4_scale_f32({x, y, z})}

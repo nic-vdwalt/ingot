@@ -4,9 +4,9 @@
 // Ported from Alloy's settings_panel.odin with the app coupling removed.
 package ui
 
-import rl "ingot:gfx"
 import "core:fmt"
 import "core:strings"
+import rl "ingot:gfx"
 
 // A selectable UI-scale preset. A value of 0 means "auto" (follow the OS DPI).
 Settings_Scale_Preset :: struct {
@@ -16,7 +16,7 @@ Settings_Scale_Preset :: struct {
 
 // Available UI-scale presets shown in the settings panel. Auto is first so it
 // is the default selection when no override is stored.
-SETTINGS_SCALE_PRESETS :: [?]Settings_Scale_Preset{
+SETTINGS_SCALE_PRESETS :: [?]Settings_Scale_Preset {
 	{"Auto (system)", 0.0},
 	{"75%", 0.75},
 	{"90%", 0.90},
@@ -31,7 +31,7 @@ SETTINGS_SCALE_PRESETS :: [?]Settings_Scale_Preset{
 // Result from the settings panel modal.
 Settings_Panel_Result :: struct {
 	applied:   bool, // true if a scale preset was chosen this frame
-	ui_scale:  f32,  // chosen scale (0 = auto), valid when applied == true
+	ui_scale:  f32, // chosen scale (0 = auto), valid when applied == true
 	dismissed: bool, // true if Escape / outside click closed the panel
 }
 
@@ -66,8 +66,11 @@ settings_scale_preset_index :: proc(ui_scale: f32) -> int {
 // scales; Escape (or clicking outside) dismisses — the caller closes the
 // panel on `dismissed`. Chrome, input claiming, and dismissal ride on the
 // generic modal widget (popups.odin); this proc owns only the preset rows.
-draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
-	screen_width, screen_height: i32) -> Settings_Panel_Result {
+draw_scale_settings_panel :: proc(
+	selected: ^int,
+	current_scale: f32,
+	screen_width, screen_height: i32,
+) -> Settings_Panel_Result {
 	assert(selected != nil, "draw_scale_settings_panel: nil selected")
 	assert(screen_width > 0 && screen_height > 0, "draw_scale_settings_panel: empty screen")
 	presets := SETTINGS_SCALE_PRESETS
@@ -105,7 +108,13 @@ draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 	draw_text(section_c, modal_x + modal_padding, body.y + 4, FONT_SIZE_SMALL, theme.fg_label)
 
 	pending_result, have_result := settings_scale_rows(
-		selected, current_scale, modal_x, body.y + section_h, st.rect.w, item_h)
+		selected,
+		current_scale,
+		modal_x,
+		body.y + section_h,
+		st.rect.w,
+		item_h,
+	)
 
 	// Footer hint.
 	footer_y := modal_y + modal_h - modal_padding - footer_h + 4
@@ -130,8 +139,14 @@ draw_scale_settings_panel :: proc(selected: ^int, current_scale: f32,
 // a click-applied result. Hover moves the highlight only while the mouse
 // moves so keyboard navigation isn't overridden by a stationary cursor.
 @(private = "file")
-settings_scale_rows :: proc(selected: ^int, current_scale: f32,
-	modal_x, top, modal_w, item_h: i32) -> (result: Settings_Panel_Result, applied: bool) {
+settings_scale_rows :: proc(
+	selected: ^int,
+	current_scale: f32,
+	modal_x, top, modal_w, item_h: i32,
+) -> (
+	result: Settings_Panel_Result,
+	applied: bool,
+) {
 	assert(selected != nil, "settings_scale_rows: nil selected")
 	assert(item_h > 0, "settings_scale_rows: non-positive row height")
 	presets := SETTINGS_SCALE_PRESETS
@@ -153,7 +168,13 @@ settings_scale_rows :: proc(selected: ^int, current_scale: f32,
 		text_x := modal_x + modal_padding
 		if abs(p.value - current_scale) < 0.001 {
 			marker_c := strings.clone_to_cstring("*", context.temp_allocator)
-			draw_text(marker_c, text_x, list_y + (item_h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_accent)
+			draw_text(
+				marker_c,
+				text_x,
+				list_y + (item_h - FONT_SIZE) / 2,
+				FONT_SIZE,
+				theme.fg_accent,
+			)
 		}
 		text_x += sc(16)
 		// Label (Auto shows the resolved system scale on the right).
@@ -168,11 +189,20 @@ settings_scale_rows :: proc(selected: ^int, current_scale: f32,
 			pct := fmt.tprintf("%d%%", int(p.value * 100 + 0.5))
 			pct_c := strings.clone_to_cstring(pct, context.temp_allocator)
 			pct_w := measure_text(pct_c, FONT_SIZE_SMALL)
-			draw_text(pct_c, right_edge - pct_w, list_y + (item_h - FONT_SIZE_SMALL) / 2, FONT_SIZE_SMALL, theme.fg_secondary)
+			draw_text(
+				pct_c,
+				right_edge - pct_w,
+				list_y + (item_h - FONT_SIZE_SMALL) / 2,
+				FONT_SIZE_SMALL,
+				theme.fg_secondary,
+			)
 		}
 		// Mouse click applies this preset.
 		if hovered && rl.IsMouseButtonReleased(.LEFT) {
-			result = Settings_Panel_Result{applied = true, ui_scale = p.value}
+			result = Settings_Panel_Result {
+				applied  = true,
+				ui_scale = p.value,
+			}
 			applied = true
 		}
 		list_y += item_h

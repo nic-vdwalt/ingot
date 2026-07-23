@@ -95,7 +95,7 @@ Action_Data_Tag :: enum c.int {
 }
 
 Action_Data :: struct {
-	tag: Action_Data_Tag,
+	tag:     Action_Data_Tag,
 	using _: struct #raw_union {
 		custom_action:      i32,
 		value:              cstring,
@@ -150,41 +150,41 @@ Deactivation_Handler :: proc "c" (userdata: rawptr)
 
 when ENABLED {
 	when ODIN_OS == .Linux {
-		foreign import lib {"lib/linux_amd64/libaccesskit.a"}
+		foreign import lib "lib/linux_amd64/libaccesskit.a"
 	} else when ODIN_OS == .Darwin && ODIN_ARCH == .arm64 {
-		foreign import lib {"lib/darwin_arm64/libaccesskit.a"}
+		foreign import lib "lib/darwin_arm64/libaccesskit.a"
 	} else when ODIN_OS == .Darwin {
-		foreign import lib {"lib/darwin_amd64/libaccesskit.a"}
+		foreign import lib "lib/darwin_amd64/libaccesskit.a"
 	} else when ODIN_OS == .Windows {
-		foreign import lib {"lib/windows_amd64/accesskit.lib"}
+		foreign import lib "lib/windows_amd64/accesskit.lib"
 	}
 
 	@(default_calling_convention = "c", link_prefix = "accesskit_")
 	foreign lib {
 		// Node builder. node_new allocates; ownership transfers to the tree
 		// update via tree_update_push_node.
-		node_new                    :: proc(role: Role) -> Node ---
-		node_free                   :: proc(node: Node) ---
-		node_set_label_with_length  :: proc(node: Node, value: [^]u8, length: c.size_t) ---
-		node_set_value_with_length  :: proc(node: Node, value: [^]u8, length: c.size_t) ---
-		node_set_bounds             :: proc(node: Node, value: Rect) ---
-		node_set_toggled            :: proc(node: Node, value: Toggled) ---
-		node_set_disabled           :: proc(node: Node) ---
-		node_set_expanded           :: proc(node: Node, value: bool) ---
-		node_set_numeric_value      :: proc(node: Node, value: f64) ---
-		node_set_min_numeric_value  :: proc(node: Node, value: f64) ---
-		node_set_max_numeric_value  :: proc(node: Node, value: f64) ---
-		node_add_action             :: proc(node: Node, action: Action) ---
-		node_push_child             :: proc(node: Node, child: Node_Id) ---
+		node_new :: proc(role: Role) -> Node ---
+		node_free :: proc(node: Node) ---
+		node_set_label_with_length :: proc(node: Node, value: [^]u8, length: c.size_t) ---
+		node_set_value_with_length :: proc(node: Node, value: [^]u8, length: c.size_t) ---
+		node_set_bounds :: proc(node: Node, value: Rect) ---
+		node_set_toggled :: proc(node: Node, value: Toggled) ---
+		node_set_disabled :: proc(node: Node) ---
+		node_set_expanded :: proc(node: Node, value: bool) ---
+		node_set_numeric_value :: proc(node: Node, value: f64) ---
+		node_set_min_numeric_value :: proc(node: Node, value: f64) ---
+		node_set_max_numeric_value :: proc(node: Node, value: f64) ---
+		node_add_action :: proc(node: Node, action: Action) ---
+		node_push_child :: proc(node: Node, child: Node_Id) ---
 
 		// Tree + tree update.
-		tree_new                            :: proc(root: Node_Id) -> Tree ---
-		tree_free                           :: proc(tree: Tree) ---
+		tree_new :: proc(root: Node_Id) -> Tree ---
+		tree_free :: proc(tree: Tree) ---
 		tree_update_with_capacity_and_focus :: proc(capacity: c.size_t, focus: Node_Id) -> Tree_Update ---
-		tree_update_free                    :: proc(update: Tree_Update) ---
-		tree_update_push_node               :: proc(update: Tree_Update, id: Node_Id, node: Node) ---
-		tree_update_set_tree                :: proc(update: Tree_Update, tree: Tree) ---
-		tree_update_set_focus               :: proc(update: Tree_Update, focus: Node_Id) ---
+		tree_update_free :: proc(update: Tree_Update) ---
+		tree_update_push_node :: proc(update: Tree_Update, id: Node_Id, node: Node) ---
+		tree_update_set_tree :: proc(update: Tree_Update, tree: Tree) ---
+		tree_update_set_focus :: proc(update: Tree_Update, focus: Node_Id) ---
 
 		action_request_free :: proc(request: ^Action_Request) ---
 	}
@@ -192,30 +192,11 @@ when ENABLED {
 	when ODIN_OS == .Darwin {
 		@(default_calling_convention = "c", link_prefix = "accesskit_")
 		foreign lib {
-			macos_subclassing_adapter_new :: proc(
-				view: rawptr,
-				activation_handler: Activation_Handler,
-				activation_handler_userdata: rawptr,
-				action_handler: Action_Handler,
-				action_handler_userdata: rawptr,
-			) -> Macos_Subclassing_Adapter ---
-			macos_subclassing_adapter_for_window :: proc(
-				window: rawptr,
-				activation_handler: Activation_Handler,
-				activation_handler_userdata: rawptr,
-				action_handler: Action_Handler,
-				action_handler_userdata: rawptr,
-			) -> Macos_Subclassing_Adapter ---
+			macos_subclassing_adapter_new :: proc(view: rawptr, activation_handler: Activation_Handler, activation_handler_userdata: rawptr, action_handler: Action_Handler, action_handler_userdata: rawptr) -> Macos_Subclassing_Adapter ---
+			macos_subclassing_adapter_for_window :: proc(window: rawptr, activation_handler: Activation_Handler, activation_handler_userdata: rawptr, action_handler: Action_Handler, action_handler_userdata: rawptr) -> Macos_Subclassing_Adapter ---
 			macos_subclassing_adapter_free :: proc(adapter: Macos_Subclassing_Adapter) ---
-			macos_subclassing_adapter_update_if_active :: proc(
-				adapter: Macos_Subclassing_Adapter,
-				update_factory: Tree_Update_Factory,
-				update_factory_userdata: rawptr,
-			) -> Macos_Queued_Events ---
-			macos_subclassing_adapter_update_view_focus_state :: proc(
-				adapter: Macos_Subclassing_Adapter,
-				is_focused: bool,
-			) -> Macos_Queued_Events ---
+			macos_subclassing_adapter_update_if_active :: proc(adapter: Macos_Subclassing_Adapter, update_factory: Tree_Update_Factory, update_factory_userdata: rawptr) -> Macos_Queued_Events ---
+			macos_subclassing_adapter_update_view_focus_state :: proc(adapter: Macos_Subclassing_Adapter, is_focused: bool) -> Macos_Queued_Events ---
 			macos_queued_events_raise :: proc(events: Macos_Queued_Events) ---
 		}
 	}
@@ -223,19 +204,9 @@ when ENABLED {
 	when ODIN_OS == .Windows {
 		@(default_calling_convention = "c", link_prefix = "accesskit_")
 		foreign lib {
-			windows_subclassing_adapter_new :: proc(
-				hwnd: rawptr,
-				activation_handler: Activation_Handler,
-				activation_handler_userdata: rawptr,
-				action_handler: Action_Handler,
-				action_handler_userdata: rawptr,
-			) -> Windows_Subclassing_Adapter ---
+			windows_subclassing_adapter_new :: proc(hwnd: rawptr, activation_handler: Activation_Handler, activation_handler_userdata: rawptr, action_handler: Action_Handler, action_handler_userdata: rawptr) -> Windows_Subclassing_Adapter ---
 			windows_subclassing_adapter_free :: proc(adapter: Windows_Subclassing_Adapter) ---
-			windows_subclassing_adapter_update_if_active :: proc(
-				adapter: Windows_Subclassing_Adapter,
-				update_factory: Tree_Update_Factory,
-				update_factory_userdata: rawptr,
-			) -> Windows_Queued_Events ---
+			windows_subclassing_adapter_update_if_active :: proc(adapter: Windows_Subclassing_Adapter, update_factory: Tree_Update_Factory, update_factory_userdata: rawptr) -> Windows_Queued_Events ---
 			windows_queued_events_raise :: proc(events: Windows_Queued_Events) ---
 		}
 	}
@@ -243,21 +214,10 @@ when ENABLED {
 	when ODIN_OS == .Linux {
 		@(default_calling_convention = "c", link_prefix = "accesskit_")
 		foreign lib {
-			unix_adapter_new :: proc(
-				activation_handler: Activation_Handler,
-				activation_handler_userdata: rawptr,
-				action_handler: Action_Handler,
-				action_handler_userdata: rawptr,
-				deactivation_handler: Deactivation_Handler,
-				deactivation_handler_userdata: rawptr,
-			) -> Unix_Adapter ---
+			unix_adapter_new :: proc(activation_handler: Activation_Handler, activation_handler_userdata: rawptr, action_handler: Action_Handler, action_handler_userdata: rawptr, deactivation_handler: Deactivation_Handler, deactivation_handler_userdata: rawptr) -> Unix_Adapter ---
 			unix_adapter_free :: proc(adapter: Unix_Adapter) ---
 			unix_adapter_set_root_window_bounds :: proc(adapter: Unix_Adapter, outer, inner: Rect) ---
-			unix_adapter_update_if_active :: proc(
-				adapter: Unix_Adapter,
-				update_factory: Tree_Update_Factory,
-				update_factory_userdata: rawptr,
-			) ---
+			unix_adapter_update_if_active :: proc(adapter: Unix_Adapter, update_factory: Tree_Update_Factory, update_factory_userdata: rawptr) ---
 			unix_adapter_update_window_focus_state :: proc(adapter: Unix_Adapter, is_focused: bool) ---
 		}
 	}

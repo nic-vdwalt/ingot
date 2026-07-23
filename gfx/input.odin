@@ -12,39 +12,37 @@ import "core:strings"
 CHAR_Q :: 64
 
 Input :: struct {
-	exit_key: KeyboardKey,
+	exit_key:         KeyboardKey,
 
 	// per-frame edge/repeat (set by the backend, cleared each poll cycle)
-	pressed:  [KEY_COUNT]bool,
-	released: [KEY_COUNT]bool,
-	repeat:   [KEY_COUNT]bool,
+	pressed:          [KEY_COUNT]bool,
+	released:         [KEY_COUNT]bool,
+	repeat:           [KEY_COUNT]bool,
 
 	// char / key queues (FIFO ring)
-	char_q:   [CHAR_Q]rune,
-	char_h, char_t: int,
-	key_q:    [CHAR_Q]KeyboardKey,
-	key_h, key_t: int,
+	char_q:           [CHAR_Q]rune,
+	char_h, char_t:   int,
+	key_q:            [CHAR_Q]KeyboardKey,
+	key_h, key_t:     int,
 
 	// mouse
-	mouse:       Vector2,
-	mouse_prev:  Vector2,
-	mouse_delta: Vector2,
-	mb_down:     [8]bool,
-	mb_pressed:  [8]bool,
-	mb_released: [8]bool,
+	mouse:            Vector2,
+	mouse_prev:       Vector2,
+	mouse_delta:      Vector2,
+	mb_down:          [8]bool,
+	mb_pressed:       [8]bool,
+	mb_released:      [8]bool,
 
 	// wheel
-	wheel:         Vector2,
-	wheel_pending: Vector2,
-
+	wheel:            Vector2,
+	wheel_pending:    Vector2,
 	cursor_on_screen: bool,
-
-	cur_cursor:  MouseCursor,
+	cur_cursor:       MouseCursor,
 
 	// Gamepads: fixed pool, snapshot-polled once per frame through the
 	// platform seam (GLFW GetGamepadState native, navigator.getGamepads()
 	// web). prev_buttons gives pressed/released edge detection.
-	pads: [MAX_GAMEPADS]Gamepad_State,
+	pads:             [MAX_GAMEPADS]Gamepad_State,
 }
 
 MAX_GAMEPADS :: 4
@@ -67,13 +65,17 @@ PREEDIT_MAX :: 256
 // Preedit staging: written by the platform backend while an OS input method
 // is composing (web composition events; native 3c later), read by the UI via
 // GetPreedit. Absolute state like the mouse position — no edge semantics.
-@(private) preedit_buf: [PREEDIT_MAX]u8
-@(private) preedit_len: int
-@(private) preedit_caret: int
+@(private)
+preedit_buf: [PREEDIT_MAX]u8
+@(private)
+preedit_len: int
+@(private)
+preedit_caret: int
 
 // ime_rect_armed tracks whether any text field reported its caret rect this
 // frame; input_poll deactivates platform text input when none did.
-@(private) ime_rect_armed: bool
+@(private)
+ime_rect_armed: bool
 
 
 // input_poll runs once per frame from EndDrawing: reset frame-scoped state,
@@ -261,11 +263,11 @@ GetGamepadAxisMovement :: proc(gamepad: i32, axis: GamepadAxis) -> f32 {
 	return v
 }
 
-GetMousePosition :: proc() -> Vector2 { return g.inp.mouse }
-GetMouseDelta    :: proc() -> Vector2 { return g.inp.mouse_delta }
+GetMousePosition :: proc() -> Vector2 {return g.inp.mouse}
+GetMouseDelta :: proc() -> Vector2 {return g.inp.mouse_delta}
 
-GetMouseX :: proc() -> i32 { return i32(g.inp.mouse.x) }
-GetMouseY :: proc() -> i32 { return i32(g.inp.mouse.y) }
+GetMouseX :: proc() -> i32 {return i32(g.inp.mouse.x)}
+GetMouseY :: proc() -> i32 {return i32(g.inp.mouse.y)}
 
 // raylib mouse coordinate offset/scale — unused by the current backends; kept
 // for API parity (no-op).
@@ -275,7 +277,7 @@ GetMouseWheelMove :: proc() -> f32 {
 	if abs(g.inp.wheel.x) > abs(g.inp.wheel.y) do return g.inp.wheel.x
 	return g.inp.wheel.y
 }
-GetMouseWheelMoveV :: proc() -> Vector2 { return g.inp.wheel }
+GetMouseWheelMoveV :: proc() -> Vector2 {return g.inp.wheel}
 
 GetClipboardText :: proc() -> cstring {
 	s := platform_get_clipboard()
@@ -287,8 +289,8 @@ SetClipboardText :: proc(text: cstring) {
 }
 
 Web_Input_Result :: struct {
-	value: string,
-	cursor: int,
+	value:   string,
+	cursor:  int,
 	changed: bool,
 	focused: bool,
 }
@@ -299,8 +301,18 @@ SyncWebTextInput :: proc(
 	active: bool,
 ) -> Web_Input_Result {
 	return platform_sync_web_text_input(
-		form_id, field_id, name, placeholder, value,
-		x, y, w, h, input_type, autocomplete, active,
+		form_id,
+		field_id,
+		name,
+		placeholder,
+		value,
+		x,
+		y,
+		w,
+		h,
+		input_type,
+		autocomplete,
+		active,
 	)
 }
 
@@ -309,9 +321,7 @@ SyncWebSubmitButton :: proc(
 	x, y, w, h, style, font_size: i32,
 	enabled: bool,
 ) -> bool {
-	return platform_sync_web_submit_button(
-		form_id, label, x, y, w, h, style, font_size, enabled,
-	)
+	return platform_sync_web_submit_button(form_id, label, x, y, w, h, style, font_size, enabled)
 }
 
 Web_Control_Result :: struct {
@@ -327,8 +337,11 @@ Web_Control_Result :: struct {
 // (AccessKit covers those). `role` is the Sem_Role ordinal; `state` is the
 // Sem_State bit_set transmuted to its u8 backing.
 SyncWebControl :: proc(
-	role: i32, id: u64, label: string,
-	x, y, w, h: i32, state: u8,
+	role: i32,
+	id: u64,
+	label: string,
+	x, y, w, h: i32,
+	state: u8,
 	value, lo, hi: f32,
 ) -> Web_Control_Result {
 	return platform_sync_web_control(role, id, label, x, y, w, h, state, value, lo, hi)
@@ -342,7 +355,7 @@ SetMouseCursor :: proc(cursor: MouseCursor) {
 	platform_set_mouse_cursor(cursor)
 }
 
-IsCursorOnScreen :: proc() -> bool { return g.inp.cursor_on_screen }
+IsCursorOnScreen :: proc() -> bool {return g.inp.cursor_on_screen}
 
 // SetTextInputRect reports the focused text field's caret rect (UI logical
 // pixels, top-left origin). Call every frame while a field is active; the OS

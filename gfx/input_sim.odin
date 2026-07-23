@@ -18,11 +18,13 @@ package gfx
 INGOT_INPUT_SIM :: #config(INGOT_INPUT_SIM, false)
 
 when INGOT_INPUT_SIM {
-	@(private) Sim_State :: struct {
+	@(private)
+	Sim_State :: struct {
 		key_down: [KEY_COUNT]bool,
 		mb_down:  [8]bool,
 	}
-	@(private) g_sim: Sim_State
+	@(private)
+	g_sim: Sim_State
 
 	// SimBeginFrame clears per-frame edges and promotes pending wheel,
 	// exactly like input_poll's clear phase but without any platform call.
@@ -95,12 +97,14 @@ when INGOT_INPUT_SIM {
 		g.inp = {}
 	}
 
-	@(private) sim_key_down :: proc(i: i32) -> bool {
+	@(private)
+	sim_key_down :: proc(i: i32) -> bool {
 		if i < 0 || i >= KEY_COUNT do return false
 		return g_sim.key_down[i]
 	}
 
-	@(private) sim_mouse_button_down :: proc(b: i32) -> bool {
+	@(private)
+	sim_mouse_button_down :: proc(b: i32) -> bool {
 		if b < 0 || b >= 8 do return false
 		return g_sim.mb_down[b]
 	}

@@ -8,14 +8,22 @@ DD_Get_Context_Proc :: #type proc "c" () -> rawptr
 DD_Get_Display_Proc :: #type proc "c" () -> ^x11.Display
 DD_Get_Window_Proc :: #type proc "c" (window: rawptr) -> x11.Window
 
-@(private = "file") g_dd_resolved: bool
-@(private = "file") g_dd_ok: bool
-@(private = "file") g_dd_display: ^x11.Display
-@(private = "file") g_dd_window: x11.Window
-@(private = "file") g_dd_enter: x11.Atom
-@(private = "file") g_dd_leave: x11.Atom
-@(private = "file") g_dd_position: x11.Atom
-@(private = "file") g_dd_drop: x11.Atom
+@(private = "file")
+g_dd_resolved: bool
+@(private = "file")
+g_dd_ok: bool
+@(private = "file")
+g_dd_display: ^x11.Display
+@(private = "file")
+g_dd_window: x11.Window
+@(private = "file")
+g_dd_enter: x11.Atom
+@(private = "file")
+g_dd_leave: x11.Atom
+@(private = "file")
+g_dd_position: x11.Atom
+@(private = "file")
+g_dd_drop: x11.Atom
 
 @(private)
 platform_dragdrop_init :: proc() {

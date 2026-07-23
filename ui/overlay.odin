@@ -38,7 +38,7 @@ Overlay_Cmd :: struct {
 	segments:  i32,
 	thickness: f32,
 	p0, p1:    rl.Vector2, // Line endpoints
-	text_off:  i32,        // Text: offset of NUL-terminated bytes in text_buf
+	text_off:  i32, // Text: offset of NUL-terminated bytes in text_buf
 	font_size: i32,
 }
 
@@ -52,7 +52,8 @@ Overlay_State :: struct {
 	dropped:  int, // commands discarded because a buffer was full
 }
 
-@(private = "file") ov: Overlay_State
+@(private = "file")
+ov: Overlay_State
 
 // overlay_begin opens a recording group for one overlay (popup, tooltip).
 // When claim_input is true the group's rect (screen space) is registered with
@@ -92,18 +93,34 @@ overlay_rect_lines :: proc(rect: rl.Rectangle, thickness: f32, color: rl.Color) 
 }
 
 overlay_rounded :: proc(rect: rl.Rectangle, roundness: f32, segments: i32, color: rl.Color) {
-	ov_push(Overlay_Cmd{kind = .Rounded, rect = rect, roundness = roundness, segments = segments, color = color})
+	ov_push(
+		Overlay_Cmd {
+			kind = .Rounded,
+			rect = rect,
+			roundness = roundness,
+			segments = segments,
+			color = color,
+		},
+	)
 }
 
-overlay_rounded_lines :: proc(rect: rl.Rectangle, roundness: f32, segments: i32, thickness: f32, color: rl.Color) {
-	ov_push(Overlay_Cmd{
-		kind = .Rounded_Lines,
-		rect = rect,
-		roundness = roundness,
-		segments = segments,
-		thickness = thickness,
-		color = color,
-	})
+overlay_rounded_lines :: proc(
+	rect: rl.Rectangle,
+	roundness: f32,
+	segments: i32,
+	thickness: f32,
+	color: rl.Color,
+) {
+	ov_push(
+		Overlay_Cmd {
+			kind = .Rounded_Lines,
+			rect = rect,
+			roundness = roundness,
+			segments = segments,
+			thickness = thickness,
+			color = color,
+		},
+	)
 }
 
 overlay_line :: proc(p0, p1: rl.Vector2, color: rl.Color) {
@@ -123,13 +140,15 @@ overlay_text :: proc(text: string, x, y, font_size: i32, color: rl.Color) {
 	copy(ov.text_buf[off:], text)
 	ov.text_buf[off + len(text)] = 0
 	ov.text_len += len(text) + 1
-	ov_push(Overlay_Cmd{
-		kind = .Text,
-		rect = rl.Rectangle{f32(x), f32(y), 0, 0},
-		text_off = i32(off),
-		font_size = font_size,
-		color = color,
-	})
+	ov_push(
+		Overlay_Cmd {
+			kind = .Text,
+			rect = rl.Rectangle{f32(x), f32(y), 0, 0},
+			text_off = i32(off),
+			font_size = font_size,
+			color = color,
+		},
+	)
 }
 
 // overlay_cmd_count returns the number of commands currently recorded.
@@ -166,7 +185,13 @@ overlay_flush :: proc() {
 		case .Rounded:
 			rl.DrawRectangleRounded(cmd.rect, cmd.roundness, cmd.segments, cmd.color)
 		case .Rounded_Lines:
-			rl.DrawRectangleRoundedLinesEx(cmd.rect, cmd.roundness, cmd.segments, cmd.thickness, cmd.color)
+			rl.DrawRectangleRoundedLinesEx(
+				cmd.rect,
+				cmd.roundness,
+				cmd.segments,
+				cmd.thickness,
+				cmd.color,
+			)
 		case .Line:
 			rl.DrawLineEx(cmd.p0, cmd.p1, 1, cmd.color)
 		case .Text:

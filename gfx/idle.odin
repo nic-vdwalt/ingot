@@ -22,7 +22,7 @@
 package gfx
 
 Frame_Strategy :: enum {
-	Continuous,   // today's behavior: a frame every loop iteration (default)
+	Continuous, // today's behavior: a frame every loop iteration (default)
 	Event_Driven, // idle between frames; wake on input/damage/redraw requests
 }
 

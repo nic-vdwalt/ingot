@@ -48,7 +48,7 @@ spell_skip_token_rejects_identifiers :: proc(t: ^testing.T) {
 spell_skip_token_rejects_joined_fragments :: proc(t: ^testing.T) {
 	// Fragments of dotted/slashed tokens (URLs, paths, emails) are skipped.
 	text := "example.com"
-	testing.expect(t, spell_skip_token(text, 0, 7))  // "example" joined by '.'
+	testing.expect(t, spell_skip_token(text, 0, 7)) // "example" joined by '.'
 	testing.expect(t, spell_skip_token(text, 8, 11)) // "com" after '.'
 	path := "src/main"
 	testing.expect(t, spell_skip_token(path, 0, 3))

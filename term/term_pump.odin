@@ -6,9 +6,9 @@ package term
 // current and switching views shows the latest screen instead of a
 // fast-forward replay of the backlog.
 
-import "core:c"
 import lv "../libvterm"
 import "../pty"
+import "core:c"
 
 // Maximum buffer-fulls drained per term_pump call. Bounds worst-case frame
 // time while letting a large backlog (e.g. `cat` of a big file) catch up at
@@ -41,7 +41,7 @@ _utf8_complete_prefix :: proc(buf: []u8) -> int {
 			} else if b >= 0xE0 {
 				need = 3
 			}
-			if n-i < need {
+			if n - i < need {
 				return i // incomplete: hold back from the lead byte
 			}
 			return n

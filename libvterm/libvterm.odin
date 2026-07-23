@@ -13,8 +13,8 @@ import "core:c"
 // Opaque handles
 // ---------------------------------------------------------------------------
 
-VTerm       :: distinct rawptr
-VTermState  :: distinct rawptr
+VTerm :: distinct rawptr
+VTermState :: distinct rawptr
 VTermScreen :: distinct rawptr
 
 // ---------------------------------------------------------------------------
@@ -23,9 +23,9 @@ VTermScreen :: distinct rawptr
 
 VTERM_MAX_CHARS_PER_CELL :: 6
 
-VTERM_COLOR_RGB        :: u8(0x00)
-VTERM_COLOR_INDEXED    :: u8(0x01)
-VTERM_COLOR_TYPE_MASK  :: u8(0x01)
+VTERM_COLOR_RGB :: u8(0x00)
+VTERM_COLOR_INDEXED :: u8(0x01)
+VTERM_COLOR_TYPE_MASK :: u8(0x01)
 VTERM_COLOR_DEFAULT_FG :: u8(0x02)
 VTERM_COLOR_DEFAULT_BG :: u8(0x04)
 
@@ -47,8 +47,8 @@ VTerm_Rect :: struct {
 
 // Tagged union: 4 bytes total (largest member is {type,r,g,b}: 4 bytes).
 VTerm_Color :: struct #raw_union {
-	type: u8,
-	rgb: struct {
+	type:    u8,
+	rgb:     struct {
 		type:  u8,
 		red:   u8,
 		green: u8,
@@ -176,13 +176,13 @@ vterm_str_frag_final :: #force_inline proc "contextless" (f: ^VTerm_String_Fragm
 // extra linker flags. Linux falls back to a system-installed libvterm (build
 // one with scripts/build-libvterm.sh --target linux_amd64 if preferred).
 when ODIN_OS == .Linux {
-	foreign import lib {"system:vterm"}
+	foreign import lib "system:vterm"
 } else when ODIN_OS == .Darwin && ODIN_ARCH == .arm64 {
-	foreign import lib {"lib/darwin_arm64/libvterm.a"}
+	foreign import lib "lib/darwin_arm64/libvterm.a"
 } else when ODIN_OS == .Darwin {
-	foreign import lib {"lib/darwin_amd64/libvterm.a"}
+	foreign import lib "lib/darwin_amd64/libvterm.a"
 } else when ODIN_OS == .Windows {
-	foreign import lib {"lib/windows_amd64/vterm.lib"}
+	foreign import lib "lib/windows_amd64/vterm.lib"
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +192,7 @@ when ODIN_OS == .Linux {
 @(default_calling_convention = "c")
 foreign lib {
 	// Lifecycle.
-	vterm_new  :: proc(rows, cols: c.int) -> VTerm ---
+	vterm_new :: proc(rows, cols: c.int) -> VTerm ---
 	vterm_free :: proc(vt: VTerm) ---
 
 	// Size and encoding.
@@ -205,22 +205,22 @@ foreign lib {
 
 	// Layer accessors.
 	vterm_obtain_screen :: proc(vt: VTerm) -> VTermScreen ---
-	vterm_obtain_state  :: proc(vt: VTerm) -> VTermState ---
+	vterm_obtain_state :: proc(vt: VTerm) -> VTermState ---
 
 	// Screen layer.
-	vterm_screen_reset             :: proc(screen: VTermScreen, hard: c.int) ---
-	vterm_screen_enable_altscreen  :: proc(screen: VTermScreen, altscreen: c.int) ---
-	vterm_screen_flush_damage      :: proc(screen: VTermScreen) ---
-	vterm_screen_set_damage_merge  :: proc(screen: VTermScreen, size: c.int) ---
-	vterm_screen_set_callbacks     :: proc(screen: VTermScreen, callbacks: ^VTerm_Screen_Callbacks, user: rawptr) ---
-	vterm_screen_get_cell          :: proc(screen: VTermScreen, pos: VTerm_Pos, cell: ^VTerm_Screen_Cell) -> c.int ---
-	vterm_screen_is_eol            :: proc(screen: VTermScreen, pos: VTerm_Pos) -> c.int ---
-	vterm_screen_convert_color_to_rgb  :: proc(screen: VTermScreen, col: ^VTerm_Color) ---
-	vterm_screen_set_default_colors    :: proc(screen: VTermScreen, default_fg, default_bg: ^VTerm_Color) ---
+	vterm_screen_reset :: proc(screen: VTermScreen, hard: c.int) ---
+	vterm_screen_enable_altscreen :: proc(screen: VTermScreen, altscreen: c.int) ---
+	vterm_screen_flush_damage :: proc(screen: VTermScreen) ---
+	vterm_screen_set_damage_merge :: proc(screen: VTermScreen, size: c.int) ---
+	vterm_screen_set_callbacks :: proc(screen: VTermScreen, callbacks: ^VTerm_Screen_Callbacks, user: rawptr) ---
+	vterm_screen_get_cell :: proc(screen: VTermScreen, pos: VTerm_Pos, cell: ^VTerm_Screen_Cell) -> c.int ---
+	vterm_screen_is_eol :: proc(screen: VTermScreen, pos: VTerm_Pos) -> c.int ---
+	vterm_screen_convert_color_to_rgb :: proc(screen: VTermScreen, col: ^VTerm_Color) ---
+	vterm_screen_set_default_colors :: proc(screen: VTermScreen, default_fg, default_bg: ^VTerm_Color) ---
 
 	// State layer.
-	vterm_state_get_cursorpos        :: proc(state: VTermState, cursorpos: ^VTerm_Pos) ---
-	vterm_state_get_default_colors   :: proc(state: VTermState, fg, bg: ^VTerm_Color) ---
-	vterm_state_set_default_colors   :: proc(state: VTermState, fg, bg: ^VTerm_Color) ---
+	vterm_state_get_cursorpos :: proc(state: VTermState, cursorpos: ^VTerm_Pos) ---
+	vterm_state_get_default_colors :: proc(state: VTermState, fg, bg: ^VTerm_Color) ---
+	vterm_state_set_default_colors :: proc(state: VTermState, fg, bg: ^VTerm_Color) ---
 	vterm_state_convert_color_to_rgb :: proc(state: VTermState, col: ^VTerm_Color) ---
 }

@@ -14,7 +14,8 @@ import "core:testing"
 import "core:thread"
 import ak "ingot:accesskit"
 
-@(private = "file") Stress_Ctx :: struct {
+@(private = "file")
+Stress_Ctx :: struct {
 	produced: int, // atomic
 	done:     bool, // atomic
 }

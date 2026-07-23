@@ -7,7 +7,13 @@ package sys
 
 // open_file_dialog on web reports "no dialog available". Use canvas
 // drag-and-drop instead (see gfx.GetDroppedFileData).
-open_file_dialog :: proc(title: string, allocator := context.allocator) -> (path: string, ok: bool) {
+open_file_dialog :: proc(
+	title: string,
+	allocator := context.allocator,
+) -> (
+	path: string,
+	ok: bool,
+) {
 	assert(len(title) < 256, "open_file_dialog: unreasonable title length")
 	assert(allocator.procedure != nil, "open_file_dialog: nil allocator")
 	return "", false
@@ -19,7 +25,10 @@ save_file_dialog :: proc(
 	title: string,
 	default_name: string,
 	allocator := context.allocator,
-) -> (path: string, ok: bool) {
+) -> (
+	path: string,
+	ok: bool,
+) {
 	assert(len(title) < 256, "save_file_dialog: unreasonable title length")
 	assert(len(default_name) < 256, "save_file_dialog: unreasonable name length")
 	return "", false

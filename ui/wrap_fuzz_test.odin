@@ -33,7 +33,15 @@ fuzz_wrap_malformed_utf8 :: proc(t: ^testing.T) {
 		prev := 0
 		for ln, i in lines {
 			ok := ln.start <= ln.end && ln.end <= len(text) && ln.start >= prev
-			testing.expectf(t, ok, "seed=0x3 iter=%d line=%d bad range %v for %d bytes", iter, i, ln, len(text))
+			testing.expectf(
+				t,
+				ok,
+				"seed=0x3 iter=%d line=%d bad range %v for %d bytes",
+				iter,
+				i,
+				ln,
+				len(text),
+			)
 			if !ok do return
 			prev = ln.start
 		}
@@ -62,7 +70,14 @@ fuzz_caret_helpers_arbitrary_offsets :: proc(t: ^testing.T) {
 		row, col := caret_row_col(text, clamped)
 		ok &&= row >= 0 && col >= 0
 		ok &&= in_range(caret_from_row_col(text, row, col), len(text))
-		testing.expectf(t, ok, "seed=0x4 iter=%d pos=%d caret invariant broken for %d bytes", iter, pos, len(text))
+		testing.expectf(
+			t,
+			ok,
+			"seed=0x4 iter=%d pos=%d caret invariant broken for %d bytes",
+			iter,
+			pos,
+			len(text),
+		)
 		if !ok do return
 		free_all(context.temp_allocator)
 	}
@@ -79,7 +94,8 @@ fuzz_markdown_parsers_random_bytes :: proc(t: ^testing.T) {
 		display_len := spans_display_len(spans)
 		ok := display_len >= 0 && display_len <= len(line)
 		for span in spans {
-			ok &&= span.raw_start >= 0 && span.raw_end <= len(line) && span.raw_start <= span.raw_end
+			ok &&=
+				span.raw_start >= 0 && span.raw_end <= len(line) && span.raw_start <= span.raw_end
 		}
 		display_position := raw_to_display(spans, testx.int_range(&p, 0, len(line) + 2))
 		ok &&= display_position >= 0 && display_position <= display_len
@@ -94,7 +110,13 @@ fuzz_markdown_parsers_random_bytes :: proc(t: ^testing.T) {
 		for start in starts {
 			ok &&= start >= 0 && start <= len(line)
 		}
-		testing.expectf(t, ok, "seed=0x5 iter=%d markdown invariant broken for %d bytes", iter, len(line))
+		testing.expectf(
+			t,
+			ok,
+			"seed=0x5 iter=%d markdown invariant broken for %d bytes",
+			iter,
+			len(line),
+		)
 		if !ok do return
 		free_all(context.temp_allocator)
 	}

@@ -20,79 +20,79 @@ set_ui_scale :: proc(scale: f32) {
 	g_ui_scale = s
 
 	// Font sizes.
-	FONT_SIZE       = i32(16.0 * s + 0.5)
+	FONT_SIZE = i32(16.0 * s + 0.5)
 	FONT_SIZE_LARGE = i32(20.0 * s + 0.5)
 	FONT_SIZE_SMALL = i32(13.0 * s + 0.5)
-	LINE_HEIGHT     = i32(22.0 * s + 0.5)
+	LINE_HEIGHT = i32(22.0 * s + 0.5)
 
 	// Embedded terminal / nvim grid metrics.
 	NVIM_FONT_SIZE = i32(16.0 * s + 0.5)
-	NVIM_CELL_PAD  = i32(6.0 * s + 0.5)
-	NVIM_MARGIN    = i32(10.0 * s + 0.5)
+	NVIM_CELL_PAD = i32(6.0 * s + 0.5)
+	NVIM_MARGIN = i32(10.0 * s + 0.5)
 
 	// General layout.
-	TAB_BAR_HEIGHT      = i32(35.0 * s + 0.5)
-	CAPTION_BTN_W       = i32(46.0 * s + 0.5)
-	INPUT_BAR_HEIGHT    = i32(50.0 * s + 0.5)
-	PADDING             = i32(10.0 * s + 0.5)
-	TAB_WIDTH           = i32(180.0 * s + 0.5)
-	TAB_MIN_WIDTH       = i32(70.0 * s + 0.5)
-	TAB_CLOSE_SIZE      = i32(16.0 * s + 0.5)
-	TAB_ICON_SIZE       = i32(18.0 * s + 0.5)
+	TAB_BAR_HEIGHT = i32(35.0 * s + 0.5)
+	CAPTION_BTN_W = i32(46.0 * s + 0.5)
+	INPUT_BAR_HEIGHT = i32(50.0 * s + 0.5)
+	PADDING = i32(10.0 * s + 0.5)
+	TAB_WIDTH = i32(180.0 * s + 0.5)
+	TAB_MIN_WIDTH = i32(70.0 * s + 0.5)
+	TAB_CLOSE_SIZE = i32(16.0 * s + 0.5)
+	TAB_ICON_SIZE = i32(18.0 * s + 0.5)
 	COMMAND_ITEM_HEIGHT = i32(28.0 * s + 0.5)
-	POPUP_MAX_WIDTH     = i32(400.0 * s + 0.5)
-	SCROLL_SPEED        = 15.0 * s
+	POPUP_MAX_WIDTH = i32(400.0 * s + 0.5)
+	SCROLL_SPEED = 15.0 * s
 
 	// Flat chat messages.
-	CHAT_MAX_W          = i32(860.0 * s + 0.5)
-	MSG_GAP             = i32(14.0 * s + 0.5)
-	USER_CARD_PAD_H     = i32(12.0 * s + 0.5)
-	USER_CARD_PAD_V     = i32(8.0 * s + 0.5)
+	CHAT_MAX_W = i32(860.0 * s + 0.5)
+	MSG_GAP = i32(14.0 * s + 0.5)
+	USER_CARD_PAD_H = i32(12.0 * s + 0.5)
+	USER_CARD_PAD_V = i32(8.0 * s + 0.5)
 	USER_CARD_RADIUS_PX = 8.0 * s
-	USER_CARD_MIN_W     = i32(48.0 * s + 0.5)
+	USER_CARD_MIN_W = i32(48.0 * s + 0.5)
 
 	// Unified panel/list metrics.
-	ROW_H_SM       = i32(24.0 * s + 0.5)
-	ROW_H_MD       = i32(28.0 * s + 0.5)
+	ROW_H_SM = i32(24.0 * s + 0.5)
+	ROW_H_MD = i32(28.0 * s + 0.5)
 	PANEL_HEADER_H = i32(34.0 * s + 0.5)
 	CARD_RADIUS_PX = 6.0 * s
 
 	// Form controls and popups.
-	CONTROL_BOX    = i32(18.0 * s + 0.5)
-	CONTROL_GAP    = i32(8.0 * s + 0.5)
+	CONTROL_BOX = i32(18.0 * s + 0.5)
+	CONTROL_GAP = i32(8.0 * s + 0.5)
 	SLIDER_TRACK_H = i32(4.0 * s + 0.5)
-	SLIDER_KNOB_R  = 7.0 * s
-	MENU_ITEM_H    = i32(26.0 * s + 0.5)
-	MENU_PAD       = i32(4.0 * s + 0.5)
-	MENU_MIN_W     = i32(160.0 * s + 0.5)
-	TOOLTIP_PAD    = i32(6.0 * s + 0.5)
+	SLIDER_KNOB_R = 7.0 * s
+	MENU_ITEM_H = i32(26.0 * s + 0.5)
+	MENU_PAD = i32(4.0 * s + 0.5)
+	MENU_MIN_W = i32(160.0 * s + 0.5)
+	TOOLTIP_PAD = i32(6.0 * s + 0.5)
 
 	// Attachment / drop zone.
 	ATTACHMENT_CHIP_ROW_H = i32(28.0 * s + 0.5)
-	DROP_ZONE_H           = i32(56.0 * s + 0.5)
+	DROP_ZONE_H = i32(56.0 * s + 0.5)
 
 	// Tool cards and markdown.
-	TOOL_BORDER_W   = i32(2.0 * s + 0.5)
+	TOOL_BORDER_W = i32(2.0 * s + 0.5)
 	TOOL_CARD_PAD_V = i32(4.0 * s + 0.5)
 	TOOL_CARD_PAD_H = i32(8.0 * s + 0.5)
-	TOOL_CARD_GAP   = i32(4.0 * s + 0.5)
-	CODE_BLOCK_PAD  = i32(8.0 * s + 0.5)
-	BULLET_INDENT   = i32(20.0 * s + 0.5)
-	TABLE_CELL_PAD  = i32(8.0 * s + 0.5)
+	TOOL_CARD_GAP = i32(4.0 * s + 0.5)
+	CODE_BLOCK_PAD = i32(8.0 * s + 0.5)
+	BULLET_INDENT = i32(20.0 * s + 0.5)
+	TABLE_CELL_PAD = i32(8.0 * s + 0.5)
 
 	// Plan sidebar.
-	PLAN_SIDEBAR_W           = i32(300.0 * s + 0.5)
+	PLAN_SIDEBAR_W = i32(300.0 * s + 0.5)
 	PLAN_SIDEBAR_COLLAPSED_W = i32(30.0 * s + 0.5)
-	PLAN_SIDEBAR_ROW_H       = i32(22.0 * s + 0.5)
-	PLAN_TITLE_ACCENT_W      = i32(3.0 * s + 0.5)
-	PLAN_TITLE_PAD           = i32(8.0 * s + 0.5)
+	PLAN_SIDEBAR_ROW_H = i32(22.0 * s + 0.5)
+	PLAN_TITLE_ACCENT_W = i32(3.0 * s + 0.5)
+	PLAN_TITLE_PAD = i32(8.0 * s + 0.5)
 
 	// Debug sidebar.
-	DEBUG_SIDEBAR_W           = i32(320.0 * s + 0.5)
+	DEBUG_SIDEBAR_W = i32(320.0 * s + 0.5)
 	DEBUG_SIDEBAR_COLLAPSED_W = i32(30.0 * s + 0.5)
-	DEBUG_SIDEBAR_ROW_H       = i32(28.0 * s + 0.5)
-	DEBUG_TITLE_ACCENT_W      = i32(3.0 * s + 0.5)
-	DEBUG_TITLE_PAD           = i32(8.0 * s + 0.5)
+	DEBUG_SIDEBAR_ROW_H = i32(28.0 * s + 0.5)
+	DEBUG_TITLE_ACCENT_W = i32(3.0 * s + 0.5)
+	DEBUG_TITLE_PAD = i32(8.0 * s + 0.5)
 
 	// Shells panel.
 	SHELLS_PANEL_W = i32(360.0 * s + 0.5)
@@ -102,11 +102,11 @@ set_ui_scale :: proc(scale: f32) {
 
 	// Vortex connecting animation.
 	VORTEX_RADIUS = 56.0 * s
-	VORTEX_INNER  = 12.0 * s
+	VORTEX_INNER = 12.0 * s
 
 	// Wave-bar animation.
-	WAVE_BAR_W     = i32(3.0 * s + 0.5)
-	WAVE_BAR_GAP   = i32(3.0 * s + 0.5)
+	WAVE_BAR_W = i32(3.0 * s + 0.5)
+	WAVE_BAR_GAP = i32(3.0 * s + 0.5)
 	WAVE_BAR_MAX_H = i32(18.0 * s + 0.5)
 	WAVE_BAR_MIN_H = i32(3.0 * s + 0.5)
 

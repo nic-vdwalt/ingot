@@ -44,7 +44,9 @@ stream_slot_reports_bounded_exhaustion :: proc(t: ^testing.T) {
 
 @(test)
 stream_slot_honours_uniform_alignment :: proc(t: ^testing.T) {
-	slot := Stream_Slot{state = .Recording}
+	slot := Stream_Slot {
+		state = .Recording,
+	}
 	first, first_ok := _stream_slot_reserve_uniform(&slot, 48, 256, 1024)
 	second, second_ok := _stream_slot_reserve_uniform(&slot, 48, 256, 1024)
 	third, third_ok := _stream_slot_reserve_uniform(&slot, 48, 256, 1024)
@@ -56,7 +58,10 @@ stream_slot_honours_uniform_alignment :: proc(t: ^testing.T) {
 
 @(test)
 stream_slot_failed_indexed_reservation_is_atomic :: proc(t: ^testing.T) {
-	slot := Stream_Slot{state = .Recording, geometry_write = 40}
+	slot := Stream_Slot {
+		state          = .Recording,
+		geometry_write = 40,
+	}
 	write_before := slot.geometry_write
 	_, _, ok := _stream_slot_reserve_indexed(&slot, 20, 12, 64)
 	testing.expect(t, !ok)
@@ -65,7 +70,10 @@ stream_slot_failed_indexed_reservation_is_atomic :: proc(t: ^testing.T) {
 
 @(test)
 stream_slot_zero_ticket_preserves_recording_ownership :: proc(t: ^testing.T) {
-	slot := Stream_Slot{state = .Recording, geometry_write = 128}
+	slot := Stream_Slot {
+		state          = .Recording,
+		geometry_write = 128,
+	}
 	testing.expect(t, !_stream_slot_submit(&slot, 0))
 	testing.expect_value(t, slot.state, Stream_Slot_State.Recording)
 	testing.expect_value(t, slot.geometry_write, u64(128))
@@ -73,7 +81,9 @@ stream_slot_zero_ticket_preserves_recording_ownership :: proc(t: ^testing.T) {
 
 @(test)
 stream_slot_intermediate_work_stays_in_recording_epoch :: proc(t: ^testing.T) {
-	slot := Stream_Slot{state = .Recording}
+	slot := Stream_Slot {
+		state = .Recording,
+	}
 	_, _, first_ok := _stream_slot_reserve_indexed(&slot, 64, 24, 1024)
 	write_after_intermediate := slot.geometry_write
 	_, _, second_ok := _stream_slot_reserve_indexed(&slot, 64, 24, 1024)

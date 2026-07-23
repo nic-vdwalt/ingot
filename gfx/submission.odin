@@ -48,14 +48,16 @@ _submission_track :: proc(tracker: ^Submission_Tracker) -> u64 {
 	index := (tracker.head + tracker.count) % MAX_IN_FLIGHT_SUBMISSIONS
 	ticket := &tracker.tickets[index]
 	assert(!ticket.active)
-	ticket^ = {id = tracker.next_id, active = true}
+	ticket^ = {
+		id     = tracker.next_id,
+		active = true,
+	}
 	tracker.next_id += 1
 	tracker.count += 1
-	wg.QueueOnSubmittedWorkDone(g.queue, {
-		mode = .AllowSpontaneos,
-		callback = _submission_done,
-		userdata1 = ticket,
-	})
+	wg.QueueOnSubmittedWorkDone(
+		g.queue,
+		{mode = .AllowSpontaneos, callback = _submission_done, userdata1 = ticket},
+	)
 	assert(tracker.count <= MAX_IN_FLIGHT_SUBMISSIONS)
 	return ticket.id
 }

@@ -4,9 +4,12 @@ MAX_DROPPED_FILES :: 16
 MAX_DROPPED_PATH_BYTES :: 64 * 1024
 DROP_NAME_MAX :: 256
 
-@(private) g_drop_hover_staged: bool
-@(private) g_drop_hover_frame: bool
-@(private) g_drop_ready: bool
+@(private)
+g_drop_hover_staged: bool
+@(private)
+g_drop_hover_frame: bool
+@(private)
+g_drop_ready: bool
 
 IsFileDragOver :: proc() -> bool {
 	return g_drop_hover_frame

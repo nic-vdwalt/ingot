@@ -14,14 +14,14 @@ import "core:strings"
 foreign import wsjs "ingot_ws"
 @(default_calling_convention = "c")
 foreign wsjs {
-	ingot_ws_open        :: proc(url: [^]byte, url_len: i32) -> i32 ---
-	ingot_ws_send_text   :: proc(id: i32, ptr: [^]byte, n: i32) -> i32 ---
+	ingot_ws_open :: proc(url: [^]byte, url_len: i32) -> i32 ---
+	ingot_ws_send_text :: proc(id: i32, ptr: [^]byte, n: i32) -> i32 ---
 	ingot_ws_send_binary :: proc(id: i32, ptr: [^]byte, n: i32) -> i32 ---
-	ingot_ws_close       :: proc(id: i32) ---
-	ingot_ws_state       :: proc(id: i32) -> i32 --- // 0 disc,1 conn,2 open,3 err
-	ingot_ws_recv_len    :: proc(id: i32) -> i32 --- // -1 none
+	ingot_ws_close :: proc(id: i32) ---
+	ingot_ws_state :: proc(id: i32) -> i32 --- // 0 disc,1 conn,2 open,3 err
+	ingot_ws_recv_len :: proc(id: i32) -> i32 --- // -1 none
 	ingot_ws_recv_binary :: proc(id: i32) -> i32 --- // 1 if next msg is binary
-	ingot_ws_recv_copy   :: proc(id: i32, dst: [^]byte, cap: i32) -> i32 --- // dequeues
+	ingot_ws_recv_copy :: proc(id: i32, dst: [^]byte, cap: i32) -> i32 --- // dequeues
 }
 
 WS_State :: enum {
@@ -32,7 +32,7 @@ WS_State :: enum {
 	Error,
 }
 
-WS_OP_TEXT   :: 0x1
+WS_OP_TEXT :: 0x1
 WS_OP_BINARY :: 0x2
 WS_MAX_PAYLOAD :: 1 << 20
 
@@ -79,13 +79,17 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 // ws_poll_state refreshes ws.state from the JS socket.
 @(private = "file")
 ws_poll_state :: proc(ws: ^WebSocket) {
-	if ws.id < 0 { ws.state = .Error; return }
+	if ws.id < 0 {ws.state = .Error; return}
 	prev := ws.state
 	switch ingot_ws_state(ws.id) {
-	case 0: ws.state = .Disconnected
-	case 1: ws.state = .Connecting
-	case 2: ws.state = .Connected
-	case:   ws.state = .Error
+	case 0:
+		ws.state = .Disconnected
+	case 1:
+		ws.state = .Connecting
+	case 2:
+		ws.state = .Connected
+	case:
+		ws.state = .Error
 	}
 	// Bump the generation on each transition into Connected so consumers can
 	// re-establish subscriptions, mirroring the native backend.
@@ -135,7 +139,7 @@ ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
 		is_bin := ingot_ws_recv_binary(ws.id) == 1
 		buf := make([]byte, int(n) if n > 0 else 0)
 		got := ingot_ws_recv_copy(ws.id, raw_data(buf) if n > 0 else nil, i32(len(buf)))
-		if got < 0 { if len(buf) > 0 do delete(buf); break }
+		if got < 0 {if len(buf) > 0 do delete(buf); break}
 		append(&msgs, WS_Message{data = string(buf[:int(got)]), binary = is_bin})
 	}
 	if len(msgs) == 0 do return nil

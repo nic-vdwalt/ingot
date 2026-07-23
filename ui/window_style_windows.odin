@@ -2,15 +2,15 @@
 // LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "ingot:gfx"
 import win32 "core:sys/windows"
+import rl "ingot:gfx"
 
 // DWM attribute constants (not in core:sys/windows).
 DWMWA_USE_IMMERSIVE_DARK_MODE :: 20
 DWMWA_SYSTEMBACKDROP_TYPE :: 38
 
 // Backdrop types for Windows 11.
-DWMSBT_MAINWINDOW :: 2   // Mica
+DWMSBT_MAINWINDOW :: 2 // Mica
 DWMSBT_TABBEDWINDOW :: 4 // Mica Alt (tabbed)
 
 foreign import dwmapi "system:dwmapi.lib"

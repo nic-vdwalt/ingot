@@ -13,7 +13,9 @@ import "ingot:testx"
 fuzz_idle_animation_lifecycle :: proc(t: ^testing.T) {
 	p := testx.prng_make(0x11)
 	for _ in 0 ..< 2_000 {
-		s := Idle_State{strategy = .Event_Driven}
+		s := Idle_State {
+			strategy = .Event_Driven,
+		}
 		speed := f32(testx.int_range(&p, 1, 30)) // widget speeds: 6..14
 		dt := f32(testx.int_range(&p, 1, 50)) / 1000.0 // 1..50 ms frames
 		anim: f32 = 0
@@ -39,7 +41,9 @@ fuzz_idle_animation_lifecycle :: proc(t: ^testing.T) {
 fuzz_idle_deadline_wakeups :: proc(t: ^testing.T) {
 	p := testx.prng_make(0x13)
 	for _ in 0 ..< 2_000 {
-		s := Idle_State{strategy = .Event_Driven}
+		s := Idle_State {
+			strategy = .Event_Driven,
+		}
 		// Positive base time: a deadline of 0 is the "none" sentinel.
 		now := 10.0
 		// Drain any settle allowance so the pump is truly idle.

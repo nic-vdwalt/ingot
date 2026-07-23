@@ -45,13 +45,23 @@ draw_debug_overlay :: proc(x, y: i32) -> i32 {
 	}
 	push(rows[:], &n, "vertices", fmt.tprintf("%d", s.vertices_uploaded))
 	push(rows[:], &n, "uploaded", fmt.tprintf("%d KB", s.bytes_uploaded / 1024))
-	push(rows[:], &n, "buffers new/grown", fmt.tprintf("%d / %d", s.buffer_creations, s.buffer_growths))
+	push(
+		rows[:],
+		&n,
+		"buffers new/grown",
+		fmt.tprintf("%d / %d", s.buffer_creations, s.buffer_growths),
+	)
 	push(rows[:], &n, "pipeline switches", fmt.tprintf("%d", s.pipeline_switches))
 	push(rows[:], &n, "render passes", fmt.tprintf("%d", s.render_passes))
 	push(rows[:], &n, "peak geom arena", fmt.tprintf("%d KB", s.peak_geometry_arena_bytes / 1024))
 	entries, evictions := measure_cache_stats()
 	push(rows[:], &n, "measure cache", fmt.tprintf("%d (%d evicted)", entries, evictions))
-	push(rows[:], &n, "overlay cmds", fmt.tprintf("%d (%d dropped)", overlay_cmd_count(), overlay_dropped()))
+	push(
+		rows[:],
+		&n,
+		"overlay cmds",
+		fmt.tprintf("%d (%d dropped)", overlay_cmd_count(), overlay_dropped()),
+	)
 	push(rows[:], &n, "route claims", fmt.tprintf("%d", route_claim_count()))
 
 	h := i32(n) * row_h + pad * 2 + FONT_SIZE_SMALL + sc(6)
@@ -68,8 +78,15 @@ draw_debug_overlay :: proc(x, y: i32) -> i32 {
 	ty += FONT_SIZE_SMALL + sc(6)
 
 	for i in 0 ..< n {
-		kv_row(x + pad, ty, w - pad * 2, rows[i].key, rows[i].val,
-			theme.fg_secondary, theme.fg_primary)
+		kv_row(
+			x + pad,
+			ty,
+			w - pad * 2,
+			rows[i].key,
+			rows[i].val,
+			theme.fg_secondary,
+			theme.fg_primary,
+		)
 		ty += row_h
 	}
 	return h

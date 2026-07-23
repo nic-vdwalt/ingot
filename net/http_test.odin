@@ -34,7 +34,12 @@ test_request_rejects_invalid_headers_and_oversized_body :: proc(t: ^testing.T) {
 @(test)
 test_fetch_result_preserves_http_status :: proc(t: ^testing.T) {
 	text := "forbidden"
-	result := Fetch_Result{tag = 7, status = 403, body = transmute([]u8)text, ok = true}
+	result := Fetch_Result {
+		tag    = 7,
+		status = 403,
+		body   = transmute([]u8)text,
+		ok     = true,
+	}
 	testing.expect_value(t, result.status, u16(403))
 	testing.expect(t, result.ok)
 }

@@ -9,7 +9,13 @@ import "core:strings"
 
 // open_file_dialog shows the OS open-file dialog; blocks until dismissed.
 // ok = false when the user cancels or the dialog cannot be shown.
-open_file_dialog :: proc(title: string, allocator := context.allocator) -> (path: string, ok: bool) {
+open_file_dialog :: proc(
+	title: string,
+	allocator := context.allocator,
+) -> (
+	path: string,
+	ok: bool,
+) {
 	assert(len(title) < 256, "open_file_dialog: unreasonable title length")
 	script := strings.concatenate(
 		{"POSIX path of (choose file with prompt \"", _dialog_escape(title), "\")"},
@@ -23,13 +29,19 @@ save_file_dialog :: proc(
 	title: string,
 	default_name: string,
 	allocator := context.allocator,
-) -> (path: string, ok: bool) {
+) -> (
+	path: string,
+	ok: bool,
+) {
 	assert(len(title) < 256, "save_file_dialog: unreasonable title length")
 	assert(len(default_name) < 256, "save_file_dialog: unreasonable name length")
 	script := strings.concatenate(
 		{
-			"POSIX path of (choose file name with prompt \"", _dialog_escape(title),
-			"\" default name \"", _dialog_escape(default_name), "\")",
+			"POSIX path of (choose file name with prompt \"",
+			_dialog_escape(title),
+			"\" default name \"",
+			_dialog_escape(default_name),
+			"\")",
 		},
 		context.temp_allocator,
 	)

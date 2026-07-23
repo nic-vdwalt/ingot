@@ -13,9 +13,9 @@ package term
 // term_init_emulator/term_free_emulator set up the exact production emulator
 // without a shell process. Seeds are fixed so failures reproduce exactly.
 
+import lv "../libvterm"
 import "core:c"
 import "core:testing"
-import lv "../libvterm"
 import "ingot:testx"
 
 // ---------------------------------------------------------------------------
@@ -25,10 +25,41 @@ import "ingot:testx"
 // Parameter values that stress CSI arithmetic: missing, zero, huge, negative,
 // and INT_MAX-adjacent (overflow in row/col math).
 @(private = "file")
-FUZZ_CSI_PARAMS := [?]string{"", "0", "1", "5", "127", "9999999", "2147483647", "2147483648", "-5", "65535"}
+FUZZ_CSI_PARAMS := [?]string {
+	"",
+	"0",
+	"1",
+	"5",
+	"127",
+	"9999999",
+	"2147483647",
+	"2147483648",
+	"-5",
+	"65535",
+}
 
 @(private = "file")
-FUZZ_CSI_FINALS := [?]string{"H", "J", "K", "m", "r", "A", "B", "C", "D", "L", "M", "@", "P", "S", "T", "d", "G", "X", "f"}
+FUZZ_CSI_FINALS := [?]string {
+	"H",
+	"J",
+	"K",
+	"m",
+	"r",
+	"A",
+	"B",
+	"C",
+	"D",
+	"L",
+	"M",
+	"@",
+	"P",
+	"S",
+	"T",
+	"d",
+	"G",
+	"X",
+	"f",
+}
 
 @(private = "file")
 FUZZ_DEC_MODES := [?]string{"?1049h", "?1049l", "?25h", "?25l", "?47h", "?47l", "?2004h", "?2004l"}
@@ -36,7 +67,19 @@ FUZZ_DEC_MODES := [?]string{"?1049h", "?1049l", "?25h", "?25l", "?47h", "?47l", 
 // Wide CJK chars, combining marks, and boundary code points — exercises
 // width-2 cell handling and the chars[6] array in VTerm_Screen_Cell.
 @(private = "file")
-FUZZ_TEXT_ATOMS := [?]string{"漢", "字", "e\u0301", "a\u0300\u0301\u0302", "\u00ff", "\U0001F600", "x", " ", "\r\n", "\t", "\u2500"}
+FUZZ_TEXT_ATOMS := [?]string {
+	"漢",
+	"字",
+	"e\u0301",
+	"a\u0300\u0301\u0302",
+	"\u00ff",
+	"\U0001F600",
+	"x",
+	" ",
+	"\r\n",
+	"\t",
+	"\u2500",
+}
 
 @(private = "file")
 fuzz_vt_append_csi :: proc(p: ^testx.Prng, buf: ^[dynamic]u8) {
@@ -66,7 +109,7 @@ fuzz_vt_append_osc_title :: proc(p: ^testx.Prng, buf: ^[dynamic]u8, maximum_titl
 	case 1:
 		append(buf, 0x1B, '\\') // ST terminator
 	case:
-		// Unterminated — the next document/garbage decides what happens.
+	// Unterminated — the next document/garbage decides what happens.
 	}
 }
 
@@ -230,7 +273,11 @@ fuzz_vterm_ingest :: proc(t: ^testing.T) {
 				ts.sb_view_offset = testx.int_range(&p, 0, len(ts.sb_lines) + 1)
 			}
 			if testx.int_range(&p, 0, 3) == 0 {
-				lv.vterm_set_size(ts.vt, c.int(testx.int_range(&p, 1, 61)), c.int(testx.int_range(&p, 1, 141)))
+				lv.vterm_set_size(
+					ts.vt,
+					c.int(testx.int_range(&p, 1, 61)),
+					c.int(testx.int_range(&p, 1, 141)),
+				)
 			}
 			fuzz_vt_check_invariants(t, ts)
 		}
@@ -266,7 +313,11 @@ fuzz_vterm_scrollback_churn :: proc(t: ^testing.T) {
 	// shrinking pushes screen rows back out.
 	for _ in 0 ..< 200 {
 		ts.sb_view_offset = testx.int_range(&p, 0, len(ts.sb_lines) + 1)
-		lv.vterm_set_size(ts.vt, c.int(testx.int_range(&p, 1, 61)), c.int(testx.int_range(&p, 1, 31)))
+		lv.vterm_set_size(
+			ts.vt,
+			c.int(testx.int_range(&p, 1, 61)),
+			c.int(testx.int_range(&p, 1, 31)),
+		)
 		fuzz_vt_check_invariants(t, ts)
 	}
 

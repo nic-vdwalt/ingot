@@ -8,8 +8,8 @@ package ui
 // by the app in its SetConfigFlags) and translucent surface fills, the app's
 // large backgrounds blend into the frosted blur.
 
-import NS "core:sys/darwin/Foundation"
 import "base:intrinsics"
+import NS "core:sys/darwin/Foundation"
 import rl "ingot:gfx"
 
 // Typed Objective-C class wrappers so intrinsics.objc_send can resolve the
@@ -41,13 +41,13 @@ NS_Color :: struct {
 
 // NSVisualEffect* constants (stable on arm64 + x86_64).
 NS_VE_BLENDING_BEHIND_WINDOW :: 0 // NSVisualEffectBlendingModeBehindWindow
-NS_VE_STATE_ACTIVE           :: 1 // NSVisualEffectStateActive
+NS_VE_STATE_ACTIVE :: 1 // NSVisualEffectStateActive
 // Sidebar (7) produces a cool-neutral dark frosted backdrop in both windowed
 // and fullscreen modes.
 NS_VE_MATERIAL :: 7 // NSVisualEffectMaterialSidebar
 
 // NSView autoresizing mask bits.
-NS_VIEW_WIDTH_SIZABLE  :: 2  // NSViewWidthSizable
+NS_VIEW_WIDTH_SIZABLE :: 2 // NSViewWidthSizable
 NS_VIEW_HEIGHT_SIZABLE :: 16 // NSViewHeightSizable
 
 apply_window_style :: proc() {
@@ -79,13 +79,21 @@ apply_window_style :: proc() {
 	intrinsics.objc_send(nil, fx, "setMaterial:", i64(NS_VE_MATERIAL))
 	intrinsics.objc_send(nil, fx, "setBlendingMode:", i64(NS_VE_BLENDING_BEHIND_WINDOW))
 	intrinsics.objc_send(nil, fx, "setState:", i64(NS_VE_STATE_ACTIVE))
-	intrinsics.objc_send(nil, fx, "setAutoresizingMask:",
-		u64(NS_VIEW_WIDTH_SIZABLE | NS_VIEW_HEIGHT_SIZABLE))
+	intrinsics.objc_send(
+		nil,
+		fx,
+		"setAutoresizingMask:",
+		u64(NS_VIEW_WIDTH_SIZABLE | NS_VIEW_HEIGHT_SIZABLE),
+	)
 
 	// Reparent: the effect view becomes the content view and the GL view rides
 	// on top, resizing with it.
-	intrinsics.objc_send(nil, content, "setAutoresizingMask:",
-		u64(NS_VIEW_WIDTH_SIZABLE | NS_VIEW_HEIGHT_SIZABLE))
+	intrinsics.objc_send(
+		nil,
+		content,
+		"setAutoresizingMask:",
+		u64(NS_VIEW_WIDTH_SIZABLE | NS_VIEW_HEIGHT_SIZABLE),
+	)
 	intrinsics.objc_send(nil, win, "setContentView:", fx)
 	intrinsics.objc_send(nil, fx, "addSubview:", content)
 }

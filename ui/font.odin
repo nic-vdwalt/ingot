@@ -1,8 +1,8 @@
 // LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "ingot:gfx"
 import "core:strings"
+import rl "ingot:gfx"
 
 // Embed the TTF font at compile time (Nerd Font Mono — single-cell-width icons).
 FONT_DATA := #load("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
@@ -93,7 +93,7 @@ Codepoint_Range :: struct {
 }
 
 // Codepoint ranges to load — standard Unicode + Nerd Font PUA glyphs.
-CODEPOINT_RANGES :: [?]Codepoint_Range{
+CODEPOINT_RANGES :: [?]Codepoint_Range {
 	// Standard Unicode
 	{0x0020, 0x007E}, // Basic Latin
 	{0x00A0, 0x00FF}, // Latin-1 Supplement
@@ -156,7 +156,7 @@ init_font :: proc() {
 get_font :: proc(size: i32) -> rl.Font {
 	if f, ok := font_cache[size]; ok do return f
 
-	px := i32(f32(size)*font_dpi + 0.5)
+	px := i32(f32(size) * font_dpi + 0.5)
 	f := rl.LoadFontFromMemory(
 		".ttf",
 		raw_data(FONT_DATA),
@@ -225,7 +225,10 @@ measure_text :: proc(text: cstring, size: i32) -> i32 {
 	// Only memoize once a real font is loaded; the backend / pre-init path is
 	// cheap and keeps window-less entries out of the cache.
 	if !font_loaded do return measure_raw(text, size)
-	key := Measure_Key{text = string(text), size = size}
+	key := Measure_Key {
+		text = string(text),
+		size = size,
+	}
 	if cached, ok := measure_cache[key]; ok {
 		return cached
 	}
@@ -278,6 +281,12 @@ rune_width :: proc(r: rune, size: i32) -> i32 {
 // Draw a single Unicode codepoint using the custom font.
 draw_codepoint :: proc(codepoint: rune, x, y: i32, size: i32, color: rl.Color) {
 	if font_loaded {
-		rl.DrawTextCodepoint(get_font(size), codepoint, rl.Vector2{f32(x), f32(y)}, f32(size), color)
+		rl.DrawTextCodepoint(
+			get_font(size),
+			codepoint,
+			rl.Vector2{f32(x), f32(y)},
+			f32(size),
+			color,
+		)
 	}
 }

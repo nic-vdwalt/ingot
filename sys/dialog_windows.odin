@@ -7,10 +7,17 @@ import "core:strings"
 import win "core:sys/windows"
 
 // _DIALOG_PATH_CAP bounds the returned path buffer (wide chars).
-@(private) _DIALOG_PATH_CAP :: 1024
+@(private)
+_DIALOG_PATH_CAP :: 1024
 
 // open_file_dialog shows the OS open-file dialog; blocks until dismissed.
-open_file_dialog :: proc(title: string, allocator := context.allocator) -> (path: string, ok: bool) {
+open_file_dialog :: proc(
+	title: string,
+	allocator := context.allocator,
+) -> (
+	path: string,
+	ok: bool,
+) {
 	assert(len(title) < 256, "open_file_dialog: unreasonable title length")
 	buffer: [_DIALOG_PATH_CAP]u16
 	ofn := win.OPENFILENAMEW {
@@ -29,7 +36,10 @@ save_file_dialog :: proc(
 	title: string,
 	default_name: string,
 	allocator := context.allocator,
-) -> (path: string, ok: bool) {
+) -> (
+	path: string,
+	ok: bool,
+) {
 	assert(len(title) < 256, "save_file_dialog: unreasonable title length")
 	assert(len(default_name) < _DIALOG_PATH_CAP, "save_file_dialog: name too long")
 	buffer: [_DIALOG_PATH_CAP]u16
@@ -50,7 +60,13 @@ save_file_dialog :: proc(
 }
 
 @(private)
-_dialog_wide_to_path :: proc(buffer: []u16, allocator := context.allocator) -> (path: string, ok: bool) {
+_dialog_wide_to_path :: proc(
+	buffer: []u16,
+	allocator := context.allocator,
+) -> (
+	path: string,
+	ok: bool,
+) {
 	assert(len(buffer) > 0, "_dialog_wide_to_path: empty buffer")
 	length := 0
 	for length < len(buffer) && buffer[length] != 0 do length += 1

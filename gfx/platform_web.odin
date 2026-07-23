@@ -19,64 +19,72 @@ import wg "vendor:wgpu"
 foreign import dom "ingot"
 @(default_calling_convention = "c")
 foreign dom {
-	@(link_name = "ingot_perf_now")           _js_perf_now   :: proc() -> f64 ---
-	@(link_name = "ingot_canvas_css_width")    _js_css_width  :: proc() -> f64 ---
-	@(link_name = "ingot_canvas_css_height")   _js_css_height :: proc() -> f64 ---
-	@(link_name = "ingot_device_pixel_ratio")  _js_dpr        :: proc() -> f64 ---
-	@(link_name = "ingot_set_cursor")          _js_set_cursor :: proc(cur: i32) ---
-	@(link_name = "ingot_clipboard_len")       _js_clipboard_len  :: proc() -> i32 ---
-	@(link_name = "ingot_clipboard_copy")      _js_clipboard_copy :: proc(dst: rawptr, cap: i32) -> i32 ---
-	@(link_name = "ingot_set_clipboard")       _js_set_clipboard  :: proc(text: cstring) ---
-	@(link_name = "ingot_web_input_frame_begin") _js_web_input_frame_begin :: proc() ---
-	@(link_name = "ingot_web_input_frame_end")   _js_web_input_frame_end   :: proc() ---
-	@(link_name = "ingot_web_input_sync") _js_web_input_sync :: proc(
-		form_ptr: rawptr, form_len: i32,
-		field_ptr: rawptr, field_len: i32,
-		name_ptr: rawptr, name_len: i32,
-		placeholder_ptr: rawptr, placeholder_len: i32,
-		value_ptr: rawptr, value_len: i32,
-		x, y, w, h, input_type, autocomplete, active: i32,
-	) -> i32 ---
-	@(link_name = "ingot_web_input_value_len") _js_web_input_value_len :: proc(field_ptr: rawptr, field_len: i32) -> i32 ---
-	@(link_name = "ingot_web_input_value_copy") _js_web_input_value_copy :: proc(field_ptr: rawptr, field_len: i32, dst: rawptr, cap: i32) -> i32 ---
-	@(link_name = "ingot_web_input_cursor") _js_web_input_cursor :: proc(field_ptr: rawptr, field_len: i32) -> i32 ---
-	@(link_name = "ingot_web_submit_sync") _js_web_submit_sync :: proc(
-		form_ptr: rawptr, form_len: i32,
-		label_ptr: rawptr, label_len: i32,
-		x, y, w, h, style, font_size, enabled: i32,
-	) -> i32 ---
-	@(link_name = "ingot_web_control_sync") _js_web_control_sync :: proc(
-		id_lo, id_hi, role: i32,
-		label_ptr: rawptr, label_len: i32,
-		x, y, w, h, state: i32,
-		value, lo, hi: f32,
-	) -> i32 ---
-	@(link_name = "ingot_web_control_value") _js_web_control_value :: proc(id_lo, id_hi: i32) -> f64 ---
-	@(link_name = "ingot_is_fullscreen")       _js_is_fullscreen     :: proc() -> i32 ---
-	@(link_name = "ingot_toggle_fullscreen")   _js_toggle_fullscreen :: proc() ---
-	@(link_name = "ingot_ime_rect")            _js_ime_rect          :: proc(x, y, w, h, active: i32) ---
-	@(link_name = "ingot_gamepad_state") _js_gamepad_state :: proc(
-		slot: i32,
-		buttons: [^]u8, buttons_cap: i32,
-		axes: [^]f32, axes_cap: i32,
-		name: [^]u8, name_cap: i32,
-	) -> i32 ---
-	@(link_name = "ingot_drop_count")    _js_drop_count     :: proc() -> i32 ---
-	@(link_name = "ingot_drop_name_len") _js_drop_name_len  :: proc(index: i32) -> i32 ---
-	@(link_name = "ingot_drop_name_copy") _js_drop_name_copy :: proc(index: i32, dst: rawptr, cap: i32) -> i32 ---
-	@(link_name = "ingot_drop_data_len")  _js_drop_data_len  :: proc(index: i32) -> i32 ---
-	@(link_name = "ingot_drop_data_copy") _js_drop_data_copy :: proc(index: i32, dst: rawptr, cap: i32) -> i32 ---
-	@(link_name = "ingot_drop_clear")     _js_drop_clear     :: proc() ---
+	@(link_name = "ingot_perf_now")
+	_js_perf_now :: proc() -> f64 ---
+	@(link_name = "ingot_canvas_css_width")
+	_js_css_width :: proc() -> f64 ---
+	@(link_name = "ingot_canvas_css_height")
+	_js_css_height :: proc() -> f64 ---
+	@(link_name = "ingot_device_pixel_ratio")
+	_js_dpr :: proc() -> f64 ---
+	@(link_name = "ingot_set_cursor")
+	_js_set_cursor :: proc(cur: i32) ---
+	@(link_name = "ingot_clipboard_len")
+	_js_clipboard_len :: proc() -> i32 ---
+	@(link_name = "ingot_clipboard_copy")
+	_js_clipboard_copy :: proc(dst: rawptr, cap: i32) -> i32 ---
+	@(link_name = "ingot_set_clipboard")
+	_js_set_clipboard :: proc(text: cstring) ---
+	@(link_name = "ingot_web_input_frame_begin")
+	_js_web_input_frame_begin :: proc() ---
+	@(link_name = "ingot_web_input_frame_end")
+	_js_web_input_frame_end :: proc() ---
+	@(link_name = "ingot_web_input_sync")
+	_js_web_input_sync :: proc(form_ptr: rawptr, form_len: i32, field_ptr: rawptr, field_len: i32, name_ptr: rawptr, name_len: i32, placeholder_ptr: rawptr, placeholder_len: i32, value_ptr: rawptr, value_len: i32, x, y, w, h, input_type, autocomplete, active: i32) -> i32 ---
+	@(link_name = "ingot_web_input_value_len")
+	_js_web_input_value_len :: proc(field_ptr: rawptr, field_len: i32) -> i32 ---
+	@(link_name = "ingot_web_input_value_copy")
+	_js_web_input_value_copy :: proc(field_ptr: rawptr, field_len: i32, dst: rawptr, cap: i32) -> i32 ---
+	@(link_name = "ingot_web_input_cursor")
+	_js_web_input_cursor :: proc(field_ptr: rawptr, field_len: i32) -> i32 ---
+	@(link_name = "ingot_web_submit_sync")
+	_js_web_submit_sync :: proc(form_ptr: rawptr, form_len: i32, label_ptr: rawptr, label_len: i32, x, y, w, h, style, font_size, enabled: i32) -> i32 ---
+	@(link_name = "ingot_web_control_sync")
+	_js_web_control_sync :: proc(id_lo, id_hi, role: i32, label_ptr: rawptr, label_len: i32, x, y, w, h, state: i32, value, lo, hi: f32) -> i32 ---
+	@(link_name = "ingot_web_control_value")
+	_js_web_control_value :: proc(id_lo, id_hi: i32) -> f64 ---
+	@(link_name = "ingot_is_fullscreen")
+	_js_is_fullscreen :: proc() -> i32 ---
+	@(link_name = "ingot_toggle_fullscreen")
+	_js_toggle_fullscreen :: proc() ---
+	@(link_name = "ingot_ime_rect")
+	_js_ime_rect :: proc(x, y, w, h, active: i32) ---
+	@(link_name = "ingot_gamepad_state")
+	_js_gamepad_state :: proc(slot: i32, buttons: [^]u8, buttons_cap: i32, axes: [^]f32, axes_cap: i32, name: [^]u8, name_cap: i32) -> i32 ---
+	@(link_name = "ingot_drop_count")
+	_js_drop_count :: proc() -> i32 ---
+	@(link_name = "ingot_drop_name_len")
+	_js_drop_name_len :: proc(index: i32) -> i32 ---
+	@(link_name = "ingot_drop_name_copy")
+	_js_drop_name_copy :: proc(index: i32, dst: rawptr, cap: i32) -> i32 ---
+	@(link_name = "ingot_drop_data_len")
+	_js_drop_data_len :: proc(index: i32) -> i32 ---
+	@(link_name = "ingot_drop_data_copy")
+	_js_drop_data_copy :: proc(index: i32, dst: rawptr, cap: i32) -> i32 ---
+	@(link_name = "ingot_drop_clear")
+	_js_drop_clear :: proc() ---
 }
 
 // A non-nil sentinel so the shared `g.win == nil` guards treat the web target as
 // "window present" (there is no OS window; the canvas plays that role).
-@(private) WEB_WIN_SENTINEL :: Window_Handle(uintptr(1))
+@(private)
+WEB_WIN_SENTINEL :: Window_Handle(uintptr(1))
 
 // Captured Odin context for the "c" GPU callbacks (they run from the browser
 // event loop, where Odin's implicit context isn't available). Set in
 // platform_create_window, which runs under main's context.
-@(private) g_web_ctx: runtime.Context
+@(private)
+g_web_ctx: runtime.Context
 
 // --- window / surface / lifecycle ------------------------------------------
 
@@ -92,12 +100,15 @@ platform_create_window :: proc(width, height: i32, title: cstring, flags: Config
 
 @(private)
 platform_create_surface :: proc(instance: wg.Instance) -> wg.Surface {
-	return wg.InstanceCreateSurface(instance, &wg.SurfaceDescriptor{
-		nextInChain = &wg.SurfaceSourceCanvasHTMLSelector{
-			chain    = {sType = .SurfaceSourceCanvasHTMLSelector},
-			selector = "#ingot-canvas",
+	return wg.InstanceCreateSurface(
+		instance,
+		&wg.SurfaceDescriptor {
+			nextInChain = &wg.SurfaceSourceCanvasHTMLSelector {
+				chain = {sType = .SurfaceSourceCanvasHTMLSelector},
+				selector = "#ingot-canvas",
+			},
 		},
-	})
+	)
 }
 
 // platform_start_gpu kicks off the async adapter→device request chain and
@@ -106,20 +117,32 @@ platform_create_surface :: proc(instance: wg.Instance) -> wg.Surface {
 // frame loop skips drawing until then.
 @(private)
 platform_start_gpu :: proc() {
-	wg.InstanceRequestAdapter(g.instance, &{compatibleSurface = g.surface}, {
-		callback = _web_on_adapter,
-	})
+	wg.InstanceRequestAdapter(
+		g.instance,
+		&{compatibleSurface = g.surface},
+		{callback = _web_on_adapter},
+	)
 }
 
 @(private)
-_web_on_adapter :: proc "c" (status: wg.RequestAdapterStatus, adapter: wg.Adapter, msg: wg.StringView, u1, u2: rawptr) {
+_web_on_adapter :: proc "c" (
+	status: wg.RequestAdapterStatus,
+	adapter: wg.Adapter,
+	msg: wg.StringView,
+	u1, u2: rawptr,
+) {
 	context = g_web_ctx
 	g.adapter = adapter
 	wg.AdapterRequestDevice(g.adapter, nil, {callback = _web_on_device})
 }
 
 @(private)
-_web_on_device :: proc "c" (status: wg.RequestDeviceStatus, device: wg.Device, msg: wg.StringView, u1, u2: rawptr) {
+_web_on_device :: proc "c" (
+	status: wg.RequestDeviceStatus,
+	device: wg.Device,
+	msg: wg.StringView,
+	u1, u2: rawptr,
+) {
 	context = g_web_ctx
 	g.device = device
 	g.queue = wg.DeviceGetQueue(g.device)
@@ -224,18 +247,30 @@ platform_set_window_icon :: proc(image: Image) {}
 // platform_poll_events drains staging into g.inp at the exact point native
 // fills it — so edge (pressed/released) semantics match frame-for-frame.
 
-@(private) st_pressed:  [KEY_COUNT]bool
-@(private) st_released: [KEY_COUNT]bool
-@(private) st_repeat:   [KEY_COUNT]bool
-@(private) st_held:     [KEY_COUNT]bool   // sticky held state for IsKeyDown
-@(private) st_keys:   [CHAR_Q]KeyboardKey // ring of pressed keys (GetKeyPressed)
-@(private) st_key_h, st_key_t: int
-@(private) st_chars:  [CHAR_Q]rune        // ring of typed runes (GetCharPressed)
-@(private) st_char_h, st_char_t: int
-@(private) st_wheel:  Vector2
-@(private) st_mouse:  Vector2
-@(private) st_mb:     [8]bool
-@(private) st_hovered: bool
+@(private)
+st_pressed: [KEY_COUNT]bool
+@(private)
+st_released: [KEY_COUNT]bool
+@(private)
+st_repeat: [KEY_COUNT]bool
+@(private)
+st_held: [KEY_COUNT]bool // sticky held state for IsKeyDown
+@(private)
+st_keys: [CHAR_Q]KeyboardKey // ring of pressed keys (GetKeyPressed)
+@(private)
+st_key_h, st_key_t: int
+@(private)
+st_chars: [CHAR_Q]rune // ring of typed runes (GetCharPressed)
+@(private)
+st_char_h, st_char_t: int
+@(private)
+st_wheel: Vector2
+@(private)
+st_mouse: Vector2
+@(private)
+st_mb: [8]bool
+@(private)
+st_hovered: bool
 
 @(private)
 _st_push_key :: proc "contextless" (k: KeyboardKey) {
@@ -258,9 +293,9 @@ _st_push_char :: proc "contextless" (r: rune) {
 @(private)
 _input_drain :: proc() {
 	for i in 0 ..< KEY_COUNT {
-		if st_pressed[i]  { g.inp.pressed[i]  = true }
-		if st_released[i] { g.inp.released[i] = true }
-		if st_repeat[i]   { g.inp.repeat[i]   = true }
+		if st_pressed[i] {g.inp.pressed[i] = true}
+		if st_released[i] {g.inp.released[i] = true}
+		if st_repeat[i] {g.inp.repeat[i] = true}
 		st_pressed[i], st_released[i], st_repeat[i] = false, false, false
 	}
 	for st_key_h != st_key_t {
@@ -318,15 +353,26 @@ platform_sync_web_text_input :: proc(
 	field_data := web_string_data(field_id)
 	field_len := i32(len(field_id))
 	flags := _js_web_input_sync(
-		web_string_data(form_id), i32(len(form_id)),
-		field_data, field_len,
-		web_string_data(name), i32(len(name)),
-		web_string_data(placeholder), i32(len(placeholder)),
-		web_string_data(value), i32(len(value)),
-		x, y, w, h, input_type, autocomplete, active ? 1 : 0,
+		web_string_data(form_id),
+		i32(len(form_id)),
+		field_data,
+		field_len,
+		web_string_data(name),
+		i32(len(name)),
+		web_string_data(placeholder),
+		i32(len(placeholder)),
+		web_string_data(value),
+		i32(len(value)),
+		x,
+		y,
+		w,
+		h,
+		input_type,
+		autocomplete,
+		active ? 1 : 0,
 	)
-	result := Web_Input_Result{
-		cursor = int(_js_web_input_cursor(field_data, field_len)),
+	result := Web_Input_Result {
+		cursor  = int(_js_web_input_cursor(field_data, field_len)),
 		changed = flags & 1 != 0,
 		focused = flags & 2 != 0,
 	}
@@ -343,8 +389,11 @@ platform_sync_web_text_input :: proc(
 
 @(private)
 platform_sync_web_control :: proc(
-	role: i32, id: u64, label: string,
-	x, y, w, h: i32, state: u8,
+	role: i32,
+	id: u64,
+	label: string,
+	x, y, w, h: i32,
+	state: u8,
 	value, lo, hi: f32,
 ) -> Web_Control_Result {
 	// Node ids exceed JS's 2^53 safe-integer range (fallback ids pack the
@@ -353,12 +402,21 @@ platform_sync_web_control :: proc(
 	id_lo := i32(u32(id & 0xFFFFFFFF))
 	id_hi := i32(u32(id >> 32))
 	flags := _js_web_control_sync(
-		id_lo, id_hi, role,
-		web_string_data(label), i32(len(label)),
-		x, y, w, h, i32(state),
-		value, lo, hi,
+		id_lo,
+		id_hi,
+		role,
+		web_string_data(label),
+		i32(len(label)),
+		x,
+		y,
+		w,
+		h,
+		i32(state),
+		value,
+		lo,
+		hi,
 	)
-	result := Web_Control_Result{
+	result := Web_Control_Result {
 		activated = flags & 1 != 0,
 		changed   = flags & 2 != 0,
 	}
@@ -374,11 +432,22 @@ platform_sync_web_submit_button :: proc(
 	x, y, w, h, style, font_size: i32,
 	enabled: bool,
 ) -> bool {
-	return _js_web_submit_sync(
-		web_string_data(form_id), i32(len(form_id)),
-		web_string_data(label), i32(len(label)),
-		x, y, w, h, style, font_size, enabled ? 1 : 0,
-	) != 0
+	return(
+		_js_web_submit_sync(
+			web_string_data(form_id),
+			i32(len(form_id)),
+			web_string_data(label),
+			i32(len(label)),
+			x,
+			y,
+			w,
+			h,
+			style,
+			font_size,
+			enabled ? 1 : 0,
+		) !=
+		0 \
+	)
 }
 
 @(private)
@@ -453,9 +522,12 @@ platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {
 		w3c_buttons = {}
 		name_len := _js_gamepad_state(
 			i32(slot),
-			raw_data(w3c_buttons[:]), i32(len(w3c_buttons)),
-			raw_data(pad.axes[:]), i32(len(pad.axes)),
-			raw_data(pad.name[:]), i32(len(pad.name)),
+			raw_data(w3c_buttons[:]),
+			i32(len(w3c_buttons)),
+			raw_data(pad.axes[:]),
+			i32(len(pad.axes)),
+			raw_data(pad.name[:]),
+			i32(len(pad.name)),
 		)
 		connected := name_len >= 0
 		if connected != pad.connected {
@@ -484,15 +556,15 @@ platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {
 
 // --- public window procs (native equivalents live in window_native/extra) --
 
-GetWindowHandle    :: proc() -> rawptr { return nil }
-IsWindowMinimized  :: proc() -> bool   { return false }
-IsWindowHidden     :: proc() -> bool   { return false }
-IsWindowFullscreen :: proc() -> bool   { return _js_is_fullscreen() != 0 }
+GetWindowHandle :: proc() -> rawptr {return nil}
+IsWindowMinimized :: proc() -> bool {return false}
+IsWindowHidden :: proc() -> bool {return false}
+IsWindowFullscreen :: proc() -> bool {return _js_is_fullscreen() != 0}
 // ToggleFullscreen requests (or exits) the browser Fullscreen API on the canvas.
 // Must be called from a user-gesture handler; the header's fullscreen button
 // forwards a click here, satisfying that requirement.
-ToggleFullscreen   :: proc() { _js_toggle_fullscreen() }
-RestoreWindow      :: proc() {}
+ToggleFullscreen :: proc() {_js_toggle_fullscreen()}
+RestoreWindow :: proc() {}
 
 // --- drag & drop (web) ------------------------------------------------------
 //
@@ -502,10 +574,12 @@ RestoreWindow      :: proc() {}
 // real paths — "paths" here are bare file names; use GetDroppedFileData for
 // the contents.
 
-@(private) g_drop_names: [MAX_DROPPED_FILES][DROP_NAME_MAX]u8
-@(private) g_drop_cstrs: [MAX_DROPPED_FILES]cstring
+@(private)
+g_drop_names: [MAX_DROPPED_FILES][DROP_NAME_MAX]u8
+@(private)
+g_drop_cstrs: [MAX_DROPPED_FILES]cstring
 
-IsFileDropped :: proc() -> bool { return g_drop_ready }
+IsFileDropped :: proc() -> bool {return g_drop_ready}
 
 LoadDroppedFiles :: proc() -> FilePathList {
 	count := clamp(_js_drop_count(), 0, MAX_DROPPED_FILES)
@@ -516,10 +590,10 @@ LoadDroppedFiles :: proc() -> FilePathList {
 		assert(n < DROP_NAME_MAX, "LoadDroppedFiles: name overflow")
 		g_drop_cstrs[i] = cstring(raw_data(g_drop_names[i][:]))
 	}
-	return FilePathList{
+	return FilePathList {
 		capacity = u32(count),
-		count    = u32(count),
-		paths    = raw_data(g_drop_cstrs[:]),
+		count = u32(count),
+		paths = raw_data(g_drop_cstrs[:]),
 	}
 }
 

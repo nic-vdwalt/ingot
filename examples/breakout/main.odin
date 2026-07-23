@@ -81,7 +81,7 @@ make_beep :: proc(freq: f32, seconds: f32) -> rl.Sound {
 		amp := f32(6000) * (1 - f32(i) / f32(frames))
 		data[i] = i16(amp) if high else i16(-amp)
 	}
-	wave := rl.Wave{
+	wave := rl.Wave {
 		frameCount = u32(frames),
 		sampleRate = RATE,
 		sampleSize = 16,
@@ -142,9 +142,11 @@ update :: proc(g: ^Game, dt: f32) {
 	g.ball.y += g.ball_v.y * dt
 
 	// Walls.
-	if g.ball.x < BALL_R { g.ball.x = BALL_R; g.ball_v.x = -g.ball_v.x; rl.PlaySound(snd_wall) }
-	if g.ball.x > SCREEN_W - BALL_R { g.ball.x = SCREEN_W - BALL_R; g.ball_v.x = -g.ball_v.x; rl.PlaySound(snd_wall) }
-	if g.ball.y < BALL_R { g.ball.y = BALL_R; g.ball_v.y = -g.ball_v.y; rl.PlaySound(snd_wall) }
+	if g.ball.x < BALL_R {g.ball.x = BALL_R; g.ball_v.x = -g.ball_v.x; rl.PlaySound(snd_wall)}
+	if g.ball.x >
+	   SCREEN_W -
+		   BALL_R {g.ball.x = SCREEN_W - BALL_R; g.ball_v.x = -g.ball_v.x; rl.PlaySound(snd_wall)}
+	if g.ball.y < BALL_R {g.ball.y = BALL_R; g.ball_v.y = -g.ball_v.y; rl.PlaySound(snd_wall)}
 
 	// Paddle.
 	paddle := rl.Rectangle{g.paddle_x, SCREEN_H - 40, PADDLE_W, PADDLE_H}
@@ -191,8 +193,10 @@ update :: proc(g: ^Game, dt: f32) {
 }
 
 brick_rect :: proc(r, c: int) -> rl.Rectangle {
-	x := f32(c*(BRICK_W+BRICK_GAP)) + (SCREEN_W - BRICK_COLS*(BRICK_W+BRICK_GAP) + BRICK_GAP) / 2
-	y := f32(BRICK_TOP + r*(BRICK_H+BRICK_GAP))
+	x :=
+		f32(c * (BRICK_W + BRICK_GAP)) +
+		(SCREEN_W - BRICK_COLS * (BRICK_W + BRICK_GAP) + BRICK_GAP) / 2
+	y := f32(BRICK_TOP + r * (BRICK_H + BRICK_GAP))
 	return rl.Rectangle{x, y, BRICK_W, BRICK_H}
 }
 
@@ -201,11 +205,11 @@ ball_hits :: proc(ball: rl.Vector2, rec: rl.Rectangle) -> bool {
 	cy := clamp(ball.y, rec.y, rec.y + rec.height)
 	dx := ball.x - cx
 	dy := ball.y - cy
-	return dx*dx + dy*dy <= BALL_R * BALL_R
+	return dx * dx + dy * dy <= BALL_R * BALL_R
 }
 
 row_color :: proc(r: int) -> rl.Color {
-	colors := [BRICK_ROWS]rl.Color{
+	colors := [BRICK_ROWS]rl.Color {
 		{235, 100, 100, 255},
 		{235, 165, 100, 255},
 		{235, 220, 100, 255},
@@ -230,7 +234,7 @@ frame :: proc() {
 	rl.DrawCircleV(game.ball, BALL_R, {245, 245, 250, 255})
 
 	hud := fmt.ctprintf("score %d   lives %d", game.score, game.lives)
-	rl.DrawTextEx(font, hud, {16, 14, }, 20, 1, {200, 200, 210, 255})
+	rl.DrawTextEx(font, hud, {16, 14}, 20, 1, {200, 200, 210, 255})
 	if rl.IsGamepadAvailable(0) {
 		rl.DrawTextEx(font, "gamepad connected", {SCREEN_W - 230, 14}, 20, 1, {130, 210, 120, 255})
 	}

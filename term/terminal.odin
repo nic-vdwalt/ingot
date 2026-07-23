@@ -5,11 +5,11 @@ package term
 // vterm_screen_get_cell + the scrollback buffer); this package stays
 // raylib-free apart from term_input.odin's key handling.
 
+import lv "../libvterm"
+import "../pty"
 import "base:runtime"
 import "core:c"
 import "core:strings"
-import lv "../libvterm"
-import "../pty"
 
 // Maximum number of scrollback lines retained per terminal instance.
 TERM_SCROLLBACK_MAX :: 5000
@@ -57,7 +57,11 @@ Term_Instance :: struct {
 // _screen_settermprop captures title changes and cursor visibility updates.
 // libvterm calls this via the registered VTermScreenCallbacks pointer.
 @(private = "file")
-_screen_settermprop :: proc "c" (prop: lv.VTerm_Prop, val: ^lv.VTerm_Value, user: rawptr) -> c.int {
+_screen_settermprop :: proc "c" (
+	prop: lv.VTerm_Prop,
+	val: ^lv.VTerm_Value,
+	user: rawptr,
+) -> c.int {
 	context = runtime.default_context()
 	ts := cast(^Term_Instance)user
 	context.allocator = ts.allocator
@@ -90,7 +94,11 @@ _screen_settermprop :: proc "c" (prop: lv.VTerm_Prop, val: ^lv.VTerm_Value, user
 // _screen_sb_pushline captures a line scrolled off the top of the normal
 // screen into the instance's scrollback buffer.
 @(private = "file")
-_screen_sb_pushline :: proc "c" (cols: c.int, cells: [^]lv.VTerm_Screen_Cell, user: rawptr) -> c.int {
+_screen_sb_pushline :: proc "c" (
+	cols: c.int,
+	cells: [^]lv.VTerm_Screen_Cell,
+	user: rawptr,
+) -> c.int {
 	context = runtime.default_context()
 	ts := cast(^Term_Instance)user
 	context.allocator = ts.allocator
@@ -113,7 +121,11 @@ _screen_sb_pushline :: proc "c" (cols: c.int, cells: [^]lv.VTerm_Screen_Cell, us
 // _screen_sb_popline returns the most recent scrollback line to libvterm
 // (used when the screen grows taller).  Returns 0 when the buffer is empty.
 @(private = "file")
-_screen_sb_popline :: proc "c" (cols: c.int, cells: [^]lv.VTerm_Screen_Cell, user: rawptr) -> c.int {
+_screen_sb_popline :: proc "c" (
+	cols: c.int,
+	cells: [^]lv.VTerm_Screen_Cell,
+	user: rawptr,
+) -> c.int {
 	context = runtime.default_context()
 	ts := cast(^Term_Instance)user
 	context.allocator = ts.allocator
@@ -123,7 +135,7 @@ _screen_sb_popline :: proc "c" (cols: c.int, cells: [^]lv.VTerm_Screen_Cell, use
 	copy(cells[:n], line[:n])
 	blank: lv.VTerm_Screen_Cell
 	blank.width = 1
-	for i in n..<int(cols) {
+	for i in n ..< int(cols) {
 		cells[i] = blank
 	}
 	delete(line)
@@ -155,11 +167,15 @@ _screen_sb_clear :: proc "c" (user: rawptr) -> c.int {
 // PTY. Split from term_start so hostile-input fuzzing can drive the exact
 // production emulator + callback path with no shell process attached.
 // Returns false if libvterm allocation fails.
-term_init_emulator :: proc(ts: ^Term_Instance, cols, rows: u16,
-	default_fg: [3]u8 = {220, 220, 220}, default_bg: [3]u8 = {27, 27, 27}) -> bool {
-	ts.allocator      = context.allocator
-	ts.cols           = cols
-	ts.rows           = rows
+term_init_emulator :: proc(
+	ts: ^Term_Instance,
+	cols, rows: u16,
+	default_fg: [3]u8 = {220, 220, 220},
+	default_bg: [3]u8 = {27, 27, 27},
+) -> bool {
+	ts.allocator = context.allocator
+	ts.cols = cols
+	ts.rows = rows
 	ts.cursor_visible = true
 
 	ts.vt = lv.vterm_new(c.int(rows), c.int(cols))
@@ -170,7 +186,7 @@ term_init_emulator :: proc(ts: ^Term_Instance, cols, rows: u16,
 	lv.vterm_set_utf8(ts.vt, 1)
 
 	ts.screen = lv.vterm_obtain_screen(ts.vt)
-	ts.state  = lv.vterm_obtain_state(ts.vt)
+	ts.state = lv.vterm_obtain_state(ts.vt)
 
 	// Enable alt-screen support (needed for vim, less, htop, etc.).
 	lv.vterm_screen_enable_altscreen(ts.screen, 1)
@@ -179,7 +195,7 @@ term_init_emulator :: proc(ts: ^Term_Instance, cols, rows: u16,
 	lv.vterm_screen_set_damage_merge(ts.screen, 2) // VTERM_DAMAGE_SCREEN = 2
 
 	// Register callbacks; libvterm stores a pointer so we must keep the struct alive.
-	ts.callbacks = lv.VTerm_Screen_Callbacks{
+	ts.callbacks = lv.VTerm_Screen_Callbacks {
 		settermprop = _screen_settermprop,
 		sb_pushline = _screen_sb_pushline,
 		sb_popline  = _screen_sb_popline,
@@ -194,14 +210,14 @@ term_init_emulator :: proc(ts: ^Term_Instance, cols, rows: u16,
 	// frame and the background matches the host app's theme.
 	def_fg: lv.VTerm_Color
 	def_bg: lv.VTerm_Color
-	def_fg.rgb.type  = lv.VTERM_COLOR_RGB
-	def_fg.rgb.red   = default_fg[0]
+	def_fg.rgb.type = lv.VTERM_COLOR_RGB
+	def_fg.rgb.red = default_fg[0]
 	def_fg.rgb.green = default_fg[1]
-	def_fg.rgb.blue  = default_fg[2]
-	def_bg.rgb.type  = lv.VTERM_COLOR_RGB
-	def_bg.rgb.red   = default_bg[0]
+	def_fg.rgb.blue = default_fg[2]
+	def_bg.rgb.type = lv.VTERM_COLOR_RGB
+	def_bg.rgb.red = default_bg[0]
 	def_bg.rgb.green = default_bg[1]
-	def_bg.rgb.blue  = default_bg[2]
+	def_bg.rgb.blue = default_bg[2]
 	lv.vterm_screen_set_default_colors(ts.screen, &def_fg, &def_bg)
 	return true
 }
@@ -226,8 +242,12 @@ term_free_emulator :: proc(ts: ^Term_Instance) {
 // default shell inside a PTY sized (cols × rows).  Returns nil on failure.
 // default_fg/default_bg are RGB triples used as the terminal's default pen
 // (pick values matching the host app's theme).
-term_start :: proc(workspace_path: string, cols, rows: u16,
-	default_fg: [3]u8 = {220, 220, 220}, default_bg: [3]u8 = {27, 27, 27}) -> ^Term_Instance {
+term_start :: proc(
+	workspace_path: string,
+	cols, rows: u16,
+	default_fg: [3]u8 = {220, 220, 220},
+	default_bg: [3]u8 = {27, 27, 27},
+) -> ^Term_Instance {
 	ts := new(Term_Instance)
 	if !term_init_emulator(ts, cols, rows, default_fg, default_bg) {
 		free(ts)
@@ -235,7 +255,7 @@ term_start :: proc(workspace_path: string, cols, rows: u16,
 	}
 
 	// Spawn PTY shell.
-	shell   := pty.get_default_shell()
+	shell := pty.get_default_shell()
 	workdir := strings.clone_to_cstring(workspace_path, context.temp_allocator)
 	p, ok := pty.spawn(shell, cols, rows, workdir)
 	if !ok {
@@ -243,7 +263,7 @@ term_start :: proc(workspace_path: string, cols, rows: u16,
 		free(ts)
 		return nil
 	}
-	ts.pty         = p
+	ts.pty = p
 	ts.pty_running = true
 	return ts
 }

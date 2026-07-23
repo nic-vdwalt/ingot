@@ -21,9 +21,19 @@ spark_up := [10]f32{3, 4, 3.6, 5, 6.2, 5.8, 7, 8.4, 8.1, 9.3}
 spark_down := [10]f32{9, 8.2, 8.6, 7.4, 7.9, 6.8, 6.1, 6.4, 5.2, 4.8}
 spark_flat := [10]f32{5, 5.4, 4.8, 5.1, 5.3, 4.9, 5.2, 5.0, 5.3, 5.1}
 
-MONTHS := [12]string{
-	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+MONTHS := [12]string {
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec",
 }
 DAYS := [7]string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
 
@@ -50,28 +60,33 @@ frame :: proc() {
 		ui.set_theme(ui.theme_dark() if dark else ui.theme_light())
 	}
 
-	line_series := [2]ui.Chart_Series{
+	line_series := [2]ui.Chart_Series {
 		{name = "Revenue", values = revenue[:]},
 		{name = "Costs", values = costs[:]},
 	}
-	ui.line_chart(24, 64, 580, 300, line_series[:], &line_state, {
-		labels      = MONTHS[:],
-		show_grid   = true,
-		show_axes   = true,
-		show_legend = true,
-		fill        = true,
-	})
+	ui.line_chart(
+		24,
+		64,
+		580,
+		300,
+		line_series[:],
+		&line_state,
+		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true, fill = true},
+	)
 
-	bar_series := [2]ui.Chart_Series{
+	bar_series := [2]ui.Chart_Series {
 		{name = "Total h", values = hours[:]},
 		{name = "Billable h", values = billable[:]},
 	}
-	ui.bar_chart(24, 396, 580, 280, bar_series[:], &bar_state, {
-		labels      = DAYS[:],
-		show_grid   = true,
-		show_axes   = true,
-		show_legend = true,
-	})
+	ui.bar_chart(
+		24,
+		396,
+		580,
+		280,
+		bar_series[:],
+		&bar_state,
+		{labels = DAYS[:], show_grid = true, show_axes = true, show_legend = true},
+	)
 
 	stat_card(628, 64, 308, 92, "ACTIVE PROJECTS", "9.3", spark_up[:], ui.theme.fg_success)
 	stat_card(628, 168, 308, 92, "OPEN TASKS", "4.8", spark_down[:], ui.theme.fg_error)
@@ -84,6 +99,12 @@ frame :: proc() {
 stat_card :: proc(x, y, w, h: i32, label, value: cstring, values: []f32, col: rl.Color) {
 	ui.draw_card_bg({f32(x), f32(y), f32(w), f32(h)}, ui.theme.bg_secondary)
 	ui.draw_text(label, x + 14, y + 12, ui.FONT_SIZE_SMALL, ui.theme.fg_label)
-	ui.draw_text(value, x + 14, y + h - ui.FONT_SIZE_LARGE - 14, ui.FONT_SIZE_LARGE, ui.theme.fg_primary)
-	ui.sparkline(x + w - 130, y + h/2 - 16, 110, 32, values, col)
+	ui.draw_text(
+		value,
+		x + 14,
+		y + h - ui.FONT_SIZE_LARGE - 14,
+		ui.FONT_SIZE_LARGE,
+		ui.theme.fg_primary,
+	)
+	ui.sparkline(x + w - 130, y + h / 2 - 16, 110, 32, values, col)
 }

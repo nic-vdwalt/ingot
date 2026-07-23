@@ -59,57 +59,54 @@ Stream_Slot :: struct {
 }
 
 Renderer :: struct {
-	shader: wg.ShaderModule, // kept alive so Custom pipelines can be rebuilt
-	pipes:  [Pipe_Kind][Blend_Slot]wg.RenderPipeline,
+	shader:             wg.ShaderModule, // kept alive so Custom pipelines can be rebuilt
+	pipes:              [Pipe_Kind][Blend_Slot]wg.RenderPipeline,
 
 	// Lazy batch pipelines for non-swapchain target formats (e.g. the galaxy
 	// HDR RGBA16Float render targets). Keyed by colour format.
-	alt_fmt:   [4]wg.TextureFormat,
-	alt_pipes: [4][Pipe_Kind][Blend_Slot]wg.RenderPipeline,
-	alt_n:     int,
-
-	ubuf:         wg.Buffer,
-	ubind:        wg.BindGroup,
-	ubind_layout: wg.BindGroupLayout,
-	tex_layout:   wg.BindGroupLayout, // group(1): texture + sampler
+	alt_fmt:            [4]wg.TextureFormat,
+	alt_pipes:          [4][Pipe_Kind][Blend_Slot]wg.RenderPipeline,
+	alt_n:              int,
+	ubuf:               wg.Buffer,
+	ubind:              wg.BindGroup,
+	ubind_layout:       wg.BindGroupLayout,
+	tex_layout:         wg.BindGroupLayout, // group(1): texture + sampler
 
 	// Alternate group(0) uniform for render-target passes: an RT renders in its
 	// own pixel space, so it needs its own ortho projection that must NOT clobber
 	// the window projection used by the main pass in the same frame. cur_u is the
 	// group(0) bind the next flush uses (r.ubind for the window, r.rt_ubind for
 	// the active render target).
-	rt_ubuf:  wg.Buffer,
-	rt_ubind: wg.BindGroup,
-	cur_u:    wg.BindGroup,
+	rt_ubuf:            wg.Buffer,
+	rt_ubind:           wg.BindGroup,
+	cur_u:              wg.BindGroup,
 
 	// current run
-	verts:     [dynamic; BATCH_MAX_VERTICES]Vertex,
-	indices:   [dynamic; BATCH_MAX_INDICES]u32,
-	cur_kind:  Pipe_Kind,
-	cur_bind:  wg.BindGroup,
-	cur_blend: Blend_Slot,
+	verts:              [dynamic; BATCH_MAX_VERTICES]Vertex,
+	indices:            [dynamic; BATCH_MAX_INDICES]u32,
+	cur_kind:           Pipe_Kind,
+	cur_bind:           wg.BindGroup,
+	cur_blend:          Blend_Slot,
 
 	// Active custom shader (BeginShaderMode); 0 = none. When set, Image-kind
 	// flushes use the shader's pipeline + uniform/extra-texture bind groups.
-	active_shader: u32,
+	active_shader:      u32,
 
 	// 2D model translation (rlgl matrix stack): applied to every emitted vertex
 	// so rlgl.PushMatrix/Translatef/PopMatrix shift subsequent draws (the galaxy
 	// pane origin transform).
-	model_off:   [2]f32,
-	model_stack: [dynamic; MODEL_STACK_MAX][2]f32,
+	model_off:          [2]f32,
+	model_stack:        [dynamic; MODEL_STACK_MAX][2]f32,
 
 	// Custom blend factors (set by rlgl.SetBlendFactors; default = Alpha).
-	cust_src: wg.BlendFactor,
-	cust_dst: wg.BlendFactor,
-	cust_op:  wg.BlendOperation,
-
-	stream_slots:      [STREAM_SLOT_COUNT]Stream_Slot,
+	cust_src:           wg.BlendFactor,
+	cust_dst:           wg.BlendFactor,
+	cust_op:            wg.BlendOperation,
+	stream_slots:       [STREAM_SLOT_COUNT]Stream_Slot,
 	active_stream_slot: i32,
-	uniform_alignment: u64,
-	transient_buffers: [dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
-
-	proj_w, proj_h: i32,
+	uniform_alignment:  u64,
+	transient_buffers:  [dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
+	proj_w, proj_h:     i32,
 }
 
 // _blend_for returns the wgpu blend state for a slot. Colour and alpha share
@@ -119,13 +116,29 @@ _blend_for :: proc(r: ^Renderer, slot: Blend_Slot) -> wg.BlendState {
 	c: wg.BlendComponent
 	switch slot {
 	case .Alpha:
-		c = {srcFactor = .One, dstFactor = .OneMinusSrcAlpha, operation = .Add}
+		c = {
+			srcFactor = .One,
+			dstFactor = .OneMinusSrcAlpha,
+			operation = .Add,
+		}
 	case .Additive:
-		c = {srcFactor = .One, dstFactor = .One, operation = .Add}
+		c = {
+			srcFactor = .One,
+			dstFactor = .One,
+			operation = .Add,
+		}
 	case .Multiplied:
-		c = {srcFactor = .Dst, dstFactor = .OneMinusSrcAlpha, operation = .Add}
+		c = {
+			srcFactor = .Dst,
+			dstFactor = .OneMinusSrcAlpha,
+			operation = .Add,
+		}
 	case .Custom:
-		c = {srcFactor = r.cust_src, dstFactor = r.cust_dst, operation = r.cust_op}
+		c = {
+			srcFactor = r.cust_src,
+			dstFactor = r.cust_dst,
+			operation = r.cust_op,
+		}
 	}
 	return {color = c, alpha = c}
 }
@@ -148,31 +161,50 @@ _format_blendable :: proc(format: wg.TextureFormat) -> bool {
 // vertex layout. File-scope so both renderer_init and _rebuild_custom_pipes
 // can call it.
 @(private)
-_make_pipe :: proc(r: ^Renderer, slot: Blend_Slot, fs: string, textured: bool, format: wg.TextureFormat) -> wg.RenderPipeline {
-	attrs := [3]wg.VertexAttribute{
+_make_pipe :: proc(
+	r: ^Renderer,
+	slot: Blend_Slot,
+	fs: string,
+	textured: bool,
+	format: wg.TextureFormat,
+) -> wg.RenderPipeline {
+	attrs := [3]wg.VertexAttribute {
 		{format = .Float32x2, offset = 0, shaderLocation = 0},
 		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
 		{format = .Float32x2, offset = u64(offset_of(Vertex, uv)), shaderLocation = 2},
 	}
-	vbl := wg.VertexBufferLayout{
-		arrayStride = size_of(Vertex), stepMode = .Vertex,
-		attributeCount = 3, attributes = raw_data(attrs[:]),
+	vbl := wg.VertexBufferLayout {
+		arrayStride    = size_of(Vertex),
+		stepMode       = .Vertex,
+		attributeCount = 3,
+		attributes     = raw_data(attrs[:]),
 	}
 	blend := _blend_for(r, slot)
-	target := wg.ColorTargetState{format = format, writeMask = wg.ColorWriteMaskFlags_All}
+	target := wg.ColorTargetState {
+		format    = format,
+		writeMask = wg.ColorWriteMaskFlags_All,
+	}
 	if _format_blendable(format) do target.blend = &blend
 	layouts := [2]wg.BindGroupLayout{r.ubind_layout, r.tex_layout}
-	pl := wg.DeviceCreatePipelineLayout(g.device, &{
-		bindGroupLayoutCount = textured ? 2 : 1,
-		bindGroupLayouts = raw_data(layouts[:]),
-	})
-	return wg.DeviceCreateRenderPipeline(g.device, &{
-		layout = pl,
-		vertex = {module = r.shader, entryPoint = "vs_main", bufferCount = 1, buffers = &vbl},
-		primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .None},
-		multisample = {count = 1, mask = ~u32(0)},
-		fragment = &wg.FragmentState{module = r.shader, entryPoint = fs, targetCount = 1, targets = &target},
-	})
+	pl := wg.DeviceCreatePipelineLayout(
+		g.device,
+		&{bindGroupLayoutCount = textured ? 2 : 1, bindGroupLayouts = raw_data(layouts[:])},
+	)
+	return wg.DeviceCreateRenderPipeline(
+		g.device,
+		&{
+			layout = pl,
+			vertex = {module = r.shader, entryPoint = "vs_main", bufferCount = 1, buffers = &vbl},
+			primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .None},
+			multisample = {count = 1, mask = ~u32(0)},
+			fragment = &wg.FragmentState {
+				module = r.shader,
+				entryPoint = fs,
+				targetCount = 1,
+				targets = &target,
+			},
+		},
+	)
 }
 
 // _fs_for maps a pipeline kind to its fragment entry point + whether it samples
@@ -180,9 +212,12 @@ _make_pipe :: proc(r: ^Renderer, slot: Blend_Slot, fs: string, textured: bool, f
 @(private)
 _fs_for :: proc(kind: Pipe_Kind) -> (string, bool) {
 	switch kind {
-	case .Solid: return "fs_solid", false
-	case .Text:  return "fs_text", true
-	case .Image: return "fs_image", true
+	case .Solid:
+		return "fs_solid", false
+	case .Text:
+		return "fs_text", true
+	case .Image:
+		return "fs_image", true
 	}
 	return "fs_solid", false
 }
@@ -222,7 +257,7 @@ _pipe_for :: proc(r: ^Renderer, kind: Pipe_Kind, slot: Blend_Slot) -> wg.RenderP
 	// find or create the alt-format set
 	idx := -1
 	for i in 0 ..< r.alt_n {
-		if r.alt_fmt[i] == fmt { idx = i; break }
+		if r.alt_fmt[i] == fmt {idx = i; break}
 	}
 	if idx < 0 {
 		if r.alt_n >= len(r.alt_fmt) do return r.pipes[kind][slot] // cache full: fall back
@@ -283,53 +318,76 @@ fn fs_image(in: VSOut) -> @location(0) vec4<f32> {
 `
 
 renderer_init :: proc(r: ^Renderer) {
-	shader := wg.DeviceCreateShaderModule(g.device, &{
-		nextInChain = &wg.ShaderSourceWGSL{
-			chain = {sType = .ShaderSourceWGSL},
-			code  = BATCH_SHADER,
+	shader := wg.DeviceCreateShaderModule(
+		g.device,
+		&{
+			nextInChain = &wg.ShaderSourceWGSL {
+				chain = {sType = .ShaderSourceWGSL},
+				code = BATCH_SHADER,
+			},
 		},
-	})
+	)
 	r.shader = shader
 	_stream_slots_init(r)
 
 	// group(0): projection uniform
-	r.ubind_layout = wg.DeviceCreateBindGroupLayout(g.device, &{
-		entryCount = 1,
-		entries = &wg.BindGroupLayoutEntry{
-			binding = 0,
-			visibility = {.Vertex},
-			buffer = {type = .Uniform, minBindingSize = size_of([4]f32)},
+	r.ubind_layout = wg.DeviceCreateBindGroupLayout(
+		g.device,
+		&{
+			entryCount = 1,
+			entries = &wg.BindGroupLayoutEntry {
+				binding = 0,
+				visibility = {.Vertex},
+				buffer = {type = .Uniform, minBindingSize = size_of([4]f32)},
+			},
 		},
-	})
-	r.ubuf = wg.DeviceCreateBuffer(g.device, &{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)})
-	r.ubind = wg.DeviceCreateBindGroup(g.device, &{
-		layout = r.ubind_layout,
-		entryCount = 1,
-		entries = &wg.BindGroupEntry{binding = 0, buffer = r.ubuf, size = size_of([4]f32)},
-	})
+	)
+	r.ubuf = wg.DeviceCreateBuffer(
+		g.device,
+		&{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)},
+	)
+	r.ubind = wg.DeviceCreateBindGroup(
+		g.device,
+		&{
+			layout = r.ubind_layout,
+			entryCount = 1,
+			entries = &wg.BindGroupEntry{binding = 0, buffer = r.ubuf, size = size_of([4]f32)},
+		},
+	)
 
 	// Separate uniform + bind for render-target passes (see struct comment).
-	r.rt_ubuf = wg.DeviceCreateBuffer(g.device, &{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)})
-	r.rt_ubind = wg.DeviceCreateBindGroup(g.device, &{
-		layout = r.ubind_layout,
-		entryCount = 1,
-		entries = &wg.BindGroupEntry{binding = 0, buffer = r.rt_ubuf, size = size_of([4]f32)},
-	})
+	r.rt_ubuf = wg.DeviceCreateBuffer(
+		g.device,
+		&{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)},
+	)
+	r.rt_ubind = wg.DeviceCreateBindGroup(
+		g.device,
+		&{
+			layout = r.ubind_layout,
+			entryCount = 1,
+			entries = &wg.BindGroupEntry{binding = 0, buffer = r.rt_ubuf, size = size_of([4]f32)},
+		},
+	)
 	r.cur_u = r.ubind
 
 	// group(1): texture + sampler (used by text + image pipelines)
-	tex_entries := [2]wg.BindGroupLayoutEntry{
-		{binding = 0, visibility = {.Fragment}, texture = {sampleType = .Float, viewDimension = ._2D}},
+	tex_entries := [2]wg.BindGroupLayoutEntry {
+		{
+			binding = 0,
+			visibility = {.Fragment},
+			texture = {sampleType = .Float, viewDimension = ._2D},
+		},
 		{binding = 1, visibility = {.Fragment}, sampler = {type = .Filtering}},
 	}
-	r.tex_layout = wg.DeviceCreateBindGroupLayout(g.device, &{
-		entryCount = 2, entries = raw_data(tex_entries[:]),
-	})
+	r.tex_layout = wg.DeviceCreateBindGroupLayout(
+		g.device,
+		&{entryCount = 2, entries = raw_data(tex_entries[:])},
+	)
 
 	// Custom blend defaults to premultiplied over-blend until SetBlendFactors.
 	r.cust_src = .One
 	r.cust_dst = .OneMinusSrcAlpha
-	r.cust_op  = .Add
+	r.cust_op = .Add
 
 	// build every (kind × blend_slot) pipeline once.
 	for kind in Pipe_Kind {
@@ -421,7 +479,8 @@ push_quad :: proc(r: ^Renderer, d: Rectangle, s: Rectangle, col: [4]f32) {
 	u0, v0 := s.x, s.y
 	u1, v1 := s.x + s.width, s.y + s.height
 	base := u32(len(r.verts))
-	append(&r.verts,
+	append(
+		&r.verts,
 		Vertex{{x0, y0}, col, {u0, v0}},
 		Vertex{{x0, y1}, col, {u0, v1}},
 		Vertex{{x1, y0}, col, {u1, v0}},
@@ -435,7 +494,8 @@ push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 	if !g.frame.has_frame do return
 	o := r.model_off
 	base := u32(len(r.verts))
-	append(&r.verts,
+	append(
+		&r.verts,
 		Vertex{{a.x + o.x, a.y + o.y}, col, {0, 0}},
 		Vertex{{b.x + o.x, b.y + o.y}, col, {0, 0}},
 		Vertex{{c.x + o.x, c.y + o.y}, col, {0, 0}},
@@ -446,7 +506,12 @@ push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 // push_quad4 emits an arbitrary (possibly rotated) quad with per-corner uv.
 // Corners must be given in order tl, tr, br, bl.
 @(private)
-push_quad4 :: proc(r: ^Renderer, tl, tr, br, bl: [2]f32, uv_tl, uv_tr, uv_br, uv_bl: [2]f32, col: [4]f32) {
+push_quad4 :: proc(
+	r: ^Renderer,
+	tl, tr, br, bl: [2]f32,
+	uv_tl, uv_tr, uv_br, uv_bl: [2]f32,
+	col: [4]f32,
+) {
 	if !g.frame.has_frame do return
 	o := r.model_off
 	tlo := [2]f32{tl.x + o.x, tl.y + o.y}
@@ -454,7 +519,8 @@ push_quad4 :: proc(r: ^Renderer, tl, tr, br, bl: [2]f32, uv_tl, uv_tr, uv_br, uv
 	bro := [2]f32{br.x + o.x, br.y + o.y}
 	blo := [2]f32{bl.x + o.x, bl.y + o.y}
 	base := u32(len(r.verts))
-	append(&r.verts,
+	append(
+		&r.verts,
 		Vertex{tlo, col, uv_tl},
 		Vertex{blo, col, uv_bl},
 		Vertex{tro, col, uv_tr},
@@ -471,7 +537,7 @@ MatrixModePush :: proc() {
 MatrixModePop :: proc() {
 	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
 	n := len(g.rend.model_stack)
-	if n == 0 { g.rend.model_off = {0, 0}; return }
+	if n == 0 {g.rend.model_off = {0, 0}; return}
 	g.rend.model_off = g.rend.model_stack[n - 1]
 	pop(&g.rend.model_stack)
 }
@@ -492,13 +558,14 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 	vertex_buffer, index_buffer: wg.Buffer
 	vertex_offset, index_offset: u64
 	if STREAMED_RENDERER_ENABLED {
-		buffer, uploaded_vertex_offset, uploaded_index_offset, upload_ok := _geometry_upload_indexed(
-			r,
-			raw_data(r.verts[:]),
-			vertex_bytes,
-			raw_data(r.indices[:]),
-			index_bytes,
-		)
+		buffer, uploaded_vertex_offset, uploaded_index_offset, upload_ok :=
+			_geometry_upload_indexed(
+				r,
+				raw_data(r.verts[:]),
+				vertex_bytes,
+				raw_data(r.indices[:]),
+				index_bytes,
+			)
 		if !upload_ok {
 			clear(&r.verts)
 			clear(&r.indices)
@@ -523,7 +590,15 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 	// Custom-shader path: an active shader overrides the pipeline + bind groups
 	// for the current draw (fullscreen post-process / custom 2D passes).
 	if r.active_shader != 0 {
-		if _shader_flush(r, pass, vertex_buffer, vertex_offset, index_buffer, index_offset, u32(index_count)) {
+		if _shader_flush(
+			r,
+			pass,
+			vertex_buffer,
+			vertex_offset,
+			index_buffer,
+			index_offset,
+			u32(index_count),
+		) {
 			clear(&r.verts)
 			clear(&r.indices)
 			return
@@ -553,7 +628,12 @@ _geometry_upload_indexed :: proc(
 	vertex_bytes: u64,
 	index_data: rawptr,
 	index_bytes: u64,
-) -> (wg.Buffer, u64, u64, bool) {
+) -> (
+	wg.Buffer,
+	u64,
+	u64,
+	bool,
+) {
 	assert(r != nil)
 	assert(vertex_data != nil)
 	assert(vertex_bytes > 0)
@@ -572,7 +652,13 @@ _geometry_upload_indexed :: proc(
 		return nil, 0, 0, false
 	}
 
-	wg.QueueWriteBuffer(g.queue, slot.geometry_buffer, vertex_offset, vertex_data, uint(vertex_bytes))
+	wg.QueueWriteBuffer(
+		g.queue,
+		slot.geometry_buffer,
+		vertex_offset,
+		vertex_data,
+		uint(vertex_bytes),
+	)
 	wg.QueueWriteBuffer(g.queue, slot.geometry_buffer, index_offset, index_data, uint(index_bytes))
 	when RENDER_STATS_ENABLED {
 		renderer_stats_current.peak_geometry_arena_bytes = max(
@@ -591,14 +677,14 @@ _stream_slots_init :: proc(r: ^Renderer) {
 	if status != .Success || r.uniform_alignment == 0 do r.uniform_alignment = 256
 	r.active_stream_slot = -1
 	for &slot in r.stream_slots {
-		slot.geometry_buffer = wg.DeviceCreateBuffer(g.device, &{
-			usage = {.Vertex, .Index, .CopyDst},
-			size = GEOMETRY_STREAM_BYTES,
-		})
-		slot.uniform_buffer = wg.DeviceCreateBuffer(g.device, &{
-			usage = {.Uniform, .CopyDst},
-			size = UNIFORM_STREAM_BYTES,
-		})
+		slot.geometry_buffer = wg.DeviceCreateBuffer(
+			g.device,
+			&{usage = {.Vertex, .Index, .CopyDst}, size = GEOMETRY_STREAM_BYTES},
+		)
+		slot.uniform_buffer = wg.DeviceCreateBuffer(
+			g.device,
+			&{usage = {.Uniform, .CopyDst}, size = UNIFORM_STREAM_BYTES},
+		)
 		_stats_buffer_created(false)
 		_stats_buffer_created(false)
 		assert(slot.geometry_buffer != nil)
@@ -673,7 +759,13 @@ _stream_slot_abandon :: proc(r: ^Renderer) {
 }
 
 @(private)
-_stream_slot_reserve_indexed :: proc(slot: ^Stream_Slot, vertex_bytes, index_bytes, capacity: u64) -> (vertex, index: u64, ok: bool) {
+_stream_slot_reserve_indexed :: proc(
+	slot: ^Stream_Slot,
+	vertex_bytes, index_bytes, capacity: u64,
+) -> (
+	vertex, index: u64,
+	ok: bool,
+) {
 	assert(slot != nil)
 	assert(slot.state == .Recording)
 	assert(vertex_bytes > 0)
@@ -687,7 +779,13 @@ _stream_slot_reserve_indexed :: proc(slot: ^Stream_Slot, vertex_bytes, index_byt
 }
 
 @(private)
-_stream_slot_reserve_uniform :: proc(slot: ^Stream_Slot, size, alignment, capacity: u64) -> (offset: u64, ok: bool) {
+_stream_slot_reserve_uniform :: proc(
+	slot: ^Stream_Slot,
+	size, alignment, capacity: u64,
+) -> (
+	offset: u64,
+	ok: bool,
+) {
 	assert(slot != nil)
 	assert(slot.state == .Recording)
 	assert(size > 0)
@@ -705,7 +803,12 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 	assert(size > 0)
 	if r.active_stream_slot < 0 do return 0, false
 	slot := &r.stream_slots[r.active_stream_slot]
-	offset, ok := _stream_slot_reserve_uniform(slot, size, r.uniform_alignment, UNIFORM_STREAM_BYTES)
+	offset, ok := _stream_slot_reserve_uniform(
+		slot,
+		size,
+		r.uniform_alignment,
+		UNIFORM_STREAM_BYTES,
+	)
 	if !ok {
 		_stats_reservation_failure(true)
 		return 0, false
@@ -763,16 +866,26 @@ BlendOpRL :: distinct i32
 @(private)
 _rl_factor :: proc(v: BlendFactorRL) -> wg.BlendFactor {
 	switch i32(v) {
-	case 0:      return .Zero               // GL_ZERO
-	case 1:      return .One                // GL_ONE
-	case 0x0300: return .Src                // GL_SRC_COLOR
-	case 0x0301: return .OneMinusSrc        // GL_ONE_MINUS_SRC_COLOR
-	case 0x0302: return .SrcAlpha           // GL_SRC_ALPHA
-	case 0x0303: return .OneMinusSrcAlpha   // GL_ONE_MINUS_SRC_ALPHA
-	case 0x0304: return .DstAlpha           // GL_DST_ALPHA
-	case 0x0305: return .OneMinusDstAlpha   // GL_ONE_MINUS_DST_ALPHA
-	case 0x0306: return .Dst                // GL_DST_COLOR
-	case 0x0307: return .OneMinusDst        // GL_ONE_MINUS_DST_COLOR
+	case 0:
+		return .Zero // GL_ZERO
+	case 1:
+		return .One // GL_ONE
+	case 0x0300:
+		return .Src // GL_SRC_COLOR
+	case 0x0301:
+		return .OneMinusSrc // GL_ONE_MINUS_SRC_COLOR
+	case 0x0302:
+		return .SrcAlpha // GL_SRC_ALPHA
+	case 0x0303:
+		return .OneMinusSrcAlpha // GL_ONE_MINUS_SRC_ALPHA
+	case 0x0304:
+		return .DstAlpha // GL_DST_ALPHA
+	case 0x0305:
+		return .OneMinusDstAlpha // GL_ONE_MINUS_DST_ALPHA
+	case 0x0306:
+		return .Dst // GL_DST_COLOR
+	case 0x0307:
+		return .OneMinusDst // GL_ONE_MINUS_DST_COLOR
 	}
 	return .One
 }
@@ -780,11 +893,16 @@ _rl_factor :: proc(v: BlendFactorRL) -> wg.BlendFactor {
 @(private)
 _rl_op :: proc(v: BlendOpRL) -> wg.BlendOperation {
 	switch i32(v) {
-	case 0x8006: return .Add                // GL_FUNC_ADD
-	case 0x800A: return .Subtract           // GL_FUNC_SUBTRACT
-	case 0x800B: return .ReverseSubtract    // GL_FUNC_REVERSE_SUBTRACT
-	case 0x8007: return .Min                // GL_MIN
-	case 0x8008: return .Max                // GL_MAX
+	case 0x8006:
+		return .Add // GL_FUNC_ADD
+	case 0x800A:
+		return .Subtract // GL_FUNC_SUBTRACT
+	case 0x800B:
+		return .ReverseSubtract // GL_FUNC_REVERSE_SUBTRACT
+	case 0x8007:
+		return .Min // GL_MIN
+	case 0x8008:
+		return .Max // GL_MAX
 	}
 	return .Add
 }

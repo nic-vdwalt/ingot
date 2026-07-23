@@ -19,7 +19,8 @@ when HTTP_STRESS {
 		mutex:       sync.Mutex,
 	}
 
-	@(private = "file") http_stress: Http_Stress_State
+	@(private = "file")
+	http_stress: Http_Stress_State
 
 	http_stress_reset :: proc() {
 		sync.mutex_lock(&http_stress.mutex)

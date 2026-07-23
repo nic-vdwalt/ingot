@@ -25,8 +25,8 @@ Rectangle :: struct {
 // --- image / texture / font ------------------------------------------------
 
 PixelFormat :: enum i32 {
-	UNKNOWN                   = 0,
-	UNCOMPRESSED_GRAYSCALE    = 1,
+	UNKNOWN = 0,
+	UNCOMPRESSED_GRAYSCALE = 1,
 	UNCOMPRESSED_GRAY_ALPHA,
 	UNCOMPRESSED_R5G6B5,
 	UNCOMPRESSED_R8G8B8,
@@ -187,7 +187,7 @@ TRIGGER_PRESS_THRESHOLD :: f32(0.1)
 // X, Y, LB, RB, back, start, guide, L3, R3, dpad U/R/D/L) to the raylib
 // GamepadButton above. Kept as data (not a switch) so it is unit-testable.
 @(rodata)
-_GLFW_PAD_REMAP := [15]GamepadButton{
+_GLFW_PAD_REMAP := [15]GamepadButton {
 	.RIGHT_FACE_DOWN, // A / cross
 	.RIGHT_FACE_RIGHT, // B / circle
 	.RIGHT_FACE_LEFT, // X / square
@@ -209,7 +209,7 @@ _GLFW_PAD_REMAP := [15]GamepadButton{
 // API) to the raylib GamepadButton. Differs from GLFW: triggers are digital
 // buttons 6/7 and the dpad order is U/D/L/R.
 @(rodata)
-_W3C_PAD_REMAP := [17]GamepadButton{
+_W3C_PAD_REMAP := [17]GamepadButton {
 	.RIGHT_FACE_DOWN, // 0 A / cross
 	.RIGHT_FACE_RIGHT, // 1 B / circle
 	.RIGHT_FACE_LEFT, // 2 X / square
@@ -367,7 +367,7 @@ ConfigFlag :: enum i32 {
 	BORDERLESS_WINDOWED_MODE = 15,
 	INTERLACED_HINT          = 16,
 }
-ConfigFlags :: distinct bit_set[ConfigFlag; i32]
+ConfigFlags :: distinct bit_set[ConfigFlag;i32]
 
 // Convenience alias used by some call sites (raylib exposes KEY_NULL sentinel).
 KEY_NULL :: KeyboardKey.KEY_NULL

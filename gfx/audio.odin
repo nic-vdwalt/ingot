@@ -34,7 +34,8 @@ Wave :: struct {
 	data:       rawptr,
 }
 
-@(private) g_audio_ready: bool
+@(private)
+g_audio_ready: bool
 
 // --- handle packing (pure; unit-tested) -------------------------------------
 
@@ -70,7 +71,7 @@ InitAudioDevice :: proc() {
 	assert(g_audio_ready == platform_audio_ready(), "InitAudioDevice: backend state mismatch")
 }
 
-IsAudioDeviceReady :: proc() -> bool { return g_audio_ready }
+IsAudioDeviceReady :: proc() -> bool {return g_audio_ready}
 
 CloseAudioDevice :: proc() {
 	if !g_audio_ready do return
@@ -102,7 +103,10 @@ LoadSound :: proc(fileName: cstring) -> Sound {
 // normalized to interleaved f32 here so both backends share one input format.
 LoadSoundFromWave :: proc(wave: Wave) -> Sound {
 	assert(wave.channels >= 1 && wave.channels <= 2, "LoadSoundFromWave: unsupported channels")
-	assert(wave.sampleSize == 16 || wave.sampleSize == 32, "LoadSoundFromWave: unsupported sampleSize")
+	assert(
+		wave.sampleSize == 16 || wave.sampleSize == 32,
+		"LoadSoundFromWave: unsupported sampleSize",
+	)
 	if !g_audio_ready || wave.frameCount == 0 || wave.data == nil do return Sound{}
 	total := int(wave.frameCount) * int(wave.channels)
 	samples := make([]f32, total, context.temp_allocator)
@@ -118,7 +122,10 @@ LoadSoundFromWave :: proc(wave: Wave) -> Sound {
 		}
 	}
 	handle := platform_audio_load_pcm(
-		raw_data(samples), wave.frameCount, wave.channels, wave.sampleRate,
+		raw_data(samples),
+		wave.frameCount,
+		wave.channels,
+		wave.sampleRate,
 	)
 	assert(handle == 0 || _audio_handle_slot(handle) >= 0, "LoadSoundFromWave: bad handle")
 	return Sound{frameCount = wave.frameCount, _handle = handle}
@@ -195,7 +202,10 @@ StopMusicStream :: proc(music: Music) {
 // UpdateMusicStream is a no-op on both targets (native streams on the device
 // thread; web plays decoded buffers). Kept for raylib call-site parity.
 UpdateMusicStream :: proc(music: Music) {
-	assert(music._handle == 0 || _audio_handle_slot(music._handle) >= 0, "UpdateMusicStream: corrupt handle")
+	assert(
+		music._handle == 0 || _audio_handle_slot(music._handle) >= 0,
+		"UpdateMusicStream: corrupt handle",
+	)
 	assert(g_audio_ready == platform_audio_ready(), "UpdateMusicStream: backend state mismatch")
 }
 

@@ -132,7 +132,7 @@ load_sound_from_wave_requires_ready_device :: proc(t: ^testing.T) {
 	// Without InitAudioDevice the loader must return the invalid Sound and
 	// touch nothing — verifies the "audio off is a safe no-op" contract.
 	samples := [4]i16{0, 16384, -16384, 0}
-	wave := Wave{
+	wave := Wave {
 		frameCount = 4,
 		sampleRate = 44100,
 		sampleSize = 16,

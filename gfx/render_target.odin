@@ -25,10 +25,17 @@ LoadRenderTexture :: proc(width, height: i32) -> RenderTexture2D {
 // LoadRenderTextureEx creates a render target with an explicit colour format
 // (e.g. RGBA16Float HDR) and an optional depth attachment. Used by the rlgl
 // framebuffer path for the galaxy HDR/scene targets.
-LoadRenderTextureEx :: proc(width, height: i32, format: wg.TextureFormat, with_depth: bool) -> RenderTexture2D {
+LoadRenderTextureEx :: proc(
+	width, height: i32,
+	format: wg.TextureFormat,
+	with_depth: bool,
+) -> RenderTexture2D {
 	if !g.initialized do return RenderTexture2D{}
 	tex := _new_rt_color(width, height, format)
-	rt := RenderTexture2D{id = tex.id, texture = tex}
+	rt := RenderTexture2D {
+		id      = tex.id,
+		texture = tex,
+	}
 	if with_depth {
 		rt.depth = _new_rt_depth(width, height)
 	}
@@ -67,12 +74,7 @@ BeginTextureMode :: proc(target: RenderTexture2D) {
 	g.frame.depth_view = g.frame.rt_depth ? _texture_view(target.depth.id) : nil
 
 	// RT projection: y-flipped (p.z = -1) so the texture matches raylib.
-	p := [4]f32{
-		1.0 / f32(max(e.width, 1)),
-		1.0 / f32(max(e.height, 1)),
-		RT_PROJECTION_Y_FLIP,
-		0.0,
-	}
+	p := [4]f32{1.0 / f32(max(e.width, 1)), 1.0 / f32(max(e.height, 1)), RT_PROJECTION_Y_FLIP, 0.0}
 	wg.QueueWriteBuffer(g.queue, g.rend.rt_ubuf, 0, &p, size_of(p))
 	g.rend.cur_u = g.rend.rt_ubind
 
@@ -94,14 +96,17 @@ _ensure_rt_pass :: proc() {
 	// not clear). Only clear when ClearBackground was called after
 	// BeginTextureMode this frame.
 	load_op := wg.LoadOp.Load if !g.frame.rt_should_clear else wg.LoadOp.Clear
-	color := wg.RenderPassColorAttachment{
+	color := wg.RenderPassColorAttachment {
 		view       = view,
 		depthSlice = wg.DEPTH_SLICE_UNDEFINED,
 		loadOp     = load_op,
 		storeOp    = .Store,
 		clearValue = {f64(cc.r) / 255.0, f64(cc.g) / 255.0, f64(cc.b) / 255.0, f64(cc.a) / 255.0},
 	}
-	desc := wg.RenderPassDescriptor{colorAttachmentCount = 1, colorAttachments = &color}
+	desc := wg.RenderPassDescriptor {
+		colorAttachmentCount = 1,
+		colorAttachments     = &color,
+	}
 	// NOTE: the CPU-projected 3D approximation does not depth-test, and the 2D
 	// batch pipelines carry no depth-stencil state, so we intentionally do not
 	// attach a depth buffer here (attaching one would mismatch those pipelines).
@@ -152,10 +157,14 @@ EndTextureMode :: proc() {
 @(private)
 _pf_to_wg :: proc(pf: PixelFormat) -> wg.TextureFormat {
 	#partial switch pf {
-	case .UNCOMPRESSED_R16G16B16A16: return .RGBA16Float
-	case .UNCOMPRESSED_R32:          return .R32Float
-	case .UNCOMPRESSED_R32G32B32A32: return .RGBA32Float
-	case .UNCOMPRESSED_R8G8B8A8:     return .RGBA8Unorm
+	case .UNCOMPRESSED_R16G16B16A16:
+		return .RGBA16Float
+	case .UNCOMPRESSED_R32:
+		return .R32Float
+	case .UNCOMPRESSED_R32G32B32A32:
+		return .RGBA32Float
+	case .UNCOMPRESSED_R8G8B8A8:
+		return .RGBA8Unorm
 	}
 	return g.format
 }

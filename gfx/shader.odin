@@ -36,7 +36,6 @@ Shader_Entry :: struct {
 	ushadow:      []u8,
 	u_layout:     wg.BindGroupLayout,
 	u_bind:       [STREAM_SLOT_COUNT]wg.BindGroup,
-
 	tex_names:    []string, // extra texture binding names (group 3)
 	extra_count:  int,
 	extra_layout: wg.BindGroupLayout,
@@ -45,13 +44,15 @@ Shader_Entry :: struct {
 	extra_dirty:  bool,
 
 	// pipelines are colour-target-format specific; built lazily per format.
-	pipe_fmt:  [8]wg.TextureFormat,
-	pipe_obj:  [8]wg.RenderPipeline,
-	pipe_n:    int,
+	pipe_fmt:     [8]wg.TextureFormat,
+	pipe_obj:     [8]wg.RenderPipeline,
+	pipe_n:       int,
 }
 
-@(private) g_shaders: [dynamic]^Shader_Entry
-@(private) g_default_tex: u32
+@(private)
+g_shaders: [dynamic]^Shader_Entry
+@(private)
+g_default_tex: u32
 
 @(private)
 _shader_get :: proc(id: u32) -> ^Shader_Entry {
@@ -66,7 +67,13 @@ _shader_get :: proc(id: u32) -> ^Shader_Entry {
 _default_tex :: proc() -> u32 {
 	if g_default_tex != 0 do return g_default_tex
 	px := [4]u8{255, 255, 255, 255}
-	img := Image{data = raw_data(px[:]), width = 1, height = 1, mipmaps = 1, format = .UNCOMPRESSED_R8G8B8A8}
+	img := Image {
+		data    = raw_data(px[:]),
+		width   = 1,
+		height  = 1,
+		mipmaps = 1,
+		format  = .UNCOMPRESSED_R8G8B8A8,
+	}
 	t := LoadTextureFromImage(img)
 	g_default_tex = t.id
 	return g_default_tex
@@ -77,11 +84,16 @@ _default_tex :: proc() -> u32 {
 @(private)
 _wgsl_type_layout :: proc(t: string) -> (size, align: u32) {
 	switch t {
-	case "f32", "i32", "u32":                      return 4, 4
-	case "vec2<f32>", "vec2<i32>", "vec2<u32>":    return 8, 8
-	case "vec3<f32>", "vec3<i32>", "vec3<u32>":    return 12, 16
-	case "vec4<f32>", "vec4<i32>", "vec4<u32>":    return 16, 16
-	case "mat4x4<f32>":                            return 64, 16
+	case "f32", "i32", "u32":
+		return 4, 4
+	case "vec2<f32>", "vec2<i32>", "vec2<u32>":
+		return 8, 8
+	case "vec3<f32>", "vec3<i32>", "vec3<u32>":
+		return 12, 16
+	case "vec4<f32>", "vec4<i32>", "vec4<u32>":
+		return 16, 16
+	case "mat4x4<f32>":
+		return 64, 16
 	}
 	return 4, 4
 }
@@ -171,12 +183,15 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 
 	e := new(Shader_Entry)
 	src_clone := strings.clone(src)
-	e.module = wg.DeviceCreateShaderModule(g.device, &{
-		nextInChain = &wg.ShaderSourceWGSL{
-			chain = {sType = .ShaderSourceWGSL},
-			code  = src_clone,
+	e.module = wg.DeviceCreateShaderModule(
+		g.device,
+		&{
+			nextInChain = &wg.ShaderSourceWGSL {
+				chain = {sType = .ShaderSourceWGSL},
+				code = src_clone,
+			},
 		},
-	})
+	)
 	e.uniforms, _ = _reflect_uniforms(src)
 	total: u32 = 16
 	for u in e.uniforms {
@@ -185,28 +200,30 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 	total = _align_up(total, 16)
 	e.ushadow = make([]u8, int(total))
 
-	e.u_layout = wg.DeviceCreateBindGroupLayout(g.device, &{
-		entryCount = 1,
-		entries = &wg.BindGroupLayoutEntry{
-			binding = 0,
-			visibility = {.Vertex, .Fragment},
-			buffer = {
-				type = .Uniform,
-				hasDynamicOffset = true,
-				minBindingSize = u64(total),
+	e.u_layout = wg.DeviceCreateBindGroupLayout(
+		g.device,
+		&{
+			entryCount = 1,
+			entries = &wg.BindGroupLayoutEntry {
+				binding = 0,
+				visibility = {.Vertex, .Fragment},
+				buffer = {type = .Uniform, hasDynamicOffset = true, minBindingSize = u64(total)},
 			},
 		},
-	})
+	)
 	for &bind, index in e.u_bind {
-		bind = wg.DeviceCreateBindGroup(g.device, &{
-			layout = e.u_layout,
-			entryCount = 1,
-			entries = &wg.BindGroupEntry{
-				binding = 0,
-				buffer = g.rend.stream_slots[index].uniform_buffer,
-				size = u64(total),
+		bind = wg.DeviceCreateBindGroup(
+			g.device,
+			&{
+				layout = e.u_layout,
+				entryCount = 1,
+				entries = &wg.BindGroupEntry {
+					binding = 0,
+					buffer = g.rend.stream_slots[index].uniform_buffer,
+					size = u64(total),
+				},
 			},
-		})
+		)
 	}
 
 	e.tex_names = _reflect_textures(src)
@@ -225,9 +242,10 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 			visibility = {.Fragment},
 			sampler = {type = .Filtering},
 		}
-		e.extra_layout = wg.DeviceCreateBindGroupLayout(g.device, &{
-			entryCount = uint(e.extra_count + 1), entries = raw_data(entries),
-		})
+		e.extra_layout = wg.DeviceCreateBindGroupLayout(
+			g.device,
+			&{entryCount = uint(e.extra_count + 1), entries = raw_data(entries)},
+		)
 		e.extra_dirty = true
 	}
 
@@ -267,11 +285,22 @@ GetShaderLocation :: proc(shader: Shader, uniformName: cstring) -> i32 {
 	return -1
 }
 
-SetShaderValue :: proc(shader: Shader, #any_int locIndex: i32, value: rawptr, uniformType: ShaderUniformDataType) {
+SetShaderValue :: proc(
+	shader: Shader,
+	#any_int locIndex: i32,
+	value: rawptr,
+	uniformType: ShaderUniformDataType,
+) {
 	SetShaderValueV(shader, locIndex, value, uniformType, 1)
 }
 
-SetShaderValueV :: proc(shader: Shader, #any_int locIndex: i32, value: rawptr, uniformType: ShaderUniformDataType, count: i32) {
+SetShaderValueV :: proc(
+	shader: Shader,
+	#any_int locIndex: i32,
+	value: rawptr,
+	uniformType: ShaderUniformDataType,
+	count: i32,
+) {
 	e := _shader_get(shader.id)
 	if e == nil || locIndex < 0 || int(locIndex) >= len(e.uniforms) do return
 	u := e.uniforms[locIndex]
@@ -332,11 +361,16 @@ ShaderUnbindRaw :: proc() {
 @(private)
 _uniform_type_size :: proc(t: ShaderUniformDataType) -> u32 {
 	switch t {
-	case .FLOAT, .INT:            return 4
-	case .VEC2, .IVEC2:          return 8
-	case .VEC3, .IVEC3:          return 12
-	case .VEC4, .IVEC4:          return 16
-	case .SAMPLER2D:             return 4
+	case .FLOAT, .INT:
+		return 4
+	case .VEC2, .IVEC2:
+		return 8
+	case .VEC3, .IVEC3:
+		return 12
+	case .VEC4, .IVEC4:
+		return 16
+	case .SAMPLER2D:
+		return 4
 	}
 	return 4
 }
@@ -349,17 +383,22 @@ _shader_pipeline :: proc(e: ^Shader_Entry, format: wg.TextureFormat) -> wg.Rende
 	}
 	if e.pipe_n >= len(e.pipe_obj) do return nil
 
-	attrs := [3]wg.VertexAttribute{
+	attrs := [3]wg.VertexAttribute {
 		{format = .Float32x2, offset = 0, shaderLocation = 0},
 		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
 		{format = .Float32x2, offset = u64(offset_of(Vertex, uv)), shaderLocation = 2},
 	}
-	vbl := wg.VertexBufferLayout{
-		arrayStride = size_of(Vertex), stepMode = .Vertex,
-		attributeCount = 3, attributes = raw_data(attrs[:]),
+	vbl := wg.VertexBufferLayout {
+		arrayStride    = size_of(Vertex),
+		stepMode       = .Vertex,
+		attributeCount = 3,
+		attributes     = raw_data(attrs[:]),
 	}
 	blend := _blend_for(&g.rend, g.rend.cur_blend)
-	target := wg.ColorTargetState{format = format, writeMask = wg.ColorWriteMaskFlags_All}
+	target := wg.ColorTargetState {
+		format    = format,
+		writeMask = wg.ColorWriteMaskFlags_All,
+	}
 	if _format_blendable(format) do target.blend = &blend
 
 	layouts: [4]wg.BindGroupLayout
@@ -371,17 +410,25 @@ _shader_pipeline :: proc(e: ^Shader_Entry, format: wg.TextureFormat) -> wg.Rende
 		layouts[3] = e.extra_layout
 		n_layouts = 4
 	}
-	pl := wg.DeviceCreatePipelineLayout(g.device, &{
-		bindGroupLayoutCount = uint(n_layouts),
-		bindGroupLayouts = raw_data(layouts[:]),
-	})
-	pipe := wg.DeviceCreateRenderPipeline(g.device, &{
-		layout = pl,
-		vertex = {module = e.module, entryPoint = "vs_main", bufferCount = 1, buffers = &vbl},
-		primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .None},
-		multisample = {count = 1, mask = ~u32(0)},
-		fragment = &wg.FragmentState{module = e.module, entryPoint = "fs_main", targetCount = 1, targets = &target},
-	})
+	pl := wg.DeviceCreatePipelineLayout(
+		g.device,
+		&{bindGroupLayoutCount = uint(n_layouts), bindGroupLayouts = raw_data(layouts[:])},
+	)
+	pipe := wg.DeviceCreateRenderPipeline(
+		g.device,
+		&{
+			layout = pl,
+			vertex = {module = e.module, entryPoint = "vs_main", bufferCount = 1, buffers = &vbl},
+			primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .None},
+			multisample = {count = 1, mask = ~u32(0)},
+			fragment = &wg.FragmentState {
+				module = e.module,
+				entryPoint = "fs_main",
+				targetCount = 1,
+				targets = &target,
+			},
+		},
+	)
 	e.pipe_fmt[e.pipe_n] = format
 	e.pipe_obj[e.pipe_n] = pipe
 	e.pipe_n += 1
@@ -399,18 +446,29 @@ _shader_rebuild_extra :: proc(e: ^Shader_Entry) {
 		id := e.extra_tex[i]
 		if id == 0 do id = _default_tex()
 		te := get_texture(id)
-		if te == nil { te = get_texture(_default_tex()) }
-		entries[i] = {binding = u32(i), textureView = te.view}
+		if te == nil {te = get_texture(_default_tex())}
+		entries[i] = {
+			binding     = u32(i),
+			textureView = te.view,
+		}
 		if samp == nil do samp = te.sampler
 	}
 	if samp == nil {
 		dt := get_texture(_default_tex())
 		if dt != nil do samp = dt.sampler
 	}
-	entries[e.extra_count] = {binding = u32(e.extra_count), sampler = samp}
-	e.extra_bind = wg.DeviceCreateBindGroup(g.device, &{
-		layout = e.extra_layout, entryCount = uint(e.extra_count + 1), entries = raw_data(entries),
-	})
+	entries[e.extra_count] = {
+		binding = u32(e.extra_count),
+		sampler = samp,
+	}
+	e.extra_bind = wg.DeviceCreateBindGroup(
+		g.device,
+		&{
+			layout = e.extra_layout,
+			entryCount = uint(e.extra_count + 1),
+			entries = raw_data(entries),
+		},
+	)
 	e.extra_dirty = false
 }
 

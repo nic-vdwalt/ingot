@@ -21,8 +21,8 @@ pills_shift_insert_moves_later_pills :: proc(t: ^testing.T) {
 @(test)
 pills_shift_delete_drops_overlaps :: proc(t: ^testing.T) {
 	pills := make([dynamic]Mention_Span, context.temp_allocator)
-	append(&pills, Mention_Span{0, 4})   // before deletion — kept
-	append(&pills, Mention_Span{5, 9})   // overlaps [6,10) — dropped
+	append(&pills, Mention_Span{0, 4}) // before deletion — kept
+	append(&pills, Mention_Span{5, 9}) // overlaps [6,10) — dropped
 	append(&pills, Mention_Span{12, 16}) // after — shifted left by 4
 	pills_shift_after_delete(&pills, 6, 4)
 	testing.expect_value(t, len(pills), 2)

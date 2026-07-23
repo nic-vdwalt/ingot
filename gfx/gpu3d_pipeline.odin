@@ -24,8 +24,8 @@ Gpu_3D_Load_Action :: enum {
 }
 
 Gpu_3D_Pass :: struct {
-	encoder:    wg.CommandEncoder,
-	pass:       wg.RenderPassEncoder,
+	encoder:     wg.CommandEncoder,
+	pass:        wg.RenderPassEncoder,
 	target:      ^Gpu_3D_Target,
 	generation:  u64,
 	active:      bool,
@@ -56,14 +56,22 @@ Gpu_3D_Pipeline_Entry :: struct {
 	pipeline: wg.RenderPipeline,
 }
 
-@(private) gpu_3d_meshes: [GPU_3D_MAX_MESHES]^Gpu_3D_Mesh_Entry
-@(private) gpu_3d_mesh_count: u32
-@(private) gpu_3d_pipelines: [GPU_3D_MAX_PIPELINES]Gpu_3D_Pipeline_Entry
-@(private) gpu_3d_pipeline_count: u32
-@(private) gpu_3d_shader: wg.ShaderModule
-@(private) gpu_3d_layout: wg.BindGroupLayout
-@(private) gpu_3d_bind: [STREAM_SLOT_COUNT]wg.BindGroup
-@(private) gpu_3d_generation: u64
+@(private)
+gpu_3d_meshes: [GPU_3D_MAX_MESHES]^Gpu_3D_Mesh_Entry
+@(private)
+gpu_3d_mesh_count: u32
+@(private)
+gpu_3d_pipelines: [GPU_3D_MAX_PIPELINES]Gpu_3D_Pipeline_Entry
+@(private)
+gpu_3d_pipeline_count: u32
+@(private)
+gpu_3d_shader: wg.ShaderModule
+@(private)
+gpu_3d_layout: wg.BindGroupLayout
+@(private)
+gpu_3d_bind: [STREAM_SLOT_COUNT]wg.BindGroup
+@(private)
+gpu_3d_generation: u64
 
 GPU_3D_SHADER :: `
 struct Uniforms {
@@ -96,7 +104,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 
 create_gpu_3d_target :: proc(width, height: i32) -> (Gpu_3D_Target, bool) {
 	if !g.initialized || width <= 0 || height <= 0 do return {}, false
-	target := Gpu_3D_Target{
+	target := Gpu_3D_Target {
 		texture = LoadRenderTextureEx(width, height, g.format, true),
 	}
 	ok := target.texture.texture.id != 0 && target.texture.depth.id != 0
@@ -125,7 +133,7 @@ create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) 
 		for slice: u32 = 0; slice <= slices; slice += 1 {
 			u := f32(slice) / f32(slices)
 			theta := u * f32(math.TAU)
-			normal := [3]f32{
+			normal := [3]f32 {
 				f32(math.sin(f64(phi))) * f32(math.cos(f64(theta))),
 				f32(math.cos(f64(phi))),
 				f32(math.sin(f64(phi))) * f32(math.sin(f64(theta))),
@@ -143,8 +151,16 @@ create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) 
 	}
 
 	entry := new(Gpu_3D_Mesh_Entry)
-	entry.vertex_buffer = _gpu_3d_buffer(raw_data(vertices), u64(len(vertices)) * size_of(Gpu_3D_Vertex), {.Vertex})
-	entry.index_buffer = _gpu_3d_buffer(raw_data(indices), u64(len(indices)) * size_of(u32), {.Index})
+	entry.vertex_buffer = _gpu_3d_buffer(
+		raw_data(vertices),
+		u64(len(vertices)) * size_of(Gpu_3D_Vertex),
+		{.Vertex},
+	)
+	entry.index_buffer = _gpu_3d_buffer(
+		raw_data(indices),
+		u64(len(indices)) * size_of(u32),
+		{.Index},
+	)
 	entry.index_count = u32(len(indices))
 	if entry.vertex_buffer == nil || entry.index_buffer == nil {
 		if entry.vertex_buffer != nil do wg.BufferRelease(entry.vertex_buffer)
@@ -173,7 +189,10 @@ begin_gpu_3d :: proc(
 	target: ^Gpu_3D_Target,
 	camera: Camera3D,
 	load: Gpu_3D_Load_Action = .Clear,
-) -> (Gpu_3D_Pass, bool) {
+) -> (
+	Gpu_3D_Pass,
+	bool,
+) {
 	assert(target != nil)
 	if !g.initialized || target.texture.texture.id == 0 || target.texture.depth.id == 0 do return {}, false
 	color_view := _texture_view(target.texture.texture.id)
@@ -185,35 +204,34 @@ begin_gpu_3d :: proc(
 		return {}, false
 	}
 
-	color := wg.RenderPassColorAttachment{
-		view = color_view,
+	color := wg.RenderPassColorAttachment {
+		view       = color_view,
 		depthSlice = wg.DEPTH_SLICE_UNDEFINED,
-		loadOp = load == .Clear ? .Clear : .Load,
-		storeOp = .Store,
+		loadOp     = load == .Clear ? .Clear : .Load,
+		storeOp    = .Store,
 		clearValue = {0, 0, 0, 0},
 	}
-	depth := wg.RenderPassDepthStencilAttachment{
-		view = depth_view,
-		depthLoadOp = load == .Clear ? .Clear : .Load,
-		depthStoreOp = .Store,
+	depth := wg.RenderPassDepthStencilAttachment {
+		view            = depth_view,
+		depthLoadOp     = load == .Clear ? .Clear : .Load,
+		depthStoreOp    = .Store,
 		depthClearValue = 1,
-		stencilLoadOp = .Undefined,
-		stencilStoreOp = .Undefined,
+		stencilLoadOp   = .Undefined,
+		stencilStoreOp  = .Undefined,
 	}
 	encoder := wg.DeviceCreateCommandEncoder(g.device, nil)
-	pass := wg.CommandEncoderBeginRenderPass(encoder, &{
-		colorAttachmentCount = 1,
-		colorAttachments = &color,
-		depthStencilAttachment = &depth,
-	})
+	pass := wg.CommandEncoderBeginRenderPass(
+		encoder,
+		&{colorAttachmentCount = 1, colorAttachments = &color, depthStencilAttachment = &depth},
+	)
 	gpu_3d_generation += 1
 	_stats_render_pass()
-	result := Gpu_3D_Pass{
-		encoder = encoder,
-		pass = pass,
-		target = target,
-		generation = gpu_3d_generation,
-		active = true,
+	result := Gpu_3D_Pass {
+		encoder     = encoder,
+		pass        = pass,
+		target      = target,
+		generation  = gpu_3d_generation,
+		active      = true,
 		owns_stream = owns_stream,
 	}
 	_gpu_3d_set_camera(&result, camera)
@@ -235,15 +253,20 @@ draw_gpu_mesh :: proc(
 	pipeline := _gpu_3d_pipeline(target_entry.wgformat)
 	if pipeline == nil do return
 
-	uniforms := Gpu_3D_Uniforms{
+	uniforms := Gpu_3D_Uniforms {
 		view_projection = cam3d_vp,
-		model = transform,
-		color = col_f(material.color),
+		model           = transform,
+		color           = col_f(material.color),
 	}
 	offset, ok := _uniform_upload(&g.rend, &uniforms, size_of(uniforms))
 	if !ok || g.rend.active_stream_slot < 0 do return
 	wg.RenderPassEncoderSetPipeline(pass.pass, pipeline)
-	wg.RenderPassEncoderSetBindGroup(pass.pass, 0, gpu_3d_bind[g.rend.active_stream_slot], {offset})
+	wg.RenderPassEncoderSetBindGroup(
+		pass.pass,
+		0,
+		gpu_3d_bind[g.rend.active_stream_slot],
+		{offset},
+	)
 	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderSetIndexBuffer(pass.pass, entry.index_buffer, .Uint32, 0, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderDrawIndexed(pass.pass, entry.index_count, 1, 0, 0, 0)
@@ -305,50 +328,60 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 	}
 	if gpu_3d_pipeline_count >= GPU_3D_MAX_PIPELINES do return nil
 	_gpu_3d_init_shared()
-	attrs := [2]wg.VertexAttribute{
+	attrs := [2]wg.VertexAttribute {
 		{format = .Float32x3, offset = 0, shaderLocation = 0},
 		{format = .Float32x3, offset = u64(offset_of(Gpu_3D_Vertex, normal)), shaderLocation = 1},
 	}
-	vertex_layout := wg.VertexBufferLayout{
-		arrayStride = size_of(Gpu_3D_Vertex),
-		stepMode = .Vertex,
+	vertex_layout := wg.VertexBufferLayout {
+		arrayStride    = size_of(Gpu_3D_Vertex),
+		stepMode       = .Vertex,
 		attributeCount = len(attrs),
-		attributes = raw_data(attrs[:]),
+		attributes     = raw_data(attrs[:]),
 	}
-	layout := wg.DeviceCreatePipelineLayout(g.device, &{
-		bindGroupLayoutCount = 1,
-		bindGroupLayouts = &gpu_3d_layout,
-	})
+	layout := wg.DeviceCreatePipelineLayout(
+		g.device,
+		&{bindGroupLayoutCount = 1, bindGroupLayouts = &gpu_3d_layout},
+	)
 	blend := _blend_for(&g.rend, .Alpha)
-	target := wg.ColorTargetState{format = format, blend = &blend, writeMask = wg.ColorWriteMaskFlags_All}
-	depth := wg.DepthStencilState{
-		format = .Depth24Plus,
-		depthWriteEnabled = .True,
-		depthCompare = .Less,
-		stencilReadMask = 0xff,
-		stencilWriteMask = 0xff,
+	target := wg.ColorTargetState {
+		format    = format,
+		blend     = &blend,
+		writeMask = wg.ColorWriteMaskFlags_All,
 	}
-	pipeline := wg.DeviceCreateRenderPipeline(g.device, &{
-		layout = layout,
-		vertex = {
-			module = gpu_3d_shader,
-			entryPoint = "vs_main",
-			bufferCount = 1,
-			buffers = &vertex_layout,
+	depth := wg.DepthStencilState {
+		format            = .Depth24Plus,
+		depthWriteEnabled = .True,
+		depthCompare      = .Less,
+		stencilReadMask   = 0xff,
+		stencilWriteMask  = 0xff,
+	}
+	pipeline := wg.DeviceCreateRenderPipeline(
+		g.device,
+		&{
+			layout = layout,
+			vertex = {
+				module = gpu_3d_shader,
+				entryPoint = "vs_main",
+				bufferCount = 1,
+				buffers = &vertex_layout,
+			},
+			primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .Back},
+			depthStencil = &depth,
+			multisample = {count = 1, mask = ~u32(0)},
+			fragment = &wg.FragmentState {
+				module = gpu_3d_shader,
+				entryPoint = "fs_main",
+				targetCount = 1,
+				targets = &target,
+			},
 		},
-		primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .Back},
-		depthStencil = &depth,
-		multisample = {count = 1, mask = ~u32(0)},
-		fragment = &wg.FragmentState{
-			module = gpu_3d_shader,
-			entryPoint = "fs_main",
-			targetCount = 1,
-			targets = &target,
-		},
-	})
+	)
 	wg.PipelineLayoutRelease(layout)
 	index := gpu_3d_pipeline_count
-	gpu_3d_pipelines[index] = {format = format, pipeline = pipeline}
+	gpu_3d_pipelines[index] = {
+		format   = format,
+		pipeline = pipeline,
+	}
 	gpu_3d_pipeline_count += 1
 	return pipeline
 }
@@ -356,34 +389,43 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 @(private)
 _gpu_3d_init_shared :: proc() {
 	if gpu_3d_shader != nil do return
-	gpu_3d_shader = wg.DeviceCreateShaderModule(g.device, &{
-		nextInChain = &wg.ShaderSourceWGSL{
-			chain = {sType = .ShaderSourceWGSL},
-			code = GPU_3D_SHADER,
-		},
-	})
-	gpu_3d_layout = wg.DeviceCreateBindGroupLayout(g.device, &{
-		entryCount = 1,
-		entries = &wg.BindGroupLayoutEntry{
-			binding = 0,
-			visibility = {.Vertex, .Fragment},
-			buffer = {
-				type = .Uniform,
-				hasDynamicOffset = true,
-				minBindingSize = size_of(Gpu_3D_Uniforms),
+	gpu_3d_shader = wg.DeviceCreateShaderModule(
+		g.device,
+		&{
+			nextInChain = &wg.ShaderSourceWGSL {
+				chain = {sType = .ShaderSourceWGSL},
+				code = GPU_3D_SHADER,
 			},
 		},
-	})
-	for &bind, index in gpu_3d_bind {
-		bind = wg.DeviceCreateBindGroup(g.device, &{
-			layout = gpu_3d_layout,
+	)
+	gpu_3d_layout = wg.DeviceCreateBindGroupLayout(
+		g.device,
+		&{
 			entryCount = 1,
-			entries = &wg.BindGroupEntry{
+			entries = &wg.BindGroupLayoutEntry {
 				binding = 0,
-				buffer = g.rend.stream_slots[index].uniform_buffer,
-				size = size_of(Gpu_3D_Uniforms),
+				visibility = {.Vertex, .Fragment},
+				buffer = {
+					type = .Uniform,
+					hasDynamicOffset = true,
+					minBindingSize = size_of(Gpu_3D_Uniforms),
+				},
 			},
-		})
+		},
+	)
+	for &bind, index in gpu_3d_bind {
+		bind = wg.DeviceCreateBindGroup(
+			g.device,
+			&{
+				layout = gpu_3d_layout,
+				entryCount = 1,
+				entries = &wg.BindGroupEntry {
+					binding = 0,
+					buffer = g.rend.stream_slots[index].uniform_buffer,
+					size = size_of(Gpu_3D_Uniforms),
+				},
+			},
+		)
 	}
 	assert(gpu_3d_shader != nil)
 	assert(gpu_3d_layout != nil)

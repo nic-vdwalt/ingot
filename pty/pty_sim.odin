@@ -8,18 +8,24 @@ INGOT_PTY_SIM :: #config(INGOT_PTY_SIM, false)
 
 when INGOT_PTY_SIM {
 
-	@(private = "file") Pty_Sim :: struct {
+	@(private = "file")
+	Pty_Sim :: struct {
 		tape:       []u8, // caller-owned; valid until the next load
 		pos:        int,
 		chunk_seed: u64, // deterministic chunk sizing
 		eof_after:  bool, // report EOF once the tape is exhausted
 	}
 
-	@(private = "file") g_pty_sim: Pty_Sim
+	@(private = "file")
+	g_pty_sim: Pty_Sim
 
 	// pty_sim_load installs a byte tape. `tape` must outlive the pump calls.
 	pty_sim_load :: proc(tape: []u8, chunk_seed: u64, eof_after: bool) {
-		g_pty_sim = {tape = tape, chunk_seed = chunk_seed, eof_after = eof_after}
+		g_pty_sim = {
+			tape       = tape,
+			chunk_seed = chunk_seed,
+			eof_after  = eof_after,
+		}
 	}
 
 	// pty_sim_exhausted reports whether the whole tape has been consumed.

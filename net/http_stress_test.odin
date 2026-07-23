@@ -33,11 +33,11 @@ when HTTP_STRESS {
 			time.sleep(100 * time.Microsecond)
 			accepted := 0
 			for i in 0 ..< FETCH_MAXIMUM_PENDING * 2 {
-				was_accepted := fetcher_request_http(&f, u64(i), Http_Request{
-					method = .Get,
-					path = "/stress",
-					maximum_body = 64,
-				})
+				was_accepted := fetcher_request_http(
+					&f,
+					u64(i),
+					Http_Request{method = .Get, path = "/stress", maximum_body = 64},
+				)
 				if was_accepted do accepted += 1
 			}
 			testing.expect(t, accepted > 0)
@@ -58,11 +58,14 @@ when HTTP_STRESS {
 
 			fetcher_stop(&f)
 			for worker in f.workers do testing.expect(t, worker == nil)
-			testing.expect(t, !fetcher_request_http(&f, 999, Http_Request{
-				method = .Get,
-				path = "/after-stop",
-				maximum_body = 64,
-			}))
+			testing.expect(
+				t,
+				!fetcher_request_http(
+					&f,
+					999,
+					Http_Request{method = .Get, path = "/after-stop", maximum_body = 64},
+				),
+			)
 			requests, completions, closes := http_stress_counts()
 			testing.expect(t, requests >= completed)
 			testing.expect_value(t, completions, completed)

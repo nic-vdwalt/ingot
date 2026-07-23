@@ -116,9 +116,14 @@ test_ws_parse_negative_64bit_length :: proc(t: ^testing.T) {
 
 @(test)
 test_ws_parse_back_to_back_frames :: proc(t: ^testing.T) {
-	buf := []u8{
-		0x81, 0x02, 'h', 'i', // text "hi"
-		0x89, 0x01, 'p', // ping "p"
+	buf := []u8 {
+		0x81,
+		0x02,
+		'h',
+		'i', // text "hi"
+		0x89,
+		0x01,
+		'p', // ping "p"
 	}
 	frame, consumed, status := ws_parse_frame(buf)
 	testing.expect_value(t, status, WS_Parse_Status.Ok)
@@ -133,6 +138,184 @@ test_ws_parse_back_to_back_frames :: proc(t: ^testing.T) {
 	testing.expect_value(t, string(frame2.payload), "p")
 }
 
+// -- ws_parse_frame: FIN bit ---------------------------------------------------
+
+@(test)
+test_ws_parse_fin_bit :: proc(t: ^testing.T) {
+	// FIN set: 0x81 = FIN + text.
+	frame, _, status := ws_parse_frame([]u8{0x81, 0x02, 'h', 'i'})
+	testing.expect_value(t, status, WS_Parse_Status.Ok)
+	testing.expect_value(t, frame.fin, true)
+
+	// FIN clear: 0x01 = text fragment start.
+	frame2, _, status2 := ws_parse_frame([]u8{0x01, 0x02, 'h', 'i'})
+	testing.expect_value(t, status2, WS_Parse_Status.Ok)
+	testing.expect_value(t, frame2.fin, false)
+	testing.expect_value(t, frame2.opcode, u8(WS_OP_TEXT))
+
+	// FIN set on a continuation frame: 0x80 = FIN + opcode 0.
+	frame3, _, status3 := ws_parse_frame([]u8{0x80, 0x01, 'x'})
+	testing.expect_value(t, status3, WS_Parse_Status.Ok)
+	testing.expect_value(t, frame3.fin, true)
+	testing.expect_value(t, frame3.opcode, u8(WS_OP_CONTINUATION))
+}
+
+// -- ws_handle_data_frame: fragment reassembly (RFC 6455 §5.4) -----------------
+
+// Drain exactly one message and return it (empty message + false if the
+// queue does not hold exactly one).
+@(private = "file")
+drain_one :: proc(t: ^testing.T, ws: ^WebSocket, loc := #caller_location) -> (WS_Message, bool) {
+	msgs := ws_drain(ws)
+	testing.expect_value(t, len(msgs), 1, loc = loc)
+	if len(msgs) != 1 do return {}, false
+	return msgs[0], true
+}
+
+@(test)
+test_ws_frag_two_part_text :: proc(t: ^testing.T) {
+	ws := ws_init()
+	defer ws_close(&ws)
+	frag: WS_Frag_State
+	defer delete(frag.buf)
+
+	testing.expect(
+		t,
+		ws_handle_data_frame(
+			&ws,
+			&frag,
+			{opcode = WS_OP_TEXT, payload = {'h', 'e', 'l'}, fin = false},
+		),
+	)
+	testing.expect_value(t, frag.active, true)
+	testing.expect_value(t, len(ws_drain(&ws)), 0) // nothing until FIN
+	// A control frame (PING) may interleave here — it never touches frag
+	// state, so reassembly must complete normally afterwards.
+	testing.expect(
+		t,
+		ws_handle_data_frame(
+			&ws,
+			&frag,
+			{opcode = WS_OP_CONTINUATION, payload = {'l', 'o'}, fin = true},
+		),
+	)
+	testing.expect_value(t, frag.active, false)
+
+	if msg, ok := drain_one(t, &ws); ok {
+		defer delete(msg.data)
+		testing.expect_value(t, msg.data, "hello")
+		testing.expect_value(t, msg.binary, false)
+	}
+}
+
+@(test)
+test_ws_frag_three_part_binary :: proc(t: ^testing.T) {
+	ws := ws_init()
+	defer ws_close(&ws)
+	frag: WS_Frag_State
+	defer delete(frag.buf)
+
+	testing.expect(
+		t,
+		ws_handle_data_frame(&ws, &frag, {opcode = WS_OP_BINARY, payload = {1, 2}, fin = false}),
+	)
+	testing.expect(
+		t,
+		ws_handle_data_frame(
+			&ws,
+			&frag,
+			{opcode = WS_OP_CONTINUATION, payload = {3}, fin = false},
+		),
+	)
+	testing.expect(
+		t,
+		ws_handle_data_frame(
+			&ws,
+			&frag,
+			{opcode = WS_OP_CONTINUATION, payload = {4, 5}, fin = true},
+		),
+	)
+	testing.expect_value(t, frag.active, false)
+
+	if msg, ok := drain_one(t, &ws); ok {
+		defer delete(msg.data)
+		expected := []u8{1, 2, 3, 4, 5}
+		testing.expect_value(t, msg.data, string(expected))
+		testing.expect_value(t, msg.binary, true)
+	}
+}
+
+@(test)
+test_ws_frag_bare_continuation_rejected :: proc(t: ^testing.T) {
+	ws := ws_init()
+	defer ws_close(&ws)
+	frag: WS_Frag_State
+	defer delete(frag.buf)
+
+	// Continuation with no fragment in flight is a protocol error.
+	testing.expect_value(
+		t,
+		ws_handle_data_frame(
+			&ws,
+			&frag,
+			{opcode = WS_OP_CONTINUATION, payload = {'x'}, fin = true},
+		),
+		false,
+	)
+	testing.expect_value(t, len(ws_drain(&ws)), 0)
+}
+
+@(test)
+test_ws_frag_interleaved_data_rejected :: proc(t: ^testing.T) {
+	ws := ws_init()
+	defer ws_close(&ws)
+	frag: WS_Frag_State
+	defer delete(frag.buf)
+
+	testing.expect(
+		t,
+		ws_handle_data_frame(&ws, &frag, {opcode = WS_OP_TEXT, payload = {'a'}, fin = false}),
+	)
+	// A new data message may not start inside an unfinished sequence —
+	// whether or not it is itself fragmented.
+	testing.expect_value(
+		t,
+		ws_handle_data_frame(&ws, &frag, {opcode = WS_OP_TEXT, payload = {'b'}, fin = true}),
+		false,
+	)
+	testing.expect_value(
+		t,
+		ws_handle_data_frame(&ws, &frag, {opcode = WS_OP_BINARY, payload = {'c'}, fin = false}),
+		false,
+	)
+}
+
+@(test)
+test_ws_frag_oversize_rejected :: proc(t: ^testing.T) {
+	ws := ws_init()
+	defer ws_close(&ws)
+	frag: WS_Frag_State
+	defer delete(frag.buf)
+
+	// Start a fragment, then inflate the assembled buffer to the ceiling:
+	// the next continuation byte must trip the WS_MAX_PAYLOAD bound.
+	testing.expect(
+		t,
+		ws_handle_data_frame(&ws, &frag, {opcode = WS_OP_TEXT, payload = {'a'}, fin = false}),
+	)
+	resize(&frag.buf, WS_MAX_PAYLOAD)
+	testing.expect_value(
+		t,
+		ws_handle_data_frame(
+			&ws,
+			&frag,
+			{opcode = WS_OP_CONTINUATION, payload = {'b'}, fin = true},
+		),
+		false,
+	)
+	testing.expect_value(t, len(ws_drain(&ws)), 0)
+}
+
 // -- ws_encode_frame -----------------------------------------------------------
 
 @(test)
@@ -141,7 +324,7 @@ test_ws_encode_frame_layout :: proc(t: ^testing.T) {
 	frame := ws_encode_frame(WS_OP_TEXT, {'a', 'b'}, mask, context.temp_allocator)
 	testing.expect_value(t, len(frame), 2 + 4 + 2)
 	testing.expect_value(t, frame[0], u8(0x80 | WS_OP_TEXT)) // FIN + opcode
-	testing.expect_value(t, frame[1], u8(0x80 | 2))          // mask bit + len
+	testing.expect_value(t, frame[1], u8(0x80 | 2)) // mask bit + len
 	testing.expect_value(t, frame[2], u8(1))
 	testing.expect_value(t, frame[6], 'a' ~ u8(1))
 	testing.expect_value(t, frame[7], 'b' ~ u8(2))

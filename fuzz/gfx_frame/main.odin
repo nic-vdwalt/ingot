@@ -58,7 +58,12 @@ draw_some :: proc(p: ^Prng) {
 	ui.draw_text("0123456789", 10, 40, ui.FONT_SIZE_SMALL, ui.theme.fg_secondary)
 	for t in live_textures {
 		if t.id == 0 do continue
-		rl.DrawTexture(t, i32(fuzzx.int_range(p, 0, 200)), i32(fuzzx.int_range(p, 0, 200)), rl.WHITE)
+		rl.DrawTexture(
+			t,
+			i32(fuzzx.int_range(p, 0, 200)),
+			i32(fuzzx.int_range(p, 0, 200)),
+			rl.WHITE,
+		)
 	}
 	for rt in live_targets {
 		if rt.id == 0 do continue
@@ -93,7 +98,8 @@ mutate_resources :: proc(p: ^Prng) {
 		slot := fuzzx.int_range(p, 0, MAX_LIVE_TARGETS)
 		if live_targets[slot].id != 0 do rl.UnloadRenderTexture(live_targets[slot])
 		live_targets[slot] = rl.LoadRenderTexture(
-			i32(fuzzx.int_range(p, 8, 129)), i32(fuzzx.int_range(p, 8, 129)),
+			i32(fuzzx.int_range(p, 8, 129)),
+			i32(fuzzx.int_range(p, 8, 129)),
 		)
 	case 5:
 		slot := fuzzx.int_range(p, 0, MAX_LIVE_TARGETS)
@@ -110,9 +116,12 @@ mutate_resources :: proc(p: ^Prng) {
 		ui.invalidate_scale_caches()
 	case 8:
 		switch fuzzx.int_range(p, 0, 3) {
-		case 0: ui.set_theme(ui.theme_dark())
-		case 1: ui.set_theme(ui.theme_light())
-		case 2: ui.set_theme(ui.theme_high_contrast())
+		case 0:
+			ui.set_theme(ui.theme_dark())
+		case 1:
+			ui.set_theme(ui.theme_light())
+		case 2:
+			ui.set_theme(ui.theme_high_contrast())
 		}
 	case 9:
 		ui.set_font_dpi(f32(fuzzx.int_range(p, 100, 301)) / 100.0)
@@ -130,9 +139,7 @@ mutate_resources :: proc(p: ^Prng) {
 	case 12:
 		// Compound case: resize immediately followed by UI rescale — the
 		// swapchain reconfigure + atlas churn interleaving.
-		rl.SetWindowSize(
-			i32(fuzzx.int_range(p, 300, 1601)), i32(fuzzx.int_range(p, 200, 1201)),
-		)
+		rl.SetWindowSize(i32(fuzzx.int_range(p, 300, 1601)), i32(fuzzx.int_range(p, 200, 1201)))
 		ui.set_ui_scale(f32(fuzzx.int_range(p, 50, 301)) / 100.0)
 		ui.reset_font_atlases()
 		ui.invalidate_scale_caches()

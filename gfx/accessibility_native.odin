@@ -37,7 +37,8 @@ A11y_Action :: struct {
 	node:   ak.Node_Id,
 }
 
-@(private = "file") A11y_State :: struct {
+@(private = "file")
+A11y_State :: struct {
 	initialized: bool,
 	factory:     ak.Tree_Update_Factory,
 	userdata:    rawptr,
@@ -46,15 +47,19 @@ A11y_Action :: struct {
 	action_mu:   sync.Mutex,
 }
 
-@(private = "file") g_a11y: A11y_State
+@(private = "file")
+g_a11y: A11y_State
 
 when A11Y_ENABLED {
 	when ODIN_OS == .Darwin {
-		@(private = "file") g_a11y_adapter: ak.Macos_Subclassing_Adapter
+		@(private = "file")
+		g_a11y_adapter: ak.Macos_Subclassing_Adapter
 	} else when ODIN_OS == .Windows {
-		@(private = "file") g_a11y_adapter: ak.Windows_Subclassing_Adapter
+		@(private = "file")
+		g_a11y_adapter: ak.Windows_Subclassing_Adapter
 	} else {
-		@(private = "file") g_a11y_adapter: ak.Unix_Adapter
+		@(private = "file")
+		g_a11y_adapter: ak.Unix_Adapter
 	}
 }
 
@@ -97,17 +102,30 @@ InitAccessibility :: proc(factory: ak.Tree_Update_Factory, userdata: rawptr) -> 
 			win := GetWindowHandle()
 			if win == nil do return false
 			g_a11y_adapter = ak.macos_subclassing_adapter_for_window(
-				win, factory, userdata, _a11y_on_action, nil,
+				win,
+				factory,
+				userdata,
+				_a11y_on_action,
+				nil,
 			)
 		} else when ODIN_OS == .Windows {
 			hwnd := GetWindowHandle()
 			if hwnd == nil do return false
 			g_a11y_adapter = ak.windows_subclassing_adapter_new(
-				hwnd, factory, userdata, _a11y_on_action, nil,
+				hwnd,
+				factory,
+				userdata,
+				_a11y_on_action,
+				nil,
 			)
 		} else {
 			g_a11y_adapter = ak.unix_adapter_new(
-				factory, userdata, _a11y_on_action, nil, _a11y_on_deactivate, nil,
+				factory,
+				userdata,
+				_a11y_on_action,
+				nil,
+				_a11y_on_deactivate,
+				nil,
 			)
 		}
 		if g_a11y_adapter == nil do return false
@@ -134,12 +152,16 @@ PushAccessibilityUpdate :: proc() {
 		assert(g_a11y.factory != nil, "PushAccessibilityUpdate: nil factory")
 		when ODIN_OS == .Darwin {
 			events := ak.macos_subclassing_adapter_update_if_active(
-				g_a11y_adapter, g_a11y.factory, g_a11y.userdata,
+				g_a11y_adapter,
+				g_a11y.factory,
+				g_a11y.userdata,
 			)
 			if events != nil do ak.macos_queued_events_raise(events)
 		} else when ODIN_OS == .Windows {
 			events := ak.windows_subclassing_adapter_update_if_active(
-				g_a11y_adapter, g_a11y.factory, g_a11y.userdata,
+				g_a11y_adapter,
+				g_a11y.factory,
+				g_a11y.userdata,
 			)
 			if events != nil do ak.windows_queued_events_raise(events)
 		} else {

@@ -14,7 +14,10 @@ frame_validation_rejects_stale_generation :: proc(t: ^testing.T) {
 
 	frame_generation = 4
 	frame_active = true
-	frame := Frame{generation = 3, active = true}
+	frame := Frame {
+		generation = 3,
+		active     = true,
+	}
 	testing.expect(t, !_frame_valid(&frame))
 }
 
@@ -29,6 +32,9 @@ frame_validation_rejects_inactive_frame :: proc(t: ^testing.T) {
 
 	frame_generation = 4
 	frame_active = true
-	frame := Frame{generation = 4, active = false}
+	frame := Frame {
+		generation = 4,
+		active     = false,
+	}
 	testing.expect(t, !_frame_valid(&frame))
 }

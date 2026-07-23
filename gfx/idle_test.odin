@@ -14,7 +14,9 @@ idle_continuous_always_runs :: proc(t: ^testing.T) {
 
 @(test)
 idle_settle_countdown :: proc(t: ^testing.T) {
-	s := Idle_State{strategy = .Event_Driven}
+	s := Idle_State {
+		strategy = .Event_Driven,
+	}
 	_idle_note_activity(&s)
 	for i in 0 ..< IDLE_SETTLE_FRAMES {
 		testing.expect(t, _idle_take_frame(&s, f64(i)), "settle burst frame must run")
@@ -27,7 +29,9 @@ idle_settle_countdown :: proc(t: ^testing.T) {
 
 @(test)
 idle_deadline_fires_and_clears :: proc(t: ^testing.T) {
-	s := Idle_State{strategy = .Event_Driven}
+	s := Idle_State {
+		strategy = .Event_Driven,
+	}
 	_idle_request_in(&s, 10.0, 0.5)
 	testing.expect_value(t, s.redraw_deadline, 10.5)
 	// Before due: no frame, wait is trimmed to the remaining time.
@@ -42,7 +46,9 @@ idle_deadline_fires_and_clears :: proc(t: ^testing.T) {
 
 @(test)
 idle_earliest_deadline_wins :: proc(t: ^testing.T) {
-	s := Idle_State{strategy = .Event_Driven}
+	s := Idle_State {
+		strategy = .Event_Driven,
+	}
 	_idle_request_in(&s, 0, 2.0)
 	_idle_request_in(&s, 0, 0.5)
 	testing.expect_value(t, s.redraw_deadline, 0.5)
@@ -52,7 +58,9 @@ idle_earliest_deadline_wins :: proc(t: ^testing.T) {
 
 @(test)
 idle_wait_capped :: proc(t: ^testing.T) {
-	s := Idle_State{strategy = .Event_Driven}
+	s := Idle_State {
+		strategy = .Event_Driven,
+	}
 	testing.expect_value(t, _idle_wait_timeout(&s, 0), f64(IDLE_MAX_WAIT))
 	_idle_request_in(&s, 0, 30.0)
 	testing.expect_value(t, _idle_wait_timeout(&s, 0), f64(IDLE_MAX_WAIT))
@@ -63,7 +71,9 @@ idle_wait_capped :: proc(t: ^testing.T) {
 
 @(test)
 idle_negative_request_is_immediate :: proc(t: ^testing.T) {
-	s := Idle_State{strategy = .Event_Driven}
+	s := Idle_State {
+		strategy = .Event_Driven,
+	}
 	_idle_request_in(&s, 10.0, -3.0) // clamped to "now"
 	testing.expect_value(t, s.redraw_deadline, 10.0)
 	testing.expect(t, _idle_take_frame(&s, 10.0))

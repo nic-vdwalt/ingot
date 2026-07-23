@@ -12,12 +12,13 @@ import win32 "core:sys/windows"
 foreign import imm32 "system:imm32.lib"
 @(default_calling_convention = "system")
 foreign imm32 {
-	ImmGetContext           :: proc(hwnd: win32.HWND) -> rawptr ---
+	ImmGetContext :: proc(hwnd: win32.HWND) -> rawptr ---
 	ImmSetCompositionWindow :: proc(himc: rawptr, form: ^COMPOSITIONFORM) -> win32.BOOL ---
-	ImmReleaseContext       :: proc(hwnd: win32.HWND, himc: rawptr) -> win32.BOOL ---
+	ImmReleaseContext :: proc(hwnd: win32.HWND, himc: rawptr) -> win32.BOOL ---
 }
 
-@(private = "file") CFS_POINT :: u32(0x0002)
+@(private = "file")
+CFS_POINT :: u32(0x0002)
 
 @(private = "file")
 COMPOSITIONFORM :: struct {

@@ -27,9 +27,12 @@ SC_Key :: struct {
 	caret: int,
 	pills: int,
 }
-@(private = "file") sc_key: SC_Key
-@(private = "file") sc_valid: bool
-@(private = "file") sc_ranges: [dynamic]Spell_Range
+@(private = "file")
+sc_key: SC_Key
+@(private = "file")
+sc_valid: bool
+@(private = "file")
+sc_ranges: [dynamic]Spell_Range
 
 // spellcheck_invalidate drops the memoized scan so the next frame rescans
 // even if the composer text is unchanged (needed after Learn/Ignore).
@@ -40,7 +43,11 @@ spellcheck_invalidate :: proc() {
 // spellcheck_ranges returns the misspelled ranges for the composer text.
 // The word containing the caret is never flagged (no squiggle mid-typing);
 // pill spans (@-mention paths) and "/command" composers are skipped.
-spellcheck_ranges :: proc(text: string, caret: int, pills: ^[dynamic]Mention_Span) -> []Spell_Range {
+spellcheck_ranges :: proc(
+	text: string,
+	caret: int,
+	pills: ^[dynamic]Mention_Span,
+) -> []Spell_Range {
 	if !spell_available() do return nil
 	if len(text) > SPELL_MAX_TEXT do return nil
 	npills := 0
@@ -78,7 +85,14 @@ spellcheck_ranges :: proc(text: string, caret: int, pills: ^[dynamic]Mention_Spa
 // spellcheck_word_at returns the token bounds at a byte offset and whether it
 // is a checkable, misspelled word. Unlike spellcheck_ranges this does not
 // exclude the caret word, so right-click works on the word being typed.
-spellcheck_word_at :: proc(text: string, off: int, pills: ^[dynamic]Mention_Span) -> (start, end: int, misspelled: bool) {
+spellcheck_word_at :: proc(
+	text: string,
+	off: int,
+	pills: ^[dynamic]Mention_Span,
+) -> (
+	start, end: int,
+	misspelled: bool,
+) {
 	if !spell_available() do return 0, 0, false
 	if len(text) > SPELL_MAX_TEXT do return 0, 0, false
 	if len(text) == 0 || len(text) > 0 && text[0] == '/' do return 0, 0, false

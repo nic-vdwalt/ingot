@@ -34,17 +34,28 @@ Titlebar_Button :: enum u8 {
 // Module state. Written by the subclass proc and the per-frame layout
 // publish; read by the draw code. All rects are in physical client pixels
 // (identical to raylib render coordinates).
-@(private = "file") tb_hwnd: win32.HWND
-@(private = "file") tb_hover: Titlebar_Button
-@(private = "file") tb_pressed: Titlebar_Button
-@(private = "file") tb_maximized: bool
-@(private = "file") tb_activity: bool // NC state changed → request a redraw
-@(private = "file") tb_tracking: bool // TrackMouseEvent armed
-@(private = "file") tb_btn_min: rl.Rectangle
-@(private = "file") tb_btn_max: rl.Rectangle
-@(private = "file") tb_btn_close: rl.Rectangle
-@(private = "file") tb_caption_h: i32
-@(private = "file") tb_interactive_right: i32
+@(private = "file")
+tb_hwnd: win32.HWND
+@(private = "file")
+tb_hover: Titlebar_Button
+@(private = "file")
+tb_pressed: Titlebar_Button
+@(private = "file")
+tb_maximized: bool
+@(private = "file")
+tb_activity: bool // NC state changed → request a redraw
+@(private = "file")
+tb_tracking: bool // TrackMouseEvent armed
+@(private = "file")
+tb_btn_min: rl.Rectangle
+@(private = "file")
+tb_btn_max: rl.Rectangle
+@(private = "file")
+tb_btn_close: rl.Rectangle
+@(private = "file")
+tb_caption_h: i32
+@(private = "file")
+tb_interactive_right: i32
 
 // titlebar_init installs the subclass and strips the standard frame.
 // Call once after rl.InitWindow() / apply_window_style().
@@ -64,9 +75,17 @@ titlebar_init :: proc() {
 
 	// Force a WM_NCCALCSIZE pass so the frame disappears immediately.
 	win32.SetWindowPos(
-		tb_hwnd, nil, 0, 0, 0, 0,
-		win32.SWP_NOMOVE | win32.SWP_NOSIZE | win32.SWP_NOZORDER |
-		win32.SWP_NOACTIVATE | win32.SWP_FRAMECHANGED,
+		tb_hwnd,
+		nil,
+		0,
+		0,
+		0,
+		0,
+		win32.SWP_NOMOVE |
+		win32.SWP_NOSIZE |
+		win32.SWP_NOZORDER |
+		win32.SWP_NOACTIVATE |
+		win32.SWP_FRAMECHANGED,
 	)
 }
 
@@ -132,9 +151,14 @@ tb_button_from_hittest :: proc "system" (ht: win32.LRESULT) -> Titlebar_Button {
 
 @(private = "file")
 tb_point_in_rect :: proc "system" (x, y: i32, r: rl.Rectangle) -> bool {
-	return r.width > 0 && r.height > 0 &&
-		f32(x) >= r.x && f32(x) < r.x + r.width &&
-		f32(y) >= r.y && f32(y) < r.y + r.height
+	return(
+		r.width > 0 &&
+		r.height > 0 &&
+		f32(x) >= r.x &&
+		f32(x) < r.x + r.width &&
+		f32(y) >= r.y &&
+		f32(y) < r.y + r.height \
+	)
 }
 
 // Resize border thickness in physical px for the window's DPI.
@@ -193,8 +217,12 @@ tb_hittest :: proc "system" (hwnd: win32.HWND, cx, cy: i32) -> win32.LRESULT {
 
 @(private = "file")
 titlebar_subclass_proc :: proc "system" (
-	hwnd: win32.HWND, msg: win32.UINT, wparam: win32.WPARAM, lparam: win32.LPARAM,
-	id_subclass: win32.UINT_PTR, ref_data: win32.DWORD_PTR,
+	hwnd: win32.HWND,
+	msg: win32.UINT,
+	wparam: win32.WPARAM,
+	lparam: win32.LPARAM,
+	id_subclass: win32.UINT_PTR,
+	ref_data: win32.DWORD_PTR,
 ) -> win32.LRESULT {
 	switch msg {
 	case win32.WM_NCCALCSIZE:
@@ -207,9 +235,11 @@ titlebar_subclass_proc :: proc "system" (
 			if win32.IsZoomed(hwnd) {
 				params := cast(^win32.NCCALCSIZE_PARAMS)uintptr(lparam)
 				dpi := win32.GetDpiForWindow(hwnd)
-				bx := win32.GetSystemMetricsForDpi(win32.SM_CXSIZEFRAME, dpi) +
+				bx :=
+					win32.GetSystemMetricsForDpi(win32.SM_CXSIZEFRAME, dpi) +
 					win32.GetSystemMetricsForDpi(win32.SM_CXPADDEDBORDER, dpi)
-				by := win32.GetSystemMetricsForDpi(win32.SM_CYSIZEFRAME, dpi) +
+				by :=
+					win32.GetSystemMetricsForDpi(win32.SM_CYSIZEFRAME, dpi) +
 					win32.GetSystemMetricsForDpi(win32.SM_CXPADDEDBORDER, dpi)
 				params.rgrc[0].left += bx
 				params.rgrc[0].right -= bx
@@ -222,7 +252,7 @@ titlebar_subclass_proc :: proc "system" (
 	case win32.WM_NCHITTEST:
 		// Screen coords, sign-extended (negative on monitors left/above the
 		// primary), converted to client px == raylib render coordinates.
-		pt := win32.POINT{
+		pt := win32.POINT {
 			x = win32.LONG(i16(u16(uintptr(lparam) & 0xFFFF))),
 			y = win32.LONG(i16(u16((uintptr(lparam) >> 16) & 0xFFFF))),
 		}
@@ -234,7 +264,7 @@ titlebar_subclass_proc :: proc "system" (
 	case win32.WM_NCMOUSEMOVE:
 		tb_set_hover(tb_button_from_hittest(win32.LRESULT(wparam)))
 		if !tb_tracking {
-			tme := win32.TRACKMOUSEEVENT{
+			tme := win32.TRACKMOUSEEVENT {
 				cbSize      = size_of(win32.TRACKMOUSEEVENT),
 				dwFlags     = win32.TME_LEAVE | win32.TME_NONCLIENT,
 				hwndTrack   = hwnd,
@@ -269,7 +299,10 @@ titlebar_subclass_proc :: proc "system" (
 				case .Minimize:
 					win32.ShowWindow(hwnd, win32.SW_MINIMIZE)
 				case .Maximize:
-					win32.ShowWindow(hwnd, win32.SW_RESTORE if win32.IsZoomed(hwnd) else win32.SW_MAXIMIZE)
+					win32.ShowWindow(
+						hwnd,
+						win32.SW_RESTORE if win32.IsZoomed(hwnd) else win32.SW_MAXIMIZE,
+					)
 				case .Close:
 					win32.PostMessageW(hwnd, win32.WM_CLOSE, 0, 0)
 				case .None:

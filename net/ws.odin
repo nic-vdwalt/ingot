@@ -5,14 +5,14 @@
 // polls a mutex-guarded queue.
 package ingotnet
 
+import "core:crypto/legacy/sha1"
+import "core:encoding/base64"
+import "core:fmt"
+import "core:math/rand"
 import cnet "core:net"
 import "core:strings"
-import "core:fmt"
-import "core:encoding/base64"
-import "core:crypto/legacy/sha1"
-import "core:math/rand"
-import "core:thread"
 import "core:sync"
+import "core:thread"
 import "core:time"
 
 // WebSocket connection state.
@@ -25,11 +25,12 @@ WS_State :: enum {
 }
 
 // WebSocket opcode constants.
-WS_OP_TEXT   :: 0x1
+WS_OP_CONTINUATION :: 0x0
+WS_OP_TEXT :: 0x1
 WS_OP_BINARY :: 0x2
-WS_OP_CLOSE  :: 0x8
-WS_OP_PING   :: 0x9
-WS_OP_PONG   :: 0xA
+WS_OP_CLOSE :: 0x8
+WS_OP_PING :: 0x9
+WS_OP_PONG :: 0xA
 
 // Maximum accepted payload per frame. Session-resume history is sent in one
 // outbound server frame and can exceed 1 MiB for long chats; match the server's
@@ -46,8 +47,8 @@ WS_MAX_QUEUED_MESSAGES :: 1024
 // blocking the worker forever: each timeout window sends a PING (the server
 // auto-replies PONG), and the connection is declared dead once no bytes arrive
 // for WS_DEAD_AFTER. WS_RECONNECT_WAIT backs off between dial cycles.
-WS_RECV_TIMEOUT   :: 5 * time.Second
-WS_DEAD_AFTER     :: 15 * time.Second
+WS_RECV_TIMEOUT :: 5 * time.Second
+WS_DEAD_AFTER :: 15 * time.Second
 WS_RECONNECT_WAIT :: 1 * time.Second
 
 // Thread-safe message queue entry for received WebSocket messages.
@@ -58,9 +59,9 @@ WS_Message :: struct {
 
 // Result of parsing one frame with ws_parse_frame.
 WS_Parse_Status :: enum {
-	Ok,        // one complete frame parsed; payload is unmasked
+	Ok, // one complete frame parsed; payload is unmasked
 	Need_More, // buf does not yet hold a complete frame (consumed == 0)
-	Too_Big,   // declared length is negative (64-bit overflow) or > WS_MAX_PAYLOAD
+	Too_Big, // declared length is negative (64-bit overflow) or > WS_MAX_PAYLOAD
 }
 
 // A single parsed RFC 6455 frame. payload slices into the caller's buffer
@@ -69,13 +70,15 @@ WS_Frame :: struct {
 	opcode:  u8,
 	payload: []u8,
 	masked:  bool,
+	fin:     bool,
 }
 
 // Parse one WebSocket frame from the front of buf. Pure except for in-place
 // unmasking of the payload (deterministic — no I/O, no shared state), so it
 // is directly fuzzable. Quirks preserved from the original inline parser:
-// FIN/RSV bits are ignored and masked server frames are tolerated even
-// though RFC 6455 forbids them.
+// RSV bits are ignored and masked server frames are tolerated even though
+// RFC 6455 forbids them. FIN is surfaced so the recv loop can reassemble
+// fragmented messages (RFC 6455 §5.4).
 //
 // On .Ok, consumed is the full frame size (header [+4 mask] + payload) and
 // frame.payload lies within buf[:consumed]. On .Need_More / .Too_Big,
@@ -86,6 +89,7 @@ ws_parse_frame :: proc(buf: []u8) -> (frame: WS_Frame, consumed: int, status: WS
 	if total < 2 do return {}, 0, .Need_More
 
 	opcode := buf[0] & 0x0F
+	fin := (buf[0] & 0x80) != 0
 	masked := (buf[1] & 0x80) != 0
 	payload_len := int(buf[1] & 0x7F)
 	header_size := 2
@@ -124,14 +128,82 @@ ws_parse_frame :: proc(buf: []u8) -> (frame: WS_Frame, consumed: int, status: WS
 		}
 	}
 
-	return WS_Frame{opcode = opcode, payload = payload, masked = masked}, total_frame, .Ok
+	frame = WS_Frame {
+		opcode  = opcode,
+		payload = payload,
+		masked  = masked,
+		fin     = fin,
+	}
+	assert(len(frame.payload) == payload_len, "payload slice must match declared length")
+	assert(total_frame >= 2, "a complete frame is at least a 2-byte header")
+	return frame, total_frame, .Ok
+}
+
+// Reassembly state for fragmented messages (RFC 6455 §5.4). Owned by
+// ws_recv_loop (loop-local — the loop owns the connection lifetime).
+// Package-private (not file-private) so ws_test.odin can drive reassembly.
+@(private)
+WS_Frag_State :: struct {
+	buf:    [dynamic]u8,
+	opcode: u8, // opcode of the initial TEXT/BINARY frame
+	active: bool,
+}
+
+// ws_handle_data_frame applies one TEXT/BINARY/CONTINUATION frame to the
+// reassembly state, enqueueing a complete logical message once FIN closes
+// it. Returns false on a protocol violation — a bare continuation, a data
+// frame interleaved inside an unfinished fragment sequence, or an assembled
+// message exceeding WS_MAX_PAYLOAD — in which case the caller must drop the
+// connection (RFC 6455 §5.4 fail-fast).
+@(private)
+ws_handle_data_frame :: proc(ws: ^WebSocket, frag: ^WS_Frag_State, frame: WS_Frame) -> bool {
+	assert(
+		frame.opcode == WS_OP_TEXT ||
+		frame.opcode == WS_OP_BINARY ||
+		frame.opcode == WS_OP_CONTINUATION,
+		"data frames only",
+	)
+	assert(len(frame.payload) <= WS_MAX_PAYLOAD, "parser bounds each frame's payload")
+
+	if frame.opcode == WS_OP_CONTINUATION {
+		// A continuation with no fragment in flight is a protocol error.
+		if !frag.active do return false
+		// The assembled message obeys the same ceiling as a single frame so
+		// fragmentation cannot smuggle unbounded data past WS_MAX_PAYLOAD.
+		if len(frag.buf) + len(frame.payload) > WS_MAX_PAYLOAD do return false
+		append(&frag.buf, ..frame.payload)
+		if frame.fin {
+			ws_enqueue(ws, strings.clone(string(frag.buf[:])), frag.opcode == WS_OP_BINARY)
+			clear(&frag.buf)
+			frag.active = false
+		}
+		return true
+	}
+
+	// TEXT/BINARY: starting a new data message inside an unfinished fragment
+	// sequence violates RFC 6455 §5.4 (only control frames may interleave).
+	if frag.active do return false
+	if frame.fin {
+		ws_enqueue(ws, strings.clone(string(frame.payload)), frame.opcode == WS_OP_BINARY)
+		return true
+	}
+	frag.active = true
+	frag.opcode = frame.opcode
+	clear(&frag.buf)
+	append(&frag.buf, ..frame.payload)
+	return true
 }
 
 // Build a complete client frame (FIN set, mask bit set, payload XOR-masked)
 // without touching the socket. The mask key is injected so tests can encode
 // deterministically; ws_send_frame supplies a random key. The returned slice
 // is owned by the caller.
-ws_encode_frame :: proc(opcode: u8, payload: []u8, mask_key: [4]u8, allocator := context.allocator) -> []u8 {
+ws_encode_frame :: proc(
+	opcode: u8,
+	payload: []u8,
+	mask_key: [4]u8,
+	allocator := context.allocator,
+) -> []u8 {
 	header_size := 2
 	if len(payload) >= 65536 {
 		header_size = 10
@@ -176,16 +248,16 @@ WebSocket :: struct {
 	// Socket lifecycle is shared between the worker thread (dial/assign) and
 	// ws_close on the main thread (close). sock_mutex guards socket +
 	// socket_open so a close cannot race the worker storing a fresh socket.
-	socket:      cnet.TCP_Socket,
-	socket_open: bool,
-	sock_mutex:  sync.Mutex,
+	socket:         cnet.TCP_Socket,
+	socket_open:    bool,
+	sock_mutex:     sync.Mutex,
 
 	// Written by the worker thread, read by the main thread — always access
 	// with sync.atomic_load / atomic_store (ws_state is the public read).
-	state:        WS_State,
-	host:         string,
-	port:         int,
-	max_attempts: int,
+	state:          WS_State,
+	host:           string,
+	port:           int,
+	max_attempts:   int,
 
 	// Self-healing: the worker re-dials on every drop until ws_close, so the
 	// thread lives for the whole session. conn_gen is bumped on each successful
@@ -196,30 +268,30 @@ WebSocket :: struct {
 	auto_reconnect: bool,
 
 	// Thread-safe receive queue, bounded at WS_MAX_QUEUED_MESSAGES.
-	recv_queue:   [dynamic]WS_Message,
-	recv_mutex:   sync.Mutex,
-	recv_dropped: u64, // messages discarded because recv_queue hit its cap
+	recv_queue:     [dynamic]WS_Message,
+	recv_mutex:     sync.Mutex,
+	recv_dropped:   u64, // messages discarded because recv_queue hit its cap
 
 	// Optional wake hook, called from the worker thread after a message is
 	// queued or the state changes, so an event-driven-idle frame loop repaints
 	// promptly instead of waiting for its idle-floor tick (gfx.RequestRedraw
 	// fits the signature). Set before ws_start_connect; nil means no-op.
-	wake: proc "contextless" (),
+	wake:           proc "contextless" (),
 
 	// ws_close broadcasts stop_cond so worker backoff waits (dial retry,
 	// reconnect) end early instead of sleeping out their full duration.
-	stop_mutex: sync.Mutex,
-	stop_cond:  sync.Cond,
+	stop_mutex:     sync.Mutex,
+	stop_cond:      sync.Cond,
 
 	// Send serialization (PONG frames go out from the recv thread while text
 	// frames are sent from the main thread).
-	send_mutex: sync.Mutex,
+	send_mutex:     sync.Mutex,
 
 	// Background thread: runs dial + handshake, then the recv loop. running
 	// is written by ws_close and the worker and read across threads — always
 	// access it with sync.atomic_load / atomic_store.
-	recv_thread: ^thread.Thread,
-	running:     bool,
+	recv_thread:    ^thread.Thread,
+	running:        bool,
 }
 
 // Initialize a WebSocket connection.
@@ -418,7 +490,9 @@ ws_handshake :: proc(ws: ^WebSocket, sock: cnet.TCP_Socket) -> bool {
 	key := generate_ws_key()
 	request := fmt.tprintf(
 		"GET /ws HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n",
-		ws.host, ws.port, key,
+		ws.host,
+		ws.port,
+		key,
 	)
 
 	request_bytes := transmute([]u8)request
@@ -469,6 +543,11 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 	acc := make([dynamic]u8) // growable accumulator (handles frames > 64 KB)
 	defer delete(acc)
 
+	// Fragment reassembly (RFC 6455 §5.4); loop-local so a reconnect always
+	// starts with a clean slate.
+	frag: WS_Frag_State
+	defer delete(frag.buf)
+
 	last_activity := time.now()
 	for sync.atomic_load(&ws.running) {
 		n, err := ws_net_recv(ws.socket, scratch[:])
@@ -509,18 +588,18 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 				return
 			}
 
-			switch frame.opcode {
-			case WS_OP_TEXT:
-				ws_enqueue(ws, strings.clone(string(frame.payload)), false)
-
-			case WS_OP_BINARY:
-				ws_enqueue(ws, strings.clone(string(frame.payload)), true)
-
-			case 0x0:
-				// Continuation frames are unsupported (server never fragments
-				// per PROTOCOL.md); treat as a protocol error and re-dial.
+			// Control frames must not be fragmented (RFC 6455 §5.5).
+			if frame.opcode >= WS_OP_CLOSE && !frame.fin {
 				ws_set_state(ws, .Disconnected)
 				return
+			}
+
+			switch frame.opcode {
+			case WS_OP_TEXT, WS_OP_BINARY, WS_OP_CONTINUATION:
+				if !ws_handle_data_frame(ws, &frag, frame) {
+					ws_set_state(ws, .Disconnected)
+					return
+				}
 
 			case WS_OP_PING:
 				ws_send_frame(ws, WS_OP_PONG, frame.payload)
@@ -560,7 +639,7 @@ ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
 
 	// Masking key (4 random bytes).
 	mask_key: [4]u8
-	for i in 0..<4 {
+	for i in 0 ..< 4 {
 		mask_key[i] = u8(rand.uint32() & 0xFF)
 	}
 	frame := ws_encode_frame(opcode, payload, mask_key)
@@ -672,7 +751,7 @@ ws_close :: proc(ws: ^WebSocket) {
 @(private = "file")
 generate_ws_key :: proc() -> string {
 	key_bytes: [16]u8
-	for i in 0..<16 {
+	for i in 0 ..< 16 {
 		key_bytes[i] = u8(rand.uint32() & 0xFF)
 	}
 	return base64.encode(key_bytes[:], allocator = context.temp_allocator)

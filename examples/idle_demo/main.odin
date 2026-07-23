@@ -65,7 +65,8 @@ frame :: proc() {
 	// Strategy toggle button.
 	bg := hovered ? rl.Color{70, 90, 140, 255} : rl.Color{50, 62, 96, 255}
 	rl.DrawRectangleRec(btn, bg)
-	label: cstring = rl.GetFrameStrategy() == .Event_Driven ? "strategy: Event_Driven" : "strategy: Continuous"
+	label: cstring =
+		rl.GetFrameStrategy() == .Event_Driven ? "strategy: Event_Driven" : "strategy: Continuous"
 	rl.DrawTextEx(font, label, {32, 30}, 20, 0, rl.RAYWHITE)
 
 	// Text input box with a blinking caret (timed repaints while idle).
@@ -76,12 +77,16 @@ frame :: proc() {
 	rl.DrawTextEx(font, txt, {28, 90}, 20, 0, rl.RAYWHITE)
 	tw := rl.MeasureTextEx(font, txt, 20, 0).x
 	rl.RequestRedrawIn(0.5) // schedule the next blink toggle
-	if int(rl.GetTime()*2) % 2 == 0 {
+	if int(rl.GetTime() * 2) % 2 == 0 {
 		rl.DrawRectangleRec({28 + tw + 2, 88, 2, 24}, rl.Color{120, 180, 255, 255})
 	}
 
 	// Frame counter + FPS overlay: freezes when idle, free-runs when active.
-	stats := fmt.ctprintf("frame %d   fps %d   type to wake; idle freezes this counter", frame_count, rl.GetFPS())
+	stats := fmt.ctprintf(
+		"frame %d   fps %d   type to wake; idle freezes this counter",
+		frame_count,
+		rl.GetFPS(),
+	)
 	rl.DrawTextEx(font, stats, {20, 150}, 20, 0, rl.Color{140, 200, 140, 255})
 
 	rl.EndDrawing()

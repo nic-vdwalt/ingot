@@ -51,12 +51,28 @@ DrawMesh :: proc(mesh: Mesh, material: Material, transform: Matrix) {
 
 // --- billboards ------------------------------------------------------------
 
-DrawBillboard :: proc(camera: Camera, texture: Texture2D, position: Vector3, size: f32, tint: Color) {
+DrawBillboard :: proc(
+	camera: Camera,
+	texture: Texture2D,
+	position: Vector3,
+	size: f32,
+	tint: Color,
+) {
 	src := Rectangle{0, 0, f32(texture.width), f32(texture.height)}
 	_draw_billboard_world(texture, src, position, {size, size}, tint)
 }
 
-DrawBillboardPro :: proc(camera: Camera, texture: Texture2D, source: Rectangle, position: Vector3, up: Vector3, size: Vector2, origin: Vector2, rotation: f32, tint: Color) {
+DrawBillboardPro :: proc(
+	camera: Camera,
+	texture: Texture2D,
+	source: Rectangle,
+	position: Vector3,
+	up: Vector3,
+	size: Vector2,
+	origin: Vector2,
+	rotation: f32,
+	tint: Color,
+) {
 	_draw_billboard_world(texture, source, position, size, tint)
 }
 
@@ -70,7 +86,13 @@ _v3len :: proc(v: Vector3) -> f32 {
 // _draw_billboard_world projects a world-space, camera-facing quad and emits it
 // through the image pipeline (so an active custom shader / blend mode applies).
 @(private)
-_draw_billboard_world :: proc(texture: Texture2D, source: Rectangle, position: Vector3, size: Vector2, tint: Color) {
+_draw_billboard_world :: proc(
+	texture: Texture2D,
+	source: Rectangle,
+	position: Vector3,
+	size: Vector2,
+	tint: Color,
+) {
 	if !cam3d_active do return
 	e := get_texture(texture.id)
 	hw := size.x * 0.5
@@ -78,10 +100,26 @@ _draw_billboard_world :: proc(texture: Texture2D, source: Rectangle, position: V
 	// world-space corners on the camera plane
 	r := cam3d_right
 	u := cam3d_up
-	wtl := Vector3{position.x - r.x * hw + u.x * hh, position.y - r.y * hw + u.y * hh, position.z - r.z * hw + u.z * hh}
-	wtr := Vector3{position.x + r.x * hw + u.x * hh, position.y + r.y * hw + u.y * hh, position.z + r.z * hw + u.z * hh}
-	wbr := Vector3{position.x + r.x * hw - u.x * hh, position.y + r.y * hw - u.y * hh, position.z + r.z * hw - u.z * hh}
-	wbl := Vector3{position.x - r.x * hw - u.x * hh, position.y - r.y * hw - u.y * hh, position.z - r.z * hw - u.z * hh}
+	wtl := Vector3 {
+		position.x - r.x * hw + u.x * hh,
+		position.y - r.y * hw + u.y * hh,
+		position.z - r.z * hw + u.z * hh,
+	}
+	wtr := Vector3 {
+		position.x + r.x * hw + u.x * hh,
+		position.y + r.y * hw + u.y * hh,
+		position.z + r.z * hw + u.z * hh,
+	}
+	wbr := Vector3 {
+		position.x + r.x * hw - u.x * hh,
+		position.y + r.y * hw - u.y * hh,
+		position.z + r.z * hw - u.z * hh,
+	}
+	wbl := Vector3 {
+		position.x - r.x * hw - u.x * hh,
+		position.y - r.y * hw - u.y * hh,
+		position.z - r.z * hw - u.z * hh,
+	}
 	tl, ok0 := _project(cam3d_vp, wtl)
 	tr, ok1 := _project(cam3d_vp, wtr)
 	br, ok2 := _project(cam3d_vp, wbr)
@@ -101,9 +139,17 @@ _draw_billboard_world :: proc(texture: Texture2D, source: Rectangle, position: V
 	} else {
 		batch_set(&g.rend, .Solid, nil)
 	}
-	push_quad4(&g.rend,
-		{tl.x, tl.y}, {tr.x, tr.y}, {br.x, br.y}, {bl.x, bl.y},
-		{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}, col,
+	push_quad4(
+		&g.rend,
+		{tl.x, tl.y},
+		{tr.x, tr.y},
+		{br.x, br.y},
+		{bl.x, bl.y},
+		{u0, v0},
+		{u1, v0},
+		{u1, v1},
+		{u0, v1},
+		col,
 	)
 }
 
@@ -113,7 +159,11 @@ _draw_disc_world :: proc(position: Vector3, radius: f32, tint: Color) {
 	center, ok := _project(cam3d_vp, position)
 	if !ok do return
 	// estimate screen radius by projecting an offset point along camera-right
-	edge := Vector3{position.x + cam3d_right.x * radius, position.y + cam3d_right.y * radius, position.z + cam3d_right.z * radius}
+	edge := Vector3 {
+		position.x + cam3d_right.x * radius,
+		position.y + cam3d_right.y * radius,
+		position.z + cam3d_right.z * radius,
+	}
 	ep, oke := _project(cam3d_vp, edge)
 	pr: f32 = 6
 	if oke {

@@ -30,39 +30,42 @@ when INGOT_WS_SIM {
 	// .Timeout until WS_DEAD_AFTER declares the connection dead — so every
 	// tape terminates.
 	Ws_Sim_Event :: enum u8 {
-		Dial_Fail,         // dial refused
+		Dial_Fail, // dial refused
 		Handshake_Garbage, // 101 never arrives (junk response)
-		Handshake_Cut,     // handshake recv reports error
-		Frame_Text,        // one clean text frame
-		Frame_Binary,      // one clean binary frame
-		Frame_Ping,        // server PING (worker must PONG)
-		Frame_Split,       // text frame delivered in two recv calls
-		Frame_Burst,       // many text frames, enough to overflow recv_queue
-		Frame_Garbage,     // random bytes (parse rejects -> disconnect)
-		Server_Close,      // clean CLOSE frame
-		Cut,               // recv error mid-connection
-		Timeout,           // recv timeout (PING probe path)
+		Handshake_Cut, // handshake recv reports error
+		Frame_Text, // one clean text frame
+		Frame_Binary, // one clean binary frame
+		Frame_Ping, // server PING (worker must PONG)
+		Frame_Split, // text frame delivered in two recv calls
+		Frame_Fragmented, // one text message as TEXT(FIN=0) + CONTINUATION(FIN=1)
+		Frame_Burst, // many text frames, enough to overflow recv_queue
+		Frame_Garbage, // bare continuation frame (parse ok, reassembly rejects -> disconnect)
+		Server_Close, // clean CLOSE frame
+		Cut, // recv error mid-connection
+		Timeout, // recv timeout (PING probe path)
 	}
 
 	MAX_SIM_EVENTS :: 256
 	WS_SIM_BURST_FRAMES :: WS_MAX_QUEUED_MESSAGES + 17
 
-	@(private = "file") Ws_Sim :: struct {
-		tape:      [MAX_SIM_EVENTS]Ws_Sim_Event,
-		tape_len:  int,
-		tape_pos:  int,   // worker-thread only after start
-		payload_seed: u64, // deterministic payload generation
-		pending_key:  [64]u8, // handshake key captured from the upgrade request
+	@(private = "file")
+	Ws_Sim :: struct {
+		tape:            [MAX_SIM_EVENTS]Ws_Sim_Event,
+		tape_len:        int,
+		tape_pos:        int, // worker-thread only after start
+		payload_seed:    u64, // deterministic payload generation
+		pending_key:     [64]u8, // handshake key captured from the upgrade request
 		pending_key_len: int,
-		split_tail:   [128]u8, // second half of a Frame_Split
-		split_tail_len: int,
-		handle_seq: i64,
-		frames_served: int, // atomic; harness-side observability
+		split_tail:      [128]u8, // second half of a Frame_Split
+		split_tail_len:  int,
+		handle_seq:      i64,
+		frames_served:   int, // atomic; harness-side observability
 		burst_remaining: int, // worker-thread only; Frame_Burst expansion
-		mutex:     sync.Mutex,
+		mutex:           sync.Mutex,
 	}
 
-	@(private = "file") g_ws_sim: Ws_Sim
+	@(private = "file")
+	g_ws_sim: Ws_Sim
 
 	// ws_sim_load installs a script tape. Call before ws_start_connect and
 	// never while a worker is running.
@@ -107,12 +110,13 @@ when INGOT_WS_SIM {
 	}
 
 	// sim_server_frame writes an unmasked server frame (small payloads only)
-	// into buf; returns the byte count.
+	// into buf; returns the byte count. fin=false emits a fragment (used by
+	// Frame_Fragmented to exercise the recv loop's reassembly).
 	@(private = "file")
-	sim_server_frame :: proc(buf: []u8, opcode: u8, payload: []u8) -> int {
+	sim_server_frame :: proc(buf: []u8, opcode: u8, payload: []u8, fin := true) -> int {
 		assert(len(payload) < 126, "sim_server_frame: small payloads only")
 		assert(len(buf) >= 2 + len(payload), "sim_server_frame: buffer too small")
-		buf[0] = 0x80 | opcode // FIN + opcode
+		buf[0] = (0x80 if fin else 0x00) | opcode
 		buf[1] = u8(len(payload)) // no mask bit (server frames are unmasked)
 		copy(buf[2:], payload)
 		return 2 + len(payload)
@@ -201,7 +205,11 @@ when INGOT_WS_SIM {
 					sync.mutex_unlock(&g_ws_sim.mutex)
 					accept := ws_accept_for_key(string(key_buf[:key_len]))
 					resp := strings.concatenate(
-						{"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ", accept, "\r\n\r\n"},
+						{
+							"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ",
+							accept,
+							"\r\n\r\n",
+						},
 						context.temp_allocator,
 					)
 					n := copy(buf, resp)
@@ -238,6 +246,21 @@ when INGOT_WS_SIM {
 			sync.mutex_unlock(&g_ws_sim.mutex)
 			sync.atomic_add(&g_ws_sim.frames_served, 1)
 			return copy(buf, frame[:half]), .None
+		case .Frame_Fragmented:
+			// One logical text message split across TEXT(FIN=0) now and
+			// CONTINUATION(FIN=1) on the next recv (via split_tail) — drives
+			// the recv loop's RFC 6455 §5.4 reassembly path.
+			part_a: [12]u8
+			part_b: [12]u8
+			for i in 0 ..< len(part_a) do part_a[i] = u8('a' + (sim_rand() % 26))
+			for i in 0 ..< len(part_b) do part_b[i] = u8('a' + (sim_rand() % 26))
+			tail: [64]u8
+			tail_len := sim_server_frame(tail[:], WS_OP_CONTINUATION, part_b[:], fin = true)
+			sync.mutex_lock(&g_ws_sim.mutex)
+			g_ws_sim.split_tail_len = copy(g_ws_sim.split_tail[:], tail[:tail_len])
+			sync.mutex_unlock(&g_ws_sim.mutex)
+			sync.atomic_add(&g_ws_sim.frames_served, 1)
+			return sim_server_frame(buf, WS_OP_TEXT, part_a[:], fin = false), .None
 		case .Frame_Burst:
 			g_ws_sim.burst_remaining = WS_SIM_BURST_FRAMES - 1
 			payload: [8]u8
@@ -245,8 +268,9 @@ when INGOT_WS_SIM {
 			sync.atomic_add(&g_ws_sim.frames_served, 1)
 			return sim_server_frame(buf, WS_OP_TEXT, payload[:]), .None
 		case .Frame_Garbage:
-			// Unmasked garbage that parses as an unsupported continuation
-			// frame (opcode 0) — the recv loop must drop the connection.
+			// A bare continuation frame (opcode 0, FIN set) with no fragment
+			// in flight — parses cleanly but the recv loop's reassembly must
+			// treat it as a protocol error and drop the connection.
 			buf[0] = 0x80
 			buf[1] = 0x02
 			buf[2] = u8(sim_rand())

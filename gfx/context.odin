@@ -11,91 +11,88 @@ import wg "vendor:wgpu"
 KEY_COUNT :: 349 // KB_MENU (348) + 1
 
 Frame_State :: struct {
-	surf_tex:    wg.SurfaceTexture,
-	view:        wg.TextureView,
-	encoder:     wg.CommandEncoder,
-	pass:        wg.RenderPassEncoder,
-	clear_color: Color,
-	pass_begun:  bool,
-	has_frame:   bool,
+	surf_tex:               wg.SurfaceTexture,
+	view:                   wg.TextureView,
+	encoder:                wg.CommandEncoder,
+	pass:                   wg.RenderPassEncoder,
+	clear_color:            Color,
+	pass_begun:             bool,
+	has_frame:              bool,
 
 	// Active window-pass scissor (framebuffer pixels). Re-applied whenever the
 	// window pass begins, since a fresh WebGPU pass resets scissor to full.
-	scissor_on:    bool,
-	scissor_empty: bool,
+	scissor_on:             bool,
+	scissor_empty:          bool,
 	sc_x, sc_y, sc_w, sc_h: u32,
 
 	// Render-target redirection (Phase 2): when rt != 0 the batch records into
 	// rt_pass (targeting an offscreen texture) on its own command encoder,
 	// submitted at EndTextureMode, instead of the swapchain pass.
-	rt:            u32,
-	rt_encoder:    wg.CommandEncoder,
-	rt_pass:       wg.RenderPassEncoder,
-	rt_pass_begun: bool,
-	rt_clear:      Color,
+	rt:                     u32,
+	rt_encoder:             wg.CommandEncoder,
+	rt_pass:                wg.RenderPassEncoder,
+	rt_pass_begun:          bool,
+	rt_clear:               Color,
 	// True when ClearBackground was called after BeginTextureMode (before the
 	// RT pass began). Selects loadOp = .Clear; otherwise the RT pass uses
 	// loadOp = .Load to preserve the target's prior contents (raylib parity —
 	// BeginTextureMode alone does not clear). Incremental renderers (the nvim
 	// grid's per-row dirty redraw) and additive-accumulation passes (galaxy
 	// streak combine) depend on this preserve-by-default behaviour.
-	rt_should_clear: bool,
-	rt_w, rt_h:    i32,
-	rt_depth:      bool,          // RT pass carries a depth attachment (3D)
+	rt_should_clear:        bool,
+	rt_w, rt_h:             i32,
+	rt_depth:               bool, // RT pass carries a depth attachment (3D)
 	// 3D mode (Phase 4): a depth-enabled pass replaces the current 2D pass.
-	depth_view:    wg.TextureView,
-	mode3d:        bool,
+	depth_view:             wg.TextureView,
+	mode3d:                 bool,
 }
 
 Context :: struct {
-	win:      Window_Handle,
-	instance: wg.Instance,
-	surface:  wg.Surface,
-	adapter:  wg.Adapter,
-	device:   wg.Device,
-	queue:    wg.Queue,
-	format:   wg.TextureFormat,
-	config:   wg.SurfaceConfiguration,
-
-	config_flags: ConfigFlags,
+	win:                  Window_Handle,
+	instance:             wg.Instance,
+	surface:              wg.Surface,
+	adapter:              wg.Adapter,
+	device:               wg.Device,
+	queue:                wg.Queue,
+	format:               wg.TextureFormat,
+	config:               wg.SurfaceConfiguration,
+	config_flags:         ConfigFlags,
 
 	// logical (point) size — what GetScreenWidth/Height and the ortho
 	// projection use; physical framebuffer may be larger under HiDPI.
-	width, height:       i32,
-	fb_width, fb_height: i32,
-	dpi:                 f32,
+	width, height:        i32,
+	fb_width, fb_height:  i32,
+	dpi:                  f32,
 
 	// requested window size, stashed at InitWindow for _gpu_finish (needed
 	// because on web the GPU device resolves asynchronously, after InitWindow
 	// has returned).
 	pending_w, pending_h: i32,
-
-	frame: Frame_State,
+	frame:                Frame_State,
 
 	// timing
-	start_time_s: f64,
-	last_time:    f64,
-	frame_time:      f32, // clamped to MAX_FRAME_TIME (what GetFrameTime returns)
-	real_frame_time: f32, // unclamped, for GetFPS accuracy
-	target_fps:   i32,
+	start_time_s:         f64,
+	last_time:            f64,
+	frame_time:           f32, // clamped to MAX_FRAME_TIME (what GetFrameTime returns)
+	real_frame_time:      f32, // unclamped, for GetFPS accuracy
+	target_fps:           i32,
 
 	// event-driven frame scheduling (idle.odin)
-	idle: Idle_State,
+	idle:                 Idle_State,
 
 	// renderer (batch.odin)
-	rend: Renderer,
+	rend:                 Renderer,
 
 	// input (input.odin)
-	inp: Input,
-
-	submissions:     Submission_Tracker,
+	inp:                  Input,
+	submissions:          Submission_Tracker,
 	// GPU handles retired mid-frame (UnloadFont/UnloadTexture while a frame
 	// is recording). Destroying a texture that this frame's command buffer
 	// references fails validation at QueueSubmit, so destruction is deferred
 	// until after the submit in EndDrawing.
-	retire:          [dynamic]Retired_Texture,
-	initialized:     bool,
-	composite_alpha: wg.CompositeAlphaMode,
+	retire:               [dynamic]Retired_Texture,
+	initialized:          bool,
+	composite_alpha:      wg.CompositeAlphaMode,
 }
 
 // Retired_Texture is one texture's GPU handles awaiting end-of-frame
@@ -118,14 +115,23 @@ MAX_RETIRED_PER_FRAME :: 64
 // frame's queue submit while a frame is recording (wgpu validates that
 // submitted command buffers reference no destroyed textures).
 @(private)
-_retire_texture :: proc(bind: wg.BindGroup, sampler: wg.Sampler, view: wg.TextureView, tex: wg.Texture) {
+_retire_texture :: proc(
+	bind: wg.BindGroup,
+	sampler: wg.Sampler,
+	view: wg.TextureView,
+	tex: wg.Texture,
+) {
 	// Why assert: all-nil handles mean the entry was already destroyed — a
 	// double-unload of the same font/texture.
-	assert(bind != nil || sampler != nil || view != nil || tex != nil,
-		"_retire_texture: all handles nil (double unload?)")
+	assert(
+		bind != nil || sampler != nil || view != nil || tex != nil,
+		"_retire_texture: all handles nil (double unload?)",
+	)
 	if g.frame.has_frame {
-		assert(len(g.retire) < MAX_RETIRED_PER_FRAME,
-			"_retire_texture: retire queue full (unload loop within one frame?)")
+		assert(
+			len(g.retire) < MAX_RETIRED_PER_FRAME,
+			"_retire_texture: retire queue full (unload loop within one frame?)",
+		)
 		append(&g.retire, Retired_Texture{bind, sampler, view, tex})
 		return
 	}
@@ -155,22 +161,41 @@ _flush_retired :: proc() {
 	clear(&g.retire)
 }
 
-@(private) g: Context
+@(private)
+g: Context
 
 // --- async adapter/device request helpers ----------------------------------
 
-@(private) Adapter_Res :: struct { adapter: wg.Adapter, done: bool }
-@(private) Device_Res  :: struct { device:  wg.Device,  done: bool }
+@(private)
+Adapter_Res :: struct {
+	adapter: wg.Adapter,
+	done:    bool,
+}
+@(private)
+Device_Res :: struct {
+	device: wg.Device,
+	done:   bool,
+}
 
 @(private)
-_on_adapter :: proc "c" (status: wg.RequestAdapterStatus, adapter: wg.Adapter, msg: wg.StringView, u1, u2: rawptr) {
+_on_adapter :: proc "c" (
+	status: wg.RequestAdapterStatus,
+	adapter: wg.Adapter,
+	msg: wg.StringView,
+	u1, u2: rawptr,
+) {
 	r := (^Adapter_Res)(u1)
 	r.adapter = adapter
 	r.done = true
 }
 
 @(private)
-_on_device :: proc "c" (status: wg.RequestDeviceStatus, device: wg.Device, msg: wg.StringView, u1, u2: rawptr) {
+_on_device :: proc "c" (
+	status: wg.RequestDeviceStatus,
+	device: wg.Device,
+	msg: wg.StringView,
+	u1, u2: rawptr,
+) {
 	if status != .Success {
 		context = runtime.default_context()
 		fmt.eprintfln("gfx: device request failed (status=%v): %s", status, string(msg))
@@ -193,7 +218,12 @@ INGOT_GPU_STRICT :: #config(INGOT_GPU_STRICT, false)
 // surfaces a diagnosable error instead of a bare SIGABRT. Under
 // INGOT_GPU_STRICT the error is fatal by design.
 @(private)
-_on_uncaptured_error :: proc "c" (device: ^wg.Device, type: wg.ErrorType, message: wg.StringView, u1, u2: rawptr) {
+_on_uncaptured_error :: proc "c" (
+	device: ^wg.Device,
+	type: wg.ErrorType,
+	message: wg.StringView,
+	u1, u2: rawptr,
+) {
 	context = runtime.default_context()
 	fmt.eprintfln("gfx: wgpu uncaptured error (%v): %s", type, string(message))
 	when INGOT_GPU_STRICT {
@@ -266,7 +296,7 @@ _gpu_finish :: proc() {
 	}
 	g.composite_alpha = alpha
 	_stats_set_alpha_mode(alpha)
-	g.config = wg.SurfaceConfiguration{
+	g.config = wg.SurfaceConfiguration {
 		device      = g.device,
 		format      = g.format,
 		usage       = {.RenderAttachment},
@@ -317,7 +347,7 @@ BeginDrawing :: proc() {
 	g.frame.surf_tex = wg.SurfaceGetCurrentTexture(g.surface)
 	#partial switch g.frame.surf_tex.status {
 	case .SuccessOptimal, .SuccessSuboptimal:
-		// ok
+	// ok
 	case .Outdated, .Lost:
 		// The swapchain is stale (e.g. display change); reconfigure so the
 		// next frame can acquire a fresh texture.
@@ -365,21 +395,24 @@ ClearBackground :: proc(c: Color) {
 _ensure_pass :: proc() {
 	if !g.frame.has_frame || g.frame.pass_begun do return
 	cc := g.frame.clear_color
-	g.frame.pass = wg.CommandEncoderBeginRenderPass(g.frame.encoder, &{
-		colorAttachmentCount = 1,
-		colorAttachments = &wg.RenderPassColorAttachment{
-			view       = g.frame.view,
-			depthSlice = wg.DEPTH_SLICE_UNDEFINED,
-			loadOp     = .Clear,
-			storeOp    = .Store,
-			clearValue = {
-				f64(cc.r) / 255.0,
-				f64(cc.g) / 255.0,
-				f64(cc.b) / 255.0,
-				f64(cc.a) / 255.0,
+	g.frame.pass = wg.CommandEncoderBeginRenderPass(
+		g.frame.encoder,
+		&{
+			colorAttachmentCount = 1,
+			colorAttachments = &wg.RenderPassColorAttachment {
+				view = g.frame.view,
+				depthSlice = wg.DEPTH_SLICE_UNDEFINED,
+				loadOp = .Clear,
+				storeOp = .Store,
+				clearValue = {
+					f64(cc.r) / 255.0,
+					f64(cc.g) / 255.0,
+					f64(cc.b) / 255.0,
+					f64(cc.a) / 255.0,
+				},
 			},
 		},
-	})
+	)
 	_stats_render_pass()
 	g.frame.pass_begun = true
 	// A new pass starts with a full-attachment scissor; restore any active clip.
@@ -495,16 +528,16 @@ _now :: proc() -> f64 {
 
 // --- window/screen queries (raylib-named) ----------------------------------
 
-GetScreenWidth  :: proc() -> i32 { return g.width }
-GetScreenHeight :: proc() -> i32 { return g.height }
-GetWindowScaleDPI :: proc() -> Vector2 { return {g.dpi, g.dpi} }
-GetRenderWidth  :: proc() -> i32 { return g.fb_width }
-GetRenderHeight :: proc() -> i32 { return g.fb_height }
+GetScreenWidth :: proc() -> i32 {return g.width}
+GetScreenHeight :: proc() -> i32 {return g.height}
+GetWindowScaleDPI :: proc() -> Vector2 {return {g.dpi, g.dpi}}
+GetRenderWidth :: proc() -> i32 {return g.fb_width}
+GetRenderHeight :: proc() -> i32 {return g.fb_height}
 
-SetTargetFPS :: proc(fps: i32) { g.target_fps = fps }
-GetFrameTime :: proc() -> f32 { return g.frame_time }
-GetTime      :: proc() -> f64 { return _now() }
-GetFPS       :: proc() -> i32 {
+SetTargetFPS :: proc(fps: i32) {g.target_fps = fps}
+GetFrameTime :: proc() -> f32 {return g.frame_time}
+GetTime :: proc() -> f64 {return _now()}
+GetFPS :: proc() -> i32 {
 	if g.real_frame_time <= 0 do return 0
 	return i32(1.0 / g.real_frame_time + 0.5)
 }
@@ -515,12 +548,12 @@ SetWindowMinSize :: proc(w, h: i32) {
 SetWindowSize :: proc(w, h: i32) {
 	platform_set_window_size(w, h)
 }
-SetExitKey :: proc(key: KeyboardKey) { g.inp.exit_key = key }
+SetExitKey :: proc(key: KeyboardKey) {g.inp.exit_key = key}
 
 GetMonitorRefreshRate :: proc(monitor: i32) -> i32 {
 	return platform_monitor_refresh_rate()
 }
-GetCurrentMonitor :: proc() -> i32 { return 0 }
+GetCurrentMonitor :: proc() -> i32 {return 0}
 
 IsWindowFocused :: proc() -> bool {
 	return platform_window_focused()

@@ -80,10 +80,16 @@ interact_step_missed_release_drops_latch :: proc(t: ^testing.T) {
 @(test)
 interact_step_blocked_widget_is_inert :: proc(t: ^testing.T) {
 	// While another widget drags, this one neither hovers nor activates.
-	it := interact_step(Interact_Event{over = true, pressed = true, down = true, blocked = true}, nil)
+	it := interact_step(
+		Interact_Event{over = true, pressed = true, down = true, blocked = true},
+		nil,
+	)
 	testing.expect(t, !it.hovered && !it.pressed && !it.clicked)
 	latch := false
-	it = interact_step(Interact_Event{over = true, pressed = true, down = true, blocked = true}, &latch)
+	it = interact_step(
+		Interact_Event{over = true, pressed = true, down = true, blocked = true},
+		&latch,
+	)
 	testing.expect(t, !it.held)
 	testing.expect(t, !latch)
 }

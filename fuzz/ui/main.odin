@@ -248,7 +248,17 @@ exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	defer ui.sem_reset()
 	ui.sem_enable(true)
 
-	roles := [?]ui.Sem_Role{.Button, .Checkbox, .Radio, .Slider, .Dropdown, .Menu_Item, .Label, .Pane, .Modal}
+	roles := [?]ui.Sem_Role {
+		.Button,
+		.Checkbox,
+		.Radio,
+		.Slider,
+		.Dropdown,
+		.Menu_Item,
+		.Label,
+		.Pane,
+		.Modal,
+	}
 	slots: [4]int
 	// (slot, id) pairs must be unique per frame the way real widget code is
 	// unique — the same pair IS the same widget and legitimately shares a
@@ -275,8 +285,12 @@ exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 			}
 			ui.semantic_push(
 				role,
-				{i32(fuzzx.int_range(p, -50, 2000)), i32(fuzzx.int_range(p, -50, 2000)),
-					i32(fuzzx.int_range(p, 1, 500)), i32(fuzzx.int_range(p, 1, 200))},
+				{
+					i32(fuzzx.int_range(p, -50, 2000)),
+					i32(fuzzx.int_range(p, -50, 2000)),
+					i32(fuzzx.int_range(p, 1, 500)),
+					i32(fuzzx.int_range(p, 1, 200)),
+				},
 				string(label_bytes),
 				{},
 				focus,
@@ -324,7 +338,10 @@ main :: proc() {
 		round_seed := seed + u64(round)
 		if rounds > 1 do fmt.printfln("fuzz_ui round %d seed=%d", round, round_seed)
 		p := fuzzx.prng_make(round_seed)
-		c := fuzzx.Ctx{name = "fuzz_ui", seed = round_seed}
+		c := fuzzx.Ctx {
+			name = "fuzz_ui",
+			seed = round_seed,
+		}
 		for i in 0 ..< iterations {
 			c.iteration = i
 			line := make_line(&p)
