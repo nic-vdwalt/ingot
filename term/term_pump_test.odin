@@ -55,3 +55,21 @@ utf8_holdback_fuzz :: proc(t: ^testing.T) {
 		free_all(context.temp_allocator)
 	}
 }
+
+// Property: for FULLY ARBITRARY bytes — including malformed UTF-8 (stray
+// continuation bytes, overlong leads, 0xFE/0xFF) — the completed prefix stays
+// within [0, len] and at most 3 bytes are ever held back. This is the
+// hostile-input counterpart of utf8_holdback_fuzz, which only feeds valid
+// streams.
+@(test)
+utf8_holdback_arbitrary_bytes :: proc(t: ^testing.T) {
+	p := testx.prng_make(0xBAD5EED)
+	for _ in 0 ..< 50_000 {
+		buf := testx.random_bytes(&p, 64)
+		prefix := _utf8_complete_prefix(buf)
+		testing.expect(t, prefix >= 0, "prefix must be non-negative")
+		testing.expect(t, prefix <= len(buf), "prefix cannot exceed buffer")
+		testing.expect(t, len(buf)-prefix < 4, "held-back tail must be < 4 bytes")
+		free_all(context.temp_allocator)
+	}
+}
