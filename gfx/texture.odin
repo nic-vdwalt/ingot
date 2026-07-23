@@ -208,10 +208,9 @@ UpdateTexture :: proc(texture: Texture2D, pixels: rawptr) {
 UnloadTexture :: proc(texture: Texture2D) {
 	e := get_texture(texture.id)
 	if e == nil do return
-	if e.bind != nil do wg.BindGroupRelease(e.bind)
-	if e.sampler != nil do wg.SamplerRelease(e.sampler)
-	if e.view != nil do wg.TextureViewRelease(e.view)
-	if e.tex != nil { wg.TextureDestroy(e.tex); wg.TextureRelease(e.tex) }
+	// Defer GPU destruction past this frame's submit: draws recorded earlier
+	// in the frame may still reference the texture (context.odin).
+	_retire_texture(e.bind, e.sampler, e.view, e.tex)
 	g_textures[texture.id - TEX_ID_BASE] = nil
 	free(e)
 }

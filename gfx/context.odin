@@ -89,8 +89,56 @@ Context :: struct {
 	inp: Input,
 
 	submissions:     Submission_Tracker,
+	// GPU handles retired mid-frame (UnloadFont/UnloadTexture while a frame
+	// is recording). Destroying a texture that this frame's command buffer
+	// references fails validation at QueueSubmit, so destruction is deferred
+	// until after the submit in EndDrawing.
+	retire:          [dynamic]Retired_Texture,
 	initialized:     bool,
 	composite_alpha: wg.CompositeAlphaMode,
+}
+
+// Retired_Texture is one texture's GPU handles awaiting end-of-frame
+// destruction. Views/samplers/binds are release-only; the texture itself is
+// destroyed (delete-now semantics) once the frame's submit no longer
+// references it.
+Retired_Texture :: struct {
+	bind:    wg.BindGroup,
+	sampler: wg.Sampler,
+	view:    wg.TextureView,
+	tex:     wg.Texture,
+}
+
+// _retire_texture destroys a texture's GPU handles, deferring to after this
+// frame's queue submit while a frame is recording (wgpu validates that
+// submitted command buffers reference no destroyed textures).
+@(private)
+_retire_texture :: proc(bind: wg.BindGroup, sampler: wg.Sampler, view: wg.TextureView, tex: wg.Texture) {
+	if g.frame.has_frame {
+		append(&g.retire, Retired_Texture{bind, sampler, view, tex})
+		return
+	}
+	_destroy_retired(Retired_Texture{bind, sampler, view, tex})
+}
+
+@(private)
+_destroy_retired :: proc(r: Retired_Texture) {
+	if r.bind != nil do wg.BindGroupRelease(r.bind)
+	if r.sampler != nil do wg.SamplerRelease(r.sampler)
+	if r.view != nil do wg.TextureViewRelease(r.view)
+	if r.tex != nil {
+		wg.TextureDestroy(r.tex)
+		wg.TextureRelease(r.tex)
+	}
+}
+
+// _flush_retired destroys all mid-frame-retired textures. Call after
+// QueueSubmit: from that point wgpu keeps the submitted work's resources
+// alive internally, so destroy is safe.
+@(private)
+_flush_retired :: proc() {
+	for r in g.retire do _destroy_retired(r)
+	clear(&g.retire)
 }
 
 @(private) g: Context
@@ -345,6 +393,7 @@ EndDrawing :: proc() {
 		wg.TextureViewRelease(g.frame.view)
 		_release_surface_texture()
 		g.frame.has_frame = false
+		_flush_retired()
 	} else {
 		clear(&g.rend.verts)
 		clear(&g.rend.indices)

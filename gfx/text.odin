@@ -190,10 +190,9 @@ _atlas_build_bind :: proc(a: ^Atlas) {
 UnloadFont :: proc(font: Font) {
 	a := get_atlas(font._atlas)
 	if a == nil do return
-	if a.bind != nil do wg.BindGroupRelease(a.bind)
-	if a.sampler != nil do wg.SamplerRelease(a.sampler)
-	if a.view != nil do wg.TextureViewRelease(a.view)
-	if a.tex != nil { wg.TextureDestroy(a.tex); wg.TextureRelease(a.tex) }
+	// Defer GPU destruction past this frame's submit: draws recorded earlier
+	// in the frame may still reference the atlas texture (context.odin).
+	_retire_texture(a.bind, a.sampler, a.view, a.tex)
 	delete(a.glyphs)
 	delete(a.bitmap)
 	delete(a.data)
