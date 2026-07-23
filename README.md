@@ -205,11 +205,13 @@ rl.PlayMusicStream(music)
 rl.UpdateMusicStream(music)            // no-op both targets; call-site parity
 ```
 
-Web notes: browsers have no file paths, so `LoadSound`/`LoadMusicStream`
-return invalid handles there — embed bytes (`#load`) and use
-`LoadSoundFromWave` (see `examples/breakout`). Autoplay policy suspends the
-AudioContext until the first click/keypress; earlier plays are dropped
-silently.
+Web notes: `LoadSound`/`LoadMusicStream` treat the path as a URL and load
+asynchronously (fetch + `decodeAudioData`) — the handle is valid immediately;
+poll `IsSoundReady`/`IsMusicReady`, and a play issued mid-decode starts once
+it lands (a failed fetch leaves the slot permanently silent).
+`LoadSoundFromWave` with embedded bytes (`#load`) stays synchronous (see
+`examples/breakout`). Autoplay policy suspends the AudioContext until the
+first click/keypress; earlier plays are dropped silently.
 
 ### Gamepad
 
@@ -603,17 +605,14 @@ evidence, then build the depth that makes people stay.
 
 - **On-device validation of the opt-in GPU 3D path.** Depth-tested indexed
   sphere meshes render through a separate pass without changing legacy
-  `BeginMode3D`; Metal is verified, while D3D12/Vulkan and browser validation
-  remain.
-- **HDR bloom/tonemap consumer migration.** ingot now names and preserves its
-  render-target Y-flip convention; openalloy's multipass galaxy chain can migrate
-  independently without changing nvim render-texture behavior.
-- **Web audio file loading** — `LoadSound`/`LoadMusicStream` return invalid
-  handles on web (no file paths), and `UpdateMusicStream` is a no-op; route
-  through the JS bridge / fetch so both targets share the same loading story.
-- **WebSocket continuation frames** — the native RFC 6455 client rejects
-  fragmented messages (`net/ws.odin`); assemble continuation frames for parity
-  with the browser backend.
+  `BeginMode3D`. Metal is verified and the per-backend validation matrix +
+  fixture protocol are documented in `docs/rendering.md`; the D3D12, Vulkan
+  (Windows/Linux), and browser WebGPU runs remain pending hardware.
+- **HDR bloom/tonemap consumer migration.** The render-target Y-flip
+  convention is named, unit-fenced, and exercised by the fixture's ping-pong
+  chain, with a migration guide in `docs/rendering.md`; migrating openalloy's
+  multipass galaxy chain itself remains, without changing nvim render-texture
+  behavior.
 
 ### Phase 2 — Proof over features
 
@@ -660,6 +659,18 @@ evidence, then build the depth that makes people stay.
 
 ### Recently shipped
 
+- **GPU 3D / render-target orientation contracts fenced**: headless sphere
+  geometry and Y-flip projection tests, a pool-exhaustion stat, cull/depth
+  proofs in `examples/render_fixture`, and the on-device validation matrix +
+  openalloy HDR migration guide in `docs/rendering.md`.
+- **Async web audio file loading**: `LoadSound`/`LoadMusicStream` on web now
+  fetch + `decodeAudioData` instead of returning invalid handles, with
+  `IsSoundReady`/`IsMusicReady` polling and deferred play intent applied when
+  the decode lands.
+- **WebSocket continuation frames**: the native RFC 6455 client reassembles
+  fragmented TEXT/BINARY messages (§5.4) under the same `WS_MAX_PAYLOAD`
+  ceiling, failing fast on protocol violations — parity with the browser
+  backend.
 - **`LoadTexture` from a file path** (native): reads the file and decodes via
   the existing stb_image path (`gfx/texture_native.odin`); the web target
   keeps a documented stub — browsers have no fs paths, so web apps fetch
