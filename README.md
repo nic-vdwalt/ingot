@@ -608,9 +608,6 @@ evidence, then build the depth that makes people stay.
 - **HDR bloom/tonemap consumer migration.** ingot now names and preserves its
   render-target Y-flip convention; openalloy's multipass galaxy chain can migrate
   independently without changing nvim render-texture behavior.
-- **`LoadTexture` from a file path** — currently a stub returning an empty
-  texture (`gfx/texture.odin`); wire an fs image loader (`vendor:stb/image`)
-  so the raylib-shaped path-based API works, not just `LoadTextureFromImage`.
 - **Web audio file loading** — `LoadSound`/`LoadMusicStream` return invalid
   handles on web (no file paths), and `UpdateMusicStream` is a no-op; route
   through the JS bridge / fetch so both targets share the same loading story.
@@ -663,6 +660,10 @@ evidence, then build the depth that makes people stay.
 
 ### Recently shipped
 
+- **`LoadTexture` from a file path** (native): reads the file and decodes via
+  the existing stb_image path (`gfx/texture_native.odin`); the web target
+  keeps a documented stub — browsers have no fs paths, so web apps fetch
+  bytes and use `LoadImageFromMemory` + `LoadTextureFromImage`.
 - **Audio** (`InitAudioDevice`, `LoadSound`, `LoadSoundFromWave`, `PlaySound`,
   music streams): native `vendor:miniaudio` engine with a fixed generation-
   checked sound pool, web WebAudio bridge — same raylib-shaped API on both

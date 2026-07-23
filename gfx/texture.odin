@@ -310,8 +310,6 @@ UnloadImage :: proc(image: Image) {
 	if image.data != nil do stbi.image_free(image.data)
 }
 
-LoadTexture :: proc(fileName: cstring) -> Texture2D { return Texture2D{} } // path load unsupported (no fs image loader wired)
-
 // SetWindowIcon sets the window icon from a decoded RGBA image (native only;
 // no-op on web where the browser owns the tab/favicon).
 SetWindowIcon :: proc(image: Image) {
