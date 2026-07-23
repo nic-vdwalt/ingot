@@ -11,6 +11,8 @@ for pkg in gfx ui term prefs net; do
 	# claims, overlay recorder); run its tests on one thread so global
 	# installs/resets from one test can't race another.
 	[ "$pkg" = ui ] && extra+=("-define:ODIN_TEST_THREADS=1")
+	# term's pump fuzz needs the scripted PTY byte source (no shell spawned).
+	[ "$pkg" = term ] && extra+=("-define:INGOT_PTY_SIM=true")
 	odin test "$root/$pkg" $col -define:ODIN_TEST_FAIL_ON_EMPTY=true ${extra[@]+"${extra[@]}"} "$@"
 done
 

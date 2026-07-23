@@ -42,7 +42,7 @@ _utf8_complete_prefix :: proc(buf: []u8) -> int {
 				need = 3
 			}
 			if n-i < need {
-				return i // incomplete: hold back from the lead byte
+				return i + 1 // BROKEN: splits the sequence after the lead
 			}
 			return n
 		}

@@ -125,24 +125,29 @@ Pty :: struct {
 		return Pty{master_fd = master_fd, child_pid = pid}, true
 	}
 
-	read_bytes :: proc(p: ^Pty, buf: []u8) -> (n: int, eof: bool) {
-		r := read(p.master_fd, raw_data(buf), len(buf))
-		if r > 0 do return int(r), false
-		if r == 0 do return 0, true
-		e := errno_ptr()^
-		if e == EAGAIN || e == EWOULDBLOCK do return 0, false
-		return 0, true
-	}
-
-	drain :: proc(p: ^Pty, buf: []u8) -> (data: []u8, eof: bool) {
-		total := 0
-		for total < len(buf) {
-			n, e := read_bytes(p, buf[total:])
-			total += n
-			if e do return buf[:total], true
-			if n == 0 do break
+	// read_bytes/drain are replaced by a scripted byte source when built
+	// with -define:INGOT_PTY_SIM=true (pty_sim.odin) so the terminal pump
+	// can be fuzzed without a shell process.
+	when !INGOT_PTY_SIM {
+		read_bytes :: proc(p: ^Pty, buf: []u8) -> (n: int, eof: bool) {
+			r := read(p.master_fd, raw_data(buf), len(buf))
+			if r > 0 do return int(r), false
+			if r == 0 do return 0, true
+			e := errno_ptr()^
+			if e == EAGAIN || e == EWOULDBLOCK do return 0, false
+			return 0, true
 		}
-		return buf[:total], false
+
+		drain :: proc(p: ^Pty, buf: []u8) -> (data: []u8, eof: bool) {
+			total := 0
+			for total < len(buf) {
+				n, e := read_bytes(p, buf[total:])
+				total += n
+				if e do return buf[:total], true
+				if n == 0 do break
+			}
+			return buf[:total], false
+		}
 	}
 
 	write_bytes :: proc(p: ^Pty, data: []u8) {

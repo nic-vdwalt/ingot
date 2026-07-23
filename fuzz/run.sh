@@ -9,6 +9,12 @@
 #   fuzz/run.sh interact       # widget interaction-sequence fuzzer (headless,
 #                              # synthetic input via -define:INGOT_INPUT_SIM=true)
 #   fuzz/run.sh input          # text-input edit-op fuzzer (in-package, high iterations)
+#   fuzz/run.sh wsreconn       # WS reconnect state machine vs real worker thread
+#                              # (sim transport via -define:INGOT_WS_SIM=true)
+#   fuzz/run.sh tsan           # ThreadSanitizer pass over the threaded surfaces
+#                              # (wsreconn + net tests + a11y queue stress);
+#                              # ASan and TSan cannot share a binary, so this
+#                              # is a separate phase, appended to each soak round
 #   fuzz/run.sh gfx-frame      # WINDOWED GPU lifecycle fuzzer (needs a display;
 #                              # NOT part of `all`/`soak` — run explicitly)
 #   fuzz/run.sh all            # net + ui + term + interact + input (headless only)
@@ -18,6 +24,11 @@
 # instruments the Odin side only; GPU-internal memory errors are outside its
 # reach. gfx-frame compensates by building with -define:INGOT_GPU_STRICT=true
 # so ANY wgpu validation message aborts the run.
+#
+# TSan scope note: term/pty are single-threaded by design (no reader threads;
+# synchronous non-blocking PTY drains), so TSan there exercises nothing — the
+# tsan target covers the only threaded code: the WS worker, the HTTP fetch
+# pool, and the a11y action queue.
 #
 # Environment:
 #   SAN=address|thread|none    # sanitizer (default: address).
@@ -63,8 +74,10 @@ run_ui() {
 run_term() {
 	# vt_bytes_for_key is package-private, so the term fuzzers live in-package
 	# as tests (term/term_input_fuzz_test.odin), mirroring net/http_fuzz_test.odin.
+	# INGOT_PTY_SIM scripts the PTY byte source so term_pump's drain/EOF loop
+	# is fuzzed too; INGOT_FUZZ_ITER scales the pump fuzz past the test default.
 	# shellcheck disable=SC2086
-	odin test "$ROOT/term" $COL $SANFLAGS
+	odin test "$ROOT/term" $COL $SANFLAGS -define:INGOT_PTY_SIM=true -define:INGOT_FUZZ_ITER=3000
 }
 
 run_gfx_frame() {
@@ -95,6 +108,28 @@ run_input() {
 	odin test "$ROOT/ui" $COL $SANFLAGS -define:ODIN_TEST_THREADS=1 -define:INGOT_FUZZ_ITER=200000
 }
 
+run_wsreconn() {
+	# Reconnect state-machine fuzzer: real worker thread + scripted transport.
+	# shellcheck disable=SC2086
+	odin build "$ROOT/fuzz/wsreconn" $COL $SANFLAGS -define:INGOT_WS_SIM=true -out:"$ROOT/fuzz/wsreconn/fuzz_wsreconn"
+	"$ROOT/fuzz/wsreconn/fuzz_wsreconn" "$@"
+}
+
+run_tsan() {
+	# ThreadSanitizer phase (separate binaries — TSan and ASan don't compose).
+	local TS="-debug -sanitize:thread"
+	# shellcheck disable=SC2086
+	odin build "$ROOT/fuzz/wsreconn" $COL $TS -define:INGOT_WS_SIM=true -out:"$ROOT/fuzz/wsreconn/fuzz_wsreconn_tsan"
+	"$ROOT/fuzz/wsreconn/fuzz_wsreconn_tsan" "$@"
+	# Fetch-pool lifecycle + WS unit tests under TSan; single-threaded test
+	# runner so runner threads don't drown the signal.
+	# shellcheck disable=SC2086
+	odin test "$ROOT/net" $COL $TS -define:ODIN_TEST_THREADS=1
+	# a11y action queue: threaded producer vs main-thread drain.
+	# shellcheck disable=SC2086
+	odin test "$ROOT/ui" $COL $TS -define:ODIN_TEST_THREADS=1 -define:ODIN_TEST_NAMES=ui.a11y_action_queue_stress
+}
+
 case "$TARGET" in
 net)
 	run_net "${ARGS[@]+"${ARGS[@]}"}"
@@ -114,10 +149,17 @@ interact)
 input)
 	run_input
 	;;
+wsreconn)
+	run_wsreconn "${ARGS[@]+"${ARGS[@]}"}"
+	;;
+tsan)
+	run_tsan "${ARGS[@]+"${ARGS[@]}"}"
+	;;
 all)
 	run_net "${ARGS[@]+"${ARGS[@]}"}"
 	run_ui "${ARGS[@]+"${ARGS[@]}"}"
 	run_interact "${ARGS[@]+"${ARGS[@]}"}"
+	run_wsreconn "${ARGS[@]+"${ARGS[@]}"}"
 	run_input
 	run_term
 	;;
@@ -129,7 +171,7 @@ soak)
 	for round in $(seq 1 "$ROUNDS"); do
 		round_seed="$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')"
 		echo "=== soak round $round/$ROUNDS seed=$round_seed ==="
-		for harness in net ui interact; do
+		for harness in net ui interact wsreconn; do
 			if ! "run_$harness" "-seed:$round_seed" "${ITERATIONS:+-iterations:$ITERATIONS}"; then
 				echo "SOAK FAILED — reproduce with: fuzz/run.sh $harness $round_seed" >&2
 				exit 1
@@ -143,10 +185,14 @@ soak)
 			echo "SOAK FAILED in term tests (deterministic seeds — rerun: fuzz/run.sh term)" >&2
 			exit 1
 		fi
+		if ! run_tsan "-seed:$round_seed"; then
+			echo "SOAK FAILED in TSan phase — reproduce with: fuzz/run.sh tsan $round_seed" >&2
+			exit 1
+		fi
 	done
 	;;
 *)
-	echo "unknown target '$TARGET' (expected net|ui|term|interact|input|gfx-frame|all|soak)" >&2
+	echo "unknown target '$TARGET' (expected net|ui|term|interact|input|wsreconn|tsan|gfx-frame|all|soak)" >&2
 	exit 2
 	;;
 esac

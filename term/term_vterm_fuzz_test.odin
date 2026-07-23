@@ -83,7 +83,8 @@ fuzz_vt_append_string_seq :: proc(p: ^testx.Prng, buf: ^[dynamic]u8) {
 // fuzz_vt_document builds a hostile byte stream mixing escape-sequence
 // templates, text atoms, raw random bytes (incl. malformed UTF-8 and C0/C1
 // controls), then applies byte-flip and truncation mutations.
-@(private = "file")
+// Package-private (not file-private): term_pump_fuzz_test.odin reuses it.
+@(private)
 fuzz_vt_document :: proc(p: ^testx.Prng, maximum_len: int) -> []u8 {
 	buf := make([dynamic]u8, 0, 512, context.temp_allocator)
 	for len(buf) < maximum_len {
@@ -150,7 +151,8 @@ fuzz_vt_feed :: proc(p: ^testx.Prng, ts: ^Term_Instance, data: []u8) {
 // input: cursor inside the grid, every cell readable with sane width,
 // scrollback within cap with consistent offsets, and the title (if any)
 // fully readable — under ASan each read also proves the memory is live.
-@(private = "file")
+// Package-private (not file-private): term_pump_fuzz_test.odin reuses it.
+@(private)
 fuzz_vt_check_invariants :: proc(t: ^testing.T, ts: ^Term_Instance) {
 	rows, cols: c.int
 	lv.vterm_get_size(ts.vt, &rows, &cols)

@@ -261,20 +261,7 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 }
 
 // Resolve a host string (dotted quad or DNS name) + port into an endpoint.
-@(private = "file")
-resolve_host :: proc(host: string, port: int) -> (cnet.Endpoint, bool) {
-	// Fast path: literal IP address.
-	if addr, ok := cnet.parse_ip4_address(host); ok {
-		return cnet.Endpoint{address = addr, port = port}, true
-	}
-	// DNS lookup.
-	ep, err := cnet.resolve_ip4(host)
-	if err != nil {
-		return {}, false
-	}
-	ep.port = port
-	return ep, true
-}
+// (Native implementation lives in ws_transport.odin as ws_net_resolve.)
 
 // ws_stop_wait sleeps up to d but wakes early when ws_close clears running,
 // so dial-retry and reconnect backoffs never delay shutdown by their full
@@ -286,7 +273,7 @@ ws_stop_wait :: proc(ws: ^WebSocket, d: time.Duration) {
 	sync.mutex_lock(&ws.stop_mutex)
 	defer sync.mutex_unlock(&ws.stop_mutex)
 	if !sync.atomic_load(&ws.running) do return
-	_ = sync.cond_wait_with_timeout(&ws.stop_cond, &ws.stop_mutex, d)
+	_ = sync.cond_wait_with_timeout(&ws.stop_cond, &ws.stop_mutex, ws_scaled(d))
 }
 
 // ws_notify nudges the app's frame loop (if a wake hook is installed) so a
@@ -332,13 +319,13 @@ ws_enqueue :: proc(ws: ^WebSocket, data: string, binary: bool) {
 @(private = "file")
 ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
 	for attempt := 0; attempt < ws.max_attempts && sync.atomic_load(&ws.running); attempt += 1 {
-		addr, resolved := resolve_host(ws.host, ws.port)
+		addr, resolved := ws_net_resolve(ws.host, ws.port)
 		if !resolved {
 			ws_stop_wait(ws, 200 * time.Millisecond)
 			continue
 		}
-		sock, err := cnet.dial_tcp(addr)
-		if err != nil {
+		sock, dialed := ws_net_dial(addr)
+		if !dialed {
 			ws_stop_wait(ws, 50 * time.Millisecond)
 			continue
 		}
@@ -347,7 +334,7 @@ ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
 		sync.mutex_lock(&ws.sock_mutex)
 		if !sync.atomic_load(&ws.running) {
 			sync.mutex_unlock(&ws.sock_mutex)
-			cnet.close(sock)
+			ws_net_close(sock)
 			return false
 		}
 		ws.socket = sock
@@ -357,14 +344,14 @@ ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
 		if ws_handshake(ws, sock) {
 			// Live read deadline: ws_handshake resets the socket to blocking
 			// after the 101 response, so re-arm it here for the recv loop.
-			_ = cnet.set_option(sock, .Receive_Timeout, WS_RECV_TIMEOUT)
+			ws_net_set_recv_timeout(sock, WS_RECV_TIMEOUT)
 			return true
 		}
 
 		// Handshake failed: retract the socket and retry.
 		sync.mutex_lock(&ws.sock_mutex)
 		if ws.socket_open {
-			cnet.close(ws.socket)
+			ws_net_close(ws.socket)
 			ws.socket_open = false
 		}
 		sync.mutex_unlock(&ws.sock_mutex)
@@ -393,13 +380,19 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 
 		first = false
 		sync.atomic_add(&ws.conn_gen, 1)
+		// Re-check running before publishing Connected: ws_close may have
+		// raced the handshake (its socket-publish gate ran before running
+		// flipped, but the handshake still completed against a buffered
+		// response). Publishing Connected after close would leave a dead
+		// socket reporting Connected.
+		if !sync.atomic_load(&ws.running) do break
 		ws_set_state(ws, .Connected)
 		ws_recv_loop(ws) // returns when the socket drops
 
 		// Retract the dropped socket before the next dial cycle.
 		sync.mutex_lock(&ws.sock_mutex)
 		if ws.socket_open {
-			cnet.close(ws.socket)
+			ws_net_close(ws.socket)
 			ws.socket_open = false
 		}
 		sync.mutex_unlock(&ws.sock_mutex)
@@ -410,9 +403,11 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 		ws_stop_wait(ws, WS_RECONNECT_WAIT)
 	}
 
-	if sync.atomic_load(&ws.state) != .Connected {
-		ws_set_state(ws, .Disconnected)
-	}
+	// The worker exiting means no connection is live: normalize the state
+	// unconditionally. The pre-fix condition preserved a stale .Connected
+	// when ws_close raced the recv loop's running check — the reconnect
+	// fuzzer (fuzz/wsreconn) found that interleaving.
+	ws_set_state(ws, .Disconnected)
 	sync.atomic_store(&ws.running, false)
 }
 
@@ -427,17 +422,17 @@ ws_handshake :: proc(ws: ^WebSocket, sock: cnet.TCP_Socket) -> bool {
 	)
 
 	request_bytes := transmute([]u8)request
-	if _, send_err := cnet.send(sock, request_bytes); send_err != nil {
+	if _, send_err := ws_net_send(sock, request_bytes); send_err != .None {
 		return false
 	}
 
 	// Bound the wait for the 101 response so a wedged server cannot park the
 	// worker forever; restore blocking mode for the recv loop afterward.
-	_ = cnet.set_option(sock, .Receive_Timeout, 2 * time.Second)
+	ws_net_set_recv_timeout(sock, 2 * time.Second)
 	buf: [2048]u8
-	n, recv_err := cnet.recv(sock, buf[:])
-	_ = cnet.set_option(sock, .Receive_Timeout, time.Duration(0))
-	if recv_err != nil || n == 0 {
+	n, recv_err := ws_net_recv(sock, buf[:])
+	ws_net_set_recv_timeout(sock, time.Duration(0))
+	if recv_err != .None || n == 0 {
 		return false
 	}
 
@@ -476,14 +471,14 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 
 	last_activity := time.now()
 	for sync.atomic_load(&ws.running) {
-		n, err := cnet.recv(ws.socket, scratch[:])
-		if err != nil {
+		n, err := ws_net_recv(ws.socket, scratch[:])
+		if err != .None {
 			// A recv timeout is not a disconnect: probe liveness with a PING
 			// (the server auto-replies PONG, counted as activity below) and
 			// only give up once the connection has been silent too long.
-			if err == .Timeout || err == .Would_Block {
+			if err == .Timeout {
 				ws_send_frame(ws, WS_OP_PING, nil)
-				if time.since(last_activity) > WS_DEAD_AFTER {
+				if time.since(last_activity) > ws_scaled(WS_DEAD_AFTER) {
 					ws_set_state(ws, .Disconnected)
 					return
 				}
@@ -589,8 +584,8 @@ ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
 	// whole frame is sent so the server never sees a truncated frame.
 	total := 0
 	for total < len(frame) {
-		n, err := cnet.send(sock, frame[total:])
-		if err != nil do return false
+		n, err := ws_net_send(sock, frame[total:])
+		if err != .None do return false
 		if n <= 0 do return false
 		total += n
 	}
@@ -657,7 +652,7 @@ ws_close :: proc(ws: ^WebSocket) {
 
 	sync.mutex_lock(&ws.sock_mutex)
 	if ws.socket_open {
-		cnet.close(ws.socket)
+		ws_net_close(ws.socket)
 		ws.socket_open = false
 	}
 	sync.mutex_unlock(&ws.sock_mutex)
