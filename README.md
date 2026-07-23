@@ -608,6 +608,15 @@ evidence, then build the depth that makes people stay.
 - **HDR bloom/tonemap consumer migration.** ingot now names and preserves its
   render-target Y-flip convention; openalloy's multipass galaxy chain can migrate
   independently without changing nvim render-texture behavior.
+- **`LoadTexture` from a file path** — currently a stub returning an empty
+  texture (`gfx/texture.odin`); wire an fs image loader (`vendor:stb/image`)
+  so the raylib-shaped path-based API works, not just `LoadTextureFromImage`.
+- **Web audio file loading** — `LoadSound`/`LoadMusicStream` return invalid
+  handles on web (no file paths), and `UpdateMusicStream` is a no-op; route
+  through the JS bridge / fetch so both targets share the same loading story.
+- **WebSocket continuation frames** — the native RFC 6455 client rejects
+  fragmented messages (`net/ws.odin`); assemble continuation frames for parity
+  with the browser backend.
 
 ### Phase 2 — Proof over features
 
@@ -631,7 +640,13 @@ evidence, then build the depth that makes people stay.
   VoiceOver+Safari / ChromeVox against the web gallery; AT value-setting for
   sliders (Increment/Decrement actions); prebuilt-lib coverage for
   windows_arm64 and linux_arm64.
-- **IME and complex text shaping** for non-Latin input.
+- **IME and complex text shaping** for non-Latin input. Linux IME (XIM /
+  text-input-v3) is unimplemented — `gfx/ime_other.odin` is empty stubs.
+- **Linux desktop-polish parity** — spellcheck is silently disabled
+  (`ui/spell_other.odin`), the custom title bar and window styling are no-ops
+  (`ui/titlebar_other.odin`, `ui/window_style_other.odin`), Wayland reports no
+  drag-hover, and libvterm has no prebuilt Linux static lib (links system
+  libvterm).
 - **Indexed instancing** (`DrawVertexArrayElementsInstanced`) for 3D node bodies.
 - **Transparent/additive GPU 3D pipelines** with explicit depth-read/write policy.
 - **macOS transparent-window fallback compositing** if a device exposes only
