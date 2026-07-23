@@ -89,7 +89,9 @@ import term  "ingot:term"
 
 Every Fetcher submission returns `bool`. Only mark application work pending when the
 submission returns `true`; `false` means the request was invalid, stopped, or rejected
-by a bounded queue. Call `fetcher_stop` during orderly shutdown.
+by bounded work or undrained-result capacity. Native requests reserve one result slot;
+the deterministic simulator reserves two because duplicate delivery is possible. Call
+`fetcher_stop` during orderly shutdown.
 
 `fetcher_drain` returns temporary slice storage that must be consumed before the next
 `free_all(context.temp_allocator)`. Each returned `Fetch_Result.body` transfers to the

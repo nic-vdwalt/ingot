@@ -80,9 +80,11 @@ test_sim_in_flight_bound_respected :: proc(t: ^testing.T) {
 	for i in 0 ..< SIM_MAX_IN_FLIGHT * 2 {
 		if fetcher_request_http(&f, u64(i + 1), Http_Request{method = .Get, path = "/x", maximum_body = 1024}) do accepted += 1
 	}
-	testing.expect_value(t, accepted, SIM_MAX_IN_FLIGHT)
-	testing.expect_value(t, len(f.in_flight), SIM_MAX_IN_FLIGHT)
-	testing.expect_value(t, f.stats.rejected, u64(SIM_MAX_IN_FLIGHT))
+	maximum_accepted := min(SIM_MAX_IN_FLIGHT, FETCH_MAXIMUM_RESULTS / SIM_RESULT_RESERVATION)
+	testing.expect_value(t, accepted, maximum_accepted)
+	testing.expect_value(t, len(f.in_flight), maximum_accepted)
+	testing.expect_value(t, f.result_slots, FETCH_MAXIMUM_RESULTS)
+	testing.expect_value(t, f.stats.rejected, u64(SIM_MAX_IN_FLIGHT * 2 - maximum_accepted))
 }
 
 @(test)
@@ -124,7 +126,8 @@ test_sim_convenience_requests_report_backpressure :: proc(t: ^testing.T) {
 	f: Fetcher
 	sim_fetcher_init(&f, 10, 0, test_respond)
 	fetcher_start(&f, "sim", 0)
-	for tag in 1 ..= SIM_MAX_IN_FLIGHT {
+	maximum_accepted := FETCH_MAXIMUM_RESULTS / SIM_RESULT_RESERVATION
+	for tag in 1 ..= maximum_accepted {
 		testing.expect(t, fetcher_request(&f, u64(tag), "/x"))
 	}
 	testing.expect(t, !fetcher_request_priority(&f, 65, "/priority"))
@@ -132,6 +135,24 @@ test_sim_convenience_requests_report_backpressure :: proc(t: ^testing.T) {
 	fetcher_stop(&f)
 	testing.expect(t, !fetcher_request(&f, 67, "/after-stop"))
 	fetcher_stop(&f)
+}
+
+@(test)
+test_sim_result_bound_releases_after_drain :: proc(t: ^testing.T) {
+	f: Fetcher
+	sim_fetcher_init(&f, 11, 0, test_respond)
+	fetcher_start(&f, "sim", 0)
+	defer fetcher_stop(&f)
+	accepted := FETCH_MAXIMUM_RESULTS / SIM_RESULT_RESERVATION
+	for tag in 1 ..= accepted do testing.expect(t, fetcher_request(&f, u64(tag), "/x"))
+	testing.expect(t, !fetcher_request(&f, 999, "/full"))
+	for len(f.in_flight) > 0 do sim_tick(&f)
+	testing.expect_value(t, len(f.results), accepted)
+	testing.expect_value(t, f.result_slots, accepted)
+	for result in fetcher_drain(&f) do delete(result.body)
+	free_all(context.temp_allocator)
+	testing.expect_value(t, f.result_slots, 0)
+	testing.expect(t, fetcher_request(&f, 1000, "/after-drain"))
 }
 
 } // when INGOT_NET_SIM

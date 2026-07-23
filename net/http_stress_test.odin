@@ -70,6 +70,32 @@ when HTTP_STRESS {
 		}
 	}
 
+	http_fetch_pool_result_backpressure_stress :: proc(t: ^testing.T) {
+		http_stress_reset()
+		f: Fetcher
+		fetcher_start(&f, "stress", 1)
+		for tag in 0 ..< FETCH_MAXIMUM_RESULTS {
+			testing.expect(t, fetcher_request(&f, u64(tag), "/stress"))
+		}
+		testing.expect(t, !fetcher_request(&f, 999, "/full"))
+		started := time.now()
+		for {
+			sync.mutex_lock(&f.mutex)
+			completed := len(f.results)
+			sync.mutex_unlock(&f.mutex)
+			if completed == FETCH_MAXIMUM_RESULTS || time.since(started) >= 2 * time.Second do break
+			thread.yield()
+		}
+		sync.mutex_lock(&f.mutex)
+		testing.expect_value(t, len(f.results), FETCH_MAXIMUM_RESULTS)
+		testing.expect_value(t, f.result_slots, FETCH_MAXIMUM_RESULTS)
+		sync.mutex_unlock(&f.mutex)
+		for result in fetcher_drain(&f) do delete(result.body)
+		free_all(context.temp_allocator)
+		testing.expect(t, fetcher_request(&f, 1000, "/after-drain"))
+		fetcher_stop(&f)
+	}
+
 	@(test)
 	http_fetch_pool_idle_stop_stress :: proc(t: ^testing.T) {
 		for round in 0 ..< 500 {
@@ -83,5 +109,6 @@ when HTTP_STRESS {
 			testing.expect(t, time.since(started) < time.Second)
 			for worker in f.workers do testing.expect(t, worker == nil)
 		}
+		http_fetch_pool_result_backpressure_stress(t)
 	}
 }
