@@ -139,21 +139,20 @@ _screen_sb_clear :: proc "c" (user: rawptr) -> c.int {
 	return 1
 }
 
-// term_start allocates and initialises a new Term_Instance, spawning the
-// default shell inside a PTY sized (cols × rows).  Returns nil on failure.
-// default_fg/default_bg are RGB triples used as the terminal's default pen
-// (pick values matching the host app's theme).
-term_start :: proc(workspace_path: string, cols, rows: u16,
-	default_fg: [3]u8 = {220, 220, 220}, default_bg: [3]u8 = {27, 27, 27}) -> ^Term_Instance {
-	ts := new(Term_Instance)
+// term_init_emulator initialises the libvterm emulator state (grid, screen,
+// callbacks, default colors) on an existing Term_Instance WITHOUT spawning a
+// PTY. Split from term_start so hostile-input fuzzing can drive the exact
+// production emulator + callback path with no shell process attached.
+// Returns false if libvterm allocation fails.
+term_init_emulator :: proc(ts: ^Term_Instance, cols, rows: u16,
+	default_fg: [3]u8 = {220, 220, 220}, default_bg: [3]u8 = {27, 27, 27}) -> bool {
 	ts.cols           = cols
 	ts.rows           = rows
 	ts.cursor_visible = true
 
 	ts.vt = lv.vterm_new(c.int(rows), c.int(cols))
 	if ts.vt == nil {
-		free(ts)
-		return nil
+		return false
 	}
 
 	lv.vterm_set_utf8(ts.vt, 1)
@@ -192,13 +191,42 @@ term_start :: proc(workspace_path: string, cols, rows: u16,
 	def_bg.rgb.green = default_bg[1]
 	def_bg.rgb.blue  = default_bg[2]
 	lv.vterm_screen_set_default_colors(ts.screen, &def_fg, &def_bg)
+	return true
+}
+
+// term_free_emulator releases libvterm state, scrollback, and the title —
+// everything term_destroy frees except the PTY. Counterpart of
+// term_init_emulator for instances that never spawned a shell.
+term_free_emulator :: proc(ts: ^Term_Instance) {
+	lv.vterm_free(ts.vt)
+	for line in ts.sb_lines {
+		delete(line)
+	}
+	delete(ts.sb_lines)
+	if len(ts.title) > 0 {
+		delete(ts.title)
+		ts.title = ""
+	}
+}
+
+// term_start allocates and initialises a new Term_Instance, spawning the
+// default shell inside a PTY sized (cols × rows).  Returns nil on failure.
+// default_fg/default_bg are RGB triples used as the terminal's default pen
+// (pick values matching the host app's theme).
+term_start :: proc(workspace_path: string, cols, rows: u16,
+	default_fg: [3]u8 = {220, 220, 220}, default_bg: [3]u8 = {27, 27, 27}) -> ^Term_Instance {
+	ts := new(Term_Instance)
+	if !term_init_emulator(ts, cols, rows, default_fg, default_bg) {
+		free(ts)
+		return nil
+	}
 
 	// Spawn PTY shell.
 	shell   := pty.get_default_shell()
 	workdir := strings.clone_to_cstring(workspace_path, context.temp_allocator)
 	p, ok := pty.spawn(shell, cols, rows, workdir)
 	if !ok {
-		lv.vterm_free(ts.vt)
+		term_free_emulator(ts)
 		free(ts)
 		return nil
 	}
@@ -211,15 +239,7 @@ term_start :: proc(workspace_path: string, cols, rows: u16,
 term_destroy :: proc(ts: ^Term_Instance) {
 	if ts == nil do return
 	pty.destroy(&ts.pty)
-	lv.vterm_free(ts.vt)
-	for line in ts.sb_lines {
-		delete(line)
-	}
-	delete(ts.sb_lines)
-	if len(ts.title) > 0 {
-		delete(ts.title)
-		ts.title = ""
-	}
+	term_free_emulator(ts)
 	free(ts)
 }
 
