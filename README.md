@@ -261,6 +261,48 @@ The UI-scale settings panel is built on `modal_begin`/`modal_end`; the spell
 menu popup rides the same overlay/routing layer. See `examples/gallery`
 (Widgets + Overlay sections) for all of these live.
 
+### Accessibility (screen readers, high contrast, reduced motion)
+
+Widgets record a per-frame **semantic buffer** (role, rect, label, state) as
+they draw — an output buffer like the draw list, no retained tree, no
+widget-ID hashing. Node identity derives from caller-owned state (the
+form-focus slot + id, or a text input's `field_id`), never from call sites.
+Two consumers read it:
+
+- **Native**: [AccessKit](https://accesskit.dev)'s C API drives
+  NSAccessibility / UIA / AT-SPI. The full tree is pushed each frame and
+  AccessKit diffs; the factory only runs while a screen reader is active, so
+  idle cost without AT is one branch per frame. Prebuilt static libs ship in
+  `accesskit/lib/` (no linker flags; opt out with
+  `-define:INGOT_ACCESSKIT=false`).
+- **Web**: semantic nodes mirror into *real DOM controls* with ARIA roles
+  (buttons, checkboxes, radios, ranges) positioned over the canvas —
+  stronger browser AT support than a canvas-side tree, riding the same
+  frame-stamped overlay as text-input autofill mirroring.
+
+```odin
+ui.a11y_init()                 // once, after InitWindow
+for !rl.WindowShouldClose() {
+    rl.BeginDrawing()
+    ui.begin_cursor_frame()
+    ui.focus_scope_cycle()     // app-wide Tab order across all forms/panes
+    // ... draw widgets ...
+    ui.apply_cursor()
+    ui.a11y_frame_end()        // push tree + apply AT actions
+    rl.EndDrawing()
+}
+```
+
+AT clicks and focus requests route through the same `focus_activated` path
+as Space/Enter, so widgets need no separate handling. `focus_scope_cycle`
+Tab-cycles every focusable widget drawn last frame in draw order (per-form
+`form_focus_cycle` still works for single forms). The theme carries the rest:
+`theme_high_contrast()` (black/white/yellow, WCAG AAA primary text),
+`theme.reduced_motion` (hover ease and caret blink snap to final state), and
+`set_theme` asserts ≥ 4.5:1 contrast for text/button roles — the same spirit
+as the focus-ring visibility assert. Interactive widgets assert non-empty
+labels: a nameless control is invisible to assistive tech.
+
 ### Metrics/debug overlay
 
 `ui.draw_debug_overlay(x, y)` renders FPS, frame time, flush counts **by
@@ -517,29 +559,13 @@ evidence, then build the depth that makes people stay.
 - **Docking / panel system** — first-class, renderer-owned (no bolt-on seams).
 - **Virtualized lists and tables** that stay smooth at millions of rows,
   extending the existing chart widgets.
-- **Accessibility** — the honest requirement for calling ingot an app engine.
-  egui proves immediate-mode can drive screen readers (it pushes a full
-  AccessKit tree each frame); Dear ImGui still can't. ingot can match egui
-  natively and beat it on the web, in this order:
-  - **Per-frame semantic recording layer** — widgets already receive rect,
-    label, and state; add a `semantic_push` alongside draw calls,
-    double-buffered like the input route claims. No retained tree; full-frame
-    pushes fit AccessKit's diffing model.
-  - **Stable node identity without ID hashing** — derive node IDs from the
-    existing focus ids and text-input `field_id`s, falling back to frame call
-    order for static text, keeping the "no widget-ID hashing" promise.
-  - **AccessKit C API adapters on native** — NSAccessibility/UIA/AT-SPI via
-    the same platform-hook precedents as the macOS IME swizzle and Windows
-    titlebar subclassing.
-  - **Extend the web semantic DOM mirror beyond text inputs** — mirror
-    buttons, checkboxes, and sliders as real ARIA-role DOM controls; real DOM
-    beats canvas-side AccessKit for browser assistive tech.
-  - **App-global focus order** — a frame-ordered focus registry so Tab
-    traverses across forms and panes, and AccessKit focus events flow from
-    the one existing choke point (the focus-ring helpers).
-  - **High-contrast theme and reduced-motion flag**, plus asserts that
-    interactive widgets carry non-empty accessible names — same spirit as the
-    existing focus-ring visibility assert.
+- **Accessibility hardening** — the semantic layer, AccessKit native
+  adapters, web DOM mirror, app-global focus order, high-contrast theme, and
+  reduced-motion flag have shipped (see "Accessibility" above). Remaining:
+  manual validation passes with VoiceOver (macOS), NVDA (Windows), and
+  VoiceOver+Safari / ChromeVox against the web gallery; AT value-setting for
+  sliders (Increment/Decrement actions); prebuilt-lib coverage for
+  windows_arm64 and linux_arm64.
 - **IME and complex text shaping** for non-Latin input.
 - **Indexed instancing** (`DrawVertexArrayElementsInstanced`) for 3D node bodies.
 - **Transparent/additive GPU 3D pipelines** with explicit depth-read/write policy.

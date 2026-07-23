@@ -1040,11 +1040,15 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	assert(ctx.active, "ti_draw_caret: input not active")
 	assert(ctx.h > 0, "ti_draw_caret: non-positive height")
 	t := rl.GetTime()
-	// Blink is time-driven: in event-driven frame mode nothing else forces a
-	// repaint while the user pauses typing, so schedule one at the next
-	// half-second toggle boundary.
-	rl.RequestRedrawIn(0.5 - math.mod(t, 0.5))
-	blink_on := int(t * 2) % 2 == 0
+	blink_on := true
+	if !theme.reduced_motion {
+		// Blink is time-driven: in event-driven frame mode nothing else
+		// forces a repaint while the user pauses typing, so schedule one at
+		// the next half-second toggle boundary. Reduced motion keeps the
+		// caret steady (no blink, no scheduled repaints).
+		rl.RequestRedrawIn(0.5 - math.mod(t, 0.5))
+		blink_on = int(t * 2) % 2 == 0
+	}
 	if v.caret_render {
 		// Caret at its true visual (row, x) within the visible window.
 		if v.cur_vrow >= v.vis_start && v.cur_vrow < v.vis_end {

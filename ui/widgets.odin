@@ -481,8 +481,13 @@ hover_anim_step :: proc(state: ^map[u64]f32, key: u64, hovered: bool, dt: f32) -
 
 // hover_anim_frac advances (and stores) the eased hover fraction for the
 // widget at this geometry. Returns 0..1; requests redraws until settled.
+// Under theme.reduced_motion the fraction snaps straight to its target.
 hover_anim_frac :: proc(x, y, w, h: i32, hovered: bool) -> f32 {
 	assert(w > 0 && h > 0, "hover_anim_frac: empty widget rect")
+	if theme.reduced_motion {
+		delete_key(&hover_anim, hover_anim_key(x, y, w, h))
+		return 1 if hovered else 0
+	}
 	t := hover_anim_step(&hover_anim, hover_anim_key(x, y, w, h), hovered, rl.GetFrameTime())
 	target: f32 = 1 if hovered else 0
 	if t != target do rl.RequestRedraw()
@@ -554,6 +559,8 @@ btn_at :: proc(
 	web_form_id: string = "",
 	focus: Focus_Opt = {},
 ) -> bool {
+	// Why assert: a nameless control is invisible to assistive tech.
+	assert(label != "", "btn: empty accessible label")
 	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	it := interact(rect)

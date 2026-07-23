@@ -41,6 +41,8 @@ NAV_W :: 170
 // --- caller-owned state (the whole point: no hidden library state) ----------
 
 dark := true
+high_contrast := false
+reduced_motion := false
 section := Section.Buttons
 debug_on := false
 
@@ -113,6 +115,7 @@ main :: proc() {
 	rl.EnableEventWaiting()
 	ui.apply_platform_dpi()
 	ui.init_font()
+	ui.a11y_init()
 	rl.run(frame)
 }
 
@@ -144,6 +147,7 @@ frame :: proc() {
 	}
 
 	ui.apply_cursor()
+	ui.a11y_frame_end()
 	rl.EndDrawing()
 }
 
@@ -172,16 +176,36 @@ draw_nav :: proc(sh: i32) {
 		y += ui.sc(32)
 	}
 
-	y = sh - ui.sc(76)
+	y = sh - ui.sc(140)
 	if ui.btn(ui.sc(10), y, w - ui.sc(20), ui.sc(26), "Light theme" if dark else "Dark theme") {
 		dark = !dark
-		ui.set_theme(ui.theme_dark() if dark else ui.theme_light())
+		high_contrast = false
+		apply_gallery_theme()
+	}
+	y += ui.sc(32)
+	if ui.btn(ui.sc(10), y, w - ui.sc(20), ui.sc(26),
+		"Standard contrast" if high_contrast else "High contrast") {
+		high_contrast = !high_contrast
+		apply_gallery_theme()
+	}
+	y += ui.sc(32)
+	if ui.btn(ui.sc(10), y, w - ui.sc(20), ui.sc(26),
+		"Motion: reduced" if reduced_motion else "Motion: full") {
+		reduced_motion = !reduced_motion
+		apply_gallery_theme()
 	}
 	y += ui.sc(32)
 	if ui.btn(ui.sc(10), y, w - ui.sc(20), ui.sc(26), "UI scale\u2026") {
 		settings_open = true
 		settings_sel = ui.settings_scale_preset_index(stored_scale)
 	}
+}
+
+apply_gallery_theme :: proc() {
+	t := ui.theme_high_contrast() if high_contrast else
+		(ui.theme_dark() if dark else ui.theme_light())
+	t.reduced_motion = reduced_motion
+	ui.set_theme(t)
 }
 
 draw_content :: proc(sw, sh: i32) {

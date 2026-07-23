@@ -26,6 +26,8 @@ checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
 checkbox_at :: proc(rect: Rect_I32, label: string, checked: ^bool, focus: Focus_Opt = {}) -> (changed: bool) {
 	assert(checked != nil, "checkbox: nil checked state")
 	assert(rect.w > 0 && rect.h > 0, "checkbox: empty rect")
+	// Why assert: a nameless control is invisible to assistive tech.
+	assert(label != "", "checkbox: empty accessible label")
 	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	it := interact(rrect)
 	hovered := it.hovered
@@ -81,6 +83,8 @@ radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed:
 radio_at :: proc(rect: Rect_I32, label: string, selected: ^i32, value: i32, focus: Focus_Opt = {}) -> (changed: bool) {
 	assert(selected != nil, "radio: nil selected state")
 	assert(rect.w > 0 && rect.h > 0, "radio: empty rect")
+	// Why assert: a nameless control is invisible to assistive tech.
+	assert(label != "", "radio: empty accessible label")
 	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	it := interact(rrect)
 	hovered := it.hovered
