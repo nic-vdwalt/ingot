@@ -466,48 +466,25 @@ draw_shadow_rounded :: proc(rect: rl.Rectangle, roundness: f32, strength: f32 = 
 	}
 }
 
-// Per-widget hover-fade state keyed by geometry. Bounded: the whole map is
-// cleared when a new key would exceed HOVER_ANIM_MAX (layout changes strand
-// stale keys; a rare full clear only restarts in-flight fades).
-HOVER_ANIM_MAX :: 256
-@(private = "file")
-hover_anim: map[u64]f32
-
-// hover_anim_key mixes all four rect coordinates so distinct widgets rarely
-// share a fade slot; a collision is cosmetic only (two widgets share a fade).
-hover_anim_key :: proc "contextless" (x, y, w, h: i32) -> u64 {
-	return (u64(u32(x)) | u64(u32(y)) << 32) ~ ((u64(u32(w)) | u64(u32(h)) << 32) * 0x100000001b3)
+Button_State :: struct {
+	hover: f32,
 }
 
-// hover_anim_step advances one hover fade in `state` by `dt`. Headless core
-// of hover_anim_frac: no frame clock, no redraw requests, caller-owned map —
-// this is the seam the fuzz harnesses drive.
-hover_anim_step :: proc(state: ^map[u64]f32, key: u64, hovered: bool, dt: f32) -> f32 {
-	if key not_in state^ {
-		if !hovered do return 0 // steady state: avoid populating the map
-		if len(state^) >= HOVER_ANIM_MAX do clear(state)
-	}
-	t := state^[key]
+hover_anim_step :: proc(state: ^f32, hovered: bool, dt: f32) -> f32 {
+	assert(state != nil, "hover_anim_step: nil state")
 	target: f32 = 1 if hovered else 0
-	eased(&t, target, dt, 14.0)
-	if t == 0 {
-		delete_key(state, key)
-	} else {
-		state^[key] = t
-	}
-	return t
+	eased(state, target, dt, 14.0)
+	state^ = clamp(state^, 0, 1)
+	return state^
 }
 
-// hover_anim_frac advances (and stores) the eased hover fraction for the
-// widget at this geometry. Returns 0..1; requests redraws until settled.
-// Under theme.reduced_motion the fraction snaps straight to its target.
-hover_anim_frac :: proc(x, y, w, h: i32, hovered: bool) -> f32 {
-	assert(w > 0 && h > 0, "hover_anim_frac: empty widget rect")
+hover_anim_frac :: proc(state: ^Button_State, hovered: bool) -> f32 {
+	assert(state != nil, "hover_anim_frac: nil state")
 	if theme.reduced_motion {
-		delete_key(&hover_anim, hover_anim_key(x, y, w, h))
-		return 1 if hovered else 0
+		state.hover = 1 if hovered else 0
+		return state.hover
 	}
-	t := hover_anim_step(&hover_anim, hover_anim_key(x, y, w, h), hovered, rl.GetFrameTime())
+	t := hover_anim_step(&state.hover, hovered, rl.GetFrameTime())
 	target: f32 = 1 if hovered else 0
 	if t != target do rl.RequestRedraw()
 	assert(t >= 0 && t <= 1, "hover_anim_frac: fraction out of range")
@@ -578,8 +555,11 @@ btn_gloss :: proc(rect: rl.Rectangle) {
 // slot, the ring draws while focused, and Space/Enter activates.
 btn :: proc {
 	btn_at,
+	btn_at_state,
 	btn_ui,
 	btn_ui_id,
+	btn_ui_state,
+	btn_ui_state_id,
 }
 
 // btn_ui sizes to its label (+padding) and auto-registers focus.
@@ -610,6 +590,37 @@ btn_ui_id :: proc(
 	return btn_at(r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
 
+btn_ui_state :: proc(
+	u: ^Ui,
+	state: ^Button_State,
+	label: string,
+	style: Btn_Style = .Secondary,
+	enabled: bool = true,
+) -> bool {
+	assert(state != nil, "btn_ui_state: nil state")
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
+	r := ui_slot(u, w, ROW_H_MD)
+	fo := ui_focus(u) if enabled else Focus_Opt{}
+	return btn_at_state(state, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
+}
+
+btn_ui_state_id :: proc(
+	u: ^Ui,
+	id: Focus_Id,
+	state: ^Button_State,
+	label: string,
+	style: Btn_Style = .Secondary,
+	enabled: bool = true,
+) -> bool {
+	assert(state != nil, "btn_ui_state_id: nil state")
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
+	r := ui_slot(u, w, ROW_H_MD)
+	fo := ui_focus(u, id) if enabled else Focus_Opt{}
+	return btn_at_state(state, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
+}
+
 btn_at :: proc(
 	x, y, w, h: i32,
 	label: string,
@@ -637,7 +648,7 @@ btn_at :: proc(
 	}
 	if hovered do request_cursor(.POINTING_HAND)
 
-	t := hover_anim_frac(x, y, w, h, hovered) if enabled else 0
+	t: f32 = 1 if hovered else 0
 	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style)
 	bg := color_mix(bg0, bg1, t)
 	fg := color_mix(fg0, fg1, t)
@@ -671,6 +682,61 @@ btn_at :: proc(
 	return clicked && enabled
 }
 
+btn_at_state :: proc(
+	state: ^Button_State,
+	x, y, w, h: i32,
+	label: string,
+	style: Btn_Style = .Secondary,
+	font_size: i32 = 0,
+	enabled: bool = true,
+	web_form_id: string = "",
+	focus: Focus_Opt = {},
+) -> bool {
+	assert(state != nil, "btn_at_state: nil state")
+	assert(label != "", "btn_at_state: empty accessible label")
+	fs := font_size if font_size > 0 else FONT_SIZE_LABEL
+	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	it := interact(rect)
+	hovered := enabled && it.hovered
+	clicked := enabled && it.clicked
+	if enabled {
+		focus_opt_click(focus, x, y, w, h)
+		clicked = clicked || focus_opt_activated(focus)
+	}
+	if web_form_id != "" {
+		clicked =
+			clicked ||
+			rl.SyncWebSubmitButton(web_form_id, label, x, y, w, h, i32(style), fs, enabled)
+	}
+	if hovered do request_cursor(.POINTING_HAND)
+	t := hover_anim_frac(state, hovered) if enabled else 0
+	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style)
+	bg := color_mix(bg0, bg1, t)
+	fg := color_mix(fg0, fg1, t)
+	border := color_mix(bd0, bd1, t)
+	if hovered && rl.IsMouseButtonDown(.LEFT) && (style == .Primary || style == .Secondary) {
+		bg = theme.button_pressed
+	}
+	if !enabled {
+		state.hover = 0
+		bg = theme.button_disabled_bg
+		fg = theme.fg_muted_dim
+		border = rl.Color{0, 0, 0, 0}
+	}
+	rl.DrawRectangleRounded(rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
+	if style == .Primary && enabled do btn_gloss(rect)
+	if border.a > 0 {
+		rl.DrawRectangleRoundedLinesEx(rect, BTN_ROUNDNESS, BTN_SEGMENTS, BTN_BORDER_W, border)
+	}
+	if enabled && focus_opt_focused(focus) do draw_focus_ring(x, y, w, h)
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	text_w := measure_text(label_c, fs)
+	draw_text(label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+	sem: Sem_State
+	if !enabled do sem += {.Disabled}
+	semantic_push(.Button, {x, y, w, h}, label, sem, focus)
+	return clicked && enabled
+}
 
 // Hit-test wrapped text. Returns byte offset into text at (mouse_x, mouse_y), or -1 if miss.
 // Must mirror draw_text_wrapped wrapping logic exactly.
@@ -1032,7 +1098,7 @@ icon_btn :: proc(
 	enabled: bool = true,
 	focus: Focus_Opt = {},
 ) -> bool {
-	return btn(x, y, size, size, label, .Ghost, FONT_SIZE_LABEL, enabled, focus = focus)
+	return btn_at(x, y, size, size, label, .Ghost, FONT_SIZE_LABEL, enabled, focus = focus)
 }
 
 // kv_row draws key (left, truncated) and value (right-aligned) on one line.
@@ -1158,7 +1224,7 @@ back_btn_w :: proc(label: string) -> i32 {
 // Returns true if clicked this frame.
 back_btn :: proc(x, y: i32, label: string, focus: Focus_Opt = {}) -> bool {
 	txt := fmt.tprintf("\u2190 %s", label)
-	return btn(x, y, back_btn_w(label), sc(22), txt, .Ghost, focus = focus)
+	return btn_at(x, y, back_btn_w(label), sc(22), txt, .Ghost, focus = focus)
 }
 
 // --- standardized collapsible section header -------------------------------

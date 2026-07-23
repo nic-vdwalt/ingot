@@ -28,7 +28,8 @@ clear_wrap_cache_with :: proc(system: ^Text_System) {
 		delete(key.text)
 		delete(entry.lines)
 	}
-	clear(&system.wrap_cache)
+	delete(system.wrap_cache)
+	system.wrap_cache = nil
 	system.wrap_stamp = 0
 }
 
