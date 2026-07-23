@@ -13,7 +13,27 @@ Dropdown_State :: struct {
 // dropdown draws a combo box over `items`. Clicking (or Space/Enter while
 // focused) opens the item popup below the box; choosing an item stores its
 // index into selected^. Returns true on the frame the selection changed.
-dropdown :: proc(
+dropdown :: proc {
+	dropdown_at,
+	dropdown_ui,
+}
+
+// dropdown_ui carves its slot (width w, 0 = sensible default), reads screen
+// size from the Ui, and auto-registers focus.
+dropdown_ui :: proc(
+	u: ^Ui,
+	items: []string,
+	selected: ^i32,
+	st: ^Dropdown_State,
+	w: i32 = 0,
+	a11y_label: string = "",
+) -> (changed: bool) {
+	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 2
+	r := ui_slot(u, ww, ROW_H_MD)
+	return dropdown_at(r, items, selected, st, u.screen_w, u.screen_h, ui_focus(u), a11y_label)
+}
+
+dropdown_at :: proc(
 	rect: Rect_I32,
 	items: []string,
 	selected: ^i32,

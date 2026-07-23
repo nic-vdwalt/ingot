@@ -52,7 +52,11 @@ headers_open := [3]bool{true, false, false}
 name_box: ui.Input_Box
 pass_box: ui.Input_Box
 notes_box: ui.Input_Box
-active_input := 0 // 1-based focus id; 0 = none
+
+// Shared Ui context for the auto-layout sections (Inputs, Widgets). Focus
+// ids are assigned by call order each frame; only one section draws per
+// frame so one context serves both.
+gal_ui: ui.Ui
 
 progress_anim: f32
 progress_frac: f32 = 0.35
@@ -257,65 +261,51 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 draw_inputs :: proc(x, y0, w: i32) -> i32 {
 	y := ui.section_header(x, y0, w, "TEXT INPUTS (Input_Box bundle: builder + caret + undo + pills)")
 	iw := min(w, ui.sc(420))
-	ih := ui.sc(34)
 
-	activate :: proc(x, y, w, h, id: i32) {
-		mouse := rl.GetMousePosition()
-		if rl.IsMouseButtonPressed(.LEFT) &&
-		   rl.CheckCollisionPointRec(mouse, {f32(x), f32(y), f32(w), f32(h)}) {
-			active_input = int(id)
-		}
-	}
+	ui.ui_begin(&gal_ui, x, y, iw, ui.sc(600), gap = ui.sc(10))
+	ui.input(&gal_ui, &name_box, "Your name (undo, selection, spellcheck)")
+	ui.input(&gal_ui, &pass_box, "Password (masked)", masked = true)
+	ui.input(&gal_ui, &notes_box, "Notes\u2026 (Shift+Enter for newlines)", h = ui.sc(90))
 
-	activate(x, y, iw, ih, 1)
-	ui.input(x, y, iw, ih, &name_box, "Your name (undo, selection, spellcheck)", active_input == 1)
-	y += ih + ui.sc(10)
-
-	activate(x, y, iw, ih, 2)
-	ui.input(x, y, iw, ih, &pass_box, "Password (masked)", active_input == 2, masked = true)
-	y += ih + ui.sc(10)
-
-	mh := ui.sc(90)
-	activate(x, y, iw, mh, 3)
-	ui.input(x, y, iw, mh, &notes_box, "Notes\u2026 (Shift+Enter for newlines)", active_input == 3)
-	y += mh + ui.sc(10)
-
-	if ui.btn(x, y, ui.sc(120), ui.sc(26), "Reset all") {
+	if ui.btn(&gal_ui, "Reset all") {
 		ui.input_box_reset(&name_box)
 		ui.input_box_reset(&pass_box)
 		ui.input_box_reset(&notes_box)
 	}
-	y += ui.sc(40)
+	ui.ui_space(&gal_ui, ui.sc(6))
 
 	summary := fmt.tprintf("name: %q \u00b7 notes: %d bytes",
 		ui.input_box_text(&name_box), len(ui.input_box_text(&notes_box)))
-	ui.draw_text(strings.clone_to_cstring(summary, context.temp_allocator),
-		x, y, ui.FONT_SIZE_SMALL, ui.theme.fg_secondary)
-	return y + ui.sc(24)
+	ui.label(&gal_ui, summary, ui.FONT_SIZE_SMALL, ui.theme.fg_secondary)
+
+	end_y := ui.remaining(&gal_ui.layout).y
+	ui.ui_end(&gal_ui)
+	return end_y + ui.sc(24)
 }
 
 draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	y := ui.section_header(x, y0, w, "FORM CONTROLS (checkbox / radio / slider / dropdown)")
-	ch := ui.sc(24)
-	ui.checkbox(ui.Rect_I32{x, y, ui.sc(170), ch}, "Enable widgets", &check_a)
-	ui.checkbox(ui.Rect_I32{x + ui.sc(180), y, ui.sc(170), ch}, "Verbose logs", &check_b)
-	y += ch + ui.sc(6)
-	ui.radio(ui.Rect_I32{x, y, ui.sc(110), ch}, "Small", &radio_choice, 0)
-	ui.radio(ui.Rect_I32{x + ui.sc(120), y, ui.sc(110), ch}, "Medium", &radio_choice, 1)
-	ui.radio(ui.Rect_I32{x + ui.sc(240), y, ui.sc(110), ch}, "Large", &radio_choice, 2)
-	y += ch + ui.sc(8)
-	slider_rect := ui.Rect_I32{x, y, ui.sc(240), ch}
-	ui.slider(slider_rect, &volume, 0, 100, 5)
+	ui.ui_begin(&gal_ui, x, y, w, ui.sc(400), gap = ui.sc(8))
+	ui.ui_row(&gal_ui, ui.ROW_H_SM, gap = ui.sc(10))
+	ui.checkbox(&gal_ui, "Enable widgets", &check_a)
+	ui.checkbox(&gal_ui, "Verbose logs", &check_b)
+	ui.ui_row_end(&gal_ui)
+	ui.ui_row(&gal_ui, ui.ROW_H_SM, gap = ui.sc(10))
+	ui.radio(&gal_ui, "Small", &radio_choice, 0)
+	ui.radio(&gal_ui, "Medium", &radio_choice, 1)
+	ui.radio(&gal_ui, "Large", &radio_choice, 2)
+	ui.ui_row_end(&gal_ui)
+	ui.ui_row(&gal_ui, ui.ROW_H_SM, gap = ui.sc(10))
+	slider_rect := ui.ui_slot(&gal_ui, ui.sc(240), ui.ROW_H_SM)
+	ui.slider(slider_rect, &volume, 0, 100, 5, ui.ui_focus(&gal_ui))
 	ui.tooltip(&tip_state, slider_rect, "drag, or use \u2190/\u2192 when focused",
-		rl.GetScreenWidth(), rl.GetScreenHeight())
-	vol := fmt.tprintf("%.0f%%", volume)
-	ui.draw_text(strings.clone_to_cstring(vol, context.temp_allocator),
-		x + ui.sc(250), y + (ch - ui.FONT_SIZE) / 2, ui.FONT_SIZE, ui.theme.fg_secondary)
-	y += ch + ui.sc(8)
+		gal_ui.screen_w, gal_ui.screen_h)
+	ui.label(&gal_ui, fmt.tprintf("%.0f%%", volume), color = ui.theme.fg_secondary)
+	ui.ui_row_end(&gal_ui)
 	backends := []string{"Metal", "Vulkan", "D3D12", "WebGPU"}
-	ui.dropdown(ui.Rect_I32{x, y, ui.sc(200), ui.sc(28)}, backends, &dd_selected,
-		&dd_state, rl.GetScreenWidth(), rl.GetScreenHeight())
-	y += ui.sc(28) + ui.sc(14)
+	ui.dropdown(&gal_ui, backends, &dd_selected, &dd_state)
+	y = ui.remaining(&gal_ui.layout).y + ui.sc(14)
+	ui.ui_end(&gal_ui)
 
 	y = ui.section_header(x, y, w, "PROGRESS / SPINNER / PILLS")
 	ui.spinner(x + ui.sc(16), y + ui.sc(16), ui.scf(14))
@@ -441,7 +431,7 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 	ui.draw_text(strings.clone_to_cstring(summary, context.temp_allocator),
 		x, info_y, ui.FONT_SIZE_SMALL, ui.theme.fg_secondary)
 
-	if ui.btn(x + bw + ui.sc(30), y, ui.sc(150), bh, "Toggle popup", .Primary) {
+	if ui.btn(x + bw + ui.sc(30), y, ui.sc(150), bh, "Toggle popup", ui.Btn_Style.Primary) {
 		popup_open = !popup_open
 	}
 	if ui.btn(x + bw + ui.sc(30), y + bh + ui.sc(8), ui.sc(150), bh, "Open modal") {
@@ -481,7 +471,7 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 			"The settings panel is built on this same modal_begin/modal_end pair. " +
 			"Escape or a click outside dismisses it.",
 			ui.theme.fg_primary)
-		if ui.btn(body.x + ui.PADDING, body.y + body.h - ui.sc(44), ui.sc(90), ui.sc(28), "Close", .Primary) {
+		if ui.btn(body.x + ui.PADDING, body.y + body.h - ui.sc(44), ui.sc(90), ui.sc(28), "Close", ui.Btn_Style.Primary) {
 			about_modal.open = false
 		}
 		ui.modal_end(&about_modal)

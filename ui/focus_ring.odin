@@ -35,10 +35,16 @@ focus_opt_click :: proc(f: Focus_Opt, x, y, w, h: i32) {
 
 // focus_activated reports whether the widget owning `id` was activated by
 // keyboard this frame: it holds the focused slot and Space or Enter was
-// pressed. Usable by any widget, not just text inputs.
+// pressed. Assistive-tech clicks (a11y_bridge.odin) flow through the same
+// path so widgets need no separate AT handling. Usable by any widget, not
+// just text inputs.
 focus_activated :: proc(focus: ^int, id: int) -> bool {
 	assert(focus != nil, "focus_activated: nil focus")
 	assert(id > 0, "focus_activated: focus ids are 1-based")
+	if a11y_take_click(focus, id) {
+		focus^ = id
+		return true
+	}
 	if focus^ != id do return false
 	return rl.IsKeyPressed(.SPACE) || rl.IsKeyPressed(.ENTER)
 }

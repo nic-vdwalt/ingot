@@ -10,7 +10,20 @@ import rl "ingot:gfx"
 
 // checkbox draws a check control with a label. Toggles checked^ on click or
 // Space/Enter while focused. Returns true on the frame the value changed.
-checkbox :: proc(rect: Rect_I32, label: string, checked: ^bool, focus: Focus_Opt = {}) -> (changed: bool) {
+checkbox :: proc {
+	checkbox_at,
+	checkbox_ui,
+}
+
+// checkbox_ui carves its own slot (content-sized) and auto-registers focus.
+checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE)
+	r := ui_slot(u, w, ROW_H_SM)
+	return checkbox_at(r, label, checked, ui_focus(u))
+}
+
+checkbox_at :: proc(rect: Rect_I32, label: string, checked: ^bool, focus: Focus_Opt = {}) -> (changed: bool) {
 	assert(checked != nil, "checkbox: nil checked state")
 	assert(rect.w > 0 && rect.h > 0, "checkbox: empty rect")
 	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
@@ -52,7 +65,20 @@ checkbox :: proc(rect: Rect_I32, label: string, checked: ^bool, focus: Focus_Opt
 
 // radio draws one exclusive-choice row. Selecting it stores `value` into
 // selected^. Returns true on the frame the selection changed to this value.
-radio :: proc(rect: Rect_I32, label: string, selected: ^i32, value: i32, focus: Focus_Opt = {}) -> (changed: bool) {
+radio :: proc {
+	radio_at,
+	radio_ui,
+}
+
+// radio_ui carves its own slot (content-sized) and auto-registers focus.
+radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed: bool) {
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE)
+	r := ui_slot(u, w, ROW_H_SM)
+	return radio_at(r, label, selected, value, ui_focus(u))
+}
+
+radio_at :: proc(rect: Rect_I32, label: string, selected: ^i32, value: i32, focus: Focus_Opt = {}) -> (changed: bool) {
 	assert(selected != nil, "radio: nil selected state")
 	assert(rect.w > 0 && rect.h > 0, "radio: empty rect")
 	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
@@ -115,7 +141,27 @@ slider_keyboard_delta :: proc(lo, hi, step: f32) -> f32 {
 // slider draws a horizontal slider over [lo, hi] with optional stepping.
 // Dragging or clicking the track moves the value; Left/Right adjust it while
 // focused. Returns true on the frame the value changed.
-slider :: proc(
+slider :: proc {
+	slider_at,
+	slider_ui,
+}
+
+// slider_ui carves its own slot (width w, 0 = sensible default) and
+// auto-registers focus.
+slider_ui :: proc(
+	u: ^Ui,
+	value: ^f32,
+	lo, hi: f32,
+	step: f32 = 0,
+	w: i32 = 0,
+	a11y_label: string = "",
+) -> (changed: bool) {
+	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
+	r := ui_slot(u, ww, ROW_H_SM)
+	return slider_at(r, value, lo, hi, step, ui_focus(u), a11y_label)
+}
+
+slider_at :: proc(
 	rect: Rect_I32,
 	value: ^f32,
 	lo, hi: f32,

@@ -532,7 +532,20 @@ btn_gloss :: proc(rect: rl.Rectangle) {
 // hover_anim_frac (frame-rate independent); pressed state darkens instantly.
 // Pass `focus` to make the button keyboard-operable: clicking acquires the
 // slot, the ring draws while focused, and Space/Enter activates.
-btn :: proc(
+btn :: proc {
+	btn_at,
+	btn_ui,
+}
+
+// btn_ui sizes to its label (+padding) and auto-registers focus.
+btn_ui :: proc(u: ^Ui, label: string, style: Btn_Style = .Secondary, enabled: bool = true) -> bool {
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	w := measure_text(label_c, FONT_SIZE_SMALL) + PADDING * 2
+	r := ui_slot(u, w, ROW_H_MD)
+	return btn_at(r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = ui_focus(u))
+}
+
+btn_at :: proc(
 	x, y, w, h: i32,
 	label: string,
 	style: Btn_Style = .Secondary,

@@ -52,7 +52,29 @@ input_box_text :: proc(b: ^Input_Box) -> string {
 // input draws a caret-aware text input backed by an Input_Box, with pills and
 // undo enabled. Same call-site brevity as an immediate-mode one-liner while
 // every byte of state stays caller-owned. Returns true when Enter submitted.
-input :: proc(
+input :: proc {
+	input_at,
+	input_ui,
+}
+
+// input_ui carves a full-width slot (height h, 0 = single-line default),
+// acquires focus on click, and is active while it owns the Ui focus slot.
+input_ui :: proc(
+	u: ^Ui,
+	b: ^Input_Box,
+	placeholder: string,
+	h: i32 = 0,
+	masked: bool = false,
+	semantics: Text_Input_Semantics = {},
+) -> bool {
+	fo := ui_focus(u)
+	hh := h if h > 0 else ROW_H_MD + CONTROL_GAP
+	r := ui_slot(u, remaining(&u.layout).w, hh)
+	focus_opt_click(fo, r.x, r.y, r.w, r.h)
+	return input_at(r.x, r.y, r.w, r.h, b, placeholder, focus_opt_focused(fo), masked, semantics)
+}
+
+input_at :: proc(
 	x, y, w, h: i32,
 	b: ^Input_Box,
 	placeholder: string,

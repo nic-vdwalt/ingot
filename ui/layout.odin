@@ -185,6 +185,12 @@ remaining :: proc(l: ^Layout) -> Rect_I32 {
 	return Rect_I32{f.rect.x + f.cursor, f.rect.y, avail, f.rect.h}
 }
 
+// layout_kind returns the active frame's axis kind (Column or Row).
+layout_kind :: proc(l: ^Layout) -> Layout_Kind {
+	assert(l.depth > 0, "layout_kind: layout not begun")
+	return l.stack[l.depth - 1].kind
+}
+
 // row_weights declares the weighted children of the current frame up front so
 // the remaining main-axis space (minus gaps between them) can be divided in a
 // single deterministic pass by subsequent next_weighted calls.
