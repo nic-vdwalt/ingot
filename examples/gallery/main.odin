@@ -97,6 +97,7 @@ Widget_State :: struct {
 	check_b:      bool,
 	radio_choice: i32,
 	volume:       f32,
+	slider:       ui.Slider_State,
 	dd_selected:  i32,
 	dropdown:     ui.Dropdown_State,
 	tooltip:      ui.Tooltip_State,
@@ -412,7 +413,15 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	ui.ui_row_end(&state.ctx)
 	ui.ui_row(&state.ctx, ui.ROW_H_SM, gap = ui.sc(10))
 	slider_rect := ui.ui_slot(&state.ctx, ui.sc(240), ui.ROW_H_SM)
-	ui.slider(slider_rect, &state.volume, 0, 100, 5, ui.ui_focus(&state.ctx, WIDGET_VOLUME_ID))
+	ui.slider_at_state(
+		&state.slider,
+		slider_rect,
+		&state.volume,
+		0,
+		100,
+		5,
+		ui.ui_focus(&state.ctx, WIDGET_VOLUME_ID),
+	)
 	ui.tooltip(
 		&state.tooltip,
 		slider_rect,
