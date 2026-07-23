@@ -81,12 +81,12 @@ dropdown_at :: proc(
 	rl.DrawRectangleRec(rrect, bg)
 	rl.DrawRectangleLinesEx(rrect, 1, border)
 	chev: cstring = "\u25BE"
-	chev_w := measure_text(chev, FONT_SIZE_SMALL)
+	chev_w := measure_text(chev, FONT_SIZE_LABEL)
 	draw_text(
 		chev,
 		rect.x + rect.w - chev_w - sc(8),
-		rect.y + (rect.h - FONT_SIZE_SMALL) / 2,
-		FONT_SIZE_SMALL,
+		rect.y + (rect.h - FONT_SIZE_LABEL) / 2,
+		FONT_SIZE_LABEL,
 		theme.fg_secondary,
 	)
 	label_w := rect.w - chev_w - sc(8) - PADDING * 2
@@ -94,9 +94,9 @@ dropdown_at :: proc(
 		draw_text_truncated(
 			items[selected^],
 			rect.x + PADDING,
-			rect.y + (rect.h - FONT_SIZE) / 2,
+			rect.y + (rect.h - FONT_SIZE_BODY) / 2,
 			label_w,
-			FONT_SIZE,
+			FONT_SIZE_BODY,
 			theme.fg_primary,
 		)
 	}

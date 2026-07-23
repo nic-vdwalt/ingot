@@ -25,6 +25,12 @@ set_ui_scale :: proc(scale: f32) {
 	FONT_SIZE_SMALL = i32(13.0 * s + 0.5)
 	LINE_HEIGHT = i32(22.0 * s + 0.5)
 
+	// Semantic type roles.
+	FONT_SIZE_TITLE = i32(20.0 * s + 0.5)
+	FONT_SIZE_BODY = i32(16.0 * s + 0.5)
+	FONT_SIZE_LABEL = i32(13.0 * s + 0.5)
+	FONT_SIZE_NOTE = i32(11.0 * s + 0.5)
+
 	// Embedded terminal / nvim grid metrics.
 	NVIM_FONT_SIZE = i32(16.0 * s + 0.5)
 	NVIM_CELL_PAD = i32(6.0 * s + 0.5)

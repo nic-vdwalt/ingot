@@ -164,7 +164,7 @@ ui_space :: proc(u: ^Ui, px: i32) {
 // label draws a plain text line, carving its own slot.
 label :: proc(u: ^Ui, text: string, font_size: i32 = 0, color: rl.Color = {}) {
 	assert(u.open, "label: frame not open")
-	fs := font_size if font_size > 0 else FONT_SIZE
+	fs := font_size if font_size > 0 else FONT_SIZE_BODY
 	col := color if color.a > 0 else theme.fg_primary
 	text_c := strings.clone_to_cstring(text, context.temp_allocator)
 	r := ui_slot(u, measure_text(text_c, fs), LINE_HEIGHT)

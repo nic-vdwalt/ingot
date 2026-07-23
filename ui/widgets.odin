@@ -41,7 +41,7 @@ draw_panel_header :: proc(x, y, w: i32, label: string, accent: rl.Color = THEME_
 	accent := accent
 	if accent == THEME_COLOR do accent = theme.fg_label
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text(lc, x + PADDING, y + (PANEL_HEADER_H - FONT_SIZE_SMALL) / 2, FONT_SIZE_SMALL, accent)
+	draw_text(lc, x + PADDING, y + (PANEL_HEADER_H - FONT_SIZE_LABEL) / 2, FONT_SIZE_LABEL, accent)
 	rl.DrawRectangle(x, y + PANEL_HEADER_H - 1, w, 1, theme.border_subtle)
 	return y + PANEL_HEADER_H
 }
@@ -590,7 +590,7 @@ btn_ui :: proc(
 	enabled: bool = true,
 ) -> bool {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := measure_text(label_c, FONT_SIZE_SMALL) + PADDING * 2
+	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
 	r := ui_slot(u, w, ROW_H_MD)
 	fo := ui_focus(u) if enabled else Focus_Opt{}
 	return btn_at(r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
@@ -604,7 +604,7 @@ btn_ui_id :: proc(
 	enabled: bool = true,
 ) -> bool {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := measure_text(label_c, FONT_SIZE_SMALL) + PADDING * 2
+	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
 	r := ui_slot(u, w, ROW_H_MD)
 	fo := ui_focus(u, id) if enabled else Focus_Opt{}
 	return btn_at(r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
@@ -621,7 +621,7 @@ btn_at :: proc(
 ) -> bool {
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "btn: empty accessible label")
-	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
+	fs := font_size if font_size > 0 else FONT_SIZE_LABEL
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	it := interact(rect)
 	hovered := enabled && it.hovered
@@ -975,9 +975,9 @@ spinner :: proc(cx, cy: i32, radius: f32, color: rl.Color = THEME_COLOR, segment
 
 section_header :: proc(x, y, w: i32, label: string) -> i32 {
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text(lc, x, y, FONT_SIZE_SMALL, theme.fg_label)
-	rl.DrawRectangle(x, y + FONT_SIZE_SMALL + sc(5), w, 1, theme.border_subtle)
-	return y + FONT_SIZE_SMALL + sc(11)
+	draw_text(lc, x, y, FONT_SIZE_LABEL, theme.fg_label)
+	rl.DrawRectangle(x, y + FONT_SIZE_LABEL + sc(5), w, 1, theme.border_subtle)
+	return y + FONT_SIZE_LABEL + sc(11)
 }
 
 // status_pill draws a pill whose background is the fg color tinted to
@@ -1032,12 +1032,12 @@ icon_btn :: proc(
 	enabled: bool = true,
 	focus: Focus_Opt = {},
 ) -> bool {
-	return btn(x, y, size, size, label, .Ghost, FONT_SIZE_SMALL, enabled, focus = focus)
+	return btn(x, y, size, size, label, .Ghost, FONT_SIZE_LABEL, enabled, focus = focus)
 }
 
 // kv_row draws key (left, truncated) and value (right-aligned) on one line.
 kv_row :: proc(x, y, w: i32, key, value: string, key_col, val_col: rl.Color, font_size: i32 = 0) {
-	fs := font_size if font_size > 0 else FONT_SIZE_SMALL
+	fs := font_size if font_size > 0 else FONT_SIZE_LABEL
 	vc := strings.clone_to_cstring(value, context.temp_allocator)
 	vw := measure_text(vc, fs)
 	draw_text(vc, x + w - vw, y, fs, val_col)
@@ -1151,7 +1151,7 @@ pane_end :: proc(p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i32 = 10) {
 // so callers can right-align it before drawing.
 back_btn_w :: proc(label: string) -> i32 {
 	txt := fmt.ctprintf("\u2190 %s", label)
-	return measure_text(txt, FONT_SIZE_SMALL) + sc(14)
+	return measure_text(txt, FONT_SIZE_LABEL) + sc(14)
 }
 
 // back_btn draws the standard Ghost-style "← label" navigation button.
@@ -1171,7 +1171,7 @@ collapsible_header :: proc(
 	x, y, w: i32,
 	label: string,
 	open: ^bool,
-	font_size: i32 = FONT_SIZE_SMALL,
+	font_size: i32 = FONT_SIZE_LABEL,
 	focus: Focus_Opt = {},
 ) -> (
 	toggled: bool,

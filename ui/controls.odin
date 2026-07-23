@@ -19,14 +19,14 @@ checkbox :: proc {
 // checkbox_ui carves its own slot (content-sized) and auto-registers focus.
 checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE)
+	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
 	r := ui_slot(u, w, ROW_H_SM)
 	return checkbox_at(r, label, checked, ui_focus(u))
 }
 
 checkbox_ui_id :: proc(u: ^Ui, id: Focus_Id, label: string, checked: ^bool) -> (changed: bool) {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE)
+	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
 	r := ui_slot(u, w, ROW_H_SM)
 	return checkbox_at(r, label, checked, ui_focus(u, id))
 }
@@ -86,8 +86,8 @@ checkbox_at :: proc(
 	draw_text(
 		label_c,
 		bx + box + CONTROL_GAP,
-		rect.y + (rect.h - FONT_SIZE) / 2,
-		FONT_SIZE,
+		rect.y + (rect.h - FONT_SIZE_BODY) / 2,
+		FONT_SIZE_BODY,
 		theme.fg_primary,
 	)
 	sem: Sem_State
@@ -107,7 +107,7 @@ radio :: proc {
 // radio_ui carves its own slot (content-sized) and auto-registers focus.
 radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed: bool) {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE)
+	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
 	r := ui_slot(u, w, ROW_H_SM)
 	return radio_at(r, label, selected, value, ui_focus(u))
 }
@@ -122,7 +122,7 @@ radio_ui_id :: proc(
 	changed: bool,
 ) {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE)
+	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
 	r := ui_slot(u, w, ROW_H_SM)
 	return radio_at(r, label, selected, value, ui_focus(u, id))
 }
@@ -169,8 +169,8 @@ radio_at :: proc(
 	draw_text(
 		label_c,
 		rect.x + box + CONTROL_GAP,
-		rect.y + (rect.h - FONT_SIZE) / 2,
-		FONT_SIZE,
+		rect.y + (rect.h - FONT_SIZE_BODY) / 2,
+		FONT_SIZE_BODY,
 		theme.fg_primary,
 	)
 	sem: Sem_State

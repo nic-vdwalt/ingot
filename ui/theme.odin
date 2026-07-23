@@ -553,6 +553,17 @@ FONT_SIZE_LARGE: i32 = 20
 FONT_SIZE_SMALL: i32 = 13
 LINE_HEIGHT: i32 = 22
 
+// Semantic type roles (consistency pass — mirrors the fg_* color roles).
+// Pick by role, not by size; hosts should prefer these over the raw tiers.
+//   TITLE — one per view/surface, pairs with fg_heading.
+//   BODY  — reading text / inputs / menus, pairs with fg_primary.
+//   LABEL — section headers, form labels, buttons, list rows; fg_label.
+//   NOTE  — hints, captions, legends, tooltips, attribution; fg_muted*.
+FONT_SIZE_TITLE: i32 = 20
+FONT_SIZE_BODY: i32 = 16
+FONT_SIZE_LABEL: i32 = 13
+FONT_SIZE_NOTE: i32 = 11
+
 // Embedded terminal / nvim grid metrics (shared by both renderers). Scaled by
 // set_ui_scale() so the character grid follows the UI scale.
 NVIM_FONT_SIZE: i32 = 16
