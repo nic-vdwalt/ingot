@@ -401,12 +401,22 @@ would double-scale and blur.
 
 ## Roadmap
 
-ingot already runs the full 2D UI + terminal stack on WebGPU across native
-targets (macOS/Metal verified) and the web target. The roadmap below tracks the
-remaining GPU-heavy and cross-platform work.
+**End goal: the app framework for Odin** — the default answer to "I want to
+ship a polished, fast, native + web desktop tool without Electron." Games are a
+supported use case (2D first), not the mission. The roadmap is sequenced as
+proof over features: close credibility gaps, convert features into public
+evidence, then build the depth that makes people stay.
 
-### Now (in progress)
+### Phase 1 — Close the gaps (now)
 
+- **Audio** via `vendor:miniaudio` behind the raylib-shaped API (`LoadSound`,
+  `PlaySound`, streams) — unlocks games and app notification sounds.
+- **Gamepad input** through the existing GLFW layer (`IsGamepadButtonDown`,
+  axes), with a web Gamepad API bridge behind the platform seam.
+- **Desktop table stakes:** native file dialogs, drag-and-drop, and clipboard
+  parity on the web target.
+- **One complete tiny game** in `examples/` proving the 2D + audio + gamepad
+  loop end-to-end.
 - **On-device validation of the opt-in GPU 3D path.** Depth-tested indexed
   sphere meshes render through a separate pass without changing legacy
   `BeginMode3D`; Metal is verified, while D3D12/Vulkan and browser validation
@@ -415,18 +425,37 @@ remaining GPU-heavy and cross-platform work.
   render-target Y-flip convention; openalloy's multipass galaxy chain can migrate
   independently without changing nvim render-texture behavior.
 
-### Next
+### Phase 2 — Proof over features
 
+- **Live web gallery** linked from this README — `examples/gallery` running in
+  the browser as the primary demo artifact.
+- **A flagship public app** built on ingot; the terminal stack (`ingot:term` +
+  `ingot:pty`) is the natural candidate.
+- **"Port your raylib app in 30 minutes" guide** plus a benchmark page with
+  concrete numbers: idle CPU vs continuous-repaint IM libraries, binary size,
+  clean compile time.
+
+### Phase 3 — App-engine depth
+
+- **Docking / panel system** — first-class, renderer-owned (no bolt-on seams).
+- **Virtualized lists and tables** that stay smooth at millions of rows,
+  extending the existing chart widgets.
+- **Accessibility** via AccessKit's C API — the honest requirement for calling
+  ingot an app engine.
+- **IME and complex text shaping** for non-Latin input.
 - **Indexed instancing** (`DrawVertexArrayElementsInstanced`) for 3D node bodies.
 - **Transparent/additive GPU 3D pipelines** with explicit depth-read/write policy.
 - **macOS transparent-window fallback compositing** if a device exposes only
   `Unpremultiplied`; premultiplied mode is already preferred when supported.
-
-### Later
-
 - **Web parity for the 3D / galaxy path**, whose wgpu features may lag on the JS
   backend.
-- **Clipboard and drag-and-drop parity** on the web target.
+
+### Explicitly out of scope
+
+- A 3D content pipeline (glTF, skeletal animation, PBR, scene graphs) — the
+  GPU 3D pass remains an escape hatch for visualization, not a pillar.
+- Mobile / touch targets, until desktop + web is won.
+- Scripting layers or editors — Odin's compile speed *is* the iteration story.
 
 ### Recently shipped
 
