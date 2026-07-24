@@ -213,7 +213,7 @@ draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color:
 }
 
 draw_text :: proc(text: cstring, x, y, size: i32, color: rl.Color) {
-	draw_text_with(&default_text_system, text, x, y, size, color)
+	draw_text_with(legacy_text_system(), text, x, y, size, color)
 }
 
 MEASURE_CACHE_MAX :: 8192
@@ -272,7 +272,7 @@ measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
 }
 
 measure_text :: proc(text: cstring, size: i32) -> i32 {
-	return measure_text_with(&default_text_system, text, size)
+	return measure_text_with(legacy_text_system(), text, size)
 }
 
 rune_width_with :: proc(system: ^Text_System, value: rune, size: i32) -> i32 {
@@ -304,7 +304,7 @@ rune_width_frame :: proc(frame: ^Ui_Frame, value: rune, size: i32) -> i32 {
 }
 
 rune_width :: proc(value: rune, size: i32) -> i32 {
-	return rune_width_with(&default_text_system, value, size)
+	return rune_width_with(legacy_text_system(), value, size)
 }
 
 draw_codepoint_with :: proc(
@@ -338,5 +338,5 @@ draw_codepoint_frame :: proc(
 }
 
 draw_codepoint :: proc(codepoint: rune, x, y: i32, size: i32, color: rl.Color) {
-	draw_codepoint_with(&default_text_system, codepoint, x, y, size, color)
+	draw_codepoint_with(legacy_text_system(), codepoint, x, y, size, color)
 }

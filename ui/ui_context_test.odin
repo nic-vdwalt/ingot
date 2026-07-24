@@ -105,6 +105,25 @@ test_ui_runtime_spell_state_is_isolated :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_legacy_helpers_follow_active_frame_runtime :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	ui_runtime_set_scale(&runtime, 2)
+	custom := theme_light()
+	ui_runtime_set_theme(&runtime, custom)
+
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	testing.expect(t, legacy_text_system() == &runtime.text)
+	testing.expect_value(t, sc(7), 14)
+	testing.expect_value(t, FONT_SIZE, runtime.metrics.FONT_SIZE)
+	testing.expect_value(t, theme.bg_color, custom.bg_color)
+	ui_frame_end(&frame)
+	testing.expect(t, legacy_text_system() == &default_text_system)
+}
+
+@(test)
 test_ui_focus_ids_sequential_and_counted :: proc(t: ^testing.T) {
 	u: Ui
 	ui_begin(&u, 0, 0, 100, 100)

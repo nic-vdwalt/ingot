@@ -37,6 +37,11 @@ Ui_Runtime :: struct {
 
 MAX_PANE_SCOPES :: 16
 
+@(private)
+active_runtime: ^Ui_Runtime
+@(private)
+active_frame: ^Ui_Frame
+
 Ui_Frame :: struct {
 	runtime:           ^Ui_Runtime,
 	cursor:            Cursor_State,
@@ -85,6 +90,14 @@ ui_runtime_set_scale :: proc(runtime: ^Ui_Runtime, value: f32) {
 ui_runtime_text :: proc(runtime: ^Ui_Runtime) -> ^Text_System {
 	assert(runtime != nil && runtime.initialized, "ui_runtime_text: invalid runtime")
 	return &runtime.text
+}
+
+legacy_text_system :: proc() -> ^Text_System {
+	if active_frame != nil && active_frame.open {
+		assert(active_frame.runtime != nil && active_frame.runtime.initialized)
+		return &active_frame.runtime.text
+	}
+	return &default_text_system
 }
 
 ui_runtime_spell :: proc(runtime: ^Ui_Runtime) -> ^Spell_System {
@@ -152,6 +165,10 @@ ui_runtime_set_scale_hooks :: proc(
 ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime) {
 	assert(frame != nil && runtime != nil, "ui_frame_begin: nil frame or runtime")
 	assert(runtime.initialized && !frame.open, "ui_frame_begin: invalid lifetime")
+	active_runtime = runtime
+	active_frame = frame
+	theme = runtime.style
+	sync_legacy_metrics(runtime.metrics)
 	frame.runtime = runtime
 	frame.cursor.requested = .DEFAULT
 	frame.overlay.count = 0
@@ -178,6 +195,10 @@ ui_frame_end :: proc(frame: ^Ui_Frame) {
 	cursor_apply(frame)
 	frame.runtime.semantics_snapshot = frame.semantics.cur
 	frame.markdown_ws_files = nil
+	if active_frame == frame {
+		active_frame = nil
+		active_runtime = nil
+	}
 	frame.runtime = nil
 	frame.open = false
 }

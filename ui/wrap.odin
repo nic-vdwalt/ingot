@@ -112,7 +112,7 @@ wrap_text_frame :: proc(
 }
 
 wrap_text :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> []Wrap_Line {
-	return wrap_text_with(&default_text_system, text, max_width, font_size)
+	return wrap_text_with(legacy_text_system(), text, max_width, font_size)
 }
 
 @(private)
@@ -184,7 +184,7 @@ wrap_compute_frame :: proc(
 }
 
 wrap_compute :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> []Wrap_Line {
-	return wrap_compute_with(&default_text_system, text, max_width, font_size)
+	return wrap_compute_with(legacy_text_system(), text, max_width, font_size)
 }
 
 wrapped_height_px_with :: proc(
@@ -208,7 +208,7 @@ wrapped_height_px_frame :: proc(
 }
 
 wrapped_height_px :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> i32 {
-	return wrapped_height_px_with(&default_text_system, text, max_width, font_size, LINE_HEIGHT)
+	return wrapped_height_px_with(legacy_text_system(), text, max_width, font_size, LINE_HEIGHT)
 }
 
 wrapped_max_line_width_with :: proc(
@@ -238,7 +238,7 @@ wrapped_max_line_width_frame :: proc(
 }
 
 wrapped_max_line_width :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> i32 {
-	return wrapped_max_line_width_with(&default_text_system, text, max_width, font_size)
+	return wrapped_max_line_width_with(legacy_text_system(), text, max_width, font_size)
 }
 
 wrapped_max_line_width_md_with :: proc(
@@ -272,7 +272,7 @@ wrapped_max_line_width_md :: proc(
 	max_width: i32,
 	font_size: i32 = FONT_SIZE,
 ) -> i32 {
-	return wrapped_max_line_width_md_with(&default_text_system, text, max_width, font_size)
+	return wrapped_max_line_width_md_with(legacy_text_system(), text, max_width, font_size)
 }
 
 wrapped_last_line_start_with :: proc(
@@ -297,5 +297,5 @@ wrapped_last_line_start_frame :: proc(
 }
 
 wrapped_last_line_start :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> int {
-	return wrapped_last_line_start_with(&default_text_system, text, max_width, font_size)
+	return wrapped_last_line_start_with(legacy_text_system(), text, max_width, font_size)
 }

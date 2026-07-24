@@ -165,10 +165,12 @@ ui_runtime_scf :: proc(runtime: ^Ui_Runtime, value: f32) -> f32 {
 }
 
 sc :: proc(value: i32) -> i32 {
+	if active_runtime != nil do return ui_runtime_sc(active_runtime, value)
 	return value
 }
 
 scf :: proc(value: f32) -> f32 {
+	if active_runtime != nil do return ui_runtime_scf(active_runtime, value)
 	return value
 }
 
