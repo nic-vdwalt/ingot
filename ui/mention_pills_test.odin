@@ -76,10 +76,9 @@ encode_strip_roundtrip :: proc(t: ^testing.T) {
 
 @(test)
 encode_pills_skips_invalid_ranges :: proc(t: ^testing.T) {
-	text := "abcdef"
-	// Out-of-bounds and out-of-order ranges are skipped, not encoded.
-	pills := []Mention_Span{{4, 99}}
-	testing.expect_value(t, strip_pill_markers(encode_pills(text, pills)), text)
+	text := "@"
+	pills := []Mention_Span{{-1, 1}, {0, 0}, {0, 2}}
+	testing.expect_value(t, encode_pills(text, pills), text)
 }
 
 @(test)

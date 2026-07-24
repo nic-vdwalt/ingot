@@ -128,7 +128,7 @@ encode_pills :: proc(text: string, pills: []Mention_Span) -> string {
 	sb := strings.builder_make(context.temp_allocator)
 	prev := 0
 	for p in pills {
-		if p.start < prev || p.end > len(text) || p.start > p.end do continue
+		if p.start < 0 || p.start < prev || p.end > len(text) || p.start >= p.end do continue
 		strings.write_string(&sb, text[prev:p.start])
 		strings.write_rune(&sb, PILL_OPEN)
 		strings.write_string(&sb, text[p.start:p.end])
