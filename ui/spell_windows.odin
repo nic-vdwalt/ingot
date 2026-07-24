@@ -164,6 +164,8 @@ foreign kernel32_spell {
 	GetUserDefaultLocaleName :: proc(lpLocaleName: win.LPWSTR, cchLocaleName: win.c_int) -> win.c_int ---
 }
 
+// Windows exposes a process COM spell-check adapter. Runtime-owned Spell_System
+// values retain independent caches, ignored words, and generations.
 @(private = "file")
 g_checker: ^ISpellChecker
 

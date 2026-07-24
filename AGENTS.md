@@ -2,7 +2,8 @@
 
 `ingot` is a pure-Odin, immediate-mode app/engine on WebGPU. One source runs
 natively (macOS/Metal, Windows/D3D12, Linux/Vulkan) and in the browser (WASM +
-WebGPU). See `README.md` for the full tour of packages and recipes.
+WebGPU). See `README.md` for the project overview, `docs/immediate-mode.md` for
+the architecture, and `docs/testing.md` for the test matrix.
 
 ## Packages
 
@@ -21,8 +22,8 @@ WebGPU). See `README.md` for the full tour of packages and recipes.
 
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
-- **Test**: `bash scripts/test.sh` — runs `odin test` on `gfx ui term prefs` and
-  type-checks `net sys`. Pass extra odin flags through, e.g.
+- **Test**: `bash scripts/test.sh` — runs `odin test` on `gfx ui term prefs net`
+  and type-checks `sys`. Pass extra odin flags through, e.g.
   `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.
 - **Check / lint** (Tiger Style gate): `bash scripts/check.sh` — strict
   type-check + `-vet -strict-style -vet-shadowing` across all packages, plus an

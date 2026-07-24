@@ -13,9 +13,6 @@ Spell_System :: struct {
 	generation:  u64,
 }
 
-@(private)
-default_spell_system: Spell_System
-
 spell_available_with :: proc(system: ^Spell_System) -> bool {
 	assert(system != nil, "spell_available_with: nil system")
 	if !system.initialized {
@@ -23,10 +20,6 @@ spell_available_with :: proc(system: ^Spell_System) -> bool {
 		system.available = _spell_backend_init()
 	}
 	return system.available
-}
-
-spell_available :: proc() -> bool {
-	return spell_available_with(&default_spell_system)
 }
 
 spell_check_word_with :: proc(system: ^Spell_System, word: string) -> bool {
@@ -44,10 +37,6 @@ spell_check_word_with :: proc(system: ^Spell_System, word: string) -> bool {
 	return ok
 }
 
-spell_check_word :: proc(word: string) -> bool {
-	return spell_check_word_with(&default_spell_system, word)
-}
-
 spell_suggest_with :: proc(
 	system: ^Spell_System,
 	word: string,
@@ -56,10 +45,6 @@ spell_suggest_with :: proc(
 	assert(system != nil, "spell_suggest_with: nil system")
 	if !spell_available_with(system) do return nil
 	return _spell_backend_suggest(word, allocator)
-}
-
-spell_suggest :: proc(word: string, allocator := context.allocator) -> []string {
-	return spell_suggest_with(&default_spell_system, word, allocator)
 }
 
 spell_learn_with :: proc(system: ^Spell_System, word: string) {
@@ -79,18 +64,10 @@ spell_learn_with :: proc(system: ^Spell_System, word: string) {
 	system.generation += 1
 }
 
-spell_learn :: proc(word: string) {
-	spell_learn_with(&default_spell_system, word)
-}
-
 spell_ignore_session_with :: proc(system: ^Spell_System, word: string) {
 	assert(system != nil, "spell_ignore_session_with: nil system")
 	if word not_in system.ignored do system.ignored[strings.clone(word)] = true
 	system.generation += 1
-}
-
-spell_ignore_session :: proc(word: string) {
-	spell_ignore_session_with(&default_spell_system, word)
 }
 
 spell_system_destroy :: proc(system: ^Spell_System) {

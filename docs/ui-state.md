@@ -1,8 +1,20 @@
 # UI state and stable focus
 
-Ingot keeps long-lived widget state in application data. There is no retained
-widget tree or hidden map keyed by labels. Group state by screen or reusable
-component so ownership and teardown follow that component's lifetime.
+Immediate mode describes how Ingot declares and derives an interface; it does
+not mean useful applications have no persistent state. Ingot keeps long-lived
+widget behavior in application data instead of a retained widget tree or hidden
+map keyed by labels. Group state by screen or reusable component so ownership
+and teardown follow that component's lifetime.
+
+The complete state boundary is:
+
+- Application components own values and persistent widget behavior.
+- `Ui_Runtime` owns explicit window-lifetime services and reusable resources.
+- `Ui_Frame` owns transient output and arbitration for one rendered frame.
+- Stable IDs identify controls without becoming keys into a widget-state store.
+
+See [Why immediate mode](immediate-mode.md) for the architectural argument and
+[Testing Ingot](testing.md) for how this boundary is exercised.
 
 ```odin
 Editor_Form :: struct {

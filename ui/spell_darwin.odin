@@ -22,6 +22,8 @@ NS_Spell_Checker :: struct {
 @(private = "file")
 NS_NOT_FOUND :: NS.UInteger(max(NS.Integer))
 
+// AppKit exposes one shared process spell checker. Runtime-owned Spell_System
+// values retain independent caches, ignored words, and generations.
 @(private = "file")
 g_spell_checker: ^NS_Spell_Checker
 
