@@ -49,7 +49,7 @@ draw_app_header :: proc(frame: ^Ui_Frame, title: cstring, screen_w: i32) -> (hea
 				pressed   = Caption_Button(u8(pressed)),
 				maximized = maximized,
 			}
-			min_r, max_r, close_r := draw_caption_buttons(screen_w, cap_in)
+			min_r, max_r, close_r := draw_caption_buttons(frame, screen_w, cap_in)
 			// interactive_right = 0: the whole strip (minus buttons) drags.
 			titlebar_set_layout(min_r, max_r, close_r, 0)
 		}
@@ -58,7 +58,7 @@ draw_app_header :: proc(frame: ^Ui_Frame, title: cstring, screen_w: i32) -> (hea
 	// Web build: no OS title bar, so offer a fullscreen toggle at the top-right.
 	when ODIN_OS == .JS {
 		is_fs := rl.IsWindowFullscreen()
-		_, hovered := draw_fullscreen_button(screen_w, is_fs, rl.GetMousePosition())
+		_, hovered := draw_fullscreen_button(frame, screen_w, is_fs, rl.GetMousePosition())
 		if hovered {
 			request_cursor(frame, .POINTING_HAND)
 			if rl.IsMouseButtonPressed(.LEFT) {

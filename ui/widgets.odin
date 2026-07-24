@@ -429,8 +429,9 @@ scrollbar_ex :: proc(
 	max_off := total - visible
 	off := clamp(offset, 0, max_off)
 
-	rl.DrawRectangle(x, y, w, h, theme.bg_secondary)
-	thumb_h := max(i32(20), h * i32(visible) / i32(total))
+	style := ui_frame_theme(frame)
+	rl.DrawRectangle(x, y, w, h, style.bg_secondary)
+	thumb_h := max(ui_frame_sc(frame, 20), h * i32(visible) / i32(total))
 	track_range := max(h - thumb_h, 1)
 	thumb_y := y + i32(f32(track_range) * f32(off) / f32(max_off))
 
@@ -458,8 +459,8 @@ scrollbar_ex :: proc(
 	thumb_hover :=
 		it.hovered &&
 		rl.CheckCollisionPointRec(mouse, rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)})
-	col := theme.border_color
-	if st.dragging || thumb_hover do col = theme.fg_accent
+	col := style.border_color
+	if st.dragging || thumb_hover do col = style.fg_accent
 	rl.DrawRectangle(x, thumb_y, w, thumb_h, col)
 	return off
 }
@@ -544,36 +545,21 @@ hover_anim_frac :: proc(state: ^Button_State, hovered: bool) -> f32 {
 // btn_palette returns the (rest, hovered) bg/fg/border colors for a style so
 // btn can blend between them with the eased hover fraction.
 @(private = "file")
-btn_palette :: proc(style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0, bd1: rl.Color) {
+btn_palette :: proc(theme: ^Theme, style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0, bd1: rl.Color) {
+	assert(theme != nil, "btn_palette: nil theme")
 	switch style {
 	case .Primary:
-		return theme.button_bg,
-			theme.button_hover,
-			theme.button_text,
-			theme.button_text,
-			theme.button_bg,
-			theme.fg_accent
+		return theme.button_bg, theme.button_hover, theme.button_text, theme.button_text,
+			theme.button_bg, theme.fg_accent
 	case .Secondary:
-		return theme.bg_active,
-			theme.bg_hover,
-			theme.fg_secondary,
-			theme.fg_primary,
-			rl.Color{0, 0, 0, 0},
-			theme.fg_accent
+		return theme.bg_active, theme.bg_hover, theme.fg_secondary, theme.fg_primary,
+			rl.Color{}, theme.fg_accent
 	case .Danger:
-		return theme.button_danger_bg,
-			theme.button_danger_hover,
-			theme.button_danger_fg,
-			theme.button_danger_fg,
-			rl.Color{0, 0, 0, 0},
-			theme.fg_error
+		return theme.button_danger_bg, theme.button_danger_hover, theme.button_danger_fg,
+			theme.button_danger_fg, rl.Color{}, theme.fg_error
 	case .Ghost:
-		return rl.Color {
-			0,
-			0,
-			0,
-			0,
-		}, theme.bg_hover, theme.fg_secondary, theme.fg_accent, rl.Color{0, 0, 0, 0}, rl.Color{0, 0, 0, 0}
+		return rl.Color{}, theme.bg_hover, theme.fg_secondary, theme.fg_accent,
+			rl.Color{}, rl.Color{}
 	}
 	return
 }
@@ -582,7 +568,8 @@ btn_palette :: proc(style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0, bd1: rl.Color
 // is inset past the corner radius because scissor modes don't nest in gfx and
 // a raw full-width quad would spill outside the rounded corners.
 @(private = "file")
-btn_gloss :: proc(rect: rl.Rectangle) {
+btn_gloss :: proc(theme: ^Theme, rect: rl.Rectangle) {
+	assert(theme != nil, "btn_gloss: nil theme")
 	top := theme.button_primary_grad_top
 	if top.a == 0 do return
 	radius := BTN_ROUNDNESS * min(rect.width, rect.height) * 0.5
@@ -620,8 +607,9 @@ btn_ui :: proc(
 	enabled: bool = true,
 ) -> bool {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
-	r := ui_slot(u, w, ROW_H_MD)
+	metrics := ui_frame_metrics(u.frame)
+	w := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
+	r := ui_slot(u, w, metrics.ROW_H_MD)
 	fo := ui_focus(u) if enabled else Focus_Opt{}
 	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
@@ -634,8 +622,9 @@ btn_ui_id :: proc(
 	enabled: bool = true,
 ) -> bool {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
-	r := ui_slot(u, w, ROW_H_MD)
+	metrics := ui_frame_metrics(u.frame)
+	w := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
+	r := ui_slot(u, w, metrics.ROW_H_MD)
 	fo := ui_focus(u, id) if enabled else Focus_Opt{}
 	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
@@ -649,8 +638,9 @@ btn_ui_state :: proc(
 ) -> bool {
 	assert(state != nil, "btn_ui_state: nil state")
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
-	r := ui_slot(u, w, ROW_H_MD)
+	metrics := ui_frame_metrics(u.frame)
+	w := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
+	r := ui_slot(u, w, metrics.ROW_H_MD)
 	fo := ui_focus(u) if enabled else Focus_Opt{}
 	return btn_at_state(
 		u.frame,
@@ -676,8 +666,9 @@ btn_ui_state_id :: proc(
 ) -> bool {
 	assert(state != nil, "btn_ui_state_id: nil state")
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
-	r := ui_slot(u, w, ROW_H_MD)
+	metrics := ui_frame_metrics(u.frame)
+	w := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
+	r := ui_slot(u, w, metrics.ROW_H_MD)
 	fo := ui_focus(u, id) if enabled else Focus_Opt{}
 	return btn_at_state(
 		u.frame,
@@ -705,7 +696,9 @@ btn_at :: proc(
 ) -> bool {
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "btn: empty accessible label")
-	fs := font_size if font_size > 0 else FONT_SIZE_LABEL
+	metrics := ui_frame_metrics(frame)
+	fs := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
+	style_theme := ui_frame_theme(frame)
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	it := interact(frame, rect)
 	hovered := enabled && it.hovered
@@ -722,22 +715,22 @@ btn_at :: proc(
 	if hovered do request_cursor(frame, .POINTING_HAND)
 
 	t: f32 = 1 if hovered else 0
-	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style)
+	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style_theme, style)
 	bg := color_mix(bg0, bg1, t)
 	fg := color_mix(fg0, fg1, t)
 	border := color_mix(bd0, bd1, t)
 	// Pressed feedback while the mouse button is held over the button.
 	if hovered && rl.IsMouseButtonDown(.LEFT) && (style == .Primary || style == .Secondary) {
-		bg = theme.button_pressed
+		bg = style_theme.button_pressed
 	}
 	if !enabled {
-		bg = theme.button_disabled_bg
-		fg = theme.fg_muted_dim
+		bg = style_theme.button_disabled_bg
+		fg = style_theme.fg_muted_dim
 		border = rl.Color{0, 0, 0, 0}
 	}
 
 	rl.DrawRectangleRounded(rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
-	if style == .Primary && enabled do btn_gloss(rect)
+	if style == .Primary && enabled do btn_gloss(style_theme, rect)
 	if border.a > 0 {
 		rl.DrawRectangleRoundedLinesEx(rect, BTN_ROUNDNESS, BTN_SEGMENTS, BTN_BORDER_W, border)
 	}
@@ -746,8 +739,8 @@ btn_at :: proc(
 	}
 
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	text_w := measure_text(label_c, fs)
-	draw_text(label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+	text_w := measure_text_frame(frame, label_c, fs)
+	draw_text_frame(frame, label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
@@ -768,7 +761,9 @@ btn_at_state :: proc(
 ) -> bool {
 	assert(state != nil, "btn_at_state: nil state")
 	assert(label != "", "btn_at_state: empty accessible label")
-	fs := font_size if font_size > 0 else FONT_SIZE_LABEL
+	metrics := ui_frame_metrics(frame)
+	fs := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
+	style_theme := ui_frame_theme(frame)
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	it := interact(frame, rect)
 	hovered := enabled && it.hovered
@@ -784,7 +779,7 @@ btn_at_state :: proc(
 	}
 	if hovered do request_cursor(frame, .POINTING_HAND)
 	t := hover_anim_frac(state, hovered) if enabled else 0
-	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style)
+	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style_theme, style)
 	bg := color_mix(bg0, bg1, t)
 	fg := color_mix(fg0, fg1, t)
 	border := color_mix(bd0, bd1, t)
@@ -798,14 +793,14 @@ btn_at_state :: proc(
 		border = rl.Color{0, 0, 0, 0}
 	}
 	rl.DrawRectangleRounded(rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
-	if style == .Primary && enabled do btn_gloss(rect)
+	if style == .Primary && enabled do btn_gloss(style_theme, rect)
 	if border.a > 0 {
 		rl.DrawRectangleRoundedLinesEx(rect, BTN_ROUNDNESS, BTN_SEGMENTS, BTN_BORDER_W, border)
 	}
 	if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	text_w := measure_text(label_c, fs)
-	draw_text(label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+	text_w := measure_text_frame(frame, label_c, fs)
+	draw_text_frame(frame, label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
 	semantic_push(frame, .Button, {x, y, w, h}, label, sem, focus)
@@ -892,6 +887,25 @@ line_culled_frame :: proc(frame: ^Ui_Frame, y, line_height: i32) -> bool {
 	assert(frame != nil && frame.open, "line_culled_frame: invalid frame")
 	assert(line_height > 0, "line_culled_frame: invalid line height")
 	return y + line_height < frame.text_cull_top || y > frame.text_cull_bottom
+}
+
+@(private = "file")
+legacy_text_cull_top: i32 = min(i32)
+@(private = "file")
+legacy_text_cull_bottom: i32 = max(i32)
+
+set_text_cull_band :: proc(top, bottom: i32) {
+	legacy_text_cull_top = top
+	legacy_text_cull_bottom = bottom
+}
+
+clear_text_cull_band :: proc() {
+	legacy_text_cull_top = min(i32)
+	legacy_text_cull_bottom = max(i32)
+}
+
+line_culled :: proc(y: i32) -> bool {
+	return y + LINE_HEIGHT < legacy_text_cull_top || y > legacy_text_cull_bottom
 }
 
 draw_text_wrapped_frame :: proc(

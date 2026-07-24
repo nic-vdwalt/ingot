@@ -22,8 +22,9 @@ Caption_Input :: struct {
 }
 
 // Total width of the three-button block, in physical pixels.
-caption_buttons_width :: proc() -> i32 {
-	return 3 * CAPTION_BTN_W
+caption_buttons_width :: proc(frame: ^Ui_Frame) -> i32 {
+	assert(frame != nil && frame.open, "caption_buttons_width: invalid frame")
+	return 3 * ui_frame_metrics(frame).CAPTION_BTN_W
 }
 
 // Win11 caption button colors.
@@ -40,13 +41,17 @@ CAPTION_CLOSE_PRESS :: rl.Color{181, 43, 30, 255}
 // top-right corner and returns their rects (physical client px) so the
 // caller can publish them to the non-client hit-test.
 draw_caption_buttons :: proc(
+	frame: ^Ui_Frame,
 	screen_w: i32,
 	st: Caption_Input,
 ) -> (
 	min_r, max_r, close_r: rl.Rectangle,
 ) {
-	w := f32(CAPTION_BTN_W)
-	h := f32(TAB_BAR_HEIGHT)
+	assert(frame != nil && frame.open, "draw_caption_buttons: invalid frame")
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	w := f32(metrics.CAPTION_BTN_W)
+	h := f32(metrics.TAB_BAR_HEIGHT)
 
 	close_r = rl.Rectangle{f32(screen_w) - w, 0, w, h}
 	max_r = rl.Rectangle{f32(screen_w) - 2 * w, 0, w, h}
@@ -54,10 +59,10 @@ draw_caption_buttons :: proc(
 
 	// Opaque base under the block: masks any header overflow and keeps the
 	// translucent hover fills consistent on every screen.
-	rl.DrawRectangleRec(rl.Rectangle{min_r.x, 0, 3 * w, h}, theme.bg_secondary)
+	rl.DrawRectangleRec(rl.Rectangle{min_r.x, 0, 3 * w, h}, style.bg_secondary)
 
 	focused := rl.IsWindowFocused()
-	glyph_base := theme.fg_primary if focused else theme.fg_secondary
+	glyph_base := style.fg_primary if focused else style.fg_secondary
 
 	// Hover / pressed backgrounds.
 	draw_btn_bg :: proc(r: rl.Rectangle, btn: Caption_Button, st: Caption_Input) {
@@ -79,8 +84,8 @@ draw_caption_buttons :: proc(
 	draw_btn_bg(max_r, .Maximize, st)
 	draw_btn_bg(close_r, .Close, st)
 
-	stroke := scf(1.0)
-	g := scf(10.0) // glyph box size
+	stroke := ui_frame_scf(frame, 1.0)
+	g := ui_frame_scf(frame, 10.0) // glyph box size
 
 	// Minimize: single horizontal line at vertical center.
 	{
@@ -96,7 +101,7 @@ draw_caption_buttons :: proc(
 		if st.maximized {
 			// Restore: two overlapping panes. Back pane offset up-right; only
 			// its top and right edges are visible behind the front pane.
-			off := scf(2.0)
+			off := ui_frame_scf(frame, 2.0)
 			front := rl.Rectangle{gx, gy + off, g - off, g - off}
 			rl.DrawRectangleLinesEx(front, stroke, glyph_base)
 			// Back pane: top edge and right edge.
@@ -131,6 +136,7 @@ draw_caption_buttons :: proc(
 // fill when the mouse is over it, and returns the button rect plus whether it
 // is hovered so the caller can handle clicks.
 draw_fullscreen_button :: proc(
+	frame: ^Ui_Frame,
 	screen_w: i32,
 	is_fs: bool,
 	mouse: rl.Vector2,
@@ -138,23 +144,26 @@ draw_fullscreen_button :: proc(
 	r: rl.Rectangle,
 	hovered: bool,
 ) {
-	w := f32(CAPTION_BTN_W)
-	h := f32(TAB_BAR_HEIGHT)
+	assert(frame != nil && frame.open, "draw_fullscreen_button: invalid frame")
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	w := f32(metrics.CAPTION_BTN_W)
+	h := f32(metrics.TAB_BAR_HEIGHT)
 	r = rl.Rectangle{f32(screen_w) - w, 0, w, h}
 	hovered = rl.CheckCollisionPointRec(mouse, r)
 
 	// Opaque base + hover fill (matches the Windows caption buttons).
-	rl.DrawRectangleRec(r, theme.bg_secondary)
+	rl.DrawRectangleRec(r, style.bg_secondary)
 	if hovered {
 		rl.DrawRectangleRec(r, CAPTION_HOVER_FILL)
 	}
 
 	focused := rl.IsWindowFocused()
-	col := theme.fg_primary if focused else theme.fg_secondary
+	col := style.fg_primary if focused else style.fg_secondary
 
-	stroke := scf(1.0)
-	g := scf(10.0) // glyph box size
-	arm := scf(3.5) // corner arm length
+	stroke := ui_frame_scf(frame, 1.0)
+	g := ui_frame_scf(frame, 10.0) // glyph box size
+	arm := ui_frame_scf(frame, 3.5) // corner arm length
 	gx := r.x + (w - g) / 2
 	gy := r.y + (h - g) / 2
 

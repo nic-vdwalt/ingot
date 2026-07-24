@@ -139,10 +139,25 @@ load_sound_from_wave_requires_ready_device :: proc(t: ^testing.T) {
 		channels   = 1,
 		data       = raw_data(samples[:]),
 	}
-	old_ready := g_audio_ready
-	defer g_audio_ready = old_ready
-	g_audio_ready = false
+	old_ready := g_audio.ready
+	defer g_audio.ready = old_ready
+	g_audio.ready = false
 	snd := LoadSoundFromWave(wave)
 	testing.expect_value(t, snd._handle, u32(0))
 	testing.expect(t, !IsSoundPlaying(snd))
+}
+
+@(test)
+audio_slot_rejects_stale_generation :: proc(t: ^testing.T) {
+	slot := &g_audio.slots[0]
+	old_slot := slot^
+	defer slot^ = old_slot
+	slot.used = true
+	slot.gen = 7
+	handle := _audio_handle_pack(0, slot.gen)
+	testing.expect_value(t, _audio_slot_resolve(handle), i32(0))
+	slot.gen += 1
+	testing.expect_value(t, _audio_slot_resolve(handle), i32(-1))
+	slot.used = false
+	testing.expect_value(t, _audio_slot_resolve(_audio_handle_pack(0, slot.gen)), i32(-1))
 }

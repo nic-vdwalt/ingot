@@ -90,6 +90,26 @@ Downstream status:
 | `ww-concord` | PascalCase 2D remains unchanged |
 | `openalloy` | All above, plus frozen `rlgl` signatures, `RenderTexture`/`Mesh` layouts, RT preserve/orientation, and opt-in depth |
 
+## Runtime and resource ownership
+
+The raylib-shaped API exposes one active graphics context for compatibility. The
+context owns the renderer plus bounded texture, font-atlas, shader, VAO/VBO, and
+GPU-3D pools. Public handles are opaque generation-checked values: zero remains
+invalid, freed slots are reusable, and a handle from an unloaded resource or a
+previous window lifetime cannot resolve to a replacement resource.
+
+`InitWindow` creates the active context. `BeginDrawing`/`EndDrawing`,
+`BeginTextureMode`/`EndTextureMode`, and `begin_gpu_3d`/`end_gpu_3d` must remain
+balanced; `CloseWindow` requires no active frame or GPU-3D pass. Shutdown releases
+GPU-3D and rlgl state, shaders, atlases, textures, and deferred retirements before
+renderer stream buffers and the WebGPU device. Closing a partially initialized
+window still releases platform and WebGPU handles, and reinitialization starts
+with empty resource pools.
+
+Audio has a separate explicit owner and lifecycle. `InitAudioDevice` and
+`CloseAudioDevice` initialize and destroy the target-specific engine/slot state;
+`CloseWindow` does not close audio.
+
 ## Phase 0 — Baseline, instrumentation, and renderer fixtures
 
 Optimization should follow measurements rather than assumptions.

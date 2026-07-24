@@ -63,23 +63,23 @@ _audio_handle_gen :: proc "contextless" (handle: u32) -> u16 {
 // missing browser audio) is an operating condition: IsAudioDeviceReady stays
 // false and every audio call becomes a safe no-op.
 InitAudioDevice :: proc() {
-	assert(!g_audio_ready, "InitAudioDevice: already initialized")
-	g_audio_ready = platform_audio_init()
-	assert(g_audio_ready == platform_audio_ready(), "InitAudioDevice: backend state mismatch")
+	assert(!g_audio.ready, "InitAudioDevice: already initialized")
+	g_audio.ready = platform_audio_init()
+	assert(g_audio.ready == platform_audio_ready(), "InitAudioDevice: backend state mismatch")
 }
 
-IsAudioDeviceReady :: proc() -> bool {return g_audio_ready}
+IsAudioDeviceReady :: proc() -> bool {return g_audio.ready}
 
 CloseAudioDevice :: proc() {
-	if !g_audio_ready do return
+	if !g_audio.ready do return
 	platform_audio_close()
-	g_audio_ready = false
+	g_audio.ready = false
 	assert(!platform_audio_ready(), "CloseAudioDevice: backend still ready")
 }
 
 SetMasterVolume :: proc(volume: f32) {
 	assert(volume >= 0 && volume <= 100, "SetMasterVolume: volume out of range")
-	if !g_audio_ready do return
+	if !g_audio.ready do return
 	platform_audio_master(clamp(volume, 0, 1))
 }
 
@@ -92,7 +92,7 @@ SetMasterVolume :: proc(volume: f32) {
 // fetch is in flight is applied when the decode lands.
 LoadSound :: proc(fileName: cstring) -> Sound {
 	assert(fileName != nil, "LoadSound: nil fileName")
-	if !g_audio_ready do return Sound{}
+	if !g_audio.ready do return Sound{}
 	handle, frames := platform_audio_load_file(fileName, false)
 	assert(handle == 0 || _audio_handle_slot(handle) >= 0, "LoadSound: bad handle")
 	return Sound{frameCount = frames, _handle = handle}
@@ -106,7 +106,7 @@ LoadSoundFromWave :: proc(wave: Wave) -> Sound {
 		wave.sampleSize == 16 || wave.sampleSize == 32,
 		"LoadSoundFromWave: unsupported sampleSize",
 	)
-	if !g_audio_ready || wave.frameCount == 0 || wave.data == nil do return Sound{}
+	if !g_audio.ready || wave.frameCount == 0 || wave.data == nil do return Sound{}
 	total := int(wave.frameCount) * int(wave.channels)
 	samples := make([]f32, total, context.temp_allocator)
 	if wave.sampleSize == 16 {
@@ -131,39 +131,39 @@ LoadSoundFromWave :: proc(wave: Wave) -> Sound {
 }
 
 UnloadSound :: proc(sound: Sound) {
-	if !g_audio_ready || sound._handle == 0 do return
+	if !g_audio.ready || sound._handle == 0 do return
 	assert(_audio_handle_slot(sound._handle) >= 0, "UnloadSound: corrupt handle")
 	platform_audio_unload(sound._handle)
 }
 
 // PlaySound restarts the sound from the beginning (raylib semantics).
 PlaySound :: proc(sound: Sound) {
-	if !g_audio_ready || sound._handle == 0 do return
+	if !g_audio.ready || sound._handle == 0 do return
 	assert(_audio_handle_slot(sound._handle) >= 0, "PlaySound: corrupt handle")
 	platform_audio_play(sound._handle, true)
 }
 
 StopSound :: proc(sound: Sound) {
-	if !g_audio_ready || sound._handle == 0 do return
+	if !g_audio.ready || sound._handle == 0 do return
 	assert(_audio_handle_slot(sound._handle) >= 0, "StopSound: corrupt handle")
 	platform_audio_stop(sound._handle)
 }
 
 IsSoundPlaying :: proc(sound: Sound) -> bool {
-	if !g_audio_ready || sound._handle == 0 do return false
+	if !g_audio.ready || sound._handle == 0 do return false
 	assert(_audio_handle_slot(sound._handle) >= 0, "IsSoundPlaying: corrupt handle")
 	return platform_audio_playing(sound._handle)
 }
 
 SetSoundVolume :: proc(sound: Sound, volume: f32) {
 	assert(volume >= 0, "SetSoundVolume: negative volume")
-	if !g_audio_ready || sound._handle == 0 do return
+	if !g_audio.ready || sound._handle == 0 do return
 	platform_audio_volume(sound._handle, volume)
 }
 
 SetSoundPitch :: proc(sound: Sound, pitch: f32) {
 	assert(pitch > 0, "SetSoundPitch: pitch must be positive")
-	if !g_audio_ready || sound._handle == 0 do return
+	if !g_audio.ready || sound._handle == 0 do return
 	platform_audio_pitch(sound._handle, pitch)
 }
 
@@ -173,7 +173,7 @@ SetSoundPitch :: proc(sound: Sound, pitch: f32) {
 // stays unready — silent to play — until the decode lands. A failed fetch
 // leaves it permanently unready (operating condition, not an error).
 IsSoundReady :: proc(sound: Sound) -> bool {
-	if !g_audio_ready || sound._handle == 0 do return false
+	if !g_audio.ready || sound._handle == 0 do return false
 	assert(_audio_handle_slot(sound._handle) >= 0, "IsSoundReady: corrupt handle")
 	return platform_audio_loaded(sound._handle)
 }
@@ -185,27 +185,27 @@ IsSoundReady :: proc(sound: Sound) -> bool {
 // buffer asynchronously (same story as LoadSound — poll IsMusicReady).
 LoadMusicStream :: proc(fileName: cstring) -> Music {
 	assert(fileName != nil, "LoadMusicStream: nil fileName")
-	if !g_audio_ready do return Music{}
+	if !g_audio.ready do return Music{}
 	handle, frames := platform_audio_load_file(fileName, true)
 	assert(handle == 0 || _audio_handle_slot(handle) >= 0, "LoadMusicStream: bad handle")
 	return Music{frameCount = frames, looping = true, _handle = handle}
 }
 
 UnloadMusicStream :: proc(music: Music) {
-	if !g_audio_ready || music._handle == 0 do return
+	if !g_audio.ready || music._handle == 0 do return
 	assert(_audio_handle_slot(music._handle) >= 0, "UnloadMusicStream: corrupt handle")
 	platform_audio_unload(music._handle)
 }
 
 PlayMusicStream :: proc(music: Music) {
-	if !g_audio_ready || music._handle == 0 do return
+	if !g_audio.ready || music._handle == 0 do return
 	assert(_audio_handle_slot(music._handle) >= 0, "PlayMusicStream: corrupt handle")
 	platform_audio_loop(music._handle, music.looping)
 	platform_audio_play(music._handle, false)
 }
 
 StopMusicStream :: proc(music: Music) {
-	if !g_audio_ready || music._handle == 0 do return
+	if !g_audio.ready || music._handle == 0 do return
 	assert(_audio_handle_slot(music._handle) >= 0, "StopMusicStream: corrupt handle")
 	platform_audio_stop(music._handle)
 }
@@ -218,17 +218,17 @@ UpdateMusicStream :: proc(music: Music) {
 		music._handle == 0 || _audio_handle_slot(music._handle) >= 0,
 		"UpdateMusicStream: corrupt handle",
 	)
-	assert(g_audio_ready == platform_audio_ready(), "UpdateMusicStream: backend state mismatch")
+	assert(g_audio.ready == platform_audio_ready(), "UpdateMusicStream: backend state mismatch")
 }
 
 SetMusicVolume :: proc(music: Music, volume: f32) {
 	assert(volume >= 0, "SetMusicVolume: negative volume")
-	if !g_audio_ready || music._handle == 0 do return
+	if !g_audio.ready || music._handle == 0 do return
 	platform_audio_volume(music._handle, volume)
 }
 
 IsMusicStreamPlaying :: proc(music: Music) -> bool {
-	if !g_audio_ready || music._handle == 0 do return false
+	if !g_audio.ready || music._handle == 0 do return false
 	assert(_audio_handle_slot(music._handle) >= 0, "IsMusicStreamPlaying: corrupt handle")
 	return platform_audio_playing(music._handle)
 }
@@ -236,7 +236,7 @@ IsMusicStreamPlaying :: proc(music: Music) -> bool {
 // IsMusicReady mirrors IsSoundReady for streamed music (see that proc for
 // the web async-load semantics).
 IsMusicReady :: proc(music: Music) -> bool {
-	if !g_audio_ready || music._handle == 0 do return false
+	if !g_audio.ready || music._handle == 0 do return false
 	assert(_audio_handle_slot(music._handle) >= 0, "IsMusicReady: corrupt handle")
 	return platform_audio_loaded(music._handle)
 }
