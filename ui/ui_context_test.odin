@@ -3,6 +3,7 @@ package ui
 
 import "core:testing"
 import "core:unicode/utf8"
+import rl "ingot:gfx"
 
 @(test)
 test_ui_slot_column_and_row :: proc(t: ^testing.T) {
