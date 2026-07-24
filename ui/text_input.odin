@@ -37,6 +37,11 @@ module_ivl: Input_Vlines_Memo
 module_spell_memo: Spellcheck_Memo
 module_spell_menu: Spell_Menu
 
+input_spell_menu_active :: proc(sb: ^strings.Builder) -> bool {
+	assert(sb != nil, "input_spell_menu_active: nil builder")
+	return spell_menu_active(&module_spell_menu, sb)
+}
+
 // input_is_selecting reports whether a legacy text input currently holds a
 // selection. Used by hosts to avoid hijacking Cmd+A/Cmd+C.
 input_is_selecting :: proc() -> bool {
