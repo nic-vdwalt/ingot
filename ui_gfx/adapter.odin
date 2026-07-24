@@ -55,6 +55,13 @@ adapter_destroy :: proc(adapter: ^Adapter) {
 	adapter^ = {}
 }
 
+adapter_paint_sink :: proc(list: ^ui.Paint_List, command: ui.Paint_Command, userdata: rawptr) {
+	adapter := (^Adapter)(userdata)
+	assert(adapter != nil && adapter.initialized, "adapter_paint_sink: invalid adapter")
+	assert(list != nil, "adapter_paint_sink: nil list")
+	replay_command(adapter, list, command)
+}
+
 adapter_begin_frame :: proc(
 	adapter: ^Adapter,
 	frame: ^ui.Ui_Frame,
@@ -75,6 +82,7 @@ adapter_begin_frame :: proc(
 		adapter_set_font_dpi(adapter, 1)
 	}
 	frame.output = output
+	ui.paint_list_set_sink(&output.main, adapter_paint_sink, adapter)
 	ui.ui_frame_begin(frame, runtime, input)
 }
 
@@ -83,7 +91,8 @@ adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	assert(frame != nil && frame.output != nil, "adapter_end_frame: invalid frame")
 	output := frame.output
 	ui.ui_frame_finalize(frame)
-	replay(adapter, output)
+	replay_list(adapter, &output.overlay)
 	apply_platform_output(&output.platform)
+	ui.paint_list_set_sink(&output.main, nil, nil)
 	ui.ui_frame_release(frame)
 }

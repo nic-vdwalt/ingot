@@ -9,6 +9,8 @@ Paint_Channel :: enum u8 {
 	Overlay,
 }
 
+Paint_Sink :: #type proc(list: ^Paint_List, command: Paint_Command, userdata: rawptr)
+
 Paint_Kind :: enum u8 {
 	Rectangle,
 	Rectangle_Outline,
@@ -57,6 +59,8 @@ Paint_List :: struct {
 	clip_depth:         int,
 	dropped_commands:   int,
 	dropped_text_bytes: int,
+	sink:               Paint_Sink,
+	sink_userdata:      rawptr,
 }
 
 Ui_Output :: struct {
@@ -82,6 +86,7 @@ paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
 	}
 	list.commands[list.count] = command
 	list.count += 1
+	if list.sink != nil do list.sink(list, command, list.sink_userdata)
 	return true
 }
 
@@ -112,4 +117,11 @@ ui_output_reset :: proc(output: ^Ui_Output) {
 	paint_list_reset(&output.main)
 	paint_list_reset(&output.overlay)
 	platform_output_reset(&output.platform)
+}
+
+paint_list_set_sink :: proc(list: ^Paint_List, sink: Paint_Sink, userdata: rawptr) {
+	assert(list != nil, "paint_list_set_sink: nil list")
+	assert((sink == nil) == (userdata == nil), "paint_list_set_sink: incomplete sink")
+	list.sink = sink
+	list.sink_userdata = userdata
 }

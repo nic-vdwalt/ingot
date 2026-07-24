@@ -68,4 +68,18 @@ overlay_recorder_behaviour :: proc(t: ^testing.T) {
 	overlay_end(&frame)
 	overlay_flush(&frame)
 	testing.expect_value(t, overlay_cmd_count(&frame), 1)
+
+	// Main paint can stream immediately while preserving its diagnostic buffer.
+	sink_count := 0
+	sink :: proc(list: ^Paint_List, command: Paint_Command, userdata: rawptr) {
+		assert(list != nil, "overlay_recorder_behaviour: nil sink list")
+		assert(command.kind == .Rectangle, "overlay_recorder_behaviour: wrong sink command")
+		count := (^int)(userdata)
+		count^ += 1
+	}
+	paint_list_set_sink(&output.main, sink, &sink_count)
+	paint_push(&output.main, {kind = .Rectangle})
+	testing.expect_value(t, sink_count, 1)
+	testing.expect_value(t, output.main.count, 1)
+	paint_list_set_sink(&output.main, nil, nil)
 }
