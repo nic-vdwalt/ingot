@@ -7,6 +7,29 @@ package ui
 import "core:strings"
 import rl "ingot:gfx"
 
+Markdown_Context :: struct {
+	frame:           ^Ui_Frame,
+	workspace_files: []string,
+	cull_top:        i32,
+	cull_bottom:     i32,
+}
+
+markdown_context :: proc(frame: ^Ui_Frame, workspace_files: []string = nil) -> Markdown_Context {
+	assert(frame != nil && frame.open, "markdown_context: invalid frame")
+	return Markdown_Context {
+		frame = frame,
+		workspace_files = workspace_files,
+		cull_top = min(i32),
+		cull_bottom = max(i32),
+	}
+}
+
+markdown_line_culled :: proc(ctx: ^Markdown_Context, y, line_height: i32) -> bool {
+	assert(ctx != nil && ctx.frame != nil, "markdown_line_culled: invalid context")
+	assert(line_height > 0, "markdown_line_culled: invalid line height")
+	return y + line_height < ctx.cull_top || y > ctx.cull_bottom
+}
+
 // --- Inline bold (**) parsing ---
 
 Text_Span :: struct {
@@ -894,6 +917,73 @@ draw_heading :: proc(
 	}
 
 	return total_h
+}
+
+draw_markdown_context :: proc(
+	ctx: ^Markdown_Context,
+	x, y, max_width: i32,
+	text: string,
+	base_color: rl.Color,
+	sel_start: int = -1,
+	sel_end: int = -1,
+	out_w: ^i32 = nil,
+	draw: bool = true,
+) -> i32 {
+	assert(ctx != nil && ctx.frame != nil, "draw_markdown_context: invalid context")
+	set_md_file_ctx_frame(ctx.frame, ctx.workspace_files)
+	set_text_cull_band_frame(ctx.frame, ctx.cull_top, ctx.cull_bottom)
+	set_md_file_ctx(ctx.workspace_files)
+	set_text_cull_band(ctx.cull_top, ctx.cull_bottom)
+	defer clear_md_file_ctx_frame(ctx.frame)
+	defer clear_text_cull_band_frame(ctx.frame)
+	defer clear_md_file_ctx()
+	defer clear_text_cull_band()
+	style := ui_frame_theme(ctx.frame)
+	previous_theme := theme
+	previous_text := default_text_system
+	theme = style^
+	default_text_system = ui_frame_text(ctx.frame)^
+	height := draw_markdown(x, y, max_width, text, base_color, sel_start, sel_end, out_w, draw)
+	ui_frame_text(ctx.frame)^ = default_text_system
+	default_text_system = previous_text
+	theme = previous_theme
+	return height
+}
+
+hit_test_markdown_context :: proc(
+	ctx: ^Markdown_Context,
+	x, y, max_width: i32,
+	text: string,
+	mouse_x, mouse_y: i32,
+) -> int {
+	assert(ctx != nil && ctx.frame != nil, "hit_test_markdown_context: invalid context")
+	set_md_file_ctx(ctx.workspace_files)
+	defer clear_md_file_ctx()
+	previous_text := default_text_system
+	default_text_system = ui_frame_text(ctx.frame)^
+	offset := hit_test_markdown(x, y, max_width, text, mouse_x, mouse_y)
+	ui_frame_text(ctx.frame)^ = default_text_system
+	default_text_system = previous_text
+	return offset
+}
+
+measure_markdown_context :: proc(
+	ctx: ^Markdown_Context,
+	width: i32,
+	text: string,
+	out_w: ^i32 = nil,
+) -> i32 {
+	assert(ctx != nil && ctx.frame != nil, "measure_markdown_context: invalid context")
+	return draw_markdown_context(
+		ctx,
+		0,
+		0,
+		width,
+		text,
+		ui_frame_theme(ctx.frame).fg_assistant,
+		out_w = out_w,
+		draw = false,
+	)
 }
 
 // Render markdown-formatted text with optional selection highlighting.

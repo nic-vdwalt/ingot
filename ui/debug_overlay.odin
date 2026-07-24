@@ -9,12 +9,18 @@ package ui
 import "core:fmt"
 import rl "ingot:gfx"
 
+DEBUG_OVERLAY_MAX_ROWS :: 24
+DEBUG_OVERLAY_FIXED_ROWS :: 11
+
+#assert(DEBUG_OVERLAY_FIXED_ROWS + len(rl.Flush_Cause) <= DEBUG_OVERLAY_MAX_ROWS)
+
 // draw_debug_overlay draws the metrics panel with its top-left corner at
 // (x, y) and returns the panel height. Call every frame while a debug toggle
 // (say F12) is on.
 draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32) -> i32 {
+	assert(frame != nil && frame.open, "draw_debug_overlay: invalid frame")
 	assert(x >= 0 && y >= 0, "draw_debug_overlay: negative origin")
-	s := rl.renderer_stats()
+	stats := rl.renderer_stats()
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 
@@ -29,7 +35,7 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32) -> i32 {
 		key: string,
 		val: string,
 	}
-	rows: [24]Cell
+	rows: [DEBUG_OVERLAY_MAX_ROWS]Cell
 	n := 0
 	push :: proc(rows: []Cell, n: ^int, key, val: string) {
 		assert(n^ < len(rows), "draw_debug_overlay: row overflow")
@@ -39,24 +45,29 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32) -> i32 {
 
 	push(rows[:], &n, "fps", fmt.tprintf("%d", rl.GetFPS()))
 	push(rows[:], &n, "frame", fmt.tprintf("%.2f ms", rl.GetFrameTime() * 1000))
-	push(rows[:], &n, "flushes (draw calls)", fmt.tprintf("%d", s.flush_count))
+	push(rows[:], &n, "flushes (draw calls)", fmt.tprintf("%d", stats.flush_count))
 	for cause in rl.Flush_Cause {
-		c := s.flush_causes[cause]
-		if c == 0 do continue
-		push(rows[:], &n, fmt.tprintf("  %v", cause), fmt.tprintf("%d", c))
+		count := stats.flush_causes[cause]
+		if count == 0 do continue
+		push(rows[:], &n, fmt.tprintf("  %v", cause), fmt.tprintf("%d", count))
 	}
-	push(rows[:], &n, "vertices", fmt.tprintf("%d", s.vertices_uploaded))
-	push(rows[:], &n, "uploaded", fmt.tprintf("%d KB", s.bytes_uploaded / 1024))
+	push(rows[:], &n, "vertices", fmt.tprintf("%d", stats.vertices_uploaded))
+	push(rows[:], &n, "uploaded", fmt.tprintf("%d KB", stats.bytes_uploaded / 1024))
 	push(
 		rows[:],
 		&n,
 		"buffers new/grown",
-		fmt.tprintf("%d / %d", s.buffer_creations, s.buffer_growths),
+		fmt.tprintf("%d / %d", stats.buffer_creations, stats.buffer_growths),
 	)
-	push(rows[:], &n, "pipeline switches", fmt.tprintf("%d", s.pipeline_switches))
-	push(rows[:], &n, "render passes", fmt.tprintf("%d", s.render_passes))
-	push(rows[:], &n, "peak geom arena", fmt.tprintf("%d KB", s.peak_geometry_arena_bytes / 1024))
-	entries, evictions := measure_cache_stats_with(&frame.runtime.text)
+	push(rows[:], &n, "pipeline switches", fmt.tprintf("%d", stats.pipeline_switches))
+	push(rows[:], &n, "render passes", fmt.tprintf("%d", stats.render_passes))
+	push(
+		rows[:],
+		&n,
+		"peak geom arena",
+		fmt.tprintf("%d KB", stats.peak_geometry_arena_bytes / 1024),
+	)
+	entries, evictions := measure_cache_stats_with(ui_frame_text(frame))
 	push(rows[:], &n, "measure cache", fmt.tprintf("%d (%d evicted)", entries, evictions))
 	push(
 		rows[:],

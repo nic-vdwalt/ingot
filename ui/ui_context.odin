@@ -194,6 +194,8 @@ ui_frame_end :: proc(frame: ^Ui_Frame) {
 	overlay_flush(frame)
 	cursor_apply(frame)
 	frame.runtime.semantics_snapshot = frame.semantics.cur
+	frame.text_cull_top = min(i32)
+	frame.text_cull_bottom = max(i32)
 	frame.markdown_ws_files = nil
 	if active_frame == frame {
 		active_frame = nil

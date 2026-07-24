@@ -40,9 +40,7 @@ clear_md_file_ctx_frame :: proc(frame: ^Ui_Frame) {
 	frame.markdown_ws_files = nil
 }
 
-workspace_has_path_frame :: proc(frame: ^Ui_Frame, rel: string) -> bool {
-	assert(frame != nil && frame.open, "workspace_has_path_frame: invalid frame")
-	files := frame.markdown_ws_files
+workspace_has_path_with :: proc(files: []string, rel: string) -> bool {
 	if len(files) == 0 || len(rel) == 0 || len(rel) > 256 do return false
 	if strings.index_byte(rel, ' ') >= 0 || strings.index_byte(rel, '\n') >= 0 do return false
 	directory := strings.concatenate({rel, "/"}, context.temp_allocator)
@@ -50,6 +48,11 @@ workspace_has_path_frame :: proc(frame: ^Ui_Frame, rel: string) -> bool {
 		if path == rel || path == directory do return true
 	}
 	return false
+}
+
+workspace_has_path_frame :: proc(frame: ^Ui_Frame, rel: string) -> bool {
+	assert(frame != nil && frame.open, "workspace_has_path_frame: invalid frame")
+	return workspace_has_path_with(frame.markdown_ws_files, rel)
 }
 
 // --- Range maintenance (composer) -------------------------------------------

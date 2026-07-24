@@ -164,7 +164,12 @@ input_mouse_to_byte :: proc(
 	if row >= len(vlines) do row = len(vlines) - 1
 	vl := vlines[row]
 	line := text[vl.start:vl.end]
-	col := caret_pixel_to_col_with(system, line, i32(mouse.x) - inner_x, ui_metrics(1).FONT_SIZE_BODY)
+	col := caret_pixel_to_col_with(
+		system,
+		line,
+		i32(mouse.x) - inner_x,
+		ui_metrics(1).FONT_SIZE_BODY,
+	)
 	return vl.start + caret_col_to_byte(line, col)
 }
 
@@ -338,7 +343,10 @@ input_caret_visual :: proc(
 	vlines: []Wrap_Line,
 	text: string,
 	pos, font_size: int,
-) -> (row: int, x_px: i32) {
+) -> (
+	row: int,
+	x_px: i32,
+) {
 	assert(system != nil, "input_caret_visual: nil text system")
 	for vl, idx in vlines {
 		if pos <= vl.end {
@@ -790,7 +798,8 @@ ti_keys_nav :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 		}
 		nav_end(sel, cursor, shift)
 	}
-	if (rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP)) && !spell_menu_active(ctx.spell_menu, sb) {
+	if (rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP)) &&
+	   !spell_menu_active(ctx.spell_menu, sb) {
 		nav_begin(sel, sb, cursor, shift, true)
 		row, col := caret_row_col(s, cursor^)
 		want := col
@@ -801,7 +810,8 @@ ti_keys_nav :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 		}
 		nav_end(sel, cursor, shift)
 	}
-	if (rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN)) && !spell_menu_active(ctx.spell_menu, sb) {
+	if (rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN)) &&
+	   !spell_menu_active(ctx.spell_menu, sb) {
 		nav_begin(sel, sb, cursor, shift, false)
 		row, col := caret_row_col(s, cursor^)
 		want := col
@@ -1426,14 +1436,7 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	// Suggestions popup for a right-clicked misspelled word. Drawn after the
 	// scissor ends so it renders unclipped above the input box.
 	if spell_menu_active(ctx.spell_menu, ctx.sb) {
-		draw_spell_menu(
-			ctx.frame,
-			ctx.spell_menu,
-			ui_frame_spell(ctx.frame),
-			ctx.x,
-			ctx.y,
-			ctx.w,
-		)
+		draw_spell_menu(ctx.frame, ctx.spell_menu, ui_frame_spell(ctx.frame), ctx.x, ctx.y, ctx.w)
 	}
 	return entered
 }

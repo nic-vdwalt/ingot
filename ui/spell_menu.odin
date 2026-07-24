@@ -286,21 +286,46 @@ draw_spell_menu :: proc(
 	// Separator.
 	overlay_rect(
 		frame,
-		{f32(mx + ox + ui_frame_sc(frame, 6)), f32(item_y + sep_h / 2), f32(menu_w - ui_frame_sc(frame, 12)), 1},
+		{
+			f32(mx + ox + ui_frame_sc(frame, 6)),
+			f32(item_y + sep_h / 2),
+			f32(menu_w - ui_frame_sc(frame, 12)),
+			1,
+		},
 		style.border_color,
 	)
 	item_y += sep_h
 
 	learn_label := strings.concatenate({"Learn \"", menu.word, "\""}, context.temp_allocator)
 	if draw_row(
-		frame, menu, ox, item_x, item_y, item_w, item_h, learn_label, n, mouse, style.fg_secondary,
+		frame,
+		menu,
+		ox,
+		item_x,
+		item_y,
+		item_w,
+		item_h,
+		learn_label,
+		n,
+		mouse,
+		style.fg_secondary,
 	) {
 		apply_idx = n
 	}
 	item_y += item_h
 
 	if draw_row(
-		frame, menu, ox, item_x, item_y, item_w, item_h, "Ignore", n + 1, mouse, style.fg_secondary,
+		frame,
+		menu,
+		ox,
+		item_x,
+		item_y,
+		item_w,
+		item_h,
+		"Ignore",
+		n + 1,
+		mouse,
+		style.fg_secondary,
 	) {
 		apply_idx = n + 1
 	}

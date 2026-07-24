@@ -124,8 +124,11 @@ mutate_resources :: proc(p: ^Prng) {
 			ui.ui_runtime_set_theme(&ui_runtime, ui.theme_high_contrast())
 		}
 	case 9:
-		ui.set_font_dpi(f32(fuzzx.int_range(p, 100, 301)) / 100.0)
-		ui.reset_font_atlases()
+		ui.set_font_dpi_with(
+			ui.ui_runtime_text(&ui_runtime),
+			f32(fuzzx.int_range(p, 100, 301)) / 100.0,
+		)
+		ui.reset_font_atlases_with(ui.ui_runtime_text(&ui_runtime))
 	case 10, 11:
 		// Surface lifecycle: resize mid-frame (swapchain reconfigure),
 		// including repeated same-size calls (must be idempotent).
@@ -155,8 +158,8 @@ main :: proc() {
 
 	rl.InitWindow(480, 320, "gfx frame lifecycle fuzz")
 	rl.SetTargetFPS(0) // uncapped: iterations bound the run, not wall time
-	ui.init_font()
 	ui.ui_runtime_init(&ui_runtime)
+	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
 
 	for round in 0 ..< rounds {
 		round_seed := seed + u64(round)
@@ -166,7 +169,7 @@ main :: proc() {
 			if rl.WindowShouldClose() do break
 			ui.ui_frame_begin(&ui_frame, &ui_runtime)
 			rl.BeginDrawing()
-			rl.ClearBackground(ui.theme.bg_color)
+			rl.ClearBackground(ui.ui_runtime_theme(&ui_runtime).bg_color)
 
 			// Interleave draw → mutate → draw so recorded references
 			// always precede the destroy in ordering-sensitive cases.

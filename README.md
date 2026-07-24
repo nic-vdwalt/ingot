@@ -107,16 +107,22 @@ when ODIN_OS == .Darwin {
     rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
 }
 rl.InitWindow(w, h, title)   // rl == ingot:gfx
-ui.apply_platform_dpi()      // pass user_scale > 0 to override the OS default
-ui.init_font()
+runtime: ui.Ui_Runtime
+frame: ui.Ui_Frame
+ui.ui_runtime_init(&runtime)
+ui.ui_runtime_apply_platform_dpi(&runtime)
 
 for !rl.WindowShouldClose() {
-    ui.dpi_refresh()         // re-rasterizes on monitor-move scale changes
+    ui.ui_runtime_dpi_refresh(&runtime)
+    ui.ui_frame_begin(&frame, &runtime)
     rl.BeginDrawing()
-    rl.ClearBackground(ui.BG_PRIMARY)
-    // ... draw ...
+    rl.ClearBackground(ui.ui_frame_theme(&frame).bg_color)
+    // ... draw widgets with &frame ...
+    ui.ui_frame_end(&frame)
     rl.EndDrawing()
 }
+ui.ui_runtime_destroy(&runtime)
+rl.CloseWindow()
 ```
 
 ### Migrating a raylib app
@@ -274,11 +280,13 @@ router so clicks never leak through to the widgets underneath (claims occlude
 on the next frame — bounded double buffer, no retained widget state):
 
 ```odin
-ui.overlay_begin(rect, claim_input = true)   // claim_input=false for passive tooltips
-ui.overlay_rounded(rect, 0.1, 6, ui.theme.bg_popup)
-ui.overlay_text("Hello", x, y, ui.FONT_SIZE, ui.theme.fg_primary)
-ui.overlay_end()
-// replayed automatically by ui.apply_cursor() before rl.EndDrawing()
+style := ui.ui_frame_theme(&frame)
+metrics := ui.ui_frame_metrics(&frame)
+ui.overlay_begin(&frame, rect, claim_input = true)
+ui.overlay_rounded(&frame, rect, 0.1, 6, style.bg_popup)
+ui.overlay_text(&frame, "Hello", x, y, metrics.FONT_SIZE_BODY, style.fg_primary)
+ui.overlay_end(&frame)
+// Replayed automatically by ui.ui_frame_end before rl.EndDrawing().
 ```
 
 Modal panels call `ui.route_claim_all()` while open. Widgets built on
@@ -304,22 +312,22 @@ modal: ui.Modal_State
 menu: ui.Context_Menu_State
 tip: ui.Tooltip_State
 
-ui.ui_begin(&form, x, y, w, h)
+ui.ui_begin_frame(&form, &frame, x, y, w, h)
 ui.checkbox(&form, ui.Focus_Id(1), "Enable", &enabled)
 ui.slider(&form, ui.Focus_Id(2), &volume, 0, 100, 5)
 ui.dropdown(&form, ui.Focus_Id(3), backends, &sel, &dd)
 ui.ui_end(&form)
-ui.tooltip(&tip, {x, y2, w, 24}, "hover hint", sw, sh)
+ui.tooltip(&frame, &tip, {x, y2, w, 24}, "hover hint", sw, sh)
 
 if open_clicked do modal.open = true
 if modal.open {
-    body := ui.modal_begin(&modal, "Title", ui.sc(420), ui.sc(200), sw, sh)
+    body := ui.modal_begin(&frame, &modal, "Title", 420, 200, sw, sh)
     // ... draw inside body; Tab-cycle only modal widgets (focus trap) ...
-    ui.modal_end(&modal) // Escape / click-outside sets modal.dismissed
+    ui.modal_end(&modal)
 }
 
 if right_clicked do ui.context_menu_open(&menu, mx, my)
-chosen := ui.context_menu(&menu, items, sw, sh) // -1 until a row is picked
+chosen := ui.context_menu(&frame, &menu, items, sw, sh)
 ```
 
 The UI-scale settings panel is built on `modal_begin`/`modal_end`; the spell
@@ -348,14 +356,13 @@ Two consumers read it:
   frame-stamped overlay as text-input autofill mirroring.
 
 ```odin
-ui.a11y_init()                 // once, after InitWindow
+ui.a11y_init(&runtime)         // once, after runtime initialization
 for !rl.WindowShouldClose() {
+    ui.ui_frame_begin(&frame, &runtime)
     rl.BeginDrawing()
-    ui.begin_cursor_frame()
-    ui.focus_scope_cycle()     // app-wide Tab order across all forms/panes
     // ... draw widgets ...
-    ui.apply_cursor()
-    ui.a11y_frame_end()        // push tree + apply AT actions
+    ui.a11y_frame_end(&frame)   // push tree + apply AT actions
+    ui.ui_frame_end(&frame)
     rl.EndDrawing()
 }
 ```

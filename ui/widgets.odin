@@ -1286,19 +1286,17 @@ kv_row_frame :: proc(
 	font_size: i32 = 0,
 ) {
 	assert(frame != nil && frame.open, "kv_row_frame: invalid frame")
-	fs := font_size if font_size > 0 else ui_frame_metrics(frame).FONT_SIZE_LABEL
+	assert(w > 0, "kv_row_frame: invalid width")
+	resolved_font_size := font_size if font_size > 0 else ui_frame_metrics(frame).FONT_SIZE_LABEL
+	assert(resolved_font_size > 0, "kv_row_frame: invalid font size")
 	value_cstring := strings.clone_to_cstring(value, context.temp_allocator)
-	value_width := measure_text_frame(frame, value_cstring, fs)
-	draw_text_frame(frame, value_cstring, x + w - value_width, y, fs, val_col)
-	draw_text_truncated_frame(
-		frame,
-		key,
-		x,
-		y,
-		w - value_width - ui_frame_sc(frame, 8),
-		fs,
-		key_col,
-	)
+	value_width := measure_text_frame(frame, value_cstring, resolved_font_size)
+	value_x := x + max(w - value_width, 0)
+	key_width := max(w - value_width - ui_frame_sc(frame, 8), 0)
+	draw_text_frame(frame, value_cstring, value_x, y, resolved_font_size, val_col)
+	if key_width > 0 {
+		draw_text_truncated_frame(frame, key, x, y, key_width, resolved_font_size, key_col)
+	}
 }
 
 // list_row_bg draws the unified rounded row background for hover/selection.

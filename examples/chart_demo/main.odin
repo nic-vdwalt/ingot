@@ -54,11 +54,20 @@ frame :: proc() {
 	ui.ui_runtime_dpi_refresh(&ui_runtime)
 	ui.ui_frame_begin(&ui_frame, &ui_runtime)
 	rl.BeginDrawing()
-	rl.ClearBackground(ui.theme.bg_color)
+	style := ui.ui_frame_theme(&ui_frame)
+	metrics := ui.ui_frame_metrics(&ui_frame)
+	rl.ClearBackground(style.bg_color)
 
 	sw := rl.GetScreenWidth()
 
-	ui.draw_text("Chart widgets", 24, 20, ui.FONT_SIZE_LARGE, ui.theme.fg_primary)
+	ui.draw_text_frame(
+		&ui_frame,
+		"Chart widgets",
+		24,
+		20,
+		metrics.FONT_SIZE_LARGE,
+		style.fg_primary,
+	)
 	if ui.btn(&ui_frame, sw - 140, 16, 120, 30, "Light theme" if dark else "Dark theme") {
 		dark = !dark
 		ui.ui_runtime_set_theme(&ui_runtime, ui.theme_dark() if dark else ui.theme_light())
@@ -94,23 +103,42 @@ frame :: proc() {
 		{labels = DAYS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
 
-	stat_card(628, 64, 308, 92, "ACTIVE PROJECTS", "9.3", spark_up[:], ui.theme.fg_success)
-	stat_card(628, 168, 308, 92, "OPEN TASKS", "4.8", spark_down[:], ui.theme.fg_error)
-	stat_card(628, 272, 308, 92, "AVG HOURS / DAY", "5.1", spark_flat[:], ui.theme.fg_accent)
+	stat_card(&ui_frame, 628, 64, 308, 92, "ACTIVE PROJECTS", "9.3", spark_up[:], style.fg_success)
+	stat_card(&ui_frame, 628, 168, 308, 92, "OPEN TASKS", "4.8", spark_down[:], style.fg_error)
+	stat_card(
+		&ui_frame,
+		628,
+		272,
+		308,
+		92,
+		"AVG HOURS / DAY",
+		"5.1",
+		spark_flat[:],
+		style.fg_accent,
+	)
 
 	ui.ui_frame_end(&ui_frame)
 	rl.EndDrawing()
 }
 
-stat_card :: proc(x, y, w, h: i32, label, value: cstring, values: []f32, col: rl.Color) {
-	ui.draw_card_bg({f32(x), f32(y), f32(w), f32(h)}, ui.theme.bg_secondary)
-	ui.draw_text(label, x + 14, y + 12, ui.FONT_SIZE_SMALL, ui.theme.fg_label)
-	ui.draw_text(
+stat_card :: proc(
+	frame: ^ui.Ui_Frame,
+	x, y, w, h: i32,
+	label, value: cstring,
+	values: []f32,
+	col: rl.Color,
+) {
+	style := ui.ui_frame_theme(frame)
+	metrics := ui.ui_frame_metrics(frame)
+	ui.draw_card_bg_frame(frame, {f32(x), f32(y), f32(w), f32(h)}, style.bg_secondary)
+	ui.draw_text_frame(frame, label, x + 14, y + 12, metrics.FONT_SIZE_SMALL, style.fg_label)
+	ui.draw_text_frame(
+		frame,
 		value,
 		x + 14,
-		y + h - ui.FONT_SIZE_LARGE - 14,
-		ui.FONT_SIZE_LARGE,
-		ui.theme.fg_primary,
+		y + h - metrics.FONT_SIZE_LARGE - 14,
+		metrics.FONT_SIZE_LARGE,
+		style.fg_primary,
 	)
-	ui.sparkline(&ui_frame, x + w - 130, y + h / 2 - 16, 110, 32, values, col)
+	ui.sparkline(frame, x + w - 130, y + h / 2 - 16, 110, 32, values, col)
 }

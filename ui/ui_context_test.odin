@@ -43,6 +43,44 @@ test_ui_runtime_frames_are_isolated_and_share_roots :: proc(t: ^testing.T) {
 	testing.expect(t, u1.frame == nil && u2.frame == nil)
 }
 
+@(test)
+test_ui_frame_transient_context_is_isolated_and_reset :: proc(t: ^testing.T) {
+	runtime_a, runtime_b: Ui_Runtime
+	ui_runtime_init(&runtime_a)
+	ui_runtime_init(&runtime_b)
+	defer ui_runtime_destroy(&runtime_a)
+	defer ui_runtime_destroy(&runtime_b)
+
+	frame_a, frame_b: Ui_Frame
+	ui_frame_begin(&frame_a, &runtime_a)
+	ui_frame_begin(&frame_b, &runtime_b)
+	files_a := [?]string{"a.odin", "b.odin"}
+	files_b := [?]string{"other.odin"}
+	set_text_cull_band_frame(&frame_a, 10, 20)
+	set_text_cull_band_frame(&frame_b, 100, 200)
+	set_md_file_ctx_frame(&frame_a, files_a[:])
+	set_md_file_ctx_frame(&frame_b, files_b[:])
+	testing.expect_value(t, frame_a.text_cull_top, i32(10))
+	testing.expect_value(t, frame_b.text_cull_top, i32(100))
+	testing.expect_value(t, frame_a.markdown_ws_files[0], "a.odin")
+	testing.expect_value(t, frame_b.markdown_ws_files[0], "other.odin")
+	ui_frame_end(&frame_a)
+	ui_frame_end(&frame_b)
+	testing.expect(t, frame_a.markdown_ws_files == nil)
+	testing.expect(t, frame_b.markdown_ws_files == nil)
+	testing.expect_value(t, frame_a.text_cull_top, min(i32))
+	testing.expect_value(t, frame_a.text_cull_bottom, max(i32))
+
+	frame_a.text_cull_top = 55
+	frame_a.text_cull_bottom = 66
+	frame_a.markdown_ws_files = files_b[:]
+	ui_frame_begin(&frame_a, &runtime_a)
+	testing.expect_value(t, frame_a.text_cull_top, min(i32))
+	testing.expect_value(t, frame_a.text_cull_bottom, max(i32))
+	testing.expect(t, frame_a.markdown_ws_files == nil)
+	ui_frame_end(&frame_a)
+}
+
 @(private = "file")
 isolation_measure_narrow :: proc(text: cstring, size: i32) -> i32 {
 	assert(size > 0, "isolation_measure_narrow: invalid size")
