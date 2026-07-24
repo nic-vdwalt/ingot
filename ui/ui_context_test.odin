@@ -44,6 +44,30 @@ test_ui_runtime_frames_are_isolated_and_share_roots :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_ui_frame_pane_origins_are_isolated :: proc(t: ^testing.T) {
+	a, b: Ui_Runtime
+	ui_runtime_init(&a)
+	ui_runtime_init(&b)
+	defer ui_runtime_destroy(&a)
+	defer ui_runtime_destroy(&b)
+	frame_a, frame_b: Ui_Frame
+	ui_frame_begin(&frame_a, &a)
+	ui_frame_begin(&frame_b, &b)
+	ui_frame_pane_push(&frame_a, {10, 20})
+	ui_frame_pane_push(&frame_b, {100, 200})
+	testing.expect_value(t, frame_to_screen(&frame_a, {1, 2}), rl.Vector2{11, 22})
+	testing.expect_value(t, frame_to_screen(&frame_b, {1, 2}), rl.Vector2{101, 202})
+	testing.expect_value(t, frame_to_local(&frame_a, {11, 22}), rl.Vector2{1, 2})
+	testing.expect_value(t, frame_to_local(&frame_b, {101, 202}), rl.Vector2{1, 2})
+	ui_frame_pane_pop(&frame_a)
+	testing.expect_value(t, frame_pane_origin(&frame_a), rl.Vector2{})
+	testing.expect_value(t, frame_pane_origin(&frame_b), rl.Vector2{100, 200})
+	ui_frame_pane_pop(&frame_b)
+	ui_frame_end(&frame_a)
+	ui_frame_end(&frame_b)
+}
+
+@(test)
 test_ui_frame_transient_context_is_isolated_and_reset :: proc(t: ^testing.T) {
 	runtime_a, runtime_b: Ui_Runtime
 	ui_runtime_init(&runtime_a)

@@ -3,7 +3,7 @@ package ui
 // Right-click suggestions popup for misspelled words in the chat composer.
 // Modeled on the mentions popup: a small anchored panel above the input box
 // with up to SPELL_MAX_SUGGESTIONS replacements plus "Learn word" / "Ignore".
-// Module-level state, like input_sel: only one composer is focused at a time.
+// Each Text_Input_State owns its own menu state.
 
 import "core:strings"
 import rl "ingot:gfx"

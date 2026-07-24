@@ -29,38 +29,6 @@ Input_Sel :: struct {
 	click_count:     int,
 }
 
-// Legacy module-level selection slot used by the positional text_input entry
-// point. Only one such input holds a selection at a time (keyed by builder
-// pointer). State-based inputs each own an Input_Sel instead.
-input_sel: Input_Sel
-module_ivl: Input_Vlines_Memo
-module_spell_memo: Spellcheck_Memo
-module_spell_menu: Spell_Menu
-
-input_spell_menu_active :: proc(sb: ^strings.Builder) -> bool {
-	assert(sb != nil, "input_spell_menu_active: nil builder")
-	return spell_menu_active(&module_spell_menu, sb)
-}
-
-// input_is_selecting reports whether a legacy text input currently holds a
-// selection. Used by hosts to avoid hijacking Cmd+A/Cmd+C.
-input_is_selecting :: proc() -> bool {
-	return input_sel.active
-}
-
-// Normalized selection range (lo <= hi) of the legacy selection slot.
-input_sel_range :: proc() -> (lo, hi: int) {
-	return sel_range(&input_sel)
-}
-
-input_sel_set :: proc(sb: ^strings.Builder, anchor, extent: int) {
-	sel_set(&input_sel, sb, anchor, extent)
-}
-
-input_sel_clear :: proc() {
-	sel_reset(&input_sel)
-}
-
 // sel_range returns the normalized (lo <= hi) range of a selection.
 @(private)
 sel_range :: proc(sel: ^Input_Sel) -> (lo, hi: int) {
@@ -435,6 +403,11 @@ text_input_state_destroy :: proc(st: ^Text_Input_State) {
 text_input_selecting :: proc(st: ^Text_Input_State) -> bool {
 	assert(st != nil, "text_input_selecting: nil state")
 	return st.sel.active
+}
+
+text_input_spell_menu_active :: proc(st: ^Text_Input_State, sb: ^strings.Builder) -> bool {
+	assert(st != nil && sb != nil, "text_input_spell_menu_active: nil state or builder")
+	return spell_menu_active(&st.spell_menu, sb)
 }
 
 text_input_selection_range :: proc(st: ^Text_Input_State) -> (lo, hi: int) {
@@ -1489,60 +1462,6 @@ text_input_box :: proc(
 		semantics   = cfg.semantics,
 		active      = cfg.active,
 		caret       = true,
-	}
-	return ti_run(&ctx)
-}
-
-// Draw a text input box (legacy positional API). Returns true if Enter was
-// pressed. When masked is true, displays asterisks instead of actual text
-// (for passwords). `cursor` is an optional byte-offset caret; pass nil for
-// single-line, end-anchored inputs (file browser, token field). When non-nil
-// the input supports Left/Right/Up/Down/Home/End navigation and inserts/
-// deletes at the caret. `desired_col` (optional) remembers the rune column
-// across vertical moves and `scroll_line` (optional) persists the top visible
-// logical line. Selection and the wrap memo live in module-level slots, so
-// only one legacy input should be focused at a time; new code should prefer
-// text_input_box.
-text_input :: proc(
-	frame: ^Ui_Frame,
-	x, y, w, h: i32,
-	sb: ^strings.Builder,
-	placeholder: string,
-	active: bool,
-	masked: bool = false,
-	cursor: ^int = nil,
-	desired_col: ^int = nil,
-	scroll_line: ^int = nil,
-	pills: ^[dynamic]Mention_Span = nil,
-	undo: ^Input_Undo = nil,
-	semantics: Text_Input_Semantics = {},
-) -> bool {
-	assert(sb != nil, "text_input: nil builder")
-	assert(w > 0 && h > 0, "text_input: empty rect")
-	ctx := TI_Ctx {
-		frame       = frame,
-		sb          = sb,
-		cursor      = cursor,
-		desired_col = desired_col,
-		scroll_line = scroll_line,
-		pills       = pills,
-		undo        = undo,
-		sel         = &input_sel,
-		memo        = &module_ivl,
-		spell_memo  = &module_spell_memo,
-		spell_menu  = &module_spell_menu,
-		x           = x,
-		y           = y,
-		w           = w,
-		h           = h,
-		rect        = rl.Rectangle{f32(x), f32(y), f32(w), f32(h)},
-		inner_x     = x + PADDING,
-		inner_w     = w - PADDING * 2,
-		placeholder = placeholder,
-		masked      = masked,
-		semantics   = semantics,
-		active      = active,
-		caret       = cursor != nil,
 	}
 	return ti_run(&ctx)
 }

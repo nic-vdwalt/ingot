@@ -99,7 +99,7 @@ interact_reset :: proc(frame: ^Ui_Frame) {
 
 // interact runs the interaction protocol for a widget rect. `rect` is in the
 // widget's drawing space (pane-local when inside a translated split pane);
-// the pointer is converted via pane_origin_x in one place here. Occlusion by
+// the pointer is converted through the frame's pane scope here. Occlusion by
 // overlay claims (route_claim) is resolved before hover is reported.
 interact :: proc(frame: ^Ui_Frame, rect: rl.Rectangle, latch: ^bool = nil) -> Interaction {
 	assert(frame != nil && frame.open, "interact: invalid frame")

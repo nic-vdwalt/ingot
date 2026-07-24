@@ -5,7 +5,7 @@
 // re-ordering code. Commands live one frame in bounded buffers — no retained
 // widget state, no allocation. Recorded coordinates are screen space (the
 // replay runs after any pane translation has been popped), so recorders in a
-// translated pane must add pane_origin_x themselves.
+// translated pane convert coordinates with frame_to_screen.
 //
 // overlay_flush is called from apply_cursor (the end-of-frame hook every host
 // already calls) so overlays work in existing apps without new wiring; it is
