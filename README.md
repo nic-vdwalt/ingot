@@ -95,7 +95,7 @@ for !rl.WindowShouldClose() {
 	ui.ui_frame_begin(&frame, &runtime)
 	rl.BeginDrawing()
 	rl.ClearBackground(ui.ui_frame_theme(&frame).bg_color)
-	ui.label(&frame, {24, 24, 240, 32}, "Hello from Ingot")
+	rl.DrawText("Hello from Ingot", 24, 24, 24, ui.ui_frame_theme(&frame).fg_primary)
 	ui.ui_frame_end(&frame)
 	rl.EndDrawing()
 }
