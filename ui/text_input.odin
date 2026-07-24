@@ -361,6 +361,33 @@ input_caret_visual :: proc(
 	return 0, 0
 }
 
+input_caret_visual_frame :: proc(
+	frame: ^Ui_Frame,
+	vlines: []Wrap_Line,
+	text: string,
+	pos, font_size: int,
+) -> (
+	row: int,
+	x_px: i32,
+) {
+	assert(frame != nil && frame.open, "input_caret_visual_frame: invalid frame")
+	assert(font_size > 0, "input_caret_visual_frame: invalid font size")
+	for vl, idx in vlines {
+		if pos <= vl.end {
+			p := pos
+			if p < vl.start do p = vl.start
+			prefix := strings.clone_to_cstring(text[vl.start:p], context.temp_allocator)
+			return idx, measure_text_frame(frame, prefix, i32(font_size))
+		}
+	}
+	if len(vlines) > 0 {
+		vl := vlines[len(vlines) - 1]
+		line := strings.clone_to_cstring(text[vl.start:vl.end], context.temp_allocator)
+		return len(vlines) - 1, measure_text_frame(frame, line, i32(font_size))
+	}
+	return 0, 0
+}
+
 // --- Public types ------------------------------------------------------------
 
 Text_Input_Type :: enum i32 {
@@ -863,15 +890,15 @@ ti_layout :: proc(ctx: ^TI_Ctx, text: string) -> TI_View {
 	metrics := ui_frame_metrics(ctx.frame)
 	v.visible_lines = max(1, (ctx.h - ui_frame_sc(ctx.frame, 12)) / metrics.LINE_HEIGHT)
 	if !v.caret_render do return v
-	v.vlines = input_visual_lines_memo_with(
-		ui_frame_text(ctx.frame),
+	v.vlines = input_visual_lines_memo_frame(
+		ctx.frame,
 		ctx.memo,
 		text,
 		ctx.inner_w,
 		metrics.FONT_SIZE_BODY,
 	)
-	v.cur_vrow, v.cur_caret_x = input_caret_visual(
-		ui_frame_text(ctx.frame),
+	v.cur_vrow, v.cur_caret_x = input_caret_visual_frame(
+		ctx.frame,
 		v.vlines,
 		text,
 		ctx.cursor^,
@@ -908,8 +935,8 @@ ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string) {
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	masked_w := measure_text_frame(ctx.frame, masked_c, font_size)
 	masked_offset := max(0, masked_w - ctx.inner_w)
-	col := caret_pixel_to_col_with(
-		ui_frame_text(ctx.frame),
+	col := caret_pixel_to_col_frame(
+		ctx.frame,
 		masked_text,
 		i32(mouse.x) - ctx.inner_x + masked_offset,
 		font_size,
@@ -996,8 +1023,8 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 		sel.dragging = false
 		if sel.anchor == sel.extent do sel.active = false
 	}
-	v.cur_vrow, v.cur_caret_x = input_caret_visual(
-		ui_frame_text(ctx.frame),
+	v.cur_vrow, v.cur_caret_x = input_caret_visual_frame(
+		ctx.frame,
 		v.vlines,
 		text,
 		ctx.cursor^,
@@ -1041,8 +1068,8 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 				ctx.pills,
 			)
 			if misspelled {
-				_, word_x := input_caret_visual(
-					ui_frame_text(ctx.frame),
+				_, word_x := input_caret_visual_frame(
+					ctx.frame,
 					v.vlines,
 					text,
 					ws,
