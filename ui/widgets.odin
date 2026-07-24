@@ -361,6 +361,29 @@ caret_pixel_to_col_with :: proc(system: ^Text_System, line: string, px, font_siz
 	return col
 }
 
+caret_pixel_to_col_frame :: proc(frame: ^Ui_Frame, line: string, px, font_size: i32) -> int {
+	assert(frame != nil && frame.open, "caret_pixel_to_col_frame: invalid frame")
+	assert(font_size > 0, "caret_pixel_to_col_frame: invalid font size")
+	if px <= 0 do return 0
+	col := 0
+	i := 0
+	for i < len(line) {
+		j := i + 1
+		for j < len(line) && (line[j] & 0xC0) == 0x80 do j += 1
+		prefix := strings.clone_to_cstring(line[:j], context.temp_allocator)
+		width := measure_text_frame(frame, prefix, font_size)
+		if width > px {
+			previous := strings.clone_to_cstring(line[:i], context.temp_allocator)
+			previous_width := measure_text_frame(frame, previous, font_size)
+			if px - previous_width < width - px do return col
+			return col + 1
+		}
+		col += 1
+		i = j
+	}
+	return col
+}
+
 // Delete the rune before `pos` (backspace). Returns the new caret position.
 caret_delete_prev :: proc(sb: ^strings.Builder, pos: int) -> int {
 	if pos <= 0 do return 0
@@ -835,7 +858,7 @@ hit_test_wrapped_frame :: proc(
 	lines := wrap_text_frame(frame, text, max_width, font_size)
 	row := clamp(int((mouse_y - y) / ui_frame_metrics(frame).LINE_HEIGHT), 0, len(lines) - 1)
 	line := text[lines[row].start:lines[row].end]
-	col := caret_pixel_to_col_with(ui_frame_text(frame), line, mouse_x - x, font_size)
+	col := caret_pixel_to_col_frame(frame, line, mouse_x - x, font_size)
 	return lines[row].start + caret_col_to_byte(line, col)
 }
 

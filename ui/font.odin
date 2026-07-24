@@ -215,9 +215,8 @@ measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
 	return measure_text_with(ui_frame_text(frame), text, size)
 }
 
-rune_width_with :: proc(system: ^Text_System, value: rune, size: i32) -> i32 {
-	assert(system != nil)
-	buf: [5]u8
+rune_utf8_encode :: proc(value: rune, buf: ^[5]u8) -> int {
+	assert(buf != nil, "rune_utf8_encode: nil buffer")
 	n := 0
 	codepoint := u32(value)
 	switch {
@@ -235,12 +234,23 @@ rune_width_with :: proc(system: ^Text_System, value: rune, size: i32) -> i32 {
 		); buf[3] = u8(0x80 | (codepoint & 0x3F)); n = 4
 	}
 	buf[n] = 0
+	assert(n > 0 && n < len(buf), "rune_utf8_encode: invalid encoded rune")
+	return n
+}
+
+rune_width_with :: proc(system: ^Text_System, value: rune, size: i32) -> i32 {
+	assert(system != nil)
+	buf: [5]u8
+	rune_utf8_encode(value, &buf)
 	return measure_text_with(system, cstring(&buf[0]), size)
 }
 
 rune_width_frame :: proc(frame: ^Ui_Frame, value: rune, size: i32) -> i32 {
+	assert(frame != nil && frame.open, "rune_width_frame: invalid frame")
 	assert(size > 0, "rune_width_frame: invalid size")
-	return rune_width_with(ui_frame_text(frame), value, size)
+	buf: [5]u8
+	rune_utf8_encode(value, &buf)
+	return measure_text_frame(frame, cstring(&buf[0]), size)
 }
 
 draw_codepoint_with :: proc(

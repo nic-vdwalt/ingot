@@ -128,7 +128,6 @@ input_mouse_to_byte :: proc(
 	// Why assert: a caller passing an empty layout or an inverted visible
 	// band would index vlines out of range below.
 	assert(frame != nil && frame.open, "input_mouse_to_byte: invalid frame")
-	system := ui_frame_text(frame)
 	metrics := ui_frame_metrics(frame)
 	assert(len(vlines) > 0, "input_mouse_to_byte: empty visual lines")
 	assert(vis_start <= vis_end, "input_mouse_to_byte: inverted visible band")
@@ -139,7 +138,7 @@ input_mouse_to_byte :: proc(
 	if row >= len(vlines) do row = len(vlines) - 1
 	vl := vlines[row]
 	line := text[vl.start:vl.end]
-	col := caret_pixel_to_col_with(system, line, i32(mouse.x) - inner_x, metrics.FONT_SIZE_BODY)
+	col := caret_pixel_to_col_frame(frame, line, i32(mouse.x) - inner_x, metrics.FONT_SIZE_BODY)
 	return vl.start + caret_col_to_byte(line, col)
 }
 
@@ -275,6 +274,42 @@ input_visual_lines_memo_with :: proc(
 	}
 	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
 	// Persist copies so the memo survives the temp allocator reset.
+	if memo.owned {
+		delete(memo.val)
+		delete(memo.text)
+	}
+	memo.val = make([]Wrap_Line, len(vlines))
+	copy(memo.val, vlines[:])
+	memo.text = strings.clone(text)
+	memo.width = inner_w
+	memo.font_size = font_size
+	memo.valid = true
+	memo.owned = true
+	return memo.val
+}
+
+input_visual_lines_memo_frame :: proc(
+	frame: ^Ui_Frame,
+	memo: ^Input_Vlines_Memo,
+	text: string,
+	inner_w: i32,
+	font_size: i32,
+) -> []Wrap_Line {
+	assert(frame != nil && frame.open, "input_visual_lines_memo_frame: invalid frame")
+	assert(memo != nil, "input_visual_lines_memo_frame: nil memo")
+	assert(inner_w >= 0 && font_size > 0, "input_visual_lines_memo_frame: invalid dimensions")
+	if memo.valid && inner_w == memo.width && font_size == memo.font_size && text == memo.text {
+		return memo.val
+	}
+	vlines := make([dynamic]Wrap_Line, context.temp_allocator)
+	base := 0
+	for logical in strings.split(text, "\n", context.temp_allocator) {
+		for seg in wrap_compute_frame(frame, logical, inner_w, font_size) {
+			append(&vlines, Wrap_Line{base + seg.start, base + seg.end})
+		}
+		base += len(logical) + 1
+	}
+	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
 	if memo.owned {
 		delete(memo.val)
 		delete(memo.text)
