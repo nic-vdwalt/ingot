@@ -8,7 +8,6 @@
 // focus_scope_cycle when several forms/panes should share one Tab order.
 package ui
 
-import rl "ingot:gfx"
 
 // focus_scope_focused_index returns the registry index of the entry that
 // currently holds focus (its slot equals its id), or -1. Pure.
@@ -57,9 +56,10 @@ focus_scope_apply :: proc(list: ^Sem_Focus_List, current, next: int) {
 // draw-order registration is complete.
 focus_scope_cycle :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "focus_scope_cycle: invalid frame")
-	if !rl.IsKeyPressed(.TAB) do return
+	if !is_key_pressed(frame, .TAB) do return
 	frame.semantics.cycle_requested = true
-	frame.semantics.cycle_backwards = rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+	frame.semantics.cycle_backwards =
+		is_key_down(frame, .LEFT_SHIFT) || is_key_down(frame, .RIGHT_SHIFT)
 }
 
 focus_scope_frame_end :: proc(frame: ^Ui_Frame) {
@@ -71,7 +71,7 @@ focus_scope_frame_end :: proc(frame: ^Ui_Frame) {
 		current := focus_scope_focused_index(list)
 		next := focus_scope_next_index(current, list.count, state.cycle_backwards)
 		focus_scope_apply(list, current, next)
-		rl.RequestRedraw()
+		request_redraw(frame)
 	}
 	state.cycle_requested = false
 	state.cycle_backwards = false

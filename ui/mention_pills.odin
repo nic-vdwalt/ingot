@@ -5,7 +5,7 @@
 package ui
 
 import "core:strings"
-import rl "ingot:gfx"
+
 
 // Sentinel bytes that bracket a mention path in stored message content. These
 // are control chars that never appear in normal paths or prose.
@@ -159,11 +159,11 @@ draw_input_pill_bg_frame :: proc(frame: ^Ui_Frame, x, y, w: i32) {
 	assert(frame != nil && frame.open, "draw_input_pill_bg_frame: invalid frame")
 	metrics := ui_frame_metrics(frame)
 	pad := ui_frame_sc(frame, 3)
-	rect := rl.Rectangle {
+	rect := Rectangle {
 		f32(x - pad),
 		f32(y - ui_frame_sc(frame, 1)),
 		f32(w + pad * 2),
 		f32(metrics.FONT_SIZE_BODY + ui_frame_sc(frame, 4)),
 	}
-	rl.DrawRectangleRounded(rect, 0.5, 6, ui_frame_theme(frame).bg_chip)
+	draw_rectangle_rounded(frame, rect, 0.5, 6, ui_frame_theme(frame).bg_chip)
 }

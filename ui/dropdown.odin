@@ -3,7 +3,6 @@
 // open state reuses the generic context-menu popup (popups.odin).
 package ui
 
-import rl "ingot:gfx"
 
 // Dropdown_State is the caller-owned open/closed state of one dropdown.
 Dropdown_State :: struct {
@@ -92,7 +91,7 @@ dropdown_at :: proc(
 	if selected^ < 0 do selected^ = 0
 	if int(selected^) >= len(items) do selected^ = i32(len(items) - 1)
 
-	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	it := interact(frame, rrect)
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
 	if it.hovered do request_cursor(frame, .POINTING_HAND)
@@ -103,8 +102,8 @@ dropdown_at :: proc(
 	bg := style.bg_input if st.menu.open || it.hovered else style.bg_secondary
 	border :=
 		style.fg_accent if st.menu.open || it.hovered || focus_opt_focused(focus) else style.border_color
-	rl.DrawRectangleRec(rrect, bg)
-	rl.DrawRectangleLinesEx(rrect, 1, border)
+	draw_rectangle_rec(frame, rrect, bg)
+	draw_rectangle_lines_ex(frame, rrect, 1, border)
 	chev: cstring = "\u25BE"
 	chev_w := measure_text_frame(frame, chev, metrics.FONT_SIZE_LABEL)
 	draw_text_frame(

@@ -6,7 +6,7 @@ package ui
 
 import "core:fmt"
 import "core:strings"
-import rl "ingot:gfx"
+
 
 // A selectable UI-scale preset. A value of 0 means "auto" (follow the OS DPI).
 Settings_Scale_Preset :: struct {
@@ -78,11 +78,11 @@ draw_scale_settings_panel :: proc(
 	n := len(presets)
 
 	// Keyboard navigation with wraparound.
-	if rl.IsKeyPressed(.UP) {
+	if is_key_pressed(frame, .UP) {
 		selected^ -= 1
 		if selected^ < 0 do selected^ = n - 1
 	}
-	if rl.IsKeyPressed(.DOWN) {
+	if is_key_pressed(frame, .DOWN) {
 		selected^ += 1
 		if selected^ >= n do selected^ = 0
 	}
@@ -147,7 +147,7 @@ draw_scale_settings_panel :: proc(
 		return pending_result
 	}
 	// Enter — apply the highlighted preset.
-	if rl.IsKeyPressed(.ENTER) {
+	if is_key_pressed(frame, .ENTER) {
 		return Settings_Panel_Result{applied = true, ui_scale = presets[selected^].value}
 	}
 	return {}
@@ -176,14 +176,14 @@ settings_scale_rows :: proc(
 	right_edge := modal_x + modal_w - modal_padding
 	list_y := top
 	for p, idx in presets {
-		item_rect := rl.Rectangle{f32(modal_x + 2), f32(list_y), f32(modal_w - 4), f32(item_h)}
-		mouse := rl.GetMousePosition()
-		hovered := rl.CheckCollisionPointRec(mouse, item_rect)
+		item_rect := Rectangle{f32(modal_x + 2), f32(list_y), f32(modal_w - 4), f32(item_h)}
+		mouse := get_mouse_position(frame)
+		hovered := point_in_rect(mouse, item_rect)
 		if hovered && mouse_moved() {
 			selected^ = idx
 		}
 		if idx == selected^ {
-			rl.DrawRectangleRec(item_rect, style.bg_active)
+			draw_rectangle_rec(frame, item_rect, style.bg_active)
 		}
 		// Current-value marker.
 		text_x := modal_x + modal_padding
@@ -228,7 +228,7 @@ settings_scale_rows :: proc(
 			)
 		}
 		// Mouse click applies this preset.
-		if hovered && rl.IsMouseButtonReleased(.LEFT) {
+		if hovered && is_mouse_button_released(frame, .LEFT) {
 			result = Settings_Panel_Result {
 				applied  = true,
 				ui_scale = p.value,

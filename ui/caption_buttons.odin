@@ -1,7 +1,6 @@
 // LIB-CANDIDATE: this package must import only core:* and ingot:gfx.
 package ui
 
-import rl "ingot:gfx"
 
 // Caption buttons for the custom Windows title bar (min / max-restore / close),
 // drawn Win11-style at the top-right of the header row. Platform-agnostic:
@@ -29,13 +28,13 @@ caption_buttons_width :: proc(frame: ^Ui_Frame) -> i32 {
 
 // Win11 caption button colors.
 @(private = "file")
-CAPTION_HOVER_FILL :: rl.Color{255, 255, 255, 15}
+CAPTION_HOVER_FILL :: Color{255, 255, 255, 15}
 @(private = "file")
-CAPTION_PRESSED_FILL :: rl.Color{255, 255, 255, 10}
+CAPTION_PRESSED_FILL :: Color{255, 255, 255, 10}
 @(private = "file")
-CAPTION_CLOSE_HOVER :: rl.Color{196, 43, 28, 255} // #C42B1C
+CAPTION_CLOSE_HOVER :: Color{196, 43, 28, 255} // #C42B1C
 @(private = "file")
-CAPTION_CLOSE_PRESS :: rl.Color{181, 43, 30, 255}
+CAPTION_CLOSE_PRESS :: Color{181, 43, 30, 255}
 
 // draw_caption_buttons renders the three caption buttons flush to the
 // top-right corner and returns their rects (physical client px) so the
@@ -45,7 +44,7 @@ draw_caption_buttons :: proc(
 	screen_w: i32,
 	st: Caption_Input,
 ) -> (
-	min_r, max_r, close_r: rl.Rectangle,
+	min_r, max_r, close_r: Rectangle,
 ) {
 	assert(frame != nil && frame.open, "draw_caption_buttons: invalid frame")
 	metrics := ui_frame_metrics(frame)
@@ -53,31 +52,31 @@ draw_caption_buttons :: proc(
 	w := f32(metrics.CAPTION_BTN_W)
 	h := f32(metrics.TAB_BAR_HEIGHT)
 
-	close_r = rl.Rectangle{f32(screen_w) - w, 0, w, h}
-	max_r = rl.Rectangle{f32(screen_w) - 2 * w, 0, w, h}
-	min_r = rl.Rectangle{f32(screen_w) - 3 * w, 0, w, h}
+	close_r = Rectangle{f32(screen_w) - w, 0, w, h}
+	max_r = Rectangle{f32(screen_w) - 2 * w, 0, w, h}
+	min_r = Rectangle{f32(screen_w) - 3 * w, 0, w, h}
 
 	// Opaque base under the block: masks any header overflow and keeps the
 	// translucent hover fills consistent on every screen.
-	rl.DrawRectangleRec(rl.Rectangle{min_r.x, 0, 3 * w, h}, style.bg_secondary)
+	draw_rectangle_rec(frame, Rectangle{min_r.x, 0, 3 * w, h}, style.bg_secondary)
 
-	focused := rl.IsWindowFocused()
+	focused := frame_input(frame).window_focused
 	glyph_base := style.fg_primary if focused else style.fg_secondary
 
 	// Hover / pressed backgrounds.
-	draw_btn_bg :: proc(r: rl.Rectangle, btn: Caption_Button, st: Caption_Input) {
+	draw_btn_bg :: proc(r: Rectangle, btn: Caption_Button, st: Caption_Input) {
 		if btn == .Close {
 			if st.pressed == .Close {
-				rl.DrawRectangleRec(r, CAPTION_CLOSE_PRESS)
+				draw_rectangle_rec(frame, r, CAPTION_CLOSE_PRESS)
 			} else if st.hover == .Close {
-				rl.DrawRectangleRec(r, CAPTION_CLOSE_HOVER)
+				draw_rectangle_rec(frame, r, CAPTION_CLOSE_HOVER)
 			}
 			return
 		}
 		if st.pressed == btn {
-			rl.DrawRectangleRec(r, CAPTION_PRESSED_FILL)
+			draw_rectangle_rec(frame, r, CAPTION_PRESSED_FILL)
 		} else if st.hover == btn {
-			rl.DrawRectangleRec(r, CAPTION_HOVER_FILL)
+			draw_rectangle_rec(frame, r, CAPTION_HOVER_FILL)
 		}
 	}
 	draw_btn_bg(min_r, .Minimize, st)
@@ -91,7 +90,7 @@ draw_caption_buttons :: proc(
 	{
 		cx := min_r.x + (w - g) / 2
 		cy := min_r.y + h / 2
-		rl.DrawLineEx(rl.Vector2{cx, cy}, rl.Vector2{cx + g, cy}, stroke, glyph_base)
+		draw_line_ex(frame, Vector2{cx, cy}, Vector2{cx + g, cy}, stroke, glyph_base)
 	}
 
 	// Maximize / Restore.
@@ -102,16 +101,16 @@ draw_caption_buttons :: proc(
 			// Restore: two overlapping panes. Back pane offset up-right; only
 			// its top and right edges are visible behind the front pane.
 			off := ui_frame_scf(frame, 2.0)
-			front := rl.Rectangle{gx, gy + off, g - off, g - off}
-			rl.DrawRectangleLinesEx(front, stroke, glyph_base)
+			front := Rectangle{gx, gy + off, g - off, g - off}
+			draw_rectangle_lines_ex(frame, front, stroke, glyph_base)
 			// Back pane: top edge and right edge.
 			bx0 := gx + off
 			by0 := gy
 			bx1 := gx + g
-			rl.DrawLineEx(rl.Vector2{bx0, by0}, rl.Vector2{bx1, by0}, stroke, glyph_base)
-			rl.DrawLineEx(rl.Vector2{bx1, by0}, rl.Vector2{bx1, by0 + g - off}, stroke, glyph_base)
+			draw_line_ex(frame, Vector2{bx0, by0}, Vector2{bx1, by0}, stroke, glyph_base)
+			draw_line_ex(frame, Vector2{bx1, by0}, Vector2{bx1, by0 + g - off}, stroke, glyph_base)
 		} else {
-			rl.DrawRectangleLinesEx(rl.Rectangle{gx, gy, g, g}, stroke, glyph_base)
+			draw_rectangle_lines_ex(frame, Rectangle{gx, gy, g, g}, stroke, glyph_base)
 		}
 	}
 
@@ -119,12 +118,12 @@ draw_caption_buttons :: proc(
 	{
 		col := glyph_base
 		if st.hover == .Close || st.pressed == .Close {
-			col = rl.Color{255, 255, 255, 255}
+			col = Color{255, 255, 255, 255}
 		}
 		gx := close_r.x + (w - g) / 2
 		gy := close_r.y + (h - g) / 2
-		rl.DrawLineEx(rl.Vector2{gx, gy}, rl.Vector2{gx + g, gy + g}, stroke, col)
-		rl.DrawLineEx(rl.Vector2{gx, gy + g}, rl.Vector2{gx + g, gy}, stroke, col)
+		draw_line_ex(frame, Vector2{gx, gy}, Vector2{gx + g, gy + g}, stroke, col)
+		draw_line_ex(frame, Vector2{gx, gy + g}, Vector2{gx + g, gy}, stroke, col)
 	}
 
 	return
@@ -139,9 +138,9 @@ draw_fullscreen_button :: proc(
 	frame: ^Ui_Frame,
 	screen_w: i32,
 	is_fs: bool,
-	mouse: rl.Vector2,
+	mouse: Vector2,
 ) -> (
-	r: rl.Rectangle,
+	r: Rectangle,
 	hovered: bool,
 ) {
 	assert(frame != nil && frame.open, "draw_fullscreen_button: invalid frame")
@@ -149,16 +148,16 @@ draw_fullscreen_button :: proc(
 	style := ui_frame_theme(frame)
 	w := f32(metrics.CAPTION_BTN_W)
 	h := f32(metrics.TAB_BAR_HEIGHT)
-	r = rl.Rectangle{f32(screen_w) - w, 0, w, h}
-	hovered = rl.CheckCollisionPointRec(mouse, r)
+	r = Rectangle{f32(screen_w) - w, 0, w, h}
+	hovered = point_in_rect(mouse, r)
 
 	// Opaque base + hover fill (matches the Windows caption buttons).
-	rl.DrawRectangleRec(r, style.bg_secondary)
+	draw_rectangle_rec(frame, r, style.bg_secondary)
 	if hovered {
-		rl.DrawRectangleRec(r, CAPTION_HOVER_FILL)
+		draw_rectangle_rec(frame, r, CAPTION_HOVER_FILL)
 	}
 
-	focused := rl.IsWindowFocused()
+	focused := frame_input(frame).window_focused
 	col := style.fg_primary if focused else style.fg_secondary
 
 	stroke := ui_frame_scf(frame, 1.0)
@@ -168,9 +167,9 @@ draw_fullscreen_button :: proc(
 	gy := r.y + (h - g) / 2
 
 	// One L-shaped corner bracket. (sx, sy) point the arms away from the vertex.
-	corner :: proc(cx, cy, sx, sy, arm, stroke: f32, col: rl.Color) {
-		rl.DrawLineEx(rl.Vector2{cx, cy}, rl.Vector2{cx + sx * arm, cy}, stroke, col)
-		rl.DrawLineEx(rl.Vector2{cx, cy}, rl.Vector2{cx, cy + sy * arm}, stroke, col)
+	corner :: proc(cx, cy, sx, sy, arm, stroke: f32, col: Color) {
+		draw_line_ex(frame, Vector2{cx, cy}, Vector2{cx + sx * arm, cy}, stroke, col)
+		draw_line_ex(frame, Vector2{cx, cy}, Vector2{cx, cy + sy * arm}, stroke, col)
 	}
 
 	if is_fs {

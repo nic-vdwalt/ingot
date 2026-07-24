@@ -2,17 +2,17 @@
 package ui
 
 import "core:testing"
-import rl "ingot:gfx"
+
 
 @(test)
 contrast_ratio_known_values :: proc(t: ^testing.T) {
-	black := rl.Color{0, 0, 0, 255}
-	white := rl.Color{255, 255, 255, 255}
+	black := Color{0, 0, 0, 255}
+	white := Color{255, 255, 255, 255}
 	// Black on white is the WCAG maximum, 21:1; identical colors are 1:1.
 	testing.expect(t, abs(contrast_ratio(black, white) - 21.0) < 0.01)
 	testing.expect(t, abs(contrast_ratio(white, white) - 1.0) < 0.001)
 	// Symmetry: argument order must not matter.
-	grey := rl.Color{119, 119, 119, 255}
+	grey := Color{119, 119, 119, 255}
 	testing.expect_value(t, contrast_ratio(grey, white), contrast_ratio(white, grey))
 	// #777777 on white is a classic near-AA-threshold pair (~4.48:1).
 	r := contrast_ratio(grey, white)

@@ -10,7 +10,7 @@
 package ui
 
 import "core:math"
-import rl "ingot:gfx"
+
 
 // GLASS_ENABLED is true on macOS, where window_style_darwin.odin installs an
 // NSVisualEffectView vibrancy backdrop behind the GL view. Large surface fills
@@ -24,99 +24,99 @@ Theme :: struct {
 	// Glass surfaces. bg_app/bg_chat/bg_panel are the *active* values drawn
 	// each frame; the windowed/fullscreen variants are the sources that
 	// set_glass_fullscreen() copies from (identical on non-glass platforms).
-	bg_app:                     rl.Color,
-	bg_chat:                    rl.Color,
-	bg_panel:                   rl.Color,
-	bg_app_windowed:            rl.Color,
-	bg_chat_windowed:           rl.Color,
-	bg_panel_windowed:          rl.Color,
-	bg_app_fullscreen:          rl.Color,
-	bg_chat_fullscreen:         rl.Color,
-	bg_panel_fullscreen:        rl.Color,
+	bg_app:                     Color,
+	bg_chat:                    Color,
+	bg_panel:                   Color,
+	bg_app_windowed:            Color,
+	bg_chat_windowed:           Color,
+	bg_panel_windowed:          Color,
+	bg_app_fullscreen:          Color,
+	bg_chat_fullscreen:         Color,
+	bg_panel_fullscreen:        Color,
 
 	// Core palette.
-	bg_color:                   rl.Color, // App background
-	bg_secondary:               rl.Color, // Slightly offset from background
-	bg_active:                  rl.Color, // Active tab/selection
-	bg_hover:                   rl.Color, // Hover state
-	bg_input:                   rl.Color, // Input field background
-	bg_code:                    rl.Color, // Code block background
-	fg_primary:                 rl.Color, // Primary text
-	fg_secondary:               rl.Color, // Secondary/muted text
-	fg_accent:                  rl.Color, // Accent (links, active)
-	fg_user:                    rl.Color, // User message
-	fg_assistant:               rl.Color, // Assistant message
-	fg_error:                   rl.Color, // Error text
-	fg_success:                 rl.Color, // Success text
-	fg_tool:                    rl.Color, // Tool activity
-	fg_diff_remove:             rl.Color, // Diff: removed lines
-	fg_diff_add:                rl.Color, // Diff: added lines
-	bg_diff_remove:             rl.Color, // Diff: removed cell background
-	bg_diff_add:                rl.Color, // Diff: added cell background
-	fg_diff_gutter:             rl.Color, // Diff: line-number gutter
-	border_color:               rl.Color, // Borders
-	border_subtle:              rl.Color, // Hairline borders (cards, dividers)
-	badge_color:                rl.Color, // Unread badge
-	merge_link_color:           rl.Color, // Joined/merged tab-group link
-	button_bg:                  rl.Color, // Button background
-	button_hover:               rl.Color, // Button hover
-	button_text:                rl.Color, // Button text
-	bg_popup:                   rl.Color, // Command menu popup background
-	fg_disabled:                rl.Color, // Disabled command text
-	bg_plan_bar:                rl.Color, // Plan mode bar background
-	fg_plan:                    rl.Color, // Plan mode text/accent
-	fg_planning:                rl.Color, // Planning mode accent
-	bg_selection:               rl.Color, // Text selection highlight
-	bg_plan_title:              rl.Color, // Plan sidebar title card background
+	bg_color:                   Color, // App background
+	bg_secondary:               Color, // Slightly offset from background
+	bg_active:                  Color, // Active tab/selection
+	bg_hover:                   Color, // Hover state
+	bg_input:                   Color, // Input field background
+	bg_code:                    Color, // Code block background
+	fg_primary:                 Color, // Primary text
+	fg_secondary:               Color, // Secondary/muted text
+	fg_accent:                  Color, // Accent (links, active)
+	fg_user:                    Color, // User message
+	fg_assistant:               Color, // Assistant message
+	fg_error:                   Color, // Error text
+	fg_success:                 Color, // Success text
+	fg_tool:                    Color, // Tool activity
+	fg_diff_remove:             Color, // Diff: removed lines
+	fg_diff_add:                Color, // Diff: added lines
+	bg_diff_remove:             Color, // Diff: removed cell background
+	bg_diff_add:                Color, // Diff: added cell background
+	fg_diff_gutter:             Color, // Diff: line-number gutter
+	border_color:               Color, // Borders
+	border_subtle:              Color, // Hairline borders (cards, dividers)
+	badge_color:                Color, // Unread badge
+	merge_link_color:           Color, // Joined/merged tab-group link
+	button_bg:                  Color, // Button background
+	button_hover:               Color, // Button hover
+	button_text:                Color, // Button text
+	bg_popup:                   Color, // Command menu popup background
+	fg_disabled:                Color, // Disabled command text
+	bg_plan_bar:                Color, // Plan mode bar background
+	fg_plan:                    Color, // Plan mode text/accent
+	fg_planning:                Color, // Planning mode accent
+	bg_selection:               Color, // Text selection highlight
+	bg_plan_title:              Color, // Plan sidebar title card background
 
 	// Tool card styling.
-	bg_tool_card:               rl.Color, // Card background
-	bg_tool_card_hover:         rl.Color, // Card hover state
-	fg_heading:                 rl.Color, // Heading text
-	fg_bullet:                  rl.Color, // Bullet point dot
-	fg_bold:                    rl.Color, // Bold text
-	fg_code_inline:             rl.Color, // Inline `code` text (non-file)
-	bg_table_header:            rl.Color, // Table header row background
+	bg_tool_card:               Color, // Card background
+	bg_tool_card_hover:         Color, // Card hover state
+	fg_heading:                 Color, // Heading text
+	fg_bullet:                  Color, // Bullet point dot
+	fg_bold:                    Color, // Bold text
+	fg_code_inline:             Color, // Inline `code` text (non-file)
+	bg_table_header:            Color, // Table header row background
 
 	// Agent-busy wave bar.
-	wave_color_a:               rl.Color,
-	wave_color_b:               rl.Color,
+	wave_color_a:               Color,
+	wave_color_b:               Color,
 
 	// Drag-and-drop drop zone.
-	drop_zone_bg:               rl.Color,
-	drop_zone_border:           rl.Color,
+	drop_zone_bg:               Color,
+	drop_zone_border:           Color,
 
 	// Debug watch sidebar.
-	fg_debug:                   rl.Color, // Accent for debug panel
-	bg_debug_title:             rl.Color, // Debug title card background
-	fg_debug_changed:           rl.Color, // Changed values
-	fg_debug_annotation:        rl.Color, // Annotations
+	fg_debug:                   Color, // Accent for debug panel
+	bg_debug_title:             Color, // Debug title card background
+	fg_debug_changed:           Color, // Changed values
+	fg_debug_annotation:        Color, // Annotations
 
 	// Attachment chips.
-	bg_chip:                    rl.Color,
-	bg_chip_hover:              rl.Color,
+	bg_chip:                    Color,
+	bg_chip_hover:              Color,
 
 	// Flat chat message styling.
-	bg_user_card:               rl.Color, // Compact user prompt card
-	border_user_card:           rl.Color, // 1px card border
-	bg_band_error:              rl.Color, // Error message tint band
-	fg_label:                   rl.Color, // Small uppercase role/section labels
+	bg_user_card:               Color, // Compact user prompt card
+	border_user_card:           Color, // 1px card border
+	bg_band_error:              Color, // Error message tint band
+	fg_label:                   Color, // Small uppercase role/section labels
 
 	// Buttons (danger / disabled / pressed) and misc.
-	button_danger_bg:           rl.Color,
-	button_danger_hover:        rl.Color,
-	button_danger_fg:           rl.Color,
-	button_disabled_bg:         rl.Color,
-	button_pressed:             rl.Color,
-	fg_accent_light:            rl.Color, // Lighter accent for text on dark
-	fg_muted_dim:               rl.Color, // Dimmed text (muted users, disabled)
-	modal_dim:                  rl.Color, // Backdrop dim behind modals
-	focus_ring:                 rl.Color, // Keyboard focus-visible ring around widgets
+	button_danger_bg:           Color,
+	button_danger_hover:        Color,
+	button_danger_fg:           Color,
+	button_disabled_bg:         Color,
+	button_pressed:             Color,
+	fg_accent_light:            Color, // Lighter accent for text on dark
+	fg_muted_dim:               Color, // Dimmed text (muted users, disabled)
+	modal_dim:                  Color, // Backdrop dim behind modals
+	focus_ring:                 Color, // Keyboard focus-visible ring around widgets
 
 	// Depth & flare (additive fields; zero alpha disables the effect).
-	shadow_color:               rl.Color, // Soft drop-shadow tint under cards
-	button_primary_grad_top:    rl.Color, // Gloss sheen on primary buttons (top)
-	button_primary_grad_bottom: rl.Color, // Gloss fade-out color (bottom)
+	shadow_color:               Color, // Soft drop-shadow tint under cards
+	button_primary_grad_top:    Color, // Gloss sheen on primary buttons (top)
+	button_primary_grad_bottom: Color, // Gloss fade-out color (bottom)
 
 	// Accessibility. reduced_motion snaps animations (hover ease, caret
 	// blink) to their final state for vestibular/motion-sensitive users.
@@ -129,54 +129,54 @@ Theme :: struct {
 // non-glass platforms both variants equal the opaque surface colors.
 when GLASS_ENABLED {
 	@(private = "file")
-	DARK_BG_APP_WINDOWED :: rl.Color{30, 30, 30, 162}
+	DARK_BG_APP_WINDOWED :: Color{30, 30, 30, 162}
 	@(private = "file")
-	DARK_BG_CHAT_WINDOWED :: rl.Color{28, 28, 30, 207}
+	DARK_BG_CHAT_WINDOWED :: Color{28, 28, 30, 207}
 	@(private = "file")
-	DARK_BG_PANEL_WINDOWED :: rl.Color{36, 36, 40, 212}
+	DARK_BG_PANEL_WINDOWED :: Color{36, 36, 40, 212}
 	@(private = "file")
-	DARK_BG_APP_FULLSCREEN :: rl.Color{30, 30, 30, 245}
+	DARK_BG_APP_FULLSCREEN :: Color{30, 30, 30, 245}
 	@(private = "file")
-	DARK_BG_CHAT_FULLSCREEN :: rl.Color{28, 28, 30, 250}
+	DARK_BG_CHAT_FULLSCREEN :: Color{28, 28, 30, 250}
 	@(private = "file")
-	DARK_BG_PANEL_FULLSCREEN :: rl.Color{36, 36, 40, 250}
+	DARK_BG_PANEL_FULLSCREEN :: Color{36, 36, 40, 250}
 	@(private = "file")
-	LIGHT_BG_APP_WINDOWED :: rl.Color{245, 245, 247, 170}
+	LIGHT_BG_APP_WINDOWED :: Color{245, 245, 247, 170}
 	@(private = "file")
-	LIGHT_BG_CHAT_WINDOWED :: rl.Color{242, 242, 246, 210}
+	LIGHT_BG_CHAT_WINDOWED :: Color{242, 242, 246, 210}
 	@(private = "file")
-	LIGHT_BG_PANEL_WINDOWED :: rl.Color{236, 236, 242, 215}
+	LIGHT_BG_PANEL_WINDOWED :: Color{236, 236, 242, 215}
 	@(private = "file")
-	LIGHT_BG_APP_FULLSCREEN :: rl.Color{245, 245, 247, 247}
+	LIGHT_BG_APP_FULLSCREEN :: Color{245, 245, 247, 247}
 	@(private = "file")
-	LIGHT_BG_CHAT_FULLSCREEN :: rl.Color{242, 242, 246, 250}
+	LIGHT_BG_CHAT_FULLSCREEN :: Color{242, 242, 246, 250}
 	@(private = "file")
-	LIGHT_BG_PANEL_FULLSCREEN :: rl.Color{236, 236, 242, 250}
+	LIGHT_BG_PANEL_FULLSCREEN :: Color{236, 236, 242, 250}
 } else {
 	@(private = "file")
-	DARK_BG_APP_WINDOWED :: rl.Color{30, 30, 30, 255}
+	DARK_BG_APP_WINDOWED :: Color{30, 30, 30, 255}
 	@(private = "file")
-	DARK_BG_CHAT_WINDOWED :: rl.Color{30, 30, 30, 255}
+	DARK_BG_CHAT_WINDOWED :: Color{30, 30, 30, 255}
 	@(private = "file")
-	DARK_BG_PANEL_WINDOWED :: rl.Color{40, 40, 40, 255}
+	DARK_BG_PANEL_WINDOWED :: Color{40, 40, 40, 255}
 	@(private = "file")
-	DARK_BG_APP_FULLSCREEN :: rl.Color{30, 30, 30, 255}
+	DARK_BG_APP_FULLSCREEN :: Color{30, 30, 30, 255}
 	@(private = "file")
-	DARK_BG_CHAT_FULLSCREEN :: rl.Color{30, 30, 30, 255}
+	DARK_BG_CHAT_FULLSCREEN :: Color{30, 30, 30, 255}
 	@(private = "file")
-	DARK_BG_PANEL_FULLSCREEN :: rl.Color{40, 40, 40, 255}
+	DARK_BG_PANEL_FULLSCREEN :: Color{40, 40, 40, 255}
 	@(private = "file")
-	LIGHT_BG_APP_WINDOWED :: rl.Color{245, 245, 247, 255}
+	LIGHT_BG_APP_WINDOWED :: Color{245, 245, 247, 255}
 	@(private = "file")
-	LIGHT_BG_CHAT_WINDOWED :: rl.Color{245, 245, 247, 255}
+	LIGHT_BG_CHAT_WINDOWED :: Color{245, 245, 247, 255}
 	@(private = "file")
-	LIGHT_BG_PANEL_WINDOWED :: rl.Color{236, 236, 242, 255}
+	LIGHT_BG_PANEL_WINDOWED :: Color{236, 236, 242, 255}
 	@(private = "file")
-	LIGHT_BG_APP_FULLSCREEN :: rl.Color{245, 245, 247, 255}
+	LIGHT_BG_APP_FULLSCREEN :: Color{245, 245, 247, 255}
 	@(private = "file")
-	LIGHT_BG_CHAT_FULLSCREEN :: rl.Color{245, 245, 247, 255}
+	LIGHT_BG_CHAT_FULLSCREEN :: Color{245, 245, 247, 255}
 	@(private = "file")
-	LIGHT_BG_PANEL_FULLSCREEN :: rl.Color{236, 236, 242, 255}
+	LIGHT_BG_PANEL_FULLSCREEN :: Color{236, 236, 242, 255}
 }
 
 // THEME_DARK preserves the original compile-time palette values exactly.
@@ -190,72 +190,72 @@ THEME_DARK :: Theme {
 	bg_app_fullscreen          = DARK_BG_APP_FULLSCREEN,
 	bg_chat_fullscreen         = DARK_BG_CHAT_FULLSCREEN,
 	bg_panel_fullscreen        = DARK_BG_PANEL_FULLSCREEN,
-	bg_color                   = rl.Color{30, 30, 30, 255},
-	bg_secondary               = rl.Color{40, 40, 40, 255},
-	bg_active                  = rl.Color{50, 50, 60, 255},
-	bg_hover                   = rl.Color{55, 55, 65, 255},
-	bg_input                   = rl.Color{45, 45, 50, 255},
-	bg_code                    = rl.Color{35, 35, 40, 255},
-	fg_primary                 = rl.Color{220, 220, 220, 255},
-	fg_secondary               = rl.Color{160, 160, 170, 255},
-	fg_accent                  = rl.Color{100, 160, 255, 255},
-	fg_user                    = rl.Color{180, 200, 255, 255},
-	fg_assistant               = rl.Color{200, 220, 200, 255},
-	fg_error                   = rl.Color{255, 120, 120, 255},
-	fg_success                 = rl.Color{120, 220, 120, 255},
-	fg_tool                    = rl.Color{200, 180, 120, 255},
-	fg_diff_remove             = rl.Color{255, 140, 140, 255},
-	fg_diff_add                = rl.Color{140, 230, 140, 255},
-	bg_diff_remove             = rl.Color{60, 30, 30, 255},
-	bg_diff_add                = rl.Color{28, 50, 30, 255},
-	fg_diff_gutter             = rl.Color{110, 110, 120, 255},
-	border_color               = rl.Color{70, 70, 80, 255},
-	border_subtle              = rl.Color{52, 52, 60, 255},
-	badge_color                = rl.Color{255, 100, 100, 255},
-	merge_link_color           = rl.Color{70, 110, 170, 255},
-	button_bg                  = rl.Color{60, 100, 180, 255},
-	button_hover               = rl.Color{70, 120, 200, 255},
-	button_text                = rl.Color{255, 255, 255, 255},
-	bg_popup                   = rl.Color{35, 35, 42, 255},
-	fg_disabled                = rl.Color{90, 90, 100, 255},
-	bg_plan_bar                = rl.Color{60, 50, 20, 255},
-	fg_plan                    = rl.Color{255, 200, 80, 255},
-	fg_planning                = rl.Color{110, 170, 240, 255},
-	bg_selection               = rl.Color{60, 80, 130, 255},
-	bg_plan_title              = rl.Color{48, 42, 24, 255},
-	bg_tool_card               = rl.Color{38, 38, 45, 255},
-	bg_tool_card_hover         = rl.Color{45, 45, 55, 255},
-	fg_heading                 = rl.Color{230, 230, 240, 255},
-	fg_bullet                  = rl.Color{140, 160, 200, 255},
-	fg_bold                    = rl.Color{255, 255, 255, 255},
-	fg_code_inline             = rl.Color{214, 182, 150, 255},
-	bg_table_header            = rl.Color{45, 45, 52, 255},
-	wave_color_a               = rl.Color{30, 95, 138, 255},
-	wave_color_b               = rl.Color{126, 206, 240, 255},
-	drop_zone_bg               = rl.Color{45, 55, 75, 235},
-	drop_zone_border           = rl.Color{100, 160, 255, 255},
-	fg_debug                   = rl.Color{180, 140, 255, 255},
-	bg_debug_title             = rl.Color{40, 32, 52, 255},
-	fg_debug_changed           = rl.Color{255, 180, 80, 255},
-	fg_debug_annotation        = rl.Color{140, 160, 180, 255},
-	bg_chip                    = rl.Color{55, 60, 72, 255},
-	bg_chip_hover              = rl.Color{70, 76, 92, 255},
-	bg_user_card               = rl.Color{44, 52, 74, 255},
-	border_user_card           = rl.Color{78, 96, 140, 255},
-	bg_band_error              = rl.Color{52, 34, 34, 255},
-	fg_label                   = rl.Color{130, 135, 150, 255},
-	button_danger_bg           = rl.Color{62, 36, 36, 255},
-	button_danger_hover        = rl.Color{80, 35, 35, 255},
-	button_danger_fg           = rl.Color{255, 180, 180, 255},
-	button_disabled_bg         = rl.Color{47, 49, 54, 255},
-	button_pressed             = rl.Color{58, 67, 160, 255},
-	fg_accent_light            = rl.Color{129, 140, 248, 255},
-	fg_muted_dim               = rl.Color{110, 115, 122, 255},
-	modal_dim                  = rl.Color{0, 0, 0, 140},
-	focus_ring                 = rl.Color{129, 160, 255, 220},
-	shadow_color               = rl.Color{0, 0, 0, 120},
-	button_primary_grad_top    = rl.Color{255, 255, 255, 20},
-	button_primary_grad_bottom = rl.Color{0, 0, 0, 0},
+	bg_color                   = Color{30, 30, 30, 255},
+	bg_secondary               = Color{40, 40, 40, 255},
+	bg_active                  = Color{50, 50, 60, 255},
+	bg_hover                   = Color{55, 55, 65, 255},
+	bg_input                   = Color{45, 45, 50, 255},
+	bg_code                    = Color{35, 35, 40, 255},
+	fg_primary                 = Color{220, 220, 220, 255},
+	fg_secondary               = Color{160, 160, 170, 255},
+	fg_accent                  = Color{100, 160, 255, 255},
+	fg_user                    = Color{180, 200, 255, 255},
+	fg_assistant               = Color{200, 220, 200, 255},
+	fg_error                   = Color{255, 120, 120, 255},
+	fg_success                 = Color{120, 220, 120, 255},
+	fg_tool                    = Color{200, 180, 120, 255},
+	fg_diff_remove             = Color{255, 140, 140, 255},
+	fg_diff_add                = Color{140, 230, 140, 255},
+	bg_diff_remove             = Color{60, 30, 30, 255},
+	bg_diff_add                = Color{28, 50, 30, 255},
+	fg_diff_gutter             = Color{110, 110, 120, 255},
+	border_color               = Color{70, 70, 80, 255},
+	border_subtle              = Color{52, 52, 60, 255},
+	badge_color                = Color{255, 100, 100, 255},
+	merge_link_color           = Color{70, 110, 170, 255},
+	button_bg                  = Color{60, 100, 180, 255},
+	button_hover               = Color{70, 120, 200, 255},
+	button_text                = Color{255, 255, 255, 255},
+	bg_popup                   = Color{35, 35, 42, 255},
+	fg_disabled                = Color{90, 90, 100, 255},
+	bg_plan_bar                = Color{60, 50, 20, 255},
+	fg_plan                    = Color{255, 200, 80, 255},
+	fg_planning                = Color{110, 170, 240, 255},
+	bg_selection               = Color{60, 80, 130, 255},
+	bg_plan_title              = Color{48, 42, 24, 255},
+	bg_tool_card               = Color{38, 38, 45, 255},
+	bg_tool_card_hover         = Color{45, 45, 55, 255},
+	fg_heading                 = Color{230, 230, 240, 255},
+	fg_bullet                  = Color{140, 160, 200, 255},
+	fg_bold                    = Color{255, 255, 255, 255},
+	fg_code_inline             = Color{214, 182, 150, 255},
+	bg_table_header            = Color{45, 45, 52, 255},
+	wave_color_a               = Color{30, 95, 138, 255},
+	wave_color_b               = Color{126, 206, 240, 255},
+	drop_zone_bg               = Color{45, 55, 75, 235},
+	drop_zone_border           = Color{100, 160, 255, 255},
+	fg_debug                   = Color{180, 140, 255, 255},
+	bg_debug_title             = Color{40, 32, 52, 255},
+	fg_debug_changed           = Color{255, 180, 80, 255},
+	fg_debug_annotation        = Color{140, 160, 180, 255},
+	bg_chip                    = Color{55, 60, 72, 255},
+	bg_chip_hover              = Color{70, 76, 92, 255},
+	bg_user_card               = Color{44, 52, 74, 255},
+	border_user_card           = Color{78, 96, 140, 255},
+	bg_band_error              = Color{52, 34, 34, 255},
+	fg_label                   = Color{130, 135, 150, 255},
+	button_danger_bg           = Color{62, 36, 36, 255},
+	button_danger_hover        = Color{80, 35, 35, 255},
+	button_danger_fg           = Color{255, 180, 180, 255},
+	button_disabled_bg         = Color{47, 49, 54, 255},
+	button_pressed             = Color{58, 67, 160, 255},
+	fg_accent_light            = Color{129, 140, 248, 255},
+	fg_muted_dim               = Color{110, 115, 122, 255},
+	modal_dim                  = Color{0, 0, 0, 140},
+	focus_ring                 = Color{129, 160, 255, 220},
+	shadow_color               = Color{0, 0, 0, 120},
+	button_primary_grad_top    = Color{255, 255, 255, 20},
+	button_primary_grad_bottom = Color{0, 0, 0, 0},
 }
 
 // THEME_LIGHT is a light counterpart tuned for equivalent contrast roles.
@@ -269,72 +269,72 @@ THEME_LIGHT :: Theme {
 	bg_app_fullscreen          = LIGHT_BG_APP_FULLSCREEN,
 	bg_chat_fullscreen         = LIGHT_BG_CHAT_FULLSCREEN,
 	bg_panel_fullscreen        = LIGHT_BG_PANEL_FULLSCREEN,
-	bg_color                   = rl.Color{245, 245, 247, 255},
-	bg_secondary               = rl.Color{235, 235, 238, 255},
-	bg_active                  = rl.Color{220, 224, 235, 255},
-	bg_hover                   = rl.Color{214, 218, 228, 255},
-	bg_input                   = rl.Color{255, 255, 255, 255},
-	bg_code                    = rl.Color{238, 238, 242, 255},
-	fg_primary                 = rl.Color{35, 35, 40, 255},
-	fg_secondary               = rl.Color{95, 95, 105, 255},
-	fg_accent                  = rl.Color{20, 90, 200, 255},
-	fg_user                    = rl.Color{40, 70, 140, 255},
-	fg_assistant               = rl.Color{40, 90, 50, 255},
-	fg_error                   = rl.Color{190, 40, 40, 255},
-	fg_success                 = rl.Color{30, 140, 60, 255},
-	fg_tool                    = rl.Color{140, 110, 40, 255},
-	fg_diff_remove             = rl.Color{180, 40, 40, 255},
-	fg_diff_add                = rl.Color{30, 130, 50, 255},
-	bg_diff_remove             = rl.Color{250, 225, 225, 255},
-	bg_diff_add                = rl.Color{223, 245, 225, 255},
-	fg_diff_gutter             = rl.Color{140, 140, 150, 255},
-	border_color               = rl.Color{200, 200, 210, 255},
-	border_subtle              = rl.Color{222, 222, 228, 255},
-	badge_color                = rl.Color{220, 60, 60, 255},
-	merge_link_color           = rl.Color{80, 120, 180, 255},
-	button_bg                  = rl.Color{55, 110, 210, 255},
-	button_hover               = rl.Color{45, 95, 190, 255},
-	button_text                = rl.Color{255, 255, 255, 255},
-	bg_popup                   = rl.Color{250, 250, 252, 255},
-	fg_disabled                = rl.Color{170, 170, 180, 255},
-	bg_plan_bar                = rl.Color{250, 238, 205, 255},
-	fg_plan                    = rl.Color{150, 110, 10, 255},
-	fg_planning                = rl.Color{40, 110, 200, 255},
-	bg_selection               = rl.Color{180, 205, 245, 255},
-	bg_plan_title              = rl.Color{247, 240, 215, 255},
-	bg_tool_card               = rl.Color{240, 240, 244, 255},
-	bg_tool_card_hover         = rl.Color{232, 232, 238, 255},
-	fg_heading                 = rl.Color{25, 25, 35, 255},
-	fg_bullet                  = rl.Color{80, 110, 170, 255},
-	fg_bold                    = rl.Color{0, 0, 0, 255},
-	fg_code_inline             = rl.Color{150, 90, 30, 255},
-	bg_table_header            = rl.Color{232, 232, 238, 255},
-	wave_color_a               = rl.Color{30, 95, 138, 255},
-	wave_color_b               = rl.Color{90, 170, 220, 255},
-	drop_zone_bg               = rl.Color{215, 228, 248, 235},
-	drop_zone_border           = rl.Color{20, 90, 200, 255},
-	fg_debug                   = rl.Color{120, 70, 200, 255},
-	bg_debug_title             = rl.Color{238, 230, 248, 255},
-	fg_debug_changed           = rl.Color{190, 120, 20, 255},
-	fg_debug_annotation        = rl.Color{110, 130, 150, 255},
-	bg_chip                    = rl.Color{225, 229, 238, 255},
-	bg_chip_hover              = rl.Color{212, 218, 232, 255},
-	bg_user_card               = rl.Color{225, 232, 248, 255},
-	border_user_card           = rl.Color{170, 190, 225, 255},
-	bg_band_error              = rl.Color{250, 228, 228, 255},
-	fg_label                   = rl.Color{110, 115, 130, 255},
-	button_danger_bg           = rl.Color{235, 205, 205, 255},
-	button_danger_hover        = rl.Color{225, 185, 185, 255},
-	button_danger_fg           = rl.Color{160, 40, 40, 255},
-	button_disabled_bg         = rl.Color{228, 228, 232, 255},
-	button_pressed             = rl.Color{120, 135, 235, 255},
-	fg_accent_light            = rl.Color{80, 95, 220, 255},
-	fg_muted_dim               = rl.Color{150, 155, 165, 255},
-	modal_dim                  = rl.Color{0, 0, 0, 90},
-	focus_ring                 = rl.Color{30, 100, 220, 220},
-	shadow_color               = rl.Color{40, 45, 70, 70},
-	button_primary_grad_top    = rl.Color{255, 255, 255, 55},
-	button_primary_grad_bottom = rl.Color{0, 0, 0, 0},
+	bg_color                   = Color{245, 245, 247, 255},
+	bg_secondary               = Color{235, 235, 238, 255},
+	bg_active                  = Color{220, 224, 235, 255},
+	bg_hover                   = Color{214, 218, 228, 255},
+	bg_input                   = Color{255, 255, 255, 255},
+	bg_code                    = Color{238, 238, 242, 255},
+	fg_primary                 = Color{35, 35, 40, 255},
+	fg_secondary               = Color{95, 95, 105, 255},
+	fg_accent                  = Color{20, 90, 200, 255},
+	fg_user                    = Color{40, 70, 140, 255},
+	fg_assistant               = Color{40, 90, 50, 255},
+	fg_error                   = Color{190, 40, 40, 255},
+	fg_success                 = Color{30, 140, 60, 255},
+	fg_tool                    = Color{140, 110, 40, 255},
+	fg_diff_remove             = Color{180, 40, 40, 255},
+	fg_diff_add                = Color{30, 130, 50, 255},
+	bg_diff_remove             = Color{250, 225, 225, 255},
+	bg_diff_add                = Color{223, 245, 225, 255},
+	fg_diff_gutter             = Color{140, 140, 150, 255},
+	border_color               = Color{200, 200, 210, 255},
+	border_subtle              = Color{222, 222, 228, 255},
+	badge_color                = Color{220, 60, 60, 255},
+	merge_link_color           = Color{80, 120, 180, 255},
+	button_bg                  = Color{55, 110, 210, 255},
+	button_hover               = Color{45, 95, 190, 255},
+	button_text                = Color{255, 255, 255, 255},
+	bg_popup                   = Color{250, 250, 252, 255},
+	fg_disabled                = Color{170, 170, 180, 255},
+	bg_plan_bar                = Color{250, 238, 205, 255},
+	fg_plan                    = Color{150, 110, 10, 255},
+	fg_planning                = Color{40, 110, 200, 255},
+	bg_selection               = Color{180, 205, 245, 255},
+	bg_plan_title              = Color{247, 240, 215, 255},
+	bg_tool_card               = Color{240, 240, 244, 255},
+	bg_tool_card_hover         = Color{232, 232, 238, 255},
+	fg_heading                 = Color{25, 25, 35, 255},
+	fg_bullet                  = Color{80, 110, 170, 255},
+	fg_bold                    = Color{0, 0, 0, 255},
+	fg_code_inline             = Color{150, 90, 30, 255},
+	bg_table_header            = Color{232, 232, 238, 255},
+	wave_color_a               = Color{30, 95, 138, 255},
+	wave_color_b               = Color{90, 170, 220, 255},
+	drop_zone_bg               = Color{215, 228, 248, 235},
+	drop_zone_border           = Color{20, 90, 200, 255},
+	fg_debug                   = Color{120, 70, 200, 255},
+	bg_debug_title             = Color{238, 230, 248, 255},
+	fg_debug_changed           = Color{190, 120, 20, 255},
+	fg_debug_annotation        = Color{110, 130, 150, 255},
+	bg_chip                    = Color{225, 229, 238, 255},
+	bg_chip_hover              = Color{212, 218, 232, 255},
+	bg_user_card               = Color{225, 232, 248, 255},
+	border_user_card           = Color{170, 190, 225, 255},
+	bg_band_error              = Color{250, 228, 228, 255},
+	fg_label                   = Color{110, 115, 130, 255},
+	button_danger_bg           = Color{235, 205, 205, 255},
+	button_danger_hover        = Color{225, 185, 185, 255},
+	button_danger_fg           = Color{160, 40, 40, 255},
+	button_disabled_bg         = Color{228, 228, 232, 255},
+	button_pressed             = Color{120, 135, 235, 255},
+	fg_accent_light            = Color{80, 95, 220, 255},
+	fg_muted_dim               = Color{150, 155, 165, 255},
+	modal_dim                  = Color{0, 0, 0, 90},
+	focus_ring                 = Color{30, 100, 220, 220},
+	shadow_color               = Color{40, 45, 70, 70},
+	button_primary_grad_top    = Color{255, 255, 255, 55},
+	button_primary_grad_bottom = Color{0, 0, 0, 0},
 }
 
 // THEME_HIGH_CONTRAST is a maximum-legibility palette: opaque black
@@ -342,88 +342,88 @@ THEME_LIGHT :: Theme {
 // translucency or glass. Every text/background role pair clears WCAG AA by a
 // wide margin; the focus ring is fully opaque.
 THEME_HIGH_CONTRAST :: Theme {
-	bg_app                     = rl.Color{0, 0, 0, 255},
-	bg_chat                    = rl.Color{0, 0, 0, 255},
-	bg_panel                   = rl.Color{0, 0, 0, 255},
-	bg_app_windowed            = rl.Color{0, 0, 0, 255},
-	bg_chat_windowed           = rl.Color{0, 0, 0, 255},
-	bg_panel_windowed          = rl.Color{0, 0, 0, 255},
-	bg_app_fullscreen          = rl.Color{0, 0, 0, 255},
-	bg_chat_fullscreen         = rl.Color{0, 0, 0, 255},
-	bg_panel_fullscreen        = rl.Color{0, 0, 0, 255},
-	bg_color                   = rl.Color{0, 0, 0, 255},
-	bg_secondary               = rl.Color{15, 15, 15, 255},
-	bg_active                  = rl.Color{60, 60, 60, 255},
-	bg_hover                   = rl.Color{40, 40, 40, 255},
-	bg_input                   = rl.Color{0, 0, 0, 255},
-	bg_code                    = rl.Color{15, 15, 15, 255},
-	fg_primary                 = rl.Color{255, 255, 255, 255},
-	fg_secondary               = rl.Color{255, 255, 255, 255},
-	fg_accent                  = rl.Color{255, 215, 0, 255},
-	fg_user                    = rl.Color{255, 255, 255, 255},
-	fg_assistant               = rl.Color{255, 255, 255, 255},
-	fg_error                   = rl.Color{255, 100, 100, 255},
-	fg_success                 = rl.Color{100, 255, 100, 255},
-	fg_tool                    = rl.Color{255, 215, 0, 255},
-	fg_diff_remove             = rl.Color{255, 130, 130, 255},
-	fg_diff_add                = rl.Color{130, 255, 130, 255},
-	bg_diff_remove             = rl.Color{60, 0, 0, 255},
-	bg_diff_add                = rl.Color{0, 50, 0, 255},
-	fg_diff_gutter             = rl.Color{255, 255, 255, 255},
-	border_color               = rl.Color{255, 255, 255, 255},
-	border_subtle              = rl.Color{200, 200, 200, 255},
-	badge_color                = rl.Color{255, 100, 100, 255},
-	merge_link_color           = rl.Color{255, 215, 0, 255},
-	button_bg                  = rl.Color{255, 215, 0, 255},
-	button_hover               = rl.Color{255, 255, 255, 255},
-	button_text                = rl.Color{0, 0, 0, 255},
-	bg_popup                   = rl.Color{0, 0, 0, 255},
-	fg_disabled                = rl.Color{160, 160, 160, 255},
-	bg_plan_bar                = rl.Color{45, 45, 0, 255},
-	fg_plan                    = rl.Color{255, 215, 0, 255},
-	fg_planning                = rl.Color{255, 215, 0, 255},
-	bg_selection               = rl.Color{90, 90, 0, 255},
-	bg_plan_title              = rl.Color{30, 30, 0, 255},
-	bg_tool_card               = rl.Color{15, 15, 15, 255},
-	bg_tool_card_hover         = rl.Color{40, 40, 40, 255},
-	fg_heading                 = rl.Color{255, 255, 255, 255},
-	fg_bullet                  = rl.Color{255, 215, 0, 255},
-	fg_bold                    = rl.Color{255, 255, 255, 255},
-	fg_code_inline             = rl.Color{255, 215, 0, 255},
-	bg_table_header            = rl.Color{30, 30, 30, 255},
-	wave_color_a               = rl.Color{255, 215, 0, 255},
-	wave_color_b               = rl.Color{255, 255, 255, 255},
-	drop_zone_bg               = rl.Color{45, 45, 0, 255},
-	drop_zone_border           = rl.Color{255, 215, 0, 255},
-	fg_debug                   = rl.Color{255, 215, 0, 255},
-	bg_debug_title             = rl.Color{30, 30, 30, 255},
-	fg_debug_changed           = rl.Color{255, 215, 0, 255},
-	fg_debug_annotation        = rl.Color{255, 255, 255, 255},
-	bg_chip                    = rl.Color{30, 30, 30, 255},
-	bg_chip_hover              = rl.Color{55, 55, 55, 255},
-	bg_user_card               = rl.Color{20, 20, 20, 255},
-	border_user_card           = rl.Color{255, 255, 255, 255},
-	bg_band_error              = rl.Color{60, 0, 0, 255},
-	fg_label                   = rl.Color{255, 255, 255, 255},
-	button_danger_bg           = rl.Color{90, 0, 0, 255},
-	button_danger_hover        = rl.Color{130, 0, 0, 255},
-	button_danger_fg           = rl.Color{255, 130, 130, 255},
-	button_disabled_bg         = rl.Color{30, 30, 30, 255},
-	button_pressed             = rl.Color{255, 255, 255, 255},
-	fg_accent_light            = rl.Color{255, 215, 0, 255},
-	fg_muted_dim               = rl.Color{190, 190, 190, 255},
-	modal_dim                  = rl.Color{0, 0, 0, 210},
-	focus_ring                 = rl.Color{255, 215, 0, 255},
-	shadow_color               = rl.Color{0, 0, 0, 0},
-	button_primary_grad_top    = rl.Color{0, 0, 0, 0},
-	button_primary_grad_bottom = rl.Color{0, 0, 0, 0},
+	bg_app                     = Color{0, 0, 0, 255},
+	bg_chat                    = Color{0, 0, 0, 255},
+	bg_panel                   = Color{0, 0, 0, 255},
+	bg_app_windowed            = Color{0, 0, 0, 255},
+	bg_chat_windowed           = Color{0, 0, 0, 255},
+	bg_panel_windowed          = Color{0, 0, 0, 255},
+	bg_app_fullscreen          = Color{0, 0, 0, 255},
+	bg_chat_fullscreen         = Color{0, 0, 0, 255},
+	bg_panel_fullscreen        = Color{0, 0, 0, 255},
+	bg_color                   = Color{0, 0, 0, 255},
+	bg_secondary               = Color{15, 15, 15, 255},
+	bg_active                  = Color{60, 60, 60, 255},
+	bg_hover                   = Color{40, 40, 40, 255},
+	bg_input                   = Color{0, 0, 0, 255},
+	bg_code                    = Color{15, 15, 15, 255},
+	fg_primary                 = Color{255, 255, 255, 255},
+	fg_secondary               = Color{255, 255, 255, 255},
+	fg_accent                  = Color{255, 215, 0, 255},
+	fg_user                    = Color{255, 255, 255, 255},
+	fg_assistant               = Color{255, 255, 255, 255},
+	fg_error                   = Color{255, 100, 100, 255},
+	fg_success                 = Color{100, 255, 100, 255},
+	fg_tool                    = Color{255, 215, 0, 255},
+	fg_diff_remove             = Color{255, 130, 130, 255},
+	fg_diff_add                = Color{130, 255, 130, 255},
+	bg_diff_remove             = Color{60, 0, 0, 255},
+	bg_diff_add                = Color{0, 50, 0, 255},
+	fg_diff_gutter             = Color{255, 255, 255, 255},
+	border_color               = Color{255, 255, 255, 255},
+	border_subtle              = Color{200, 200, 200, 255},
+	badge_color                = Color{255, 100, 100, 255},
+	merge_link_color           = Color{255, 215, 0, 255},
+	button_bg                  = Color{255, 215, 0, 255},
+	button_hover               = Color{255, 255, 255, 255},
+	button_text                = Color{0, 0, 0, 255},
+	bg_popup                   = Color{0, 0, 0, 255},
+	fg_disabled                = Color{160, 160, 160, 255},
+	bg_plan_bar                = Color{45, 45, 0, 255},
+	fg_plan                    = Color{255, 215, 0, 255},
+	fg_planning                = Color{255, 215, 0, 255},
+	bg_selection               = Color{90, 90, 0, 255},
+	bg_plan_title              = Color{30, 30, 0, 255},
+	bg_tool_card               = Color{15, 15, 15, 255},
+	bg_tool_card_hover         = Color{40, 40, 40, 255},
+	fg_heading                 = Color{255, 255, 255, 255},
+	fg_bullet                  = Color{255, 215, 0, 255},
+	fg_bold                    = Color{255, 255, 255, 255},
+	fg_code_inline             = Color{255, 215, 0, 255},
+	bg_table_header            = Color{30, 30, 30, 255},
+	wave_color_a               = Color{255, 215, 0, 255},
+	wave_color_b               = Color{255, 255, 255, 255},
+	drop_zone_bg               = Color{45, 45, 0, 255},
+	drop_zone_border           = Color{255, 215, 0, 255},
+	fg_debug                   = Color{255, 215, 0, 255},
+	bg_debug_title             = Color{30, 30, 30, 255},
+	fg_debug_changed           = Color{255, 215, 0, 255},
+	fg_debug_annotation        = Color{255, 255, 255, 255},
+	bg_chip                    = Color{30, 30, 30, 255},
+	bg_chip_hover              = Color{55, 55, 55, 255},
+	bg_user_card               = Color{20, 20, 20, 255},
+	border_user_card           = Color{255, 255, 255, 255},
+	bg_band_error              = Color{60, 0, 0, 255},
+	fg_label                   = Color{255, 255, 255, 255},
+	button_danger_bg           = Color{90, 0, 0, 255},
+	button_danger_hover        = Color{130, 0, 0, 255},
+	button_danger_fg           = Color{255, 130, 130, 255},
+	button_disabled_bg         = Color{30, 30, 30, 255},
+	button_pressed             = Color{255, 255, 255, 255},
+	fg_accent_light            = Color{255, 215, 0, 255},
+	fg_muted_dim               = Color{190, 190, 190, 255},
+	modal_dim                  = Color{0, 0, 0, 210},
+	focus_ring                 = Color{255, 215, 0, 255},
+	shadow_color               = Color{0, 0, 0, 0},
+	button_primary_grad_top    = Color{0, 0, 0, 0},
+	button_primary_grad_bottom = Color{0, 0, 0, 0},
 }
 
 // THEME_COLOR is the zero-color sentinel for widget color parameters whose
 // real default is a theme field. Odin default parameter values must be
 // compile-time constants while the theme is runtime data, so widgets compare
 // against this named sentinel and substitute the theme color at call time.
-THEME_COLOR :: rl.Color{0, 0, 0, 0}
+THEME_COLOR :: Color{0, 0, 0, 0}
 
 // theme_dark returns the built-in dark palette (the original constants).
 theme_dark :: proc() -> Theme {
@@ -442,7 +442,7 @@ theme_high_contrast :: proc() -> Theme {
 
 // relative_luminance returns the WCAG relative luminance of a color
 // (0 = black, 1 = white). Pure; alpha is ignored.
-relative_luminance :: proc(c: rl.Color) -> f64 {
+relative_luminance :: proc(c: Color) -> f64 {
 	linearize :: proc(channel: u8) -> f64 {
 		v := f64(channel) / 255.0
 		if v <= 0.04045 do return v / 12.92
@@ -453,7 +453,7 @@ relative_luminance :: proc(c: rl.Color) -> f64 {
 
 // contrast_ratio returns the WCAG contrast ratio between two colors, in
 // [1, 21]. Pure; order of arguments does not matter.
-contrast_ratio :: proc(a, b: rl.Color) -> f64 {
+contrast_ratio :: proc(a, b: Color) -> f64 {
 	la := relative_luminance(a)
 	lb := relative_luminance(b)
 	hi := max(la, lb)

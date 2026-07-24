@@ -1,7 +1,6 @@
 // LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "ingot:gfx"
 
 auto_scale :: proc() -> f32 {
 	when ODIN_OS == .Darwin || ODIN_OS == .JS {

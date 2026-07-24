@@ -3,7 +3,7 @@
 package ui
 
 import win32 "core:sys/windows"
-import rl "ingot:gfx"
+
 
 // Custom window title bar (Windows only).
 //
@@ -47,11 +47,11 @@ tb_activity: bool // NC state changed → request a redraw
 @(private = "file")
 tb_tracking: bool // TrackMouseEvent armed
 @(private = "file")
-tb_btn_min: rl.Rectangle
+tb_btn_min: Rectangle
 @(private = "file")
-tb_btn_max: rl.Rectangle
+tb_btn_max: Rectangle
 @(private = "file")
-tb_btn_close: rl.Rectangle
+tb_btn_close: Rectangle
 @(private = "file")
 tb_caption_h: i32
 @(private = "file")
@@ -97,7 +97,7 @@ titlebar_enabled :: proc() -> bool {
 // of the interactive header region (widgets that must stay clickable) for
 // non-client hit-testing. Call every frame after drawing. interactive_right
 // == 0 means the whole caption band (minus buttons) is a drag region.
-titlebar_set_layout :: proc(min_r, max_r, close_r: rl.Rectangle, interactive_right: i32) {
+titlebar_set_layout :: proc(min_r, max_r, close_r: Rectangle, interactive_right: i32) {
 	tb_btn_min = min_r
 	tb_btn_max = max_r
 	tb_btn_close = close_r
@@ -150,7 +150,7 @@ tb_button_from_hittest :: proc "system" (ht: win32.LRESULT) -> Titlebar_Button {
 }
 
 @(private = "file")
-tb_point_in_rect :: proc "system" (x, y: i32, r: rl.Rectangle) -> bool {
+tb_point_in_rect :: proc "system" (x, y: i32, r: Rectangle) -> bool {
 	return(
 		r.width > 0 &&
 		r.height > 0 &&

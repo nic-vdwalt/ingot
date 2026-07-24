@@ -1,12 +1,11 @@
 // LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "ingot:gfx"
 
 MAX_ROUTE_CLAIMS :: 16
 
 Route_Claims :: struct {
-	rects: [MAX_ROUTE_CLAIMS]rl.Rectangle,
+	rects: [MAX_ROUTE_CLAIMS]Rectangle,
 	count: int,
 	all:   bool,
 }
@@ -24,7 +23,7 @@ route_begin_frame :: proc(frame: ^Ui_Frame) {
 	state.cur = {}
 }
 
-route_claim :: proc(frame: ^Ui_Frame, rect: rl.Rectangle) {
+route_claim :: proc(frame: ^Ui_Frame, rect: Rectangle) {
 	assert(frame != nil && frame.open, "route_claim: invalid frame")
 	assert(rect.width >= 0 && rect.height >= 0, "route_claim: negative rect")
 	state := &frame.route
@@ -46,16 +45,16 @@ route_reset :: proc(frame: ^Ui_Frame) {
 	frame.route = {}
 }
 
-route_occluded_in :: proc(claims: Route_Claims, point: rl.Vector2) -> bool {
+route_occluded_in :: proc(claims: Route_Claims, point: Vector2) -> bool {
 	assert(claims.count >= 0 && claims.count <= MAX_ROUTE_CLAIMS)
 	if claims.all do return true
 	for i in 0 ..< claims.count {
-		if rl.CheckCollisionPointRec(point, claims.rects[i]) do return true
+		if point_in_rect(point, claims.rects[i]) do return true
 	}
 	return false
 }
 
-route_occluded :: proc(frame: ^Ui_Frame, point: rl.Vector2) -> bool {
+route_occluded :: proc(frame: ^Ui_Frame, point: Vector2) -> bool {
 	assert(frame != nil && frame.open, "route_occluded: invalid frame")
 	return route_occluded_in(frame.route.prev, point)
 }

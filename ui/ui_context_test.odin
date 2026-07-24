@@ -3,7 +3,7 @@ package ui
 
 import "core:testing"
 import "core:unicode/utf8"
-import rl "ingot:gfx"
+
 
 @(test)
 test_ui_slot_column_and_row :: proc(t: ^testing.T) {
@@ -56,13 +56,13 @@ test_ui_frame_pane_origins_are_isolated :: proc(t: ^testing.T) {
 	ui_frame_begin(&frame_b, &b)
 	ui_frame_pane_push(&frame_a, {10, 20})
 	ui_frame_pane_push(&frame_b, {100, 200})
-	testing.expect_value(t, frame_to_screen(&frame_a, {1, 2}), rl.Vector2{11, 22})
-	testing.expect_value(t, frame_to_screen(&frame_b, {1, 2}), rl.Vector2{101, 202})
-	testing.expect_value(t, frame_to_local(&frame_a, {11, 22}), rl.Vector2{1, 2})
-	testing.expect_value(t, frame_to_local(&frame_b, {101, 202}), rl.Vector2{1, 2})
+	testing.expect_value(t, frame_to_screen(&frame_a, {1, 2}), Vector2{11, 22})
+	testing.expect_value(t, frame_to_screen(&frame_b, {1, 2}), Vector2{101, 202})
+	testing.expect_value(t, frame_to_local(&frame_a, {11, 22}), Vector2{1, 2})
+	testing.expect_value(t, frame_to_local(&frame_b, {101, 202}), Vector2{1, 2})
 	ui_frame_pane_pop(&frame_a)
-	testing.expect_value(t, frame_pane_origin(&frame_a), rl.Vector2{})
-	testing.expect_value(t, frame_pane_origin(&frame_b), rl.Vector2{100, 200})
+	testing.expect_value(t, frame_pane_origin(&frame_a), Vector2{})
+	testing.expect_value(t, frame_pane_origin(&frame_b), Vector2{100, 200})
 	ui_frame_pane_pop(&frame_b)
 	ui_frame_end(&frame_a)
 	ui_frame_end(&frame_b)

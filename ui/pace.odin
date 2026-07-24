@@ -8,7 +8,6 @@
 // want a bounded idle poll rate instead of full event-driven idling.
 package ui
 
-import rl "ingot:gfx"
 
 // Frame_Pacer drops the render loop to idle_fps when there has been no user
 // input or caller-reported activity for `grace` seconds, and restores full
@@ -26,13 +25,13 @@ Frame_Pacer :: struct {
 // rl.InitWindow().
 pacer_init :: proc(target_fps: i32 = 60, idle_fps: i32 = 15, grace: f64 = 2.5) -> Frame_Pacer {
 	rl.SetTargetFPS(target_fps)
-	return {target_fps, idle_fps, grace, rl.GetTime(), target_fps}
+	return {target_fps, idle_fps, grace, frame_input(frame).time, target_fps}
 }
 
 // pacer_note_activity marks external activity (network message, animation
 // running, streaming output) so the loop stays at full rate.
 pacer_note_activity :: proc(p: ^Frame_Pacer) {
-	p.last_activity = rl.GetTime()
+	p.last_activity = frame_input(frame).time
 }
 
 // pacer_frame updates the frame limiter; call once per frame (typically after
@@ -41,9 +40,9 @@ pacer_note_activity :: proc(p: ^Frame_Pacer) {
 // this frame (async work pending, run in progress, camera animating, ...).
 pacer_frame :: proc(p: ^Frame_Pacer, busy: bool = false) {
 	if busy || pacer_input_active() {
-		p.last_activity = rl.GetTime()
+		p.last_activity = frame_input(frame).time
 	}
-	if rl.GetTime() - p.last_activity < p.grace {
+	if frame_input(frame).time - p.last_activity < p.grace {
 		// Match the frame limiter to the monitor's refresh rate so it never
 		// fights vsync: a 60 FPS cap on top of vsync overshoots by a whole
 		// sleep quantum and oscillates. Unknown refresh (0) → target_fps.
@@ -69,12 +68,12 @@ pacer_frame :: proc(p: ^Frame_Pacer, busy: bool = false) {
 // the app's own input handling.
 @(private)
 pacer_input_active :: proc() -> bool {
-	if rl.GetMouseDelta() != {0, 0} do return true
-	if rl.GetMouseWheelMoveV() != {} do return true
-	if rl.IsMouseButtonDown(.LEFT) || rl.IsMouseButtonDown(.RIGHT) do return true
+	if get_mouse_delta(frame) != {0, 0} do return true
+	if get_mouse_wheel_move_v(frame) != {} do return true
+	if is_mouse_button_down(frame, .LEFT) || is_mouse_button_down(frame, .RIGHT) do return true
 	// Scan the keyboard state arrays (IsKeyPressed does not consume events).
-	for k := i32(rl.KeyboardKey.SPACE); k <= i32(rl.KeyboardKey.KB_MENU); k += 1 {
-		if rl.IsKeyPressed(rl.KeyboardKey(k)) do return true
+	for k := i32(KeyboardKey.SPACE); k <= i32(KeyboardKey.KB_MENU); k += 1 {
+		if is_key_pressed(frame, KeyboardKey(k)) do return true
 	}
 	return false
 }

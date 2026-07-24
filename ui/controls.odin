@@ -6,7 +6,7 @@ package ui
 
 import "core:math"
 import "core:strings"
-import rl "ingot:gfx"
+
 
 // checkbox draws a check control with a label. Toggles checked^ on click or
 // Space/Enter while focused. Returns true on the frame the value changed.
@@ -52,7 +52,7 @@ checkbox_at :: proc(
 	assert(rect.w > 0 && rect.h > 0, "checkbox: empty rect")
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "checkbox: empty accessible label")
-	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	it := interact(frame, rrect)
 	hovered := it.hovered
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
@@ -67,23 +67,25 @@ checkbox_at :: proc(
 	box := metrics.CONTROL_BOX
 	bx := rect.x
 	by := rect.y + (rect.h - box) / 2
-	box_rect := rl.Rectangle{f32(bx), f32(by), f32(box), f32(box)}
+	box_rect := Rectangle{f32(bx), f32(by), f32(box), f32(box)}
 	bg := style.button_bg if checked^ else style.bg_input
 	border := style.fg_accent if hovered || focus_opt_focused(focus) else style.border_color
-	rl.DrawRectangleRounded(box_rect, 0.25, 4, bg)
-	rl.DrawRectangleRoundedLinesEx(box_rect, 0.25, 4, 1.0, border)
+	draw_rectangle_rounded(frame, box_rect, 0.25, 4, bg)
+	draw_rectangle_rounded_lines_ex(frame, box_rect, 0.25, 4, 1.0, border)
 	if checked^ {
 		// Check mark: two strokes proportional to the box size.
 		cx := f32(bx)
 		cy := f32(by)
 		s := f32(box)
-		rl.DrawLineEx(
+		draw_line_ex(
+			frame,
 			{cx + s * 0.22, cy + s * 0.52},
 			{cx + s * 0.44, cy + s * 0.74},
 			2.0,
 			style.button_text,
 		)
-		rl.DrawLineEx(
+		draw_line_ex(
+			frame,
 			{cx + s * 0.44, cy + s * 0.74},
 			{cx + s * 0.80, cy + s * 0.28},
 			2.0,
@@ -161,7 +163,7 @@ radio_at :: proc(
 	assert(rect.w > 0 && rect.h > 0, "radio: empty rect")
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "radio: empty accessible label")
-	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	it := interact(frame, rrect)
 	hovered := it.hovered
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
@@ -180,10 +182,10 @@ radio_at :: proc(
 	is_on := selected^ == value
 	border :=
 		style.fg_accent if hovered || focus_opt_focused(focus) || is_on else style.border_color
-	rl.DrawCircleV({ccx, ccy}, r, style.bg_input)
-	rl.DrawCircleLinesV({ccx, ccy}, r, border)
+	draw_circle_v(frame, {ccx, ccy}, r, style.bg_input)
+	draw_circle_lines_v(frame, {ccx, ccy}, r, border)
 	if is_on {
-		rl.DrawCircleV({ccx, ccy}, r * 0.45, style.fg_accent)
+		draw_circle_v(frame, {ccx, ccy}, r * 0.45, style.fg_accent)
 	}
 	if focus_opt_focused(focus) {
 		draw_focus_ring(frame, rect.x, rect.y + (rect.h - box) / 2, box, box)
@@ -323,8 +325,8 @@ slider_at :: proc(
 	assert(hi > lo, "slider: hi must exceed lo")
 	assert(rect.w > 0 && rect.h > 0, "slider: empty rect")
 	old := value^
-	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	mouse := rl.GetMousePosition()
+	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+	mouse := get_mouse_position(frame)
 	it := interact(frame, rrect)
 	hovered := it.hovered
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
@@ -343,25 +345,25 @@ slider_at :: proc(
 	}
 	if focus_opt_focused(focus) {
 		d := slider_keyboard_delta(lo, hi, step)
-		if rl.IsKeyPressed(.LEFT) || rl.IsKeyPressedRepeat(.LEFT) do value^ = clamp(value^ - d, lo, hi)
-		if rl.IsKeyPressed(.RIGHT) || rl.IsKeyPressedRepeat(.RIGHT) do value^ = clamp(value^ + d, lo, hi)
+		if is_key_pressed(frame, .LEFT) || is_key_pressed_repeat(frame, .LEFT) do value^ = clamp(value^ - d, lo, hi)
+		if is_key_pressed(frame, .RIGHT) || is_key_pressed_repeat(frame, .RIGHT) do value^ = clamp(value^ + d, lo, hi)
 	}
 	value^ = clamp(value^, lo, hi)
 
 	// Track + fill + knob.
 	cy := f32(rect.y) + f32(rect.h) / 2
 	th := f32(metrics.SLIDER_TRACK_H)
-	rl.DrawRectangleRounded({track_x, cy - th / 2, track_w, th}, 1.0, 4, style.bg_active)
+	draw_rectangle_rounded(frame, {track_x, cy - th / 2, track_w, th}, 1.0, 4, style.bg_active)
 	frac := (value^ - lo) / (hi - lo)
 	fill_w := track_w * frac
 	if fill_w > 0 {
-		rl.DrawRectangleRounded({track_x, cy - th / 2, fill_w, th}, 1.0, 4, style.fg_accent)
+		draw_rectangle_rounded(frame, {track_x, cy - th / 2, fill_w, th}, 1.0, 4, style.fg_accent)
 	}
 	knob_x := track_x + track_w * frac
 	knob_col := style.fg_accent if hovered || focus_opt_focused(focus) else style.fg_secondary
-	rl.DrawCircleV({knob_x, cy}, knob_r, style.bg_input)
-	rl.DrawCircleLinesV({knob_x, cy}, knob_r, knob_col)
-	rl.DrawCircleV({knob_x, cy}, knob_r * 0.55, knob_col)
+	draw_circle_v(frame, {knob_x, cy}, knob_r, style.bg_input)
+	draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
+	draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)
 	if focus_opt_focused(focus) {
 		draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 	}
@@ -382,8 +384,8 @@ slider_at_state :: proc(
 	assert(state != nil && value != nil, "slider_at_state: nil state or value")
 	assert(hi > lo && rect.w > 0 && rect.h > 0, "slider_at_state: invalid bounds")
 	old := value^
-	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	mouse := rl.GetMousePosition()
+	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+	mouse := get_mouse_position(frame)
 	it := interact(frame, rrect, &state.dragging)
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
 	if it.hovered do request_cursor(frame, .POINTING_HAND)
@@ -398,22 +400,22 @@ slider_at_state :: proc(
 	}
 	if focus_opt_focused(focus) {
 		d := slider_keyboard_delta(lo, hi, step)
-		if rl.IsKeyPressed(.LEFT) || rl.IsKeyPressedRepeat(.LEFT) do value^ = clamp(value^ - d, lo, hi)
-		if rl.IsKeyPressed(.RIGHT) || rl.IsKeyPressedRepeat(.RIGHT) do value^ = clamp(value^ + d, lo, hi)
+		if is_key_pressed(frame, .LEFT) || is_key_pressed_repeat(frame, .LEFT) do value^ = clamp(value^ - d, lo, hi)
+		if is_key_pressed(frame, .RIGHT) || is_key_pressed_repeat(frame, .RIGHT) do value^ = clamp(value^ + d, lo, hi)
 	}
 	value^ = clamp(value^, lo, hi)
 	cy := f32(rect.y) + f32(rect.h) / 2
 	th := f32(metrics.SLIDER_TRACK_H)
-	rl.DrawRectangleRounded({track_x, cy - th / 2, track_w, th}, 1.0, 4, style.bg_active)
+	draw_rectangle_rounded(frame, {track_x, cy - th / 2, track_w, th}, 1.0, 4, style.bg_active)
 	frac := (value^ - lo) / (hi - lo)
 	fill_w := track_w * frac
-	if fill_w > 0 do rl.DrawRectangleRounded({track_x, cy - th / 2, fill_w, th}, 1.0, 4, style.fg_accent)
+	if fill_w > 0 do draw_rectangle_rounded(frame, {track_x, cy - th / 2, fill_w, th}, 1.0, 4, style.fg_accent)
 	knob_x := track_x + track_w * frac
 	knob_col :=
 		style.fg_accent if it.hovered || state.dragging || focus_opt_focused(focus) else style.fg_secondary
-	rl.DrawCircleV({knob_x, cy}, knob_r, style.bg_input)
-	rl.DrawCircleLinesV({knob_x, cy}, knob_r, knob_col)
-	rl.DrawCircleV({knob_x, cy}, knob_r * 0.55, knob_col)
+	draw_circle_v(frame, {knob_x, cy}, knob_r, style.bg_input)
+	draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
+	draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)
 	if focus_opt_focused(focus) do draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 	semantic_push(frame, .Slider, rect, a11y_label, {}, focus, value = value^, lo = lo, hi = hi)
 	return value^ != old

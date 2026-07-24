@@ -7,7 +7,7 @@
 package ui
 
 import "core:fmt"
-import rl "ingot:gfx"
+
 
 DEBUG_OVERLAY_MAX_ROWS :: 24
 DEBUG_OVERLAY_FIXED_ROWS :: 11
@@ -44,7 +44,7 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32) -> i32 {
 	}
 
 	push(rows[:], &n, "fps", fmt.tprintf("%d", rl.GetFPS()))
-	push(rows[:], &n, "frame", fmt.tprintf("%.2f ms", rl.GetFrameTime() * 1000))
+	push(rows[:], &n, "frame", fmt.tprintf("%.2f ms", frame_input(frame).frame_time * 1000))
 	push(rows[:], &n, "flushes (draw calls)", fmt.tprintf("%d", stats.flush_count))
 	for cause in rl.Flush_Cause {
 		count := stats.flush_causes[cause]
@@ -78,9 +78,13 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32) -> i32 {
 	push(rows[:], &n, "route claims", fmt.tprintf("%d", route_claim_count(frame)))
 
 	h := i32(n) * row_h + pad * 2 + metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 6)
-	panel := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	rl.DrawRectangleRec(panel, rl.Color{style.bg_popup.r, style.bg_popup.g, style.bg_popup.b, 235})
-	rl.DrawRectangleLinesEx(panel, ui_frame_scf(frame, 1), style.border_color)
+	panel := Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	draw_rectangle_rec(
+		frame,
+		panel,
+		Color{style.bg_popup.r, style.bg_popup.g, style.bg_popup.b, 235},
+	)
+	draw_rectangle_lines_ex(frame, panel, ui_frame_scf(frame, 1), style.border_color)
 
 	ty := y + pad
 	title: cstring = "DEBUG \u00b7 renderer stats"

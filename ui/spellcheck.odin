@@ -1,14 +1,14 @@
 package ui
 
 import "core:strings"
-import rl "ingot:gfx"
+
 
 Spell_Range :: struct {
 	start: int,
 	end:   int,
 }
 
-SPELL_SQUIGGLE_COLOR :: rl.Color{235, 90, 90, 220}
+SPELL_SQUIGGLE_COLOR :: Color{235, 90, 90, 220}
 SPELL_MAX_TEXT :: 8 * 1024
 
 Spellcheck_Memo :: struct {
@@ -183,7 +183,7 @@ spell_in_pill :: proc(pills: ^[dynamic]Mention_Span, start, end: int) -> bool {
 	return false
 }
 
-draw_squiggle :: proc(x, y, w: i32, color: rl.Color) {
+draw_squiggle :: proc(x, y, w: i32, color: Color) {
 	if w <= 1 do return
 	amp: f32 = 1.5
 	half: f32 = 3
@@ -195,7 +195,7 @@ draw_squiggle :: proc(x, y, w: i32, color: rl.Color) {
 		nx := min(cx + half, x1)
 		ya := yf + (amp if up else -amp)
 		yb := yf + (-amp if up else amp)
-		rl.DrawLineEx({cx, ya}, {nx, yb}, 1.2, color)
+		draw_line_ex(frame, {cx, ya}, {nx, yb}, 1.2, color)
 		up = !up
 	}
 }

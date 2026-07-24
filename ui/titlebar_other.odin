@@ -2,7 +2,6 @@
 // LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "ingot:gfx"
 
 // No-op custom title bar on non-Windows platforms (native title bar is used).
 
@@ -19,7 +18,7 @@ titlebar_enabled :: proc() -> bool {
 	return false
 }
 
-titlebar_set_layout :: proc(min_r, max_r, close_r: rl.Rectangle, interactive_right: i32) {}
+titlebar_set_layout :: proc(min_r, max_r, close_r: Rectangle, interactive_right: i32) {}
 
 titlebar_state :: proc() -> (hover, pressed: Titlebar_Button, maximized: bool) {
 	return .None, .None, false

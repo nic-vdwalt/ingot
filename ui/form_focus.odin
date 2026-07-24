@@ -5,7 +5,6 @@
 // activation.
 package ui
 
-import rl "ingot:gfx"
 
 form_focus_next :: proc(current, count: int, backwards: bool) -> int {
 	assert(count > 0)
@@ -41,8 +40,8 @@ focus_order_next :: proc(ids: []Focus_Id, active: Focus_Id, backwards: bool) -> 
 form_focus_cycle :: proc(focus: ^int, count: int) {
 	assert(focus != nil)
 	assert(count > 0)
-	if !rl.IsKeyPressed(.TAB) do return
-	backwards := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+	if !is_key_pressed(frame, .TAB) do return
+	backwards := is_key_down(frame, .LEFT_SHIFT) || is_key_down(frame, .RIGHT_SHIFT)
 	focus^ = form_focus_next(focus^, count, backwards)
 	assert(focus^ >= 1)
 	assert(focus^ <= count)
@@ -53,10 +52,10 @@ form_focus_input :: proc(frame: ^Ui_Frame, focus: ^int, id: int, x, y, w, h: i32
 	assert(id > 0)
 	assert(w > 0)
 	assert(h > 0)
-	if !rl.IsMouseButtonPressed(.LEFT) do return
-	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	mouse := rl.GetMousePosition()
-	if rl.CheckCollisionPointRec(mouse, rect) && !route_occluded(frame, mouse) {
+	if !is_mouse_button_pressed(frame, .LEFT) do return
+	rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	mouse := get_mouse_position(frame)
+	if point_in_rect(mouse, rect) && !route_occluded(frame, mouse) {
 		focus^ = id
 		assert(focus^ == id)
 	}

@@ -3,7 +3,6 @@
 // stable focus state, plus the shared focus-ring rendering.
 package ui
 
-import rl "ingot:gfx"
 
 Focus_Id :: distinct u64
 FOCUS_ID_NONE :: Focus_Id(0)
@@ -84,7 +83,7 @@ focus_activated :: proc(frame: ^Ui_Frame, focus: ^int, id: int) -> bool {
 		return true
 	}
 	if focus^ != id do return false
-	return rl.IsKeyPressed(.SPACE) || rl.IsKeyPressed(.ENTER)
+	return is_key_pressed(frame, .SPACE) || is_key_pressed(frame, .ENTER)
 }
 
 focus_opt_activated :: proc(frame: ^Ui_Frame, f: Focus_Opt) -> bool {
@@ -97,8 +96,9 @@ draw_focus_ring :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
 	style := ui_frame_theme(frame)
 	assert(style.focus_ring.a > 0, "draw_focus_ring: focus ring has zero alpha")
 	inset := ui_frame_sc(frame, 2)
-	r := rl.Rectangle{f32(x - inset), f32(y - inset), f32(w + inset * 2), f32(h + inset * 2)}
-	rl.DrawRectangleRoundedLinesEx(
+	r := Rectangle{f32(x - inset), f32(y - inset), f32(w + inset * 2), f32(h + inset * 2)}
+	draw_rectangle_rounded_lines_ex(
+		frame,
 		r,
 		BTN_ROUNDNESS,
 		BTN_SEGMENTS,

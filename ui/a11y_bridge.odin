@@ -23,7 +23,7 @@ package ui
 
 import "base:runtime"
 import ak "ingot:accesskit"
-import rl "ingot:gfx"
+
 
 A11y_Pending_Action :: struct {
 	node_id:            u64,
@@ -132,7 +132,7 @@ a11y_stage_click :: proc(runtime: ^Ui_Runtime, node_id: u64) {
 		expires_generation = runtime.frame_generation + 1,
 		pending            = true,
 	}
-	rl.RequestRedraw()
+	request_redraw(frame)
 }
 
 a11y_expire_before_frame :: proc(runtime: ^Ui_Runtime) {
@@ -177,7 +177,7 @@ a11y_apply_action :: proc(ui_frame: ^Ui_Frame, action: rl.A11y_Action) {
 		focus, ok := sem_action_target(ui_frame, u64(action.node))
 		if ok {
 			focus_opt_set(focus)
-			rl.RequestRedraw()
+			request_redraw(frame)
 		}
 	}
 }

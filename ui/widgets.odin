@@ -7,14 +7,14 @@ package ui
 import "core:fmt"
 import "core:math"
 import "core:strings"
-import rl "ingot:gfx"
+
 
 // begin_pane_scissor converts pane-local geometry to screen coordinates because
 // scissor rectangles are not affected by the drawing transform.
 begin_pane_scissor :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
 	assert(w > 0 && h > 0, "begin_pane_scissor: invalid rect")
 	point := frame_to_screen(frame, {f32(x), f32(y)})
-	rl.BeginScissorMode(i32(point.x), i32(point.y), w, h)
+	begin_scissor_mode(frame, i32(point.x), i32(point.y), w, h)
 }
 
 // draw_split_divider draws the vertical drag handle between the chat pane and
@@ -25,7 +25,8 @@ draw_split_divider :: proc(frame: ^Ui_Frame, x, screen_h: i32, hovered: bool) {
 	metrics := ui_frame_metrics(frame)
 	col := style.border_color
 	if hovered do col = style.fg_accent
-	rl.DrawRectangle(
+	draw_rectangle(
+		frame,
 		x,
 		metrics.TAB_BAR_HEIGHT,
 		metrics.SPLIT_DIVIDER_W,
@@ -41,7 +42,7 @@ draw_panel_header :: proc(
 	frame: ^Ui_Frame,
 	x, y, w: i32,
 	label: string,
-	accent: rl.Color = THEME_COLOR,
+	accent: Color = THEME_COLOR,
 ) -> i32 {
 	assert(w > 0, "draw_panel_header: invalid width")
 	style := ui_frame_theme(frame)
@@ -57,7 +58,7 @@ draw_panel_header :: proc(
 		metrics.FONT_SIZE_LABEL,
 		accent,
 	)
-	rl.DrawRectangle(x, y + metrics.PANEL_HEADER_H - 1, w, 1, style.border_subtle)
+	draw_rectangle(frame, x, y + metrics.PANEL_HEADER_H - 1, w, 1, style.border_subtle)
 	return y + metrics.PANEL_HEADER_H
 }
 
@@ -65,17 +66,18 @@ draw_panel_header :: proc(
 // hairline border + optional left accent bar.
 draw_card_bg_frame :: proc(
 	frame: ^Ui_Frame,
-	rect: rl.Rectangle,
-	bg: rl.Color,
-	accent: rl.Color = THEME_COLOR,
+	rect: Rectangle,
+	bg: Color,
+	accent: Color = THEME_COLOR,
 	accent_w: i32 = 0,
 ) {
 	min_dim := min(rect.width, rect.height)
 	if min_dim <= 0 do return
 	round := (ui_frame_metrics(frame).CARD_RADIUS_PX * 2) / min_dim
 	if round > 1 do round = 1
-	rl.DrawRectangleRounded(rect, round, 6, bg)
-	rl.DrawRectangleRoundedLinesEx(
+	draw_rectangle_rounded(frame, rect, round, 6, bg)
+	draw_rectangle_rounded_lines_ex(
+		frame,
 		rect,
 		round,
 		6,
@@ -84,7 +86,8 @@ draw_card_bg_frame :: proc(
 	)
 	if accent_w > 0 {
 		inset := ui_frame_sc(frame, 2)
-		rl.DrawRectangle(
+		draw_rectangle(
+			frame,
 			i32(rect.x),
 			i32(rect.y) + inset,
 			accent_w,
@@ -102,15 +105,22 @@ draw_split_drop_hint :: proc(frame: ^Ui_Frame, screen_w, screen_h: i32, side_lef
 	style := ui_frame_theme(frame)
 	top := ui_frame_metrics(frame).TAB_BAR_HEIGHT
 	h := screen_h - top
-	rl.DrawRectangle(0, top, screen_w, h, rl.Color{0, 0, 0, 70})
+	draw_rectangle(frame, 0, top, screen_w, h, Color{0, 0, 0, 70})
 	half := screen_w / 2
-	hl := rl.Color{style.fg_accent.r, style.fg_accent.g, style.fg_accent.b, 70}
+	hl := Color{style.fg_accent.r, style.fg_accent.g, style.fg_accent.b, 70}
 	if side_left {
-		rl.DrawRectangle(0, top, half, h, hl)
+		draw_rectangle(frame, 0, top, half, h, hl)
 	} else {
-		rl.DrawRectangle(half, top, screen_w - half, h, hl)
+		draw_rectangle(frame, half, top, screen_w - half, h, hl)
 	}
-	rl.DrawRectangle(half - ui_frame_sc(frame, 1), top, ui_frame_sc(frame, 2), h, style.fg_accent)
+	draw_rectangle(
+		frame,
+		half - ui_frame_sc(frame, 1),
+		top,
+		ui_frame_sc(frame, 2),
+		h,
+		style.fg_accent,
+	)
 }
 
 // input_is_selecting (selection queries) live in text_input.odin.
@@ -119,10 +129,10 @@ draw_split_drop_hint :: proc(frame: ^Ui_Frame, screen_w, screen_h: i32, side_lef
 // is currently held.
 mod_down :: proc() -> bool {
 	return(
-		rl.IsKeyDown(.LEFT_SUPER) ||
-		rl.IsKeyDown(.RIGHT_SUPER) ||
-		rl.IsKeyDown(.LEFT_CONTROL) ||
-		rl.IsKeyDown(.RIGHT_CONTROL) \
+		is_key_down(frame, .LEFT_SUPER) ||
+		is_key_down(frame, .RIGHT_SUPER) ||
+		is_key_down(frame, .LEFT_CONTROL) ||
+		is_key_down(frame, .RIGHT_CONTROL) \
 	)
 }
 
@@ -131,7 +141,7 @@ mod_down :: proc() -> bool {
 // stationary cursor that happens to sit over an item. Mouse hover only changes
 // the selection when the user is actively moving the mouse.
 mouse_moved :: proc() -> bool {
-	delta := rl.GetMouseDelta()
+	delta := get_mouse_delta(frame)
 	return delta.x != 0 || delta.y != 0
 }
 
@@ -140,7 +150,7 @@ mouse_moved :: proc() -> bool {
 // Windows mouse wheels produce 1.0 per notch while macOS trackpads
 // deliver larger inertia-driven values; the multiplier compensates.
 get_wheel_move :: proc() -> f32 {
-	wheel := rl.GetMouseWheelMove()
+	wheel := get_mouse_wheel_move(frame)
 	when ODIN_OS == .Windows {
 		return wheel * 5.0
 	} else {
@@ -407,19 +417,19 @@ scrollbar_ex :: proc(
 	off := clamp(offset, 0, max_off)
 
 	style := ui_frame_theme(frame)
-	rl.DrawRectangle(x, y, w, h, style.bg_secondary)
+	draw_rectangle(frame, x, y, w, h, style.bg_secondary)
 	thumb_h := max(ui_frame_sc(frame, 20), h * i32(visible) / i32(total))
 	track_range := max(h - thumb_h, 1)
 	thumb_y := y + i32(f32(track_range) * f32(off) / f32(max_off))
 
-	mouse := rl.GetMousePosition()
+	mouse := get_mouse_position(frame)
 	mouse = frame_to_local(frame, mouse)
-	thumb_rect := rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)}
-	track_rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	thumb_rect := Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)}
+	track_rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
 
 	it := interact(frame, track_rect, &st.dragging)
 	if it.pressed {
-		if rl.CheckCollisionPointRec(mouse, thumb_rect) {
+		if point_in_rect(mouse, thumb_rect) {
 			st.grab_dy = mouse.y - f32(thumb_y)
 		} else {
 			// Jump: center the thumb on the click, then keep dragging.
@@ -434,11 +444,10 @@ scrollbar_ex :: proc(
 	// Recompute the thumb position after a drag update.
 	thumb_y = y + i32(f32(track_range) * f32(off) / f32(max_off))
 	thumb_hover :=
-		it.hovered &&
-		rl.CheckCollisionPointRec(mouse, rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)})
+		it.hovered && point_in_rect(mouse, Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)})
 	col := style.border_color
 	if st.dragging || thumb_hover do col = style.fg_accent
-	rl.DrawRectangle(x, thumb_y, w, thumb_h, col)
+	draw_rectangle(frame, x, thumb_y, w, thumb_h, col)
 	return off
 }
 
@@ -452,12 +461,12 @@ Btn_Style :: enum {
 
 // color_mix linearly blends a toward b by t (0..1) per channel, alpha
 // included, so widgets can fade between two theme states over time.
-color_mix :: proc(a, b: rl.Color, t: f32) -> rl.Color {
+color_mix :: proc(a, b: Color, t: f32) -> Color {
 	assert(t >= 0 && t <= 1, "color_mix: t out of range")
 	mix_u8 :: proc(x, y: u8, t: f32) -> u8 {
 		return u8(clamp(f32(x) + (f32(y) - f32(x)) * t, 0, 255))
 	}
-	return rl.Color {
+	return Color {
 		mix_u8(a.r, b.r, t),
 		mix_u8(a.g, b.g, t),
 		mix_u8(a.b, b.b, t),
@@ -471,7 +480,7 @@ color_mix :: proc(a, b: rl.Color, t: f32) -> rl.Color {
 // the theme.shadow_color alpha; 1.0 is the standard card shadow.
 draw_shadow_rounded :: proc(
 	frame: ^Ui_Frame,
-	rect: rl.Rectangle,
+	rect: Rectangle,
 	roundness: f32,
 	strength: f32 = 1.0,
 ) {
@@ -484,13 +493,14 @@ draw_shadow_rounded :: proc(
 	alpha := clamp(f32(base.a) * strength / f32(SHADOW_LAYERS + 2), 0, 255)
 	for i := SHADOW_LAYERS; i >= 1; i -= 1 {
 		spread := f32(i) * 2
-		layer := rl.Rectangle {
+		layer := Rectangle {
 			rect.x - spread,
 			rect.y - spread + 3, // bias downward for a lit-from-above look
 			rect.width + spread * 2,
 			rect.height + spread * 2,
 		}
-		rl.DrawRectangleRounded(
+		draw_rectangle_rounded(
+			frame,
 			layer,
 			roundness,
 			BTN_SEGMENTS,
@@ -517,9 +527,9 @@ hover_anim_frac :: proc(frame: ^Ui_Frame, state: ^Button_State, hovered: bool) -
 		state.hover = 1 if hovered else 0
 		return state.hover
 	}
-	t := hover_anim_step(&state.hover, hovered, rl.GetFrameTime())
+	t := hover_anim_step(&state.hover, hovered, frame_input(frame).frame_time)
 	target: f32 = 1 if hovered else 0
-	if t != target do rl.RequestRedraw()
+	if t != target do request_redraw(frame)
 	assert(t >= 0 && t <= 1, "hover_anim_frac: fraction out of range")
 	return t
 }
@@ -527,7 +537,7 @@ hover_anim_frac :: proc(frame: ^Ui_Frame, state: ^Button_State, hovered: bool) -
 // btn_palette returns the (rest, hovered) bg/fg/border colors for a style so
 // btn can blend between them with the eased hover fraction.
 @(private = "file")
-btn_palette :: proc(theme: ^Theme, style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0, bd1: rl.Color) {
+btn_palette :: proc(theme: ^Theme, style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0, bd1: Color) {
 	assert(theme != nil, "btn_palette: nil theme")
 	switch style {
 	case .Primary:
@@ -542,17 +552,17 @@ btn_palette :: proc(theme: ^Theme, style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0
 			theme.bg_hover,
 			theme.fg_secondary,
 			theme.fg_primary,
-			rl.Color{},
+			Color{},
 			theme.fg_accent
 	case .Danger:
 		return theme.button_danger_bg,
 			theme.button_danger_hover,
 			theme.button_danger_fg,
 			theme.button_danger_fg,
-			rl.Color{},
+			Color{},
 			theme.fg_error
 	case .Ghost:
-		return rl.Color{}, theme.bg_hover, theme.fg_secondary, theme.fg_accent, rl.Color{}, rl.Color{}
+		return Color{}, theme.bg_hover, theme.fg_secondary, theme.fg_accent, Color{}, Color{}
 	}
 	return
 }
@@ -561,7 +571,7 @@ btn_palette :: proc(theme: ^Theme, style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0
 // is inset past the corner radius because scissor modes don't nest in gfx and
 // a raw full-width quad would spill outside the rounded corners.
 @(private = "file")
-btn_gloss :: proc(theme: ^Theme, rect: rl.Rectangle) {
+btn_gloss :: proc(theme: ^Theme, rect: Rectangle) {
 	assert(theme != nil, "btn_gloss: nil theme")
 	top := theme.button_primary_grad_top
 	if top.a == 0 do return
@@ -569,7 +579,8 @@ btn_gloss :: proc(theme: ^Theme, rect: rl.Rectangle) {
 	inset := i32(radius) + 1
 	gw := i32(rect.width) - inset * 2
 	if gw <= 0 do return
-	rl.DrawRectangleGradientV(
+	draw_rectangle_gradient_v(
+		frame,
 		i32(rect.x) + inset,
 		i32(rect.y) + 1,
 		gw,
@@ -692,7 +703,7 @@ btn_at :: proc(
 	metrics := ui_frame_metrics(frame)
 	fs := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
 	style_theme := ui_frame_theme(frame)
-	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	it := interact(frame, rect)
 	hovered := enabled && it.hovered
 	clicked := enabled && it.clicked
@@ -713,19 +724,28 @@ btn_at :: proc(
 	fg := color_mix(fg0, fg1, t)
 	border := color_mix(bd0, bd1, t)
 	// Pressed feedback while the mouse button is held over the button.
-	if hovered && rl.IsMouseButtonDown(.LEFT) && (style == .Primary || style == .Secondary) {
+	if hovered &&
+	   is_mouse_button_down(frame, .LEFT) &&
+	   (style == .Primary || style == .Secondary) {
 		bg = style_theme.button_pressed
 	}
 	if !enabled {
 		bg = style_theme.button_disabled_bg
 		fg = style_theme.fg_muted_dim
-		border = rl.Color{0, 0, 0, 0}
+		border = Color{0, 0, 0, 0}
 	}
 
-	rl.DrawRectangleRounded(rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
+	draw_rectangle_rounded(frame, rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
 	if style == .Primary && enabled do btn_gloss(style_theme, rect)
 	if border.a > 0 {
-		rl.DrawRectangleRoundedLinesEx(rect, BTN_ROUNDNESS, BTN_SEGMENTS, BTN_BORDER_W, border)
+		draw_rectangle_rounded_lines_ex(
+			frame,
+			rect,
+			BTN_ROUNDNESS,
+			BTN_SEGMENTS,
+			BTN_BORDER_W,
+			border,
+		)
 	}
 	if enabled && focus_opt_focused(focus) {
 		draw_focus_ring(frame, x, y, w, h)
@@ -757,7 +777,7 @@ btn_at_state :: proc(
 	metrics := ui_frame_metrics(frame)
 	fs := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
 	style_theme := ui_frame_theme(frame)
-	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	it := interact(frame, rect)
 	hovered := enabled && it.hovered
 	clicked := enabled && it.clicked
@@ -776,19 +796,28 @@ btn_at_state :: proc(
 	bg := color_mix(bg0, bg1, t)
 	fg := color_mix(fg0, fg1, t)
 	border := color_mix(bd0, bd1, t)
-	if hovered && rl.IsMouseButtonDown(.LEFT) && (style == .Primary || style == .Secondary) {
+	if hovered &&
+	   is_mouse_button_down(frame, .LEFT) &&
+	   (style == .Primary || style == .Secondary) {
 		bg = style_theme.button_pressed
 	}
 	if !enabled {
 		state.hover = 0
 		bg = style_theme.button_disabled_bg
 		fg = style_theme.fg_muted_dim
-		border = rl.Color{0, 0, 0, 0}
+		border = Color{0, 0, 0, 0}
 	}
-	rl.DrawRectangleRounded(rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
+	draw_rectangle_rounded(frame, rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
 	if style == .Primary && enabled do btn_gloss(style_theme, rect)
 	if border.a > 0 {
-		rl.DrawRectangleRoundedLinesEx(rect, BTN_ROUNDNESS, BTN_SEGMENTS, BTN_BORDER_W, border)
+		draw_rectangle_rounded_lines_ex(
+			frame,
+			rect,
+			BTN_ROUNDNESS,
+			BTN_SEGMENTS,
+			BTN_BORDER_W,
+			border,
+		)
 	}
 	if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
@@ -825,7 +854,7 @@ draw_line_with_selection_frame :: proc(
 	x, y: i32,
 	line: string,
 	font_size, line_height: i32,
-	color: rl.Color,
+	color: Color,
 	line_byte_start, sel_start, sel_end: int,
 ) {
 	line_byte_end := line_byte_start + len(line)
@@ -838,7 +867,7 @@ draw_line_with_selection_frame :: proc(
 		hl_x := x + measure_text_frame(frame, prefix_c, font_size)
 		span_c := strings.clone_to_cstring(line[local_start:local_end], context.temp_allocator)
 		hl_w := measure_text_frame(frame, span_c, font_size)
-		rl.DrawRectangle(hl_x, y, hl_w, line_height, ui_frame_theme(frame).bg_selection)
+		draw_rectangle(frame, hl_x, y, hl_w, line_height, ui_frame_theme(frame).bg_selection)
 	}
 	line_c := strings.clone_to_cstring(line, context.temp_allocator)
 	draw_text_frame(frame, line_c, x, y, font_size, color)
@@ -869,7 +898,7 @@ draw_text_wrapped_frame :: proc(
 	frame: ^Ui_Frame,
 	x, y, max_width: i32,
 	text: string,
-	color: rl.Color,
+	color: Color,
 	font_size, line_height: i32,
 	sel_start: int = -1,
 	sel_end: int = -1,
@@ -914,7 +943,7 @@ draw_text_truncated_frame :: proc(
 	frame: ^Ui_Frame,
 	text: string,
 	x, y, max_width, font_size: i32,
-	color: rl.Color,
+	color: Color,
 ) {
 	assert(max_width >= 0 && font_size > 0, "draw_text_truncated_frame: invalid metrics")
 	if len(text) == 0 do return
@@ -925,14 +954,14 @@ draw_text_truncated_frame :: proc(
 
 // Draw a rounded "pill" badge with text. Returns the pill's full width so the
 // caller can advance horizontally. Background and foreground are caller-chosen.
-draw_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, fg, bg: rl.Color) -> i32 {
+draw_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, fg, bg: Color) -> i32 {
 	c := strings.clone_to_cstring(text, context.temp_allocator)
 	tw := measure_text_frame(frame, c, font_size)
 	pad_h: i32 = 6
 	pill_w := tw + pad_h * 2
 	pill_h := font_size + 4
-	rect := rl.Rectangle{f32(x), f32(y), f32(pill_w), f32(pill_h)}
-	rl.DrawRectangleRounded(rect, 0.6, 6, bg)
+	rect := Rectangle{f32(x), f32(y), f32(pill_w), f32(pill_h)}
+	draw_rectangle_rounded(frame, rect, 0.6, 6, bg)
 	draw_text_frame(frame, c, x + pad_h, y + 2, font_size, fg)
 	return pill_w
 }
@@ -1087,7 +1116,7 @@ spinner :: proc(
 	frame: ^Ui_Frame,
 	cx, cy: i32,
 	radius: f32,
-	color: rl.Color = THEME_COLOR,
+	color: Color = THEME_COLOR,
 	segments: i32 = 24,
 ) {
 	// The sentinel default resolves to the theme accent at call time
@@ -1096,11 +1125,12 @@ spinner :: proc(
 	if color == THEME_COLOR do color = ui_frame_theme(frame).fg_accent_light
 	// Continuous animation: keep frames coming while a spinner is visible
 	// (no-op in the default continuous frame strategy).
-	rl.RequestRedraw()
-	start := f32(math.mod(rl.GetTime() * 360.0, 360.0))
+	request_redraw(frame)
+	start := f32(math.mod(frame_input(frame).time * 360.0, 360.0))
 	thickness := max(radius * 0.28, 2.0)
-	rl.DrawRing(
-		rl.Vector2{f32(cx), f32(cy)},
+	draw_ring(
+		frame,
+		Vector2{f32(cx), f32(cy)},
 		radius - thickness,
 		radius,
 		start,
@@ -1115,7 +1145,8 @@ section_header :: proc(frame: ^Ui_Frame, x, y, w: i32, label: string) -> i32 {
 	style := ui_frame_theme(frame)
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
 	draw_text_frame(frame, lc, x, y, metrics.FONT_SIZE_LABEL, style.fg_label)
-	rl.DrawRectangle(
+	draw_rectangle(
+		frame,
 		x,
 		y + metrics.FONT_SIZE_LABEL + ui_frame_sc(frame, 5),
 		w,
@@ -1127,7 +1158,7 @@ section_header :: proc(frame: ^Ui_Frame, x, y, w: i32, label: string) -> i32 {
 
 // status_pill draws a pill whose background is the fg color tinted to
 // PILL_TINT_ALPHA. Returns the pill width.
-status_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, color: rl.Color) -> i32 {
+status_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, color: Color) -> i32 {
 	return draw_pill(
 		frame,
 		text,
@@ -1140,14 +1171,14 @@ status_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, color:
 }
 
 // progress_bar draws a rounded track + fill; frac clamped to [0,1].
-progress_bar :: proc(frame: ^Ui_Frame, x, y, w, h: i32, frac: f32, color: rl.Color) {
-	track := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	rl.DrawRectangleRounded(track, 1.0, 4, ui_frame_theme(frame).bg_active)
+progress_bar :: proc(frame: ^Ui_Frame, x, y, w, h: i32, frac: f32, color: Color) {
+	track := Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	draw_rectangle_rounded(frame, track, 1.0, 4, ui_frame_theme(frame).bg_active)
 	fw := f32(w) * clamp(frac, 0, 1)
 	if fw >= f32(h) { 	// avoid degenerate rounding on tiny fills
-		rl.DrawRectangleRounded({f32(x), f32(y), fw, f32(h)}, 1.0, 4, color)
+		draw_rectangle_rounded(frame, {f32(x), f32(y), fw, f32(h)}, 1.0, 4, color)
 	} else if fw > 0 {
-		rl.DrawRectangleRec({f32(x), f32(y), fw, f32(h)}, color)
+		draw_rectangle_rec(frame, {f32(x), f32(y), fw, f32(h)}, color)
 	}
 }
 
@@ -1173,12 +1204,12 @@ progress_bar_animated :: proc(
 	x, y, w, h: i32,
 	frac: f32,
 	anim: ^f32,
-	color: rl.Color,
+	color: Color,
 ) {
-	eased(anim, clamp(frac, 0, 1), rl.GetFrameTime(), 10.0)
+	eased(anim, clamp(frac, 0, 1), frame_input(frame).frame_time, 10.0)
 	if abs(clamp(frac, 0, 1) - anim^) >= 0.001 {
 		// Still easing: keep frames coming until the fill settles.
-		rl.RequestRedraw()
+		request_redraw(frame)
 	}
 	progress_bar(frame, x, y, w, h, anim^, color)
 }
@@ -1210,7 +1241,7 @@ kv_row_frame :: proc(
 	frame: ^Ui_Frame,
 	x, y, w: i32,
 	key, value: string,
-	key_col, val_col: rl.Color,
+	key_col, val_col: Color,
 	font_size: i32 = 0,
 ) {
 	assert(frame != nil && frame.open, "kv_row_frame: invalid frame")
@@ -1228,12 +1259,12 @@ kv_row_frame :: proc(
 }
 
 // list_row_bg draws the unified rounded row background for hover/selection.
-list_row_bg :: proc(frame: ^Ui_Frame, rect: rl.Rectangle, selected, hovered: bool) {
+list_row_bg :: proc(frame: ^Ui_Frame, rect: Rectangle, selected, hovered: bool) {
 	style := ui_frame_theme(frame)
 	if selected {
-		rl.DrawRectangleRounded(rect, 0.25, 4, style.bg_active)
+		draw_rectangle_rounded(frame, rect, 0.25, 4, style.bg_active)
 	} else if hovered {
-		rl.DrawRectangleRounded(rect, 0.25, 4, style.bg_hover)
+		draw_rectangle_rounded(frame, rect, 0.25, 4, style.bg_hover)
 	}
 }
 
@@ -1273,10 +1304,9 @@ pane_begin :: proc(
 	assert(!p.open, "pane_begin: pane already begun (missing pane_end)")
 	assert(w >= 0 && h >= 0, "pane_begin: negative pane size")
 	p.open = true
-	mouse := rl.GetMousePosition()
+	mouse := get_mouse_position(frame)
 	hovered :=
-		rl.CheckCollisionPointRec(mouse, {f32(x), f32(y), f32(w), f32(h)}) &&
-		!route_occluded(frame, mouse)
+		point_in_rect(mouse, {f32(x), f32(y), f32(w), f32(h)}) && !route_occluded(frame, mouse)
 	if hovered {
 		p.scroll -= get_wheel_move() * f32(ui_frame_sc(frame, 24))
 	}
@@ -1295,12 +1325,12 @@ pane_keyboard_scroll :: proc(frame: ^Ui_Frame, p: ^Pane, h: i32) {
 	assert(p != nil, "pane_keyboard_scroll: nil pane")
 	assert(p.open, "pane_keyboard_scroll: pane not begun")
 	step := f32(ui_frame_metrics(frame).LINE_HEIGHT)
-	if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN) do p.scroll += step
-	if rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP) do p.scroll -= step
-	if rl.IsKeyPressed(.PAGE_DOWN) || rl.IsKeyPressedRepeat(.PAGE_DOWN) do p.scroll += f32(h)
-	if rl.IsKeyPressed(.PAGE_UP) || rl.IsKeyPressedRepeat(.PAGE_UP) do p.scroll -= f32(h)
-	if rl.IsKeyPressed(.HOME) do p.scroll = 0
-	if rl.IsKeyPressed(.END) do p.scroll = f32(max(p.content_h - h, 0))
+	if is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN) do p.scroll += step
+	if is_key_pressed(frame, .UP) || is_key_pressed_repeat(frame, .UP) do p.scroll -= step
+	if is_key_pressed(frame, .PAGE_DOWN) || is_key_pressed_repeat(frame, .PAGE_DOWN) do p.scroll += f32(h)
+	if is_key_pressed(frame, .PAGE_UP) || is_key_pressed_repeat(frame, .PAGE_UP) do p.scroll -= f32(h)
+	if is_key_pressed(frame, .HOME) do p.scroll = 0
+	if is_key_pressed(frame, .END) do p.scroll = f32(max(p.content_h - h, 0))
 }
 
 // pane_end ends the scissor, records the measured content height from the
@@ -1312,7 +1342,7 @@ pane_end :: proc(frame: ^Ui_Frame, p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i
 	assert(p.open, "pane_end: pane not begun")
 	assert(h >= 0, "pane_end: negative pane height")
 	p.open = false
-	rl.EndScissorMode()
+	end_scissor_mode(frame)
 	start_y := y + ui_frame_sc(frame, pad) - i32(p.scroll)
 	p.content_h = end_y - start_y + ui_frame_sc(frame, pad)
 	if p.content_h > h {
@@ -1381,7 +1411,7 @@ collapsible_header :: proc(
 	style := ui_frame_theme(frame)
 	resolved_font_size := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
 	h := ui_frame_sc(frame, 26)
-	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	it := interact(frame, rect)
 	hovered := it.hovered
 	focus_opt_click(frame, focus, x, y, w, h)

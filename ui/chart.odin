@@ -7,7 +7,7 @@ package ui
 import "core:fmt"
 import "core:math"
 import "core:strings"
-import rl "ingot:gfx"
+
 
 // Chart_State is caller-owned per-chart state. The zero value is valid; reset
 // enter_anim to 0 to replay the enter animation.
@@ -22,7 +22,7 @@ Chart_State :: struct {
 Chart_Series :: struct {
 	name:   string,
 	values: []f32,
-	color:  rl.Color,
+	color:  Color,
 }
 
 // Chart_Opts configures axes, range, and decoration. The zero value draws a
@@ -78,7 +78,7 @@ nice_ticks :: proc(min_v, max_v: f32, target: int) -> (lo, hi, step: f32) {
 // map_y maps a value to a pixel y within the plot rect (lo → bottom edge,
 // hi → top edge). Values outside [lo, hi] clamp to the plot edges.
 @(private)
-map_y :: proc(v, lo, hi: f32, plot: rl.Rectangle) -> f32 {
+map_y :: proc(v, lo, hi: f32, plot: Rectangle) -> f32 {
 	if hi - lo < 1e-9 do return plot.y + plot.height
 	t := clamp((v - lo) / (hi - lo), 0, 1)
 	return plot.y + plot.height * (1 - t)
@@ -88,8 +88,8 @@ map_y :: proc(v, lo, hi: f32, plot: rl.Rectangle) -> f32 {
 // the mouse is outside the plot (or there are no points). Points sit at
 // evenly spaced x positions spanning the plot width.
 @(private)
-line_hover_index :: proc(mouse: rl.Vector2, plot: rl.Rectangle, n: int) -> int {
-	if n <= 0 || !rl.CheckCollisionPointRec(mouse, plot) do return -1
+line_hover_index :: proc(mouse: Vector2, plot: Rectangle, n: int) -> int {
+	if n <= 0 || !point_in_rect(mouse, plot) do return -1
 	if n == 1 do return 0
 	slot := plot.width / f32(n - 1)
 	idx := int((mouse.x - plot.x) / slot + 0.5)
@@ -99,8 +99,8 @@ line_hover_index :: proc(mouse: rl.Vector2, plot: rl.Rectangle, n: int) -> int {
 // bar_hover_index returns the slot index containing the mouse x, or -1 when
 // the mouse is outside the plot. Slots partition the plot width into n bins.
 @(private)
-bar_hover_index :: proc(mouse: rl.Vector2, plot: rl.Rectangle, n: int) -> int {
-	if n <= 0 || !rl.CheckCollisionPointRec(mouse, plot) do return -1
+bar_hover_index :: proc(mouse: Vector2, plot: Rectangle, n: int) -> int {
+	if n <= 0 || !point_in_rect(mouse, plot) do return -1
 	slot := plot.width / f32(n)
 	idx := int((mouse.x - plot.x) / slot)
 	return clamp(idx, 0, n - 1)
@@ -129,7 +129,7 @@ chart_data_range :: proc(series: []Chart_Series) -> (mn, mx: f32, n: int, ok: bo
 
 // chart_series_color cycles the theme palette by series index.
 @(private)
-chart_series_color :: proc(frame: ^Ui_Frame, i: int) -> rl.Color {
+chart_series_color :: proc(frame: ^Ui_Frame, i: int) -> Color {
 	style := ui_frame_theme(frame)
 	switch i %% 6 {
 	case 0:
@@ -151,8 +151,8 @@ chart_series_color :: proc(frame: ^Ui_Frame, i: int) -> rl.Color {
 
 @(private = "file")
 Chart_Layout :: struct {
-	chart:        rl.Rectangle, // full widget bounds
-	plot:         rl.Rectangle, // inner data area
+	chart:        Rectangle, // full widget bounds
+	plot:         Rectangle, // inner data area
 	lo, hi, step: f32, // nice y range
 	n:            int, // point count (max across series)
 }
@@ -216,8 +216,8 @@ chart_layout :: proc(
 	plot_w := w - left - right
 	if plot_w < ui_frame_sc(frame, 20) do return
 
-	cl.chart = rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	cl.plot = rl.Rectangle{f32(x + left), f32(y + top), f32(plot_w), f32(plot_h)}
+	cl.chart = Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	cl.plot = Rectangle{f32(x + left), f32(y + top), f32(plot_w), f32(plot_h)}
 	cl.n = n
 	ok = true
 	return
@@ -228,8 +228,8 @@ chart_layout :: proc(
 @(private = "file")
 chart_anim :: proc(state: ^Chart_State) -> f32 {
 	if state == nil do return 1
-	eased(&state.enter_anim, 1, rl.GetFrameTime(), 6.0)
-	if state.enter_anim < 1 do rl.RequestRedraw()
+	eased(&state.enter_anim, 1, frame_input(frame).frame_time, 6.0)
+	if state.enter_anim < 1 do request_redraw(frame)
 	return state.enter_anim
 }
 
@@ -240,7 +240,7 @@ chart_note_hover :: proc(state: ^Chart_State, hovered: int) {
 	if state == nil do return
 	if hovered != state.hover_idx {
 		state.hover_idx = hovered
-		rl.RequestRedraw()
+		request_redraw(frame)
 	}
 }
 
@@ -255,7 +255,8 @@ chart_draw_axes :: proc(frame: ^Ui_Frame, cl: Chart_Layout, opts: Chart_Opts, xs
 		for tv := cl.lo; tv <= cl.hi + cl.step * 0.5; tv += cl.step {
 			py := map_y(tv, cl.lo, cl.hi, cl.plot)
 			if opts.show_grid {
-				rl.DrawLineEx(
+				draw_line_ex(
+					frame,
 					{cl.plot.x, py},
 					{cl.plot.x + cl.plot.width, py},
 					1,
@@ -279,7 +280,8 @@ chart_draw_axes :: proc(frame: ^Ui_Frame, cl: Chart_Layout, opts: Chart_Opts, xs
 	}
 	if opts.show_axes {
 		by := cl.plot.y + cl.plot.height
-		rl.DrawLineEx(
+		draw_line_ex(
+			frame,
 			{cl.plot.x, by},
 			{cl.plot.x + cl.plot.width, by},
 			ui_frame_scf(frame, 1),
@@ -321,7 +323,8 @@ chart_draw_legend :: proc(frame: ^Ui_Frame, cl: Chart_Layout, series: []Chart_Se
 	sw := ui_frame_sc(frame, 10)
 	for s, i in series {
 		col := s.color if s.color != {} else chart_series_color(frame, i)
-		rl.DrawRectangleRounded(
+		draw_rectangle_rounded(
+			frame,
 			{f32(lx), f32(ly + (metrics.FONT_SIZE_SMALL - sw) / 2), f32(sw), f32(sw)},
 			0.4,
 			4,
@@ -347,7 +350,7 @@ chart_draw_tooltip :: proc(
 	series: []Chart_Series,
 	opts: Chart_Opts,
 	idx: int,
-	mouse: rl.Vector2,
+	mouse: Vector2,
 ) {
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
@@ -392,7 +395,7 @@ chart_draw_tooltip :: proc(
 	)
 	origin := frame_pane_origin(frame)
 	ox := i32(origin.x)
-	rect := rl.Rectangle{f32(tx + ox), f32(ty), f32(tw), f32(th)}
+	rect := Rectangle{f32(tx + ox), f32(ty), f32(tw), f32(th)}
 	overlay_begin(frame, rect, claim_input = false)
 	overlay_rounded(frame, rect, 0.2, 4, style.bg_popup)
 	overlay_rounded_lines(frame, rect, 0.2, 4, ui_frame_scf(frame, 1), style.border_color)
@@ -469,7 +472,7 @@ line_chart :: proc(
 
 	chart_draw_axes(frame, cl, opts, xs)
 
-	mouse := rl.GetMousePosition()
+	mouse := get_mouse_position(frame)
 	hovered := line_hover_index(mouse, cl.plot, cl.n)
 	chart_note_hover(state, hovered)
 
@@ -479,22 +482,23 @@ line_chart :: proc(
 		nv := min(len(s.values), cl.n)
 		if nv == 0 do continue
 		if opts.fill && nv >= 2 {
-			fill := rl.Color{col.r, col.g, col.b, 40}
+			fill := Color{col.r, col.g, col.b, 40}
 			for i in 1 ..< nv {
-				p0 := rl.Vector2{xs[i - 1], chart_point_y(s.values[i - 1], cl, anim)}
-				p1 := rl.Vector2{xs[i], chart_point_y(s.values[i], cl, anim)}
-				rl.DrawTriangle(p0, {p0.x, yb}, {p1.x, yb}, fill)
-				rl.DrawTriangle(p0, {p1.x, yb}, p1, fill)
+				p0 := Vector2{xs[i - 1], chart_point_y(s.values[i - 1], cl, anim)}
+				p1 := Vector2{xs[i], chart_point_y(s.values[i], cl, anim)}
+				draw_triangle(frame, p0, {p0.x, yb}, {p1.x, yb}, fill)
+				draw_triangle(frame, p0, {p1.x, yb}, p1, fill)
 			}
 		}
 		thick := ui_frame_scf(frame, 2)
 		for i in 1 ..< nv {
-			p0 := rl.Vector2{xs[i - 1], chart_point_y(s.values[i - 1], cl, anim)}
-			p1 := rl.Vector2{xs[i], chart_point_y(s.values[i], cl, anim)}
-			rl.DrawLineEx(p0, p1, thick, col)
+			p0 := Vector2{xs[i - 1], chart_point_y(s.values[i - 1], cl, anim)}
+			p1 := Vector2{xs[i], chart_point_y(s.values[i], cl, anim)}
+			draw_line_ex(frame, p0, p1, thick, col)
 		}
 		if nv == 1 {
-			rl.DrawCircleV(
+			draw_circle_v(
+				frame,
 				{xs[0], chart_point_y(s.values[0], cl, anim)},
 				ui_frame_scf(frame, 3),
 				col,
@@ -506,7 +510,8 @@ line_chart :: proc(
 
 	if hovered >= 0 {
 		gx := xs[hovered]
-		rl.DrawLineEx(
+		draw_line_ex(
+			frame,
 			{gx, cl.plot.y},
 			{gx, yb},
 			ui_frame_scf(frame, 1),
@@ -515,7 +520,8 @@ line_chart :: proc(
 		for s, si in series {
 			if hovered >= len(s.values) do continue
 			col := s.color if s.color != {} else chart_series_color(frame, si)
-			rl.DrawCircleV(
+			draw_circle_v(
+				frame,
 				{gx, chart_point_y(s.values[hovered], cl, anim)},
 				ui_frame_scf(frame, 4),
 				col,
@@ -547,15 +553,16 @@ bar_chart :: proc(
 
 	chart_draw_axes(frame, cl, opts, xs)
 
-	mouse := rl.GetMousePosition()
+	mouse := get_mouse_position(frame)
 	hovered := bar_hover_index(mouse, cl.plot, cl.n)
 	chart_note_hover(state, hovered)
 
 	if hovered >= 0 {
 		hl := ui_frame_theme(frame).fg_accent
-		rl.DrawRectangleRec(
+		draw_rectangle_rec(
+			frame,
 			{cl.plot.x + slot * f32(hovered), cl.plot.y, slot, cl.plot.height},
-			rl.Color{hl.r, hl.g, hl.b, 18},
+			Color{hl.r, hl.g, hl.b, 18},
 		)
 	}
 
@@ -573,11 +580,11 @@ bar_chart :: proc(
 			bx := cl.plot.x + slot * f32(i) + gap + bw * f32(si)
 			bh := abs(yb - py)
 			if bh < 0.5 do continue
-			rect := rl.Rectangle{bx, min(py, yb), max(bw - 1, 1), bh}
+			rect := Rectangle{bx, min(py, yb), max(bw - 1, 1), bh}
 			if bh >= ui_frame_scf(frame, 6) { 	// avoid degenerate rounding on tiny bars
-				rl.DrawRectangleRounded(rect, 0.25, 4, col)
+				draw_rectangle_rounded(frame, rect, 0.25, 4, col)
 			} else {
-				rl.DrawRectangleRec(rect, col)
+				draw_rectangle_rec(frame, rect, col)
 			}
 		}
 	}
@@ -589,7 +596,7 @@ bar_chart :: proc(
 
 // sparkline draws a minimal inline trend line (no axes, no state, no hover)
 // sized to fit inside stat cards. A zero color resolves to the theme accent.
-sparkline :: proc(frame: ^Ui_Frame, x, y, w, h: i32, values: []f32, color: rl.Color = {}) {
+sparkline :: proc(frame: ^Ui_Frame, x, y, w, h: i32, values: []f32, color: Color = {}) {
 	if len(values) == 0 || w <= 0 || h <= 0 do return
 	color := color
 	if color == {} do color = ui_frame_theme(frame).fg_accent_light
@@ -603,14 +610,14 @@ sparkline :: proc(frame: ^Ui_Frame, x, y, w, h: i32, values: []f32, color: rl.Co
 
 	n := len(values)
 	fx, fy, fw, fh := f32(x), f32(y), f32(w), f32(h)
-	prev, last: rl.Vector2
+	prev, last: Vector2
 	for v, i in values {
 		t := f32(0.5) // all-equal values: flat mid line
 		if span > 1e-9 do t = (v - mn) / span
-		p := rl.Vector2{fx + fw * (f32(i) / f32(max(n - 1, 1))), fy + fh * (1 - t)}
-		if i > 0 do rl.DrawLineEx(prev, p, ui_frame_scf(frame, 1.5), color)
+		p := Vector2{fx + fw * (f32(i) / f32(max(n - 1, 1))), fy + fh * (1 - t)}
+		if i > 0 do draw_line_ex(frame, prev, p, ui_frame_scf(frame, 1.5), color)
 		prev = p
 		last = p
 	}
-	rl.DrawCircleV(last, ui_frame_scf(frame, 2.5), color)
+	draw_circle_v(frame, last, ui_frame_scf(frame, 2.5), color)
 }
