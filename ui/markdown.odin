@@ -987,7 +987,14 @@ layout_table :: proc(
 
 	total_h := row_y - y + 1 // +1 for header separator rule
 	if draw {
-		draw_rectangle_lines(ctx.frame, x, y, table_w, total_h, ui_frame_theme(ctx.frame).border_color)
+		draw_rectangle_lines(
+			ctx.frame,
+			x,
+			y,
+			table_w,
+			total_h,
+			ui_frame_theme(ctx.frame).border_color,
+		)
 	}
 	total_h += 4 // bottom margin
 

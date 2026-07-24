@@ -69,3 +69,35 @@ set_text_input_rect :: proc(frame: ^Ui_Frame, x, y, width, height: i32) {
 	frame.output.platform.text_input_rect = {f32(x), f32(y), f32(width), f32(height)}
 	frame.output.platform.text_input_active = true
 }
+
+sync_web_submit_button :: proc(
+	frame: ^Ui_Frame,
+	form_id, label: string,
+	x, y, width, height, style, font_size: i32,
+	enabled: bool,
+) -> bool {
+	assert(frame != nil && frame.output != nil, "sync_web_submit_button: invalid frame")
+	assert(width >= 0 && height >= 0, "sync_web_submit_button: negative size")
+	_ = form_id
+	_ = style
+	_ = font_size
+	output := &frame.output.platform
+	if output.control_count >= PLATFORM_CONTROL_CAP {
+		output.controls_dropped += 1
+		return false
+	}
+	if len(label) > PLATFORM_TEXT_CAP - output.control_text_len {
+		output.controls_dropped += 1
+		return false
+	}
+	control := &output.controls[output.control_count]
+	control.kind = .Submit_Button
+	control.rect = {f32(x), f32(y), f32(width), f32(height)}
+	control.text_offset = output.control_text_len
+	control.text_length = len(label)
+	control.disabled = !enabled
+	copy(output.control_text[output.control_text_len:], transmute([]u8)label)
+	output.control_text_len += len(label)
+	output.control_count += 1
+	return false
+}

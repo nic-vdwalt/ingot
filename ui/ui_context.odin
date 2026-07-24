@@ -41,6 +41,7 @@ MAX_PANE_SCOPES :: 16
 
 Ui_Frame :: struct {
 	runtime:          ^Ui_Runtime,
+	input_default:    Ui_Input,
 	input:            ^Ui_Input,
 	output:           ^Ui_Output,
 	cursor:           Cursor_State,
@@ -156,7 +157,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	assert(frame != nil && runtime != nil, "ui_frame_begin: nil frame or runtime")
 	assert(runtime.initialized && !frame.open, "ui_frame_begin: invalid lifetime")
 	runtime.frame_generation += 1
-	frame.input = input
+	frame.input = input if input != nil else &frame.input_default
 	if frame.output != nil do ui_output_reset(frame.output)
 	a11y_expire_before_frame(runtime)
 	frame.runtime = runtime
@@ -250,11 +251,13 @@ ui_begin :: proc(u: ^Ui, x, y, w, h: i32, gap: i32 = 0) {
 	assert(u != nil, "ui_begin: nil Ui")
 	assert(!u.open, "ui_begin: frame already open")
 	frame := u.frame
-	u.screen_w = i32(frame_input(frame).screen_size.x)
-	u.screen_h = i32(frame_input(frame).screen_size.y)
+	input: Ui_Input
+	if frame != nil && frame.input != nil do input = frame.input^
+	u.screen_w = i32(input.screen_size.x)
+	u.screen_h = i32(input.screen_size.y)
 	if u.focus_count > 0 do form_focus_cycle(frame, &u.focus_slot, u.focus_count)
-	if u.stable_count > 0 && is_key_pressed(frame, .TAB) {
-		backwards := is_key_down(frame, .LEFT_SHIFT) || is_key_down(frame, .RIGHT_SHIFT)
+	if u.stable_count > 0 && input_key_pressed(&input, .TAB) {
+		backwards := input_key_down(&input, .LEFT_SHIFT) || input_key_down(&input, .RIGHT_SHIFT)
 		ids := u.stable_prev[:u.stable_count]
 		u.stable_focus.active = focus_order_next(ids, u.stable_focus.active, backwards)
 	}
