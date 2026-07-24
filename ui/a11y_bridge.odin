@@ -85,12 +85,18 @@ a11y_apply_action :: proc(frame: ^Ui_Frame, action: A11y_Action) {
 		focus, ok := sem_action_target(frame, action.node)
 		if ok {
 			focus_opt_set(focus)
-			request_redraw(frame)
+			if frame.output != nil do request_redraw(frame)
 		}
 	}
 }
 
-a11y_build_nodes :: proc(frame: ^Sem_Frame, allocator := context.temp_allocator) -> (nodes: []A11y_Node_Desc, focus_id: u64) {
+a11y_build_nodes :: proc(
+	frame: ^Sem_Frame,
+	allocator := context.temp_allocator,
+) -> (
+	nodes: []A11y_Node_Desc,
+	focus_id: u64,
+) {
 	assert(frame != nil, "a11y_build_nodes: nil frame")
 	assert(frame.count >= 0 && frame.count <= MAX_SEM_NODES, "a11y_build_nodes: corrupt frame")
 	focus_id = SEM_ID_ROOT
