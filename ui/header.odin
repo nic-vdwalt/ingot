@@ -11,7 +11,7 @@ import rl "ingot:gfx"
 //
 // Call once per frame, drawn last (on top of everything else). On macOS/Linux
 // the native title bar is retained; this strip sits just below it.
-draw_app_header :: proc(title: cstring, screen_w: i32) -> (header_h: i32) {
+draw_app_header :: proc(frame: ^Ui_Frame, title: cstring, screen_w: i32) -> (header_h: i32) {
 	header_h = TAB_BAR_HEIGHT
 	h := f32(header_h)
 
@@ -45,7 +45,7 @@ draw_app_header :: proc(title: cstring, screen_w: i32) -> (header_h: i32) {
 		is_fs := rl.IsWindowFullscreen()
 		_, hovered := draw_fullscreen_button(screen_w, is_fs, rl.GetMousePosition())
 		if hovered {
-			request_cursor(.POINTING_HAND)
+			request_cursor(frame, .POINTING_HAND)
 			if rl.IsMouseButtonPressed(.LEFT) {
 				rl.ToggleFullscreen()
 			}

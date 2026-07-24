@@ -30,11 +30,25 @@ Initialize and destroy the runtime with the window, bracket drawing with
 `ui_begin_frame`. Several roots may share a frame, while separate windows and
 tests use separate runtime/frame pairs.
 
-`Ui_Runtime` owns text and spell systems plus style generations. Cache results
-are borrowed until the owning system is reset or destroyed. Persistent widget
-behavior never lives in the runtime: keep `Button_State`, `Slider_State`,
-`Input_Box`, and other state bundles in the component that draws them. Stable
-IDs identify focus targets; they do not own widget state.
+`Ui_Runtime` owns text and spell systems, theme, metrics, DPI tracking, and
+style generations. `Ui_Frame` owns cursor arbitration, overlays, input routes,
+interaction arbitration, semantics, accessibility actions, and pane-coordinate
+scopes. Cache results are borrowed until the owning system is reset or
+destroyed. Persistent widget behavior never lives in either context: keep
+`Button_State`, `Slider_State`, `Input_Box`, menu state, and scrollbar state in
+the component that draws them. Stable IDs identify focus targets; they do not
+own widget state.
+
+Ingot has no implicit active runtime or frame. Geometry-level widgets receive a
+`^Ui_Frame`; `Ui` overloads forward the frame attached by `ui_begin_frame`.
+Text, wrap, and spell helpers receive their owning system explicitly. A host
+must end every frame before beginning another frame on the same object.
+Accessibility adapters may be process-limited by the operating-system bridge,
+but semantic data and pending actions remain owned by the selected runtime and
+frame.
+
+Consumers not yet migrated to this API must remain pinned to an earlier Ingot
+revision. In particular, `ww-app` is intentionally deferred.
 
 ```odin
 runtime: ui.Ui_Runtime
