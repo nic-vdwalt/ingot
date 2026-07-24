@@ -91,9 +91,17 @@ focus_opt_activated :: proc(frame: ^Ui_Frame, f: Focus_Opt) -> bool {
 	return focus_activated(frame, f.focus, f.id)
 }
 
-draw_focus_ring :: proc(x, y, w, h: i32) {
+draw_focus_ring :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
 	assert(w > 0 && h > 0, "draw_focus_ring: empty rect")
-	assert(theme.focus_ring.a > 0, "draw_focus_ring: theme.focus_ring has zero alpha")
-	r := rl.Rectangle{f32(x - 2), f32(y - 2), f32(w + 4), f32(h + 4)}
-	rl.DrawRectangleRoundedLinesEx(r, BTN_ROUNDNESS, BTN_SEGMENTS, 2.0, theme.focus_ring)
+	style := ui_frame_theme(frame)
+	assert(style.focus_ring.a > 0, "draw_focus_ring: focus ring has zero alpha")
+	inset := ui_frame_sc(frame, 2)
+	r := rl.Rectangle{f32(x - inset), f32(y - inset), f32(w + inset * 2), f32(h + inset * 2)}
+	rl.DrawRectangleRoundedLinesEx(
+		r,
+		BTN_ROUNDNESS,
+		BTN_SEGMENTS,
+		ui_frame_scf(frame, 2.0),
+		style.focus_ring,
+	)
 }

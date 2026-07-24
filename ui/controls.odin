@@ -18,16 +18,24 @@ checkbox :: proc {
 
 // checkbox_ui carves its own slot (content-sized) and auto-registers focus.
 checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
+	metrics := ui_frame_metrics(u.frame)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
-	r := ui_slot(u, w, ROW_H_SM)
+	w :=
+		metrics.CONTROL_BOX +
+		metrics.CONTROL_GAP +
+		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	r := ui_slot(u, w, metrics.ROW_H_SM)
 	return checkbox_at(u.frame, r, label, checked, ui_focus(u))
 }
 
 checkbox_ui_id :: proc(u: ^Ui, id: Focus_Id, label: string, checked: ^bool) -> (changed: bool) {
+	metrics := ui_frame_metrics(u.frame)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
-	r := ui_slot(u, w, ROW_H_SM)
+	w :=
+		metrics.CONTROL_BOX +
+		metrics.CONTROL_GAP +
+		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	r := ui_slot(u, w, metrics.ROW_H_SM)
 	return checkbox_at(u.frame, r, label, checked, ui_focus(u, id))
 }
 
@@ -54,12 +62,14 @@ checkbox_at :: proc(
 		changed = true
 	}
 
-	box := CONTROL_BOX
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	box := metrics.CONTROL_BOX
 	bx := rect.x
 	by := rect.y + (rect.h - box) / 2
 	box_rect := rl.Rectangle{f32(bx), f32(by), f32(box), f32(box)}
-	bg := theme.button_bg if checked^ else theme.bg_input
-	border := theme.fg_accent if hovered || focus_opt_focused(focus) else theme.border_color
+	bg := style.button_bg if checked^ else style.bg_input
+	border := style.fg_accent if hovered || focus_opt_focused(focus) else style.border_color
 	rl.DrawRectangleRounded(box_rect, 0.25, 4, bg)
 	rl.DrawRectangleRoundedLinesEx(box_rect, 0.25, 4, 1.0, border)
 	if checked^ {
@@ -71,25 +81,26 @@ checkbox_at :: proc(
 			{cx + s * 0.22, cy + s * 0.52},
 			{cx + s * 0.44, cy + s * 0.74},
 			2.0,
-			theme.button_text,
+			style.button_text,
 		)
 		rl.DrawLineEx(
 			{cx + s * 0.44, cy + s * 0.74},
 			{cx + s * 0.80, cy + s * 0.28},
 			2.0,
-			theme.button_text,
+			style.button_text,
 		)
 	}
 	if focus_opt_focused(focus) {
-		draw_focus_ring(bx, by, box, box)
+		draw_focus_ring(frame, bx, by, box, box)
 	}
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text(
+	draw_text_frame(
+		frame,
 		label_c,
-		bx + box + CONTROL_GAP,
-		rect.y + (rect.h - FONT_SIZE_BODY) / 2,
-		FONT_SIZE_BODY,
-		theme.fg_primary,
+		bx + box + metrics.CONTROL_GAP,
+		rect.y + (rect.h - metrics.FONT_SIZE_BODY) / 2,
+		metrics.FONT_SIZE_BODY,
+		style.fg_primary,
 	)
 	sem: Sem_State
 	if checked^ do sem += {.Checked}
@@ -107,9 +118,13 @@ radio :: proc {
 
 // radio_ui carves its own slot (content-sized) and auto-registers focus.
 radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed: bool) {
+	metrics := ui_frame_metrics(u.frame)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
-	r := ui_slot(u, w, ROW_H_SM)
+	w :=
+		metrics.CONTROL_BOX +
+		metrics.CONTROL_GAP +
+		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	r := ui_slot(u, w, metrics.ROW_H_SM)
 	return radio_at(u.frame, r, label, selected, value, ui_focus(u))
 }
 
@@ -122,9 +137,13 @@ radio_ui_id :: proc(
 ) -> (
 	changed: bool,
 ) {
+	metrics := ui_frame_metrics(u.frame)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
-	r := ui_slot(u, w, ROW_H_SM)
+	w :=
+		metrics.CONTROL_BOX +
+		metrics.CONTROL_GAP +
+		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	r := ui_slot(u, w, metrics.ROW_H_SM)
 	return radio_at(u.frame, r, label, selected, value, ui_focus(u, id))
 }
 
@@ -152,28 +171,31 @@ radio_at :: proc(
 		changed = true
 	}
 
-	box := CONTROL_BOX
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	box := metrics.CONTROL_BOX
 	r := f32(box) / 2
 	ccx := f32(rect.x) + r
 	ccy := f32(rect.y) + f32(rect.h) / 2
 	is_on := selected^ == value
 	border :=
-		theme.fg_accent if hovered || focus_opt_focused(focus) || is_on else theme.border_color
-	rl.DrawCircleV({ccx, ccy}, r, theme.bg_input)
+		style.fg_accent if hovered || focus_opt_focused(focus) || is_on else style.border_color
+	rl.DrawCircleV({ccx, ccy}, r, style.bg_input)
 	rl.DrawCircleLinesV({ccx, ccy}, r, border)
 	if is_on {
-		rl.DrawCircleV({ccx, ccy}, r * 0.45, theme.fg_accent)
+		rl.DrawCircleV({ccx, ccy}, r * 0.45, style.fg_accent)
 	}
 	if focus_opt_focused(focus) {
-		draw_focus_ring(rect.x, rect.y + (rect.h - box) / 2, box, box)
+		draw_focus_ring(frame, rect.x, rect.y + (rect.h - box) / 2, box, box)
 	}
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text(
+	draw_text_frame(
+		frame,
 		label_c,
-		rect.x + box + CONTROL_GAP,
-		rect.y + (rect.h - FONT_SIZE_BODY) / 2,
-		FONT_SIZE_BODY,
-		theme.fg_primary,
+		rect.x + box + metrics.CONTROL_GAP,
+		rect.y + (rect.h - metrics.FONT_SIZE_BODY) / 2,
+		metrics.FONT_SIZE_BODY,
+		style.fg_primary,
 	)
 	sem: Sem_State
 	if is_on do sem += {.Checked}
@@ -230,8 +252,9 @@ slider_ui :: proc(
 ) -> (
 	changed: bool,
 ) {
-	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
-	r := ui_slot(u, ww, ROW_H_SM)
+	metrics := ui_frame_metrics(u.frame)
+	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
+	r := ui_slot(u, ww, metrics.ROW_H_SM)
 	return slider_at(u.frame, r, value, lo, hi, step, ui_focus(u), a11y_label)
 }
 
@@ -246,8 +269,9 @@ slider_ui_id :: proc(
 ) -> (
 	changed: bool,
 ) {
-	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
-	r := ui_slot(u, ww, ROW_H_SM)
+	metrics := ui_frame_metrics(u.frame)
+	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
+	r := ui_slot(u, ww, metrics.ROW_H_SM)
 	return slider_at(u.frame, r, value, lo, hi, step, ui_focus(u, id), a11y_label)
 }
 
@@ -261,8 +285,9 @@ slider_ui_state :: proc(
 	a11y_label: string = "",
 ) -> bool {
 	assert(state != nil, "slider_ui_state: nil state")
-	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
-	r := ui_slot(u, ww, ROW_H_SM)
+	metrics := ui_frame_metrics(u.frame)
+	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
+	r := ui_slot(u, ww, metrics.ROW_H_SM)
 	return slider_at_state(u.frame, state, r, value, lo, hi, step, ui_focus(u), a11y_label)
 }
 
@@ -277,8 +302,9 @@ slider_ui_state_id :: proc(
 	a11y_label: string = "",
 ) -> bool {
 	assert(state != nil, "slider_ui_state_id: nil state")
-	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
-	r := ui_slot(u, ww, ROW_H_SM)
+	metrics := ui_frame_metrics(u.frame)
+	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
+	r := ui_slot(u, ww, metrics.ROW_H_SM)
 	return slider_at_state(u.frame, state, r, value, lo, hi, step, ui_focus(u, id), a11y_label)
 }
 
@@ -304,7 +330,9 @@ slider_at :: proc(
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
 	if hovered do request_cursor(frame, .POINTING_HAND)
 
-	knob_r := SLIDER_KNOB_R
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	knob_r := metrics.SLIDER_KNOB_R
 	track_x := f32(rect.x) + knob_r
 	track_w := f32(rect.w) - knob_r * 2
 	if track_w < 1 do track_w = 1
@@ -322,20 +350,20 @@ slider_at :: proc(
 
 	// Track + fill + knob.
 	cy := f32(rect.y) + f32(rect.h) / 2
-	th := f32(SLIDER_TRACK_H)
-	rl.DrawRectangleRounded({track_x, cy - th / 2, track_w, th}, 1.0, 4, theme.bg_active)
+	th := f32(metrics.SLIDER_TRACK_H)
+	rl.DrawRectangleRounded({track_x, cy - th / 2, track_w, th}, 1.0, 4, style.bg_active)
 	frac := (value^ - lo) / (hi - lo)
 	fill_w := track_w * frac
 	if fill_w > 0 {
-		rl.DrawRectangleRounded({track_x, cy - th / 2, fill_w, th}, 1.0, 4, theme.fg_accent)
+		rl.DrawRectangleRounded({track_x, cy - th / 2, fill_w, th}, 1.0, 4, style.fg_accent)
 	}
 	knob_x := track_x + track_w * frac
-	knob_col := theme.fg_accent if hovered || focus_opt_focused(focus) else theme.fg_secondary
-	rl.DrawCircleV({knob_x, cy}, knob_r, theme.bg_input)
+	knob_col := style.fg_accent if hovered || focus_opt_focused(focus) else style.fg_secondary
+	rl.DrawCircleV({knob_x, cy}, knob_r, style.bg_input)
 	rl.DrawCircleLinesV({knob_x, cy}, knob_r, knob_col)
 	rl.DrawCircleV({knob_x, cy}, knob_r * 0.55, knob_col)
 	if focus_opt_focused(focus) {
-		draw_focus_ring(rect.x, rect.y, rect.w, rect.h)
+		draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 	}
 	semantic_push(frame, .Slider, rect, a11y_label, {}, focus, value = value^, lo = lo, hi = hi)
 	return value^ != old
@@ -359,7 +387,9 @@ slider_at_state :: proc(
 	it := interact(frame, rrect, &state.dragging)
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
 	if it.hovered do request_cursor(frame, .POINTING_HAND)
-	knob_r := SLIDER_KNOB_R
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	knob_r := metrics.SLIDER_KNOB_R
 	track_x := f32(rect.x) + knob_r
 	track_w := max(f32(rect.w) - knob_r * 2, 1)
 	if it.held {
@@ -373,18 +403,18 @@ slider_at_state :: proc(
 	}
 	value^ = clamp(value^, lo, hi)
 	cy := f32(rect.y) + f32(rect.h) / 2
-	th := f32(SLIDER_TRACK_H)
-	rl.DrawRectangleRounded({track_x, cy - th / 2, track_w, th}, 1.0, 4, theme.bg_active)
+	th := f32(metrics.SLIDER_TRACK_H)
+	rl.DrawRectangleRounded({track_x, cy - th / 2, track_w, th}, 1.0, 4, style.bg_active)
 	frac := (value^ - lo) / (hi - lo)
 	fill_w := track_w * frac
-	if fill_w > 0 do rl.DrawRectangleRounded({track_x, cy - th / 2, fill_w, th}, 1.0, 4, theme.fg_accent)
+	if fill_w > 0 do rl.DrawRectangleRounded({track_x, cy - th / 2, fill_w, th}, 1.0, 4, style.fg_accent)
 	knob_x := track_x + track_w * frac
 	knob_col :=
-		theme.fg_accent if it.hovered || state.dragging || focus_opt_focused(focus) else theme.fg_secondary
-	rl.DrawCircleV({knob_x, cy}, knob_r, theme.bg_input)
+		style.fg_accent if it.hovered || state.dragging || focus_opt_focused(focus) else style.fg_secondary
+	rl.DrawCircleV({knob_x, cy}, knob_r, style.bg_input)
 	rl.DrawCircleLinesV({knob_x, cy}, knob_r, knob_col)
 	rl.DrawCircleV({knob_x, cy}, knob_r * 0.55, knob_col)
-	if focus_opt_focused(focus) do draw_focus_ring(rect.x, rect.y, rect.w, rect.h)
+	if focus_opt_focused(focus) do draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 	semantic_push(frame, .Slider, rect, a11y_label, {}, focus, value = value^, lo = lo, hi = hi)
 	return value^ != old
 }

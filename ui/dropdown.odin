@@ -31,8 +31,9 @@ dropdown_ui :: proc(
 ) -> (
 	changed: bool,
 ) {
-	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 2
-	r := ui_slot(u, ww, ROW_H_MD)
+	metrics := ui_frame_metrics(u.frame)
+	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
+	r := ui_slot(u, ww, metrics.ROW_H_MD)
 	return dropdown_at(
 		u.frame,
 		r,
@@ -57,8 +58,9 @@ dropdown_ui_id :: proc(
 ) -> (
 	changed: bool,
 ) {
-	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 2
-	r := ui_slot(u, ww, ROW_H_MD)
+	metrics := ui_frame_metrics(u.frame)
+	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
+	r := ui_slot(u, ww, metrics.ROW_H_MD)
 	return dropdown_at(
 		u.frame,
 		r,
@@ -96,33 +98,37 @@ dropdown_at :: proc(
 	if it.hovered do request_cursor(frame, .POINTING_HAND)
 
 	// Closed chrome: input-style box, current label, chevron.
-	bg := theme.bg_input if st.menu.open || it.hovered else theme.bg_secondary
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	bg := style.bg_input if st.menu.open || it.hovered else style.bg_secondary
 	border :=
-		theme.fg_accent if st.menu.open || it.hovered || focus_opt_focused(focus) else theme.border_color
+		style.fg_accent if st.menu.open || it.hovered || focus_opt_focused(focus) else style.border_color
 	rl.DrawRectangleRec(rrect, bg)
 	rl.DrawRectangleLinesEx(rrect, 1, border)
 	chev: cstring = "\u25BE"
-	chev_w := measure_text(chev, FONT_SIZE_LABEL)
-	draw_text(
+	chev_w := measure_text_frame(frame, chev, metrics.FONT_SIZE_LABEL)
+	draw_text_frame(
+		frame,
 		chev,
-		rect.x + rect.w - chev_w - sc(8),
-		rect.y + (rect.h - FONT_SIZE_LABEL) / 2,
-		FONT_SIZE_LABEL,
-		theme.fg_secondary,
+		rect.x + rect.w - chev_w - ui_frame_sc(frame, 8),
+		rect.y + (rect.h - metrics.FONT_SIZE_LABEL) / 2,
+		metrics.FONT_SIZE_LABEL,
+		style.fg_secondary,
 	)
-	label_w := rect.w - chev_w - sc(8) - PADDING * 2
+	label_w := rect.w - chev_w - ui_frame_sc(frame, 8) - metrics.PADDING * 2
 	if label_w > 0 {
-		draw_text_truncated(
+		draw_text_truncated_frame(
+			frame,
 			items[selected^],
-			rect.x + PADDING,
-			rect.y + (rect.h - FONT_SIZE_BODY) / 2,
+			rect.x + metrics.PADDING,
+			rect.y + (rect.h - metrics.FONT_SIZE_BODY) / 2,
 			label_w,
-			FONT_SIZE_BODY,
-			theme.fg_primary,
+			metrics.FONT_SIZE_BODY,
+			style.fg_primary,
 		)
 	}
 	if focus_opt_focused(focus) {
-		draw_focus_ring(rect.x, rect.y, rect.w, rect.h)
+		draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 	}
 
 	// Open on click or keyboard activation; the opening click must not also

@@ -94,6 +94,48 @@ ui_runtime_theme :: proc(runtime: ^Ui_Runtime) -> ^Theme {
 	return &runtime.style
 }
 
+ui_frame_runtime :: proc(frame: ^Ui_Frame) -> ^Ui_Runtime {
+	assert(frame != nil && frame.open, "ui_frame_runtime: invalid frame")
+	assert(frame.runtime != nil && frame.runtime.initialized, "ui_frame_runtime: invalid runtime")
+	return frame.runtime
+}
+
+ui_frame_text :: proc(frame: ^Ui_Frame) -> ^Text_System {
+	runtime := ui_frame_runtime(frame)
+	assert(runtime.text.font_loaded, "ui_frame_text: text system not initialized")
+	return &runtime.text
+}
+
+ui_frame_spell :: proc(frame: ^Ui_Frame) -> ^Spell_System {
+	runtime := ui_frame_runtime(frame)
+	assert(runtime.initialized, "ui_frame_spell: invalid runtime")
+	return &runtime.spell
+}
+
+ui_frame_theme :: proc(frame: ^Ui_Frame) -> ^Theme {
+	runtime := ui_frame_runtime(frame)
+	assert(runtime.style.fg_primary.a > 0, "ui_frame_theme: invalid theme")
+	return &runtime.style
+}
+
+ui_frame_metrics :: proc(frame: ^Ui_Frame) -> ^Ui_Metrics {
+	runtime := ui_frame_runtime(frame)
+	assert(runtime.scale > 0, "ui_frame_metrics: invalid scale")
+	return &runtime.metrics
+}
+
+ui_frame_sc :: proc(frame: ^Ui_Frame, value: i32) -> i32 {
+	runtime := ui_frame_runtime(frame)
+	assert(runtime.scale > 0, "ui_frame_sc: invalid scale")
+	return i32(f32(value) * runtime.scale + 0.5)
+}
+
+ui_frame_scf :: proc(frame: ^Ui_Frame, value: f32) -> f32 {
+	runtime := ui_frame_runtime(frame)
+	assert(runtime.scale > 0, "ui_frame_scf: invalid scale")
+	return value * runtime.scale
+}
+
 ui_runtime_set_scale_hooks :: proc(
 	runtime: ^Ui_Runtime,
 	metrics_hook: proc(scale: f32),

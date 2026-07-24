@@ -688,7 +688,7 @@ btn_at :: proc(
 		rl.DrawRectangleRoundedLinesEx(rect, BTN_ROUNDNESS, BTN_SEGMENTS, BTN_BORDER_W, border)
 	}
 	if enabled && focus_opt_focused(focus) {
-		draw_focus_ring(x, y, w, h)
+		draw_focus_ring(frame, x, y, w, h)
 	}
 
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
@@ -748,7 +748,7 @@ btn_at_state :: proc(
 	if border.a > 0 {
 		rl.DrawRectangleRoundedLinesEx(rect, BTN_ROUNDNESS, BTN_SEGMENTS, BTN_BORDER_W, border)
 	}
-	if enabled && focus_opt_focused(focus) do draw_focus_ring(x, y, w, h)
+	if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	text_w := measure_text(label_c, fs)
 	draw_text(label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
@@ -1285,7 +1285,7 @@ collapsible_header :: proc(
 		toggled = true
 	}
 	if focus_opt_focused(focus) {
-		draw_focus_ring(x, y, w, h)
+		draw_focus_ring(frame, x, y, w, h)
 	}
 	lbl := strings.clone_to_cstring(label, context.temp_allocator)
 	draw_text(lbl, x + sc(10), y + sc(6), font_size, theme.fg_label)

@@ -207,6 +207,11 @@ draw_text_with :: proc(system: ^Text_System, text: cstring, x, y, size: i32, col
 	}
 }
 
+draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color: rl.Color) {
+	assert(size > 0, "draw_text_frame: invalid size")
+	draw_text_with(ui_frame_text(frame), text, x, y, size, color)
+}
+
 draw_text :: proc(text: cstring, x, y, size: i32, color: rl.Color) {
 	draw_text_with(&default_text_system, text, x, y, size, color)
 }
@@ -261,6 +266,11 @@ measure_text_with :: proc(system: ^Text_System, text: cstring, size: i32) -> i32
 	return width
 }
 
+measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
+	assert(size > 0, "measure_text_frame: invalid size")
+	return measure_text_with(ui_frame_text(frame), text, size)
+}
+
 measure_text :: proc(text: cstring, size: i32) -> i32 {
 	return measure_text_with(&default_text_system, text, size)
 }
@@ -288,6 +298,11 @@ rune_width_with :: proc(system: ^Text_System, value: rune, size: i32) -> i32 {
 	return measure_text_with(system, cstring(&buf[0]), size)
 }
 
+rune_width_frame :: proc(frame: ^Ui_Frame, value: rune, size: i32) -> i32 {
+	assert(size > 0, "rune_width_frame: invalid size")
+	return rune_width_with(ui_frame_text(frame), value, size)
+}
+
 rune_width :: proc(value: rune, size: i32) -> i32 {
 	return rune_width_with(&default_text_system, value, size)
 }
@@ -309,6 +324,17 @@ draw_codepoint_with :: proc(
 			color,
 		)
 	}
+}
+
+draw_codepoint_frame :: proc(
+	frame: ^Ui_Frame,
+	codepoint: rune,
+	x, y: i32,
+	size: i32,
+	color: rl.Color,
+) {
+	assert(size > 0, "draw_codepoint_frame: invalid size")
+	draw_codepoint_with(ui_frame_text(frame), codepoint, x, y, size, color)
 }
 
 draw_codepoint :: proc(codepoint: rune, x, y: i32, size: i32, color: rl.Color) {
