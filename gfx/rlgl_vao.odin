@@ -13,6 +13,15 @@ package gfx
 
 import wg "vendor:wgpu"
 
+RLGL_MAX_VAOS :: 256
+RLGL_MAX_VBOS :: 1024
+RLGL_MAX_BUFFERS_PER_VAO :: 16
+RLGL_MAX_ATTRIBUTES_PER_VAO :: 32
+RLGL_MAX_PIPELINES_PER_VAO :: 32
+
+#assert(RLGL_MAX_VAOS <= RESOURCE_SLOT_COUNT)
+#assert(RLGL_MAX_VBOS <= RESOURCE_SLOT_COUNT)
+
 @(private)
 Vao_Attr :: struct {
 	location:   u32,
@@ -47,18 +56,53 @@ Vao :: struct {
 }
 
 @(private)
-g_vaos: [dynamic]^Vao
-@(private)
-g_vbos: [dynamic]wg.Buffer // global VBO registry (id = index+1)
-@(private)
-g_cur_vao: int // bound VAO id (0 = none)
-@(private)
-g_inst_shader: u32 // shader bound via EnableShader
+Vao_Slot :: struct {
+	entry:      ^Vao,
+	generation: u32,
+	occupied:   bool,
+}
 
 @(private)
-_vao_get :: proc(id: int) -> ^Vao {
-	if id <= 0 || id > len(g_vaos) do return nil
-	return g_vaos[id - 1]
+Vbo_Slot :: struct {
+	buffer:     wg.Buffer,
+	generation: u32,
+	occupied:   bool,
+}
+
+Rlgl_Resources :: struct {
+	vaos:        [RLGL_MAX_VAOS]Vao_Slot,
+	vbos:        [RLGL_MAX_VBOS]Vbo_Slot,
+	vao_count:   u32,
+	vbo_count:   u32,
+	current_vao: u32,
+	inst_shader: u32,
+}
+
+@(private)
+_vao_slot :: proc(resources: ^Rlgl_Resources, id: u32) -> ^Vao_Slot {
+	assert(resources != nil, "_vao_slot: nil resources")
+	index, generation, ok := _resource_handle_decode(id, len(resources.vaos))
+	if !ok do return nil
+	slot := &resources.vaos[index]
+	if !slot.occupied || slot.generation != generation do return nil
+	return slot
+}
+
+@(private)
+_vao_get :: proc(id: u32) -> ^Vao {
+	slot := _vao_slot(&g.resources.rlgl, id)
+	if slot == nil do return nil
+	return slot.entry
+}
+
+@(private)
+_vbo_slot :: proc(resources: ^Rlgl_Resources, id: u32) -> ^Vbo_Slot {
+	assert(resources != nil, "_vbo_slot: nil resources")
+	index, generation, ok := _resource_handle_decode(id, len(resources.vbos))
+	if !ok do return nil
+	slot := &resources.vbos[index]
+	if !slot.occupied || slot.generation != generation do return nil
+	return slot
 }
 
 @(private)
@@ -75,76 +119,103 @@ _vao_invalidate_caches :: proc(v: ^Vao) {
 // --- VAO / VBO lifecycle ----------------------------------------------------
 
 RlLoadVertexArray :: proc() -> u32 {
-	v := new(Vao)
-	append(&g_vaos, v)
-	return u32(len(g_vaos))
+	resources := &g.resources.rlgl
+	if resources.vao_count >= RLGL_MAX_VAOS do return 0
+	for &slot, index in resources.vaos {
+		if slot.occupied do continue
+		slot.generation = _resource_generation_next(slot.generation)
+		slot.entry = new(Vao)
+		slot.occupied = true
+		resources.vao_count += 1
+		return _resource_handle_make(index, slot.generation)
+	}
+	assert(false, "RlLoadVertexArray: count mismatch")
+	return 0
 }
 
 RlEnableVertexArray :: proc(id: u32) -> bool {
-	if _vao_get(int(id)) == nil do return false
-	g_cur_vao = int(id)
+	if _vao_get(id) == nil do return false
+	g.resources.rlgl.current_vao = id
 	return true
 }
 
-RlDisableVertexArray :: proc() {g_cur_vao = 0}
+RlDisableVertexArray :: proc() {g.resources.rlgl.current_vao = 0}
+
+@(private)
+_vao_entry_destroy :: proc(entry: ^Vao) {
+	assert(entry != nil, "_vao_entry_destroy: nil entry")
+	_vao_invalidate_caches(entry)
+	delete(entry.buffers)
+	delete(entry.attrs)
+	delete(entry.caches)
+	free(entry)
+}
 
 RlUnloadVertexArray :: proc(id: u32) {
-	v := _vao_get(int(id))
-	if v == nil do return
-	for c in v.caches {
-		if c.pipe != nil do wg.RenderPipelineRelease(c.pipe)
-	}
-	delete(v.buffers)
-	delete(v.attrs)
-	delete(v.caches)
-	free(v)
-	g_vaos[id - 1] = nil
-	if g_cur_vao == int(id) do g_cur_vao = 0
+	slot := _vao_slot(&g.resources.rlgl, id)
+	if slot == nil do return
+	_vao_entry_destroy(slot.entry)
+	slot.entry = nil
+	slot.occupied = false
+	assert(g.resources.rlgl.vao_count > 0, "RlUnloadVertexArray: count underflow")
+	g.resources.rlgl.vao_count -= 1
+	if g.resources.rlgl.current_vao == id do g.resources.rlgl.current_vao = 0
 }
 
 RlLoadVertexBuffer :: proc(data: rawptr, size: i32, dynamic_buf: bool) -> u32 {
 	if g.device == nil || size <= 0 do return 0
+	resources := &g.resources.rlgl
+	if resources.vbo_count >= RLGL_MAX_VBOS do return 0
 	assert(size > 0)
 	buffer_size := u64(size)
 	usage: wg.BufferUsageFlags = {.Vertex, .CopyDst}
-	buf := wg.DeviceCreateBuffer(g.device, &{usage = usage, size = buffer_size})
-	if buf == nil do return 0
-	if data != nil {
-		wg.QueueWriteBuffer(g.queue, buf, 0, data, uint(size))
+	buffer := wg.DeviceCreateBuffer(g.device, &{usage = usage, size = buffer_size})
+	if buffer == nil do return 0
+	if data != nil do wg.QueueWriteBuffer(g.queue, buffer, 0, data, uint(size))
+	id: u32
+	for &slot, index in resources.vbos {
+		if slot.occupied do continue
+		slot.generation = _resource_generation_next(slot.generation)
+		slot.buffer = buffer
+		slot.occupied = true
+		resources.vbo_count += 1
+		id = _resource_handle_make(index, slot.generation)
+		break
 	}
-	append(&g_vbos, buf)
-	id := u32(len(g_vbos))
-	if v := _vao_get(g_cur_vao); v != nil {
+	assert(id > 0, "RlLoadVertexBuffer: count mismatch")
+	if v := _vao_get(resources.current_vao);
+	   v != nil && len(v.buffers) < RLGL_MAX_BUFFERS_PER_VAO {
 		_vao_invalidate_caches(v)
-		append(&v.buffers, Vao_Buffer{id = id, buf = buf, size = buffer_size})
+		append(&v.buffers, Vao_Buffer{id = id, buf = buffer, size = buffer_size})
 		v.cur_buffer = len(v.buffers) - 1
 		assert(v.cur_buffer >= 0)
 	}
-	assert(id > 0)
 	return id
 }
 
 RlUpdateVertexBuffer :: proc(bufferId: u32, data: rawptr, dataSize: i32, offset: i32) {
-	if bufferId == 0 || int(bufferId) > len(g_vbos) do return
-	buf := g_vbos[bufferId - 1]
-	if buf == nil || data == nil || dataSize <= 0 do return
-	wg.QueueWriteBuffer(g.queue, buf, u64(offset), data, uint(dataSize))
+	slot := _vbo_slot(&g.resources.rlgl, bufferId)
+	if slot == nil || data == nil || dataSize <= 0 || offset < 0 do return
+	wg.QueueWriteBuffer(g.queue, slot.buffer, u64(offset), data, uint(dataSize))
 }
 
 RlUnloadVertexBuffer :: proc(vboId: u32) {
-	if vboId == 0 || int(vboId) > len(g_vbos) do return
-	buf := g_vbos[vboId - 1]
-	if buf != nil {
-		wg.BufferRelease(buf)
-		g_vbos[vboId - 1] = nil
-	}
+	resources := &g.resources.rlgl
+	slot := _vbo_slot(resources, vboId)
+	if slot == nil do return
+	wg.BufferRelease(slot.buffer)
+	slot.buffer = nil
+	slot.occupied = false
+	assert(resources.vbo_count > 0, "RlUnloadVertexBuffer: count underflow")
+	resources.vbo_count -= 1
 	// Detach this buffer from every VAO that references it. Without this the
 	// stale Vao_Buffer slot (and its attributes) would linger; a subsequent
 	// LoadVertexBuffer + re-setup would append duplicate shaderLocations and
 	// wgpu would reject the resulting pipeline (an uncaptured validation error
 	// that aborts the process).
-	for v in g_vaos {
-		if v == nil do continue
+	for vao_slot in resources.vaos {
+		if !vao_slot.occupied do continue
+		v := vao_slot.entry
 		k := -1
 		for b, i in v.buffers {
 			if b.id == vboId {
@@ -185,7 +256,7 @@ RlSetVertexAttribute :: proc(
 	stride: i32,
 	offset: i32,
 ) {
-	v := _vao_get(g_cur_vao)
+	v := _vao_get(g.resources.rlgl.current_vao)
 	if v == nil || v.cur_buffer < 0 || v.cur_buffer >= len(v.buffers) do return
 	if compSize < 1 || compSize > 4 || stride <= 0 || offset < 0 do return
 	if offset + compSize * size_of(f32) > stride do return
@@ -205,12 +276,13 @@ RlSetVertexAttribute :: proc(
 			return
 		}
 	}
+	if len(v.attrs) >= RLGL_MAX_ATTRIBUTES_PER_VAO do return
 	append(&v.attrs, attr)
 	assert(len(v.attrs) > 0)
 }
 
 RlSetVertexAttributeDivisor :: proc(index: u32, divisor: i32) {
-	v := _vao_get(g_cur_vao)
+	v := _vao_get(g.resources.rlgl.current_vao)
 	if v == nil || divisor < 0 do return
 	assert(divisor >= 0)
 	for &a in v.attrs {
@@ -226,8 +298,8 @@ RlEnableVertexAttribute :: proc(index: u32) {}
 
 // --- shader binding ---------------------------------------------------------
 
-RlEnableInstShader :: proc(id: u32) {g_inst_shader = id}
-RlDisableInstShader :: proc() {g_inst_shader = 0}
+RlEnableInstShader :: proc(id: u32) {g.resources.rlgl.inst_shader = id}
+RlDisableInstShader :: proc() {g.resources.rlgl.inst_shader = 0}
 
 // --- instanced draw ---------------------------------------------------------
 
@@ -283,9 +355,14 @@ _vao_pipeline :: proc(
 	if v == nil || se == nil || !_vao_layout_valid(v) do return nil
 	assert(len(v.buffers) > 0)
 	assert(len(v.attrs) > 0)
-	for c in v.caches {
-		if c.shader_id == g_inst_shader && c.format == format && c.blend == blend do return c.pipe
+	for cache in v.caches {
+		if cache.shader_id == g.resources.rlgl.inst_shader &&
+		   cache.format == format &&
+		   cache.blend == blend {
+			return cache.pipe
+		}
 	}
+	if len(v.caches) >= RLGL_MAX_PIPELINES_PER_VAO do return nil
 	nbuf := len(v.buffers)
 	attr_store := make([][dynamic]wg.VertexAttribute, nbuf, context.temp_allocator)
 	strides := make([]u32, nbuf, context.temp_allocator)
@@ -345,17 +422,23 @@ _vao_pipeline :: proc(
 			},
 		},
 	)
+	wg.PipelineLayoutRelease(pl)
 	append(
 		&v.caches,
-		Vao_PipeCache{shader_id = g_inst_shader, format = format, blend = blend, pipe = pipe},
+		Vao_PipeCache {
+			shader_id = g.resources.rlgl.inst_shader,
+			format = format,
+			blend = blend,
+			pipe = pipe,
+		},
 	)
 	return pipe
 }
 
 RlDrawVertexArrayInstanced :: proc(offset, count, instances: i32) {
 	if instances <= 0 || count <= 0 || offset < 0 do return
-	v := _vao_get(g_cur_vao)
-	se := _shader_get(g_inst_shader)
+	v := _vao_get(g.resources.rlgl.current_vao)
+	se := _shader_get(g.resources.rlgl.inst_shader)
 	if v == nil || se == nil || !_vao_layout_valid(v) do return
 	if !g.frame.has_frame || g.frame.scissor_empty do return
 	assert(len(v.buffers) > 0)
@@ -384,4 +467,16 @@ RlDrawVertexArrayInstanced :: proc(offset, count, instances: i32) {
 RlDrawVertexArrayElementsInstanced :: proc(offset, count: i32, buffer: rawptr, instances: i32) {
 	// Galaxy uses the non-indexed instanced path; indexed instancing is not yet
 	// wired. No-op keeps the API total.
+}
+
+@(private)
+_rlgl_resources_destroy :: proc(resources: ^Rlgl_Resources) {
+	assert(resources != nil, "_rlgl_resources_destroy: nil resources")
+	for &slot in resources.vaos {
+		if slot.occupied do _vao_entry_destroy(slot.entry)
+	}
+	for slot in resources.vbos {
+		if slot.occupied && slot.buffer != nil do wg.BufferRelease(slot.buffer)
+	}
+	resources^ = {}
 }

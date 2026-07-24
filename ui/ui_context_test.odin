@@ -2,6 +2,7 @@
 package ui
 
 import "core:testing"
+import "core:unicode/utf8"
 
 @(test)
 test_ui_slot_column_and_row :: proc(t: ^testing.T) {
@@ -40,6 +41,67 @@ test_ui_runtime_frames_are_isolated_and_share_roots :: proc(t: ^testing.T) {
 	ui_frame_end(&frame_a)
 	ui_frame_end(&frame_b)
 	testing.expect(t, u1.frame == nil && u2.frame == nil)
+}
+
+@(private = "file")
+isolation_measure_narrow :: proc(text: cstring, size: i32) -> i32 {
+	assert(size > 0, "isolation_measure_narrow: invalid size")
+	return i32(utf8.rune_count(string(text))) * 5
+}
+
+@(private = "file")
+isolation_measure_wide :: proc(text: cstring, size: i32) -> i32 {
+	assert(size > 0, "isolation_measure_wide: invalid size")
+	return i32(utf8.rune_count(string(text))) * 11
+}
+
+@(test)
+test_ui_runtime_text_wrap_theme_and_destroy_are_isolated :: proc(t: ^testing.T) {
+	a, b: Ui_Runtime
+	ui_runtime_init(&a)
+	ui_runtime_init(&b)
+	set_measure_backend_with(&a.text, isolation_measure_narrow)
+	set_measure_backend_with(&b.text, isolation_measure_wide)
+	ui_runtime_set_scale(&a, 2)
+	a.style = THEME_LIGHT
+
+	frame_a, frame_b: Ui_Frame
+	ui_frame_begin(&frame_a, &a)
+	ui_frame_begin(&frame_b, &b)
+	testing.expect_value(t, measure_text_frame(&frame_a, "abcd", 16), i32(20))
+	testing.expect_value(t, measure_text_frame(&frame_b, "abcd", 16), i32(44))
+	lines_a := wrap_text_frame(&frame_a, "aa aa", 25, 16)
+	lines_b := wrap_text_frame(&frame_b, "aa aa", 25, 16)
+	testing.expect_value(t, len(lines_a), 1)
+	testing.expect_value(t, len(lines_b), 3)
+	testing.expect_value(t, ui_frame_theme(&frame_a).bg_app, THEME_LIGHT.bg_app)
+	testing.expect_value(t, ui_frame_theme(&frame_b).bg_app, THEME_DARK.bg_app)
+	testing.expect_value(t, ui_frame_sc(&frame_a, 8), i32(16))
+	testing.expect_value(t, ui_frame_sc(&frame_b, 8), i32(8))
+	ui_frame_end(&frame_a)
+	ui_frame_end(&frame_b)
+
+	ui_runtime_destroy(&a)
+	ui_frame_begin(&frame_b, &b)
+	testing.expect_value(t, measure_text_frame(&frame_b, "abcd", 16), i32(44))
+	testing.expect_value(t, len(wrap_text_frame(&frame_b, "aa aa", 25, 16)), 3)
+	ui_frame_end(&frame_b)
+	ui_runtime_destroy(&b)
+}
+
+@(test)
+test_ui_runtime_spell_state_is_isolated :: proc(t: ^testing.T) {
+	a, b: Ui_Runtime
+	ui_runtime_init(&a)
+	ui_runtime_init(&b)
+	spell_ignore_session_with(&a.spell, "ingotword")
+	testing.expect(t, "ingotword" in a.spell.ignored)
+	testing.expect(t, "ingotword" not_in b.spell.ignored)
+	testing.expect_value(t, a.spell.generation, u64(1))
+	testing.expect_value(t, b.spell.generation, u64(0))
+	ui_runtime_destroy(&a)
+	testing.expect_value(t, b.spell.generation, u64(0))
+	ui_runtime_destroy(&b)
 }
 
 @(test)

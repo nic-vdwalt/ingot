@@ -28,12 +28,13 @@ Gpu_3D_Load_Action :: enum {
 }
 
 Gpu_3D_Pass :: struct {
-	encoder:     wg.CommandEncoder,
-	pass:        wg.RenderPassEncoder,
-	target:      ^Gpu_3D_Target,
-	generation:  u64,
-	active:      bool,
-	owns_stream: bool,
+	encoder:         wg.CommandEncoder,
+	pass:            wg.RenderPassEncoder,
+	target:          ^Gpu_3D_Target,
+	view_projection: Matrix,
+	generation:      u64,
+	active:          bool,
+	owns_stream:     bool,
 }
 
 Gpu_3D_Vertex :: struct {
@@ -72,21 +73,25 @@ Gpu_3D_Pipeline_Entry :: struct {
 }
 
 @(private)
-gpu_3d_meshes: [GPU_3D_MAX_MESHES]^Gpu_3D_Mesh_Entry
-@(private)
-gpu_3d_mesh_count: u32
-@(private)
-gpu_3d_pipelines: [GPU_3D_MAX_PIPELINES]Gpu_3D_Pipeline_Entry
-@(private)
-gpu_3d_pipeline_count: u32
-@(private)
-gpu_3d_shader: wg.ShaderModule
-@(private)
-gpu_3d_layout: wg.BindGroupLayout
-@(private)
-gpu_3d_bind: [STREAM_SLOT_COUNT]wg.BindGroup
-@(private)
-gpu_3d_generation: u64
+Gpu_3D_Mesh_Slot :: struct {
+	entry:      ^Gpu_3D_Mesh_Entry,
+	generation: u32,
+	occupied:   bool,
+}
+
+Gpu_3D_Resources :: struct {
+	meshes:                 [GPU_3D_MAX_MESHES]Gpu_3D_Mesh_Slot,
+	mesh_count:             u32,
+	pipelines:              [GPU_3D_MAX_PIPELINES]Gpu_3D_Pipeline_Entry,
+	pipeline_count:         u32,
+	shader:                 wg.ShaderModule,
+	layout:                 wg.BindGroupLayout,
+	bind:                   [STREAM_SLOT_COUNT]wg.BindGroup,
+	next_pass_generation:   u64,
+	active_pass_generation: u64,
+}
+
+#assert(GPU_3D_MAX_MESHES <= RESOURCE_SLOT_COUNT)
 
 GPU_3D_SHADER :: `
 struct Uniforms {
@@ -174,7 +179,8 @@ _sphere_mesh_geometry :: proc(
 create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) {
 	assert(radius > 0)
 	if !g.initialized || rings < 2 || slices < 3 do return {}, false
-	if gpu_3d_mesh_count >= GPU_3D_MAX_MESHES {
+	resources := &g.resources.gpu_3d
+	if resources.mesh_count >= GPU_3D_MAX_MESHES {
 		// Pool full: operating condition — caller gets ok=false (counted).
 		_stats_gpu3d_pool_exhaustion()
 		return {}, false
@@ -204,19 +210,30 @@ create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) 
 		free(entry)
 		return {}, false
 	}
-	gpu_3d_meshes[gpu_3d_mesh_count] = entry
-	gpu_3d_mesh_count += 1
-	return Gpu_Mesh{id = gpu_3d_mesh_count}, true
+	for &slot, index in resources.meshes {
+		if slot.occupied do continue
+		slot.generation = _resource_generation_next(slot.generation)
+		slot.entry = entry
+		slot.occupied = true
+		resources.mesh_count += 1
+		return Gpu_Mesh{id = _resource_handle_make(index, slot.generation)}, true
+	}
+	assert(false, "create_sphere_mesh: count mismatch")
+	return {}, false
 }
 
 destroy_gpu_mesh :: proc(mesh: ^Gpu_Mesh) {
 	assert(mesh != nil)
-	entry := _gpu_3d_mesh(mesh^)
-	if entry == nil do return
-	wg.BufferRelease(entry.vertex_buffer)
-	wg.BufferRelease(entry.index_buffer)
-	free(entry)
-	gpu_3d_meshes[mesh.id - 1] = nil
+	slot := _gpu_3d_mesh_slot(&g.resources.gpu_3d, mesh^)
+	if slot == nil {
+		mesh^ = {}
+		return
+	}
+	_gpu_3d_mesh_entry_destroy(slot.entry)
+	slot.entry = nil
+	slot.occupied = false
+	assert(g.resources.gpu_3d.mesh_count > 0, "destroy_gpu_mesh: count underflow")
+	g.resources.gpu_3d.mesh_count -= 1
 	mesh^ = {}
 	assert(mesh.id == 0)
 }
@@ -230,6 +247,8 @@ begin_gpu_3d :: proc(
 	bool,
 ) {
 	assert(target != nil)
+	resources := &g.resources.gpu_3d
+	if resources.active_pass_generation != 0 do return {}, false
 	if !g.initialized || target.texture.texture.id == 0 || target.texture.depth.id == 0 do return {}, false
 	color_view := _texture_view(target.texture.texture.id)
 	depth_view := _texture_view(target.texture.depth.id)
@@ -260,13 +279,15 @@ begin_gpu_3d :: proc(
 		encoder,
 		&{colorAttachmentCount = 1, colorAttachments = &color, depthStencilAttachment = &depth},
 	)
-	gpu_3d_generation += 1
+	resources.next_pass_generation += 1
+	if resources.next_pass_generation == 0 do resources.next_pass_generation = 1
+	resources.active_pass_generation = resources.next_pass_generation
 	_stats_render_pass()
 	result := Gpu_3D_Pass {
 		encoder     = encoder,
 		pass        = pass,
 		target      = target,
-		generation  = gpu_3d_generation,
+		generation  = resources.active_pass_generation,
 		active      = true,
 		owns_stream = owns_stream,
 	}
@@ -280,8 +301,7 @@ draw_gpu_mesh :: proc(
 	transform: Matrix,
 	material: Gpu_Material,
 ) {
-	assert(pass != nil)
-	assert(pass.active)
+	if !_gpu_3d_pass_current(&g.resources.gpu_3d, pass) do return
 	entry := _gpu_3d_mesh(mesh)
 	if entry == nil do return
 	target_entry := get_texture(pass.target.texture.texture.id)
@@ -290,7 +310,7 @@ draw_gpu_mesh :: proc(
 	if pipeline == nil do return
 
 	uniforms := Gpu_3D_Uniforms {
-		view_projection = cam3d_vp,
+		view_projection = pass.view_projection,
 		model           = transform,
 		color           = col_f(material.color),
 	}
@@ -300,7 +320,7 @@ draw_gpu_mesh :: proc(
 	wg.RenderPassEncoderSetBindGroup(
 		pass.pass,
 		0,
-		gpu_3d_bind[g.rend.active_stream_slot],
+		g.resources.gpu_3d.bind[g.rend.active_stream_slot],
 		{offset},
 	)
 	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, wg.WHOLE_SIZE)
@@ -311,8 +331,7 @@ draw_gpu_mesh :: proc(
 }
 
 end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
-	assert(pass != nil)
-	assert(pass.active)
+	if !_gpu_3d_pass_current(&g.resources.gpu_3d, pass) do return
 	wg.RenderPassEncoderEnd(pass.pass)
 	wg.RenderPassEncoderRelease(pass.pass)
 	cmd := wg.CommandEncoderFinish(pass.encoder, nil)
@@ -324,8 +343,8 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	}
 	wg.CommandBufferRelease(cmd)
 	wg.CommandEncoderRelease(pass.encoder)
-	pass.active = false
-	assert(!pass.active)
+	g.resources.gpu_3d.active_pass_generation = 0
+	pass^ = {}
 }
 
 @(private)
@@ -335,15 +354,40 @@ _gpu_3d_set_camera :: proc(pass: ^Gpu_3D_Pass, camera: Camera3D) {
 	height := pass.target.texture.texture.height
 	old_width, old_height := g.width, g.height
 	g.width, g.height = width, height
-	cam3d_vp = _vp_from(camera)
+	pass.view_projection = _vp_from(camera)
 	g.width, g.height = old_width, old_height
 	assert(width > 0 && height > 0)
 }
 
 @(private)
+_gpu_3d_mesh_slot :: proc(resources: ^Gpu_3D_Resources, mesh: Gpu_Mesh) -> ^Gpu_3D_Mesh_Slot {
+	assert(resources != nil, "_gpu_3d_mesh_slot: nil resources")
+	index, generation, ok := _resource_handle_decode(mesh.id, len(resources.meshes))
+	if !ok do return nil
+	slot := &resources.meshes[index]
+	if !slot.occupied || slot.generation != generation do return nil
+	return slot
+}
+
+@(private)
 _gpu_3d_mesh :: proc(mesh: Gpu_Mesh) -> ^Gpu_3D_Mesh_Entry {
-	if mesh.id == 0 || mesh.id > gpu_3d_mesh_count do return nil
-	return gpu_3d_meshes[mesh.id - 1]
+	slot := _gpu_3d_mesh_slot(&g.resources.gpu_3d, mesh)
+	if slot == nil do return nil
+	return slot.entry
+}
+
+@(private)
+_gpu_3d_pass_current :: proc(resources: ^Gpu_3D_Resources, pass: ^Gpu_3D_Pass) -> bool {
+	if resources == nil || pass == nil || !pass.active || pass.generation == 0 do return false
+	return pass.generation == resources.active_pass_generation
+}
+
+@(private)
+_gpu_3d_mesh_entry_destroy :: proc(entry: ^Gpu_3D_Mesh_Entry) {
+	assert(entry != nil, "_gpu_3d_mesh_entry_destroy: nil entry")
+	if entry.vertex_buffer != nil do wg.BufferRelease(entry.vertex_buffer)
+	if entry.index_buffer != nil do wg.BufferRelease(entry.index_buffer)
+	free(entry)
 }
 
 @(private)
@@ -359,16 +403,17 @@ _gpu_3d_buffer :: proc(data: rawptr, size: u64, usage: wg.BufferUsageFlags) -> w
 
 @(private)
 _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
-	for index in 0 ..< gpu_3d_pipeline_count {
-		if gpu_3d_pipelines[index].format == format do return gpu_3d_pipelines[index].pipeline
+	resources := &g.resources.gpu_3d
+	for index in 0 ..< resources.pipeline_count {
+		if resources.pipelines[index].format == format do return resources.pipelines[index].pipeline
 	}
-	if gpu_3d_pipeline_count >= GPU_3D_MAX_PIPELINES {
+	if resources.pipeline_count >= GPU_3D_MAX_PIPELINES {
 		// Pool full: draws to targets in unseen formats are skipped from now
 		// on (bounded pool, never grows) — operating condition, counted.
 		_stats_gpu3d_pool_exhaustion()
 		return nil
 	}
-	_gpu_3d_init_shared()
+	_gpu_3d_init_shared(resources)
 	attrs := [2]wg.VertexAttribute {
 		{format = .Float32x3, offset = 0, shaderLocation = 0},
 		{format = .Float32x3, offset = u64(offset_of(Gpu_3D_Vertex, normal)), shaderLocation = 1},
@@ -381,7 +426,7 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 	}
 	layout := wg.DeviceCreatePipelineLayout(
 		g.device,
-		&{bindGroupLayoutCount = 1, bindGroupLayouts = &gpu_3d_layout},
+		&{bindGroupLayoutCount = 1, bindGroupLayouts = &resources.layout},
 	)
 	blend := _blend_for(&g.rend, .Alpha)
 	target := wg.ColorTargetState {
@@ -401,7 +446,7 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 		&{
 			layout = layout,
 			vertex = {
-				module = gpu_3d_shader,
+				module = resources.shader,
 				entryPoint = "vs_main",
 				bufferCount = 1,
 				buffers = &vertex_layout,
@@ -410,7 +455,7 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 			depthStencil = &depth,
 			multisample = {count = 1, mask = ~u32(0)},
 			fragment = &wg.FragmentState {
-				module = gpu_3d_shader,
+				module = resources.shader,
 				entryPoint = "fs_main",
 				targetCount = 1,
 				targets = &target,
@@ -418,19 +463,20 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 		},
 	)
 	wg.PipelineLayoutRelease(layout)
-	index := gpu_3d_pipeline_count
-	gpu_3d_pipelines[index] = {
+	index := resources.pipeline_count
+	resources.pipelines[index] = {
 		format   = format,
 		pipeline = pipeline,
 	}
-	gpu_3d_pipeline_count += 1
+	resources.pipeline_count += 1
 	return pipeline
 }
 
 @(private)
-_gpu_3d_init_shared :: proc() {
-	if gpu_3d_shader != nil do return
-	gpu_3d_shader = wg.DeviceCreateShaderModule(
+_gpu_3d_init_shared :: proc(resources: ^Gpu_3D_Resources) {
+	assert(resources != nil, "_gpu_3d_init_shared: nil resources")
+	if resources.shader != nil do return
+	resources.shader = wg.DeviceCreateShaderModule(
 		g.device,
 		&{
 			nextInChain = &wg.ShaderSourceWGSL {
@@ -439,7 +485,7 @@ _gpu_3d_init_shared :: proc() {
 			},
 		},
 	)
-	gpu_3d_layout = wg.DeviceCreateBindGroupLayout(
+	resources.layout = wg.DeviceCreateBindGroupLayout(
 		g.device,
 		&{
 			entryCount = 1,
@@ -454,11 +500,11 @@ _gpu_3d_init_shared :: proc() {
 			},
 		},
 	)
-	for &bind, index in gpu_3d_bind {
+	for &bind, index in resources.bind {
 		bind = wg.DeviceCreateBindGroup(
 			g.device,
 			&{
-				layout = gpu_3d_layout,
+				layout = resources.layout,
 				entryCount = 1,
 				entries = &wg.BindGroupEntry {
 					binding = 0,
@@ -468,6 +514,26 @@ _gpu_3d_init_shared :: proc() {
 			},
 		)
 	}
-	assert(gpu_3d_shader != nil)
-	assert(gpu_3d_layout != nil)
+	assert(resources.shader != nil)
+	assert(resources.layout != nil)
+}
+
+@(private)
+_gpu_3d_resources_destroy :: proc(resources: ^Gpu_3D_Resources) {
+	assert(resources != nil, "_gpu_3d_resources_destroy: nil resources")
+	assert(resources.active_pass_generation == 0, "_gpu_3d_resources_destroy: active pass")
+	for &slot in resources.meshes {
+		if slot.occupied do _gpu_3d_mesh_entry_destroy(slot.entry)
+	}
+	for index in 0 ..< resources.pipeline_count {
+		if resources.pipelines[index].pipeline != nil {
+			wg.RenderPipelineRelease(resources.pipelines[index].pipeline)
+		}
+	}
+	for bind in resources.bind {
+		if bind != nil do wg.BindGroupRelease(bind)
+	}
+	if resources.layout != nil do wg.BindGroupLayoutRelease(resources.layout)
+	if resources.shader != nil do wg.ShaderModuleRelease(resources.shader)
+	resources^ = {}
 }
