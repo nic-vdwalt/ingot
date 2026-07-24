@@ -51,13 +51,14 @@ is_mouse_button_down :: proc(frame: ^Ui_Frame, button: MouseButton) -> bool {
 }
 
 request_redraw :: proc(frame: ^Ui_Frame) {
-	assert(frame != nil && frame.output != nil, "request_redraw: invalid frame")
-	frame.output.platform.request_redraw = true
+	assert(frame != nil, "request_redraw: nil frame")
+	if frame.output != nil do frame.output.platform.request_redraw = true
 }
 
 request_redraw_in :: proc(frame: ^Ui_Frame, seconds: f64) {
-	assert(frame != nil && frame.output != nil, "request_redraw_in: invalid frame")
+	assert(frame != nil, "request_redraw_in: nil frame")
 	assert(seconds >= 0, "request_redraw_in: negative delay")
+	if frame.output == nil do return
 	if frame.output.platform.redraw_after == 0 || seconds < frame.output.platform.redraw_after {
 		frame.output.platform.redraw_after = seconds
 	}
