@@ -14,6 +14,7 @@ import wg "vendor:wgpu"
 
 ATLAS_DIM :: 2048 // multiple of 256 so R8 bytesPerRow is copy-aligned
 ATLAS_PAD :: 1
+MAX_ATLASES :: 256
 
 Glyph :: struct {
 	x, y, w, h: u16, // atlas cell (pixels)
@@ -41,12 +42,48 @@ Atlas :: struct {
 }
 
 @(private)
-g_atlases: [dynamic]^Atlas // ids are 1-based indices
+Atlas_Slot :: struct {
+	entry:      ^Atlas,
+	generation: u32,
+	occupied:   bool,
+}
+
+Atlas_Resources :: struct {
+	slots: [MAX_ATLASES]Atlas_Slot,
+	count: u32,
+}
+
+@(private)
+_atlas_register :: proc(resources: ^Atlas_Resources, entry: ^Atlas) -> u32 {
+	assert(resources != nil && entry != nil, "_atlas_register: invalid arguments")
+	if resources.count >= MAX_ATLASES do return 0
+	for &slot, index in resources.slots {
+		if slot.occupied do continue
+		slot.generation = _resource_generation_next(slot.generation)
+		slot.entry = entry
+		slot.occupied = true
+		resources.count += 1
+		return _resource_handle_make(index, slot.generation)
+	}
+	assert(false, "_atlas_register: count mismatch")
+	return 0
+}
+
+@(private)
+_atlas_slot :: proc(resources: ^Atlas_Resources, id: u32) -> ^Atlas_Slot {
+	assert(resources != nil, "_atlas_slot: nil resources")
+	index, generation, ok := _resource_handle_decode(id, len(resources.slots))
+	if !ok do return nil
+	slot := &resources.slots[index]
+	if !slot.occupied || slot.generation != generation do return nil
+	return slot
+}
 
 @(private)
 get_atlas :: proc(id: u32) -> ^Atlas {
-	if id == 0 || int(id) > len(g_atlases) do return nil
-	return g_atlases[id - 1]
+	slot := _atlas_slot(&g.resources.atlases, id)
+	if slot == nil do return nil
+	return slot.entry
 }
 
 LoadFontFromMemory :: proc(
@@ -61,6 +98,7 @@ LoadFontFromMemory :: proc(
 	a.data = make([]byte, int(dataSize))
 	copy(a.data, fileData[:dataSize])
 	if !tt.InitFont(&a.info, raw_data(a.data), 0) {
+		delete(a.data)
 		free(a)
 		return Font{}
 	}
@@ -80,8 +118,11 @@ LoadFontFromMemory :: proc(
 		if _bake_glyph(a, cp) do baked += 1
 	}
 
-	append(&g_atlases, a)
-	id := u32(len(g_atlases))
+	id := _atlas_register(&g.resources.atlases, a)
+	if id == 0 {
+		_atlas_entry_destroy(a)
+		return {}
+	}
 
 	_atlas_gpu_init(a)
 
@@ -236,17 +277,38 @@ _atlas_build_bind :: proc(a: ^Atlas) {
 	)
 }
 
+@(private)
+_atlas_entry_destroy :: proc(entry: ^Atlas) {
+	assert(entry != nil, "_atlas_entry_destroy: nil entry")
+	if entry.bind != nil || entry.sampler != nil || entry.view != nil || entry.tex != nil {
+		_retire_texture(entry.bind, entry.sampler, entry.view, entry.tex)
+	}
+	delete(entry.glyphs)
+	delete(entry.bitmap)
+	delete(entry.data)
+	free(entry)
+}
+
+@(private)
+_atlas_resources_destroy :: proc(resources: ^Atlas_Resources) {
+	assert(resources != nil, "_atlas_resources_destroy: nil resources")
+	for &slot in resources.slots {
+		if !slot.occupied do continue
+		_atlas_entry_destroy(slot.entry)
+		slot.entry = nil
+		slot.occupied = false
+	}
+	resources^ = {}
+}
+
 UnloadFont :: proc(font: Font) {
-	a := get_atlas(font._atlas)
-	if a == nil do return
-	// Defer GPU destruction past this frame's submit: draws recorded earlier
-	// in the frame may still reference the atlas texture (context.odin).
-	_retire_texture(a.bind, a.sampler, a.view, a.tex)
-	delete(a.glyphs)
-	delete(a.bitmap)
-	delete(a.data)
-	g_atlases[font._atlas - 1] = nil
-	free(a)
+	slot := _atlas_slot(&g.resources.atlases, font._atlas)
+	if slot == nil do return
+	_atlas_entry_destroy(slot.entry)
+	slot.entry = nil
+	slot.occupied = false
+	assert(g.resources.atlases.count > 0, "UnloadFont: count underflow")
+	g.resources.atlases.count -= 1
 }
 
 SetTextureFilter :: proc(texture: Texture2D, filter: TextureFilter) {

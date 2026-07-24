@@ -11,6 +11,7 @@ import stbi "vendor:stb/image"
 import wg "vendor:wgpu"
 
 TEX_ID_BASE :: u32(0x4000_0000)
+MAX_TEXTURES :: RESOURCE_SLOT_COUNT
 
 Tex_Entry :: struct {
 	tex:      wg.Texture,
@@ -24,14 +25,49 @@ Tex_Entry :: struct {
 }
 
 @(private)
-g_textures: [dynamic]^Tex_Entry
+Texture_Slot :: struct {
+	entry:      ^Tex_Entry,
+	generation: u32,
+	occupied:   bool,
+}
+
+Texture_Resources :: struct {
+	slots: [MAX_TEXTURES]Texture_Slot,
+	count: u32,
+}
+
+@(private)
+_texture_register :: proc(resources: ^Texture_Resources, entry: ^Tex_Entry) -> u32 {
+	assert(resources != nil && entry != nil, "_texture_register: invalid arguments")
+	if resources.count >= MAX_TEXTURES do return 0
+	for &slot, index in resources.slots {
+		if slot.occupied do continue
+		slot.generation = _resource_generation_next(slot.generation)
+		slot.entry = entry
+		slot.occupied = true
+		resources.count += 1
+		return TEX_ID_BASE | _resource_handle_make(index, slot.generation)
+	}
+	assert(false, "_texture_register: count mismatch")
+	return 0
+}
+
+@(private)
+_texture_slot :: proc(resources: ^Texture_Resources, id: u32) -> ^Texture_Slot {
+	assert(resources != nil, "_texture_slot: nil resources")
+	if id & TEX_ID_BASE == 0 do return nil
+	index, generation, ok := _resource_handle_decode(id & ~TEX_ID_BASE, len(resources.slots))
+	if !ok do return nil
+	slot := &resources.slots[index]
+	if !slot.occupied || slot.generation != generation do return nil
+	return slot
+}
 
 @(private)
 get_texture :: proc(id: u32) -> ^Tex_Entry {
-	if id < TEX_ID_BASE do return nil
-	idx := int(id - TEX_ID_BASE)
-	if idx < 0 || idx >= len(g_textures) do return nil
-	return g_textures[idx]
+	slot := _texture_slot(&g.resources.textures, id)
+	if slot == nil do return nil
+	return slot.entry
 }
 
 // _to_rgba expands `src` (width*height, `format` channels) into a freshly
@@ -93,8 +129,11 @@ _new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
 	)
 	e.view = wg.TextureCreateView(e.tex, nil)
 	_tex_build_bind(e)
-	append(&g_textures, e)
-	id := TEX_ID_BASE + u32(len(g_textures) - 1)
+	id := _texture_register(&g.resources.textures, e)
+	if id == 0 {
+		_texture_entry_destroy(e)
+		return {}
+	}
 	pf: PixelFormat = .UNCOMPRESSED_R8G8B8A8
 	#partial switch format {
 	case .R32Float:
@@ -134,8 +173,11 @@ _new_rt_depth :: proc(w, h: i32) -> Texture2D {
 		},
 	)
 	e.view = wg.TextureCreateView(e.tex, nil)
-	append(&g_textures, e)
-	id := TEX_ID_BASE + u32(len(g_textures) - 1)
+	id := _texture_register(&g.resources.textures, e)
+	if id == 0 {
+		_texture_entry_destroy(e)
+		return {}
+	}
 	return Texture2D{id = id, width = w, height = h, mipmaps = 1, format = .UNCOMPRESSED_R32}
 }
 
@@ -177,8 +219,11 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 	e.view = wg.TextureCreateView(e.tex, nil)
 	_tex_build_bind(e)
 
-	append(&g_textures, e)
-	id := TEX_ID_BASE + u32(len(g_textures) - 1)
+	id := _texture_register(&g.resources.textures, e)
+	if id == 0 {
+		_texture_entry_destroy(e)
+		return {}
+	}
 	return Texture2D {
 		id = id,
 		width = image.width,
@@ -235,14 +280,33 @@ UpdateTexture :: proc(texture: Texture2D, pixels: rawptr) {
 	)
 }
 
+@(private)
+_texture_entry_destroy :: proc(entry: ^Tex_Entry) {
+	assert(entry != nil, "_texture_entry_destroy: nil entry")
+	_retire_texture(entry.bind, entry.sampler, entry.view, entry.tex)
+	free(entry)
+}
+
+@(private)
+_texture_resources_destroy :: proc(resources: ^Texture_Resources) {
+	assert(resources != nil, "_texture_resources_destroy: nil resources")
+	for &slot in resources.slots {
+		if !slot.occupied do continue
+		_texture_entry_destroy(slot.entry)
+		slot.entry = nil
+		slot.occupied = false
+	}
+	resources^ = {}
+}
+
 UnloadTexture :: proc(texture: Texture2D) {
-	e := get_texture(texture.id)
-	if e == nil do return
-	// Defer GPU destruction past this frame's submit: draws recorded earlier
-	// in the frame may still reference the texture (context.odin).
-	_retire_texture(e.bind, e.sampler, e.view, e.tex)
-	g_textures[texture.id - TEX_ID_BASE] = nil
-	free(e)
+	slot := _texture_slot(&g.resources.textures, texture.id)
+	if slot == nil do return
+	_texture_entry_destroy(slot.entry)
+	slot.entry = nil
+	slot.occupied = false
+	assert(g.resources.textures.count > 0, "UnloadTexture: count underflow")
+	g.resources.textures.count -= 1
 }
 
 // --- draw ------------------------------------------------------------------

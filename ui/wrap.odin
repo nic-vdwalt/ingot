@@ -100,6 +100,17 @@ wrap_text_with :: proc(
 	return owned_lines
 }
 
+wrap_text_frame :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	max_width: i32,
+	font_size: i32,
+) -> []Wrap_Line {
+	assert(frame != nil && frame.open, "wrap_text_frame: invalid frame")
+	assert(max_width >= 0 && font_size > 0, "wrap_text_frame: invalid dimensions")
+	return wrap_text_with(ui_frame_text(frame), text, max_width, font_size)
+}
+
 wrap_text :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> []Wrap_Line {
 	return wrap_text_with(&default_text_system, text, max_width, font_size)
 }
@@ -161,6 +172,17 @@ wrap_compute_with :: proc(
 	return lines[:]
 }
 
+wrap_compute_frame :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	max_width: i32,
+	font_size: i32,
+) -> []Wrap_Line {
+	assert(frame != nil && frame.open, "wrap_compute_frame: invalid frame")
+	assert(max_width >= 0 && font_size > 0, "wrap_compute_frame: invalid dimensions")
+	return wrap_compute_with(ui_frame_text(frame), text, max_width, font_size)
+}
+
 wrap_compute :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> []Wrap_Line {
 	return wrap_compute_with(&default_text_system, text, max_width, font_size)
 }
@@ -173,6 +195,16 @@ wrapped_height_px_with :: proc(
 	assert(system != nil)
 	assert(line_height > 0)
 	return i32(len(wrap_text_with(system, text, max_width, font_size))) * line_height
+}
+
+wrapped_height_px_frame :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	max_width, font_size, line_height: i32,
+) -> i32 {
+	assert(frame != nil && frame.open, "wrapped_height_px_frame: invalid frame")
+	assert(max_width >= 0 && font_size > 0, "wrapped_height_px_frame: invalid dimensions")
+	return wrapped_height_px_with(ui_frame_text(frame), text, max_width, font_size, line_height)
 }
 
 wrapped_height_px :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> i32 {
@@ -195,6 +227,16 @@ wrapped_max_line_width_with :: proc(
 	return min(width, max_width)
 }
 
+wrapped_max_line_width_frame :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	max_width, font_size: i32,
+) -> i32 {
+	assert(frame != nil && frame.open, "wrapped_max_line_width_frame: invalid frame")
+	assert(max_width >= 0 && font_size > 0, "wrapped_max_line_width_frame: invalid dimensions")
+	return wrapped_max_line_width_with(ui_frame_text(frame), text, max_width, font_size)
+}
+
 wrapped_max_line_width :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> i32 {
 	return wrapped_max_line_width_with(&default_text_system, text, max_width, font_size)
 }
@@ -215,6 +257,16 @@ wrapped_max_line_width_md_with :: proc(
 	return wrapped_max_line_width_with(system, display, max_width, font_size)
 }
 
+wrapped_max_line_width_md_frame :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	max_width, font_size: i32,
+) -> i32 {
+	assert(frame != nil && frame.open, "wrapped_max_line_width_md_frame: invalid frame")
+	assert(max_width >= 0 && font_size > 0, "wrapped_max_line_width_md_frame: invalid dimensions")
+	return wrapped_max_line_width_md_with(ui_frame_text(frame), text, max_width, font_size)
+}
+
 wrapped_max_line_width_md :: proc(
 	text: string,
 	max_width: i32,
@@ -232,6 +284,16 @@ wrapped_last_line_start_with :: proc(
 	lines := wrap_text_with(system, text, max_width, font_size)
 	if len(lines) == 0 do return 0
 	return lines[len(lines) - 1].start
+}
+
+wrapped_last_line_start_frame :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	max_width, font_size: i32,
+) -> int {
+	assert(frame != nil && frame.open, "wrapped_last_line_start_frame: invalid frame")
+	assert(max_width >= 0 && font_size > 0, "wrapped_last_line_start_frame: invalid dimensions")
+	return wrapped_last_line_start_with(ui_frame_text(frame), text, max_width, font_size)
 }
 
 wrapped_last_line_start :: proc(text: string, max_width: i32, font_size: i32 = FONT_SIZE) -> int {

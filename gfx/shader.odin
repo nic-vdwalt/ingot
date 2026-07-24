@@ -21,6 +21,7 @@ import wg "vendor:wgpu"
 
 SHADER_TEX_LOC_BASE :: 1000
 SHADER_MAX_TEX :: 4
+MAX_SHADERS :: 256
 
 @(private)
 Shader_Uniform :: struct {
@@ -50,22 +51,55 @@ Shader_Entry :: struct {
 }
 
 @(private)
-g_shaders: [dynamic]^Shader_Entry
+Shader_Slot :: struct {
+	entry:      ^Shader_Entry,
+	generation: u32,
+	occupied:   bool,
+}
+
+Shader_Resources :: struct {
+	slots:       [MAX_SHADERS]Shader_Slot,
+	count:       u32,
+	default_tex: u32,
+}
+
 @(private)
-g_default_tex: u32
+_shader_register :: proc(resources: ^Shader_Resources, entry: ^Shader_Entry) -> u32 {
+	assert(resources != nil && entry != nil, "_shader_register: invalid arguments")
+	if resources.count >= MAX_SHADERS do return 0
+	for &slot, index in resources.slots {
+		if slot.occupied do continue
+		slot.generation = _resource_generation_next(slot.generation)
+		slot.entry = entry
+		slot.occupied = true
+		resources.count += 1
+		return _resource_handle_make(index, slot.generation)
+	}
+	assert(false, "_shader_register: count mismatch")
+	return 0
+}
+
+@(private)
+_shader_slot :: proc(resources: ^Shader_Resources, id: u32) -> ^Shader_Slot {
+	assert(resources != nil, "_shader_slot: nil resources")
+	index, generation, ok := _resource_handle_decode(id, len(resources.slots))
+	if !ok do return nil
+	slot := &resources.slots[index]
+	if !slot.occupied || slot.generation != generation do return nil
+	return slot
+}
 
 @(private)
 _shader_get :: proc(id: u32) -> ^Shader_Entry {
-	if id == 0 do return nil
-	idx := int(id - 1)
-	if idx < 0 || idx >= len(g_shaders) do return nil
-	return g_shaders[idx]
+	slot := _shader_slot(&g.resources.shaders, id)
+	if slot == nil do return nil
+	return slot.entry
 }
 
 // _default_tex lazily creates a 1×1 white texture to fill unset extra slots.
 @(private)
 _default_tex :: proc() -> u32 {
-	if g_default_tex != 0 do return g_default_tex
+	if g.resources.shaders.default_tex != 0 do return g.resources.shaders.default_tex
 	px := [4]u8{255, 255, 255, 255}
 	img := Image {
 		data    = raw_data(px[:]),
@@ -75,8 +109,8 @@ _default_tex :: proc() -> u32 {
 		format  = .UNCOMPRESSED_R8G8B8A8,
 	}
 	t := LoadTextureFromImage(img)
-	g_default_tex = t.id
-	return g_default_tex
+	g.resources.shaders.default_tex = t.id
+	return g.resources.shaders.default_tex
 }
 
 // --- WGSL uniform reflection ------------------------------------------------
@@ -192,6 +226,7 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 			},
 		},
 	)
+	delete(src_clone)
 	e.uniforms, _ = _reflect_uniforms(src)
 	total: u32 = 16
 	for u in e.uniforms {
@@ -249,27 +284,55 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 		e.extra_dirty = true
 	}
 
-	append(&g_shaders, e)
-	id := u32(len(g_shaders))
+	id := _shader_register(&g.resources.shaders, e)
+	if id == 0 {
+		_shader_entry_destroy(e)
+		return {}
+	}
 	return Shader{id = id}
 }
 
-UnloadShader :: proc(shader: Shader) {
-	e := _shader_get(shader.id)
-	if e == nil do return
-	for i in 0 ..< e.pipe_n {
-		if e.pipe_obj[i] != nil do wg.RenderPipelineRelease(e.pipe_obj[i])
+@(private)
+_shader_entry_destroy :: proc(entry: ^Shader_Entry) {
+	assert(entry != nil, "_shader_entry_destroy: nil entry")
+	for index in 0 ..< entry.pipe_n {
+		if entry.pipe_obj[index] != nil do wg.RenderPipelineRelease(entry.pipe_obj[index])
 	}
-	if e.extra_bind != nil do wg.BindGroupRelease(e.extra_bind)
-	if e.extra_layout != nil do wg.BindGroupLayoutRelease(e.extra_layout)
-	for bind in e.u_bind {
+	if entry.extra_bind != nil do wg.BindGroupRelease(entry.extra_bind)
+	if entry.extra_layout != nil do wg.BindGroupLayoutRelease(entry.extra_layout)
+	for bind in entry.u_bind {
 		if bind != nil do wg.BindGroupRelease(bind)
 	}
-	if e.u_layout != nil do wg.BindGroupLayoutRelease(e.u_layout)
-	if e.module != nil do wg.ShaderModuleRelease(e.module)
-	delete(e.ushadow)
-	g_shaders[shader.id - 1] = nil
-	free(e)
+	if entry.u_layout != nil do wg.BindGroupLayoutRelease(entry.u_layout)
+	if entry.module != nil do wg.ShaderModuleRelease(entry.module)
+	for uniform in entry.uniforms do delete(uniform.name)
+	for name in entry.tex_names do delete(name)
+	delete(entry.uniforms)
+	delete(entry.tex_names)
+	delete(entry.ushadow)
+	free(entry)
+}
+
+@(private)
+_shader_resources_destroy :: proc(resources: ^Shader_Resources) {
+	assert(resources != nil, "_shader_resources_destroy: nil resources")
+	for &slot in resources.slots {
+		if !slot.occupied do continue
+		_shader_entry_destroy(slot.entry)
+		slot.entry = nil
+		slot.occupied = false
+	}
+	resources^ = {}
+}
+
+UnloadShader :: proc(shader: Shader) {
+	slot := _shader_slot(&g.resources.shaders, shader.id)
+	if slot == nil do return
+	_shader_entry_destroy(slot.entry)
+	slot.entry = nil
+	slot.occupied = false
+	assert(g.resources.shaders.count > 0, "UnloadShader: count underflow")
+	g.resources.shaders.count -= 1
 }
 
 GetShaderLocation :: proc(shader: Shader, uniformName: cstring) -> i32 {
@@ -429,6 +492,7 @@ _shader_pipeline :: proc(e: ^Shader_Entry, format: wg.TextureFormat) -> wg.Rende
 			},
 		},
 	)
+	wg.PipelineLayoutRelease(pl)
 	e.pipe_fmt[e.pipe_n] = format
 	e.pipe_obj[e.pipe_n] = pipe
 	e.pipe_n += 1

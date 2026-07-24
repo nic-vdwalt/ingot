@@ -36,7 +36,9 @@ test_sphere_geometry_bounds_and_normals :: proc(t: ^testing.T) {
 
 	for v in vertices {
 		pos_len := math.sqrt(
-			v.position.x * v.position.x + v.position.y * v.position.y + v.position.z * v.position.z,
+			v.position.x * v.position.x +
+			v.position.y * v.position.y +
+			v.position.z * v.position.z,
 		)
 		nrm_len := math.sqrt(
 			v.normal.x * v.normal.x + v.normal.y * v.normal.y + v.normal.z * v.normal.z,

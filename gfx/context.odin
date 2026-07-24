@@ -9,6 +9,54 @@ import "core:fmt"
 import wg "vendor:wgpu"
 
 KEY_COUNT :: 349 // KB_MENU (348) + 1
+RESOURCE_SLOT_BITS :: 10
+RESOURCE_SLOT_COUNT :: 1 << RESOURCE_SLOT_BITS
+RESOURCE_SLOT_MASK :: u32(RESOURCE_SLOT_COUNT - 1)
+RESOURCE_GENERATION_MASK :: (u32(1) << 20) - 1
+
+#assert(RESOURCE_SLOT_COUNT == 1024)
+#assert(RESOURCE_GENERATION_MASK > 0)
+
+@(private)
+_resource_generation_next :: proc(generation: u32) -> u32 {
+	next := (generation + 1) & RESOURCE_GENERATION_MASK
+	if next == 0 do next = 1
+	return next
+}
+
+@(private)
+_resource_handle_make :: proc(index: int, generation: u32) -> u32 {
+	assert(index >= 0 && index < RESOURCE_SLOT_COUNT)
+	assert(generation > 0 && generation <= RESOURCE_GENERATION_MASK)
+	handle := generation << RESOURCE_SLOT_BITS | u32(index)
+	assert(handle != 0)
+	return handle
+}
+
+@(private)
+_resource_handle_decode :: proc(
+	handle: u32,
+	capacity: int,
+) -> (
+	index: int,
+	generation: u32,
+	ok: bool,
+) {
+	if handle == 0 do return 0, 0, false
+	index = int(handle & RESOURCE_SLOT_MASK)
+	generation = handle >> RESOURCE_SLOT_BITS
+	if generation == 0 || index < 0 || index >= capacity do return 0, 0, false
+	return index, generation, true
+}
+
+Graphics_Resources :: struct {
+	textures: Texture_Resources,
+	atlases:  Atlas_Resources,
+	shaders:  Shader_Resources,
+	rlgl:     Rlgl_Resources,
+	gpu_3d:   Gpu_3D_Resources,
+	retire:   [dynamic]Retired_Texture,
+}
 
 Frame_State :: struct {
 	surf_tex:               wg.SurfaceTexture,
@@ -83,15 +131,11 @@ Context :: struct {
 
 	// renderer (batch.odin)
 	rend:                 Renderer,
+	resources:            Graphics_Resources,
 
 	// input (input.odin)
 	inp:                  Input,
 	submissions:          Submission_Tracker,
-	// GPU handles retired mid-frame (UnloadFont/UnloadTexture while a frame
-	// is recording). Destroying a texture that this frame's command buffer
-	// references fails validation at QueueSubmit, so destruction is deferred
-	// until after the submit in EndDrawing.
-	retire:               [dynamic]Retired_Texture,
 	initialized:          bool,
 	composite_alpha:      wg.CompositeAlphaMode,
 }
@@ -130,10 +174,10 @@ _retire_texture :: proc(
 	)
 	if g.frame.has_frame {
 		assert(
-			len(g.retire) < MAX_RETIRED_PER_FRAME,
+			len(g.resources.retire) < MAX_RETIRED_PER_FRAME,
 			"_retire_texture: retire queue full (unload loop within one frame?)",
 		)
-		append(&g.retire, Retired_Texture{bind, sampler, view, tex})
+		append(&g.resources.retire, Retired_Texture{bind, sampler, view, tex})
 		return
 	}
 	_destroy_retired(Retired_Texture{bind, sampler, view, tex})
@@ -158,12 +202,32 @@ _flush_retired :: proc() {
 	// Why assert: flushing while a frame still records would recreate the
 	// destroy-before-submit validation abort this queue exists to prevent.
 	assert(!g.frame.has_frame, "_flush_retired: called while a frame is recording")
-	for r in g.retire do _destroy_retired(r)
-	clear(&g.retire)
+	for retired in g.resources.retire do _destroy_retired(retired)
+	clear(&g.resources.retire)
 }
 
 @(private)
 g: Context
+
+@(private)
+_graphics_resources_init :: proc(resources: ^Graphics_Resources) {
+	assert(resources != nil, "_graphics_resources_init: nil resources")
+	resources^ = {}
+}
+
+@(private)
+_graphics_resources_destroy :: proc(resources: ^Graphics_Resources) {
+	assert(resources != nil, "_graphics_resources_destroy: nil resources")
+	assert(!g.frame.has_frame, "_graphics_resources_destroy: active frame")
+	_gpu_3d_resources_destroy(&resources.gpu_3d)
+	_rlgl_resources_destroy(&resources.rlgl)
+	_shader_resources_destroy(&resources.shaders)
+	_atlas_resources_destroy(&resources.atlases)
+	_texture_resources_destroy(&resources.textures)
+	_flush_retired()
+	delete(resources.retire)
+	resources^ = {}
+}
 
 // --- async adapter/device request helpers ----------------------------------
 
@@ -314,6 +378,7 @@ _gpu_finish :: proc() {
 
 	_submission_init(&g.submissions)
 	renderer_init(&g.rend)
+	_graphics_resources_init(&g.resources)
 	platform_input_init()
 	platform_drop_init()
 
@@ -321,17 +386,23 @@ _gpu_finish :: proc() {
 }
 
 CloseWindow :: proc() {
-	if !g.initialized do return
-	platform_drop_shutdown()
-	renderer_shutdown(&g.rend)
-	_submission_shutdown(&g.submissions)
+	if g.instance == nil && g.win == nil do return
+	assert(!g.frame.has_frame, "CloseWindow: frame is still recording")
+	if g.initialized {
+		platform_drop_shutdown()
+		_graphics_resources_destroy(&g.resources)
+		renderer_shutdown(&g.rend)
+		_submission_shutdown(&g.submissions)
+	}
 	if g.surface != nil do wg.SurfaceRelease(g.surface)
 	if g.queue != nil do wg.QueueRelease(g.queue)
 	if g.device != nil do wg.DeviceRelease(g.device)
 	if g.adapter != nil do wg.AdapterRelease(g.adapter)
 	if g.instance != nil do wg.InstanceRelease(g.instance)
 	platform_terminate()
-	g.initialized = false
+	flags := g.config_flags
+	g = {}
+	g.config_flags = flags
 }
 
 WindowShouldClose :: proc() -> bool {
