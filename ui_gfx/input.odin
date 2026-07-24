@@ -18,6 +18,16 @@ capture_input :: proc(input: ^ui.Ui_Input) {
 	input.window_focused = rl.IsWindowFocused()
 	input.cursor_on_screen = rl.IsCursorOnScreen()
 	input.window_fullscreen = rl.IsWindowFullscreen()
+	clipboard := rl.GetClipboardText()
+	if clipboard != nil {
+		clipboard_text := string(clipboard)
+		input.clipboard_len = min(len(clipboard_text), ui.INPUT_CLIPBOARD_CAP)
+		copy(input.clipboard[:input.clipboard_len], transmute([]u8)clipboard_text)
+	}
+	assert(
+		input.clipboard_len >= 0 && input.clipboard_len <= ui.INPUT_CLIPBOARD_CAP,
+		"capture_input: invalid clipboard length",
+	)
 
 	for index in 0 ..< ui.INPUT_KEY_COUNT {
 		key := rl.KeyboardKey(index)

@@ -37,6 +37,17 @@ md_spans_flags :: proc(t: ^testing.T) {
 }
 
 @(test)
+md_spans_pill_with_trailing_text :: proc(t: ^testing.T) {
+	encoded := "\x02src/main.odin\x03 "
+	spans := parse_inline_spans_with(encoded)
+	testing.expect_value(t, len(spans), 2)
+	testing.expect(t, spans[0].pill, "mention path should remain a pill")
+	testing.expect_value(t, spans[0].text, "src/main.odin")
+	testing.expect_value(t, spans_display_string_with(spans), "src/main.odin ")
+	testing.expect_value(t, raw_to_display(spans, len(encoded)), len("src/main.odin "))
+}
+
+@(test)
 md_spans_contiguous_fuzz :: proc(t: ^testing.T) {
 	p := testx.prng_make(0xBEEF)
 	for _ in 0 ..< 3000 {
