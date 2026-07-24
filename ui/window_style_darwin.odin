@@ -45,11 +45,7 @@ apply_window_style :: proc(window_handle: rawptr = nil) {
 	if content == nil do return
 	bounds := intrinsics.objc_send(NS.Rect, content, "bounds")
 
-	effect := intrinsics.objc_send(
-		^Window_Style_Effect_View,
-		Window_Style_Effect_View,
-		"alloc",
-	)
+	effect := intrinsics.objc_send(^Window_Style_Effect_View, Window_Style_Effect_View, "alloc")
 	effect = intrinsics.objc_send(^Window_Style_Effect_View, effect, "initWithFrame:", bounds)
 	if effect == nil do return
 
