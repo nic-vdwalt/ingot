@@ -21,6 +21,7 @@ Ui_Focus_Mode :: enum u8 {
 // widgets and their values remain entirely caller-owned.
 Ui_Runtime :: struct {
 	text:                  Text_System,
+	text_backend:          Text_Backend,
 	spell:                 Spell_System,
 	style:                 Theme,
 	metrics:               Ui_Metrics,
@@ -40,6 +41,8 @@ MAX_PANE_SCOPES :: 16
 
 Ui_Frame :: struct {
 	runtime:          ^Ui_Runtime,
+	input:            ^Ui_Input,
+	output:           ^Ui_Output,
 	cursor:           Cursor_State,
 	overlay:          Overlay_State,
 	route:            Input_Route_State,
@@ -149,10 +152,12 @@ ui_runtime_set_scale_hooks :: proc(
 	runtime.scale_invalidate_hook = invalidate_hook
 }
 
-ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime) {
+ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input = nil) {
 	assert(frame != nil && runtime != nil, "ui_frame_begin: nil frame or runtime")
 	assert(runtime.initialized && !frame.open, "ui_frame_begin: invalid lifetime")
 	runtime.frame_generation += 1
+	frame.input = input
+	if frame.output != nil do ui_output_reset(frame.output)
 	a11y_expire_before_frame(runtime)
 	frame.runtime = runtime
 	frame.cursor.requested = .DEFAULT
@@ -184,6 +189,7 @@ ui_frame_end :: proc(frame: ^Ui_Frame) {
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
 	frame.runtime = nil
+	frame.input = nil
 	frame.open = false
 }
 
