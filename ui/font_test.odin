@@ -98,3 +98,27 @@ test_frame_text_geometry_uses_render_backend :: proc(t: ^testing.T) {
 	testing.expect_value(t, col, 3)
 	testing.expect(t, state.measure_calls > 0, "frame geometry must use the render backend")
 }
+
+@(test)
+test_markdown_width_uses_render_backend :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	state := Test_Text_Backend_State {
+		advance = 11,
+	}
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	plain_width := wrapped_max_line_width_md_frame(&frame, "abcd", 100, 16)
+	bold_width := wrapped_max_line_width_md_frame(&frame, "**abcd**", 100, 16)
+	ui_frame_end(&frame)
+	ui_frame_destroy(&frame)
+	ui_runtime_destroy(&runtime)
+
+	testing.expect_value(t, plain_width, i32(44))
+	testing.expect_value(t, bold_width, i32(44))
+	testing.expect(t, state.measure_calls > 0, "markdown width must use the render backend")
+}

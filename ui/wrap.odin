@@ -298,7 +298,14 @@ wrapped_max_line_width_md_frame :: proc(
 ) -> i32 {
 	assert(frame != nil && frame.open, "wrapped_max_line_width_md_frame: invalid frame")
 	assert(max_width >= 0 && font_size > 0, "wrapped_max_line_width_md_frame: invalid dimensions")
-	return wrapped_max_line_width_md_with(ui_frame_text(frame), text, max_width, font_size)
+	if !strings.contains(text, "**") &&
+	   strings.index_byte(text, PILL_OPEN) < 0 &&
+	   strings.index_byte(text, '`') < 0 {
+		return wrapped_max_line_width_frame(frame, text, max_width, font_size)
+	}
+	spans := frame_view_items(frame, parse_inline_spans(frame, text))
+	display := frame_string_value(frame, spans_display_string(frame, spans))
+	return wrapped_max_line_width_frame(frame, display, max_width, font_size)
 }
 
 wrapped_last_line_start_with :: proc(
