@@ -10,9 +10,10 @@ overlay_recorder_behaviour :: proc(t: ^testing.T) {
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
-	output: Ui_Output
+	output := new(Ui_Output)
+	defer free(output)
 	frame.runtime = &runtime
-	frame.output = &output
+	frame.output = output
 	frame.open = true
 	overlay_reset(&frame)
 	route_reset(&frame)
