@@ -1,79 +1,38 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
-// Adaptive frame pacing: run at full rate while anything is happening, drop
-// to a low idle rate when the app is quiet. Ported from Alloy's main loop.
-//
-// See also gfx.SetFrameStrategy(.Event_Driven): the engine-level scheduler
-// idles completely (no frames at all) between events, which saves more power
-// than this pacer's low-rate polling. The pacer remains useful for apps that
-// want a bounded idle poll rate instead of full event-driven idling.
 package ui
 
-
-// Frame_Pacer drops the render loop to idle_fps when there has been no user
-// input or caller-reported activity for `grace` seconds, and restores full
-// rate immediately on activity. The grace window lets time-based fade-outs
-// and trailing animations finish smoothly before throttling.
 Frame_Pacer :: struct {
-	target_fps:    i32, // full-rate floor (matched up to the monitor refresh)
-	idle_fps:      i32, // polling ceiling while idle
-	grace:         f64, // seconds of full-rate rendering after last activity
+	target_fps:    i32,
+	idle_fps:      i32,
+	grace:         f64,
 	last_activity: f64,
-	current:       i32, // last applied SetTargetFPS value
+	current:       i32,
 }
 
-// pacer_init applies target_fps and returns an initialized pacer. Call after
-// rl.InitWindow().
 pacer_init :: proc(target_fps: i32 = 60, idle_fps: i32 = 15, grace: f64 = 2.5) -> Frame_Pacer {
-	rl.SetTargetFPS(target_fps)
-	return {target_fps, idle_fps, grace, frame_input(frame).time, target_fps}
+	assert(target_fps > 0 && idle_fps > 0, "pacer_init: invalid rate")
+	return {target_fps = target_fps, idle_fps = idle_fps, grace = grace, current = target_fps}
 }
 
-// pacer_note_activity marks external activity (network message, animation
-// running, streaming output) so the loop stays at full rate.
-pacer_note_activity :: proc(p: ^Frame_Pacer) {
-	p.last_activity = frame_input(frame).time
+pacer_note_activity :: proc(p: ^Frame_Pacer, now: f64) {
+	assert(p != nil, "pacer_note_activity: nil pacer")
+	p.last_activity = now
 }
 
-// pacer_frame updates the frame limiter; call once per frame (typically after
-// rl.EndDrawing()). Input detection is non-consuming, so it never eats queued
-// key/char events belonging to the app's handlers. `busy` forces full rate
-// this frame (async work pending, run in progress, camera animating, ...).
-pacer_frame :: proc(p: ^Frame_Pacer, busy: bool = false) {
-	if busy || pacer_input_active() {
-		p.last_activity = frame_input(frame).time
-	}
-	if frame_input(frame).time - p.last_activity < p.grace {
-		// Match the frame limiter to the monitor's refresh rate so it never
-		// fights vsync: a 60 FPS cap on top of vsync overshoots by a whole
-		// sleep quantum and oscillates. Unknown refresh (0) → target_fps.
-		active_fps := rl.GetMonitorRefreshRate(rl.GetCurrentMonitor())
-		if active_fps < p.target_fps do active_fps = p.target_fps
-		// Only call SetTargetFPS on transitions — it resets raylib's
-		// internal frame-time bookkeeping every call.
-		if p.current != active_fps {
-			rl.SetTargetFPS(active_fps)
-			p.current = active_fps
-		}
-	} else {
-		if p.current != p.idle_fps {
-			rl.SetTargetFPS(p.idle_fps)
-			p.current = p.idle_fps
-		}
-	}
+pacer_frame :: proc(p: ^Frame_Pacer, input: ^Ui_Input, busy: bool = false) -> i32 {
+	assert(p != nil && input != nil, "pacer_frame: invalid argument")
+	if busy || pacer_input_active(input) do p.last_activity = input.time
+	active_fps := max(input.monitor_refresh, p.target_fps)
+	next := active_fps if input.time - p.last_activity < p.grace else p.idle_fps
+	p.current = next
+	return next
 }
 
-// pacer_input_active reports raw user input this frame (mouse move, buttons,
-// wheel, keys). Uses only non-consuming state queries — GetKeyPressed /
-// GetCharPressed pop from raylib's event queues and would steal events from
-// the app's own input handling.
-@(private)
-pacer_input_active :: proc() -> bool {
-	if get_mouse_delta(frame) != {0, 0} do return true
-	if get_mouse_wheel_move_v(frame) != {} do return true
-	if is_mouse_button_down(frame, .LEFT) || is_mouse_button_down(frame, .RIGHT) do return true
-	// Scan the keyboard state arrays (IsKeyPressed does not consume events).
-	for k := i32(KeyboardKey.SPACE); k <= i32(KeyboardKey.KB_MENU); k += 1 {
-		if is_key_pressed(frame, KeyboardKey(k)) do return true
+pacer_input_active :: proc(input: ^Ui_Input) -> bool {
+	assert(input != nil, "pacer_input_active: nil input")
+	if input.mouse_delta != {} || input.mouse_wheel != {} do return true
+	if input_mouse_down(input, .LEFT) || input_mouse_down(input, .RIGHT) do return true
+	for index in 0 ..< INPUT_KEY_COUNT {
+		if input.keys_pressed[index] do return true
 	}
 	return false
 }

@@ -17,8 +17,9 @@ import "core:strings"
 Modal_State :: struct {
 	open:      bool,
 	dismissed: bool,
-	rect:      Rect_I32, // panel rect computed by modal_begin
-	drawing:   bool, // begin/end balance check
+	rect:      Rect_I32,
+	frame:     ^Ui_Frame,
+	drawing:   bool,
 }
 
 // modal_begin dims the screen, claims backdrop input (nothing under the dim
@@ -37,6 +38,7 @@ modal_begin :: proc(
 	assert(!st.drawing, "modal_begin: unbalanced begin (missing modal_end)")
 	assert(w > 0 && h > 0, "modal_begin: empty modal size")
 	st.drawing = true
+	st.frame = frame
 	st.dismissed = false
 	style := ui_frame_theme(frame)
 	metrics := ui_frame_metrics(frame)
@@ -78,10 +80,13 @@ modal_end :: proc(st: ^Modal_State) {
 	assert(st != nil, "modal_end: nil state")
 	assert(st.drawing, "modal_end: modal_begin not called")
 	st.drawing = false
+	frame := st.frame
+	assert(frame != nil, "modal_end: missing frame")
 	end_scissor_mode(frame)
 	if is_key_pressed(frame, .ESCAPE) {
 		st.open = false
 		st.dismissed = true
+		st.frame = nil
 		return
 	}
 	mrect := Rectangle{f32(st.rect.x), f32(st.rect.y), f32(st.rect.w), f32(st.rect.h)}
@@ -89,6 +94,7 @@ modal_end :: proc(st: ^Modal_State) {
 		st.open = false
 		st.dismissed = true
 	}
+	st.frame = nil
 }
 
 // --- Context menu ------------------------------------------------------------
@@ -273,7 +279,7 @@ context_menu_rows :: proc(
 			it.label,
 			sem,
 		)
-		if hovered && !it.disabled && mouse_moved() do st.selected = i
+		if hovered && !it.disabled && mouse_moved(frame) do st.selected = i
 		if st.selected == i {
 			overlay_rect(
 				frame,

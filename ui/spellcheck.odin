@@ -183,7 +183,7 @@ spell_in_pill :: proc(pills: ^[dynamic]Mention_Span, start, end: int) -> bool {
 	return false
 }
 
-draw_squiggle :: proc(x, y, w: i32, color: Color) {
+draw_squiggle :: proc(frame: ^Ui_Frame, x, y, w: i32, color: Color) {
 	if w <= 1 do return
 	amp: f32 = 1.5
 	half: f32 = 3

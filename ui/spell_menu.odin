@@ -78,12 +78,12 @@ spell_menu_close :: proc(menu: ^Spell_Menu) {
 // spell_menu_apply performs the action for a nav index: 0..n-1 replace with
 // that suggestion, n = learn, n+1 = ignore for this session.
 @(private = "file")
-spell_menu_apply :: proc(menu: ^Spell_Menu, system: ^Spell_System, idx: int) {
-	assert(menu != nil && system != nil, "spell_menu_apply: nil state")
+spell_menu_apply :: proc(frame: ^Ui_Frame, menu: ^Spell_Menu, system: ^Spell_System, idx: int) {
+	assert(frame != nil && menu != nil && system != nil, "spell_menu_apply: nil state")
 	n := len(menu.suggestions)
 	switch {
 	case idx < n:
-		spell_replace_word(menu, menu.suggestions[idx])
+		spell_replace_word(frame, menu, menu.suggestions[idx])
 	case idx == n:
 		spell_learn_with(system, menu.word)
 		spell_menu_close(menu)
@@ -96,8 +96,8 @@ spell_menu_apply :: proc(menu: ^Spell_Menu, system: ^Spell_System, idx: int) {
 // Replace the misspelled word range with `replacement`, keeping pills and the
 // caret consistent and recording one undo step.
 @(private = "file")
-spell_replace_word :: proc(menu: ^Spell_Menu, replacement: string) {
-	assert(menu != nil && menu.sb != nil, "spell_replace_word: nil state")
+spell_replace_word :: proc(frame: ^Ui_Frame, menu: ^Spell_Menu, replacement: string) {
+	assert(frame != nil && menu != nil && menu.sb != nil, "spell_replace_word: nil state")
 	sb := menu.sb
 	old := strings.to_string(sb^)
 	ws, we := menu.word_start, menu.word_end
@@ -188,7 +188,7 @@ draw_spell_menu :: proc(
 	if is_key_pressed(frame, .ENTER) &&
 	   !is_key_down(frame, .LEFT_SHIFT) &&
 	   !is_key_down(frame, .RIGHT_SHIFT) {
-		spell_menu_apply(menu, system, menu.selected)
+		spell_menu_apply(frame, menu, system, menu.selected)
 		return
 	}
 
@@ -230,7 +230,7 @@ draw_spell_menu :: proc(
 		assert(menu != nil, "draw_spell_menu row: nil menu")
 		row_rect := Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(item_h)}
 		hovered := point_in_rect(mouse, row_rect)
-		if hovered && mouse_moved() do menu.selected = nav_idx
+		if hovered && mouse_moved(frame) do menu.selected = nav_idx
 		if menu.selected == nav_idx {
 			overlay_rect(
 				frame,
@@ -341,6 +341,6 @@ draw_spell_menu :: proc(
 	overlay_end(frame)
 
 	if apply_idx >= 0 {
-		spell_menu_apply(menu, system, apply_idx)
+		spell_menu_apply(frame, menu, system, apply_idx)
 	}
 }

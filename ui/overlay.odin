@@ -2,6 +2,9 @@ package ui
 
 import "core:strings"
 
+MAX_OVERLAY_CMDS :: PAINT_COMMAND_CAP
+OVERLAY_TEXT_CAP :: PAINT_TEXT_CAP
+
 Overlay_State :: struct {
 	open:    bool,
 	dropped: int,
@@ -85,6 +88,7 @@ overlay_reset :: proc(frame: ^Ui_Frame) {
 overlay_flush :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil, "overlay_flush: nil frame")
 	assert(!frame.overlay.open, "overlay_flush: group still open")
+	if frame.output != nil do paint_list_reset(&frame.output.overlay)
 }
 
 overlay_text_str :: proc(

@@ -179,7 +179,7 @@ settings_scale_rows :: proc(
 		item_rect := Rectangle{f32(modal_x + 2), f32(list_y), f32(modal_w - 4), f32(item_h)}
 		mouse := get_mouse_position(frame)
 		hovered := point_in_rect(mouse, item_rect)
-		if hovered && mouse_moved() {
+		if hovered && mouse_moved(frame) {
 			selected^ = idx
 		}
 		if idx == selected^ {

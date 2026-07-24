@@ -127,7 +127,7 @@ draw_split_drop_hint :: proc(frame: ^Ui_Frame, screen_w, screen_h: i32, side_lef
 
 // mod_down reports whether a clipboard modifier (Cmd on macOS, Ctrl elsewhere)
 // is currently held.
-mod_down :: proc() -> bool {
+mod_down :: proc(frame: ^Ui_Frame) -> bool {
 	return(
 		is_key_down(frame, .LEFT_SUPER) ||
 		is_key_down(frame, .RIGHT_SUPER) ||
@@ -140,7 +140,7 @@ mod_down :: proc() -> bool {
 // Used so keyboard arrow navigation in selection menus isn't overridden by a
 // stationary cursor that happens to sit over an item. Mouse hover only changes
 // the selection when the user is actively moving the mouse.
-mouse_moved :: proc() -> bool {
+mouse_moved :: proc(frame: ^Ui_Frame) -> bool {
 	delta := get_mouse_delta(frame)
 	return delta.x != 0 || delta.y != 0
 }
@@ -149,7 +149,7 @@ mouse_moved :: proc() -> bool {
 // platform multiplier so scroll speed feels consistent across OSes.
 // Windows mouse wheels produce 1.0 per notch while macOS trackpads
 // deliver larger inertia-driven values; the multiplier compensates.
-get_wheel_move :: proc() -> f32 {
+get_wheel_move :: proc(frame: ^Ui_Frame) -> f32 {
 	wheel := get_mouse_wheel_move(frame)
 	when ODIN_OS == .Windows {
 		return wheel * 5.0
@@ -162,8 +162,8 @@ get_wheel_move :: proc() -> f32 {
 // fractional remainders in accum so small trackpad deltas are not lost.
 // Resets the accumulator on direction reversal. Returns rows to scroll
 // (positive = down the list).
-wheel_row_steps :: proc(accum: ^f32) -> int {
-	return wheel_accum_steps(accum, get_wheel_move())
+wheel_row_steps :: proc(frame: ^Ui_Frame, accum: ^f32) -> int {
+	return wheel_accum_steps(accum, get_wheel_move(frame))
 }
 
 // wheel_accum_steps is the pure core of wheel_row_steps: fold one frame's
@@ -571,8 +571,8 @@ btn_palette :: proc(theme: ^Theme, style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0
 // is inset past the corner radius because scissor modes don't nest in gfx and
 // a raw full-width quad would spill outside the rounded corners.
 @(private = "file")
-btn_gloss :: proc(theme: ^Theme, rect: Rectangle) {
-	assert(theme != nil, "btn_gloss: nil theme")
+btn_gloss :: proc(frame: ^Ui_Frame, theme: ^Theme, rect: Rectangle) {
+	assert(frame != nil && theme != nil, "btn_gloss: invalid argument")
 	top := theme.button_primary_grad_top
 	if top.a == 0 do return
 	radius := BTN_ROUNDNESS * min(rect.width, rect.height) * 0.5
@@ -711,11 +711,7 @@ btn_at :: proc(
 		focus_opt_click(frame, focus, x, y, w, h)
 		clicked = clicked || focus_opt_activated(frame, focus)
 	}
-	if web_form_id != "" {
-		clicked =
-			clicked ||
-			rl.SyncWebSubmitButton(web_form_id, label, x, y, w, h, i32(style), fs, enabled)
-	}
+	_ = web_form_id
 	if hovered do request_cursor(frame, .POINTING_HAND)
 
 	t: f32 = 1 if hovered else 0
@@ -736,7 +732,7 @@ btn_at :: proc(
 	}
 
 	draw_rectangle_rounded(frame, rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
-	if style == .Primary && enabled do btn_gloss(style_theme, rect)
+	if style == .Primary && enabled do btn_gloss(frame, style_theme, rect)
 	if border.a > 0 {
 		draw_rectangle_rounded_lines_ex(
 			frame,
@@ -785,11 +781,7 @@ btn_at_state :: proc(
 		focus_opt_click(frame, focus, x, y, w, h)
 		clicked = clicked || focus_opt_activated(frame, focus)
 	}
-	if web_form_id != "" {
-		clicked =
-			clicked ||
-			rl.SyncWebSubmitButton(web_form_id, label, x, y, w, h, i32(style), fs, enabled)
-	}
+	_ = web_form_id
 	if hovered do request_cursor(frame, .POINTING_HAND)
 	t := hover_anim_frac(frame, state, hovered) if enabled else 0
 	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style_theme, style)
@@ -808,7 +800,7 @@ btn_at_state :: proc(
 		border = Color{0, 0, 0, 0}
 	}
 	draw_rectangle_rounded(frame, rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
-	if style == .Primary && enabled do btn_gloss(style_theme, rect)
+	if style == .Primary && enabled do btn_gloss(frame, style_theme, rect)
 	if border.a > 0 {
 		draw_rectangle_rounded_lines_ex(
 			frame,
@@ -1308,7 +1300,7 @@ pane_begin :: proc(
 	hovered :=
 		point_in_rect(mouse, {f32(x), f32(y), f32(w), f32(h)}) && !route_occluded(frame, mouse)
 	if hovered {
-		p.scroll -= get_wheel_move() * f32(ui_frame_sc(frame, 24))
+		p.scroll -= get_wheel_move(frame) * f32(ui_frame_sc(frame, 24))
 	}
 	if keyboard && hovered {
 		pane_keyboard_scroll(frame, p, h)

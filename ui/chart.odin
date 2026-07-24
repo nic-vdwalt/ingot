@@ -226,7 +226,7 @@ chart_layout :: proc(
 // chart_anim advances the caller-owned enter animation and keeps frames
 // coming (event-driven mode) until the fill settles.
 @(private = "file")
-chart_anim :: proc(state: ^Chart_State) -> f32 {
+chart_anim :: proc(frame: ^Ui_Frame, state: ^Chart_State) -> f32 {
 	if state == nil do return 1
 	eased(&state.enter_anim, 1, frame_input(frame).frame_time, 6.0)
 	if state.enter_anim < 1 do request_redraw(frame)
@@ -236,7 +236,7 @@ chart_anim :: proc(state: ^Chart_State) -> f32 {
 // chart_note_hover requests a redraw when the hovered index changed so
 // event-driven hosts repaint the guide/tooltip.
 @(private = "file")
-chart_note_hover :: proc(state: ^Chart_State, hovered: int) {
+chart_note_hover :: proc(frame: ^Ui_Frame, state: ^Chart_State, hovered: int) {
 	if state == nil do return
 	if hovered != state.hover_idx {
 		state.hover_idx = hovered
@@ -460,7 +460,7 @@ line_chart :: proc(
 ) -> int {
 	cl, ok := chart_layout(frame, x, y, w, h, series, opts, false)
 	if !ok do return -1
-	anim := chart_anim(state)
+	anim := chart_anim(frame, state)
 
 	xs := make([]f32, cl.n, context.temp_allocator)
 	if cl.n == 1 {
@@ -474,7 +474,7 @@ line_chart :: proc(
 
 	mouse := get_mouse_position(frame)
 	hovered := line_hover_index(mouse, cl.plot, cl.n)
-	chart_note_hover(state, hovered)
+	chart_note_hover(frame, state, hovered)
 
 	yb := cl.plot.y + cl.plot.height
 	for s, si in series {
@@ -545,7 +545,7 @@ bar_chart :: proc(
 ) -> int {
 	cl, ok := chart_layout(frame, x, y, w, h, series, opts, true)
 	if !ok do return -1
-	anim := chart_anim(state)
+	anim := chart_anim(frame, state)
 
 	slot := cl.plot.width / f32(cl.n)
 	xs := make([]f32, cl.n, context.temp_allocator)
@@ -555,7 +555,7 @@ bar_chart :: proc(
 
 	mouse := get_mouse_position(frame)
 	hovered := bar_hover_index(mouse, cl.plot, cl.n)
-	chart_note_hover(state, hovered)
+	chart_note_hover(frame, state, hovered)
 
 	if hovered >= 0 {
 		hl := ui_frame_theme(frame).fg_accent

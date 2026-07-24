@@ -62,3 +62,10 @@ request_redraw_in :: proc(frame: ^Ui_Frame, seconds: f64) {
 		frame.output.platform.redraw_after = seconds
 	}
 }
+
+set_text_input_rect :: proc(frame: ^Ui_Frame, x, y, width, height: i32) {
+	assert(frame != nil && frame.output != nil, "set_text_input_rect: invalid frame")
+	assert(width >= 0 && height >= 0, "set_text_input_rect: negative size")
+	frame.output.platform.text_input_rect = {f32(x), f32(y), f32(width), f32(height)}
+	frame.output.platform.text_input_active = true
+}

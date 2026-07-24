@@ -1,7 +1,5 @@
 package ui
 
-import "core:strings"
-
 frame_paint_list :: proc(frame: ^Ui_Frame, channel: Paint_Channel = .Main) -> ^Paint_List {
 	assert(frame != nil && frame.open, "frame_paint_list: invalid frame")
 	assert(frame.output != nil, "frame_paint_list: missing output")

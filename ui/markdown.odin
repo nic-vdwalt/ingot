@@ -387,7 +387,7 @@ draw_markdown_line_spans :: proc(
 					ui_frame_metrics(ctx.frame).FONT_SIZE,
 				)
 				draw_rectangle(
-					frame,
+					ctx.frame,
 					hl_x,
 					y,
 					hl_w,
@@ -406,7 +406,7 @@ draw_markdown_line_spans :: proc(
 				f32(seg_w + 6),
 				f32(ui_frame_metrics(ctx.frame).FONT_SIZE + 4),
 			}
-			draw_rectangle_rounded(frame, rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
+			draw_rectangle_rounded(ctx.frame, rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
 			draw_text_frame(
 				ctx.frame,
 				seg_c,
@@ -430,7 +430,7 @@ draw_markdown_line_spans :: proc(
 					f32(seg_w + 6),
 					f32(ui_frame_metrics(ctx.frame).FONT_SIZE + 4),
 				}
-				draw_rectangle_rounded(frame, rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
+				draw_rectangle_rounded(ctx.frame, rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
 				draw_text_frame(
 					ctx.frame,
 					seg_c,
@@ -479,7 +479,7 @@ draw_markdown_line_spans :: proc(
 				ui_frame_theme(ctx.frame).fg_accent,
 			)
 			draw_line(
-				frame,
+				ctx.frame,
 				cursor_x,
 				y + ui_frame_metrics(ctx.frame).FONT_SIZE + 1,
 				cursor_x + seg_w,
@@ -889,7 +889,7 @@ layout_table :: proc(
 		if draw {
 			if is_header {
 				draw_rectangle(
-					frame,
+					ctx.frame,
 					x,
 					row_y,
 					table_w,
@@ -901,7 +901,7 @@ layout_table :: proc(
 			for ci in 0 ..< cols {
 				if ci > 0 {
 					draw_rectangle(
-						frame,
+						ctx.frame,
 						cell_x,
 						row_y,
 						1,
@@ -942,7 +942,7 @@ layout_table :: proc(
 			}
 			if is_header {
 				draw_rectangle(
-					frame,
+					ctx.frame,
 					x,
 					row_y + row_h,
 					table_w,
@@ -987,7 +987,7 @@ layout_table :: proc(
 
 	total_h := row_y - y + 1 // +1 for header separator rule
 	if draw {
-		draw_rectangle_lines(frame, x, y, table_w, total_h, ui_frame_theme(ctx.frame).border_color)
+		draw_rectangle_lines(ctx.frame, x, y, table_w, total_h, ui_frame_theme(ctx.frame).border_color)
 	}
 	total_h += 4 // bottom margin
 
@@ -1093,7 +1093,7 @@ draw_heading :: proc(
 	total_h := text_h
 
 	if level == 1 {
-		if draw do draw_rectangle(frame, x, y + total_h, max_width, 1, ui_frame_theme(ctx.frame).border_color)
+		if draw do draw_rectangle(ctx.frame, x, y + total_h, max_width, 1, ui_frame_theme(ctx.frame).border_color)
 		total_h += 1
 	}
 
@@ -1191,11 +1191,11 @@ draw_markdown :: proc(
 		if is_code_fence(line) {
 			if !in_code_block {
 				in_code_block = true
-				if draw do draw_rectangle(frame, x, current_y + 2, max_width, 1, ui_frame_theme(ctx.frame).border_color)
+				if draw do draw_rectangle(ctx.frame, x, current_y + 2, max_width, 1, ui_frame_theme(ctx.frame).border_color)
 				current_y += 6
 			} else {
 				in_code_block = false
-				if draw do draw_rectangle(frame, x, current_y, max_width, 1, ui_frame_theme(ctx.frame).border_color)
+				if draw do draw_rectangle(ctx.frame, x, current_y, max_width, 1, ui_frame_theme(ctx.frame).border_color)
 				current_y += 8
 			}
 			line_start = i + 1
@@ -1207,7 +1207,7 @@ draw_markdown :: proc(
 			if draw &&
 			   !markdown_line_culled(ctx, current_y, ui_frame_metrics(ctx.frame).LINE_HEIGHT) {
 				draw_rectangle(
-					frame,
+					ctx.frame,
 					x,
 					current_y,
 					max_width,
@@ -1216,7 +1216,7 @@ draw_markdown :: proc(
 				)
 				// Left accent so the block reads as one unit in the flat transcript.
 				draw_rectangle(
-					frame,
+					ctx.frame,
 					x,
 					current_y,
 					2,
@@ -1356,7 +1356,7 @@ draw_markdown :: proc(
 		if len(line) >= 2 &&
 		   (line[0] == '-' || line[0] == '*' || line[0] == '+') &&
 		   line[1] == ' ' {
-			if draw do draw_circle(frame, x + 8, current_y + ui_frame_metrics(ctx.frame).FONT_SIZE / 2 + 1, 2.5, ui_frame_theme(ctx.frame).fg_bullet)
+			if draw do draw_circle(ctx.frame, x + 8, current_y + ui_frame_metrics(ctx.frame).FONT_SIZE / 2 + 1, 2.5, ui_frame_theme(ctx.frame).fg_bullet)
 
 			content := line[2:]
 			content_x := x + ui_frame_metrics(ctx.frame).BULLET_INDENT

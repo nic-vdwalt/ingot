@@ -146,6 +146,7 @@ input_mouse_to_byte :: proc(
 // Record an undo snapshot before a mutation (nil-safe).
 @(private)
 undo_record :: proc(
+	frame: ^Ui_Frame,
 	u: ^Input_Undo,
 	sb: ^strings.Builder,
 	cursor: ^int,
@@ -469,30 +470,6 @@ ti_sel_owner :: proc(ctx: ^TI_Ctx) -> bool {
 @(private = "file")
 ti_sync_web :: proc(ctx: ^TI_Ctx) {
 	assert(ctx.sb != nil, "ti_sync_web: nil builder")
-	if ctx.semantics.field_id == "" do return
-	web := rl.SyncWebTextInput(
-		ctx.semantics.form_id,
-		ctx.semantics.field_id,
-		ctx.semantics.name,
-		ctx.placeholder,
-		strings.to_string(ctx.sb^),
-		ctx.x,
-		ctx.y,
-		ctx.w,
-		ctx.h,
-		i32(ctx.semantics.input_type),
-		i32(ctx.semantics.autocomplete),
-		ctx.active,
-	)
-	if web.changed {
-		strings.builder_reset(ctx.sb)
-		strings.write_string(ctx.sb, web.value)
-	}
-	if web.focused {
-		ctx.active = true
-		if ctx.cursor != nil do ctx.cursor^ = caret_clamp(strings.to_string(ctx.sb^), web.cursor)
-		if ctx.semantics.focus != nil do ctx.semantics.focus^ = ctx.semantics.focus_id
-	}
 }
 
 // ti_semantic_push records the input in the semantic layer. Label prefers
@@ -545,40 +522,40 @@ ti_keys_select :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 	}
 	// Non-caret inputs: clicking inside clears the selection (caret inputs
 	// handle mouse press/drag in the render section).
-	if !ctx.caret && ti_sel_owner(ctx) && is_mouse_button_pressed(frame, .LEFT) {
-		screen_mouse := get_mouse_position(frame)
+	if !ctx.caret && ti_sel_owner(ctx) && is_mouse_button_pressed(ctx.frame, .LEFT) {
+		screen_mouse := get_mouse_position(ctx.frame)
 		if point_in_rect(screen_mouse, ctx.rect) && !route_occluded(ctx.frame, screen_mouse) {
 			sel_reset(sel)
 		}
 	}
 	// Select all (Cmd/Ctrl+A).
-	if mods && is_key_pressed(frame, .A) {
+	if mods && is_key_pressed(ctx.frame, .A) {
 		if strings.builder_len(sb^) > 0 {
 			sel_set(sel, sb, 0, strings.builder_len(sb^))
 			if ctx.caret do ctx.cursor^ = strings.builder_len(sb^)
 		}
 	}
 	// Copy (Cmd/Ctrl+C) — copies the selected range.
-	if mods && is_key_pressed(frame, .C) && ti_sel_owner(ctx) {
+	if mods && is_key_pressed(ctx.frame, .C) && ti_sel_owner(ctx) {
 		s := strings.to_string(sb^)
 		lo, hi := sel_range(sel)
 		if lo < hi && hi <= len(s) {
-			rl.SetClipboardText(strings.clone_to_cstring(s[lo:hi], context.temp_allocator))
+			platform_set_clipboard(&ctx.frame.output.platform, s[lo:hi])
 		}
 	}
 	// Cut (Cmd/Ctrl+X) — copies the selected range then deletes it.
-	if mods && is_key_pressed(frame, .X) && ti_sel_owner(ctx) {
+	if mods && is_key_pressed(ctx.frame, .X) && ti_sel_owner(ctx) {
 		s := strings.to_string(sb^)
 		lo, hi := sel_range(sel)
 		if lo < hi && hi <= len(s) {
-			rl.SetClipboardText(strings.clone_to_cstring(s[lo:hi], context.temp_allocator))
-			undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
+			platform_set_clipboard(&ctx.frame.output.platform, s[lo:hi])
+			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
 			nc := selection_delete(sel, sb, ctx.pills)
 			if ctx.caret do ctx.cursor^ = nc
 		}
 	}
 	// Undo / Redo (Cmd/Ctrl+Z, +Shift for redo).
-	if mods && ctx.undo != nil && (is_key_pressed(frame, .Z) || is_key_pressed_repeat(frame, .Z)) {
+	if mods && ctx.undo != nil && (is_key_pressed(ctx.frame, .Z) || is_key_pressed_repeat(ctx.frame, .Z)) {
 		undo_apply(sel, ctx.undo, sb, ctx.cursor, ctx.pills, redo = shift)
 	}
 }
@@ -591,12 +568,11 @@ ti_keys_insert :: proc(ctx: ^TI_Ctx, mods: bool) {
 	sb := ctx.sb
 	// Handle character input. Ignore characters while a modifier is held so
 	// shortcuts (Cmd+A/C/X/V/Z) don't insert their letters.
-	for {
-		ch := rl.GetCharPressed()
-		if ch == 0 do break
+	for index in 0 ..< frame_input(ctx.frame).character_count {
+		ch := frame_input(ctx.frame).characters[index]
 		if mods do continue
 		// Typing over a selection replaces it (one undo step).
-		undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, ti_sel_owner(ctx) ? .Other : .Insert)
+		undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, ti_sel_owner(ctx) ? .Other : .Insert)
 		if ti_sel_owner(ctx) {
 			nc := selection_delete(ctx.sel, sb, ctx.pills)
 			if ctx.caret do ctx.cursor^ = nc
@@ -611,16 +587,15 @@ ti_keys_insert :: proc(ctx: ^TI_Ctx, mods: bool) {
 		}
 	}
 	// Handle paste (Cmd+V / Ctrl+V).
-	if is_key_pressed(frame, .V) && mods {
-		clip := rl.GetClipboardText()
-		if clip != nil && len(string(clip)) > 0 {
-			undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
+	if is_key_pressed(ctx.frame, .V) && mods {
+		clip_str := input_clipboard(frame_input(ctx.frame))
+		if len(clip_str) > 0 {
+			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
 			// Pasting over a selection replaces it.
 			if ti_sel_owner(ctx) {
 				nc := selection_delete(ctx.sel, sb, ctx.pills)
 				if ctx.caret do ctx.cursor^ = nc
 			}
-			clip_str := string(clip)
 			if ctx.caret {
 				before := ctx.cursor^
 				ctx.cursor^ = caret_insert(sb, ctx.cursor^, clip_str)
@@ -642,14 +617,14 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx) {
 	assert(ctx.sb != nil, "ti_keys_delete: nil builder")
 	assert(ctx.sel != nil, "ti_keys_delete: nil selection")
 	sb := ctx.sb
-	if is_key_pressed(frame, .BACKSPACE) || is_key_pressed_repeat(frame, .BACKSPACE) {
+	if is_key_pressed(ctx.frame, .BACKSPACE) || is_key_pressed_repeat(ctx.frame, .BACKSPACE) {
 		if ti_sel_owner(ctx) {
 			// Delete the selected range.
-			undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
+			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
 			nc := selection_delete(ctx.sel, sb, ctx.pills)
 			if ctx.caret do ctx.cursor^ = nc
 		} else if ctx.caret {
-			undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
+			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
 			if ctx.pills != nil {
 				if idx, ok := pill_ending_at(ctx.pills, ctx.cursor^); ok {
 					// Atomic: delete the whole pill range in one keystroke.
@@ -665,7 +640,7 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx) {
 		} else {
 			s := strings.to_string(sb^)
 			if len(s) > 0 {
-				undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
+				undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
 				// Remove last rune.
 				last_rune_start := len(s)
 				for last_rune_start > 0 {
@@ -678,12 +653,12 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx) {
 		}
 	}
 	// Handle forward delete.
-	if ctx.caret && (is_key_pressed(frame, .DELETE) || is_key_pressed_repeat(frame, .DELETE)) {
+	if ctx.caret && (is_key_pressed(ctx.frame, .DELETE) || is_key_pressed_repeat(ctx.frame, .DELETE)) {
 		if ti_sel_owner(ctx) {
-			undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
+			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
 			ctx.cursor^ = selection_delete(ctx.sel, sb, ctx.pills)
 		} else if ctx.pills != nil {
-			undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
+			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
 			if idx, ok := pill_starting_at(ctx.pills, ctx.cursor^); ok {
 				// Atomic: delete the whole pill range in one keystroke.
 				ctx.cursor^ = pill_delete_atomic(sb, ctx.pills, idx)
@@ -697,7 +672,7 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx) {
 				)
 			}
 		} else {
-			undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
+			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
 			ctx.cursor^ = caret_delete_next(sb, ctx.cursor^)
 		}
 	}
@@ -711,16 +686,16 @@ ti_keys_enter :: proc(ctx: ^TI_Ctx) -> bool {
 	assert(ctx.sel != nil, "ti_keys_enter: nil selection")
 	sb := ctx.sb
 	entered := false
-	shift_down := is_key_down(frame, .LEFT_SHIFT) || is_key_down(frame, .RIGHT_SHIFT)
+	shift_down := is_key_down(ctx.frame, .LEFT_SHIFT) || is_key_down(ctx.frame, .RIGHT_SHIFT)
 	// Enter submits. Suppressed while the spell menu is open so Enter applies
 	// the highlighted suggestion instead of sending.
-	if is_key_pressed(frame, .ENTER) && !shift_down && !spell_menu_active(ctx.spell_menu, sb) {
+	if is_key_pressed(ctx.frame, .ENTER) && !shift_down && !spell_menu_active(ctx.spell_menu, sb) {
 		entered = true
 		sel_reset(ctx.sel)
 	}
 	// Shift+Enter inserts a newline.
-	if is_key_pressed(frame, .ENTER) && shift_down {
-		undo_record(ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
+	if is_key_pressed(ctx.frame, .ENTER) && shift_down {
+		undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
 		if ti_sel_owner(ctx) {
 			nc := selection_delete(ctx.sel, sb, ctx.pills)
 			if ctx.caret do ctx.cursor^ = nc
@@ -746,24 +721,24 @@ ti_keys_nav :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 	sel := ctx.sel
 	cursor := ctx.cursor
 	s := strings.to_string(sb^)
-	word := is_key_down(frame, .LEFT_ALT) || is_key_down(frame, .RIGHT_ALT)
+	word := is_key_down(ctx.frame, .LEFT_ALT) || is_key_down(ctx.frame, .RIGHT_ALT)
 	moved_vert := false
 
-	if is_key_pressed(frame, .LEFT) || is_key_pressed_repeat(frame, .LEFT) {
+	if is_key_pressed(ctx.frame, .LEFT) || is_key_pressed_repeat(ctx.frame, .LEFT) {
 		if !nav_begin(sel, sb, cursor, shift, true) {
 			cursor^ = word ? caret_word_left(s, cursor^) : caret_prev_rune(s, cursor^)
 			if ctx.pills != nil do cursor^ = pill_snap_left(ctx.pills, cursor^)
 		}
 		nav_end(sel, cursor, shift)
 	}
-	if is_key_pressed(frame, .RIGHT) || is_key_pressed_repeat(frame, .RIGHT) {
+	if is_key_pressed(ctx.frame, .RIGHT) || is_key_pressed_repeat(ctx.frame, .RIGHT) {
 		if !nav_begin(sel, sb, cursor, shift, false) {
 			cursor^ = word ? caret_word_right(s, cursor^) : caret_next_rune(s, cursor^)
 			if ctx.pills != nil do cursor^ = pill_snap_right(ctx.pills, cursor^)
 		}
 		nav_end(sel, cursor, shift)
 	}
-	if (is_key_pressed(frame, .UP) || is_key_pressed_repeat(frame, .UP)) &&
+	if (is_key_pressed(ctx.frame, .UP) || is_key_pressed_repeat(ctx.frame, .UP)) &&
 	   !spell_menu_active(ctx.spell_menu, sb) {
 		nav_begin(sel, sb, cursor, shift, true)
 		row, col := caret_row_col(s, cursor^)
@@ -775,7 +750,7 @@ ti_keys_nav :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 		}
 		nav_end(sel, cursor, shift)
 	}
-	if (is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN)) &&
+	if (is_key_pressed(ctx.frame, .DOWN) || is_key_pressed_repeat(ctx.frame, .DOWN)) &&
 	   !spell_menu_active(ctx.spell_menu, sb) {
 		nav_begin(sel, sb, cursor, shift, false)
 		row, col := caret_row_col(s, cursor^)
@@ -787,12 +762,12 @@ ti_keys_nav :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 		}
 		nav_end(sel, cursor, shift)
 	}
-	if is_key_pressed(frame, .HOME) {
+	if is_key_pressed(ctx.frame, .HOME) {
 		nav_begin(sel, sb, cursor, shift, true)
 		cursor^ = mods ? 0 : caret_line_start(s, cursor^)
 		nav_end(sel, cursor, shift)
 	}
-	if is_key_pressed(frame, .END) {
+	if is_key_pressed(ctx.frame, .END) {
 		nav_begin(sel, sb, cursor, shift, false)
 		cursor^ = mods ? len(s) : caret_line_end(s, cursor^)
 		nav_end(sel, cursor, shift)
@@ -811,8 +786,8 @@ ti_keys_nav :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 ti_keys :: proc(ctx: ^TI_Ctx) -> bool {
 	assert(ctx.active, "ti_keys: input not active")
 	assert(ctx.sb != nil, "ti_keys: nil builder")
-	mods := mod_down()
-	shift := is_key_down(frame, .LEFT_SHIFT) || is_key_down(frame, .RIGHT_SHIFT)
+	mods := mod_down(ctx.frame)
+	shift := is_key_down(ctx.frame, .LEFT_SHIFT) || is_key_down(ctx.frame, .RIGHT_SHIFT)
 	ti_keys_select(ctx, mods, shift)
 	ti_keys_insert(ctx, mods)
 	ti_keys_delete(ctx)
@@ -878,8 +853,8 @@ ti_layout :: proc(ctx: ^TI_Ctx, text: string) -> TI_View {
 ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string) {
 	assert(ctx.caret, "ti_mouse_masked: caret model required")
 	assert(ctx.masked, "ti_mouse_masked: masked input required")
-	if !is_mouse_button_pressed(frame, .LEFT) do return
-	mouse := get_mouse_position(frame)
+	if !is_mouse_button_pressed(ctx.frame, .LEFT) do return
+	mouse := get_mouse_position(ctx.frame)
 	if route_occluded(ctx.frame, mouse) do return
 	mouse = frame_to_local(ctx.frame, mouse)
 	if !point_in_rect(mouse, ctx.rect) do return
@@ -906,10 +881,10 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	assert(ctx.caret, "ti_mouse_caret: caret model required")
 	assert(v.caret_render, "ti_mouse_caret: caret renderer required")
 	sel := ctx.sel
-	mouse := get_mouse_position(frame)
+	mouse := get_mouse_position(ctx.frame)
 	occluded := route_occluded(ctx.frame, mouse)
 	mouse = frame_to_local(ctx.frame, mouse)
-	if is_mouse_button_pressed(frame, .LEFT) && !occluded {
+	if is_mouse_button_pressed(ctx.frame, .LEFT) && !occluded {
 		if point_in_rect(mouse, ctx.rect) {
 			off := input_mouse_to_byte(
 				ctx.frame,
@@ -921,7 +896,7 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 				v.vis_start,
 				v.vis_end,
 			)
-			now := frame_input(frame).time
+			now := frame_input(ctx.frame).time
 			if now - sel.last_click_time < 0.4 && abs(off - sel.last_click_byte) <= 2 {
 				sel.click_count = min(sel.click_count + 1, 3)
 			} else {
@@ -955,7 +930,7 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 			sel_reset(sel)
 		}
 	}
-	if sel.dragging && sel.sb == ctx.sb && is_mouse_button_down(frame, .LEFT) {
+	if sel.dragging && sel.sb == ctx.sb && is_mouse_button_down(ctx.frame, .LEFT) {
 		off := input_mouse_to_byte(
 			ctx.frame,
 			v.vlines,
@@ -972,7 +947,7 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 			ctx.cursor^ = off
 		}
 	}
-	if sel.dragging && is_mouse_button_released(frame, .LEFT) {
+	if sel.dragging && is_mouse_button_released(ctx.frame, .LEFT) {
 		sel.dragging = false
 		if sel.anchor == sel.extent do sel.active = false
 	}
@@ -999,8 +974,8 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 		ctx.cursor^,
 		ctx.pills,
 	)
-	if is_mouse_button_pressed(frame, .RIGHT) {
-		mouse := get_mouse_position(frame)
+	if is_mouse_button_pressed(ctx.frame, .RIGHT) {
+		mouse := get_mouse_position(ctx.frame)
 		occluded := route_occluded(ctx.frame, mouse)
 		mouse = frame_to_local(ctx.frame, mouse)
 		if !occluded && point_in_rect(mouse, ctx.rect) {
@@ -1078,7 +1053,7 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 				hx := ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
 				span_c := strings.clone_to_cstring(text[hs:he], context.temp_allocator)
 				hw := measure_text_frame(ctx.frame, span_c, font_size)
-				draw_rectangle(frame, hx, line_y, hw, font_size, style.bg_selection)
+				draw_rectangle(ctx.frame, hx, line_y, hw, font_size, style.bg_selection)
 			}
 		}
 		// Pill backgrounds behind any mention chips on this visual line.
@@ -1117,6 +1092,7 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 			sx := ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
 			sw := measure_text_frame(ctx.frame, seg_c, font_size)
 			draw_squiggle(
+				ctx.frame,
 				sx,
 				line_y + font_size + ui_frame_sc(ctx.frame, 1),
 				sw,
@@ -1153,7 +1129,7 @@ ti_render_multiline :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bo
 			}
 			if sel_all {
 				hl_w := min(line_pixel_w, ctx.inner_w)
-				draw_rectangle(frame, ctx.inner_x, line_y, hl_w, font_size, style.bg_selection)
+				draw_rectangle(ctx.frame, ctx.inner_x, line_y, hl_w, font_size, style.bg_selection)
 			}
 			draw_text_frame(
 				ctx.frame,
@@ -1166,7 +1142,7 @@ ti_render_multiline :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bo
 		} else {
 			if sel_all {
 				hl_w := min(measure_text_frame(ctx.frame, line_c, font_size), ctx.inner_w)
-				draw_rectangle(frame, ctx.inner_x, line_y, hl_w, font_size, style.bg_selection)
+				draw_rectangle(ctx.frame, ctx.inner_x, line_y, hl_w, font_size, style.bg_selection)
 			}
 			draw_text_frame(ctx.frame, line_c, ctx.inner_x, line_y, font_size, style.fg_primary)
 		}
@@ -1193,7 +1169,7 @@ ti_render_single :: proc(ctx: ^TI_Ctx, text: string, sel_all: bool) {
 	if sel_all {
 		hl_w := min(text_pixel_w, ctx.inner_w)
 		draw_rectangle(
-			frame,
+			ctx.frame,
 			ctx.inner_x,
 			ctx.y + (ctx.h - font_size) / 2,
 			hl_w,
@@ -1222,14 +1198,14 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	style := ui_frame_theme(ctx.frame)
 	font_size := metrics.FONT_SIZE_BODY
 	line_height := metrics.LINE_HEIGHT
-	t := frame_input(frame).time
+	t := frame_input(ctx.frame).time
 	blink_on := true
 	if !style.reduced_motion {
 		// Blink is time-driven: in event-driven frame mode nothing else
 		// forces a repaint while the user pauses typing, so schedule one at
 		// the next half-second toggle boundary. Reduced motion keeps the
 		// caret steady (no blink, no scheduled repaints).
-		request_redraw_in(frame, 0.5 - math.mod(t, 0.5))
+		request_redraw_in(ctx.frame, 0.5 - math.mod(t, 0.5))
 		blink_on = int(t * 2) % 2 == 0
 	}
 	if v.caret_render {
@@ -1238,10 +1214,10 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 			cursor_x := ctx.inner_x + v.cur_caret_x
 			cursor_line_y :=
 				ctx.y + ui_frame_sc(ctx.frame, 6) + i32(v.cur_vrow - v.vis_start) * line_height
-			rl.SetTextInputRect(cursor_x, cursor_line_y, 1, font_size)
+			set_text_input_rect(ctx.frame, cursor_x, cursor_line_y, 1, font_size)
 			if blink_on {
 				draw_line(
-					frame,
+					ctx.frame,
 					cursor_x,
 					cursor_line_y,
 					cursor_x,
@@ -1265,10 +1241,10 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 		cursor_x := ctx.inner_x + cursor_text_w - cursor_offset
 		visible_count := min(i32(len(lines)), v.visible_lines)
 		cursor_line_y := ctx.y + ui_frame_sc(ctx.frame, 6) + (visible_count - 1) * line_height
-		rl.SetTextInputRect(cursor_x, cursor_line_y, 1, font_size)
+		set_text_input_rect(ctx.frame, cursor_x, cursor_line_y, 1, font_size)
 		if blink_on {
 			draw_line(
-				frame,
+				ctx.frame,
 				cursor_x,
 				cursor_line_y,
 				cursor_x,
@@ -1316,10 +1292,17 @@ ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, blink_on: bool) {
 		font_size,
 	)
 	cursor_x := ctx.inner_x + cursor_prefix_w - cursor_offset
-	rl.SetTextInputRect(cursor_x, ctx.y + 5, 1, ctx.h - 10)
+	set_text_input_rect(ctx.frame, cursor_x, ctx.y + 5, 1, ctx.h - 10)
 	if blink_on {
 		inset := ui_frame_sc(ctx.frame, 5)
-		draw_line(frame, cursor_x, ctx.y + inset, cursor_x, ctx.y + ctx.h - inset, style.fg_accent)
+		draw_line(
+			ctx.frame,
+			cursor_x,
+			ctx.y + inset,
+			cursor_x,
+			ctx.y + ctx.h - inset,
+			style.fg_accent,
+		)
 	}
 }
 
@@ -1336,9 +1319,9 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	style := ui_frame_theme(ctx.frame)
 	font_size := metrics.FONT_SIZE_BODY
 	bg := style.bg_input if ctx.active else style.bg_secondary
-	draw_rectangle_rec(frame, ctx.rect, bg)
+	draw_rectangle_rec(ctx.frame, ctx.rect, bg)
 	draw_rectangle_lines_ex(
-		frame,
+		ctx.frame,
 		ctx.rect,
 		ui_frame_scf(ctx.frame, 1),
 		style.border_color if !ctx.active else style.fg_accent,
@@ -1400,7 +1383,7 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	if ctx.active {
 		ti_draw_caret(ctx, text, &v)
 	}
-	end_scissor_mode(frame)
+	end_scissor_mode(ctx.frame)
 
 	// Suggestions popup for a right-clicked misspelled word. Drawn after the
 	// scissor ends so it renders unclipped above the input box.

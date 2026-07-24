@@ -3,6 +3,7 @@ package ui
 INPUT_KEY_COUNT :: 349
 INPUT_MOUSE_BUTTON_COUNT :: 7
 INPUT_CHAR_CAP :: 64
+INPUT_CLIPBOARD_CAP :: 4096
 
 Ui_Input :: struct {
 	screen_size:        Vec2,
@@ -24,6 +25,8 @@ Ui_Input :: struct {
 	characters:         [INPUT_CHAR_CAP]rune,
 	character_count:    int,
 	characters_dropped: int,
+	clipboard:          [INPUT_CLIPBOARD_CAP]u8,
+	clipboard_len:      int,
 	window_focused:     bool,
 	cursor_on_screen:   bool,
 	window_fullscreen:  bool,
@@ -87,4 +90,10 @@ input_character :: proc(input: ^Ui_Input, index: int) -> (rune, bool) {
 	assert(input != nil, "input_character: nil input")
 	if index < 0 || index >= input.character_count do return 0, false
 	return input.characters[index], true
+}
+
+input_clipboard :: proc(input: ^Ui_Input) -> string {
+	assert(input != nil, "input_clipboard: nil input")
+	assert(input.clipboard_len >= 0 && input.clipboard_len <= INPUT_CLIPBOARD_CAP, "input_clipboard: invalid length")
+	return string(input.clipboard[:input.clipboard_len])
 }

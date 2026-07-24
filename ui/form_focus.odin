@@ -37,8 +37,8 @@ focus_order_next :: proc(ids: []Focus_Id, active: Focus_Id, backwards: bool) -> 
 	return ids[0] if current == len(ids) - 1 else ids[current + 1]
 }
 
-form_focus_cycle :: proc(focus: ^int, count: int) {
-	assert(focus != nil)
+form_focus_cycle :: proc(frame: ^Ui_Frame, focus: ^int, count: int) {
+	assert(frame != nil && focus != nil)
 	assert(count > 0)
 	if !is_key_pressed(frame, .TAB) do return
 	backwards := is_key_down(frame, .LEFT_SHIFT) || is_key_down(frame, .RIGHT_SHIFT)

@@ -249,9 +249,10 @@ ui_begin_frame :: proc(u: ^Ui, frame: ^Ui_Frame, x, y, w, h: i32, gap: i32 = 0) 
 ui_begin :: proc(u: ^Ui, x, y, w, h: i32, gap: i32 = 0) {
 	assert(u != nil, "ui_begin: nil Ui")
 	assert(!u.open, "ui_begin: frame already open")
+	frame := u.frame
 	u.screen_w = i32(frame_input(frame).screen_size.x)
 	u.screen_h = i32(frame_input(frame).screen_size.y)
-	if u.focus_count > 0 do form_focus_cycle(&u.focus_slot, u.focus_count)
+	if u.focus_count > 0 do form_focus_cycle(frame, &u.focus_slot, u.focus_count)
 	if u.stable_count > 0 && is_key_pressed(frame, .TAB) {
 		backwards := is_key_down(frame, .LEFT_SHIFT) || is_key_down(frame, .RIGHT_SHIFT)
 		ids := u.stable_prev[:u.stable_count]
