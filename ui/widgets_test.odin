@@ -42,15 +42,16 @@ input_undo_record_invalidates_redo :: proc(t: ^testing.T) {
 
 @(test)
 truncate_helpers_fit_and_cut :: proc(t: ^testing.T) {
-	set_measure_backend(w_mono)
-	defer set_measure_backend(nil)
+	system: Text_System
+	set_measure_backend_with(&system, w_mono)
+	defer text_system_destroy(&system)
 	// Fits: returned untouched.
-	testing.expect_value(t, truncate_to_width("abc", 10 * W_CELL, 16), "abc")
-	testing.expect_value(t, truncate_to_width_left("abc", 10 * W_CELL, 16), "abc")
+	testing.expect_value(t, truncate_to_width_dir_with(&system, "abc", 10 * W_CELL, 16, .Tail), "abc")
+	testing.expect_value(t, truncate_to_width_dir_with(&system, "abc", 10 * W_CELL, 16, .Head), "abc")
 	// Tail cut keeps a head prefix and appends the ellipsis; head cut keeps a
 	// tail suffix behind it. Exact glyph counts depend on the shared measure
 	// backend (parallel tests may swap it), so assert the structural contract.
-	cut := truncate_to_width("abcdefgh", 5 * W_CELL, 16)
+	cut := truncate_to_width_dir_with(&system, "abcdefgh", 5 * W_CELL, 16, .Tail)
 	testing.expect(t, len(cut) < len("abcdefgh") + len("…"), "tail cut did not shrink")
 	testing.expect(t, strings.has_suffix(cut, "…"), "tail cut must end with ellipsis")
 	testing.expect(
@@ -58,7 +59,7 @@ truncate_helpers_fit_and_cut :: proc(t: ^testing.T) {
 		strings.has_prefix("abcdefgh", cut[:len(cut) - len("…")]),
 		"tail cut must keep a prefix",
 	)
-	left := truncate_to_width_left("abcdefgh", 5 * W_CELL, 16)
+	left := truncate_to_width_dir_with(&system, "abcdefgh", 5 * W_CELL, 16, .Head)
 	testing.expect(t, strings.has_prefix(left, "…"), "head cut must start with ellipsis")
 	testing.expect(
 		t,
@@ -66,23 +67,28 @@ truncate_helpers_fit_and_cut :: proc(t: ^testing.T) {
 		"head cut must keep a suffix",
 	)
 	// Empty input is returned as-is.
-	testing.expect_value(t, truncate_to_width("", 100, 16), "")
+	testing.expect_value(t, truncate_to_width_dir_with(&system, "", 100, 16, .Tail), "")
 }
 
 @(test)
 truncate_path_middle_keeps_ends :: proc(t: ^testing.T) {
-	set_measure_backend(w_mono)
-	defer set_measure_backend(nil)
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	set_measure_backend_with(&runtime.text, w_mono)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
 	path := "alloy/src/ui/widgets.odin"
 	// Wide enough: untouched.
-	testing.expect_value(t, truncate_path_middle(path, 30 * W_CELL, 16), path)
+	testing.expect_value(t, truncate_path_middle_frame(&frame, path, 30 * W_CELL, 16), path)
 	// Middle truncation keeps the first segment and the filename visible.
-	got := truncate_path_middle(path, 24 * W_CELL, 16)
+	got := truncate_path_middle_frame(&frame, path, 24 * W_CELL, 16)
 	testing.expect(t, strings.has_suffix(got, "widgets.odin"), "filename must stay visible")
 	testing.expect(t, strings.contains(got, "…"), "middle cut must show an ellipsis")
 	// Trailing slash (directory entry) is preserved.
 	dir := "alloy/src/ui/deep/"
-	got_dir := truncate_path_middle(dir, 14 * W_CELL, 16)
+	got_dir := truncate_path_middle_frame(&frame, dir, 14 * W_CELL, 16)
 	testing.expect(t, strings.has_suffix(got_dir, "/"), "directory slash must survive")
 	testing.expect(t, strings.contains(got_dir, "…"), "middle cut must show an ellipsis")
 }
@@ -118,20 +124,23 @@ wheel_accum_carries_fractions :: proc(t: ^testing.T) {
 
 @(test)
 hit_test_wrapped_maps_rows_and_columns :: proc(t: ^testing.T) {
-	set_measure_backend(w_mono)
-	defer set_measure_backend(nil)
-	clear_wrap_cache()
-	defer clear_wrap_cache()
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	set_measure_backend_with(&runtime.text, w_mono)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
 	text := "aaa bbb"
 	w := 5 * W_CELL // wraps after "aaa"
 	// Click on row 0, column 1.
-	off := hit_test_wrapped(0, 0, w, text, W_CELL, 0, 16)
+	off := hit_test_wrapped_frame(&frame, 0, 0, w, text, W_CELL, 0, 16)
 	testing.expect_value(t, off, 1)
 	// Click on row 1 lands inside "bbb".
-	off2 := hit_test_wrapped(0, 0, w, text, 0, LINE_HEIGHT, 16)
+	off2 := hit_test_wrapped_frame(&frame, 0, 0, w, text, 0, runtime.metrics.LINE_HEIGHT, 16)
 	testing.expect(t, off2 >= 4 && off2 <= 7)
 	// Empty text misses.
-	testing.expect_value(t, hit_test_wrapped(0, 0, w, "", 0, 0, 16), -1)
+	testing.expect_value(t, hit_test_wrapped_frame(&frame, 0, 0, w, "", 0, 0, 16), -1)
 }
 
 @(test)

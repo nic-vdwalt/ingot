@@ -149,16 +149,6 @@ context_menu_height_frame :: proc(frame: ^Ui_Frame, items: []Menu_Item) -> i32 {
 	return h
 }
 
-context_menu_height :: proc(items: []Menu_Item) -> i32 {
-	assert(len(items) > 0, "context_menu_height: empty items")
-	h := MENU_PAD * 2
-	for it in items {
-		h += sc(5) if it.separator else MENU_ITEM_H
-	}
-	assert(h > 0, "context_menu_height: non-positive height")
-	return h
-}
-
 // context_menu_width returns the popup width for an item list (widest label
 // plus padding, at least MENU_MIN_W, capped to the given width).
 context_menu_width_frame :: proc(frame: ^Ui_Frame, items: []Menu_Item, max_w: i32) -> i32 {
@@ -170,19 +160,6 @@ context_menu_width_frame :: proc(frame: ^Ui_Frame, items: []Menu_Item, max_w: i3
 		if it.separator do continue
 		c := strings.clone_to_cstring(it.label, context.temp_allocator)
 		lw := measure_text_frame(frame, c, metrics.FONT_SIZE) + ui_frame_sc(frame, 32)
-		if lw > w do w = lw
-	}
-	return min(w, max_w)
-}
-
-context_menu_width :: proc(items: []Menu_Item, max_w: i32) -> i32 {
-	assert(len(items) > 0, "context_menu_width: empty items")
-	assert(max_w > 0, "context_menu_width: non-positive cap")
-	w := MENU_MIN_W
-	for it in items {
-		if it.separator do continue
-		c := strings.clone_to_cstring(it.label, context.temp_allocator)
-		lw := measure_text(c, FONT_SIZE) + sc(32)
 		if lw > w do w = lw
 	}
 	return min(w, max_w)

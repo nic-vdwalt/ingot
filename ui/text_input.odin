@@ -247,15 +247,6 @@ Input_Vlines_Memo :: struct {
 	owned:     bool,
 }
 
-input_visual_lines_memo :: proc(
-	memo: ^Input_Vlines_Memo,
-	text: string,
-	inner_w: i32,
-	font_size: i32 = FONT_SIZE,
-) -> []Wrap_Line {
-	return input_visual_lines_memo_with(&default_text_system, memo, text, inner_w, font_size)
-}
-
 // Build the soft-wrapped visual lines for an input's text using an explicit
 // memo. Each logical line (split on '\n') is word-wrapped to inner_w; the
 // returned ranges are absolute byte offsets into `text`. Always returns at
@@ -265,7 +256,7 @@ input_visual_lines_memo_with :: proc(
 	memo: ^Input_Vlines_Memo,
 	text: string,
 	inner_w: i32,
-	font_size: i32 = FONT_SIZE,
+	font_size: i32,
 ) -> []Wrap_Line {
 	assert(system != nil, "input_visual_lines_memo: nil text system")
 	assert(memo != nil, "input_visual_lines_memo: nil memo")

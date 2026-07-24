@@ -164,16 +164,6 @@ ui_runtime_scf :: proc(runtime: ^Ui_Runtime, value: f32) -> f32 {
 	return value * runtime.scale
 }
 
-sc :: proc(value: i32) -> i32 {
-	if active_runtime != nil do return ui_runtime_sc(active_runtime, value)
-	return value
-}
-
-scf :: proc(value: f32) -> f32 {
-	if active_runtime != nil do return ui_runtime_scf(active_runtime, value)
-	return value
-}
-
 ui_runtime_invalidate_scale_caches :: proc(runtime: ^Ui_Runtime) {
 	assert(runtime != nil && runtime.initialized)
 	clear_measure_cache_with(&runtime.text)

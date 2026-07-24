@@ -337,8 +337,6 @@ THEME_LIGHT :: Theme {
 	button_primary_grad_bottom = rl.Color{0, 0, 0, 0},
 }
 
-theme: Theme = THEME_DARK
-
 // THEME_HIGH_CONTRAST is a maximum-legibility palette: opaque black
 // surfaces, white text, yellow accents (the highest-luminance hue), no
 // translucency or glass. Every text/background role pair clears WCAG AA by a

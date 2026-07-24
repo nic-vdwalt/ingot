@@ -37,11 +37,6 @@ Ui_Runtime :: struct {
 
 MAX_PANE_SCOPES :: 16
 
-@(private)
-active_runtime: ^Ui_Runtime
-@(private)
-active_frame: ^Ui_Frame
-
 Ui_Frame :: struct {
 	runtime:           ^Ui_Runtime,
 	cursor:            Cursor_State,
@@ -53,7 +48,6 @@ Ui_Frame :: struct {
 	pane_count:        int,
 	text_cull_top:     i32,
 	text_cull_bottom:  i32,
-	markdown_ws_files: []string,
 	open_roots:        int,
 	open:              bool,
 }
@@ -90,14 +84,6 @@ ui_runtime_set_scale :: proc(runtime: ^Ui_Runtime, value: f32) {
 ui_runtime_text :: proc(runtime: ^Ui_Runtime) -> ^Text_System {
 	assert(runtime != nil && runtime.initialized, "ui_runtime_text: invalid runtime")
 	return &runtime.text
-}
-
-legacy_text_system :: proc() -> ^Text_System {
-	if active_frame != nil && active_frame.open {
-		assert(active_frame.runtime != nil && active_frame.runtime.initialized)
-		return &active_frame.runtime.text
-	}
-	return &default_text_system
 }
 
 ui_runtime_spell :: proc(runtime: ^Ui_Runtime) -> ^Spell_System {
@@ -165,10 +151,6 @@ ui_runtime_set_scale_hooks :: proc(
 ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime) {
 	assert(frame != nil && runtime != nil, "ui_frame_begin: nil frame or runtime")
 	assert(runtime.initialized && !frame.open, "ui_frame_begin: invalid lifetime")
-	active_runtime = runtime
-	active_frame = frame
-	theme = runtime.style
-	sync_legacy_metrics(runtime.metrics)
 	frame.runtime = runtime
 	frame.cursor.requested = .DEFAULT
 	frame.overlay.count = 0
@@ -178,7 +160,6 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime) {
 	frame.pane_count = 0
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
-	frame.markdown_ws_files = nil
 	frame.open_roots = 0
 	frame.open = true
 	route_begin_frame(frame)
@@ -196,11 +177,6 @@ ui_frame_end :: proc(frame: ^Ui_Frame) {
 	frame.runtime.semantics_snapshot = frame.semantics.cur
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
-	frame.markdown_ws_files = nil
-	if active_frame == frame {
-		active_frame = nil
-		active_runtime = nil
-	}
 	frame.runtime = nil
 	frame.open = false
 }
@@ -392,10 +368,11 @@ ui_space :: proc(u: ^Ui, px: i32) {
 
 // label draws a plain text line, carving its own slot.
 label :: proc(u: ^Ui, text: string, font_size: i32 = 0, color: rl.Color = {}) {
-	assert(u.open, "label: frame not open")
-	fs := font_size if font_size > 0 else FONT_SIZE_BODY
-	col := color if color.a > 0 else theme.fg_primary
+	assert(u.open && u.frame != nil, "label: frame not open")
+	metrics := ui_frame_metrics(u.frame)
+	fs := font_size if font_size > 0 else metrics.FONT_SIZE_BODY
+	col := color if color.a > 0 else ui_frame_theme(u.frame).fg_primary
 	text_c := strings.clone_to_cstring(text, context.temp_allocator)
-	r := ui_slot(u, measure_text(text_c, fs), LINE_HEIGHT)
-	draw_text(text_c, r.x, r.y + (r.h - fs) / 2, fs, col)
+	r := ui_slot(u, measure_text_frame(u.frame, text_c, fs), metrics.LINE_HEIGHT)
+	draw_text_frame(u.frame, text_c, r.x, r.y + (r.h - fs) / 2, fs, col)
 }

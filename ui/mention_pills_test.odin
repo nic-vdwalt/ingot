@@ -85,15 +85,13 @@ encode_pills_skips_invalid_ranges :: proc(t: ^testing.T) {
 @(test)
 workspace_path_registry :: proc(t: ^testing.T) {
 	files := []string{"src/main.odin", "docs/"}
-	set_md_file_ctx(files)
-	defer clear_md_file_ctx()
-	testing.expect(t, workspace_has_path("src/main.odin"))
+	testing.expect(t, workspace_has_path_with(files, "src/main.odin"))
 	// Directory entries carry a trailing '/' in the registry.
-	testing.expect(t, workspace_has_path("docs"))
-	testing.expect(t, !workspace_has_path("missing.odin"))
+	testing.expect(t, workspace_has_path_with(files, "docs"))
+	testing.expect(t, !workspace_has_path_with(files, "missing.odin"))
 	// Cheap rejects: spaces and newlines are never paths.
-	testing.expect(t, !workspace_has_path("a b"))
-	testing.expect(t, !workspace_has_path(""))
+	testing.expect(t, !workspace_has_path_with(files, "a b"))
+	testing.expect(t, !workspace_has_path_with(files, ""))
 }
 
 // Invariant fuzz: after any random insert/delete sequence every surviving

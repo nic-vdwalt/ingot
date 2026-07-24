@@ -30,9 +30,6 @@ Text_System :: struct {
 	wrap_stamp:              u64,
 }
 
-@(private)
-default_text_system: Text_System
-
 text_system_init :: proc(system: ^Text_System) {
 	assert(system != nil)
 	assert(!system.font_loaded)
@@ -58,10 +55,6 @@ set_font_dpi_with :: proc(system: ^Text_System, scale: f32) {
 	system.font_dpi = scale if scale > 0 else 1.0
 }
 
-set_font_dpi :: proc(scale: f32) {
-	set_font_dpi_with(&default_text_system, scale)
-}
-
 reset_font_atlases_with :: proc(system: ^Text_System) {
 	assert(system != nil)
 	if !system.font_loaded do return
@@ -71,17 +64,9 @@ reset_font_atlases_with :: proc(system: ^Text_System) {
 	clear(&system.font_cache)
 }
 
-reset_font_atlases :: proc() {
-	reset_font_atlases_with(&default_text_system)
-}
-
 measure_cache_stats_with :: proc(system: ^Text_System) -> (entries: int, evictions: int) {
 	assert(system != nil)
 	return len(system.measure_cache), system.measure_cache_evictions
-}
-
-measure_cache_stats :: proc() -> (entries: int, evictions: int) {
-	return measure_cache_stats_with(&default_text_system)
 }
 
 set_measure_backend_with :: proc(system: ^Text_System, fn: proc(text: cstring, size: i32) -> i32) {
@@ -89,10 +74,6 @@ set_measure_backend_with :: proc(system: ^Text_System, fn: proc(text: cstring, s
 	system.measure_backend = fn
 	clear_measure_cache_with(system)
 	clear_wrap_cache_with(system)
-}
-
-set_measure_backend :: proc(fn: proc(text: cstring, size: i32) -> i32) {
-	set_measure_backend_with(&default_text_system, fn)
 }
 
 @(private)
@@ -140,10 +121,6 @@ CODEPOINT_RANGES :: [?]Codepoint_Range {
 	{0xF400, 0xF533},
 }
 
-init_font :: proc() {
-	text_system_init(&default_text_system)
-}
-
 @(private)
 get_font_with :: proc(system: ^Text_System, size: i32) -> rl.Font {
 	assert(system != nil)
@@ -172,10 +149,6 @@ clear_measure_cache_with :: proc(system: ^Text_System) {
 	system.measure_stamp = 0
 }
 
-clear_measure_cache :: proc() {
-	clear_measure_cache_with(&default_text_system)
-}
-
 text_system_destroy :: proc(system: ^Text_System) {
 	assert(system != nil)
 	if system.font_loaded {
@@ -186,10 +159,6 @@ text_system_destroy :: proc(system: ^Text_System) {
 	clear_measure_cache_with(system)
 	clear_wrap_cache_with(system)
 	system^ = {}
-}
-
-destroy_font :: proc() {
-	text_system_destroy(&default_text_system)
 }
 
 draw_text_with :: proc(system: ^Text_System, text: cstring, x, y, size: i32, color: rl.Color) {
@@ -212,10 +181,6 @@ draw_text_with :: proc(system: ^Text_System, text: cstring, x, y, size: i32, col
 draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color: rl.Color) {
 	assert(size > 0, "draw_text_frame: invalid size")
 	draw_text_with(ui_frame_text(frame), text, x, y, size, color)
-}
-
-draw_text :: proc(text: cstring, x, y, size: i32, color: rl.Color) {
-	draw_text_with(legacy_text_system(), text, x, y, size, color)
 }
 
 MEASURE_CACHE_MAX :: 8192
@@ -273,10 +238,6 @@ measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
 	return measure_text_with(ui_frame_text(frame), text, size)
 }
 
-measure_text :: proc(text: cstring, size: i32) -> i32 {
-	return measure_text_with(legacy_text_system(), text, size)
-}
-
 rune_width_with :: proc(system: ^Text_System, value: rune, size: i32) -> i32 {
 	assert(system != nil)
 	buf: [5]u8
@@ -303,10 +264,6 @@ rune_width_with :: proc(system: ^Text_System, value: rune, size: i32) -> i32 {
 rune_width_frame :: proc(frame: ^Ui_Frame, value: rune, size: i32) -> i32 {
 	assert(size > 0, "rune_width_frame: invalid size")
 	return rune_width_with(ui_frame_text(frame), value, size)
-}
-
-rune_width :: proc(value: rune, size: i32) -> i32 {
-	return rune_width_with(legacy_text_system(), value, size)
 }
 
 draw_codepoint_with :: proc(
@@ -338,8 +295,4 @@ draw_codepoint_frame :: proc(
 ) {
 	assert(size > 0, "draw_codepoint_frame: invalid size")
 	draw_codepoint_with(ui_frame_text(frame), codepoint, x, y, size, color)
-}
-
-draw_codepoint :: proc(codepoint: rune, x, y: i32, size: i32, color: rl.Color) {
-	draw_codepoint_with(legacy_text_system(), codepoint, x, y, size, color)
 }

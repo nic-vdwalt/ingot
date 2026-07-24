@@ -63,8 +63,10 @@ input_box_destroy_is_idempotent :: proc(t: ^testing.T) {
 input_box_reset_clears_wrapped_line_memo :: proc(t: ^testing.T) {
 	b: Input_Box
 	defer input_box_destroy(&b)
+	system: Text_System
+	defer text_system_destroy(&system)
 	strings.write_string(&b.sb, "wrapped text")
-	input_visual_lines_memo(&b.st.memo, input_box_text(&b), 40)
+	input_visual_lines_memo_with(&system, &b.st.memo, input_box_text(&b), 40, 16)
 	testing.expect(t, b.st.memo.valid)
 	input_box_reset(&b)
 	testing.expect(t, !b.st.memo.valid)

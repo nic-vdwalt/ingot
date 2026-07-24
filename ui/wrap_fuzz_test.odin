@@ -23,13 +23,14 @@ fuzz_mono :: proc(text: cstring, size: i32) -> i32 {
 // range must be ordered, in bounds, and monotonically advancing.
 @(test)
 fuzz_wrap_malformed_utf8 :: proc(t: ^testing.T) {
-	set_measure_backend(fuzz_mono)
-	defer set_measure_backend(nil)
+	system: Text_System
+	set_measure_backend_with(&system, fuzz_mono)
+	defer text_system_destroy(&system)
 	p := testx.prng_make(0x3)
 	for iter in 0 ..< 10_000 {
 		text := string(testx.random_bytes(&p, 512))
 		width := i32(testx.int_range(&p, 1, 12)) * FUZZ_CELL
-		lines := wrap_compute(text, width, 16)
+		lines := wrap_compute_with(&system, text, width, 16)
 		prev := 0
 		for ln, i in lines {
 			ok := ln.start <= ln.end && ln.end <= len(text) && ln.start >= prev

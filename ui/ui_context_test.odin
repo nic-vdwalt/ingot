@@ -79,30 +79,20 @@ test_ui_frame_transient_context_is_isolated_and_reset :: proc(t: ^testing.T) {
 	frame_a, frame_b: Ui_Frame
 	ui_frame_begin(&frame_a, &runtime_a)
 	ui_frame_begin(&frame_b, &runtime_b)
-	files_a := [?]string{"a.odin", "b.odin"}
-	files_b := [?]string{"other.odin"}
 	set_text_cull_band_frame(&frame_a, 10, 20)
 	set_text_cull_band_frame(&frame_b, 100, 200)
-	set_md_file_ctx_frame(&frame_a, files_a[:])
-	set_md_file_ctx_frame(&frame_b, files_b[:])
 	testing.expect_value(t, frame_a.text_cull_top, i32(10))
 	testing.expect_value(t, frame_b.text_cull_top, i32(100))
-	testing.expect_value(t, frame_a.markdown_ws_files[0], "a.odin")
-	testing.expect_value(t, frame_b.markdown_ws_files[0], "other.odin")
 	ui_frame_end(&frame_a)
 	ui_frame_end(&frame_b)
-	testing.expect(t, frame_a.markdown_ws_files == nil)
-	testing.expect(t, frame_b.markdown_ws_files == nil)
 	testing.expect_value(t, frame_a.text_cull_top, min(i32))
 	testing.expect_value(t, frame_a.text_cull_bottom, max(i32))
 
 	frame_a.text_cull_top = 55
 	frame_a.text_cull_bottom = 66
-	frame_a.markdown_ws_files = files_b[:]
 	ui_frame_begin(&frame_a, &runtime_a)
 	testing.expect_value(t, frame_a.text_cull_top, min(i32))
 	testing.expect_value(t, frame_a.text_cull_bottom, max(i32))
-	testing.expect(t, frame_a.markdown_ws_files == nil)
 	ui_frame_end(&frame_a)
 }
 
@@ -168,7 +158,7 @@ test_ui_runtime_spell_state_is_isolated :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_legacy_helpers_follow_active_frame_runtime :: proc(t: ^testing.T) {
+test_explicit_frame_resources_follow_own_runtime :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
@@ -178,12 +168,11 @@ test_legacy_helpers_follow_active_frame_runtime :: proc(t: ^testing.T) {
 
 	frame: Ui_Frame
 	ui_frame_begin(&frame, &runtime)
-	testing.expect(t, legacy_text_system() == &runtime.text)
-	testing.expect_value(t, sc(7), 14)
-	testing.expect_value(t, FONT_SIZE, runtime.metrics.FONT_SIZE)
-	testing.expect_value(t, theme.bg_color, custom.bg_color)
+	testing.expect(t, ui_frame_text(&frame) == &runtime.text)
+	testing.expect_value(t, ui_frame_sc(&frame, 7), 14)
+	testing.expect_value(t, ui_frame_metrics(&frame).FONT_SIZE, runtime.metrics.FONT_SIZE)
+	testing.expect_value(t, ui_frame_theme(&frame).bg_color, custom.bg_color)
 	ui_frame_end(&frame)
-	testing.expect(t, legacy_text_system() == &default_text_system)
 }
 
 @(test)

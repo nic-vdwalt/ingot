@@ -18,19 +18,20 @@ mono :: proc(text: cstring, size: i32) -> i32 {
 
 @(test)
 wrap_examples :: proc(t: ^testing.T) {
-	set_measure_backend(mono)
-	defer set_measure_backend(nil)
+	system: Text_System
+	set_measure_backend_with(&system, mono)
+	defer text_system_destroy(&system)
 	// "aaa bbb" at width 5*CELL wraps after "aaa".
 	src := "aaa bbb"
-	lines := wrap_compute(src, 5 * CELL, 16)
+	lines := wrap_compute_with(&system, src, 5 * CELL, 16)
 	testing.expect_value(t, len(lines), 2)
 	testing.expect_value(t, src[lines[0].start:lines[0].end], "aaa")
 	testing.expect_value(t, src[lines[1].start:lines[1].end], "bbb")
 	// Explicit newline always breaks.
-	nl := wrap_compute("a\nb", 100 * CELL, 16)
+	nl := wrap_compute_with(&system, "a\nb", 100 * CELL, 16)
 	testing.expect_value(t, len(nl), 2)
 	// Empty string yields one empty line.
-	empty := wrap_compute("", 50, 16)
+	empty := wrap_compute_with(&system, "", 50, 16)
 	testing.expect_value(t, len(empty), 1)
 }
 
@@ -38,13 +39,14 @@ wrap_examples :: proc(t: ^testing.T) {
 // coverage advances monotonically through the input.
 @(test)
 wrap_invariants_fuzz :: proc(t: ^testing.T) {
-	set_measure_backend(mono)
-	defer set_measure_backend(nil)
+	system: Text_System
+	set_measure_backend_with(&system, mono)
+	defer text_system_destroy(&system)
 	p := testx.prng_make(FUZZ_SEED)
 	for iter in 0 ..< FUZZ_ITERS {
 		s := testx.ascii_string(&p, 64)
 		w := i32(testx.int_range(&p, 1, 12)) * CELL
-		lines := wrap_compute(s, w, 16)
+		lines := wrap_compute_with(&system, s, w, 16)
 		prev := 0
 		for ln, i in lines {
 			ok := ln.start <= ln.end && ln.end <= len(s) && ln.start >= prev

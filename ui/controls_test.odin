@@ -49,9 +49,15 @@ menu_nav_all_unselectable_stays_put :: proc(t: ^testing.T) {
 
 @(test)
 context_menu_height_counts_rows :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
 	items := []Menu_Item{{label = "a"}, {separator = true}, {label = "b"}}
-	want := MENU_PAD * 2 + MENU_ITEM_H * 2 + sc(5)
-	testing.expect_value(t, context_menu_height(items), want)
+	want := runtime.metrics.MENU_PAD * 2 + runtime.metrics.MENU_ITEM_H * 2 + ui_frame_sc(&frame, 5)
+	testing.expect_value(t, context_menu_height_frame(&frame, items), want)
 }
 
 @(test)

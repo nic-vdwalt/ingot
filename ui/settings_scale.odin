@@ -90,12 +90,14 @@ draw_scale_settings_panel :: proc(
 	if selected^ >= n do selected^ = n - 1
 
 	// Modal dimensions.
-	item_h: i32 = sc(28)
-	section_h: i32 = sc(26)
-	footer_h: i32 = sc(24)
-	modal_padding: i32 = PADDING
-	modal_w: i32 = min(sc(440), screen_width - PADDING * 4)
-	modal_h: i32 = sc(40) + section_h + i32(n) * item_h + footer_h + modal_padding * 2
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	item_h := ui_frame_sc(frame, 28)
+	section_h := ui_frame_sc(frame, 26)
+	footer_h := ui_frame_sc(frame, 24)
+	modal_padding := metrics.PADDING
+	modal_w := min(ui_frame_sc(frame, 440), screen_width - metrics.PADDING * 4)
+	modal_h := ui_frame_sc(frame, 40) + section_h + i32(n) * item_h + footer_h + modal_padding * 2
 
 	st := Modal_State {
 		open = true,
@@ -106,9 +108,10 @@ draw_scale_settings_panel :: proc(
 
 	// Section header.
 	section_c := strings.clone_to_cstring("UI SCALE", context.temp_allocator)
-	draw_text(section_c, modal_x + modal_padding, body.y + 4, FONT_SIZE_SMALL, theme.fg_label)
+	draw_text_frame(frame, section_c, modal_x + modal_padding, body.y + 4, metrics.FONT_SIZE_SMALL, style.fg_label)
 
 	pending_result, have_result := settings_scale_rows(
+		frame,
 		selected,
 		current_scale,
 		modal_x,
@@ -120,7 +123,7 @@ draw_scale_settings_panel :: proc(
 	// Footer hint.
 	footer_y := modal_y + modal_h - modal_padding - footer_h + 4
 	hint_c := strings.clone_to_cstring("Enter apply  \u00b7  Esc close", context.temp_allocator)
-	draw_text(hint_c, modal_x + modal_padding, footer_y, FONT_SIZE_SMALL, theme.fg_secondary)
+	draw_text_frame(frame, hint_c, modal_x + modal_padding, footer_y, metrics.FONT_SIZE_SMALL, style.fg_secondary)
 
 	modal_end(&st)
 	if st.dismissed {
@@ -141,6 +144,7 @@ draw_scale_settings_panel :: proc(
 // moves so keyboard navigation isn't overridden by a stationary cursor.
 @(private = "file")
 settings_scale_rows :: proc(
+	frame: ^Ui_Frame,
 	selected: ^int,
 	current_scale: f32,
 	modal_x, top, modal_w, item_h: i32,
@@ -152,7 +156,9 @@ settings_scale_rows :: proc(
 	assert(item_h > 0, "settings_scale_rows: non-positive row height")
 	presets := SETTINGS_SCALE_PRESETS
 	auto_scale := settings_auto_scale()
-	modal_padding: i32 = PADDING
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	modal_padding := metrics.PADDING
 	right_edge := modal_x + modal_w - modal_padding
 	list_y := top
 	for p, idx in presets {
@@ -163,39 +169,39 @@ settings_scale_rows :: proc(
 			selected^ = idx
 		}
 		if idx == selected^ {
-			rl.DrawRectangleRec(item_rect, theme.bg_active)
+			rl.DrawRectangleRec(item_rect, style.bg_active)
 		}
 		// Current-value marker.
 		text_x := modal_x + modal_padding
 		if abs(p.value - current_scale) < 0.001 {
 			marker_c := strings.clone_to_cstring("*", context.temp_allocator)
-			draw_text(
+			draw_text_frame(frame, 
 				marker_c,
 				text_x,
-				list_y + (item_h - FONT_SIZE) / 2,
-				FONT_SIZE,
-				theme.fg_accent,
+				list_y + (item_h - metrics.FONT_SIZE) / 2,
+				metrics.FONT_SIZE,
+				style.fg_accent,
 			)
 		}
-		text_x += sc(16)
+		text_x += ui_frame_sc(frame, 16)
 		// Label (Auto shows the resolved system scale on the right).
 		label := p.label
 		if idx == 0 {
 			label = fmt.tprintf("Auto (system \u2014 %d%%)", int(auto_scale * 100 + 0.5))
 		}
 		label_c := strings.clone_to_cstring(label, context.temp_allocator)
-		draw_text(label_c, text_x, list_y + (item_h - FONT_SIZE) / 2, FONT_SIZE, theme.fg_primary)
+		draw_text_frame(frame, label_c, text_x, list_y + (item_h - metrics.FONT_SIZE) / 2, metrics.FONT_SIZE, style.fg_primary)
 		// Effective pixel percentage on the far right for non-auto rows.
 		if idx != 0 {
 			pct := fmt.tprintf("%d%%", int(p.value * 100 + 0.5))
 			pct_c := strings.clone_to_cstring(pct, context.temp_allocator)
-			pct_w := measure_text(pct_c, FONT_SIZE_SMALL)
-			draw_text(
+			pct_w := measure_text_frame(frame, pct_c, metrics.FONT_SIZE_SMALL)
+			draw_text_frame(frame, 
 				pct_c,
 				right_edge - pct_w,
-				list_y + (item_h - FONT_SIZE_SMALL) / 2,
-				FONT_SIZE_SMALL,
-				theme.fg_secondary,
+				list_y + (item_h - metrics.FONT_SIZE_SMALL) / 2,
+				metrics.FONT_SIZE_SMALL,
+				style.fg_secondary,
 			)
 		}
 		// Mouse click applies this preset.

@@ -123,8 +123,9 @@ undo_coalesces_same_kind_edits :: proc(t: ^testing.T) {
 
 @(test)
 vlines_memo_two_instances_and_invalidation :: proc(t: ^testing.T) {
-	set_measure_backend(ti_mono)
-	defer set_measure_backend(nil)
+	system: Text_System
+	set_measure_backend_with(&system, ti_mono)
+	defer text_system_destroy(&system)
 	memo_a: Input_Vlines_Memo
 	memo_b: Input_Vlines_Memo
 	defer input_vlines_memo_destroy(&memo_a)
@@ -133,20 +134,20 @@ vlines_memo_two_instances_and_invalidation :: proc(t: ^testing.T) {
 	text_a := "aaa bbb ccc"
 	text_b := "xx yy"
 	w := 5 * TI_CELL
-	la1 := input_visual_lines_memo(&memo_a, text_a, w)
-	lb1 := input_visual_lines_memo(&memo_b, text_b, w)
+	la1 := input_visual_lines_memo_with(&system, &memo_a, text_a, w, 16)
+	lb1 := input_visual_lines_memo_with(&system, &memo_b, text_b, w, 16)
 	// Interleaved second lookups must hit each instance's own cache: same
 	// backing slice pointer, no recompute (the old single-slot memo thrashed).
-	la2 := input_visual_lines_memo(&memo_a, text_a, w)
-	lb2 := input_visual_lines_memo(&memo_b, text_b, w)
+	la2 := input_visual_lines_memo_with(&system, &memo_a, text_a, w, 16)
+	lb2 := input_visual_lines_memo_with(&system, &memo_b, text_b, w, 16)
 	testing.expect(t, raw_data(la1) == raw_data(la2))
 	testing.expect(t, raw_data(lb1) == raw_data(lb2))
 	testing.expect(t, len(la1) > 1)
 	testing.expect(t, len(lb1) >= 1)
 
 	// Font size is part of the key, so scale changes cannot reuse stale lines.
-	la3 := input_visual_lines_memo(&memo_a, text_a, w, FONT_SIZE + 1)
-	testing.expect_value(t, memo_a.font_size, FONT_SIZE + 1)
+	la3 := input_visual_lines_memo_with(&system, &memo_a, text_a, w, 16 + 1)
+	testing.expect_value(t, memo_a.font_size, 16 + 1)
 	testing.expect_value(t, len(la3), len(la1))
 }
 
