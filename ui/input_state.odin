@@ -93,7 +93,8 @@ input_ui :: proc(
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
 	fo := ui_focus(u)
-	hh := h if h > 0 else ROW_H_MD + CONTROL_GAP
+	metrics := ui_frame_metrics(u.frame)
+	hh := h if h > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
 	r := ui_slot(u, remaining(&u.layout).w, hh)
 	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
 	sem := semantics
@@ -123,7 +124,8 @@ input_ui_id :: proc(
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
 	fo := ui_focus(u, id)
-	hh := h if h > 0 else ROW_H_MD + CONTROL_GAP
+	metrics := ui_frame_metrics(u.frame)
+	hh := h if h > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
 	r := ui_slot(u, remaining(&u.layout).w, hh)
 	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
 	sem := semantics

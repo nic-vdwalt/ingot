@@ -1424,6 +1424,7 @@ text_input_box :: proc(
 	assert(sb != nil, "text_input_box: nil builder")
 	assert(st != nil, "text_input_box: nil state")
 	assert(cfg.rect.w > 0 && cfg.rect.h > 0, "text_input_box: empty rect")
+	metrics := ui_frame_metrics(frame)
 	ctx := TI_Ctx {
 		frame       = frame,
 		sb          = sb,
@@ -1446,8 +1447,8 @@ text_input_box :: proc(
 			f32(cfg.rect.w),
 			f32(cfg.rect.h),
 		},
-		inner_x     = cfg.rect.x + PADDING,
-		inner_w     = cfg.rect.w - PADDING * 2,
+		inner_x     = cfg.rect.x + metrics.PADDING,
+		inner_w     = cfg.rect.w - metrics.PADDING * 2,
 		placeholder = cfg.placeholder,
 		masked      = cfg.masked,
 		semantics   = cfg.semantics,

@@ -72,7 +72,7 @@ draw_card_bg_frame :: proc(
 ) {
 	min_dim := min(rect.width, rect.height)
 	if min_dim <= 0 do return
-	round := (ui_frame_scf(frame, CARD_RADIUS_PX) * 2) / min_dim
+	round := (ui_frame_metrics(frame).CARD_RADIUS_PX * 2) / min_dim
 	if round > 1 do round = 1
 	rl.DrawRectangleRounded(rect, round, 6, bg)
 	rl.DrawRectangleRoundedLinesEx(
