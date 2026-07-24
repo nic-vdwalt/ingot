@@ -23,9 +23,36 @@ IsWindowFullscreen :: proc() -> bool {
 	if g.win == nil do return false
 	return glfw.GetWindowMonitor(glfw.WindowHandle(g.win)) != nil
 }
+ToggleFullscreen :: proc() {
+	if g.win == nil do return
+	window := glfw.WindowHandle(g.win)
+	monitor := glfw.GetWindowMonitor(window)
+	if monitor == nil {
+		g_windowed_x, g_windowed_y = glfw.GetWindowPos(window)
+		g_windowed_width, g_windowed_height = glfw.GetWindowSize(window)
+		monitor = glfw.GetPrimaryMonitor()
+		mode := glfw.GetVideoMode(monitor)
+		glfw.SetWindowMonitor(window, monitor, 0, 0, mode.width, mode.height, mode.refresh_rate)
+	} else {
+		glfw.SetWindowMonitor(
+			window,
+			nil,
+			g_windowed_x,
+			g_windowed_y,
+			g_windowed_width,
+			g_windowed_height,
+			0,
+		)
+	}
+}
 RestoreWindow :: proc() {
 	if g.win != nil do glfw.RestoreWindow(glfw.WindowHandle(g.win))
 }
+
+@(private)
+g_windowed_x, g_windowed_y: i32
+@(private)
+g_windowed_width, g_windowed_height: i32 = 1280, 720
 
 // --- drag & drop -----------------------------------------------------------
 
