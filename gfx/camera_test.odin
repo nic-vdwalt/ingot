@@ -5,10 +5,10 @@ import "core:testing"
 
 camera_test_value :: proc(projection: CameraProjection = .PERSPECTIVE) -> Camera3D {
 	return {
-		position   = {0, 0, 10},
-		target     = {0, 0, 0},
-		up         = {0, 1, 0},
-		fovy       = 60,
+		position = {0, 0, 10},
+		target = {0, 0, 0},
+		up = {0, 1, 0},
+		fovy = 60,
 		projection = projection,
 	}
 }
@@ -71,7 +71,9 @@ gpu_camera_setup_preserves_window_and_active_camera :: proc(t: ^testing.T) {
 	target: Gpu_3D_Target
 	target.texture.texture.width = 1920
 	target.texture.texture.height = 1080
-	pass := Gpu_3D_Pass{target = &target}
+	pass := Gpu_3D_Pass {
+		target = &target,
+	}
 	camera := camera_test_value()
 	_gpu_3d_set_camera(&pass, camera)
 	_, _, expected := _camera_matrices(camera, 1920, 1080)
