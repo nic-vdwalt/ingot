@@ -36,14 +36,21 @@ FOCUS_COUNT :: 5 // btn, checkbox, radio a, radio b, slider
 Prng :: fuzzx.Prng
 
 Scene :: struct {
-	focus:      int,
-	checked:    bool,
-	radio_sel:  i32,
-	slider_val: f32,
-	dd_sel:     i32,
-	dd_state:   ui.Dropdown_State,
-	modal:      ui.Modal_State,
-	menu:       ui.Context_Menu_State,
+	focus:              int,
+	checked:            bool,
+	radio_sel:          i32,
+	slider_val:         f32,
+	slider_state:       ui.Slider_State,
+	dd_sel:             i32,
+	dd_state:           ui.Dropdown_State,
+	modal:              ui.Modal_State,
+	menu:               ui.Context_Menu_State,
+	button_activations: u64,
+	checkbox_changes:   u64,
+	radio_changes:      u64,
+	slider_changes:     u64,
+	dropdown_changes:   u64,
+	menu_choices:       u64,
 }
 
 DD_ITEMS := [?]string{"metal", "vulkan", "d3d12", "webgpu"}
@@ -64,6 +71,70 @@ R_SLIDER :: ui.Rect_I32{20, 180, 200, 24}
 R_DROP :: ui.Rect_I32{20, 220, 180, 28}
 
 RECTS := [?]ui.Rect_I32{R_BTN, R_CHECK, R_RADIO_A, R_RADIO_B, R_SLIDER, R_DROP}
+DETERMINISTIC_FRAMES :: 24
+
+inject_scenario :: proc(iteration: int, s: ^Scene) -> bool {
+	if iteration >= DETERMINISTIC_FRAMES do return false
+	switch iteration {
+	case 0:
+		rl.SimMouse(40, 35)
+		rl.SimButton(.LEFT, true)
+	case 1:
+		rl.SimMouse(400, 400)
+	case 2:
+		rl.SimButton(.LEFT, false)
+	case 3:
+		rl.SimMouse(30, 190)
+		rl.SimButton(.LEFT, true)
+	case 4:
+		rl.SimMouse(215, 190)
+	case 5:
+		rl.SimMouse(40, 35)
+	case 6:
+		rl.SimButton(.LEFT, false)
+	case 7:
+		s.focus = FOCUS_COUNT
+		rl.SimKey(.TAB, true)
+		rl.SimKey(.TAB, false)
+	case 8:
+		rl.SimKey(.LEFT_SHIFT, true)
+		rl.SimKey(.TAB, true)
+		rl.SimKey(.TAB, false)
+		rl.SimKey(.LEFT_SHIFT, false)
+	case 9:
+		ui.context_menu_open(&s.menu, 300, 100)
+	case 10, 11, 12:
+		rl.SimKey(.DOWN, true)
+		rl.SimKey(.DOWN, false)
+	case 13:
+		rl.SimKey(.ENTER, true)
+		rl.SimKey(.ENTER, false)
+	case 14:
+		rl.SimMouse(40, 230)
+		rl.SimButton(.LEFT, true)
+	case 15:
+		rl.SimButton(.LEFT, false)
+	case 16, 17, 18:
+		rl.SimKey(.DOWN, true)
+		rl.SimKey(.DOWN, false)
+	case 19:
+		rl.SimKey(.ENTER, true)
+		rl.SimKey(.ENTER, false)
+	case 20:
+		rl.SimMouse(40, 230)
+		rl.SimButton(.LEFT, true)
+	case 21:
+		rl.SimButton(.LEFT, false)
+	case 22:
+		rl.SimKey(.ENTER, true)
+		rl.SimKey(.ENTER, false)
+	case 23:
+		s.modal.open = true
+		rl.SimKey(.ESCAPE, true)
+		rl.SimKey(.ESCAPE, false)
+	}
+	return true
+}
 
 // inject_events stages 0..5 random input events for this frame.
 inject_events :: proc(p: ^Prng) {
@@ -92,6 +163,7 @@ inject_events :: proc(p: ^Prng) {
 			rl.SimKey(.LEFT_SHIFT, shift)
 			rl.SimKey(.TAB, true)
 			rl.SimKey(.TAB, false)
+			rl.SimKey(.LEFT_SHIFT, false)
 		case 6:
 			acts := [?]rl.KeyboardKey{.SPACE, .ENTER, .ESCAPE}
 			k := acts[fuzzx.int_range(p, 0, 3)]
@@ -115,10 +187,17 @@ inject_events :: proc(p: ^Prng) {
 // active at any point during the frame — end-of-frame state is not enough
 // because a menu can open and be chosen-from (row release) in one frame,
 // legitimately registering a claim while ending the frame closed.
-draw_scene :: proc(frame: ^ui.Ui_Frame, s: ^Scene, p: ^Prng) -> (overlay_active: bool) {
+draw_scene :: proc(
+	frame: ^ui.Ui_Frame,
+	s: ^Scene,
+	p: ^Prng,
+	allow_random_overlays: bool,
+) -> (
+	overlay_active: bool,
+) {
 	ui.form_focus_cycle(&s.focus, FOCUS_COUNT)
 
-	_ = ui.btn(
+	if ui.btn_at(
 		frame,
 		R_BTN.x,
 		R_BTN.y,
@@ -126,23 +205,44 @@ draw_scene :: proc(frame: ^ui.Ui_Frame, s: ^Scene, p: ^Prng) -> (overlay_active:
 		R_BTN.h,
 		"Fuzz",
 		focus = ui.Focus_Opt{&s.focus, 1},
-	)
-	_ = ui.checkbox_at(frame, R_CHECK, "Check", &s.checked, ui.Focus_Opt{&s.focus, 2})
-	_ = ui.radio_at(frame, R_RADIO_A, "Radio A", &s.radio_sel, 0, ui.Focus_Opt{&s.focus, 3})
-	_ = ui.radio_at(frame, R_RADIO_B, "Radio B", &s.radio_sel, 1, ui.Focus_Opt{&s.focus, 4})
-	_ = ui.slider_at(frame, R_SLIDER, &s.slider_val, 0, 100, 5, ui.Focus_Opt{&s.focus, 5})
+	) {
+		s.button_activations += 1
+	}
+	if ui.checkbox_at(frame, R_CHECK, "Check", &s.checked, ui.Focus_Opt{&s.focus, 2}) {
+		s.checkbox_changes += 1
+	}
+	if ui.radio_at(frame, R_RADIO_A, "Radio A", &s.radio_sel, 0, ui.Focus_Opt{&s.focus, 3}) {
+		s.radio_changes += 1
+	}
+	if ui.radio_at(frame, R_RADIO_B, "Radio B", &s.radio_sel, 1, ui.Focus_Opt{&s.focus, 4}) {
+		s.radio_changes += 1
+	}
+	if ui.slider_at_state(
+		frame,
+		&s.slider_state,
+		R_SLIDER,
+		&s.slider_val,
+		0,
+		100,
+		5,
+		ui.Focus_Opt{&s.focus, 5},
+	) {
+		s.slider_changes += 1
+	}
 	overlay_active |= s.dd_state.menu.open
-	_ = ui.dropdown_at(frame, R_DROP, DD_ITEMS[:], &s.dd_sel, &s.dd_state, SCREEN_W, SCREEN_H)
+	if ui.dropdown_at(frame, R_DROP, DD_ITEMS[:], &s.dd_sel, &s.dd_state, SCREEN_W, SCREEN_H) {
+		s.dropdown_changes += 1
+	}
 	overlay_active |= s.dd_state.menu.open
 
 	// Randomly open the modal / context menu the way an app handler would.
-	if !s.modal.open && fuzzx.int_range(p, 0, 97) == 0 do s.modal.open = true
+	if allow_random_overlays && !s.modal.open && fuzzx.int_range(p, 0, 97) == 0 do s.modal.open = true
 	if s.modal.open {
 		overlay_active = true
 		_ = ui.modal_begin(frame, &s.modal, "Fuzz Modal", 400, 300, SCREEN_W, SCREEN_H)
 		ui.modal_end(&s.modal)
 	}
-	if !s.menu.open && fuzzx.int_range(p, 0, 89) == 0 {
+	if allow_random_overlays && !s.menu.open && fuzzx.int_range(p, 0, 89) == 0 {
 		ui.context_menu_open(
 			&s.menu,
 			i32(fuzzx.int_range(p, 0, SCREEN_W)),
@@ -150,7 +250,9 @@ draw_scene :: proc(frame: ^ui.Ui_Frame, s: ^Scene, p: ^Prng) -> (overlay_active:
 		)
 	}
 	overlay_active |= s.menu.open
-	_ = ui.context_menu(frame, &s.menu, MENU_ITEMS[:], SCREEN_W, SCREEN_H)
+	if ui.context_menu(frame, &s.menu, MENU_ITEMS[:], SCREEN_W, SCREEN_H) >= 0 {
+		s.menu_choices += 1
+	}
 	overlay_active |= s.menu.open
 	return overlay_active
 }
@@ -177,6 +279,12 @@ check_invariants :: proc(c: ^fuzzx.Ctx, frame: ^ui.Ui_Frame, s: ^Scene, overlay_
 
 	fuzzx.check(c, s.slider_val >= 0 && s.slider_val <= 100, "slider escaped [lo, hi]")
 	fuzzx.check(c, s.radio_sel == 0 || s.radio_sel == 1, "radio selected invalid value")
+	fuzzx.check(c, s.button_activations <= u64(c.iteration + 1), "duplicate button activation")
+	fuzzx.check(c, s.checkbox_changes <= u64(c.iteration + 1), "duplicate checkbox change")
+	fuzzx.check(c, s.radio_changes <= u64(c.iteration + 1), "duplicate radio change")
+	fuzzx.check(c, s.slider_changes <= u64(c.iteration + 1), "duplicate slider change")
+	fuzzx.check(c, s.dropdown_changes <= u64(c.iteration + 1), "duplicate dropdown change")
+	fuzzx.check(c, s.menu_choices <= u64(c.iteration + 1), "duplicate menu choice")
 	fuzzx.check(
 		c,
 		s.dd_sel >= 0 && int(s.dd_sel) < len(DD_ITEMS),
@@ -184,13 +292,12 @@ check_invariants :: proc(c: ^fuzzx.Ctx, frame: ^ui.Ui_Frame, s: ^Scene, overlay_
 	)
 	fuzzx.check(c, !s.modal.drawing, "modal begin/end unbalanced")
 	if s.menu.open {
-		it := MENU_ITEMS[s.menu.selected]
-		fuzzx.check(
-			c,
-			s.menu.selected >= 0 && s.menu.selected < len(MENU_ITEMS),
-			"menu selection out of range",
-		)
-		fuzzx.check(c, !it.separator || s.menu.selected == 0, "menu selection on separator")
+		selected_valid := s.menu.selected >= 0 && s.menu.selected < len(MENU_ITEMS)
+		fuzzx.check(c, selected_valid, "menu selection out of range")
+		if selected_valid {
+			it := MENU_ITEMS[s.menu.selected]
+			fuzzx.check(c, !it.separator || s.menu.selected == 0, "menu selection on separator")
+		}
 	}
 
 	semantics := ui.sem_frame(frame)
@@ -239,9 +346,10 @@ main :: proc() {
 		for i in 0 ..< iterations {
 			c.iteration = i
 			rl.SimBeginFrame()
-			inject_events(&p)
+			deterministic := inject_scenario(i, &s)
+			if !deterministic do inject_events(&p)
 			ui.ui_frame_begin(&frame, &runtime)
-			overlay_active := draw_scene(&frame, &s, &p)
+			overlay_active := draw_scene(&frame, &s, &p, !deterministic)
 			if overlay_active {
 				overlay_free_frames = 0
 			} else {
