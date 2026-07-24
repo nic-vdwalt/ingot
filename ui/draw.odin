@@ -1,0 +1,201 @@
+package ui
+
+import "core:strings"
+
+frame_paint_list :: proc(frame: ^Ui_Frame, channel: Paint_Channel = .Main) -> ^Paint_List {
+	assert(frame != nil && frame.open, "frame_paint_list: invalid frame")
+	assert(frame.output != nil, "frame_paint_list: missing output")
+	if channel == .Overlay do return &frame.output.overlay
+	return &frame.output.main
+}
+
+draw_rectangle :: proc(frame: ^Ui_Frame, x, y, width, height: i32, color: Color) {
+	paint_push(
+		frame_paint_list(frame),
+		{kind = .Rectangle, rect = {f32(x), f32(y), f32(width), f32(height)}, color = color},
+	)
+}
+
+draw_rectangle_rec :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
+	paint_push(frame_paint_list(frame), {kind = .Rectangle, rect = rect, color = color})
+}
+
+draw_rectangle_lines :: proc(frame: ^Ui_Frame, x, y, width, height: i32, color: Color) {
+	draw_rectangle_lines_ex(frame, {f32(x), f32(y), f32(width), f32(height)}, 1, color)
+}
+
+draw_rectangle_lines_ex :: proc(frame: ^Ui_Frame, rect: Rectangle, thickness: f32, color: Color) {
+	paint_push(
+		frame_paint_list(frame),
+		{kind = .Rectangle_Outline, rect = rect, thickness = thickness, color = color},
+	)
+}
+
+draw_rectangle_rounded :: proc(
+	frame: ^Ui_Frame,
+	rect: Rectangle,
+	roundness: f32,
+	segments: i32,
+	color: Color,
+) {
+	paint_push(
+		frame_paint_list(frame),
+		{
+			kind = .Rectangle_Rounded,
+			rect = rect,
+			roundness = roundness,
+			segments = segments,
+			color = color,
+		},
+	)
+}
+
+draw_rectangle_rounded_lines_ex :: proc(
+	frame: ^Ui_Frame,
+	rect: Rectangle,
+	roundness: f32,
+	segments: i32,
+	thickness: f32,
+	color: Color,
+) {
+	paint_push(
+		frame_paint_list(frame),
+		{
+			kind = .Rectangle_Rounded_Outline,
+			rect = rect,
+			roundness = roundness,
+			segments = segments,
+			thickness = thickness,
+			color = color,
+		},
+	)
+}
+
+draw_rectangle_gradient_v :: proc(frame: ^Ui_Frame, x, y, width, height: i32, top, bottom: Color) {
+	paint_push(
+		frame_paint_list(frame),
+		{
+			kind = .Rectangle_Gradient_V,
+			rect = {f32(x), f32(y), f32(width), f32(height)},
+			color = top,
+			color_end = bottom,
+		},
+	)
+}
+
+draw_line :: proc(frame: ^Ui_Frame, x0, y0, x1, y1: i32, color: Color) {
+	draw_line_ex(frame, {f32(x0), f32(y0)}, {f32(x1), f32(y1)}, 1, color)
+}
+
+draw_line_ex :: proc(frame: ^Ui_Frame, p0, p1: Vector2, thickness: f32, color: Color) {
+	paint_push(
+		frame_paint_list(frame),
+		{kind = .Line, p0 = p0, p1 = p1, thickness = thickness, color = color},
+	)
+}
+
+draw_circle :: proc(frame: ^Ui_Frame, x, y: i32, radius: f32, color: Color) {
+	draw_circle_v(frame, {f32(x), f32(y)}, radius, color)
+}
+
+draw_circle_v :: proc(frame: ^Ui_Frame, center: Vector2, radius: f32, color: Color) {
+	paint_push(
+		frame_paint_list(frame),
+		{kind = .Circle, p0 = center, outer_radius = radius, color = color},
+	)
+}
+
+draw_circle_lines_v :: proc(frame: ^Ui_Frame, center: Vector2, radius: f32, color: Color) {
+	paint_push(
+		frame_paint_list(frame),
+		{kind = .Circle_Outline, p0 = center, outer_radius = radius, color = color},
+	)
+}
+
+draw_ring :: proc(
+	frame: ^Ui_Frame,
+	center: Vector2,
+	inner_radius, outer_radius, start_angle, end_angle: f32,
+	segments: i32,
+	color: Color,
+) {
+	paint_push(
+		frame_paint_list(frame),
+		{
+			kind = .Ring,
+			p0 = center,
+			inner_radius = inner_radius,
+			outer_radius = outer_radius,
+			start_angle = start_angle,
+			end_angle = end_angle,
+			segments = segments,
+			color = color,
+		},
+	)
+}
+
+draw_triangle :: proc(frame: ^Ui_Frame, p0, p1, p2: Vector2, color: Color) {
+	paint_push(
+		frame_paint_list(frame),
+		{kind = .Triangle, p0 = p0, p1 = p1, p2 = p2, color = color},
+	)
+}
+
+begin_scissor_mode :: proc(frame: ^Ui_Frame, x, y, width, height: i32) {
+	list := frame_paint_list(frame)
+	assert(list.clip_depth < PAINT_CLIP_CAP, "begin_scissor_mode: clip limit")
+	if paint_push(list, {kind = .Clip_Begin, rect = {f32(x), f32(y), f32(width), f32(height)}}) do list.clip_depth += 1
+}
+
+end_scissor_mode :: proc(frame: ^Ui_Frame) {
+	list := frame_paint_list(frame)
+	assert(list.clip_depth > 0, "end_scissor_mode: no clip")
+	if paint_push(list, {kind = .Clip_End}) do list.clip_depth -= 1
+}
+
+draw_text_command :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	x, y, size: i32,
+	color: Color,
+	font: Font_Id = 0,
+) {
+	command := Paint_Command {
+		kind      = .Text,
+		p0        = {f32(x), f32(y)},
+		color     = color,
+		font      = font,
+		font_size = f32(size),
+	}
+	paint_push_text(frame_paint_list(frame), command, text)
+}
+
+draw_cstring_command :: proc(
+	frame: ^Ui_Frame,
+	text: cstring,
+	x, y, size: i32,
+	color: Color,
+	font: Font_Id = 0,
+) {
+	draw_text_command(frame, string(text), x, y, size, color, font)
+}
+
+draw_codepoint_command :: proc(
+	frame: ^Ui_Frame,
+	codepoint: rune,
+	x, y, size: i32,
+	color: Color,
+	font: Font_Id = 0,
+) {
+	paint_push(
+		frame_paint_list(frame),
+		{
+			kind = .Codepoint,
+			p0 = {f32(x), f32(y)},
+			color = color,
+			font = font,
+			font_size = f32(size),
+			codepoint = codepoint,
+		},
+	)
+}

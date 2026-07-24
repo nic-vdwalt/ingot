@@ -2,7 +2,7 @@
 package ui
 
 import "core:testing"
-import rl "ingot:gfx"
+
 
 @(private = "file")
 expect_close :: proc(t: ^testing.T, got, want: f32, loc := #caller_location) {
@@ -61,7 +61,7 @@ chart_nice_ticks_degenerate :: proc(t: ^testing.T) {
 
 @(test)
 chart_map_y_endpoints :: proc(t: ^testing.T) {
-	plot := rl.Rectangle{0, 0, 100, 100}
+	plot := Rectangle{0, 0, 100, 100}
 	expect_close(t, map_y(0, 0, 10, plot), 100) // lo → bottom
 	expect_close(t, map_y(10, 0, 10, plot), 0) // hi → top
 	expect_close(t, map_y(5, 0, 10, plot), 50) // mid
@@ -74,7 +74,7 @@ chart_map_y_endpoints :: proc(t: ^testing.T) {
 
 @(test)
 chart_line_hover_index :: proc(t: ^testing.T) {
-	plot := rl.Rectangle{0, 0, 100, 20}
+	plot := Rectangle{0, 0, 100, 20}
 	// 5 points at x = 0, 25, 50, 75, 100; x=52 is nearest point 2.
 	testing.expect_value(t, line_hover_index({52, 10}, plot, 5), 2)
 	testing.expect_value(t, line_hover_index({1, 10}, plot, 5), 0)
@@ -90,7 +90,7 @@ chart_line_hover_index :: proc(t: ^testing.T) {
 
 @(test)
 chart_bar_hover_index :: proc(t: ^testing.T) {
-	plot := rl.Rectangle{0, 0, 100, 20}
+	plot := Rectangle{0, 0, 100, 20}
 	// 5 slots of width 20.
 	testing.expect_value(t, bar_hover_index({45, 10}, plot, 5), 2)
 	testing.expect_value(t, bar_hover_index({1, 10}, plot, 5), 0)

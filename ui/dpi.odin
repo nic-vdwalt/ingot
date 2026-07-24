@@ -1,34 +1,29 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "ingot:gfx"
-
-auto_scale :: proc() -> f32 {
+auto_scale :: proc(input: ^Ui_Input = nil) -> f32 {
 	when ODIN_OS == .Darwin || ODIN_OS == .JS {
-		return 1.0
-	} else {
-		s := rl.GetWindowScaleDPI().x
-		return s if s > 0 else 1.0
+		return 1
 	}
+	if input == nil || input.dpi_scale <= 0 do return 1
+	return input.dpi_scale
 }
 
-ui_runtime_apply_platform_dpi :: proc(runtime: ^Ui_Runtime, user_scale: f32 = 0) {
+ui_runtime_apply_platform_dpi :: proc(runtime: ^Ui_Runtime, user_scale: f32 = 0, dpi_scale: f32 = 1) {
 	assert(runtime != nil && runtime.initialized, "apply_platform_dpi: invalid runtime")
-	dpi := rl.GetWindowScaleDPI().x
-	if dpi <= 0 do dpi = 1.0
+	dpi := dpi_scale if dpi_scale > 0 else 1
 	runtime.dpi_last = dpi
 	when ODIN_OS == .Darwin || ODIN_OS == .JS {
-		ui_runtime_set_scale(runtime, user_scale if user_scale > 0 else 1.0)
+		ui_runtime_set_scale(runtime, user_scale if user_scale > 0 else 1)
 		set_font_dpi_with(&runtime.text, dpi)
 	} else {
 		ui_runtime_set_scale(runtime, user_scale if user_scale > 0 else dpi)
-		set_font_dpi_with(&runtime.text, 1.0)
+		set_font_dpi_with(&runtime.text, 1)
 	}
 }
 
-ui_runtime_dpi_refresh :: proc(runtime: ^Ui_Runtime, user_scale: f32 = 0) -> bool {
+ui_runtime_dpi_refresh :: proc(runtime: ^Ui_Runtime, user_scale: f32 = 0, dpi_scale: f32 = 1) -> bool {
 	assert(runtime != nil && runtime.initialized, "dpi_refresh: invalid runtime")
-	dpi := rl.GetWindowScaleDPI().x
+	dpi := dpi_scale
 	if dpi <= 0 do return false
 	if runtime.dpi_last == 0 {
 		runtime.dpi_last = dpi

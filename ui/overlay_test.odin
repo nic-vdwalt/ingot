@@ -2,7 +2,7 @@
 package ui
 
 import "core:testing"
-import rl "ingot:gfx"
+
 
 @(test)
 overlay_recorder_behaviour :: proc(t: ^testing.T) {
@@ -18,10 +18,10 @@ overlay_recorder_behaviour :: proc(t: ^testing.T) {
 	defer route_reset(&frame)
 
 	// Commands record in order.
-	overlay_begin(&frame, rl.Rectangle{0, 0, 100, 100}, claim_input = false)
-	overlay_rect(&frame, rl.Rectangle{0, 0, 10, 10}, rl.Color{1, 2, 3, 255})
-	overlay_text(&frame, "hello", 5, 5, 13, rl.Color{255, 255, 255, 255})
-	overlay_rounded(&frame, rl.Rectangle{1, 1, 8, 8}, 0.5, 4, rl.Color{9, 9, 9, 255})
+	overlay_begin(&frame, Rectangle{0, 0, 100, 100}, claim_input = false)
+	overlay_rect(&frame, Rectangle{0, 0, 10, 10}, Color{1, 2, 3, 255})
+	overlay_text(&frame, "hello", 5, 5, 13, Color{255, 255, 255, 255})
+	overlay_rounded(&frame, Rectangle{1, 1, 8, 8}, 0.5, 4, Color{9, 9, 9, 255})
 	overlay_end(&frame)
 	testing.expect_value(t, overlay_cmd_count(&frame), 3)
 	testing.expect_value(t, overlay_dropped(&frame), 0)
@@ -32,9 +32,9 @@ overlay_recorder_behaviour :: proc(t: ^testing.T) {
 	testing.expect_value(t, overlay_dropped(&frame), 0)
 
 	// Command buffer is bounded: overflow drops, never crashes or allocates.
-	overlay_begin(&frame, rl.Rectangle{0, 0, 10, 10}, claim_input = false)
+	overlay_begin(&frame, Rectangle{0, 0, 10, 10}, claim_input = false)
 	for _ in 0 ..< MAX_OVERLAY_CMDS + 5 {
-		overlay_rect(&frame, rl.Rectangle{0, 0, 1, 1}, rl.Color{})
+		overlay_rect(&frame, Rectangle{0, 0, 1, 1}, Color{})
 	}
 	overlay_end(&frame)
 	testing.expect_value(t, overlay_cmd_count(&frame), MAX_OVERLAY_CMDS)
@@ -42,26 +42,26 @@ overlay_recorder_behaviour :: proc(t: ^testing.T) {
 	overlay_reset(&frame)
 
 	// Text buffer is bounded: an overlong string drops its command.
-	overlay_begin(&frame, rl.Rectangle{0, 0, 10, 10}, claim_input = false)
+	overlay_begin(&frame, Rectangle{0, 0, 10, 10}, claim_input = false)
 	big := make([]u8, OVERLAY_TEXT_CAP)
 	defer delete(big)
 	for &b in big do b = 'a'
-	overlay_text(&frame, string(big), 0, 0, 13, rl.Color{})
+	overlay_text(&frame, string(big), 0, 0, 13, Color{})
 	testing.expect_value(t, overlay_cmd_count(&frame), 0)
 	testing.expect_value(t, overlay_dropped(&frame), 1)
 	overlay_end(&frame)
 	overlay_reset(&frame)
 
 	// A claiming group registers its rect with the input router.
-	overlay_begin(&frame, rl.Rectangle{20, 20, 40, 40}, claim_input = true)
+	overlay_begin(&frame, Rectangle{20, 20, 40, 40}, claim_input = true)
 	overlay_end(&frame)
 	route_begin_frame(&frame)
-	testing.expect(t, route_occluded(&frame, rl.Vector2{30, 30}))
-	testing.expect(t, !route_occluded(&frame, rl.Vector2{5, 5}))
+	testing.expect(t, route_occluded(&frame, Vector2{30, 30}))
+	testing.expect(t, !route_occluded(&frame, Vector2{5, 5}))
 
 	// Flush resets shape commands without requiring a GPU text atlas.
-	overlay_begin(&frame, rl.Rectangle{0, 0, 10, 10}, claim_input = false)
-	overlay_rect(&frame, rl.Rectangle{0, 0, 1, 1}, rl.Color{})
+	overlay_begin(&frame, Rectangle{0, 0, 10, 10}, claim_input = false)
+	overlay_rect(&frame, Rectangle{0, 0, 1, 1}, Color{})
 	overlay_end(&frame)
 	overlay_flush(&frame)
 	testing.expect_value(t, overlay_cmd_count(&frame), 0)

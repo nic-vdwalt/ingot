@@ -5,7 +5,7 @@
 package ui
 
 import "core:strings"
-import rl "ingot:gfx"
+
 
 // MAX_FOCUSABLES bounds focus registrations per frame (Tiger Style: put a
 // limit on everything).
@@ -48,7 +48,7 @@ Ui_Frame :: struct {
 	route:            Input_Route_State,
 	interaction:      Interaction_State,
 	semantics:        Semantics_State,
-	pane_origins:     [MAX_PANE_SCOPES]rl.Vector2,
+	pane_origins:     [MAX_PANE_SCOPES]Vector2,
 	pane_count:       int,
 	text_cull_top:    i32,
 	text_cull_bottom: i32,
@@ -161,10 +161,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	a11y_expire_before_frame(runtime)
 	frame.runtime = runtime
 	frame.cursor.requested = .DEFAULT
-	frame.overlay.count = 0
-	frame.overlay.text_len = 0
-	frame.overlay.dropped = 0
-	frame.overlay.open = false
+	frame.overlay = {}
 	frame.pane_count = 0
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
@@ -193,7 +190,7 @@ ui_frame_end :: proc(frame: ^Ui_Frame) {
 	frame.open = false
 }
 
-ui_frame_pane_push :: proc(frame: ^Ui_Frame, origin: rl.Vector2) {
+ui_frame_pane_push :: proc(frame: ^Ui_Frame, origin: Vector2) {
 	assert(frame != nil && frame.open, "pane_push: invalid frame")
 	assert(frame.pane_count < MAX_PANE_SCOPES, "pane_push: scope limit")
 	frame.pane_origins[frame.pane_count] = origin
@@ -206,18 +203,18 @@ ui_frame_pane_pop :: proc(frame: ^Ui_Frame) {
 	frame.pane_count -= 1
 }
 
-frame_pane_origin :: proc(frame: ^Ui_Frame) -> rl.Vector2 {
+frame_pane_origin :: proc(frame: ^Ui_Frame) -> Vector2 {
 	assert(frame != nil && frame.open, "pane_origin: invalid frame")
 	if frame.pane_count == 0 do return {}
 	return frame.pane_origins[frame.pane_count - 1]
 }
 
-frame_to_local :: proc(frame: ^Ui_Frame, point: rl.Vector2) -> rl.Vector2 {
+frame_to_local :: proc(frame: ^Ui_Frame, point: Vector2) -> Vector2 {
 	origin := frame_pane_origin(frame)
 	return {point.x - origin.x, point.y - origin.y}
 }
 
-frame_to_screen :: proc(frame: ^Ui_Frame, point: rl.Vector2) -> rl.Vector2 {
+frame_to_screen :: proc(frame: ^Ui_Frame, point: Vector2) -> Vector2 {
 	origin := frame_pane_origin(frame)
 	return {point.x + origin.x, point.y + origin.y}
 }
@@ -252,11 +249,11 @@ ui_begin_frame :: proc(u: ^Ui, frame: ^Ui_Frame, x, y, w, h: i32, gap: i32 = 0) 
 ui_begin :: proc(u: ^Ui, x, y, w, h: i32, gap: i32 = 0) {
 	assert(u != nil, "ui_begin: nil Ui")
 	assert(!u.open, "ui_begin: frame already open")
-	u.screen_w = rl.GetScreenWidth()
-	u.screen_h = rl.GetScreenHeight()
+	u.screen_w = i32(frame_input(frame).screen_size.x)
+	u.screen_h = i32(frame_input(frame).screen_size.y)
 	if u.focus_count > 0 do form_focus_cycle(&u.focus_slot, u.focus_count)
-	if u.stable_count > 0 && rl.IsKeyPressed(.TAB) {
-		backwards := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+	if u.stable_count > 0 && is_key_pressed(frame, .TAB) {
+		backwards := is_key_down(frame, .LEFT_SHIFT) || is_key_down(frame, .RIGHT_SHIFT)
 		ids := u.stable_prev[:u.stable_count]
 		u.stable_focus.active = focus_order_next(ids, u.stable_focus.active, backwards)
 	}
@@ -379,7 +376,7 @@ ui_space :: proc(u: ^Ui, px: i32) {
 }
 
 // label draws a plain text line, carving its own slot.
-label :: proc(u: ^Ui, text: string, font_size: i32 = 0, color: rl.Color = {}) {
+label :: proc(u: ^Ui, text: string, font_size: i32 = 0, color: Color = {}) {
 	assert(u.open && u.frame != nil, "label: frame not open")
 	metrics := ui_frame_metrics(u.frame)
 	fs := font_size if font_size > 0 else metrics.FONT_SIZE_BODY

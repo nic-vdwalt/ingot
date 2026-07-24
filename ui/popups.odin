@@ -7,7 +7,7 @@
 package ui
 
 import "core:strings"
-import rl "ingot:gfx"
+
 
 // --- Modal -------------------------------------------------------------------
 
@@ -40,21 +40,21 @@ modal_begin :: proc(
 	st.dismissed = false
 	style := ui_frame_theme(frame)
 	metrics := ui_frame_metrics(frame)
-	rl.DrawRectangle(0, 0, screen_w, screen_h, style.modal_dim)
+	draw_rectangle(frame, 0, 0, screen_w, screen_h, style.modal_dim)
 
 	mw := min(w, screen_w - metrics.PADDING * 4)
 	mh := min(h, screen_h - metrics.PADDING * 2)
 	mx := (screen_w - mw) / 2
 	my := (screen_h - mh) / 2
 	st.rect = Rect_I32{mx, my, mw, mh}
-	route_claim(frame, rl.Rectangle{0, 0, f32(screen_w), f32(my)})
-	route_claim(frame, rl.Rectangle{0, f32(my + mh), f32(screen_w), f32(screen_h - my - mh)})
-	route_claim(frame, rl.Rectangle{0, f32(my), f32(mx), f32(mh)})
-	route_claim(frame, rl.Rectangle{f32(mx + mw), f32(my), f32(screen_w - mx - mw), f32(mh)})
+	route_claim(frame, Rectangle{0, 0, f32(screen_w), f32(my)})
+	route_claim(frame, Rectangle{0, f32(my + mh), f32(screen_w), f32(screen_h - my - mh)})
+	route_claim(frame, Rectangle{0, f32(my), f32(mx), f32(mh)})
+	route_claim(frame, Rectangle{f32(mx + mw), f32(my), f32(screen_w - mx - mw), f32(mh)})
 
-	rl.DrawRectangle(mx, my, mw, mh, style.bg_secondary)
-	rl.DrawRectangleLines(mx, my, mw, mh, style.border_color)
-	rl.BeginScissorMode(mx, my, mw, mh)
+	draw_rectangle(frame, mx, my, mw, mh, style.bg_secondary)
+	draw_rectangle_lines(frame, mx, my, mw, mh, style.border_color)
+	begin_scissor_mode(frame, mx, my, mw, mh)
 	semantic_push(frame, .Modal, st.rect, title)
 
 	title_h := ui_frame_sc(frame, 40)
@@ -78,14 +78,14 @@ modal_end :: proc(st: ^Modal_State) {
 	assert(st != nil, "modal_end: nil state")
 	assert(st.drawing, "modal_end: modal_begin not called")
 	st.drawing = false
-	rl.EndScissorMode()
-	if rl.IsKeyPressed(.ESCAPE) {
+	end_scissor_mode(frame)
+	if is_key_pressed(frame, .ESCAPE) {
 		st.open = false
 		st.dismissed = true
 		return
 	}
-	mrect := rl.Rectangle{f32(st.rect.x), f32(st.rect.y), f32(st.rect.w), f32(st.rect.h)}
-	if rl.IsMouseButtonPressed(.LEFT) && !rl.CheckCollisionPointRec(rl.GetMousePosition(), mrect) {
+	mrect := Rectangle{f32(st.rect.x), f32(st.rect.y), f32(st.rect.w), f32(st.rect.h)}
+	if is_mouse_button_pressed(frame, .LEFT) && !point_in_rect(get_mouse_position(frame), mrect) {
 		st.open = false
 		st.dismissed = true
 	}
@@ -185,32 +185,32 @@ context_menu :: proc(
 	menu_h := context_menu_height_frame(frame, items)
 	mx := clamp(st.anchor_x, 0, max(screen_w - menu_w, 0))
 	my := clamp(st.anchor_y, 0, max(screen_h - menu_h, 0))
-	menu_rect := rl.Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
+	menu_rect := Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
 
 	// Ensure the selection starts on a selectable row.
 	if items[st.selected].separator || items[st.selected].disabled {
 		st.selected = menu_nav_next(items, st.selected, 1)
 	}
-	if rl.IsKeyPressed(.ESCAPE) {
+	if is_key_pressed(frame, .ESCAPE) {
 		st.open = false
 		return -1
 	}
-	if rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP) {
+	if is_key_pressed(frame, .UP) || is_key_pressed_repeat(frame, .UP) {
 		st.selected = menu_nav_next(items, st.selected, -1)
 	}
-	if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN) {
+	if is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN) {
 		st.selected = menu_nav_next(items, st.selected, 1)
 	}
-	if rl.IsKeyPressed(.ENTER) {
+	if is_key_pressed(frame, .ENTER) {
 		st.open = false
 		return st.selected
 	}
 
-	mouse := rl.GetMousePosition()
+	mouse := get_mouse_position(frame)
 	mouse = frame_to_local(frame, mouse)
 	if !st.just_opened &&
-	   (rl.IsMouseButtonPressed(.LEFT) || rl.IsMouseButtonPressed(.RIGHT)) &&
-	   !rl.CheckCollisionPointRec(mouse, menu_rect) {
+	   (is_mouse_button_pressed(frame, .LEFT) || is_mouse_button_pressed(frame, .RIGHT)) &&
+	   !point_in_rect(mouse, menu_rect) {
 		st.open = false
 		return -1
 	}
@@ -221,7 +221,7 @@ context_menu :: proc(
 	// scissor); the group rect also claims the covered area with the router.
 	origin := frame_pane_origin(frame)
 	ox := i32(origin.x)
-	screen_rect := rl.Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
+	screen_rect := Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
 	style := ui_frame_theme(frame)
 	overlay_begin(frame, screen_rect, claim_input = true)
 	overlay_rect(frame, screen_rect, style.bg_popup)
@@ -240,7 +240,7 @@ context_menu_rows :: proc(
 	st: ^Context_Menu_State,
 	items: []Menu_Item,
 	mx, my, menu_w, ox: i32,
-	mouse: rl.Vector2,
+	mouse: Vector2,
 ) -> int {
 	assert(st.open, "context_menu_rows: menu not open")
 	assert(len(items) > 0, "context_menu_rows: empty items")
@@ -262,8 +262,8 @@ context_menu_rows :: proc(
 			item_y += sep_h
 			continue
 		}
-		row_rect := rl.Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(metrics.MENU_ITEM_H)}
-		hovered := rl.CheckCollisionPointRec(mouse, row_rect)
+		row_rect := Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(metrics.MENU_ITEM_H)}
+		hovered := point_in_rect(mouse, row_rect)
 		sem: Sem_State
 		if it.disabled do sem += {.Disabled}
 		semantic_push(
@@ -297,7 +297,7 @@ context_menu_rows :: proc(
 			metrics.FONT_SIZE,
 			col,
 		)
-		if hovered && !it.disabled && rl.IsMouseButtonReleased(.LEFT) {
+		if hovered && !it.disabled && is_mouse_button_released(frame, .LEFT) {
 			st.open = false
 			chosen = i
 		}
@@ -328,16 +328,16 @@ tooltip :: proc(
 ) {
 	assert(st != nil, "tooltip: nil state")
 	assert(rect.w > 0 && rect.h > 0, "tooltip: empty target rect")
-	mouse := rl.GetMousePosition()
-	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+	mouse := get_mouse_position(frame)
+	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	key :=
 		(u64(u32(rect.x)) | u64(u32(rect.y)) << 32) ~
 		((u64(u32(rect.w)) | u64(u32(rect.h)) << 32) * 0x100000001b3)
-	if !rl.CheckCollisionPointRec(mouse, rrect) || route_occluded(frame, mouse) {
+	if !point_in_rect(mouse, rrect) || route_occluded(frame, mouse) {
 		if st.key == key do st^ = {}
 		return
 	}
-	now := rl.GetTime()
+	now := frame_input(frame).time
 	if st.key != key {
 		st.key = key
 		st.hover_start = now
@@ -345,7 +345,7 @@ tooltip :: proc(
 	elapsed := now - st.hover_start
 	if elapsed < TOOLTIP_DELAY {
 		// Event-driven frames: schedule the repaint that reveals the tip.
-		rl.RequestRedrawIn(TOOLTIP_DELAY - elapsed)
+		request_redraw_in(frame, TOOLTIP_DELAY - elapsed)
 		return
 	}
 	metrics := ui_frame_metrics(frame)
@@ -356,7 +356,7 @@ tooltip :: proc(
 	bh := metrics.FONT_SIZE_SMALL + metrics.TOOLTIP_PAD * 2
 	tx := clamp(i32(mouse.x) + ui_frame_sc(frame, 12), 0, max(screen_w - bw, 0))
 	ty := clamp(i32(mouse.y) + ui_frame_sc(frame, 18), 0, max(screen_h - bh, 0))
-	tip := rl.Rectangle{f32(tx), f32(ty), f32(bw), f32(bh)}
+	tip := Rectangle{f32(tx), f32(ty), f32(bw), f32(bh)}
 	overlay_begin(frame, tip, claim_input = false)
 	overlay_rect(frame, tip, style.bg_popup)
 	overlay_rect_lines(frame, tip, ui_frame_scf(frame, 1), style.border_color)

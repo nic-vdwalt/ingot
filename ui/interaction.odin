@@ -7,7 +7,6 @@
 // any per-widget state in the library.
 package ui
 
-import rl "ingot:gfx"
 
 // Interaction is the per-frame result of one widget's pointer protocol.
 Interaction :: struct {
@@ -73,7 +72,7 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 
 Interaction_State :: struct {
 	active_latch:   ^bool,
-	press_pos:      rl.Vector2,
+	press_pos:      Vector2,
 	press_occluded: bool,
 	press_seen:     bool,
 }
@@ -83,8 +82,8 @@ Interaction_State :: struct {
 // (so the occlusion test sees the claims active this frame).
 interact_frame_begin :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "interact_frame_begin: invalid frame")
-	if rl.IsMouseButtonPressed(.LEFT) {
-		frame.interaction.press_pos = rl.GetMousePosition()
+	if is_mouse_button_pressed(frame, .LEFT) {
+		frame.interaction.press_pos = get_mouse_position(frame)
 		frame.interaction.press_occluded = route_occluded(frame, frame.interaction.press_pos)
 		frame.interaction.press_seen = true
 	}
@@ -101,21 +100,21 @@ interact_reset :: proc(frame: ^Ui_Frame) {
 // widget's drawing space (pane-local when inside a translated split pane);
 // the pointer is converted through the frame's pane scope here. Occlusion by
 // overlay claims (route_claim) is resolved before hover is reported.
-interact :: proc(frame: ^Ui_Frame, rect: rl.Rectangle, latch: ^bool = nil) -> Interaction {
+interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Interaction {
 	assert(frame != nil && frame.open, "interact: invalid frame")
 	assert(rect.width >= 0 && rect.height >= 0, "interact: negative rect")
 	state := &frame.interaction
 	if state.active_latch != nil && !state.active_latch^ do state.active_latch = nil
-	mouse := rl.GetMousePosition()
+	mouse := get_mouse_position(frame)
 	local := frame_to_local(frame, mouse)
 	local_press := frame_to_local(frame, state.press_pos)
 	ev := Interact_Event {
-		over       = rl.CheckCollisionPointRec(local, rect) && !route_occluded(frame, mouse),
-		pressed    = rl.IsMouseButtonPressed(.LEFT),
-		released   = rl.IsMouseButtonReleased(.LEFT),
-		down       = rl.IsMouseButtonDown(.LEFT),
+		over       = point_in_rect(local, rect) && !route_occluded(frame, mouse),
+		pressed    = is_mouse_button_pressed(frame, .LEFT),
+		released   = is_mouse_button_released(frame, .LEFT),
+		down       = is_mouse_button_down(frame, .LEFT),
 		blocked    = state.active_latch != nil && state.active_latch != latch,
-		press_over = state.press_seen && !state.press_occluded && rl.CheckCollisionPointRec(local_press, rect),
+		press_over = state.press_seen && !state.press_occluded && point_in_rect(local_press, rect),
 	}
 	it := interact_step(ev, latch)
 	if latch != nil {

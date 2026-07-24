@@ -2,7 +2,7 @@
 package ui
 
 import "core:strings"
-import rl "ingot:gfx"
+
 
 FONT_DATA := #load("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
 
@@ -19,7 +19,6 @@ Measure_Entry :: struct {
 Text_System :: struct {
 	font_loaded:             bool,
 	font_dpi:                f32,
-	font_cache:              map[i32]rl.Font,
 	font_codepoints:         []rune,
 	measure_cache:           map[Measure_Key]Measure_Entry,
 	measure_cache_evictions: int,
@@ -46,7 +45,6 @@ text_system_init :: proc(system: ^Text_System) {
 			idx += 1
 		}
 	}
-	system.font_cache = make(map[i32]rl.Font)
 	system.font_loaded = true
 }
 
@@ -58,10 +56,6 @@ set_font_dpi_with :: proc(system: ^Text_System, scale: f32) {
 reset_font_atlases_with :: proc(system: ^Text_System) {
 	assert(system != nil)
 	if !system.font_loaded do return
-	for _, font in system.font_cache {
-		rl.UnloadFont(font)
-	}
-	clear(&system.font_cache)
 }
 
 measure_cache_stats_with :: proc(system: ^Text_System) -> (entries: int, evictions: int) {
@@ -80,9 +74,7 @@ set_measure_backend_with :: proc(system: ^Text_System, fn: proc(text: cstring, s
 measure_raw_with :: proc(system: ^Text_System, text: cstring, size: i32) -> i32 {
 	assert(system != nil)
 	if system.measure_backend != nil do return system.measure_backend(text, size)
-	when rl.INGOT_INPUT_SIM do return i32(len(string(text))) * size / 2
-	if system.font_loaded do return i32(rl.MeasureTextEx(get_font_with(system, size), text, f32(size), 0).x)
-	return rl.MeasureText(text, size)
+	return i32(len(string(text))) * size / 2
 }
 
 Codepoint_Range :: struct {
@@ -121,24 +113,6 @@ CODEPOINT_RANGES :: [?]Codepoint_Range {
 	{0xF400, 0xF533},
 }
 
-@(private)
-get_font_with :: proc(system: ^Text_System, size: i32) -> rl.Font {
-	assert(system != nil)
-	if font, ok := system.font_cache[size]; ok do return font
-	px := i32(f32(size) * (system.font_dpi if system.font_dpi > 0 else 1.0) + 0.5)
-	font := rl.LoadFontFromMemory(
-		".ttf",
-		raw_data(FONT_DATA),
-		i32(len(FONT_DATA)),
-		px,
-		raw_data(system.font_codepoints),
-		i32(len(system.font_codepoints)),
-	)
-	if font.glyphCount > 0 do rl.SetTextureFilter(font.texture, .BILINEAR)
-	system.font_cache[size] = font
-	return font
-}
-
 clear_measure_cache_with :: proc(system: ^Text_System) {
 	assert(system != nil)
 	for key in system.measure_cache {
@@ -153,7 +127,6 @@ text_system_destroy :: proc(system: ^Text_System) {
 	assert(system != nil)
 	if system.font_loaded {
 		reset_font_atlases_with(system)
-		delete(system.font_cache)
 		delete(system.font_codepoints)
 	}
 	clear_measure_cache_with(system)
@@ -161,26 +134,15 @@ text_system_destroy :: proc(system: ^Text_System) {
 	system^ = {}
 }
 
-draw_text_with :: proc(system: ^Text_System, text: cstring, x, y, size: i32, color: rl.Color) {
+draw_text_with :: proc(system: ^Text_System, text: cstring, x, y, size: i32, color: Color) {
 	assert(system != nil)
-	when rl.INGOT_INPUT_SIM do return
-	if system.font_loaded {
-		rl.DrawTextEx(
-			get_font_with(system, size),
-			text,
-			rl.Vector2{f32(x), f32(y)},
-			f32(size),
-			0,
-			color,
-		)
-	} else {
-		rl.DrawText(text, x, y, size, color)
-	}
 }
 
-draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color: rl.Color) {
+draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color: Color) {
 	assert(size > 0, "draw_text_frame: invalid size")
-	draw_text_with(ui_frame_text(frame), text, x, y, size, color)
+	font := Font_Id(0)
+	if text_backend_valid(frame.runtime.text_backend) do font = text_backend_font(frame.runtime.text_backend, size)
+	draw_cstring_command(frame, text, x, y, size, color, font)
 }
 
 MEASURE_CACHE_MAX :: 8192
@@ -271,19 +233,9 @@ draw_codepoint_with :: proc(
 	codepoint: rune,
 	x, y: i32,
 	size: i32,
-	color: rl.Color,
+	color: Color,
 ) {
 	assert(system != nil)
-	when rl.INGOT_INPUT_SIM do return
-	if system.font_loaded {
-		rl.DrawTextCodepoint(
-			get_font_with(system, size),
-			codepoint,
-			rl.Vector2{f32(x), f32(y)},
-			f32(size),
-			color,
-		)
-	}
 }
 
 draw_codepoint_frame :: proc(
@@ -291,8 +243,10 @@ draw_codepoint_frame :: proc(
 	codepoint: rune,
 	x, y: i32,
 	size: i32,
-	color: rl.Color,
+	color: Color,
 ) {
 	assert(size > 0, "draw_codepoint_frame: invalid size")
-	draw_codepoint_with(ui_frame_text(frame), codepoint, x, y, size, color)
+	font := Font_Id(0)
+	if text_backend_valid(frame.runtime.text_backend) do font = text_backend_font(frame.runtime.text_backend, size)
+	draw_codepoint_command(frame, codepoint, x, y, size, color, font)
 }

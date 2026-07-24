@@ -10,7 +10,7 @@ package ui
 
 import "base:intrinsics"
 import NS "core:sys/darwin/Foundation"
-import rl "ingot:gfx"
+
 
 // Typed Objective-C class wrappers so intrinsics.objc_send can resolve the
 // receiver's class for message dispatch.

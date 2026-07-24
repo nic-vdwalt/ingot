@@ -40,7 +40,7 @@ Platform_Output :: struct {
 platform_output_reset :: proc(output: ^Platform_Output) {
 	assert(output != nil, "platform_output_reset: nil output")
 	output^ = {}
-	output.cursor = .Default
+	output.cursor = .DEFAULT
 }
 
 platform_set_clipboard :: proc(output: ^Platform_Output, text: string) -> bool {

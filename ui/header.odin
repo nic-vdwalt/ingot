@@ -1,7 +1,6 @@
 // LIB-CANDIDATE: imports only core:* and ingot:gfx.
 package ui
 
-import rl "ingot:gfx"
 
 // draw_app_header renders the app header strip: a theme.bg_secondary bar of height
 // TAB_BAR_HEIGHT with a left-aligned title and a hairline bottom border. On
@@ -19,10 +18,11 @@ draw_app_header :: proc(frame: ^Ui_Frame, title: cstring, screen_w: i32) -> (hea
 	h := f32(header_h)
 
 	// Bar background + hairline bottom border.
-	rl.DrawRectangle(0, 0, screen_w, header_h, style.bg_secondary)
-	rl.DrawLineEx(
-		rl.Vector2{0, h},
-		rl.Vector2{f32(screen_w), h},
+	draw_rectangle(frame, 0, 0, screen_w, header_h, style.bg_secondary)
+	draw_line_ex(
+		frame,
+		Vector2{0, h},
+		Vector2{f32(screen_w), h},
 		ui_frame_scf(frame, 1.0),
 		style.border_subtle,
 	)
@@ -57,11 +57,11 @@ draw_app_header :: proc(frame: ^Ui_Frame, title: cstring, screen_w: i32) -> (hea
 
 	// Web build: no OS title bar, so offer a fullscreen toggle at the top-right.
 	when ODIN_OS == .JS {
-		is_fs := rl.IsWindowFullscreen()
-		_, hovered := draw_fullscreen_button(frame, screen_w, is_fs, rl.GetMousePosition())
+		is_fs := frame_input(frame).window_fullscreen
+		_, hovered := draw_fullscreen_button(frame, screen_w, is_fs, get_mouse_position(frame))
 		if hovered {
 			request_cursor(frame, .POINTING_HAND)
-			if rl.IsMouseButtonPressed(.LEFT) {
+			if is_mouse_button_pressed(frame, .LEFT) {
 				rl.ToggleFullscreen()
 			}
 		}

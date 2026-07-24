@@ -6,7 +6,7 @@ package ui
 // Each Text_Input_State owns its own menu state.
 
 import "core:strings"
-import rl "ingot:gfx"
+
 
 SPELL_MENU_W :: 240
 SPELL_MENU_ITEM_H :: 26
@@ -108,7 +108,14 @@ spell_replace_word :: proc(menu: ^Spell_Menu, replacement: string) {
 	if menu.undo != nil && menu.cursor != nil {
 		pill_slice: []Mention_Span
 		if menu.pills != nil do pill_slice = menu.pills[:]
-		input_undo_record(menu.undo, old, menu.cursor^, pill_slice, .Other, rl.GetTime())
+		input_undo_record(
+			menu.undo,
+			old,
+			menu.cursor^,
+			pill_slice,
+			.Other,
+			frame_input(frame).time,
+		)
 	}
 	new_text := strings.concatenate({old[:ws], replacement, old[we:]}, context.temp_allocator)
 	strings.builder_reset(sb)
@@ -168,29 +175,31 @@ draw_spell_menu :: proc(
 	nav_count := n + 2
 
 	// Keyboard: Up/Down navigate, Enter applies, Escape closes.
-	if rl.IsKeyPressed(.ESCAPE) {
+	if is_key_pressed(frame, .ESCAPE) {
 		spell_menu_close(menu)
 		return
 	}
-	if rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP) {
+	if is_key_pressed(frame, .UP) || is_key_pressed_repeat(frame, .UP) {
 		menu.selected = (menu.selected + nav_count - 1) % nav_count
 	}
-	if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN) {
+	if is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN) {
 		menu.selected = (menu.selected + 1) % nav_count
 	}
-	if rl.IsKeyPressed(.ENTER) && !rl.IsKeyDown(.LEFT_SHIFT) && !rl.IsKeyDown(.RIGHT_SHIFT) {
+	if is_key_pressed(frame, .ENTER) &&
+	   !is_key_down(frame, .LEFT_SHIFT) &&
+	   !is_key_down(frame, .RIGHT_SHIFT) {
 		spell_menu_apply(menu, system, menu.selected)
 		return
 	}
 
-	mouse := rl.GetMousePosition()
+	mouse := get_mouse_position(frame)
 	mouse = frame_to_local(frame, mouse)
-	menu_rect := rl.Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
+	menu_rect := Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
 
 	// Click-away closes (the opening right-click is swallowed for one frame).
 	if !menu.just_opened &&
-	   (rl.IsMouseButtonPressed(.LEFT) || rl.IsMouseButtonPressed(.RIGHT)) &&
-	   !rl.CheckCollisionPointRec(mouse, menu_rect) {
+	   (is_mouse_button_pressed(frame, .LEFT) || is_mouse_button_pressed(frame, .RIGHT)) &&
+	   !point_in_rect(mouse, menu_rect) {
 		spell_menu_close(menu)
 		return
 	}
@@ -200,7 +209,7 @@ draw_spell_menu :: proc(
 	// rect also claims the covered area with the input router.
 	origin := frame_pane_origin(frame)
 	ox := i32(origin.x)
-	screen_rect := rl.Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
+	screen_rect := Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
 	overlay_begin(frame, screen_rect, claim_input = true)
 	overlay_rect(frame, screen_rect, style.bg_popup)
 	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
@@ -215,12 +224,12 @@ draw_spell_menu :: proc(
 		ox, item_x, item_y, item_w, item_h: i32,
 		label: string,
 		nav_idx: int,
-		mouse: rl.Vector2,
-		color: rl.Color,
+		mouse: Vector2,
+		color: Color,
 	) -> bool {
 		assert(menu != nil, "draw_spell_menu row: nil menu")
-		row_rect := rl.Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(item_h)}
-		hovered := rl.CheckCollisionPointRec(mouse, row_rect)
+		row_rect := Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(item_h)}
+		hovered := point_in_rect(mouse, row_rect)
 		if hovered && mouse_moved() do menu.selected = nav_idx
 		if menu.selected == nav_idx {
 			overlay_rect(
@@ -240,7 +249,7 @@ draw_spell_menu :: proc(
 			font_size,
 			color,
 		)
-		return hovered && rl.IsMouseButtonReleased(.LEFT)
+		return hovered && is_mouse_button_released(frame, .LEFT)
 	}
 
 	// Collect the clicked action and apply it only after the overlay group is
