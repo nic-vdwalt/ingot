@@ -76,20 +76,26 @@ replay_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Pain
 	case .Text:
 		text := ui.paint_text(list, command)
 		font, ok := adapter_font(adapter, command.font)
-		if ok {
-			value := strings.clone_to_cstring(text, context.temp_allocator)
-			rl.DrawTextEx(
-				font,
-				value,
-				vec_to_gfx(command.p0),
-				command.font_size,
-				command.spacing,
-				color,
-			)
-		}
+		assert(ok, "replay_command: invalid text font")
+		value := strings.clone_to_cstring(text, context.temp_allocator)
+		rl.DrawTextEx(
+			font,
+			value,
+			vec_to_gfx(command.p0),
+			command.font_size,
+			command.spacing,
+			color,
+		)
 	case .Codepoint:
 		font, ok := adapter_font(adapter, command.font)
-		if ok do rl.DrawTextCodepoint(font, command.codepoint, vec_to_gfx(command.p0), command.font_size, color)
+		assert(ok, "replay_command: invalid codepoint font")
+		rl.DrawTextCodepoint(
+			font,
+			command.codepoint,
+			vec_to_gfx(command.p0),
+			command.font_size,
+			color,
+		)
 	case .Clip_Begin:
 		rl.BeginScissorMode(
 			i32(command.rect.x),

@@ -142,6 +142,10 @@ draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color:
 	assert(size > 0, "draw_text_frame: invalid size")
 	font := Font_Id(0)
 	if text_backend_valid(frame.runtime.text_backend) do font = text_backend_font(frame.runtime.text_backend, size)
+	assert(
+		frame.output == nil || font != 0,
+		"draw_text_frame: paint output requires a text backend",
+	)
 	draw_cstring_command(frame, text, x, y, size, color, font)
 }
 
@@ -197,6 +201,17 @@ measure_text_with :: proc(system: ^Text_System, text: cstring, size: i32) -> i32
 
 measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
 	assert(size > 0, "measure_text_frame: invalid size")
+	if text_backend_valid(frame.runtime.text_backend) {
+		font := text_backend_font(frame.runtime.text_backend, size)
+		measurement := text_backend_measure(
+			frame.runtime.text_backend,
+			font,
+			string(text),
+			f32(size),
+			0,
+		)
+		return i32(measurement.x + 0.5)
+	}
 	return measure_text_with(ui_frame_text(frame), text, size)
 }
 

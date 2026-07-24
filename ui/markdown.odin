@@ -78,15 +78,14 @@ match_url :: proc(line: string, i: int) -> (int, bool) {
 }
 
 // Parse a line into spans, stripping **bold** markers and PILL sentinels.
-// Returns a slice allocated with temp_allocator.
-parse_inline_spans :: proc(line: string) -> []Text_Span {
+parse_inline_spans_with :: proc(line: string, allocator := context.temp_allocator) -> []Text_Span {
 	has_bold := strings.contains(line, "**")
 	has_pill := strings.index_byte(line, PILL_OPEN) >= 0
 	has_code := strings.index_byte(line, '`') >= 0
 	has_link := strings.contains(line, "http://") || strings.contains(line, "https://")
 	// Fast path: no markers at all.
 	if !has_bold && !has_pill && !has_code && !has_link {
-		spans := make([]Text_Span, 1, context.temp_allocator)
+		spans := make([]Text_Span, 1, allocator)
 		spans[0] = Text_Span {
 			text      = line,
 			raw_start = 0,
@@ -96,7 +95,7 @@ parse_inline_spans :: proc(line: string) -> []Text_Span {
 		return spans
 	}
 
-	buf := make([dynamic]Text_Span, 0, 8, context.temp_allocator)
+	buf := make([dynamic]Text_Span, 0, 8, allocator)
 	i := 0
 	seg_start := 0 // start of pending normal text
 	for i < len(line) {
@@ -257,6 +256,11 @@ parse_inline_spans :: proc(line: string) -> []Text_Span {
 	return buf[:]
 }
 
+
+parse_inline_spans :: proc(frame: ^Ui_Frame, line: string) -> Frame_View(Text_Span) {
+	return frame_view(frame, parse_inline_spans_with(line, ui_frame_allocator(frame)))
+}
+
 // Total display length (without ** markers) for a span array.
 spans_display_len :: proc(spans: []Text_Span) -> int {
 	total := 0
@@ -267,12 +271,19 @@ spans_display_len :: proc(spans: []Text_Span) -> int {
 }
 
 // Build display string (markers stripped) from spans.
-spans_display_string :: proc(spans: []Text_Span) -> string {
-	sb := strings.builder_make(context.temp_allocator)
+spans_display_string_with :: proc(
+	spans: []Text_Span,
+	allocator := context.temp_allocator,
+) -> string {
+	sb := strings.builder_make(allocator)
 	for &s in spans {
 		strings.write_string(&sb, s.text)
 	}
 	return strings.to_string(sb)
+}
+
+spans_display_string :: proc(frame: ^Ui_Frame, spans: []Text_Span) -> Frame_String {
+	return frame_string(frame, spans_display_string_with(spans, ui_frame_allocator(frame)))
 }
 
 // Convert a raw byte offset (in original text with markers) to a display char position.
@@ -514,7 +525,7 @@ draw_text_wrapped_md :: proc(
 ) -> i32 {
 	if len(text) == 0 do return 0
 
-	spans := parse_inline_spans(text)
+	spans := frame_view_items(ctx.frame, parse_inline_spans(ctx.frame, text))
 
 	// Fast path: single plain span — delegate to existing function.
 	if len(spans) == 1 && !spans[0].bold && !spans[0].pill && !spans[0].code && !spans[0].link {
@@ -533,7 +544,7 @@ draw_text_wrapped_md :: proc(
 		)
 	}
 
-	display_text := spans_display_string(spans)
+	display_text := frame_string_value(ctx.frame, spans_display_string(ctx.frame, spans))
 	if len(display_text) == 0 do return 0
 
 	has_sel := sel_start >= 0 && sel_end > sel_start
@@ -591,8 +602,8 @@ measure_wrapped_height_md :: proc(
 		)
 	}
 
-	spans := parse_inline_spans(text)
-	display_text := spans_display_string(spans)
+	spans := frame_view_items(ctx.frame, parse_inline_spans(ctx.frame, text))
+	display_text := frame_string_value(ctx.frame, spans_display_string(ctx.frame, spans))
 	return wrapped_height_px_frame(
 		ctx.frame,
 		display_text,
@@ -628,8 +639,8 @@ hit_test_wrapped_md :: proc(
 		)
 	}
 
-	spans := parse_inline_spans(text)
-	display_text := spans_display_string(spans)
+	spans := frame_view_items(ctx.frame, parse_inline_spans(ctx.frame, text))
+	display_text := frame_string_value(ctx.frame, spans_display_string(ctx.frame, spans))
 
 	display_offset := hit_test_wrapped_frame(
 		ctx.frame,
@@ -674,15 +685,16 @@ is_table_separator :: proc(line: string) -> bool {
 // returning both the cell text (temp-allocated) and the source byte offset where
 // each cell's trimmed content begins (used for hit-testing). A single leading and
 // trailing outer pipe is dropped.
-split_table_row_offsets :: proc(
+split_table_row_offsets_with :: proc(
 	text: string,
 	line_start, line_end: int,
+	allocator := context.temp_allocator,
 ) -> (
 	cells: []string,
 	starts: []int,
 ) {
-	cell_buf := make([dynamic]string, 0, 8, context.temp_allocator)
-	start_buf := make([dynamic]int, 0, 8, context.temp_allocator)
+	cell_buf := make([dynamic]string, 0, 8, allocator)
+	start_buf := make([dynamic]int, 0, 8, allocator)
 
 	// Determine where the first cell begins: after a leading pipe if present.
 	j := line_start
@@ -715,6 +727,23 @@ split_table_row_offsets :: proc(
 	return cell_buf[:], start_buf[:]
 }
 
+split_table_row_offsets :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	line_start, line_end: int,
+) -> (
+	Frame_View(string),
+	Frame_View(int),
+) {
+	cells, starts := split_table_row_offsets_with(
+		text,
+		line_start,
+		line_end,
+		ui_frame_allocator(frame),
+	)
+	return frame_view(frame, cells), frame_view(frame, starts)
+}
+
 // Parse, lay out, and (when draw==true) render a GFM table block beginning at
 // source byte `blk_start` (start of the header line). Returns the byte index just
 // past the block and the pixel height consumed. The `draw` flag gates raylib draw
@@ -745,7 +774,7 @@ layout_table :: proc(
 		cells:  []string,
 		starts: []int,
 	}
-	rows := make([dynamic]Row, 0, 8, context.temp_allocator)
+	rows := make([dynamic]Row, 0, 8, ui_frame_allocator(ctx.frame))
 	cols := 0
 
 	pos := blk_start
@@ -766,7 +795,9 @@ layout_table :: proc(
 			pos = advance
 			continue
 		}
-		cells, starts := split_table_row_offsets(text, pos, line_end)
+		cells_view, starts_view := split_table_row_offsets(ctx.frame, text, pos, line_end)
+		cells := frame_view_items(ctx.frame, cells_view)
+		starts := frame_view_items(ctx.frame, starts_view)
 		append(&rows, Row{cells = cells, starts = starts})
 		if len(cells) > cols do cols = len(cells)
 		phys += 1
@@ -780,11 +811,11 @@ layout_table :: proc(
 
 	pad := ui_frame_metrics(ctx.frame).TABLE_CELL_PAD
 	// Natural width per column: widest cell plus horizontal padding.
-	naturals := make([]i32, cols, context.temp_allocator)
+	naturals := make([]i32, cols, ui_frame_allocator(ctx.frame))
 	for row in rows {
 		for cell, ci in row.cells {
 			if len(cell) == 0 do continue
-			cell_c := strings.clone_to_cstring(cell, context.temp_allocator)
+			cell_c := strings.clone_to_cstring(cell, ui_frame_allocator(ctx.frame))
 			w :=
 				measure_text_frame(ctx.frame, cell_c, ui_frame_metrics(ctx.frame).FONT_SIZE) +
 				pad * 2
@@ -799,7 +830,7 @@ layout_table :: proc(
 		if naturals[ci] < min_w do naturals[ci] = min_w
 	}
 
-	col_widths := make([]i32, cols, context.temp_allocator)
+	col_widths := make([]i32, cols, ui_frame_allocator(ctx.frame))
 	natural_total: i32 = 0
 	for ci in 0 ..< cols do natural_total += naturals[ci]
 

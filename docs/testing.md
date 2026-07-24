@@ -57,6 +57,13 @@ Headless targets build with debug information and AddressSanitizer by default.
 Harnesses use `mem.Tracking_Allocator` where applicable so leaks and invalid
 ownership transitions fail the run.
 
+### Frame scratch checks
+
+Tests and fuzzers enable `INGOT_FRAME_SCRATCH_GUARD`. They exercise allocations
+through `ui_frame_allocator`, generation rollover, and frame-end release. An
+individual frame-memory free must panic with `individual free of frame memory`
+and identify the offending source location.
+
 | Target | Surface exercised |
 |---|---|
 | `net` | Simulated HTTP transport plus HTTP and WebSocket parsers |

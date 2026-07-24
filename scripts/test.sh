@@ -4,6 +4,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 col="-collection:ingot=$root"
+guard="-define:INGOT_FRAME_SCRATCH_GUARD=true"
 "$root/scripts/check-ui-state.sh"
 for pkg in gfx ui term prefs net; do
 	echo "== testing $pkg =="
@@ -13,7 +14,7 @@ for pkg in gfx ui term prefs net; do
 	[ "$pkg" = ui ] && extra+=("-define:ODIN_TEST_THREADS=1")
 	# term's pump fuzz needs the scripted PTY byte source (no shell spawned).
 	[ "$pkg" = term ] && extra+=("-define:INGOT_PTY_SIM=true")
-	odin test "$root/$pkg" $col -define:ODIN_TEST_FAIL_ON_EMPTY=true ${extra[@]+"${extra[@]}"} "$@"
+	odin test "$root/$pkg" $col $guard -define:ODIN_TEST_FAIL_ON_EMPTY=true ${extra[@]+"${extra[@]}"} "$@"
 done
 
 # sys has no unit tests yet — type-check it so it can't rot.

@@ -44,6 +44,7 @@ Ui_Frame :: struct {
 	input_default:    Ui_Input,
 	input:            ^Ui_Input,
 	output:           ^Ui_Output,
+	scratch:          Frame_Scratch,
 	cursor:           Cursor_State,
 	overlay:          Overlay_State,
 	route:            Input_Route_State,
@@ -54,6 +55,7 @@ Ui_Frame :: struct {
 	text_cull_top:    i32,
 	text_cull_bottom: i32,
 	open_roots:       int,
+	finalized:        bool,
 	open:             bool,
 }
 
@@ -156,6 +158,7 @@ ui_runtime_set_scale_hooks :: proc(
 ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input = nil) {
 	assert(frame != nil && runtime != nil, "ui_frame_begin: nil frame or runtime")
 	assert(runtime.initialized && !frame.open, "ui_frame_begin: invalid lifetime")
+	frame_scratch_begin(&frame.scratch)
 	runtime.frame_generation += 1
 	frame.input = input if input != nil else &frame.input_default
 	if frame.output != nil do ui_output_reset(frame.output)
@@ -167,29 +170,31 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
 	frame.open_roots = 0
+	frame.finalized = false
 	frame.open = true
 	route_begin_frame(frame)
 	interact_frame_begin(frame)
 	sem_begin_frame(frame)
 }
 
-ui_frame_end :: proc(frame: ^Ui_Frame) {
-	assert(frame != nil && frame.open, "ui_frame_end: frame not open")
-	assert(frame.open_roots == 0, "ui_frame_end: UI root still open")
-	assert(frame.pane_count == 0, "ui_frame_end: pane scope still open")
-	assert(!frame.overlay.open, "ui_frame_end: overlay still open")
-	overlay_flush(frame)
-	cursor_apply(frame)
-	focus_scope_frame_end(frame)
+ui_frame_finalize :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open && !frame.finalized)
+	assert(frame.open_roots == 0 && frame.pane_count == 0 && !frame.overlay.open)
+	overlay_flush(frame); cursor_apply(frame); focus_scope_frame_end(frame)
 	frame.runtime.semantics_snapshot = frame.semantics.cur
-	a11y_expire_after_frame(frame.runtime)
-	focus_scope_clear_live(frame)
-	frame.text_cull_top = min(i32)
-	frame.text_cull_bottom = max(i32)
-	frame.runtime = nil
-	frame.input = nil
-	frame.open = false
+	a11y_expire_after_frame(frame.runtime); focus_scope_clear_live(frame)
+	frame.finalized = true
 }
+ui_frame_release :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open && frame.finalized)
+	frame.text_cull_top = min(i32); frame.text_cull_bottom = max(i32)
+	frame_scratch_end(&frame.scratch)
+	frame.runtime = nil; frame.input = nil; frame.open = false; frame.finalized = false
+}
+ui_frame_end :: proc(frame: ^Ui_Frame) {ui_frame_finalize(frame); ui_frame_release(frame)}
+ui_frame_destroy :: proc(frame: ^Ui_Frame) {assert(frame != nil && !frame.open)
+	frame_scratch_destroy(&frame.scratch)
+	frame^ = {}}
 
 ui_frame_pane_push :: proc(frame: ^Ui_Frame, origin: Vector2) {
 	assert(frame != nil && frame.open, "pane_push: invalid frame")

@@ -6,10 +6,10 @@ import "ingot:testx"
 
 @(test)
 md_spans_examples :: proc(t: ^testing.T) {
-	spans := parse_inline_spans("a **bold** `code` http://x.com.")
+	spans := parse_inline_spans_with("a **bold** `code` http://x.com.")
 	// Display strips ** and ` markers. The URL span itself trims the trailing
 	// '.', but that '.' remains as ordinary trailing text.
-	testing.expect_value(t, spans_display_string(spans), "a bold code http://x.com.")
+	testing.expect_value(t, spans_display_string_with(spans), "a bold code http://x.com.")
 }
 
 @(test)
@@ -26,7 +26,7 @@ md_match_url :: proc(t: ^testing.T) {
 
 @(test)
 md_spans_flags :: proc(t: ^testing.T) {
-	spans := parse_inline_spans("**b** and `c`")
+	spans := parse_inline_spans_with("**b** and `c`")
 	bold_seen, code_seen := false, false
 	for sp in spans {
 		if sp.bold do bold_seen = true
@@ -41,7 +41,7 @@ md_spans_contiguous_fuzz :: proc(t: ^testing.T) {
 	p := testx.prng_make(0xBEEF)
 	for _ in 0 ..< 3000 {
 		s := testx.ascii_string(&p, 48)
-		spans := parse_inline_spans(s)
+		spans := parse_inline_spans_with(s)
 		cur := 0
 		for sp in spans {
 			testing.expect(t, sp.raw_start == cur, "span raw ranges must be contiguous")

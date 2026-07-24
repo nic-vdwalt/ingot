@@ -44,6 +44,19 @@ See [UI state and stable focus](ui-state.md) for ownership rules and concrete
 Odin examples. [Choosing Ingot](comparison.md) compares this model with other
 app engines and UI stacks.
 
+## Frame scratch lifetime
+
+Allocate transient UI data with `ui_frame_allocator(frame)`. The allocation is
+valid only until the frame is released by `ui_frame_end`; never individually
+free or delete it. Guarded builds panic at the offending call site with
+`individual free of frame memory`.
+
+APIs returning `Frame_View(T)` or `Frame_String` expose borrowed frame data.
+Read them with `frame_view_items` or `frame_string_value` while the originating
+frame is open, and clone into an owner allocator before retaining the data.
+Call `ui_frame_destroy` when a reusable frame leaves service. Deferred renderers
+must finalize, consume borrowed output, and release in that order.
+
 ## What retained-mode features require
 
 A retained tree is one way to implement rich UI behavior, not a prerequisite

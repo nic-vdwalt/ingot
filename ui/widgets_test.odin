@@ -162,7 +162,7 @@ settings_preset_index_lookup :: proc(t: ^testing.T) {
 @(test)
 markdown_offset_roundtrip :: proc(t: ^testing.T) {
 	line := "a **bold** `code` end"
-	spans := parse_inline_spans(line)
+	spans := parse_inline_spans_with(line)
 	display_len := spans_display_len(spans)
 	// display -> raw -> display is identity for every display position.
 	for d in 0 ..< display_len {

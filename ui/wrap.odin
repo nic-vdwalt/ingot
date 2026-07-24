@@ -113,6 +113,7 @@ wrap_compute_with :: proc(
 	text: string,
 	max_width: i32,
 	font_size: i32,
+	allocator := context.temp_allocator,
 ) -> []Wrap_Line {
 	assert(system != nil)
 	assert(max_width >= 0 && font_size > 0)
@@ -232,8 +233,8 @@ wrapped_max_line_width_md_with :: proc(
 	   strings.index_byte(text, '`') < 0 {
 		return wrapped_max_line_width_with(system, text, max_width, font_size)
 	}
-	spans := parse_inline_spans(text)
-	display := spans_display_string(spans)
+	spans := parse_inline_spans_with(text)
+	display := spans_display_string_with(spans)
 	return wrapped_max_line_width_with(system, display, max_width, font_size)
 }
 

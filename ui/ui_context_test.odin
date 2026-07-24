@@ -77,8 +77,14 @@ test_ui_frame_transient_context_is_isolated_and_reset :: proc(t: ^testing.T) {
 	defer ui_runtime_destroy(&runtime_b)
 
 	frame_a, frame_b: Ui_Frame
+	defer ui_frame_destroy(&frame_a)
+	defer ui_frame_destroy(&frame_b)
 	ui_frame_begin(&frame_a, &runtime_a)
 	ui_frame_begin(&frame_b, &runtime_b)
+	view_a := frame_view(&frame_a, make([]u8, 32, ui_frame_allocator(&frame_a)))
+	view_b := frame_view(&frame_b, make([]u8, 64, ui_frame_allocator(&frame_b)))
+	testing.expect_value(t, len(frame_view_items(&frame_a, view_a)), 32)
+	testing.expect_value(t, len(frame_view_items(&frame_b, view_b)), 64)
 	set_text_cull_band_frame(&frame_a, 10, 20)
 	set_text_cull_band_frame(&frame_b, 100, 200)
 	testing.expect_value(t, frame_a.text_cull_top, i32(10))

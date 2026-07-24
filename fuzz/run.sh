@@ -44,6 +44,7 @@ TARGET="${1:-net}"
 SEED="${2:-}"
 ITERATIONS="${3:-}"
 COL="-collection:ingot=$ROOT"
+GUARD="-define:INGOT_FRAME_SCRATCH_GUARD=true"
 
 case "${SAN:-address}" in
 address) SANFLAGS="-debug -sanitize:address" ;;
@@ -61,13 +62,13 @@ ARGS=()
 
 run_net() {
 	# shellcheck disable=SC2086
-	odin build "$ROOT/fuzz/net" $COL $SANFLAGS -define:INGOT_NET_SIM=true -out:"$ROOT/fuzz/net/fuzz_net"
+	odin build "$ROOT/fuzz/net" $COL $GUARD $SANFLAGS -define:INGOT_NET_SIM=true -out:"$ROOT/fuzz/net/fuzz_net"
 	"$ROOT/fuzz/net/fuzz_net" "$@"
 }
 
 run_ui() {
 	# shellcheck disable=SC2086
-	odin build "$ROOT/fuzz/ui" $COL $SANFLAGS -out:"$ROOT/fuzz/ui/fuzz_ui"
+	odin build "$ROOT/fuzz/ui" $COL $GUARD $SANFLAGS -out:"$ROOT/fuzz/ui/fuzz_ui"
 	"$ROOT/fuzz/ui/fuzz_ui" "$@"
 }
 
@@ -77,7 +78,7 @@ run_term() {
 	# INGOT_PTY_SIM scripts the PTY byte source so term_pump's drain/EOF loop
 	# is fuzzed too; INGOT_FUZZ_ITER scales the pump fuzz past the test default.
 	# shellcheck disable=SC2086
-	odin test "$ROOT/term" $COL $SANFLAGS -define:INGOT_PTY_SIM=true -define:INGOT_FUZZ_ITER=3000
+	odin test "$ROOT/term" $COL $GUARD $SANFLAGS -define:INGOT_PTY_SIM=true -define:INGOT_FUZZ_ITER=3000
 }
 
 run_gfx_frame() {
@@ -87,7 +88,7 @@ run_gfx_frame() {
 	# reach. Built without a sanitizer flag override is fine, but ASan works.
 	# INGOT_GPU_STRICT aborts on any wgpu validation message (see header).
 	# shellcheck disable=SC2086
-	odin build "$ROOT/fuzz/gfx_frame" $COL $SANFLAGS -define:INGOT_GPU_STRICT=true -out:"$ROOT/fuzz/gfx_frame/fuzz_gfx_frame"
+	odin build "$ROOT/fuzz/gfx_frame" $COL $GUARD $SANFLAGS -define:INGOT_GPU_STRICT=true -out:"$ROOT/fuzz/gfx_frame/fuzz_gfx_frame"
 	"$ROOT/fuzz/gfx_frame/fuzz_gfx_frame" "$@"
 }
 
@@ -96,7 +97,7 @@ run_interact() {
 	# synthetic input sequences (INGOT_INPUT_SIM seam) and checks routing,
 	# focus, latch, and semantic-buffer invariants.
 	# shellcheck disable=SC2086
-	odin build "$ROOT/fuzz/interact" $COL $SANFLAGS -define:INGOT_INPUT_SIM=true -out:"$ROOT/fuzz/interact/fuzz_interact"
+	odin build "$ROOT/fuzz/interact" $COL $GUARD $SANFLAGS -define:INGOT_INPUT_SIM=true -out:"$ROOT/fuzz/interact/fuzz_interact"
 	"$ROOT/fuzz/interact/fuzz_interact" "$@"
 }
 
@@ -105,13 +106,13 @@ run_input() {
 	# mirroring the term pattern; INGOT_FUZZ_ITER scales the op count far past
 	# the fast default used by scripts/test.sh.
 	# shellcheck disable=SC2086
-	odin test "$ROOT/ui" $COL $SANFLAGS -define:ODIN_TEST_THREADS=1 -define:INGOT_FUZZ_ITER=200000
+	odin test "$ROOT/ui" $COL $GUARD $SANFLAGS -define:ODIN_TEST_THREADS=1 -define:INGOT_FUZZ_ITER=200000
 }
 
 run_wsreconn() {
 	# Reconnect state-machine fuzzer: real worker thread + scripted transport.
 	# shellcheck disable=SC2086
-	odin build "$ROOT/fuzz/wsreconn" $COL $SANFLAGS -define:INGOT_WS_SIM=true -out:"$ROOT/fuzz/wsreconn/fuzz_wsreconn"
+	odin build "$ROOT/fuzz/wsreconn" $COL $GUARD $SANFLAGS -define:INGOT_WS_SIM=true -out:"$ROOT/fuzz/wsreconn/fuzz_wsreconn"
 	"$ROOT/fuzz/wsreconn/fuzz_wsreconn" "$@"
 }
 

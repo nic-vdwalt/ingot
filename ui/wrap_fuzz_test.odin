@@ -91,7 +91,7 @@ fuzz_markdown_parsers_random_bytes :: proc(t: ^testing.T) {
 	p := testx.prng_make(0x5)
 	for iter in 0 ..< 10_000 {
 		line := string(testx.random_bytes(&p, 512))
-		spans := parse_inline_spans(line)
+		spans := parse_inline_spans_with(line)
 		display_len := spans_display_len(spans)
 		ok := display_len >= 0 && display_len <= len(line)
 		for span in spans {
@@ -106,7 +106,7 @@ fuzz_markdown_parsers_random_bytes :: proc(t: ^testing.T) {
 		_ = is_table_separator(line)
 		line_end := testx.int_range(&p, 0, len(line) + 1)
 		line_start := testx.int_range(&p, 0, line_end + 1)
-		cells, starts := split_table_row_offsets(line, line_start, line_end)
+		cells, starts := split_table_row_offsets_with(line, line_start, line_end)
 		ok &&= len(cells) == len(starts)
 		for start in starts {
 			ok &&= start >= 0 && start <= len(line)

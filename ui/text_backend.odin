@@ -15,6 +15,12 @@ text_backend_valid :: proc(backend: Text_Backend) -> bool {
 	return backend.font_for_size != nil && backend.measure != nil
 }
 
+ui_runtime_set_text_backend :: proc(runtime: ^Ui_Runtime, backend: Text_Backend) {
+	assert(runtime != nil && runtime.initialized, "ui_runtime_set_text_backend: invalid runtime")
+	assert(text_backend_valid(backend), "ui_runtime_set_text_backend: invalid backend")
+	runtime.text_backend = backend
+}
+
 text_backend_font :: proc(backend: Text_Backend, size: i32) -> Font_Id {
 	assert(text_backend_valid(backend), "text_backend_font: invalid backend")
 	assert(size > 0, "text_backend_font: invalid size")
