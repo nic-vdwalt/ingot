@@ -8,12 +8,16 @@ package main
 
 import rl "ingot:gfx"
 import "ingot:ui"
+import "ingot:ui_gfx"
 
 dark := true
 line_state: ui.Chart_State
 bar_state: ui.Chart_State
 ui_runtime: ui.Ui_Runtime
 ui_frame: ui.Ui_Frame
+ui_input: ui.Ui_Input
+ui_output: ui.Ui_Output
+ui_adapter: ui_gfx.Adapter
 
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
 costs := [12]f32{8.1, 8.4, 9.0, 9.7, 10.2, 11.5, 11.1, 12.4, 12.0, 13.6, 13.1, 14.0}
@@ -44,19 +48,21 @@ main :: proc() {
 	rl.SetTargetFPS(60)
 	rl.EnableEventWaiting()
 	ui.ui_runtime_init(&ui_runtime)
+	ui_gfx.adapter_init(&ui_adapter)
 	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
 	rl.run(frame)
+	ui_gfx.adapter_destroy(&ui_adapter)
 	ui.ui_runtime_destroy(&ui_runtime)
 	rl.CloseWindow()
 }
 
 frame :: proc() {
-	ui.ui_runtime_dpi_refresh(&ui_runtime)
-	ui.ui_frame_begin(&ui_frame, &ui_runtime)
+	ui_gfx.adapter_begin_frame(&ui_adapter, &ui_frame, &ui_runtime, &ui_input, &ui_output)
+	ui.ui_runtime_dpi_refresh(&ui_runtime, dpi_scale = ui_input.dpi_scale)
 	rl.BeginDrawing()
 	style := ui.ui_frame_theme(&ui_frame)
 	metrics := ui.ui_frame_metrics(&ui_frame)
-	rl.ClearBackground(style.bg_color)
+	rl.ClearBackground(ui_gfx.color_to_gfx(style.bg_color))
 
 	sw := rl.GetScreenWidth()
 
@@ -117,7 +123,7 @@ frame :: proc() {
 		style.fg_accent,
 	)
 
-	ui.ui_frame_end(&ui_frame)
+	ui_gfx.adapter_end_frame(&ui_adapter, &ui_frame)
 	rl.EndDrawing()
 }
 
@@ -126,7 +132,7 @@ stat_card :: proc(
 	x, y, w, h: i32,
 	label, value: cstring,
 	values: []f32,
-	col: rl.Color,
+	col: ui.Color,
 ) {
 	style := ui.ui_frame_theme(frame)
 	metrics := ui.ui_frame_metrics(frame)

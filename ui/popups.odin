@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Generic popup widgets: modal panel, context menu, tooltip. All immediate
 // mode with caller-owned state. Popups register their rects with the input
 // router (input_route.odin) so widgets underneath neither hover nor click

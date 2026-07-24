@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Generic UI-scale settings modal. The caller owns all state: whether the
 // panel is open, the highlighted row index, and the currently stored scale.
 // Ported from Alloy's settings_panel.odin with the app coupling removed.
@@ -38,12 +38,8 @@ Settings_Panel_Result :: struct {
 // settings_auto_scale returns the scale the "Auto" preset resolves to on this
 // platform: 1.0 on macOS (the compositor handles HiDPI) or the OS DPI factor
 // on Windows/Linux.
-settings_auto_scale :: proc() -> f32 {
-	when ODIN_OS == .Darwin {
-		return 1.0
-	} else {
-		return rl.GetWindowScaleDPI().x
-	}
+settings_auto_scale :: proc(input: ^Ui_Input = nil) -> f32 {
+	return auto_scale(input)
 }
 
 // settings_scale_preset_index returns the preset row index that matches the

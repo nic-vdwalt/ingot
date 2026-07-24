@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Inline markdown (bold/code/links/pills), GFM tables, headings. Merged
 // from openalloy/alloy (adds file pills via ui.workspace_has_path +
 // PILL_OPEN/CLOSE from mention_pills.odin). No app-package imports.

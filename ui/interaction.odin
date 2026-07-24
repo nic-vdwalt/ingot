@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Shared press/drag/release interaction protocol (the battle-tested Dear
 // ImGui contract) as a pure helper. No keyed storage: the caller owns the
 // drag latch (one bool per draggable widget); latch-less widgets get simple

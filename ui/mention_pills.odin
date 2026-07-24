@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Mention-pill geometry, encode/strip, and the workspace-path registry the
 // markdown renderer consults for inline file pills. Extracted from alloy;
 // decoupled from the app state package (uses ui.Mention_Span).

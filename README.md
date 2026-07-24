@@ -50,7 +50,8 @@ harnesses.
 | Package | Role |
 |---|---|
 | `ingot:gfx` | Windowing, WebGPU rendering, shapes, textures, text, input, audio, cameras, and a raylib/rlgl-shaped API |
-| `ingot:ui` | Immediate-mode widgets, layout, overlays, accessibility semantics, themes, HiDPI, window chrome, and frame pacing |
+| `ingot:ui` | Renderer-independent immediate-mode widgets, layout, paint output, input snapshots, accessibility semantics, and themes |
+| `ingot:ui_gfx` | Adapter that captures `gfx` input, replays UI paint output, and applies platform output |
 | `ingot:prefs` | Native settings files and web `localStorage` behind one API |
 | `ingot:net` | Background HTTP and a reconnecting RFC 6455 WebSocket client |
 | `ingot:sys` | URLs, native file dialogs, and platform integration |
@@ -74,6 +75,7 @@ expected by Odin's `vendor:wgpu` package.
 ```odin
 import rl "ingot:gfx"
 import ui "ingot:ui"
+import "ingot:ui_gfx"
 ```
 
 ## Quick start
@@ -88,19 +90,24 @@ rl.InitWindow(960, 640, "Ingot app")
 
 runtime: ui.Ui_Runtime
 frame: ui.Ui_Frame
+input: ui.Ui_Input
+output: ui.Ui_Output
+adapter: ui_gfx.Adapter
 ui.ui_runtime_init(&runtime)
+ui_gfx.adapter_init(&adapter)
 ui.ui_runtime_apply_platform_dpi(&runtime)
 
 for !rl.WindowShouldClose() {
-	ui.ui_runtime_dpi_refresh(&runtime)
-	ui.ui_frame_begin(&frame, &runtime)
+	ui_gfx.adapter_begin_frame(&adapter, &frame, &runtime, &input, &output)
+	ui.ui_runtime_dpi_refresh(&runtime, dpi_scale = input.dpi_scale)
 	rl.BeginDrawing()
-	rl.ClearBackground(ui.ui_frame_theme(&frame).bg_color)
-	rl.DrawText("Hello from Ingot", 24, 24, 24, ui.ui_frame_theme(&frame).fg_primary)
-	ui.ui_frame_end(&frame)
+	rl.ClearBackground(ui_gfx.color_to_gfx(ui.ui_frame_theme(&frame).bg_color))
+	ui.draw_text_frame(&frame, "Hello from Ingot", 24, 24, 24, ui.ui_frame_theme(&frame).fg_primary)
+	ui_gfx.adapter_end_frame(&adapter, &frame)
 	rl.EndDrawing()
 }
 
+ui_gfx.adapter_destroy(&adapter)
 ui.ui_runtime_destroy(&runtime)
 rl.CloseWindow()
 ```

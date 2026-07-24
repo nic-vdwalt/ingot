@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Immediate-mode chart widgets: line, bar, and sparkline. Widgets take plain
 // data and return events; callers own all state (Chart_State holds only the
 // enter animation and last hover index so redraws can be event-driven).

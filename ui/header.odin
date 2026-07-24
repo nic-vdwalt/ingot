@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 package ui
 
 
@@ -62,7 +62,8 @@ draw_app_header :: proc(frame: ^Ui_Frame, title: cstring, screen_w: i32) -> (hea
 		if hovered {
 			request_cursor(frame, .POINTING_HAND)
 			if is_mouse_button_pressed(frame, .LEFT) {
-				rl.ToggleFullscreen()
+				assert(frame.output != nil, "draw_header: missing output")
+				frame.output.platform.toggle_fullscreen = true
 			}
 		}
 	}

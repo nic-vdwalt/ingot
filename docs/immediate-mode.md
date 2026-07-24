@@ -93,6 +93,23 @@ smaller, earlier, and reproducible.
 
 See [Testing](testing.md) for the harnesses and commands.
 
+## Renderer boundary
+
+`ingot:ui` does not import `ingot:gfx`. A frame consumes one explicit `Ui_Input`
+snapshot and appends to bounded main and overlay paint lists plus platform and
+semantic output. This makes interaction, focus, layout, wrapping, and painting
+testable without a window or GPU.
+
+`ingot:ui_gfx` is the default backend. It drains character input once, captures
+window and pointer state, replays paint commands through `ingot:gfx`, owns the
+font resources used for both measurement and drawing, and applies cursor,
+clipboard, IME, redraw, and fullscreen requests. Other backends can implement
+the same contracts without changing widgets.
+
+The host frame order is capture input, begin UI, build widgets, end UI, replay
+main then overlay paint, apply platform output, and end graphics drawing. Direct
+application graphics that must interleave with UI use explicit replay points.
+
 ## The boundary
 
 Ingot is not hostile to retained application data. Editors, documents, terminal

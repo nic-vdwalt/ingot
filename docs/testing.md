@@ -18,7 +18,7 @@ bash scripts/test.sh
 ```
 
 This runs `odin test` for `gfx`, `ui`, `term`, `prefs`, and `net`, then
-type-checks `sys`. Extra Odin flags pass through to each test command:
+type-checks `ui_gfx` and `sys`. Extra Odin flags pass through to each test command:
 
 ```sh
 bash scripts/test.sh -define:ODIN_TEST_THREADS=1
@@ -86,9 +86,11 @@ input, and frame output are already the system's natural boundary.
 normal package test runs the same class of checks at a smaller count for fast
 feedback.
 
-`ui` checks layout and semantic-buffer invariants as bounded data. Accessibility
-is generated alongside drawing, so tests can validate roles, labels, focus
-links, and bounds without launching assistive technology.
+`ui` checks layout, input snapshots, paint lists, and semantic-buffer invariants
+as bounded data. Accessibility is generated alongside painting, so tests can
+validate roles, labels, focus links, bounds, and paint ordering without a window,
+GPU, or assistive technology. The boundary gate rejects any `ingot:gfx` import or
+`rl.` reference under `ui`; backend integration is checked in `ui_gfx`.
 
 ## Concurrency testing
 

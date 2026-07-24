@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Widgets take plain data and return events; callers own all state.
 // Merged from openalloy/alloy (superset input/undo/pill/split features)
 // plus ingot-only generic widgets (spinner, panes, back_btn, etc.).

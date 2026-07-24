@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: this package must import only core:* and ingot:gfx.
+// LIB-CANDIDATE: this package must import only core:*.
 // Never import app packages — destined for a standalone Odin GUI library.
 //
 // Cursor-based row/column auto-layout (microui/ImGui style, not a constraint

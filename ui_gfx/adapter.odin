@@ -66,7 +66,8 @@ adapter_begin_frame :: proc(
 adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	assert(adapter != nil && adapter.initialized, "adapter_end_frame: invalid adapter")
 	assert(frame != nil && frame.output != nil, "adapter_end_frame: invalid frame")
+	output := frame.output
 	ui.ui_frame_end(frame)
-	replay(adapter, frame.output)
-	apply_platform_output(&frame.output.platform)
+	replay(adapter, output)
+	apply_platform_output(&output.platform)
 }

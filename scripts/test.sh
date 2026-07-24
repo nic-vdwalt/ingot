@@ -17,7 +17,7 @@ for pkg in gfx ui term prefs net; do
 done
 
 # sys has no unit tests yet — type-check it so it can't rot.
-for pkg in sys; do
+for pkg in ui_gfx sys; do
 	echo "== checking $pkg =="
 	odin check "$root/$pkg" $col -no-entry-point
 done

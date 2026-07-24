@@ -1,5 +1,5 @@
 #+build !windows
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 package ui
 
 
@@ -12,7 +12,9 @@ Titlebar_Button :: enum u8 {
 	Close,
 }
 
-titlebar_init :: proc() {}
+titlebar_init :: proc(window_handle: rawptr = nil) {
+	_ = window_handle
+}
 
 titlebar_enabled :: proc() -> bool {
 	return false

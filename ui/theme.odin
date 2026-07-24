@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: this package must import only core:* and ingot:gfx.
+// LIB-CANDIDATE: this package must import only core:*.
 // Never import app packages — destined for a standalone Odin GUI library.
 // Merged from openalloy/alloy (full app palette + macOS glass) plus
 // ingot-only re-theme constants preserved for other consumers.

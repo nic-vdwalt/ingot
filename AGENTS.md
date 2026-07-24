@@ -10,7 +10,8 @@ the architecture, and `docs/testing.md` for the test matrix.
 | Package          | Role |
 |------------------|------|
 | `ingot:gfx`      | graphics core (raylib-shaped): window/context, 2D shapes, textures, text atlas, input, math, cameras, `rlgl` shim |
-| `ingot:ui`       | immediate-mode widget toolkit: buttons, text input, checkbox/radio/slider, dropdown, modal, context menu, tooltip, panels, scroll panes, markdown, theming, HiDPI, keyboard focus, window chrome, frame pacing. New widgets take a `Rect_I32` plus config/state structs (not positional scalars) and an optional `Focus_Opt` for keyboard operation |
+| `ingot:ui`       | renderer-independent immediate-mode toolkit: widgets consume `Ui_Input` and append bounded paint, semantics, and platform output. It must not import `ingot:gfx`. |
+| `ingot:ui_gfx`   | bridge that snapshots `gfx` input, replays UI paint, manages UI fonts, and applies platform output |
 | `ingot:prefs`    | per-app settings persistence (native file / web `localStorage`) |
 | `ingot:net`      | background HTTP `Fetcher` + self-healing RFC 6455 `WebSocket` client |
 | `ingot:sys`      | system integration (`open_url`) |
@@ -23,7 +24,7 @@ the architecture, and `docs/testing.md` for the test matrix.
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
 - **Test**: `bash scripts/test.sh` — runs `odin test` on `gfx ui term prefs net`
-  and type-checks `sys`. Pass extra odin flags through, e.g.
+  and type-checks `ui_gfx` and `sys`. Pass extra odin flags through, e.g.
   `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.
 - **Check / lint** (Tiger Style gate): `bash scripts/check.sh` — strict
   type-check + `-vet -strict-style -vet-shadowing` across all packages, plus an

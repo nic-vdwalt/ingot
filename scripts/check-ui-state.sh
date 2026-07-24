@@ -6,3 +6,7 @@ if grep -R -n -E --include='*.odin' "$patterns" "$root/ui"; then
 	echo "forbidden ambient UI state found" >&2
 	exit 1
 fi
+if grep -R -n -E --include='*.odin' 'ingot:gfx|rl\.' "$root/ui"; then
+	echo "forbidden gfx dependency found in ui" >&2
+	exit 1
+fi

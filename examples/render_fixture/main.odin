@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:strings"
 import rl "ingot:gfx"
 import "ingot:ui"
+import "ingot:ui_gfx"
 
 FONT_TTF := #load("../../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
 FIXTURE_CPS := [?]rune {
@@ -44,6 +45,9 @@ gpu_sphere: rl.Gpu_Mesh
 resources_ready: bool
 ui_runtime: ui.Ui_Runtime
 ui_frame: ui.Ui_Frame
+ui_input: ui.Ui_Input
+ui_output: ui.Ui_Output
+ui_adapter: ui_gfx.Adapter
 retina_input: ui.Text_Input_State
 retina_text: strings.Builder
 
@@ -51,20 +55,22 @@ main :: proc() {
 	rl.InitWindow(960, 720, "ingot renderer fixture")
 	rl.SetTargetFPS(60)
 	ui.ui_runtime_init(&ui_runtime)
+	ui_gfx.adapter_init(&ui_adapter)
 	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
 	retina_text = strings.builder_make()
 	strings.write_string(&retina_text, "Runtime text input")
 	rl.run(frame)
 	ui.text_input_state_destroy(&retina_input)
 	strings.builder_destroy(&retina_text)
+	ui_gfx.adapter_destroy(&ui_adapter)
 	ui.ui_runtime_destroy(&ui_runtime)
 	rl.CloseWindow()
 }
 
 frame :: proc() {
 	ensure_resources()
-	ui.ui_runtime_dpi_refresh(&ui_runtime)
-	ui.ui_frame_begin(&ui_frame, &ui_runtime)
+	ui_gfx.adapter_begin_frame(&ui_adapter, &ui_frame, &ui_runtime, &ui_input, &ui_output)
+	ui.ui_runtime_dpi_refresh(&ui_runtime, dpi_scale = ui_input.dpi_scale)
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{22, 24, 32, 255})
 	if resources_ready {
@@ -73,7 +79,7 @@ frame :: proc() {
 		draw_stream_lifetime_stress()
 		draw_retina_fixture()
 	}
-	ui.ui_frame_end(&ui_frame)
+	ui_gfx.adapter_end_frame(&ui_adapter, &ui_frame)
 	rl.EndDrawing()
 
 	when rl.RENDER_STATS_ENABLED {
@@ -223,7 +229,13 @@ draw_retina_fixture :: proc() {
 	width := ui.measure_text_frame(&ui_frame, label, metrics.FONT_SIZE_BODY)
 	x, y := i32(632), i32(506)
 	ui.draw_text_frame(&ui_frame, label, x, y, metrics.FONT_SIZE_BODY, style.fg_primary)
-	rl.DrawRectangleLines(x - 2, y - 2, width + 4, metrics.LINE_HEIGHT, style.fg_accent)
+	rl.DrawRectangleLines(
+		x - 2,
+		y - 2,
+		width + 4,
+		metrics.LINE_HEIGHT,
+		ui_gfx.color_to_gfx(style.fg_accent),
+	)
 	ui.draw_text_truncated_frame(
 		&ui_frame,
 		"Truncation uses the same runtime atlas and measurement cache",

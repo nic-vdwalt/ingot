@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Text input widget: caret model, selection, clipboard, undo, mention pills,
 // spellcheck, soft-wrap rendering. Extracted from widgets.odin and decomposed
 // into phase procedures so each stays within Tiger Style limits.
@@ -555,7 +555,9 @@ ti_keys_select :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 		}
 	}
 	// Undo / Redo (Cmd/Ctrl+Z, +Shift for redo).
-	if mods && ctx.undo != nil && (is_key_pressed(ctx.frame, .Z) || is_key_pressed_repeat(ctx.frame, .Z)) {
+	if mods &&
+	   ctx.undo != nil &&
+	   (is_key_pressed(ctx.frame, .Z) || is_key_pressed_repeat(ctx.frame, .Z)) {
 		undo_apply(sel, ctx.undo, sb, ctx.cursor, ctx.pills, redo = shift)
 	}
 }
@@ -572,7 +574,14 @@ ti_keys_insert :: proc(ctx: ^TI_Ctx, mods: bool) {
 		ch := frame_input(ctx.frame).characters[index]
 		if mods do continue
 		// Typing over a selection replaces it (one undo step).
-		undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, ti_sel_owner(ctx) ? .Other : .Insert)
+		undo_record(
+			ctx.frame,
+			ctx.undo,
+			sb,
+			ctx.cursor,
+			ctx.pills,
+			ti_sel_owner(ctx) ? .Other : .Insert,
+		)
 		if ti_sel_owner(ctx) {
 			nc := selection_delete(ctx.sel, sb, ctx.pills)
 			if ctx.caret do ctx.cursor^ = nc
@@ -653,7 +662,8 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx) {
 		}
 	}
 	// Handle forward delete.
-	if ctx.caret && (is_key_pressed(ctx.frame, .DELETE) || is_key_pressed_repeat(ctx.frame, .DELETE)) {
+	if ctx.caret &&
+	   (is_key_pressed(ctx.frame, .DELETE) || is_key_pressed_repeat(ctx.frame, .DELETE)) {
 		if ti_sel_owner(ctx) {
 			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
 			ctx.cursor^ = selection_delete(ctx.sel, sb, ctx.pills)

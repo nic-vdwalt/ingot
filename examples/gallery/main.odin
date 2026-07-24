@@ -13,6 +13,7 @@ import "core:fmt"
 import "core:strings"
 import rl "ingot:gfx"
 import "ingot:ui"
+import "ingot:ui_gfx"
 
 // SMOKE enables the self-driving crash harness in smoke.odin (native only;
 // see scripts/smoke-gallery.sh).
@@ -92,6 +93,9 @@ settings_sel := 0
 stored_scale: f32 = 0 // 0 = auto
 ui_runtime: ui.Ui_Runtime
 ui_frame: ui.Ui_Frame
+ui_input: ui.Ui_Input
+ui_output: ui.Ui_Output
+ui_adapter: ui_gfx.Adapter
 
 Widget_State :: struct {
 	ctx:          ui.Ui,
@@ -156,10 +160,12 @@ main :: proc() {
 	rl.SetTargetFPS(60)
 	when !SMOKE do rl.EnableEventWaiting() // smoke needs continuous frames
 	ui.ui_runtime_init(&ui_runtime)
+	ui_gfx.adapter_init(&ui_adapter)
 	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
 	ui.a11y_init(&ui_runtime)
 	rl.run(frame)
 	input_state_destroy(&input_state)
+	ui_gfx.adapter_destroy(&ui_adapter)
 	ui.ui_runtime_destroy(&ui_runtime)
 	rl.CloseWindow()
 }
@@ -172,10 +178,10 @@ input_state_destroy :: proc(state: ^Input_State) {
 }
 
 frame :: proc() {
-	ui.ui_runtime_dpi_refresh(&ui_runtime)
-	ui.ui_frame_begin(&ui_frame, &ui_runtime)
+	ui_gfx.adapter_begin_frame(&ui_adapter, &ui_frame, &ui_runtime, &ui_input, &ui_output)
+	ui.ui_runtime_dpi_refresh(&ui_runtime, dpi_scale = ui_input.dpi_scale)
 	rl.BeginDrawing()
-	rl.ClearBackground(ui.ui_frame_theme(&ui_frame).bg_color)
+	rl.ClearBackground(ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).bg_color))
 
 	sw := rl.GetScreenWidth()
 	sh := rl.GetScreenHeight()
@@ -205,19 +211,25 @@ frame :: proc() {
 	}
 
 	ui.a11y_frame_end(&ui_frame)
-	ui.ui_frame_end(&ui_frame)
+	ui_gfx.adapter_end_frame(&ui_adapter, &ui_frame)
 	rl.EndDrawing()
 }
 
 apply_scale :: proc(scale: f32) {
-	resolved := scale if scale > 0 else ui.settings_auto_scale()
+	resolved := scale if scale > 0 else ui.settings_auto_scale(&ui_input)
 	ui.ui_runtime_set_scale(&ui_runtime, resolved)
 }
 
 draw_nav :: proc(sh: i32) {
 	w := ui.ui_frame_sc(&ui_frame, NAV_W)
-	rl.DrawRectangle(0, 0, w, sh, ui.ui_frame_theme(&ui_frame).bg_secondary)
-	rl.DrawRectangle(w - 1, 0, 1, sh, ui.ui_frame_theme(&ui_frame).border_subtle)
+	rl.DrawRectangle(0, 0, w, sh, ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).bg_secondary))
+	rl.DrawRectangle(
+		w - 1,
+		0,
+		1,
+		sh,
+		ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).border_subtle),
+	)
 
 	y := ui.ui_frame_sc(&ui_frame, 14)
 	ui.draw_text_frame(
@@ -380,7 +392,7 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	y += ui.ui_frame_sc(&ui_frame, 30)
 
 	y = ui.section_header(&ui_frame, x, y, w, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
-	ui.form_focus_cycle(&focus_slot, 3)
+	ui.form_focus_cycle(&ui_frame, &focus_slot, 3)
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Focusable %d", i + 1)
 		if ui.btn(
@@ -644,7 +656,7 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 			f32(ui.ui_frame_sc(&ui_frame, 24)),
 		}
 		hovered := rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
-		ui.list_row_bg(&ui_frame, rect, i == 1, hovered)
+		ui.list_row_bg(&ui_frame, ui.Rect(rect), i == 1, hovered)
 		label := fmt.tprintf("list row %d%s", i + 1, " (selected)" if i == 1 else "")
 		ui.draw_text_frame(
 			&ui_frame,
@@ -665,10 +677,10 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		f32(min(w, ui.ui_frame_sc(&ui_frame, 360))),
 		f32(ui.ui_frame_sc(&ui_frame, 64)),
 	}
-	ui.draw_shadow_rounded(&ui_frame, card, 0.15)
+	ui.draw_shadow_rounded(&ui_frame, ui.Rect(card), 0.15)
 	ui.draw_card_bg_frame(
 		&ui_frame,
-		card,
+		ui.Rect(card),
 		ui.ui_frame_theme(&ui_frame).bg_secondary,
 		accent_w = ui.ui_frame_sc(&ui_frame, 3),
 	)
@@ -712,7 +724,7 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	detail := ui.fit_column_next(&column, ui.ui_frame_sc(&ui_frame, 18))
 	content := ui.fit_column_end(&column)
 	fit_card := rl.Rectangle{f32(x), f32(y), f32(fit_w), f32(content.h + pad * 2)}
-	ui.draw_card_bg_frame(&ui_frame, fit_card, ui.ui_frame_theme(&ui_frame).bg_secondary)
+	ui.draw_card_bg_frame(&ui_frame, ui.Rect(fit_card), ui.ui_frame_theme(&ui_frame).bg_secondary)
 	ui.draw_text_frame(
 		&ui_frame,
 		"Geometry resolved before drawing",
@@ -845,8 +857,20 @@ draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
 
 cell :: proc(r: ui.Rect_I32, label: string) {
 	if r.w <= 0 || r.h <= 0 do return
-	rl.DrawRectangle(r.x, r.y, r.w, r.h, ui.ui_frame_theme(&ui_frame).bg_active)
-	rl.DrawRectangleLines(r.x, r.y, r.w, r.h, ui.ui_frame_theme(&ui_frame).border_color)
+	rl.DrawRectangle(
+		r.x,
+		r.y,
+		r.w,
+		r.h,
+		ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).bg_active),
+	)
+	rl.DrawRectangleLines(
+		r.x,
+		r.y,
+		r.w,
+		r.h,
+		ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).border_color),
+	)
 	c := strings.clone_to_cstring(label, context.temp_allocator)
 	tw := ui.measure_text_frame(&ui_frame, c, ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL)
 	ui.draw_text_frame(
@@ -996,11 +1020,11 @@ draw_demo_popup :: proc(x, y: i32) {
 	w := ui.ui_frame_sc(&ui_frame, 220)
 	h := ui.ui_frame_sc(&ui_frame, 130)
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	ui.overlay_begin(&ui_frame, rect, claim_input = true)
-	ui.overlay_rounded(&ui_frame, rect, 0.1, 6, ui.ui_frame_theme(&ui_frame).bg_popup)
+	ui.overlay_begin(&ui_frame, ui.Rect(rect), claim_input = true)
+	ui.overlay_rounded(&ui_frame, ui.Rect(rect), 0.1, 6, ui.ui_frame_theme(&ui_frame).bg_popup)
 	ui.overlay_rounded_lines(
 		&ui_frame,
-		rect,
+		ui.Rect(rect),
 		0.1,
 		6,
 		1.0,
@@ -1041,7 +1065,7 @@ draw_demo_popup :: proc(x, y: i32) {
 	mouse := rl.GetMousePosition()
 	hovered := rl.CheckCollisionPointRec(mouse, row)
 	if hovered {
-		ui.overlay_rect(&ui_frame, row, ui.ui_frame_theme(&ui_frame).bg_active)
+		ui.overlay_rect(&ui_frame, ui.Rect(row), ui.ui_frame_theme(&ui_frame).bg_active)
 		ui.request_cursor(&ui_frame, .POINTING_HAND)
 	}
 	ui.overlay_text(

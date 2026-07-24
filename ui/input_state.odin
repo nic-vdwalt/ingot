@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Ergonomic state bundling for text inputs: one caller-owned struct instead
 // of a builder plus a state struct at every call site. Nothing here is
 // library-retained — the bundle lives in the caller's data, and `input` is a

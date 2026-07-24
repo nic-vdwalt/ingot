@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Core form controls: checkbox, radio button, slider. Immediate mode with
 // caller-owned value state, Rect_I32 geometry, theme-driven colors, and
 // optional keyboard focus (Focus_Opt) with Space/Enter/arrow operation.

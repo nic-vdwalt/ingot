@@ -1,5 +1,5 @@
 #+build windows
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 package ui
 
 import win32 "core:sys/windows"
@@ -20,7 +20,7 @@ import win32 "core:sys/windows"
 // mouse events over them. Hover/pressed state is tracked here from the
 // WM_NC* messages and read by the draw code (draw_caption_buttons) each
 // frame via titlebar_state(). The subclass proc runs on the main thread
-// (GLFW pumps messages inside rl.EndDrawing), so plain globals are safe.
+// (GLFW pumps messages inside the host frame end), so plain globals are safe.
 
 TITLEBAR_SUBCLASS_ID :: 2
 
@@ -58,9 +58,9 @@ tb_caption_h: i32
 tb_interactive_right: i32
 
 // titlebar_init installs the subclass and strips the standard frame.
-// Call once after rl.InitWindow() / apply_window_style().
-titlebar_init :: proc() {
-	tb_hwnd = cast(win32.HWND)rl.GetWindowHandle()
+// Call once after host window initialization / apply_window_style().
+titlebar_init :: proc(window_handle: rawptr = nil) {
+	tb_hwnd = cast(win32.HWND)window_handle
 	if tb_hwnd == nil do return
 
 	tb_caption_h = TAB_BAR_HEIGHT

@@ -94,6 +94,9 @@ input_character :: proc(input: ^Ui_Input, index: int) -> (rune, bool) {
 
 input_clipboard :: proc(input: ^Ui_Input) -> string {
 	assert(input != nil, "input_clipboard: nil input")
-	assert(input.clipboard_len >= 0 && input.clipboard_len <= INPUT_CLIPBOARD_CAP, "input_clipboard: invalid length")
+	assert(
+		input.clipboard_len >= 0 && input.clipboard_len <= INPUT_CLIPBOARD_CAP,
+		"input_clipboard: invalid length",
+	)
 	return string(input.clipboard[:input.clipboard_len])
 }

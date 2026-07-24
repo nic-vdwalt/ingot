@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Ui is a caller-owned context bundling layout and keyboard focus. Static
 // forms may use sequential registration; conditional and dynamic forms pass
 // stable caller IDs whose traversal order is rebuilt in bounded frame arrays.

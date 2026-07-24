@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Dropdown / combo box: closed state draws the current item plus a chevron;
 // open state reuses the generic context-menu popup (popups.odin).
 package ui

@@ -8,7 +8,11 @@ auto_scale :: proc(input: ^Ui_Input = nil) -> f32 {
 	return input.dpi_scale
 }
 
-ui_runtime_apply_platform_dpi :: proc(runtime: ^Ui_Runtime, user_scale: f32 = 0, dpi_scale: f32 = 1) {
+ui_runtime_apply_platform_dpi :: proc(
+	runtime: ^Ui_Runtime,
+	user_scale: f32 = 0,
+	dpi_scale: f32 = 1,
+) {
 	assert(runtime != nil && runtime.initialized, "apply_platform_dpi: invalid runtime")
 	dpi := dpi_scale if dpi_scale > 0 else 1
 	runtime.dpi_last = dpi
@@ -21,7 +25,11 @@ ui_runtime_apply_platform_dpi :: proc(runtime: ^Ui_Runtime, user_scale: f32 = 0,
 	}
 }
 
-ui_runtime_dpi_refresh :: proc(runtime: ^Ui_Runtime, user_scale: f32 = 0, dpi_scale: f32 = 1) -> bool {
+ui_runtime_dpi_refresh :: proc(
+	runtime: ^Ui_Runtime,
+	user_scale: f32 = 0,
+	dpi_scale: f32 = 1,
+) -> bool {
 	assert(runtime != nil && runtime.initialized, "dpi_refresh: invalid runtime")
 	dpi := dpi_scale
 	if dpi <= 0 do return false

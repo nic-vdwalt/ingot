@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 // Keyboard focus-visible support links widgets to caller-owned sequential or
 // stable focus state, plus the shared focus-ring rendering.
 package ui

@@ -12,7 +12,7 @@ col="-collection:ingot=$root"
 # have no main().
 vet_flags="-vet -strict-style -vet-shadowing -no-entry-point"
 
-for pkg in gfx ui term prefs net sys; do
+for pkg in gfx ui ui_gfx term prefs net sys; do
 	echo "== checking $pkg =="
 	# shellcheck disable=SC2086
 	odin check "$root/$pkg" $col $vet_flags "$@"

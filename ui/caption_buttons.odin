@@ -1,4 +1,4 @@
-// LIB-CANDIDATE: this package must import only core:* and ingot:gfx.
+// LIB-CANDIDATE: this package must import only core:*.
 package ui
 
 

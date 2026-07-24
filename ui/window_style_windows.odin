@@ -1,5 +1,5 @@
 #+build windows
-// LIB-CANDIDATE: imports only core:* and ingot:gfx.
+// LIB-CANDIDATE: imports only core:*.
 package ui
 
 import win32 "core:sys/windows"
@@ -20,9 +20,9 @@ foreign dwmapi {
 }
 
 // Apply modern Windows 11 Mica effect and dark mode to the window title bar.
-// Call after rl.InitWindow(). Silently fails on older Windows versions.
-apply_window_style :: proc() {
-	hwnd := cast(win32.HWND)rl.GetWindowHandle()
+// Call after host window initialization. Silently fails on older Windows versions.
+apply_window_style :: proc(window_handle: rawptr = nil) {
+	hwnd := cast(win32.HWND)window_handle
 	if hwnd == nil do return
 
 	// Enable dark mode for title bar (matches app's dark theme).
