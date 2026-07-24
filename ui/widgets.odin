@@ -549,17 +549,28 @@ btn_palette :: proc(theme: ^Theme, style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0
 	assert(theme != nil, "btn_palette: nil theme")
 	switch style {
 	case .Primary:
-		return theme.button_bg, theme.button_hover, theme.button_text, theme.button_text,
-			theme.button_bg, theme.fg_accent
+		return theme.button_bg,
+			theme.button_hover,
+			theme.button_text,
+			theme.button_text,
+			theme.button_bg,
+			theme.fg_accent
 	case .Secondary:
-		return theme.bg_active, theme.bg_hover, theme.fg_secondary, theme.fg_primary,
-			rl.Color{}, theme.fg_accent
+		return theme.bg_active,
+			theme.bg_hover,
+			theme.fg_secondary,
+			theme.fg_primary,
+			rl.Color{},
+			theme.fg_accent
 	case .Danger:
-		return theme.button_danger_bg, theme.button_danger_hover, theme.button_danger_fg,
-			theme.button_danger_fg, rl.Color{}, theme.fg_error
+		return theme.button_danger_bg,
+			theme.button_danger_hover,
+			theme.button_danger_fg,
+			theme.button_danger_fg,
+			rl.Color{},
+			theme.fg_error
 	case .Ghost:
-		return rl.Color{}, theme.bg_hover, theme.fg_secondary, theme.fg_accent,
-			rl.Color{}, rl.Color{}
+		return rl.Color{}, theme.bg_hover, theme.fg_secondary, theme.fg_accent, rl.Color{}, rl.Color{}
 	}
 	return
 }
@@ -919,7 +930,10 @@ draw_text_wrapped_frame :: proc(
 	draw: bool = true,
 ) -> i32 {
 	assert(frame != nil && frame.open, "draw_text_wrapped_frame: invalid frame")
-	assert(max_width >= 0 && font_size > 0 && line_height > 0, "draw_text_wrapped_frame: invalid metrics")
+	assert(
+		max_width >= 0 && font_size > 0 && line_height > 0,
+		"draw_text_wrapped_frame: invalid metrics",
+	)
 	if len(text) == 0 do return 0
 	current_y := y
 	for line in wrap_text_frame(frame, text, max_width, font_size) {
@@ -1262,6 +1276,29 @@ kv_row :: proc(x, y, w: i32, key, value: string, key_col, val_col: rl.Color, fon
 	vw := measure_text(vc, fs)
 	draw_text(vc, x + w - vw, y, fs, val_col)
 	draw_text_truncated(key, x, y, w - vw - sc(8), fs, key_col)
+}
+
+kv_row_frame :: proc(
+	frame: ^Ui_Frame,
+	x, y, w: i32,
+	key, value: string,
+	key_col, val_col: rl.Color,
+	font_size: i32 = 0,
+) {
+	assert(frame != nil && frame.open, "kv_row_frame: invalid frame")
+	fs := font_size if font_size > 0 else ui_frame_metrics(frame).FONT_SIZE_LABEL
+	value_cstring := strings.clone_to_cstring(value, context.temp_allocator)
+	value_width := measure_text_frame(frame, value_cstring, fs)
+	draw_text_frame(frame, value_cstring, x + w - value_width, y, fs, val_col)
+	draw_text_truncated_frame(
+		frame,
+		key,
+		x,
+		y,
+		w - value_width - ui_frame_sc(frame, 8),
+		fs,
+		key_col,
+	)
 }
 
 // list_row_bg draws the unified rounded row background for hover/selection.

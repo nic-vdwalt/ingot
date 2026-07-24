@@ -30,14 +30,15 @@ Spell_Menu :: struct {
 	anchor_y:    i32, // top edge of the input box; menu opens above it
 }
 
-spell_menu: Spell_Menu
-
 // spell_menu_active reports whether the menu is open for this builder.
-spell_menu_active :: proc(sb: ^strings.Builder) -> bool {
-	return spell_menu.open && spell_menu.sb == sb
+spell_menu_active :: proc(menu: ^Spell_Menu, sb: ^strings.Builder) -> bool {
+	assert(menu != nil, "spell_menu_active: nil menu")
+	return menu.open && menu.sb == sb
 }
 
 spell_menu_open :: proc(
+	menu: ^Spell_Menu,
+	system: ^Spell_System,
 	sb: ^strings.Builder,
 	cursor: ^int,
 	pills: ^[dynamic]Mention_Span,
@@ -45,87 +46,84 @@ spell_menu_open :: proc(
 	word_start, word_end: int,
 	anchor_x, anchor_y: i32,
 ) {
-	spell_menu_close()
+	assert(menu != nil && system != nil, "spell_menu_open: nil state")
+	spell_menu_close(menu)
 	text := strings.to_string(sb^)
 	if word_start < 0 || word_end > len(text) || word_start >= word_end do return
-	spell_menu.word = strings.clone(text[word_start:word_end])
-	spell_menu.suggestions = spell_suggest(spell_menu.word)
-	spell_menu.sb = sb
-	spell_menu.cursor = cursor
-	spell_menu.pills = pills
-	spell_menu.undo = undo
-	spell_menu.word_start = word_start
-	spell_menu.word_end = word_end
-	spell_menu.selected = 0
-	spell_menu.text_hash = fnv1a64(text)
-	spell_menu.text_len = len(text)
-	spell_menu.anchor_x = anchor_x
-	spell_menu.anchor_y = anchor_y
-	spell_menu.open = true
-	spell_menu.just_opened = true
+	menu.word = strings.clone(text[word_start:word_end])
+	menu.suggestions = spell_suggest_with(system, menu.word)
+	menu.sb = sb
+	menu.cursor = cursor
+	menu.pills = pills
+	menu.undo = undo
+	menu.word_start = word_start
+	menu.word_end = word_end
+	menu.selected = 0
+	menu.text_hash = fnv1a64(text)
+	menu.text_len = len(text)
+	menu.anchor_x = anchor_x
+	menu.anchor_y = anchor_y
+	menu.open = true
+	menu.just_opened = true
 }
 
-spell_menu_close :: proc() {
-	delete(spell_menu.word)
-	for s in spell_menu.suggestions do delete(s)
-	delete(spell_menu.suggestions)
-	spell_menu = {}
+spell_menu_close :: proc(menu: ^Spell_Menu) {
+	assert(menu != nil, "spell_menu_close: nil menu")
+	delete(menu.word)
+	for suggestion in menu.suggestions do delete(suggestion)
+	delete(menu.suggestions)
+	menu^ = {}
 }
 
 // spell_menu_apply performs the action for a nav index: 0..n-1 replace with
 // that suggestion, n = learn, n+1 = ignore for this session.
 @(private = "file")
-spell_menu_apply :: proc(idx: int) {
-	n := len(spell_menu.suggestions)
+spell_menu_apply :: proc(menu: ^Spell_Menu, system: ^Spell_System, idx: int) {
+	assert(menu != nil && system != nil, "spell_menu_apply: nil state")
+	n := len(menu.suggestions)
 	switch {
 	case idx < n:
-		spell_replace_word(spell_menu.suggestions[idx])
+		spell_replace_word(menu, menu.suggestions[idx])
 	case idx == n:
-		spell_learn(spell_menu.word)
-		spell_menu_close()
+		spell_learn_with(system, menu.word)
+		spell_menu_close(menu)
 	case:
-		spell_ignore_session(spell_menu.word)
-		spell_menu_close()
+		spell_ignore_session_with(system, menu.word)
+		spell_menu_close(menu)
 	}
 }
 
 // Replace the misspelled word range with `replacement`, keeping pills and the
 // caret consistent and recording one undo step.
 @(private = "file")
-spell_replace_word :: proc(replacement: string) {
-	sb := spell_menu.sb
+spell_replace_word :: proc(menu: ^Spell_Menu, replacement: string) {
+	assert(menu != nil && menu.sb != nil, "spell_replace_word: nil state")
+	sb := menu.sb
 	old := strings.to_string(sb^)
-	ws, we := spell_menu.word_start, spell_menu.word_end
+	ws, we := menu.word_start, menu.word_end
 	if ws < 0 || we > len(old) || ws >= we {
-		spell_menu_close()
+		spell_menu_close(menu)
 		return
 	}
-	if spell_menu.undo != nil && spell_menu.cursor != nil {
+	if menu.undo != nil && menu.cursor != nil {
 		pill_slice: []Mention_Span
-		if spell_menu.pills != nil do pill_slice = spell_menu.pills[:]
-		input_undo_record(
-			spell_menu.undo,
-			old,
-			spell_menu.cursor^,
-			pill_slice,
-			.Other,
-			rl.GetTime(),
-		)
+		if menu.pills != nil do pill_slice = menu.pills[:]
+		input_undo_record(menu.undo, old, menu.cursor^, pill_slice, .Other, rl.GetTime())
 	}
 	new_text := strings.concatenate({old[:ws], replacement, old[we:]}, context.temp_allocator)
 	strings.builder_reset(sb)
 	strings.write_string(sb, new_text)
 	delta := len(replacement) - (we - ws)
-	if spell_menu.pills != nil {
-		for &p in spell_menu.pills {
-			if p.start >= we {
-				p.start += delta
-				p.end += delta
+	if menu.pills != nil {
+		for &pill in menu.pills {
+			if pill.start >= we {
+				pill.start += delta
+				pill.end += delta
 			}
 		}
 	}
-	if spell_menu.cursor != nil do spell_menu.cursor^ = ws + len(replacement)
-	spell_menu_close()
+	if menu.cursor != nil do menu.cursor^ = ws + len(replacement)
+	spell_menu_close(menu)
 }
 
 // draw_spell_menu renders and drives the popup. Called from text_input while
@@ -135,43 +133,53 @@ spell_replace_word :: proc(replacement: string) {
 // never leak through to the widgets underneath). Input coords are pane-local,
 // matching the composer's drawing space; recorded draw coords are shifted to
 // screen space because the overlay replays after pane translation is popped.
-draw_spell_menu :: proc(frame: ^Ui_Frame, input_x, input_y, input_w: i32) {
-	if !spell_menu.open do return
+draw_spell_menu :: proc(
+	frame: ^Ui_Frame,
+	menu: ^Spell_Menu,
+	system: ^Spell_System,
+	input_x, input_y, input_w: i32,
+) {
+	assert(menu != nil && system != nil, "draw_spell_menu: nil state")
+	if !menu.open do return
 
 	// Any composer text change since open (typing, undo, paste) closes it.
-	text := strings.to_string(spell_menu.sb^)
-	if fnv1a64(text) != spell_menu.text_hash || len(text) != spell_menu.text_len {
-		spell_menu_close()
+	text := strings.to_string(menu.sb^)
+	if fnv1a64(text) != menu.text_hash || len(text) != menu.text_len {
+		spell_menu_close(menu)
 		return
 	}
 
-	n := len(spell_menu.suggestions)
+	style := ui_frame_theme(frame)
+	metrics := ui_frame_metrics(frame)
+	n := len(menu.suggestions)
 	rows := max(n, 1) + 2 // suggestions (or "No suggestions") + Learn + Ignore
-	sep_h: i32 = 5
-	menu_w: i32 = SPELL_MENU_W
-	menu_h := i32(rows) * SPELL_MENU_ITEM_H + SPELL_MENU_PAD * 2 + sep_h
+	sep_h := ui_frame_sc(frame, 5)
+	menu_w := ui_frame_sc(frame, SPELL_MENU_W)
+	item_h := ui_frame_sc(frame, SPELL_MENU_ITEM_H)
+	menu_pad := ui_frame_sc(frame, SPELL_MENU_PAD)
+	menu_h := i32(rows) * item_h + menu_pad * 2 + sep_h
 
-	mx := spell_menu.anchor_x
+	mx := menu.anchor_x
 	if mx + menu_w > input_x + input_w do mx = input_x + input_w - menu_w
 	if mx < input_x do mx = input_x
-	my := spell_menu.anchor_y - menu_h - 4
+	my := menu.anchor_y - menu_h - ui_frame_sc(frame, 4)
 	if my < 0 do my = 0
 
 	nav_count := n + 2
 
 	// Keyboard: Up/Down navigate, Enter applies, Escape closes.
 	if rl.IsKeyPressed(.ESCAPE) {
-		spell_menu_close()
+		spell_menu_close(menu)
 		return
 	}
 	if rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP) {
-		spell_menu.selected = (spell_menu.selected + nav_count - 1) % nav_count
+		menu.selected = (menu.selected + nav_count - 1) % nav_count
 	}
 	if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN) {
-		spell_menu.selected = (spell_menu.selected + 1) % nav_count
+		menu.selected = (menu.selected + 1) % nav_count
 	}
 	if rl.IsKeyPressed(.ENTER) && !rl.IsKeyDown(.LEFT_SHIFT) && !rl.IsKeyDown(.RIGHT_SHIFT) {
-		spell_menu_apply(spell_menu.selected)
+		spell_menu_apply(menu, system, menu.selected)
 		return
 	}
 
@@ -180,13 +188,13 @@ draw_spell_menu :: proc(frame: ^Ui_Frame, input_x, input_y, input_w: i32) {
 	menu_rect := rl.Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
 
 	// Click-away closes (the opening right-click is swallowed for one frame).
-	if !spell_menu.just_opened &&
+	if !menu.just_opened &&
 	   (rl.IsMouseButtonPressed(.LEFT) || rl.IsMouseButtonPressed(.RIGHT)) &&
 	   !rl.CheckCollisionPointRec(mouse, menu_rect) {
-		spell_menu_close()
+		spell_menu_close(menu)
 		return
 	}
-	spell_menu.just_opened = false
+	menu.just_opened = false
 
 	// Record all panel draws on the overlay layer in screen space; the group
 	// rect also claims the covered area with the input router.
@@ -194,39 +202,42 @@ draw_spell_menu :: proc(frame: ^Ui_Frame, input_x, input_y, input_w: i32) {
 	ox := i32(origin.x)
 	screen_rect := rl.Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
 	overlay_begin(frame, screen_rect, claim_input = true)
-	overlay_rect(frame, screen_rect, theme.bg_popup)
-	overlay_rect_lines(frame, screen_rect, 1, theme.border_color)
+	overlay_rect(frame, screen_rect, style.bg_popup)
+	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
 
-	item_x := mx + 2
-	item_w := menu_w - 4
-	item_y := my + SPELL_MENU_PAD
+	item_x := mx + ui_frame_sc(frame, 2)
+	item_w := menu_w - ui_frame_sc(frame, 4)
+	item_y := my + menu_pad
 
 	draw_row :: proc(
 		frame: ^Ui_Frame,
-		ox, item_x, item_y, item_w: i32,
+		menu: ^Spell_Menu,
+		ox, item_x, item_y, item_w, item_h: i32,
 		label: string,
 		nav_idx: int,
 		mouse: rl.Vector2,
 		color: rl.Color,
 	) -> bool {
-		row_rect := rl.Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(SPELL_MENU_ITEM_H)}
+		assert(menu != nil, "draw_spell_menu row: nil menu")
+		row_rect := rl.Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(item_h)}
 		hovered := rl.CheckCollisionPointRec(mouse, row_rect)
-		if hovered && mouse_moved() do spell_menu.selected = nav_idx
-		if spell_menu.selected == nav_idx {
+		if hovered && mouse_moved() do menu.selected = nav_idx
+		if menu.selected == nav_idx {
 			overlay_rect(
 				frame,
-				{f32(item_x + ox), f32(item_y), f32(item_w), f32(SPELL_MENU_ITEM_H)},
-				theme.bg_active,
+				{f32(item_x + ox), f32(item_y), f32(item_w), f32(item_h)},
+				ui_frame_theme(frame).bg_active,
 			)
 		}
 		if hovered do request_cursor(frame, .POINTING_HAND)
-		txt := truncate_to_width(label, item_w - 16, FONT_SIZE)
+		font_size := ui_frame_metrics(frame).FONT_SIZE_BODY
+		txt := truncate_to_width_frame(frame, label, item_w - ui_frame_sc(frame, 16), font_size)
 		overlay_text(
 			frame,
 			txt,
-			item_x + ox + 8,
-			item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2,
-			FONT_SIZE,
+			item_x + ox + ui_frame_sc(frame, 8),
+			item_y + (item_h - font_size) / 2,
+			font_size,
 			color,
 		)
 		return hovered && rl.IsMouseButtonReleased(.LEFT)
@@ -236,45 +247,66 @@ draw_spell_menu :: proc(frame: ^Ui_Frame, input_x, input_y, input_w: i32) {
 	// closed, so every path leaves the recorder balanced.
 	apply_idx := -1
 	if n == 0 {
-		txt := truncate_to_width("No suggestions", item_w - 16, FONT_SIZE)
+		txt := truncate_to_width_frame(
+			frame,
+			"No suggestions",
+			item_w - ui_frame_sc(frame, 16),
+			metrics.FONT_SIZE_BODY,
+		)
 		overlay_text(
 			frame,
 			txt,
-			item_x + ox + 8,
-			item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2,
-			FONT_SIZE,
-			theme.fg_disabled,
+			item_x + ox + ui_frame_sc(frame, 8),
+			item_y + (item_h - metrics.FONT_SIZE_BODY) / 2,
+			metrics.FONT_SIZE_BODY,
+			style.fg_disabled,
 		)
-		item_y += SPELL_MENU_ITEM_H
+		item_y += item_h
 	} else {
-		for s, i in spell_menu.suggestions {
-			if draw_row(frame, ox, item_x, item_y, item_w, s, i, mouse, theme.fg_primary) {
-				apply_idx = i
+		for suggestion, index in menu.suggestions {
+			if draw_row(
+				frame,
+				menu,
+				ox,
+				item_x,
+				item_y,
+				item_w,
+				item_h,
+				suggestion,
+				index,
+				mouse,
+				style.fg_primary,
+			) {
+				apply_idx = index
 			}
-			item_y += SPELL_MENU_ITEM_H
+			item_y += item_h
 		}
 	}
 
 	// Separator.
 	overlay_rect(
 		frame,
-		{f32(mx + ox + 6), f32(item_y + sep_h / 2), f32(menu_w - 12), 1},
-		theme.border_color,
+		{f32(mx + ox + ui_frame_sc(frame, 6)), f32(item_y + sep_h / 2), f32(menu_w - ui_frame_sc(frame, 12)), 1},
+		style.border_color,
 	)
 	item_y += sep_h
 
-	learn_label := strings.concatenate({"Learn \"", spell_menu.word, "\""}, context.temp_allocator)
-	if draw_row(frame, ox, item_x, item_y, item_w, learn_label, n, mouse, theme.fg_secondary) {
+	learn_label := strings.concatenate({"Learn \"", menu.word, "\""}, context.temp_allocator)
+	if draw_row(
+		frame, menu, ox, item_x, item_y, item_w, item_h, learn_label, n, mouse, style.fg_secondary,
+	) {
 		apply_idx = n
 	}
-	item_y += SPELL_MENU_ITEM_H
+	item_y += item_h
 
-	if draw_row(frame, ox, item_x, item_y, item_w, "Ignore", n + 1, mouse, theme.fg_secondary) {
+	if draw_row(
+		frame, menu, ox, item_x, item_y, item_w, item_h, "Ignore", n + 1, mouse, style.fg_secondary,
+	) {
 		apply_idx = n + 1
 	}
 	overlay_end(frame)
 
 	if apply_idx >= 0 {
-		spell_menu_apply(apply_idx)
+		spell_menu_apply(menu, system, apply_idx)
 	}
 }

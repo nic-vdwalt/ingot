@@ -35,6 +35,7 @@ Input_Sel :: struct {
 input_sel: Input_Sel
 module_ivl: Input_Vlines_Memo
 module_spell_memo: Spellcheck_Memo
+module_spell_menu: Spell_Menu
 
 // input_is_selecting reports whether a legacy text input currently holds a
 // selection. Used by hosts to avoid hijacking Cmd+A/Cmd+C.
@@ -144,6 +145,7 @@ pill_delete_atomic :: proc(sb: ^strings.Builder, pills: ^[dynamic]Mention_Span, 
 // window. Rows clamp to the visible band; x clamps to line ends.
 @(private)
 input_mouse_to_byte :: proc(
+	system: ^Text_System,
 	vlines: []Wrap_Line,
 	text: string,
 	mouse: rl.Vector2,
@@ -152,16 +154,17 @@ input_mouse_to_byte :: proc(
 ) -> int {
 	// Why assert: a caller passing an empty layout or an inverted visible
 	// band would index vlines out of range below.
+	assert(system != nil, "input_mouse_to_byte: nil text system")
 	assert(len(vlines) > 0, "input_mouse_to_byte: empty visual lines")
 	assert(vis_start <= vis_end, "input_mouse_to_byte: inverted visible band")
-	row := vis_start + int((mouse.y - f32(y + 6)) / f32(LINE_HEIGHT))
+	row := vis_start + int((mouse.y - f32(y + 6)) / f32(ui_metrics(1).LINE_HEIGHT))
 	if row < vis_start do row = vis_start
 	if row > vis_end - 1 do row = vis_end - 1
 	if row < 0 do row = 0
 	if row >= len(vlines) do row = len(vlines) - 1
 	vl := vlines[row]
 	line := text[vl.start:vl.end]
-	col := caret_pixel_to_col(line, i32(mouse.x) - inner_x)
+	col := caret_pixel_to_col_with(system, line, i32(mouse.x) - inner_x, ui_metrics(1).FONT_SIZE_BODY)
 	return vl.start + caret_col_to_byte(line, col)
 }
 
@@ -266,16 +269,27 @@ Input_Vlines_Memo :: struct {
 	owned:     bool,
 }
 
-// Build the soft-wrapped visual lines for an input's text using an explicit
-// memo. Each logical line (split on '\n') is word-wrapped to inner_w; the
-// returned ranges are absolute byte offsets into `text`. Always returns at
-// least one (possibly empty) line.
 input_visual_lines_memo :: proc(
 	memo: ^Input_Vlines_Memo,
 	text: string,
 	inner_w: i32,
 	font_size: i32 = FONT_SIZE,
 ) -> []Wrap_Line {
+	return input_visual_lines_memo_with(&default_text_system, memo, text, inner_w, font_size)
+}
+
+// Build the soft-wrapped visual lines for an input's text using an explicit
+// memo. Each logical line (split on '\n') is word-wrapped to inner_w; the
+// returned ranges are absolute byte offsets into `text`. Always returns at
+// least one (possibly empty) line.
+input_visual_lines_memo_with :: proc(
+	system: ^Text_System,
+	memo: ^Input_Vlines_Memo,
+	text: string,
+	inner_w: i32,
+	font_size: i32 = FONT_SIZE,
+) -> []Wrap_Line {
+	assert(system != nil, "input_visual_lines_memo: nil text system")
 	assert(memo != nil, "input_visual_lines_memo: nil memo")
 	assert(inner_w >= 0 && font_size > 0, "input_visual_lines_memo: invalid dimensions")
 	if memo.valid && inner_w == memo.width && font_size == memo.font_size && text == memo.text {
@@ -287,7 +301,7 @@ input_visual_lines_memo :: proc(
 		// Uncached wrap: the memo above already ensures this only runs when
 		// the text/width changed, and routing a large paste through the
 		// global wrap_text cache would evict the transcript's layouts.
-		for seg in wrap_compute(logical, inner_w, font_size) {
+		for seg in wrap_compute_with(system, logical, inner_w, font_size) {
 			append(&vlines, Wrap_Line{base + seg.start, base + seg.end})
 		}
 		base += len(logical) + 1 // +1 for the consumed '\n'
@@ -319,19 +333,25 @@ input_vlines_memo_destroy :: proc(memo: ^Input_Vlines_Memo) {
 }
 
 // Map a byte offset to its visual (soft-wrapped) row and pixel x within the row.
-input_caret_visual :: proc(vlines: []Wrap_Line, text: string, pos: int) -> (row: int, x_px: i32) {
+input_caret_visual :: proc(
+	system: ^Text_System,
+	vlines: []Wrap_Line,
+	text: string,
+	pos, font_size: int,
+) -> (row: int, x_px: i32) {
+	assert(system != nil, "input_caret_visual: nil text system")
 	for vl, idx in vlines {
 		if pos <= vl.end {
 			p := pos
 			if p < vl.start do p = vl.start
 			c := strings.clone_to_cstring(text[vl.start:p], context.temp_allocator)
-			return idx, measure_text(c, FONT_SIZE)
+			return idx, measure_text_with(system, c, i32(font_size))
 		}
 	}
 	if len(vlines) > 0 {
 		vl := vlines[len(vlines) - 1]
 		c := strings.clone_to_cstring(text[vl.start:vl.end], context.temp_allocator)
-		return len(vlines) - 1, measure_text(c, FONT_SIZE)
+		return len(vlines) - 1, measure_text_with(system, c, i32(font_size))
 	}
 	return 0, 0
 }
@@ -383,6 +403,7 @@ Text_Input_State :: struct {
 	pills:       [dynamic]Mention_Span,
 	memo:        Input_Vlines_Memo,
 	spell_memo:  Spellcheck_Memo,
+	spell_menu:  Spell_Menu,
 }
 
 // text_input_state_destroy releases all heap state owned by a state struct.
@@ -392,6 +413,7 @@ text_input_state_destroy :: proc(st: ^Text_Input_State) {
 	delete(st.pills)
 	input_vlines_memo_destroy(&st.memo)
 	spellcheck_memo_destroy(&st.spell_memo)
+	spell_menu_close(&st.spell_menu)
 	st^ = {}
 	assert(!st.sel.active, "text_input_state_destroy: state not cleared")
 }
@@ -437,6 +459,7 @@ TI_Ctx :: struct {
 	sel:         ^Input_Sel,
 	memo:        ^Input_Vlines_Memo,
 	spell_memo:  ^Spellcheck_Memo,
+	spell_menu:  ^Spell_Menu,
 	x, y, w, h:  i32,
 	rect:        rl.Rectangle,
 	inner_x:     i32,
@@ -718,7 +741,7 @@ ti_keys_enter :: proc(ctx: ^TI_Ctx) -> bool {
 	shift_down := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
 	// Enter submits. Suppressed while the spell menu is open so Enter applies
 	// the highlighted suggestion instead of sending.
-	if rl.IsKeyPressed(.ENTER) && !shift_down && !spell_menu_active(sb) {
+	if rl.IsKeyPressed(.ENTER) && !shift_down && !spell_menu_active(ctx.spell_menu, sb) {
 		entered = true
 		sel_reset(ctx.sel)
 	}
@@ -767,7 +790,7 @@ ti_keys_nav :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 		}
 		nav_end(sel, cursor, shift)
 	}
-	if (rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP)) && !spell_menu_active(sb) {
+	if (rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(.UP)) && !spell_menu_active(ctx.spell_menu, sb) {
 		nav_begin(sel, sb, cursor, shift, true)
 		row, col := caret_row_col(s, cursor^)
 		want := col
@@ -778,7 +801,7 @@ ti_keys_nav :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 		}
 		nav_end(sel, cursor, shift)
 	}
-	if (rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN)) && !spell_menu_active(sb) {
+	if (rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(.DOWN)) && !spell_menu_active(ctx.spell_menu, sb) {
 		nav_begin(sel, sb, cursor, shift, false)
 		row, col := caret_row_col(s, cursor^)
 		want := col
@@ -842,10 +865,23 @@ ti_layout :: proc(ctx: ^TI_Ctx, text: string) -> TI_View {
 	// logical lines.
 	v.caret_render = ctx.caret && !ctx.masked
 	v.masked_caret = ctx.caret && ctx.masked
-	v.visible_lines = max(1, (ctx.h - 12) / LINE_HEIGHT)
+	metrics := ui_frame_metrics(ctx.frame)
+	v.visible_lines = max(1, (ctx.h - ui_frame_sc(ctx.frame, 12)) / metrics.LINE_HEIGHT)
 	if !v.caret_render do return v
-	v.vlines = input_visual_lines_memo(ctx.memo, text, ctx.inner_w)
-	v.cur_vrow, v.cur_caret_x = input_caret_visual(v.vlines, text, ctx.cursor^)
+	v.vlines = input_visual_lines_memo_with(
+		ui_frame_text(ctx.frame),
+		ctx.memo,
+		text,
+		ctx.inner_w,
+		metrics.FONT_SIZE_BODY,
+	)
+	v.cur_vrow, v.cur_caret_x = input_caret_visual(
+		ui_frame_text(ctx.frame),
+		v.vlines,
+		text,
+		ctx.cursor^,
+		int(metrics.FONT_SIZE_BODY),
+	)
 	v.vis_start =
 		ctx.scroll_line^ if ctx.scroll_line != nil else max(0, len(v.vlines) - int(v.visible_lines))
 	if v.cur_vrow < v.vis_start do v.vis_start = v.cur_vrow
@@ -874,9 +910,15 @@ ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string) {
 	if !rl.CheckCollisionPointRec(mouse, ctx.rect) do return
 	masked_text := masked_display(text)
 	masked_c := strings.clone_to_cstring(masked_text, context.temp_allocator)
-	masked_w := measure_text(masked_c, FONT_SIZE)
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
+	masked_w := measure_text_frame(ctx.frame, masked_c, font_size)
 	masked_offset := max(0, masked_w - ctx.inner_w)
-	col := caret_pixel_to_col(masked_text, i32(mouse.x) - ctx.inner_x + masked_offset)
+	col := caret_pixel_to_col_with(
+		ui_frame_text(ctx.frame),
+		masked_text,
+		i32(mouse.x) - ctx.inner_x + masked_offset,
+		font_size,
+	)
 	ctx.cursor^ = caret_col_to_byte(text, col)
 	sel_set(ctx.sel, ctx.sb, ctx.cursor^, ctx.cursor^)
 }
@@ -895,6 +937,7 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	if rl.IsMouseButtonPressed(.LEFT) && !occluded {
 		if rl.CheckCollisionPointRec(mouse, ctx.rect) {
 			off := input_mouse_to_byte(
+				ui_frame_text(ctx.frame),
 				v.vlines,
 				text,
 				mouse,
@@ -939,6 +982,7 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	}
 	if sel.dragging && sel.sb == ctx.sb && rl.IsMouseButtonDown(.LEFT) {
 		off := input_mouse_to_byte(
+			ui_frame_text(ctx.frame),
 			v.vlines,
 			text,
 			mouse,
@@ -957,7 +1001,13 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 		sel.dragging = false
 		if sel.anchor == sel.extent do sel.active = false
 	}
-	v.cur_vrow, v.cur_caret_x = input_caret_visual(v.vlines, text, ctx.cursor^)
+	v.cur_vrow, v.cur_caret_x = input_caret_visual(
+		ui_frame_text(ctx.frame),
+		v.vlines,
+		text,
+		ctx.cursor^,
+		int(ui_frame_metrics(ctx.frame).FONT_SIZE_BODY),
+	)
 }
 
 // ti_spell scans the composer for misspelled words (memoized) and opens the
@@ -968,7 +1018,7 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 	assert(ctx.pills != nil && ctx.undo != nil, "ti_spell: pills and undo required")
 	assert(v.caret_render, "ti_spell: caret renderer required")
 	squiggles := spellcheck_ranges_with(
-		&default_spell_system,
+		ui_frame_spell(ctx.frame),
 		ctx.spell_memo,
 		text,
 		ctx.cursor^,
@@ -980,6 +1030,7 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 		mouse = frame_to_local(ctx.frame, mouse)
 		if !occluded && rl.CheckCollisionPointRec(mouse, ctx.rect) {
 			off := input_mouse_to_byte(
+				ui_frame_text(ctx.frame),
 				v.vlines,
 				text,
 				mouse,
@@ -989,14 +1040,22 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 				v.vis_end,
 			)
 			ws, we, misspelled := spellcheck_word_at_with(
-				&default_spell_system,
+				ui_frame_spell(ctx.frame),
 				text,
 				off,
 				ctx.pills,
 			)
 			if misspelled {
-				_, word_x := input_caret_visual(v.vlines, text, ws)
+				_, word_x := input_caret_visual(
+					ui_frame_text(ctx.frame),
+					v.vlines,
+					text,
+					ws,
+					int(ui_frame_metrics(ctx.frame).FONT_SIZE_BODY),
+				)
 				spell_menu_open(
+					ctx.spell_menu,
+					ui_frame_spell(ctx.frame),
 					ctx.sb,
 					ctx.cursor,
 					ctx.pills,
@@ -1006,8 +1065,8 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 					ctx.inner_x + word_x,
 					ctx.y,
 				)
-			} else if spell_menu_active(ctx.sb) {
-				spell_menu_close()
+			} else if spell_menu_active(ctx.spell_menu, ctx.sb) {
+				spell_menu_close(ctx.spell_menu)
 			}
 		}
 	}
@@ -1019,6 +1078,10 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 @(private = "file")
 ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles: []Spell_Range) {
 	assert(v.caret_render, "ti_render_caret_lines: caret renderer required")
+	metrics := ui_frame_metrics(ctx.frame)
+	style := ui_frame_theme(ctx.frame)
+	font_size := metrics.FONT_SIZE_BODY
+	line_height := metrics.LINE_HEIGHT
 	assert(
 		v.vis_start >= 0 && v.vis_end <= len(v.vlines),
 		"ti_render_caret_lines: window out of range",
@@ -1029,7 +1092,7 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 		vl := v.vlines[vi]
 		line := text[vl.start:vl.end]
 		line_c := strings.clone_to_cstring(line, context.temp_allocator)
-		line_y := ctx.y + 6 + render_idx * LINE_HEIGHT
+		line_y := ctx.y + ui_frame_sc(ctx.frame, 6) + render_idx * line_height
 		// Selection highlight: overlap of this visual line with the range.
 		if sel.active && sel.sb == ctx.sb {
 			lo, hi := sel_range(sel)
@@ -1037,10 +1100,10 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 			he := min(hi, vl.end)
 			if hs < he {
 				pre_c := strings.clone_to_cstring(text[vl.start:hs], context.temp_allocator)
-				hx := ctx.inner_x + measure_text(pre_c, FONT_SIZE)
+				hx := ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
 				span_c := strings.clone_to_cstring(text[hs:he], context.temp_allocator)
-				hw := measure_text(span_c, FONT_SIZE)
-				rl.DrawRectangle(hx, line_y, hw, FONT_SIZE, theme.bg_selection)
+				hw := measure_text_frame(ctx.frame, span_c, font_size)
+				rl.DrawRectangle(hx, line_y, hw, font_size, style.bg_selection)
 			}
 		}
 		// Pill backgrounds behind any mention chips on this visual line.
@@ -1051,12 +1114,12 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 				if ps >= pe do continue
 				pre_c := strings.clone_to_cstring(text[vl.start:ps], context.temp_allocator)
 				seg_c := strings.clone_to_cstring(text[ps:pe], context.temp_allocator)
-				px := ctx.inner_x + measure_text(pre_c, FONT_SIZE)
-				pw := measure_text(seg_c, FONT_SIZE)
-				draw_input_pill_bg(px, line_y, pw)
+				px := ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
+				pw := measure_text_frame(ctx.frame, seg_c, font_size)
+				draw_input_pill_bg_frame(ctx.frame, px, line_y, pw)
 			}
 		}
-		draw_text(line_c, ctx.inner_x, line_y, FONT_SIZE, theme.fg_primary)
+		draw_text_frame(ctx.frame, line_c, ctx.inner_x, line_y, font_size, style.fg_primary)
 		// Redraw pill substrings in the accent color over the chip bg.
 		if ctx.pills != nil {
 			for p in ctx.pills {
@@ -1065,8 +1128,8 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 				if ps >= pe do continue
 				pre_c := strings.clone_to_cstring(text[vl.start:ps], context.temp_allocator)
 				seg_c := strings.clone_to_cstring(text[ps:pe], context.temp_allocator)
-				px := ctx.inner_x + measure_text(pre_c, FONT_SIZE)
-				draw_text(seg_c, px, line_y, FONT_SIZE, theme.fg_accent)
+				px := ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
+				draw_text_frame(ctx.frame, seg_c, px, line_y, font_size, style.fg_accent)
 			}
 		}
 		// Red squiggles under misspelled words on this visual line.
@@ -1076,9 +1139,14 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 			if rs >= re do continue
 			pre_c := strings.clone_to_cstring(text[vl.start:rs], context.temp_allocator)
 			seg_c := strings.clone_to_cstring(text[rs:re], context.temp_allocator)
-			sx := ctx.inner_x + measure_text(pre_c, FONT_SIZE)
-			sw := measure_text(seg_c, FONT_SIZE)
-			draw_squiggle(sx, line_y + FONT_SIZE + 1, sw, SPELL_SQUIGGLE_COLOR)
+			sx := ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
+			sw := measure_text_frame(ctx.frame, seg_c, font_size)
+			draw_squiggle(
+				sx,
+				line_y + font_size + ui_frame_sc(ctx.frame, 1),
+				sw,
+				SPELL_SQUIGGLE_COLOR,
+			)
 		}
 		render_idx += 1
 	}
@@ -1090,31 +1158,42 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 ti_render_multiline :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bool) {
 	assert(v.has_newlines, "ti_render_multiline: multiline text required")
 	assert(v.visible_lines > 0, "ti_render_multiline: no visible lines")
+	metrics := ui_frame_metrics(ctx.frame)
+	style := ui_frame_theme(ctx.frame)
+	font_size := metrics.FONT_SIZE_BODY
+	line_height := metrics.LINE_HEIGHT
 	lines := strings.split(text, "\n", context.temp_allocator)
 	start_line := max(0, i32(len(lines)) - v.visible_lines)
 	render_idx: i32 = 0
 	for i := start_line; i < i32(len(lines)); i += 1 {
 		line := lines[i]
 		line_c := strings.clone_to_cstring(line, context.temp_allocator)
-		line_y := ctx.y + 6 + render_idx * LINE_HEIGHT
+		line_y := ctx.y + ui_frame_sc(ctx.frame, 6) + render_idx * line_height
 		// Only the last line gets horizontal scrolling (cursor is at the end).
 		if i == i32(len(lines)) - 1 {
-			line_pixel_w := measure_text(line_c, FONT_SIZE)
+			line_pixel_w := measure_text_frame(ctx.frame, line_c, font_size)
 			line_offset: i32 = 0
 			if line_pixel_w > ctx.inner_w {
 				line_offset = line_pixel_w - ctx.inner_w
 			}
 			if sel_all {
 				hl_w := min(line_pixel_w, ctx.inner_w)
-				rl.DrawRectangle(ctx.inner_x, line_y, hl_w, FONT_SIZE, theme.bg_selection)
+				rl.DrawRectangle(ctx.inner_x, line_y, hl_w, font_size, style.bg_selection)
 			}
-			draw_text(line_c, ctx.inner_x - line_offset, line_y, FONT_SIZE, theme.fg_primary)
+			draw_text_frame(
+				ctx.frame,
+				line_c,
+				ctx.inner_x - line_offset,
+				line_y,
+				font_size,
+				style.fg_primary,
+			)
 		} else {
 			if sel_all {
-				hl_w := min(measure_text(line_c, FONT_SIZE), ctx.inner_w)
-				rl.DrawRectangle(ctx.inner_x, line_y, hl_w, FONT_SIZE, theme.bg_selection)
+				hl_w := min(measure_text_frame(ctx.frame, line_c, font_size), ctx.inner_w)
+				rl.DrawRectangle(ctx.inner_x, line_y, hl_w, font_size, style.bg_selection)
 			}
-			draw_text(line_c, ctx.inner_x, line_y, FONT_SIZE, theme.fg_primary)
+			draw_text_frame(ctx.frame, line_c, ctx.inner_x, line_y, font_size, style.fg_primary)
 		}
 		render_idx += 1
 	}
@@ -1126,9 +1205,12 @@ ti_render_multiline :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bo
 ti_render_single :: proc(ctx: ^TI_Ctx, text: string, sel_all: bool) {
 	assert(len(text) > 0, "ti_render_single: empty text")
 	assert(ctx.inner_w >= 0, "ti_render_single: negative inner width")
+	metrics := ui_frame_metrics(ctx.frame)
+	style := ui_frame_theme(ctx.frame)
+	font_size := metrics.FONT_SIZE_BODY
 	display_text := masked_display(text) if ctx.masked else text
 	display_c := strings.clone_to_cstring(display_text, context.temp_allocator)
-	text_pixel_w := measure_text(display_c, FONT_SIZE)
+	text_pixel_w := measure_text_frame(ctx.frame, display_c, font_size)
 	text_offset: i32 = 0
 	if text_pixel_w > ctx.inner_w {
 		text_offset = text_pixel_w - ctx.inner_w
@@ -1137,18 +1219,19 @@ ti_render_single :: proc(ctx: ^TI_Ctx, text: string, sel_all: bool) {
 		hl_w := min(text_pixel_w, ctx.inner_w)
 		rl.DrawRectangle(
 			ctx.inner_x,
-			ctx.y + (ctx.h - FONT_SIZE) / 2,
+			ctx.y + (ctx.h - font_size) / 2,
 			hl_w,
-			FONT_SIZE,
-			theme.bg_selection,
+			font_size,
+			style.bg_selection,
 		)
 	}
-	draw_text(
+	draw_text_frame(
+		ctx.frame,
 		display_c,
 		ctx.inner_x - text_offset,
-		ctx.y + (ctx.h - FONT_SIZE) / 2,
-		FONT_SIZE,
-		theme.fg_primary,
+		ctx.y + (ctx.h - font_size) / 2,
+		font_size,
+		style.fg_primary,
 	)
 }
 
@@ -1159,9 +1242,13 @@ ti_render_single :: proc(ctx: ^TI_Ctx, text: string, sel_all: bool) {
 ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	assert(ctx.active, "ti_draw_caret: input not active")
 	assert(ctx.h > 0, "ti_draw_caret: non-positive height")
+	metrics := ui_frame_metrics(ctx.frame)
+	style := ui_frame_theme(ctx.frame)
+	font_size := metrics.FONT_SIZE_BODY
+	line_height := metrics.LINE_HEIGHT
 	t := rl.GetTime()
 	blink_on := true
-	if !theme.reduced_motion {
+	if !style.reduced_motion {
 		// Blink is time-driven: in event-driven frame mode nothing else
 		// forces a repaint while the user pauses typing, so schedule one at
 		// the next half-second toggle boundary. Reduced motion keeps the
@@ -1173,15 +1260,16 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 		// Caret at its true visual (row, x) within the visible window.
 		if v.cur_vrow >= v.vis_start && v.cur_vrow < v.vis_end {
 			cursor_x := ctx.inner_x + v.cur_caret_x
-			cursor_line_y := ctx.y + 6 + i32(v.cur_vrow - v.vis_start) * LINE_HEIGHT
-			rl.SetTextInputRect(cursor_x, cursor_line_y, 1, FONT_SIZE)
+			cursor_line_y :=
+				ctx.y + ui_frame_sc(ctx.frame, 6) + i32(v.cur_vrow - v.vis_start) * line_height
+			rl.SetTextInputRect(cursor_x, cursor_line_y, 1, font_size)
 			if blink_on {
 				rl.DrawLine(
 					cursor_x,
 					cursor_line_y,
 					cursor_x,
-					cursor_line_y + FONT_SIZE,
-					theme.fg_accent,
+					cursor_line_y + font_size,
+					style.fg_accent,
 				)
 			}
 		}
@@ -1192,22 +1280,22 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 		lines := strings.split(text, "\n", context.temp_allocator)
 		last_line := lines[len(lines) - 1]
 		last_line_c := strings.clone_to_cstring(last_line, context.temp_allocator)
-		cursor_text_w := measure_text(last_line_c, FONT_SIZE)
+		cursor_text_w := measure_text_frame(ctx.frame, last_line_c, font_size)
 		cursor_offset: i32 = 0
 		if cursor_text_w > ctx.inner_w {
 			cursor_offset = cursor_text_w - ctx.inner_w
 		}
 		cursor_x := ctx.inner_x + cursor_text_w - cursor_offset
 		visible_count := min(i32(len(lines)), v.visible_lines)
-		cursor_line_y := ctx.y + 6 + (visible_count - 1) * LINE_HEIGHT
-		rl.SetTextInputRect(cursor_x, cursor_line_y, 1, FONT_SIZE)
+		cursor_line_y := ctx.y + ui_frame_sc(ctx.frame, 6) + (visible_count - 1) * line_height
+		rl.SetTextInputRect(cursor_x, cursor_line_y, 1, font_size)
 		if blink_on {
 			rl.DrawLine(
 				cursor_x,
 				cursor_line_y,
 				cursor_x,
-				cursor_line_y + FONT_SIZE,
-				theme.fg_accent,
+				cursor_line_y + font_size,
+				style.fg_accent,
 			)
 		}
 		return
@@ -1221,10 +1309,13 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, blink_on: bool) {
 	assert(ctx.active, "ti_draw_caret_single: input not active")
 	assert(ctx.h > 0, "ti_draw_caret_single: non-positive height")
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
+	style := ui_frame_theme(ctx.frame)
 	display_for_cursor := masked_display(text) if ctx.masked else text
-	cursor_text_w := measure_text(
+	cursor_text_w := measure_text_frame(
+		ctx.frame,
 		strings.clone_to_cstring(display_for_cursor, context.temp_allocator),
-		FONT_SIZE,
+		font_size,
 	)
 	cursor_offset: i32 = 0
 	if cursor_text_w > ctx.inner_w {
@@ -1241,14 +1332,16 @@ ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, blink_on: bool) {
 		prefix_end := caret_col_to_byte(display_for_cursor, col)
 		cursor_prefix = display_for_cursor[:prefix_end]
 	}
-	cursor_prefix_w := measure_text(
+	cursor_prefix_w := measure_text_frame(
+		ctx.frame,
 		strings.clone_to_cstring(cursor_prefix, context.temp_allocator),
-		FONT_SIZE,
+		font_size,
 	)
 	cursor_x := ctx.inner_x + cursor_prefix_w - cursor_offset
 	rl.SetTextInputRect(cursor_x, ctx.y + 5, 1, ctx.h - 10)
 	if blink_on {
-		rl.DrawLine(cursor_x, ctx.y + 5, cursor_x, ctx.y + ctx.h - 5, theme.fg_accent)
+		inset := ui_frame_sc(ctx.frame, 5)
+		rl.DrawLine(cursor_x, ctx.y + inset, cursor_x, ctx.y + ctx.h - inset, style.fg_accent)
 	}
 }
 
@@ -1261,9 +1354,16 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	assert(ctx.sel != nil && ctx.memo != nil, "ti_run: nil selection or memo")
 	ti_sync_web(ctx)
 	ti_semantic_push(ctx)
-	bg := theme.bg_input if ctx.active else theme.bg_secondary
+	metrics := ui_frame_metrics(ctx.frame)
+	style := ui_frame_theme(ctx.frame)
+	font_size := metrics.FONT_SIZE_BODY
+	bg := style.bg_input if ctx.active else style.bg_secondary
 	rl.DrawRectangleRec(ctx.rect, bg)
-	rl.DrawRectangleLinesEx(ctx.rect, 1, theme.border_color if !ctx.active else theme.fg_accent)
+	rl.DrawRectangleLinesEx(
+		ctx.rect,
+		ui_frame_scf(ctx.frame, 1),
+		style.border_color if !ctx.active else style.fg_accent,
+	)
 
 	entered := false
 	if ctx.active {
@@ -1302,12 +1402,13 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 
 	if len(text) == 0 {
 		ph_c := strings.clone_to_cstring(ctx.placeholder, context.temp_allocator)
-		draw_text(
+		draw_text_frame(
+			ctx.frame,
 			ph_c,
 			ctx.inner_x,
-			ctx.y + (ctx.h - FONT_SIZE) / 2,
-			FONT_SIZE,
-			theme.fg_secondary,
+			ctx.y + (ctx.h - font_size) / 2,
+			font_size,
+			style.fg_secondary,
 		)
 	} else if v.caret_render {
 		ti_render_caret_lines(ctx, text, &v, spell_squiggles)
@@ -1324,8 +1425,15 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 
 	// Suggestions popup for a right-clicked misspelled word. Drawn after the
 	// scissor ends so it renders unclipped above the input box.
-	if spell_menu_active(ctx.sb) {
-		draw_spell_menu(ctx.frame, ctx.x, ctx.y, ctx.w)
+	if spell_menu_active(ctx.spell_menu, ctx.sb) {
+		draw_spell_menu(
+			ctx.frame,
+			ctx.spell_menu,
+			ui_frame_spell(ctx.frame),
+			ctx.x,
+			ctx.y,
+			ctx.w,
+		)
 	}
 	return entered
 }
@@ -1355,6 +1463,7 @@ text_input_box :: proc(
 		sel         = &st.sel,
 		memo        = &st.memo,
 		spell_memo  = &st.spell_memo,
+		spell_menu  = &st.spell_menu,
 		x           = cfg.rect.x,
 		y           = cfg.rect.y,
 		w           = cfg.rect.w,
@@ -1413,6 +1522,7 @@ text_input :: proc(
 		sel         = &input_sel,
 		memo        = &module_ivl,
 		spell_memo  = &module_spell_memo,
+		spell_menu  = &module_spell_menu,
 		x           = x,
 		y           = y,
 		w           = w,

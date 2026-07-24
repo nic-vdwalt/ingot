@@ -38,11 +38,11 @@ Ui_Runtime :: struct {
 MAX_PANE_SCOPES :: 16
 
 Ui_Frame :: struct {
-	runtime:      ^Ui_Runtime,
-	cursor:       Cursor_State,
-	overlay:      Overlay_State,
-	route:        Input_Route_State,
-	interaction:  Interaction_State,
+	runtime:           ^Ui_Runtime,
+	cursor:            Cursor_State,
+	overlay:           Overlay_State,
+	route:             Input_Route_State,
+	interaction:       Interaction_State,
 	semantics:         Semantics_State,
 	pane_origins:      [MAX_PANE_SCOPES]rl.Vector2,
 	pane_count:        int,

@@ -15,10 +15,12 @@ import rl "ingot:gfx"
 draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32) -> i32 {
 	assert(x >= 0 && y >= 0, "draw_debug_overlay: negative origin")
 	s := rl.renderer_stats()
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
 
-	row_h := FONT_SIZE_SMALL + sc(4)
-	pad := sc(8)
-	w := sc(280)
+	row_h := metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 4)
+	pad := ui_frame_sc(frame, 8)
+	w := ui_frame_sc(frame, 280)
 
 	// Rows: fps, frame ms, flushes, per-cause breakdown (nonzero only),
 	// vertices, uploaded KB, buffers, pipeline switches, passes, arenas,
@@ -64,28 +66,29 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32) -> i32 {
 	)
 	push(rows[:], &n, "route claims", fmt.tprintf("%d", route_claim_count(frame)))
 
-	h := i32(n) * row_h + pad * 2 + FONT_SIZE_SMALL + sc(6)
+	h := i32(n) * row_h + pad * 2 + metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 6)
 	panel := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	rl.DrawRectangleRec(panel, rl.Color{theme.bg_popup.r, theme.bg_popup.g, theme.bg_popup.b, 235})
-	rl.DrawRectangleLinesEx(panel, 1, theme.border_color)
+	rl.DrawRectangleRec(panel, rl.Color{style.bg_popup.r, style.bg_popup.g, style.bg_popup.b, 235})
+	rl.DrawRectangleLinesEx(panel, ui_frame_scf(frame, 1), style.border_color)
 
 	ty := y + pad
 	title: cstring = "DEBUG \u00b7 renderer stats"
 	when !rl.RENDER_STATS_ENABLED {
 		title = "DEBUG (build with -define:INGOT_RENDER_STATS=true)"
 	}
-	draw_text(title, x + pad, ty, FONT_SIZE_SMALL, theme.fg_label)
-	ty += FONT_SIZE_SMALL + sc(6)
+	draw_text_frame(frame, title, x + pad, ty, metrics.FONT_SIZE_SMALL, style.fg_label)
+	ty += metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 6)
 
 	for i in 0 ..< n {
-		kv_row(
+		kv_row_frame(
+			frame,
 			x + pad,
 			ty,
 			w - pad * 2,
 			rows[i].key,
 			rows[i].val,
-			theme.fg_secondary,
-			theme.fg_primary,
+			style.fg_secondary,
+			style.fg_primary,
 		)
 		ty += row_h
 	}
