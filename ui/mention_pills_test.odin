@@ -75,6 +75,16 @@ encode_strip_roundtrip :: proc(t: ^testing.T) {
 }
 
 @(test)
+encode_pills_owned_survives_temp_reset :: proc(t: ^testing.T) {
+	text := "see file.odin now"
+	pills := []Mention_Span{{4, 13}}
+	encoded := encode_pills_owned(text, pills)
+	defer delete(encoded)
+	free_all(context.temp_allocator)
+	testing.expect_value(t, encoded, "see \x02file.odin\x03 now")
+}
+
+@(test)
 encode_pills_skips_invalid_ranges :: proc(t: ^testing.T) {
 	text := "@"
 	pills := []Mention_Span{{-1, 1}, {0, 0}, {0, 2}}

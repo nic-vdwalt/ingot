@@ -139,6 +139,14 @@ encode_pills :: proc(text: string, pills: []Mention_Span) -> string {
 	return strings.to_string(sb)
 }
 
+encode_pills_owned :: proc(
+	text: string,
+	pills: []Mention_Span,
+	allocator := context.allocator,
+) -> string {
+	return strings.clone(encode_pills(text, pills), allocator)
+}
+
 // Remove all pill sentinels, returning clean text (for the wire + clipboard).
 // Returns a temp-allocated string when stripping occurs, else the input.
 strip_pill_markers :: proc(text: string) -> string {
