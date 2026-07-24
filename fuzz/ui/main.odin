@@ -244,9 +244,13 @@ exercise_eased :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 // saturation past MAX_SEM_NODES, frame churn, and focus-registry
 // interleaving — then validates the pure AccessKit node build.
 exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
-	ui.sem_reset()
-	defer ui.sem_reset()
-	ui.sem_enable(true)
+	runtime: ui.Ui_Runtime
+	ui.ui_runtime_init(&runtime)
+	defer ui.ui_runtime_destroy(&runtime)
+	ui.sem_enable(&runtime, true)
+	frame: ui.Ui_Frame
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
 
 	roles := [?]ui.Sem_Role {
 		.Button,
@@ -267,7 +271,7 @@ exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 
 	frames := fuzzx.int_range(p, 1, 4)
 	for _ in 0 ..< frames {
-		ui.sem_begin_frame()
+		ui.sem_begin_frame(&frame)
 		for i in 0 ..< len(next_focus_id) do next_focus_id[i] = 1
 		pushes := fuzzx.int_range(p, 0, ui.MAX_SEM_NODES + 40) // past saturation sometimes
 		for _ in 0 ..< pushes {
@@ -284,6 +288,7 @@ exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 				next_focus_id[slot] += 1
 			}
 			ui.semantic_push(
+				&frame,
 				role,
 				{
 					i32(fuzzx.int_range(p, -50, 2000)),
@@ -300,25 +305,33 @@ exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 			)
 		}
 
-		frame := ui.sem_frame()
-		fuzzx.check(c, frame.count >= 0 && frame.count <= ui.MAX_SEM_NODES, "sem buffer overflow")
-		for i in 0 ..< frame.count {
-			label := ui.sem_node_label(&frame.nodes[i])
+		semantics := ui.sem_frame(&frame)
+		fuzzx.check(
+			c,
+			semantics.count >= 0 && semantics.count <= ui.MAX_SEM_NODES,
+			"sem buffer overflow",
+		)
+		for i in 0 ..< semantics.count {
+			label := ui.sem_node_label(&semantics.nodes[i])
 			fuzzx.check(c, len(label) <= ui.SEM_LABEL_MAX, "sem label exceeds cap")
 			fuzzx.check(c, utf8.valid_string(label), "sem label not valid UTF-8 after truncation")
 		}
-		fuzzx.check(c, ui.sem_focus_list().count <= ui.MAX_SEM_FOCUS, "focus registry overflow")
+		fuzzx.check(
+			c,
+			ui.sem_focus_list(&frame).count <= ui.MAX_SEM_FOCUS,
+			"focus registry overflow",
+		)
 
 		// Pure AccessKit node build: ids unique, non-reserved; every desc
 		// mirrors its source node.
-		nodes, focus_id := ui.a11y_build_nodes(frame, context.temp_allocator)
-		fuzzx.check(c, len(nodes) == frame.count, "a11y node count mismatch")
+		nodes, focus_id := ui.a11y_build_nodes(semantics, context.temp_allocator)
+		fuzzx.check(c, len(nodes) == semantics.count, "a11y node count mismatch")
 		fuzzx.check(c, focus_id != 0, "a11y focus id zero")
 		for i in 0 ..< len(nodes) {
 			fuzzx.check(c, nodes[i].id > 1, "a11y node id reserved")
 			fuzzx.check(c, len(nodes[i].label) <= ui.SEM_LABEL_MAX, "a11y label exceeds cap")
 			// Interactive nodes must not collide on ids (AT targets them).
-			if frame.nodes[i].focus.focus == nil do continue
+			if semantics.nodes[i].focus.focus == nil do continue
 			for j in i + 1 ..< len(nodes) {
 				fuzzx.check(c, nodes[i].id != nodes[j].id, "a11y duplicate interactive node id")
 			}

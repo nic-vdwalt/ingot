@@ -115,23 +115,31 @@ inject_events :: proc(p: ^Prng) {
 // active at any point during the frame — end-of-frame state is not enough
 // because a menu can open and be chosen-from (row release) in one frame,
 // legitimately registering a claim while ending the frame closed.
-draw_scene :: proc(s: ^Scene, p: ^Prng) -> (overlay_active: bool) {
+draw_scene :: proc(frame: ^ui.Ui_Frame, s: ^Scene, p: ^Prng) -> (overlay_active: bool) {
 	ui.form_focus_cycle(&s.focus, FOCUS_COUNT)
 
-	_ = ui.btn(R_BTN.x, R_BTN.y, R_BTN.w, R_BTN.h, "Fuzz", focus = ui.Focus_Opt{&s.focus, 1})
-	_ = ui.checkbox(R_CHECK, "Check", &s.checked, ui.Focus_Opt{&s.focus, 2})
-	_ = ui.radio(R_RADIO_A, "Radio A", &s.radio_sel, 0, ui.Focus_Opt{&s.focus, 3})
-	_ = ui.radio(R_RADIO_B, "Radio B", &s.radio_sel, 1, ui.Focus_Opt{&s.focus, 4})
-	_ = ui.slider(R_SLIDER, &s.slider_val, 0, 100, 5, ui.Focus_Opt{&s.focus, 5})
+	_ = ui.btn(
+		frame,
+		R_BTN.x,
+		R_BTN.y,
+		R_BTN.w,
+		R_BTN.h,
+		"Fuzz",
+		focus = ui.Focus_Opt{&s.focus, 1},
+	)
+	_ = ui.checkbox_at(frame, R_CHECK, "Check", &s.checked, ui.Focus_Opt{&s.focus, 2})
+	_ = ui.radio_at(frame, R_RADIO_A, "Radio A", &s.radio_sel, 0, ui.Focus_Opt{&s.focus, 3})
+	_ = ui.radio_at(frame, R_RADIO_B, "Radio B", &s.radio_sel, 1, ui.Focus_Opt{&s.focus, 4})
+	_ = ui.slider_at(frame, R_SLIDER, &s.slider_val, 0, 100, 5, ui.Focus_Opt{&s.focus, 5})
 	overlay_active |= s.dd_state.menu.open
-	_ = ui.dropdown(R_DROP, DD_ITEMS[:], &s.dd_sel, &s.dd_state, SCREEN_W, SCREEN_H)
+	_ = ui.dropdown_at(frame, R_DROP, DD_ITEMS[:], &s.dd_sel, &s.dd_state, SCREEN_W, SCREEN_H)
 	overlay_active |= s.dd_state.menu.open
 
 	// Randomly open the modal / context menu the way an app handler would.
 	if !s.modal.open && fuzzx.int_range(p, 0, 97) == 0 do s.modal.open = true
 	if s.modal.open {
 		overlay_active = true
-		_ = ui.modal_begin(&s.modal, "Fuzz Modal", 400, 300, SCREEN_W, SCREEN_H)
+		_ = ui.modal_begin(frame, &s.modal, "Fuzz Modal", 400, 300, SCREEN_W, SCREEN_H)
 		ui.modal_end(&s.modal)
 	}
 	if !s.menu.open && fuzzx.int_range(p, 0, 89) == 0 {
@@ -142,18 +150,22 @@ draw_scene :: proc(s: ^Scene, p: ^Prng) -> (overlay_active: bool) {
 		)
 	}
 	overlay_active |= s.menu.open
-	_ = ui.context_menu(&s.menu, MENU_ITEMS[:], SCREEN_W, SCREEN_H)
+	_ = ui.context_menu(frame, &s.menu, MENU_ITEMS[:], SCREEN_W, SCREEN_H)
 	overlay_active |= s.menu.open
 	return overlay_active
 }
 
-check_invariants :: proc(c: ^fuzzx.Ctx, s: ^Scene, overlay_free_frames: int) {
-	fuzzx.check(c, ui.route_claim_count() <= ui.MAX_ROUTE_CLAIMS, "route claims exceeded bound")
+check_invariants :: proc(c: ^fuzzx.Ctx, frame: ^ui.Ui_Frame, s: ^Scene, overlay_free_frames: int) {
+	fuzzx.check(
+		c,
+		ui.route_claim_count(frame) <= ui.MAX_ROUTE_CLAIMS,
+		"route claims exceeded bound",
+	)
 	// Claim latency by design: claims registered during the overlay's last
 	// open frame (N) occlude through N+1 and expire at the rotation into
 	// N+2 — so zero claims is first guaranteed on the third free frame.
 	if overlay_free_frames >= 3 {
-		fuzzx.check(c, ui.route_claim_count() == 0, "route claims leaked past overlay close")
+		fuzzx.check(c, ui.route_claim_count(frame) == 0, "route claims leaked past overlay close")
 	}
 
 	fuzzx.check(c, s.focus >= 0 && s.focus <= FOCUS_COUNT, "focus slot out of range")
@@ -181,13 +193,17 @@ check_invariants :: proc(c: ^fuzzx.Ctx, s: ^Scene, overlay_free_frames: int) {
 		fuzzx.check(c, !it.separator || s.menu.selected == 0, "menu selection on separator")
 	}
 
-	frame := ui.sem_frame()
-	fuzzx.check(c, frame.count >= 0 && frame.count <= ui.MAX_SEM_NODES, "semantic buffer overflow")
-	for i in 0 ..< frame.count {
-		fuzzx.check(c, frame.nodes[i].id > 1, "semantic node id reserved/zero")
-		for j in i + 1 ..< frame.count {
-			if frame.nodes[i].focus.focus == nil do continue
-			same := frame.nodes[i].id == frame.nodes[j].id
+	semantics := ui.sem_frame(frame)
+	fuzzx.check(
+		c,
+		semantics.count >= 0 && semantics.count <= ui.MAX_SEM_NODES,
+		"semantic buffer overflow",
+	)
+	for i in 0 ..< semantics.count {
+		fuzzx.check(c, semantics.nodes[i].id > 1, "semantic node id reserved/zero")
+		for j in i + 1 ..< semantics.count {
+			if semantics.nodes[i].focus.focus == nil do continue
+			same := semantics.nodes[i].id == semantics.nodes[j].id
 			fuzzx.check(c, !same, "duplicate interactive semantic node id")
 		}
 	}
@@ -213,28 +229,29 @@ main :: proc() {
 		s := Scene {
 			slider_val = 40,
 		}
+		runtime: ui.Ui_Runtime
+		ui.ui_runtime_init(&runtime)
+		ui.sem_enable(&runtime, true)
+		frame: ui.Ui_Frame
 		rl.SimReset()
-		ui.interact_reset()
-		ui.route_reset()
-		ui.sem_reset()
-		ui.sem_enable(true)
 		overlay_free_frames := 0
 
 		for i in 0 ..< iterations {
 			c.iteration = i
 			rl.SimBeginFrame()
 			inject_events(&p)
-			ui.begin_cursor_frame()
-			overlay_active := draw_scene(&s, &p)
-			ui.apply_cursor() // flush overlay commands (headless-safe)
+			ui.ui_frame_begin(&frame, &runtime)
+			overlay_active := draw_scene(&frame, &s, &p)
 			if overlay_active {
 				overlay_free_frames = 0
 			} else {
 				overlay_free_frames += 1
 			}
-			check_invariants(&c, &s, overlay_free_frames)
+			check_invariants(&c, &frame, &s, overlay_free_frames)
+			ui.ui_frame_end(&frame)
 			free_all(context.temp_allocator)
 		}
+		ui.ui_runtime_destroy(&runtime)
 	}
 
 	fuzzx.report(&track, "fuzz_interact", seed)

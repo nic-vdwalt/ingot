@@ -99,6 +99,7 @@ set_measure_backend :: proc(fn: proc(text: cstring, size: i32) -> i32) {
 measure_raw_with :: proc(system: ^Text_System, text: cstring, size: i32) -> i32 {
 	assert(system != nil)
 	if system.measure_backend != nil do return system.measure_backend(text, size)
+	when rl.INGOT_INPUT_SIM do return i32(len(string(text))) * size / 2
 	if system.font_loaded do return i32(rl.MeasureTextEx(get_font_with(system, size), text, f32(size), 0).x)
 	return rl.MeasureText(text, size)
 }
@@ -193,6 +194,7 @@ destroy_font :: proc() {
 
 draw_text_with :: proc(system: ^Text_System, text: cstring, x, y, size: i32, color: rl.Color) {
 	assert(system != nil)
+	when rl.INGOT_INPUT_SIM do return
 	if system.font_loaded {
 		rl.DrawTextEx(
 			get_font_with(system, size),
@@ -315,6 +317,7 @@ draw_codepoint_with :: proc(
 	color: rl.Color,
 ) {
 	assert(system != nil)
+	when rl.INGOT_INPUT_SIM do return
 	if system.font_loaded {
 		rl.DrawTextCodepoint(
 			get_font_with(system, size),
