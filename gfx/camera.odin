@@ -30,20 +30,23 @@ cam3d_fwd: Vector3
 depth_mask_on: bool = true
 
 @(private)
-_vp_from :: proc(camera: Camera3D) -> Matrix {
-	aspect := f32(max(g.width, 1)) / f32(max(g.height, 1))
+_camera_matrices :: proc(camera: Camera3D, width, height: i32) -> (Matrix, Matrix, Matrix) {
+	aspect := f32(max(width, 1)) / f32(max(height, 1))
 	view := linalg.matrix4_look_at_f32(camera.position, camera.target, camera.up)
-	proj: Matrix
+	projection: Matrix
 	if camera.projection == .ORTHOGRAPHIC {
 		top := camera.fovy / 2.0
 		right := top * aspect
-		proj = linalg.matrix_ortho3d_f32(-right, right, -top, top, 0.01, 1000.0)
+		projection = linalg.matrix_ortho3d_f32(-right, right, -top, top, 0.01, 1000.0)
 	} else {
-		proj = linalg.matrix4_perspective_f32(camera.fovy * math.PI / 180.0, aspect, 0.01, 1000.0)
+		projection = linalg.matrix4_perspective_f32(
+			camera.fovy * math.PI / 180.0,
+			aspect,
+			0.01,
+			1000.0,
+		)
 	}
-	cam3d_proj = proj
-	cam3d_view = view
-	return proj * view
+	return view, projection, projection * view
 }
 
 // GetProjectionMatrix returns the last 3D projection matrix (rlgl parity for
@@ -58,7 +61,8 @@ GetProjectionMatrix :: proc() -> Matrix {
 SetDepthMask :: proc(on: bool) {depth_mask_on = on}
 
 BeginMode3D :: proc(camera: Camera3D) {
-	cam3d_vp = _vp_from(camera)
+	width, height := _target_dims_i32()
+	cam3d_view, cam3d_proj, cam3d_vp = _camera_matrices(camera, width, height)
 	cam3d = camera
 	// camera basis (world space) for CPU-projected billboards
 	fwd := linalg.normalize(camera.target - camera.position)
@@ -80,9 +84,15 @@ EndMode3D :: proc() {
 // _target_dims returns the pixel dimensions of the pass 3D draws land in: the
 // bound render target while one is active, else the logical window.
 @(private)
+_target_dims_i32 :: proc() -> (i32, i32) {
+	if g.frame.rt != 0 do return g.frame.rt_w, g.frame.rt_h
+	return g.width, g.height
+}
+
+@(private)
 _target_dims :: proc() -> (f32, f32) {
-	if g.frame.rt != 0 do return f32(g.frame.rt_w), f32(g.frame.rt_h)
-	return f32(g.width), f32(g.height)
+	width, height := _target_dims_i32()
+	return f32(width), f32(height)
 }
 
 @(private)
@@ -113,7 +123,7 @@ DrawLine3D :: proc(startPos, endPos: Vector3, color: Color) {
 // GetWorldToScreen projects to the logical window (screen overlays / picking),
 // independent of any active render target.
 GetWorldToScreen :: proc(position: Vector3, camera: Camera3D) -> Vector2 {
-	vp := _vp_from(camera)
+	_, _, vp := _camera_matrices(camera, g.width, g.height)
 	s, _ := _project_dims(vp, position, f32(g.width), f32(g.height))
 	return s
 }

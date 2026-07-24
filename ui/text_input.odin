@@ -118,7 +118,7 @@ pill_delete_atomic :: proc(sb: ^strings.Builder, pills: ^[dynamic]Mention_Span, 
 // window. Rows clamp to the visible band; x clamps to line ends.
 @(private)
 input_mouse_to_byte :: proc(
-	system: ^Text_System,
+	frame: ^Ui_Frame,
 	vlines: []Wrap_Line,
 	text: string,
 	mouse: rl.Vector2,
@@ -127,22 +127,19 @@ input_mouse_to_byte :: proc(
 ) -> int {
 	// Why assert: a caller passing an empty layout or an inverted visible
 	// band would index vlines out of range below.
-	assert(system != nil, "input_mouse_to_byte: nil text system")
+	assert(frame != nil && frame.open, "input_mouse_to_byte: invalid frame")
+	system := ui_frame_text(frame)
+	metrics := ui_frame_metrics(frame)
 	assert(len(vlines) > 0, "input_mouse_to_byte: empty visual lines")
 	assert(vis_start <= vis_end, "input_mouse_to_byte: inverted visible band")
-	row := vis_start + int((mouse.y - f32(y + 6)) / f32(ui_metrics(1).LINE_HEIGHT))
+	row := vis_start + int((mouse.y - f32(y + 6)) / f32(metrics.LINE_HEIGHT))
 	if row < vis_start do row = vis_start
 	if row > vis_end - 1 do row = vis_end - 1
 	if row < 0 do row = 0
 	if row >= len(vlines) do row = len(vlines) - 1
 	vl := vlines[row]
 	line := text[vl.start:vl.end]
-	col := caret_pixel_to_col_with(
-		system,
-		line,
-		i32(mouse.x) - inner_x,
-		ui_metrics(1).FONT_SIZE_BODY,
-	)
+	col := caret_pixel_to_col_with(system, line, i32(mouse.x) - inner_x, metrics.FONT_SIZE_BODY)
 	return vl.start + caret_col_to_byte(line, col)
 }
 
@@ -916,7 +913,7 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	if rl.IsMouseButtonPressed(.LEFT) && !occluded {
 		if rl.CheckCollisionPointRec(mouse, ctx.rect) {
 			off := input_mouse_to_byte(
-				ui_frame_text(ctx.frame),
+				ctx.frame,
 				v.vlines,
 				text,
 				mouse,
@@ -961,7 +958,7 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	}
 	if sel.dragging && sel.sb == ctx.sb && rl.IsMouseButtonDown(.LEFT) {
 		off := input_mouse_to_byte(
-			ui_frame_text(ctx.frame),
+			ctx.frame,
 			v.vlines,
 			text,
 			mouse,
@@ -1009,7 +1006,7 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 		mouse = frame_to_local(ctx.frame, mouse)
 		if !occluded && rl.CheckCollisionPointRec(mouse, ctx.rect) {
 			off := input_mouse_to_byte(
-				ui_frame_text(ctx.frame),
+				ctx.frame,
 				v.vlines,
 				text,
 				mouse,

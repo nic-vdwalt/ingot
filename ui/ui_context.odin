@@ -27,7 +27,8 @@ Ui_Runtime :: struct {
 	scale:                 f32,
 	dpi_last:              f32,
 	generation:            u64,
-	pending_click:         u64,
+	frame_generation:      u64,
+	pending_a11y:          A11y_Pending_Action,
 	semantics_enabled:     bool,
 	semantics_snapshot:    Sem_Frame,
 	scale_metrics_hook:    proc(scale: f32),
@@ -38,18 +39,18 @@ Ui_Runtime :: struct {
 MAX_PANE_SCOPES :: 16
 
 Ui_Frame :: struct {
-	runtime:           ^Ui_Runtime,
-	cursor:            Cursor_State,
-	overlay:           Overlay_State,
-	route:             Input_Route_State,
-	interaction:       Interaction_State,
-	semantics:         Semantics_State,
-	pane_origins:      [MAX_PANE_SCOPES]rl.Vector2,
-	pane_count:        int,
-	text_cull_top:     i32,
-	text_cull_bottom:  i32,
-	open_roots:        int,
-	open:              bool,
+	runtime:          ^Ui_Runtime,
+	cursor:           Cursor_State,
+	overlay:          Overlay_State,
+	route:            Input_Route_State,
+	interaction:      Interaction_State,
+	semantics:        Semantics_State,
+	pane_origins:     [MAX_PANE_SCOPES]rl.Vector2,
+	pane_count:       int,
+	text_cull_top:    i32,
+	text_cull_bottom: i32,
+	open_roots:       int,
+	open:             bool,
 }
 
 ui_runtime_init :: proc(runtime: ^Ui_Runtime) {
@@ -151,6 +152,8 @@ ui_runtime_set_scale_hooks :: proc(
 ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime) {
 	assert(frame != nil && runtime != nil, "ui_frame_begin: nil frame or runtime")
 	assert(runtime.initialized && !frame.open, "ui_frame_begin: invalid lifetime")
+	runtime.frame_generation += 1
+	a11y_expire_before_frame(runtime)
 	frame.runtime = runtime
 	frame.cursor.requested = .DEFAULT
 	frame.overlay.count = 0
@@ -174,7 +177,10 @@ ui_frame_end :: proc(frame: ^Ui_Frame) {
 	assert(!frame.overlay.open, "ui_frame_end: overlay still open")
 	overlay_flush(frame)
 	cursor_apply(frame)
+	focus_scope_frame_end(frame)
 	frame.runtime.semantics_snapshot = frame.semantics.cur
+	a11y_expire_after_frame(frame.runtime)
+	focus_scope_clear_live(frame)
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
 	frame.runtime = nil

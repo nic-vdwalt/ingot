@@ -108,7 +108,14 @@ draw_scale_settings_panel :: proc(
 
 	// Section header.
 	section_c := strings.clone_to_cstring("UI SCALE", context.temp_allocator)
-	draw_text_frame(frame, section_c, modal_x + modal_padding, body.y + 4, metrics.FONT_SIZE_SMALL, style.fg_label)
+	draw_text_frame(
+		frame,
+		section_c,
+		modal_x + modal_padding,
+		body.y + 4,
+		metrics.FONT_SIZE_SMALL,
+		style.fg_label,
+	)
 
 	pending_result, have_result := settings_scale_rows(
 		frame,
@@ -123,7 +130,14 @@ draw_scale_settings_panel :: proc(
 	// Footer hint.
 	footer_y := modal_y + modal_h - modal_padding - footer_h + 4
 	hint_c := strings.clone_to_cstring("Enter apply  \u00b7  Esc close", context.temp_allocator)
-	draw_text_frame(frame, hint_c, modal_x + modal_padding, footer_y, metrics.FONT_SIZE_SMALL, style.fg_secondary)
+	draw_text_frame(
+		frame,
+		hint_c,
+		modal_x + modal_padding,
+		footer_y,
+		metrics.FONT_SIZE_SMALL,
+		style.fg_secondary,
+	)
 
 	modal_end(&st)
 	if st.dismissed {
@@ -175,7 +189,8 @@ settings_scale_rows :: proc(
 		text_x := modal_x + modal_padding
 		if abs(p.value - current_scale) < 0.001 {
 			marker_c := strings.clone_to_cstring("*", context.temp_allocator)
-			draw_text_frame(frame, 
+			draw_text_frame(
+				frame,
 				marker_c,
 				text_x,
 				list_y + (item_h - metrics.FONT_SIZE) / 2,
@@ -190,13 +205,21 @@ settings_scale_rows :: proc(
 			label = fmt.tprintf("Auto (system \u2014 %d%%)", int(auto_scale * 100 + 0.5))
 		}
 		label_c := strings.clone_to_cstring(label, context.temp_allocator)
-		draw_text_frame(frame, label_c, text_x, list_y + (item_h - metrics.FONT_SIZE) / 2, metrics.FONT_SIZE, style.fg_primary)
+		draw_text_frame(
+			frame,
+			label_c,
+			text_x,
+			list_y + (item_h - metrics.FONT_SIZE) / 2,
+			metrics.FONT_SIZE,
+			style.fg_primary,
+		)
 		// Effective pixel percentage on the far right for non-auto rows.
 		if idx != 0 {
 			pct := fmt.tprintf("%d%%", int(p.value * 100 + 0.5))
 			pct_c := strings.clone_to_cstring(pct, context.temp_allocator)
 			pct_w := measure_text_frame(frame, pct_c, metrics.FONT_SIZE_SMALL)
-			draw_text_frame(frame, 
+			draw_text_frame(
+				frame,
 				pct_c,
 				right_edge - pct_w,
 				list_y + (item_h - metrics.FONT_SIZE_SMALL) / 2,

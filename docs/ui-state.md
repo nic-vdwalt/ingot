@@ -45,10 +45,12 @@ tests use separate runtime/frame pairs.
 `Ui_Runtime` owns text and spell systems, theme, metrics, DPI tracking, and
 style generations. `Ui_Frame` owns cursor arbitration, overlays, input routes,
 interaction arbitration, semantics, accessibility actions, and pane-coordinate
-scopes. Cache results are borrowed until the owning system is reset or
-destroyed. Persistent widget behavior never lives in either context: keep
-`Button_State`, `Slider_State`, `Input_Box`, menu state, and scrollbar state in
-the component that draws them. Stable IDs identify focus targets; they do not
+scopes. Retained semantic snapshots contain only values and fixed buffers; live
+focus pointers exist only in bounded registries while a frame is open and are
+cleared by `ui_frame_end`. Cache results are borrowed until the owning system is
+reset or destroyed. Persistent widget behavior never lives in either context:
+keep `Button_State`, `Slider_State`, `Input_Box`, menu state, and scrollbar state
+in the component that draws them. Stable IDs identify focus targets; they do not
 own widget state.
 
 Ingot has no implicit active runtime or frame. Geometry-level widgets receive a
@@ -92,7 +94,11 @@ ui.ui_frame_end(&frame)
 
 New conditional or dynamic interfaces should pass explicit nonzero `Focus_Id`
 values to auto-layout widgets. IDs are unique only within one `Ui` frame.
-Registration order defines Tab order; the ID defines logical identity.
+Registration order defines Tab order; the ID defines logical identity. Global
+Tab intent may be captured before drawing, but is resolved at frame end against
+only the controls registered during that same frame. Accessibility focus uses a
+live current-frame link, while activation expires after the immediately
+following frame if its target is absent.
 
 ```odin
 TITLE_ID :: ui.Focus_Id(1)
@@ -129,14 +135,14 @@ The order of `items` may change without moving focus to another record. Keep
 IDs stable for the lifetime of each logical control and avoid reusing a removed
 record's ID for a different control.
 
-## Legacy compatibility boundary
+## Explicit ownership boundary
 
-No-context font, wrap, spell, theme, scale, markdown, and positional text-input
-APIs remain temporarily for source compatibility. New code must use
-`Ui_Runtime`, `Ui_Frame`, explicit `Text_System`/`Spell_System`,
-`Markdown_Context`, and caller-owned `Text_Input_State`. Runtime-aware internals
-must not call no-context adapters. Removal is a separately reviewed breaking
-release after known consumers are migrated.
+Font, wrap, spell, theme, scale, markdown, and text-input APIs require their
+owner explicitly. There is no default text or spell system, active runtime or
+frame, ambient theme or metric mirror, or positional text-input compatibility
+path. Native spell adapters may use process resources required by the operating
+system, while logical caches, ignored words, and menu state remain explicitly
+owned by runtimes and components.
 
 ## Sequential compatibility
 

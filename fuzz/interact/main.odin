@@ -309,9 +309,11 @@ check_invariants :: proc(c: ^fuzzx.Ctx, frame: ^ui.Ui_Frame, s: ^Scene, overlay_
 	for i in 0 ..< semantics.count {
 		fuzzx.check(c, semantics.nodes[i].id > 1, "semantic node id reserved/zero")
 		for j in i + 1 ..< semantics.count {
-			if semantics.nodes[i].focus.focus == nil do continue
 			same := semantics.nodes[i].id == semantics.nodes[j].id
-			fuzzx.check(c, !same, "duplicate interactive semantic node id")
+			if same {
+				_, actionable := ui.sem_action_target(frame, semantics.nodes[i].id)
+				fuzzx.check(c, !actionable, "duplicate interactive semantic node id")
+			}
 		}
 	}
 }

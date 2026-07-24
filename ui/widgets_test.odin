@@ -46,8 +46,16 @@ truncate_helpers_fit_and_cut :: proc(t: ^testing.T) {
 	set_measure_backend_with(&system, w_mono)
 	defer text_system_destroy(&system)
 	// Fits: returned untouched.
-	testing.expect_value(t, truncate_to_width_dir_with(&system, "abc", 10 * W_CELL, 16, .Tail), "abc")
-	testing.expect_value(t, truncate_to_width_dir_with(&system, "abc", 10 * W_CELL, 16, .Head), "abc")
+	testing.expect_value(
+		t,
+		truncate_to_width_dir_with(&system, "abc", 10 * W_CELL, 16, .Tail),
+		"abc",
+	)
+	testing.expect_value(
+		t,
+		truncate_to_width_dir_with(&system, "abc", 10 * W_CELL, 16, .Head),
+		"abc",
+	)
 	// Tail cut keeps a head prefix and appends the ellipsis; head cut keeps a
 	// tail suffix behind it. Exact glyph counts depend on the shared measure
 	// backend (parallel tests may swap it), so assert the structural contract.

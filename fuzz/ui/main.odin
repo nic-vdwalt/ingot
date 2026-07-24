@@ -321,6 +321,11 @@ exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 			ui.sem_focus_list(&frame).count <= ui.MAX_SEM_FOCUS,
 			"focus registry overflow",
 		)
+		fuzzx.check(
+			c,
+			frame.semantics.action_targets.count <= ui.MAX_SEM_FOCUS,
+			"action target registry overflow",
+		)
 
 		// Pure AccessKit node build: ids unique, non-reserved; every desc
 		// mirrors its source node.
@@ -330,10 +335,11 @@ exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 		for i in 0 ..< len(nodes) {
 			fuzzx.check(c, nodes[i].id > 1, "a11y node id reserved")
 			fuzzx.check(c, len(nodes[i].label) <= ui.SEM_LABEL_MAX, "a11y label exceeds cap")
-			// Interactive nodes must not collide on ids (AT targets them).
-			if semantics.nodes[i].focus.focus == nil do continue
 			for j in i + 1 ..< len(nodes) {
-				fuzzx.check(c, nodes[i].id != nodes[j].id, "a11y duplicate interactive node id")
+				if nodes[i].id == nodes[j].id {
+					_, actionable := ui.sem_action_target(&frame, nodes[i].id)
+					fuzzx.check(c, !actionable, "a11y duplicate interactive node id")
+				}
 			}
 		}
 	}

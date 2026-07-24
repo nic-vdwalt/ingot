@@ -352,11 +352,8 @@ _gpu_3d_set_camera :: proc(pass: ^Gpu_3D_Pass, camera: Camera3D) {
 	assert(pass != nil)
 	width := pass.target.texture.texture.width
 	height := pass.target.texture.texture.height
-	old_width, old_height := g.width, g.height
-	g.width, g.height = width, height
-	pass.view_projection = _vp_from(camera)
-	g.width, g.height = old_width, old_height
 	assert(width > 0 && height > 0)
+	_, _, pass.view_projection = _camera_matrices(camera, width, height)
 }
 
 @(private)

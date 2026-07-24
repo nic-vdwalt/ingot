@@ -51,3 +51,30 @@ focus_scope_cycles_stable_links_across_owners :: proc(t: ^testing.T) {
 	testing.expect_value(t, a.active, FOCUS_ID_NONE)
 	testing.expect_value(t, b.active, focus_id(20))
 }
+
+@(test)
+focus_scope_resolves_current_frame_and_clears_links :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+
+	slot_a, slot_b: int
+	frame.semantics.cycle_requested = true
+	semantic_push(&frame, .Button, {0, 0, 1, 1}, "a", focus = {&slot_a, 1})
+	semantic_push(&frame, .Button, {0, 0, 1, 1}, "b", focus = {&slot_b, 1})
+	ui_frame_end(&frame)
+
+	testing.expect_value(t, slot_a, 1)
+	testing.expect_value(t, slot_b, 0)
+	testing.expect_value(t, frame.semantics.focus_cur.count, 0)
+	testing.expect_value(t, frame.semantics.action_targets.count, 0)
+
+	ui_frame_begin(&frame, &runtime)
+	frame.semantics.cycle_requested = true
+	semantic_push(&frame, .Button, {0, 0, 1, 1}, "b", focus = {&slot_b, 1})
+	ui_frame_end(&frame)
+	testing.expect_value(t, slot_a, 1)
+	testing.expect_value(t, slot_b, 1)
+}

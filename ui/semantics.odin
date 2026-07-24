@@ -63,7 +63,6 @@ Sem_Node :: struct {
 	value:     f32, // slider/progress current value
 	lo:        f32, // slider range low
 	hi:        f32, // slider range high
-	focus:     Focus_Opt,
 }
 
 Sem_Frame :: struct {
@@ -82,12 +81,24 @@ Sem_Focus_List :: struct {
 	count:   int,
 }
 
+Sem_Action_Target :: struct {
+	id:    u64,
+	focus: Focus_Opt,
+}
+
+Sem_Action_Targets :: struct {
+	entries: [MAX_SEM_FOCUS]Sem_Action_Target,
+	count:   int,
+}
+
 Semantics_State :: struct {
-	cur:        Sem_Frame,
-	on:         bool,
-	ordinals:   [Sem_Role]int,
-	focus_cur:  Sem_Focus_List,
-	focus_prev: Sem_Focus_List,
+	cur:             Sem_Frame,
+	on:              bool,
+	ordinals:        [Sem_Role]int,
+	focus_cur:       Sem_Focus_List,
+	action_targets:  Sem_Action_Targets,
+	cycle_requested: bool,
+	cycle_backwards: bool,
 }
 
 sem_enable :: proc(runtime: ^Ui_Runtime, on: bool) {
@@ -105,10 +116,13 @@ sem_begin_frame :: proc(frame: ^Ui_Frame) {
 	state := &frame.semantics
 	assert(state.cur.count >= 0 && state.cur.count <= MAX_SEM_NODES)
 	assert(state.focus_cur.count >= 0 && state.focus_cur.count <= MAX_SEM_FOCUS)
+	assert(state.action_targets.count >= 0 && state.action_targets.count <= MAX_SEM_FOCUS)
 	state.cur.count = 0
 	state.ordinals = {}
-	state.focus_prev = state.focus_cur
 	state.focus_cur.count = 0
+	state.action_targets.count = 0
+	state.cycle_requested = false
+	state.cycle_backwards = false
 }
 
 sem_reset :: proc(frame: ^Ui_Frame) {
@@ -220,7 +234,10 @@ semantic_push :: proc(
 		value = value,
 		lo    = lo,
 		hi    = hi,
-		focus = focus,
+	}
+	if focus.focus != nil && sem.action_targets.count < MAX_SEM_FOCUS {
+		sem.action_targets.entries[sem.action_targets.count] = {node.id, focus}
+		sem.action_targets.count += 1
 	}
 	n := sem_label_clip(label)
 	copy(node.label[:n], label[:n])
@@ -238,11 +255,31 @@ sem_frame :: proc(frame: ^Ui_Frame) -> ^Sem_Frame {
 	return &frame.semantics.cur
 }
 
-// sem_focus_list returns last frame's draw-ordered focusable widgets for the
-// app-global Tab cycler.
+// sem_focus_list returns this frame's draw-ordered focusable widgets.
 sem_focus_list :: proc(frame: ^Ui_Frame) -> ^Sem_Focus_List {
 	assert(frame != nil, "sem_focus_list: nil frame")
-	return &frame.semantics.focus_prev
+	return &frame.semantics.focus_cur
+}
+
+sem_action_target :: proc(frame: ^Ui_Frame, id: u64) -> (Focus_Opt, bool) {
+	assert(frame != nil && frame.open, "sem_action_target: invalid frame")
+	targets := &frame.semantics.action_targets
+	assert(targets.count >= 0 && targets.count <= MAX_SEM_FOCUS)
+	for i in 0 ..< targets.count {
+		if targets.entries[i].id == id do return targets.entries[i].focus, true
+	}
+	return {}, false
+}
+
+sem_has_interactive_node :: proc(frame: ^Ui_Frame, id: u64) -> bool {
+	assert(frame != nil && frame.open, "sem_has_interactive_node: invalid frame")
+	sem := sem_frame(frame)
+	for i in 0 ..< sem.count {
+		node := &sem.nodes[i]
+		if node.id != id do continue
+		return node.role != .Label && node.role != .Pane && node.role != .Modal
+	}
+	return false
 }
 
 // sem_node_label returns the node's label as a string view.

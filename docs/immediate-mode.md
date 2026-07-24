@@ -35,8 +35,10 @@ Ingot divides UI data into three categories:
    rendered frame and then discarded or reused.
 
 Stable IDs identify focus and accessibility targets. They do not become keys
-into a hidden state database. Registration order can define traversal order
-while application identity remains stable across insertion and reordering.
+into a hidden state database. Semantic snapshots are pointer-free, live action
+links last only for the open frame, and Tab traversal resolves the current
+frame's registration order at frame end. Accessibility activation is bounded to
+the immediately following frame, so a removed control cannot retain an action.
 
 See [UI state and stable focus](ui-state.md) for ownership rules and concrete
 Odin examples. [Choosing Ingot](comparison.md) compares this model with other

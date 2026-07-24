@@ -469,7 +469,12 @@ color_mix :: proc(a, b: rl.Color, t: f32) -> rl.Color {
 // stacking expanded translucent rings (gfx has no blur primitive). Draw it
 // *before* the card fill so only the fringe remains visible. strength scales
 // the theme.shadow_color alpha; 1.0 is the standard card shadow.
-draw_shadow_rounded :: proc(frame: ^Ui_Frame, rect: rl.Rectangle, roundness: f32, strength: f32 = 1.0) {
+draw_shadow_rounded :: proc(
+	frame: ^Ui_Frame,
+	rect: rl.Rectangle,
+	roundness: f32,
+	strength: f32 = 1.0,
+) {
 	assert(rect.width > 0 && rect.height > 0, "draw_shadow_rounded: empty rect")
 	assert(strength >= 0 && strength <= 4, "draw_shadow_rounded: strength out of range")
 	base := ui_frame_theme(frame).shadow_color
@@ -881,7 +886,18 @@ draw_text_wrapped_frame :: proc(
 		if !line_culled_frame(frame, current_y, line_height) && draw {
 			value := text[line.start:line.end]
 			if sel_start >= 0 && sel_end > sel_start {
-				draw_line_with_selection_frame(frame, x, current_y, value, font_size, line_height, color, line.start, sel_start, sel_end)
+				draw_line_with_selection_frame(
+					frame,
+					x,
+					current_y,
+					value,
+					font_size,
+					line_height,
+					color,
+					line.start,
+					sel_start,
+					sel_end,
+				)
 			} else {
 				value_c := strings.clone_to_cstring(value, context.temp_allocator)
 				draw_text_frame(frame, value_c, x, current_y, font_size, color)
@@ -978,7 +994,11 @@ truncate_to_width_frame :: proc(
 }
 
 // Return text truncated with a trailing ellipsis so it fits within max_width.
-truncate_to_width_left_frame :: proc(frame: ^Ui_Frame, text: string, max_width, font_size: i32) -> string {
+truncate_to_width_left_frame :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	max_width, font_size: i32,
+) -> string {
 	return truncate_to_width_dir_with(ui_frame_text(frame), text, max_width, font_size, .Head)
 }
 
@@ -986,7 +1006,11 @@ truncate_to_width_left_frame :: proc(frame: ^Ui_Frame, text: string, max_width, 
 // final segment (filename) stay visible when it would otherwise overflow
 // max_width, e.g. "alloy/…/widgets.odin". A trailing '/' on directory entries
 // is preserved. Allocated in the temp allocator.
-truncate_path_middle_frame :: proc(frame: ^Ui_Frame, path: string, max_width, font_size: i32) -> string {
+truncate_path_middle_frame :: proc(
+	frame: ^Ui_Frame,
+	path: string,
+	max_width, font_size: i32,
+) -> string {
 	system := ui_frame_text(frame)
 	if len(path) == 0 do return path
 	full_c := strings.clone_to_cstring(path, context.temp_allocator)
@@ -1059,7 +1083,13 @@ find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: in
 // ingot-only generic widgets (not present in the alloy superset).
 // ------------------------------------------------------------------
 
-spinner :: proc(frame: ^Ui_Frame, cx, cy: i32, radius: f32, color: rl.Color = THEME_COLOR, segments: i32 = 24) {
+spinner :: proc(
+	frame: ^Ui_Frame,
+	cx, cy: i32,
+	radius: f32,
+	color: rl.Color = THEME_COLOR,
+	segments: i32 = 24,
+) {
 	// The sentinel default resolves to the theme accent at call time
 	// (defaults must be compile-time constants; the theme is runtime).
 	color := color
@@ -1085,14 +1115,28 @@ section_header :: proc(frame: ^Ui_Frame, x, y, w: i32, label: string) -> i32 {
 	style := ui_frame_theme(frame)
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
 	draw_text_frame(frame, lc, x, y, metrics.FONT_SIZE_LABEL, style.fg_label)
-	rl.DrawRectangle(x, y + metrics.FONT_SIZE_LABEL + ui_frame_sc(frame, 5), w, 1, style.border_subtle)
+	rl.DrawRectangle(
+		x,
+		y + metrics.FONT_SIZE_LABEL + ui_frame_sc(frame, 5),
+		w,
+		1,
+		style.border_subtle,
+	)
 	return y + metrics.FONT_SIZE_LABEL + ui_frame_sc(frame, 11)
 }
 
 // status_pill draws a pill whose background is the fg color tinted to
 // PILL_TINT_ALPHA. Returns the pill width.
 status_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, color: rl.Color) -> i32 {
-	return draw_pill(frame, text, x, y, font_size, color, {color.r, color.g, color.b, PILL_TINT_ALPHA})
+	return draw_pill(
+		frame,
+		text,
+		x,
+		y,
+		font_size,
+		color,
+		{color.r, color.g, color.b, PILL_TINT_ALPHA},
+	)
 }
 
 // progress_bar draws a rounded track + fill; frac clamped to [0,1].
@@ -1124,7 +1168,13 @@ eased :: proc(current: ^f32, target, dt, speed: f32) -> f32 {
 
 // progress_bar_animated draws a progress bar whose fill eases toward frac.
 // `anim` is caller-owned eased state (reset it to 0 to replay the fill).
-progress_bar_animated :: proc(frame: ^Ui_Frame, x, y, w, h: i32, frac: f32, anim: ^f32, color: rl.Color) {
+progress_bar_animated :: proc(
+	frame: ^Ui_Frame,
+	x, y, w, h: i32,
+	frac: f32,
+	anim: ^f32,
+	color: rl.Color,
+) {
 	eased(anim, clamp(frac, 0, 1), rl.GetFrameTime(), 10.0)
 	if abs(clamp(frac, 0, 1) - anim^) >= 0.001 {
 		// Still easing: keep frames coming until the fill settles.
@@ -1142,7 +1192,18 @@ icon_btn :: proc(
 	enabled: bool = true,
 	focus: Focus_Opt = {},
 ) -> bool {
-	return btn_at(frame, x, y, size, size, label, .Ghost, ui_frame_metrics(frame).FONT_SIZE_LABEL, enabled, focus = focus)
+	return btn_at(
+		frame,
+		x,
+		y,
+		size,
+		size,
+		label,
+		.Ghost,
+		ui_frame_metrics(frame).FONT_SIZE_LABEL,
+		enabled,
+		focus = focus,
+	)
 }
 
 kv_row_frame :: proc(
@@ -1276,14 +1337,26 @@ pane_end :: proc(frame: ^Ui_Frame, p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i
 // so callers can right-align it before drawing.
 back_btn_w :: proc(frame: ^Ui_Frame, label: string) -> i32 {
 	txt := fmt.ctprintf("\u2190 %s", label)
-	return measure_text_frame(frame, txt, ui_frame_metrics(frame).FONT_SIZE_LABEL) + ui_frame_sc(frame, 14)
+	return(
+		measure_text_frame(frame, txt, ui_frame_metrics(frame).FONT_SIZE_LABEL) +
+		ui_frame_sc(frame, 14) \
+	)
 }
 
 // back_btn draws the standard Ghost-style "← label" navigation button.
 // Returns true if clicked this frame.
 back_btn :: proc(frame: ^Ui_Frame, x, y: i32, label: string, focus: Focus_Opt = {}) -> bool {
 	txt := fmt.tprintf("\u2190 %s", label)
-	return btn_at(frame, x, y, back_btn_w(frame, label), ui_frame_sc(frame, 22), txt, .Ghost, focus = focus)
+	return btn_at(
+		frame,
+		x,
+		y,
+		back_btn_w(frame, label),
+		ui_frame_sc(frame, 22),
+		txt,
+		.Ghost,
+		focus = focus,
+	)
 }
 
 // --- standardized collapsible section header -------------------------------
@@ -1327,7 +1400,14 @@ collapsible_header :: proc(
 		draw_focus_ring(frame, x, y, w, h)
 	}
 	lbl := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text_frame(frame, lbl, x + ui_frame_sc(frame, 10), y + ui_frame_sc(frame, 6), resolved_font_size, style.fg_label)
+	draw_text_frame(
+		frame,
+		lbl,
+		x + ui_frame_sc(frame, 10),
+		y + ui_frame_sc(frame, 6),
+		resolved_font_size,
+		style.fg_label,
+	)
 	ind: cstring = "\u25BE" if open^ else "\u25B8"
 	iw := measure_text_frame(frame, ind, resolved_font_size)
 	draw_text_frame(

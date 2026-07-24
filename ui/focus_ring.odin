@@ -78,7 +78,8 @@ focus_activated :: proc(frame: ^Ui_Frame, focus: ^int, id: int) -> bool {
 	assert(frame != nil && frame.open, "focus_activated: invalid frame")
 	assert(focus != nil, "focus_activated: nil focus")
 	assert(id > 0, "focus_activated: focus ids are positive")
-	if a11y_take_click(frame.runtime, focus, id) {
+	node_id := sem_node_id(.Button, {focus, id}, "", 0)
+	if a11y_take_click(frame.runtime, node_id) {
 		focus^ = id
 		return true
 	}

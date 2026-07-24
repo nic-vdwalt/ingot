@@ -25,6 +25,12 @@ import "base:runtime"
 import ak "ingot:accesskit"
 import rl "ingot:gfx"
 
+A11y_Pending_Action :: struct {
+	node_id:            u64,
+	expires_generation: u64,
+	pending:            bool,
+}
+
 // a11y_role maps a semantic role onto AccessKit's role enum. Pure.
 a11y_role :: proc(role: Sem_Role) -> ak.Role {
 	switch role {
@@ -80,7 +86,7 @@ a11y_frame_end :: proc(frame: ^Ui_Frame) {
 	for {
 		action, ok := rl.PollAccessibilityAction()
 		if !ok do break
-		_a11y_apply(frame, action)
+		a11y_apply_action(frame, action)
 	}
 }
 
@@ -112,44 +118,66 @@ _a11y_sync_web_controls :: proc(ui_frame: ^Ui_Frame) {
 			sem.lo,
 			sem.hi,
 		)
-		if res.activated {
-			ui_frame.runtime.pending_click = sem.id
-			rl.RequestRedraw()
+		if res.activated && sem_has_interactive_node(ui_frame, sem.id) {
+			a11y_stage_click(ui_frame.runtime, sem.id)
 		}
 	}
 }
 
-// a11y_take_click consumes a pending AT click aimed at this focus link.
-// focus_activated calls it so AT activation flows through the same path as
-// Space/Enter.
-a11y_take_click :: proc(runtime: ^Ui_Runtime, focus: ^int, id: int) -> bool {
+a11y_stage_click :: proc(runtime: ^Ui_Runtime, node_id: u64) {
+	assert(runtime != nil && runtime.initialized, "a11y_stage_click: invalid runtime")
+	assert(node_id > SEM_ID_ROOT, "a11y_stage_click: invalid node id")
+	runtime.pending_a11y = {
+		node_id            = node_id,
+		expires_generation = runtime.frame_generation + 1,
+		pending            = true,
+	}
+	rl.RequestRedraw()
+}
+
+a11y_expire_before_frame :: proc(runtime: ^Ui_Runtime) {
+	assert(runtime != nil && runtime.initialized, "a11y_expire_before_frame: invalid runtime")
+	pending := &runtime.pending_a11y
+	if pending.pending && runtime.frame_generation > pending.expires_generation {
+		pending^ = {}
+	}
+}
+
+a11y_expire_after_frame :: proc(runtime: ^Ui_Runtime) {
+	assert(runtime != nil && runtime.initialized, "a11y_expire_after_frame: invalid runtime")
+	pending := &runtime.pending_a11y
+	if pending.pending && runtime.frame_generation >= pending.expires_generation {
+		pending^ = {}
+	}
+}
+
+// a11y_take_click consumes an AT click only in the immediately following
+// frame. The caller supplies the semantic identity registered this frame.
+a11y_take_click :: proc(runtime: ^Ui_Runtime, node_id: u64) -> bool {
 	assert(runtime != nil && runtime.initialized, "a11y_take_click: invalid runtime")
-	if runtime.pending_click == 0 do return false
-	if focus == nil || id <= 0 do return false
-	if sem_node_id(.Button, {focus, id}, "", 0) != runtime.pending_click do return false
-	runtime.pending_click = 0
+	pending := &runtime.pending_a11y
+	if !pending.pending do return false
+	if runtime.frame_generation != pending.expires_generation do return false
+	if node_id != pending.node_id do return false
+	pending^ = {}
 	return true
 }
 
 // _a11y_apply routes one AT action. Focus writes the caller's focus slot
 // directly (the pointer recorded in the semantic node is long-lived caller
 // state); Click is staged for the widget's next focus_activated check.
-@(private = "file")
-_a11y_apply :: proc(ui_frame: ^Ui_Frame, action: rl.A11y_Action) {
-	frame := sem_frame(ui_frame)
+a11y_apply_action :: proc(ui_frame: ^Ui_Frame, action: rl.A11y_Action) {
 	#partial switch action.action {
 	case .Click:
-		ui_frame.runtime.pending_click = u64(action.node)
-		rl.RequestRedraw()
+		node_id := u64(action.node)
+		if sem_has_interactive_node(ui_frame, node_id) {
+			a11y_stage_click(ui_frame.runtime, node_id)
+		}
 	case .Focus:
-		for i in 0 ..< frame.count {
-			node := &frame.nodes[i]
-			if node.id != u64(action.node) do continue
-			if node.focus.focus != nil {
-				focus_opt_set(node.focus)
-				rl.RequestRedraw()
-			}
-			return
+		focus, ok := sem_action_target(ui_frame, u64(action.node))
+		if ok {
+			focus_opt_set(focus)
+			rl.RequestRedraw()
 		}
 	}
 }

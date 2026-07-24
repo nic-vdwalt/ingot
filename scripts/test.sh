@@ -4,12 +4,12 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 col="-collection:ingot=$root"
+"$root/scripts/check-ui-state.sh"
 for pkg in gfx ui term prefs net; do
 	echo "== testing $pkg =="
 	extra=()
-	# ui widgets share module-level scratch state (measure backend, route
-	# claims, overlay recorder); run its tests on one thread so global
-	# installs/resets from one test can't race another.
+	# UI tests use deterministic single-thread execution for native graphics
+	# fixtures and platform adapters.
 	[ "$pkg" = ui ] && extra+=("-define:ODIN_TEST_THREADS=1")
 	# term's pump fuzz needs the scripted PTY byte source (no shell spawned).
 	[ "$pkg" = term ] && extra+=("-define:INGOT_PTY_SIM=true")

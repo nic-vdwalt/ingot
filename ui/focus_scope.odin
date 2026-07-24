@@ -1,10 +1,8 @@
 // App-global keyboard focus order. form_focus.odin cycles Tab within one
-// caller-owned focus slot; focus_scope_cycle extends that across every
-// focusable widget drawn last frame, in draw order, using the registry the
-// semantic layer records (semantics.odin). The registry is one frame behind
-// — the same latency/justification as the input router's claim buffer — so
-// Tab traverses exactly what was on screen. Callers keep owning their focus
-// slots; this only writes 0 or the widget's id into them.
+// caller-owned focus slot; focus_scope_cycle captures Tab intent before draw,
+// then focus_scope_frame_end resolves it against focusable widgets registered
+// during the current frame. Callers keep owning their focus slots; no pointer
+// survives the open frame.
 //
 // Use one or the other per frame: form_focus_cycle for a single form,
 // focus_scope_cycle when several forms/panes should share one Tab order.
@@ -54,16 +52,33 @@ focus_scope_apply :: proc(list: ^Sem_Focus_List, current, next: int) {
 	assert(focus_opt_focused(e.focus), "focus_scope_apply: focus not set")
 }
 
-// focus_scope_cycle is the app-level Tab handler: call once per frame
-// (instead of per-form form_focus_cycle) to Tab across all focusable widgets
-// drawn last frame. Shift+Tab reverses. No-op while no focusable widgets
-// were recorded.
+// focus_scope_cycle is the app-level Tab handler. Call it once before drawing
+// focusable widgets. The request is committed at ui_frame_end after current
+// draw-order registration is complete.
 focus_scope_cycle :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "focus_scope_cycle: invalid frame")
 	if !rl.IsKeyPressed(.TAB) do return
+	frame.semantics.cycle_requested = true
+	frame.semantics.cycle_backwards = rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+}
+
+focus_scope_frame_end :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "focus_scope_frame_end: invalid frame")
+	state := &frame.semantics
+	if !state.cycle_requested do return
 	list := sem_focus_list(frame)
-	if list.count == 0 do return
-	backwards := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
-	current := focus_scope_focused_index(list)
-	next := focus_scope_next_index(current, list.count, backwards)
-	focus_scope_apply(list, current, next)
+	if list.count > 0 {
+		current := focus_scope_focused_index(list)
+		next := focus_scope_next_index(current, list.count, state.cycle_backwards)
+		focus_scope_apply(list, current, next)
+		rl.RequestRedraw()
+	}
+	state.cycle_requested = false
+	state.cycle_backwards = false
+}
+
+focus_scope_clear_live :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "focus_scope_clear_live: invalid frame")
+	frame.semantics.focus_cur.count = 0
+	frame.semantics.action_targets.count = 0
 }

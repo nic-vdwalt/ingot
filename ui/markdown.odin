@@ -362,7 +362,8 @@ draw_markdown_line_spans :: proc(
 
 		seg_text := s.text[seg_start - span_disp_start:seg_end - span_disp_start]
 		seg_c := strings.clone_to_cstring(seg_text, context.temp_allocator)
-		seg_pixel_w := measure_text_frame(ctx.frame, seg_c, ui_frame_metrics(ctx.frame).FONT_SIZE) + 1
+		seg_pixel_w :=
+			measure_text_frame(ctx.frame, seg_c, ui_frame_metrics(ctx.frame).FONT_SIZE) + 1
 
 		// Draw selection highlight behind text so text stays visible.
 		if has_sel && sel_display_start < sel_display_end {
@@ -377,23 +378,51 @@ draw_markdown_line_spans :: proc(
 					seg_text[hl_s - seg_start:hl_e - seg_start],
 					context.temp_allocator,
 				)
-				hl_x := cursor_x + measure_text_frame(ctx.frame, pre_c, ui_frame_metrics(ctx.frame).FONT_SIZE)
-				hl_w := measure_text_frame(ctx.frame, span_c, ui_frame_metrics(ctx.frame).FONT_SIZE)
-				rl.DrawRectangle(hl_x, y, hl_w, ui_frame_metrics(ctx.frame).LINE_HEIGHT, ui_frame_theme(ctx.frame).bg_selection)
+				hl_x :=
+					cursor_x +
+					measure_text_frame(ctx.frame, pre_c, ui_frame_metrics(ctx.frame).FONT_SIZE)
+				hl_w := measure_text_frame(
+					ctx.frame,
+					span_c,
+					ui_frame_metrics(ctx.frame).FONT_SIZE,
+				)
+				rl.DrawRectangle(
+					hl_x,
+					y,
+					hl_w,
+					ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+					ui_frame_theme(ctx.frame).bg_selection,
+				)
 			}
 		}
 
 		if s.pill {
 			// File-mention chip: rounded background + accent text.
 			seg_w := measure_text_frame(ctx.frame, seg_c, ui_frame_metrics(ctx.frame).FONT_SIZE)
-			rect := rl.Rectangle{f32(cursor_x - 3), f32(y - 1), f32(seg_w + 6), f32(ui_frame_metrics(ctx.frame).FONT_SIZE + 4)}
+			rect := rl.Rectangle {
+				f32(cursor_x - 3),
+				f32(y - 1),
+				f32(seg_w + 6),
+				f32(ui_frame_metrics(ctx.frame).FONT_SIZE + 4),
+			}
 			rl.DrawRectangleRounded(rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
-			draw_text_frame(ctx.frame, seg_c, cursor_x, y, ui_frame_metrics(ctx.frame).FONT_SIZE, ui_frame_theme(ctx.frame).fg_accent)
+			draw_text_frame(
+				ctx.frame,
+				seg_c,
+				cursor_x,
+				y,
+				ui_frame_metrics(ctx.frame).FONT_SIZE,
+				ui_frame_theme(ctx.frame).fg_accent,
+			)
 		} else if s.code {
 			// Inline code: render as a clickable file/dir pill when the text
 			// names a real workspace path; otherwise as plain inline-code text.
 			if workspace_has_path_with(ctx.workspace_files, s.text) {
-				seg_w := measure_text_frame(ctx.frame, seg_c, ui_frame_metrics(ctx.frame).FONT_SIZE)
+				seg_w := measure_text_frame(
+					ctx.frame,
+					seg_c,
+					ui_frame_metrics(ctx.frame).FONT_SIZE,
+				)
 				rect := rl.Rectangle {
 					f32(cursor_x - 3),
 					f32(y - 1),
@@ -401,18 +430,53 @@ draw_markdown_line_spans :: proc(
 					f32(ui_frame_metrics(ctx.frame).FONT_SIZE + 4),
 				}
 				rl.DrawRectangleRounded(rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
-				draw_text_frame(ctx.frame, seg_c, cursor_x, y, ui_frame_metrics(ctx.frame).FONT_SIZE, ui_frame_theme(ctx.frame).fg_accent)
+				draw_text_frame(
+					ctx.frame,
+					seg_c,
+					cursor_x,
+					y,
+					ui_frame_metrics(ctx.frame).FONT_SIZE,
+					ui_frame_theme(ctx.frame).fg_accent,
+				)
 			} else {
-				draw_text_frame(ctx.frame, seg_c, cursor_x, y, ui_frame_metrics(ctx.frame).FONT_SIZE, ui_frame_theme(ctx.frame).fg_code_inline)
+				draw_text_frame(
+					ctx.frame,
+					seg_c,
+					cursor_x,
+					y,
+					ui_frame_metrics(ctx.frame).FONT_SIZE,
+					ui_frame_theme(ctx.frame).fg_code_inline,
+				)
 			}
 		} else if s.bold {
 			// Faux-bold: draw text twice with 1px horizontal offset.
-			draw_text_frame(ctx.frame, seg_c, cursor_x + 1, y, ui_frame_metrics(ctx.frame).FONT_SIZE, ui_frame_theme(ctx.frame).fg_bold)
-			draw_text_frame(ctx.frame, seg_c, cursor_x, y, ui_frame_metrics(ctx.frame).FONT_SIZE, ui_frame_theme(ctx.frame).fg_bold)
+			draw_text_frame(
+				ctx.frame,
+				seg_c,
+				cursor_x + 1,
+				y,
+				ui_frame_metrics(ctx.frame).FONT_SIZE,
+				ui_frame_theme(ctx.frame).fg_bold,
+			)
+			draw_text_frame(
+				ctx.frame,
+				seg_c,
+				cursor_x,
+				y,
+				ui_frame_metrics(ctx.frame).FONT_SIZE,
+				ui_frame_theme(ctx.frame).fg_bold,
+			)
 		} else if s.link {
 			// Hyperlink: accent text + underline; click handling lives in chat.odin.
 			seg_w := measure_text_frame(ctx.frame, seg_c, ui_frame_metrics(ctx.frame).FONT_SIZE)
-			draw_text_frame(ctx.frame, seg_c, cursor_x, y, ui_frame_metrics(ctx.frame).FONT_SIZE, ui_frame_theme(ctx.frame).fg_accent)
+			draw_text_frame(
+				ctx.frame,
+				seg_c,
+				cursor_x,
+				y,
+				ui_frame_metrics(ctx.frame).FONT_SIZE,
+				ui_frame_theme(ctx.frame).fg_accent,
+			)
 			rl.DrawLine(
 				cursor_x,
 				y + ui_frame_metrics(ctx.frame).FONT_SIZE + 1,
@@ -421,7 +485,14 @@ draw_markdown_line_spans :: proc(
 				ui_frame_theme(ctx.frame).fg_accent,
 			)
 		} else {
-			draw_text_frame(ctx.frame, seg_c, cursor_x, y, ui_frame_metrics(ctx.frame).FONT_SIZE, base_color)
+			draw_text_frame(
+				ctx.frame,
+				seg_c,
+				cursor_x,
+				y,
+				ui_frame_metrics(ctx.frame).FONT_SIZE,
+				base_color,
+			)
 		}
 
 		cursor_x += seg_pixel_w
@@ -445,7 +516,19 @@ draw_text_wrapped_md :: proc(
 
 	// Fast path: single plain span — delegate to existing function.
 	if len(spans) == 1 && !spans[0].bold && !spans[0].pill && !spans[0].code && !spans[0].link {
-		return draw_text_wrapped_frame(ctx.frame, x, y, max_width, text, color, font_size, ui_frame_metrics(ctx.frame).LINE_HEIGHT, sel_start, sel_end, draw)
+		return draw_text_wrapped_frame(
+			ctx.frame,
+			x,
+			y,
+			max_width,
+			text,
+			color,
+			font_size,
+			ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+			sel_start,
+			sel_end,
+			draw,
+		)
 	}
 
 	display_text := spans_display_string(spans)
@@ -497,12 +580,24 @@ measure_wrapped_height_md :: proc(
 	if !strings.contains(text, "**") &&
 	   strings.index_byte(text, PILL_OPEN) < 0 &&
 	   strings.index_byte(text, '`') < 0 {
-		return wrapped_height_px_frame(ctx.frame, text, max_width, font_size, ui_frame_metrics(ctx.frame).LINE_HEIGHT)
+		return wrapped_height_px_frame(
+			ctx.frame,
+			text,
+			max_width,
+			font_size,
+			ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+		)
 	}
 
 	spans := parse_inline_spans(text)
 	display_text := spans_display_string(spans)
-	return wrapped_height_px_frame(ctx.frame, display_text, max_width, font_size, ui_frame_metrics(ctx.frame).LINE_HEIGHT)
+	return wrapped_height_px_frame(
+		ctx.frame,
+		display_text,
+		max_width,
+		font_size,
+		ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+	)
 }
 
 // Like hit_test_wrapped but maps display position back to raw byte offset.
@@ -519,13 +614,31 @@ hit_test_wrapped_md :: proc(
 	if !strings.contains(text, "**") &&
 	   strings.index_byte(text, PILL_OPEN) < 0 &&
 	   strings.index_byte(text, '`') < 0 {
-		return hit_test_wrapped_frame(ctx.frame, x, y, max_width, text, mouse_x, mouse_y, font_size)
+		return hit_test_wrapped_frame(
+			ctx.frame,
+			x,
+			y,
+			max_width,
+			text,
+			mouse_x,
+			mouse_y,
+			font_size,
+		)
 	}
 
 	spans := parse_inline_spans(text)
 	display_text := spans_display_string(spans)
 
-	display_offset := hit_test_wrapped_frame(ctx.frame, x, y, max_width, display_text, mouse_x, mouse_y, font_size)
+	display_offset := hit_test_wrapped_frame(
+		ctx.frame,
+		x,
+		y,
+		max_width,
+		display_text,
+		mouse_x,
+		mouse_y,
+		font_size,
+	)
 	if display_offset < 0 do return -1
 
 	return display_to_raw(spans, display_offset)
@@ -670,7 +783,9 @@ layout_table :: proc(
 		for cell, ci in row.cells {
 			if len(cell) == 0 do continue
 			cell_c := strings.clone_to_cstring(cell, context.temp_allocator)
-			w := measure_text_frame(ctx.frame, cell_c, ui_frame_metrics(ctx.frame).FONT_SIZE) + pad * 2
+			w :=
+				measure_text_frame(ctx.frame, cell_c, ui_frame_metrics(ctx.frame).FONT_SIZE) +
+				pad * 2
 			if w > naturals[ci] do naturals[ci] = w
 		}
 	}
@@ -748,13 +863,20 @@ layout_table :: proc(
 			if ci >= cols || len(cell) == 0 do continue
 			inner := col_widths[ci] - pad * 2
 			if inner < 1 do inner = 1
-			ch := wrapped_height_px_frame(ctx.frame, cell, inner, ui_frame_metrics(ctx.frame).FONT_SIZE, ui_frame_metrics(ctx.frame).LINE_HEIGHT)
+			ch := wrapped_height_px_frame(
+				ctx.frame,
+				cell,
+				inner,
+				ui_frame_metrics(ctx.frame).FONT_SIZE,
+				ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+			)
 			if ch > h do h = ch
 		}
 		row_heights[ri] = h
 	}
 
-	cell_pad_y := (i32(ui_frame_metrics(ctx.frame).LINE_HEIGHT) - ui_frame_metrics(ctx.frame).FONT_SIZE) / 2
+	cell_pad_y :=
+		(i32(ui_frame_metrics(ctx.frame).LINE_HEIGHT) - ui_frame_metrics(ctx.frame).FONT_SIZE) / 2
 	if cell_pad_y < 0 do cell_pad_y = 0
 
 	row_y := y
@@ -764,12 +886,24 @@ layout_table :: proc(
 
 		if draw {
 			if is_header {
-				rl.DrawRectangle(x, row_y, table_w, row_h, ui_frame_theme(ctx.frame).bg_table_header)
+				rl.DrawRectangle(
+					x,
+					row_y,
+					table_w,
+					row_h,
+					ui_frame_theme(ctx.frame).bg_table_header,
+				)
 			}
 			cell_x := x
 			for ci in 0 ..< cols {
 				if ci > 0 {
-					rl.DrawRectangle(cell_x, row_y, 1, row_h, ui_frame_theme(ctx.frame).border_color)
+					rl.DrawRectangle(
+						cell_x,
+						row_y,
+						1,
+						row_h,
+						ui_frame_theme(ctx.frame).border_color,
+					)
 				}
 				if ci < len(row.cells) && len(row.cells[ci]) > 0 {
 					cell := row.cells[ci]
@@ -777,13 +911,25 @@ layout_table :: proc(
 					inner := col_widths[ci] - pad * 2
 					if inner < 1 do inner = 1
 					ty := row_y + cell_pad_y
-					for ln in wrap_text_frame(ctx.frame, cell, inner, ui_frame_metrics(ctx.frame).FONT_SIZE) {
+					for ln in wrap_text_frame(
+						ctx.frame,
+						cell,
+						inner,
+						ui_frame_metrics(ctx.frame).FONT_SIZE,
+					) {
 						if ln.end > ln.start {
 							line_c := strings.clone_to_cstring(
 								cell[ln.start:ln.end],
 								context.temp_allocator,
 							)
-							draw_text_frame(ctx.frame, line_c, cell_x + pad, ty, ui_frame_metrics(ctx.frame).FONT_SIZE, cell_color)
+							draw_text_frame(
+								ctx.frame,
+								line_c,
+								cell_x + pad,
+								ty,
+								ui_frame_metrics(ctx.frame).FONT_SIZE,
+								cell_color,
+							)
 						}
 						ty += i32(ui_frame_metrics(ctx.frame).LINE_HEIGHT)
 					}
@@ -791,7 +937,13 @@ layout_table :: proc(
 				cell_x += col_widths[ci]
 			}
 			if is_header {
-				rl.DrawRectangle(x, row_y + row_h, table_w, 1, ui_frame_theme(ctx.frame).border_color)
+				rl.DrawRectangle(
+					x,
+					row_y + row_h,
+					table_w,
+					1,
+					ui_frame_theme(ctx.frame).border_color,
+				)
 			}
 		} else if out_hit != nil && mouse_y >= row_y && mouse_y < row_y + row_h {
 			// Find the column under the mouse by walking the variable widths.
@@ -850,9 +1002,20 @@ heading_font_size :: proc(ctx: ^Markdown_Context, level: int) -> i32 {
 }
 
 // Get total height consumed by a heading (wrapped text + padding + rule + margin).
-heading_total_height :: proc(ctx: ^Markdown_Context, heading_text: string, level: int, max_width: i32) -> i32 {
+heading_total_height :: proc(
+	ctx: ^Markdown_Context,
+	heading_text: string,
+	level: int,
+	max_width: i32,
+) -> i32 {
 	fs := heading_font_size(ctx, level)
-	text_h := wrapped_height_px_frame(ctx.frame, heading_text, max_width, fs, ui_frame_metrics(ctx.frame).LINE_HEIGHT)
+	text_h := wrapped_height_px_frame(
+		ctx.frame,
+		heading_text,
+		max_width,
+		fs,
+		ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+	)
 	if text_h == 0 do text_h = fs + 4
 	h := text_h
 	switch level {
@@ -867,8 +1030,19 @@ heading_total_height :: proc(ctx: ^Markdown_Context, heading_text: string, level
 }
 
 // Measure the height that draw_text_wrapped would produce.
-measure_wrapped_height :: proc(ctx: ^Markdown_Context, text: string, max_width: i32, font_size: i32) -> i32 {
-	return wrapped_height_px_frame(ctx.frame, text, max_width, font_size, ui_frame_metrics(ctx.frame).LINE_HEIGHT)
+measure_wrapped_height :: proc(
+	ctx: ^Markdown_Context,
+	text: string,
+	max_width: i32,
+	font_size: i32,
+) -> i32 {
+	return wrapped_height_px_frame(
+		ctx.frame,
+		text,
+		max_width,
+		font_size,
+		ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+	)
 }
 
 // Render a heading line with wrapping. Returns total height consumed.
@@ -1025,12 +1199,30 @@ draw_markdown :: proc(
 
 		// Code block line.
 		if in_code_block {
-			if draw && !markdown_line_culled(ctx, current_y, ui_frame_metrics(ctx.frame).LINE_HEIGHT) {
-				rl.DrawRectangle(x, current_y, max_width, ui_frame_metrics(ctx.frame).LINE_HEIGHT, ui_frame_theme(ctx.frame).bg_code)
+			if draw &&
+			   !markdown_line_culled(ctx, current_y, ui_frame_metrics(ctx.frame).LINE_HEIGHT) {
+				rl.DrawRectangle(
+					x,
+					current_y,
+					max_width,
+					ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+					ui_frame_theme(ctx.frame).bg_code,
+				)
 				// Left accent so the block reads as one unit in the flat transcript.
-				rl.DrawRectangle(x, current_y, 2, ui_frame_metrics(ctx.frame).LINE_HEIGHT, ui_frame_theme(ctx.frame).border_subtle)
+				rl.DrawRectangle(
+					x,
+					current_y,
+					2,
+					ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+					ui_frame_theme(ctx.frame).border_subtle,
+				)
 				// Truncate long lines to available width (pixel-accurate, with ellipsis).
-				display_line := truncate_to_width_frame(ctx.frame, line, max_width - ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD * 2, ui_frame_metrics(ctx.frame).FONT_SIZE)
+				display_line := truncate_to_width_frame(
+					ctx.frame,
+					line,
+					max_width - ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD * 2,
+					ui_frame_metrics(ctx.frame).FONT_SIZE,
+				)
 				if has_sel {
 					draw_line_with_selection_frame(
 						ctx.frame,
@@ -1046,13 +1238,23 @@ draw_markdown :: proc(
 					)
 				} else {
 					line_c := strings.clone_to_cstring(display_line, context.temp_allocator)
-					draw_text_frame(ctx.frame, line_c, x + ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD, current_y, ui_frame_metrics(ctx.frame).FONT_SIZE, ui_frame_theme(ctx.frame).fg_primary)
+					draw_text_frame(
+						ctx.frame,
+						line_c,
+						x + ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD,
+						current_y,
+						ui_frame_metrics(ctx.frame).FONT_SIZE,
+						ui_frame_theme(ctx.frame).fg_primary,
+					)
 				}
 			}
 			if out_w != nil {
 				lc := strings.clone_to_cstring(line, context.temp_allocator)
 				cw :=
-					min(measure_text_frame(ctx.frame, lc, ui_frame_metrics(ctx.frame).FONT_SIZE), max_width - ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD * 2) +
+					min(
+						measure_text_frame(ctx.frame, lc, ui_frame_metrics(ctx.frame).FONT_SIZE),
+						max_width - ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD * 2,
+					) +
 					ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD * 2
 				if cw > max_w do max_w = cw
 			}
@@ -1077,7 +1279,12 @@ draw_markdown :: proc(
 				draw,
 			)
 			if out_w != nil {
-				hw := wrapped_max_line_width_frame(ctx.frame, line[4:], max_width, ui_frame_metrics(ctx.frame).FONT_SIZE)
+				hw := wrapped_max_line_width_frame(
+					ctx.frame,
+					line[4:],
+					max_width,
+					ui_frame_metrics(ctx.frame).FONT_SIZE,
+				)
 				if hw > max_w do max_w = hw
 			}
 			line_start = i + 1
@@ -1099,7 +1306,12 @@ draw_markdown :: proc(
 				draw,
 			)
 			if out_w != nil {
-				hw := wrapped_max_line_width_frame(ctx.frame, line[3:], max_width, ui_frame_metrics(ctx.frame).FONT_SIZE_LARGE)
+				hw := wrapped_max_line_width_frame(
+					ctx.frame,
+					line[3:],
+					max_width,
+					ui_frame_metrics(ctx.frame).FONT_SIZE_LARGE,
+				)
 				if hw > max_w do max_w = hw
 			}
 			line_start = i + 1
@@ -1121,7 +1333,12 @@ draw_markdown :: proc(
 				draw,
 			)
 			if out_w != nil {
-				hw := wrapped_max_line_width_frame(ctx.frame, line[2:], max_width, ui_frame_metrics(ctx.frame).FONT_SIZE_LARGE)
+				hw := wrapped_max_line_width_frame(
+					ctx.frame,
+					line[2:],
+					max_width,
+					ui_frame_metrics(ctx.frame).FONT_SIZE_LARGE,
+				)
 				if hw > max_w do max_w = hw
 			}
 			line_start = i + 1
@@ -1166,7 +1383,14 @@ draw_markdown :: proc(
 			if h == 0 do h = ui_frame_metrics(ctx.frame).LINE_HEIGHT
 			current_y += h
 			if out_w != nil {
-				bw := ui_frame_metrics(ctx.frame).BULLET_INDENT + wrapped_max_line_width_md_frame(ctx.frame, content, content_width, ui_frame_metrics(ctx.frame).FONT_SIZE)
+				bw :=
+					ui_frame_metrics(ctx.frame).BULLET_INDENT +
+					wrapped_max_line_width_md_frame(
+						ctx.frame,
+						content,
+						content_width,
+						ui_frame_metrics(ctx.frame).FONT_SIZE,
+					)
 				if bw > max_w do max_w = bw
 			}
 			line_start = i + 1
@@ -1220,7 +1444,7 @@ draw_markdown :: proc(
 		}
 
 		h := draw_text_wrapped_md(
-				ctx,
+			ctx,
 			x,
 			current_y,
 			max_width,
@@ -1233,7 +1457,12 @@ draw_markdown :: proc(
 		)
 		current_y += h
 		if out_w != nil {
-			lw := wrapped_max_line_width_md_frame(ctx.frame, line, max_width, ui_frame_metrics(ctx.frame).FONT_SIZE)
+			lw := wrapped_max_line_width_md_frame(
+				ctx.frame,
+				line,
+				max_width,
+				ui_frame_metrics(ctx.frame).FONT_SIZE,
+			)
 			if lw > max_w do max_w = lw
 		}
 		line_start = i + 1
@@ -1249,16 +1478,37 @@ draw_markdown :: proc(
 // identical layout math runs — guaranteeing the scroll predictor matches what is
 // actually rendered. draw_markdown performs no input handling, so re-running it
 // here is side-effect free.
-measure_markdown :: proc(ctx: ^Markdown_Context, width: i32, text: string, out_w: ^i32 = nil) -> i32 {
+measure_markdown :: proc(
+	ctx: ^Markdown_Context,
+	width: i32,
+	text: string,
+	out_w: ^i32 = nil,
+) -> i32 {
 	if len(text) == 0 do return 0
 	// draw=false runs the identical layout math but emits no glyph quads.
-	h := draw_markdown(ctx, 0, 0, width, text, ui_frame_theme(ctx.frame).fg_assistant, -1, -1, out_w, false)
+	h := draw_markdown(
+		ctx,
+		0,
+		0,
+		width,
+		text,
+		ui_frame_theme(ctx.frame).fg_assistant,
+		-1,
+		-1,
+		out_w,
+		false,
+	)
 	return h
 }
 // Mirrors draw_markdown layout exactly.
 // Returns valid byte offsets for all positions within the content area, including
 // empty-line gaps, code fence margins, heading/bullet margins, and past-end areas.
-hit_test_markdown :: proc(ctx: ^Markdown_Context, x, y, max_width: i32, text: string, mouse_x, mouse_y: i32) -> int {
+hit_test_markdown :: proc(
+	ctx: ^Markdown_Context,
+	x, y, max_width: i32,
+	text: string,
+	mouse_x, mouse_y: i32,
+) -> int {
 	// Why assert: layout must mirror draw_markdown exactly, so it shares the
 	// same argument contract (positive wrap width).
 	assert(max_width > 0, "hit_test_markdown: non-positive max_width")
@@ -1302,8 +1552,14 @@ hit_test_markdown :: proc(ctx: ^Markdown_Context, x, y, max_width: i32, text: st
 
 		// Code block line.
 		if in_code_block {
-			if mouse_y >= current_y && mouse_y < current_y + ui_frame_metrics(ctx.frame).LINE_HEIGHT {
-				col := caret_pixel_to_col_with(ui_frame_text(ctx.frame), line, mouse_x - (x + ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD), ui_frame_metrics(ctx.frame).FONT_SIZE)
+			if mouse_y >= current_y &&
+			   mouse_y < current_y + ui_frame_metrics(ctx.frame).LINE_HEIGHT {
+				col := caret_pixel_to_col_with(
+					ui_frame_text(ctx.frame),
+					line,
+					mouse_x - (x + ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD),
+					ui_frame_metrics(ctx.frame).FONT_SIZE,
+				)
 				return line_start + caret_col_to_byte(line, col)
 			}
 			current_y += ui_frame_metrics(ctx.frame).LINE_HEIGHT
@@ -1317,7 +1573,8 @@ hit_test_markdown :: proc(ctx: ^Markdown_Context, x, y, max_width: i32, text: st
 			h := heading_total_height(ctx, heading_text, 3, max_width)
 			if mouse_y >= current_y && mouse_y < current_y + h {
 				fs := heading_font_size(ctx, 3)
-				offset := hit_test_wrapped_frame(ctx.frame, 
+				offset := hit_test_wrapped_frame(
+					ctx.frame,
 					x,
 					current_y,
 					max_width,
@@ -1340,7 +1597,8 @@ hit_test_markdown :: proc(ctx: ^Markdown_Context, x, y, max_width: i32, text: st
 			h := heading_total_height(ctx, heading_text, 2, max_width)
 			if mouse_y >= current_y && mouse_y < current_y + h {
 				fs := heading_font_size(ctx, 2)
-				offset := hit_test_wrapped_frame(ctx.frame, 
+				offset := hit_test_wrapped_frame(
+					ctx.frame,
 					x,
 					current_y,
 					max_width,
@@ -1363,7 +1621,8 @@ hit_test_markdown :: proc(ctx: ^Markdown_Context, x, y, max_width: i32, text: st
 			h := heading_total_height(ctx, heading_text, 1, max_width)
 			if mouse_y >= current_y && mouse_y < current_y + h {
 				fs := heading_font_size(ctx, 1)
-				offset := hit_test_wrapped_frame(ctx.frame, 
+				offset := hit_test_wrapped_frame(
+					ctx.frame,
 					x,
 					current_y,
 					max_width,
@@ -1388,7 +1647,12 @@ hit_test_markdown :: proc(ctx: ^Markdown_Context, x, y, max_width: i32, text: st
 			content := line[2:]
 			content_x := x + ui_frame_metrics(ctx.frame).BULLET_INDENT
 			content_width := max_width - ui_frame_metrics(ctx.frame).BULLET_INDENT
-			h := measure_wrapped_height_md(ctx, content, content_width, ui_frame_metrics(ctx.frame).FONT_SIZE)
+			h := measure_wrapped_height_md(
+				ctx,
+				content,
+				content_width,
+				ui_frame_metrics(ctx.frame).FONT_SIZE,
+			)
 			if h == 0 do h = ui_frame_metrics(ctx.frame).LINE_HEIGHT
 
 			if mouse_y >= current_y && mouse_y < current_y + h {
@@ -1458,7 +1722,16 @@ hit_test_markdown :: proc(ctx: ^Markdown_Context, x, y, max_width: i32, text: st
 		h := measure_wrapped_height_md(ctx, line, max_width, ui_frame_metrics(ctx.frame).FONT_SIZE)
 
 		if mouse_y >= current_y && mouse_y < current_y + h {
-			offset := hit_test_wrapped_md(ctx, x, current_y, max_width, line, mouse_x, mouse_y, ui_frame_metrics(ctx.frame).FONT_SIZE)
+			offset := hit_test_wrapped_md(
+				ctx,
+				x,
+				current_y,
+				max_width,
+				line,
+				mouse_x,
+				mouse_y,
+				ui_frame_metrics(ctx.frame).FONT_SIZE,
+			)
 			if offset >= 0 do return line_start + offset
 		}
 

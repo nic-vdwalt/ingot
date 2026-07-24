@@ -152,6 +152,39 @@ vlines_memo_two_instances_and_invalidation :: proc(t: ^testing.T) {
 }
 
 @(test)
+text_input_states_keep_selection_memos_and_menus_isolated :: proc(t: ^testing.T) {
+	system: Text_System
+	set_measure_backend_with(&system, ti_mono)
+	defer text_system_destroy(&system)
+	builder_a := strings.builder_make(context.temp_allocator)
+	builder_b := strings.builder_make(context.temp_allocator)
+	strings.write_string(&builder_a, "alpha beta")
+	strings.write_string(&builder_b, "gamma delta")
+	state_a, state_b: Text_Input_State
+	defer text_input_state_destroy(&state_a)
+	defer text_input_state_destroy(&state_b)
+	text_input_selection_set(&state_a, &builder_a, 1, 5)
+	text_input_selection_set(&state_b, &builder_b, 2, 7)
+	_ = input_visual_lines_memo_with(&system, &state_a.memo, strings.to_string(builder_a), 40, 16)
+	_ = input_visual_lines_memo_with(&system, &state_b.memo, strings.to_string(builder_b), 80, 16)
+	state_a.spell_memo.valid = true
+	state_b.spell_memo.valid = false
+	state_a.spell_menu.open = true
+	state_a.spell_menu.sb = &builder_a
+	a_lo, a_hi := text_input_selection_range(&state_a)
+	b_lo, b_hi := text_input_selection_range(&state_b)
+	testing.expect_value(t, a_lo, 1)
+	testing.expect_value(t, a_hi, 5)
+	testing.expect_value(t, b_lo, 2)
+	testing.expect_value(t, b_hi, 7)
+	testing.expect_value(t, state_a.memo.width, i32(40))
+	testing.expect_value(t, state_b.memo.width, i32(80))
+	testing.expect(t, state_a.spell_memo.valid && !state_b.spell_memo.valid)
+	testing.expect(t, text_input_spell_menu_active(&state_a, &builder_a))
+	testing.expect(t, !text_input_spell_menu_active(&state_b, &builder_b))
+}
+
+@(test)
 text_input_state_destroy_clears :: proc(t: ^testing.T) {
 	st: Text_Input_State
 	append(&st.pills, Mention_Span{0, 3})

@@ -64,6 +64,9 @@ semantics_buffer_behaviour :: proc(t: ^testing.T) {
 	nf := semantic_push(&frame, .Checkbox, {0, 0, 10, 10}, "Off", focus = {&slot, 4})
 	testing.expect(t, nf != nil)
 	testing.expect(t, .Focused not_in nf.state)
+	focus, ok := sem_action_target(&frame, f.id)
+	testing.expect(t, ok)
+	testing.expect(t, focus == Focus_Opt{&slot, 3})
 }
 
 @(test)
@@ -131,21 +134,19 @@ semantics_focus_registry :: proc(t: ^testing.T) {
 	sem_reset(&frame)
 	defer sem_reset(&frame)
 
-	// Registry records focusable widgets in draw order even while semantic
-	// recording is disabled, and rotates with a one-frame latency.
+	// Registry records focusable widgets in current draw order even while
+	// semantic recording is disabled, then clears before the next frame.
 	slot_a, slot_b: int
 	sem_begin_frame(&frame)
 	semantic_push(&frame, .Button, {0, 0, 1, 1}, "a1", focus = {&slot_a, 1})
 	semantic_push(&frame, .Checkbox, {0, 0, 1, 1}, "a2", focus = {&slot_a, 2})
 	semantic_push(&frame, .Button, {0, 0, 1, 1}, "b1", focus = {&slot_b, 1})
-	semantic_push(&frame, .Label, {0, 0, 1, 1}, "static") // no focus: not registered
-	testing.expect_value(t, sem_focus_list(&frame).count, 0) // same frame: not yet visible
-	sem_begin_frame(&frame)
+	semantic_push(&frame, .Label, {0, 0, 1, 1}, "static")
 	list := sem_focus_list(&frame)
 	testing.expect_value(t, list.count, 3)
 	testing.expect(t, list.entries[0] == Sem_Focus_Entry{Focus_Opt{&slot_a, 1}})
 	testing.expect(t, list.entries[1] == Sem_Focus_Entry{Focus_Opt{&slot_a, 2}})
 	testing.expect(t, list.entries[2] == Sem_Focus_Entry{Focus_Opt{&slot_b, 1}})
 	sem_begin_frame(&frame)
-	testing.expect_value(t, sem_focus_list(&frame).count, 0) // not renewed: expired
+	testing.expect_value(t, sem_focus_list(&frame).count, 0)
 }
