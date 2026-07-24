@@ -39,7 +39,8 @@ into a hidden state database. Registration order can define traversal order
 while application identity remains stable across insertion and reordering.
 
 See [UI state and stable focus](ui-state.md) for ownership rules and concrete
-Odin examples.
+Odin examples. [Choosing Ingot](comparison.md) compares this model with other
+app engines and UI stacks.
 
 ## What retained-mode features require
 

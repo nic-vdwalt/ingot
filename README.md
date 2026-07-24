@@ -23,8 +23,9 @@ and deterministic seeds can replay failures without reconstructing a private
 object graph. This is a natural fit for Ingot's Tiger Style approach.
 
 Read [Why immediate mode](docs/immediate-mode.md) for the argument and boundaries,
-[UI state and stable focus](docs/ui-state.md) for the ownership model, and
-[Testing Ingot](docs/testing.md) for the deterministic and sanitizer-backed
+[Choosing Ingot](docs/comparison.md) for comparisons with other app and UI
+stacks, [UI state and stable focus](docs/ui-state.md) for the ownership model,
+and [Testing Ingot](docs/testing.md) for the deterministic and sanitizer-backed
 harnesses.
 
 ## Highlights
@@ -133,6 +134,8 @@ Build the browser demo with `bash build_web.sh`; validate web targets with
 
 - [Why immediate mode](docs/immediate-mode.md) — the architecture's position,
   state boundary, retained-GUI capability mapping, and Tiger Style fit.
+- [Choosing Ingot](docs/comparison.md) — comparisons with immediate, retained,
+  web, native, raylib, and full game-engine alternatives.
 - [UI state and stable focus](docs/ui-state.md) — runtime/frame/component
   ownership, teardown, focus identity, and accessibility identity.
 - [Testing Ingot](docs/testing.md) — package tests, deterministic fuzzing,
