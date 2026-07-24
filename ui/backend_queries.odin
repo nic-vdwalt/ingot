@@ -1,8 +1,8 @@
 package ui
 
 frame_input :: proc(frame: ^Ui_Frame) -> ^Ui_Input {
-	assert(frame != nil && frame.open, "frame_input: invalid frame")
-	assert(frame.input != nil, "frame_input: missing input")
+	assert(frame != nil, "frame_input: nil frame")
+	if frame.input == nil do return &frame.input_default
 	return frame.input
 }
 
