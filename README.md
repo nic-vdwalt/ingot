@@ -392,20 +392,29 @@ when ODIN_OS == .Darwin {
 }
 rl.InitWindow(w, h, title)
 
-ui.apply_window_style()   // macOS: vibrancy / Windows: Mica + dark titlebar
-ui.titlebar_init()        // Windows: strip native frame + install subclass
+runtime: ui.Ui_Runtime
+frame: ui.Ui_Frame
+ui.ui_runtime_init(&runtime)
+ui.ui_runtime_apply_platform_dpi(&runtime)
+ui.apply_window_style()
+ui.titlebar_init()
 
 for !rl.WindowShouldClose() {
-    header_h := ui.TAB_BAR_HEIGHT      // inset content below the header
+    ui.ui_runtime_dpi_refresh(&runtime)
+    ui.ui_frame_begin(&frame, &runtime)
+    header_h := ui.ui_frame_metrics(&frame).TAB_BAR_HEIGHT
     // ... draw content starting at y = header_h ...
-    ui.draw_app_header(title, screen_w) // drawn last, on top of content
+    ui.draw_app_header(&frame, title, screen_w)
+    ui.ui_frame_end(&frame)
 
     busy := app_activity || ui.titlebar_consume_activity()
     ui.pacer_frame(&pacer, busy)
 }
+ui.ui_runtime_destroy(&runtime)
+rl.CloseWindow()
 ```
 
-`draw_app_header(title, screen_w) -> header_h` draws the header strip, title,
+`draw_app_header(frame, title, screen_w) -> header_h` draws the header strip, title,
 hairline border, and (Windows) caption buttons, then publishes the non-client
 layout so the strip drags the window. Off Windows the `titlebar_*` procedures
 are no-ops. Dependencies stay within the Odin stdlib — no external linker flags.

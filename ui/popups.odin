@@ -38,10 +38,12 @@ modal_begin :: proc(
 	assert(w > 0 && h > 0, "modal_begin: empty modal size")
 	st.drawing = true
 	st.dismissed = false
-	rl.DrawRectangle(0, 0, screen_w, screen_h, theme.modal_dim)
+	style := ui_frame_theme(frame)
+	metrics := ui_frame_metrics(frame)
+	rl.DrawRectangle(0, 0, screen_w, screen_h, style.modal_dim)
 
-	mw := min(w, screen_w - PADDING * 4)
-	mh := min(h, screen_h - PADDING * 2)
+	mw := min(w, screen_w - metrics.PADDING * 4)
+	mh := min(h, screen_h - metrics.PADDING * 2)
 	mx := (screen_w - mw) / 2
 	my := (screen_h - mh) / 2
 	st.rect = Rect_I32{mx, my, mw, mh}
@@ -50,14 +52,21 @@ modal_begin :: proc(
 	route_claim(frame, rl.Rectangle{0, f32(my), f32(mx), f32(mh)})
 	route_claim(frame, rl.Rectangle{f32(mx + mw), f32(my), f32(screen_w - mx - mw), f32(mh)})
 
-	rl.DrawRectangle(mx, my, mw, mh, theme.bg_secondary)
-	rl.DrawRectangleLines(mx, my, mw, mh, theme.border_color)
+	rl.DrawRectangle(mx, my, mw, mh, style.bg_secondary)
+	rl.DrawRectangleLines(mx, my, mw, mh, style.border_color)
 	rl.BeginScissorMode(mx, my, mw, mh)
 	semantic_push(frame, .Modal, st.rect, title)
 
-	title_h := sc(40)
+	title_h := ui_frame_sc(frame, 40)
 	title_c := strings.clone_to_cstring(title, context.temp_allocator)
-	draw_text(title_c, mx + PADDING, my + PADDING, FONT_SIZE_LARGE, theme.fg_primary)
+	draw_text_frame(
+		frame,
+		title_c,
+		mx + metrics.PADDING,
+		my + metrics.PADDING,
+		metrics.FONT_SIZE_LARGE,
+		style.fg_primary,
+	)
 	return Rect_I32{mx, my + title_h, mw, mh - title_h}
 }
 
@@ -129,6 +138,17 @@ menu_nav_next :: proc(items: []Menu_Item, current, delta: int) -> int {
 
 // context_menu_height returns the popup's pixel height for an item list, so
 // callers can pre-position the anchor (e.g. open upward above an input box).
+context_menu_height_frame :: proc(frame: ^Ui_Frame, items: []Menu_Item) -> i32 {
+	assert(len(items) > 0, "context_menu_height_frame: empty items")
+	metrics := ui_frame_metrics(frame)
+	h := metrics.MENU_PAD * 2
+	for it in items {
+		h += ui_frame_sc(frame, 5) if it.separator else metrics.MENU_ITEM_H
+	}
+	assert(h > 0, "context_menu_height_frame: non-positive height")
+	return h
+}
+
 context_menu_height :: proc(items: []Menu_Item) -> i32 {
 	assert(len(items) > 0, "context_menu_height: empty items")
 	h := MENU_PAD * 2
@@ -141,6 +161,20 @@ context_menu_height :: proc(items: []Menu_Item) -> i32 {
 
 // context_menu_width returns the popup width for an item list (widest label
 // plus padding, at least MENU_MIN_W, capped to the given width).
+context_menu_width_frame :: proc(frame: ^Ui_Frame, items: []Menu_Item, max_w: i32) -> i32 {
+	assert(len(items) > 0, "context_menu_width_frame: empty items")
+	assert(max_w > 0, "context_menu_width_frame: non-positive cap")
+	metrics := ui_frame_metrics(frame)
+	w := metrics.MENU_MIN_W
+	for it in items {
+		if it.separator do continue
+		c := strings.clone_to_cstring(it.label, context.temp_allocator)
+		lw := measure_text_frame(frame, c, metrics.FONT_SIZE) + ui_frame_sc(frame, 32)
+		if lw > w do w = lw
+	}
+	return min(w, max_w)
+}
+
 context_menu_width :: proc(items: []Menu_Item, max_w: i32) -> i32 {
 	assert(len(items) > 0, "context_menu_width: empty items")
 	assert(max_w > 0, "context_menu_width: non-positive cap")
@@ -170,8 +204,8 @@ context_menu :: proc(
 	if !st.open do return -1
 	assert(len(items) > 0, "context_menu: empty items")
 
-	menu_w := context_menu_width(items, screen_w)
-	menu_h := context_menu_height(items)
+	menu_w := context_menu_width_frame(frame, items, screen_w)
+	menu_h := context_menu_height_frame(frame, items)
 	mx := clamp(st.anchor_x, 0, max(screen_w - menu_w, 0))
 	my := clamp(st.anchor_y, 0, max(screen_h - menu_h, 0))
 	menu_rect := rl.Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
@@ -211,9 +245,10 @@ context_menu :: proc(
 	origin := frame_pane_origin(frame)
 	ox := i32(origin.x)
 	screen_rect := rl.Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
+	style := ui_frame_theme(frame)
 	overlay_begin(frame, screen_rect, claim_input = true)
-	overlay_rect(frame, screen_rect, theme.bg_popup)
-	overlay_rect_lines(frame, screen_rect, 1, theme.border_color)
+	overlay_rect(frame, screen_rect, style.bg_popup)
+	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
 	chosen := context_menu_rows(frame, st, items, mx, my, menu_w, ox, mouse)
 	overlay_end(frame)
 	return chosen
@@ -232,50 +267,64 @@ context_menu_rows :: proc(
 ) -> int {
 	assert(st.open, "context_menu_rows: menu not open")
 	assert(len(items) > 0, "context_menu_rows: empty items")
-	item_x := mx + 2
-	item_w := menu_w - 4
-	item_y := my + MENU_PAD
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	inset := ui_frame_sc(frame, 2)
+	item_x := mx + inset
+	item_w := menu_w - inset * 2
+	item_y := my + metrics.MENU_PAD
 	chosen := -1
 	for it, i in items {
 		if it.separator {
-			sep_h := sc(5)
+			sep_h := ui_frame_sc(frame, 5)
 			overlay_rect(
 				frame,
 				{f32(mx + ox + 6), f32(item_y + sep_h / 2), f32(menu_w - 12), 1},
-				theme.border_color,
+				style.border_color,
 			)
 			item_y += sep_h
 			continue
 		}
-		row_rect := rl.Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(MENU_ITEM_H)}
+		row_rect := rl.Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(metrics.MENU_ITEM_H)}
 		hovered := rl.CheckCollisionPointRec(mouse, row_rect)
 		sem: Sem_State
 		if it.disabled do sem += {.Disabled}
-		semantic_push(frame, .Menu_Item, {item_x + ox, item_y, item_w, MENU_ITEM_H}, it.label, sem)
+		semantic_push(
+			frame,
+			.Menu_Item,
+			{item_x + ox, item_y, item_w, metrics.MENU_ITEM_H},
+			it.label,
+			sem,
+		)
 		if hovered && !it.disabled && mouse_moved() do st.selected = i
 		if st.selected == i {
 			overlay_rect(
 				frame,
-				{f32(item_x + ox), f32(item_y), f32(item_w), f32(MENU_ITEM_H)},
-				theme.bg_active,
+				{f32(item_x + ox), f32(item_y), f32(item_w), f32(metrics.MENU_ITEM_H)},
+				style.bg_active,
 			)
 		}
 		if hovered && !it.disabled do request_cursor(frame, .POINTING_HAND)
-		col := theme.fg_disabled if it.disabled else theme.fg_primary
-		txt := truncate_to_width(it.label, item_w - 16, FONT_SIZE)
+		col := style.fg_disabled if it.disabled else style.fg_primary
+		txt := truncate_to_width_frame(
+			frame,
+			it.label,
+			item_w - ui_frame_sc(frame, 16),
+			metrics.FONT_SIZE,
+		)
 		overlay_text(
 			frame,
 			txt,
-			item_x + ox + 8,
-			item_y + (MENU_ITEM_H - FONT_SIZE) / 2,
-			FONT_SIZE,
+			item_x + ox + ui_frame_sc(frame, 8),
+			item_y + (metrics.MENU_ITEM_H - metrics.FONT_SIZE) / 2,
+			metrics.FONT_SIZE,
 			col,
 		)
 		if hovered && !it.disabled && rl.IsMouseButtonReleased(.LEFT) {
 			st.open = false
 			chosen = i
 		}
-		item_y += MENU_ITEM_H
+		item_y += metrics.MENU_ITEM_H
 	}
 	return chosen
 }
@@ -322,23 +371,25 @@ tooltip :: proc(
 		rl.RequestRedrawIn(TOOLTIP_DELAY - elapsed)
 		return
 	}
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
 	text_c := strings.clone_to_cstring(text, context.temp_allocator)
-	tw := measure_text(text_c, FONT_SIZE_SMALL)
-	bw := tw + TOOLTIP_PAD * 2
-	bh := FONT_SIZE_SMALL + TOOLTIP_PAD * 2
-	tx := clamp(i32(mouse.x) + sc(12), 0, max(screen_w - bw, 0))
-	ty := clamp(i32(mouse.y) + sc(18), 0, max(screen_h - bh, 0))
+	tw := measure_text_frame(frame, text_c, metrics.FONT_SIZE_SMALL)
+	bw := tw + metrics.TOOLTIP_PAD * 2
+	bh := metrics.FONT_SIZE_SMALL + metrics.TOOLTIP_PAD * 2
+	tx := clamp(i32(mouse.x) + ui_frame_sc(frame, 12), 0, max(screen_w - bw, 0))
+	ty := clamp(i32(mouse.y) + ui_frame_sc(frame, 18), 0, max(screen_h - bh, 0))
 	tip := rl.Rectangle{f32(tx), f32(ty), f32(bw), f32(bh)}
 	overlay_begin(frame, tip, claim_input = false)
-	overlay_rect(frame, tip, theme.bg_popup)
-	overlay_rect_lines(frame, tip, 1, theme.border_color)
+	overlay_rect(frame, tip, style.bg_popup)
+	overlay_rect_lines(frame, tip, ui_frame_scf(frame, 1), style.border_color)
 	overlay_text(
 		frame,
 		text,
-		tx + TOOLTIP_PAD,
-		ty + TOOLTIP_PAD,
-		FONT_SIZE_SMALL,
-		theme.fg_primary,
+		tx + metrics.TOOLTIP_PAD,
+		ty + metrics.TOOLTIP_PAD,
+		metrics.FONT_SIZE_SMALL,
+		style.fg_primary,
 	)
 	overlay_end(frame)
 }

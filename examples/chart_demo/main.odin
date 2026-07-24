@@ -47,6 +47,7 @@ main :: proc() {
 	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
 	rl.run(frame)
 	ui.ui_runtime_destroy(&ui_runtime)
+	rl.CloseWindow()
 }
 
 frame :: proc() {
@@ -111,5 +112,5 @@ stat_card :: proc(x, y, w, h: i32, label, value: cstring, values: []f32, col: rl
 		ui.FONT_SIZE_LARGE,
 		ui.theme.fg_primary,
 	)
-	ui.sparkline(x + w - 130, y + h / 2 - 16, 110, 32, values, col)
+	ui.sparkline(&ui_frame, x + w - 130, y + h / 2 - 16, 110, 32, values, col)
 }

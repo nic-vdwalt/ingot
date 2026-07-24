@@ -977,7 +977,7 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 	if rl.IsMouseButtonPressed(.RIGHT) {
 		mouse := rl.GetMousePosition()
 		occluded := route_occluded(ctx.frame, mouse)
-		mouse.x -= f32(pane_origin_x)
+		mouse = frame_to_local(ctx.frame, mouse)
 		if !occluded && rl.CheckCollisionPointRec(mouse, ctx.rect) {
 			off := input_mouse_to_byte(
 				v.vlines,
@@ -1271,7 +1271,7 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	}
 
 	// Clip all drawing to the input rect interior.
-	begin_pane_scissor(ctx.inner_x, ctx.y, ctx.inner_w, ctx.h)
+	begin_pane_scissor(ctx.frame, ctx.inner_x, ctx.y, ctx.inner_w, ctx.h)
 	text := strings.to_string(ctx.sb^)
 	v := ti_layout(ctx, text)
 

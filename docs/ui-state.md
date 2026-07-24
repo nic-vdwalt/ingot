@@ -74,7 +74,7 @@ TITLE_ID :: ui.Focus_Id(1)
 ENABLED_ID :: ui.Focus_Id(2)
 SAVE_ID :: ui.Focus_Id(3)
 
-ui.ui_begin(&form.ui, x, y, w, h)
+ui.ui_begin_frame(&form.ui, &frame, x, y, w, h)
 ui.input(&form.ui, TITLE_ID, &form.title, "Title")
 ui.checkbox(&form.ui, ENABLED_ID, "Enabled", &form.enabled)
 if ui.btn(&form.ui, SAVE_ID, "Save") {

@@ -9,45 +9,91 @@ import "core:math"
 import "core:strings"
 import rl "ingot:gfx"
 
-// Horizontal origin of the pane currently being drawn. draw_chat sets this for
-// a split secondary (right) pane and resets it to 0 afterward. Drawing is
-// translated by the rlgl matrix, but BeginScissorMode rectangles live in
-// framebuffer space and are NOT affected by that matrix, so any in-pane scissor
-// must add this offset. When not drawing a split pane it is 0 (no effect).
-pane_origin_x: i32
-
-// begin_pane_scissor starts a scissor whose x is shifted by pane_origin_x so it
-// lines up with the rlgl-translated drawing of the current pane.
-begin_pane_scissor :: proc(x, y, w, h: i32) {
-	rl.BeginScissorMode(x + pane_origin_x, y, w, h)
+// begin_pane_scissor converts pane-local geometry to screen coordinates because
+// scissor rectangles are not affected by the drawing transform.
+begin_pane_scissor :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
+	assert(w > 0 && h > 0, "begin_pane_scissor: invalid rect")
+	point := frame_to_screen(frame, {f32(x), f32(y)})
+	rl.BeginScissorMode(i32(point.x), i32(point.y), w, h)
 }
 
 // draw_split_divider draws the vertical drag handle between the chat pane and
 // the embedded nvim pane of a split Chat tab. x is the divider's left edge.
-draw_split_divider :: proc(x, screen_h: i32, hovered: bool) {
-	col := theme.border_color
-	if hovered {
-		col = theme.fg_accent
-	}
-	rl.DrawRectangle(x, TAB_BAR_HEIGHT, SPLIT_DIVIDER_W, screen_h - TAB_BAR_HEIGHT, col)
+draw_split_divider :: proc(frame: ^Ui_Frame, x, screen_h: i32, hovered: bool) {
+	assert(screen_h > 0, "draw_split_divider: invalid screen height")
+	style := ui_frame_theme(frame)
+	metrics := ui_frame_metrics(frame)
+	col := style.border_color
+	if hovered do col = style.fg_accent
+	rl.DrawRectangle(
+		x,
+		metrics.TAB_BAR_HEIGHT,
+		metrics.SPLIT_DIVIDER_W,
+		screen_h - metrics.TAB_BAR_HEIGHT,
+		col,
+	)
 }
 
 // draw_panel_header draws the unified header band used by side panels: a
 // small label in the given accent color plus a hairline divider underneath.
 // Returns the y just below the divider.
-draw_panel_header :: proc(x, y, w: i32, label: string, accent: rl.Color = THEME_COLOR) -> i32 {
-	// The sentinel default resolves to the theme label color at call time
-	// (defaults must be compile-time constants; the theme is runtime).
+draw_panel_header :: proc(
+	frame: ^Ui_Frame,
+	x, y, w: i32,
+	label: string,
+	accent: rl.Color = THEME_COLOR,
+) -> i32 {
+	assert(w > 0, "draw_panel_header: invalid width")
+	style := ui_frame_theme(frame)
+	metrics := ui_frame_metrics(frame)
 	accent := accent
-	if accent == THEME_COLOR do accent = theme.fg_label
+	if accent == THEME_COLOR do accent = style.fg_label
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text(lc, x + PADDING, y + (PANEL_HEADER_H - FONT_SIZE_LABEL) / 2, FONT_SIZE_LABEL, accent)
-	rl.DrawRectangle(x, y + PANEL_HEADER_H - 1, w, 1, theme.border_subtle)
-	return y + PANEL_HEADER_H
+	draw_text_frame(
+		frame,
+		lc,
+		x + metrics.PADDING,
+		y + (metrics.PANEL_HEADER_H - metrics.FONT_SIZE_LABEL) / 2,
+		metrics.FONT_SIZE_LABEL,
+		accent,
+	)
+	rl.DrawRectangle(x, y + metrics.PANEL_HEADER_H - 1, w, 1, style.border_subtle)
+	return y + metrics.PANEL_HEADER_H
 }
 
 // draw_card_bg draws the unified card container: rounded background fill +
 // hairline border + optional left accent bar.
+draw_card_bg_frame :: proc(
+	frame: ^Ui_Frame,
+	rect: rl.Rectangle,
+	bg: rl.Color,
+	accent: rl.Color = THEME_COLOR,
+	accent_w: i32 = 0,
+) {
+	min_dim := min(rect.width, rect.height)
+	if min_dim <= 0 do return
+	round := (ui_frame_scf(frame, CARD_RADIUS_PX) * 2) / min_dim
+	if round > 1 do round = 1
+	rl.DrawRectangleRounded(rect, round, 6, bg)
+	rl.DrawRectangleRoundedLinesEx(
+		rect,
+		round,
+		6,
+		ui_frame_scf(frame, 1),
+		ui_frame_theme(frame).border_subtle,
+	)
+	if accent_w > 0 {
+		inset := ui_frame_sc(frame, 2)
+		rl.DrawRectangle(
+			i32(rect.x),
+			i32(rect.y) + inset,
+			accent_w,
+			i32(rect.height) - inset * 2,
+			accent,
+		)
+	}
+}
+
 draw_card_bg :: proc(
 	rect: rl.Rectangle,
 	bg: rl.Color,
@@ -68,18 +114,20 @@ draw_card_bg :: proc(
 // draw_split_drop_hint previews where a tab dragged into the content area will
 // land: it dims the content region and highlights the target half (left/right)
 // with a divider preview down the middle.
-draw_split_drop_hint :: proc(screen_w, screen_h: i32, side_left: bool) {
-	top: i32 = TAB_BAR_HEIGHT
+draw_split_drop_hint :: proc(frame: ^Ui_Frame, screen_w, screen_h: i32, side_left: bool) {
+	assert(screen_w > 0 && screen_h > 0, "draw_split_drop_hint: invalid screen size")
+	style := ui_frame_theme(frame)
+	top := ui_frame_metrics(frame).TAB_BAR_HEIGHT
 	h := screen_h - top
 	rl.DrawRectangle(0, top, screen_w, h, rl.Color{0, 0, 0, 70})
 	half := screen_w / 2
-	hl := rl.Color{theme.fg_accent.r, theme.fg_accent.g, theme.fg_accent.b, 70}
+	hl := rl.Color{style.fg_accent.r, style.fg_accent.g, style.fg_accent.b, 70}
 	if side_left {
 		rl.DrawRectangle(0, top, half, h, hl)
 	} else {
 		rl.DrawRectangle(half, top, screen_w - half, h, hl)
 	}
-	rl.DrawRectangle(half - 1, top, 2, h, theme.fg_accent)
+	rl.DrawRectangle(half - ui_frame_sc(frame, 1), top, ui_frame_sc(frame, 2), h, style.fg_accent)
 }
 
 // input_is_selecting (selection queries) live in text_input.odin.
@@ -883,6 +931,19 @@ draw_text_wrapped :: proc(
 
 // Draw a single line of text, cutting it with an ellipsis if it would exceed
 // max_width. Used for labels/paths in modals that must never overflow.
+draw_text_truncated_frame :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	x, y, max_width, font_size: i32,
+	color: rl.Color,
+) {
+	assert(max_width >= 0 && font_size > 0, "draw_text_truncated_frame: invalid metrics")
+	if len(text) == 0 do return
+	out := truncate_to_width_frame(frame, text, max_width, font_size)
+	out_c := strings.clone_to_cstring(out, context.temp_allocator)
+	draw_text_frame(frame, out_c, x, y, font_size, color)
+}
+
 draw_text_truncated :: proc(text: string, x, y, max_width, font_size: i32, color: rl.Color) {
 	if len(text) == 0 do return
 	out := truncate_to_width(text, max_width, font_size)
@@ -949,6 +1010,29 @@ truncate_to_width_dir :: proc(
 		start = prev
 	}
 	return strings.concatenate({"…", text[start:]}, context.temp_allocator)
+}
+
+truncate_to_width_frame :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	max_width, font_size: i32,
+) -> string {
+	assert(max_width >= 0, "truncate_to_width_frame: negative width")
+	assert(font_size > 0, "truncate_to_width_frame: non-positive font size")
+	if len(text) == 0 do return text
+	full_c := strings.clone_to_cstring(text, context.temp_allocator)
+	if measure_text_frame(frame, full_c, font_size) <= max_width do return text
+	ell_c := strings.clone_to_cstring("…", context.temp_allocator)
+	avail := max_width - measure_text_frame(frame, ell_c, font_size)
+	end := 0
+	for end < len(text) {
+		next_i := end + 1
+		for next_i < len(text) && (text[next_i] & 0xC0) == 0x80 do next_i += 1
+		seg_c := strings.clone_to_cstring(text[:next_i], context.temp_allocator)
+		if measure_text_frame(frame, seg_c, font_size) > avail do break
+		end = next_i
+	}
+	return strings.concatenate({text[:end], "…"}, context.temp_allocator)
 }
 
 // Return text truncated with a trailing ellipsis so it fits within max_width.
@@ -1187,7 +1271,7 @@ pane_begin :: proc(
 		pane_keyboard_scroll(p, h)
 	}
 	p.scroll = clamp(p.scroll, 0, f32(max(p.content_h - h, 0)))
-	begin_pane_scissor(x, y, w, h)
+	begin_pane_scissor(frame, x, y, w, h)
 	return y + sc(pad) - i32(p.scroll)
 }
 

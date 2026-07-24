@@ -161,6 +161,7 @@ main :: proc() {
 	rl.run(frame)
 	input_state_destroy(&input_state)
 	ui.ui_runtime_destroy(&ui_runtime)
+	rl.CloseWindow()
 }
 
 input_state_destroy :: proc(state: ^Input_State) {
@@ -600,7 +601,7 @@ draw_charts :: proc(x, y0, w: i32) -> i32 {
 	)
 	y += ui.sc(232)
 	ui.draw_text("sparkline:", x, y + ui.sc(6), ui.FONT_SIZE_SMALL, ui.theme.fg_secondary)
-	ui.sparkline(x + ui.sc(80), y, ui.sc(140), ui.sc(28), spark[:])
+	ui.sparkline(&ui_frame, x + ui.sc(80), y, ui.sc(140), ui.sc(28), spark[:])
 	return y + ui.sc(40)
 }
 
