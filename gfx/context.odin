@@ -63,6 +63,7 @@ Context :: struct {
 	width, height:        i32,
 	fb_width, fb_height:  i32,
 	dpi:                  f32,
+	force_reconfigure:    bool,
 
 	// requested window size, stashed at InitWindow for _gpu_finish (needed
 	// because on web the GPU device resolves asynchronously, after InitWindow
@@ -481,11 +482,12 @@ _maybe_reconfigure :: proc() {
 	w, h := platform_window_size()
 	changed := fbw != g.fb_width || fbh != g.fb_height
 	g.width, g.height = w, h
-	if changed && fbw > 0 && fbh > 0 {
+	if (changed || g.force_reconfigure) && fbw > 0 && fbh > 0 {
 		g.fb_width, g.fb_height = fbw, fbh
 		g.config.width = u32(fbw)
 		g.config.height = u32(fbh)
 		wg.SurfaceConfigure(g.surface, &g.config)
+		g.force_reconfigure = false
 	}
 	g.dpi = platform_content_scale()
 }

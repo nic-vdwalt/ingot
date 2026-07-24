@@ -21,8 +21,8 @@ Modal_State :: struct {
 	drawing:   bool, // begin/end balance check
 }
 
-// modal_begin dims the screen, claims all input (nothing under the dim layer
-// hovers or clicks), draws a centered titled panel clamped to the screen,
+// modal_begin dims the screen, claims backdrop input (nothing under the dim
+// layer hovers or clicks), draws a centered titled panel clamped to the screen,
 // begins a scissor over it, and returns the body rect below the title band.
 // Pair with modal_end, which handles dismissal. Focus trap: while a modal is
 // open the caller must route Tab cycling only across the widgets it draws
@@ -38,7 +38,6 @@ modal_begin :: proc(
 	assert(w > 0 && h > 0, "modal_begin: empty modal size")
 	st.drawing = true
 	st.dismissed = false
-	route_claim_all(frame)
 	rl.DrawRectangle(0, 0, screen_w, screen_h, theme.modal_dim)
 
 	mw := min(w, screen_w - PADDING * 4)
@@ -46,6 +45,10 @@ modal_begin :: proc(
 	mx := (screen_w - mw) / 2
 	my := (screen_h - mh) / 2
 	st.rect = Rect_I32{mx, my, mw, mh}
+	route_claim(frame, rl.Rectangle{0, 0, f32(screen_w), f32(my)})
+	route_claim(frame, rl.Rectangle{0, f32(my + mh), f32(screen_w), f32(screen_h - my - mh)})
+	route_claim(frame, rl.Rectangle{0, f32(my), f32(mx), f32(mh)})
+	route_claim(frame, rl.Rectangle{f32(mx + mw), f32(my), f32(screen_w - mx - mw), f32(mh)})
 
 	rl.DrawRectangle(mx, my, mw, mh, theme.bg_secondary)
 	rl.DrawRectangleLines(mx, my, mw, mh, theme.border_color)

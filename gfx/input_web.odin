@@ -139,3 +139,9 @@ ingot_web_drop_notify :: proc "contextless" () {
 ingot_web_resize :: proc "contextless" () {
 	_idle_note_activity(&g.idle)
 }
+
+@(export)
+ingot_web_resume :: proc "contextless" () {
+	g.force_reconfigure = true
+	_idle_note_activity(&g.idle)
+}
