@@ -69,8 +69,23 @@ test_create_sphere_mesh_rejects_headless :: proc(t: ^testing.T) {
 
 @(test)
 test_gpu_3d_mesh_handle_mapping :: proc(t: ^testing.T) {
-	// id 0 is the invalid handle; ids beyond the allocated count resolve nil.
-	testing.expect(t, _gpu_3d_mesh(Gpu_Mesh{}) == nil)
-	testing.expect(t, _gpu_3d_mesh(Gpu_Mesh{id = gpu_3d_mesh_count + 1}) == nil)
-	testing.expect(t, _gpu_3d_mesh(Gpu_Mesh{id = GPU_3D_MAX_MESHES + 1}) == nil)
+	resources: Gpu_3D_Resources
+	testing.expect(t, _gpu_3d_mesh_slot(&resources, Gpu_Mesh{}) == nil)
+
+	entry: Gpu_3D_Mesh_Entry
+	slot := &resources.meshes[0]
+	slot.generation = _resource_generation_next(slot.generation)
+	slot.entry = &entry
+	slot.occupied = true
+	old_mesh := Gpu_Mesh {
+		id = _resource_handle_make(0, slot.generation),
+	}
+	testing.expect(t, _gpu_3d_mesh_slot(&resources, old_mesh) == slot)
+
+	slot.generation = _resource_generation_next(slot.generation)
+	new_mesh := Gpu_Mesh {
+		id = _resource_handle_make(0, slot.generation),
+	}
+	testing.expect(t, _gpu_3d_mesh_slot(&resources, old_mesh) == nil)
+	testing.expect(t, _gpu_3d_mesh_slot(&resources, new_mesh) == slot)
 }

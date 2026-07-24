@@ -14,24 +14,24 @@ PILL_CLOSE :: '\x03'
 
 // --- Markdown file-pill context ---------------------------------------------
 
-// Workspace-relative file/dir list (app.mention_files) made available to the
-// markdown renderer so inline `code` that names a real path renders as a
-// clickable pill. Set around the visible chat draw; empty elsewhere.
-@(private = "file")
-md_ws_files: []string
+set_md_file_ctx_frame :: proc(frame: ^Ui_Frame, files: []string) {
+	assert(frame != nil && frame.open, "set_md_file_ctx_frame: invalid frame")
+	frame.markdown_ws_files = files
+}
 
-set_md_file_ctx :: proc(files: []string) {md_ws_files = files}
-clear_md_file_ctx :: proc() {md_ws_files = nil}
+clear_md_file_ctx_frame :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "clear_md_file_ctx_frame: invalid frame")
+	frame.markdown_ws_files = nil
+}
 
-// workspace_has_path reports whether `rel` names a known workspace file or
-// directory. Directory entries in the list carry a trailing '/', so both `rel`
-// and `rel + "/"` are checked. Cheap rejects keep the linear scan off prose.
-workspace_has_path :: proc(rel: string) -> bool {
-	if len(md_ws_files) == 0 || len(rel) == 0 || len(rel) > 256 do return false
+workspace_has_path_frame :: proc(frame: ^Ui_Frame, rel: string) -> bool {
+	assert(frame != nil && frame.open, "workspace_has_path_frame: invalid frame")
+	files := frame.markdown_ws_files
+	if len(files) == 0 || len(rel) == 0 || len(rel) > 256 do return false
 	if strings.index_byte(rel, ' ') >= 0 || strings.index_byte(rel, '\n') >= 0 do return false
-	dir_key := strings.concatenate({rel, "/"}, context.temp_allocator)
-	for e in md_ws_files {
-		if e == rel || e == dir_key do return true
+	directory := strings.concatenate({rel, "/"}, context.temp_allocator)
+	for path in files {
+		if path == rel || path == directory do return true
 	}
 	return false
 }
@@ -167,8 +167,15 @@ strip_pill_markers :: proc(text: string) -> string {
 
 // Draw a pill background behind a composer path run already laid out at
 // [x, x+w). Mirrors the /history pill look (rounded chip).
-draw_input_pill_bg :: proc(x, y, w: i32) {
-	pad: i32 = 3
-	rect := rl.Rectangle{f32(x - pad), f32(y - 1), f32(w + pad * 2), f32(FONT_SIZE + 4)}
-	rl.DrawRectangleRounded(rect, 0.5, 6, theme.bg_chip)
+draw_input_pill_bg_frame :: proc(frame: ^Ui_Frame, x, y, w: i32) {
+	assert(frame != nil && frame.open, "draw_input_pill_bg_frame: invalid frame")
+	metrics := ui_frame_metrics(frame)
+	pad := ui_frame_sc(frame, 3)
+	rect := rl.Rectangle {
+		f32(x - pad),
+		f32(y - ui_frame_sc(frame, 1)),
+		f32(w + pad * 2),
+		f32(metrics.FONT_SIZE_BODY + ui_frame_sc(frame, 4)),
+	}
+	rl.DrawRectangleRounded(rect, 0.5, 6, ui_frame_theme(frame).bg_chip)
 }

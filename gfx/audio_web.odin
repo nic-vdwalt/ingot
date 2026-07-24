@@ -34,10 +34,16 @@ foreign audio_js {
 // Slot generations mirror the native pool so stale handles are rejected the
 // same way on both targets.
 @(private)
-g_audio_gens: [MAX_SOUNDS]u16
+Audio_State :: struct {
+	ready: bool,
+	gens:  [MAX_SOUNDS]u16,
+}
 
 @(private)
-platform_audio_ready :: proc() -> bool {return g_audio_ready}
+g_audio: Audio_State
+
+@(private)
+platform_audio_ready :: proc() -> bool {return g_audio.ready}
 
 @(private)
 platform_audio_init :: proc() -> bool {
@@ -48,7 +54,7 @@ platform_audio_init :: proc() -> bool {
 platform_audio_close :: proc() {
 	for i in 0 ..< MAX_SOUNDS {
 		ingot_audio_unload(i32(i))
-		g_audio_gens[i] += 1
+		g_audio.gens[i] += 1
 	}
 }
 
@@ -56,7 +62,7 @@ platform_audio_close :: proc() {
 _audio_web_resolve :: proc(handle: u32) -> i32 {
 	slot := _audio_handle_slot(handle)
 	if slot < 0 do return -1
-	if g_audio_gens[slot] != _audio_handle_gen(handle) do return -1
+	if g_audio.gens[slot] != _audio_handle_gen(handle) do return -1
 	return slot
 }
 
@@ -68,11 +74,11 @@ _audio_web_resolve :: proc(handle: u32) -> i32 {
 @(private)
 platform_audio_load_file :: proc(fileName: cstring, stream: bool) -> (handle: u32, frames: u32) {
 	assert(fileName != nil, "platform_audio_load_file: nil fileName")
-	assert(g_audio_ready, "platform_audio_load_file: device not ready")
+	assert(g_audio.ready, "platform_audio_load_file: device not ready")
 	url := string(fileName)
 	slot := ingot_audio_load(raw_data(url), i32(len(url)), stream ? 1 : 0)
 	if slot < 0 || slot >= MAX_SOUNDS do return 0, 0
-	return _audio_handle_pack(slot, g_audio_gens[slot]), u32(max(ingot_audio_frames(slot), 0))
+	return _audio_handle_pack(slot, g_audio.gens[slot]), u32(max(ingot_audio_frames(slot), 0))
 }
 
 // platform_audio_loaded: ready only once the JS-side fetch + decode landed
@@ -95,7 +101,7 @@ platform_audio_load_pcm :: proc(
 	assert(channels >= 1 && channels <= 2, "platform_audio_load_pcm: bad channels")
 	slot := ingot_audio_pcm(samples, i32(frame_count), i32(channels), i32(rate))
 	if slot < 0 || slot >= MAX_SOUNDS do return 0
-	return _audio_handle_pack(slot, g_audio_gens[slot])
+	return _audio_handle_pack(slot, g_audio.gens[slot])
 }
 
 @(private)
@@ -103,7 +109,7 @@ platform_audio_unload :: proc(handle: u32) {
 	slot := _audio_web_resolve(handle)
 	if slot < 0 do return
 	ingot_audio_unload(slot)
-	g_audio_gens[slot] += 1
+	g_audio.gens[slot] += 1
 }
 
 @(private)

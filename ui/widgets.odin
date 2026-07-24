@@ -345,27 +345,33 @@ caret_col_to_byte :: proc(line: string, col: int) -> int {
 	return i
 }
 
-// Rune column within `line` closest to horizontal pixel `px` (relative to the
-// line's left edge). Used for mouse click-to-place caret.
-caret_pixel_to_col :: proc(line: string, px: i32) -> int {
+caret_pixel_to_col_with :: proc(system: ^Text_System, line: string, px, font_size: i32) -> int {
+	assert(system != nil, "caret_pixel_to_col_with: nil text system")
+	assert(font_size > 0, "caret_pixel_to_col_with: invalid font size")
 	if px <= 0 do return 0
 	col := 0
 	i := 0
 	for i < len(line) {
 		j := i + 1
 		for j < len(line) && (line[j] & 0xC0) == 0x80 do j += 1
-		prefix_c := strings.clone_to_cstring(line[:j], context.temp_allocator)
-		w := measure_text(prefix_c, FONT_SIZE)
-		if w > px {
-			prev_c := strings.clone_to_cstring(line[:i], context.temp_allocator)
-			pw := measure_text(prev_c, FONT_SIZE)
-			if px - pw < w - px do return col
+		prefix := strings.clone_to_cstring(line[:j], context.temp_allocator)
+		width := measure_text_with(system, prefix, font_size)
+		if width > px {
+			previous := strings.clone_to_cstring(line[:i], context.temp_allocator)
+			previous_width := measure_text_with(system, previous, font_size)
+			if px - previous_width < width - px do return col
 			return col + 1
 		}
 		col += 1
 		i = j
 	}
 	return col
+}
+
+// Rune column within `line` closest to horizontal pixel `px` (relative to the
+// line's left edge). Used for mouse click-to-place caret.
+caret_pixel_to_col :: proc(line: string, px: i32) -> int {
+	return caret_pixel_to_col_with(&default_text_system, line, px, FONT_SIZE)
 }
 
 // Delete the rune before `pos` (backspace). Returns the new caret position.
@@ -808,6 +814,22 @@ btn_at_state :: proc(
 
 // Hit-test wrapped text. Returns byte offset into text at (mouse_x, mouse_y), or -1 if miss.
 // Must mirror draw_text_wrapped wrapping logic exactly.
+hit_test_wrapped_frame :: proc(
+	frame: ^Ui_Frame,
+	x, y, max_width: i32,
+	text: string,
+	mouse_x, mouse_y, font_size: i32,
+) -> int {
+	assert(frame != nil && frame.open, "hit_test_wrapped_frame: invalid frame")
+	assert(max_width >= 0 && font_size > 0, "hit_test_wrapped_frame: invalid dimensions")
+	if len(text) == 0 do return -1
+	lines := wrap_text_frame(frame, text, max_width, font_size)
+	row := clamp(int((mouse_y - y) / ui_frame_metrics(frame).LINE_HEIGHT), 0, len(lines) - 1)
+	line := text[lines[row].start:lines[row].end]
+	col := caret_pixel_to_col_with(ui_frame_text(frame), line, mouse_x - x, font_size)
+	return lines[row].start + caret_col_to_byte(line, col)
+}
+
 hit_test_wrapped :: proc(
 	x, y, max_width: i32,
 	text: string,
@@ -815,15 +837,11 @@ hit_test_wrapped :: proc(
 	font_size: i32 = FONT_SIZE,
 ) -> int {
 	if len(text) == 0 do return -1
-
 	lines := wrap_text(text, max_width, font_size)
-	row := int((mouse_y - y) / i32(LINE_HEIGHT))
-	if row < 0 do row = 0
-	if row >= len(lines) do row = len(lines) - 1
-	ln := lines[row]
-	line := text[ln.start:ln.end]
+	row := clamp(int((mouse_y - y) / LINE_HEIGHT), 0, len(lines) - 1)
+	line := text[lines[row].start:lines[row].end]
 	col := caret_pixel_to_col(line, mouse_x - x)
-	return ln.start + caret_col_to_byte(line, col)
+	return lines[row].start + caret_col_to_byte(line, col)
 }
 
 // Draw a single line with optional selection highlight behind it.
@@ -855,32 +873,49 @@ draw_line_with_selection :: proc(
 	draw_text(line_c, x, y, font_size, color)
 }
 
-// Vertical viewport cull band for wrapped-text draw loops. When set by the
-// chat renderer, per-line drawing skips lines fully outside [top, bottom] while
-// still advancing layout so heights stay correct. Defaults to unbounded so
-// non-chat callers (modals, sidebar) draw every line.
-@(private = "file")
-text_cull_top: i32 = min(i32)
-@(private = "file")
-text_cull_bottom: i32 = max(i32)
-
-// set_text_cull_band restricts subsequent wrapped-text draws to the given
-// vertical band. Pair with clear_text_cull_band.
-set_text_cull_band :: proc(top, bottom: i32) {
-	text_cull_top = top
-	text_cull_bottom = bottom
+// Vertical viewport culling belongs to the frame so nested or interleaved
+// renderers cannot leak a process-global clipping band into each other.
+set_text_cull_band_frame :: proc(frame: ^Ui_Frame, top, bottom: i32) {
+	assert(frame != nil && frame.open, "set_text_cull_band_frame: invalid frame")
+	assert(top <= bottom, "set_text_cull_band_frame: inverted band")
+	frame.text_cull_top = top
+	frame.text_cull_bottom = bottom
 }
 
-// clear_text_cull_band restores unbounded drawing.
-clear_text_cull_band :: proc() {
-	text_cull_top = min(i32)
-	text_cull_bottom = max(i32)
+clear_text_cull_band_frame :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "clear_text_cull_band_frame: invalid frame")
+	frame.text_cull_top = min(i32)
+	frame.text_cull_bottom = max(i32)
 }
 
-// line_culled reports whether a line drawn at y (height LINE_HEIGHT) is fully
-// outside the active cull band.
-line_culled :: proc(y: i32) -> bool {
-	return y + LINE_HEIGHT < text_cull_top || y > text_cull_bottom
+line_culled_frame :: proc(frame: ^Ui_Frame, y, line_height: i32) -> bool {
+	assert(frame != nil && frame.open, "line_culled_frame: invalid frame")
+	assert(line_height > 0, "line_culled_frame: invalid line height")
+	return y + line_height < frame.text_cull_top || y > frame.text_cull_bottom
+}
+
+draw_text_wrapped_frame :: proc(
+	frame: ^Ui_Frame,
+	x, y, max_width: i32,
+	text: string,
+	color: rl.Color,
+	font_size, line_height: i32,
+	sel_start: int = -1,
+	sel_end: int = -1,
+	draw: bool = true,
+) -> i32 {
+	assert(frame != nil && frame.open, "draw_text_wrapped_frame: invalid frame")
+	assert(max_width >= 0 && font_size > 0 && line_height > 0, "draw_text_wrapped_frame: invalid metrics")
+	if len(text) == 0 do return 0
+	current_y := y
+	for line in wrap_text_frame(frame, text, max_width, font_size) {
+		if !line_culled_frame(frame, current_y, line_height) && draw {
+			value := strings.clone_to_cstring(text[line.start:line.end], context.temp_allocator)
+			draw_text_frame(frame, value, x, current_y, font_size, color)
+		}
+		current_y += line_height
+	}
+	return current_y - y
 }
 
 // Draw a scrollable text area with optional selection highlighting.

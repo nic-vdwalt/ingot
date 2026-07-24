@@ -34,9 +34,6 @@ Wave :: struct {
 	data:       rawptr,
 }
 
-@(private)
-g_audio_ready: bool
-
 // --- handle packing (pure; unit-tested) -------------------------------------
 
 // _audio_handle_pack encodes slot (0-based) + generation into a non-zero u32.

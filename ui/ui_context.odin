@@ -43,11 +43,14 @@ Ui_Frame :: struct {
 	overlay:      Overlay_State,
 	route:        Input_Route_State,
 	interaction:  Interaction_State,
-	semantics:    Semantics_State,
-	pane_origins: [MAX_PANE_SCOPES]rl.Vector2,
-	pane_count:   int,
-	open_roots:   int,
-	open:         bool,
+	semantics:         Semantics_State,
+	pane_origins:      [MAX_PANE_SCOPES]rl.Vector2,
+	pane_count:        int,
+	text_cull_top:     i32,
+	text_cull_bottom:  i32,
+	markdown_ws_files: []string,
+	open_roots:        int,
+	open:              bool,
 }
 
 ui_runtime_init :: proc(runtime: ^Ui_Runtime) {
@@ -156,6 +159,9 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime) {
 	frame.overlay.dropped = 0
 	frame.overlay.open = false
 	frame.pane_count = 0
+	frame.text_cull_top = min(i32)
+	frame.text_cull_bottom = max(i32)
+	frame.markdown_ws_files = nil
 	frame.open_roots = 0
 	frame.open = true
 	route_begin_frame(frame)
@@ -171,6 +177,7 @@ ui_frame_end :: proc(frame: ^Ui_Frame) {
 	overlay_flush(frame)
 	cursor_apply(frame)
 	frame.runtime.semantics_snapshot = frame.semantics.cur
+	frame.markdown_ws_files = nil
 	frame.runtime = nil
 	frame.open = false
 }

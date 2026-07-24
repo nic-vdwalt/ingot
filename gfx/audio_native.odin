@@ -22,13 +22,17 @@ Audio_Slot :: struct {
 }
 
 @(private)
-g_audio: struct {
+Audio_State :: struct {
+	ready:  bool,
 	engine: ma.engine,
 	slots:  [MAX_SOUNDS]Audio_Slot,
 }
 
 @(private)
-platform_audio_ready :: proc() -> bool {return g_audio_ready}
+g_audio: Audio_State
+
+@(private)
+platform_audio_ready :: proc() -> bool {return g_audio.ready}
 
 // platform_audio_init starts the engine (and its device thread). A missing
 // output device is an operating failure: report false, never assert.
