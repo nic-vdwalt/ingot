@@ -35,6 +35,8 @@ Prng :: fuzzx.Prng
 
 live_textures: [MAX_LIVE_TEXTURES]rl.Texture2D
 live_targets: [MAX_LIVE_TARGETS]rl.RenderTexture2D
+ui_runtime: ui.Ui_Runtime
+ui_frame: ui.Ui_Frame
 
 make_texture :: proc(p: ^Prng) -> rl.Texture2D {
 	w := i32(fuzzx.int_range(p, 1, 65))
@@ -111,17 +113,15 @@ mutate_resources :: proc(p: ^Prng) {
 		// The original crash: rescale mid-frame unloads every font atlas
 		// referenced by draws already recorded this frame.
 		scale := f32(fuzzx.int_range(p, 50, 301)) / 100.0
-		ui.set_ui_scale(scale)
-		ui.reset_font_atlases()
-		ui.invalidate_scale_caches()
+		ui.ui_runtime_set_scale(&ui_runtime, scale)
 	case 8:
 		switch fuzzx.int_range(p, 0, 3) {
 		case 0:
-			ui.set_theme(ui.theme_dark())
+			ui.ui_runtime_set_theme(&ui_runtime, ui.theme_dark())
 		case 1:
-			ui.set_theme(ui.theme_light())
+			ui.ui_runtime_set_theme(&ui_runtime, ui.theme_light())
 		case 2:
-			ui.set_theme(ui.theme_high_contrast())
+			ui.ui_runtime_set_theme(&ui_runtime, ui.theme_high_contrast())
 		}
 	case 9:
 		ui.set_font_dpi(f32(fuzzx.int_range(p, 100, 301)) / 100.0)
@@ -140,10 +140,9 @@ mutate_resources :: proc(p: ^Prng) {
 		// Compound case: resize immediately followed by UI rescale — the
 		// swapchain reconfigure + atlas churn interleaving.
 		rl.SetWindowSize(i32(fuzzx.int_range(p, 300, 1601)), i32(fuzzx.int_range(p, 200, 1201)))
-		ui.set_ui_scale(f32(fuzzx.int_range(p, 50, 301)) / 100.0)
-		ui.reset_font_atlases()
-		ui.invalidate_scale_caches()
+		ui.ui_runtime_set_scale(&ui_runtime, f32(fuzzx.int_range(p, 50, 301)) / 100.0)
 	}
+
 }
 
 main :: proc() {
@@ -157,6 +156,7 @@ main :: proc() {
 	rl.InitWindow(480, 320, "gfx frame lifecycle fuzz")
 	rl.SetTargetFPS(0) // uncapped: iterations bound the run, not wall time
 	ui.init_font()
+	ui.ui_runtime_init(&ui_runtime)
 
 	for round in 0 ..< rounds {
 		round_seed := seed + u64(round)
@@ -164,9 +164,9 @@ main :: proc() {
 		p := fuzzx.prng_make(round_seed)
 		for i in 0 ..< iterations {
 			if rl.WindowShouldClose() do break
+			ui.ui_frame_begin(&ui_frame, &ui_runtime)
 			rl.BeginDrawing()
 			rl.ClearBackground(ui.theme.bg_color)
-			ui.begin_cursor_frame()
 
 			// Interleave draw → mutate → draw so recorded references
 			// always precede the destroy in ordering-sensitive cases.
@@ -177,6 +177,7 @@ main :: proc() {
 				if fuzzx.int_range(&p, 0, 2) == 0 do draw_some(&p)
 			}
 
+			ui.ui_frame_end(&ui_frame)
 			rl.EndDrawing()
 			free_all(context.temp_allocator)
 			_ = i
@@ -186,6 +187,7 @@ main :: proc() {
 	// Teardown outside any frame exercises the immediate-destroy path.
 	for t in live_textures do if t.id != 0 do rl.UnloadTexture(t)
 	for rt in live_targets do if rt.id != 0 do rl.UnloadRenderTexture(rt)
+	ui.ui_runtime_destroy(&ui_runtime)
 	rl.CloseWindow()
 
 	fmt.printfln("fuzz_gfx_frame ok")

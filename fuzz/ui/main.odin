@@ -318,7 +318,7 @@ exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 			fuzzx.check(c, nodes[i].id > 1, "a11y node id reserved")
 			fuzzx.check(c, len(nodes[i].label) <= ui.SEM_LABEL_MAX, "a11y label exceeds cap")
 			// Interactive nodes must not collide on ids (AT targets them).
-			if frame.nodes[i].focus == nil do continue
+			if frame.nodes[i].focus.focus == nil do continue
 			for j in i + 1 ..< len(nodes) {
 				fuzzx.check(c, nodes[i].id != nodes[j].id, "a11y duplicate interactive node id")
 			}
