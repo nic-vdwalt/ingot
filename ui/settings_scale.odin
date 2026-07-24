@@ -67,6 +67,7 @@ settings_scale_preset_index :: proc(ui_scale: f32) -> int {
 // panel on `dismissed`. Chrome, input claiming, and dismissal ride on the
 // generic modal widget (popups.odin); this proc owns only the preset rows.
 draw_scale_settings_panel :: proc(
+	frame: ^Ui_Frame,
 	selected: ^int,
 	current_scale: f32,
 	screen_width, screen_height: i32,
@@ -99,7 +100,7 @@ draw_scale_settings_panel :: proc(
 	st := Modal_State {
 		open = true,
 	}
-	body := modal_begin(&st, "Settings", modal_w, modal_h, screen_width, screen_height)
+	body := modal_begin(frame, &st, "Settings", modal_w, modal_h, screen_width, screen_height)
 	modal_x := st.rect.x
 	modal_y := st.rect.y
 

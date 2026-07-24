@@ -337,7 +337,6 @@ THEME_LIGHT :: Theme {
 	button_primary_grad_bottom = rl.Color{0, 0, 0, 0},
 }
 
-// theme is the active palette. Dark by default (original values).
 theme: Theme = THEME_DARK
 
 // THEME_HIGH_CONTRAST is a maximum-legibility palette: opaque black
@@ -469,37 +468,29 @@ contrast_ratio :: proc(a, b: rl.Color) -> f64 {
 // MIN_TEXT_CONTRAST is WCAG 2.1 AA for normal text.
 MIN_TEXT_CONTRAST :: 4.5
 
-// set_theme swaps the active palette and clears any color-derived caches via
-// the host invalidate hook. Glass surfaces reset to windowed variants; call
-// set_glass_fullscreen() afterwards if currently fullscreen.
-set_theme :: proc(t: Theme) {
-	// Why assert: an all-zero palette means the caller passed an
-	// uninitialized Theme — every widget would render invisibly.
-	assert(t.fg_primary.a != 0, "set_theme: fg_primary must be opaque-ish")
-	assert(t.bg_color.a != 0, "set_theme: bg_color must have alpha")
-	// Why assert: sub-AA text contrast silently excludes low-vision users —
-	// same spirit as the focus-ring visibility assert (focus_ring.odin).
+ui_runtime_set_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
+	assert(runtime != nil && runtime.initialized, "set_theme: invalid runtime")
+	assert(value.fg_primary.a != 0, "set_theme: fg_primary must be opaque-ish")
+	assert(value.bg_color.a != 0, "set_theme: bg_color must have alpha")
 	assert(
-		contrast_ratio(t.fg_primary, t.bg_color) >= MIN_TEXT_CONTRAST,
+		contrast_ratio(value.fg_primary, value.bg_color) >= MIN_TEXT_CONTRAST,
 		"set_theme: fg_primary on bg_color below WCAG AA (4.5:1)",
 	)
 	assert(
-		contrast_ratio(t.button_text, t.button_bg) >= MIN_TEXT_CONTRAST,
+		contrast_ratio(value.button_text, value.button_bg) >= MIN_TEXT_CONTRAST,
 		"set_theme: button_text on button_bg below WCAG AA (4.5:1)",
 	)
-	theme = t
-	theme.bg_app = t.bg_app_windowed
-	theme.bg_chat = t.bg_chat_windowed
-	theme.bg_panel = t.bg_panel_windowed
-	if scale_invalidate_hook != nil do scale_invalidate_hook()
+	runtime.style = value
+	runtime.style.bg_app = value.bg_app_windowed
+	runtime.style.bg_chat = value.bg_chat_windowed
+	runtime.style.bg_panel = value.bg_panel_windowed
+	if runtime.scale_invalidate_hook != nil do runtime.scale_invalidate_hook()
+	runtime.generation += 1
 }
 
-// set_glass_fullscreen switches the active glass surface fills between the
-// windowed (translucent) and fullscreen (near-opaque) variants. Call once per
-// frame from the host with the window's fullscreen state; no-op cheap.
-set_glass_fullscreen :: proc(fullscreen: bool) {
-	// Why assert: variants must be populated (all themes define them); a
-	// zero-alpha source would make the whole window transparent.
+ui_runtime_set_glass_fullscreen :: proc(runtime: ^Ui_Runtime, fullscreen: bool) {
+	assert(runtime != nil && runtime.initialized, "glass: invalid runtime")
+	theme := &runtime.style
 	assert(theme.bg_app_windowed.a != 0, "glass: bg_app_windowed unset")
 	assert(theme.bg_app_fullscreen.a != 0, "glass: bg_app_fullscreen unset")
 	if fullscreen {

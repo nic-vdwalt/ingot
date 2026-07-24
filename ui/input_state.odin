@@ -95,11 +95,22 @@ input_ui :: proc(
 	fo := ui_focus(u)
 	hh := h if h > 0 else ROW_H_MD + CONTROL_GAP
 	r := ui_slot(u, remaining(&u.layout).w, hh)
-	focus_opt_click(fo, r.x, r.y, r.w, r.h)
+	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
 	sem := semantics
 	sem.focus = fo.focus
 	sem.focus_id = fo.id
-	return input_at(r.x, r.y, r.w, r.h, b, placeholder, focus_opt_focused(fo), masked, sem)
+	return input_at(
+		u.frame,
+		r.x,
+		r.y,
+		r.w,
+		r.h,
+		b,
+		placeholder,
+		focus_opt_focused(fo),
+		masked,
+		sem,
+	)
 }
 
 input_ui_id :: proc(
@@ -114,14 +125,26 @@ input_ui_id :: proc(
 	fo := ui_focus(u, id)
 	hh := h if h > 0 else ROW_H_MD + CONTROL_GAP
 	r := ui_slot(u, remaining(&u.layout).w, hh)
-	focus_opt_click(fo, r.x, r.y, r.w, r.h)
+	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
 	sem := semantics
 	sem.focus = fo.focus
 	sem.focus_id = fo.id
-	return input_at(r.x, r.y, r.w, r.h, b, placeholder, focus_opt_focused(fo), masked, sem)
+	return input_at(
+		u.frame,
+		r.x,
+		r.y,
+		r.w,
+		r.h,
+		b,
+		placeholder,
+		focus_opt_focused(fo),
+		masked,
+		sem,
+	)
 }
 
 input_at :: proc(
+	frame: ^Ui_Frame,
 	x, y, w, h: i32,
 	b: ^Input_Box,
 	placeholder: string,
@@ -140,5 +163,5 @@ input_at :: proc(
 		enable_undo  = true,
 		semantics    = semantics,
 	}
-	return text_input_box(cfg, &b.sb, &b.st)
+	return text_input_box(frame, cfg, &b.sb, &b.st)
 }

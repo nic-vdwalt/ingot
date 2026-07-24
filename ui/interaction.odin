@@ -71,74 +71,58 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 	return it
 }
 
-// Pointer to the drag latch currently held, so no other widget hovers or
-// activates mid-drag. One mouse -> at most one active drag; this is frame
-// arbitration, not retained widget state (the bool itself is caller-owned).
-@(private = "file")
-active_latch: ^bool
-
-// Screen-space origin of the current primary press and whether an overlay
-// claim covered it at press time. Snapshotted once per frame on the press
-// edge (interact_frame_begin) so latch-less widgets can require the press
-// to have started on them before reporting a release-over click.
-@(private = "file")
-press_pos: rl.Vector2
-@(private = "file")
-press_occluded: bool
-@(private = "file")
-press_seen: bool
+Interaction_State :: struct {
+	active_latch:   ^bool,
+	press_pos:      rl.Vector2,
+	press_occluded: bool,
+	press_seen:     bool,
+}
 
 // interact_frame_begin snapshots the primary press origin for this frame.
 // Called once per frame from begin_cursor_frame, after route_begin_frame
 // (so the occlusion test sees the claims active this frame).
-interact_frame_begin :: proc() {
+interact_frame_begin :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "interact_frame_begin: invalid frame")
 	if rl.IsMouseButtonPressed(.LEFT) {
-		press_pos = rl.GetMousePosition()
-		press_occluded = route_occluded(press_pos)
-		press_seen = true
+		frame.interaction.press_pos = rl.GetMousePosition()
+		frame.interaction.press_occluded = route_occluded(frame, frame.interaction.press_pos)
+		frame.interaction.press_seen = true
 	}
 }
 
 // interact_reset clears the drag arbitration slot and the recorded press
 // origin (tests / teardown).
-interact_reset :: proc() {
-	active_latch = nil
-	press_pos = {}
-	press_occluded = false
-	press_seen = false
+interact_reset :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil, "interact_reset: nil frame")
+	frame.interaction = {}
 }
 
 // interact runs the interaction protocol for a widget rect. `rect` is in the
 // widget's drawing space (pane-local when inside a translated split pane);
 // the pointer is converted via pane_origin_x in one place here. Occlusion by
 // overlay claims (route_claim) is resolved before hover is reported.
-interact :: proc(rect: rl.Rectangle, latch: ^bool = nil) -> Interaction {
+interact :: proc(frame: ^Ui_Frame, rect: rl.Rectangle, latch: ^bool = nil) -> Interaction {
+	assert(frame != nil && frame.open, "interact: invalid frame")
 	assert(rect.width >= 0 && rect.height >= 0, "interact: negative rect")
-	// Stale arbitration: the caller reset its latch externally.
-	if active_latch != nil && !active_latch^ {
-		active_latch = nil
-	}
+	state := &frame.interaction
+	if state.active_latch != nil && !state.active_latch^ do state.active_latch = nil
 	mouse := rl.GetMousePosition()
-	local := mouse
-	local.x -= f32(pane_origin_x)
-	local_press := press_pos
-	local_press.x -= f32(pane_origin_x)
+	local := frame_to_local(frame, mouse)
+	local_press := frame_to_local(frame, state.press_pos)
 	ev := Interact_Event {
-		over       = rl.CheckCollisionPointRec(local, rect) && !route_occluded(mouse),
+		over       = rl.CheckCollisionPointRec(local, rect) && !route_occluded(frame, mouse),
 		pressed    = rl.IsMouseButtonPressed(.LEFT),
 		released   = rl.IsMouseButtonReleased(.LEFT),
 		down       = rl.IsMouseButtonDown(.LEFT),
-		blocked    = active_latch != nil && active_latch != latch,
-		press_over = press_seen &&
-			!press_occluded &&
-			rl.CheckCollisionPointRec(local_press, rect),
+		blocked    = state.active_latch != nil && state.active_latch != latch,
+		press_over = state.press_seen && !state.press_occluded && rl.CheckCollisionPointRec(local_press, rect),
 	}
 	it := interact_step(ev, latch)
 	if latch != nil {
 		if it.held {
-			active_latch = latch
-		} else if active_latch == latch {
-			active_latch = nil
+			state.active_latch = latch
+		} else if state.active_latch == latch {
+			state.active_latch = nil
 		}
 	}
 	return it

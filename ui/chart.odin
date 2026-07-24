@@ -329,6 +329,7 @@ chart_draw_legend :: proc(cl: Chart_Layout, series: []Chart_Series) {
 // because the overlay replays after pane translation is popped.
 @(private = "file")
 chart_draw_tooltip :: proc(
+	frame: ^Ui_Frame,
 	cl: Chart_Layout,
 	series: []Chart_Series,
 	opts: Chart_Opts,
@@ -371,22 +372,24 @@ chart_draw_tooltip :: proc(
 		i32(cl.chart.y),
 		max(i32(cl.chart.y + cl.chart.height) - th, i32(cl.chart.y)),
 	)
-	ox := pane_origin_x
+	origin := frame_pane_origin(frame)
+	ox := i32(origin.x)
 	rect := rl.Rectangle{f32(tx + ox), f32(ty), f32(tw), f32(th)}
-	overlay_begin(rect, claim_input = false)
-	overlay_rounded(rect, 0.2, 4, theme.bg_popup)
-	overlay_rounded_lines(rect, 0.2, 4, 1.0, theme.border_color)
+	overlay_begin(frame, rect, claim_input = false)
+	overlay_rounded(frame, rect, 0.2, 4, theme.bg_popup)
+	overlay_rounded_lines(frame, rect, 0.2, 4, 1.0, theme.border_color)
 
 	// Draw pass.
 	ry := ty + pad
 	if has_header {
-		overlay_text(opts.labels[idx], tx + ox + pad, ry, FONT_SIZE_SMALL, theme.fg_primary)
+		overlay_text(frame, opts.labels[idx], tx + ox + pad, ry, FONT_SIZE_SMALL, theme.fg_primary)
 		ry += row_h
 	}
 	for s, si in series {
 		if idx >= len(s.values) do continue
 		col := s.color if s.color != {} else chart_series_color(si)
 		overlay_rounded(
+			frame,
 			{f32(tx + ox + pad), f32(ry + (FONT_SIZE_SMALL - sw) / 2), f32(sw), f32(sw)},
 			0.5,
 			4,
@@ -395,6 +398,7 @@ chart_draw_tooltip :: proc(
 		val := chart_format_value(opts, s.values[idx], buf[:])
 		name := s.name if len(s.name) > 0 else fmt.tprintf("series %d", si + 1)
 		overlay_text(
+			frame,
 			fmt.tprintf("%s: %s", name, val),
 			tx + ox + pad + sw + sc(5),
 			ry,
@@ -403,7 +407,7 @@ chart_draw_tooltip :: proc(
 		)
 		ry += row_h
 	}
-	overlay_end()
+	overlay_end(frame)
 }
 
 // chart_point_y maps a value to its animated pixel y: during the enter
@@ -420,6 +424,7 @@ chart_point_y :: proc(v: f32, cl: Chart_Layout, anim: f32) -> f32 {
 // line_chart draws one polyline per series with optional area fill, grid,
 // axes, legend, and a hover tooltip. Returns the hovered point index or -1.
 line_chart :: proc(
+	frame: ^Ui_Frame,
 	x, y, w, h: i32,
 	series: []Chart_Series,
 	state: ^Chart_State,
@@ -478,7 +483,7 @@ line_chart :: proc(
 			col := s.color if s.color != {} else chart_series_color(si)
 			rl.DrawCircleV({gx, chart_point_y(s.values[hovered], cl, anim)}, scf(4), col)
 		}
-		chart_draw_tooltip(cl, series, opts, hovered, mouse)
+		chart_draw_tooltip(frame, cl, series, opts, hovered, mouse)
 	}
 	return hovered
 }
@@ -488,6 +493,7 @@ line_chart :: proc(
 // always includes zero so bars grow from a meaningful baseline. Returns the
 // hovered slot index or -1.
 bar_chart :: proc(
+	frame: ^Ui_Frame,
 	x, y, w, h: i32,
 	series: []Chart_Series,
 	state: ^Chart_State,
@@ -539,7 +545,7 @@ bar_chart :: proc(
 	}
 
 	if opts.show_legend do chart_draw_legend(cl, series)
-	if hovered >= 0 do chart_draw_tooltip(cl, series, opts, hovered, mouse)
+	if hovered >= 0 do chart_draw_tooltip(frame, cl, series, opts, hovered, mouse)
 	return hovered
 }
 

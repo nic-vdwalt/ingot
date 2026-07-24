@@ -58,9 +58,9 @@ focus_scope_apply :: proc(list: ^Sem_Focus_List, current, next: int) {
 // (instead of per-form form_focus_cycle) to Tab across all focusable widgets
 // drawn last frame. Shift+Tab reverses. No-op while no focusable widgets
 // were recorded.
-focus_scope_cycle :: proc() {
+focus_scope_cycle :: proc(frame: ^Ui_Frame) {
 	if !rl.IsKeyPressed(.TAB) do return
-	list := sem_focus_list()
+	list := sem_focus_list(frame)
 	if list.count == 0 do return
 	backwards := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
 	current := focus_scope_focused_index(list)

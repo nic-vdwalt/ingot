@@ -427,6 +427,7 @@ text_input_selection_clear :: proc(st: ^Text_Input_State) {
 // phase procedures below stay under the length limit without 14-arg calls.
 @(private = "file")
 TI_Ctx :: struct {
+	frame:       ^Ui_Frame,
 	sb:          ^strings.Builder,
 	cursor:      ^int, // nil = end-anchored legacy input (no caret model)
 	desired_col: ^int,
@@ -510,6 +511,7 @@ ti_semantic_push :: proc(ctx: ^TI_Ctx) {
 	}
 	label := ctx.semantics.name if ctx.semantics.name != "" else ctx.placeholder
 	semantic_push(
+		ctx.frame,
 		.Text_Input,
 		{ctx.x, ctx.y, ctx.w, ctx.h},
 		label,
@@ -548,7 +550,8 @@ ti_keys_select :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 	// handle mouse press/drag in the render section).
 	if !ctx.caret && ti_sel_owner(ctx) && rl.IsMouseButtonPressed(.LEFT) {
 		screen_mouse := rl.GetMousePosition()
-		if rl.CheckCollisionPointRec(screen_mouse, ctx.rect) && !route_occluded(screen_mouse) {
+		if rl.CheckCollisionPointRec(screen_mouse, ctx.rect) &&
+		   !route_occluded(ctx.frame, screen_mouse) {
 			sel_reset(sel)
 		}
 	}
@@ -866,8 +869,8 @@ ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string) {
 	assert(ctx.masked, "ti_mouse_masked: masked input required")
 	if !rl.IsMouseButtonPressed(.LEFT) do return
 	mouse := rl.GetMousePosition()
-	if route_occluded(mouse) do return
-	mouse.x -= f32(pane_origin_x)
+	if route_occluded(ctx.frame, mouse) do return
+	mouse = frame_to_local(ctx.frame, mouse)
 	if !rl.CheckCollisionPointRec(mouse, ctx.rect) do return
 	masked_text := masked_display(text)
 	masked_c := strings.clone_to_cstring(masked_text, context.temp_allocator)
@@ -887,8 +890,8 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	assert(v.caret_render, "ti_mouse_caret: caret renderer required")
 	sel := ctx.sel
 	mouse := rl.GetMousePosition()
-	occluded := route_occluded(mouse)
-	mouse.x -= f32(pane_origin_x)
+	occluded := route_occluded(ctx.frame, mouse)
+	mouse = frame_to_local(ctx.frame, mouse)
 	if rl.IsMouseButtonPressed(.LEFT) && !occluded {
 		if rl.CheckCollisionPointRec(mouse, ctx.rect) {
 			off := input_mouse_to_byte(
@@ -973,7 +976,7 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 	)
 	if rl.IsMouseButtonPressed(.RIGHT) {
 		mouse := rl.GetMousePosition()
-		occluded := route_occluded(mouse)
+		occluded := route_occluded(ctx.frame, mouse)
 		mouse.x -= f32(pane_origin_x)
 		if !occluded && rl.CheckCollisionPointRec(mouse, ctx.rect) {
 			off := input_mouse_to_byte(
@@ -1322,7 +1325,7 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	// Suggestions popup for a right-clicked misspelled word. Drawn after the
 	// scissor ends so it renders unclipped above the input box.
 	if spell_menu_active(ctx.sb) {
-		draw_spell_menu(ctx.x, ctx.y, ctx.w)
+		draw_spell_menu(ctx.frame, ctx.x, ctx.y, ctx.w)
 	}
 	return entered
 }
@@ -1333,6 +1336,7 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 // any number of inputs coexist without shared-cache thrash. Always caret-
 // aware. Returns true if Enter was pressed.
 text_input_box :: proc(
+	frame: ^Ui_Frame,
 	cfg: Text_Input_Config,
 	sb: ^strings.Builder,
 	st: ^Text_Input_State,
@@ -1341,6 +1345,7 @@ text_input_box :: proc(
 	assert(st != nil, "text_input_box: nil state")
 	assert(cfg.rect.w > 0 && cfg.rect.h > 0, "text_input_box: empty rect")
 	ctx := TI_Ctx {
+		frame       = frame,
 		sb          = sb,
 		cursor      = &st.cursor,
 		desired_col = &st.desired_col,
@@ -1382,6 +1387,7 @@ text_input_box :: proc(
 // only one legacy input should be focused at a time; new code should prefer
 // text_input_box.
 text_input :: proc(
+	frame: ^Ui_Frame,
 	x, y, w, h: i32,
 	sb: ^strings.Builder,
 	placeholder: string,
@@ -1397,6 +1403,7 @@ text_input :: proc(
 	assert(sb != nil, "text_input: nil builder")
 	assert(w > 0 && h > 0, "text_input: empty rect")
 	ctx := TI_Ctx {
+		frame       = frame,
 		sb          = sb,
 		cursor      = cursor,
 		desired_col = desired_col,

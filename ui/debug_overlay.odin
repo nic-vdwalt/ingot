@@ -12,7 +12,7 @@ import rl "ingot:gfx"
 // draw_debug_overlay draws the metrics panel with its top-left corner at
 // (x, y) and returns the panel height. Call every frame while a debug toggle
 // (say F12) is on.
-draw_debug_overlay :: proc(x, y: i32) -> i32 {
+draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32) -> i32 {
 	assert(x >= 0 && y >= 0, "draw_debug_overlay: negative origin")
 	s := rl.renderer_stats()
 
@@ -54,15 +54,15 @@ draw_debug_overlay :: proc(x, y: i32) -> i32 {
 	push(rows[:], &n, "pipeline switches", fmt.tprintf("%d", s.pipeline_switches))
 	push(rows[:], &n, "render passes", fmt.tprintf("%d", s.render_passes))
 	push(rows[:], &n, "peak geom arena", fmt.tprintf("%d KB", s.peak_geometry_arena_bytes / 1024))
-	entries, evictions := measure_cache_stats()
+	entries, evictions := measure_cache_stats_with(&frame.runtime.text)
 	push(rows[:], &n, "measure cache", fmt.tprintf("%d (%d evicted)", entries, evictions))
 	push(
 		rows[:],
 		&n,
 		"overlay cmds",
-		fmt.tprintf("%d (%d dropped)", overlay_cmd_count(), overlay_dropped()),
+		fmt.tprintf("%d (%d dropped)", overlay_cmd_count(frame), overlay_dropped(frame)),
 	)
-	push(rows[:], &n, "route claims", fmt.tprintf("%d", route_claim_count()))
+	push(rows[:], &n, "route claims", fmt.tprintf("%d", route_claim_count(frame)))
 
 	h := i32(n) * row_h + pad * 2 + FONT_SIZE_SMALL + sc(6)
 	panel := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}

@@ -1,159 +1,180 @@
 package ui
 
-// g_ui_scale is the current UI scale factor:
-//   1.0 = 96 DPI (100 %)
-//   1.5 = 144 DPI (150 %)
-//   2.0 = 192 DPI (200 % / typical 4K)
-// Initialised at startup from the OS DPI (or a persisted user override) and
-// may be changed at runtime via the settings panel.
-@(private)
-g_ui_scale: f32 = 1.0
+Ui_Metrics :: struct {
+	FONT_SIZE:                 i32,
+	FONT_SIZE_LARGE:           i32,
+	FONT_SIZE_SMALL:           i32,
+	LINE_HEIGHT:               i32,
+	FONT_SIZE_TITLE:           i32,
+	FONT_SIZE_BODY:            i32,
+	FONT_SIZE_LABEL:           i32,
+	FONT_SIZE_NOTE:            i32,
+	NVIM_FONT_SIZE:            i32,
+	NVIM_CELL_PAD:             i32,
+	NVIM_MARGIN:               i32,
+	TAB_BAR_HEIGHT:            i32,
+	CAPTION_BTN_W:             i32,
+	INPUT_BAR_HEIGHT:          i32,
+	PADDING:                   i32,
+	TAB_WIDTH:                 i32,
+	TAB_MIN_WIDTH:             i32,
+	TAB_CLOSE_SIZE:            i32,
+	TAB_ICON_SIZE:             i32,
+	COMMAND_ITEM_HEIGHT:       i32,
+	POPUP_MAX_WIDTH:           i32,
+	SCROLL_SPEED:              f32,
+	CHAT_MAX_W:                i32,
+	MSG_GAP:                   i32,
+	USER_CARD_PAD_H:           i32,
+	USER_CARD_PAD_V:           i32,
+	USER_CARD_RADIUS_PX:       f32,
+	USER_CARD_MIN_W:           i32,
+	ROW_H_SM:                  i32,
+	ROW_H_MD:                  i32,
+	PANEL_HEADER_H:            i32,
+	CARD_RADIUS_PX:            f32,
+	CONTROL_BOX:               i32,
+	CONTROL_GAP:               i32,
+	SLIDER_TRACK_H:            i32,
+	SLIDER_KNOB_R:             f32,
+	MENU_ITEM_H:               i32,
+	MENU_PAD:                  i32,
+	MENU_MIN_W:                i32,
+	TOOLTIP_PAD:               i32,
+	ATTACHMENT_CHIP_ROW_H:     i32,
+	DROP_ZONE_H:               i32,
+	TOOL_BORDER_W:             i32,
+	TOOL_CARD_PAD_V:           i32,
+	TOOL_CARD_PAD_H:           i32,
+	TOOL_CARD_GAP:             i32,
+	CODE_BLOCK_PAD:            i32,
+	BULLET_INDENT:             i32,
+	TABLE_CELL_PAD:            i32,
+	PLAN_SIDEBAR_W:            i32,
+	PLAN_SIDEBAR_COLLAPSED_W:  i32,
+	PLAN_SIDEBAR_ROW_H:        i32,
+	PLAN_TITLE_ACCENT_W:       i32,
+	PLAN_TITLE_PAD:            i32,
+	DEBUG_SIDEBAR_W:           i32,
+	DEBUG_SIDEBAR_COLLAPSED_W: i32,
+	DEBUG_SIDEBAR_ROW_H:       i32,
+	DEBUG_TITLE_ACCENT_W:      i32,
+	DEBUG_TITLE_PAD:           i32,
+	SHELLS_PANEL_W:            i32,
+	SPLIT_DIVIDER_W:           i32,
+	VORTEX_RADIUS:             f32,
+	VORTEX_INNER:              f32,
+	WAVE_BAR_W:                i32,
+	WAVE_BAR_GAP:              i32,
+	WAVE_BAR_MAX_H:            i32,
+	WAVE_BAR_MIN_H:            i32,
+}
 
-// set_ui_scale rescales all pixel-dimension variables declared in theme.odin
-// to match the given scale factor. Safe to call at runtime; callers that
-// change the scale after startup must also call invalidate_scale_caches() and
-// reset cached per-message/tool render heights so the new metrics take effect.
-// The factor is clamped to [0.5, 3.0].
-set_ui_scale :: proc(scale: f32) {
+ui_metrics :: proc(scale: f32) -> Ui_Metrics {
 	s := clamp(scale, 0.5, 3.0)
-	if s == g_ui_scale do return
-	g_ui_scale = s
-
-	// Font sizes.
-	FONT_SIZE = i32(16.0 * s + 0.5)
-	FONT_SIZE_LARGE = i32(20.0 * s + 0.5)
-	FONT_SIZE_SMALL = i32(13.0 * s + 0.5)
-	LINE_HEIGHT = i32(22.0 * s + 0.5)
-
-	// Semantic type roles.
-	FONT_SIZE_TITLE = i32(20.0 * s + 0.5)
-	FONT_SIZE_BODY = i32(16.0 * s + 0.5)
-	FONT_SIZE_LABEL = i32(13.0 * s + 0.5)
-	FONT_SIZE_NOTE = i32(11.0 * s + 0.5)
-
-	// Embedded terminal / nvim grid metrics.
-	NVIM_FONT_SIZE = i32(16.0 * s + 0.5)
-	NVIM_CELL_PAD = i32(6.0 * s + 0.5)
-	NVIM_MARGIN = i32(10.0 * s + 0.5)
-
-	// General layout.
-	TAB_BAR_HEIGHT = i32(35.0 * s + 0.5)
-	CAPTION_BTN_W = i32(46.0 * s + 0.5)
-	INPUT_BAR_HEIGHT = i32(50.0 * s + 0.5)
-	PADDING = i32(10.0 * s + 0.5)
-	TAB_WIDTH = i32(180.0 * s + 0.5)
-	TAB_MIN_WIDTH = i32(70.0 * s + 0.5)
-	TAB_CLOSE_SIZE = i32(16.0 * s + 0.5)
-	TAB_ICON_SIZE = i32(18.0 * s + 0.5)
-	COMMAND_ITEM_HEIGHT = i32(28.0 * s + 0.5)
-	POPUP_MAX_WIDTH = i32(400.0 * s + 0.5)
-	SCROLL_SPEED = 15.0 * s
-
-	// Flat chat messages.
-	CHAT_MAX_W = i32(860.0 * s + 0.5)
-	MSG_GAP = i32(14.0 * s + 0.5)
-	USER_CARD_PAD_H = i32(12.0 * s + 0.5)
-	USER_CARD_PAD_V = i32(8.0 * s + 0.5)
-	USER_CARD_RADIUS_PX = 8.0 * s
-	USER_CARD_MIN_W = i32(48.0 * s + 0.5)
-
-	// Unified panel/list metrics.
-	ROW_H_SM = i32(24.0 * s + 0.5)
-	ROW_H_MD = i32(28.0 * s + 0.5)
-	PANEL_HEADER_H = i32(34.0 * s + 0.5)
-	CARD_RADIUS_PX = 6.0 * s
-
-	// Form controls and popups.
-	CONTROL_BOX = i32(18.0 * s + 0.5)
-	CONTROL_GAP = i32(8.0 * s + 0.5)
-	SLIDER_TRACK_H = i32(4.0 * s + 0.5)
-	SLIDER_KNOB_R = 7.0 * s
-	MENU_ITEM_H = i32(26.0 * s + 0.5)
-	MENU_PAD = i32(4.0 * s + 0.5)
-	MENU_MIN_W = i32(160.0 * s + 0.5)
-	TOOLTIP_PAD = i32(6.0 * s + 0.5)
-
-	// Attachment / drop zone.
-	ATTACHMENT_CHIP_ROW_H = i32(28.0 * s + 0.5)
-	DROP_ZONE_H = i32(56.0 * s + 0.5)
-
-	// Tool cards and markdown.
-	TOOL_BORDER_W = i32(2.0 * s + 0.5)
-	TOOL_CARD_PAD_V = i32(4.0 * s + 0.5)
-	TOOL_CARD_PAD_H = i32(8.0 * s + 0.5)
-	TOOL_CARD_GAP = i32(4.0 * s + 0.5)
-	CODE_BLOCK_PAD = i32(8.0 * s + 0.5)
-	BULLET_INDENT = i32(20.0 * s + 0.5)
-	TABLE_CELL_PAD = i32(8.0 * s + 0.5)
-
-	// Plan sidebar.
-	PLAN_SIDEBAR_W = i32(300.0 * s + 0.5)
-	PLAN_SIDEBAR_COLLAPSED_W = i32(30.0 * s + 0.5)
-	PLAN_SIDEBAR_ROW_H = i32(22.0 * s + 0.5)
-	PLAN_TITLE_ACCENT_W = i32(3.0 * s + 0.5)
-	PLAN_TITLE_PAD = i32(8.0 * s + 0.5)
-
-	// Debug sidebar.
-	DEBUG_SIDEBAR_W = i32(320.0 * s + 0.5)
-	DEBUG_SIDEBAR_COLLAPSED_W = i32(30.0 * s + 0.5)
-	DEBUG_SIDEBAR_ROW_H = i32(28.0 * s + 0.5)
-	DEBUG_TITLE_ACCENT_W = i32(3.0 * s + 0.5)
-	DEBUG_TITLE_PAD = i32(8.0 * s + 0.5)
-
-	// Shells panel.
-	SHELLS_PANEL_W = i32(360.0 * s + 0.5)
-
-	// Split divider.
-	SPLIT_DIVIDER_W = i32(4.0 * s + 0.5)
-
-	// Vortex connecting animation.
-	VORTEX_RADIUS = 56.0 * s
-	VORTEX_INNER = 12.0 * s
-
-	// Wave-bar animation.
-	WAVE_BAR_W = i32(3.0 * s + 0.5)
-	WAVE_BAR_GAP = i32(3.0 * s + 0.5)
-	WAVE_BAR_MAX_H = i32(18.0 * s + 0.5)
-	WAVE_BAR_MIN_H = i32(3.0 * s + 0.5)
-
-	// App-owned view metrics (git/nvim/terminal panels) live outside the
-	// library; the host app rescales them via this hook.
-	if scale_metrics_hook != nil do scale_metrics_hook(s)
+	si :: proc(value, factor: f32) -> i32 {return i32(value * factor + 0.5)}
+	return {
+		FONT_SIZE = si(16, s),
+		FONT_SIZE_LARGE = si(20, s),
+		FONT_SIZE_SMALL = si(13, s),
+		LINE_HEIGHT = si(22, s),
+		FONT_SIZE_TITLE = si(20, s),
+		FONT_SIZE_BODY = si(16, s),
+		FONT_SIZE_LABEL = si(13, s),
+		FONT_SIZE_NOTE = si(11, s),
+		NVIM_FONT_SIZE = si(16, s),
+		NVIM_CELL_PAD = si(6, s),
+		NVIM_MARGIN = si(10, s),
+		TAB_BAR_HEIGHT = si(35, s),
+		CAPTION_BTN_W = si(46, s),
+		INPUT_BAR_HEIGHT = si(50, s),
+		PADDING = si(10, s),
+		TAB_WIDTH = si(180, s),
+		TAB_MIN_WIDTH = si(70, s),
+		TAB_CLOSE_SIZE = si(16, s),
+		TAB_ICON_SIZE = si(18, s),
+		COMMAND_ITEM_HEIGHT = si(28, s),
+		POPUP_MAX_WIDTH = si(400, s),
+		SCROLL_SPEED = 15 * s,
+		CHAT_MAX_W = si(860, s),
+		MSG_GAP = si(14, s),
+		USER_CARD_PAD_H = si(12, s),
+		USER_CARD_PAD_V = si(8, s),
+		USER_CARD_RADIUS_PX = 8 * s,
+		USER_CARD_MIN_W = si(48, s),
+		ROW_H_SM = si(24, s),
+		ROW_H_MD = si(28, s),
+		PANEL_HEADER_H = si(34, s),
+		CARD_RADIUS_PX = 6 * s,
+		CONTROL_BOX = si(18, s),
+		CONTROL_GAP = si(8, s),
+		SLIDER_TRACK_H = si(4, s),
+		SLIDER_KNOB_R = 7 * s,
+		MENU_ITEM_H = si(26, s),
+		MENU_PAD = si(4, s),
+		MENU_MIN_W = si(160, s),
+		TOOLTIP_PAD = si(6, s),
+		ATTACHMENT_CHIP_ROW_H = si(28, s),
+		DROP_ZONE_H = si(56, s),
+		TOOL_BORDER_W = si(2, s),
+		TOOL_CARD_PAD_V = si(4, s),
+		TOOL_CARD_PAD_H = si(8, s),
+		TOOL_CARD_GAP = si(4, s),
+		CODE_BLOCK_PAD = si(8, s),
+		BULLET_INDENT = si(20, s),
+		TABLE_CELL_PAD = si(8, s),
+		PLAN_SIDEBAR_W = si(300, s),
+		PLAN_SIDEBAR_COLLAPSED_W = si(30, s),
+		PLAN_SIDEBAR_ROW_H = si(22, s),
+		PLAN_TITLE_ACCENT_W = si(3, s),
+		PLAN_TITLE_PAD = si(8, s),
+		DEBUG_SIDEBAR_W = si(320, s),
+		DEBUG_SIDEBAR_COLLAPSED_W = si(30, s),
+		DEBUG_SIDEBAR_ROW_H = si(28, s),
+		DEBUG_TITLE_ACCENT_W = si(3, s),
+		DEBUG_TITLE_PAD = si(8, s),
+		SHELLS_PANEL_W = si(360, s),
+		SPLIT_DIVIDER_W = si(4, s),
+		VORTEX_RADIUS = 56 * s,
+		VORTEX_INNER = 12 * s,
+		WAVE_BAR_W = si(3, s),
+		WAVE_BAR_GAP = si(3, s),
+		WAVE_BAR_MAX_H = si(18, s),
+		WAVE_BAR_MIN_H = si(3, s),
+	}
 }
 
-// sc scales an integer pixel literal by the current UI scale factor.
-// Use for any locally hard-coded pixel value not covered by a theme variable.
-sc :: proc(x: i32) -> i32 {
-	return i32(f32(x) * g_ui_scale + 0.5)
+ui_runtime_scale :: proc(runtime: ^Ui_Runtime) -> f32 {
+	assert(runtime != nil && runtime.initialized)
+	return runtime.scale
 }
 
-// scf scales a float pixel literal by the current UI scale factor.
-scf :: proc(x: f32) -> f32 {
-	return x * g_ui_scale
+ui_runtime_metrics :: proc(runtime: ^Ui_Runtime) -> ^Ui_Metrics {
+	assert(runtime != nil && runtime.initialized)
+	return &runtime.metrics
 }
 
-// ui_scale returns the current DPI scale factor (1.0 = standard 96 DPI).
-ui_scale :: proc() -> f32 {
-	return g_ui_scale
+ui_runtime_sc :: proc(runtime: ^Ui_Runtime, value: i32) -> i32 {
+	assert(runtime != nil && runtime.initialized)
+	return i32(f32(value) * runtime.scale + 0.5)
 }
 
-// invalidate_scale_caches drops every cache whose contents depend on the UI
-// scale (font sizes / layout metrics). Call after set_ui_scale() changes the
-// scale at runtime. Size-keyed caches (measure_cache, wrap_cache) are flushed
-// for memory hygiene; the composer memo and the terminal/nvim cell-width
-// caches are reset because their keys omit the font size and would otherwise
-// go stale. Per-message/tool render heights are reset separately by the
-// caller (they live in the state package).
-// scale_metrics_hook lets the host app rescale its own view metrics
-// (git/nvim/terminal panels) that live outside the library.
-scale_metrics_hook: proc(s: f32)
+ui_runtime_scf :: proc(runtime: ^Ui_Runtime, value: f32) -> f32 {
+	assert(runtime != nil && runtime.initialized)
+	return value * runtime.scale
+}
 
-// scale_invalidate_hook lets the host app clear its own scale-derived caches
-// without ingot importing app code.
-scale_invalidate_hook: proc()
+sc :: proc(value: i32) -> i32 {
+	return value
+}
 
-invalidate_scale_caches :: proc() {
-	clear_measure_cache()
-	clear_wrap_cache()
-	if scale_invalidate_hook != nil do scale_invalidate_hook()
+scf :: proc(value: f32) -> f32 {
+	return value
+}
+
+ui_runtime_invalidate_scale_caches :: proc(runtime: ^Ui_Runtime) {
+	assert(runtime != nil && runtime.initialized)
+	clear_measure_cache_with(&runtime.text)
+	clear_wrap_cache_with(&runtime.text)
+	if runtime.scale_invalidate_hook != nil do runtime.scale_invalidate_hook()
 }

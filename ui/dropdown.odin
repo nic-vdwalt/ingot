@@ -33,7 +33,17 @@ dropdown_ui :: proc(
 ) {
 	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 2
 	r := ui_slot(u, ww, ROW_H_MD)
-	return dropdown_at(r, items, selected, st, u.screen_w, u.screen_h, ui_focus(u), a11y_label)
+	return dropdown_at(
+		u.frame,
+		r,
+		items,
+		selected,
+		st,
+		u.screen_w,
+		u.screen_h,
+		ui_focus(u),
+		a11y_label,
+	)
 }
 
 dropdown_ui_id :: proc(
@@ -49,10 +59,21 @@ dropdown_ui_id :: proc(
 ) {
 	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 2
 	r := ui_slot(u, ww, ROW_H_MD)
-	return dropdown_at(r, items, selected, st, u.screen_w, u.screen_h, ui_focus(u, id), a11y_label)
+	return dropdown_at(
+		u.frame,
+		r,
+		items,
+		selected,
+		st,
+		u.screen_w,
+		u.screen_h,
+		ui_focus(u, id),
+		a11y_label,
+	)
 }
 
 dropdown_at :: proc(
+	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	items: []string,
 	selected: ^i32,
@@ -70,9 +91,9 @@ dropdown_at :: proc(
 	if int(selected^) >= len(items) do selected^ = i32(len(items) - 1)
 
 	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	it := interact(rrect)
-	focus_opt_click(focus, rect.x, rect.y, rect.w, rect.h)
-	if it.hovered do request_cursor(.POINTING_HAND)
+	it := interact(frame, rrect)
+	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	if it.hovered do request_cursor(frame, .POINTING_HAND)
 
 	// Closed chrome: input-style box, current label, chevron.
 	bg := theme.bg_input if st.menu.open || it.hovered else theme.bg_secondary
@@ -106,14 +127,14 @@ dropdown_at :: proc(
 
 	// Open on click or keyboard activation; the opening click must not also
 	// register as the popup's click-away (just_opened swallows it).
-	if !st.menu.open && (it.clicked || focus_opt_activated(focus)) {
+	if !st.menu.open && (it.clicked || focus_opt_activated(frame, focus)) {
 		context_menu_open(&st.menu, rect.x, rect.y + rect.h + 2)
 		st.menu.selected = int(selected^)
 	}
 	sem: Sem_State
 	if st.menu.open do sem += {.Expanded}
 	sem_label := a11y_label if a11y_label != "" else items[selected^]
-	semantic_push(.Dropdown, rect, sem_label, sem, focus)
+	semantic_push(frame, .Dropdown, rect, sem_label, sem, focus)
 	if !st.menu.open do return false
 
 	menu_items := make([]Menu_Item, len(items), context.temp_allocator)
@@ -122,7 +143,7 @@ dropdown_at :: proc(
 			label = item,
 		}
 	}
-	chosen := context_menu(&st.menu, menu_items, screen_w, screen_h)
+	chosen := context_menu(frame, &st.menu, menu_items, screen_w, screen_h)
 	if chosen >= 0 {
 		assert(chosen < len(items), "dropdown: chosen index out of range")
 		changed = i32(chosen) != selected^

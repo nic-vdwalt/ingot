@@ -48,7 +48,7 @@ form_focus_cycle :: proc(focus: ^int, count: int) {
 	assert(focus^ <= count)
 }
 
-form_focus_input :: proc(focus: ^int, id: int, x, y, w, h: i32) {
+form_focus_input :: proc(frame: ^Ui_Frame, focus: ^int, id: int, x, y, w, h: i32) {
 	assert(focus != nil)
 	assert(id > 0)
 	assert(w > 0)
@@ -56,7 +56,7 @@ form_focus_input :: proc(focus: ^int, id: int, x, y, w, h: i32) {
 	if !rl.IsMouseButtonPressed(.LEFT) do return
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 	mouse := rl.GetMousePosition()
-	if rl.CheckCollisionPointRec(mouse, rect) && !route_occluded(mouse) {
+	if rl.CheckCollisionPointRec(mouse, rect) && !route_occluded(frame, mouse) {
 		focus^ = id
 		assert(focus^ == id)
 	}

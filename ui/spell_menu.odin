@@ -135,7 +135,7 @@ spell_replace_word :: proc(replacement: string) {
 // never leak through to the widgets underneath). Input coords are pane-local,
 // matching the composer's drawing space; recorded draw coords are shifted to
 // screen space because the overlay replays after pane translation is popped.
-draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
+draw_spell_menu :: proc(frame: ^Ui_Frame, input_x, input_y, input_w: i32) {
 	if !spell_menu.open do return
 
 	// Any composer text change since open (typing, undo, paste) closes it.
@@ -176,7 +176,7 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	}
 
 	mouse := rl.GetMousePosition()
-	mouse.x -= f32(pane_origin_x)
+	mouse = frame_to_local(frame, mouse)
 	menu_rect := rl.Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
 
 	// Click-away closes (the opening right-click is swallowed for one frame).
@@ -190,17 +190,19 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 
 	// Record all panel draws on the overlay layer in screen space; the group
 	// rect also claims the covered area with the input router.
-	ox := pane_origin_x
+	origin := frame_pane_origin(frame)
+	ox := i32(origin.x)
 	screen_rect := rl.Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
-	overlay_begin(screen_rect, claim_input = true)
-	overlay_rect(screen_rect, theme.bg_popup)
-	overlay_rect_lines(screen_rect, 1, theme.border_color)
+	overlay_begin(frame, screen_rect, claim_input = true)
+	overlay_rect(frame, screen_rect, theme.bg_popup)
+	overlay_rect_lines(frame, screen_rect, 1, theme.border_color)
 
 	item_x := mx + 2
 	item_w := menu_w - 4
 	item_y := my + SPELL_MENU_PAD
 
 	draw_row :: proc(
+		frame: ^Ui_Frame,
 		ox, item_x, item_y, item_w: i32,
 		label: string,
 		nav_idx: int,
@@ -212,13 +214,15 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 		if hovered && mouse_moved() do spell_menu.selected = nav_idx
 		if spell_menu.selected == nav_idx {
 			overlay_rect(
+				frame,
 				{f32(item_x + ox), f32(item_y), f32(item_w), f32(SPELL_MENU_ITEM_H)},
 				theme.bg_active,
 			)
 		}
-		if hovered do request_cursor(.POINTING_HAND)
+		if hovered do request_cursor(frame, .POINTING_HAND)
 		txt := truncate_to_width(label, item_w - 16, FONT_SIZE)
 		overlay_text(
+			frame,
 			txt,
 			item_x + ox + 8,
 			item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2,
@@ -234,6 +238,7 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 	if n == 0 {
 		txt := truncate_to_width("No suggestions", item_w - 16, FONT_SIZE)
 		overlay_text(
+			frame,
 			txt,
 			item_x + ox + 8,
 			item_y + (SPELL_MENU_ITEM_H - FONT_SIZE) / 2,
@@ -243,7 +248,7 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 		item_y += SPELL_MENU_ITEM_H
 	} else {
 		for s, i in spell_menu.suggestions {
-			if draw_row(ox, item_x, item_y, item_w, s, i, mouse, theme.fg_primary) {
+			if draw_row(frame, ox, item_x, item_y, item_w, s, i, mouse, theme.fg_primary) {
 				apply_idx = i
 			}
 			item_y += SPELL_MENU_ITEM_H
@@ -252,21 +257,22 @@ draw_spell_menu :: proc(input_x, input_y, input_w: i32) {
 
 	// Separator.
 	overlay_rect(
+		frame,
 		{f32(mx + ox + 6), f32(item_y + sep_h / 2), f32(menu_w - 12), 1},
 		theme.border_color,
 	)
 	item_y += sep_h
 
 	learn_label := strings.concatenate({"Learn \"", spell_menu.word, "\""}, context.temp_allocator)
-	if draw_row(ox, item_x, item_y, item_w, learn_label, n, mouse, theme.fg_secondary) {
+	if draw_row(frame, ox, item_x, item_y, item_w, learn_label, n, mouse, theme.fg_secondary) {
 		apply_idx = n
 	}
 	item_y += SPELL_MENU_ITEM_H
 
-	if draw_row(ox, item_x, item_y, item_w, "Ignore", n + 1, mouse, theme.fg_secondary) {
+	if draw_row(frame, ox, item_x, item_y, item_w, "Ignore", n + 1, mouse, theme.fg_secondary) {
 		apply_idx = n + 1
 	}
-	overlay_end()
+	overlay_end(frame)
 
 	if apply_idx >= 0 {
 		spell_menu_apply(apply_idx)

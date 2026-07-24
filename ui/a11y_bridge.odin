@@ -53,20 +53,16 @@ a11y_role :: proc(role: Sem_Role) -> ak.Role {
 	return .Unknown
 }
 
-// Pending AT click, keyed by the focus-link node id; consumed by
-// focus_activated as a synthetic activation on the next frame.
-@(private = "file")
-g_a11y_pending_click: u64
-
 // a11y_init enables semantic recording and attaches the platform adapter.
 // Call once after InitWindow. On native this registers the AccessKit
 // factory; on web the DOM control mirror (driven from a11y_frame_end) is the
 // consumer, so this returns true with no adapter. Returns false only when
 // accessibility is compiled out (-define:INGOT_ACCESSKIT=false on native).
-a11y_init :: proc() -> bool {
-	sem_enable(true)
+a11y_init :: proc(runtime: ^Ui_Runtime) -> bool {
+	assert(runtime != nil && runtime.initialized, "a11y_init: invalid runtime")
+	sem_enable(runtime, true)
 	when rl.A11Y_ENABLED {
-		return rl.InitAccessibility(_a11y_factory, nil)
+		return rl.InitAccessibility(_a11y_factory, runtime)
 	} else when ODIN_OS == .JS {
 		return true
 	} else {
@@ -77,13 +73,14 @@ a11y_init :: proc() -> bool {
 // a11y_frame_end pushes this frame's semantic buffer to the platform
 // consumer — the web DOM mirror and/or the AccessKit adapter — and applies
 // any staged AT actions. Call once at end of frame, after all UI is drawn.
-a11y_frame_end :: proc() {
-	_a11y_sync_web_controls()
+a11y_frame_end :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "a11y_frame_end: invalid frame")
+	_a11y_sync_web_controls(frame)
 	rl.PushAccessibilityUpdate()
 	for {
 		action, ok := rl.PollAccessibilityAction()
 		if !ok do break
-		_a11y_apply(action)
+		_a11y_apply(frame, action)
 	}
 }
 
@@ -92,9 +89,9 @@ a11y_frame_end :: proc() {
 // autofill-capable mirror (ti_sync_web). AT activations come back as
 // synthetic clicks through the same pending path as AccessKit actions.
 @(private = "file")
-_a11y_sync_web_controls :: proc() {
-	if !sem_enabled() do return
-	frame := sem_frame()
+_a11y_sync_web_controls :: proc(ui_frame: ^Ui_Frame) {
+	if !sem_enabled(ui_frame) do return
+	frame := sem_frame(ui_frame)
 	for i in 0 ..< frame.count {
 		sem := &frame.nodes[i]
 		#partial switch sem.role {
@@ -116,7 +113,7 @@ _a11y_sync_web_controls :: proc() {
 			sem.hi,
 		)
 		if res.activated {
-			g_a11y_pending_click = sem.id
+			ui_frame.runtime.pending_click = sem.id
 			rl.RequestRedraw()
 		}
 	}
@@ -125,11 +122,12 @@ _a11y_sync_web_controls :: proc() {
 // a11y_take_click consumes a pending AT click aimed at this focus link.
 // focus_activated calls it so AT activation flows through the same path as
 // Space/Enter.
-a11y_take_click :: proc(focus: ^int, id: int) -> bool {
-	if g_a11y_pending_click == 0 do return false
+a11y_take_click :: proc(runtime: ^Ui_Runtime, focus: ^int, id: int) -> bool {
+	assert(runtime != nil && runtime.initialized, "a11y_take_click: invalid runtime")
+	if runtime.pending_click == 0 do return false
 	if focus == nil || id <= 0 do return false
-	if sem_node_id(.Button, {focus, id}, "", 0) != g_a11y_pending_click do return false
-	g_a11y_pending_click = 0
+	if sem_node_id(.Button, {focus, id}, "", 0) != runtime.pending_click do return false
+	runtime.pending_click = 0
 	return true
 }
 
@@ -137,11 +135,11 @@ a11y_take_click :: proc(focus: ^int, id: int) -> bool {
 // directly (the pointer recorded in the semantic node is long-lived caller
 // state); Click is staged for the widget's next focus_activated check.
 @(private = "file")
-_a11y_apply :: proc(action: rl.A11y_Action) {
-	frame := sem_frame()
+_a11y_apply :: proc(ui_frame: ^Ui_Frame, action: rl.A11y_Action) {
+	frame := sem_frame(ui_frame)
 	#partial switch action.action {
 	case .Click:
-		g_a11y_pending_click = u64(action.node)
+		ui_frame.runtime.pending_click = u64(action.node)
 		rl.RequestRedraw()
 	case .Focus:
 		for i in 0 ..< frame.count {
@@ -226,7 +224,9 @@ a11y_build_nodes :: proc(
 _a11y_factory :: proc "c" (userdata: rawptr) -> ak.Tree_Update {
 	context = runtime.default_context()
 	when rl.A11Y_ENABLED {
-		nodes, focus_id := a11y_build_nodes(sem_frame())
+		runtime := cast(^Ui_Runtime)userdata
+		assert(runtime != nil && runtime.initialized, "a11y factory: invalid runtime")
+		nodes, focus_id := a11y_build_nodes(&runtime.semantics_snapshot)
 
 		update := ak.tree_update_with_capacity_and_focus(uint(len(nodes) + 1), focus_id)
 		root := ak.node_new(.Window)

@@ -43,26 +43,24 @@ main :: proc() {
 	rl.InitWindow(960, 720, "ingot chart demo")
 	rl.SetTargetFPS(60)
 	rl.EnableEventWaiting()
-	ui.apply_platform_dpi()
-	ui.init_font()
 	ui.ui_runtime_init(&ui_runtime)
+	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
 	rl.run(frame)
 	ui.ui_runtime_destroy(&ui_runtime)
 }
 
 frame :: proc() {
-	ui.dpi_refresh()
+	ui.ui_runtime_dpi_refresh(&ui_runtime)
 	ui.ui_frame_begin(&ui_frame, &ui_runtime)
-	ui.begin_cursor_frame()
 	rl.BeginDrawing()
 	rl.ClearBackground(ui.theme.bg_color)
 
 	sw := rl.GetScreenWidth()
 
 	ui.draw_text("Chart widgets", 24, 20, ui.FONT_SIZE_LARGE, ui.theme.fg_primary)
-	if ui.btn(sw - 140, 16, 120, 30, "Light theme" if dark else "Dark theme") {
+	if ui.btn(&ui_frame, sw - 140, 16, 120, 30, "Light theme" if dark else "Dark theme") {
 		dark = !dark
-		ui.set_theme(ui.theme_dark() if dark else ui.theme_light())
+		ui.ui_runtime_set_theme(&ui_runtime, ui.theme_dark() if dark else ui.theme_light())
 	}
 
 	line_series := [2]ui.Chart_Series {
@@ -70,6 +68,7 @@ frame :: proc() {
 		{name = "Costs", values = costs[:]},
 	}
 	ui.line_chart(
+		&ui_frame,
 		24,
 		64,
 		580,
@@ -84,6 +83,7 @@ frame :: proc() {
 		{name = "Billable h", values = billable[:]},
 	}
 	ui.bar_chart(
+		&ui_frame,
 		24,
 		396,
 		580,
@@ -97,7 +97,6 @@ frame :: proc() {
 	stat_card(628, 168, 308, 92, "OPEN TASKS", "4.8", spark_down[:], ui.theme.fg_error)
 	stat_card(628, 272, 308, 92, "AVG HOURS / DAY", "5.1", spark_flat[:], ui.theme.fg_accent)
 
-	ui.apply_cursor()
 	ui.ui_frame_end(&ui_frame)
 	rl.EndDrawing()
 }

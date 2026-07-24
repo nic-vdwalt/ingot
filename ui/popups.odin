@@ -27,13 +27,18 @@ Modal_State :: struct {
 // Pair with modal_end, which handles dismissal. Focus trap: while a modal is
 // open the caller must route Tab cycling only across the widgets it draws
 // inside the body.
-modal_begin :: proc(st: ^Modal_State, title: string, w, h, screen_w, screen_h: i32) -> Rect_I32 {
+modal_begin :: proc(
+	frame: ^Ui_Frame,
+	st: ^Modal_State,
+	title: string,
+	w, h, screen_w, screen_h: i32,
+) -> Rect_I32 {
 	assert(st != nil && st.open, "modal_begin: modal not open")
 	assert(!st.drawing, "modal_begin: unbalanced begin (missing modal_end)")
 	assert(w > 0 && h > 0, "modal_begin: empty modal size")
 	st.drawing = true
 	st.dismissed = false
-	route_claim_all()
+	route_claim_all(frame)
 	rl.DrawRectangle(0, 0, screen_w, screen_h, theme.modal_dim)
 
 	mw := min(w, screen_w - PADDING * 4)
@@ -45,7 +50,7 @@ modal_begin :: proc(st: ^Modal_State, title: string, w, h, screen_w, screen_h: i
 	rl.DrawRectangle(mx, my, mw, mh, theme.bg_secondary)
 	rl.DrawRectangleLines(mx, my, mw, mh, theme.border_color)
 	rl.BeginScissorMode(mx, my, mw, mh)
-	semantic_push(.Modal, st.rect, title)
+	semantic_push(frame, .Modal, st.rect, title)
 
 	title_h := sc(40)
 	title_c := strings.clone_to_cstring(title, context.temp_allocator)
@@ -152,7 +157,12 @@ context_menu_width :: proc(items: []Menu_Item, max_w: i32) -> i32 {
 // applies; hover follows the mouse only while it moves so keyboard selection
 // is not overridden by a stationary cursor. The menu claims its rect with
 // the input router so widgets underneath stay inert.
-context_menu :: proc(st: ^Context_Menu_State, items: []Menu_Item, screen_w, screen_h: i32) -> int {
+context_menu :: proc(
+	frame: ^Ui_Frame,
+	st: ^Context_Menu_State,
+	items: []Menu_Item,
+	screen_w, screen_h: i32,
+) -> int {
 	assert(st != nil, "context_menu: nil state")
 	if !st.open do return -1
 	assert(len(items) > 0, "context_menu: empty items")
@@ -183,7 +193,7 @@ context_menu :: proc(st: ^Context_Menu_State, items: []Menu_Item, screen_w, scre
 	}
 
 	mouse := rl.GetMousePosition()
-	mouse.x -= f32(pane_origin_x)
+	mouse = frame_to_local(frame, mouse)
 	if !st.just_opened &&
 	   (rl.IsMouseButtonPressed(.LEFT) || rl.IsMouseButtonPressed(.RIGHT)) &&
 	   !rl.CheckCollisionPointRec(mouse, menu_rect) {
@@ -195,13 +205,14 @@ context_menu :: proc(st: ^Context_Menu_State, items: []Menu_Item, screen_w, scre
 	// Record all panel draws on the overlay layer in screen space so the menu
 	// replays above content painted later in the frame (and outside any pane
 	// scissor); the group rect also claims the covered area with the router.
-	ox := pane_origin_x
+	origin := frame_pane_origin(frame)
+	ox := i32(origin.x)
 	screen_rect := rl.Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
-	overlay_begin(screen_rect, claim_input = true)
-	overlay_rect(screen_rect, theme.bg_popup)
-	overlay_rect_lines(screen_rect, 1, theme.border_color)
-	chosen := context_menu_rows(st, items, mx, my, menu_w, ox, mouse)
-	overlay_end()
+	overlay_begin(frame, screen_rect, claim_input = true)
+	overlay_rect(frame, screen_rect, theme.bg_popup)
+	overlay_rect_lines(frame, screen_rect, 1, theme.border_color)
+	chosen := context_menu_rows(frame, st, items, mx, my, menu_w, ox, mouse)
+	overlay_end(frame)
 	return chosen
 }
 
@@ -210,6 +221,7 @@ context_menu :: proc(st: ^Context_Menu_State, items: []Menu_Item, screen_w, scre
 // `ox`). Returns the clicked index or -1.
 @(private = "file")
 context_menu_rows :: proc(
+	frame: ^Ui_Frame,
 	st: ^Context_Menu_State,
 	items: []Menu_Item,
 	mx, my, menu_w, ox: i32,
@@ -225,6 +237,7 @@ context_menu_rows :: proc(
 		if it.separator {
 			sep_h := sc(5)
 			overlay_rect(
+				frame,
 				{f32(mx + ox + 6), f32(item_y + sep_h / 2), f32(menu_w - 12), 1},
 				theme.border_color,
 			)
@@ -235,18 +248,26 @@ context_menu_rows :: proc(
 		hovered := rl.CheckCollisionPointRec(mouse, row_rect)
 		sem: Sem_State
 		if it.disabled do sem += {.Disabled}
-		semantic_push(.Menu_Item, {item_x + ox, item_y, item_w, MENU_ITEM_H}, it.label, sem)
+		semantic_push(frame, .Menu_Item, {item_x + ox, item_y, item_w, MENU_ITEM_H}, it.label, sem)
 		if hovered && !it.disabled && mouse_moved() do st.selected = i
 		if st.selected == i {
 			overlay_rect(
+				frame,
 				{f32(item_x + ox), f32(item_y), f32(item_w), f32(MENU_ITEM_H)},
 				theme.bg_active,
 			)
 		}
-		if hovered && !it.disabled do request_cursor(.POINTING_HAND)
+		if hovered && !it.disabled do request_cursor(frame, .POINTING_HAND)
 		col := theme.fg_disabled if it.disabled else theme.fg_primary
 		txt := truncate_to_width(it.label, item_w - 16, FONT_SIZE)
-		overlay_text(txt, item_x + ox + 8, item_y + (MENU_ITEM_H - FONT_SIZE) / 2, FONT_SIZE, col)
+		overlay_text(
+			frame,
+			txt,
+			item_x + ox + 8,
+			item_y + (MENU_ITEM_H - FONT_SIZE) / 2,
+			FONT_SIZE,
+			col,
+		)
 		if hovered && !it.disabled && rl.IsMouseButtonReleased(.LEFT) {
 			st.open = false
 			chosen = i
@@ -269,7 +290,13 @@ Tooltip_State :: struct {
 // `rect` for TOOLTIP_DELAY seconds. Call it after drawing the target; the tip
 // itself is replayed through the overlay layer so it always paints on top.
 // Keeps frames coming while the dwell timer runs (event-driven hosts).
-tooltip :: proc(st: ^Tooltip_State, rect: Rect_I32, text: string, screen_w, screen_h: i32) {
+tooltip :: proc(
+	frame: ^Ui_Frame,
+	st: ^Tooltip_State,
+	rect: Rect_I32,
+	text: string,
+	screen_w, screen_h: i32,
+) {
 	assert(st != nil, "tooltip: nil state")
 	assert(rect.w > 0 && rect.h > 0, "tooltip: empty target rect")
 	mouse := rl.GetMousePosition()
@@ -277,7 +304,7 @@ tooltip :: proc(st: ^Tooltip_State, rect: Rect_I32, text: string, screen_w, scre
 	key :=
 		(u64(u32(rect.x)) | u64(u32(rect.y)) << 32) ~
 		((u64(u32(rect.w)) | u64(u32(rect.h)) << 32) * 0x100000001b3)
-	if !rl.CheckCollisionPointRec(mouse, rrect) || route_occluded(mouse) {
+	if !rl.CheckCollisionPointRec(mouse, rrect) || route_occluded(frame, mouse) {
 		if st.key == key do st^ = {}
 		return
 	}
@@ -299,9 +326,16 @@ tooltip :: proc(st: ^Tooltip_State, rect: Rect_I32, text: string, screen_w, scre
 	tx := clamp(i32(mouse.x) + sc(12), 0, max(screen_w - bw, 0))
 	ty := clamp(i32(mouse.y) + sc(18), 0, max(screen_h - bh, 0))
 	tip := rl.Rectangle{f32(tx), f32(ty), f32(bw), f32(bh)}
-	overlay_begin(tip, claim_input = false)
-	overlay_rect(tip, theme.bg_popup)
-	overlay_rect_lines(tip, 1, theme.border_color)
-	overlay_text(text, tx + TOOLTIP_PAD, ty + TOOLTIP_PAD, FONT_SIZE_SMALL, theme.fg_primary)
-	overlay_end()
+	overlay_begin(frame, tip, claim_input = false)
+	overlay_rect(frame, tip, theme.bg_popup)
+	overlay_rect_lines(frame, tip, 1, theme.border_color)
+	overlay_text(
+		frame,
+		text,
+		tx + TOOLTIP_PAD,
+		ty + TOOLTIP_PAD,
+		FONT_SIZE_SMALL,
+		theme.fg_primary,
+	)
+	overlay_end(frame)
 }

@@ -67,17 +67,18 @@ focus_opt_clear :: proc(f: Focus_Opt) {
 	assert(f.focus^ == 0, "focus_opt_clear: focus not cleared")
 }
 
-focus_opt_click :: proc(f: Focus_Opt, x, y, w, h: i32) {
+focus_opt_click :: proc(frame: ^Ui_Frame, f: Focus_Opt, x, y, w, h: i32) {
 	if f.focus == nil do return
 	assert(f.id > 0, "focus_opt_click: focus ids are positive")
 	assert(w > 0 && h > 0, "focus_opt_click: empty rect")
-	form_focus_input(f.focus, f.id, x, y, w, h)
+	form_focus_input(frame, f.focus, f.id, x, y, w, h)
 }
 
-focus_activated :: proc(focus: ^int, id: int) -> bool {
+focus_activated :: proc(frame: ^Ui_Frame, focus: ^int, id: int) -> bool {
+	assert(frame != nil && frame.open, "focus_activated: invalid frame")
 	assert(focus != nil, "focus_activated: nil focus")
 	assert(id > 0, "focus_activated: focus ids are positive")
-	if a11y_take_click(focus, id) {
+	if a11y_take_click(frame.runtime, focus, id) {
 		focus^ = id
 		return true
 	}
@@ -85,9 +86,9 @@ focus_activated :: proc(focus: ^int, id: int) -> bool {
 	return rl.IsKeyPressed(.SPACE) || rl.IsKeyPressed(.ENTER)
 }
 
-focus_opt_activated :: proc(f: Focus_Opt) -> bool {
+focus_opt_activated :: proc(frame: ^Ui_Frame, f: Focus_Opt) -> bool {
 	if f.focus == nil do return false
-	return focus_activated(f.focus, f.id)
+	return focus_activated(frame, f.focus, f.id)
 }
 
 draw_focus_ring :: proc(x, y, w, h: i32) {

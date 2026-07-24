@@ -20,29 +20,43 @@ Ui_Focus_Mode :: enum u8 {
 // Ui is caller-owned. Stable arrays retain only bounded traversal identity;
 // widgets and their values remain entirely caller-owned.
 Ui_Runtime :: struct {
-	text:          Text_System,
-	spell:         Spell_System,
-	style:         Theme,
-	scale:         f32,
-	generation:    u64,
-	pending_click: u64,
-	initialized:   bool,
+	text:                  Text_System,
+	spell:                 Spell_System,
+	style:                 Theme,
+	metrics:               Ui_Metrics,
+	scale:                 f32,
+	dpi_last:              f32,
+	generation:            u64,
+	pending_click:         u64,
+	semantics_enabled:     bool,
+	semantics_snapshot:    Sem_Frame,
+	scale_metrics_hook:    proc(scale: f32),
+	scale_invalidate_hook: proc(),
+	initialized:           bool,
 }
 
+MAX_PANE_SCOPES :: 16
+
 Ui_Frame :: struct {
-	runtime:            ^Ui_Runtime,
-	requested_cursor:   rl.MouseCursor,
-	applied_cursor:     rl.MouseCursor,
-	cursor_initialized: bool,
-	open_roots:         int,
-	open:               bool,
+	runtime:      ^Ui_Runtime,
+	cursor:       Cursor_State,
+	overlay:      Overlay_State,
+	route:        Input_Route_State,
+	interaction:  Interaction_State,
+	semantics:    Semantics_State,
+	pane_origins: [MAX_PANE_SCOPES]rl.Vector2,
+	pane_count:   int,
+	open_roots:   int,
+	open:         bool,
 }
 
 ui_runtime_init :: proc(runtime: ^Ui_Runtime) {
 	assert(runtime != nil, "ui_runtime_init: nil runtime")
 	assert(!runtime.initialized, "ui_runtime_init: already initialized")
 	runtime.scale = 1
-	runtime.style = theme
+	runtime.metrics = ui_metrics(runtime.scale)
+	runtime.style = THEME_DARK
+	text_system_init(&runtime.text)
 	runtime.initialized = true
 }
 
@@ -53,35 +67,99 @@ ui_runtime_destroy :: proc(runtime: ^Ui_Runtime) {
 	runtime^ = {}
 }
 
-ui_runtime_set_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
-	assert(runtime != nil && runtime.initialized, "ui_runtime_set_theme: invalid runtime")
-	runtime.style = value
+ui_runtime_set_scale :: proc(runtime: ^Ui_Runtime, value: f32) {
+	assert(runtime != nil && runtime.initialized, "ui_runtime_set_scale: invalid runtime")
+	scale := clamp(value, 0.5, 3)
+	if scale == runtime.scale do return
+	runtime.scale = scale
+	runtime.metrics = ui_metrics(scale)
+	reset_font_atlases_with(&runtime.text)
+	ui_runtime_invalidate_scale_caches(runtime)
+	if runtime.scale_metrics_hook != nil do runtime.scale_metrics_hook(scale)
 	runtime.generation += 1
 }
 
-ui_runtime_set_scale :: proc(runtime: ^Ui_Runtime, value: f32) {
-	assert(runtime != nil && runtime.initialized, "ui_runtime_set_scale: invalid runtime")
-	runtime.scale = clamp(value, 0.5, 3)
-	reset_font_atlases_with(&runtime.text)
-	clear_measure_cache_with(&runtime.text)
-	clear_wrap_cache_with(&runtime.text)
-	runtime.generation += 1
+ui_runtime_text :: proc(runtime: ^Ui_Runtime) -> ^Text_System {
+	assert(runtime != nil && runtime.initialized, "ui_runtime_text: invalid runtime")
+	return &runtime.text
+}
+
+ui_runtime_spell :: proc(runtime: ^Ui_Runtime) -> ^Spell_System {
+	assert(runtime != nil && runtime.initialized, "ui_runtime_spell: invalid runtime")
+	return &runtime.spell
+}
+
+ui_runtime_theme :: proc(runtime: ^Ui_Runtime) -> ^Theme {
+	assert(runtime != nil && runtime.initialized, "ui_runtime_theme: invalid runtime")
+	return &runtime.style
+}
+
+ui_runtime_set_scale_hooks :: proc(
+	runtime: ^Ui_Runtime,
+	metrics_hook: proc(scale: f32),
+	invalidate_hook: proc(),
+) {
+	assert(runtime != nil && runtime.initialized, "ui_runtime_set_scale_hooks: invalid runtime")
+	runtime.scale_metrics_hook = metrics_hook
+	runtime.scale_invalidate_hook = invalidate_hook
 }
 
 ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime) {
 	assert(frame != nil && runtime != nil, "ui_frame_begin: nil frame or runtime")
 	assert(runtime.initialized && !frame.open, "ui_frame_begin: invalid lifetime")
 	frame.runtime = runtime
-	frame.requested_cursor = .DEFAULT
+	frame.cursor.requested = .DEFAULT
+	frame.overlay.count = 0
+	frame.overlay.text_len = 0
+	frame.overlay.dropped = 0
+	frame.overlay.open = false
+	frame.pane_count = 0
 	frame.open_roots = 0
 	frame.open = true
+	route_begin_frame(frame)
+	interact_frame_begin(frame)
+	sem_begin_frame(frame)
 }
 
 ui_frame_end :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "ui_frame_end: frame not open")
 	assert(frame.open_roots == 0, "ui_frame_end: UI root still open")
+	assert(frame.pane_count == 0, "ui_frame_end: pane scope still open")
+	assert(!frame.overlay.open, "ui_frame_end: overlay still open")
+	overlay_flush(frame)
+	cursor_apply(frame)
+	frame.runtime.semantics_snapshot = frame.semantics.cur
 	frame.runtime = nil
 	frame.open = false
+}
+
+ui_frame_pane_push :: proc(frame: ^Ui_Frame, origin: rl.Vector2) {
+	assert(frame != nil && frame.open, "pane_push: invalid frame")
+	assert(frame.pane_count < MAX_PANE_SCOPES, "pane_push: scope limit")
+	frame.pane_origins[frame.pane_count] = origin
+	frame.pane_count += 1
+}
+
+ui_frame_pane_pop :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "pane_pop: invalid frame")
+	assert(frame.pane_count > 0, "pane_pop: no scope")
+	frame.pane_count -= 1
+}
+
+frame_pane_origin :: proc(frame: ^Ui_Frame) -> rl.Vector2 {
+	assert(frame != nil && frame.open, "pane_origin: invalid frame")
+	if frame.pane_count == 0 do return {}
+	return frame.pane_origins[frame.pane_count - 1]
+}
+
+frame_to_local :: proc(frame: ^Ui_Frame, point: rl.Vector2) -> rl.Vector2 {
+	origin := frame_pane_origin(frame)
+	return {point.x - origin.x, point.y - origin.y}
+}
+
+frame_to_screen :: proc(frame: ^Ui_Frame, point: rl.Vector2) -> rl.Vector2 {
+	origin := frame_pane_origin(frame)
+	return {point.x + origin.x, point.y + origin.y}
 }
 
 Ui :: struct {

@@ -352,21 +352,17 @@ Scrollbar_State :: struct {
 	grab_dy:  f32,
 }
 
-// Module-level slot for the legacy scrollbar entry point: only one scrollbar
-// can be dragged at a time through that path.
-@(private = "file")
-sbar: Scrollbar_State
-
 // Draw a draggable vertical scrollbar (track + thumb) and return the updated
 // first-visible-row offset. total and visible are row counts; offset is the
 // current first visible row. Supports thumb dragging and track-click jumps.
 // Uses the shared module drag slot; prefer scrollbar_ex for per-instance state.
-scrollbar :: proc(x, y, w, h: i32, total, visible, offset: int) -> int {
-	return scrollbar_ex(&sbar, x, y, w, h, total, visible, offset)
-}
-
 // scrollbar_ex is scrollbar with caller-owned drag state.
-scrollbar_ex :: proc(st: ^Scrollbar_State, x, y, w, h: i32, total, visible, offset: int) -> int {
+scrollbar_ex :: proc(
+	frame: ^Ui_Frame,
+	st: ^Scrollbar_State,
+	x, y, w, h: i32,
+	total, visible, offset: int,
+) -> int {
 	// Why assert: negative row counts mean the caller mixed up pixel and row
 	// units; every later division would silently produce garbage offsets.
 	assert(st != nil, "scrollbar_ex: nil state")
@@ -385,11 +381,11 @@ scrollbar_ex :: proc(st: ^Scrollbar_State, x, y, w, h: i32, total, visible, offs
 	thumb_y := y + i32(f32(track_range) * f32(off) / f32(max_off))
 
 	mouse := rl.GetMousePosition()
-	mouse.x -= f32(pane_origin_x)
+	mouse = frame_to_local(frame, mouse)
 	thumb_rect := rl.Rectangle{f32(x), f32(thumb_y), f32(w), f32(thumb_h)}
 	track_rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
 
-	it := interact(track_rect, &st.dragging)
+	it := interact(frame, track_rect, &st.dragging)
 	if it.pressed {
 		if rl.CheckCollisionPointRec(mouse, thumb_rect) {
 			st.grab_dy = mouse.y - f32(thumb_y)
@@ -573,7 +569,7 @@ btn_ui :: proc(
 	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
 	r := ui_slot(u, w, ROW_H_MD)
 	fo := ui_focus(u) if enabled else Focus_Opt{}
-	return btn_at(r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
+	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
 
 btn_ui_id :: proc(
@@ -587,7 +583,7 @@ btn_ui_id :: proc(
 	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
 	r := ui_slot(u, w, ROW_H_MD)
 	fo := ui_focus(u, id) if enabled else Focus_Opt{}
-	return btn_at(r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
+	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
 
 btn_ui_state :: proc(
@@ -602,7 +598,18 @@ btn_ui_state :: proc(
 	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
 	r := ui_slot(u, w, ROW_H_MD)
 	fo := ui_focus(u) if enabled else Focus_Opt{}
-	return btn_at_state(state, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
+	return btn_at_state(
+		u.frame,
+		state,
+		r.x,
+		r.y,
+		r.w,
+		r.h,
+		label,
+		style,
+		enabled = enabled,
+		focus = fo,
+	)
 }
 
 btn_ui_state_id :: proc(
@@ -618,10 +625,22 @@ btn_ui_state_id :: proc(
 	w := measure_text(label_c, FONT_SIZE_LABEL) + PADDING * 2
 	r := ui_slot(u, w, ROW_H_MD)
 	fo := ui_focus(u, id) if enabled else Focus_Opt{}
-	return btn_at_state(state, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
+	return btn_at_state(
+		u.frame,
+		state,
+		r.x,
+		r.y,
+		r.w,
+		r.h,
+		label,
+		style,
+		enabled = enabled,
+		focus = fo,
+	)
 }
 
 btn_at :: proc(
+	frame: ^Ui_Frame,
 	x, y, w, h: i32,
 	label: string,
 	style: Btn_Style = .Secondary,
@@ -634,19 +653,19 @@ btn_at :: proc(
 	assert(label != "", "btn: empty accessible label")
 	fs := font_size if font_size > 0 else FONT_SIZE_LABEL
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	it := interact(rect)
+	it := interact(frame, rect)
 	hovered := enabled && it.hovered
 	clicked := enabled && it.clicked
 	if enabled {
-		focus_opt_click(focus, x, y, w, h)
-		clicked = clicked || focus_opt_activated(focus)
+		focus_opt_click(frame, focus, x, y, w, h)
+		clicked = clicked || focus_opt_activated(frame, focus)
 	}
 	if web_form_id != "" {
 		clicked =
 			clicked ||
 			rl.SyncWebSubmitButton(web_form_id, label, x, y, w, h, i32(style), fs, enabled)
 	}
-	if hovered do request_cursor(.POINTING_HAND)
+	if hovered do request_cursor(frame, .POINTING_HAND)
 
 	t: f32 = 1 if hovered else 0
 	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style)
@@ -678,11 +697,12 @@ btn_at :: proc(
 
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
-	semantic_push(.Button, {x, y, w, h}, label, sem, focus)
+	semantic_push(frame, .Button, {x, y, w, h}, label, sem, focus)
 	return clicked && enabled
 }
 
 btn_at_state :: proc(
+	frame: ^Ui_Frame,
 	state: ^Button_State,
 	x, y, w, h: i32,
 	label: string,
@@ -696,19 +716,19 @@ btn_at_state :: proc(
 	assert(label != "", "btn_at_state: empty accessible label")
 	fs := font_size if font_size > 0 else FONT_SIZE_LABEL
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	it := interact(rect)
+	it := interact(frame, rect)
 	hovered := enabled && it.hovered
 	clicked := enabled && it.clicked
 	if enabled {
-		focus_opt_click(focus, x, y, w, h)
-		clicked = clicked || focus_opt_activated(focus)
+		focus_opt_click(frame, focus, x, y, w, h)
+		clicked = clicked || focus_opt_activated(frame, focus)
 	}
 	if web_form_id != "" {
 		clicked =
 			clicked ||
 			rl.SyncWebSubmitButton(web_form_id, label, x, y, w, h, i32(style), fs, enabled)
 	}
-	if hovered do request_cursor(.POINTING_HAND)
+	if hovered do request_cursor(frame, .POINTING_HAND)
 	t := hover_anim_frac(state, hovered) if enabled else 0
 	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style)
 	bg := color_mix(bg0, bg1, t)
@@ -734,7 +754,7 @@ btn_at_state :: proc(
 	draw_text(label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
-	semantic_push(.Button, {x, y, w, h}, label, sem, focus)
+	semantic_push(frame, .Button, {x, y, w, h}, label, sem, focus)
 	return clicked && enabled
 }
 
@@ -1093,12 +1113,13 @@ progress_bar_animated :: proc(x, y, w, h: i32, frac: f32, anim: ^f32, color: rl.
 // icon_btn draws a small square ghost button (for ✕ / ◀ / ▶ style glyphs).
 // Returns true if clicked this frame.
 icon_btn :: proc(
+	frame: ^Ui_Frame,
 	x, y, size: i32,
 	label: string,
 	enabled: bool = true,
 	focus: Focus_Opt = {},
 ) -> bool {
-	return btn_at(x, y, size, size, label, .Ghost, FONT_SIZE_LABEL, enabled, focus = focus)
+	return btn_at(frame, x, y, size, size, label, .Ghost, FONT_SIZE_LABEL, enabled, focus = focus)
 }
 
 // kv_row draws key (left, truncated) and value (right-aligned) on one line.
@@ -1142,6 +1163,7 @@ pane_reset :: proc(p: ^Pane) {
 // and Up/Down arrows scroll it — leave it off for panes that host text inputs
 // (their caret owns those keys).
 pane_begin :: proc(
+	frame: ^Ui_Frame,
 	p: ^Pane,
 	x, y, w, h: i32,
 	pad: i32 = 10,
@@ -1157,7 +1179,7 @@ pane_begin :: proc(
 	mouse := rl.GetMousePosition()
 	hovered :=
 		rl.CheckCollisionPointRec(mouse, {f32(x), f32(y), f32(w), f32(h)}) &&
-		!route_occluded(mouse)
+		!route_occluded(frame, mouse)
 	if hovered {
 		p.scroll -= get_wheel_move() * f32(sc(24))
 	}
@@ -1187,7 +1209,7 @@ pane_keyboard_scroll :: proc(p: ^Pane, h: i32) {
 // pane_end ends the scissor, records the measured content height from the
 // caller's final y cursor, and draws/handles the scrollbar when content
 // overflows the pane.
-pane_end :: proc(p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i32 = 10) {
+pane_end :: proc(frame: ^Ui_Frame, p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i32 = 10) {
 	// Why assert: pane_end without pane_begin would pop a scissor the pane
 	// never pushed, clipping unrelated draws.
 	assert(p.open, "pane_end: pane not begun")
@@ -1198,6 +1220,7 @@ pane_end :: proc(p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i32 = 10) {
 	p.content_h = end_y - start_y + sc(pad)
 	if p.content_h > h {
 		off := scrollbar_ex(
+			frame,
 			&p.sbar,
 			x + w - sc(9),
 			y + sc(2),
@@ -1222,9 +1245,9 @@ back_btn_w :: proc(label: string) -> i32 {
 
 // back_btn draws the standard Ghost-style "← label" navigation button.
 // Returns true if clicked this frame.
-back_btn :: proc(x, y: i32, label: string, focus: Focus_Opt = {}) -> bool {
+back_btn :: proc(frame: ^Ui_Frame, x, y: i32, label: string, focus: Focus_Opt = {}) -> bool {
 	txt := fmt.tprintf("\u2190 %s", label)
-	return btn_at(x, y, back_btn_w(label), sc(22), txt, .Ghost, focus = focus)
+	return btn_at(frame, x, y, back_btn_w(label), sc(22), txt, .Ghost, focus = focus)
 }
 
 // --- standardized collapsible section header -------------------------------
@@ -1234,6 +1257,7 @@ back_btn :: proc(x, y: i32, label: string, focus: Focus_Opt = {}) -> bool {
 // click (or Space/Enter while focused); returns true on the frame it toggled
 // (caller persists open state).
 collapsible_header :: proc(
+	frame: ^Ui_Frame,
 	x, y, w: i32,
 	label: string,
 	open: ^bool,
@@ -1246,17 +1270,17 @@ collapsible_header :: proc(
 	assert(w > 0, "collapsible_header: non-positive width")
 	h := sc(26)
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	it := interact(rect)
+	it := interact(frame, rect)
 	hovered := it.hovered
-	focus_opt_click(focus, x, y, w, h)
+	focus_opt_click(frame, focus, x, y, w, h)
 	if hovered {
-		request_cursor(.POINTING_HAND)
+		request_cursor(frame, .POINTING_HAND)
 	}
 	if it.clicked {
 		open^ = !open^
 		toggled = true
 	}
-	if focus_opt_activated(focus) {
+	if focus_opt_activated(frame, focus) {
 		open^ = !open^
 		toggled = true
 	}

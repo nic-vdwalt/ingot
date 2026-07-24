@@ -82,55 +82,38 @@ Sem_Focus_List :: struct {
 	count:   int,
 }
 
-@(private = "file")
-sem_cur: Sem_Frame
-@(private = "file")
-sem_on: bool
-@(private = "file")
-sem_ordinals: [Sem_Role]int
-@(private = "file")
-sem_focus_cur: Sem_Focus_List
-@(private = "file")
-sem_focus_prev: Sem_Focus_List
-
-// sem_enable turns semantic node recording on or off. Off by default so apps
-// without an accessibility consumer pay only a branch per widget. The focus
-// registry records regardless, so focus_scope_cycle works either way.
-sem_enable :: proc(on: bool) {
-	sem_on = on
+Semantics_State :: struct {
+	cur:        Sem_Frame,
+	on:         bool,
+	ordinals:   [Sem_Role]int,
+	focus_cur:  Sem_Focus_List,
+	focus_prev: Sem_Focus_List,
 }
 
-sem_enabled :: proc() -> bool {
-	return sem_on
+sem_enable :: proc(runtime: ^Ui_Runtime, on: bool) {
+	assert(runtime != nil && runtime.initialized)
+	runtime.semantics_enabled = on
 }
 
-// sem_begin_frame resets the node buffer, per-role ordinals, and rotates the
-// focus registry. Called once per frame from begin_cursor_frame, next to
-// route_begin_frame.
-sem_begin_frame :: proc() {
-	assert(
-		sem_cur.count >= 0 && sem_cur.count <= MAX_SEM_NODES,
-		"sem_begin_frame: corrupt node count",
-	)
-	assert(
-		sem_focus_cur.count >= 0 && sem_focus_cur.count <= MAX_SEM_FOCUS,
-		"sem_begin_frame: corrupt focus count",
-	)
-	sem_cur.count = 0
-	sem_ordinals = {}
-	// Focus registry double-buffers: the Tab cycler consults last frame's
-	// draw order (same one-frame latency justification as input_route).
-	sem_focus_prev = sem_focus_cur
-	sem_focus_cur.count = 0
+sem_enabled :: proc(frame: ^Ui_Frame) -> bool {
+	assert(frame != nil && frame.open)
+	return frame.runtime.semantics_enabled
 }
 
-// sem_reset clears all semantic state (tests / teardown).
-sem_reset :: proc() {
-	sem_cur = {}
-	sem_ordinals = {}
-	sem_focus_cur = {}
-	sem_focus_prev = {}
-	sem_on = false
+sem_begin_frame :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil, "sem_begin_frame: nil frame")
+	state := &frame.semantics
+	assert(state.cur.count >= 0 && state.cur.count <= MAX_SEM_NODES)
+	assert(state.focus_cur.count >= 0 && state.focus_cur.count <= MAX_SEM_FOCUS)
+	state.cur.count = 0
+	state.ordinals = {}
+	state.focus_prev = state.focus_cur
+	state.focus_cur.count = 0
+}
+
+sem_reset :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil, "sem_reset: nil frame")
+	frame.semantics = {}
 }
 
 // SEM_ID_ROOT is the window root node; 0 is reserved as invalid (AccessKit's
@@ -203,6 +186,7 @@ sem_label_clip :: proc(label: string) -> int {
 // corrupt). The focus registry records regardless of sem_enable so global
 // Tab order works without an accessibility consumer.
 semantic_push :: proc(
+	frame: ^Ui_Frame,
 	role: Sem_Role,
 	rect: Rect_I32,
 	label: string,
@@ -213,19 +197,21 @@ semantic_push :: proc(
 	lo: f32 = 0,
 	hi: f32 = 0,
 ) -> ^Sem_Node {
+	assert(frame != nil && frame.open, "semantic_push: invalid frame")
 	assert(role != .None, "semantic_push: role required")
-	if focus.focus != nil && sem_focus_cur.count < MAX_SEM_FOCUS {
-		sem_focus_cur.entries[sem_focus_cur.count] = {focus}
-		sem_focus_cur.count += 1
+	sem := &frame.semantics
+	if focus.focus != nil && sem.focus_cur.count < MAX_SEM_FOCUS {
+		sem.focus_cur.entries[sem.focus_cur.count] = {focus}
+		sem.focus_cur.count += 1
 	}
-	if !sem_on do return nil
-	ordinal := sem_ordinals[role]
-	sem_ordinals[role] = ordinal + 1
-	if sem_cur.count >= MAX_SEM_NODES {
+	if !frame.runtime.semantics_enabled do return nil
+	ordinal := sem.ordinals[role]
+	sem.ordinals[role] = ordinal + 1
+	if sem.cur.count >= MAX_SEM_NODES {
 		return nil
 	}
-	node := &sem_cur.nodes[sem_cur.count]
-	sem_cur.count += 1
+	node := &sem.cur.nodes[sem.cur.count]
+	sem.cur.count += 1
 	node^ = {
 		id    = sem_node_id(role, focus, field_id, ordinal),
 		role  = role,
@@ -247,14 +233,16 @@ semantic_push :: proc(
 
 // sem_frame exposes this frame's recorded nodes to platform consumers
 // (AccessKit bridge, web DOM mirror). Read at end of frame, after all UI.
-sem_frame :: proc() -> ^Sem_Frame {
-	return &sem_cur
+sem_frame :: proc(frame: ^Ui_Frame) -> ^Sem_Frame {
+	assert(frame != nil, "sem_frame: nil frame")
+	return &frame.semantics.cur
 }
 
 // sem_focus_list returns last frame's draw-ordered focusable widgets for the
 // app-global Tab cycler.
-sem_focus_list :: proc() -> ^Sem_Focus_List {
-	return &sem_focus_prev
+sem_focus_list :: proc(frame: ^Ui_Frame) -> ^Sem_Focus_List {
+	assert(frame != nil, "sem_focus_list: nil frame")
+	return &frame.semantics.focus_prev
 }
 
 // sem_node_label returns the node's label as a string view.

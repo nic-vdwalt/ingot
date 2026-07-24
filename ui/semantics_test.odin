@@ -3,41 +3,54 @@ package ui
 
 import "core:testing"
 
-// Semantic buffer lives in module state, so buffer behaviour is exercised in
-// one sequential test (the runner executes @(test) procs in parallel).
 @(test)
 semantics_buffer_behaviour :: proc(t: ^testing.T) {
-	sem_reset()
-	defer sem_reset()
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	frame.runtime = &runtime
+	frame.open = true
+	sem_reset(&frame)
+	defer sem_reset(&frame)
 
 	// Disabled by default: nodes are not recorded.
-	sem_begin_frame()
-	testing.expect(t, semantic_push(.Button, {0, 0, 10, 10}, "Off") == nil)
-	testing.expect_value(t, sem_frame().count, 0)
+	sem_begin_frame(&frame)
+	testing.expect(t, semantic_push(&frame, .Button, {0, 0, 10, 10}, "Off") == nil)
+	testing.expect_value(t, sem_frame(&frame).count, 0)
 
-	sem_enable(true)
-	sem_begin_frame()
-	n := semantic_push(.Button, {5, 6, 100, 24}, "Save")
+	sem_enable(&runtime, true)
+	sem_begin_frame(&frame)
+	n := semantic_push(&frame, .Button, {5, 6, 100, 24}, "Save")
 	testing.expect(t, n != nil)
-	testing.expect_value(t, sem_frame().count, 1)
+	testing.expect_value(t, sem_frame(&frame).count, 1)
 	testing.expect_value(t, sem_node_label(n), "Save")
 	testing.expect_value(t, n.role, Sem_Role.Button)
 	testing.expect_value(t, n.rect, Rect_I32{5, 6, 100, 24})
 
 	// Reset clears the buffer each frame.
-	sem_begin_frame()
-	testing.expect_value(t, sem_frame().count, 0)
+	sem_begin_frame(&frame)
+	testing.expect_value(t, sem_frame(&frame).count, 0)
 
 	// Saturation drops nodes without corrupting the buffer.
 	for _ in 0 ..< MAX_SEM_NODES {
-		testing.expect(t, semantic_push(.Label, {0, 0, 1, 1}, "x") != nil)
+		testing.expect(t, semantic_push(&frame, .Label, {0, 0, 1, 1}, "x") != nil)
 	}
-	testing.expect(t, semantic_push(.Label, {0, 0, 1, 1}, "overflow") == nil)
-	testing.expect_value(t, sem_frame().count, MAX_SEM_NODES)
+	testing.expect(t, semantic_push(&frame, .Label, {0, 0, 1, 1}, "overflow") == nil)
+	testing.expect_value(t, sem_frame(&frame).count, MAX_SEM_NODES)
 
 	// Slider payload and state flags are carried through.
-	sem_begin_frame()
-	s := semantic_push(.Slider, {0, 0, 80, 16}, "Volume", {.Disabled}, value = 0.5, lo = 0, hi = 1)
+	sem_begin_frame(&frame)
+	s := semantic_push(
+		&frame,
+		.Slider,
+		{0, 0, 80, 16},
+		"Volume",
+		{.Disabled},
+		value = 0.5,
+		lo = 0,
+		hi = 1,
+	)
 	testing.expect(t, s != nil)
 	testing.expect_value(t, s.value, f32(0.5))
 	testing.expect_value(t, s.hi, f32(1))
@@ -45,10 +58,10 @@ semantics_buffer_behaviour :: proc(t: ^testing.T) {
 
 	// Focused widgets get the Focused flag from their live slot.
 	slot := 3
-	f := semantic_push(.Checkbox, {0, 0, 10, 10}, "On", focus = {&slot, 3})
+	f := semantic_push(&frame, .Checkbox, {0, 0, 10, 10}, "On", focus = {&slot, 3})
 	testing.expect(t, f != nil)
 	testing.expect(t, .Focused in f.state)
-	nf := semantic_push(.Checkbox, {0, 0, 10, 10}, "Off", focus = {&slot, 4})
+	nf := semantic_push(&frame, .Checkbox, {0, 0, 10, 10}, "Off", focus = {&slot, 4})
 	testing.expect(t, nf != nil)
 	testing.expect(t, .Focused not_in nf.state)
 }
@@ -109,24 +122,30 @@ semantics_node_identity :: proc(t: ^testing.T) {
 
 @(test)
 semantics_focus_registry :: proc(t: ^testing.T) {
-	sem_reset()
-	defer sem_reset()
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	frame.runtime = &runtime
+	frame.open = true
+	sem_reset(&frame)
+	defer sem_reset(&frame)
 
 	// Registry records focusable widgets in draw order even while semantic
 	// recording is disabled, and rotates with a one-frame latency.
 	slot_a, slot_b: int
-	sem_begin_frame()
-	semantic_push(.Button, {0, 0, 1, 1}, "a1", focus = {&slot_a, 1})
-	semantic_push(.Checkbox, {0, 0, 1, 1}, "a2", focus = {&slot_a, 2})
-	semantic_push(.Button, {0, 0, 1, 1}, "b1", focus = {&slot_b, 1})
-	semantic_push(.Label, {0, 0, 1, 1}, "static") // no focus: not registered
-	testing.expect_value(t, sem_focus_list().count, 0) // same frame: not yet visible
-	sem_begin_frame()
-	list := sem_focus_list()
+	sem_begin_frame(&frame)
+	semantic_push(&frame, .Button, {0, 0, 1, 1}, "a1", focus = {&slot_a, 1})
+	semantic_push(&frame, .Checkbox, {0, 0, 1, 1}, "a2", focus = {&slot_a, 2})
+	semantic_push(&frame, .Button, {0, 0, 1, 1}, "b1", focus = {&slot_b, 1})
+	semantic_push(&frame, .Label, {0, 0, 1, 1}, "static") // no focus: not registered
+	testing.expect_value(t, sem_focus_list(&frame).count, 0) // same frame: not yet visible
+	sem_begin_frame(&frame)
+	list := sem_focus_list(&frame)
 	testing.expect_value(t, list.count, 3)
 	testing.expect(t, list.entries[0] == Sem_Focus_Entry{Focus_Opt{&slot_a, 1}})
 	testing.expect(t, list.entries[1] == Sem_Focus_Entry{Focus_Opt{&slot_a, 2}})
 	testing.expect(t, list.entries[2] == Sem_Focus_Entry{Focus_Opt{&slot_b, 1}})
-	sem_begin_frame()
-	testing.expect_value(t, sem_focus_list().count, 0) // not renewed: expired
+	sem_begin_frame(&frame)
+	testing.expect_value(t, sem_focus_list(&frame).count, 0) // not renewed: expired
 }

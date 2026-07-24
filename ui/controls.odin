@@ -21,17 +21,18 @@ checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
 	r := ui_slot(u, w, ROW_H_SM)
-	return checkbox_at(r, label, checked, ui_focus(u))
+	return checkbox_at(u.frame, r, label, checked, ui_focus(u))
 }
 
 checkbox_ui_id :: proc(u: ^Ui, id: Focus_Id, label: string, checked: ^bool) -> (changed: bool) {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
 	r := ui_slot(u, w, ROW_H_SM)
-	return checkbox_at(r, label, checked, ui_focus(u, id))
+	return checkbox_at(u.frame, r, label, checked, ui_focus(u, id))
 }
 
 checkbox_at :: proc(
+	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	label: string,
 	checked: ^bool,
@@ -44,11 +45,11 @@ checkbox_at :: proc(
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "checkbox: empty accessible label")
 	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	it := interact(rrect)
+	it := interact(frame, rrect)
 	hovered := it.hovered
-	focus_opt_click(focus, rect.x, rect.y, rect.w, rect.h)
-	if hovered do request_cursor(.POINTING_HAND)
-	if it.clicked || focus_opt_activated(focus) {
+	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	if hovered do request_cursor(frame, .POINTING_HAND)
+	if it.clicked || focus_opt_activated(frame, focus) {
 		checked^ = !checked^
 		changed = true
 	}
@@ -92,7 +93,7 @@ checkbox_at :: proc(
 	)
 	sem: Sem_State
 	if checked^ do sem += {.Checked}
-	semantic_push(.Checkbox, rect, label, sem, focus)
+	semantic_push(frame, .Checkbox, rect, label, sem, focus)
 	return changed
 }
 
@@ -109,7 +110,7 @@ radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed:
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
 	r := ui_slot(u, w, ROW_H_SM)
-	return radio_at(r, label, selected, value, ui_focus(u))
+	return radio_at(u.frame, r, label, selected, value, ui_focus(u))
 }
 
 radio_ui_id :: proc(
@@ -124,10 +125,11 @@ radio_ui_id :: proc(
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	w := CONTROL_BOX + CONTROL_GAP + measure_text(label_c, FONT_SIZE_BODY)
 	r := ui_slot(u, w, ROW_H_SM)
-	return radio_at(r, label, selected, value, ui_focus(u, id))
+	return radio_at(u.frame, r, label, selected, value, ui_focus(u, id))
 }
 
 radio_at :: proc(
+	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	label: string,
 	selected: ^i32,
@@ -141,11 +143,11 @@ radio_at :: proc(
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "radio: empty accessible label")
 	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	it := interact(rrect)
+	it := interact(frame, rrect)
 	hovered := it.hovered
-	focus_opt_click(focus, rect.x, rect.y, rect.w, rect.h)
-	if hovered do request_cursor(.POINTING_HAND)
-	if (it.clicked || focus_opt_activated(focus)) && selected^ != value {
+	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	if hovered do request_cursor(frame, .POINTING_HAND)
+	if (it.clicked || focus_opt_activated(frame, focus)) && selected^ != value {
 		selected^ = value
 		changed = true
 	}
@@ -175,7 +177,7 @@ radio_at :: proc(
 	)
 	sem: Sem_State
 	if is_on do sem += {.Checked}
-	semantic_push(.Radio, rect, label, sem, focus)
+	semantic_push(frame, .Radio, rect, label, sem, focus)
 	return changed
 }
 
@@ -230,7 +232,7 @@ slider_ui :: proc(
 ) {
 	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
 	r := ui_slot(u, ww, ROW_H_SM)
-	return slider_at(r, value, lo, hi, step, ui_focus(u), a11y_label)
+	return slider_at(u.frame, r, value, lo, hi, step, ui_focus(u), a11y_label)
 }
 
 slider_ui_id :: proc(
@@ -246,7 +248,7 @@ slider_ui_id :: proc(
 ) {
 	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
 	r := ui_slot(u, ww, ROW_H_SM)
-	return slider_at(r, value, lo, hi, step, ui_focus(u, id), a11y_label)
+	return slider_at(u.frame, r, value, lo, hi, step, ui_focus(u, id), a11y_label)
 }
 
 slider_ui_state :: proc(
@@ -261,7 +263,7 @@ slider_ui_state :: proc(
 	assert(state != nil, "slider_ui_state: nil state")
 	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
 	r := ui_slot(u, ww, ROW_H_SM)
-	return slider_at_state(state, r, value, lo, hi, step, ui_focus(u), a11y_label)
+	return slider_at_state(u.frame, state, r, value, lo, hi, step, ui_focus(u), a11y_label)
 }
 
 slider_ui_state_id :: proc(
@@ -277,10 +279,11 @@ slider_ui_state_id :: proc(
 	assert(state != nil, "slider_ui_state_id: nil state")
 	ww := w if w > 0 else MENU_MIN_W + CONTROL_BOX * 4
 	r := ui_slot(u, ww, ROW_H_SM)
-	return slider_at_state(state, r, value, lo, hi, step, ui_focus(u, id), a11y_label)
+	return slider_at_state(u.frame, state, r, value, lo, hi, step, ui_focus(u, id), a11y_label)
 }
 
 slider_at :: proc(
+	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	value: ^f32,
 	lo, hi: f32,
@@ -296,10 +299,10 @@ slider_at :: proc(
 	old := value^
 	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	mouse := rl.GetMousePosition()
-	it := interact(rrect)
+	it := interact(frame, rrect)
 	hovered := it.hovered
-	focus_opt_click(focus, rect.x, rect.y, rect.w, rect.h)
-	if hovered do request_cursor(.POINTING_HAND)
+	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	if hovered do request_cursor(frame, .POINTING_HAND)
 
 	knob_r := SLIDER_KNOB_R
 	track_x := f32(rect.x) + knob_r
@@ -334,11 +337,12 @@ slider_at :: proc(
 	if focus_opt_focused(focus) {
 		draw_focus_ring(rect.x, rect.y, rect.w, rect.h)
 	}
-	semantic_push(.Slider, rect, a11y_label, {}, focus, value = value^, lo = lo, hi = hi)
+	semantic_push(frame, .Slider, rect, a11y_label, {}, focus, value = value^, lo = lo, hi = hi)
 	return value^ != old
 }
 
 slider_at_state :: proc(
+	frame: ^Ui_Frame,
 	state: ^Slider_State,
 	rect: Rect_I32,
 	value: ^f32,
@@ -352,9 +356,9 @@ slider_at_state :: proc(
 	old := value^
 	rrect := rl.Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	mouse := rl.GetMousePosition()
-	it := interact(rrect, &state.dragging)
-	focus_opt_click(focus, rect.x, rect.y, rect.w, rect.h)
-	if it.hovered do request_cursor(.POINTING_HAND)
+	it := interact(frame, rrect, &state.dragging)
+	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	if it.hovered do request_cursor(frame, .POINTING_HAND)
 	knob_r := SLIDER_KNOB_R
 	track_x := f32(rect.x) + knob_r
 	track_w := max(f32(rect.w) - knob_r * 2, 1)
@@ -381,6 +385,6 @@ slider_at_state :: proc(
 	rl.DrawCircleLinesV({knob_x, cy}, knob_r, knob_col)
 	rl.DrawCircleV({knob_x, cy}, knob_r * 0.55, knob_col)
 	if focus_opt_focused(focus) do draw_focus_ring(rect.x, rect.y, rect.w, rect.h)
-	semantic_push(.Slider, rect, a11y_label, {}, focus, value = value^, lo = lo, hi = hi)
+	semantic_push(frame, .Slider, rect, a11y_label, {}, focus, value = value^, lo = lo, hi = hi)
 	return value^ != old
 }

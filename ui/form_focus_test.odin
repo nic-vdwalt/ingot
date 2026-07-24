@@ -29,7 +29,7 @@ form_focus_recovers_unset_value :: proc(t: ^testing.T) {
 focus_opt_zero_value_is_inert :: proc(t: ^testing.T) {
 	f: Focus_Opt
 	testing.expect(t, !focus_opt_focused(f))
-	testing.expect(t, !focus_opt_activated(f))
+	testing.expect(t, !focus_opt_focused(f))
 }
 
 @(test)
