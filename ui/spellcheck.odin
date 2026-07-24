@@ -22,9 +22,9 @@ Spellcheck_Memo :: struct {
 
 spellcheck_memo_destroy :: proc(memo: ^Spellcheck_Memo) {
 	assert(memo != nil, "spellcheck_memo_destroy: nil memo")
-	delete(memo.text)
-	delete(memo.pills)
-	delete(memo.ranges)
+	if len(memo.text) > 0 do delete(memo.text)
+	if len(memo.pills) > 0 do delete(memo.pills)
+	if cap(memo.ranges) > 0 do delete(memo.ranges)
 	memo^ = {}
 }
 
@@ -46,9 +46,11 @@ spellcheck_memo_set_key :: proc(
 	pills: ^[dynamic]Mention_Span,
 	generation: u64,
 ) {
-	delete(memo.text)
-	delete(memo.pills)
-	memo.text = strings.clone(text)
+	if len(memo.text) > 0 do delete(memo.text)
+	if len(memo.pills) > 0 do delete(memo.pills)
+	memo.text = ""
+	memo.pills = nil
+	if len(text) > 0 do memo.text = strings.clone(text)
 	memo.caret = caret
 	memo.generation = generation
 	if pills != nil && len(pills) > 0 {

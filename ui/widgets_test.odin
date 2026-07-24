@@ -41,6 +41,15 @@ input_undo_record_invalidates_redo :: proc(t: ^testing.T) {
 }
 
 @(test)
+input_undo_reset_handles_empty_snapshots :: proc(t: ^testing.T) {
+	u: Input_Undo
+	input_undo_record(&u, "", 0, nil, .Other, 0)
+	input_undo_reset(&u)
+	testing.expect_value(t, len(u.undo), 0)
+	input_undo_destroy(&u)
+}
+
+@(test)
 truncate_helpers_fit_and_cut :: proc(t: ^testing.T) {
 	system: Text_System
 	set_measure_backend_with(&system, w_mono)

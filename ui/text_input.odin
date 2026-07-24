@@ -275,8 +275,11 @@ input_visual_lines_memo_with :: proc(
 	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
 	// Persist copies so the memo survives the temp allocator reset.
 	if memo.owned {
-		delete(memo.val)
-		delete(memo.text)
+		if len(memo.val) > 0 do delete(memo.val)
+		if len(memo.text) > 0 do delete(memo.text)
+		memo.val = nil
+		memo.text = ""
+		memo.owned = false
 	}
 	memo.val = make([]Wrap_Line, len(vlines))
 	copy(memo.val, vlines[:])
@@ -311,8 +314,11 @@ input_visual_lines_memo_frame :: proc(
 	}
 	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
 	if memo.owned {
-		delete(memo.val)
-		delete(memo.text)
+		if len(memo.val) > 0 do delete(memo.val)
+		if len(memo.text) > 0 do delete(memo.text)
+		memo.val = nil
+		memo.text = ""
+		memo.owned = false
 	}
 	memo.val = make([]Wrap_Line, len(vlines))
 	copy(memo.val, vlines[:])
@@ -328,8 +334,8 @@ input_visual_lines_memo_frame :: proc(
 input_vlines_memo_destroy :: proc(memo: ^Input_Vlines_Memo) {
 	assert(memo != nil, "input_vlines_memo_destroy: nil memo")
 	if memo.owned {
-		delete(memo.val)
-		delete(memo.text)
+		if len(memo.val) > 0 do delete(memo.val)
+		if len(memo.text) > 0 do delete(memo.text)
 	}
 	memo^ = {}
 }

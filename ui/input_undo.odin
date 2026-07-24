@@ -43,17 +43,20 @@ INPUT_UNDO_MAX :: 100
 INPUT_UNDO_COALESCE_SECS :: 1.0
 
 input_snapshot_destroy :: proc(s: ^Input_Snapshot) {
-	delete(s.text)
-	delete(s.pills)
+	if len(s.text) > 0 do delete(s.text)
+	if cap(s.pills) > 0 do delete(s.pills)
+	s^ = {}
 }
 
 make_input_snapshot :: proc(text: string, cursor: int, pills: []Mention_Span) -> Input_Snapshot {
 	s := Input_Snapshot {
-		text   = strings.clone(text),
 		cursor = cursor,
 	}
-	s.pills = make([dynamic]Mention_Span, 0, len(pills))
-	for p in pills do append(&s.pills, p)
+	if len(text) > 0 do s.text = strings.clone(text)
+	if len(pills) > 0 {
+		s.pills = make([dynamic]Mention_Span, 0, len(pills))
+		for p in pills do append(&s.pills, p)
+	}
 	return s
 }
 
@@ -96,7 +99,7 @@ input_undo_reset :: proc(u: ^Input_Undo) {
 
 input_undo_destroy :: proc(u: ^Input_Undo) {
 	input_undo_reset(u)
-	delete(u.undo)
-	delete(u.redo)
+	if cap(u.undo) > 0 do delete(u.undo)
+	if cap(u.redo) > 0 do delete(u.redo)
 	u^ = {}
 }

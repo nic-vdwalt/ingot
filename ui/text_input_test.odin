@@ -122,6 +122,44 @@ undo_coalesces_same_kind_edits :: proc(t: ^testing.T) {
 }
 
 @(test)
+mention_send_rewrite_resets_owned_state :: proc(t: ^testing.T) {
+	system: Text_System
+	set_measure_backend_with(&system, ti_mono)
+	defer text_system_destroy(&system)
+	sb := strings.builder_make()
+	defer strings.builder_destroy(&sb)
+	strings.write_string(&sb, "prefix @men")
+	st: Text_Input_State
+	defer text_input_state_destroy(&st)
+	st.cursor = strings.builder_len(sb)
+	input_undo_record(&st.undo, strings.to_string(sb), st.cursor, st.pills[:], .Other, 0)
+	_ = input_visual_lines_memo_with(&system, &st.memo, strings.to_string(sb), 200, 16)
+	spellcheck_memo_set_key(&st.spell_memo, strings.to_string(sb), st.cursor, &st.pills, 1)
+
+	prefix := strings.clone(strings.to_string(sb)[:7])
+	strings.builder_reset(&sb)
+	strings.write_string(&sb, prefix)
+	delete(prefix)
+	path := "alloy/src/ui/mentions.odin"
+	strings.write_string(&sb, path)
+	strings.write_byte(&sb, ' ')
+	append(&st.pills, Mention_Span{7, 7 + len(path)})
+	st.cursor = strings.builder_len(sb)
+	encoded := encode_pills(strings.to_string(sb), st.pills[:])
+	owned_message := strings.clone(encoded)
+	defer delete(owned_message)
+	strings.builder_reset(&sb)
+	clear(&st.pills)
+	input_undo_reset(&st.undo)
+	st.cursor = 0
+	_ = input_visual_lines_memo_with(&system, &st.memo, "", 200, 16)
+	spellcheck_memo_set_key(&st.spell_memo, "", 0, &st.pills, 1)
+
+	testing.expect_value(t, strings.to_string(sb), "")
+	testing.expect_value(t, strip_pill_markers(owned_message), "prefix alloy/src/ui/mentions.odin ")
+}
+
+@(test)
 vlines_memo_two_instances_and_invalidation :: proc(t: ^testing.T) {
 	system: Text_System
 	set_measure_backend_with(&system, ti_mono)
