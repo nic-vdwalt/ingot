@@ -823,8 +823,8 @@ draw_demo_popup :: proc(x, y: i32) {
 	mouse := rl.GetMousePosition()
 	hovered := rl.CheckCollisionPointRec(mouse, row)
 	if hovered {
-		ui.overlay_rect(row, ui.theme.bg_active)
-		ui.request_cursor(.POINTING_HAND)
+		ui.overlay_rect(&ui_frame, row, ui.theme.bg_active)
+		ui.request_cursor(&ui_frame, .POINTING_HAND)
 	}
 	ui.overlay_text(
 		&ui_frame,
