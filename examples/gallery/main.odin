@@ -155,10 +155,9 @@ main :: proc() {
 	rl.InitWindow(1100, 760, "ingot widget gallery")
 	rl.SetTargetFPS(60)
 	when !SMOKE do rl.EnableEventWaiting() // smoke needs continuous frames
-	ui.apply_platform_dpi()
-	ui.init_font()
 	ui.ui_runtime_init(&ui_runtime)
-	ui.a11y_init()
+	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
+	ui.a11y_init(&ui_runtime)
 	rl.run(frame)
 	input_state_destroy(&input_state)
 	ui.ui_runtime_destroy(&ui_runtime)
@@ -172,9 +171,8 @@ input_state_destroy :: proc(state: ^Input_State) {
 }
 
 frame :: proc() {
-	ui.dpi_refresh()
+	ui.ui_runtime_dpi_refresh(&ui_runtime)
 	ui.ui_frame_begin(&ui_frame, &ui_runtime)
-	ui.begin_cursor_frame()
 	rl.BeginDrawing()
 	rl.ClearBackground(ui.theme.bg_color)
 
@@ -189,7 +187,7 @@ frame :: proc() {
 	draw_content(sw, sh)
 
 	if settings_open {
-		res := ui.draw_scale_settings_panel(&settings_sel, stored_scale, sw, sh)
+		res := ui.draw_scale_settings_panel(&ui_frame, &settings_sel, stored_scale, sw, sh)
 		if res.applied {
 			stored_scale = res.ui_scale
 			apply_scale(res.ui_scale)
@@ -198,20 +196,17 @@ frame :: proc() {
 	}
 
 	if debug_on {
-		ui.draw_debug_overlay(sw - ui.sc(290), ui.sc(10))
+		ui.draw_debug_overlay(&ui_frame, sw - ui.sc(290), ui.sc(10))
 	}
 
-	ui.apply_cursor()
-	ui.a11y_frame_end()
+	ui.a11y_frame_end(&ui_frame)
 	ui.ui_frame_end(&ui_frame)
 	rl.EndDrawing()
 }
 
 apply_scale :: proc(scale: f32) {
 	resolved := scale if scale > 0 else ui.settings_auto_scale()
-	ui.set_ui_scale(resolved)
-	ui.reset_font_atlases()
-	ui.invalidate_scale_caches()
+	ui.ui_runtime_set_scale(&ui_runtime, resolved)
 }
 
 draw_nav :: proc(sh: i32) {
@@ -225,7 +220,7 @@ draw_nav :: proc(sh: i32) {
 
 	for s in Section {
 		style := ui.Btn_Style.Primary if s == section else .Ghost
-		if ui.btn(ui.sc(10), y, w - ui.sc(20), ui.sc(28), SECTION_NAMES[s], style) {
+		if ui.btn(&ui_frame, ui.sc(10), y, w - ui.sc(20), ui.sc(28), SECTION_NAMES[s], style) {
 			section = s
 			ui.pane_reset(&content_pane)
 		}
@@ -233,13 +228,21 @@ draw_nav :: proc(sh: i32) {
 	}
 
 	y = sh - ui.sc(140)
-	if ui.btn(ui.sc(10), y, w - ui.sc(20), ui.sc(26), "Light theme" if dark else "Dark theme") {
+	if ui.btn(
+		&ui_frame,
+		ui.sc(10),
+		y,
+		w - ui.sc(20),
+		ui.sc(26),
+		"Light theme" if dark else "Dark theme",
+	) {
 		dark = !dark
 		high_contrast = false
 		apply_gallery_theme()
 	}
 	y += ui.sc(32)
 	if ui.btn(
+		&ui_frame,
 		ui.sc(10),
 		y,
 		w - ui.sc(20),
@@ -251,6 +254,7 @@ draw_nav :: proc(sh: i32) {
 	}
 	y += ui.sc(32)
 	if ui.btn(
+		&ui_frame,
 		ui.sc(10),
 		y,
 		w - ui.sc(20),
@@ -261,7 +265,7 @@ draw_nav :: proc(sh: i32) {
 		apply_gallery_theme()
 	}
 	y += ui.sc(32)
-	if ui.btn(ui.sc(10), y, w - ui.sc(20), ui.sc(26), "UI scale\u2026") {
+	if ui.btn(&ui_frame, ui.sc(10), y, w - ui.sc(20), ui.sc(26), "UI scale\u2026") {
 		settings_open = true
 		settings_sel = ui.settings_scale_preset_index(stored_scale)
 	}
@@ -271,13 +275,22 @@ apply_gallery_theme :: proc() {
 	t :=
 		ui.theme_high_contrast() if high_contrast else (ui.theme_dark() if dark else ui.theme_light())
 	t.reduced_motion = reduced_motion
-	ui.set_theme(t)
+	ui.ui_runtime_set_theme(&ui_runtime, t)
 }
 
 draw_content :: proc(sw, sh: i32) {
 	x := ui.sc(NAV_W)
 	w := sw - x
-	y := ui.pane_begin(&content_pane, x, 0, w, sh, pad = 14, keyboard = section != .Inputs)
+	y := ui.pane_begin(
+		&ui_frame,
+		&content_pane,
+		x,
+		0,
+		w,
+		sh,
+		pad = 14,
+		keyboard = section != .Inputs,
+	)
 	cx := x + ui.sc(18)
 	cw := w - ui.sc(52)
 
@@ -300,7 +313,7 @@ draw_content :: proc(sw, sh: i32) {
 	case .Stress:
 		end_y = draw_stress(cx, y, cw)
 	}
-	ui.pane_end(&content_pane, x, 0, w, sh, end_y, pad = 14)
+	ui.pane_end(&ui_frame, &content_pane, x, 0, w, sh, end_y, pad = 14)
 }
 
 draw_buttons :: proc(x, y0, w: i32) -> i32 {
@@ -308,14 +321,14 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	bw := ui.sc(120)
 	bh := ui.sc(30)
 	gap := ui.sc(10)
-	if ui.btn(x, y, bw, bh, "Primary", ui.Btn_Style.Primary) do click_count += 1
-	if ui.btn(x + (bw + gap), y, bw, bh, "Secondary", ui.Btn_Style.Secondary) do click_count += 1
-	if ui.btn(x + (bw + gap) * 2, y, bw, bh, "Danger", ui.Btn_Style.Danger) do click_count += 1
-	if ui.btn(x + (bw + gap) * 3, y, bw, bh, "Ghost", ui.Btn_Style.Ghost) do click_count += 1
+	if ui.btn(&ui_frame, x, y, bw, bh, "Primary", ui.Btn_Style.Primary) do click_count += 1
+	if ui.btn(&ui_frame, x + (bw + gap), y, bw, bh, "Secondary", ui.Btn_Style.Secondary) do click_count += 1
+	if ui.btn(&ui_frame, x + (bw + gap) * 2, y, bw, bh, "Danger", ui.Btn_Style.Danger) do click_count += 1
+	if ui.btn(&ui_frame, x + (bw + gap) * 3, y, bw, bh, "Ghost", ui.Btn_Style.Ghost) do click_count += 1
 	y += bh + gap
-	ui.btn(x, y, bw, bh, "Disabled", ui.Btn_Style.Primary, enabled = false)
-	if ui.icon_btn(x + bw + gap, y, bh, "\u2715") do click_count += 1
-	if ui.back_btn(x + bw + gap + bh + gap, y + ui.sc(4), "Back") do click_count += 1
+	ui.btn(&ui_frame, x, y, bw, bh, "Disabled", ui.Btn_Style.Primary, enabled = false)
+	if ui.icon_btn(&ui_frame, x + bw + gap, y, bh, "\u2715") do click_count += 1
+	if ui.back_btn(&ui_frame, x + bw + gap + bh + gap, y + ui.sc(4), "Back") do click_count += 1
 	y += bh + gap
 
 	count := fmt.tprintf("clicks: %d", click_count)
@@ -333,6 +346,7 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Focusable %d", i + 1)
 		if ui.btn(
+			&ui_frame,
 			x + i32(i) * (bw + gap),
 			y,
 			bw,
@@ -348,7 +362,7 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	y = ui.section_header(x, y, w, "COLLAPSIBLE HEADERS")
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Section %d", i + 1)
-		ui.collapsible_header(x, y, w, label, &headers_open[i])
+		ui.collapsible_header(&ui_frame, x, y, w, label, &headers_open[i])
 		y += ui.sc(28)
 		if headers_open[i] {
 			ui.draw_text(
@@ -420,6 +434,7 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	ui.ui_row(&state.ctx, ui.ROW_H_SM, gap = ui.sc(10))
 	slider_rect := ui.ui_slot(&state.ctx, ui.sc(240), ui.ROW_H_SM)
 	ui.slider_at_state(
+		&ui_frame,
 		&state.slider,
 		slider_rect,
 		&state.volume,
@@ -429,6 +444,7 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		ui.ui_focus(&state.ctx, WIDGET_VOLUME_ID),
 	)
 	ui.tooltip(
+		&ui_frame,
 		&state.tooltip,
 		slider_rect,
 		"drag, or use \u2190/\u2192 when focused",
@@ -454,7 +470,7 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		&progress_anim,
 		ui.theme.fg_success,
 	)
-	if ui.btn(x + ui.sc(260), y, ui.sc(90), ui.sc(24), "Replay") {
+	if ui.btn(&ui_frame, x + ui.sc(260), y, ui.sc(90), ui.sc(24), "Replay") {
 		progress_anim = 0
 	}
 	y += ui.sc(44)
@@ -562,6 +578,7 @@ draw_charts :: proc(x, y0, w: i32) -> i32 {
 		{name = "Costs", values = costs[:]},
 	}
 	ui.line_chart(
+		&ui_frame,
 		x,
 		y,
 		cw,
@@ -572,6 +589,7 @@ draw_charts :: proc(x, y0, w: i32) -> i32 {
 	)
 	y += ui.sc(252)
 	ui.bar_chart(
+		&ui_frame,
 		x,
 		y,
 		cw,
@@ -656,7 +674,7 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 	// must not reach them.
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Shielded %d", i + 1)
-		if ui.btn(x, y + i32(i) * (bh + ui.sc(8)), bw, bh, label) {
+		if ui.btn(&ui_frame, x, y + i32(i) * (bh + ui.sc(8)), bw, bh, label) {
 			shielded_clicks += 1
 		}
 	}
@@ -673,10 +691,18 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 		ui.theme.fg_secondary,
 	)
 
-	if ui.btn(x + bw + ui.sc(100), y, ui.sc(150), bh, "Toggle popup", ui.Btn_Style.Primary) {
+	if ui.btn(
+		&ui_frame,
+		x + bw + ui.sc(100),
+		y,
+		ui.sc(150),
+		bh,
+		"Toggle popup",
+		ui.Btn_Style.Primary,
+	) {
 		popup_open = !popup_open
 	}
-	if ui.btn(x + bw + ui.sc(100), y + bh + ui.sc(8), ui.sc(150), bh, "Open modal") {
+	if ui.btn(&ui_frame, x + bw + ui.sc(100), y + bh + ui.sc(8), ui.sc(150), bh, "Open modal") {
 		about_modal.open = true
 	}
 
@@ -692,7 +718,13 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 			{separator = true},
 			{label = "Close menu"},
 		}
-		chosen := ui.context_menu(&ctx_menu, items, rl.GetScreenWidth(), rl.GetScreenHeight())
+		chosen := ui.context_menu(
+			&ui_frame,
+			&ctx_menu,
+			items,
+			rl.GetScreenWidth(),
+			rl.GetScreenHeight(),
+		)
 		if chosen == 0 {
 			shielded_clicks = 0
 			ctx_note = "shielded clicks reset via context menu"
@@ -715,6 +747,7 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 	// Generic modal: dims, claims all input, Escape / click-outside dismisses.
 	if about_modal.open {
 		body := ui.modal_begin(
+			&ui_frame,
 			&about_modal,
 			"Generic modal",
 			ui.sc(420),
@@ -731,6 +764,7 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 			ui.theme.fg_primary,
 		)
 		if ui.btn(
+			&ui_frame,
 			body.x + ui.PADDING,
 			body.y + body.h - ui.sc(44),
 			ui.sc(90),
@@ -751,10 +785,11 @@ draw_demo_popup :: proc(x, y: i32) {
 	w := ui.sc(220)
 	h := ui.sc(130)
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	ui.overlay_begin(rect, claim_input = true)
-	ui.overlay_rounded(rect, 0.1, 6, ui.theme.bg_popup)
-	ui.overlay_rounded_lines(rect, 0.1, 6, 1.0, ui.theme.border_color)
+	ui.overlay_begin(&ui_frame, rect, claim_input = true)
+	ui.overlay_rounded(&ui_frame, rect, 0.1, 6, ui.theme.bg_popup)
+	ui.overlay_rounded_lines(&ui_frame, rect, 0.1, 6, 1.0, ui.theme.border_color)
 	ui.overlay_text(
+		&ui_frame,
 		"Overlay popup",
 		x + ui.sc(12),
 		y + ui.sc(10),
@@ -762,6 +797,7 @@ draw_demo_popup :: proc(x, y: i32) {
 		ui.theme.fg_primary,
 	)
 	ui.overlay_text(
+		&ui_frame,
 		"Recorded during the frame,",
 		x + ui.sc(12),
 		y + ui.sc(36),
@@ -769,6 +805,7 @@ draw_demo_popup :: proc(x, y: i32) {
 		ui.theme.fg_secondary,
 	)
 	ui.overlay_text(
+		&ui_frame,
 		"replayed above everything.",
 		x + ui.sc(12),
 		y + ui.sc(54),
@@ -790,6 +827,7 @@ draw_demo_popup :: proc(x, y: i32) {
 		ui.request_cursor(.POINTING_HAND)
 	}
 	ui.overlay_text(
+		&ui_frame,
 		"Close",
 		x + ui.sc(18),
 		y + h - ui.sc(28),
@@ -799,7 +837,7 @@ draw_demo_popup :: proc(x, y: i32) {
 	if hovered && rl.IsMouseButtonReleased(.LEFT) {
 		popup_open = false
 	}
-	ui.overlay_end()
+	ui.overlay_end(&ui_frame)
 }
 
 draw_stress :: proc(x, y0, w: i32) -> i32 {
@@ -813,7 +851,7 @@ draw_stress :: proc(x, y0, w: i32) -> i32 {
 		bx := x + i32(col) * (bw + ui.sc(6))
 		by := y + i32(row) * (bh + ui.sc(6))
 		label := fmt.tprintf("btn %d", i)
-		if ui.btn(bx, by, bw, bh, label) {
+		if ui.btn(&ui_frame, bx, by, bw, bh, label) {
 			stress_clicked = i
 		}
 	}
