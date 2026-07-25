@@ -27,22 +27,22 @@ def parse_args():
 
 
 def terminate_group(process, grace_seconds=2.0):
-    if process.poll() is not None:
-        return
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
         return
     try:
         process.wait(timeout=grace_seconds)
-        return
     except subprocess.TimeoutExpired:
-        pass
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
     try:
         os.killpg(process.pid, signal.SIGKILL)
     except ProcessLookupError:
         pass
-    process.wait()
 
 
 def write_failure_log(log_dir, package, chunks, limit):
@@ -86,7 +86,7 @@ def main():
             if interrupted is not None:
                 failure = f"interrupted by signal {interrupted}"
                 terminate_group(process)
-            elif time.monotonic() >= deadline and process.poll() is None:
+            elif time.monotonic() >= deadline and selector.get_map():
                 failure = f"timed out after {args.timeout:g}s"
                 terminate_group(process)
 
@@ -96,8 +96,10 @@ def main():
                 if not data:
                     selector.unregister(key.fileobj)
                     continue
-                sys.stdout.buffer.write(data)
-                sys.stdout.buffer.flush()
+                remaining = max(args.output_limit - total, 0)
+                if remaining > 0:
+                    sys.stdout.buffer.write(data[:remaining])
+                    sys.stdout.buffer.flush()
                 chunks.append(data)
                 retained += len(data)
                 total += len(data)

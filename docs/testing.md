@@ -50,6 +50,25 @@ to each test command:
 bash scripts/test.sh -define:ODIN_TEST_THREADS=1
 ```
 
+Each package gets a 300-second wall-clock limit and a 16 MiB output budget. The
+supervisor owns a separate process group, so timeout, excessive output, or an
+`INT`, `TERM`, or `HUP` signal stops and reaps the generated test executable as
+well as Odin. Successful output is not retained. A bounded failure log is saved
+under `${TMPDIR:-/tmp}/ingot-test-failures` and its path is printed on failure.
+Override the safeguards when an intentional long fuzz or soak run needs more:
+
+```sh
+INGOT_TEST_TIMEOUT_SECONDS=3600 \
+INGOT_TEST_OUTPUT_LIMIT_BYTES=67108864 \
+INGOT_TEST_FAILURE_LOG_DIR="$PWD/test-failures" \
+bash scripts/test.sh -define:ODIN_TEST_THREADS=1
+```
+
+All limits must be positive integers. `ODIN_TEST_THREADS=1` controls test
+concurrency only; it does not provide a timeout, output bound, or descendant
+cleanup. Dedicated long-running fuzz targets should normally use `fuzz/run.sh`
+rather than weakening the standard package-test limits.
+
 Run the strict project gate:
 
 ```sh

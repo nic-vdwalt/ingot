@@ -10,6 +10,7 @@ import "vendor:glfw"
 when ODIN_OS == .Darwin {
 	GetWindowHandle :: proc() -> rawptr {
 		if g.win == nil do return nil
+		_ = glfw.GetCurrentContext()
 		return rawptr(glfw.GetCocoaWindow(glfw.WindowHandle(g.win)))
 	}
 } else when ODIN_OS == .Windows {
