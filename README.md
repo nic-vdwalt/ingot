@@ -11,16 +11,22 @@ games are supported; polished desktop tools are the mission.
 ## Immediate mode is enough
 
 Ingot's premise is that a retained widget tree is unnecessary. Anything a
-retained GUI presents can be built by declaring the current interface from
-explicit application state each frame. Persistence still exists, but it belongs
-to the application or an explicit runtime service rather than a hidden tree or
-label-hashed state store.
+retained GUI presents can be derived by declaring the current interface from
+explicit application state whenever a frame is required. Persistence still
+exists, but authoritative behavior belongs to the application or an explicit
+runtime service rather than a hidden tree or label-hashed state store.
 
-That distinction makes ownership visible and makes the machinery beneath the UI
-straightforward to test. Input sequences can drive real widgets; assertions can
-check bounded routing, focus, overlay, semantic, and resource-lifetime output;
-and deterministic seeds can replay failures without reconstructing a private
-object graph. This is a natural fit for Ingot's Tiger Style approach.
+This follows the original single-path IMGUI idea: immediate mode describes the
+interface between application and UI system, not stateless internals or
+immediate GPU rendering. Ingot may retain caches, resources, and platform
+snapshots, then batch paint through WebGPU. Event-driven applications can build
+no UI frame and submit no GPU work while idle.
+
+Ingot carries that boundary beyond a debug overlay. One declaration derives
+interaction, focus, overlays, accessibility semantics, platform output, and
+paint together as bounded data. That makes ownership visible and lets tests
+drive real widgets, inspect output, and replay failures without reconstructing
+a private object graph. This is a natural fit for Ingot's Tiger Style approach.
 
 Read [Why immediate mode](docs/immediate-mode.md) for the argument and boundaries,
 [Choosing Ingot](docs/comparison.md) for comparisons with other app and UI
@@ -150,8 +156,8 @@ body exactly once after every borrowing consumer has integrated it.
 
 ## Documentation
 
-- [Why immediate mode](docs/immediate-mode.md) — the architecture's position,
-  state boundary, retained-GUI capability mapping, and Tiger Style fit.
+- [Why immediate mode](docs/immediate-mode.md) — IMGUI's historical intent,
+  Ingot's app-framework vision, state boundary, and Tiger Style fit.
 - [Choosing Ingot](docs/comparison.md) — comparisons with immediate, retained,
   web, native, raylib, and full game-engine alternatives.
 - [UI state and stable focus](docs/ui-state.md) — runtime/frame/component

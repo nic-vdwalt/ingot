@@ -69,17 +69,26 @@ Evaluate the current release of a candidate before making a product decision.
 
 ## Against immediate-mode UI libraries
 
-Ingot shares the direct, frame-by-frame declaration model associated with Dear
-ImGui and egui-style libraries, but its intended boundary is broader. It includes
-windowing, graphics, application frame pacing, platform effects, settings,
-networking, accessibility semantics, and terminal support rather than assuming
-an existing host engine or application shell.
+Ingot shares the application-facing IMGUI lineage of Dear ImGui, Nuklear, Gio,
+and egui. Immediate mode historically describes how application code expresses
+the interface; it does not require stateless library internals, immediate GPU
+rendering, or a continuously running frame loop. These are genuine
+immediate-mode systems even when they retain caches, schedule redraws, or emit
+accessibility data.
+
+Ingot's intended boundary is broader than a standalone widget library. It
+includes windowing, graphics, application frame pacing, platform effects,
+settings, networking, accessibility semantics, and terminal support rather than
+assuming an existing host engine or application shell. Gio and egui already show
+that immediate-mode systems can support event-driven frames and semantics, so
+Ingot does not claim those ideas as unprecedented.
 
 Its stricter distinction is state ownership. Persistent widget behavior belongs
 to application component structs; stable IDs identify focus and accessibility
 targets but do not key a hidden widget-state database. `Ui_Runtime` owns explicit
 window-lifetime services, while `Ui_Frame` owns bounded output and arbitration
-for one rendered frame.
+for one rendered frame. Caches and platform backing structures may persist
+without becoming a second application model.
 
 Prefer a standalone immediate-mode UI library when integrating into an existing
 renderer or engine, when its ecosystem already supplies required widgets, or
@@ -94,9 +103,11 @@ reactive models can also be productive when a team already understands the
 framework's lifecycle and state conventions.
 
 Ingot instead keeps the application's own data as the persistent source of truth
-and derives interaction, focus, overlays, semantics, and drawing each frame.
-That makes ownership and teardown visible and lets tests drive production widgets
-with synthetic input without reconstructing a private object hierarchy.
+and derives interaction, focus, overlays, semantics, and drawing whenever a
+frame is required. That makes ownership and teardown visible and lets tests drive
+production widgets with synthetic input without reconstructing a private object
+hierarchy. It does not forbid internal retention: layout caches, text systems,
+GPU resources, and semantic snapshots can persist behind explicit owners.
 
 The cost is that applications may need to build specialized controls and product
 infrastructure that established toolkits already provide. Accessibility support

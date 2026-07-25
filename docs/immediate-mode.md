@@ -12,13 +12,70 @@ labels or call sites, and framework behavior can become difficult to inspect or
 test.
 
 Ingot keeps those concerns separate. The application owns persistent behavior
-and presents the current interface each frame. The framework derives bounded
-frame output from that declaration: draw commands, interactions, overlays,
-focus registration, and accessibility semantics. There is no framework-owned
-widget tree and no label-hashed state store.
+and presents the current interface when a frame is required. The framework
+derives bounded frame output from that declaration: draw commands, interactions,
+overlays, focus registration, and accessibility semantics. There is no
+framework-owned widget tree and no label-hashed state store.
 
 This is not a claim that useful interfaces have no state. It is a claim that the
 state should have an obvious owner.
+
+## The idea before Ingot
+
+Immediate-mode GUI began as an application-interface idea, not a rendering rule.
+Casey Muratori developed the approach in 2002 while building a Granny 3D viewer,
+called it a "single-path immediate-mode graphical user interface," and presented
+it publicly in 2005. The "single path" matters: application code should not have
+to create a parallel hierarchy of widget objects and then keep that hierarchy
+synchronized with the data it represents.
+
+Muratori explicitly allowed the library to retain internal structures between
+frames. The immediate boundary was the interface presented to application code,
+not a requirement that the implementation remember nothing. Omar Cornut later
+made the same distinction in Dear ImGui's documentation: IMGUI describes the API
+between the application and UI system, favors application data as the source of
+truth, and minimizes duplicated state and synchronization from the caller's
+point of view.
+
+There is no universally agreed formal definition of IMGUI. Ingot follows that
+original application-facing interpretation:
+
+```text
+application state -> declare current interface -> derived UI output
+```
+
+rather than requiring the application to maintain this relationship:
+
+```text
+application state <-> synchronize <-> persistent widget object graph
+```
+
+This history also sets an important limit on Ingot's claims. Dear ImGui,
+Nuklear, Gio, egui, and other systems are genuine immediate-mode libraries even
+when they retain caches or interaction data internally. Ingot does not define
+them out of the paradigm. Its position is that the same boundary can support a
+complete application GUI rather than only an engine overlay or debugging tool.
+
+Primary historical context:
+
+- Casey Muratori, [Immediate-Mode Graphical User Interfaces](https://caseymuratori.com/blog_0001)
+- Dear ImGui, [About the IMGUI paradigm](https://github.com/ocornut/imgui/wiki/About-the-IMGUI-paradigm)
+- Dear ImGui, [FAQ: traditional toolkits and IMGUI](https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#q-what-is-the-difference-between-dear-imgui-and-traditional-ui-toolkits)
+
+## Immediate interface, deferred rendering
+
+Immediate-mode GUI and immediate-mode graphics are separate ideas. An Ingot
+widget call appends interactions, semantics, and paint data to a frame. The
+renderer later batches and submits that paint through WebGPU. GPU resources,
+font atlases, text caches, and platform adapters necessarily persist.
+
+"Each frame" also means each interface evaluation that actually occurs, not a
+mandatory polling loop. An event-driven Ingot application can sleep with no UI
+construction and no GPU submission, wake for input, network data, or a redraw
+deadline, derive one frame, and sleep again. Gio and egui demonstrate related
+modern immediate-mode patterns through explicit invalidation and scheduled
+repaint APIs. Continuous redraw is useful for games, but it is not part of the
+IMGUI definition.
 
 ## The state model
 
@@ -57,7 +114,39 @@ frame is open, and clone into an owner allocator before retaining the data.
 Call `ui_frame_destroy` when a reusable frame leaves service. Deferred renderers
 must finalize, consume borrowed output, and release in that order.
 
-## What retained-mode features require
+## From immediate-mode library to app framework
+
+The early success of IMGUI in game tools also narrowed how the idea came to be
+perceived. A continuously rendered debug overlay can omit application concerns
+such as idle scheduling, assistive technology, native text input, clipboard
+integration, settings, and window lifetime. Those omissions describe the scope
+of a particular library, not a limit of the immediate-mode interface.
+
+Ingot's vision is to carry the single-path model through the complete app stack.
+One evaluation derives the visible and machine-readable interface together:
+
+```text
+input snapshot
+    -> application-owned state
+    -> UI declaration
+    -> layout + interaction + focus + semantics + paint
+    -> platform output + accessibility bridge + WebGPU submission
+```
+
+`ingot:ui` stops at explicit renderer-independent data. `ingot:ui_gfx` connects
+that data to graphics and platform services, while the other Ingot packages
+provide the application shell around it. Accessibility is therefore not a
+retained-tree exception: widgets emit a semantic snapshot with stable identity,
+and the platform bridge may retain or compare snapshots without taking
+ownership of the application's controls.
+
+This combination is not claimed as unprecedented. Gio provides an immediate
+application model with event-driven frames and semantic operations; egui
+supports scheduled repaint and accessibility output through integrations.
+Ingot's distinct goal is their class of application capability under a strict,
+bounded, Odin-native ownership model and one WebGPU-oriented native/web stack.
+
+## What rich UI behavior requires
 
 A retained tree is one way to implement rich UI behavior, not a prerequisite
 for it. Ingot implements the same classes of behavior by choosing explicit data
@@ -126,12 +215,28 @@ application graphics that must interleave with UI use explicit replay points.
 ## The boundary
 
 Ingot is not hostile to retained application data. Editors, documents, terminal
-sessions, undo histories, and caches necessarily persist. The distinction is
-ownership:
+sessions, undo histories, and caches necessarily persist. Nor must every cache
+or backing structure be exposed to application code. Text shaping, GPU resource
+management, accessibility adapters, and platform integration may retain data
+behind explicit service boundaries.
+
+The distinction is authority and ownership:
 
 > Immediate mode describes how the interface is declared and derived. It does
-> not mean application state disappears. Ingot keeps persistent behavior in
-> explicit caller-owned state and avoids a hidden framework-owned widget tree.
+> not mean application state disappears or that the implementation is stateless.
+> Ingot keeps persistent behavior in explicit caller-owned state and avoids a
+> hidden framework-owned widget tree as the application's second source of truth.
 
-That boundary keeps the UI a function of state the application can see, test,
-and destroy.
+This means Ingot can add multi-pass layout, virtualized views, richer text,
+docking, animations, and semantic diffing without ceasing to be immediate-mode.
+The test is not whether the framework remembers anything. The test is whether
+application code must construct and synchronize a persistent widget model to
+express the current interface.
+
+The architecture has not proved every consequence merely by being coherent.
+Complex text, large data views, docking, screen-reader continuity, asynchronous
+updates, and long-lived product interfaces must be measured in real
+applications. The vision is stronger than "immediate mode is good for tools": a
+complete, accessible, energy-efficient product GUI can keep application state as
+its single source of truth. Ingot's tests and examples must continue to prove
+that claim workload by workload.
