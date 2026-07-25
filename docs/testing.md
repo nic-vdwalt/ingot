@@ -22,10 +22,11 @@ contract differs from the baseline.
 ## Toolchain
 
 Ingot is checked with Odin `dev-2026-06:285f6d87b`. Install that exact Odin
-revision and build `odinfmt` from the matching OLS checkout, then place both
-executables on `PATH`. The repository `.odinfmt.json` pins formatting behavior.
-`bash scripts/check.sh` fails when either the code does not match that formatter
-or `odinfmt` is unavailable.
+revision, including its bundled `odinfmt`, then place both executables on `PATH`.
+The repository `.odinfmt.json` pins formatting behavior. `scripts/test.sh`
+requires Python 3 for process supervision, and `scripts/check-web.sh` additionally
+requires Node with `node --test`. `bash scripts/check.sh` fails when either the
+code does not match the pinned formatter or `odinfmt` is unavailable.
 
 Verify the tools before running the gate:
 

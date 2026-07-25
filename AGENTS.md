@@ -1,9 +1,10 @@
 # ingot — Agent Guide
 
-`ingot` is a pure-Odin, immediate-mode app/engine on WebGPU. One source runs
+`ingot` is an Odin-first, immediate-mode app/engine on WebGPU. One source runs
 natively (macOS/Metal, Windows/D3D12, Linux/Vulkan) and in the browser (WASM +
-WebGPU). See `README.md` for the project overview, `docs/immediate-mode.md` for
-the architecture, and `docs/testing.md` for the test matrix.
+WebGPU). Native terminal and accessibility bindings use vendored libraries. See
+`README.md` for the project overview, `docs/immediate-mode.md` for the
+architecture, and `docs/testing.md` for the test matrix.
 
 ## Packages
 
@@ -14,17 +15,20 @@ the architecture, and `docs/testing.md` for the test matrix.
 | `ingot:ui_gfx`   | bridge that snapshots `gfx` input, replays UI paint, manages UI fonts, and applies platform output |
 | `ingot:prefs`    | per-app settings persistence (native file / web `localStorage`) |
 | `ingot:net`      | background HTTP `Fetcher` + self-healing RFC 6455 `WebSocket` client |
-| `ingot:sys`      | system integration (`open_url`) |
+| `ingot:sys`      | system integration: URLs, cache paths, and native dialogs |
 | `ingot:term`     | terminal core: libvterm + PTY, per-frame pump, key→VT translation |
 | `ingot:libvterm` | Odin bindings for libvterm 0.3.3 (prebuilt static libs committed) |
+| `ingot:accesskit` | Odin bindings for the native AccessKit C API |
 | `ingot:pty`      | PTY: `forkpty` (unix) / ConPTY (Windows) |
+| `ingot:testx`    | deterministic PRNG and snapshot test helpers |
 
 ## Build / test / check commands
 
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
-- **Test**: `bash scripts/test.sh` — runs `odin test` on `gfx ui term prefs net`
-  and type-checks `ui_gfx` and `sys`. Pass extra odin flags through, e.g.
+- **Test**: `bash scripts/test.sh` — runs `odin test` on `gfx ui ui_gfx
+  libvterm term prefs net`, then type-checks `sys pty accesskit testx`. Python 3
+  supervises each command. Pass extra Odin flags through, e.g.
   `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.
 - **Check / lint** (Tiger Style gate): `bash scripts/check.sh` — strict
   type-check + `-vet -strict-style -vet-shadowing` across all packages, plus an
@@ -33,6 +37,8 @@ the architecture, and `docs/testing.md` for the test matrix.
   100-column lines).
 - **Web build**: `bash build_web.sh` → `web/ingot_web.wasm`; serve with
   `(cd web && python3 -m http.server 8000)`.
+- **Web gate**: `bash scripts/check-web.sh` — compiles gallery, Breakout, and the
+  default demo, then runs `web/test/*.test.mjs` with dependency-free Node.
 - **Rebuild libvterm** (rarely needed): `scripts/build-libvterm.sh` (macOS) /
   `scripts/build-libvterm.bat` (Windows).
 

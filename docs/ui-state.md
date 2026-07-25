@@ -63,19 +63,18 @@ frame. Markdown uses `Markdown_Context` for its frame, workspace paths, and cull
 band. `Text_Input_State` owns its selection, wrap/spell memoization, undo data,
 and spell menu; destroy it before its runtime.
 
-Native applications destroy widget state and `Ui_Runtime` before `CloseWindow`.
-Web `rl.run` registers the browser animation-frame callback and returns, so web
-applications must keep runtime state alive until an explicit browser shutdown
-hook exists.
+Native applications destroy component/widget state, then `ui_gfx.Adapter`, then
+`Ui_Runtime`, and finally call `CloseWindow`. End the active frame before any of
+those steps. Destroy allocation-owning component state before its runtime so it
+cannot retain borrowed text, wrap, spell, theme, or font data.
 
-For macOS Retina verification, run `odin run examples/render_fixture
--collection:ingot=.` first on a standard-density display and then on a Retina
-display. Move the live window between displays and confirm the boxed runtime
-label, truncation row, and text input stay aligned and sharpen after the DPI
-refresh without a mixed-atlas frame.
-
-Consumers not yet migrated to this API must remain pinned to an earlier Ingot
-revision. In particular, `ww-app` is intentionally deferred.
+Web `rl.run` installs the browser animation-frame callback and returns. State
+read by that callback must have static or otherwise host-managed lifetime; do
+not place it in a stack frame that returns. The managed JavaScript host owns the
+running session. Call `session.destroy()` before replacing it, or
+`ingotWeb.stop()` during page teardown. Shutdown is idempotent and detaches input,
+cancels network work, removes semantic overlays, and closes the graphics
+lifetime before a replacement session starts.
 
 ```odin
 runtime: ui.Ui_Runtime
@@ -85,9 +84,10 @@ form: Editor_Form
 ui.ui_runtime_init(&runtime)
 ui.ui_frame_begin(&frame, &runtime)
 ui.ui_begin_frame(&form.ui, &frame, x, y, w, h)
-// Draw roots in the order their overlays and semantics should appear.
 ui.ui_end(&form.ui)
 ui.ui_frame_end(&frame)
+editor_form_destroy(&form)
+ui.ui_runtime_destroy(&runtime)
 ```
 
 ## Stable focus
