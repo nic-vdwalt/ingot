@@ -124,6 +124,35 @@ semantics_node_identity :: proc(t: ^testing.T) {
 }
 
 @(test)
+semantics_text_metadata_and_privacy :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	sem_enable(&runtime, true)
+	frame: Ui_Frame
+	frame.runtime = &runtime
+	frame.open = true
+	sem_begin_frame(&frame)
+	node := semantic_push(
+		&frame,
+		.Text_Input,
+		{1, 2, 100, 24},
+		"Search",
+		{.Multiline},
+		field_id = "search",
+		description = "Search sessions",
+		text_value = "hello",
+		selection_start = 1,
+		selection_end = 4,
+	)
+	testing.expect(t, node != nil)
+	testing.expect_value(t, string(node.text_value[:node.text_value_len]), "hello")
+	testing.expect_value(t, node.selection_start, i32(1))
+	testing.expect_value(t, node.selection_end, i32(4))
+	testing.expect(t, .Multiline in node.state)
+}
+
+@(test)
 semantics_focus_registry :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

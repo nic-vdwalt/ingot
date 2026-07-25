@@ -571,11 +571,20 @@ ti_sync_web :: proc(ctx: ^TI_Ctx) {
 ti_semantic_push :: proc(ctx: ^TI_Ctx) {
 	sem: Sem_State
 	if ctx.active do sem += {.Focused}
+	if ctx.masked do sem += {.Password}
+	if !ctx.single_line do sem += {.Multiline}
 	sfoc: Focus_Opt
 	if ctx.semantics.focus != nil && ctx.semantics.focus_id > 0 {
 		sfoc = {ctx.semantics.focus, ctx.semantics.focus_id}
 	}
 	label := ctx.semantics.name if ctx.semantics.name != "" else ctx.placeholder
+	text_value := "" if ctx.masked else strings.to_string(ctx.sb^)
+	selection_start, selection_end: i32
+	if ti_sel_owner(ctx) {
+		lo, hi := sel_range(ctx.sel)
+		selection_start = i32(lo)
+		selection_end = i32(hi)
+	}
 	semantic_push(
 		ctx.frame,
 		.Text_Input,
@@ -584,6 +593,9 @@ ti_semantic_push :: proc(ctx: ^TI_Ctx) {
 		sem,
 		sfoc,
 		ctx.semantics.field_id,
+		text_value = text_value,
+		selection_start = selection_start,
+		selection_end = selection_end,
 	)
 }
 

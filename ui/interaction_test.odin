@@ -103,3 +103,40 @@ interact_step_blocked_widget_is_inert :: proc(t: ^testing.T) {
 	testing.expect(t, !it.held)
 	testing.expect(t, !latch)
 }
+
+@(test)
+pressable_records_stable_selected_semantics :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	sem_enable(&runtime, true)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	result := pressable(
+		&frame,
+		{{0, 0, 100, 24}, .Option, "Detailed", "reasoning:detailed", {}, false, true},
+	)
+	testing.expect(t, !result.activated)
+	testing.expect_value(t, frame.semantics.cur.count, 1)
+	node := &frame.semantics.cur.nodes[0]
+	testing.expect_value(t, node.id, sem_node_id(.Option, {}, "reasoning:detailed", 0))
+	testing.expect(t, .Selected in node.state)
+	ui_frame_end(&frame)
+}
+
+@(test)
+pressable_disabled_is_inert_and_semantic :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	sem_enable(&runtime, true)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	result := pressable(
+		&frame,
+		{{0, 0, 100, 24}, .Button, "Delete", "delete:row", {}, true, false},
+	)
+	testing.expect(t, !result.hovered && !result.activated)
+	testing.expect(t, .Disabled in frame.semantics.cur.nodes[0].state)
+	ui_frame_end(&frame)
+}

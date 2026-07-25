@@ -1,19 +1,23 @@
 package ui_gfx
 
+import ak "ingot:accesskit"
 import rl "ingot:gfx"
 import "ingot:ui"
 
 FONT_CAP :: 64
 
 Adapter :: struct {
-	gfx_context:     ^rl.Context,
-	gfx_epoch:       u64,
-	fonts:           [FONT_CAP]rl.Font,
-	font_sizes:      [FONT_CAP]i32,
-	font_count:      int,
-	font_dpi:        f32,
-	font_codepoints: []rune,
-	initialized:     bool,
+	gfx_context:      ^rl.Context,
+	gfx_epoch:        u64,
+	fonts:            [FONT_CAP]rl.Font,
+	font_sizes:       [FONT_CAP]i32,
+	font_count:       int,
+	font_dpi:         f32,
+	font_codepoints:  []rune,
+	a11y_snapshot:    ui.Sem_Frame,
+	a11y_focus:       ak.Node_Id,
+	a11y_initialized: bool,
+	initialized:      bool,
 }
 
 vec_to_ui :: proc(value: rl.Vector2) -> ui.Vec2 {
@@ -49,6 +53,7 @@ adapter_init_context :: proc(adapter: ^Adapter, gfx_context: ^rl.Context) {
 	adapter.font_dpi = 1
 	adapter.initialized = true
 	adapter_text_init(adapter)
+	adapter.a11y_initialized = adapter_a11y_init(adapter)
 }
 
 adapter_attach_runtime :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime) {
@@ -59,6 +64,7 @@ adapter_attach_runtime :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime) {
 
 adapter_destroy :: proc(adapter: ^Adapter) {
 	assert(adapter != nil && adapter.initialized, "adapter_destroy: invalid adapter")
+	adapter_a11y_destroy(adapter)
 	adapter_reset_fonts(adapter)
 	delete(adapter.font_codepoints)
 	adapter^ = {}
@@ -98,6 +104,7 @@ adapter_begin_frame :: proc(
 	frame.output = output
 	ui.paint_list_set_sink(&output.main, adapter_paint_sink, adapter)
 	ui.ui_frame_begin(frame, runtime, input)
+	adapter_a11y_poll(adapter, frame)
 }
 
 adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
@@ -105,6 +112,7 @@ adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	assert(frame != nil && frame.output != nil, "adapter_end_frame: invalid frame")
 	output := frame.output
 	ui.ui_frame_finalize(frame)
+	adapter_a11y_publish(adapter, frame)
 	replay_list(adapter, &output.overlay)
 	apply_platform_output(&output.platform)
 	ui.paint_list_set_sink(&output.main, nil, nil)

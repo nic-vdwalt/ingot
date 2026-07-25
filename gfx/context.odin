@@ -6,6 +6,7 @@ package gfx
 
 import "base:runtime"
 import "core:fmt"
+import "core:mem"
 import wg "vendor:wgpu"
 
 KEY_COUNT :: 349 // KB_MENU (348) + 1
@@ -428,9 +429,8 @@ CloseWindow :: proc() {
 	platform_terminate()
 	flags := g.config_flags
 	closing_epoch := g.epoch
-	g = Context {
-		epoch = closing_epoch,
-	}
+	mem.zero(&g, size_of(Context))
+	g.epoch = closing_epoch
 	g.config_flags = flags
 }
 
