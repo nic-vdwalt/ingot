@@ -56,6 +56,19 @@ semantics_buffer_behaviour :: proc(t: ^testing.T) {
 	testing.expect_value(t, s.hi, f32(1))
 	testing.expect(t, .Disabled in s.state)
 
+	option := semantic_push(
+		&frame,
+		.Option,
+		{0, 20, 80, 16},
+		"Vulkan",
+		{.Selected},
+		field_id = "backend:vulkan",
+		position_in_set = 2,
+		size_of_set = 4,
+	)
+	testing.expect_value(t, option.position_in_set, 2)
+	testing.expect_value(t, option.size_of_set, 4)
+
 	// Focused widgets get the Focused flag from their live slot.
 	slot := 3
 	f := semantic_push(&frame, .Checkbox, {0, 0, 10, 10}, "On", focus = {&slot, 3})

@@ -35,6 +35,7 @@ export class StubElement {
 	}
 	setAttribute(k, v) { this.attributes.set(k, String(v)); }
 	getAttribute(k) { return this.attributes.has(k) ? this.attributes.get(k) : null; }
+	removeAttribute(k) { this.attributes.delete(k); }
 	appendChild(child) {
 		child.parent = this;
 		this.children.push(child);

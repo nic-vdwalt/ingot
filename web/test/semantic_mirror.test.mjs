@@ -12,7 +12,8 @@ const hookP = install();
 // Sem_Role ordinals (ui/semantics.odin) and Sem_State bits used by
 // syncSemanticControl.
 const ROLE_BUTTON = 1, ROLE_CHECKBOX = 2, ROLE_SLIDER = 4, ROLE_DROPDOWN = 6;
-const STATE_CHECKED = 1, STATE_DISABLED = 2, STATE_EXPANDED = 8;
+const ROLE_OPTION = 15, ROLE_LISTBOX = 18;
+const STATE_CHECKED = 1, STATE_DISABLED = 2, STATE_EXPANDED = 8, STATE_SELECTED = 16;
 
 test("text input mirror: creation, aria-label, GC by frame stamp", async () => {
 	const { hook } = await hookP;
@@ -99,6 +100,32 @@ test("control mirror: roles, ARIA state, activation staging", async () => {
 	hook.endSemanticFrame();
 	assert.equal(semanticControls.size, 0, "controls GC'd");
 	assert.ok(!btn.isConnected, "button element removed from DOM");
+});
+
+test("control mirror: listbox roles and collection state", async () => {
+	const { hook } = await hookP;
+	hook.beginSemanticFrame();
+	hook.syncSemanticControl("2:1", ROLE_LISTBOX, "Backends", 0, 0, 120, 80, 0, 0, 0, 0);
+	hook.syncSemanticControl("2:2", ROLE_OPTION, "Vulkan", 0, 20, 120, 20, STATE_SELECTED, 0, 0, 0, 2, 4);
+	hook.endSemanticFrame();
+
+	const { semanticControls } = hook.semanticState();
+	const listbox = semanticControls.get("2:1").el;
+	assert.equal(listbox.getAttribute("role"), "listbox");
+	const option = semanticControls.get("2:2").el;
+	assert.equal(option.getAttribute("role"), "option");
+	assert.equal(option.getAttribute("aria-selected"), "true");
+	assert.equal(option.getAttribute("aria-posinset"), "2");
+	assert.equal(option.getAttribute("aria-setsize"), "4");
+
+	hook.beginSemanticFrame();
+	hook.syncSemanticControl("2:2", ROLE_OPTION, "Vulkan", 0, 20, 120, 20, 0, 0, 0, 0);
+	assert.equal(option.getAttribute("aria-selected"), "false");
+	assert.equal(option.getAttribute("aria-posinset"), null);
+	hook.endSemanticFrame();
+	hook.beginSemanticFrame();
+	hook.endSemanticFrame();
+	assert.equal(semanticControls.size, 0, "listbox controls GC'd");
 });
 
 test("control mirror: role change replaces the element", async () => {

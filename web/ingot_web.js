@@ -255,7 +255,7 @@
 	// invisible and mouse-transparent (opacity 0, pointer-events none); AT
 	// activation still fires click/change events, staged here and pulled by
 	// the engine on the next sync. Sem_Role ordinals; Sem_State bits:
-	// 1 checked, 2 disabled, 4 focused, 8 expanded.
+	// 1 checked, 2 disabled, 4 focused, 8 expanded, 16 selected.
 	const CONTROL_ROLES = {
 		1: { tag: "button" },                     // Button
 		2: { tag: "input", type: "checkbox" },    // Checkbox
@@ -263,6 +263,8 @@
 		4: { tag: "input", type: "range" },       // Slider
 		6: { tag: "button", listbox: true },      // Dropdown
 		7: { tag: "button" },                     // Menu_Item
+		15: { tag: "div", ariaRole: "option" },   // Option
+		18: { tag: "div", ariaRole: "listbox" },  // List_Box
 	};
 
 	function createSemanticControl(key, role) {
@@ -270,6 +272,7 @@
 		if (!spec) return null;
 		const el = document.createElement(spec.tag);
 		if (spec.type) el.type = spec.type;
+		if (spec.ariaRole) el.setAttribute("role", spec.ariaRole);
 		if (spec.tag === "button") el.type = "button";
 		if (spec.listbox) el.setAttribute("aria-haspopup", "listbox");
 		el.tabIndex = -1; // reachable by AT virtual cursors, not by page Tab
@@ -291,7 +294,7 @@
 		return state;
 	}
 
-	function syncSemanticControl(key, role, label, x, y, width, height, stateBits, value, lo, hi) {
+	function syncSemanticControl(key, role, label, x, y, width, height, stateBits, value, lo, hi, positionInSet = 0, sizeOfSet = 0) {
 		let state = semanticControls.get(key);
 		if (state && state.role !== role) {
 			state.el.remove();
@@ -308,6 +311,14 @@
 		el.disabled = (stateBits & 2) !== 0;
 		if (state.role === 2 || state.role === 3) el.checked = (stateBits & 1) !== 0;
 		if (state.role === 6) el.setAttribute("aria-expanded", (stateBits & 8) !== 0 ? "true" : "false");
+		if (state.role === 15) el.setAttribute("aria-selected", (stateBits & 16) !== 0 ? "true" : "false");
+		if (positionInSet > 0 && sizeOfSet > 0) {
+			el.setAttribute("aria-posinset", String(positionInSet));
+			el.setAttribute("aria-setsize", String(sizeOfSet));
+		} else {
+			el.removeAttribute("aria-posinset");
+			el.removeAttribute("aria-setsize");
+		}
 		if (state.role === 4 && !state.changed) {
 			el.min = String(lo);
 			el.max = String(hi);
@@ -418,10 +429,10 @@
 				x, y, width, height, style, fontSize, enabled !== 0,
 			),
 			ingot_web_control_sync: (idLo, idHi, role, labelPointer, labelLength,
-				x, y, width, height, stateBits, value, lo, hi) => syncSemanticControl(
+				x, y, width, height, stateBits, value, lo, hi, positionInSet, sizeOfSet) => syncSemanticControl(
 				`${idHi >>> 0}:${idLo >>> 0}`, role,
 				wasmText(labelPointer, labelLength),
-				x, y, width, height, stateBits, value, lo, hi,
+				x, y, width, height, stateBits, value, lo, hi, positionInSet, sizeOfSet,
 			),
 			ingot_web_control_value: (idLo, idHi) => {
 				const state = semanticControls.get(`${idHi >>> 0}:${idLo >>> 0}`);

@@ -148,6 +148,10 @@ selectable_row :: proc(
 		result.pressed = it.pressed
 		result.held = it.held && state.pressed_index == row.index
 		result.activated = it.clicked && state.pressed_index == row.index
+		if a11y_take_click(frame.runtime, sem_node_id(.Option, {}, row.stable_id, 0)) {
+			result.activated = true
+			focus_opt_set(focus_link(&state.focus, focus_id(1)))
+		}
 		if result.hovered do request_cursor(frame, .POINTING_HAND)
 		if result.hovered && config.hover_select && mouse_moved(frame) && config.selected^ != row.index {
 			config.selected^ = row.index
