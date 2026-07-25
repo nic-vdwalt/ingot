@@ -1,9 +1,12 @@
 # Production readiness
 
 This document records the security and platform-validation boundary for `ingot`.
-Passing the package tests proves deterministic core behavior; it does not by itself
-prove Internet transport, operating-system integration, browser, GPU, or assistive-
-technology behavior on every supported platform.
+It is a release checklist, not a claim that every listed target has already been
+validated. Passing package tests proves deterministic core behavior; it does not
+by itself prove Internet transport, operating-system integration, browser, GPU,
+or assistive-technology behavior on every supported platform. See
+[Compatibility and platforms](compatibility.md) for supported API behavior and
+[Networking](networking.md) for lifecycle and ownership.
 
 ## Networking
 
@@ -74,17 +77,39 @@ Chromium/WebKit run, screen-reader exercise, audio-unlock test, or WebGPU valida
 
 ## Validation matrix
 
-| Target | Mandatory automated checks | Required release validation |
-|---|---|---|
-| macOS | `scripts/test.sh`, `scripts/check.sh` | Real PTY, dialogs/URL, Metal fixture, Safari WebGPU, VoiceOver |
-| Linux | `scripts/test.sh`, `scripts/check.sh` | Real PTY, dialogs/URL, Vulkan fixture on supported drivers |
-| Windows | Native equivalents of test/check gates | ConPTY, dialogs/URL, D3D12 and Vulkan fixtures, screen reader |
-| Browser | `scripts/check-web.sh`, Node tests | Chromium and WebKit lifecycle/input/network/WebGPU runs |
-| Internet TLS | URL/parser unit tests | Valid chain plus expired, untrusted, wrong-host, timeout, IPv4/IPv6, and downgrade cases |
+| Target | Mandatory automated checks | Required release validation | Status |
+|---|---|---|---|
+| macOS | `scripts/test.sh`, `scripts/check.sh` | Real PTY, dialogs/URL, Metal fixture, Safari WebGPU, VoiceOver | Not recorded |
+| Linux | `scripts/test.sh`, `scripts/check.sh` | Real PTY, dialogs/URL, Vulkan fixture on supported drivers | Not recorded |
+| Windows | Native equivalents of test/check gates | ConPTY, dialogs/URL, D3D12 and Vulkan fixtures, screen reader | Not recorded |
+| Browser | `scripts/check-web.sh`, Node tests | Chromium and WebKit lifecycle/input/network/WebGPU runs | Not recorded |
+| Internet TLS | URL/parser unit tests | Valid chain plus expired, untrusted, wrong-host, timeout, IPv4/IPv6, and downgrade cases | Not recorded |
 
-Record operating system, architecture, browser, GPU, driver, backend, and date for
-manual release validation. A build-only result must be marked `compiled`, never
-`validated`.
+Record operating system, architecture, Ingot/Odin revision, browser, GPU, driver,
+backend, date, commands, and outcome for manual release validation. Use only
+these status terms:
+
+- `compiled` — source built for the target; runtime behavior is unverified.
+- `validated` — the dated release fixture and platform checks passed without
+  validation errors.
+- `blocked` — the check could not run; record the missing hardware, dependency,
+  credential, or platform capability.
+- `failed` — the check ran and exposed a defect; link the reproducer or issue.
+
+Do not infer `validated` from a build-only or Node-only result.
+
+## Release gate
+
+Before describing a revision as production-ready for a target:
+
+1. Pin and record the exact Ingot and Odin revisions.
+2. Run package tests, strict checks, and the web gate where applicable.
+3. Run deterministic fuzz targets and TSan for networking/concurrency changes.
+4. Run `fuzz/run.sh gfx-frame` and `examples/render_fixture` for renderer changes.
+5. Exercise lifecycle replacement and teardown, not only startup.
+6. Complete the target's PTY, dialog, URL, accessibility, audio, input, and
+   browser checks that the release actually exposes.
+7. Record failures and blockers instead of silently omitting matrix entries.
 
 ## Remaining production work
 
