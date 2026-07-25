@@ -104,14 +104,18 @@ Widget_State :: struct {
 	radio_choice: i32,
 	volume:       f32,
 	slider:       ui.Slider_State,
-	dd_selected:  i32,
-	dropdown:     ui.Dropdown_State,
-	tooltip:      ui.Tooltip_State,
+	dd_selected:   i32,
+	dropdown:      ui.Dropdown_State,
+	tooltip:       ui.Tooltip_State,
+	listbox:       ui.Listbox_State,
+	list_selected: int,
+	list_activated: int,
 }
 
 widget_state := Widget_State {
-	check_a = true,
-	volume  = 40,
+	check_a        = true,
+	volume         = 40,
+	list_activated = -1,
 }
 
 // Generic modal + context menu (Overlay section).
@@ -648,16 +652,41 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		ui.ui_frame_theme(&ui_frame).fg_primary,
 	)
 	y += ui.ui_frame_sc(&ui_frame, 26)
-	for i in 0 ..< 3 {
+	list_labels := [?]string{"Metal", "Vulkan", "D3D12", "WebGPU"}
+	list_width := min(w, ui.ui_frame_sc(&ui_frame, 360))
+	row_step := ui.ui_frame_sc(&ui_frame, 26)
+	list_config := ui.Listbox_Config {
+		{x, y, list_width, row_step * i32(len(list_labels))},
+		"Rendering backends",
+		"gallery:backends",
+		len(list_labels),
+		&state.list_selected,
+		true,
+		true,
+	}
+	list_result := ui.listbox_begin(&ui_frame, &state.listbox, list_config)
+	for label, i in list_labels {
 		rect := rl.Rectangle {
 			f32(x),
 			f32(y),
-			f32(min(w, ui.ui_frame_sc(&ui_frame, 360))),
+			f32(list_width),
 			f32(ui.ui_frame_sc(&ui_frame, 24)),
 		}
-		hovered := rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
-		ui.list_row_bg(&ui_frame, ui.Rect(rect), i == 1, hovered)
-		label := fmt.tprintf("list row %d%s", i + 1, " (selected)" if i == 1 else "")
+		row := ui.selectable_row(
+			&ui_frame,
+			&state.listbox,
+			list_config,
+			{
+				{x, y, list_width, ui.ui_frame_sc(&ui_frame, 24)},
+				label,
+				fmt.tprintf("gallery:backend:%d", i),
+				i,
+				false,
+				"Rendering backend option",
+			},
+		)
+		ui.list_row_bg(&ui_frame, ui.Rect(rect), row.selected, row.hovered)
+		if row.activated do state.list_activated = i
 		ui.draw_text_frame(
 			&ui_frame,
 			strings.clone_to_cstring(label, context.temp_allocator),
@@ -666,7 +695,21 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 			ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
 			ui.ui_frame_theme(&ui_frame).fg_primary,
 		)
-		y += ui.ui_frame_sc(&ui_frame, 26)
+		y += row_step
+	}
+	ui.listbox_end(&ui_frame, &state.listbox)
+	if list_result.activated do state.list_activated = list_result.activated_index
+	if state.list_activated >= 0 {
+		activated := fmt.tprintf("activated: %s", list_labels[state.list_activated])
+		ui.draw_text_frame(
+			&ui_frame,
+			strings.clone_to_cstring(activated, context.temp_allocator),
+			x,
+			y,
+			ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
+			ui.ui_frame_theme(&ui_frame).fg_secondary,
+		)
+		y += row_step
 	}
 	y += ui.ui_frame_sc(&ui_frame, 8)
 
