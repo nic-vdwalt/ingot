@@ -1,5 +1,7 @@
 package ui
 
+import "base:runtime"
+
 PAINT_COMMAND_CAP :: 32768
 PAINT_TEXT_CAP :: 262144
 PAINT_CLIP_CAP :: 64
@@ -59,6 +61,9 @@ Paint_List :: struct {
 	text_len:           int,
 	clip_stack:         [PAINT_CLIP_CAP]Rect,
 	clip_emitted:       [PAINT_CLIP_CAP]bool,
+	// Origin of each open clip so an unbalanced frame can name the exact
+	// begin_scissor_mode call that leaked instead of only its depth.
+	clip_origin:        [PAINT_CLIP_CAP]runtime.Source_Code_Location,
 	clip_count:         int,
 	dropped_commands:   int,
 	dropped_text_bytes: int,
@@ -81,6 +86,16 @@ paint_list_reset :: proc(list: ^Paint_List) {
 	list.dropped_text_bytes = 0
 }
 
+// paint_clip_leak_origin names the call site of the outermost clip left open,
+// which is what a caller needs to fix an unbalanced frame. The zero location
+// is returned when the stack is balanced.
+paint_clip_leak_origin :: proc(list: ^Paint_List) -> runtime.Source_Code_Location {
+	assert(list != nil, "paint_clip_leak_origin: nil list")
+	assert(list.clip_count >= 0, "paint_clip_leak_origin: negative depth")
+	if list.clip_count == 0 do return {}
+	return list.clip_origin[list.clip_count - 1]
+}
+
 paint_clip_intersection :: proc(a, b: Rect) -> Rect {
 	assert(a.width >= 0 && a.height >= 0, "paint_clip_intersection: invalid first rect")
 	assert(b.width >= 0 && b.height >= 0, "paint_clip_intersection: invalid second rect")
@@ -96,7 +111,7 @@ paint_clip_intersection :: proc(a, b: Rect) -> Rect {
 // success leaves the stack unbalanced for the rest of the frame. clip_emitted
 // records whether the paired command reached the buffer so the replayed stream
 // stays balanced too.
-paint_clip_begin :: proc(list: ^Paint_List, rect: Rect) {
+paint_clip_begin :: proc(list: ^Paint_List, rect: Rect, loc := #caller_location) {
 	assert(list != nil, "paint_clip_begin: nil list")
 	assert(rect.width >= 0 && rect.height >= 0, "paint_clip_begin: invalid rect")
 	assert(list.clip_count < PAINT_CLIP_CAP, "paint_clip_begin: clip limit")
@@ -107,6 +122,7 @@ paint_clip_begin :: proc(list: ^Paint_List, rect: Rect) {
 	emitted := paint_push(list, {kind = .Clip_Begin, rect = effective})
 	list.clip_stack[list.clip_count] = effective
 	list.clip_emitted[list.clip_count] = emitted
+	list.clip_origin[list.clip_count] = loc
 	list.clip_count += 1
 }
 
