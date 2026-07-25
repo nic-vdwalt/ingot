@@ -71,8 +71,10 @@ test_ws_parse_need_more :: proc(t: ^testing.T) {
 	check_need_more(t, []u8{0x81, 126, 0x01})
 	// Mid 64-bit extended length.
 	check_need_more(t, []u8{0x81, 127, 0, 0, 0, 0, 0, 0, 0})
-	// Mid mask key (masked, len 0, only 2 of 4 key bytes).
-	check_need_more(t, []u8{0x81, 0x80, 0xAA, 0xBB})
+	// Server frames carrying the client mask bit are rejected immediately.
+	_, masked_consumed, masked_status := ws_parse_frame([]u8{0x81, 0x80, 0xAA, 0xBB})
+	testing.expect_value(t, masked_status, WS_Parse_Status.Too_Big)
+	testing.expect_value(t, masked_consumed, 0)
 	// Mid payload (declared 5 bytes, only 2 present).
 	check_need_more(t, []u8{0x81, 0x05, 'h', 'e'})
 }

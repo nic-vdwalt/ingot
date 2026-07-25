@@ -32,6 +32,32 @@ fuzz_ws_mask_key :: proc(p: ^testx.Prng) -> [4]u8 {
 	return [4]u8{u8(r), u8(r >> 8), u8(r >> 16), u8(r >> 24)}
 }
 
+@(private = "file")
+fuzz_ws_server_frame :: proc(opcode: u8, payload: []u8) -> []u8 {
+	body := payload
+	if opcode >= WS_OP_CLOSE && len(body) > 125 do body = body[:125]
+	header_size := 2
+	if len(body) >= 65536 {
+		header_size = 10
+	} else if len(body) >= 126 {
+		header_size = 4
+	}
+	frame := make([]u8, header_size + len(body), context.temp_allocator)
+	frame[0] = 0x80 | opcode
+	if len(body) < 126 {
+		frame[1] = u8(len(body))
+	} else if len(body) < 65536 {
+		frame[1] = 126
+		frame[2] = u8(len(body) >> 8)
+		frame[3] = u8(len(body))
+	} else {
+		frame[1] = 127
+		for index in 0 ..< 8 do frame[2 + index] = u8(len(body) >> uint((7 - index) * 8))
+	}
+	copy(frame[header_size:], body)
+	return frame
+}
+
 // Shared invariant checks: consumed stays in bounds, Need_More/Too_Big never
 // consume, and an accepted payload lies within the consumed frame region and
 // respects WS_MAX_PAYLOAD.
@@ -103,24 +129,20 @@ fuzz_ws_parse_mutated_valid :: proc(t: ^testing.T) {
 	}
 }
 
-// Encode with a deterministic mask key, parse back: the frame must round-trip
-// exactly (opcode, payload bytes, full consumption).
+// Encode valid unmasked server frames and parse them back exactly.
 @(test)
 fuzz_ws_encode_parse_round_trip :: proc(t: ^testing.T) {
 	p := testx.prng_make(0x13)
 	for _ in 0 ..< 10_000 {
 		opcode := FUZZ_WS_OPCODES[testx.int_range(&p, 0, len(FUZZ_WS_OPCODES))]
 		payload := fuzz_ws_payload(&p)
-		original := make([]u8, len(payload), context.temp_allocator)
-		copy(original, payload)
-
-		buf := ws_encode_frame(opcode, payload, fuzz_ws_mask_key(&p), context.temp_allocator)
+		buf := fuzz_ws_server_frame(opcode, payload)
 		frame, consumed, status := ws_parse_frame(buf)
 		testing.expect_value(t, status, WS_Parse_Status.Ok)
 		testing.expect_value(t, consumed, len(buf))
 		testing.expect_value(t, frame.opcode, opcode)
-		testing.expect_value(t, frame.masked, true)
-		testing.expect_value(t, string(frame.payload), string(original))
+		testing.expect_value(t, frame.masked, false)
+		testing.expect_value(t, string(frame.payload), string(payload[:len(frame.payload)]))
 		free_all(context.temp_allocator)
 	}
 }
@@ -146,12 +168,8 @@ fuzz_ws_stream_reassembly :: proc(t: ^testing.T) {
 			payload := make([]u8, n, context.temp_allocator)
 			for j in 0 ..< n do payload[j] = u8(testx.next_u64(&p) & 0xFF)
 			payloads[i] = payload
-			encoded := ws_encode_frame(
-				opcodes[i],
-				payload,
-				fuzz_ws_mask_key(&p),
-				context.temp_allocator,
-			)
+			encoded := fuzz_ws_server_frame(opcodes[i], payload)
+			payloads[i] = payload[:min(len(payload), len(encoded) - 2)]
 			append(&stream, ..encoded)
 		}
 
