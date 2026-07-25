@@ -38,8 +38,9 @@ harnesses.
 
 - **Immediate mode all the way up.** Callers own persistent widget behavior;
   frames derive draw, interaction, overlay, focus, and accessibility output.
-- **Pure Odin + WebGPU.** Built on Odin's bundled `vendor:wgpu`, `vendor:glfw`,
-  and `vendor:stb`, with no external graphics stack to vendor.
+- **Odin-first + WebGPU.** The framework API is written in Odin on top of
+  `vendor:wgpu`, `vendor:glfw`, and `vendor:stb`. Native terminal and
+  accessibility integrations use vendored C or static libraries.
 - **Native and web from one source.** The same application compiles for desktop
   and WASM + WebGPU behind a small platform seam.
 - **Raylib-shaped graphics API.** Familiar `Color`, `Vector2`, `Rectangle`,
@@ -63,21 +64,24 @@ harnesses.
 | `ingot:sys` | URLs, native file dialogs, and platform integration |
 | `ingot:term` | libvterm, PTY pumping, and key-to-terminal translation |
 | `ingot:libvterm` | Odin bindings and committed native static libraries |
+| `ingot:accesskit` | Odin bindings and native static libraries for the AccessKit C API |
 | `ingot:pty` | `forkpty` on Unix and ConPTY on Windows |
+| `ingot:testx` | Deterministic test helpers for PRNG and inline snapshots |
 
 ## Installation
 
 Add Ingot as a submodule and register it as an Odin collection:
 
 ```sh
-git submodule add <url> libs/ingot
+git submodule add https://github.com/Nic-vdwalt/ingot.git libs/ingot
 odin build src -collection:ingot=libs/ingot
 ```
 
 Pin the submodule revision in consumer CI. The tested Odin toolchain is
-`dev-2026-06:285f6d87b`; use `odinfmt` built from the matching OLS revision and
-place both executables on `PATH`. Native rendering also needs the wgpu-native
-library expected by Odin's `vendor:wgpu` package. See
+`dev-2026-06:285f6d87b`; put `odin` and the `odinfmt` bundled with that toolchain
+on `PATH`. Native rendering also needs the wgpu-native library expected by
+Odin's `vendor:wgpu` package. Terminal support needs the committed libvterm
+library; native accessibility needs the AccessKit library for the target. See
 [Testing Ingot](docs/testing.md#toolchain) for verification commands.
 
 ```odin
@@ -89,36 +93,53 @@ import "ingot:ui_gfx"
 ## Quick start
 
 ```odin
-when ODIN_OS == .Darwin {
-	rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT, .WINDOW_HIGHDPI})
-} else {
-	rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
-}
-rl.InitWindow(960, 640, "Ingot app")
+package main
+
+import rl "ingot:gfx"
+import ui "ingot:ui"
+import "ingot:ui_gfx"
 
 runtime: ui.Ui_Runtime
-frame: ui.Ui_Frame
+frame_state: ui.Ui_Frame
 input: ui.Ui_Input
 output: ui.Ui_Output
 adapter: ui_gfx.Adapter
-ui.ui_runtime_init(&runtime)
-ui_gfx.adapter_init(&adapter)
-ui.ui_runtime_apply_platform_dpi(&runtime)
 
-for !rl.WindowShouldClose() {
-	ui_gfx.adapter_begin_frame(&adapter, &frame, &runtime, &input, &output)
-	ui.ui_runtime_dpi_refresh(&runtime, dpi_scale = input.dpi_scale)
-	rl.BeginDrawing()
-	rl.ClearBackground(ui_gfx.color_to_gfx(ui.ui_frame_theme(&frame).bg_color))
-	ui.draw_text_frame(&frame, "Hello from Ingot", 24, 24, 24, ui.ui_frame_theme(&frame).fg_primary)
-	ui_gfx.adapter_end_frame(&adapter, &frame)
-	rl.EndDrawing()
+main :: proc() {
+	when ODIN_OS == .Darwin {
+		rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT, .WINDOW_HIGHDPI})
+	} else {
+		rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
+	}
+	rl.InitWindow(960, 640, "Ingot app")
+	ui.ui_runtime_init(&runtime)
+	ui_gfx.adapter_init(&adapter)
+	ui.ui_runtime_apply_platform_dpi(&runtime)
+
+	rl.run(frame)
+
+	ui_gfx.adapter_destroy(&adapter)
+	ui.ui_runtime_destroy(&runtime)
+	rl.CloseWindow()
 }
 
-ui_gfx.adapter_destroy(&adapter)
-ui.ui_runtime_destroy(&runtime)
-rl.CloseWindow()
+frame :: proc() {
+	ui_gfx.adapter_begin_frame(&adapter, &frame_state, &runtime, &input, &output)
+	ui.ui_runtime_dpi_refresh(&runtime, dpi_scale = input.dpi_scale)
+	rl.BeginDrawing()
+	style := ui.ui_frame_theme(&frame_state)
+	rl.ClearBackground(ui_gfx.color_to_gfx(style.bg_color))
+	ui.draw_text_frame(&frame_state, "Hello from Ingot", 24, 24, 24, style.fg_primary)
+	ui_gfx.adapter_end_frame(&adapter, &frame_state)
+	rl.EndDrawing()
+}
 ```
+
+`rl.run` blocks on native targets and installs the animation-frame callback on
+web. State used by `frame` must therefore outlive `main` on web. A managed web
+host must retain the session returned by `ingotWeb.run()` and call
+`session.destroy()` before replacement, or `ingotWeb.stop()` during global page
+teardown.
 
 For an existing raylib application, replace `import rl "vendor:raylib"` with
 `import rl "ingot:gfx"` and `vendor:raylib/rlgl` with `ingot:gfx/rlgl`. The API
@@ -135,6 +156,9 @@ odin run examples/gallery -collection:ingot=.
 bash scripts/smoke-gallery.sh
 ```
 
+The smoke script is a separate windowed GPU test, not part of `scripts/test.sh`.
+It requires a working display and drives every scale, theme, and gallery section.
+
 Other focused examples:
 
 - `examples/breakout` — audio, gamepad input, and web export from one source.
@@ -142,17 +166,22 @@ Other focused examples:
 - `examples/chart_demo` — chart widgets and interaction.
 - `examples/render_fixture` — renderer, resource-lifetime, and backend validation.
 
-Build the browser demo with `bash build_web.sh`; validate web targets with
-`bash scripts/check-web.sh`. Consumer builds should use
-`scripts/stage-web-runtime.sh DEST` so Odin's WebGPU runtime and Ingot's managed
-host-session glue stay in sync. `ingotWeb.run()` returns an idempotently
-destroyable session; consumers must call `session.destroy()` or `ingotWeb.stop()`
-when replacing an app or tearing down a page.
+Web builds require Bash, Python 3, and the pinned Odin toolchain. From the
+repository root, `bash build_web.sh` writes `web/ingot_web.wasm`; serve `web/`
+over HTTP and use a WebGPU browser (Chrome/Edge 113+ or Safari 18+).
+`bash scripts/check-web.sh` compiles the gallery, Breakout, and default demo,
+then runs dependency-free Node lifecycle and semantic tests. Each build replaces
+the same WASM output, and the headless gate does not replace real-browser or
+assistive-technology testing.
 
-`ingot:net` fetch submissions may independently select priority and an optional
-native cache path through `Fetch_Options`. `fetcher_drain` returns temporary
-result metadata and transfers each body to the caller, which must delete each
-body exactly once after every borrowing consumer has integrated it.
+Consumer builds should use `scripts/stage-web-runtime.sh DEST`. It copies the
+pinned Odin and WebGPU JavaScript runtimes, applies Ingot's compatibility
+transform, and copies the managed host glue for external destinations. It does
+not copy the application WASM or HTML entry point.
+
+See [Networking](docs/networking.md) for HTTP/WebSocket lifecycle and ownership,
+and [Compatibility and platforms](docs/compatibility.md) for browser, dialog,
+preferences, terminal, accessibility, and versioning constraints.
 
 ## Documentation
 
@@ -164,8 +193,14 @@ body exactly once after every borrowing consumer has integrated it.
   ownership, teardown, focus identity, and accessibility identity.
 - [Testing Ingot](docs/testing.md) — package tests, deterministic fuzzing,
   ASan/TSan, GPU validation, and reproducible seeds.
-- [Rendering](docs/rendering.md) — renderer contracts, frame scheduling, backend
-  validation, and render-target conventions.
+- [Rendering](docs/rendering.md) — renderer ownership, submission lifetime,
+  render-target conventions, frame scheduling, and backend validation.
+- [Networking](docs/networking.md) — HTTP and WebSocket lifecycle, ownership,
+  limits, security, and native/web differences.
+- [Compatibility and platforms](docs/compatibility.md) — toolchain pinning,
+  support policy, browser hosting, system integration, and native dependencies.
+- [Production readiness](docs/production-readiness.md) — security boundaries,
+  release validation matrix, and remaining platform work.
 - [Tiger Style](docs/TIGER_STYLE.md) — safety, performance, assertions, bounds,
   memory discipline, and contribution rules.
 
@@ -211,4 +246,5 @@ is a visualization escape hatch rather than a scene-graph engine.
 
 ## License
 
-See repository for license details.
+A project license has not yet been published. Do not assume permission beyond
+rights granted by applicable law until a license file is added.
