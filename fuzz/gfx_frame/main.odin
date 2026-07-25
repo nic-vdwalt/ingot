@@ -56,8 +56,8 @@ make_texture :: proc(p: ^Prng) -> rl.Texture2D {
 // draw_some records draws referencing current resources so the frame's
 // command buffer actually captures them — the precondition for the bug.
 draw_some :: proc(p: ^Prng) {
-	ui.draw_text("lifecycle fuzz", 10, 10, ui.FONT_SIZE, ui.theme.fg_primary)
-	ui.draw_text("0123456789", 10, 40, ui.FONT_SIZE_SMALL, ui.theme.fg_secondary)
+	rl.DrawText("lifecycle fuzz", 10, 10, 16, rl.WHITE)
+	rl.DrawText("0123456789", 10, 40, 13, rl.LIGHTGRAY)
 	for t in live_textures {
 		if t.id == 0 do continue
 		rl.DrawTexture(
@@ -71,7 +71,7 @@ draw_some :: proc(p: ^Prng) {
 		if rt.id == 0 do continue
 		rl.BeginTextureMode(rt)
 		rl.ClearBackground(rl.Color{20, 20, 20, 255})
-		ui.draw_text("rt", 2, 2, ui.FONT_SIZE_SMALL, ui.theme.fg_primary)
+		rl.DrawText("rt", 2, 2, 13, rl.WHITE)
 		rl.EndTextureMode()
 		src := rl.Rectangle{0, 0, f32(rt.texture.width), -f32(rt.texture.height)}
 		dst := rl.Rectangle{240, 10, 64, 64}
@@ -169,7 +169,8 @@ main :: proc() {
 			if rl.WindowShouldClose() do break
 			ui.ui_frame_begin(&ui_frame, &ui_runtime)
 			rl.BeginDrawing()
-			rl.ClearBackground(ui.ui_runtime_theme(&ui_runtime).bg_color)
+			background := ui.ui_runtime_theme(&ui_runtime).bg_color
+			rl.ClearBackground(rl.Color(background))
 
 			// Interleave draw → mutate → draw so recorded references
 			// always precede the destroy in ordering-sensitive cases.
@@ -190,6 +191,7 @@ main :: proc() {
 	// Teardown outside any frame exercises the immediate-destroy path.
 	for t in live_textures do if t.id != 0 do rl.UnloadTexture(t)
 	for rt in live_targets do if rt.id != 0 do rl.UnloadRenderTexture(rt)
+	ui.ui_frame_destroy(&ui_frame)
 	ui.ui_runtime_destroy(&ui_runtime)
 	rl.CloseWindow()
 

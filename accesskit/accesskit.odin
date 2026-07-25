@@ -31,9 +31,11 @@ Tree_Id :: struct {
 // Role values are ordinals into accesskit.h's `enum accesskit_role`; only the
 // roles ingot emits are named (the C enum has ~190 entries).
 Role :: enum u8 {
-	Unknown        = 0,
-	Label          = 3,
-	Menu_Item      = 11,
+	Unknown         = 0,
+	Label           = 3,
+	List_Item       = 7,
+	List_Box_Option = 10,
+	Menu_Item       = 11,
 	Check_Box      = 15,
 	Radio_Button   = 16,
 	Text_Input     = 17,
@@ -43,6 +45,7 @@ Role :: enum u8 {
 	Password_Input = 40,
 	Combo_Box      = 56,
 	Dialog         = 66,
+	List_Box       = 87,
 	Slider         = 113,
 	Window         = 133,
 }
@@ -174,6 +177,9 @@ when ENABLED {
 		node_set_numeric_value :: proc(node: Node, value: f64) ---
 		node_set_min_numeric_value :: proc(node: Node, value: f64) ---
 		node_set_max_numeric_value :: proc(node: Node, value: f64) ---
+		node_set_size_of_set :: proc(node: Node, value: c.size_t) ---
+		node_set_position_in_set :: proc(node: Node, value: c.size_t) ---
+		node_set_selected :: proc(node: Node, value: bool) ---
 		node_add_action :: proc(node: Node, action: Action) ---
 		node_push_child :: proc(node: Node, child: Node_Id) ---
 

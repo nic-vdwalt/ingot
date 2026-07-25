@@ -51,6 +51,7 @@ Sem_Role :: enum u8 {
 	Option,
 	Status,
 	Progress,
+	List_Box,
 }
 
 Sem_Flag :: enum u8 {
@@ -83,6 +84,8 @@ Sem_Node :: struct {
 	value:           f32,
 	lo:              f32,
 	hi:              f32,
+	position_in_set: int,
+	size_of_set:     int,
 }
 
 Sem_Frame :: struct {
@@ -234,9 +237,16 @@ semantic_push :: proc(
 	text_value: string = "",
 	selection_start: i32 = 0,
 	selection_end: i32 = 0,
+	position_in_set: int = 0,
+	size_of_set: int = 0,
 ) -> ^Sem_Node {
 	assert(frame != nil && frame.open, "semantic_push: invalid frame")
 	assert(role != .None, "semantic_push: role required")
+	assert(
+		(position_in_set == 0 && size_of_set == 0) ||
+			(position_in_set > 0 && size_of_set > 0 && position_in_set <= size_of_set),
+		"semantic_push: invalid collection position",
+	)
 	sem := &frame.semantics
 	if focus.focus != nil && sem.focus_cur.count < MAX_SEM_FOCUS {
 		sem.focus_cur.entries[sem.focus_cur.count] = {focus}
@@ -255,9 +265,11 @@ semantic_push :: proc(
 		role  = role,
 		rect  = rect,
 		state = state,
-		value = value,
-		lo    = lo,
-		hi    = hi,
+		value           = value,
+		lo              = lo,
+		hi              = hi,
+		position_in_set = position_in_set,
+		size_of_set     = size_of_set,
 	}
 	if focus.focus != nil && sem.action_targets.count < MAX_SEM_FOCUS {
 		sem.action_targets.entries[sem.action_targets.count] = {node.id, focus}

@@ -50,7 +50,7 @@ foreign dom {
 	@(link_name = "ingot_web_submit_sync")
 	_js_web_submit_sync :: proc(form_ptr: rawptr, form_len: i32, label_ptr: rawptr, label_len: i32, x, y, w, h, style, font_size, enabled: i32) -> i32 ---
 	@(link_name = "ingot_web_control_sync")
-	_js_web_control_sync :: proc(id_lo, id_hi, role: i32, label_ptr: rawptr, label_len: i32, x, y, w, h, state: i32, value, lo, hi: f32) -> i32 ---
+	_js_web_control_sync :: proc(id_lo, id_hi, role: i32, label_ptr: rawptr, label_len: i32, x, y, w, h, state: i32, value, lo, hi: f32, position_in_set, size_of_set: i32) -> i32 ---
 	@(link_name = "ingot_web_control_value")
 	_js_web_control_value :: proc(id_lo, id_hi: i32) -> f64 ---
 	@(link_name = "ingot_is_fullscreen")
@@ -427,6 +427,7 @@ platform_sync_web_control :: proc(
 	x, y, w, h: i32,
 	state: u8,
 	value, lo, hi: f32,
+	position_in_set, size_of_set: i32,
 ) -> Web_Control_Result {
 	// Node ids exceed JS's 2^53 safe-integer range (fallback ids pack the
 	// role into bits 56+), so the id crosses as two i32 halves and keys a
@@ -447,6 +448,8 @@ platform_sync_web_control :: proc(
 		value,
 		lo,
 		hi,
+		position_in_set,
+		size_of_set,
 	)
 	result := Web_Control_Result {
 		activated = flags & 1 != 0,

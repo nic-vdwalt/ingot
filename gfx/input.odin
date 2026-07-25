@@ -343,8 +343,23 @@ SyncWebControl :: proc(
 	x, y, w, h: i32,
 	state: u8,
 	value, lo, hi: f32,
+	position_in_set, size_of_set: i32,
 ) -> Web_Control_Result {
-	return platform_sync_web_control(role, id, label, x, y, w, h, state, value, lo, hi)
+	return platform_sync_web_control(
+		role,
+		id,
+		label,
+		x,
+		y,
+		w,
+		h,
+		state,
+		value,
+		lo,
+		hi,
+		position_in_set,
+		size_of_set,
+	)
 }
 
 SetMouseCursor :: proc(cursor: MouseCursor) {

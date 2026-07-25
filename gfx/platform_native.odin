@@ -269,6 +269,7 @@ platform_sync_web_control :: proc(
 	x, y, w, h: i32,
 	state: u8,
 	value, lo, hi: f32,
+	position_in_set, size_of_set: i32,
 ) -> Web_Control_Result {
 	return {}
 }

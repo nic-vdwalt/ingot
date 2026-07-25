@@ -11,8 +11,14 @@ when ak.ENABLED {
 	adapter_a11y_role :: proc(node: ^ui.Sem_Node) -> ak.Role {
 		assert(node != nil, "adapter_a11y_role: nil node")
 		#partial switch node.role {
-		case .Button, .Tab, .List_Item, .Option:
+		case .Button, .Tab:
 			return .Button
+		case .List_Item:
+			return .List_Item
+		case .Option:
+			return .List_Box_Option
+		case .List_Box:
+			return .List_Box
 		case .Checkbox:
 			return .Check_Box
 		case .Radio:
@@ -62,6 +68,11 @@ when ak.ENABLED {
 			{f64(rect.x), f64(rect.y), f64(rect.x + rect.w), f64(rect.y + rect.h)},
 		)
 		if .Disabled in source.state do ak.node_set_disabled(node)
+		if source.role == .Option do ak.node_set_selected(node, .Selected in source.state)
+		if source.position_in_set > 0 {
+			ak.node_set_position_in_set(node, c.size_t(source.position_in_set))
+			ak.node_set_size_of_set(node, c.size_t(source.size_of_set))
+		}
 		if source.role == .Checkbox || source.role == .Radio {
 			toggled := ak.Toggled.True if .Checked in source.state else ak.Toggled.False
 			ak.node_set_toggled(node, toggled)
@@ -72,7 +83,7 @@ when ak.ENABLED {
 			ak.node_set_min_numeric_value(node, f64(source.lo))
 			ak.node_set_max_numeric_value(node, f64(source.hi))
 		}
-		if source.role != .Label && source.role != .Pane && source.role != .Modal {
+		if source.role != .Label && source.role != .Pane && source.role != .Modal && source.role != .List_Box {
 			ak.node_add_action(node, .Click)
 			ak.node_add_action(node, .Focus)
 		}
@@ -136,6 +147,27 @@ adapter_a11y_poll :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 adapter_a11y_publish :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	assert(adapter != nil && adapter.initialized, "adapter_a11y_publish: invalid adapter")
 	assert(frame != nil && frame.finalized, "adapter_a11y_publish: frame not finalized")
+	when ODIN_OS == .JS {
+		for index in 0 ..< frame.semantics.cur.count {
+			node := &frame.semantics.cur.nodes[index]
+			result := rl.SyncWebControl(
+				i32(node.role),
+				node.id,
+				ui.sem_node_label(node),
+				node.rect.x,
+				node.rect.y,
+				node.rect.w,
+				node.rect.h,
+				u8(node.state),
+				node.value,
+				node.lo,
+				node.hi,
+				i32(node.position_in_set),
+				i32(node.size_of_set),
+			)
+			if result.activated do ui.a11y_stage_click(frame.runtime, node.id)
+		}
+	}
 	if !adapter.a11y_initialized do return
 	adapter.a11y_snapshot = frame.semantics.cur
 	adapter.a11y_focus = ak.Node_Id(ui.SEM_ID_ROOT)
