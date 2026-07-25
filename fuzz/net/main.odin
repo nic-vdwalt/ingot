@@ -246,10 +246,11 @@ exercise_ws_stream :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	for i in 0 ..< frame_count {
 		opcodes[i] = WS_OPCODES[fuzzx.int_range(p, 0, len(WS_OPCODES))]
 		n := fuzzx.int_range(p, 0, 300)
+		if opcodes[i] >= ingotnet.WS_OP_CLOSE do n = min(n, 125)
 		payload := make([]u8, n, context.temp_allocator)
 		for j in 0 ..< n do payload[j] = u8(fuzzx.next_u64(p) & 0xFF)
 		encoded := ws_server_frame(opcodes[i], payload)
-		payloads[i] = payload[:len(encoded) - 2]
+		payloads[i] = payload
 		append(&stream, ..encoded)
 	}
 	c.input = stream[:]
