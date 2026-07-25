@@ -28,6 +28,8 @@ if status not in source:
 if open(path).read().count(status) != 1:
     raise SystemExit("invalid SurfaceTexture.status compatibility transform")
 PY
-cp "$ROOT/web/ingot_web.js" "$DEST/ingot_web.js"
-cp "$ROOT/web/ingot_input.js" "$DEST/ingot_input.js"
-cp "$ROOT/web/ingot_app.js" "$DEST/ingot_app.js"
+if [ "$ROOT/web" != "$(cd "$DEST" && pwd)" ]; then
+	cp "$ROOT/web/ingot_web.js" "$DEST/ingot_web.js"
+	cp "$ROOT/web/ingot_input.js" "$DEST/ingot_input.js"
+	cp "$ROOT/web/ingot_app.js" "$DEST/ingot_app.js"
+fi

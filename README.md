@@ -137,7 +137,16 @@ Other focused examples:
 - `examples/render_fixture` — renderer, resource-lifetime, and backend validation.
 
 Build the browser demo with `bash build_web.sh`; validate web targets with
-`bash scripts/check-web.sh`.
+`bash scripts/check-web.sh`. Consumer builds should use
+`scripts/stage-web-runtime.sh DEST` so Odin's WebGPU runtime and Ingot's managed
+host-session glue stay in sync. `ingotWeb.run()` returns an idempotently
+destroyable session; consumers must call `session.destroy()` or `ingotWeb.stop()`
+when replacing an app or tearing down a page.
+
+`ingot:net` fetch submissions may independently select priority and an optional
+native cache path through `Fetch_Options`. `fetcher_drain` returns temporary
+result metadata and transfers each body to the caller, which must delete each
+body exactly once after every borrowing consumer has integrated it.
 
 ## Documentation
 
