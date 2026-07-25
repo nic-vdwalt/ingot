@@ -211,6 +211,33 @@ exercise_ws_parse :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 // from random 1–1500-byte TCP-like chunks, mirroring ws_recv_loop's
 // accumulator — under ASan and the tracking allocator, unlike the odin-test
 // mirror in net/ws_fuzz_test.odin.
+ws_server_frame :: proc(opcode: u8, payload: []u8) -> []u8 {
+	body := payload
+	if opcode >= ingotnet.WS_OP_CLOSE && len(body) > 125 do body = body[:125]
+	header_size := 2
+	if len(body) >= 65536 {
+		header_size = 10
+	} else if len(body) >= 126 {
+		header_size = 4
+	}
+	frame := make([]u8, header_size + len(body), context.temp_allocator)
+	frame[0] = 0x80 | opcode
+	if len(body) < 126 {
+		frame[1] = u8(len(body))
+	} else if len(body) < 65536 {
+		frame[1] = 126
+		frame[2] = u8(len(body) >> 8)
+		frame[3] = u8(len(body))
+	} else {
+		frame[1] = 127
+		for i := 7; i >= 0; i -= 1 {
+			frame[2 + (7 - i)] = u8((len(body) >> uint(i * 8)) & 0xFF)
+		}
+	}
+	copy(frame[header_size:], body)
+	return frame
+}
+
 exercise_ws_stream :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	frame_count := fuzzx.int_range(p, 1, 9)
 	opcodes := make([]u8, frame_count, context.temp_allocator)
@@ -221,13 +248,8 @@ exercise_ws_stream :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 		n := fuzzx.int_range(p, 0, 300)
 		payload := make([]u8, n, context.temp_allocator)
 		for j in 0 ..< n do payload[j] = u8(fuzzx.next_u64(p) & 0xFF)
-		payloads[i] = payload
-		encoded := ingotnet.ws_encode_frame(
-			opcodes[i],
-			payload,
-			ws_mask_key(p),
-			context.temp_allocator,
-		)
+		encoded := ws_server_frame(opcodes[i], payload)
+		payloads[i] = payload[:len(encoded) - 2]
 		append(&stream, ..encoded)
 	}
 	c.input = stream[:]
