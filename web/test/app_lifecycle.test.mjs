@@ -15,11 +15,22 @@ globalThis.WebSocket = class {
 };
 let aborted = 0;
 globalThis.AbortController = class {
-	constructor() { this.signal = {}; }
-	abort() { aborted += 1; }
+	constructor() {
+		this.listeners = [];
+		this.signal = {
+			addEventListener: (_type, listener) => this.listeners.push(listener),
+		};
+	}
+	abort() {
+		aborted += 1;
+		for (const listener of this.listeners) listener();
+	}
 };
-globalThis.fetch = () => new Promise(() => {});
+globalThis.fetch = (_url, options) => new Promise((_resolve, reject) => {
+	options.signal.addEventListener("abort", () => reject(new Error("aborted")));
+});
 
+await import("../ingot_web.js");
 await import("../ingot_app.js");
 
 function writeText(text) {
@@ -33,7 +44,9 @@ test("app session closes sockets and aborts fetches once", () => {
 	let length = writeText("ws://test");
 	session.imports.ingot_ws.ingot_ws_open(8, length);
 	length = writeText("http://test");
-	session.imports.ingot_http.ingot_http_get(8, length);
+	session.imports.ingot_http.ingot_http_request(
+		0, 8, length, 0, 0, 0, 0, 1024,
+	);
 	session.destroy();
 	session.destroy();
 	assert.equal(closed, 1);

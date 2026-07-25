@@ -23,6 +23,15 @@ test_ws_parse_rejects_masked_server_frame :: proc(t: ^testing.T) {
 	_, consumed, status := ws_parse_frame(buf)
 	testing.expect_value(t, status, WS_Parse_Status.Too_Big)
 	testing.expect_value(t, consumed, 0)
+	testing.expect_value(t, ws_stream_parse_action(status, consumed), WS_Stream_Parse_Action.Drop)
+}
+
+@(test)
+test_ws_stream_parse_action_requires_progress :: proc(t: ^testing.T) {
+	testing.expect_value(t, ws_stream_parse_action(.Need_More, 0), WS_Stream_Parse_Action.Wait)
+	testing.expect_value(t, ws_stream_parse_action(.Too_Big, 0), WS_Stream_Parse_Action.Drop)
+	testing.expect_value(t, ws_stream_parse_action(.Ok, 0), WS_Stream_Parse_Action.Drop)
+	testing.expect_value(t, ws_stream_parse_action(.Ok, 2), WS_Stream_Parse_Action.Advance)
 }
 
 @(test)

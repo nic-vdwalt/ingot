@@ -147,6 +147,23 @@ fuzz_ws_encode_parse_round_trip :: proc(t: ^testing.T) {
 	}
 }
 
+@(private)
+WS_Stream_Parse_Action :: enum {
+	Wait,
+	Drop,
+	Advance,
+}
+
+@(private)
+ws_stream_parse_action :: proc(status: WS_Parse_Status, consumed: int) -> WS_Stream_Parse_Action {
+	assert(consumed >= 0)
+	if status == .Need_More do return .Wait
+	if status == .Too_Big || consumed == 0 do return .Drop
+	assert(status == .Ok)
+	assert(consumed > 0)
+	return .Advance
+}
+
 // Concatenate several frames and feed them through a caller-side accumulator
 // in random TCP-sized chunks (mirroring ws_recv_loop's acc/remove_range
 // pattern). Every frame must be recovered exactly once, in order, with no
@@ -184,19 +201,31 @@ fuzz_ws_stream_reassembly :: proc(t: ^testing.T) {
 			fed += chunk
 
 			offset := 0
-			for offset < len(acc) {
+			parse_count := 0
+			failed := false
+			for offset < len(acc) && parse_count < frame_count {
 				frame, consumed, status := ws_parse_frame(acc[offset:])
-				if status == .Need_More do break
-				testing.expect_value(t, status, WS_Parse_Status.Ok)
-				testing.expect(t, got < frame_count)
-				if got < frame_count {
-					// Payload was unmasked in place — compare to source.
-					testing.expect_value(t, frame.opcode, opcodes[got])
-					testing.expect_value(t, string(frame.payload), string(payloads[got]))
+				action := ws_stream_parse_action(status, consumed)
+				if action == .Wait do break
+				if action == .Drop {
+					testing.expect_value(t, status, WS_Parse_Status.Ok)
+					testing.expect(t, consumed > 0)
+					failed = true
+					break
 				}
+				testing.expect(t, got < frame_count)
+				if got >= frame_count {
+					failed = true
+					break
+				}
+				// Payload was unmasked in place — compare to source.
+				testing.expect_value(t, frame.opcode, opcodes[got])
+				testing.expect_value(t, string(frame.payload), string(payloads[got]))
 				got += 1
 				offset += consumed
+				parse_count += 1
 			}
+			if failed do break
 			if offset > 0 {
 				remove_range(&acc, 0, offset)
 			}

@@ -127,54 +127,36 @@
 
 	// ---- ingot_http: browser fetch() ------------------------------------
 	function httpImports(WMI) {
-		const { readStr, writeBytes } = helpers(WMI);
-		const reqs = new Map(); // id → { status: 0|1|2, body: Uint8Array|null, timer }
-		let nextReq = 1;
-		const HTTP_TIMEOUT_MS = 30000; // match native core:net receive timeout
+		if (!window.ingotWeb || typeof window.ingotWeb.httpImports !== "function") {
+			throw new Error("ingot_web.js must be loaded before ingot_app.js HTTP imports");
+		}
+		const canonical = window.ingotWeb.httpImports(WMI);
+		const active = new Set();
 		const imports = {
-			ingot_http_get: (urlPtr, urlLen) => {
-				const url = readStr(urlPtr, urlLen);
-				const id = nextReq++;
-				const ctl = new AbortController();
-				const rec = { status: 0, body: null, timer: 0, controller: ctl };
-				rec.timer = setTimeout(() => {
-					if (rec.status === 0) { rec.status = 2; ctl.abort(); }
-				}, HTTP_TIMEOUT_MS);
-				reqs.set(id, rec);
-				fetch(url, { signal: ctl.signal })
-					.then((resp) => resp.ok ? resp.arrayBuffer().then((b) => {
-						if (rec.status === 2) return; // already timed out
-						rec.body = new Uint8Array(b); rec.status = 1;
-					}) : (rec.status = 2))
-					.catch(() => { rec.status = 2; })
-					.finally(() => { clearTimeout(rec.timer); });
+			ingot_http_request: (...args) => {
+				const id = canonical.ingot_http_request(...args);
+				if (id >= 0) active.add(id);
 				return id;
 			},
-			ingot_http_poll: (id) => {
-				const r = reqs.get(id);
-				return r ? r.status : 2;
+			ingot_http_poll: (id) => canonical.ingot_http_poll(id),
+			ingot_http_status: (id) => canonical.ingot_http_status(id),
+			ingot_http_body_len: (id) => canonical.ingot_http_body_len(id),
+			ingot_http_body_copy: (id, destination, capacity) => {
+				const count = canonical.ingot_http_body_copy(id, destination, capacity);
+				if (count >= 0) active.delete(id);
+				return count;
 			},
-			ingot_http_body_len: (id) => {
-				const r = reqs.get(id);
-				return (r && r.body) ? r.body.length : 0;
-			},
-			ingot_http_body_copy: (id, dst, cap) => {
-				const r = reqs.get(id);
-				let n = 0;
-				if (r && r.body && dst !== 0) n = writeBytes(dst, r.body, cap);
-				if (r && r.timer) clearTimeout(r.timer);
-				reqs.delete(id); // free the slot
-				return n;
+			ingot_http_cancel: (id) => {
+				const cancelled = canonical.ingot_http_cancel(id);
+				active.delete(id);
+				return cancelled;
 			},
 		};
 		return {
 			imports,
 			destroy: () => {
-				for (const rec of reqs.values()) {
-					if (rec.timer) clearTimeout(rec.timer);
-					if (rec.controller) rec.controller.abort();
-				}
-				reqs.clear();
+				for (const id of active) canonical.ingot_http_cancel(id);
+				active.clear();
 			},
 		};
 	}
