@@ -43,9 +43,8 @@ _submission_shutdown :: proc(tracker: ^Submission_Tracker) {
 }
 
 @(private)
-_submission_track :: proc(tracker: ^Submission_Tracker) -> u64 {
+_submission_reserve :: proc(tracker: ^Submission_Tracker) -> u64 {
 	assert(tracker != nil)
-	assert(g.queue != nil)
 	_submission_poll(tracker)
 	if tracker.count >= MAX_IN_FLIGHT_SUBMISSIONS {
 		_stats_submission_tracking_failure()
@@ -55,20 +54,59 @@ _submission_track :: proc(tracker: ^Submission_Tracker) -> u64 {
 	index := (tracker.head + tracker.count) % MAX_IN_FLIGHT_SUBMISSIONS
 	ticket := &tracker.tickets[index]
 	assert(!ticket.active)
+	assert(tracker.next_id != 0)
 	ticket^ = {
 		id     = tracker.next_id,
 		active = true,
 	}
 	tracker.next_id += 1
+	if tracker.next_id == 0 do tracker.next_id = 1
 	tracker.count += 1
+	assert(tracker.count <= MAX_IN_FLIGHT_SUBMISSIONS)
+	return ticket.id
+}
+
+@(private)
+_submission_commit :: proc(tracker: ^Submission_Tracker, ticket_id: u64) -> bool {
+	assert(tracker != nil)
+	assert(g.queue != nil)
+	ticket := _submission_find(tracker, ticket_id)
+	if ticket == nil do return false
 	callback := new(Submission_Callback)
-	callback^ = {tracker = tracker, ticket = ticket.id, epoch = g.epoch}
+	callback^ = {
+		tracker = tracker,
+		ticket  = ticket.id,
+		epoch   = g.epoch,
+	}
 	wg.QueueOnSubmittedWorkDone(
 		g.queue,
 		{mode = .AllowSpontaneos, callback = _submission_done, userdata1 = callback},
 	)
-	assert(tracker.count <= MAX_IN_FLIGHT_SUBMISSIONS)
-	return ticket.id
+	return true
+}
+
+@(private)
+_submission_rollback :: proc(tracker: ^Submission_Tracker, ticket_id: u64) -> bool {
+	assert(tracker != nil)
+	if tracker.count == 0 || ticket_id == 0 do return false
+	index := (tracker.head + tracker.count - 1) % MAX_IN_FLIGHT_SUBMISSIONS
+	ticket := &tracker.tickets[index]
+	if !ticket.active || ticket.id != ticket_id do return false
+	ticket^ = {}
+	tracker.count -= 1
+	assert(tracker.count < MAX_IN_FLIGHT_SUBMISSIONS)
+	return true
+}
+
+@(private)
+_submission_track :: proc(tracker: ^Submission_Tracker) -> u64 {
+	ticket := _submission_reserve(tracker)
+	if ticket == 0 do return 0
+	if !_submission_commit(tracker, ticket) {
+		assert(_submission_rollback(tracker, ticket))
+		return 0
+	}
+	return ticket
 }
 
 @(private)

@@ -18,19 +18,11 @@ test_ws_parse_7bit_unmasked :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_ws_parse_7bit_masked :: proc(t: ^testing.T) {
-	mask := [4]u8{0xA1, 0xB2, 0xC3, 0xD4}
-	payload := []u8{'h', 'i', '!'}
-	buf := make([dynamic]u8, context.temp_allocator)
-	append(&buf, 0x82, 0x80 | 0x03, mask[0], mask[1], mask[2], mask[3])
-	for b, i in payload do append(&buf, b ~ mask[i % 4])
-
-	frame, consumed, status := ws_parse_frame(buf[:])
-	testing.expect_value(t, status, WS_Parse_Status.Ok)
-	testing.expect_value(t, consumed, 9)
-	testing.expect_value(t, frame.opcode, u8(WS_OP_BINARY))
-	testing.expect_value(t, frame.masked, true)
-	testing.expect_value(t, string(frame.payload), "hi!")
+test_ws_parse_rejects_masked_server_frame :: proc(t: ^testing.T) {
+	buf := []u8{0x82, 0x83, 1, 2, 3, 4, 'h' ~ 1, 'i' ~ 2, '!' ~ 3}
+	_, consumed, status := ws_parse_frame(buf)
+	testing.expect_value(t, status, WS_Parse_Status.Too_Big)
+	testing.expect_value(t, consumed, 0)
 }
 
 @(test)

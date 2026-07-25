@@ -242,6 +242,15 @@ slider :: proc {
 	slider_ui_state_id,
 }
 
+@(private = "file")
+slider_ui_slot :: proc(u: ^Ui, width: i32) -> Rect_I32 {
+	assert(u != nil && u.frame != nil, "slider_ui_slot: invalid UI")
+	metrics := ui_frame_metrics(u.frame)
+	resolved_width := width if width > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
+	assert(resolved_width > 0, "slider_ui_slot: invalid width")
+	return ui_slot(u, resolved_width, metrics.ROW_H_SM)
+}
+
 // slider_ui carves its own slot (width w, 0 = sensible default) and
 // auto-registers focus.
 slider_ui :: proc(
@@ -254,9 +263,7 @@ slider_ui :: proc(
 ) -> (
 	changed: bool,
 ) {
-	metrics := ui_frame_metrics(u.frame)
-	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
-	r := ui_slot(u, ww, metrics.ROW_H_SM)
+	r := slider_ui_slot(u, w)
 	return slider_at(u.frame, r, value, lo, hi, step, ui_focus(u), a11y_label)
 }
 
@@ -271,9 +278,7 @@ slider_ui_id :: proc(
 ) -> (
 	changed: bool,
 ) {
-	metrics := ui_frame_metrics(u.frame)
-	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
-	r := ui_slot(u, ww, metrics.ROW_H_SM)
+	r := slider_ui_slot(u, w)
 	return slider_at(u.frame, r, value, lo, hi, step, ui_focus(u, id), a11y_label)
 }
 
@@ -287,9 +292,7 @@ slider_ui_state :: proc(
 	a11y_label: string = "",
 ) -> bool {
 	assert(state != nil, "slider_ui_state: nil state")
-	metrics := ui_frame_metrics(u.frame)
-	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
-	r := ui_slot(u, ww, metrics.ROW_H_SM)
+	r := slider_ui_slot(u, w)
 	return slider_at_state(u.frame, state, r, value, lo, hi, step, ui_focus(u), a11y_label)
 }
 
@@ -304,9 +307,7 @@ slider_ui_state_id :: proc(
 	a11y_label: string = "",
 ) -> bool {
 	assert(state != nil, "slider_ui_state_id: nil state")
-	metrics := ui_frame_metrics(u.frame)
-	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
-	r := ui_slot(u, ww, metrics.ROW_H_SM)
+	r := slider_ui_slot(u, w)
 	return slider_at_state(u.frame, state, r, value, lo, hi, step, ui_focus(u, id), a11y_label)
 }
 

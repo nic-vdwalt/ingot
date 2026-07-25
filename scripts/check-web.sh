@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-web.sh — Web-target gate: compiles the example apps for js_wasm32
 # (catches missing #+build !js tags and web-platform-seam breakage that
-# native checks can't see) and runs the semantic-overlay JS tests under
+# native checks can't see) and runs the web lifecycle JS tests under
 # `node --test` against the hand-rolled DOM stub (web/test/dom_stub.mjs; no
 # npm dependencies).
 #
@@ -16,7 +16,10 @@ bash "$ROOT/build_web.sh" examples/gallery >/dev/null
 echo "== wasm compile: examples/breakout =="
 bash "$ROOT/build_web.sh" examples/breakout >/dev/null
 
-echo "== semantic overlay JS tests =="
+echo "== wasm compile: default web demo =="
+bash "$ROOT/build_web.sh" >/dev/null
+
+echo "== web lifecycle and semantic tests =="
 node --test "$ROOT"/web/test/*.test.mjs
 
 echo "check-web: PASS"

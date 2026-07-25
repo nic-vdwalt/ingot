@@ -19,7 +19,53 @@ replay_list :: proc(adapter: ^Adapter, list: ^ui.Paint_List) {
 	}
 }
 
+@(private = "file")
+replay_text_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Paint_Command) {
+	assert(adapter != nil && adapter.initialized, "replay_text_command: invalid adapter")
+	assert(list != nil, "replay_text_command: nil list")
+	text := ui.paint_text(list, command)
+	font, ok := adapter_font(adapter, command.font)
+	assert(ok, "replay_text_command: invalid font")
+	value := strings.clone_to_cstring(text, context.temp_allocator)
+	rl.DrawTextEx(
+		font,
+		value,
+		vec_to_gfx(command.p0),
+		command.font_size,
+		command.spacing,
+		color_to_gfx(command.color),
+	)
+}
+
+@(private = "file")
+replay_codepoint_command :: proc(adapter: ^Adapter, command: ui.Paint_Command) {
+	assert(adapter != nil && adapter.initialized, "replay_codepoint_command: invalid adapter")
+	font, ok := adapter_font(adapter, command.font)
+	assert(ok, "replay_codepoint_command: invalid font")
+	rl.DrawTextCodepoint(
+		font,
+		command.codepoint,
+		vec_to_gfx(command.p0),
+		command.font_size,
+		color_to_gfx(command.color),
+	)
+}
+
+@(private = "file")
+replay_clip_begin_command :: proc(command: ui.Paint_Command) {
+	assert(command.rect.width >= 0, "replay_clip_begin_command: negative width")
+	assert(command.rect.height >= 0, "replay_clip_begin_command: negative height")
+	rl.BeginScissorMode(
+		i32(command.rect.x),
+		i32(command.rect.y),
+		i32(command.rect.width),
+		i32(command.rect.height),
+	)
+}
+
 replay_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Paint_Command) {
+	assert(adapter != nil && adapter.initialized, "replay_command: invalid adapter")
+	assert(list != nil, "replay_command: nil list")
 	color := color_to_gfx(command.color)
 	switch command.kind {
 	case .Rectangle:
@@ -74,35 +120,11 @@ replay_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Pain
 			color,
 		)
 	case .Text:
-		text := ui.paint_text(list, command)
-		font, ok := adapter_font(adapter, command.font)
-		assert(ok, "replay_command: invalid text font")
-		value := strings.clone_to_cstring(text, context.temp_allocator)
-		rl.DrawTextEx(
-			font,
-			value,
-			vec_to_gfx(command.p0),
-			command.font_size,
-			command.spacing,
-			color,
-		)
+		replay_text_command(adapter, list, command)
 	case .Codepoint:
-		font, ok := adapter_font(adapter, command.font)
-		assert(ok, "replay_command: invalid codepoint font")
-		rl.DrawTextCodepoint(
-			font,
-			command.codepoint,
-			vec_to_gfx(command.p0),
-			command.font_size,
-			color,
-		)
+		replay_codepoint_command(adapter, command)
 	case .Clip_Begin:
-		rl.BeginScissorMode(
-			i32(command.rect.x),
-			i32(command.rect.y),
-			i32(command.rect.width),
-			i32(command.rect.height),
-		)
+		replay_clip_begin_command(command)
 	case .Clip_End:
 		rl.EndScissorMode()
 	}

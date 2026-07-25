@@ -14,6 +14,7 @@ import "core:time"
 
 DEFAULT_MAXIMUM_BODY :: 64 * 1024 * 1024
 MAXIMUM_HEADER_BYTES :: 64 * 1024
+HTTP_RECV_CALLS_MAX :: DEFAULT_MAXIMUM_BODY + MAXIMUM_HEADER_BYTES + 1
 
 Http_Method :: enum u8 {
 	Get,
@@ -194,12 +195,15 @@ when !INGOT_NET_SIM {
 		if len(wire) == 0 do return {}, false
 		if !send_all(sock, wire) do return {}, false
 		http_net_set_recv_timeout(sock, 5 * time.Second)
+		if request.maximum_body > u64(max(int) - MAXIMUM_HEADER_BYTES) do return {}, false
 		maximum := int(request.maximum_body)
 		if maximum <= 0 do maximum = DEFAULT_MAXIMUM_BODY
 		buf: [dynamic]u8
 		buf.allocator = context.temp_allocator
 		chunk: [16384]u8
-		for {
+		recv_calls := 0
+		for recv_calls < HTTP_RECV_CALLS_MAX {
+			recv_calls += 1
 			n, recv_ok := http_net_recv(sock, chunk[:])
 			if n > 0 {
 				append(&buf, ..chunk[:n])
@@ -207,6 +211,7 @@ when !INGOT_NET_SIM {
 			}
 			if !recv_ok || n == 0 do break
 		}
+		if recv_calls >= HTTP_RECV_CALLS_MAX do return {}, false
 		if len(buf) == 0 do return {}, false
 		return parse_http_response(buf[:], maximum, allocator)
 	}
@@ -359,7 +364,8 @@ decode_chunked :: proc(data: []u8, maximum_body: int, allocator: mem.Allocator) 
 	out: [dynamic]u8
 	out.allocator = allocator
 	cursor := 0
-	for {
+	chunks_max := len(data) / 3 + 1
+	for _ in 0 ..< chunks_max {
 		line_end := strings.index(string(data[cursor:]), "\r\n")
 		if line_end < 0 {delete(out); return nil, false}
 		size_text := string(data[cursor:cursor + line_end])
@@ -379,6 +385,8 @@ decode_chunked :: proc(data: []u8, maximum_body: int, allocator: mem.Allocator) 
 		if data[cursor] != '\r' || data[cursor + 1] != '\n' {delete(out); return nil, false}
 		cursor += 2
 	}
+	delete(out)
+	return nil, false
 }
 
 FETCH_WORKERS :: 8

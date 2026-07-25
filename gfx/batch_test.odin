@@ -93,3 +93,54 @@ stream_slot_intermediate_work_stays_in_recording_epoch :: proc(t: ^testing.T) {
 	testing.expect(t, _stream_slot_submit(&slot, 7))
 	testing.expect_value(t, slot.state, Stream_Slot_State.Submitted)
 }
+
+@(test)
+stream_slot_indexed_reservation_reports_exact_layout :: proc(t: ^testing.T) {
+	slot := Stream_Slot {
+		state          = .Recording,
+		geometry_write = 3,
+	}
+	vertex, index, ok := _stream_slot_reserve_indexed(&slot, 5, 3, 15)
+	testing.expect(t, ok)
+	testing.expect_value(t, vertex, u64(4))
+	testing.expect_value(t, index, u64(12))
+	testing.expect_value(t, slot.geometry_write, u64(15))
+}
+
+@(test)
+stream_slot_failed_uniform_reservation_is_atomic :: proc(t: ^testing.T) {
+	slot := Stream_Slot {
+		state         = .Recording,
+		uniform_write = 900,
+	}
+	write_before := slot.uniform_write
+	offset, ok := _stream_slot_reserve_uniform(&slot, 48, 256, 1024)
+	testing.expect(t, !ok)
+	testing.expect_value(t, offset, u64(0))
+	testing.expect_value(t, slot.uniform_write, write_before)
+}
+
+@(test)
+stream_reservation_rejects_u64_overflow_atomically :: proc(t: ^testing.T) {
+	slot := Stream_Slot {
+		state          = .Recording,
+		geometry_write = max(u64) - 1,
+		uniform_write  = max(u64) - 1,
+	}
+	geometry_before := slot.geometry_write
+	uniform_before := slot.uniform_write
+	_, _, indexed_ok := _stream_slot_reserve_indexed(&slot, 8, 4, max(u64))
+	_, uniform_ok := _stream_slot_reserve_uniform(&slot, 8, 4, max(u64))
+	testing.expect(t, !indexed_ok)
+	testing.expect(t, !uniform_ok)
+	testing.expect_value(t, slot.geometry_write, geometry_before)
+	testing.expect_value(t, slot.uniform_write, uniform_before)
+}
+
+@(test)
+batch_capacity_constants_cover_complete_primitives :: proc(t: ^testing.T) {
+	testing.expect_value(t, BATCH_MAX_VERTICES % 4, 0)
+	testing.expect_value(t, BATCH_MAX_INDICES % 6, 0)
+	testing.expect(t, BATCH_MAX_INDICES >= BATCH_MAX_VERTICES / 4 * 6)
+	testing.expect(t, MODEL_STACK_MAX > 0)
+}

@@ -190,7 +190,8 @@ _make_pipe :: proc(
 		g.device,
 		&{bindGroupLayoutCount = textured ? 2 : 1, bindGroupLayouts = raw_data(layouts[:])},
 	)
-	return wg.DeviceCreateRenderPipeline(
+	if pl == nil do return nil
+	pipe := wg.DeviceCreateRenderPipeline(
 		g.device,
 		&{
 			layout = pl,
@@ -205,6 +206,8 @@ _make_pipe :: proc(
 			},
 		},
 	)
+	wg.PipelineLayoutRelease(pl)
+	return pipe
 }
 
 // _fs_for maps a pipeline kind to its fragment entry point + whether it samples
@@ -260,7 +263,7 @@ _pipe_for :: proc(r: ^Renderer, kind: Pipe_Kind, slot: Blend_Slot) -> wg.RenderP
 		if r.alt_fmt[i] == fmt {idx = i; break}
 	}
 	if idx < 0 {
-		if r.alt_n >= len(r.alt_fmt) do return r.pipes[kind][slot] // cache full: fall back
+		if r.alt_n >= len(r.alt_fmt) do return nil
 		idx = r.alt_n
 		r.alt_n += 1
 		r.alt_fmt[idx] = fmt
@@ -469,10 +472,28 @@ batch_set :: proc(r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
 	}
 }
 
+@(private)
+_batch_reserve :: proc(r: ^Renderer, vertex_count, index_count: int) -> bool {
+	assert(r != nil)
+	assert(vertex_count > 0)
+	assert(index_count > 0)
+	if vertex_count > BATCH_MAX_VERTICES || index_count > BATCH_MAX_INDICES do return false
+	vertices_fit := len(r.verts) <= BATCH_MAX_VERTICES - vertex_count
+	indices_fit := len(r.indices) <= BATCH_MAX_INDICES - index_count
+	if vertices_fit && indices_fit do return true
+	if !_active_pass_begun() do return false
+	renderer_flush(r, active_pass(), .Manual)
+	return(
+		len(r.verts) <= BATCH_MAX_VERTICES - vertex_count &&
+		len(r.indices) <= BATCH_MAX_INDICES - index_count \
+	)
+}
+
 // push_quad emits two triangles for rect `d` sampling uv rect `s`.
 @(private)
 push_quad :: proc(r: ^Renderer, d: Rectangle, s: Rectangle, col: [4]f32) {
 	if !g.frame.has_frame do return
+	if !_batch_reserve(r, 4, 6) do return
 	ox, oy := r.model_off.x, r.model_off.y
 	x0, y0 := d.x + ox, d.y + oy
 	x1, y1 := d.x + d.width + ox, d.y + d.height + oy
@@ -492,6 +513,7 @@ push_quad :: proc(r: ^Renderer, d: Rectangle, s: Rectangle, col: [4]f32) {
 @(private)
 push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 	if !g.frame.has_frame do return
+	if !_batch_reserve(r, 3, 3) do return
 	o := r.model_off
 	base := u32(len(r.verts))
 	append(
@@ -513,6 +535,7 @@ push_quad4 :: proc(
 	col: [4]f32,
 ) {
 	if !g.frame.has_frame do return
+	if !_batch_reserve(r, 4, 6) do return
 	o := r.model_off
 	tlo := [2]f32{tl.x + o.x, tl.y + o.y}
 	tro := [2]f32{tr.x + o.x, tr.y + o.y}
@@ -532,6 +555,7 @@ push_quad4 :: proc(
 // --- rlgl matrix-stack backing (2D model translation) ----------------------
 
 MatrixModePush :: proc() {
+	if len(g.rend.model_stack) >= MODEL_STACK_MAX do return
 	append(&g.rend.model_stack, g.rend.model_off)
 }
 MatrixModePop :: proc() {
@@ -605,7 +629,13 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 		}
 	}
 
-	wg.RenderPassEncoderSetPipeline(pass, _pipe_for(r, r.cur_kind, r.cur_blend))
+	pipe := _pipe_for(r, r.cur_kind, r.cur_blend)
+	if pipe == nil {
+		clear(&r.verts)
+		clear(&r.indices)
+		return
+	}
+	wg.RenderPassEncoderSetPipeline(pass, pipe)
 	_stats_pipeline_switch()
 	wg.RenderPassEncoderSetBindGroup(pass, 0, r.cur_u != nil ? r.cur_u : r.ubind)
 	_stats_bind_group_switches(1)
@@ -758,6 +788,19 @@ _stream_slot_abandon :: proc(r: ^Renderer) {
 	r.active_stream_slot = -1
 }
 
+@(private = "file")
+checked_add_u64 :: proc(a, b: u64) -> (sum: u64, ok: bool) {
+	if b > max(u64) - a do return 0, false
+	return a + b, true
+}
+
+@(private = "file")
+checked_align_u64 :: proc(value, alignment: u64) -> (aligned: u64, ok: bool) {
+	assert(alignment > 0)
+	padded := checked_add_u64(value, alignment - 1) or_return
+	return padded / alignment * alignment, true
+}
+
 @(private)
 _stream_slot_reserve_indexed :: proc(
 	slot: ^Stream_Slot,
@@ -770,11 +813,15 @@ _stream_slot_reserve_indexed :: proc(
 	assert(slot.state == .Recording)
 	assert(vertex_bytes > 0)
 	assert(index_bytes > 0)
-	vertex = _align_u64(slot.geometry_write, GEOMETRY_STREAM_ALIGN)
-	index = _align_u64(vertex + vertex_bytes, GEOMETRY_STREAM_ALIGN)
-	end := index + index_bytes
+	write_before := slot.geometry_write
+	vertex = checked_align_u64(write_before, GEOMETRY_STREAM_ALIGN) or_return
+	vertex_end := checked_add_u64(vertex, vertex_bytes) or_return
+	index = checked_align_u64(vertex_end, GEOMETRY_STREAM_ALIGN) or_return
+	end := checked_add_u64(index, index_bytes) or_return
 	if end > capacity do return 0, 0, false
 	slot.geometry_write = end
+	assert(slot.geometry_write >= write_before)
+	assert(slot.geometry_write <= capacity)
 	return vertex, index, true
 }
 
@@ -790,9 +837,13 @@ _stream_slot_reserve_uniform :: proc(
 	assert(slot.state == .Recording)
 	assert(size > 0)
 	assert(alignment > 0)
-	offset = _align_u64(slot.uniform_write, alignment)
-	if offset + size > capacity do return 0, false
-	slot.uniform_write = offset + size
+	write_before := slot.uniform_write
+	offset = checked_align_u64(write_before, alignment) or_return
+	end := checked_add_u64(offset, size) or_return
+	if end > capacity do return 0, false
+	slot.uniform_write = end
+	assert(slot.uniform_write >= write_before)
+	assert(slot.uniform_write <= capacity)
 	return offset, true
 }
 
@@ -829,14 +880,6 @@ _active_uniform_buffer :: proc(r: ^Renderer) -> wg.Buffer {
 	assert(r != nil)
 	if r.active_stream_slot < 0 do return nil
 	return r.stream_slots[r.active_stream_slot].uniform_buffer
-}
-
-@(private)
-_align_u64 :: proc(value, alignment: u64) -> u64 {
-	assert(alignment > 0)
-	aligned := (value + alignment - 1) / alignment * alignment
-	assert(aligned >= value)
-	return aligned
 }
 
 // col_f converts an 8-bit Color to normalized rgba for the vertex stream.

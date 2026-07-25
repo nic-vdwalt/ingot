@@ -626,6 +626,16 @@ btn :: proc {
 	btn_ui_state_id,
 }
 
+@(private = "file")
+btn_ui_slot :: proc(u: ^Ui, label: string) -> Rect_I32 {
+	assert(u != nil && u.frame != nil, "btn_ui_slot: invalid UI")
+	metrics := ui_frame_metrics(u.frame)
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	width := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
+	assert(width > 0, "btn_ui_slot: invalid width")
+	return ui_slot(u, width, metrics.ROW_H_MD)
+}
+
 // btn_ui sizes to its label (+padding) and auto-registers focus.
 btn_ui :: proc(
 	u: ^Ui,
@@ -633,10 +643,7 @@ btn_ui :: proc(
 	style: Btn_Style = .Secondary,
 	enabled: bool = true,
 ) -> bool {
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	metrics := ui_frame_metrics(u.frame)
-	w := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
-	r := ui_slot(u, w, metrics.ROW_H_MD)
+	r := btn_ui_slot(u, label)
 	fo := ui_focus(u) if enabled else Focus_Opt{}
 	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
@@ -648,10 +655,7 @@ btn_ui_id :: proc(
 	style: Btn_Style = .Secondary,
 	enabled: bool = true,
 ) -> bool {
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	metrics := ui_frame_metrics(u.frame)
-	w := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
-	r := ui_slot(u, w, metrics.ROW_H_MD)
+	r := btn_ui_slot(u, label)
 	fo := ui_focus(u, id) if enabled else Focus_Opt{}
 	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
@@ -664,10 +668,7 @@ btn_ui_state :: proc(
 	enabled: bool = true,
 ) -> bool {
 	assert(state != nil, "btn_ui_state: nil state")
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	metrics := ui_frame_metrics(u.frame)
-	w := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
-	r := ui_slot(u, w, metrics.ROW_H_MD)
+	r := btn_ui_slot(u, label)
 	fo := ui_focus(u) if enabled else Focus_Opt{}
 	return btn_at_state(
 		u.frame,
@@ -692,10 +693,7 @@ btn_ui_state_id :: proc(
 	enabled: bool = true,
 ) -> bool {
 	assert(state != nil, "btn_ui_state_id: nil state")
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	metrics := ui_frame_metrics(u.frame)
-	w := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
-	r := ui_slot(u, w, metrics.ROW_H_MD)
+	r := btn_ui_slot(u, label)
 	fo := ui_focus(u, id) if enabled else Focus_Opt{}
 	return btn_at_state(
 		u.frame,
@@ -1106,18 +1104,26 @@ truncate_path_middle_frame :: proc(
 	return truncate_to_width_dir_with(system, path, max_width, font_size, .Head)
 }
 
+@(private = "file")
+is_identifier_byte :: proc(value: u8) -> bool {
+	return(
+		(value >= 'a' && value <= 'z') ||
+		(value >= 'A' && value <= 'Z') ||
+		(value >= '0' && value <= '9') ||
+		value == '_' \
+	)
+}
+
 // Find word boundaries around a byte offset. A word is alphanumeric + underscore.
 find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: int) {
 	start = byte_offset
 	for start > 0 {
-		c := text[start - 1]
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') do break
+		if !is_identifier_byte(text[start - 1]) do break
 		start -= 1
 	}
 	end = byte_offset
 	for end < len(text) {
-		c := text[end]
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') do break
+		if !is_identifier_byte(text[end]) do break
 		end += 1
 	}
 	return

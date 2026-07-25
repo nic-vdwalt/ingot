@@ -14,7 +14,7 @@ open_file_dialog :: proc(
 	path: string,
 	ok: bool,
 ) {
-	assert(len(title) < 256, "open_file_dialog: unreasonable title length")
+	if len(title) >= 256 do return "", false
 	if p, zok := _dialog_exec({"zenity", "--file-selection", "--title", title}, allocator); zok {
 		return p, true
 	}
@@ -30,8 +30,7 @@ save_file_dialog :: proc(
 	path: string,
 	ok: bool,
 ) {
-	assert(len(title) < 256, "save_file_dialog: unreasonable title length")
-	assert(len(default_name) < 256, "save_file_dialog: unreasonable name length")
+	if len(title) >= 256 || len(default_name) >= 256 do return "", false
 	if p, zok := _dialog_exec(
 		{"zenity", "--file-selection", "--save", "--title", title, "--filename", default_name},
 		allocator,
@@ -52,12 +51,11 @@ _dialog_exec :: proc(
 	path: string,
 	ok: bool,
 ) {
-	assert(len(command) >= 2, "_dialog_exec: command too short")
+	if len(command) < 2 do return "", false
 	state, stdout, stderr, err := os.process_exec({command = command}, context.temp_allocator)
 	_ = stderr
 	if err != nil || !state.exited || state.exit_code != 0 do return "", false
-	trimmed := strings.trim_space(string(stdout))
-	if len(trimmed) == 0 do return "", false
-	assert(len(trimmed) < 4096, "_dialog_exec: unreasonable path length")
+	trimmed := strings.trim_right(string(stdout), "\r\n")
+	if len(trimmed) == 0 || len(trimmed) >= 4096 do return "", false
 	return strings.clone(trimmed, allocator), true
 }

@@ -94,3 +94,31 @@ gpu_3d_pass_rejects_stale_generation :: proc(t: ^testing.T) {
 	testing.expect(t, !_gpu_3d_pass_current(&resources, &stale))
 	testing.expect(t, !_gpu_3d_pass_current(&resources, nil))
 }
+
+@(test)
+submission_reservation_is_nonzero_and_rollback_is_atomic :: proc(t: ^testing.T) {
+	tracker: Submission_Tracker
+	_submission_init(&tracker)
+	first := _submission_reserve(&tracker)
+	second := _submission_reserve(&tracker)
+	testing.expect(t, first != 0)
+	testing.expect(t, second > first)
+	testing.expect_value(t, tracker.count, u32(2))
+	testing.expect(t, !_submission_rollback(&tracker, first))
+	testing.expect(t, _submission_rollback(&tracker, second))
+	testing.expect_value(t, tracker.count, u32(1))
+	testing.expect(t, _submission_find(&tracker, first) != nil)
+	testing.expect(t, _submission_find(&tracker, second) == nil)
+}
+
+@(test)
+submission_reservation_stops_at_fixed_capacity :: proc(t: ^testing.T) {
+	tracker: Submission_Tracker
+	_submission_init(&tracker)
+	for _ in 0 ..< MAX_IN_FLIGHT_SUBMISSIONS {
+		testing.expect(t, _submission_reserve(&tracker) != 0)
+	}
+	testing.expect_value(t, tracker.count, u32(MAX_IN_FLIGHT_SUBMISSIONS))
+	testing.expect_value(t, _submission_reserve(&tracker), u64(0))
+	testing.expect_value(t, tracker.count, u32(MAX_IN_FLIGHT_SUBMISSIONS))
+}

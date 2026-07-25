@@ -130,6 +130,17 @@ bugs, and they are a force multiplier for fuzzing.
   an `ok: bool` or an error union without a deliberate, commented decision. Do
   not silently ignore an `or_return`.
 
+- **Preserve consumer contracts while hardening internals.** Existing exported
+  names, signatures, public layouts, ownership, ordering, defaults, and failure
+  behavior remain stable unless a versioned migration is approved. Add
+  characterization tests before refactoring behavior-sensitive code. A stricter
+  assertion is a contract change when existing valid consumers can reach it.
+
+- **Separate programmer errors from operating errors.** Checked private helpers
+  may strengthen internal invariants, but filesystem, device, socket, PTY, and
+  user-input failures must continue through the package's documented recovery or
+  result path.
+
 - **Explicitly pass options at the call site** instead of leaning on zero-value
   defaults for *behaviour*. If a default ever changes, silent call sites become
   latent bugs.

@@ -111,3 +111,16 @@ caret_boundary_fuzz :: proc(t: ^testing.T) {
 		free_all(context.temp_allocator)
 	}
 }
+
+@(test)
+caret_insert_does_not_split_utf8_at_max_len :: proc(t: ^testing.T) {
+	sb := strings.builder_make()
+	defer strings.builder_destroy(&sb)
+	base := strings.repeat("x", INPUT_MAX_LEN - 1, context.temp_allocator)
+	strings.write_string(&sb, base)
+
+	pos := caret_insert(&sb, INPUT_MAX_LEN - 1, "é")
+	testing.expect_value(t, pos, INPUT_MAX_LEN - 1)
+	testing.expect_value(t, strings.builder_len(sb), INPUT_MAX_LEN - 1)
+	testing.expect_value(t, strings.to_string(sb), base)
+}

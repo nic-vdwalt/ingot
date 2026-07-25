@@ -238,7 +238,10 @@ when !INGOT_NET_SIM {
 		for len(f.in_flight) < MAX_INFLIGHT && len(f.pending) > 0 {
 			pending := f.pending[0]; ordered_remove(&f.pending, 0)
 			url := pending.request.path
-			if f.host != "" do url = fmt.tprintf("http://%s:%d%s", f.host, f.port, pending.request.path)
+			if f.host != "" {
+				scheme := "https" if f.port == 443 else "http"
+				url = fmt.tprintf("%s://%s:%d%s", scheme, f.host, f.port, pending.request.path)
+			}
 			bytes := transmute([]byte)url
 			headers := encode_headers_json(pending.request.headers)
 			maximum_body := pending.request.maximum_body

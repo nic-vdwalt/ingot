@@ -61,3 +61,38 @@ vt_key_map :: proc(t: ^testing.T) {
 	_, ok = vt_bytes_for_key(.C, false, false, true, nil, b[:])
 	testing.expect(t, !ok, "Cmd+C is not a control code")
 }
+
+@(test)
+vt_key_map_remaining_contract :: proc(t: ^testing.T) {
+	b: [8]u8
+	ctrl_cases := []struct {
+		key:      rl.KeyboardKey,
+		expected: u8,
+	}{{.Z, 0x1A}, {.BACKSLASH, 0x1C}, {.RIGHT_BRACKET, 0x1D}, {.GRAVE, 0x1E}}
+	for test_case in ctrl_cases {
+		n, ok := vt_bytes_for_key(test_case.key, true, false, false, nil, b[:])
+		testing.expect(t, ok)
+		testing.expect_value(t, n, 1)
+		testing.expect_value(t, b[0], test_case.expected)
+	}
+
+	sequence_cases := []struct {
+		key:      rl.KeyboardKey,
+		expected: string,
+	} {
+		{.ESCAPE, "\x1b"},
+		{.DOWN, "\x1b[B"},
+		{.RIGHT, "\x1b[C"},
+		{.LEFT, "\x1b[D"},
+		{.END, "\x1b[F"},
+		{.PAGE_DOWN, "\x1b[6~"},
+		{.INSERT, "\x1b[2~"},
+		{.DELETE, "\x1b[3~"},
+		{.F12, "\x1b[24~"},
+	}
+	for test_case in sequence_cases {
+		n, ok := vt_bytes_for_key(test_case.key, false, false, false, nil, b[:])
+		testing.expect(t, ok)
+		testing.expect_value(t, string(b[:n]), test_case.expected)
+	}
+}

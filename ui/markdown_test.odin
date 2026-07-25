@@ -13,6 +13,24 @@ md_spans_examples :: proc(t: ^testing.T) {
 }
 
 @(test)
+md_match_heading :: proc(t: ^testing.T) {
+	h1, h1_ok := match_heading("# one")
+	testing.expect(t, h1_ok, "H1 should match")
+	testing.expect_value(t, h1.level, 1)
+	testing.expect_value(t, h1.prefix_len, 2)
+	testing.expect_value(t, h1.text, "one")
+
+	h3, h3_ok := match_heading("### three")
+	testing.expect(t, h3_ok, "H3 should match before H2 and H1")
+	testing.expect_value(t, h3.level, 3)
+	testing.expect_value(t, h3.prefix_len, 4)
+	testing.expect_value(t, h3.text, "three")
+
+	_, h4_ok := match_heading("#### four")
+	testing.expect(t, !h4_ok, "H4 preserves current plain-text behavior")
+}
+
+@(test)
 md_match_url :: proc(t: ^testing.T) {
 	// Trailing sentence punctuation is trimmed from the URL.
 	src := "see http://x.com."
@@ -61,4 +79,21 @@ md_spans_contiguous_fuzz :: proc(t: ^testing.T) {
 		testing.expect_value(t, cur, len(s))
 		free_all(context.temp_allocator)
 	}
+}
+
+@(test)
+md_block_helpers_and_table_offsets :: proc(t: ^testing.T) {
+	testing.expect(t, is_code_fence("```odin"), "opening code fence")
+	testing.expect(t, !is_code_fence("  ```odin"), "fence requires column zero")
+	testing.expect(t, is_table_separator("|---|:--:|"), "valid table separator")
+	testing.expect(t, !is_table_separator("|abc|---|"), "invalid separator text")
+
+	line := "|  alpha | beta  |"
+	cells, starts := split_table_row_offsets_with(line, 0, len(line))
+	testing.expect_value(t, len(cells), 2)
+	testing.expect_value(t, len(starts), 2)
+	testing.expect_value(t, cells[0], "alpha")
+	testing.expect_value(t, cells[1], "beta")
+	testing.expect_value(t, line[starts[0]:starts[0] + len(cells[0])], cells[0])
+	testing.expect_value(t, line[starts[1]:starts[1] + len(cells[1])], cells[1])
 }

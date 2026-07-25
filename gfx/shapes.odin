@@ -300,6 +300,7 @@ DrawCircleLinesV :: proc(center: Vector2, radius: f32, color: Color) {
 DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Color) {
 	if !g.frame.has_frame do return
 	batch_set(&g.rend, .Solid, nil)
+	if !_batch_reserve(&g.rend, 4, 6) do return
 	x0, y0 := f32(posX), f32(posY)
 	x1, y1 := x0 + f32(width), y0 + f32(height)
 	cl := col_f(left)
@@ -319,6 +320,7 @@ DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Colo
 DrawRectangleGradientV :: proc(posX, posY, width, height: i32, top, bottom: Color) {
 	if !g.frame.has_frame do return
 	batch_set(&g.rend, .Solid, nil)
+	if !_batch_reserve(&g.rend, 4, 6) do return
 	x0, y0 := f32(posX), f32(posY)
 	x1, y1 := x0 + f32(width), y0 + f32(height)
 	ct := col_f(top)

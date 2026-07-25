@@ -191,6 +191,8 @@ term_init_emulator :: proc(
 	default_fg: [3]u8 = {220, 220, 220},
 	default_bg: [3]u8 = {27, 27, 27},
 ) -> bool {
+	if ts == nil || cols == 0 || rows == 0 do return false
+	if cols > pty.PTY_DIMENSION_MAX || rows > pty.PTY_DIMENSION_MAX do return false
 	ts.allocator = context.allocator
 	ts.cols = cols
 	ts.rows = rows
@@ -356,7 +358,8 @@ term_destroy :: proc(ts: ^Term_Instance) {
 // term_resize updates both the PTY window size and the libvterm grid.
 // No-op if the size is unchanged.
 term_resize :: proc(ts: ^Term_Instance, cols, rows: u16) {
-	if ts == nil do return
+	if ts == nil || cols == 0 || rows == 0 do return
+	if cols > pty.PTY_DIMENSION_MAX || rows > pty.PTY_DIMENSION_MAX do return
 	if cols == ts.cols && rows == ts.rows do return
 	ts.cols = cols
 	ts.rows = rows

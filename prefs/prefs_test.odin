@@ -41,4 +41,13 @@ prefs_paths_and_roundtrip :: proc(t: ^testing.T) {
 	got, rok := read("roundtrip", "cfg.txt", context.temp_allocator)
 	testing.expect(t, rok, "read succeeds")
 	testing.expect_value(t, string(got), "hello=world")
+
+	blocked_home := fmt.tprintf("/tmp/ingot_prefs_blocked_%d", os.get_pid())
+	os.remove_all(blocked_home)
+	defer os.remove_all(blocked_home)
+	testing.expect(t, os.make_directory_all(blocked_home) == nil, "create blocked HOME")
+	blocker := fmt.tprintf("%s/.local", blocked_home)
+	testing.expect(t, os.write_entire_file(blocker, payload) == nil, "create blocker")
+	os.set_env("HOME", blocked_home)
+	testing.expect(t, !write("blocked", "cfg.txt", payload), "propagate mkdir failure")
 }

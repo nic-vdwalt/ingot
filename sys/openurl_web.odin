@@ -11,7 +11,13 @@ foreign openurl {
 	ingot_open_url :: proc(url: [^]byte, url_len: i32) ---
 }
 
-open_url :: proc(url: string) {
-	b := transmute([]byte)url
+open_url :: proc(
+	url: string,
+	options: Open_URL_Options = {allow_http = true, allow_https = true},
+) -> Open_URL_Status {
+	validated, status := _validate_external_url(url, options)
+	if status != .Opened do return status
+	b := transmute([]byte)validated
 	ingot_open_url(raw_data(b), i32(len(b)))
+	return .Opened
 }

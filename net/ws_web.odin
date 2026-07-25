@@ -63,14 +63,14 @@ ws_init :: proc() -> WebSocket {
 	return ws
 }
 
-// ws_start_connect opens a browser WebSocket to ws://host:port/ws. The browser
-// dials + upgrades asynchronously; the caller polls ws.state (updated in
-// ws_drain / ws_poll_state). max_attempts is ignored (the browser handles it).
+// ws_start_connect uses WSS on the standard secure port and WS otherwise.
+// The browser performs certificate and hostname verification for WSS.
 ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: int) {
 	ws.host = host
 	ws.port = port
 	ws.state = .Connecting
-	url := fmt.tprintf("ws://%s:%d/ws", host, port)
+	scheme := "wss" if port == 443 else "ws"
+	url := fmt.tprintf("%s://%s:%d/ws", scheme, host, port)
 	ub := transmute([]byte)url
 	ws.id = ingot_ws_open(raw_data(ub), i32(len(ub)))
 	if ws.id < 0 {

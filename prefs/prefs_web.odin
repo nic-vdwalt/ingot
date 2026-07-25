@@ -17,6 +17,12 @@ foreign store {
 	ingot_store_set :: proc(key: [^]byte, key_len: i32, val: [^]byte, val_len: i32) ---
 }
 
+@(private = "file")
+store_len :: proc(n: int) -> (length: i32, ok: bool) {
+	if n < 0 || n > int(max(i32)) do return 0, false
+	return i32(n), true
+}
+
 // data_dir returns the logical key prefix for an app (parity with native).
 data_dir :: proc(app: string, allocator := context.temp_allocator) -> (dir: string, ok: bool) {
 	return app, len(app) > 0
@@ -33,7 +39,9 @@ write :: proc(app, file: string, data: []u8) -> bool {
 	key, ok := path(app, file)
 	if !ok do return false
 	kb := transmute([]byte)key
-	ingot_store_set(raw_data(kb), i32(len(kb)), raw_data(data), i32(len(data)))
+	key_len := store_len(len(kb)) or_return
+	data_len := store_len(len(data)) or_return
+	ingot_store_set(raw_data(kb), key_len, raw_data(data), data_len)
 	return true
 }
 
@@ -42,14 +50,16 @@ read :: proc(app, file: string, allocator := context.temp_allocator) -> (data: [
 	key, key_ok := path(app, file)
 	if !key_ok do return nil, false
 	kb := transmute([]byte)key
+	key_len := store_len(len(kb)) or_return
 	// Probe length first, then allocate exactly and copy.
-	n := ingot_store_get(raw_data(kb), i32(len(kb)), nil, 0)
-	if n <= 0 do return nil, false
+	n := ingot_store_get(raw_data(kb), key_len, nil, 0)
+	if n < 0 do return nil, false
+	if n == 0 do return make([]byte, 0, allocator), true
 	buf := make([]byte, int(n), allocator)
-	got := ingot_store_get(raw_data(kb), i32(len(kb)), raw_data(buf), i32(len(buf)))
-	if got <= 0 {
+	got := ingot_store_get(raw_data(kb), key_len, raw_data(buf), n)
+	if got != n {
 		delete(buf, allocator)
 		return nil, false
 	}
-	return buf[:int(got)], true
+	return buf, true
 }

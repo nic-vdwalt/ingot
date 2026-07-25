@@ -220,6 +220,15 @@ _flush_retired :: proc() {
 @(private)
 g: Context
 
+default_context :: proc() -> ^Context {
+	return &g
+}
+
+context_epoch :: proc(ctx: ^Context) -> u64 {
+	if ctx == nil do return 0
+	return ctx.epoch
+}
+
 @(private)
 _graphics_resources_init :: proc(resources: ^Graphics_Resources) {
 	assert(resources != nil, "_graphics_resources_init: nil resources")
@@ -419,7 +428,9 @@ CloseWindow :: proc() {
 	platform_terminate()
 	flags := g.config_flags
 	closing_epoch := g.epoch
-	g = Context{epoch = closing_epoch}
+	g = Context {
+		epoch = closing_epoch,
+	}
 	g.config_flags = flags
 }
 
@@ -531,12 +542,19 @@ EndDrawing :: proc() {
 		wg.RenderPassEncoderEnd(g.frame.pass)
 		wg.RenderPassEncoderRelease(g.frame.pass)
 
+		retirement := _submission_reserve(&g.submissions)
 		cmd := wg.CommandEncoderFinish(g.frame.encoder, nil)
-		wg.QueueSubmit(g.queue, {cmd})
-		_stats_queue_submission()
-		retirement := _submission_track(&g.submissions)
-		if !_stream_slot_submitted(&g.rend, retirement) do _stats_stream_retirement_failure()
-		wg.CommandBufferRelease(cmd)
+		if retirement != 0 && cmd != nil {
+			wg.QueueSubmit(g.queue, {cmd})
+			_stats_queue_submission()
+			assert(_submission_commit(&g.submissions, retirement))
+			if !_stream_slot_submitted(&g.rend, retirement) do _stats_stream_retirement_failure()
+		} else {
+			if retirement != 0 do assert(_submission_rollback(&g.submissions, retirement))
+			_stream_slot_abandon(&g.rend)
+			_stats_stream_retirement_failure()
+		}
+		if cmd != nil do wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(g.frame.encoder)
 		wg.SurfacePresent(g.surface)
 		wg.TextureViewRelease(g.frame.view)

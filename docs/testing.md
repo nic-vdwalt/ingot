@@ -9,6 +9,16 @@ This guide describes the commands. [Tiger Style](TIGER_STYLE.md) defines the
 safety policy behind them, and [Why immediate mode](immediate-mode.md) explains
 why the architecture is well suited to this approach.
 
+## Contract-preserving refactors
+
+Before changing behavior-sensitive internals, add characterization coverage for
+its exported contract and record a green baseline. After each phase, run the
+package tests, strict gate, web gate, deterministic fuzz targets, and the
+windowed GPU lifecycle harness when rendering is touched. Build documented
+downstream consumers against the local Ingot checkout using each consumer's own
+instructions. Do not advance while a source, layout, ownership, timing, or visual
+contract differs from the baseline.
+
 ## Toolchain
 
 Ingot is checked with Odin `dev-2026-06:285f6d87b`. Install that exact Odin
@@ -32,8 +42,9 @@ Run the package tests:
 bash scripts/test.sh
 ```
 
-This runs `odin test` for `gfx`, `ui`, `term`, `prefs`, and `net`, then
-type-checks `ui_gfx` and `sys`. Extra Odin flags pass through to each test command:
+This runs `odin test` for `gfx`, `ui`, `ui_gfx`, `libvterm`, `term`, `prefs`,
+and `net`, then type-checks packages without tests. Extra Odin flags pass through
+to each test command:
 
 ```sh
 bash scripts/test.sh -define:ODIN_TEST_THREADS=1
@@ -54,8 +65,14 @@ Validate the browser target with:
 bash scripts/check-web.sh
 ```
 
-This compiles the web examples and runs the dependency-free JavaScript tests for
-the semantic DOM overlay.
+This compiles the gallery, breakout, render fixture, idle demo, and default web
+demo, then runs the dependency-free JavaScript lifecycle and semantic DOM tests.
+These tests do not launch a browser; see `production-readiness.md` for the real
+browser, operating-system, PTY, GPU, networking, and accessibility matrix.
+
+The ordinary `term` run enables `INGOT_PTY_SIM=true`. It validates terminal pump
+behavior without spawning a shell. Real Unix PTY and Windows ConPTY validation is
+a separate platform integration gate.
 
 ## Deterministic fuzzing
 

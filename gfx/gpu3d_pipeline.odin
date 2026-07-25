@@ -334,14 +334,22 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	if !_gpu_3d_pass_current(&g.resources.gpu_3d, pass) do return
 	wg.RenderPassEncoderEnd(pass.pass)
 	wg.RenderPassEncoderRelease(pass.pass)
+	retirement := u64(0)
+	if pass.owns_stream do retirement = _submission_reserve(&g.submissions)
 	cmd := wg.CommandEncoderFinish(pass.encoder, nil)
-	wg.QueueSubmit(g.queue, {cmd})
-	_stats_queue_submission()
-	if pass.owns_stream {
-		retirement := _submission_track(&g.submissions)
-		if !_stream_slot_submitted(&g.rend, retirement) do _stats_stream_retirement_failure()
+	if (!pass.owns_stream || retirement != 0) && cmd != nil {
+		wg.QueueSubmit(g.queue, {cmd})
+		_stats_queue_submission()
+		if pass.owns_stream {
+			assert(_submission_commit(&g.submissions, retirement))
+			if !_stream_slot_submitted(&g.rend, retirement) do _stats_stream_retirement_failure()
+		}
+	} else if pass.owns_stream {
+		if retirement != 0 do assert(_submission_rollback(&g.submissions, retirement))
+		_stream_slot_abandon(&g.rend)
+		_stats_stream_retirement_failure()
 	}
-	wg.CommandBufferRelease(cmd)
+	if cmd != nil do wg.CommandBufferRelease(cmd)
 	wg.CommandEncoderRelease(pass.encoder)
 	g.resources.gpu_3d.active_pass_generation = 0
 	pass^ = {}

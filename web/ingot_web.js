@@ -543,6 +543,7 @@
 		ctx: null,
 		master: null,
 		slots: new Array(AUDIO_MAX_SLOTS).fill(null),
+		unlock: null,
 	};
 
 	function audioResume() {
@@ -583,9 +584,9 @@
 					audioState.ctx = new Ctx();
 					audioState.master = audioState.ctx.createGain();
 					audioState.master.connect(audioState.ctx.destination);
-					const unlock = () => audioResume();
-					window.addEventListener("pointerdown", unlock);
-					window.addEventListener("keydown", unlock);
+					audioState.unlock = () => audioResume();
+					window.addEventListener("pointerdown", audioState.unlock);
+					window.addEventListener("keydown", audioState.unlock);
 				}
 				return 1;
 			},
@@ -623,10 +624,14 @@
 					buffer: null, gain: audioState.ctx.createGain(), source: null,
 					playing: false, looping: looping !== 0, pitch: 1,
 					load: 0, frames: 0, pendingPlay: false, pendingRestart: false,
+					controller: new AbortController(),
 				};
 				s.gain.connect(audioState.master);
 				audioState.slots[slot] = s;
-				fetch(wasmText(urlPtr, urlLen), { credentials: "same-origin" })
+				fetch(wasmText(urlPtr, urlLen), {
+					credentials: "same-origin",
+					signal: s.controller.signal,
+				})
 					.then((response) => {
 						if (!response.ok) throw new Error("http " + response.status);
 						return response.arrayBuffer();
@@ -658,6 +663,7 @@
 			ingot_audio_unload: (slot) => {
 				const s = audioState.slots[slot];
 				if (!s) return;
+				if (s.controller) s.controller.abort();
 				if (s.source) { try { s.source.stop(); } catch (_) {} }
 				s.gain.disconnect();
 				audioState.slots[slot] = null;
@@ -849,17 +855,26 @@
 				if (destroyed) return;
 				destroyed = true;
 				const x = wmi.exports;
-				if (opts.onDestroy) opts.onDestroy(x);
-				if (x && x.client_web_shutdown) x.client_web_shutdown();
-				for (const slot of httpSlots) if (slot && slot.controller) slot.controller.abort();
+				const errors = [];
+				const safely = (fn) => {
+					try { fn(); } catch (error) { errors.push(error); }
+				};
+				if (opts.onDestroy) safely(() => opts.onDestroy(x));
+				if (x && x.client_web_shutdown) safely(() => x.client_web_shutdown());
+				for (const slot of httpSlots) {
+					if (slot && slot.controller) safely(() => slot.controller.abort());
+				}
 				httpSlots.fill(null);
-				if (appSession && appSession.destroy) appSession.destroy();
-				detachFiles();
-				detachInput();
-				for (const [target, type, handler] of listeners) target.removeEventListener(type, handler);
-				clearSemanticOverlays();
+				if (appSession && appSession.destroy) safely(() => appSession.destroy());
+				safely(detachFiles);
+				safely(detachInput);
+				for (const [target, type, handler] of listeners) {
+					safely(() => target.removeEventListener(type, handler));
+				}
+				safely(clearSemanticOverlays);
 				if (wasmMemoryInterface === wmi) wasmMemoryInterface = null;
 				if (activeSession === session) activeSession = null;
+				if (errors.length) console.error("ingot session cleanup failed", errors);
 			},
 		};
 		activeSession = session;

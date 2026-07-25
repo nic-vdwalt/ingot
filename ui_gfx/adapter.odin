@@ -6,6 +6,8 @@ import "ingot:ui"
 FONT_CAP :: 64
 
 Adapter :: struct {
+	gfx_context:     ^rl.Context,
+	gfx_epoch:       u64,
 	fonts:           [FONT_CAP]rl.Font,
 	font_sizes:      [FONT_CAP]i32,
 	font_count:      int,
@@ -35,8 +37,15 @@ color_from_gfx :: proc(value: rl.Color) -> ui.Color {
 }
 
 adapter_init :: proc(adapter: ^Adapter) {
-	assert(adapter != nil, "adapter_init: nil adapter")
-	assert(!adapter.initialized, "adapter_init: already initialized")
+	adapter_init_context(adapter, rl.default_context())
+}
+
+adapter_init_context :: proc(adapter: ^Adapter, gfx_context: ^rl.Context) {
+	assert(adapter != nil, "adapter_init_context: nil adapter")
+	assert(gfx_context != nil, "adapter_init_context: nil graphics context")
+	assert(!adapter.initialized, "adapter_init_context: already initialized")
+	adapter.gfx_context = gfx_context
+	adapter.gfx_epoch = rl.context_epoch(gfx_context)
 	adapter.font_dpi = 1
 	adapter.initialized = true
 	adapter_text_init(adapter)
@@ -70,6 +79,11 @@ adapter_begin_frame :: proc(
 	output: ^ui.Ui_Output,
 ) {
 	assert(adapter != nil && adapter.initialized, "adapter_begin_frame: invalid adapter")
+	assert(adapter.gfx_context != nil, "adapter_begin_frame: nil graphics context")
+	assert(
+		adapter.gfx_epoch == rl.context_epoch(adapter.gfx_context),
+		"adapter_begin_frame: stale graphics context",
+	)
 	assert(
 		frame != nil && runtime != nil && input != nil && output != nil,
 		"adapter_begin_frame: nil argument",

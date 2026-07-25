@@ -39,25 +39,36 @@
 	// ---- ingot_ws: browser WebSocket ------------------------------------
 	function wsImports(WMI) {
 		const { mem, readStr, writeBytes } = helpers(WMI);
-		const sockets = new Map(); // id → { ws, state, queue: [{bytes, binary}] }
+		const sockets = new Map(); // id → { ws, state, queue, queuedBytes }
+		const maximumQueuedMessages = 1024;
+		const maximumQueuedBytes = 64 * 1024 * 1024;
+		const maximumMessageBytes = 32 * 1024 * 1024;
 		let nextSock = 1;
 		const imports = {
 			ingot_ws_open: (urlPtr, urlLen) => {
-				const url = readStr(urlPtr, urlLen);
+				const rawUrl = readStr(urlPtr, urlLen);
 				const id = nextSock++;
-				const rec = { ws: null, state: 1 /*connecting*/, queue: [] };
+				const rec = { ws: null, state: 1 /*connecting*/, queue: [], queuedBytes: 0 };
 				try {
-					const s = new WebSocket(url);
+					const base = window.location && window.location.href ? window.location.href : undefined;
+					const url = base ? new URL(rawUrl, base) : new URL(rawUrl);
+					if (url.protocol !== "ws:" && url.protocol !== "wss:") throw new Error("invalid websocket scheme");
+					const s = new WebSocket(url.href);
 					s.binaryType = "arraybuffer";
 					s.onopen = () => { rec.state = 2; };
 					s.onclose = () => { rec.state = 0; };
 					s.onerror = () => { rec.state = 3; };
 					s.onmessage = (ev) => {
-						if (typeof ev.data === "string") {
-							rec.queue.push({ bytes: new TextEncoder().encode(ev.data), binary: false });
-						} else {
-							rec.queue.push({ bytes: new Uint8Array(ev.data), binary: true });
+						const binary = typeof ev.data !== "string";
+						const bytes = binary ? new Uint8Array(ev.data) : new TextEncoder().encode(ev.data);
+						if (bytes.length > maximumMessageBytes) { s.close(1009); return; }
+						while (rec.queue.length > 0 &&
+							(rec.queue.length >= maximumQueuedMessages ||
+							 rec.queuedBytes + bytes.length > maximumQueuedBytes)) {
+							rec.queuedBytes -= rec.queue.shift().bytes.length;
 						}
+						rec.queue.push({ bytes, binary });
+						rec.queuedBytes += bytes.length;
 					};
 					rec.ws = s;
 				} catch (e) { rec.state = 3; }
@@ -97,6 +108,8 @@
 				const r = sockets.get(id);
 				if (!r || r.queue.length === 0) return -1;
 				const msg = r.queue.shift();
+				r.queuedBytes -= msg.bytes.length;
+				if (cap < msg.bytes.length) return -1;
 				return writeBytes(dst, msg.bytes, cap);
 			},
 		};

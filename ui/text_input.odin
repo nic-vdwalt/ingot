@@ -244,6 +244,50 @@ Input_Vlines_Memo :: struct {
 	owned:     bool,
 }
 
+@(private = "file")
+input_vlines_memo_matches :: proc(
+	memo: ^Input_Vlines_Memo,
+	text: string,
+	width, font_size: i32,
+) -> bool {
+	assert(memo != nil, "input_vlines_memo_matches: nil memo")
+	return memo.valid && width == memo.width && font_size == memo.font_size && text == memo.text
+}
+
+@(private = "file")
+input_vlines_memo_release :: proc(memo: ^Input_Vlines_Memo) {
+	assert(memo != nil, "input_vlines_memo_release: nil memo")
+	if memo.owned {
+		if len(memo.val) > 0 do delete(memo.val)
+		if len(memo.text) > 0 do delete(memo.text)
+	}
+	memo.val = nil
+	memo.text = ""
+	memo.valid = false
+	memo.owned = false
+}
+
+@(private = "file")
+input_vlines_memo_commit :: proc(
+	memo: ^Input_Vlines_Memo,
+	text: string,
+	width, font_size: i32,
+	vlines: []Wrap_Line,
+) -> []Wrap_Line {
+	assert(memo != nil, "input_vlines_memo_commit: nil memo")
+	assert(len(vlines) > 0, "input_vlines_memo_commit: empty lines")
+	input_vlines_memo_release(memo)
+	memo.val = make([]Wrap_Line, len(vlines))
+	copy(memo.val, vlines)
+	memo.text = strings.clone(text)
+	memo.width = width
+	memo.font_size = font_size
+	memo.valid = true
+	memo.owned = true
+	assert(len(memo.val) == len(vlines))
+	return memo.val
+}
+
 // Build the soft-wrapped visual lines for an input's text using an explicit
 // memo. Each logical line (split on '\n') is word-wrapped to inner_w; the
 // returned ranges are absolute byte offsets into `text`. Always returns at
@@ -258,9 +302,7 @@ input_visual_lines_memo_with :: proc(
 	assert(system != nil, "input_visual_lines_memo: nil text system")
 	assert(memo != nil, "input_visual_lines_memo: nil memo")
 	assert(inner_w >= 0 && font_size > 0, "input_visual_lines_memo: invalid dimensions")
-	if memo.valid && inner_w == memo.width && font_size == memo.font_size && text == memo.text {
-		return memo.val
-	}
+	if input_vlines_memo_matches(memo, text, inner_w, font_size) do return memo.val
 	vlines := make([dynamic]Wrap_Line, context.temp_allocator)
 	base := 0
 	for logical in strings.split(text, "\n", context.temp_allocator) {
@@ -274,21 +316,7 @@ input_visual_lines_memo_with :: proc(
 	}
 	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
 	// Persist copies so the memo survives the temp allocator reset.
-	if memo.owned {
-		if len(memo.val) > 0 do delete(memo.val)
-		if len(memo.text) > 0 do delete(memo.text)
-		memo.val = nil
-		memo.text = ""
-		memo.owned = false
-	}
-	memo.val = make([]Wrap_Line, len(vlines))
-	copy(memo.val, vlines[:])
-	memo.text = strings.clone(text)
-	memo.width = inner_w
-	memo.font_size = font_size
-	memo.valid = true
-	memo.owned = true
-	return memo.val
+	return input_vlines_memo_commit(memo, text, inner_w, font_size, vlines[:])
 }
 
 input_visual_lines_memo_frame :: proc(
@@ -301,9 +329,7 @@ input_visual_lines_memo_frame :: proc(
 	assert(frame != nil && frame.open, "input_visual_lines_memo_frame: invalid frame")
 	assert(memo != nil, "input_visual_lines_memo_frame: nil memo")
 	assert(inner_w >= 0 && font_size > 0, "input_visual_lines_memo_frame: invalid dimensions")
-	if memo.valid && inner_w == memo.width && font_size == memo.font_size && text == memo.text {
-		return memo.val
-	}
+	if input_vlines_memo_matches(memo, text, inner_w, font_size) do return memo.val
 	vlines := make([dynamic]Wrap_Line, context.temp_allocator)
 	base := 0
 	for logical in strings.split(text, "\n", context.temp_allocator) {
@@ -313,31 +339,14 @@ input_visual_lines_memo_frame :: proc(
 		base += len(logical) + 1
 	}
 	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
-	if memo.owned {
-		if len(memo.val) > 0 do delete(memo.val)
-		if len(memo.text) > 0 do delete(memo.text)
-		memo.val = nil
-		memo.text = ""
-		memo.owned = false
-	}
-	memo.val = make([]Wrap_Line, len(vlines))
-	copy(memo.val, vlines[:])
-	memo.text = strings.clone(text)
-	memo.width = inner_w
-	memo.font_size = font_size
-	memo.valid = true
-	memo.owned = true
-	return memo.val
+	return input_vlines_memo_commit(memo, text, inner_w, font_size, vlines[:])
 }
 
 // input_vlines_memo_destroy releases a memo's owned clones.
 input_vlines_memo_destroy :: proc(memo: ^Input_Vlines_Memo) {
 	assert(memo != nil, "input_vlines_memo_destroy: nil memo")
-	if memo.owned {
-		if len(memo.val) > 0 do delete(memo.val)
-		if len(memo.text) > 0 do delete(memo.text)
-	}
-	memo^ = {}
+	input_vlines_memo_release(memo)
+	assert(!memo.owned && !memo.valid, "input_vlines_memo_destroy: live memo")
 }
 
 // Map a byte offset to its visual (soft-wrapped) row and pixel x within the row.
@@ -951,6 +960,45 @@ ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string) {
 	sel_set(ctx.sel, ctx.sb, ctx.cursor^, ctx.cursor^)
 }
 
+@(private = "file")
+ti_click_count_update :: proc(sel: ^Input_Sel, offset: int, now: f64) {
+	assert(sel != nil, "ti_click_count_update: nil selection")
+	if now - sel.last_click_time < 0.4 && abs(offset - sel.last_click_byte) <= 2 {
+		sel.click_count = min(sel.click_count + 1, 3)
+	} else {
+		sel.click_count = 1
+	}
+	sel.last_click_time = now
+	sel.last_click_byte = offset
+	assert(sel.click_count >= 1 && sel.click_count <= 3, "ti_click_count_update: invalid count")
+}
+
+@(private = "file")
+ti_click_apply :: proc(ctx: ^TI_Ctx, text: string, offset: int) {
+	assert(ctx != nil && ctx.sel != nil, "ti_click_apply: invalid context")
+	assert(offset >= 0 && offset <= len(text), "ti_click_apply: invalid offset")
+	sel := ctx.sel
+	switch sel.click_count {
+	case 2:
+		start, end := find_word_bounds(text, offset)
+		sel_set(sel, ctx.sb, start, end)
+		sel.dragging = true
+		ctx.cursor^ = end
+	case 3:
+		start := caret_line_start(text, offset)
+		end := caret_line_end(text, offset)
+		sel_set(sel, ctx.sb, start, end)
+		sel.dragging = false
+		ctx.cursor^ = end
+	case:
+		ctx.cursor^ = offset
+		if ctx.pills != nil do ctx.cursor^ = pill_snap_caret(ctx.pills, ctx.cursor^)
+		sel_set(sel, ctx.sb, ctx.cursor^, ctx.cursor^)
+		sel.dragging = true
+	}
+	assert(ctx.cursor^ >= 0 && ctx.cursor^ <= len(text), "ti_click_apply: invalid cursor")
+}
+
 // ti_mouse_caret handles press (single/double/triple click), drag-extend, and
 // release for the caret-aware renderer, then refreshes the caret's visual
 // position so highlight and caret don't lag one frame.
@@ -974,32 +1022,8 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 				v.vis_start,
 				v.vis_end,
 			)
-			now := frame_input(ctx.frame).time
-			if now - sel.last_click_time < 0.4 && abs(off - sel.last_click_byte) <= 2 {
-				sel.click_count = min(sel.click_count + 1, 3)
-			} else {
-				sel.click_count = 1
-			}
-			sel.last_click_time = now
-			sel.last_click_byte = off
-			switch sel.click_count {
-			case 2:
-				ws, we := find_word_bounds(text, off)
-				sel_set(sel, ctx.sb, ws, we)
-				sel.dragging = true
-				ctx.cursor^ = we
-			case 3:
-				ls := caret_line_start(text, off)
-				le := caret_line_end(text, off)
-				sel_set(sel, ctx.sb, ls, le)
-				sel.dragging = false
-				ctx.cursor^ = le
-			case:
-				ctx.cursor^ = off
-				if ctx.pills != nil do ctx.cursor^ = pill_snap_caret(ctx.pills, ctx.cursor^)
-				sel_set(sel, ctx.sb, ctx.cursor^, ctx.cursor^)
-				sel.dragging = true
-			}
+			ti_click_count_update(sel, off, frame_input(ctx.frame).time)
+			ti_click_apply(ctx, text, off)
 			if ctx.desired_col != nil {
 				_, c := caret_row_col(text, ctx.cursor^)
 				ctx.desired_col^ = c

@@ -9,7 +9,6 @@ package prefs
 
 import "core:fmt"
 import "core:os"
-import "core:strings"
 
 // user_home returns the current user's home directory across platforms.
 // HOME is set on macOS/Linux; Windows uses USERPROFILE.
@@ -44,7 +43,7 @@ path :: proc(app, file: string, allocator := context.temp_allocator) -> (p: stri
 // write fails.
 write :: proc(app, file: string, data: []u8) -> bool {
 	dir := data_dir(app) or_return
-	make_dirs_all(dir)
+	if !make_dirs_all_checked(dir) do return false
 	p := fmt.tprintf("%s/%s", dir, file)
 	return os.write_entire_file(p, data) == nil
 }
@@ -57,19 +56,12 @@ read :: proc(app, file: string, allocator := context.temp_allocator) -> (data: [
 	return d, true
 }
 
-// make_dirs_all creates a directory and any missing parents.
+make_dirs_all_checked :: proc(path: string) -> bool {
+	if len(path) == 0 do return false
+	return os.make_directory_all(path) == nil
+}
+
+// make_dirs_all preserves the original package contract for existing callers.
 make_dirs_all :: proc(path: string) {
-	if len(path) == 0 do return
-	parts := strings.split(path, "/", context.temp_allocator)
-	acc := strings.builder_make(context.temp_allocator)
-	for p, i in parts {
-		if i == 0 && len(p) == 0 {
-			strings.write_string(&acc, "/")
-			continue
-		}
-		if len(p) == 0 do continue
-		strings.write_string(&acc, p)
-		os.make_directory(strings.to_string(acc))
-		strings.write_string(&acc, "/")
-	}
+	_ = make_dirs_all_checked(path)
 }

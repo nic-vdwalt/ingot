@@ -30,6 +30,26 @@ markdown_line_culled :: proc(ctx: ^Markdown_Context, y, line_height: i32) -> boo
 	return y + line_height < ctx.cull_top || y > ctx.cull_bottom
 }
 
+Heading_Match :: struct {
+	text:       string,
+	level:      int,
+	prefix_len: int,
+}
+
+@(private)
+match_heading :: proc(line: string) -> (Heading_Match, bool) {
+	if strings.has_prefix(line, "### ") {
+		return Heading_Match{text = line[4:], level = 3, prefix_len = 4}, true
+	}
+	if strings.has_prefix(line, "## ") {
+		return Heading_Match{text = line[3:], level = 2, prefix_len = 3}, true
+	}
+	if strings.has_prefix(line, "# ") {
+		return Heading_Match{text = line[2:], level = 1, prefix_len = 2}, true
+	}
+	return {}, false
+}
+
 // --- Inline bold (**) parsing ---
 
 Text_Span :: struct {
@@ -1309,7 +1329,7 @@ draw_markdown :: proc(
 		}
 
 		// H3 heading.
-		if len(line) >= 4 && line[0] == '#' && line[1] == '#' && line[2] == '#' && line[3] == ' ' {
+		if heading, ok := match_heading(line); ok && heading.level == 3 {
 			current_y += draw_heading(
 				ctx,
 				x,
@@ -1336,7 +1356,7 @@ draw_markdown :: proc(
 			continue
 		}
 		// H2 heading.
-		if len(line) >= 3 && line[0] == '#' && line[1] == '#' && line[2] == ' ' {
+		if heading, ok := match_heading(line); ok && heading.level == 2 {
 			current_y += draw_heading(
 				ctx,
 				x,
@@ -1363,7 +1383,7 @@ draw_markdown :: proc(
 			continue
 		}
 		// H1 heading.
-		if len(line) >= 2 && line[0] == '#' && line[1] == ' ' {
+		if heading, ok := match_heading(line); ok && heading.level == 1 {
 			current_y += draw_heading(
 				ctx,
 				x,
@@ -1613,7 +1633,7 @@ hit_test_markdown :: proc(
 		}
 
 		// H3 heading.
-		if len(line) >= 4 && line[0] == '#' && line[1] == '#' && line[2] == '#' && line[3] == ' ' {
+		if heading, ok := match_heading(line); ok && heading.level == 3 {
 			heading_text := line[4:]
 			h := heading_total_height(ctx, heading_text, 3, max_width)
 			if mouse_y >= current_y && mouse_y < current_y + h {
@@ -1637,7 +1657,7 @@ hit_test_markdown :: proc(
 			continue
 		}
 		// H2 heading.
-		if len(line) >= 3 && line[0] == '#' && line[1] == '#' && line[2] == ' ' {
+		if heading, ok := match_heading(line); ok && heading.level == 2 {
 			heading_text := line[3:]
 			h := heading_total_height(ctx, heading_text, 2, max_width)
 			if mouse_y >= current_y && mouse_y < current_y + h {
@@ -1661,7 +1681,7 @@ hit_test_markdown :: proc(
 			continue
 		}
 		// H1 heading.
-		if len(line) >= 2 && line[0] == '#' && line[1] == ' ' {
+		if heading, ok := match_heading(line); ok && heading.level == 1 {
 			heading_text := line[2:]
 			h := heading_total_height(ctx, heading_text, 1, max_width)
 			if mouse_y >= current_y && mouse_y < current_y + h {

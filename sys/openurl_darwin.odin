@@ -4,13 +4,15 @@ package sys
 import "core:os"
 import "core:time"
 
-open_url :: proc(url: string) {
-	// argv spawn (no shell) so URLs/paths with quotes or spaces can't be
-	// misinterpreted or injected into a shell command line.
-	p, err := os.process_start({command = {"open", url}})
-	if err == nil {
-		// `open` hands off to the browser and exits almost immediately; reap
-		// with a short timeout so the child doesn't linger as a zombie.
-		_, _ = os.process_wait(p, time.Second)
-	}
+open_url :: proc(
+	url: string,
+	options: Open_URL_Options = {allow_http = true, allow_https = true},
+) -> Open_URL_Status {
+	validated, status := _validate_external_url(url, options)
+	if status != .Opened do return status
+	p, err := os.process_start({command = {"open", validated}})
+	if err != nil do return .Failed
+	state, wait_err := os.process_wait(p, time.Second)
+	if wait_err != nil || !state.exited || state.exit_code != 0 do return .Failed
+	return .Opened
 }

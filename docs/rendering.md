@@ -104,7 +104,10 @@ balanced; `CloseWindow` requires no active frame or GPU-3D pass. Shutdown releas
 GPU-3D and rlgl state, shaders, atlases, textures, and deferred retirements before
 renderer stream buffers and the WebGPU device. Closing a partially initialized
 window still releases platform and WebGPU handles, and reinitialization starts
-with empty resource pools.
+with empty resource pools. `default_context` exposes that compatibility owner to
+bridges such as `ui_gfx`; its lifecycle epoch rejects frames and asynchronous GPU
+callbacks from an earlier window lifetime. This explicit binding does not yet make
+simultaneous multi-window rendering a supported production configuration.
 
 Audio has a separate explicit owner and lifecycle. `InitAudioDevice` and
 `CloseAudioDevice` initialize and destroy the target-specific engine/slot state;

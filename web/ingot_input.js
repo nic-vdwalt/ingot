@@ -49,6 +49,8 @@
 		const canvas = document.getElementById(canvasId);
 		if (!canvas) return () => {};
 		const listeners = [];
+		const pressedKeys = new Set();
+		const pressedButtons = new Set();
 		const listen = (target, type, handler, options) => {
 			target.addEventListener(type, handler, options);
 			listeners.push([target, type, handler, options]);
@@ -86,6 +88,7 @@
 			if (e.isComposing || e.keyCode === 229) return;
 			const k = KEY[e.code];
 			if (k !== undefined) {
+				pressedKeys.add(k);
 				x.ingot_web_key(k, true, e.repeat);
 				if (CONSUME.has(k)) e.preventDefault();
 			}
@@ -98,6 +101,7 @@
 		function onKeyup(e) {
 			const k = KEY[e.code];
 			const x = ex();
+			if (k !== undefined) pressedKeys.delete(k);
 			if (x && k !== undefined) x.ingot_web_key(k, false, false);
 		}
 
@@ -146,13 +150,17 @@
 			canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
 			x.ingot_web_mouse_move(e.offsetX, e.offsetY);
 			const b = BTN[e.button];
-			if (b !== undefined) x.ingot_web_mouse_button(b, true);
+			if (b !== undefined) {
+				pressedButtons.add(b);
+				x.ingot_web_mouse_button(b, true);
+			}
 		});
 
 		listen(canvas, "pointerup", function (e) {
 			const x = ex();
 			if (!x) return;
 			const b = BTN[e.button];
+			if (b !== undefined) pressedButtons.delete(b);
 			if (b !== undefined) x.ingot_web_mouse_button(b, false);
 		});
 
@@ -186,6 +194,21 @@
 			e.preventDefault();
 		}, { passive: false });
 
+		const releaseHeldInput = () => {
+			const x = ex();
+			if (x) {
+				for (const key of pressedKeys) x.ingot_web_key(key, false, false);
+				for (const button of pressedButtons) x.ingot_web_mouse_button(button, false);
+			}
+			pressedKeys.clear();
+			pressedButtons.clear();
+		};
+		listen(canvas, "pointercancel", releaseHeldInput);
+		listen(canvas, "lostpointercapture", releaseHeldInput);
+		listen(window, "blur", releaseHeldInput);
+		listen(document, "visibilitychange", function () {
+			if (document.visibilityState !== "visible") releaseHeldInput();
+		});
 		listen(canvas, "pointerenter", function () {
 			const x = ex(); if (x) x.ingot_web_hover(true);
 		});
@@ -204,6 +227,7 @@
 		const detach = () => {
 			if (!active) return;
 			active = false;
+			releaseHeldInput();
 			for (const [target, type, handler, options] of listeners) {
 				target.removeEventListener(type, handler, options);
 			}

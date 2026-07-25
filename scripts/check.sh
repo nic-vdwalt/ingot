@@ -12,10 +12,17 @@ col="-collection:ingot=$root"
 # have no main().
 vet_flags="-vet -strict-style -vet-shadowing -no-entry-point"
 
-for pkg in gfx ui ui_gfx term prefs net sys; do
+for pkg in gfx ui ui_gfx term prefs net sys pty testx; do
 	echo "== checking $pkg =="
 	# shellcheck disable=SC2086
 	odin check "$root/$pkg" $col $vet_flags "$@"
+done
+
+# Foreign bindings intentionally mirror upstream names and declarations, but
+# they must still type-check against the pinned toolchain.
+for pkg in libvterm accesskit; do
+	echo "== checking binding $pkg =="
+	odin check "$root/$pkg" $col -no-entry-point "$@"
 done
 
 # odinfmt has no list/check flag (only -w/-stdin), so compare each file

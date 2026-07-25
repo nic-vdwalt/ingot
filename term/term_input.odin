@@ -7,6 +7,25 @@ import "../pty"
 import "core:unicode/utf8"
 import rl "ingot:gfx"
 
+TERM_PASTE_MAX_BYTES :: 1024 * 1024
+TERM_WRITE_MAX_ATTEMPTS :: 16
+
+@(private = "file")
+term_write :: proc(ts: ^Term_Instance, data: []u8) -> bool {
+	if ts == nil || len(data) == 0 do return false
+	written := 0
+	for attempt := 0; attempt < TERM_WRITE_MAX_ATTEMPTS && written < len(data); attempt += 1 {
+		n, status := pty.write_bytes(&ts.pty, data[written:])
+		if n > 0 do written += n
+		if status == .Closed || status == .Failed {
+			ts.pty_running = false
+			break
+		}
+		if status == .Would_Block do break
+	}
+	return written == len(data)
+}
+
 // term_handle_input drains all pending key events from Raylib and forwards
 // them to the PTY as the appropriate byte sequences.  Returns true when at
 // least one byte was written to the PTY so callers can react (e.g. clear a
@@ -33,8 +52,7 @@ term_handle_input :: proc(
 		// Skip control characters — handled by the key-press path.
 		if cp < 0x20 || cp == 0x7f do continue
 		buf, n := utf8.encode_rune(cp)
-		pty.write_bytes(&ts.pty, buf[:n])
-		sent = true
+		sent = term_write(ts, buf[:n]) || sent
 	}
 
 	// --- Special keys and control combos via GetKeyPressed() ---
@@ -50,8 +68,8 @@ term_handle_input :: proc(
 		if key == .V && (super || (ctrl && shift)) {
 			clip := rl.GetClipboardText()
 			if clip != nil {
-				pty.write_string(&ts.pty, string(clip))
-				sent = true
+				paste := transmute([]u8)string(clip)
+				if len(paste) <= TERM_PASTE_MAX_BYTES do sent = term_write(ts, paste) || sent
 			}
 			continue
 		}
@@ -60,8 +78,7 @@ term_handle_input :: proc(
 		// Navigation / function keys — VT100/xterm sequences.
 		b: [8]u8
 		if n, ok := vt_bytes_for_key(key, ctrl, shift, super, skip_ctrl_shift, b[:]); ok {
-			pty.write_bytes(&ts.pty, b[:n])
-			sent = true
+			sent = term_write(ts, b[:n]) || sent
 		}
 	}
 	// Typing snaps the view back to the live screen.

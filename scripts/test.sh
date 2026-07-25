@@ -6,7 +6,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 col="-collection:ingot=$root"
 guard="-define:INGOT_FRAME_SCRATCH_GUARD=true"
 "$root/scripts/check-ui-state.sh"
-for pkg in gfx ui libvterm term prefs net; do
+for pkg in gfx ui ui_gfx libvterm term prefs net; do
 	echo "== testing $pkg =="
 	extra=()
 	# UI tests use deterministic single-thread execution for native graphics
@@ -17,8 +17,8 @@ for pkg in gfx ui libvterm term prefs net; do
 	odin test "$root/$pkg" $col $guard -define:ODIN_TEST_FAIL_ON_EMPTY=true ${extra[@]+"${extra[@]}"} "$@"
 done
 
-# sys has no unit tests yet — type-check it so it can't rot.
-for pkg in ui_gfx sys; do
+# Packages without unit tests are still type-checked so they cannot rot.
+for pkg in sys pty accesskit testx; do
 	echo "== checking $pkg =="
 	odin check "$root/$pkg" $col -no-entry-point
 done

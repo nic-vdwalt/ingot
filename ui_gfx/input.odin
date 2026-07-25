@@ -3,6 +3,9 @@ package ui_gfx
 import rl "ingot:gfx"
 import "ingot:ui"
 
+INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
+#assert(INPUT_CHARACTER_DRAIN_MAX == ui.INPUT_CHAR_CAP)
+
 capture_input :: proc(input: ^ui.Ui_Input) {
 	assert(input != nil, "capture_input: nil input")
 	input^ = {}
@@ -42,9 +45,11 @@ capture_input :: proc(input: ^ui.Ui_Input) {
 		input.mouse_released[index] = rl.IsMouseButtonReleased(button)
 		input.mouse_down[index] = rl.IsMouseButtonDown(button)
 	}
-	for {
+	characters_drained := 0
+	for characters_drained < INPUT_CHARACTER_DRAIN_MAX {
 		character := rl.GetCharPressed()
 		if character == 0 do break
+		characters_drained += 1
 		if input.character_count < ui.INPUT_CHAR_CAP {
 			input.characters[input.character_count] = character
 			input.character_count += 1
@@ -52,4 +57,6 @@ capture_input :: proc(input: ^ui.Ui_Input) {
 			input.characters_dropped += 1
 		}
 	}
+	assert(input.character_count <= ui.INPUT_CHAR_CAP)
+	assert(characters_drained <= INPUT_CHARACTER_DRAIN_MAX)
 }

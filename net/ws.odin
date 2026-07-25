@@ -5,10 +5,10 @@
 // polls a mutex-guarded queue.
 package ingotnet
 
+import "core:crypto"
 import "core:crypto/legacy/sha1"
 import "core:encoding/base64"
 import "core:fmt"
-import "core:math/rand"
 import cnet "core:net"
 import "core:strings"
 import "core:sync"
@@ -74,12 +74,9 @@ WS_Frame :: struct {
 	fin:     bool,
 }
 
-// Parse one WebSocket frame from the front of buf. Pure except for in-place
-// unmasking of the payload (deterministic — no I/O, no shared state), so it
-// is directly fuzzable. Quirks preserved from the original inline parser:
-// RSV bits are ignored and masked server frames are tolerated even though
-// RFC 6455 forbids them. FIN is surfaced so the recv loop can reassemble
-// fragmented messages (RFC 6455 §5.4).
+// Parse one server WebSocket frame from the front of buf. The parser rejects
+// extension bits, client-direction masking, reserved opcodes, noncanonical
+// lengths, and invalid control frames before exposing payload bytes.
 //
 // On .Ok, consumed is the full frame size (header [+4 mask] + payload) and
 // frame.payload lies within buf[:consumed]. On .Need_More / .Too_Big,
@@ -92,19 +89,31 @@ ws_parse_frame :: proc(buf: []u8) -> (frame: WS_Frame, consumed: int, status: WS
 	opcode := buf[0] & 0x0F
 	fin := (buf[0] & 0x80) != 0
 	masked := (buf[1] & 0x80) != 0
+	if (buf[0] & 0x70) != 0 || masked do return {}, 0, .Too_Big
+	if opcode != WS_OP_CONTINUATION &&
+	   opcode != WS_OP_TEXT &&
+	   opcode != WS_OP_BINARY &&
+	   opcode != WS_OP_CLOSE &&
+	   opcode != WS_OP_PING &&
+	   opcode != WS_OP_PONG {
+		return {}, 0, .Too_Big
+	}
 	payload_len := int(buf[1] & 0x7F)
 	header_size := 2
 
 	if payload_len == 126 {
 		if total < 4 do return {}, 0, .Need_More
 		payload_len = int(buf[2]) << 8 | int(buf[3])
+		if payload_len < 126 do return {}, 0, .Too_Big
 		header_size = 4
 	} else if payload_len == 127 {
 		if total < 10 do return {}, 0, .Need_More
+		if (buf[2] & 0x80) != 0 do return {}, 0, .Too_Big
 		payload_len = 0
 		for i := 0; i < 8; i += 1 {
 			payload_len = payload_len << 8 | int(buf[2 + i])
 		}
+		if payload_len < 65536 do return {}, 0, .Too_Big
 		header_size = 10
 	}
 
@@ -112,6 +121,8 @@ ws_parse_frame :: proc(buf: []u8) -> (frame: WS_Frame, consumed: int, status: WS
 	if payload_len < 0 || payload_len > WS_MAX_PAYLOAD {
 		return {}, 0, .Too_Big
 	}
+	if payload_len > max(int) - header_size do return {}, 0, .Too_Big
+	if opcode >= WS_OP_CLOSE && (!fin || payload_len > 125) do return {}, 0, .Too_Big
 
 	mask_offset := header_size
 	if masked {
@@ -171,7 +182,7 @@ ws_handle_data_frame :: proc(ws: ^WebSocket, frag: ^WS_Frag_State, frame: WS_Fra
 		if !frag.active do return false
 		// The assembled message obeys the same ceiling as a single frame so
 		// fragmentation cannot smuggle unbounded data past WS_MAX_PAYLOAD.
-		if len(frag.buf) + len(frame.payload) > WS_MAX_PAYLOAD do return false
+		if len(frame.payload) > WS_MAX_PAYLOAD - len(frag.buf) do return false
 		append(&frag.buf, ..frame.payload)
 		if frame.fin {
 			ws_enqueue(ws, strings.clone(string(frag.buf[:])), frag.opcode == WS_OP_BINARY)
@@ -249,24 +260,24 @@ WebSocket :: struct {
 	// Socket lifecycle is shared between the worker thread (dial/assign) and
 	// ws_close on the main thread (close). sock_mutex guards socket +
 	// socket_open so a close cannot race the worker storing a fresh socket.
-	socket:         cnet.TCP_Socket,
-	socket_open:    bool,
-	sock_mutex:     sync.Mutex,
+	socket:           cnet.TCP_Socket,
+	socket_open:      bool,
+	sock_mutex:       sync.Mutex,
 
 	// Written by the worker thread, read by the main thread — always access
 	// with sync.atomic_load / atomic_store (ws_state is the public read).
-	state:          WS_State,
-	host:           string,
-	port:           int,
-	max_attempts:   int,
+	state:            WS_State,
+	host:             string,
+	port:             int,
+	max_attempts:     int,
 
 	// Self-healing: the worker re-dials on every drop until ws_close, so the
 	// thread lives for the whole session. conn_gen is bumped on each successful
 	// (re)handshake — consumers poll it (ws_conn_gen) to re-establish app-level
 	// subscriptions after a recovery. auto_reconnect=false restores the legacy
 	// one-shot behaviour (worker exits after the first drop).
-	conn_gen:       int,
-	auto_reconnect: bool,
+	conn_gen:         int,
+	auto_reconnect:   bool,
 
 	// Thread-safe receive queue, bounded by message count and aggregate bytes.
 	recv_queue:       [dynamic]WS_Message,
@@ -278,22 +289,22 @@ WebSocket :: struct {
 	// queued or the state changes, so an event-driven-idle frame loop repaints
 	// promptly instead of waiting for its idle-floor tick (gfx.RequestRedraw
 	// fits the signature). Set before ws_start_connect; nil means no-op.
-	wake:           proc "contextless" (),
+	wake:             proc "contextless" (),
 
 	// ws_close broadcasts stop_cond so worker backoff waits (dial retry,
 	// reconnect) end early instead of sleeping out their full duration.
-	stop_mutex:     sync.Mutex,
-	stop_cond:      sync.Cond,
+	stop_mutex:       sync.Mutex,
+	stop_cond:        sync.Cond,
 
 	// Send serialization (PONG frames go out from the recv thread while text
 	// frames are sent from the main thread).
-	send_mutex:     sync.Mutex,
+	send_mutex:       sync.Mutex,
 
 	// Background thread: runs dial + handshake, then the recv loop. running
 	// is written by ws_close and the worker and read across threads — always
 	// access it with sync.atomic_load / atomic_store.
-	recv_thread:    ^thread.Thread,
-	running:        bool,
+	recv_thread:      ^thread.Thread,
+	running:          bool,
 }
 
 // Initialize a WebSocket connection.
@@ -379,15 +390,20 @@ ws_enqueue :: proc(ws: ^WebSocket, data: string, binary: bool) {
 	}
 	data_bytes := u64(len(data))
 	sync.mutex_lock(&ws.recv_mutex)
-	for len(ws.recv_queue) > 0 &&
-	    (len(ws.recv_queue) >= WS_MAX_QUEUED_MESSAGES ||
-	     ws.recv_queue_bytes + data_bytes > WS_MAX_QUEUED_BYTES) {
+	for _ in 0 ..< WS_MAX_QUEUED_MESSAGES {
+		if len(ws.recv_queue) == 0 ||
+		   (len(ws.recv_queue) < WS_MAX_QUEUED_MESSAGES &&
+				   ws.recv_queue_bytes <= WS_MAX_QUEUED_BYTES - data_bytes) {
+			break
+		}
 		oldest := ws.recv_queue[0]
 		ordered_remove(&ws.recv_queue, 0)
 		ws.recv_queue_bytes -= u64(len(oldest.data))
 		delete(oldest.data)
 		ws.recv_dropped += 1
 	}
+	assert(len(ws.recv_queue) < WS_MAX_QUEUED_MESSAGES, "recv queue did not make room")
+	assert(ws.recv_queue_bytes <= WS_MAX_QUEUED_BYTES - data_bytes, "recv bytes did not make room")
 	append(&ws.recv_queue, WS_Message{data = data, binary = binary})
 	ws.recv_queue_bytes += data_bytes
 	assert(len(ws.recv_queue) <= WS_MAX_QUEUED_MESSAGES, "recv queue bound violated")
@@ -500,6 +516,7 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 @(private = "file")
 ws_handshake :: proc(ws: ^WebSocket, sock: cnet.TCP_Socket) -> bool {
 	key := generate_ws_key()
+	if len(key) == 0 do return false
 	request := fmt.tprintf(
 		"GET /ws HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n",
 		ws.host,
@@ -650,11 +667,10 @@ ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
 	assert(opcode <= 0x0F, "opcode is a 4-bit field")
 	assert(len(payload) <= WS_MAX_PAYLOAD, "payload exceeds WS_MAX_PAYLOAD")
 
-	// Masking key (4 random bytes).
+	// Masking keys must be unpredictable for intermediaries to remain safe.
 	mask_key: [4]u8
-	for i in 0 ..< 4 {
-		mask_key[i] = u8(rand.uint32() & 0xFF)
-	}
+	if !crypto.HAS_RAND_BYTES do return false
+	crypto.rand_bytes(mask_key[:])
 	frame := ws_encode_frame(opcode, payload, mask_key)
 	defer delete(frame)
 
@@ -764,9 +780,8 @@ ws_close :: proc(ws: ^WebSocket) {
 // Generate a random WebSocket key for the handshake.
 @(private = "file")
 generate_ws_key :: proc() -> string {
+	if !crypto.HAS_RAND_BYTES do return ""
 	key_bytes: [16]u8
-	for i in 0 ..< 16 {
-		key_bytes[i] = u8(rand.uint32() & 0xFF)
-	}
+	crypto.rand_bytes(key_bytes[:])
 	return base64.encode(key_bytes[:], allocator = context.temp_allocator)
 }
