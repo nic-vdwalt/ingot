@@ -38,14 +38,20 @@ path :: proc(app, file: string, allocator := context.temp_allocator) -> (p: stri
 	return fmt.aprintf("%s/%s", dir, file, allocator = allocator), true
 }
 
-// write creates the app data directory (with parents) and writes data to
-// path(app, file). Returns false when the location cannot be resolved or the
-// write fails.
+// write creates the app data directory (with parents) and atomically replaces
+// path(app, file). Writing a sibling first preserves the last valid snapshot
+// when the process crashes or the filesystem rejects an incomplete write.
 write :: proc(app, file: string, data: []u8) -> bool {
 	dir := data_dir(app) or_return
 	if !make_dirs_all_checked(dir) do return false
 	p := fmt.tprintf("%s/%s", dir, file)
-	return os.write_entire_file(p, data) == nil
+	tmp := fmt.tprintf("%s.tmp", p)
+	if os.write_entire_file(tmp, data) != nil do return false
+	if os.rename(tmp, p) != nil {
+		_ = os.remove(tmp)
+		return false
+	}
+	return true
 }
 
 // read loads path(app, file); ok = false when missing or unreadable.
