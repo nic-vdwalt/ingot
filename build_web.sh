@@ -11,14 +11,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 WEB="$ROOT/web"
 
-# Locate the Odin vendor JS runtimes.
-ODIN_BIN="$(command -v odin)"
-ODIN_ROOT="$(dirname "$(readlink "$ODIN_BIN" 2>/dev/null || echo "$ODIN_BIN")")"
-# Homebrew symlink resolves into libexec; fall back to `odin root` if present.
-if [ ! -f "$ODIN_ROOT/core/sys/wasm/js/odin.js" ]; then
-	ODIN_ROOT="$(odin root 2>/dev/null || echo "$ODIN_ROOT")"
-fi
-
 echo "Building wasm..."
 # --export-table is REQUIRED by vendor:wgpu on JS so the browser glue can invoke
 # Odin callbacks (adapter/device requests) through the function table.
@@ -38,9 +30,7 @@ odin build "$SRC" $FILE_FLAG \
 	-extra-linker-flags:"--export-table"
 
 echo "Staging JS runtimes..."
-cp "$ODIN_ROOT/core/sys/wasm/js/odin.js" "$WEB/odin.js"
-cp "$ODIN_ROOT/vendor/wgpu/wgpu.js"       "$WEB/wgpu.js"
-# ingot_web.js / ingot_input.js are committed host glue (not staged from Odin).
+"$ROOT/scripts/stage-web-runtime.sh" "$WEB"
 
 echo "Done. Serve web/ and open index.html in a WebGPU browser:"
 echo "  (cd '$WEB' && python3 -m http.server 8000) then open http://localhost:8000"

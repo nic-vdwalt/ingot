@@ -33,6 +33,7 @@
 	const MAX_DROP_BYTES = 32 * 1024 * 1024;
 	let dropFiles = [];
 	let detachDrop = null;
+	let activeSession = null;
 	let dropGeneration = 0;
 
 	function wasmBytes(pointer, length) {
@@ -786,54 +787,103 @@
 		return cleanup;
 	}
 
-	// Boot an ingot wasm app. `wasmPath` defaults to "ingot_web.wasm".
-	async function ingotRun(wasmPath, opts) {
+	function clearSemanticOverlays() {
+		for (const state of semanticInputs.values()) state.input.remove();
+		for (const state of semanticForms.values()) state.form.remove();
+		for (const state of semanticControls.values()) state.el.remove();
+		semanticInputs.clear();
+		semanticForms.clear();
+		semanticControls.clear();
+	}
+
+	async function createSession(wasmPath, opts) {
 		opts = opts || {};
 		wasmPath = wasmPath || "ingot_web.wasm";
-
+		if (activeSession) throw new Error("an ingot web session is already active");
 		if (!navigator.gpu) {
 			throw new Error(
 				"WebGPU is not available. Use Chrome/Edge 113+ or Safari 18+.");
 		}
-
-		fitCanvas();
-		window.addEventListener("resize", fitCanvas);
-		// Wake the engine's event-driven idle gate on resize so an idle app
-		// re-renders at the new canvas size (see gfx/input_web.odin).
-		window.addEventListener("resize", () => {
-			const x = wasmMemoryInterface && wasmMemoryInterface.exports;
-			if (x && x.ingot_web_resize) x.ingot_web_resize();
-		});
-		window.addEventListener("paste", (event) => {
-			const text = event.clipboardData && event.clipboardData.getData("text/plain");
-			if (typeof text === "string") clipboardText = text;
-		});
-
 		const wmi = new window.odin.WasmMemoryInterface();
 		wasmMemoryInterface = wmi;
 		const webgpu = new window.odin.WebGPUInterface(wmi);
-
-		const extra = {
+		const listeners = [];
+		const listen = (target, type, handler) => {
+			target.addEventListener(type, handler);
+			listeners.push([target, type, handler]);
+		};
+		const onResize = () => {
+			fitCanvas();
+			const x = wmi.exports;
+			if (x && x.ingot_web_resize) x.ingot_web_resize();
+		};
+		const onPaste = (event) => {
+			const text = event.clipboardData && event.clipboardData.getData("text/plain");
+			if (typeof text === "string") clipboardText = text;
+		};
+		const onResume = () => {
+			if (document.visibilityState && document.visibilityState !== "visible") return;
+			fitCanvas();
+			const x = wmi.exports;
+			if (x && x.ingot_web_resume) x.ingot_web_resume();
+		};
+		fitCanvas();
+		listen(window, "resize", onResize);
+		listen(window, "paste", onPaste);
+		listen(window, "pageshow", onResume);
+		listen(document, "visibilitychange", onResume);
+		const detachInput = window.ingotInput && window.ingotInput.attach
+			? window.ingotInput.attach(CANVAS_ID, wmi) : () => {};
+		const detachFiles = attachDrop(wmi);
+		const appSession = opts.appSessionFactory ? opts.appSessionFactory(wmi) : null;
+		const extra = Object.assign({
 			wgpu: webgpu.getInterface(),
 			ingot: ingotImports(),
 			ingot_http: httpImports(),
 			ingot_audio: audioImports(),
+		}, appSession ? appSession.imports : {}, opts.imports || {});
+		let destroyed = false;
+		const session = {
+			wmi,
+			destroy: () => {
+				if (destroyed) return;
+				destroyed = true;
+				const x = wmi.exports;
+				if (opts.onDestroy) opts.onDestroy(x);
+				if (x && x.client_web_shutdown) x.client_web_shutdown();
+				for (const slot of httpSlots) if (slot && slot.controller) slot.controller.abort();
+				httpSlots.fill(null);
+				if (appSession && appSession.destroy) appSession.destroy();
+				detachFiles();
+				detachInput();
+				for (const [target, type, handler] of listeners) target.removeEventListener(type, handler);
+				clearSemanticOverlays();
+				if (wasmMemoryInterface === wmi) wasmMemoryInterface = null;
+				if (activeSession === session) activeSession = null;
+			},
 		};
-
-		// ingot_input.js (Step 4) registers DOM listeners that push into the
-		// engine's input exports; if present, let it attach now.
-		if (window.ingotInput && typeof window.ingotInput.attach === "function") {
-			window.ingotInput.attach(CANVAS_ID, wmi);
+		activeSession = session;
+		try {
+			session.runResult = await window.odin.runWasm(wasmPath, null, extra, wmi);
+			return session;
+		} catch (error) {
+			session.destroy();
+			throw error;
 		}
-		attachDrop(wmi);
+	}
 
-		// odin.js runs main() (_start), then drives the exported step() via
-		// requestAnimationFrame until it returns false.
-		return window.odin.runWasm(wasmPath, null, extra, wmi);
+	async function ingotRun(wasmPath, opts) {
+		return createSession(wasmPath, opts);
+	}
+
+	function ingotStop() {
+		if (activeSession) activeSession.destroy();
 	}
 
 	window.ingotWeb = {
 		run: ingotRun,
+		stop: ingotStop,
+		createSession: createSession,
 		fitCanvas: fitCanvas,
 		ingotImports: ingotImports,
 		httpImports: httpImports,
