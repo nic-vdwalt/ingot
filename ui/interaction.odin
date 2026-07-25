@@ -17,6 +17,24 @@ Interaction :: struct {
 	clicked:  bool, // activation: release over the rect
 }
 
+Pressable_Config :: struct {
+	rect:      Rect_I32,
+	role:      Sem_Role,
+	label:     string,
+	stable_id: string,
+	focus:     Focus_Opt,
+	disabled:  bool,
+	selected:  bool,
+}
+
+Pressable_Result :: struct {
+	hovered:   bool,
+	pressed:   bool,
+	held:      bool,
+	activated: bool,
+	focused:   bool,
+}
+
 // Interact_Event is the raw input snapshot interact_step consumes. Split out
 // so the protocol core is pure and unit-testable without a window.
 Interact_Event :: struct {
@@ -125,4 +143,37 @@ interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Inter
 		}
 	}
 	return it
+}
+
+pressable :: proc(frame: ^Ui_Frame, config: Pressable_Config) -> Pressable_Result {
+	assert(frame != nil && frame.open, "pressable: invalid frame")
+	assert(config.rect.w > 0 && config.rect.h > 0, "pressable: empty rect")
+	assert(config.role != .None && config.label != "", "pressable: semantics required")
+	assert(config.stable_id != "", "pressable: stable id required")
+
+	result: Pressable_Result
+	result.focused = focus_opt_focused(config.focus)
+	if !config.disabled {
+		rect := config.rect
+		it := interact(frame, {f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)})
+		focus_opt_click(frame, config.focus, rect.x, rect.y, rect.w, rect.h)
+		result.hovered = it.hovered
+		result.pressed = it.pressed
+		result.held = it.held
+		result.activated = it.clicked || focus_opt_activated(frame, config.focus)
+		if result.hovered do request_cursor(frame, .POINTING_HAND)
+	}
+	state: Sem_State
+	if config.disabled do state += {.Disabled}
+	if config.selected do state += {.Selected}
+	semantic_push(
+		frame,
+		config.role,
+		config.rect,
+		config.label,
+		state,
+		config.focus,
+		config.stable_id,
+	)
+	return result
 }

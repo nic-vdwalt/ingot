@@ -26,6 +26,8 @@ MAX_SEM_NODES :: 256
 // SEM_LABEL_MAX bounds the copied label bytes; longer labels truncate at a
 // rune boundary so assistive tech never receives split UTF-8.
 SEM_LABEL_MAX :: 64
+SEM_DESCRIPTION_MAX :: 128
+SEM_VALUE_MAX :: 256
 
 // MAX_SEM_FOCUS bounds the frame-ordered focus registry (focus_scope.odin).
 MAX_SEM_FOCUS :: 128
@@ -42,6 +44,13 @@ Sem_Role :: enum u8 {
 	Label,
 	Pane,
 	Modal,
+	Tab,
+	Tab_Panel,
+	List,
+	List_Item,
+	Option,
+	Status,
+	Progress,
 }
 
 Sem_Flag :: enum u8 {
@@ -49,20 +58,31 @@ Sem_Flag :: enum u8 {
 	Disabled,
 	Focused,
 	Expanded,
+	Selected,
+	Read_Only,
+	Password,
+	Multiline,
 }
 
 Sem_State :: bit_set[Sem_Flag;u8]
 
 Sem_Node :: struct {
-	id:        u64,
-	role:      Sem_Role,
-	rect:      Rect_I32,
-	label:     [SEM_LABEL_MAX]u8,
-	label_len: u8,
-	state:     Sem_State,
-	value:     f32, // slider/progress current value
-	lo:        f32, // slider range low
-	hi:        f32, // slider range high
+	id:              u64,
+	parent_id:       u64,
+	role:            Sem_Role,
+	rect:            Rect_I32,
+	label:           [SEM_LABEL_MAX]u8,
+	label_len:       u8,
+	description:     [SEM_DESCRIPTION_MAX]u8,
+	description_len: u8,
+	text_value:      [SEM_VALUE_MAX]u8,
+	text_value_len:  u16,
+	selection_start: i32,
+	selection_end:   i32,
+	state:           Sem_State,
+	value:           f32,
+	lo:              f32,
+	hi:              f32,
 }
 
 Sem_Frame :: struct {
@@ -210,6 +230,10 @@ semantic_push :: proc(
 	value: f32 = 0,
 	lo: f32 = 0,
 	hi: f32 = 0,
+	description: string = "",
+	text_value: string = "",
+	selection_start: i32 = 0,
+	selection_end: i32 = 0,
 ) -> ^Sem_Node {
 	assert(frame != nil && frame.open, "semantic_push: invalid frame")
 	assert(role != .None, "semantic_push: role required")
@@ -242,6 +266,14 @@ semantic_push :: proc(
 	n := sem_label_clip(label)
 	copy(node.label[:n], label[:n])
 	node.label_len = u8(n)
+	description_len := min(len(description), SEM_DESCRIPTION_MAX)
+	copy(node.description[:description_len], description[:description_len])
+	node.description_len = u8(description_len)
+	text_value_len := min(len(text_value), SEM_VALUE_MAX)
+	copy(node.text_value[:text_value_len], text_value[:text_value_len])
+	node.text_value_len = u16(text_value_len)
+	node.selection_start = selection_start
+	node.selection_end = selection_end
 	if focus_opt_focused(focus) {
 		node.state += {.Focused}
 	}

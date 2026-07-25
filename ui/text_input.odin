@@ -418,6 +418,13 @@ Text_Input_Autocomplete :: enum i32 {
 	New_Password,
 }
 
+Text_Input_Submit :: enum u8 {
+	Enter,
+	Never,
+}
+
+Text_Input_Filter :: #type proc(value: rune) -> bool
+
 Text_Input_Semantics :: struct {
 	form_id:      string,
 	field_id:     string,
@@ -436,6 +443,10 @@ Text_Input_Config :: struct {
 	masked:       bool, // display asterisks (passwords)
 	enable_pills: bool, // mention-pill support (atomic chips)
 	enable_undo:  bool, // undo/redo stacks
+	max_bytes:    int, // zero uses INPUT_MAX_LEN
+	single_line:  bool,
+	submit:       Text_Input_Submit,
+	filter:       Text_Input_Filter,
 	semantics:    Text_Input_Semantics,
 }
 
@@ -518,6 +529,10 @@ TI_Ctx :: struct {
 	inner_w:     i32,
 	placeholder: string,
 	masked:      bool,
+	max_bytes:   int,
+	single_line: bool,
+	submit:      Text_Input_Submit,
+	filter:      Text_Input_Filter,
 	semantics:   Text_Input_Semantics,
 	active:      bool,
 	caret:       bool, // cursor != nil
@@ -648,8 +663,16 @@ ti_keys_insert :: proc(ctx: ^TI_Ctx, mods: bool) {
 	// Handle character input. Ignore characters while a modifier is held so
 	// shortcuts (Cmd+A/C/X/V/Z) don't insert their letters.
 	for index in 0 ..< frame_input(ctx.frame).character_count {
-		ch := frame_input(ctx.frame).characters[index]
-		if mods do continue
+		ch := rune(frame_input(ctx.frame).characters[index])
+		if mods || (ctx.single_line && ch == '\n') do continue
+		if ctx.filter != nil && !ctx.filter(ch) do continue
+		buf, rune_size := utf8.encode_rune(ch)
+		selected_bytes := 0
+		if ti_sel_owner(ctx) {
+			lo, hi := sel_range(ctx.sel)
+			selected_bytes = hi - lo
+		}
+		if strings.builder_len(sb^) - selected_bytes + rune_size > ctx.max_bytes do continue
 		// Typing over a selection replaces it (one undo step).
 		undo_record(
 			ctx.frame,
@@ -664,33 +687,37 @@ ti_keys_insert :: proc(ctx: ^TI_Ctx, mods: bool) {
 			if ctx.caret do ctx.cursor^ = nc
 		}
 		if ctx.caret {
-			buf, n := utf8.encode_rune(rune(ch))
 			before := ctx.cursor^
-			ctx.cursor^ = caret_insert(sb, ctx.cursor^, string(buf[:n]))
+			ctx.cursor^ = caret_insert(sb, ctx.cursor^, string(buf[:rune_size]))
 			if ctx.pills != nil do pills_shift_after_insert(ctx.pills, before, ctx.cursor^ - before)
-		} else if strings.builder_len(sb^) < INPUT_MAX_LEN {
-			strings.write_rune(sb, rune(ch))
+		} else {
+			strings.write_rune(sb, ch)
 		}
 	}
 	// Handle paste (Cmd+V / Ctrl+V).
 	if is_key_pressed(ctx.frame, .V) && mods {
 		clip_str := input_clipboard(frame_input(ctx.frame))
-		if len(clip_str) > 0 {
+		paste := strings.builder_make(context.temp_allocator)
+		for ch in clip_str {
+			if ctx.single_line && ch == '\n' do continue
+			if ctx.filter != nil && !ctx.filter(ch) do continue
+			buf, rune_size := utf8.encode_rune(ch)
+			if strings.builder_len(sb^) + strings.builder_len(paste) + rune_size > ctx.max_bytes do break
+			strings.write_rune(&paste, ch)
+		}
+		paste_text := strings.to_string(paste)
+		if len(paste_text) > 0 {
 			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
-			// Pasting over a selection replaces it.
 			if ti_sel_owner(ctx) {
 				nc := selection_delete(ctx.sel, sb, ctx.pills)
 				if ctx.caret do ctx.cursor^ = nc
 			}
 			if ctx.caret {
 				before := ctx.cursor^
-				ctx.cursor^ = caret_insert(sb, ctx.cursor^, clip_str)
+				ctx.cursor^ = caret_insert(sb, ctx.cursor^, paste_text)
 				if ctx.pills != nil do pills_shift_after_insert(ctx.pills, before, ctx.cursor^ - before)
 			} else {
-				for ch in clip_str {
-					if strings.builder_len(sb^) >= INPUT_MAX_LEN do break
-					strings.write_rune(sb, ch)
-				}
+				strings.write_string(sb, paste_text)
 			}
 		}
 	}
@@ -776,12 +803,15 @@ ti_keys_enter :: proc(ctx: ^TI_Ctx) -> bool {
 	shift_down := is_key_down(ctx.frame, .LEFT_SHIFT) || is_key_down(ctx.frame, .RIGHT_SHIFT)
 	// Enter submits. Suppressed while the spell menu is open so Enter applies
 	// the highlighted suggestion instead of sending.
-	if is_key_pressed(ctx.frame, .ENTER) && !shift_down && !spell_menu_active(ctx.spell_menu, sb) {
+	if ctx.submit == .Enter &&
+	   is_key_pressed(ctx.frame, .ENTER) &&
+	   !shift_down &&
+	   !spell_menu_active(ctx.spell_menu, sb) {
 		entered = true
 		sel_reset(ctx.sel)
 	}
 	// Shift+Enter inserts a newline.
-	if is_key_pressed(ctx.frame, .ENTER) && shift_down {
+	if !ctx.single_line && is_key_pressed(ctx.frame, .ENTER) && shift_down {
 		undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
 		if ti_sel_owner(ctx) {
 			nc := selection_delete(ctx.sel, sb, ctx.pills)
@@ -1536,9 +1566,14 @@ text_input_box :: proc(
 		inner_w     = cfg.rect.w - metrics.PADDING * 2,
 		placeholder = cfg.placeholder,
 		masked      = cfg.masked,
+		max_bytes   = cfg.max_bytes if cfg.max_bytes > 0 else INPUT_MAX_LEN,
+		single_line = cfg.single_line,
+		submit      = cfg.submit,
+		filter      = cfg.filter,
 		semantics   = cfg.semantics,
 		active      = cfg.active,
 		caret       = true,
 	}
+	assert(ctx.max_bytes > 0 && ctx.max_bytes <= INPUT_MAX_LEN, "text_input_box: invalid max")
 	return ti_run(&ctx)
 }
