@@ -41,7 +41,7 @@
 		const { mem, readStr, writeBytes } = helpers(WMI);
 		const sockets = new Map(); // id → { ws, state, queue: [{bytes, binary}] }
 		let nextSock = 1;
-		return {
+		const imports = {
 			ingot_ws_open: (urlPtr, urlLen) => {
 				const url = readStr(urlPtr, urlLen);
 				const id = nextSock++;
@@ -100,6 +100,16 @@
 				return writeBytes(dst, msg.bytes, cap);
 			},
 		};
+		return {
+			imports,
+			destroy: () => {
+				for (const rec of sockets.values()) {
+					if (rec.ws) { try { rec.ws.close(); } catch (e) {} }
+					rec.queue.length = 0;
+				}
+				sockets.clear();
+			},
+		};
 	}
 
 	// ---- ingot_http: browser fetch() ------------------------------------
@@ -108,12 +118,12 @@
 		const reqs = new Map(); // id → { status: 0|1|2, body: Uint8Array|null, timer }
 		let nextReq = 1;
 		const HTTP_TIMEOUT_MS = 30000; // match native core:net receive timeout
-		return {
+		const imports = {
 			ingot_http_get: (urlPtr, urlLen) => {
 				const url = readStr(urlPtr, urlLen);
 				const id = nextReq++;
 				const ctl = new AbortController();
-				const rec = { status: 0, body: null, timer: 0 };
+				const rec = { status: 0, body: null, timer: 0, controller: ctl };
 				rec.timer = setTimeout(() => {
 					if (rec.status === 0) { rec.status = 2; ctl.abort(); }
 				}, HTTP_TIMEOUT_MS);
@@ -142,6 +152,16 @@
 				if (r && r.timer) clearTimeout(r.timer);
 				reqs.delete(id); // free the slot
 				return n;
+			},
+		};
+		return {
+			imports,
+			destroy: () => {
+				for (const rec of reqs.values()) {
+					if (rec.timer) clearTimeout(rec.timer);
+					if (rec.controller) rec.controller.abort();
+				}
+				reqs.clear();
 			},
 		};
 	}
@@ -177,9 +197,30 @@
 		};
 	}
 
+	function createSession(WMI) {
+		const ws = wsImports(WMI);
+		const http = httpImports(WMI);
+		let destroyed = false;
+		return {
+			imports: {
+				ingot_ws: ws.imports,
+				ingot_http: http.imports,
+				ingot_store: storeImports(WMI),
+				ingot_open: openImports(WMI),
+			},
+			destroy: () => {
+				if (destroyed) return;
+				destroyed = true;
+				http.destroy();
+				ws.destroy();
+			},
+		};
+	}
+
 	window.ingotApp = {
-		wsImports: wsImports,
-		httpImports: httpImports,
+		createSession: createSession,
+		wsImports: (WMI) => wsImports(WMI).imports,
+		httpImports: (WMI) => httpImports(WMI).imports,
 		storeImports: storeImports,
 		openImports: openImports,
 	};

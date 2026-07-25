@@ -42,9 +42,17 @@
 	// focus (arrows, space, tab, backspace, page up/down, home/end).
 	const CONSUME = new Set([32, 258, 259, 262, 263, 264, 265, 266, 267, 268, 269]);
 
+	let detachCurrent = null;
+
 	function attach(canvasId, wmi) {
+		if (detachCurrent) detachCurrent();
 		const canvas = document.getElementById(canvasId);
-		if (!canvas) return;
+		if (!canvas) return () => {};
+		const listeners = [];
+		const listen = (target, type, handler, options) => {
+			target.addEventListener(type, handler, options);
+			listeners.push([target, type, handler, options]);
+		};
 
 		// Exports may not be set at attach time; read lazily at event time.
 		const ex = () => (wmi && wmi.exports) ? wmi.exports : null;
@@ -93,10 +101,10 @@
 			if (x && k !== undefined) x.ingot_web_key(k, false, false);
 		}
 
-		canvas.addEventListener("keydown", onKeydown);
-		canvas.addEventListener("keyup", onKeyup);
-		ime.addEventListener("keydown", onKeydown);
-		ime.addEventListener("keyup", onKeyup);
+		listen(canvas, "keydown", onKeydown);
+		listen(canvas, "keyup", onKeyup);
+		listen(ime, "keydown", onKeydown);
+		listen(ime, "keyup", onKeyup);
 
 		// Composition events fire only on the proxy. Preedit updates stage the
 		// in-progress string; the final composed text enters the same char
@@ -107,13 +115,13 @@
 			x.ingot_web_preedit_clear();
 			if (s) for (const ch of s) x.ingot_web_preedit_char(ch.codePointAt(0));
 		};
-		ime.addEventListener("compositionstart", function () {
+		listen(ime, "compositionstart", function () {
 			forwardPreedit("");
 		});
-		ime.addEventListener("compositionupdate", function (e) {
+		listen(ime, "compositionupdate", function (e) {
 			forwardPreedit(e.data || "");
 		});
-		ime.addEventListener("compositionend", function (e) {
+		listen(ime, "compositionend", function (e) {
 			forwardPreedit("");
 			const x = ex();
 			if (x && e.data) for (const ch of e.data) x.ingot_web_char(ch.codePointAt(0));
@@ -122,16 +130,16 @@
 		// Non-composition input still mutates the proxy's value (chars are
 		// forwarded from keydown); keep it empty so stale text can't leak into
 		// the next composition.
-		ime.addEventListener("input", function (e) {
+		listen(ime, "input", function (e) {
 			if (!e.isComposing) ime.value = "";
 		});
 
-		canvas.addEventListener("pointermove", function (e) {
+		listen(canvas, "pointermove", function (e) {
 			const x = ex();
 			if (x) x.ingot_web_mouse_move(e.offsetX, e.offsetY);
 		});
 
-		canvas.addEventListener("pointerdown", function (e) {
+		listen(canvas, "pointerdown", function (e) {
 			const x = ex();
 			if (!x) return;
 			canvas.focus();
@@ -141,14 +149,14 @@
 			if (b !== undefined) x.ingot_web_mouse_button(b, true);
 		});
 
-		canvas.addEventListener("pointerup", function (e) {
+		listen(canvas, "pointerup", function (e) {
 			const x = ex();
 			if (!x) return;
 			const b = BTN[e.button];
 			if (b !== undefined) x.ingot_web_mouse_button(b, false);
 		});
 
-		canvas.addEventListener("wheel", function (e) {
+		listen(canvas, "wheel", function (e) {
 			const x = ex();
 			if (!x) return;
 			// Convert the browser wheel delta into the same "notch" units the
@@ -178,21 +186,36 @@
 			e.preventDefault();
 		}, { passive: false });
 
-		canvas.addEventListener("pointerenter", function () {
+		listen(canvas, "pointerenter", function () {
 			const x = ex(); if (x) x.ingot_web_hover(true);
 		});
-		canvas.addEventListener("pointerleave", function () {
+		listen(canvas, "pointerleave", function () {
 			const x = ex(); if (x) x.ingot_web_hover(false);
 		});
-		canvas.addEventListener("blur", function (e) {
+		listen(canvas, "blur", function (e) {
 			// Focus moving to the IME proxy is still "ours" — don't clear
 			// held keys mid-typing.
 			if (e.relatedTarget && e.relatedTarget.id === "ingot-ime") return;
 			const x = ex(); if (x) x.ingot_web_hover(false);
 		});
 		// Suppress the browser context menu so right-click works as a UI button.
-		canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+		listen(canvas, "contextmenu", function (e) { e.preventDefault(); });
+		let active = true;
+		const detach = () => {
+			if (!active) return;
+			active = false;
+			for (const [target, type, handler, options] of listeners) {
+				target.removeEventListener(type, handler, options);
+			}
+			if (detachCurrent === detach) detachCurrent = null;
+		};
+		detachCurrent = detach;
+		return detach;
 	}
 
-	window.ingotInput = { attach: attach };
+	function detach() {
+		if (detachCurrent) detachCurrent();
+	}
+
+	window.ingotInput = { attach: attach, detach: detach };
 })();
