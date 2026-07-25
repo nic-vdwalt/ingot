@@ -49,6 +49,7 @@ Paint_Command :: struct {
 	codepoint:    rune,
 	text_offset:  int,
 	text_length:  int,
+	clip_restore: bool,
 }
 
 Paint_List :: struct {
@@ -56,7 +57,8 @@ Paint_List :: struct {
 	count:              int,
 	text:               [PAINT_TEXT_CAP]u8,
 	text_len:           int,
-	clip_depth:         int,
+	clip_stack:         [PAINT_CLIP_CAP]Rect,
+	clip_count:         int,
 	dropped_commands:   int,
 	dropped_text_bytes: int,
 	sink:               Paint_Sink,
@@ -73,9 +75,44 @@ paint_list_reset :: proc(list: ^Paint_List) {
 	assert(list != nil, "paint_list_reset: nil list")
 	list.count = 0
 	list.text_len = 0
-	list.clip_depth = 0
+	list.clip_count = 0
 	list.dropped_commands = 0
 	list.dropped_text_bytes = 0
+}
+
+paint_clip_intersection :: proc(a, b: Rect) -> Rect {
+	assert(a.width >= 0 && a.height >= 0, "paint_clip_intersection: invalid first rect")
+	assert(b.width >= 0 && b.height >= 0, "paint_clip_intersection: invalid second rect")
+	x0 := max(a.x, b.x)
+	y0 := max(a.y, b.y)
+	x1 := min(a.x + a.width, b.x + b.width)
+	y1 := min(a.y + a.height, b.y + b.height)
+	return {x0, y0, max(f32(0), x1 - x0), max(f32(0), y1 - y0)}
+}
+
+paint_clip_begin :: proc(list: ^Paint_List, rect: Rect) {
+	assert(list != nil, "paint_clip_begin: nil list")
+	assert(rect.width >= 0 && rect.height >= 0, "paint_clip_begin: invalid rect")
+	assert(list.clip_count < PAINT_CLIP_CAP, "paint_clip_begin: clip limit")
+	effective := rect
+	if list.clip_count > 0 {
+		effective = paint_clip_intersection(list.clip_stack[list.clip_count - 1], rect)
+	}
+	if paint_push(list, {kind = .Clip_Begin, rect = effective}) {
+		list.clip_stack[list.clip_count] = effective
+		list.clip_count += 1
+	}
+}
+
+paint_clip_end :: proc(list: ^Paint_List) {
+	assert(list != nil, "paint_clip_end: nil list")
+	assert(list.clip_count > 0, "paint_clip_end: no clip")
+	restore := list.clip_count > 1
+	rect: Rect
+	if restore do rect = list.clip_stack[list.clip_count - 2]
+	if paint_push(list, {kind = .Clip_End, rect = rect, clip_restore = restore}) {
+		list.clip_count -= 1
+	}
 }
 
 paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {

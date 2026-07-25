@@ -180,6 +180,10 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 ui_frame_finalize :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open && !frame.finalized)
 	assert(frame.open_roots == 0 && frame.pane_count == 0 && !frame.overlay.open)
+	if frame.output != nil {
+		assert(frame.output.main.clip_count == 0, "ui_frame_finalize: unbalanced main clips")
+		assert(frame.output.overlay.clip_count == 0, "ui_frame_finalize: unbalanced overlay clips")
+	}
 	overlay_flush(frame); cursor_apply(frame); focus_scope_frame_end(frame)
 	frame.runtime.semantics_snapshot = frame.semantics.cur
 	a11y_expire_after_frame(frame.runtime); focus_scope_clear_live(frame)

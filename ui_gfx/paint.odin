@@ -127,5 +127,13 @@ replay_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Pain
 		replay_clip_begin_command(command)
 	case .Clip_End:
 		rl.EndScissorMode()
+		if command.clip_restore {
+			rl.BeginScissorMode(
+				i32(command.rect.x),
+				i32(command.rect.y),
+				i32(command.rect.width),
+				i32(command.rect.height),
+			)
+		}
 	}
 }
