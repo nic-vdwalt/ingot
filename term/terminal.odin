@@ -10,9 +10,19 @@ import "../pty"
 import "base:runtime"
 import "core:c"
 import "core:strings"
+import "core:sync"
+import "core:thread"
+import "core:time"
 
 // Maximum number of scrollback lines retained per terminal instance.
 TERM_SCROLLBACK_MAX :: 5000
+TERM_OUTPUT_CHUNK_SIZE :: 65532
+TERM_OUTPUT_QUEUE_CAP :: 16
+
+Term_Output_Chunk :: struct {
+	data: [TERM_OUTPUT_CHUNK_SIZE]u8,
+	len:  int,
+}
 
 // Term_Instance bundles a libvterm VTerm, a POSIX PTY, and bookkeeping used
 // by the render / input / pump layers.
@@ -25,6 +35,14 @@ Term_Instance :: struct {
 	cols:           u16,
 	rows:           u16,
 	pty_running:    bool,
+	reader_running: bool,
+	reader_thread:  ^thread.Thread,
+	wake:           proc "contextless" (),
+	output_mutex:   sync.Mutex,
+	output_queue:   [TERM_OUTPUT_QUEUE_CAP]Term_Output_Chunk,
+	output_head:    int,
+	output_count:   int,
+	output_eof:     bool,
 	cursor_visible: bool,
 	cursor_blink:   bool,
 	altscreen:      bool,
@@ -247,6 +265,7 @@ term_start :: proc(
 	cols, rows: u16,
 	default_fg: [3]u8 = {220, 220, 220},
 	default_bg: [3]u8 = {27, 27, 27},
+	wake: proc "contextless" () = nil,
 ) -> ^Term_Instance {
 	ts := new(Term_Instance)
 	if !term_init_emulator(ts, cols, rows, default_fg, default_bg) {
@@ -265,12 +284,70 @@ term_start :: proc(
 	}
 	ts.pty = p
 	ts.pty_running = true
+	ts.wake = wake
+	when !pty.INGOT_PTY_SIM {
+		sync.atomic_store(&ts.reader_running, true)
+		ts.reader_thread = thread.create(proc(t: ^thread.Thread) {
+			term_reader_loop(cast(^Term_Instance)t.data)
+		})
+		if ts.reader_thread != nil {
+			ts.reader_thread.data = ts
+			thread.start(ts.reader_thread)
+		} else {
+			sync.atomic_store(&ts.reader_running, false)
+			pty.destroy(&ts.pty)
+			term_free_emulator(ts)
+			free(ts)
+			return nil
+		}
+	}
 	return ts
+}
+
+@(private = "file")
+term_reader_loop :: proc(ts: ^Term_Instance) {
+	buf: [TERM_OUTPUT_CHUNK_SIZE]u8
+	for sync.atomic_load(&ts.reader_running) {
+		data, eof := pty.drain(&ts.pty, buf[:])
+		if len(data) > 0 {
+			queued := false
+			for sync.atomic_load(&ts.reader_running) && !queued {
+				sync.mutex_lock(&ts.output_mutex)
+				if ts.output_count < TERM_OUTPUT_QUEUE_CAP {
+					index := (ts.output_head + ts.output_count) % TERM_OUTPUT_QUEUE_CAP
+					copy(ts.output_queue[index].data[:len(data)], data)
+					ts.output_queue[index].len = len(data)
+					ts.output_count += 1
+					queued = true
+				}
+				sync.mutex_unlock(&ts.output_mutex)
+				if !queued do time.sleep(time.Millisecond)
+			}
+			if queued && ts.wake != nil do ts.wake()
+		}
+		if eof {
+			sync.mutex_lock(&ts.output_mutex)
+			ts.output_eof = true
+			sync.mutex_unlock(&ts.output_mutex)
+			if ts.wake != nil do ts.wake()
+			break
+		}
+		if len(data) == 0 do time.sleep(time.Millisecond)
+	}
+	sync.atomic_store(&ts.reader_running, false)
 }
 
 // term_destroy tears down the PTY and libvterm state and frees the instance.
 term_destroy :: proc(ts: ^Term_Instance) {
 	if ts == nil do return
+	when !pty.INGOT_PTY_SIM {
+		sync.atomic_store(&ts.reader_running, false)
+		if ts.reader_thread != nil {
+			thread.join(ts.reader_thread)
+			thread.destroy(ts.reader_thread)
+			ts.reader_thread = nil
+		}
+	}
 	pty.destroy(&ts.pty)
 	term_free_emulator(ts)
 	free(ts)

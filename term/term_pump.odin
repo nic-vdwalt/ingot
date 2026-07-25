@@ -9,6 +9,7 @@ package term
 import lv "../libvterm"
 import "../pty"
 import "core:c"
+import "core:sync"
 
 // Maximum buffer-fulls drained per term_pump call. Bounds worst-case frame
 // time while letting a large backlog (e.g. `cat` of a big file) catch up at
@@ -95,34 +96,55 @@ _term_ingest :: proc(ts: ^Term_Instance, total: int, eof: bool) {
 term_pump :: proc(ts: ^Term_Instance) -> (bytes_read: int) {
 	if ts == nil || !ts.pty_running do return 0
 
-	// Drain up to TERM_PUMP_MAX_BUFS buffer-fulls so a large backlog catches
-	// up within a single frame instead of fast-forwarding over many frames.
-	for _ in 0 ..< TERM_PUMP_MAX_BUFS {
-		// Place held-back partial sequence bytes at the front of the buffer
-		// and read new data after them so both are fed in a single write.
-		hold := ts.utf8_hold_len
-		// A held prefix is at most 3 bytes (an unfinished 4-byte sequence) and
-		// must always fit ahead of the fresh read, or the copy below corrupts
-		// the buffer. Assert the invariant on both operands.
-		assert(hold >= 0)
-		assert(hold <= len(ts.utf8_hold))
-		assert(hold < len(ts.read_buf))
-		copy(ts.read_buf[:hold], ts.utf8_hold[:hold])
-		data, eof := pty.drain(&ts.pty, ts.read_buf[hold:])
-		total := hold + len(data)
-		// drain never returns more than the slice it was handed, so the held
-		// prefix plus the new bytes cannot exceed the buffer.
-		assert(total <= len(ts.read_buf))
-		ts.utf8_hold_len = 0
-
-		_term_ingest(ts, total, eof)
-		bytes_read += len(data)
-		if eof {
-			ts.pty_running = false
-			return
+	when pty.INGOT_PTY_SIM {
+		for _ in 0 ..< TERM_PUMP_MAX_BUFS {
+			hold := ts.utf8_hold_len
+			assert(hold >= 0)
+			assert(hold <= len(ts.utf8_hold))
+			assert(hold < len(ts.read_buf))
+			copy(ts.read_buf[:hold], ts.utf8_hold[:hold])
+			data, eof := pty.drain(&ts.pty, ts.read_buf[hold:])
+			total := hold + len(data)
+			assert(total <= len(ts.read_buf))
+			ts.utf8_hold_len = 0
+			_term_ingest(ts, total, eof)
+			bytes_read += len(data)
+			if eof {
+				ts.pty_running = false
+				return
+			}
+			if total < len(ts.read_buf) do break
 		}
-		// Buffer not filled — the PTY is fully drained for now.
-		if total < len(ts.read_buf) do break
+	} else {
+		for _ in 0 ..< TERM_PUMP_MAX_BUFS {
+			sync.mutex_lock(&ts.output_mutex)
+			if ts.output_count == 0 {
+				eof := ts.output_eof
+				sync.mutex_unlock(&ts.output_mutex)
+				if eof {
+					ts.pty_running = false
+				}
+				break
+			}
+			chunk := &ts.output_queue[ts.output_head]
+			n := chunk.len
+			copy(ts.read_buf[ts.utf8_hold_len:], chunk.data[:n])
+			chunk.len = 0
+			ts.output_head = (ts.output_head + 1) % TERM_OUTPUT_QUEUE_CAP
+			ts.output_count -= 1
+			eof := ts.output_eof && ts.output_count == 0
+			sync.mutex_unlock(&ts.output_mutex)
+
+			hold := ts.utf8_hold_len
+			copy(ts.read_buf[:hold], ts.utf8_hold[:hold])
+			ts.utf8_hold_len = 0
+			_term_ingest(ts, hold + n, eof)
+			bytes_read += n
+			if eof {
+				ts.pty_running = false
+				break
+			}
+		}
 	}
 	return
 }
