@@ -6,7 +6,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 col="-collection:ingot=$root"
 guard="-define:INGOT_FRAME_SCRATCH_GUARD=true"
 "$root/scripts/check-ui-state.sh"
-for pkg in gfx ui term prefs net; do
+for pkg in gfx ui libvterm term prefs net; do
 	echo "== testing $pkg =="
 	extra=()
 	# UI tests use deterministic single-thread execution for native graphics

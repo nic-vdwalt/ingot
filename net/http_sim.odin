@@ -161,11 +161,11 @@ when INGOT_NET_SIM {
 			latency += u64(sim_int_range(&f.prng, 1, SIM_EXTRA_DELAY_TICKS + 1))
 		}
 		message := Sim_Message {
-			tag = tag,
-			request = sim_request_clone(request),
-			sent_tick = f.tick,
+			tag          = tag,
+			request      = sim_request_clone(request),
+			sent_tick    = f.tick,
 			deliver_tick = f.tick + latency,
-			fault = fault,
+			fault        = fault,
 			result_slots = SIM_RESULT_RESERVATION,
 		}
 		if options.priority == .Priority {

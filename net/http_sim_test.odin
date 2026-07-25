@@ -157,7 +157,11 @@ when INGOT_NET_SIM {
 		sim_fetcher_init(&f, 12, 0, test_respond)
 		fetcher_start(&f, "sim", 0)
 		defer fetcher_stop(&f)
-		request := Http_Request{method = .Get, path = "/options", maximum_body = DEFAULT_MAXIMUM_BODY}
+		request := Http_Request {
+			method       = .Get,
+			path         = "/options",
+			maximum_body = DEFAULT_MAXIMUM_BODY,
+		}
 		testing.expect(
 			t,
 			fetcher_request_with_options(

@@ -45,6 +45,11 @@ VTerm_Rect :: struct {
 	end_col:   c.int,
 }
 
+#assert(size_of(VTerm_Pos) == 8)
+#assert(align_of(VTerm_Pos) == 4)
+#assert(size_of(VTerm_Rect) == 16)
+#assert(align_of(VTerm_Rect) == 4)
+
 // Tagged union: 4 bytes total (largest member is {type,r,g,b}: 4 bytes).
 VTerm_Color :: struct #raw_union {
 	type:    u8,
@@ -87,6 +92,16 @@ VTerm_Screen_Cell :: struct {
 	fg:    VTerm_Color,
 	bg:    VTerm_Color,
 }
+
+#assert(size_of(VTerm_Color) == 4)
+#assert(align_of(VTerm_Color) == 1)
+#assert(size_of(VTerm_Screen_Cell_Attrs) == 4)
+#assert(size_of(VTerm_Screen_Cell) == 40)
+#assert(align_of(VTerm_Screen_Cell) == 4)
+#assert(offset_of(VTerm_Screen_Cell, width) == 24)
+#assert(offset_of(VTerm_Screen_Cell, attrs) == 28)
+#assert(offset_of(VTerm_Screen_Cell, fg) == 32)
+#assert(offset_of(VTerm_Screen_Cell, bg) == 36)
 
 // VTermProp enum values.
 VTerm_Prop :: enum c.int {
@@ -166,6 +181,20 @@ vterm_str_frag_initial :: #force_inline proc "contextless" (f: ^VTerm_String_Fra
 @(require_results)
 vterm_str_frag_final :: #force_inline proc "contextless" (f: ^VTerm_String_Fragment) -> bool {
 	return (f._bits >> 31) & 1 != 0
+}
+
+vterm_abi_validate :: proc() -> bool {
+	return(
+		size_of(VTerm_Pos) == 8 &&
+		size_of(VTerm_Rect) == 16 &&
+		size_of(VTerm_Color) == 4 &&
+		size_of(VTerm_Screen_Cell_Attrs) == 4 &&
+		size_of(VTerm_Screen_Cell) == 40 &&
+		offset_of(VTerm_Screen_Cell, width) == 24 &&
+		offset_of(VTerm_Screen_Cell, attrs) == 28 &&
+		offset_of(VTerm_Screen_Cell, fg) == 32 &&
+		offset_of(VTerm_Screen_Cell, bg) == 36 \
+	)
 }
 
 // ---------------------------------------------------------------------------

@@ -549,15 +549,18 @@ when !INGOT_NET_SIM {
 	// fetcher_stop frees only jobs and results still owned by this Fetcher.
 	fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
 		sync.mutex_lock(&f.mutex); defer sync.mutex_unlock(&f.mutex)
+		assert(f.result_slots >= 0)
 		assert(len(f.results) <= f.result_slots)
 		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 		if len(f.results) == 0 do return nil
 		count := min(len(f.results), FETCH_MAXIMUM_DRAIN)
+		assert(count > 0 && count <= FETCH_MAXIMUM_DRAIN)
 		out := make([]Fetch_Result, count, context.temp_allocator)
 		copy(out, f.results[:count])
 		copy(f.results[:], f.results[count:])
 		resize(&f.results, len(f.results) - count)
 		f.result_slots -= count
+		assert(f.result_slots >= 0)
 		assert(len(f.results) <= f.result_slots)
 		return out
 	}

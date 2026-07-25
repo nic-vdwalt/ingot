@@ -155,7 +155,10 @@ when !INGOT_NET_SIM {
 	) -> bool {
 		if !f.running || request.path == "" || request.path[0] != '/' || len(f.pending) >= FETCH_MAXIMUM_PENDING do return false
 		assert(options.priority == .Normal || options.priority == .Priority)
-		pending := Pending{tag = tag, request = request_clone(request)}
+		pending := Pending {
+			tag     = tag,
+			request = request_clone(request),
+		}
 		if options.priority == .Priority {
 			inject_at(&f.pending, 0, pending)
 		} else {
