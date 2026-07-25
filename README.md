@@ -183,15 +183,31 @@ checking, and an average target of at least two assertions per procedure.
 
 ## Direction
 
-The near-term priority is proof over feature count: validate every native WebGPU
-backend, publish the live gallery, document a raylib migration, and report
-concrete idle CPU, binary-size, and build-time measurements. Deeper app-engine
-work includes docking, virtualized data views, accessibility validation, complex
-text input, and Linux desktop-polish parity.
+The near-term priority remains proof over feature count: validate every native
+WebGPU backend, publish the live gallery, document raylib migration, report
+concrete idle CPU, binary-size, build-time, and frame-work measurements, and
+reach Linux desktop-polish parity.
 
-A 3D content pipeline, mobile targets, scripting layers, and editors remain out
-of scope. Ingot's optional 3D path is a visualization escape hatch rather than a
-scene-graph engine.
+Advanced widgets will be built in dependency order:
+
+1. **Collection foundation:** a bounded two-axis virtual viewport, visible-range
+   calculation, scroll-to-item behavior, stable selection, keyboard navigation,
+   and composite accessibility semantics.
+2. **Virtualized data views:** list, searchable combo box and command palette,
+   then sortable and resizable data grid, tree view, and property grid widgets.
+3. **Workspace composition:** tabs and resizable split panes, followed by a
+   serializable docking workspace with keyboard-accessible drag targets.
+4. **Terminal view:** package the existing PTY and libvterm core as a reusable
+   widget with styled cells, selection, clipboard, scrollback, and resize support.
+5. **Code editor:** build on scalable text storage, styled runs, two-axis
+   virtualization, gutters, diagnostics, and complete IME handling.
+
+Each stage must preserve caller-owned state, bounded frame work, event-driven
+idle behavior, stable focus, and accessibility across native and web targets.
+
+A 3D content pipeline, mobile targets, scripting layers, visual designers, and
+game or content-production editors remain out of scope. Ingot's optional 3D path
+is a visualization escape hatch rather than a scene-graph engine.
 
 ## License
 

@@ -47,12 +47,14 @@ Fetch_Options :: struct {
 }
 
 Http_Response :: struct {
-	status:  u16,
-	headers: []Http_Header,
-	body:    []u8,
+	status:    u16,
+	headers:   []Http_Header,
+	body:      []u8,
+	allocator: mem.Allocator,
 }
 
-http_response_destroy :: proc(response: ^Http_Response, allocator := context.allocator) {
+http_response_destroy :: proc(response: ^Http_Response) {
+	allocator := response.allocator
 	for header in response.headers {
 		delete(header.name, allocator)
 		delete(header.value, allocator)
@@ -87,11 +89,7 @@ when !INGOT_NET_SIM {
 		}
 		body = response.body
 		response.body = nil
-		for header in response.headers {
-			delete(header.name)
-			delete(header.value)
-		}
-		delete(response.headers)
+		http_response_destroy(&response)
 		return body, true
 	}
 
@@ -133,11 +131,7 @@ when !INGOT_NET_SIM {
 		}
 		body = response.body
 		response.body = nil
-		for header in response.headers {
-			delete(header.name)
-			delete(header.value)
-		}
-		delete(response.headers)
+		http_response_destroy(&response)
 		return body, true
 	}
 
@@ -296,13 +290,15 @@ parse_http_response :: proc(
 	status_value, status_ok := strconv.parse_int(parts[1])
 	if !status_ok || status_value < 100 || status_value > 599 do return {}, false
 	response.status = u16(status_value)
+	response.allocator = allocator
 	header_array := make([dynamic]Http_Header, 0, len(lines) - 1, allocator)
+	response.headers = header_array[:]
 	for line in lines[1:] {
 		colon := strings.index(line, ":")
 		if colon <= 0 {
 			// Free with the SAME allocator we allocated with — the caller may
 			// have passed a temp allocator (pair-asserted by the fuzz harness).
-			http_response_destroy(&response, allocator)
+			http_response_destroy(&response)
 			return {}, false
 		}
 		append(
@@ -318,7 +314,7 @@ parse_http_response :: proc(
 	if transfer_chunked(response.headers) {
 		decoded, decoded_ok := decode_chunked(raw_body, maximum_body, allocator)
 		if !decoded_ok {
-			http_response_destroy(&response, allocator)
+			http_response_destroy(&response)
 			return {}, false
 		}
 		response.body = decoded
@@ -326,12 +322,12 @@ parse_http_response :: proc(
 	}
 	if length, has_length := header_content_length(response.headers); has_length {
 		if length > maximum_body || len(raw_body) < length {
-			http_response_destroy(&response, allocator)
+			http_response_destroy(&response)
 			return {}, false
 		}
 		raw_body = raw_body[:length]
 	} else if len(raw_body) > maximum_body {
-		http_response_destroy(&response, allocator)
+		http_response_destroy(&response)
 		return {}, false
 	}
 	response.body = make([]u8, len(raw_body), allocator)
@@ -632,7 +628,7 @@ when !INGOT_NET_SIM {
 				response: Http_Response
 				response, ok = http_request_impl(f, idx, f.host, f.port, job.request, f.allocator)
 				status = response.status; body = response.body; response.body = nil
-				http_response_destroy(&response, f.allocator)
+				http_response_destroy(&response)
 				if ok &&
 				   status >= 200 &&
 				   status < 300 &&

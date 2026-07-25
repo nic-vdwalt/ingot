@@ -33,6 +33,15 @@ LPPROC_THREAD_ATTRIBUTE_LIST :: distinct rawptr
 
 // STILL_ACTIVE constant for GetExitCodeProcess.
 STILL_ACTIVE :: 259
+PTY_DIMENSION_MAX :: u16(32767)
+
+Pty_IO_Status :: enum u8 {
+	Ok,
+	Would_Block,
+	Interrupted,
+	Closed,
+	Failed,
+}
 
 // Foreign imports from kernel32.dll.
 foreign import kernel32 "system:kernel32.lib"
@@ -66,6 +75,8 @@ Pty :: struct {
 }
 
 spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
+	if shell == nil || cols == 0 || rows == 0 do return {}, false
+	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, false
 	p: Pty
 	p.cols = cols
 	p.rows = rows
@@ -89,8 +100,14 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 	}
 
 	// Make parent-side handles non-inheritable.
-	win32.SetHandleInformation(pipe_in_w, win32.HANDLE_FLAG_INHERIT, 0)
-	win32.SetHandleInformation(pipe_out_r, win32.HANDLE_FLAG_INHERIT, 0)
+	if !win32.SetHandleInformation(pipe_in_w, win32.HANDLE_FLAG_INHERIT, 0) ||
+	   !win32.SetHandleInformation(pipe_out_r, win32.HANDLE_FLAG_INHERIT, 0) {
+		win32.CloseHandle(pipe_in_r)
+		win32.CloseHandle(pipe_in_w)
+		win32.CloseHandle(pipe_out_r)
+		win32.CloseHandle(pipe_out_w)
+		return {}, false
+	}
 
 	// Create pseudo console.
 	size := COORD {
@@ -161,6 +178,7 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 	shell_str := string(shell)
 	cmd_line := strings.clone_to_cstring(shell_str, context.temp_allocator)
 	cmd_line_w := win32.utf8_to_wstring(string(cmd_line), context.temp_allocator)
+	shell_w := win32.utf8_to_wstring(shell_str, context.temp_allocator)
 
 	working_dir_w: win32.wstring = nil
 	if workdir != nil && len(string(workdir)) > 0 {
@@ -171,7 +189,7 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 	EXTENDED_STARTUPINFO_PRESENT :: 0x00080000
 
 	ok := win32.CreateProcessW(
-		nil, // lpApplicationName
+		shell_w, // lpApplicationName
 		cmd_line_w, // lpCommandLine
 		nil, // lpProcessAttributes
 		nil, // lpThreadAttributes
@@ -240,36 +258,38 @@ drain :: proc(p: ^Pty, buf: []u8) -> (data: []u8, eof: bool) {
 	return buf[:total], false
 }
 
-write_bytes :: proc(p: ^Pty, data: []u8) {
-	if len(data) == 0 || p.pipe_in_w == nil do return
-	written: win32.DWORD
-	win32.WriteFile(p.pipe_in_w, raw_data(data), win32.DWORD(len(data)), &written, nil)
-}
-
-write_byte :: proc(p: ^Pty, b: u8) {
-	buf := [1]u8{b}
-	if p.pipe_in_w != nil {
-		written: win32.DWORD
-		win32.WriteFile(p.pipe_in_w, &buf[0], 1, &written, nil)
+write_bytes :: proc(p: ^Pty, data: []u8) -> (written: int, status: Pty_IO_Status) {
+	if len(data) == 0 do return 0, .Ok
+	if p.pipe_in_w == nil do return 0, .Closed
+	bytes_written: win32.DWORD
+	chunk := min(len(data), int(max(win32.DWORD)))
+	if !win32.WriteFile(p.pipe_in_w, raw_data(data), win32.DWORD(chunk), &bytes_written, nil) {
+		return 0, .Failed
 	}
+	return int(bytes_written), .Ok
 }
 
-write_string :: proc(p: ^Pty, s: string) {
-	if len(s) == 0 || p.pipe_in_w == nil do return
-	written: win32.DWORD
-	win32.WriteFile(p.pipe_in_w, raw_data(s), win32.DWORD(len(s)), &written, nil)
+write_byte :: proc(p: ^Pty, b: u8) -> (int, Pty_IO_Status) {
+	buf := [1]u8{b}
+	return write_bytes(p, buf[:])
+}
+
+write_string :: proc(p: ^Pty, s: string) -> (int, Pty_IO_Status) {
+	return write_bytes(p, transmute([]u8)s)
 }
 
 resize :: proc(p: ^Pty, cols: u16, rows: u16) {
 	if p.hpc == nil do return
+	if cols == 0 || rows == 0 || cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return
 	if cols == p.cols && rows == p.rows do return
-	p.cols = cols
-	p.rows = rows
 	size := COORD {
 		X = win32.SHORT(cols),
 		Y = win32.SHORT(rows),
 	}
-	ResizePseudoConsole(p.hpc, size)
+	if ResizePseudoConsole(p.hpc, size) == 0 {
+		p.cols = cols
+		p.rows = rows
+	}
 }
 
 destroy :: proc(p: ^Pty) {

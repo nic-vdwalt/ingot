@@ -89,6 +89,16 @@ g_web_ctx: runtime.Context
 // --- window / surface / lifecycle ------------------------------------------
 
 @(private)
+Web_GPU_Request :: struct {
+	epoch: u64,
+}
+
+@(private)
+_web_request_live :: proc(request: ^Web_GPU_Request) -> bool {
+	return request != nil && request.epoch == g.epoch && g.lifecycle == .Starting
+}
+
+@(private)
 platform_create_window :: proc(width, height: i32, title: cstring, flags: ConfigFlags) -> bool {
 	g_web_ctx = context
 	g.win = WEB_WIN_SENTINEL
@@ -117,10 +127,12 @@ platform_create_surface :: proc(instance: wg.Instance) -> wg.Surface {
 // frame loop skips drawing until then.
 @(private)
 platform_start_gpu :: proc() {
+	request := new(Web_GPU_Request)
+	request.epoch = g.epoch
 	wg.InstanceRequestAdapter(
 		g.instance,
 		&{compatibleSurface = g.surface},
-		{callback = _web_on_adapter},
+		{callback = _web_on_adapter, userdata1 = request},
 	)
 }
 
@@ -132,8 +144,21 @@ _web_on_adapter :: proc "c" (
 	u1, u2: rawptr,
 ) {
 	context = g_web_ctx
+	request := cast(^Web_GPU_Request)u1
+	if status != .Success || !_web_request_live(request) {
+		if adapter != nil do wg.AdapterRelease(adapter)
+		free(request)
+		return
+	}
 	g.adapter = adapter
-	wg.AdapterRequestDevice(g.adapter, nil, {callback = _web_on_device})
+	device_request := new(Web_GPU_Request)
+	device_request.epoch = request.epoch
+	free(request)
+	wg.AdapterRequestDevice(
+		g.adapter,
+		nil,
+		{callback = _web_on_device, userdata1 = device_request},
+	)
 }
 
 @(private)
@@ -144,6 +169,13 @@ _web_on_device :: proc "c" (
 	u1, u2: rawptr,
 ) {
 	context = g_web_ctx
+	request := cast(^Web_GPU_Request)u1
+	if status != .Success || !_web_request_live(request) {
+		if device != nil do wg.DeviceRelease(device)
+		free(request)
+		return
+	}
+	free(request)
 	g.device = device
 	g.queue = wg.DeviceGetQueue(g.device)
 	_gpu_finish()

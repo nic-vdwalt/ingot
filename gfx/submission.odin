@@ -1,5 +1,6 @@
 package gfx
 
+import "base:runtime"
 import "core:sync"
 import wg "vendor:wgpu"
 
@@ -10,6 +11,12 @@ Submission_Ticket :: struct {
 	active:   bool,
 	complete: bool,
 	failed:   bool,
+}
+
+Submission_Callback :: struct {
+	tracker: ^Submission_Tracker,
+	ticket:  u64,
+	epoch:   u64,
 }
 
 Submission_Tracker :: struct {
@@ -54,9 +61,11 @@ _submission_track :: proc(tracker: ^Submission_Tracker) -> u64 {
 	}
 	tracker.next_id += 1
 	tracker.count += 1
+	callback := new(Submission_Callback)
+	callback^ = {tracker = tracker, ticket = ticket.id, epoch = g.epoch}
 	wg.QueueOnSubmittedWorkDone(
 		g.queue,
-		{mode = .AllowSpontaneos, callback = _submission_done, userdata1 = ticket},
+		{mode = .AllowSpontaneos, callback = _submission_done, userdata1 = callback},
 	)
 	assert(tracker.count <= MAX_IN_FLIGHT_SUBMISSIONS)
 	return ticket.id
@@ -85,12 +94,28 @@ _submission_completed :: proc(tracker: ^Submission_Tracker) -> u64 {
 }
 
 @(private)
+_submission_find :: proc(tracker: ^Submission_Tracker, id: u64) -> ^Submission_Ticket {
+	if tracker == nil || id == 0 do return nil
+	for index in 0 ..< int(tracker.count) {
+		ticket_index := (int(tracker.head) + index) % MAX_IN_FLIGHT_SUBMISSIONS
+		ticket := &tracker.tickets[ticket_index]
+		if ticket.active && ticket.id == id do return ticket
+	}
+	return nil
+}
+
+@(private)
 _submission_done :: proc "c" (
 	status: wg.QueueWorkDoneStatus,
 	message: wg.StringView,
 	userdata1, userdata2: rawptr,
 ) {
-	ticket := (^Submission_Ticket)(userdata1)
+	context = runtime.default_context()
+	callback := cast(^Submission_Callback)userdata1
+	if callback == nil do return
+	defer free(callback)
+	if callback.epoch != g.epoch do return
+	ticket := _submission_find(callback.tracker, callback.ticket)
 	if ticket == nil do return
 	sync.atomic_store(&ticket.failed, status != .Success)
 	sync.atomic_store(&ticket.complete, true)

@@ -41,6 +41,7 @@ WS_MAX_PAYLOAD :: 32 * 1024 * 1024
 // upper bound). If the consumer stops draining, the oldest message is dropped
 // (counted in recv_dropped) instead of growing memory without limit.
 WS_MAX_QUEUED_MESSAGES :: 1024
+WS_MAX_QUEUED_BYTES :: 64 * 1024 * 1024
 
 // Liveness/reconnect tuning. The live socket carries a recv read deadline so a
 // half-open TCP drop (Wi-Fi/VPN/sleep — no FIN/RST) is detected instead of
@@ -267,10 +268,11 @@ WebSocket :: struct {
 	conn_gen:       int,
 	auto_reconnect: bool,
 
-	// Thread-safe receive queue, bounded at WS_MAX_QUEUED_MESSAGES.
-	recv_queue:     [dynamic]WS_Message,
-	recv_mutex:     sync.Mutex,
-	recv_dropped:   u64, // messages discarded because recv_queue hit its cap
+	// Thread-safe receive queue, bounded by message count and aggregate bytes.
+	recv_queue:       [dynamic]WS_Message,
+	recv_queue_bytes: u64,
+	recv_mutex:       sync.Mutex,
+	recv_dropped:     u64, // messages discarded because recv_queue hit its cap
 
 	// Optional wake hook, called from the worker thread after a message is
 	// queued or the state changes, so an event-driven-idle frame loop repaints
@@ -371,15 +373,25 @@ ws_set_state :: proc(ws: ^WebSocket, s: WS_State) {
 // for a UI consumer the latest data wins.
 @(private = "file")
 ws_enqueue :: proc(ws: ^WebSocket, data: string, binary: bool) {
+	if len(data) > WS_MAX_QUEUED_BYTES {
+		delete(data)
+		return
+	}
+	data_bytes := u64(len(data))
 	sync.mutex_lock(&ws.recv_mutex)
-	if len(ws.recv_queue) >= WS_MAX_QUEUED_MESSAGES {
+	for len(ws.recv_queue) > 0 &&
+	    (len(ws.recv_queue) >= WS_MAX_QUEUED_MESSAGES ||
+	     ws.recv_queue_bytes + data_bytes > WS_MAX_QUEUED_BYTES) {
 		oldest := ws.recv_queue[0]
 		ordered_remove(&ws.recv_queue, 0)
+		ws.recv_queue_bytes -= u64(len(oldest.data))
 		delete(oldest.data)
 		ws.recv_dropped += 1
 	}
 	append(&ws.recv_queue, WS_Message{data = data, binary = binary})
+	ws.recv_queue_bytes += data_bytes
 	assert(len(ws.recv_queue) <= WS_MAX_QUEUED_MESSAGES, "recv queue bound violated")
+	assert(ws.recv_queue_bytes <= WS_MAX_QUEUED_BYTES, "recv queue byte bound violated")
 	sync.mutex_unlock(&ws.recv_mutex)
 	ws_notify(ws)
 }
@@ -622,6 +634,7 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 // Send a text message over WebSocket.
 ws_send :: proc(ws: ^WebSocket, data: string) -> bool {
 	if ws_state(ws) != .Connected do return false
+	if len(data) > WS_MAX_PAYLOAD do return false
 	return ws_send_frame(ws, WS_OP_TEXT, transmute([]u8)data)
 }
 
@@ -681,6 +694,7 @@ ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
 		result[i] = msg
 	}
 	clear(&ws.recv_queue)
+	ws.recv_queue_bytes = 0
 	return result
 }
 

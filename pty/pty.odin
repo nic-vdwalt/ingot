@@ -11,17 +11,28 @@ when ODIN_OS == .Darwin {
 	TIOCSWINSZ :: 0x80087467
 	EAGAIN :: 35
 	EWOULDBLOCK :: 35
+	EINTR :: 4
 	O_NONBLOCK :: 0x0004
 } else when ODIN_OS == .Linux {
 	TIOCSWINSZ :: 0x5414
 	EAGAIN :: 11
 	EWOULDBLOCK :: EAGAIN
+	EINTR :: 4
 	O_NONBLOCK :: 0o4000
 }
 
 F_GETFL :: 3
 F_SETFL :: 4
 WNOHANG :: 1
+PTY_DIMENSION_MAX :: u16(32767)
+
+Pty_IO_Status :: enum u8 {
+	Ok,
+	Would_Block,
+	Interrupted,
+	Closed,
+	Failed,
+}
 
 Pty :: struct {
 	master_fd: c.int,
@@ -83,6 +94,8 @@ when ODIN_OS == .Darwin {
 }
 
 spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
+	if shell == nil || cols == 0 || rows == 0 do return {}, false
+	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, false
 	master_fd: c.int
 	pid := forkpty(&master_fd, nil, nil, nil)
 
@@ -105,8 +118,9 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 				break
 			}
 		}
+		if len(base) == 0 || len(base) > len(login_argv0) - 2 do _exit(1)
 		login_argv0[0] = '-'
-		n := copy(login_argv0[1:], transmute([]u8)base)
+		n := copy(login_argv0[1:len(login_argv0) - 1], transmute([]u8)base)
 		login_argv0[1 + n] = 0
 		args := [?]cstring{cstring(&login_argv0[0]), nil}
 		execvp(shell, raw_data(&args))
@@ -114,7 +128,10 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 	}
 
 	flags := fcntl(master_fd, F_GETFL)
-	fcntl(master_fd, F_SETFL, flags | O_NONBLOCK)
+	if flags < 0 || fcntl(master_fd, F_SETFL, flags | O_NONBLOCK) < 0 {
+		close(master_fd)
+		return {}, false
+	}
 
 	ws := Winsize {
 		ws_col = c.ushort(cols),
@@ -134,7 +151,7 @@ when !INGOT_PTY_SIM {
 		if r > 0 do return int(r), false
 		if r == 0 do return 0, true
 		e := errno_ptr()^
-		if e == EAGAIN || e == EWOULDBLOCK do return 0, false
+		if e == EINTR || e == EAGAIN || e == EWOULDBLOCK do return 0, false
 		return 0, true
 	}
 
@@ -150,23 +167,29 @@ when !INGOT_PTY_SIM {
 	}
 }
 
-write_bytes :: proc(p: ^Pty, data: []u8) {
-	if len(data) == 0 || p.master_fd < 0 do return
-	write(p.master_fd, raw_data(data), len(data))
+write_bytes :: proc(p: ^Pty, data: []u8) -> (written: int, status: Pty_IO_Status) {
+	if len(data) == 0 do return 0, .Ok
+	if p.master_fd < 0 do return 0, .Closed
+	n := write(p.master_fd, raw_data(data), len(data))
+	if n >= 0 do return int(n), .Ok
+	e := errno_ptr()^
+	if e == EINTR do return 0, .Interrupted
+	if e == EAGAIN || e == EWOULDBLOCK do return 0, .Would_Block
+	return 0, .Failed
 }
 
-write_byte :: proc(p: ^Pty, b: u8) {
+write_byte :: proc(p: ^Pty, b: u8) -> (int, Pty_IO_Status) {
 	buf := [1]u8{b}
-	if p.master_fd >= 0 do write(p.master_fd, &buf[0], 1)
+	return write_bytes(p, buf[:])
 }
 
-write_string :: proc(p: ^Pty, s: string) {
-	if len(s) == 0 || p.master_fd < 0 do return
-	write(p.master_fd, raw_data(s), len(s))
+write_string :: proc(p: ^Pty, s: string) -> (int, Pty_IO_Status) {
+	return write_bytes(p, transmute([]u8)s)
 }
 
 resize :: proc(p: ^Pty, cols: u16, rows: u16) {
 	if p.master_fd < 0 do return
+	if cols == 0 || rows == 0 || cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return
 	ws := Winsize {
 		ws_col = c.ushort(cols),
 		ws_row = c.ushort(rows),
@@ -181,8 +204,8 @@ destroy :: proc(p: ^Pty) {
 	}
 	if p.child_pid > 0 {
 		status: c.int
-		waitpid(p.child_pid, &status, WNOHANG)
-		p.child_pid = 0
+		reaped := waitpid(p.child_pid, &status, WNOHANG)
+		if reaped == p.child_pid do p.child_pid = 0
 	}
 }
 

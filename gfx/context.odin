@@ -95,7 +95,16 @@ Frame_State :: struct {
 	mode3d:                 bool,
 }
 
+Context_Lifecycle :: enum u8 {
+	Empty,
+	Starting,
+	Ready,
+	Closing,
+}
+
 Context :: struct {
+	epoch:                u64,
+	lifecycle:            Context_Lifecycle,
 	win:                  Window_Handle,
 	instance:             wg.Instance,
 	surface:              wg.Surface,
@@ -118,6 +127,8 @@ Context :: struct {
 	// has returned).
 	pending_w, pending_h: i32,
 	frame:                Frame_State,
+	frame_generation:     u64,
+	frame_active:         bool,
 
 	// timing
 	start_time_s:         f64,
@@ -304,8 +315,12 @@ SetConfigFlags :: proc(flags: ConfigFlags) {
 }
 
 InitWindow :: proc(width, height: i32, title: cstring) {
+	if g.lifecycle != .Empty do return
+	g.epoch += 1
+	g.lifecycle = .Starting
 	if !platform_create_window(width, height, title, g.config_flags) {
 		fmt.eprintln("gfx: window creation failed")
+		g.lifecycle = .Empty
 		return
 	}
 
@@ -383,11 +398,13 @@ _gpu_finish :: proc() {
 	platform_drop_init()
 
 	g.initialized = true
+	g.lifecycle = .Ready
 }
 
 CloseWindow :: proc() {
 	if g.instance == nil && g.win == nil do return
 	assert(!g.frame.has_frame, "CloseWindow: frame is still recording")
+	g.lifecycle = .Closing
 	if g.initialized {
 		platform_drop_shutdown()
 		_graphics_resources_destroy(&g.resources)
@@ -401,7 +418,8 @@ CloseWindow :: proc() {
 	if g.instance != nil do wg.InstanceRelease(g.instance)
 	platform_terminate()
 	flags := g.config_flags
-	g = {}
+	closing_epoch := g.epoch
+	g = Context{epoch = closing_epoch}
 	g.config_flags = flags
 }
 

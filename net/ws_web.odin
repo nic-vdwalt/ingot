@@ -35,6 +35,8 @@ WS_State :: enum {
 WS_OP_TEXT :: 0x1
 WS_OP_BINARY :: 0x2
 WS_MAX_PAYLOAD :: 1 << 20
+WS_MAX_QUEUED_MESSAGES :: 1024
+WS_MAX_QUEUED_BYTES :: 64 * 1024 * 1024
 
 WS_Message :: struct {
 	data:   string,
@@ -79,7 +81,7 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 // ws_poll_state refreshes ws.state from the JS socket.
 @(private = "file")
 ws_poll_state :: proc(ws: ^WebSocket) {
-	if ws.id < 0 {ws.state = .Error; return}
+	if ws.id < 0 do return
 	prev := ws.state
 	switch ingot_ws_state(ws.id) {
 	case 0:
@@ -115,6 +117,7 @@ ws_send :: proc(ws: ^WebSocket, data: string) -> bool {
 	ws_poll_state(ws)
 	if ws.state != .Connected || ws.id < 0 do return false
 	b := transmute([]byte)data
+	if len(b) > WS_MAX_PAYLOAD do return false
 	return ingot_ws_send_text(ws.id, raw_data(b), i32(len(b))) == 0
 }
 
@@ -133,14 +136,23 @@ ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
 
 	msgs: [dynamic]WS_Message
 	msgs.allocator = context.temp_allocator
-	for {
+	message_count := 0
+	byte_count := 0
+	for message_count < WS_MAX_QUEUED_MESSAGES && byte_count <= WS_MAX_QUEUED_BYTES {
 		n := ingot_ws_recv_len(ws.id)
 		if n < 0 do break
+		if n > WS_MAX_PAYLOAD do break
 		is_bin := ingot_ws_recv_binary(ws.id) == 1
 		buf := make([]byte, int(n) if n > 0 else 0)
 		got := ingot_ws_recv_copy(ws.id, raw_data(buf) if n > 0 else nil, i32(len(buf)))
-		if got < 0 {if len(buf) > 0 do delete(buf); break}
+		if got < 0 || got > n {
+			if len(buf) > 0 do delete(buf)
+			ws.state = .Error
+			break
+		}
 		append(&msgs, WS_Message{data = string(buf[:int(got)]), binary = is_bin})
+		message_count += 1
+		byte_count += int(got)
 	}
 	if len(msgs) == 0 do return nil
 	return msgs[:]
