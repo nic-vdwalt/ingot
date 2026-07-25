@@ -42,6 +42,21 @@ prefs_paths_and_roundtrip :: proc(t: ^testing.T) {
 	testing.expect(t, rok, "read succeeds")
 	testing.expect_value(t, string(got), "hello=world")
 
+	replacement := transmute([]u8)string("new=value")
+	testing.expect(t, write("roundtrip", "cfg.txt", replacement), "replacement succeeds")
+	got, rok = read("roundtrip", "cfg.txt", context.temp_allocator)
+	testing.expect(t, rok, "replacement reads")
+	testing.expect_value(t, string(got), "new=value")
+	roundtrip_dir := fmt.tprintf("%s/.local/share/roundtrip", base)
+	dir_handle, dir_err := os.open(roundtrip_dir)
+	testing.expect(t, dir_err == nil, "roundtrip directory opens")
+	if dir_err == nil {
+		entries, read_err := os.read_dir(dir_handle, -1, context.temp_allocator)
+		testing.expect(t, read_err == nil, "roundtrip directory reads")
+		testing.expect_value(t, len(entries), 1)
+		_ = os.close(dir_handle)
+	}
+
 	blocked_home := fmt.tprintf("/tmp/ingot_prefs_blocked_%d", os.get_pid())
 	os.remove_all(blocked_home)
 	defer os.remove_all(blocked_home)

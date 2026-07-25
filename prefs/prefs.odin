@@ -39,14 +39,29 @@ path :: proc(app, file: string, allocator := context.temp_allocator) -> (p: stri
 }
 
 // write creates the app data directory (with parents) and atomically replaces
-// path(app, file). Writing a sibling first preserves the last valid snapshot
-// when the process crashes or the filesystem rejects an incomplete write.
+// path(app, file). Writing a unique sibling first preserves the last valid
+// snapshot and prevents concurrent writers from sharing staging storage.
 write :: proc(app, file: string, data: []u8) -> bool {
-	dir := data_dir(app) or_return
+	dir := data_dir(app, context.allocator) or_return
+	defer delete(dir)
 	if !make_dirs_all_checked(dir) do return false
-	p := fmt.tprintf("%s/%s", dir, file)
-	tmp := fmt.tprintf("%s.tmp", p)
-	if os.write_entire_file(tmp, data) != nil do return false
+	p := fmt.aprintf("%s/%s", dir, file)
+	defer delete(p)
+	temp, create_err := os.create_temp_file(dir, ".prefs-*.tmp")
+	if create_err != nil do return false
+	tmp := fmt.aprintf("%s", os.name(temp))
+	defer delete(tmp)
+	written, write_err := os.write(temp, data)
+	sync_err := os.sync(temp)
+	if write_err != nil || written != len(data) || sync_err != nil {
+		_ = os.close(temp)
+		_ = os.remove(tmp)
+		return false
+	}
+	if os.close(temp) != nil {
+		_ = os.remove(tmp)
+		return false
+	}
 	if os.rename(tmp, p) != nil {
 		_ = os.remove(tmp)
 		return false
@@ -64,7 +79,8 @@ read :: proc(app, file: string, allocator := context.temp_allocator) -> (data: [
 
 make_dirs_all_checked :: proc(path: string) -> bool {
 	if len(path) == 0 do return false
-	return os.make_directory_all(path) == nil
+	if os.make_directory_all(path) == nil do return true
+	return os.is_directory(path)
 }
 
 // make_dirs_all preserves the original package contract for existing callers.
