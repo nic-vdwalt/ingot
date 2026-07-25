@@ -21,6 +21,8 @@
 // will not wake for it.
 package gfx
 
+import "core:sync"
+
 Frame_Strategy :: enum {
 	Continuous, // today's behavior: a frame every loop iteration (default)
 	Event_Driven, // idle between frames; wake on input/damage/redraw requests
@@ -37,6 +39,7 @@ Idle_State :: struct {
 	strategy:        Frame_Strategy,
 	settle_frames:   i32, // full frames still owed after the last activity
 	redraw_deadline: f64, // absolute _now() time of earliest RequestRedrawIn; 0 = none
+	redraw_pending:  bool, // worker-published redraw request; accessed atomically
 }
 
 // --- public API -------------------------------------------------------------
@@ -54,7 +57,7 @@ GetFrameStrategy :: proc() -> Frame_Strategy {
 // from any thread ("c"/contextless): platform_wake unblocks a native wait in
 // progress, so background work (net callbacks, timers) can trigger a repaint.
 RequestRedraw :: proc "contextless" () {
-	_idle_note_activity(&g.idle)
+	_idle_request_redraw(&g.idle)
 	platform_wake()
 }
 
@@ -81,6 +84,11 @@ _idle_note_activity :: proc "contextless" (s: ^Idle_State) {
 }
 
 @(private)
+_idle_request_redraw :: proc "contextless" (s: ^Idle_State) {
+	sync.atomic_store(&s.redraw_pending, true)
+}
+
+@(private)
 _idle_request_in :: proc "contextless" (s: ^Idle_State, now, seconds: f64) {
 	d := now + max(seconds, 0)
 	if s.redraw_deadline == 0 || d < s.redraw_deadline {
@@ -93,6 +101,9 @@ _idle_request_in :: proc "contextless" (s: ^Idle_State, now, seconds: f64) {
 // per frame per target: from _idle_timeout on native, from step() on web.
 @(private)
 _idle_take_frame :: proc "contextless" (s: ^Idle_State, now: f64) -> bool {
+	if sync.atomic_exchange(&s.redraw_pending, false) {
+		s.settle_frames = max(s.settle_frames, IDLE_SETTLE_FRAMES)
+	}
 	if s.strategy == .Continuous do return true
 	if s.redraw_deadline != 0 && now >= s.redraw_deadline {
 		s.redraw_deadline = 0
