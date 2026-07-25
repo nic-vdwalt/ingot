@@ -76,8 +76,8 @@ make_line :: proc(p: ^Prng) -> string {
 	return random_line(p)
 }
 
-exercise_spans :: proc(c: ^fuzzx.Ctx, p: ^Prng, line: string) {
-	spans := ui.parse_inline_spans(line)
+exercise_spans :: proc(c: ^fuzzx.Ctx, p: ^Prng, frame: ^ui.Ui_Frame, line: string) {
+	spans := ui.frame_view_items(frame, ui.parse_inline_spans(frame, line))
 	display_len := ui.spans_display_len(spans)
 	fuzzx.check(c, display_len >= 0, "display length must be non-negative")
 	fuzzx.check(c, display_len <= len(line), "display text can never be longer than raw text")
@@ -97,12 +97,14 @@ exercise_spans :: proc(c: ^fuzzx.Ctx, p: ^Prng, line: string) {
 	fuzzx.check(c, raw_position <= len(line), "display_to_raw in range")
 }
 
-exercise_table :: proc(c: ^fuzzx.Ctx, p: ^Prng, line: string) {
+exercise_table :: proc(c: ^fuzzx.Ctx, p: ^Prng, frame: ^ui.Ui_Frame, line: string) {
 	_ = ui.is_code_fence(line)
 	_ = ui.is_table_separator(line)
 	line_end := fuzzx.int_range(p, 0, len(line) + 1)
 	line_start := fuzzx.int_range(p, 0, line_end + 1)
-	cells, starts := ui.split_table_row_offsets(line, line_start, line_end)
+	cells_view, starts_view := ui.split_table_row_offsets(frame, line, line_start, line_end)
+	cells := ui.frame_view_items(frame, cells_view)
+	starts := ui.frame_view_items(frame, starts_view)
 	fuzzx.check(c, len(cells) == len(starts), "cells and starts must stay parallel")
 	for start in starts {
 		fuzzx.check(c, start >= 0, "cell start in range")
@@ -114,7 +116,7 @@ exercise_table :: proc(c: ^fuzzx.Ctx, p: ^Prng, line: string) {
 // the way a renderer does: toggling in_code on fences and tracking table
 // runs. This exercises caller-side cross-line state that single-line
 // fuzzing never reaches.
-exercise_document :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
+exercise_document :: proc(c: ^fuzzx.Ctx, p: ^Prng, frame: ^ui.Ui_Frame) {
 	line_count := fuzzx.int_range(p, 1, 33)
 	in_code := false
 	table_run := 0
@@ -139,8 +141,8 @@ exercise_document :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 		} else {
 			table_run = 0
 		}
-		exercise_spans(c, p, line)
-		exercise_table(c, p, line)
+		exercise_spans(c, p, frame, line)
+		exercise_table(c, p, frame, line)
 	}
 }
 
@@ -363,11 +365,18 @@ main :: proc() {
 		}
 		for i in 0 ..< iterations {
 			c.iteration = i
+			runtime: ui.Ui_Runtime
+			ui.ui_runtime_init(&runtime)
+			frame: ui.Ui_Frame
+			ui.ui_frame_begin(&frame, &runtime)
 			line := make_line(&p)
 			c.input = transmute([]u8)line
-			exercise_spans(&c, &p, line)
-			exercise_table(&c, &p, line)
-			if i % 8 == 0 do exercise_document(&c, &p)
+			exercise_spans(&c, &p, &frame, line)
+			exercise_table(&c, &p, &frame, line)
+			if i % 8 == 0 do exercise_document(&c, &p, &frame)
+			ui.ui_frame_end(&frame)
+			ui.ui_frame_destroy(&frame)
+			ui.ui_runtime_destroy(&runtime)
 			if i % 16 == 0 do exercise_semantics(&c, &p)
 			exercise_widget_math(&c, &p)
 			exercise_eased(&c, &p)

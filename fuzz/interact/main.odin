@@ -195,7 +195,7 @@ draw_scene :: proc(
 ) -> (
 	overlay_active: bool,
 ) {
-	ui.form_focus_cycle(&s.focus, FOCUS_COUNT)
+	ui.form_focus_cycle(frame, &s.focus, FOCUS_COUNT)
 
 	if ui.btn_at(
 		frame,
@@ -318,6 +318,14 @@ check_invariants :: proc(c: ^fuzzx.Ctx, frame: ^ui.Ui_Frame, s: ^Scene, overlay_
 	}
 }
 
+fuzz_text_font :: proc(data: rawptr, size: i32) -> ui.Font_Id {
+	return ui.Font_Id(size)
+}
+
+fuzz_text_measure :: proc(data: rawptr, font: ui.Font_Id, text: string, size, spacing: f32) -> ui.Vec2 {
+	return {f32(len(text)) * size * 0.5, size}
+}
+
 main :: proc() {
 	seed, iterations, rounds := fuzzx.parse_options(ITERATIONS_DEFAULT)
 	fmt.printfln("fuzz_interact seed=%d iterations=%d rounds=%d", seed, iterations, rounds)
@@ -340,8 +348,14 @@ main :: proc() {
 		}
 		runtime: ui.Ui_Runtime
 		ui.ui_runtime_init(&runtime)
+		ui.ui_runtime_set_text_backend(
+			&runtime,
+			{font_for_size = fuzz_text_font, measure = fuzz_text_measure},
+		)
 		ui.sem_enable(&runtime, true)
 		frame: ui.Ui_Frame
+		output := new(ui.Ui_Output)
+		frame.output = output
 		rl.SimReset()
 		overlay_free_frames := 0
 
@@ -361,6 +375,8 @@ main :: proc() {
 			ui.ui_frame_end(&frame)
 			free_all(context.temp_allocator)
 		}
+		ui.ui_frame_destroy(&frame)
+		free(output)
 		ui.ui_runtime_destroy(&runtime)
 	}
 
