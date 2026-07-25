@@ -9,6 +9,8 @@ import rl "ingot:gfx"
 
 TERM_PASTE_MAX_BYTES :: 1024 * 1024
 TERM_WRITE_MAX_ATTEMPTS :: 16
+TERM_INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
+TERM_INPUT_KEY_DRAIN_MAX :: rl.CHAR_Q
 
 @(private = "file")
 term_write :: proc(ts: ^Term_Instance, data: []u8) -> bool {
@@ -46,7 +48,7 @@ term_handle_input :: proc(
 	// Raylib delivers these as Unicode codepoints. We write their UTF-8
 	// encoding directly. Control keys (Ctrl+letter) arrive here as codepoints
 	// 1-26, so we skip them and handle them via GetKeyPressed() below.
-	for {
+	for _ in 0 ..< TERM_INPUT_CHARACTER_DRAIN_MAX {
 		cp := rl.GetCharPressed()
 		if cp == 0 do break
 		// Skip control characters — handled by the key-press path.
@@ -56,7 +58,7 @@ term_handle_input :: proc(
 	}
 
 	// --- Special keys and control combos via GetKeyPressed() ---
-	for {
+	for _ in 0 ..< TERM_INPUT_KEY_DRAIN_MAX {
 		key := rl.GetKeyPressed()
 		if key == .KEY_NULL do break
 

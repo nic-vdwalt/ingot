@@ -220,7 +220,8 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 }
 
 read_bytes :: proc(p: ^Pty, buf: []u8) -> (n: int, eof: bool) {
-	if p.pipe_out_r == nil do return 0, true
+	if p == nil || p.pipe_out_r == nil do return 0, true
+	if len(buf) == 0 do return 0, false
 
 	// Non-blocking check: see if data is available.
 	avail: win32.DWORD
@@ -260,7 +261,7 @@ drain :: proc(p: ^Pty, buf: []u8) -> (data: []u8, eof: bool) {
 
 write_bytes :: proc(p: ^Pty, data: []u8) -> (written: int, status: Pty_IO_Status) {
 	if len(data) == 0 do return 0, .Ok
-	if p.pipe_in_w == nil do return 0, .Closed
+	if p == nil || p.pipe_in_w == nil do return 0, .Closed
 	bytes_written: win32.DWORD
 	chunk := min(len(data), int(max(win32.DWORD)))
 	if !win32.WriteFile(p.pipe_in_w, raw_data(data), win32.DWORD(chunk), &bytes_written, nil) {
@@ -279,7 +280,7 @@ write_string :: proc(p: ^Pty, s: string) -> (int, Pty_IO_Status) {
 }
 
 resize :: proc(p: ^Pty, cols: u16, rows: u16) {
-	if p.hpc == nil do return
+	if p == nil || p.hpc == nil do return
 	if cols == 0 || rows == 0 || cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return
 	if cols == p.cols && rows == p.rows do return
 	size := COORD {
@@ -293,6 +294,7 @@ resize :: proc(p: ^Pty, cols: u16, rows: u16) {
 }
 
 destroy :: proc(p: ^Pty) {
+	if p == nil do return
 	// Signal ConPTY to stop FIRST so the conhost I/O threads drain cleanly
 	// before we close the pipes they are reading/writing (matches the Windows
 	// Terminal sample teardown order from Microsoft's ConPTY documentation).

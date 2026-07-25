@@ -3,7 +3,6 @@ package sys
 
 import "core:fmt"
 import "core:os"
-import "core:path/filepath"
 
 @(private)
 _valid_cache_app_id :: proc(app: string) -> bool {
@@ -25,7 +24,10 @@ _valid_cache_app_id :: proc(app: string) -> bool {
 cache_dir :: proc(app: string, allocator := context.temp_allocator) -> (dir: string, ok: bool) {
 	if !_valid_cache_app_id(app) do return "", false
 	when ODIN_OS == .Windows {
-		if root := os.get_env("LOCALAPPDATA", allocator); len(root) > 0 && filepath.is_abs(root) {
+		if root := os.get_env("LOCALAPPDATA", allocator);
+		   len(root) > 2 &&
+		   ((root[1] == ':' && (root[2] == '/' || root[2] == '\\')) ||
+				   (root[0] == '\\' && root[1] == '\\')) {
 			return fmt.aprintf("%s/%s", root, app, allocator = allocator), true
 		}
 	}
@@ -35,8 +37,7 @@ cache_dir :: proc(app: string, allocator := context.temp_allocator) -> (dir: str
 		if len(home) == 0 do return "", false
 		return fmt.aprintf("%s/Library/Caches/%s", home, app, allocator = allocator), true
 	} else when ODIN_OS != .Windows {
-		if root := os.get_env("XDG_CACHE_HOME", allocator);
-		   len(root) > 0 && filepath.is_abs(root) {
+		if root := os.get_env("XDG_CACHE_HOME", allocator); len(root) > 0 && root[0] == '/' {
 			return fmt.aprintf("%s/%s", root, app, allocator = allocator), true
 		}
 	}
