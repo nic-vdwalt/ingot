@@ -36,6 +36,16 @@ Http_Request :: struct {
 	maximum_body: u64,
 }
 
+Fetch_Priority :: enum u8 {
+	Normal,
+	Priority,
+}
+
+Fetch_Options :: struct {
+	priority:   Fetch_Priority,
+	cache_path: string,
+}
+
 Http_Response :: struct {
 	status:  u16,
 	headers: []Http_Header,
@@ -469,14 +479,23 @@ when !INGOT_NET_SIM {
 		sync.mutex_unlock(&f.mutex)
 	}
 
-	fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
+	fetcher_request_with_options :: proc(
+		f: ^Fetcher,
+		tag: u64,
+		request: Http_Request,
+		options: Fetch_Options = {},
+	) -> bool {
 		if !valid_request(request) do return false
+		assert(options.priority == .Normal || options.priority == .Priority)
 		job := Fetch_Job {
-			tag     = tag,
-			request = http_request_clone(request, f.allocator),
+			tag        = tag,
+			request    = http_request_clone(request, f.allocator),
+			cache_path = strings.clone(options.cache_path, f.allocator),
 		}
 		sync.mutex_lock(&f.mutex)
 		defer sync.mutex_unlock(&f.mutex)
+		assert(f.result_slots >= len(f.jobs) + len(f.results))
+		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 		if !sync.atomic_load(&f.running) ||
 		   len(f.jobs) >= FETCH_MAXIMUM_PENDING ||
 		   f.result_slots >= FETCH_MAXIMUM_RESULTS {
@@ -486,42 +505,31 @@ when !INGOT_NET_SIM {
 		f.result_slots += 1
 		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 		if f.jobs == nil do f.jobs.allocator = f.allocator
-		append(&f.jobs, job)
+		if options.priority == .Priority {
+			inject_at(&f.jobs, 0, job)
+		} else {
+			append(&f.jobs, job)
+		}
 		sync.cond_signal(&f.jobs_cond)
 		return true
 	}
+	fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
+		return fetcher_request_with_options(f, tag, request)
+	}
 	fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
-		return fetcher_request_http(
+		return fetcher_request_with_options(
 			f,
 			tag,
 			Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY},
 		)
 	}
 	fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
-		request := Http_Request {
-			method       = .Get,
-			path         = path,
-			maximum_body = DEFAULT_MAXIMUM_BODY,
-		}
-		if !valid_request(request) do return false
-		job := Fetch_Job {
-			tag     = tag,
-			request = http_request_clone(request, f.allocator),
-		}
-		sync.mutex_lock(&f.mutex)
-		defer sync.mutex_unlock(&f.mutex)
-		if !sync.atomic_load(&f.running) ||
-		   len(f.jobs) >= FETCH_MAXIMUM_PENDING ||
-		   f.result_slots >= FETCH_MAXIMUM_RESULTS {
-			fetch_job_destroy(&job, f.allocator)
-			return false
-		}
-		f.result_slots += 1
-		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
-		if f.jobs == nil do f.jobs.allocator = f.allocator
-		inject_at(&f.jobs, 0, job)
-		sync.cond_signal(&f.jobs_cond)
-		return true
+		return fetcher_request_with_options(
+			f,
+			tag,
+			Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY},
+			Fetch_Options{priority = .Priority},
+		)
 	}
 	fetcher_request_cached :: proc(
 		f: ^Fetcher,
@@ -529,31 +537,12 @@ when !INGOT_NET_SIM {
 		path: string,
 		cache_path: string,
 	) -> bool {
-		request := Http_Request {
-			method       = .Get,
-			path         = path,
-			maximum_body = DEFAULT_MAXIMUM_BODY,
-		}
-		if !valid_request(request) do return false
-		job := Fetch_Job {
-			tag        = tag,
-			request    = http_request_clone(request, f.allocator),
-			cache_path = strings.clone(cache_path, f.allocator),
-		}
-		sync.mutex_lock(&f.mutex)
-		defer sync.mutex_unlock(&f.mutex)
-		if !sync.atomic_load(&f.running) ||
-		   len(f.jobs) >= FETCH_MAXIMUM_PENDING ||
-		   f.result_slots >= FETCH_MAXIMUM_RESULTS {
-			fetch_job_destroy(&job, f.allocator)
-			return false
-		}
-		f.result_slots += 1
-		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
-		if f.jobs == nil do f.jobs.allocator = f.allocator
-		append(&f.jobs, job)
-		sync.cond_signal(&f.jobs_cond)
-		return true
+		return fetcher_request_with_options(
+			f,
+			tag,
+			Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY},
+			Fetch_Options{cache_path = cache_path},
+		)
 	}
 	// The returned slice uses context.temp_allocator and must not be retained.
 	// Every result body transfers to the caller and must be deleted exactly once.

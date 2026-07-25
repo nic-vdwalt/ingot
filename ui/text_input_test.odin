@@ -156,7 +156,11 @@ mention_send_rewrite_resets_owned_state :: proc(t: ^testing.T) {
 	spellcheck_memo_set_key(&st.spell_memo, "", 0, &st.pills, 1)
 
 	testing.expect_value(t, strings.to_string(sb), "")
-	testing.expect_value(t, strip_pill_markers(owned_message), "prefix alloy/src/ui/mentions.odin ")
+	testing.expect_value(
+		t,
+		strip_pill_markers(owned_message),
+		"prefix alloy/src/ui/mentions.odin ",
+	)
 }
 
 @(test)

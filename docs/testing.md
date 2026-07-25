@@ -9,6 +9,21 @@ This guide describes the commands. [Tiger Style](TIGER_STYLE.md) defines the
 safety policy behind them, and [Why immediate mode](immediate-mode.md) explains
 why the architecture is well suited to this approach.
 
+## Toolchain
+
+Ingot is checked with Odin `dev-2026-06:285f6d87b`. Install that exact Odin
+revision and build `odinfmt` from the matching OLS checkout, then place both
+executables on `PATH`. The repository `.odinfmt.json` pins formatting behavior.
+`bash scripts/check.sh` fails when either the code does not match that formatter
+or `odinfmt` is unavailable.
+
+Verify the tools before running the gate:
+
+```sh
+odin version
+odinfmt -help
+```
+
 ## Standard checks
 
 Run the package tests:
@@ -31,7 +46,7 @@ bash scripts/check.sh
 ```
 
 It checks every package with Odin's vet, strict-style, and shadowing diagnostics
-and checks formatting when `odinfmt` is available.
+and requires every tracked Odin source file to match `odinfmt`.
 
 Validate the browser target with:
 

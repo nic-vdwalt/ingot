@@ -69,8 +69,10 @@ odin build src -collection:ingot=libs/ingot
 ```
 
 Pin the submodule revision in consumer CI. The tested Odin toolchain is
-`dev-2026-06:285f6d87b`; native rendering also needs the wgpu-native library
-expected by Odin's `vendor:wgpu` package.
+`dev-2026-06:285f6d87b`; use `odinfmt` built from the matching OLS revision and
+place both executables on `PATH`. Native rendering also needs the wgpu-native
+library expected by Odin's `vendor:wgpu` package. See
+[Testing Ingot](docs/testing.md#toolchain) for verification commands.
 
 ```odin
 import rl "ingot:gfx"

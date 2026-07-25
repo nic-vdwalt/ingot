@@ -28,6 +28,14 @@ Http_Request :: struct {
 	body:         []u8,
 	maximum_body: u64,
 }
+Fetch_Priority :: enum u8 {
+	Normal,
+	Priority,
+}
+Fetch_Options :: struct {
+	priority:   Fetch_Priority,
+	cache_path: string,
+}
 Http_Response :: struct {
 	status:  u16,
 	headers: []Http_Header,
@@ -139,28 +147,40 @@ when !INGOT_NET_SIM {
 		delete(f.pending); f.pending = nil
 	}
 
-	fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
+	fetcher_request_with_options :: proc(
+		f: ^Fetcher,
+		tag: u64,
+		request: Http_Request,
+		options: Fetch_Options = {},
+	) -> bool {
 		if !f.running || request.path == "" || request.path[0] != '/' || len(f.pending) >= FETCH_MAXIMUM_PENDING do return false
-		append(&f.pending, Pending{tag = tag, request = request_clone(request)})
+		assert(options.priority == .Normal || options.priority == .Priority)
+		pending := Pending{tag = tag, request = request_clone(request)}
+		if options.priority == .Priority {
+			inject_at(&f.pending, 0, pending)
+		} else {
+			append(&f.pending, pending)
+		}
 		pump(f)
 		return true
 	}
+	fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
+		return fetcher_request_with_options(f, tag, request)
+	}
 	fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
-		return fetcher_request_http(
+		return fetcher_request_with_options(
 			f,
 			tag,
 			Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY},
 		)
 	}
 	fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
-		request := Http_Request {
-			method       = .Get,
-			path         = path,
-			maximum_body = DEFAULT_MAXIMUM_BODY,
-		}
-		if !f.running || request.path == "" || request.path[0] != '/' || len(f.pending) >= FETCH_MAXIMUM_PENDING do return false
-		inject_at(&f.pending, 0, Pending{tag = tag, request = request_clone(request)}); pump(f)
-		return true
+		return fetcher_request_with_options(
+			f,
+			tag,
+			Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY},
+			Fetch_Options{priority = .Priority},
+		)
 	}
 	fetcher_request_cached :: proc(
 		f: ^Fetcher,
@@ -168,8 +188,12 @@ when !INGOT_NET_SIM {
 		path: string,
 		cache_path: string,
 	) -> bool {
-		_ = cache_path
-		return fetcher_request(f, tag, path)
+		return fetcher_request_with_options(
+			f,
+			tag,
+			Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY},
+			Fetch_Options{cache_path = cache_path},
+		)
 	}
 
 	@(private = "file")

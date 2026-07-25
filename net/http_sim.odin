@@ -140,8 +140,14 @@ when INGOT_NET_SIM {
 		f.result_slots = 0
 	}
 
-	fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
+	fetcher_request_with_options :: proc(
+		f: ^Fetcher,
+		tag: u64,
+		request: Http_Request,
+		options: Fetch_Options = {},
+	) -> bool {
 		if request.path == "" || request.path[0] != '/' do return false
+		assert(options.priority == .Normal || options.priority == .Priority)
 		if !f.running ||
 		   len(f.in_flight) >= SIM_MAX_IN_FLIGHT ||
 		   f.result_slots + SIM_RESULT_RESERVATION > FETCH_MAXIMUM_RESULTS {
@@ -154,17 +160,19 @@ when INGOT_NET_SIM {
 		case .Delay, .Slow_Trickle:
 			latency += u64(sim_int_range(&f.prng, 1, SIM_EXTRA_DELAY_TICKS + 1))
 		}
-		append(
-			&f.in_flight,
-			Sim_Message {
-				tag = tag,
-				request = sim_request_clone(request),
-				sent_tick = f.tick,
-				deliver_tick = f.tick + latency,
-				fault = fault,
-				result_slots = SIM_RESULT_RESERVATION,
-			},
-		)
+		message := Sim_Message {
+			tag = tag,
+			request = sim_request_clone(request),
+			sent_tick = f.tick,
+			deliver_tick = f.tick + latency,
+			fault = fault,
+			result_slots = SIM_RESULT_RESERVATION,
+		}
+		if options.priority == .Priority {
+			inject_at(&f.in_flight, 0, message)
+		} else {
+			append(&f.in_flight, message)
+		}
 		f.result_slots += SIM_RESULT_RESERVATION
 		f.stats.sent += 1
 		assert(len(f.in_flight) <= SIM_MAX_IN_FLIGHT)
@@ -172,8 +180,12 @@ when INGOT_NET_SIM {
 		return true
 	}
 
+	fetcher_request_http :: proc(f: ^Fetcher, tag: u64, request: Http_Request) -> bool {
+		return fetcher_request_with_options(f, tag, request)
+	}
+
 	fetcher_request :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
-		return fetcher_request_http(
+		return fetcher_request_with_options(
 			f,
 			tag,
 			Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY},
@@ -181,9 +193,12 @@ when INGOT_NET_SIM {
 	}
 
 	fetcher_request_priority :: proc(f: ^Fetcher, tag: u64, path: string) -> bool {
-		// Priority ordering is a real-transport concern; the sim's random latency
-		// already explores every ordering, so this is a plain request.
-		return fetcher_request(f, tag, path)
+		return fetcher_request_with_options(
+			f,
+			tag,
+			Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY},
+			Fetch_Options{priority = .Priority},
+		)
 	}
 
 	fetcher_request_cached :: proc(
@@ -192,8 +207,12 @@ when INGOT_NET_SIM {
 		path: string,
 		cache_path: string,
 	) -> bool {
-		_ = cache_path // the sim has no disk cache — always go through the model
-		return fetcher_request(f, tag, path)
+		return fetcher_request_with_options(
+			f,
+			tag,
+			Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY},
+			Fetch_Options{cache_path = cache_path},
+		)
 	}
 
 	// Advance simulated time one tick: deliver every due message through the

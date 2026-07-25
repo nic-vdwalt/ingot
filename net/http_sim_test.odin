@@ -152,6 +152,40 @@ when INGOT_NET_SIM {
 	}
 
 	@(test)
+	test_sim_request_options_are_independent :: proc(t: ^testing.T) {
+		f: Fetcher
+		sim_fetcher_init(&f, 12, 0, test_respond)
+		fetcher_start(&f, "sim", 0)
+		defer fetcher_stop(&f)
+		request := Http_Request{method = .Get, path = "/options", maximum_body = DEFAULT_MAXIMUM_BODY}
+		testing.expect(
+			t,
+			fetcher_request_with_options(
+				&f,
+				1,
+				request,
+				Fetch_Options{priority = .Priority, cache_path = "ignored"},
+			),
+		)
+		testing.expect_value(t, len(f.in_flight), 1)
+		testing.expect_value(t, f.in_flight[0].tag, 1)
+		testing.expect_value(t, f.in_flight[0].request.path, "/options")
+	}
+
+	@(test)
+	test_sim_priority_inserts_before_normal :: proc(t: ^testing.T) {
+		f: Fetcher
+		sim_fetcher_init(&f, 13, 0, test_respond)
+		fetcher_start(&f, "sim", 0)
+		defer fetcher_stop(&f)
+		testing.expect(t, fetcher_request(&f, 1, "/normal"))
+		testing.expect(t, fetcher_request_priority(&f, 2, "/priority"))
+		testing.expect_value(t, len(f.in_flight), 2)
+		testing.expect_value(t, f.in_flight[0].tag, 2)
+		testing.expect_value(t, f.in_flight[1].tag, 1)
+	}
+
+	@(test)
 	test_sim_result_bound_releases_after_drain :: proc(t: ^testing.T) {
 		f: Fetcher
 		sim_fetcher_init(&f, 11, 0, test_respond)
