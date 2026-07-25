@@ -713,7 +713,7 @@ ti_keys_insert :: proc(ctx: ^TI_Ctx, mods: bool) {
 		for ch in clip_str {
 			if ctx.single_line && ch == '\n' do continue
 			if ctx.filter != nil && !ctx.filter(ch) do continue
-			buf, rune_size := utf8.encode_rune(ch)
+			_, rune_size := utf8.encode_rune(ch)
 			if strings.builder_len(sb^) + strings.builder_len(paste) + rune_size > ctx.max_bytes do break
 			strings.write_rune(&paste, ch)
 		}
