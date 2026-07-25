@@ -49,6 +49,60 @@ paint_clip_stack_reaches_static_capacity :: proc(t: ^testing.T) {
 }
 
 @(test)
+paint_clip_balances_when_command_buffer_saturates :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	// Fill the command buffer so every subsequent push is dropped. The clip
+	// stack must still unwind, otherwise a frame that overflows can never
+	// balance its clips again.
+	for _ in 0 ..< PAINT_COMMAND_CAP {
+		paint_push(list, {kind = .Rectangle})
+	}
+	testing.expect_value(t, list.count, PAINT_COMMAND_CAP)
+
+	paint_clip_begin(list, {0, 0, 10, 10})
+	paint_clip_begin(list, {2, 2, 4, 4})
+	testing.expect_value(t, list.clip_count, 2)
+	// The intersection is still tracked even though nothing was recorded.
+	testing.expect_value(t, list.clip_stack[1], Rect{2, 2, 4, 4})
+
+	paint_clip_end(list)
+	paint_clip_end(list)
+	testing.expect_value(t, list.clip_count, 0)
+	// Only the two begins are counted as dropped; their ends are skipped
+	// outright so the recorded stream never carries an unpaired Clip_End.
+	testing.expect_value(t, list.dropped_commands, 2)
+}
+
+@(test)
+paint_clip_end_is_skipped_when_its_begin_was_dropped :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	// An outer clip that fits, then saturation, then an inner clip that is
+	// dropped. The replayed stream must not contain an unpaired Clip_End.
+	paint_clip_begin(list, {0, 0, 100, 100})
+	for list.count < PAINT_COMMAND_CAP {
+		paint_push(list, {kind = .Rectangle})
+	}
+	paint_clip_begin(list, {10, 10, 20, 20})
+	paint_clip_end(list)
+	testing.expect_value(t, list.clip_count, 1)
+	testing.expect_value(t, list.count, PAINT_COMMAND_CAP)
+
+	begins, ends: int
+	for index in 0 ..< list.count {
+		#partial switch list.commands[index].kind {
+		case .Clip_Begin:
+			begins += 1
+		case .Clip_End:
+			ends += 1
+		}
+	}
+	testing.expect_value(t, begins, 1)
+	testing.expect_value(t, ends, 0)
+}
+
+@(test)
 paint_clip_main_overlay_and_pane_coordinates_are_isolated :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

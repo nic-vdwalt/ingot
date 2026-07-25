@@ -1,6 +1,6 @@
 package ui
 
-PAINT_COMMAND_CAP :: 8192
+PAINT_COMMAND_CAP :: 32768
 PAINT_TEXT_CAP :: 262144
 PAINT_CLIP_CAP :: 64
 
@@ -58,6 +58,7 @@ Paint_List :: struct {
 	text:               [PAINT_TEXT_CAP]u8,
 	text_len:           int,
 	clip_stack:         [PAINT_CLIP_CAP]Rect,
+	clip_emitted:       [PAINT_CLIP_CAP]bool,
 	clip_count:         int,
 	dropped_commands:   int,
 	dropped_text_bytes: int,
@@ -90,6 +91,11 @@ paint_clip_intersection :: proc(a, b: Rect) -> Rect {
 	return {x0, y0, max(f32(0), x1 - x0), max(f32(0), y1 - y0)}
 }
 
+// The clip stack is maintained even when the command buffer is full, because a
+// dropped Clip_Begin must still pair with its Clip_End; tying the depth to push
+// success leaves the stack unbalanced for the rest of the frame. clip_emitted
+// records whether the paired command reached the buffer so the replayed stream
+// stays balanced too.
 paint_clip_begin :: proc(list: ^Paint_List, rect: Rect) {
 	assert(list != nil, "paint_clip_begin: nil list")
 	assert(rect.width >= 0 && rect.height >= 0, "paint_clip_begin: invalid rect")
@@ -98,21 +104,21 @@ paint_clip_begin :: proc(list: ^Paint_List, rect: Rect) {
 	if list.clip_count > 0 {
 		effective = paint_clip_intersection(list.clip_stack[list.clip_count - 1], rect)
 	}
-	if paint_push(list, {kind = .Clip_Begin, rect = effective}) {
-		list.clip_stack[list.clip_count] = effective
-		list.clip_count += 1
-	}
+	emitted := paint_push(list, {kind = .Clip_Begin, rect = effective})
+	list.clip_stack[list.clip_count] = effective
+	list.clip_emitted[list.clip_count] = emitted
+	list.clip_count += 1
 }
 
 paint_clip_end :: proc(list: ^Paint_List) {
 	assert(list != nil, "paint_clip_end: nil list")
 	assert(list.clip_count > 0, "paint_clip_end: no clip")
-	restore := list.clip_count > 1
+	list.clip_count -= 1
+	if !list.clip_emitted[list.clip_count] do return
+	restore := list.clip_count > 0
 	rect: Rect
-	if restore do rect = list.clip_stack[list.clip_count - 2]
-	if paint_push(list, {kind = .Clip_End, rect = rect, clip_restore = restore}) {
-		list.clip_count -= 1
-	}
+	if restore do rect = list.clip_stack[list.clip_count - 1]
+	paint_push(list, {kind = .Clip_End, rect = rect, clip_restore = restore})
 }
 
 paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
