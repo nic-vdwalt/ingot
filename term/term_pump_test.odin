@@ -2,6 +2,7 @@ package term
 
 import "core:testing"
 import "core:unicode/utf8"
+import "ingot:pty"
 import "ingot:testx"
 
 @(test)
@@ -71,5 +72,22 @@ utf8_holdback_arbitrary_bytes :: proc(t: ^testing.T) {
 		testing.expect(t, prefix <= len(buf), "prefix cannot exceed buffer")
 		testing.expect(t, len(buf) - prefix < 4, "held-back tail must be < 4 bytes")
 		free_all(context.temp_allocator)
+	}
+}
+
+@(test)
+output_queue_publishes_before_pump :: proc(t: ^testing.T) {
+	when pty.INGOT_PTY_SIM {
+		return
+	} else {
+		ts := new(Term_Instance)
+		defer free(ts)
+		ts.pty_running = true
+		ts.output_queue[0].data[0] = 'x'
+		ts.output_queue[0].len = 1
+		ts.output_count = 1
+		bytes := term_pump(ts)
+		testing.expect_value(t, bytes, 1)
+		testing.expect_value(t, ts.output_count, 0)
 	}
 }
