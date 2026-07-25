@@ -98,17 +98,17 @@ ui_output: ui.Ui_Output
 ui_adapter: ui_gfx.Adapter
 
 Widget_State :: struct {
-	ctx:          ui.Ui,
-	check_a:      bool,
-	check_b:      bool,
-	radio_choice: i32,
-	volume:       f32,
-	slider:       ui.Slider_State,
-	dd_selected:   i32,
-	dropdown:      ui.Dropdown_State,
-	tooltip:       ui.Tooltip_State,
-	listbox:       ui.Listbox_State,
-	list_selected: int,
+	ctx:            ui.Ui,
+	check_a:        bool,
+	check_b:        bool,
+	radio_choice:   i32,
+	volume:         f32,
+	slider:         ui.Slider_State,
+	dd_selected:    i32,
+	dropdown:       ui.Dropdown_State,
+	tooltip:        ui.Tooltip_State,
+	listbox:        ui.Listbox_State,
+	list_selected:  int,
 	list_activated: int,
 }
 
@@ -666,12 +666,7 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	}
 	list_result := ui.listbox_begin(&ui_frame, &state.listbox, list_config)
 	for label, i in list_labels {
-		rect := rl.Rectangle {
-			f32(x),
-			f32(y),
-			f32(list_width),
-			f32(ui.ui_frame_sc(&ui_frame, 24)),
-		}
+		rect := rl.Rectangle{f32(x), f32(y), f32(list_width), f32(ui.ui_frame_sc(&ui_frame, 24))}
 		row := ui.selectable_row(
 			&ui_frame,
 			&state.listbox,

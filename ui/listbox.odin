@@ -2,13 +2,13 @@
 package ui
 
 Listbox_State :: struct {
-	focus:          Focus_State,
-	press_latch:    bool,
-	pressed_index:  int,
-	selected_seen:  int,
-	count_seen:     int,
-	owner_seen:     bool,
-	initialized:    bool,
+	focus:         Focus_State,
+	press_latch:   bool,
+	pressed_index: int,
+	selected_seen: int,
+	count_seen:    int,
+	owner_seen:    bool,
+	initialized:   bool,
 }
 
 Listbox_Config :: struct {
@@ -23,10 +23,10 @@ Listbox_Config :: struct {
 
 Listbox_Result :: struct {
 	selection_changed: bool,
-	activated:          bool,
-	activated_index:    int,
-	reveal:             bool,
-	reveal_index:       int,
+	activated:         bool,
+	activated_index:   int,
+	reveal:            bool,
+	reveal_index:      int,
 }
 
 Selectable_Row_Config :: struct {
@@ -62,7 +62,10 @@ listbox_begin :: proc(
 	assert(config.label != "" && config.stable_id != "", "listbox_begin: semantics required")
 	assert(config.count >= 0, "listbox_begin: negative count")
 
-	result := Listbox_Result{activated_index = -1, reveal_index = -1}
+	result := Listbox_Result {
+		activated_index = -1,
+		reveal_index    = -1,
+	}
 	was_initialized := state.initialized
 	if !was_initialized {
 		state.pressed_index = -1
@@ -75,7 +78,10 @@ listbox_begin :: proc(
 	} else {
 		config.selected^ = clamp(config.selected^, 0, config.count - 1)
 	}
-	if config.selected^ >= 0 && (!was_initialized || config.selected^ != state.selected_seen || config.count != state.count_seen) {
+	if config.selected^ >= 0 &&
+	   (!was_initialized ||
+			   config.selected^ != state.selected_seen ||
+			   config.count != state.count_seen) {
 		result.reveal = true
 		result.reveal_index = config.selected^
 	}
@@ -153,7 +159,10 @@ selectable_row :: proc(
 			focus_opt_set(focus_link(&state.focus, focus_id(1)))
 		}
 		if result.hovered do request_cursor(frame, .POINTING_HAND)
-		if result.hovered && config.hover_select && mouse_moved(frame) && config.selected^ != row.index {
+		if result.hovered &&
+		   config.hover_select &&
+		   mouse_moved(frame) &&
+		   config.selected^ != row.index {
 			config.selected^ = row.index
 			state.selected_seen = row.index
 		}
@@ -180,7 +189,9 @@ selectable_row :: proc(
 listbox_end :: proc(frame: ^Ui_Frame, state: ^Listbox_State) {
 	assert(frame != nil && frame.open, "listbox_end: invalid frame")
 	assert(state != nil && state.initialized, "listbox_end: invalid state")
-	if state.press_latch && !state.owner_seen && (is_mouse_button_released(frame, .LEFT) || !is_mouse_button_down(frame, .LEFT)) {
+	if state.press_latch &&
+	   !state.owner_seen &&
+	   (is_mouse_button_released(frame, .LEFT) || !is_mouse_button_down(frame, .LEFT)) {
 		state.press_latch = false
 		state.pressed_index = -1
 		if frame.interaction.active_latch == &state.press_latch do frame.interaction.active_latch = nil

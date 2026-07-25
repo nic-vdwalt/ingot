@@ -189,7 +189,11 @@ listbox_records_stable_collection_semantics :: proc(t: ^testing.T) {
 	list := &frame.semantics.cur.nodes[0]
 	option := &frame.semantics.cur.nodes[1]
 	testing.expect_value(t, list.role, Sem_Role.List_Box)
-	testing.expect_value(t, list.id, sem_node_id(.List_Box, focus_link(&state.focus, focus_id(1)), "models", 0))
+	testing.expect_value(
+		t,
+		list.id,
+		sem_node_id(.List_Box, focus_link(&state.focus, focus_id(1)), "models", 0),
+	)
 	testing.expect_value(t, option.role, Sem_Role.Option)
 	testing.expect_value(t, option.id, sem_node_id(.Option, {}, "model:c", 0))
 	testing.expect(t, .Selected in option.state)

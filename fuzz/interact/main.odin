@@ -322,7 +322,12 @@ fuzz_text_font :: proc(data: rawptr, size: i32) -> ui.Font_Id {
 	return ui.Font_Id(size)
 }
 
-fuzz_text_measure :: proc(data: rawptr, font: ui.Font_Id, text: string, size, spacing: f32) -> ui.Vec2 {
+fuzz_text_measure :: proc(
+	data: rawptr,
+	font: ui.Font_Id,
+	text: string,
+	size, spacing: f32,
+) -> ui.Vec2 {
 	return {f32(len(text)) * size * 0.5, size}
 }
 

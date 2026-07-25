@@ -83,7 +83,10 @@ when ak.ENABLED {
 			ak.node_set_min_numeric_value(node, f64(source.lo))
 			ak.node_set_max_numeric_value(node, f64(source.hi))
 		}
-		if source.role != .Label && source.role != .Pane && source.role != .Modal && source.role != .List_Box {
+		if source.role != .Label &&
+		   source.role != .Pane &&
+		   source.role != .Modal &&
+		   source.role != .List_Box {
 			ak.node_add_action(node, .Click)
 			ak.node_add_action(node, .Focus)
 		}
@@ -158,7 +161,7 @@ adapter_a11y_publish :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 				node.rect.y,
 				node.rect.w,
 				node.rect.h,
-				u8(node.state),
+				transmute(u8)node.state,
 				node.value,
 				node.lo,
 				node.hi,

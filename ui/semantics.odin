@@ -244,7 +244,7 @@ semantic_push :: proc(
 	assert(role != .None, "semantic_push: role required")
 	assert(
 		(position_in_set == 0 && size_of_set == 0) ||
-			(position_in_set > 0 && size_of_set > 0 && position_in_set <= size_of_set),
+		(position_in_set > 0 && size_of_set > 0 && position_in_set <= size_of_set),
 		"semantic_push: invalid collection position",
 	)
 	sem := &frame.semantics
@@ -261,10 +261,10 @@ semantic_push :: proc(
 	node := &sem.cur.nodes[sem.cur.count]
 	sem.cur.count += 1
 	node^ = {
-		id    = sem_node_id(role, focus, field_id, ordinal),
-		role  = role,
-		rect  = rect,
-		state = state,
+		id              = sem_node_id(role, focus, field_id, ordinal),
+		role            = role,
+		rect            = rect,
+		state           = state,
 		value           = value,
 		lo              = lo,
 		hi              = hi,
