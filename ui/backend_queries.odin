@@ -30,6 +30,16 @@ is_key_pressed_repeat :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
 	return input_key_pressed_repeat(frame_input(frame), key)
 }
 
+// is_key_pressed_or_repeat is the binding every navigation key must use. The
+// platform layer reports the initial keystroke and the auto-repeat ticks as
+// two separate events (GLFW PRESS lands in keys_pressed, REPEAT in
+// keys_repeat), so a widget that reads only one of them either drops the first
+// tap or never repeats while the key is held.
+is_key_pressed_or_repeat :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
+	input := frame_input(frame)
+	return input_key_pressed(input, key) || input_key_pressed_repeat(input, key)
+}
+
 is_key_released :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
 	return input_key_released(frame_input(frame), key)
 }

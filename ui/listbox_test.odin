@@ -3,8 +3,39 @@ package ui
 
 import "core:testing"
 
-listbox_test_config :: proc(selected: ^int, count := 3, hover_select := true) -> Listbox_Config {
-	return {{0, 0, 100, 72}, "Models", "models", count, selected, true, hover_select}
+listbox_test_config :: proc(
+	selected: ^int,
+	count := 3,
+	hover_select := true,
+	keys := Listbox_Keys.Focused,
+	page_rows := 0,
+) -> Listbox_Config {
+	return {
+		rect = {0, 0, 100, 72},
+		label = "Models",
+		stable_id = "models",
+		count = count,
+		selected = selected,
+		wrap = true,
+		hover_select = hover_select,
+		keys = keys,
+		page_rows = page_rows,
+	}
+}
+
+// listbox_test_key builds an input snapshot holding one key, as either the
+// initial keystroke or an auto-repeat tick. The platform reports those as
+// separate events, so navigation tests must be able to send each on its own.
+listbox_test_key :: proc(key: KeyboardKey, repeat := false) -> Ui_Input {
+	input: Ui_Input
+	index := input_key_index(key)
+	assert(index >= 0, "listbox_test_key: unknown key")
+	if repeat {
+		input.keys_repeat[index] = true
+	} else {
+		input.keys_pressed[index] = true
+	}
+	return input
 }
 
 listbox_test_input :: proc(
@@ -59,6 +90,193 @@ listbox_keyboard_navigation_and_activation :: proc(t: ^testing.T) {
 	result = listbox_begin(&frame, &state, listbox_test_config(&selected))
 	testing.expect(t, result.activated)
 	testing.expect_value(t, result.activated_index, 2)
+	ui_frame_end(&frame)
+}
+
+@(test)
+listbox_wrap_step_wraps_and_clamps :: proc(t: ^testing.T) {
+	testing.expect_value(t, listbox_wrap_step(0, -1, 3, true), 2)
+	testing.expect_value(t, listbox_wrap_step(2, 1, 3, true), 0)
+	testing.expect_value(t, listbox_wrap_step(0, -1, 3, false), 0)
+	testing.expect_value(t, listbox_wrap_step(2, 1, 3, false), 2)
+	testing.expect_value(t, listbox_wrap_step(1, -5, 10, false), 0)
+	testing.expect_value(t, listbox_wrap_step(1, 5, 10, false), 6)
+}
+
+// A single tap of Up must move the selection. The initial keystroke arrives in
+// keys_pressed and never in keys_repeat, so reading only the repeat flag drops
+// every non-held press.
+@(test)
+listbox_first_arrow_press_navigates :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	selected := 1
+	state: Listbox_State
+	state.initialized = true
+	state.selected_seen = selected
+	state.count_seen = 3
+
+	input := listbox_test_key(.UP)
+	ui_frame_begin(&frame, &runtime, &input)
+	result := listbox_begin(&frame, &state, listbox_test_config(&selected, keys = .Owned))
+	testing.expect_value(t, selected, 0)
+	testing.expect(t, result.selection_changed && result.reveal)
+	ui_frame_end(&frame)
+
+	input = listbox_test_key(.DOWN)
+	ui_frame_begin(&frame, &runtime, &input)
+	result = listbox_begin(&frame, &state, listbox_test_config(&selected, keys = .Owned))
+	testing.expect_value(t, selected, 1)
+	testing.expect(t, result.selection_changed)
+	ui_frame_end(&frame)
+}
+
+// .Owned navigates with no focus handshake; .Focused stays inert until the
+// focus slot is set, so a list sharing a page keeps Tab reachability.
+@(test)
+listbox_keys_mode_governs_focus_requirement :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	selected := 0
+	state: Listbox_State
+	state.initialized = true
+	state.selected_seen = selected
+	state.count_seen = 3
+
+	input := listbox_test_key(.DOWN)
+	ui_frame_begin(&frame, &runtime, &input)
+	result := listbox_begin(&frame, &state, listbox_test_config(&selected))
+	testing.expect(t, !result.selection_changed)
+	testing.expect_value(t, selected, 0)
+	ui_frame_end(&frame)
+
+	input = listbox_test_key(.DOWN)
+	ui_frame_begin(&frame, &runtime, &input)
+	result = listbox_begin(&frame, &state, listbox_test_config(&selected, keys = .Owned))
+	testing.expect(t, result.selection_changed)
+	testing.expect_value(t, selected, 1)
+	ui_frame_end(&frame)
+
+	state.focus.active = focus_id(1)
+	input = listbox_test_key(.DOWN)
+	ui_frame_begin(&frame, &runtime, &input)
+	result = listbox_begin(&frame, &state, listbox_test_config(&selected))
+	testing.expect(t, result.selection_changed)
+	testing.expect_value(t, selected, 2)
+	ui_frame_end(&frame)
+}
+
+// .Searched shares the dialog with a text input: Home/End must move the caret
+// and Space must type a space, so the list leaves all three alone while still
+// owning the arrows and Enter.
+@(test)
+listbox_searched_mode_yields_home_end_and_space :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	selected := 1
+	state: Listbox_State
+	state.initialized = true
+	state.selected_seen = selected
+	state.count_seen = 3
+	config := proc(selected: ^int) -> Listbox_Config {
+		return listbox_test_config(selected, keys = .Searched)
+	}
+
+	for key in ([?]KeyboardKey{.HOME, .END}) {
+		input := listbox_test_key(key)
+		ui_frame_begin(&frame, &runtime, &input)
+		result := listbox_begin(&frame, &state, config(&selected))
+		testing.expect(t, !result.selection_changed)
+		testing.expect_value(t, selected, 1)
+		ui_frame_end(&frame)
+	}
+
+	input := listbox_test_key(.SPACE)
+	ui_frame_begin(&frame, &runtime, &input)
+	result := listbox_begin(&frame, &state, config(&selected))
+	testing.expect(t, !result.activated)
+	ui_frame_end(&frame)
+
+	input = listbox_test_key(.ENTER)
+	ui_frame_begin(&frame, &runtime, &input)
+	result = listbox_begin(&frame, &state, config(&selected))
+	testing.expect(t, result.activated)
+	testing.expect_value(t, result.activated_index, 1)
+	ui_frame_end(&frame)
+
+	input = listbox_test_key(.UP)
+	ui_frame_begin(&frame, &runtime, &input)
+	result = listbox_begin(&frame, &state, config(&selected))
+	testing.expect(t, result.selection_changed)
+	testing.expect_value(t, selected, 0)
+	ui_frame_end(&frame)
+}
+
+// Page Up/Down clamp even when the list wraps — jumping a whole page past the
+// end would skip rows the user never saw. page_rows = 0 disables both keys.
+@(test)
+listbox_page_keys_clamp_and_opt_in :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	selected := 9
+	state: Listbox_State
+	state.initialized = true
+	state.selected_seen = selected
+	state.count_seen = 20
+
+	input := listbox_test_key(.PAGE_UP)
+	ui_frame_begin(&frame, &runtime, &input)
+	result := listbox_begin(
+		&frame,
+		&state,
+		listbox_test_config(&selected, count = 20, keys = .Owned, page_rows = 4),
+	)
+	testing.expect_value(t, selected, 5)
+	testing.expect(t, result.selection_changed && result.reveal)
+	ui_frame_end(&frame)
+
+	input = listbox_test_key(.PAGE_UP, repeat = true)
+	ui_frame_begin(&frame, &runtime, &input)
+	_ = listbox_begin(
+		&frame,
+		&state,
+		listbox_test_config(&selected, count = 20, keys = .Owned, page_rows = 8),
+	)
+	testing.expect_value(t, selected, 0)
+	ui_frame_end(&frame)
+
+	input = listbox_test_key(.PAGE_UP)
+	ui_frame_begin(&frame, &runtime, &input)
+	_ = listbox_begin(
+		&frame,
+		&state,
+		listbox_test_config(&selected, count = 20, keys = .Owned, page_rows = 4),
+	)
+	testing.expect_value(t, selected, 0)
+	ui_frame_end(&frame)
+
+	input = listbox_test_key(.PAGE_DOWN)
+	ui_frame_begin(&frame, &runtime, &input)
+	_ = listbox_begin(&frame, &state, listbox_test_config(&selected, count = 20, keys = .Owned))
+	testing.expect_value(t, selected, 0)
+	ui_frame_end(&frame)
+
+	input = listbox_test_key(.PAGE_DOWN)
+	ui_frame_begin(&frame, &runtime, &input)
+	_ = listbox_begin(
+		&frame,
+		&state,
+		listbox_test_config(&selected, count = 20, keys = .Owned, page_rows = 25),
+	)
+	testing.expect_value(t, selected, 19)
 	ui_frame_end(&frame)
 }
 
