@@ -342,6 +342,8 @@ slider_at :: proc(
 	old := value^
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	mouse := get_mouse_position(frame)
+	press := frame_to_local(frame, frame.interaction.press_pos)
+	dragging := is_mouse_button_down(frame, .LEFT) && frame.interaction.press_seen && point_in_rect(press, rrect)
 	it := interact(frame, rrect)
 	hovered := it.hovered
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
@@ -354,7 +356,7 @@ slider_at :: proc(
 	track_w := f32(rect.w) - knob_r * 2
 	if track_w < 1 do track_w = 1
 
-	if it.pressed {
+	if it.pressed || dragging {
 		t := clamp((mouse.x - track_x) / track_w, 0, 1)
 		value^ = slider_step_value(lo, hi, step, t)
 	}
