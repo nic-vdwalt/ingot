@@ -52,14 +52,19 @@ curl_body_write :: proc "c" (
 
 @(private)
 http_request_is_valid :: proc(request: Http_Request) -> bool {
-	if request.path == "" || request.path[0] != '/' ||
-	   strings.contains(request.path, "\r") || strings.contains(request.path, "\n") {
+	if request.path == "" ||
+	   request.path[0] != '/' ||
+	   strings.contains(request.path, "\r") ||
+	   strings.contains(request.path, "\n") {
 		return false
 	}
 	for header in request.headers {
-		if header.name == "" || strings.contains(header.name, ":") ||
-		   strings.contains(header.name, "\r") || strings.contains(header.name, "\n") ||
-		   strings.contains(header.value, "\r") || strings.contains(header.value, "\n") {
+		if header.name == "" ||
+		   strings.contains(header.name, ":") ||
+		   strings.contains(header.name, "\r") ||
+		   strings.contains(header.name, "\n") ||
+		   strings.contains(header.value, "\r") ||
+		   strings.contains(header.value, "\n") {
 			return false
 		}
 	}
@@ -79,17 +84,26 @@ http_request_maximum_body :: proc(request: Http_Request, options: Http_Request_O
 @(private)
 http_request_method :: proc(method: Http_Method) -> string {
 	switch method {
-	case .Post:   return "POST"
-	case .Put:    return "PUT"
-	case .Patch:  return "PATCH"
-	case .Delete: return "DELETE"
-	case .Get:    return "GET"
+	case .Post:
+		return "POST"
+	case .Put:
+		return "PUT"
+	case .Patch:
+		return "PATCH"
+	case .Delete:
+		return "DELETE"
+	case .Get:
+		return "GET"
 	}
 	return "GET"
 }
 
 @(private = "file")
-curl_request_configure_base :: proc(handle: $Handle, raw_url: string, body: ^Curl_Body) -> Http_Error {
+curl_request_configure_base :: proc(
+	handle: $Handle,
+	raw_url: string,
+	body: ^Curl_Body,
+) -> Http_Error {
 	url_c, clone_err := strings.clone_to_cstring(raw_url, context.temp_allocator)
 	if clone_err != nil do return .Allocation
 	if curl.easy_setopt(handle, .URL, url_c) != .E_OK do return .Invalid_URL
@@ -104,7 +118,10 @@ curl_request_configure_base :: proc(handle: $Handle, raw_url: string, body: ^Cur
 }
 
 @(private = "file")
-curl_request_configure_policy :: proc(handle: $Handle, options: Http_Request_Options) -> Http_Error {
+curl_request_configure_policy :: proc(
+	handle: $Handle,
+	options: Http_Request_Options,
+) -> Http_Error {
 	if options.redirects.maximum_redirects > 0 {
 		if curl.easy_setopt(handle, .FOLLOWLOCATION, c.long(1)) != .E_OK do return .Redirect
 		if curl.easy_setopt(handle, .MAXREDIRS, c.long(options.redirects.maximum_redirects)) !=
@@ -125,8 +142,10 @@ curl_request_configure_policy :: proc(handle: $Handle, options: Http_Request_Opt
 
 @(private = "file")
 curl_request_configure_payload :: proc(handle: $Handle, request: Http_Request) -> Http_Error {
-	method_c, clone_err :=
-		strings.clone_to_cstring(http_request_method(request.method), context.temp_allocator)
+	method_c, clone_err := strings.clone_to_cstring(
+		http_request_method(request.method),
+		context.temp_allocator,
+	)
 	if clone_err != nil do return .Allocation
 	if curl.easy_setopt(handle, .CUSTOMREQUEST, method_c) != .E_OK do return .Invalid_Request
 	if len(request.body) == 0 do return .None
@@ -140,7 +159,14 @@ curl_request_configure_payload :: proc(handle: $Handle, request: Http_Request) -
 }
 
 @(private = "file")
-curl_request_perform :: proc(handle: $Handle, scheme: Http_Scheme, body: ^Curl_Body) -> (u16, Http_Error) {
+curl_request_perform :: proc(
+	handle: $Handle,
+	scheme: Http_Scheme,
+	body: ^Curl_Body,
+) -> (
+	u16,
+	Http_Error,
+) {
 	if curl.easy_perform(handle) != .E_OK {
 		if body.overflow do return 0, .Body_Too_Large
 		return 0, scheme == .Https ? .TLS : .Connect
@@ -167,7 +193,9 @@ http_request_url :: proc(
 	handle := curl.easy_init()
 	if handle == nil do return {}, .Allocation
 	defer curl.easy_cleanup(handle)
-	body := Curl_Body{maximum = http_request_maximum_body(request, options)}
+	body := Curl_Body {
+		maximum = http_request_maximum_body(request, options),
+	}
 	body.bytes.allocator = allocator
 	defer if err != .None do delete(body.bytes)
 	if setup_err := curl_request_configure_base(handle, raw_url, &body); setup_err != .None {

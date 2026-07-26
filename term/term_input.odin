@@ -93,36 +93,66 @@ term_handle_input :: proc(
 @(private)
 vt_control_byte_for_key :: proc(key: rl.KeyboardKey) -> (value: u8, ok: bool) {
 	#partial switch key {
-	case .A:             return 0x01, true
-	case .B:             return 0x02, true
-	case .C:             return 0x03, true
-	case .D:             return 0x04, true
-	case .E:             return 0x05, true
-	case .F:             return 0x06, true
-	case .G:             return 0x07, true
-	case .H:             return 0x08, true
-	case .I:             return 0x09, true
-	case .J:             return 0x0A, true
-	case .K:             return 0x0B, true
-	case .L:             return 0x0C, true
-	case .M:             return 0x0D, true
-	case .N:             return 0x0E, true
-	case .O:             return 0x0F, true
-	case .P:             return 0x10, true
-	case .Q:             return 0x11, true
-	case .R:             return 0x12, true
-	case .S:             return 0x13, true
-	case .T:             return 0x14, true
-	case .U:             return 0x15, true
-	case .V:             return 0x16, true
-	case .W:             return 0x17, true
-	case .X:             return 0x18, true
-	case .Y:             return 0x19, true
-	case .Z:             return 0x1A, true
-	case .LEFT_BRACKET:  return 0x1B, true
-	case .BACKSLASH:     return 0x1C, true
-	case .RIGHT_BRACKET: return 0x1D, true
-	case .GRAVE:         return 0x1E, true
+	case .A:
+		return 0x01, true
+	case .B:
+		return 0x02, true
+	case .C:
+		return 0x03, true
+	case .D:
+		return 0x04, true
+	case .E:
+		return 0x05, true
+	case .F:
+		return 0x06, true
+	case .G:
+		return 0x07, true
+	case .H:
+		return 0x08, true
+	case .I:
+		return 0x09, true
+	case .J:
+		return 0x0A, true
+	case .K:
+		return 0x0B, true
+	case .L:
+		return 0x0C, true
+	case .M:
+		return 0x0D, true
+	case .N:
+		return 0x0E, true
+	case .O:
+		return 0x0F, true
+	case .P:
+		return 0x10, true
+	case .Q:
+		return 0x11, true
+	case .R:
+		return 0x12, true
+	case .S:
+		return 0x13, true
+	case .T:
+		return 0x14, true
+	case .U:
+		return 0x15, true
+	case .V:
+		return 0x16, true
+	case .W:
+		return 0x17, true
+	case .X:
+		return 0x18, true
+	case .Y:
+		return 0x19, true
+	case .Z:
+		return 0x1A, true
+	case .LEFT_BRACKET:
+		return 0x1B, true
+	case .BACKSLASH:
+		return 0x1C, true
+	case .RIGHT_BRACKET:
+		return 0x1D, true
+	case .GRAVE:
+		return 0x1E, true
 	}
 	return 0, false
 }
@@ -130,34 +160,59 @@ vt_control_byte_for_key :: proc(key: rl.KeyboardKey) -> (value: u8, ok: bool) {
 @(private)
 vt_sequence_for_key :: proc(key: rl.KeyboardKey, shift: bool, buf: []u8) -> (int, bool) {
 	#partial switch key {
-	case .ENTER:     buf[0] = '\r'; return 1, true
-	case .BACKSPACE: buf[0] = 0x7f; return 1, true
+	case .ENTER:
+		buf[0] = '\r'; return 1, true
+	case .BACKSPACE:
+		buf[0] = 0x7f; return 1, true
 	case .TAB:
 		if shift do return copy(buf, "\x1b[Z"), true
 		buf[0] = '\t'; return 1, true
-	case .ESCAPE:    buf[0] = 0x1b; return 1, true
-	case .UP:        return copy(buf, "\x1b[A"), true
-	case .DOWN:      return copy(buf, "\x1b[B"), true
-	case .RIGHT:     return copy(buf, "\x1b[C"), true
-	case .LEFT:      return copy(buf, "\x1b[D"), true
-	case .HOME:      return copy(buf, "\x1b[H"), true
-	case .END:       return copy(buf, "\x1b[F"), true
-	case .PAGE_UP:   return copy(buf, "\x1b[5~"), true
-	case .PAGE_DOWN: return copy(buf, "\x1b[6~"), true
-	case .INSERT:    return copy(buf, "\x1b[2~"), true
-	case .DELETE:    return copy(buf, "\x1b[3~"), true
-	case .F1:        return copy(buf, "\x1bOP"), true
-	case .F2:        return copy(buf, "\x1bOQ"), true
-	case .F3:        return copy(buf, "\x1bOR"), true
-	case .F4:        return copy(buf, "\x1bOS"), true
-	case .F5:        return copy(buf, "\x1b[15~"), true
-	case .F6:        return copy(buf, "\x1b[17~"), true
-	case .F7:        return copy(buf, "\x1b[18~"), true
-	case .F8:        return copy(buf, "\x1b[19~"), true
-	case .F9:        return copy(buf, "\x1b[20~"), true
-	case .F10:       return copy(buf, "\x1b[21~"), true
-	case .F11:       return copy(buf, "\x1b[23~"), true
-	case .F12:       return copy(buf, "\x1b[24~"), true
+	case .ESCAPE:
+		buf[0] = 0x1b; return 1, true
+	case .UP:
+		return copy(buf, "\x1b[A"), true
+	case .DOWN:
+		return copy(buf, "\x1b[B"), true
+	case .RIGHT:
+		return copy(buf, "\x1b[C"), true
+	case .LEFT:
+		return copy(buf, "\x1b[D"), true
+	case .HOME:
+		return copy(buf, "\x1b[H"), true
+	case .END:
+		return copy(buf, "\x1b[F"), true
+	case .PAGE_UP:
+		return copy(buf, "\x1b[5~"), true
+	case .PAGE_DOWN:
+		return copy(buf, "\x1b[6~"), true
+	case .INSERT:
+		return copy(buf, "\x1b[2~"), true
+	case .DELETE:
+		return copy(buf, "\x1b[3~"), true
+	case .F1:
+		return copy(buf, "\x1bOP"), true
+	case .F2:
+		return copy(buf, "\x1bOQ"), true
+	case .F3:
+		return copy(buf, "\x1bOR"), true
+	case .F4:
+		return copy(buf, "\x1bOS"), true
+	case .F5:
+		return copy(buf, "\x1b[15~"), true
+	case .F6:
+		return copy(buf, "\x1b[17~"), true
+	case .F7:
+		return copy(buf, "\x1b[18~"), true
+	case .F8:
+		return copy(buf, "\x1b[19~"), true
+	case .F9:
+		return copy(buf, "\x1b[20~"), true
+	case .F10:
+		return copy(buf, "\x1b[21~"), true
+	case .F11:
+		return copy(buf, "\x1b[23~"), true
+	case .F12:
+		return copy(buf, "\x1b[24~"), true
 	}
 	return 0, false
 }

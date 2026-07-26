@@ -41,9 +41,14 @@ The categories below overlap, but they represent the most likely alternatives.
   caller-owned state, immediate UI, batched WebGPU rendering, and event-driven
   idle behavior. The stack is integrated and inspectable, but young and
   Odin-specific.
-- **Dear ImGui or egui-style UI:** Best for debug tools, inspectors, engine
-  tooling, and custom-rendered utilities. Ingot provides a broader app stack and
-  explicit runtime/frame boundary, but has a smaller ecosystem.
+- **Dear ImGui:** Best for mature C++ engine tooling, inspectors, overlays, and
+  applications that already own a renderer or platform shell. It has much wider
+  adoption, backend coverage, tables, and docking than Ingot, but no core
+  accessibility implementation.
+- **egui:** Best for Rust-native tools and applications that value native/web
+  portability, higher-level layout, scheduled repaint, and AccessKit semantics.
+  With `eframe` it approaches Ingot's app-framework scope, while retaining a much
+  larger ecosystem and a less strictly caller-owned state model.
 - **Qt, GTK, or Slint-style toolkit:** Best for conventional applications and
   mature widget needs. Ingot offers direct ownership and custom rendering;
   established toolkits offer deeper widgets, tooling, and stability.
@@ -76,23 +81,75 @@ rendering, or a continuously running frame loop. These are genuine
 immediate-mode systems even when they retain caches, schedule redraws, or emit
 accessibility data.
 
-Ingot's intended boundary is broader than a standalone widget library. It
-includes windowing, graphics, application frame pacing, platform effects,
-settings, networking, accessibility semantics, and terminal support rather than
-assuming an existing host engine or application shell. Gio and egui already show
-that immediate-mode systems can support event-driven frames and semantics, so
-Ingot does not claim those ideas as unprecedented.
+Dear ImGui and egui should not be treated as one interchangeable category. Dear
+ImGui is primarily a C++ UI library designed to embed into engines and custom
+applications. egui is a Rust UI library whose official `eframe` framework and
+renderer/platform crates also provide a native and web application stack. Ingot
+is an Odin framework that integrates UI with its own graphics and application
+services. Compare the complete stack required by the application, not only the
+widget-call syntax.
 
-Its stricter distinction is state ownership. Persistent widget behavior belongs
-to application component structs; stable IDs identify focus and accessibility
-targets but do not key a hidden widget-state database. `Ui_Runtime` owns explicit
-window-lifetime services, while `Ui_Frame` owns bounded output and arbitration
-for one rendered frame. Caches and platform backing structures may persist
-without becoming a second application model.
+### Ingot, Dear ImGui, and egui
 
-Prefer a standalone immediate-mode UI library when integrating into an existing
-renderer or engine, when its ecosystem already supplies required widgets, or
-when framework-level services would be redundant.
+This table describes architectural defaults rather than every extension. Dear
+ImGui docking is maintained on its official docking branch; egui docking is
+normally supplied by third-party crates.
+
+| Area | Ingot | Dear ImGui | egui |
+|---|---|---|---|
+| Primary ecosystem | Odin desktop tools, native and browser builds | C++ engines, tools, overlays, and custom applications | Rust native and web tools and applications |
+| Integration boundary | App framework with UI, WebGPU graphics, frame pacing, platform effects, settings, networking, and terminal packages | Renderer-agnostic UI core with official renderer and platform backends; normally embedded in a host | Renderer-agnostic UI core with official `winit`, `wgpu`, `glow`, and `eframe` integrations |
+| Persistent UI behavior | Component state such as editing, scrolling, menus, and interaction latches is caller-owned | Application values are caller-owned; the context retains window, table, navigation, and interaction state keyed by widget identity | Application values are caller-owned; `Context` and `Memory` retain focus, window, scroll, collapse, and text-edit state keyed by IDs |
+| Identity | Stable IDs identify current-frame focus and accessibility targets, not a general widget-state store | Labels and an ID stack produce stable widget IDs | Sequential widgets often receive IDs automatically; persistent state requires stable IDs |
+| Layout | Bounded single-pass layout with explicit measurements and application-owned geometry escape hatches | Cursor-driven layout, explicit composition, child regions, and mature tables | Closure-based rows, columns, panels, grids, wrapping, scroll areas, and occasional extra layout passes |
+| Rendering output | Bounded renderer-independent paint lists replayed by the integrated WebGPU adapter | Batched indexed triangle draw lists consumed by a renderer backend | Shapes, texture updates, and platform output tessellated and painted by an integration |
+| Idle scheduling | `Frame_Pacer` can skip UI construction and GPU submission until input, application work, or a redraw deadline | Commonly rebuilt in a continuous engine loop; event-driven hosting is possible but not the primary integration model | Repaint requests and deadlines allow integrations to sleep while idle |
+| Accessibility | Widgets emit bounded semantic snapshots; native AccessKit and browser semantic-DOM bridges exist, but target validation is not recorded | No accessibility implementation in the core project | Built-in AccessKit semantics exposed through integrations, including `eframe` |
+| Docking and detached tools | Docking is roadmap work; explicit native contexts can own independent windows, with platform validation still required | First-party docking and multi-viewports on the official docking branch | Core multi-viewport protocol; docking normally comes from ecosystem crates |
+| Predictability tradeoff | Named capacities bound frame work and storage; exceeding a contract degrades or asserts according to the API | Highly optimized and allocation-conscious, with dynamic internal structures | Safe Rust implementation with dynamic containers and optional persistence/serialization features |
+| Maturity | Young, no semantic-versioned releases, small Odin ecosystem, and no published project license | More than a decade of broad production use and backend integrations | Production-capable and widely used, but younger than Dear ImGui and still permits breaking releases |
+
+### What the table means
+
+Ingot's clearest distinction is state ownership. Persistent widget behavior
+belongs to application component structs; stable IDs identify focus and
+accessibility targets but do not key a hidden widget-state database.
+`Ui_Runtime` owns explicit window-lifetime services, while `Ui_Frame` owns
+bounded output and arbitration for one rendered frame. Caches and platform
+backing structures may persist without becoming a second application model.
+This makes teardown and headless tests explicit, at the cost of more state in
+application types than callers of Dear ImGui or egui may expect.
+
+Ingot's intended boundary is also broader than Dear ImGui's core. It includes
+windowing, graphics, application frame pacing, platform effects, settings,
+networking, accessibility semantics, and terminal support rather than assuming
+an existing host engine or application shell. The fairer egui comparison is
+often Ingot against `egui` plus `eframe` and its renderer/platform crates. Gio
+and egui already demonstrate event-driven immediate-mode frames and semantics,
+so Ingot does not claim those ideas as unprecedented.
+
+Ingot's bounds provide explicit workload and storage ceilings, not automatic
+superiority. They can simplify failure analysis and deterministic testing, but
+large or highly dynamic interfaces must fit the capacities and widget set that
+exist today. Dear ImGui has substantially deeper tables, docking, backend
+coverage, and operational history. egui has richer general layout, an
+established Rust crate ecosystem, and more mature accessibility integration.
+Neither comparison should imply current feature parity.
+
+Platform claims also require qualification. The shared Ingot API targets macOS,
+Windows, Linux, and the browser, but compilation is not runtime validation.
+Native accessibility, assistive technology, WebGPU backends, browser behavior,
+and multi-window presentation still require dated evidence on representative
+systems. See [Production readiness](production-readiness.md) for the current
+matrix and [Testing Ingot](testing.md) for what package, web, fuzz, and GPU tests
+actually establish.
+
+Prefer Dear ImGui when integrating into an existing C++ renderer or engine, or
+when mature docking, tables, backend breadth, and operational history dominate.
+Prefer egui when Rust, higher-level layout, its crate ecosystem, or established
+AccessKit integration dominate. Prefer Ingot when one Odin-owned stack, explicit
+component state, bounded frame derivation, and shared native/WebGPU architecture
+matter more than ecosystem size and current widget depth.
 
 ## Against retained and declarative UI toolkits
 

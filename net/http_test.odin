@@ -8,21 +8,36 @@ import "core:testing"
 @(test)
 test_http_request_validation_helpers :: proc(t: ^testing.T) {
 	testing.expect(t, http_request_is_valid(Http_Request{path = "/"}))
-	testing.expect(t, http_request_is_valid(Http_Request {
-		path = "/resource?q=1",
-		headers = {Http_Header{name = "Accept", value = "application/json"}},
-	}))
+	testing.expect(
+		t,
+		http_request_is_valid(
+			Http_Request {
+				path = "/resource?q=1",
+				headers = {Http_Header{name = "Accept", value = "application/json"}},
+			},
+		),
+	)
 	testing.expect(t, !http_request_is_valid(Http_Request{path = ""}))
 	testing.expect(t, !http_request_is_valid(Http_Request{path = "resource"}))
 	testing.expect(t, !http_request_is_valid(Http_Request{path = "/resource\rvalue"}))
-	testing.expect(t, !http_request_is_valid(Http_Request {
-		path = "/",
-		headers = {Http_Header{name = "X:Injected", value = "value"}},
-	}))
-	testing.expect(t, !http_request_is_valid(Http_Request {
-		path = "/",
-		headers = {Http_Header{name = "X-Test", value = "value\nInjected"}},
-	}))
+	testing.expect(
+		t,
+		!http_request_is_valid(
+			Http_Request {
+				path = "/",
+				headers = {Http_Header{name = "X:Injected", value = "value"}},
+			},
+		),
+	)
+	testing.expect(
+		t,
+		!http_request_is_valid(
+			Http_Request {
+				path = "/",
+				headers = {Http_Header{name = "X-Test", value = "value\nInjected"}},
+			},
+		),
+	)
 }
 
 @(test)
@@ -33,7 +48,9 @@ test_http_request_method_and_body_limit_helpers :: proc(t: ^testing.T) {
 	testing.expect_value(t, http_request_method(.Patch), "PATCH")
 	testing.expect_value(t, http_request_method(.Delete), "DELETE")
 
-	request := Http_Request{maximum_body = 128}
+	request := Http_Request {
+		maximum_body = 128,
+	}
 	options := Http_Request_Options{}
 	testing.expect_value(t, http_request_maximum_body(request, options), u64(128))
 	options.limits.maximum_body_bytes = 64

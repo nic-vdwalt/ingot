@@ -233,6 +233,27 @@ WebGPU backend, publish the live gallery, document raylib migration, report
 concrete idle CPU, binary-size, build-time, and frame-work measurements, and
 reach Linux desktop-polish parity.
 
+The remaining maturity priorities, including the gaps against focused embeddable
+layout libraries such as Clay, are:
+
+1. **Platform evidence:** replace every `Not recorded` release-matrix entry with
+   revision-pinned macOS, Linux, Windows, browser, TLS, GPU, and accessibility
+   evidence without treating compile-only or Node-only checks as validation.
+2. **Multi-context proof:** validate simultaneous native windows on Metal,
+   Vulkan, and D3D12, including independent input/resources, interleaved frames,
+   close/recreate behavior, and stale or cross-context handle rejection.
+3. **Portable integration:** reduce the integration surface, document renderer
+   and host boundaries, publish focused embedding examples, and measure build
+   time and binary size. Ingot remains Odin-first rather than pursuing Clay's
+   single-header C portability.
+4. **Layout confidence:** expand automatic-layout fuzzing, responsive gallery
+   fixtures, clipping/focus/accessibility coverage, and performance measurements
+   while preserving bounded work and explicit caller-owned state.
+
+These are release gates and engineering targets, not claims of completed
+validation. Detailed evidence requirements remain in
+[`docs/production-readiness.md`](docs/production-readiness.md).
+
 Advanced widgets will be built in dependency order:
 
 1. **Collection foundation:** a bounded two-axis virtual viewport, visible-range

@@ -66,6 +66,14 @@ Text_Span :: struct {
 	link:      bool, // Bare http(s):// URL; rendered accent+underline, clickable.
 }
 
+@(private = "file")
+Inline_Span_Parse_State :: struct {
+	line:      string,
+	spans:     [dynamic]Text_Span,
+	index:     int,
+	seg_start: int,
+}
+
 // match_url returns the exclusive end of a bare URL starting at byte i in
 // line, or ok=false when line[i:] does not start with http:// or https://.
 // Trailing sentence punctuation is not considered part of the URL.
@@ -100,183 +108,171 @@ match_url :: proc(line: string, i: int) -> (int, bool) {
 	return j, true
 }
 
+@(private = "file")
+inline_span_append_plain :: proc(state: ^Inline_Span_Parse_State, start, end: int) {
+	if start >= end do return
+	append(&state.spans, Text_Span{text = state.line[start:end], raw_start = start, raw_end = end})
+}
+
+@(private = "file")
+inline_span_find :: proc(line: string, start: int, marker: u8) -> int {
+	for index := start; index < len(line); index += 1 {
+		if line[index] == marker do return index
+	}
+	return -1
+}
+
+@(private = "file")
+inline_span_parse_pill :: proc(state: ^Inline_Span_Parse_State) {
+	inline_span_append_plain(state, state.seg_start, state.index)
+	close := inline_span_find(state.line, state.index + 1, PILL_CLOSE)
+	if close < 0 {
+		append(
+			&state.spans,
+			Text_Span {
+				text = state.line[state.index + 1:],
+				raw_start = state.index,
+				raw_end = len(state.line),
+			},
+		)
+		state.index = len(state.line)
+		state.seg_start = state.index
+		return
+	}
+	append(
+		&state.spans,
+		Text_Span {
+			text = state.line[state.index + 1:close],
+			raw_start = state.index,
+			raw_end = close + 1,
+			pill = true,
+		},
+	)
+	state.index = close + 1
+	state.seg_start = state.index
+}
+
+@(private = "file")
+inline_span_parse_code :: proc(state: ^Inline_Span_Parse_State) {
+	inline_span_append_plain(state, state.seg_start, state.index)
+	close := inline_span_find(state.line, state.index + 1, '`')
+	if close < 0 {
+		append(
+			&state.spans,
+			Text_Span {
+				text = state.line[state.index:state.index + 1],
+				raw_start = state.index,
+				raw_end = state.index + 1,
+			},
+		)
+		state.index += 1
+		state.seg_start = state.index
+		return
+	}
+	append(
+		&state.spans,
+		Text_Span {
+			text = state.line[state.index + 1:close],
+			raw_start = state.index,
+			raw_end = close + 1,
+			code = true,
+		},
+	)
+	state.index = close + 1
+	state.seg_start = state.index
+}
+
+@(private = "file")
+inline_span_parse_link :: proc(state: ^Inline_Span_Parse_State) -> bool {
+	end, ok := match_url(state.line, state.index)
+	if !ok do return false
+	inline_span_append_plain(state, state.seg_start, state.index)
+	append(
+		&state.spans,
+		Text_Span {
+			text = state.line[state.index:end],
+			raw_start = state.index,
+			raw_end = end,
+			link = true,
+		},
+	)
+	state.index = end
+	state.seg_start = state.index
+	return true
+}
+
+@(private = "file")
+inline_span_parse_bold :: proc(state: ^Inline_Span_Parse_State) {
+	inline_span_append_plain(state, state.seg_start, state.index)
+	close := -1
+	for index := state.index + 2; index + 1 < len(state.line); index += 1 {
+		if state.line[index] == '*' && state.line[index + 1] == '*' {
+			close = index
+			break
+		}
+	}
+	if close < 0 || close == state.index + 2 {
+		append(
+			&state.spans,
+			Text_Span {
+				text = state.line[state.index:state.index + 2],
+				raw_start = state.index,
+				raw_end = state.index + 2,
+			},
+		)
+		state.index += 2
+		state.seg_start = state.index
+		return
+	}
+	append(
+		&state.spans,
+		Text_Span {
+			text = state.line[state.index + 2:close],
+			raw_start = state.index,
+			raw_end = close + 2,
+			bold = true,
+		},
+	)
+	state.index = close + 2
+	state.seg_start = state.index
+}
+
 // Parse a line into spans, stripping **bold** markers and PILL sentinels.
 parse_inline_spans_with :: proc(line: string, allocator := context.temp_allocator) -> []Text_Span {
 	has_bold := strings.contains(line, "**")
 	has_pill := strings.index_byte(line, PILL_OPEN) >= 0
 	has_code := strings.index_byte(line, '`') >= 0
 	has_link := strings.contains(line, "http://") || strings.contains(line, "https://")
-	// Fast path: no markers at all.
 	if !has_bold && !has_pill && !has_code && !has_link {
 		spans := make([]Text_Span, 1, allocator)
 		spans[0] = Text_Span {
 			text      = line,
 			raw_start = 0,
 			raw_end   = len(line),
-			bold      = false,
 		}
 		return spans
 	}
-
-	buf := make([dynamic]Text_Span, 0, 8, allocator)
-	i := 0
-	seg_start := 0 // start of pending normal text
-	for i < len(line) {
-		// Pill chip: PILL_OPEN ... PILL_CLOSE (single-byte sentinels).
-		if line[i] == PILL_OPEN {
-			if i > seg_start {
-				append(
-					&buf,
-					Text_Span {
-						text = line[seg_start:i],
-						raw_start = seg_start,
-						raw_end = i,
-						bold = false,
-					},
-				)
-			}
-			close := -1
-			for j := i + 1; j < len(line); j += 1 {
-				if line[j] == PILL_CLOSE {
-					close = j
-					break
-				}
-			}
-			if close < 0 {
-				// Unmatched open — treat the remainder as normal text.
-				append(
-					&buf,
-					Text_Span {
-						text = line[i + 1:],
-						raw_start = i,
-						raw_end = len(line),
-						bold = false,
-					},
-				)
-				seg_start = len(line)
-				i = len(line)
-				break
-			}
-			inner := line[i + 1:close]
-			append(&buf, Text_Span{text = inner, raw_start = i, raw_end = close + 1, pill = true})
-			i = close + 1
-			seg_start = i
-			continue
-		}
-
-		// Inline code: `text` (single-byte backtick markers).
-		if line[i] == '`' {
-			if i > seg_start {
-				append(
-					&buf,
-					Text_Span {
-						text = line[seg_start:i],
-						raw_start = seg_start,
-						raw_end = i,
-						bold = false,
-					},
-				)
-			}
-			close := -1
-			for j := i + 1; j < len(line); j += 1 {
-				if line[j] == '`' {
-					close = j
-					break
-				}
-			}
-			if close < 0 {
-				// Unmatched backtick — treat the marker as literal text.
-				append(
-					&buf,
-					Text_Span{text = line[i:i + 1], raw_start = i, raw_end = i + 1, bold = false},
-				)
-				i += 1
-				seg_start = i
-				continue
-			}
-			inner := line[i + 1:close]
-			append(&buf, Text_Span{text = inner, raw_start = i, raw_end = close + 1, code = true})
-			i = close + 1
-			seg_start = i
-			continue
-		}
-
-		// Bare URL: http:// or https:// (no markers — raw text == display text).
-		if line[i] == 'h' {
-			if end, ok := match_url(line, i); ok {
-				if i > seg_start {
-					append(
-						&buf,
-						Text_Span {
-							text = line[seg_start:i],
-							raw_start = seg_start,
-							raw_end = i,
-							bold = false,
-						},
-					)
-				}
-				append(
-					&buf,
-					Text_Span{text = line[i:end], raw_start = i, raw_end = end, link = true},
-				)
-				i = end
-				seg_start = i
-				continue
-			}
-		}
-
-		// Bold: **text**.
-		if i + 1 < len(line) && line[i] == '*' && line[i + 1] == '*' {
-			if i > seg_start {
-				append(
-					&buf,
-					Text_Span {
-						text = line[seg_start:i],
-						raw_start = seg_start,
-						raw_end = i,
-						bold = false,
-					},
-				)
-			}
-			close := -1
-			for j := i + 2; j + 1 < len(line); j += 1 {
-				if line[j] == '*' && line[j + 1] == '*' {
-					close = j
-					break
-				}
-			}
-			if close < 0 || close == i + 2 {
-				// Unmatched or empty (****): treat the marker as literal.
-				append(
-					&buf,
-					Text_Span{text = line[i:i + 2], raw_start = i, raw_end = i + 2, bold = false},
-				)
-				i += 2
-				seg_start = i
-				continue
-			}
-			inner := line[i + 2:close]
-			append(&buf, Text_Span{text = inner, raw_start = i, raw_end = close + 2, bold = true})
-			i = close + 2
-			seg_start = i
-			continue
-		}
-
-		i += 1
+	state := Inline_Span_Parse_State {
+		line  = line,
+		spans = make([dynamic]Text_Span, 0, 8, allocator),
 	}
-	if seg_start < len(line) {
-		append(
-			&buf,
-			Text_Span {
-				text = line[seg_start:],
-				raw_start = seg_start,
-				raw_end = len(line),
-				bold = false,
-			},
-		)
+	for state.index < len(line) {
+		switch {
+		case line[state.index] == PILL_OPEN:
+			inline_span_parse_pill(&state)
+		case line[state.index] == '`':
+			inline_span_parse_code(&state)
+		case line[state.index] == 'h' && inline_span_parse_link(&state):
+		case state.index + 1 < len(line) &&
+		     line[state.index] == '*' &&
+		     line[state.index + 1] == '*':
+			inline_span_parse_bold(&state)
+		case:
+			state.index += 1
+		}
 	}
-
-	return buf[:]
+	inline_span_append_plain(&state, state.seg_start, len(line))
+	return state.spans[:]
 }
 
 

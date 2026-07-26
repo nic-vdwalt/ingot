@@ -71,3 +71,29 @@ spell_in_pill_overlap :: proc(t: ^testing.T) {
 	testing.expect(t, !spell_in_pill(&pills, 10, 12))
 	testing.expect(t, !spell_in_pill(nil, 0, 3))
 }
+
+@(test)
+spell_menu_place_clamps_to_input_and_screen_top :: proc(t: ^testing.T) {
+	x, y := spell_menu_place(120, 200, 100, 400, 240, 100, 4)
+	testing.expect_value(t, x, i32(120))
+	testing.expect_value(t, y, i32(96))
+	x, y = spell_menu_place(400, 200, 100, 400, 240, 100, 4)
+	testing.expect_value(t, x, i32(260))
+	testing.expect_value(t, y, i32(96))
+	x, y = spell_menu_place(20, 200, 100, 400, 240, 100, 4)
+	testing.expect_value(t, x, i32(100))
+	testing.expect_value(t, y, i32(96))
+	x, y = spell_menu_place(120, 80, 100, 400, 240, 100, 4)
+	testing.expect_value(t, x, i32(120))
+	testing.expect_value(t, y, i32(0))
+}
+
+@(test)
+spell_menu_move_selection_wraps :: proc(t: ^testing.T) {
+	testing.expect_value(t, spell_menu_move_selection(0, 5, -1), 4)
+	testing.expect_value(t, spell_menu_move_selection(4, 5, 1), 0)
+	testing.expect_value(t, spell_menu_move_selection(2, 5, -1), 1)
+	testing.expect_value(t, spell_menu_move_selection(2, 5, 1), 3)
+	testing.expect_value(t, spell_menu_move_selection(0, 2, -1), 1)
+	testing.expect_value(t, spell_menu_move_selection(1, 2, 1), 0)
+}

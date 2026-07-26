@@ -133,6 +133,286 @@ spell_replace_word :: proc(frame: ^Ui_Frame, menu: ^Spell_Menu, replacement: str
 	spell_menu_close(menu)
 }
 
+Spell_Menu_Layout :: struct {
+	suggestion_count: int,
+	menu_x, menu_y:   i32,
+	menu_w, menu_h:   i32,
+	item_h, menu_pad: i32,
+	separator_h:      i32,
+	item_x, item_w:   i32,
+	menu_rect:        Rectangle,
+}
+
+@(private)
+spell_menu_place :: proc(
+	anchor_x, anchor_y, input_x, input_w, menu_w, menu_h, gap: i32,
+) -> (
+	i32,
+	i32,
+) {
+	x := anchor_x
+	if x + menu_w > input_x + input_w do x = input_x + input_w - menu_w
+	if x < input_x do x = input_x
+	y := anchor_y - menu_h - gap
+	if y < 0 do y = 0
+	return x, y
+}
+
+@(private)
+spell_menu_move_selection :: proc(selected, nav_count, delta: int) -> int {
+	return (selected + nav_count + delta) % nav_count
+}
+
+@(private = "file")
+spell_menu_layout :: proc(
+	frame: ^Ui_Frame,
+	menu: ^Spell_Menu,
+	input_x, input_w: i32,
+) -> Spell_Menu_Layout {
+	n := len(menu.suggestions)
+	rows := max(n, 1) + 2
+	separator_h := ui_frame_sc(frame, 5)
+	menu_w := ui_frame_sc(frame, SPELL_MENU_W)
+	item_h := ui_frame_sc(frame, SPELL_MENU_ITEM_H)
+	menu_pad := ui_frame_sc(frame, SPELL_MENU_PAD)
+	menu_h := i32(rows) * item_h + menu_pad * 2 + separator_h
+	menu_x, menu_y := spell_menu_place(
+		menu.anchor_x,
+		menu.anchor_y,
+		input_x,
+		input_w,
+		menu_w,
+		menu_h,
+		ui_frame_sc(frame, 4),
+	)
+	return {
+		suggestion_count = n,
+		menu_x = menu_x,
+		menu_y = menu_y,
+		menu_w = menu_w,
+		menu_h = menu_h,
+		item_h = item_h,
+		menu_pad = menu_pad,
+		separator_h = separator_h,
+		item_x = menu_x + ui_frame_sc(frame, 2),
+		item_w = menu_w - ui_frame_sc(frame, 4),
+		menu_rect = {f32(menu_x), f32(menu_y), f32(menu_w), f32(menu_h)},
+	}
+}
+
+@(private = "file")
+spell_menu_handle_keyboard :: proc(
+	frame: ^Ui_Frame,
+	menu: ^Spell_Menu,
+	system: ^Spell_System,
+	nav_count: int,
+) -> bool {
+	if is_key_pressed(frame, .ESCAPE) {
+		spell_menu_close(menu)
+		return true
+	}
+	if is_key_pressed(frame, .UP) || is_key_pressed_repeat(frame, .UP) {
+		menu.selected = spell_menu_move_selection(menu.selected, nav_count, -1)
+	}
+	if is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN) {
+		menu.selected = spell_menu_move_selection(menu.selected, nav_count, 1)
+	}
+	if is_key_pressed(frame, .ENTER) &&
+	   !is_key_down(frame, .LEFT_SHIFT) &&
+	   !is_key_down(frame, .RIGHT_SHIFT) {
+		spell_menu_apply(frame, menu, system, menu.selected)
+		return true
+	}
+	return false
+}
+
+@(private = "file")
+spell_menu_handle_pointer :: proc(
+	frame: ^Ui_Frame,
+	menu: ^Spell_Menu,
+	menu_rect: Rectangle,
+) -> (
+	Vector2,
+	bool,
+) {
+	mouse := frame_to_local(frame, get_mouse_position(frame))
+	pressed := is_mouse_button_pressed(frame, .LEFT) || is_mouse_button_pressed(frame, .RIGHT)
+	if !menu.just_opened && pressed && !point_in_rect(mouse, menu_rect) {
+		spell_menu_close(menu)
+		return mouse, true
+	}
+	menu.just_opened = false
+	return mouse, false
+}
+
+@(private = "file")
+spell_menu_draw_row :: proc(
+	frame: ^Ui_Frame,
+	menu: ^Spell_Menu,
+	origin_x, item_x, item_y, item_w, item_h: i32,
+	label: string,
+	nav_index: int,
+	mouse: Vector2,
+	color: Color,
+) -> bool {
+	row_rect := Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(item_h)}
+	hovered := point_in_rect(mouse, row_rect)
+	if hovered && mouse_moved(frame) do menu.selected = nav_index
+	if menu.selected == nav_index {
+		overlay_rect(
+			frame,
+			{f32(item_x + origin_x), f32(item_y), f32(item_w), f32(item_h)},
+			ui_frame_theme(frame).bg_active,
+		)
+	}
+	if hovered do request_cursor(frame, .POINTING_HAND)
+	font_size := ui_frame_metrics(frame).FONT_SIZE_BODY
+	text := truncate_to_width_frame(frame, label, item_w - ui_frame_sc(frame, 16), font_size)
+	overlay_text(
+		frame,
+		text,
+		item_x + origin_x + ui_frame_sc(frame, 8),
+		item_y + (item_h - font_size) / 2,
+		font_size,
+		color,
+	)
+	return hovered && is_mouse_button_released(frame, .LEFT)
+}
+
+@(private = "file")
+spell_menu_draw_suggestions :: proc(
+	frame: ^Ui_Frame,
+	menu: ^Spell_Menu,
+	layout: ^Spell_Menu_Layout,
+	origin_x: i32,
+	mouse: Vector2,
+) -> (
+	int,
+	i32,
+) {
+	item_y := layout.menu_y + layout.menu_pad
+	apply_index := -1
+	if layout.suggestion_count == 0 {
+		metrics := ui_frame_metrics(frame)
+		text := truncate_to_width_frame(
+			frame,
+			"No suggestions",
+			layout.item_w - ui_frame_sc(frame, 16),
+			metrics.FONT_SIZE_BODY,
+		)
+		overlay_text(
+			frame,
+			text,
+			layout.item_x + origin_x + ui_frame_sc(frame, 8),
+			item_y + (layout.item_h - metrics.FONT_SIZE_BODY) / 2,
+			metrics.FONT_SIZE_BODY,
+			ui_frame_theme(frame).fg_disabled,
+		)
+		return -1, item_y + layout.item_h
+	}
+	for suggestion, index in menu.suggestions {
+		if spell_menu_draw_row(
+			frame,
+			menu,
+			origin_x,
+			layout.item_x,
+			item_y,
+			layout.item_w,
+			layout.item_h,
+			suggestion,
+			index,
+			mouse,
+			ui_frame_theme(frame).fg_primary,
+		) {
+			apply_index = index
+		}
+		item_y += layout.item_h
+	}
+	return apply_index, item_y
+}
+
+@(private = "file")
+spell_menu_draw_actions :: proc(
+	frame: ^Ui_Frame,
+	menu: ^Spell_Menu,
+	layout: ^Spell_Menu_Layout,
+	origin_x, item_y: i32,
+	mouse: Vector2,
+) -> int {
+	style := ui_frame_theme(frame)
+	current_y := item_y
+	overlay_rect(
+		frame,
+		{
+			f32(layout.menu_x + origin_x + ui_frame_sc(frame, 6)),
+			f32(current_y + layout.separator_h / 2),
+			f32(layout.menu_w - ui_frame_sc(frame, 12)),
+			1,
+		},
+		style.border_color,
+	)
+	current_y += layout.separator_h
+	apply_index := -1
+	learn := strings.concatenate({"Learn \"", menu.word, "\""}, context.temp_allocator)
+	if spell_menu_draw_row(
+		frame,
+		menu,
+		origin_x,
+		layout.item_x,
+		current_y,
+		layout.item_w,
+		layout.item_h,
+		learn,
+		layout.suggestion_count,
+		mouse,
+		style.fg_secondary,
+	) {
+		apply_index = layout.suggestion_count
+	}
+	current_y += layout.item_h
+	if spell_menu_draw_row(
+		frame,
+		menu,
+		origin_x,
+		layout.item_x,
+		current_y,
+		layout.item_w,
+		layout.item_h,
+		"Ignore",
+		layout.suggestion_count + 1,
+		mouse,
+		style.fg_secondary,
+	) {
+		apply_index = layout.suggestion_count + 1
+	}
+	return apply_index
+}
+
+@(private = "file")
+spell_menu_draw_overlay :: proc(
+	frame: ^Ui_Frame,
+	menu: ^Spell_Menu,
+	layout: ^Spell_Menu_Layout,
+	mouse: Vector2,
+) -> int {
+	style := ui_frame_theme(frame)
+	origin_x := i32(frame_pane_origin(frame).x)
+	screen_rect := Rectangle {
+		f32(layout.menu_x + origin_x),
+		f32(layout.menu_y),
+		f32(layout.menu_w),
+		f32(layout.menu_h),
+	}
+	overlay_begin(frame, screen_rect, claim_input = true)
+	overlay_rect(frame, screen_rect, style.bg_popup)
+	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
+	apply_index, item_y := spell_menu_draw_suggestions(frame, menu, layout, origin_x, mouse)
+	action_index := spell_menu_draw_actions(frame, menu, layout, origin_x, item_y, mouse)
+	if action_index >= 0 do apply_index = action_index
+	overlay_end(frame)
+	return apply_index
+}
+
 // draw_spell_menu renders and drives the popup. Called from text_input while
 // its scissor may still be active: the panel's draws are recorded on the
 // overlay layer, so they replay above all main content at overlay_flush time
@@ -148,199 +428,16 @@ draw_spell_menu :: proc(
 ) {
 	assert(menu != nil && system != nil, "draw_spell_menu: nil state")
 	if !menu.open do return
-
-	// Any composer text change since open (typing, undo, paste) closes it.
+	_ = input_y
 	text := strings.to_string(menu.sb^)
 	if fnv1a64(text) != menu.text_hash || len(text) != menu.text_len {
 		spell_menu_close(menu)
 		return
 	}
-
-	style := ui_frame_theme(frame)
-	metrics := ui_frame_metrics(frame)
-	n := len(menu.suggestions)
-	rows := max(n, 1) + 2 // suggestions (or "No suggestions") + Learn + Ignore
-	sep_h := ui_frame_sc(frame, 5)
-	menu_w := ui_frame_sc(frame, SPELL_MENU_W)
-	item_h := ui_frame_sc(frame, SPELL_MENU_ITEM_H)
-	menu_pad := ui_frame_sc(frame, SPELL_MENU_PAD)
-	menu_h := i32(rows) * item_h + menu_pad * 2 + sep_h
-
-	mx := menu.anchor_x
-	if mx + menu_w > input_x + input_w do mx = input_x + input_w - menu_w
-	if mx < input_x do mx = input_x
-	my := menu.anchor_y - menu_h - ui_frame_sc(frame, 4)
-	if my < 0 do my = 0
-
-	nav_count := n + 2
-
-	// Keyboard: Up/Down navigate, Enter applies, Escape closes.
-	if is_key_pressed(frame, .ESCAPE) {
-		spell_menu_close(menu)
-		return
-	}
-	if is_key_pressed(frame, .UP) || is_key_pressed_repeat(frame, .UP) {
-		menu.selected = (menu.selected + nav_count - 1) % nav_count
-	}
-	if is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN) {
-		menu.selected = (menu.selected + 1) % nav_count
-	}
-	if is_key_pressed(frame, .ENTER) &&
-	   !is_key_down(frame, .LEFT_SHIFT) &&
-	   !is_key_down(frame, .RIGHT_SHIFT) {
-		spell_menu_apply(frame, menu, system, menu.selected)
-		return
-	}
-
-	mouse := get_mouse_position(frame)
-	mouse = frame_to_local(frame, mouse)
-	menu_rect := Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
-
-	// Click-away closes (the opening right-click is swallowed for one frame).
-	if !menu.just_opened &&
-	   (is_mouse_button_pressed(frame, .LEFT) || is_mouse_button_pressed(frame, .RIGHT)) &&
-	   !point_in_rect(mouse, menu_rect) {
-		spell_menu_close(menu)
-		return
-	}
-	menu.just_opened = false
-
-	// Record all panel draws on the overlay layer in screen space; the group
-	// rect also claims the covered area with the input router.
-	origin := frame_pane_origin(frame)
-	ox := i32(origin.x)
-	screen_rect := Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
-	overlay_begin(frame, screen_rect, claim_input = true)
-	overlay_rect(frame, screen_rect, style.bg_popup)
-	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
-
-	item_x := mx + ui_frame_sc(frame, 2)
-	item_w := menu_w - ui_frame_sc(frame, 4)
-	item_y := my + menu_pad
-
-	draw_row :: proc(
-		frame: ^Ui_Frame,
-		menu: ^Spell_Menu,
-		ox, item_x, item_y, item_w, item_h: i32,
-		label: string,
-		nav_idx: int,
-		mouse: Vector2,
-		color: Color,
-	) -> bool {
-		assert(menu != nil, "draw_spell_menu row: nil menu")
-		row_rect := Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(item_h)}
-		hovered := point_in_rect(mouse, row_rect)
-		if hovered && mouse_moved(frame) do menu.selected = nav_idx
-		if menu.selected == nav_idx {
-			overlay_rect(
-				frame,
-				{f32(item_x + ox), f32(item_y), f32(item_w), f32(item_h)},
-				ui_frame_theme(frame).bg_active,
-			)
-		}
-		if hovered do request_cursor(frame, .POINTING_HAND)
-		font_size := ui_frame_metrics(frame).FONT_SIZE_BODY
-		txt := truncate_to_width_frame(frame, label, item_w - ui_frame_sc(frame, 16), font_size)
-		overlay_text(
-			frame,
-			txt,
-			item_x + ox + ui_frame_sc(frame, 8),
-			item_y + (item_h - font_size) / 2,
-			font_size,
-			color,
-		)
-		return hovered && is_mouse_button_released(frame, .LEFT)
-	}
-
-	// Collect the clicked action and apply it only after the overlay group is
-	// closed, so every path leaves the recorder balanced.
-	apply_idx := -1
-	if n == 0 {
-		txt := truncate_to_width_frame(
-			frame,
-			"No suggestions",
-			item_w - ui_frame_sc(frame, 16),
-			metrics.FONT_SIZE_BODY,
-		)
-		overlay_text(
-			frame,
-			txt,
-			item_x + ox + ui_frame_sc(frame, 8),
-			item_y + (item_h - metrics.FONT_SIZE_BODY) / 2,
-			metrics.FONT_SIZE_BODY,
-			style.fg_disabled,
-		)
-		item_y += item_h
-	} else {
-		for suggestion, index in menu.suggestions {
-			if draw_row(
-				frame,
-				menu,
-				ox,
-				item_x,
-				item_y,
-				item_w,
-				item_h,
-				suggestion,
-				index,
-				mouse,
-				style.fg_primary,
-			) {
-				apply_idx = index
-			}
-			item_y += item_h
-		}
-	}
-
-	// Separator.
-	overlay_rect(
-		frame,
-		{
-			f32(mx + ox + ui_frame_sc(frame, 6)),
-			f32(item_y + sep_h / 2),
-			f32(menu_w - ui_frame_sc(frame, 12)),
-			1,
-		},
-		style.border_color,
-	)
-	item_y += sep_h
-
-	learn_label := strings.concatenate({"Learn \"", menu.word, "\""}, context.temp_allocator)
-	if draw_row(
-		frame,
-		menu,
-		ox,
-		item_x,
-		item_y,
-		item_w,
-		item_h,
-		learn_label,
-		n,
-		mouse,
-		style.fg_secondary,
-	) {
-		apply_idx = n
-	}
-	item_y += item_h
-
-	if draw_row(
-		frame,
-		menu,
-		ox,
-		item_x,
-		item_y,
-		item_w,
-		item_h,
-		"Ignore",
-		n + 1,
-		mouse,
-		style.fg_secondary,
-	) {
-		apply_idx = n + 1
-	}
-	overlay_end(frame)
-
-	if apply_idx >= 0 {
-		spell_menu_apply(frame, menu, system, apply_idx)
-	}
+	layout := spell_menu_layout(frame, menu, input_x, input_w)
+	if spell_menu_handle_keyboard(frame, menu, system, layout.suggestion_count + 2) do return
+	mouse, closed := spell_menu_handle_pointer(frame, menu, layout.menu_rect)
+	if closed do return
+	apply_index := spell_menu_draw_overlay(frame, menu, &layout, mouse)
+	if apply_index >= 0 do spell_menu_apply(frame, menu, system, apply_index)
 }
