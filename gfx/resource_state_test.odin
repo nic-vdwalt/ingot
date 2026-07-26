@@ -83,10 +83,14 @@ gpu_3d_pass_rejects_stale_generation :: proc(t: ^testing.T) {
 	resources: Gpu_3D_Resources
 	resources.active_pass_generation = 12
 	current := Gpu_3D_Pass {
+		owner      = default_context(),
+		epoch      = context_epoch(default_context()),
 		generation = 12,
 		active     = true,
 	}
 	stale := Gpu_3D_Pass {
+		owner      = default_context(),
+		epoch      = context_epoch(default_context()),
 		generation = 11,
 		active     = true,
 	}

@@ -38,6 +38,22 @@ test_ui_slot_column_and_row :: proc(t: ^testing.T) {
 }
 
 @(test)
+ui_composition_facade_balances_nested_scopes :: proc(t: ^testing.T) {
+	u: Ui
+	ui_begin(&u, 0, 0, 320, 200, 8)
+	ui_padding(&u, insets(12))
+	ui_row(&u, 64, 8)
+	ui_weights(&u, []i32{1, 2})
+	left := ui_weighted_slot(&u, 1)
+	right := ui_weighted_slot(&u, 2)
+	testing.expect_value(t, left, Rect_I32{12, 12, 96, 64})
+	testing.expect_value(t, right, Rect_I32{116, 12, 192, 64})
+	ui_row_end(&u)
+	testing.expect_value(t, ui_fill(&u), Rect_I32{12, 84, 296, 104})
+	ui_end(&u)
+}
+
+@(test)
 test_ui_runtime_frames_are_isolated_and_share_roots :: proc(t: ^testing.T) {
 	a, b: Ui_Runtime
 	ui_runtime_init(&a)

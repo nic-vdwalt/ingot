@@ -222,7 +222,12 @@ when !INGOT_NET_SIM {
 		if request.path == "" || request.path[0] != '/' do return false
 		if strings.contains(request.path, "\r") || strings.contains(request.path, "\n") do return false
 		for header in request.headers {
-			if header.name == "" || strings.contains(header.name, ":") || strings.contains(header.name, "\r") || strings.contains(header.name, "\n") do return false
+			if header.name == "" ||
+			   strings.contains(header.name, ":") ||
+			   strings.contains(header.name, "\r") ||
+			   strings.contains(header.name, "\n") {
+				return false
+			}
 			if strings.contains(header.value, "\r") || strings.contains(header.value, "\n") do return false
 		}
 		return true
@@ -259,7 +264,12 @@ when !INGOT_NET_SIM {
 				port,
 			),
 		)
-		for header in request.headers do append(&buf, ..transmute([]u8)fmt.tprintf("%s: %s\r\n", header.name, header.value))
+		for header in request.headers {
+			append(
+				&buf,
+				..transmute([]u8)fmt.tprintf("%s: %s\r\n", header.name, header.value),
+			)
+		}
 		append(&buf, ..transmute([]u8)fmt.tprintf("Content-Length: %d\r\n\r\n", len(request.body)))
 		append(&buf, ..request.body)
 		return buf[:]
@@ -360,7 +370,9 @@ header_content_length :: proc(headers: []Http_Header) -> (int, bool) {
 @(private = "file")
 transfer_chunked :: proc(headers: []Http_Header) -> bool {
 	for header in headers {
-		if strings.to_lower(header.name, context.temp_allocator) == "transfer-encoding" && strings.contains(strings.to_lower(header.value, context.temp_allocator), "chunked") do return true
+		name := strings.to_lower(header.name, context.temp_allocator)
+		value := strings.to_lower(header.value, context.temp_allocator)
+		if name == "transfer-encoding" && strings.contains(value, "chunked") do return true
 	}
 	return false
 }
@@ -474,9 +486,20 @@ when !INGOT_NET_SIM {
 		sync.cond_broadcast(&f.jobs_cond)
 		sync.mutex_unlock(&f.mutex)
 		sync.mutex_lock(&f.sock_mutex)
-		for i in 0 ..< FETCH_WORKERS {if f.active_open[i] {http_net_close(f.active_socks[i]); f.active_open[i] = false}}
+		for i in 0 ..< FETCH_WORKERS {
+			if f.active_open[i] {
+				http_net_close(f.active_socks[i])
+				f.active_open[i] = false
+			}
+		}
 		sync.mutex_unlock(&f.sock_mutex)
-		for i in 0 ..< FETCH_WORKERS {if f.workers[i] != nil {thread.join(f.workers[i]); thread.destroy(f.workers[i]); f.workers[i] = nil}}
+		for i in 0 ..< FETCH_WORKERS {
+			if f.workers[i] != nil {
+				thread.join(f.workers[i])
+				thread.destroy(f.workers[i])
+				f.workers[i] = nil
+			}
+		}
 		sync.mutex_lock(&f.mutex)
 		assert(f.result_slots == len(f.jobs) + len(f.results))
 		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)

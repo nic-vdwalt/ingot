@@ -1157,7 +1157,16 @@ draw_heading :: proc(
 	total_h := text_h
 
 	if level == 1 {
-		if draw do draw_rectangle(ctx.frame, x, y + total_h, max_width, 1, ui_frame_theme(ctx.frame).border_color)
+		if draw {
+			draw_rectangle(
+				ctx.frame,
+				x,
+				y + total_h,
+				max_width,
+				1,
+				ui_frame_theme(ctx.frame).border_color,
+			)
+		}
 		total_h += 1
 	}
 

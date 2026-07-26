@@ -170,8 +170,12 @@ spell_skip_token :: proc(text: string, start, end: int) -> bool {
 		}
 	}
 	if upper == end - start || inner_upper do return true
-	if start >= 2 && spell_join_punct(text[start - 1]) && spell_word_byte(text[start - 2]) do return true
-	if end + 1 < len(text) && spell_join_punct(text[end]) && spell_word_byte(text[end + 1]) do return true
+	if start >= 2 && spell_join_punct(text[start - 1]) && spell_word_byte(text[start - 2]) {
+		return true
+	}
+	if end + 1 < len(text) && spell_join_punct(text[end]) && spell_word_byte(text[end + 1]) {
+		return true
+	}
 	if start >= 1 && (text[start - 1] == '@' || text[start - 1] == '#') do return true
 	return false
 }

@@ -12,7 +12,15 @@ import "ingot:ui"
 #assert(len(ui.Frame_Strategy) == len(rl.Frame_Strategy))
 
 apply_platform_output :: proc(output: ^ui.Platform_Output) {
-	assert(output != nil, "apply_platform_output: nil output")
+	apply_platform_output_context(rl.default_context(), output)
+}
+
+apply_platform_output_context :: proc(ctx: ^rl.Context, output: ^ui.Platform_Output) {
+	assert(ctx != nil && output != nil, "apply_platform_output_context: nil argument")
+	assert(
+		ctx == rl.default_context(),
+		"apply_platform_output_context: context routing unavailable",
+	)
 	if output.cursor_requested do rl.SetMouseCursor(rl.MouseCursor(output.cursor))
 	if output.clipboard_write {
 		text := string(output.clipboard_text[:output.clipboard_text_len])

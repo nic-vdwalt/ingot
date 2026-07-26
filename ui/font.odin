@@ -141,7 +141,9 @@ draw_text_with :: proc(system: ^Text_System, text: cstring, x, y, size: i32, col
 draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color: Color) {
 	assert(size > 0, "draw_text_frame: invalid size")
 	font := Font_Id(0)
-	if text_backend_valid(frame.runtime.text_backend) do font = text_backend_font(frame.runtime.text_backend, size)
+	if text_backend_valid(frame.runtime.text_backend) {
+		font = text_backend_font(frame.runtime.text_backend, size)
+	}
 	assert(
 		frame.output == nil || font != 0,
 		"draw_text_frame: paint output requires a text backend",
@@ -272,6 +274,8 @@ draw_codepoint_frame :: proc(
 ) {
 	assert(size > 0, "draw_codepoint_frame: invalid size")
 	font := Font_Id(0)
-	if text_backend_valid(frame.runtime.text_backend) do font = text_backend_font(frame.runtime.text_backend, size)
+	if text_backend_valid(frame.runtime.text_backend) {
+		font = text_backend_font(frame.runtime.text_backend, size)
+	}
 	draw_codepoint_command(frame, codepoint, x, y, size, color, font)
 }

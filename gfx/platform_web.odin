@@ -40,17 +40,47 @@ foreign dom {
 	@(link_name = "ingot_web_input_frame_end")
 	_js_web_input_frame_end :: proc() ---
 	@(link_name = "ingot_web_input_sync")
-	_js_web_input_sync :: proc(form_ptr: rawptr, form_len: i32, field_ptr: rawptr, field_len: i32, name_ptr: rawptr, name_len: i32, placeholder_ptr: rawptr, placeholder_len: i32, value_ptr: rawptr, value_len: i32, x, y, w, h, input_type, autocomplete, active: i32) -> i32 ---
+	_js_web_input_sync :: proc(
+		form_ptr: rawptr,
+		form_len: i32,
+		field_ptr: rawptr,
+		field_len: i32,
+		name_ptr: rawptr,
+		name_len: i32,
+		placeholder_ptr: rawptr,
+		placeholder_len: i32,
+		value_ptr: rawptr,
+		value_len: i32,
+		x, y, w, h, input_type, autocomplete, active: i32,
+	) -> i32 ---
 	@(link_name = "ingot_web_input_value_len")
 	_js_web_input_value_len :: proc(field_ptr: rawptr, field_len: i32) -> i32 ---
 	@(link_name = "ingot_web_input_value_copy")
-	_js_web_input_value_copy :: proc(field_ptr: rawptr, field_len: i32, dst: rawptr, cap: i32) -> i32 ---
+	_js_web_input_value_copy :: proc(
+		field_ptr: rawptr,
+		field_len: i32,
+		dst: rawptr,
+		cap: i32,
+	) -> i32 ---
 	@(link_name = "ingot_web_input_cursor")
 	_js_web_input_cursor :: proc(field_ptr: rawptr, field_len: i32) -> i32 ---
 	@(link_name = "ingot_web_submit_sync")
-	_js_web_submit_sync :: proc(form_ptr: rawptr, form_len: i32, label_ptr: rawptr, label_len: i32, x, y, w, h, style, font_size, enabled: i32) -> i32 ---
+	_js_web_submit_sync :: proc(
+		form_ptr: rawptr,
+		form_len: i32,
+		label_ptr: rawptr,
+		label_len: i32,
+		x, y, w, h, style, font_size, enabled: i32,
+	) -> i32 ---
 	@(link_name = "ingot_web_control_sync")
-	_js_web_control_sync :: proc(id_lo, id_hi, role: i32, label_ptr: rawptr, label_len: i32, x, y, w, h, state: i32, value, lo, hi: f32, position_in_set, size_of_set: i32) -> i32 ---
+	_js_web_control_sync :: proc(
+		id_lo, id_hi, role: i32,
+		label_ptr: rawptr,
+		label_len: i32,
+		x, y, w, h, state: i32,
+		value, lo, hi: f32,
+		position_in_set, size_of_set: i32,
+	) -> i32 ---
 	@(link_name = "ingot_web_control_value")
 	_js_web_control_value :: proc(id_lo, id_hi: i32) -> f64 ---
 	@(link_name = "ingot_is_fullscreen")
@@ -60,7 +90,15 @@ foreign dom {
 	@(link_name = "ingot_ime_rect")
 	_js_ime_rect :: proc(x, y, w, h, active: i32) ---
 	@(link_name = "ingot_gamepad_state")
-	_js_gamepad_state :: proc(slot: i32, buttons: [^]u8, buttons_cap: i32, axes: [^]f32, axes_cap: i32, name: [^]u8, name_cap: i32) -> i32 ---
+	_js_gamepad_state :: proc(
+		slot: i32,
+		buttons: [^]u8,
+		buttons_cap: i32,
+		axes: [^]f32,
+		axes_cap: i32,
+		name: [^]u8,
+		name_cap: i32,
+	) -> i32 ---
 	@(link_name = "ingot_drop_count")
 	_js_drop_count :: proc() -> i32 ---
 	@(link_name = "ingot_drop_name_len")

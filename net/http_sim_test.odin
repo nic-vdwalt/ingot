@@ -84,7 +84,8 @@ when INGOT_NET_SIM {
 
 		accepted := 0
 		for i in 0 ..< SIM_MAX_IN_FLIGHT * 2 {
-			if fetcher_request_http(&f, u64(i + 1), Http_Request{method = .Get, path = "/x", maximum_body = 1024}) do accepted += 1
+			request := Http_Request{method = .Get, path = "/x", maximum_body = 1024}
+			if fetcher_request_http(&f, u64(i + 1), request) do accepted += 1
 		}
 		maximum_accepted := min(SIM_MAX_IN_FLIGHT, FETCH_MAXIMUM_RESULTS / SIM_RESULT_RESERVATION)
 		testing.expect_value(t, accepted, maximum_accepted)

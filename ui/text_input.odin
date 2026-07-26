@@ -964,7 +964,9 @@ ti_layout :: proc(ctx: ^TI_Ctx, text: string) -> TI_View {
 	v.vis_start =
 		ctx.scroll_line^ if ctx.scroll_line != nil else max(0, len(v.vlines) - int(v.visible_lines))
 	if v.cur_vrow < v.vis_start do v.vis_start = v.cur_vrow
-	if v.cur_vrow >= v.vis_start + int(v.visible_lines) do v.vis_start = v.cur_vrow - int(v.visible_lines) + 1
+	if v.cur_vrow >= v.vis_start + int(v.visible_lines) {
+		v.vis_start = v.cur_vrow - int(v.visible_lines) + 1
+	}
 	if v.vis_start < 0 do v.vis_start = 0
 	// Never scroll further than needed to fill the visible window, so the
 	// view pulls back up when the input grows (e.g. after a line wraps and

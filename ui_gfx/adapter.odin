@@ -94,10 +94,14 @@ adapter_begin_frame :: proc(
 		"adapter_begin_frame: stale graphics context",
 	)
 	assert(
+		adapter.gfx_context == rl.default_context(),
+		"adapter_begin_frame: context routing unavailable",
+	)
+	assert(
 		frame != nil && runtime != nil && input != nil && output != nil,
 		"adapter_begin_frame: nil argument",
 	)
-	capture_input(input)
+	capture_input_context(adapter.gfx_context, input)
 	adapter_attach_runtime(adapter, runtime)
 	when ODIN_OS == .Darwin || ODIN_OS == .JS {
 		adapter_set_font_dpi(adapter, input.dpi_scale)
@@ -112,12 +116,16 @@ adapter_begin_frame :: proc(
 
 adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	assert(adapter != nil && adapter.initialized, "adapter_end_frame: invalid adapter")
+	assert(
+		adapter.gfx_epoch == rl.context_epoch(adapter.gfx_context),
+		"adapter_end_frame: stale context",
+	)
 	assert(frame != nil && frame.output != nil, "adapter_end_frame: invalid frame")
 	output := frame.output
 	ui.ui_frame_finalize(frame)
 	adapter_a11y_publish(adapter, frame)
 	replay_list(adapter, &output.overlay)
-	apply_platform_output(&output.platform)
+	apply_platform_output_context(adapter.gfx_context, &output.platform)
 	ui.paint_list_set_sink(&output.main, nil, nil)
 	ui.ui_frame_release(frame)
 }

@@ -165,7 +165,9 @@ platform_dragdrop_tick :: proc() {
 
 @(private)
 platform_dragdrop_shutdown :: proc() {
-	if g_dd_view != nil && g_dd_original_class != nil do object_setClass(g_dd_view, g_dd_original_class)
+	if g_dd_view != nil && g_dd_original_class != nil {
+		object_setClass(g_dd_view, g_dd_original_class)
+	}
 	if g_dd_subclass != nil do objc_disposeClassPair(g_dd_subclass)
 	g_dd_orig_entered, g_dd_orig_updated = nil, nil
 	g_dd_orig_exited, g_dd_orig_ended, g_dd_orig_perform = nil, nil, nil

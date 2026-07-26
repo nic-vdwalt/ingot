@@ -6,20 +6,27 @@ RGBA :: Color
 Rect :: Rectangle
 
 Frame :: struct {
+	owner:      ^Context,
 	epoch:      u64,
 	generation: u64,
 	active:     bool,
 }
 
 begin_frame :: proc() -> (Frame, bool) {
-	if !g.initialized || g.frame_active do return {}, false
+	return context_begin_frame(default_context())
+}
+
+context_begin_frame :: proc(ctx: ^Context) -> (Frame, bool) {
+	if ctx == nil || ctx != default_context() do return {}, false
+	if !ctx.initialized || ctx.frame_active do return {}, false
 	BeginDrawing()
 	if !g.frame.has_frame do return {}, false
 	g.frame_generation += 1
 	g.frame_active = true
 	frame := Frame {
-		epoch      = g.epoch,
-		generation = g.frame_generation,
+		owner      = ctx,
+		epoch      = ctx.epoch,
+		generation = ctx.frame_generation,
 		active     = true,
 	}
 	assert(frame.generation > 0)
@@ -123,9 +130,11 @@ mouse_position :: proc() -> Vec2 {
 @(private)
 _frame_valid :: proc(frame: ^Frame) -> bool {
 	assert(frame != nil)
-	if !frame.active || !g.frame_active do return false
-	if frame.epoch != g.epoch do return false
-	if frame.generation != g.frame_generation do return false
-	assert(g.frame.has_frame)
-	return g.frame.has_frame
+	ctx := frame.owner
+	if ctx == nil || ctx != default_context() do return false
+	if !frame.active || !ctx.frame_active do return false
+	if frame.epoch != ctx.epoch do return false
+	if frame.generation != ctx.frame_generation do return false
+	assert(ctx.frame.has_frame)
+	return ctx.frame.has_frame
 }

@@ -25,7 +25,9 @@ fuzz_parse_http_response_random_bytes :: proc(t: ^testing.T) {
 // header_content_length.
 @(test)
 fuzz_parse_http_response_mutated_valid :: proc(t: ^testing.T) {
-	base := "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nX-A: b\r\n\r\n5;ext\r\nhello\r\n3\r\nabc\r\n0\r\n\r\n"
+	base :=
+		"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nX-A: b\r\n\r\n" +
+		"5;ext\r\nhello\r\n3\r\nabc\r\n0\r\n\r\n"
 	p := testx.prng_make(0x2)
 	for _ in 0 ..< 20_000 {
 		buf := make([]u8, len(base), context.temp_allocator)

@@ -24,6 +24,23 @@ Rect_I32 :: struct {
 	x, y, w, h: i32,
 }
 
+Insets_I32 :: struct {
+	left, top, right, bottom: i32,
+}
+
+insets :: proc(all: i32) -> Insets_I32 {
+	assert(all >= 0, "insets: negative inset")
+	return {all, all, all, all}
+}
+
+rect_inset :: proc(rect: Rect_I32, value: Insets_I32) -> Rect_I32 {
+	assert(value.left >= 0 && value.top >= 0, "rect_inset: negative leading inset")
+	assert(value.right >= 0 && value.bottom >= 0, "rect_inset: negative trailing inset")
+	w := max(rect.w - value.left - value.right, 0)
+	h := max(rect.h - value.top - value.bottom, 0)
+	return {rect.x + value.left, rect.y + value.top, w, h}
+}
+
 MAX_FIT_COLUMN_ITEMS :: 64
 
 Fit_Column :: struct {
@@ -227,6 +244,32 @@ push_column :: proc(l: ^Layout, gap: i32 = 0, cross_align: Cross_Align = .Stretc
 	l.depth += 1
 }
 
+push_column_sized :: proc(
+	l: ^Layout,
+	w: i32,
+	gap: i32 = 0,
+	cross_align: Cross_Align = .Stretch,
+) {
+	assert(l.depth > 0 && l.depth < MAX_LAYOUT_DEPTH, "push_column_sized: depth out of bounds")
+	assert(_top(l).kind == .Row, "push_column_sized: current frame must be a row")
+	r := next(l, w)
+	l.stack[l.depth] = Layout_Frame {
+		kind        = .Column,
+		rect        = r,
+		gap         = gap,
+		cross_align = cross_align,
+	}
+	l.depth += 1
+}
+
+layout_inset :: proc(l: ^Layout, value: Insets_I32) {
+	assert(l != nil && l.depth > 0, "layout_inset: layout not begun")
+	f := _top(l)
+	assert(f.cursor == 0, "layout_inset: frame already consumed")
+	assert(f.weight_left == 0 && f.flex_index == f.flex_count, "layout_inset: sequence active")
+	f.rect = rect_inset(f.rect, value)
+}
+
 // pop closes the innermost pushed frame (row or column).
 layout_pop :: proc(l: ^Layout) {
 	assert(l.depth > 1, "layout_pop: nothing pushed above the root")
@@ -345,6 +388,14 @@ remaining :: proc(l: ^Layout) -> Rect_I32 {
 		return Rect_I32{f.rect.x, f.rect.y + f.cursor, f.rect.w, avail}
 	}
 	return Rect_I32{f.rect.x + f.cursor, f.rect.y, avail, f.rect.h}
+}
+
+take_remaining :: proc(l: ^Layout) -> Rect_I32 {
+	assert(l != nil && l.depth > 0, "take_remaining: layout not begun")
+	r := remaining(l)
+	f := _top(l)
+	f.cursor = _main_extent(f^)
+	return r
 }
 
 // layout_kind returns the active frame's axis kind (Column or Row).

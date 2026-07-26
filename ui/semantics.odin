@@ -30,7 +30,7 @@ SEM_DESCRIPTION_MAX :: 128
 SEM_VALUE_MAX :: 256
 
 // MAX_SEM_FOCUS bounds the frame-ordered focus registry (focus_scope.odin).
-MAX_SEM_FOCUS :: 128
+MAX_SEM_FOCUS :: MAX_FOCUSABLES
 MAX_SEM_FOCUS_SCOPES :: 16
 
 Focus_Scope_Id :: distinct u64
@@ -131,14 +131,19 @@ Sem_Action_Targets :: struct {
 }
 
 Semantics_State :: struct {
-	cur:             Sem_Frame,
-	on:              bool,
-	ordinals:        [Sem_Role]int,
-	focus_cur:       Sem_Focus_List,
-	action_targets:  Sem_Action_Targets,
-	focus_scopes:    Focus_Scope_Stack,
-	cycle_requested: bool,
-	cycle_backwards: bool,
+	cur:                    Sem_Frame,
+	on:                     bool,
+	ordinals:               [Sem_Role]int,
+	focus_cur:              Sem_Focus_List,
+	action_targets:         Sem_Action_Targets,
+	focus_scopes:           Focus_Scope_Stack,
+	cycle_requested:        bool,
+	cycle_backwards:        bool,
+	nodes_dropped:          int,
+	focus_dropped:          int,
+	action_targets_dropped: int,
+	id_collisions:          int,
+	text_truncations:       int,
 }
 
 sem_enable :: proc(runtime: ^Ui_Runtime, on: bool) {
@@ -166,6 +171,11 @@ sem_begin_frame :: proc(frame: ^Ui_Frame) {
 	state.focus_scopes.count = 0
 	state.cycle_requested = false
 	state.cycle_backwards = false
+	state.nodes_dropped = 0
+	state.focus_dropped = 0
+	state.action_targets_dropped = 0
+	state.id_collisions = 0
+	state.text_truncations = 0
 }
 
 sem_reset :: proc(frame: ^Ui_Frame) {
@@ -184,10 +194,9 @@ SEM_FNV_PRIME :: u64(0x00000100000001b3)
 
 // sem_node_id derives a stable node id without call-site hashing, in
 // priority order:
-//  1. focus link: the caller's focus-slot pointer is long-lived caller state
-//     and the 1-based id is stable per form — pointer XOR id<<48.
-//  2. field_id: FNV-1a checksum of a caller-chosen stable string (text
-//     inputs). A checksum of explicit identity, not egui-style ID hashing.
+//  1. field_id: FNV-1a checksum of a caller-chosen application-global
+//     semantic key. Explicit identity remains stable when focus ownership moves.
+//  2. focus link: compatibility identity for controls without an explicit key.
 //  3. fallback: role<<56 | per-role call order this frame. Unstable under
 //     layout changes; acceptable only for non-interactive roles.
 // Pure — unit-testable without a window.
@@ -195,7 +204,13 @@ sem_node_id :: proc(role: Sem_Role, focus: Focus_Opt, field_id: string, ordinal:
 	assert(role != .None, "sem_node_id: role required")
 	assert(ordinal >= 0, "sem_node_id: negative ordinal")
 	id: u64
-	if focus.focus != nil {
+	if field_id != "" {
+		id = SEM_FNV_OFFSET
+		for b in transmute([]u8)field_id {
+			id ~= u64(b)
+			id *= SEM_FNV_PRIME
+		}
+	} else if focus.focus != nil {
 		assert(focus.id > 0, "sem_node_id: focus ids are positive")
 		id = SEM_FNV_OFFSET
 		pointer := u64(uintptr(focus.focus))
@@ -208,13 +223,6 @@ sem_node_id :: proc(role: Sem_Role, focus: Focus_Opt, field_id: string, ordinal:
 			id ~= (focus_id >> shift) & 0xff
 			id *= SEM_FNV_PRIME
 		}
-	} else if field_id != "" {
-		h := SEM_FNV_OFFSET
-		for b in transmute([]u8)field_id {
-			h ~= u64(b)
-			h *= SEM_FNV_PRIME
-		}
-		id = h
 	} else {
 		id = (u64(role) << 56) | u64(ordinal)
 	}
@@ -259,7 +267,10 @@ sem_focus_register :: proc(frame: ^Ui_Frame, focus: Focus_Opt, state: Sem_State)
 			"sem_focus_register: duplicate focus registration",
 		)
 	}
-	if list.count >= MAX_SEM_FOCUS do return
+	if list.count >= MAX_SEM_FOCUS {
+		frame.semantics.focus_dropped += 1
+		return
+	}
 	scope := focus_scope_current(frame)
 	list.entries[list.count] = {
 		focus    = focus,
@@ -305,12 +316,21 @@ semantic_push :: proc(
 	ordinal := sem.ordinals[role]
 	sem.ordinals[role] = ordinal + 1
 	if sem.cur.count >= MAX_SEM_NODES {
+		sem.nodes_dropped += 1
 		return nil
+	}
+	id := sem_node_id(role, focus, field_id, ordinal)
+	for index in 0 ..< sem.cur.count {
+		if sem.cur.nodes[index].id == id {
+			sem.id_collisions += 1
+			sem.nodes_dropped += 1
+			return nil
+		}
 	}
 	node := &sem.cur.nodes[sem.cur.count]
 	sem.cur.count += 1
 	node^ = {
-		id              = sem_node_id(role, focus, field_id, ordinal),
+		id              = id,
 		role            = role,
 		rect            = rect,
 		state           = state,
@@ -320,17 +340,24 @@ semantic_push :: proc(
 		position_in_set = position_in_set,
 		size_of_set     = size_of_set,
 	}
-	if focus.focus != nil && sem.action_targets.count < MAX_SEM_FOCUS {
-		sem.action_targets.entries[sem.action_targets.count] = {node.id, focus}
-		sem.action_targets.count += 1
+	if focus.focus != nil {
+		if sem.action_targets.count < MAX_SEM_FOCUS {
+			sem.action_targets.entries[sem.action_targets.count] = {node.id, focus}
+			sem.action_targets.count += 1
+		} else {
+			sem.action_targets_dropped += 1
+		}
 	}
 	n := sem_label_clip(label)
+	if n < len(label) do sem.text_truncations += 1
 	copy(node.label[:n], label[:n])
 	node.label_len = u8(n)
 	description_len := min(len(description), SEM_DESCRIPTION_MAX)
+	if description_len < len(description) do sem.text_truncations += 1
 	copy(node.description[:description_len], description[:description_len])
 	node.description_len = u8(description_len)
 	text_value_len := min(len(text_value), SEM_VALUE_MAX)
+	if text_value_len < len(text_value) do sem.text_truncations += 1
 	copy(node.text_value[:text_value_len], text_value[:text_value_len])
 	node.text_value_len = u16(text_value_len)
 	node.selection_start = selection_start

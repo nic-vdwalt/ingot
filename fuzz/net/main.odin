@@ -34,7 +34,8 @@ Prng :: fuzzx.Prng
 // whitespace, out-of-range status, and integer-overflow length claims.
 HTTP_TEMPLATES := [?]string {
 	"HTTP/1.1 200 OK\r\nContent-Length: 11\r\nX-A: b\r\n\r\nhello world",
-	"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nX-A: b\r\n\r\n5;ext\r\nhello\r\n3\r\nabc\r\n0\r\n\r\n",
+	"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nX-A: b\r\n\r\n" +
+		"5;ext\r\nhello\r\n3\r\nabc\r\n0\r\n\r\n",
 	"HTTP/1.1 204 No Content\r\nX-A: b\r\n\r\n",
 	"HTTP/1.1 304 Not Modified\r\nETag: \"abc\"\r\n\r\n",
 	"HTTP/1.1  200  OK \r\n Content-Length : 5\r\nX-A:b\r\n\r\nhello",
@@ -324,11 +325,15 @@ when ingotnet.INGOT_NET_SIM {
 	// cloned, faulted, delivered, and freed. Leaks here are transport bugs.
 	exercise_sim_fetcher :: proc(p: ^Prng, seed: u64) {
 		f: ingotnet.Fetcher
-		ingotnet.sim_fetcher_init(&f, seed, 1.0, proc(request: ingotnet.Http_Request, prng: ^ingotnet.Sim_Prng) -> ingotnet.Fetch_Result {
+		respond := proc(
+			request: ingotnet.Http_Request,
+			prng: ^ingotnet.Sim_Prng,
+		) -> ingotnet.Fetch_Result {
 			body := make([]u8, ingotnet.sim_int_range(prng, 0, 256))
 			for i in 0 ..< len(body) do body[i] = u8(ingotnet.sim_next_u64(prng) & 0xFF)
 			return ingotnet.Fetch_Result{status = 200, body = body, ok = true}
-		})
+		}
+		ingotnet.sim_fetcher_init(&f, seed, 1.0, respond)
 		ingotnet.fetcher_start(&f, "sim", 0)
 		defer ingotnet.fetcher_stop(&f)
 

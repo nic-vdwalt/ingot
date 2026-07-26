@@ -113,6 +113,26 @@ layout_cross_align_center :: proc(t: ^testing.T) {
 }
 
 @(test)
+layout_insets_columns_and_remaining :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 10, 20, 300, 180, 8)
+	layout_inset(&l, {left = 12, top = 10, right = 16, bottom = 14})
+	push_row(&l, 80, 6)
+	push_column_sized(&l, 100, 4)
+	testing.expect_value(t, next(&l, 24), Rect_I32{22, 30, 100, 24})
+	testing.expect_value(t, take_remaining(&l), Rect_I32{22, 58, 100, 52})
+	layout_pop(&l)
+	push_column_sized(&l, 166)
+	testing.expect_value(t, take_remaining(&l), Rect_I32{128, 30, 166, 80})
+	layout_pop(&l)
+	layout_pop(&l)
+	testing.expect_value(t, take_remaining(&l), Rect_I32{22, 118, 272, 68})
+	layout_end(&l)
+
+	testing.expect_value(t, rect_inset({0, 0, 10, 8}, insets(9)), Rect_I32{9, 9, 0, 0})
+}
+
+@(test)
 layout_reusable_after_end :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 100, 100)

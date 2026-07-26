@@ -122,6 +122,9 @@ semantics_node_identity :: proc(t: ^testing.T) {
 	id_pw := sem_node_id(.Text_Input, {}, "login-password", 0)
 	testing.expect_value(t, id_email, id_email2)
 	testing.expect(t, id_email != id_pw)
+	id_explicit_a := sem_node_id(.Button, {&form_a, 1}, "save", 0)
+	id_explicit_b := sem_node_id(.Button, {&form_b, 7}, "save", 9)
+	testing.expect_value(t, id_explicit_a, id_explicit_b)
 
 	// Fallback ids differ by call order and by role.
 	l0 := sem_node_id(.Label, {}, "", 0)
@@ -134,6 +137,23 @@ semantics_node_identity :: proc(t: ^testing.T) {
 	testing.expect(t, id_a1 > SEM_ID_ROOT)
 	testing.expect(t, id_email > SEM_ID_ROOT)
 	testing.expect(t, l0 > SEM_ID_ROOT)
+}
+
+@(test)
+semantics_reports_bounded_degradation :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	sem_enable(&runtime, true)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	first := semantic_push(&frame, .Button, {0, 0, 1, 1}, "A", field_id = "duplicate")
+	second := semantic_push(&frame, .Button, {1, 0, 1, 1}, "B", field_id = "duplicate")
+	testing.expect(t, first != nil && second == nil)
+	testing.expect_value(t, frame.semantics.id_collisions, 1)
+	testing.expect_value(t, frame.semantics.nodes_dropped, 1)
+	ui_frame_end(&frame)
+	ui_frame_destroy(&frame)
 }
 
 @(test)

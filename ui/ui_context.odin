@@ -416,6 +416,16 @@ ui_flex_slot :: proc(u: ^Ui, cross_size: i32) -> Rect_I32 {
 	return flex_next_sized(&u.layout, cross_size)
 }
 
+ui_padding :: proc(u: ^Ui, value: Insets_I32) {
+	assert(u != nil && u.open, "ui_padding: frame not open")
+	layout_inset(&u.layout, value)
+}
+
+ui_fill :: proc(u: ^Ui) -> Rect_I32 {
+	assert(u != nil && u.open, "ui_fill: frame not open")
+	return take_remaining(&u.layout)
+}
+
 // ui_row / ui_row_end / ui_space: thin conveniences over the Layout the Ui
 // already owns; callers may equally use push_row(&u.layout, …) directly.
 ui_row :: proc(u: ^Ui, h: i32, gap: i32 = 0, cross_align: Cross_Align = .Start) {
@@ -426,6 +436,26 @@ ui_row :: proc(u: ^Ui, h: i32, gap: i32 = 0, cross_align: Cross_Align = .Start) 
 ui_row_end :: proc(u: ^Ui) {
 	assert(u.open, "ui_row_end: frame not open")
 	layout_pop(&u.layout)
+}
+
+ui_column :: proc(u: ^Ui, w: i32, gap: i32 = 0, cross_align: Cross_Align = .Stretch) {
+	assert(u != nil && u.open, "ui_column: frame not open")
+	push_column_sized(&u.layout, w, gap, cross_align)
+}
+
+ui_column_end :: proc(u: ^Ui) {
+	assert(u != nil && u.open, "ui_column_end: frame not open")
+	layout_pop(&u.layout)
+}
+
+ui_weights :: proc(u: ^Ui, weights: []i32) {
+	assert(u != nil && u.open, "ui_weights: frame not open")
+	row_weights(&u.layout, weights)
+}
+
+ui_weighted_slot :: proc(u: ^Ui, weight: i32) -> Rect_I32 {
+	assert(u != nil && u.open, "ui_weighted_slot: frame not open")
+	return next_weighted(&u.layout, weight)
 }
 
 ui_space :: proc(u: ^Ui, px: i32) {

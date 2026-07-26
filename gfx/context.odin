@@ -230,6 +230,28 @@ context_epoch :: proc(ctx: ^Context) -> u64 {
 	return ctx.epoch
 }
 
+context_ready :: proc(ctx: ^Context) -> bool {
+	return ctx != nil && ctx.lifecycle == .Ready && ctx.initialized
+}
+
+context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool {
+	assert(ctx != nil && title != nil, "context_init: nil argument")
+	if ctx != default_context() do return false
+	InitWindow(width, height, title)
+	return context_ready(ctx)
+}
+
+context_close :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_close: nil context")
+	if ctx != default_context() do return
+	CloseWindow()
+}
+
+context_should_close :: proc(ctx: ^Context) -> bool {
+	if ctx == nil || ctx != default_context() do return true
+	return WindowShouldClose()
+}
+
 @(private)
 _graphics_resources_init :: proc(resources: ^Graphics_Resources) {
 	assert(resources != nil, "_graphics_resources_init: nil resources")

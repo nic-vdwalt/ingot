@@ -103,7 +103,9 @@ g_dd_has_files: bool
 @(private = "file")
 dd_guid_equal :: proc "system" (left, right: ^win.GUID) -> bool {
 	if left == nil || right == nil do return false
-	if left.Data1 != right.Data1 || left.Data2 != right.Data2 || left.Data3 != right.Data3 do return false
+	if left.Data1 != right.Data1 || left.Data2 != right.Data2 || left.Data3 != right.Data3 {
+		return false
+	}
 	for i in 0 ..< len(left.Data4) {
 		if left.Data4[i] != right.Data4[i] do return false
 	}

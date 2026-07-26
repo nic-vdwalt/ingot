@@ -126,7 +126,7 @@ focus_scope_prefers_highest_priority_and_preserves_order :: proc(t: ^testing.T) 
 }
 
 @(test)
-focus_scope_equal_priority_uses_draw_order :: proc(t: ^testing.T) {
+focus_scope_equal_priority_scopes_merge_in_draw_order :: proc(t: ^testing.T) {
 	a, b: int
 	list: Sem_Focus_List
 	list.entries[0] = {

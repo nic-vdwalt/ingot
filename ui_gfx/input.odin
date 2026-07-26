@@ -7,7 +7,12 @@ INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
 #assert(INPUT_CHARACTER_DRAIN_MAX == ui.INPUT_CHAR_CAP)
 
 capture_input :: proc(input: ^ui.Ui_Input) {
-	assert(input != nil, "capture_input: nil input")
+	capture_input_context(rl.default_context(), input)
+}
+
+capture_input_context :: proc(ctx: ^rl.Context, input: ^ui.Ui_Input) {
+	assert(ctx != nil && input != nil, "capture_input_context: nil argument")
+	assert(ctx == rl.default_context(), "capture_input_context: context routing unavailable")
 	input^ = {}
 	input.screen_size = {f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
 	input.dpi_scale = rl.GetWindowScaleDPI().x

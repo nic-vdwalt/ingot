@@ -28,6 +28,8 @@ Gpu_3D_Load_Action :: enum {
 }
 
 Gpu_3D_Pass :: struct {
+	owner:           ^Context,
+	epoch:           u64,
 	encoder:         wg.CommandEncoder,
 	pass:            wg.RenderPassEncoder,
 	target:          ^Gpu_3D_Target,
@@ -249,7 +251,9 @@ begin_gpu_3d :: proc(
 	assert(target != nil)
 	resources := &g.resources.gpu_3d
 	if resources.active_pass_generation != 0 do return {}, false
-	if !g.initialized || target.texture.texture.id == 0 || target.texture.depth.id == 0 do return {}, false
+	if !g.initialized || target.texture.texture.id == 0 || target.texture.depth.id == 0 {
+		return {}, false
+	}
 	color_view := _texture_view(target.texture.texture.id)
 	depth_view := _texture_view(target.texture.depth.id)
 	if color_view == nil || depth_view == nil do return {}, false
@@ -284,6 +288,8 @@ begin_gpu_3d :: proc(
 	resources.active_pass_generation = resources.next_pass_generation
 	_stats_render_pass()
 	result := Gpu_3D_Pass {
+		owner       = default_context(),
+		epoch       = g.epoch,
 		encoder     = encoder,
 		pass        = pass,
 		target      = target,
@@ -384,6 +390,7 @@ _gpu_3d_mesh :: proc(mesh: Gpu_Mesh) -> ^Gpu_3D_Mesh_Entry {
 @(private)
 _gpu_3d_pass_current :: proc(resources: ^Gpu_3D_Resources, pass: ^Gpu_3D_Pass) -> bool {
 	if resources == nil || pass == nil || !pass.active || pass.generation == 0 do return false
+	if pass.owner != default_context() || pass.epoch != g.epoch do return false
 	return pass.generation == resources.active_pass_generation
 }
 

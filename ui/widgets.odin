@@ -1366,7 +1366,9 @@ pane_keyboard_scroll :: proc(frame: ^Ui_Frame, p: ^Pane, h: i32) {
 	step := f32(ui_frame_metrics(frame).LINE_HEIGHT)
 	if is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN) do p.scroll += step
 	if is_key_pressed(frame, .UP) || is_key_pressed_repeat(frame, .UP) do p.scroll -= step
-	if is_key_pressed(frame, .PAGE_DOWN) || is_key_pressed_repeat(frame, .PAGE_DOWN) do p.scroll += f32(h)
+	if is_key_pressed(frame, .PAGE_DOWN) || is_key_pressed_repeat(frame, .PAGE_DOWN) {
+		p.scroll += f32(h)
+	}
 	if is_key_pressed(frame, .PAGE_UP) || is_key_pressed_repeat(frame, .PAGE_UP) do p.scroll -= f32(h)
 	if is_key_pressed(frame, .HOME) do p.scroll = 0
 	if is_key_pressed(frame, .END) do p.scroll = f32(max(p.content_h - h, 0))
