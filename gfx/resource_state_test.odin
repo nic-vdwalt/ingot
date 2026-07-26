@@ -102,7 +102,7 @@ gpu_3d_pass_rejects_stale_generation :: proc(t: ^testing.T) {
 @(test)
 submission_reservation_is_nonzero_and_rollback_is_atomic :: proc(t: ^testing.T) {
 	tracker: Submission_Tracker
-	_submission_init(&tracker)
+	_submission_init(&tracker, default_context())
 	first := _submission_reserve(&tracker)
 	second := _submission_reserve(&tracker)
 	testing.expect(t, first != 0)
@@ -118,7 +118,7 @@ submission_reservation_is_nonzero_and_rollback_is_atomic :: proc(t: ^testing.T) 
 @(test)
 submission_reservation_stops_at_fixed_capacity :: proc(t: ^testing.T) {
 	tracker: Submission_Tracker
-	_submission_init(&tracker)
+	_submission_init(&tracker, default_context())
 	for _ in 0 ..< MAX_IN_FLIGHT_SUBMISSIONS {
 		testing.expect(t, _submission_reserve(&tracker) != 0)
 	}

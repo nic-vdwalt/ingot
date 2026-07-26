@@ -42,98 +42,103 @@ Renderer_Stats :: struct {
 	flush_causes:                  [Flush_Cause]u32,
 }
 
-@(private)
-renderer_stats_current: Renderer_Stats
-@(private)
-renderer_stats_latest: Renderer_Stats
-
 renderer_stats :: proc() -> Renderer_Stats {
+	return context_renderer_stats(default_context())
+}
+
+context_renderer_stats :: proc(ctx: ^Context) -> Renderer_Stats {
+	if ctx == nil do return {}
 	when RENDER_STATS_ENABLED {
-		if g.frame.has_frame do return renderer_stats_current
+		if ctx.frame.has_frame do return ctx.stats_current
 	}
-	return renderer_stats_latest
+	return ctx.stats_latest
 }
 
 renderer_stats_reset :: proc() {
+	context_renderer_stats_reset(default_context())
+}
+
+context_renderer_stats_reset :: proc(ctx: ^Context) {
+	if ctx == nil do return
 	when RENDER_STATS_ENABLED {
-		alpha := renderer_stats_current.composite_alpha_mode
-		index := renderer_stats_current.frame_index
-		renderer_stats_current = {}
-		renderer_stats_latest = {}
-		renderer_stats_current.composite_alpha_mode = alpha
-		renderer_stats_current.frame_index = index
+		alpha := ctx.stats_current.composite_alpha_mode
+		index := ctx.stats_current.frame_index
+		ctx.stats_current = {}
+		ctx.stats_latest = {}
+		ctx.stats_current.composite_alpha_mode = alpha
+		ctx.stats_current.frame_index = index
 	}
 }
 
 @(private)
 _stats_frame_begin :: proc() {
 	when RENDER_STATS_ENABLED {
-		index := renderer_stats_current.frame_index + 1
-		alpha := renderer_stats_current.composite_alpha_mode
-		renderer_stats_current = {}
-		renderer_stats_current.frame_index = index
-		renderer_stats_current.composite_alpha_mode = alpha
+		index := g.stats_current.frame_index + 1
+		alpha := g.stats_current.composite_alpha_mode
+		g.stats_current = {}
+		g.stats_current.frame_index = index
+		g.stats_current.composite_alpha_mode = alpha
 	}
 }
 
 @(private)
 _stats_frame_end :: proc() {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_latest = renderer_stats_current
+		g.stats_latest = g.stats_current
 	}
 }
 
 @(private)
 _stats_set_alpha_mode :: proc(mode: wg.CompositeAlphaMode) {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.composite_alpha_mode = mode
-		renderer_stats_latest.composite_alpha_mode = mode
+		g.stats_current.composite_alpha_mode = mode
+		g.stats_latest.composite_alpha_mode = mode
 	}
 }
 
 @(private)
 _stats_flush :: proc(vertices, bytes: u64, cause: Flush_Cause) {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.flush_count += 1
-		renderer_stats_current.vertices_uploaded += vertices
-		renderer_stats_current.bytes_uploaded += bytes
-		renderer_stats_current.flush_causes[cause] += 1
+		g.stats_current.flush_count += 1
+		g.stats_current.vertices_uploaded += vertices
+		g.stats_current.bytes_uploaded += bytes
+		g.stats_current.flush_causes[cause] += 1
 	}
 }
 
 @(private)
 _stats_buffer_created :: proc(growth: bool) {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.buffer_creations += 1
-		if growth do renderer_stats_current.buffer_growths += 1
+		g.stats_current.buffer_creations += 1
+		if growth do g.stats_current.buffer_growths += 1
 	}
 }
 
 @(private)
 _stats_pipeline_switch :: proc() {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.pipeline_switches += 1
+		g.stats_current.pipeline_switches += 1
 	}
 }
 
 @(private)
 _stats_bind_group_switches :: proc(count: u32) {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.bind_group_switches += count
+		g.stats_current.bind_group_switches += count
 	}
 }
 
 @(private)
 _stats_render_pass :: proc() {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.render_passes += 1
+		g.stats_current.render_passes += 1
 	}
 }
 
 @(private)
 _stats_queue_submission :: proc() {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.queue_submissions += 1
+		g.stats_current.queue_submissions += 1
 	}
 }
 
@@ -141,9 +146,9 @@ _stats_queue_submission :: proc() {
 _stats_reservation_failure :: proc(uniform: bool) {
 	when RENDER_STATS_ENABLED {
 		if uniform {
-			renderer_stats_current.uniform_reservation_failures += 1
+			g.stats_current.uniform_reservation_failures += 1
 		} else {
-			renderer_stats_current.geometry_reservation_failures += 1
+			g.stats_current.geometry_reservation_failures += 1
 		}
 	}
 }
@@ -151,7 +156,7 @@ _stats_reservation_failure :: proc(uniform: bool) {
 @(private)
 _stats_stream_slot_exhaustion :: proc() {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.stream_slot_exhaustions += 1
+		g.stats_current.stream_slot_exhaustions += 1
 	}
 }
 
@@ -160,20 +165,20 @@ _stats_stream_slot_exhaustion :: proc() {
 @(private)
 _stats_gpu3d_pool_exhaustion :: proc() {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.gpu3d_pool_exhaustions += 1
+		g.stats_current.gpu3d_pool_exhaustions += 1
 	}
 }
 
 @(private)
 _stats_submission_tracking_failure :: proc() {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.submission_tracking_failures += 1
+		g.stats_current.submission_tracking_failures += 1
 	}
 }
 
 @(private)
 _stats_stream_retirement_failure :: proc() {
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.stream_retirement_failures += 1
+		g.stats_current.stream_retirement_failures += 1
 	}
 }

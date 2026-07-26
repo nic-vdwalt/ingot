@@ -20,6 +20,9 @@ Submission_Ticket :: struct {
 }
 
 Submission_Tracker :: struct {
+	owner:     ^Context,
+	epoch:     u64,
+	queue:     wg.Queue,
 	tickets:   [MAX_IN_FLIGHT_SUBMISSIONS]Submission_Ticket,
 	head:      u32,
 	count:     u32,
@@ -27,9 +30,14 @@ Submission_Tracker :: struct {
 }
 
 @(private)
-_submission_init :: proc(tracker: ^Submission_Tracker) {
+_submission_init :: proc(tracker: ^Submission_Tracker, owner: ^Context) {
 	assert(tracker != nil)
-	tracker^ = {}
+	assert(owner != nil)
+	tracker^ = {
+		owner = owner,
+		epoch = owner.epoch,
+		queue = owner.queue,
+	}
 	assert(tracker.count == 0)
 }
 
@@ -55,7 +63,7 @@ _submission_reserve :: proc(tracker: ^Submission_Tracker) -> u64 {
 	assert(g_submission_id_next != 0)
 	ticket^ = {
 		id     = g_submission_id_next,
-		epoch  = g.epoch,
+		epoch  = tracker.epoch,
 		active = true,
 	}
 	g_submission_id_next += 1
@@ -68,11 +76,11 @@ _submission_reserve :: proc(tracker: ^Submission_Tracker) -> u64 {
 @(private)
 _submission_commit :: proc(tracker: ^Submission_Tracker, ticket_id: u64) -> bool {
 	assert(tracker != nil)
-	assert(g.queue != nil)
+	assert(tracker.queue != nil)
 	ticket := _submission_find(tracker, ticket_id)
 	if ticket == nil do return false
 	wg.QueueOnSubmittedWorkDone(
-		g.queue,
+		tracker.queue,
 		{
 			mode = .AllowSpontaneos,
 			callback = _submission_done,
@@ -150,8 +158,10 @@ _submission_done :: proc "c" (
 	tracker := cast(^Submission_Tracker)userdata1
 	id := u64(uintptr(userdata2))
 	if tracker == nil || id == 0 do return
+	owner := tracker.owner
+	if owner == nil || owner.epoch != tracker.epoch do return
 	ticket := _submission_find(tracker, id)
-	if ticket == nil || ticket.epoch != g.epoch do return
+	if ticket == nil || ticket.epoch != tracker.epoch do return
 	assert(ticket.id == id)
 	sync.atomic_store(&ticket.failed, status != .Success)
 	sync.atomic_store(&ticket.complete, true)

@@ -17,12 +17,14 @@ begin_frame :: proc() -> (Frame, bool) {
 }
 
 context_begin_frame :: proc(ctx: ^Context) -> (Frame, bool) {
-	if ctx == nil || ctx != default_context() do return {}, false
+	if ctx == nil do return {}, false
 	if !ctx.initialized || ctx.frame_active do return {}, false
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
 	BeginDrawing()
-	if !g.frame.has_frame do return {}, false
-	g.frame_generation += 1
-	g.frame_active = true
+	if !ctx.frame.has_frame do return {}, false
+	ctx.frame_generation += 1
+	ctx.frame_active = true
 	frame := Frame {
 		owner      = ctx,
 		epoch      = ctx.epoch,
@@ -38,25 +40,33 @@ end_frame :: proc(frame: ^Frame) {
 	assert(frame != nil)
 	assert(frame.active)
 	if !_frame_valid(frame) do return
+	ctx := frame.owner
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
 	EndDrawing()
 	frame.active = false
-	g.frame_active = false
+	ctx.frame_active = false
 	assert(!frame.active)
-	assert(!g.frame_active)
+	assert(!ctx.frame_active)
 }
 
 clear_frame :: proc(frame: ^Frame, color: RGBA) {
 	assert(frame != nil)
 	assert(frame.active)
 	if !_frame_valid(frame) do return
+	ctx := frame.owner
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
 	ClearBackground(color)
-	assert(frame.generation == g.frame_generation)
+	assert(frame.generation == ctx.frame_generation)
 }
 
 draw_rect :: proc(frame: ^Frame, rect: Rect, color: RGBA) {
 	assert(frame != nil)
 	assert(rect.width >= 0 && rect.height >= 0)
 	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
 	DrawRectangleRec(rect, color)
 	assert(frame.active)
 }
@@ -65,6 +75,8 @@ draw_line :: proc(frame: ^Frame, start, end: Vec2, thick: f32, color: RGBA) {
 	assert(frame != nil)
 	assert(thick >= 0)
 	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
 	DrawLineEx(start, end, thick, color)
 	assert(frame.active)
 }
@@ -73,6 +85,8 @@ draw_circle :: proc(frame: ^Frame, center: Vec2, radius: f32, color: RGBA) {
 	assert(frame != nil)
 	assert(radius >= 0)
 	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
 	DrawCircleV(center, radius, color)
 	assert(frame.active)
 }
@@ -88,6 +102,8 @@ draw_texture :: proc(
 	assert(frame != nil)
 	assert(texture.id != 0)
 	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
 	DrawTexturePro(texture, source, dest, origin, rotation, tint)
 	assert(frame.active)
 }
@@ -103,6 +119,8 @@ draw_text :: proc(
 	assert(frame != nil)
 	assert(text != nil)
 	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
 	DrawTextEx(font, text, position, font_size, spacing, tint)
 	assert(frame.active)
 }
@@ -131,7 +149,7 @@ mouse_position :: proc() -> Vec2 {
 _frame_valid :: proc(frame: ^Frame) -> bool {
 	assert(frame != nil)
 	ctx := frame.owner
-	if ctx == nil || ctx != default_context() do return false
+	if ctx == nil do return false
 	if !frame.active || !ctx.frame_active do return false
 	if frame.epoch != ctx.epoch do return false
 	if frame.generation != ctx.frame_generation do return false

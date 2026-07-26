@@ -36,7 +36,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	g.device = dres.device
 	g.queue = wg.DeviceGetQueue(g.device)
 	g.format = .BGRA8Unorm
-	_submission_init(&g.submissions)
+	_submission_init(&g.submissions, g)
 	renderer_init(&g.rend)
 
 	cps: [95]rune

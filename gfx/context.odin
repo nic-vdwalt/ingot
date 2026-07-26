@@ -11,11 +11,15 @@ import wg "vendor:wgpu"
 
 KEY_COUNT :: 349 // KB_MENU (348) + 1
 RESOURCE_SLOT_BITS :: 10
+RESOURCE_CONTEXT_BITS :: 6
+RESOURCE_GENERATION_BITS :: 32 - RESOURCE_SLOT_BITS - RESOURCE_CONTEXT_BITS
 RESOURCE_SLOT_COUNT :: 1 << RESOURCE_SLOT_BITS
 RESOURCE_SLOT_MASK :: u32(RESOURCE_SLOT_COUNT - 1)
-RESOURCE_GENERATION_MASK :: (u32(1) << 20) - 1
+RESOURCE_CONTEXT_MASK :: (u32(1) << RESOURCE_CONTEXT_BITS) - 1
+RESOURCE_GENERATION_MASK :: (u32(1) << RESOURCE_GENERATION_BITS) - 1
 
 #assert(RESOURCE_SLOT_COUNT == 1024)
+#assert(RESOURCE_CONTEXT_MASK == 63)
 #assert(RESOURCE_GENERATION_MASK > 0)
 
 @(private)
@@ -26,12 +30,20 @@ _resource_generation_next :: proc(generation: u32) -> u32 {
 }
 
 @(private)
-_resource_handle_make :: proc(index: int, generation: u32) -> u32 {
+_resource_handle_make_context :: proc(context_id: u32, index: int, generation: u32) -> u32 {
+	assert(context_id > 0 && context_id <= RESOURCE_CONTEXT_MASK)
 	assert(index >= 0 && index < RESOURCE_SLOT_COUNT)
 	assert(generation > 0 && generation <= RESOURCE_GENERATION_MASK)
-	handle := generation << RESOURCE_SLOT_BITS | u32(index)
+	handle := generation << (RESOURCE_CONTEXT_BITS + RESOURCE_SLOT_BITS)
+	handle |= context_id << RESOURCE_SLOT_BITS
+	handle |= u32(index)
 	assert(handle != 0)
 	return handle
+}
+
+@(private)
+_resource_handle_make :: proc(index: int, generation: u32) -> u32 {
+	return _resource_handle_make_context(1, index, generation)
 }
 
 @(private)
@@ -45,7 +57,7 @@ _resource_handle_decode :: proc(
 ) {
 	if handle == 0 do return 0, 0, false
 	index = int(handle & RESOURCE_SLOT_MASK)
-	generation = handle >> RESOURCE_SLOT_BITS
+	generation = handle >> (RESOURCE_CONTEXT_BITS + RESOURCE_SLOT_BITS)
 	if generation == 0 || index < 0 || index >= capacity do return 0, 0, false
 	return index, generation, true
 }
@@ -104,6 +116,7 @@ Context_Lifecycle :: enum u8 {
 }
 
 Context :: struct {
+	id:                   u32,
 	epoch:                u64,
 	lifecycle:            Context_Lifecycle,
 	win:                  Window_Handle,
@@ -144,6 +157,8 @@ Context :: struct {
 	// renderer (batch.odin)
 	rend:                 Renderer,
 	resources:            Graphics_Resources,
+	stats_current:        Renderer_Stats,
+	stats_latest:         Renderer_Stats,
 
 	// input (input.odin)
 	inp:                  Input,
@@ -219,15 +234,48 @@ _flush_retired :: proc() {
 }
 
 @(private)
-g: Context
+default_context_storage: Context = {id = 1}
+@(private)
+g: ^Context = &default_context_storage
+@(private)
+context_id_next: u32 = 2
 
 default_context :: proc() -> ^Context {
-	return &g
+	return &default_context_storage
+}
+
+@(private)
+_context_activate :: proc(ctx: ^Context) -> ^Context {
+	assert(ctx != nil, "_context_activate: nil context")
+	previous := g
+	g = ctx
+	return previous
+}
+
+@(private)
+_context_restore :: proc(previous: ^Context) {
+	assert(previous != nil, "_context_restore: nil context")
+	g = previous
 }
 
 context_epoch :: proc(ctx: ^Context) -> u64 {
 	if ctx == nil do return 0
 	return ctx.epoch
+}
+
+context_id :: proc(ctx: ^Context) -> u32 {
+	if ctx == nil do return 0
+	return ctx.id
+}
+
+@(private)
+_context_assign_id :: proc(ctx: ^Context) -> bool {
+	assert(ctx != nil, "_context_assign_id: nil context")
+	if ctx.id != 0 do return true
+	if context_id_next == 0 || context_id_next > RESOURCE_CONTEXT_MASK do return false
+	ctx.id = context_id_next
+	context_id_next += 1
+	return true
 }
 
 context_ready :: proc(ctx: ^Context) -> bool {
@@ -236,20 +284,27 @@ context_ready :: proc(ctx: ^Context) -> bool {
 
 context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool {
 	assert(ctx != nil && title != nil, "context_init: nil argument")
-	if ctx != default_context() do return false
-	InitWindow(width, height, title)
+	when ODIN_OS == .JS {
+		if ctx != default_context() do return false
+	}
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
+	_init_window_context(ctx, width, height, title)
 	return context_ready(ctx)
 }
 
 context_close :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_close: nil context")
-	if ctx != default_context() do return
-	CloseWindow()
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
+	_close_window_context(ctx)
 }
 
 context_should_close :: proc(ctx: ^Context) -> bool {
-	if ctx == nil || ctx != default_context() do return true
-	return WindowShouldClose()
+	if ctx == nil do return true
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
+	return platform_should_close()
 }
 
 @(private)
@@ -343,11 +398,19 @@ _on_uncaptured_error :: proc "c" (
 
 // SetConfigFlags stashes flags to apply at InitWindow (raylib order).
 SetConfigFlags :: proc(flags: ConfigFlags) {
-	g.config_flags = flags
+	default_context().config_flags = flags
 }
 
 InitWindow :: proc(width, height: i32, title: cstring) {
+	context_init(default_context(), width, height, title)
+}
+
+@(private)
+_init_window_context :: proc(ctx: ^Context, width, height: i32, title: cstring) {
+	assert(ctx != nil, "_init_window_context: nil context")
+	assert(g == ctx, "_init_window_context: inactive context")
 	if g.lifecycle != .Empty do return
+	if !_context_assign_id(ctx) do return
 	g.epoch += 1
 	g.lifecycle = .Starting
 	if !platform_create_window(width, height, title, g.config_flags) {
@@ -423,7 +486,7 @@ _gpu_finish :: proc() {
 	g.last_time = _now()
 	g.target_fps = 0
 
-	_submission_init(&g.submissions)
+	_submission_init(&g.submissions, g)
 	renderer_init(&g.rend)
 	_graphics_resources_init(&g.resources)
 	platform_input_init()
@@ -434,6 +497,13 @@ _gpu_finish :: proc() {
 }
 
 CloseWindow :: proc() {
+	context_close(default_context())
+}
+
+@(private)
+_close_window_context :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_close_window_context: nil context")
+	assert(g == ctx, "_close_window_context: inactive context")
 	if g.instance == nil && g.win == nil do return
 	assert(!g.frame.has_frame, "CloseWindow: frame is still recording")
 	g.lifecycle = .Closing
@@ -449,15 +519,17 @@ CloseWindow :: proc() {
 	if g.adapter != nil do wg.AdapterRelease(g.adapter)
 	if g.instance != nil do wg.InstanceRelease(g.instance)
 	platform_terminate()
+	context_id := g.id
 	flags := g.config_flags
 	closing_epoch := g.epoch
-	mem.zero(&g, size_of(Context))
+	mem.zero(g, size_of(Context))
+	g.id = context_id
 	g.epoch = closing_epoch
 	g.config_flags = flags
 }
 
 WindowShouldClose :: proc() -> bool {
-	return platform_should_close()
+	return context_should_close(default_context())
 }
 
 // --- per-frame -------------------------------------------------------------

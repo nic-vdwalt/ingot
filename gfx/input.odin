@@ -25,6 +25,17 @@ Input :: struct {
 	key_q:            [CHAR_Q]KeyboardKey,
 	key_h, key_t:     int,
 
+	// Native callbacks stage per-window events until that context publishes
+	// its next frame-visible input snapshot.
+	st_pressed:       [KEY_COUNT]bool,
+	st_released:      [KEY_COUNT]bool,
+	st_repeat:        [KEY_COUNT]bool,
+	st_char_q:        [CHAR_Q]rune,
+	st_char_h, st_char_t: int,
+	st_key_q:         [CHAR_Q]KeyboardKey,
+	st_key_h, st_key_t: int,
+	st_wheel:         Vector2,
+
 	// mouse
 	mouse:            Vector2,
 	mouse_prev:       Vector2,
@@ -105,6 +116,7 @@ input_poll :: proc() {
 	}
 	platform_drop_finish_events()
 	_drop_hover_publish()
+	_input_publish_staged(inp)
 
 	mx, my := platform_cursor_pos()
 	inp.mouse = {f32(mx), f32(my)}
@@ -135,19 +147,54 @@ input_poll :: proc() {
 // --- queue helpers (shared; called by the platform input backend) ----------
 
 @(private)
+_input_publish_staged :: proc(inp: ^Input) {
+	assert(inp != nil, "_input_publish_staged: nil input")
+	for index in 0 ..< KEY_COUNT {
+		inp.pressed[index] = inp.st_pressed[index]
+		inp.released[index] = inp.st_released[index]
+		inp.repeat[index] = inp.st_repeat[index]
+		inp.st_pressed[index] = false
+		inp.st_released[index] = false
+		inp.st_repeat[index] = false
+	}
+	for inp.st_key_h != inp.st_key_t {
+		_push_key_input(inp, inp.st_key_q[inp.st_key_h])
+		inp.st_key_h = (inp.st_key_h + 1) % CHAR_Q
+	}
+	for inp.st_char_h != inp.st_char_t {
+		_push_char_input(inp, inp.st_char_q[inp.st_char_h])
+		inp.st_char_h = (inp.st_char_h + 1) % CHAR_Q
+	}
+	inp.wheel_pending += inp.st_wheel
+	inp.st_wheel = {}
+}
+
+@(private)
+_push_char_input :: proc "contextless" (inp: ^Input, r: rune) {
+	if inp == nil do return
+	nt := (inp.char_t + 1) % CHAR_Q
+	if nt == inp.char_h do return
+	inp.char_q[inp.char_t] = r
+	inp.char_t = nt
+}
+
+@(private)
+_push_key_input :: proc "contextless" (inp: ^Input, k: KeyboardKey) {
+	if inp == nil do return
+	nt := (inp.key_t + 1) % CHAR_Q
+	if nt == inp.key_h do return
+	inp.key_q[inp.key_t] = k
+	inp.key_t = nt
+}
+
+@(private)
 _push_char :: proc "c" (r: rune) {
-	nt := (g.inp.char_t + 1) % CHAR_Q
-	if nt == g.inp.char_h do return // full
-	g.inp.char_q[g.inp.char_t] = r
-	g.inp.char_t = nt
+	_push_char_input(&g.inp, r)
 }
 
 @(private)
 _push_key :: proc "c" (k: KeyboardKey) {
-	nt := (g.inp.key_t + 1) % CHAR_Q
-	if nt == g.inp.key_h do return
-	g.inp.key_q[g.inp.key_t] = k
-	g.inp.key_t = nt
+	_push_key_input(&g.inp, k)
 }
 
 // --- raylib-named queries --------------------------------------------------

@@ -618,7 +618,7 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 	}
 	_stats_flush(u64(n), vertex_bytes + index_bytes, cause)
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.indices_uploaded += u64(index_count)
+		g.stats_current.indices_uploaded += u64(index_count)
 	}
 
 	// Custom-shader path: an active shader overrides the pipeline + bind groups
@@ -701,8 +701,8 @@ _geometry_upload_indexed :: proc(
 	)
 	wg.QueueWriteBuffer(g.queue, slot.geometry_buffer, index_offset, index_data, uint(index_bytes))
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.peak_geometry_arena_bytes = max(
-			renderer_stats_current.peak_geometry_arena_bytes,
+		g.stats_current.peak_geometry_arena_bytes = max(
+			g.stats_current.peak_geometry_arena_bytes,
 			slot.geometry_write,
 		)
 	}
@@ -876,8 +876,8 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 	}
 	wg.QueueWriteBuffer(g.queue, slot.uniform_buffer, offset, data, uint(size))
 	when RENDER_STATS_ENABLED {
-		renderer_stats_current.peak_uniform_arena_bytes = max(
-			renderer_stats_current.peak_uniform_arena_bytes,
+		g.stats_current.peak_uniform_arena_bytes = max(
+			g.stats_current.peak_uniform_arena_bytes,
 			slot.uniform_write,
 		)
 	}
