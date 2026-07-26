@@ -39,6 +39,11 @@ A full run uses 300 warm-up frames, 2,000 measured frames, and seven fresh-proce
 every configured core case. Restrict development runs with `--framework`, `--workload`, `--scale`,
 `--warmup`, `--frames`, or `--repetitions`.
 
+`complex_dashboard` submits ten elements per row: a unique title, status, checkbox, slider, persistent
+text input, action button, and four data cells. Its fixed geometry isolates deterministic UI
+construction and finalization costs. It does not model responsive layout, scrolling, application
+state updates, native event handling, accessibility hosts, presentation, or GPU execution.
+
 For two independent runs:
 
 ```sh

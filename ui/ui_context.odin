@@ -227,7 +227,9 @@ ui_frame_finalize :: proc(frame: ^Ui_Frame) {
 		)
 	}
 	overlay_flush(frame); cursor_apply(frame); focus_scope_frame_end(frame)
-	frame.runtime.semantics_snapshot = frame.semantics.cur
+	snapshot := &frame.runtime.semantics_snapshot
+	snapshot.count = frame.semantics.cur.count
+	copy(snapshot.nodes[:snapshot.count], frame.semantics.cur.nodes[:snapshot.count])
 	a11y_expire_after_frame(frame.runtime); focus_scope_clear_live(frame)
 	frame.finalized = true
 }
