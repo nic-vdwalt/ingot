@@ -62,7 +62,11 @@ with_frame :: proc(
 	text_backend: Test_Text_Backend_State
 	ui_runtime_set_text_backend(
 		runtime,
-		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
 	)
 
 	// A real output buffer, so the tests can assert that a dropped widget

@@ -55,24 +55,24 @@ Paint_Command :: struct {
 }
 
 Paint_List :: struct {
-	commands:           [PAINT_COMMAND_CAP]Paint_Command,
-	count:              int,
-	text:               [PAINT_TEXT_CAP]u8,
-	text_len:           int,
-	clip_stack:         [PAINT_CLIP_CAP]Rect,
-	clip_emitted:       [PAINT_CLIP_CAP]bool,
+	commands:            [PAINT_COMMAND_CAP]Paint_Command,
+	count:               int,
+	text:                [PAINT_TEXT_CAP]u8,
+	text_len:            int,
+	clip_stack:          [PAINT_CLIP_CAP]Rect,
+	clip_emitted:        [PAINT_CLIP_CAP]bool,
 	// Origin of each open clip so an unbalanced frame can name the exact
 	// begin_scissor_mode call that leaked instead of only its depth.
-	clip_origin:        [PAINT_CLIP_CAP]runtime.Source_Code_Location,
-	clip_count:         int,
+	clip_origin:         [PAINT_CLIP_CAP]runtime.Source_Code_Location,
+	clip_count:          int,
 	// Begins rejected after PAINT_CLIP_CAP still need matching ends. Tracking
 	// their logical depth separately lets paint_clip_end consume those ends
 	// without popping a real outer clip.
 	clip_overflow_depth: int,
-	dropped_commands:   int,
-	dropped_text_bytes: int,
-	sink:               Paint_Sink,
-	sink_userdata:      rawptr,
+	dropped_commands:    int,
+	dropped_text_bytes:  int,
+	sink:                Paint_Sink,
+	sink_userdata:       rawptr,
 }
 
 Ui_Output :: struct {

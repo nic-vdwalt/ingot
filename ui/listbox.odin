@@ -148,10 +148,7 @@ listbox_begin :: proc(
 		// collapsed, so leave the state in a valid empty-begin state.
 		state.initialized = true
 		state.pressed_index = -1
-		return {
-			activated_index = -1,
-			reveal_index = -1,
-		}
+		return {activated_index = -1, reveal_index = -1}
 	}
 	assert(config.label != "" && config.stable_id != "", "listbox_begin: semantics required")
 	assert(config.count >= 0, "listbox_begin: negative count")
