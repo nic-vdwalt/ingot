@@ -16,12 +16,7 @@ DWMSBT_TABBEDWINDOW :: 4 // Mica Alt (tabbed)
 foreign import dwmapi "system:dwmapi.lib"
 @(default_calling_convention = "stdcall")
 foreign dwmapi {
-	DwmSetWindowAttribute :: proc(
-		hwnd: win32.HWND,
-		attr: win32.DWORD,
-		value: rawptr,
-		size: win32.DWORD,
-	) -> win32.HRESULT ---
+	DwmSetWindowAttribute :: proc(hwnd: win32.HWND, attr: win32.DWORD, value: rawptr, size: win32.DWORD) -> win32.HRESULT ---
 }
 
 // Apply modern Windows 11 Mica effect and dark mode to the window title bar.

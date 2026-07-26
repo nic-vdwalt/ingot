@@ -226,7 +226,13 @@ pressable_survives_degenerate_rects :: proc(t: ^testing.T) {
 		for w in DEGENERATE_EXTENTS {
 			for h in DEGENERATE_EXTENTS {
 				if w > 0 && h > 0 do continue
-				res := pressable(frame, Pressable_Config{rect = Rect_I32{0, 0, w, h}, role = .Button, label = "press me", stable_id = "degenerate"})
+				config := Pressable_Config {
+					rect      = Rect_I32{0, 0, w, h},
+					role      = .Button,
+					label     = "press me",
+					stable_id = "degenerate",
+				}
+				res := pressable(frame, config)
 				testing.expect(t, !res.activated, "a zero-area control cannot be activated")
 				testing.expect(t, !res.hovered, "a zero-area control cannot be hovered")
 				testing.expect(t, !res.pressed)
