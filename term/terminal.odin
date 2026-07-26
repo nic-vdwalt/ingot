@@ -13,6 +13,7 @@ import "core:strings"
 import "core:sync"
 import "core:thread"
 import "core:time"
+import "ingot:threadhook"
 
 // Maximum number of scrollback lines retained per terminal instance.
 TERM_SCROLLBACK_MAX :: 5000
@@ -290,6 +291,7 @@ term_start :: proc(
 	when !pty.INGOT_PTY_SIM {
 		sync.atomic_store(&ts.reader_running, true)
 		ts.reader_thread = thread.create(proc(t: ^thread.Thread) {
+			context.assertion_failure_proc = threadhook.install(context.assertion_failure_proc)
 			term_reader_loop(cast(^Term_Instance)t.data)
 		})
 		if ts.reader_thread != nil {

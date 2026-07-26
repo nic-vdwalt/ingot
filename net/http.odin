@@ -11,6 +11,7 @@ import "core:strings"
 import "core:sync"
 import "core:thread"
 import "core:time"
+import "ingot:threadhook"
 
 DEFAULT_MAXIMUM_BODY :: 64 * 1024 * 1024
 MAXIMUM_HEADER_BYTES :: 64 * 1024
@@ -448,12 +449,11 @@ when !INGOT_NET_SIM {
 				f   = f,
 				idx = i,
 			}
-			f.workers[i] = thread.create(
-				proc(t: ^thread.Thread) {ctx := cast(^Fetch_Worker_Ctx)t.data; fetch_worker(
-						ctx.f,
-						ctx.idx,
-					)},
-			)
+			f.workers[i] = thread.create(proc(t: ^thread.Thread) {
+				context.assertion_failure_proc = threadhook.install(context.assertion_failure_proc)
+				ctx := cast(^Fetch_Worker_Ctx)t.data
+				fetch_worker(ctx.f, ctx.idx)
+			})
 			f.workers[i].data = &f.worker_ctx[i]
 			thread.start(f.workers[i])
 		}

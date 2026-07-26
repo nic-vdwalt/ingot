@@ -1,5 +1,10 @@
 #+build !js
-// LIB-CANDIDATE: this package must import only core:* — never app packages.
+// LIB-CANDIDATE: this package must import only core:* and ingot:threadhook —
+// never app packages. threadhook is the one permitted exception: it is a
+// dependency-free leaf (base:runtime + core:sync) that exists so worker-thread
+// assertions can reach the embedder's crash reporter, which they otherwise
+// cannot because core:thread hands every worker a fresh
+// runtime.default_context().
 // Hand-rolled RFC 6455 WebSocket client (text frames, no TLS). The worker
 // thread runs dial + HTTP upgrade handshake + the recv loop; the main thread
 // polls a mutex-guarded queue.
@@ -14,6 +19,7 @@ import "core:strings"
 import "core:sync"
 import "core:thread"
 import "core:time"
+import "ingot:threadhook"
 
 // WebSocket connection state.
 WS_State :: enum {
@@ -334,6 +340,7 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 	sync.atomic_store(&ws.running, true)
 
 	ws.recv_thread = thread.create(proc(t: ^thread.Thread) {
+		context.assertion_failure_proc = threadhook.install(context.assertion_failure_proc)
 		ws_connect_worker(cast(^WebSocket)t.data)
 	})
 	if ws.recv_thread == nil {
