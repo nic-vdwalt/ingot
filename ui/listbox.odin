@@ -268,7 +268,7 @@ listbox_end :: proc(frame: ^Ui_Frame, state: ^Listbox_State) {
 	   (is_mouse_button_released(frame, .LEFT) || !is_mouse_button_down(frame, .LEFT)) {
 		state.press_latch = false
 		state.pressed_index = -1
-		if frame.interaction.active_latch == &state.press_latch do frame.interaction.active_latch = nil
+		interact_forget(frame, &state.press_latch)
 	}
 	state.owner_seen = false
 }

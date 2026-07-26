@@ -60,8 +60,13 @@ with_frame :: proc(
 	ui_runtime_init(runtime)
 	defer ui_runtime_destroy(runtime)
 
+	// A real output buffer, so the tests can assert that a dropped widget
+	// emitted no paint commands and left no clip on the stack.
+	output := new(Ui_Output)
+	defer free(output)
 	frame := new(Ui_Frame)
 	defer free(frame)
+	frame.output = output
 	ui_frame_begin(frame, runtime)
 	body(t, frame)
 	drops = frame.degenerate_drops

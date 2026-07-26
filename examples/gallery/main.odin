@@ -649,13 +649,18 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	list_width := min(w, ui.ui_frame_sc(&ui_frame, 360))
 	row_step := ui.ui_frame_sc(&ui_frame, 26)
 	list_config := ui.Listbox_Config {
-		{x, y, list_width, row_step * i32(len(list_labels))},
-		"Rendering backends",
-		"gallery:backends",
-		len(list_labels),
-		&state.list_selected,
-		true,
-		true,
+		rect         = {x, y, list_width, row_step * i32(len(list_labels))},
+		label        = "Rendering backends",
+		stable_id    = "gallery:backends",
+		count        = len(list_labels),
+		selected     = &state.list_selected,
+		wrap         = true,
+		hover_select = true,
+		// The list shares this page with other focusable widgets, so it reads
+		// keys only while focused. Every row is visible, so a page step is the
+		// whole list.
+		keys         = .Focused,
+		page_rows    = len(list_labels),
 	}
 	list_result := ui.listbox_begin(&ui_frame, &state.listbox, list_config)
 	for label, i in list_labels {
@@ -873,11 +878,10 @@ cell :: proc(r: ui.Rect_I32, label: string) {
 		r.h,
 		ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).border_color),
 	)
-	c := strings.clone_to_cstring(label, context.temp_allocator)
-	tw := ui.measure_text_frame(&ui_frame, c, ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL)
+	tw := ui.text_width(&ui_frame, label, .Small)
 	ui.text(
 		&ui_frame,
-		c,
+		label,
 		r.x + (r.w - tw) / 2,
 		r.y + (r.h - ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL) / 2,
 		.Small,

@@ -105,6 +105,14 @@ Interaction_State :: struct {
 // (so the occlusion test sees the claims active this frame).
 interact_frame_begin :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "interact_frame_begin: invalid frame")
+	assert(frame.runtime != nil, "interact_frame_begin: nil runtime")
+	// Reclaim a latch whose owner was not drawn last frame. ui_frame_begin
+	// has already bumped frame_generation, so a latch confirmed during the
+	// previous frame stamps generation - 1. Without this the slot is only
+	// ever released from inside the owning widget's own interact() call, so
+	// a latched widget that stops being drawn (tab closed, view swapped,
+	// panel collapsed) leaves every other widget permanently `blocked`.
+	// Pointer is compared, never dereferenced: the owner may already be freed.
 	if is_mouse_button_pressed(frame, .LEFT) {
 		frame.interaction.press_pos = get_mouse_position(frame)
 		frame.interaction.press_occluded = route_occluded(frame, frame.interaction.press_pos)
@@ -117,6 +125,47 @@ interact_frame_begin :: proc(frame: ^Ui_Frame) {
 interact_reset :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil, "interact_reset: nil frame")
 	frame.interaction = {}
+}
+
+// interact_forget releases the drag arbitration slot if it points at `latch`.
+// Pointer comparison only, so it is safe to call while tearing down the owner
+// (and safe on a closed frame).
+interact_forget :: proc(frame: ^Ui_Frame, latch: ^bool) {
+	assert(frame != nil, "interact_forget: nil frame")
+	if latch == nil || frame.interaction.active_latch != latch do return
+	frame.interaction.active_latch = nil
+	frame.interaction.latch_gen = 0
+}
+
+// interact_forget_block releases the slot if it points anywhere inside
+// [base, base + size). Call immediately before freeing a component that owns
+// drag latches, so a later interact() in the same frame cannot dereference
+// freed memory. Enumerating individual latch fields is error-prone; the block
+// form stays correct when a component gains a new scrollbar or slider.
+interact_forget_block :: proc(frame: ^Ui_Frame, base: rawptr, size: int) {
+	assert(frame != nil, "interact_forget_block: nil frame")
+	assert(size >= 0, "interact_forget_block: negative size")
+	if base == nil || size == 0 || frame.interaction.active_latch == nil do return
+	latch := uintptr(rawptr(frame.interaction.active_latch))
+	lo := uintptr(base)
+	if latch < lo || latch >= lo + uintptr(size) do return
+	frame.interaction.active_latch = nil
+	frame.interaction.latch_gen = 0
+}
+
+// interact_latched reports whether any widget currently holds the frame's
+// drag arbitration slot. A latch that outlives its owner makes every other
+// widget inert, so hosts and harnesses can assert on this directly.
+interact_latched :: proc(frame: ^Ui_Frame) -> bool {
+	assert(frame != nil, "interact_latched: nil frame")
+	return frame.interaction.active_latch != nil
+}
+
+// interact_latch_is reports whether `latch` specifically holds the slot.
+// Pointer comparison only; the owner is never dereferenced.
+interact_latch_is :: proc(frame: ^Ui_Frame, latch: ^bool) -> bool {
+	assert(frame != nil, "interact_latch_is: nil frame")
+	return latch != nil && frame.interaction.active_latch == latch
 }
 
 // interact runs the interaction protocol for a widget rect. `rect` is in the
