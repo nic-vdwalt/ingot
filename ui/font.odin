@@ -4,6 +4,8 @@ package ui
 import "core:strings"
 
 
+UI_TELEMETRY_ENABLED :: #config(INGOT_UI_TELEMETRY, false)
+
 FONT_DATA := #load("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
 
 Measure_Key :: struct {
@@ -22,6 +24,8 @@ Text_System :: struct {
 	font_codepoints:         []rune,
 	measure_cache:           map[Measure_Key]Measure_Entry,
 	measure_cache_evictions: int,
+	measure_cache_hits:      u64,
+	measure_cache_misses:    u64,
 	measure_stamp:           u64,
 	measure_backend:         proc(text: cstring, size: i32) -> i32,
 	wrap_cache:              map[Wrap_Key]Wrap_Entry,
@@ -61,6 +65,17 @@ reset_font_atlases_with :: proc(system: ^Text_System) {
 measure_cache_stats_with :: proc(system: ^Text_System) -> (entries: int, evictions: int) {
 	assert(system != nil)
 	return len(system.measure_cache), system.measure_cache_evictions
+}
+
+measure_cache_telemetry_with :: proc(system: ^Text_System) -> (hits, misses: u64) {
+	assert(system != nil, "measure_cache_telemetry_with: nil system")
+	return system.measure_cache_hits, system.measure_cache_misses
+}
+
+measure_cache_telemetry_reset_with :: proc(system: ^Text_System) {
+	assert(system != nil, "measure_cache_telemetry_reset_with: nil system")
+	system.measure_cache_hits = 0
+	system.measure_cache_misses = 0
 }
 
 set_measure_backend_with :: proc(system: ^Text_System, fn: proc(text: cstring, size: i32) -> i32) {
@@ -180,11 +195,13 @@ measure_text_with :: proc(system: ^Text_System, text: cstring, size: i32) -> i32
 		size = size,
 	}
 	if entry, ok := system.measure_cache[key]; ok {
+		when UI_TELEMETRY_ENABLED do system.measure_cache_hits += 1
 		system.measure_stamp += 1
 		entry.stamp = system.measure_stamp
 		system.measure_cache[key] = entry
 		return entry.width
 	}
+	when UI_TELEMETRY_ENABLED do system.measure_cache_misses += 1
 	width := measure_raw_with(system, text, size)
 	if len(key.text) <= MEASURE_CACHE_MAX_KEY_LEN {
 		if len(system.measure_cache) >= MEASURE_CACHE_MAX do measure_evict_oldest(system)

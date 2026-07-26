@@ -2,6 +2,7 @@
 package gfx
 
 import "core:testing"
+import wg "vendor:wgpu"
 
 @(test)
 frame_validation_rejects_stale_generation :: proc(t: ^testing.T) {
@@ -92,6 +93,23 @@ context_queries_are_isolated :: proc(t: ^testing.T) {
 	testing.expect_value(t, context_get_mouse_position(second), Vector2{30, 40})
 	testing.expect(t, context_is_key_pressed(first, .A))
 	testing.expect(t, !context_is_key_pressed(second, .A))
+}
+
+@(test)
+renderer_stats_reset_preserves_live_identity :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.stats_current.frame_index = 7
+	ctx.stats_current.composite_alpha_mode = .Premultiplied
+	ctx.stats_current.flush_count = 3
+	ctx.stats_latest.flush_count = 2
+	context_renderer_stats_reset(ctx)
+	when RENDER_STATS_ENABLED {
+		testing.expect_value(t, ctx.stats_current.frame_index, u64(7))
+		testing.expect_value(t, ctx.stats_current.composite_alpha_mode, wg.CompositeAlphaMode.Premultiplied)
+		testing.expect_value(t, ctx.stats_current.flush_count, u32(0))
+		testing.expect_value(t, ctx.stats_latest.flush_count, u32(0))
+	}
 }
 
 @(test)

@@ -342,9 +342,17 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	wg.RenderPassEncoderRelease(pass.pass)
 	retirement := u64(0)
 	if pass.owns_stream do retirement = _submission_reserve(&g.submissions)
+	encode_started := f64(0)
+	when RENDER_STATS_ENABLED do encode_started = platform_now()
 	cmd := wg.CommandEncoderFinish(pass.encoder, nil)
+	encode_elapsed := f64(0)
+	when RENDER_STATS_ENABLED do encode_elapsed = platform_now() - encode_started
+	submit_elapsed := f64(0)
 	if (!pass.owns_stream || retirement != 0) && cmd != nil {
+		submit_started := f64(0)
+		when RENDER_STATS_ENABLED do submit_started = platform_now()
 		wg.QueueSubmit(g.queue, {cmd})
+		when RENDER_STATS_ENABLED do submit_elapsed = platform_now() - submit_started
 		_stats_queue_submission()
 		if pass.owns_stream {
 			assert(_submission_commit(&g.submissions, retirement))
@@ -355,6 +363,7 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 		_stream_slot_abandon(&g.rend)
 		_stats_stream_retirement_failure()
 	}
+	_stats_cpu_times(0, encode_elapsed, submit_elapsed, 0)
 	if cmd != nil do wg.CommandBufferRelease(cmd)
 	wg.CommandEncoderRelease(pass.encoder)
 	g.resources.gpu_3d.active_pass_generation = 0

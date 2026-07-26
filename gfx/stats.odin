@@ -30,6 +30,10 @@ Renderer_Stats :: struct {
 	bind_group_switches:           u32,
 	render_passes:                 u32,
 	queue_submissions:             u32,
+	frame_cpu_seconds:             f64,
+	encode_cpu_seconds:            f64,
+	submit_cpu_seconds:            f64,
+	present_cpu_seconds:           f64,
 	peak_geometry_arena_bytes:     u64,
 	peak_uniform_arena_bytes:      u64,
 	geometry_reservation_failures: u32,
@@ -139,6 +143,18 @@ _stats_render_pass :: proc() {
 _stats_queue_submission :: proc() {
 	when RENDER_STATS_ENABLED {
 		g.stats_current.queue_submissions += 1
+	}
+}
+
+@(private)
+_stats_cpu_times :: proc(frame, encode, submit, present: f64) {
+	when RENDER_STATS_ENABLED {
+		assert(frame >= 0 && encode >= 0, "_stats_cpu_times: negative frame time")
+		assert(submit >= 0 && present >= 0, "_stats_cpu_times: negative queue time")
+		g.stats_current.frame_cpu_seconds += frame
+		g.stats_current.encode_cpu_seconds += encode
+		g.stats_current.submit_cpu_seconds += submit
+		g.stats_current.present_cpu_seconds += present
 	}
 }
 

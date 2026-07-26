@@ -1,9 +1,11 @@
 # Tiger Style (ingot / Odin edition)
 
-Adapted from [TigerBeetle's TigerStyle](https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md).
-That document is written for Zig; this is its translation to **Odin** for the
-`ingot` engine. When something here disagrees with the original, this file wins
-for `ingot`, because it accounts for our language and our domain.
+Adapted from TigerBeetle's
+[TigerStyle](https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md),
+licensed under Apache License 2.0. This version has been modified from the
+original. That document is written for Zig; this is its translation to **Odin**
+for the `ingot` engine. When something here disagrees with the original, this
+file wins for `ingot`, because it accounts for our language and our domain.
 
 ## Why have style?
 

@@ -1,11 +1,15 @@
 package ui
 
 Ui_Frame_Output_Stats :: struct {
-	main_command_count:    i32,
-	main_text_bytes:       i32,
-	overlay_command_count: i32,
-	overlay_text_bytes:    i32,
-	semantic_node_count:   i32,
+	main_command_count:       i32,
+	main_text_bytes:          i32,
+	overlay_command_count:    i32,
+	overlay_text_bytes:       i32,
+	semantic_node_count:      i32,
+	scratch_allocation_count: u64,
+	scratch_peak_bytes:       u64,
+	measure_cache_hits:       u64,
+	measure_cache_misses:     u64,
 }
 
 Ui_Frame_Diagnostics :: struct {
@@ -26,8 +30,13 @@ Ui_Frame_Diagnostics :: struct {
 ui_frame_output_stats :: proc(frame: ^Ui_Frame) -> Ui_Frame_Output_Stats {
 	assert(frame != nil && frame.open, "ui_frame_output_stats: invalid frame")
 	assert(frame.finalized, "ui_frame_output_stats: frame not finalized")
+	hits, misses := measure_cache_telemetry_with(&frame.runtime.text)
 	result := Ui_Frame_Output_Stats {
-		semantic_node_count = i32(frame.semantics.cur.count),
+		semantic_node_count      = i32(frame.semantics.cur.count),
+		scratch_allocation_count = frame.scratch.allocation_count,
+		scratch_peak_bytes       = frame.scratch.peak_bytes,
+		measure_cache_hits       = hits,
+		measure_cache_misses     = misses,
 	}
 	if frame.output != nil {
 		result.main_command_count = i32(frame.output.main.count)

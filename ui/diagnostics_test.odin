@@ -4,6 +4,25 @@ package ui
 import "core:testing"
 
 @(test)
+frame_output_stats_require_completed_frame :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame{output = output}
+	ui_frame_begin(&frame, &runtime)
+	draw_rectangle(&frame, 0, 0, 10, 10, Color{255, 255, 255, 255})
+	ui_frame_finalize(&frame)
+	stats := ui_frame_output_stats(&frame)
+	testing.expect_value(t, stats.main_command_count, i32(1))
+	testing.expect_value(t, stats.main_text_bytes, i32(0))
+	testing.expect_value(t, stats.semantic_node_count, i32(0))
+	ui_frame_release(&frame)
+	ui_frame_destroy(&frame)
+}
+
+@(test)
 frame_diagnostics_aggregate_bounded_drops :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

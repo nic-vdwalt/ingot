@@ -273,5 +273,8 @@ is a visualization escape hatch rather than a scene-graph engine.
 
 ## License
 
-A project license has not yet been published. Do not assume permission beyond
-rights granted by applicable law until a license file is added.
+Ingot's original source is licensed under the [Apache License 2.0](LICENSE).
+Bundled third-party works retain their own licenses; see [NOTICE](NOTICE) and
+[third-party notices](THIRD_PARTY_NOTICES.md). Complete the
+[OSS release checklist](docs/oss-release-checklist.md) before redistributing
+release artifacts, especially the bundled patched font.
