@@ -800,6 +800,10 @@ ws_state :: proc(ws: ^WebSocket) -> WS_State {
 	return sync.atomic_load(&ws.state)
 }
 
+ws_error :: proc(ws: ^WebSocket) -> WS_Error {
+	return sync.atomic_load(&ws.last_error)
+}
+
 // Close the WebSocket connection. Stops the worker thread: broadcasting
 // stop_cond ends any backoff wait early, closing the socket unblocks a
 // blocking recv (handshake or recv loop), and a dial in flight fails on its
