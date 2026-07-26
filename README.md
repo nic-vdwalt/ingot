@@ -151,8 +151,7 @@ For an existing raylib application, start by replacing
 `import rl "vendor:raylib"` with `import rl "ingot:gfx"` and
 `vendor:raylib/rlgl` with `ingot:gfx/rlgl`. This import-only path targets common
 2D call sites; other subsystems can require mechanical edits, behavior review,
-or redesign. Review the graphics boundaries in
-[Compatibility and platforms](docs/compatibility.md).
+or redesign. Follow [Migrating from raylib](docs/raylib-migration.md).
 
 ## See it running
 
@@ -175,6 +174,7 @@ Other focused examples:
 - `examples/idle_demo` — event-driven rendering at approximately zero idle CPU.
 - `examples/chart_demo` — chart widgets and interaction.
 - `examples/render_fixture` — renderer, resource-lifetime, and backend validation.
+- `examples/raylib_migration_fixture` — import-only 2D compatibility contract.
 
 Web builds require Bash, Python 3, and the pinned Odin toolchain. From the
 repository root, `bash build_web.sh` writes `web/ingot_web.wasm`; serve `web/`
@@ -219,6 +219,8 @@ These are headless construction results, not GPU or complete application ranking
   comparisons and dated results for Dear ImGui, egui, and Ingot at scale.
 - [Rendering](docs/rendering.md) — renderer ownership, submission lifetime,
   render-target conventions, frame scheduling, and backend validation.
+- [Migrating from raylib](docs/raylib-migration.md) — supported 2D profile,
+  compatibility matrix, conversion workflow, examples, and validation checklist.
 - [Networking](docs/networking.md) — HTTP and WebSocket lifecycle, ownership,
   limits, security, and native/web differences.
 - [Compatibility and platforms](docs/compatibility.md) — toolchain pinning,

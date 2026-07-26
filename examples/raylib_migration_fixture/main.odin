@@ -23,30 +23,13 @@ main :: proc() {
 }
 
 load_resources :: proc() {
-	pixels := [16]u8 {
-		255,
-		255,
-		255,
-		255,
-		255,
-		100,
-		80,
-		255,
-		80,
-		210,
-		130,
-		255,
-		90,
-		130,
-		255,
-		255,
-	}
+	pixels := [16]u8{255, 255, 255, 255, 255, 100, 80, 255, 80, 210, 130, 255, 90, 130, 255, 255}
 	image := rl.Image {
-		data = raw_data(pixels[:]),
-		width = 2,
-		height = 2,
+		data    = raw_data(pixels[:]),
+		width   = 2,
+		height  = 2,
 		mipmaps = 1,
-		format = .UNCOMPRESSED_R8G8B8A8,
+		format  = .UNCOMPRESSED_R8G8B8A8,
 	}
 	texture = rl.LoadTextureFromImage(image)
 	target = rl.LoadRenderTexture(160, 90)

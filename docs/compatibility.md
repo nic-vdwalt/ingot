@@ -114,9 +114,9 @@ does not spawn a shell.
 
 The compatibility graphics facade owns one default context so documented common
 2D calls can retain their familiar shape after the package import changes.
-Applications outside that surface require mechanical edits, behavior review, or
-redesign. Native applications may also create explicit contexts and interleave
-independently live windows on one owner thread.
+Applications outside that surface require the edits described in
+[Migrating from raylib](raylib-migration.md). Native applications may also create
+explicit contexts and interleave independently live windows on one owner thread.
 Parallel renderer threads and browser multi-canvas hosting are not production
 guarantees. HiDPI, transparency, vibrancy/Mica, drag-and-drop, IME, gamepad,
 audio, accessibility, and custom chrome have platform seams and require
