@@ -85,10 +85,10 @@ accessibility data.
 ### Why Ingot is the purest form of immediate mode
 
 Ingot can reasonably call itself the purest form of immediate-mode GUI in one
-specific architectural sense: it carries the original single-path boundary
-through the complete application UI. The application remains the sole owner of
-persistent widget behavior instead of synchronizing its data with a second UI
-model.
+specific architectural sense: the application remains the single source of
+truth for persistent widget behavior. State flows directly from application or
+component data into each frame's interface declaration, without a retained
+widget tree or hidden UI state store that must be kept in sync.
 
 Concretely, this means:
 
@@ -110,11 +110,12 @@ snapshot, or skipped entirely while the application is idle; none of those
 choices transfer authority over persistent widget behavior away from the
 caller.
 
-Here, "purest" means strict adherence to that single-path ownership boundary. It
-is not a claim about maturity or feature breadth, and it does not mean stateless
-internals, immediate GPU submission, or mandatory continuous redraw. It also
-does not define Dear ImGui, egui, Gio, or Nuklear out of immediate mode; all are
-genuine IMGUI systems with different ownership and integration tradeoffs.
+Here, "purest" refers only to this single-source-of-truth ownership model: the
+application owns persistent widget behavior, while Ingot derives each required
+frame from the state it receives. It is not a claim about maturity or feature
+breadth, nor does it require stateless internals, immediate GPU submission, or
+continuous redraw. Dear ImGui, egui, Gio, and Nuklear remain genuine IMGUI
+systems with different ownership and integration tradeoffs.
 
 Dear ImGui and egui should not be treated as one interchangeable category. Dear
 ImGui is primarily a C++ UI library designed to embed into engines and custom
@@ -138,6 +139,7 @@ normally supplied by third-party crates.
 | Identity | Stable IDs identify current-frame focus and accessibility targets, not a general widget-state store | Labels and an ID stack produce stable widget IDs | Sequential widgets often receive IDs automatically; persistent state requires stable IDs |
 | Layout | Bounded single-pass layout with explicit measurements and application-owned geometry escape hatches | Cursor-driven layout, explicit composition, child regions, and mature tables | Closure-based rows, columns, panels, grids, wrapping, scroll areas, and occasional extra layout passes |
 | Rendering output | Bounded renderer-independent paint lists replayed by the integrated WebGPU adapter | Batched indexed triangle draw lists consumed by a renderer backend | Shapes, texture updates, and platform output tessellated and painted by an integration |
+| Performance model | Bounded frame storage, reusable scratch memory, batched drawing, renderer statistics, and optional event-driven frames | Allocation-conscious core and mature batching; host renderer, backend, and frame loop determine end-to-end cost | Retained caches, tessellation, repaint scheduling, and integration choices determine end-to-end cost |
 | Idle scheduling | `Frame_Pacer` can skip UI construction and GPU submission until input, application work, or a redraw deadline | Commonly rebuilt in a continuous engine loop; event-driven hosting is possible but not the primary integration model | Repaint requests and deadlines allow integrations to sleep while idle |
 | Accessibility | Widgets emit bounded semantic snapshots; native AccessKit and browser semantic-DOM bridges exist, but target validation is not recorded | No accessibility implementation in the core project | Built-in AccessKit semantics exposed through integrations, including `eframe` |
 | Docking and detached tools | Docking is roadmap work; explicit native contexts can own independent windows, with platform validation still required | First-party docking and multi-viewports on the official docking branch | Core multi-viewport protocol; docking normally comes from ecosystem crates |
@@ -170,6 +172,16 @@ exist today. Dear ImGui has substantially deeper tables, docking, backend
 coverage, and operational history. egui has richer general layout, an
 established Rust crate ecosystem, and more mature accessibility integration.
 Neither comparison should imply current feature parity.
+
+For performance, Ingot is designed to reuse bounded frame storage, batch paint,
+and avoid both UI construction and GPU submission while idle. Dear ImGui is
+also highly optimized and allocation-conscious, while egui can cache work and
+schedule repaint deadlines. End-to-end CPU time, GPU time, memory, startup, and
+idle power depend on the host, backend, workload, and build configuration; no
+cross-project benchmark is published here. Measure the same representative UI
+and interaction trace on target hardware rather than inferring a winner from
+architecture alone. Ingot's renderer statistics can expose flushes, uploads,
+state switches, submissions, and arena peaks during that measurement.
 
 Platform claims also require qualification. The shared Ingot API targets macOS,
 Windows, Linux, and the browser, but compilation is not runtime validation.
@@ -220,6 +232,15 @@ infrastructure that established toolkits already provide. Accessibility support
 also needs validation on each target; semantic output is part of Ingot's design,
 but ecosystem maturity is not equivalent to mature native toolkits.
 
+For performance, Ingot avoids maintaining and diffing a retained widget tree,
+uses bounded per-frame outputs, batches drawing, and can do no frame work while
+idle. Retained and declarative toolkits can instead reuse layout, rendering, and
+widget caches when only part of an interface changes, and mature toolkits may
+have heavily optimized native paths. The winning model depends on invalidation
+patterns, control count, text complexity, animation, and backend quality. Compare
+frame-time distributions, memory, startup, and idle CPU on the actual product;
+architecture alone does not establish that Ingot is faster.
+
 ## Against Electron and Tauri-style applications
 
 Electron and Tauri are compelling when the product is naturally a web
@@ -231,6 +252,15 @@ Ingot uses Odin for application and UI code and renders through WebGPU without a
 desktop webview. This gives native and browser builds one explicit rendering and
 state model, avoids synchronizing a native backend with a JavaScript frontend,
 and permits event-driven frames with no GPU submission while idle.
+
+That architecture can reduce runtime layers, baseline memory, startup work, and
+idle activity relative to shipping a browser frontend, especially compared with
+Electron. It is not a universal performance advantage: browser engines have
+mature layout, text, accessibility, compositing, and profiling implementations;
+Tauri uses the operating system webview rather than bundling Chromium; and a
+custom WebGPU UI may perform more application-side work. Measure packaged
+binary size, cold and warm startup, resident memory, idle CPU and power, and
+interactive frame times on every target instead of relying on framework labels.
 
 Prefer a web stack when DOM semantics, browser layout, web content embedding,
 frontend staffing, or the npm ecosystem outweigh the benefits of a single Odin
@@ -248,6 +278,16 @@ A full game engine remains the better choice for scene editing, imported asset
 pipelines, animation graphs, physics, navigation, scripting, or large 3D worlds.
 Ingot supports two-dimensional games and an optional GPU 3D path for
 visualization, but does not aim to become a scene-graph engine or game editor.
+
+For performance, Ingot adds UI derivation, semantic output, platform services,
+and frame-pacing machinery beyond bare raylib, so applications should not assume
+those features are free. In return, it batches renderer-independent paint,
+reuses bounded storage, exposes renderer statistics, and can sleep without UI or
+GPU work. A full engine carries broader subsystems but may offer more advanced
+culling, streaming, profiling, and platform-specific optimization for complex
+scenes. Benchmark the required feature set rather than a minimal draw loop, and
+compare CPU and GPU frame time, memory, startup, idle behavior, and asset-loading
+costs on representative content.
 
 ## Decision checklist
 

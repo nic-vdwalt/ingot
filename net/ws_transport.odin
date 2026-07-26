@@ -1,89 +1,161 @@
 #+build !js
-// WebSocket transport seam. The worker thread (ws.odin) performs all socket
-// I/O through the ws_net_* procs below so a compile-gated simulated
-// transport (-define:INGOT_WS_SIM=true, ws_sim.odin) can replace the network
-// while keeping the REAL worker thread, mutexes, atomics, and backoff waits
-// — the reconnect fuzzer (fuzz/wsreconn) is thereby both a state-machine
-// fuzzer (ASan) and a race-detector target (TSan). Zero-cost passthroughs in
-// normal builds.
 package ingotnet
 
+import "core:c"
+import "core:fmt"
 import cnet "core:net"
+import "core:strings"
 import "core:time"
+import curl "vendor:curl"
 
 INGOT_WS_SIM :: #config(INGOT_WS_SIM, false)
 
-// WS_TIME_SCALE compresses backoff/liveness waits so a full simulated
-// reconnect cycle (dial retries + WS_RECONNECT_WAIT + WS_DEAD_AFTER) runs in
-// about a millisecond instead of tens of seconds. 1.0 (identity) on real
-// builds — the constant folds away.
 when INGOT_WS_SIM {
 	WS_TIME_SCALE :: 0.001
 } else {
 	WS_TIME_SCALE :: 1.0
 }
 
-// ws_scaled applies WS_TIME_SCALE to a duration, with a 1ms floor in sim
-// mode so cond_wait timeouts stay meaningful to the scheduler.
 ws_scaled :: proc(d: time.Duration) -> time.Duration {
 	when INGOT_WS_SIM {
-		s := time.Duration(f64(d) * WS_TIME_SCALE)
-		return max(s, time.Millisecond)
+		scaled := time.Duration(f64(d) * WS_TIME_SCALE)
+		return max(scaled, time.Millisecond)
 	} else {
 		return d
 	}
 }
 
-// Ws_Net_Err collapses platform network errors to what the worker's control
-// flow distinguishes: timeout (liveness probe path) vs everything else.
 Ws_Net_Err :: enum u8 {
 	None,
 	Timeout,
+	Cancelled,
+	TLS,
 	Other,
 }
 
-when !INGOT_WS_SIM {
-	// Native passthroughs to core:net.
+Ws_Transport_Kind :: enum u8 {
+	TCP,
+	TLS,
+}
 
+Ws_Transport :: struct {
+	kind:        Ws_Transport_Kind,
+	socket:      cnet.TCP_Socket,
+	curl_handle: ^curl.CURL,
+	open:        bool,
+}
+
+when !INGOT_WS_SIM {
 	ws_net_resolve :: proc(host: string, port: int) -> (cnet.Endpoint, bool) {
-		// Fast path: literal IP address.
 		if addr, ok := cnet.parse_ip4_address(host); ok {
 			return cnet.Endpoint{address = addr, port = port}, true
 		}
-		// DNS lookup.
-		ep, err := cnet.resolve_ip4(host)
-		if err != nil {
-			return {}, false
+		endpoint, err := cnet.resolve_ip4(host)
+		if err != nil do return {}, false
+		endpoint.port = port
+		return endpoint, true
+	}
+
+	ws_net_dial :: proc(endpoint: cnet.Endpoint) -> (Ws_Transport, Ws_Net_Err) {
+		socket, err := cnet.dial_tcp(endpoint)
+		if err != nil do return {}, .Other
+		return Ws_Transport{kind = .TCP, socket = socket, open = true}, .None
+	}
+
+	@(private = "file")
+	ws_tls_configure :: proc(
+		handle: ^curl.CURL,
+		host: string,
+		port: u16,
+		ca_file: string,
+		connect_timeout: time.Duration,
+	) -> bool {
+		url := fmt.tprintf("https://%s:%d/", host, port)
+		url_c, url_err := strings.clone_to_cstring(url, context.temp_allocator)
+		if url_err != nil do return false
+		if curl.easy_setopt(handle, .URL, url_c) != .E_OK do return false
+		if curl.easy_setopt(handle, .CONNECT_ONLY, c.long(1)) != .E_OK do return false
+		if curl.easy_setopt(handle, .SSL_VERIFYPEER, c.long(1)) != .E_OK do return false
+		if curl.easy_setopt(handle, .SSL_VERIFYHOST, c.long(2)) != .E_OK do return false
+		if curl.easy_setopt(handle, .DISALLOW_USERNAME_IN_URL, c.long(1)) != .E_OK do return false
+		milliseconds := c.long(connect_timeout / time.Millisecond)
+		if curl.easy_setopt(handle, .CONNECTTIMEOUT_MS, milliseconds) != .E_OK do return false
+		if ca_file != "" {
+			ca_c, ca_err := strings.clone_to_cstring(ca_file, context.temp_allocator)
+			if ca_err != nil do return false
+			if curl.easy_setopt(handle, .CAINFO, ca_c) != .E_OK do return false
 		}
-		ep.port = port
-		return ep, true
+		return true
 	}
 
-	ws_net_dial :: proc(ep: cnet.Endpoint) -> (cnet.TCP_Socket, bool) {
-		sock, err := cnet.dial_tcp(ep)
-		return sock, err == nil
-	}
-
-	ws_net_send :: proc(sock: cnet.TCP_Socket, data: []u8) -> (int, Ws_Net_Err) {
-		n, err := cnet.send(sock, data)
-		if err != nil do return n, .Other
-		return n, .None
-	}
-
-	ws_net_recv :: proc(sock: cnet.TCP_Socket, buf: []u8) -> (int, Ws_Net_Err) {
-		n, err := cnet.recv(sock, buf)
-		if err != nil {
-			if err == .Timeout || err == .Would_Block do return n, .Timeout
-			return n, .Other
+	ws_net_dial_tls :: proc(
+		host: string,
+		port: u16,
+		ca_file: string,
+		connect_timeout: time.Duration,
+	) -> (Ws_Transport, Ws_Net_Err) {
+		if !curl_initialize() do return {}, .TLS
+		handle := curl.easy_init()
+		if handle == nil do return {}, .TLS
+		if !ws_tls_configure(handle, host, port, ca_file, connect_timeout) {
+			curl.easy_cleanup(handle)
+			return {}, .TLS
 		}
-		return n, .None
+		result := curl.easy_perform(handle)
+		if result != .E_OK {
+			curl.easy_cleanup(handle)
+			if result == .E_OPERATION_TIMEDOUT do return {}, .Timeout
+			return {}, .TLS
+		}
+		return Ws_Transport{kind = .TLS, curl_handle = handle, open = true}, .None
 	}
 
-	ws_net_close :: proc(sock: cnet.TCP_Socket) {
-		cnet.close(sock)
+	ws_net_send :: proc(transport: ^Ws_Transport, data: []u8) -> (int, Ws_Net_Err) {
+		if transport == nil || !transport.open do return 0, .Other
+		if transport.kind == .TCP {
+			count, err := cnet.send(transport.socket, data)
+			if err != nil do return count, .Other
+			return count, .None
+		}
+		count: c.size_t
+		result := curl.easy_send(transport.curl_handle, raw_data(data), c.size_t(len(data)), &count)
+		if result == .E_AGAIN do return int(count), .Timeout
+		if result != .E_OK do return int(count), .Other
+		return int(count), .None
 	}
 
-	ws_net_set_recv_timeout :: proc(sock: cnet.TCP_Socket, d: time.Duration) {
-		_ = cnet.set_option(sock, .Receive_Timeout, d)
+	ws_net_recv :: proc(transport: ^Ws_Transport, buf: []u8) -> (int, Ws_Net_Err) {
+		if transport == nil || !transport.open do return 0, .Other
+		if transport.kind == .TCP {
+			count, err := cnet.recv(transport.socket, buf)
+			if err != nil {
+				if err == .Timeout || err == .Would_Block do return count, .Timeout
+				return count, .Other
+			}
+			return count, .None
+		}
+		count: c.size_t
+		result := curl.easy_recv(transport.curl_handle, raw_data(buf), c.size_t(len(buf)), &count)
+		if result == .E_AGAIN do return int(count), .Timeout
+		if result != .E_OK do return int(count), .Other
+		return int(count), .None
+	}
+
+	ws_net_close :: proc(transport: ^Ws_Transport) {
+		if transport == nil || !transport.open do return
+		transport.open = false
+		if transport.kind == .TCP {
+			cnet.close(transport.socket)
+		} else if transport.curl_handle != nil {
+			curl.easy_cleanup(transport.curl_handle)
+			transport.curl_handle = nil
+		}
+	}
+
+	ws_net_set_recv_timeout :: proc(transport: ^Ws_Transport, duration: time.Duration) {
+		if transport == nil || !transport.open do return
+		if transport.kind == .TCP {
+			_ = cnet.set_option(transport.socket, .Receive_Timeout, duration)
+		}
 	}
 }

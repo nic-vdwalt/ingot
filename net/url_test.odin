@@ -30,3 +30,30 @@ test_http_url_rejects_injection_and_downgrade :: proc(t: ^testing.T) {
 	_, downgrade := http_url_resolve(base, "http://example.com/")
 	testing.expect_value(t, downgrade, Http_Error.Redirect)
 }
+
+@(test)
+test_ws_url_parse_secure_and_plaintext :: proc(t: ^testing.T) {
+	secure, secure_err := ws_url_parse("wss://example.test/chat?room=1")
+	testing.expect_value(t, secure_err, WS_URL_Error.None)
+	testing.expect_value(t, secure.scheme, WS_Scheme.Wss)
+	testing.expect_value(t, secure.port, u16(443))
+	testing.expect_value(t, secure.path, "/chat?room=1")
+	plain, plain_err := ws_url_parse("ws://127.0.0.1:8080/ws")
+	testing.expect_value(t, plain_err, WS_URL_Error.None)
+	testing.expect_value(t, plain.port, u16(8080))
+}
+
+@(test)
+test_ws_url_parse_rejects_unsafe_authority_and_path :: proc(t: ^testing.T) {
+	invalid_urls := []string {
+		"http://example.test/ws",
+		"wss://user@example.test/ws",
+		"wss://example.test:0/ws",
+		"wss://example.test/ws#fragment",
+		"wss://example.test/\r\nInjected: yes",
+	}
+	for raw_url in invalid_urls {
+		_, err := ws_url_parse(raw_url)
+		testing.expect(t, err != .None)
+	}
+}

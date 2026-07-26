@@ -5,16 +5,15 @@
 // assertions can reach the embedder's crash reporter, which they otherwise
 // cannot because core:thread hands every worker a fresh
 // runtime.default_context().
-// Hand-rolled RFC 6455 WebSocket client (text frames, no TLS). The worker
-// thread runs dial + HTTP upgrade handshake + the recv loop; the main thread
-// polls a mutex-guarded queue.
+// Bounded RFC 6455 WebSocket client over plaintext TCP or verified TLS. The
+// worker thread runs dial + HTTP upgrade handshake + the recv loop; the main
+// thread polls a mutex-guarded queue.
 package ingotnet
 
 import "core:crypto"
 import "core:crypto/legacy/sha1"
 import "core:encoding/base64"
 import "core:fmt"
-import cnet "core:net"
 import "core:strings"
 import "core:sync"
 import "core:thread"
@@ -57,6 +56,25 @@ WS_MAX_QUEUED_BYTES :: 64 * 1024 * 1024
 WS_RECV_TIMEOUT :: 5 * time.Second
 WS_DEAD_AFTER :: 15 * time.Second
 WS_RECONNECT_WAIT :: 1 * time.Second
+WS_CONNECT_TIMEOUT :: 10 * time.Second
+WS_HANDSHAKE_TIMEOUT :: 5 * time.Second
+
+WS_Options :: struct {
+	max_attempts:      int,
+	connect_timeout:   time.Duration,
+	handshake_timeout: time.Duration,
+	ca_file:           string,
+}
+
+WS_Error :: enum u8 {
+	None,
+	Invalid_URL,
+	Resolve,
+	Connect,
+	TLS,
+	Handshake,
+	Cancelled,
+}
 
 // Thread-safe message queue entry for received WebSocket messages.
 WS_Message :: struct {
@@ -263,19 +281,24 @@ ws_encode_frame :: proc(
 }
 
 WebSocket :: struct {
-	// Socket lifecycle is shared between the worker thread (dial/assign) and
-	// ws_close on the main thread (close). sock_mutex guards socket +
-	// socket_open so a close cannot race the worker storing a fresh socket.
-	socket:           cnet.TCP_Socket,
+	// Transport lifecycle is shared between the worker and ws_close. TLS handles
+	// remain worker-owned; ws_close signals cancellation and joins the worker.
+	transport:        Ws_Transport,
 	socket_open:      bool,
 	sock_mutex:       sync.Mutex,
 
 	// Written by the worker thread, read by the main thread — always access
 	// with sync.atomic_load / atomic_store (ws_state is the public read).
-	state:            WS_State,
-	host:             string,
-	port:             int,
-	max_attempts:     int,
+	state:             WS_State,
+	last_error:        WS_Error,
+	host:              string,
+	port:              int,
+	path:              string,
+	secure:            bool,
+	ca_file:           string,
+	connect_timeout:   time.Duration,
+	handshake_timeout: time.Duration,
+	max_attempts:      int,
 
 	// Self-healing: the worker re-dials on every drop until ws_close, so the
 	// thread lives for the whole session. conn_gen is bumped on each successful
@@ -331,25 +354,49 @@ ws_init :: proc() -> WebSocket {
 // thread: on Windows, connect() to a loopback port that is not listening yet
 // takes ~0.5-1s per attempt, which would freeze the UI.
 ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: int) {
-	ws.host = host
-	ws.port = port
-	ws.max_attempts = max_attempts
+	url := fmt.tprintf("ws://%s:%d/ws", host, port)
+	_ = ws_start_connect_url(ws, url, WS_Options{max_attempts = max_attempts})
+}
+
+ws_start_connect_url :: proc(
+	ws: ^WebSocket,
+	raw_url: string,
+	options: WS_Options = {},
+) -> bool {
+	parsed, parse_err := ws_url_parse(raw_url)
+	if parse_err != .None {
+		sync.atomic_store(&ws.last_error, WS_Error.Invalid_URL)
+		sync.atomic_store(&ws.state, WS_State.Error)
+		return false
+	}
+	ws.host = parsed.host
+	ws.port = int(parsed.port)
+	ws.path = parsed.path
+	ws.secure = parsed.scheme == .Wss
+	ws.ca_file = options.ca_file
+	ws.connect_timeout = options.connect_timeout
+	if ws.connect_timeout <= 0 do ws.connect_timeout = WS_CONNECT_TIMEOUT
+	ws.handshake_timeout = options.handshake_timeout
+	if ws.handshake_timeout <= 0 do ws.handshake_timeout = WS_HANDSHAKE_TIMEOUT
+	ws.max_attempts = max(options.max_attempts, 1)
 	ws.auto_reconnect = true
 	ws.conn_gen = 0
+	sync.atomic_store(&ws.last_error, WS_Error.None)
 	sync.atomic_store(&ws.state, WS_State.Connecting)
 	sync.atomic_store(&ws.running, true)
-
 	ws.recv_thread = thread.create(proc(t: ^thread.Thread) {
 		context.assertion_failure_proc = threadhook.install(context.assertion_failure_proc)
 		ws_connect_worker(cast(^WebSocket)t.data)
 	})
 	if ws.recv_thread == nil {
 		sync.atomic_store(&ws.running, false)
+		sync.atomic_store(&ws.last_error, WS_Error.Connect)
 		sync.atomic_store(&ws.state, WS_State.Error)
-		return
+		return false
 	}
 	ws.recv_thread.data = ws
 	thread.start(ws.recv_thread)
+	return true
 }
 
 // Resolve a host string (dotted quad or DNS name) + port into an endpoint.
@@ -426,39 +473,49 @@ ws_enqueue :: proc(ws: ^WebSocket, data: string, binary: bool) {
 @(private = "file")
 ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
 	for attempt := 0; attempt < ws.max_attempts && sync.atomic_load(&ws.running); attempt += 1 {
-		addr, resolved := ws_net_resolve(ws.host, ws.port)
-		if !resolved {
-			ws_stop_wait(ws, 200 * time.Millisecond)
-			continue
+		transport: Ws_Transport
+		net_err: Ws_Net_Err
+		if ws.secure {
+			transport, net_err = ws_net_dial_tls(
+				ws.host,
+				u16(ws.port),
+				ws.ca_file,
+				ws.connect_timeout,
+			)
+		} else {
+			address, resolved := ws_net_resolve(ws.host, ws.port)
+			if !resolved {
+				sync.atomic_store(&ws.last_error, WS_Error.Resolve)
+				ws_stop_wait(ws, 200 * time.Millisecond)
+				continue
+			}
+			transport, net_err = ws_net_dial(address)
 		}
-		sock, dialed := ws_net_dial(addr)
-		if !dialed {
+		if net_err != .None {
+			error_value := WS_Error.TLS if net_err == .TLS else WS_Error.Connect
+			sync.atomic_store(&ws.last_error, error_value)
+			if net_err == .TLS do return false
 			ws_stop_wait(ws, 50 * time.Millisecond)
 			continue
 		}
-
-		// Publish the socket so ws_close can close it to unblock a recv.
 		sync.mutex_lock(&ws.sock_mutex)
 		if !sync.atomic_load(&ws.running) {
 			sync.mutex_unlock(&ws.sock_mutex)
-			ws_net_close(sock)
+			ws_net_close(&transport)
 			return false
 		}
-		ws.socket = sock
+		ws.transport = transport
 		ws.socket_open = true
 		sync.mutex_unlock(&ws.sock_mutex)
-
-		if ws_handshake(ws, sock) {
-			// Live read deadline: ws_handshake resets the socket to blocking
-			// after the 101 response, so re-arm it here for the recv loop.
-			ws_net_set_recv_timeout(sock, WS_RECV_TIMEOUT)
+		if ws_handshake(ws, &ws.transport) {
+			ws_net_set_recv_timeout(&ws.transport, WS_RECV_TIMEOUT)
+			sync.atomic_store(&ws.last_error, WS_Error.None)
 			return true
 		}
-
-		// Handshake failed: retract the socket and retry.
+		sync.atomic_store(&ws.last_error, WS_Error.Handshake)
 		sync.mutex_lock(&ws.sock_mutex)
 		if ws.socket_open {
-			ws_net_close(ws.socket)
+			ws_net_close(&ws.transport)
 			ws.socket_open = false
 		}
 		sync.mutex_unlock(&ws.sock_mutex)
@@ -478,9 +535,11 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 		ws_set_state(ws, first ? .Connecting : .Reconnecting)
 
 		if !ws_dial_and_handshake(ws) {
-			if !ws.auto_reconnect || !sync.atomic_load(&ws.running) {
+			if sync.atomic_load(&ws.last_error) == .TLS {
+				ws_set_state(ws, .Error)
 				break
 			}
+			if !ws.auto_reconnect || !sync.atomic_load(&ws.running) do break
 			ws_stop_wait(ws, WS_RECONNECT_WAIT)
 			continue
 		}
@@ -499,7 +558,7 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 		// Retract the dropped socket before the next dial cycle.
 		sync.mutex_lock(&ws.sock_mutex)
 		if ws.socket_open {
-			ws_net_close(ws.socket)
+			ws_net_close(&ws.transport)
 			ws.socket_open = false
 		}
 		sync.mutex_unlock(&ws.sock_mutex)
@@ -521,37 +580,34 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 // Send the HTTP upgrade request and validate the 101 response, including the
 // Sec-WebSocket-Accept header (base64(sha1(key + RFC 6455 GUID))).
 @(private = "file")
-ws_handshake :: proc(ws: ^WebSocket, sock: cnet.TCP_Socket) -> bool {
+ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
 	key := generate_ws_key()
 	if len(key) == 0 do return false
+	default_port := (ws.secure && ws.port == 443) || (!ws.secure && ws.port == 80)
+	host_value := ws.host
+	if !default_port do host_value = fmt.tprintf("%s:%d", ws.host, ws.port)
 	request := fmt.tprintf(
-		"GET /ws HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\n" +
+		"GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\n" +
 		"Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\n" +
 		"Sec-WebSocket-Version: 13\r\n\r\n",
-		ws.host,
-		ws.port,
+		ws.path,
+		host_value,
 		key,
 	)
-
 	request_bytes := transmute([]u8)request
-	if _, send_err := ws_net_send(sock, request_bytes); send_err != .None {
-		return false
+	total := 0
+	for total < len(request_bytes) {
+		count, send_err := ws_net_send(transport, request_bytes[total:])
+		if send_err != .None || count <= 0 do return false
+		total += count
 	}
-
-	// Bound the wait for the 101 response so a wedged server cannot park the
-	// worker forever; restore blocking mode for the recv loop afterward.
-	ws_net_set_recv_timeout(sock, 2 * time.Second)
+	ws_net_set_recv_timeout(transport, ws.handshake_timeout)
 	buf: [2048]u8
-	n, recv_err := ws_net_recv(sock, buf[:])
-	ws_net_set_recv_timeout(sock, time.Duration(0))
-	if recv_err != .None || n == 0 {
-		return false
-	}
-
-	response := string(buf[:n])
-	if !strings.contains(response, " 101 ") && !strings.has_prefix(response, "HTTP/1.1 101") {
-		return false
-	}
+	count, recv_err := ws_net_recv(transport, buf[:])
+	ws_net_set_recv_timeout(transport, time.Duration(0))
+	if recv_err != .None || count == 0 do return false
+	response := string(buf[:count])
+	if !strings.has_prefix(response, "HTTP/1.1 101") do return false
 	return strings.contains(response, ws_accept_for_key(key))
 }
 
@@ -588,7 +644,7 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 
 	last_activity := time.now()
 	for sync.atomic_load(&ws.running) {
-		n, err := ws_net_recv(ws.socket, scratch[:])
+		n, err := ws_net_recv(&ws.transport, scratch[:])
 		if err != .None {
 			// A recv timeout is not a disconnect: probe liveness with a PING
 			// (the server auto-replies PONG, counted as activity below) and
@@ -697,7 +753,7 @@ ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
 	// whole frame is sent so the server never sees a truncated frame.
 	total := 0
 	for total < len(frame) {
-		n, err := ws_net_send(ws.socket, frame[total:])
+		n, err := ws_net_send(&ws.transport, frame[total:])
 		if err != .None do return false
 		if n <= 0 do return false
 		total += n
@@ -765,8 +821,8 @@ ws_close :: proc(ws: ^WebSocket) {
 	}
 
 	sync.mutex_lock(&ws.sock_mutex)
-	if ws.socket_open {
-		ws_net_close(ws.socket)
+	if ws.socket_open && ws.transport.kind == .TCP {
+		ws_net_close(&ws.transport)
 		ws.socket_open = false
 	}
 	sync.mutex_unlock(&ws.sock_mutex)

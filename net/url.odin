@@ -42,6 +42,28 @@ Http_Timeouts :: struct {
 	total:         time.Duration,
 }
 
+WS_Scheme :: enum u8 {
+	Ws,
+	Wss,
+}
+
+WS_URL :: struct {
+	scheme:        WS_Scheme,
+	host:          string,
+	port:          u16,
+	explicit_port: bool,
+	path:          string,
+}
+
+WS_URL_Error :: enum u8 {
+	None,
+	Invalid_Scheme,
+	Invalid_Host,
+	Invalid_Port,
+	Invalid_Path,
+	Credentials_Forbidden,
+}
+
 Http_Parser_Limits :: struct {
 	maximum_status_line_bytes: u64,
 	maximum_header_bytes:      u64,
@@ -141,6 +163,54 @@ http_url_resolve :: proc(base: Http_URL, location: string) -> (Http_URL, Http_Er
 	resolved := base
 	resolved.request_target = location
 	return resolved, .None
+}
+
+ws_url_parse :: proc(raw: string) -> (url: WS_URL, err: WS_URL_Error) {
+	if len(raw) == 0 || strings.contains(raw, "\r") || strings.contains(raw, "\n") ||
+	   strings.contains(raw, "\x00") {
+		return {}, .Invalid_Path
+	}
+	rest := raw
+	if strings.has_prefix(rest, "ws://") {
+		url.scheme = .Ws
+		url.port = 80
+		rest = rest[5:]
+	} else if strings.has_prefix(rest, "wss://") {
+		url.scheme = .Wss
+		url.port = 443
+		rest = rest[6:]
+	} else {
+		return {}, .Invalid_Scheme
+	}
+	if strings.contains(rest, "#") do return {}, .Invalid_Path
+	target_index := strings.index(rest, "/")
+	query_index := strings.index(rest, "?")
+	if target_index < 0 || (query_index >= 0 && query_index < target_index) do target_index = query_index
+	authority := rest
+	url.path = "/"
+	if target_index >= 0 {
+		authority = rest[:target_index]
+		url.path = rest[target_index:]
+		if url.path[0] == '?' {
+			url.path = strings.concatenate({"/", url.path}, context.temp_allocator)
+		}
+	}
+	if strings.contains(authority, "@") do return {}, .Credentials_Forbidden
+	if len(authority) == 0 do return {}, .Invalid_Host
+	colon := strings.last_index(authority, ":")
+	if colon >= 0 {
+		if strings.index(authority[:colon], ":") >= 0 do return {}, .Invalid_Host
+		port, ok := strconv.parse_u64(authority[colon + 1:])
+		if !ok || port == 0 || port > 65535 do return {}, .Invalid_Port
+		url.host = authority[:colon]
+		url.port = u16(port)
+		url.explicit_port = true
+	} else {
+		url.host = authority
+	}
+	if len(url.host) == 0 || strings.contains(url.host, " ") do return {}, .Invalid_Host
+	if len(url.path) == 0 || url.path[0] != '/' do return {}, .Invalid_Path
+	return url, .None
 }
 
 query_component_encode :: proc(value: string, allocator := context.temp_allocator) -> string {

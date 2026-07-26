@@ -21,7 +21,7 @@ g_curl_mutex: sync.Mutex
 @(private = "file")
 g_curl_initialized: bool
 
-@(private = "file")
+@(private)
 curl_initialize :: proc() -> bool {
 	sync.mutex_lock(&g_curl_mutex)
 	defer sync.mutex_unlock(&g_curl_mutex)
