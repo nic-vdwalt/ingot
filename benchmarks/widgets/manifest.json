@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "suite": "ingot-widget-scale",
+  "viewport": {"width": 1280, "height": 720, "scale_factor": 1.0},
+  "collection": {"warmup_frames": 300, "measured_frames": 2000, "repetitions": 7, "native_seconds": 10, "idle_seconds": 30},
+  "toolchains": {
+    "odin": "dev-2026-06:285f6d87b",
+    "cpp": "c++17",
+    "rust": "1.90.0"
+  },
+  "frameworks": {
+    "ingot": {"revision": "workspace", "core_backend": "headless", "native_backend": "wgpu-native"},
+    "imgui": {"repository": "https://github.com/ocornut/imgui", "tag": "v1.92.1", "revision": "5d4126876bc10396d4c6511853ff10964414c776", "core_backend": "headless", "native_backend": "metal"},
+    "egui": {"repository": "https://github.com/emilk/egui", "tag": "0.32.3", "revision": "f2ab57d6987a9b7984f0637cc4d9f2fd173c507c", "core_backend": "headless", "native_backend": "wgpu"}
+  },
+  "font": {
+    "path": "assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf",
+    "sha256": "f01031f40e48dc29e1112e6b0b0450a2c6cd097f3f35cfff05c55cb311f8034c"
+  },
+  "result_schema": "spec/result.schema.json",
+  "workloads": "spec/workloads.json",
+  "trace": "spec/trace.json"
+}

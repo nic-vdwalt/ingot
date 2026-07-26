@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "frames": [
+    {"frame": 0, "pointer": [15, 15], "buttons": [], "wheel": [0, 0], "keys": [], "text": "", "scroll_row": 0, "expected_state": 1469598103934665603},
+    {"frame": 1, "pointer": [15, 15], "buttons": ["left_pressed"], "wheel": [0, 0], "keys": [], "text": "", "scroll_row": 0, "expected_state": 4953162257141659110},
+    {"frame": 2, "pointer": [15, 15], "buttons": ["left_released"], "wheel": [0, 0], "keys": [], "text": "", "scroll_row": 0, "expected_state": 4953162257141659110},
+    {"frame": 3, "pointer": [100, 100], "buttons": [], "wheel": [0, -3], "keys": [], "text": "", "scroll_row": 37, "expected_state": 4953162257141659110},
+    {"frame": 4, "pointer": [100, 100], "buttons": [], "wheel": [0, 0], "keys": ["tab"], "text": "", "scroll_row": 37, "expected_state": 4953162257141659110},
+    {"frame": 5, "pointer": [180, 140], "buttons": ["left_pressed"], "wheel": [0, 0], "keys": [], "text": "bench", "scroll_row": 999960, "expected_state": 11172354264465555238}
+  ],
+  "checksum": {"algorithm": "fnv1a64", "basis": 1469598103934665603, "prime": 1099511628211}
+}

@@ -1,5 +1,13 @@
 package ui
 
+Ui_Frame_Output_Stats :: struct {
+	main_command_count:    i32,
+	main_text_bytes:       i32,
+	overlay_command_count: i32,
+	overlay_text_bytes:    i32,
+	semantic_node_count:   i32,
+}
+
 Ui_Frame_Diagnostics :: struct {
 	input_characters_dropped:   i32,
 	degenerate_widgets_dropped: i32,
@@ -13,6 +21,21 @@ Ui_Frame_Diagnostics :: struct {
 	overlay_commands_dropped:   i32,
 	overlay_text_bytes_dropped: i32,
 	platform_controls_dropped:  i32,
+}
+
+ui_frame_output_stats :: proc(frame: ^Ui_Frame) -> Ui_Frame_Output_Stats {
+	assert(frame != nil && frame.open, "ui_frame_output_stats: invalid frame")
+	assert(frame.finalized, "ui_frame_output_stats: frame not finalized")
+	result := Ui_Frame_Output_Stats {
+		semantic_node_count = i32(frame.semantics.cur.count),
+	}
+	if frame.output != nil {
+		result.main_command_count = i32(frame.output.main.count)
+		result.main_text_bytes = i32(frame.output.main.text_len)
+		result.overlay_command_count = i32(frame.output.overlay.count)
+		result.overlay_text_bytes = i32(frame.output.overlay.text_len)
+	}
+	return result
 }
 
 ui_frame_diagnostics :: proc(frame: ^Ui_Frame) -> Ui_Frame_Diagnostics {

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Widget benchmark result",
+  "type": "object",
+  "required": ["schema_version", "framework", "framework_revision", "backend", "layer", "workload", "scale", "repetition", "warmup_frames", "measured_frames", "valid", "state_checksum", "samples_ns", "output", "environment"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "framework": {"enum": ["ingot", "imgui", "egui"]},
+    "framework_revision": {"type": "string", "minLength": 1},
+    "backend": {"type": "string", "minLength": 1},
+    "layer": {"enum": ["core", "native", "idle_continuous", "idle_event_driven"]},
+    "workload": {"type": "string", "minLength": 1},
+    "scale": {"type": "integer", "minimum": 1},
+    "repetition": {"type": "integer", "minimum": 0},
+    "warmup_frames": {"type": "integer", "minimum": 0},
+    "measured_frames": {"type": "integer", "minimum": 1},
+    "valid": {"type": "boolean"},
+    "invalid_reason": {"type": "string"},
+    "state_checksum": {"type": "integer", "minimum": 0},
+    "samples_ns": {"type": "object", "required": ["build", "finalize", "frame"], "properties": {"build": {"type": "array", "items": {"type": "integer", "minimum": 0}}, "finalize": {"type": "array", "items": {"type": "integer", "minimum": 0}}, "frame": {"type": "array", "items": {"type": "integer", "minimum": 0}}}},
+    "output": {"type": "object", "required": ["submitted_widgets", "visible_widgets", "paint_commands", "text_bytes", "dropped_commands", "dropped_text_bytes"], "properties": {"submitted_widgets": {"type": "integer", "minimum": 0}, "visible_widgets": {"type": "integer", "minimum": 0}, "paint_commands": {"type": "integer", "minimum": 0}, "text_bytes": {"type": "integer", "minimum": 0}, "dropped_commands": {"type": "integer", "minimum": 0}, "dropped_text_bytes": {"type": "integer", "minimum": 0}}},
+    "environment": {"type": "object", "required": ["os", "arch", "cpu", "toolchain"], "properties": {"os": {"type": "string"}, "arch": {"type": "string"}, "cpu": {"type": "string"}, "toolchain": {"type": "string"}}}
+  }
+}

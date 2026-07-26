@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "seed": 12648430,
+  "label_repeated": "Widget",
+  "label_format": "Widget %08d",
+  "table_columns": ["Name", "State", "Value", "Updated"],
+  "row_height": 18,
+  "button_size": [96, 24],
+  "virtual_visible_rows": 40,
+  "virtual_overscan": 2
+}
