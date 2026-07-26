@@ -18,18 +18,18 @@ drop_lifecycle_is_bounded_and_consumed :: proc(t: ^testing.T) {
 
 	paths := [2]string{"/tmp/one", "/tmp/two"}
 	testing.expect(t, _drop_paths_replace(paths[:]))
-	testing.expect_value(t, len(g_drop_paths), 2)
+	testing.expect_value(t, len(g.drop.paths), 2)
 	files := LoadDroppedFiles()
 	testing.expect_value(t, files.count, u32(2))
 	testing.expect(t, IsFileDropped())
 	UnloadDroppedFiles(files)
-	testing.expect_value(t, len(g_drop_paths), 0)
+	testing.expect_value(t, len(g.drop.paths), 0)
 	testing.expect(t, !IsFileDropped())
 
 	too_large := make([]u8, MAX_DROPPED_PATH_BYTES + 1, context.temp_allocator)
 	overflow := [1]string{string(too_large)}
 	testing.expect(t, !_drop_paths_replace(overflow[:]))
-	testing.expect_value(t, len(g_drop_paths), 0)
+	testing.expect_value(t, len(g.drop.paths), 0)
 	testing.expect(t, !IsFileDropped())
 
 	_drop_hover_stage(true)

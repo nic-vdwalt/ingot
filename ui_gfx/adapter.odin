@@ -12,6 +12,7 @@ FONT_CAP :: 64
 Adapter :: struct {
 	gfx_context:      ^rl.Context,
 	gfx_epoch:        u64,
+	gfx_frame:        ^rl.Frame,
 	fonts:            [FONT_CAP]rl.Font,
 	font_sizes:       [FONT_CAP]i32,
 	font_count:       int,
@@ -67,6 +68,7 @@ adapter_attach_runtime :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime) {
 
 adapter_destroy :: proc(adapter: ^Adapter) {
 	assert(adapter != nil && adapter.initialized, "adapter_destroy: invalid adapter")
+	assert(adapter.gfx_frame == nil, "adapter_destroy: graphics frame still bound")
 	adapter_a11y_destroy(adapter)
 	adapter_reset_fonts(adapter)
 	delete(adapter.font_codepoints)
@@ -77,6 +79,8 @@ adapter_paint_sink :: proc(list: ^ui.Paint_List, command: ui.Paint_Command, user
 	adapter := (^Adapter)(userdata)
 	assert(adapter != nil && adapter.initialized, "adapter_paint_sink: invalid adapter")
 	assert(list != nil, "adapter_paint_sink: nil list")
+	scope := rl.context_scope_enter(adapter.gfx_context)
+	defer rl.context_scope_leave(&scope)
 	replay_command(adapter, list, command)
 }
 
@@ -97,10 +101,6 @@ adapter_prepare_frame :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime, input:
 	assert(
 		adapter.gfx_epoch == rl.context_epoch(adapter.gfx_context),
 		"adapter_prepare_frame: stale graphics context",
-	)
-	assert(
-		adapter.gfx_context == rl.default_context(),
-		"adapter_prepare_frame: context routing unavailable",
 	)
 	assert(runtime != nil && input != nil, "adapter_prepare_frame: nil argument")
 	capture_input_context(adapter.gfx_context, input)
@@ -130,6 +130,14 @@ adapter_open_frame :: proc(
 	adapter_a11y_poll(adapter, frame)
 }
 
+adapter_bind_frame :: proc(adapter: ^Adapter, gfx_frame: ^rl.Frame) {
+	assert(adapter != nil && adapter.initialized, "adapter_bind_frame: invalid adapter")
+	assert(gfx_frame != nil, "adapter_bind_frame: nil frame")
+	assert(rl.frame_context(gfx_frame) == adapter.gfx_context, "adapter_bind_frame: owner mismatch")
+	assert(adapter.gfx_frame == nil, "adapter_bind_frame: frame already bound")
+	adapter.gfx_frame = gfx_frame
+}
+
 adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	assert(adapter != nil && adapter.initialized, "adapter_end_frame: invalid adapter")
 	assert(
@@ -140,8 +148,11 @@ adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	output := frame.output
 	ui.ui_frame_finalize(frame)
 	adapter_a11y_publish(adapter, frame)
+	scope := rl.context_scope_enter(adapter.gfx_context)
 	replay_list(adapter, &output.overlay)
+	rl.context_scope_leave(&scope)
 	apply_platform_output_context(adapter.gfx_context, &output.platform)
 	ui.paint_list_set_sink(&output.main, nil, nil)
 	ui.ui_frame_release(frame)
+	adapter.gfx_frame = nil
 }

@@ -19,6 +19,8 @@ import wgglue "vendor:wgpu/glfwglue"
 // struct) so Input carries no glfw type.
 @(private)
 g_cursors: [11]glfw.CursorHandle
+@(private)
+glfw_live_windows: u32
 
 // Monotonic clock epoch for platform_now(); the caller-side offset cancels, so
 // this only needs to be a stable monotonic base.
@@ -35,22 +37,19 @@ _win :: proc "contextless" () -> glfw.WindowHandle {
 
 @(private)
 platform_create_window :: proc(width, height: i32, title: cstring, flags: ConfigFlags) -> bool {
-	if !glfw.Init() {
-		return false
-	}
+	if glfw_live_windows == 0 && !glfw.Init() do return false
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 	glfw.WindowHint(glfw.RESIZABLE, .WINDOW_RESIZABLE in flags ? 1 : 0)
-	if .WINDOW_TRANSPARENT in flags {
-		glfw.WindowHint(glfw.TRANSPARENT_FRAMEBUFFER, 1)
-	}
-	if .WINDOW_UNDECORATED in flags {
-		glfw.WindowHint(glfw.DECORATED, 0)
-	}
+	glfw.WindowHint(glfw.TRANSPARENT_FRAMEBUFFER, .WINDOW_TRANSPARENT in flags ? 1 : 0)
+	glfw.WindowHint(glfw.DECORATED, .WINDOW_UNDECORATED in flags ? 0 : 1)
 	win := glfw.CreateWindow(width, height, title, nil, nil)
 	if win == nil {
+		if glfw_live_windows == 0 do glfw.Terminate()
 		return false
 	}
 	g.win = Window_Handle(win)
+	glfw.SetWindowUserPointer(win, g)
+	glfw_live_windows += 1
 	return true
 }
 
@@ -136,7 +135,7 @@ platform_wait_events :: proc(timeout: f64) {
 // (GLFW documents PostEmptyEvent as callable from any thread).
 @(private)
 platform_wake :: proc "contextless" () {
-	if g.win != nil do glfw.PostEmptyEvent()
+	if glfw_live_windows > 0 do glfw.PostEmptyEvent()
 }
 
 @(private)
@@ -147,8 +146,20 @@ platform_window_iconified :: proc() -> bool {
 
 @(private)
 platform_terminate :: proc() {
-	if g.win != nil do glfw.DestroyWindow(_win())
-	glfw.Terminate()
+	if g.win != nil {
+		glfw.SetWindowUserPointer(_win(), nil)
+		glfw.DestroyWindow(_win())
+		g.win = nil
+		assert(glfw_live_windows > 0, "platform_terminate: window count underflow")
+		glfw_live_windows -= 1
+	}
+	if glfw_live_windows == 0 {
+		for &cursor in g_cursors {
+			if cursor != nil do glfw.DestroyCursor(cursor)
+			cursor = nil
+		}
+		glfw.Terminate()
+	}
 }
 
 // platform_now returns a monotonic time in seconds. gfx stores the value at
@@ -220,17 +231,19 @@ platform_input_init :: proc() {
 	glfw.SetWindowIconifyCallback(_win(), _iconify_cb)
 	glfw.SetFramebufferSizeCallback(_win(), _fb_size_cb)
 
-	g_cursors[MouseCursor.DEFAULT] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
-	g_cursors[MouseCursor.ARROW] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
-	g_cursors[MouseCursor.IBEAM] = glfw.CreateStandardCursor(glfw.IBEAM_CURSOR)
-	g_cursors[MouseCursor.CROSSHAIR] = glfw.CreateStandardCursor(glfw.CROSSHAIR_CURSOR)
-	g_cursors[MouseCursor.POINTING_HAND] = glfw.CreateStandardCursor(glfw.POINTING_HAND_CURSOR)
-	g_cursors[MouseCursor.RESIZE_EW] = glfw.CreateStandardCursor(glfw.RESIZE_EW_CURSOR)
-	g_cursors[MouseCursor.RESIZE_NS] = glfw.CreateStandardCursor(glfw.RESIZE_NS_CURSOR)
-	g_cursors[MouseCursor.RESIZE_NWSE] = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
-	g_cursors[MouseCursor.RESIZE_NESW] = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
-	g_cursors[MouseCursor.RESIZE_ALL] = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
-	g_cursors[MouseCursor.NOT_ALLOWED] = glfw.CreateStandardCursor(glfw.NOT_ALLOWED_CURSOR)
+	if g_cursors[MouseCursor.DEFAULT] == nil {
+		g_cursors[MouseCursor.DEFAULT] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
+		g_cursors[MouseCursor.ARROW] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
+		g_cursors[MouseCursor.IBEAM] = glfw.CreateStandardCursor(glfw.IBEAM_CURSOR)
+		g_cursors[MouseCursor.CROSSHAIR] = glfw.CreateStandardCursor(glfw.CROSSHAIR_CURSOR)
+		g_cursors[MouseCursor.POINTING_HAND] = glfw.CreateStandardCursor(glfw.POINTING_HAND_CURSOR)
+		g_cursors[MouseCursor.RESIZE_EW] = glfw.CreateStandardCursor(glfw.RESIZE_EW_CURSOR)
+		g_cursors[MouseCursor.RESIZE_NS] = glfw.CreateStandardCursor(glfw.RESIZE_NS_CURSOR)
+		g_cursors[MouseCursor.RESIZE_NWSE] = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
+		g_cursors[MouseCursor.RESIZE_NESW] = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
+		g_cursors[MouseCursor.RESIZE_ALL] = glfw.CreateStandardCursor(glfw.RESIZE_ALL_CURSOR)
+		g_cursors[MouseCursor.NOT_ALLOWED] = glfw.CreateStandardCursor(glfw.NOT_ALLOWED_CURSOR)
+	}
 
 	mx, my := glfw.GetCursorPos(_win())
 	g.inp.mouse = {f32(mx), f32(my)}
@@ -408,34 +421,64 @@ platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {
 }
 
 // --- GLFW input callbacks --------------------------------------------------
-// Fill the shared Input queues/edge state; read by the app on the next frame.
+// Fill the owning window's staging queues; read by that context on its next frame.
+
+@(private)
+_callback_context :: proc "contextless" (win: glfw.WindowHandle) -> ^Context {
+	if win == nil do return nil
+	return cast(^Context)glfw.GetWindowUserPointer(win)
+}
+
+@(private)
+_stage_key :: proc "contextless" (inp: ^Input, key: KeyboardKey) {
+	if inp == nil do return
+	nt := (inp.st_key_t + 1) % CHAR_Q
+	if nt == inp.st_key_h do return
+	inp.st_key_q[inp.st_key_t] = key
+	inp.st_key_t = nt
+}
+
+@(private)
+_stage_char :: proc "contextless" (inp: ^Input, value: rune) {
+	if inp == nil do return
+	nt := (inp.st_char_t + 1) % CHAR_Q
+	if nt == inp.st_char_h do return
+	inp.st_char_q[inp.st_char_t] = value
+	inp.st_char_t = nt
+}
 
 @(private)
 _key_cb :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: i32) {
-	_idle_note_activity(&g.idle)
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
 	if key < 0 || key >= KEY_COUNT do return
 	switch action {
 	case glfw.PRESS:
-		g.inp.pressed[key] = true
-		_push_key(KeyboardKey(key))
+		ctx.inp.st_pressed[key] = true
+		_stage_key(&ctx.inp, KeyboardKey(key))
 	case glfw.RELEASE:
-		g.inp.released[key] = true
+		ctx.inp.st_released[key] = true
 	case glfw.REPEAT:
-		g.inp.repeat[key] = true
+		ctx.inp.st_repeat[key] = true
 	}
 }
 
 @(private)
 _char_cb :: proc "c" (win: glfw.WindowHandle, codepoint: rune) {
-	_idle_note_activity(&g.idle)
-	_push_char(codepoint)
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
+	_stage_char(&ctx.inp, codepoint)
 }
 
 @(private)
 _scroll_cb :: proc "c" (win: glfw.WindowHandle, xoffset, yoffset: f64) {
-	_idle_note_activity(&g.idle)
-	g.inp.wheel_pending.x += f32(xoffset)
-	g.inp.wheel_pending.y += f32(yoffset)
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
+	ctx.inp.st_wheel.x += f32(xoffset)
+	ctx.inp.st_wheel.y += f32(yoffset)
 }
 
 // The callbacks below carry no input state (their data is polled per frame);
@@ -443,34 +486,37 @@ _scroll_cb :: proc "c" (win: glfw.WindowHandle, xoffset, yoffset: f64) {
 
 @(private)
 _cursor_pos_cb :: proc "c" (win: glfw.WindowHandle, xpos, ypos: f64) {
-	_idle_note_activity(&g.idle)
+	if ctx := _callback_context(win); ctx != nil do _idle_note_activity(&ctx.idle)
 }
 
 @(private)
 _mouse_button_cb :: proc "c" (win: glfw.WindowHandle, button, action, mods: i32) {
-	_idle_note_activity(&g.idle)
+	if ctx := _callback_context(win); ctx != nil do _idle_note_activity(&ctx.idle)
 }
 
 @(private)
 _refresh_cb :: proc "c" (win: glfw.WindowHandle) {
-	_idle_note_activity(&g.idle)
+	if ctx := _callback_context(win); ctx != nil do _idle_note_activity(&ctx.idle)
 }
 
 @(private)
 _focus_cb :: proc "c" (win: glfw.WindowHandle, focused: i32) {
-	_idle_note_activity(&g.idle)
-	if focused == 0 && !g_drop_hover_staged do _drop_hover_stage(false)
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
 }
 
 @(private)
 _iconify_cb :: proc "c" (win: glfw.WindowHandle, iconified: i32) {
-	_idle_note_activity(&g.idle)
-	if iconified != 0 do _drop_hover_stage(false)
+	if ctx := _callback_context(win); ctx != nil do _idle_note_activity(&ctx.idle)
 }
 
 @(private)
 _fb_size_cb :: proc "c" (win: glfw.WindowHandle, width, height: i32) {
-	_idle_note_activity(&g.idle)
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	ctx.force_reconfigure = true
+	_idle_note_activity(&ctx.idle)
 }
 
 // --- frame loop ------------------------------------------------------------

@@ -38,8 +38,12 @@ Texture_Resources :: struct {
 }
 
 @(private)
-_texture_register :: proc(resources: ^Texture_Resources, entry: ^Tex_Entry) -> u32 {
-	assert(resources != nil && entry != nil, "_texture_register: invalid arguments")
+_texture_register_context :: proc(
+	context_id: u32,
+	resources: ^Texture_Resources,
+	entry: ^Tex_Entry,
+) -> u32 {
+	assert(resources != nil && entry != nil, "_texture_register_context: invalid arguments")
 	if resources.count >= MAX_TEXTURES do return 0
 	for &slot, index in resources.slots {
 		if slot.occupied do continue
@@ -47,17 +51,30 @@ _texture_register :: proc(resources: ^Texture_Resources, entry: ^Tex_Entry) -> u
 		slot.entry = entry
 		slot.occupied = true
 		resources.count += 1
-		return TEX_ID_BASE | _resource_handle_make(index, slot.generation)
+		handle := _resource_handle_make_context(context_id, index, slot.generation)
+		return TEX_ID_BASE | handle
 	}
-	assert(false, "_texture_register: count mismatch")
+	assert(false, "_texture_register_context: count mismatch")
 	return 0
 }
 
 @(private)
-_texture_slot :: proc(resources: ^Texture_Resources, id: u32) -> ^Texture_Slot {
-	assert(resources != nil, "_texture_slot: nil resources")
+_texture_register :: proc(resources: ^Texture_Resources, entry: ^Tex_Entry) -> u32 {
+	return _texture_register_context(1, resources, entry)
+}
+
+@(private)
+_texture_slot_context :: proc(
+	context_id: u32,
+	resources: ^Texture_Resources,
+	id: u32,
+) -> ^Texture_Slot {
+	assert(resources != nil, "_texture_slot_context: nil resources")
 	if id & TEX_ID_BASE == 0 do return nil
-	index, generation, ok := _resource_handle_decode(id & ~TEX_ID_BASE, len(resources.slots))
+	raw_id := id & ~TEX_ID_BASE
+	handle_context := (raw_id >> RESOURCE_SLOT_BITS) & RESOURCE_CONTEXT_MASK
+	if handle_context != context_id do return nil
+	index, generation, ok := _resource_handle_decode(raw_id, len(resources.slots))
 	if !ok do return nil
 	slot := &resources.slots[index]
 	if !slot.occupied || slot.generation != generation do return nil
@@ -65,8 +82,13 @@ _texture_slot :: proc(resources: ^Texture_Resources, id: u32) -> ^Texture_Slot {
 }
 
 @(private)
+_texture_slot :: proc(resources: ^Texture_Resources, id: u32) -> ^Texture_Slot {
+	return _texture_slot_context(1, resources, id)
+}
+
+@(private)
 get_texture :: proc(id: u32) -> ^Tex_Entry {
-	slot := _texture_slot(&g.resources.textures, id)
+	slot := _texture_slot_context(g.id, &g.resources.textures, id)
 	if slot == nil do return nil
 	return slot.entry
 }
@@ -137,7 +159,7 @@ _new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
 	)
 	e.view = wg.TextureCreateView(e.tex, nil)
 	_tex_build_bind(e)
-	id := _texture_register(&g.resources.textures, e)
+	id := _texture_register_context(g.id, &g.resources.textures, e)
 	if id == 0 {
 		_texture_entry_destroy(e)
 		return {}
@@ -181,7 +203,7 @@ _new_rt_depth :: proc(w, h: i32) -> Texture2D {
 		},
 	)
 	e.view = wg.TextureCreateView(e.tex, nil)
-	id := _texture_register(&g.resources.textures, e)
+	id := _texture_register_context(g.id, &g.resources.textures, e)
 	if id == 0 {
 		_texture_entry_destroy(e)
 		return {}
@@ -227,7 +249,7 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 	e.view = wg.TextureCreateView(e.tex, nil)
 	_tex_build_bind(e)
 
-	id := _texture_register(&g.resources.textures, e)
+	id := _texture_register_context(g.id, &g.resources.textures, e)
 	if id == 0 {
 		_texture_entry_destroy(e)
 		return {}
@@ -317,7 +339,7 @@ _texture_resources_destroy :: proc(resources: ^Texture_Resources) {
 }
 
 UnloadTexture :: proc(texture: Texture2D) {
-	slot := _texture_slot(&g.resources.textures, texture.id)
+	slot := _texture_slot_context(g.id, &g.resources.textures, texture.id)
 	if slot == nil do return
 	_texture_entry_destroy(slot.entry)
 	slot.entry = nil

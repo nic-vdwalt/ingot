@@ -28,8 +28,8 @@ ToggleFullscreen :: proc() {
 	window := glfw.WindowHandle(g.win)
 	monitor := glfw.GetWindowMonitor(window)
 	if monitor == nil {
-		g_windowed_x, g_windowed_y = glfw.GetWindowPos(window)
-		g_windowed_width, g_windowed_height = glfw.GetWindowSize(window)
+		g.drop.windowed_x, g.drop.windowed_y = glfw.GetWindowPos(window)
+		g.drop.windowed_w, g.drop.windowed_h = glfw.GetWindowSize(window)
 		monitor = glfw.GetPrimaryMonitor()
 		mode := glfw.GetVideoMode(monitor)
 		glfw.SetWindowMonitor(window, monitor, 0, 0, mode.width, mode.height, mode.refresh_rate)
@@ -37,10 +37,10 @@ ToggleFullscreen :: proc() {
 		glfw.SetWindowMonitor(
 			window,
 			nil,
-			g_windowed_x,
-			g_windowed_y,
-			g_windowed_width,
-			g_windowed_height,
+			g.drop.windowed_x,
+			g.drop.windowed_y,
+			max(g.drop.windowed_w, 1),
+			max(g.drop.windowed_h, 1),
 			0,
 		)
 	}
@@ -49,21 +49,19 @@ RestoreWindow :: proc() {
 	if g.win != nil do glfw.RestoreWindow(glfw.WindowHandle(g.win))
 }
 
-@(private)
-g_windowed_x, g_windowed_y: i32
-@(private)
-g_windowed_width, g_windowed_height: i32 = 1280, 720
-
 // --- drag & drop -----------------------------------------------------------
 
 @(private)
-g_drop_paths: [dynamic]cstring
+_drop_paths_clear_context :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_drop_paths_clear_context: nil context")
+	for path in ctx.drop.paths do delete(path)
+	delete(ctx.drop.paths)
+	ctx.drop.paths = nil
+}
 
 @(private)
 _drop_paths_clear :: proc() {
-	for path in g_drop_paths do delete(path)
-	delete(g_drop_paths)
-	g_drop_paths = nil
+	_drop_paths_clear_context(g)
 }
 
 @(private)
@@ -76,8 +74,8 @@ _drop_paths_replace :: proc(paths: []string) -> bool {
 	}
 	_drop_paths_clear()
 	if len(paths) == 0 do return false
-	g_drop_paths = make([dynamic]cstring, 0, len(paths))
-	for path in paths do append(&g_drop_paths, strings.clone_to_cstring(path))
+	g.drop.paths = make([dynamic]cstring, 0, len(paths))
+	for path in paths do append(&g.drop.paths, strings.clone_to_cstring(path))
 	_drop_complete()
 	return true
 }
@@ -85,8 +83,12 @@ _drop_paths_replace :: proc(paths: []string) -> bool {
 @(private)
 _drop_cb :: proc "c" (win: glfw.WindowHandle, count: i32, paths: [^]cstring) {
 	context = runtime.default_context()
-	_idle_note_activity(&g.idle)
-	_drop_hover_stage(false)
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
+	_idle_note_activity(&ctx.idle)
+	_drop_hover_stage_context(ctx, false)
 	if count <= 0 || paths == nil do return
 	accepted_count := min(int(count), MAX_DROPPED_FILES)
 	accepted: [MAX_DROPPED_FILES]string
@@ -94,18 +96,18 @@ _drop_cb :: proc "c" (win: glfw.WindowHandle, count: i32, paths: [^]cstring) {
 	_drop_paths_replace(accepted[:accepted_count])
 }
 
-IsFileDropped :: proc() -> bool {return g_drop_ready}
+IsFileDropped :: proc() -> bool {return g.drop.ready}
 
 LoadDroppedFiles :: proc() -> FilePathList {
 	return FilePathList {
-		capacity = u32(len(g_drop_paths)),
-		count = u32(len(g_drop_paths)),
-		paths = raw_data(g_drop_paths),
+		capacity = u32(len(g.drop.paths)),
+		count = u32(len(g.drop.paths)),
+		paths = raw_data(g.drop.paths),
 	}
 }
 
 UnloadDroppedFiles :: proc(files: FilePathList) {
-	g_drop_ready = false
+	g.drop.ready = false
 	_drop_paths_clear()
 }
 
@@ -114,8 +116,8 @@ UnloadDroppedFiles :: proc(files: FilePathList) {
 // Web parity: browsers deliver bytes without real paths, so target-portable
 // consumers should read drops through this instead of opening paths.
 GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
-	if index < 0 || int(index) >= len(g_drop_paths) do return nil
-	path := string(g_drop_paths[index])
+	if index < 0 || int(index) >= len(g.drop.paths) do return nil
+	path := string(g.drop.paths[index])
 	assert(len(path) > 0, "GetDroppedFileData: empty dropped path")
 	data, err := os.read_entire_file(path, allocator)
 	if err != nil do return nil

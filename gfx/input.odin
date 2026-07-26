@@ -199,22 +199,37 @@ _push_key :: proc "c" (k: KeyboardKey) {
 
 // --- raylib-named queries --------------------------------------------------
 
-IsKeyPressed :: proc(key: KeyboardKey) -> bool {
+context_is_key_pressed :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
+	if ctx == nil do return false
 	i := i32(key)
 	if i < 0 || i >= KEY_COUNT do return false
-	return g.inp.pressed[i]
+	return ctx.inp.pressed[i]
+}
+
+IsKeyPressed :: proc(key: KeyboardKey) -> bool {
+	return context_is_key_pressed(default_context(), key)
+}
+
+context_is_key_pressed_repeat :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
+	if ctx == nil do return false
+	i := i32(key)
+	if i < 0 || i >= KEY_COUNT do return false
+	return ctx.inp.repeat[i]
 }
 
 IsKeyPressedRepeat :: proc(key: KeyboardKey) -> bool {
+	return context_is_key_pressed_repeat(default_context(), key)
+}
+
+context_is_key_released :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
+	if ctx == nil do return false
 	i := i32(key)
 	if i < 0 || i >= KEY_COUNT do return false
-	return g.inp.repeat[i]
+	return ctx.inp.released[i]
 }
 
 IsKeyReleased :: proc(key: KeyboardKey) -> bool {
-	i := i32(key)
-	if i < 0 || i >= KEY_COUNT do return false
-	return g.inp.released[i]
+	return context_is_key_released(default_context(), key)
 }
 
 IsKeyDown :: proc(key: KeyboardKey) -> bool {
@@ -239,16 +254,26 @@ GetKeyPressed :: proc() -> KeyboardKey {
 	return k
 }
 
-IsMouseButtonPressed :: proc(button: MouseButton) -> bool {
+context_is_mouse_button_pressed :: proc(ctx: ^Context, button: MouseButton) -> bool {
+	if ctx == nil do return false
 	b := int(button)
 	if b < 0 || b >= 8 do return false
-	return g.inp.mb_pressed[b]
+	return ctx.inp.mb_pressed[b]
+}
+
+IsMouseButtonPressed :: proc(button: MouseButton) -> bool {
+	return context_is_mouse_button_pressed(default_context(), button)
+}
+
+context_is_mouse_button_released :: proc(ctx: ^Context, button: MouseButton) -> bool {
+	if ctx == nil do return false
+	b := int(button)
+	if b < 0 || b >= 8 do return false
+	return ctx.inp.mb_released[b]
 }
 
 IsMouseButtonReleased :: proc(button: MouseButton) -> bool {
-	b := int(button)
-	if b < 0 || b >= 8 do return false
-	return g.inp.mb_released[b]
+	return context_is_mouse_button_released(default_context(), button)
 }
 
 IsMouseButtonDown :: proc(button: MouseButton) -> bool {
@@ -310,8 +335,18 @@ GetGamepadAxisMovement :: proc(gamepad: i32, axis: GamepadAxis) -> f32 {
 	return v
 }
 
-GetMousePosition :: proc() -> Vector2 {return g.inp.mouse}
-GetMouseDelta :: proc() -> Vector2 {return g.inp.mouse_delta}
+context_get_mouse_position :: proc(ctx: ^Context) -> Vector2 {
+	return ctx == nil ? Vector2{} : ctx.inp.mouse
+}
+context_get_mouse_delta :: proc(ctx: ^Context) -> Vector2 {
+	return ctx == nil ? Vector2{} : ctx.inp.mouse_delta
+}
+context_get_mouse_wheel_move_v :: proc(ctx: ^Context) -> Vector2 {
+	return ctx == nil ? Vector2{} : ctx.inp.wheel
+}
+
+GetMousePosition :: proc() -> Vector2 {return context_get_mouse_position(default_context())}
+GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(default_context())}
 
 GetMouseX :: proc() -> i32 {return i32(g.inp.mouse.x)}
 GetMouseY :: proc() -> i32 {return i32(g.inp.mouse.y)}
@@ -324,7 +359,7 @@ GetMouseWheelMove :: proc() -> f32 {
 	if abs(g.inp.wheel.x) > abs(g.inp.wheel.y) do return g.inp.wheel.x
 	return g.inp.wheel.y
 }
-GetMouseWheelMoveV :: proc() -> Vector2 {return g.inp.wheel}
+GetMouseWheelMoveV :: proc() -> Vector2 {return context_get_mouse_wheel_move_v(default_context())}
 
 GetClipboardText :: proc() -> cstring {
 	s := platform_get_clipboard()
@@ -417,7 +452,11 @@ SetMouseCursor :: proc(cursor: MouseCursor) {
 	platform_set_mouse_cursor(cursor)
 }
 
-IsCursorOnScreen :: proc() -> bool {return g.inp.cursor_on_screen}
+context_is_cursor_on_screen :: proc(ctx: ^Context) -> bool {
+	return ctx != nil && ctx.inp.cursor_on_screen
+}
+
+IsCursorOnScreen :: proc() -> bool {return context_is_cursor_on_screen(default_context())}
 
 // SetTextInputRect reports the focused text field's caret rect (UI logical
 // pixels, top-left origin). Call every frame while a field is active; the OS

@@ -17,6 +17,7 @@ App_Session :: struct {
 	config:      App_Session_Config,
 	initialized: bool,
 	frame_open:  bool,
+	gfx_frame:   ^rl.Frame,
 }
 
 app_session_init :: proc(session: ^App_Session, config: App_Session_Config = {}) {
@@ -59,12 +60,29 @@ app_session_begin_frame :: proc(session: ^App_Session) -> ^ui.Ui_Frame {
 	return &session.frame
 }
 
+app_session_begin_frame_context :: proc(
+	session: ^App_Session,
+	gfx_frame: ^rl.Frame,
+) -> ^ui.Ui_Frame {
+	assert(session != nil && session.initialized, "app_session_begin_frame_context: invalid session")
+	adapter_bind_frame(&session.adapter, gfx_frame)
+	session.gfx_frame = gfx_frame
+	return app_session_begin_frame(session)
+}
+
 app_session_end_frame :: proc(session: ^App_Session) {
 	assert(session != nil && session.initialized, "app_session_end_frame: invalid session")
 	assert(session.frame_open, "app_session_end_frame: no open frame")
 	ui.a11y_frame_end(&session.frame)
 	adapter_end_frame(&session.adapter, &session.frame)
 	session.frame_open = false
+	session.gfx_frame = nil
+}
+
+app_session_end_frame_context :: proc(session: ^App_Session, gfx_frame: ^rl.Frame) {
+	assert(session != nil && session.initialized, "app_session_end_frame_context: invalid session")
+	assert(session.gfx_frame == gfx_frame, "app_session_end_frame_context: frame mismatch")
+	app_session_end_frame(session)
 }
 
 app_session_destroy :: proc(session: ^App_Session) {

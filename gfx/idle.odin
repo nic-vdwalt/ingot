@@ -57,14 +57,25 @@ GetFrameStrategy :: proc() -> Frame_Strategy {
 // from any thread ("c"/contextless): platform_wake unblocks a native wait in
 // progress, so background work (net callbacks, timers) can trigger a repaint.
 RequestRedraw :: proc "contextless" () {
-	_idle_request_redraw(&g.idle)
+	RequestRedrawContext(&default_context_storage)
+}
+
+RequestRedrawContext :: proc "contextless" (ctx: ^Context) {
+	if ctx == nil do return
+	_idle_request_redraw(&ctx.idle)
 	platform_wake()
 }
 
 // RequestRedrawIn schedules a frame after `seconds` (caret blink, delayed
 // animations). Multiple pending requests keep the earliest deadline.
 RequestRedrawIn :: proc(seconds: f64) {
-	_idle_request_in(&g.idle, _now(), seconds)
+	RequestRedrawInContext(default_context(), seconds)
+}
+
+RequestRedrawInContext :: proc(ctx: ^Context, seconds: f64) {
+	if ctx == nil do return
+	now := platform_now() - ctx.start_time_s
+	_idle_request_in(&ctx.idle, now, seconds)
 }
 
 // raylib-compat aliases.

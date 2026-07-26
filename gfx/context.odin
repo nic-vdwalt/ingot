@@ -71,6 +71,17 @@ Graphics_Resources :: struct {
 	retire:   [dynamic]Retired_Texture,
 }
 
+Drop_State :: struct {
+	hover_staged: bool,
+	hover_frame:  bool,
+	ready:        bool,
+	windowed_x:   i32,
+	windowed_y:   i32,
+	windowed_w:   i32,
+	windowed_h:   i32,
+	paths:        [dynamic]cstring,
+}
+
 Frame_State :: struct {
 	surf_tex:               wg.SurfaceTexture,
 	view:                   wg.TextureView,
@@ -162,6 +173,7 @@ Context :: struct {
 
 	// input (input.odin)
 	inp:                  Input,
+	drop:                 Drop_State,
 	submissions:          Submission_Tracker,
 	initialized:          bool,
 	composite_alpha:      wg.CompositeAlphaMode,
@@ -535,6 +547,7 @@ WindowShouldClose :: proc() -> bool {
 // --- per-frame -------------------------------------------------------------
 
 BeginDrawing :: proc() {
+	assert(g != nil, "BeginDrawing: nil context")
 	_maybe_reconfigure()
 	_stats_frame_begin()
 	platform_web_input_frame_begin()
@@ -745,19 +758,34 @@ _now :: proc() -> f64 {
 
 // --- window/screen queries (raylib-named) ----------------------------------
 
-GetScreenWidth :: proc() -> i32 {return g.width}
-GetScreenHeight :: proc() -> i32 {return g.height}
-GetWindowScaleDPI :: proc() -> Vector2 {return {g.dpi, g.dpi}}
-GetRenderWidth :: proc() -> i32 {return g.fb_width}
-GetRenderHeight :: proc() -> i32 {return g.fb_height}
-
-SetTargetFPS :: proc(fps: i32) {g.target_fps = fps}
-GetFrameTime :: proc() -> f32 {return g.frame_time}
-GetTime :: proc() -> f64 {return _now()}
-GetFPS :: proc() -> i32 {
-	if g.real_frame_time <= 0 do return 0
-	return i32(1.0 / g.real_frame_time + 0.5)
+context_screen_width :: proc(ctx: ^Context) -> i32 {return ctx == nil ? 0 : ctx.width}
+context_screen_height :: proc(ctx: ^Context) -> i32 {return ctx == nil ? 0 : ctx.height}
+context_window_scale_dpi :: proc(ctx: ^Context) -> Vector2 {
+	if ctx == nil do return {1, 1}
+	return {ctx.dpi, ctx.dpi}
 }
+context_render_width :: proc(ctx: ^Context) -> i32 {return ctx == nil ? 0 : ctx.fb_width}
+context_render_height :: proc(ctx: ^Context) -> i32 {return ctx == nil ? 0 : ctx.fb_height}
+context_frame_time :: proc(ctx: ^Context) -> f32 {return ctx == nil ? 0 : ctx.frame_time}
+context_time :: proc(ctx: ^Context) -> f64 {
+	if ctx == nil do return 0
+	return platform_now() - ctx.start_time_s
+}
+context_fps :: proc(ctx: ^Context) -> i32 {
+	if ctx == nil || ctx.real_frame_time <= 0 do return 0
+	return i32(1.0 / ctx.real_frame_time + 0.5)
+}
+
+GetScreenWidth :: proc() -> i32 {return context_screen_width(default_context())}
+GetScreenHeight :: proc() -> i32 {return context_screen_height(default_context())}
+GetWindowScaleDPI :: proc() -> Vector2 {return context_window_scale_dpi(default_context())}
+GetRenderWidth :: proc() -> i32 {return context_render_width(default_context())}
+GetRenderHeight :: proc() -> i32 {return context_render_height(default_context())}
+
+SetTargetFPS :: proc(fps: i32) {default_context().target_fps = fps}
+GetFrameTime :: proc() -> f32 {return context_frame_time(default_context())}
+GetTime :: proc() -> f64 {return context_time(default_context())}
+GetFPS :: proc() -> i32 {return context_fps(default_context())}
 
 SetWindowMinSize :: proc(w, h: i32) {
 	platform_set_window_min_size(w, h)
