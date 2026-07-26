@@ -155,7 +155,7 @@ input_at :: proc(
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
 	assert(b != nil, "input: nil box")
-	assert(w > 0 && h > 0, "input: empty rect")
+	if ui_frame_drop_degenerate(frame, w <= 0 || h <= 0) do return false
 	cfg := Text_Input_Config {
 		rect         = Rect_I32{x, y, w, h},
 		placeholder  = placeholder,

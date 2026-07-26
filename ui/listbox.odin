@@ -143,7 +143,16 @@ listbox_begin :: proc(
 ) -> Listbox_Result {
 	assert(frame != nil && frame.open, "listbox_begin: invalid frame")
 	assert(state != nil && config.selected != nil, "listbox_begin: nil state")
-	assert(config.rect.w > 0 && config.rect.h > 0, "listbox_begin: empty rect")
+	if ui_frame_drop_degenerate(frame, config.rect.w <= 0 || config.rect.h <= 0) {
+		// listbox_end is part of the begin/end protocol even when layout has
+		// collapsed, so leave the state in a valid empty-begin state.
+		state.initialized = true
+		state.pressed_index = -1
+		return {
+			activated_index = -1,
+			reveal_index = -1,
+		}
+	}
 	assert(config.label != "" && config.stable_id != "", "listbox_begin: semantics required")
 	assert(config.count >= 0, "listbox_begin: negative count")
 

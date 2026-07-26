@@ -59,6 +59,11 @@ with_frame :: proc(
 	defer free(runtime)
 	ui_runtime_init(runtime)
 	defer ui_runtime_destroy(runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		runtime,
+		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
 
 	// A real output buffer, so the tests can assert that a dropped widget
 	// emitted no paint commands and left no clip on the stack.
@@ -367,8 +372,11 @@ degenerate_widgets_emit_no_paint :: proc(t: ^testing.T) {
 	defer free(runtime)
 	ui_runtime_init(runtime)
 	defer ui_runtime_destroy(runtime)
+	output := new(Ui_Output)
+	defer free(output)
 	frame := new(Ui_Frame)
 	defer free(frame)
+	frame.output = output
 	ui_frame_begin(frame, runtime)
 	before := frame.output.main.count
 	checked := false

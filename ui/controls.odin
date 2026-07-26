@@ -49,7 +49,7 @@ checkbox_at :: proc(
 	changed: bool,
 ) {
 	assert(checked != nil, "checkbox: nil checked state")
-	assert(rect.w > 0 && rect.h > 0, "checkbox: empty rect")
+	if ui_frame_drop_degenerate(frame, rect.w <= 0 || rect.h <= 0) do return false
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "checkbox: empty accessible label")
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
@@ -160,7 +160,7 @@ radio_at :: proc(
 	changed: bool,
 ) {
 	assert(selected != nil, "radio: nil selected state")
-	assert(rect.w > 0 && rect.h > 0, "radio: empty rect")
+	if ui_frame_drop_degenerate(frame, rect.w <= 0 || rect.h <= 0) do return false
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "radio: empty accessible label")
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
@@ -383,7 +383,7 @@ slider_at_state :: proc(
 	a11y_label: string = "",
 ) -> bool {
 	assert(state != nil && value != nil, "slider_at_state: nil state or value")
-	assert(hi > lo && rect.w > 0 && rect.h > 0, "slider_at_state: invalid bounds")
+	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
 	old := value^
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	mouse := get_mouse_position(frame)

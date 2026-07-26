@@ -11,7 +11,7 @@ package ui
 // Call once per frame, drawn last (on top of everything else). On macOS/Linux
 // the native title bar is retained; this strip sits just below it.
 draw_app_header :: proc(frame: ^Ui_Frame, title: cstring, screen_w: i32) -> (header_h: i32) {
-	assert(screen_w > 0, "draw_app_header: invalid screen width")
+	if ui_frame_drop_degenerate(frame, screen_w <= 0) do return 0
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	header_h = metrics.TAB_BAR_HEIGHT

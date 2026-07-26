@@ -86,8 +86,13 @@ dropdown_at :: proc(
 	changed: bool,
 ) {
 	assert(st != nil && selected != nil, "dropdown: nil state")
-	assert(len(items) > 0, "dropdown: empty items")
-	assert(rect.w > 0 && rect.h > 0, "dropdown: empty rect")
+	if len(items) == 0 {
+		selected^ = -1
+		st.menu.open = false
+		_ = ui_frame_drop_degenerate(frame, true)
+		return false
+	}
+	if ui_frame_drop_degenerate(frame, rect.w <= 0 || rect.h <= 0) do return false
 	if selected^ < 0 do selected^ = 0
 	if int(selected^) >= len(items) do selected^ = i32(len(items) - 1)
 

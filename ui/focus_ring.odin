@@ -69,7 +69,7 @@ focus_opt_clear :: proc(f: Focus_Opt) {
 focus_opt_click :: proc(frame: ^Ui_Frame, f: Focus_Opt, x, y, w, h: i32) {
 	if f.focus == nil do return
 	assert(f.id > 0, "focus_opt_click: focus ids are positive")
-	assert(w > 0 && h > 0, "focus_opt_click: empty rect")
+	if ui_frame_drop_degenerate(frame, w <= 0 || h <= 0) do return
 	form_focus_input(frame, f.focus, f.id, x, y, w, h)
 }
 
@@ -92,9 +92,9 @@ focus_opt_activated :: proc(frame: ^Ui_Frame, f: Focus_Opt) -> bool {
 }
 
 draw_focus_ring :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
-	assert(w > 0 && h > 0, "draw_focus_ring: empty rect")
+	if ui_frame_drop_degenerate(frame, w <= 0 || h <= 0) do return
 	style := ui_frame_theme(frame)
-	assert(style.focus_ring.a > 0, "draw_focus_ring: focus ring has zero alpha")
+	if style.focus_ring.a == 0 do return
 	inset := ui_frame_sc(frame, 2)
 	r := Rectangle{f32(x - inset), f32(y - inset), f32(w + inset * 2), f32(h + inset * 2)}
 	draw_rectangle_rounded_lines_ex(

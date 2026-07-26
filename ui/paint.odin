@@ -65,6 +65,10 @@ Paint_List :: struct {
 	// begin_scissor_mode call that leaked instead of only its depth.
 	clip_origin:        [PAINT_CLIP_CAP]runtime.Source_Code_Location,
 	clip_count:         int,
+	// Begins rejected after PAINT_CLIP_CAP still need matching ends. Tracking
+	// their logical depth separately lets paint_clip_end consume those ends
+	// without popping a real outer clip.
+	clip_overflow_depth: int,
 	dropped_commands:   int,
 	dropped_text_bytes: int,
 	sink:               Paint_Sink,
@@ -82,6 +86,7 @@ paint_list_reset :: proc(list: ^Paint_List) {
 	list.count = 0
 	list.text_len = 0
 	list.clip_count = 0
+	list.clip_overflow_depth = 0
 	list.dropped_commands = 0
 	list.dropped_text_bytes = 0
 }
@@ -113,9 +118,15 @@ paint_clip_intersection :: proc(a, b: Rect) -> Rect {
 // stays balanced too.
 paint_clip_begin :: proc(list: ^Paint_List, rect: Rect, loc := #caller_location) {
 	assert(list != nil, "paint_clip_begin: nil list")
-	assert(rect.width >= 0 && rect.height >= 0, "paint_clip_begin: invalid rect")
-	assert(list.clip_count < PAINT_CLIP_CAP, "paint_clip_begin: clip limit")
-	effective := rect
+	// Layout-derived negative extents mean an empty clip, not a malformed
+	// command. Clamp them before intersection so the stack remains balanced.
+	clamped := Rect{rect.x, rect.y, max(f32(0), rect.width), max(f32(0), rect.height)}
+	if list.clip_count >= PAINT_CLIP_CAP {
+		list.clip_overflow_depth += 1
+		list.dropped_commands += 1
+		return
+	}
+	effective := clamped
 	if list.clip_count > 0 {
 		effective = paint_clip_intersection(list.clip_stack[list.clip_count - 1], rect)
 	}
@@ -128,7 +139,13 @@ paint_clip_begin :: proc(list: ^Paint_List, rect: Rect, loc := #caller_location)
 
 paint_clip_end :: proc(list: ^Paint_List) {
 	assert(list != nil, "paint_clip_end: nil list")
-	assert(list.clip_count > 0, "paint_clip_end: no clip")
+	if list.clip_overflow_depth > 0 {
+		list.clip_overflow_depth -= 1
+		return
+	}
+	// An unmatched end is a caller bug, but ignoring it is the safe failure:
+	// driving depth negative would corrupt the next view's clip index.
+	if list.clip_count == 0 do return
 	list.clip_count -= 1
 	if !list.clip_emitted[list.clip_count] do return
 	restore := list.clip_count > 0

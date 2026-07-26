@@ -231,7 +231,7 @@ interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Inter
 
 pressable :: proc(frame: ^Ui_Frame, config: Pressable_Config) -> Pressable_Result {
 	assert(frame != nil && frame.open, "pressable: invalid frame")
-	assert(config.rect.w > 0 && config.rect.h > 0, "pressable: empty rect")
+	if ui_frame_drop_degenerate(frame, config.rect.w <= 0 || config.rect.h <= 0) do return {}
 	assert(config.role != .None && config.label != "", "pressable: semantics required")
 	assert(config.stable_id != "", "pressable: stable id required")
 

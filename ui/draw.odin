@@ -141,15 +141,15 @@ draw_triangle :: proc(frame: ^Ui_Frame, p0, p1, p2: Vector2, color: Color) {
 
 begin_scissor_mode :: proc(frame: ^Ui_Frame, x, y, width, height: i32) {
 	assert(frame != nil && frame.open, "begin_scissor_mode: invalid frame")
-	assert(width >= 0 && height >= 0, "begin_scissor_mode: invalid rect")
-	paint_clip_begin(frame_paint_list(frame), {f32(x), f32(y), f32(width), f32(height)})
+	paint_clip_begin(
+		frame_paint_list(frame),
+		{f32(x), f32(y), f32(max(width, 0)), f32(max(height, 0))},
+	)
 }
 
 end_scissor_mode :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "end_scissor_mode: invalid frame")
-	list := frame_paint_list(frame)
-	assert(list.clip_count > 0, "end_scissor_mode: no clip")
-	paint_clip_end(list)
+	paint_clip_end(frame_paint_list(frame))
 }
 
 draw_text_command :: proc(
