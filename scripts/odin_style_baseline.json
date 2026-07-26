@@ -1,11 +1,1 @@
-{
-  "examples/gallery/main.odin:draw_overlay_demo": 125,
-  "fuzz/ui/main.odin:exercise_semantics": 101,
-  "fuzz/wsreconn/main.odin:main": 139,
-  "gfx/text_test.odin:test_measure_metrics": 104,
-  "net/ws_sim.odin:ws_net_recv": 125,
-  "pty/pty_windows.odin:spawn": 144,
-  "ui/debug_overlay.odin:draw_debug_overlay": 120,
-  "ui/text_input_fuzz_test.odin:text_input_edit_op_fuzz": 127,
-  "ui/titlebar_windows.odin:titlebar_subclass_proc": 116
-}
+{}

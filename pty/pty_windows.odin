@@ -90,7 +90,8 @@ conpty_close_pipes :: proc(pipes: ^Conpty_Pipes) {
 conpty_create_pipes :: proc() -> (Conpty_Pipes, bool) {
 	pipes: Conpty_Pipes
 	security := win32.SECURITY_ATTRIBUTES {
-		nLength = size_of(win32.SECURITY_ATTRIBUTES), bInheritHandle = true,
+		nLength        = size_of(win32.SECURITY_ATTRIBUTES),
+		bInheritHandle = true,
 	}
 	if !win32.CreatePipe(&pipes.input_read, &pipes.input_write, &security, 0) {
 		return {}, false
@@ -117,7 +118,9 @@ conpty_create_attribute_list :: proc(hpc: HPCON) -> (LPPROC_THREAD_ATTRIBUTE_LIS
 	attribute_size: c.size_t
 	InitializeProcThreadAttributeList(nil, 1, 0, &attribute_size)
 	list := cast(LPPROC_THREAD_ATTRIBUTE_LIST)win32.HeapAlloc(
-		win32.GetProcessHeap(), 0, attribute_size,
+		win32.GetProcessHeap(),
+		0,
+		attribute_size,
 	)
 	if list == nil do return nil, false
 	if !InitializeProcThreadAttributeList(list, 1, 0, &attribute_size) {
@@ -125,7 +128,13 @@ conpty_create_attribute_list :: proc(hpc: HPCON) -> (LPPROC_THREAD_ATTRIBUTE_LIS
 		return nil, false
 	}
 	if !UpdateProcThreadAttribute(
-		list, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, hpc, size_of(HPCON), nil, nil,
+		list,
+		0,
+		PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
+		hpc,
+		size_of(HPCON),
+		nil,
+		nil,
 	) {
 		conpty_destroy_attribute_list(list)
 		return nil, false
@@ -136,7 +145,10 @@ conpty_create_attribute_list :: proc(hpc: HPCON) -> (LPPROC_THREAD_ATTRIBUTE_LIS
 conpty_create_process :: proc(
 	shell, workdir: cstring,
 	list: LPPROC_THREAD_ATTRIBUTE_LIST,
-) -> (win32.PROCESS_INFORMATION, bool) {
+) -> (
+	win32.PROCESS_INFORMATION,
+	bool,
+) {
 	startup: STARTUPINFOEXW
 	startup.StartupInfo.cb = size_of(STARTUPINFOEXW)
 	startup.lpAttributeList = list
@@ -151,154 +163,58 @@ conpty_create_process :: proc(
 	process: win32.PROCESS_INFORMATION
 	EXTENDED_STARTUPINFO_PRESENT :: 0x00080000
 	ok := win32.CreateProcessW(
-		shell_w, command_line_w, nil, nil, false, EXTENDED_STARTUPINFO_PRESENT,
-		nil, working_dir_w, &startup.StartupInfo, &process,
+		shell_w,
+		command_line_w,
+		nil,
+		nil,
+		false,
+		EXTENDED_STARTUPINFO_PRESENT,
+		nil,
+		working_dir_w,
+		&startup.StartupInfo,
+		&process,
 	)
-	return process, ok
+	return process, bool(ok)
 }
 
 spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
 	if shell == nil || cols == 0 || rows == 0 do return {}, false
 	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, false
-	p: Pty
-	p.cols = cols
-	p.rows = rows
-
-	// Create pipes for ConPTY I/O.
-	sa := win32.SECURITY_ATTRIBUTES {
-		nLength        = size_of(win32.SECURITY_ATTRIBUTES),
-		bInheritHandle = true,
+	pipes, pipes_ok := conpty_create_pipes()
+	if !pipes_ok do return {}, false
+	p := Pty {
+		cols = cols,
+		rows = rows,
 	}
-
-	pipe_in_r, pipe_in_w: win32.HANDLE // Parent writes → child reads
-	pipe_out_r, pipe_out_w: win32.HANDLE // Child writes → parent reads
-
-	if !win32.CreatePipe(&pipe_in_r, &pipe_in_w, &sa, 0) {
-		return {}, false
-	}
-	if !win32.CreatePipe(&pipe_out_r, &pipe_out_w, &sa, 0) {
-		win32.CloseHandle(pipe_in_r)
-		win32.CloseHandle(pipe_in_w)
-		return {}, false
-	}
-
-	// Make parent-side handles non-inheritable.
-	if !win32.SetHandleInformation(pipe_in_w, win32.HANDLE_FLAG_INHERIT, 0) ||
-	   !win32.SetHandleInformation(pipe_out_r, win32.HANDLE_FLAG_INHERIT, 0) {
-		win32.CloseHandle(pipe_in_r)
-		win32.CloseHandle(pipe_in_w)
-		win32.CloseHandle(pipe_out_r)
-		win32.CloseHandle(pipe_out_w)
-		return {}, false
-	}
-
-	// Create pseudo console.
 	size := COORD {
 		X = win32.SHORT(cols),
 		Y = win32.SHORT(rows),
 	}
-	hr := CreatePseudoConsole(size, pipe_in_r, pipe_out_w, 0, &p.hpc)
-	if hr != 0 {
-		win32.CloseHandle(pipe_in_r)
-		win32.CloseHandle(pipe_in_w)
-		win32.CloseHandle(pipe_out_r)
-		win32.CloseHandle(pipe_out_w)
+	if CreatePseudoConsole(size, pipes.input_read, pipes.output_write, 0, &p.hpc) != 0 {
+		conpty_close_pipes(&pipes)
 		return {}, false
 	}
-
-	// Child-side pipe ends are now owned by ConPTY; close our copies.
-	win32.CloseHandle(pipe_in_r)
-	win32.CloseHandle(pipe_out_w)
-
-	// Initialize thread attribute list for PSEUDOCONSOLE.
-	attr_size: c.size_t = 0
-	InitializeProcThreadAttributeList(nil, 1, 0, &attr_size)
-	attr_list := cast(LPPROC_THREAD_ATTRIBUTE_LIST)win32.HeapAlloc(
-		win32.GetProcessHeap(),
-		0,
-		attr_size,
-	)
-	if attr_list == nil {
+	win32.CloseHandle(pipes.input_read)
+	pipes.input_read = nil
+	win32.CloseHandle(pipes.output_write)
+	pipes.output_write = nil
+	attributes, attributes_ok := conpty_create_attribute_list(p.hpc)
+	if !attributes_ok {
 		ClosePseudoConsole(p.hpc)
-		win32.CloseHandle(pipe_in_w)
-		win32.CloseHandle(pipe_out_r)
+		conpty_close_pipes(&pipes)
 		return {}, false
 	}
-
-	if !InitializeProcThreadAttributeList(attr_list, 1, 0, &attr_size) {
-		win32.HeapFree(win32.GetProcessHeap(), 0, attr_list)
+	process, process_ok := conpty_create_process(shell, workdir, attributes)
+	conpty_destroy_attribute_list(attributes)
+	if !process_ok {
 		ClosePseudoConsole(p.hpc)
-		win32.CloseHandle(pipe_in_w)
-		win32.CloseHandle(pipe_out_r)
+		conpty_close_pipes(&pipes)
 		return {}, false
 	}
-
-	if !UpdateProcThreadAttribute(
-		attr_list,
-		0,
-		PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-		p.hpc,
-		size_of(HPCON),
-		nil,
-		nil,
-	) {
-		DeleteProcThreadAttributeList(attr_list)
-		win32.HeapFree(win32.GetProcessHeap(), 0, attr_list)
-		ClosePseudoConsole(p.hpc)
-		win32.CloseHandle(pipe_in_w)
-		win32.CloseHandle(pipe_out_r)
-		return {}, false
-	}
-
-	// Prepare extended startup info.
-	si: STARTUPINFOEXW
-	si.StartupInfo.cb = size_of(STARTUPINFOEXW)
-	si.lpAttributeList = attr_list
-
-	pi: win32.PROCESS_INFORMATION
-
-	// Command line: spawn the shell.
-	shell_str := string(shell)
-	cmd_line := strings.clone_to_cstring(shell_str, context.temp_allocator)
-	cmd_line_w := win32.utf8_to_wstring(string(cmd_line), context.temp_allocator)
-	shell_w := win32.utf8_to_wstring(shell_str, context.temp_allocator)
-
-	working_dir_w: win32.wstring = nil
-	if workdir != nil && len(string(workdir)) > 0 {
-		working_dir_w = win32.utf8_to_wstring(string(workdir), context.temp_allocator)
-	}
-
-	// EXTENDED_STARTUPINFO_PRESENT required for attribute list.
-	EXTENDED_STARTUPINFO_PRESENT :: 0x00080000
-
-	ok := win32.CreateProcessW(
-		shell_w, // lpApplicationName
-		cmd_line_w, // lpCommandLine
-		nil, // lpProcessAttributes
-		nil, // lpThreadAttributes
-		false, // bInheritHandles — ConPTY handles inheritance itself
-		EXTENDED_STARTUPINFO_PRESENT, // dwCreationFlags
-		nil, // lpEnvironment
-		working_dir_w, // lpCurrentDirectory
-		&si.StartupInfo,
-		&pi,
-	)
-
-	DeleteProcThreadAttributeList(attr_list)
-	win32.HeapFree(win32.GetProcessHeap(), 0, attr_list)
-
-	if !ok {
-		ClosePseudoConsole(p.hpc)
-		win32.CloseHandle(pipe_in_w)
-		win32.CloseHandle(pipe_out_r)
-		return {}, false
-	}
-
-	p.pipe_in_w = pipe_in_w
-	p.pipe_out_r = pipe_out_r
-	p.hProcess = pi.hProcess
-	p.hThread = pi.hThread
-
+	p.pipe_in_w = pipes.input_write
+	p.pipe_out_r = pipes.output_read
+	p.hProcess = process.hProcess
+	p.hThread = process.hThread
 	return p, true
 }
 
