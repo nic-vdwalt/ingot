@@ -63,10 +63,10 @@ frame. Markdown uses `Markdown_Context` for its frame, workspace paths, and cull
 band. `Text_Input_State` owns its selection, wrap/spell memoization, undo data,
 and spell menu; destroy it before its runtime.
 
-Native applications destroy component/widget state, then `ui_gfx.Adapter`, then
-`Ui_Runtime`, and finally call `CloseWindow`. End the active frame before any of
-those steps. Destroy allocation-owning component state before its runtime so it
-cannot retain borrowed text, wrap, spell, theme, or font data.
+Native applications using `ui_gfx.App_Session` destroy component/widget state,
+then call `app_session_destroy`, which destroys `Ui_Frame`, `Adapter`, and
+`Ui_Runtime` in order, and finally call `CloseWindow`. Low-level hosts perform
+the same order explicitly. End the active frame before any of those steps.
 
 Web `rl.run` installs the browser animation-frame callback and returns. State
 read by that callback must have static or otherwise host-managed lifetime; do
@@ -144,9 +144,9 @@ Most widgets ship in two call shapes. Pick one per screen and stay in it.
 | `*_at` | Supported | Explicit `x, y, w, h` against a `^Ui_Frame` | Caller passes `Focus_Opt`, or omits it |
 | `*_ui` | Supported | Carves a bounded slot from a `^Ui` and its `Layout` | Registered automatically when visible |
 
-**Use `*_at` for application-owned geometry.** It composes with hand-computed
-layout and scroll offsets. Positioning is your responsibility: scale every
-dimension through `ui_frame_sc` so the result tracks the runtime UI scale.
+Use `*_at` for canvases, scroll-offset content, overlays, and custom geometry.
+Positioning is your responsibility: scale every dimension through `ui_frame_sc`
+so the result tracks the runtime UI scale.
 
 ```odin
 metrics, style := ui.ui_frame_style(frame)
@@ -155,11 +155,11 @@ if ui.btn_at(frame, x, y, ui.ui_frame_sc(frame, 120), metrics.ROW_H_MD, "Save", 
 }
 ```
 
-**`*_ui` is supported for bounded row, column, and flex forms.** Overflow clips
-to the root and produces zero-area slots rather than assertions. Clipped slots
-do not register focus, interaction, paint, or semantics. Stable-ID overloads
-preserve focus through resize, DPI changes, insertion, and reorder; use them for
-dynamic forms. Widget dimensions remain caller-scaled through frame metrics.
+Use `*_ui` for bounded row, column, weighted, and flex forms. `ui_padding`,
+`ui_row`, `ui_column`, `ui_flex_begin`, `ui_weights`, and `ui_fill` expose the
+same bounded single-pass layout engine. Every row and column scope must be
+balanced before `ui_end`. Overflow clips to the root and produces zero-area
+slots rather than assertions.
 
 `btn_ui_state` and `btn_ui_state_id` are deprecated: no consumer has needed
 `Button_State` together with auto-layout. Use `btn_at_state` with an explicit
@@ -198,7 +198,15 @@ available under the same constraint.
 ## Accessibility
 
 The semantic layer records each complete focus link, so stable focus works
-through app-wide focus scopes and assistive-technology focus actions.
-Accessibility node identity is still derived independently from explicit
-semantic identity such as a text input's `field_id`; a `Focus_Id` is scoped to
-one `Ui` and is not an application-global accessibility identifier.
+through app-wide focus scopes and assistive-technology focus actions. An
+explicit semantic `field_id` is the authoritative application-global node
+identity. A focus link supplies compatibility identity only when no explicit
+key is present; `Focus_Id` remains scoped to one `Ui`. Duplicate semantic IDs
+drop the later node and increment frame diagnostics. Focus-scope priority
+selects the traversal tier; equal-priority scope IDs merge in draw order.
+
+## Frame diagnostics
+
+`ui_frame_diagnostics` returns a copied, allocation-free snapshot of input,
+geometry, semantic, paint, and platform-output drops. Golden-path tests should
+assert that every counter is zero. `draw_debug_overlay` displays the same data.

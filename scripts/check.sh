@@ -35,6 +35,12 @@ for example in gallery breakout idle_demo chart_demo render_fixture multi_contex
 	odin build "$root/examples/$example" $col "-out:$example_out/$example" "$@"
 done
 
+echo "== Odin physical style limits =="
+python3 "$root/scripts/check_odin_style_test.py"
+python3 "$root/scripts/check_odin_style.py" \
+	--baseline "$root/scripts/odin_style_baseline.json" \
+	"$root"
+
 # odinfmt has no list/check flag (only -w/-stdin), so compare each file
 # against its formatted output. Formatting is part of the strict gate.
 if ! command -v odinfmt >/dev/null 2>&1; then

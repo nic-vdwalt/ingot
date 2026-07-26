@@ -101,11 +101,7 @@ import rl "ingot:gfx"
 import ui "ingot:ui"
 import "ingot:ui_gfx"
 
-runtime: ui.Ui_Runtime
-frame_state: ui.Ui_Frame
-input: ui.Ui_Input
-output: ui.Ui_Output
-adapter: ui_gfx.Adapter
+session: ui_gfx.App_Session
 
 main :: proc() {
 	when ODIN_OS == .Darwin {
@@ -114,26 +110,25 @@ main :: proc() {
 		rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
 	}
 	rl.InitWindow(960, 640, "Ingot app")
-	ui.ui_runtime_init(&runtime)
-	ui_gfx.adapter_init(&adapter)
-	ui.ui_runtime_apply_platform_dpi(&runtime)
+	ui_gfx.app_session_init(&session, {semantics_enabled = true})
 
 	rl.run(frame)
 
-	ui_gfx.adapter_destroy(&adapter)
-	ui.ui_runtime_destroy(&runtime)
-	rl.CloseWindow()
+	when ODIN_OS != .JS {
+		ui_gfx.app_session_destroy(&session)
+		rl.CloseWindow()
+	}
 }
 
 frame :: proc() {
-	ui_gfx.adapter_begin_frame(&adapter, &frame_state, &runtime, &input, &output)
-	ui.ui_runtime_dpi_refresh(&runtime, dpi_scale = input.dpi_scale)
+	frame_state := ui_gfx.app_session_begin_frame(&session)
 	rl.BeginDrawing()
-	style := ui.ui_frame_theme(&frame_state)
+	style := ui.ui_frame_theme(frame_state)
 	rl.ClearBackground(ui_gfx.color_to_gfx(style.bg_color))
-	ui.text(&frame_state, "Hello from Ingot", 24, 24, .Large)
-	ui_gfx.adapter_end_frame(&adapter, &frame_state)
+	ui.text(frame_state, "Hello from Ingot", 24, 24, .Large)
+	ui_gfx.app_session_end_frame(&session)
 	rl.EndDrawing()
+	free_all(context.temp_allocator)
 }
 ```
 

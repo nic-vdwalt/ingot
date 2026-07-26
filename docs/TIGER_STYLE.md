@@ -129,6 +129,9 @@ bugs, and they are a force multiplier for fuzzing.
     branch-free fragments down into pure helpers. "Push ifs up, push fors down."
   - Keep leaf helpers pure: let the parent own the mutable state and pass in
     what the helper needs.
+  - `scripts/check_odin_style.py` enforces this for authored source. Legacy
+    procedures in `scripts/odin_style_baseline.json` may only shrink; remove an
+    entry when its procedure reaches the limit.
 
 - **Handle every error / every returned `ok`.** The majority of catastrophic
   failures in real systems come from mishandled non-fatal errors. Never discard
@@ -226,7 +229,9 @@ bugs, and they are a force multiplier for fuzzing.
   entire `ingot` tree already uses. (TigerBeetle uses 4 spaces because that's the
   Zig norm — we deliberately keep tabs so the formatter never churns the tree.)
 - **Hard limit lines to 100 columns.** Use the width, never exceed it. Set a
-  column ruler in your editor (`.editorconfig` declares it).
+  column ruler in your editor (`.editorconfig` declares it). The style gate
+  counts physical source characters and excludes only vendored `libvterm`,
+  `accesskit`, and generated `gfx/rlgl` declarations.
 - Add braces to an `if` unless it fits on a single line — defense in depth
   against "goto fail" bugs.
 

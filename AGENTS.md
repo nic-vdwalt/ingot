@@ -31,8 +31,8 @@ architecture, and `docs/testing.md` for the test matrix.
   supervises each command. Pass extra Odin flags through, e.g.
   `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.
 - **Check / lint** (Tiger Style gate): `bash scripts/check.sh` — strict
-  type-check + `-vet -strict-style -vet-shadowing` across all packages, plus an
-  `odinfmt -l` format check.
+  type-check + `-vet -strict-style -vet-shadowing`, 70-line procedure and
+  100-character physical-line checks, plus an `odinfmt` format check.
 - **Format**: `odinfmt -w .` (settings pinned in `.odinfmt.json`: tabs width 4,
   100-column lines).
 - **Web build**: `bash build_web.sh` → `web/ingot_web.wasm`; serve with

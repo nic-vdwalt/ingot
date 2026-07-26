@@ -161,7 +161,10 @@ LOCALE_NAME_MAX_LENGTH :: 85
 foreign import kernel32_spell "system:Kernel32.lib"
 @(default_calling_convention = "system")
 foreign kernel32_spell {
-	GetUserDefaultLocaleName :: proc(lpLocaleName: win.LPWSTR, cchLocaleName: win.c_int) -> win.c_int ---
+	GetUserDefaultLocaleName :: proc(
+		lpLocaleName: win.LPWSTR,
+		cchLocaleName: win.c_int,
+	) -> win.c_int ---
 }
 
 // Windows exposes a process COM spell-check adapter. Runtime-owned Spell_System

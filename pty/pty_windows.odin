@@ -48,19 +48,45 @@ foreign import kernel32 "system:kernel32.lib"
 
 @(default_calling_convention = "system")
 foreign kernel32 {
-	CreatePseudoConsole :: proc(size: COORD, hInput: win32.HANDLE, hOutput: win32.HANDLE, dwFlags: win32.DWORD, phPC: ^HPCON) -> win32.HRESULT ---
+	CreatePseudoConsole :: proc(
+		size: COORD,
+		hInput: win32.HANDLE,
+		hOutput: win32.HANDLE,
+		dwFlags: win32.DWORD,
+		phPC: ^HPCON,
+	) -> win32.HRESULT ---
 
 	ClosePseudoConsole :: proc(hPC: HPCON) ---
 
 	ResizePseudoConsole :: proc(hPC: HPCON, size: COORD) -> win32.HRESULT ---
 
-	InitializeProcThreadAttributeList :: proc(lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST, dwAttributeCount: win32.DWORD, dwFlags: win32.DWORD, lpSize: ^c.size_t) -> win32.BOOL ---
+	InitializeProcThreadAttributeList :: proc(
+		lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST,
+		dwAttributeCount: win32.DWORD,
+		dwFlags: win32.DWORD,
+		lpSize: ^c.size_t,
+	) -> win32.BOOL ---
 
-	UpdateProcThreadAttribute :: proc(lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST, dwFlags: win32.DWORD, attribute: win32.DWORD_PTR, lpValue: rawptr, cbSize: c.size_t, lpPreviousValue: rawptr, lpReturnSize: ^c.size_t) -> win32.BOOL ---
+	UpdateProcThreadAttribute :: proc(
+		lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST,
+		dwFlags: win32.DWORD,
+		attribute: win32.DWORD_PTR,
+		lpValue: rawptr,
+		cbSize: c.size_t,
+		lpPreviousValue: rawptr,
+		lpReturnSize: ^c.size_t,
+	) -> win32.BOOL ---
 
 	DeleteProcThreadAttributeList :: proc(lpAttributeList: LPPROC_THREAD_ATTRIBUTE_LIST) ---
 
-	PeekNamedPipe :: proc(hNamedPipe: win32.HANDLE, lpBuffer: rawptr, nBufferSize: win32.DWORD, lpBytesRead: ^win32.DWORD, lpTotalBytesAvail: ^win32.DWORD, lpBytesLeftThisMessage: ^win32.DWORD) -> win32.BOOL ---
+	PeekNamedPipe :: proc(
+		hNamedPipe: win32.HANDLE,
+		lpBuffer: rawptr,
+		nBufferSize: win32.DWORD,
+		lpBytesRead: ^win32.DWORD,
+		lpTotalBytesAvail: ^win32.DWORD,
+		lpBytesLeftThisMessage: ^win32.DWORD,
+	) -> win32.BOOL ---
 }
 
 // Pty bundles the ConPTY handle, I/O pipes, and child process.

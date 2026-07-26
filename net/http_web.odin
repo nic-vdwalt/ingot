@@ -49,7 +49,16 @@ when !INGOT_NET_SIM {
 	foreign import httpjs "ingot_http"
 	@(default_calling_convention = "c")
 	foreign httpjs {
-		ingot_http_request :: proc(method: i32, url: [^]byte, url_len: i32, headers: [^]byte, headers_len: i32, body: [^]byte, body_len: i32, maximum_body: i32) -> i32 ---
+		ingot_http_request :: proc(
+			method: i32,
+			url: [^]byte,
+			url_len: i32,
+			headers: [^]byte,
+			headers_len: i32,
+			body: [^]byte,
+			body_len: i32,
+			maximum_body: i32,
+		) -> i32 ---
 		ingot_http_poll :: proc(id: i32) -> i32 ---
 		ingot_http_status :: proc(id: i32) -> i32 ---
 		ingot_http_body_len :: proc(id: i32) -> i32 ---

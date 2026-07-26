@@ -13,11 +13,7 @@ import "ingot:ui_gfx"
 dark := true
 line_state: ui.Chart_State
 bar_state: ui.Chart_State
-ui_runtime: ui.Ui_Runtime
-ui_frame: ui.Ui_Frame
-ui_input: ui.Ui_Input
-ui_output: ui.Ui_Output
-ui_adapter: ui_gfx.Adapter
+ui_session: ui_gfx.App_Session
 
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
 costs := [12]f32{8.1, 8.4, 9.0, 9.7, 10.2, 11.5, 11.1, 12.4, 12.0, 13.6, 13.1, 14.0}
@@ -47,36 +43,34 @@ main :: proc() {
 	rl.InitWindow(960, 720, "ingot chart demo")
 	rl.SetTargetFPS(60)
 	rl.EnableEventWaiting()
-	ui.ui_runtime_init(&ui_runtime)
-	ui_gfx.adapter_init(&ui_adapter)
-	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
+	ui_gfx.app_session_init(&ui_session, {semantics_enabled = true})
 	rl.run(frame)
-	ui_gfx.adapter_destroy(&ui_adapter)
-	ui.ui_runtime_destroy(&ui_runtime)
-	rl.CloseWindow()
+	when ODIN_OS != .JS {
+		ui_gfx.app_session_destroy(&ui_session)
+		rl.CloseWindow()
+	}
 }
 
 frame :: proc() {
-	ui_gfx.adapter_begin_frame(&ui_adapter, &ui_frame, &ui_runtime, &ui_input, &ui_output)
-	ui.ui_runtime_dpi_refresh(&ui_runtime, dpi_scale = ui_input.dpi_scale)
+	ui_frame := ui_gfx.app_session_begin_frame(&ui_session)
 	rl.BeginDrawing()
-	style := ui.ui_frame_theme(&ui_frame)
-	metrics := ui.ui_frame_metrics(&ui_frame)
+	style := ui.ui_frame_theme(ui_frame)
+	metrics := ui.ui_frame_metrics(ui_frame)
 	rl.ClearBackground(ui_gfx.color_to_gfx(style.bg_color))
 
 	sw := rl.GetScreenWidth()
 
 	ui.draw_text_frame(
-		&ui_frame,
+		ui_frame,
 		"Chart widgets",
 		24,
 		20,
 		metrics.FONT_SIZE_LARGE,
 		style.fg_primary,
 	)
-	if ui.btn(&ui_frame, sw - 140, 16, 120, 30, "Light theme" if dark else "Dark theme") {
+	if ui.btn(ui_frame, sw - 140, 16, 120, 30, "Light theme" if dark else "Dark theme") {
 		dark = !dark
-		ui.ui_runtime_set_theme(&ui_runtime, ui.theme_dark() if dark else ui.theme_light())
+		ui.ui_runtime_set_theme(&ui_session.runtime, ui.theme_dark() if dark else ui.theme_light())
 	}
 
 	line_series := [2]ui.Chart_Series {
@@ -84,7 +78,7 @@ frame :: proc() {
 		{name = "Costs", values = costs[:]},
 	}
 	ui.line_chart(
-		&ui_frame,
+		ui_frame,
 		24,
 		64,
 		580,
@@ -99,7 +93,7 @@ frame :: proc() {
 		{name = "Billable h", values = billable[:]},
 	}
 	ui.bar_chart(
-		&ui_frame,
+		ui_frame,
 		24,
 		396,
 		580,
@@ -109,10 +103,10 @@ frame :: proc() {
 		{labels = DAYS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
 
-	stat_card(&ui_frame, 628, 64, 308, 92, "ACTIVE PROJECTS", "9.3", spark_up[:], style.fg_success)
-	stat_card(&ui_frame, 628, 168, 308, 92, "OPEN TASKS", "4.8", spark_down[:], style.fg_error)
+	stat_card(ui_frame, 628, 64, 308, 92, "ACTIVE PROJECTS", "9.3", spark_up[:], style.fg_success)
+	stat_card(ui_frame, 628, 168, 308, 92, "OPEN TASKS", "4.8", spark_down[:], style.fg_error)
 	stat_card(
-		&ui_frame,
+		ui_frame,
 		628,
 		272,
 		308,
@@ -123,7 +117,7 @@ frame :: proc() {
 		style.fg_accent,
 	)
 
-	ui_gfx.adapter_end_frame(&ui_adapter, &ui_frame)
+	ui_gfx.app_session_end_frame(&ui_session)
 	rl.EndDrawing()
 	free_all(context.temp_allocator)
 }

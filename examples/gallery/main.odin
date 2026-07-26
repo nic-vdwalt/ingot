@@ -98,11 +98,8 @@ spark := [10]f32{3, 4, 3.6, 5, 6.2, 5.8, 7, 8.4, 8.1, 9.3}
 settings_open := false
 settings_sel := 0
 stored_scale: f32 = 0 // 0 = auto
-ui_runtime: ui.Ui_Runtime
-ui_frame: ui.Ui_Frame
-ui_input: ui.Ui_Input
-ui_output: ui.Ui_Output
-ui_adapter: ui_gfx.Adapter
+ui_session: ui_gfx.App_Session
+ui_frame: ^ui.Ui_Frame
 
 Widget_State :: struct {
 	ctx:            ui.Ui,
@@ -170,15 +167,13 @@ main :: proc() {
 	rl.InitWindow(1100, 760, "ingot widget gallery")
 	rl.SetTargetFPS(60)
 	when !SMOKE do rl.EnableEventWaiting() // smoke needs continuous frames
-	ui.ui_runtime_init(&ui_runtime)
-	ui_gfx.adapter_init(&ui_adapter)
-	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
-	ui.a11y_init(&ui_runtime)
+	ui_gfx.app_session_init(&ui_session, {semantics_enabled = true})
 	rl.run(frame)
-	input_state_destroy(&input_state)
-	ui_gfx.adapter_destroy(&ui_adapter)
-	ui.ui_runtime_destroy(&ui_runtime)
-	rl.CloseWindow()
+	when ODIN_OS != .JS {
+		input_state_destroy(&input_state)
+		ui_gfx.app_session_destroy(&ui_session)
+		rl.CloseWindow()
+	}
 }
 
 input_state_destroy :: proc(state: ^Input_State) {
@@ -189,10 +184,9 @@ input_state_destroy :: proc(state: ^Input_State) {
 }
 
 frame :: proc() {
-	ui_gfx.adapter_begin_frame(&ui_adapter, &ui_frame, &ui_runtime, &ui_input, &ui_output)
-	ui.ui_runtime_dpi_refresh(&ui_runtime, dpi_scale = ui_input.dpi_scale)
+	ui_frame = ui_gfx.app_session_begin_frame(&ui_session)
 	rl.BeginDrawing()
-	rl.ClearBackground(ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).bg_color))
+	rl.ClearBackground(ui_gfx.color_to_gfx(ui.ui_frame_theme(ui_frame).bg_color))
 
 	sw := rl.GetScreenWidth()
 	sh := rl.GetScreenHeight()
@@ -205,7 +199,7 @@ frame :: proc() {
 	draw_content(sw, sh)
 
 	if settings_open {
-		res := ui.draw_scale_settings_panel(&ui_frame, &settings_sel, stored_scale, sw, sh)
+		res := ui.draw_scale_settings_panel(ui_frame, &settings_sel, stored_scale, sw, sh)
 		if res.applied {
 			stored_scale = res.ui_scale
 			apply_scale(res.ui_scale)
@@ -215,99 +209,98 @@ frame :: proc() {
 
 	if debug_on {
 		ui.draw_debug_overlay(
-			&ui_frame,
-			sw - ui.ui_frame_sc(&ui_frame, 290),
-			ui.ui_frame_sc(&ui_frame, 10),
+			ui_frame,
+			sw - ui.ui_frame_sc(ui_frame, 290),
+			ui.ui_frame_sc(ui_frame, 10),
 		)
 	}
 
-	ui.a11y_frame_end(&ui_frame)
-	ui_gfx.adapter_end_frame(&ui_adapter, &ui_frame)
+	ui_gfx.app_session_end_frame(&ui_session)
 	rl.EndDrawing()
 	free_all(context.temp_allocator)
 }
 
 apply_scale :: proc(scale: f32) {
-	resolved := scale if scale > 0 else ui.settings_auto_scale(&ui_input)
-	ui.ui_runtime_set_scale(&ui_runtime, resolved)
+	resolved := scale if scale > 0 else ui.settings_auto_scale(&ui_session.input)
+	ui.ui_runtime_set_scale(&ui_session.runtime, resolved)
 }
 
 draw_nav :: proc(sh: i32) {
-	w := ui.ui_frame_sc(&ui_frame, NAV_W)
-	rl.DrawRectangle(0, 0, w, sh, ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).bg_secondary))
+	w := ui.ui_frame_sc(ui_frame, NAV_W)
+	rl.DrawRectangle(0, 0, w, sh, ui_gfx.color_to_gfx(ui.ui_frame_theme(ui_frame).bg_secondary))
 	rl.DrawRectangle(
 		w - 1,
 		0,
 		1,
 		sh,
-		ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).border_subtle),
+		ui_gfx.color_to_gfx(ui.ui_frame_theme(ui_frame).border_subtle),
 	)
 
-	y := ui.ui_frame_sc(&ui_frame, 14)
-	ui.text(&ui_frame, "ingot gallery", ui.ui_frame_sc(&ui_frame, 14), y, .Large)
-	y += ui.ui_frame_sc(&ui_frame, 40)
+	y := ui.ui_frame_sc(ui_frame, 14)
+	ui.text(ui_frame, "ingot gallery", ui.ui_frame_sc(ui_frame, 14), y, .Large)
+	y += ui.ui_frame_sc(ui_frame, 40)
 
 	for s in Section {
 		style := ui.Btn_Style.Primary if s == section else .Ghost
 		if ui.btn(
-			&ui_frame,
-			ui.ui_frame_sc(&ui_frame, 10),
+			ui_frame,
+			ui.ui_frame_sc(ui_frame, 10),
 			y,
-			w - ui.ui_frame_sc(&ui_frame, 20),
-			ui.ui_frame_sc(&ui_frame, 28),
+			w - ui.ui_frame_sc(ui_frame, 20),
+			ui.ui_frame_sc(ui_frame, 28),
 			SECTION_NAMES[s],
 			style,
 		) {
 			section = s
 			ui.pane_reset(&content_pane)
 		}
-		y += ui.ui_frame_sc(&ui_frame, 32)
+		y += ui.ui_frame_sc(ui_frame, 32)
 	}
 
-	y = sh - ui.ui_frame_sc(&ui_frame, 140)
+	y = sh - ui.ui_frame_sc(ui_frame, 140)
 	if ui.btn(
-		&ui_frame,
-		ui.ui_frame_sc(&ui_frame, 10),
+		ui_frame,
+		ui.ui_frame_sc(ui_frame, 10),
 		y,
-		w - ui.ui_frame_sc(&ui_frame, 20),
-		ui.ui_frame_sc(&ui_frame, 26),
+		w - ui.ui_frame_sc(ui_frame, 20),
+		ui.ui_frame_sc(ui_frame, 26),
 		"Light theme" if dark else "Dark theme",
 	) {
 		dark = !dark
 		high_contrast = false
 		apply_gallery_theme()
 	}
-	y += ui.ui_frame_sc(&ui_frame, 32)
+	y += ui.ui_frame_sc(ui_frame, 32)
 	if ui.btn(
-		&ui_frame,
-		ui.ui_frame_sc(&ui_frame, 10),
+		ui_frame,
+		ui.ui_frame_sc(ui_frame, 10),
 		y,
-		w - ui.ui_frame_sc(&ui_frame, 20),
-		ui.ui_frame_sc(&ui_frame, 26),
+		w - ui.ui_frame_sc(ui_frame, 20),
+		ui.ui_frame_sc(ui_frame, 26),
 		"Standard contrast" if high_contrast else "High contrast",
 	) {
 		high_contrast = !high_contrast
 		apply_gallery_theme()
 	}
-	y += ui.ui_frame_sc(&ui_frame, 32)
+	y += ui.ui_frame_sc(ui_frame, 32)
 	if ui.btn(
-		&ui_frame,
-		ui.ui_frame_sc(&ui_frame, 10),
+		ui_frame,
+		ui.ui_frame_sc(ui_frame, 10),
 		y,
-		w - ui.ui_frame_sc(&ui_frame, 20),
-		ui.ui_frame_sc(&ui_frame, 26),
+		w - ui.ui_frame_sc(ui_frame, 20),
+		ui.ui_frame_sc(ui_frame, 26),
 		"Motion: reduced" if reduced_motion else "Motion: full",
 	) {
 		reduced_motion = !reduced_motion
 		apply_gallery_theme()
 	}
-	y += ui.ui_frame_sc(&ui_frame, 32)
+	y += ui.ui_frame_sc(ui_frame, 32)
 	if ui.btn(
-		&ui_frame,
-		ui.ui_frame_sc(&ui_frame, 10),
+		ui_frame,
+		ui.ui_frame_sc(ui_frame, 10),
 		y,
-		w - ui.ui_frame_sc(&ui_frame, 20),
-		ui.ui_frame_sc(&ui_frame, 26),
+		w - ui.ui_frame_sc(ui_frame, 20),
+		ui.ui_frame_sc(ui_frame, 26),
 		"UI scale\u2026",
 	) {
 		settings_open = true
@@ -319,14 +312,14 @@ apply_gallery_theme :: proc() {
 	t :=
 		ui.theme_high_contrast() if high_contrast else (ui.theme_dark() if dark else ui.theme_light())
 	t.reduced_motion = reduced_motion
-	ui.ui_runtime_set_theme(&ui_runtime, t)
+	ui.ui_runtime_set_theme(&ui_session.runtime, t)
 }
 
 draw_content :: proc(sw, sh: i32) {
-	x := ui.ui_frame_sc(&ui_frame, NAV_W)
+	x := ui.ui_frame_sc(ui_frame, NAV_W)
 	w := sw - x
 	y := ui.pane_begin(
-		&ui_frame,
+		ui_frame,
 		&content_pane,
 		x,
 		0,
@@ -335,8 +328,8 @@ draw_content :: proc(sw, sh: i32) {
 		pad = 14,
 		keyboard = section != .Inputs,
 	)
-	cx := x + ui.ui_frame_sc(&ui_frame, 18)
-	cw := w - ui.ui_frame_sc(&ui_frame, 52)
+	cx := x + ui.ui_frame_sc(ui_frame, 18)
+	cw := w - ui.ui_frame_sc(ui_frame, 52)
 
 	end_y: i32
 	switch section {
@@ -349,7 +342,7 @@ draw_content :: proc(sw, sh: i32) {
 	case .Charts:
 		end_y = draw_charts(cx, y, cw)
 	case .Markdown:
-		md_ctx := ui.markdown_context(&ui_frame)
+		md_ctx := ui.markdown_context(ui_frame)
 		end_y =
 			ui.draw_markdown(
 				&md_ctx,
@@ -357,7 +350,7 @@ draw_content :: proc(sw, sh: i32) {
 				y,
 				cw,
 				MARKDOWN_SAMPLE,
-				ui.ui_frame_theme(&ui_frame).fg_primary,
+				ui.ui_frame_theme(ui_frame).fg_primary,
 			) +
 			y
 	case .Layout:
@@ -367,42 +360,42 @@ draw_content :: proc(sw, sh: i32) {
 	case .Stress:
 		end_y = draw_stress(cx, y, cw)
 	}
-	ui.pane_end(&ui_frame, &content_pane, x, 0, w, sh, end_y, pad = 14)
+	ui.pane_end(ui_frame, &content_pane, x, 0, w, sh, end_y, pad = 14)
 }
 
 draw_buttons :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(&ui_frame, x, y0, w, "BUTTON STYLES")
-	bw := ui.ui_frame_sc(&ui_frame, 120)
-	bh := ui.ui_frame_sc(&ui_frame, 30)
-	gap := ui.ui_frame_sc(&ui_frame, 10)
-	if ui.btn(&ui_frame, x, y, bw, bh, "Primary", ui.Btn_Style.Primary) do click_count += 1
-	if ui.btn(&ui_frame, x + (bw + gap), y, bw, bh, "Secondary", ui.Btn_Style.Secondary) {
+	y := ui.section_header(ui_frame, x, y0, w, "BUTTON STYLES")
+	bw := ui.ui_frame_sc(ui_frame, 120)
+	bh := ui.ui_frame_sc(ui_frame, 30)
+	gap := ui.ui_frame_sc(ui_frame, 10)
+	if ui.btn(ui_frame, x, y, bw, bh, "Primary", ui.Btn_Style.Primary) do click_count += 1
+	if ui.btn(ui_frame, x + (bw + gap), y, bw, bh, "Secondary", ui.Btn_Style.Secondary) {
 		click_count += 1
 	}
-	if ui.btn(&ui_frame, x + (bw + gap) * 2, y, bw, bh, "Danger", ui.Btn_Style.Danger) {
+	if ui.btn(ui_frame, x + (bw + gap) * 2, y, bw, bh, "Danger", ui.Btn_Style.Danger) {
 		click_count += 1
 	}
-	if ui.btn(&ui_frame, x + (bw + gap) * 3, y, bw, bh, "Ghost", ui.Btn_Style.Ghost) {
+	if ui.btn(ui_frame, x + (bw + gap) * 3, y, bw, bh, "Ghost", ui.Btn_Style.Ghost) {
 		click_count += 1
 	}
 	y += bh + gap
-	ui.btn(&ui_frame, x, y, bw, bh, "Disabled", ui.Btn_Style.Primary, enabled = false)
-	if ui.icon_btn(&ui_frame, x + bw + gap, y, bh, "\u2715") do click_count += 1
-	if ui.back_btn(&ui_frame, x + bw + gap + bh + gap, y + ui.ui_frame_sc(&ui_frame, 4), "Back") {
+	ui.btn(ui_frame, x, y, bw, bh, "Disabled", ui.Btn_Style.Primary, enabled = false)
+	if ui.icon_btn(ui_frame, x + bw + gap, y, bh, "\u2715") do click_count += 1
+	if ui.back_btn(ui_frame, x + bw + gap + bh + gap, y + ui.ui_frame_sc(ui_frame, 4), "Back") {
 		click_count += 1
 	}
 	y += bh + gap
 
 	count := fmt.tprintf("clicks: %d", click_count)
-	ui.text(&ui_frame, count, x, y, .Small, .Secondary)
-	y += ui.ui_frame_sc(&ui_frame, 30)
+	ui.text(ui_frame, count, x, y, .Small, .Secondary)
+	y += ui.ui_frame_sc(ui_frame, 30)
 
-	y = ui.section_header(&ui_frame, x, y, w, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
-	ui.form_focus_cycle(&ui_frame, &focus_slot, 3)
+	y = ui.section_header(ui_frame, x, y, w, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
+	ui.form_focus_cycle(ui_frame, &focus_slot, 3)
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Focusable %d", i + 1)
 		if ui.btn(
-			&ui_frame,
+			ui_frame,
 			x + i32(i) * (bw + gap),
 			y,
 			bw,
@@ -413,23 +406,23 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 			click_count += 1
 		}
 	}
-	y += bh + ui.ui_frame_sc(&ui_frame, 16)
+	y += bh + ui.ui_frame_sc(ui_frame, 16)
 
-	y = ui.section_header(&ui_frame, x, y, w, "COLLAPSIBLE HEADERS")
+	y = ui.section_header(ui_frame, x, y, w, "COLLAPSIBLE HEADERS")
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Section %d", i + 1)
-		ui.collapsible_header(&ui_frame, x, y, w, label, &headers_open[i])
-		y += ui.ui_frame_sc(&ui_frame, 28)
+		ui.collapsible_header(ui_frame, x, y, w, label, &headers_open[i])
+		y += ui.ui_frame_sc(ui_frame, 28)
 		if headers_open[i] {
 			ui.text(
-				&ui_frame,
+				ui_frame,
 				"Collapsed state is a caller-owned bool.",
-				x + ui.ui_frame_sc(&ui_frame, 12),
+				x + ui.ui_frame_sc(ui_frame, 12),
 				y,
 				.Small,
 				.Secondary,
 			)
-			y += ui.ui_frame_sc(&ui_frame, 24)
+			y += ui.ui_frame_sc(ui_frame, 24)
 		}
 	}
 	return y
@@ -437,23 +430,23 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 
 draw_inputs :: proc(x, y0, w: i32) -> i32 {
 	y := ui.section_header(
-		&ui_frame,
+		ui_frame,
 		x,
 		y0,
 		w,
 		"TEXT INPUTS (Input_Box bundle: builder + caret + undo + pills)",
 	)
-	iw := min(w, ui.ui_frame_sc(&ui_frame, 420))
+	iw := min(w, ui.ui_frame_sc(ui_frame, 420))
 
 	state := &input_state
 	ui.ui_begin_frame(
 		&state.ctx,
-		&ui_frame,
+		ui_frame,
 		x,
 		y,
 		iw,
-		ui.ui_frame_sc(&ui_frame, 600),
-		gap = ui.ui_frame_sc(&ui_frame, 10),
+		ui.ui_frame_sc(ui_frame, 600),
+		gap = ui.ui_frame_sc(ui_frame, 10),
 	)
 	ui.input(
 		&state.ctx,
@@ -475,7 +468,7 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 		INPUT_NOTES_ID,
 		&state.notes,
 		"Notes\u2026 (Shift+Enter for newlines)",
-		h = ui.ui_frame_sc(&ui_frame, 90),
+		h = ui.ui_frame_sc(ui_frame, 90),
 		semantics = ui.Text_Input_Semantics{name = "Notes"},
 	)
 
@@ -484,7 +477,7 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 		ui.input_box_reset(&state.pass)
 		ui.input_box_reset(&state.notes)
 	}
-	ui.ui_space(&state.ctx, ui.ui_frame_sc(&ui_frame, 6))
+	ui.ui_space(&state.ctx, ui.ui_frame_sc(ui_frame, 6))
 
 	summary := fmt.tprintf(
 		"name: %q \u00b7 notes: %d bytes",
@@ -494,29 +487,29 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 	ui.label(
 		&state.ctx,
 		summary,
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_theme(ui_frame).fg_secondary,
 	)
 
 	end_y := ui.remaining(&state.ctx.layout).y
 	ui.ui_end(&state.ctx)
-	return end_y + ui.ui_frame_sc(&ui_frame, 24)
+	return end_y + ui.ui_frame_sc(ui_frame, 24)
 }
 
 draw_widget_choices :: proc(state: ^Widget_State) {
 	assert(state != nil, "draw_widget_choices: nil state")
 	ui.ui_row(
 		&state.ctx,
-		ui.ui_frame_metrics(&ui_frame).ROW_H_SM,
-		gap = ui.ui_frame_sc(&ui_frame, 10),
+		ui.ui_frame_metrics(ui_frame).ROW_H_SM,
+		gap = ui.ui_frame_sc(ui_frame, 10),
 	)
 	ui.checkbox(&state.ctx, WIDGET_ENABLE_ID, "Enable widgets", &state.check_a)
 	ui.checkbox(&state.ctx, WIDGET_VERBOSE_ID, "Verbose logs", &state.check_b)
 	ui.ui_row_end(&state.ctx)
 	ui.ui_row(
 		&state.ctx,
-		ui.ui_frame_metrics(&ui_frame).ROW_H_SM,
-		gap = ui.ui_frame_sc(&ui_frame, 10),
+		ui.ui_frame_metrics(ui_frame).ROW_H_SM,
+		gap = ui.ui_frame_sc(ui_frame, 10),
 	)
 	ui.radio(&state.ctx, WIDGET_SMALL_ID, "Small", &state.radio_choice, 0)
 	ui.radio(&state.ctx, WIDGET_MEDIUM_ID, "Medium", &state.radio_choice, 1)
@@ -528,16 +521,16 @@ draw_widget_volume :: proc(state: ^Widget_State) {
 	assert(state != nil, "draw_widget_volume: nil state")
 	ui.ui_row(
 		&state.ctx,
-		ui.ui_frame_metrics(&ui_frame).ROW_H_SM,
-		gap = ui.ui_frame_sc(&ui_frame, 10),
+		ui.ui_frame_metrics(ui_frame).ROW_H_SM,
+		gap = ui.ui_frame_sc(ui_frame, 10),
 	)
 	rect := ui.ui_slot(
 		&state.ctx,
-		ui.ui_frame_sc(&ui_frame, 240),
-		ui.ui_frame_metrics(&ui_frame).ROW_H_SM,
+		ui.ui_frame_sc(ui_frame, 240),
+		ui.ui_frame_metrics(ui_frame).ROW_H_SM,
 	)
 	ui.slider_at_state(
-		&ui_frame,
+		ui_frame,
 		&state.slider,
 		rect,
 		&state.volume,
@@ -547,7 +540,7 @@ draw_widget_volume :: proc(state: ^Widget_State) {
 		ui.ui_focus(&state.ctx, WIDGET_VOLUME_ID),
 	)
 	ui.tooltip(
-		&ui_frame,
+		ui_frame,
 		&state.tooltip,
 		rect,
 		"drag, or use \u2190/\u2192 when focused",
@@ -557,7 +550,7 @@ draw_widget_volume :: proc(state: ^Widget_State) {
 	ui.label(
 		&state.ctx,
 		fmt.tprintf("%.0f%%", state.volume),
-		color = ui.ui_frame_theme(&ui_frame).fg_secondary,
+		color = ui.ui_frame_theme(ui_frame).fg_secondary,
 	)
 	ui.ui_row_end(&state.ctx)
 }
@@ -565,7 +558,7 @@ draw_widget_volume :: proc(state: ^Widget_State) {
 draw_widget_form_controls :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_form_controls: nil state")
 	y := ui.section_header(
-		&ui_frame,
+		ui_frame,
 		x,
 		y0,
 		w,
@@ -573,12 +566,12 @@ draw_widget_form_controls :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 	)
 	ui.ui_begin_frame(
 		&state.ctx,
-		&ui_frame,
+		ui_frame,
 		x,
 		y,
 		w,
-		ui.ui_frame_sc(&ui_frame, 400),
-		gap = ui.ui_frame_sc(&ui_frame, 8),
+		ui.ui_frame_sc(ui_frame, 400),
+		gap = ui.ui_frame_sc(ui_frame, 8),
 	)
 	draw_widget_choices(state)
 	draw_widget_volume(state)
@@ -591,117 +584,117 @@ draw_widget_form_controls :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 		&state.dropdown,
 		a11y_label = "Graphics backend",
 	)
-	y = ui.remaining(&state.ctx.layout).y + ui.ui_frame_sc(&ui_frame, 14)
+	y = ui.remaining(&state.ctx.layout).y + ui.ui_frame_sc(ui_frame, 14)
 	ui.ui_end(&state.ctx)
 	return y
 }
 
 draw_widget_progress :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(&ui_frame, x, y0, w, "PROGRESS / SPINNER / PILLS")
+	y := ui.section_header(ui_frame, x, y0, w, "PROGRESS / SPINNER / PILLS")
 	ui.spinner(
-		&ui_frame,
-		x + ui.ui_frame_sc(&ui_frame, 16),
-		y + ui.ui_frame_sc(&ui_frame, 16),
-		ui.ui_frame_scf(&ui_frame, 14),
+		ui_frame,
+		x + ui.ui_frame_sc(ui_frame, 16),
+		y + ui.ui_frame_sc(ui_frame, 16),
+		ui.ui_frame_scf(ui_frame, 14),
 	)
 	ui.progress_bar(
-		&ui_frame,
-		x + ui.ui_frame_sc(&ui_frame, 48),
-		y + ui.ui_frame_sc(&ui_frame, 4),
-		ui.ui_frame_sc(&ui_frame, 200),
-		ui.ui_frame_sc(&ui_frame, 8),
+		ui_frame,
+		x + ui.ui_frame_sc(ui_frame, 48),
+		y + ui.ui_frame_sc(ui_frame, 4),
+		ui.ui_frame_sc(ui_frame, 200),
+		ui.ui_frame_sc(ui_frame, 8),
 		0.65,
-		ui.ui_frame_theme(&ui_frame).fg_accent,
+		ui.ui_frame_theme(ui_frame).fg_accent,
 	)
 	ui.progress_bar_animated(
-		&ui_frame,
-		x + ui.ui_frame_sc(&ui_frame, 48),
-		y + ui.ui_frame_sc(&ui_frame, 20),
-		ui.ui_frame_sc(&ui_frame, 200),
-		ui.ui_frame_sc(&ui_frame, 8),
+		ui_frame,
+		x + ui.ui_frame_sc(ui_frame, 48),
+		y + ui.ui_frame_sc(ui_frame, 20),
+		ui.ui_frame_sc(ui_frame, 200),
+		ui.ui_frame_sc(ui_frame, 8),
 		progress_frac,
 		&progress_anim,
-		ui.ui_frame_theme(&ui_frame).fg_success,
+		ui.ui_frame_theme(ui_frame).fg_success,
 	)
 	if ui.btn(
-		&ui_frame,
-		x + ui.ui_frame_sc(&ui_frame, 260),
+		ui_frame,
+		x + ui.ui_frame_sc(ui_frame, 260),
 		y,
-		ui.ui_frame_sc(&ui_frame, 90),
-		ui.ui_frame_sc(&ui_frame, 24),
+		ui.ui_frame_sc(ui_frame, 90),
+		ui.ui_frame_sc(ui_frame, 24),
 		"Replay",
 	) {
 		progress_anim = 0
 	}
-	return y + ui.ui_frame_sc(&ui_frame, 44)
+	return y + ui.ui_frame_sc(ui_frame, 44)
 }
 
 draw_widget_status_pills :: proc(x, y: i32) -> i32 {
 	px := x
 	px +=
 		ui.status_pill(
-			&ui_frame,
+			ui_frame,
 			"active",
 			px,
 			y,
-			ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-			ui.ui_frame_theme(&ui_frame).fg_success,
+			ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+			ui.ui_frame_theme(ui_frame).fg_success,
 		) +
-		ui.ui_frame_sc(&ui_frame, 8)
+		ui.ui_frame_sc(ui_frame, 8)
 	px +=
 		ui.status_pill(
-			&ui_frame,
+			ui_frame,
 			"warning",
 			px,
 			y,
-			ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-			ui.ui_frame_theme(&ui_frame).fg_tool,
+			ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+			ui.ui_frame_theme(ui_frame).fg_tool,
 		) +
-		ui.ui_frame_sc(&ui_frame, 8)
+		ui.ui_frame_sc(ui_frame, 8)
 	ui.status_pill(
-		&ui_frame,
+		ui_frame,
 		"error",
 		px,
 		y,
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_error,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_theme(ui_frame).fg_error,
 	)
-	return y + ui.ui_frame_sc(&ui_frame, 34)
+	return y + ui.ui_frame_sc(ui_frame, 34)
 }
 
 draw_widget_kv_rows :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(&ui_frame, x, y0, w, "KV ROWS + LIST ROWS")
-	width := min(w, ui.ui_frame_sc(&ui_frame, 360))
+	y := ui.section_header(ui_frame, x, y0, w, "KV ROWS + LIST ROWS")
+	width := min(w, ui.ui_frame_sc(ui_frame, 360))
 	ui.kv_row_frame(
-		&ui_frame,
+		ui_frame,
 		x,
 		y,
 		width,
 		"Renderer",
 		"WebGPU",
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
-		ui.ui_frame_theme(&ui_frame).fg_primary,
+		ui.ui_frame_theme(ui_frame).fg_secondary,
+		ui.ui_frame_theme(ui_frame).fg_primary,
 	)
-	y += ui.ui_frame_sc(&ui_frame, 20)
+	y += ui.ui_frame_sc(ui_frame, 20)
 	ui.kv_row_frame(
-		&ui_frame,
+		ui_frame,
 		x,
 		y,
 		width,
 		"State model",
 		"caller-owned",
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
-		ui.ui_frame_theme(&ui_frame).fg_primary,
+		ui.ui_frame_theme(ui_frame).fg_secondary,
+		ui.ui_frame_theme(ui_frame).fg_primary,
 	)
-	return y + ui.ui_frame_sc(&ui_frame, 26)
+	return y + ui.ui_frame_sc(ui_frame, 26)
 }
 
 draw_widget_backend_list :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_backend_list: nil state")
 	y := y0
 	labels := [?]string{"Metal", "Vulkan", "D3D12", "WebGPU"}
-	width := min(w, ui.ui_frame_sc(&ui_frame, 360))
-	step := ui.ui_frame_sc(&ui_frame, 26)
+	width := min(w, ui.ui_frame_sc(ui_frame, 360))
+	step := ui.ui_frame_sc(ui_frame, 26)
 	config := ui.Listbox_Config {
 		rect         = {x, y, width, step * i32(len(labels))},
 		label        = "Rendering backends",
@@ -713,15 +706,15 @@ draw_widget_backend_list :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 		keys         = .Focused,
 		page_rows    = len(labels),
 	}
-	result := ui.listbox_begin(&ui_frame, &state.listbox, config)
+	result := ui.listbox_begin(ui_frame, &state.listbox, config)
 	for label, i in labels {
-		rect := rl.Rectangle{f32(x), f32(y), f32(width), f32(ui.ui_frame_sc(&ui_frame, 24))}
+		rect := rl.Rectangle{f32(x), f32(y), f32(width), f32(ui.ui_frame_sc(ui_frame, 24))}
 		row := ui.selectable_row(
-			&ui_frame,
+			ui_frame,
 			&state.listbox,
 			config,
 			{
-				{x, y, width, ui.ui_frame_sc(&ui_frame, 24)},
+				{x, y, width, ui.ui_frame_sc(ui_frame, 24)},
 				label,
 				fmt.tprintf("gallery:backend:%d", i),
 				i,
@@ -729,23 +722,23 @@ draw_widget_backend_list :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 				"Rendering backend option",
 			},
 		)
-		ui.list_row_bg(&ui_frame, ui.Rect(rect), row.selected, row.hovered)
+		ui.list_row_bg(ui_frame, ui.Rect(rect), row.selected, row.hovered)
 		if row.activated do state.list_activated = i
 		ui.text(
-			&ui_frame,
+			ui_frame,
 			label,
-			x + ui.ui_frame_sc(&ui_frame, 8),
-			y + ui.ui_frame_sc(&ui_frame, 4),
+			x + ui.ui_frame_sc(ui_frame, 8),
+			y + ui.ui_frame_sc(ui_frame, 4),
 			.Small,
 		)
 		y += step
 	}
-	ui.listbox_end(&ui_frame, &state.listbox)
+	ui.listbox_end(ui_frame, &state.listbox)
 	if result.activated do state.list_activated = result.activated_index
 	if state.list_activated >= 0 {
 		assert(state.list_activated < len(labels), "draw_widget_backend_list: invalid index")
 		ui.text(
-			&ui_frame,
+			ui_frame,
 			fmt.tprintf("activated: %s", labels[state.list_activated]),
 			x,
 			y,
@@ -754,70 +747,70 @@ draw_widget_backend_list :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 		)
 		y += step
 	}
-	return y + ui.ui_frame_sc(&ui_frame, 8)
+	return y + ui.ui_frame_sc(ui_frame, 8)
 }
 
 draw_widget_truncation_card :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(&ui_frame, x, y0, w, "CARD + SHADOW + TRUNCATION")
+	y := ui.section_header(ui_frame, x, y0, w, "CARD + SHADOW + TRUNCATION")
 	card := rl.Rectangle {
 		f32(x),
 		f32(y),
-		f32(min(w, ui.ui_frame_sc(&ui_frame, 360))),
-		f32(ui.ui_frame_sc(&ui_frame, 64)),
+		f32(min(w, ui.ui_frame_sc(ui_frame, 360))),
+		f32(ui.ui_frame_sc(ui_frame, 64)),
 	}
-	ui.draw_shadow_rounded(&ui_frame, ui.Rect(card), 0.15)
+	ui.draw_shadow_rounded(ui_frame, ui.Rect(card), 0.15)
 	ui.draw_card_bg_frame(
-		&ui_frame,
+		ui_frame,
 		ui.Rect(card),
-		ui.ui_frame_theme(&ui_frame).bg_secondary,
-		accent_w = ui.ui_frame_sc(&ui_frame, 3),
+		ui.ui_frame_theme(ui_frame).bg_secondary,
+		accent_w = ui.ui_frame_sc(ui_frame, 3),
 	)
 	ui.draw_text_truncated_frame(
-		&ui_frame,
+		ui_frame,
 		"A very long label that will be cut with an ellipsis when it overflows the card",
-		x + ui.ui_frame_sc(&ui_frame, 12),
-		y + ui.ui_frame_sc(&ui_frame, 12),
-		i32(card.width) - ui.ui_frame_sc(&ui_frame, 24),
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_primary,
+		x + ui.ui_frame_sc(ui_frame, 12),
+		y + ui.ui_frame_sc(ui_frame, 12),
+		i32(card.width) - ui.ui_frame_sc(ui_frame, 24),
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_theme(ui_frame).fg_primary,
 	)
 	path := ui.truncate_path_middle_frame(
-		&ui_frame,
+		ui_frame,
 		"ingot/examples/gallery/very/deep/dir/main.odin",
-		i32(card.width) - ui.ui_frame_sc(&ui_frame, 24),
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
+		i32(card.width) - ui.ui_frame_sc(ui_frame, 24),
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
 	)
 	ui.text(
-		&ui_frame,
+		ui_frame,
 		path,
-		x + ui.ui_frame_sc(&ui_frame, 12),
-		y + ui.ui_frame_sc(&ui_frame, 34),
+		x + ui.ui_frame_sc(ui_frame, 12),
+		y + ui.ui_frame_sc(ui_frame, 34),
 		.Small,
 		.Secondary,
 	)
-	return y + i32(card.height) + ui.ui_frame_sc(&ui_frame, 16)
+	return y + i32(card.height) + ui.ui_frame_sc(ui_frame, 16)
 }
 
 draw_widget_fit_card :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(&ui_frame, x, y0, w, "FIT-CONTENT CARD")
-	fit_w := min(w, ui.ui_frame_sc(&ui_frame, 360))
-	pad := ui.ui_frame_sc(&ui_frame, 12)
+	y := ui.section_header(ui_frame, x, y0, w, "FIT-CONTENT CARD")
+	fit_w := min(w, ui.ui_frame_sc(ui_frame, 360))
+	pad := ui.ui_frame_sc(ui_frame, 12)
 	column: ui.Fit_Column
 	ui.fit_column_begin(
 		&column,
 		x + pad,
 		y + pad,
 		fit_w - pad * 2,
-		gap = ui.ui_frame_sc(&ui_frame, 6),
+		gap = ui.ui_frame_sc(ui_frame, 6),
 	)
-	title := ui.fit_column_next(&column, ui.ui_frame_sc(&ui_frame, 18))
-	detail := ui.fit_column_next(&column, ui.ui_frame_sc(&ui_frame, 18))
+	title := ui.fit_column_next(&column, ui.ui_frame_sc(ui_frame, 18))
+	detail := ui.fit_column_next(&column, ui.ui_frame_sc(ui_frame, 18))
 	content := ui.fit_column_end(&column)
 	card := rl.Rectangle{f32(x), f32(y), f32(fit_w), f32(content.h + pad * 2)}
-	ui.draw_card_bg_frame(&ui_frame, ui.Rect(card), ui.ui_frame_theme(&ui_frame).bg_secondary)
-	ui.text(&ui_frame, "Geometry resolved before drawing", title.x, title.y, .Small)
-	ui.text(&ui_frame, "No retained tree or trailing gap", detail.x, detail.y, .Small, .Secondary)
-	return y + i32(card.height) + ui.ui_frame_sc(&ui_frame, 16)
+	ui.draw_card_bg_frame(ui_frame, ui.Rect(card), ui.ui_frame_theme(ui_frame).bg_secondary)
+	ui.text(ui_frame, "Geometry resolved before drawing", title.x, title.y, .Small)
+	ui.text(ui_frame, "No retained tree or trailing gap", detail.x, detail.y, .Small, .Secondary)
+	return y + i32(card.height) + ui.ui_frame_sc(ui_frame, 16)
 }
 
 draw_widgets :: proc(x, y0, w: i32) -> i32 {
@@ -833,94 +826,87 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 
 draw_charts :: proc(x, y0, w: i32) -> i32 {
 	y := ui.section_header(
-		&ui_frame,
+		ui_frame,
 		x,
 		y0,
 		w,
 		"LINE + BAR + SPARKLINE (hover for overlay tooltips)",
 	)
-	cw := min(w, ui.ui_frame_sc(&ui_frame, 560))
+	cw := min(w, ui.ui_frame_sc(ui_frame, 560))
 	series := [2]ui.Chart_Series {
 		{name = "Revenue", values = revenue[:]},
 		{name = "Costs", values = costs[:]},
 	}
 	ui.line_chart(
-		&ui_frame,
+		ui_frame,
 		x,
 		y,
 		cw,
-		ui.ui_frame_sc(&ui_frame, 240),
+		ui.ui_frame_sc(ui_frame, 240),
 		series[:],
 		&line_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true, fill = true},
 	)
-	y += ui.ui_frame_sc(&ui_frame, 252)
+	y += ui.ui_frame_sc(ui_frame, 252)
 	ui.bar_chart(
-		&ui_frame,
+		ui_frame,
 		x,
 		y,
 		cw,
-		ui.ui_frame_sc(&ui_frame, 220),
+		ui.ui_frame_sc(ui_frame, 220),
 		series[:],
 		&bar_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
-	y += ui.ui_frame_sc(&ui_frame, 232)
-	ui.text(&ui_frame, "sparkline:", x, y + ui.ui_frame_sc(&ui_frame, 6), .Small, .Secondary)
+	y += ui.ui_frame_sc(ui_frame, 232)
+	ui.text(ui_frame, "sparkline:", x, y + ui.ui_frame_sc(ui_frame, 6), .Small, .Secondary)
 	ui.sparkline(
-		&ui_frame,
-		x + ui.ui_frame_sc(&ui_frame, 80),
+		ui_frame,
+		x + ui.ui_frame_sc(ui_frame, 80),
 		y,
-		ui.ui_frame_sc(&ui_frame, 140),
-		ui.ui_frame_sc(&ui_frame, 28),
+		ui.ui_frame_sc(ui_frame, 140),
+		ui.ui_frame_sc(ui_frame, 28),
 		spark[:],
 	)
-	return y + ui.ui_frame_sc(&ui_frame, 40)
+	return y + ui.ui_frame_sc(ui_frame, 40)
 }
 
 draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(&ui_frame, x, y0, w, "SINGLE-PASS LAYOUT (weights + flex sizing)")
+	y := ui.section_header(ui_frame, x, y0, w, "SINGLE-PASS LAYOUT (weights + flex sizing)")
 	l: ui.Layout
-	lw := min(w, ui.ui_frame_sc(&ui_frame, 520))
-	ui.layout_begin(
-		&l,
-		x,
-		y,
-		lw,
-		ui.ui_frame_sc(&ui_frame, 248),
-		gap = ui.ui_frame_sc(&ui_frame, 8),
-	)
+	lw := min(w, ui.ui_frame_sc(ui_frame, 520))
+	ui.layout_begin(&l, x, y, lw, ui.ui_frame_sc(ui_frame, 248), gap = ui.ui_frame_sc(ui_frame, 8))
 
-	ui.push_row(&l, ui.ui_frame_sc(&ui_frame, 40), gap = ui.ui_frame_sc(&ui_frame, 8))
+	ui.push_row(&l, ui.ui_frame_sc(ui_frame, 40), gap = ui.ui_frame_sc(ui_frame, 8))
 	ui.row_weights(&l, {1, 2, 1})
 	cell(ui.next_weighted(&l, 1), "1fr")
 	cell(ui.next_weighted(&l, 2), "2fr")
 	cell(ui.next_weighted(&l, 1), "1fr")
 	ui.layout_pop(&l)
 
-	ui.push_row(&l, ui.ui_frame_sc(&ui_frame, 40), gap = ui.ui_frame_sc(&ui_frame, 8))
-	cell(ui.next(&l, ui.ui_frame_sc(&ui_frame, 120)), "fixed 120")
+	ui.push_row(&l, ui.ui_frame_sc(ui_frame, 40), gap = ui.ui_frame_sc(ui_frame, 8))
+	cell(ui.next(&l, ui.ui_frame_sc(ui_frame, 120)), "fixed 120")
 	cell(ui.remaining(&l), "remaining")
 	ui.layout_pop(&l)
 
 	ui.push_row(
 		&l,
-		ui.ui_frame_sc(&ui_frame, 90),
-		gap = ui.ui_frame_sc(&ui_frame, 8),
+		ui.ui_frame_sc(ui_frame, 90),
+		gap = ui.ui_frame_sc(ui_frame, 8),
 		cross_align = .Center,
 	)
 	cell(
-		ui.next_sized(&l, ui.ui_frame_sc(&ui_frame, 160), ui.ui_frame_sc(&ui_frame, 50)),
+		ui.next_sized(&l, ui.ui_frame_sc(ui_frame, 160), ui.ui_frame_sc(ui_frame, 50)),
 		"centered",
 	)
 	ui.layout_pop(&l)
 
-	ui.push_row(&l, ui.ui_frame_sc(&ui_frame, 40), gap = ui.ui_frame_sc(&ui_frame, 8))
+	ui.push_row(&l, ui.ui_frame_sc(ui_frame, 40), gap = ui.ui_frame_sc(ui_frame, 8))
 	ui.flex_begin(
 		&l,
 		{
-			ui.flex_fixed(ui.ui_frame_sc(&ui_frame, 72)),
-			ui.flex_fit(ui.ui_frame_sc(&ui_frame, 96), min_size = ui.ui_frame_sc(&ui_frame, 56)),
+			ui.flex_fixed(ui.ui_frame_sc(ui_frame, 72)),
+			ui.flex_fit(ui.ui_frame_sc(ui_frame, 96), min_size = ui.ui_frame_sc(ui_frame, 56)),
 			ui.flex_percent(0.2),
 			ui.flex_grow(),
 		},
@@ -932,7 +918,7 @@ draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
 	ui.layout_pop(&l)
 
 	ui.layout_end(&l)
-	return y + ui.ui_frame_sc(&ui_frame, 258)
+	return y + ui.ui_frame_sc(ui_frame, 258)
 }
 
 cell :: proc(r: ui.Rect_I32, label: string) {
@@ -942,21 +928,21 @@ cell :: proc(r: ui.Rect_I32, label: string) {
 		r.y,
 		r.w,
 		r.h,
-		ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).bg_active),
+		ui_gfx.color_to_gfx(ui.ui_frame_theme(ui_frame).bg_active),
 	)
 	rl.DrawRectangleLines(
 		r.x,
 		r.y,
 		r.w,
 		r.h,
-		ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).border_color),
+		ui_gfx.color_to_gfx(ui.ui_frame_theme(ui_frame).border_color),
 	)
-	tw := ui.text_width(&ui_frame, label, .Small)
+	tw := ui.text_width(ui_frame, label, .Small)
 	ui.text(
-		&ui_frame,
+		ui_frame,
 		label,
 		r.x + (r.w - tw) / 2,
-		r.y + (r.h - ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL) / 2,
+		r.y + (r.h - ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL) / 2,
 		.Small,
 		.Secondary,
 	)
@@ -964,34 +950,34 @@ cell :: proc(r: ui.Rect_I32, label: string) {
 
 draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 	y := ui.section_header(
-		&ui_frame,
+		ui_frame,
 		x,
 		y0,
 		w,
 		"OVERLAY + INPUT ROUTING (popup occludes the buttons under it)",
 	)
-	bw := ui.ui_frame_sc(&ui_frame, 150)
-	bh := ui.ui_frame_sc(&ui_frame, 30)
+	bw := ui.ui_frame_sc(ui_frame, 150)
+	bh := ui.ui_frame_sc(ui_frame, 30)
 	// These buttons sit UNDER the popup. With routing, clicks on the popup
 	// must not reach them.
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Shielded %d", i + 1)
-		if ui.btn(&ui_frame, x, y + i32(i) * (bh + ui.ui_frame_sc(&ui_frame, 8)), bw, bh, label) {
+		if ui.btn(ui_frame, x, y + i32(i) * (bh + ui.ui_frame_sc(ui_frame, 8)), bw, bh, label) {
 			shielded_clicks += 1
 		}
 	}
-	info_y := y + 3 * (bh + ui.ui_frame_sc(&ui_frame, 8))
+	info_y := y + 3 * (bh + ui.ui_frame_sc(ui_frame, 8))
 	summary := fmt.tprintf(
 		"shielded clicks: %d (should not rise while the popup covers them)",
 		shielded_clicks,
 	)
-	ui.text(&ui_frame, summary, x, info_y, .Small, .Secondary)
+	ui.text(ui_frame, summary, x, info_y, .Small, .Secondary)
 
 	if ui.btn(
-		&ui_frame,
-		x + bw + ui.ui_frame_sc(&ui_frame, 100),
+		ui_frame,
+		x + bw + ui.ui_frame_sc(ui_frame, 100),
 		y,
-		ui.ui_frame_sc(&ui_frame, 150),
+		ui.ui_frame_sc(ui_frame, 150),
 		bh,
 		"Toggle popup",
 		ui.Btn_Style.Primary,
@@ -999,10 +985,10 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 		popup_open = !popup_open
 	}
 	if ui.btn(
-		&ui_frame,
-		x + bw + ui.ui_frame_sc(&ui_frame, 100),
-		y + bh + ui.ui_frame_sc(&ui_frame, 8),
-		ui.ui_frame_sc(&ui_frame, 150),
+		ui_frame,
+		x + bw + ui.ui_frame_sc(ui_frame, 100),
+		y + bh + ui.ui_frame_sc(ui_frame, 8),
+		ui.ui_frame_sc(ui_frame, 150),
 		bh,
 		"Open modal",
 	) {
@@ -1022,7 +1008,7 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 			{label = "Close menu"},
 		}
 		chosen := ui.context_menu(
-			&ui_frame,
+			ui_frame,
 			&ctx_menu,
 			items,
 			rl.GetScreenWidth(),
@@ -1036,48 +1022,48 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 	// Escape hatch: fg_label has no semantic Ink, so this one keeps the
 	// explicit size/color API rather than ui.text.
 	ui.draw_text_frame(
-		&ui_frame,
+		ui_frame,
 		strings.clone_to_cstring(ctx_note, context.temp_allocator),
 		x,
-		info_y + ui.ui_frame_sc(&ui_frame, 22),
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_label,
+		info_y + ui.ui_frame_sc(ui_frame, 22),
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_theme(ui_frame).fg_label,
 	)
 
 	if popup_open {
 		// Fully covers all three shielded buttons (and nothing else), so any
 		// click on them while the popup is open would be a routing leak.
-		draw_demo_popup(x - ui.ui_frame_sc(&ui_frame, 8), y - ui.ui_frame_sc(&ui_frame, 8))
+		draw_demo_popup(x - ui.ui_frame_sc(ui_frame, 8), y - ui.ui_frame_sc(ui_frame, 8))
 	}
 
 	// Generic modal: dims, claims all input, Escape / click-outside dismisses.
 	if about_modal.open {
 		body := ui.modal_begin(
-			&ui_frame,
+			ui_frame,
 			&about_modal,
 			"Generic modal",
-			ui.ui_frame_sc(&ui_frame, 420),
-			ui.ui_frame_sc(&ui_frame, 190),
+			ui.ui_frame_sc(ui_frame, 420),
+			ui.ui_frame_sc(ui_frame, 190),
 			rl.GetScreenWidth(),
 			rl.GetScreenHeight(),
 		)
 		ui.draw_text_wrapped_frame(
-			&ui_frame,
-			body.x + ui.ui_frame_metrics(&ui_frame).PADDING,
-			body.y + ui.ui_frame_sc(&ui_frame, 4),
-			body.w - ui.ui_frame_metrics(&ui_frame).PADDING * 2,
+			ui_frame,
+			body.x + ui.ui_frame_metrics(ui_frame).PADDING,
+			body.y + ui.ui_frame_sc(ui_frame, 4),
+			body.w - ui.ui_frame_metrics(ui_frame).PADDING * 2,
 			"The settings panel is built on this same modal_begin/modal_end pair. " +
 			"Escape or a click outside dismisses it.",
-			ui.ui_frame_theme(&ui_frame).fg_primary,
-			ui.ui_frame_metrics(&ui_frame).FONT_SIZE,
-			ui.ui_frame_metrics(&ui_frame).LINE_HEIGHT,
+			ui.ui_frame_theme(ui_frame).fg_primary,
+			ui.ui_frame_metrics(ui_frame).FONT_SIZE,
+			ui.ui_frame_metrics(ui_frame).LINE_HEIGHT,
 		)
 		if ui.btn(
-			&ui_frame,
-			body.x + ui.ui_frame_metrics(&ui_frame).PADDING,
-			body.y + body.h - ui.ui_frame_sc(&ui_frame, 44),
-			ui.ui_frame_sc(&ui_frame, 90),
-			ui.ui_frame_sc(&ui_frame, 28),
+			ui_frame,
+			body.x + ui.ui_frame_metrics(ui_frame).PADDING,
+			body.y + body.h - ui.ui_frame_sc(ui_frame, 44),
+			ui.ui_frame_sc(ui_frame, 90),
+			ui.ui_frame_sc(ui_frame, 28),
 			"Close",
 			ui.Btn_Style.Primary,
 		) {
@@ -1085,104 +1071,104 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 		}
 		ui.modal_end(&about_modal)
 	}
-	return info_y + ui.ui_frame_sc(&ui_frame, 52)
+	return info_y + ui.ui_frame_sc(ui_frame, 52)
 }
 
 // draw_demo_popup records a popup on the overlay layer (drawn above content
 // painted later) and claims its rect so widgets underneath are inert.
 draw_demo_popup :: proc(x, y: i32) {
-	w := ui.ui_frame_sc(&ui_frame, 220)
-	h := ui.ui_frame_sc(&ui_frame, 130)
+	w := ui.ui_frame_sc(ui_frame, 220)
+	h := ui.ui_frame_sc(ui_frame, 130)
 	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	ui.overlay_begin(&ui_frame, ui.Rect(rect), claim_input = true)
-	ui.overlay_rounded(&ui_frame, ui.Rect(rect), 0.1, 6, ui.ui_frame_theme(&ui_frame).bg_popup)
+	ui.overlay_begin(ui_frame, ui.Rect(rect), claim_input = true)
+	ui.overlay_rounded(ui_frame, ui.Rect(rect), 0.1, 6, ui.ui_frame_theme(ui_frame).bg_popup)
 	ui.overlay_rounded_lines(
-		&ui_frame,
+		ui_frame,
 		ui.Rect(rect),
 		0.1,
 		6,
 		1.0,
-		ui.ui_frame_theme(&ui_frame).border_color,
+		ui.ui_frame_theme(ui_frame).border_color,
 	)
 	ui.overlay_text(
-		&ui_frame,
+		ui_frame,
 		"Overlay popup",
-		x + ui.ui_frame_sc(&ui_frame, 12),
-		y + ui.ui_frame_sc(&ui_frame, 10),
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE,
-		ui.ui_frame_theme(&ui_frame).fg_primary,
+		x + ui.ui_frame_sc(ui_frame, 12),
+		y + ui.ui_frame_sc(ui_frame, 10),
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE,
+		ui.ui_frame_theme(ui_frame).fg_primary,
 	)
 	ui.overlay_text(
-		&ui_frame,
+		ui_frame,
 		"Recorded during the frame,",
-		x + ui.ui_frame_sc(&ui_frame, 12),
-		y + ui.ui_frame_sc(&ui_frame, 36),
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
+		x + ui.ui_frame_sc(ui_frame, 12),
+		y + ui.ui_frame_sc(ui_frame, 36),
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_theme(ui_frame).fg_secondary,
 	)
 	ui.overlay_text(
-		&ui_frame,
+		ui_frame,
 		"replayed above everything.",
-		x + ui.ui_frame_sc(&ui_frame, 12),
-		y + ui.ui_frame_sc(&ui_frame, 54),
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
+		x + ui.ui_frame_sc(ui_frame, 12),
+		y + ui.ui_frame_sc(ui_frame, 54),
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_theme(ui_frame).fg_secondary,
 	)
 
 	// Close row: the popup is topmost, so it hit-tests raw input.
 	row := rl.Rectangle {
-		f32(x + ui.ui_frame_sc(&ui_frame, 12)),
-		f32(y + h - ui.ui_frame_sc(&ui_frame, 30)),
-		f32(w - ui.ui_frame_sc(&ui_frame, 24)),
-		f32(ui.ui_frame_sc(&ui_frame, 22)),
+		f32(x + ui.ui_frame_sc(ui_frame, 12)),
+		f32(y + h - ui.ui_frame_sc(ui_frame, 30)),
+		f32(w - ui.ui_frame_sc(ui_frame, 24)),
+		f32(ui.ui_frame_sc(ui_frame, 22)),
 	}
 	mouse := rl.GetMousePosition()
 	hovered := rl.CheckCollisionPointRec(mouse, row)
 	if hovered {
-		ui.overlay_rect(&ui_frame, ui.Rect(row), ui.ui_frame_theme(&ui_frame).bg_active)
-		ui.request_cursor(&ui_frame, .POINTING_HAND)
+		ui.overlay_rect(ui_frame, ui.Rect(row), ui.ui_frame_theme(ui_frame).bg_active)
+		ui.request_cursor(ui_frame, .POINTING_HAND)
 	}
 	ui.overlay_text(
-		&ui_frame,
+		ui_frame,
 		"Close",
-		x + ui.ui_frame_sc(&ui_frame, 18),
-		y + h - ui.ui_frame_sc(&ui_frame, 28),
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_accent,
+		x + ui.ui_frame_sc(ui_frame, 18),
+		y + h - ui.ui_frame_sc(ui_frame, 28),
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_theme(ui_frame).fg_accent,
 	)
 	if hovered && rl.IsMouseButtonReleased(.LEFT) {
 		popup_open = false
 	}
-	ui.overlay_end(&ui_frame)
+	ui.overlay_end(ui_frame)
 }
 
 draw_stress :: proc(x, y0, w: i32) -> i32 {
 	y := ui.section_header(
-		&ui_frame,
+		ui_frame,
 		x,
 		y0,
 		w,
 		"STRESS: 1000 BUTTONS (batcher, hover-anim bound, culling)",
 	)
-	cols := max(int(w / ui.ui_frame_sc(&ui_frame, 110)), 1)
-	bw := ui.ui_frame_sc(&ui_frame, 100)
-	bh := ui.ui_frame_sc(&ui_frame, 26)
+	cols := max(int(w / ui.ui_frame_sc(ui_frame, 110)), 1)
+	bw := ui.ui_frame_sc(ui_frame, 100)
+	bh := ui.ui_frame_sc(ui_frame, 26)
 	for i in 0 ..< 1000 {
 		col := i % cols
 		row := i / cols
-		bx := x + i32(col) * (bw + ui.ui_frame_sc(&ui_frame, 6))
-		by := y + i32(row) * (bh + ui.ui_frame_sc(&ui_frame, 6))
+		bx := x + i32(col) * (bw + ui.ui_frame_sc(ui_frame, 6))
+		by := y + i32(row) * (bh + ui.ui_frame_sc(ui_frame, 6))
 		label := fmt.tprintf("btn %d", i)
-		if ui.btn(&ui_frame, bx, by, bw, bh, label) {
+		if ui.btn(ui_frame, bx, by, bw, bh, label) {
 			stress_clicked = i
 		}
 	}
 	rows := (1000 + cols - 1) / cols
-	y += i32(rows) * (bh + ui.ui_frame_sc(&ui_frame, 6)) + ui.ui_frame_sc(&ui_frame, 10)
+	y += i32(rows) * (bh + ui.ui_frame_sc(ui_frame, 6)) + ui.ui_frame_sc(ui_frame, 10)
 	if stress_clicked >= 0 {
 		msg := fmt.tprintf("last clicked: btn %d", stress_clicked)
-		ui.text(&ui_frame, msg, x, y, .Small, .Secondary)
-		y += ui.ui_frame_sc(&ui_frame, 24)
+		ui.text(ui_frame, msg, x, y, .Small, .Secondary)
+		y += ui.ui_frame_sc(ui_frame, 24)
 	}
 	return y
 }

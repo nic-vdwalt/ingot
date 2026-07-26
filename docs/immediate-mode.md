@@ -114,6 +114,11 @@ frame is open, and clone into an owner allocator before retaining the data.
 Call `ui_frame_destroy` when a reusable frame leaves service. Deferred renderers
 must finalize, consume borrowed output, and release in that order.
 
+`ui_gfx.App_Session` is the default graphics host. It owns one runtime, reusable
+frame, input/output pair, and adapter. It does not own widget/component state,
+the graphics window, or `context.temp_allocator`. Advanced hosts may continue
+to bracket these objects through the low-level adapter procedures.
+
 ## From immediate-mode library to app framework
 
 The early success of IMGUI in game tools also narrowed how the idea came to be
