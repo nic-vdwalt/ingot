@@ -5,7 +5,7 @@ third-party binaries, fonts, documentation, toolchain code, or system
 libraries. Complete this checklist before publishing a source or binary
 release.
 
-## Copyright ownership
+## Original-code ownership
 
 - [ ] Confirm Nicolas van der Walt or the named licensor owns the copyright in
   all Ingot contributions, including code moved from the Alloy Odin client.
