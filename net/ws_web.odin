@@ -88,11 +88,7 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 	_ = ws_start_connect_url(ws, url, WS_Options{max_attempts = max_attempts})
 }
 
-ws_start_connect_url :: proc(
-	ws: ^WebSocket,
-	raw_url: string,
-	options: WS_Options = {},
-) -> bool {
+ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Options = {}) -> bool {
 	url, parse_err := ws_url_parse(raw_url)
 	if parse_err != .None || options.ca_file != "" {
 		ws.last_error = .Invalid_URL

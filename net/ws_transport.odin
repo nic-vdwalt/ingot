@@ -96,7 +96,10 @@ when !INGOT_WS_SIM {
 		port: u16,
 		ca_file: string,
 		connect_timeout: time.Duration,
-	) -> (Ws_Transport, Ws_Net_Err) {
+	) -> (
+		Ws_Transport,
+		Ws_Net_Err,
+	) {
 		if ws_curl_global_init(WS_CURL_GLOBAL_ALL) != .OK do return {}, .TLS
 		handle := ws_curl_easy_init()
 		if handle == nil do return {}, .TLS

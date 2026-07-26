@@ -150,7 +150,10 @@ when INGOT_WS_SIM {
 		port: u16,
 		ca_file: string,
 		connect_timeout: time.Duration,
-	) -> (Ws_Transport, Ws_Net_Err) {
+	) -> (
+		Ws_Transport,
+		Ws_Net_Err,
+	) {
 		event, _ := sim_next()
 		if event == .TLS_Fail do return {}, .TLS
 		if event != .TLS_Valid do return {}, .Other

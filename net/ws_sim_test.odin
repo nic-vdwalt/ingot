@@ -7,6 +7,7 @@ import "core:time"
 
 _ :: strings
 _ :: testing
+_ :: time
 
 when INGOT_WS_SIM {
 	@(test)

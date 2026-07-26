@@ -53,7 +53,7 @@ WS_MAX_QUEUED_BYTES :: 64 * 1024 * 1024
 // blocking the worker forever: each timeout window sends a PING (the server
 // auto-replies PONG), and the connection is declared dead once no bytes arrive
 // for WS_DEAD_AFTER. WS_RECONNECT_WAIT backs off between dial cycles.
-WS_RECV_TIMEOUT :: 5 * time.Second
+WS_RECV_TIMEOUT :: 100 * time.Millisecond
 WS_DEAD_AFTER :: 15 * time.Second
 WS_RECONNECT_WAIT :: 1 * time.Second
 WS_CONNECT_TIMEOUT :: 10 * time.Second
@@ -283,9 +283,9 @@ ws_encode_frame :: proc(
 WebSocket :: struct {
 	// Transport lifecycle is shared between the worker and ws_close. TLS handles
 	// remain worker-owned; ws_close signals cancellation and joins the worker.
-	transport:        Ws_Transport,
-	socket_open:      bool,
-	sock_mutex:       sync.Mutex,
+	transport:         Ws_Transport,
+	socket_open:       bool,
+	sock_mutex:        sync.Mutex,
 
 	// Written by the worker thread, read by the main thread — always access
 	// with sync.atomic_load / atomic_store (ws_state is the public read).
@@ -305,35 +305,35 @@ WebSocket :: struct {
 	// (re)handshake — consumers poll it (ws_conn_gen) to re-establish app-level
 	// subscriptions after a recovery. auto_reconnect=false restores the legacy
 	// one-shot behaviour (worker exits after the first drop).
-	conn_gen:         int,
-	auto_reconnect:   bool,
+	conn_gen:          int,
+	auto_reconnect:    bool,
 
 	// Thread-safe receive queue, bounded by message count and aggregate bytes.
-	recv_queue:       [dynamic]WS_Message,
-	recv_queue_bytes: u64,
-	recv_mutex:       sync.Mutex,
-	recv_dropped:     u64, // messages discarded because recv_queue hit its cap
+	recv_queue:        [dynamic]WS_Message,
+	recv_queue_bytes:  u64,
+	recv_mutex:        sync.Mutex,
+	recv_dropped:      u64, // messages discarded because recv_queue hit its cap
 
 	// Optional wake hook, called from the worker thread after a message is
 	// queued or the state changes, so an event-driven-idle frame loop repaints
 	// promptly instead of waiting for its idle-floor tick (gfx.RequestRedraw
 	// fits the signature). Set before ws_start_connect; nil means no-op.
-	wake:             proc "contextless" (),
+	wake:              proc "contextless" (),
 
 	// ws_close broadcasts stop_cond so worker backoff waits (dial retry,
 	// reconnect) end early instead of sleeping out their full duration.
-	stop_mutex:       sync.Mutex,
-	stop_cond:        sync.Cond,
+	stop_mutex:        sync.Mutex,
+	stop_cond:         sync.Cond,
 
 	// Send serialization (PONG frames go out from the recv thread while text
 	// frames are sent from the main thread).
-	send_mutex:       sync.Mutex,
+	send_mutex:        sync.Mutex,
 
 	// Background thread: runs dial + handshake, then the recv loop. running
 	// is written by ws_close and the worker and read across threads — always
 	// access it with sync.atomic_load / atomic_store.
-	recv_thread:      ^thread.Thread,
-	running:          bool,
+	recv_thread:       ^thread.Thread,
+	running:           bool,
 }
 
 // Initialize a WebSocket connection.
@@ -358,11 +358,7 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 	_ = ws_start_connect_url(ws, url, WS_Options{max_attempts = max_attempts})
 }
 
-ws_start_connect_url :: proc(
-	ws: ^WebSocket,
-	raw_url: string,
-	options: WS_Options = {},
-) -> bool {
+ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Options = {}) -> bool {
 	parsed, parse_err := ws_url_parse(raw_url)
 	if parse_err != .None {
 		sync.atomic_store(&ws.last_error, WS_Error.Invalid_URL)
@@ -535,7 +531,8 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 		ws_set_state(ws, first ? .Connecting : .Reconnecting)
 
 		if !ws_dial_and_handshake(ws) {
-			if sync.atomic_load(&ws.last_error) == .TLS {
+			failure := sync.atomic_load(&ws.last_error)
+			if failure == .TLS || failure == .Handshake {
 				ws_set_state(ws, .Error)
 				break
 			}
@@ -573,7 +570,7 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 	// unconditionally. The pre-fix condition preserved a stale .Connected
 	// when ws_close raced the recv loop's running check — the reconnect
 	// fuzzer (fuzz/wsreconn) found that interleaving.
-	ws_set_state(ws, .Disconnected)
+	if ws_state(ws) != .Error do ws_set_state(ws, .Disconnected)
 	sync.atomic_store(&ws.running, false)
 }
 
@@ -603,9 +600,19 @@ ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
 	}
 	ws_net_set_recv_timeout(transport, ws.handshake_timeout)
 	buf: [2048]u8
-	count, recv_err := ws_net_recv(transport, buf[:])
+	count := 0
+	started := time.now()
+	for count < len(buf) && time.since(started) < ws.handshake_timeout {
+		read, recv_err := ws_net_recv(transport, buf[count:])
+		if recv_err == .Timeout {
+			time.sleep(10 * time.Millisecond)
+			continue
+		}
+		if recv_err != .None || read == 0 do return false
+		count += read
+		if strings.contains(string(buf[:count]), "\r\n\r\n") do break
+	}
 	ws_net_set_recv_timeout(transport, time.Duration(0))
-	if recv_err != .None || count == 0 do return false
 	response := string(buf[:count])
 	if !strings.has_prefix(response, "HTTP/1.1 101") do return false
 	return strings.contains(response, ws_accept_for_key(key))
@@ -646,6 +653,10 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 	for sync.atomic_load(&ws.running) {
 		n, err := ws_net_recv(&ws.transport, scratch[:])
 		if err != .None {
+			if err == .Timeout && ws.secure {
+				time.sleep(10 * time.Millisecond)
+				continue
+			}
 			// A recv timeout is not a disconnect: probe liveness with a PING
 			// (the server auto-replies PONG, counted as activity below) and
 			// only give up once the connection has been silent too long.
@@ -837,6 +848,7 @@ ws_close :: proc(ws: ^WebSocket) {
 		thread.destroy(ws.recv_thread)
 		ws.recv_thread = nil
 	}
+	sync.atomic_store(&ws.state, WS_State.Disconnected)
 
 	// Clean up queue (idempotent — ws_close may be called more than once).
 	for msg in ws.recv_queue {

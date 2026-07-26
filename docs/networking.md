@@ -79,7 +79,7 @@ bound is exhausted or it is closed:
 
 1. Initialize with `ws_init`.
 2. Set the optional native `wake` hook before connecting.
-3. Call `ws_start_connect` with host, port, and a positive maximum attempt count.
+3. Call `ws_start_connect_url` with an explicit `ws://` or `wss://` URL and bounded options.
 4. Observe connection changes through `ws_state` and `ws_conn_gen`.
 5. Send only while connected and handle a `false` send result.
 6. Drain and free messages on the application thread.
@@ -90,10 +90,14 @@ re-establish server-side subscriptions because they belonged to the previous
 socket. Native connection and receive work runs on a worker thread; state access
 uses the provided procedures rather than direct field reads.
 
-Native host/port WebSockets are plaintext. Port 443 causes the web backend to
-select `wss`, but native WSS is not implemented by this compatibility transport.
-Do not use native `ws_start_connect` for confidential production traffic until
-a TLS-capable transport is supplied.
+Native `wss://` uses libcurl TLS with peer-chain, hostname, and SNI validation.
+Verification cannot be disabled. `WS_Options.ca_file` may add a private trust
+root on native builds; browsers use browser-managed trust. Scheme, not port,
+selects security. The legacy `ws_start_connect` API remains plaintext.
+
+Certificate and configuration failures publish `.Error` and do not reconnect.
+Transient connection and stream failures retain bounded reconnect behavior. Use
+`ws_error` to inspect the last classified failure.
 
 ## WebSocket ownership and limits
 
@@ -122,8 +126,9 @@ stopped and page teardown is complete.
 
 ## Testing
 
-`bash scripts/test.sh` covers parsers, ownership, simulated transport, and worker
-behavior. Deterministic `fuzz/run.sh net` exercises HTTP and WebSocket parsing;
+`bash scripts/test.sh` covers parsers, ownership, simulated transport, workers,
+and an Internet-independent loopback TLS matrix. Deterministic `fuzz/run.sh net`
+exercises HTTP and WebSocket parsing;
 `fuzz/run.sh wsreconn` exercises reconnect synchronization; the TSan phase
 covers WebSocket and HTTP worker concurrency. These do not replace real TLS,
 proxy, CORS, DNS, timeout, IPv4/IPv6, browser, and unreliable-network testing in

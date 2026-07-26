@@ -27,7 +27,9 @@ All targets require the pinned Odin toolchain and Bash for repository scripts.
 `scripts/test.sh` requires Python 3. `scripts/check-web.sh` requires Node with the
 built-in test runner. Native rendering requires the wgpu-native library expected
 by Odin's `vendor:wgpu`; terminal and native accessibility features require the
-committed libvterm and AccessKit libraries for the selected target.
+committed libvterm and AccessKit libraries for the selected target. Native HTTPS
+and WSS use libcurl. Ingot always enables peer and hostname verification; the
+application deployment must provide libcurl's required CA trust source.
 
 The core framework API is written in Odin, but native integration is not
 literally dependency-free or pure Odin. Applications that omit terminal or

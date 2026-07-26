@@ -27,7 +27,8 @@ architecture, and `docs/testing.md` for the test matrix.
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
 - **Test**: `bash scripts/test.sh` — runs `odin test` on `gfx ui ui_gfx
-  libvterm term prefs net`, then type-checks `sys pty accesskit testx`. Python 3
+  libvterm term prefs net`, the offline WSS/TLS matrix, then type-checks
+  `sys pty accesskit testx`. Python 3
   supervises each command. Pass extra Odin flags through, e.g.
   `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.
 - **Check / lint** (Tiger Style gate): `bash scripts/check.sh` — strict

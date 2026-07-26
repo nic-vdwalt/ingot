@@ -80,11 +80,11 @@ Chromium/WebKit run, screen-reader exercise, audio-unlock test, or WebGPU valida
 
 | Target | Mandatory automated checks | Required release validation | Status |
 |---|---|---|---|
-| macOS | `scripts/test.sh`, `scripts/check.sh` | Real PTY, dialogs/URL, Metal fixture, Safari WebGPU, VoiceOver | Not recorded |
-| Linux | `scripts/test.sh`, `scripts/check.sh` | Real PTY, dialogs/URL, Vulkan fixture on supported drivers | Not recorded |
-| Windows | Native equivalents of test/check gates | ConPTY, dialogs/URL, D3D12 and Vulkan fixtures, screen reader | Not recorded |
+| macOS | Tests including loopback WSS, strict checks | Native trust-store WSS, real PTY, Metal, Safari, VoiceOver | Not recorded |
+| Linux | Tests including loopback WSS, strict checks | Native CA-source WSS, real PTY, Vulkan | Not recorded |
+| Windows | Native tests including loopback WSS, strict checks | Native trust-source WSS, ConPTY, D3D12/Vulkan, screen reader | Not recorded |
 | Browser | `scripts/check-web.sh`, Node tests | Chromium and WebKit lifecycle/input/network/WebGPU runs | Not recorded |
-| Internet TLS | URL/parser unit tests | Valid chain plus expired, untrusted, wrong-host, timeout, IPv4/IPv6, and downgrade cases | Not recorded |
+| Internet TLS | URL/parser and loopback certificate tests | HTTPS/WSS valid, expired, untrusted, wrong-host, timeout, IPv4/IPv6, proxy, downgrade | Not recorded |
 
 Record operating system, architecture, Ingot/Odin revision, browser, GPU, driver,
 backend, date, commands, and outcome with `scripts/validation-evidence.py` and
@@ -117,8 +117,8 @@ Before describing a revision as production-ready for a target:
 
 ## Remaining production work
 
-- Native WSS still requires a TLS-capable WebSocket transport; the compatibility
-  socket implementation is plaintext.
+- Native WSS has deterministic loopback coverage; revision-pinned macOS, Linux,
+  Windows, proxy, IPv4/IPv6, and public-Internet evidence remains required.
 - Native multi-context rendering requires representative Metal, D3D12, and
   Vulkan validation evidence; browser multi-canvas and parallel rendering remain
   separate future capabilities.

@@ -19,13 +19,13 @@ jobs:
       - name: Verify pinned Odin is available
         shell: bash
         run: odin version
-      - name: Test and check
+      - name: Native tests, WSS TLS, and checks
         if: runner.os != 'Windows'
         shell: bash
         run: |
           bash scripts/test.sh
           bash scripts/check.sh
-      - name: Native Windows checks
+      - name: Native Windows tests, WSS TLS, and checks
         if: runner.os == 'Windows'
         shell: pwsh
         run: |

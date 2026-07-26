@@ -5,7 +5,6 @@ import base64
 import hashlib
 import pathlib
 import ssl
-import subprocess
 import tempfile
 
 CASE_TIMEOUT_SECONDS = 15
@@ -20,16 +19,22 @@ async def websocket_server(reader, writer, valid_upgrade=True):
         accept = base64.b64encode(hashlib.sha1(key + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
         if valid_upgrade:
             writer.write(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + b"\r\n\r\n")
-            writer.write(b"\x81\x06secure")
         else:
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
         await writer.drain()
-        await asyncio.sleep(0.1)
+        if valid_upgrade:
+            await asyncio.sleep(0.2)
+            writer.write(b"\x81\x06secure")
+            await writer.drain()
+            await asyncio.sleep(0.2)
     except (asyncio.IncompleteReadError, ConnectionError, StopAsyncIteration):
         pass
     finally:
         writer.close()
-        await writer.wait_closed()
+        try:
+            await writer.wait_closed()
+        except (BrokenPipeError, ConnectionError):
+            pass
 
 
 async def run_case(name, fixture, collection, pki, certificate, key, ca_file, expected_error, expect_message, valid_upgrade=True):
@@ -49,7 +54,7 @@ async def run_case(name, fixture, collection, pki, certificate, key, ca_file, ex
         collection,
         "--",
         f"wss://localhost:{port}/secure?case={name}",
-        str(pki / ca_file) if ca_file else "",
+        str(pki / ca_file) if ca_file else str(pki / "wrong.pem"),
         str(expected_error),
         "1" if expect_message else "0",
     ]

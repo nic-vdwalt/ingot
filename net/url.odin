@@ -166,7 +166,9 @@ http_url_resolve :: proc(base: Http_URL, location: string) -> (Http_URL, Http_Er
 }
 
 ws_url_parse :: proc(raw: string) -> (url: WS_URL, err: WS_URL_Error) {
-	if len(raw) == 0 || strings.contains(raw, "\r") || strings.contains(raw, "\n") ||
+	if len(raw) == 0 ||
+	   strings.contains(raw, "\r") ||
+	   strings.contains(raw, "\n") ||
 	   strings.contains(raw, "\x00") {
 		return {}, .Invalid_Path
 	}
@@ -185,7 +187,9 @@ ws_url_parse :: proc(raw: string) -> (url: WS_URL, err: WS_URL_Error) {
 	if strings.contains(rest, "#") do return {}, .Invalid_Path
 	target_index := strings.index(rest, "/")
 	query_index := strings.index(rest, "?")
-	if target_index < 0 || (query_index >= 0 && query_index < target_index) do target_index = query_index
+	if target_index < 0 || (query_index >= 0 && query_index < target_index) {
+		target_index = query_index
+	}
 	authority := rest
 	url.path = "/"
 	if target_index >= 0 {

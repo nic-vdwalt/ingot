@@ -62,7 +62,7 @@ harnesses.
 | `ingot:ui` | Renderer-independent immediate-mode widgets, layout, paint output, input snapshots, accessibility semantics, and themes |
 | `ingot:ui_gfx` | Adapter that captures `gfx` input, replays UI paint output, and applies platform output |
 | `ingot:prefs` | Native settings files and web `localStorage` behind one API |
-| `ingot:net` | Background HTTP and a reconnecting RFC 6455 WebSocket client |
+| `ingot:net` | Background HTTP and reconnecting verified `ws://`/`wss://` WebSockets |
 | `ingot:sys` | URLs, native file dialogs, and platform integration |
 | `ingot:term` | libvterm, PTY pumping, and key-to-terminal translation |
 | `ingot:libvterm` | Odin bindings and committed native static libraries |

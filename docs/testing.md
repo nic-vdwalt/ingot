@@ -44,7 +44,10 @@ bash scripts/test.sh
 ```
 
 This runs `odin test` for `gfx`, `ui`, `ui_gfx`, `libvterm`, `term`, `prefs`,
-and `net`, then type-checks packages without tests. Extra Odin flags pass through
+and `net`, runs the native loopback WSS/TLS matrix, then type-checks packages
+without tests. The matrix uses repository-only test PKI and Python's standard
+library to verify trusted, untrusted, wrong-host, upgrade, framing, and teardown
+behavior without Internet access. Extra Odin flags pass through
 to each test command:
 
 ```sh

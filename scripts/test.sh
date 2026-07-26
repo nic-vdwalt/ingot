@@ -62,6 +62,10 @@ for pkg in gfx ui ui_gfx libvterm term prefs net; do
 		-define:ODIN_TEST_FAIL_ON_EMPTY=true ${extra[@]+"${extra[@]}"} "$@"
 done
 
+echo "== testing native WSS loopback TLS =="
+run_supervised "wss-loopback" python3 "$root/scripts/wss-loopback-test.py" \
+	--fixture "$root/examples/wss_fixture" "--collection=$col"
+
 # Packages without unit tests are still type-checked so they cannot rot.
 for pkg in sys pty accesskit testx; do
 	echo "== checking $pkg =="
