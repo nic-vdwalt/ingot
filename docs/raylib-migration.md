@@ -343,3 +343,63 @@ until the window closes. Web stores `frame`, returns to JavaScript, and lets
 Browser paths are URLs, file-backed audio is asynchronous, clipboard and input
 are subject to browser policy, page presentation owns the icon, and audio may
 need a gesture. Native and web builds must be validated independently.
+
+## Validation checklist
+
+Framework changes affecting the compatibility surface must pass:
+
+```sh
+bash scripts/test.sh
+bash scripts/check.sh
+bash scripts/check-web.sh
+```
+
+The strict native gate builds `examples/raylib_migration_fixture`; the web gate
+compiles the same fixture for `js_wasm32`. These are compile and deterministic
+test gates. They do not replace a windowed render comparison or real browser and
+GPU validation.
+
+Before accepting an application migration, verify:
+
+- The application compiles from a clean checkout with pinned Odin and Ingot
+  revisions and the explicit `ingot` collection registration.
+- Every raylib and `rlgl` dependency is classified, and no unsupported call is
+  hidden behind a compatibility wrapper.
+- No visual result depends on `SetMouseOffset`, compatibility framebuffer
+  attachment, compatibility depth-mask state, or an unported low-level draw.
+- Native screenshots match the baseline for shapes, clipping, text, textures,
+  render-target orientation, shaders, blending, and depth-sensitive content.
+- Logical and render dimensions, pointer coordinates, resize behavior, and
+  HiDPI output are correct on representative displays.
+- Keyboard transitions, text entry, IME, mouse, clipboard, gamepad connection,
+  buttons, and axes work on representative native hardware.
+- Sounds and music load, become ready, play, stop, loop, and unload; browser
+  audio is tested before and after the required user gesture.
+- Web assets resolve from their deployed URLs, persistent frame state survives
+  after `main`, and managed-session teardown releases the application once.
+- Native rendering runs on each supported backend being claimed: Metal on
+  macOS, D3D12 on Windows, and Vulkan on Linux.
+- A real WebGPU browser validates rendering and lifecycle. Node and compile-only
+  gates are not reported as browser, accessibility, or GPU evidence.
+
+Record the exact revision and hardware evidence in
+[Production readiness](production-readiness.md) when making a release claim.
+
+## Known limitations and issue reports
+
+The compatibility matrix describes the current known limitations. Re-check it at
+every pinned-revision upgrade because Ingot does not yet publish semantic-versioned
+releases. A newly compiling call is not evidence that its behavior matches
+raylib, and an enum value does not establish backend support.
+
+A compatibility report should include:
+
+- The smallest source reproducer and its classification from this guide.
+- Ingot Git revision and complete `odin version` output.
+- Operating system, architecture, GPU, driver, and selected WebGPU backend.
+- Browser and version for web failures, plus the served asset URL layout.
+- Exact build or run command and whether all three project gates pass.
+- Expected raylib behavior, observed Ingot behavior, and a screenshot or render
+  capture when the problem is visual.
+- Whether the migration fixture, Breakout, and render fixture reproduce the
+  failure.

@@ -39,7 +39,15 @@ done
 # all library packages green while breaking every real application.
 example_out="${TMPDIR:-/tmp}/ingot-example-check"
 mkdir -p "$example_out"
-for example in hello gallery breakout idle_demo chart_demo render_fixture multi_context_fixture; do
+for example in \
+	hello \
+	gallery \
+	breakout \
+	idle_demo \
+	chart_demo \
+	render_fixture \
+	multi_context_fixture \
+	raylib_migration_fixture; do
 	echo "== building example $example =="
 	odin build "$root/examples/$example" $col "-out:$example_out/$example" "$@"
 done

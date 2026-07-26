@@ -16,7 +16,17 @@ foreach ($Package in @("libvterm", "accesskit")) {
     & odin check "$Root/$Package" $Collection -no-entry-point
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
-foreach ($Example in @("gallery", "breakout", "idle_demo", "chart_demo", "render_fixture", "multi_context_fixture")) {
+$Examples = @(
+    "hello",
+    "gallery",
+    "breakout",
+    "idle_demo",
+    "chart_demo",
+    "render_fixture",
+    "multi_context_fixture",
+    "raylib_migration_fixture"
+)
+foreach ($Example in $Examples) {
     & odin build "$Root/examples/$Example" $Collection
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
