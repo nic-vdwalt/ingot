@@ -46,16 +46,8 @@ static void decode_utf8(VTermEncoding *enc, void *data_,
       return;
 
     else if(c >= 0x20 && c < 0x7f) {
-      if(data->bytes_remaining) {
+      if(data->bytes_remaining)
         cp[(*cpi)++] = UNICODE_INVALID;
-        /* The loop guard only reserved room for one codepoint this
-         * iteration; flushing the aborted sequence may have used it. Leave
-         * this byte unconsumed (skip the (*pos)++) for the next call rather
-         * than overflow cp[]. */
-        data->bytes_remaining = 0;
-        if(*cpi >= cplen)
-          return;
-      }
 
       cp[(*cpi)++] = c;
 #ifdef DEBUG_PRINT_UTF8

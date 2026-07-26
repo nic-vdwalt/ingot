@@ -6,6 +6,9 @@ security, caching, and wakeup behavior differ by platform.
 
 ## HTTP choices
 
+Ingot's HTTP implementation is temporary and will be replaced when Odin provides
+its proper HTTP package. This does not apply to Ingot's WebSocket client.
+
 Use `http_request_url` for general Internet URLs. It accepts explicit `http` and
 `https` schemes, validates redirects, and rejects user information, fragments,
 control characters, malformed ports, and HTTPS-to-HTTP downgrade redirects.

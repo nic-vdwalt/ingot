@@ -36,6 +36,12 @@ Renderer_Stats :: struct {
 	present_cpu_seconds:           f64,
 	peak_geometry_arena_bytes:     u64,
 	peak_uniform_arena_bytes:      u64,
+	stream_geometry_write_calls:   u32,
+	stream_uniform_write_calls:    u32,
+	stream_geometry_write_bytes:   u64,
+	stream_uniform_write_bytes:    u64,
+	stream_copy_cpu_seconds:       f64,
+	stream_write_cpu_seconds:      f64,
 	geometry_reservation_failures: u32,
 	uniform_reservation_failures:  u32,
 	stream_slot_exhaustions:       u32,
@@ -239,6 +245,30 @@ _stats_present :: proc(ctx: ^Context) -> f64 {
 	} else {
 		wg.SurfacePresent(ctx.surface)
 		return 0
+	}
+}
+
+@(private)
+_stats_stream_copy :: proc(elapsed: f64) {
+	when RENDER_STATS_ENABLED {
+		assert(elapsed >= 0, "_stats_stream_copy: negative time")
+		g.stats_current.stream_copy_cpu_seconds += elapsed
+	}
+}
+
+@(private)
+_stats_stream_write :: proc(uniform: bool, bytes: u64, elapsed: f64) {
+	when RENDER_STATS_ENABLED {
+		assert(bytes > 0, "_stats_stream_write: empty write")
+		assert(elapsed >= 0, "_stats_stream_write: negative time")
+		if uniform {
+			g.stats_current.stream_uniform_write_calls += 1
+			g.stats_current.stream_uniform_write_bytes += bytes
+		} else {
+			g.stats_current.stream_geometry_write_calls += 1
+			g.stats_current.stream_geometry_write_bytes += bytes
+		}
+		g.stats_current.stream_write_cpu_seconds += elapsed
 	}
 }
 

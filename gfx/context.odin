@@ -653,6 +653,7 @@ EndDrawing :: proc() {
 		wg.RenderPassEncoderRelease(g.frame.pass)
 
 		retirement := _submission_reserve(&g.submissions)
+		if retirement != 0 do assert(_stream_slot_upload(&g.rend))
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
 			ctx,
 			g.frame.encoder,

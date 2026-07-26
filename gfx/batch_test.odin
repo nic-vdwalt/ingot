@@ -138,6 +138,32 @@ stream_reservation_rejects_u64_overflow_atomically :: proc(t: ^testing.T) {
 }
 
 @(test)
+stream_shadow_grows_geometrically_and_preserves_bytes :: proc(t: ^testing.T) {
+	shadow: [dynamic]byte
+	defer delete(shadow)
+	testing.expect(t, _stream_shadow_ensure(&shadow, 5, 16384))
+	testing.expect_value(t, len(shadow), 4096)
+	shadow[0] = 17
+	testing.expect(t, _stream_shadow_ensure(&shadow, 4097, 16384))
+	testing.expect_value(t, len(shadow), 8192)
+	testing.expect_value(t, shadow[0], byte(17))
+}
+
+@(test)
+stream_slot_reuse_preserves_shadow_capacity :: proc(t: ^testing.T) {
+	slots: [1]Stream_Slot
+	defer delete(slots[0].geometry_shadow)
+	first := _stream_slots_acquire(slots[:], 0)
+	testing.expect(t, _stream_shadow_ensure(&slots[first].geometry_shadow, 64, 8192))
+	capacity := len(slots[first].geometry_shadow)
+	testing.expect(t, _stream_slot_submit(&slots[first], 1))
+	reused := _stream_slots_acquire(slots[:], 1)
+	testing.expect_value(t, reused, first)
+	testing.expect_value(t, slots[reused].geometry_write, u64(0))
+	testing.expect_value(t, len(slots[reused].geometry_shadow), capacity)
+}
+
+@(test)
 batch_capacity_constants_cover_complete_primitives :: proc(t: ^testing.T) {
 	testing.expect_value(t, BATCH_MAX_VERTICES % 4, 0)
 	testing.expect_value(t, BATCH_MAX_INDICES % 6, 0)

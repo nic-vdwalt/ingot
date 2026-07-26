@@ -2,9 +2,10 @@
 
 `ingot` is an Odin-first, immediate-mode app/engine on WebGPU. One source runs
 natively (macOS/Metal, Windows/D3D12, Linux/Vulkan) and in the browser (WASM +
-WebGPU). Native terminal and accessibility bindings use vendored libraries. See
-`README.md` for the project overview, `docs/immediate-mode.md` for the
-architecture, and `docs/testing.md` for the test matrix.
+WebGPU). iOS and Android support is deferred until Odin provides proper support
+for those platforms. Native terminal and accessibility bindings use vendored
+libraries. See `README.md` for the project overview, `docs/immediate-mode.md`
+for the architecture, and `docs/testing.md` for the test matrix.
 
 ## Packages
 
@@ -14,7 +15,7 @@ architecture, and `docs/testing.md` for the test matrix.
 | `ingot:ui`       | renderer-independent immediate-mode toolkit: widgets consume `Ui_Input` and append bounded paint, semantics, and platform output. It must not import `ingot:gfx`. |
 | `ingot:ui_gfx`   | bridge that snapshots `gfx` input, replays UI paint, manages UI fonts, and applies platform output |
 | `ingot:prefs`    | per-app settings persistence (native file / web `localStorage`) |
-| `ingot:net`      | background HTTP `Fetcher` + self-healing RFC 6455 `WebSocket` client |
+| `ingot:net`      | background HTTP `Fetcher` + self-healing RFC 6455 `WebSocket` client; the HTTP implementation is temporary until Odin provides its proper package |
 | `ingot:sys`      | system integration: URLs, cache paths, and native dialogs |
 | `ingot:term`     | terminal core: libvterm + PTY, per-frame pump, key→VT translation |
 | `ingot:libvterm` | Odin bindings for libvterm 0.3.3 (prebuilt static libs committed) |

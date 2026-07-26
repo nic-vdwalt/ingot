@@ -343,6 +343,7 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	retirement := u64(0)
 	if pass.owns_stream do retirement = _submission_reserve(&g.submissions)
 	allow_submit := !pass.owns_stream || retirement != 0
+	if pass.owns_stream && allow_submit do assert(_stream_slot_upload(&g.rend))
 	cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(g, pass.encoder, allow_submit)
 	if allow_submit && cmd != nil {
 		_stats_queue_submission()

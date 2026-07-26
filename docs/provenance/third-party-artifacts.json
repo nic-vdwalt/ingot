@@ -5,6 +5,8 @@
       "name": "AccessKit C API",
       "version": "0.22.3",
       "source": "https://github.com/AccessKit/accesskit-c/releases/tag/0.22.3",
+      "source_archive": "accesskit-c-0.22.3.zip",
+      "source_archive_sha256": "b652e380fb78efe6721ad892f15b2224f38f661c3fb20436ef4c5b3ce0fe8177",
       "license": "Apache-2.0 OR MIT",
       "build": "scripts/build-accesskit.sh",
       "notices": ["LICENSE", "THIRD_PARTY_NOTICES.md"],
@@ -19,13 +21,15 @@
     {
       "name": "libvterm",
       "version": "0.3.3",
-      "source": "https://www.leonerd.org.uk/code/libvterm/",
+      "source": "https://www.leonerd.org.uk/code/libvterm/libvterm-0.3.3.tar.gz",
+      "source_archive_sha256": "09156f43dd2128bd347cbeebe50d9a571d32c64e0cf18d211197946aff7226e0",
+      "source_tag_commit": "9d6d2112335080312ef8c36667fa717ded4f7daf",
       "license": "MIT",
       "build": "scripts/build-libvterm.sh and scripts/build-libvterm.bat",
-      "notices": ["THIRD_PARTY_NOTICES.md"],
+      "notices": ["vendor/libvterm/LICENSE", "THIRD_PARTY_NOTICES.md"],
       "artifacts": [
-        {"path": "libvterm/lib/darwin_arm64/libvterm.a", "sha256": "d028977b50a95813fc60638aa27c7877ab838af6c6f572f5cec28466e1e0d57f"},
-        {"path": "libvterm/lib/darwin_amd64/libvterm.a", "sha256": "42907dad31c644e9b4f2568bc9e8e86a33bfc3669035f7e93bb5b4c0d3e9e6bb"},
+        {"path": "libvterm/lib/darwin_arm64/libvterm.a", "sha256": "d69b38ecefdf7d23d56df592cb799760833ddff1154bf759d4940f51c6fc0f24"},
+        {"path": "libvterm/lib/darwin_amd64/libvterm.a", "sha256": "f8ccd0e741df7368fb79f915d334774f2d3f173ffcb7f3d7fe8024648b4e1d09"},
         {"path": "libvterm/lib/windows_amd64/vterm.lib", "sha256": "726100141eba902aeef49ee134ea3b88767f558ef691d35091526ae29d89e369"}
       ]
     },

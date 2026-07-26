@@ -12,6 +12,9 @@ col="-collection:ingot=$root"
 # have no main().
 vet_flags="-vet -strict-style -vet-shadowing -no-entry-point"
 
+echo "== repository hygiene =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check-repository-hygiene.py"
+
 echo "== gfx context ownership guard =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" \

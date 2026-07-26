@@ -7,6 +7,7 @@
 // flushes.
 package gfx
 
+import "core:mem"
 import wg "vendor:wgpu"
 
 Vertex :: struct {
@@ -52,6 +53,8 @@ Stream_Slot_State :: enum {
 Stream_Slot :: struct {
 	geometry_buffer: wg.Buffer,
 	uniform_buffer:  wg.Buffer,
+	geometry_shadow: [dynamic]byte,
+	uniform_shadow:  [dynamic]byte,
 	geometry_write:  u64,
 	uniform_write:   u64,
 	ticket:          u64,
@@ -420,6 +423,8 @@ renderer_shutdown :: proc(r: ^Renderer) {
 	for &slot in r.stream_slots {
 		if slot.uniform_buffer != nil do wg.BufferRelease(slot.uniform_buffer)
 		if slot.geometry_buffer != nil do wg.BufferRelease(slot.geometry_buffer)
+		delete(slot.geometry_shadow)
+		delete(slot.uniform_shadow)
 	}
 	for kind in Pipe_Kind {
 		for slot in Blend_Slot {
@@ -692,14 +697,15 @@ _geometry_upload_indexed :: proc(
 		return nil, 0, 0, false
 	}
 
-	wg.QueueWriteBuffer(
-		g.queue,
-		slot.geometry_buffer,
-		vertex_offset,
-		vertex_data,
-		uint(vertex_bytes),
-	)
-	wg.QueueWriteBuffer(g.queue, slot.geometry_buffer, index_offset, index_data, uint(index_bytes))
+	copy_started := platform_now()
+	if !_stream_shadow_ensure(&slot.geometry_shadow, slot.geometry_write, GEOMETRY_STREAM_BYTES) {
+		slot.geometry_write = vertex_offset
+		_stats_reservation_failure(false)
+		return nil, 0, 0, false
+	}
+	mem.copy(raw_data(slot.geometry_shadow[vertex_offset:]), vertex_data, int(vertex_bytes))
+	mem.copy(raw_data(slot.geometry_shadow[index_offset:]), index_data, int(index_bytes))
+	_stats_stream_copy(platform_now() - copy_started)
 	when RENDER_STATS_ENABLED {
 		g.stats_current.peak_geometry_arena_bytes = max(
 			g.stats_current.peak_geometry_arena_bytes,
@@ -730,6 +736,55 @@ _stream_slots_init :: proc(r: ^Renderer) {
 		assert(slot.geometry_buffer != nil)
 		assert(slot.uniform_buffer != nil)
 	}
+}
+
+@(private)
+_stream_shadow_ensure :: proc(shadow: ^[dynamic]byte, required, capacity: u64) -> bool {
+	assert(shadow != nil)
+	assert(required <= capacity)
+	if required <= u64(len(shadow)) do return true
+	grown := max(u64(4096), u64(len(shadow)) * 2)
+	for grown < required {
+		if grown > capacity / 2 {
+			grown = capacity
+			break
+		}
+		grown *= 2
+	}
+	if grown < required || grown > capacity do return false
+	resize(shadow, int(grown))
+	return u64(len(shadow)) >= required
+}
+
+@(private)
+_stream_slot_upload :: proc(r: ^Renderer) -> bool {
+	assert(r != nil)
+	if r.active_stream_slot < 0 do return false
+	slot := &r.stream_slots[r.active_stream_slot]
+	assert(slot.state == .Recording)
+	if slot.geometry_write > 0 {
+		started := platform_now()
+		wg.QueueWriteBuffer(
+			g.queue,
+			slot.geometry_buffer,
+			0,
+			raw_data(slot.geometry_shadow[:slot.geometry_write]),
+			uint(slot.geometry_write),
+		)
+		_stats_stream_write(false, slot.geometry_write, platform_now() - started)
+	}
+	if slot.uniform_write > 0 {
+		started := platform_now()
+		wg.QueueWriteBuffer(
+			g.queue,
+			slot.uniform_buffer,
+			0,
+			raw_data(slot.uniform_shadow[:slot.uniform_write]),
+			uint(slot.uniform_write),
+		)
+		_stats_stream_write(true, slot.uniform_write, platform_now() - started)
+	}
+	return true
 }
 
 @(private)
@@ -874,7 +929,14 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 		_stats_reservation_failure(true)
 		return 0, false
 	}
-	wg.QueueWriteBuffer(g.queue, slot.uniform_buffer, offset, data, uint(size))
+	copy_started := platform_now()
+	if !_stream_shadow_ensure(&slot.uniform_shadow, slot.uniform_write, UNIFORM_STREAM_BYTES) {
+		slot.uniform_write = offset
+		_stats_reservation_failure(true)
+		return 0, false
+	}
+	mem.copy(raw_data(slot.uniform_shadow[offset:]), data, int(size))
+	_stats_stream_copy(platform_now() - copy_started)
 	when RENDER_STATS_ENABLED {
 		g.stats_current.peak_uniform_arena_bytes = max(
 			g.stats_current.peak_uniform_arena_bytes,

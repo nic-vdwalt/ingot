@@ -16,6 +16,12 @@ Bundled files:
 
 Source: <https://github.com/AccessKit/accesskit-c/releases/tag/0.22.3>
 
+The source and release inputs are contained in `accesskit-c-0.22.3.zip`:
+
+```text
+b652e380fb78efe6721ad892f15b2224f38f661c3fb20436ef4c5b3ce0fe8177  accesskit-c-0.22.3.zip
+```
+
 Copyright 2023 The AccessKit Authors. All rights reserved.
 
 AccessKit C is offered under Apache License 2.0 or the MIT License. Ingot
@@ -46,7 +52,14 @@ Bundled files:
 - `libvterm/lib/darwin_amd64/libvterm.a`
 - `libvterm/lib/windows_amd64/vterm.lib`
 
-Source: <https://www.leonerd.org.uk/code/libvterm/>
+Source: <https://www.leonerd.org.uk/code/libvterm/libvterm-0.3.3.tar.gz>
+
+The exact upstream source is committed under `vendor/libvterm`. The source
+archive SHA-256 is
+`09156f43dd2128bd347cbeebe50d9a571d32c64e0cf18d211197946aff7226e0`;
+the corresponding mirror tag points to commit
+`9d6d2112335080312ef8c36667fa717ded4f7daf`. Build the archives with
+`scripts/build-libvterm.sh` or `scripts/build-libvterm.bat`.
 
 The MIT License
 
@@ -73,14 +86,10 @@ THE SOFTWARE.
 SHA-256:
 
 ```text
-d028977b50a95813fc60638aa27c7877ab838af6c6f572f5cec28466e1e0d57f  libvterm/lib/darwin_arm64/libvterm.a
-42907dad31c644e9b4f2568bc9e8e86a33bfc3669035f7e93bb5b4c0d3e9e6bb  libvterm/lib/darwin_amd64/libvterm.a
+d69b38ecefdf7d23d56df592cb799760833ddff1154bf759d4940f51c6fc0f24  libvterm/lib/darwin_arm64/libvterm.a
+f8ccd0e741df7368fb79f915d334774f2d3f173ffcb7f3d7fe8024648b4e1d09  libvterm/lib/darwin_amd64/libvterm.a
 726100141eba902aeef49ee134ea3b88767f558ef691d35091526ae29d89e369  libvterm/lib/windows_amd64/vterm.lib
 ```
-
-The build scripts refer to `vendor/libvterm`, which is not currently committed.
-Restore the exact 0.3.3 source and its file-level notices before claiming
-reproducible binary provenance.
 
 ## JetBrains Mono Regular 2.304
 

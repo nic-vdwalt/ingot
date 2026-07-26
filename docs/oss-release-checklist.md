@@ -1,9 +1,10 @@
-# OSS release checklist
+# Binary and web release checklist
 
 The root Apache-2.0 license covers Ingot's original work. It does not relicense
 third-party binaries, fonts, documentation, toolchain code, or system
-libraries. Complete this checklist before publishing a source or binary
-release.
+libraries. Complete `source-publication-checklist.md` before making the Git
+repository public. Complete this additional checklist before publishing a
+native binary, installer, or web bundle.
 
 ## Original-code ownership
 
@@ -16,15 +17,14 @@ release.
 
 ## Bundled artifacts
 
-- [ ] Record the exact tagged source and build inputs for every committed
+- [x] Record the exact tagged source and build inputs for every committed
   AccessKit and libvterm archive.
 - [ ] Capture the AccessKit 0.22.3 Rust dependency license inventory and ship
   all required notices with binary distributions.
-- [ ] Restore or document the exact libvterm 0.3.3 source used by the build
-  scripts, including file-level notices.
-- [ ] Verify committed artifact checksums against the release manifest.
-- [ ] Remove generated executables from source releases or produce them from a
-  clean, reproducible build and include all linked dependency notices.
+- [x] Restore and document the exact libvterm 0.3.3 source used by the build
+  scripts, including its license.
+- [x] Verify committed artifact checksums against the release manifest.
+- [x] Remove generated executables from source releases.
 
 ## Bundled font
 
@@ -40,9 +40,9 @@ release.
 - [ ] Compare `gfx/raymath.odin`, `gfx/rlgl/rlgl.odin`, and related rendering
   code against the raylib versions that informed their API. If implementation
   or comments were translated, retain raylib's zlib notice and mark changes.
-- [ ] Retain the modified-work attribution at the top of
+- [x] Retain the modified-work attribution at the top of
   `docs/TIGER_STYLE.md`.
-- [ ] Review test certificates, fixtures, and generated data for documented
+- [x] Review test certificates, fixtures, and generated data for documented
   provenance and regeneration steps.
 
 ## Toolchain and release output
