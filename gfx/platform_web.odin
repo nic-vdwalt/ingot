@@ -222,7 +222,7 @@ platform_should_close :: proc() -> bool {
 
 @(private)
 platform_poll_events :: proc() {
-	_input_drain()
+	_input_drain(&g.inp)
 }
 
 @(private)
@@ -327,11 +327,12 @@ _st_push_char :: proc "contextless" (r: rune) {
 // _input_drain merges staged events into g.inp. Called from platform_poll_events
 // (i.e. from input_poll, right after it clears the per-frame edge/queue state).
 @(private)
-_input_drain :: proc() {
+_input_drain :: proc(inp: ^Input) {
+	assert(inp != nil, "_input_drain: nil input")
 	for i in 0 ..< KEY_COUNT {
-		if st_pressed[i] {g.inp.pressed[i] = true}
-		if st_released[i] {g.inp.released[i] = true}
-		if st_repeat[i] {g.inp.repeat[i] = true}
+		if st_pressed[i] {inp.pressed[i] = true}
+		if st_released[i] {inp.released[i] = true}
+		if st_repeat[i] {inp.repeat[i] = true}
 		st_pressed[i], st_released[i], st_repeat[i] = false, false, false
 	}
 	for st_key_h != st_key_t {
@@ -342,12 +343,12 @@ _input_drain :: proc() {
 		_push_char(st_chars[st_char_h])
 		st_char_h = (st_char_h + 1) % CHAR_Q
 	}
-	g.inp.wheel_pending.x += st_wheel.x
-	g.inp.wheel_pending.y += st_wheel.y
+	inp.wheel_pending.x += st_wheel.x
+	inp.wheel_pending.y += st_wheel.y
 	st_wheel = {0, 0}
 	for i in 0 ..< 8 {
-		if st_mb_pressed[i] do g.inp.mb_pressed[i] = true
-		if st_mb_released[i] do g.inp.mb_released[i] = true
+		if st_mb_pressed[i] do inp.mb_pressed[i] = true
+		if st_mb_released[i] do inp.mb_released[i] = true
 		st_mb_pressed[i] = false
 		st_mb_released[i] = false
 	}

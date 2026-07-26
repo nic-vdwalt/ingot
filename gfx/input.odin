@@ -99,6 +99,7 @@ input_poll :: proc() {
 		inp.released[i] = false
 		inp.repeat[i] = false
 	}
+	_input_reset_mouse_edges(inp)
 	inp.char_h, inp.char_t = 0, 0
 	inp.key_h, inp.key_t = 0, 0
 	inp.wheel_pending = {0, 0}
@@ -147,6 +148,15 @@ input_poll :: proc() {
 	// clears the candidate-window rect). Active fields re-arm every frame.
 	if !ime_rect_armed do platform_text_input_deactivate()
 	ime_rect_armed = false
+}
+
+@(private)
+_input_reset_mouse_edges :: proc(inp: ^Input) {
+	assert(inp != nil, "_input_reset_mouse_edges: nil input")
+	for button in 0 ..< 8 {
+		inp.mb_pressed[button] = false
+		inp.mb_released[button] = false
+	}
 }
 
 // --- queue helpers (shared; called by the platform input backend) ----------

@@ -95,6 +95,20 @@ context_queries_are_isolated :: proc(t: ^testing.T) {
 }
 
 @(test)
+mouse_edges_reset_without_clearing_held_state :: proc(t: ^testing.T) {
+	inp := Input{}
+	inp.mb_pressed[0] = true
+	inp.mb_released[0] = true
+	inp.mb_down[0] = true
+
+	_input_reset_mouse_edges(&inp)
+
+	testing.expect(t, !inp.mb_pressed[0])
+	testing.expect(t, !inp.mb_released[0])
+	testing.expect(t, inp.mb_down[0])
+}
+
+@(test)
 renderer_stats_reset_preserves_live_identity :: proc(t: ^testing.T) {
 	ctx := new(Context)
 	defer free(ctx)
