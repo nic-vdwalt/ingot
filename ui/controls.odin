@@ -343,7 +343,10 @@ slider_at :: proc(
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	mouse := get_mouse_position(frame)
 	press := frame_to_local(frame, frame.interaction.press_pos)
-	dragging := is_mouse_button_down(frame, .LEFT) && frame.interaction.press_seen && point_in_rect(press, rrect)
+	dragging :=
+		is_mouse_button_down(frame, .LEFT) &&
+		frame.interaction.press_seen &&
+		point_in_rect(press, rrect)
 	it := interact(frame, rrect)
 	hovered := it.hovered
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
