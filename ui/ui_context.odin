@@ -55,8 +55,29 @@ Ui_Frame :: struct {
 	text_cull_top:    i32,
 	text_cull_bottom: i32,
 	open_roots:       int,
+	// Widgets handed a degenerate rect (zero or negative in either dimension)
+	// or an empty caller collection draw nothing and return their zero result
+	// rather than trapping: layout arithmetic legitimately produces those
+	// values when a window is narrowed or a panel collapses, and a trap there
+	// takes the whole app down. Counting the drops keeps that from hiding real
+	// layout bugs — tests assert the counter is zero on golden-path frames.
+	degenerate_drops: int,
 	finalized:        bool,
 	open:             bool,
+}
+
+// ui_frame_drop_degenerate records that a widget declined to draw because its
+// geometry or inputs were degenerate, and returns true, so call sites read as a
+// single guarded early-out:
+//
+//	if ui_frame_drop_degenerate(frame, rect.w <= 0 || rect.h <= 0) do return {}
+ui_frame_drop_degenerate :: proc(frame: ^Ui_Frame, degenerate: bool) -> bool {
+	if !degenerate do return false
+	// A nil frame is a programmer error everywhere else in this package, but
+	// this helper sits on the failure path and must never be the thing that
+	// crashes.
+	if frame != nil do frame.degenerate_drops += 1
+	return true
 }
 
 ui_runtime_init :: proc(runtime: ^Ui_Runtime) {
@@ -180,6 +201,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
 	frame.open_roots = 0
+	frame.degenerate_drops = 0
 	frame.finalized = false
 	frame.open = true
 	route_begin_frame(frame)
