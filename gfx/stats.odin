@@ -8,8 +8,8 @@ RENDER_STATS_ENABLED :: #config(INGOT_RENDER_STATS, false)
 // can see which state changes fragment their batches.
 Flush_Cause :: enum u8 {
 	Manual, // FlushBatch / rlgl VAO ordering / uncategorized
-	Pipeline, // pipeline kind switch (solid <-> text <-> image)
-	Texture, // texture bind-group switch within one pipeline
+	Pipeline, // pipeline kind switch (unified UI <-> image)
+	Texture, // font atlas or image bind-group switch within one pipeline
 	Blend, // blend-mode switch
 	Scissor, // Begin/EndScissorMode
 	Matrix, // rlgl model-matrix pop/translate

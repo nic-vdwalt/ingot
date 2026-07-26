@@ -39,10 +39,21 @@ A full run uses 300 warm-up frames, 2,000 measured frames, and seven fresh-proce
 every configured core case. Restrict development runs with `--framework`, `--workload`, `--scale`,
 `--warmup`, `--frames`, or `--repetitions`.
 
+Workloads may declare a `frameworks` list. The Phase 2 profiling cases are Ingot-only and are skipped
+for Dear ImGui and egui even when `--framework all` is used. They isolate repeated, stable-unique, and
+changing-unique labels; inactive and active inputs; checkbox, slider, and button construction; and
+paired semantics-disabled/enabled buttons. Stable labels are prepared before warm-up, while changing
+labels are formatted during each measured frame.
+
 `complex_dashboard` submits ten elements per row: a unique title, status, checkbox, slider, persistent
 text input, action button, and four data cells. Its fixed geometry isolates deterministic UI
 construction and finalization costs. It does not model responsive layout, scrolling, application
 state updates, native event handling, accessibility hosts, presentation, or GPU execution.
+
+`complex_dashboard` is the representative warm integrated workload. `capacity` characterizes bounded
+fixed-storage overflow. Ingot paint lists currently use fixed command and text arrays, so there is no
+true forced-growth case until the bounded-reservation storage work lands; growth telemetry must remain
+zero in Phase 2.
 
 For two independent runs:
 
@@ -72,3 +83,7 @@ export INGOT_BENCH_POWER_MODE='AC, low-power-mode=off'
 
 Retain the raw JSONL, `manifest.json`, generated aggregate files, hardware details, OS revision, display
 configuration, thermal/power state, and framework/compiler revisions with every published report.
+
+For development evidence, use at least 100 warm-up and 500 measured frames with five fresh processes.
+Accepted Phase 2 evidence uses the default 300 warm-up, 2,000 measured frames, and seven repetitions,
+and reports total, build, and finalization median/p95 values.

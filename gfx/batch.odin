@@ -338,11 +338,11 @@ fn fs_image(in: VSOut) -> @location(0) vec4<f32> {
 `
 
 @(private)
-_neutral_texture_init :: proc(r: ^Renderer) {
-	assert(r != nil, "_neutral_texture_init: nil renderer")
-	assert(r.tex_layout != nil, "_neutral_texture_init: nil texture layout")
+_neutral_texture_init :: proc(r: ^Renderer, device: wg.Device, queue: wg.Queue) {
+	assert(r != nil && device != nil, "_neutral_texture_init: invalid arguments")
+	assert(r.tex_layout != nil && queue != nil, "_neutral_texture_init: invalid resources")
 	r.neutral_tex = wg.DeviceCreateTexture(
-		g.device,
+		device,
 		&{
 			usage = {.TextureBinding, .CopyDst},
 			dimension = ._2D,
@@ -355,7 +355,7 @@ _neutral_texture_init :: proc(r: ^Renderer) {
 	assert(r.neutral_tex != nil, "_neutral_texture_init: texture creation failed")
 	pixel := [4]byte{255, 255, 255, 255}
 	wg.QueueWriteTexture(
-		g.queue,
+		queue,
 		&{texture = r.neutral_tex},
 		raw_data(pixel[:]),
 		uint(len(pixel)),
@@ -364,7 +364,7 @@ _neutral_texture_init :: proc(r: ^Renderer) {
 	)
 	r.neutral_view = wg.TextureCreateView(r.neutral_tex, nil)
 	r.neutral_sampler = wg.DeviceCreateSampler(
-		g.device,
+		device,
 		&{
 			magFilter = .Nearest,
 			minFilter = .Nearest,
@@ -382,7 +382,7 @@ _neutral_texture_init :: proc(r: ^Renderer) {
 		{binding = 1, sampler = r.neutral_sampler},
 	}
 	r.neutral_bind = wg.DeviceCreateBindGroup(
-		g.device,
+		device,
 		&{layout = r.tex_layout, entryCount = 2, entries = raw_data(entries[:])},
 	)
 	assert(r.neutral_bind != nil, "_neutral_texture_init: bind creation failed")
@@ -403,9 +403,11 @@ _neutral_texture_shutdown :: proc(r: ^Renderer) {
 	r.neutral_tex = nil
 }
 
-renderer_init :: proc(r: ^Renderer) {
+renderer_init :: proc(r: ^Renderer, ctx: ^Context) {
+	assert(r != nil && ctx != nil, "renderer_init: invalid arguments")
+	assert(ctx.device != nil && ctx.queue != nil, "renderer_init: invalid context")
 	shader := wg.DeviceCreateShaderModule(
-		g.device,
+		ctx.device,
 		&{
 			nextInChain = &wg.ShaderSourceWGSL {
 				chain = {sType = .ShaderSourceWGSL},
@@ -418,7 +420,7 @@ renderer_init :: proc(r: ^Renderer) {
 
 	// group(0): projection uniform
 	r.ubind_layout = wg.DeviceCreateBindGroupLayout(
-		g.device,
+		ctx.device,
 		&{
 			entryCount = 1,
 			entries = &wg.BindGroupLayoutEntry {
@@ -428,12 +430,9 @@ renderer_init :: proc(r: ^Renderer) {
 			},
 		},
 	)
-	r.ubuf = wg.DeviceCreateBuffer(
-		g.device,
-		&{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)},
-	)
+	r.ubuf = wg.DeviceCreateBuffer(ctx.device, &{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)})
 	r.ubind = wg.DeviceCreateBindGroup(
-		g.device,
+		ctx.device,
 		&{
 			layout = r.ubind_layout,
 			entryCount = 1,
@@ -443,11 +442,11 @@ renderer_init :: proc(r: ^Renderer) {
 
 	// Separate uniform + bind for render-target passes (see struct comment).
 	r.rt_ubuf = wg.DeviceCreateBuffer(
-		g.device,
+		ctx.device,
 		&{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)},
 	)
 	r.rt_ubind = wg.DeviceCreateBindGroup(
-		g.device,
+		ctx.device,
 		&{
 			layout = r.ubind_layout,
 			entryCount = 1,
@@ -466,10 +465,10 @@ renderer_init :: proc(r: ^Renderer) {
 		{binding = 1, visibility = {.Fragment}, sampler = {type = .Filtering}},
 	}
 	r.tex_layout = wg.DeviceCreateBindGroupLayout(
-		g.device,
+		ctx.device,
 		&{entryCount = 2, entries = raw_data(tex_entries[:])},
 	)
-	_neutral_texture_init(r)
+	_neutral_texture_init(r, ctx.device, ctx.queue)
 
 	// Custom blend defaults to premultiplied over-blend until SetBlendFactors.
 	r.cust_src = .One
@@ -480,13 +479,11 @@ renderer_init :: proc(r: ^Renderer) {
 	for kind in Pipe_Kind {
 		fs, textured := _fs_for(kind)
 		for slot in Blend_Slot {
-			r.pipes[kind][slot] = _make_pipe(r, slot, fs, textured, g.format)
+			r.pipes[kind][slot] = _make_pipe(r, slot, fs, textured, ctx.format)
 		}
 	}
 
-	r.cur_kind = .Solid
-	r.cur_bind = r.neutral_bind
-	r.cur_blend = .Alpha
+	renderer_state_reset(r)
 }
 
 renderer_shutdown :: proc(r: ^Renderer) {
@@ -520,6 +517,15 @@ renderer_shutdown :: proc(r: ^Renderer) {
 	if r.tex_layout != nil do wg.BindGroupLayoutRelease(r.tex_layout)
 }
 
+@(private)
+renderer_state_reset :: proc(r: ^Renderer) {
+	assert(r != nil, "renderer_state_reset: nil renderer")
+	assert(r.neutral_bind != nil, "renderer_state_reset: nil neutral bind")
+	r.cur_kind = .Solid
+	r.cur_bind = r.neutral_bind
+	r.cur_blend = .Alpha
+}
+
 renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 	for buffer in r.transient_buffers do wg.BufferRelease(buffer)
 	clear(&r.transient_buffers)
@@ -529,9 +535,7 @@ renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 	}
 	clear(&r.verts)
 	clear(&r.indices)
-	r.cur_kind = .Solid
-	r.cur_bind = r.neutral_bind
-	r.cur_blend = .Alpha
+	renderer_state_reset(r)
 	r.cur_u = r.ubind
 	r.active_shader = 0
 	r.model_off = {0, 0}
@@ -547,10 +551,7 @@ renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 }
 
 @(private)
-_batch_bind :: proc(
-	kind: Pipe_Kind,
-	bind, current, neutral: wg.BindGroup,
-) -> wg.BindGroup {
+_batch_bind :: proc(kind: Pipe_Kind, bind, current, neutral: wg.BindGroup) -> wg.BindGroup {
 	assert(neutral != nil, "_batch_bind: nil neutral bind")
 	if kind == .Solid && bind == nil && current != nil do return current
 	if bind == nil do return neutral

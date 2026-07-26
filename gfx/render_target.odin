@@ -88,9 +88,7 @@ BeginTextureMode :: proc(target: RenderTexture2D) {
 	g.rend.cur_u = g.rend.rt_ubind
 
 	// reset the batch run for the target
-	g.rend.cur_kind = .Solid
-	g.rend.cur_bind = g.rend.neutral_bind
-	g.rend.cur_blend = .Alpha
+	renderer_state_reset(&g.rend)
 }
 
 // _ensure_rt_pass lazily begins the render-target pass on its own encoder.
@@ -151,9 +149,7 @@ EndTextureMode :: proc() {
 
 	// back to the window projection for the (still-open) main pass
 	g.rend.cur_u = g.rend.ubind
-	g.rend.cur_kind = .Solid
-	g.rend.cur_bind = g.rend.neutral_bind
-	g.rend.cur_blend = .Alpha
+	renderer_state_reset(&g.rend)
 }
 
 // --- rlgl framebuffer backing ----------------------------------------------

@@ -150,7 +150,8 @@ run_labels :: proc(h: ^Harness, count: int, unique: bool) -> int {
 run_isolated_labels :: proc(h: ^Harness, count, frame_index: int, changing: bool) -> int {
 	assert(h != nil && count > 0 && count <= MAX_SCALE, "run_isolated_labels: invalid argument")
 	for index in 0 ..< count {
-		label := changing_label_for(h, index, frame_index) if changing else stable_label_for(h, index)
+		label :=
+			changing_label_for(h, index, frame_index) if changing else stable_label_for(h, index)
 		x := i32(index % 10) * 126
 		y := i32(index / 10) * 18
 		paint_label(&h.frame, label, x, y, 124)
@@ -490,7 +491,8 @@ main :: proc() {
 		)
 		os.exit(2)
 	}
-	semantics := options.workload == .Accessibility || options.workload == .Button_Semantics_Enabled
+	semantics :=
+		options.workload == .Accessibility || options.workload == .Button_Semantics_Enabled
 	h := harness_make(semantics)
 	defer harness_destroy(h)
 	for index in 0 ..< options.warmup {
@@ -563,7 +565,7 @@ main :: proc() {
 		stats.main_command_count,
 		",\"text_bytes\":",
 		stats.main_text_bytes,
-		",\"dropped_commands\":"
+		",\"dropped_commands\":",
 		diagnostics.main_commands_dropped,
 		",\"dropped_text_bytes\":",
 		diagnostics.main_text_bytes_dropped,

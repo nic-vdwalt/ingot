@@ -134,21 +134,29 @@ def capacity_rows(records):
 
 
 def write_markdown(rows, records, path):
-    build_rows = [row for row in rows if row["phase"] == "build"]
+    grouped = defaultdict(dict)
+    for row in rows:
+        key = (row["framework"], row["framework_revision"], row["workload"], row["scale"])
+        grouped[key][row["phase"]] = row
     lines = [
         "# Widget Benchmark Report", "",
         "Core CPU timings are reported separately from render finalization. Backend, revision, and layer",
         "remain explicit; this report does not compute an overall winner.", "",
-        "## Core build latency", "",
-        "| Framework | Revision | Workload | Scale | Median (µs) | p95 (µs) | 95% CI (µs) | Widgets/s |",
-        "|---|---|---|---:|---:|---:|---:|---:|",
+        "## Core frame latency", "",
+        "| Framework | Revision | Workload | Scale | Total median/p95 (µs) | Build median/p95 (µs) | Finalize median/p95 (µs) |",
+        "|---|---|---|---:|---:|---:|---:|",
     ]
-    for row in build_rows:
+    for key, phases in sorted(grouped.items()):
+        build = phases.get("build")
+        finalize = phases.get("finalize")
+        frame = phases.get("frame")
+        if build is None or finalize is None:
+            continue
+        total = "—" if frame is None else f"{frame['median_ns'] / 1000:.2f}/{frame['p95_ns'] / 1000:.2f}"
         lines.append(
-            f"| {row['framework']} | `{row['framework_revision'][:12]}` | {row['workload']} | "
-            f"{row['scale']} | {row['median_ns'] / 1000:.2f} | {row['p95_ns'] / 1000:.2f} | "
-            f"{row['ci95_low_ns'] / 1000:.2f}–{row['ci95_high_ns'] / 1000:.2f} | "
-            f"{row['throughput_widgets_per_second']:.0f} |"
+            f"| {key[0]} | `{key[1][:12]}` | {key[2]} | {key[3]} | {total} | "
+            f"{build['median_ns'] / 1000:.2f}/{build['p95_ns'] / 1000:.2f} | "
+            f"{finalize['median_ns'] / 1000:.2f}/{finalize['p95_ns'] / 1000:.2f} |"
         )
     capacities = capacity_rows(records)
     lines.extend(["", "## Capacity validity", "", "| Framework | Last valid | First invalid |", "|---|---:|---:|"])

@@ -501,7 +501,7 @@ _gpu_finish :: proc() {
 	g.target_fps = 0
 
 	_submission_init(&g.submissions, g)
-	renderer_init(&g.rend)
+	renderer_init(&g.rend, g.device, g.queue, g.format)
 	_graphics_resources_init(&g.resources)
 	platform_input_init()
 	platform_drop_init()

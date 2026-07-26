@@ -60,7 +60,11 @@ correctness boundary, not accidental duplication.
 ## Batching and ordering
 
 The renderer preserves declaration order across solid, text, image, custom
-shader, scissor, blend, and texture changes. State changes flush as needed.
+shader, scissor, blend, and texture changes. Solid and text vertices share one
+UI pipeline; a per-vertex mode selects flat color or font-atlas coverage. Solid
+geometry preserves the active texture binding, so alternating shapes and text
+from one font remain in one ordered batch after the atlas is selected. Font,
+image, custom-shader, scissor, blend, and target changes still flush as needed.
 Immediate render-target submissions may occur while main-pass work is already
 encoded; submission resources keep both paths valid.
 
