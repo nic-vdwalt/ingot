@@ -50,7 +50,7 @@ curl_body_write :: proc "c" (
 	return total
 }
 
-@(private = "file")
+@(private)
 http_request_is_valid :: proc(request: Http_Request) -> bool {
 	if request.path == "" || request.path[0] != '/' ||
 	   strings.contains(request.path, "\r") || strings.contains(request.path, "\n") {
@@ -66,7 +66,7 @@ http_request_is_valid :: proc(request: Http_Request) -> bool {
 	return true
 }
 
-@(private = "file")
+@(private)
 http_request_maximum_body :: proc(request: Http_Request, options: Http_Request_Options) -> u64 {
 	maximum := request.maximum_body
 	if maximum == 0 do maximum = DEFAULT_MAXIMUM_BODY
@@ -76,7 +76,7 @@ http_request_maximum_body :: proc(request: Http_Request, options: Http_Request_O
 	return maximum
 }
 
-@(private = "file")
+@(private)
 http_request_method :: proc(method: Http_Method) -> string {
 	switch method {
 	case .Post:   return "POST"

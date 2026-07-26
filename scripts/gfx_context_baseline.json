@@ -129,6 +129,8 @@
   "gfx/platform_native.odin:platform_window_focused": 1,
   "gfx/platform_native.odin:platform_window_hovered": 1,
   "gfx/platform_native.odin:platform_window_iconified": 1,
+  "gfx/platform_web.odin:IsFileDropped": 1,
+  "gfx/platform_web.odin:UnloadDroppedFiles": 1,
   "gfx/platform_web.odin:_input_drain": 5,
   "gfx/platform_web.odin:_web_on_adapter": 2,
   "gfx/platform_web.odin:_web_on_device": 3,
