@@ -40,7 +40,7 @@ dropdown_ui :: proc(
 
 dropdown_ui_id :: proc(
 	u: ^Ui,
-	id: Focus_Id,
+	id: Widget_Id,
 	items: []string,
 	selected: ^i32,
 	st: ^Dropdown_State,
@@ -54,7 +54,18 @@ dropdown_ui_id :: proc(
 	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
 	r := ui_slot(u, ww, metrics.ROW_H_MD)
 	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
-	return dropdown_at(u.frame, r, items, selected, st, u.screen_w, u.screen_h, fo, a11y_label)
+	return dropdown_at(
+		u.frame,
+		r,
+		items,
+		selected,
+		st,
+		u.screen_w,
+		u.screen_h,
+		fo,
+		a11y_label,
+		id,
+	)
 }
 
 dropdown_at :: proc(
@@ -66,6 +77,7 @@ dropdown_at :: proc(
 	screen_w, screen_h: i32,
 	focus: Focus_Opt = {},
 	a11y_label: string = "",
+	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> (
 	changed: bool,
 ) {
@@ -128,7 +140,7 @@ dropdown_at :: proc(
 	sem: Sem_State
 	if st.menu.open do sem += {.Expanded}
 	sem_label := a11y_label if a11y_label != "" else items[selected^]
-	semantic_push(frame, .Dropdown, rect, sem_label, sem, focus)
+	semantic_push(frame, .Dropdown, rect, sem_label, sem, focus, widget = widget)
 	if !st.menu.open do return false
 
 	menu_items := make([]Menu_Item, len(items), context.temp_allocator)

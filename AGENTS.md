@@ -31,7 +31,7 @@ architecture, and `docs/testing.md` for the test matrix.
   supervises each command. Pass extra Odin flags through, e.g.
   `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.
 - **Check / lint** (Tiger Style gate): `bash scripts/check.sh` — strict
-  type-check + `-vet -strict-style -vet-shadowing`, 70-line procedure and
+  type-check + `-vet -strict-style -vet-shadowing`, 100-line procedure and
   100-character physical-line checks, plus an `odinfmt` format check.
 - **Format**: `odinfmt -w .` (settings pinned in `.odinfmt.json`: tabs width 4,
   100-column lines).
@@ -64,7 +64,7 @@ non-negotiables:
 - **Explicit sized types** at wire/file/FFI boundaries (never `int`/`uint`
   there); keep `index` / `count` / `size` distinct.
 - **Handle every returned `ok` / error** — no silent `or_return` drops.
-- **70 lines per procedure, 100 columns per line, tabs width 4.** Run `odinfmt`.
+- **100 lines per procedure, 100 columns per line, tabs width 4.** Run `odinfmt`.
 - **Always say why** in comments — full sentences. The UTF-8 hold-back note in
   `term/term_pump.odin` is the bar.
 

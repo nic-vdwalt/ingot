@@ -661,14 +661,26 @@ btn_ui :: proc(
 
 btn_ui_id :: proc(
 	u: ^Ui,
-	id: Focus_Id,
+	id: Widget_Id,
 	label: string,
 	style: Btn_Style = .Secondary,
 	enabled: bool = true,
 ) -> bool {
 	r := btn_ui_slot(u, label)
-	fo := ui_focus(u, id) if enabled else Focus_Opt{}
-	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
+	visible := ui_slot_visible(r)
+	fo := ui_focus(u, id) if enabled && visible else Focus_Opt{}
+	return btn_at(
+		u.frame,
+		r.x,
+		r.y,
+		r.w,
+		r.h,
+		label,
+		style,
+		enabled = enabled,
+		focus = fo,
+		widget = id,
+	)
 }
 
 // Deprecated: no caller across any consumer has needed Button_State together
@@ -704,7 +716,7 @@ btn_ui_state :: proc(
 @(deprecated = "btn_ui_state_id is unused; prefer btn_at_state with an explicit rect")
 btn_ui_state_id :: proc(
 	u: ^Ui,
-	id: Focus_Id,
+	id: Widget_Id,
 	state: ^Button_State,
 	label: string,
 	style: Btn_Style = .Secondary,
@@ -724,6 +736,7 @@ btn_ui_state_id :: proc(
 		style,
 		enabled = enabled,
 		focus = fo,
+		widget = id,
 	)
 }
 
@@ -736,6 +749,7 @@ btn_at :: proc(
 	enabled: bool = true,
 	web_form_id: string = "",
 	focus: Focus_Opt = {},
+	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> bool {
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "btn: empty accessible label")
@@ -792,7 +806,7 @@ btn_at :: proc(
 
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
-	semantic_push(frame, .Button, {x, y, w, h}, label, sem, focus)
+	semantic_push(frame, .Button, {x, y, w, h}, label, sem, focus, widget = widget)
 	return clicked && enabled
 }
 
@@ -806,6 +820,7 @@ btn_at_state :: proc(
 	enabled: bool = true,
 	web_form_id: string = "",
 	focus: Focus_Opt = {},
+	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> bool {
 	assert(state != nil, "btn_at_state: nil state")
 	assert(label != "", "btn_at_state: empty accessible label")
@@ -856,7 +871,7 @@ btn_at_state :: proc(
 	draw_text_frame(frame, label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
-	semantic_push(frame, .Button, {x, y, w, h}, label, sem, focus)
+	semantic_push(frame, .Button, {x, y, w, h}, label, sem, focus, widget = widget)
 	return clicked && enabled
 }
 

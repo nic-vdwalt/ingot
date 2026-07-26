@@ -18,13 +18,13 @@ class OdinStyleTest(unittest.TestCase):
         self.assertEqual(len(violations), 1)
         self.assertEqual(violations[0].line, 2)
 
-    def test_procedure_limit_accepts_70_and_rejects_71(self):
-        accepted = "p :: proc() {\n" + ("\tx := 1\n" * 68) + "}\n"
-        rejected = "p :: proc() {\n" + ("\tx := 1\n" * 69) + "}\n"
+    def test_procedure_limit_accepts_100_and_rejects_101(self):
+        accepted = "p :: proc() {\n" + ("\tx := 1\n" * 98) + "}\n"
+        rejected = "p :: proc() {\n" + ("\tx := 1\n" * 99) + "}\n"
         self.assertEqual(check_odin_style.check_source(accepted), [])
         violations = check_odin_style.check_source(rejected)
         self.assertEqual(len(violations), 1)
-        self.assertIn("71 lines", violations[0].message)
+        self.assertIn("101 lines", violations[0].message)
 
     def test_attributes_and_multiline_signatures_are_counted(self):
         source = "@(private)\np :: proc(\n\tx: int,\n) -> (\n\tint,\n) {\n\treturn x\n}\n"
@@ -53,9 +53,9 @@ class OdinStyleTest(unittest.TestCase):
         self.assertEqual(procedure.end_line, 4)
 
     def test_baseline_allows_current_size_but_rejects_growth(self):
-        source = "p :: proc() {\n" + ("\tx := 1\n" * 69) + "}\n"
-        self.assertEqual(check_odin_style.check_source(source, {"x:p": 71}, "x"), [])
-        violations = check_odin_style.check_source(source, {"x:p": 70}, "x")
+        source = "p :: proc() {\n" + ("\tx := 1\n" * 99) + "}\n"
+        self.assertEqual(check_odin_style.check_source(source, {"x:p": 101}, "x"), [])
+        violations = check_odin_style.check_source(source, {"x:p": 100}, "x")
         self.assertEqual(len(violations), 1)
 
 

@@ -117,7 +117,7 @@ input_ui :: proc(
 
 input_ui_id :: proc(
 	u: ^Ui,
-	id: Focus_Id,
+	id: Widget_Id,
 	b: ^Input_Box,
 	placeholder: string,
 	h: i32 = 0,
@@ -133,6 +133,7 @@ input_ui_id :: proc(
 	sem := semantics
 	sem.focus = fo.focus
 	sem.focus_id = fo.id
+	sem.widget = id
 	return input_at(
 		u.frame,
 		r.x,

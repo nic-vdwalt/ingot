@@ -433,6 +433,7 @@ Text_Input_Semantics :: struct {
 	autocomplete: Text_Input_Autocomplete,
 	focus:        ^int,
 	focus_id:     int,
+	widget:       Widget_Id,
 }
 
 // Text_Input_Config carries per-call parameters for the struct-based API.
@@ -596,6 +597,7 @@ ti_semantic_push :: proc(ctx: ^TI_Ctx) {
 		text_value = text_value,
 		selection_start = selection_start,
 		selection_end = selection_end,
+		widget = ctx.semantics.widget,
 	)
 }
 

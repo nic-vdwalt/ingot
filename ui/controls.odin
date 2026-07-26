@@ -29,7 +29,7 @@ checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
 	return checkbox_at(u.frame, r, label, checked, fo)
 }
 
-checkbox_ui_id :: proc(u: ^Ui, id: Focus_Id, label: string, checked: ^bool) -> (changed: bool) {
+checkbox_ui_id :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (changed: bool) {
 	metrics := ui_frame_metrics(u.frame)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	w :=
@@ -38,7 +38,7 @@ checkbox_ui_id :: proc(u: ^Ui, id: Focus_Id, label: string, checked: ^bool) -> (
 		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
 	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
-	return checkbox_at(u.frame, r, label, checked, fo)
+	return checkbox_at(u.frame, r, label, checked, fo, id)
 }
 
 checkbox_at :: proc(
@@ -47,6 +47,7 @@ checkbox_at :: proc(
 	label: string,
 	checked: ^bool,
 	focus: Focus_Opt = {},
+	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> (
 	changed: bool,
 ) {
@@ -108,7 +109,7 @@ checkbox_at :: proc(
 	)
 	sem: Sem_State
 	if checked^ do sem += {.Checked}
-	semantic_push(frame, .Checkbox, rect, label, sem, focus)
+	semantic_push(frame, .Checkbox, rect, label, sem, focus, widget = widget)
 	return changed
 }
 
@@ -135,7 +136,7 @@ radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed:
 
 radio_ui_id :: proc(
 	u: ^Ui,
-	id: Focus_Id,
+	id: Widget_Id,
 	label: string,
 	selected: ^i32,
 	value: i32,
@@ -150,7 +151,7 @@ radio_ui_id :: proc(
 		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
 	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
-	return radio_at(u.frame, r, label, selected, value, fo)
+	return radio_at(u.frame, r, label, selected, value, fo, id)
 }
 
 radio_at :: proc(
@@ -160,6 +161,7 @@ radio_at :: proc(
 	selected: ^i32,
 	value: i32,
 	focus: Focus_Opt = {},
+	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> (
 	changed: bool,
 ) {
@@ -205,7 +207,7 @@ radio_at :: proc(
 	)
 	sem: Sem_State
 	if is_on do sem += {.Checked}
-	semantic_push(frame, .Radio, rect, label, sem, focus)
+	semantic_push(frame, .Radio, rect, label, sem, focus, widget = widget)
 	return changed
 }
 
@@ -275,7 +277,7 @@ slider_ui :: proc(
 
 slider_ui_id :: proc(
 	u: ^Ui,
-	id: Focus_Id,
+	id: Widget_Id,
 	value: ^f32,
 	lo, hi: f32,
 	step: f32 = 0,
@@ -308,7 +310,7 @@ slider_ui_state :: proc(
 
 slider_ui_state_id :: proc(
 	u: ^Ui,
-	id: Focus_Id,
+	id: Widget_Id,
 	state: ^Slider_State,
 	value: ^f32,
 	lo, hi: f32,
@@ -320,7 +322,7 @@ slider_ui_state_id :: proc(
 	assert(a11y_label != "", "slider_ui_state_id: empty accessible label")
 	r := slider_ui_slot(u, w)
 	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
-	return slider_at_state(u.frame, state, r, value, lo, hi, step, fo, a11y_label)
+	return slider_at_state(u.frame, state, r, value, lo, hi, step, fo, a11y_label, id)
 }
 
 slider_at :: proc(
@@ -331,6 +333,7 @@ slider_at :: proc(
 	step: f32 = 0,
 	focus: Focus_Opt = {},
 	a11y_label: string = "",
+	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> (
 	changed: bool,
 ) {
@@ -383,7 +386,18 @@ slider_at :: proc(
 	if focus_opt_focused(focus) {
 		draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 	}
-	semantic_push(frame, .Slider, rect, a11y_label, {}, focus, value = value^, lo = lo, hi = hi)
+	semantic_push(
+		frame,
+		.Slider,
+		rect,
+		a11y_label,
+		{},
+		focus,
+		value = value^,
+		lo = lo,
+		hi = hi,
+		widget = widget,
+	)
 	return value^ != old
 }
 
@@ -396,6 +410,7 @@ slider_at_state :: proc(
 	step: f32 = 0,
 	focus: Focus_Opt = {},
 	a11y_label: string = "",
+	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> bool {
 	assert(state != nil && value != nil, "slider_at_state: nil state or value")
 	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
@@ -439,6 +454,17 @@ slider_at_state :: proc(
 	draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
 	draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)
 	if focus_opt_focused(focus) do draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
-	semantic_push(frame, .Slider, rect, a11y_label, {}, focus, value = value^, lo = lo, hi = hi)
+	semantic_push(
+		frame,
+		.Slider,
+		rect,
+		a11y_label,
+		{},
+		focus,
+		value = value^,
+		lo = lo,
+		hi = hi,
+		widget = widget,
+	)
 	return value^ != old
 }

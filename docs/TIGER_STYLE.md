@@ -120,9 +120,10 @@ bugs, and they are a force multiplier for fuzzing.
 
 ### Procedures
 
-- **Hard limit: 70 lines per procedure.** There is a real discontinuity between
-  a procedure that fits on screen and one you must scroll. Most walls of code
-  split cleanly; only a few splits feel right — find them.
+- **Target: 70 lines; hard limit: 100 lines per procedure.** Procedures should
+  normally fit on screen, but cohesive control flow need not be fragmented only
+  to meet the target. Procedures beyond 100 lines must be split at meaningful
+  boundaries.
   - Good shape is an inverse hourglass: few parameters, a simple return type,
     meaty logic in the middle.
   - **Centralize control flow.** Keep the `switch`/`if` in the parent; push

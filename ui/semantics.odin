@@ -200,11 +200,19 @@ SEM_FNV_PRIME :: u64(0x00000100000001b3)
 //  3. fallback: role<<56 | per-role call order this frame. Unstable under
 //     layout changes; acceptable only for non-interactive roles.
 // Pure — unit-testable without a window.
-sem_node_id :: proc(role: Sem_Role, focus: Focus_Opt, field_id: string, ordinal: int) -> u64 {
+sem_node_id :: proc(
+	role: Sem_Role,
+	focus: Focus_Opt,
+	field_id: string,
+	ordinal: int,
+	widget: Widget_Id = WIDGET_ID_NONE,
+) -> u64 {
 	assert(role != .None, "sem_node_id: role required")
 	assert(ordinal >= 0, "sem_node_id: negative ordinal")
 	id: u64
-	if field_id != "" {
+	if widget != WIDGET_ID_NONE {
+		id = id_hash_u64(SEM_FNV_OFFSET, u64(widget))
+	} else if field_id != "" {
 		id = SEM_FNV_OFFSET
 		for b in transmute([]u8)field_id {
 			id ~= u64(b)
@@ -302,6 +310,7 @@ semantic_push :: proc(
 	selection_end: i32 = 0,
 	position_in_set: int = 0,
 	size_of_set: int = 0,
+	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> ^Sem_Node {
 	assert(frame != nil && frame.open, "semantic_push: invalid frame")
 	assert(role != .None, "semantic_push: role required")
@@ -319,7 +328,7 @@ semantic_push :: proc(
 		sem.nodes_dropped += 1
 		return nil
 	}
-	id := sem_node_id(role, focus, field_id, ordinal)
+	id := sem_node_id(role, focus, field_id, ordinal, widget)
 	for index in 0 ..< sem.cur.count {
 		if sem.cur.nodes[index].id == id {
 			sem.id_collisions += 1

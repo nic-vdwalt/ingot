@@ -283,6 +283,7 @@ Ui :: struct {
 	stable_count: int,
 	stable_seq:   int,
 	focus_mode:   Ui_Focus_Mode,
+	ids:          Id_Context,
 	screen_w:     i32,
 	screen_h:     i32,
 	open:         bool,
@@ -315,12 +316,14 @@ ui_begin :: proc(u: ^Ui, x, y, w, h: i32, gap: i32 = 0) {
 	u.focus_seq = 0
 	u.stable_seq = 0
 	u.focus_mode = .None
+	id_context_reset(&u.ids)
 	layout_begin(&u.layout, x, y, w, h, gap)
 	u.open = true
 }
 
 ui_end :: proc(u: ^Ui) {
 	assert(u.open, "ui_end: frame not open")
+	assert(u.ids.depth == 0, "ui_end: unbalanced id scope")
 	layout_end(&u.layout)
 	if u.focus_mode == .Stable {
 		if u.stable_focus.active != FOCUS_ID_NONE &&
@@ -351,7 +354,7 @@ ui_focus_sequential :: proc(u: ^Ui) -> Focus_Opt {
 	return Focus_Opt{&u.focus_slot, u.focus_seq}
 }
 
-ui_focus_id :: proc(u: ^Ui, id: Focus_Id) -> Focus_Opt {
+ui_focus_id :: proc(u: ^Ui, id: Widget_Id) -> Focus_Opt {
 	assert(u.open, "ui_focus: frame not open")
 	assert(id != FOCUS_ID_NONE, "ui_focus: zero stable id")
 	assert(u.focus_mode != .Sequential, "ui_focus: mixed focus registration")
@@ -368,6 +371,46 @@ ui_focus_id :: proc(u: ^Ui, id: Focus_Id) -> Focus_Opt {
 ui_focus :: proc {
 	ui_focus_sequential,
 	ui_focus_id,
+}
+
+ui_id_u64 :: proc(u: ^Ui, value: u64) -> Widget_Id {
+	assert(u != nil && u.open, "ui_id: frame not open")
+	return id_context_id(&u.ids, value)
+}
+
+ui_id_string :: proc(u: ^Ui, value: string) -> Widget_Id {
+	assert(u != nil && u.open, "ui_id: frame not open")
+	return id_context_id(&u.ids, value)
+}
+
+ui_id :: proc {
+	ui_id_u64,
+	ui_id_string,
+}
+
+ui_id_push_u64 :: proc(u: ^Ui, value: u64, loc := #caller_location) {
+	assert(u != nil && u.open, "ui_id_push: frame not open")
+	id_context_push(&u.ids, value, loc)
+}
+
+ui_id_push_string :: proc(u: ^Ui, value: string, loc := #caller_location) {
+	assert(u != nil && u.open, "ui_id_push: frame not open")
+	id_context_push(&u.ids, value, loc)
+}
+
+ui_id_push :: proc {
+	ui_id_push_u64,
+	ui_id_push_string,
+}
+
+ui_id_root :: proc {
+	ui_id_push_u64,
+	ui_id_push_string,
+}
+
+ui_id_pop :: proc(u: ^Ui) {
+	assert(u != nil && u.open, "ui_id_pop: frame not open")
+	id_context_pop(&u.ids)
 }
 
 ui_focus_clear :: proc(u: ^Ui) {
