@@ -4,6 +4,61 @@ package ui
 import "core:testing"
 
 @(test)
+flow_wraps_explicit_items_and_returns_content_bounds :: proc(t: ^testing.T) {
+	flow: Flow_Layout
+	flow_begin(&flow, {10, 20, 100, 200}, 5, 7)
+	a := flow_next(&flow, 40, 20)
+	b := flow_next(&flow, 55, 30)
+	c := flow_next(&flow, 60, 12)
+	bounds := flow_end(&flow)
+	testing.expect_value(t, a, Rect_I32{10, 20, 40, 20})
+	testing.expect_value(t, b, Rect_I32{55, 20, 55, 30})
+	testing.expect_value(t, c, Rect_I32{10, 57, 60, 12})
+	testing.expect_value(t, bounds, Rect_I32{10, 20, 100, 49})
+}
+
+@(test)
+flow_exact_fit_stays_on_the_current_line :: proc(t: ^testing.T) {
+	flow: Flow_Layout
+	flow_begin(&flow, {0, 0, 100, 100}, 10, 4)
+	a := flow_next(&flow, 45, 8)
+	b := flow_next(&flow, 45, 12)
+	bounds := flow_end(&flow)
+	testing.expect_value(t, a, Rect_I32{0, 0, 45, 8})
+	testing.expect_value(t, b, Rect_I32{55, 0, 45, 12})
+	testing.expect_value(t, bounds, Rect_I32{0, 0, 100, 12})
+}
+
+@(test)
+flow_clamps_oversized_width_and_reuses_state :: proc(t: ^testing.T) {
+	flow: Flow_Layout
+	flow_begin(&flow, {4, 8, 50, 20})
+	a := flow_next(&flow, 80, 10)
+	first := flow_end(&flow)
+	flow_begin(&flow, {1, 2, 30, 20}, 2, 3)
+	b := flow_next(&flow, 10, 5)
+	second := flow_end(&flow)
+	testing.expect_value(t, a, Rect_I32{4, 8, 50, 10})
+	testing.expect_value(t, first, Rect_I32{4, 8, 50, 10})
+	testing.expect_value(t, b, Rect_I32{1, 2, 10, 5})
+	testing.expect_value(t, second, Rect_I32{1, 2, 10, 5})
+}
+
+@(test)
+flow_empty_zero_width_and_capacity_are_bounded :: proc(t: ^testing.T) {
+	flow: Flow_Layout
+	flow_begin(&flow, {3, 4, 0, 20}, 2, 3)
+	zero := flow_next(&flow, 10, 5)
+	zero_bounds := flow_end(&flow)
+	testing.expect_value(t, zero, Rect_I32{3, 4, 0, 5})
+	testing.expect_value(t, zero_bounds, Rect_I32{3, 4, 0, 5})
+	flow_begin(&flow, {0, 0, 1024, 20})
+	for _ in 0 ..< MAX_FLOW_ITEMS do _ = flow_next(&flow, 1, 1)
+	bounds := flow_end(&flow)
+	testing.expect_value(t, bounds, Rect_I32{0, 0, 1024, 1})
+}
+
+@(test)
 layout_column_carves_sequentially :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 10, 20, 300, 400, gap = 5)

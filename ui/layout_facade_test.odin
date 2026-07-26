@@ -38,3 +38,21 @@ layout_named_row_resolves_exact_slots :: proc(t: ^testing.T) {
 	testing.expect_value(t, first, Rect_I32{0, 0, 80, 40})
 	testing.expect_value(t, second, Rect_I32{88, 0, 212, 40})
 }
+
+@(test)
+layout_flow_reflows_when_available_width_changes :: proc(t: ^testing.T) {
+	wide: Flow_Layout
+	flow_begin(&wide, {0, 0, 120, 100}, 4, 6)
+	_ = flow_next(&wide, 50, 20)
+	wide_second := flow_next(&wide, 50, 20)
+	wide_bounds := flow_end(&wide)
+	narrow: Flow_Layout
+	flow_begin(&narrow, {0, 0, 80, 100}, 4, 6)
+	_ = flow_next(&narrow, 50, 20)
+	narrow_second := flow_next(&narrow, 50, 20)
+	narrow_bounds := flow_end(&narrow)
+	testing.expect_value(t, wide_second, Rect_I32{54, 0, 50, 20})
+	testing.expect_value(t, wide_bounds.h, i32(20))
+	testing.expect_value(t, narrow_second, Rect_I32{0, 26, 50, 20})
+	testing.expect_value(t, narrow_bounds.h, i32(46))
+}

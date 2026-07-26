@@ -876,7 +876,7 @@ draw_charts :: proc(x, y0, w: i32) -> i32 {
 }
 
 draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(ui_frame, x, y0, w, "SINGLE-PASS LAYOUT (weights + flex sizing)")
+	y := ui.section_header(ui_frame, x, y0, w, "SINGLE-PASS LAYOUT (weights + flex + flow)")
 	l: ui.Layout
 	lw := min(w, ui.ui_frame_sc(ui_frame, 520))
 	ui.layout_begin(&l, x, y, lw, ui.ui_frame_sc(ui_frame, 248), gap = ui.ui_frame_sc(ui_frame, 8))
@@ -922,7 +922,21 @@ draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
 	ui.layout_pop(&l)
 
 	ui.layout_end(&l)
-	return y + ui.ui_frame_sc(ui_frame, 258)
+	flow_y := y + ui.ui_frame_sc(ui_frame, 258)
+	flow: ui.Flow_Layout
+	ui.flow_begin(
+		&flow,
+		{x, flow_y, lw, max(i32)},
+		ui.ui_frame_sc(ui_frame, 8),
+		ui.ui_frame_sc(ui_frame, 8),
+	)
+	labels := [?]string{"measured", "single pass", "caller owned", "bounded", "responsive flow"}
+	for label in labels {
+		width := ui.text_width(ui_frame, label, .Small) + ui.ui_frame_sc(ui_frame, 24)
+		cell(ui.flow_next(&flow, width, ui.ui_frame_sc(ui_frame, 32)), label)
+	}
+	flow_bounds := ui.flow_end(&flow)
+	return flow_bounds.y + flow_bounds.h + ui.ui_frame_sc(ui_frame, 10)
 }
 
 cell :: proc(r: ui.Rect_I32, label: string) {

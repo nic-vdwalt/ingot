@@ -15,6 +15,7 @@
     {"id": "button_grid", "kind": "buttons", "scales": [100, 250, 1000, 5000, 10000], "columns": 10},
     {"id": "mixed_form", "kind": "mixed_form", "scales": [10, 50, 100, 250, 1000], "widgets_per_group": 5},
     {"id": "complex_dashboard", "kind": "complex_dashboard", "scales": [10, 50, 100, 250], "widgets_per_group": 10},
+    {"id": "layout_flow", "kind": "layout_flow", "scales": [32, 128, 512, 1024], "frameworks": ["ingot"]},
     {"id": "list_full", "kind": "list", "scales": [100, 1000, 5000, 10000], "virtualized": false},
     {"id": "list_virtual", "kind": "list", "scales": [1000, 10000, 100000, 1000000], "virtualized": true, "visible_rows": 40, "overscan": 2},
     {"id": "table_repeated", "kind": "table", "scales": [20, 100, 250, 1000], "columns": 4, "unique_text": false},

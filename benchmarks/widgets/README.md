@@ -55,6 +55,11 @@ fixed-storage overflow. Ingot paint lists currently use fixed command and text a
 true forced-growth case until the bounded-reservation storage work lands; growth telemetry must remain
 zero in Phase 2.
 
+`layout_flow` is an Ingot-only geometry workload. It lays out 32–1,024 explicitly measured items with
+varying dimensions, validates a deterministic geometry checksum, and emits no paint or semantic output.
+It isolates flow-layout CPU cost and scaling; it is not a Clay comparison and does not measure text
+measurement, rendering, input, accessibility, or application frame time.
+
 For two independent runs:
 
 ```sh

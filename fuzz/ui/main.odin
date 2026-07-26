@@ -186,6 +186,31 @@ exercise_widget_math :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	fuzzx.check(c, accum > -1 && accum < 1, "wheel remainder out of range")
 }
 
+exercise_layout_flow :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
+	width := i32(fuzzx.int_range(p, 0, 1025))
+	gap_x := i32(fuzzx.int_range(p, 0, 33))
+	gap_y := i32(fuzzx.int_range(p, 0, 33))
+	flow: ui.Flow_Layout
+	ui.flow_begin(&flow, {0, 0, width, max(i32)}, gap_x, gap_y)
+	previous: ui.Rect_I32
+	count := fuzzx.int_range(p, 0, ui.MAX_FLOW_ITEMS + 1)
+	for index in 0 ..< count {
+		item_w := i32(fuzzx.int_range(p, 0, 2049))
+		item_h := i32(fuzzx.int_range(p, 0, 257))
+		rect := ui.flow_next(&flow, item_w, item_h)
+		inside := rect.x >= 0 && i64(rect.x) + i64(rect.w) <= i64(width)
+		fuzzx.check(c, inside, "flow item escaped width")
+		fuzzx.check(c, rect.y >= previous.y, "flow moved backwards")
+		if index > 0 && rect.y == previous.y {
+			fuzzx.check(c, rect.x >= previous.x + previous.w, "flow items overlap")
+		}
+		previous = rect
+	}
+	bounds := ui.flow_end(&flow)
+	fuzzx.check(c, bounds.w >= 0 && bounds.w <= width, "flow content width invalid")
+	fuzzx.check(c, bounds.h >= 0, "flow content height invalid")
+}
+
 // exercise_eased property-fuzzes the animation easing primitive: band
 // containment, monotone convergence, hostile dt/speed, and the one-sided
 // frame-partition property (sub-steps never get closer than one big step).
@@ -376,6 +401,7 @@ main :: proc() {
 			ui.ui_runtime_destroy(&runtime)
 			if i % 16 == 0 do exercise_semantics(&c, &p)
 			exercise_widget_math(&c, &p)
+			exercise_layout_flow(&c, &p)
 			exercise_eased(&c, &p)
 			free_all(context.temp_allocator)
 		}

@@ -43,6 +43,76 @@ rect_inset :: proc(rect: Rect_I32, value: Insets_I32) -> Rect_I32 {
 
 MAX_FIT_COLUMN_ITEMS :: 64
 
+// A separate flow bound keeps large collections on the existing chunked or virtualized paths.
+MAX_FLOW_ITEMS :: 1024
+
+Flow_Layout :: struct {
+	bounds:       Rect_I32,
+	gap_x, gap_y: i32,
+	cursor_x:     i32,
+	cursor_y:     i32,
+	line_h:       i32,
+	content_w:    i32,
+	items:        i32,
+	open:         bool,
+}
+
+flow_begin :: proc(flow: ^Flow_Layout, bounds: Rect_I32, gap_x: i32 = 0, gap_y: i32 = 0) {
+	assert(flow != nil, "flow_begin: nil flow")
+	assert(!flow.open, "flow_begin: flow already open")
+	assert(bounds.w >= 0 && bounds.h >= 0, "flow_begin: negative bounds")
+	assert(gap_x >= 0 && gap_y >= 0, "flow_begin: negative gap")
+	assert(i64(bounds.x) + i64(bounds.w) <= i64(max(i32)), "flow_begin: horizontal overflow")
+	assert(i64(bounds.y) + i64(bounds.h) <= i64(max(i32)), "flow_begin: vertical overflow")
+	flow^ = Flow_Layout {
+		bounds = bounds,
+		gap_x  = gap_x,
+		gap_y  = gap_y,
+		open   = true,
+	}
+}
+
+flow_next :: proc(flow: ^Flow_Layout, width, height: i32) -> Rect_I32 {
+	assert(flow != nil && flow.open, "flow_next: flow not open")
+	assert(width >= 0 && height >= 0, "flow_next: negative size")
+	assert(flow.items < MAX_FLOW_ITEMS, "flow_next: too many items")
+	item_w := min(width, flow.bounds.w)
+	before := flow.gap_x if flow.cursor_x > 0 else 0
+	if flow.cursor_x > 0 && i64(flow.cursor_x) + i64(before) + i64(item_w) > i64(flow.bounds.w) {
+		next_y := i64(flow.cursor_y) + i64(flow.line_h) + i64(flow.gap_y)
+		assert(next_y <= i64(max(i32)), "flow_next: vertical overflow")
+		flow.cursor_x = 0
+		flow.cursor_y = i32(next_y)
+		flow.line_h = 0
+		before = 0
+	}
+	next_x := i64(flow.cursor_x) + i64(before) + i64(item_w)
+	assert(next_x <= i64(flow.bounds.w), "flow_next: horizontal overflow")
+	assert(i64(flow.bounds.y) + i64(flow.cursor_y) <= i64(max(i32)), "flow_next: y overflow")
+	flow.cursor_x += before
+	result := Rect_I32 {
+		flow.bounds.x + flow.cursor_x,
+		flow.bounds.y + flow.cursor_y,
+		item_w,
+		height,
+	}
+	flow.cursor_x = i32(next_x)
+	flow.line_h = max(flow.line_h, height)
+	flow.content_w = max(flow.content_w, flow.cursor_x)
+	flow.items += 1
+	return result
+}
+
+flow_end :: proc(flow: ^Flow_Layout) -> Rect_I32 {
+	assert(flow != nil && flow.open, "flow_end: flow not open")
+	assert(flow.items >= 0 && flow.items <= MAX_FLOW_ITEMS, "flow_end: corrupt flow")
+	content_h := i64(flow.cursor_y) + i64(flow.line_h)
+	assert(content_h <= i64(max(i32)), "flow_end: content overflow")
+	result := Rect_I32{flow.bounds.x, flow.bounds.y, flow.content_w, i32(content_h)}
+	flow.open = false
+	return result
+}
+
 Fit_Column :: struct {
 	x, y, w: i32,
 	cursor:  i32,
