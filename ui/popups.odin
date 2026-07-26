@@ -22,6 +22,36 @@ Modal_State :: struct {
 	drawing:   bool,
 }
 
+// route_claim_backdrop claims pointer input for the region *around* a panel so
+// widgets underneath neither hover nor click while it is open.
+//
+// The four bands around the panel are claimed rather than the whole screen:
+// interact resolves hover against the claim set, so a full-screen claim would
+// also disable the panel's own widgets. Must be called on every frame the
+// panel is open, because the router tests against the previous frame's claims.
+//
+// modal_begin calls this for callers using the built-in modal chrome; callers
+// that draw their own panel call it directly.
+route_claim_backdrop :: proc(frame: ^Ui_Frame, panel: Rect_I32, screen_w, screen_h: i32) {
+	assert(frame != nil, "route_claim_backdrop: nil frame")
+	assert(screen_w >= 0 && screen_h >= 0, "route_claim_backdrop: negative screen size")
+	route_claim(frame, Rectangle{0, 0, f32(screen_w), f32(panel.y)})
+	route_claim(
+		frame,
+		Rectangle{0, f32(panel.y + panel.h), f32(screen_w), f32(screen_h - panel.y - panel.h)},
+	)
+	route_claim(frame, Rectangle{0, f32(panel.y), f32(panel.x), f32(panel.h)})
+	route_claim(
+		frame,
+		Rectangle {
+			f32(panel.x + panel.w),
+			f32(panel.y),
+			f32(screen_w - panel.x - panel.w),
+			f32(panel.h),
+		},
+	)
+}
+
 // modal_begin dims the screen, claims backdrop input (nothing under the dim
 // layer hovers or clicks), draws a centered titled panel clamped to the screen,
 // begins a scissor over it, and returns the body rect below the title band.
@@ -49,10 +79,7 @@ modal_begin :: proc(
 	mx := (screen_w - mw) / 2
 	my := (screen_h - mh) / 2
 	st.rect = Rect_I32{mx, my, mw, mh}
-	route_claim(frame, Rectangle{0, 0, f32(screen_w), f32(my)})
-	route_claim(frame, Rectangle{0, f32(my + mh), f32(screen_w), f32(screen_h - my - mh)})
-	route_claim(frame, Rectangle{0, f32(my), f32(mx), f32(mh)})
-	route_claim(frame, Rectangle{f32(mx + mw), f32(my), f32(screen_w - mx - mw), f32(mh)})
+	route_claim_backdrop(frame, st.rect, screen_w, screen_h)
 
 	draw_rectangle(frame, mx, my, mw, mh, style.bg_secondary)
 	draw_rectangle_lines(frame, mx, my, mw, mh, style.border_color)

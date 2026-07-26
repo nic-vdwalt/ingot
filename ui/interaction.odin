@@ -90,6 +90,11 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 
 Interaction_State :: struct {
 	active_latch:   ^bool,
+	// Runtime frame generation in which active_latch was last confirmed by
+	// the widget that owns it. A latch whose owner stops being drawn is
+	// otherwise never released, and `blocked` above then makes every widget
+	// in the window inert. Compared, never used to reach the owner.
+	latch_gen:      u64,
 	press_pos:      Vector2,
 	press_occluded: bool,
 	press_seen:     bool,
@@ -122,7 +127,10 @@ interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Inter
 	assert(frame != nil && frame.open, "interact: invalid frame")
 	assert(rect.width >= 0 && rect.height >= 0, "interact: negative rect")
 	state := &frame.interaction
-	if state.active_latch != nil && !state.active_latch^ do state.active_latch = nil
+	if state.active_latch != nil && !state.active_latch^ {
+		state.active_latch = nil
+		state.latch_gen = 0
+	}
 	mouse := get_mouse_position(frame)
 	local := frame_to_local(frame, mouse)
 	local_press := frame_to_local(frame, state.press_pos)
@@ -138,8 +146,10 @@ interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Inter
 	if latch != nil {
 		if it.held {
 			state.active_latch = latch
+			state.latch_gen = frame.runtime.frame_generation
 		} else if state.active_latch == latch {
 			state.active_latch = nil
+			state.latch_gen = 0
 		}
 	}
 	return it

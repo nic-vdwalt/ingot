@@ -99,7 +99,13 @@ text_ink :: proc(frame: ^Ui_Frame, ink: Ink) -> Color {
 
 // text draws a single line at (x, y). The cstring conversion happens once,
 // here, in the temp allocator.
-text :: proc(frame: ^Ui_Frame, s: string, x, y: i32, role: Text_Role = .Body, ink: Ink = .Primary) {
+text :: proc(
+	frame: ^Ui_Frame,
+	s: string,
+	x, y: i32,
+	role: Text_Role = .Body,
+	ink: Ink = .Primary,
+) {
 	assert(frame != nil && frame.open, "text: invalid frame")
 	if len(s) == 0 do return
 	size := text_role_size(frame, role)
@@ -124,7 +130,17 @@ text_wrapped :: proc(
 	size := text_role_size(frame, role)
 	line_height := text_role_line_height(frame, role)
 	color := text_ink(frame, ink)
-	return draw_text_wrapped_frame(frame, x, y, max_width, s, color, size, line_height, draw = draw)
+	return draw_text_wrapped_frame(
+		frame,
+		x,
+		y,
+		max_width,
+		s,
+		color,
+		size,
+		line_height,
+		draw = draw,
+	)
 }
 
 // text_truncated draws one line, cutting it with a trailing ellipsis when it
