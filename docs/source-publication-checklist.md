@@ -32,16 +32,17 @@ claims; those remain governed by `oss-release-checklist.md` and
   Apache-2.0.
 - [x] Git history contains one contributor identity, Nicolas van der Walt's
   GitHub identity; no non-owner contribution grants are currently required.
-- [ ] Approve GitHub private vulnerability reporting as the security contact.
+- [x] GitHub private vulnerability reporting was approved and enabled on
+  2026-07-26.
 
 ## Before changing repository visibility
 
 - [x] Complete the owner confirmations above.
 - [x] Coordinate the history cutover described in `history-rewrite.md`.
-- [ ] Run `scripts/check.sh`, `scripts/test.sh`, and `scripts/check-web.sh` from a
+- [x] Run `scripts/check.sh`, `scripts/test.sh`, and `scripts/check-web.sh` from a
   fresh clone of rewritten history.
-- [ ] Confirm GitHub branch protection and private vulnerability reporting are
-  enabled.
+- [ ] Confirm GitHub branch protection is enabled.
+- [x] Confirm GitHub private vulnerability reporting is enabled.
 
 Binary and web releases additionally require the deferred toolchain, linked
 library, SDK, runtime-notice, SBOM, platform-validation, and counsel-review work
