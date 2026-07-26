@@ -4,6 +4,13 @@ import "core:strings"
 import rl "ingot:gfx"
 import "ingot:ui"
 
+// ui.Frame_Strategy mirrors rl.Frame_Strategy so renderer-independent UI code
+// can name a pacing decision. The cast below is only sound while the two
+// declarations stay in the same order.
+#assert(int(ui.Frame_Strategy.Continuous) == int(rl.Frame_Strategy.Continuous))
+#assert(int(ui.Frame_Strategy.Event_Driven) == int(rl.Frame_Strategy.Event_Driven))
+#assert(len(ui.Frame_Strategy) == len(rl.Frame_Strategy))
+
 apply_platform_output :: proc(output: ^ui.Platform_Output) {
 	assert(output != nil, "apply_platform_output: nil output")
 	if output.cursor_requested do rl.SetMouseCursor(rl.MouseCursor(output.cursor))
@@ -17,6 +24,12 @@ apply_platform_output :: proc(output: ^ui.Platform_Output) {
 	}
 	when ODIN_OS == .JS {
 		if output.toggle_fullscreen do rl.ToggleFullscreen()
+	}
+	// Strategy before the redraw requests: SetFrameStrategy marks activity, so
+	// applying it after would let a settle burst outlive a deadline set this
+	// frame. Producers only publish this on a transition (see ui.pacer_frame).
+	if output.frame_strategy_requested {
+		rl.SetFrameStrategy(rl.Frame_Strategy(output.frame_strategy))
 	}
 	if output.request_redraw do rl.RequestRedraw()
 	if output.redraw_after > 0 do rl.RequestRedrawIn(output.redraw_after)
