@@ -7,11 +7,14 @@ This plan targets Ingot's headless core UI build time for the deterministic
 a unique title, status, checkbox, slider, persistent text input, action button,
 and four data cells per row.
 
-The current optimized baseline is approximately 60.8 microseconds of build time
-and 0.04 microseconds of finalization per frame on the profiled Apple M2 Max.
-Ingot is approximately 5-6% faster than Dear ImGui and 16.5 times faster than
-egui for this workload. These results do not represent application, event-loop,
-accessibility-host, presentation, or GPU execution performance.
+The original profiled baseline was approximately 60.8 microseconds of build time
+and 0.04 microseconds of finalization per frame on the Apple M2 Max. The accepted
+Phase 2 baseline is 45.88 microseconds build median, 46.21 microseconds directly
+measured total median, and 53.46 microseconds total p95. Phase 2 added measurement
+and isolated workloads rather than a production hot-path optimization, so the
+change from the original profile is not attributed to Phase 2. These results do
+not represent application, event-loop, accessibility-host, presentation, or GPU
+execution performance.
 
 ## Profile
 

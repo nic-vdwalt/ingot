@@ -195,13 +195,15 @@ preferences, terminal, accessibility, and versioning constraints.
 
 ## Measured performance
 
-A [2026-07-26 Apple M2 Max headless run](benchmarks/widgets/results/2026-07-26-m2-max-core.md)
-measured Ingot alongside pinned Dear ImGui and egui revisions over 1,008 validated
-process/workload samples. Ingot was competitive with Dear ImGui in this core CPU
-suite: 10,000 repeated labels took 236 µs, 1,000 mixed-form groups took 161 µs,
-and a million-row logical list with 44 submitted rows took 3.6 µs. Dear ImGui led
-several other workloads, including fully submitted lists and table-like cells.
-These are headless construction results, not GPU or complete application rankings.
+An accepted [2026-07-26 Apple M2 Max Phase 2 baseline](benchmarks/widgets/results/2026-07-26-m2-max-phase-2.md)
+measured a deterministic 100-row dashboard with 1,000 submitted UI elements at a
+46.21 µs total median and 53.46 µs total p95. The build median was 45.88 µs and
+finalization p95 was 0.04 µs across seven fresh processes, each with 300 warm-up
+and 2,000 measured frames. These are fixed-geometry headless-core CPU results,
+not native host, GPU, presentation, memory, idle-power, or complete application
+measurements. The earlier [cross-framework run](benchmarks/widgets/results/2026-07-26-m2-max-core.md)
+remains workload-specific evidence for pinned Dear ImGui and egui adapters, not
+an overall framework ranking.
 
 ## Documentation
 

@@ -178,21 +178,20 @@ and avoid both UI construction and GPU submission while idle. Dear ImGui is
 also highly optimized and allocation-conscious, while egui can cache work and
 schedule repaint deadlines.
 
-A [dated Apple M2 Max headless run](../benchmarks/widgets/results/2026-07-26-m2-max-core.md)
-of the [scalable widget suite](../benchmarks/widgets/README.md) found Ingot
-competitive with Dear ImGui for fixed-geometry core construction. At the largest
-representative scales, Ingot led repeated labels (236 µs versus 264 µs), mixed
-forms (161 µs versus 162 µs), and a virtualized million-row list with 44 rows
-submitted (3.6 µs versus 5.5 µs). Dear ImGui led buttons (390 µs versus 448 µs),
-a fully submitted 10,000-row list (516 µs versus 861 µs), table-like cells
-(206 µs versus 342 µs), and churn (270 µs versus 422 µs). egui took materially
-more core CPU in these adapters, ranging from 28.8 µs for the virtual list to
-10.3 ms for 10,000 buttons.
+An accepted [Apple M2 Max Phase 2 baseline](../benchmarks/widgets/results/2026-07-26-m2-max-phase-2.md)
+of the [scalable widget suite](../benchmarks/widgets/README.md) measured Ingot's
+deterministic 100-row dashboard at a 46.21 µs total median and 53.46 µs total
+p95. The workload submits 1,000 fixed-geometry UI elements; its build median was
+45.88 µs and finalization p95 was 0.04 µs across seven fresh processes, each with
+300 warm-up and 2,000 measured frames. Isolated cases separately measure stable
+and changing labels, active and inactive inputs, widgets, and semantics.
 
-Those measurements establish workload-specific headless CPU behavior, not an
-overall framework ranking. The adapters do not measure native GPU work,
-presentation, memory, startup, or idle power, and they do not imply feature
-parity. End-to-end results still depend on the host, backend, workload, and build
+The earlier [cross-framework run](../benchmarks/widgets/results/2026-07-26-m2-max-core.md)
+remains evidence for specific pinned Dear ImGui and egui adapters and workloads.
+Neither result establishes an overall framework ranking or proves equivalent
+feature work. These headless-core CPU adapters do not measure native host
+integration, GPU execution, presentation, memory, startup, or idle power.
+End-to-end results still depend on the host, backend, workload, and build
 configuration. Ingot's renderer statistics can expose flushes, uploads, CPU
 encoding/submission calls, state switches, and arena peaks during a future
 native measurement.
