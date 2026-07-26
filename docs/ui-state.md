@@ -142,12 +142,11 @@ Most widgets ship in two call shapes. Pick one per screen and stay in it.
 | Suffix | Status | Shape | Focus |
 |---|---|---|---|
 | `*_at` | Supported | Explicit `x, y, w, h` against a `^Ui_Frame` | Caller passes `Focus_Opt`, or omits it |
-| `*_ui` | Experimental | Carves a slot from a `^Ui` and its `Layout` | Registered automatically |
+| `*_ui` | Supported | Carves a bounded slot from a `^Ui` and its `Layout` | Registered automatically when visible |
 
-**Use `*_at` for application code.** It is the path every shipped consumer
-takes, it composes with hand-computed layout and scroll offsets, and its
-signature is stable. Positioning is your responsibility: scale every dimension
-through `ui_frame_sc` so the result tracks the runtime UI scale.
+**Use `*_at` for application-owned geometry.** It composes with hand-computed
+layout and scroll offsets. Positioning is your responsibility: scale every
+dimension through `ui_frame_sc` so the result tracks the runtime UI scale.
 
 ```odin
 metrics, style := ui.ui_frame_style(frame)
@@ -156,10 +155,11 @@ if ui.btn_at(frame, x, y, ui.ui_frame_sc(frame, 120), metrics.ROW_H_MD, "Save", 
 }
 ```
 
-**`*_ui` is experimental.** It removes slot arithmetic for short static forms,
-but the layout model is still settling and the auto-layout tier has very few
-callers, so it receives correspondingly less validation. Do not build a large
-screen on it yet.
+**`*_ui` is supported for bounded row, column, and flex forms.** Overflow clips
+to the root and produces zero-area slots rather than assertions. Clipped slots
+do not register focus, interaction, paint, or semantics. Stable-ID overloads
+preserve focus through resize, DPI changes, insertion, and reorder; use them for
+dynamic forms. Widget dimensions remain caller-scaled through frame metrics.
 
 `btn_ui_state` and `btn_ui_state_id` are deprecated: no consumer has needed
 `Button_State` together with auto-layout. Use `btn_at_state` with an explicit

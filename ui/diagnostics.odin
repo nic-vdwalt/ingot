@@ -1,18 +1,18 @@
 package ui
 
 Ui_Frame_Diagnostics :: struct {
-	input_characters_dropped:    i32,
-	degenerate_widgets_dropped:  i32,
-	semantic_nodes_dropped:      i32,
-	semantic_focus_dropped:      i32,
-	semantic_actions_dropped:    i32,
-	semantic_id_collisions:      i32,
-	semantic_text_truncations:   i32,
-	main_commands_dropped:       i32,
-	main_text_bytes_dropped:     i32,
-	overlay_commands_dropped:    i32,
-	overlay_text_bytes_dropped:  i32,
-	platform_controls_dropped:   i32,
+	input_characters_dropped:   i32,
+	degenerate_widgets_dropped: i32,
+	semantic_nodes_dropped:     i32,
+	semantic_focus_dropped:     i32,
+	semantic_actions_dropped:   i32,
+	semantic_id_collisions:     i32,
+	semantic_text_truncations:  i32,
+	main_commands_dropped:      i32,
+	main_text_bytes_dropped:    i32,
+	overlay_commands_dropped:   i32,
+	overlay_text_bytes_dropped: i32,
+	platform_controls_dropped:  i32,
 }
 
 ui_frame_diagnostics :: proc(frame: ^Ui_Frame) -> Ui_Frame_Diagnostics {

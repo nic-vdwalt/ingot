@@ -153,7 +153,12 @@ when !INGOT_NET_SIM {
 		request: Http_Request,
 		options: Fetch_Options = {},
 	) -> bool {
-		if !f.running || request.path == "" || request.path[0] != '/' || len(f.pending) >= FETCH_MAXIMUM_PENDING do return false
+		if !f.running ||
+		   request.path == "" ||
+		   request.path[0] != '/' ||
+		   len(f.pending) >= FETCH_MAXIMUM_PENDING {
+			return false
+		}
 		assert(options.priority == .Normal || options.priority == .Priority)
 		pending := Pending {
 			tag     = tag,
@@ -278,8 +283,17 @@ when !INGOT_NET_SIM {
 			request_ok := state == 1
 			body: []u8
 			n := ingot_http_body_len(item.id)
-			if n >
-			   0 {body = make([]byte, int(n)); got := ingot_http_body_copy(item.id, raw_data(body), i32(len(body))); if got < 0 {delete(body); body = nil; request_ok = false}} else {ingot_http_body_copy(item.id, nil, 0)}
+			if n > 0 {
+				body = make([]byte, int(n))
+				got := ingot_http_body_copy(item.id, raw_data(body), i32(len(body)))
+				if got < 0 {
+					delete(body)
+					body = nil
+					request_ok = false
+				}
+			} else {
+				ingot_http_body_copy(item.id, nil, 0)
+			}
 			append(
 				&out,
 				Fetch_Result{tag = item.tag, status = u16(status), body = body, ok = request_ok},

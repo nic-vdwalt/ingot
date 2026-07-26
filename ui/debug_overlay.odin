@@ -56,6 +56,59 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnost
 		fmt.tprintf("%d (%d dropped)", overlay_cmd_count(frame), overlay_dropped(frame)),
 	)
 	push(rows[:], &count, "route claims", fmt.tprintf("%d", route_claim_count(frame)))
+	diagnostics := ui_frame_diagnostics(frame)
+	push(
+		rows[:],
+		&count,
+		"input / geometry drops",
+		fmt.tprintf(
+			"%d / %d",
+			diagnostics.input_characters_dropped,
+			diagnostics.degenerate_widgets_dropped,
+		),
+	)
+	push(
+		rows[:],
+		&count,
+		"semantic drops",
+		fmt.tprintf(
+			"%d / %d / %d",
+			diagnostics.semantic_nodes_dropped,
+			diagnostics.semantic_focus_dropped,
+			diagnostics.semantic_actions_dropped,
+		),
+	)
+	push(
+		rows[:],
+		&count,
+		"semantic ids / text",
+		fmt.tprintf(
+			"%d / %d",
+			diagnostics.semantic_id_collisions,
+			diagnostics.semantic_text_truncations,
+		),
+	)
+	push(
+		rows[:],
+		&count,
+		"paint cmd drops",
+		fmt.tprintf(
+			"%d / %d",
+			diagnostics.main_commands_dropped,
+			diagnostics.overlay_commands_dropped,
+		),
+	)
+	push(
+		rows[:],
+		&count,
+		"paint text / controls",
+		fmt.tprintf(
+			"%d / %d / %d",
+			diagnostics.main_text_bytes_dropped,
+			diagnostics.overlay_text_bytes_dropped,
+			diagnostics.platform_controls_dropped,
+		),
+	)
 	height := i32(count) * row_h + pad * 2 + metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 6)
 	panel := Rectangle{f32(x), f32(y), f32(width), f32(height)}
 	draw_rectangle_rec(

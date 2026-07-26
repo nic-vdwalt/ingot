@@ -376,48 +376,19 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	bh := ui.ui_frame_sc(&ui_frame, 30)
 	gap := ui.ui_frame_sc(&ui_frame, 10)
 	if ui.btn(&ui_frame, x, y, bw, bh, "Primary", ui.Btn_Style.Primary) do click_count += 1
-	if ui.btn(
-		&ui_frame,
-		x + (bw + gap),
-		y,
-		bw,
-		bh,
-		"Secondary",
-		ui.Btn_Style.Secondary,
-	) {
+	if ui.btn(&ui_frame, x + (bw + gap), y, bw, bh, "Secondary", ui.Btn_Style.Secondary) {
 		click_count += 1
 	}
-	if ui.btn(
-		&ui_frame,
-		x + (bw + gap) * 2,
-		y,
-		bw,
-		bh,
-		"Danger",
-		ui.Btn_Style.Danger,
-	) {
+	if ui.btn(&ui_frame, x + (bw + gap) * 2, y, bw, bh, "Danger", ui.Btn_Style.Danger) {
 		click_count += 1
 	}
-	if ui.btn(
-		&ui_frame,
-		x + (bw + gap) * 3,
-		y,
-		bw,
-		bh,
-		"Ghost",
-		ui.Btn_Style.Ghost,
-	) {
+	if ui.btn(&ui_frame, x + (bw + gap) * 3, y, bw, bh, "Ghost", ui.Btn_Style.Ghost) {
 		click_count += 1
 	}
 	y += bh + gap
 	ui.btn(&ui_frame, x, y, bw, bh, "Disabled", ui.Btn_Style.Primary, enabled = false)
 	if ui.icon_btn(&ui_frame, x + bw + gap, y, bh, "\u2715") do click_count += 1
-	if ui.back_btn(
-		&ui_frame,
-		x + bw + gap + bh + gap,
-		y + ui.ui_frame_sc(&ui_frame, 4),
-		"Back",
-	) {
+	if ui.back_btn(&ui_frame, x + bw + gap + bh + gap, y + ui.ui_frame_sc(&ui_frame, 4), "Back") {
 		click_count += 1
 	}
 	y += bh + gap

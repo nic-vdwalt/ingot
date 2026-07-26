@@ -94,6 +94,11 @@ The ordinary `term` run enables `INGOT_PTY_SIM=true`. It validates terminal pump
 behavior without spawning a shell. Real Unix PTY and Windows ConPTY validation is
 a separate platform integration gate.
 
+Windows uses `scripts/test.ps1` and `scripts/check.ps1`. Validation runs use
+`scripts/validation-evidence.py` to emit bounded, redacted JSON and logs matching
+`docs/validation/schema.json`. `scripts/validation-matrix.py` generates status
+rows from committed evidence and leaves targets without evidence as Not recorded.
+
 ## Deterministic fuzzing
 
 The fuzz harnesses use deterministic pseudo-random input. Passing a seed

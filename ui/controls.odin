@@ -430,13 +430,7 @@ slider_at_state :: proc(
 	frac := (value^ - lo) / (hi - lo)
 	fill_w := track_w * frac
 	if fill_w > 0 {
-		draw_rectangle_rounded(
-			frame,
-			{track_x, cy - th / 2, fill_w, th},
-			1.0,
-			4,
-			style.fg_accent,
-		)
+		draw_rectangle_rounded(frame, {track_x, cy - th / 2, fill_w, th}, 1.0, 4, style.fg_accent)
 	}
 	knob_x := track_x + track_w * frac
 	active := it.hovered || state.dragging || focus_opt_focused(focus)

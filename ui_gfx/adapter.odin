@@ -87,20 +87,22 @@ adapter_begin_frame :: proc(
 	input: ^ui.Ui_Input,
 	output: ^ui.Ui_Output,
 ) {
-	assert(adapter != nil && adapter.initialized, "adapter_begin_frame: invalid adapter")
-	assert(adapter.gfx_context != nil, "adapter_begin_frame: nil graphics context")
+	adapter_prepare_frame(adapter, runtime, input)
+	adapter_open_frame(adapter, frame, runtime, input, output)
+}
+
+adapter_prepare_frame :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime, input: ^ui.Ui_Input) {
+	assert(adapter != nil && adapter.initialized, "adapter_prepare_frame: invalid adapter")
+	assert(adapter.gfx_context != nil, "adapter_prepare_frame: nil graphics context")
 	assert(
 		adapter.gfx_epoch == rl.context_epoch(adapter.gfx_context),
-		"adapter_begin_frame: stale graphics context",
+		"adapter_prepare_frame: stale graphics context",
 	)
 	assert(
 		adapter.gfx_context == rl.default_context(),
-		"adapter_begin_frame: context routing unavailable",
+		"adapter_prepare_frame: context routing unavailable",
 	)
-	assert(
-		frame != nil && runtime != nil && input != nil && output != nil,
-		"adapter_begin_frame: nil argument",
-	)
+	assert(runtime != nil && input != nil, "adapter_prepare_frame: nil argument")
 	capture_input_context(adapter.gfx_context, input)
 	adapter_attach_runtime(adapter, runtime)
 	when ODIN_OS == .Darwin || ODIN_OS == .JS {
@@ -108,6 +110,20 @@ adapter_begin_frame :: proc(
 	} else {
 		adapter_set_font_dpi(adapter, 1)
 	}
+}
+
+adapter_open_frame :: proc(
+	adapter: ^Adapter,
+	frame: ^ui.Ui_Frame,
+	runtime: ^ui.Ui_Runtime,
+	input: ^ui.Ui_Input,
+	output: ^ui.Ui_Output,
+) {
+	assert(adapter != nil && adapter.initialized, "adapter_open_frame: invalid adapter")
+	assert(
+		frame != nil && runtime != nil && input != nil && output != nil,
+		"adapter_open_frame: nil argument",
+	)
 	frame.output = output
 	ui.paint_list_set_sink(&output.main, adapter_paint_sink, adapter)
 	ui.ui_frame_begin(frame, runtime, input)

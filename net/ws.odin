@@ -525,7 +525,9 @@ ws_handshake :: proc(ws: ^WebSocket, sock: cnet.TCP_Socket) -> bool {
 	key := generate_ws_key()
 	if len(key) == 0 do return false
 	request := fmt.tprintf(
-		"GET /ws HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n",
+		"GET /ws HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\n" +
+		"Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\n" +
+		"Sec-WebSocket-Version: 13\r\n\r\n",
 		ws.host,
 		ws.port,
 		key,

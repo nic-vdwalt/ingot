@@ -244,12 +244,7 @@ push_column :: proc(l: ^Layout, gap: i32 = 0, cross_align: Cross_Align = .Stretc
 	l.depth += 1
 }
 
-push_column_sized :: proc(
-	l: ^Layout,
-	w: i32,
-	gap: i32 = 0,
-	cross_align: Cross_Align = .Stretch,
-) {
+push_column_sized :: proc(l: ^Layout, w: i32, gap: i32 = 0, cross_align: Cross_Align = .Stretch) {
 	assert(l.depth > 0 && l.depth < MAX_LAYOUT_DEPTH, "push_column_sized: depth out of bounds")
 	assert(_top(l).kind == .Row, "push_column_sized: current frame must be a row")
 	r := next(l, w)

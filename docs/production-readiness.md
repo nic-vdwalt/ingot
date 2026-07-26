@@ -86,7 +86,9 @@ Chromium/WebKit run, screen-reader exercise, audio-unlock test, or WebGPU valida
 | Internet TLS | URL/parser unit tests | Valid chain plus expired, untrusted, wrong-host, timeout, IPv4/IPv6, and downgrade cases | Not recorded |
 
 Record operating system, architecture, Ingot/Odin revision, browser, GPU, driver,
-backend, date, commands, and outcome for manual release validation. Use only
+backend, date, commands, and outcome with `scripts/validation-evidence.py` and
+`docs/validation/schema.json`. Generate matrix rows with
+`scripts/validation-matrix.py`; missing evidence remains Not recorded. Use only
 these status terms:
 
 - `compiled` — source built for the target; runtime behavior is unverified.

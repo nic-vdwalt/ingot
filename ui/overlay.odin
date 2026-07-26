@@ -31,7 +31,11 @@ overlay_list :: proc(frame: ^Ui_Frame) -> ^Paint_List {
 }
 
 overlay_rect :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
-	command := Paint_Command{kind = .Rectangle, rect = rect, color = color}
+	command := Paint_Command {
+		kind  = .Rectangle,
+		rect  = rect,
+		color = color,
+	}
 	if !paint_push(overlay_list(frame), command) do frame.overlay.dropped += 1
 }
 
@@ -82,7 +86,13 @@ overlay_rounded_lines :: proc(
 }
 
 overlay_line :: proc(frame: ^Ui_Frame, p0, p1: Vector2, color: Color) {
-	command := Paint_Command{kind = .Line, p0 = p0, p1 = p1, thickness = 1, color = color}
+	command := Paint_Command {
+		kind      = .Line,
+		p0        = p0,
+		p1        = p1,
+		thickness = 1,
+		color     = color,
+	}
 	if !paint_push(overlay_list(frame), command) do frame.overlay.dropped += 1
 }
 

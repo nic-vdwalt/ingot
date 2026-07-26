@@ -32,10 +32,7 @@ frame_scratch_allocator_proc :: proc(
 	scratch := cast(^Frame_Scratch)data
 	assert(scratch != nil && scratch.initialized, "frame scratch allocator is not initialized")
 	if mode == .Free && old_memory != nil {
-		panic(
-			"individual free of frame memory; memory is released by ui_frame_end",
-			loc = loc,
-		)
+		panic("individual free of frame memory; memory is released by ui_frame_end", loc = loc)
 	}
 	backing := mem.dynamic_arena_allocator(&scratch.arena)
 	return backing.procedure(backing.data, mode, size, alignment, old_memory, old_size, loc)

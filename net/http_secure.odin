@@ -103,11 +103,8 @@ http_request_url :: proc(
 	if curl.easy_setopt(handle, .WRITEDATA, &body) != .E_OK do return {}, .Protocol
 	if options.redirects.maximum_redirects > 0 {
 		if curl.easy_setopt(handle, .FOLLOWLOCATION, c.long(1)) != .E_OK do return {}, .Redirect
-		if curl.easy_setopt(
-			handle,
-			.MAXREDIRS,
-			c.long(options.redirects.maximum_redirects),
-		) != .E_OK {
+		if curl.easy_setopt(handle, .MAXREDIRS, c.long(options.redirects.maximum_redirects)) !=
+		   .E_OK {
 			return {}, .Redirect
 		}
 	}

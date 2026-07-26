@@ -145,9 +145,9 @@ scaled `Ui_Metrics` and `Ink` against the active `Theme`. The explicit
 sizes and colors these enums do not name. Where drawing code needs both tables
 at once, `ui.ui_frame_style(frame)` returns them together.
 
-Widgets ship in two call shapes: `*_at` takes an explicit rect and is the
-supported path for application code, while `*_ui` carves a slot from a `Ui`
-layout and is experimental. See
+Widgets ship in two supported call shapes: `*_at` takes application-owned
+geometry, while `*_ui` carves a bounded slot from a `Ui` layout and registers
+focus only when visible. See
 [UI state and stable focus](docs/ui-state.md#widget-tiers).
 
 `rl.run` blocks on native targets and installs the animation-frame callback on

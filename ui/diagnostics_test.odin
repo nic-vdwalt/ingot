@@ -8,9 +8,15 @@ frame_diagnostics_aggregate_bounded_drops :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
-	input := Ui_Input{characters_dropped = 2}
-	output: Ui_Output
-	frame := Ui_Frame{output = &output}
+	input := Ui_Input {
+		characters_dropped = 2,
+	}
+	output := new(Ui_Output)
+	defer free(output)
+	output^ = {}
+	frame := Ui_Frame {
+		output = output,
+	}
 	ui_frame_begin(&frame, &runtime, &input)
 	frame.degenerate_drops = 3
 	frame.semantics.nodes_dropped = 4

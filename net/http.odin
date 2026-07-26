@@ -265,10 +265,7 @@ when !INGOT_NET_SIM {
 			),
 		)
 		for header in request.headers {
-			append(
-				&buf,
-				..transmute([]u8)fmt.tprintf("%s: %s\r\n", header.name, header.value),
-			)
+			append(&buf, ..transmute([]u8)fmt.tprintf("%s: %s\r\n", header.name, header.value))
 		}
 		append(&buf, ..transmute([]u8)fmt.tprintf("Content-Length: %d\r\n\r\n", len(request.body)))
 		append(&buf, ..request.body)
