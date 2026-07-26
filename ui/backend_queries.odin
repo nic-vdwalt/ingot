@@ -60,6 +60,56 @@ is_mouse_button_down :: proc(frame: ^Ui_Frame, button: MouseButton) -> bool {
 	return input_mouse_down(frame_input(frame), button)
 }
 
+// frame_characters returns the printable characters typed this frame.
+//
+// The platform adapter drains the backend's character queue into Ui_Input at
+// the top of every frame, so polling the backend from view code always yields
+// nothing — the queue is already empty. Views must read this snapshot instead.
+frame_characters :: proc(frame: ^Ui_Frame) -> []rune {
+	assert(frame != nil, "frame_characters: nil frame")
+	input := frame_input(frame)
+	assert(
+		input.character_count >= 0 && input.character_count <= INPUT_CHAR_CAP,
+		"frame_characters: character count out of range",
+	)
+	return input.characters[:input.character_count]
+}
+
+// frame_characters_consume discards the characters typed this frame so a key
+// that acted as a shortcut is not also typed into a text input drawn later in
+// the same frame.
+frame_characters_consume :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil, "frame_characters_consume: nil frame")
+	input := frame_input(frame)
+	assert(input != nil, "frame_characters_consume: nil input")
+	input.character_count = 0
+}
+
+// frame_user_input_active reports whether the user touched the mouse or
+// keyboard this frame, so a caller can stay at full frame rate instead of
+// dropping into the event-driven idle strategy mid-gesture.
+//
+// This must read the Ui_Input snapshot for the same reason as
+// frame_characters: the backend queues have already been drained.
+frame_user_input_active :: proc(frame: ^Ui_Frame) -> bool {
+	assert(frame != nil, "frame_user_input_active: nil frame")
+	input := frame_input(frame)
+	assert(input != nil, "frame_user_input_active: nil input")
+	if input.mouse_delta != {0, 0} do return true
+	if input.mouse_wheel != {0, 0} do return true
+	if input.character_count > 0 do return true
+	for down in input.mouse_down {
+		if down do return true
+	}
+	for pressed in input.keys_pressed {
+		if pressed do return true
+	}
+	for down in input.keys_down {
+		if down do return true
+	}
+	return false
+}
+
 request_redraw :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil, "request_redraw: nil frame")
 	if frame.output != nil do frame.output.platform.request_redraw = true

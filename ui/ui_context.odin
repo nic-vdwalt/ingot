@@ -133,6 +133,16 @@ ui_frame_metrics :: proc(frame: ^Ui_Frame) -> ^Ui_Metrics {
 	return &runtime.metrics
 }
 
+// ui_frame_style returns scaled metrics and the active theme together. Drawing
+// code almost always needs both, and resolving them once per view procedure
+// avoids re-deriving them at every call site.
+ui_frame_style :: proc(frame: ^Ui_Frame) -> (^Ui_Metrics, ^Theme) {
+	runtime := ui_frame_runtime(frame)
+	assert(runtime.scale > 0, "ui_frame_style: invalid scale")
+	assert(runtime.style.fg_primary.a > 0, "ui_frame_style: invalid theme")
+	return &runtime.metrics, &runtime.style
+}
+
 ui_frame_sc :: proc(frame: ^Ui_Frame, value: i32) -> i32 {
 	runtime := ui_frame_runtime(frame)
 	assert(runtime.scale > 0, "ui_frame_sc: invalid scale")

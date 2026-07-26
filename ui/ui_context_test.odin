@@ -6,6 +6,25 @@ import "core:unicode/utf8"
 
 
 @(test)
+ui_frame_style_matches_individual_accessors :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	ui_runtime_set_scale(&runtime, 1.5)
+	ui_runtime_set_theme(&runtime, theme_light())
+
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+
+	metrics, style := ui_frame_style(&frame)
+	testing.expect(t, metrics == ui_frame_metrics(&frame), "style metrics must alias the runtime")
+	testing.expect(t, style == ui_frame_theme(&frame), "style theme must alias the runtime")
+	testing.expect_value(t, metrics.FONT_SIZE, ui_frame_metrics(&frame).FONT_SIZE)
+	testing.expect_value(t, style.fg_primary, theme_light().fg_primary)
+}
+
+@(test)
 test_ui_slot_column_and_row :: proc(t: ^testing.T) {
 	u: Ui
 	ui_begin(&u, 0, 0, 200, 100)
