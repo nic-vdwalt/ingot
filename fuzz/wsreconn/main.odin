@@ -80,6 +80,87 @@ build_tape :: proc(p: ^Prng, buf: []ingotnet.Ws_Sim_Event) -> []ingotnet.Ws_Sim_
 	return buf[:n]
 }
 
+Ws_Reconn_Observations :: struct {
+	last_gen:      int,
+	saw_connected: bool,
+	drained:       int,
+}
+
+exercise_ws_reconnect_ops :: proc(
+	c: ^fuzzx.Ctx,
+	p: ^Prng,
+	ws: ^ingotnet.Ws,
+	worker_allocator: mem.Allocator,
+	session_start: time.Time,
+) -> Ws_Reconn_Observations {
+	observations: Ws_Reconn_Observations
+	ops := fuzzx.int_range(p, 4, 64)
+	for _ in 0 ..< ops {
+		switch fuzzx.int_range(p, 0, 6) {
+		case 0:
+			_ = ingotnet.ws_send(ws, "fuzz-payload")
+		case 1:
+			for message in ingotnet.ws_drain(ws) {
+				observations.drained += 1
+				delete(message.data, worker_allocator)
+			}
+		case 2:
+			if ingotnet.ws_state(ws) == .Connected {
+				observations.saw_connected = true
+				fuzzx.check(c, ingotnet.ws_conn_gen(ws) >= 1, "Connected observed with conn_gen == 0")
+			}
+		case 3:
+			generation := ingotnet.ws_conn_gen(ws)
+			fuzzx.check(c, generation >= observations.last_gen, "conn_gen went backwards")
+			observations.last_gen = generation
+		case 4:
+			_ = ingotnet.ws_has_pending(ws)
+		case 5:
+			time.sleep(time.Duration(fuzzx.int_range(p, 0, 3)) * time.Millisecond)
+		}
+		fuzzx.check(
+			c, time.since(session_start) < SESSION_BUDGET,
+			"session watchdog exceeded (worker wedged?)",
+		)
+	}
+	return observations
+}
+
+close_and_check_ws_reconnect_session :: proc(
+	c: ^fuzzx.Ctx,
+	ws: ^ingotnet.Ws,
+	worker_allocator: mem.Allocator,
+	session_start: time.Time,
+	observations: Ws_Reconn_Observations,
+) {
+	for message in ingotnet.ws_drain(ws) {
+		observations.drained += 1
+		delete(message.data, worker_allocator)
+	}
+	{
+		context.allocator = worker_allocator
+		ingotnet.ws_close(ws)
+	}
+	sync.atomic_store(&closed, true)
+	fuzzx.check(c, ingotnet.ws_state(ws) == .Disconnected, "state not Disconnected after close")
+	fuzzx.check(c, ws.recv_thread == nil, "worker thread not joined after close")
+	generation := ingotnet.ws_conn_gen(ws)
+	fuzzx.check(c, generation >= observations.last_gen, "conn_gen went backwards across close")
+	if observations.saw_connected do fuzzx.check(c, generation >= 1, "connected session ended with gen 0")
+	fuzzx.check(
+		c, observations.drained <= ingotnet.ws_sim_frames_served(),
+		"drained more messages than the sim served",
+	)
+	if observations.saw_connected || ingotnet.ws_sim_frames_served() > 0 {
+		fuzzx.check(c, sync.atomic_load(&wake_count) > 0, "worker activity did not invoke wake hook")
+	}
+	fuzzx.check(c, !sync.atomic_load(&wake_after_close), "wake hook ran after ws_close returned")
+	fuzzx.check(
+		c, time.since(session_start) < SESSION_BUDGET,
+		"close watchdog exceeded (join wedged?)",
+	)
+}
+
 main :: proc() {
 	seed, iterations, rounds := fuzzx.parse_options(ITERATIONS_DEFAULT)
 	fmt.printfln("fuzz_wsreconn seed=%d iterations=%d rounds=%d", seed, iterations, rounds)

@@ -160,117 +160,102 @@ when INGOT_WS_SIM {
 		return len(data), .None // sink everything (PONGs, texts, CLOSE)
 	}
 
-	ws_net_recv :: proc(sock: cnet.TCP_Socket, buf: []u8) -> (int, Ws_Net_Err) {
-		// Expand Frame_Burst without requiring a tape longer than
-		// MAX_SIM_EVENTS. The worker is the only reader/writer after start.
-		if g_ws_sim.burst_remaining > 0 {
-			payload: [8]u8
-			for i in 0 ..< len(payload) do payload[i] = u8('a' + (sim_rand() % 26))
-			g_ws_sim.burst_remaining -= 1
-			sync.atomic_add(&g_ws_sim.frames_served, 1)
-			return sim_server_frame(buf, WS_OP_TEXT, payload[:]), .None
-		}
+	@(private)
+	sim_recv_pending_burst :: proc(buf: []u8) -> (int, Ws_Net_Err, bool) {
+		if g_ws_sim.burst_remaining <= 0 do return 0, .None, false
+		payload: [8]u8
+		for index in 0 ..< len(payload) do payload[index] = u8('a' + (sim_rand() % 26))
+		g_ws_sim.burst_remaining -= 1
+		sync.atomic_add(&g_ws_sim.frames_served, 1)
+		return sim_server_frame(buf, WS_OP_TEXT, payload[:]), .None, true
+	}
 
-		// Serve a deferred split tail first.
-		{
-			sync.mutex_lock(&g_ws_sim.mutex)
-			if g_ws_sim.split_tail_len > 0 {
-				n := copy(buf, g_ws_sim.split_tail[:g_ws_sim.split_tail_len])
-				g_ws_sim.split_tail_len = 0
-				sync.mutex_unlock(&g_ws_sim.mutex)
-				return n, .None
-			}
-			sync.mutex_unlock(&g_ws_sim.mutex)
-		}
+	@(private)
+	sim_recv_split_tail :: proc(buf: []u8) -> (int, Ws_Net_Err, bool) {
+		sync.mutex_lock(&g_ws_sim.mutex)
+		defer sync.mutex_unlock(&g_ws_sim.mutex)
+		if g_ws_sim.split_tail_len <= 0 do return 0, .None, false
+		count := copy(buf, g_ws_sim.split_tail[:g_ws_sim.split_tail_len])
+		g_ws_sim.split_tail_len = 0
+		return count, .None, true
+	}
 
-		// Handshake response pending? (Key captured, not yet answered.)
-		{
-			sync.mutex_lock(&g_ws_sim.mutex)
-			key_len := g_ws_sim.pending_key_len
-			key_buf := g_ws_sim.pending_key
-			if key_len > 0 do g_ws_sim.pending_key_len = 0
-			sync.mutex_unlock(&g_ws_sim.mutex)
-			if key_len > 0 {
-				ev, _ := sim_next()
-				#partial switch ev {
-				case .Handshake_Garbage:
-					n := copy(buf, "HTTP/1.1 200 NOPE\r\n\r\n")
-					return n, .None
-				case .Handshake_Cut:
-					return 0, .Other
-				case:
-					// Rewind the event for the recv loop; answer 101.
-					sync.mutex_lock(&g_ws_sim.mutex)
-					g_ws_sim.tape_pos = max(g_ws_sim.tape_pos - 1, 0)
-					sync.mutex_unlock(&g_ws_sim.mutex)
-					accept := ws_accept_for_key(string(key_buf[:key_len]))
-					resp := strings.concatenate(
-						{
-							"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ",
-							accept,
-							"\r\n\r\n",
-						},
-						context.temp_allocator,
-					)
-					n := copy(buf, resp)
-					return n, .None
-				}
-			}
+	@(private)
+	sim_recv_handshake :: proc(buf: []u8) -> (int, Ws_Net_Err, bool) {
+		sync.mutex_lock(&g_ws_sim.mutex)
+		key_len := g_ws_sim.pending_key_len
+		key_buf := g_ws_sim.pending_key
+		if key_len > 0 do g_ws_sim.pending_key_len = 0
+		sync.mutex_unlock(&g_ws_sim.mutex)
+		if key_len <= 0 do return 0, .None, false
+		event, _ := sim_next()
+		if event == .Handshake_Garbage {
+			return copy(buf, "HTTP/1.1 200 NOPE\r\n\r\n"), .None, true
 		}
+		if event == .Handshake_Cut do return 0, .Other, true
+		sync.mutex_lock(&g_ws_sim.mutex)
+		g_ws_sim.tape_pos = max(g_ws_sim.tape_pos - 1, 0)
+		sync.mutex_unlock(&g_ws_sim.mutex)
+		accept := ws_accept_for_key(string(key_buf[:key_len]))
+		response := strings.concatenate(
+			{
+				"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ",
+				accept,
+				"\r\n\r\n",
+			},
+			context.temp_allocator,
+		)
+		return copy(buf, response), .None, true
+	}
 
-		ev, live := sim_next()
-		if !live {
-			// Tape exhausted: stall — worker's PING/dead-after path ends it.
-			time.sleep(ws_scaled(WS_RECV_TIMEOUT))
-			return 0, .Timeout
-		}
-		#partial switch ev {
+	@(private = "file")
+	sim_store_tail :: proc(tail: []u8) {
+		sync.mutex_lock(&g_ws_sim.mutex)
+		g_ws_sim.split_tail_len = copy(g_ws_sim.split_tail[:], tail)
+		sync.mutex_unlock(&g_ws_sim.mutex)
+	}
+
+	@(private = "file")
+	sim_recv_data_event :: proc(event: Ws_Sim_Event, buf: []u8) -> (int, Ws_Net_Err, bool) {
+		#partial switch event {
 		case .Frame_Text, .Frame_Binary:
 			payload: [24]u8
-			for i in 0 ..< len(payload) do payload[i] = u8('a' + (sim_rand() % 26))
-			op := u8(WS_OP_TEXT) if ev == .Frame_Text else u8(WS_OP_BINARY)
-			n := sim_server_frame(buf, op, payload[:])
+			for index in 0 ..< len(payload) do payload[index] = u8('a' + (sim_rand() % 26))
+			opcode := u8(WS_OP_TEXT) if event == .Frame_Text else u8(WS_OP_BINARY)
 			sync.atomic_add(&g_ws_sim.frames_served, 1)
-			return n, .None
-		case .Frame_Ping:
-			n := sim_server_frame(buf, WS_OP_PING, {})
-			return n, .None
+			return sim_server_frame(buf, opcode, payload[:]), .None, true
 		case .Frame_Split:
 			frame: [64]u8
 			payload: [30]u8
-			for i in 0 ..< len(payload) do payload[i] = u8('A' + (sim_rand() % 26))
+			for index in 0 ..< len(payload) do payload[index] = u8('A' + (sim_rand() % 26))
 			total := sim_server_frame(frame[:], WS_OP_TEXT, payload[:])
 			half := total / 2
-			sync.mutex_lock(&g_ws_sim.mutex)
-			g_ws_sim.split_tail_len = copy(g_ws_sim.split_tail[:], frame[half:total])
-			sync.mutex_unlock(&g_ws_sim.mutex)
+			sim_store_tail(frame[half:total])
 			sync.atomic_add(&g_ws_sim.frames_served, 1)
-			return copy(buf, frame[:half]), .None
+			return copy(buf, frame[:half]), .None, true
 		case .Frame_Fragmented:
-			// One logical text message split across TEXT(FIN=0) now and
-			// CONTINUATION(FIN=1) on the next recv (via split_tail) — drives
-			// the recv loop's RFC 6455 §5.4 reassembly path.
-			part_a: [12]u8
-			part_b: [12]u8
-			for i in 0 ..< len(part_a) do part_a[i] = u8('a' + (sim_rand() % 26))
-			for i in 0 ..< len(part_b) do part_b[i] = u8('a' + (sim_rand() % 26))
+			part_a, part_b: [12]u8
+			for index in 0 ..< len(part_a) do part_a[index] = u8('a' + (sim_rand() % 26))
+			for index in 0 ..< len(part_b) do part_b[index] = u8('a' + (sim_rand() % 26))
 			tail: [64]u8
 			tail_len := sim_server_frame(tail[:], WS_OP_CONTINUATION, part_b[:], fin = true)
-			sync.mutex_lock(&g_ws_sim.mutex)
-			g_ws_sim.split_tail_len = copy(g_ws_sim.split_tail[:], tail[:tail_len])
-			sync.mutex_unlock(&g_ws_sim.mutex)
+			sim_store_tail(tail[:tail_len])
 			sync.atomic_add(&g_ws_sim.frames_served, 1)
-			return sim_server_frame(buf, WS_OP_TEXT, part_a[:], fin = false), .None
+			return sim_server_frame(buf, WS_OP_TEXT, part_a[:], fin = false), .None, true
 		case .Frame_Burst:
-			g_ws_sim.burst_remaining = WS_SIM_BURST_FRAMES - 1
-			payload: [8]u8
-			for i in 0 ..< len(payload) do payload[i] = u8('a' + (sim_rand() % 26))
-			sync.atomic_add(&g_ws_sim.frames_served, 1)
-			return sim_server_frame(buf, WS_OP_TEXT, payload[:]), .None
+			g_ws_sim.burst_remaining = WS_SIM_BURST_FRAMES
+			return sim_recv_pending_burst(buf)
+		}
+		return 0, .None, false
+	}
+
+	@(private)
+	sim_recv_event :: proc(event: Ws_Sim_Event, buf: []u8) -> (int, Ws_Net_Err) {
+		if count, err, handled := sim_recv_data_event(event, buf); handled do return count, err
+		#partial switch event {
+		case .Frame_Ping:
+			return sim_server_frame(buf, WS_OP_PING, {}), .None
 		case .Frame_Garbage:
-			// A bare continuation frame (opcode 0, FIN set) with no fragment
-			// in flight — parses cleanly but the recv loop's reassembly must
-			// treat it as a protocol error and drop the connection.
 			buf[0] = 0x80
 			buf[1] = 0x02
 			buf[2] = u8(sim_rand())
@@ -284,6 +269,18 @@ when INGOT_WS_SIM {
 			return 0, .Timeout
 		}
 		return 0, .Other
+	}
+
+	ws_net_recv :: proc(sock: cnet.TCP_Socket, buf: []u8) -> (int, Ws_Net_Err) {
+		if count, err, handled := sim_recv_pending_burst(buf); handled do return count, err
+		if count, err, handled := sim_recv_split_tail(buf); handled do return count, err
+		if count, err, handled := sim_recv_handshake(buf); handled do return count, err
+		event, live := sim_next()
+		if !live {
+			time.sleep(ws_scaled(WS_RECV_TIMEOUT))
+			return 0, .Timeout
+		}
+		return sim_recv_event(event, buf)
 	}
 
 	ws_net_close :: proc(sock: cnet.TCP_Socket) {

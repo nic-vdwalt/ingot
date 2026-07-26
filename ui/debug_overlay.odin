@@ -99,9 +99,19 @@ debug_overlay_rows :: proc(
 			diagnostics.semantic_actions_dropped,
 		),
 	)
+	debug_overlay_diagnostic_rows(rows, &count, diagnostics)
+	return count
+}
+
+@(private = "file")
+debug_overlay_diagnostic_rows :: proc(
+	rows: []Debug_Overlay_Cell,
+	count: ^int,
+	diagnostics: Ui_Frame_Diagnostics,
+) {
 	debug_overlay_push(
 		rows,
-		&count,
+		count,
 		"semantic ids / text",
 		fmt.tprintf(
 			"%d / %d",
@@ -111,7 +121,7 @@ debug_overlay_rows :: proc(
 	)
 	debug_overlay_push(
 		rows,
-		&count,
+		count,
 		"paint cmd drops",
 		fmt.tprintf(
 			"%d / %d",
@@ -121,7 +131,7 @@ debug_overlay_rows :: proc(
 	)
 	debug_overlay_push(
 		rows,
-		&count,
+		count,
 		"paint text / controls",
 		fmt.tprintf(
 			"%d / %d / %d",
@@ -130,7 +140,6 @@ debug_overlay_rows :: proc(
 			diagnostics.platform_controls_dropped,
 		),
 	)
-	return count
 }
 
 draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnostics = {}) -> i32 {
