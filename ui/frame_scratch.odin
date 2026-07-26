@@ -4,14 +4,14 @@ import "core:mem"
 
 INGOT_FRAME_SCRATCH_GUARD :: #config(INGOT_FRAME_SCRATCH_GUARD, true)
 Frame_Scratch :: struct {
-	arena:                   mem.Dynamic_Arena,
-	allocator:               mem.Allocator,
-	generation:              u64,
-	allocation_count:        u64,
-	resize_count:            u64,
+	arena:                    mem.Dynamic_Arena,
+	allocator:                mem.Allocator,
+	generation:               u64,
+	allocation_count:         u64,
+	resize_count:             u64,
 	allocation_request_bytes: u64,
 	resize_request_bytes:     u64,
-	initialized:             bool,
+	initialized:              bool,
 }
 Frame_View :: struct($T: typeid) {
 	items:      []T,

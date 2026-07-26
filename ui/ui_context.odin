@@ -40,32 +40,32 @@ Ui_Runtime :: struct {
 MAX_PANE_SCOPES :: 16
 
 Ui_Frame :: struct {
-	runtime:          ^Ui_Runtime,
-	input_default:    Ui_Input,
-	input:            ^Ui_Input,
-	output:           ^Ui_Output,
-	scratch:          Frame_Scratch,
-	cursor:           Cursor_State,
-	overlay:          Overlay_State,
-	route:            Input_Route_State,
-	interaction:      Interaction_State,
-	semantics:        Semantics_State,
-	pane_origins:     [MAX_PANE_SCOPES]Vector2,
-	pane_count:       int,
-	text_cull_top:    i32,
-	text_cull_bottom: i32,
-	open_roots:       int,
+	runtime:                        ^Ui_Runtime,
+	input_default:                  Ui_Input,
+	input:                          ^Ui_Input,
+	output:                         ^Ui_Output,
+	scratch:                        Frame_Scratch,
+	cursor:                         Cursor_State,
+	overlay:                        Overlay_State,
+	route:                          Input_Route_State,
+	interaction:                    Interaction_State,
+	semantics:                      Semantics_State,
+	pane_origins:                   [MAX_PANE_SCOPES]Vector2,
+	pane_count:                     int,
+	text_cull_top:                  i32,
+	text_cull_bottom:               i32,
+	open_roots:                     int,
 	// Widgets handed a degenerate rect (zero or negative in either dimension)
 	// or an empty caller collection draw nothing and return their zero result
 	// rather than trapping: layout arithmetic legitimately produces those
 	// values when a window is narrowed or a panel collapses, and a trap there
 	// takes the whole app down. Counting the drops keeps that from hiding real
 	// layout bugs — tests assert the counter is zero on golden-path frames.
-	degenerate_drops:              int,
+	degenerate_drops:               int,
 	text_input_full_path_count:     u64,
 	text_input_inactive_candidates: u64,
-	finalized:                     bool,
-	open:                          bool,
+	finalized:                      bool,
+	open:                           bool,
 }
 
 // ui_frame_drop_degenerate records that a widget declined to draw because its

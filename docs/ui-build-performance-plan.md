@@ -207,9 +207,29 @@ For each comparison:
 - Report paired total, build, and finalization medians plus p95.
 - Retain raw JSONL, aggregate output, environment, compiler, and power state.
 
+## Telemetry Contract
+
+Step 1 is implemented behind `INGOT_UI_TELEMETRY`. `ui_frame_telemetry` exposes
+per-frame counters after finalization:
+
+- Scratch allocation and resize request counts.
+- Total requested bytes for allocation and resize operations.
+- Successful command appends for main and overlay paint lists.
+- Successful text-storage appends and bytes actually copied.
+- Command and text storage growth counts, currently always zero because paint
+  storage uses fixed-capacity arrays.
+- Full text-input path calls and inactive fast-path candidates.
+
+The scratch byte fields describe allocator requests, not live bytes, peak bytes,
+or backing-arena growth. Odin's core `Dynamic_Arena` does not expose backing
+block growth through its current public API, so actual arena growth remains a
+known instrumentation limitation. Text copied before an associated command is
+rejected remains counted because it was actual work; characterization tests lock
+that existing behavior until text recording is redesigned.
+
 ## Implementation Order
 
-1. Add allocation, copy, command, text, and input-path counters.
+1. Add allocation, copy, command, text, and input-path counters. Completed.
 2. Add isolated workloads and establish reproducible baselines.
 3. Implement direct string-to-paint recording and bounded reservation.
 4. Implement and characterize the inactive text-input fast path.

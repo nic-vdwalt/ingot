@@ -1542,8 +1542,14 @@ ti_inactive_candidate :: proc(ctx: ^TI_Ctx) -> bool {
 	assert(ctx != nil && ctx.sb != nil, "ti_inactive_candidate: invalid context")
 	assert(ctx.sel != nil && ctx.spell_menu != nil, "ti_inactive_candidate: missing state")
 	text := strings.to_string(ctx.sb^)
-	return !ctx.active && !ctx.masked && !strings.contains_rune(text, '\n') && !ctx.sel.active &&
-	       (ctx.pills == nil || len(ctx.pills) == 0) && !spell_menu_active(ctx.spell_menu, ctx.sb)
+	return(
+		!ctx.active &&
+		!ctx.masked &&
+		!strings.contains_rune(text, '\n') &&
+		!ctx.sel.active &&
+		(ctx.pills == nil || len(ctx.pills) == 0) &&
+		!spell_menu_active(ctx.spell_menu, ctx.sb) \
+	)
 }
 
 // ti_run drives one frame of the input and reports whether Enter submitted it.

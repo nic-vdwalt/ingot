@@ -54,3 +54,54 @@ frame_diagnostics_aggregate_bounded_drops :: proc(t: ^testing.T) {
 	ui_frame_end(&frame)
 	ui_frame_destroy(&frame)
 }
+
+@(test)
+frame_telemetry_counts_and_resets_per_frame :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	ui_frame_begin(&frame, &runtime)
+	allocator := ui_frame_allocator(&frame)
+	_ = make([]byte, 12, allocator)
+	paint_push(&output.main, {kind = .Rectangle})
+	paint_push_text(&output.main, {kind = .Text}, "main")
+	paint_push_text(&output.overlay, {kind = .Text}, "over")
+	box: Input_Box
+	defer input_box_destroy(&box)
+	_ = input_at(&frame, 0, 0, 120, 24, &box, "input", false)
+	ui_frame_finalize(&frame)
+	telemetry := ui_frame_telemetry(&frame)
+	when UI_TELEMETRY_ENABLED {
+		testing.expect_value(t, telemetry.scratch_allocation_count, u64(1))
+		testing.expect_value(t, telemetry.scratch_resize_count, u64(0))
+		testing.expect_value(t, telemetry.scratch_allocation_request_bytes, u64(12))
+		testing.expect_value(t, telemetry.scratch_resize_request_bytes, u64(0))
+		testing.expect_value(t, telemetry.main.command_append_count, u64(7))
+		testing.expect_value(t, telemetry.main.text_append_count, u64(2))
+		testing.expect_value(t, telemetry.overlay.command_append_count, u64(1))
+		testing.expect_value(t, telemetry.overlay.text_append_count, u64(1))
+		testing.expect_value(t, telemetry.text_input_full_path_count, u64(1))
+		testing.expect_value(t, telemetry.text_input_inactive_candidates, u64(1))
+	}
+	ui_frame_release(&frame)
+	ui_frame_begin(&frame, &runtime)
+	ui_frame_finalize(&frame)
+	telemetry = ui_frame_telemetry(&frame)
+	testing.expect_value(t, telemetry, Ui_Frame_Telemetry{})
+	ui_frame_release(&frame)
+	ui_frame_destroy(&frame)
+}

@@ -4,6 +4,34 @@ package ui
 import "core:testing"
 
 @(test)
+paint_telemetry_counts_successful_writes_and_rejected_command_text :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	paint_push(list, {kind = .Rectangle})
+	paint_push_text(list, {kind = .Text}, "abc")
+	when UI_TELEMETRY_ENABLED {
+		testing.expect_value(t, list.command_append_count, u64(2))
+		testing.expect_value(t, list.text_append_count, u64(1))
+		testing.expect_value(t, list.text_bytes_copied, u64(3))
+		testing.expect_value(t, list.command_growth_count, u64(0))
+		testing.expect_value(t, list.text_growth_count, u64(0))
+	}
+	list.count = PAINT_COMMAND_CAP
+	paint_push_text(list, {kind = .Text}, "lost")
+	when UI_TELEMETRY_ENABLED {
+		testing.expect_value(t, list.command_append_count, u64(2))
+		testing.expect_value(t, list.text_append_count, u64(2))
+		testing.expect_value(t, list.text_bytes_copied, u64(7))
+	}
+	paint_list_reset(list)
+	when UI_TELEMETRY_ENABLED {
+		testing.expect_value(t, list.command_append_count, u64(0))
+		testing.expect_value(t, list.text_append_count, u64(0))
+		testing.expect_value(t, list.text_bytes_copied, u64(0))
+	}
+}
+
+@(test)
 paint_clip_nested_intersection_and_restore :: proc(t: ^testing.T) {
 	list := new(Paint_List)
 	defer free(list)

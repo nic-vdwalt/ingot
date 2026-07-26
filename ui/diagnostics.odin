@@ -1,13 +1,13 @@
 package ui
 
 Ui_Frame_Output_Stats :: struct {
-	main_command_count:       i32,
-	main_text_bytes:          i32,
-	overlay_command_count:    i32,
-	overlay_text_bytes:       i32,
-	semantic_node_count:      i32,
-	measure_cache_hits:       u64,
-	measure_cache_misses:     u64,
+	main_command_count:    i32,
+	main_text_bytes:       i32,
+	overlay_command_count: i32,
+	overlay_text_bytes:    i32,
+	semantic_node_count:   i32,
+	measure_cache_hits:    u64,
+	measure_cache_misses:  u64,
 }
 
 Ui_Paint_Telemetry :: struct {
@@ -19,12 +19,12 @@ Ui_Paint_Telemetry :: struct {
 }
 
 Ui_Frame_Telemetry :: struct {
-	scratch_allocation_count:        u64,
-	scratch_resize_count:            u64,
+	scratch_allocation_count:         u64,
+	scratch_resize_count:             u64,
 	scratch_allocation_request_bytes: u64,
 	scratch_resize_request_bytes:     u64,
-	main:                            Ui_Paint_Telemetry,
-	overlay:                         Ui_Paint_Telemetry,
+	main:                             Ui_Paint_Telemetry,
+	overlay:                          Ui_Paint_Telemetry,
 	text_input_full_path_count:       u64,
 	text_input_inactive_candidates:   u64,
 }
@@ -67,10 +67,10 @@ paint_telemetry :: proc(list: ^Paint_List) -> Ui_Paint_Telemetry {
 	assert(list != nil, "paint_telemetry: nil list")
 	return {
 		command_append_count = list.command_append_count,
-		text_append_count    = list.text_append_count,
-		text_bytes_copied    = list.text_bytes_copied,
+		text_append_count = list.text_append_count,
+		text_bytes_copied = list.text_bytes_copied,
 		command_growth_count = list.command_growth_count,
-		text_growth_count    = list.text_growth_count,
+		text_growth_count = list.text_growth_count,
 	}
 }
 
