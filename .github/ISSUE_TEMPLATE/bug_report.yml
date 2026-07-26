@@ -1,0 +1,51 @@
+name: Bug report
+description: Report a reproducible, non-sensitive defect
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not report vulnerabilities here. Use the private process in SECURITY.md.
+  - type: input
+    id: revision
+    attributes:
+      label: Ingot revision
+      description: Commit SHA or branch and date
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options: [macOS, Linux, Windows, Browser, Headless]
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include expected and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide bounded steps, code, and deterministic seed when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs and validation evidence
+      description: Remove credentials and personal data before posting.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: This report contains no sensitive vulnerability details.
+          required: true

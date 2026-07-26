@@ -144,7 +144,7 @@ normally supplied by third-party crates.
 | Accessibility | Widgets emit bounded semantic snapshots; native AccessKit and browser semantic-DOM bridges exist, but target validation is not recorded | No accessibility implementation in the core project | Built-in AccessKit semantics exposed through integrations, including `eframe` |
 | Docking and detached tools | Docking is roadmap work; explicit native contexts can own independent windows, with platform validation still required | First-party docking and multi-viewports on the official docking branch | Core multi-viewport protocol; docking normally comes from ecosystem crates |
 | Predictability tradeoff | Named capacities bound frame work and storage; exceeding a contract degrades or asserts according to the API | Highly optimized and allocation-conscious, with dynamic internal structures | Safe Rust implementation with dynamic containers and optional persistence/serialization features |
-| Maturity | Young, no semantic-versioned releases, small Odin ecosystem, and no published project license | More than a decade of broad production use and backend integrations | Production-capable and widely used, but younger than Dear ImGui and still permits breaking releases |
+| Maturity | Young, Apache-2.0 licensed, no semantic-versioned releases, and a small Odin ecosystem | More than a decade of broad production use and backend integrations | Production-capable and widely used, but younger than Dear ImGui and still permits breaking releases |
 
 ### What the table means
 

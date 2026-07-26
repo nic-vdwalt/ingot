@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose a focused capability or design change
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the user or integration problem, not only the proposed API.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Explain ownership, limits, error behavior, and native/web impact.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platforms affected
+      multiple: true
+      options: [All, macOS, Linux, Windows, Browser, Headless]
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: New assets or dependencies
+      description: List upstream source, revision, license, notices, and build/provenance needs.
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: Project fit
+      options:
+        - label: I reviewed the direction and ownership model in README.md and docs/immediate-mode.md.
+          required: true

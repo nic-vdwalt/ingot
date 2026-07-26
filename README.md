@@ -233,6 +233,11 @@ bash scripts/check-web.sh
 python3 benchmarks/widgets/runner/bench.py smoke
 ```
 
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes and report
+vulnerabilities through the private process in [SECURITY.md](SECURITY.md).
+New third-party or generated artifacts require the provenance evidence described
+in [the source publication checklist](docs/source-publication-checklist.md).
+
 The project prioritizes safety, then performance, then developer experience.
 New and changed code follows bounded control flow, explicit ownership, strict
 checking, and an average target of at least two assertions per procedure.
@@ -291,10 +296,15 @@ A 3D content pipeline, mobile targets, scripting layers, visual designers, and
 game or content-production editors remain out of scope. Ingot's optional 3D path
 is a visualization escape hatch rather than a scene-graph engine.
 
-## License
+## License and release status
 
 Ingot's original source is licensed under the [Apache License 2.0](LICENSE).
-Bundled third-party works retain their own licenses; see [NOTICE](NOTICE) and
-[third-party notices](THIRD_PARTY_NOTICES.md). Complete the
-[OSS release checklist](docs/oss-release-checklist.md) before redistributing
-release artifacts, especially the bundled patched font.
+Bundled third-party works retain their own licenses; see [NOTICE](NOTICE),
+[third-party notices](THIRD_PARTY_NOTICES.md), and the
+[artifact manifest](docs/provenance/third-party-artifacts.json).
+
+Making the source repository public does not establish production readiness or
+authorize binary, installer, or web-bundle distribution. Complete the
+[source publication checklist](docs/source-publication-checklist.md) before a
+visibility change and the [binary and web release checklist](docs/oss-release-checklist.md)
+before redistributing release artifacts.
