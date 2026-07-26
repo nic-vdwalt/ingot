@@ -20,6 +20,15 @@ FNV_PRIME :: u64(1099511628211)
 Workload :: enum {
 	Labels_Repeated,
 	Labels_Unique,
+	Labels_Stable_Unique,
+	Labels_Changing_Unique,
+	Input_Inactive,
+	Input_Active,
+	Checkbox_Only,
+	Slider_Only,
+	Button_Only,
+	Button_Semantics_Disabled,
+	Button_Semantics_Enabled,
 	Button_Grid,
 	Mixed_Form,
 	Complex_Dashboard,
@@ -48,6 +57,8 @@ Harness :: struct {
 	checked:          [MAX_SCALE]bool,
 	values:           [MAX_SCALE]f32,
 	labels:           [MAX_SCALE][32]u8,
+	stable_labels:    [MAX_SCALE][32]u8,
+	changing_labels:  [MAX_SCALE][32]u8,
 	dashboard_inputs: [DASHBOARD_MAX_GROUPS]ui.Input_Box,
 }
 
@@ -75,6 +86,9 @@ harness_make :: proc(semantics: bool) -> ^Harness {
 	h.input.dpi_scale = 1
 	h.input.window_focused = true
 	h.input.cursor_on_screen = true
+	for index in 0 ..< MAX_SCALE {
+		_ = fmt.bprintf(h.stable_labels[index][:], "Widget %08d", index)
+	}
 	return h
 }
 
@@ -94,6 +108,16 @@ label_for :: proc(h: ^Harness, index: int, unique: bool) -> string {
 	buffer := &h.labels[index]
 	value := fmt.bprintf(buffer[:], "Widget %08d", index)
 	return value
+}
+
+stable_label_for :: proc(h: ^Harness, index: int) -> string {
+	assert(h != nil && index >= 0 && index < MAX_SCALE, "stable_label_for: invalid argument")
+	return string(h.stable_labels[index][:15])
+}
+
+changing_label_for :: proc(h: ^Harness, index, frame_index: int) -> string {
+	assert(h != nil && index >= 0 && index < MAX_SCALE, "changing_label_for: invalid argument")
+	return fmt.bprintf(h.changing_labels[index][:], "Widget %08d %08d", index, frame_index)
 }
 
 hash_u64 :: proc(hash, value: u64) -> u64 {
@@ -119,6 +143,62 @@ run_labels :: proc(h: ^Harness, count: int, unique: bool) -> int {
 		x := i32(index % 10) * 126
 		y := i32(index / 10) * 18
 		paint_label(&h.frame, label_for(h, index, unique), x, y, 124)
+	}
+	return count
+}
+
+run_isolated_labels :: proc(h: ^Harness, count, frame_index: int, changing: bool) -> int {
+	assert(h != nil && count > 0 && count <= MAX_SCALE, "run_isolated_labels: invalid argument")
+	for index in 0 ..< count {
+		label := changing_label_for(h, index, frame_index) if changing else stable_label_for(h, index)
+		x := i32(index % 10) * 126
+		y := i32(index / 10) * 18
+		paint_label(&h.frame, label, x, y, 124)
+	}
+	return count
+}
+
+run_inputs :: proc(h: ^Harness, count: int, active: bool) -> int {
+	assert(h != nil && count > 0 && count <= DASHBOARD_MAX_GROUPS, "run_inputs: invalid argument")
+	for index in 0 ..< count {
+		_ = ui.input_at(
+			&h.frame,
+			0,
+			i32(index) * 26,
+			180,
+			24,
+			&h.dashboard_inputs[index],
+			"Filter",
+			active,
+		)
+	}
+	return count
+}
+
+run_checkboxes :: proc(h: ^Harness, count: int) -> int {
+	assert(h != nil && count > 0 && count <= MAX_SCALE, "run_checkboxes: invalid argument")
+	for index in 0 ..< count {
+		x := i32(index % 10) * 100
+		y := i32(index / 10) * 26
+		_ = ui.checkbox_at(&h.frame, {x, y, 96, 24}, "Check", &h.checked[index])
+	}
+	return count
+}
+
+run_sliders :: proc(h: ^Harness, count: int) -> int {
+	assert(h != nil && count > 0 && count <= MAX_SCALE, "run_sliders: invalid argument")
+	for index in 0 ..< count {
+		x := i32(index % 8) * 150
+		y := i32(index / 8) * 26
+		_ = ui.slider_at(
+			&h.frame,
+			{x, y, 144, 24},
+			&h.values[index],
+			0,
+			1,
+			0.01,
+			a11y_label = "Value",
+		)
 	}
 	return count
 }
@@ -219,6 +299,22 @@ run_workload :: proc(h: ^Harness, workload: Workload, scale, frame_index: int) -
 		return run_labels(h, scale, false)
 	case .Labels_Unique:
 		return run_labels(h, scale, true)
+	case .Labels_Stable_Unique:
+		return run_isolated_labels(h, scale, frame_index, false)
+	case .Labels_Changing_Unique:
+		return run_isolated_labels(h, scale, frame_index, true)
+	case .Input_Inactive:
+		return run_inputs(h, scale, false)
+	case .Input_Active:
+		return run_inputs(h, scale, true)
+	case .Checkbox_Only:
+		return run_checkboxes(h, scale)
+	case .Slider_Only:
+		return run_sliders(h, scale)
+	case .Button_Only, .Button_Semantics_Disabled:
+		return run_buttons(h, scale, false)
+	case .Button_Semantics_Enabled:
+		return run_buttons(h, scale, true)
 	case .Button_Grid:
 		return run_buttons(h, scale, false)
 	case .Mixed_Form:
@@ -249,6 +345,24 @@ parse_workload :: proc(value: string) -> (Workload, bool) {
 		return .Labels_Repeated, true
 	case "labels_unique":
 		return .Labels_Unique, true
+	case "labels_stable_unique":
+		return .Labels_Stable_Unique, true
+	case "labels_changing_unique":
+		return .Labels_Changing_Unique, true
+	case "input_inactive":
+		return .Input_Inactive, true
+	case "input_active":
+		return .Input_Active, true
+	case "checkbox_only":
+		return .Checkbox_Only, true
+	case "slider_only":
+		return .Slider_Only, true
+	case "button_only":
+		return .Button_Only, true
+	case "button_semantics_disabled":
+		return .Button_Semantics_Disabled, true
+	case "button_semantics_enabled":
+		return .Button_Semantics_Enabled, true
 	case "button_grid":
 		return .Button_Grid, true
 	case "mixed_form":
@@ -468,6 +582,24 @@ workload_name :: proc(workload: Workload) -> string {
 		return "labels_repeated"
 	case .Labels_Unique:
 		return "labels_unique"
+	case .Labels_Stable_Unique:
+		return "labels_stable_unique"
+	case .Labels_Changing_Unique:
+		return "labels_changing_unique"
+	case .Input_Inactive:
+		return "input_inactive"
+	case .Input_Active:
+		return "input_active"
+	case .Checkbox_Only:
+		return "checkbox_only"
+	case .Slider_Only:
+		return "slider_only"
+	case .Button_Only:
+		return "button_only"
+	case .Button_Semantics_Disabled:
+		return "button_semantics_disabled"
+	case .Button_Semantics_Enabled:
+		return "button_semantics_enabled"
 	case .Button_Grid:
 		return "button_grid"
 	case .Mixed_Form:

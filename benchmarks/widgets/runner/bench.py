@@ -130,14 +130,18 @@ def build_all(selection, manifest, timeout):
             for framework in frameworks_for(selection)}
 
 
-def workload_cases(args, manifest):
+def workload_cases(args, manifest, frameworks):
     workloads = load_json(SUITE / manifest["workloads"])["workloads"]
     cases = []
     for workload in workloads:
         if args.workload and workload["id"] != args.workload:
             continue
+        supported = workload.get("frameworks", ("ingot", "imgui", "egui"))
+        eligible = [framework for framework in frameworks if framework in supported]
+        if not eligible:
+            continue
         scales = [args.scale] if args.scale is not None else workload["scales"]
-        cases.extend((workload["id"], scale) for scale in scales)
+        cases.extend((workload["id"], scale, eligible) for scale in scales)
     if not cases:
         raise RuntimeError("no workload cases selected")
     return cases
@@ -209,7 +213,7 @@ def result_path(args, command):
 
 def run_suite(args, manifest, smoke):
     binaries = build_all(args.framework, manifest, args.timeout)
-    cases = workload_cases(args, manifest)
+    cases = workload_cases(args, manifest, binaries)
     if smoke:
         cases = cases[:1]
     collection = manifest["collection"]
@@ -217,9 +221,9 @@ def run_suite(args, manifest, smoke):
     frames = args.frames if args.frames is not None else (3 if smoke else collection["measured_frames"])
     repetitions = args.repetitions if args.repetitions is not None else (1 if smoke else collection["repetitions"])
     jobs = [(framework, workload, scale, repetition)
-            for workload, scale in cases
+            for workload, scale, eligible in cases
             for repetition in range(repetitions)
-            for framework in binaries]
+            for framework in eligible]
     random.Random(args.seed).shuffle(jobs)
     output = result_path(args, "smoke" if smoke else "run")
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -1,7 +1,7 @@
-// ingot:gfx — CPU 2D vertex batcher over WebGPU. Three pipelines share one
-// vertex layout (pos in logical pixels, rgba, uv) and one ortho projection
-// uniform: `solid` (flat color), `text` (R8 atlas sampled as coverage), and
-// `image` (RGBA texture). Draws accumulate into a CPU run and flush into the
+// ingot:gfx — CPU 2D vertex batcher over WebGPU. Two pipelines share one
+// vertex layout (pos in logical pixels, rgba, uv, mode) and one ortho projection
+// uniform: `solid` handles flat color and R8 text coverage, while `image`
+// handles RGBA textures. Draws accumulate into a CPU run and flush into the
 // frame's render pass whenever the pipeline/texture/scissor changes or at
 // EndDrawing. Scissor is render-pass state, set directly on the pass between
 // flushes.
@@ -11,14 +11,19 @@ import "core:mem"
 import wg "vendor:wgpu"
 
 Vertex :: struct {
-	pos: [2]f32,
-	col: [4]f32,
-	uv:  [2]f32,
+	pos:  [2]f32,
+	col:  [4]f32,
+	uv:   [2]f32,
+	mode: Vertex_Mode,
+}
+
+Vertex_Mode :: enum u32 {
+	Solid,
+	Text,
 }
 
 Pipe_Kind :: enum {
 	Solid,
-	Text,
 	Image,
 }
 
@@ -74,6 +79,10 @@ Renderer :: struct {
 	ubind:              wg.BindGroup,
 	ubind_layout:       wg.BindGroupLayout,
 	tex_layout:         wg.BindGroupLayout, // group(1): texture + sampler
+	neutral_tex:        wg.Texture,
+	neutral_view:       wg.TextureView,
+	neutral_sampler:    wg.Sampler,
+	neutral_bind:       wg.BindGroup,
 
 	// Alternate group(0) uniform for render-target passes: an RT renders in its
 	// own pixel space, so it needs its own ortho projection that must NOT clobber
@@ -171,15 +180,16 @@ _make_pipe :: proc(
 	textured: bool,
 	format: wg.TextureFormat,
 ) -> wg.RenderPipeline {
-	attrs := [3]wg.VertexAttribute {
+	attrs := [4]wg.VertexAttribute {
 		{format = .Float32x2, offset = 0, shaderLocation = 0},
 		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
 		{format = .Float32x2, offset = u64(offset_of(Vertex, uv)), shaderLocation = 2},
+		{format = .Uint32, offset = u64(offset_of(Vertex, mode)), shaderLocation = 3},
 	}
 	vbl := wg.VertexBufferLayout {
 		arrayStride    = size_of(Vertex),
 		stepMode       = .Vertex,
-		attributeCount = 3,
+		attributeCount = 4,
 		attributes     = raw_data(attrs[:]),
 	}
 	blend := _blend_for(r, slot)
@@ -219,13 +229,11 @@ _make_pipe :: proc(
 _fs_for :: proc(kind: Pipe_Kind) -> (string, bool) {
 	switch kind {
 	case .Solid:
-		return "fs_solid", false
-	case .Text:
-		return "fs_text", true
+		return "fs_ui", true
 	case .Image:
 		return "fs_image", true
 	}
-	return "fs_solid", false
+	return "fs_ui", true
 }
 
 // _rebuild_custom_pipes recreates the Custom-slot pipelines after the custom
@@ -244,17 +252,12 @@ _rebuild_custom_pipes :: proc(r: ^Renderer) {
 		if r.alt_pipes[i][.Solid][.Custom] != nil {
 			wg.RenderPipelineRelease(r.alt_pipes[i][.Solid][.Custom])
 		}
-		if r.alt_pipes[i][.Text][.Custom] != nil {
-			wg.RenderPipelineRelease(r.alt_pipes[i][.Text][.Custom])
-		}
 		if r.alt_pipes[i][.Image][.Custom] != nil {
 			wg.RenderPipelineRelease(r.alt_pipes[i][.Image][.Custom])
 		}
 		fs_s, ts := _fs_for(.Solid)
-		fs_t, tt := _fs_for(.Text)
 		fs_i, ti := _fs_for(.Image)
 		r.alt_pipes[i][.Solid][.Custom] = _make_pipe(r, .Custom, fs_s, ts, r.alt_fmt[i])
-		r.alt_pipes[i][.Text][.Custom] = _make_pipe(r, .Custom, fs_t, tt, r.alt_fmt[i])
 		r.alt_pipes[i][.Image][.Custom] = _make_pipe(r, .Custom, fs_i, ti, r.alt_fmt[i])
 	}
 }
@@ -294,6 +297,7 @@ struct VSOut {
 	@builtin(position) pos: vec4<f32>,
 	@location(0) col: vec4<f32>,
 	@location(1) uv: vec2<f32>,
+	@location(2) @interpolate(flat) mode: u32,
 };
 
 @vertex
@@ -301,6 +305,7 @@ fn vs_main(
 	@location(0) pos: vec2<f32>,
 	@location(1) col: vec4<f32>,
 	@location(2) uv: vec2<f32>,
+	@location(3) mode: u32,
 ) -> VSOut {
 	var o: VSOut;
 	let sx = pos.x * u.p.x * 2.0 - 1.0;
@@ -308,19 +313,18 @@ fn vs_main(
 	o.pos = vec4<f32>(sx, sy * u.p.z, 0.0, 1.0);
 	o.col = col;
 	o.uv = uv;
+	o.mode = mode;
 	return o;
-}
-
-@fragment
-fn fs_solid(in: VSOut) -> @location(0) vec4<f32> {
-	return vec4<f32>(in.col.rgb * in.col.a, in.col.a);
 }
 
 @group(1) @binding(0) var atlas: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
 
 @fragment
-fn fs_text(in: VSOut) -> @location(0) vec4<f32> {
+fn fs_ui(in: VSOut) -> @location(0) vec4<f32> {
+	if (in.mode == 0u) {
+		return vec4<f32>(in.col.rgb * in.col.a, in.col.a);
+	}
 	let a = textureSample(atlas, samp, in.uv).r * in.col.a;
 	return vec4<f32>(in.col.rgb * a, a);
 }
@@ -332,6 +336,72 @@ fn fs_image(in: VSOut) -> @location(0) vec4<f32> {
 	return vec4<f32>(t.rgb * in.col.rgb * a, a);
 }
 `
+
+@(private)
+_neutral_texture_init :: proc(r: ^Renderer) {
+	assert(r != nil, "_neutral_texture_init: nil renderer")
+	assert(r.tex_layout != nil, "_neutral_texture_init: nil texture layout")
+	r.neutral_tex = wg.DeviceCreateTexture(
+		g.device,
+		&{
+			usage = {.TextureBinding, .CopyDst},
+			dimension = ._2D,
+			size = {1, 1, 1},
+			format = .RGBA8Unorm,
+			mipLevelCount = 1,
+			sampleCount = 1,
+		},
+	)
+	assert(r.neutral_tex != nil, "_neutral_texture_init: texture creation failed")
+	pixel := [4]byte{255, 255, 255, 255}
+	wg.QueueWriteTexture(
+		g.queue,
+		&{texture = r.neutral_tex},
+		raw_data(pixel[:]),
+		uint(len(pixel)),
+		&{bytesPerRow = 4, rowsPerImage = 1},
+		&{1, 1, 1},
+	)
+	r.neutral_view = wg.TextureCreateView(r.neutral_tex, nil)
+	r.neutral_sampler = wg.DeviceCreateSampler(
+		g.device,
+		&{
+			magFilter = .Nearest,
+			minFilter = .Nearest,
+			mipmapFilter = .Nearest,
+			addressModeU = .ClampToEdge,
+			addressModeV = .ClampToEdge,
+			addressModeW = .ClampToEdge,
+			maxAnisotropy = 1,
+		},
+	)
+	assert(r.neutral_view != nil, "_neutral_texture_init: view creation failed")
+	assert(r.neutral_sampler != nil, "_neutral_texture_init: sampler creation failed")
+	entries := [2]wg.BindGroupEntry {
+		{binding = 0, textureView = r.neutral_view},
+		{binding = 1, sampler = r.neutral_sampler},
+	}
+	r.neutral_bind = wg.DeviceCreateBindGroup(
+		g.device,
+		&{layout = r.tex_layout, entryCount = 2, entries = raw_data(entries[:])},
+	)
+	assert(r.neutral_bind != nil, "_neutral_texture_init: bind creation failed")
+}
+
+@(private)
+_neutral_texture_shutdown :: proc(r: ^Renderer) {
+	assert(r != nil, "_neutral_texture_shutdown: nil renderer")
+	assert(r.neutral_tex != nil, "_neutral_texture_shutdown: missing texture")
+	if r.neutral_bind != nil do wg.BindGroupRelease(r.neutral_bind)
+	if r.neutral_sampler != nil do wg.SamplerRelease(r.neutral_sampler)
+	if r.neutral_view != nil do wg.TextureViewRelease(r.neutral_view)
+	wg.TextureDestroy(r.neutral_tex)
+	wg.TextureRelease(r.neutral_tex)
+	r.neutral_bind = nil
+	r.neutral_sampler = nil
+	r.neutral_view = nil
+	r.neutral_tex = nil
+}
 
 renderer_init :: proc(r: ^Renderer) {
 	shader := wg.DeviceCreateShaderModule(
@@ -399,6 +469,7 @@ renderer_init :: proc(r: ^Renderer) {
 		g.device,
 		&{entryCount = 2, entries = raw_data(tex_entries[:])},
 	)
+	_neutral_texture_init(r)
 
 	// Custom blend defaults to premultiplied over-blend until SetBlendFactors.
 	r.cust_src = .One
