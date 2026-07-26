@@ -11,7 +11,9 @@ State :: struct {
 }
 
 app: ui_gfx.App
-state := State{items = {101, 205, 309}}
+state := State {
+	items = {101, 205, 309},
+}
 
 main :: proc() {
 	flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}

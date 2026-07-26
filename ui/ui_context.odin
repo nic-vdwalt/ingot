@@ -515,12 +515,7 @@ ui_row_end :: proc(u: ^Ui) {
 	layout_pop(&u.layout)
 }
 
-ui_row_begin :: proc(
-	u: ^Ui,
-	height: i32,
-	sizes: []Layout_Size,
-	style: Layout_Style = {},
-) {
+ui_row_begin :: proc(u: ^Ui, height: i32, sizes: []Layout_Size, style: Layout_Style = {}) {
 	assert(u != nil && len(sizes) > 0, "ui_row_begin: invalid call")
 	ui_row(u, ui_frame_sc(u.frame, height), ui_space_px(u, style.gap), style.align)
 	ui_flex_begin(u, sizes)
@@ -536,12 +531,7 @@ ui_column_end :: proc(u: ^Ui) {
 	layout_pop(&u.layout)
 }
 
-ui_column_begin :: proc(
-	u: ^Ui,
-	width: i32,
-	sizes: []Layout_Size,
-	style: Layout_Style = {},
-) {
+ui_column_begin :: proc(u: ^Ui, width: i32, sizes: []Layout_Size, style: Layout_Style = {}) {
 	assert(u != nil && len(sizes) > 0, "ui_column_begin: invalid call")
 	ui_column(u, ui_frame_sc(u.frame, width), ui_space_px(u, style.gap), style.align)
 	ui_flex_begin(u, sizes)

@@ -15,50 +15,71 @@ Renderer_Diagnostics :: struct {
 	peak_arena_bytes:  u64,
 }
 
-draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnostics = {}) -> i32 {
-	assert(frame != nil && frame.open, "draw_debug_overlay: invalid frame")
-	assert(x >= 0 && y >= 0, "draw_debug_overlay: negative origin")
-	metrics := ui_frame_metrics(frame)
-	style := ui_frame_theme(frame)
-	row_h := metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 4)
-	pad := ui_frame_sc(frame, 8)
-	width := ui_frame_sc(frame, 280)
-	Cell :: struct {
-		key, value: string,
-	}
-	rows: [DEBUG_OVERLAY_MAX_ROWS]Cell
+@(private = "file")
+Debug_Overlay_Cell :: struct {
+	key, value: string,
+}
+
+@(private = "file")
+debug_overlay_push :: proc(rows: []Debug_Overlay_Cell, count: ^int, key, value: string) {
+	assert(count^ < len(rows), "draw_debug_overlay: row overflow")
+	rows[count^] = {key, value}
+	count^ += 1
+}
+
+@(private = "file")
+debug_overlay_rows :: proc(
+	frame: ^Ui_Frame,
+	stats: Renderer_Diagnostics,
+	rows: []Debug_Overlay_Cell,
+) -> int {
 	count := 0
-	push :: proc(rows: []Cell, count: ^int, key, value: string) {
-		assert(count^ < len(rows), "draw_debug_overlay: row overflow")
-		rows[count^] = {key, value}
-		count^ += 1
-	}
-	push(rows[:], &count, "fps", fmt.tprintf("%d", frame_input(frame).fps))
-	push(rows[:], &count, "frame", fmt.tprintf("%.2f ms", frame_input(frame).frame_time * 1000))
-	push(rows[:], &count, "flushes", fmt.tprintf("%d", stats.flush_count))
-	push(rows[:], &count, "vertices", fmt.tprintf("%d", stats.vertices_uploaded))
-	push(rows[:], &count, "uploaded", fmt.tprintf("%d KB", stats.bytes_uploaded / 1024))
-	push(
-		rows[:],
+	debug_overlay_push(rows, &count, "fps", fmt.tprintf("%d", frame_input(frame).fps))
+	debug_overlay_push(
+		rows,
+		&count,
+		"frame",
+		fmt.tprintf("%.2f ms", frame_input(frame).frame_time * 1000),
+	)
+	debug_overlay_push(rows, &count, "flushes", fmt.tprintf("%d", stats.flush_count))
+	debug_overlay_push(rows, &count, "vertices", fmt.tprintf("%d", stats.vertices_uploaded))
+	debug_overlay_push(rows, &count, "uploaded", fmt.tprintf("%d KB", stats.bytes_uploaded / 1024))
+	debug_overlay_push(
+		rows,
 		&count,
 		"buffers new/grown",
 		fmt.tprintf("%d / %d", stats.buffer_creations, stats.buffer_growths),
 	)
-	push(rows[:], &count, "pipeline switches", fmt.tprintf("%d", stats.pipeline_switches))
-	push(rows[:], &count, "render passes", fmt.tprintf("%d", stats.render_passes))
-	push(rows[:], &count, "peak geom arena", fmt.tprintf("%d KB", stats.peak_arena_bytes / 1024))
+	debug_overlay_push(
+		rows,
+		&count,
+		"pipeline switches",
+		fmt.tprintf("%d", stats.pipeline_switches),
+	)
+	debug_overlay_push(rows, &count, "render passes", fmt.tprintf("%d", stats.render_passes))
+	debug_overlay_push(
+		rows,
+		&count,
+		"peak geom arena",
+		fmt.tprintf("%d KB", stats.peak_arena_bytes / 1024),
+	)
 	entries, evictions := measure_cache_stats_with(ui_frame_text(frame))
-	push(rows[:], &count, "measure cache", fmt.tprintf("%d (%d evicted)", entries, evictions))
-	push(
-		rows[:],
+	debug_overlay_push(
+		rows,
+		&count,
+		"measure cache",
+		fmt.tprintf("%d (%d evicted)", entries, evictions),
+	)
+	debug_overlay_push(
+		rows,
 		&count,
 		"overlay cmds",
 		fmt.tprintf("%d (%d dropped)", overlay_cmd_count(frame), overlay_dropped(frame)),
 	)
-	push(rows[:], &count, "route claims", fmt.tprintf("%d", route_claim_count(frame)))
+	debug_overlay_push(rows, &count, "route claims", fmt.tprintf("%d", route_claim_count(frame)))
 	diagnostics := ui_frame_diagnostics(frame)
-	push(
-		rows[:],
+	debug_overlay_push(
+		rows,
 		&count,
 		"input / geometry drops",
 		fmt.tprintf(
@@ -67,8 +88,8 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnost
 			diagnostics.degenerate_widgets_dropped,
 		),
 	)
-	push(
-		rows[:],
+	debug_overlay_push(
+		rows,
 		&count,
 		"semantic drops",
 		fmt.tprintf(
@@ -78,8 +99,8 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnost
 			diagnostics.semantic_actions_dropped,
 		),
 	)
-	push(
-		rows[:],
+	debug_overlay_push(
+		rows,
 		&count,
 		"semantic ids / text",
 		fmt.tprintf(
@@ -88,8 +109,8 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnost
 			diagnostics.semantic_text_truncations,
 		),
 	)
-	push(
-		rows[:],
+	debug_overlay_push(
+		rows,
 		&count,
 		"paint cmd drops",
 		fmt.tprintf(
@@ -98,8 +119,8 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnost
 			diagnostics.overlay_commands_dropped,
 		),
 	)
-	push(
-		rows[:],
+	debug_overlay_push(
+		rows,
 		&count,
 		"paint text / controls",
 		fmt.tprintf(
@@ -109,6 +130,19 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnost
 			diagnostics.platform_controls_dropped,
 		),
 	)
+	return count
+}
+
+draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnostics = {}) -> i32 {
+	assert(frame != nil && frame.open, "draw_debug_overlay: invalid frame")
+	assert(x >= 0 && y >= 0, "draw_debug_overlay: negative origin")
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	row_h := metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 4)
+	pad := ui_frame_sc(frame, 8)
+	width := ui_frame_sc(frame, 280)
+	rows: [DEBUG_OVERLAY_MAX_ROWS]Debug_Overlay_Cell
+	count := debug_overlay_rows(frame, stats, rows[:])
 	height := i32(count) * row_h + pad * 2 + metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 6)
 	panel := Rectangle{f32(x), f32(y), f32(width), f32(height)}
 	draw_rectangle_rec(

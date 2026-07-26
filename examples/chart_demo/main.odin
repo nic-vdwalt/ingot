@@ -13,7 +13,7 @@ import "ingot:ui_gfx"
 dark := true
 line_state: ui.Chart_State
 bar_state: ui.Chart_State
-ui_session: ui_gfx.App_Session
+app: ui_gfx.App
 
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
 costs := [12]f32{8.1, 8.4, 9.0, 9.7, 10.2, 11.5, 11.1, 12.4, 12.0, 13.6, 13.1, 14.0}
@@ -40,25 +40,27 @@ MONTHS := [12]string {
 DAYS := [7]string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
 
 main :: proc() {
-	rl.InitWindow(960, 720, "ingot chart demo")
-	rl.SetTargetFPS(60)
-	rl.EnableEventWaiting()
-	ui_gfx.app_session_init(&ui_session, {semantics_enabled = true})
-	rl.run(frame)
-	when ODIN_OS != .JS {
-		ui_gfx.app_session_destroy(&ui_session)
-		rl.CloseWindow()
-	}
+	_ = ui_gfx.app_run(
+		&app,
+		{
+			width = 960,
+			height = 720,
+			title = "ingot chart demo",
+			target_fps = 60,
+			event_waiting = true,
+			clear_color = {24, 26, 32, 255},
+			session = {semantics_enabled = true},
+		},
+		{frame = frame},
+	)
 }
 
-frame :: proc() {
-	ui_frame := ui_gfx.app_session_begin_frame(&ui_session)
-	rl.BeginDrawing()
+frame :: proc(app: ^ui_gfx.App, ui_frame: ^ui.Ui_Frame, userdata: rawptr) {
+	_ = userdata
 	style := ui.ui_frame_theme(ui_frame)
 	metrics := ui.ui_frame_metrics(ui_frame)
-	rl.ClearBackground(ui_gfx.color_to_gfx(style.bg_color))
-
-	sw := rl.GetScreenWidth()
+	root := ui_gfx.app_screen_rect(app)
+	sw := root.w
 
 	ui.draw_text_frame(
 		ui_frame,
@@ -70,7 +72,10 @@ frame :: proc() {
 	)
 	if ui.btn(ui_frame, sw - 140, 16, 120, 30, "Light theme" if dark else "Dark theme") {
 		dark = !dark
-		ui.ui_runtime_set_theme(&ui_session.runtime, ui.theme_dark() if dark else ui.theme_light())
+		ui.ui_runtime_set_theme(
+			ui_gfx.app_ui_runtime(app),
+			ui.theme_dark() if dark else ui.theme_light(),
+		)
 	}
 
 	line_series := [2]ui.Chart_Series {
@@ -116,10 +121,6 @@ frame :: proc() {
 		spark_flat[:],
 		style.fg_accent,
 	)
-
-	ui_gfx.app_session_end_frame(&ui_session)
-	rl.EndDrawing()
-	free_all(context.temp_allocator)
 }
 
 stat_card :: proc(

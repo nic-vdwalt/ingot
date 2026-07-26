@@ -112,6 +112,47 @@ fz_check :: proc(t: ^testing.T, f: ^Fuzz_Input, seed: u64, i: int) -> bool {
 	return ok
 }
 
+fz_insert_mention :: proc(f: ^Fuzz_Input, text: string) {
+	mention := "@name"
+	start := caret_clamp(text, f.cursor)
+	fz_insert(f, mention)
+	append(&f.pills, Mention_Span{start, start + len(mention)})
+	for index := len(f.pills) - 1; index > 0; index -= 1 {
+		if f.pills[index].start < f.pills[index - 1].start {
+			f.pills[index], f.pills[index - 1] = f.pills[index - 1], f.pills[index]
+		}
+	}
+	for index := len(f.pills) - 1; index > 0; index -= 1 {
+		if f.pills[index].start < f.pills[index - 1].end {
+			ordered_remove(&f.pills, index - 1)
+		}
+	}
+}
+
+fz_check_undo_redo_round_trip :: proc(
+	t: ^testing.T,
+	f: ^Fuzz_Input,
+	seed: u64,
+	iteration: int,
+) -> bool {
+	before_text := strings.clone(fz_text(f), context.temp_allocator)
+	before_cursor := f.cursor
+	undo_apply(&f.sel, &f.undo, &f.sb, &f.cursor, &f.pills, redo = false)
+	undo_apply(&f.sel, &f.undo, &f.sb, &f.cursor, &f.pills, redo = true)
+	if fz_text(f) == before_text && f.cursor == before_cursor do return true
+	log.errorf(
+		"undo/redo round-trip mismatch seed=%d iteration=%d %q(%d) != %q(%d)",
+		seed,
+		iteration,
+		fz_text(f),
+		f.cursor,
+		before_text,
+		before_cursor,
+	)
+	testing.expect(t, false, "undo/redo round-trip failed (see seed above)")
+	return false
+}
+
 @(test)
 text_input_edit_op_fuzz :: proc(t: ^testing.T) {
 	seed := u64(INGOT_FUZZ_SEED)
@@ -186,24 +227,7 @@ text_input_edit_op_fuzz :: proc(t: ^testing.T) {
 			// Redo.
 			undo_apply(&f.sel, &f.undo, &f.sb, &f.cursor, &f.pills, redo = true)
 		case 12:
-			// Mention pill insert: "@name " at the caret becomes a pill.
-			mention := "@name"
-			start := caret_clamp(text, f.cursor)
-			fz_insert(&f, mention)
-			append(&f.pills, Mention_Span{start, start + len(mention)})
-			// Keep sorted: re-sort by simple insertion (bounded list).
-			for j := len(f.pills) - 1; j > 0; j -= 1 {
-				if f.pills[j].start < f.pills[j - 1].start {
-					f.pills[j], f.pills[j - 1] = f.pills[j - 1], f.pills[j]
-				}
-			}
-			// Overlapping pills are invalid caller state; drop overlaps the
-			// way pill acceptance does (last write wins).
-			for j := len(f.pills) - 1; j > 0; j -= 1 {
-				if f.pills[j].start < f.pills[j - 1].end {
-					ordered_remove(&f.pills, j - 1)
-				}
-			}
+			fz_insert_mention(&f, text)
 		case 13:
 			// External buffer rewrite (mention completion path): text
 			// replaced wholesale; caret must clamp.
@@ -216,25 +240,8 @@ text_input_edit_op_fuzz :: proc(t: ^testing.T) {
 		}
 		if !fz_check(t, &f, seed, i) do return
 
-		// Undo→redo round-trip must restore exact text+caret.
 		if fuzzx.int_range(&p, 0, 50) == 0 && len(f.undo.undo) > 0 {
-			before_text := strings.clone(fz_text(&f), context.temp_allocator)
-			before_cursor := f.cursor
-			undo_apply(&f.sel, &f.undo, &f.sb, &f.cursor, &f.pills, redo = false)
-			undo_apply(&f.sel, &f.undo, &f.sb, &f.cursor, &f.pills, redo = true)
-			if fz_text(&f) != before_text || f.cursor != before_cursor {
-				log.errorf(
-					"undo/redo round-trip mismatch seed=%d iteration=%d %q(%d) != %q(%d)",
-					seed,
-					i,
-					fz_text(&f),
-					f.cursor,
-					before_text,
-					before_cursor,
-				)
-				testing.expect(t, false, "undo/redo round-trip failed (see seed above)")
-				return
-			}
+			if !fz_check_undo_redo_round_trip(t, &f, seed, i) do return
 		}
 		free_all(context.temp_allocator)
 	}

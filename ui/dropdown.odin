@@ -54,18 +54,7 @@ dropdown_ui_id :: proc(
 	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
 	r := ui_slot(u, ww, metrics.ROW_H_MD)
 	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
-	return dropdown_at(
-		u.frame,
-		r,
-		items,
-		selected,
-		st,
-		u.screen_w,
-		u.screen_h,
-		fo,
-		a11y_label,
-		id,
-	)
+	return dropdown_at(u.frame, r, items, selected, st, u.screen_w, u.screen_h, fo, a11y_label, id)
 }
 
 dropdown_at :: proc(

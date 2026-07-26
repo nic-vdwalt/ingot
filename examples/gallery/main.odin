@@ -98,7 +98,7 @@ spark := [10]f32{3, 4, 3.6, 5, 6.2, 5.8, 7, 8.4, 8.1, 9.3}
 settings_open := false
 settings_sel := 0
 stored_scale: f32 = 0 // 0 = auto
-ui_session: ui_gfx.App_Session
+app: ui_gfx.App
 ui_frame: ^ui.Ui_Frame
 
 Widget_State :: struct {
@@ -164,16 +164,19 @@ Inline **bold**, *italic*, ` +
 `
 
 main :: proc() {
-	rl.InitWindow(1100, 760, "ingot widget gallery")
-	rl.SetTargetFPS(60)
-	when !SMOKE do rl.EnableEventWaiting() // smoke needs continuous frames
-	ui_gfx.app_session_init(&ui_session, {semantics_enabled = true})
-	rl.run(frame)
-	when ODIN_OS != .JS {
-		input_state_destroy(&input_state)
-		ui_gfx.app_session_destroy(&ui_session)
-		rl.CloseWindow()
-	}
+	_ = ui_gfx.app_run(
+		&app,
+		{
+			width = 1100,
+			height = 760,
+			title = "ingot widget gallery",
+			target_fps = 60,
+			event_waiting = !SMOKE,
+			clear_color = {24, 26, 32, 255},
+			session = {semantics_enabled = true},
+		},
+		{frame = frame, shutdown = shutdown},
+	)
 }
 
 input_state_destroy :: proc(state: ^Input_State) {
@@ -183,13 +186,12 @@ input_state_destroy :: proc(state: ^Input_State) {
 	ui.input_box_destroy(&state.notes)
 }
 
-frame :: proc() {
-	ui_frame = ui_gfx.app_session_begin_frame(&ui_session)
-	rl.BeginDrawing()
-	rl.ClearBackground(ui_gfx.color_to_gfx(ui.ui_frame_theme(ui_frame).bg_color))
-
-	sw := rl.GetScreenWidth()
-	sh := rl.GetScreenHeight()
+frame :: proc(app: ^ui_gfx.App, frame_state: ^ui.Ui_Frame, userdata: rawptr) {
+	_ = userdata
+	ui_frame = frame_state
+	root := ui_gfx.app_screen_rect(app)
+	sw := root.w
+	sh := root.h
 
 	when SMOKE do smoke_step()
 
@@ -214,15 +216,17 @@ frame :: proc() {
 			ui.ui_frame_sc(ui_frame, 10),
 		)
 	}
+}
 
-	ui_gfx.app_session_end_frame(&ui_session)
-	rl.EndDrawing()
-	free_all(context.temp_allocator)
+shutdown :: proc(app: ^ui_gfx.App, userdata: rawptr) {
+	assert(app != nil, "shutdown: nil app")
+	_ = userdata
+	input_state_destroy(&input_state)
 }
 
 apply_scale :: proc(scale: f32) {
-	resolved := scale if scale > 0 else ui.settings_auto_scale(&ui_session.input)
-	ui.ui_runtime_set_scale(&ui_session.runtime, resolved)
+	resolved := scale if scale > 0 else ui.settings_auto_scale(&app.session.input)
+	ui.ui_runtime_set_scale(ui_gfx.app_ui_runtime(&app), resolved)
 }
 
 draw_nav :: proc(sh: i32) {
@@ -312,7 +316,7 @@ apply_gallery_theme :: proc() {
 	t :=
 		ui.theme_high_contrast() if high_contrast else (ui.theme_dark() if dark else ui.theme_light())
 	t.reduced_motion = reduced_motion
-	ui.ui_runtime_set_theme(&ui_session.runtime, t)
+	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app), t)
 }
 
 draw_content :: proc(sw, sh: i32) {
@@ -948,37 +952,27 @@ cell :: proc(r: ui.Rect_I32, label: string) {
 	)
 }
 
-draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(
-		ui_frame,
-		x,
-		y0,
-		w,
-		"OVERLAY + INPUT ROUTING (popup occludes the buttons under it)",
-	)
-	bw := ui.ui_frame_sc(ui_frame, 150)
-	bh := ui.ui_frame_sc(ui_frame, 30)
-	// These buttons sit UNDER the popup. With routing, clicks on the popup
-	// must not reach them.
-	for i in 0 ..< 3 {
-		label := fmt.tprintf("Shielded %d", i + 1)
-		if ui.btn(ui_frame, x, y + i32(i) * (bh + ui.ui_frame_sc(ui_frame, 8)), bw, bh, label) {
-			shielded_clicks += 1
-		}
+draw_overlay_controls :: proc(x, y: i32) -> i32 {
+	button_w := ui.ui_frame_sc(ui_frame, 150)
+	button_h := ui.ui_frame_sc(ui_frame, 30)
+	for index in 0 ..< 3 {
+		label := fmt.tprintf("Shielded %d", index + 1)
+		button_y := y + i32(index) * (button_h + ui.ui_frame_sc(ui_frame, 8))
+		if ui.btn(ui_frame, x, button_y, button_w, button_h, label) do shielded_clicks += 1
 	}
-	info_y := y + 3 * (bh + ui.ui_frame_sc(ui_frame, 8))
+	info_y := y + 3 * (button_h + ui.ui_frame_sc(ui_frame, 8))
 	summary := fmt.tprintf(
 		"shielded clicks: %d (should not rise while the popup covers them)",
 		shielded_clicks,
 	)
 	ui.text(ui_frame, summary, x, info_y, .Small, .Secondary)
-
+	action_x := x + button_w + ui.ui_frame_sc(ui_frame, 100)
 	if ui.btn(
 		ui_frame,
-		x + bw + ui.ui_frame_sc(ui_frame, 100),
+		action_x,
 		y,
 		ui.ui_frame_sc(ui_frame, 150),
-		bh,
+		button_h,
 		"Toggle popup",
 		ui.Btn_Style.Primary,
 	) {
@@ -986,19 +980,21 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 	}
 	if ui.btn(
 		ui_frame,
-		x + bw + ui.ui_frame_sc(ui_frame, 100),
-		y + bh + ui.ui_frame_sc(ui_frame, 8),
+		action_x,
+		y + button_h + ui.ui_frame_sc(ui_frame, 8),
 		ui.ui_frame_sc(ui_frame, 150),
-		bh,
+		button_h,
 		"Open modal",
 	) {
 		about_modal.open = true
 	}
+	return info_y
+}
 
-	// Generic context menu: right-click anywhere in this section opens it.
+draw_overlay_context_menu :: proc(x, info_y: i32) {
 	if rl.IsMouseButtonPressed(.RIGHT) && !ctx_menu.open && !about_modal.open {
-		m := rl.GetMousePosition()
-		ui.context_menu_open(&ctx_menu, i32(m.x), i32(m.y))
+		mouse := rl.GetMousePosition()
+		ui.context_menu_open(&ctx_menu, i32(mouse.x), i32(mouse.y))
 	}
 	if ctx_menu.open {
 		items := []ui.Menu_Item {
@@ -1019,8 +1015,6 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 			ctx_note = "shielded clicks reset via context menu"
 		}
 	}
-	// Escape hatch: fg_label has no semantic Ink, so this one keeps the
-	// explicit size/color API rather than ui.text.
 	ui.draw_text_frame(
 		ui_frame,
 		strings.clone_to_cstring(ctx_note, context.temp_allocator),
@@ -1029,48 +1023,58 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
 		ui.ui_frame_theme(ui_frame).fg_label,
 	)
+}
 
+draw_overlay_modal :: proc() {
+	if !about_modal.open do return
+	body := ui.modal_begin(
+		ui_frame,
+		&about_modal,
+		"Generic modal",
+		ui.ui_frame_sc(ui_frame, 420),
+		ui.ui_frame_sc(ui_frame, 190),
+		rl.GetScreenWidth(),
+		rl.GetScreenHeight(),
+	)
+	ui.draw_text_wrapped_frame(
+		ui_frame,
+		body.x + ui.ui_frame_metrics(ui_frame).PADDING,
+		body.y + ui.ui_frame_sc(ui_frame, 4),
+		body.w - ui.ui_frame_metrics(ui_frame).PADDING * 2,
+		"The settings panel is built on this same modal_begin/modal_end pair. " +
+		"Escape or a click outside dismisses it.",
+		ui.ui_frame_theme(ui_frame).fg_primary,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE,
+		ui.ui_frame_metrics(ui_frame).LINE_HEIGHT,
+	)
+	if ui.btn(
+		ui_frame,
+		body.x + ui.ui_frame_metrics(ui_frame).PADDING,
+		body.y + body.h - ui.ui_frame_sc(ui_frame, 44),
+		ui.ui_frame_sc(ui_frame, 90),
+		ui.ui_frame_sc(ui_frame, 28),
+		"Close",
+		ui.Btn_Style.Primary,
+	) {
+		about_modal.open = false
+	}
+	ui.modal_end(&about_modal)
+}
+
+draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
+	y := ui.section_header(
+		ui_frame,
+		x,
+		y0,
+		w,
+		"OVERLAY + INPUT ROUTING (popup occludes the buttons under it)",
+	)
+	info_y := draw_overlay_controls(x, y)
+	draw_overlay_context_menu(x, info_y)
 	if popup_open {
-		// Fully covers all three shielded buttons (and nothing else), so any
-		// click on them while the popup is open would be a routing leak.
 		draw_demo_popup(x - ui.ui_frame_sc(ui_frame, 8), y - ui.ui_frame_sc(ui_frame, 8))
 	}
-
-	// Generic modal: dims, claims all input, Escape / click-outside dismisses.
-	if about_modal.open {
-		body := ui.modal_begin(
-			ui_frame,
-			&about_modal,
-			"Generic modal",
-			ui.ui_frame_sc(ui_frame, 420),
-			ui.ui_frame_sc(ui_frame, 190),
-			rl.GetScreenWidth(),
-			rl.GetScreenHeight(),
-		)
-		ui.draw_text_wrapped_frame(
-			ui_frame,
-			body.x + ui.ui_frame_metrics(ui_frame).PADDING,
-			body.y + ui.ui_frame_sc(ui_frame, 4),
-			body.w - ui.ui_frame_metrics(ui_frame).PADDING * 2,
-			"The settings panel is built on this same modal_begin/modal_end pair. " +
-			"Escape or a click outside dismisses it.",
-			ui.ui_frame_theme(ui_frame).fg_primary,
-			ui.ui_frame_metrics(ui_frame).FONT_SIZE,
-			ui.ui_frame_metrics(ui_frame).LINE_HEIGHT,
-		)
-		if ui.btn(
-			ui_frame,
-			body.x + ui.ui_frame_metrics(ui_frame).PADDING,
-			body.y + body.h - ui.ui_frame_sc(ui_frame, 44),
-			ui.ui_frame_sc(ui_frame, 90),
-			ui.ui_frame_sc(ui_frame, 28),
-			"Close",
-			ui.Btn_Style.Primary,
-		) {
-			about_modal.open = false
-		}
-		ui.modal_end(&about_modal)
-	}
+	draw_overlay_modal()
 	return info_y + ui.ui_frame_sc(ui_frame, 52)
 }
 
