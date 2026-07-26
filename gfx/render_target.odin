@@ -135,6 +135,7 @@ EndTextureMode :: proc() {
 		renderer_flush(&g.rend, g.frame.rt_pass, .Target)
 		wg.RenderPassEncoderEnd(g.frame.rt_pass)
 		wg.RenderPassEncoderRelease(g.frame.rt_pass)
+		assert(_stream_slot_upload(&g.rend))
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(g, g.frame.rt_encoder, true)
 		_stats_cpu_times(0, encode_elapsed, submit_elapsed, 0)
 		_stats_queue_submission()
