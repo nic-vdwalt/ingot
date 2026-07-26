@@ -129,11 +129,24 @@ frame :: proc() {
 	rl.BeginDrawing()
 	style := ui.ui_frame_theme(&frame_state)
 	rl.ClearBackground(ui_gfx.color_to_gfx(style.bg_color))
-	ui.draw_text_frame(&frame_state, "Hello from Ingot", 24, 24, 24, style.fg_primary)
+	ui.text(&frame_state, "Hello from Ingot", 24, 24, .Large)
 	ui_gfx.adapter_end_frame(&adapter, &frame_state)
 	rl.EndDrawing()
 }
 ```
+
+Text takes a semantic *role* and *ink* rather than a raw size and color, so
+call sites do not re-derive metrics and theme. `ui.text`, `ui.text_wrapped`,
+`ui.text_truncated`, and `ui.text_width` resolve `Text_Role` against the
+scaled `Ui_Metrics` and `Ink` against the active `Theme`. The explicit
+`draw_text_frame` and `measure_text_frame` entry points remain available for
+sizes and colors these enums do not name. Where drawing code needs both tables
+at once, `ui.ui_frame_style(frame)` returns them together.
+
+Widgets ship in two call shapes: `*_at` takes an explicit rect and is the
+supported path for application code, while `*_ui` carves a slot from a `Ui`
+layout and is experimental. See
+[UI state and stable focus](docs/ui-state.md#widget-tiers).
 
 `rl.run` blocks on native targets and installs the animation-frame callback on
 web. State used by `frame` must therefore outlive `main` on web. A managed web

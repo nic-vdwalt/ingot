@@ -135,6 +135,42 @@ The order of `items` may change without moving focus to another record. Keep
 IDs stable for the lifetime of each logical control and avoid reusing a removed
 record's ID for a different control.
 
+## Widget tiers
+
+Most widgets ship in two call shapes. Pick one per screen and stay in it.
+
+| Suffix | Status | Shape | Focus |
+|---|---|---|---|
+| `*_at` | Supported | Explicit `x, y, w, h` against a `^Ui_Frame` | Caller passes `Focus_Opt`, or omits it |
+| `*_ui` | Experimental | Carves a slot from a `^Ui` and its `Layout` | Registered automatically |
+
+**Use `*_at` for application code.** It is the path every shipped consumer
+takes, it composes with hand-computed layout and scroll offsets, and its
+signature is stable. Positioning is your responsibility: scale every dimension
+through `ui_frame_sc` so the result tracks the runtime UI scale.
+
+```odin
+metrics, style := ui.ui_frame_style(frame)
+if ui.btn_at(frame, x, y, ui.ui_frame_sc(frame, 120), metrics.ROW_H_MD, "Save", .Primary) {
+	save(app)
+}
+```
+
+**`*_ui` is experimental.** It removes slot arithmetic for short static forms,
+but the layout model is still settling and the auto-layout tier has very few
+callers, so it receives correspondingly less validation. Do not build a large
+screen on it yet.
+
+`btn_ui_state` and `btn_ui_state_id` are deprecated: no consumer has needed
+`Button_State` together with auto-layout. Use `btn_at_state` with an explicit
+rect, or `btn_ui` when the press animation state is not required.
+
+Both tiers share one interaction, focus, semantics, and paint pipeline — `*_ui`
+resolves a rect and then calls the matching `*_at`. Mixing them in one frame is
+legal; mixing them in one *form* is not, because focus registration must be
+either sequential or stable for the whole `Ui` (see
+[Sequential compatibility](#sequential-compatibility)).
+
 ## Explicit ownership boundary
 
 Font, wrap, spell, theme, scale, markdown, and text-input APIs require their

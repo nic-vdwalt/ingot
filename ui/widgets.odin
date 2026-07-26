@@ -617,6 +617,12 @@ btn_gloss :: proc(frame: ^Ui_Frame, theme: ^Theme, rect: Rectangle) {
 // hover_anim_frac (frame-rate independent); pressed state darkens instantly.
 // Pass `focus` to make the button keyboard-operable: clicking acquires the
 // slot, the ring draws while focused, and Space/Enter activates.
+//
+// Widget tiers — see docs/ui-state.md#widget-tiers:
+//   *_at  (supported)    explicit x, y, w, h. The paved path for applications.
+//   *_ui  (experimental) carves a slot from a Ui/Layout and auto-registers
+//                        focus. Convenient for short static forms; the layout
+//                        model is still settling, so expect churn.
 btn :: proc {
 	btn_at,
 	btn_at_state,
@@ -660,6 +666,10 @@ btn_ui_id :: proc(
 	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
 
+// Deprecated: no caller across any consumer has needed Button_State together
+// with auto-layout. Use btn_at_state with an explicit rect, or btn_ui when the
+// press animation state is not required.
+@(deprecated = "btn_ui_state is unused; prefer btn_at_state with an explicit rect")
 btn_ui_state :: proc(
 	u: ^Ui,
 	state: ^Button_State,
@@ -684,6 +694,9 @@ btn_ui_state :: proc(
 	)
 }
 
+// Deprecated: see btn_ui_state. Use btn_at_state with an explicit rect and a
+// stable Focus_Id.
+@(deprecated = "btn_ui_state_id is unused; prefer btn_at_state with an explicit rect")
 btn_ui_state_id :: proc(
 	u: ^Ui,
 	id: Focus_Id,

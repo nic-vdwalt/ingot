@@ -7,6 +7,13 @@
 // Keys: F12 toggles the metrics/debug overlay (renderer counters need
 // -define:INGOT_RENDER_STATS=true). Tab cycles keyboard focus in the
 // Buttons section.
+//
+// Conventions this gallery demonstrates (docs/ui-state.md#widget-tiers):
+//   - Widgets use the supported *_at tier: an explicit rect, with every
+//     dimension scaled through ui_frame_sc so it tracks the UI scale.
+//   - Text uses the semantic ui.text / Text_Role / Ink API rather than
+//     re-deriving metrics and theme per call. The Layout section is the one
+//     place the experimental *_ui / Layout tier is exercised.
 package main
 
 import "core:fmt"
@@ -236,14 +243,7 @@ draw_nav :: proc(sh: i32) {
 	)
 
 	y := ui.ui_frame_sc(&ui_frame, 14)
-	ui.draw_text_frame(
-		&ui_frame,
-		"ingot gallery",
-		ui.ui_frame_sc(&ui_frame, 14),
-		y,
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_LARGE,
-		ui.ui_frame_theme(&ui_frame).fg_primary,
-	)
+	ui.text(&ui_frame, "ingot gallery", ui.ui_frame_sc(&ui_frame, 14), y, .Large)
 	y += ui.ui_frame_sc(&ui_frame, 40)
 
 	for s in Section {
@@ -385,14 +385,7 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	y += bh + gap
 
 	count := fmt.tprintf("clicks: %d", click_count)
-	ui.draw_text_frame(
-		&ui_frame,
-		strings.clone_to_cstring(count, context.temp_allocator),
-		x,
-		y,
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
-	)
+	ui.text(&ui_frame, count, x, y, .Small, .Secondary)
 	y += ui.ui_frame_sc(&ui_frame, 30)
 
 	y = ui.section_header(&ui_frame, x, y, w, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
@@ -419,13 +412,13 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 		ui.collapsible_header(&ui_frame, x, y, w, label, &headers_open[i])
 		y += ui.ui_frame_sc(&ui_frame, 28)
 		if headers_open[i] {
-			ui.draw_text_frame(
+			ui.text(
 				&ui_frame,
 				"Collapsed state is a caller-owned bool.",
 				x + ui.ui_frame_sc(&ui_frame, 12),
 				y,
-				ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-				ui.ui_frame_theme(&ui_frame).fg_secondary,
+				.Small,
+				.Secondary,
 			)
 			y += ui.ui_frame_sc(&ui_frame, 24)
 		}
@@ -656,13 +649,18 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	list_width := min(w, ui.ui_frame_sc(&ui_frame, 360))
 	row_step := ui.ui_frame_sc(&ui_frame, 26)
 	list_config := ui.Listbox_Config {
-		{x, y, list_width, row_step * i32(len(list_labels))},
-		"Rendering backends",
-		"gallery:backends",
-		len(list_labels),
-		&state.list_selected,
-		true,
-		true,
+		rect         = {x, y, list_width, row_step * i32(len(list_labels))},
+		label        = "Rendering backends",
+		stable_id    = "gallery:backends",
+		count        = len(list_labels),
+		selected     = &state.list_selected,
+		wrap         = true,
+		hover_select = true,
+		// The list shares this page with other focusable widgets, so it reads
+		// keys only while focused. Every row is visible, so a page step is the
+		// whole list.
+		keys         = .Focused,
+		page_rows    = len(list_labels),
 	}
 	list_result := ui.listbox_begin(&ui_frame, &state.listbox, list_config)
 	for label, i in list_labels {
@@ -682,13 +680,12 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		)
 		ui.list_row_bg(&ui_frame, ui.Rect(rect), row.selected, row.hovered)
 		if row.activated do state.list_activated = i
-		ui.draw_text_frame(
+		ui.text(
 			&ui_frame,
-			strings.clone_to_cstring(label, context.temp_allocator),
+			label,
 			x + ui.ui_frame_sc(&ui_frame, 8),
 			y + ui.ui_frame_sc(&ui_frame, 4),
-			ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-			ui.ui_frame_theme(&ui_frame).fg_primary,
+			.Small,
 		)
 		y += row_step
 	}
@@ -696,14 +693,7 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	if list_result.activated do state.list_activated = list_result.activated_index
 	if state.list_activated >= 0 {
 		activated := fmt.tprintf("activated: %s", list_labels[state.list_activated])
-		ui.draw_text_frame(
-			&ui_frame,
-			strings.clone_to_cstring(activated, context.temp_allocator),
-			x,
-			y,
-			ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-			ui.ui_frame_theme(&ui_frame).fg_secondary,
-		)
+		ui.text(&ui_frame, activated, x, y, .Small, .Secondary)
 		y += row_step
 	}
 	y += ui.ui_frame_sc(&ui_frame, 8)
@@ -737,13 +727,13 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		i32(card.width) - ui.ui_frame_sc(&ui_frame, 24),
 		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
 	)
-	ui.draw_text_frame(
+	ui.text(
 		&ui_frame,
-		strings.clone_to_cstring(path, context.temp_allocator),
+		path,
 		x + ui.ui_frame_sc(&ui_frame, 12),
 		y + ui.ui_frame_sc(&ui_frame, 34),
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
+		.Small,
+		.Secondary,
 	)
 	y += i32(card.height) + ui.ui_frame_sc(&ui_frame, 16)
 
@@ -763,22 +753,8 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	content := ui.fit_column_end(&column)
 	fit_card := rl.Rectangle{f32(x), f32(y), f32(fit_w), f32(content.h + pad * 2)}
 	ui.draw_card_bg_frame(&ui_frame, ui.Rect(fit_card), ui.ui_frame_theme(&ui_frame).bg_secondary)
-	ui.draw_text_frame(
-		&ui_frame,
-		"Geometry resolved before drawing",
-		title.x,
-		title.y,
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_primary,
-	)
-	ui.draw_text_frame(
-		&ui_frame,
-		"No retained tree or trailing gap",
-		detail.x,
-		detail.y,
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
-	)
+	ui.text(&ui_frame, "Geometry resolved before drawing", title.x, title.y, .Small)
+	ui.text(&ui_frame, "No retained tree or trailing gap", detail.x, detail.y, .Small, .Secondary)
 	return y + i32(fit_card.height) + ui.ui_frame_sc(&ui_frame, 16)
 }
 
@@ -817,14 +793,7 @@ draw_charts :: proc(x, y0, w: i32) -> i32 {
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
 	y += ui.ui_frame_sc(&ui_frame, 232)
-	ui.draw_text_frame(
-		&ui_frame,
-		"sparkline:",
-		x,
-		y + ui.ui_frame_sc(&ui_frame, 6),
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
-	)
+	ui.text(&ui_frame, "sparkline:", x, y + ui.ui_frame_sc(&ui_frame, 6), .Small, .Secondary)
 	ui.sparkline(
 		&ui_frame,
 		x + ui.ui_frame_sc(&ui_frame, 80),
@@ -909,15 +878,14 @@ cell :: proc(r: ui.Rect_I32, label: string) {
 		r.h,
 		ui_gfx.color_to_gfx(ui.ui_frame_theme(&ui_frame).border_color),
 	)
-	c := strings.clone_to_cstring(label, context.temp_allocator)
-	tw := ui.measure_text_frame(&ui_frame, c, ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL)
-	ui.draw_text_frame(
+	tw := ui.text_width(&ui_frame, label, .Small)
+	ui.text(
 		&ui_frame,
-		c,
+		label,
 		r.x + (r.w - tw) / 2,
 		r.y + (r.h - ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL) / 2,
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
+		.Small,
+		.Secondary,
 	)
 }
 
@@ -944,14 +912,7 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 		"shielded clicks: %d (should not rise while the popup covers them)",
 		shielded_clicks,
 	)
-	ui.draw_text_frame(
-		&ui_frame,
-		strings.clone_to_cstring(summary, context.temp_allocator),
-		x,
-		info_y,
-		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-		ui.ui_frame_theme(&ui_frame).fg_secondary,
-	)
+	ui.text(&ui_frame, summary, x, info_y, .Small, .Secondary)
 
 	if ui.btn(
 		&ui_frame,
@@ -999,6 +960,8 @@ draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
 			ctx_note = "shielded clicks reset via context menu"
 		}
 	}
+	// Escape hatch: fg_label has no semantic Ink, so this one keeps the
+	// explicit size/color API rather than ui.text.
 	ui.draw_text_frame(
 		&ui_frame,
 		strings.clone_to_cstring(ctx_note, context.temp_allocator),
@@ -1145,14 +1108,7 @@ draw_stress :: proc(x, y0, w: i32) -> i32 {
 	y += i32(rows) * (bh + ui.ui_frame_sc(&ui_frame, 6)) + ui.ui_frame_sc(&ui_frame, 10)
 	if stress_clicked >= 0 {
 		msg := fmt.tprintf("last clicked: btn %d", stress_clicked)
-		ui.draw_text_frame(
-			&ui_frame,
-			strings.clone_to_cstring(msg, context.temp_allocator),
-			x,
-			y,
-			ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
-			ui.ui_frame_theme(&ui_frame).fg_secondary,
-		)
+		ui.text(&ui_frame, msg, x, y, .Small, .Secondary)
 		y += ui.ui_frame_sc(&ui_frame, 24)
 	}
 	return y
