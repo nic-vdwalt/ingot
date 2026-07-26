@@ -7,13 +7,17 @@ validation contracts.
 
 ## Context and resource ownership
 
-The PascalCase compatibility API uses one active graphics context. `InitWindow`
-creates it and `CloseWindow` destroys it. The context owns the renderer and the
-bounded texture, font-atlas, shader, VAO/VBO, and GPU-3D pools.
+The PascalCase compatibility API uses `default_context()`. `InitWindow` creates
+it and `CloseWindow` destroys it. Explicit `context_init`, `context_begin_frame`,
+and `context_close` support independently live native contexts rendered in a
+deterministic, interleaved order on one owner thread. Each context owns its
+window, renderer, input, timing, statistics, submission tracker, and bounded
+texture, font-atlas, shader, VAO/VBO, and GPU-3D pools.
 
-Public resources use opaque generation-checked handles. Zero is invalid, freed
-slots can be reused, and a handle from an unloaded resource or previous window
-lifetime cannot resolve to a replacement resource. The context lifecycle epoch
+Public resources use opaque context- and generation-checked handles. Zero is
+invalid, freed slots can be reused, and a handle from another context, an
+unloaded resource, or a previous window lifetime cannot resolve to a replacement
+resource. The context lifecycle epoch
 also rejects frames, adapters, and asynchronous GPU callbacks from an earlier
 window lifetime.
 
@@ -22,10 +26,10 @@ window lifetime.
 frame or GPU-3D pass. A partially initialized window may still be closed safely.
 
 `default_context()` exposes the compatibility owner to bridges such as
-`ui_gfx.Adapter`. The adapter captures that context and epoch at initialization.
-This explicit binding prevents stale use, but the renderer still routes through
-the default facade; simultaneous rendering from multiple windows is not a
-production guarantee.
+`ui_gfx.Adapter`. Explicit frames carry their owner, epoch, and generation and
+route drawing through that context. `ui_gfx.Adapter` captures a context and epoch
+and can bind an explicit graphics frame. Parallel renderer threads remain
+unsupported; browser hosting remains one managed canvas per module session.
 
 Audio has a separate lifecycle. Pair `InitAudioDevice` with `CloseAudioDevice`;
 `CloseWindow` does not close audio.
@@ -129,9 +133,10 @@ RGBA :: Color
 Rect :: Rectangle
 ```
 
-The additive frame API returns a generation-checked `Frame`; stale and
-double-ended handles are rejected. It wraps the same renderer rather than
-creating an independent context. No deprecation of the PascalCase API is
+The additive frame API returns a context-, epoch-, and generation-checked
+`Frame`; stale, cross-context, and double-ended handles are rejected. Each
+explicit context owns an independent renderer while the PascalCase API remains a
+thin default-context facade. No deprecation of the PascalCase API is
 currently implied.
 
 ## Event-driven frame scheduling
@@ -182,10 +187,11 @@ and window resizing under strict WebGPU validation. It requires a working
 display and is intentionally excluded from the headless `all` and `soak` fuzz
 targets.
 
-Use the deterministic visual fixture for backend validation:
+Use the deterministic visual and native multi-context fixtures for backend validation:
 
 ```sh
 odin run examples/render_fixture -collection:ingot=.
+odin run examples/multi_context_fixture -collection:ingot=.
 bash build_web.sh examples/render_fixture
 ```
 

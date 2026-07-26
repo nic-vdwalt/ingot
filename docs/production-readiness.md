@@ -35,11 +35,12 @@ Every context has a monotonically increasing lifecycle epoch. Frames, asynchrono
 WebGPU adapter/device completion, and submission callbacks validate that epoch so
 work from a closed lifetime cannot mutate a replacement lifetime.
 
-`ui_gfx.Adapter` records its graphics context and epoch at initialization and
-rejects stale use. The explicit binding is an ownership boundary; rendering still
-routes through the default facade until all renderer/resource procedures accept a
-context parameter. Multiple simultaneously rendering windows are therefore not yet
-a production guarantee.
+`ui_gfx.Adapter` records its graphics context and epoch at initialization,
+rejects stale use, and can bind an explicit graphics frame. Native contexts own
+independent windows, renderers, resources, input, timing, statistics, and
+submission tracking; explicit frames route rendering through their recorded
+owner. The PascalCase API remains a default-context facade. Parallel renderer
+threads and browser multi-canvas hosting remain outside the production guarantee.
 
 ## PTY and terminal
 
@@ -107,7 +108,8 @@ Before describing a revision as production-ready for a target:
 1. Pin and record the exact Ingot and Odin revisions.
 2. Run package tests, strict checks, and the web gate where applicable.
 3. Run deterministic fuzz targets and TSan for networking/concurrency changes.
-4. Run `fuzz/run.sh gfx-frame` and `examples/render_fixture` for renderer changes.
+4. Run `fuzz/run.sh gfx-frame`, `examples/render_fixture`, and
+   `examples/multi_context_fixture` for renderer changes.
 5. Exercise lifecycle replacement and teardown, not only startup.
 6. Complete the target's PTY, dialog, URL, accessibility, audio, input, and
    browser checks that the release actually exposes.
@@ -117,8 +119,9 @@ Before describing a revision as production-ready for a target:
 
 - Native WSS still requires a TLS-capable WebSocket transport; the compatibility
   socket implementation is plaintext.
-- Full renderer multi-context routing and context-owned resource identity remain
-  incomplete behind the explicit default-context facade.
+- Native multi-context rendering requires representative Metal, D3D12, and
+  Vulkan validation evidence; browser multi-canvas and parallel rendering remain
+  separate future capabilities.
 - Real PTY/ConPTY, native dialogs, accessibility, browser, and backend GPU jobs need
   representative hardware or virtualized runners.
 - Strict CSP deployment and content-hashed browser assets remain packaging work.

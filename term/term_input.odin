@@ -90,6 +90,78 @@ term_handle_input :: proc(
 	return
 }
 
+@(private)
+vt_control_byte_for_key :: proc(key: rl.KeyboardKey) -> (value: u8, ok: bool) {
+	#partial switch key {
+	case .A:             return 0x01, true
+	case .B:             return 0x02, true
+	case .C:             return 0x03, true
+	case .D:             return 0x04, true
+	case .E:             return 0x05, true
+	case .F:             return 0x06, true
+	case .G:             return 0x07, true
+	case .H:             return 0x08, true
+	case .I:             return 0x09, true
+	case .J:             return 0x0A, true
+	case .K:             return 0x0B, true
+	case .L:             return 0x0C, true
+	case .M:             return 0x0D, true
+	case .N:             return 0x0E, true
+	case .O:             return 0x0F, true
+	case .P:             return 0x10, true
+	case .Q:             return 0x11, true
+	case .R:             return 0x12, true
+	case .S:             return 0x13, true
+	case .T:             return 0x14, true
+	case .U:             return 0x15, true
+	case .V:             return 0x16, true
+	case .W:             return 0x17, true
+	case .X:             return 0x18, true
+	case .Y:             return 0x19, true
+	case .Z:             return 0x1A, true
+	case .LEFT_BRACKET:  return 0x1B, true
+	case .BACKSLASH:     return 0x1C, true
+	case .RIGHT_BRACKET: return 0x1D, true
+	case .GRAVE:         return 0x1E, true
+	}
+	return 0, false
+}
+
+@(private)
+vt_sequence_for_key :: proc(key: rl.KeyboardKey, shift: bool, buf: []u8) -> (int, bool) {
+	#partial switch key {
+	case .ENTER:     buf[0] = '\r'; return 1, true
+	case .BACKSPACE: buf[0] = 0x7f; return 1, true
+	case .TAB:
+		if shift do return copy(buf, "\x1b[Z"), true
+		buf[0] = '\t'; return 1, true
+	case .ESCAPE:    buf[0] = 0x1b; return 1, true
+	case .UP:        return copy(buf, "\x1b[A"), true
+	case .DOWN:      return copy(buf, "\x1b[B"), true
+	case .RIGHT:     return copy(buf, "\x1b[C"), true
+	case .LEFT:      return copy(buf, "\x1b[D"), true
+	case .HOME:      return copy(buf, "\x1b[H"), true
+	case .END:       return copy(buf, "\x1b[F"), true
+	case .PAGE_UP:   return copy(buf, "\x1b[5~"), true
+	case .PAGE_DOWN: return copy(buf, "\x1b[6~"), true
+	case .INSERT:    return copy(buf, "\x1b[2~"), true
+	case .DELETE:    return copy(buf, "\x1b[3~"), true
+	case .F1:        return copy(buf, "\x1bOP"), true
+	case .F2:        return copy(buf, "\x1bOQ"), true
+	case .F3:        return copy(buf, "\x1bOR"), true
+	case .F4:        return copy(buf, "\x1bOS"), true
+	case .F5:        return copy(buf, "\x1b[15~"), true
+	case .F6:        return copy(buf, "\x1b[17~"), true
+	case .F7:        return copy(buf, "\x1b[18~"), true
+	case .F8:        return copy(buf, "\x1b[19~"), true
+	case .F9:        return copy(buf, "\x1b[20~"), true
+	case .F10:       return copy(buf, "\x1b[21~"), true
+	case .F11:       return copy(buf, "\x1b[23~"), true
+	case .F12:       return copy(buf, "\x1b[24~"), true
+	}
+	return 0, false
+}
+
 // vt_bytes_for_key maps a single key event to the VT byte sequence a terminal
 // expects. Pure: no raylib input, no clipboard. Writes into buf and returns the
 // byte count; ok=false means "emit nothing" (unmapped key, or a host-app
@@ -105,133 +177,14 @@ vt_bytes_for_key :: proc(
 	n: int,
 	ok: bool,
 ) {
-	// Ctrl+letter — send control codes 0x01–0x1A.
 	if ctrl && !super {
-		// Host-app Ctrl+Shift chords are consumed by the app's shortcut
-		// handling and never forwarded.
 		if shift {
 			for sk in skip_ctrl_shift do if key == sk do return 0, false
 		}
-		#partial switch key {
-		case .A:
-			buf[0] = 0x01; return 1, true
-		case .B:
-			buf[0] = 0x02; return 1, true
-		case .C:
-			buf[0] = 0x03; return 1, true
-		case .D:
-			buf[0] = 0x04; return 1, true
-		case .E:
-			buf[0] = 0x05; return 1, true
-		case .F:
-			buf[0] = 0x06; return 1, true
-		case .G:
-			buf[0] = 0x07; return 1, true
-		case .H:
-			buf[0] = 0x08; return 1, true
-		case .I:
-			buf[0] = 0x09; return 1, true // Tab
-		case .J:
-			buf[0] = 0x0A; return 1, true
-		case .K:
-			buf[0] = 0x0B; return 1, true
-		case .L:
-			buf[0] = 0x0C; return 1, true
-		case .M:
-			buf[0] = 0x0D; return 1, true // CR
-		case .N:
-			buf[0] = 0x0E; return 1, true
-		case .O:
-			buf[0] = 0x0F; return 1, true
-		case .P:
-			buf[0] = 0x10; return 1, true
-		case .Q:
-			buf[0] = 0x11; return 1, true
-		case .R:
-			buf[0] = 0x12; return 1, true
-		case .S:
-			buf[0] = 0x13; return 1, true
-		case .T:
-			buf[0] = 0x14; return 1, true
-		case .U:
-			buf[0] = 0x15; return 1, true
-		case .V:
-			buf[0] = 0x16; return 1, true
-		case .W:
-			buf[0] = 0x17; return 1, true
-		case .X:
-			buf[0] = 0x18; return 1, true
-		case .Y:
-			buf[0] = 0x19; return 1, true
-		case .Z:
-			buf[0] = 0x1A; return 1, true
-		case .LEFT_BRACKET:
-			buf[0] = 0x1B; return 1, true // Ctrl+[  → ESC
-		case .BACKSLASH:
-			buf[0] = 0x1C; return 1, true
-		case .RIGHT_BRACKET:
-			buf[0] = 0x1D; return 1, true
-		case .GRAVE:
-			buf[0] = 0x1E; return 1, true
-		}
-		return 0, false
+		value, mapped := vt_control_byte_for_key(key)
+		if !mapped do return 0, false
+		buf[0] = value
+		return 1, true
 	}
-
-	// Navigation / function keys — VT100/xterm sequences.
-	#partial switch key {
-	case .ENTER:
-		buf[0] = '\r'; return 1, true
-	case .BACKSPACE:
-		buf[0] = 0x7f; return 1, true
-	case .TAB:
-		if shift do return copy(buf, "\x1b[Z"), true
-		buf[0] = '\t'; return 1, true
-	case .ESCAPE:
-		buf[0] = 0x1b; return 1, true
-	case .UP:
-		return copy(buf, "\x1b[A"), true
-	case .DOWN:
-		return copy(buf, "\x1b[B"), true
-	case .RIGHT:
-		return copy(buf, "\x1b[C"), true
-	case .LEFT:
-		return copy(buf, "\x1b[D"), true
-	case .HOME:
-		return copy(buf, "\x1b[H"), true
-	case .END:
-		return copy(buf, "\x1b[F"), true
-	case .PAGE_UP:
-		return copy(buf, "\x1b[5~"), true
-	case .PAGE_DOWN:
-		return copy(buf, "\x1b[6~"), true
-	case .INSERT:
-		return copy(buf, "\x1b[2~"), true
-	case .DELETE:
-		return copy(buf, "\x1b[3~"), true
-	case .F1:
-		return copy(buf, "\x1bOP"), true
-	case .F2:
-		return copy(buf, "\x1bOQ"), true
-	case .F3:
-		return copy(buf, "\x1bOR"), true
-	case .F4:
-		return copy(buf, "\x1bOS"), true
-	case .F5:
-		return copy(buf, "\x1b[15~"), true
-	case .F6:
-		return copy(buf, "\x1b[17~"), true
-	case .F7:
-		return copy(buf, "\x1b[18~"), true
-	case .F8:
-		return copy(buf, "\x1b[19~"), true
-	case .F9:
-		return copy(buf, "\x1b[20~"), true
-	case .F10:
-		return copy(buf, "\x1b[21~"), true
-	case .F11:
-		return copy(buf, "\x1b[23~"), true
-	case .F12:
-		return copy(buf, "\x1b[24~"), true
-	}
-	return 0, false
+	return vt_sequence_for_key(key, shift, buf)
 }

@@ -100,6 +100,19 @@ gpu_3d_pass_rejects_stale_generation :: proc(t: ^testing.T) {
 }
 
 @(test)
+texture_handles_reject_cross_context_lookup :: proc(t: ^testing.T) {
+	first, second: Texture_Resources
+	first_entry, second_entry: Tex_Entry
+	first_id := _texture_register_context(2, &first, &first_entry)
+	second_id := _texture_register_context(3, &second, &second_entry)
+	testing.expect(t, first_id != second_id)
+	testing.expect(t, _texture_slot_context(2, &first, first_id) != nil)
+	testing.expect(t, _texture_slot_context(3, &second, second_id) != nil)
+	testing.expect(t, _texture_slot_context(3, &second, first_id) == nil)
+	testing.expect(t, _texture_slot_context(2, &first, second_id) == nil)
+}
+
+@(test)
 submission_reservation_is_nonzero_and_rollback_is_atomic :: proc(t: ^testing.T) {
 	tracker: Submission_Tracker
 	_submission_init(&tracker, default_context())

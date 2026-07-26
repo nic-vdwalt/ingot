@@ -64,7 +64,10 @@ app_session_begin_frame_context :: proc(
 	session: ^App_Session,
 	gfx_frame: ^rl.Frame,
 ) -> ^ui.Ui_Frame {
-	assert(session != nil && session.initialized, "app_session_begin_frame_context: invalid session")
+	assert(
+		session != nil && session.initialized,
+		"app_session_begin_frame_context: invalid session",
+	)
 	adapter_bind_frame(&session.adapter, gfx_frame)
 	session.gfx_frame = gfx_frame
 	return app_session_begin_frame(session)

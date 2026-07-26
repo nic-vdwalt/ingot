@@ -76,8 +76,18 @@ Run the strict project gate:
 bash scripts/check.sh
 ```
 
-It checks every package with Odin's vet, strict-style, and shadowing diagnostics
-and requires every tracked Odin source file to match `odinfmt`.
+It checks every package with Odin's vet, strict-style, and shadowing diagnostics,
+runs the graphics-context ownership guard, builds every consumer fixture, and
+requires every tracked Odin source file to match `odinfmt`. The ownership guard
+uses `scripts/gfx_context_baseline.json` to reject growth in direct singleton
+references per procedure. Measure the current inventory with:
+
+```sh
+python3 scripts/check_gfx_context.py --measure .
+```
+
+Reductions require removing stale baseline entries; intentional compatibility
+facade additions require an explicit reviewed baseline update.
 
 Validate the browser target with:
 
@@ -186,10 +196,13 @@ target unloads, UI rescaling, and window resizes inside live frames. It builds
 with `INGOT_GPU_STRICT`, making any WebGPU validation message abort the run.
 Because it needs a display, it is intentionally excluded from `all` and `soak`.
 
-The gallery smoke test exercises the same class through real event handlers:
+The gallery smoke test exercises the same class through real event handlers. The
+multi-context fixture alternates two native windows, closes one, and verifies the
+other remains renderable:
 
 ```sh
 bash scripts/smoke-gallery.sh
+odin run examples/multi_context_fixture -collection:ingot=.
 ```
 
 ## Scope and limits

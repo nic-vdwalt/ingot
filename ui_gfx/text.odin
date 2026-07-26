@@ -100,6 +100,8 @@ adapter_font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
 	assert(adapter.font_count < FONT_CAP, "adapter_font_for_size: font limit")
 	pixel_size := i32(f32(size) * adapter.font_dpi + 0.5)
 	if pixel_size < 1 do pixel_size = 1
+	scope := rl.context_scope_enter(adapter.gfx_context)
+	defer rl.context_scope_leave(&scope)
 	font := rl.LoadFontFromMemory(
 		".ttf",
 		raw_data(FONT_DATA),
@@ -124,7 +126,7 @@ adapter_measure :: proc(
 	font, ok := adapter_font(adapter, font_id)
 	assert(ok, "adapter_measure: invalid font")
 	value := strings.clone_to_cstring(text, context.temp_allocator)
-	return vec_to_ui(rl.MeasureTextEx(font, value, size, spacing))
+	return vec_to_ui(rl.context_measure_text(adapter.gfx_context, font, value, size, spacing))
 }
 
 adapter_set_font_dpi :: proc(adapter: ^Adapter, scale: f32) {
@@ -138,6 +140,8 @@ adapter_set_font_dpi :: proc(adapter: ^Adapter, scale: f32) {
 adapter_reset_fonts :: proc(data: rawptr) {
 	adapter := cast(^Adapter)data
 	assert(adapter != nil && adapter.initialized, "adapter_reset_fonts: invalid adapter")
+	scope := rl.context_scope_enter(adapter.gfx_context)
+	defer rl.context_scope_leave(&scope)
 	for index in 0 ..< adapter.font_count {
 		if adapter.fonts[index].glyphCount > 0 do rl.UnloadFont(adapter.fonts[index])
 		adapter.fonts[index] = {}

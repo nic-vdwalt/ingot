@@ -133,7 +133,10 @@ adapter_open_frame :: proc(
 adapter_bind_frame :: proc(adapter: ^Adapter, gfx_frame: ^rl.Frame) {
 	assert(adapter != nil && adapter.initialized, "adapter_bind_frame: invalid adapter")
 	assert(gfx_frame != nil, "adapter_bind_frame: nil frame")
-	assert(rl.frame_context(gfx_frame) == adapter.gfx_context, "adapter_bind_frame: owner mismatch")
+	assert(
+		rl.frame_context(gfx_frame) == adapter.gfx_context,
+		"adapter_bind_frame: owner mismatch",
+	)
 	assert(adapter.gfx_frame == nil, "adapter_bind_frame: frame already bound")
 	adapter.gfx_frame = gfx_frame
 }

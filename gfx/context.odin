@@ -246,7 +246,9 @@ _flush_retired :: proc() {
 }
 
 @(private)
-default_context_storage: Context = {id = 1}
+default_context_storage: Context = {
+	id = 1,
+}
 @(private)
 g: ^Context = &default_context_storage
 @(private)

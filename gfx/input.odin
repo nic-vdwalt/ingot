@@ -12,48 +12,48 @@ import "core:strings"
 CHAR_Q :: 64
 
 Input :: struct {
-	exit_key:         KeyboardKey,
+	exit_key:             KeyboardKey,
 
 	// per-frame edge/repeat (set by the backend, cleared each poll cycle)
-	pressed:          [KEY_COUNT]bool,
-	released:         [KEY_COUNT]bool,
-	repeat:           [KEY_COUNT]bool,
+	pressed:              [KEY_COUNT]bool,
+	released:             [KEY_COUNT]bool,
+	repeat:               [KEY_COUNT]bool,
 
 	// char / key queues (FIFO ring)
-	char_q:           [CHAR_Q]rune,
-	char_h, char_t:   int,
-	key_q:            [CHAR_Q]KeyboardKey,
-	key_h, key_t:     int,
+	char_q:               [CHAR_Q]rune,
+	char_h, char_t:       int,
+	key_q:                [CHAR_Q]KeyboardKey,
+	key_h, key_t:         int,
 
 	// Native callbacks stage per-window events until that context publishes
 	// its next frame-visible input snapshot.
-	st_pressed:       [KEY_COUNT]bool,
-	st_released:      [KEY_COUNT]bool,
-	st_repeat:        [KEY_COUNT]bool,
-	st_char_q:        [CHAR_Q]rune,
+	st_pressed:           [KEY_COUNT]bool,
+	st_released:          [KEY_COUNT]bool,
+	st_repeat:            [KEY_COUNT]bool,
+	st_char_q:            [CHAR_Q]rune,
 	st_char_h, st_char_t: int,
-	st_key_q:         [CHAR_Q]KeyboardKey,
-	st_key_h, st_key_t: int,
-	st_wheel:         Vector2,
+	st_key_q:             [CHAR_Q]KeyboardKey,
+	st_key_h, st_key_t:   int,
+	st_wheel:             Vector2,
 
 	// mouse
-	mouse:            Vector2,
-	mouse_prev:       Vector2,
-	mouse_delta:      Vector2,
-	mb_down:          [8]bool,
-	mb_pressed:       [8]bool,
-	mb_released:      [8]bool,
+	mouse:                Vector2,
+	mouse_prev:           Vector2,
+	mouse_delta:          Vector2,
+	mb_down:              [8]bool,
+	mb_pressed:           [8]bool,
+	mb_released:          [8]bool,
 
 	// wheel
-	wheel:            Vector2,
-	wheel_pending:    Vector2,
-	cursor_on_screen: bool,
-	cur_cursor:       MouseCursor,
+	wheel:                Vector2,
+	wheel_pending:        Vector2,
+	cursor_on_screen:     bool,
+	cur_cursor:           MouseCursor,
 
 	// Gamepads: fixed pool, snapshot-polled once per frame through the
 	// platform seam (GLFW GetGamepadState native, navigator.getGamepads()
 	// web). prev_buttons gives pressed/released edge detection.
-	pads:             [MAX_GAMEPADS]Gamepad_State,
+	pads:                 [MAX_GAMEPADS]Gamepad_State,
 }
 
 MAX_GAMEPADS :: 4

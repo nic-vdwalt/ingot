@@ -614,7 +614,7 @@ g_drop_names: [MAX_DROPPED_FILES][DROP_NAME_MAX]u8
 @(private)
 g_drop_cstrs: [MAX_DROPPED_FILES]cstring
 
-IsFileDropped :: proc() -> bool {return g_drop_ready}
+IsFileDropped :: proc() -> bool {return g.drop.ready}
 
 LoadDroppedFiles :: proc() -> FilePathList {
 	count := clamp(_js_drop_count(), 0, MAX_DROPPED_FILES)
@@ -633,7 +633,7 @@ LoadDroppedFiles :: proc() -> FilePathList {
 }
 
 UnloadDroppedFiles :: proc(files: FilePathList) {
-	g_drop_ready = false
+	g.drop.ready = false
 	for i in 0 ..< MAX_DROPPED_FILES {
 		g_drop_names[i] = {}
 		g_drop_cstrs[i] = nil

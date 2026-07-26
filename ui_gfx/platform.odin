@@ -17,10 +17,8 @@ apply_platform_output :: proc(output: ^ui.Platform_Output) {
 
 apply_platform_output_context :: proc(ctx: ^rl.Context, output: ^ui.Platform_Output) {
 	assert(ctx != nil && output != nil, "apply_platform_output_context: nil argument")
-	assert(
-		ctx == rl.default_context(),
-		"apply_platform_output_context: context routing unavailable",
-	)
+	scope := rl.context_scope_enter(ctx)
+	defer rl.context_scope_leave(&scope)
 	if output.cursor_requested do rl.SetMouseCursor(rl.MouseCursor(output.cursor))
 	if output.clipboard_write {
 		text := string(output.clipboard_text[:output.clipboard_text_len])
@@ -37,8 +35,8 @@ apply_platform_output_context :: proc(ctx: ^rl.Context, output: ^ui.Platform_Out
 	// applying it after would let a settle burst outlive a deadline set this
 	// frame. Producers only publish this on a transition (see ui.pacer_frame).
 	if output.frame_strategy_requested {
-		rl.SetFrameStrategy(rl.Frame_Strategy(output.frame_strategy))
+		rl.context_set_frame_strategy(ctx, rl.Frame_Strategy(output.frame_strategy))
 	}
-	if output.request_redraw do rl.RequestRedraw()
-	if output.redraw_after > 0 do rl.RequestRedrawIn(output.redraw_after)
+	if output.request_redraw do rl.RequestRedrawContext(ctx)
+	if output.redraw_after > 0 do rl.RequestRedrawInContext(ctx, output.redraw_after)
 }

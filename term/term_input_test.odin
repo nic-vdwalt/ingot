@@ -63,36 +63,78 @@ vt_key_map :: proc(t: ^testing.T) {
 }
 
 @(test)
-vt_key_map_remaining_contract :: proc(t: ^testing.T) {
+vt_key_map_control_contract :: proc(t: ^testing.T) {
 	b: [8]u8
 	ctrl_cases := []struct {
 		key:      rl.KeyboardKey,
 		expected: u8,
-	}{{.Z, 0x1A}, {.BACKSLASH, 0x1C}, {.RIGHT_BRACKET, 0x1D}, {.GRAVE, 0x1E}}
+	} {
+		{.A, 0x01}, {.B, 0x02}, {.C, 0x03}, {.D, 0x04},
+		{.E, 0x05}, {.F, 0x06}, {.G, 0x07}, {.H, 0x08},
+		{.I, 0x09}, {.J, 0x0A}, {.K, 0x0B}, {.L, 0x0C},
+		{.M, 0x0D}, {.N, 0x0E}, {.O, 0x0F}, {.P, 0x10},
+		{.Q, 0x11}, {.R, 0x12}, {.S, 0x13}, {.T, 0x14},
+		{.U, 0x15}, {.V, 0x16}, {.W, 0x17}, {.X, 0x18},
+		{.Y, 0x19}, {.Z, 0x1A}, {.LEFT_BRACKET, 0x1B},
+		{.BACKSLASH, 0x1C}, {.RIGHT_BRACKET, 0x1D}, {.GRAVE, 0x1E},
+	}
 	for test_case in ctrl_cases {
 		n, ok := vt_bytes_for_key(test_case.key, true, false, false, nil, b[:])
 		testing.expect(t, ok)
 		testing.expect_value(t, n, 1)
 		testing.expect_value(t, b[0], test_case.expected)
 	}
+}
 
+@(test)
+vt_key_map_sequence_contract :: proc(t: ^testing.T) {
+	b: [8]u8
 	sequence_cases := []struct {
 		key:      rl.KeyboardKey,
 		expected: string,
 	} {
-		{.ESCAPE, "\x1b"},
-		{.DOWN, "\x1b[B"},
-		{.RIGHT, "\x1b[C"},
-		{.LEFT, "\x1b[D"},
-		{.END, "\x1b[F"},
-		{.PAGE_DOWN, "\x1b[6~"},
-		{.INSERT, "\x1b[2~"},
-		{.DELETE, "\x1b[3~"},
-		{.F12, "\x1b[24~"},
+		{.ENTER, "\r"}, {.BACKSPACE, "\x7f"}, {.TAB, "\t"}, {.ESCAPE, "\x1b"},
+		{.UP, "\x1b[A"}, {.DOWN, "\x1b[B"}, {.RIGHT, "\x1b[C"}, {.LEFT, "\x1b[D"},
+		{.HOME, "\x1b[H"}, {.END, "\x1b[F"}, {.PAGE_UP, "\x1b[5~"},
+		{.PAGE_DOWN, "\x1b[6~"}, {.INSERT, "\x1b[2~"}, {.DELETE, "\x1b[3~"},
+		{.F1, "\x1bOP"}, {.F2, "\x1bOQ"}, {.F3, "\x1bOR"}, {.F4, "\x1bOS"},
+		{.F5, "\x1b[15~"}, {.F6, "\x1b[17~"}, {.F7, "\x1b[18~"},
+		{.F8, "\x1b[19~"}, {.F9, "\x1b[20~"}, {.F10, "\x1b[21~"},
+		{.F11, "\x1b[23~"}, {.F12, "\x1b[24~"},
 	}
 	for test_case in sequence_cases {
 		n, ok := vt_bytes_for_key(test_case.key, false, false, false, nil, b[:])
 		testing.expect(t, ok)
 		testing.expect_value(t, string(b[:n]), test_case.expected)
 	}
+}
+
+@(test)
+vt_key_map_modifier_precedence :: proc(t: ^testing.T) {
+	b: [8]u8
+	skip := []rl.KeyboardKey{.A, .TAB}
+	n, ok := vt_bytes_for_key(.A, true, true, false, skip, b[:])
+	testing.expect(t, !ok)
+	testing.expect_value(t, n, 0)
+	n, ok = vt_bytes_for_key(.A, true, true, true, skip, b[:])
+	testing.expect(t, !ok)
+	testing.expect_value(t, n, 0)
+	n, ok = vt_bytes_for_key(.TAB, true, true, true, skip, b[:])
+	testing.expect(t, ok)
+	testing.expect_value(t, string(b[:n]), "\x1b[Z")
+	n, ok = vt_bytes_for_key(.UP, true, false, false, nil, b[:])
+	testing.expect(t, !ok)
+	testing.expect_value(t, n, 0)
+	n, ok = vt_bytes_for_key(.UP, true, false, true, nil, b[:])
+	testing.expect(t, ok)
+	testing.expect_value(t, string(b[:n]), "\x1b[A")
+}
+
+@(test)
+vt_key_map_short_sequence_buffer_contract :: proc(t: ^testing.T) {
+	b: [2]u8
+	n, ok := vt_bytes_for_key(.F12, false, false, false, nil, b[:])
+	testing.expect(t, ok)
+	testing.expect_value(t, n, 2)
+	testing.expect_value(t, string(b[:]), "\x1b[")
 }

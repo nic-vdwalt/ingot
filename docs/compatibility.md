@@ -108,11 +108,13 @@ does not spawn a shell.
 
 ## Graphics and window limitations
 
-The compatibility graphics facade owns one default active context. Multiple
-simultaneously rendering windows are not a production guarantee. HiDPI,
-transparency, vibrancy/Mica, drag-and-drop, IME, gamepad, audio, accessibility,
-and custom chrome have platform seams and require validation on representative
-hardware.
+The compatibility graphics facade continues to own one default context, so
+raylib-shaped applications require no source changes. Native applications may
+also create explicit contexts and interleave independently live windows on one
+owner thread. Parallel renderer threads and browser multi-canvas hosting are not
+production guarantees. HiDPI, transparency, vibrancy/Mica, drag-and-drop, IME,
+gamepad, audio, accessibility, and custom chrome have platform seams and require
+validation on representative hardware.
 
 WebGPU backend selection and optional features vary by operating system, GPU,
 driver, and browser. A successful compile demonstrates source compatibility,
