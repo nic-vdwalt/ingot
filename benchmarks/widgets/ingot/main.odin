@@ -359,6 +359,7 @@ main :: proc() {
 	submitted = run_workload(h, options.workload, options.scale, options.frames)
 	ui.ui_frame_finalize(&h.frame)
 	stats := ui.ui_frame_output_stats(&h.frame)
+	telemetry := ui.ui_frame_telemetry(&h.frame)
 	diagnostics := ui.ui_frame_diagnostics(&h.frame)
 	valid_output :=
 		diagnostics.main_commands_dropped == 0 && diagnostics.main_text_bytes_dropped == 0
@@ -405,6 +406,38 @@ main :: proc() {
 		diagnostics.main_commands_dropped,
 		",\"dropped_text_bytes\":",
 		diagnostics.main_text_bytes_dropped,
+		"},\"telemetry\":{\"scratch_allocations\":",
+		telemetry.scratch_allocation_count,
+		",\"scratch_resizes\":",
+		telemetry.scratch_resize_count,
+		",\"scratch_allocation_request_bytes\":",
+		telemetry.scratch_allocation_request_bytes,
+		",\"scratch_resize_request_bytes\":",
+		telemetry.scratch_resize_request_bytes,
+		",\"main_command_appends\":",
+		telemetry.main.command_append_count,
+		",\"main_text_appends\":",
+		telemetry.main.text_append_count,
+		",\"main_text_bytes_copied\":",
+		telemetry.main.text_bytes_copied,
+		",\"main_command_growths\":",
+		telemetry.main.command_growth_count,
+		",\"main_text_growths\":",
+		telemetry.main.text_growth_count,
+		",\"overlay_command_appends\":",
+		telemetry.overlay.command_append_count,
+		",\"overlay_text_appends\":",
+		telemetry.overlay.text_append_count,
+		",\"overlay_text_bytes_copied\":",
+		telemetry.overlay.text_bytes_copied,
+		",\"overlay_command_growths\":",
+		telemetry.overlay.command_growth_count,
+		",\"overlay_text_growths\":",
+		telemetry.overlay.text_growth_count,
+		",\"text_input_full_paths\":",
+		telemetry.text_input_full_path_count,
+		",\"text_input_inactive_candidates\":",
+		telemetry.text_input_inactive_candidates,
 		"},\"diagnostics\":{\"semantic_nodes_dropped\":",
 		diagnostics.semantic_nodes_dropped,
 		",\"semantic_focus_dropped\":",

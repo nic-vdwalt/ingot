@@ -61,9 +61,11 @@ Ui_Frame :: struct {
 	// values when a window is narrowed or a panel collapses, and a trap there
 	// takes the whole app down. Counting the drops keeps that from hiding real
 	// layout bugs — tests assert the counter is zero on golden-path frames.
-	degenerate_drops: int,
-	finalized:        bool,
-	open:             bool,
+	degenerate_drops:              int,
+	text_input_full_path_count:     u64,
+	text_input_inactive_candidates: u64,
+	finalized:                     bool,
+	open:                          bool,
 }
 
 // ui_frame_drop_degenerate records that a widget declined to draw because its
@@ -202,6 +204,10 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame.text_cull_bottom = max(i32)
 	frame.open_roots = 0
 	frame.degenerate_drops = 0
+	when UI_TELEMETRY_ENABLED {
+		frame.text_input_full_path_count = 0
+		frame.text_input_inactive_candidates = 0
+	}
 	frame.finalized = false
 	frame.open = true
 	route_begin_frame(frame)

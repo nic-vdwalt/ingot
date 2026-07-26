@@ -4,13 +4,14 @@ import "core:mem"
 
 INGOT_FRAME_SCRATCH_GUARD :: #config(INGOT_FRAME_SCRATCH_GUARD, true)
 Frame_Scratch :: struct {
-	arena:            mem.Dynamic_Arena,
-	allocator:        mem.Allocator,
-	generation:       u64,
-	allocation_count: u64,
-	allocated_bytes:  u64,
-	peak_bytes:       u64,
-	initialized:      bool,
+	arena:                   mem.Dynamic_Arena,
+	allocator:               mem.Allocator,
+	generation:              u64,
+	allocation_count:        u64,
+	resize_count:            u64,
+	allocation_request_bytes: u64,
+	resize_request_bytes:     u64,
+	initialized:             bool,
 }
 Frame_View :: struct($T: typeid) {
 	items:      []T,
@@ -38,11 +39,14 @@ frame_scratch_allocator_proc :: proc(
 		panic("individual free of frame memory; memory is released by ui_frame_end", loc = loc)
 	}
 	when UI_TELEMETRY_ENABLED {
-		if mode == .Alloc || mode == .Resize {
+		#partial switch mode {
+		case .Alloc:
 			scratch.allocation_count += 1
-			growth := max(size - old_size, 0)
-			scratch.allocated_bytes += u64(growth)
-			scratch.peak_bytes = max(scratch.peak_bytes, scratch.allocated_bytes)
+			scratch.allocation_request_bytes += u64(size)
+		case .Resize:
+			scratch.resize_count += 1
+			scratch.resize_request_bytes += u64(size)
+		case:
 		}
 	}
 	backing := mem.dynamic_arena_allocator(&scratch.arena)
@@ -54,8 +58,9 @@ frame_scratch_begin :: proc(scratch: ^Frame_Scratch) {
 	scratch.generation += 1
 	when UI_TELEMETRY_ENABLED {
 		scratch.allocation_count = 0
-		scratch.allocated_bytes = 0
-		scratch.peak_bytes = 0
+		scratch.resize_count = 0
+		scratch.allocation_request_bytes = 0
+		scratch.resize_request_bytes = 0
 	}
 	when INGOT_FRAME_SCRATCH_GUARD {scratch.allocator = {
 			procedure = frame_scratch_allocator_proc,

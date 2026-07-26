@@ -1537,11 +1537,24 @@ ti_draw_spell_popup :: proc(ctx: ^TI_Ctx) {
 	}
 }
 
+@(private = "file")
+ti_inactive_candidate :: proc(ctx: ^TI_Ctx) -> bool {
+	assert(ctx != nil && ctx.sb != nil, "ti_inactive_candidate: invalid context")
+	assert(ctx.sel != nil && ctx.spell_menu != nil, "ti_inactive_candidate: missing state")
+	text := strings.to_string(ctx.sb^)
+	return !ctx.active && !ctx.masked && !strings.contains_rune(text, '\n') && !ctx.sel.active &&
+	       (ctx.pills == nil || len(ctx.pills) == 0) && !spell_menu_active(ctx.spell_menu, ctx.sb)
+}
+
 // ti_run drives one frame of the input and reports whether Enter submitted it.
 @(private = "file")
 ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	assert(ctx.sb != nil, "ti_run: nil builder")
 	assert(ctx.sel != nil && ctx.memo != nil, "ti_run: nil selection or memo")
+	when UI_TELEMETRY_ENABLED {
+		ctx.frame.text_input_full_path_count += 1
+		if ti_inactive_candidate(ctx) do ctx.frame.text_input_inactive_candidates += 1
+	}
 	ti_sync_web(ctx)
 	ti_semantic_push(ctx)
 	ti_draw_chrome(ctx)

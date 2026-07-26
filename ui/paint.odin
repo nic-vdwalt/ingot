@@ -69,9 +69,14 @@ Paint_List :: struct {
 	// their logical depth separately lets paint_clip_end consume those ends
 	// without popping a real outer clip.
 	clip_overflow_depth: int,
-	dropped_commands:    int,
-	dropped_text_bytes:  int,
-	sink:                Paint_Sink,
+	dropped_commands:      int,
+	dropped_text_bytes:    int,
+	command_append_count:  u64,
+	text_append_count:     u64,
+	text_bytes_copied:     u64,
+	command_growth_count:  u64,
+	text_growth_count:     u64,
+	sink:                  Paint_Sink,
 	sink_userdata:       rawptr,
 }
 
@@ -89,6 +94,13 @@ paint_list_reset :: proc(list: ^Paint_List) {
 	list.clip_overflow_depth = 0
 	list.dropped_commands = 0
 	list.dropped_text_bytes = 0
+	when UI_TELEMETRY_ENABLED {
+		list.command_append_count = 0
+		list.text_append_count = 0
+		list.text_bytes_copied = 0
+		list.command_growth_count = 0
+		list.text_growth_count = 0
+	}
 }
 
 // paint_clip_leak_origin names the call site of the outermost clip left open,
@@ -162,6 +174,7 @@ paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
 	}
 	list.commands[list.count] = command
 	list.count += 1
+	when UI_TELEMETRY_ENABLED do list.command_append_count += 1
 	if list.sink != nil do list.sink(list, command, list.sink_userdata)
 	return true
 }
@@ -177,6 +190,10 @@ paint_push_text :: proc(list: ^Paint_List, command: Paint_Command, text: string)
 	stored_command.text_length = len(text)
 	copy(list.text[list.text_len:], transmute([]u8)text)
 	list.text_len += len(text)
+	when UI_TELEMETRY_ENABLED {
+		list.text_append_count += 1
+		list.text_bytes_copied += u64(len(text))
+	}
 	return paint_push(list, stored_command)
 }
 
