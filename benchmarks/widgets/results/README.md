@@ -10,3 +10,4 @@ not publishable; capacity-overflow samples belong only in capacity evidence.
 Published summaries:
 
 - [2026-07-26 Apple M2 Max headless core run](2026-07-26-m2-max-core.md)
+- [2026-07-26 Apple M2 Max Ingot Phase 2 baseline](2026-07-26-m2-max-phase-2.md)

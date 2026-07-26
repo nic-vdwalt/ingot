@@ -445,6 +445,17 @@ measure_frame :: proc(
 	return
 }
 
+print_samples :: proc(name: string, samples: []i64, first: bool) {
+	assert(len(name) > 0 && len(samples) > 0, "print_samples: invalid argument")
+	if !first do fmt.print(",")
+	fmt.print("\"", name, "\":[")
+	for value, index in samples {
+		if index > 0 do fmt.print(",")
+		fmt.print(value)
+	}
+	fmt.print("]")
+}
+
 print_telemetry :: proc(telemetry: ui.Ui_Frame_Telemetry) {
 	fmt.print(
 		"\"scratch_allocations\":",
@@ -540,26 +551,15 @@ main :: proc() {
 		"output_overflow" if !valid_output else "",
 		"\",\"state_checksum\":",
 		state_checksum,
-		",\"samples_ns\":{\"build\":[",
+		",\"samples_ns\":{",
 	)
-	for value, index in build_samples {
-		if index > 0 do fmt.print(",")
-		fmt.print(value)
-	}
-	fmt.print("],\"finalize\":[")
-	for value, index in finalize_samples {
-		if index > 0 do fmt.print(",")
-		fmt.print(value)
-	}
-	fmt.print("],\"frame\":[")
-	for value, index in frame_samples {
-		if index > 0 do fmt.print(",")
-		fmt.print(value)
-	}
+	print_samples("build", build_samples, true)
+	print_samples("finalize", finalize_samples, false)
+	print_samples("frame", frame_samples, false)
 	fmt.print(
-		"]},\"output\":{\"submitted_widgets\":",
+		"},\"output\":{\"submitted_widgets\":",
 		submitted,
-		",\"visible_widgets\":",
+		",\"visible_widgets\":"
 		min(submitted, VIRTUAL_ROWS),
 		",\"paint_commands\":",
 		stats.main_command_count,

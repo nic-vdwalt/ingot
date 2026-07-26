@@ -230,7 +230,7 @@ that existing behavior until text recording is redesigned.
 ## Implementation Order
 
 1. Add allocation, copy, command, text, and input-path counters. Completed.
-2. Add isolated workloads and establish reproducible baselines.
+2. Add isolated workloads and establish reproducible baselines. Completed.
 3. Implement direct string-to-paint recording and bounded reservation.
 4. Implement and characterize the inactive text-input fast path.
 5. Gate widget-side semantics construction when disabled.
