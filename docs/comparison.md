@@ -37,9 +37,10 @@ Choose another stack when any of these are hard requirements:
 
 The categories below overlap, but they represent the most likely alternatives.
 
-- **Ingot:** Best for Odin desktop tools with native and web targets. It combines
-  caller-owned state, immediate UI, batched WebGPU rendering, and event-driven
-  idle behavior. The stack is integrated and inspectable, but young and
+- **Ingot:** Best for Odin desktop tools with native and web targets. Its strict
+  single-path model keeps persistent widget behavior in caller-owned state and
+  derives bounded UI output only for the current frame. The stack integrates
+  batched WebGPU rendering and event-driven idle behavior, but is young and
   Odin-specific.
 - **Dear ImGui:** Best for mature C++ engine tooling, inspectors, overlays, and
   applications that already own a renderer or platform shell. It has much wider
@@ -80,6 +81,40 @@ the interface; it does not require stateless library internals, immediate GPU
 rendering, or a continuously running frame loop. These are genuine
 immediate-mode systems even when they retain caches, schedule redraws, or emit
 accessibility data.
+
+### Why Ingot is the purest form of immediate mode
+
+Ingot can reasonably call itself the purest form of immediate-mode GUI in one
+specific architectural sense: it carries the original single-path boundary
+through the complete application UI. The application remains the sole owner of
+persistent widget behavior instead of synchronizing its data with a second UI
+model.
+
+Concretely, this means:
+
+- There is no retained widget tree.
+- There is no hidden ID-keyed database for persistent widget behavior.
+- Stable IDs identify current-frame controls for focus and accessibility; they
+  do not own control state.
+- Application or component structs explicitly own editing, scrolling, menu,
+  selection, and interaction state.
+- Each required frame derives input routing, focus, accessibility semantics,
+  platform output, and paint together from the current interface declaration.
+- Persistent caches, GPU resources, text systems, semantic snapshots, and
+  platform adapters live behind explicit runtime services. They accelerate or
+  connect the interface without becoming a second application model.
+
+This is immediate mode at the application boundary, not statelessness inside the
+implementation. A frame may be deferred, batched, compared with an earlier
+snapshot, or skipped entirely while the application is idle; none of those
+choices transfer authority over persistent widget behavior away from the
+caller.
+
+Here, "purest" means strict adherence to that single-path ownership boundary. It
+is not a claim about maturity or feature breadth, and it does not mean stateless
+internals, immediate GPU submission, or mandatory continuous redraw. It also
+does not define Dear ImGui, egui, Gio, or Nuklear out of immediate mode; all are
+genuine IMGUI systems with different ownership and integration tradeoffs.
 
 Dear ImGui and egui should not be treated as one interchangeable category. Dear
 ImGui is primarily a C++ UI library designed to embed into engines and custom
