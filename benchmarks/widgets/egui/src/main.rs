@@ -8,6 +8,7 @@ const WARMUP_DEFAULT: usize = 300;
 const FRAMES_DEFAULT: usize = 2000;
 const VIRTUAL_ROWS: usize = 40;
 const VIRTUAL_OVERSCAN: usize = 2;
+const DASHBOARD_WIDGETS_PER_GROUP: usize = 10;
 const FNV_BASIS: u64 = 1_469_598_103_934_665_603;
 const FNV_PRIME: u64 = 1_099_511_628_211;
 
@@ -163,6 +164,53 @@ fn mixed(
     groups * 5
 }
 
+fn dashboard(
+    ui: &mut egui::Ui,
+    groups: usize,
+    checked: &mut [bool],
+    values: &mut [f32],
+    text: &mut [String],
+) -> usize {
+    for index in 0..groups {
+        let y = index as f32 * 30.0;
+        let widgets = [
+            (0.0, 124.0, label_for(index, true)),
+            (128.0, 76.0, "Healthy".to_owned()),
+        ];
+        for (x, width, label) in widgets {
+            ui.put(
+                Rect::from_min_size(pos2(x, y), vec2(width, 24.0)),
+                egui::Label::new(label),
+            );
+        }
+        ui.push_id(index, |ui| {
+            ui.put(
+                Rect::from_min_size(pos2(208.0, y), vec2(88.0, 24.0)),
+                Checkbox::new(&mut checked[index], "Live"),
+            );
+            ui.put(
+                Rect::from_min_size(pos2(300.0, y), vec2(130.0, 24.0)),
+                Slider::new(&mut values[index], 0.0..=1.0),
+            );
+            ui.put(
+                Rect::from_min_size(pos2(434.0, y), vec2(150.0, 24.0)),
+                TextEdit::singleline(&mut text[index]).hint_text("Filter"),
+            );
+            ui.put(
+                Rect::from_min_size(pos2(588.0, y), vec2(72.0, 24.0)),
+                Button::new("Open"),
+            );
+        });
+        for column in 0..4 {
+            ui.put(
+                Rect::from_min_size(pos2(664.0 + column as f32 * 86.0, y), vec2(82.0, 24.0)),
+                egui::Label::new("Data"),
+            );
+        }
+    }
+    groups * DASHBOARD_WIDGETS_PER_GROUP
+}
+
 fn virtual_list(ui: &mut egui::Ui, logical_count: usize) -> usize {
     let submitted = logical_count.min(VIRTUAL_ROWS + VIRTUAL_OVERSCAN * 2);
     let start = logical_count
@@ -201,6 +249,7 @@ fn workload(
         "labels_unique" | "list_full" => Some(labels(ui, options.scale, true)),
         "button_grid" | "accessibility" | "capacity" => Some(buttons(ui, options.scale)),
         "mixed_form" => Some(mixed(ui, options.scale, checked, values, text)),
+        "complex_dashboard" => Some(dashboard(ui, options.scale, checked, values, text)),
         "list_virtual" => Some(virtual_list(ui, options.scale)),
         "table_repeated" => Some(table(ui, options.scale, false)),
         "table_unique" => Some(table(ui, options.scale, true)),

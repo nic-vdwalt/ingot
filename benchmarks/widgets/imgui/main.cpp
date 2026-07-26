@@ -14,6 +14,7 @@ constexpr int kWarmupDefault = 300;
 constexpr int kFramesDefault = 2000;
 constexpr int kVirtualRows = 40;
 constexpr int kVirtualOverscan = 2;
+constexpr int kDashboardWidgetsPerGroup = 10;
 constexpr std::uint64_t kFnvBasis = 1469598103934665603ULL;
 constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -105,6 +106,31 @@ int run_mixed(int groups, std::vector<bool>* checked, std::vector<float>* values
     return groups * 5;
 }
 
+int run_dashboard(int groups, std::vector<bool>* checked, std::vector<float>* values,
+                  std::vector<std::string>* text) {
+    for (int index = 0; index < groups; ++index) {
+        ImGui::PushID(index);
+        const float y = static_cast<float>(index) * 30.0f;
+        const std::string title = label_for(index, true);
+        ImGui::SetCursorPos(ImVec2(0.0f, y)); ImGui::TextUnformatted(title.c_str());
+        ImGui::SetCursorPos(ImVec2(128.0f, y)); ImGui::TextUnformatted("Healthy");
+        bool checked_value = (*checked)[index];
+        ImGui::SetCursorPos(ImVec2(208.0f, y)); ImGui::Checkbox("Live", &checked_value);
+        (*checked)[index] = checked_value;
+        ImGui::SetCursorPos(ImVec2(300.0f, y)); ImGui::SetNextItemWidth(130.0f);
+        ImGui::SliderFloat("Value", &(*values)[index], 0.0f, 1.0f);
+        ImGui::SetCursorPos(ImVec2(434.0f, y)); ImGui::SetNextItemWidth(150.0f);
+        ImGui::InputText("Filter", (*text)[index].data(), (*text)[index].size() + 1);
+        ImGui::SetCursorPos(ImVec2(588.0f, y)); ImGui::Button("Open", ImVec2(72.0f, 24.0f));
+        for (int column = 0; column < 4; ++column) {
+            ImGui::SetCursorPos(ImVec2(664.0f + static_cast<float>(column) * 86.0f, y));
+            ImGui::TextUnformatted("Data");
+        }
+        ImGui::PopID();
+    }
+    return groups * kDashboardWidgetsPerGroup;
+}
+
 int run_virtual(int logical_count) {
     const int submitted = std::min(logical_count, kVirtualRows + kVirtualOverscan * 2);
     const int start = std::max(logical_count / 2 - kVirtualOverscan, 0);
@@ -129,12 +155,13 @@ int run_table(int rows, bool unique) {
 }
 
 int run_workload(const Options& options, int frame_index, std::vector<bool>* checked,
-                 std::vector<float>* values) {
+                 std::vector<float>* values, std::vector<std::string>* text) {
     const std::string& id = options.workload;
     if (id == "labels_repeated") return run_labels(options.scale, false);
     if (id == "labels_unique" || id == "list_full") return run_labels(options.scale, true);
     if (id == "button_grid" || id == "accessibility" || id == "capacity") return run_buttons(options.scale);
     if (id == "mixed_form") return run_mixed(options.scale, checked, values);
+    if (id == "complex_dashboard") return run_dashboard(options.scale, checked, values, text);
     if (id == "list_virtual") return run_virtual(options.scale);
     if (id == "table_repeated") return run_table(options.scale, false);
     if (id == "table_unique") return run_table(options.scale, true);
@@ -177,6 +204,7 @@ int main(int argc, char** argv) {
     const int state_count = std::max(options.scale, 1);
     std::vector<bool> checked(state_count);
     std::vector<float> values(state_count, 0.5f);
+    std::vector<std::string> text(state_count, std::string(15, '\0'));
     std::vector<std::int64_t> build_samples(options.frames);
     std::vector<std::int64_t> finalize_samples(options.frames);
     std::uint64_t checksum = kFnvBasis;
@@ -190,7 +218,7 @@ int main(int argc, char** argv) {
                                                ImGuiWindowFlags_NoSavedSettings |
                                                ImGuiWindowFlags_NoMove);
         const auto build_started = std::chrono::steady_clock::now();
-        submitted = run_workload(options, std::max(frame, 0), &checked, &values);
+        submitted = run_workload(options, std::max(frame, 0), &checked, &values, &text);
         const std::int64_t build_ns = elapsed_ns(build_started);
         ImGui::End();
         const auto finalize_started = std::chrono::steady_clock::now();

@@ -12,6 +12,8 @@ FRAMES_DEFAULT :: 2000
 MAX_SCALE :: 16384
 VIRTUAL_ROWS :: 40
 VIRTUAL_OVERSCAN :: 2
+DASHBOARD_WIDGETS_PER_GROUP :: 10
+DASHBOARD_MAX_GROUPS :: 250
 FNV_BASIS :: u64(1469598103934665603)
 FNV_PRIME :: u64(1099511628211)
 
@@ -20,6 +22,7 @@ Workload :: enum {
 	Labels_Unique,
 	Button_Grid,
 	Mixed_Form,
+	Complex_Dashboard,
 	List_Full,
 	List_Virtual,
 	Table_Repeated,
@@ -38,13 +41,14 @@ Options :: struct {
 }
 
 Harness :: struct {
-	runtime: ui.Ui_Runtime,
-	frame:   ui.Ui_Frame,
-	input:   ui.Ui_Input,
-	output:  ui.Ui_Output,
-	checked: [MAX_SCALE]bool,
-	values:  [MAX_SCALE]f32,
-	labels:  [MAX_SCALE][32]u8,
+	runtime:          ui.Ui_Runtime,
+	frame:            ui.Ui_Frame,
+	input:            ui.Ui_Input,
+	output:           ui.Ui_Output,
+	checked:          [MAX_SCALE]bool,
+	values:           [MAX_SCALE]f32,
+	labels:           [MAX_SCALE][32]u8,
+	dashboard_inputs: [DASHBOARD_MAX_GROUPS]ui.Input_Box,
 }
 
 font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
@@ -76,6 +80,9 @@ harness_make :: proc(semantics: bool) -> ^Harness {
 
 harness_destroy :: proc(h: ^Harness) {
 	assert(h != nil && !h.frame.open, "harness_destroy: invalid harness")
+	for index in 0 ..< DASHBOARD_MAX_GROUPS {
+		ui.input_box_destroy(&h.dashboard_inputs[index])
+	}
 	ui.ui_frame_destroy(&h.frame)
 	ui.ui_runtime_destroy(&h.runtime)
 	free(h)
@@ -155,6 +162,24 @@ run_mixed :: proc(h: ^Harness, groups: int) -> int {
 	return groups * 5
 }
 
+run_dashboard :: proc(h: ^Harness, groups: int) -> int {
+	assert(h != nil && groups > 0, "run_dashboard: invalid argument")
+	assert(groups <= DASHBOARD_MAX_GROUPS, "run_dashboard: too many groups")
+	for index in 0 ..< groups {
+		y := i32(index) * 30
+		paint_label(&h.frame, label_for(h, index, true), 0, y, 124)
+		paint_label(&h.frame, "Healthy", 128, y, 76)
+		_ = ui.checkbox_at(&h.frame, {208, y, 88, 24}, "Live", &h.checked[index])
+		_ = ui.slider_at(&h.frame, {300, y, 130, 24}, &h.values[index], 0, 1, 0.01)
+		_ = ui.input_at(&h.frame, 434, y, 150, 24, &h.dashboard_inputs[index], "Filter", false)
+		_ = ui.btn_at(&h.frame, 588, y, 72, 24, "Open", widget = ui.Widget_Id(index + 1))
+		for column in 0 ..< 4 {
+			paint_label(&h.frame, "Data", 664 + i32(column) * 86, y, 82)
+		}
+	}
+	return groups * DASHBOARD_WIDGETS_PER_GROUP
+}
+
 run_virtual_list :: proc(h: ^Harness, logical_count: int) -> int {
 	assert(h != nil && logical_count > 0, "run_virtual_list: invalid argument")
 	submitted := min(logical_count, VIRTUAL_ROWS + VIRTUAL_OVERSCAN * 2)
@@ -198,6 +223,8 @@ run_workload :: proc(h: ^Harness, workload: Workload, scale, frame_index: int) -
 		return run_buttons(h, scale, false)
 	case .Mixed_Form:
 		return run_mixed(h, scale)
+	case .Complex_Dashboard:
+		return run_dashboard(h, scale)
 	case .List_Full:
 		return run_labels(h, scale, true)
 	case .List_Virtual:
@@ -226,6 +253,8 @@ parse_workload :: proc(value: string) -> (Workload, bool) {
 		return .Button_Grid, true
 	case "mixed_form":
 		return .Mixed_Form, true
+	case "complex_dashboard":
+		return .Complex_Dashboard, true
 	case "list_full":
 		return .List_Full, true
 	case "list_virtual":
@@ -401,6 +430,8 @@ workload_name :: proc(workload: Workload) -> string {
 		return "button_grid"
 	case .Mixed_Form:
 		return "mixed_form"
+	case .Complex_Dashboard:
+		return "complex_dashboard"
 	case .List_Full:
 		return "list_full"
 	case .List_Virtual:
