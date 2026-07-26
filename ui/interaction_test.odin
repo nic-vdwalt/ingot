@@ -48,6 +48,15 @@ interact_step_press_outside_does_not_claim :: proc(t: ^testing.T) {
 }
 
 @(test)
+interact_step_coalesced_tap_clicks_without_stale_latch :: proc(t: ^testing.T) {
+	latch := false
+	it := interact_step(Interact_Event{over = true, pressed = true, released = true}, &latch)
+	testing.expect(t, it.pressed && it.released && it.clicked)
+	testing.expect(t, !it.held)
+	testing.expect(t, !latch)
+}
+
+@(test)
 interact_step_drag_reports_held_outside_rect :: proc(t: ^testing.T) {
 	latch := true
 	it := interact_step(Interact_Event{over = false, down = true}, &latch)

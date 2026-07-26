@@ -78,8 +78,13 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 	if ev.over && ev.pressed {
 		it.pressed = true
 		if latch != nil {
-			latch^ = true
-			it.held = true
+			if ev.released {
+				it.released = true
+				it.clicked = true
+			} else {
+				latch^ = true
+				it.held = true
+			}
 		}
 	}
 	if latch == nil {

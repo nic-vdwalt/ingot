@@ -39,6 +39,7 @@ step :: proc(dt: f32) -> bool {
 	if !_idle_take_frame(&g.idle, _now()) {
 		return true // idle: keep rAF alive, skip the app frame
 	}
+	input_poll()
 	if g_web_frame != nil {
 		g_web_frame()
 	}

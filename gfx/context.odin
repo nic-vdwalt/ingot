@@ -683,7 +683,9 @@ EndDrawing :: proc() {
 
 	platform_web_input_frame_end()
 	_stats_frame_end()
-	input_poll()
+	when ODIN_OS != .JS {
+		input_poll()
+	}
 	_frame_timing()
 }
 
