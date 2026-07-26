@@ -17,9 +17,11 @@ revisions can change language, ABI, vendor package, and WebGPU runtime behavior;
 a newer revision is not assumed compatible until the full gates pass.
 
 Public PascalCase graphics procedures and documented public type layouts form
-the raylib-shaped compatibility surface. New Odin-style aliases are additive.
-Internal structures, private procedures, generated web runtime files, and
-undocumented bridge details are not stable APIs.
+a targeted source-compatibility surface for common raylib-style 2D applications.
+This is not complete raylib, raymath, 3D, shader, or `rlgl` parity. New Odin-style
+aliases are additive. Internal structures, private procedures, generated web
+runtime files, and undocumented bridge details are not stable APIs. Pin an Ingot
+revision and review the graphics limitations below before replacing imports.
 
 ## Build dependencies
 
@@ -110,12 +112,14 @@ does not spawn a shell.
 
 ## Graphics and window limitations
 
-The compatibility graphics facade continues to own one default context, so
-raylib-shaped applications require no source changes. Native applications may
-also create explicit contexts and interleave independently live windows on one
-owner thread. Parallel renderer threads and browser multi-canvas hosting are not
-production guarantees. HiDPI, transparency, vibrancy/Mica, drag-and-drop, IME,
-gamepad, audio, accessibility, and custom chrome have platform seams and require
+The compatibility graphics facade owns one default context so documented common
+2D calls can retain their familiar shape after the package import changes.
+Applications outside that surface require mechanical edits, behavior review, or
+redesign. Native applications may also create explicit contexts and interleave
+independently live windows on one owner thread.
+Parallel renderer threads and browser multi-canvas hosting are not production
+guarantees. HiDPI, transparency, vibrancy/Mica, drag-and-drop, IME, gamepad,
+audio, accessibility, and custom chrome have platform seams and require
 validation on representative hardware.
 
 WebGPU backend selection and optional features vary by operating system, GPU,

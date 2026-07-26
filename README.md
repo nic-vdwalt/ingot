@@ -43,8 +43,9 @@ harnesses.
   accessibility integrations use vendored C or static libraries.
 - **Native and web from one source.** The same application compiles for desktop
   and WASM + WebGPU behind a small platform seam.
-- **Raylib-shaped graphics API.** Familiar `Color`, `Vector2`, `Rectangle`,
-  `Texture2D`, `Draw*`, and `IsKey*` names make migrations mechanical.
+- **Raylib-shaped graphics API.** Targeted source compatibility for common 2D
+  applications keeps familiar `Color`, `Vector2`, `Rectangle`, `Texture2D`,
+  `Draw*`, and `IsKey*` names without claiming complete raylib parity.
 - **Native feel.** Platform-correct HiDPI, macOS vibrancy, Windows 11 Mica,
   custom window chrome, accessibility, and input behavior.
 - **Energy-efficient.** Event-driven applications build no frame and submit no
@@ -146,9 +147,12 @@ host must retain the session returned by `ingotWeb.run()` and call
 `session.destroy()` before replacement, or `ingotWeb.stop()` during global page
 teardown.
 
-For an existing raylib application, replace `import rl "vendor:raylib"` with
-`import rl "ingot:gfx"` and `vendor:raylib/rlgl` with `ingot:gfx/rlgl`. The API
-shape keeps most `rl.*` call sites intact.
+For an existing raylib application, start by replacing
+`import rl "vendor:raylib"` with `import rl "ingot:gfx"` and
+`vendor:raylib/rlgl` with `ingot:gfx/rlgl`. This import-only path targets common
+2D call sites; other subsystems can require mechanical edits, behavior review,
+or redesign. Review the graphics boundaries in
+[Compatibility and platforms](docs/compatibility.md).
 
 ## See it running
 
