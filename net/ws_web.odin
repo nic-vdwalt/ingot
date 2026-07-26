@@ -37,6 +37,25 @@ WS_OP_BINARY :: 0x2
 WS_MAX_PAYLOAD :: 1 << 20
 WS_MAX_QUEUED_MESSAGES :: 1024
 WS_MAX_QUEUED_BYTES :: 64 * 1024 * 1024
+WS_CONNECT_TIMEOUT :: 10
+WS_HANDSHAKE_TIMEOUT :: 5
+
+WS_Options :: struct {
+	max_attempts:      int,
+	connect_timeout:   int,
+	handshake_timeout: int,
+	ca_file:           string,
+}
+
+WS_Error :: enum u8 {
+	None,
+	Invalid_URL,
+	Resolve,
+	Connect,
+	TLS,
+	Handshake,
+	Cancelled,
+}
 
 WS_Message :: struct {
 	data:   string,
@@ -46,6 +65,7 @@ WS_Message :: struct {
 WebSocket :: struct {
 	id:         i32,
 	state:      WS_State,
+	last_error: WS_Error,
 	host:       string,
 	port:       int,
 	conn_gen:   int, // bumped on each transition into Connected (API parity)
@@ -63,19 +83,34 @@ ws_init :: proc() -> WebSocket {
 	return ws
 }
 
-// ws_start_connect uses WSS on the standard secure port and WS otherwise.
-// The browser performs certificate and hostname verification for WSS.
 ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: int) {
-	ws.host = host
-	ws.port = port
-	ws.state = .Connecting
-	scheme := "wss" if port == 443 else "ws"
-	url := fmt.tprintf("%s://%s:%d/ws", scheme, host, port)
-	ub := transmute([]byte)url
-	ws.id = ingot_ws_open(raw_data(ub), i32(len(ub)))
-	if ws.id < 0 {
+	url := fmt.tprintf("ws://%s:%d/ws", host, port)
+	_ = ws_start_connect_url(ws, url, WS_Options{max_attempts = max_attempts})
+}
+
+ws_start_connect_url :: proc(
+	ws: ^WebSocket,
+	raw_url: string,
+	options: WS_Options = {},
+) -> bool {
+	url, parse_err := ws_url_parse(raw_url)
+	if parse_err != .None || options.ca_file != "" {
+		ws.last_error = .Invalid_URL
 		ws.state = .Error
+		return false
 	}
+	ws.host = url.host
+	ws.port = int(url.port)
+	ws.state = .Connecting
+	ws.last_error = .None
+	bytes := transmute([]byte)raw_url
+	ws.id = ingot_ws_open(raw_data(bytes), i32(len(bytes)))
+	if ws.id < 0 {
+		ws.last_error = .Connect
+		ws.state = .Error
+		return false
+	}
+	return true
 }
 
 // ws_poll_state refreshes ws.state from the JS socket.
@@ -111,6 +146,10 @@ ws_conn_gen :: proc(ws: ^WebSocket) -> int {
 ws_state :: proc(ws: ^WebSocket) -> WS_State {
 	ws_poll_state(ws)
 	return ws.state
+}
+
+ws_error :: proc(ws: ^WebSocket) -> WS_Error {
+	return ws.last_error
 }
 
 ws_send :: proc(ws: ^WebSocket, data: string) -> bool {

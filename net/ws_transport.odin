@@ -6,7 +6,6 @@ import "core:fmt"
 import cnet "core:net"
 import "core:strings"
 import "core:time"
-import curl "vendor:curl"
 
 INGOT_WS_SIM :: #config(INGOT_WS_SIM, false)
 
@@ -41,7 +40,7 @@ Ws_Transport_Kind :: enum u8 {
 Ws_Transport :: struct {
 	kind:        Ws_Transport_Kind,
 	socket:      cnet.TCP_Socket,
-	curl_handle: ^curl.CURL,
+	curl_handle: ^Ws_Curl,
 	open:        bool,
 }
 
@@ -64,7 +63,7 @@ when !INGOT_WS_SIM {
 
 	@(private = "file")
 	ws_tls_configure :: proc(
-		handle: ^curl.CURL,
+		handle: ^Ws_Curl,
 		host: string,
 		port: u16,
 		ca_file: string,
@@ -73,17 +72,21 @@ when !INGOT_WS_SIM {
 		url := fmt.tprintf("https://%s:%d/", host, port)
 		url_c, url_err := strings.clone_to_cstring(url, context.temp_allocator)
 		if url_err != nil do return false
-		if curl.easy_setopt(handle, .URL, url_c) != .E_OK do return false
-		if curl.easy_setopt(handle, .CONNECT_ONLY, c.long(1)) != .E_OK do return false
-		if curl.easy_setopt(handle, .SSL_VERIFYPEER, c.long(1)) != .E_OK do return false
-		if curl.easy_setopt(handle, .SSL_VERIFYHOST, c.long(2)) != .E_OK do return false
-		if curl.easy_setopt(handle, .DISALLOW_USERNAME_IN_URL, c.long(1)) != .E_OK do return false
+		if ws_curl_easy_setopt(handle, WS_CURL_URL, url_c) != .OK do return false
+		if ws_curl_easy_setopt(handle, WS_CURL_CONNECT_ONLY, c.long(1)) != .OK do return false
+		if ws_curl_easy_setopt(handle, WS_CURL_SSL_VERIFYPEER, c.long(1)) != .OK do return false
+		if ws_curl_easy_setopt(handle, WS_CURL_SSL_VERIFYHOST, c.long(2)) != .OK do return false
+		if ws_curl_easy_setopt(handle, WS_CURL_DISALLOW_USERNAME_IN_URL, c.long(1)) != .OK {
+			return false
+		}
 		milliseconds := c.long(connect_timeout / time.Millisecond)
-		if curl.easy_setopt(handle, .CONNECTTIMEOUT_MS, milliseconds) != .E_OK do return false
+		if ws_curl_easy_setopt(handle, WS_CURL_CONNECTTIMEOUT_MS, milliseconds) != .OK {
+			return false
+		}
 		if ca_file != "" {
 			ca_c, ca_err := strings.clone_to_cstring(ca_file, context.temp_allocator)
 			if ca_err != nil do return false
-			if curl.easy_setopt(handle, .CAINFO, ca_c) != .E_OK do return false
+			if ws_curl_easy_setopt(handle, WS_CURL_CAINFO, ca_c) != .OK do return false
 		}
 		return true
 	}
@@ -94,17 +97,17 @@ when !INGOT_WS_SIM {
 		ca_file: string,
 		connect_timeout: time.Duration,
 	) -> (Ws_Transport, Ws_Net_Err) {
-		if !curl_initialize() do return {}, .TLS
-		handle := curl.easy_init()
+		if ws_curl_global_init(WS_CURL_GLOBAL_ALL) != .OK do return {}, .TLS
+		handle := ws_curl_easy_init()
 		if handle == nil do return {}, .TLS
 		if !ws_tls_configure(handle, host, port, ca_file, connect_timeout) {
-			curl.easy_cleanup(handle)
+			ws_curl_easy_cleanup(handle)
 			return {}, .TLS
 		}
-		result := curl.easy_perform(handle)
-		if result != .E_OK {
-			curl.easy_cleanup(handle)
-			if result == .E_OPERATION_TIMEDOUT do return {}, .Timeout
+		result := ws_curl_easy_perform(handle)
+		if result != .OK {
+			ws_curl_easy_cleanup(handle)
+			if result == .OPERATION_TIMEDOUT do return {}, .Timeout
 			return {}, .TLS
 		}
 		return Ws_Transport{kind = .TLS, curl_handle = handle, open = true}, .None
@@ -118,9 +121,14 @@ when !INGOT_WS_SIM {
 			return count, .None
 		}
 		count: c.size_t
-		result := curl.easy_send(transport.curl_handle, raw_data(data), c.size_t(len(data)), &count)
-		if result == .E_AGAIN do return int(count), .Timeout
-		if result != .E_OK do return int(count), .Other
+		result := ws_curl_easy_send(
+			transport.curl_handle,
+			raw_data(data),
+			c.size_t(len(data)),
+			&count,
+		)
+		if result == .AGAIN do return int(count), .Timeout
+		if result != .OK do return int(count), .Other
 		return int(count), .None
 	}
 
@@ -135,9 +143,14 @@ when !INGOT_WS_SIM {
 			return count, .None
 		}
 		count: c.size_t
-		result := curl.easy_recv(transport.curl_handle, raw_data(buf), c.size_t(len(buf)), &count)
-		if result == .E_AGAIN do return int(count), .Timeout
-		if result != .E_OK do return int(count), .Other
+		result := ws_curl_easy_recv(
+			transport.curl_handle,
+			raw_data(buf),
+			c.size_t(len(buf)),
+			&count,
+		)
+		if result == .AGAIN do return int(count), .Timeout
+		if result != .OK do return int(count), .Other
 		return int(count), .None
 	}
 
@@ -147,7 +160,7 @@ when !INGOT_WS_SIM {
 		if transport.kind == .TCP {
 			cnet.close(transport.socket)
 		} else if transport.curl_handle != nil {
-			curl.easy_cleanup(transport.curl_handle)
+			ws_curl_easy_cleanup(transport.curl_handle)
 			transport.curl_handle = nil
 		}
 	}

@@ -31,6 +31,8 @@ when INGOT_WS_SIM {
 	// tape terminates.
 	Ws_Sim_Event :: enum u8 {
 		Dial_Fail, // dial refused
+		TLS_Fail, // certificate or TLS setup failed
+		TLS_Valid, // verified TLS stream established
 		Handshake_Garbage, // 101 never arrives (junk response)
 		Handshake_Cut, // handshake recv reports error
 		Frame_Text, // one clean text frame
@@ -126,25 +128,36 @@ when INGOT_WS_SIM {
 		return {}, true // resolution always succeeds in sim
 	}
 
-	ws_net_dial :: proc(ep: cnet.Endpoint) -> (cnet.TCP_Socket, bool) {
-		ev, _ := sim_next()
-		if ev == .Dial_Fail do return {}, false
-		// Any non-Dial_Fail event is "connection accepted"; the event is
-		// consumed either way (the tape models the server's behavior tick
-		// by tick). Rewind non-dial events so the handshake sees them.
-		if ev != .Dial_Fail {
-			sync.mutex_lock(&g_ws_sim.mutex)
-			g_ws_sim.tape_pos = max(g_ws_sim.tape_pos - 1, 0)
-			sync.mutex_unlock(&g_ws_sim.mutex)
-		}
+	ws_sim_transport :: proc(kind: Ws_Transport_Kind) -> Ws_Transport {
 		sync.mutex_lock(&g_ws_sim.mutex)
 		g_ws_sim.handle_seq += 1
-		h := g_ws_sim.handle_seq
+		handle := g_ws_sim.handle_seq
 		sync.mutex_unlock(&g_ws_sim.mutex)
-		return cnet.TCP_Socket(h), true
+		return Ws_Transport{kind = kind, socket = cnet.TCP_Socket(handle), open = true}
 	}
 
-	ws_net_send :: proc(sock: cnet.TCP_Socket, data: []u8) -> (int, Ws_Net_Err) {
+	ws_net_dial :: proc(ep: cnet.Endpoint) -> (Ws_Transport, Ws_Net_Err) {
+		event, _ := sim_next()
+		if event == .Dial_Fail do return {}, .Other
+		sync.mutex_lock(&g_ws_sim.mutex)
+		g_ws_sim.tape_pos = max(g_ws_sim.tape_pos - 1, 0)
+		sync.mutex_unlock(&g_ws_sim.mutex)
+		return ws_sim_transport(.TCP), .None
+	}
+
+	ws_net_dial_tls :: proc(
+		host: string,
+		port: u16,
+		ca_file: string,
+		connect_timeout: time.Duration,
+	) -> (Ws_Transport, Ws_Net_Err) {
+		event, _ := sim_next()
+		if event == .TLS_Fail do return {}, .TLS
+		if event != .TLS_Valid do return {}, .Other
+		return ws_sim_transport(.TLS), .None
+	}
+
+	ws_net_send :: proc(transport: ^Ws_Transport, data: []u8) -> (int, Ws_Net_Err) {
 		// Capture the Sec-WebSocket-Key from the upgrade request so the
 		// simulated 101 can carry a valid Accept. Worker or main thread.
 		s := string(data)
@@ -271,7 +284,7 @@ when INGOT_WS_SIM {
 		return 0, .Other
 	}
 
-	ws_net_recv :: proc(sock: cnet.TCP_Socket, buf: []u8) -> (int, Ws_Net_Err) {
+	ws_net_recv :: proc(transport: ^Ws_Transport, buf: []u8) -> (int, Ws_Net_Err) {
 		if count, err, handled := sim_recv_pending_burst(buf); handled do return count, err
 		if count, err, handled := sim_recv_split_tail(buf); handled do return count, err
 		if count, err, handled := sim_recv_handshake(buf); handled do return count, err
@@ -283,9 +296,10 @@ when INGOT_WS_SIM {
 		return sim_recv_event(event, buf)
 	}
 
-	ws_net_close :: proc(sock: cnet.TCP_Socket) {
+	ws_net_close :: proc(transport: ^Ws_Transport) {
+		if transport != nil do transport.open = false
 	}
 
-	ws_net_set_recv_timeout :: proc(sock: cnet.TCP_Socket, d: time.Duration) {
+	ws_net_set_recv_timeout :: proc(transport: ^Ws_Transport, d: time.Duration) {
 	}
 }

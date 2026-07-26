@@ -35,6 +35,27 @@ test_ws_stream_parse_action_requires_progress :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_ws_connection_configuration_is_explicit :: proc(t: ^testing.T) {
+	secure, secure_err := ws_url_parse("wss://example.test:8443/events")
+	testing.expect_value(t, secure_err, WS_URL_Error.None)
+	testing.expect_value(t, secure.scheme, WS_Scheme.Wss)
+	testing.expect_value(t, secure.port, u16(8443))
+	plain, plain_err := ws_url_parse("ws://example.test:443/events")
+	testing.expect_value(t, plain_err, WS_URL_Error.None)
+	testing.expect_value(t, plain.scheme, WS_Scheme.Ws)
+}
+
+@(test)
+test_ws_invalid_url_fails_synchronously :: proc(t: ^testing.T) {
+	ws := ws_init()
+	started := ws_start_connect_url(&ws, "https://example.test/ws")
+	testing.expect(t, !started)
+	testing.expect_value(t, ws_state(&ws), WS_State.Error)
+	testing.expect_value(t, ws_error(&ws), WS_Error.Invalid_URL)
+	ws_close(&ws)
+}
+
+@(test)
 test_ws_parse_16bit_length :: proc(t: ^testing.T) {
 	n := 300
 	buf := make([dynamic]u8, context.temp_allocator)
