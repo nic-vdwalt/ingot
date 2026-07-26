@@ -446,15 +446,16 @@ _shader_pipeline :: proc(e: ^Shader_Entry, format: wg.TextureFormat) -> wg.Rende
 	}
 	if e.pipe_n >= len(e.pipe_obj) do return nil
 
-	attrs := [3]wg.VertexAttribute {
+	attrs := [4]wg.VertexAttribute {
 		{format = .Float32x2, offset = 0, shaderLocation = 0},
 		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
 		{format = .Float32x2, offset = u64(offset_of(Vertex, uv)), shaderLocation = 2},
+		{format = .Uint32, offset = u64(offset_of(Vertex, mode)), shaderLocation = 3},
 	}
 	vbl := wg.VertexBufferLayout {
 		arrayStride    = size_of(Vertex),
 		stepMode       = .Vertex,
-		attributeCount = 3,
+		attributeCount = 4,
 		attributes     = raw_data(attrs[:]),
 	}
 	blend := _blend_for(&g.rend, g.rend.cur_blend)

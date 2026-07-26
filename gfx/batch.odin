@@ -485,6 +485,7 @@ renderer_init :: proc(r: ^Renderer) {
 	}
 
 	r.cur_kind = .Solid
+	r.cur_bind = r.neutral_bind
 	r.cur_blend = .Alpha
 }
 
@@ -514,6 +515,7 @@ renderer_shutdown :: proc(r: ^Renderer) {
 	if r.ubuf != nil do wg.BufferRelease(r.ubuf)
 	if r.rt_ubind != nil do wg.BindGroupRelease(r.rt_ubind)
 	if r.rt_ubuf != nil do wg.BufferRelease(r.rt_ubuf)
+	_neutral_texture_shutdown(r)
 	if r.ubind_layout != nil do wg.BindGroupLayoutRelease(r.ubind_layout)
 	if r.tex_layout != nil do wg.BindGroupLayoutRelease(r.tex_layout)
 }
@@ -528,7 +530,7 @@ renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 	clear(&r.verts)
 	clear(&r.indices)
 	r.cur_kind = .Solid
-	r.cur_bind = nil
+	r.cur_bind = r.neutral_bind
 	r.cur_blend = .Alpha
 	r.cur_u = r.ubind
 	r.active_shader = 0
@@ -544,17 +546,31 @@ renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 	return true
 }
 
+@(private)
+_batch_bind :: proc(
+	kind: Pipe_Kind,
+	bind, current, neutral: wg.BindGroup,
+) -> wg.BindGroup {
+	assert(neutral != nil, "_batch_bind: nil neutral bind")
+	if kind == .Solid && bind == nil && current != nil do return current
+	if bind == nil do return neutral
+	return bind
+}
+
 // batch_set switches the active pipeline/texture, flushing the pending run
 // first if the state differs. Routes to the render-target pass when one is
 // bound (BeginTextureMode).
 @(private)
 batch_set :: proc(r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
+	assert(r != nil, "batch_set: nil renderer")
+	assert(r.neutral_bind != nil, "batch_set: nil neutral bind")
 	_ensure_active_pass()
-	if kind != r.cur_kind || bind != r.cur_bind {
+	next_bind := _batch_bind(kind, bind, r.cur_bind, r.neutral_bind)
+	if kind != r.cur_kind || next_bind != r.cur_bind {
 		cause: Flush_Cause = kind != r.cur_kind ? .Pipeline : .Texture
 		if _active_pass_begun() do renderer_flush(r, active_pass(), cause)
 		r.cur_kind = kind
-		r.cur_bind = bind
+		r.cur_bind = next_bind
 	}
 }
 
@@ -577,7 +593,13 @@ _batch_reserve :: proc(r: ^Renderer, vertex_count, index_count: int) -> bool {
 
 // push_quad emits two triangles for rect `d` sampling uv rect `s`.
 @(private)
-push_quad :: proc(r: ^Renderer, d: Rectangle, s: Rectangle, col: [4]f32) {
+push_quad :: proc(
+	r: ^Renderer,
+	d: Rectangle,
+	s: Rectangle,
+	col: [4]f32,
+	mode: Vertex_Mode = .Solid,
+) {
 	if !g.frame.has_frame do return
 	if !_batch_reserve(r, 4, 6) do return
 	ox, oy := r.model_off.x, r.model_off.y
@@ -588,10 +610,10 @@ push_quad :: proc(r: ^Renderer, d: Rectangle, s: Rectangle, col: [4]f32) {
 	base := u32(len(r.verts))
 	append(
 		&r.verts,
-		Vertex{{x0, y0}, col, {u0, v0}},
-		Vertex{{x0, y1}, col, {u0, v1}},
-		Vertex{{x1, y0}, col, {u1, v0}},
-		Vertex{{x1, y1}, col, {u1, v1}},
+		Vertex{{x0, y0}, col, {u0, v0}, mode},
+		Vertex{{x0, y1}, col, {u0, v1}, mode},
+		Vertex{{x1, y0}, col, {u1, v0}, mode},
+		Vertex{{x1, y1}, col, {u1, v1}, mode},
 	)
 	append(&r.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }
@@ -604,9 +626,9 @@ push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 	base := u32(len(r.verts))
 	append(
 		&r.verts,
-		Vertex{{a.x + o.x, a.y + o.y}, col, {0, 0}},
-		Vertex{{b.x + o.x, b.y + o.y}, col, {0, 0}},
-		Vertex{{c.x + o.x, c.y + o.y}, col, {0, 0}},
+		Vertex{{a.x + o.x, a.y + o.y}, col, {0, 0}, .Solid},
+		Vertex{{b.x + o.x, b.y + o.y}, col, {0, 0}, .Solid},
+		Vertex{{c.x + o.x, c.y + o.y}, col, {0, 0}, .Solid},
 	)
 	append(&r.indices, base, base + 1, base + 2)
 }
@@ -630,10 +652,10 @@ push_quad4 :: proc(
 	base := u32(len(r.verts))
 	append(
 		&r.verts,
-		Vertex{tlo, col, uv_tl},
-		Vertex{blo, col, uv_bl},
-		Vertex{tro, col, uv_tr},
-		Vertex{bro, col, uv_br},
+		Vertex{tlo, col, uv_tl, .Solid},
+		Vertex{blo, col, uv_bl, .Solid},
+		Vertex{tro, col, uv_tr, .Solid},
+		Vertex{bro, col, uv_br, .Solid},
 	)
 	append(&r.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }
@@ -725,7 +747,7 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 	_stats_pipeline_switch()
 	wg.RenderPassEncoderSetBindGroup(pass, 0, r.cur_u != nil ? r.cur_u : r.ubind)
 	_stats_bind_group_switches(1)
-	if r.cur_kind != .Solid && r.cur_bind != nil {
+	if r.cur_bind != nil {
 		wg.RenderPassEncoderSetBindGroup(pass, 1, r.cur_bind)
 		_stats_bind_group_switches(1)
 	}

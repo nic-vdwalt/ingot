@@ -308,10 +308,10 @@ DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Colo
 	base := u32(len(g.rend.verts))
 	append(
 		&g.rend.verts,
-		Vertex{{x0, y0}, cl, {0, 0}},
-		Vertex{{x0, y1}, cl, {0, 0}},
-		Vertex{{x1, y0}, cr, {0, 0}},
-		Vertex{{x1, y1}, cr, {0, 0}},
+		Vertex{{x0, y0}, cl, {0, 0}, .Solid},
+		Vertex{{x0, y1}, cl, {0, 0}, .Solid},
+		Vertex{{x1, y0}, cr, {0, 0}, .Solid},
+		Vertex{{x1, y1}, cr, {0, 0}, .Solid},
 	)
 	append(&g.rend.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }
@@ -328,10 +328,10 @@ DrawRectangleGradientV :: proc(posX, posY, width, height: i32, top, bottom: Colo
 	base := u32(len(g.rend.verts))
 	append(
 		&g.rend.verts,
-		Vertex{{x0, y0}, ct, {0, 0}},
-		Vertex{{x0, y1}, cb, {0, 0}},
-		Vertex{{x1, y0}, ct, {0, 0}},
-		Vertex{{x1, y1}, cb, {0, 0}},
+		Vertex{{x0, y0}, ct, {0, 0}, .Solid},
+		Vertex{{x0, y1}, cb, {0, 0}, .Solid},
+		Vertex{{x1, y0}, ct, {0, 0}, .Solid},
+		Vertex{{x1, y1}, cb, {0, 0}, .Solid},
 	)
 	append(&g.rend.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }

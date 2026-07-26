@@ -2,6 +2,7 @@
 package gfx
 
 import "core:testing"
+import wg "vendor:wgpu"
 
 @(test)
 stream_slot_does_not_reuse_submitted_work :: proc(t: ^testing.T) {
@@ -169,4 +170,19 @@ batch_capacity_constants_cover_complete_primitives :: proc(t: ^testing.T) {
 	testing.expect_value(t, BATCH_MAX_INDICES % 6, 0)
 	testing.expect(t, BATCH_MAX_INDICES >= BATCH_MAX_VERTICES / 4 * 6)
 	testing.expect(t, MODEL_STACK_MAX > 0)
+}
+
+@(test)
+unified_ui_state_preserves_texture_for_solids :: proc(t: ^testing.T) {
+	current := wg.BindGroup(uintptr(1))
+	neutral := wg.BindGroup(uintptr(2))
+	testing.expect_value(t, _batch_bind(.Solid, nil, current, neutral), current)
+	testing.expect_value(t, _batch_bind(.Solid, nil, nil, neutral), neutral)
+}
+
+@(test)
+vertex_modes_are_distinct_and_gpu_sized :: proc(t: ^testing.T) {
+	testing.expect_value(t, u32(Vertex_Mode.Solid), u32(0))
+	testing.expect_value(t, u32(Vertex_Mode.Text), u32(1))
+	testing.expect_value(t, size_of(Vertex_Mode), size_of(u32))
 }

@@ -89,7 +89,7 @@ BeginTextureMode :: proc(target: RenderTexture2D) {
 
 	// reset the batch run for the target
 	g.rend.cur_kind = .Solid
-	g.rend.cur_bind = nil
+	g.rend.cur_bind = g.rend.neutral_bind
 	g.rend.cur_blend = .Alpha
 }
 
@@ -152,7 +152,7 @@ EndTextureMode :: proc() {
 	// back to the window projection for the (still-open) main pass
 	g.rend.cur_u = g.rend.ubind
 	g.rend.cur_kind = .Solid
-	g.rend.cur_bind = nil
+	g.rend.cur_bind = g.rend.neutral_bind
 	g.rend.cur_blend = .Alpha
 }
 

@@ -428,10 +428,11 @@ measure_frame :: proc(
 	options: Options,
 	index: int,
 ) -> (
-	build_ns, finalize_ns: i64,
+	build_ns, finalize_ns, frame_ns: i64,
 	submitted: int,
 ) {
 	assert(h != nil && options.scale > 0, "measure_frame: invalid argument")
+	frame_started := time.tick_now()
 	ui.ui_frame_begin(&h.frame, &h.runtime, &h.input)
 	build_started := time.tick_now()
 	submitted = run_workload(h, options.workload, options.scale, index)
@@ -439,6 +440,7 @@ measure_frame :: proc(
 	finalize_started := time.tick_now()
 	ui.ui_frame_finalize(&h.frame)
 	finalize_ns = time.duration_nanoseconds(time.tick_since(finalize_started))
+	frame_ns = time.duration_nanoseconds(time.tick_since(frame_started))
 	return
 }
 
@@ -488,21 +490,24 @@ main :: proc() {
 		)
 		os.exit(2)
 	}
-	semantics := options.workload == .Accessibility
+	semantics := options.workload == .Accessibility || options.workload == .Button_Semantics_Enabled
 	h := harness_make(semantics)
 	defer harness_destroy(h)
 	for index in 0 ..< options.warmup {
-		_, _, _ = measure_frame(h, options, index)
+		_, _, _, _ = measure_frame(h, options, index)
 		ui.ui_frame_release(&h.frame)
 	}
 	build_samples := make([]i64, options.frames)
 	finalize_samples := make([]i64, options.frames)
+	frame_samples := make([]i64, options.frames)
 	defer delete(build_samples)
 	defer delete(finalize_samples)
+	defer delete(frame_samples)
 	submitted := 0
 	state_checksum := FNV_BASIS
 	for index in 0 ..< options.frames {
-		build_samples[index], finalize_samples[index], submitted = measure_frame(h, options, index)
+		build_samples[index], finalize_samples[index], frame_samples[index], submitted =
+			measure_frame(h, options, index)
 		state_checksum = hash_u64(state_checksum, u64(submitted))
 		ui.ui_frame_release(&h.frame)
 	}
@@ -544,8 +549,13 @@ main :: proc() {
 		if index > 0 do fmt.print(",")
 		fmt.print(value)
 	}
+	fmt.print("],\"frame\":[")
+	for value, index in frame_samples {
+		if index > 0 do fmt.print(",")
+		fmt.print(value)
+	}
 	fmt.print(
-		"],\"frame\":[]},\"output\":{\"submitted_widgets\":",
+		"]},\"output\":{\"submitted_widgets\":",
 		submitted,
 		",\"visible_widgets\":",
 		min(submitted, VIRTUAL_ROWS),
@@ -553,7 +563,7 @@ main :: proc() {
 		stats.main_command_count,
 		",\"text_bytes\":",
 		stats.main_text_bytes,
-		",\"dropped_commands\":",
+		",\"dropped_commands\":"
 		diagnostics.main_commands_dropped,
 		",\"dropped_text_bytes\":",
 		diagnostics.main_text_bytes_dropped,
