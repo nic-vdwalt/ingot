@@ -4,6 +4,13 @@ This suite compares headless core CPU work for Ingot, Dear ImGui, and egui with 
 deterministic geometry, fixed workloads, randomized process order, correctness validation, and raw
 JSONL output. It does not produce an overall score.
 
+The latest checked-in evidence is the
+[2026-07-26 Apple M2 Max core run](results/2026-07-26-m2-max-core.md). Ingot was competitive with Dear
+ImGui in that run: Ingot led repeated labels, mixed forms, and a virtualized list, while Dear ImGui led
+the button grid, full list, table-like, and churn cases. egui used materially more core CPU in these
+fixed-geometry adapters. Treat those as workload-specific headless results, not native application or
+GPU rankings.
+
 ## Requirements
 
 - Odin `dev-2026-06:285f6d87b`

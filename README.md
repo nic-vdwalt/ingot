@@ -189,6 +189,16 @@ See [Networking](docs/networking.md) for HTTP/WebSocket lifecycle and ownership,
 and [Compatibility and platforms](docs/compatibility.md) for browser, dialog,
 preferences, terminal, accessibility, and versioning constraints.
 
+## Measured performance
+
+A [2026-07-26 Apple M2 Max headless run](benchmarks/widgets/results/2026-07-26-m2-max-core.md)
+measured Ingot alongside pinned Dear ImGui and egui revisions over 1,008 validated
+process/workload samples. Ingot was competitive with Dear ImGui in this core CPU
+suite: 10,000 repeated labels took 236 µs, 1,000 mixed-form groups took 161 µs,
+and a million-row logical list with 44 submitted rows took 3.6 µs. Dear ImGui led
+several other workloads, including fully submitted lists and table-like cells.
+These are headless construction results, not GPU or complete application rankings.
+
 ## Documentation
 
 - [Why immediate mode](docs/immediate-mode.md) — IMGUI's historical intent,
@@ -202,7 +212,7 @@ preferences, terminal, accessibility, and versioning constraints.
 - [Testing Ingot](docs/testing.md) — package tests, deterministic fuzzing,
   ASan/TSan, GPU validation, and reproducible seeds.
 - [Widget benchmark](benchmarks/widgets/README.md) — pinned, reproducible core
-  comparisons with Dear ImGui and egui at increasing workload scales.
+  comparisons and dated results for Dear ImGui, egui, and Ingot at scale.
 - [Rendering](docs/rendering.md) — renderer ownership, submission lifetime,
   render-target conventions, frame scheduling, and backend validation.
 - [Networking](docs/networking.md) — HTTP and WebSocket lifecycle, ownership,
