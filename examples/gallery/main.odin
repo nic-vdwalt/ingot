@@ -926,7 +926,7 @@ draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
 	flow: ui.Flow_Layout
 	ui.flow_begin(
 		&flow,
-		{x, flow_y, lw, max(i32)},
+		{x, flow_y, lw, max(i32) - flow_y},
 		ui.ui_frame_sc(ui_frame, 8),
 		ui.ui_frame_sc(ui_frame, 8),
 	)

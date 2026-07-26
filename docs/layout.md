@@ -30,4 +30,27 @@ ui.ui_end(&form)
 
 `ui_panel_begin/end`, `ui_spacer`, `ui_separator`, `ui_remaining`, and `ui_compact` are thin conveniences over the same layout. `ui_compact` only compares available width with a scaled breakpoint; it does not trigger implicit reflow.
 
+## Explicit flow
+
+`Flow_Layout` places caller-sized items left to right and starts a new row before an item would exceed the available width. Rebuilding the same declaration with a different width provides responsive reflow in one pass. The flow does not measure widgets, retain children, allocate, or recursively inspect content. Oversized item widths clamp to the flow width; heights remain unclipped so the returned content extent can drive scrolling.
+
+```odin
+flow: ui.Flow_Layout
+ui.flow_begin(&flow, bounds, gap_x, gap_y)
+for item in items {
+	size := measure_item(item)
+	rect := ui.flow_next(&flow, size.x, size.y)
+	draw_item(rect, item)
+}
+content := ui.flow_end(&flow)
+```
+
+One flow accepts at most `MAX_FLOW_ITEMS` items. Chunk or virtualize larger collections. The 32-item `MAX_LAYOUT_FLEX` bound applies only to one pre-resolved flex sibling sequence, not to ordinary slots, fit columns, or flow declarations.
+
+## Measurement and containers
+
+Intrinsic measurement is explicit: pass measured text or component extents to `flex_fit`, `flow_next`, or `fit_column_next`. Text helpers provide unwrapped width and wrapped width/height. This keeps layout single-pass and avoids recursive measurement.
+
+`Fit_Column` returns content-height bounds for caller-sized rows. Existing panes own scrolling and clipping; overlays use explicit `*_at` geometry. Compose those facilities with flow instead of nesting a second scroll or overlay state model inside layout.
+
 Use `*_at` for canvases, scroll-offset content, overlays, charts, and geometry whose exact placement is part of application behavior. Use `*_ui` for forms and panels where widgets should consume bounded slots.

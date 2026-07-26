@@ -270,9 +270,10 @@ layout libraries such as Clay, are:
    and host boundaries, publish focused embedding examples, and measure build
    time and binary size. Ingot remains Odin-first rather than pursuing Clay's
    single-header C portability.
-4. **Layout confidence:** expand automatic-layout fuzzing, responsive gallery
-   fixtures, clipping/focus/accessibility coverage, and performance measurements
-   while preserving bounded work and explicit caller-owned state.
+4. **Layout confidence:** expand the bounded explicit-size flow beyond its initial
+   fuzzing, responsive gallery fixture, and geometry benchmark with clipping,
+   focus, accessibility, and real-application evidence while preserving bounded
+   work and explicit caller-owned state.
 
 These are release gates and engineering targets, not claims of completed
 validation. Detailed evidence requirements remain in

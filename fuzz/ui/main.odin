@@ -201,7 +201,8 @@ exercise_layout_flow :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 		inside := rect.x >= 0 && i64(rect.x) + i64(rect.w) <= i64(width)
 		fuzzx.check(c, inside, "flow item escaped width")
 		fuzzx.check(c, rect.y >= previous.y, "flow moved backwards")
-		if index > 0 && rect.y == previous.y {
+		positive_areas := rect.w > 0 && rect.h > 0 && previous.w > 0 && previous.h > 0
+		if index > 0 && rect.y == previous.y && positive_areas {
 			fuzzx.check(c, rect.x >= previous.x + previous.w, "flow items overlap")
 		}
 		previous = rect

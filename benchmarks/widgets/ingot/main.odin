@@ -32,6 +32,7 @@ Workload :: enum {
 	Button_Grid,
 	Mixed_Form,
 	Complex_Dashboard,
+	Layout_Flow,
 	List_Full,
 	List_Virtual,
 	Table_Repeated,
@@ -60,6 +61,7 @@ Harness :: struct {
 	stable_labels:    [MAX_SCALE][32]u8,
 	changing_labels:  [MAX_SCALE][32]u8,
 	dashboard_inputs: [DASHBOARD_MAX_GROUPS]ui.Input_Box,
+	layout_checksum:  u64,
 }
 
 font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
@@ -261,6 +263,26 @@ run_dashboard :: proc(h: ^Harness, groups: int) -> int {
 	return groups * DASHBOARD_WIDGETS_PER_GROUP
 }
 
+run_layout_flow :: proc(h: ^Harness, count: int) -> int {
+	assert(h != nil && count > 0, "run_layout_flow: invalid argument")
+	assert(count <= ui.MAX_FLOW_ITEMS, "run_layout_flow: too many items")
+	flow: ui.Flow_Layout
+	ui.flow_begin(&flow, {0, 0, 1280, max(i32)}, 6, 4)
+	checksum := FNV_BASIS
+	for index in 0 ..< count {
+		width := i32(24 + index % 17 * 7)
+		height := i32(18 + index % 3 * 4)
+		rect := ui.flow_next(&flow, width, height)
+		checksum = hash_u64(checksum, u64(rect.x))
+		checksum = hash_u64(checksum, u64(rect.y))
+		checksum = hash_u64(checksum, u64(rect.w))
+		checksum = hash_u64(checksum, u64(rect.h))
+	}
+	bounds := ui.flow_end(&flow)
+	h.layout_checksum = hash_u64(checksum, u64(bounds.h))
+	return count
+}
+
 run_virtual_list :: proc(h: ^Harness, logical_count: int) -> int {
 	assert(h != nil && logical_count > 0, "run_virtual_list: invalid argument")
 	submitted := min(logical_count, VIRTUAL_ROWS + VIRTUAL_OVERSCAN * 2)
@@ -322,6 +344,8 @@ run_workload :: proc(h: ^Harness, workload: Workload, scale, frame_index: int) -
 		return run_mixed(h, scale)
 	case .Complex_Dashboard:
 		return run_dashboard(h, scale)
+	case .Layout_Flow:
+		return run_layout_flow(h, scale)
 	case .List_Full:
 		return run_labels(h, scale, true)
 	case .List_Virtual:
@@ -370,6 +394,8 @@ parse_workload :: proc(value: string) -> (Workload, bool) {
 		return .Mixed_Form, true
 	case "complex_dashboard":
 		return .Complex_Dashboard, true
+	case "layout_flow":
+		return .Layout_Flow, true
 	case "list_full":
 		return .List_Full, true
 	case "list_virtual":
@@ -522,6 +548,9 @@ main :: proc() {
 		build_samples[index], finalize_samples[index], frame_samples[index], submitted =
 			measure_frame(h, options, index)
 		state_checksum = hash_u64(state_checksum, u64(submitted))
+		if options.workload == .Layout_Flow {
+			state_checksum = hash_u64(state_checksum, h.layout_checksum)
+		}
 		ui.ui_frame_release(&h.frame)
 	}
 	ui.ui_frame_begin(&h.frame, &h.runtime, &h.input)
@@ -618,6 +647,8 @@ workload_name :: proc(workload: Workload) -> string {
 		return "mixed_form"
 	case .Complex_Dashboard:
 		return "complex_dashboard"
+	case .Layout_Flow:
+		return "layout_flow"
 	case .List_Full:
 		return "list_full"
 	case .List_Virtual:
