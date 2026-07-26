@@ -177,11 +177,14 @@ For performance, Ingot is designed to reuse bounded frame storage, batch paint,
 and avoid both UI construction and GPU submission while idle. Dear ImGui is
 also highly optimized and allocation-conscious, while egui can cache work and
 schedule repaint deadlines. End-to-end CPU time, GPU time, memory, startup, and
-idle power depend on the host, backend, workload, and build configuration; no
-cross-project benchmark is published here. Measure the same representative UI
-and interaction trace on target hardware rather than inferring a winner from
-architecture alone. Ingot's renderer statistics can expose flushes, uploads,
-state switches, submissions, and arena peaks during that measurement.
+idle power depend on the host, backend, workload, and build configuration. The
+[scalable widget benchmark](../benchmarks/widgets/README.md) provides a pinned
+headless core suite and raw-data reporting pipeline; it does not yet publish a
+canonical cross-machine result or native end-to-end comparison. Measure the same
+representative UI and interaction trace on target hardware rather than inferring
+a winner from architecture alone. Ingot's renderer statistics can expose
+flushes, uploads, CPU encoding/submission calls, state switches, and arena peaks
+during native measurement.
 
 Platform claims also require qualification. The shared Ingot API targets macOS,
 Windows, Linux, and the browser, but compilation is not runtime validation.

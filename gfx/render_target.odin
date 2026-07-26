@@ -137,16 +137,7 @@ EndTextureMode :: proc() {
 		renderer_flush(&g.rend, g.frame.rt_pass, .Target)
 		wg.RenderPassEncoderEnd(g.frame.rt_pass)
 		wg.RenderPassEncoderRelease(g.frame.rt_pass)
-		encode_started := f64(0)
-		when RENDER_STATS_ENABLED do encode_started = platform_now()
-		cmd := wg.CommandEncoderFinish(g.frame.rt_encoder, nil)
-		encode_elapsed := f64(0)
-		when RENDER_STATS_ENABLED do encode_elapsed = platform_now() - encode_started
-		submit_started := f64(0)
-		when RENDER_STATS_ENABLED do submit_started = platform_now()
-		wg.QueueSubmit(g.queue, {cmd})
-		submit_elapsed := f64(0)
-		when RENDER_STATS_ENABLED do submit_elapsed = platform_now() - submit_started
+		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(g, g.frame.rt_encoder, true)
 		_stats_cpu_times(0, encode_elapsed, submit_elapsed, 0)
 		_stats_queue_submission()
 		wg.CommandBufferRelease(cmd)

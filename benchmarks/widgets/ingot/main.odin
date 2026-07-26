@@ -30,10 +30,10 @@ Workload :: enum {
 }
 
 Options :: struct {
-	workload:  Workload,
-	scale:     int,
-	warmup:    int,
-	frames:    int,
+	workload:   Workload,
+	scale:      int,
+	warmup:     int,
+	frames:     int,
 	repetition: int,
 }
 
@@ -124,7 +124,10 @@ run_buttons :: proc(h: ^Harness, count: int, semantics: bool) -> int {
 		id := ui.Widget_Id(index + 1)
 		focus := ui.Focus_Opt{}
 		if semantics && index < ui.MAX_FOCUSABLES {
-			focus = {focus = nil, id = index + 1}
+			focus = {
+				focus = nil,
+				id    = index + 1,
+			}
 		}
 		_ = ui.btn_at(&h.frame, x, y, 96, 24, "Button", focus = focus, widget = id)
 	}
@@ -137,7 +140,15 @@ run_mixed :: proc(h: ^Harness, groups: int) -> int {
 		y := i32(index) * 30
 		paint_label(&h.frame, "Label", 0, y, 100)
 		_ = ui.checkbox_at(&h.frame, {105, y, 120, 24}, "Check", &h.checked[index])
-		_ = ui.slider_at(&h.frame, {230, y, 140, 24}, &h.values[index], 0, 1, 0.01, a11y_label = "Value")
+		_ = ui.slider_at(
+			&h.frame,
+			{230, y, 140, 24},
+			&h.values[index],
+			0,
+			1,
+			0.01,
+			a11y_label = "Value",
+		)
 		paint_label(&h.frame, "Input", 375, y, 160)
 		_ = ui.btn_at(&h.frame, 540, y, 96, 24, "Submit", widget = ui.Widget_Id(index + 1))
 	}
@@ -179,40 +190,67 @@ run_churn :: proc(h: ^Harness, count, frame_index: int) -> int {
 run_workload :: proc(h: ^Harness, workload: Workload, scale, frame_index: int) -> int {
 	assert(h != nil && scale > 0, "run_workload: invalid argument")
 	switch workload {
-	case .Labels_Repeated: return run_labels(h, scale, false)
-	case .Labels_Unique: return run_labels(h, scale, true)
-	case .Button_Grid: return run_buttons(h, scale, false)
-	case .Mixed_Form: return run_mixed(h, scale)
-	case .List_Full: return run_labels(h, scale, true)
-	case .List_Virtual: return run_virtual_list(h, scale)
-	case .Table_Repeated: return run_table(h, scale, false)
-	case .Table_Unique: return run_table(h, scale, true)
-	case .Dynamic_Churn: return run_churn(h, scale, frame_index)
-	case .Accessibility: return run_buttons(h, scale, true)
-	case .Capacity: return run_buttons(h, scale, false)
+	case .Labels_Repeated:
+		return run_labels(h, scale, false)
+	case .Labels_Unique:
+		return run_labels(h, scale, true)
+	case .Button_Grid:
+		return run_buttons(h, scale, false)
+	case .Mixed_Form:
+		return run_mixed(h, scale)
+	case .List_Full:
+		return run_labels(h, scale, true)
+	case .List_Virtual:
+		return run_virtual_list(h, scale)
+	case .Table_Repeated:
+		return run_table(h, scale, false)
+	case .Table_Unique:
+		return run_table(h, scale, true)
+	case .Dynamic_Churn:
+		return run_churn(h, scale, frame_index)
+	case .Accessibility:
+		return run_buttons(h, scale, true)
+	case .Capacity:
+		return run_buttons(h, scale, false)
 	}
 	return 0
 }
 
 parse_workload :: proc(value: string) -> (Workload, bool) {
 	switch value {
-	case "labels_repeated": return .Labels_Repeated, true
-	case "labels_unique": return .Labels_Unique, true
-	case "button_grid": return .Button_Grid, true
-	case "mixed_form": return .Mixed_Form, true
-	case "list_full": return .List_Full, true
-	case "list_virtual": return .List_Virtual, true
-	case "table_repeated": return .Table_Repeated, true
-	case "table_unique": return .Table_Unique, true
-	case "dynamic_churn": return .Dynamic_Churn, true
-	case "accessibility": return .Accessibility, true
-	case "capacity": return .Capacity, true
+	case "labels_repeated":
+		return .Labels_Repeated, true
+	case "labels_unique":
+		return .Labels_Unique, true
+	case "button_grid":
+		return .Button_Grid, true
+	case "mixed_form":
+		return .Mixed_Form, true
+	case "list_full":
+		return .List_Full, true
+	case "list_virtual":
+		return .List_Virtual, true
+	case "table_repeated":
+		return .Table_Repeated, true
+	case "table_unique":
+		return .Table_Unique, true
+	case "dynamic_churn":
+		return .Dynamic_Churn, true
+	case "accessibility":
+		return .Accessibility, true
+	case "capacity":
+		return .Capacity, true
 	}
 	return {}, false
 }
 
 parse_options :: proc() -> (Options, bool) {
-	options := Options{workload = .Labels_Repeated, scale = 100, warmup = WARMUP_DEFAULT, frames = FRAMES_DEFAULT}
+	options := Options {
+		workload = .Labels_Repeated,
+		scale    = 100,
+		warmup   = WARMUP_DEFAULT,
+		frames   = FRAMES_DEFAULT,
+	}
 	for argument in os.args[1:] {
 		if strings.has_prefix(argument, "--workload=") {
 			workload, ok := parse_workload(argument[len("--workload="):])
@@ -236,11 +274,20 @@ parse_options :: proc() -> (Options, bool) {
 			options.repetition = int(value)
 		} else do return {}, false
 	}
-	valid_scale := options.scale > 0 && (options.scale <= MAX_SCALE || options.workload == .List_Virtual)
-	return options, valid_scale && options.warmup >= 0 && options.frames > 0 && options.repetition >= 0
+	valid_scale :=
+		options.scale > 0 && (options.scale <= MAX_SCALE || options.workload == .List_Virtual)
+	valid_run := options.warmup >= 0 && options.frames > 0 && options.repetition >= 0
+	return options, valid_scale && valid_run
 }
 
-measure_frame :: proc(h: ^Harness, options: Options, index: int) -> (build_ns, finalize_ns: i64, submitted: int) {
+measure_frame :: proc(
+	h: ^Harness,
+	options: Options,
+	index: int,
+) -> (
+	build_ns, finalize_ns: i64,
+	submitted: int,
+) {
 	assert(h != nil && options.scale > 0, "measure_frame: invalid argument")
 	ui.ui_frame_begin(&h.frame, &h.runtime, &h.input)
 	build_started := time.tick_now()
@@ -255,7 +302,10 @@ measure_frame :: proc(h: ^Harness, options: Options, index: int) -> (build_ns, f
 main :: proc() {
 	options, valid := parse_options()
 	if !valid {
-		fmt.eprintln("usage: ingot_widget_bench [--workload=ID] [--scale=N] [--warmup=N] [--frames=N] [--repetition=N]")
+		fmt.eprintln(
+			"usage: ingot_widget_bench [--workload=ID] [--scale=N] ",
+			"[--warmup=N] [--frames=N] [--repetition=N]",
+		)
 		os.exit(2)
 	}
 	semantics := options.workload == .Accessibility
@@ -281,16 +331,27 @@ main :: proc() {
 	ui.ui_frame_finalize(&h.frame)
 	stats := ui.ui_frame_output_stats(&h.frame)
 	diagnostics := ui.ui_frame_diagnostics(&h.frame)
-	valid_output := diagnostics.main_commands_dropped == 0 && diagnostics.main_text_bytes_dropped == 0
+	valid_output :=
+		diagnostics.main_commands_dropped == 0 && diagnostics.main_text_bytes_dropped == 0
 	if options.workload == .Capacity do valid_output = true
 	fmt.print(
 		"{\"schema_version\":1,\"framework\":\"ingot\",\"framework_revision\":\"workspace\"",
 		",\"backend\":\"headless\",\"layer\":\"core\",\"workload\":\"",
 		workload_name(options.workload),
-		"\",\"scale\":", options.scale, ",\"repetition\":", options.repetition,
-		",\"warmup_frames\":", options.warmup, ",\"measured_frames\":", options.frames,
-		",\"valid\":", valid_output, ",\"invalid_reason\":\"",
-		"output_overflow" if !valid_output else "", "\",\"state_checksum\":", state_checksum,
+		"\",\"scale\":",
+		options.scale,
+		",\"repetition\":",
+		options.repetition,
+		",\"warmup_frames\":",
+		options.warmup,
+		",\"measured_frames\":",
+		options.frames,
+		",\"valid\":",
+		valid_output,
+		",\"invalid_reason\":\"",
+		"output_overflow" if !valid_output else "",
+		"\",\"state_checksum\":",
+		state_checksum,
 		",\"samples_ns\":{\"build\":[",
 	)
 	for value, index in build_samples {
@@ -303,16 +364,28 @@ main :: proc() {
 		fmt.print(value)
 	}
 	fmt.print(
-		"],\"frame\":[]},\"output\":{\"submitted_widgets\":", submitted,
-		",\"visible_widgets\":", min(submitted, VIRTUAL_ROWS),
-		",\"paint_commands\":", stats.main_command_count,
-		",\"text_bytes\":", stats.main_text_bytes,
-		",\"dropped_commands\":", diagnostics.main_commands_dropped,
-		",\"dropped_text_bytes\":", diagnostics.main_text_bytes_dropped,
-		"},\"diagnostics\":{\"semantic_nodes_dropped\":", diagnostics.semantic_nodes_dropped,
-		",\"semantic_focus_dropped\":", diagnostics.semantic_focus_dropped,
-		",\"semantic_id_collisions\":", diagnostics.semantic_id_collisions,
-		"},\"environment\":{\"os\":\"", ODIN_OS, "\",\"arch\":\"", ODIN_ARCH,
+		"],\"frame\":[]},\"output\":{\"submitted_widgets\":",
+		submitted,
+		",\"visible_widgets\":",
+		min(submitted, VIRTUAL_ROWS),
+		",\"paint_commands\":",
+		stats.main_command_count,
+		",\"text_bytes\":",
+		stats.main_text_bytes,
+		",\"dropped_commands\":",
+		diagnostics.main_commands_dropped,
+		",\"dropped_text_bytes\":",
+		diagnostics.main_text_bytes_dropped,
+		"},\"diagnostics\":{\"semantic_nodes_dropped\":",
+		diagnostics.semantic_nodes_dropped,
+		",\"semantic_focus_dropped\":",
+		diagnostics.semantic_focus_dropped,
+		",\"semantic_id_collisions\":",
+		diagnostics.semantic_id_collisions,
+		"},\"environment\":{\"os\":\"",
+		ODIN_OS,
+		"\",\"arch\":\"",
+		ODIN_ARCH,
 		"\",\"cpu\":\"runner\",\"toolchain\":\"odin dev-2026-06:285f6d87b\"}}\n",
 	)
 	ui.ui_frame_release(&h.frame)
@@ -320,17 +393,28 @@ main :: proc() {
 
 workload_name :: proc(workload: Workload) -> string {
 	switch workload {
-	case .Labels_Repeated: return "labels_repeated"
-	case .Labels_Unique: return "labels_unique"
-	case .Button_Grid: return "button_grid"
-	case .Mixed_Form: return "mixed_form"
-	case .List_Full: return "list_full"
-	case .List_Virtual: return "list_virtual"
-	case .Table_Repeated: return "table_repeated"
-	case .Table_Unique: return "table_unique"
-	case .Dynamic_Churn: return "dynamic_churn"
-	case .Accessibility: return "accessibility"
-	case .Capacity: return "capacity"
+	case .Labels_Repeated:
+		return "labels_repeated"
+	case .Labels_Unique:
+		return "labels_unique"
+	case .Button_Grid:
+		return "button_grid"
+	case .Mixed_Form:
+		return "mixed_form"
+	case .List_Full:
+		return "list_full"
+	case .List_Virtual:
+		return "list_virtual"
+	case .Table_Repeated:
+		return "table_repeated"
+	case .Table_Unique:
+		return "table_unique"
+	case .Dynamic_Churn:
+		return "dynamic_churn"
+	case .Accessibility:
+		return "accessibility"
+	case .Capacity:
+		return "capacity"
 	}
 	return "unknown"
 }

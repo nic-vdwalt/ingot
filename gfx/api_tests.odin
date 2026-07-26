@@ -2,7 +2,6 @@
 package gfx
 
 import "core:testing"
-import wg "vendor:wgpu"
 
 @(test)
 frame_validation_rejects_stale_generation :: proc(t: ^testing.T) {
@@ -106,7 +105,7 @@ renderer_stats_reset_preserves_live_identity :: proc(t: ^testing.T) {
 	context_renderer_stats_reset(ctx)
 	when RENDER_STATS_ENABLED {
 		testing.expect_value(t, ctx.stats_current.frame_index, u64(7))
-		testing.expect_value(t, ctx.stats_current.composite_alpha_mode, wg.CompositeAlphaMode.Premultiplied)
+		testing.expect(t, ctx.stats_current.composite_alpha_mode == .Premultiplied)
 		testing.expect_value(t, ctx.stats_current.flush_count, u32(0))
 		testing.expect_value(t, ctx.stats_latest.flush_count, u32(0))
 	}

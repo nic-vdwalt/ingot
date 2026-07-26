@@ -99,7 +99,11 @@ fn hash_u64(mut hash: u64, value: u64) -> u64 {
 }
 
 fn label_for(index: usize, unique: bool) -> String {
-    if unique { format!("Widget {index:08}") } else { "Widget".to_owned() }
+    if unique {
+        format!("Widget {index:08}")
+    } else {
+        "Widget".to_owned()
+    }
 }
 
 fn labels(ui: &mut egui::Ui, count: usize, unique: bool) -> usize {
@@ -119,26 +123,51 @@ fn buttons(ui: &mut egui::Ui, count: usize) -> usize {
             pos2((index % 10) as f32 * 100.0, (index / 10) as f32 * 26.0),
             vec2(96.0, 24.0),
         );
-        ui.push_id(index, |ui| { ui.put(rect, Button::new("Button")); });
+        ui.push_id(index, |ui| {
+            ui.put(rect, Button::new("Button"));
+        });
     }
     count
 }
 
-fn mixed(ui: &mut egui::Ui, groups: usize, checked: &mut [bool], values: &mut [f32], text: &mut [String]) -> usize {
+fn mixed(
+    ui: &mut egui::Ui,
+    groups: usize,
+    checked: &mut [bool],
+    values: &mut [f32],
+    text: &mut [String],
+) -> usize {
     for index in 0..groups {
         let y = index as f32 * 30.0;
-        ui.put(Rect::from_min_size(pos2(0.0, y), vec2(100.0, 24.0)), egui::Label::new("Label"));
-        ui.put(Rect::from_min_size(pos2(105.0, y), vec2(120.0, 24.0)), Checkbox::new(&mut checked[index], "Check"));
-        ui.put(Rect::from_min_size(pos2(230.0, y), vec2(140.0, 24.0)), Slider::new(&mut values[index], 0.0..=1.0));
-        ui.put(Rect::from_min_size(pos2(375.0, y), vec2(160.0, 24.0)), TextEdit::singleline(&mut text[index]));
-        ui.put(Rect::from_min_size(pos2(540.0, y), vec2(96.0, 24.0)), Button::new("Submit"));
+        ui.put(
+            Rect::from_min_size(pos2(0.0, y), vec2(100.0, 24.0)),
+            egui::Label::new("Label"),
+        );
+        ui.put(
+            Rect::from_min_size(pos2(105.0, y), vec2(120.0, 24.0)),
+            Checkbox::new(&mut checked[index], "Check"),
+        );
+        ui.put(
+            Rect::from_min_size(pos2(230.0, y), vec2(140.0, 24.0)),
+            Slider::new(&mut values[index], 0.0..=1.0),
+        );
+        ui.put(
+            Rect::from_min_size(pos2(375.0, y), vec2(160.0, 24.0)),
+            TextEdit::singleline(&mut text[index]),
+        );
+        ui.put(
+            Rect::from_min_size(pos2(540.0, y), vec2(96.0, 24.0)),
+            Button::new("Submit"),
+        );
     }
     groups * 5
 }
 
 fn virtual_list(ui: &mut egui::Ui, logical_count: usize) -> usize {
     let submitted = logical_count.min(VIRTUAL_ROWS + VIRTUAL_OVERSCAN * 2);
-    let start = logical_count.saturating_div(2).saturating_sub(VIRTUAL_OVERSCAN);
+    let start = logical_count
+        .saturating_div(2)
+        .saturating_sub(VIRTUAL_OVERSCAN);
     for offset in 0..submitted {
         let rect = Rect::from_min_size(pos2(0.0, offset as f32 * 18.0), vec2(320.0, 18.0));
         ui.put(rect, egui::Label::new(label_for(start + offset, true)));
@@ -149,14 +178,24 @@ fn virtual_list(ui: &mut egui::Ui, logical_count: usize) -> usize {
 fn table(ui: &mut egui::Ui, rows: usize, unique: bool) -> usize {
     for row in 0..rows {
         for column in 0..4 {
-            let rect = Rect::from_min_size(pos2(column as f32 * 220.0, row as f32 * 18.0), vec2(216.0, 18.0));
+            let rect = Rect::from_min_size(
+                pos2(column as f32 * 220.0, row as f32 * 18.0),
+                vec2(216.0, 18.0),
+            );
             ui.put(rect, egui::Label::new(label_for(row * 4 + column, unique)));
         }
     }
     rows * 4
 }
 
-fn workload(ui: &mut egui::Ui, options: &Options, frame: usize, checked: &mut [bool], values: &mut [f32], text: &mut [String]) -> Option<usize> {
+fn workload(
+    ui: &mut egui::Ui,
+    options: &Options,
+    frame: usize,
+    checked: &mut [bool],
+    values: &mut [f32],
+    text: &mut [String],
+) -> Option<usize> {
     match options.workload.as_str() {
         "labels_repeated" => Some(labels(ui, options.scale, false)),
         "labels_unique" | "list_full" => Some(labels(ui, options.scale, true)),
@@ -165,13 +204,18 @@ fn workload(ui: &mut egui::Ui, options: &Options, frame: usize, checked: &mut [b
         "list_virtual" => Some(virtual_list(ui, options.scale)),
         "table_repeated" => Some(table(ui, options.scale, false)),
         "table_unique" => Some(table(ui, options.scale, true)),
-        "dynamic_churn" => ui.push_id(frame % options.scale, |ui| labels(ui, options.scale, true)).inner.into(),
+        "dynamic_churn" => ui
+            .push_id(frame % options.scale, |ui| labels(ui, options.scale, true))
+            .inner
+            .into(),
         _ => None,
     }
 }
 
 fn main() -> ExitCode {
-    let Some(options) = parse_options() else { return ExitCode::from(2); };
+    let Some(options) = parse_options() else {
+        return ExitCode::from(2);
+    };
     let context = Context::default();
     let state_count = options.scale.max(1);
     let mut checked = vec![false; state_count];
@@ -190,7 +234,8 @@ fn main() -> ExitCode {
         let build_started = Instant::now();
         let output = context.run(input, |context| {
             egui::CentralPanel::default().show(context, |ui| {
-                submitted = workload(ui, &options, frame, &mut checked, &mut values, &mut text).unwrap_or(0);
+                submitted = workload(ui, &options, frame, &mut checked, &mut values, &mut text)
+                    .unwrap_or(0);
             });
         });
         let build_ns = build_started.elapsed().as_nanos() as u64;
@@ -204,7 +249,9 @@ fn main() -> ExitCode {
             checksum = hash_u64(checksum, submitted as u64);
         }
     }
-    if submitted == 0 { return ExitCode::from(2); }
+    if submitted == 0 {
+        return ExitCode::from(2);
+    }
     let result = ResultRecord {
         schema_version: 1,
         framework: "egui",
@@ -219,10 +266,29 @@ fn main() -> ExitCode {
         valid: true,
         invalid_reason: "",
         state_checksum: checksum,
-        samples_ns: Samples { build: build_samples, finalize: finalize_samples, frame: Vec::new() },
-        output: Output { submitted_widgets: submitted, visible_widgets: submitted.min(VIRTUAL_ROWS), paint_commands, text_bytes: 0, dropped_commands: 0, dropped_text_bytes: 0 },
-        environment: Environment { os: env::consts::OS, arch: env::consts::ARCH, cpu: "runner", toolchain: "rust 1.90.0" },
+        samples_ns: Samples {
+            build: build_samples,
+            finalize: finalize_samples,
+            frame: Vec::new(),
+        },
+        output: Output {
+            submitted_widgets: submitted,
+            visible_widgets: submitted.min(VIRTUAL_ROWS),
+            paint_commands,
+            text_bytes: 0,
+            dropped_commands: 0,
+            dropped_text_bytes: 0,
+        },
+        environment: Environment {
+            os: env::consts::OS,
+            arch: env::consts::ARCH,
+            cpu: "runner",
+            toolchain: "rust 1.90.0",
+        },
     };
-    println!("{}", serde_json::to_string(&result).expect("result serialization"));
+    println!(
+        "{}",
+        serde_json::to_string(&result).expect("result serialization")
+    );
     ExitCode::SUCCESS
 }

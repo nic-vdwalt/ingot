@@ -187,6 +187,12 @@ def execute(binary, framework, workload, scale, warmup, frames, repetition, time
         record = json.loads(raw)
     except json.JSONDecodeError as error:
         raise RuntimeError(f"invalid JSON from {framework}: {error}") from error
+    for field in ("framework", "framework_revision", "backend", "layer", "workload", "invalid_reason"):
+        if isinstance(record.get(field), str):
+            record[field] = record[field].strip()
+    for field in ("os", "arch", "cpu", "toolchain"):
+        if isinstance(record.get("environment", {}).get(field), str):
+            record["environment"][field] = record["environment"][field].strip()
     validate_record(record, framework, workload, scale, frames)
     record["process_wall_ns"] = elapsed
     record["runner_environment"] = environment_metadata()

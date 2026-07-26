@@ -197,8 +197,12 @@ preferences, terminal, accessibility, and versioning constraints.
   web, native, raylib, and full game-engine alternatives.
 - [UI state and stable focus](docs/ui-state.md) — runtime/frame/component
   ownership, teardown, focus identity, and accessibility identity.
+- [Interaction contract](docs/interaction-contract.md) — pointer, keyboard,
+  focus, overlays, forms, accessibility, platform conventions, and approval gates.
 - [Testing Ingot](docs/testing.md) — package tests, deterministic fuzzing,
   ASan/TSan, GPU validation, and reproducible seeds.
+- [Widget benchmark](benchmarks/widgets/README.md) — pinned, reproducible core
+  comparisons with Dear ImGui and egui at increasing workload scales.
 - [Rendering](docs/rendering.md) — renderer ownership, submission lifetime,
   render-target conventions, frame scheduling, and backend validation.
 - [Networking](docs/networking.md) — HTTP and WebSocket lifecycle, ownership,
@@ -216,6 +220,7 @@ preferences, terminal, accessibility, and versioning constraints.
 bash scripts/test.sh
 bash scripts/check.sh
 bash scripts/check-web.sh
+python3 benchmarks/widgets/runner/bench.py smoke
 ```
 
 The project prioritizes safety, then performance, then developer experience.
@@ -261,8 +266,13 @@ Advanced widgets will be built in dependency order:
    serializable docking workspace with keyboard-accessible drag targets.
 4. **Terminal view:** package the existing PTY and libvterm core as a reusable
    widget with styled cells, selection, clipboard, scrollback, and resize support.
-5. **Code editor:** build on scalable text storage, styled runs, two-axis
-   virtualization, gutters, diagnostics, and complete IME handling.
+5. **Remote editor surface:** provide bounded cell-grid state, dirty-row paint,
+   cursor and selection input, overlays, and accessibility for applications that
+   embed an editing engine such as Neovim. Protocol adapters and renderer-specific
+   render-target caching remain application-owned.
+6. **Code editor:** build an optional native editor on scalable text storage,
+   styled runs, two-axis virtualization, gutters, diagnostics, and complete IME
+   handling rather than requiring it for embedded-engine applications.
 
 Each stage must preserve caller-owned state, bounded frame work, event-driven
 idle behavior, stable focus, and accessibility across native and web targets.

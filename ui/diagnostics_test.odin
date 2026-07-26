@@ -10,7 +10,9 @@ frame_output_stats_require_completed_frame :: proc(t: ^testing.T) {
 	defer ui_runtime_destroy(&runtime)
 	output := new(Ui_Output)
 	defer free(output)
-	frame := Ui_Frame{output = output}
+	frame := Ui_Frame {
+		output = output,
+	}
 	ui_frame_begin(&frame, &runtime)
 	draw_rectangle(&frame, 0, 0, 10, 10, Color{255, 255, 255, 255})
 	ui_frame_finalize(&frame)

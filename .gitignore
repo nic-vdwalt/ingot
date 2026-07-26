@@ -11,3 +11,10 @@ web/wgpu.js
 *.dSYM/
 fuzz/net/fuzz_net
 fuzz/ui/fuzz_ui
+benchmarks/widgets/build/
+benchmarks/widgets/cache/
+benchmarks/widgets/egui/target/
+benchmarks/widgets/**/__pycache__/
+benchmarks/widgets/results/*.jsonl
+benchmarks/widgets/results/*.csv
+benchmarks/widgets/results/*.json

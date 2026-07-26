@@ -82,13 +82,52 @@ _stats_frame_begin :: proc() {
 		g.stats_current = {}
 		g.stats_current.frame_index = index
 		g.stats_current.composite_alpha_mode = alpha
+		_stats_context_frame_started(default_context())
+	}
+}
+
+@(private)
+_stats_context_frame_started :: proc(ctx: ^Context) {
+	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_context_frame_started: nil context")
+		ctx.stats_current.frame_cpu_seconds = platform_now()
+	}
+}
+
+@(private)
+_stats_context_frame_begin :: proc(ctx: ^Context) {
+	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_context_frame_begin: nil context")
+		index := ctx.stats_current.frame_index + 1
+		alpha := ctx.stats_current.composite_alpha_mode
+		ctx.stats_current = {}
+		ctx.stats_current.frame_index = index
+		ctx.stats_current.composite_alpha_mode = alpha
 	}
 }
 
 @(private)
 _stats_frame_end :: proc() {
 	when RENDER_STATS_ENABLED {
+		_stats_context_frame_stopped(default_context())
 		g.stats_latest = g.stats_current
+	}
+}
+
+@(private)
+_stats_context_frame_stopped :: proc(ctx: ^Context) {
+	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_context_frame_stopped: nil context")
+		started := ctx.stats_current.frame_cpu_seconds
+		ctx.stats_current.frame_cpu_seconds = platform_now() - started
+	}
+}
+
+@(private)
+_stats_context_frame_end :: proc(ctx: ^Context) {
+	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_context_frame_end: nil context")
+		ctx.stats_latest = ctx.stats_current
 	}
 }
 
@@ -148,13 +187,58 @@ _stats_queue_submission :: proc() {
 
 @(private)
 _stats_cpu_times :: proc(frame, encode, submit, present: f64) {
+	_stats_context_cpu_times(default_context(), frame, encode, submit, present)
+}
+
+@(private)
+_stats_context_cpu_times :: proc(ctx: ^Context, frame, encode, submit, present: f64) {
 	when RENDER_STATS_ENABLED {
-		assert(frame >= 0 && encode >= 0, "_stats_cpu_times: negative frame time")
-		assert(submit >= 0 && present >= 0, "_stats_cpu_times: negative queue time")
-		g.stats_current.frame_cpu_seconds += frame
-		g.stats_current.encode_cpu_seconds += encode
-		g.stats_current.submit_cpu_seconds += submit
-		g.stats_current.present_cpu_seconds += present
+		assert(ctx != nil, "_stats_context_cpu_times: nil context")
+		assert(frame >= 0 && encode >= 0, "_stats_context_cpu_times: negative frame time")
+		assert(submit >= 0 && present >= 0, "_stats_context_cpu_times: negative queue time")
+		ctx.stats_current.frame_cpu_seconds += frame
+		ctx.stats_current.encode_cpu_seconds += encode
+		ctx.stats_current.submit_cpu_seconds += submit
+		ctx.stats_current.present_cpu_seconds += present
+	}
+}
+
+@(private)
+_stats_finish_submit :: proc(
+	ctx: ^Context,
+	encoder: wg.CommandEncoder,
+	allow_submit: bool,
+) -> (
+	cmd: wg.CommandBuffer,
+	encode, submit: f64,
+) {
+	assert(ctx != nil && encoder != nil, "_stats_finish_submit: invalid argument")
+	when RENDER_STATS_ENABLED {
+		encode_started := platform_now()
+		cmd = wg.CommandEncoderFinish(encoder, nil)
+		encode = platform_now() - encode_started
+		if allow_submit && cmd != nil {
+			submit_started := platform_now()
+			wg.QueueSubmit(ctx.queue, {cmd})
+			submit = platform_now() - submit_started
+		}
+	} else {
+		cmd = wg.CommandEncoderFinish(encoder, nil)
+		if allow_submit && cmd != nil do wg.QueueSubmit(ctx.queue, {cmd})
+	}
+	return
+}
+
+@(private)
+_stats_present :: proc(ctx: ^Context) -> f64 {
+	assert(ctx != nil, "_stats_present: nil context")
+	when RENDER_STATS_ENABLED {
+		started := platform_now()
+		wg.SurfacePresent(ctx.surface)
+		return platform_now() - started
+	} else {
+		wg.SurfacePresent(ctx.surface)
+		return 0
 	}
 }
 

@@ -552,7 +552,6 @@ BeginDrawing :: proc() {
 	assert(g != nil, "BeginDrawing: nil context")
 	_maybe_reconfigure()
 	_stats_frame_begin()
-	when RENDER_STATS_ENABLED do g.stats_current.frame_cpu_seconds = platform_now()
 	platform_web_input_frame_begin()
 
 	g.frame.surf_tex = wg.SurfaceGetCurrentTexture(g.surface)
@@ -641,7 +640,8 @@ _ensure_pass :: proc() {
 }
 
 EndDrawing :: proc() {
-	if g.frame.has_frame {
+	ctx := g
+	if ctx.frame.has_frame {
 		_ensure_pass() // guarantee a clear even on empty frames
 		if !g.frame.scissor_empty {
 			renderer_flush(&g.rend, g.frame.pass, .Frame_End)
@@ -653,17 +653,12 @@ EndDrawing :: proc() {
 		wg.RenderPassEncoderRelease(g.frame.pass)
 
 		retirement := _submission_reserve(&g.submissions)
-		encode_started := f64(0)
-		when RENDER_STATS_ENABLED do encode_started = platform_now()
-		cmd := wg.CommandEncoderFinish(g.frame.encoder, nil)
-		encode_elapsed := f64(0)
-		when RENDER_STATS_ENABLED do encode_elapsed = platform_now() - encode_started
-		submit_elapsed := f64(0)
+		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
+			ctx,
+			g.frame.encoder,
+			retirement != 0,
+		)
 		if retirement != 0 && cmd != nil {
-			submit_started := f64(0)
-			when RENDER_STATS_ENABLED do submit_started = platform_now()
-			wg.QueueSubmit(g.queue, {cmd})
-			when RENDER_STATS_ENABLED do submit_elapsed = platform_now() - submit_started
 			_stats_queue_submission()
 			assert(_submission_commit(&g.submissions, retirement))
 			if !_stream_slot_submitted(&g.rend, retirement) do _stats_stream_retirement_failure()
@@ -674,12 +669,8 @@ EndDrawing :: proc() {
 		}
 		if cmd != nil do wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(g.frame.encoder)
-		present_started := f64(0)
-		when RENDER_STATS_ENABLED do present_started = platform_now()
-		wg.SurfacePresent(g.surface)
-		present_elapsed := f64(0)
-		when RENDER_STATS_ENABLED do present_elapsed = platform_now() - present_started
-		_stats_cpu_times(0, encode_elapsed, submit_elapsed, present_elapsed)
+		present_elapsed := _stats_present(ctx)
+		_stats_context_cpu_times(ctx, 0, encode_elapsed, submit_elapsed, present_elapsed)
 		wg.TextureViewRelease(g.frame.view)
 		_release_surface_texture()
 		g.frame.has_frame = false
@@ -690,10 +681,6 @@ EndDrawing :: proc() {
 	}
 
 	platform_web_input_frame_end()
-	when RENDER_STATS_ENABLED {
-		started := g.stats_current.frame_cpu_seconds
-		g.stats_current.frame_cpu_seconds = platform_now() - started
-	}
 	_stats_frame_end()
 	input_poll()
 	_frame_timing()
