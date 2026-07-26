@@ -302,6 +302,10 @@ st_mouse: Vector2
 @(private)
 st_mb: [8]bool
 @(private)
+st_mb_pressed: [8]bool
+@(private)
+st_mb_released: [8]bool
+@(private)
 st_hovered: bool
 
 @(private)
@@ -341,6 +345,12 @@ _input_drain :: proc() {
 	g.inp.wheel_pending.x += st_wheel.x
 	g.inp.wheel_pending.y += st_wheel.y
 	st_wheel = {0, 0}
+	for i in 0 ..< 8 {
+		if st_mb_pressed[i] do g.inp.mb_pressed[i] = true
+		if st_mb_released[i] do g.inp.mb_released[i] = true
+		st_mb_pressed[i] = false
+		st_mb_released[i] = false
+	}
 }
 
 @(private)

@@ -125,8 +125,13 @@ input_poll :: proc() {
 
 	for b in 0 ..< 8 {
 		cur := platform_mouse_button(i32(b))
-		inp.mb_pressed[b] = cur && !inp.mb_down[b]
-		inp.mb_released[b] = !cur && inp.mb_down[b]
+		when ODIN_OS == .JS {
+			inp.mb_pressed[b] = inp.mb_pressed[b] || (cur && !inp.mb_down[b])
+			inp.mb_released[b] = inp.mb_released[b] || (!cur && inp.mb_down[b])
+		} else {
+			inp.mb_pressed[b] = cur && !inp.mb_down[b]
+			inp.mb_released[b] = !cur && inp.mb_down[b]
+		}
 		inp.mb_down[b] = cur
 	}
 	inp.cursor_on_screen = platform_window_hovered()

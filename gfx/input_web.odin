@@ -96,6 +96,8 @@ ingot_web_mouse_move :: proc "contextless" (x, y: f32) {
 ingot_web_mouse_button :: proc "contextless" (button: i32, down: bool) {
 	_idle_note_activity(&g.idle)
 	if button < 0 || button >= 8 do return
+	if down && !st_mb[button] do st_mb_pressed[button] = true
+	if !down && st_mb[button] do st_mb_released[button] = true
 	st_mb[button] = down
 }
 
