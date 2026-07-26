@@ -12,6 +12,12 @@ col="-collection:ingot=$root"
 # have no main().
 vet_flags="-vet -strict-style -vet-shadowing -no-entry-point"
 
+echo "== gfx context ownership guard =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context_test.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" \
+	--baseline "$root/scripts/gfx_context_baseline.json" \
+	"$root"
+
 for pkg in gfx ui ui_gfx term prefs net sys pty testx; do
 	echo "== checking $pkg =="
 	# shellcheck disable=SC2086
@@ -36,8 +42,8 @@ for example in gallery breakout idle_demo chart_demo render_fixture multi_contex
 done
 
 echo "== Odin physical style limits =="
-python3 "$root/scripts/check_odin_style_test.py"
-python3 "$root/scripts/check_odin_style.py" \
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_odin_style_test.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_odin_style.py" \
 	--baseline "$root/scripts/odin_style_baseline.json" \
 	"$root"
 

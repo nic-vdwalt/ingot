@@ -1,6 +1,12 @@
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Collection = "-collection:ingot=$Root"
+Write-Host "== gfx context ownership guard =="
+$env:PYTHONDONTWRITEBYTECODE = "1"
+& python "$PSScriptRoot/check_gfx_context_test.py"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& python "$PSScriptRoot/check_gfx_context.py" --baseline "$PSScriptRoot/gfx_context_baseline.json" "$Root"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($Package in @("gfx", "ui", "ui_gfx", "term", "prefs", "net", "sys", "pty", "testx")) {
     Write-Host "== checking $Package =="
     & odin check "$Root/$Package" $Collection -vet -strict-style -vet-shadowing -no-entry-point

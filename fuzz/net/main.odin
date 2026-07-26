@@ -29,15 +29,20 @@ MAXIMUM_BODY_LIMIT :: 64 * 1024
 
 Prng :: fuzzx.Prng
 
+HTTP_CHUNKED ::
+	"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nX-A: b\r\n\r\n" +
+	"5;ext\r\nhello\r\n3\r\nabc\r\n0\r\n\r\n"
+HTTP_SPACED :: "HTTP/1.1  200  OK \r\n Content-Length : 5\r\n" + "X-A:b\r\n\r\nhello"
+
 // HTTP response templates reaching different parser paths: content-length,
 // chunked (+extensions), no-body statuses, many headers, malformed
 // whitespace, out-of-range status, and integer-overflow length claims.
 HTTP_TEMPLATES := [?]string {
 	"HTTP/1.1 200 OK\r\nContent-Length: 11\r\nX-A: b\r\n\r\nhello world",
-	"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nX-A: b\r\n\r\n" + "5;ext\r\nhello\r\n3\r\nabc\r\n0\r\n\r\n",
+	HTTP_CHUNKED,
 	"HTTP/1.1 204 No Content\r\nX-A: b\r\n\r\n",
 	"HTTP/1.1 304 Not Modified\r\nETag: \"abc\"\r\n\r\n",
-	"HTTP/1.1  200  OK \r\n Content-Length : 5\r\n" + "X-A:b\r\n\r\nhello",
+	HTTP_SPACED,
 	"HTTP/1.1 99999 Enhance Your Calm\r\nContent-Length: 3\r\n\r\nabc",
 	// Extreme length claims — must be rejected or bounded, never allocated.
 	"HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\nx",

@@ -230,8 +230,9 @@ bugs, and they are a force multiplier for fuzzing.
   Zig norm — we deliberately keep tabs so the formatter never churns the tree.)
 - **Hard limit lines to 100 columns.** Use the width, never exceed it. Set a
   column ruler in your editor (`.editorconfig` declares it). The style gate
-  counts physical source characters and excludes only vendored `libvterm`,
-  `accesskit`, and generated `gfx/rlgl` declarations.
+  counts physical source characters. It excludes vendored `libvterm`,
+  `accesskit`, generated `gfx/rlgl`, and foreign ABI declaration files that
+  `odinfmt` necessarily renders on one line.
 - Add braces to an `if` unless it fits on a single line — defense in depth
   against "goto fail" bugs.
 

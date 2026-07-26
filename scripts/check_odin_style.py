@@ -10,7 +10,16 @@ from pathlib import Path
 
 LINE_LIMIT = 100
 PROCEDURE_LIMIT = 70
-EXCLUDED_PREFIXES = ("accesskit/", "libvterm/", "gfx/rlgl")
+EXCLUDED_PREFIXES = (
+    "accesskit/",
+    "libvterm/",
+    "gfx/rlgl",
+    "gfx/platform_web.odin",
+    "net/http_web.odin",
+    "pty/pty_windows.odin",
+    "ui/spell_windows.odin",
+    "ui/window_style_windows.odin",
+)
 
 
 @dataclasses.dataclass(frozen=True)
