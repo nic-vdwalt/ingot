@@ -35,13 +35,6 @@ FOCUS_COUNT :: 5 // btn, checkbox, radio a, radio b, slider
 
 Prng :: fuzzx.Prng
 
-g_hidden_while_latched: int
-g_hidden_frames: int
-g_dragging_frames: int
-g_over_slider: int
-g_press_over_slider: int
-g_down_frames: int
-
 Scene :: struct {
 	focus:              int,
 	checked:            bool,
@@ -195,6 +188,39 @@ inject_events :: proc(p: ^Prng) {
 	}
 }
 
+// capture_sim_input mirrors ui_gfx.capture_input for the headless harness.
+// ingot:ui reads one explicit Ui_Input snapshot per frame, so without this
+// every widget sees the zeroed input_default and the whole event mix above
+// is inert. ui_gfx itself cannot be imported here: it pulls in AccessKit and
+// the GPU backend, and this harness must stay windowless.
+capture_sim_input :: proc(input: ^ui.Ui_Input) {
+	assert(input != nil, "capture_sim_input: nil input")
+	input^ = {}
+	input.screen_size = {f32(SCREEN_W), f32(SCREEN_H)}
+	input.dpi_scale = 1
+	mouse := rl.GetMousePosition()
+	delta := rl.GetMouseDelta()
+	wheel := rl.GetMouseWheelMoveV()
+	input.mouse_position = {mouse.x, mouse.y}
+	input.mouse_delta = {delta.x, delta.y}
+	input.mouse_wheel = {wheel.x, wheel.y}
+	input.window_focused = true
+	input.cursor_on_screen = true
+	for index in 0 ..< ui.INPUT_KEY_COUNT {
+		key := rl.KeyboardKey(index)
+		input.keys_pressed[index] = rl.IsKeyPressed(key)
+		input.keys_repeat[index] = rl.IsKeyPressedRepeat(key)
+		input.keys_released[index] = rl.IsKeyReleased(key)
+		input.keys_down[index] = rl.IsKeyDown(key)
+	}
+	for index in 0 ..< ui.INPUT_MOUSE_BUTTON_COUNT {
+		button := rl.MouseButton(index)
+		input.mouse_pressed[index] = rl.IsMouseButtonPressed(button)
+		input.mouse_released[index] = rl.IsMouseButtonReleased(button)
+		input.mouse_down[index] = rl.IsMouseButtonDown(button)
+	}
+}
+
 // draw_scene runs one frame of the widget scene, mirroring how an app would.
 // Returns whether any claiming overlay (modal, menu, dropdown popup) was
 // active at any point during the frame — end-of-frame state is not enough
@@ -230,9 +256,7 @@ draw_scene :: proc(
 	if ui.radio_at(frame, R_RADIO_B, "Radio B", &s.radio_sel, 1, ui.Focus_Opt{&s.focus, 4}) {
 		s.radio_changes += 1
 	}
-	if allow_random_overlays &&
-	   s.hide_slider_frames == 0 &&
-	   fuzzx.int_range(p, 0, 61) == 0 {
+	if allow_random_overlays && s.hide_slider_frames == 0 && fuzzx.int_range(p, 0, 61) == 0 {
 		// Stop drawing a latch owner for a few frames, the way switching
 		// tabs or collapsing a panel mid-drag does.
 		s.hide_slider_frames = fuzzx.int_range(p, 1, 5)
@@ -315,17 +339,6 @@ check_invariants :: proc(c: ^fuzzx.Ctx, frame: ^ui.Ui_Frame, s: ^Scene, overlay_
 			"drag latch outlived an undrawn owner",
 		)
 	}
-	if s.slider_gone_frames >= 1 && ui.interact_latch_is(frame, &s.slider_state.dragging) {
-		g_hidden_while_latched += 1
-	}
-	if s.slider_gone_frames >= 1 do g_hidden_frames += 1
-	if s.slider_state.dragging do g_dragging_frames += 1
-	mp := ui.get_mouse_position(frame)
-	over := mp.x >= f32(R_SLIDER.x) && mp.x < f32(R_SLIDER.x + R_SLIDER.w) &&
-	        mp.y >= f32(R_SLIDER.y) && mp.y < f32(R_SLIDER.y + R_SLIDER.h)
-	if over do g_over_slider += 1
-	if over && ui.is_mouse_button_pressed(frame, .LEFT) do g_press_over_slider += 1
-	if ui.is_mouse_button_down(frame, .LEFT) do g_down_frames += 1
 
 	fuzzx.check(c, s.slider_val >= 0 && s.slider_val <= 100, "slider escaped [lo, hi]")
 	fuzzx.check(c, s.radio_sel == 0 || s.radio_sel == 1, "radio selected invalid value")
@@ -409,6 +422,7 @@ main :: proc() {
 		)
 		ui.sem_enable(&runtime, true)
 		frame: ui.Ui_Frame
+		input: ui.Ui_Input
 		output := new(ui.Ui_Output)
 		frame.output = output
 		rl.SimReset()
@@ -419,7 +433,8 @@ main :: proc() {
 			rl.SimBeginFrame()
 			deterministic := inject_scenario(i, &s)
 			if !deterministic do inject_events(&p)
-			ui.ui_frame_begin(&frame, &runtime)
+			capture_sim_input(&input)
+			ui.ui_frame_begin(&frame, &runtime, &input)
 			overlay_active := draw_scene(&frame, &s, &p, !deterministic)
 			if overlay_active {
 				overlay_free_frames = 0
@@ -436,5 +451,5 @@ main :: proc() {
 	}
 
 	fuzzx.report(&track, "fuzz_interact", seed)
-	fmt.printfln("fuzz_interact ok hidden=%d dragging=%d hidden_while_latched=%d over=%d press_over=%d down=%d", g_hidden_frames, g_dragging_frames, g_hidden_while_latched, g_over_slider, g_press_over_slider, g_down_frames)
+	fmt.printfln("fuzz_interact ok")
 }

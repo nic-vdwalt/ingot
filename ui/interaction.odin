@@ -113,6 +113,11 @@ interact_frame_begin :: proc(frame: ^Ui_Frame) {
 	// a latched widget that stops being drawn (tab closed, view swapped,
 	// panel collapsed) leaves every other widget permanently `blocked`.
 	// Pointer is compared, never dereferenced: the owner may already be freed.
+	state := &frame.interaction
+	if state.active_latch != nil && state.latch_gen + 1 != frame.runtime.frame_generation {
+		state.active_latch = nil
+		state.latch_gen = 0
+	}
 	if is_mouse_button_pressed(frame, .LEFT) {
 		frame.interaction.press_pos = get_mouse_position(frame)
 		frame.interaction.press_occluded = route_occluded(frame, frame.interaction.press_pos)

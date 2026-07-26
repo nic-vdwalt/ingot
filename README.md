@@ -49,6 +49,8 @@ harnesses.
   custom window chrome, accessibility, and input behavior.
 - **Energy-efficient.** Event-driven applications build no frame and submit no
   GPU work while idle; explicit redraw requests wake them when data changes.
+  `ui.Frame_Pacer` derives that policy from input and an app-supplied busy flag,
+  then publishes it through `Platform_Output` so the adapter applies it.
 - **Batteries included.** Windowing, batched 2D rendering, text, widgets, audio,
   gamepads, accessibility, settings, networking, and a terminal stack.
 
