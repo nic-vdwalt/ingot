@@ -66,6 +66,33 @@ md_spans_pill_with_trailing_text :: proc(t: ^testing.T) {
 }
 
 @(test)
+md_spans_unmatched_and_empty_markers :: proc(t: ^testing.T) {
+	unmatched_pill := parse_inline_spans_with("a \x02path")
+	testing.expect_value(t, spans_display_string_with(unmatched_pill), "a path")
+	last := unmatched_pill[len(unmatched_pill) - 1]
+	testing.expect_value(t, last.raw_start, 2)
+	testing.expect_value(t, last.raw_end, 7)
+
+	unmatched_code := parse_inline_spans_with("a `code")
+	testing.expect_value(t, spans_display_string_with(unmatched_code), "a `code")
+	testing.expect(t, !unmatched_code[1].code)
+
+	empty_code := parse_inline_spans_with("``")
+	testing.expect_value(t, len(empty_code), 1)
+	testing.expect(t, empty_code[0].code)
+	testing.expect_value(t, empty_code[0].text, "")
+
+	empty_bold := parse_inline_spans_with("****")
+	testing.expect_value(t, spans_display_string_with(empty_bold), "****")
+	testing.expect(t, !empty_bold[0].bold)
+
+	precedence := parse_inline_spans_with("`http://x.com`")
+	testing.expect_value(t, len(precedence), 1)
+	testing.expect(t, precedence[0].code)
+	testing.expect(t, !precedence[0].link)
+}
+
+@(test)
 md_spans_contiguous_fuzz :: proc(t: ^testing.T) {
 	p := testx.prng_make(0xBEEF)
 	for _ in 0 ..< 3000 {

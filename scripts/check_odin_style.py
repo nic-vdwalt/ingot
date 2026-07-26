@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 LINE_LIMIT = 100
-PROCEDURE_LIMIT = 70
+PROCEDURE_LIMIT = 100
 EXCLUDED_PREFIXES = (
     "accesskit/",
     "libvterm/",

@@ -380,14 +380,19 @@ draw_markdown_span_selection :: proc(
 	if highlight_start >= highlight_end do return
 	pre := strings.clone_to_cstring(text[:highlight_start - segment_start], context.temp_allocator)
 	selected := strings.clone_to_cstring(
-		text[highlight_start - segment_start:highlight_end - segment_start], context.temp_allocator,
+		text[highlight_start - segment_start:highlight_end - segment_start],
+		context.temp_allocator,
 	)
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE
 	highlight_x := cursor_x + measure_text_frame(ctx.frame, pre, font_size)
 	highlight_w := measure_text_frame(ctx.frame, selected, font_size)
 	draw_rectangle(
-		ctx.frame, highlight_x, y, highlight_w,
-		ui_frame_metrics(ctx.frame).LINE_HEIGHT, ui_frame_theme(ctx.frame).bg_selection,
+		ctx.frame,
+		highlight_x,
+		y,
+		highlight_w,
+		ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+		ui_frame_theme(ctx.frame).bg_selection,
 	)
 }
 
@@ -412,7 +417,11 @@ draw_markdown_span_code :: proc(
 		return
 	}
 	draw_text_frame(
-		ctx.frame, text, x, y, ui_frame_metrics(ctx.frame).FONT_SIZE,
+		ctx.frame,
+		text,
+		x,
+		y,
+		ui_frame_metrics(ctx.frame).FONT_SIZE,
 		ui_frame_theme(ctx.frame).fg_code_inline,
 	)
 }
@@ -480,13 +489,19 @@ draw_markdown_line_spans :: proc(
 		segment := span.text[segment_start - span_start:segment_end - span_start]
 		segment_c := strings.clone_to_cstring(segment, context.temp_allocator)
 		draw_markdown_span_selection(
-			ctx, cursor_x, y, segment, segment_start, segment_end,
-			sel_display_start, sel_display_end, has_sel,
+			ctx,
+			cursor_x,
+			y,
+			segment,
+			segment_start,
+			segment_end,
+			sel_display_start,
+			sel_display_end,
+			has_sel,
 		)
 		draw_markdown_span_style(ctx, &span, segment_c, cursor_x, y, base_color)
-		cursor_x += measure_text_frame(
-			ctx.frame, segment_c, ui_frame_metrics(ctx.frame).FONT_SIZE,
-		) + 1
+		cursor_x +=
+			measure_text_frame(ctx.frame, segment_c, ui_frame_metrics(ctx.frame).FONT_SIZE) + 1
 	}
 }
 
@@ -723,13 +738,289 @@ split_table_row_offsets :: proc(
 	return frame_view(frame, cells), frame_view(frame, starts)
 }
 
-// Parse, lay out, and (when draw==true) render a GFM table block beginning at
-// source byte `blk_start` (start of the header line). Returns the byte index just
-// past the block and the pixel height consumed. The `draw` flag gates raylib draw
-// calls so the same routine measures/hit-tests; both paths compute identical
-// heights so scroll/selection stay in sync. When draw==false and out_hit != nil,
-// out_hit is set to a source byte offset if the mouse falls inside the table.
-// When out_table_w != nil it receives the rendered table width in pixels.
+Markdown_Table_Row :: struct {
+	cells:  []string,
+	starts: []int,
+}
+
+Markdown_Table_Widths :: [MARKDOWN_TABLE_COLS_MAX]i32
+Markdown_Table_Heights :: [MARKDOWN_TABLE_ROWS_MAX]i32
+
+@(private = "file")
+markdown_table_parse_rows :: proc(
+	ctx: ^Markdown_Context,
+	text: string,
+	block_start: int,
+) -> (
+	[dynamic]Markdown_Table_Row,
+	int,
+	int,
+) {
+	rows := make([dynamic]Markdown_Table_Row, 0, 8, ui_frame_allocator(ctx.frame))
+	columns := 0
+	position := block_start
+	physical_line := 0
+	next_byte := block_start
+	for position < len(text) && len(rows) < MARKDOWN_TABLE_ROWS_MAX {
+		newline := strings.index_byte(text[position:], '\n')
+		line_end := len(text) if newline < 0 else position + newline
+		line := text[position:line_end]
+		if !strings.contains(line, "|") do break
+		advance := len(text) if newline < 0 else line_end + 1
+		if physical_line == 1 && is_table_separator(line) {
+			physical_line += 1
+			next_byte = advance
+			position = advance
+			continue
+		}
+		cells_view, starts_view := split_table_row_offsets(ctx.frame, text, position, line_end)
+		cells := frame_view_items(ctx.frame, cells_view)
+		starts := frame_view_items(ctx.frame, starts_view)
+		append(&rows, Markdown_Table_Row{cells = cells, starts = starts})
+		columns = max(columns, min(len(cells), MARKDOWN_TABLE_COLS_MAX))
+		physical_line += 1
+		next_byte = advance
+		position = advance
+	}
+	return rows, columns, next_byte
+}
+
+@(private = "file")
+markdown_table_natural_widths :: proc(
+	ctx: ^Markdown_Context,
+	rows: []Markdown_Table_Row,
+	columns: int,
+	max_width: i32,
+) -> (
+	Markdown_Table_Widths,
+	i32,
+) {
+	widths: Markdown_Table_Widths
+	padding := ui_frame_metrics(ctx.frame).TABLE_CELL_PAD
+	for row in rows {
+		for cell, column in row.cells {
+			if len(cell) == 0 do continue
+			cell_c := strings.clone_to_cstring(cell, ui_frame_allocator(ctx.frame))
+			width :=
+				measure_text_frame(ctx.frame, cell_c, ui_frame_metrics(ctx.frame).FONT_SIZE) +
+				padding * 2
+			widths[column] = max(widths[column], width)
+		}
+	}
+	minimum := padding * 2 + ui_frame_metrics(ctx.frame).FONT_SIZE * 2
+	minimum = clamp(minimum, i32(1), max_width / i32(columns))
+	for column in 0 ..< columns do widths[column] = max(widths[column], minimum)
+	return widths, minimum
+}
+
+@(private = "file")
+markdown_table_fix_columns :: proc(
+	naturals: Markdown_Table_Widths,
+	columns: int,
+	max_width: i32,
+	widths: ^Markdown_Table_Widths,
+	fixed: ^[MARKDOWN_TABLE_COLS_MAX]bool,
+) -> (
+	i32,
+	int,
+) {
+	remaining := max_width
+	flexible := columns
+	for _ in 0 ..< columns {
+		changed := false
+		share := remaining / i32(max(flexible, 1))
+		for column in 0 ..< columns {
+			if fixed[column] || naturals[column] > share do continue
+			fixed[column] = true
+			widths[column] = naturals[column]
+			remaining -= naturals[column]
+			flexible -= 1
+			changed = true
+		}
+		if !changed || flexible == 0 do break
+	}
+	return remaining, flexible
+}
+
+@(private = "file")
+markdown_table_distribute_columns :: proc(
+	naturals: Markdown_Table_Widths,
+	columns: int,
+	minimum, remaining: i32,
+	fixed: ^[MARKDOWN_TABLE_COLS_MAX]bool,
+	widths: ^Markdown_Table_Widths,
+) {
+	flex_natural: i32
+	for column in 0 ..< columns {
+		if !fixed[column] do flex_natural += naturals[column]
+	}
+	left := remaining
+	last := -1
+	for column in 0 ..< columns {
+		if fixed[column] do continue
+		width := remaining * naturals[column] / max(flex_natural, 1)
+		widths[column] = max(width, minimum)
+		left -= widths[column]
+		last = column
+	}
+	if last >= 0 && left > 0 do widths[last] += left
+}
+
+@(private = "file")
+markdown_table_column_widths :: proc(
+	naturals: Markdown_Table_Widths,
+	columns: int,
+	max_width, minimum: i32,
+) -> (
+	Markdown_Table_Widths,
+	bool,
+) {
+	widths: Markdown_Table_Widths
+	total: i32
+	for column in 0 ..< columns do total += naturals[column]
+	if total <= max_width {
+		for column in 0 ..< columns do widths[column] = naturals[column]
+		return widths, false
+	}
+	fixed: [MARKDOWN_TABLE_COLS_MAX]bool
+	remaining, flexible := markdown_table_fix_columns(
+		naturals,
+		columns,
+		max_width,
+		&widths,
+		&fixed,
+	)
+	if flexible > 0 {
+		markdown_table_distribute_columns(naturals, columns, minimum, remaining, &fixed, &widths)
+	}
+	return widths, true
+}
+
+@(private = "file")
+markdown_table_row_heights :: proc(
+	ctx: ^Markdown_Context,
+	rows: []Markdown_Table_Row,
+	widths: Markdown_Table_Widths,
+	columns: int,
+) -> Markdown_Table_Heights {
+	heights: Markdown_Table_Heights
+	metrics := ui_frame_metrics(ctx.frame)
+	for row, row_index in rows {
+		height := i32(metrics.LINE_HEIGHT)
+		for cell, column in row.cells {
+			if column >= columns || len(cell) == 0 do continue
+			inner := max(widths[column] - metrics.TABLE_CELL_PAD * 2, i32(1))
+			cell_height := wrapped_height_px_frame(
+				ctx.frame,
+				cell,
+				inner,
+				metrics.FONT_SIZE,
+				metrics.LINE_HEIGHT,
+			)
+			height = max(height, cell_height)
+		}
+		heights[row_index] = height
+	}
+	return heights
+}
+
+@(private = "file")
+markdown_table_draw_cell :: proc(
+	ctx: ^Markdown_Context,
+	cell: string,
+	x, y, width: i32,
+	color: Color,
+) {
+	metrics := ui_frame_metrics(ctx.frame)
+	inner := max(width - metrics.TABLE_CELL_PAD * 2, i32(1))
+	padding_y := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE) / 2, i32(0))
+	text_y := y + padding_y
+	for line in wrap_text_frame(ctx.frame, cell, inner, metrics.FONT_SIZE) {
+		if line.end > line.start {
+			line_c := strings.clone_to_cstring(cell[line.start:line.end], context.temp_allocator)
+			draw_text_frame(
+				ctx.frame,
+				line_c,
+				x + metrics.TABLE_CELL_PAD,
+				text_y,
+				metrics.FONT_SIZE,
+				color,
+			)
+		}
+		text_y += i32(metrics.LINE_HEIGHT)
+	}
+}
+
+@(private = "file")
+markdown_table_draw_row :: proc(
+	ctx: ^Markdown_Context,
+	row: ^Markdown_Table_Row,
+	row_index: int,
+	x, y, height, table_width: i32,
+	widths: Markdown_Table_Widths,
+	columns: int,
+	base_color: Color,
+) {
+	style := ui_frame_theme(ctx.frame)
+	is_header := row_index == 0
+	if is_header do draw_rectangle(ctx.frame, x, y, table_width, height, style.bg_table_header)
+	cell_x := x
+	for column in 0 ..< columns {
+		if column > 0 do draw_rectangle(ctx.frame, cell_x, y, 1, height, style.border_color)
+		if column < len(row.cells) && len(row.cells[column]) > 0 {
+			color := style.fg_bold if is_header else base_color
+			markdown_table_draw_cell(ctx, row.cells[column], cell_x, y, widths[column], color)
+		}
+		cell_x += widths[column]
+	}
+	if is_header do draw_rectangle(ctx.frame, x, y + height, table_width, 1, style.border_color)
+}
+
+@(private = "file")
+markdown_table_hit_row :: proc(
+	ctx: ^Markdown_Context,
+	row: ^Markdown_Table_Row,
+	x, y: i32,
+	widths: Markdown_Table_Widths,
+	columns: int,
+	mouse_x, mouse_y: i32,
+	block_start: int,
+) -> int {
+	column := columns - 1
+	cell_x := x
+	for candidate in 0 ..< columns {
+		if mouse_x < cell_x + widths[candidate] {
+			column = candidate
+			break
+		}
+		cell_x += widths[candidate]
+	}
+	cell_x = x
+	for candidate in 0 ..< column do cell_x += widths[candidate]
+	if column >= len(row.cells) || len(row.cells[column]) == 0 do return block_start
+	metrics := ui_frame_metrics(ctx.frame)
+	inner := max(widths[column] - metrics.TABLE_CELL_PAD * 2, i32(1))
+	padding_y := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE) / 2, i32(0))
+	local := hit_test_wrapped_frame(
+		ctx.frame,
+		cell_x + metrics.TABLE_CELL_PAD,
+		y + padding_y,
+		inner,
+		row.cells[column],
+		mouse_x,
+		mouse_y,
+		metrics.FONT_SIZE,
+	)
+	return row.starts[column] + max(local, 0)
+}
+
+@(private = "file")
+markdown_table_total_width :: proc(widths: Markdown_Table_Widths, columns: int) -> i32 {
+	total: i32
+	for column in 0 ..< columns do total += widths[column]
+	return total
+}
+
 layout_table :: proc(
 	ctx: ^Markdown_Context,
 	x, y, max_width: i32,
@@ -745,272 +1036,58 @@ layout_table :: proc(
 	next: int,
 	height: i32,
 ) {
-	// Why assert: blk_start must reference a real line start inside text or
-	// every row scan below slices out of bounds.
 	assert(blk_start >= 0 && blk_start <= len(text), "layout_table: blk_start out of bounds")
 	assert(max_width > 0, "layout_table: non-positive max_width")
-	Row :: struct {
-		cells:  []string,
-		starts: []int,
-	}
-	rows := make([dynamic]Row, 0, 8, ui_frame_allocator(ctx.frame))
-	cols := 0
-
-	pos := blk_start
-	phys := 0
-	next_byte := blk_start
-	for pos < len(text) && len(rows) < MARKDOWN_TABLE_ROWS_MAX {
-		nl := strings.index_byte(text[pos:], '\n')
-		line_end := len(text) if nl < 0 else pos + nl
-		line := text[pos:line_end]
-		if !strings.contains(line, "|") {
-			break
-		}
-		advance := len(text) if nl < 0 else line_end + 1
-		// The second physical line is the header/body separator — skip it.
-		if phys == 1 && is_table_separator(line) {
-			phys += 1
-			next_byte = advance
-			pos = advance
-			continue
-		}
-		cells_view, starts_view := split_table_row_offsets(ctx.frame, text, pos, line_end)
-		cells := frame_view_items(ctx.frame, cells_view)
-		starts := frame_view_items(ctx.frame, starts_view)
-		append(&rows, Row{cells = cells, starts = starts})
-		if len(cells) > cols do cols = min(len(cells), MARKDOWN_TABLE_COLS_MAX)
-		phys += 1
-		next_byte = advance
-		pos = advance
-	}
-
-	if cols == 0 || len(rows) == 0 {
-		return blk_start, 0
-	}
-
-	pad := ui_frame_metrics(ctx.frame).TABLE_CELL_PAD
-	// Natural width per column: widest cell plus horizontal padding.
-	naturals: [MARKDOWN_TABLE_COLS_MAX]i32
-	for row in rows {
-		for cell, ci in row.cells {
-			if len(cell) == 0 do continue
-			cell_c := strings.clone_to_cstring(cell, ui_frame_allocator(ctx.frame))
-			w :=
-				measure_text_frame(ctx.frame, cell_c, ui_frame_metrics(ctx.frame).FONT_SIZE) +
-				pad * 2
-			if w > naturals[ci] do naturals[ci] = w
-		}
-	}
-	fair := max_width / i32(cols)
-	min_w := pad * 2 + ui_frame_metrics(ctx.frame).FONT_SIZE * 2
-	if min_w > fair do min_w = fair
-	if min_w < 1 do min_w = 1
-	for ci in 0 ..< cols {
-		if naturals[ci] < min_w do naturals[ci] = min_w
-	}
-
-	col_widths: [MARKDOWN_TABLE_COLS_MAX]i32
-	natural_total: i32 = 0
-	for ci in 0 ..< cols do natural_total += naturals[ci]
-
-	shrunk := natural_total > max_width
-	if !shrunk {
-		// Everything fits at natural width — table may be narrower than max_width.
-		copy(col_widths[:cols], naturals[:cols])
-	} else {
-		// Columns at/below their fair share keep natural width; wide columns
-		// split the remaining space proportionally to their natural widths.
-		// Fixing a column changes the fair share of the rest, so iterate.
-		fixed: [MARKDOWN_TABLE_COLS_MAX]bool
-		remaining := max_width
-		flex := cols
-		changed := false
-		for _ in 0 ..< cols {
-			changed = false
-			share := remaining / i32(max(flex, 1))
-			for ci in 0 ..< cols {
-				if fixed[ci] do continue
-				if naturals[ci] <= share {
-					fixed[ci] = true
-					col_widths[ci] = naturals[ci]
-					remaining -= naturals[ci]
-					flex -= 1
-					changed = true
-				}
-			}
-			if !changed || flex == 0 do break
-		}
-		assert(flex == 0 || !changed)
-		if flex > 0 {
-			flex_natural: i32 = 0
-			for ci in 0 ..< cols {
-				if !fixed[ci] do flex_natural += naturals[ci]
-			}
-			left := remaining
-			last := -1
-			for ci in 0 ..< cols {
-				if fixed[ci] do continue
-				w := remaining * naturals[ci] / max(flex_natural, 1)
-				if w < min_w do w = min_w
-				col_widths[ci] = w
-				left -= w
-				last = ci
-			}
-			// Give rounding leftovers to the last flexible column.
-			if last >= 0 && left > 0 do col_widths[last] += left
-		}
-	}
-
-	table_w: i32 = 0
-	for ci in 0 ..< cols do table_w += col_widths[ci]
-	if out_table_w != nil {
-		// When columns were shrunk the layout depends on max_width; report
-		// max_width so re-layout at the reported width is identical.
-		out_table_w^ = max_width if shrunk else table_w
-	}
-
-	// Per-row height: tallest wrapped cell (min one line).
-	row_heights: [MARKDOWN_TABLE_ROWS_MAX]i32
-	for row, ri in rows {
-		h := i32(ui_frame_metrics(ctx.frame).LINE_HEIGHT)
-		for cell, ci in row.cells {
-			if ci >= cols || len(cell) == 0 do continue
-			inner := col_widths[ci] - pad * 2
-			if inner < 1 do inner = 1
-			ch := wrapped_height_px_frame(
-				ctx.frame,
-				cell,
-				inner,
-				ui_frame_metrics(ctx.frame).FONT_SIZE,
-				ui_frame_metrics(ctx.frame).LINE_HEIGHT,
-			)
-			if ch > h do h = ch
-		}
-		row_heights[ri] = h
-	}
-
-	cell_pad_y :=
-		(i32(ui_frame_metrics(ctx.frame).LINE_HEIGHT) - ui_frame_metrics(ctx.frame).FONT_SIZE) / 2
-	if cell_pad_y < 0 do cell_pad_y = 0
-
+	rows, columns, next_byte := markdown_table_parse_rows(ctx, text, blk_start)
+	if columns == 0 || len(rows) == 0 do return blk_start, 0
+	naturals, minimum := markdown_table_natural_widths(ctx, rows[:], columns, max_width)
+	widths, shrunk := markdown_table_column_widths(naturals, columns, max_width, minimum)
+	table_width := markdown_table_total_width(widths, columns)
+	if out_table_w != nil do out_table_w^ = max_width if shrunk else table_width
+	heights := markdown_table_row_heights(ctx, rows[:], widths, columns)
 	row_y := y
-	for row, ri in rows {
-		row_h := row_heights[ri]
-		is_header := ri == 0
-
+	for &row, row_index in rows {
+		row_height := heights[row_index]
 		if draw {
-			if is_header {
-				draw_rectangle(
-					ctx.frame,
-					x,
-					row_y,
-					table_w,
-					row_h,
-					ui_frame_theme(ctx.frame).bg_table_header,
-				)
-			}
-			cell_x := x
-			for ci in 0 ..< cols {
-				if ci > 0 {
-					draw_rectangle(
-						ctx.frame,
-						cell_x,
-						row_y,
-						1,
-						row_h,
-						ui_frame_theme(ctx.frame).border_color,
-					)
-				}
-				if ci < len(row.cells) && len(row.cells[ci]) > 0 {
-					cell := row.cells[ci]
-					cell_color := ui_frame_theme(ctx.frame).fg_bold if is_header else base_color
-					inner := col_widths[ci] - pad * 2
-					if inner < 1 do inner = 1
-					ty := row_y + cell_pad_y
-					for ln in wrap_text_frame(
-						ctx.frame,
-						cell,
-						inner,
-						ui_frame_metrics(ctx.frame).FONT_SIZE,
-					) {
-						if ln.end > ln.start {
-							line_c := strings.clone_to_cstring(
-								cell[ln.start:ln.end],
-								context.temp_allocator,
-							)
-							draw_text_frame(
-								ctx.frame,
-								line_c,
-								cell_x + pad,
-								ty,
-								ui_frame_metrics(ctx.frame).FONT_SIZE,
-								cell_color,
-							)
-						}
-						ty += i32(ui_frame_metrics(ctx.frame).LINE_HEIGHT)
-					}
-				}
-				cell_x += col_widths[ci]
-			}
-			if is_header {
-				draw_rectangle(
-					ctx.frame,
-					x,
-					row_y + row_h,
-					table_w,
-					1,
-					ui_frame_theme(ctx.frame).border_color,
-				)
-			}
-		} else if out_hit != nil && mouse_y >= row_y && mouse_y < row_y + row_h {
-			// Find the column under the mouse by walking the variable widths.
-			ci := cols - 1
-			cx := x
-			for c in 0 ..< cols {
-				if mouse_x < cx + col_widths[c] {
-					ci = c
-					break
-				}
-				cx += col_widths[c]
-			}
-			cell_x := x
-			for c in 0 ..< ci do cell_x += col_widths[c]
-			if ci < len(row.cells) && len(row.cells[ci]) > 0 {
-				inner := col_widths[ci] - pad * 2
-				if inner < 1 do inner = 1
-				local := hit_test_wrapped_frame(
-					ctx.frame,
-					cell_x + pad,
-					row_y + cell_pad_y,
-					inner,
-					row.cells[ci],
-					mouse_x,
-					mouse_y,
-					ui_frame_metrics(ctx.frame).FONT_SIZE,
-				)
-				if local < 0 do local = 0
-				out_hit^ = row.starts[ci] + local
-			} else {
-				out_hit^ = blk_start
-			}
+			markdown_table_draw_row(
+				ctx,
+				&row,
+				row_index,
+				x,
+				row_y,
+				row_height,
+				table_width,
+				widths,
+				columns,
+				base_color,
+			)
+		} else if out_hit != nil && mouse_y >= row_y && mouse_y < row_y + row_height {
+			out_hit^ = markdown_table_hit_row(
+				ctx,
+				&row,
+				x,
+				row_y,
+				widths,
+				columns,
+				mouse_x,
+				mouse_y,
+				blk_start,
+			)
 		}
-		row_y += row_h
+		row_y += row_height
 	}
-
-	total_h := row_y - y + 1 // +1 for header separator rule
+	total_height := row_y - y + 1
 	if draw {
 		draw_rectangle_lines(
 			ctx.frame,
 			x,
 			y,
-			table_w,
-			total_h,
+			table_width,
+			total_height,
 			ui_frame_theme(ctx.frame).border_color,
 		)
 	}
-	total_h += 4 // bottom margin
-
-	return next_byte, total_h
+	return next_byte, total_height + 4
 }
 
 // Get font size for a heading level.
@@ -1549,251 +1626,240 @@ measure_markdown :: proc(
 	)
 	return h
 }
+@(private = "file")
+Markdown_Hit_State :: struct {
+	ctx:           ^Markdown_Context,
+	text:          string,
+	x, current_y:  i32,
+	max_width:     i32,
+	mouse_x:       i32,
+	mouse_y:       i32,
+	in_code_block: bool,
+}
+
+@(private = "file")
+markdown_hit_fence :: proc(
+	state: ^Markdown_Hit_State,
+	line: string,
+	line_start: int,
+) -> (
+	int,
+	bool,
+) {
+	if !is_code_fence(line) do return -1, false
+	gap: i32 = 6
+	if state.in_code_block do gap = 8
+	state.in_code_block = !state.in_code_block
+	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + gap {
+		return line_start, true
+	}
+	state.current_y += gap
+	return -1, true
+}
+
+@(private = "file")
+markdown_hit_code :: proc(state: ^Markdown_Hit_State, line: string, line_start: int) -> int {
+	metrics := ui_frame_metrics(state.ctx.frame)
+	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + metrics.LINE_HEIGHT {
+		column := caret_pixel_to_col_with(
+			ui_frame_text(state.ctx.frame),
+			line,
+			state.mouse_x - (state.x + metrics.CODE_BLOCK_PAD),
+			metrics.FONT_SIZE,
+		)
+		return line_start + caret_col_to_byte(line, column)
+	}
+	state.current_y += metrics.LINE_HEIGHT
+	return -1
+}
+
+@(private = "file")
+markdown_hit_heading :: proc(
+	state: ^Markdown_Hit_State,
+	heading: Heading_Match,
+	line_start: int,
+) -> int {
+	height := heading_total_height(state.ctx, heading.text, heading.level, state.max_width)
+	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + height {
+		offset := hit_test_wrapped_frame(
+			state.ctx.frame,
+			state.x,
+			state.current_y,
+			state.max_width,
+			heading.text,
+			state.mouse_x,
+			state.mouse_y,
+			heading_font_size(state.ctx, heading.level),
+		)
+		if offset < 0 do offset = len(heading.text)
+		return line_start + heading.prefix_len + offset
+	}
+	state.current_y += height
+	return -1
+}
+
+@(private = "file")
+markdown_hit_bullet :: proc(state: ^Markdown_Hit_State, line: string, line_start: int) -> int {
+	metrics := ui_frame_metrics(state.ctx.frame)
+	content := line[2:]
+	content_x := state.x + metrics.BULLET_INDENT
+	content_width := state.max_width - metrics.BULLET_INDENT
+	height := measure_wrapped_height_md(state.ctx, content, content_width, metrics.FONT_SIZE)
+	if height == 0 do height = metrics.LINE_HEIGHT
+	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + height {
+		offset := hit_test_wrapped_md(
+			state.ctx,
+			content_x,
+			state.current_y,
+			content_width,
+			content,
+			state.mouse_x,
+			state.mouse_y,
+			metrics.FONT_SIZE,
+		)
+		if offset < 0 do offset = 0
+		return line_start + 2 + offset
+	}
+	state.current_y += height
+	return -1
+}
+
+@(private = "file")
+markdown_hit_table :: proc(
+	state: ^Markdown_Hit_State,
+	line: string,
+	line_start, line_end: int,
+) -> (
+	int,
+	int,
+	bool,
+) {
+	if line_end == len(state.text) || !strings.contains(line, "|") do return -1, 0, false
+	newline := strings.index_byte(state.text[line_end + 1:], '\n')
+	next_end := len(state.text) if newline < 0 else line_end + 1 + newline
+	next_line := state.text[line_end + 1:next_end]
+	if !strings.contains(next_line, "|") || !is_table_separator(next_line) {
+		return -1, 0, false
+	}
+	offset := -1
+	next_byte, height := layout_table(
+		state.ctx,
+		state.x,
+		state.current_y,
+		state.max_width,
+		state.text,
+		line_start,
+		ui_frame_theme(state.ctx.frame).fg_primary,
+		false,
+		state.mouse_x,
+		state.mouse_y,
+		&offset,
+	)
+	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + height {
+		if offset < 0 do offset = line_start
+		return offset, next_byte, true
+	}
+	state.current_y += height
+	return -1, next_byte, true
+}
+
+@(private = "file")
+markdown_hit_plain :: proc(state: ^Markdown_Hit_State, line: string, line_start: int) -> int {
+	metrics := ui_frame_metrics(state.ctx.frame)
+	if len(line) == 0 {
+		gap: i32 = metrics.LINE_HEIGHT / 2
+		if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + gap {
+			return line_start
+		}
+		state.current_y += gap
+		return -1
+	}
+	height := measure_wrapped_height_md(state.ctx, line, state.max_width, metrics.FONT_SIZE)
+	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + height {
+		offset := hit_test_wrapped_md(
+			state.ctx,
+			state.x,
+			state.current_y,
+			state.max_width,
+			line,
+			state.mouse_x,
+			state.mouse_y,
+			metrics.FONT_SIZE,
+		)
+		if offset >= 0 do return line_start + offset
+	}
+	state.current_y += height
+	return -1
+}
+
+@(private = "file")
+markdown_hit_line :: proc(
+	state: ^Markdown_Hit_State,
+	line: string,
+	line_start, line_end: int,
+) -> (
+	int,
+	int,
+	bool,
+) {
+	if result, handled := markdown_hit_fence(state, line, line_start); handled {
+		return result, 0, false
+	}
+	if state.in_code_block do return markdown_hit_code(state, line, line_start), 0, false
+	if heading, ok := match_heading(line); ok {
+		return markdown_hit_heading(state, heading, line_start), 0, false
+	}
+	if len(line) >= 2 && (line[0] == '-' || line[0] == '*' || line[0] == '+') && line[1] == ' ' {
+		return markdown_hit_bullet(state, line, line_start), 0, false
+	}
+	if result, next, table := markdown_hit_table(state, line, line_start, line_end); table {
+		return result, next, true
+	}
+	return markdown_hit_plain(state, line, line_start), 0, false
+}
+
 // Mirrors draw_markdown layout exactly.
-// Returns valid byte offsets for all positions within the content area, including
-// empty-line gaps, code fence margins, heading/bullet margins, and past-end areas.
 hit_test_markdown :: proc(
 	ctx: ^Markdown_Context,
 	x, y, max_width: i32,
 	text: string,
 	mouse_x, mouse_y: i32,
 ) -> int {
-	// Why assert: layout must mirror draw_markdown exactly, so it shares the
-	// same argument contract (positive wrap width).
 	assert(max_width > 0, "hit_test_markdown: non-positive max_width")
 	assert(x >= min(i32) / 2 && y >= min(i32) / 2, "hit_test_markdown: origin overflow risk")
-	if len(text) == 0 do return -1
-
-	// Mouse is above the content area.
-	if mouse_y < y do return -1
-
-	current_y := y
-	line_start := 0
-	in_code_block := false
-
-	for i := 0; i <= len(text); i += 1 {
-		is_end := i == len(text)
-		if !is_end && text[i] != '\n' do continue
-		if is_end && line_start >= len(text) do break
-
-		line := text[line_start:i]
-
-		// Code fence toggle.
-		if is_code_fence(line) {
-			if !in_code_block {
-				in_code_block = true
-				// Opening fence: 6px gap. Snap to fence line_start.
-				if mouse_y >= current_y && mouse_y < current_y + 6 {
-					return line_start
-				}
-				current_y += 6
-			} else {
-				in_code_block = false
-				// Closing fence: 8px gap. Snap to fence line_start.
-				if mouse_y >= current_y && mouse_y < current_y + 8 {
-					return line_start
-				}
-				current_y += 8
-			}
-			line_start = i + 1
-			continue
-		}
-
-		// Code block line.
-		if in_code_block {
-			if mouse_y >= current_y &&
-			   mouse_y < current_y + ui_frame_metrics(ctx.frame).LINE_HEIGHT {
-				col := caret_pixel_to_col_with(
-					ui_frame_text(ctx.frame),
-					line,
-					mouse_x - (x + ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD),
-					ui_frame_metrics(ctx.frame).FONT_SIZE,
-				)
-				return line_start + caret_col_to_byte(line, col)
-			}
-			current_y += ui_frame_metrics(ctx.frame).LINE_HEIGHT
-			line_start = i + 1
-			continue
-		}
-
-		// H3 heading.
-		if heading, ok := match_heading(line); ok && heading.level == 3 {
-			heading_text := line[4:]
-			h := heading_total_height(ctx, heading_text, 3, max_width)
-			if mouse_y >= current_y && mouse_y < current_y + h {
-				fs := heading_font_size(ctx, 3)
-				offset := hit_test_wrapped_frame(
-					ctx.frame,
-					x,
-					current_y,
-					max_width,
-					heading_text,
-					mouse_x,
-					mouse_y,
-					fs,
-				)
-				if offset >= 0 do return line_start + 4 + offset
-				// Mouse is in heading margin area — snap to end of heading text.
-				return line_start + 4 + len(heading_text)
-			}
-			current_y += h
-			line_start = i + 1
-			continue
-		}
-		// H2 heading.
-		if heading, ok := match_heading(line); ok && heading.level == 2 {
-			heading_text := line[3:]
-			h := heading_total_height(ctx, heading_text, 2, max_width)
-			if mouse_y >= current_y && mouse_y < current_y + h {
-				fs := heading_font_size(ctx, 2)
-				offset := hit_test_wrapped_frame(
-					ctx.frame,
-					x,
-					current_y,
-					max_width,
-					heading_text,
-					mouse_x,
-					mouse_y,
-					fs,
-				)
-				if offset >= 0 do return line_start + 3 + offset
-				// Mouse is in heading margin area — snap to end of heading text.
-				return line_start + 3 + len(heading_text)
-			}
-			current_y += h
-			line_start = i + 1
-			continue
-		}
-		// H1 heading.
-		if heading, ok := match_heading(line); ok && heading.level == 1 {
-			heading_text := line[2:]
-			h := heading_total_height(ctx, heading_text, 1, max_width)
-			if mouse_y >= current_y && mouse_y < current_y + h {
-				fs := heading_font_size(ctx, 1)
-				offset := hit_test_wrapped_frame(
-					ctx.frame,
-					x,
-					current_y,
-					max_width,
-					heading_text,
-					mouse_x,
-					mouse_y,
-					fs,
-				)
-				if offset >= 0 do return line_start + 2 + offset
-				// Mouse is in heading margin area — snap to end of heading text.
-				return line_start + 2 + len(heading_text)
-			}
-			current_y += h
-			line_start = i + 1
-			continue
-		}
-
-		// Bullet point.
-		if len(line) >= 2 &&
-		   (line[0] == '-' || line[0] == '*' || line[0] == '+') &&
-		   line[1] == ' ' {
-			content := line[2:]
-			content_x := x + ui_frame_metrics(ctx.frame).BULLET_INDENT
-			content_width := max_width - ui_frame_metrics(ctx.frame).BULLET_INDENT
-			h := measure_wrapped_height_md(
-				ctx,
-				content,
-				content_width,
-				ui_frame_metrics(ctx.frame).FONT_SIZE,
-			)
-			if h == 0 do h = ui_frame_metrics(ctx.frame).LINE_HEIGHT
-
-			if mouse_y >= current_y && mouse_y < current_y + h {
-				offset := hit_test_wrapped_md(
-					ctx,
-					content_x,
-					current_y,
-					content_width,
-					content,
-					mouse_x,
-					mouse_y,
-					ui_frame_metrics(ctx.frame).FONT_SIZE,
-				)
-				if offset >= 0 do return line_start + 2 + offset
-				// Mouse is in bullet indent area — snap to start of bullet content.
-				return line_start + 2
-			}
-
-			current_y += h
-			line_start = i + 1
-			continue
-		}
-
-		// GFM table.
-		if !is_end && strings.contains(line, "|") {
-			nl := strings.index_byte(text[i + 1:], '\n')
-			next_end := len(text) if nl < 0 else i + 1 + nl
-			next_line := text[i + 1:next_end]
-			if strings.contains(next_line, "|") && is_table_separator(next_line) {
-				offset := -1
-				next_byte, h := layout_table(
-					ctx,
-					x,
-					current_y,
-					max_width,
-					text,
-					line_start,
-					ui_frame_theme(ctx.frame).fg_primary,
-					false,
-					mouse_x,
-					mouse_y,
-					&offset,
-				)
-				if mouse_y >= current_y && mouse_y < current_y + h {
-					if offset >= 0 do return offset
-					return line_start
-				}
-				current_y += h
-				line_start = next_byte
-				i = next_byte - 1
-				continue
-			}
-		}
-
-		// Empty line — half-height gap. Snap to line_start (the newline boundary).
-		if len(line) == 0 {
-			gap: i32 = ui_frame_metrics(ctx.frame).LINE_HEIGHT / 2
-			if mouse_y >= current_y && mouse_y < current_y + gap {
-				return line_start
-			}
-			current_y += gap
-			line_start = i + 1
-			continue
-		}
-
-		// Normal text.
-		h := measure_wrapped_height_md(ctx, line, max_width, ui_frame_metrics(ctx.frame).FONT_SIZE)
-
-		if mouse_y >= current_y && mouse_y < current_y + h {
-			offset := hit_test_wrapped_md(
-				ctx,
-				x,
-				current_y,
-				max_width,
-				line,
-				mouse_x,
-				mouse_y,
-				ui_frame_metrics(ctx.frame).FONT_SIZE,
-			)
-			if offset >= 0 do return line_start + offset
-		}
-
-		current_y += h
-		line_start = i + 1
+	if len(text) == 0 || mouse_y < y do return -1
+	state := Markdown_Hit_State {
+		ctx       = ctx,
+		text      = text,
+		x         = x,
+		current_y = y,
+		max_width = max_width,
+		mouse_x   = mouse_x,
+		mouse_y   = mouse_y,
 	}
-
-	// Mouse is just past the last line — snap to end of text. Bounded to one
-	// line of slack so clicks far below the content (e.g. in the gap or on a
-	// following tool card) miss this block instead of selecting to its end.
-	if mouse_y >= current_y && mouse_y < current_y + ui_frame_metrics(ctx.frame).LINE_HEIGHT {
+	line_start := 0
+	for index := 0; index <= len(text); index += 1 {
+		is_end := index == len(text)
+		if !is_end && text[index] != '\n' do continue
+		if is_end && line_start >= len(text) do break
+		result, next, skipped := markdown_hit_line(
+			&state,
+			text[line_start:index],
+			line_start,
+			index,
+		)
+		if result >= 0 do return result
+		if skipped {
+			assert(next > line_start, "hit_test_markdown: table made no progress")
+			line_start = next
+			index = next - 1
+			continue
+		}
+		line_start = index + 1
+	}
+	if mouse_y >= state.current_y &&
+	   mouse_y < state.current_y + ui_frame_metrics(ctx.frame).LINE_HEIGHT {
 		return len(text)
 	}
-
 	return -1
 }
