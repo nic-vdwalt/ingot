@@ -9,23 +9,52 @@
 package ui
 
 
-// focus_scope_focused_index returns the registry index of the entry that
-// currently holds focus (its slot equals its id), or -1. Pure.
+focus_scope_id :: proc(value: u64) -> Focus_Scope_Id {
+	assert(value != 0, "focus_scope_id: zero is reserved")
+	return Focus_Scope_Id(value)
+}
+
+focus_scope_begin :: proc(frame: ^Ui_Frame, id: Focus_Scope_Id, priority: i32) {
+	assert(frame != nil && frame.open, "focus_scope_begin: invalid frame")
+	assert(id != FOCUS_SCOPE_NONE, "focus_scope_begin: zero id")
+	stack := &frame.semantics.focus_scopes
+	assert(stack.count >= 0 && stack.count < MAX_SEM_FOCUS_SCOPES)
+	for i in 0 ..< stack.count {
+		assert(stack.entries[i].id != id, "focus_scope_begin: duplicate active scope id")
+	}
+	stack.entries[stack.count] = {
+		id       = id,
+		priority = priority,
+	}
+	stack.count += 1
+}
+
+focus_scope_end :: proc(frame: ^Ui_Frame, id: Focus_Scope_Id) {
+	assert(frame != nil && frame.open, "focus_scope_end: invalid frame")
+	assert(id != FOCUS_SCOPE_NONE, "focus_scope_end: zero id")
+	stack := &frame.semantics.focus_scopes
+	assert(stack.count > 0, "focus_scope_end: no active scope")
+	assert(stack.entries[stack.count - 1].id == id, "focus_scope_end: mismatched scope")
+	stack.count -= 1
+}
+
+focus_scope_current :: proc(frame: ^Ui_Frame) -> Focus_Scope_Stamp {
+	assert(frame != nil && frame.open, "focus_scope_current: invalid frame")
+	stack := &frame.semantics.focus_scopes
+	assert(stack.count >= 0 && stack.count <= MAX_SEM_FOCUS_SCOPES)
+	if stack.count == 0 do return {}
+	return stack.entries[stack.count - 1]
+}
+
 focus_scope_focused_index :: proc(list: ^Sem_Focus_List) -> int {
 	assert(list != nil, "focus_scope_focused_index: nil list")
-	assert(
-		list.count >= 0 && list.count <= MAX_SEM_FOCUS,
-		"focus_scope_focused_index: corrupt count",
-	)
+	assert(list.count >= 0 && list.count <= MAX_SEM_FOCUS)
 	for i in 0 ..< list.count {
 		if focus_opt_focused(list.entries[i].focus) do return i
 	}
 	return -1
 }
 
-// focus_scope_next_index returns the registry index Tab should land on:
-// draw-order successor (or predecessor) of `current` with wraparound; the
-// first (or last) entry when nothing is focused. Pure.
 focus_scope_next_index :: proc(current, count: int, backwards: bool) -> int {
 	assert(count > 0, "focus_scope_next_index: empty registry")
 	assert(current >= -1 && current < count, "focus_scope_next_index: index out of range")
@@ -38,22 +67,70 @@ focus_scope_next_index :: proc(current, count: int, backwards: bool) -> int {
 	return 0 if current == count - 1 else current + 1
 }
 
-// focus_scope_apply moves focus from entry `current` (-1 for none) to entry
-// `next`: clears the outgoing slot, sets the incoming one. Pure over the
-// caller-owned slots.
+focus_scope_active_priority :: proc(list: ^Sem_Focus_List) -> (i32, bool) {
+	assert(list != nil, "focus_scope_active_priority: nil list")
+	assert(list.count >= 0 && list.count <= MAX_SEM_FOCUS)
+	if list.count == 0 do return 0, false
+	priority := list.entries[0].priority
+	for i in 1 ..< list.count {
+		priority = max(priority, list.entries[i].priority)
+	}
+	return priority, true
+}
+
+focus_scope_focused_index_at :: proc(list: ^Sem_Focus_List, priority: i32) -> int {
+	assert(list != nil, "focus_scope_focused_index_at: nil list")
+	assert(list.count >= 0 && list.count <= MAX_SEM_FOCUS)
+	for i in 0 ..< list.count {
+		entry := &list.entries[i]
+		if entry.priority == priority && focus_opt_focused(entry.focus) do return i
+	}
+	return -1
+}
+
+focus_scope_next_index_at :: proc(
+	list: ^Sem_Focus_List,
+	current: int,
+	priority: i32,
+	backwards: bool,
+) -> int {
+	assert(list != nil, "focus_scope_next_index_at: nil list")
+	assert(list.count > 0 && list.count <= MAX_SEM_FOCUS)
+	assert(current >= -1 && current < list.count)
+	if backwards {
+		start := current - 1 if current >= 0 else list.count - 1
+		for step in 0 ..< list.count {
+			index := start - step
+			if index < 0 do index += list.count
+			if list.entries[index].priority == priority do return index
+		}
+	} else {
+		start := current + 1 if current >= 0 else 0
+		for step in 0 ..< list.count {
+			index := (start + step) % list.count
+			if list.entries[index].priority == priority do return index
+		}
+	}
+	assert(false, "focus_scope_next_index_at: priority has no entries")
+	return -1
+}
+
 focus_scope_apply :: proc(list: ^Sem_Focus_List, current, next: int) {
 	assert(list != nil, "focus_scope_apply: nil list")
+	assert(list.count > 0 && list.count <= MAX_SEM_FOCUS)
+	assert(current >= -1 && current < list.count)
 	assert(next >= 0 && next < list.count, "focus_scope_apply: next out of range")
-	if current >= 0 do focus_opt_clear(list.entries[current].focus)
+	for i in 0 ..< list.count {
+		if i != next && focus_opt_focused(list.entries[i].focus) {
+			focus_opt_clear(list.entries[i].focus)
+		}
+	}
 	e := list.entries[next]
 	assert(e.focus.focus != nil, "focus_scope_apply: registry entry without focus link")
 	focus_opt_set(e.focus)
 	assert(focus_opt_focused(e.focus), "focus_scope_apply: focus not set")
 }
 
-// focus_scope_cycle is the app-level Tab handler. Call it once before drawing
-// focusable widgets. The request is committed at ui_frame_end after current
-// draw-order registration is complete.
 focus_scope_cycle :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "focus_scope_cycle: invalid frame")
 	if !is_key_pressed(frame, .TAB) do return
@@ -65,11 +142,13 @@ focus_scope_cycle :: proc(frame: ^Ui_Frame) {
 focus_scope_frame_end :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "focus_scope_frame_end: invalid frame")
 	state := &frame.semantics
+	assert(state.focus_scopes.count == 0, "focus_scope_frame_end: unbalanced focus scopes")
 	if !state.cycle_requested do return
 	list := sem_focus_list(frame)
-	if list.count > 0 {
-		current := focus_scope_focused_index(list)
-		next := focus_scope_next_index(current, list.count, state.cycle_backwards)
+	priority, present := focus_scope_active_priority(list)
+	if present {
+		current := focus_scope_focused_index_at(list, priority)
+		next := focus_scope_next_index_at(list, current, priority, state.cycle_backwards)
 		focus_scope_apply(list, current, next)
 		request_redraw(frame)
 	}
@@ -79,6 +158,11 @@ focus_scope_frame_end :: proc(frame: ^Ui_Frame) {
 
 focus_scope_clear_live :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "focus_scope_clear_live: invalid frame")
+	assert(
+		frame.semantics.focus_scopes.count == 0,
+		"focus_scope_clear_live: unbalanced focus scopes",
+	)
 	frame.semantics.focus_cur.count = 0
 	frame.semantics.action_targets.count = 0
+	frame.semantics.focus_scopes.count = 0
 }

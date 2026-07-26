@@ -31,6 +31,20 @@ SEM_VALUE_MAX :: 256
 
 // MAX_SEM_FOCUS bounds the frame-ordered focus registry (focus_scope.odin).
 MAX_SEM_FOCUS :: 128
+MAX_SEM_FOCUS_SCOPES :: 16
+
+Focus_Scope_Id :: distinct u64
+FOCUS_SCOPE_NONE :: Focus_Scope_Id(0)
+
+Focus_Scope_Stamp :: struct {
+	id:       Focus_Scope_Id,
+	priority: i32,
+}
+
+Focus_Scope_Stack :: struct {
+	entries: [MAX_SEM_FOCUS_SCOPES]Focus_Scope_Stamp,
+	count:   int,
+}
 
 Sem_Role :: enum u8 {
 	None,
@@ -96,7 +110,9 @@ Sem_Frame :: struct {
 // Sem_Focus_Entry is one focusable widget recorded in draw order; the
 // app-global Tab cycler (focus_scope.odin) walks these.
 Sem_Focus_Entry :: struct {
-	focus: Focus_Opt,
+	focus:    Focus_Opt,
+	scope_id: Focus_Scope_Id,
+	priority: i32,
 }
 
 Sem_Focus_List :: struct {
@@ -120,6 +136,7 @@ Semantics_State :: struct {
 	ordinals:        [Sem_Role]int,
 	focus_cur:       Sem_Focus_List,
 	action_targets:  Sem_Action_Targets,
+	focus_scopes:    Focus_Scope_Stack,
 	cycle_requested: bool,
 	cycle_backwards: bool,
 }
@@ -140,10 +157,13 @@ sem_begin_frame :: proc(frame: ^Ui_Frame) {
 	assert(state.cur.count >= 0 && state.cur.count <= MAX_SEM_NODES)
 	assert(state.focus_cur.count >= 0 && state.focus_cur.count <= MAX_SEM_FOCUS)
 	assert(state.action_targets.count >= 0 && state.action_targets.count <= MAX_SEM_FOCUS)
+	assert(state.focus_scopes.count >= 0 && state.focus_scopes.count <= MAX_SEM_FOCUS_SCOPES)
+	assert(state.focus_scopes.count == 0, "sem_begin_frame: unbalanced prior focus scope")
 	state.cur.count = 0
 	state.ordinals = {}
 	state.focus_cur.count = 0
 	state.action_targets.count = 0
+	state.focus_scopes.count = 0
 	state.cycle_requested = false
 	state.cycle_backwards = false
 }
@@ -176,9 +196,18 @@ sem_node_id :: proc(role: Sem_Role, focus: Focus_Opt, field_id: string, ordinal:
 	assert(ordinal >= 0, "sem_node_id: negative ordinal")
 	id: u64
 	if focus.focus != nil {
-		assert(focus.id > 0, "sem_node_id: focus ids are 1-based")
-		assert(focus.id < (1 << 16), "sem_node_id: focus id exceeds 16-bit pack space")
-		id = u64(uintptr(focus.focus)) ~ (u64(focus.id) << 48)
+		assert(focus.id > 0, "sem_node_id: focus ids are positive")
+		id = SEM_FNV_OFFSET
+		pointer := u64(uintptr(focus.focus))
+		for shift: u64 = 0; shift < 64; shift += 8 {
+			id ~= (pointer >> shift) & 0xff
+			id *= SEM_FNV_PRIME
+		}
+		focus_id := u64(focus.id)
+		for shift: u64 = 0; shift < 64; shift += 8 {
+			id ~= (focus_id >> shift) & 0xff
+			id *= SEM_FNV_PRIME
+		}
 	} else if field_id != "" {
 		h := SEM_FNV_OFFSET
 		for b in transmute([]u8)field_id {
@@ -217,6 +246,29 @@ sem_label_clip :: proc(label: string) -> int {
 	return n
 }
 
+sem_focus_register :: proc(frame: ^Ui_Frame, focus: Focus_Opt, state: Sem_State) {
+	assert(frame != nil && frame.open, "sem_focus_register: invalid frame")
+	if focus.focus == nil || .Disabled in state do return
+	assert(focus.id > 0, "sem_focus_register: invalid focus id")
+	list := &frame.semantics.focus_cur
+	assert(list.count >= 0 && list.count <= MAX_SEM_FOCUS)
+	for i in 0 ..< list.count {
+		existing := list.entries[i].focus
+		assert(
+			existing.focus != focus.focus || existing.id != focus.id,
+			"sem_focus_register: duplicate focus registration",
+		)
+	}
+	if list.count >= MAX_SEM_FOCUS do return
+	scope := focus_scope_current(frame)
+	list.entries[list.count] = {
+		focus    = focus,
+		scope_id = scope.id,
+		priority = scope.priority,
+	}
+	list.count += 1
+}
+
 // semantic_push records one widget's semantics for this frame. Widgets call
 // it once, after interaction state is known. Returns the recorded node, or
 // nil when recording is disabled or the bounded buffer is full (drop, don't
@@ -248,10 +300,7 @@ semantic_push :: proc(
 		"semantic_push: invalid collection position",
 	)
 	sem := &frame.semantics
-	if focus.focus != nil && sem.focus_cur.count < MAX_SEM_FOCUS {
-		sem.focus_cur.entries[sem.focus_cur.count] = {focus}
-		sem.focus_cur.count += 1
-	}
+	sem_focus_register(frame, focus, state)
 	if !frame.runtime.semantics_enabled do return nil
 	ordinal := sem.ordinals[role]
 	sem.ordinals[role] = ordinal + 1

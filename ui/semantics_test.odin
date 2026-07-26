@@ -186,9 +186,35 @@ semantics_focus_registry :: proc(t: ^testing.T) {
 	semantic_push(&frame, .Label, {0, 0, 1, 1}, "static")
 	list := sem_focus_list(&frame)
 	testing.expect_value(t, list.count, 3)
-	testing.expect(t, list.entries[0] == Sem_Focus_Entry{Focus_Opt{&slot_a, 1}})
-	testing.expect(t, list.entries[1] == Sem_Focus_Entry{Focus_Opt{&slot_a, 2}})
-	testing.expect(t, list.entries[2] == Sem_Focus_Entry{Focus_Opt{&slot_b, 1}})
+	testing.expect(t, list.entries[0] == Sem_Focus_Entry{focus = Focus_Opt{&slot_a, 1}})
+	testing.expect(t, list.entries[1] == Sem_Focus_Entry{focus = Focus_Opt{&slot_a, 2}})
+	testing.expect(t, list.entries[2] == Sem_Focus_Entry{focus = Focus_Opt{&slot_b, 1}})
 	sem_begin_frame(&frame)
 	testing.expect_value(t, sem_focus_list(&frame).count, 0)
+}
+
+@(test)
+semantics_disabled_focus_is_not_traversable_but_action_is_retained :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	sem_enable(&runtime, true)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	slot: int
+	node := semantic_push(
+		&frame,
+		.Button,
+		{0, 0, 10, 10},
+		"Disabled",
+		{.Disabled},
+		focus = {&slot, 1},
+	)
+	testing.expect(t, node != nil)
+	testing.expect(t, .Disabled in node.state)
+	testing.expect_value(t, sem_focus_list(&frame).count, 0)
+	target, ok := sem_action_target(&frame, node.id)
+	testing.expect(t, ok)
+	testing.expect(t, target == Focus_Opt{&slot, 1})
+	ui_frame_end(&frame)
 }

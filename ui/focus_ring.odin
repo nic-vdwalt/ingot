@@ -26,6 +26,18 @@ focus_id :: proc(value: u64) -> Focus_Id {
 	return id
 }
 
+focus_id_string :: proc(value: string) -> Focus_Id {
+	assert(len(value) > 0, "focus_id_string: empty value")
+	h := u64(0xcbf29ce484222325)
+	for byte in transmute([]u8)value {
+		h ~= u64(byte)
+		h *= u64(0x00000100000001b3)
+	}
+	h &= u64(max(int))
+	if h == 0 do h = 1
+	return focus_id(h)
+}
+
 focus_clear :: proc(state: ^Focus_State) {
 	assert(state != nil, "focus_clear: nil state")
 	state.active = FOCUS_ID_NONE
