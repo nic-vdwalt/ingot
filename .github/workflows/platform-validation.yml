@@ -1,0 +1,34 @@
+name: Platform validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Evidence target
+        required: true
+        type: choice
+        options: [macOS, Linux, Windows, Browser, Internet TLS]
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ${{ inputs.target == 'Windows' && 'windows-2025' || inputs.target == 'Linux' && 'ubuntu-24.04' || 'macos-14' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture deterministic gate evidence
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          python3 scripts/validation-evidence.py \
+            --name package-tests \
+            --target "${{ inputs.target }}" \
+            --status validated \
+            --odin-revision "$(odin version | tr '\n' ' ')" \
+            --output artifacts/package-tests.json \
+            -- bash scripts/test.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ingot-validation-${{ inputs.target }}
+          path: artifacts/

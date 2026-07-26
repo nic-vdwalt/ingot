@@ -86,13 +86,20 @@ http_url_parse :: proc(raw: string) -> (url: Http_URL, err: Http_Error) {
 	if fragment := strings.index(rest, "#"); fragment >= 0 do return {}, .Invalid_URL
 	target_index := strings.index(rest, "/")
 	query_index := strings.index(rest, "?")
-	if target_index < 0 || (query_index >= 0 && query_index < target_index) do target_index = query_index
+	if target_index < 0 || (query_index >= 0 && query_index < target_index) {
+		target_index = query_index
+	}
 	authority := rest
 	url.request_target = "/"
 	if target_index >= 0 {
 		authority = rest[:target_index]
 		url.request_target = rest[target_index:]
-		if url.request_target[0] == '?' do url.request_target = strings.concatenate({"/", url.request_target}, context.temp_allocator)
+		if url.request_target[0] == '?' {
+			url.request_target = strings.concatenate(
+				{"/", url.request_target},
+				context.temp_allocator,
+			)
+		}
 	}
 	if len(authority) == 0 || strings.contains(authority, "@") do return {}, .Invalid_URL
 	if authority[0] == '[' {

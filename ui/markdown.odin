@@ -1216,6 +1216,297 @@ measure_markdown_context :: proc(
 	)
 }
 
+@(private = "file")
+Markdown_Draw_State :: struct {
+	ctx:           ^Markdown_Context,
+	text:          string,
+	base_color:    Color,
+	x:             i32,
+	current_y:     i32,
+	max_width:     i32,
+	sel_start:     int,
+	sel_end:       int,
+	max_w:         i32,
+	in_code_block: bool,
+	has_sel:       bool,
+	draw:          bool,
+}
+
+@(private = "file")
+markdown_selection :: proc(state: ^Markdown_Draw_State, start, end: int) -> (int, int) {
+	assert(state != nil, "markdown_selection: nil state")
+	assert(start >= 0 && end >= start, "markdown_selection: invalid range")
+	if !state.has_sel do return -1, -1
+	overlap_start := max(state.sel_start, start)
+	overlap_end := min(state.sel_end, end)
+	if overlap_start >= overlap_end do return -1, -1
+	return overlap_start - start, overlap_end - start
+}
+
+@(private = "file")
+markdown_draw_fence :: proc(state: ^Markdown_Draw_State, line: string) -> bool {
+	assert(state != nil, "markdown_draw_fence: nil state")
+	if !is_code_fence(line) do return false
+	if !state.in_code_block {
+		state.in_code_block = true
+		if state.draw {
+			draw_rectangle(
+				state.ctx.frame,
+				state.x,
+				state.current_y + 2,
+				state.max_width,
+				1,
+				ui_frame_theme(state.ctx.frame).border_color,
+			)
+		}
+		state.current_y += 6
+	} else {
+		state.in_code_block = false
+		if state.draw {
+			draw_rectangle(
+				state.ctx.frame,
+				state.x,
+				state.current_y,
+				state.max_width,
+				1,
+				ui_frame_theme(state.ctx.frame).border_color,
+			)
+		}
+		state.current_y += 8
+	}
+	return true
+}
+
+@(private = "file")
+markdown_draw_code_text :: proc(state: ^Markdown_Draw_State, line: string, line_start: int) {
+	assert(state != nil, "markdown_draw_code_text: nil state")
+	display_line := truncate_to_width_frame(
+		state.ctx.frame,
+		line,
+		state.max_width - ui_frame_metrics(state.ctx.frame).CODE_BLOCK_PAD * 2,
+		ui_frame_metrics(state.ctx.frame).FONT_SIZE,
+	)
+	if state.has_sel {
+		draw_line_with_selection_frame(
+			state.ctx.frame,
+			state.x + ui_frame_metrics(state.ctx.frame).CODE_BLOCK_PAD,
+			state.current_y,
+			display_line,
+			ui_frame_metrics(state.ctx.frame).FONT_SIZE,
+			ui_frame_metrics(state.ctx.frame).LINE_HEIGHT,
+			ui_frame_theme(state.ctx.frame).fg_primary,
+			line_start,
+			state.sel_start,
+			state.sel_end,
+		)
+	} else {
+		line_c := strings.clone_to_cstring(display_line, context.temp_allocator)
+		draw_text_frame(
+			state.ctx.frame,
+			line_c,
+			state.x + ui_frame_metrics(state.ctx.frame).CODE_BLOCK_PAD,
+			state.current_y,
+			ui_frame_metrics(state.ctx.frame).FONT_SIZE,
+			ui_frame_theme(state.ctx.frame).fg_primary,
+		)
+	}
+}
+
+@(private = "file")
+markdown_draw_code_line :: proc(state: ^Markdown_Draw_State, line: string, line_start: int) {
+	assert(state != nil, "markdown_draw_code_line: nil state")
+	metrics := ui_frame_metrics(state.ctx.frame)
+	if state.draw && !markdown_line_culled(state.ctx, state.current_y, metrics.LINE_HEIGHT) {
+		draw_rectangle(
+			state.ctx.frame,
+			state.x,
+			state.current_y,
+			state.max_width,
+			metrics.LINE_HEIGHT,
+			ui_frame_theme(state.ctx.frame).bg_code,
+		)
+		draw_rectangle(
+			state.ctx.frame,
+			state.x,
+			state.current_y,
+			2,
+			metrics.LINE_HEIGHT,
+			ui_frame_theme(state.ctx.frame).border_subtle,
+		)
+		markdown_draw_code_text(state, line, line_start)
+	}
+	line_c := strings.clone_to_cstring(line, context.temp_allocator)
+	width :=
+		min(
+			measure_text_frame(state.ctx.frame, line_c, metrics.FONT_SIZE),
+			state.max_width - metrics.CODE_BLOCK_PAD * 2,
+		) +
+		metrics.CODE_BLOCK_PAD * 2
+	state.max_w = max(state.max_w, width)
+	state.current_y += metrics.LINE_HEIGHT
+}
+
+@(private = "file")
+markdown_draw_heading_line :: proc(
+	state: ^Markdown_Draw_State,
+	line: string,
+	line_start, level: int,
+) {
+	assert(state != nil, "markdown_draw_heading_line: nil state")
+	assert(level >= 1 && level <= 3, "markdown_draw_heading_line: invalid level")
+	prefix_length := level + 1
+	content := line[prefix_length:]
+	state.current_y += draw_heading(
+		state.ctx,
+		state.x,
+		state.current_y,
+		state.max_width,
+		content,
+		level,
+		line_start + prefix_length,
+		state.sel_start,
+		state.sel_end,
+		state.has_sel,
+		state.draw,
+	)
+	font_size := ui_frame_metrics(state.ctx.frame).FONT_SIZE_LARGE
+	if level == 3 do font_size = ui_frame_metrics(state.ctx.frame).FONT_SIZE
+	width := wrapped_max_line_width_frame(state.ctx.frame, content, state.max_width, font_size)
+	state.max_w = max(state.max_w, width)
+}
+
+@(private = "file")
+markdown_draw_bullet_line :: proc(state: ^Markdown_Draw_State, line: string, line_start: int) {
+	assert(state != nil, "markdown_draw_bullet_line: nil state")
+	metrics := ui_frame_metrics(state.ctx.frame)
+	if state.draw {
+		draw_circle(
+			state.ctx.frame,
+			state.x + 8,
+			state.current_y + metrics.FONT_SIZE / 2 + 1,
+			2.5,
+			ui_frame_theme(state.ctx.frame).fg_bullet,
+		)
+	}
+	content := line[2:]
+	content_x := state.x + metrics.BULLET_INDENT
+	content_width := state.max_width - metrics.BULLET_INDENT
+	sel_start, sel_end := markdown_selection(state, line_start + 2, line_start + len(line))
+	height := draw_text_wrapped_md(
+		state.ctx,
+		content_x,
+		state.current_y,
+		content_width,
+		content,
+		state.base_color,
+		metrics.FONT_SIZE,
+		sel_start,
+		sel_end,
+		state.draw,
+	)
+	if height == 0 do height = metrics.LINE_HEIGHT
+	state.current_y += height
+	width :=
+		metrics.BULLET_INDENT +
+		wrapped_max_line_width_md_frame(state.ctx.frame, content, content_width, metrics.FONT_SIZE)
+	state.max_w = max(state.max_w, width)
+}
+
+@(private = "file")
+markdown_draw_table_line :: proc(
+	state: ^Markdown_Draw_State,
+	line: string,
+	line_start, line_end: int,
+) -> (
+	next: int,
+	handled: bool,
+) {
+	assert(state != nil, "markdown_draw_table_line: nil state")
+	if line_end == len(state.text) || !strings.contains(line, "|") do return 0, false
+	newline := strings.index_byte(state.text[line_end + 1:], '\n')
+	next_end := len(state.text) if newline < 0 else line_end + 1 + newline
+	next_line := state.text[line_end + 1:next_end]
+	if !strings.contains(next_line, "|") || !is_table_separator(next_line) {
+		return 0, false
+	}
+	table_width: i32
+	next_byte, height := layout_table(
+		state.ctx,
+		state.x,
+		state.current_y,
+		state.max_width,
+		state.text,
+		line_start,
+		state.base_color,
+		state.draw,
+		out_table_w = &table_width,
+	)
+	state.current_y += height
+	state.max_w = max(state.max_w, table_width)
+	return next_byte, true
+}
+
+@(private = "file")
+markdown_draw_plain_line :: proc(state: ^Markdown_Draw_State, line: string, line_start: int) {
+	assert(state != nil, "markdown_draw_plain_line: nil state")
+	metrics := ui_frame_metrics(state.ctx.frame)
+	sel_start, sel_end := markdown_selection(state, line_start, line_start + len(line))
+	state.current_y += draw_text_wrapped_md(
+		state.ctx,
+		state.x,
+		state.current_y,
+		state.max_width,
+		line,
+		state.base_color,
+		metrics.FONT_SIZE,
+		sel_start,
+		sel_end,
+		state.draw,
+	)
+	width := wrapped_max_line_width_md_frame(
+		state.ctx.frame,
+		line,
+		state.max_width,
+		metrics.FONT_SIZE,
+	)
+	state.max_w = max(state.max_w, width)
+}
+
+@(private = "file")
+markdown_draw_line :: proc(
+	state: ^Markdown_Draw_State,
+	line: string,
+	line_start, line_end: int,
+) -> (
+	next: int,
+	handled: bool,
+) {
+	assert(state != nil, "markdown_draw_line: nil state")
+	assert(line_start >= 0, "markdown_draw_line: negative line start")
+	if markdown_draw_fence(state, line) do return 0, false
+	if state.in_code_block {
+		markdown_draw_code_line(state, line, line_start)
+		return 0, false
+	}
+	if heading, ok := match_heading(line); ok {
+		markdown_draw_heading_line(state, line, line_start, heading.level)
+		return 0, false
+	}
+	if len(line) >= 2 && (line[0] == '-' || line[0] == '*' || line[0] == '+') && line[1] == ' ' {
+		markdown_draw_bullet_line(state, line, line_start)
+		return 0, false
+	}
+	if next, handled = markdown_draw_table_line(state, line, line_start, line_end); handled {
+		return next, true
+	}
+	if len(line) == 0 {
+		state.current_y += ui_frame_metrics(state.ctx.frame).LINE_HEIGHT / 2
+		return 0, false
+	}
+	markdown_draw_plain_line(state, line, line_start)
+	return 0, false
+}
+
 // Render markdown-formatted text with optional selection highlighting.
 // Supports: # headings (H1-H3), - * + bullets, ``` fenced code blocks.
 // Returns the total height drawn.
@@ -1229,318 +1520,41 @@ draw_markdown :: proc(
 	out_w: ^i32 = nil,
 	draw: bool = true,
 ) -> i32 {
-	// Why assert: a non-positive wrap width sends the wrapper into degenerate
-	// one-rune lines; an inverted selection breaks every highlight overlap.
+	assert(ctx != nil && ctx.frame != nil, "draw_markdown: invalid context")
 	assert(max_width > 0, "draw_markdown: non-positive max_width")
 	assert(
 		sel_start < 0 || sel_end < 0 || sel_start <= sel_end,
 		"draw_markdown: inverted selection",
 	)
 	if len(text) == 0 do return 0
-
-	current_y := y
+	state := Markdown_Draw_State {
+		ctx        = ctx,
+		text       = text,
+		base_color = base_color,
+		x          = x,
+		current_y  = y,
+		max_width  = max_width,
+		sel_start  = sel_start,
+		sel_end    = sel_end,
+		has_sel    = sel_start >= 0 && sel_end > sel_start,
+		draw       = draw,
+	}
 	line_start := 0
-	in_code_block := false
-	has_sel := sel_start >= 0 && sel_end > sel_start
-	max_w: i32 = 0 // widest laid-out block, for content-hugging bubbles
-
 	for i := 0; i <= len(text); i += 1 {
 		is_end := i == len(text)
 		if !is_end && text[i] != '\n' do continue
 		if is_end && line_start >= len(text) do break
-
 		line := text[line_start:i]
-
-		// Code fence toggle.
-		if is_code_fence(line) {
-			if !in_code_block {
-				in_code_block = true
-				if draw do draw_rectangle(ctx.frame, x, current_y + 2, max_width, 1, ui_frame_theme(ctx.frame).border_color)
-				current_y += 6
-			} else {
-				in_code_block = false
-				if draw do draw_rectangle(ctx.frame, x, current_y, max_width, 1, ui_frame_theme(ctx.frame).border_color)
-				current_y += 8
-			}
-			line_start = i + 1
+		if next, handled := markdown_draw_line(&state, line, line_start, i); handled {
+			assert(next > line_start, "draw_markdown: table made no progress")
+			line_start = next
+			i = next - 1
 			continue
-		}
-
-		// Code block line.
-		if in_code_block {
-			if draw &&
-			   !markdown_line_culled(ctx, current_y, ui_frame_metrics(ctx.frame).LINE_HEIGHT) {
-				draw_rectangle(
-					ctx.frame,
-					x,
-					current_y,
-					max_width,
-					ui_frame_metrics(ctx.frame).LINE_HEIGHT,
-					ui_frame_theme(ctx.frame).bg_code,
-				)
-				// Left accent so the block reads as one unit in the flat transcript.
-				draw_rectangle(
-					ctx.frame,
-					x,
-					current_y,
-					2,
-					ui_frame_metrics(ctx.frame).LINE_HEIGHT,
-					ui_frame_theme(ctx.frame).border_subtle,
-				)
-				// Truncate long lines to available width (pixel-accurate, with ellipsis).
-				display_line := truncate_to_width_frame(
-					ctx.frame,
-					line,
-					max_width - ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD * 2,
-					ui_frame_metrics(ctx.frame).FONT_SIZE,
-				)
-				if has_sel {
-					draw_line_with_selection_frame(
-						ctx.frame,
-						x + ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD,
-						current_y,
-						display_line,
-						ui_frame_metrics(ctx.frame).FONT_SIZE,
-						ui_frame_metrics(ctx.frame).LINE_HEIGHT,
-						ui_frame_theme(ctx.frame).fg_primary,
-						line_start,
-						sel_start,
-						sel_end,
-					)
-				} else {
-					line_c := strings.clone_to_cstring(display_line, context.temp_allocator)
-					draw_text_frame(
-						ctx.frame,
-						line_c,
-						x + ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD,
-						current_y,
-						ui_frame_metrics(ctx.frame).FONT_SIZE,
-						ui_frame_theme(ctx.frame).fg_primary,
-					)
-				}
-			}
-			if out_w != nil {
-				lc := strings.clone_to_cstring(line, context.temp_allocator)
-				cw :=
-					min(
-						measure_text_frame(ctx.frame, lc, ui_frame_metrics(ctx.frame).FONT_SIZE),
-						max_width - ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD * 2,
-					) +
-					ui_frame_metrics(ctx.frame).CODE_BLOCK_PAD * 2
-				if cw > max_w do max_w = cw
-			}
-			current_y += ui_frame_metrics(ctx.frame).LINE_HEIGHT
-			line_start = i + 1
-			continue
-		}
-
-		// H3 heading.
-		if heading, ok := match_heading(line); ok && heading.level == 3 {
-			current_y += draw_heading(
-				ctx,
-				x,
-				current_y,
-				max_width,
-				line[4:],
-				3,
-				line_start + 4,
-				sel_start,
-				sel_end,
-				has_sel,
-				draw,
-			)
-			if out_w != nil {
-				hw := wrapped_max_line_width_frame(
-					ctx.frame,
-					line[4:],
-					max_width,
-					ui_frame_metrics(ctx.frame).FONT_SIZE,
-				)
-				if hw > max_w do max_w = hw
-			}
-			line_start = i + 1
-			continue
-		}
-		// H2 heading.
-		if heading, ok := match_heading(line); ok && heading.level == 2 {
-			current_y += draw_heading(
-				ctx,
-				x,
-				current_y,
-				max_width,
-				line[3:],
-				2,
-				line_start + 3,
-				sel_start,
-				sel_end,
-				has_sel,
-				draw,
-			)
-			if out_w != nil {
-				hw := wrapped_max_line_width_frame(
-					ctx.frame,
-					line[3:],
-					max_width,
-					ui_frame_metrics(ctx.frame).FONT_SIZE_LARGE,
-				)
-				if hw > max_w do max_w = hw
-			}
-			line_start = i + 1
-			continue
-		}
-		// H1 heading.
-		if heading, ok := match_heading(line); ok && heading.level == 1 {
-			current_y += draw_heading(
-				ctx,
-				x,
-				current_y,
-				max_width,
-				line[2:],
-				1,
-				line_start + 2,
-				sel_start,
-				sel_end,
-				has_sel,
-				draw,
-			)
-			if out_w != nil {
-				hw := wrapped_max_line_width_frame(
-					ctx.frame,
-					line[2:],
-					max_width,
-					ui_frame_metrics(ctx.frame).FONT_SIZE_LARGE,
-				)
-				if hw > max_w do max_w = hw
-			}
-			line_start = i + 1
-			continue
-		}
-
-		// Bullet point.
-		if len(line) >= 2 &&
-		   (line[0] == '-' || line[0] == '*' || line[0] == '+') &&
-		   line[1] == ' ' {
-			if draw do draw_circle(ctx.frame, x + 8, current_y + ui_frame_metrics(ctx.frame).FONT_SIZE / 2 + 1, 2.5, ui_frame_theme(ctx.frame).fg_bullet)
-
-			content := line[2:]
-			content_x := x + ui_frame_metrics(ctx.frame).BULLET_INDENT
-			content_width := max_width - ui_frame_metrics(ctx.frame).BULLET_INDENT
-
-			sub_sel_s := -1
-			sub_sel_e := -1
-			if has_sel {
-				content_byte_start := line_start + 2
-				content_byte_end := line_start + len(line)
-				ov_start := max(sel_start, content_byte_start)
-				ov_end := min(sel_end, content_byte_end)
-				if ov_start < ov_end {
-					sub_sel_s = ov_start - content_byte_start
-					sub_sel_e = ov_end - content_byte_start
-				}
-			}
-
-			h := draw_text_wrapped_md(
-				ctx,
-				content_x,
-				current_y,
-				content_width,
-				content,
-				base_color,
-				ui_frame_metrics(ctx.frame).FONT_SIZE,
-				sub_sel_s,
-				sub_sel_e,
-				draw,
-			)
-			if h == 0 do h = ui_frame_metrics(ctx.frame).LINE_HEIGHT
-			current_y += h
-			if out_w != nil {
-				bw :=
-					ui_frame_metrics(ctx.frame).BULLET_INDENT +
-					wrapped_max_line_width_md_frame(
-						ctx.frame,
-						content,
-						content_width,
-						ui_frame_metrics(ctx.frame).FONT_SIZE,
-					)
-				if bw > max_w do max_w = bw
-			}
-			line_start = i + 1
-			continue
-		}
-
-		// GFM table: header row with '|' followed by a separator row.
-		if !is_end && strings.contains(line, "|") {
-			nl := strings.index_byte(text[i + 1:], '\n')
-			next_end := len(text) if nl < 0 else i + 1 + nl
-			next_line := text[i + 1:next_end]
-			if strings.contains(next_line, "|") && is_table_separator(next_line) {
-				tbl_w: i32 = 0
-				next_byte, h := layout_table(
-					ctx,
-					x,
-					current_y,
-					max_width,
-					text,
-					line_start,
-					base_color,
-					draw,
-					out_table_w = &tbl_w,
-				)
-				current_y += h
-				if tbl_w > max_w do max_w = tbl_w
-				line_start = next_byte
-				i = next_byte - 1 // loop will i += 1
-				continue
-			}
-		}
-
-		// Empty line.
-		if len(line) == 0 {
-			current_y += ui_frame_metrics(ctx.frame).LINE_HEIGHT / 2
-			line_start = i + 1
-			continue
-		}
-
-		// Normal text — delegate to draw_text_wrapped.
-		sub_sel_s := -1
-		sub_sel_e := -1
-		if has_sel {
-			line_byte_end := line_start + len(line)
-			ov_start := max(sel_start, line_start)
-			ov_end := min(sel_end, line_byte_end)
-			if ov_start < ov_end {
-				sub_sel_s = ov_start - line_start
-				sub_sel_e = ov_end - line_start
-			}
-		}
-
-		h := draw_text_wrapped_md(
-			ctx,
-			x,
-			current_y,
-			max_width,
-			line,
-			base_color,
-			ui_frame_metrics(ctx.frame).FONT_SIZE,
-			sub_sel_s,
-			sub_sel_e,
-			draw,
-		)
-		current_y += h
-		if out_w != nil {
-			lw := wrapped_max_line_width_md_frame(
-				ctx.frame,
-				line,
-				max_width,
-				ui_frame_metrics(ctx.frame).FONT_SIZE,
-			)
-			if lw > max_w do max_w = lw
 		}
 		line_start = i + 1
 	}
-
-	if out_w != nil do out_w^ = max_w
-	return current_y - y
+	if out_w != nil do out_w^ = state.max_w
+	return state.current_y - y
 }
 
 // measure_markdown returns the pixel height draw_markdown would produce for

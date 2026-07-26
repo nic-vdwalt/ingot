@@ -92,10 +92,11 @@ input_ui :: proc(
 	masked: bool = false,
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
-	fo := ui_focus(u)
+	assert(semantics.name != "", "input_ui: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	hh := h if h > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
 	r := ui_slot(u, remaining(&u.layout).w, hh)
+	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
 	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
 	sem := semantics
 	sem.focus = fo.focus
@@ -123,10 +124,11 @@ input_ui_id :: proc(
 	masked: bool = false,
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
-	fo := ui_focus(u, id)
+	assert(semantics.name != "", "input_ui_id: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	hh := h if h > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
 	r := ui_slot(u, remaining(&u.layout).w, hh)
+	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
 	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
 	sem := semantics
 	sem.focus = fo.focus

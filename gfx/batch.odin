@@ -238,9 +238,15 @@ _rebuild_custom_pipes :: proc(r: ^Renderer) {
 	}
 	// invalidate alt-format Custom variants so they rebuild on next use
 	for i in 0 ..< r.alt_n {
-		if r.alt_pipes[i][.Solid][.Custom] != nil do wg.RenderPipelineRelease(r.alt_pipes[i][.Solid][.Custom])
-		if r.alt_pipes[i][.Text][.Custom] != nil do wg.RenderPipelineRelease(r.alt_pipes[i][.Text][.Custom])
-		if r.alt_pipes[i][.Image][.Custom] != nil do wg.RenderPipelineRelease(r.alt_pipes[i][.Image][.Custom])
+		if r.alt_pipes[i][.Solid][.Custom] != nil {
+			wg.RenderPipelineRelease(r.alt_pipes[i][.Solid][.Custom])
+		}
+		if r.alt_pipes[i][.Text][.Custom] != nil {
+			wg.RenderPipelineRelease(r.alt_pipes[i][.Text][.Custom])
+		}
+		if r.alt_pipes[i][.Image][.Custom] != nil {
+			wg.RenderPipelineRelease(r.alt_pipes[i][.Image][.Custom])
+		}
 		fs_s, ts := _fs_for(.Solid)
 		fs_t, tt := _fs_for(.Text)
 		fs_i, ti := _fs_for(.Image)
@@ -288,7 +294,11 @@ struct VSOut {
 };
 
 @vertex
-fn vs_main(@location(0) pos: vec2<f32>, @location(1) col: vec4<f32>, @location(2) uv: vec2<f32>) -> VSOut {
+fn vs_main(
+	@location(0) pos: vec2<f32>,
+	@location(1) col: vec4<f32>,
+	@location(2) uv: vec2<f32>,
+) -> VSOut {
 	var o: VSOut;
 	let sx = pos.x * u.p.x * 2.0 - 1.0;
 	let sy = 1.0 - pos.y * u.p.y * 2.0;

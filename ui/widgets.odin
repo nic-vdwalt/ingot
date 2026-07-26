@@ -626,10 +626,8 @@ btn_gloss :: proc(frame: ^Ui_Frame, theme: ^Theme, rect: Rectangle) {
 // slot, the ring draws while focused, and Space/Enter activates.
 //
 // Widget tiers — see docs/ui-state.md#widget-tiers:
-//   *_at  (supported)    explicit x, y, w, h. The paved path for applications.
-//   *_ui  (experimental) carves a slot from a Ui/Layout and auto-registers
-//                        focus. Convenient for short static forms; the layout
-//                        model is still settling, so expect churn.
+//   *_at  (supported) explicit x, y, w, h for application-owned layout.
+//   *_ui  (supported) carves a bounded slot and registers focus only when visible.
 btn :: proc {
 	btn_at,
 	btn_at_state,
@@ -657,7 +655,7 @@ btn_ui :: proc(
 	enabled: bool = true,
 ) -> bool {
 	r := btn_ui_slot(u, label)
-	fo := ui_focus(u) if enabled else Focus_Opt{}
+	fo := ui_focus(u) if enabled && ui_slot_visible(r) else Focus_Opt{}
 	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
 
@@ -686,7 +684,7 @@ btn_ui_state :: proc(
 ) -> bool {
 	assert(state != nil, "btn_ui_state: nil state")
 	r := btn_ui_slot(u, label)
-	fo := ui_focus(u) if enabled else Focus_Opt{}
+	fo := ui_focus(u) if enabled && ui_slot_visible(r) else Focus_Opt{}
 	return btn_at_state(
 		u.frame,
 		state,
@@ -714,7 +712,7 @@ btn_ui_state_id :: proc(
 ) -> bool {
 	assert(state != nil, "btn_ui_state_id: nil state")
 	r := btn_ui_slot(u, label)
-	fo := ui_focus(u, id) if enabled else Focus_Opt{}
+	fo := ui_focus(u, id) if enabled && ui_slot_visible(r) else Focus_Opt{}
 	return btn_at_state(
 		u.frame,
 		state,

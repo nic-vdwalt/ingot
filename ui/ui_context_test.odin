@@ -298,3 +298,24 @@ test_ui_flex_slots_preserve_cross_trim :: proc(t: ^testing.T) {
 	testing.expect_value(t, a, Rect_I32{10, 20, 80, 20})
 	testing.expect_value(t, b, Rect_I32{100, 20, 210, 30})
 }
+
+@(test)
+test_ui_row_cross_alignment_applies_to_slots :: proc(t: ^testing.T) {
+	u: Ui
+	ui_begin(&u, 10, 20, 300, 100)
+	ui_row(&u, 40, cross_align = .Center)
+	a := ui_slot(&u, 80, 20)
+	ui_row_end(&u)
+	ui_end(&u)
+	testing.expect_value(t, a, Rect_I32{10, 30, 80, 20})
+}
+
+@(test)
+test_zero_sized_slot_is_not_visible :: proc(t: ^testing.T) {
+	u: Ui
+	ui_begin(&u, 0, 0, 0, 0)
+	r := ui_slot(&u, 100, 20)
+	ui_end(&u)
+	testing.expect(t, !ui_slot_visible(r))
+	testing.expect_value(t, r, Rect_I32{})
+}

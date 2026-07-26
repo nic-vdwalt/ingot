@@ -169,8 +169,10 @@ flex_percent :: proc(percent: f32, min_size: i32 = 0, max_size: i32 = 0) -> Flex
 // layout_begin opens the root column over the given area. Must be balanced
 // with layout_end; nesting Layouts is fine because callers own the struct.
 layout_begin :: proc(l: ^Layout, x, y, w, h: i32, gap: i32 = 0) {
-	assert(l.depth == 0, "layout_begin: layout already open")
-	assert(w >= 0 && h >= 0, "layout_begin: negative size")
+	assert(l != nil && l.depth == 0, "layout_begin: layout already open")
+	assert(w >= 0 && h >= 0 && gap >= 0, "layout_begin: negative size")
+	assert(i64(x) + i64(w) <= i64(max(i32)), "layout_begin: horizontal extent overflow")
+	assert(i64(y) + i64(h) <= i64(max(i32)), "layout_begin: vertical extent overflow")
 	l.stack[0] = Layout_Frame {
 		kind = .Column,
 		rect = Rect_I32{x, y, w, h},
@@ -243,40 +245,53 @@ flex_begin :: proc(l: ^Layout, sizes: []Flex_Size) {
 	f := _top(l)
 	assert(f.weight_left == 0, "flex_begin: weighted sequence is active")
 	assert(f.flex_index == f.flex_count, "flex_begin: previous flex sequence not consumed")
-	space := max(_main_extent(f^) - f.cursor - f.gap * i32(len(sizes) - 1), 0)
+	gap_total := i64(f.gap) * i64(len(sizes) - 1)
+	space_i64 := max(i64(_main_extent(f^)) - i64(f.cursor) - gap_total, i64(0))
+	space := i32(min(space_i64, i64(max(i32))))
 	_flex_resolve(f, sizes, space)
 }
 
 // flex_next emits the next pre-resolved sibling using ordinary cursor advance.
 flex_next :: proc(l: ^Layout) -> Rect_I32 {
-	assert(l.depth > 0, "flex_next: layout not begun")
+	assert(l != nil && l.depth > 0, "flex_next: layout not begun")
 	f := _top(l)
-	assert(f.flex_index < f.flex_count, "flex_next: no flex size available")
+	cross_size := f.rect.w if f.kind == .Column else f.rect.h
+	return flex_next_sized(l, cross_size)
+}
+
+flex_next_sized :: proc(l: ^Layout, cross_size: i32) -> Rect_I32 {
+	assert(l.depth > 0, "flex_next_sized: layout not begun")
+	assert(cross_size >= 0, "flex_next_sized: negative cross size")
+	f := _top(l)
+	assert(f.flex_index < f.flex_count, "flex_next_sized: no flex size available")
 	size := f.flex_sizes[f.flex_index]
 	f.flex_index += 1
 	if f.flex_index == f.flex_count {
 		f.flex_count = 0
 		f.flex_index = 0
 	}
-	return next(l, size)
+	return next_sized(l, size, cross_size)
 }
 
 // next carves main_size pixels along the main axis, spanning the full cross
-// axis. The size is clamped to the remaining space (asserted in debug).
+// axis. Overflow is clipped to the frame and never advances beyond its extent.
 next :: proc(l: ^Layout, main_size: i32) -> Rect_I32 {
 	assert(l.depth > 0, "next: layout not begun")
 	assert(main_size >= 0, "next: negative size")
 	f := _top(l)
-	avail := _main_extent(f^) - f.cursor
-	if avail < 0 do avail = 0
-	size := min(main_size, avail)
+	extent := i64(_main_extent(f^))
+	cursor := min(max(i64(f.cursor), i64(0)), extent)
+	avail := extent - cursor
+	size := min(i64(main_size), avail)
 	r: Rect_I32
 	if f.kind == .Column {
-		r = Rect_I32{f.rect.x, f.rect.y + f.cursor, f.rect.w, size}
+		r = Rect_I32{f.rect.x, i32(i64(f.rect.y) + cursor), f.rect.w, i32(size)}
 	} else {
-		r = Rect_I32{f.rect.x + f.cursor, f.rect.y, size, f.rect.h}
+		r = Rect_I32{i32(i64(f.rect.x) + cursor), f.rect.y, i32(size), f.rect.h}
 	}
-	f.cursor += size + f.gap
+	advance := size
+	if size > 0 && cursor + size < extent do advance += i64(f.gap)
+	f.cursor = i32(min(cursor + advance, extent))
 	return r
 }
 
@@ -350,17 +365,17 @@ row_weights :: proc(l: ^Layout, weights: []i32) {
 	f := _top(l)
 	assert(f.flex_index == f.flex_count, "row_weights: flex sequence is active")
 	assert(f.weight_left == 0, "row_weights: previous weights not consumed")
-	total: i32 = 0
+	total: i64
 	for w in weights {
 		assert(w > 0, "row_weights: weights must be positive")
-		total += w
+		total += i64(w)
 	}
-	avail := _main_extent(f^) - f.cursor
-	gaps := f.gap * i32(len(weights) - 1)
-	space := avail - gaps
-	if space < 0 do space = 0
-	f.weight_total = total
-	f.weight_space = space
+	assert(total <= i64(max(i32)), "row_weights: total weight overflow")
+	avail := max(i64(_main_extent(f^)) - i64(f.cursor), i64(0))
+	gaps := i64(f.gap) * i64(len(weights) - 1)
+	space := max(avail - gaps, i64(0))
+	f.weight_total = i32(total)
+	f.weight_space = i32(space)
 	f.weight_acc = 0
 	f.weight_left = i32(len(weights))
 }
@@ -375,8 +390,9 @@ next_weighted :: proc(l: ^Layout, weight: i32) -> Rect_I32 {
 	assert(f.weight_left > 0, "next_weighted: no weights declared (call row_weights)")
 	// Cumulative division: share_i = floor(acc+w * S/T) - floor(acc * S/T)
 	// guarantees the shares sum exactly to weight_space.
-	before := f.weight_acc * f.weight_space / f.weight_total
-	after := (f.weight_acc + weight) * f.weight_space / f.weight_total
+	before := i64(f.weight_acc) * i64(f.weight_space) / i64(f.weight_total)
+	after := (i64(f.weight_acc) + i64(weight)) * i64(f.weight_space) / i64(f.weight_total)
+	assert(after >= before && after - before <= i64(max(i32)), "next_weighted: invalid share")
 	f.weight_acc += weight
 	f.weight_left -= 1
 	if f.weight_left == 0 {
@@ -384,7 +400,7 @@ next_weighted :: proc(l: ^Layout, weight: i32) -> Rect_I32 {
 		f.weight_space = 0
 		f.weight_acc = 0
 	}
-	return next(l, after - before)
+	return next(l, i32(after - before))
 }
 
 @(private = "file")

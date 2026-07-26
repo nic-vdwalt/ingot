@@ -605,9 +605,48 @@ when !INGOT_NET_SIM {
 		job^ = {}
 	}
 
+	@(private)
+	fetch_cache_read :: proc(
+		path: string,
+		validate: proc(body: []u8) -> bool,
+		allocator: mem.Allocator,
+	) -> (
+		body: []u8,
+		ok: bool,
+	) {
+		assert(path != "", "fetch_cache_read: empty path")
+		cached, read_err := os.read_entire_file_from_path(path, allocator)
+		if read_err != nil do return nil, false
+		if len(cached) > 0 && (validate == nil || validate(cached)) {
+			return cached, true
+		}
+		delete(cached, allocator)
+		if remove_err := os.remove(path); remove_err != nil {
+			fmt.eprintfln("net: unable to remove invalid cache %q: %v", path, remove_err)
+		}
+		return nil, false
+	}
+
+	@(private)
+	fetch_cache_write :: proc(path: string, body: []u8) {
+		assert(path != "", "fetch_cache_write: empty path")
+		directory, _ := os.split_path(path)
+		if directory != "" {
+			if mkdir_err := os.make_directory_all(directory);
+			   mkdir_err != nil && !os.is_dir(directory) {
+				fmt.eprintfln("net: unable to create cache directory %q: %v", directory, mkdir_err)
+				return
+			}
+		}
+		if write_err := os.write_entire_file(path, body); write_err != nil {
+			fmt.eprintfln("net: unable to write cache %q: %v", path, write_err)
+		}
+	}
+
 	@(private = "file")
 	fetch_worker :: proc(f: ^Fetcher, idx: int) {
-		assert(idx >= 0 && idx < FETCH_WORKERS, "worker index out of range")
+		assert(idx >= 0, "fetch_worker: negative worker index")
+		assert(idx < FETCH_WORKERS, "fetch_worker: worker index out of range")
 		for {
 			sync.mutex_lock(&f.mutex)
 			// Park until a job arrives or fetcher_stop broadcasts — blocking on the
@@ -620,17 +659,17 @@ when !INGOT_NET_SIM {
 				sync.mutex_unlock(&f.mutex)
 				return
 			}
-			job := f.jobs[0]; ordered_remove(&f.jobs, 0); sync.mutex_unlock(&f.mutex)
+			job := f.jobs[0]
+			ordered_remove(&f.jobs, 0)
+			sync.mutex_unlock(&f.mutex)
 			free_all(context.temp_allocator)
-			body: []u8; status: u16; ok: bool; validate := f.cache_validator
+			body: []u8
+			status: u16
+			ok: bool
+			validate := f.cache_validator
 			if job.cache_path != "" {
-				if cached, read_err := os.read_entire_file_from_path(job.cache_path, f.allocator);
-				   read_err == nil && len(cached) > 0 {
-					if validate == nil ||
-					   validate(
-						   cached,
-					   ) {body = cached; status = 200; ok = true} else {delete(cached); os.remove(job.cache_path)}
-				}
+				body, ok = fetch_cache_read(job.cache_path, validate, f.allocator)
+				if ok do status = 200
 			}
 			if !ok {
 				// Jitter worker scheduling in the native stress build so TSan explores
@@ -640,14 +679,15 @@ when !INGOT_NET_SIM {
 				)
 				response: Http_Response
 				response, ok = http_request_impl(f, idx, f.host, f.port, job.request, f.allocator)
-				status = response.status; body = response.body; response.body = nil
+				status = response.status
+				body = response.body
+				response.body = nil
 				http_response_destroy(&response)
-				if ok &&
-				   status >= 200 &&
-				   status < 300 &&
-				   (validate == nil || validate(body)) &&
-				   job.cache_path !=
-					   "" {dir, _ := os.split_path(job.cache_path); os.make_directory_all(dir); _ = os.write_entire_file(job.cache_path, body)}
+				cacheable := ok && status >= 200 && status < 300
+				cacheable = cacheable && (validate == nil || validate(body))
+				if cacheable && job.cache_path != "" {
+					fetch_cache_write(job.cache_path, body)
+				}
 			}
 			tag := job.tag
 			fetch_job_destroy(&job, f.allocator)

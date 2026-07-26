@@ -17,6 +17,7 @@ def parse_args():
     parser.add_argument("--timeout", required=True, type=float)
     parser.add_argument("--output-limit", required=True, type=int)
     parser.add_argument("--log-dir", required=True)
+    parser.add_argument("--retain-success-log", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.command and args.command[0] == "--":
@@ -27,22 +28,25 @@ def parse_args():
 
 
 def terminate_group(process, grace_seconds=2.0):
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
+    if process.poll() is not None:
         return
+    if os.name == "nt":
+        process.send_signal(signal.CTRL_BREAK_EVENT)
+    else:
+        os.killpg(process.pid, signal.SIGTERM)
     try:
         process.wait(timeout=grace_seconds)
     except subprocess.TimeoutExpired:
-        try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
             os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
         process.wait()
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
 
 
 def write_failure_log(log_dir, package, chunks, limit):
@@ -58,11 +62,13 @@ def write_failure_log(log_dir, package, chunks, limit):
 
 def main():
     args = parse_args()
+    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     process = subprocess.Popen(
         args.command,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        start_new_session=True,
+        start_new_session=os.name != "nt",
+        creationflags=creationflags,
     )
     interrupted = None
 
@@ -70,7 +76,10 @@ def main():
         nonlocal interrupted
         interrupted = signum
 
-    for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+    handled_signals = [signal.SIGINT, signal.SIGTERM]
+    if hasattr(signal, "SIGHUP"):
+        handled_signals.append(signal.SIGHUP)
+    for signum in handled_signals:
         signal.signal(signum, handle_signal)
 
     selector = selectors.DefaultSelector()
@@ -118,6 +127,8 @@ def main():
 
     return_code = process.returncode
     if failure is None and return_code == 0:
+        if args.retain_success_log:
+            write_failure_log(args.log_dir, args.package, chunks, args.output_limit)
         return 0
 
     log_path = write_failure_log(args.log_dir, args.package, chunks, args.output_limit)

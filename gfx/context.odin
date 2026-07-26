@@ -599,27 +599,41 @@ _maybe_reconfigure :: proc() {
 	g.dpi = platform_content_scale()
 }
 
+FRAME_PACING_SLEEP_THRESHOLD :: 0.002
+FRAME_PACING_SLEEP_MARGIN :: 0.001
+FRAME_PACING_SPINS_MAX :: 4096
+#assert(FRAME_PACING_SLEEP_MARGIN > 0)
+#assert(FRAME_PACING_SLEEP_THRESHOLD > FRAME_PACING_SLEEP_MARGIN)
+#assert(FRAME_PACING_SPINS_MAX > 0)
+
+@(private)
+_frame_pacing_remaining :: proc(now, last, target: f64) -> f64 {
+	assert(target > 0, "_frame_pacing_remaining: non-positive target")
+	return clamp(target - (now - last), 0, target)
+}
+
 @(private)
 _frame_timing :: proc() {
-	// Native paces frames via an optional busy-wait to hit target_fps. On web
-	// the browser's requestAnimationFrame already paces the loop, and a
-	// busy-wait would block the event loop — so the cap is native-only.
+	// Native pacing uses a bounded spin so a stalled clock cannot hang a frame.
 	when ODIN_OS != .JS {
 		if g.target_fps > 0 {
 			target := 1.0 / f64(g.target_fps)
-			for {
-				now := _now()
-				elapsed := now - g.last_time
-				if elapsed >= target do break
-				remaining := target - elapsed
-				if remaining > 0.002 {
-					platform_sleep(remaining - 0.001)
-				}
+			assert(target > 0, "_frame_timing: non-positive target")
+			remaining := _frame_pacing_remaining(_now(), g.last_time, target)
+			if remaining > FRAME_PACING_SLEEP_THRESHOLD {
+				platform_sleep(remaining - FRAME_PACING_SLEEP_MARGIN)
+			}
+			for _ in 0 ..< FRAME_PACING_SPINS_MAX {
+				remaining = _frame_pacing_remaining(_now(), g.last_time, target)
+				if remaining <= 0 do break
+			}
+			if remaining > 0 {
+				platform_sleep(min(remaining, FRAME_PACING_SLEEP_THRESHOLD))
 			}
 		}
 	}
 	now := _now()
-	raw := f32(now - g.last_time)
+	raw := f32(max(now - g.last_time, 0))
 	g.real_frame_time = raw
 	// Clamp dt so a long gap (idle wait, browser tab hidden then resumed)
 	// doesn't feed a huge step into animations/physics on the next frame.

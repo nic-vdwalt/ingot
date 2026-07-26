@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pinned Odin is available
+        shell: bash
+        run: odin version
+      - name: Test and check
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          bash scripts/test.sh
+          bash scripts/check.sh
+      - name: Native Windows checks
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/test.ps1
+          ./scripts/check.ps1
+      - name: Web gate
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash scripts/check-web.sh

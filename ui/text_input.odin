@@ -1450,18 +1450,11 @@ ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, blink_on: bool) {
 	}
 }
 
-// ti_run drives one frame of the input: web sync, chrome, keys, layout,
-// mouse, spellcheck, render, caret, spell-menu popup. Returns true when
-// Enter submitted the input.
 @(private = "file")
-ti_run :: proc(ctx: ^TI_Ctx) -> bool {
-	assert(ctx.sb != nil, "ti_run: nil builder")
-	assert(ctx.sel != nil && ctx.memo != nil, "ti_run: nil selection or memo")
-	ti_sync_web(ctx)
-	ti_semantic_push(ctx)
-	metrics := ui_frame_metrics(ctx.frame)
+ti_draw_chrome :: proc(ctx: ^TI_Ctx) {
+	assert(ctx != nil, "ti_draw_chrome: nil context")
+	assert(ctx.frame != nil, "ti_draw_chrome: nil frame")
 	style := ui_frame_theme(ctx.frame)
-	font_size := metrics.FONT_SIZE_BODY
 	bg := style.bg_input if ctx.active else style.bg_secondary
 	draw_rectangle_rec(ctx.frame, ctx.rect, bg)
 	draw_rectangle_lines_ex(
@@ -1470,70 +1463,88 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 		ui_frame_scf(ctx.frame, 1),
 		style.border_color if !ctx.active else style.fg_accent,
 	)
+}
 
-	entered := false
-	if ctx.active {
-		entered = ti_keys(ctx)
-	}
-
-	// Clip all drawing to the input rect interior.
-	begin_pane_scissor(ctx.frame, ctx.inner_x, ctx.y, ctx.inner_w, ctx.h)
-	text := strings.to_string(ctx.sb^)
-	v := ti_layout(ctx, text)
-
-	// Mouse selection (caret inputs): press places the caret / starts a drag,
-	// double-click selects a word, triple-click the logical line, drag extends
-	// by character. Mouse is converted to pane-local coordinates because split
-	// panes draw rlgl-translated while the mouse is in screen space.
-	if ctx.active && v.masked_caret {
-		ti_mouse_masked(ctx, text)
-	}
-	if ctx.active && v.caret_render {
-		ti_mouse_caret(ctx, text, &v)
-	}
-
-	spell_squiggles: []Spell_Range
-	if ctx.active && v.caret_render && ctx.pills != nil && ctx.undo != nil {
-		spell_squiggles = ti_spell(ctx, text, &v)
-	}
-
-	// Legacy (non-caret) render paths only show a highlight when the selection
-	// covers the whole text (Cmd+A on simple inputs).
+@(private = "file")
+ti_selection_is_all :: proc(ctx: ^TI_Ctx, text_length: int) -> bool {
+	assert(ctx != nil, "ti_selection_is_all: nil context")
+	assert(text_length >= 0, "ti_selection_is_all: negative text length")
 	sel := ctx.sel
-	sel_all :=
+	return(
 		sel.active &&
 		sel.sb == ctx.sb &&
 		min(sel.anchor, sel.extent) == 0 &&
-		max(sel.anchor, sel.extent) == len(text)
+		max(sel.anchor, sel.extent) == text_length \
+	)
+}
 
+@(private = "file")
+ti_render_content :: proc(
+	ctx: ^TI_Ctx,
+	text: string,
+	view: ^TI_View,
+	spell_squiggles: []Spell_Range,
+) {
+	assert(ctx != nil, "ti_render_content: nil context")
+	assert(view != nil, "ti_render_content: nil view")
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	if len(text) == 0 {
-		ph_c := strings.clone_to_cstring(ctx.placeholder, context.temp_allocator)
+		placeholder := strings.clone_to_cstring(ctx.placeholder, context.temp_allocator)
 		draw_text_frame(
 			ctx.frame,
-			ph_c,
+			placeholder,
 			ctx.inner_x,
 			ctx.y + (ctx.h - font_size) / 2,
 			font_size,
-			style.fg_secondary,
+			ui_frame_theme(ctx.frame).fg_secondary,
 		)
-	} else if v.caret_render {
-		ti_render_caret_lines(ctx, text, &v, spell_squiggles)
-	} else if v.has_newlines {
-		ti_render_multiline(ctx, text, &v, sel_all)
+	} else if view.caret_render {
+		ti_render_caret_lines(ctx, text, view, spell_squiggles)
+	} else if view.has_newlines {
+		ti_render_multiline(ctx, text, view, ti_selection_is_all(ctx, len(text)))
 	} else {
-		ti_render_single(ctx, text, sel_all)
+		ti_render_single(ctx, text, ti_selection_is_all(ctx, len(text)))
 	}
+}
 
-	if ctx.active {
-		ti_draw_caret(ctx, text, &v)
+@(private = "file")
+ti_draw_clipped :: proc(ctx: ^TI_Ctx) {
+	assert(ctx.inner_w > 0, "ti_draw_clipped: non-positive inner width")
+	assert(ctx.h > 0, "ti_draw_clipped: non-positive height")
+	begin_pane_scissor(ctx.frame, ctx.inner_x, ctx.y, ctx.inner_w, ctx.h)
+	text := strings.to_string(ctx.sb^)
+	view := ti_layout(ctx, text)
+	if ctx.active && view.masked_caret do ti_mouse_masked(ctx, text)
+	if ctx.active && view.caret_render do ti_mouse_caret(ctx, text, &view)
+	spell_squiggles: []Spell_Range
+	if ctx.active && view.caret_render && ctx.pills != nil && ctx.undo != nil {
+		spell_squiggles = ti_spell(ctx, text, &view)
 	}
+	ti_render_content(ctx, text, &view, spell_squiggles)
+	if ctx.active do ti_draw_caret(ctx, text, &view)
 	end_scissor_mode(ctx.frame)
+}
 
-	// Suggestions popup for a right-clicked misspelled word. Drawn after the
-	// scissor ends so it renders unclipped above the input box.
+@(private = "file")
+ti_draw_spell_popup :: proc(ctx: ^TI_Ctx) {
+	assert(ctx != nil, "ti_draw_spell_popup: nil context")
 	if spell_menu_active(ctx.spell_menu, ctx.sb) {
 		draw_spell_menu(ctx.frame, ctx.spell_menu, ui_frame_spell(ctx.frame), ctx.x, ctx.y, ctx.w)
 	}
+}
+
+// ti_run drives one frame of the input and reports whether Enter submitted it.
+@(private = "file")
+ti_run :: proc(ctx: ^TI_Ctx) -> bool {
+	assert(ctx.sb != nil, "ti_run: nil builder")
+	assert(ctx.sel != nil && ctx.memo != nil, "ti_run: nil selection or memo")
+	ti_sync_web(ctx)
+	ti_semantic_push(ctx)
+	ti_draw_chrome(ctx)
+	entered := false
+	if ctx.active do entered = ti_keys(ctx)
+	ti_draw_clipped(ctx)
+	ti_draw_spell_popup(ctx)
 	return entered
 }
 

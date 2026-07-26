@@ -85,7 +85,9 @@ http_request_url :: proc(
 	if url_c_err != nil do return {}, .Allocation
 	maximum := request.maximum_body
 	if maximum == 0 do maximum = DEFAULT_MAXIMUM_BODY
-	if options.limits.maximum_body_bytes > 0 do maximum = min(maximum, options.limits.maximum_body_bytes)
+	if options.limits.maximum_body_bytes > 0 {
+		maximum = min(maximum, options.limits.maximum_body_bytes)
+	}
 	body := Curl_Body {
 		maximum = maximum,
 	}
@@ -94,12 +96,20 @@ http_request_url :: proc(
 	if curl.easy_setopt(handle, .URL, url_c) != .E_OK do return {}, .Invalid_URL
 	if curl.easy_setopt(handle, .SSL_VERIFYPEER, c.long(1)) != .E_OK do return {}, .TLS
 	if curl.easy_setopt(handle, .SSL_VERIFYHOST, c.long(2)) != .E_OK do return {}, .TLS
-	if curl.easy_setopt(handle, .DISALLOW_USERNAME_IN_URL, c.long(1)) != .E_OK do return {}, .Invalid_URL
+	if curl.easy_setopt(handle, .DISALLOW_USERNAME_IN_URL, c.long(1)) != .E_OK {
+		return {}, .Invalid_URL
+	}
 	if curl.easy_setopt(handle, .WRITEFUNCTION, curl_body_write) != .E_OK do return {}, .Protocol
 	if curl.easy_setopt(handle, .WRITEDATA, &body) != .E_OK do return {}, .Protocol
 	if options.redirects.maximum_redirects > 0 {
 		if curl.easy_setopt(handle, .FOLLOWLOCATION, c.long(1)) != .E_OK do return {}, .Redirect
-		if curl.easy_setopt(handle, .MAXREDIRS, c.long(options.redirects.maximum_redirects)) != .E_OK do return {}, .Redirect
+		if curl.easy_setopt(
+			handle,
+			.MAXREDIRS,
+			c.long(options.redirects.maximum_redirects),
+		) != .E_OK {
+			return {}, .Redirect
+		}
 	}
 	if options.timeouts.connect > 0 {
 		milliseconds := c.long(options.timeouts.connect / time.Millisecond)
@@ -125,8 +135,12 @@ http_request_url :: proc(
 	if method_c_err != nil do return {}, .Allocation
 	if curl.easy_setopt(handle, .CUSTOMREQUEST, method_c) != .E_OK do return {}, .Invalid_Request
 	if len(request.body) > 0 {
-		if curl.easy_setopt(handle, .POSTFIELDS, raw_data(request.body)) != .E_OK do return {}, .Invalid_Request
-		if curl.easy_setopt(handle, .POSTFIELDSIZE, c.long(len(request.body))) != .E_OK do return {}, .Invalid_Request
+		if curl.easy_setopt(handle, .POSTFIELDS, raw_data(request.body)) != .E_OK {
+			return {}, .Invalid_Request
+		}
+		if curl.easy_setopt(handle, .POSTFIELDSIZE, c.long(len(request.body))) != .E_OK {
+			return {}, .Invalid_Request
+		}
 	}
 	perform := curl.easy_perform(handle)
 	if perform != .E_OK {

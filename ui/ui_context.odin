@@ -378,11 +378,16 @@ ui_focus_clear :: proc(u: ^Ui) {
 }
 
 // ui_slot carves a w×h rect from the active layout frame. In a column the
-// main axis is h (cross trimmed to w); in a row it is w (cross trimmed to h).
+// main axis is h; in a row it is w. Cross-axis placement honors alignment.
 ui_slot :: proc(u: ^Ui, w, h: i32) -> Rect_I32 {
-	assert(u.open, "ui_slot: frame not open")
+	assert(u != nil && u.open, "ui_slot: frame not open")
 	assert(w >= 0 && h >= 0, "ui_slot: negative size")
 	l := &u.layout
+	f := &l.stack[l.depth - 1]
+	if f.cross_align != .Stretch {
+		if layout_kind(l) == .Column do return next_sized(l, h, w)
+		return next_sized(l, w, h)
+	}
 	if layout_kind(l) == .Column {
 		r := next(l, h)
 		r.w = min(r.w, w)
@@ -393,6 +398,10 @@ ui_slot :: proc(u: ^Ui, w, h: i32) -> Rect_I32 {
 	return r
 }
 
+ui_slot_visible :: proc(rect: Rect_I32) -> bool {
+	return rect.w > 0 && rect.h > 0
+}
+
 // ui_flex_begin resolves sibling main-axis sizes on the active Ui frame.
 ui_flex_begin :: proc(u: ^Ui, sizes: []Flex_Size) {
 	assert(u != nil, "ui_flex_begin: nil Ui")
@@ -400,24 +409,18 @@ ui_flex_begin :: proc(u: ^Ui, sizes: []Flex_Size) {
 	flex_begin(&u.layout, sizes)
 }
 
-// ui_flex_slot consumes one flex size and trims only the cross axis.
+// ui_flex_slot consumes one flex size and honors active cross-axis alignment.
 ui_flex_slot :: proc(u: ^Ui, cross_size: i32) -> Rect_I32 {
 	assert(u != nil, "ui_flex_slot: nil Ui")
 	assert(u.open && cross_size >= 0, "ui_flex_slot: invalid call")
-	r := flex_next(&u.layout)
-	if layout_kind(&u.layout) == .Column {
-		r.w = min(r.w, cross_size)
-	} else {
-		r.h = min(r.h, cross_size)
-	}
-	return r
+	return flex_next_sized(&u.layout, cross_size)
 }
 
 // ui_row / ui_row_end / ui_space: thin conveniences over the Layout the Ui
 // already owns; callers may equally use push_row(&u.layout, …) directly.
-ui_row :: proc(u: ^Ui, h: i32, gap: i32 = 0) {
+ui_row :: proc(u: ^Ui, h: i32, gap: i32 = 0, cross_align: Cross_Align = .Start) {
 	assert(u.open, "ui_row: frame not open")
-	push_row(&u.layout, h, gap)
+	push_row(&u.layout, h, gap, cross_align)
 }
 
 ui_row_end :: proc(u: ^Ui) {
@@ -430,7 +433,7 @@ ui_space :: proc(u: ^Ui, px: i32) {
 	spacer(&u.layout, px)
 }
 
-// label draws a plain text line, carving its own slot.
+// label draws a plain text line, carving its own slot and semantic node.
 label :: proc(u: ^Ui, text: string, font_size: i32 = 0, color: Color = {}) {
 	assert(u.open && u.frame != nil, "label: frame not open")
 	metrics := ui_frame_metrics(u.frame)
@@ -438,5 +441,12 @@ label :: proc(u: ^Ui, text: string, font_size: i32 = 0, color: Color = {}) {
 	col := color if color.a > 0 else ui_frame_theme(u.frame).fg_primary
 	text_c := strings.clone_to_cstring(text, context.temp_allocator)
 	r := ui_slot(u, measure_text_frame(u.frame, text_c, fs), metrics.LINE_HEIGHT)
+	if !ui_slot_visible(r) {
+		_ = ui_frame_drop_degenerate(u.frame, true)
+		return
+	}
+	begin_scissor_mode(u.frame, r.x, r.y, r.w, r.h)
 	draw_text_frame(u.frame, text_c, r.x, r.y + (r.h - fs) / 2, fs, col)
+	end_scissor_mode(u.frame)
+	semantic_push(u.frame, .Label, r, text, {})
 }

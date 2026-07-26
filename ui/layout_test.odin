@@ -275,3 +275,32 @@ fit_column_reuses_caller_owned_state :: proc(t: ^testing.T) {
 	testing.expect_value(t, first, Rect_I32{0, 0, 50, 12})
 	testing.expect_value(t, second, Rect_I32{5, 7, 60, 8})
 }
+
+@(test)
+layout_overflow_never_advances_outside_root :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 100, 200, 40, 30, gap = max(i32))
+	a := next(&l, 20)
+	b := next(&l, 20)
+	c := next(&l, max(i32))
+	end := remaining(&l)
+	layout_end(&l)
+	testing.expect_value(t, a, Rect_I32{100, 200, 40, 20})
+	testing.expect_value(t, b, Rect_I32{100, 230, 40, 0})
+	testing.expect_value(t, c, Rect_I32{100, 230, 40, 0})
+	testing.expect_value(t, end, Rect_I32{100, 230, 40, 0})
+}
+
+@(test)
+layout_weighted_math_handles_large_valid_values :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, max(i32), 1)
+	push_row(&l, 1)
+	row_weights(&l, {max(i32) / 2, max(i32) / 2})
+	a := next_weighted(&l, max(i32) / 2)
+	b := next_weighted(&l, max(i32) / 2)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, i64(a.w) + i64(b.w), i64(max(i32)))
+	testing.expect_value(t, i64(b.x) + i64(b.w), i64(max(i32)))
+}

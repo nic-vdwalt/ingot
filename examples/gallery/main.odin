@@ -376,13 +376,50 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	bh := ui.ui_frame_sc(&ui_frame, 30)
 	gap := ui.ui_frame_sc(&ui_frame, 10)
 	if ui.btn(&ui_frame, x, y, bw, bh, "Primary", ui.Btn_Style.Primary) do click_count += 1
-	if ui.btn(&ui_frame, x + (bw + gap), y, bw, bh, "Secondary", ui.Btn_Style.Secondary) do click_count += 1
-	if ui.btn(&ui_frame, x + (bw + gap) * 2, y, bw, bh, "Danger", ui.Btn_Style.Danger) do click_count += 1
-	if ui.btn(&ui_frame, x + (bw + gap) * 3, y, bw, bh, "Ghost", ui.Btn_Style.Ghost) do click_count += 1
+	if ui.btn(
+		&ui_frame,
+		x + (bw + gap),
+		y,
+		bw,
+		bh,
+		"Secondary",
+		ui.Btn_Style.Secondary,
+	) {
+		click_count += 1
+	}
+	if ui.btn(
+		&ui_frame,
+		x + (bw + gap) * 2,
+		y,
+		bw,
+		bh,
+		"Danger",
+		ui.Btn_Style.Danger,
+	) {
+		click_count += 1
+	}
+	if ui.btn(
+		&ui_frame,
+		x + (bw + gap) * 3,
+		y,
+		bw,
+		bh,
+		"Ghost",
+		ui.Btn_Style.Ghost,
+	) {
+		click_count += 1
+	}
 	y += bh + gap
 	ui.btn(&ui_frame, x, y, bw, bh, "Disabled", ui.Btn_Style.Primary, enabled = false)
 	if ui.icon_btn(&ui_frame, x + bw + gap, y, bh, "\u2715") do click_count += 1
-	if ui.back_btn(&ui_frame, x + bw + gap + bh + gap, y + ui.ui_frame_sc(&ui_frame, 4), "Back") do click_count += 1
+	if ui.back_btn(
+		&ui_frame,
+		x + bw + gap + bh + gap,
+		y + ui.ui_frame_sc(&ui_frame, 4),
+		"Back",
+	) {
+		click_count += 1
+	}
 	y += bh + gap
 
 	count := fmt.tprintf("clicks: %d", click_count)
@@ -447,14 +484,28 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 		ui.ui_frame_sc(&ui_frame, 600),
 		gap = ui.ui_frame_sc(&ui_frame, 10),
 	)
-	ui.input(&state.ctx, INPUT_NAME_ID, &state.name, "Your name (undo, selection, spellcheck)")
-	ui.input(&state.ctx, INPUT_PASS_ID, &state.pass, "Password (masked)", masked = true)
+	ui.input(
+		&state.ctx,
+		INPUT_NAME_ID,
+		&state.name,
+		"Your name (undo, selection, spellcheck)",
+		semantics = ui.Text_Input_Semantics{name = "Name"},
+	)
+	ui.input(
+		&state.ctx,
+		INPUT_PASS_ID,
+		&state.pass,
+		"Password (masked)",
+		masked = true,
+		semantics = ui.Text_Input_Semantics{name = "Password"},
+	)
 	ui.input(
 		&state.ctx,
 		INPUT_NOTES_ID,
 		&state.notes,
 		"Notes\u2026 (Shift+Enter for newlines)",
 		h = ui.ui_frame_sc(&ui_frame, 90),
+		semantics = ui.Text_Input_Semantics{name = "Notes"},
 	)
 
 	if ui.btn(&state.ctx, INPUT_RESET_ID, "Reset all") {
@@ -481,24 +532,8 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 	return end_y + ui.ui_frame_sc(&ui_frame, 24)
 }
 
-draw_widgets :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(
-		&ui_frame,
-		x,
-		y0,
-		w,
-		"FORM CONTROLS (checkbox / radio / slider / dropdown)",
-	)
-	state := &widget_state
-	ui.ui_begin_frame(
-		&state.ctx,
-		&ui_frame,
-		x,
-		y,
-		w,
-		ui.ui_frame_sc(&ui_frame, 400),
-		gap = ui.ui_frame_sc(&ui_frame, 8),
-	)
+draw_widget_choices :: proc(state: ^Widget_State) {
+	assert(state != nil, "draw_widget_choices: nil state")
 	ui.ui_row(
 		&state.ctx,
 		ui.ui_frame_metrics(&ui_frame).ROW_H_SM,
@@ -516,12 +551,16 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	ui.radio(&state.ctx, WIDGET_MEDIUM_ID, "Medium", &state.radio_choice, 1)
 	ui.radio(&state.ctx, WIDGET_LARGE_ID, "Large", &state.radio_choice, 2)
 	ui.ui_row_end(&state.ctx)
+}
+
+draw_widget_volume :: proc(state: ^Widget_State) {
+	assert(state != nil, "draw_widget_volume: nil state")
 	ui.ui_row(
 		&state.ctx,
 		ui.ui_frame_metrics(&ui_frame).ROW_H_SM,
 		gap = ui.ui_frame_sc(&ui_frame, 10),
 	)
-	slider_rect := ui.ui_slot(
+	rect := ui.ui_slot(
 		&state.ctx,
 		ui.ui_frame_sc(&ui_frame, 240),
 		ui.ui_frame_metrics(&ui_frame).ROW_H_SM,
@@ -529,7 +568,7 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	ui.slider_at_state(
 		&ui_frame,
 		&state.slider,
-		slider_rect,
+		rect,
 		&state.volume,
 		0,
 		100,
@@ -539,7 +578,7 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	ui.tooltip(
 		&ui_frame,
 		&state.tooltip,
-		slider_rect,
+		rect,
 		"drag, or use \u2190/\u2192 when focused",
 		state.ctx.screen_w,
 		state.ctx.screen_h,
@@ -550,12 +589,44 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		color = ui.ui_frame_theme(&ui_frame).fg_secondary,
 	)
 	ui.ui_row_end(&state.ctx)
+}
+
+draw_widget_form_controls :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
+	assert(state != nil, "draw_widget_form_controls: nil state")
+	y := ui.section_header(
+		&ui_frame,
+		x,
+		y0,
+		w,
+		"FORM CONTROLS (checkbox / radio / slider / dropdown)",
+	)
+	ui.ui_begin_frame(
+		&state.ctx,
+		&ui_frame,
+		x,
+		y,
+		w,
+		ui.ui_frame_sc(&ui_frame, 400),
+		gap = ui.ui_frame_sc(&ui_frame, 8),
+	)
+	draw_widget_choices(state)
+	draw_widget_volume(state)
 	backends := []string{"Metal", "Vulkan", "D3D12", "WebGPU"}
-	ui.dropdown(&state.ctx, WIDGET_BACKEND_ID, backends, &state.dd_selected, &state.dropdown)
+	ui.dropdown(
+		&state.ctx,
+		WIDGET_BACKEND_ID,
+		backends,
+		&state.dd_selected,
+		&state.dropdown,
+		a11y_label = "Graphics backend",
+	)
 	y = ui.remaining(&state.ctx.layout).y + ui.ui_frame_sc(&ui_frame, 14)
 	ui.ui_end(&state.ctx)
+	return y
+}
 
-	y = ui.section_header(&ui_frame, x, y, w, "PROGRESS / SPINNER / PILLS")
+draw_widget_progress :: proc(x, y0, w: i32) -> i32 {
+	y := ui.section_header(&ui_frame, x, y0, w, "PROGRESS / SPINNER / PILLS")
 	ui.spinner(
 		&ui_frame,
 		x + ui.ui_frame_sc(&ui_frame, 16),
@@ -591,7 +662,10 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	) {
 		progress_anim = 0
 	}
-	y += ui.ui_frame_sc(&ui_frame, 44)
+	return y + ui.ui_frame_sc(&ui_frame, 44)
+}
+
+draw_widget_status_pills :: proc(x, y: i32) -> i32 {
 	px := x
 	px +=
 		ui.status_pill(
@@ -621,14 +695,17 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		ui.ui_frame_metrics(&ui_frame).FONT_SIZE_SMALL,
 		ui.ui_frame_theme(&ui_frame).fg_error,
 	)
-	y += ui.ui_frame_sc(&ui_frame, 34)
+	return y + ui.ui_frame_sc(&ui_frame, 34)
+}
 
-	y = ui.section_header(&ui_frame, x, y, w, "KV ROWS + LIST ROWS")
+draw_widget_kv_rows :: proc(x, y0, w: i32) -> i32 {
+	y := ui.section_header(&ui_frame, x, y0, w, "KV ROWS + LIST ROWS")
+	width := min(w, ui.ui_frame_sc(&ui_frame, 360))
 	ui.kv_row_frame(
 		&ui_frame,
 		x,
 		y,
-		min(w, ui.ui_frame_sc(&ui_frame, 360)),
+		width,
 		"Renderer",
 		"WebGPU",
 		ui.ui_frame_theme(&ui_frame).fg_secondary,
@@ -639,39 +716,41 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		&ui_frame,
 		x,
 		y,
-		min(w, ui.ui_frame_sc(&ui_frame, 360)),
+		width,
 		"State model",
 		"caller-owned",
 		ui.ui_frame_theme(&ui_frame).fg_secondary,
 		ui.ui_frame_theme(&ui_frame).fg_primary,
 	)
-	y += ui.ui_frame_sc(&ui_frame, 26)
-	list_labels := [?]string{"Metal", "Vulkan", "D3D12", "WebGPU"}
-	list_width := min(w, ui.ui_frame_sc(&ui_frame, 360))
-	row_step := ui.ui_frame_sc(&ui_frame, 26)
-	list_config := ui.Listbox_Config {
-		rect         = {x, y, list_width, row_step * i32(len(list_labels))},
+	return y + ui.ui_frame_sc(&ui_frame, 26)
+}
+
+draw_widget_backend_list :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
+	assert(state != nil, "draw_widget_backend_list: nil state")
+	y := y0
+	labels := [?]string{"Metal", "Vulkan", "D3D12", "WebGPU"}
+	width := min(w, ui.ui_frame_sc(&ui_frame, 360))
+	step := ui.ui_frame_sc(&ui_frame, 26)
+	config := ui.Listbox_Config {
+		rect         = {x, y, width, step * i32(len(labels))},
 		label        = "Rendering backends",
 		stable_id    = "gallery:backends",
-		count        = len(list_labels),
+		count        = len(labels),
 		selected     = &state.list_selected,
 		wrap         = true,
 		hover_select = true,
-		// The list shares this page with other focusable widgets, so it reads
-		// keys only while focused. Every row is visible, so a page step is the
-		// whole list.
 		keys         = .Focused,
-		page_rows    = len(list_labels),
+		page_rows    = len(labels),
 	}
-	list_result := ui.listbox_begin(&ui_frame, &state.listbox, list_config)
-	for label, i in list_labels {
-		rect := rl.Rectangle{f32(x), f32(y), f32(list_width), f32(ui.ui_frame_sc(&ui_frame, 24))}
+	result := ui.listbox_begin(&ui_frame, &state.listbox, config)
+	for label, i in labels {
+		rect := rl.Rectangle{f32(x), f32(y), f32(width), f32(ui.ui_frame_sc(&ui_frame, 24))}
 		row := ui.selectable_row(
 			&ui_frame,
 			&state.listbox,
-			list_config,
+			config,
 			{
-				{x, y, list_width, ui.ui_frame_sc(&ui_frame, 24)},
+				{x, y, width, ui.ui_frame_sc(&ui_frame, 24)},
 				label,
 				fmt.tprintf("gallery:backend:%d", i),
 				i,
@@ -688,18 +767,27 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 			y + ui.ui_frame_sc(&ui_frame, 4),
 			.Small,
 		)
-		y += row_step
+		y += step
 	}
 	ui.listbox_end(&ui_frame, &state.listbox)
-	if list_result.activated do state.list_activated = list_result.activated_index
+	if result.activated do state.list_activated = result.activated_index
 	if state.list_activated >= 0 {
-		activated := fmt.tprintf("activated: %s", list_labels[state.list_activated])
-		ui.text(&ui_frame, activated, x, y, .Small, .Secondary)
-		y += row_step
+		assert(state.list_activated < len(labels), "draw_widget_backend_list: invalid index")
+		ui.text(
+			&ui_frame,
+			fmt.tprintf("activated: %s", labels[state.list_activated]),
+			x,
+			y,
+			.Small,
+			.Secondary,
+		)
+		y += step
 	}
-	y += ui.ui_frame_sc(&ui_frame, 8)
+	return y + ui.ui_frame_sc(&ui_frame, 8)
+}
 
-	y = ui.section_header(&ui_frame, x, y, w, "CARD + SHADOW + TRUNCATION")
+draw_widget_truncation_card :: proc(x, y0, w: i32) -> i32 {
+	y := ui.section_header(&ui_frame, x, y0, w, "CARD + SHADOW + TRUNCATION")
 	card := rl.Rectangle {
 		f32(x),
 		f32(y),
@@ -736,9 +824,11 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 		.Small,
 		.Secondary,
 	)
-	y += i32(card.height) + ui.ui_frame_sc(&ui_frame, 16)
+	return y + i32(card.height) + ui.ui_frame_sc(&ui_frame, 16)
+}
 
-	y = ui.section_header(&ui_frame, x, y, w, "FIT-CONTENT CARD")
+draw_widget_fit_card :: proc(x, y0, w: i32) -> i32 {
+	y := ui.section_header(&ui_frame, x, y0, w, "FIT-CONTENT CARD")
 	fit_w := min(w, ui.ui_frame_sc(&ui_frame, 360))
 	pad := ui.ui_frame_sc(&ui_frame, 12)
 	column: ui.Fit_Column
@@ -752,11 +842,22 @@ draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	title := ui.fit_column_next(&column, ui.ui_frame_sc(&ui_frame, 18))
 	detail := ui.fit_column_next(&column, ui.ui_frame_sc(&ui_frame, 18))
 	content := ui.fit_column_end(&column)
-	fit_card := rl.Rectangle{f32(x), f32(y), f32(fit_w), f32(content.h + pad * 2)}
-	ui.draw_card_bg_frame(&ui_frame, ui.Rect(fit_card), ui.ui_frame_theme(&ui_frame).bg_secondary)
+	card := rl.Rectangle{f32(x), f32(y), f32(fit_w), f32(content.h + pad * 2)}
+	ui.draw_card_bg_frame(&ui_frame, ui.Rect(card), ui.ui_frame_theme(&ui_frame).bg_secondary)
 	ui.text(&ui_frame, "Geometry resolved before drawing", title.x, title.y, .Small)
 	ui.text(&ui_frame, "No retained tree or trailing gap", detail.x, detail.y, .Small, .Secondary)
-	return y + i32(fit_card.height) + ui.ui_frame_sc(&ui_frame, 16)
+	return y + i32(card.height) + ui.ui_frame_sc(&ui_frame, 16)
+}
+
+draw_widgets :: proc(x, y0, w: i32) -> i32 {
+	state := &widget_state
+	y := draw_widget_form_controls(x, y0, w, state)
+	y = draw_widget_progress(x, y, w)
+	y = draw_widget_status_pills(x, y)
+	y = draw_widget_kv_rows(x, y, w)
+	y = draw_widget_backend_list(x, y, w, state)
+	y = draw_widget_truncation_card(x, y, w)
+	return draw_widget_fit_card(x, y, w)
 }
 
 draw_charts :: proc(x, y0, w: i32) -> i32 {

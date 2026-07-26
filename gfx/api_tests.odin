@@ -46,3 +46,15 @@ frame_validation_rejects_inactive_frame :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, !_frame_valid(&frame))
 }
+
+@(test)
+frame_pacing_remaining_is_bounded :: proc(t: ^testing.T) {
+	start := _frame_pacing_remaining(10.0, 10.0, 0.1)
+	middle := _frame_pacing_remaining(10.05, 10.0, 0.1)
+	reached := _frame_pacing_remaining(10.2, 10.0, 0.1)
+	regressed := _frame_pacing_remaining(9.0, 10.0, 0.1)
+	testing.expect(t, abs(start - 0.1) < 0.000001)
+	testing.expect(t, abs(middle - 0.05) < 0.000001)
+	testing.expect_value(t, reached, 0.0)
+	testing.expect(t, abs(regressed - 0.1) < 0.000001)
+}

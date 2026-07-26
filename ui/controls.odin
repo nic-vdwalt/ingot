@@ -25,7 +25,8 @@ checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
 		metrics.CONTROL_GAP +
 		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
-	return checkbox_at(u.frame, r, label, checked, ui_focus(u))
+	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
+	return checkbox_at(u.frame, r, label, checked, fo)
 }
 
 checkbox_ui_id :: proc(u: ^Ui, id: Focus_Id, label: string, checked: ^bool) -> (changed: bool) {
@@ -36,7 +37,8 @@ checkbox_ui_id :: proc(u: ^Ui, id: Focus_Id, label: string, checked: ^bool) -> (
 		metrics.CONTROL_GAP +
 		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
-	return checkbox_at(u.frame, r, label, checked, ui_focus(u, id))
+	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	return checkbox_at(u.frame, r, label, checked, fo)
 }
 
 checkbox_at :: proc(
@@ -127,7 +129,8 @@ radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed:
 		metrics.CONTROL_GAP +
 		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
-	return radio_at(u.frame, r, label, selected, value, ui_focus(u))
+	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
+	return radio_at(u.frame, r, label, selected, value, fo)
 }
 
 radio_ui_id :: proc(
@@ -146,7 +149,8 @@ radio_ui_id :: proc(
 		metrics.CONTROL_GAP +
 		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
-	return radio_at(u.frame, r, label, selected, value, ui_focus(u, id))
+	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	return radio_at(u.frame, r, label, selected, value, fo)
 }
 
 radio_at :: proc(
@@ -263,8 +267,10 @@ slider_ui :: proc(
 ) -> (
 	changed: bool,
 ) {
+	assert(a11y_label != "", "slider_ui: empty accessible label")
 	r := slider_ui_slot(u, w)
-	return slider_at(u.frame, r, value, lo, hi, step, ui_focus(u), a11y_label)
+	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
+	return slider_at(u.frame, r, value, lo, hi, step, fo, a11y_label)
 }
 
 slider_ui_id :: proc(
@@ -278,8 +284,10 @@ slider_ui_id :: proc(
 ) -> (
 	changed: bool,
 ) {
+	assert(a11y_label != "", "slider_ui_id: empty accessible label")
 	r := slider_ui_slot(u, w)
-	return slider_at(u.frame, r, value, lo, hi, step, ui_focus(u, id), a11y_label)
+	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	return slider_at(u.frame, r, value, lo, hi, step, fo, a11y_label)
 }
 
 slider_ui_state :: proc(
@@ -292,8 +300,10 @@ slider_ui_state :: proc(
 	a11y_label: string = "",
 ) -> bool {
 	assert(state != nil, "slider_ui_state: nil state")
+	assert(a11y_label != "", "slider_ui_state: empty accessible label")
 	r := slider_ui_slot(u, w)
-	return slider_at_state(u.frame, state, r, value, lo, hi, step, ui_focus(u), a11y_label)
+	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
+	return slider_at_state(u.frame, state, r, value, lo, hi, step, fo, a11y_label)
 }
 
 slider_ui_state_id :: proc(
@@ -307,8 +317,10 @@ slider_ui_state_id :: proc(
 	a11y_label: string = "",
 ) -> bool {
 	assert(state != nil, "slider_ui_state_id: nil state")
+	assert(a11y_label != "", "slider_ui_state_id: empty accessible label")
 	r := slider_ui_slot(u, w)
-	return slider_at_state(u.frame, state, r, value, lo, hi, step, ui_focus(u, id), a11y_label)
+	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	return slider_at_state(u.frame, state, r, value, lo, hi, step, fo, a11y_label)
 }
 
 slider_at :: proc(
@@ -323,8 +335,7 @@ slider_at :: proc(
 	changed: bool,
 ) {
 	assert(value != nil, "slider: nil value")
-	assert(hi > lo, "slider: hi must exceed lo")
-	assert(rect.w > 0 && rect.h > 0, "slider: empty rect")
+	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
 	old := value^
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	mouse := get_mouse_position(frame)
@@ -346,8 +357,12 @@ slider_at :: proc(
 	}
 	if focus_opt_focused(focus) {
 		d := slider_keyboard_delta(lo, hi, step)
-		if is_key_pressed(frame, .LEFT) || is_key_pressed_repeat(frame, .LEFT) do value^ = clamp(value^ - d, lo, hi)
-		if is_key_pressed(frame, .RIGHT) || is_key_pressed_repeat(frame, .RIGHT) do value^ = clamp(value^ + d, lo, hi)
+		if is_key_pressed(frame, .LEFT) || is_key_pressed_repeat(frame, .LEFT) {
+			value^ = clamp(value^ - d, lo, hi)
+		}
+		if is_key_pressed(frame, .RIGHT) || is_key_pressed_repeat(frame, .RIGHT) {
+			value^ = clamp(value^ + d, lo, hi)
+		}
 	}
 	value^ = clamp(value^, lo, hi)
 
@@ -401,8 +416,12 @@ slider_at_state :: proc(
 	}
 	if focus_opt_focused(focus) {
 		d := slider_keyboard_delta(lo, hi, step)
-		if is_key_pressed(frame, .LEFT) || is_key_pressed_repeat(frame, .LEFT) do value^ = clamp(value^ - d, lo, hi)
-		if is_key_pressed(frame, .RIGHT) || is_key_pressed_repeat(frame, .RIGHT) do value^ = clamp(value^ + d, lo, hi)
+		if is_key_pressed(frame, .LEFT) || is_key_pressed_repeat(frame, .LEFT) {
+			value^ = clamp(value^ - d, lo, hi)
+		}
+		if is_key_pressed(frame, .RIGHT) || is_key_pressed_repeat(frame, .RIGHT) {
+			value^ = clamp(value^ + d, lo, hi)
+		}
 	}
 	value^ = clamp(value^, lo, hi)
 	cy := f32(rect.y) + f32(rect.h) / 2
@@ -410,10 +429,18 @@ slider_at_state :: proc(
 	draw_rectangle_rounded(frame, {track_x, cy - th / 2, track_w, th}, 1.0, 4, style.bg_active)
 	frac := (value^ - lo) / (hi - lo)
 	fill_w := track_w * frac
-	if fill_w > 0 do draw_rectangle_rounded(frame, {track_x, cy - th / 2, fill_w, th}, 1.0, 4, style.fg_accent)
+	if fill_w > 0 {
+		draw_rectangle_rounded(
+			frame,
+			{track_x, cy - th / 2, fill_w, th},
+			1.0,
+			4,
+			style.fg_accent,
+		)
+	}
 	knob_x := track_x + track_w * frac
-	knob_col :=
-		style.fg_accent if it.hovered || state.dragging || focus_opt_focused(focus) else style.fg_secondary
+	active := it.hovered || state.dragging || focus_opt_focused(focus)
+	knob_col := style.fg_accent if active else style.fg_secondary
 	draw_circle_v(frame, {knob_x, cy}, knob_r, style.bg_input)
 	draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
 	draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)
