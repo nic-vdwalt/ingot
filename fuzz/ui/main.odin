@@ -241,10 +241,81 @@ exercise_eased :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	)
 }
 
-// exercise_semantics storms the accessibility semantic buffer: random roles,
-// labels straddling truncation boundaries (multi-byte runes at SEM_LABEL_MAX),
-// saturation past MAX_SEM_NODES, frame churn, and focus-registry
-// interleaving — then validates the pure AccessKit node build.
+populate_semantic_fuzz_frame :: proc(
+	frame: ^ui.Ui_Frame,
+	p: ^Prng,
+	roles: []ui.Sem_Role,
+	slots: ^[4]int,
+	next_focus_id: ^[4]int,
+) {
+	ui.sem_begin_frame(frame)
+	for index in 0 ..< len(next_focus_id) do next_focus_id[index] = 1
+	pushes := fuzzx.int_range(p, 0, ui.MAX_SEM_NODES + 40)
+	for _ in 0 ..< pushes {
+		role := roles[fuzzx.int_range(p, 0, len(roles))]
+		label_bytes := fuzzx.random_bytes(p, ui.SEM_LABEL_MAX + 8)
+		if fuzzx.int_range(p, 0, 2) == 0 && len(label_bytes) >= 4 {
+			copy(label_bytes[len(label_bytes) - 4:], "€")
+		}
+		focus := ui.Focus_Opt{}
+		if fuzzx.int_range(p, 0, 3) == 0 {
+			slot := fuzzx.int_range(p, 0, len(slots))
+			focus = {&slots[slot], next_focus_id[slot]}
+			next_focus_id[slot] += 1
+		}
+		ui.semantic_push(
+			frame,
+			role,
+			{
+				i32(fuzzx.int_range(p, -50, 2000)),
+				i32(fuzzx.int_range(p, -50, 2000)),
+				i32(fuzzx.int_range(p, 1, 500)),
+				i32(fuzzx.int_range(p, 1, 200)),
+			},
+			string(label_bytes),
+			{},
+			focus,
+			value = f32(fuzzx.int_range(p, 0, 100)),
+			lo = 0,
+			hi = 100,
+		)
+	}
+}
+
+check_semantic_fuzz_frame :: proc(c: ^fuzzx.Ctx, frame: ^ui.Ui_Frame) {
+	semantics := ui.sem_frame(frame)
+	fuzzx.check(
+		c,
+		semantics.count >= 0 && semantics.count <= ui.MAX_SEM_NODES,
+		"sem buffer overflow",
+	)
+	for index in 0 ..< semantics.count {
+		label := ui.sem_node_label(&semantics.nodes[index])
+		fuzzx.check(c, len(label) <= ui.SEM_LABEL_MAX, "sem label exceeds cap")
+		fuzzx.check(c, utf8.valid_string(label), "sem label not valid UTF-8 after truncation")
+	}
+	fuzzx.check(c, ui.sem_focus_list(frame).count <= ui.MAX_SEM_FOCUS, "focus registry overflow")
+	fuzzx.check(
+		c,
+		frame.semantics.action_targets.count <= ui.MAX_SEM_FOCUS,
+		"action target registry overflow",
+	)
+	nodes, focus_id := ui.a11y_build_nodes(semantics, context.temp_allocator)
+	fuzzx.check(c, len(nodes) == semantics.count, "a11y node count mismatch")
+	fuzzx.check(c, focus_id != 0, "a11y focus id zero")
+	for index in 0 ..< len(nodes) {
+		fuzzx.check(c, nodes[index].id > 1, "a11y node id reserved")
+		fuzzx.check(c, len(nodes[index].label) <= ui.SEM_LABEL_MAX, "a11y label exceeds cap")
+		for other in index + 1 ..< len(nodes) {
+			if nodes[index].id == nodes[other].id {
+				_, actionable := ui.sem_action_target(frame, nodes[index].id)
+				fuzzx.check(c, !actionable, "a11y duplicate interactive node id")
+			}
+		}
+	}
+}
+
+// exercise_semantics storms the accessibility semantic buffer.
 exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	runtime: ui.Ui_Runtime
 	ui.ui_runtime_init(&runtime)
@@ -253,8 +324,7 @@ exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 	frame: ui.Ui_Frame
 	ui.ui_frame_begin(&frame, &runtime)
 	defer ui.ui_frame_end(&frame)
-
-	roles := [?]ui.Sem_Role {
+	roles := []ui.Sem_Role {
 		.Button,
 		.Checkbox,
 		.Radio,
@@ -266,84 +336,11 @@ exercise_semantics :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 		.Modal,
 	}
 	slots: [4]int
-	// (slot, id) pairs must be unique per frame the way real widget code is
-	// unique — the same pair IS the same widget and legitimately shares a
-	// node id, so the fuzzer allocates ids sequentially per slot.
 	next_focus_id: [4]int
-
 	frames := fuzzx.int_range(p, 1, 4)
 	for _ in 0 ..< frames {
-		ui.sem_begin_frame(&frame)
-		for i in 0 ..< len(next_focus_id) do next_focus_id[i] = 1
-		pushes := fuzzx.int_range(p, 0, ui.MAX_SEM_NODES + 40) // past saturation sometimes
-		for _ in 0 ..< pushes {
-			role := roles[fuzzx.int_range(p, 0, len(roles))]
-			// Label biased to straddle the truncation cap with multi-byte runes.
-			label_bytes := fuzzx.random_bytes(p, ui.SEM_LABEL_MAX + 8)
-			if fuzzx.int_range(p, 0, 2) == 0 && len(label_bytes) >= 4 {
-				copy(label_bytes[len(label_bytes) - 4:], "€") // 3-byte rune near the end
-			}
-			focus := ui.Focus_Opt{}
-			if fuzzx.int_range(p, 0, 3) == 0 {
-				slot := fuzzx.int_range(p, 0, len(slots))
-				focus = {&slots[slot], next_focus_id[slot]}
-				next_focus_id[slot] += 1
-			}
-			ui.semantic_push(
-				&frame,
-				role,
-				{
-					i32(fuzzx.int_range(p, -50, 2000)),
-					i32(fuzzx.int_range(p, -50, 2000)),
-					i32(fuzzx.int_range(p, 1, 500)),
-					i32(fuzzx.int_range(p, 1, 200)),
-				},
-				string(label_bytes),
-				{},
-				focus,
-				value = f32(fuzzx.int_range(p, 0, 100)),
-				lo = 0,
-				hi = 100,
-			)
-		}
-
-		semantics := ui.sem_frame(&frame)
-		fuzzx.check(
-			c,
-			semantics.count >= 0 && semantics.count <= ui.MAX_SEM_NODES,
-			"sem buffer overflow",
-		)
-		for i in 0 ..< semantics.count {
-			label := ui.sem_node_label(&semantics.nodes[i])
-			fuzzx.check(c, len(label) <= ui.SEM_LABEL_MAX, "sem label exceeds cap")
-			fuzzx.check(c, utf8.valid_string(label), "sem label not valid UTF-8 after truncation")
-		}
-		fuzzx.check(
-			c,
-			ui.sem_focus_list(&frame).count <= ui.MAX_SEM_FOCUS,
-			"focus registry overflow",
-		)
-		fuzzx.check(
-			c,
-			frame.semantics.action_targets.count <= ui.MAX_SEM_FOCUS,
-			"action target registry overflow",
-		)
-
-		// Pure AccessKit node build: ids unique, non-reserved; every desc
-		// mirrors its source node.
-		nodes, focus_id := ui.a11y_build_nodes(semantics, context.temp_allocator)
-		fuzzx.check(c, len(nodes) == semantics.count, "a11y node count mismatch")
-		fuzzx.check(c, focus_id != 0, "a11y focus id zero")
-		for i in 0 ..< len(nodes) {
-			fuzzx.check(c, nodes[i].id > 1, "a11y node id reserved")
-			fuzzx.check(c, len(nodes[i].label) <= ui.SEM_LABEL_MAX, "a11y label exceeds cap")
-			for j in i + 1 ..< len(nodes) {
-				if nodes[i].id == nodes[j].id {
-					_, actionable := ui.sem_action_target(&frame, nodes[i].id)
-					fuzzx.check(c, !actionable, "a11y duplicate interactive node id")
-				}
-			}
-		}
+		populate_semantic_fuzz_frame(&frame, p, roles, &slots, &next_focus_id)
+		check_semantic_fuzz_frame(c, &frame)
 	}
 }
 

@@ -51,7 +51,13 @@ app_init :: proc(
 	assert(config.title != nil && callbacks.frame != nil, "app_init: missing callback or title")
 	assert(active_app == nil, "app_init: another application is active")
 	gfx.SetConfigFlags(config.flags)
-	if !gfx.context_init(gfx.default_context(), config.width, config.height, config.title) do return false
+	initialized := gfx.context_init(
+		gfx.default_context(),
+		config.width,
+		config.height,
+		config.title,
+	)
+	if !initialized do return false
 	if config.target_fps > 0 do gfx.SetTargetFPS(config.target_fps)
 	if config.event_waiting do gfx.EnableEventWaiting()
 	app_session_init(&app.session, config.session)
