@@ -26,7 +26,11 @@ route_claim_backdrop_occludes_only_outside_panel :: proc(t: ^testing.T) {
 	// Inside the panel stays interactive, including its edges.
 	testing.expect(t, !route_occluded(&frame, Vector2{400, 300}), "panel center must stay live")
 	testing.expect(t, !route_occluded(&frame, Vector2{300, 200}), "panel corner must stay live")
-	testing.expect(t, !route_occluded(&frame, Vector2{499, 399}), "panel inner edge must stay live")
+	testing.expect(
+		t,
+		!route_occluded(&frame, Vector2{499, 399}),
+		"panel inner edge must stay live",
+	)
 
 	// Every band around the panel is claimed.
 	testing.expect(t, route_occluded(&frame, Vector2{400, 100}), "above panel must be occluded")

@@ -143,7 +143,9 @@ slider_survives_inverted_and_empty_ranges :: proc(t: ^testing.T) {
 
 @(test)
 dropdown_survives_degenerate_rects_and_empty_items :: proc(t: ^testing.T) {
-	drops, clip_depth := with_frame(t, proc(t: ^testing.T, frame: ^Ui_Frame) {
+	drops, clip_depth := with_frame(
+	t,
+	proc(t: ^testing.T, frame: ^Ui_Frame) {
 		items_many := []string{"a", "b", "c"}
 		items_one := []string{"only"}
 		empty: []string
@@ -152,15 +154,7 @@ dropdown_survives_degenerate_rects_and_empty_items :: proc(t: ^testing.T) {
 				if w > 0 && h > 0 do continue
 				st: Dropdown_State
 				selected: i32 = 1
-				_ = dropdown_at(
-					frame,
-					Rect_I32{0, 0, w, h},
-					items_many,
-					&selected,
-					&st,
-					800,
-					600,
-				)
+				_ = dropdown_at(frame, Rect_I32{0, 0, w, h}, items_many, &selected, &st, 800, 600)
 			}
 		}
 		// A healthy rect with no items at all: the model list has not loaded.
@@ -169,7 +163,8 @@ dropdown_survives_degenerate_rects_and_empty_items :: proc(t: ^testing.T) {
 			selected: i32 = 0
 			_ = dropdown_at(frame, Rect_I32{0, 0, 200, 24}, items, &selected, &st, 800, 600)
 		}
-	})
+	},
+	)
 	testing.expect(t, drops > 0)
 	testing.expect_value(t, clip_depth, 0)
 }
@@ -222,15 +217,7 @@ pressable_survives_degenerate_rects :: proc(t: ^testing.T) {
 		for w in DEGENERATE_EXTENTS {
 			for h in DEGENERATE_EXTENTS {
 				if w > 0 && h > 0 do continue
-				res := pressable(
-					frame,
-					Pressable_Config {
-						rect = Rect_I32{0, 0, w, h},
-						role = .Button,
-						label = "press me",
-						stable_id = "degenerate",
-					},
-				)
+				res := pressable(frame, Pressable_Config{rect = Rect_I32{0, 0, w, h}, role = .Button, label = "press me", stable_id = "degenerate"})
 				testing.expect(t, !res.activated, "a zero-area control cannot be activated")
 				testing.expect(t, !res.hovered, "a zero-area control cannot be hovered")
 				testing.expect(t, !res.pressed)
@@ -244,7 +231,9 @@ pressable_survives_degenerate_rects :: proc(t: ^testing.T) {
 
 @(test)
 listbox_survives_degenerate_rects_and_counts :: proc(t: ^testing.T) {
-	drops, clip_depth := with_frame(t, proc(t: ^testing.T, frame: ^Ui_Frame) {
+	drops, clip_depth := with_frame(
+	t,
+	proc(t: ^testing.T, frame: ^Ui_Frame) {
 		for w in DEGENERATE_EXTENTS {
 			for h in DEGENERATE_EXTENTS {
 				if w > 0 && h > 0 do continue
@@ -280,7 +269,8 @@ listbox_survives_degenerate_rects_and_counts :: proc(t: ^testing.T) {
 		)
 		listbox_end(frame, &st)
 		testing.expect_value(t, selected, -1)
-	})
+	},
+	)
 	testing.expect(t, drops > 0)
 	testing.expect_value(t, clip_depth, 0)
 }
