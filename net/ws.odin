@@ -296,6 +296,7 @@ WebSocket :: struct {
 	path:              string,
 	secure:            bool,
 	ca_file:           string,
+	url_storage:       string,
 	connect_timeout:   time.Duration,
 	handshake_timeout: time.Duration,
 	max_attempts:      int,
@@ -365,6 +366,10 @@ ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Option
 		sync.atomic_store(&ws.state, WS_State.Error)
 		return false
 	}
+	if len(ws.url_storage) > 0 do delete(ws.url_storage)
+	ws.url_storage = strings.clone(raw_url)
+	parsed, parse_err = ws_url_parse(ws.url_storage)
+	assert(parse_err == .None, "cloned WebSocket URL failed to parse")
 	ws.host = parsed.host
 	ws.port = int(parsed.port)
 	ws.path = parsed.path
@@ -856,6 +861,10 @@ ws_close :: proc(ws: ^WebSocket) {
 	}
 	delete(ws.recv_queue)
 	ws.recv_queue = nil
+	if len(ws.url_storage) > 0 {
+		delete(ws.url_storage)
+		ws.url_storage = ""
+	}
 }
 
 // Generate a random WebSocket key for the handshake.

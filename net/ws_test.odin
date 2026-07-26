@@ -1,6 +1,7 @@
 #+build !js
 package ingotnet
 
+import "core:strings"
 import "core:testing"
 
 // -- ws_parse_frame: header classes ------------------------------------------
@@ -52,6 +53,18 @@ test_ws_invalid_url_fails_synchronously :: proc(t: ^testing.T) {
 	testing.expect(t, !started)
 	testing.expect_value(t, ws_state(&ws), WS_State.Error)
 	testing.expect_value(t, ws_error(&ws), WS_Error.Invalid_URL)
+	ws_close(&ws)
+}
+
+@(test)
+test_ws_connection_owns_url_components :: proc(t: ^testing.T) {
+	ws := ws_init()
+	raw_url := strings.clone("ws://127.0.0.1:65534/session")
+	started := ws_start_connect_url(&ws, raw_url, WS_Options{max_attempts = 1})
+	delete(raw_url)
+	testing.expect(t, started)
+	testing.expect_value(t, ws.host, "127.0.0.1")
+	testing.expect_value(t, ws.path, "/session")
 	ws_close(&ws)
 }
 
