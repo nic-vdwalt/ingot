@@ -101,34 +101,27 @@ import rl "ingot:gfx"
 import ui "ingot:ui"
 import "ingot:ui_gfx"
 
-session: ui_gfx.App_Session
+app: ui_gfx.App
 
 main :: proc() {
-	when ODIN_OS == .Darwin {
-		rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT, .WINDOW_HIGHDPI})
-	} else {
-		rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
-	}
-	rl.InitWindow(960, 640, "Ingot app")
-	ui_gfx.app_session_init(&session, {semantics_enabled = true})
-
-	rl.run(frame)
-
-	when ODIN_OS != .JS {
-		ui_gfx.app_session_destroy(&session)
-		rl.CloseWindow()
-	}
+	flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}
+	when ODIN_OS == .Darwin do flags += {.WINDOW_HIGHDPI}
+	_ = ui_gfx.app_run(
+		&app,
+		{
+			width = 960,
+			height = 640,
+			title = "Ingot app",
+			flags = flags,
+			session = {semantics_enabled = true},
+		},
+		{frame = frame},
+	)
 }
 
-frame :: proc() {
-	frame_state := ui_gfx.app_session_begin_frame(&session)
-	rl.BeginDrawing()
-	style := ui.ui_frame_theme(frame_state)
-	rl.ClearBackground(ui_gfx.color_to_gfx(style.bg_color))
-	ui.text(frame_state, "Hello from Ingot", 24, 24, .Large)
-	ui_gfx.app_session_end_frame(&session)
-	rl.EndDrawing()
-	free_all(context.temp_allocator)
+frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
+	root := ui_gfx.app_screen_rect(app)
+	ui.text(frame, "Hello from Ingot", root.x + 24, root.y + 24, .Large)
 }
 ```
 
@@ -142,7 +135,9 @@ at once, `ui.ui_frame_style(frame)` returns them together.
 
 Widgets ship in two supported call shapes: `*_at` takes application-owned
 geometry, while `*_ui` carves a bounded slot from a `Ui` layout and registers
-focus only when visible. See
+focus only when visible. Conditional and dynamic forms derive `Widget_Id` values
+from bounded scopes. See [application shell](docs/application-shell.md),
+[layout conventions](docs/layout.md), and
 [UI state and stable focus](docs/ui-state.md#widget-tiers).
 
 `rl.run` blocks on native targets and installs the animation-frame callback on
@@ -171,6 +166,7 @@ It requires a working display and drives every scale, theme, and gallery section
 
 Other focused examples:
 
+- `examples/hello` — canonical application shell, layout, and stable-ID usage.
 - `examples/breakout` — audio, gamepad input, and web export from one source.
 - `examples/idle_demo` — event-driven rendering at approximately zero idle CPU.
 - `examples/chart_demo` — chart widgets and interaction.

@@ -135,6 +135,31 @@ The order of `items` may change without moving focus to another record. Keep
 IDs stable for the lifetime of each logical control and avoid reusing a removed
 record's ID for a different control.
 
+## Scoped widget identity
+
+`Widget_Id` is the canonical identity for conditional controls, collections,
+and reusable components. A `Ui` owns a bounded `Id_Context`; scopes compose
+explicit component and domain identity without retaining widget state.
+
+```odin
+ui.ui_id_root(&form, "settings")
+ui.ui_id_push(&form, "accounts")
+for account in accounts {
+	id := ui.ui_id(&form, account.id)
+	_ = ui.btn_ui_id(&form, id, account.name)
+}
+ui.ui_id_pop(&form)
+ui.ui_id_pop(&form)
+```
+
+IDs are deterministic across frames and process launches, independent of labels,
+pointers, source locations, and sibling order. Use stable domain IDs for list
+rows rather than indexes. Focus and accessibility semantics share the generated
+identity. All ID scopes must be closed before `ui_end`.
+
+`Focus_Id`, `focus_id`, and `focus_id_string` remain supported compatibility
+paths. They do not create a hidden widget-state store.
+
 ## Widget tiers
 
 Most widgets ship in two call shapes. Pick one per screen and stay in it.
@@ -156,8 +181,10 @@ if ui.btn_at(frame, x, y, ui.ui_frame_sc(frame, 120), metrics.ROW_H_MD, "Save", 
 ```
 
 Use `*_ui` for bounded row, column, weighted, and flex forms. `ui_padding`,
-`ui_row`, `ui_column`, `ui_flex_begin`, `ui_weights`, and `ui_fill` expose the
-same bounded single-pass layout engine. Every row and column scope must be
+`ui_row_begin`, `ui_column_begin`, `ui_panel_begin`, `ui_flex_begin`, and
+`ui_fill` expose the same bounded single-pass layout engine. Standard `Space`
+tokens resolve logical spacing once through the frame scale; metrics, measured
+text, screen bounds, and parent rectangles are already physical. Every scope must be
 balanced before `ui_end`. Overflow clips to the root and produces zero-area
 slots rather than assertions.
 
@@ -199,9 +226,10 @@ available under the same constraint.
 
 The semantic layer records each complete focus link, so stable focus works
 through app-wide focus scopes and assistive-technology focus actions. An
-explicit semantic `field_id` is the authoritative application-global node
-identity. A focus link supplies compatibility identity only when no explicit
-key is present; `Focus_Id` remains scoped to one `Ui`. Duplicate semantic IDs
+generated `Widget_Id` is the authoritative control identity. An explicit
+semantic `field_id` remains available for application-global external identity,
+and a focus link supplies compatibility identity only when neither is present.
+`Focus_Id` remains scoped to one `Ui`. Duplicate semantic IDs
 drop the later node and increment frame diagnostics. Focus-scope priority
 selects the traversal tier; equal-priority scope IDs merge in draw order.
 

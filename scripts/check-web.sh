@@ -10,6 +10,9 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+echo "== wasm compile: examples/hello =="
+bash "$ROOT/build_web.sh" examples/hello >/dev/null
+
 echo "== wasm compile: examples/gallery =="
 bash "$ROOT/build_web.sh" examples/gallery >/dev/null
 

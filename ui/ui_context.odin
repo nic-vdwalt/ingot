@@ -469,6 +469,40 @@ ui_fill :: proc(u: ^Ui) -> Rect_I32 {
 	return take_remaining(&u.layout)
 }
 
+ui_space_px :: proc(u: ^Ui, value: Space) -> i32 {
+	assert(u != nil && u.frame != nil, "ui_space_px: frame required")
+	logical: i32
+	switch value {
+	case .None:
+		logical = 0
+	case .XS:
+		logical = 4
+	case .SM:
+		logical = 8
+	case .MD:
+		logical = 12
+	case .LG:
+		logical = 16
+	case .XL:
+		logical = 24
+	}
+	return ui_frame_sc(u.frame, logical)
+}
+
+ui_insets :: proc(u: ^Ui, value: Space) -> Insets_I32 {
+	return insets(ui_space_px(u, value))
+}
+
+ui_compact :: proc(u: ^Ui, breakpoint: i32 = 640) -> bool {
+	assert(u != nil && u.open && breakpoint > 0, "ui_compact: invalid call")
+	return remaining(&u.layout).w < ui_frame_sc(u.frame, breakpoint)
+}
+
+ui_remaining :: proc(u: ^Ui) -> Rect_I32 {
+	assert(u != nil && u.open, "ui_remaining: frame not open")
+	return remaining(&u.layout)
+}
+
 // ui_row / ui_row_end / ui_space: thin conveniences over the Layout the Ui
 // already owns; callers may equally use push_row(&u.layout, …) directly.
 ui_row :: proc(u: ^Ui, h: i32, gap: i32 = 0, cross_align: Cross_Align = .Start) {
@@ -481,6 +515,17 @@ ui_row_end :: proc(u: ^Ui) {
 	layout_pop(&u.layout)
 }
 
+ui_row_begin :: proc(
+	u: ^Ui,
+	height: i32,
+	sizes: []Layout_Size,
+	style: Layout_Style = {},
+) {
+	assert(u != nil && len(sizes) > 0, "ui_row_begin: invalid call")
+	ui_row(u, ui_frame_sc(u.frame, height), ui_space_px(u, style.gap), style.align)
+	ui_flex_begin(u, sizes)
+}
+
 ui_column :: proc(u: ^Ui, w: i32, gap: i32 = 0, cross_align: Cross_Align = .Stretch) {
 	assert(u != nil && u.open, "ui_column: frame not open")
 	push_column_sized(&u.layout, w, gap, cross_align)
@@ -488,6 +533,28 @@ ui_column :: proc(u: ^Ui, w: i32, gap: i32 = 0, cross_align: Cross_Align = .Stre
 
 ui_column_end :: proc(u: ^Ui) {
 	assert(u != nil && u.open, "ui_column_end: frame not open")
+	layout_pop(&u.layout)
+}
+
+ui_column_begin :: proc(
+	u: ^Ui,
+	width: i32,
+	sizes: []Layout_Size,
+	style: Layout_Style = {},
+) {
+	assert(u != nil && len(sizes) > 0, "ui_column_begin: invalid call")
+	ui_column(u, ui_frame_sc(u.frame, width), ui_space_px(u, style.gap), style.align)
+	ui_flex_begin(u, sizes)
+}
+
+ui_panel_begin :: proc(u: ^Ui, style: Layout_Style = {}) {
+	assert(u != nil && u.open, "ui_panel_begin: frame not open")
+	push_column(&u.layout, ui_space_px(u, style.gap), style.align)
+	ui_padding(u, ui_insets(u, style.padding))
+}
+
+ui_panel_end :: proc(u: ^Ui) {
+	assert(u != nil && u.open, "ui_panel_end: frame not open")
 	layout_pop(&u.layout)
 }
 
@@ -504,6 +571,22 @@ ui_weighted_slot :: proc(u: ^Ui, weight: i32) -> Rect_I32 {
 ui_space :: proc(u: ^Ui, px: i32) {
 	assert(u.open, "ui_space: frame not open")
 	spacer(&u.layout, px)
+}
+
+ui_spacer :: proc(u: ^Ui, value: Space) {
+	ui_space(u, ui_space_px(u, value))
+}
+
+ui_separator :: proc(u: ^Ui) {
+	assert(u != nil && u.open && u.frame != nil, "ui_separator: invalid UI")
+	rect := ui_slot(u, remaining(&u.layout).w, 1)
+	if ui_slot_visible(rect) {
+		draw_rectangle_rec(
+			u.frame,
+			{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)},
+			ui_frame_theme(u.frame).border_subtle,
+		)
+	}
 }
 
 // label draws a plain text line, carving its own slot and semantic node.

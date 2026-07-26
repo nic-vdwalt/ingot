@@ -107,6 +107,21 @@ Cross_Align :: enum u8 {
 	End,
 }
 
+Space :: enum u8 {
+	None,
+	XS,
+	SM,
+	MD,
+	LG,
+	XL,
+}
+
+Layout_Style :: struct {
+	gap:     Space,
+	padding: Space,
+	align:   Cross_Align,
+}
+
 Flex_Kind :: enum u8 {
 	Fit,
 	Grow,
@@ -124,6 +139,8 @@ Flex_Size :: struct {
 	min_size: i32,
 	max_size: i32,
 }
+
+Layout_Size :: Flex_Size
 
 Layout_Frame :: struct {
 	kind:         Layout_Kind,

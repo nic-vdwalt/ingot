@@ -13,6 +13,59 @@ import wg "vendor:wgpu"
 
 FONT_TTF := #load("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
 
+test_font_measure_invariants :: proc(t: ^testing.T, font: Font) {
+	testing.expect(t, font.glyphCount > 0, "font should bake glyphs")
+	testing.expect(t, MeasureTextEx(font, "", 16, 0).x == 0, "empty width == 0")
+
+	w14 := MeasureTextEx(font, "The quick brown fox", 14, 0).x
+	w20 := MeasureTextEx(font, "The quick brown fox", 20, 0).x
+	testing.expect(t, w14 > 0 && w20 > 0, "widths positive")
+	ratio := w20 / w14
+	testing.expectf(
+		t,
+		math.abs(ratio - 20.0 / 14.0) < 1e-4,
+		"width should scale linearly with size, got ratio %v",
+		ratio,
+	)
+
+	one := MeasureTextEx(font, "m", 16, 0).x
+	five := MeasureTextEx(font, "mmmmm", 16, 0).x
+	testing.expectf(
+		t,
+		math.abs(five - 5 * one) < 1e-3,
+		"monospace advance should be uniform: 1=%v 5=%v",
+		one,
+		five,
+	)
+
+	h1 := MeasureTextEx(font, "abc", 16, 0).y
+	h2 := MeasureTextEx(font, "abc\ndef", 16, 0).y
+	testing.expectf(
+		t,
+		math.abs(h2 - 2 * h1) < 1e-3,
+		"two lines == 2x one line: h1=%v h2=%v",
+		h1,
+		h2,
+	)
+
+	base := MeasureTextEx(font, "abcd", 16, 0).x
+	spaced := MeasureTextEx(font, "abcd", 16, 2).x
+	testing.expect(t, spaced > base, "positive spacing widens text")
+
+	corpus := []cstring{"ingot", "WebGPU", "raylib", "func main() {}", "AaBb 0123"}
+	for size in ([]f32{14, 16, 20}) {
+		for text in corpus {
+			testing.expectf(
+				t,
+				MeasureTextEx(font, text, size, 0).x > 0,
+				"corpus width positive for %v @ %v",
+				text,
+				size,
+			)
+		}
+	}
+}
+
 @(test)
 test_measure_metrics :: proc(t: ^testing.T) {
 	// --- headless device bring-up (no window/surface) ---
@@ -59,61 +112,5 @@ test_measure_metrics :: proc(t: ^testing.T) {
 		wg.InstanceRelease(g.instance)
 	}
 
-	testing.expect(t, f.glyphCount > 0, "font should bake glyphs")
-
-	// empty string measures to zero width
-	testing.expect(t, MeasureTextEx(f, "", 16, 0).x == 0, "empty width == 0")
-
-	// width is exactly linear in font size (advance * fontSize/px)
-	w14 := MeasureTextEx(f, "The quick brown fox", 14, 0).x
-	w20 := MeasureTextEx(f, "The quick brown fox", 20, 0).x
-	testing.expect(t, w14 > 0 && w20 > 0, "widths positive")
-	ratio := w20 / w14
-	testing.expectf(
-		t,
-		math.abs(ratio - 20.0 / 14.0) < 1e-4,
-		"width should scale linearly with size, got ratio %v",
-		ratio,
-	)
-
-	// monospace: N glyphs advance to N * single-glyph width
-	one := MeasureTextEx(f, "m", 16, 0).x
-	five := MeasureTextEx(f, "mmmmm", 16, 0).x
-	testing.expectf(
-		t,
-		math.abs(five - 5 * one) < 1e-3,
-		"monospace advance should be uniform: 1=%v 5=%v",
-		one,
-		five,
-	)
-
-	// newline adds exactly one line of height
-	h1 := MeasureTextEx(f, "abc", 16, 0).y
-	h2 := MeasureTextEx(f, "abc\ndef", 16, 0).y
-	testing.expectf(
-		t,
-		math.abs(h2 - 2 * h1) < 1e-3,
-		"two lines == 2x one line: h1=%v h2=%v",
-		h1,
-		h2,
-	)
-
-	// positive spacing widens text
-	base := MeasureTextEx(f, "abcd", 16, 0).x
-	spaced := MeasureTextEx(f, "abcd", 16, 2).x
-	testing.expect(t, spaced > base, "positive spacing widens text")
-
-	// fixed corpus stays positive at each size
-	corpus := []cstring{"ingot", "WebGPU", "raylib", "func main() {}", "AaBb 0123"}
-	for s in ([]f32{14, 16, 20}) {
-		for c in corpus {
-			testing.expectf(
-				t,
-				MeasureTextEx(f, c, s, 0).x > 0,
-				"corpus width positive for %v @ %v",
-				c,
-				s,
-			)
-		}
-	}
+	test_font_measure_invariants(t, f)
 }
