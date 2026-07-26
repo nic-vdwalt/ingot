@@ -4,6 +4,9 @@ package ingotnet
 import "core:strings"
 import "core:testing"
 
+_ :: strings
+_ :: testing
+
 when INGOT_WS_SIM {
 	@(test)
 	ws_sim_handshake_contract :: proc(t: ^testing.T) {

@@ -74,6 +74,89 @@ Pty :: struct {
 	rows:       u16,
 }
 
+Conpty_Pipes :: struct {
+	input_read, input_write:   win32.HANDLE,
+	output_read, output_write: win32.HANDLE,
+}
+
+conpty_close_pipes :: proc(pipes: ^Conpty_Pipes) {
+	if pipes.input_read != nil do win32.CloseHandle(pipes.input_read)
+	if pipes.input_write != nil do win32.CloseHandle(pipes.input_write)
+	if pipes.output_read != nil do win32.CloseHandle(pipes.output_read)
+	if pipes.output_write != nil do win32.CloseHandle(pipes.output_write)
+	pipes^ = {}
+}
+
+conpty_create_pipes :: proc() -> (Conpty_Pipes, bool) {
+	pipes: Conpty_Pipes
+	security := win32.SECURITY_ATTRIBUTES {
+		nLength = size_of(win32.SECURITY_ATTRIBUTES), bInheritHandle = true,
+	}
+	if !win32.CreatePipe(&pipes.input_read, &pipes.input_write, &security, 0) {
+		return {}, false
+	}
+	if !win32.CreatePipe(&pipes.output_read, &pipes.output_write, &security, 0) {
+		conpty_close_pipes(&pipes)
+		return {}, false
+	}
+	if !win32.SetHandleInformation(pipes.input_write, win32.HANDLE_FLAG_INHERIT, 0) ||
+	   !win32.SetHandleInformation(pipes.output_read, win32.HANDLE_FLAG_INHERIT, 0) {
+		conpty_close_pipes(&pipes)
+		return {}, false
+	}
+	return pipes, true
+}
+
+conpty_destroy_attribute_list :: proc(list: LPPROC_THREAD_ATTRIBUTE_LIST) {
+	if list == nil do return
+	DeleteProcThreadAttributeList(list)
+	win32.HeapFree(win32.GetProcessHeap(), 0, list)
+}
+
+conpty_create_attribute_list :: proc(hpc: HPCON) -> (LPPROC_THREAD_ATTRIBUTE_LIST, bool) {
+	attribute_size: c.size_t
+	InitializeProcThreadAttributeList(nil, 1, 0, &attribute_size)
+	list := cast(LPPROC_THREAD_ATTRIBUTE_LIST)win32.HeapAlloc(
+		win32.GetProcessHeap(), 0, attribute_size,
+	)
+	if list == nil do return nil, false
+	if !InitializeProcThreadAttributeList(list, 1, 0, &attribute_size) {
+		win32.HeapFree(win32.GetProcessHeap(), 0, list)
+		return nil, false
+	}
+	if !UpdateProcThreadAttribute(
+		list, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, hpc, size_of(HPCON), nil, nil,
+	) {
+		conpty_destroy_attribute_list(list)
+		return nil, false
+	}
+	return list, true
+}
+
+conpty_create_process :: proc(
+	shell, workdir: cstring,
+	list: LPPROC_THREAD_ATTRIBUTE_LIST,
+) -> (win32.PROCESS_INFORMATION, bool) {
+	startup: STARTUPINFOEXW
+	startup.StartupInfo.cb = size_of(STARTUPINFOEXW)
+	startup.lpAttributeList = list
+	shell_string := string(shell)
+	command_line := strings.clone_to_cstring(shell_string, context.temp_allocator)
+	command_line_w := win32.utf8_to_wstring(string(command_line), context.temp_allocator)
+	shell_w := win32.utf8_to_wstring(shell_string, context.temp_allocator)
+	working_dir_w: win32.wstring
+	if workdir != nil && len(string(workdir)) > 0 {
+		working_dir_w = win32.utf8_to_wstring(string(workdir), context.temp_allocator)
+	}
+	process: win32.PROCESS_INFORMATION
+	EXTENDED_STARTUPINFO_PRESENT :: 0x00080000
+	ok := win32.CreateProcessW(
+		shell_w, command_line_w, nil, nil, false, EXTENDED_STARTUPINFO_PRESENT,
+		nil, working_dir_w, &startup.StartupInfo, &process,
+	)
+	return process, ok
+}
+
 spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
 	if shell == nil || cols == 0 || rows == 0 do return {}, false
 	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, false

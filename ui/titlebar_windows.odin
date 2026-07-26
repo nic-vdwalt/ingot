@@ -216,6 +216,52 @@ tb_hittest :: proc "system" (hwnd: win32.HWND, cx, cy: i32) -> win32.LRESULT {
 }
 
 @(private = "file")
+tb_handle_nccalcsize :: proc "system" (
+	hwnd: win32.HWND,
+	wparam: win32.WPARAM,
+	lparam: win32.LPARAM,
+) -> (
+	win32.LRESULT,
+	bool,
+) {
+	if wparam == 0 do return 0, false
+	if win32.IsZoomed(hwnd) {
+		params := cast(^win32.NCCALCSIZE_PARAMS)uintptr(lparam)
+		dpi := win32.GetDpiForWindow(hwnd)
+		border_x :=
+			win32.GetSystemMetricsForDpi(win32.SM_CXSIZEFRAME, dpi) +
+			win32.GetSystemMetricsForDpi(win32.SM_CXPADDEDBORDER, dpi)
+		border_y :=
+			win32.GetSystemMetricsForDpi(win32.SM_CYSIZEFRAME, dpi) +
+			win32.GetSystemMetricsForDpi(win32.SM_CXPADDEDBORDER, dpi)
+		params.rgrc[0].left += border_x
+		params.rgrc[0].right -= border_x
+		params.rgrc[0].top += border_y
+		params.rgrc[0].bottom -= border_y
+	}
+	return 0, true
+}
+
+@(private = "file")
+tb_handle_ncbutton_up :: proc "system" (hwnd: win32.HWND, wparam: win32.WPARAM) -> bool {
+	button := tb_button_from_hittest(win32.LRESULT(wparam))
+	if tb_pressed == .None do return false
+	if button == tb_pressed {
+		switch button {
+		case .Minimize:
+			win32.ShowWindow(hwnd, win32.SW_MINIMIZE)
+		case .Maximize:
+			win32.ShowWindow(hwnd, win32.SW_RESTORE if win32.IsZoomed(hwnd) else win32.SW_MAXIMIZE)
+		case .Close:
+			win32.PostMessageW(hwnd, win32.WM_CLOSE, 0, 0)
+		case .None:
+		}
+	}
+	tb_set_pressed(.None)
+	return true
+}
+
+@(private = "file")
 titlebar_subclass_proc :: proc "system" (
 	hwnd: win32.HWND,
 	msg: win32.UINT,
@@ -226,28 +272,7 @@ titlebar_subclass_proc :: proc "system" (
 ) -> win32.LRESULT {
 	switch msg {
 	case win32.WM_NCCALCSIZE:
-		// Removing the standard frame: with wparam==TRUE, returning 0 without
-		// adjusting the proposed rect gives us the whole window as client
-		// area while WS_THICKFRAME keeps shadow/snap/animations alive.
-		if wparam != 0 {
-			// When maximized, Windows sizes the window larger than the
-			// monitor by the frame width; inset so content isn't clipped.
-			if win32.IsZoomed(hwnd) {
-				params := cast(^win32.NCCALCSIZE_PARAMS)uintptr(lparam)
-				dpi := win32.GetDpiForWindow(hwnd)
-				bx :=
-					win32.GetSystemMetricsForDpi(win32.SM_CXSIZEFRAME, dpi) +
-					win32.GetSystemMetricsForDpi(win32.SM_CXPADDEDBORDER, dpi)
-				by :=
-					win32.GetSystemMetricsForDpi(win32.SM_CYSIZEFRAME, dpi) +
-					win32.GetSystemMetricsForDpi(win32.SM_CXPADDEDBORDER, dpi)
-				params.rgrc[0].left += bx
-				params.rgrc[0].right -= bx
-				params.rgrc[0].top += by
-				params.rgrc[0].bottom -= by
-			}
-			return 0
-		}
+		if result, handled := tb_handle_nccalcsize(hwnd, wparam, lparam); handled do return result
 
 	case win32.WM_NCHITTEST:
 		// Screen coords, sign-extended (negative on monitors left/above the
@@ -292,25 +317,7 @@ titlebar_subclass_proc :: proc "system" (
 		}
 
 	case win32.WM_NCLBUTTONUP:
-		btn := tb_button_from_hittest(win32.LRESULT(wparam))
-		if tb_pressed != .None {
-			if btn == tb_pressed {
-				switch btn {
-				case .Minimize:
-					win32.ShowWindow(hwnd, win32.SW_MINIMIZE)
-				case .Maximize:
-					win32.ShowWindow(
-						hwnd,
-						win32.SW_RESTORE if win32.IsZoomed(hwnd) else win32.SW_MAXIMIZE,
-					)
-				case .Close:
-					win32.PostMessageW(hwnd, win32.WM_CLOSE, 0, 0)
-				case .None:
-				}
-			}
-			tb_set_pressed(.None)
-			return 0
-		}
+		if tb_handle_ncbutton_up(hwnd, wparam) do return 0
 
 	case win32.WM_NCLBUTTONDBLCLK:
 		// Double-click on a caption button must not toggle maximize;
