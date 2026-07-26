@@ -365,6 +365,97 @@ display_to_raw :: proc(spans: []Text_Span, display_pos: int) -> int {
 	return 0
 }
 
+@(private = "file")
+draw_markdown_span_selection :: proc(
+	ctx: ^Markdown_Context,
+	cursor_x, y: i32,
+	text: string,
+	segment_start, segment_end: int,
+	selection_start, selection_end: int,
+	has_selection: bool,
+) {
+	if !has_selection || selection_start >= selection_end do return
+	highlight_start := max(selection_start, segment_start)
+	highlight_end := min(selection_end, segment_end)
+	if highlight_start >= highlight_end do return
+	pre := strings.clone_to_cstring(text[:highlight_start - segment_start], context.temp_allocator)
+	selected := strings.clone_to_cstring(
+		text[highlight_start - segment_start:highlight_end - segment_start], context.temp_allocator,
+	)
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE
+	highlight_x := cursor_x + measure_text_frame(ctx.frame, pre, font_size)
+	highlight_w := measure_text_frame(ctx.frame, selected, font_size)
+	draw_rectangle(
+		ctx.frame, highlight_x, y, highlight_w,
+		ui_frame_metrics(ctx.frame).LINE_HEIGHT, ui_frame_theme(ctx.frame).bg_selection,
+	)
+}
+
+@(private = "file")
+draw_markdown_span_chip :: proc(ctx: ^Markdown_Context, text: cstring, x, y: i32) {
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE
+	width := measure_text_frame(ctx.frame, text, font_size)
+	rect := Rectangle{f32(x - 3), f32(y - 1), f32(width + 6), f32(font_size + 4)}
+	draw_rectangle_rounded(ctx.frame, rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
+	draw_text_frame(ctx.frame, text, x, y, font_size, ui_frame_theme(ctx.frame).fg_accent)
+}
+
+@(private = "file")
+draw_markdown_span_code :: proc(
+	ctx: ^Markdown_Context,
+	span: ^Text_Span,
+	text: cstring,
+	x, y: i32,
+) {
+	if workspace_has_path_with(ctx.workspace_files, span.text) {
+		draw_markdown_span_chip(ctx, text, x, y)
+		return
+	}
+	draw_text_frame(
+		ctx.frame, text, x, y, ui_frame_metrics(ctx.frame).FONT_SIZE,
+		ui_frame_theme(ctx.frame).fg_code_inline,
+	)
+}
+
+@(private = "file")
+draw_markdown_span_emphasis :: proc(
+	ctx: ^Markdown_Context,
+	span: ^Text_Span,
+	text: cstring,
+	x, y: i32,
+	base_color: Color,
+) {
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE
+	style := ui_frame_theme(ctx.frame)
+	if span.bold {
+		draw_text_frame(ctx.frame, text, x + 1, y, font_size, style.fg_bold)
+		draw_text_frame(ctx.frame, text, x, y, font_size, style.fg_bold)
+	} else if span.link {
+		width := measure_text_frame(ctx.frame, text, font_size)
+		draw_text_frame(ctx.frame, text, x, y, font_size, style.fg_accent)
+		draw_line(ctx.frame, x, y + font_size + 1, x + width, y + font_size + 1, style.fg_accent)
+	} else {
+		draw_text_frame(ctx.frame, text, x, y, font_size, base_color)
+	}
+}
+
+@(private = "file")
+draw_markdown_span_style :: proc(
+	ctx: ^Markdown_Context,
+	span: ^Text_Span,
+	text: cstring,
+	x, y: i32,
+	base_color: Color,
+) {
+	if span.pill {
+		draw_markdown_span_chip(ctx, text, x, y)
+	} else if span.code {
+		draw_markdown_span_code(ctx, span, text, x, y)
+	} else {
+		draw_markdown_span_emphasis(ctx, span, text, x, y, base_color)
+	}
+}
+
 // Draw a single visual (wrapped) line using spans. Renders bold spans as pills.
 draw_markdown_line_spans :: proc(
 	ctx: ^Markdown_Context,
@@ -376,158 +467,26 @@ draw_markdown_line_spans :: proc(
 	sel_display_start, sel_display_end: int,
 	has_sel: bool,
 ) {
+	_ = display_line
 	cursor_x := x
-	// dl_start/dl_end are character offsets into the full display string for this visual line.
-	display_offset := 0 // running display char position across all spans
-
-	for &s in spans {
-		span_disp_start := display_offset
-		span_disp_end := display_offset + len(s.text)
-		display_offset = span_disp_end
-
-		// Compute overlap of this span with the current visual line [dl_start, dl_end).
-		seg_start := max(span_disp_start, dl_start)
-		seg_end := min(span_disp_end, dl_end)
-		if seg_start >= seg_end do continue
-
-		seg_text := s.text[seg_start - span_disp_start:seg_end - span_disp_start]
-		seg_c := strings.clone_to_cstring(seg_text, context.temp_allocator)
-		seg_pixel_w :=
-			measure_text_frame(ctx.frame, seg_c, ui_frame_metrics(ctx.frame).FONT_SIZE) + 1
-
-		// Draw selection highlight behind text so text stays visible.
-		if has_sel && sel_display_start < sel_display_end {
-			hl_s := max(sel_display_start, seg_start)
-			hl_e := min(sel_display_end, seg_end)
-			if hl_s < hl_e {
-				pre_c := strings.clone_to_cstring(
-					seg_text[:hl_s - seg_start],
-					context.temp_allocator,
-				)
-				span_c := strings.clone_to_cstring(
-					seg_text[hl_s - seg_start:hl_e - seg_start],
-					context.temp_allocator,
-				)
-				hl_x :=
-					cursor_x +
-					measure_text_frame(ctx.frame, pre_c, ui_frame_metrics(ctx.frame).FONT_SIZE)
-				hl_w := measure_text_frame(
-					ctx.frame,
-					span_c,
-					ui_frame_metrics(ctx.frame).FONT_SIZE,
-				)
-				draw_rectangle(
-					ctx.frame,
-					hl_x,
-					y,
-					hl_w,
-					ui_frame_metrics(ctx.frame).LINE_HEIGHT,
-					ui_frame_theme(ctx.frame).bg_selection,
-				)
-			}
-		}
-
-		if s.pill {
-			// File-mention chip: rounded background + accent text.
-			seg_w := measure_text_frame(ctx.frame, seg_c, ui_frame_metrics(ctx.frame).FONT_SIZE)
-			rect := Rectangle {
-				f32(cursor_x - 3),
-				f32(y - 1),
-				f32(seg_w + 6),
-				f32(ui_frame_metrics(ctx.frame).FONT_SIZE + 4),
-			}
-			draw_rectangle_rounded(ctx.frame, rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
-			draw_text_frame(
-				ctx.frame,
-				seg_c,
-				cursor_x,
-				y,
-				ui_frame_metrics(ctx.frame).FONT_SIZE,
-				ui_frame_theme(ctx.frame).fg_accent,
-			)
-		} else if s.code {
-			// Inline code: render as a clickable file/dir pill when the text
-			// names a real workspace path; otherwise as plain inline-code text.
-			if workspace_has_path_with(ctx.workspace_files, s.text) {
-				seg_w := measure_text_frame(
-					ctx.frame,
-					seg_c,
-					ui_frame_metrics(ctx.frame).FONT_SIZE,
-				)
-				rect := Rectangle {
-					f32(cursor_x - 3),
-					f32(y - 1),
-					f32(seg_w + 6),
-					f32(ui_frame_metrics(ctx.frame).FONT_SIZE + 4),
-				}
-				draw_rectangle_rounded(ctx.frame, rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
-				draw_text_frame(
-					ctx.frame,
-					seg_c,
-					cursor_x,
-					y,
-					ui_frame_metrics(ctx.frame).FONT_SIZE,
-					ui_frame_theme(ctx.frame).fg_accent,
-				)
-			} else {
-				draw_text_frame(
-					ctx.frame,
-					seg_c,
-					cursor_x,
-					y,
-					ui_frame_metrics(ctx.frame).FONT_SIZE,
-					ui_frame_theme(ctx.frame).fg_code_inline,
-				)
-			}
-		} else if s.bold {
-			// Faux-bold: draw text twice with 1px horizontal offset.
-			draw_text_frame(
-				ctx.frame,
-				seg_c,
-				cursor_x + 1,
-				y,
-				ui_frame_metrics(ctx.frame).FONT_SIZE,
-				ui_frame_theme(ctx.frame).fg_bold,
-			)
-			draw_text_frame(
-				ctx.frame,
-				seg_c,
-				cursor_x,
-				y,
-				ui_frame_metrics(ctx.frame).FONT_SIZE,
-				ui_frame_theme(ctx.frame).fg_bold,
-			)
-		} else if s.link {
-			// Hyperlink: accent text + underline; click handling lives in chat.odin.
-			seg_w := measure_text_frame(ctx.frame, seg_c, ui_frame_metrics(ctx.frame).FONT_SIZE)
-			draw_text_frame(
-				ctx.frame,
-				seg_c,
-				cursor_x,
-				y,
-				ui_frame_metrics(ctx.frame).FONT_SIZE,
-				ui_frame_theme(ctx.frame).fg_accent,
-			)
-			draw_line(
-				ctx.frame,
-				cursor_x,
-				y + ui_frame_metrics(ctx.frame).FONT_SIZE + 1,
-				cursor_x + seg_w,
-				y + ui_frame_metrics(ctx.frame).FONT_SIZE + 1,
-				ui_frame_theme(ctx.frame).fg_accent,
-			)
-		} else {
-			draw_text_frame(
-				ctx.frame,
-				seg_c,
-				cursor_x,
-				y,
-				ui_frame_metrics(ctx.frame).FONT_SIZE,
-				base_color,
-			)
-		}
-
-		cursor_x += seg_pixel_w
+	display_offset := 0
+	for &span in spans {
+		span_start := display_offset
+		span_end := display_offset + len(span.text)
+		display_offset = span_end
+		segment_start := max(span_start, dl_start)
+		segment_end := min(span_end, dl_end)
+		if segment_start >= segment_end do continue
+		segment := span.text[segment_start - span_start:segment_end - span_start]
+		segment_c := strings.clone_to_cstring(segment, context.temp_allocator)
+		draw_markdown_span_selection(
+			ctx, cursor_x, y, segment, segment_start, segment_end,
+			sel_display_start, sel_display_end, has_sel,
+		)
+		draw_markdown_span_style(ctx, &span, segment_c, cursor_x, y, base_color)
+		cursor_x += measure_text_frame(
+			ctx.frame, segment_c, ui_frame_metrics(ctx.frame).FONT_SIZE,
+		) + 1
 	}
 }
 

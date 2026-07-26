@@ -151,6 +151,20 @@ AccessKit integration dominate. Prefer Ingot when one Odin-owned stack, explicit
 component state, bounded frame derivation, and shared native/WebGPU architecture
 matter more than ecosystem size and current widget depth.
 
+The external claims above were reviewed against the upstream projects in July
+2026. Recheck them when selecting a dependency because branches, integrations,
+and release policies change:
+
+- Dear ImGui [repository](https://github.com/ocornut/imgui),
+  [backends](https://github.com/ocornut/imgui/blob/master/docs/BACKENDS.md), and
+  [docking notes](https://github.com/ocornut/imgui/wiki/Docking)
+- egui [repository and architecture](https://github.com/emilk/egui),
+  [`Context` repaint API](https://docs.rs/egui/latest/egui/struct.Context.html),
+  and [viewport API](https://docs.rs/egui/latest/egui/viewport/index.html)
+- Ingot [state model](ui-state.md), [rendering boundary](rendering.md),
+  [test coverage](testing.md), and
+  [platform-validation matrix](production-readiness.md)
+
 ## Against retained and declarative UI toolkits
 
 Qt, GTK, Slint, Flutter, and Compose-style systems are better defaults when the
