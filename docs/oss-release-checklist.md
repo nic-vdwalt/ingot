@@ -26,17 +26,14 @@ release.
 - [ ] Remove generated executables from source releases or produce them from a
   clean, reproducible build and include all linked dependency notices.
 
-## Font release blocker
+## Bundled font
 
-- [ ] Identify the exact Nerd Fonts release and upstream path for
-  `JetBrainsMonoNerdFontMono-Regular.ttf`.
-- [ ] Inventory all embedded glyph sets and include their copyright and license
-  notices, including CC BY 4.0 modification attribution where applicable.
-- [ ] Resolve Nerd Fonts' unlicensed Font Logos component through permission or
-  replace the font with an artifact that excludes it.
-- [ ] Keep `assets/fonts/OFL.txt` with every distribution containing the font.
-
-Do not distribute the current font until these items are complete.
+- [x] Replace the patched Nerd Fonts artifact with unmodified JetBrains Mono
+  Regular 2.304 from the official tagged release.
+- [x] Record the tagged source, commit, archive path, retrieval date, and
+  SHA-256 checksums in `THIRD_PARTY_NOTICES.md`.
+- [x] Remove Nerd Fonts private-use icon ranges and dependencies.
+- [x] Keep `assets/fonts/OFL.txt` with every distribution containing the font.
 
 ## Source provenance
 

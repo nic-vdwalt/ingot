@@ -4,7 +4,7 @@ import "core:strings"
 import rl "ingot:gfx"
 import "ingot:ui"
 
-FONT_DATA := #load("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
+FONT_DATA := #load("../assets/fonts/JetBrainsMono-Regular.ttf")
 
 Codepoint_Range :: struct {
 	start: rune,
@@ -26,20 +26,6 @@ CODEPOINT_RANGES :: [?]Codepoint_Range {
 	{0x2700, 0x27BF},
 	{0x2800, 0x28FF},
 	{0x2B00, 0x2B73},
-	{0x23FB, 0x23FE},
-	{0x2B58, 0x2B58},
-	{0xE000, 0xE00A},
-	{0xE0A0, 0xE0A3},
-	{0xE0B0, 0xE0D4},
-	{0xE200, 0xE2A9},
-	{0xE300, 0xE3E3},
-	{0xE5FA, 0xE6B5},
-	{0xE700, 0xE7C5},
-	{0xEA60, 0xEC1E},
-	{0xED00, 0xEFC1},
-	{0xF000, 0xF2FF},
-	{0xF300, 0xF375},
-	{0xF400, 0xF533},
 }
 
 adapter_text_init :: proc(adapter: ^Adapter) {

@@ -12,7 +12,7 @@ package main
 import "core:fmt"
 import rl "ingot:gfx"
 
-FONT_TTF := #load("../../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
+FONT_TTF := #load("../../assets/fonts/JetBrainsMono-Regular.ttf")
 
 SCREEN_W :: 800
 SCREEN_H :: 520

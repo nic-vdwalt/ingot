@@ -11,7 +11,7 @@ import "core:math"
 import "core:testing"
 import wg "vendor:wgpu"
 
-FONT_TTF := #load("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
+FONT_TTF := #load("../assets/fonts/JetBrainsMono-Regular.ttf")
 
 test_font_measure_invariants :: proc(t: ^testing.T, font: Font) {
 	testing.expect(t, font.glyphCount > 0, "font should bake glyphs")
@@ -113,4 +113,13 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	}
 
 	test_font_measure_invariants(t, f)
+	atlas := get_atlas(f._atlas)
+	testing.expect(t, atlas != nil, "font should own an atlas")
+	for codepoint in ([]rune{'A', 'é', '→', '─', '█'}) {
+		testing.expectf(t, _bake_glyph(atlas, codepoint), "font should contain U+%04X", codepoint)
+		testing.expectf(t, atlas.glyphs[codepoint].valid, "glyph U+%04X should render", codepoint)
+	}
+	missing: rune = 0xE000
+	testing.expect(t, !_bake_glyph(atlas, missing), "unbundled icon glyph should be absent")
+	testing.expect(t, !atlas.glyphs[missing].valid, "missing glyph should use fallback metrics")
 }

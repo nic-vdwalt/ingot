@@ -6,7 +6,7 @@ import rl "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
-FONT_TTF := #load("../../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
+FONT_TTF := #load("../../assets/fonts/JetBrainsMono-Regular.ttf")
 FIXTURE_CPS := [?]rune {
 	' ',
 	':',

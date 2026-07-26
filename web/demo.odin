@@ -14,7 +14,7 @@ import rl "ingot:gfx"
 
 // Embed a font so the demo exercises the real text atlas (stb_truetype → R8 wgpu
 // upload) in-browser, proving the text stack works on the web target.
-FONT_TTF := #load("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
+FONT_TTF := #load("../assets/fonts/JetBrainsMono-Regular.ttf")
 DEMO_CPS := [?]rune {
 	' ',
 	'!',

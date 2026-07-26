@@ -9,8 +9,15 @@ web/wgpu.js
 
 # build artifacts
 *.dSYM/
+/gallery
+/chart_demo
+/idle_demo
 fuzz/net/fuzz_net
 fuzz/ui/fuzz_ui
+fuzz/gfx_frame/fuzz_gfx_frame
+fuzz/interact/fuzz_interact
+fuzz/wsreconn/fuzz_wsreconn
+fuzz/wsreconn/fuzz_wsreconn_tsan
 benchmarks/widgets/build/
 benchmarks/widgets/cache/
 benchmarks/widgets/egui/target/

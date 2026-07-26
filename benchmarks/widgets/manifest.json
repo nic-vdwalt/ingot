@@ -14,8 +14,8 @@
     "egui": {"repository": "https://github.com/emilk/egui", "tag": "0.32.3", "revision": "f2ab57d6987a9b7984f0637cc4d9f2fd173c507c", "core_backend": "headless", "native_backend": "wgpu"}
   },
   "font": {
-    "path": "assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf",
-    "sha256": "f01031f40e48dc29e1112e6b0b0450a2c6cd097f3f35cfff05c55cb311f8034c"
+    "path": "assets/fonts/JetBrainsMono-Regular.ttf",
+    "sha256": "a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f"
   },
   "result_schema": "spec/result.schema.json",
   "workloads": "spec/workloads.json",

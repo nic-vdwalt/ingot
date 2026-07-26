@@ -14,7 +14,7 @@ import "core:fmt"
 import "core:strings"
 import rl "ingot:gfx"
 
-FONT_TTF := #load("../../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf")
+FONT_TTF := #load("../../assets/fonts/JetBrainsMono-Regular.ttf")
 
 font: rl.Font
 frame_count: u64

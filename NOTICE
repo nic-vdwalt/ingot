@@ -5,8 +5,8 @@ This product includes software developed by the AccessKit project.
 
 This product includes software developed by Paul Evans as part of libvterm.
 
-The bundled font is a Nerd Fonts-modified version of JetBrains Mono and is
-licensed separately from Ingot. See assets/fonts/OFL.txt and
+The bundled JetBrains Mono font is licensed separately from Ingot under the
+SIL Open Font License 1.1. See assets/fonts/OFL.txt and
 THIRD_PARTY_NOTICES.md.
 
 The Tiger Style guide in docs/TIGER_STYLE.md is adapted from the TigerBeetle

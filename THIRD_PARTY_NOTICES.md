@@ -82,44 +82,35 @@ The build scripts refer to `vendor/libvterm`, which is not currently committed.
 Restore the exact 0.3.3 source and its file-level notices before claiming
 reproducible binary provenance.
 
-## JetBrains Mono Nerd Font Mono Regular
+## JetBrains Mono Regular 2.304
 
 Bundled file:
 
-- `assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf`
+- `assets/fonts/JetBrainsMono-Regular.ttf`
+
+Source: <https://github.com/JetBrains/JetBrainsMono/releases/tag/v2.304>
+
+The file is `fonts/ttf/JetBrainsMono-Regular.ttf` from the official
+`JetBrainsMono-2.304.zip` release archive at commit
+`cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9`. It was retrieved on 2026-07-26
+without modification. Upstream did not publish a checksum or signature for the
+archive; the repository records the verified local hashes below.
 
 SHA-256:
 
 ```text
-f01031f40e48dc29e1112e6b0b0450a2c6cd097f3f35cfff05c55cb311f8034c  assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
+6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf  JetBrainsMono-2.304.zip
+a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f  assets/fonts/JetBrainsMono-Regular.ttf
+30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad  assets/fonts/OFL.txt
 ```
 
-The base font is JetBrains Mono:
-<https://github.com/JetBrains/JetBrainsMono>.
+Copyright 2020 The JetBrains Mono Project Authors
+(<https://github.com/JetBrains/JetBrainsMono>).
 
-Copyright 2020 The JetBrains Mono Project Authors.
-
-The base font is licensed under SIL Open Font License 1.1. The complete
-copyright notice and license are in `assets/fonts/OFL.txt`. JetBrains Mono
-declares no Reserved Font Names in that file.
-
-The file is a patched Nerd Fonts artifact:
-<https://github.com/ryanoasis/nerd-fonts>.
-
-Nerd Fonts patched fonts carry this notice:
-
-Copyright (c) 2014, Ryan L McIntyre (<https://ryanlmcintyre.com>).
-
-Nerd Fonts combines icon glyphs governed by several licenses, including MIT,
-Apache-2.0, SIL OFL 1.1, and CC BY 4.0. Its license audit also identifies Font
-Logos as unlicensed. The exact Nerd Fonts release used for this artifact is not
-recorded, so this repository cannot yet provide a reliable glyph-by-glyph
-license inventory.
-
-Do not distribute this font in a release until its exact tagged source and
-complete icon notices have been established, or replace it with a font whose
-full redistribution chain is known. The font remains separately licensed and
-is not covered by Ingot's Apache-2.0 grant.
+JetBrains Mono is licensed under SIL Open Font License 1.1. The complete
+copyright notice and license are in `assets/fonts/OFL.txt`. The font declares
+no Reserved Font Names in that file. It is separately licensed and is not
+covered by Ingot's Apache-2.0 grant.
 
 ## TigerBeetle TigerStyle
 
