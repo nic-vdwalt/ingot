@@ -448,7 +448,7 @@ measure_frame :: proc(
 print_samples :: proc(name: string, samples: []i64, first: bool) {
 	assert(len(name) > 0 && len(samples) > 0, "print_samples: invalid argument")
 	if !first do fmt.print(",")
-	fmt.print("\"", name, "\":[")
+	fmt.printf("\"%s\":[", name)
 	for value, index in samples {
 		if index > 0 do fmt.print(",")
 		fmt.print(value)
@@ -559,7 +559,7 @@ main :: proc() {
 	fmt.print(
 		"},\"output\":{\"submitted_widgets\":",
 		submitted,
-		",\"visible_widgets\":"
+		",\"visible_widgets\":",
 		min(submitted, VIRTUAL_ROWS),
 		",\"paint_commands\":",
 		stats.main_command_count,
