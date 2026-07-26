@@ -250,6 +250,7 @@ frame :: proc() {
 	}
 
 	rl.EndDrawing()
+	free_all(context.temp_allocator)
 }
 
 draw_center :: proc(text: cstring, y: f32) {

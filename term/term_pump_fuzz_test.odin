@@ -64,7 +64,7 @@ term_pump_resize_fuzz :: proc(t: ^testing.T) {
 						u16(testx.int_range(&p, 2, 80)),
 					)
 				case 4:
-					ts.sb_view_offset = testx.int_range(&p, 0, len(ts.sb_lines) + 1)
+					ts.sb_view_offset = testx.int_range(&p, 0, term_scrollback_count(ts) + 1)
 				}
 
 				// Hold prefix: at most 3 bytes and never after EOF ingest.

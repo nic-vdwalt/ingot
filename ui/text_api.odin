@@ -34,6 +34,14 @@ Ink :: enum u8 {
 	Danger,
 	Success,
 	Inverse,
+	Disabled,
+	Label,
+	Tool,
+	Diff_Add,
+	Diff_Remove,
+	User,
+	Assistant,
+	Plan,
 }
 
 // text_role_size resolves a role against the frame's scaled metrics.
@@ -92,6 +100,22 @@ text_ink :: proc(frame: ^Ui_Frame, ink: Ink) -> Color {
 		color = style.fg_success
 	case .Inverse:
 		color = style.button_text
+	case .Disabled:
+		color = style.fg_disabled
+	case .Label:
+		color = style.fg_label
+	case .Tool:
+		color = style.fg_tool
+	case .Diff_Add:
+		color = style.fg_diff_add
+	case .Diff_Remove:
+		color = style.fg_diff_remove
+	case .User:
+		color = style.fg_user
+	case .Assistant:
+		color = style.fg_assistant
+	case .Plan:
+		color = style.fg_plan
 	}
 	assert(color.a > 0, "text_ink: theme resolved a fully transparent ink")
 	return color

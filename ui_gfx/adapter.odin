@@ -1,5 +1,8 @@
 package ui_gfx
 
+// UI rendering borrows context.temp_allocator for frame scratch. The host owns
+// that arena and must reclaim it after each complete frame.
+
 import ak "ingot:accesskit"
 import rl "ingot:gfx"
 import "ingot:ui"

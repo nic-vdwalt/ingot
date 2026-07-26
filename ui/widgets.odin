@@ -433,7 +433,14 @@ scrollbar_ex :: proc(
 	assert(total >= 0 && visible >= 0, "scrollbar_ex: negative row counts")
 	assert(w > 0, "scrollbar_ex: non-positive width")
 	if total <= visible || h <= 0 {
-		st.dragging = false
+		// Content shrank below the viewport mid-drag: drop the latch and
+		// release the frame's arbitration slot in the same breath. The
+		// generation check in interact_frame_begin would reclaim it on the
+		// next frame anyway; doing it here avoids one frame of dead input.
+		if st.dragging {
+			st.dragging = false
+			interact_forget(frame, &st.dragging)
+		}
 		return 0
 	}
 	max_off := total - visible

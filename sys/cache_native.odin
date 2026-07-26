@@ -24,20 +24,23 @@ _valid_cache_app_id :: proc(app: string) -> bool {
 cache_dir :: proc(app: string, allocator := context.temp_allocator) -> (dir: string, ok: bool) {
 	if !_valid_cache_app_id(app) do return "", false
 	when ODIN_OS == .Windows {
-		if root := os.get_env("LOCALAPPDATA", allocator);
+		// The returned path owns its storage; environment scratch is frame-local.
+		if root := os.get_env("LOCALAPPDATA", context.temp_allocator);
 		   len(root) > 2 &&
 		   ((root[1] == ':' && (root[2] == '/' || root[2] == '\\')) ||
 				   (root[0] == '\\' && root[1] == '\\')) {
 			return fmt.aprintf("%s/%s", root, app, allocator = allocator), true
 		}
 	}
-	home := os.get_env("HOME", allocator)
-	if len(home) == 0 do home = os.get_env("USERPROFILE", allocator)
+	// The returned path owns its storage; environment scratch is frame-local.
+	home := os.get_env("HOME", context.temp_allocator)
+	if len(home) == 0 do home = os.get_env("USERPROFILE", context.temp_allocator)
 	when ODIN_OS == .Darwin {
 		if len(home) == 0 do return "", false
 		return fmt.aprintf("%s/Library/Caches/%s", home, app, allocator = allocator), true
 	} else when ODIN_OS != .Windows {
-		if root := os.get_env("XDG_CACHE_HOME", allocator); len(root) > 0 && root[0] == '/' {
+		if root := os.get_env("XDG_CACHE_HOME", context.temp_allocator);
+		   len(root) > 0 && root[0] == '/' {
 			return fmt.aprintf("%s/%s", root, app, allocator = allocator), true
 		}
 	}

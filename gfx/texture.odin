@@ -32,8 +32,9 @@ Texture_Slot :: struct {
 }
 
 Texture_Resources :: struct {
-	slots: [MAX_TEXTURES]Texture_Slot,
-	count: u32,
+	slots:          [MAX_TEXTURES]Texture_Slot,
+	count:          u32,
+	upload_scratch: [dynamic]byte,
 }
 
 @(private)
@@ -70,12 +71,10 @@ get_texture :: proc(id: u32) -> ^Tex_Entry {
 	return slot.entry
 }
 
-// _to_rgba expands `src` (width*height, `format` channels) into a freshly
-// allocated RGBA8 buffer for WebGPU upload.
 @(private)
-_to_rgba :: proc(src: [^]byte, w, h: i32, format: PixelFormat) -> []byte {
+_to_rgba_into :: proc(out: []byte, src: [^]byte, w, h: i32, format: PixelFormat) -> bool {
 	n := int(w) * int(h)
-	out := make([]byte, n * 4)
+	if src == nil || n <= 0 || len(out) != n * 4 do return false
 	#partial switch format {
 	case .UNCOMPRESSED_R8G8B8A8:
 		copy(out, src[:n * 4])
@@ -103,6 +102,15 @@ _to_rgba :: proc(src: [^]byte, w, h: i32, format: PixelFormat) -> []byte {
 			out[i * 4 + 0] = 255; out[i * 4 + 1] = 255; out[i * 4 + 2] = 255; out[i * 4 + 3] = 255
 		}
 	}
+	return true
+}
+
+// _to_rgba expands source pixels into an owned RGBA8 buffer for one-time uploads.
+@(private)
+_to_rgba :: proc(src: [^]byte, w, h: i32, format: PixelFormat) -> []byte {
+	n := int(w) * int(h)
+	out := make([]byte, n * 4)
+	assert(_to_rgba_into(out, src, w, h, format))
 	return out
 }
 
@@ -268,8 +276,14 @@ UpdateTexture :: proc(texture: Texture2D, pixels: rawptr) {
 	// caller passed data matching the source format used at load; the texture
 	// itself is RGBA8, so expand assuming R8G8B8 (concord's screen frames) when
 	// the byte count differs — otherwise treat as RGBA8.
-	rgba := _to_rgba(([^]byte)(pixels), e.width, e.height, .UNCOMPRESSED_R8G8B8)
-	defer delete(rgba)
+	pixel_count := int(e.width) * int(e.height)
+	ensure(pixel_count > 0)
+	resources := &g.resources.textures
+	if len(resources.upload_scratch) < pixel_count * 4 {
+		resize(&resources.upload_scratch, pixel_count * 4)
+	}
+	rgba := resources.upload_scratch[:pixel_count * 4]
+	ensure(_to_rgba_into(rgba, ([^]byte)(pixels), e.width, e.height, .UNCOMPRESSED_R8G8B8))
 	wg.QueueWriteTexture(
 		g.queue,
 		&{texture = e.tex},
@@ -296,6 +310,9 @@ _texture_resources_destroy :: proc(resources: ^Texture_Resources) {
 		slot.entry = nil
 		slot.occupied = false
 	}
+
+	delete(resources.upload_scratch)
+
 	resources^ = {}
 }
 

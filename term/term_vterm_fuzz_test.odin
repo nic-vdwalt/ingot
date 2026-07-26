@@ -215,13 +215,19 @@ fuzz_vt_check_invariants :: proc(t: ^testing.T, ts: ^Term_Instance) {
 		}
 	}
 
-	testing.expect(t, len(ts.sb_lines) <= TERM_SCROLLBACK_MAX, "scrollback exceeded cap")
+	count := term_scrollback_count(ts)
+	testing.expect(t, count <= TERM_SCROLLBACK_MAX, "scrollback exceeded cap")
+	testing.expect(
+		t,
+		ts.sb_ring_head >= 0 && ts.sb_ring_head < TERM_SCROLLBACK_MAX,
+		"ring head invalid",
+	)
 	testing.expect(t, ts.sb_view_offset >= 0, "sb_view_offset negative")
-	testing.expect(t, ts.sb_view_offset <= len(ts.sb_lines), "sb_view_offset past scrollback")
+	testing.expect(t, ts.sb_view_offset <= count, "sb_view_offset past scrollback")
 	testing.expect(t, ts.sb_base >= 0, "sb_base negative")
-	for line in ts.sb_lines {
+	for index in 0 ..< count {
 		// Touch every scrollback line — ASan flags stale/freed rows.
-		for cl in line {
+		for cl in term_scrollback_line(ts, index) {
 			testing.expect(t, cl.width >= -1 && cl.width <= 2, "scrollback cell width corrupt")
 		}
 	}
@@ -270,7 +276,7 @@ fuzz_vterm_ingest :: proc(t: ^testing.T) {
 			fuzz_vt_feed(&p, ts, doc)
 			// Simulate a user scrolled back mid-stream; pushline pins this.
 			if testx.int_range(&p, 0, 4) == 0 {
-				ts.sb_view_offset = testx.int_range(&p, 0, len(ts.sb_lines) + 1)
+				ts.sb_view_offset = testx.int_range(&p, 0, term_scrollback_count(ts) + 1)
 			}
 			if testx.int_range(&p, 0, 3) == 0 {
 				lv.vterm_set_size(
@@ -305,14 +311,14 @@ fuzz_vterm_scrollback_churn :: proc(t: ^testing.T) {
 	for _ in 0 ..< (TERM_SCROLLBACK_MAX + 500) / 64 + 1 {
 		fuzz_vt_feed(&p, ts, flood[:])
 	}
-	testing.expect_value(t, len(ts.sb_lines), TERM_SCROLLBACK_MAX)
+	testing.expect_value(t, term_scrollback_count(ts), TERM_SCROLLBACK_MAX)
 	testing.expect(t, ts.sb_base > 0, "eviction must advance sb_base")
 	fuzz_vt_check_invariants(t, ts)
 
 	// Grow/shrink churn: growing rows pops scrollback into the screen,
 	// shrinking pushes screen rows back out.
 	for _ in 0 ..< 200 {
-		ts.sb_view_offset = testx.int_range(&p, 0, len(ts.sb_lines) + 1)
+		ts.sb_view_offset = testx.int_range(&p, 0, term_scrollback_count(ts) + 1)
 		lv.vterm_set_size(
 			ts.vt,
 			c.int(testx.int_range(&p, 1, 61)),
@@ -324,7 +330,7 @@ fuzz_vterm_scrollback_churn :: proc(t: ^testing.T) {
 	// ED 3 (CSI 3 J) drops the scrollback via sb_clear.
 	reset := [?]u8{0x1B, '[', '3', 'J'}
 	fuzz_vt_feed(&p, ts, reset[:])
-	testing.expect_value(t, len(ts.sb_lines), 0)
+	testing.expect_value(t, term_scrollback_count(ts), 0)
 	testing.expect_value(t, ts.sb_view_offset, 0)
 	fuzz_vt_check_invariants(t, ts)
 

@@ -10,7 +10,7 @@ package prefs
 import "core:fmt"
 import "core:os"
 
-// user_home returns the current user's home directory across platforms.
+// user_home returns an allocator-owned current-user home directory.
 // HOME is set on macOS/Linux; Windows uses USERPROFILE.
 user_home :: proc(allocator := context.temp_allocator) -> string {
 	if h := os.get_env("HOME", allocator); len(h) > 0 do return h
@@ -23,11 +23,13 @@ user_home :: proc(allocator := context.temp_allocator) -> string {
 //   windows: %APPDATA%\<app>  (falls back to ~/.local/share/<app>)
 data_dir :: proc(app: string, allocator := context.temp_allocator) -> (dir: string, ok: bool) {
 	when ODIN_OS == .Windows {
-		if ad := os.get_env("APPDATA", allocator); len(ad) > 0 {
+		// The returned path owns its storage; environment scratch ends with this frame.
+		if ad := os.get_env("APPDATA", context.temp_allocator); len(ad) > 0 {
 			return fmt.aprintf("%s/%s", ad, app, allocator = allocator), true
 		}
 	}
-	home := user_home(allocator)
+	// The returned path owns its storage; home is only needed while formatting it.
+	home := user_home(context.temp_allocator)
 	if len(home) == 0 do return "", false
 	return fmt.aprintf("%s/.local/share/%s", home, app, allocator = allocator), true
 }

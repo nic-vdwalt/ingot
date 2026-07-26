@@ -89,14 +89,19 @@ bugs, and they are a force multiplier for fuzzing.
 - Prefer **static / arena allocation** and reuse. Allocate long-lived buffers
   once (see the per-instance `read_buf` / `utf8_hold` in `term`) rather than
   per frame. For scratch work use `context.temp_allocator` and let the frame
-  boundary reclaim it — never leak it into retained state.
+  boundary reclaim it — never leak it into retained state. Hosts must call
+  `free_all(context.temp_allocator)` after each complete frame; libraries
+  borrow the arena and must not reclaim storage they do not own.
 
 - Declare variables at the **smallest possible scope** and keep the number of
   live variables small. Compute a value close to where it is used; don't hoist
   it up where it can be misused (avoid place-of-check to place-of-use gaps).
 
-- Group allocation and its `defer delete/free` together, with a blank line
-  before and after, so leaks are easy to spot.
+- Group scoped allocation and its `defer delete/free` together, with a blank
+  line before and after, so leaks are easy to spot. Arena-backed subsystems use
+  one explicit reclamation point instead; retained owners use a named destroy
+  procedure. `ui/frame_scratch.odin` and `net/http.odin`'s
+  `http_response_destroy` are the reference shapes.
 
 ### Types
 
@@ -144,6 +149,11 @@ bugs, and they are a force multiplier for fuzzing.
 - **Explicitly pass options at the call site** instead of leaning on zero-value
   defaults for *behaviour*. If a default ever changes, silent call sites become
   latent bugs.
+
+- **Use named fields for public config struct literals.** Positional literals
+  make field order part of the consumer contract and turn an additive field
+  into a compile break in every downstream application. Named fields document
+  intent and let new optional fields retain their zero-value defaults.
 
 - Compile at the strictest setting and treat warnings as defects. Our gate is
   `scripts/check.sh` (`odin check ... -vet -strict-style -vet-shadowing`).

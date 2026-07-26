@@ -143,14 +143,25 @@ ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
 		if n < 0 do break
 		if n > WS_MAX_PAYLOAD do break
 		is_bin := ingot_ws_recv_binary(ws.id) == 1
-		buf := make([]byte, int(n) if n > 0 else 0)
-		got := ingot_ws_recv_copy(ws.id, raw_data(buf) if n > 0 else nil, i32(len(buf)))
-		if got < 0 || got > n {
-			if len(buf) > 0 do delete(buf)
+		if n == 0 {
+			got := ingot_ws_recv_copy(ws.id, nil, 0)
+			if got != 0 {
+				ws.state = .Error
+				break
+			}
+			append(&msgs, WS_Message{data = "", binary = is_bin})
+			message_count += 1
+			continue
+		}
+		buf := make([]byte, int(n))
+		ensure(len(buf) == int(n))
+		got := ingot_ws_recv_copy(ws.id, raw_data(buf), i32(len(buf)))
+		if got != n {
+			delete(buf)
 			ws.state = .Error
 			break
 		}
-		append(&msgs, WS_Message{data = string(buf[:int(got)]), binary = is_bin})
+		append(&msgs, WS_Message{data = string(buf), binary = is_bin})
 		message_count += 1
 		byte_count += int(got)
 	}

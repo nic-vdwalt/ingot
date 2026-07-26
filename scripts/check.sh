@@ -25,6 +25,16 @@ for pkg in libvterm accesskit; do
 	odin check "$root/$pkg" $col -no-entry-point "$@"
 done
 
+# Examples are consumer contracts, not samples that may rot independently.
+# Build every example because a public config struct gaining a field can keep
+# all library packages green while breaking every real application.
+example_out="${TMPDIR:-/tmp}/ingot-example-check"
+mkdir -p "$example_out"
+for example in gallery breakout idle_demo chart_demo render_fixture; do
+	echo "== building example $example =="
+	odin build "$root/examples/$example" $col "-out:$example_out/$example" "$@"
+done
+
 # odinfmt has no list/check flag (only -w/-stdin), so compare each file
 # against its formatted output. Formatting is part of the strict gate.
 if ! command -v odinfmt >/dev/null 2>&1; then

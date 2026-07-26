@@ -364,30 +364,32 @@ _vao_pipeline :: proc(
 	}
 	if len(v.caches) >= RLGL_MAX_PIPELINES_PER_VAO do return nil
 	nbuf := len(v.buffers)
-	attr_store := make([][dynamic]wg.VertexAttribute, nbuf, context.temp_allocator)
-	strides := make([]u32, nbuf, context.temp_allocator)
-	stepmodes := make([]wg.VertexStepMode, nbuf, context.temp_allocator)
+	ensure(nbuf <= RLGL_MAX_BUFFERS_PER_VAO)
+	attr_store: [RLGL_MAX_BUFFERS_PER_VAO][RLGL_MAX_ATTRIBUTES_PER_VAO]wg.VertexAttribute
+	attr_counts: [RLGL_MAX_BUFFERS_PER_VAO]u32
+	strides: [RLGL_MAX_BUFFERS_PER_VAO]u32
+	stepmodes: [RLGL_MAX_BUFFERS_PER_VAO]wg.VertexStepMode
+	layouts: [RLGL_MAX_BUFFERS_PER_VAO]wg.VertexBufferLayout
 	for i in 0 ..< nbuf {stepmodes[i] = .Vertex}
 	for a in v.attrs {
-		append(
-			&attr_store[a.buffer_idx],
-			wg.VertexAttribute {
-				format = _vf_for_comps(a.comps),
-				offset = u64(a.offset),
-				shaderLocation = a.location,
-			},
-		)
+		attribute_index := attr_counts[a.buffer_idx]
+		ensure(attribute_index < RLGL_MAX_ATTRIBUTES_PER_VAO)
+		attr_store[a.buffer_idx][attribute_index] = {
+			format         = _vf_for_comps(a.comps),
+			offset         = u64(a.offset),
+			shaderLocation = a.location,
+		}
+		attr_counts[a.buffer_idx] += 1
 		strides[a.buffer_idx] = a.stride
 		if a.divisor > 0 do stepmodes[a.buffer_idx] = .Instance
 	}
-	layouts := make([]wg.VertexBufferLayout, nbuf, context.temp_allocator)
 	for i in 0 ..< nbuf {
-		if strides[i] == 0 || len(attr_store[i]) == 0 do return nil
+		if strides[i] == 0 || attr_counts[i] == 0 do return nil
 		layouts[i] = {
 			arrayStride    = u64(strides[i]),
 			stepMode       = stepmodes[i],
-			attributeCount = uint(len(attr_store[i])),
-			attributes     = raw_data(attr_store[i][:]),
+			attributeCount = uint(attr_counts[i]),
+			attributes     = raw_data(attr_store[i][:attr_counts[i]]),
 		}
 	}
 
@@ -410,7 +412,7 @@ _vao_pipeline :: proc(
 				module = se.module,
 				entryPoint = "vs_main",
 				bufferCount = uint(nbuf),
-				buffers = raw_data(layouts),
+				buffers = raw_data(layouts[:nbuf]),
 			},
 			primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .None},
 			multisample = {count = 1, mask = ~u32(0)},

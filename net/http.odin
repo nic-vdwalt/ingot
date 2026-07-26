@@ -278,6 +278,17 @@ when !INGOT_NET_SIM {
 
 } // when !INGOT_NET_SIM
 
+@(private = "file")
+parse_http_header_line :: proc(line: string, allocator: mem.Allocator) -> (Http_Header, bool) {
+	colon := strings.index(line, ":")
+	if colon <= 0 do return {}, false
+	return Http_Header {
+			name = strings.clone(strings.trim_space(line[:colon]), allocator),
+			value = strings.clone(strings.trim_space(line[colon + 1:]), allocator),
+		},
+		true
+}
+
 parse_http_response :: proc(
 	data: []u8,
 	maximum_body := DEFAULT_MAXIMUM_BODY,
@@ -298,24 +309,18 @@ parse_http_response :: proc(
 	response.status = u16(status_value)
 	response.allocator = allocator
 	header_array := make([dynamic]Http_Header, 0, len(lines) - 1, allocator)
-	response.headers = header_array[:]
 	for line in lines[1:] {
-		colon := strings.index(line, ":")
-		if colon <= 0 {
-			// Free with the SAME allocator we allocated with — the caller may
-			// have passed a temp allocator (pair-asserted by the fuzz harness).
+		header, header_ok := parse_http_header_line(line, allocator)
+		if !header_ok {
+			// The response remains the single owner across malformed peer input.
 			http_response_destroy(&response)
 			return {}, false
 		}
-		append(
-			&header_array,
-			Http_Header {
-				name = strings.clone(strings.trim_space(line[:colon]), allocator),
-				value = strings.clone(strings.trim_space(line[colon + 1:]), allocator),
-			},
-		)
+		append(&header_array, header)
+		response.headers = header_array[:]
 	}
 	response.headers = header_array[:]
+	assert(len(response.headers) == len(header_array))
 	raw_body := data[header_end + 4:]
 	if transfer_chunked(response.headers) {
 		decoded, decoded_ok := decode_chunked(raw_body, maximum_body, allocator)

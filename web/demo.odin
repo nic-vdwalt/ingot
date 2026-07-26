@@ -110,6 +110,7 @@ frame :: proc() {
 	}
 
 	rl.EndDrawing()
+	free_all(context.temp_allocator)
 }
 
 // small periodic sine to avoid pulling extra deps on the wasm target

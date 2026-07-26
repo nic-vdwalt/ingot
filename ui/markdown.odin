@@ -6,6 +6,9 @@ package ui
 
 import "core:strings"
 
+// Tables beyond these dimensions are neither legible nor safe to process in one frame.
+MARKDOWN_TABLE_COLS_MAX :: 64
+MARKDOWN_TABLE_ROWS_MAX :: 512
 
 Markdown_Context :: struct {
 	frame:           ^Ui_Frame,
@@ -738,6 +741,7 @@ split_table_row_offsets_with :: proc(
 					break
 				}
 			}
+			if len(cell_buf) >= MARKDOWN_TABLE_COLS_MAX do break
 			append(&cell_buf, trimmed)
 			append(&start_buf, off)
 			seg_start = k + 1
@@ -800,7 +804,7 @@ layout_table :: proc(
 	pos := blk_start
 	phys := 0
 	next_byte := blk_start
-	for pos < len(text) {
+	for pos < len(text) && len(rows) < MARKDOWN_TABLE_ROWS_MAX {
 		nl := strings.index_byte(text[pos:], '\n')
 		line_end := len(text) if nl < 0 else pos + nl
 		line := text[pos:line_end]
@@ -819,7 +823,7 @@ layout_table :: proc(
 		cells := frame_view_items(ctx.frame, cells_view)
 		starts := frame_view_items(ctx.frame, starts_view)
 		append(&rows, Row{cells = cells, starts = starts})
-		if len(cells) > cols do cols = len(cells)
+		if len(cells) > cols do cols = min(len(cells), MARKDOWN_TABLE_COLS_MAX)
 		phys += 1
 		next_byte = advance
 		pos = advance
@@ -831,7 +835,7 @@ layout_table :: proc(
 
 	pad := ui_frame_metrics(ctx.frame).TABLE_CELL_PAD
 	// Natural width per column: widest cell plus horizontal padding.
-	naturals := make([]i32, cols, ui_frame_allocator(ctx.frame))
+	naturals: [MARKDOWN_TABLE_COLS_MAX]i32
 	for row in rows {
 		for cell, ci in row.cells {
 			if len(cell) == 0 do continue
@@ -850,23 +854,24 @@ layout_table :: proc(
 		if naturals[ci] < min_w do naturals[ci] = min_w
 	}
 
-	col_widths := make([]i32, cols, ui_frame_allocator(ctx.frame))
+	col_widths: [MARKDOWN_TABLE_COLS_MAX]i32
 	natural_total: i32 = 0
 	for ci in 0 ..< cols do natural_total += naturals[ci]
 
 	shrunk := natural_total > max_width
 	if !shrunk {
 		// Everything fits at natural width — table may be narrower than max_width.
-		copy(col_widths, naturals)
+		copy(col_widths[:cols], naturals[:cols])
 	} else {
 		// Columns at/below their fair share keep natural width; wide columns
 		// split the remaining space proportionally to their natural widths.
 		// Fixing a column changes the fair share of the rest, so iterate.
-		fixed := make([]bool, cols, context.temp_allocator)
+		fixed: [MARKDOWN_TABLE_COLS_MAX]bool
 		remaining := max_width
 		flex := cols
-		for {
-			changed := false
+		changed := false
+		for _ in 0 ..< cols {
+			changed = false
 			share := remaining / i32(max(flex, 1))
 			for ci in 0 ..< cols {
 				if fixed[ci] do continue
@@ -880,6 +885,7 @@ layout_table :: proc(
 			}
 			if !changed || flex == 0 do break
 		}
+		assert(flex == 0 || !changed)
 		if flex > 0 {
 			flex_natural: i32 = 0
 			for ci in 0 ..< cols {
@@ -909,7 +915,7 @@ layout_table :: proc(
 	}
 
 	// Per-row height: tallest wrapped cell (min one line).
-	row_heights := make([]i32, len(rows), context.temp_allocator)
+	row_heights: [MARKDOWN_TABLE_ROWS_MAX]i32
 	for row, ri in rows {
 		h := i32(ui_frame_metrics(ctx.frame).LINE_HEIGHT)
 		for cell, ci in row.cells {

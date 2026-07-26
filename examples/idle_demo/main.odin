@@ -90,4 +90,5 @@ frame :: proc() {
 	rl.DrawTextEx(font, stats, {20, 150}, 20, 0, rl.Color{140, 200, 140, 255})
 
 	rl.EndDrawing()
+	free_all(context.temp_allocator)
 }

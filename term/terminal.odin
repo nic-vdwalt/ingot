@@ -15,7 +15,7 @@ import "core:thread"
 import "core:time"
 import "ingot:threadhook"
 
-// Maximum number of scrollback lines retained per terminal instance.
+// Maximum retained rows and pointer slots allocated once per terminal instance.
 TERM_SCROLLBACK_MAX :: 5000
 TERM_OUTPUT_CHUNK_SIZE :: 65532
 TERM_OUTPUT_QUEUE_CAP :: 16
@@ -55,9 +55,10 @@ Term_Instance :: struct {
 	utf8_hold:      [4]u8,
 	utf8_hold_len:  int,
 
-	// Scrollback: lines pushed off the top of the normal screen.
-	// Each entry is a heap-owned row of cells captured via sb_pushline.
-	sb_lines:       [dynamic][]lv.VTerm_Screen_Cell,
+	// Scrollback rows are recycled through a fixed-size pointer ring.
+	sb_ring:        [dynamic][]lv.VTerm_Screen_Cell,
+	sb_ring_head:   int,
+	sb_ring_count:  int,
 	// How many lines the view is scrolled back (0 = live view).
 	sb_view_offset: int,
 	// Count of scrollback lines evicted at the cap. Content-absolute row
@@ -65,7 +66,7 @@ Term_Instance :: struct {
 	// they stay stable when old lines are dropped.
 	sb_base:        int,
 
-	// Owner of all emulator heap state (title, scrollback rows, sb_lines
+	// Owner of all emulator heap state (title, scrollback rows, and ring
 	// backing). Captured in term_init_emulator; the C callbacks re-enter
 	// Odin with default_context(), so they must restore this allocator or
 	// alloc/free pairs split across allocators (bad frees under tracking
@@ -110,6 +111,19 @@ _screen_settermprop :: proc "c" (
 	return 1
 }
 
+term_scrollback_count :: proc(ts: ^Term_Instance) -> int {
+	assert(ts != nil)
+	assert(ts.sb_ring_count >= 0 && ts.sb_ring_count <= TERM_SCROLLBACK_MAX)
+	return ts.sb_ring_count
+}
+
+term_scrollback_line :: proc(ts: ^Term_Instance, index: int) -> []lv.VTerm_Screen_Cell {
+	assert(ts != nil)
+	assert(index >= 0 && index < ts.sb_ring_count)
+	ring_index := (ts.sb_ring_head + index) % TERM_SCROLLBACK_MAX
+	return ts.sb_ring[ring_index]
+}
+
 // _screen_sb_pushline captures a line scrolled off the top of the normal
 // screen into the instance's scrollback buffer.
 @(private = "file")
@@ -121,18 +135,25 @@ _screen_sb_pushline :: proc "c" (
 	context = runtime.default_context()
 	ts := cast(^Term_Instance)user
 	context.allocator = ts.allocator
-	line := make([]lv.VTerm_Screen_Cell, int(cols))
-	copy(line, cells[:int(cols)])
-	if len(ts.sb_lines) >= TERM_SCROLLBACK_MAX {
-		delete(ts.sb_lines[0])
-		ordered_remove(&ts.sb_lines, 0)
+	index := (ts.sb_ring_head + ts.sb_ring_count) % TERM_SCROLLBACK_MAX
+	if ts.sb_ring_count == TERM_SCROLLBACK_MAX {
+		index = ts.sb_ring_head
+		ts.sb_ring_head = (ts.sb_ring_head + 1) % TERM_SCROLLBACK_MAX
 		ts.sb_base += 1
+	} else {
+		ts.sb_ring_count += 1
 	}
-	append(&ts.sb_lines, line)
+	line := ts.sb_ring[index]
+	if len(line) != int(cols) {
+		delete(line)
+		line = make([]lv.VTerm_Screen_Cell, int(cols))
+		ts.sb_ring[index] = line
+	}
+	copy(line, cells[:int(cols)])
 	// Pin the view while scrolled back so live output does not slide the
 	// content (or an in-progress selection) beneath the viewport.
 	if ts.sb_view_offset > 0 {
-		ts.sb_view_offset = min(ts.sb_view_offset + 1, len(ts.sb_lines))
+		ts.sb_view_offset = min(ts.sb_view_offset + 1, ts.sb_ring_count)
 	}
 	return 1
 }
@@ -148,8 +169,10 @@ _screen_sb_popline :: proc "c" (
 	context = runtime.default_context()
 	ts := cast(^Term_Instance)user
 	context.allocator = ts.allocator
-	if len(ts.sb_lines) == 0 do return 0
-	line := pop(&ts.sb_lines)
+	if ts.sb_ring_count == 0 do return 0
+	index := (ts.sb_ring_head + ts.sb_ring_count - 1) % TERM_SCROLLBACK_MAX
+	line := ts.sb_ring[index]
+	ts.sb_ring_count -= 1
 	n := min(int(cols), len(line))
 	copy(cells[:n], line[:n])
 	blank: lv.VTerm_Screen_Cell
@@ -157,9 +180,8 @@ _screen_sb_popline :: proc "c" (
 	for i in n ..< int(cols) {
 		cells[i] = blank
 	}
-	delete(line)
-	if ts.sb_view_offset > len(ts.sb_lines) {
-		ts.sb_view_offset = len(ts.sb_lines)
+	if ts.sb_view_offset > ts.sb_ring_count {
+		ts.sb_view_offset = ts.sb_ring_count
 	}
 	return 1
 }
@@ -172,11 +194,9 @@ _screen_sb_clear :: proc "c" (user: rawptr) -> c.int {
 	context.allocator = ts.allocator
 	// Advance sb_base past the dropped lines so stale content-absolute
 	// selection rows resolve to nothing instead of wrong screen rows.
-	ts.sb_base += len(ts.sb_lines)
-	for line in ts.sb_lines {
-		delete(line)
-	}
-	clear(&ts.sb_lines)
+	ts.sb_base += ts.sb_ring_count
+	ts.sb_ring_head = 0
+	ts.sb_ring_count = 0
 	ts.sb_view_offset = 0
 	return 1
 }
@@ -198,9 +218,12 @@ term_init_emulator :: proc(
 	ts.cols = cols
 	ts.rows = rows
 	ts.cursor_visible = true
+	ts.sb_ring = make([dynamic][]lv.VTerm_Screen_Cell, TERM_SCROLLBACK_MAX)
 
 	ts.vt = lv.vterm_new(c.int(rows), c.int(cols))
 	if ts.vt == nil {
+		delete(ts.sb_ring)
+		ts.sb_ring = nil
 		return false
 	}
 
@@ -249,10 +272,10 @@ term_init_emulator :: proc(
 term_free_emulator :: proc(ts: ^Term_Instance) {
 	context.allocator = ts.allocator
 	lv.vterm_free(ts.vt)
-	for line in ts.sb_lines {
+	for line in ts.sb_ring {
 		delete(line)
 	}
-	delete(ts.sb_lines)
+	delete(ts.sb_ring)
 	if len(ts.title) > 0 {
 		delete(ts.title)
 		ts.title = ""

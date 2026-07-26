@@ -81,6 +81,7 @@ frame :: proc() {
 	}
 	ui_gfx.adapter_end_frame(&ui_adapter, &ui_frame)
 	rl.EndDrawing()
+	free_all(context.temp_allocator)
 
 	when rl.RENDER_STATS_ENABLED {
 		@(static) reported := false

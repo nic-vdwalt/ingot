@@ -224,6 +224,7 @@ frame :: proc() {
 	ui.a11y_frame_end(&ui_frame)
 	ui_gfx.adapter_end_frame(&ui_adapter, &ui_frame)
 	rl.EndDrawing()
+	free_all(context.temp_allocator)
 }
 
 apply_scale :: proc(scale: f32) {

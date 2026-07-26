@@ -5,25 +5,24 @@ import "core:sync"
 import wg "vendor:wgpu"
 
 MAX_IN_FLIGHT_SUBMISSIONS :: 64
+#assert(size_of(u64) == 8)
+
+// At sixty submissions per second, a 64-bit identity cannot wrap in any physical runtime.
+@(private)
+g_submission_id_next: u64 = 1
 
 Submission_Ticket :: struct {
 	id:       u64,
+	epoch:    u64,
 	active:   bool,
 	complete: bool,
 	failed:   bool,
-}
-
-Submission_Callback :: struct {
-	tracker: ^Submission_Tracker,
-	ticket:  u64,
-	epoch:   u64,
 }
 
 Submission_Tracker :: struct {
 	tickets:   [MAX_IN_FLIGHT_SUBMISSIONS]Submission_Ticket,
 	head:      u32,
 	count:     u32,
-	next_id:   u64,
 	completed: u64,
 }
 
@@ -31,7 +30,6 @@ Submission_Tracker :: struct {
 _submission_init :: proc(tracker: ^Submission_Tracker) {
 	assert(tracker != nil)
 	tracker^ = {}
-	tracker.next_id = 1
 	assert(tracker.count == 0)
 }
 
@@ -54,13 +52,14 @@ _submission_reserve :: proc(tracker: ^Submission_Tracker) -> u64 {
 	index := (tracker.head + tracker.count) % MAX_IN_FLIGHT_SUBMISSIONS
 	ticket := &tracker.tickets[index]
 	assert(!ticket.active)
-	assert(tracker.next_id != 0)
+	assert(g_submission_id_next != 0)
 	ticket^ = {
-		id     = tracker.next_id,
+		id     = g_submission_id_next,
+		epoch  = g.epoch,
 		active = true,
 	}
-	tracker.next_id += 1
-	if tracker.next_id == 0 do tracker.next_id = 1
+	g_submission_id_next += 1
+	ensure(g_submission_id_next != 0, "submission identity exhausted")
 	tracker.count += 1
 	assert(tracker.count <= MAX_IN_FLIGHT_SUBMISSIONS)
 	return ticket.id
@@ -72,15 +71,14 @@ _submission_commit :: proc(tracker: ^Submission_Tracker, ticket_id: u64) -> bool
 	assert(g.queue != nil)
 	ticket := _submission_find(tracker, ticket_id)
 	if ticket == nil do return false
-	callback := new(Submission_Callback)
-	callback^ = {
-		tracker = tracker,
-		ticket  = ticket.id,
-		epoch   = g.epoch,
-	}
 	wg.QueueOnSubmittedWorkDone(
 		g.queue,
-		{mode = .AllowSpontaneos, callback = _submission_done, userdata1 = callback},
+		{
+			mode = .AllowSpontaneos,
+			callback = _submission_done,
+			userdata1 = tracker,
+			userdata2 = rawptr(uintptr(ticket.id)),
+		},
 	)
 	return true
 }
@@ -149,12 +147,12 @@ _submission_done :: proc "c" (
 	userdata1, userdata2: rawptr,
 ) {
 	context = runtime.default_context()
-	callback := cast(^Submission_Callback)userdata1
-	if callback == nil do return
-	defer free(callback)
-	if callback.epoch != g.epoch do return
-	ticket := _submission_find(callback.tracker, callback.ticket)
-	if ticket == nil do return
+	tracker := cast(^Submission_Tracker)userdata1
+	id := u64(uintptr(userdata2))
+	if tracker == nil || id == 0 do return
+	ticket := _submission_find(tracker, id)
+	if ticket == nil || ticket.epoch != g.epoch do return
+	assert(ticket.id == id)
 	sync.atomic_store(&ticket.failed, status != .Success)
 	sync.atomic_store(&ticket.complete, true)
 }

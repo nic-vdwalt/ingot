@@ -10,7 +10,23 @@ import "core:testing"
 ROLES :: [6]Text_Role{.Body, .Title, .Large, .Small, .Label, .Note}
 
 @(private = "file")
-INKS :: [7]Ink{.Primary, .Secondary, .Muted, .Accent, .Danger, .Success, .Inverse}
+INKS :: [15]Ink {
+	.Primary,
+	.Secondary,
+	.Muted,
+	.Accent,
+	.Danger,
+	.Success,
+	.Inverse,
+	.Disabled,
+	.Label,
+	.Tool,
+	.Diff_Add,
+	.Diff_Remove,
+	.User,
+	.Assistant,
+	.Plan,
+}
 
 @(test)
 text_roles_resolve_to_metric_sizes :: proc(t: ^testing.T) {
@@ -93,6 +109,14 @@ text_inks_resolve_opaque_theme_colors :: proc(t: ^testing.T) {
 		testing.expect_value(t, text_ink(&frame, .Danger), style.fg_error)
 		testing.expect_value(t, text_ink(&frame, .Success), style.fg_success)
 		testing.expect_value(t, text_ink(&frame, .Inverse), style.button_text)
+		testing.expect_value(t, text_ink(&frame, .Disabled), style.fg_disabled)
+		testing.expect_value(t, text_ink(&frame, .Label), style.fg_label)
+		testing.expect_value(t, text_ink(&frame, .Tool), style.fg_tool)
+		testing.expect_value(t, text_ink(&frame, .Diff_Add), style.fg_diff_add)
+		testing.expect_value(t, text_ink(&frame, .Diff_Remove), style.fg_diff_remove)
+		testing.expect_value(t, text_ink(&frame, .User), style.fg_user)
+		testing.expect_value(t, text_ink(&frame, .Assistant), style.fg_assistant)
+		testing.expect_value(t, text_ink(&frame, .Plan), style.fg_plan)
 		for ink in INKS {
 			testing.expect(t, text_ink(&frame, ink).a > 0, "ink must resolve to a visible color")
 		}

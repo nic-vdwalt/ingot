@@ -32,6 +32,20 @@ test_request_rejects_invalid_headers_and_oversized_body :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_parse_response_releases_headers_on_late_failures :: proc(t: ^testing.T) {
+	cases := [?]string {
+		"HTTP/1.1 200 OK\r\nGood: one\r\nmalformed\r\n\r\n",
+		"HTTP/1.1 200 OK\r\nGood: one\r\nTransfer-Encoding: chunked\r\n\r\nxyz",
+		"HTTP/1.1 200 OK\r\nGood: one\r\nContent-Length: 5\r\n\r\n1234",
+	}
+	for text in cases {
+		response, ok := parse_http_response(transmute([]u8)text)
+		testing.expect(t, !ok)
+		testing.expect_value(t, len(response.headers), 0)
+	}
+}
+
+@(test)
 test_fetch_result_preserves_http_status :: proc(t: ^testing.T) {
 	text := "forbidden"
 	result := Fetch_Result {

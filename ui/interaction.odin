@@ -97,6 +97,10 @@ Interaction_State :: struct {
 	latch_gen:      u64,
 	press_pos:      Vector2,
 	press_occluded: bool,
+	// True only while a primary press is in flight: set on the press edge,
+	// cleared once the button is up and its release edge has been consumed.
+	// press_over below is derived from press_pos, so an unbounded press_seen
+	// would let a stale origin outlive the gesture that produced it.
 	press_seen:     bool,
 }
 
@@ -118,11 +122,27 @@ interact_frame_begin :: proc(frame: ^Ui_Frame) {
 		state.active_latch = nil
 		state.latch_gen = 0
 	}
+	down := is_mouse_button_down(frame, .LEFT)
+	released := is_mouse_button_released(frame, .LEFT)
+	// Retire a finished gesture. The release edge still needs press_pos this
+	// frame, so the origin only expires once the button is up and no release
+	// remains to be consumed.
+	if state.press_seen && !down && !released {
+		state.press_seen = false
+		state.press_pos = {}
+		state.press_occluded = false
+	}
 	if is_mouse_button_pressed(frame, .LEFT) {
 		frame.interaction.press_pos = get_mouse_position(frame)
 		frame.interaction.press_occluded = route_occluded(frame, frame.interaction.press_pos)
 		frame.interaction.press_seen = true
 	}
+	// Why assert: press_over is only meaningful for a live gesture; a
+	// press_seen with no button activity means the origin outlived its press.
+	assert(
+		!state.press_seen || down || released || is_mouse_button_pressed(frame, .LEFT),
+		"interact_frame_begin: press origin outlived its gesture",
+	)
 }
 
 // interact_reset clears the drag arbitration slot and the recorded press
