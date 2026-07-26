@@ -90,7 +90,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	g.queue = wg.DeviceGetQueue(g.device)
 	g.format = .BGRA8Unorm
 	_submission_init(&g.submissions, g)
-	renderer_init(&g.rend, g.device, g.queue, g.format)
+	renderer_init(&g.rend)
 
 	cps: [95]rune
 	for i in 0 ..< 95 {cps[i] = rune(32 + i)}

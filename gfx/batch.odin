@@ -403,11 +403,12 @@ _neutral_texture_shutdown :: proc(r: ^Renderer) {
 	r.neutral_tex = nil
 }
 
-renderer_init :: proc(r: ^Renderer, ctx: ^Context) {
-	assert(r != nil && ctx != nil, "renderer_init: invalid arguments")
-	assert(ctx.device != nil && ctx.queue != nil, "renderer_init: invalid context")
+renderer_init :: proc(r: ^Renderer) {
+	assert(r != nil, "renderer_init: nil renderer")
+	device, queue, format := g.device, g.queue, g.format
+	assert(device != nil && queue != nil, "renderer_init: invalid context")
 	shader := wg.DeviceCreateShaderModule(
-		ctx.device,
+		device,
 		&{
 			nextInChain = &wg.ShaderSourceWGSL {
 				chain = {sType = .ShaderSourceWGSL},
@@ -420,7 +421,7 @@ renderer_init :: proc(r: ^Renderer, ctx: ^Context) {
 
 	// group(0): projection uniform
 	r.ubind_layout = wg.DeviceCreateBindGroupLayout(
-		ctx.device,
+		device,
 		&{
 			entryCount = 1,
 			entries = &wg.BindGroupLayoutEntry {
@@ -430,9 +431,9 @@ renderer_init :: proc(r: ^Renderer, ctx: ^Context) {
 			},
 		},
 	)
-	r.ubuf = wg.DeviceCreateBuffer(ctx.device, &{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)})
+	r.ubuf = wg.DeviceCreateBuffer(device, &{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)})
 	r.ubind = wg.DeviceCreateBindGroup(
-		ctx.device,
+		device,
 		&{
 			layout = r.ubind_layout,
 			entryCount = 1,
@@ -442,11 +443,11 @@ renderer_init :: proc(r: ^Renderer, ctx: ^Context) {
 
 	// Separate uniform + bind for render-target passes (see struct comment).
 	r.rt_ubuf = wg.DeviceCreateBuffer(
-		ctx.device,
+		device,
 		&{usage = {.Uniform, .CopyDst}, size = size_of([4]f32)},
 	)
 	r.rt_ubind = wg.DeviceCreateBindGroup(
-		ctx.device,
+		device,
 		&{
 			layout = r.ubind_layout,
 			entryCount = 1,
@@ -465,10 +466,10 @@ renderer_init :: proc(r: ^Renderer, ctx: ^Context) {
 		{binding = 1, visibility = {.Fragment}, sampler = {type = .Filtering}},
 	}
 	r.tex_layout = wg.DeviceCreateBindGroupLayout(
-		ctx.device,
+		device,
 		&{entryCount = 2, entries = raw_data(tex_entries[:])},
 	)
-	_neutral_texture_init(r, ctx.device, ctx.queue)
+	_neutral_texture_init(r, device, queue)
 
 	// Custom blend defaults to premultiplied over-blend until SetBlendFactors.
 	r.cust_src = .One
@@ -479,7 +480,7 @@ renderer_init :: proc(r: ^Renderer, ctx: ^Context) {
 	for kind in Pipe_Kind {
 		fs, textured := _fs_for(kind)
 		for slot in Blend_Slot {
-			r.pipes[kind][slot] = _make_pipe(r, slot, fs, textured, ctx.format)
+			r.pipes[kind][slot] = _make_pipe(r, slot, fs, textured, format)
 		}
 	}
 
