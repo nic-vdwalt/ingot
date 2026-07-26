@@ -25,19 +25,19 @@ claims; those remain governed by `oss-release-checklist.md` and
 
 ## Owner confirmations required
 
-- [ ] Nicolas van der Walt confirms ownership or an Apache-2.0-compatible grant
-  for all original and Alloy-derived source. Record the confirmation date here.
-- [ ] Nicolas van der Walt confirms no employment, contractor, assignment, or
-  other agreement prevents publication under Apache-2.0. Record only the date,
-  not private contract evidence.
+- [x] Nicolas van der Walt confirmed ownership or an Apache-2.0-compatible grant
+  for all original and Alloy-derived source on 2026-07-26.
+- [x] Nicolas van der Walt confirmed on 2026-07-26 that no employment,
+  contractor, assignment, or other agreement prevents publication under
+  Apache-2.0.
 - [x] Git history contains one contributor identity, Nicolas van der Walt's
   GitHub identity; no non-owner contribution grants are currently required.
 - [ ] Approve GitHub private vulnerability reporting as the security contact.
 
 ## Before changing repository visibility
 
-- [ ] Complete the owner confirmations above.
-- [ ] Coordinate the history cutover described in `history-rewrite.md`.
+- [x] Complete the owner confirmations above.
+- [x] Coordinate the history cutover described in `history-rewrite.md`.
 - [ ] Run `scripts/check.sh`, `scripts/test.sh`, and `scripts/check-web.sh` from a
   fresh clone of rewritten history.
 - [ ] Confirm GitHub branch protection and private vulnerability reporting are
