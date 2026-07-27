@@ -28,6 +28,7 @@ Text_Role :: enum u8 {
 // themes can remap without touching call sites.
 Ink :: enum u8 {
 	Primary,
+	Heading,
 	Secondary,
 	Muted,
 	Accent,
@@ -36,6 +37,7 @@ Ink :: enum u8 {
 	Inverse,
 	Disabled,
 	Label,
+	Accent_Light,
 	Tool,
 	Diff_Add,
 	Diff_Remove,
@@ -84,6 +86,8 @@ text_ink :: proc(frame: ^Ui_Frame, ink: Ink) -> Color {
 	switch ink {
 	case .Primary:
 		color = style.fg_primary
+	case .Heading:
+		color = style.fg_heading
 	case .Secondary:
 		color = style.fg_secondary
 	case .Muted:
@@ -100,6 +104,8 @@ text_ink :: proc(frame: ^Ui_Frame, ink: Ink) -> Color {
 		color = style.fg_disabled
 	case .Label:
 		color = style.fg_label
+	case .Accent_Light:
+		color = style.fg_accent_light
 	case .Tool:
 		color = style.fg_tool
 	case .Diff_Add:

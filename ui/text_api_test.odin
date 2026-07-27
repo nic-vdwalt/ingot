@@ -10,8 +10,9 @@ import "core:testing"
 ROLES :: [4]Text_Role{.Body, .Title, .Label, .Note}
 
 @(private = "file")
-INKS :: [15]Ink {
+INKS :: [17]Ink {
 	.Primary,
+	.Heading,
 	.Secondary,
 	.Muted,
 	.Accent,
@@ -20,6 +21,7 @@ INKS :: [15]Ink {
 	.Inverse,
 	.Disabled,
 	.Label,
+	.Accent_Light,
 	.Tool,
 	.Diff_Add,
 	.Diff_Remove,
