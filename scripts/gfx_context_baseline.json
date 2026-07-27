@@ -6,7 +6,6 @@
   "gfx/batch.odin:MatrixModeTranslate": 3,
   "gfx/batch.odin:SetCustomBlend": 7,
   "gfx/batch.odin:_geometry_upload_indexed": 4,
-  "gfx/batch.odin:_geometry_upload_transient": 2,
   "gfx/batch.odin:_make_pipe": 2,
   "gfx/batch.odin:_pipe_for": 1,
   "gfx/batch.odin:_rebuild_custom_pipes": 1,

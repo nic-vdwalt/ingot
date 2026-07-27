@@ -761,6 +761,8 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 	assert(index_count > 0)
 	vertex_bytes := u64(n) * size_of(Vertex)
 	index_bytes := u64(index_count) * size_of(u32)
+	// Resolved once here so the upload leaves stay context-free.
+	device := g.device
 	vertex_buffer, index_buffer: wg.Buffer
 	vertex_offset, index_offset: u64
 	if STREAMED_RENDERER_ENABLED {
@@ -778,7 +780,7 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 			vertex_offset = uploaded_vertex_offset
 			index_offset = uploaded_index_offset
 		} else {
-			vertex_buffer, index_buffer = _geometry_upload_transient(r)
+			vertex_buffer, index_buffer = _geometry_upload_transient(r, device)
 			if vertex_buffer == nil || index_buffer == nil {
 				clear(&r.verts)
 				clear(&r.indices)
@@ -786,7 +788,7 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 			}
 		}
 	} else {
-		vertex_buffer, index_buffer = _geometry_upload_transient(r)
+		vertex_buffer, index_buffer = _geometry_upload_transient(r, device)
 		if vertex_buffer == nil || index_buffer == nil {
 			clear(&r.verts)
 			clear(&r.indices)
@@ -838,18 +840,28 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 	clear(&r.indices)
 }
 
+// _geometry_upload_transient is the fallback path when indexed streaming has
+// no room: it creates one-shot vertex and index buffers that live until the
+// owning stream slot is reused.
+//
+// The device is passed in rather than read from the active-context global, so
+// this leaf stays pure and its caller owns the context lookup (the same shape
+// as _neutral_texture_init).
 @(private)
-_geometry_upload_transient :: proc(r: ^Renderer) -> (wg.Buffer, wg.Buffer) {
-	assert(r != nil)
+_geometry_upload_transient :: proc(r: ^Renderer, device: wg.Device) -> (wg.Buffer, wg.Buffer) {
+	assert(r != nil, "_geometry_upload_transient: nil renderer")
+	assert(device != nil, "_geometry_upload_transient: nil device")
+	// Two buffers are appended below, so stop one pair short of the cap.
 	if len(r.transient_buffers) > BATCH_TRANSIENT_BUFFERS_MAX - 2 do return nil, nil
-	vertex_buffer := wg.DeviceCreateBufferWithData(g.device, &{usage = {.Vertex}}, r.verts[:])
+	vertex_buffer := wg.DeviceCreateBufferWithData(device, &{usage = {.Vertex}}, r.verts[:])
 	if vertex_buffer == nil do return nil, nil
-	index_buffer := wg.DeviceCreateBufferWithData(g.device, &{usage = {.Index}}, r.indices[:])
+	index_buffer := wg.DeviceCreateBufferWithData(device, &{usage = {.Index}}, r.indices[:])
 	if index_buffer == nil {
 		wg.BufferRelease(vertex_buffer)
 		return nil, nil
 	}
 	append(&r.transient_buffers, vertex_buffer, index_buffer)
+	assert(len(r.transient_buffers) <= BATCH_TRANSIENT_BUFFERS_MAX)
 	_stats_buffer_created(false)
 	_stats_buffer_created(false)
 	return vertex_buffer, index_buffer
