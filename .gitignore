@@ -21,7 +21,8 @@ fuzz/wsreconn/fuzz_wsreconn_tsan
 benchmarks/widgets/build/
 benchmarks/widgets/cache/
 benchmarks/widgets/egui/target/
-benchmarks/widgets/**/__pycache__/
+__pycache__/
+*.py[cod]
 benchmarks/widgets/results/*.jsonl
 benchmarks/widgets/results/*.csv
 benchmarks/widgets/results/*.json
