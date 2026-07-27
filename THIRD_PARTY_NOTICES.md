@@ -61,6 +61,31 @@ the corresponding mirror tag points to commit
 `9d6d2112335080312ef8c36667fa717ded4f7daf`. Build the archives with
 `scripts/build-libvterm.sh` or `scripts/build-libvterm.bat`.
 
+### Local modifications
+
+The vendored source is upstream 0.3.3 with one patch applied:
+
+- `src/screen.c`, `erase_internal()`: skip cells for which `getcell()` returns
+  `NULL` instead of writing through the null pointer. The row loop bounds
+  against `screen->state->rows` while `getcell()` checks `screen->rows`, and
+  the column loop is not bounded by `screen->cols` at all, so an erase rect
+  derived from the state can outrun the screen buffer while the two disagree.
+  Interleaving `term_resize` with `term_pump` reaches this and segfaults. It
+  was found by `fuzz/run.sh term`, which now fences it. The guard uses the
+  same `if(!cell)` idiom the rest of the file already applies to `getcell()`
+  results.
+
+Any upstream refresh must re-apply this patch or confirm upstream has fixed
+it. Both macOS archives have been rebuilt from the patched source and their
+checksums updated in `docs/provenance/third-party-artifacts.json`.
+
+**`libvterm/lib/windows_amd64/vterm.lib` predates the patch** and must be
+rebuilt with `scripts/build-libvterm.bat` on Windows, then have its checksum
+refreshed in the same manifest, which currently marks it
+`"built_from": "upstream-unpatched"`. The hygiene gate verifies each archive
+against its recorded checksum rather than against `vendor/libvterm`, so it
+cannot detect an archive that is merely stale against the source.
+
 The MIT License
 
 Copyright (c) 2008 Paul Evans <leonerd@leonerd.org.uk>

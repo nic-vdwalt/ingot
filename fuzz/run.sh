@@ -80,13 +80,21 @@ run_term() {
 	#
 	# ODIN_TEST_THREADS=1 is required, not a preference: the pump fuzz drives
 	# process-global PTY and libvterm state, so concurrent tests corrupt each
-	# other's emulator and segfault intermittently (about one run in six at 12
-	# threads). scripts/test.sh pins the same value for the same reason; this
-	# runner previously omitted it, which is why the crash only ever surfaced
-	# under fuzzing.
+	# other's emulator. scripts/test.sh pins the same value for the same
+	# reason; this runner previously omitted it.
+	#
+	# A seed replays a specific run: fuzz/run.sh term <seed>. The in-package
+	# fuzzers take it as a compile-time define rather than as a runtime flag
+	# like the standalone fuzz binaries, so this reads $SEED directly instead
+	# of the pre-formatted ARGS array.
+	local seed_define=()
+	if [ -n "$SEED" ]; then
+		seed_define=("-define:INGOT_FUZZ_SEED=$SEED")
+	fi
 	# shellcheck disable=SC2086
 	odin test "$ROOT/term" $COL $GUARD $SANFLAGS -define:INGOT_PTY_SIM=true \
-		-define:INGOT_FUZZ_ITER=3000 -define:ODIN_TEST_THREADS=1
+		-define:INGOT_FUZZ_ITER=3000 -define:ODIN_TEST_THREADS=1 \
+		${seed_define[@]+"${seed_define[@]}"}
 }
 
 run_gfx_frame() {

@@ -9,13 +9,31 @@
       "source_archive_sha256": "b652e380fb78efe6721ad892f15b2224f38f661c3fb20436ef4c5b3ce0fe8177",
       "license": "Apache-2.0 OR MIT",
       "build": "scripts/build-accesskit.sh",
-      "notices": ["LICENSE", "THIRD_PARTY_NOTICES.md"],
+      "notices": [
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.md"
+      ],
       "artifacts": [
-        {"path": "accesskit/include/accesskit.h", "sha256": "c7e0dff6b97ba5793d5a092d6ef817d5a4ec5ffe409345f5927fc0da4b06cf61"},
-        {"path": "accesskit/lib/darwin_arm64/libaccesskit.a", "sha256": "4b0f56c6852856ea91790318976f9b06c8ce61afdecfc3e4e5eef955a50ac46c"},
-        {"path": "accesskit/lib/darwin_amd64/libaccesskit.a", "sha256": "ab7aad4f73228ca03f6c2bdf50ff23c25a8831672dea738a0edf3bc967eb3391"},
-        {"path": "accesskit/lib/linux_amd64/libaccesskit.a", "sha256": "b3cb0b7055f3e4cd30d21dca9778f956d49503ef0088d5a7fee8600929e8b70b"},
-        {"path": "accesskit/lib/windows_amd64/accesskit.lib", "sha256": "376fceabd2da5860d5fc11cadc5958027875b711445c1c406c387d74529659c2"}
+        {
+          "path": "accesskit/include/accesskit.h",
+          "sha256": "c7e0dff6b97ba5793d5a092d6ef817d5a4ec5ffe409345f5927fc0da4b06cf61"
+        },
+        {
+          "path": "accesskit/lib/darwin_arm64/libaccesskit.a",
+          "sha256": "4b0f56c6852856ea91790318976f9b06c8ce61afdecfc3e4e5eef955a50ac46c"
+        },
+        {
+          "path": "accesskit/lib/darwin_amd64/libaccesskit.a",
+          "sha256": "ab7aad4f73228ca03f6c2bdf50ff23c25a8831672dea738a0edf3bc967eb3391"
+        },
+        {
+          "path": "accesskit/lib/linux_amd64/libaccesskit.a",
+          "sha256": "b3cb0b7055f3e4cd30d21dca9778f956d49503ef0088d5a7fee8600929e8b70b"
+        },
+        {
+          "path": "accesskit/lib/windows_amd64/accesskit.lib",
+          "sha256": "376fceabd2da5860d5fc11cadc5958027875b711445c1c406c387d74529659c2"
+        }
       ]
     },
     {
@@ -24,13 +42,36 @@
       "source": "https://www.leonerd.org.uk/code/libvterm/libvterm-0.3.3.tar.gz",
       "source_archive_sha256": "09156f43dd2128bd347cbeebe50d9a571d32c64e0cf18d211197946aff7226e0",
       "source_tag_commit": "9d6d2112335080312ef8c36667fa717ded4f7daf",
+      "local_patches": [
+        {
+          "file": "vendor/libvterm/src/screen.c",
+          "function": "erase_internal",
+          "summary": "Skip cells where getcell() returns NULL instead of writing through the null pointer. The row loop bounds against screen->state->rows while getcell() checks screen->rows, and the column loop is not bounded by screen->cols, so an erase rect derived from the state can outrun the screen buffer. Reachable by interleaving term_resize with term_pump; found by fuzz/run.sh term."
+        }
+      ],
       "license": "MIT",
       "build": "scripts/build-libvterm.sh and scripts/build-libvterm.bat",
-      "notices": ["vendor/libvterm/LICENSE", "THIRD_PARTY_NOTICES.md"],
+      "notices": [
+        "vendor/libvterm/LICENSE",
+        "THIRD_PARTY_NOTICES.md"
+      ],
       "artifacts": [
-        {"path": "libvterm/lib/darwin_arm64/libvterm.a", "sha256": "d69b38ecefdf7d23d56df592cb799760833ddff1154bf759d4940f51c6fc0f24"},
-        {"path": "libvterm/lib/darwin_amd64/libvterm.a", "sha256": "f8ccd0e741df7368fb79f915d334774f2d3f173ffcb7f3d7fe8024648b4e1d09"},
-        {"path": "libvterm/lib/windows_amd64/vterm.lib", "sha256": "726100141eba902aeef49ee134ea3b88767f558ef691d35091526ae29d89e369"}
+        {
+          "path": "libvterm/lib/darwin_arm64/libvterm.a",
+          "sha256": "9981b524baef9e97ca67f2c108a4c77e8041d7c1c6731d6e88e1292b657dfc90",
+          "built_from": "patched"
+        },
+        {
+          "path": "libvterm/lib/darwin_amd64/libvterm.a",
+          "sha256": "e45fdd14fa3efec3614e3c6a6f0703a3a7226df25e8aab051a9dd89aa2880834",
+          "built_from": "patched"
+        },
+        {
+          "path": "libvterm/lib/windows_amd64/vterm.lib",
+          "sha256": "726100141eba902aeef49ee134ea3b88767f558ef691d35091526ae29d89e369",
+          "built_from": "upstream-unpatched",
+          "stale": "Predates the erase_internal patch; rebuild with scripts/build-libvterm.bat on Windows."
+        }
       ]
     },
     {
@@ -41,10 +82,19 @@
       "source_archive_sha256": "6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf",
       "license": "OFL-1.1",
       "build": "Unmodified fonts/ttf/JetBrainsMono-Regular.ttf from JetBrainsMono-2.304.zip",
-      "notices": ["assets/fonts/OFL.txt", "THIRD_PARTY_NOTICES.md"],
+      "notices": [
+        "assets/fonts/OFL.txt",
+        "THIRD_PARTY_NOTICES.md"
+      ],
       "artifacts": [
-        {"path": "assets/fonts/JetBrainsMono-Regular.ttf", "sha256": "a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f"},
-        {"path": "assets/fonts/OFL.txt", "sha256": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad"}
+        {
+          "path": "assets/fonts/JetBrainsMono-Regular.ttf",
+          "sha256": "a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f"
+        },
+        {
+          "path": "assets/fonts/OFL.txt",
+          "sha256": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad"
+        }
       ]
     }
   ]

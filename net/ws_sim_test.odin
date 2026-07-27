@@ -1,6 +1,18 @@
 #+build !js
 package ingotnet
 
+// Tests for the deterministic simulated WebSocket transport. Only compiled
+// when the sim is enabled:
+//
+//	odin test net -collection:ingot=. -define:INGOT_WS_SIM=true \
+//	  -define:ODIN_TEST_THREADS=1
+//
+// ODIN_TEST_THREADS=1 is required, not a preference. ws_sim_load resets one
+// process-global tape (g_ws_sim); its mutex makes each call atomic but does
+// not protect a load-then-consume sequence, so concurrent tests overwrite each
+// other's tape and fail intermittently. scripts/test.sh and fuzz/run.sh pin
+// the same value for the term fuzzers, for the same reason.
+
 import "core:strings"
 import "core:testing"
 import "core:time"

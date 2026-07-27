@@ -300,7 +300,9 @@ when INGOT_WS_SIM {
 	}
 
 	ws_net_close :: proc(transport: ^Ws_Transport) {
-		if transport != nil do transport.open = false
+		// Atomic for the same reason as the real transport: the closer and the
+		// recv worker are different threads.
+		if transport != nil do ws_transport_set_open(transport, false)
 	}
 
 	ws_net_set_recv_timeout :: proc(transport: ^Ws_Transport, d: time.Duration) {

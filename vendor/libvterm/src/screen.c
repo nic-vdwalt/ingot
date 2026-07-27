@@ -277,6 +277,17 @@ static int erase_internal(VTermRect rect, int selective, void *user)
     for(int col = rect.start_col; col < rect.end_col; col++) {
       ScreenCell *cell = getcell(screen, row, col);
 
+      /* ingot: getcell() returns NULL for out-of-range coordinates. The row
+       * loop above bounds against screen->state->rows while getcell() checks
+       * screen->rows, and the column loop is not bounded by screen->cols at
+       * all, so an erase rect derived from the state can outrun the screen
+       * buffer while the two disagree (reachable by interleaving resizes with
+       * parsing). Skipping a NULL cell matches how erase_user() and the other
+       * getcell() callers in this file already handle it, instead of writing
+       * through NULL. */
+      if(!cell)
+        continue;
+
       if(selective && cell->pen.protected_cell)
         continue;
 

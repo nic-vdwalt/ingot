@@ -5,6 +5,7 @@ import "core:c"
 import "core:fmt"
 import cnet "core:net"
 import "core:strings"
+import "core:sync"
 import "core:time"
 
 INGOT_WS_SIM :: #config(INGOT_WS_SIM, false)
@@ -41,7 +42,29 @@ Ws_Transport :: struct {
 	kind:        Ws_Transport_Kind,
 	socket:      cnet.TCP_Socket,
 	curl_handle: ^Ws_Curl,
+
+	// Written by whichever thread closes the socket (ws_close runs on the
+	// caller's thread) and read by the recv worker, so it is touched from two
+	// threads without a lock. Go through ws_transport_open /
+	// ws_transport_set_open rather than reading the field directly.
 	open:        bool,
+}
+
+// ws_transport_open reports whether the socket is still usable.
+//
+// This flag is the one piece of transport state that legitimately crosses
+// threads: ws_close marks the socket closed while the worker may be mid-dial
+// or mid-handshake. Plain access is a data race (ThreadSanitizer reports it
+// through fuzz/run.sh tsan), and on a relaxed memory model the worker can miss
+// the close and keep using a socket the closer already tore down.
+ws_transport_open :: proc(transport: ^Ws_Transport) -> bool {
+	if transport == nil do return false
+	return sync.atomic_load(&transport.open)
+}
+
+ws_transport_set_open :: proc(transport: ^Ws_Transport, open: bool) {
+	assert(transport != nil, "ws_transport_set_open: nil transport")
+	sync.atomic_store(&transport.open, open)
 }
 
 when !INGOT_WS_SIM {
@@ -117,7 +140,7 @@ when !INGOT_WS_SIM {
 	}
 
 	ws_net_send :: proc(transport: ^Ws_Transport, data: []u8) -> (int, Ws_Net_Err) {
-		if transport == nil || !transport.open do return 0, .Other
+		if !ws_transport_open(transport) do return 0, .Other
 		if transport.kind == .TCP {
 			count, err := cnet.send(transport.socket, data)
 			if err != nil do return count, .Other
@@ -138,7 +161,7 @@ when !INGOT_WS_SIM {
 	}
 
 	ws_net_recv :: proc(transport: ^Ws_Transport, buf: []u8) -> (int, Ws_Net_Err) {
-		if transport == nil || !transport.open do return 0, .Other
+		if !ws_transport_open(transport) do return 0, .Other
 		if transport.kind == .TCP {
 			count, err := cnet.recv(transport.socket, buf)
 			if err != nil {
@@ -162,8 +185,10 @@ when !INGOT_WS_SIM {
 	}
 
 	ws_net_close :: proc(transport: ^Ws_Transport) {
-		if transport == nil || !transport.open do return
-		transport.open = false
+		if !ws_transport_open(transport) do return
+		// Publish the closed flag before tearing the socket down, so a worker
+		// racing this sees "closed" instead of a handle about to be freed.
+		ws_transport_set_open(transport, false)
 		if transport.kind == .TCP {
 			cnet.close(transport.socket)
 		} else if transport.curl_handle != nil {
@@ -173,7 +198,7 @@ when !INGOT_WS_SIM {
 	}
 
 	ws_net_set_recv_timeout :: proc(transport: ^Ws_Transport, duration: time.Duration) {
-		if transport == nil || !transport.open do return
+		if !ws_transport_open(transport) do return
 		if transport.kind == .TCP {
 			_ = cnet.set_option(transport.socket, .Receive_Timeout, duration)
 		}

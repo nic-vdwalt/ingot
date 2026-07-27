@@ -7,7 +7,8 @@ package term
 // scripted PTY (-define:INGOT_PTY_SIM=true, pty/pty_sim.odin); the test
 // no-ops without it so `scripts/test.sh` needs the define to gain coverage
 // (it passes it — see scripts/test.sh). Iterations scale with
-// -define:INGOT_FUZZ_ITER for fuzz/run.sh term.
+// -define:INGOT_FUZZ_ITER for fuzz/run.sh term, and a failure reproduces via
+// -define:INGOT_FUZZ_SEED=n (fuzz/run.sh term <seed> forwards it).
 
 import lv "../libvterm"
 import "core:c"
@@ -24,11 +25,15 @@ _ :: testx
 _ :: time
 
 TERM_PUMP_FUZZ_ITER :: #config(INGOT_FUZZ_ITER, 300)
+// 0 means "take a fresh seed from the clock"; any other value replays that run
+// exactly. Printing a seed is only useful if it can be fed back in.
+TERM_PUMP_FUZZ_SEED :: #config(INGOT_FUZZ_SEED, 0)
 
 @(test)
 term_pump_resize_fuzz :: proc(t: ^testing.T) {
 	when pty.INGOT_PTY_SIM {
-		seed := u64(time.now()._nsec)
+		seed := u64(TERM_PUMP_FUZZ_SEED)
+		if seed == 0 do seed = u64(time.now()._nsec)
 		log.infof("term_pump_fuzz seed=%d iterations=%d", seed, TERM_PUMP_FUZZ_ITER)
 		p := testx.prng_make(seed)
 

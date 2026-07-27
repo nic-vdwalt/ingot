@@ -611,7 +611,11 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 @(private = "file")
 ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
 	assert(ws != nil)
-	assert(transport != nil && transport.open)
+	assert(transport != nil, "ws_handshake: nil transport")
+	// Read through the accessor: ws_close can mark the transport closed from
+	// another thread while this handshake is in flight. Split from the nil
+	// check so a failure names which half broke.
+	assert(ws_transport_open(transport), "ws_handshake: transport closed")
 	key := generate_ws_key()
 	if len(key) == 0 do return false
 	default_port := (ws.secure && ws.port == 443) || (!ws.secure && ws.port == 80)

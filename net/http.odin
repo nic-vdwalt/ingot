@@ -513,6 +513,13 @@ when !INGOT_NET_SIM {
 		delete(f.jobs)
 		for result in f.results do delete(result.body, f.allocator)
 		delete(f.results)
+		// delete() releases the backing store but leaves the slice header's
+		// length intact, so without this the fields stay non-empty views onto
+		// freed memory and the post-conditions below read a stale length.
+		// Reachable whenever stop happens with work still queued, which is
+		// what the idle-stop stress exercises.
+		f.jobs = nil
+		f.results = nil
 		f.result_slots = 0
 		assert(len(f.jobs) == 0)
 		assert(len(f.results) == 0)
