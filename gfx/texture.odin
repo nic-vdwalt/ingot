@@ -146,10 +146,14 @@ _new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
 	e.height = h
 	e.filter = .BILINEAR
 	e.wgformat = format
+	// CopySrc is what makes SaveRenderTexturePng (screenshot.odin) possible: the
+	// swapchain is configured RenderAttachment-only (context.odin), so every
+	// readback must route through a render target. The flag is free on an
+	// already-renderable colour format.
 	e.tex = wg.DeviceCreateTexture(
 		g.device,
 		&{
-			usage = {.RenderAttachment, .TextureBinding, .CopyDst},
+			usage = {.RenderAttachment, .TextureBinding, .CopyDst, .CopySrc},
 			dimension = ._2D,
 			size = {u32(max(w, 1)), u32(max(h, 1)), 1},
 			format = format,

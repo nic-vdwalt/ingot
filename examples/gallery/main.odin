@@ -164,19 +164,26 @@ Inline **bold**, *italic*, ` +
 `
 
 main :: proc() {
-	_ = ui_gfx.app_run(
-		&app,
-		{
-			width = 1100,
-			height = 760,
-			title = "ingot widget gallery",
-			target_fps = 60,
-			event_waiting = !SMOKE,
-			clear_color = {24, 26, 32, 255},
-			session = {semantics_enabled = true},
-		},
-		{frame = frame, shutdown = shutdown},
-	)
+	// Capture mode owns its own loop: widget paint replays after the frame
+	// callback returns, so the render target has to bracket the whole session
+	// frame (capture.odin).
+	when CAPTURE {
+		capture_main()
+	} else {
+		_ = ui_gfx.app_run(
+			&app,
+			{
+				width = 1100,
+				height = 760,
+				title = "ingot widget gallery",
+				target_fps = 60,
+				event_waiting = !SMOKE,
+				clear_color = {24, 26, 32, 255},
+				session = {semantics_enabled = true},
+			},
+			{frame = frame, shutdown = shutdown},
+		)
+	}
 }
 
 input_state_destroy :: proc(state: ^Input_State) {
@@ -194,6 +201,7 @@ frame :: proc(app: ^ui_gfx.App, frame_state: ^ui.Ui_Frame, userdata: rawptr) {
 	sh := root.h
 
 	when SMOKE do smoke_step()
+	when CAPTURE do capture_step()
 
 	if rl.IsKeyPressed(.F12) do debug_on = !debug_on
 

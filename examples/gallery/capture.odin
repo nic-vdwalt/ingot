@@ -1,0 +1,251 @@
+#+build !js
+// Gallery capture mode (scripts/capture-media.sh, -define:INGOT_CAPTURE=true):
+// a self-driving media harness, modelled on smoke.odin. It renders the gallery
+// into a fixed-size offscreen render target and writes PNGs, so the README
+// stills and the demo GIF are reproducible on any machine instead of being
+// hand-cropped screenshots.
+//
+// Why a render target: the swapchain is RenderAttachment-only (gfx/context.odin),
+// so gfx.SaveRenderTexturePng can only read a render target. Rendering into a
+// fixed CAPTURE_WIDTH x CAPTURE_HEIGHT target also decouples the output from the
+// host window size and HiDPI factor.
+//
+// Why its own loop instead of ui_gfx.app_run: widget paint is replayed in
+// app_session_end_frame_context, after the frame callback returns. Wrapping the
+// callback alone would capture the direct gfx draws and none of the widgets, so
+// the target has to bracket the whole session frame.
+//
+// Determinism: capture forces reduced motion, an explicit 1.0 UI scale, and a
+// settle delay before each shot. Caret blink and progress easing are wall-clock
+// driven (ui/text_input.odin reads frame_input().time), so without those two
+// controls the same shot would differ byte-for-byte between runs.
+package main
+
+import "core:fmt"
+import "core:os"
+import "core:strings"
+import rl "ingot:gfx"
+import "ingot:ui"
+import "ingot:ui_gfx"
+
+// Imports are used only under `when CAPTURE`; anchor them for normal builds.
+_ :: fmt
+_ :: os
+_ :: strings
+_ :: rl
+_ :: ui
+_ :: ui_gfx
+
+// CAPTURE enables the media harness (native only; see scripts/capture-media.sh).
+CAPTURE :: #config(INGOT_CAPTURE, false)
+
+when CAPTURE {
+	// Fixed output geometry: identical PNGs regardless of host display.
+	CAPTURE_WIDTH :: 1600
+	CAPTURE_HEIGHT :: 1000
+	// Frames to hold a state before the shot. Long enough for eased widget
+	// animation to converge on its target, which is what makes reruns
+	// byte-identical; a shorter delay would capture mid-ease values that
+	// depend on the host's frame timing.
+	CAPTURE_SETTLE_FRAMES :: 30
+	// Explicit UI scale. Fixed rather than auto so HiDPI hosts cannot change
+	// the output, and above 1.0 so the gallery's intrinsic content height
+	// fills CAPTURE_HEIGHT instead of leaving dead space below the fold.
+	CAPTURE_UI_SCALE :: f32(1.5)
+	// Frames each sequence step is held. Eight steps x 60 frames = 480 frames,
+	// which is 8 s of source at the 60 fps the GIF/MP4 encode assumes.
+	CAPTURE_SEQUENCE_FRAMES :: 60
+	CAPTURE_MAX_SEQUENCE_FRAMES :: 4096
+
+	Capture_Shot :: struct {
+		file:    string,
+		section: Section,
+		dark:    bool,
+	}
+
+	// The README set: one shot per visually distinct area, in both themes so a
+	// reader can see the theme system is real rather than a recolour.
+	CAPTURE_SHOTS := [?]Capture_Shot {
+		{"gallery-widgets-dark.png", .Widgets, true},
+		{"gallery-inputs-light.png", .Inputs, false},
+		{"gallery-charts-dark.png", .Charts, true},
+		{"gallery-layout-dark.png", .Layout, true},
+		{"gallery-markdown-light.png", .Markdown, false},
+		{"gallery-stress-dark.png", .Stress, true},
+	}
+
+	// The GIF script: every section in order, alternating theme so the motion
+	// shows both navigation and theming without any synthetic input.
+	CAPTURE_SEQUENCE := [?]Capture_Shot {
+		{"", .Buttons, true},
+		{"", .Inputs, true},
+		{"", .Widgets, true},
+		{"", .Charts, true},
+		{"", .Markdown, false},
+		{"", .Layout, false},
+		{"", .Overlay, true},
+		{"", .Stress, true},
+	}
+
+	capture_target: rl.RenderTexture2D
+	capture_dir: string
+	capture_sequence: bool
+	capture_step_index: int
+	capture_state_frame: int
+	capture_state_applied: bool
+	capture_sequence_frame: int
+
+	// capture_script returns the active shot table for the current pass.
+	capture_script :: proc() -> []Capture_Shot {
+		if capture_sequence do return CAPTURE_SEQUENCE[:]
+		return CAPTURE_SHOTS[:]
+	}
+
+	// capture_step applies the current shot's state through the same paths a
+	// click would (apply_gallery_theme, apply_scale, pane_reset) and counts
+	// settle frames. Called from frame(), exactly like smoke_step.
+	capture_step :: proc() {
+		script := capture_script()
+		assert(capture_step_index >= 0, "capture_step: negative index")
+		if capture_step_index >= len(script) do return
+		if !capture_state_applied {
+			shot := script[capture_step_index]
+			section = shot.section
+			dark = shot.dark
+			high_contrast = false
+			// Reduced motion is what removes wall-clock dependence; see the
+			// determinism note at the top of this file.
+			reduced_motion = true
+			apply_gallery_theme()
+			apply_scale(CAPTURE_UI_SCALE)
+			ui.pane_reset(&content_pane)
+			capture_state_applied = true
+			capture_state_frame = 0
+		}
+		capture_state_frame += 1
+	}
+
+	// capture_write saves the settled render target and advances the script.
+	// Called after EndTextureMode, when the target holds a complete frame.
+	capture_write :: proc() {
+		script := capture_script()
+		assert(capture_target.texture.id != 0, "capture_write: no render target")
+		if capture_step_index >= len(script) {
+			fmt.printfln("capture: ok (%d steps)", len(script))
+			capture_finish()
+		}
+		if capture_sequence {
+			capture_write_sequence_frame()
+			return
+		}
+		if capture_state_frame < CAPTURE_SETTLE_FRAMES do return
+		shot := script[capture_step_index]
+		path := fmt.tprintf("%s/%s", capture_dir, shot.file)
+		if !rl.SaveRenderTexturePng(capture_target, path) {
+			fmt.eprintfln("capture: failed to write %s", path)
+			os.exit(1)
+		}
+		fmt.printfln("capture: wrote %s", path)
+		capture_step_index += 1
+		capture_state_applied = false
+	}
+
+	// capture_write_sequence_frame writes one numbered frame of the GIF source
+	// and rolls to the next script step once the hold elapses.
+	capture_write_sequence_frame :: proc() {
+		assert(capture_sequence, "capture_write_sequence_frame: not a sequence pass")
+		if capture_sequence_frame >= CAPTURE_MAX_SEQUENCE_FRAMES {
+			fmt.eprintln("capture: sequence frame cap exceeded")
+			os.exit(1)
+		}
+		path := fmt.tprintf("%s/frame_%05d.png", capture_dir, capture_sequence_frame)
+		if !rl.SaveRenderTexturePng(capture_target, path) {
+			fmt.eprintfln("capture: failed to write %s", path)
+			os.exit(1)
+		}
+		capture_sequence_frame += 1
+		if capture_state_frame >= CAPTURE_SEQUENCE_FRAMES {
+			capture_step_index += 1
+			capture_state_applied = false
+		}
+	}
+
+	// capture_finish releases the target and exits successfully. The process
+	// terminates here rather than returning, so the harness never depends on
+	// the window being closed by a human.
+	capture_finish :: proc() {
+		assert(capture_dir != "", "capture_finish: no output directory")
+		if capture_target.texture.id != 0 do rl.UnloadRenderTexture(capture_target)
+		if capture_sequence do fmt.printfln("capture: %d frames", capture_sequence_frame)
+		os.exit(0)
+	}
+
+	// capture_frame is the whole loop body: it brackets the entire session
+	// frame — build and paint replay — with the capture target, then blits the
+	// result to the window so the run is visible while it records.
+	capture_frame :: proc() {
+		gfx_frame, acquired := rl.begin_frame()
+		if !acquired do return
+		frame_state := ui_gfx.app_session_begin_frame_context(&app.session, &gfx_frame)
+		rl.clear_frame(&gfx_frame, app.config.clear_color)
+
+		rl.BeginTextureMode(capture_target)
+		rl.ClearBackground(app.config.clear_color)
+		frame(&app, frame_state, nil)
+		ui_gfx.app_session_end_frame_context(&app.session, &gfx_frame)
+		rl.EndTextureMode()
+
+		// Negative source height blits the bottom-left-origin target upright
+		// (docs/rendering.md "Render-target orientation").
+		rl.DrawTexturePro(
+			capture_target.texture,
+			{0, 0, f32(CAPTURE_WIDTH), -f32(CAPTURE_HEIGHT)},
+			{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())},
+			{0, 0},
+			0,
+			rl.WHITE,
+		)
+		rl.end_frame(&gfx_frame)
+		capture_write()
+		free_all(context.temp_allocator)
+	}
+
+	// capture_main replaces the normal app_run entry point under -define.
+	capture_main :: proc() {
+		capture_dir = os.get_env("INGOT_CAPTURE_DIR", context.allocator)
+		if capture_dir == "" do capture_dir = strings.clone("docs/media")
+		sequence_flag := os.get_env("INGOT_CAPTURE_SEQUENCE", context.allocator)
+		defer delete(sequence_flag)
+		capture_sequence = sequence_flag != ""
+
+		started := ui_gfx.app_init(
+			&app,
+			{
+				width = CAPTURE_WIDTH,
+				height = CAPTURE_HEIGHT,
+				title = "ingot widget gallery (capture)",
+				target_fps = 60,
+				event_waiting = false,
+				clear_color = {24, 26, 32, 255},
+				session = {semantics_enabled = true},
+			},
+			{frame = frame, shutdown = shutdown},
+		)
+		if !started {
+			fmt.eprintln("capture: window initialisation failed")
+			os.exit(1)
+		}
+		app.state = .Running
+		capture_target = rl.LoadRenderTexture(CAPTURE_WIDTH, CAPTURE_HEIGHT)
+		if capture_target.texture.id == 0 {
+			fmt.eprintln("capture: render target allocation failed")
+			os.exit(1)
+		}
+		fmt.printfln(
+			"capture: %s pass into %s",
+			"sequence" if capture_sequence else "stills",
+			capture_dir,
+		)
+		rl.run(capture_frame)
+	}
+}
