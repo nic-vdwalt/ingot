@@ -184,3 +184,52 @@ shape_bounds_fit_the_batch :: proc(t: ^testing.T) {
 	testing.expect(t, SHAPE_SEGMENTS_MAX > 0)
 	testing.expect(t, SHAPE_POINTS_MAX > 0)
 }
+
+// --- geometry finiteness ---------------------------------------------------
+// The tessellation bound treats a non-finite radius as "minimum segments", so
+// the loop count is safe, but the vertices it emits are still NaN. That renders
+// nothing and logs nothing, so the primitives assert on it at entry.
+
+@(test)
+shape_geometry_predicate_rejects_non_finite :: proc(t: ^testing.T) {
+	nan := math.nan_f32()
+	inf := math.inf_f32(1)
+	testing.expect(t, _shape_geometry_is_finite({0, 0}, 10))
+	testing.expect(t, _shape_geometry_is_finite({-1e6, 1e6}, max(f32)))
+	testing.expect(t, !_shape_geometry_is_finite({nan, 0}, 10))
+	testing.expect(t, !_shape_geometry_is_finite({0, nan}, 10))
+	testing.expect(t, !_shape_geometry_is_finite({0, 0}, nan))
+	testing.expect(t, !_shape_geometry_is_finite({0, 0}, inf))
+	testing.expect(t, !_shape_geometry_is_finite({inf, 0}, 10))
+}
+
+@(test)
+non_finite_radius_bounds_segments_but_not_vertices :: proc(t: ^testing.T) {
+	// Why the entry asserts exist rather than relying on the segment bound:
+	// the count is already safe, and the geometry still is not.
+	nan := math.nan_f32()
+	testing.expect_value(t, _shape_segments_for_radius(nan, 16), i32(16))
+
+	point := _polar({0, 0}, nan, 45)
+	testing.expect(t, point.x != point.x, "polar of a NaN radius is NaN")
+
+	elliptical := _polar_ellipse({0, 0}, nan, 10, 45)
+	testing.expect(t, elliptical.x != elliptical.x, "polar_ellipse of a NaN radius is NaN")
+}
+
+@(test)
+degenerate_but_finite_geometry_stays_legal :: proc(t: ^testing.T) {
+	// The boundary the asserts must not false-positive on. A zero radius is
+	// degenerate and renders nothing visible, but it is well defined and a
+	// shrink animation passes through it.
+	testing.expect(t, _shape_geometry_is_finite({0, 0}, 0))
+	testing.expect(t, _shape_geometry_is_finite({0, 0}, -5))
+	testing.expect(t, _shape_geometry_is_finite({0, 0}, max(f32)))
+
+	// A zero radius collapses every tessellated point onto the centre, which
+	// is well defined rather than corrupt, so _polar must stay finite there.
+	for angle in ([]f32{0, 90, 180, 359.9}) {
+		point := _polar({12, 34}, 0, angle)
+		testing.expect_value(t, point, [2]f32{12, 34})
+	}
+}

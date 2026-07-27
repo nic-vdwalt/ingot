@@ -52,6 +52,19 @@ _shape_segments_for_radius :: proc(radius: f32, minimum: i32) -> i32 {
 	return _shape_segments(i32(radius), minimum)
 }
 
+// _shape_geometry_is_finite is the shared precondition for the curved and
+// polygon primitives: a centre and an extent that can actually be rasterised.
+//
+// A radius from `distance()` of coincident points, or a lerp with a NaN
+// parameter, reaches these procedures easily. The tessellation bound already
+// treats a non-finite radius as "minimum segments", but the vertices it then
+// emits are still NaN, so the count being safe does not make the geometry
+// safe. Checked at each primitive's entry, never per segment.
+@(private)
+_shape_geometry_is_finite :: proc(center: Vector2, extent: f32) -> bool {
+	return _f32_is_finite(center.x) && _f32_is_finite(center.y) && _f32_is_finite(extent)
+}
+
 // --- filled rectangles -----------------------------------------------------
 
 DrawRectangle :: proc(posX, posY, width, height: i32, color: Color) {
@@ -166,6 +179,13 @@ _corner_fan :: proc(
 	// rather than relying on each one to remember.
 	assert(segments >= 1, "_corner_fan: segment count must be at least 1")
 	assert(segments <= SHAPE_SEGMENTS_MAX, "_corner_fan: unbounded segment count")
+	// Non-finite geometry is the silent failure this fans out into: _polar
+	// turns it into NaN vertices, the GPU discards the primitives, and the
+	// frame comes out blank with nothing logged. Checked once per primitive
+	// here rather than per segment, and once for every filled curved shape
+	// because they all tessellate through this fan.
+	assert(_shape_geometry_is_finite(center, radius), "_corner_fan: non-finite center or radius")
+	assert(_f32_is_finite(a0) && _f32_is_finite(a1), "_corner_fan: non-finite sweep angle")
 	step := (a1 - a0) / f32(segments)
 	prev := _polar(center, radius, a0)
 	for i in 1 ..= segments {
@@ -229,6 +249,10 @@ DrawRing :: proc(
 	segments: i32,
 	color: Color,
 ) {
+	assert(
+		_shape_geometry_is_finite(center, innerRadius) && _f32_is_finite(outerRadius),
+		"DrawRing: non-finite center or radius",
+	)
 	segs := _shape_segments(segments, 2)
 	c := col_f(color)
 	batch_set(&g.rend, .Solid, nil)
@@ -432,6 +456,7 @@ _ellipse_segments :: proc(radiusH, radiusV: f32) -> i32 {
 }
 
 DrawEllipse :: proc(centerX, centerY: i32, radiusH, radiusV: f32, color: Color) {
+	assert(_f32_is_finite(radiusH) && _f32_is_finite(radiusV), "DrawEllipse: non-finite radius")
 	center := Vector2{f32(centerX), f32(centerY)}
 	segments := _ellipse_segments(radiusH, radiusV)
 	c := col_f(color)
@@ -446,6 +471,10 @@ DrawEllipse :: proc(centerX, centerY: i32, radiusH, radiusV: f32, color: Color) 
 }
 
 DrawEllipseLines :: proc(centerX, centerY: i32, radiusH, radiusV: f32, color: Color) {
+	assert(
+		_f32_is_finite(radiusH) && _f32_is_finite(radiusV),
+		"DrawEllipseLines: non-finite radius",
+	)
 	center := Vector2{f32(centerX), f32(centerY)}
 	segments := _ellipse_segments(radiusH, radiusV)
 	step := 360.0 / f32(segments)
@@ -481,6 +510,10 @@ DrawCircleSectorLines :: proc(
 	segments: i32,
 	color: Color,
 ) {
+	assert(
+		_shape_geometry_is_finite(center, radius),
+		"DrawCircleSectorLines: non-finite center or radius",
+	)
 	segs := _shape_segments(segments, 1)
 	step := (endAngle - startAngle) / f32(segs)
 	first := _polar(center, radius, startAngle)
@@ -515,6 +548,11 @@ DrawPolyLinesEx :: proc(
 	lineThick: f32,
 	color: Color,
 ) {
+	assert(
+		_shape_geometry_is_finite(center, radius),
+		"DrawPolyLinesEx: non-finite center or radius",
+	)
+	assert(_f32_is_finite(lineThick), "DrawPolyLinesEx: non-finite line thickness")
 	if sides < 3 do return
 	segs := _shape_segments(sides, 3)
 	step := 360.0 / f32(segs)
