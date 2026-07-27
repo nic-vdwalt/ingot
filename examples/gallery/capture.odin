@@ -73,10 +73,12 @@ when CAPTURE {
 	// reader can see the theme system is real rather than a recolour.
 	CAPTURE_SHOTS := [?]Capture_Shot {
 		{"gallery-widgets-dark.png", .Widgets, true},
+		{"gallery-buttons-light.png", .Buttons, false},
 		{"gallery-inputs-light.png", .Inputs, false},
 		{"gallery-charts-dark.png", .Charts, true},
 		{"gallery-layout-dark.png", .Layout, true},
 		{"gallery-markdown-light.png", .Markdown, false},
+		{"gallery-overlay-dark.png", .Overlay, true},
 		{"gallery-stress-dark.png", .Stress, true},
 	}
 
@@ -191,6 +193,22 @@ when CAPTURE {
 		}
 	}
 
+	// capture_clear_color is the active theme's app background forced opaque.
+	//
+	// bg_app carries the vibrancy/Mica alpha (dark windowed is alpha 162), which
+	// is correct for a composited window but wrong for a file: it produced PNGs
+	// with a 0.74 mean alpha that render washed-out grey on any non-white page.
+	// Captured media is flat artwork, so the shot takes the colour and drops the
+	// translucency.
+	capture_clear_color :: proc() -> rl.Color {
+		theme := ui.ui_runtime_theme(ui_gfx.app_ui_runtime(&app))
+		assert(theme != nil, "capture_clear_color: nil theme")
+		color := ui_gfx.color_to_gfx(theme.bg_app)
+		color.a = 255
+		assert(color.a == 255, "capture_clear_color: capture background must be opaque")
+		return color
+	}
+
 	// capture_finish releases the target and exits successfully. The process
 	// terminates here rather than returning, so the harness never depends on
 	// the window being closed by a human.
@@ -214,9 +232,7 @@ when CAPTURE {
 		// Clear to the *active theme's* app background rather than the window's
 		// fixed clear colour, so a light-theme shot is light behind the content
 		// instead of showing the dark configured clear through it.
-		rl.ClearBackground(
-			ui_gfx.color_to_gfx(ui.ui_runtime_theme(ui_gfx.app_ui_runtime(&app)).bg_app),
-		)
+		rl.ClearBackground(capture_clear_color())
 		frame(&app, frame_state, nil)
 		ui_gfx.app_session_end_frame_context(&app.session, &gfx_frame)
 		rl.EndTextureMode()
