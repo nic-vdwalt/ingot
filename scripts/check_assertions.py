@@ -741,6 +741,40 @@ def fully_guarded_risk(body: str, risk: str) -> bool:
     return inferred_contract_present(body, risk) or authored_contract_present(executable, risk)
 
 
+def discharged_risk(body: str, risk: str) -> bool:
+    """Report whether one risk is discharged by evidence about that risk.
+
+    Every predicate here judges the risk it is passed. The chain this replaced
+    discharged *all* remaining risks whenever any one of them fired, so a
+    procedure guarding one hazard was excused for the rest — and one that merely
+    contained a `defer` was excused for everything.
+    """
+    executable = executable_text(body)
+    if procedure_has_reviewed_contract(body, risk):
+        return True
+    if structural_contract_present(executable, risk, body):
+        return True
+    if inferred_contract_present(body, risk):
+        return True
+    if fully_guarded_risk(body, risk):
+        return True
+    # Risk-specific shape heuristics. Previously these ran only when the
+    # procedure had exactly one uncovered risk, which made them silently
+    # inapplicable to the procedures most likely to need scrutiny.
+    if risk == "queue":
+        if re.search(r"\b(?:append|clear)\s*\(", executable):
+            return True
+        return recognized_dynamic_append(body)
+    if risk == "index":
+        return re.search(r"\b(?:for|switch)\b", executable) is not None
+    if risk == "pointer" and re.search(r"\b(?:raw_data|transmute)\s*\(", executable):
+        # An explicit raw_data/transmute is judged by pointer_contract_present.
+        # A ^T parameter is not discharged by its presence: Odin's implicit
+        # dereference leaves no trace in the body to reason about.
+        return not pointer_parameter_names(body)
+    return False
+
+
 def findings_for_source(source: str, path: str) -> list[Finding]:
     findings: list[Finding] = []
     for procedure in check_odin_style.procedures(source):
@@ -750,32 +784,9 @@ def findings_for_source(source: str, path: str) -> list[Finding]:
         if is_trivial(body, risks) or is_thin_forwarder(body, risks) or has_dominating_risk_guard(body, risks):
             continue
         assertions = len(ASSERTION.findall(masked))
-        uncovered = uncovered_risks(body, risks)
-        if uncovered and procedure_has_reviewed_contract(body):
-            uncovered = ()
-        if uncovered and all(
-            structural_contract_present(executable_text(body), risk, body) for risk in uncovered
-        ):
-            uncovered = ()
-        if uncovered and assertions >= len(uncovered) + 1:
-            uncovered = ()
-        if uncovered and contract_review_complete(body, uncovered):
-            uncovered = ()
-        if uncovered and fully_guarded_procedure(body, uncovered):
-            uncovered = ()
-        if uncovered and path != "net/x.odin" and procedure_contract_score(body) > 0:
-            uncovered = ()
-        if uncovered and path != "net/x.odin" and len(uncovered) == 1:
-            executable = executable_text(body)
-            risk = uncovered[0]
-            if risk == "queue" and re.search(r"\b(?:append|clear)\s*\(", executable):
-                uncovered = ()
-            elif risk == "index" and re.search(r"\b(?:for|switch)\b", executable):
-                uncovered = ()
-            elif risk == "pointer" and re.search(r"\b(?:raw_data|transmute)\s*\(", executable):
-                uncovered = ()
-        if uncovered == ("queue",) and recognized_dynamic_append(body):
-            uncovered = ()
+        uncovered = tuple(
+            risk for risk in uncovered_risks(body, risks) if not discharged_risk(body, risk)
+        )
         if uncovered:
             findings.append(Finding(path, procedure.name, procedure.start_line, uncovered, assertions))
     return findings
