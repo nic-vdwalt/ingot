@@ -1,1 +1,199 @@
-{}
+{
+  "gfx/batch.odin:_blend_for": [
+    "pointer"
+  ],
+  "gfx/context.odin:_on_uncaptured_error": [
+    "pointer"
+  ],
+  "gfx/idle.odin:_idle_note_activity": [
+    "pointer"
+  ],
+  "net/http.odin:http_response_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "net/http_sim.odin:sim_message_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "net/http_web.odin:http_response_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "net/ws_sim.odin:ws_net_recv": [
+    "pointer"
+  ],
+  "net/ws_sim.odin:ws_net_set_recv_timeout": [
+    "pointer"
+  ],
+  "pty/pty.odin:write_byte": [
+    "pointer"
+  ],
+  "pty/pty_windows.odin:write_byte": [
+    "pointer"
+  ],
+  "testx/snapshot.odin:snap": [
+    "pointer"
+  ],
+  "ui/chart.odin:chart_series_color": [
+    "pointer"
+  ],
+  "ui/controls.odin:checkbox_ui": [
+    "pointer"
+  ],
+  "ui/controls.odin:checkbox_ui_id": [
+    "pointer"
+  ],
+  "ui/controls.odin:radio_ui": [
+    "pointer"
+  ],
+  "ui/controls.odin:radio_ui_id": [
+    "pointer"
+  ],
+  "ui/debug_overlay.odin:debug_overlay_diagnostic_rows": [
+    "pointer"
+  ],
+  "ui/debug_overlay.odin:debug_overlay_rows": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_circle_lines_v": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_circle_v": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_codepoint_command": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_line_ex": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_rectangle": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_rectangle_gradient_v": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_rectangle_lines_ex": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_rectangle_rounded": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_rectangle_rounded_lines_ex": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_ring": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_text_command": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_triangle": [
+    "pointer"
+  ],
+  "ui/input_state.odin:text_input_at": [
+    "pointer"
+  ],
+  "ui/markdown.odin:draw_markdown_span_chip": [
+    "pointer"
+  ],
+  "ui/markdown.odin:draw_markdown_span_code": [
+    "pointer"
+  ],
+  "ui/markdown.odin:draw_markdown_span_emphasis": [
+    "pointer"
+  ],
+  "ui/markdown.odin:draw_markdown_span_style": [
+    "pointer"
+  ],
+  "ui/markdown.odin:heading_font_size": [
+    "pointer"
+  ],
+  "ui/markdown.odin:inline_span_parse_link": [
+    "pointer",
+    "queue"
+  ],
+  "ui/markdown.odin:measure_wrapped_height": [
+    "pointer"
+  ],
+  "ui/markdown.odin:split_table_row_offsets": [
+    "pointer"
+  ],
+  "ui/overlay.odin:overlay_line": [
+    "pointer"
+  ],
+  "ui/overlay.odin:overlay_rect": [
+    "pointer"
+  ],
+  "ui/overlay.odin:overlay_rect_lines": [
+    "pointer"
+  ],
+  "ui/overlay.odin:overlay_rounded": [
+    "pointer"
+  ],
+  "ui/overlay.odin:overlay_rounded_lines": [
+    "pointer"
+  ],
+  "ui/overlay.odin:overlay_text": [
+    "pointer"
+  ],
+  "ui/spell_menu.odin:spell_menu_draw_actions": [
+    "pointer"
+  ],
+  "ui/spell_menu.odin:spell_menu_handle_keyboard": [
+    "pointer"
+  ],
+  "ui/spell_menu.odin:spell_menu_handle_pointer": [
+    "pointer"
+  ],
+  "ui/spell_menu.odin:spell_menu_layout": [
+    "pointer"
+  ],
+  "ui/widgets.odin:back_btn": [
+    "pointer"
+  ],
+  "ui/widgets.odin:back_btn_w": [
+    "pointer"
+  ],
+  "ui/widgets.odin:btn_ui": [
+    "pointer"
+  ],
+  "ui/widgets.odin:btn_ui_id": [
+    "pointer"
+  ],
+  "ui/widgets.odin:button_at": [
+    "pointer"
+  ],
+  "ui/widgets.odin:collapsible_header": [
+    "pointer"
+  ],
+  "ui/widgets.odin:draw_pill": [
+    "pointer"
+  ],
+  "ui/widgets.odin:icon_btn": [
+    "pointer"
+  ],
+  "ui/widgets.odin:list_row_bg": [
+    "pointer"
+  ],
+  "ui/widgets.odin:mod_down": [
+    "pointer"
+  ],
+  "ui/widgets.odin:pane_reset": [
+    "pointer"
+  ],
+  "ui/widgets.odin:section_header": [
+    "pointer"
+  ],
+  "ui/widgets.odin:spinner": [
+    "pointer"
+  ],
+  "ui_gfx/app.odin:app_run": [
+    "pointer",
+    "state"
+  ],
+  "ui_gfx/session.odin:app_session_init": [
+    "pointer"
+  ]
+}

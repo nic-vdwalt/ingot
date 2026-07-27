@@ -212,6 +212,75 @@ class MapLookupTest(unittest.TestCase):
         self.assertIn("index", check_assertions.risks_for(source))
 
 
+class PointerParameterTest(unittest.TestCase):
+    """A ^T parameter is a pointer risk even with no `^` in the body.
+
+    Odin auto-dereferences field access, so a procedure taking ^T and reading
+    `t.field` contains no dereference token at all. Matching only an explicit
+    `x^` missed the most common pointer shape in the codebase — and let a
+    deleted `assert(panel != nil)` pass the gate unnoticed.
+    """
+
+    def findings(self, source: str):
+        return check_assertions.findings_for_source(source, "ui/x.odin")
+
+    def test_auto_dereferenced_pointer_parameter_without_contract_is_flagged(self):
+        source = '''p :: proc(panel: ^Panel) {
+	panel.x = 4
+	use(panel.ctx)
+}
+'''
+        self.assertIn("pointer", check_assertions.risks_for(source))
+        self.assertEqual([f.risks for f in self.findings(source)], [("pointer",)])
+
+    def test_nil_assertion_discharges_the_contract(self):
+        source = '''p :: proc(panel: ^Panel) {
+	assert(panel != nil)
+	panel.x = 4
+	use(panel.ctx)
+}
+'''
+        self.assertEqual(self.findings(source), [])
+
+    def test_nil_guard_discharges_the_contract(self):
+        source = '''p :: proc(panel: ^Panel) {
+	if panel == nil do return
+	panel.x = 4
+	use(panel.ctx)
+}
+'''
+        self.assertEqual(self.findings(source), [])
+
+    def test_grouped_parameters_all_carry_the_risk(self):
+        # Odin's `a, b: ^T` states the type once for the whole group.
+        source = '''p :: proc(a, b: ^Panel) {
+	a.x = 1
+	b.x = 2
+	use(a)
+}
+'''
+        self.assertEqual(check_assertions.pointer_parameter_names(source), ("a", "b"))
+        self.assertEqual([f.risks for f in self.findings(source)], [("pointer",)])
+
+    def test_pointer_return_type_is_not_a_parameter_risk(self):
+        source = '''p :: proc(n: int) -> ^Foo {
+	use(n)
+	return nil
+}
+'''
+        self.assertEqual(check_assertions.pointer_parameter_names(source), ())
+        self.assertEqual(self.findings(source), [])
+
+    def test_value_parameters_carry_no_pointer_risk(self):
+        source = '''p :: proc(n: int, m: int) {
+	use(n)
+	use(m)
+	use(n + m)
+}
+'''
+        self.assertNotIn("pointer", check_assertions.risks_for(source))
+
+
 class PackageSelectionTest(unittest.TestCase):
     """The gate's rules are not ingot-specific; only its default scope is.
 

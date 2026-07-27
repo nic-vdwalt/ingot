@@ -46,6 +46,9 @@ MAP_LOOKUP = re.compile(
     r"\b[A-Za-z_][A-Za-z0-9_]*\s*,\s*[A-Za-z_][A-Za-z0-9_]*\s*:?=\s*"
     r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s*(\[[^\]\n]*\])"
 )
+# A `^T` parameter. See has_pointer_parameter for why the body alone is not
+# enough to find one.
+POINTER_PARAMETER = re.compile(r":\s*\^")
 CONTROL_FLOW = re.compile(r"\b(?:if|when|switch|for)\b")
 MUTATION = re.compile(
     r"(?:\.|\])\s*[+\-*/%]?="
@@ -172,14 +175,51 @@ def index_operations(executable: str) -> list[Index_Operation]:
     return sorted(operations, key=lambda operation: operation.offset)
 
 
+def procedure_parameters(body: str) -> str:
+    """Return the text of the procedure's parameter list, comments masked.
+
+    Stops at the closing parenthesis so a pointer *return* type is not mistaken
+    for a pointer parameter.
+    """
+    masked = check_odin_style.mask_source(body)
+    header = re.search(r"\bproc\s*\(", masked)
+    if not header:
+        return ""
+    depth = 1
+    start = header.end()
+    for index in range(start, len(masked)):
+        if masked[index] == "(":
+            depth += 1
+        elif masked[index] == ")":
+            depth -= 1
+            if depth == 0:
+                return masked[start:index]
+    return ""
+
+
+def has_pointer_parameter(body: str) -> bool:
+    """Report whether the procedure accepts a pointer.
+
+    Odin auto-dereferences field access, so a procedure taking ^T and reading
+    `t.field` contains no `^` anywhere in its body. Matching only an explicit
+    dereference therefore misses the most common pointer shape in the codebase —
+    including, before this check existed, a deleted nil assertion on a ^T
+    parameter.
+    """
+    return POINTER_PARAMETER.search(procedure_parameters(body)) is not None
+
+
 def risks_for(body: str) -> tuple[str, ...]:
     executable = executable_text(body)
     subscripts = mask_map_lookups(executable)
-    return tuple(
+    detected = {
         name
         for name, pattern in RISK_PATTERNS.items()
         if pattern.search(subscripts if name == "index" else executable)
-    )
+    }
+    if has_pointer_parameter(body):
+        detected.add("pointer")
+    return tuple(name for name in RISK_PATTERNS if name in detected)
 
 
 def matching_block_prefix(executable: str, offset: int) -> str:
@@ -313,7 +353,7 @@ def authored_contract_present(executable: str, risk: str) -> bool:
     return any(re.search(r"\b(?:len|count|size|offset|cursor|parsed|status|ok|err)\b", check) for check in assertions)
 
 
-def structural_contract_present(executable: str, risk: str) -> bool:
+def structural_contract_present(executable: str, risk: str, body: str = "") -> bool:
     if risk == "index":
         operations = index_operations(executable)
         if not operations:
@@ -353,6 +393,10 @@ def structural_contract_present(executable: str, risk: str) -> bool:
             for operation in operations
         )
     if risk == "pointer":
+        # A ^T parameter is not discharged by the absence of a transmute: the
+        # dereference is invisible because Odin performs it implicitly.
+        if pointer_parameter_names(body):
+            return False
         return re.search(r"\bif\b[^\n]*(?:==|!=)\s*nil", executable) is not None or not re.search(
             r"\b(?:transmute|raw_data|raw_ptr)\s*\(", executable
         )
@@ -377,13 +421,53 @@ def contract_lines(executable: str) -> str:
     )
 
 
-def pointer_contract_present(executable: str) -> bool:
+def pointer_parameter_names(body: str) -> tuple[str, ...]:
+    """Names of the procedure's pointer parameters.
+
+    Handles Odin's grouped form (`a, b: ^T`), where only the last name in a
+    group carries the type.
+    """
+    parameters = procedure_parameters(body)
+    if not parameters:
+        return ()
+    fields: list[str] = []
+    depth = 0
+    current = ""
+    for character in parameters:
+        if character in "([{":
+            depth += 1
+        elif character in ")]}":
+            depth -= 1
+        if character == "," and depth == 0:
+            fields.append(current)
+            current = ""
+        else:
+            current += character
+    fields.append(current)
+    names: list[str] = []
+    pending: list[str] = []
+    for field in fields:
+        name, separator, declared = field.partition(":")
+        pending.append(name.strip())
+        if not separator:
+            continue
+        if declared.strip().startswith("^"):
+            names.extend(entry for entry in pending if entry.isidentifier())
+        pending = []
+    return tuple(names)
+
+
+def pointer_contract_present(executable: str, body: str = "") -> bool:
     operations = re.findall(
         r"\btransmute\s*\([^)]*\)\s*([A-Za-z_][A-Za-z0-9_]*)"
         r"|raw_(?:data|ptr)\s*\(\s*([A-Za-z_][A-Za-z0-9_.]*)",
         executable,
     )
     names = {left or right for left, right in operations if left or right}
+    # A ^T parameter is a contract the caller must honour, and one the callee
+    # cannot see honoured. Odin auto-dereferences, so the body carries no
+    # syntactic trace of the dereference — without this the risk is invisible.
+    names.update(pointer_parameter_names(body))
     if not names:
         return True
     contracts = contract_lines(executable)
@@ -463,11 +547,11 @@ def untrusted_contract_present(executable: str) -> bool:
     return all(re.search(rf"\b{name}\b[^\n]*(?:<|<=|>|>=|==|!=|len\s*\()", contracts) for name in results)
 
 
-def risk_contract_present(executable: str, risk: str) -> bool:
+def risk_contract_present(executable: str, risk: str, body: str = "") -> bool:
     if risk == "index":
         return index_contract_present(executable)
     if risk == "pointer":
-        return pointer_contract_present(executable)
+        return pointer_contract_present(executable, body)
     if risk == "queue":
         return queue_contract_present(executable)
     if risk == "ownership":
@@ -482,9 +566,9 @@ def uncovered_risks(body: str, risks: tuple[str, ...]) -> tuple[str, ...]:
     uncovered = tuple(
         risk
         for risk in risks
-        if not risk_contract_present(executable, risk)
+        if not risk_contract_present(executable, risk, body)
         and not authored_contract_present(executable, risk)
-        and not structural_contract_present(executable, risk)
+        and not structural_contract_present(executable, risk, body)
     )
     if not uncovered:
         return ()
@@ -516,11 +600,11 @@ def has_dominating_risk_guard(body: str, risks: tuple[str, ...]) -> bool:
     if not risks:
         return True
     for risk in risks:
-        if risk_contract_present(executable, risk):
+        if risk_contract_present(executable, risk, body):
             continue
         if authored_contract_present(executable, risk):
             continue
-        if structural_contract_present(executable, risk):
+        if structural_contract_present(executable, risk, body):
             continue
         return False
     return True
@@ -655,7 +739,9 @@ def findings_for_source(source: str, path: str) -> list[Finding]:
         uncovered = uncovered_risks(body, risks)
         if uncovered and procedure_has_reviewed_contract(body):
             uncovered = ()
-        if uncovered and all(structural_contract_present(executable_text(body), risk) for risk in uncovered):
+        if uncovered and all(
+            structural_contract_present(executable_text(body), risk, body) for risk in uncovered
+        ):
             uncovered = ()
         if uncovered and assertions >= len(uncovered) + 1:
             uncovered = ()
