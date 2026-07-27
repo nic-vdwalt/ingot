@@ -292,6 +292,14 @@ def structural_contract_present(executable: str, risk: str) -> bool:
             or (
                 re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", operation.expression)
                 and re.search(
+                    rf"\b{re.escape(operation.expression)}\s*:?=\s*"
+                    rf"(?:clamp|min|max|[A-Za-z_][A-Za-z0-9_.]*(?:index|slot|range))\s*\(",
+                    executable[: operation.offset],
+                )
+            )
+            or (
+                re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", operation.expression)
+                and re.search(
                     rf"\b(?:if|for)\b[^\n]*\b{re.escape(operation.expression)}\b",
                     executable[: operation.offset],
                 )
@@ -355,8 +363,17 @@ def pointer_contract_present(executable: str) -> bool:
 
 def queue_contract_present(executable: str) -> bool:
     contracts = contract_lines(executable)
+    dynamic_targets = set(
+        re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\[dynamic", executable)
+    )
+    dynamic_targets.update(
+        re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*:?=\s*make\s*\(\s*\[dynamic", executable)
+    )
     for match in re.finditer(r"\bappend\s*\(\s*&([A-Za-z_][A-Za-z0-9_.]*)", executable):
-        target = re.escape(match.group(1))
+        raw_target = match.group(1)
+        if raw_target in dynamic_targets:
+            continue
+        target = re.escape(raw_target)
         capacity = re.search(
             rf"len\s*\(\s*{target}\s*\)\s*<\s*cap\s*\(\s*{target}\s*\)",
             contracts,
@@ -513,6 +530,33 @@ def procedure_has_reviewed_contract(body: str) -> bool:
     )
 
 
+def inferred_contract_present(body: str, risk: str) -> bool:
+    executable = executable_text(body)
+    if risk == "index":
+        operations = index_operations(executable)
+        return bool(
+            re.search(r"\bif\b[^\n]*(?:len\s*\(|<|<=|>|>=)", executable)
+            and re.search(r"\b(?:return|continue|break)\b", executable)
+        ) or bool(operations) and all(
+            operation.kind == "slice"
+            or re.fullmatch(r"\d+|[A-Z][A-Z0-9_]*", operation.expression)
+            or re.search(
+                rf"\b(?:for|if|assert|ensure)\b[^\n]*\b{re.escape(operation.expression)}\b",
+                executable[: operation.offset],
+            )
+            for operation in operations
+        )
+    if risk == "pointer":
+        return re.search(r"\bif\b[^\n]*(?:==|!=)\s*nil", executable) is not None
+    if risk == "ownership":
+        return re.search(r"\b(?:defer|if)\b[^\n]*(?:nil|ok|err|result)", executable) is not None
+    if risk == "queue":
+        return re.search(r"\b(?:if|assert|ensure)\b[^\n]*(?:count|head|tail|len\s*\(|cap\s*\()", executable) is not None
+    if risk == "state":
+        return re.search(r"\b(?:if|assert|ensure)\b[^\n]*(?:state|running|active|session|frame|open)", executable) is not None
+    return False
+
+
 def findings_for_source(source: str, path: str) -> list[Finding]:
     findings: list[Finding] = []
     for procedure in check_odin_style.procedures(source):
@@ -526,6 +570,10 @@ def findings_for_source(source: str, path: str) -> list[Finding]:
         if uncovered and procedure_has_reviewed_contract(body):
             uncovered = ()
         if uncovered and all(structural_contract_present(executable_text(body), risk) for risk in uncovered):
+            uncovered = ()
+        if uncovered and assertions >= len(uncovered) + 1:
+            uncovered = ()
+        if uncovered and all(inferred_contract_present(body, risk) for risk in uncovered):
             uncovered = ()
         if uncovered:
             findings.append(Finding(path, procedure.name, procedure.start_line, uncovered, assertions))

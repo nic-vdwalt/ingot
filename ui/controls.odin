@@ -301,7 +301,8 @@ slider_auto :: proc(
 slider_ui_slot :: proc(u: ^Ui, width: i32) -> Rect_I32 {
 	assert(u != nil && u.frame != nil, "slider_ui_slot: invalid UI")
 	metrics := ui_frame_metrics(u.frame)
-	resolved_width := width if width > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
+	resolved_width :=
+		ui_frame_sc(u.frame, width) if width > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
 	assert(resolved_width > 0, "slider_ui_slot: invalid width")
 	return slot_next_px(u, resolved_width, metrics.ROW_H_SM)
 }

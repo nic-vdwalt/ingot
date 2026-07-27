@@ -95,7 +95,8 @@ text_input :: proc(
 	assert(id != WIDGET_ID_NONE, "text_input: zero stable id")
 	assert(semantics.name != "", "text_input: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
-	resolved_height := height if height > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
+	resolved_height :=
+		ui_frame_sc(u.frame, height) if height > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
 	r := slot_next_px(u, remaining(&u.layout).w, resolved_height)
 	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
 	focus_opt_click(u.frame, focus, r.x, r.y, r.w, r.h)

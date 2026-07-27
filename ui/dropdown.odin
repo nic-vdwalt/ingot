@@ -32,7 +32,8 @@ dropdown_auto :: proc(
 	assert(id != WIDGET_ID_NONE, "dropdown: zero stable id")
 	assert(a11y_label != "", "dropdown: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
-	resolved_width := width if width > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
+	resolved_width :=
+		ui_frame_sc(u.frame, width) if width > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
 	r := slot_next_px(u, resolved_width, metrics.ROW_H_MD)
 	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
 	return dropdown_at(
