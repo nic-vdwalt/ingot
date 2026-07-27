@@ -26,8 +26,6 @@ cam3d_right: Vector3
 cam3d_up: Vector3
 @(private)
 cam3d_fwd: Vector3
-@(private)
-depth_mask_on: bool = true
 
 @(private)
 _camera_matrices :: proc(camera: Camera3D, width, height: i32) -> (Matrix, Matrix, Matrix) {
@@ -55,10 +53,6 @@ GetProjectionMatrix :: proc() -> Matrix {
 	if cam3d_proj == (Matrix{}) do return Matrix(1)
 	return cam3d_proj
 }
-
-// SetDepthMask records the rlgl depth-mask state (no visual effect in the
-// CPU-projected 2D approximation, kept for API parity).
-SetDepthMask :: proc(on: bool) {depth_mask_on = on}
 
 BeginMode3D :: proc(camera: Camera3D) {
 	width, height := _target_dims_i32()

@@ -1,9 +1,13 @@
 // ingot:gfx/rlgl — shim over the low-level raylib rlgl API the consumer apps
 // use. The 2D WebGPU batch renderer doesn't expose an immediate-mode GL layer,
-// so the low-level vertex-array / framebuffer / matrix-stack calls (used only by
-// openalloy's deferred galaxy renderer) are runtime-safe no-ops with matching
-// signatures. DrawRenderBatchActive maps to a real batch flush. Lets `import
-// rlgl "vendor:raylib/rlgl"` become `import rlgl "ingot:gfx/rlgl"` unchanged.
+// so the low-level vertex-array and matrix-stack calls (used only by
+// openalloy's deferred galaxy renderer) map onto an internal instancing path
+// with matching signatures. DrawRenderBatchActive maps to a real batch flush.
+// Lets `import rlgl "vendor:raylib/rlgl"` become `import rlgl "ingot:gfx/rlgl"`
+// for that surface.
+//
+// Calls that this renderer cannot honour are absent rather than present as
+// silent no-ops, so a dependency on them is a compile error at the call site.
 package rlgl
 
 import gfx "ingot:gfx"
@@ -16,30 +20,6 @@ ONE :: 1
 SRC_COLOR :: 0x0300
 ONE_MINUS_SRC_COLOR :: 0x0301
 FUNC_ADD :: 0x8006
-
-FramebufferAttachType :: enum i32 {
-	COLOR_CHANNEL0 = 0,
-	COLOR_CHANNEL1 = 1,
-	COLOR_CHANNEL2 = 2,
-	COLOR_CHANNEL3 = 3,
-	COLOR_CHANNEL4 = 4,
-	COLOR_CHANNEL5 = 5,
-	COLOR_CHANNEL6 = 6,
-	COLOR_CHANNEL7 = 7,
-	DEPTH          = 100,
-	STENCIL        = 200,
-}
-
-FramebufferAttachTextureType :: enum i32 {
-	CUBEMAP_POSITIVE_X = 0,
-	CUBEMAP_NEGATIVE_X = 1,
-	CUBEMAP_POSITIVE_Y = 2,
-	CUBEMAP_NEGATIVE_Y = 3,
-	CUBEMAP_POSITIVE_Z = 4,
-	CUBEMAP_NEGATIVE_Z = 5,
-	TEXTURE2D          = 100,
-	RENDERBUFFER       = 200,
-}
 
 // --- batch / culling (real) ------------------------------------------------
 
@@ -54,10 +34,8 @@ PopMatrix :: proc() {gfx.MatrixModePop()}
 Translatef :: proc(x, y, z: f32) {gfx.MatrixModeTranslate(x, y)}
 GetMatrixProjection :: proc() -> gfx.Matrix {return gfx.GetProjectionMatrix()}
 
-// --- depth / shader / clip -------------------------------------------------
+// --- shader / clip ---------------------------------------------------------
 
-EnableDepthMask :: proc() {gfx.SetDepthMask(true)}
-DisableDepthMask :: proc() {gfx.SetDepthMask(false)}
 EnableShader :: proc(id: u32) {gfx.RlEnableInstShader(id)}
 DisableShader :: proc() {gfx.RlDisableInstShader()}
 SetClipPlanes :: proc(near, far: f64) {}
@@ -115,20 +93,15 @@ DrawVertexArrayElementsInstanced :: proc(
 	instances: i32,
 ) {gfx.RlDrawVertexArrayElementsInstanced(offset, count, buffer, instances)}
 
-// --- framebuffers / textures -----------------------------------------------
-// The galaxy builds HDR render targets from these raw calls. LoadFramebuffer
-// returns an opaque non-zero id; the real colour/depth attachments are created
-// by LoadTexture/LoadTextureDepth (backed by gfx render-target textures) and
-// carried on the RenderTexture2D, so Attach/Complete are bookkeeping only.
+// --- textures ---------------------------------------------------------------
+// The galaxy builds HDR render targets from these raw calls. Colour and depth
+// attachments are real gfx render-target textures carried on a RenderTexture2D.
+//
+// There is deliberately no LoadFramebuffer/EnableFramebuffer/FramebufferAttach/
+// FramebufferComplete here: those were bookkeeping-only no-ops that accepted a
+// framebuffer assembly this renderer never performed. Use gfx.RenderTexture2D
+// (LoadRenderTexture + BeginTextureMode) or an explicit WebGPU target instead.
 
-@(private)
-_fbo_counter: u32 = 0
-
-LoadFramebuffer :: proc() -> u32 {_fbo_counter += 1; return _fbo_counter}
-EnableFramebuffer :: proc(id: u32) {}
-DisableFramebuffer :: proc() {}
-FramebufferAttach :: proc(fboId, texId: u32, attachType, texType, mipLevel: i32) {}
-FramebufferComplete :: proc(id: u32) -> bool {return id != 0}
 LoadTexture :: proc(data: rawptr, width, height, format, mipmapCount: i32) -> u32 {
 	return gfx.RlLoadColorTexture(width, height, gfx.PixelFormat(format))
 }

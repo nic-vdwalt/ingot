@@ -1,6 +1,7 @@
 // ingot:gfx — glyph-atlas text stack over WebGPU. Mirrors the raylib text API
 // ingot uses: LoadFontFromMemory / UnloadFont / DrawTextEx / MeasureTextEx /
-// DrawTextCodepoint / SetTextureFilter (+ DrawText/MeasureText fallbacks).
+// DrawTextCodepoint / SetTextureFilter, plus DrawText/MeasureText/DrawTextPro
+// over the embedded default font (font_default.odin).
 // Each font bakes its requested codepoints once (stb_truetype) into a single
 // R8 atlas texture; glyphs draw as textured quads through the batch renderer's
 // `text` pipeline (atlas red channel = coverage).
@@ -411,11 +412,8 @@ MeasureTextEx :: proc(font: Font, text: cstring, fontSize, spacing: f32) -> Vect
 	return {max_w, lines * a.line_adv * sf}
 }
 
-// Fallback default-font stubs (only used if a custom font failed to load).
-DrawText :: proc(text: cstring, posX, posY, fontSize: i32, color: Color) {}
-MeasureText :: proc(text: cstring, fontSize: i32) -> i32 {
-	return i32(len(string(text))) * fontSize / 2
-}
+// DrawText and MeasureText live in font_default.odin: they are the default-font
+// entry points and exist only when the embedded face is compiled in.
 
 // Re-upload the whole atlas after a lazy on-demand glyph bake.
 @(private)

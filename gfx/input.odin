@@ -366,10 +366,6 @@ GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(default_conte
 GetMouseX :: proc() -> i32 {return i32(g.inp.mouse.x)}
 GetMouseY :: proc() -> i32 {return i32(g.inp.mouse.y)}
 
-// raylib mouse coordinate offset/scale — unused by the current backends; kept
-// for API parity (no-op).
-SetMouseOffset :: proc(offsetX, offsetY: i32) {}
-
 GetMouseWheelMove :: proc() -> f32 {
 	if abs(g.inp.wheel.x) > abs(g.inp.wheel.y) do return g.inp.wheel.x
 	return g.inp.wheel.y
