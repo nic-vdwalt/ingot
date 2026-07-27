@@ -25,10 +25,10 @@ Affine :: struct {
 }
 
 AFFINE_IDENTITY :: Affine {
-	a = 1,
-	b = 0,
-	c = 0,
-	d = 1,
+	a  = 1,
+	b  = 0,
+	c  = 0,
+	d  = 1,
 	tx = 0,
 	ty = 0,
 }
