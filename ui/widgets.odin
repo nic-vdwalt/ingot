@@ -795,6 +795,18 @@ btn_ui_state_id :: proc(
 	)
 }
 
+// Fit a button label to the button box: truncate with an ellipsis when it is
+// too wide, and return the drawn text plus its measured width for centring.
+@(private = "file")
+btn_label_fit :: proc(frame: ^Ui_Frame, label: string, w, font_size: i32) -> (cstring, i32) {
+	assert(font_size > 0, "btn_label_fit: non-positive font size")
+	assert(label != "", "btn_label_fit: empty label")
+	pad := ui_frame_metrics(frame).CONTROL_GAP
+	fitted := truncate_to_width_frame(frame, label, max(w - pad * 2, 0), font_size)
+	text_c := strings.clone_to_cstring(fitted, context.temp_allocator)
+	return text_c, measure_text_frame(frame, text_c, font_size)
+}
+
 btn_at :: proc(
 	frame: ^Ui_Frame,
 	x, y, w, h: i32,
@@ -855,8 +867,7 @@ btn_at :: proc(
 		draw_focus_ring(frame, x, y, w, h)
 	}
 
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	text_w := measure_text_frame(frame, label_c, fs)
+	label_c, text_w := btn_label_fit(frame, label, w, fs)
 	draw_text_frame(frame, label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 
 	sem: Sem_State
@@ -921,8 +932,7 @@ btn_at_state :: proc(
 		)
 	}
 	if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	text_w := measure_text_frame(frame, label_c, fs)
+	label_c, text_w := btn_label_fit(frame, label, w, fs)
 	draw_text_frame(frame, label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}

@@ -111,12 +111,15 @@ checkbox_at :: proc(
 	if focus_opt_focused(focus) {
 		draw_focus_ring(frame, bx, by, box, box)
 	}
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text_frame(
+	label_x := bx + box + metrics.CONTROL_GAP
+	// Why truncate: the label must stay inside the caller's rect; a fixed-width
+	// panel would otherwise spill body text over whatever is painted behind it.
+	draw_text_truncated_frame(
 		frame,
-		label_c,
-		bx + box + metrics.CONTROL_GAP,
+		label,
+		label_x,
 		rect.y + (rect.h - metrics.FONT_SIZE_BODY) / 2,
+		max(rect.x + rect.w - label_x, 0),
 		metrics.FONT_SIZE_BODY,
 		style.fg_primary,
 	)
@@ -230,12 +233,14 @@ radio_at :: proc(
 	if focus_opt_focused(focus) {
 		draw_focus_ring(frame, rect.x, rect.y + (rect.h - box) / 2, box, box)
 	}
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text_frame(
+	label_x := rect.x + box + metrics.CONTROL_GAP
+	// Why truncate: mirrors checkbox_at — the label never escapes its own rect.
+	draw_text_truncated_frame(
 		frame,
-		label_c,
-		rect.x + box + metrics.CONTROL_GAP,
+		label,
+		label_x,
 		rect.y + (rect.h - metrics.FONT_SIZE_BODY) / 2,
+		max(rect.x + rect.w - label_x, 0),
 		metrics.FONT_SIZE_BODY,
 		style.fg_primary,
 	)
