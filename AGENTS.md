@@ -7,6 +7,13 @@ for those platforms. Native terminal and accessibility bindings use vendored
 libraries. See `README.md` for the project overview, `docs/immediate-mode.md`
 for the architecture, and `docs/testing.md` for the test matrix.
 
+New subsystems are expected to preserve the four properties that make
+deterministic simulation cheap here: an explicit state-in/data-out boundary,
+nondeterminism confined to compile-gated simulation seams, bounded work with
+named upper bounds, and assertions plus inspectable derived output as oracles.
+`docs/testing.md` explains why, and `docs/3d-content-pipeline-plan.md` is a
+worked example applied to a subsystem before it is written.
+
 ## Packages
 
 | Package          | Role |

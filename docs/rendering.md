@@ -120,6 +120,9 @@ caller deliberately migrates them.
 
 The GPU 3D API is a visualization escape hatch rather than a scene graph,
 material system, asset pipeline, or full game engine.
+[The 3D content pipeline plan](3d-content-pipeline-plan.md) describes what those
+layers would require, including the renderer-independent package split that
+keeps import, cook, visibility, and batching testable without a window.
 
 ## Compatibility API
 
@@ -190,6 +193,19 @@ It interleaves texture and render-target unloads, font-atlas resets, UI scaling,
 and window resizing under strict WebGPU validation. It requires a working
 display and is intentionally excluded from the headless `all` and `soak` fuzz
 targets.
+
+The GPU is the one Ingot subsystem where deterministic simulation cannot supply
+its own oracle. Resource lifetime errors are not observable from Odin: a stale
+view, a resource destroyed while a submission still references it, or a
+mismatched binding produces driver-defined behavior rather than a value a
+harness can test.
+`INGOT_GPU_STRICT` therefore substitutes an external observer, promoting any
+WebGPU validation message to an abort, so the generated event ordering that
+provoked it still fails under its recorded seed. Generation-checked handles and
+fixed pools do the complementary work in-process by making a stale handle a
+detectable value instead of a dangling one. Keep new GPU resources inside that
+pattern; a resource without a generation check or a declared bound is invisible
+to the harness.
 
 Use the deterministic visual and native multi-context fixtures for backend validation:
 

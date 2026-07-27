@@ -63,7 +63,8 @@ the corresponding mirror tag points to commit
 
 ### Local modifications
 
-The vendored source is upstream 0.3.3 with one patch applied:
+The vendored source is upstream 0.3.3 with two memory-safety patches
+applied. Both were found by `fuzz/run.sh term`, which now fences them:
 
 - `src/screen.c`, `erase_internal()`: skip cells for which `getcell()` returns
   `NULL` instead of writing through the null pointer. The row loop bounds
@@ -75,11 +76,27 @@ The vendored source is upstream 0.3.3 with one patch applied:
   same `if(!cell)` idiom the rest of the file already applies to `getcell()`
   results.
 
-Any upstream refresh must re-apply this patch or confirm upstream has fixed
-it. Both macOS archives have been rebuilt from the patched source and their
-checksums updated in `docs/provenance/third-party-artifacts.json`.
+- `src/encoding.c`, `decode_utf8()`: do not emit two codepoints when only one
+  slot remains. The ASCII branch writes the U+FFFD marker for an abandoned
+  multi-byte sequence and then the character itself, but the loop guard only
+  proves room for one, so landing that pair on the last slot wrote one `uint32`
+  past the end of `vt->tmpbuffer`. The overrun is silent: it corrupts the C
+  heap and the process aborts later in an unrelated `free`. Any terminal output
+  containing a truncated UTF-8 sequence can reach it, and it made
+  `scripts/test.sh` abort roughly 43% of the time. The fix stops without
+  consuming the byte so the caller re-enters with an empty buffer, which is the
+  same partial-consumption path already used for text runs longer than the
+  codepoint buffer.
 
-**`libvterm/lib/windows_amd64/vterm.lib` predates the patch** and must be
+Any upstream refresh must re-apply these patches or confirm upstream has fixed
+them. Both macOS archives have been rebuilt from the patched source and their
+checksums updated in `docs/provenance/third-party-artifacts.json`.
+`scripts/build-libvterm.sh` sets `ZERO_AR_DATE=1` so a rebuild of identical
+source reproduces the recorded checksum byte for byte; without it `ar` stamps
+each member with the build time and the manifest would only ever match the one
+machine that produced it.
+
+**`libvterm/lib/windows_amd64/vterm.lib` predates both patches** and must be
 rebuilt with `scripts/build-libvterm.bat` on Windows, then have its checksum
 refreshed in the same manifest, which currently marks it
 `"built_from": "upstream-unpatched"`. The hygiene gate verifies each archive

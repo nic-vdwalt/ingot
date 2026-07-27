@@ -47,6 +47,15 @@ are *unexpected*; the only correct response to corrupt program state is to crash
 Assertions downgrade catastrophic correctness bugs into loud, early liveness
 bugs, and they are a force multiplier for fuzzing.
 
+They are a force multiplier because generating input is the easy half of
+deterministic simulation; recognising wrong behaviour is the hard half. An
+assertion is a standing oracle that any generated ordering can trip, and it
+fails at the origin of the corruption rather than at a later symptom. The same
+applies to the bounds rule above: a named upper bound is a property the harness
+can assert against, and it keeps a generated input from wandering into a state
+nobody modelled. Writing to these rules is what makes the harnesses in
+[Testing Ingot](testing.md) cheap to point at new code.
+
 - **Assert function arguments, return values, pre/postconditions, and
   invariants.** Target an average of **at least two assertions per substantive
   authored production procedure** during design review. This is not a quota for

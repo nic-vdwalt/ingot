@@ -47,6 +47,11 @@
           "file": "vendor/libvterm/src/screen.c",
           "function": "erase_internal",
           "summary": "Skip cells where getcell() returns NULL instead of writing through the null pointer. The row loop bounds against screen->state->rows while getcell() checks screen->rows, and the column loop is not bounded by screen->cols, so an erase rect derived from the state can outrun the screen buffer. Reachable by interleaving term_resize with term_pump; found by fuzz/run.sh term."
+        },
+        {
+          "file": "vendor/libvterm/src/encoding.c",
+          "function": "decode_utf8",
+          "summary": "Do not emit two codepoints when only one slot remains. The ASCII branch writes the U+FFFD marker for an abandoned multi-byte sequence followed by the character itself, but the loop guard only proves room for one, so landing the pair on the last slot wrote one uint32 past the end of vt->tmpbuffer and corrupted the C heap. Reachable from any terminal output containing a truncated UTF-8 sequence; it made scripts/test.sh abort about 43% of the time."
         }
       ],
       "license": "MIT",
@@ -58,12 +63,12 @@
       "artifacts": [
         {
           "path": "libvterm/lib/darwin_arm64/libvterm.a",
-          "sha256": "9981b524baef9e97ca67f2c108a4c77e8041d7c1c6731d6e88e1292b657dfc90",
+          "sha256": "b456006ce2aaafbd5a7cc0f9ded9dcbbad86982598faec3473881cc1eb5ea743",
           "built_from": "patched"
         },
         {
           "path": "libvterm/lib/darwin_amd64/libvterm.a",
-          "sha256": "e45fdd14fa3efec3614e3c6a6f0703a3a7226df25e8aab051a9dd89aa2880834",
+          "sha256": "35d13f6afe9cebb16c0bae49cb489039fa9469268b87579e01911a9f4c811c7b",
           "built_from": "patched"
         },
         {

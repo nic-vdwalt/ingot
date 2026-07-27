@@ -110,6 +110,16 @@ snapshot, or skipped entirely while the application is idle; none of those
 choices transfer authority over persistent widget behavior away from the
 caller.
 
+One practical consequence is verification cost. Because the frame boundary is
+already explicit state in and bounded data out, deterministic harnesses drive
+production widgets directly and check routing, focus, layout, and accessibility
+as values, without a window, a GPU, or a test-only model of the widget tree. A
+toolkit whose source of truth is a retained tree must first expose or rebuild
+that tree before it can be simulated. This is a consequence of the ownership
+model rather than a quality claim about other toolkits, but it is a real
+difference in what testing costs. [Testing Ingot](testing.md) sets out the
+argument and the harnesses.
+
 Here, "purest" refers only to this single-source-of-truth ownership model: the
 application owns persistent widget behavior, while Ingot derives each required
 frame from the state it receives. It is not a claim about maturity or feature

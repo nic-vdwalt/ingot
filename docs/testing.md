@@ -151,6 +151,61 @@ Use `SAN=none`, `SAN=address`, or `SAN=thread` to select instrumentation where a
 target supports it. AddressSanitizer and ThreadSanitizer run in separate
 binaries because they cannot be combined.
 
+## Why deterministic simulation fits Ingot
+
+Deterministic simulation testing runs the real system against generated input
+under a recorded seed, replacing only the sources of nondeterminism. It is
+effective in proportion to four properties, and Ingot's architecture supplies
+all four rather than acquiring them through test scaffolding.
+
+**The system's natural boundary is already a function.** An immediate-mode
+frame consumes explicit caller state and one input snapshot, and produces
+bounded paint, semantic, and platform output plus a state transition. A harness
+does not have to construct, serialize, or repair a hidden widget tree to reach
+an interesting state, and it does not have to reach through a private object
+graph to observe the result. The boundary that the architecture already exposes
+is the boundary the simulation drives. A retained-tree toolkit must invent that
+seam; Ingot only has to call the public procedure.
+
+**Nondeterminism is confined to a few named seams.** Wall clock, sockets, the
+PTY, the platform input queue, and the GPU are the only sources of surprise, and
+each is isolated behind a compile-gated simulation seam — `INGOT_NET_SIM`,
+`INGOT_WS_SIM`, `INGOT_INPUT_SIM`, `INGOT_PTY_SIM`. The seam replaces the edge,
+not the logic: `wsreconn` keeps the production worker thread, mutexes, atomics,
+condition variable, queue, and reconnect loop, and scripts only the transport.
+What runs under simulation is therefore the code that ships, which is the
+difference between a simulation and a mock.
+
+**Bounded work makes state spaces enumerable and failures local.** Tiger Style
+forbids recursion and requires a named upper bound on every loop, queue, and
+pool. That makes a frame's work finite by construction, so a harness can assert
+capacity rather than hope for it, exhaustion becomes a counted operating
+condition instead of a crash, and a generated input cannot wander into an
+unbounded state the developer never modeled.
+
+**Assertions and derived data supply the oracles.** The hard part of fuzzing is
+usually not generating input but recognizing wrong behavior. Ingot answers this
+twice. Assertions sit at the boundaries they protect, so corrupt state fails
+immediately at its origin rather than as a later symptom. And frame output is
+plain, inspectable data — focus links, routing claims, semantic nodes, paint
+batches, resource generations — so invariants can be checked as properties of
+values instead of by rendering pixels and comparing them.
+
+Where a property cannot be observed in-process, the harness substitutes a
+stricter external observer rather than dropping the check: `INGOT_GPU_STRICT`
+turns any WebGPU validation message into an abort, and
+`INGOT_FRAME_SCRATCH_GUARD` turns a misuse of frame memory into a located panic. Sanitizers and the tracking
+allocator play the same role for memory and concurrency errors, which have no
+natural in-language oracle at all.
+
+The consequence is that new subsystems should be designed to preserve these four
+properties rather than tested afterward. `docs/3d-content-pipeline-plan.md`
+applies that rule to a prospective asset and scene pipeline: import and cook are
+pure byte-to-data transforms, the draw list is bounded plain data, and the
+renderer-independent packages are forbidden from importing `ingot:gfx`, so
+almost the whole pipeline is reachable by the harness described here without a
+window.
+
 ## Why the UI harnesses are effective
 
 `interact` drives production buttons, checkboxes, sliders, dropdowns, modals,

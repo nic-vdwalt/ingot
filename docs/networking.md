@@ -136,3 +136,13 @@ exercises HTTP and WebSocket parsing;
 covers WebSocket and HTTP worker concurrency. These do not replace real TLS,
 proxy, CORS, DNS, timeout, IPv4/IPv6, browser, and unreliable-network testing in
 the release matrix.
+
+The simulation seams replace the network edge only. `INGOT_NET_SIM` and
+`INGOT_WS_SIM` substitute a scripted transport that can produce dial failures,
+handshake faults, fragmented or invalid frames, closes, cuts, and timeouts,
+while the production worker thread, mutexes, atomics, condition variable,
+bounded queue, and reconnect loop keep running unchanged. Networking is the
+subsystem where real-world failure orderings are least reproducible and most
+consequential, so scripting them from a seed converts a rare production race
+into a replayable test. See [Testing Ingot](testing.md) for why this seam style is preferred over
+mocking the client.

@@ -54,6 +54,10 @@ harnesses.
   then publishes it through `Platform_Output` so the adapter applies it.
 - **Batteries included.** Windowing, batched 2D rendering, text, widgets, audio,
   gamepads, accessibility, settings, networking, and a terminal stack.
+- **Testable by construction.** Explicit state, bounded work, and compile-gated
+  simulation seams let deterministic harnesses drive production widgets,
+  parsers, workers, and GPU resource lifetimes from a recorded seed, mostly
+  without a window. See [Testing Ingot](docs/testing.md).
 
 ## Packages
 
@@ -221,6 +225,8 @@ an overall framework ranking.
   comparisons and dated results for Dear ImGui, egui, and Ingot at scale.
 - [Rendering](docs/rendering.md) — renderer ownership, submission lifetime,
   render-target conventions, frame scheduling, and backend validation.
+- [3D content pipeline plan](docs/3d-content-pipeline-plan.md) — proposed
+  asset/scene package split, deterministic-simulation oracles, and phases.
 - [Migrating from raylib](docs/raylib-migration.md) — supported 2D profile,
   compatibility matrix, conversion workflow, examples, and validation checklist.
 - [Networking](docs/networking.md) — HTTP and WebSocket lifecycle, ownership,
