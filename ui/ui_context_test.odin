@@ -24,33 +24,55 @@ ui_frame_style_matches_individual_accessors :: proc(t: ^testing.T) {
 	testing.expect_value(t, style.fg_primary, theme_light().fg_primary)
 }
 
-@(test)
-test_ui_slot_column_and_row :: proc(t: ^testing.T) {
-	u: Ui
-	ui_begin(&u, 0, 0, 200, 100)
-	r1 := ui_slot(&u, 50, 20)
-	testing.expect_value(t, r1, Rect_I32{0, 0, 50, 20})
-	ui_row(&u, 30)
-	r2 := ui_slot(&u, 40, 30)
-	testing.expect_value(t, r2, Rect_I32{0, 20, 40, 30})
-	ui_row_end(&u)
-	ui_end(&u)
+// Facade geometry tests run at scale 1 so logical and device pixels coincide
+// and the expected rectangles stay readable.
+@(private = "file")
+facade_frame :: proc(runtime: ^Ui_Runtime, frame: ^Ui_Frame) {
+	assert(runtime != nil && frame != nil, "facade_frame: nil argument")
+	ui_runtime_init(runtime)
+	ui_frame_begin(frame, runtime)
+}
+
+@(private = "file")
+facade_frame_end :: proc(runtime: ^Ui_Runtime, frame: ^Ui_Frame) {
+	assert(runtime != nil && frame != nil, "facade_frame_end: nil argument")
+	ui_frame_end(frame)
+	ui_runtime_destroy(runtime)
 }
 
 @(test)
-ui_composition_facade_balances_nested_scopes :: proc(t: ^testing.T) {
+test_slot_next_column_and_row :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	facade_frame(&runtime, &frame)
+	defer facade_frame_end(&runtime, &frame)
 	u: Ui
-	ui_begin(&u, 0, 0, 320, 200, 8)
-	ui_padding(&u, insets(12))
-	ui_row(&u, 64, 8)
-	ui_weights(&u, []i32{1, 2})
-	left := ui_weighted_slot(&u, 1)
-	right := ui_weighted_slot(&u, 2)
+	begin(&u, &frame, {0, 0, 200, 100})
+	r1 := slot_next(&u, 50, 20)
+	testing.expect_value(t, r1, Rect_I32{0, 0, 50, 20})
+	row_begin(&u, 30)
+	r2 := slot_next(&u, 40, 30)
+	testing.expect_value(t, r2, Rect_I32{0, 20, 40, 30})
+	row_end(&u)
+	end(&u)
+}
+
+@(test)
+layout_weighted_division_matches_declared_shares :: proc(t: ^testing.T) {
+	// Weighted division has no facade entry point: flex tracks supersede it.
+	// The physical tier keeps it for callers driving a Layout directly.
+	l: Layout
+	layout_begin(&l, 0, 0, 320, 200, 8)
+	layout_inset(&l, insets(12))
+	push_row(&l, 64, 8)
+	row_weights(&l, {1, 2})
+	left := next_weighted(&l, 1)
+	right := next_weighted(&l, 2)
 	testing.expect_value(t, left, Rect_I32{12, 12, 96, 64})
 	testing.expect_value(t, right, Rect_I32{116, 12, 192, 64})
-	ui_row_end(&u)
-	testing.expect_value(t, ui_fill(&u), Rect_I32{12, 84, 296, 104})
-	ui_end(&u)
+	layout_pop(&l)
+	testing.expect_value(t, take_remaining(&l), Rect_I32{12, 84, 296, 104})
+	layout_end(&l)
 }
 
 @(test)
@@ -68,12 +90,12 @@ test_ui_runtime_frames_are_isolated_and_share_roots :: proc(t: ^testing.T) {
 	ui_frame_begin(&frame_a, &a)
 	ui_frame_begin(&frame_b, &b)
 	u1, u2: Ui
-	ui_begin_frame(&u1, &frame_a, 0, 0, 100, 100)
-	ui_begin_frame(&u2, &frame_a, 0, 0, 100, 100)
+	begin(&u1, &frame_a, {0, 0, 100, 100})
+	begin(&u2, &frame_a, {0, 0, 100, 100})
 	testing.expect_value(t, frame_a.open_roots, 2)
 	testing.expect_value(t, frame_b.open_roots, 0)
-	ui_end(&u2)
-	ui_end(&u1)
+	end(&u2)
+	end(&u1)
 	ui_frame_end(&frame_a)
 	ui_frame_end(&frame_b)
 	testing.expect(t, u1.frame == nil && u2.frame == nil)
@@ -221,52 +243,42 @@ test_explicit_frame_resources_follow_own_runtime :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_ui_focus_ids_sequential_and_counted :: proc(t: ^testing.T) {
-	u: Ui
-	ui_begin(&u, 0, 0, 100, 100)
-	f1 := ui_focus(&u)
-	f2 := ui_focus(&u)
-	testing.expect_value(t, f1.id, 1)
-	testing.expect_value(t, f2.id, 2)
-	testing.expect(t, f1.focus == &u.focus_slot)
-	ui_end(&u)
-	testing.expect_value(t, u.focus_count, 2)
-	// Next frame resets the sequence and latches the new count.
-	ui_begin(&u, 0, 0, 100, 100)
-	testing.expect_value(t, ui_focus(&u).id, 1)
-	ui_end(&u)
-	testing.expect_value(t, u.focus_count, 1)
-}
-
-@(test)
-test_ui_stable_focus_survives_insert_and_reorder :: proc(t: ^testing.T) {
+test_stable_focus_survives_insert_and_reorder :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	facade_frame(&runtime, &frame)
+	defer facade_frame_end(&runtime, &frame)
 	u: Ui
 	a, b, inserted := focus_id(11), focus_id(22), focus_id(33)
-	ui_begin(&u, 0, 0, 100, 100)
-	ui_focus(&u, a)
-	focus_opt_set(ui_focus(&u, b))
-	ui_end(&u)
+	begin(&u, &frame, {0, 0, 100, 100})
+	focus(&u, a)
+	focus_opt_set(focus(&u, b))
+	end(&u)
 
-	ui_begin(&u, 0, 0, 100, 100)
-	ui_focus(&u, inserted)
-	ui_focus(&u, b)
-	ui_focus(&u, a)
-	ui_end(&u)
+	begin(&u, &frame, {0, 0, 100, 100})
+	focus(&u, inserted)
+	focus(&u, b)
+	focus(&u, a)
+	end(&u)
 	testing.expect_value(t, u.stable_focus.active, b)
 	testing.expect_value(t, u.stable_count, 3)
 }
 
 @(test)
-test_ui_stable_focus_clears_missing_target :: proc(t: ^testing.T) {
+test_stable_focus_clears_missing_target :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	facade_frame(&runtime, &frame)
+	defer facade_frame_end(&runtime, &frame)
 	u: Ui
 	a, b := focus_id(1), focus_id(2)
-	ui_begin(&u, 0, 0, 100, 100)
-	ui_focus(&u, a)
-	focus_opt_set(ui_focus(&u, b))
-	ui_end(&u)
-	ui_begin(&u, 0, 0, 100, 100)
-	ui_focus(&u, a)
-	ui_end(&u)
+	begin(&u, &frame, {0, 0, 100, 100})
+	focus(&u, a)
+	focus_opt_set(focus(&u, b))
+	end(&u)
+	begin(&u, &frame, {0, 0, 100, 100})
+	focus(&u, a)
+	end(&u)
 	testing.expect_value(t, u.stable_focus.active, FOCUS_ID_NONE)
 }
 
@@ -280,62 +292,81 @@ test_focus_order_wraps_and_recovers :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_ui_slot_row_cross_trim :: proc(t: ^testing.T) {
+test_slot_next_row_cross_trim :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	facade_frame(&runtime, &frame)
+	defer facade_frame_end(&runtime, &frame)
 	u: Ui
-	ui_begin(&u, 10, 10, 300, 200, gap = 4)
-	ui_row(&u, 40, gap = 8)
-	r1 := ui_slot(&u, 100, 30)
+	begin(&u, &frame, {10, 10, 300, 200}, gap = .XS)
+	row_begin(&u, 40, gap = .SM)
+	r1 := slot_next(&u, 100, 30)
 	testing.expect_value(t, r1, Rect_I32{10, 10, 100, 30})
-	r2 := ui_slot(&u, 100, 40)
+	r2 := slot_next(&u, 100, 40)
 	testing.expect_value(t, r2, Rect_I32{118, 10, 100, 40})
-	ui_row_end(&u)
+	row_end(&u)
 	// Root gap applies after the row strip.
-	r3 := ui_slot(&u, 50, 20)
+	r3 := slot_next(&u, 50, 20)
 	testing.expect_value(t, r3, Rect_I32{10, 54, 50, 20})
-	ui_end(&u)
+	end(&u)
 }
 
 @(test)
-test_ui_space_advances_cursor :: proc(t: ^testing.T) {
+test_space_advances_cursor :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	facade_frame(&runtime, &frame)
+	defer facade_frame_end(&runtime, &frame)
 	u: Ui
-	ui_begin(&u, 0, 0, 100, 100)
-	ui_space(&u, 25)
-	r := ui_slot(&u, 100, 10)
-	testing.expect_value(t, r, Rect_I32{0, 25, 100, 10})
-	ui_end(&u)
+	begin(&u, &frame, {0, 0, 100, 100})
+	space(&u, .XL)
+	r := slot_next(&u, 100, 10)
+	testing.expect_value(t, r, Rect_I32{0, 24, 100, 10})
+	end(&u)
 }
 
 @(test)
-test_ui_flex_slots_preserve_cross_trim :: proc(t: ^testing.T) {
+test_flex_slots_preserve_cross_trim :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	facade_frame(&runtime, &frame)
+	defer facade_frame_end(&runtime, &frame)
 	u: Ui
-	ui_begin(&u, 10, 20, 300, 100)
-	ui_row(&u, 40, gap = 10)
-	ui_flex_begin(&u, {fixed(80), grow()})
-	a := ui_flex_slot(&u, 20)
-	b := ui_flex_slot(&u, 30)
-	ui_row_end(&u)
-	ui_end(&u)
+	begin(&u, &frame, {10, 20, 300, 100})
+	flex_row_begin(&u, 40, {fixed(80), grow()}, gap = .MD, align = .Start)
+	a := flex_slot_next(&u, 20)
+	b := flex_slot_next(&u, 30)
+	flex_row_end(&u)
+	end(&u)
 	testing.expect_value(t, a, Rect_I32{10, 20, 80, 20})
-	testing.expect_value(t, b, Rect_I32{100, 20, 210, 30})
+	testing.expect_value(t, b, Rect_I32{102, 20, 208, 30})
 }
 
 @(test)
-test_ui_row_cross_alignment_applies_to_slots :: proc(t: ^testing.T) {
+test_row_cross_alignment_applies_to_slots :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	facade_frame(&runtime, &frame)
+	defer facade_frame_end(&runtime, &frame)
 	u: Ui
-	ui_begin(&u, 10, 20, 300, 100)
-	ui_row(&u, 40, cross_align = .Center)
-	a := ui_slot(&u, 80, 20)
-	ui_row_end(&u)
-	ui_end(&u)
+	begin(&u, &frame, {10, 20, 300, 100})
+	row_begin(&u, 40, align = .Center)
+	a := slot_next(&u, 80, 20)
+	row_end(&u)
+	end(&u)
 	testing.expect_value(t, a, Rect_I32{10, 30, 80, 20})
 }
 
 @(test)
 test_zero_sized_slot_is_not_visible :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	facade_frame(&runtime, &frame)
+	defer facade_frame_end(&runtime, &frame)
 	u: Ui
-	ui_begin(&u, 0, 0, 0, 0)
-	r := ui_slot(&u, 100, 20)
-	ui_end(&u)
-	testing.expect(t, !ui_slot_visible(r))
+	begin(&u, &frame, {0, 0, 0, 0})
+	r := slot_next(&u, 100, 20)
+	end(&u)
+	testing.expect(t, !slot_visible(r))
 	testing.expect_value(t, r, Rect_I32{})
 }

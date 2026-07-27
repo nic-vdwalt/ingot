@@ -263,6 +263,20 @@ bash scripts/smoke-gallery.sh
 odin run examples/multi_context_fixture -collection:ingot=.
 ```
 
+`scripts/capture-media.sh` is the third windowed tool outside `scripts/test.sh`.
+It renders the gallery into a fixed 1600x1000 offscreen target and reads it back
+with `gfx.SaveRenderTexturePng`, writing the committed stills in `docs/media/`
+and the demo GIF/MP4 in `dist/media/`:
+
+```sh
+bash scripts/capture-media.sh
+```
+
+It is a media generator rather than an assertion harness, but it is a useful
+regression signal: capture mode forces reduced motion, a fixed UI scale, and a
+parked cursor, so two runs of the same revision produce byte-identical PNGs.
+A diff in the output means rendering, layout, or theming changed.
+
 ## Scope and limits
 
 - The fuzz suite currently runs locally rather than in CI.

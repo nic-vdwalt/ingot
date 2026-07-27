@@ -13,11 +13,11 @@ layout_space_tokens_follow_scale :: proc(t: ^testing.T) {
 	ui_frame_begin(&frame, &runtime)
 	defer ui_frame_end(&frame)
 	u: Ui
-	ui_begin_frame(&u, &frame, 0, 0, 900, 300)
-	testing.expect_value(t, ui_space_px(&u, .SM), i32(12))
-	testing.expect_value(t, ui_insets(&u, .LG), insets(24))
-	testing.expect(t, !ui_compact(&u, 500))
-	ui_end(&u)
+	begin(&u, &frame, {0, 0, 900, 300})
+	testing.expect_value(t, space_px(&u, .SM), i32(12))
+	testing.expect_value(t, insets_of(&u, .LG), insets(24))
+	testing.expect(t, !compact(&u, 500))
+	end(&u)
 }
 
 @(test)

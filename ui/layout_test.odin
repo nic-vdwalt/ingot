@@ -359,7 +359,7 @@ fit_column_bounded_exact_fit_has_no_overflow :: proc(t: ^testing.T) {
 }
 
 // Past the budget, rows collapse to zero height instead of being placed
-// outside the panel. ui_slot_visible then reports them invisible.
+// outside the panel. slot_visible then reports them invisible.
 @(test)
 fit_column_bounded_exhaustion_yields_zero_height_rows :: proc(t: ^testing.T) {
 	column: Fit_Column
@@ -372,7 +372,7 @@ fit_column_bounded_exhaustion_yields_zero_height_rows :: proc(t: ^testing.T) {
 	// Only 10 px were left, so the second row is truncated, not displaced.
 	testing.expect_value(t, second, Rect_I32{0, 20, 100, 10})
 	testing.expect_value(t, third, Rect_I32{0, 30, 100, 0})
-	testing.expect(t, !ui_slot_visible(third), "exhausted row must report invisible")
+	testing.expect(t, !slot_visible(third), "exhausted row must report invisible")
 	testing.expect_value(t, bounds.h, i32(30))
 	// 10 lost from the second row, 20 from the third.
 	testing.expect_value(t, fit_column_overflow(&column), i32(30))

@@ -10,3 +10,11 @@ if grep -R -n -E --include='*.odin' 'ingot:gfx|rl\.' "$root/ui"; then
 	echo "forbidden gfx dependency found in ui" >&2
 	exit 1
 fi
+# Tier guard: the facade tier is the bare-named ^Ui surface. A ui_-prefixed
+# procedure that takes a ^Ui is the duplicate-tier rot this split removed, so
+# fail the build rather than let the two naming schemes drift back apart.
+if grep -R -n -E --include='*.odin' -A2 '^ui_[a-z_0-9]+ :: proc' "$root/ui" |
+	grep -E 'u: \^Ui,|u: \^Ui\)'; then
+	echo "forbidden ui_-prefixed facade procedure taking a ^Ui" >&2
+	exit 1
+fi

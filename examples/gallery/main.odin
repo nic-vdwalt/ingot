@@ -493,7 +493,7 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 		ui.input_box_reset(&state.pass)
 		ui.input_box_reset(&state.notes)
 	}
-	ui.ui_space(&state.ctx, ui.ui_frame_sc(ui_frame, 6))
+	ui.space(&state.ctx, .XS)
 
 	summary := fmt.tprintf(
 		"name: %q \u00b7 notes: %d bytes",
@@ -537,7 +537,7 @@ draw_widget_volume :: proc(state: ^Widget_State) {
 		0,
 		100,
 		5,
-		ui.ui_focus(&state.ctx, WIDGET_VOLUME_ID),
+		ui.focus(&state.ctx, WIDGET_VOLUME_ID),
 	)
 	ui.tooltip(
 		ui_frame,

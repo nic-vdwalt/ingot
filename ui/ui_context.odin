@@ -367,10 +367,9 @@ end :: proc(u: ^Ui) {
 	}
 }
 
-// Deprecated: sequential focus is order-dependent by construction, so inserting
-// or reordering a control transfers focus to whichever widget inherits its
+// Sequential focus is order-dependent by construction, so inserting or
+// reordering a control transfers focus to whichever widget inherits its
 // ordinal. Register a Widget_Id from id() / scope_begin() instead.
-@(deprecated = "sequential focus is order-dependent; pass a Widget_Id to focus")
 focus_sequential :: proc(u: ^Ui) -> Focus_Opt {
 	assert(u != nil, "focus: nil u")
 	assert(u.open, "focus: frame not open")

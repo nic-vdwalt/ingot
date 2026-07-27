@@ -40,23 +40,29 @@ identity_scopes_are_stable_and_composable :: proc(t: ^testing.T) {
 
 @(test)
 generated_focus_survives_reorder :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
 	u: Ui
-	ui_begin(&u, 0, 0, 100, 100)
-	ui_id_root(&u, "list")
-	a := ui_id(&u, u64(10))
-	b := ui_id(&u, u64(20))
-	ui_focus(&u, a)
-	focus_opt_set(ui_focus(&u, b))
-	ui_id_pop(&u)
-	ui_end(&u)
+	begin(&u, &frame, {0, 0, 100, 100})
+	scope_begin(&u, "list")
+	a := id(&u, u64(10))
+	b := id(&u, u64(20))
+	focus(&u, a)
+	focus_opt_set(focus(&u, b))
+	scope_end(&u)
+	end(&u)
 
-	ui_begin(&u, 0, 0, 100, 100)
-	ui_id_root(&u, "list")
-	ui_focus(&u, ui_id(&u, u64(30)))
-	ui_focus(&u, ui_id(&u, u64(20)))
-	ui_focus(&u, ui_id(&u, u64(10)))
-	ui_id_pop(&u)
-	ui_end(&u)
+	begin(&u, &frame, {0, 0, 100, 100})
+	scope_begin(&u, "list")
+	focus(&u, id(&u, u64(30)))
+	focus(&u, id(&u, u64(20)))
+	focus(&u, id(&u, u64(10)))
+	scope_end(&u)
+	end(&u)
 	testing.expect_value(t, u.stable_focus.active, b)
 }
 
