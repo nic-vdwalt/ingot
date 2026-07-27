@@ -639,7 +639,7 @@ when !INGOT_NET_SIM {
 		delete(job.cache_path, allocator)
 		job^ = {}
 		assert(job.tag == 0)
-		assert(job.request.path == nil)
+		assert(len(job.request.path) == 0)
 	}
 
 	@(private)

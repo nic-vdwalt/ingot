@@ -237,7 +237,7 @@ when !INGOT_NET_SIM {
 		for header in pending.request.headers {delete(header.name); delete(header.value)}
 		delete(pending.request.headers); delete(pending.request.body)
 		pending^ = {}
-		assert(pending.request.path == nil)
+		assert(len(pending.request.path) == 0)
 	}
 
 	@(private = "file")
