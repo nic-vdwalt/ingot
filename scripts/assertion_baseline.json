@@ -71,9 +71,6 @@
   "gfx/shapes.odin:_emit_gradient_quad": [
     "queue"
   ],
-  "gfx/text.odin:LoadFontFromMemory": [
-    "ownership"
-  ],
   "gfx/text.odin:_atlas_slot": [
     "index"
   ],

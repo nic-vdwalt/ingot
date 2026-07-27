@@ -95,6 +95,15 @@ LoadFontFromMemory :: proc(
 	codepoints: [^]rune,
 	codepointCount: i32,
 ) -> Font {
+	// Why assert: a public entry taking a raw multipointer alongside a separate
+	// length, so the two can disagree. A negative dataSize reaches make() and
+	// then slices fileData[:dataSize]; a nil fileData with a positive length
+	// slices nothing valid. _to_rgba_into guards its equivalent inputs
+	// (texture.odin:99) — this one did not.
+	assert(fileData != nil, "LoadFontFromMemory: nil font data")
+	assert(dataSize > 0, "LoadFontFromMemory: non-positive font data size")
+	assert(codepointCount >= 0, "LoadFontFromMemory: negative codepoint count")
+	if codepointCount > 0 do assert(codepoints != nil, "LoadFontFromMemory: nil codepoints")
 	a := new(Atlas)
 	a.data = make([]byte, int(dataSize))
 	copy(a.data, fileData[:dataSize])
