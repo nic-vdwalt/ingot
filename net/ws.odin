@@ -14,6 +14,7 @@ import "core:crypto"
 import "core:crypto/legacy/sha1"
 import "core:encoding/base64"
 import "core:fmt"
+import "core:mem"
 import "core:strings"
 import "core:sync"
 import "core:thread"
@@ -300,7 +301,16 @@ WebSocket :: struct {
 	path:              string,
 	secure:            bool,
 	ca_file:           string,
+
+	// host/path above point into url_storage, which owns the only copy of the
+	// URL. It is a raw string rather than a [dynamic], so unlike recv_queue it
+	// does not carry its own allocator — url_allocator records the one that
+	// produced it. ws_start_connect_url and ws_close can run under different
+	// ambient allocators (a consumer may connect on one and tear down on
+	// another), and freeing a block from an allocator that did not produce it
+	// is undefined, not merely a leak.
 	url_storage:       string,
+	url_allocator:     mem.Allocator,
 	connect_timeout:   time.Duration,
 	handshake_timeout: time.Duration,
 	max_attempts:      int,
@@ -370,8 +380,12 @@ ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Option
 		sync.atomic_store(&ws.state, WS_State.Error)
 		return false
 	}
-	if len(ws.url_storage) > 0 do delete(ws.url_storage)
-	ws.url_storage = strings.clone(raw_url)
+	// Reconnecting to a new URL replaces the old storage, which must be
+	// released through the allocator that produced it rather than whichever
+	// one happens to be ambient now.
+	_ws_url_storage_free(ws)
+	ws.url_allocator = context.allocator
+	ws.url_storage = strings.clone(raw_url, ws.url_allocator)
 	parsed, parse_err = ws_url_parse(ws.url_storage)
 	assert(parse_err == .None, "cloned WebSocket URL failed to parse")
 	ws.host = parsed.host
@@ -888,13 +902,30 @@ ws_close :: proc(ws: ^WebSocket) {
 	}
 	delete(ws.recv_queue)
 	ws.recv_queue = nil
-	if len(ws.url_storage) > 0 {
-		delete(ws.url_storage)
-		ws.url_storage = ""
-	}
+	_ws_url_storage_free(ws)
 	assert(ws.recv_thread == nil)
 	assert(len(ws.recv_queue) == 0)
+	assert(len(ws.url_storage) == 0)
 	assert(sync.atomic_load(&ws.state) == .Disconnected)
+}
+
+// _ws_url_storage_free releases the URL clone through the allocator that
+// produced it, and clears the borrowed views into it. Idempotent, because
+// ws_close may be called more than once.
+@(private = "file")
+_ws_url_storage_free :: proc(ws: ^WebSocket) {
+	assert(ws != nil, "_ws_url_storage_free: nil socket")
+	if len(ws.url_storage) == 0 do return
+	// url_storage and url_allocator are only ever assigned together, so a
+	// live string with no recorded allocator means that pairing was broken.
+	assert(ws.url_allocator.procedure != nil, "_ws_url_storage_free: url storage has no allocator")
+	delete(ws.url_storage, ws.url_allocator)
+	ws.url_storage = ""
+	// host and path pointed into the freed block; leaving them set would make
+	// a use-after-free look like an ordinary field read.
+	ws.host = ""
+	ws.path = ""
+	assert(len(ws.url_storage) == 0)
 }
 
 // Generate a random WebSocket key for the handshake.
