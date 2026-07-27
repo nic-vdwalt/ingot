@@ -296,42 +296,51 @@ DrawCircleLinesV :: proc(center: Vector2, radius: f32, color: Color) {
 	DrawRing(center, radius - 1, radius, 0, 360, segs, color)
 }
 
-// DrawRectangleGradientH draws a rect with a left→right color gradient.
-DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Color) {
+// _gradient_quad emits a rect whose four corners carry independent colors,
+// given in order tl, tr, br, bl. It goes through the batch's model transform
+// like every other primitive, so gradients pan, zoom, and rotate with a
+// Camera2D instead of staying pinned to the screen.
+@(private)
+_gradient_quad :: proc(rec: Rectangle, tl, tr, br, bl: [4]f32) {
 	if !g.frame.has_frame do return
 	batch_set(&g.rend, .Solid, nil)
 	if !_batch_reserve(&g.rend, 4, 6) do return
-	x0, y0 := f32(posX), f32(posY)
-	x1, y1 := x0 + f32(width), y0 + f32(height)
-	cl := col_f(left)
-	cr := col_f(right)
+	transform := g.rend.model_xf
+	x0, y0 := rec.x, rec.y
+	x1, y1 := rec.x + rec.width, rec.y + rec.height
+	p_tl := _affine_apply(transform, {x0, y0})
+	p_tr := _affine_apply(transform, {x1, y0})
+	p_br := _affine_apply(transform, {x1, y1})
+	p_bl := _affine_apply(transform, {x0, y1})
 	base := u32(len(g.rend.verts))
 	append(
 		&g.rend.verts,
-		Vertex{{x0, y0}, cl, {0, 0}, .Solid},
-		Vertex{{x0, y1}, cl, {0, 0}, .Solid},
-		Vertex{{x1, y0}, cr, {0, 0}, .Solid},
-		Vertex{{x1, y1}, cr, {0, 0}, .Solid},
+		Vertex{p_tl, tl, {0, 0}, .Solid},
+		Vertex{p_bl, bl, {0, 0}, .Solid},
+		Vertex{p_tr, tr, {0, 0}, .Solid},
+		Vertex{p_br, br, {0, 0}, .Solid},
 	)
 	append(&g.rend.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }
 
+// DrawRectangleGradientH draws a rect with a left→right color gradient.
+DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Color) {
+	rec := Rectangle{f32(posX), f32(posY), f32(width), f32(height)}
+	cl := col_f(left)
+	cr := col_f(right)
+	_gradient_quad(rec, cl, cr, cr, cl)
+}
+
 // DrawRectangleGradientV draws a rect with a top→bottom color gradient.
 DrawRectangleGradientV :: proc(posX, posY, width, height: i32, top, bottom: Color) {
-	if !g.frame.has_frame do return
-	batch_set(&g.rend, .Solid, nil)
-	if !_batch_reserve(&g.rend, 4, 6) do return
-	x0, y0 := f32(posX), f32(posY)
-	x1, y1 := x0 + f32(width), y0 + f32(height)
+	rec := Rectangle{f32(posX), f32(posY), f32(width), f32(height)}
 	ct := col_f(top)
 	cb := col_f(bottom)
-	base := u32(len(g.rend.verts))
-	append(
-		&g.rend.verts,
-		Vertex{{x0, y0}, ct, {0, 0}, .Solid},
-		Vertex{{x0, y1}, cb, {0, 0}, .Solid},
-		Vertex{{x1, y0}, ct, {0, 0}, .Solid},
-		Vertex{{x1, y1}, cb, {0, 0}, .Solid},
-	)
-	append(&g.rend.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
+	_gradient_quad(rec, ct, ct, cb, cb)
+}
+
+// DrawRectangleGradientEx draws a rect with an independent color per corner,
+// in raylib's order: top-left, bottom-left, bottom-right, top-right.
+DrawRectangleGradientEx :: proc(rec: Rectangle, col1, col2, col3, col4: Color) {
+	_gradient_quad(rec, col_f(col1), col_f(col4), col_f(col3), col_f(col2))
 }

@@ -54,6 +54,76 @@ GetProjectionMatrix :: proc() -> Matrix {
 	return cam3d_proj
 }
 
+// --- 2D camera -------------------------------------------------------------
+
+@(private)
+cam2d_active: bool
+@(private)
+cam2d_saved: Affine
+@(private)
+cam2d: Camera2D
+
+// BeginMode2D applies `camera` to every 2D draw until EndMode2D, by installing
+// its affine as the batch model transform. Unlike the CPU-projected 3D path
+// this is exact: a Camera2D is an affine, and the batch already transforms
+// every vertex it emits.
+//
+// The mode does not nest (raylib's does not either). The previous transform is
+// saved so a camera composed on top of an rlgl matrix-stack offset restores
+// that offset rather than resetting to identity.
+BeginMode2D :: proc(camera: Camera2D) {
+	assert(!cam2d_active, "BeginMode2D: already inside a 2D camera mode")
+	// Order geometry drawn under the old transform before the new one.
+	FlushBatch()
+	cam2d_saved = g.rend.model_xf
+	cam2d = camera
+	g.rend.model_xf = _affine_from_camera_2d(camera)
+	cam2d_active = true
+}
+
+EndMode2D :: proc() {
+	assert(cam2d_active, "EndMode2D: no active 2D camera mode")
+	FlushBatch()
+	g.rend.model_xf = cam2d_saved
+	cam2d_saved = {}
+	cam2d = {}
+	cam2d_active = false
+}
+
+// GetCameraMatrix2D returns the active-camera transform as a 4x4, matching
+// raylib's rlgl-facing accessor. The 2D affine occupies the upper-left block.
+GetCameraMatrix2D :: proc(camera: Camera2D) -> Matrix {
+	m := _affine_from_camera_2d(camera)
+	result := Matrix(1)
+	result[0, 0] = m.a
+	result[1, 0] = m.b
+	result[0, 1] = m.c
+	result[1, 1] = m.d
+	result[0, 3] = m.tx
+	result[1, 3] = m.ty
+	return result
+}
+
+// GetWorldToScreen2D and GetScreenToWorld2D map between a Camera2D's world and
+// the screen, for picking and for placing screen-space overlays on world
+// anchors. They do not require an active BeginMode2D.
+GetWorldToScreen2D :: proc(position: Vector2, camera: Camera2D) -> Vector2 {
+	p := _affine_apply(_affine_from_camera_2d(camera), {position.x, position.y})
+	return {p.x, p.y}
+}
+
+GetScreenToWorld2D :: proc(position: Vector2, camera: Camera2D) -> Vector2 {
+	m := _affine_from_camera_2d(camera)
+	determinant := m.a * m.d - m.b * m.c
+	// A zero-zoom camera collapses the world to a point, so no screen position
+	// maps back to a unique world position. raylib produces infinities here;
+	// returning the camera target is bounded and obviously wrong to a caller.
+	if determinant == 0 do return camera.target
+	x := position.x - m.tx
+	y := position.y - m.ty
+	return {(m.d * x - m.c * y) / determinant, (m.a * y - m.b * x) / determinant}
+}
+
 BeginMode3D :: proc(camera: Camera3D) {
 	width, height := _target_dims_i32()
 	cam3d_view, cam3d_proj, cam3d_vp = _camera_matrices(camera, width, height)

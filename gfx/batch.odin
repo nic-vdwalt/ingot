@@ -548,7 +548,7 @@ renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 	renderer_state_reset(r)
 	r.cur_u = r.ubind
 	r.active_shader = 0
-	r.model_off = {0, 0}
+	r.model_xf = AFFINE_IDENTITY
 	clear(&r.model_stack)
 
 	// keep projection in sync with the logical window size (p.z = +1: no flip)
@@ -608,6 +608,10 @@ _batch_reserve :: proc(r: ^Renderer, vertex_count, index_count: int) -> bool {
 }
 
 // push_quad emits two triangles for rect `d` sampling uv rect `s`.
+//
+// A rectangle survives the model transform as a rectangle only while the
+// transform does not mix the axes, so a rotating transform (BeginMode2D with a
+// rotation) hands the four corners to push_quad4 instead.
 @(private)
 push_quad :: proc(
 	r: ^Renderer,
@@ -617,12 +621,29 @@ push_quad :: proc(
 	mode: Vertex_Mode = .Solid,
 ) {
 	if !g.frame.has_frame do return
-	if !_batch_reserve(r, 4, 6) do return
-	ox, oy := r.model_off.x, r.model_off.y
-	x0, y0 := d.x + ox, d.y + oy
-	x1, y1 := d.x + d.width + ox, d.y + d.height + oy
 	u0, v0 := s.x, s.y
 	u1, v1 := s.x + s.width, s.y + s.height
+	if _affine_rotates(r.model_xf) {
+		push_quad4(
+			r,
+			{d.x, d.y},
+			{d.x + d.width, d.y},
+			{d.x + d.width, d.y + d.height},
+			{d.x, d.y + d.height},
+			{u0, v0},
+			{u1, v0},
+			{u1, v1},
+			{u0, v1},
+			col,
+			mode,
+		)
+		return
+	}
+	if !_batch_reserve(r, 4, 6) do return
+	p0 := _affine_apply(r.model_xf, {d.x, d.y})
+	p1 := _affine_apply(r.model_xf, {d.x + d.width, d.y + d.height})
+	x0, y0 := p0.x, p0.y
+	x1, y1 := p1.x, p1.y
 	base := u32(len(r.verts))
 	append(
 		&r.verts,
@@ -638,13 +659,15 @@ push_quad :: proc(
 push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 	if !g.frame.has_frame do return
 	if !_batch_reserve(r, 3, 3) do return
-	o := r.model_off
+	pa := _affine_apply(r.model_xf, a)
+	pb := _affine_apply(r.model_xf, b)
+	pc := _affine_apply(r.model_xf, c)
 	base := u32(len(r.verts))
 	append(
 		&r.verts,
-		Vertex{{a.x + o.x, a.y + o.y}, col, {0, 0}, .Solid},
-		Vertex{{b.x + o.x, b.y + o.y}, col, {0, 0}, .Solid},
-		Vertex{{c.x + o.x, c.y + o.y}, col, {0, 0}, .Solid},
+		Vertex{pa, col, {0, 0}, .Solid},
+		Vertex{pb, col, {0, 0}, .Solid},
+		Vertex{pc, col, {0, 0}, .Solid},
 	)
 	append(&r.indices, base, base + 1, base + 2)
 }
@@ -657,42 +680,41 @@ push_quad4 :: proc(
 	tl, tr, br, bl: [2]f32,
 	uv_tl, uv_tr, uv_br, uv_bl: [2]f32,
 	col: [4]f32,
+	mode: Vertex_Mode = .Solid,
 ) {
 	if !g.frame.has_frame do return
 	if !_batch_reserve(r, 4, 6) do return
-	o := r.model_off
-	tlo := [2]f32{tl.x + o.x, tl.y + o.y}
-	tro := [2]f32{tr.x + o.x, tr.y + o.y}
-	bro := [2]f32{br.x + o.x, br.y + o.y}
-	blo := [2]f32{bl.x + o.x, bl.y + o.y}
+	tlo := _affine_apply(r.model_xf, tl)
+	tro := _affine_apply(r.model_xf, tr)
+	bro := _affine_apply(r.model_xf, br)
+	blo := _affine_apply(r.model_xf, bl)
 	base := u32(len(r.verts))
 	append(
 		&r.verts,
-		Vertex{tlo, col, uv_tl, .Solid},
-		Vertex{blo, col, uv_bl, .Solid},
-		Vertex{tro, col, uv_tr, .Solid},
-		Vertex{bro, col, uv_br, .Solid},
+		Vertex{tlo, col, uv_tl, mode},
+		Vertex{blo, col, uv_bl, mode},
+		Vertex{tro, col, uv_tr, mode},
+		Vertex{bro, col, uv_br, mode},
 	)
 	append(&r.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }
 
-// --- rlgl matrix-stack backing (2D model translation) ----------------------
+// --- model transform (rlgl matrix stack + Camera2D) -------------------------
 
 MatrixModePush :: proc() {
 	if len(g.rend.model_stack) >= MODEL_STACK_MAX do return
-	append(&g.rend.model_stack, g.rend.model_off)
+	append(&g.rend.model_stack, g.rend.model_xf)
 }
 MatrixModePop :: proc() {
 	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
 	n := len(g.rend.model_stack)
-	if n == 0 {g.rend.model_off = {0, 0}; return}
-	g.rend.model_off = g.rend.model_stack[n - 1]
+	if n == 0 {g.rend.model_xf = AFFINE_IDENTITY; return}
+	g.rend.model_xf = g.rend.model_stack[n - 1]
 	pop(&g.rend.model_stack)
 }
 MatrixModeTranslate :: proc(x, y: f32) {
 	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
-	g.rend.model_off.x += x
-	g.rend.model_off.y += y
+	g.rend.model_xf = _affine_translated(g.rend.model_xf, x, y)
 }
 
 renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Cause = .Manual) {
