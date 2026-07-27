@@ -14,6 +14,16 @@ identity_is_deterministic_and_namespaced :: proc(t: ^testing.T) {
 }
 
 @(test)
+identity_reset_clears_open_scope_storage :: proc(t: ^testing.T) {
+	ids: Id_Context
+	id_context_push(&ids, "root")
+	id_context_push(&ids, "child")
+	id_context_reset(&ids)
+	testing.expect_value(t, ids.depth, 0)
+	for id in ids.stack do testing.expect_value(t, id, WIDGET_ID_NONE)
+}
+
+@(test)
 identity_scopes_are_stable_and_composable :: proc(t: ^testing.T) {
 	ids: Id_Context
 	root := id_context_id(&ids, "save")

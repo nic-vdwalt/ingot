@@ -25,6 +25,10 @@ prefs_paths_and_roundtrip :: proc(t: ^testing.T) {
 	p, pok := path("myapp", "settings.json", context.temp_allocator)
 	testing.expect(t, pok, "path resolves")
 	testing.expect(t, strings.has_suffix(p, "myapp/settings.json"), "path ends with app/file")
+	_, empty_app_ok := data_dir("", context.temp_allocator)
+	_, empty_file_ok := path("myapp", "", context.temp_allocator)
+	testing.expect(t, !empty_app_ok, "empty app is rejected")
+	testing.expect(t, !empty_file_ok, "empty file is rejected")
 
 	// --- user_home prefers HOME ---
 	testing.expect_value(t, user_home(context.temp_allocator), "/tmp/ingot_home")
@@ -65,4 +69,6 @@ prefs_paths_and_roundtrip :: proc(t: ^testing.T) {
 	testing.expect(t, os.write_entire_file(blocker, payload) == nil, "create blocker")
 	os.set_env("HOME", blocked_home)
 	testing.expect(t, !write("blocked", "cfg.txt", payload), "propagate mkdir failure")
+	testing.expect(t, !write("", "cfg.txt", payload), "empty app write is rejected")
+	testing.expect(t, !write("blocked", "", payload), "empty file write is rejected")
 }

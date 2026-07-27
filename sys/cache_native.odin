@@ -7,6 +7,8 @@ import "core:os"
 @(private)
 _valid_cache_app_id :: proc(app: string) -> bool {
 	if len(app) == 0 || len(app) > 128 || app == "." || app == ".." do return false
+	assert(len(app) > 0)
+	assert(len(app) <= 128)
 	for byte in transmute([]u8)app {
 		if (byte >= 'a' && byte <= 'z') ||
 		   (byte >= 'A' && byte <= 'Z') ||
@@ -23,6 +25,8 @@ _valid_cache_app_id :: proc(app: string) -> bool {
 
 cache_dir :: proc(app: string, allocator := context.temp_allocator) -> (dir: string, ok: bool) {
 	if !_valid_cache_app_id(app) do return "", false
+	assert(len(app) > 0)
+	assert(len(app) <= 128)
 	when ODIN_OS == .Windows {
 		// The returned path owns its storage; environment scratch is frame-local.
 		if root := os.get_env("LOCALAPPDATA", context.temp_allocator);

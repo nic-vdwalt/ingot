@@ -103,6 +103,40 @@ workspace_path_registry :: proc(t: ^testing.T) {
 	testing.expect(t, !workspace_has_path_with(files, ""))
 }
 
+@(test)
+mention_matching_prefers_names_and_handles_separators :: proc(t: ^testing.T) {
+	testing.expect_value(
+		t,
+		mention_match_score("src/widgets.odin", "WID"),
+		Mention_Match_Score.Name_Prefix,
+	)
+	testing.expect_value(
+		t,
+		mention_match_score("src/my_widgets.odin", "wid"),
+		Mention_Match_Score.Name_Contains,
+	)
+	testing.expect_value(
+		t,
+		mention_match_score("widgets/file.odin", "wid"),
+		Mention_Match_Score.Path_Contains,
+	)
+	testing.expect_value(
+		t,
+		mention_match_score("src\\widgets.odin", "wid"),
+		Mention_Match_Score.Name_Prefix,
+	)
+	testing.expect_value(
+		t,
+		mention_match_score("src/widgets/", "wid"),
+		Mention_Match_Score.Name_Prefix,
+	)
+	testing.expect_value(
+		t,
+		mention_match_score("src/file.odin", "wid"),
+		Mention_Match_Score.No_Match,
+	)
+}
+
 // Invariant fuzz: after any random insert/delete sequence every surviving
 // pill stays in bounds and pills remain non-overlapping and ordered.
 @(test)

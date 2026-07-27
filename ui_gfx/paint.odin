@@ -12,8 +12,13 @@ replay :: proc(adapter: ^Adapter, output: ^ui.Ui_Output) {
 }
 
 replay_list :: proc(adapter: ^Adapter, list: ^ui.Paint_List) {
-	assert(adapter != nil && list != nil, "replay_list: nil argument")
+	assert(adapter != nil && adapter.initialized, "replay_list: invalid adapter")
+	assert(list != nil, "replay_list: nil list")
+	assert(list.count >= 0)
+	assert(list.count <= len(list.commands))
 	for index in 0 ..< list.count {
+		assert(index >= 0)
+		assert(index < len(list.commands))
 		command := list.commands[index]
 		replay_command(adapter, list, command)
 	}

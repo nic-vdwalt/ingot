@@ -12,6 +12,108 @@ import "core:strings"
 PILL_OPEN :: '\x02'
 PILL_CLOSE :: '\x03'
 
+Mention_Match_Score :: enum i32 {
+	Name_Prefix   = 0,
+	Name_Contains = 1,
+	Path_Contains = 2,
+	No_Match      = 3,
+}
+
+mention_basename :: proc(candidate: string) -> string {
+	assert(len(candidate) >= 0)
+	end := len(candidate)
+	for end > 0 && (candidate[end - 1] == '/' || candidate[end - 1] == '\\') do end -= 1
+	if end == 0 do return candidate[:0]
+	start := end
+	for start > 0 && candidate[start - 1] != '/' && candidate[start - 1] != '\\' do start -= 1
+	return candidate[start:end]
+}
+
+mention_match_score :: proc(candidate, query: string) -> Mention_Match_Score {
+	assert(len(candidate) >= 0 && len(query) >= 0)
+	if len(query) == 0 do return .Name_Prefix
+	candidate_lower := strings.to_lower(candidate, context.temp_allocator)
+	query_lower := strings.to_lower(query, context.temp_allocator)
+	name_lower := strings.to_lower(mention_basename(candidate), context.temp_allocator)
+	if strings.has_prefix(name_lower, query_lower) do return .Name_Prefix
+	if strings.contains(name_lower, query_lower) do return .Name_Contains
+	if strings.contains(candidate_lower, query_lower) do return .Path_Contains
+	return .No_Match
+}
+
+Tagged_Option_Config :: struct {
+	rect:       Rect_I32,
+	label:      string,
+	icon:       string,
+	trailing:   string,
+	stable_id:  string,
+	focus:      Focus_Opt,
+	selected:   bool,
+	icon_color: Color,
+	tag_fg:     Color,
+	tag_bg:     Color,
+}
+
+Tagged_Option_Result :: struct {
+	pressable: Pressable_Result,
+	text_x:    i32,
+	text_w:    i32,
+}
+
+tagged_option_row :: proc(frame: ^Ui_Frame, config: Tagged_Option_Config) -> Tagged_Option_Result {
+	assert(frame != nil && frame.open, "tagged_option_row: invalid frame")
+	assert(config.label != "" && config.stable_id != "", "tagged_option_row: identity required")
+	if ui_frame_drop_degenerate(frame, config.rect.w <= 0 || config.rect.h <= 0) do return {}
+	style := ui_frame_theme(frame)
+	metrics := ui_frame_metrics(frame)
+	row := pressable(
+		frame,
+		{
+			rect = config.rect,
+			role = .Option,
+			label = config.label,
+			stable_id = config.stable_id,
+			focus = config.focus,
+			selected = config.selected,
+		},
+	)
+	if config.selected do draw_rectangle(frame, config.rect.x, config.rect.y, config.rect.w, config.rect.h, style.bg_active)
+	padding := metrics.PADDING
+	text_x := config.rect.x + padding
+	if len(config.icon) > 0 {
+		icon_color := config.icon_color
+		if icon_color == {} do icon_color = style.fg_secondary
+		text(
+			frame,
+			config.icon,
+			text_x,
+			config.rect.y + (config.rect.h - metrics.FONT_SIZE_SMALL) / 2,
+			.Small,
+			.Secondary,
+		)
+		text_x += text_width(frame, config.icon, .Small) + ui_frame_sc(frame, 8)
+	}
+	trailing_width := 0
+	if len(config.trailing) > 0 {
+		trailing_width = text_width(frame, config.trailing, .Small) + ui_frame_sc(frame, 12)
+		tag_fg := config.tag_fg
+		if tag_fg == {} do tag_fg = style.fg_accent
+		tag_bg := config.tag_bg
+		if tag_bg == {} do tag_bg = style.bg_chip
+		draw_pill(
+			frame,
+			config.trailing,
+			config.rect.x + config.rect.w - padding - trailing_width,
+			config.rect.y + (config.rect.h - metrics.FONT_SIZE_SMALL - ui_frame_sc(frame, 4)) / 2,
+			metrics.FONT_SIZE_SMALL,
+			tag_fg,
+			tag_bg,
+		)
+	}
+	text_width_available := config.rect.x + config.rect.w - padding - trailing_width - text_x
+	return {pressable = row, text_x = text_x, text_w = max(text_width_available, 0)}
+}
+
 // --- Markdown file-pill context ---------------------------------------------
 
 workspace_has_path_with :: proc(files: []string, rel: string) -> bool {

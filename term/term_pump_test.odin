@@ -76,6 +76,24 @@ utf8_holdback_arbitrary_bytes :: proc(t: ^testing.T) {
 }
 
 @(test)
+output_queue_wraparound_is_bounded :: proc(t: ^testing.T) {
+	when pty.INGOT_PTY_SIM {
+		return
+	} else {
+		ts := new(Term_Instance)
+		defer free(ts)
+		ts.pty_running = true
+		ts.output_head = TERM_OUTPUT_QUEUE_CAP - 1
+		ts.output_queue[ts.output_head].len = 0
+		ts.output_count = 1
+		bytes := term_pump(ts)
+		testing.expect_value(t, bytes, 0)
+		testing.expect_value(t, ts.output_head, 0)
+		testing.expect_value(t, ts.output_count, 0)
+	}
+}
+
+@(test)
 output_queue_publishes_before_pump :: proc(t: ^testing.T) {
 	when pty.INGOT_PTY_SIM {
 		return

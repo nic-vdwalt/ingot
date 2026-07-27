@@ -22,6 +22,7 @@ user_home :: proc(allocator := context.temp_allocator) -> string {
 //   unix:    ~/.local/share/<app>
 //   windows: %APPDATA%\<app>  (falls back to ~/.local/share/<app>)
 data_dir :: proc(app: string, allocator := context.temp_allocator) -> (dir: string, ok: bool) {
+	if len(app) == 0 do return "", false
 	when ODIN_OS == .Windows {
 		// The returned path owns its storage; environment scratch ends with this frame.
 		if ad := os.get_env("APPDATA", context.temp_allocator); len(ad) > 0 {
@@ -36,14 +37,18 @@ data_dir :: proc(app: string, allocator := context.temp_allocator) -> (dir: stri
 
 // path returns data_dir(app)/file.
 path :: proc(app, file: string, allocator := context.temp_allocator) -> (p: string, ok: bool) {
+	if len(file) == 0 do return "", false
 	dir := data_dir(app, allocator) or_return
-	return fmt.aprintf("%s/%s", dir, file, allocator = allocator), true
+	p = fmt.aprintf("%s/%s", dir, file, allocator = allocator)
+	assert(len(p) > len(dir))
+	return p, true
 }
 
 // write creates the app data directory (with parents) and atomically replaces
 // path(app, file). Writing a unique sibling first preserves the last valid
 // snapshot and prevents concurrent writers from sharing staging storage.
 write :: proc(app, file: string, data: []u8) -> bool {
+	if len(app) == 0 || len(file) == 0 do return false
 	dir := data_dir(app, context.allocator) or_return
 	defer delete(dir)
 	if !make_dirs_all_checked(dir) do return false
@@ -54,6 +59,8 @@ write :: proc(app, file: string, data: []u8) -> bool {
 	tmp := fmt.aprintf("%s", os.name(temp))
 	defer delete(tmp)
 	written, write_err := os.write(temp, data)
+	assert(written >= 0)
+	assert(written <= len(data))
 	sync_err := os.sync(temp)
 	if write_err != nil || written != len(data) || sync_err != nil {
 		_ = os.close(temp)
@@ -68,14 +75,17 @@ write :: proc(app, file: string, data: []u8) -> bool {
 		_ = os.remove(tmp)
 		return false
 	}
+	assert(os.is_file(p))
 	return true
 }
 
 // read loads path(app, file); ok = false when missing or unreadable.
 read :: proc(app, file: string, allocator := context.temp_allocator) -> (data: []u8, ok: bool) {
+	if len(app) == 0 || len(file) == 0 do return nil, false
 	p := path(app, file) or_return
 	d, err := os.read_entire_file(p, allocator)
 	if err != nil do return nil, false
+	assert(len(d) >= 0)
 	return d, true
 }
 

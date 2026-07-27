@@ -24,7 +24,7 @@ route_begin_frame :: proc(frame: ^Ui_Frame) {
 	assert(state.prev.count >= 0)
 	assert(state.prev.count <= MAX_ROUTE_CLAIMS)
 	assert(state.cur.count == 0)
-
+}
 
 route_claim :: proc(frame: ^Ui_Frame, rect: Rectangle) {
 	assert(frame != nil && frame.open, "route_claim: invalid frame")

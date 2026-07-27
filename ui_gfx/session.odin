@@ -38,6 +38,9 @@ app_session_init_context :: proc(
 	if config.semantics_enabled do _ = ui.a11y_init(&session.runtime)
 	session.config = config
 	session.initialized = true
+	assert(session.runtime.initialized)
+	assert(session.adapter.initialized)
+	assert(session.initialized)
 }
 
 app_session_begin_frame :: proc(session: ^App_Session) -> ^ui.Ui_Frame {
@@ -57,6 +60,8 @@ app_session_begin_frame :: proc(session: ^App_Session) -> ^ui.Ui_Frame {
 		&session.output,
 	)
 	session.frame_open = true
+	assert(session.frame.open)
+	assert(session.frame_open)
 	return &session.frame
 }
 
@@ -80,6 +85,9 @@ app_session_end_frame :: proc(session: ^App_Session) {
 	adapter_end_frame(&session.adapter, &session.frame)
 	session.frame_open = false
 	session.gfx_frame = nil
+	assert(!session.frame.open)
+	assert(!session.frame_open)
+	assert(session.adapter.gfx_frame == nil)
 }
 
 app_session_end_frame_context :: proc(session: ^App_Session, gfx_frame: ^rl.Frame) {
@@ -95,4 +103,6 @@ app_session_destroy :: proc(session: ^App_Session) {
 	adapter_destroy(&session.adapter)
 	ui.ui_runtime_destroy(&session.runtime)
 	session^ = {}
+	assert(!session.initialized)
+	assert(!session.frame_open)
 }

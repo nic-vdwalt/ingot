@@ -1166,6 +1166,65 @@ find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: in
 // ingot-only generic widgets (not present in the alloy superset).
 // ------------------------------------------------------------------
 
+Spinner_Style :: enum {
+	Arc,
+	Orbit_Dots,
+}
+
+Spinner_Options :: struct {
+	style:              Spinner_Style,
+	radius:             f32,
+	color:              Color,
+	segments:           i32,
+	dot_count:          i32,
+	dot_radius:         f32,
+	speed:              f32,
+	animation_interval: f64,
+}
+
+spinner_with :: proc(frame: ^Ui_Frame, cx, cy: i32, options: Spinner_Options) {
+	assert(frame != nil && frame.open, "spinner_with: invalid frame")
+	assert(options.dot_count >= 0, "spinner_with: negative dot count")
+	radius := options.radius
+	if ui_frame_drop_degenerate(frame, radius <= 0) do return
+	color := options.color
+	if color == {} || color == THEME_COLOR do color = ui_frame_theme(frame).fg_accent_light
+	interval := options.animation_interval if options.animation_interval > 0 else 1.0 / 60.0
+	request_redraw_in(frame, interval)
+	speed := options.speed if options.speed > 0 else 1.0
+	angle := f32(frame_input(frame).time) * speed
+	if options.style == .Orbit_Dots {
+		count := options.dot_count if options.dot_count > 0 else 3
+		count = min(count, 16)
+		dot_radius := options.dot_radius if options.dot_radius > 0 else max(radius * 0.3, 1.0)
+		for index in 0 ..< count {
+			phase := f32(index) * (2 * math.PI / f32(count))
+			center := Vector2 {
+				f32(cx) + math.cos(angle + phase) * radius,
+				f32(cy) + math.sin(angle + phase) * radius,
+			}
+			dot_color := color
+			dot_color.a = u8(clamp(120 + index * 135 / max(count - 1, 1), 0, 255))
+			draw_circle_v(frame, center, dot_radius, dot_color)
+		}
+		return
+	}
+	segments := options.segments if options.segments > 0 else 24
+	segments = min(segments, 128)
+	start := f32(math.mod(f64(angle) * 57.2957795, 360.0))
+	thickness := max(radius * 0.28, 2.0)
+	draw_ring(
+		frame,
+		{f32(cx), f32(cy)},
+		radius - thickness,
+		radius,
+		start,
+		start + 270,
+		segments,
+		color,
+	)
+}
+
 spinner :: proc(
 	frame: ^Ui_Frame,
 	cx, cy: i32,
@@ -1173,24 +1232,11 @@ spinner :: proc(
 	color: Color = THEME_COLOR,
 	segments: i32 = 24,
 ) {
-	// The sentinel default resolves to the theme accent at call time
-	// (defaults must be compile-time constants; the theme is runtime).
-	color := color
-	if color == THEME_COLOR do color = ui_frame_theme(frame).fg_accent_light
-	// Continuous animation: keep frames coming while a spinner is visible
-	// (no-op in the default continuous frame strategy).
-	request_redraw(frame)
-	start := f32(math.mod(frame_input(frame).time * 360.0, 360.0))
-	thickness := max(radius * 0.28, 2.0)
-	draw_ring(
+	spinner_with(
 		frame,
-		Vector2{f32(cx), f32(cy)},
-		radius - thickness,
-		radius,
-		start,
-		start + 270.0,
-		segments,
-		color,
+		cx,
+		cy,
+		{radius = radius, color = color, segments = segments, speed = 6.283185},
 	)
 }
 
@@ -1224,16 +1270,62 @@ status_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, color:
 	)
 }
 
-// progress_bar draws a rounded track + fill; frac clamped to [0,1].
-progress_bar :: proc(frame: ^Ui_Frame, x, y, w, h: i32, frac: f32, color: Color) {
+Progress_Orientation :: enum {
+	Horizontal,
+	Vertical,
+}
+
+Progress_Bar_Options :: struct {
+	orientation: Progress_Orientation,
+	track_color: Color,
+	label:       string,
+	field_id:    string,
+	widget:      Widget_Id,
+}
+
+progress_bar_with :: proc(
+	frame: ^Ui_Frame,
+	x, y, w, h: i32,
+	fraction: f32,
+	color: Color,
+	options: Progress_Bar_Options = {},
+) {
+	assert(frame != nil && frame.open, "progress_bar_with: invalid frame")
+	if ui_frame_drop_degenerate(frame, w <= 0 || h <= 0) do return
+	value := clamp(fraction, 0, 1)
+	track_color := options.track_color
+	if track_color == {} do track_color = ui_frame_theme(frame).bg_active
 	track := Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	draw_rectangle_rounded(frame, track, 1.0, 4, ui_frame_theme(frame).bg_active)
-	fw := f32(w) * clamp(frac, 0, 1)
-	if fw >= f32(h) { 	// avoid degenerate rounding on tiny fills
-		draw_rectangle_rounded(frame, {f32(x), f32(y), fw, f32(h)}, 1.0, 4, color)
-	} else if fw > 0 {
-		draw_rectangle_rec(frame, {f32(x), f32(y), fw, f32(h)}, color)
+	draw_rectangle_rounded(frame, track, 1.0, 4, track_color)
+	if options.orientation == .Vertical {
+		fill_h := f32(h) * value
+		if fill_h > 0 do draw_rectangle_rec(frame, {f32(x), f32(y + h) - fill_h, f32(w), fill_h}, color)
+	} else {
+		fill_w := f32(w) * value
+		if fill_w >= f32(h) {
+			draw_rectangle_rounded(frame, {f32(x), f32(y), fill_w, f32(h)}, 1.0, 4, color)
+		} else if fill_w > 0 {
+			draw_rectangle_rec(frame, {f32(x), f32(y), fill_w, f32(h)}, color)
+		}
 	}
+	if len(options.label) > 0 {
+		semantic_push(
+			frame,
+			.Progress,
+			{x, y, w, h},
+			options.label,
+			field_id = options.field_id,
+			value = value,
+			lo = 0,
+			hi = 1,
+			widget = options.widget,
+		)
+	}
+}
+
+// progress_bar preserves the original horizontal progress API.
+progress_bar :: proc(frame: ^Ui_Frame, x, y, w, h: i32, frac: f32, color: Color) {
+	progress_bar_with(frame, x, y, w, h, frac, color)
 }
 
 // eased moves current toward target at `speed` units per second (frame-rate
@@ -1505,7 +1597,9 @@ collapsible_header_with :: proc(
 		right -= right_w + ui_frame_sc(frame, 8)
 	}
 	line_x := left + label_w + ui_frame_sc(frame, 8)
-	if right > line_x do draw_rectangle(frame, line_x, y + height / 2, right - line_x, 1, style.border_subtle)
+	if right > line_x {
+		draw_rectangle(frame, line_x, y + height / 2, right - line_x, 1, style.border_subtle)
+	}
 	sem_state: Sem_State
 	if open^ do sem_state += {.Expanded}
 	semantic_push(

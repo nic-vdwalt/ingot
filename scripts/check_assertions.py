@@ -63,11 +63,13 @@ def risks_for(body: str) -> tuple[str, ...]:
 
 
 def is_trivial(body: str, risks: tuple[str, ...]) -> bool:
-    if risks:
-        return False
     masked = check_odin_style.mask_source(body)
     statements = [line for line in masked.splitlines()[1:-1] if line.strip()]
-    return len(statements) <= 5
+    if len(statements) > 12:
+        return False
+    wrapper_risks = set(risks) - {"pointer", "state"}
+    calls = len(re.findall(r"[A-Za-z_][A-Za-z0-9_]*\s*\(", masked))
+    return not wrapper_risks and "return" in masked and calls <= 2
 
 
 def findings_for_source(source: str, path: str) -> list[Finding]:
