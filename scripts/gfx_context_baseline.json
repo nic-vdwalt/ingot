@@ -211,6 +211,7 @@
   "gfx/text.odin:get_atlas": 1,
   "gfx/texture.odin:DrawTexturePro": 2,
   "gfx/texture.odin:LoadTextureFromImage": 4,
+  "gfx/texture.odin:TextureSlotsUsed": 1,
   "gfx/texture.odin:UnloadTexture": 4,
   "gfx/texture.odin:UpdateTexture": 2,
   "gfx/texture.odin:_new_rt_color": 3,

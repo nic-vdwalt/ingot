@@ -147,6 +147,7 @@ _stats_set_alpha_mode :: proc(mode: wg.CompositeAlphaMode) {
 
 @(private)
 _stats_flush :: proc(vertices, bytes: u64, cause: Flush_Cause) {
+	assert(cause >= min(Flush_Cause) && cause <= max(Flush_Cause))
 	when RENDER_STATS_ENABLED {
 		g.stats_current.flush_count += 1
 		g.stats_current.vertices_uploaded += vertices

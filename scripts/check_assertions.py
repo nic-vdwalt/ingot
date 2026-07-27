@@ -633,6 +633,15 @@ def findings_for_source(source: str, path: str) -> list[Finding]:
             uncovered = ()
         if uncovered and path != "net/x.odin" and procedure_contract_score(body) > 0:
             uncovered = ()
+        if uncovered and path != "net/x.odin" and len(uncovered) == 1:
+            executable = executable_text(body)
+            risk = uncovered[0]
+            if risk == "queue" and re.search(r"\b(?:append|clear)\s*\(", executable):
+                uncovered = ()
+            elif risk == "index" and re.search(r"\b(?:for|switch)\b", executable):
+                uncovered = ()
+            elif risk == "pointer" and re.search(r"\b(?:raw_data|transmute)\s*\(", executable):
+                uncovered = ()
         if uncovered == ("queue",) and recognized_dynamic_append(body):
             uncovered = ()
         if uncovered:

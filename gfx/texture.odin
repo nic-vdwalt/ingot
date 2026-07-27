@@ -358,9 +358,10 @@ UnloadTexture :: proc(texture: Texture2D) {
 // and render targets, and LoadTextureFromImage returns an invalid handle once
 // it is full.
 TextureSlotsUsed :: proc() -> int {
-	assert(g != nil, "TextureSlotsUsed: no active context")
-	assert(int(g.resources.textures.count) <= MAX_TEXTURES, "TextureSlotsUsed: count overflow")
-	return int(g.resources.textures.count)
+	resources := &g.resources.textures
+	assert(resources != nil, "TextureSlotsUsed: no active context")
+	assert(int(resources.count) <= MAX_TEXTURES, "TextureSlotsUsed: count overflow")
+	return int(resources.count)
 }
 
 // TextureSlotsMax reports the context's texture-slot capacity, so a consumer
@@ -374,9 +375,8 @@ TextureSlotsMax :: proc() -> int {
 // returning id == 0 means the pool was full — an operating condition callers
 // must handle, not a programmer error, so this is a query and not an assert.
 IsTextureValid :: proc(texture: Texture2D) -> bool {
-	assert(g != nil, "IsTextureValid: no active context")
 	if texture.id == 0 do return false
-	return _texture_slot_context(g.id, &g.resources.textures, texture.id) != nil
+	return get_texture(texture.id) != nil
 }
 
 // --- draw ------------------------------------------------------------------

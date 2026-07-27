@@ -99,6 +99,7 @@ _drop_cb :: proc "c" (win: glfw.WindowHandle, count: i32, paths: [^]cstring) {
 IsFileDropped :: proc() -> bool {return g.drop.ready}
 
 LoadDroppedFiles :: proc() -> FilePathList {
+	assert(len(g.drop.paths) <= MAX_DROPPED_FILES)
 	return FilePathList {
 		capacity = u32(len(g.drop.paths)),
 		count = u32(len(g.drop.paths)),
