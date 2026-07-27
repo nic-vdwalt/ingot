@@ -33,6 +33,27 @@ for pkg in gfx ui ui_gfx term prefs net sys pty testx; do
 	odin check "$root/$pkg" $col $vet_flags "$@"
 done
 
+# Simulated-transport builds are a separate compilation of the same packages:
+# a `when !INGOT_*_SIM` block hides code from one mode and reveals it in the
+# other, so a default-mode check cannot see breakage in the sim mode. This is
+# checked in test mode because the gap that motivated it was a test file
+# referencing procedures that only exist in the real-transport build, which
+# silently disabled every simulated-transport test and the net fuzzer.
+for spec in \
+	"net:INGOT_NET_SIM=true" \
+	"net:INGOT_WS_SIM=true" \
+	"pty:INGOT_PTY_SIM=true" \
+	"term:INGOT_PTY_SIM=true" \
+	"gfx:INGOT_INPUT_SIM=true"; do
+	pkg="${spec%%:*}"
+	define="${spec#*:}"
+	echo "== checking $pkg ($define) =="
+	# ODIN_TEST_NAMES selects no test, so this compiles the test build without
+	# running it.
+	odin test "$root/$pkg" $col "-define:$define" \
+		-define:ODIN_TEST_NAMES=__compile_only__ >/dev/null
+done
+
 # Foreign bindings intentionally mirror upstream names and declarations, but
 # they must still type-check against the pinned toolchain.
 for pkg in libvterm accesskit; do

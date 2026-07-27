@@ -115,36 +115,48 @@ test_fetch_result_preserves_http_status :: proc(t: ^testing.T) {
 	testing.expect(t, result.ok)
 }
 
-@(test)
-test_fetch_cache_read_write_and_failures :: proc(t: ^testing.T) {
-	root := fmt.tprintf("/tmp/ingot_http_cache_%d", os.get_pid())
-	_ = os.remove_all(root)
-	defer os.remove_all(root)
+// The on-disk fetch cache is part of the real transport (http.odin's
+// `when !INGOT_NET_SIM` block); the simulated transport has no filesystem
+// cache to exercise. Guarding the test the same way the code is guarded keeps
+// `-define:INGOT_NET_SIM=true` building, which both the sim test suite and
+// fuzz/net depend on.
+when !INGOT_NET_SIM {
 
-	path := fmt.tprintf("%s/cache/body", root)
-	payload := transmute([]u8)string("cached")
-	fetch_cache_write(path, payload)
-	body, ok := fetch_cache_read(path, nil, context.allocator)
-	testing.expect(t, ok, "cache hit succeeds")
-	testing.expect_value(t, string(body), "cached")
-	delete(body)
+	@(test)
+	test_fetch_cache_read_write_and_failures :: proc(t: ^testing.T) {
+		root := fmt.tprintf("/tmp/ingot_http_cache_%d", os.get_pid())
+		_ = os.remove_all(root)
+		defer os.remove_all(root)
 
-	invalid := fmt.tprintf("%s/cache/invalid", root)
-	testing.expect(t, os.write_entire_file(invalid, payload) == nil, "write invalid cache")
-	body, ok = fetch_cache_read(
-		invalid,
-		proc(body: []u8) -> bool {return false},
-		context.allocator,
-	)
-	testing.expect(t, !ok, "invalid cache is a miss")
-	_, stat_err := os.stat(invalid, context.temp_allocator)
-	testing.expect(t, stat_err != nil, "invalid cache is removed")
+		path := fmt.tprintf("%s/cache/body", root)
+		payload := transmute([]u8)string("cached")
+		fetch_cache_write(path, payload)
+		body, ok := fetch_cache_read(path, nil, context.allocator)
+		testing.expect(t, ok, "cache hit succeeds")
+		testing.expect_value(t, string(body), "cached")
+		delete(body)
 
-	missing := fmt.tprintf("%s/cache/missing", root)
-	body, ok = fetch_cache_read(missing, nil, context.allocator)
-	testing.expect(t, !ok, "missing cache is a miss")
+		invalid := fmt.tprintf("%s/cache/invalid", root)
+		testing.expect(t, os.write_entire_file(invalid, payload) == nil, "write invalid cache")
+		body, ok = fetch_cache_read(
+			invalid,
+			proc(body: []u8) -> bool {return false},
+			context.allocator,
+		)
+		testing.expect(t, !ok, "invalid cache is a miss")
+		_, stat_err := os.stat(invalid, context.temp_allocator)
+		testing.expect(t, stat_err != nil, "invalid cache is removed")
 
-	blocked := fmt.tprintf("%s/blocked", root)
-	testing.expect(t, os.write_entire_file(blocked, payload) == nil, "create cache blocker")
-	fetch_cache_write(fmt.tprintf("%s/body", blocked), payload)
-}
+		missing := fmt.tprintf("%s/cache/missing", root)
+		body, ok = fetch_cache_read(missing, nil, context.allocator)
+		testing.expect(t, !ok, "missing cache is a miss")
+
+		// Negative space: a plain file where the cache wants a directory must
+		// fail as an operating error, not a crash. This logs to stderr by
+		// design.
+		blocked := fmt.tprintf("%s/blocked", root)
+		testing.expect(t, os.write_entire_file(blocked, payload) == nil, "create cache blocker")
+		fetch_cache_write(fmt.tprintf("%s/body", blocked), payload)
+	}
+
+} // when !INGOT_NET_SIM
