@@ -217,6 +217,10 @@ _unload_depth :: proc(depth: Texture2D) {
 	UnloadTexture(depth)
 }
 
+// LoadTextureFromImage uploads `image` and registers it in the context's
+// texture pool. Returns a zero Texture2D when the pool is full (see
+// TextureSlotsUsed) or the image is empty — a full pool is an operating
+// condition, so callers must check IsTextureValid rather than assume success.
 LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 	if image.data == nil || image.width <= 0 || image.height <= 0 do return Texture2D{}
 	rgba := _to_rgba(([^]byte)(image.data), image.width, image.height, image.format)
@@ -346,6 +350,33 @@ UnloadTexture :: proc(texture: Texture2D) {
 	slot.occupied = false
 	assert(g.resources.textures.count > 0, "UnloadTexture: count underflow")
 	g.resources.textures.count -= 1
+}
+
+// TextureSlotsUsed reports how many of the context's texture slots are
+// occupied. Consumers that cache many textures (tile maps, sprite streamers)
+// need this to size their own budget: the pool is shared with fonts, UI icons
+// and render targets, and LoadTextureFromImage returns an invalid handle once
+// it is full.
+TextureSlotsUsed :: proc() -> int {
+	assert(g != nil, "TextureSlotsUsed: no active context")
+	assert(int(g.resources.textures.count) <= MAX_TEXTURES, "TextureSlotsUsed: count overflow")
+	return int(g.resources.textures.count)
+}
+
+// TextureSlotsMax reports the context's texture-slot capacity, so a consumer
+// can budget a fraction of it instead of hard-coding the pool size.
+TextureSlotsMax :: proc() -> int {
+	#assert(MAX_TEXTURES > 0)
+	return MAX_TEXTURES
+}
+
+// IsTextureValid reports whether `texture` refers to a live slot. A loader
+// returning id == 0 means the pool was full — an operating condition callers
+// must handle, not a programmer error, so this is a query and not an assert.
+IsTextureValid :: proc(texture: Texture2D) -> bool {
+	assert(g != nil, "IsTextureValid: no active context")
+	if texture.id == 0 do return false
+	return _texture_slot_context(g.id, &g.resources.textures, texture.id) != nil
 }
 
 // --- draw ------------------------------------------------------------------

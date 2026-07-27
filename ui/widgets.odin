@@ -191,6 +191,7 @@ wheel_accum_steps :: proc(accum: ^f32, wheel: f32) -> int {
 
 // Byte offset of the start of the logical line containing `pos`.
 caret_line_start :: proc(s: string, pos: int) -> int {
+	assert(pos >= 0 && pos <= len(s))
 	i := pos
 	for i > 0 && s[i - 1] != '\n' do i -= 1
 	return i
@@ -269,6 +270,7 @@ caret_next_rune :: proc(s: string, pos: int) -> int {
 
 // Word-jump left (skip trailing whitespace/newlines, then a run of non-space).
 caret_word_left :: proc(s: string, pos: int) -> int {
+	assert(pos >= 0 && pos <= len(s))
 	i := pos
 	for i > 0 && (s[i - 1] == ' ' || s[i - 1] == '\n') do i -= 1
 	for i > 0 {
@@ -1202,6 +1204,7 @@ is_identifier_byte :: proc(value: u8) -> bool {
 
 // Find word boundaries around a byte offset. A word is alphanumeric + underscore.
 find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: int) {
+	assert(byte_offset >= 0 && byte_offset <= len(text))
 	start = byte_offset
 	for start > 0 {
 		if !is_identifier_byte(text[start - 1]) do break

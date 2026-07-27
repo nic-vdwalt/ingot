@@ -434,6 +434,9 @@ _atlas_gpu_reupload :: proc(a: ^Atlas) {
 // utf8_encode writes `r` into buf as null-terminated UTF-8, returns the slice.
 @(private)
 utf8_encode :: proc(r: rune, buf: []byte, n: ^int) -> []byte {
+	assert(n != nil)
+	assert(len(buf) >= 5)
+	assert(r >= 0 && r <= 0x10FFFF && !(r >= 0xD800 && r <= 0xDFFF))
 	cp := u32(r)
 	i := 0
 	switch {

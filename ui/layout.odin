@@ -488,7 +488,8 @@ take_remaining :: proc(l: ^Layout) -> Rect_I32 {
 
 // layout_kind returns the active frame's axis kind (Column or Row).
 layout_kind :: proc(l: ^Layout) -> Layout_Kind {
-	assert(l.depth > 0, "layout_kind: layout not begun")
+	assert(l != nil)
+	assert(l.depth > 0 && l.depth <= len(l.stack), "layout_kind: layout not begun")
 	return l.stack[l.depth - 1].kind
 }
 

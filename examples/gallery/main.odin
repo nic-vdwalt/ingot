@@ -594,16 +594,26 @@ draw_widget_progress :: proc(x, y0, w: i32) -> i32 {
 	)
 	ui.progress_bar(
 		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 48),
+		x + ui.ui_frame_sc(ui_frame, 80),
 		y + ui.ui_frame_sc(ui_frame, 4),
 		ui.ui_frame_sc(ui_frame, 200),
 		ui.ui_frame_sc(ui_frame, 8),
 		0.65,
 		ui.ui_frame_theme(ui_frame).fg_accent,
 	)
+	ui.progress_bar_animated(
+		ui_frame,
+		x + ui.ui_frame_sc(ui_frame, 80),
+		y + ui.ui_frame_sc(ui_frame, 24),
+		ui.ui_frame_sc(ui_frame, 200),
+		ui.ui_frame_sc(ui_frame, 8),
+		progress_frac,
+		&progress_anim,
+		ui.ui_frame_theme(ui_frame).fg_success,
+	)
 	ui.progress_bar_with(
 		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 260),
+		x + ui.ui_frame_sc(ui_frame, 296),
 		y + ui.ui_frame_sc(ui_frame, 4),
 		ui.ui_frame_sc(ui_frame, 8),
 		ui.ui_frame_sc(ui_frame, 32),
@@ -611,27 +621,17 @@ draw_widget_progress :: proc(x, y0, w: i32) -> i32 {
 		ui.ui_frame_theme(ui_frame).fg_tool,
 		{orientation = .Vertical, label = "Vertical progress"},
 	)
-	ui.progress_bar_animated(
-		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 80),
-		y + ui.ui_frame_sc(ui_frame, 20),
-		ui.ui_frame_sc(ui_frame, 200),
-		ui.ui_frame_sc(ui_frame, 8),
-		progress_frac,
-		&progress_anim,
-		ui.ui_frame_theme(ui_frame).fg_success,
-	)
 	if ui.btn(
 		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 290),
-		y,
+		x + ui.ui_frame_sc(ui_frame, 320),
+		y + ui.ui_frame_sc(ui_frame, 8),
 		ui.ui_frame_sc(ui_frame, 90),
 		ui.ui_frame_sc(ui_frame, 24),
 		"Replay",
 	) {
 		progress_anim = 0
 	}
-	return y + ui.ui_frame_sc(ui_frame, 44)
+	return y + ui.ui_frame_sc(ui_frame, 48)
 }
 
 draw_widget_status_pills :: proc(x, y: i32) -> i32 {

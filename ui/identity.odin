@@ -64,6 +64,7 @@ id_context_reset :: proc(ids: ^Id_Context) {
 
 id_context_parent :: proc(ids: ^Id_Context) -> Widget_Id {
 	assert(ids != nil, "id_context_parent: nil context")
+	assert(ids.depth >= 0 && ids.depth <= len(ids.stack))
 	if ids.depth == 0 do return Widget_Id(id_finish(id_hash_u64(ID_FNV_OFFSET, ID_HASH_VERSION)))
 	return ids.stack[ids.depth - 1]
 }

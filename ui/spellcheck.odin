@@ -142,6 +142,7 @@ spell_word_byte :: proc(c: u8) -> bool {
 
 @(private)
 spell_trim_token :: proc(text: string, start, end: int) -> (int, int) {
+	assert(start >= 0 && start <= end && end <= len(text))
 	s, e := start, end
 	for s < e && text[s] == '\'' do s += 1
 	for e > s && text[e - 1] == '\'' do e -= 1

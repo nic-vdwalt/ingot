@@ -139,3 +139,54 @@ submission_reservation_stops_at_fixed_capacity :: proc(t: ^testing.T) {
 	testing.expect_value(t, _submission_reserve(&tracker), u64(0))
 	testing.expect_value(t, tracker.count, u32(MAX_IN_FLIGHT_SUBMISSIONS))
 }
+
+@(test)
+retire_bound_covers_every_destroyable_resource :: proc(t: ^testing.T) {
+	// The bound must stay the physical maximum (one retirement per texture
+	// slot plus one per atlas), otherwise a consumer that legitimately
+	// recycles a large tile cache in one frame trips the assert.
+	#assert(MAX_RETIRED_PER_FRAME == RESOURCE_SLOT_COUNT + MAX_ATLASES)
+	#assert(MAX_RETIRED_PER_FRAME == 1280)
+	testing.expect(t, MAX_RETIRED_PER_FRAME >= MAX_TEXTURES)
+}
+
+@(test)
+texture_pool_reports_exhaustion_instead_of_asserting :: proc(t: ^testing.T) {
+	// A full pool is an operating condition: registration returns 0 so the
+	// loader can hand back an invalid Texture2D for the caller to handle.
+	resources: Texture_Resources
+	entries := make([]Tex_Entry, MAX_TEXTURES)
+	defer delete(entries)
+	for i in 0 ..< MAX_TEXTURES {
+		testing.expect(t, _texture_register(&resources, &entries[i]) != 0)
+	}
+	testing.expect_value(t, int(resources.count), MAX_TEXTURES)
+	overflow: Tex_Entry
+	testing.expect_value(t, _texture_register(&resources, &overflow), u32(0))
+	testing.expect_value(t, int(resources.count), MAX_TEXTURES)
+}
+
+@(test)
+texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
+	// Consumers size their caches off these accessors, so the used count must
+	// track registration exactly and IsTextureValid must reject a zero handle.
+	testing.expect_value(t, TextureSlotsMax(), MAX_TEXTURES)
+	testing.expect(t, !IsTextureValid(Texture2D{}))
+
+	before := TextureSlotsUsed()
+	entry: Tex_Entry
+	id := _texture_register_context(g.id, &g.resources.textures, &entry)
+	testing.expect(t, id != 0)
+	testing.expect_value(t, TextureSlotsUsed(), before + 1)
+	testing.expect(t, IsTextureValid(Texture2D{id = id}))
+
+	// Release the slot by hand: UnloadTexture would retire all-nil GPU
+	// handles, which is itself an asserted double-unload.
+	slot := _texture_slot_context(g.id, &g.resources.textures, id)
+	testing.expect(t, slot != nil)
+	slot.entry = nil
+	slot.occupied = false
+	g.resources.textures.count -= 1
+	testing.expect_value(t, TextureSlotsUsed(), before)
+	testing.expect(t, !IsTextureValid(Texture2D{id = id}))
+}

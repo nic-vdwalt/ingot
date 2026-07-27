@@ -191,9 +191,14 @@ Retired_Texture :: struct {
 }
 
 // MAX_RETIRED_PER_FRAME bounds mid-frame texture retirements (Tiger Style:
-// put a limit on everything). Real apps unload a handful per frame; hitting
-// the bound means a caller is leaking unloads in a loop.
-MAX_RETIRED_PER_FRAME :: 64
+// put a limit on everything). The true physical maximum is one retirement per
+// live texture slot plus one per font atlas: nothing else can be destroyed in
+// a single frame, so exceeding this bound means the same handle was retired
+// twice. A tile-cache consumer legitimately recycles hundreds of textures per
+// frame while the user flick-zooms, so the previous policy cap of 64 turned an
+// ordinary workload into an abort.
+MAX_RETIRED_PER_FRAME :: RESOURCE_SLOT_COUNT + MAX_ATLASES
+#assert(MAX_RETIRED_PER_FRAME == 1280)
 
 // _retire_texture destroys a texture's GPU handles, deferring to after this
 // frame's queue submit while a frame is recording (wgpu validates that
@@ -212,9 +217,12 @@ _retire_texture :: proc(
 		"_retire_texture: all handles nil (double unload?)",
 	)
 	if g.frame.has_frame {
+		// Why assert: the bound is the physical maximum (every texture slot
+		// plus every atlas), so overflowing it means a handle was retired
+		// twice rather than that the caller is simply busy.
 		assert(
 			len(g.resources.retire) < MAX_RETIRED_PER_FRAME,
-			"_retire_texture: retire queue full (unload loop within one frame?)",
+			"_retire_texture: retire queue full (double unload?)",
 		)
 		append(&g.resources.retire, Retired_Texture{bind, sampler, view, tex})
 		return
