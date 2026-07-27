@@ -29,14 +29,53 @@ layout_named_row_resolves_exact_slots :: proc(t: ^testing.T) {
 	ui_frame_begin(&frame, &runtime)
 	defer ui_frame_end(&frame)
 	u: Ui
-	ui_begin_frame(&u, &frame, 0, 0, 300, 100)
-	ui_row_begin(&u, 40, {flex_fixed(80), flex_grow()}, {gap = .SM})
-	first := ui_flex_slot(&u, 40)
-	second := ui_flex_slot(&u, 40)
-	ui_row_end(&u)
-	ui_end(&u)
+	begin(&u, &frame, {0, 0, 300, 100})
+	flex_row_begin(&u, 40, {fixed(80), grow()}, gap = .SM)
+	first := flex_slot_next(&u, 40)
+	second := flex_slot_next(&u, 40)
+	flex_row_end(&u)
+	end(&u)
 	testing.expect_value(t, first, Rect_I32{0, 0, 80, 40})
 	testing.expect_value(t, second, Rect_I32{88, 0, 212, 40})
+}
+
+@(test)
+layout_root_stays_physical_while_children_scale :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	ui_runtime_set_scale(&runtime, 2)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {10, 20, 200, 100})
+	row_begin(&u, 20)
+	rect := slot_next(&u, 30, 10)
+	row_end(&u)
+	end(&u)
+	testing.expect_value(t, rect, Rect_I32{10, 20, 60, 20})
+}
+
+@(test)
+layout_nested_container_consumes_one_flex_track :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 100})
+	flex_row_begin(&u, 40, {fixed(100), grow()})
+	column_begin(&u, 100)
+	child := slot_next(&u, 40, 20)
+	column_end(&u)
+	second := flex_slot_next(&u, 40)
+	flex_row_end(&u)
+	end(&u)
+	testing.expect_value(t, child, Rect_I32{0, 0, 40, 20})
+	testing.expect_value(t, second, Rect_I32{100, 0, 200, 40})
 }
 
 @(test)

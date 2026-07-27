@@ -455,23 +455,15 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 	iw := min(w, ui.ui_frame_sc(ui_frame, 420))
 
 	state := &input_state
-	ui.ui_begin_frame(
-		&state.ctx,
-		ui_frame,
-		x,
-		y,
-		iw,
-		ui.ui_frame_sc(ui_frame, 600),
-		gap = ui.ui_frame_sc(ui_frame, 10),
-	)
-	ui.input(
+	ui.begin(&state.ctx, ui_frame, {x, y, iw, ui.ui_frame_sc(ui_frame, 600)}, gap = .SM)
+	ui.text_input(
 		&state.ctx,
 		INPUT_NAME_ID,
 		&state.name,
 		"Your name (undo, selection, spellcheck)",
 		semantics = ui.Text_Input_Semantics{name = "Name"},
 	)
-	ui.input(
+	ui.text_input(
 		&state.ctx,
 		INPUT_PASS_ID,
 		&state.pass,
@@ -479,16 +471,16 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 		masked = true,
 		semantics = ui.Text_Input_Semantics{name = "Password"},
 	)
-	ui.input(
+	ui.text_input(
 		&state.ctx,
 		INPUT_NOTES_ID,
 		&state.notes,
 		"Notes\u2026 (Shift+Enter for newlines)",
-		h = ui.ui_frame_sc(ui_frame, 90),
+		height = 90,
 		semantics = ui.Text_Input_Semantics{name = "Notes"},
 	)
 
-	if ui.btn(&state.ctx, INPUT_RESET_ID, "Reset all") {
+	if ui.button(&state.ctx, INPUT_RESET_ID, "Reset all") {
 		ui.input_box_reset(&state.name)
 		ui.input_box_reset(&state.pass)
 		ui.input_box_reset(&state.notes)
@@ -508,42 +500,30 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 	)
 
 	end_y := ui.remaining(&state.ctx.layout).y
-	ui.ui_end(&state.ctx)
+	ui.end(&state.ctx)
 	return end_y + ui.ui_frame_sc(ui_frame, 24)
 }
 
 draw_widget_choices :: proc(state: ^Widget_State) {
 	assert(state != nil, "draw_widget_choices: nil state")
-	ui.ui_row(
-		&state.ctx,
-		ui.ui_frame_metrics(ui_frame).ROW_H_SM,
-		gap = ui.ui_frame_sc(ui_frame, 10),
-	)
+	ui.row_begin(&state.ctx, 32, gap = .SM)
 	ui.checkbox(&state.ctx, WIDGET_ENABLE_ID, "Enable widgets", &state.check_a)
 	ui.checkbox(&state.ctx, WIDGET_VERBOSE_ID, "Verbose logs", &state.check_b)
-	ui.ui_row_end(&state.ctx)
-	ui.ui_row(
-		&state.ctx,
-		ui.ui_frame_metrics(ui_frame).ROW_H_SM,
-		gap = ui.ui_frame_sc(ui_frame, 10),
-	)
+	ui.row_end(&state.ctx)
+	ui.row_begin(&state.ctx, 32, gap = .SM)
 	ui.radio(&state.ctx, WIDGET_SMALL_ID, "Small", &state.radio_choice, 0)
 	ui.radio(&state.ctx, WIDGET_MEDIUM_ID, "Medium", &state.radio_choice, 1)
 	ui.radio(&state.ctx, WIDGET_LARGE_ID, "Large", &state.radio_choice, 2)
-	ui.ui_row_end(&state.ctx)
+	ui.row_end(&state.ctx)
 }
 
 draw_widget_volume :: proc(state: ^Widget_State) {
 	assert(state != nil, "draw_widget_volume: nil state")
-	ui.ui_row(
+	ui.row_begin(&state.ctx, 32, gap = .SM)
+	rect := ui.slot_next(
 		&state.ctx,
-		ui.ui_frame_metrics(ui_frame).ROW_H_SM,
-		gap = ui.ui_frame_sc(ui_frame, 10),
-	)
-	rect := ui.ui_slot(
-		&state.ctx,
-		ui.ui_frame_sc(ui_frame, 240),
-		ui.ui_frame_metrics(ui_frame).ROW_H_SM,
+		240,
+		32,
 	)
 	ui.slider_at_state(
 		ui_frame,
@@ -568,7 +548,7 @@ draw_widget_volume :: proc(state: ^Widget_State) {
 		fmt.tprintf("%.0f%%", state.volume),
 		color = ui.ui_frame_theme(ui_frame).fg_secondary,
 	)
-	ui.ui_row_end(&state.ctx)
+	ui.row_end(&state.ctx)
 }
 
 draw_widget_form_controls :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
@@ -580,15 +560,7 @@ draw_widget_form_controls :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 		w,
 		"FORM CONTROLS (checkbox / radio / slider / dropdown)",
 	)
-	ui.ui_begin_frame(
-		&state.ctx,
-		ui_frame,
-		x,
-		y,
-		w,
-		ui.ui_frame_sc(ui_frame, 400),
-		gap = ui.ui_frame_sc(ui_frame, 8),
-	)
+	ui.begin(&state.ctx, ui_frame, {x, y, w, ui.ui_frame_sc(ui_frame, 400)}, gap = .SM)
 	draw_widget_choices(state)
 	draw_widget_volume(state)
 	backends := []string{"Metal", "Vulkan", "D3D12", "WebGPU"}
@@ -601,7 +573,7 @@ draw_widget_form_controls :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 		a11y_label = "Graphics backend",
 	)
 	y = ui.remaining(&state.ctx.layout).y + ui.ui_frame_sc(ui_frame, 14)
-	ui.ui_end(&state.ctx)
+	ui.end(&state.ctx)
 	return y
 }
 

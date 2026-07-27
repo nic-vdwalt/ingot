@@ -82,6 +82,64 @@ input :: proc {
 	input_ui_id,
 }
 
+text_input :: proc(
+	u: ^Ui,
+	id: Widget_Id,
+	b: ^Input_Box,
+	placeholder: string,
+	height: i32 = 0,
+	masked: bool = false,
+	semantics: Text_Input_Semantics = {},
+) -> bool {
+	assert(u != nil && u.open, "text_input: frame not open")
+	assert(id != WIDGET_ID_NONE, "text_input: zero stable id")
+	assert(semantics.name != "", "text_input: empty accessible label")
+	metrics := ui_frame_metrics(u.frame)
+	resolved_height := height if height > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
+	r := slot_next_px(u, remaining(&u.layout).w, resolved_height)
+	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	focus_opt_click(u.frame, focus, r.x, r.y, r.w, r.h)
+	sem := semantics
+	sem.focus = focus.focus
+	sem.focus_id = focus.id
+	sem.widget = id
+	return input_at(
+		u.frame,
+		r.x,
+		r.y,
+		r.w,
+		r.h,
+		b,
+		placeholder,
+		focus_opt_focused(focus),
+		masked,
+		sem,
+	)
+}
+
+text_input_at :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	b: ^Input_Box,
+	placeholder: string,
+	active: bool,
+	masked: bool = false,
+	semantics: Text_Input_Semantics = {},
+) -> bool {
+	return input_at(
+		frame,
+		rect.x,
+		rect.y,
+		rect.w,
+		rect.h,
+		b,
+		placeholder,
+		active,
+		masked,
+		semantics,
+	)
+}
+
 // input_ui carves a full-width slot (height h, 0 = single-line default),
 // acquires focus on click, and is active while it owns the Ui focus slot.
 input_ui :: proc(

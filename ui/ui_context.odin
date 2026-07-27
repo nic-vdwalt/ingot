@@ -611,13 +611,13 @@ ui_padding :: proc(u: ^Ui, value: Insets_I32) {
 	layout_inset(&u.layout, value)
 }
 
-padding_space :: proc(u: ^Ui, value: Space) {
+padding :: proc(u: ^Ui, value: Space) {
 	assert(u != nil && u.open, "padding: frame not open")
 	layout_inset(&u.layout, ui_insets(u, value))
 }
 
 padding_insets :: proc(u: ^Ui, value: Insets_I32) {
-	assert(u != nil && u.open, "padding: frame not open")
+	assert(u != nil && u.open, "padding_insets: frame not open")
 	scaled := Insets_I32 {
 		ui_frame_sc(u.frame, value.left),
 		ui_frame_sc(u.frame, value.top),
@@ -625,11 +625,6 @@ padding_insets :: proc(u: ^Ui, value: Insets_I32) {
 		ui_frame_sc(u.frame, value.bottom),
 	}
 	layout_inset(&u.layout, scaled)
-}
-
-padding :: proc {
-	padding_space,
-	padding_insets,
 }
 
 ui_fill :: proc(u: ^Ui) -> Rect_I32 {

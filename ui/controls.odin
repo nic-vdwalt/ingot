@@ -12,8 +12,18 @@ import "core:strings"
 // Space/Enter while focused. Returns true on the frame the value changed.
 checkbox :: proc {
 	checkbox_at,
-	checkbox_ui,
-	checkbox_ui_id,
+	checkbox_auto,
+}
+
+checkbox_auto :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (changed: bool) {
+	assert(u != nil && u.open, "checkbox: frame not open")
+	assert(id != WIDGET_ID_NONE, "checkbox: zero stable id")
+	metrics := ui_frame_metrics(u.frame)
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	w := metrics.CONTROL_BOX + metrics.CONTROL_GAP + measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	r := slot_next_px(u, w, metrics.ROW_H_SM)
+	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	return checkbox_at(u.frame, r, label, checked, focus, id)
 }
 
 // checkbox_ui carves its own slot (content-sized) and auto-registers focus.
@@ -117,8 +127,24 @@ checkbox_at :: proc(
 // selected^. Returns true on the frame the selection changed to this value.
 radio :: proc {
 	radio_at,
-	radio_ui,
-	radio_ui_id,
+	radio_auto,
+}
+
+radio_auto :: proc(
+	u: ^Ui,
+	id: Widget_Id,
+	label: string,
+	selected: ^i32,
+	value: i32,
+) -> (changed: bool) {
+	assert(u != nil && u.open, "radio: frame not open")
+	assert(id != WIDGET_ID_NONE, "radio: zero stable id")
+	metrics := ui_frame_metrics(u.frame)
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	w := metrics.CONTROL_BOX + metrics.CONTROL_GAP + measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	r := slot_next_px(u, w, metrics.ROW_H_SM)
+	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	return radio_at(u.frame, r, label, selected, value, focus, id)
 }
 
 // radio_ui carves its own slot (content-sized) and auto-registers focus.
@@ -241,11 +267,24 @@ Slider_State :: struct {
 // focused. Returns true on the frame the value changed.
 slider :: proc {
 	slider_at,
-	slider_at_state,
-	slider_ui,
-	slider_ui_id,
-	slider_ui_state,
-	slider_ui_state_id,
+	slider_auto,
+}
+
+slider_auto :: proc(
+	u: ^Ui,
+	id: Widget_Id,
+	value: ^f32,
+	lo, hi: f32,
+	step: f32 = 0,
+	width: i32 = 0,
+	a11y_label: string = "",
+) -> (changed: bool) {
+	assert(u != nil && u.open, "slider: frame not open")
+	assert(id != WIDGET_ID_NONE, "slider: zero stable id")
+	assert(a11y_label != "", "slider: empty accessible label")
+	r := slider_ui_slot(u, width)
+	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	return slider_at(u.frame, r, value, lo, hi, step, focus, a11y_label, id)
 }
 
 @(private = "file")
@@ -254,7 +293,7 @@ slider_ui_slot :: proc(u: ^Ui, width: i32) -> Rect_I32 {
 	metrics := ui_frame_metrics(u.frame)
 	resolved_width := width if width > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
 	assert(resolved_width > 0, "slider_ui_slot: invalid width")
-	return ui_slot(u, resolved_width, metrics.ROW_H_SM)
+	return slot_next_px(u, resolved_width, metrics.ROW_H_SM)
 }
 
 // slider_ui carves its own slot (width w, 0 = sensible default) and

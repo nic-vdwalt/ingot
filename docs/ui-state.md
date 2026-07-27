@@ -124,8 +124,8 @@ Stable IDs should come from application identity, not row positions:
 
 ```odin
 for item in items {
-	id := ui.focus_id(item.id)
-	if ui.btn(&list_ui, id, item.name) {
+	id := ui.id(&list_ui, item.id)
+	if ui.button(&list_ui, id, item.name) {
 		open_item(item.id)
 	}
 }
@@ -142,61 +142,48 @@ and reusable components. A `Ui` owns a bounded `Id_Context`; scopes compose
 explicit component and domain identity without retaining widget state.
 
 ```odin
-ui.ui_id_root(&form, "settings")
-ui.ui_id_push(&form, "accounts")
+ui.scope_begin(&form, "settings")
+ui.scope_begin(&form, "accounts")
 for account in accounts {
-	id := ui.ui_id(&form, account.id)
-	_ = ui.btn_ui_id(&form, id, account.name)
+	id := ui.id(&form, account.id)
+	_ = ui.button(&form, id, account.name)
 }
-ui.ui_id_pop(&form)
-ui.ui_id_pop(&form)
+ui.scope_end(&form)
+ui.scope_end(&form)
 ```
 
 IDs are deterministic across frames and process launches, independent of labels,
 pointers, source locations, and sibling order. Use stable domain IDs for list
 rows rather than indexes. Focus and accessibility semantics share the generated
-identity. All ID scopes must be closed before `ui_end`.
+identity. Labels never generate identity. All ID scopes must be closed before `end`.
 
 `Focus_Id`, `focus_id`, and `focus_id_string` remain supported compatibility
 paths. They do not create a hidden widget-state store.
 
-## Widget tiers
+## Widget entry points
 
-Most widgets ship in two call shapes. Pick one per screen and stay in it.
-
-| Suffix | Status | Shape | Focus |
-|---|---|---|---|
-| `*_at` | Supported | Explicit `x, y, w, h` against a `^Ui_Frame` | Caller passes `Focus_Opt`, or omits it |
-| `*_ui` | Supported | Carves a bounded slot from a `^Ui` and its `Layout` | Registered automatically when visible |
-
-Use `*_at` for canvases, scroll-offset content, overlays, and custom geometry.
-Positioning is your responsibility: scale every dimension through `ui_frame_sc`
-so the result tracks the runtime UI scale.
+Primary facade widgets take a `^Ui` and an explicit stable `Widget_Id`. They consume one bounded slot and register focus only when visible:
 
 ```odin
-metrics, style := ui.ui_frame_style(frame)
-if ui.btn_at(frame, x, y, ui.ui_frame_sc(frame, 120), metrics.ROW_H_MD, "Save", .Primary) {
+if ui.button(&form, ui.id(&form, "save"), "Save", .Primary) {
 	save(app)
 }
 ```
 
-Use `*_ui` for bounded row, column, weighted, and flex forms. `ui_padding`,
-`ui_row_begin`, `ui_column_begin`, `ui_panel_begin`, `ui_flex_begin`, and
-`ui_fill` expose the same bounded single-pass layout engine. Standard `Space`
-tokens resolve logical spacing once through the frame scale; metrics, measured
-text, screen bounds, and parent rectangles are already physical. Every scope must be
-balanced before `ui_end`. Overflow clips to the root and produces zero-area
-slots rather than assertions.
+Explicit widgets take a `^Ui_Frame` and physical `Rect_I32`. Use them for canvases, scroll-offset content, overlays, and custom geometry:
 
-`btn_ui_state` and `btn_ui_state_id` are deprecated: no consumer has needed
-`Button_State` together with auto-layout. Use `btn_at_state` with an explicit
-rect, or `btn_ui` when the press animation state is not required.
+```odin
+rect := ui.next(&layout, ui.ui_frame_sc(frame, 120))
+if ui.button_at(frame, rect, "Save", .Primary, widget = SAVE_ID) {
+	save(app)
+}
+```
 
-Both tiers share one interaction, focus, semantics, and paint pipeline — `*_ui`
-resolves a rect and then calls the matching `*_at`. Mixing them in one frame is
-legal; mixing them in one *form* is not, because focus registration must be
-either sequential or stable for the whole `Ui` (see
-[Sequential compatibility](#sequential-compatibility)).
+Facade and explicit entry points share interaction, focus, semantics, and paint. They differ only in who supplies geometry. Facade dimensions are logical; roots, measured values, metrics, low-level layout, and explicit rectangles are physical.
+
+Ordinary containers consume intrinsic sizes. Flex containers consume one declared track per widget or `flex_slot_next` call. Every container and scope must be balanced before `end`. Overflow clips to the root and produces zero-area slots rather than retaining or repairing a widget hierarchy.
+
+Sequential `*_ui` entry points remain compatibility paths during migration. Do not mix sequential and stable focus registration in one `Ui` frame.
 
 ## Explicit ownership boundary
 

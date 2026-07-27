@@ -14,8 +14,37 @@ Dropdown_State :: struct {
 // index into selected^. Returns true on the frame the selection changed.
 dropdown :: proc {
 	dropdown_at,
-	dropdown_ui,
-	dropdown_ui_id,
+	dropdown_auto,
+}
+
+dropdown_auto :: proc(
+	u: ^Ui,
+	id: Widget_Id,
+	items: []string,
+	selected: ^i32,
+	state: ^Dropdown_State,
+	width: i32 = 0,
+	a11y_label: string = "",
+) -> (changed: bool) {
+	assert(u != nil && u.open, "dropdown: frame not open")
+	assert(id != WIDGET_ID_NONE, "dropdown: zero stable id")
+	assert(a11y_label != "", "dropdown: empty accessible label")
+	metrics := ui_frame_metrics(u.frame)
+	resolved_width := width if width > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
+	r := slot_next_px(u, resolved_width, metrics.ROW_H_MD)
+	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	return dropdown_at(
+		u.frame,
+		r,
+		items,
+		selected,
+		state,
+		u.screen_w,
+		u.screen_h,
+		focus,
+		a11y_label,
+		id,
+	)
 }
 
 // dropdown_ui carves its slot (width w, 0 = sensible default), reads screen

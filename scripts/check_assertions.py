@@ -200,6 +200,13 @@ def element_index_proven(operation: Index_Operation, executable: str) -> bool:
     )
     if positive or unsigned or target_contract or rejected:
         return True
+    enum_guard = re.search(
+        rf"\b(?:if|assert|ensure)\b[^\n]*\b{escaped}\b\s*(?:<|<=|>|>=)\s*"
+        rf"[A-Z][A-Z0-9_]*",
+        prefix,
+    )
+    if enum_guard:
+        return True
     resolved = re.search(
         rf"\b{escaped}\s*:?=\s*[A-Za-z_][A-Za-z0-9_.]*\s*\([^\n]*\)",
         prefix,
@@ -510,14 +517,6 @@ def procedure_has_reviewed_contract(body: str) -> bool:
     )
 
 
-def procedure_is_reviewed(body: str) -> bool:
-    executable = executable_text(body)
-    return ASSERTION.search(executable) is not None and any(
-        token in executable
-        for token in ("len(", "cap(", "nil", "count", "head", "tail", "state", "running", "active")
-    )
-
-
 def findings_for_source(source: str, path: str) -> list[Finding]:
     findings: list[Finding] = []
     for procedure in check_odin_style.procedures(source):
@@ -529,8 +528,6 @@ def findings_for_source(source: str, path: str) -> list[Finding]:
         assertions = len(ASSERTION.findall(masked))
         uncovered = uncovered_risks(body, risks)
         if uncovered and procedure_has_reviewed_contract(body):
-            uncovered = ()
-        if uncovered and procedure_is_reviewed(body):
             uncovered = ()
         if uncovered and all(structural_contract_present(executable_text(body), risk) for risk in uncovered):
             uncovered = ()
