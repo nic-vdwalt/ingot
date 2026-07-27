@@ -630,7 +630,28 @@ def is_thin_forwarder(body: str, risks: tuple[str, ...]) -> bool:
     )
 
 
-def procedure_has_reviewed_contract(body: str) -> bool:
+# Keywords that evidence a contract for each risk. An assertion mentioning one
+# of these, compared against something, is treated as reasoning about that risk
+# — and only that risk. Pooling them into a single "did the author assert
+# anything" test let an unrelated check discharge a missing one.
+REVIEWED_CONTRACT_TERMS = {
+    "pointer": r"\bnil\b",
+    "index": r"\blen\s*\(|\bcap\s*\(",
+    "queue": r"\blen\s*\(|\bcap\s*\(|\bcount\b|\bhead\b|\btail\b",
+    "ownership": r"\bnil\b|\blen\s*\(|\bcap\s*\(|\bowner\b|\bowned\b|\ballocator\b",
+    "state": r"\bstate\b|\brunning\b|\bactive\b|\bsession\b|\bframe\b|\bopen\b",
+    "untrusted_input": r"\blen\s*\(|\bok\b|\berr\b|\bresult\b|\bstatus\b|\bparsed\b",
+}
+COMPARISON = r"(?:==|!=|<|<=|>|>=)"
+
+
+def procedure_has_reviewed_contract(body: str, risk: str) -> bool:
+    """Report whether an authored assertion reasons about `risk` specifically.
+
+    Word boundaries matter here: without them `frame` matches `framebuffer` and
+    `count` matches `account`, so an assertion about an unrelated identifier
+    counted as a reviewed contract.
+    """
     executable = executable_text(body)
     assertions = [
         match.group()
@@ -638,12 +659,14 @@ def procedure_has_reviewed_contract(body: str) -> bool:
     ]
     if not assertions:
         return False
+    terms = REVIEWED_CONTRACT_TERMS.get(risk)
+    if not terms:
+        return False
+    # The comparison may sit on either side of the term: `p != nil` and
+    # `nil != p` are the same contract.
     return any(
-        re.search(
-            r"(?:nil|len\s*\(|cap\s*\(|count|head|tail|state|running|active|session|frame|open)"
-            r"[^\n]*(?:==|!=|<|<=|>|>=)",
-            assertion,
-        )
+        re.search(rf"(?:{terms})[^\n]*{COMPARISON}", assertion)
+        or re.search(rf"{COMPARISON}[^\n]*(?:{terms})", assertion)
         for assertion in assertions
     )
 
@@ -689,21 +712,11 @@ def inferred_contract_present(body: str, risk: str) -> bool:
 
 
 def contract_review_complete(body: str, risks: tuple[str, ...]) -> bool:
-    executable = executable_text(body)
+    # No count-based shortcut: two assertions about one hazard say nothing
+    # about a second. Each risk must be inferred on its own evidence.
     if not risks:
         return True
-    if len(ASSERTION.findall(executable)) >= 2:
-        return True
     return all(inferred_contract_present(body, risk) for risk in risks)
-
-
-def procedure_contract_score(body: str) -> int:
-    executable = executable_text(body)
-    score = len(ASSERTION.findall(executable))
-    score += len(re.findall(r"\bif\b[^\n]*(?:<|<=|>|>=|==|!=)", executable))
-    score += len(re.findall(r"\bfor\b[^\n]*(?:\.\.<|\.\.)", executable))
-    score += len(re.findall(r"\bdefer\b", executable))
-    return score
 
 
 def recognized_dynamic_append(body: str) -> bool:
@@ -716,15 +729,16 @@ def recognized_dynamic_append(body: str) -> bool:
     return bool(targets) and targets <= assignments | declarations
 
 
-def fully_guarded_procedure(body: str, risks: tuple[str, ...]) -> bool:
+def fully_guarded_risk(body: str, risk: str) -> bool:
+    """Report whether `risk` alone is discharged by evidence about `risk`.
+
+    This used to pool risk-agnostic terms — every `defer`, every comparing `if`,
+    every `min`/`max`/`clamp` call anywhere in the body — into one scalar shared
+    across all risks, so guarding an index could pay for an unchecked pointer.
+    Evidence now has to name the hazard it discharges.
+    """
     executable = executable_text(body)
-    if not risks:
-        return True
-    evidence = procedure_contract_score(body)
-    evidence += sum(1 for risk in risks if inferred_contract_present(body, risk))
-    evidence += sum(1 for risk in risks if authored_contract_present(executable, risk))
-    evidence += len(re.findall(r"\b(?:min|max|clamp|copy|clear)\s*\(", executable))
-    return evidence >= len(risks) + 1
+    return inferred_contract_present(body, risk) or authored_contract_present(executable, risk)
 
 
 def findings_for_source(source: str, path: str) -> list[Finding]:
