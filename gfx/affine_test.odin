@@ -357,3 +357,110 @@ emit_gradient_quad_follows_the_model_transform :: proc(t: ^testing.T) {
 	testing.expect_value(t, r.verts[2].col, top)
 	testing.expect_value(t, r.verts[3].col, bottom)
 }
+
+// --- finiteness contracts --------------------------------------------------
+// A non-finite transform maps every vertex to NaN: the GPU discards the
+// primitives and the frame is blank with nothing logged. Application code
+// reaches this easily (a zoom animation dividing by zero, normalising a
+// zero-length vector), so the constructors assert rather than emit it.
+//
+// The asserts themselves cannot be exercised from a test without aborting the
+// runner, so these fence the predicate that backs them and the boundary
+// between "degenerate but well defined" and "corrupt".
+
+@(test)
+f32_finite_predicate_rejects_inf_and_nan :: proc(t: ^testing.T) {
+	testing.expect(t, _f32_is_finite(0))
+	testing.expect(t, _f32_is_finite(-1))
+	testing.expect(t, _f32_is_finite(max(f32)))
+	testing.expect(t, _f32_is_finite(min(f32)))
+	testing.expect(t, !_f32_is_finite(math.inf_f32(1)))
+	testing.expect(t, !_f32_is_finite(math.inf_f32(-1)))
+	testing.expect(t, !_f32_is_finite(math.nan_f32()))
+}
+
+@(test)
+affine_finite_predicate_checks_every_component :: proc(t: ^testing.T) {
+	testing.expect(t, _affine_is_finite(AFFINE_IDENTITY))
+	// Each of the six components must be covered; a predicate that forgot one
+	// would still pass a whole-struct smoke test.
+	nan := math.nan_f32()
+	for index in 0 ..< 6 {
+		poisoned := AFFINE_IDENTITY
+		switch index {
+		case 0:
+			poisoned.a = nan
+		case 1:
+			poisoned.b = nan
+		case 2:
+			poisoned.c = nan
+		case 3:
+			poisoned.d = nan
+		case 4:
+			poisoned.tx = nan
+		case 5:
+			poisoned.ty = nan
+		}
+		testing.expectf(t, !_affine_is_finite(poisoned), "component %v not checked", index)
+	}
+}
+
+@(test)
+zero_zoom_camera_is_finite_and_allowed :: proc(t: ^testing.T) {
+	// Degenerate but well defined: the world collapses to a point. This must
+	// stay legal, because a zoom animation can pass through zero and
+	// GetScreenToWorld2D already handles the missing inverse.
+	m := _affine_from_camera_2d(Camera2D{offset = {10, 20}, target = {3, 4}, zoom = 0})
+	testing.expect(t, _affine_is_finite(m))
+	testing.expect_value(t, _affine_apply(m, {1e6, -1e6}), [2]f32{10, 20})
+}
+
+@(test)
+extreme_but_finite_camera_stays_finite :: proc(t: ^testing.T) {
+	// The boundary the assert must not false-positive on: values large enough
+	// to look alarming, small enough to stay in range.
+	m := _affine_from_camera_2d(
+		Camera2D{offset = {1e6, -1e6}, target = {1e6, 1e6}, rotation = 720, zoom = 1e3},
+	)
+	testing.expect(t, _affine_is_finite(m))
+}
+
+@(test)
+nan_camera_would_poison_every_vertex :: proc(t: ^testing.T) {
+	// Why the assert exists. Built by hand rather than through the guarded
+	// constructor, this is what used to reach the batch: finite input
+	// geometry, NaN output, no error anywhere.
+	poisoned := Affine {
+		a  = math.nan_f32(),
+		b  = 0,
+		c  = 0,
+		d  = math.nan_f32(),
+		tx = 0,
+		ty = 0,
+	}
+	testing.expect(t, !_affine_is_finite(poisoned))
+
+	r := new_test_renderer()
+	defer free(r)
+	r.model_xf = poisoned
+	_emit_quad(r, {10, 20, 30, 40}, {0, 0, 1, 1}, {1, 1, 1, 1})
+
+	testing.expect_value(t, len(r.verts), 4)
+	for vertex, index in r.verts {
+		testing.expectf(
+			t,
+			vertex.pos.x != vertex.pos.x,
+			"vertex %v should be NaN without the guard, got %v",
+			index,
+			vertex.pos,
+		)
+	}
+}
+
+@(test)
+composed_transforms_stay_finite :: proc(t: ^testing.T) {
+	camera := _affine_from_camera_2d(Camera2D{zoom = 2, rotation = 30})
+	pivot := _affine_from_camera_2d(Camera2D{offset = {5, 5}, target = {5, 5}, rotation = -30})
+	testing.expect(t, _affine_is_finite(_affine_compose(camera, pivot)))
+	testing.expect(t, _affine_is_finite(_affine_translated(camera, 1e4, -1e4)))
+}
