@@ -43,6 +43,7 @@ INPUT_UNDO_MAX :: 100
 INPUT_UNDO_COALESCE_SECS :: 1.0
 
 input_snapshot_destroy :: proc(s: ^Input_Snapshot) {
+	assert(s != nil, "input_snapshot_destroy: nil s")
 	if len(s.text) > 0 do delete(s.text)
 	if cap(s.pills) > 0 do delete(s.pills)
 	s^ = {}
@@ -71,6 +72,7 @@ input_undo_record :: proc(
 	kind: Input_Edit_Kind,
 	now: f64,
 ) {
+	assert(u != nil, "input_undo_record: nil u")
 	for &s in u.redo do input_snapshot_destroy(&s)
 	clear(&u.redo)
 	coalesce :=
@@ -90,6 +92,7 @@ input_undo_record :: proc(
 }
 
 input_undo_reset :: proc(u: ^Input_Undo) {
+	assert(u != nil, "input_undo_reset: nil u")
 	for &s in u.undo do input_snapshot_destroy(&s)
 	clear(&u.undo)
 	for &s in u.redo do input_snapshot_destroy(&s)
@@ -98,6 +101,7 @@ input_undo_reset :: proc(u: ^Input_Undo) {
 }
 
 input_undo_destroy :: proc(u: ^Input_Undo) {
+	assert(u != nil, "input_undo_destroy: nil u")
 	input_undo_reset(u)
 	if cap(u.undo) > 0 do delete(u.undo)
 	if cap(u.redo) > 0 do delete(u.redo)

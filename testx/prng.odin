@@ -22,6 +22,7 @@ next_u64 :: proc(p: ^Prng) -> u64 {
 
 // int_range returns a value in [lo, hi).
 int_range :: proc(p: ^Prng, lo, hi: int) -> int {
+	assert(p != nil, "int_range: nil p")
 	if hi <= lo do return lo
 	return lo + int(next_u64(p) % u64(hi - lo))
 }
@@ -30,6 +31,7 @@ int_range :: proc(p: ^Prng, lo, hi: int) -> int {
 // occasional newlines) of length in [0, max_len). Allocated with the given
 // allocator (default: temp).
 ascii_string :: proc(p: ^Prng, max_len: int, allocator := context.temp_allocator) -> string {
+	assert(p != nil, "ascii_string: nil p")
 	n := int_range(p, 0, max_len)
 	b := make([]u8, n, allocator)
 	for i in 0 ..< n {
@@ -50,6 +52,7 @@ ascii_string :: proc(p: ^Prng, max_len: int, allocator := context.temp_allocator
 // intended for fuzzing parsers that consume untrusted input. Length is in
 // [0, max_len). Allocated with the given allocator (default: temp).
 random_bytes :: proc(p: ^Prng, max_len: int, allocator := context.temp_allocator) -> []u8 {
+	assert(p != nil, "random_bytes: nil p")
 	n := int_range(p, 0, max_len)
 	b := make([]u8, n, allocator)
 	for i in 0 ..< n do b[i] = u8(next_u64(p) & 0xFF)

@@ -110,6 +110,7 @@ match_url :: proc(line: string, i: int) -> (int, bool) {
 
 @(private = "file")
 inline_span_append_plain :: proc(state: ^Inline_Span_Parse_State, start, end: int) {
+	assert(state != nil, "inline_span_append_plain: nil state")
 	if start >= end do return
 	append(&state.spans, Text_Span{text = state.line[start:end], raw_start = start, raw_end = end})
 }
@@ -124,6 +125,7 @@ inline_span_find :: proc(line: string, start: int, marker: u8) -> int {
 
 @(private = "file")
 inline_span_parse_pill :: proc(state: ^Inline_Span_Parse_State) {
+	assert(state != nil, "inline_span_parse_pill: nil state")
 	inline_span_append_plain(state, state.seg_start, state.index)
 	close := inline_span_find(state.line, state.index + 1, PILL_CLOSE)
 	if close < 0 {
@@ -154,6 +156,7 @@ inline_span_parse_pill :: proc(state: ^Inline_Span_Parse_State) {
 
 @(private = "file")
 inline_span_parse_code :: proc(state: ^Inline_Span_Parse_State) {
+	assert(state != nil, "inline_span_parse_code: nil state")
 	inline_span_append_plain(state, state.seg_start, state.index)
 	close := inline_span_find(state.line, state.index + 1, '`')
 	if close < 0 {
@@ -184,6 +187,7 @@ inline_span_parse_code :: proc(state: ^Inline_Span_Parse_State) {
 
 @(private = "file")
 inline_span_parse_link :: proc(state: ^Inline_Span_Parse_State) -> bool {
+	assert(state != nil, "inline_span_parse_link: nil state")
 	end, ok := match_url(state.line, state.index)
 	if !ok do return false
 	inline_span_append_plain(state, state.seg_start, state.index)
@@ -203,6 +207,7 @@ inline_span_parse_link :: proc(state: ^Inline_Span_Parse_State) -> bool {
 
 @(private = "file")
 inline_span_parse_bold :: proc(state: ^Inline_Span_Parse_State) {
+	assert(state != nil, "inline_span_parse_bold: nil state")
 	inline_span_append_plain(state, state.seg_start, state.index)
 	close := -1
 	for index := state.index + 2; index + 1 < len(state.line); index += 1 {
@@ -374,6 +379,7 @@ draw_markdown_span_selection :: proc(
 	selection_start, selection_end: int,
 	has_selection: bool,
 ) {
+	assert(ctx != nil, "draw_markdown_span_selection: nil ctx")
 	if !has_selection || selection_start >= selection_end do return
 	highlight_start := max(selection_start, segment_start)
 	highlight_end := min(selection_end, segment_end)
@@ -398,6 +404,7 @@ draw_markdown_span_selection :: proc(
 
 @(private = "file")
 draw_markdown_span_chip :: proc(ctx: ^Markdown_Context, text: cstring, x, y: i32) {
+	assert(ctx != nil, "draw_markdown_span_chip: nil ctx")
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	width := measure_text_frame(ctx.frame, text, font_size)
 	rect := Rectangle{f32(x - 3), f32(y - 1), f32(width + 6), f32(font_size + 4)}
@@ -412,6 +419,8 @@ draw_markdown_span_code :: proc(
 	text: cstring,
 	x, y: i32,
 ) {
+	assert(ctx != nil, "draw_markdown_span_code: nil ctx")
+	assert(span != nil, "draw_markdown_span_code: nil span")
 	if workspace_has_path_with(ctx.workspace_files, span.text) {
 		draw_markdown_span_chip(ctx, text, x, y)
 		return
@@ -434,6 +443,8 @@ draw_markdown_span_emphasis :: proc(
 	x, y: i32,
 	base_color: Color,
 ) {
+	assert(ctx != nil, "draw_markdown_span_emphasis: nil ctx")
+	assert(span != nil, "draw_markdown_span_emphasis: nil span")
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	style := ui_frame_theme(ctx.frame)
 	if span.bold {
@@ -456,6 +467,8 @@ draw_markdown_span_style :: proc(
 	x, y: i32,
 	base_color: Color,
 ) {
+	assert(ctx != nil, "draw_markdown_span_style: nil ctx")
+	assert(span != nil, "draw_markdown_span_style: nil span")
 	if span.pill {
 		draw_markdown_span_chip(ctx, text, x, y)
 	} else if span.code {
@@ -476,6 +489,7 @@ draw_markdown_line_spans :: proc(
 	sel_display_start, sel_display_end: int,
 	has_sel: bool,
 ) {
+	assert(ctx != nil, "draw_markdown_line_spans: nil ctx")
 	_ = display_line
 	cursor_x := x
 	display_offset := 0
@@ -517,6 +531,7 @@ draw_text_wrapped_md :: proc(
 	sel_end: int = -1,
 	draw: bool = true,
 ) -> i32 {
+	assert(ctx != nil, "draw_text_wrapped_md: nil ctx")
 	if len(text) == 0 do return 0
 
 	spans := frame_view_items(ctx.frame, parse_inline_spans(ctx.frame, text))
@@ -581,6 +596,7 @@ measure_wrapped_height_md :: proc(
 	max_width: i32,
 	font_size: i32,
 ) -> i32 {
+	assert(ctx != nil, "measure_wrapped_height_md: nil ctx")
 	if len(text) == 0 do return 0
 
 	// Fast path: no inline markers.
@@ -615,6 +631,7 @@ hit_test_wrapped_md :: proc(
 	mouse_x, mouse_y: i32,
 	font_size: i32,
 ) -> int {
+	assert(ctx != nil, "hit_test_wrapped_md: nil ctx")
 	if len(text) == 0 do return -1
 
 	// Fast path: no inline markers.
@@ -730,6 +747,7 @@ split_table_row_offsets :: proc(
 	Frame_View(string),
 	Frame_View(int),
 ) {
+	assert(frame != nil, "split_table_row_offsets: nil frame")
 	cells, starts := split_table_row_offsets_with(
 		text,
 		line_start,
@@ -757,6 +775,7 @@ markdown_table_parse_rows :: proc(
 	int,
 	int,
 ) {
+	assert(ctx != nil, "markdown_table_parse_rows: nil ctx")
 	rows := make([dynamic]Markdown_Table_Row, 0, 8, ui_frame_allocator(ctx.frame))
 	columns := 0
 	position := block_start
@@ -796,6 +815,7 @@ markdown_table_natural_widths :: proc(
 	Markdown_Table_Widths,
 	i32,
 ) {
+	assert(ctx != nil, "markdown_table_natural_widths: nil ctx")
 	widths: Markdown_Table_Widths
 	padding := ui_frame_metrics(ctx.frame).TABLE_CELL_PAD
 	for row in rows {
@@ -825,6 +845,8 @@ markdown_table_fix_columns :: proc(
 	i32,
 	int,
 ) {
+	assert(widths != nil, "markdown_table_fix_columns: nil widths")
+	assert(fixed != nil, "markdown_table_fix_columns: nil fixed")
 	remaining := max_width
 	flexible := columns
 	for _ in 0 ..< columns {
@@ -851,6 +873,8 @@ markdown_table_distribute_columns :: proc(
 	fixed: ^[MARKDOWN_TABLE_COLS_MAX]bool,
 	widths: ^Markdown_Table_Widths,
 ) {
+	assert(fixed != nil, "markdown_table_distribute_columns: nil fixed")
+	assert(widths != nil, "markdown_table_distribute_columns: nil widths")
 	flex_natural: i32
 	for column in 0 ..< columns {
 		if !fixed[column] do flex_natural += naturals[column]
@@ -904,6 +928,7 @@ markdown_table_row_heights :: proc(
 	widths: Markdown_Table_Widths,
 	columns: int,
 ) -> Markdown_Table_Heights {
+	assert(ctx != nil, "markdown_table_row_heights: nil ctx")
 	heights: Markdown_Table_Heights
 	metrics := ui_frame_metrics(ctx.frame)
 	for row, row_index in rows {
@@ -932,6 +957,7 @@ markdown_table_draw_cell :: proc(
 	x, y, width: i32,
 	color: Color,
 ) {
+	assert(ctx != nil, "markdown_table_draw_cell: nil ctx")
 	metrics := ui_frame_metrics(ctx.frame)
 	inner := max(width - metrics.TABLE_CELL_PAD * 2, i32(1))
 	padding_y := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE_BODY) / 2, i32(0))
@@ -962,6 +988,8 @@ markdown_table_draw_row :: proc(
 	columns: int,
 	base_color: Color,
 ) {
+	assert(ctx != nil, "markdown_table_draw_row: nil ctx")
+	assert(row != nil, "markdown_table_draw_row: nil row")
 	style := ui_frame_theme(ctx.frame)
 	is_header := row_index == 0
 	if is_header do draw_rectangle(ctx.frame, x, y, table_width, height, style.bg_table_header)
@@ -987,6 +1015,8 @@ markdown_table_hit_row :: proc(
 	mouse_x, mouse_y: i32,
 	block_start: int,
 ) -> int {
+	assert(ctx != nil, "markdown_table_hit_row: nil ctx")
+	assert(row != nil, "markdown_table_hit_row: nil row")
 	column := columns - 1
 	cell_x := x
 	for candidate in 0 ..< columns {
@@ -1093,6 +1123,7 @@ layout_table :: proc(
 
 // Get font size for a heading level.
 heading_font_size :: proc(ctx: ^Markdown_Context, level: int) -> i32 {
+	assert(ctx != nil, "heading_font_size: nil ctx")
 	switch level {
 	case 1:
 		return ui_frame_metrics(ctx.frame).FONT_SIZE_TITLE + 6 // 26
@@ -1110,6 +1141,7 @@ heading_font_size :: proc(ctx: ^Markdown_Context, level: int) -> i32 {
 // multi-line headings tighter than body text. Scale the body ratio by the
 // heading's own size, and never advance less than the glyphs occupy.
 heading_line_height :: proc(ctx: ^Markdown_Context, level: int) -> i32 {
+	assert(ctx != nil, "heading_line_height: nil ctx")
 	metrics := ui_frame_metrics(ctx.frame)
 	assert(metrics.FONT_SIZE_BODY > 0, "heading_line_height: invalid body metric")
 	size := heading_font_size(ctx, level)
@@ -1126,6 +1158,7 @@ heading_total_height :: proc(
 	level: int,
 	max_width: i32,
 ) -> i32 {
+	assert(ctx != nil, "heading_total_height: nil ctx")
 	fs := heading_font_size(ctx, level)
 	text_h := wrapped_height_px_frame(
 		ctx.frame,
@@ -1154,6 +1187,7 @@ measure_wrapped_height :: proc(
 	max_width: i32,
 	font_size: i32,
 ) -> i32 {
+	assert(ctx != nil, "measure_wrapped_height: nil ctx")
 	return wrapped_height_px_frame(
 		ctx.frame,
 		text,
@@ -1173,6 +1207,7 @@ draw_heading :: proc(
 	has_sel: bool,
 	draw: bool = true,
 ) -> i32 {
+	assert(ctx != nil, "draw_heading: nil ctx")
 	font_size := heading_font_size(ctx, level)
 
 	// Convert selection coordinates to be relative to the heading text.
@@ -1635,6 +1670,8 @@ measure_markdown :: proc(
 	text: string,
 	out_w: ^i32 = nil,
 ) -> i32 {
+	assert(ctx != nil, "measure_markdown: nil ctx")
+	assert(out_w != nil, "measure_markdown: nil out_w")
 	if len(text) == 0 do return 0
 	// draw=false runs the identical layout math but emits no glyph quads.
 	h := draw_markdown(
@@ -1671,6 +1708,7 @@ markdown_hit_fence :: proc(
 	int,
 	bool,
 ) {
+	assert(state != nil, "markdown_hit_fence: nil state")
 	if !is_code_fence(line) do return -1, false
 	gap: i32 = 6
 	if state.in_code_block do gap = 8
@@ -1684,6 +1722,7 @@ markdown_hit_fence :: proc(
 
 @(private = "file")
 markdown_hit_code :: proc(state: ^Markdown_Hit_State, line: string, line_start: int) -> int {
+	assert(state != nil, "markdown_hit_code: nil state")
 	metrics := ui_frame_metrics(state.ctx.frame)
 	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + metrics.LINE_HEIGHT {
 		column := caret_pixel_to_col_with(
@@ -1704,6 +1743,7 @@ markdown_hit_heading :: proc(
 	heading: Heading_Match,
 	line_start: int,
 ) -> int {
+	assert(state != nil, "markdown_hit_heading: nil state")
 	height := heading_total_height(state.ctx, heading.text, heading.level, state.max_width)
 	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + height {
 		offset := hit_test_wrapped_frame(
@@ -1725,6 +1765,7 @@ markdown_hit_heading :: proc(
 
 @(private = "file")
 markdown_hit_bullet :: proc(state: ^Markdown_Hit_State, line: string, line_start: int) -> int {
+	assert(state != nil, "markdown_hit_bullet: nil state")
 	metrics := ui_frame_metrics(state.ctx.frame)
 	content := line[2:]
 	content_x := state.x + metrics.BULLET_INDENT
@@ -1759,6 +1800,7 @@ markdown_hit_table :: proc(
 	int,
 	bool,
 ) {
+	assert(state != nil, "markdown_hit_table: nil state")
 	if line_end == len(state.text) || !strings.contains(line, "|") do return -1, 0, false
 	newline := strings.index_byte(state.text[line_end + 1:], '\n')
 	next_end := len(state.text) if newline < 0 else line_end + 1 + newline
@@ -1790,6 +1832,7 @@ markdown_hit_table :: proc(
 
 @(private = "file")
 markdown_hit_plain :: proc(state: ^Markdown_Hit_State, line: string, line_start: int) -> int {
+	assert(state != nil, "markdown_hit_plain: nil state")
 	metrics := ui_frame_metrics(state.ctx.frame)
 	if len(line) == 0 {
 		gap: i32 = metrics.LINE_HEIGHT / 2
@@ -1827,6 +1870,7 @@ markdown_hit_line :: proc(
 	int,
 	bool,
 ) {
+	assert(state != nil, "markdown_hit_line: nil state")
 	if result, handled := markdown_hit_fence(state, line, line_start); handled {
 		return result, 0, false
 	}
@@ -1850,6 +1894,7 @@ hit_test_markdown :: proc(
 	text: string,
 	mouse_x, mouse_y: i32,
 ) -> int {
+	assert(ctx != nil, "hit_test_markdown: nil ctx")
 	assert(max_width > 0, "hit_test_markdown: non-positive max_width")
 	assert(x >= min(i32) / 2 && y >= min(i32) / 2, "hit_test_markdown: origin overflow risk")
 	if len(text) == 0 || mouse_y < y do return -1

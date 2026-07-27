@@ -83,6 +83,9 @@ _screen_settermprop :: proc "c" (
 	user: rawptr,
 ) -> c.int {
 	context = runtime.default_context()
+	// Asserted after the context exists: assert needs one. This is an FFI
+	// entry point, so the contract is on libvterm, not on Odin callers.
+	assert(val != nil, "_screen_settermprop: nil val")
 	ts := cast(^Term_Instance)user
 	context.allocator = ts.allocator
 	#partial switch prop {
@@ -270,6 +273,7 @@ term_init_emulator :: proc(
 // everything term_destroy frees except the PTY. Counterpart of
 // term_init_emulator for instances that never spawned a shell.
 term_free_emulator :: proc(ts: ^Term_Instance) {
+	assert(ts != nil, "term_free_emulator: nil ts")
 	context.allocator = ts.allocator
 	lv.vterm_free(ts.vt)
 	for line in ts.sb_ring {

@@ -167,6 +167,7 @@ curl_request_perform :: proc(
 	u16,
 	Http_Error,
 ) {
+	assert(body != nil, "curl_request_perform: nil body")
 	if curl.easy_perform(handle) != .E_OK {
 		if body.overflow do return 0, .Body_Too_Large
 		return 0, scheme == .Https ? .TLS : .Connect

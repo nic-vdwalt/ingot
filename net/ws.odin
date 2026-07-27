@@ -195,6 +195,8 @@ WS_Frag_State :: struct {
 // connection (RFC 6455 §5.4 fail-fast).
 @(private)
 ws_handle_data_frame :: proc(ws: ^WebSocket, frag: ^WS_Frag_State, frame: WS_Frame) -> bool {
+	assert(ws != nil, "ws_handle_data_frame: nil ws")
+	assert(frag != nil, "ws_handle_data_frame: nil frag")
 	assert(
 		frame.opcode == WS_OP_TEXT ||
 		frame.opcode == WS_OP_BINARY ||
@@ -427,6 +429,7 @@ ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Option
 // backoff, only ws_close broadcasts.
 @(private = "file")
 ws_stop_wait :: proc(ws: ^WebSocket, d: time.Duration) {
+	assert(ws != nil, "ws_stop_wait: nil ws")
 	assert(d > 0, "backoff wait must be positive")
 	sync.mutex_lock(&ws.stop_mutex)
 	defer sync.mutex_unlock(&ws.stop_mutex)
@@ -494,6 +497,7 @@ ws_enqueue :: proc(ws: ^WebSocket, data: string, binary: bool) {
 // failed or ws_close cut in. The socket is left retracted on failure.
 @(private = "file")
 ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
+	assert(ws != nil, "ws_dial_and_handshake: nil ws")
 	for attempt := 0; attempt < ws.max_attempts && sync.atomic_load(&ws.running); attempt += 1 {
 		transport: Ws_Transport
 		net_err: Ws_Net_Err
@@ -785,6 +789,7 @@ ws_send_binary :: proc(ws: ^WebSocket, data: []u8) -> bool {
 
 // Send a raw WebSocket frame.
 ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
+	assert(ws != nil, "ws_send_frame: nil ws")
 	assert(opcode <= 0x0F, "opcode is a 4-bit field")
 	assert(len(payload) <= WS_MAX_PAYLOAD, "payload exceeds WS_MAX_PAYLOAD")
 
@@ -841,6 +846,7 @@ ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
 
 // Thread-safe check for undrained received messages.
 ws_has_pending :: proc(ws: ^WebSocket) -> bool {
+	assert(ws != nil, "ws_has_pending: nil ws")
 	sync.mutex_lock(&ws.recv_mutex)
 	defer sync.mutex_unlock(&ws.recv_mutex)
 	return len(ws.recv_queue) > 0

@@ -48,6 +48,7 @@ Ink :: enum u8 {
 
 // text_role_size resolves a role against the frame's scaled metrics.
 text_role_size :: proc(frame: ^Ui_Frame, role: Text_Role) -> i32 {
+	assert(frame != nil, "text_role_size: nil frame")
 	metrics := ui_frame_metrics(frame)
 	size: i32
 	switch role {
@@ -68,6 +69,7 @@ text_role_size :: proc(frame: ^Ui_Frame, role: Text_Role) -> i32 {
 // uses the metric directly; other roles keep the same ratio so mixed-size
 // blocks stay visually consistent across UI scales.
 text_role_line_height :: proc(frame: ^Ui_Frame, role: Text_Role) -> i32 {
+	assert(frame != nil, "text_role_line_height: nil frame")
 	metrics := ui_frame_metrics(frame)
 	assert(metrics.LINE_HEIGHT > 0, "text_role_line_height: invalid line height")
 	if role == .Body do return metrics.LINE_HEIGHT
@@ -81,6 +83,7 @@ text_role_line_height :: proc(frame: ^Ui_Frame, role: Text_Role) -> i32 {
 
 // text_ink resolves a semantic ink against the frame's theme.
 text_ink :: proc(frame: ^Ui_Frame, ink: Ink) -> Color {
+	assert(frame != nil, "text_ink: nil frame")
 	style := ui_frame_theme(frame)
 	color: Color
 	switch ink {

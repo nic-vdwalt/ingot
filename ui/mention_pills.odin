@@ -138,6 +138,7 @@ workspace_has_path_with :: proc(files: []string, rel: string) -> bool {
 
 // Shift pill ranges after inserting `n` bytes at byte offset `at`.
 pills_shift_after_insert :: proc(pills: ^[dynamic]Mention_Span, at, n: int) {
+	assert(pills != nil, "pills_shift_after_insert: nil pills")
 	for &p in pills {
 		if p.start >= at do p.start += n
 		if p.end > at do p.end += n

@@ -25,6 +25,7 @@ checkbox :: proc {
 // by default, every such panel was inconsistent unless the caller intervened.
 @(private = "file")
 control_label_size :: proc(frame: ^Ui_Frame, font_size: i32) -> i32 {
+	assert(frame != nil, "control_label_size: nil frame")
 	assert(font_size >= 0, "control_label_size: negative font size")
 	if font_size > 0 do return font_size
 	size := ui_frame_metrics(frame).FONT_SIZE_LABEL
@@ -35,6 +36,7 @@ control_label_size :: proc(frame: ^Ui_Frame, font_size: i32) -> i32 {
 // control_row_width measures box + gap + label for the content-sized wrappers.
 @(private = "file")
 control_row_width :: proc(frame: ^Ui_Frame, label: string, font_size: i32) -> i32 {
+	assert(frame != nil, "control_row_width: nil frame")
 	metrics := ui_frame_metrics(frame)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	width :=
@@ -57,6 +59,8 @@ checkbox_auto :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (
 
 // checkbox_ui carves its own slot (content-sized) and auto-registers focus.
 checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
+	assert(u != nil, "checkbox_ui: nil u")
+	assert(checked != nil, "checkbox_ui: nil checked")
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
@@ -65,6 +69,8 @@ checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
 }
 
 checkbox_ui_id :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (changed: bool) {
+	assert(u != nil, "checkbox_ui_id: nil u")
+	assert(checked != nil, "checkbox_ui_id: nil checked")
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
@@ -176,6 +182,8 @@ radio_auto :: proc(
 
 // radio_ui carves its own slot (content-sized) and auto-registers focus.
 radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed: bool) {
+	assert(u != nil, "radio_ui: nil u")
+	assert(selected != nil, "radio_ui: nil selected")
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
@@ -192,6 +200,8 @@ radio_ui_id :: proc(
 ) -> (
 	changed: bool,
 ) {
+	assert(u != nil, "radio_ui_id: nil u")
+	assert(selected != nil, "radio_ui_id: nil selected")
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
@@ -334,6 +344,8 @@ slider_ui :: proc(
 ) -> (
 	changed: bool,
 ) {
+	assert(u != nil, "slider_ui: nil u")
+	assert(value != nil, "slider_ui: nil value")
 	assert(a11y_label != "", "slider_ui: empty accessible label")
 	r := slider_ui_slot(u, w)
 	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
@@ -351,6 +363,8 @@ slider_ui_id :: proc(
 ) -> (
 	changed: bool,
 ) {
+	assert(u != nil, "slider_ui_id: nil u")
+	assert(value != nil, "slider_ui_id: nil value")
 	assert(a11y_label != "", "slider_ui_id: empty accessible label")
 	r := slider_ui_slot(u, w)
 	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}

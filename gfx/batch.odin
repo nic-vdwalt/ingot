@@ -127,6 +127,7 @@ Renderer :: struct {
 // the same factors (the batch outputs premultiplied rgb).
 @(private)
 _blend_for :: proc(r: ^Renderer, slot: Blend_Slot) -> wg.BlendState {
+	assert(r != nil, "_blend_for: nil r")
 	c: wg.BlendComponent
 	switch slot {
 	case .Alpha:
@@ -269,6 +270,7 @@ _rebuild_custom_pipes :: proc(r: ^Renderer) {
 // the galaxy HDR RGBA16Float targets) are built lazily and cached.
 @(private)
 _pipe_for :: proc(r: ^Renderer, kind: Pipe_Kind, slot: Blend_Slot) -> wg.RenderPipeline {
+	assert(r != nil, "_pipe_for: nil r")
 	fmt := _cur_target_format()
 	if fmt == g.format do return r.pipes[kind][slot]
 	// find or create the alt-format set
@@ -535,6 +537,7 @@ renderer_state_reset :: proc(r: ^Renderer) {
 }
 
 renderer_frame_begin :: proc(r: ^Renderer) -> bool {
+	assert(r != nil, "renderer_frame_begin: nil r")
 	if !_stream_slot_acquire(r, _submission_completed(&g.submissions)) {
 		_stats_stream_slot_exhaustion()
 		return false

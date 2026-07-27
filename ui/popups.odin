@@ -172,6 +172,7 @@ menu_nav_next :: proc(items: []Menu_Item, current, delta: int) -> int {
 // context_menu_height returns the popup's pixel height for an item list, so
 // callers can pre-position the anchor (e.g. open upward above an input box).
 context_menu_height_frame :: proc(frame: ^Ui_Frame, items: []Menu_Item) -> i32 {
+	assert(frame != nil, "context_menu_height_frame: nil frame")
 	assert(len(items) > 0, "context_menu_height_frame: empty items")
 	metrics := ui_frame_metrics(frame)
 	h := metrics.MENU_PAD * 2
@@ -185,6 +186,7 @@ context_menu_height_frame :: proc(frame: ^Ui_Frame, items: []Menu_Item) -> i32 {
 // context_menu_width returns the popup width for an item list (widest label
 // plus padding, at least MENU_MIN_W, capped to the given width).
 context_menu_width_frame :: proc(frame: ^Ui_Frame, items: []Menu_Item, max_w: i32) -> i32 {
+	assert(frame != nil, "context_menu_width_frame: nil frame")
 	assert(len(items) > 0, "context_menu_width_frame: empty items")
 	assert(max_w > 0, "context_menu_width_frame: non-positive cap")
 	metrics := ui_frame_metrics(frame)
@@ -275,6 +277,8 @@ context_menu_rows :: proc(
 	mx, my, menu_w, ox: i32,
 	mouse: Vector2,
 ) -> int {
+	assert(frame != nil, "context_menu_rows: nil frame")
+	assert(st != nil, "context_menu_rows: nil st")
 	assert(st.open, "context_menu_rows: menu not open")
 	assert(len(items) > 0, "context_menu_rows: empty items")
 	metrics := ui_frame_metrics(frame)

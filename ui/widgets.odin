@@ -20,6 +20,7 @@ begin_pane_scissor :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
 // draw_split_divider draws the vertical drag handle between the chat pane and
 // the embedded nvim pane of a split Chat tab. x is the divider's left edge.
 draw_split_divider :: proc(frame: ^Ui_Frame, x, screen_h: i32, hovered: bool) {
+	assert(frame != nil, "draw_split_divider: nil frame")
 	assert(screen_h > 0, "draw_split_divider: invalid screen height")
 	style := ui_frame_theme(frame)
 	metrics := ui_frame_metrics(frame)
@@ -44,6 +45,7 @@ draw_panel_header :: proc(
 	label: string,
 	accent: Color = THEME_COLOR,
 ) -> i32 {
+	assert(frame != nil, "draw_panel_header: nil frame")
 	assert(w > 0, "draw_panel_header: invalid width")
 	style := ui_frame_theme(frame)
 	metrics := ui_frame_metrics(frame)
@@ -71,6 +73,7 @@ draw_card_bg_frame :: proc(
 	accent: Color = THEME_COLOR,
 	accent_w: i32 = 0,
 ) {
+	assert(frame != nil, "draw_card_bg_frame: nil frame")
 	min_dim := min(rect.width, rect.height)
 	if min_dim <= 0 do return
 	round := (ui_frame_metrics(frame).CARD_RADIUS_PX * 2) / min_dim
@@ -101,6 +104,7 @@ draw_card_bg_frame :: proc(
 // land: it dims the content region and highlights the target half (left/right)
 // with a divider preview down the middle.
 draw_split_drop_hint :: proc(frame: ^Ui_Frame, screen_w, screen_h: i32, side_left: bool) {
+	assert(frame != nil, "draw_split_drop_hint: nil frame")
 	assert(screen_w > 0 && screen_h > 0, "draw_split_drop_hint: invalid screen size")
 	style := ui_frame_theme(frame)
 	top := ui_frame_metrics(frame).TAB_BAR_HEIGHT
@@ -128,6 +132,7 @@ draw_split_drop_hint :: proc(frame: ^Ui_Frame, screen_w, screen_h: i32, side_lef
 // mod_down reports whether a clipboard modifier (Cmd on macOS, Ctrl elsewhere)
 // is currently held.
 mod_down :: proc(frame: ^Ui_Frame) -> bool {
+	assert(frame != nil, "mod_down: nil frame")
 	return(
 		is_key_down(frame, .LEFT_SUPER) ||
 		is_key_down(frame, .RIGHT_SUPER) ||
@@ -309,6 +314,7 @@ caret_clamp :: proc(s: string, pos: int) -> int {
 
 // Insert `text` at `pos`, returning the new caret position (pos + len(inserted)).
 caret_insert :: proc(sb: ^strings.Builder, pos: int, text: string) -> int {
+	assert(sb != nil, "caret_insert: nil sb")
 	old := strings.to_string(sb^)
 	insert := text
 	before := old[:pos]
@@ -388,6 +394,7 @@ caret_pixel_to_col_frame :: proc(frame: ^Ui_Frame, line: string, px, font_size: 
 
 // Delete the rune before `pos` (backspace). Returns the new caret position.
 caret_delete_prev :: proc(sb: ^strings.Builder, pos: int) -> int {
+	assert(sb != nil, "caret_delete_prev: nil sb")
 	if pos <= 0 do return 0
 	old := strings.to_string(sb^)
 	start := caret_prev_rune(old, pos)
@@ -399,6 +406,7 @@ caret_delete_prev :: proc(sb: ^strings.Builder, pos: int) -> int {
 
 // Delete the rune at `pos` (forward delete). Returns `pos` unchanged.
 caret_delete_next :: proc(sb: ^strings.Builder, pos: int) -> int {
+	assert(sb != nil, "caret_delete_next: nil sb")
 	old := strings.to_string(sb^)
 	if pos >= len(old) do return pos
 	end := caret_next_rune(old, pos)
@@ -516,6 +524,7 @@ draw_shadow_rounded :: proc(
 	roundness: f32,
 	strength: f32 = 1.0,
 ) {
+	assert(frame != nil, "draw_shadow_rounded: nil frame")
 	assert(rect.width > 0 && rect.height > 0, "draw_shadow_rounded: empty rect")
 	assert(strength >= 0 && strength <= 4, "draw_shadow_rounded: strength out of range")
 	base := ui_frame_theme(frame).shadow_color
@@ -676,6 +685,7 @@ button_at :: proc(
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> bool {
+	assert(frame != nil, "button_at: nil frame")
 	return btn_at(
 		frame,
 		rect.x,
@@ -709,6 +719,7 @@ btn_ui :: proc(
 	style: Btn_Style = .Secondary,
 	enabled: bool = true,
 ) -> bool {
+	assert(u != nil, "btn_ui: nil u")
 	r := btn_ui_slot(u, label)
 	fo := ui_focus(u) if enabled && ui_slot_visible(r) else Focus_Opt{}
 	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
@@ -721,6 +732,7 @@ btn_ui_id :: proc(
 	style: Btn_Style = .Secondary,
 	enabled: bool = true,
 ) -> bool {
+	assert(u != nil, "btn_ui_id: nil u")
 	r := btn_ui_slot(u, label)
 	visible := ui_slot_visible(r)
 	fo := ui_focus(u, id) if enabled && visible else Focus_Opt{}
@@ -799,6 +811,7 @@ btn_ui_state_id :: proc(
 // too wide, and return the drawn text plus its measured width for centring.
 @(private = "file")
 btn_label_fit :: proc(frame: ^Ui_Frame, label: string, w, font_size: i32) -> (cstring, i32) {
+	assert(frame != nil, "btn_label_fit: nil frame")
 	assert(font_size > 0, "btn_label_fit: non-positive font size")
 	assert(label != "", "btn_label_fit: empty label")
 	pad := ui_frame_metrics(frame).CONTROL_GAP
@@ -818,6 +831,7 @@ btn_at :: proc(
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> bool {
+	assert(frame != nil, "btn_at: nil frame")
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "btn: empty accessible label")
 	metrics := ui_frame_metrics(frame)
@@ -968,6 +982,7 @@ draw_line_with_selection_frame :: proc(
 	color: Color,
 	line_byte_start, sel_start, sel_end: int,
 ) {
+	assert(frame != nil, "draw_line_with_selection_frame: nil frame")
 	line_byte_end := line_byte_start + len(line)
 	hl_start := max(sel_start, line_byte_start)
 	hl_end := min(sel_end, line_byte_end)
@@ -1056,6 +1071,7 @@ draw_text_truncated_frame :: proc(
 	x, y, max_width, font_size: i32,
 	color: Color,
 ) {
+	assert(frame != nil, "draw_text_truncated_frame: nil frame")
 	assert(max_width >= 0 && font_size > 0, "draw_text_truncated_frame: invalid metrics")
 	if len(text) == 0 do return
 	out := truncate_to_width_frame(frame, text, max_width, font_size)
@@ -1066,6 +1082,7 @@ draw_text_truncated_frame :: proc(
 // Draw a rounded "pill" badge with text. Returns the pill's full width so the
 // caller can advance horizontally. Background and foreground are caller-chosen.
 draw_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, fg, bg: Color) -> i32 {
+	assert(frame != nil, "draw_pill: nil frame")
 	c := strings.clone_to_cstring(text, context.temp_allocator)
 	tw := measure_text_frame(frame, c, font_size)
 	pad_h: i32 = 6
@@ -1092,6 +1109,7 @@ truncate_to_width_dir_with :: proc(
 	max_width, font_size: i32,
 	side: Truncate_Side,
 ) -> string {
+	assert(system != nil, "truncate_to_width_dir_with: nil system")
 	assert(max_width >= 0, "truncate_to_width_dir: negative width")
 	assert(font_size > 0, "truncate_to_width_dir: non-positive font size")
 	if len(text) == 0 do return text
@@ -1151,6 +1169,7 @@ truncate_path_middle_frame :: proc(
 	path: string,
 	max_width, font_size: i32,
 ) -> string {
+	assert(frame != nil, "truncate_path_middle_frame: nil frame")
 	system := ui_frame_text(frame)
 	if len(path) == 0 do return path
 	full_c := strings.clone_to_cstring(path, context.temp_allocator)
@@ -1298,6 +1317,7 @@ spinner :: proc(
 	color: Color = THEME_COLOR,
 	segments: i32 = 24,
 ) {
+	assert(frame != nil, "spinner: nil frame")
 	spinner_with(
 		frame,
 		cx,
@@ -1307,6 +1327,7 @@ spinner :: proc(
 }
 
 section_header :: proc(frame: ^Ui_Frame, x, y, w: i32, label: string) -> i32 {
+	assert(frame != nil, "section_header: nil frame")
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
@@ -1400,6 +1421,7 @@ progress_bar :: proc(frame: ^Ui_Frame, x, y, w, h: i32, frac: f32, color: Color)
 // rounds to zero at large magnitudes) snaps to target, so "redraw until
 // settled" callers can never spin forever.
 eased :: proc(current: ^f32, target, dt, speed: f32) -> f32 {
+	assert(current != nil, "eased: nil current")
 	k := clamp(speed * dt, 0, 1)
 	if k != k do k = 0 // NaN dt/speed: hold position rather than poison state
 	prev := current^
@@ -1418,6 +1440,8 @@ progress_bar_animated :: proc(
 	anim: ^f32,
 	color: Color,
 ) {
+	assert(frame != nil, "progress_bar_animated: nil frame")
+	assert(anim != nil, "progress_bar_animated: nil anim")
 	eased(anim, clamp(frac, 0, 1), frame_input(frame).frame_time, 10.0)
 	if abs(clamp(frac, 0, 1) - anim^) >= 0.001 {
 		// Still easing: keep frames coming until the fill settles.
@@ -1435,6 +1459,7 @@ icon_btn :: proc(
 	enabled: bool = true,
 	focus: Focus_Opt = {},
 ) -> bool {
+	assert(frame != nil, "icon_btn: nil frame")
 	return btn_at(
 		frame,
 		x,
@@ -1472,6 +1497,7 @@ kv_row_frame :: proc(
 
 // list_row_bg draws the unified rounded row background for hover/selection.
 list_row_bg :: proc(frame: ^Ui_Frame, rect: Rectangle, selected, hovered: bool) {
+	assert(frame != nil, "list_row_bg: nil frame")
 	style := ui_frame_theme(frame)
 	if selected {
 		draw_rectangle_rounded(frame, rect, 0.25, 4, style.bg_active)
@@ -1492,6 +1518,7 @@ Pane :: struct {
 }
 
 pane_reset :: proc(p: ^Pane) {
+	assert(p != nil, "pane_reset: nil p")
 	p.scroll = 0
 	p.content_h = 0
 	p.open = false
@@ -1511,6 +1538,8 @@ pane_begin :: proc(
 ) -> (
 	cursor_y: i32,
 ) {
+	assert(frame != nil, "pane_begin: nil frame")
+	assert(p != nil, "pane_begin: nil p")
 	// Why assert: an already-open pane means a missing pane_end — the scissor
 	// stack would corrupt every subsequent draw.
 	assert(!p.open, "pane_begin: pane already begun (missing pane_end)")
@@ -1551,6 +1580,8 @@ pane_keyboard_scroll :: proc(frame: ^Ui_Frame, p: ^Pane, h: i32) {
 // caller's final y cursor, and draws/handles the scrollbar when content
 // overflows the pane.
 pane_end :: proc(frame: ^Ui_Frame, p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i32 = 10) {
+	assert(frame != nil, "pane_end: nil frame")
+	assert(p != nil, "pane_end: nil p")
 	// Why assert: pane_end without pane_begin would pop a scissor the pane
 	// never pushed, clipping unrelated draws.
 	assert(p.open, "pane_end: pane not begun")
@@ -1580,6 +1611,7 @@ pane_end :: proc(frame: ^Ui_Frame, p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i
 // back_btn_w returns the width the standard back button occupies for a label,
 // so callers can right-align it before drawing.
 back_btn_w :: proc(frame: ^Ui_Frame, label: string) -> i32 {
+	assert(frame != nil, "back_btn_w: nil frame")
 	txt := fmt.ctprintf("\u2190 %s", label)
 	return(
 		measure_text_frame(frame, txt, ui_frame_metrics(frame).FONT_SIZE_LABEL) +
@@ -1590,6 +1622,7 @@ back_btn_w :: proc(frame: ^Ui_Frame, label: string) -> i32 {
 // back_btn draws the standard Ghost-style "← label" navigation button.
 // Returns true if clicked this frame.
 back_btn :: proc(frame: ^Ui_Frame, x, y: i32, label: string, focus: Focus_Opt = {}) -> bool {
+	assert(frame != nil, "back_btn: nil frame")
 	txt := fmt.tprintf("\u2190 %s", label)
 	return btn_at(
 		frame,
@@ -1690,6 +1723,8 @@ collapsible_header :: proc(
 	font_size: i32 = 0,
 	focus: Focus_Opt = {},
 ) -> bool {
+	assert(frame != nil, "collapsible_header: nil frame")
+	assert(open != nil, "collapsible_header: nil open")
 	result := collapsible_header_with(
 		frame,
 		x,

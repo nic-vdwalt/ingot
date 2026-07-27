@@ -276,6 +276,7 @@ write_bytes :: proc(p: ^Pty, data: []u8) -> (written: int, status: Pty_IO_Status
 }
 
 write_byte :: proc(p: ^Pty, b: u8) -> (int, Pty_IO_Status) {
+	assert(p != nil, "write_byte: nil p")
 	buf := [1]u8{b}
 	return write_bytes(p, buf[:])
 }

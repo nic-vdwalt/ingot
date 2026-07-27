@@ -94,6 +94,7 @@ app_run :: proc(
 	callbacks: App_Callbacks,
 	userdata: rawptr = nil,
 ) -> bool {
+	assert(app != nil, "app_run: nil app")
 	if !app_init(app, config, callbacks, userdata) do return false
 	app.state = .Running
 	gfx.run(app_frame_active)

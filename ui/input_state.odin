@@ -127,6 +127,8 @@ text_input_at :: proc(
 	masked: bool = false,
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
+	assert(frame != nil, "text_input_at: nil frame")
+	assert(b != nil, "text_input_at: nil b")
 	return input_at(
 		frame,
 		rect.x,
@@ -151,6 +153,8 @@ input_ui :: proc(
 	masked: bool = false,
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
+	assert(u != nil, "input_ui: nil u")
+	assert(b != nil, "input_ui: nil b")
 	assert(semantics.name != "", "input_ui: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	hh := h if h > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
@@ -183,6 +187,8 @@ input_ui_id :: proc(
 	masked: bool = false,
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
+	assert(u != nil, "input_ui_id: nil u")
+	assert(b != nil, "input_ui_id: nil b")
 	assert(semantics.name != "", "input_ui_id: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	hh := h if h > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP

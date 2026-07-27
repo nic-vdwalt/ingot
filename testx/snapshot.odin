@@ -11,6 +11,7 @@ UPDATE_SNAPSHOTS :: #config(ODIN_TEST_UPDATE_SNAPSHOTS, false)
 
 // snap compares actual against an inline expected block, failing with a diff.
 snap :: proc(t: ^testing.T, actual, expected: string, loc := #caller_location) {
+	assert(t != nil, "snap: nil t")
 	when UPDATE_SNAPSHOTS {
 		log.infof("[snapshot @ %v]\n%s", loc, actual)
 	} else {

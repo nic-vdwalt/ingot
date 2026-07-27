@@ -22,6 +22,7 @@ Debug_Overlay_Cell :: struct {
 
 @(private = "file")
 debug_overlay_push :: proc(rows: []Debug_Overlay_Cell, count: ^int, key, value: string) {
+	assert(count != nil, "debug_overlay_push: nil count")
 	assert(count^ < len(rows), "draw_debug_overlay: row overflow")
 	rows[count^] = {key, value}
 	count^ += 1
@@ -33,6 +34,7 @@ debug_overlay_rows :: proc(
 	stats: Renderer_Diagnostics,
 	rows: []Debug_Overlay_Cell,
 ) -> int {
+	assert(frame != nil, "debug_overlay_rows: nil frame")
 	count := 0
 	debug_overlay_push(rows, &count, "fps", fmt.tprintf("%d", frame_input(frame).fps))
 	debug_overlay_push(
@@ -109,6 +111,7 @@ debug_overlay_diagnostic_rows :: proc(
 	count: ^int,
 	diagnostics: Ui_Frame_Diagnostics,
 ) {
+	assert(count != nil, "debug_overlay_diagnostic_rows: nil count")
 	debug_overlay_push(
 		rows,
 		count,

@@ -104,6 +104,7 @@ focus_opt_activated :: proc(frame: ^Ui_Frame, f: Focus_Opt) -> bool {
 }
 
 draw_focus_ring :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
+	assert(frame != nil, "draw_focus_ring: nil frame")
 	if ui_frame_drop_degenerate(frame, w <= 0 || h <= 0) do return
 	style := ui_frame_theme(frame)
 	if style.focus_ring.a == 0 do return

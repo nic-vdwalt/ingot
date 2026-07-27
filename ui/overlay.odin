@@ -31,6 +31,7 @@ overlay_list :: proc(frame: ^Ui_Frame) -> ^Paint_List {
 }
 
 overlay_rect :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
+	assert(frame != nil, "overlay_rect: nil frame")
 	command := Paint_Command {
 		kind  = .Rectangle,
 		rect  = rect,
@@ -40,6 +41,7 @@ overlay_rect :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
 }
 
 overlay_rect_lines :: proc(frame: ^Ui_Frame, rect: Rectangle, thickness: f32, color: Color) {
+	assert(frame != nil, "overlay_rect_lines: nil frame")
 	command := Paint_Command {
 		kind      = .Rectangle_Outline,
 		rect      = rect,
@@ -56,6 +58,7 @@ overlay_rounded :: proc(
 	segments: i32,
 	color: Color,
 ) {
+	assert(frame != nil, "overlay_rounded: nil frame")
 	command := Paint_Command {
 		kind      = .Rectangle_Rounded,
 		rect      = rect,
@@ -74,6 +77,7 @@ overlay_rounded_lines :: proc(
 	thickness: f32,
 	color: Color,
 ) {
+	assert(frame != nil, "overlay_rounded_lines: nil frame")
 	command := Paint_Command {
 		kind      = .Rectangle_Rounded_Outline,
 		rect      = rect,
@@ -86,6 +90,7 @@ overlay_rounded_lines :: proc(
 }
 
 overlay_line :: proc(frame: ^Ui_Frame, p0, p1: Vector2, color: Color) {
+	assert(frame != nil, "overlay_line: nil frame")
 	command := Paint_Command {
 		kind      = .Line,
 		p0        = p0,
@@ -97,6 +102,7 @@ overlay_line :: proc(frame: ^Ui_Frame, p0, p1: Vector2, color: Color) {
 }
 
 overlay_text :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, color: Color) {
+	assert(frame != nil, "overlay_text: nil frame")
 	font := Font_Id(0)
 	if text_backend_valid(frame.runtime.text_backend) {
 		font = text_backend_font(frame.runtime.text_backend, font_size)

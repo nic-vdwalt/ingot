@@ -144,6 +144,7 @@ LoadFontFromMemory :: proc(
 
 @(private)
 _bake_glyph :: proc(a: ^Atlas, cp: rune) -> bool {
+	assert(a != nil, "_bake_glyph: nil a")
 	if _, ok := a.glyphs[cp]; ok do return true
 
 	gi := tt.FindGlyphIndex(&a.info, cp)
@@ -210,6 +211,7 @@ _bake_glyph :: proc(a: ^Atlas, cp: rune) -> bool {
 
 @(private)
 _atlas_pack :: proc(a: ^Atlas, w, h: i32) -> (x, y: i32, ok: bool) {
+	assert(a != nil, "_atlas_pack: nil a")
 	if a.cur_x + w + ATLAS_PAD > ATLAS_DIM {
 		a.cur_x = 0
 		a.cur_y += a.shelf_h + ATLAS_PAD

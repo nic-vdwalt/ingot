@@ -112,6 +112,7 @@ ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Option
 // ws_poll_state refreshes ws.state from the JS socket.
 @(private = "file")
 ws_poll_state :: proc(ws: ^WebSocket) {
+	assert(ws != nil, "ws_poll_state: nil ws")
 	if ws.id < 0 do return
 	prev := ws.state
 	switch ingot_ws_state(ws.id) {
@@ -210,6 +211,7 @@ ws_has_pending :: proc(ws: ^WebSocket) -> bool {
 }
 
 ws_close :: proc(ws: ^WebSocket) {
+	assert(ws != nil, "ws_close: nil ws")
 	if ws.id >= 0 {
 		ingot_ws_close(ws.id)
 		ws.id = -1

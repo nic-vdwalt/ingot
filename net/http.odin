@@ -56,6 +56,7 @@ Http_Response :: struct {
 }
 
 http_response_destroy :: proc(response: ^Http_Response) {
+	assert(response != nil, "http_response_destroy: nil response")
 	allocator := response.allocator
 	for header in response.headers {
 		delete(header.name, allocator)
@@ -119,6 +120,7 @@ when !INGOT_NET_SIM {
 		body: []u8,
 		ok: bool,
 	) {
+	assert(f != nil, "http_get_interruptible: nil f")
 		response, request_ok := http_request_impl(
 			f,
 			idx,

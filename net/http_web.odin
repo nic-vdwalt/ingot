@@ -60,6 +60,7 @@ when !INGOT_NET_SIM {
 } // when !INGOT_NET_SIM
 
 http_response_destroy :: proc(response: ^Http_Response) {
+	assert(response != nil, "http_response_destroy: nil response")
 	delete(response.body)
 	response^ = {}
 }

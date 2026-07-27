@@ -140,6 +140,7 @@ draw_text_with :: proc(system: ^Text_System, text: cstring, x, y, size: i32, col
 }
 
 draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color: Color) {
+	assert(frame != nil, "draw_text_frame: nil frame")
 	assert(size > 0, "draw_text_frame: invalid size")
 	font := Font_Id(0)
 	if text_backend_valid(frame.runtime.text_backend) {
@@ -205,6 +206,7 @@ measure_text_with :: proc(system: ^Text_System, text: cstring, size: i32) -> i32
 }
 
 measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
+	assert(frame != nil, "measure_text_frame: nil frame")
 	assert(size > 0, "measure_text_frame: invalid size")
 	if text_backend_valid(frame.runtime.text_backend) {
 		font := text_backend_font(frame.runtime.text_backend, size)
@@ -275,6 +277,7 @@ draw_codepoint_frame :: proc(
 	size: i32,
 	color: Color,
 ) {
+	assert(frame != nil, "draw_codepoint_frame: nil frame")
 	assert(size > 0, "draw_codepoint_frame: invalid size")
 	font := Font_Id(0)
 	if text_backend_valid(frame.runtime.text_backend) {

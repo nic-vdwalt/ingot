@@ -984,6 +984,7 @@ ti_layout :: proc(ctx: ^TI_Ctx, text: string) -> TI_View {
 // ti_mouse_masked places the caret from a click in a masked (password) input.
 @(private = "file")
 ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string) {
+	assert(ctx != nil, "ti_mouse_masked: nil ctx")
 	assert(ctx.caret, "ti_mouse_masked: caret model required")
 	assert(ctx.masked, "ti_mouse_masked: masked input required")
 	if !is_mouse_button_pressed(ctx.frame, .LEFT) do return
@@ -1255,6 +1256,8 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 // text (legacy non-caret path; cursor is always at the end).
 @(private = "file")
 ti_render_multiline :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bool) {
+	assert(ctx != nil, "ti_render_multiline: nil ctx")
+	assert(v != nil, "ti_render_multiline: nil v")
 	assert(v.has_newlines, "ti_render_multiline: multiline text required")
 	assert(v.visible_lines > 0, "ti_render_multiline: no visible lines")
 	metrics := ui_frame_metrics(ctx.frame)
@@ -1302,6 +1305,7 @@ ti_render_multiline :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bo
 // horizontal end-scroll.
 @(private = "file")
 ti_render_single :: proc(ctx: ^TI_Ctx, text: string, sel_all: bool) {
+	assert(ctx != nil, "ti_render_single: nil ctx")
 	assert(len(text) > 0, "ti_render_single: empty text")
 	assert(ctx.inner_w >= 0, "ti_render_single: negative inner width")
 	metrics := ui_frame_metrics(ctx.frame)
@@ -1340,6 +1344,8 @@ ti_render_single :: proc(ctx: ^TI_Ctx, text: string, sel_all: bool) {
 // (not only blink-on); only the caret line itself blinks.
 @(private = "file")
 ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
+	assert(ctx != nil, "ti_draw_caret: nil ctx")
+	assert(v != nil, "ti_draw_caret: nil v")
 	assert(ctx.active, "ti_draw_caret: input not active")
 	assert(ctx.h > 0, "ti_draw_caret: non-positive height")
 	metrics := ui_frame_metrics(ctx.frame)
@@ -1409,6 +1415,7 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 // mapping the byte cursor through the (possibly masked) display string.
 @(private = "file")
 ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, blink_on: bool) {
+	assert(ctx != nil, "ti_draw_caret_single: nil ctx")
 	assert(ctx.active, "ti_draw_caret_single: input not active")
 	assert(ctx.h > 0, "ti_draw_caret_single: non-positive height")
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY

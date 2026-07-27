@@ -353,6 +353,7 @@ layout_begin :: proc(l: ^Layout, x, y, w, h: i32, gap: i32 = 0) {
 
 // layout_end closes the root frame and resets the layout for reuse.
 layout_end :: proc(l: ^Layout) {
+	assert(l != nil, "layout_end: nil l")
 	assert(l.depth == 1, "layout_end: unbalanced push/pop")
 	assert(l.stack[0].cursor >= 0, "layout_end: corrupt cursor")
 	assert(
@@ -394,6 +395,7 @@ push_row :: proc(l: ^Layout, h: i32, gap: i32 = 0, cross_align: Cross_Align = .S
 // Inside a row this fills everything right of the cursor; use next() first to
 // carve fixed-width cells.
 push_column :: proc(l: ^Layout, gap: i32 = 0, cross_align: Cross_Align = .Stretch) {
+	assert(l != nil, "push_column: nil l")
 	assert(l.depth > 0 && l.depth < MAX_LAYOUT_DEPTH, "push_column: depth out of bounds")
 	r := remaining(l)
 	assert(r.w >= 0 && r.h >= 0, "push_column: negative remaining space")
@@ -420,6 +422,7 @@ layout_inset :: proc(l: ^Layout, value: Insets_I32) {
 
 // pop closes the innermost pushed frame (row or column).
 layout_pop :: proc(l: ^Layout) {
+	assert(l != nil, "layout_pop: nil l")
 	assert(l.depth > 1, "layout_pop: nothing pushed above the root")
 	assert(_top(l).weight_left == 0, "layout_pop: declared weights not fully consumed")
 	assert(
@@ -457,6 +460,7 @@ flex_next :: proc(l: ^Layout) -> Rect_I32 {
 }
 
 flex_next_sized :: proc(l: ^Layout, cross_size: i32) -> Rect_I32 {
+	assert(l != nil, "flex_next_sized: nil l")
 	assert(l.depth > 0, "flex_next_sized: layout not begun")
 	assert(cross_size >= 0, "flex_next_sized: negative cross size")
 	f := _top(l)
@@ -473,6 +477,7 @@ flex_next_sized :: proc(l: ^Layout, cross_size: i32) -> Rect_I32 {
 // next carves main_size pixels along the main axis, spanning the full cross
 // axis. Overflow is clipped to the frame and never advances beyond its extent.
 next :: proc(l: ^Layout, main_size: i32) -> Rect_I32 {
+	assert(l != nil, "next: nil l")
 	assert(l.depth > 0, "next: layout not begun")
 	assert(main_size >= 0, "next: negative size")
 	f := _top(l)
@@ -495,6 +500,7 @@ next :: proc(l: ^Layout, main_size: i32) -> Rect_I32 {
 // next_sized carves main_size like next but limits the cross axis to
 // cross_size, positioned by the frame's cross_align.
 next_sized :: proc(l: ^Layout, main_size, cross_size: i32) -> Rect_I32 {
+	assert(l != nil, "next_sized: nil l")
 	assert(l.depth > 0, "next_sized: layout not begun")
 	assert(cross_size >= 0, "next_sized: negative cross size")
 	f := _top(l)
@@ -524,6 +530,7 @@ next_sized :: proc(l: ^Layout, main_size, cross_size: i32) -> Rect_I32 {
 
 // spacer advances the cursor by px without emitting a rect (gap is not added).
 spacer :: proc(l: ^Layout, px: i32) {
+	assert(l != nil, "spacer: nil l")
 	assert(l.depth > 0, "spacer: layout not begun")
 	assert(px >= 0, "spacer: negative spacer")
 	f := _top(l)
@@ -533,6 +540,7 @@ spacer :: proc(l: ^Layout, px: i32) {
 
 // remaining returns the not-yet-carved area of the current frame.
 remaining :: proc(l: ^Layout) -> Rect_I32 {
+	assert(l != nil, "remaining: nil l")
 	assert(l.depth > 0, "remaining: layout not begun")
 	f := _top(l)
 	avail := _main_extent(f^) - f.cursor
@@ -563,6 +571,7 @@ layout_kind :: proc(l: ^Layout) -> Layout_Kind {
 // the remaining main-axis space (minus gaps between them) can be divided in a
 // single deterministic pass by subsequent next_weighted calls.
 row_weights :: proc(l: ^Layout, weights: []i32) {
+	assert(l != nil, "row_weights: nil l")
 	assert(l.depth > 0, "row_weights: layout not begun")
 	assert(
 		len(weights) > 0 && len(weights) <= MAX_LAYOUT_WEIGHTS,
@@ -590,6 +599,7 @@ row_weights :: proc(l: ^Layout, weights: []i32) {
 // the corresponding entry declared via row_weights; rounding is distributed
 // so all shares sum exactly to the declared space.
 next_weighted :: proc(l: ^Layout, weight: i32) -> Rect_I32 {
+	assert(l != nil, "next_weighted: nil l")
 	assert(l.depth > 0, "next_weighted: layout not begun")
 	assert(weight > 0, "next_weighted: weight must be positive")
 	f := _top(l)
@@ -719,6 +729,7 @@ _flex_resolve :: proc(f: ^Layout_Frame, sizes: []Flex_Size, space: i32) {
 // _top returns the active frame. Internal; callers use the procs above.
 @(private = "file")
 _top :: proc(l: ^Layout) -> ^Layout_Frame {
+	assert(l != nil, "_top: nil l")
 	assert(l.depth > 0, "_top: empty layout stack")
 	assert(l.depth <= MAX_LAYOUT_DEPTH, "_top: depth out of bounds")
 	return &l.stack[l.depth - 1]

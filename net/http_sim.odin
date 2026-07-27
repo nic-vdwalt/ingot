@@ -103,6 +103,7 @@ when INGOT_NET_SIM {
 
 	// sim_int_range returns a value in [lo, hi).
 	sim_int_range :: proc(p: ^Sim_Prng, lo, hi: int) -> int {
+	assert(p != nil, "sim_int_range: nil p")
 		if hi <= lo do return lo
 		return lo + int(sim_next_u64(p) % u64(hi - lo))
 	}
@@ -225,6 +226,7 @@ when INGOT_NET_SIM {
 	// Advance simulated time one tick: deliver every due message through the
 	// server model, applying its chosen fault.
 	sim_tick :: proc(f: ^Fetcher) {
+	assert(f != nil, "sim_tick: nil f")
 		f.tick += 1
 		scanned := 0
 		for index := 0; index < len(f.in_flight); {
@@ -290,6 +292,7 @@ when INGOT_NET_SIM {
 
 	@(private = "file")
 	sim_pick_fault :: proc(p: ^Sim_Prng, fault_rate: f32) -> Sim_Fault {
+	assert(p != nil, "sim_pick_fault: nil p")
 		assert(fault_rate >= 0)
 		assert(fault_rate <= 1)
 		roll := f32(sim_next_u64(p) % 10_000) / 10_000
@@ -339,6 +342,7 @@ when INGOT_NET_SIM {
 
 	@(private = "file")
 	sim_result_append :: proc(f: ^Fetcher, result: Fetch_Result) {
+	assert(f != nil, "sim_result_append: nil f")
 		assert(len(f.results) < f.result_slots)
 		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 		append(&f.results, result)
@@ -365,6 +369,7 @@ when INGOT_NET_SIM {
 
 	@(private = "file")
 	sim_message_destroy :: proc(message: ^Sim_Message) {
+	assert(message != nil, "sim_message_destroy: nil message")
 		delete(message.request.path)
 		for header in message.request.headers {
 			delete(header.name)

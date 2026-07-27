@@ -142,6 +142,7 @@ chart_data_range :: proc(series: []Chart_Series) -> (mn, mx: f32, n: int, ok: bo
 // chart_series_color cycles the theme palette by series index.
 @(private)
 chart_series_color :: proc(frame: ^Ui_Frame, i: int) -> Color {
+	assert(frame != nil, "chart_series_color: nil frame")
 	style := ui_frame_theme(frame)
 	switch i %% 6 {
 	case 0:
@@ -192,6 +193,7 @@ chart_layout :: proc(
 	cl: Chart_Layout,
 	ok: bool,
 ) {
+	assert(frame != nil, "chart_layout: nil frame")
 	mn, mx, n, has := chart_data_range(series)
 	if !has || w <= 0 || h <= 0 do return
 	if opts.y_fixed {
@@ -259,6 +261,7 @@ chart_note_hover :: proc(frame: ^Ui_Frame, state: ^Chart_State, hovered: int) {
 // x labels. xs holds the pixel x center of each point/slot.
 @(private = "file")
 chart_draw_axes :: proc(frame: ^Ui_Frame, cl: Chart_Layout, opts: Chart_Opts, xs: []f32) {
+	assert(frame != nil, "chart_draw_axes: nil frame")
 	style := ui_frame_theme(frame)
 	buf: [32]u8
 	if opts.show_grid || opts.show_axes {
@@ -326,6 +329,7 @@ chart_draw_axes :: proc(frame: ^Ui_Frame, cl: Chart_Layout, opts: Chart_Opts, xs
 // bottom edge.
 @(private = "file")
 chart_draw_legend :: proc(frame: ^Ui_Frame, cl: Chart_Layout, series: []Chart_Series) {
+	assert(frame != nil, "chart_draw_legend: nil frame")
 	style := ui_frame_theme(frame)
 	ly := i32(cl.chart.y + cl.chart.height) - chart_text_size(frame) - ui_frame_sc(frame, 2)
 	lx := i32(cl.plot.x)
@@ -361,6 +365,7 @@ chart_draw_tooltip :: proc(
 	idx: int,
 	mouse: Vector2,
 ) {
+	assert(frame != nil, "chart_draw_tooltip: nil frame")
 	style := ui_frame_theme(frame)
 	buf: [32]u8
 	pad := ui_frame_sc(frame, 6)
@@ -466,6 +471,8 @@ line_chart :: proc(
 	state: ^Chart_State,
 	opts: Chart_Opts = {},
 ) -> int {
+	assert(frame != nil, "line_chart: nil frame")
+	assert(state != nil, "line_chart: nil state")
 	cl, ok := chart_layout(frame, x, y, w, h, series, opts, false)
 	if !ok do return -1
 	anim := chart_anim(frame, state)
@@ -551,6 +558,8 @@ bar_chart :: proc(
 	state: ^Chart_State,
 	opts: Chart_Opts = {},
 ) -> int {
+	assert(frame != nil, "bar_chart: nil frame")
+	assert(state != nil, "bar_chart: nil state")
 	cl, ok := chart_layout(frame, x, y, w, h, series, opts, true)
 	if !ok do return -1
 	anim := chart_anim(frame, state)
@@ -605,6 +614,7 @@ bar_chart :: proc(
 // sparkline draws a minimal inline trend line (no axes, no state, no hover)
 // sized to fit inside stat cards. A zero color resolves to the theme accent.
 sparkline :: proc(frame: ^Ui_Frame, x, y, w, h: i32, values: []f32, color: Color = {}) {
+	assert(frame != nil, "sparkline: nil frame")
 	if len(values) == 0 || w <= 0 || h <= 0 do return
 	color := color
 	if color == {} do color = ui_frame_theme(frame).fg_accent_light

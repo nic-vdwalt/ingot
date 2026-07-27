@@ -169,6 +169,8 @@ spell_menu_layout :: proc(
 	menu: ^Spell_Menu,
 	input_x, input_w: i32,
 ) -> Spell_Menu_Layout {
+	assert(frame != nil, "spell_menu_layout: nil frame")
+	assert(menu != nil, "spell_menu_layout: nil menu")
 	n := len(menu.suggestions)
 	rows := max(n, 1) + 2
 	separator_h := ui_frame_sc(frame, 5)
@@ -207,6 +209,9 @@ spell_menu_handle_keyboard :: proc(
 	system: ^Spell_System,
 	nav_count: int,
 ) -> bool {
+	assert(frame != nil, "spell_menu_handle_keyboard: nil frame")
+	assert(menu != nil, "spell_menu_handle_keyboard: nil menu")
+	assert(system != nil, "spell_menu_handle_keyboard: nil system")
 	if is_key_pressed(frame, .ESCAPE) {
 		spell_menu_close(menu)
 		return true
@@ -235,6 +240,8 @@ spell_menu_handle_pointer :: proc(
 	Vector2,
 	bool,
 ) {
+	assert(frame != nil, "spell_menu_handle_pointer: nil frame")
+	assert(menu != nil, "spell_menu_handle_pointer: nil menu")
 	mouse := frame_to_local(frame, get_mouse_position(frame))
 	pressed := is_mouse_button_pressed(frame, .LEFT) || is_mouse_button_pressed(frame, .RIGHT)
 	if !menu.just_opened && pressed && !point_in_rect(mouse, menu_rect) {
@@ -255,6 +262,8 @@ spell_menu_draw_row :: proc(
 	mouse: Vector2,
 	color: Color,
 ) -> bool {
+	assert(frame != nil, "spell_menu_draw_row: nil frame")
+	assert(menu != nil, "spell_menu_draw_row: nil menu")
 	row_rect := Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(item_h)}
 	hovered := point_in_rect(mouse, row_rect)
 	if hovered && mouse_moved(frame) do menu.selected = nav_index
@@ -290,6 +299,9 @@ spell_menu_draw_suggestions :: proc(
 	int,
 	i32,
 ) {
+	assert(frame != nil, "spell_menu_draw_suggestions: nil frame")
+	assert(menu != nil, "spell_menu_draw_suggestions: nil menu")
+	assert(layout != nil, "spell_menu_draw_suggestions: nil layout")
 	item_y := layout.menu_y + layout.menu_pad
 	apply_index := -1
 	if layout.suggestion_count == 0 {
@@ -339,6 +351,9 @@ spell_menu_draw_actions :: proc(
 	origin_x, item_y: i32,
 	mouse: Vector2,
 ) -> int {
+	assert(frame != nil, "spell_menu_draw_actions: nil frame")
+	assert(menu != nil, "spell_menu_draw_actions: nil menu")
+	assert(layout != nil, "spell_menu_draw_actions: nil layout")
 	style := ui_frame_theme(frame)
 	current_y := item_y
 	overlay_rect(
@@ -395,6 +410,9 @@ spell_menu_draw_overlay :: proc(
 	layout: ^Spell_Menu_Layout,
 	mouse: Vector2,
 ) -> int {
+	assert(frame != nil, "spell_menu_draw_overlay: nil frame")
+	assert(menu != nil, "spell_menu_draw_overlay: nil menu")
+	assert(layout != nil, "spell_menu_draw_overlay: nil layout")
 	style := ui_frame_theme(frame)
 	origin_x := i32(frame_pane_origin(frame).x)
 	screen_rect := Rectangle {

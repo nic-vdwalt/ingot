@@ -62,6 +62,9 @@ dropdown_ui :: proc(
 ) -> (
 	changed: bool,
 ) {
+	assert(u != nil, "dropdown_ui: nil u")
+	assert(selected != nil, "dropdown_ui: nil selected")
+	assert(st != nil, "dropdown_ui: nil st")
 	assert(a11y_label != "", "dropdown_ui: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
@@ -81,6 +84,9 @@ dropdown_ui_id :: proc(
 ) -> (
 	changed: bool,
 ) {
+	assert(u != nil, "dropdown_ui_id: nil u")
+	assert(selected != nil, "dropdown_ui_id: nil selected")
+	assert(st != nil, "dropdown_ui_id: nil st")
 	assert(a11y_label != "", "dropdown_ui_id: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2

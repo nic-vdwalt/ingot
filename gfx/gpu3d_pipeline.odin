@@ -150,6 +150,8 @@ _sphere_mesh_geometry :: proc(
 	vertices: ^[dynamic]Gpu_3D_Vertex,
 	indices: ^[dynamic]u32,
 ) {
+	assert(vertices != nil, "_sphere_mesh_geometry: nil vertices")
+	assert(indices != nil, "_sphere_mesh_geometry: nil indices")
 	assert(radius > 0)
 	assert(rings >= 2 && slices >= 3)
 	for ring: u32 = 0; ring <= rings; ring += 1 {

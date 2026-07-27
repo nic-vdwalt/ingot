@@ -106,6 +106,7 @@ _submission_rollback :: proc(tracker: ^Submission_Tracker, ticket_id: u64) -> bo
 
 @(private)
 _submission_track :: proc(tracker: ^Submission_Tracker) -> u64 {
+	assert(tracker != nil, "_submission_track: nil tracker")
 	ticket := _submission_reserve(tracker)
 	if ticket == 0 do return 0
 	if !_submission_commit(tracker, ticket) {

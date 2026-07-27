@@ -21,6 +21,7 @@ App_Session :: struct {
 }
 
 app_session_init :: proc(session: ^App_Session, config: App_Session_Config = {}) {
+	assert(session != nil, "app_session_init: nil session")
 	app_session_init_context(session, rl.default_context(), config)
 }
 
@@ -69,6 +70,8 @@ app_session_begin_frame_context :: proc(
 	session: ^App_Session,
 	gfx_frame: ^rl.Frame,
 ) -> ^ui.Ui_Frame {
+	assert(session != nil, "app_session_begin_frame_context: nil session")
+	assert(gfx_frame != nil, "app_session_begin_frame_context: nil gfx_frame")
 	assert(
 		session != nil && session.initialized,
 		"app_session_begin_frame_context: invalid session",

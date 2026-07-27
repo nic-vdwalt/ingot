@@ -175,24 +175,28 @@ ui_frame_runtime :: proc(frame: ^Ui_Frame) -> ^Ui_Runtime {
 }
 
 ui_frame_text :: proc(frame: ^Ui_Frame) -> ^Text_System {
+	assert(frame != nil, "ui_frame_text: nil frame")
 	runtime := ui_frame_runtime(frame)
 	assert(runtime.text.font_loaded, "ui_frame_text: text system not initialized")
 	return &runtime.text
 }
 
 ui_frame_spell :: proc(frame: ^Ui_Frame) -> ^Spell_System {
+	assert(frame != nil, "ui_frame_spell: nil frame")
 	runtime := ui_frame_runtime(frame)
 	assert(runtime.initialized, "ui_frame_spell: invalid runtime")
 	return &runtime.spell
 }
 
 ui_frame_theme :: proc(frame: ^Ui_Frame) -> ^Theme {
+	assert(frame != nil, "ui_frame_theme: nil frame")
 	runtime := ui_frame_runtime(frame)
 	assert(runtime.style.fg_primary.a > 0, "ui_frame_theme: invalid theme")
 	return &runtime.style
 }
 
 ui_frame_metrics :: proc(frame: ^Ui_Frame) -> ^Ui_Metrics {
+	assert(frame != nil, "ui_frame_metrics: nil frame")
 	runtime := ui_frame_runtime(frame)
 	assert(runtime.scale > 0, "ui_frame_metrics: invalid scale")
 	return &runtime.metrics
@@ -202,6 +206,7 @@ ui_frame_metrics :: proc(frame: ^Ui_Frame) -> ^Ui_Metrics {
 // code almost always needs both, and resolving them once per view procedure
 // avoids re-deriving them at every call site.
 ui_frame_style :: proc(frame: ^Ui_Frame) -> (^Ui_Metrics, ^Theme) {
+	assert(frame != nil, "ui_frame_style: nil frame")
 	runtime := ui_frame_runtime(frame)
 	assert(runtime.scale > 0, "ui_frame_style: invalid scale")
 	assert(runtime.style.fg_primary.a > 0, "ui_frame_style: invalid theme")
@@ -215,6 +220,7 @@ ui_frame_sc :: proc(frame: ^Ui_Frame, value: i32) -> i32 {
 }
 
 ui_frame_scf :: proc(frame: ^Ui_Frame, value: f32) -> f32 {
+	assert(frame != nil, "ui_frame_scf: nil frame")
 	runtime := ui_frame_runtime(frame)
 	assert(runtime.scale > 0, "ui_frame_scf: invalid scale")
 	return value * runtime.scale
@@ -411,6 +417,7 @@ end :: proc(u: ^Ui) {
 }
 
 ui_focus_sequential :: proc(u: ^Ui) -> Focus_Opt {
+	assert(u != nil, "ui_focus_sequential: nil u")
 	assert(u.open, "ui_focus: frame not open")
 	assert(u.focus_mode != .Stable, "ui_focus: mixed focus registration")
 	assert(u.focus_seq < MAX_FOCUSABLES, "ui_focus: too many focusables")
@@ -420,6 +427,7 @@ ui_focus_sequential :: proc(u: ^Ui) -> Focus_Opt {
 }
 
 ui_focus_id :: proc(u: ^Ui, id: Widget_Id) -> Focus_Opt {
+	assert(u != nil, "ui_focus_id: nil u")
 	assert(u.open, "ui_focus: frame not open")
 	assert(id != FOCUS_ID_NONE, "ui_focus: zero stable id")
 	assert(u.focus_mode != .Sequential, "ui_focus: mixed focus registration")
