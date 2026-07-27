@@ -355,20 +355,14 @@ UnloadTexture :: proc(texture: Texture2D) {
 // TextureSlotsUsed reports how many of the context's texture slots are
 // occupied. Consumers that cache many textures (tile maps, sprite streamers)
 // need this to size their own budget: the pool is shared with fonts, UI icons
-// and render targets, and LoadTextureFromImage returns an invalid handle once
-// it is full.
+// and render targets (capacity is MAX_TEXTURES), and LoadTextureFromImage
+// returns an invalid handle once it is full.
 TextureSlotsUsed :: proc() -> int {
-	resources := &g.resources.textures
-	assert(resources != nil, "TextureSlotsUsed: no active context")
-	assert(int(resources.count) <= MAX_TEXTURES, "TextureSlotsUsed: count overflow")
-	return int(resources.count)
-}
-
-// TextureSlotsMax reports the context's texture-slot capacity, so a consumer
-// can budget a fraction of it instead of hard-coding the pool size.
-TextureSlotsMax :: proc() -> int {
-	#assert(MAX_TEXTURES > 0)
-	return MAX_TEXTURES
+	count := int(g.resources.textures.count)
+	// Why assert: the pool hands out a bounded number of slots, so a count
+	// above the bound means a register/unregister pair drifted.
+	assert(count <= MAX_TEXTURES, "TextureSlotsUsed: count exceeds pool")
+	return count
 }
 
 // IsTextureValid reports whether `texture` refers to a live slot. A loader

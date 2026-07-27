@@ -170,7 +170,6 @@ texture_pool_reports_exhaustion_instead_of_asserting :: proc(t: ^testing.T) {
 texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
 	// Consumers size their caches off these accessors, so the used count must
 	// track registration exactly and IsTextureValid must reject a zero handle.
-	testing.expect_value(t, TextureSlotsMax(), MAX_TEXTURES)
 	testing.expect(t, !IsTextureValid(Texture2D{}))
 
 	before := TextureSlotsUsed()
