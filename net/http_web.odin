@@ -137,8 +137,8 @@ when !INGOT_NET_SIM {
 		f.in_flight = make([dynamic]In_Flight)
 		f.pending = make([dynamic]Pending)
 		f.running = true
-		assert(f.in_flight != nil)
-		assert(f.pending != nil)
+		assert(len(f.in_flight) == 0)
+		assert(len(f.pending) == 0)
 	}
 
 	fetcher_stop :: proc(f: ^Fetcher) {

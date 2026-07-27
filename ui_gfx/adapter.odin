@@ -103,10 +103,12 @@ adapter_begin_frame :: proc(
 adapter_prepare_frame :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime, input: ^ui.Ui_Input) {
 	assert(adapter != nil && adapter.initialized, "adapter_prepare_frame: invalid adapter")
 	assert(adapter.gfx_context != nil, "adapter_prepare_frame: nil graphics context")
-	assert(
-		adapter.gfx_epoch == rl.context_epoch(adapter.gfx_context),
-		"adapter_prepare_frame: stale graphics context",
-	)
+	when ODIN_OS != .JS {
+		assert(
+			adapter.gfx_epoch == rl.context_epoch(adapter.gfx_context),
+			"adapter_prepare_frame: stale graphics context",
+		)
+	}
 	assert(runtime != nil && input != nil, "adapter_prepare_frame: nil argument")
 	capture_input_context(adapter.gfx_context, input)
 	adapter_attach_runtime(adapter, runtime)
@@ -150,15 +152,17 @@ adapter_bind_frame :: proc(adapter: ^Adapter, gfx_frame: ^rl.Frame) {
 }
 
 adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
-	assert(adapter != nil && adapter.initialized, "adapter_end_frame: invalid adapter")
-	assert(
-		adapter.gfx_epoch == rl.context_epoch(adapter.gfx_context),
-		"adapter_end_frame: stale context",
-	)
-	assert(frame != nil && frame.output != nil, "adapter_end_frame: invalid frame")
+	when ODIN_OS != .JS {
+		assert(adapter != nil && adapter.initialized, "adapter_end_frame: invalid adapter")
+		assert(
+			adapter.gfx_epoch == rl.context_epoch(adapter.gfx_context),
+			"adapter_end_frame: stale context",
+		)
+		assert(frame != nil && frame.output != nil, "adapter_end_frame: invalid frame")
+	}
 	output := frame.output
 	ui.ui_frame_finalize(frame)
-	assert(!frame.open)
+	when ODIN_OS != .JS do assert(!frame.open)
 	adapter_a11y_publish(adapter, frame)
 	scope := rl.context_scope_enter(adapter.gfx_context)
 	replay_list(adapter, &output.overlay)
@@ -167,5 +171,5 @@ adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	ui.paint_list_set_sink(&output.main, nil, nil)
 	ui.ui_frame_release(frame)
 	adapter.gfx_frame = nil
-	assert(adapter.gfx_frame == nil)
+	when ODIN_OS != .JS do assert(adapter.gfx_frame == nil)
 }

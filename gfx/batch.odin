@@ -322,10 +322,11 @@ fn vs_main(
 
 @fragment
 fn fs_ui(in: VSOut) -> @location(0) vec4<f32> {
+	let sampled_alpha = textureSample(atlas, samp, in.uv).r;
 	if (in.mode == 0u) {
 		return vec4<f32>(in.col.rgb * in.col.a, in.col.a);
 	}
-	let a = textureSample(atlas, samp, in.uv).r * in.col.a;
+	let a = sampled_alpha * in.col.a;
 	return vec4<f32>(in.col.rgb * a, a);
 }
 
