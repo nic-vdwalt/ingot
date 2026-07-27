@@ -33,30 +33,32 @@ when INGOT_DEFAULT_FONT {
 	@(private)
 	DEFAULT_FONT_TTF := #load("../assets/fonts/JetBrainsMono-Regular.ttf")
 
-	// _default_font returns the context's default font atlas, baking it on
-	// first use. The bake needs a live GPU device, so it reports false until
-	// the context is initialized; callers must not draw with a false result.
+	// _default_font returns `ctx`'s default font atlas, baking it on first
+	// use. The bake needs a live GPU device, so it reports false until the
+	// context is initialized; callers must not draw with a false result.
 	//
-	// The result is cached on Graphics_Resources rather than in a package
-	// global so each Context owns its own atlas, and so context teardown
-	// clears it along with the atlas slot it refers to.
+	// The context is explicit rather than read from the active-context global
+	// so ownership is visible: the atlas is cached on ctx.resources, and
+	// context teardown clears it along with the atlas slot it refers to.
 	@(private)
-	_default_font :: proc() -> (Font, bool) {
-		if g.resources.default_font_baked {
-			font := g.resources.default_font
+	_default_font :: proc(ctx: ^Context) -> (Font, bool) {
+		assert(ctx != nil, "_default_font: nil context")
+		resources := &ctx.resources
+		if resources.default_font_baked {
+			font := resources.default_font
 			return font, get_atlas(font._atlas) != nil
 		}
-		if !g.initialized do return {}, false
+		if !ctx.initialized do return {}, false
 
 		// Set before baking: a font this build cannot bake (atlas registry
 		// full, corrupt embed) must not be retried on every subsequent frame.
-		g.resources.default_font_baked = true
+		resources.default_font_baked = true
 
 		codepoints: [DEFAULT_FONT_CP_COUNT]rune
 		for &codepoint, index in codepoints {
 			codepoint = DEFAULT_FONT_FIRST_CP + rune(index)
 		}
-		g.resources.default_font = LoadFontFromMemory(
+		resources.default_font = LoadFontFromMemory(
 			".ttf",
 			raw_data(DEFAULT_FONT_TTF),
 			i32(len(DEFAULT_FONT_TTF)),
@@ -64,7 +66,7 @@ when INGOT_DEFAULT_FONT {
 			raw_data(codepoints[:]),
 			i32(len(codepoints)),
 		)
-		return g.resources.default_font, g.resources.default_font.glyphCount > 0
+		return resources.default_font, resources.default_font.glyphCount > 0
 	}
 
 	// DrawText matches raylib's no-asset-required entry point. Unlike raylib it
@@ -72,7 +74,7 @@ when INGOT_DEFAULT_FONT {
 	// bitmap font needing fontSize/10 added back between glyphs, whereas the
 	// embedded TTF's own advances already include it.
 	DrawText :: proc(text: cstring, posX, posY, fontSize: i32, color: Color) {
-		font, ok := _default_font()
+		font, ok := _default_font(g)
 		if !ok do return
 		DrawTextEx(font, text, {f32(posX), f32(posY)}, f32(fontSize), 0, color)
 	}
@@ -80,7 +82,7 @@ when INGOT_DEFAULT_FONT {
 	// MeasureText reads the same atlas DrawText draws from, so its result
 	// always describes what DrawText actually renders.
 	MeasureText :: proc(text: cstring, fontSize: i32) -> i32 {
-		font, ok := _default_font()
+		font, ok := _default_font(g)
 		if !ok do return 0
 		return i32(MeasureTextEx(font, text, f32(fontSize), 0).x)
 	}

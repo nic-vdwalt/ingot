@@ -192,6 +192,7 @@ surface_routing_counters_balance_across_a_frame :: proc(t: ^testing.T) {
 	testing.expect_value(t, context_activation_depth, depth_before + 1)
 	_context_restore(previous)
 	testing.expect_value(t, context_activation_depth, depth_before)
+	testing.expect_value(t, previous, default_context())
 
 	ctx.frame_active = true
 	_ergonomic_frame_opened(ctx)
@@ -201,5 +202,4 @@ surface_routing_counters_balance_across_a_frame :: proc(t: ^testing.T) {
 	ctx.frame_active = false
 	_ergonomic_frame_closed(ctx)
 	testing.expect_value(t, ergonomic_frames_active, frames_before)
-	testing.expect_value(t, g, default_context())
 }
