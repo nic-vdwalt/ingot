@@ -363,6 +363,30 @@ context_get_mouse_wheel_move_v :: proc(ctx: ^Context) -> Vector2 {
 GetMousePosition :: proc() -> Vector2 {return context_get_mouse_position(default_context())}
 GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(default_context())}
 
+// SetMousePosition warps the cursor to window coordinates (raylib parity).
+// The buffered position updates immediately so the frame that requests the warp
+// already reads the new value; the platform is told as well so the next poll
+// agrees. No-op on web, where a page cannot move the system cursor.
+//
+// Deterministic capture depends on this: hover, tooltips, and focus rings are
+// derived from the pointer, so a recorded frame is only reproducible when the
+// harness owns the cursor rather than inheriting wherever the user left it.
+SetMousePosition :: proc(x, y: i32) {
+	context_set_mouse_position(default_context(), x, y)
+}
+
+context_set_mouse_position :: proc(ctx: ^Context, x, y: i32) {
+	if ctx == nil || !ctx.initialized do return
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
+	position := Vector2{f32(x), f32(y)}
+	ctx.inp.mouse = position
+	ctx.inp.mouse_delta = {}
+	platform_set_cursor_pos(f64(x), f64(y))
+	assert(ctx.inp.mouse == position, "SetMousePosition: buffered position not applied")
+	assert(ctx.inp.mouse_delta == Vector2{}, "SetMousePosition: warp must not report a delta")
+}
+
 GetMouseX :: proc() -> i32 {return i32(g.inp.mouse.x)}
 GetMouseY :: proc() -> i32 {return i32(g.inp.mouse.y)}
 

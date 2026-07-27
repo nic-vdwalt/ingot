@@ -519,6 +519,13 @@ platform_cursor_pos :: proc() -> (f64, f64) {
 	return f64(st_mouse.x), f64(st_mouse.y)
 }
 
+// A page cannot warp the system cursor, so the browser keeps ownership and the
+// next pointer event overwrites any buffered position SetMousePosition wrote.
+@(private)
+platform_set_cursor_pos :: proc(x, y: f64) {
+	assert(x == x && y == y, "platform_set_cursor_pos: NaN coordinate")
+}
+
 @(private)
 platform_mouse_button :: proc(button: i32) -> bool {
 	if button < 0 || button >= 8 do return false

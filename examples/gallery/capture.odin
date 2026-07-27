@@ -43,15 +43,21 @@ when CAPTURE {
 	// Fixed output geometry: identical PNGs regardless of host display.
 	CAPTURE_WIDTH :: 1600
 	CAPTURE_HEIGHT :: 1000
-	// Frames to hold a state before the shot. Long enough for eased widget
-	// animation to converge on its target, which is what makes reruns
-	// byte-identical; a shorter delay would capture mid-ease values that
-	// depend on the host's frame timing.
-	CAPTURE_SETTLE_FRAMES :: 30
+	// Frames to hold a state before the shot. ui.eased snaps to its target once
+	// it is within 0.001, so a long enough hold makes every eased widget land on
+	// exactly its target value instead of a frame-timing-dependent one. The
+	// slowest easer here is the chart enter animation (rate 6), which needs
+	// roughly 70 frames; 90 leaves margin without making the run slow.
+	CAPTURE_SETTLE_FRAMES :: 90
 	// Explicit UI scale. Fixed rather than auto so HiDPI hosts cannot change
 	// the output, and above 1.0 so the gallery's intrinsic content height
 	// fills CAPTURE_HEIGHT instead of leaving dead space below the fold.
 	CAPTURE_UI_SCALE :: f32(1.5)
+	// Where the harness parks the cursor. Hover, tooltips, and pointer-driven
+	// focus rings would otherwise depend on wherever the operator left the
+	// mouse, so every shot pins it to the same inert spot in the nav gutter.
+	CAPTURE_MOUSE_X :: 8
+	CAPTURE_MOUSE_Y :: CAPTURE_HEIGHT - 8
 	// Frames each sequence step is held. Eight steps x 60 frames = 480 frames,
 	// which is 8 s of source at the 60 fps the GIF/MP4 encode assumes.
 	CAPTURE_SEQUENCE_FRAMES :: 60
@@ -107,6 +113,7 @@ when CAPTURE {
 	capture_step :: proc() {
 		script := capture_script()
 		assert(capture_step_index >= 0, "capture_step: negative index")
+		rl.SetMousePosition(CAPTURE_MOUSE_X, CAPTURE_MOUSE_Y)
 		if capture_step_index >= len(script) do return
 		if !capture_state_applied {
 			shot := script[capture_step_index]
@@ -119,10 +126,24 @@ when CAPTURE {
 			apply_gallery_theme()
 			apply_scale(CAPTURE_UI_SCALE)
 			ui.pane_reset(&content_pane)
+			capture_seed_inputs()
 			capture_state_applied = true
 			capture_state_frame = 0
 		}
 		capture_state_frame += 1
+	}
+
+	// capture_seed_inputs fills the text boxes so the Inputs shot shows real
+	// content, selection, and spellcheck rather than three empty placeholders.
+	capture_seed_inputs :: proc() {
+		if section != .Inputs do return
+		ui.input_box_set_text(&input_state.name, "Ada Lovelace")
+		ui.input_box_set_text(&input_state.pass, "correct horse battery")
+		ui.input_box_set_text(
+			&input_state.notes,
+			"Immediate mode all the way up: the caller owns this text, undo, and selection.",
+		)
+		fmt.printfln("capture: seeded name=%q", ui.input_box_text(&input_state.name))
 	}
 
 	// capture_write saves the settled render target and advances the script.
@@ -190,7 +211,12 @@ when CAPTURE {
 		rl.clear_frame(&gfx_frame, app.config.clear_color)
 
 		rl.BeginTextureMode(capture_target)
-		rl.ClearBackground(app.config.clear_color)
+		// Clear to the *active theme's* app background rather than the window's
+		// fixed clear colour, so a light-theme shot is light behind the content
+		// instead of showing the dark configured clear through it.
+		rl.ClearBackground(
+			ui_gfx.color_to_gfx(ui.ui_runtime_theme(ui_gfx.app_ui_runtime(&app)).bg_app),
+		)
 		frame(&app, frame_state, nil)
 		ui_gfx.app_session_end_frame_context(&app.session, &gfx_frame)
 		rl.EndTextureMode()

@@ -271,10 +271,20 @@ DrawRing :: proc(
 
 // --- scissor ---------------------------------------------------------------
 
+// _scissor_rect converts a logical clip rect into attachment pixels.
+//
+// flip_y selects the attachment's origin. The window pass and WebGPU scissor
+// rects both count y down from the top, so the window path passes false. A
+// render target is drawn through a y-flipped projection (RT_PROJECTION_Y_FLIP,
+// render_target.odin) so its logical y=0 is the attachment's *bottom* row;
+// without the flip a clipped widget inside a render target kept its size but
+// mirrored its position, which hid short bands such as a text input's inner
+// clip entirely.
 @(private)
 _scissor_rect :: proc(
 	x, y, width, height: i32,
 	logical_w, logical_h, attachment_w, attachment_h: f32,
+	flip_y: bool = false,
 ) -> (
 	u32,
 	u32,
@@ -293,6 +303,13 @@ _scissor_rect :: proc(
 	fy := clamp(f32(y) * sy, 0, attachment_h)
 	pw := u32(clamp(f32(width) * sx, 0, attachment_w - fx))
 	ph := u32(clamp(f32(height) * sy, 0, attachment_h - fy))
+	if flip_y {
+		// Mirror the band, then re-clamp: the top edge measured from the
+		// bottom is attachment_h - (y + height).
+		top := clamp(attachment_h - (f32(y) + f32(height)) * sy, 0, attachment_h)
+		ph = u32(clamp(f32(height) * sy, 0, attachment_h - top))
+		return u32(fx), u32(top), pw, ph, pw > 0 && ph > 0
+	}
 	return u32(fx), u32(fy), pw, ph, pw > 0 && ph > 0
 }
 
@@ -313,7 +330,17 @@ BeginScissorMode :: proc(x, y, width, height: i32) {
 		logical_w = f32(max(g.width, 1))
 		logical_h = f32(max(g.height, 1))
 	}
-	px, py, pw, ph, visible := _scissor_rect(x, y, width, height, logical_w, logical_h, fbw, fbh)
+	px, py, pw, ph, visible := _scissor_rect(
+		x,
+		y,
+		width,
+		height,
+		logical_w,
+		logical_h,
+		fbw,
+		fbh,
+		g.frame.rt != 0,
+	)
 	g.frame.scissor_empty = !visible
 	if visible {
 		assert(pw > 0)

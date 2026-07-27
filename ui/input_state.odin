@@ -53,6 +53,25 @@ input_box_text :: proc(b: ^Input_Box) -> string {
 	return strings.to_string(b.sb)
 }
 
+// input_box_set_text replaces the text and parks the caret at the end.
+//
+// Why it exists: an immediate-mode form is rendered from application state, so
+// loading a record, resetting a form, or restoring a draft all need to push text
+// into the bundle. Without a setter callers reached into the builder directly
+// and left cursor, selection, undo, and the wrap memo describing the old text.
+//
+// The edit is not undoable on purpose: it is a programmatic reload, not a user
+// edit, so folding it into the undo stack would let ctrl+z resurrect another
+// record's text.
+input_box_set_text :: proc(b: ^Input_Box, text: string) {
+	assert(b != nil, "input_box_set_text: nil box")
+	input_box_reset(b)
+	strings.write_string(&b.sb, text)
+	b.st.cursor = strings.builder_len(b.sb)
+	assert(b.st.cursor == len(text), "input_box_set_text: caret not at end of text")
+	assert(!b.st.sel.active, "input_box_set_text: stale selection survived")
+}
+
 input_box_selecting :: proc(b: ^Input_Box) -> bool {
 	assert(b != nil, "input_box_selecting: nil box")
 	return text_input_selecting(&b.st)

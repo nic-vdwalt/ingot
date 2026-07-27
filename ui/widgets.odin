@@ -1319,10 +1319,18 @@ spinner_with :: proc(frame: ^Ui_Frame, cx, cy: i32, options: Spinner_Options) {
 	if ui_frame_drop_degenerate(frame, radius <= 0) do return
 	color := options.color
 	if color == {} || color == THEME_COLOR do color = ui_frame_theme(frame).fg_accent_light
-	interval := options.animation_interval if options.animation_interval > 0 else 1.0 / 60.0
-	request_redraw_in(frame, interval)
-	speed := options.speed if options.speed > 0 else 1.0
-	angle := f32(frame_input(frame).time) * speed
+	// Reduced motion freezes the indicator at phase zero and schedules no
+	// repaint, matching the caret's contract in text_input.odin: the widget
+	// stays legible as a busy affordance without animating. Without this the
+	// spinner alone kept an idle, event-driven application repainting forever.
+	reduced := ui_frame_theme(frame).reduced_motion
+	angle: f32
+	if !reduced {
+		interval := options.animation_interval if options.animation_interval > 0 else 1.0 / 60.0
+		request_redraw_in(frame, interval)
+		speed := options.speed if options.speed > 0 else 1.0
+		angle = f32(frame_input(frame).time) * speed
+	}
 	if options.style == .Orbit_Dots {
 		count := options.dot_count if options.dot_count > 0 else 3
 		count = min(count, 16)

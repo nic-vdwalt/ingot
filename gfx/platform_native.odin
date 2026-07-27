@@ -325,6 +325,12 @@ platform_cursor_pos :: proc() -> (f64, f64) {
 }
 
 @(private)
+platform_set_cursor_pos :: proc(x, y: f64) {
+	if g.win == nil do return
+	glfw.SetCursorPos(_win(), x, y)
+}
+
+@(private)
 platform_mouse_button :: proc(button: i32) -> bool {
 	if g.win == nil do return false
 	return glfw.GetMouseButton(_win(), button) == glfw.PRESS
