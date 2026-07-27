@@ -286,6 +286,7 @@ Cameras do not nest, matching raylib. A camera composes on top of any active
 `rlgl` matrix-stack offset and restores it on `EndMode2D`.
 
 ### Custom shaders — redesign
+
 ```odin
 // Before: raylib accepts GLSL source selected for its OpenGL backend.
 shader := rl.LoadShaderFromMemory(glsl_vertex, glsl_fragment)

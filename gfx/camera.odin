@@ -94,17 +94,11 @@ EndMode2D :: proc() {
 }
 
 // GetCameraMatrix2D returns the active-camera transform as a 4x4, matching
-// raylib's rlgl-facing accessor. The 2D affine occupies the upper-left block.
+// raylib's rlgl-facing accessor. The 2D affine occupies the upper-left block
+// and the translation column; z passes through unchanged.
 GetCameraMatrix2D :: proc(camera: Camera2D) -> Matrix {
 	m := _affine_from_camera_2d(camera)
-	result := Matrix(1)
-	result[0, 0] = m.a
-	result[1, 0] = m.b
-	result[0, 1] = m.c
-	result[1, 1] = m.d
-	result[0, 3] = m.tx
-	result[1, 3] = m.ty
-	return result
+	return Matrix{m.a, m.c, 0, m.tx, m.b, m.d, 0, m.ty, 0, 0, 1, 0, 0, 0, 0, 1}
 }
 
 // GetWorldToScreen2D and GetScreenToWorld2D map between a Camera2D's world and

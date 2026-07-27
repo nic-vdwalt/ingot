@@ -47,24 +47,26 @@ Fade :: proc(color: Color, alpha: f32) -> Color {
 // reproducing raylib's integer blend so ported code gets the same bytes.
 //
 // The arithmetic is deliberately raylib's: 8-bit fixed point with an alpha
-// biased by one, not a float blend. Matching it matters because callers use
-// this to precompute colors that must agree with what raylib produced.
+// biased by one, and a tint modulation that divides by 256 rather than 255, so
+// even a WHITE tint costs one unit per channel. Matching it matters because
+// callers use this to precompute colors that must agree with what raylib
+// produced.
 ColorAlphaBlend :: proc(dst, src, tint: Color) -> Color {
-	tinted := Color {
-		u8((u32(src.r) * u32(tint.r)) >> 8),
-		u8((u32(src.g) * u32(tint.g)) >> 8),
-		u8((u32(src.b) * u32(tint.b)) >> 8),
-		u8((u32(src.a) * u32(tint.a)) >> 8),
+	tinted: Color
+	for channel in 0 ..< 4 {
+		tinted[channel] = u8((u32(src[channel]) * u32(tint[channel])) >> 8)
 	}
-	if tinted.a == 0 do return dst
-	if tinted.a == 255 do return tinted
+	if tinted[3] == 0 do return dst
+	if tinted[3] == 255 do return tinted
 
-	alpha := u32(tinted.a) + 1
+	alpha := u32(tinted[3]) + 1
+	inverse := 256 - alpha
 	out: Color
-	out.a = u8((alpha * 256 + u32(dst.a) * (256 - alpha)) >> 8)
-	if out.a == 0 do return out
-	out.r = u8(((u32(tinted.r) * alpha * 256 + u32(dst.r) * u32(dst.a) * (256 - alpha)) / u32(out.a)) >> 8)
-	out.g = u8(((u32(tinted.g) * alpha * 256 + u32(dst.g) * u32(dst.a) * (256 - alpha)) / u32(out.a)) >> 8)
-	out.b = u8(((u32(tinted.b) * alpha * 256 + u32(dst.b) * u32(dst.a) * (256 - alpha)) / u32(out.a)) >> 8)
+	out[3] = u8((alpha * 256 + u32(dst[3]) * inverse) >> 8)
+	if out[3] == 0 do return out
+	for channel in 0 ..< 3 {
+		blended := u32(tinted[channel]) * alpha * 256 + u32(dst[channel]) * u32(dst[3]) * inverse
+		out[channel] = u8((blended / u32(out[3])) >> 8)
+	}
 	return out
 }
