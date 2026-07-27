@@ -28,6 +28,7 @@ context_begin_frame :: proc(ctx: ^Context) -> (Frame, bool) {
 	}
 	ctx.frame_generation += 1
 	ctx.frame_active = true
+	_ergonomic_frame_opened(ctx)
 	frame := Frame {
 		owner      = ctx,
 		epoch      = ctx.epoch,
@@ -49,6 +50,7 @@ end_frame :: proc(frame: ^Frame) {
 	EndDrawing()
 	frame.active = false
 	ctx.frame_active = false
+	_ergonomic_frame_closed(ctx)
 	assert(!frame.active)
 	assert(!ctx.frame_active)
 }
