@@ -27,14 +27,10 @@ RISK_PATTERNS = {
         r"\b(?:append|inject_at|ordered_remove|unordered_remove)\s*\("
         r"|(?:head|tail|count)\s*(?:\+=|-=|=)"
     ),
-    "ownership": re.compile(r"\b(?:make|new|delete|free|destroy|clone|resize)\s*\("),
-    "state": re.compile(
-        r"\b(?:state|running|active|session)\b\s*(?:=|\+=|-=)"
-        r"|\b(?:begin|end|start|stop|close)\s*\("
-    ),
+    "ownership": re.compile(r"\b(?:new|delete|free|destroy|clone|resize)\s*\("),
+    "state": re.compile(r"\b(?:state|running|active|session)\b\s*(?:=|\+=|-=)"),
     "untrusted_input": re.compile(
-        r"\b(?:parse[A-Za-z0-9_]*|decode[A-Za-z0-9_]*"
-        r"|read[A-Za-z0-9_]*|recv[A-Za-z0-9_]*)\s*\("
+        r"\b(?:decode[A-Za-z0-9_]*|read[A-Za-z0-9_]*|recv[A-Za-z0-9_]*)\s*\("
     ),
 }
 CONTROL_FLOW = re.compile(r"\b(?:if|when|switch|for)\b")

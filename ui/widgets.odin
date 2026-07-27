@@ -637,13 +637,30 @@ btn :: proc {
 	btn_ui_state_id,
 }
 
-button :: proc(u: ^Ui, id: Widget_Id, label: string, style: Btn_Style = .Secondary, enabled: bool = true) -> bool {
+button :: proc(
+	u: ^Ui,
+	id: Widget_Id,
+	label: string,
+	style: Btn_Style = .Secondary,
+	enabled: bool = true,
+) -> bool {
 	assert(u != nil && u.open, "button: frame not open")
 	assert(id != WIDGET_ID_NONE, "button: zero stable id")
 	assert(label != "", "button: empty accessible label")
 	r := btn_ui_slot(u, label)
 	focus := ui_focus(u, id) if enabled && ui_slot_visible(r) else Focus_Opt{}
-	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = focus, widget = id)
+	return btn_at(
+		u.frame,
+		r.x,
+		r.y,
+		r.w,
+		r.h,
+		label,
+		style,
+		enabled = enabled,
+		focus = focus,
+		widget = id,
+	)
 }
 
 button_at :: proc(

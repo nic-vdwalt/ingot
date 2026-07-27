@@ -20,7 +20,10 @@ checkbox_auto :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (
 	assert(id != WIDGET_ID_NONE, "checkbox: zero stable id")
 	metrics := ui_frame_metrics(u.frame)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := metrics.CONTROL_BOX + metrics.CONTROL_GAP + measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	w :=
+		metrics.CONTROL_BOX +
+		metrics.CONTROL_GAP +
+		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
 	r := slot_next_px(u, w, metrics.ROW_H_SM)
 	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
 	return checkbox_at(u.frame, r, label, checked, focus, id)
@@ -136,12 +139,17 @@ radio_auto :: proc(
 	label: string,
 	selected: ^i32,
 	value: i32,
-) -> (changed: bool) {
+) -> (
+	changed: bool,
+) {
 	assert(u != nil && u.open, "radio: frame not open")
 	assert(id != WIDGET_ID_NONE, "radio: zero stable id")
 	metrics := ui_frame_metrics(u.frame)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w := metrics.CONTROL_BOX + metrics.CONTROL_GAP + measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	w :=
+		metrics.CONTROL_BOX +
+		metrics.CONTROL_GAP +
+		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
 	r := slot_next_px(u, w, metrics.ROW_H_SM)
 	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
 	return radio_at(u.frame, r, label, selected, value, focus, id)
@@ -278,7 +286,9 @@ slider_auto :: proc(
 	step: f32 = 0,
 	width: i32 = 0,
 	a11y_label: string = "",
-) -> (changed: bool) {
+) -> (
+	changed: bool,
+) {
 	assert(u != nil && u.open, "slider: frame not open")
 	assert(id != WIDGET_ID_NONE, "slider: zero stable id")
 	assert(a11y_label != "", "slider: empty accessible label")

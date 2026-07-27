@@ -727,12 +727,7 @@ ui_panel_end :: proc(u: ^Ui) {
 	layout_pop(&u.layout)
 }
 
-row_begin :: proc(
-	u: ^Ui,
-	height: i32,
-	gap: Space = .None,
-	align: Cross_Align = .Start,
-) {
+row_begin :: proc(u: ^Ui, height: i32, gap: Space = .None, align: Cross_Align = .Start) {
 	assert(u != nil && u.open, "row_begin: frame not open")
 	assert(height >= 0, "row_begin: negative height")
 	height_px := ui_frame_sc(u.frame, height)
@@ -763,12 +758,7 @@ flex_row_end :: proc(u: ^Ui) {
 	row_end(u)
 }
 
-column_begin :: proc(
-	u: ^Ui,
-	width: i32,
-	gap: Space = .None,
-	align: Cross_Align = .Stretch,
-) {
+column_begin :: proc(u: ^Ui, width: i32, gap: Space = .None, align: Cross_Align = .Stretch) {
 	assert(u != nil && u.open, "column_begin: frame not open")
 	assert(width >= 0, "column_begin: negative width")
 	width_px := ui_frame_sc(u.frame, width)

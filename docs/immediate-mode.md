@@ -119,6 +119,18 @@ frame, input/output pair, and adapter. It does not own widget/component state,
 the graphics window, or `context.temp_allocator`. Advanced hosts may continue
 to bracket these objects through the low-level adapter procedures.
 
+## Composition and explicit escape hatches
+
+Explicit ownership does not require applications to manage every coordinate.
+The ordinary path combines a caller-owned `Ui`, explicit stable IDs, and
+unsuffixed facade widgets. Facade dimensions are logical and widgets consume
+bounded single-pass slots without retaining children or application state.
+
+Use rect-based `*_at` widgets for canvases, scrolling content, overlays,
+charts, and exact geometry. Use `Layout`, `Flow_Layout`, explicit measurement,
+and visible-range rendering for custom composition. These paths change who
+supplies geometry; they do not change caller ownership or identity.
+
 ## From immediate-mode library to app framework
 
 The early success of IMGUI in game tools also narrowed how the idea came to be

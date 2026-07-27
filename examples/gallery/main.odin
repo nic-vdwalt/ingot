@@ -520,11 +520,7 @@ draw_widget_choices :: proc(state: ^Widget_State) {
 draw_widget_volume :: proc(state: ^Widget_State) {
 	assert(state != nil, "draw_widget_volume: nil state")
 	ui.row_begin(&state.ctx, 32, gap = .SM)
-	rect := ui.slot_next(
-		&state.ctx,
-		240,
-		32,
-	)
+	rect := ui.slot_next(&state.ctx, 240, 32)
 	ui.slider_at_state(
 		ui_frame,
 		&state.slider,

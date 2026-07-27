@@ -25,7 +25,9 @@ dropdown_auto :: proc(
 	state: ^Dropdown_State,
 	width: i32 = 0,
 	a11y_label: string = "",
-) -> (changed: bool) {
+) -> (
+	changed: bool,
+) {
 	assert(u != nil && u.open, "dropdown: frame not open")
 	assert(id != WIDGET_ID_NONE, "dropdown: zero stable id")
 	assert(a11y_label != "", "dropdown: empty accessible label")
