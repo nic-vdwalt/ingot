@@ -76,9 +76,13 @@ triangle_fan_and_strip_ignore_degenerate_input :: proc(t: ^testing.T) {
 	defer g.frame.has_frame = restore
 	g.frame.has_frame = false
 
+	// Empty input is ordinary: raylib draws nothing and so does ingot. A nil
+	// pointer with a *positive* count is a different thing — a programmer
+	// error — and asserts rather than silently drawing nothing, so it is not
+	// exercised here.
 	points := [2]Vector2{{0, 0}, {1, 1}}
-	DrawTriangleFan(nil, 8, WHITE)
-	DrawTriangleStrip(nil, 8, WHITE)
+	DrawTriangleFan(nil, 0, WHITE)
+	DrawTriangleStrip(nil, 0, WHITE)
 	DrawTriangleFan(raw_data(points[:]), 2, WHITE)
 	DrawTriangleStrip(raw_data(points[:]), 2, WHITE)
 	testing.expect_value(t, len(g.rend.verts), 0)
@@ -126,4 +130,57 @@ polar_places_points_on_the_circle :: proc(t: ^testing.T) {
 		)
 		testing.expectf(t, math.abs(radius - 5) < 1e-4, "radius at %v was %v", degrees, radius)
 	}
+}
+
+// --- tessellation bounds ---------------------------------------------------
+// Every curved primitive derives a loop count from either a caller-supplied
+// segment count or a radius, and both are unbounded at the call site. Without
+// a cap a zoomed-in circle or a bad segment count turns one draw call into
+// millions of GPU flushes and hangs the frame, so the cap is fenced here.
+
+@(test)
+shape_segments_clamps_into_the_bound :: proc(t: ^testing.T) {
+	testing.expect_value(t, _shape_segments(1, 2), i32(2))
+	testing.expect_value(t, _shape_segments(64, 2), i32(64))
+	testing.expect_value(t, _shape_segments(SHAPE_SEGMENTS_MAX, 2), i32(SHAPE_SEGMENTS_MAX))
+	testing.expect_value(t, _shape_segments(SHAPE_SEGMENTS_MAX + 1, 2), i32(SHAPE_SEGMENTS_MAX))
+	testing.expect_value(t, _shape_segments(max(i32), 2), i32(SHAPE_SEGMENTS_MAX))
+	// Negative counts must not underflow into a huge unsigned loop bound.
+	testing.expect_value(t, _shape_segments(-1, 2), i32(2))
+	testing.expect_value(t, _shape_segments(min(i32), 2), i32(2))
+}
+
+@(test)
+shape_segments_for_radius_is_bounded :: proc(t: ^testing.T) {
+	// Ordinary radii tessellate proportionally.
+	testing.expect_value(t, _shape_segments_for_radius(4, 16), i32(16))
+	testing.expect_value(t, _shape_segments_for_radius(64, 16), i32(64))
+	// A camera zoomed far in produces a huge radius; the cap holds.
+	testing.expect_value(t, _shape_segments_for_radius(1e6, 16), i32(SHAPE_SEGMENTS_MAX))
+	testing.expect_value(t, _shape_segments_for_radius(1e30, 16), i32(SHAPE_SEGMENTS_MAX))
+	testing.expect_value(t, _shape_segments_for_radius(max(f32), 16), i32(SHAPE_SEGMENTS_MAX))
+	// Degenerate radii fall back to the minimum rather than a negative or
+	// NaN-derived loop count.
+	testing.expect_value(t, _shape_segments_for_radius(0, 16), i32(16))
+	testing.expect_value(t, _shape_segments_for_radius(-1e9, 16), i32(16))
+}
+
+@(test)
+shape_segments_for_radius_rejects_nan :: proc(t: ^testing.T) {
+	// A NaN radius compares false against every bound. The guard is written
+	// as !(radius > minimum) precisely so NaN falls through to the minimum
+	// instead of reaching i32(NaN), which is undefined.
+	nan := math.nan_f32()
+	testing.expect_value(t, _shape_segments_for_radius(nan, 16), i32(16))
+}
+
+@(test)
+shape_bounds_fit_the_batch :: proc(t: ^testing.T) {
+	// The caps exist to keep a single primitive inside one batch. If the batch
+	// ever shrinks below them the compile-time asserts in shapes.odin fire;
+	// this states the same relationship at runtime for readers.
+	testing.expect(t, SHAPE_SEGMENTS_MAX * 3 <= BATCH_MAX_VERTICES)
+	testing.expect(t, SHAPE_POINTS_MAX * 3 <= BATCH_MAX_VERTICES + 2)
+	testing.expect(t, SHAPE_SEGMENTS_MAX > 0)
+	testing.expect(t, SHAPE_POINTS_MAX > 0)
 }

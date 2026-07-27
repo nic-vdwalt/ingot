@@ -402,6 +402,8 @@ DrawTextPro :: proc(
 	rotation, fontSize, spacing: f32,
 	tint: Color,
 ) {
+	assert(text != nil, "DrawTextPro: nil text")
+	assert(g != nil, "DrawTextPro: nil context")
 	if rotation == 0 {
 		DrawTextEx(
 			font,
@@ -413,8 +415,14 @@ DrawTextPro :: proc(
 		)
 		return
 	}
+	// Paired save/restore across the draw: the transform is process state, so
+	// an early return inside DrawTextEx must not leak the pivot to the next
+	// caller. The defer is the restore half of that pair.
 	saved := g.rend.model_xf
-	defer g.rend.model_xf = saved
+	defer {
+		g.rend.model_xf = saved
+		assert(g.rend.model_xf == saved, "DrawTextPro: model transform not restored")
+	}
 
 	// Rotate about `position`, then place the text so `origin` lands there.
 	pivot := _affine_from_camera_2d(

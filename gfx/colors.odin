@@ -61,8 +61,16 @@ ColorAlphaBlend :: proc(dst, src, tint: Color) -> Color {
 
 	alpha := u32(tinted[3]) + 1
 	inverse := 256 - alpha
+	// alpha is biased by one so the 8-bit reciprocal is exact, and inverse is
+	// its complement. Both staying inside 1..=256 is what keeps the numerator
+	// below from overflowing u32.
+	assert(alpha >= 1 && alpha <= 256, "ColorAlphaBlend: alpha outside fixed-point range")
+	assert(alpha + inverse == 256, "ColorAlphaBlend: alpha and inverse must complement")
+
 	out: Color
 	out[3] = u8((alpha * 256 + u32(dst[3]) * inverse) >> 8)
+	// Guard the divisor rather than assert it: a fully transparent result is
+	// reachable from ordinary inputs, not a programmer error.
 	if out[3] == 0 do return out
 	for channel in 0 ..< 3 {
 		blended := u32(tinted[channel]) * alpha * 256 + u32(dst[channel]) * u32(dst[3]) * inverse

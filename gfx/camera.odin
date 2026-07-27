@@ -77,20 +77,24 @@ cam2d: Camera2D
 // boundary in the renderer stats.
 BeginMode2D :: proc(camera: Camera2D) {
 	assert(!cam2d_active, "BeginMode2D: already inside a 2D camera mode")
+	assert(g != nil, "BeginMode2D: nil context")
 	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
 	cam2d_saved = g.rend.model_xf
 	cam2d = camera
 	g.rend.model_xf = _affine_from_camera_2d(camera)
 	cam2d_active = true
+	assert(cam2d_active)
 }
 
 EndMode2D :: proc() {
 	assert(cam2d_active, "EndMode2D: no active 2D camera mode")
+	assert(g != nil, "EndMode2D: nil context")
 	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
 	g.rend.model_xf = cam2d_saved
 	cam2d_saved = {}
 	cam2d = {}
 	cam2d_active = false
+	assert(!cam2d_active)
 }
 
 // GetCameraMatrix2D returns the active-camera transform as a 4x4, matching
@@ -115,10 +119,17 @@ GetScreenToWorld2D :: proc(position: Vector2, camera: Camera2D) -> Vector2 {
 	// A zero-zoom camera collapses the world to a point, so no screen position
 	// maps back to a unique world position. raylib produces infinities here;
 	// returning the camera target is bounded and obviously wrong to a caller.
+	// A zoom animation can legitimately pass through zero, so this is handled
+	// rather than asserted.
 	if determinant == 0 do return camera.target
 	x := position.x - m.tx
 	y := position.y - m.ty
-	return {(m.d * x - m.c * y) / determinant, (m.a * y - m.b * x) / determinant}
+	world := Vector2{(m.d * x - m.c * y) / determinant, (m.a * y - m.b * x) / determinant}
+	// Postcondition: picking feeds layout and hit-testing, so a NaN escaping
+	// here would surface far from its cause.
+	assert(world.x == world.x, "GetScreenToWorld2D: produced NaN x")
+	assert(world.y == world.y, "GetScreenToWorld2D: produced NaN y")
+	return world
 }
 
 BeginMode3D :: proc(camera: Camera3D) {

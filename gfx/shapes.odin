@@ -8,6 +8,50 @@ package gfx
 import "core:math"
 import wg "vendor:wgpu"
 
+// SHAPE_SEGMENTS_MAX bounds the tessellation of every curved primitive (Tiger
+// Style: put a limit on everything).
+//
+// Segment counts arrive two ways, and both are unbounded at the call site: a
+// caller passes `segments` directly, or it is derived from a radius that grows
+// without limit under a zoomed Camera2D. Each segment emits a triangle, so an
+// absurd count does not overflow the batch — `_batch_reserve` flushes and
+// retries — it converts one draw call into millions of GPU flushes and hangs
+// the frame.
+//
+// 8192 is past the point of visible return: a circle spanning an 8K display is
+// about 7680px across, so one segment per pixel of diameter already exceeds
+// what the display can resolve, and the worst case costs 8192*3 vertices,
+// comfortably inside BATCH_MAX_VERTICES.
+SHAPE_SEGMENTS_MAX :: 8192
+#assert(SHAPE_SEGMENTS_MAX * 3 <= BATCH_MAX_VERTICES)
+#assert(SHAPE_SEGMENTS_MAX * 3 <= BATCH_MAX_INDICES)
+
+// _shape_segments clamps a requested or derived segment count into
+// 1..=SHAPE_SEGMENTS_MAX. It clamps rather than asserts because a large count
+// is usually a large radius under zoom — ordinary data, not a programmer error
+// — and refusing to draw or aborting would both be worse than tessellating at
+// the resolution limit.
+@(private)
+_shape_segments :: proc(requested: i32, minimum: i32) -> i32 {
+	assert(minimum >= 1, "_shape_segments: minimum must be at least 1")
+	assert(minimum <= SHAPE_SEGMENTS_MAX, "_shape_segments: minimum exceeds the cap")
+	segments := clamp(requested, minimum, SHAPE_SEGMENTS_MAX)
+	assert(segments >= 1)
+	assert(segments <= SHAPE_SEGMENTS_MAX)
+	return segments
+}
+
+// _shape_segments_for_radius derives a segment count from a radius in logical
+// pixels. A NaN radius compares false against every bound, so it falls through
+// to `minimum` rather than propagating into the loop count.
+@(private)
+_shape_segments_for_radius :: proc(radius: f32, minimum: i32) -> i32 {
+	assert(minimum >= 1, "_shape_segments_for_radius: minimum must be at least 1")
+	if !(radius > f32(minimum)) do return minimum
+	if radius >= f32(SHAPE_SEGMENTS_MAX) do return SHAPE_SEGMENTS_MAX
+	return _shape_segments(i32(radius), minimum)
+}
+
 // --- filled rectangles -----------------------------------------------------
 
 DrawRectangle :: proc(posX, posY, width, height: i32, color: Color) {
@@ -57,7 +101,7 @@ DrawRectangleRounded :: proc(rec: Rectangle, roundness: f32, segments: i32, colo
 		DrawRectangleRec(rec, color)
 		return
 	}
-	segs := max(segments, 2)
+	segs := _shape_segments(segments, 2)
 	c := col_f(color)
 	batch_set(&g.rend, .Solid, nil)
 
@@ -82,7 +126,7 @@ DrawRectangleRoundedLinesEx :: proc(
 	color: Color,
 ) {
 	r := _corner_radius(rec, roundness)
-	segs := max(segments, 2)
+	segs := _shape_segments(segments, 2)
 	t := lineThick
 	x, y, w, h := rec.x, rec.y, rec.width, rec.height
 	if r <= 0 {
@@ -116,6 +160,12 @@ _corner_fan :: proc(
 	segments: i32,
 	c: [4]f32,
 ) {
+	assert(rend != nil, "_corner_fan: nil renderer")
+	// Every caller routes through _shape_segments, so the loop below is
+	// bounded. Asserting it here keeps the bound true for future callers
+	// rather than relying on each one to remember.
+	assert(segments >= 1, "_corner_fan: segment count must be at least 1")
+	assert(segments <= SHAPE_SEGMENTS_MAX, "_corner_fan: unbounded segment count")
 	step := (a1 - a0) / f32(segments)
 	prev := _polar(center, radius, a0)
 	for i in 1 ..= segments {
@@ -167,7 +217,7 @@ DrawCircle :: proc(centerX, centerY: i32, radius: f32, color: Color) {
 }
 
 DrawCircleV :: proc(center: Vector2, radius: f32, color: Color) {
-	segs := i32(max(12, radius))
+	segs := _shape_segments_for_radius(radius, 12)
 	c := col_f(color)
 	batch_set(&g.rend, .Solid, nil)
 	_corner_fan(&g.rend, center, radius, 0, 360, segs, c)
@@ -179,7 +229,7 @@ DrawRing :: proc(
 	segments: i32,
 	color: Color,
 ) {
-	segs := max(segments, 2)
+	segs := _shape_segments(segments, 2)
 	c := col_f(color)
 	batch_set(&g.rend, .Solid, nil)
 	step := (endAngle - startAngle) / f32(segs)
@@ -292,7 +342,7 @@ DrawCircleLines :: proc(centerX, centerY: i32, radius: f32, color: Color) {
 }
 
 DrawCircleLinesV :: proc(center: Vector2, radius: f32, color: Color) {
-	segs := i32(max(16, radius))
+	segs := _shape_segments_for_radius(radius, 16)
 	DrawRing(center, radius - 1, radius, 0, 360, segs, color)
 }
 
@@ -374,10 +424,11 @@ _polar_ellipse :: proc(center: Vector2, radiusH, radiusV, deg: f32) -> [2]f32 {
 }
 
 // _ellipse_segments picks a tessellation fine enough for the larger radius, so
-// a wide flat ellipse does not become visibly polygonal along its long axis.
+// a wide flat ellipse does not become visibly polygonal along its long axis,
+// bounded by SHAPE_SEGMENTS_MAX.
 @(private)
 _ellipse_segments :: proc(radiusH, radiusV: f32) -> i32 {
-	return i32(max(16, max(abs(radiusH), abs(radiusV))))
+	return _shape_segments_for_radius(max(abs(radiusH), abs(radiusV)), 16)
 }
 
 DrawEllipse :: proc(centerX, centerY: i32, radiusH, radiusV: f32, color: Color) {
@@ -415,7 +466,7 @@ DrawCircleSector :: proc(
 	segments: i32,
 	color: Color,
 ) {
-	segs := max(segments, 1)
+	segs := _shape_segments(segments, 1)
 	batch_set(&g.rend, .Solid, nil)
 	_corner_fan(&g.rend, center, radius, startAngle, endAngle, segs, col_f(color))
 }
@@ -430,7 +481,7 @@ DrawCircleSectorLines :: proc(
 	segments: i32,
 	color: Color,
 ) {
-	segs := max(segments, 1)
+	segs := _shape_segments(segments, 1)
 	step := (endAngle - startAngle) / f32(segs)
 	first := _polar(center, radius, startAngle)
 	prev := first
@@ -447,8 +498,9 @@ DrawCircleSectorLines :: proc(
 
 DrawPoly :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color: Color) {
 	if sides < 3 do return
+	segs := _shape_segments(sides, 3)
 	batch_set(&g.rend, .Solid, nil)
-	_corner_fan(&g.rend, center, radius, rotation, rotation + 360, sides, col_f(color))
+	_corner_fan(&g.rend, center, radius, rotation, rotation + 360, segs, col_f(color))
 }
 
 DrawPolyLines :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color: Color) {
@@ -464,9 +516,10 @@ DrawPolyLinesEx :: proc(
 	color: Color,
 ) {
 	if sides < 3 do return
-	step := 360.0 / f32(sides)
+	segs := _shape_segments(sides, 3)
+	step := 360.0 / f32(segs)
 	prev := _polar(center, radius, rotation)
-	for i in 1 ..= sides {
+	for i in 1 ..= segs {
 		cur := _polar(center, radius, rotation + step * f32(i))
 		DrawLineEx(prev, cur, lineThick, color)
 		prev = cur
@@ -475,8 +528,25 @@ DrawPolyLinesEx :: proc(
 
 // --- triangle fans and strips ----------------------------------------------
 
+// SHAPE_POINTS_MAX bounds a single fan or strip. Unlike a segment count this
+// cannot be clamped — dropping points would silently corrupt the caller's
+// shape — so it is asserted instead. The bound is the batch's own vertex
+// capacity: one fan needing more vertices than the entire batch can hold is a
+// caller passing a bad count, not a legitimate 2D primitive.
+SHAPE_POINTS_MAX :: BATCH_MAX_VERTICES / 3
+#assert(SHAPE_POINTS_MAX >= SHAPE_SEGMENTS_MAX)
+
 // DrawTriangleFan draws points[0] joined to every consecutive pair after it.
+//
+// `points` is a raw multi-pointer, so this cannot verify it really holds
+// `pointCount` elements; that stays the caller's contract. What it can check
+// is the part that is unambiguously a programmer error.
 DrawTriangleFan :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
+	assert(pointCount >= 0, "DrawTriangleFan: negative point count")
+	assert(pointCount <= SHAPE_POINTS_MAX, "DrawTriangleFan: point count exceeds the batch")
+	if pointCount > 0 do assert(points != nil, "DrawTriangleFan: nil points with a positive count")
+	// Too few points to form a triangle is ordinary empty input, not an
+	// error: raylib draws nothing and so does this.
 	if points == nil || pointCount < 3 do return
 	c := col_f(color)
 	batch_set(&g.rend, .Solid, nil)
@@ -488,6 +558,11 @@ DrawTriangleFan :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
 // DrawTriangleStrip draws each consecutive triple, alternating winding so the
 // strip stays consistently oriented the way raylib's does.
 DrawTriangleStrip :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
+	assert(pointCount >= 0, "DrawTriangleStrip: negative point count")
+	assert(pointCount <= SHAPE_POINTS_MAX, "DrawTriangleStrip: point count exceeds the batch")
+	if pointCount > 0 {
+		assert(points != nil, "DrawTriangleStrip: nil points with a positive count")
+	}
 	if points == nil || pointCount < 3 do return
 	c := col_f(color)
 	batch_set(&g.rend, .Solid, nil)
