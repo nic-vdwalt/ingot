@@ -761,9 +761,11 @@ def discharged_risk(body: str, risk: str) -> bool:
     # Risk-specific shape heuristics. Previously these ran only when the
     # procedure had exactly one uncovered risk, which made them silently
     # inapplicable to the procedures most likely to need scrutiny.
+    #
+    # Note there is no `append(`/`clear(` heuristic for queue: an append is the
+    # hazard itself, not evidence against it. The old chain treated its presence
+    # as discharging the risk, which inverted the test.
     if risk == "queue":
-        if re.search(r"\b(?:append|clear)\s*\(", executable):
-            return True
         return recognized_dynamic_append(body)
     if risk == "index":
         return re.search(r"\b(?:for|switch)\b", executable) is not None

@@ -10,8 +10,27 @@ import check_assertions
 
 
 class AssertionDisciplineTest(unittest.TestCase):
+    # An ordinary source path. This used to be "net/x.odin", which two
+    # exclusions special-cased by name — so the suite exercised a branch
+    # production never took, and the loosest rules in the gate went untested.
+    FIXTURE_PATH = "ui/fixture.odin"
+
     def findings(self, source: str):
-        return check_assertions.findings_for_source(source, "net/x.odin")
+        return check_assertions.findings_for_source(source, self.FIXTURE_PATH)
+
+    def test_findings_do_not_depend_on_the_source_path(self):
+        # No path may be privileged: a gate that reports differently depending
+        # on which file it is reading is not a gate.
+        source = '''p :: proc(queue: ^Queue) {
+	assert(queue != nil)
+	append(&queue.items, 1)
+}
+'''
+        risks = {
+            path: tuple(f.risks for f in check_assertions.findings_for_source(source, path))
+            for path in ("net/x.odin", "ui/fixture.odin", "gfx/other.odin")
+        }
+        self.assertEqual(len(set(risks.values())), 1, risks)
 
     def test_comments_and_strings_do_not_count_as_assertions(self):
         source = '''p :: proc(queue: ^Queue) {
@@ -135,14 +154,14 @@ value :: proc() -> int {
         self.assertEqual(self.findings(source), [])
 
     def test_baseline_rejects_growth_and_stale_entries(self):
-        finding = check_assertions.Finding("net/x.odin", "p", 1, ("queue",), 0)
+        finding = check_assertions.Finding("ui/fixture.odin", "p", 1, ("queue",), 0)
         current = {finding.key: finding}
         self.assertEqual(check_assertions.check_findings(current, {finding.key: ["queue"]}), [])
         self.assertEqual(len(check_assertions.check_findings(current, {})), 1)
         self.assertEqual(len(check_assertions.check_findings({}, {finding.key: ["queue"]})), 1)
 
     def test_baseline_rejects_stale_risk_on_live_entry(self):
-        finding = check_assertions.Finding("net/x.odin", "p", 1, ("index",), 0)
+        finding = check_assertions.Finding("ui/fixture.odin", "p", 1, ("index",), 0)
         failures = check_assertions.check_findings(
             {finding.key: finding}, {finding.key: ["index", "queue"]}
         )
@@ -150,12 +169,12 @@ value :: proc() -> int {
         self.assertIn("queue", failures[0])
 
     def test_empty_baseline_rejects_complete_current_findings(self):
-        finding = check_assertions.Finding("net/x.odin", "new", 2, ("index",), 0)
+        finding = check_assertions.Finding("ui/fixture.odin", "new", 2, ("index",), 0)
         self.assertEqual(len(check_assertions.check_findings({finding.key: finding}, {})), 1)
 
     def test_measurement_includes_complete_current_findings(self):
-        old = check_assertions.Finding("net/x.odin", "old", 1, ("index",), 0)
-        new = check_assertions.Finding("net/x.odin", "new", 2, ("queue",), 0)
+        old = check_assertions.Finding("ui/fixture.odin", "old", 1, ("index",), 0)
+        new = check_assertions.Finding("ui/fixture.odin", "new", 2, ("queue",), 0)
         result = check_assertions.measurement({old.key: old, new.key: new})
         self.assertEqual(result["uncovered"], 2)
         self.assertEqual(result["by_risk"], {"index": 1, "queue": 1})
@@ -185,7 +204,7 @@ class MapLookupTest(unittest.TestCase):
 }
 '''
         self.assertNotIn("index", check_assertions.risks_for(source))
-        self.assertEqual(check_assertions.findings_for_source(source, "net/x.odin"), [])
+        self.assertEqual(check_assertions.findings_for_source(source, "ui/fixture.odin"), [])
 
     def test_ordinary_array_index_is_still_an_index_risk(self):
         source = '''p :: proc(xs: []int, i: int) -> int {
