@@ -496,19 +496,26 @@ _mouse_button_cb :: proc "c" (win: glfw.WindowHandle, button, action, mods: i32)
 
 @(private)
 _refresh_cb :: proc "c" (win: glfw.WindowHandle) {
-	if ctx := _callback_context(win); ctx != nil do _idle_note_activity(&ctx.idle)
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	ctx.force_reconfigure = true
+	_idle_note_activity(&ctx.idle)
 }
 
 @(private)
 _focus_cb :: proc "c" (win: glfw.WindowHandle, focused: i32) {
 	ctx := _callback_context(win)
 	if ctx == nil do return
+	if focused != 0 do ctx.force_reconfigure = true
 	_idle_note_activity(&ctx.idle)
 }
 
 @(private)
 _iconify_cb :: proc "c" (win: glfw.WindowHandle, iconified: i32) {
-	if ctx := _callback_context(win); ctx != nil do _idle_note_activity(&ctx.idle)
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	if iconified == 0 do ctx.force_reconfigure = true
+	_idle_note_activity(&ctx.idle)
 }
 
 @(private)

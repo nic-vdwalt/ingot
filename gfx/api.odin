@@ -22,7 +22,10 @@ context_begin_frame :: proc(ctx: ^Context) -> (Frame, bool) {
 	previous := _context_activate(ctx)
 	defer _context_restore(previous)
 	BeginDrawing()
-	if !ctx.frame.has_frame do return {}, false
+	if !ctx.frame.has_frame {
+		EndDrawing()
+		return {}, false
+	}
 	ctx.frame_generation += 1
 	ctx.frame_active = true
 	frame := Frame {
