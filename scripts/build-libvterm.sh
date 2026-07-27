@@ -64,5 +64,12 @@ for f in "$SRC_DIR"/*.c; do
     cc $ARCH_FLAG -O2 -I "$INC_DIR" -I "$SRC_DIR" -c "$f" -o "$BUILD_TMP/$(basename "${f%.c}").o"
 done
 
-ar rcs "$OUT_LIB" "$BUILD_TMP"/*.o
+# ZERO_AR_DATE stops ar writing a per-member mtime, which otherwise makes every
+# build of identical source produce a different archive. The committed archives
+# are checksummed in docs/provenance/third-party-artifacts.json and verified by
+# scripts/check-repository-hygiene.py, so a non-reproducible build would mean
+# that checksum only ever matched one machine at one instant: anyone rebuilding
+# would fail the hygiene gate through no fault of their own.
+ZERO_AR_DATE=1 ar rcs "$OUT_LIB" "$BUILD_TMP"/*.o
 echo "Output: $OUT_LIB"
+echo "sha256: $(shasum -a 256 "$OUT_LIB" | cut -d' ' -f1)"

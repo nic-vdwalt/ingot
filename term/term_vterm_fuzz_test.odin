@@ -368,3 +368,54 @@ fuzz_vterm_title_churn :: proc(t: ^testing.T) {
 	fuzz_vt_destroy(ts)
 	free_all(context.temp_allocator)
 }
+
+// Regression: libvterm's UTF-8 decoder overran its codepoint buffer.
+//
+// decode_utf8's ASCII branch emits two codepoints when a multi-byte sequence
+// was abandoned mid-way -- the U+FFFD marker, then the character -- but the
+// loop guard only proved room for one. Landing that pair on the last slot
+// wrote one uint32 past the end of vt->tmpbuffer, silently corrupting the C
+// heap; the process later aborted in an unrelated free (usually vterm_free in
+// whichever test ran next). It made scripts/test.sh fail about 43% of the time.
+//
+// The codepoint buffer is tmpbuffer_len/4 == 1024 entries, so the pair must
+// straddle index 1023. This walks the alignment window rather than assuming
+// one offset, because the exact boundary depends on tmpbuffer_len.
+//
+// Fixed in vendor/libvterm/src/encoding.c; see THIRD_PARTY_NOTICES.md.
+@(test)
+vterm_utf8_decode_respects_codepoint_buffer_bound :: proc(t: ^testing.T) {
+	VTERM_CODEPOINTS :: 4096 / size_of(u32)
+
+	for pad in VTERM_CODEPOINTS - 4 ..= VTERM_CODEPOINTS + 2 {
+		ts := fuzz_vt_make(80, 24)
+		testing.expectf(t, ts != nil, "emulator should initialise (pad %v)", pad)
+		if ts == nil do continue
+		defer fuzz_vt_destroy(ts)
+
+		// `pad` plain ASCII, a 2-byte lead byte that never gets its
+		// continuation, then one more ASCII character. The lead byte is
+		// abandoned, so decoding the final character emits U+FFFD followed by
+		// that character: the two-codepoint case.
+		// Delivered in one ingest so the whole run reaches libvterm as a
+		// single on_text call; chunking would reset the codepoint buffer
+		// between pieces and never reach the boundary.
+		total := pad + 2
+		for index in 0 ..< pad do ts.read_buf[index] = 'A'
+		ts.read_buf[pad] = 0xC3
+		ts.read_buf[pad + 1] = 'Z'
+		ts.utf8_hold_len = 0
+
+		_term_ingest(ts, total, false)
+
+		// Reaching here without corrupting the heap is the assertion; the
+		// grid check confirms the decoder still produced output rather than
+		// bailing out early.
+		testing.expectf(
+			t,
+			int(ts.cols) == 80 && int(ts.rows) == 24,
+			"grid should survive ingest (pad %v)",
+			pad,
+		)
+	}
+}

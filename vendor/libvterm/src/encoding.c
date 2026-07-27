@@ -46,8 +46,29 @@ static void decode_utf8(VTermEncoding *enc, void *data_,
       return;
 
     else if(c >= 0x20 && c < 0x7f) {
-      if(data->bytes_remaining)
-        cp[(*cpi)++] = UNICODE_INVALID;
+      if(data->bytes_remaining) {
+        /* ingot: this is the only branch that emits two codepoints in one
+         * iteration -- the invalid marker for the abandoned multi-byte
+         * sequence, then this character -- but the loop guard above only
+         * proves room for one. With *cpi == cplen-1 on entry the second
+         * store lands one element past the end of cp[], corrupting whatever
+         * follows the caller's buffer (on_text passes vt->tmpbuffer).
+         */
+        if(*cpi + 2 <= cplen)
+          cp[(*cpi)++] = UNICODE_INVALID;
+        else if(*cpi > 0)
+          /* Only one slot left, but this call has already produced output.
+           * Return without advancing *pos so the caller re-enters with an
+           * empty buffer and both codepoints fit. Partial consumption is
+           * already the normal path for text runs longer than the codepoint
+           * buffer, and *cpi > 0 guarantees forward progress.
+           */
+          return;
+        /* else cplen < 2 (the single-shift path passes cplen == 1): there is
+         * no room for the marker in any call, so drop it rather than stall.
+         * The character itself is still emitted below.
+         */
+      }
 
       cp[(*cpi)++] = c;
 #ifdef DEBUG_PRINT_UTF8
