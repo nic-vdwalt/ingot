@@ -59,6 +59,11 @@ _utf8_complete_prefix :: proc(buf: []u8) -> int {
 // hostile-input fuzzing drives the production ingestion path directly.
 @(private)
 _term_ingest :: proc(ts: ^Term_Instance, total: int, eof: bool) {
+	assert(ts != nil)
+	assert(total >= 0)
+	assert(total <= len(ts.read_buf))
+	assert(ts.utf8_hold_len >= 0)
+	assert(ts.utf8_hold_len <= len(ts.utf8_hold))
 	if total <= 0 do return
 	complete := total
 	if !eof {
@@ -77,8 +82,11 @@ _term_ingest :: proc(ts: ^Term_Instance, total: int, eof: bool) {
 		}
 	}
 	if complete > 0 {
+		assert(complete <= len(ts.read_buf))
 		lv.vterm_input_write(ts.vt, raw_data(ts.read_buf[:]), c.size_t(complete))
 	}
+	assert(ts.utf8_hold_len >= 0)
+	assert(ts.utf8_hold_len <= len(ts.utf8_hold))
 }
 
 // term_pump reads all available PTY output and feeds it to the terminal
@@ -118,6 +126,10 @@ term_pump :: proc(ts: ^Term_Instance) -> (bytes_read: int) {
 	} else {
 		for _ in 0 ..< TERM_PUMP_MAX_BUFS {
 			sync.mutex_lock(&ts.output_mutex)
+			assert(ts.output_head >= 0)
+			assert(ts.output_head < TERM_OUTPUT_QUEUE_CAP)
+			assert(ts.output_count >= 0)
+			assert(ts.output_count <= TERM_OUTPUT_QUEUE_CAP)
 			if ts.output_count == 0 {
 				eof := ts.output_eof
 				sync.mutex_unlock(&ts.output_mutex)
@@ -128,10 +140,17 @@ term_pump :: proc(ts: ^Term_Instance) -> (bytes_read: int) {
 			}
 			chunk := &ts.output_queue[ts.output_head]
 			n := chunk.len
+			assert(n >= 0)
+			assert(n <= len(chunk.data))
+			assert(ts.utf8_hold_len >= 0)
+			assert(ts.utf8_hold_len + n <= len(ts.read_buf))
 			copy(ts.read_buf[ts.utf8_hold_len:], chunk.data[:n])
 			chunk.len = 0
 			ts.output_head = (ts.output_head + 1) % TERM_OUTPUT_QUEUE_CAP
 			ts.output_count -= 1
+			assert(ts.output_head >= 0)
+			assert(ts.output_head < TERM_OUTPUT_QUEUE_CAP)
+			assert(ts.output_count >= 0)
 			eof := ts.output_eof && ts.output_count == 0
 			sync.mutex_unlock(&ts.output_mutex)
 
@@ -146,5 +165,7 @@ term_pump :: proc(ts: ^Term_Instance) -> (bytes_read: int) {
 			}
 		}
 	}
+	assert(bytes_read >= 0)
+	assert(bytes_read <= TERM_PUMP_MAX_BUFS * len(ts.read_buf))
 	return
 }

@@ -107,6 +107,7 @@ WS_Frame :: struct {
 // consumed is 0; .Too_Big is a protocol violation — the caller should drop
 // the connection rather than buffer unbounded data.
 ws_parse_frame :: proc(buf: []u8) -> (frame: WS_Frame, consumed: int, status: WS_Parse_Status) {
+	assert(len(buf) >= 0)
 	total := len(buf)
 	if total < 2 do return {}, 0, .Need_More
 
@@ -240,6 +241,8 @@ ws_encode_frame :: proc(
 	mask_key: [4]u8,
 	allocator := context.allocator,
 ) -> []u8 {
+	assert(opcode <= 0x0F)
+	assert(len(payload) <= WS_MAX_PAYLOAD)
 	header_size := 2
 	if len(payload) >= 65536 {
 		header_size = 10
@@ -277,6 +280,7 @@ ws_encode_frame :: proc(
 	for i := 0; i < len(payload); i += 1 {
 		frame[body + i] ~= key[i % 4]
 	}
+	assert(len(frame) == header_size + 4 + len(payload))
 	return frame
 }
 
@@ -429,6 +433,8 @@ ws_notify :: proc(ws: ^WebSocket) {
 // status changes appear without waiting for the idle floor.
 @(private = "file")
 ws_set_state :: proc(ws: ^WebSocket, s: WS_State) {
+	assert(ws != nil)
+	assert(s >= .Disconnected && s <= .Error)
 	sync.atomic_store(&ws.state, s)
 	ws_notify(ws)
 }
@@ -439,6 +445,7 @@ ws_set_state :: proc(ws: ^WebSocket, s: WS_State) {
 // for a UI consumer the latest data wins.
 @(private = "file")
 ws_enqueue :: proc(ws: ^WebSocket, data: string, binary: bool) {
+	assert(ws != nil)
 	if len(data) > WS_MAX_QUEUED_BYTES {
 		delete(data)
 		return
@@ -531,6 +538,9 @@ ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
 // each successful handshake so consumers can re-establish subscriptions.
 @(private = "file")
 ws_connect_worker :: proc(ws: ^WebSocket) {
+	assert(ws != nil)
+	previous_generation := sync.atomic_load(&ws.conn_gen)
+	assert(previous_generation >= 0)
 	first := true
 	for sync.atomic_load(&ws.running) {
 		ws_set_state(ws, first ? .Connecting : .Reconnecting)
@@ -548,6 +558,9 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 
 		first = false
 		sync.atomic_add(&ws.conn_gen, 1)
+		generation := sync.atomic_load(&ws.conn_gen)
+		assert(generation > previous_generation)
+		previous_generation = generation
 		// Re-check running before publishing Connected: ws_close may have
 		// raced the handshake (its socket-publish gate ran before running
 		// flipped, but the handshake still completed against a buffered
@@ -731,6 +744,7 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 
 // Send a text message over WebSocket.
 ws_send :: proc(ws: ^WebSocket, data: string) -> bool {
+	assert(ws != nil)
 	if ws_state(ws) != .Connected do return false
 	if len(data) > WS_MAX_PAYLOAD do return false
 	return ws_send_frame(ws, WS_OP_TEXT, transmute([]u8)data)
@@ -738,6 +752,7 @@ ws_send :: proc(ws: ^WebSocket, data: string) -> bool {
 
 // Send a binary message over WebSocket.
 ws_send_binary :: proc(ws: ^WebSocket, data: []u8) -> bool {
+	assert(ws != nil)
 	if ws_state(ws) != .Connected do return false
 	if len(data) > WS_MAX_PAYLOAD do return false
 	return ws_send_frame(ws, WS_OP_BINARY, data)
@@ -781,6 +796,7 @@ ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
 // returned slice is temp-allocated; each message's `data` string is heap-
 // allocated and owned by the caller (delete after processing).
 ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
+	assert(ws != nil)
 	sync.mutex_lock(&ws.recv_mutex)
 	defer sync.mutex_unlock(&ws.recv_mutex)
 
@@ -792,6 +808,9 @@ ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
 	}
 	clear(&ws.recv_queue)
 	ws.recv_queue_bytes = 0
+	assert(len(result) <= WS_MAX_QUEUED_MESSAGES)
+	assert(len(ws.recv_queue) == 0)
+	assert(ws.recv_queue_bytes == 0)
 	return result
 }
 
@@ -825,6 +844,7 @@ ws_error :: proc(ws: ^WebSocket) -> WS_Error {
 // blocking recv (handshake or recv loop), and a dial in flight fails on its
 // own — the worker then exits on running == false.
 ws_close :: proc(ws: ^WebSocket) {
+	assert(ws != nil)
 	sync.atomic_store(&ws.running, false)
 
 	// Wake a worker parked in ws_stop_wait so shutdown is prompt (broadcast
@@ -865,6 +885,9 @@ ws_close :: proc(ws: ^WebSocket) {
 		delete(ws.url_storage)
 		ws.url_storage = ""
 	}
+	assert(ws.recv_thread == nil)
+	assert(len(ws.recv_queue) == 0)
+	assert(sync.atomic_load(&ws.state) == .Disconnected)
 }
 
 // Generate a random WebSocket key for the handshake.
