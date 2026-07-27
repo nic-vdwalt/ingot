@@ -120,7 +120,7 @@ when !INGOT_NET_SIM {
 		body: []u8,
 		ok: bool,
 	) {
-	assert(f != nil, "http_get_interruptible: nil f")
+		assert(f != nil, "http_get_interruptible: nil f")
 		response, request_ok := http_request_impl(
 			f,
 			idx,

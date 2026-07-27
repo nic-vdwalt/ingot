@@ -198,7 +198,7 @@ when !INGOT_WS_SIM {
 	}
 
 	ws_net_set_recv_timeout :: proc(transport: ^Ws_Transport, duration: time.Duration) {
-	assert(transport != nil, "ws_net_set_recv_timeout: nil transport")
+		assert(transport != nil, "ws_net_set_recv_timeout: nil transport")
 		if !ws_transport_open(transport) do return
 		if transport.kind == .TCP {
 			_ = cnet.set_option(transport.socket, .Receive_Timeout, duration)
