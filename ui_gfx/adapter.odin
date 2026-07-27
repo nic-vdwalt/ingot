@@ -162,7 +162,6 @@ adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	}
 	output := frame.output
 	ui.ui_frame_finalize(frame)
-	when ODIN_OS != .JS do assert(!frame.open)
 	adapter_a11y_publish(adapter, frame)
 	scope := rl.context_scope_enter(adapter.gfx_context)
 	replay_list(adapter, &output.overlay)

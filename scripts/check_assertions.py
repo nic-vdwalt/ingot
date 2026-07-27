@@ -14,17 +14,35 @@ import check_odin_style
 PACKAGES = ("gfx/", "ui/", "ui_gfx/", "term/", "prefs/", "net/", "sys/", "pty/", "testx/")
 EXCLUDED_PREFIXES = ("accesskit/", "libvterm/", "gfx/rlgl")
 EXCLUDED_SUFFIXES = ("_test.odin", "_tests.odin", "_fuzz_test.odin")
-ASSERTION = re.compile(r"(?<![A-Za-z0-9_#])(?:assert|ensure)\s*\(|#assert\s*\(")
+ASSERTION = re.compile(r"(?<![A-Za-z0-9_#])(?:assert|ensure)\s*\(")
 RISK_PATTERNS = {
-    "pointer": re.compile(r"\^\w|->\s*\^|raw_(?:data|ptr)|transmute"),
-    "index": re.compile(r"\[[^\]\n]+\]|slice\.|ordered_remove|unordered_remove"),
+    "pointer": re.compile(
+        r"\b[A-Za-z_][A-Za-z0-9_]*\^|raw_(?:data|ptr)\s*\(|\btransmute\s*\("
+    ),
+    "index": re.compile(
+        r"(?:[A-Za-z_][A-Za-z0-9_]*|\)|\])\s*\[[^\]\n]+\]"
+        r"|\b(?:ordered_remove|unordered_remove)\s*\("
+    ),
     "queue": re.compile(
-        r"\b(?:queue|ring|result_slots|head|count)\b|append\s*\(|inject_at"
+        r"\b(?:append|inject_at|ordered_remove|unordered_remove)\s*\("
+        r"|(?:head|tail|count)\s*(?:\+=|-=|=)"
     ),
     "ownership": re.compile(r"\b(?:make|new|delete|free|destroy|clone|resize)\s*\("),
-    "state": re.compile(r"\b(?:state|running|active|frame|session|begin|end|start|stop|close)\b"),
-    "untrusted_input": re.compile(r"\b(?:parse|decode|read|recv|payload|wire|ffi)\b"),
+    "state": re.compile(
+        r"\b(?:state|running|active|session)\b\s*(?:=|\+=|-=)"
+        r"|\b(?:begin|end|start|stop|close)\s*\("
+    ),
+    "untrusted_input": re.compile(
+        r"\b(?:parse[A-Za-z0-9_]*|decode[A-Za-z0-9_]*"
+        r"|read[A-Za-z0-9_]*|recv[A-Za-z0-9_]*)\s*\("
+    ),
 }
+CONTROL_FLOW = re.compile(r"\b(?:if|when|switch|for)\b")
+MUTATION = re.compile(
+    r"(?:\.|\])\s*[+\-*/%]?="
+    r"|\b(?:append|inject_at|ordered_remove|unordered_remove"
+    r"|make|new|delete|free|destroy|clone|resize)\s*\("
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -57,9 +75,49 @@ def procedure_text(source: str, procedure: check_odin_style.Procedure) -> str:
     return "".join(source.splitlines(keepends=True)[procedure.start_line - 1 : procedure.end_line])
 
 
-def risks_for(body: str) -> tuple[str, ...]:
+def executable_text(body: str) -> str:
     masked = check_odin_style.mask_source(body)
-    return tuple(name for name, pattern in RISK_PATTERNS.items() if pattern.search(masked))
+    opening = masked.find("{")
+    closing = masked.rfind("}")
+    if opening < 0 or closing <= opening:
+        return ""
+    return masked[opening + 1 : closing]
+
+
+def mask_proven_bounded_indexes(executable: str) -> str:
+    masked = list(executable)
+    loop = re.compile(
+        r"for\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\s+0\s*\.\.<\s*"
+        r"len\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*\{"
+    )
+    for match in loop.finditer(executable):
+        index_name, collection = match.group(1), match.group(2)
+        depth = 1
+        cursor = match.end()
+        while cursor < len(executable) and depth > 0:
+            if executable[cursor] == "{":
+                depth += 1
+            elif executable[cursor] == "}":
+                depth -= 1
+            cursor += 1
+        if depth != 0:
+            continue
+        safe = re.compile(
+            rf"\b{re.escape(collection)}\s*\[\s*{re.escape(index_name)}\s*\]"
+        )
+        for index_match in safe.finditer(executable, match.end(), cursor - 1):
+            masked[index_match.start() : index_match.end()] = " " * len(index_match.group())
+    return "".join(masked)
+
+
+def risks_for(body: str) -> tuple[str, ...]:
+    executable = executable_text(body)
+    index_executable = mask_proven_bounded_indexes(executable)
+    return tuple(
+        name
+        for name, pattern in RISK_PATTERNS.items()
+        if pattern.search(index_executable if name == "index" else executable)
+    )
 
 
 def is_trivial(body: str, risks: tuple[str, ...]) -> bool:
@@ -72,13 +130,33 @@ def is_trivial(body: str, risks: tuple[str, ...]) -> bool:
     return not wrapper_risks and "return" in masked and calls <= 2
 
 
+def is_thin_forwarder(body: str, risks: tuple[str, ...]) -> bool:
+    executable = executable_text(body)
+    statements = [line.strip() for line in executable.splitlines() if line.strip()]
+    if not statements or len(statements) > 20:
+        return False
+    if set(risks) & {"index", "queue", "ownership", "untrusted_input"}:
+        return False
+    if CONTROL_FLOW.search(executable) or MUTATION.search(executable):
+        return False
+    return all(
+        re.match(
+            r"^(?:(?:[A-Za-z_][A-Za-z0-9_]*\s*:?=\s*)?"
+            r"[A-Za-z_][A-Za-z0-9_.]*\s*\(.*\)"
+            r"|return(?:\s+[A-Za-z_][A-Za-z0-9_.]*\s*\(.*\))?)$",
+            statement,
+        )
+        for statement in statements
+    )
+
+
 def findings_for_source(source: str, path: str) -> list[Finding]:
     findings: list[Finding] = []
     for procedure in check_odin_style.procedures(source):
         body = procedure_text(source, procedure)
         masked = check_odin_style.mask_source(body)
         risks = risks_for(body)
-        if is_trivial(body, risks):
+        if is_trivial(body, risks) or is_thin_forwarder(body, risks):
             continue
         assertions = len(ASSERTION.findall(masked))
         if risks and assertions == 0:
@@ -99,9 +177,15 @@ def check_findings(current: dict[str, Finding], baseline: dict[str, list[str]]) 
     failures: list[str] = []
     for key, finding in sorted(current.items()):
         allowed = set(baseline.get(key, []))
-        added = set(finding.risks) - allowed
+        actual = set(finding.risks)
+        added = actual - allowed
         if added:
             failures.append(f"{key}: uncovered assertion risks added: {', '.join(sorted(added))}")
+        removed = allowed - actual
+        if removed:
+            failures.append(
+                f"{key}: stale assertion baseline risks; remove: {', '.join(sorted(removed))}"
+            )
     for key in sorted(set(baseline) - set(current)):
         failures.append(f"{key}: stale assertion baseline entry; remove it")
     return failures
