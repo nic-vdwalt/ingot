@@ -67,7 +67,7 @@ frame :: proc(app: ^ui_gfx.App, ui_frame: ^ui.Ui_Frame, userdata: rawptr) {
 		"Chart widgets",
 		24,
 		20,
-		metrics.FONT_SIZE_LARGE,
+		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
 	if ui.btn(ui_frame, sw - 140, 16, 120, 30, "Light theme" if dark else "Dark theme") {
@@ -133,13 +133,13 @@ stat_card :: proc(
 	style := ui.ui_frame_theme(frame)
 	metrics := ui.ui_frame_metrics(frame)
 	ui.draw_card_bg_frame(frame, {f32(x), f32(y), f32(w), f32(h)}, style.bg_secondary)
-	ui.draw_text_frame(frame, label, x + 14, y + 12, metrics.FONT_SIZE_SMALL, style.fg_label)
+	ui.draw_text_frame(frame, label, x + 14, y + 12, metrics.FONT_SIZE_LABEL, style.fg_label)
 	ui.draw_text_frame(
 		frame,
 		value,
 		x + 14,
-		y + h - metrics.FONT_SIZE_LARGE - 14,
-		metrics.FONT_SIZE_LARGE,
+		y + h - metrics.FONT_SIZE_TITLE - 14,
+		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
 	ui.sparkline(frame, x + w - 130, y + h / 2 - 16, 110, 32, values, col)

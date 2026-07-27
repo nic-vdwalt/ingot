@@ -94,15 +94,15 @@ tagged_option_row :: proc(frame: ^Ui_Frame, config: Tagged_Option_Config) -> Tag
 			frame,
 			config.icon,
 			text_x,
-			config.rect.y + (config.rect.h - metrics.FONT_SIZE_SMALL) / 2,
-			.Small,
+			config.rect.y + (config.rect.h - text_role_size(frame, .Label)) / 2,
+			.Label,
 			.Secondary,
 		)
-		text_x += text_width(frame, config.icon, .Small) + ui_frame_sc(frame, 8)
+		text_x += text_width(frame, config.icon, .Label) + ui_frame_sc(frame, 8)
 	}
 	trailing_width: i32 = 0
 	if len(config.trailing) > 0 {
-		trailing_width = text_width(frame, config.trailing, .Small) + ui_frame_sc(frame, 12)
+		trailing_width = text_width(frame, config.trailing, .Label) + ui_frame_sc(frame, 12)
 		tag_fg := config.tag_fg
 		if tag_fg == {} do tag_fg = style.fg_accent
 		tag_bg := config.tag_bg
@@ -111,8 +111,9 @@ tagged_option_row :: proc(frame: ^Ui_Frame, config: Tagged_Option_Config) -> Tag
 			frame,
 			config.trailing,
 			config.rect.x + config.rect.w - padding - trailing_width,
-			config.rect.y + (config.rect.h - metrics.FONT_SIZE_SMALL - ui_frame_sc(frame, 4)) / 2,
-			metrics.FONT_SIZE_SMALL,
+			config.rect.y +
+			(config.rect.h - text_role_size(frame, .Label) - ui_frame_sc(frame, 4)) / 2,
+			text_role_size(frame, .Label),
 			tag_fg,
 			tag_bg,
 		)
@@ -283,13 +284,12 @@ strip_pill_markers :: proc(text: string) -> string {
 // [x, x+w). Mirrors the /history pill look (rounded chip).
 draw_input_pill_bg_frame :: proc(frame: ^Ui_Frame, x, y, w: i32) {
 	assert(frame != nil && frame.open, "draw_input_pill_bg_frame: invalid frame")
-	metrics := ui_frame_metrics(frame)
 	pad := ui_frame_sc(frame, 3)
 	rect := Rectangle {
 		f32(x - pad),
 		f32(y - ui_frame_sc(frame, 1)),
 		f32(w + pad * 2),
-		f32(metrics.FONT_SIZE_BODY + ui_frame_sc(frame, 4)),
+		f32(text_role_size(frame, .Body) + ui_frame_sc(frame, 4)),
 	}
 	draw_rectangle_rounded(frame, rect, 0.5, 6, ui_frame_theme(frame).bg_chip)
 }

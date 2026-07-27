@@ -7,7 +7,7 @@ package ui
 import "core:testing"
 
 @(private = "file")
-ROLES :: [6]Text_Role{.Body, .Title, .Large, .Small, .Label, .Note}
+ROLES :: [4]Text_Role{.Body, .Title, .Label, .Note}
 
 @(private = "file")
 INKS :: [15]Ink {
@@ -40,10 +40,36 @@ text_roles_resolve_to_metric_sizes :: proc(t: ^testing.T) {
 	metrics := ui_frame_metrics(&frame)
 	testing.expect_value(t, text_role_size(&frame, .Body), metrics.FONT_SIZE_BODY)
 	testing.expect_value(t, text_role_size(&frame, .Title), metrics.FONT_SIZE_TITLE)
-	testing.expect_value(t, text_role_size(&frame, .Large), metrics.FONT_SIZE_LARGE)
-	testing.expect_value(t, text_role_size(&frame, .Small), metrics.FONT_SIZE_SMALL)
 	testing.expect_value(t, text_role_size(&frame, .Label), metrics.FONT_SIZE_LABEL)
 	testing.expect_value(t, text_role_size(&frame, .Note), metrics.FONT_SIZE_NOTE)
+}
+
+// Every role must name a distinct size. A role that duplicates another is what
+// lets two call sites drift apart while both look deliberate.
+@(test)
+text_roles_are_pairwise_distinct :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+
+	for role, i in ROLES {
+		for other, j in ROLES {
+			if i >= j do continue
+			size := text_role_size(&frame, role)
+			other_size := text_role_size(&frame, other)
+			testing.expectf(
+				t,
+				size != other_size,
+				"roles %v and %v both resolve to %d",
+				role,
+				other,
+				size,
+			)
+		}
+	}
 }
 
 @(test)

@@ -29,15 +29,8 @@ draw_app_header :: proc(frame: ^Ui_Frame, title: cstring, screen_w: i32) -> (hea
 
 	// Left-aligned, vertically centered title.
 	if title != nil && len(title) > 0 {
-		ty := (header_h - metrics.FONT_SIZE_BODY) / 2
-		draw_text_frame(
-			frame,
-			title,
-			metrics.PADDING,
-			ty,
-			metrics.FONT_SIZE_BODY,
-			style.fg_secondary,
-		)
+		ty := (header_h - text_role_size(frame, .Body)) / 2
+		text(frame, string(title), metrics.PADDING, ty, .Body, .Secondary)
 	}
 
 	// Windows custom title bar: caption buttons + non-client layout publish.

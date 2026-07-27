@@ -8,6 +8,18 @@ import "core:fmt"
 import "core:math"
 import "core:strings"
 
+// Every string a chart draws — axis ticks, legend entries, tooltip rows — is
+// chrome around the plot, never reading text. Naming the role once here stops
+// the axis and the legend drifting apart the way they can when each call site
+// reaches for its own metric.
+@(private = "file")
+CHART_TEXT :: Text_Role.Label
+
+@(private = "file")
+chart_text_size :: proc(frame: ^Ui_Frame) -> i32 {
+	return text_role_size(frame, CHART_TEXT)
+}
+
 
 // Chart_State is caller-owned per-chart state. The zero value is valid; reset
 // enter_anim to 0 to replay the enter animation.
@@ -189,12 +201,11 @@ chart_layout :: proc(
 		mx = max(mx, 0)
 	}
 
-	metrics := ui_frame_metrics(frame)
 	top := ui_frame_sc(frame, 4)
 	right := ui_frame_sc(frame, 4)
 	bottom := ui_frame_sc(frame, 4)
-	if len(opts.labels) > 0 do bottom += metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 6)
-	if opts.show_legend do bottom += metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 10)
+	if len(opts.labels) > 0 do bottom += chart_text_size(frame) + ui_frame_sc(frame, 6)
+	if opts.show_legend do bottom += chart_text_size(frame) + ui_frame_sc(frame, 10)
 
 	plot_h := h - top - bottom
 	if plot_h < ui_frame_sc(frame, 20) do return
@@ -209,7 +220,7 @@ chart_layout :: proc(
 		for tv := cl.lo; tv <= cl.hi + cl.step * 0.5; tv += cl.step {
 			s := chart_format_value(opts, tv, buf[:])
 			c := strings.clone_to_cstring(s, context.temp_allocator)
-			widest = max(widest, measure_text_frame(frame, c, metrics.FONT_SIZE_SMALL))
+			widest = max(widest, measure_text_frame(frame, c, chart_text_size(frame)))
 		}
 		left = widest + ui_frame_sc(frame, 8)
 	}
@@ -248,7 +259,6 @@ chart_note_hover :: proc(frame: ^Ui_Frame, state: ^Chart_State, hovered: int) {
 // x labels. xs holds the pixel x center of each point/slot.
 @(private = "file")
 chart_draw_axes :: proc(frame: ^Ui_Frame, cl: Chart_Layout, opts: Chart_Opts, xs: []f32) {
-	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	buf: [32]u8
 	if opts.show_grid || opts.show_axes {
@@ -266,13 +276,13 @@ chart_draw_axes :: proc(frame: ^Ui_Frame, cl: Chart_Layout, opts: Chart_Opts, xs
 			if opts.show_axes {
 				s := chart_format_value(opts, tv, buf[:])
 				c := strings.clone_to_cstring(s, context.temp_allocator)
-				tw := measure_text_frame(frame, c, metrics.FONT_SIZE_SMALL)
+				tw := measure_text_frame(frame, c, chart_text_size(frame))
 				draw_text_frame(
 					frame,
 					c,
 					i32(cl.plot.x) - tw - ui_frame_sc(frame, 6),
-					i32(py) - metrics.FONT_SIZE_SMALL / 2,
-					metrics.FONT_SIZE_SMALL,
+					i32(py) - chart_text_size(frame) / 2,
+					chart_text_size(frame),
 					style.fg_secondary,
 				)
 			}
@@ -294,20 +304,20 @@ chart_draw_axes :: proc(frame: ^Ui_Frame, cl: Chart_Layout, opts: Chart_Opts, xs
 		max_w: i32 = 1
 		for l in opts.labels {
 			c := strings.clone_to_cstring(l, context.temp_allocator)
-			max_w = max(max_w, measure_text_frame(frame, c, metrics.FONT_SIZE_SMALL))
+			max_w = max(max_w, measure_text_frame(frame, c, chart_text_size(frame)))
 		}
 		count := min(len(opts.labels), len(xs))
 		step_n := max(1, int(f32(max_w) * 1.4 * f32(count) / max(cl.plot.width, 1)))
 		ly := i32(cl.plot.y + cl.plot.height) + ui_frame_sc(frame, 4)
 		for i := 0; i < count; i += step_n {
 			c := strings.clone_to_cstring(opts.labels[i], context.temp_allocator)
-			tw := measure_text_frame(frame, c, metrics.FONT_SIZE_SMALL)
+			tw := measure_text_frame(frame, c, chart_text_size(frame))
 			lx := clamp(
 				i32(xs[i]) - tw / 2,
 				i32(cl.chart.x),
 				max(i32(cl.chart.x + cl.chart.width) - tw, i32(cl.chart.x)),
 			)
-			draw_text_frame(frame, c, lx, ly, metrics.FONT_SIZE_SMALL, style.fg_secondary)
+			draw_text_frame(frame, c, lx, ly, chart_text_size(frame), style.fg_secondary)
 		}
 	}
 }
@@ -316,16 +326,15 @@ chart_draw_axes :: proc(frame: ^Ui_Frame, cl: Chart_Layout, opts: Chart_Opts, xs
 // bottom edge.
 @(private = "file")
 chart_draw_legend :: proc(frame: ^Ui_Frame, cl: Chart_Layout, series: []Chart_Series) {
-	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
-	ly := i32(cl.chart.y + cl.chart.height) - metrics.FONT_SIZE_SMALL - ui_frame_sc(frame, 2)
+	ly := i32(cl.chart.y + cl.chart.height) - chart_text_size(frame) - ui_frame_sc(frame, 2)
 	lx := i32(cl.plot.x)
 	sw := ui_frame_sc(frame, 10)
 	for s, i in series {
 		col := s.color if s.color != {} else chart_series_color(frame, i)
 		draw_rectangle_rounded(
 			frame,
-			{f32(lx), f32(ly + (metrics.FONT_SIZE_SMALL - sw) / 2), f32(sw), f32(sw)},
+			{f32(lx), f32(ly + (chart_text_size(frame) - sw) / 2), f32(sw), f32(sw)},
 			0.4,
 			4,
 			col,
@@ -333,8 +342,8 @@ chart_draw_legend :: proc(frame: ^Ui_Frame, cl: Chart_Layout, series: []Chart_Se
 		lx += sw + ui_frame_sc(frame, 5)
 		name := s.name if len(s.name) > 0 else "series"
 		c := strings.clone_to_cstring(name, context.temp_allocator)
-		draw_text_frame(frame, c, lx, ly, metrics.FONT_SIZE_SMALL, style.fg_secondary)
-		lx += measure_text_frame(frame, c, metrics.FONT_SIZE_SMALL) + ui_frame_sc(frame, 14)
+		draw_text_frame(frame, c, lx, ly, chart_text_size(frame), style.fg_secondary)
+		lx += measure_text_frame(frame, c, chart_text_size(frame)) + ui_frame_sc(frame, 14)
 	}
 }
 
@@ -352,11 +361,10 @@ chart_draw_tooltip :: proc(
 	idx: int,
 	mouse: Vector2,
 ) {
-	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	buf: [32]u8
 	pad := ui_frame_sc(frame, 6)
-	row_h := metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 4)
+	row_h := chart_text_size(frame) + ui_frame_sc(frame, 4)
 	sw := ui_frame_sc(frame, 8)
 
 	// Measure pass.
@@ -365,7 +373,7 @@ chart_draw_tooltip :: proc(
 	has_header := idx >= 0 && idx < len(opts.labels)
 	if has_header {
 		c := strings.clone_to_cstring(opts.labels[idx], context.temp_allocator)
-		wmax = max(wmax, measure_text_frame(frame, c, metrics.FONT_SIZE_SMALL))
+		wmax = max(wmax, measure_text_frame(frame, c, chart_text_size(frame)))
 		rows += 1
 	}
 	for s, si in series {
@@ -375,7 +383,7 @@ chart_draw_tooltip :: proc(
 		c := strings.clone_to_cstring(fmt.tprintf("%s: %s", name, val), context.temp_allocator)
 		wmax = max(
 			wmax,
-			measure_text_frame(frame, c, metrics.FONT_SIZE_SMALL) + sw + ui_frame_sc(frame, 5),
+			measure_text_frame(frame, c, chart_text_size(frame)) + sw + ui_frame_sc(frame, 5),
 		)
 		rows += 1
 	}
@@ -408,7 +416,7 @@ chart_draw_tooltip :: proc(
 			opts.labels[idx],
 			tx + ox + pad,
 			ry,
-			metrics.FONT_SIZE_SMALL,
+			chart_text_size(frame),
 			style.fg_primary,
 		)
 		ry += row_h
@@ -418,7 +426,7 @@ chart_draw_tooltip :: proc(
 		col := s.color if s.color != {} else chart_series_color(frame, si)
 		overlay_rounded(
 			frame,
-			{f32(tx + ox + pad), f32(ry + (metrics.FONT_SIZE_SMALL - sw) / 2), f32(sw), f32(sw)},
+			{f32(tx + ox + pad), f32(ry + (chart_text_size(frame) - sw) / 2), f32(sw), f32(sw)},
 			0.5,
 			4,
 			col,
@@ -430,7 +438,7 @@ chart_draw_tooltip :: proc(
 			fmt.tprintf("%s: %s", name, val),
 			tx + ox + pad + sw + ui_frame_sc(frame, 5),
 			ry,
-			metrics.FONT_SIZE_SMALL,
+			chart_text_size(frame),
 			style.fg_secondary,
 		)
 		ry += row_h

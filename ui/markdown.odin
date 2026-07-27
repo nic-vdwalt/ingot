@@ -383,7 +383,7 @@ draw_markdown_span_selection :: proc(
 		text[highlight_start - segment_start:highlight_end - segment_start],
 		context.temp_allocator,
 	)
-	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	highlight_x := cursor_x + measure_text_frame(ctx.frame, pre, font_size)
 	highlight_w := measure_text_frame(ctx.frame, selected, font_size)
 	draw_rectangle(
@@ -398,7 +398,7 @@ draw_markdown_span_selection :: proc(
 
 @(private = "file")
 draw_markdown_span_chip :: proc(ctx: ^Markdown_Context, text: cstring, x, y: i32) {
-	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	width := measure_text_frame(ctx.frame, text, font_size)
 	rect := Rectangle{f32(x - 3), f32(y - 1), f32(width + 6), f32(font_size + 4)}
 	draw_rectangle_rounded(ctx.frame, rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
@@ -421,7 +421,7 @@ draw_markdown_span_code :: proc(
 		text,
 		x,
 		y,
-		ui_frame_metrics(ctx.frame).FONT_SIZE,
+		ui_frame_metrics(ctx.frame).FONT_SIZE_BODY,
 		ui_frame_theme(ctx.frame).fg_code_inline,
 	)
 }
@@ -434,7 +434,7 @@ draw_markdown_span_emphasis :: proc(
 	x, y: i32,
 	base_color: Color,
 ) {
-	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	style := ui_frame_theme(ctx.frame)
 	if span.bold {
 		draw_text_frame(ctx.frame, text, x + 1, y, font_size, style.fg_bold)
@@ -501,7 +501,8 @@ draw_markdown_line_spans :: proc(
 		)
 		draw_markdown_span_style(ctx, &span, segment_c, cursor_x, y, base_color)
 		cursor_x +=
-			measure_text_frame(ctx.frame, segment_c, ui_frame_metrics(ctx.frame).FONT_SIZE) + 1
+			measure_text_frame(ctx.frame, segment_c, ui_frame_metrics(ctx.frame).FONT_SIZE_BODY) +
+			1
 	}
 }
 
@@ -802,12 +803,12 @@ markdown_table_natural_widths :: proc(
 			if len(cell) == 0 do continue
 			cell_c := strings.clone_to_cstring(cell, ui_frame_allocator(ctx.frame))
 			width :=
-				measure_text_frame(ctx.frame, cell_c, ui_frame_metrics(ctx.frame).FONT_SIZE) +
+				measure_text_frame(ctx.frame, cell_c, ui_frame_metrics(ctx.frame).FONT_SIZE_BODY) +
 				padding * 2
 			widths[column] = max(widths[column], width)
 		}
 	}
-	minimum := padding * 2 + ui_frame_metrics(ctx.frame).FONT_SIZE * 2
+	minimum := padding * 2 + ui_frame_metrics(ctx.frame).FONT_SIZE_BODY * 2
 	minimum = clamp(minimum, i32(1), max_width / i32(columns))
 	for column in 0 ..< columns do widths[column] = max(widths[column], minimum)
 	return widths, minimum
@@ -914,7 +915,7 @@ markdown_table_row_heights :: proc(
 				ctx.frame,
 				cell,
 				inner,
-				metrics.FONT_SIZE,
+				metrics.FONT_SIZE_BODY,
 				metrics.LINE_HEIGHT,
 			)
 			height = max(height, cell_height)
@@ -933,9 +934,9 @@ markdown_table_draw_cell :: proc(
 ) {
 	metrics := ui_frame_metrics(ctx.frame)
 	inner := max(width - metrics.TABLE_CELL_PAD * 2, i32(1))
-	padding_y := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE) / 2, i32(0))
+	padding_y := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE_BODY) / 2, i32(0))
 	text_y := y + padding_y
-	for line in wrap_text_frame(ctx.frame, cell, inner, metrics.FONT_SIZE) {
+	for line in wrap_text_frame(ctx.frame, cell, inner, metrics.FONT_SIZE_BODY) {
 		if line.end > line.start {
 			line_c := strings.clone_to_cstring(cell[line.start:line.end], context.temp_allocator)
 			draw_text_frame(
@@ -943,7 +944,7 @@ markdown_table_draw_cell :: proc(
 				line_c,
 				x + metrics.TABLE_CELL_PAD,
 				text_y,
-				metrics.FONT_SIZE,
+				metrics.FONT_SIZE_BODY,
 				color,
 			)
 		}
@@ -1000,7 +1001,7 @@ markdown_table_hit_row :: proc(
 	if column >= len(row.cells) || len(row.cells[column]) == 0 do return block_start
 	metrics := ui_frame_metrics(ctx.frame)
 	inner := max(widths[column] - metrics.TABLE_CELL_PAD * 2, i32(1))
-	padding_y := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE) / 2, i32(0))
+	padding_y := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE_BODY) / 2, i32(0))
 	local := hit_test_wrapped_frame(
 		ctx.frame,
 		cell_x + metrics.TABLE_CELL_PAD,
@@ -1009,7 +1010,7 @@ markdown_table_hit_row :: proc(
 		row.cells[column],
 		mouse_x,
 		mouse_y,
-		metrics.FONT_SIZE,
+		metrics.FONT_SIZE_BODY,
 	)
 	return row.starts[column] + max(local, 0)
 }
@@ -1094,12 +1095,28 @@ layout_table :: proc(
 heading_font_size :: proc(ctx: ^Markdown_Context, level: int) -> i32 {
 	switch level {
 	case 1:
-		return ui_frame_metrics(ctx.frame).FONT_SIZE_LARGE + 6 // 26
+		return ui_frame_metrics(ctx.frame).FONT_SIZE_TITLE + 6 // 26
 	case 2:
-		return ui_frame_metrics(ctx.frame).FONT_SIZE_LARGE + 2 // 22
+		return ui_frame_metrics(ctx.frame).FONT_SIZE_TITLE + 2 // 22
 	case:
-		return ui_frame_metrics(ctx.frame).FONT_SIZE_LARGE // 20
+		return ui_frame_metrics(ctx.frame).FONT_SIZE_TITLE // 20
 	}
+}
+
+// Get the wrapped line advance for a heading level.
+//
+// Why not LINE_HEIGHT: that metric is tuned for FONT_SIZE_BODY (22 for 16px).
+// A level-1 heading is 26px, so body line height clips its descenders and packs
+// multi-line headings tighter than body text. Scale the body ratio by the
+// heading's own size, and never advance less than the glyphs occupy.
+heading_line_height :: proc(ctx: ^Markdown_Context, level: int) -> i32 {
+	metrics := ui_frame_metrics(ctx.frame)
+	assert(metrics.FONT_SIZE_BODY > 0, "heading_line_height: invalid body metric")
+	size := heading_font_size(ctx, level)
+	height := (size * metrics.LINE_HEIGHT + metrics.FONT_SIZE_BODY / 2) / metrics.FONT_SIZE_BODY
+	if height < size + 1 do height = size + 1
+	assert(height > 0, "heading_line_height: non-positive height")
+	return height
 }
 
 // Get total height consumed by a heading (wrapped text + padding + rule + margin).
@@ -1115,7 +1132,7 @@ heading_total_height :: proc(
 		heading_text,
 		max_width,
 		fs,
-		ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+		heading_line_height(ctx, level),
 	)
 	if text_h == 0 do text_h = fs + 4
 	h := text_h
@@ -1179,7 +1196,7 @@ draw_heading :: proc(
 		text,
 		ui_frame_theme(ctx.frame).fg_heading,
 		font_size,
-		ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+		heading_line_height(ctx, level),
 		sub_sel_s,
 		sub_sel_e,
 		draw,
@@ -1325,7 +1342,7 @@ markdown_draw_code_text :: proc(state: ^Markdown_Draw_State, line: string, line_
 		state.ctx.frame,
 		line,
 		state.max_width - ui_frame_metrics(state.ctx.frame).CODE_BLOCK_PAD * 2,
-		ui_frame_metrics(state.ctx.frame).FONT_SIZE,
+		ui_frame_metrics(state.ctx.frame).FONT_SIZE_BODY,
 	)
 	if state.has_sel {
 		draw_line_with_selection_frame(
@@ -1333,7 +1350,7 @@ markdown_draw_code_text :: proc(state: ^Markdown_Draw_State, line: string, line_
 			state.x + ui_frame_metrics(state.ctx.frame).CODE_BLOCK_PAD,
 			state.current_y,
 			display_line,
-			ui_frame_metrics(state.ctx.frame).FONT_SIZE,
+			ui_frame_metrics(state.ctx.frame).FONT_SIZE_BODY,
 			ui_frame_metrics(state.ctx.frame).LINE_HEIGHT,
 			ui_frame_theme(state.ctx.frame).fg_primary,
 			line_start,
@@ -1347,7 +1364,7 @@ markdown_draw_code_text :: proc(state: ^Markdown_Draw_State, line: string, line_
 			line_c,
 			state.x + ui_frame_metrics(state.ctx.frame).CODE_BLOCK_PAD,
 			state.current_y,
-			ui_frame_metrics(state.ctx.frame).FONT_SIZE,
+			ui_frame_metrics(state.ctx.frame).FONT_SIZE_BODY,
 			ui_frame_theme(state.ctx.frame).fg_primary,
 		)
 	}
@@ -1379,7 +1396,7 @@ markdown_draw_code_line :: proc(state: ^Markdown_Draw_State, line: string, line_
 	line_c := strings.clone_to_cstring(line, context.temp_allocator)
 	width :=
 		min(
-			measure_text_frame(state.ctx.frame, line_c, metrics.FONT_SIZE),
+			measure_text_frame(state.ctx.frame, line_c, metrics.FONT_SIZE_BODY),
 			state.max_width - metrics.CODE_BLOCK_PAD * 2,
 		) +
 		metrics.CODE_BLOCK_PAD * 2
@@ -1410,8 +1427,11 @@ markdown_draw_heading_line :: proc(
 		state.has_sel,
 		state.draw,
 	)
-	font_size := ui_frame_metrics(state.ctx.frame).FONT_SIZE_LARGE
-	if level == 3 do font_size = ui_frame_metrics(state.ctx.frame).FONT_SIZE
+	// Why heading_font_size: this used to re-derive the size by hand as TITLE
+	// (or BODY for level 3), which is not what draw_heading paints (26/22/20).
+	// Every heading was measured narrower than it renders, so both the wrap
+	// decision and the reported content width were wrong.
+	font_size := heading_font_size(state.ctx, level)
 	width := wrapped_max_line_width_frame(state.ctx.frame, content, state.max_width, font_size)
 	state.max_w = max(state.max_w, width)
 }
@@ -1424,7 +1444,7 @@ markdown_draw_bullet_line :: proc(state: ^Markdown_Draw_State, line: string, lin
 		draw_circle(
 			state.ctx.frame,
 			state.x + 8,
-			state.current_y + metrics.FONT_SIZE / 2 + 1,
+			state.current_y + metrics.FONT_SIZE_BODY / 2 + 1,
 			2.5,
 			ui_frame_theme(state.ctx.frame).fg_bullet,
 		)
@@ -1440,7 +1460,7 @@ markdown_draw_bullet_line :: proc(state: ^Markdown_Draw_State, line: string, lin
 		content_width,
 		content,
 		state.base_color,
-		metrics.FONT_SIZE,
+		metrics.FONT_SIZE_BODY,
 		sel_start,
 		sel_end,
 		state.draw,
@@ -1449,7 +1469,12 @@ markdown_draw_bullet_line :: proc(state: ^Markdown_Draw_State, line: string, lin
 	state.current_y += height
 	width :=
 		metrics.BULLET_INDENT +
-		wrapped_max_line_width_md_frame(state.ctx.frame, content, content_width, metrics.FONT_SIZE)
+		wrapped_max_line_width_md_frame(
+			state.ctx.frame,
+			content,
+			content_width,
+			metrics.FONT_SIZE_BODY,
+		)
 	state.max_w = max(state.max_w, width)
 }
 
@@ -1499,7 +1524,7 @@ markdown_draw_plain_line :: proc(state: ^Markdown_Draw_State, line: string, line
 		state.max_width,
 		line,
 		state.base_color,
-		metrics.FONT_SIZE,
+		metrics.FONT_SIZE_BODY,
 		sel_start,
 		sel_end,
 		state.draw,
@@ -1508,7 +1533,7 @@ markdown_draw_plain_line :: proc(state: ^Markdown_Draw_State, line: string, line
 		state.ctx.frame,
 		line,
 		state.max_width,
-		metrics.FONT_SIZE,
+		metrics.FONT_SIZE_BODY,
 	)
 	state.max_w = max(state.max_w, width)
 }
@@ -1665,7 +1690,7 @@ markdown_hit_code :: proc(state: ^Markdown_Hit_State, line: string, line_start: 
 			ui_frame_text(state.ctx.frame),
 			line,
 			state.mouse_x - (state.x + metrics.CODE_BLOCK_PAD),
-			metrics.FONT_SIZE,
+			metrics.FONT_SIZE_BODY,
 		)
 		return line_start + caret_col_to_byte(line, column)
 	}
@@ -1704,7 +1729,7 @@ markdown_hit_bullet :: proc(state: ^Markdown_Hit_State, line: string, line_start
 	content := line[2:]
 	content_x := state.x + metrics.BULLET_INDENT
 	content_width := state.max_width - metrics.BULLET_INDENT
-	height := measure_wrapped_height_md(state.ctx, content, content_width, metrics.FONT_SIZE)
+	height := measure_wrapped_height_md(state.ctx, content, content_width, metrics.FONT_SIZE_BODY)
 	if height == 0 do height = metrics.LINE_HEIGHT
 	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + height {
 		offset := hit_test_wrapped_md(
@@ -1715,7 +1740,7 @@ markdown_hit_bullet :: proc(state: ^Markdown_Hit_State, line: string, line_start
 			content,
 			state.mouse_x,
 			state.mouse_y,
-			metrics.FONT_SIZE,
+			metrics.FONT_SIZE_BODY,
 		)
 		if offset < 0 do offset = 0
 		return line_start + 2 + offset
@@ -1774,7 +1799,7 @@ markdown_hit_plain :: proc(state: ^Markdown_Hit_State, line: string, line_start:
 		state.current_y += gap
 		return -1
 	}
-	height := measure_wrapped_height_md(state.ctx, line, state.max_width, metrics.FONT_SIZE)
+	height := measure_wrapped_height_md(state.ctx, line, state.max_width, metrics.FONT_SIZE_BODY)
 	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + height {
 		offset := hit_test_wrapped_md(
 			state.ctx,
@@ -1784,7 +1809,7 @@ markdown_hit_plain :: proc(state: ^Markdown_Hit_State, line: string, line_start:
 			line,
 			state.mouse_x,
 			state.mouse_y,
-			metrics.FONT_SIZE,
+			metrics.FONT_SIZE_BODY,
 		)
 		if offset >= 0 do return line_start + offset
 	}

@@ -145,14 +145,14 @@ debug_overlay_diagnostic_rows :: proc(
 draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnostics = {}) -> i32 {
 	assert(frame != nil && frame.open, "draw_debug_overlay: invalid frame")
 	assert(x >= 0 && y >= 0, "draw_debug_overlay: negative origin")
-	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
-	row_h := metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 4)
+	label_h := text_role_size(frame, .Label)
+	row_h := label_h + ui_frame_sc(frame, 4)
 	pad := ui_frame_sc(frame, 8)
 	width := ui_frame_sc(frame, 280)
 	rows: [DEBUG_OVERLAY_MAX_ROWS]Debug_Overlay_Cell
 	count := debug_overlay_rows(frame, stats, rows[:])
-	height := i32(count) * row_h + pad * 2 + metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 6)
+	height := i32(count) * row_h + pad * 2 + label_h + ui_frame_sc(frame, 6)
 	panel := Rectangle{f32(x), f32(y), f32(width), f32(height)}
 	draw_rectangle_rec(
 		frame,
@@ -161,8 +161,8 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnost
 	)
 	draw_rectangle_lines_ex(frame, panel, ui_frame_scf(frame, 1), style.border_color)
 	text_y := y + pad
-	draw_text_frame(frame, "DEBUG", x + pad, text_y, metrics.FONT_SIZE_SMALL, style.fg_label)
-	text_y += metrics.FONT_SIZE_SMALL + ui_frame_sc(frame, 6)
+	text(frame, "DEBUG", x + pad, text_y, .Label, .Label)
+	text_y += label_h + ui_frame_sc(frame, 6)
 	for index in 0 ..< count {
 		kv_row_frame(
 			frame,

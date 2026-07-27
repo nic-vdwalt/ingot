@@ -20,7 +20,7 @@ ui_frame_style_matches_individual_accessors :: proc(t: ^testing.T) {
 	metrics, style := ui_frame_style(&frame)
 	testing.expect(t, metrics == ui_frame_metrics(&frame), "style metrics must alias the runtime")
 	testing.expect(t, style == ui_frame_theme(&frame), "style theme must alias the runtime")
-	testing.expect_value(t, metrics.FONT_SIZE, ui_frame_metrics(&frame).FONT_SIZE)
+	testing.expect_value(t, metrics.FONT_SIZE_BODY, ui_frame_metrics(&frame).FONT_SIZE_BODY)
 	testing.expect_value(t, style.fg_primary, theme_light().fg_primary)
 }
 
@@ -211,7 +211,11 @@ test_explicit_frame_resources_follow_own_runtime :: proc(t: ^testing.T) {
 	ui_frame_begin(&frame, &runtime)
 	testing.expect(t, ui_frame_text(&frame) == &runtime.text)
 	testing.expect_value(t, ui_frame_sc(&frame, 7), 14)
-	testing.expect_value(t, ui_frame_metrics(&frame).FONT_SIZE, runtime.metrics.FONT_SIZE)
+	testing.expect_value(
+		t,
+		ui_frame_metrics(&frame).FONT_SIZE_BODY,
+		runtime.metrics.FONT_SIZE_BODY,
+	)
 	testing.expect_value(t, ui_frame_theme(&frame).bg_color, custom.bg_color)
 	ui_frame_end(&frame)
 }

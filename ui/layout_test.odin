@@ -338,6 +338,78 @@ fit_column_space_and_conditional_rows :: proc(t: ^testing.T) {
 	testing.expect_value(t, bounds.h, i32(40))
 }
 
+// An unbounded column is unchanged: it reports no overflow and unlimited room.
+@(test)
+fit_column_unbounded_never_reports_overflow :: proc(t: ^testing.T) {
+	column: Fit_Column
+	fit_column_begin(&column, 0, 0, 100)
+	_ = fit_column_next(&column, 10_000)
+	testing.expect_value(t, fit_column_remaining(&column), max(i32))
+	testing.expect_value(t, fit_column_overflow(&column), i32(0))
+	testing.expect_value(t, fit_column_end(&column).h, i32(10_000))
+}
+
+// Exact fit consumes the budget without reporting overflow.
+@(test)
+fit_column_bounded_exact_fit_has_no_overflow :: proc(t: ^testing.T) {
+	column: Fit_Column
+	fit_column_begin_bounded(&column, 5, 7, 90, 46, gap = 4)
+	a := fit_column_next(&column, 20)
+	b := fit_column_next(&column, 22)
+	bounds := fit_column_end(&column)
+	testing.expect_value(t, a, Rect_I32{5, 7, 90, 20})
+	testing.expect_value(t, b, Rect_I32{5, 31, 90, 22})
+	testing.expect_value(t, bounds, Rect_I32{5, 7, 90, 46})
+	testing.expect_value(t, fit_column_overflow(&column), i32(0))
+}
+
+// Past the budget, rows collapse to zero height instead of being placed
+// outside the panel. ui_slot_visible then reports them invisible.
+@(test)
+fit_column_bounded_exhaustion_yields_zero_height_rows :: proc(t: ^testing.T) {
+	column: Fit_Column
+	fit_column_begin_bounded(&column, 0, 0, 100, 30)
+	first := fit_column_next(&column, 20)
+	second := fit_column_next(&column, 20)
+	third := fit_column_next(&column, 20)
+	bounds := fit_column_end(&column)
+	testing.expect_value(t, first, Rect_I32{0, 0, 100, 20})
+	// Only 10 px were left, so the second row is truncated, not displaced.
+	testing.expect_value(t, second, Rect_I32{0, 20, 100, 10})
+	testing.expect_value(t, third, Rect_I32{0, 30, 100, 0})
+	testing.expect(t, !ui_slot_visible(third), "exhausted row must report invisible")
+	testing.expect_value(t, bounds.h, i32(30))
+	// 10 lost from the second row, 20 from the third.
+	testing.expect_value(t, fit_column_overflow(&column), i32(30))
+	testing.expect_value(t, fit_column_remaining(&column), i32(0))
+}
+
+// A budget computed as `bottom - cursor` legitimately goes negative on a short
+// window. That must degrade to "nothing fits", not trip an assert.
+@(test)
+fit_column_bounded_negative_budget_places_nothing :: proc(t: ^testing.T) {
+	column: Fit_Column
+	fit_column_begin_bounded(&column, 3, 9, -40, -100, gap = 5)
+	row := fit_column_next(&column, 25)
+	bounds := fit_column_end(&column)
+	testing.expect_value(t, row, Rect_I32{3, 9, 0, 0})
+	testing.expect_value(t, bounds, Rect_I32{3, 9, 0, 0})
+	testing.expect_value(t, fit_column_overflow(&column), i32(25))
+}
+
+// fit_column_space respects the budget too, so a spacer cannot push later rows
+// past the bottom edge.
+@(test)
+fit_column_bounded_space_is_clamped :: proc(t: ^testing.T) {
+	column: Fit_Column
+	fit_column_begin_bounded(&column, 0, 0, 50, 20)
+	fit_column_space(&column, 100)
+	row := fit_column_next(&column, 10)
+	testing.expect_value(t, row, Rect_I32{0, 20, 50, 0})
+	testing.expect_value(t, fit_column_end(&column).h, i32(20))
+	testing.expect_value(t, fit_column_overflow(&column), i32(90))
+}
+
 @(test)
 fit_column_reuses_caller_owned_state :: proc(t: ^testing.T) {
 	column: Fit_Column

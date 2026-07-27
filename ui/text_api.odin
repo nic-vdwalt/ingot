@@ -14,14 +14,14 @@ package ui
 import "core:strings"
 
 // Text_Role names the typographic slot a string occupies. Sizes come from
-// Ui_Metrics so they follow the runtime UI scale.
+// Ui_Metrics so they follow the runtime UI scale. There are exactly four roles
+// because there are exactly four sizes; a role that resolves to the same size
+// as another role only lets two call sites disagree while both look correct.
 Text_Role :: enum u8 {
 	Body, // default reading size
-	Title, // view/section titles
-	Large, // emphasized headings
-	Small, // dense secondary rows
-	Label, // control labels, buttons
-	Note, // footnotes, timestamps
+	Title, // view/section titles and emphasized headings
+	Label, // control labels, buttons, dense rows
+	Note, // footnotes, timestamps, hints
 }
 
 // Ink names the semantic role of a text color rather than a palette slot, so
@@ -53,10 +53,6 @@ text_role_size :: proc(frame: ^Ui_Frame, role: Text_Role) -> i32 {
 		size = metrics.FONT_SIZE_BODY
 	case .Title:
 		size = metrics.FONT_SIZE_TITLE
-	case .Large:
-		size = metrics.FONT_SIZE_LARGE
-	case .Small:
-		size = metrics.FONT_SIZE_SMALL
 	case .Label:
 		size = metrics.FONT_SIZE_LABEL
 	case .Note:

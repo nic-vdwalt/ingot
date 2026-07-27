@@ -180,8 +180,8 @@ diff_draw_gutter :: proc(frame: ^Ui_Frame, x, y, width, cell_width: i32, number:
 	assert(width >= 0 && cell_width > 0, "diff_draw_gutter: invalid geometry")
 	if number <= 0 do return
 	value := fmt.tprintf("%d", number)
-	value_width := text_width(frame, value, .Small)
-	text(frame, value, x + width - cell_width - value_width, y, .Small, .Muted)
+	value_width := text_width(frame, value, .Label)
+	text(frame, value, x + width - cell_width - value_width, y, .Label, .Muted)
 }
 
 diff_draw_cell :: proc(frame: ^Ui_Frame, x, y: i32, value: string, max_characters: int, ink: Ink) {
@@ -195,7 +195,7 @@ diff_draw_cell :: proc(frame: ^Ui_Frame, x, y: i32, value: string, max_character
 			display = display[:max_characters]
 		}
 	}
-	text(frame, display, x, y, .Small, ink)
+	text(frame, display, x, y, .Label, ink)
 }
 
 diff_semantics :: proc(
@@ -230,10 +230,9 @@ diff_view :: proc(
 ) -> Diff_View_Result {
 	assert(frame != nil && frame.open, "diff_view: invalid frame")
 	if ui_frame_drop_degenerate(frame, width <= 0) || len(rows) == 0 do return {next_y = y}
-	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
-	line_height := metrics.FONT_SIZE_SMALL + 2
-	cell_width := max(text_width(frame, "MM", .Small) - text_width(frame, "M", .Small), 1)
+	line_height := text_role_size(frame, .Label) + 2
+	cell_width := max(text_width(frame, "MM", .Label) - text_width(frame, "M", .Label), 1)
 	gutter_width := cell_width * 5
 	gap := cell_width
 	column_width := (width - gutter_width * 2 - gap * 3) / 2
@@ -275,7 +274,7 @@ diff_view :: proc(
 			fmt.tprintf("... %d more lines", hidden),
 			x + gap,
 			y + 4 + i32(shown) * line_height,
-			.Small,
+			.Label,
 			.Muted,
 		)
 	}
@@ -290,7 +289,7 @@ diff_view_split :: proc(
 ) {
 	assert(frame != nil && frame.open, "diff_view_split: invalid frame")
 	assert(gutter_width > 0 && column_width > 0 && gap > 0 && cell_width > 0)
-	line_height := ui_frame_metrics(frame).FONT_SIZE_SMALL + 2
+	line_height := text_role_size(frame, .Label) + 2
 	left_gutter := x + gap
 	left_text := left_gutter + gutter_width
 	right_gutter := left_text + column_width + gap
@@ -298,7 +297,7 @@ diff_view_split :: proc(
 	for row, index in rows {
 		row_y := y + i32(index) * line_height
 		if row.kind == .Hunk || row.kind == .Metadata {
-			text(frame, row.text, x + gap, row_y, .Small, .Muted)
+			text(frame, row.text, x + gap, row_y, .Label, .Muted)
 			continue
 		}
 		if row.kind == .Del || row.kind == .Context {
@@ -354,7 +353,7 @@ diff_view_unified :: proc(
 ) {
 	assert(frame != nil && frame.open, "diff_view_unified: invalid frame")
 	assert(gutter_width > 0 && gap > 0 && cell_width > 0)
-	line_height := ui_frame_metrics(frame).FONT_SIZE_SMALL + 2
+	line_height := text_role_size(frame, .Label) + 2
 	gutter_x := x + gap
 	marker_x := gutter_x + gutter_width * 2
 	text_x := marker_x + cell_width * 2
@@ -362,7 +361,7 @@ diff_view_unified :: proc(
 	for row, index in rows {
 		row_y := y + i32(index) * line_height
 		if row.kind == .Hunk || row.kind == .Metadata {
-			text(frame, row.text, gutter_x, row_y, .Small, .Muted)
+			text(frame, row.text, gutter_x, row_y, .Label, .Muted)
 			continue
 		}
 		marker, ink := " ", Ink.Secondary
@@ -396,7 +395,7 @@ diff_view_unified :: proc(
 			cell_width,
 			row.new_no,
 		)
-		text(frame, marker, marker_x, row_y, .Small, ink)
+		text(frame, marker, marker_x, row_y, .Label, ink)
 		diff_draw_cell(frame, text_x, row_y, row.text, max_characters, ink)
 	}
 }

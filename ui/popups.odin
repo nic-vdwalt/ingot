@@ -93,7 +93,7 @@ modal_begin :: proc(
 		title_c,
 		mx + metrics.PADDING,
 		my + metrics.PADDING,
-		metrics.FONT_SIZE_LARGE,
+		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
 	return Rect_I32{mx, my + title_h, mw, mh - title_h}
@@ -192,7 +192,7 @@ context_menu_width_frame :: proc(frame: ^Ui_Frame, items: []Menu_Item, max_w: i3
 	for it in items {
 		if it.separator do continue
 		c := strings.clone_to_cstring(it.label, context.temp_allocator)
-		lw := measure_text_frame(frame, c, metrics.FONT_SIZE) + ui_frame_sc(frame, 32)
+		lw := measure_text_frame(frame, c, metrics.FONT_SIZE_BODY) + ui_frame_sc(frame, 32)
 		if lw > w do w = lw
 	}
 	return min(w, max_w)
@@ -320,14 +320,14 @@ context_menu_rows :: proc(
 			frame,
 			it.label,
 			item_w - ui_frame_sc(frame, 16),
-			metrics.FONT_SIZE,
+			metrics.FONT_SIZE_BODY,
 		)
 		overlay_text(
 			frame,
 			txt,
 			item_x + ox + ui_frame_sc(frame, 8),
-			item_y + (metrics.MENU_ITEM_H - metrics.FONT_SIZE) / 2,
-			metrics.FONT_SIZE,
+			item_y + (metrics.MENU_ITEM_H - metrics.FONT_SIZE_BODY) / 2,
+			metrics.FONT_SIZE_BODY,
 			col,
 		)
 		if hovered && !it.disabled && is_mouse_button_released(frame, .LEFT) {
@@ -384,9 +384,9 @@ tooltip :: proc(
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	text_c := strings.clone_to_cstring(text, context.temp_allocator)
-	tw := measure_text_frame(frame, text_c, metrics.FONT_SIZE_SMALL)
+	tw := measure_text_frame(frame, text_c, metrics.FONT_SIZE_LABEL)
 	bw := tw + metrics.TOOLTIP_PAD * 2
-	bh := metrics.FONT_SIZE_SMALL + metrics.TOOLTIP_PAD * 2
+	bh := metrics.FONT_SIZE_LABEL + metrics.TOOLTIP_PAD * 2
 	tx := clamp(i32(mouse.x) + ui_frame_sc(frame, 12), 0, max(screen_w - bw, 0))
 	ty := clamp(i32(mouse.y) + ui_frame_sc(frame, 18), 0, max(screen_h - bh, 0))
 	tip := Rectangle{f32(tx), f32(ty), f32(bw), f32(bh)}
@@ -398,7 +398,7 @@ tooltip :: proc(
 		text,
 		tx + metrics.TOOLTIP_PAD,
 		ty + metrics.TOOLTIP_PAD,
-		metrics.FONT_SIZE_SMALL,
+		metrics.FONT_SIZE_LABEL,
 		style.fg_primary,
 	)
 	overlay_end(frame)

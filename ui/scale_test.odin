@@ -35,5 +35,5 @@ scale_noop_when_unchanged :: proc(t: ^testing.T) {
 	before := runtime.generation
 	ui_runtime_set_scale(&runtime, 2.0)
 	testing.expect_value(t, runtime.generation, before)
-	testing.expect_value(t, runtime.metrics.FONT_SIZE, i32(32))
+	testing.expect_value(t, runtime.metrics.FONT_SIZE_BODY, i32(32))
 }

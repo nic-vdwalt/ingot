@@ -102,6 +102,27 @@ support remain unclaimed until recorded by the production-readiness matrix.
 - Narrow layouts switch explicitly to a reviewed compact composition; they do not rely on accidental clipping.
 - Navigation, forms, overlays, and status feedback remain reachable without horizontal overflow.
 
+## Typography
+
+- `Ui_Metrics` exposes exactly four type sizes: `FONT_SIZE_TITLE`, `FONT_SIZE_BODY`,
+  `FONT_SIZE_LABEL`, `FONT_SIZE_NOTE`. A second name for an existing size is not
+  added: aliases let two call sites drift apart while both look deliberate.
+- `Text_Role` has exactly one role per size. `text_roles_are_pairwise_distinct`
+  enforces this.
+- Widgets resolve size and colour through `Text_Role`/`Ink` rather than reading
+  metrics directly, so a theme or scale change cannot miss a call site.
+- Control labels (`checkbox_at`, `radio_at`) and button labels (`btn_at`) share
+  one default size, `FONT_SIZE_LABEL`. They appear side by side in almost every
+  panel; a differing default made those panels inconsistent unless each caller
+  intervened. All three accept a `font_size` override.
+
+### Recorded default changes
+
+| Date | Change | Rationale |
+|---|---|---|
+| 2026-07-27 | `checkbox_at`/`radio_at` label default `FONT_SIZE_BODY` (16) → `FONT_SIZE_LABEL` (13) | Matched `btn_at`. Controls and buttons in one panel previously differed by 3 px with neither call site naming a size. Covered by `control_labels_default_to_button_label_size`. |
+| 2026-07-27 | Removed `FONT_SIZE`, `FONT_SIZE_LARGE`, `FONT_SIZE_SMALL` from `Ui_Metrics`; removed `Text_Role.Large`/`.Small` | Each duplicated an existing size. Callers used the pairs interchangeably for the same purpose. Replace with `FONT_SIZE_BODY`, `FONT_SIZE_TITLE`, `FONT_SIZE_LABEL` and `.Title`/`.Label` respectively. |
+
 ## Approval sequence
 
 Each behavior change follows the same gate:

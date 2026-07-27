@@ -113,12 +113,21 @@ flow_end :: proc(flow: ^Flow_Layout) -> Rect_I32 {
 	return result
 }
 
+// Fit_Column stacks fixed-height rows and reports the extent they consumed.
+//
+// A column may be bounded (see fit_column_begin_bounded). An unbounded column
+// grows without limit, which is only correct when the caller has already proven
+// the content fits; a panel laid out against a window edge has not, and an
+// unbounded column will happily place rows past the bottom of the screen.
 Fit_Column :: struct {
-	x, y, w: i32,
-	cursor:  i32,
-	gap:     i32,
-	items:   i32,
-	open:    bool,
+	x, y, w:  i32,
+	cursor:   i32,
+	gap:      i32,
+	items:    i32,
+	max_h:    i32,
+	bounded:  bool,
+	overflow: i32,
+	open:     bool,
 }
 
 fit_column_begin :: proc(column: ^Fit_Column, x, y, w: i32, gap: i32 = 0) {
@@ -134,15 +143,62 @@ fit_column_begin :: proc(column: ^Fit_Column, x, y, w: i32, gap: i32 = 0) {
 	}
 }
 
+// fit_column_begin_bounded limits the column to max_h pixels. Rows that do not
+// fit are returned with zero height (ui_slot_visible reports them as invisible,
+// so widgets skip them) and their lost pixels accumulate in fit_column_overflow.
+//
+// Why clamp rather than assert: max_h is typically computed as
+// `available_bottom - cursor`, which legitimately goes negative on a short
+// window. Asserting there turns a layout that should degrade into a crash.
+fit_column_begin_bounded :: proc(column: ^Fit_Column, x, y, w, max_h: i32, gap: i32 = 0) {
+	assert(column != nil, "fit_column_begin_bounded: nil column")
+	assert(!column.open, "fit_column_begin_bounded: column already open")
+	assert(gap >= 0, "fit_column_begin_bounded: negative gap")
+	column^ = Fit_Column {
+		x       = x,
+		y       = y,
+		w       = max(w, 0),
+		gap     = gap,
+		max_h   = max(max_h, 0),
+		bounded = true,
+		open    = true,
+	}
+}
+
+// fit_column_remaining reports the unused pixels of a bounded column. An
+// unbounded column always reports max(i32).
+fit_column_remaining :: proc(column: ^Fit_Column) -> i32 {
+	assert(column != nil, "fit_column_remaining: nil column")
+	if !column.bounded do return max(i32)
+	return max(column.max_h - column.cursor, 0)
+}
+
+// fit_column_overflow reports the content pixels a bounded column could not
+// place. Valid during and after the column. Zero means everything fit.
+fit_column_overflow :: proc(column: ^Fit_Column) -> i32 {
+	assert(column != nil, "fit_column_overflow: nil column")
+	assert(column.overflow >= 0, "fit_column_overflow: corrupt column")
+	return column.overflow
+}
+
 fit_column_next :: proc(column: ^Fit_Column, height: i32) -> Rect_I32 {
 	assert(column != nil && column.open, "fit_column_next: column not open")
 	assert(height >= 0, "fit_column_next: negative height")
 	assert(column.items < MAX_FIT_COLUMN_ITEMS, "fit_column_next: too many items")
 	before := column.gap if column.items > 0 else 0
-	assert(column.cursor <= 0x7fff_ffff - before - height, "fit_column_next: extent overflow")
+	granted := height
+	if column.bounded {
+		remaining := max(column.max_h - column.cursor, 0)
+		before = min(before, remaining)
+		remaining -= before
+		granted = min(height, remaining)
+		assert(column.overflow <= 0x7fff_ffff - (height - granted), "fit_column_next: overflow")
+		column.overflow += height - granted
+	}
+	assert(column.cursor <= 0x7fff_ffff - before - granted, "fit_column_next: extent overflow")
 	column.cursor += before
-	result := Rect_I32{column.x, column.y + column.cursor, column.w, height}
-	column.cursor += height
+	result := Rect_I32{column.x, column.y + column.cursor, column.w, granted}
+	column.cursor += granted
 	column.items += 1
 	return result
 }
@@ -150,8 +206,14 @@ fit_column_next :: proc(column: ^Fit_Column, height: i32) -> Rect_I32 {
 fit_column_space :: proc(column: ^Fit_Column, height: i32) {
 	assert(column != nil && column.open, "fit_column_space: column not open")
 	assert(height >= 0, "fit_column_space: negative height")
-	assert(column.cursor <= 0x7fff_ffff - height, "fit_column_space: extent overflow")
-	column.cursor += height
+	granted := height
+	if column.bounded {
+		granted = min(height, max(column.max_h - column.cursor, 0))
+		assert(column.overflow <= 0x7fff_ffff - (height - granted), "fit_column_space: overflow")
+		column.overflow += height - granted
+	}
+	assert(column.cursor <= 0x7fff_ffff - granted, "fit_column_space: extent overflow")
+	column.cursor += granted
 }
 
 fit_column_end :: proc(column: ^Fit_Column) -> Rect_I32 {
@@ -159,6 +221,10 @@ fit_column_end :: proc(column: ^Fit_Column) -> Rect_I32 {
 	assert(
 		column.cursor >= 0 && column.items <= MAX_FIT_COLUMN_ITEMS,
 		"fit_column_end: corrupt column",
+	)
+	assert(
+		!column.bounded || column.cursor <= column.max_h,
+		"fit_column_end: bounded column exceeded its budget",
 	)
 	result := Rect_I32{column.x, column.y, column.w, column.cursor}
 	column.open = false

@@ -41,7 +41,7 @@ draw :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	ui.begin(&data.form, frame, root, gap = .SM)
 	ui.padding(&data.form, .LG)
 	ui.scope_begin(&data.form, "hello")
-	ui.label(&data.form, "Hello from Ingot", ui.ui_frame_metrics(frame).FONT_SIZE_LARGE)
+	ui.label(&data.form, "Hello from Ingot", ui.ui_frame_metrics(frame).FONT_SIZE_TITLE)
 	ui.flex_row_begin(&data.form, 32, {ui.fit(120), ui.grow()}, gap = .SM)
 	ui.label(&data.form, "Controls")
 	if ui.button(&data.form, ui.id(&data.form, "toggle"), "Toggle list") {

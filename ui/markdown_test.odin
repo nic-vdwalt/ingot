@@ -30,6 +30,47 @@ md_match_heading :: proc(t: ^testing.T) {
 	testing.expect(t, !h4_ok, "H4 preserves current plain-text behavior")
 }
 
+// A heading must be measured at the size it is drawn at. Deriving the size
+// twice let the measure (TITLE, or BODY for level 3) drift from the draw
+// (TITLE+6 / TITLE+2 / TITLE), so every heading wrapped as if it were smaller
+// than it renders.
+@(test)
+md_heading_measure_matches_draw_size :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	ctx := markdown_context(&frame)
+	metrics := ui_frame_metrics(&frame)
+
+	testing.expect_value(t, heading_font_size(&ctx, 1), metrics.FONT_SIZE_TITLE + 6)
+	testing.expect_value(t, heading_font_size(&ctx, 2), metrics.FONT_SIZE_TITLE + 2)
+	testing.expect_value(t, heading_font_size(&ctx, 3), metrics.FONT_SIZE_TITLE)
+
+	// Heading line advance follows the heading's own size, not body text.
+	for level in 1 ..= 3 {
+		size := heading_font_size(&ctx, level)
+		advance := heading_line_height(&ctx, level)
+		testing.expectf(
+			t,
+			advance > size,
+			"level %d advance %d must exceed its %d px glyphs",
+			level,
+			advance,
+			size,
+		)
+	}
+	// A level-1 heading is larger than body text, so it must not reuse the
+	// body line height.
+	testing.expect(
+		t,
+		heading_line_height(&ctx, 1) > metrics.LINE_HEIGHT,
+		"H1 must not advance by the body line height",
+	)
+}
+
 @(test)
 md_match_url :: proc(t: ^testing.T) {
 	// Trailing sentence punctuation is trimmed from the URL.

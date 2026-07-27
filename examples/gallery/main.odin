@@ -241,7 +241,7 @@ draw_nav :: proc(sh: i32) {
 	)
 
 	y := ui.ui_frame_sc(ui_frame, 14)
-	ui.text(ui_frame, "ingot gallery", ui.ui_frame_sc(ui_frame, 14), y, .Large)
+	ui.text(ui_frame, "ingot gallery", ui.ui_frame_sc(ui_frame, 14), y, .Title)
 	y += ui.ui_frame_sc(ui_frame, 40)
 
 	for s in Section {
@@ -391,7 +391,7 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	y += bh + gap
 
 	count := fmt.tprintf("clicks: %d", click_count)
-	ui.text(ui_frame, count, x, y, .Small, .Secondary)
+	ui.text(ui_frame, count, x, y, .Label, .Secondary)
 	y += ui.ui_frame_sc(ui_frame, 30)
 
 	y = ui.section_header(ui_frame, x, y, w, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
@@ -435,7 +435,7 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 				"Collapsed state is a caller-owned bool.",
 				x + ui.ui_frame_sc(ui_frame, 12),
 				y,
-				.Small,
+				.Label,
 				.Secondary,
 			)
 			y += ui.ui_frame_sc(ui_frame, 24)
@@ -495,7 +495,7 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 	ui.label(
 		&state.ctx,
 		summary,
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(ui_frame).fg_secondary,
 	)
 
@@ -642,7 +642,7 @@ draw_widget_status_pills :: proc(x, y: i32) -> i32 {
 			"active",
 			px,
 			y,
-			ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+			ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
 			ui.ui_frame_theme(ui_frame).fg_success,
 		) +
 		ui.ui_frame_sc(ui_frame, 8)
@@ -652,7 +652,7 @@ draw_widget_status_pills :: proc(x, y: i32) -> i32 {
 			"warning",
 			px,
 			y,
-			ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+			ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
 			ui.ui_frame_theme(ui_frame).fg_tool,
 		) +
 		ui.ui_frame_sc(ui_frame, 8)
@@ -661,7 +661,7 @@ draw_widget_status_pills :: proc(x, y: i32) -> i32 {
 		"error",
 		px,
 		y,
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(ui_frame).fg_error,
 	)
 	return y + ui.ui_frame_sc(ui_frame, 34)
@@ -734,7 +734,7 @@ draw_widget_backend_list :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 			label,
 			x + ui.ui_frame_sc(ui_frame, 8),
 			y + ui.ui_frame_sc(ui_frame, 4),
-			.Small,
+			.Label,
 		)
 		y += step
 	}
@@ -747,7 +747,7 @@ draw_widget_backend_list :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 			fmt.tprintf("activated: %s", labels[state.list_activated]),
 			x,
 			y,
-			.Small,
+			.Label,
 			.Secondary,
 		)
 		y += step
@@ -776,21 +776,21 @@ draw_widget_truncation_card :: proc(x, y0, w: i32) -> i32 {
 		x + ui.ui_frame_sc(ui_frame, 12),
 		y + ui.ui_frame_sc(ui_frame, 12),
 		i32(card.width) - ui.ui_frame_sc(ui_frame, 24),
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(ui_frame).fg_primary,
 	)
 	path := ui.truncate_path_middle_frame(
 		ui_frame,
 		"ingot/examples/gallery/very/deep/dir/main.odin",
 		i32(card.width) - ui.ui_frame_sc(ui_frame, 24),
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
 	)
 	ui.text(
 		ui_frame,
 		path,
 		x + ui.ui_frame_sc(ui_frame, 12),
 		y + ui.ui_frame_sc(ui_frame, 34),
-		.Small,
+		.Label,
 		.Secondary,
 	)
 	return y + i32(card.height) + ui.ui_frame_sc(ui_frame, 16)
@@ -813,8 +813,8 @@ draw_widget_fit_card :: proc(x, y0, w: i32) -> i32 {
 	content := ui.fit_column_end(&column)
 	card := rl.Rectangle{f32(x), f32(y), f32(fit_w), f32(content.h + pad * 2)}
 	ui.draw_card_bg_frame(ui_frame, ui.Rect(card), ui.ui_frame_theme(ui_frame).bg_secondary)
-	ui.text(ui_frame, "Geometry resolved before drawing", title.x, title.y, .Small)
-	ui.text(ui_frame, "No retained tree or trailing gap", detail.x, detail.y, .Small, .Secondary)
+	ui.text(ui_frame, "Geometry resolved before drawing", title.x, title.y, .Label)
+	ui.text(ui_frame, "No retained tree or trailing gap", detail.x, detail.y, .Label, .Secondary)
 	return y + i32(card.height) + ui.ui_frame_sc(ui_frame, 16)
 }
 
@@ -864,7 +864,7 @@ draw_charts :: proc(x, y0, w: i32) -> i32 {
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
 	y += ui.ui_frame_sc(ui_frame, 232)
-	ui.text(ui_frame, "sparkline:", x, y + ui.ui_frame_sc(ui_frame, 6), .Small, .Secondary)
+	ui.text(ui_frame, "sparkline:", x, y + ui.ui_frame_sc(ui_frame, 6), .Label, .Secondary)
 	ui.sparkline(
 		ui_frame,
 		x + ui.ui_frame_sc(ui_frame, 80),
@@ -933,7 +933,7 @@ draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
 	)
 	labels := [?]string{"measured", "single pass", "caller owned", "bounded", "responsive flow"}
 	for label in labels {
-		width := ui.text_width(ui_frame, label, .Small) + ui.ui_frame_sc(ui_frame, 24)
+		width := ui.text_width(ui_frame, label, .Label) + ui.ui_frame_sc(ui_frame, 24)
 		cell(ui.flow_next(&flow, width, ui.ui_frame_sc(ui_frame, 32)), label)
 	}
 	flow_bounds := ui.flow_end(&flow)
@@ -956,13 +956,13 @@ cell :: proc(r: ui.Rect_I32, label: string) {
 		r.h,
 		ui_gfx.color_to_gfx(ui.ui_frame_theme(ui_frame).border_color),
 	)
-	tw := ui.text_width(ui_frame, label, .Small)
+	tw := ui.text_width(ui_frame, label, .Label)
 	ui.text(
 		ui_frame,
 		label,
 		r.x + (r.w - tw) / 2,
-		r.y + (r.h - ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL) / 2,
-		.Small,
+		r.y + (r.h - ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL) / 2,
+		.Label,
 		.Secondary,
 	)
 }
@@ -980,7 +980,7 @@ draw_overlay_controls :: proc(x, y: i32) -> i32 {
 		"shielded clicks: %d (should not rise while the popup covers them)",
 		shielded_clicks,
 	)
-	ui.text(ui_frame, summary, x, info_y, .Small, .Secondary)
+	ui.text(ui_frame, summary, x, info_y, .Label, .Secondary)
 	action_x := x + button_w + ui.ui_frame_sc(ui_frame, 100)
 	if ui.btn(
 		ui_frame,
@@ -1035,7 +1035,7 @@ draw_overlay_context_menu :: proc(x, info_y: i32) {
 		strings.clone_to_cstring(ctx_note, context.temp_allocator),
 		x,
 		info_y + ui.ui_frame_sc(ui_frame, 22),
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(ui_frame).fg_label,
 	)
 }
@@ -1059,7 +1059,7 @@ draw_overlay_modal :: proc() {
 		"The settings panel is built on this same modal_begin/modal_end pair. " +
 		"Escape or a click outside dismisses it.",
 		ui.ui_frame_theme(ui_frame).fg_primary,
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_BODY,
 		ui.ui_frame_metrics(ui_frame).LINE_HEIGHT,
 	)
 	if ui.btn(
@@ -1114,7 +1114,7 @@ draw_demo_popup :: proc(x, y: i32) {
 		"Overlay popup",
 		x + ui.ui_frame_sc(ui_frame, 12),
 		y + ui.ui_frame_sc(ui_frame, 10),
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_BODY,
 		ui.ui_frame_theme(ui_frame).fg_primary,
 	)
 	ui.overlay_text(
@@ -1122,7 +1122,7 @@ draw_demo_popup :: proc(x, y: i32) {
 		"Recorded during the frame,",
 		x + ui.ui_frame_sc(ui_frame, 12),
 		y + ui.ui_frame_sc(ui_frame, 36),
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(ui_frame).fg_secondary,
 	)
 	ui.overlay_text(
@@ -1130,7 +1130,7 @@ draw_demo_popup :: proc(x, y: i32) {
 		"replayed above everything.",
 		x + ui.ui_frame_sc(ui_frame, 12),
 		y + ui.ui_frame_sc(ui_frame, 54),
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(ui_frame).fg_secondary,
 	)
 
@@ -1152,7 +1152,7 @@ draw_demo_popup :: proc(x, y: i32) {
 		"Close",
 		x + ui.ui_frame_sc(ui_frame, 18),
 		y + h - ui.ui_frame_sc(ui_frame, 28),
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE_SMALL,
+		ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(ui_frame).fg_accent,
 	)
 	if hovered && rl.IsMouseButtonReleased(.LEFT) {
@@ -1186,7 +1186,7 @@ draw_stress :: proc(x, y0, w: i32) -> i32 {
 	y += i32(rows) * (bh + ui.ui_frame_sc(ui_frame, 6)) + ui.ui_frame_sc(ui_frame, 10)
 	if stress_clicked >= 0 {
 		msg := fmt.tprintf("last clicked: btn %d", stress_clicked)
-		ui.text(ui_frame, msg, x, y, .Small, .Secondary)
+		ui.text(ui_frame, msg, x, y, .Label, .Secondary)
 		y += ui.ui_frame_sc(ui_frame, 24)
 	}
 	return y

@@ -1,14 +1,14 @@
 package ui
 
+// Four type sizes, named by role. There is deliberately no second name for
+// any size: duplicate aliases let call sites drift apart while looking
+// intentional, which is how on-map and off-map widgets ended up disagreeing.
 Ui_Metrics :: struct {
-	FONT_SIZE:       i32,
-	FONT_SIZE_LARGE: i32,
-	FONT_SIZE_SMALL: i32,
-	LINE_HEIGHT:     i32,
 	FONT_SIZE_TITLE: i32,
 	FONT_SIZE_BODY:  i32,
 	FONT_SIZE_LABEL: i32,
 	FONT_SIZE_NOTE:  i32,
+	LINE_HEIGHT:     i32,
 	TAB_BAR_HEIGHT:  i32,
 	CAPTION_BTN_W:   i32,
 	PADDING:         i32,
@@ -34,14 +34,11 @@ ui_metrics :: proc(scale: f32) -> Ui_Metrics {
 	s := clamp(scale, 0.5, 3.0)
 	si :: proc(value, factor: f32) -> i32 {return i32(value * factor + 0.5)}
 	return {
-		FONT_SIZE = si(16, s),
-		FONT_SIZE_LARGE = si(20, s),
-		FONT_SIZE_SMALL = si(13, s),
-		LINE_HEIGHT = si(22, s),
 		FONT_SIZE_TITLE = si(20, s),
 		FONT_SIZE_BODY = si(16, s),
 		FONT_SIZE_LABEL = si(13, s),
 		FONT_SIZE_NOTE = si(11, s),
+		LINE_HEIGHT = si(22, s),
 		TAB_BAR_HEIGHT = si(35, s),
 		CAPTION_BTN_W = si(46, s),
 		PADDING = si(10, s),

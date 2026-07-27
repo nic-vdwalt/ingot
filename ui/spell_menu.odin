@@ -266,7 +266,7 @@ spell_menu_draw_row :: proc(
 		)
 	}
 	if hovered do request_cursor(frame, .POINTING_HAND)
-	font_size := ui_frame_metrics(frame).FONT_SIZE_BODY
+	font_size := text_role_size(frame, .Body)
 	text := truncate_to_width_frame(frame, label, item_w - ui_frame_sc(frame, 16), font_size)
 	overlay_text(
 		frame,
@@ -293,20 +293,20 @@ spell_menu_draw_suggestions :: proc(
 	item_y := layout.menu_y + layout.menu_pad
 	apply_index := -1
 	if layout.suggestion_count == 0 {
-		metrics := ui_frame_metrics(frame)
+		font_size := text_role_size(frame, .Body)
 		text := truncate_to_width_frame(
 			frame,
 			"No suggestions",
 			layout.item_w - ui_frame_sc(frame, 16),
-			metrics.FONT_SIZE_BODY,
+			font_size,
 		)
 		overlay_text(
 			frame,
 			text,
 			layout.item_x + origin_x + ui_frame_sc(frame, 8),
-			item_y + (layout.item_h - metrics.FONT_SIZE_BODY) / 2,
-			metrics.FONT_SIZE_BODY,
-			ui_frame_theme(frame).fg_disabled,
+			item_y + (layout.item_h - font_size) / 2,
+			font_size,
+			text_ink(frame, .Disabled),
 		)
 		return -1, item_y + layout.item_h
 	}

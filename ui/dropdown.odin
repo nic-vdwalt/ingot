@@ -126,26 +126,27 @@ dropdown_at :: proc(
 		style.fg_accent if st.menu.open || it.hovered || focus_opt_focused(focus) else style.border_color
 	draw_rectangle_rec(frame, rrect, bg)
 	draw_rectangle_lines_ex(frame, rrect, 1, border)
-	chev: cstring = "\u25BE"
-	chev_w := measure_text_frame(frame, chev, metrics.FONT_SIZE_LABEL)
-	draw_text_frame(
+	chev :: "\u25BE"
+	chev_size := text_role_size(frame, .Label)
+	chev_w := text_width(frame, chev, .Label)
+	text(
 		frame,
 		chev,
 		rect.x + rect.w - chev_w - ui_frame_sc(frame, 8),
-		rect.y + (rect.h - metrics.FONT_SIZE_LABEL) / 2,
-		metrics.FONT_SIZE_LABEL,
-		style.fg_secondary,
+		rect.y + (rect.h - chev_size) / 2,
+		.Label,
+		.Secondary,
 	)
 	label_w := rect.w - chev_w - ui_frame_sc(frame, 8) - metrics.PADDING * 2
 	if label_w > 0 {
-		draw_text_truncated_frame(
+		text_truncated(
 			frame,
 			items[selected^],
 			rect.x + metrics.PADDING,
-			rect.y + (rect.h - metrics.FONT_SIZE_BODY) / 2,
+			rect.y + (rect.h - text_role_size(frame, .Body)) / 2,
 			label_w,
-			metrics.FONT_SIZE_BODY,
-			style.fg_primary,
+			.Body,
+			.Primary,
 		)
 	}
 	if focus_opt_focused(focus) {

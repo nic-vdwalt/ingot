@@ -5,7 +5,6 @@
 package ui
 
 import "core:fmt"
-import "core:strings"
 
 
 // A selectable UI-scale preset. A value of 0 means "auto" (follow the OS DPI).
@@ -87,7 +86,6 @@ draw_scale_settings_panel :: proc(
 
 	// Modal dimensions.
 	metrics := ui_frame_metrics(frame)
-	style := ui_frame_theme(frame)
 	item_h := ui_frame_sc(frame, 28)
 	section_h := ui_frame_sc(frame, 26)
 	footer_h := ui_frame_sc(frame, 24)
@@ -103,15 +101,7 @@ draw_scale_settings_panel :: proc(
 	modal_y := st.rect.y
 
 	// Section header.
-	section_c := strings.clone_to_cstring("UI SCALE", context.temp_allocator)
-	draw_text_frame(
-		frame,
-		section_c,
-		modal_x + modal_padding,
-		body.y + 4,
-		metrics.FONT_SIZE_SMALL,
-		style.fg_label,
-	)
+	text(frame, "UI SCALE", modal_x + modal_padding, body.y + 4, .Label, .Label)
 
 	pending_result, have_result := settings_scale_rows(
 		frame,
@@ -125,14 +115,13 @@ draw_scale_settings_panel :: proc(
 
 	// Footer hint.
 	footer_y := modal_y + modal_h - modal_padding - footer_h + 4
-	hint_c := strings.clone_to_cstring("Enter apply  \u00b7  Esc close", context.temp_allocator)
-	draw_text_frame(
+	text(
 		frame,
-		hint_c,
+		"Enter apply  \u00b7  Esc close",
 		modal_x + modal_padding,
 		footer_y,
-		metrics.FONT_SIZE_SMALL,
-		style.fg_secondary,
+		.Label,
+		.Secondary,
 	)
 
 	modal_end(&st)
@@ -183,16 +172,9 @@ settings_scale_rows :: proc(
 		}
 		// Current-value marker.
 		text_x := modal_x + modal_padding
+		body_h := text_role_size(frame, .Body)
 		if abs(p.value - current_scale) < 0.001 {
-			marker_c := strings.clone_to_cstring("*", context.temp_allocator)
-			draw_text_frame(
-				frame,
-				marker_c,
-				text_x,
-				list_y + (item_h - metrics.FONT_SIZE) / 2,
-				metrics.FONT_SIZE,
-				style.fg_accent,
-			)
+			text(frame, "*", text_x, list_y + (item_h - body_h) / 2, .Body, .Accent)
 		}
 		text_x += ui_frame_sc(frame, 16)
 		// Label (Auto shows the resolved system scale on the right).
@@ -200,27 +182,19 @@ settings_scale_rows :: proc(
 		if idx == 0 {
 			label = fmt.tprintf("Auto (system \u2014 %d%%)", int(auto_scale * 100 + 0.5))
 		}
-		label_c := strings.clone_to_cstring(label, context.temp_allocator)
-		draw_text_frame(
-			frame,
-			label_c,
-			text_x,
-			list_y + (item_h - metrics.FONT_SIZE) / 2,
-			metrics.FONT_SIZE,
-			style.fg_primary,
-		)
+		text(frame, label, text_x, list_y + (item_h - body_h) / 2, .Body, .Primary)
 		// Effective pixel percentage on the far right for non-auto rows.
 		if idx != 0 {
 			pct := fmt.tprintf("%d%%", int(p.value * 100 + 0.5))
-			pct_c := strings.clone_to_cstring(pct, context.temp_allocator)
-			pct_w := measure_text_frame(frame, pct_c, metrics.FONT_SIZE_SMALL)
-			draw_text_frame(
+			pct_w := text_width(frame, pct, .Label)
+			label_h := text_role_size(frame, .Label)
+			text(
 				frame,
-				pct_c,
+				pct,
 				right_edge - pct_w,
-				list_y + (item_h - metrics.FONT_SIZE_SMALL) / 2,
-				metrics.FONT_SIZE_SMALL,
-				style.fg_secondary,
+				list_y + (item_h - label_h) / 2,
+				.Label,
+				.Secondary,
 			)
 		}
 		// Mouse click applies this preset.

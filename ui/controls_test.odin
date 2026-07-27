@@ -60,6 +60,11 @@ context_menu_height_counts_rows :: proc(t: ^testing.T) {
 	testing.expect_value(t, context_menu_height_frame(&frame, items), want)
 }
 
+@(private = "file")
+containment_advance :: proc(text: cstring, size: i32) -> i32 {
+	return i32(len(string(text))) * 8
+}
+
 @(test)
 checkbox_and_radio_labels_stay_inside_their_rect :: proc(t: ^testing.T) {
 	// A caller-sized row (e.g. a fixed-width map overlay panel) must never let
@@ -74,6 +79,11 @@ checkbox_and_radio_labels_stay_inside_their_rect :: proc(t: ^testing.T) {
 		&runtime,
 		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
 	)
+	// Truncation measures through the Text_System, drawing through the text
+	// backend. Give both the same fixed advance: with the default estimator
+	// (len * size / 2) the two disagree, and this test would only pass at the
+	// font size that happened to make them agree.
+	set_measure_backend_with(&runtime.text, containment_advance)
 	output := new(Ui_Output)
 	defer free(output)
 	frame: Ui_Frame
@@ -101,6 +111,51 @@ checkbox_and_radio_labels_stay_inside_their_rect :: proc(t: ^testing.T) {
 		)
 	}
 	testing.expect_value(t, labels, 2)
+}
+
+// Characterization: control labels default to the same size buttons use, so a
+// panel mixing a checkbox with a button is consistent without either call site
+// naming a size. Callers may still override per control.
+@(test)
+control_labels_default_to_button_label_size :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	state := Test_Text_Backend_State {
+		advance = 8,
+	}
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	metrics := ui_frame_metrics(&frame)
+	rect := Rect_I32{0, 0, 400, 22}
+	checked := false
+	selected: i32 = 0
+	override := metrics.FONT_SIZE_NOTE
+	_ = checkbox_at(&frame, rect, "Base map", &checked)
+	_ = radio_at(&frame, {rect.x, 40, rect.w, rect.h}, "Base map", &selected, 0)
+	_ = checkbox_at(&frame, {rect.x, 80, rect.w, rect.h}, "Base map", &checked, {}, 0, override)
+	_ = radio_at(&frame, {rect.x, 120, rect.w, rect.h}, "Base map", &selected, 0, {}, 0, override)
+	ui_frame_end(&frame)
+
+	sizes: [dynamic]f32
+	defer delete(sizes)
+	for index in 0 ..< output.main.count {
+		command := output.main.commands[index]
+		if command.kind != .Text do continue
+		append(&sizes, command.font_size)
+	}
+	testing.expect_value(t, len(sizes), 4)
+	testing.expect_value(t, sizes[0], f32(metrics.FONT_SIZE_LABEL))
+	testing.expect_value(t, sizes[1], f32(metrics.FONT_SIZE_LABEL))
+	testing.expect_value(t, sizes[2], f32(override))
+	testing.expect_value(t, sizes[3], f32(override))
 }
 
 @(test)

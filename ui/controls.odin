@@ -15,15 +15,41 @@ checkbox :: proc {
 	checkbox_auto,
 }
 
+// control_label_size resolves the size a checkbox/radio label is drawn at.
+// Zero means "use the default", matching how btn_at resolves its font_size.
+// Measurement and drawing both go through here so an auto-layout row can never
+// be sized for one font and painted in another.
+//
+// The default is FONT_SIZE_LABEL, the same size btn_at defaults to. Controls
+// and buttons sit next to each other in every real panel; while they disagreed
+// by default, every such panel was inconsistent unless the caller intervened.
+@(private = "file")
+control_label_size :: proc(frame: ^Ui_Frame, font_size: i32) -> i32 {
+	assert(font_size >= 0, "control_label_size: negative font size")
+	if font_size > 0 do return font_size
+	size := ui_frame_metrics(frame).FONT_SIZE_LABEL
+	assert(size > 0, "control_label_size: invalid metric")
+	return size
+}
+
+// control_row_width measures box + gap + label for the content-sized wrappers.
+@(private = "file")
+control_row_width :: proc(frame: ^Ui_Frame, label: string, font_size: i32) -> i32 {
+	metrics := ui_frame_metrics(frame)
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	width :=
+		metrics.CONTROL_BOX +
+		metrics.CONTROL_GAP +
+		measure_text_frame(frame, label_c, control_label_size(frame, font_size))
+	assert(width > 0, "control_row_width: invalid width")
+	return width
+}
+
 checkbox_auto :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (changed: bool) {
 	assert(u != nil && u.open, "checkbox: frame not open")
 	assert(id != WIDGET_ID_NONE, "checkbox: zero stable id")
 	metrics := ui_frame_metrics(u.frame)
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w :=
-		metrics.CONTROL_BOX +
-		metrics.CONTROL_GAP +
-		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	w := control_row_width(u.frame, label, 0)
 	r := slot_next_px(u, w, metrics.ROW_H_SM)
 	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
 	return checkbox_at(u.frame, r, label, checked, focus, id)
@@ -32,11 +58,7 @@ checkbox_auto :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (
 // checkbox_ui carves its own slot (content-sized) and auto-registers focus.
 checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
 	metrics := ui_frame_metrics(u.frame)
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w :=
-		metrics.CONTROL_BOX +
-		metrics.CONTROL_GAP +
-		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	w := control_row_width(u.frame, label, 0)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
 	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
 	return checkbox_at(u.frame, r, label, checked, fo)
@@ -44,11 +66,7 @@ checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
 
 checkbox_ui_id :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (changed: bool) {
 	metrics := ui_frame_metrics(u.frame)
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w :=
-		metrics.CONTROL_BOX +
-		metrics.CONTROL_GAP +
-		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	w := control_row_width(u.frame, label, 0)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
 	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
 	return checkbox_at(u.frame, r, label, checked, fo, id)
@@ -61,6 +79,7 @@ checkbox_at :: proc(
 	checked: ^bool,
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
+	font_size: i32 = 0,
 ) -> (
 	changed: bool,
 ) {
@@ -112,15 +131,16 @@ checkbox_at :: proc(
 		draw_focus_ring(frame, bx, by, box, box)
 	}
 	label_x := bx + box + metrics.CONTROL_GAP
+	fs := control_label_size(frame, font_size)
 	// Why truncate: the label must stay inside the caller's rect; a fixed-width
 	// panel would otherwise spill body text over whatever is painted behind it.
 	draw_text_truncated_frame(
 		frame,
 		label,
 		label_x,
-		rect.y + (rect.h - metrics.FONT_SIZE_BODY) / 2,
+		rect.y + (rect.h - fs) / 2,
 		max(rect.x + rect.w - label_x, 0),
-		metrics.FONT_SIZE_BODY,
+		fs,
 		style.fg_primary,
 	)
 	sem: Sem_State
@@ -148,11 +168,7 @@ radio_auto :: proc(
 	assert(u != nil && u.open, "radio: frame not open")
 	assert(id != WIDGET_ID_NONE, "radio: zero stable id")
 	metrics := ui_frame_metrics(u.frame)
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w :=
-		metrics.CONTROL_BOX +
-		metrics.CONTROL_GAP +
-		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	w := control_row_width(u.frame, label, 0)
 	r := slot_next_px(u, w, metrics.ROW_H_SM)
 	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
 	return radio_at(u.frame, r, label, selected, value, focus, id)
@@ -161,11 +177,7 @@ radio_auto :: proc(
 // radio_ui carves its own slot (content-sized) and auto-registers focus.
 radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed: bool) {
 	metrics := ui_frame_metrics(u.frame)
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w :=
-		metrics.CONTROL_BOX +
-		metrics.CONTROL_GAP +
-		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	w := control_row_width(u.frame, label, 0)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
 	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
 	return radio_at(u.frame, r, label, selected, value, fo)
@@ -181,11 +193,7 @@ radio_ui_id :: proc(
 	changed: bool,
 ) {
 	metrics := ui_frame_metrics(u.frame)
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	w :=
-		metrics.CONTROL_BOX +
-		metrics.CONTROL_GAP +
-		measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_BODY)
+	w := control_row_width(u.frame, label, 0)
 	r := ui_slot(u, w, metrics.ROW_H_SM)
 	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
 	return radio_at(u.frame, r, label, selected, value, fo, id)
@@ -199,6 +207,7 @@ radio_at :: proc(
 	value: i32,
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
+	font_size: i32 = 0,
 ) -> (
 	changed: bool,
 ) {
@@ -234,14 +243,15 @@ radio_at :: proc(
 		draw_focus_ring(frame, rect.x, rect.y + (rect.h - box) / 2, box, box)
 	}
 	label_x := rect.x + box + metrics.CONTROL_GAP
+	fs := control_label_size(frame, font_size)
 	// Why truncate: mirrors checkbox_at — the label never escapes its own rect.
 	draw_text_truncated_frame(
 		frame,
 		label,
 		label_x,
-		rect.y + (rect.h - metrics.FONT_SIZE_BODY) / 2,
+		rect.y + (rect.h - fs) / 2,
 		max(rect.x + rect.w - label_x, 0),
-		metrics.FONT_SIZE_BODY,
+		fs,
 		style.fg_primary,
 	)
 	sem: Sem_State
