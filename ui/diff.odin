@@ -269,7 +269,16 @@ diff_view :: proc(
 	} else {
 		diff_view_unified(frame, x, y + 4, width, rows[:shown], gutter_width, gap, cell_width)
 	}
-	if hidden > 0 do text(frame, fmt.tprintf("... %d more lines", hidden), x + gap, y + 4 + i32(shown) * line_height, .Small, .Muted)
+	if hidden > 0 {
+		text(
+			frame,
+			fmt.tprintf("... %d more lines", hidden),
+			x + gap,
+			y + 4 + i32(shown) * line_height,
+			.Small,
+			.Muted,
+		)
+	}
 	return {next_y = y + height, shown = shown, hidden = hidden, used_split = use_split}
 }
 
@@ -293,7 +302,16 @@ diff_view_split :: proc(
 			continue
 		}
 		if row.kind == .Del || row.kind == .Context {
-			if row.kind == .Del do draw_rectangle(frame, left_gutter, row_y, gutter_width + column_width, line_height, ui_frame_theme(frame).bg_diff_remove)
+			if row.kind == .Del {
+				draw_rectangle(
+					frame,
+					left_gutter,
+					row_y,
+					gutter_width + column_width,
+					line_height,
+					ui_frame_theme(frame).bg_diff_remove,
+				)
+			}
 			diff_draw_gutter(frame, left_gutter, row_y, gutter_width, cell_width, row.old_no)
 			diff_draw_cell(
 				frame,
@@ -305,7 +323,16 @@ diff_view_split :: proc(
 			)
 		}
 		if row.kind == .Add || row.kind == .Context {
-			if row.kind == .Add do draw_rectangle(frame, right_gutter, row_y, gutter_width + column_width, line_height, ui_frame_theme(frame).bg_diff_add)
+			if row.kind == .Add {
+				draw_rectangle(
+					frame,
+					right_gutter,
+					row_y,
+					gutter_width + column_width,
+					line_height,
+					ui_frame_theme(frame).bg_diff_add,
+				)
+			}
 			diff_draw_gutter(frame, right_gutter, row_y, gutter_width, cell_width, row.new_no)
 			diff_draw_cell(
 				frame,

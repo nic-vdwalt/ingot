@@ -77,7 +77,16 @@ tagged_option_row :: proc(frame: ^Ui_Frame, config: Tagged_Option_Config) -> Tag
 			selected = config.selected,
 		},
 	)
-	if config.selected do draw_rectangle(frame, config.rect.x, config.rect.y, config.rect.w, config.rect.h, style.bg_active)
+	if config.selected {
+		draw_rectangle(
+			frame,
+			config.rect.x,
+			config.rect.y,
+			config.rect.w,
+			config.rect.h,
+			style.bg_active,
+		)
+	}
 	padding := metrics.PADDING
 	text_x := config.rect.x + padding
 	if len(config.icon) > 0 {
@@ -93,7 +102,7 @@ tagged_option_row :: proc(frame: ^Ui_Frame, config: Tagged_Option_Config) -> Tag
 		)
 		text_x += text_width(frame, config.icon, .Small) + ui_frame_sc(frame, 8)
 	}
-	trailing_width := 0
+	trailing_width: i32 = 0
 	if len(config.trailing) > 0 {
 		trailing_width = text_width(frame, config.trailing, .Small) + ui_frame_sc(frame, 12)
 		tag_fg := config.tag_fg

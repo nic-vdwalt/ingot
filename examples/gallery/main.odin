@@ -415,8 +415,20 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	y = ui.section_header(ui_frame, x, y, w, "COLLAPSIBLE HEADERS")
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Section %d", i + 1)
-		ui.collapsible_header(ui_frame, x, y, w, label, &headers_open[i])
-		y += ui.ui_frame_sc(ui_frame, 28)
+		header := ui.collapsible_header_with(
+			ui_frame,
+			x,
+			y,
+			w,
+			label,
+			&headers_open[i],
+			{
+				icon = 0x25C6,
+				right_label = "Details",
+				field_id = fmt.tprintf("gallery:header:%d", i),
+			},
+		)
+		y = header.next_y + ui.ui_frame_sc(ui_frame, 2)
 		if headers_open[i] {
 			ui.text(
 				ui_frame,
@@ -601,6 +613,17 @@ draw_widget_progress :: proc(x, y0, w: i32) -> i32 {
 		y + ui.ui_frame_sc(ui_frame, 16),
 		ui.ui_frame_scf(ui_frame, 14),
 	)
+	ui.spinner_with(
+		ui_frame,
+		x + ui.ui_frame_sc(ui_frame, 48),
+		y + ui.ui_frame_sc(ui_frame, 16),
+		{
+			style = .Orbit_Dots,
+			radius = ui.ui_frame_scf(ui_frame, 10),
+			dot_radius = ui.ui_frame_scf(ui_frame, 2.5),
+			speed = 6,
+		},
+	)
 	ui.progress_bar(
 		ui_frame,
 		x + ui.ui_frame_sc(ui_frame, 48),
@@ -610,9 +633,19 @@ draw_widget_progress :: proc(x, y0, w: i32) -> i32 {
 		0.65,
 		ui.ui_frame_theme(ui_frame).fg_accent,
 	)
+	ui.progress_bar_with(
+		ui_frame,
+		x + ui.ui_frame_sc(ui_frame, 260),
+		y + ui.ui_frame_sc(ui_frame, 4),
+		ui.ui_frame_sc(ui_frame, 8),
+		ui.ui_frame_sc(ui_frame, 32),
+		0.65,
+		ui.ui_frame_theme(ui_frame).fg_tool,
+		{orientation = .Vertical, label = "Vertical progress"},
+	)
 	ui.progress_bar_animated(
 		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 48),
+		x + ui.ui_frame_sc(ui_frame, 80),
 		y + ui.ui_frame_sc(ui_frame, 20),
 		ui.ui_frame_sc(ui_frame, 200),
 		ui.ui_frame_sc(ui_frame, 8),
@@ -622,7 +655,7 @@ draw_widget_progress :: proc(x, y0, w: i32) -> i32 {
 	)
 	if ui.btn(
 		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 260),
+		x + ui.ui_frame_sc(ui_frame, 290),
 		y,
 		ui.ui_frame_sc(ui_frame, 90),
 		ui.ui_frame_sc(ui_frame, 24),
