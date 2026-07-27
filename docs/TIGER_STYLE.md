@@ -48,9 +48,17 @@ Assertions downgrade catastrophic correctness bugs into loud, early liveness
 bugs, and they are a force multiplier for fuzzing.
 
 - **Assert function arguments, return values, pre/postconditions, and
-  invariants.** Target an average of **at least two assertions per procedure**.
-  A procedure exists to increase the probability that the program is correct;
-  its assertions are part of how it does that.
+  invariants.** Target an average of **at least two assertions per substantive
+  authored production procedure** during design review. This is not a quota for
+  accessors, declarations, FFI mirrors, tests, examples, or thin platform
+  wrappers. A procedure exists to increase the probability that the program is
+  correct; its assertions are part of how it does that.
+
+- **Never pad the metric.** Do not add tautologies, duplicate checks at the same
+  boundary, or assertions for operating errors. Every changed or new
+  risk-bearing procedure must instead encode its actual pointer, index, queue,
+  ownership, lifecycle, or untrusted-input contract. The monotonic gate in
+  `scripts/check_assertions.py` prevents new uncovered assertion debt.
 
 - Odin gives you several tools — use the right one:
   - `assert(cond)` / `assert(cond, "message")` — runtime precondition/invariant.
@@ -63,13 +71,14 @@ bugs, and they are a force multiplier for fuzzing.
     constants and type sizes; these are checked before the program even runs.
   - `panic("...")` / `unreachable()` — for states that must never occur.
 
-- **Pair assertions.** For every property, try to assert it in at least two
-  places / two code paths. Assert data valid right before you write it to the
-  PTY, and again right after you read it back. Bugs live where data crosses the
-  valid/invalid boundary.
+- **Pair assertions across real boundaries.** Check producer/consumer,
+  enqueue/dequeue, serialize/parse, begin/end, and allocate/destroy seams.
+  Assert data valid right before you write it to the PTY, and again right after
+  you read it back. Bugs live where data crosses the valid/invalid boundary.
 
 - **Split compound assertions.** Prefer `assert(a); assert(b)` over
-  `assert(a && b)` — the split form points at the exact failure.
+  `assert(a && b)` — the split form points at the exact failure. Include units
+  or bounds in messages where they make the violated contract clearer.
 
 - Use a single-line `if` to assert an implication: `if a do assert(b)`.
 

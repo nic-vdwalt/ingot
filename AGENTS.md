@@ -54,10 +54,12 @@ non-negotiables:
   debt — fix showstoppers in design, not production.
 - **Assertions catch programmer errors** (not operating errors — a closed PTY, a
   dropped socket, and a missing file are *handled*, not asserted). Average **≥ 2
-  assertions per procedure**: assert arguments, return values, pre/postconditions,
-  and invariants. Use `assert` for debug checks, `ensure` for release-kept checks
-  on untrusted input, `#assert` for compile-time constant/size checks. **Pair
-  assertions** across a boundary (validate before write and after read).
+  assertions per substantive authored production procedure** is a design-review
+  target, not a padding quota. Use `assert` for debug checks, `ensure` for
+  release-kept checks before unchecked use of untrusted-derived values, and
+  `#assert` for compile-time relationships. Pair checks across real boundaries.
+  Changed/new risk-bearing procedures may not add uncovered debt; run
+  `scripts/check_assertions.py` through `scripts/check.sh`.
 - **No recursion. Put a limit on everything** — every loop and queue has a fixed
   upper bound (see `term.TERM_PUMP_MAX_BUFS`) or an asserted exit invariant.
 - **Immediate-mode / static allocation**: callers own state and pass it each

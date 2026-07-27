@@ -117,13 +117,17 @@ when INGOT_NET_SIM {
 	}
 
 	fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
+		assert(f != nil)
+		assert(!f.running, "fetcher_start: already running")
 		f.host = host
 		f.port = port
 		f.running = true
 		if f.prng.state == 0 do f.prng = sim_prng_make(1)
+		assert(f.prng.state != 0)
 	}
 
 	fetcher_stop :: proc(f: ^Fetcher) {
+		assert(f != nil)
 		f.running = false
 		reserved := 0
 		for &message in f.in_flight {
@@ -138,6 +142,8 @@ when INGOT_NET_SIM {
 		delete(f.results)
 		f.results = nil
 		f.result_slots = 0
+		assert(len(f.in_flight) == 0)
+		assert(len(f.results) == 0)
 	}
 
 	fetcher_request_with_options :: proc(
@@ -146,6 +152,7 @@ when INGOT_NET_SIM {
 		request: Http_Request,
 		options: Fetch_Options = {},
 	) -> bool {
+		assert(f != nil)
 		if request.path == "" || request.path[0] != '/' do return false
 		assert(options.priority == .Normal || options.priority == .Priority)
 		if !f.running ||
@@ -263,16 +270,21 @@ when INGOT_NET_SIM {
 	// Every result body transfers to the caller and must be deleted exactly once.
 	// fetcher_stop frees only messages and results still owned by this Fetcher.
 	fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
+		assert(f != nil)
 		assert(len(f.results) <= f.result_slots)
 		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 		if len(f.results) == 0 do return nil
 		count := min(len(f.results), FETCH_MAXIMUM_DRAIN)
+		assert(count > 0)
+		assert(count <= FETCH_MAXIMUM_DRAIN)
 		out := make([]Fetch_Result, count, context.temp_allocator)
 		copy(out, f.results[:count])
 		copy(f.results[:], f.results[count:])
 		resize(&f.results, len(f.results) - count)
 		f.result_slots -= count
+		assert(f.result_slots >= 0)
 		assert(len(f.results) <= f.result_slots)
+		assert(len(out) == count)
 		return out
 	}
 

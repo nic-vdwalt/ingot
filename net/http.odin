@@ -454,11 +454,14 @@ when !INGOT_NET_SIM {
 	}
 
 	fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
+		assert(f != nil)
+		assert(!sync.atomic_load(&f.running), "fetcher_start: already running")
 		f.host = host
 		f.port = port
 		f.allocator = context.allocator
 		sync.atomic_store(&f.running, true)
 		for i in 0 ..< FETCH_WORKERS {
+			assert(f.workers[i] == nil)
 			f.worker_ctx[i] = Fetch_Worker_Ctx {
 				f   = f,
 				idx = i,
@@ -471,9 +474,11 @@ when !INGOT_NET_SIM {
 			f.workers[i].data = &f.worker_ctx[i]
 			thread.start(f.workers[i])
 		}
+		assert(sync.atomic_load(&f.running))
 	}
 
 	fetcher_stop :: proc(f: ^Fetcher) {
+		assert(f != nil)
 		// Order matters: clear running and wake every parked worker under the job
 		// mutex (broadcast under the mutex is never lost against a concurrent
 		// cond_wait), then unblock in-flight recvs by closing their sockets, then
@@ -505,6 +510,8 @@ when !INGOT_NET_SIM {
 		for result in f.results do delete(result.body, f.allocator)
 		delete(f.results)
 		f.result_slots = 0
+		assert(len(f.jobs) == 0)
+		assert(len(f.results) == 0)
 		sync.mutex_unlock(&f.mutex)
 	}
 
@@ -514,6 +521,7 @@ when !INGOT_NET_SIM {
 		request: Http_Request,
 		options: Fetch_Options = {},
 	) -> bool {
+		assert(f != nil)
 		if !valid_request(request) do return false
 		assert(options.priority == .Normal || options.priority == .Priority)
 		job := Fetch_Job {
@@ -539,6 +547,8 @@ when !INGOT_NET_SIM {
 		} else {
 			append(&f.jobs, job)
 		}
+		assert(len(f.jobs) <= FETCH_MAXIMUM_PENDING)
+		assert(f.result_slots >= len(f.jobs) + len(f.results))
 		sync.cond_signal(&f.jobs_cond)
 		return true
 	}
@@ -577,13 +587,15 @@ when !INGOT_NET_SIM {
 	// Every result body transfers to the caller and must be deleted exactly once.
 	// fetcher_stop frees only jobs and results still owned by this Fetcher.
 	fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
+		assert(f != nil)
 		sync.mutex_lock(&f.mutex); defer sync.mutex_unlock(&f.mutex)
 		assert(f.result_slots >= 0)
 		assert(len(f.results) <= f.result_slots)
 		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
 		if len(f.results) == 0 do return nil
 		count := min(len(f.results), FETCH_MAXIMUM_DRAIN)
-		assert(count > 0 && count <= FETCH_MAXIMUM_DRAIN)
+		assert(count > 0)
+		assert(count <= FETCH_MAXIMUM_DRAIN)
 		out := make([]Fetch_Result, count, context.temp_allocator)
 		copy(out, f.results[:count])
 		copy(f.results[:], f.results[count:])
@@ -591,11 +603,13 @@ when !INGOT_NET_SIM {
 		f.result_slots -= count
 		assert(f.result_slots >= 0)
 		assert(len(f.results) <= f.result_slots)
+		assert(len(out) == count)
 		return out
 	}
 
 	@(private = "file")
 	http_request_clone :: proc(request: Http_Request, allocator: mem.Allocator) -> Http_Request {
+		assert(valid_request(request))
 		headers := make([]Http_Header, len(request.headers), allocator)
 		for header, i in request.headers do headers[i] = Http_Header {
 			name  = strings.clone(header.name, allocator),
@@ -614,6 +628,7 @@ when !INGOT_NET_SIM {
 
 	@(private = "file")
 	fetch_job_destroy :: proc(job: ^Fetch_Job, allocator: mem.Allocator) {
+		assert(job != nil)
 		delete(job.request.path, allocator)
 		for header in job.request.headers {
 			delete(header.name, allocator)
@@ -623,6 +638,8 @@ when !INGOT_NET_SIM {
 		delete(job.request.body, allocator)
 		delete(job.cache_path, allocator)
 		job^ = {}
+		assert(job.tag == 0)
+		assert(job.request.path == nil)
 	}
 
 	@(private)

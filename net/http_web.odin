@@ -131,20 +131,26 @@ when !INGOT_NET_SIM {
 	}
 
 	fetcher_start :: proc(f: ^Fetcher, host: string, port: int) {
+		assert(f != nil)
 		if f.running do return
 		f.host = host; f.port = port
 		f.in_flight = make([dynamic]In_Flight)
 		f.pending = make([dynamic]Pending)
 		f.running = true
+		assert(f.in_flight != nil)
+		assert(f.pending != nil)
 	}
 
 	fetcher_stop :: proc(f: ^Fetcher) {
+		assert(f != nil)
 		if !f.running do return
 		f.running = false
 		for it in f.in_flight do _ = ingot_http_cancel(it.id)
 		delete(f.in_flight); f.in_flight = nil
 		for &pending in f.pending do pending_destroy(&pending)
 		delete(f.pending); f.pending = nil
+		assert(len(f.in_flight) == 0)
+		assert(len(f.pending) == 0)
 	}
 
 	fetcher_request_with_options :: proc(
@@ -153,6 +159,7 @@ when !INGOT_NET_SIM {
 		request: Http_Request,
 		options: Fetch_Options = {},
 	) -> bool {
+		assert(f != nil)
 		if !f.running ||
 		   request.path == "" ||
 		   request.path[0] != '/' ||
@@ -169,6 +176,7 @@ when !INGOT_NET_SIM {
 		} else {
 			append(&f.pending, pending)
 		}
+		assert(len(f.pending) <= FETCH_MAXIMUM_PENDING)
 		pump(f)
 		return true
 	}
@@ -206,6 +214,7 @@ when !INGOT_NET_SIM {
 
 	@(private = "file")
 	request_clone :: proc(request: Http_Request) -> Http_Request {
+		assert(request.path != "")
 		headers := make([]Http_Header, len(request.headers))
 		for header, i in request.headers do headers[i] = Http_Header {
 			name  = strings.clone(header.name),
@@ -223,10 +232,12 @@ when !INGOT_NET_SIM {
 
 	@(private = "file")
 	pending_destroy :: proc(pending: ^Pending) {
+		assert(pending != nil)
 		delete(pending.request.path)
 		for header in pending.request.headers {delete(header.name); delete(header.value)}
 		delete(pending.request.headers); delete(pending.request.body)
 		pending^ = {}
+		assert(pending.request.path == nil)
 	}
 
 	@(private = "file")
@@ -240,6 +251,8 @@ when !INGOT_NET_SIM {
 
 	@(private = "file")
 	pump :: proc(f: ^Fetcher) {
+		assert(f != nil)
+		assert(len(f.in_flight) <= MAX_INFLIGHT)
 		for len(f.in_flight) < MAX_INFLIGHT && len(f.pending) > 0 {
 			pending := f.pending[0]; ordered_remove(&f.pending, 0)
 			url := pending.request.path
@@ -267,6 +280,7 @@ when !INGOT_NET_SIM {
 			}
 			tag := pending.tag; pending_destroy(&pending)
 			append(&f.in_flight, In_Flight{id = id, tag = tag})
+			assert(len(f.in_flight) <= MAX_INFLIGHT)
 		}
 	}
 
@@ -274,6 +288,8 @@ when !INGOT_NET_SIM {
 	// Every result body transfers to the caller and must be deleted exactly once.
 	// fetcher_stop frees only requests still owned by this Fetcher.
 	fetcher_drain :: proc(f: ^Fetcher) -> []Fetch_Result {
+		assert(f != nil)
+		assert(len(f.in_flight) <= MAX_INFLIGHT)
 		out: [dynamic]Fetch_Result; out.allocator = context.temp_allocator
 		i := 0
 		for i < len(f.in_flight) && len(out) < FETCH_MAXIMUM_DRAIN {
@@ -300,6 +316,7 @@ when !INGOT_NET_SIM {
 			); unordered_remove(&f.in_flight, i)
 		}
 		pump(f)
+		assert(len(out) <= FETCH_MAXIMUM_DRAIN)
 		if len(out) == 0 do return nil
 		return out[:]
 	}

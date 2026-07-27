@@ -21,6 +21,12 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" \
 	--baseline "$root/scripts/gfx_context_baseline.json" \
 	"$root"
 
+echo "== assertion discipline =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions_test.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions.py" \
+	--baseline "$root/scripts/assertion_baseline.json" \
+	"$root"
+
 for pkg in gfx ui ui_gfx term prefs net sys pty testx; do
 	echo "== checking $pkg =="
 	# shellcheck disable=SC2086

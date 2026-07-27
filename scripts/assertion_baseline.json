@@ -1,0 +1,1999 @@
+{
+  "gfx/accessibility_native.odin:PollAccessibilityAction": [
+    "index"
+  ],
+  "gfx/accessibility_native.odin:_a11y_on_action": [
+    "pointer"
+  ],
+  "gfx/accessibility_native.odin:_a11y_stage": [
+    "index"
+  ],
+  "gfx/api.odin:context_key_down": [
+    "pointer"
+  ],
+  "gfx/api.odin:context_key_pressed": [
+    "pointer"
+  ],
+  "gfx/api.odin:context_mouse_position": [
+    "pointer"
+  ],
+  "gfx/api.odin:frame_context": [
+    "pointer",
+    "state"
+  ],
+  "gfx/audio_native.odin:_audio_slot_alloc": [
+    "index"
+  ],
+  "gfx/audio_native.odin:_audio_slot_resolve": [
+    "index"
+  ],
+  "gfx/audio_native.odin:platform_audio_close": [
+    "index"
+  ],
+  "gfx/audio_native.odin:platform_audio_loop": [
+    "index"
+  ],
+  "gfx/audio_native.odin:platform_audio_play": [
+    "index"
+  ],
+  "gfx/audio_native.odin:platform_audio_playing": [
+    "index"
+  ],
+  "gfx/audio_native.odin:platform_audio_stop": [
+    "index"
+  ],
+  "gfx/audio_web.odin:_audio_web_resolve": [
+    "index"
+  ],
+  "gfx/audio_web.odin:platform_audio_close": [
+    "index"
+  ],
+  "gfx/audio_web.odin:platform_audio_unload": [
+    "index"
+  ],
+  "gfx/batch.odin:MatrixModePop": [
+    "index"
+  ],
+  "gfx/batch.odin:MatrixModePush": [
+    "queue"
+  ],
+  "gfx/batch.odin:_blend_for": [
+    "pointer"
+  ],
+  "gfx/batch.odin:_make_pipe": [
+    "pointer",
+    "index",
+    "queue"
+  ],
+  "gfx/batch.odin:_pipe_for": [
+    "pointer",
+    "index"
+  ],
+  "gfx/batch.odin:_rebuild_custom_pipes": [
+    "pointer",
+    "index"
+  ],
+  "gfx/batch.odin:_stream_slots_acquire": [
+    "state"
+  ],
+  "gfx/batch.odin:_stream_slots_poll": [
+    "state"
+  ],
+  "gfx/batch.odin:col_f": [
+    "index"
+  ],
+  "gfx/batch.odin:push_quad": [
+    "pointer",
+    "index",
+    "queue",
+    "state"
+  ],
+  "gfx/batch.odin:push_quad4": [
+    "pointer",
+    "index",
+    "queue",
+    "state"
+  ],
+  "gfx/batch.odin:push_tri": [
+    "pointer",
+    "index",
+    "queue",
+    "state"
+  ],
+  "gfx/batch.odin:renderer_frame_begin": [
+    "pointer",
+    "index",
+    "queue"
+  ],
+  "gfx/batch.odin:renderer_shutdown": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "gfx/camera.odin:_project_dims": [
+    "index"
+  ],
+  "gfx/camera.odin:_target_dims_i32": [
+    "state"
+  ],
+  "gfx/context.odin:ClearBackground": [
+    "state"
+  ],
+  "gfx/context.odin:FlushBatch": [
+    "state"
+  ],
+  "gfx/context.odin:_active_pass_begun": [
+    "state"
+  ],
+  "gfx/context.odin:_attachment_px": [
+    "state"
+  ],
+  "gfx/context.odin:_cur_target_format": [
+    "state"
+  ],
+  "gfx/context.odin:_ensure_active_pass": [
+    "state"
+  ],
+  "gfx/context.odin:_gpu_finish": [
+    "index"
+  ],
+  "gfx/context.odin:_on_adapter": [
+    "pointer"
+  ],
+  "gfx/context.odin:_on_device": [
+    "pointer"
+  ],
+  "gfx/context.odin:_on_uncaptured_error": [
+    "pointer"
+  ],
+  "gfx/context.odin:_release_surface_texture": [
+    "state"
+  ],
+  "gfx/context.odin:active_pass": [
+    "state"
+  ],
+  "gfx/context.odin:context_epoch": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_fps": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_frame_time": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_id": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_ready": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_render_height": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_render_width": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_screen_height": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_screen_width": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_should_close": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_time": [
+    "pointer"
+  ],
+  "gfx/context.odin:context_window_scale_dpi": [
+    "pointer"
+  ],
+  "gfx/context.odin:default_context": [
+    "pointer"
+  ],
+  "gfx/context_api.odin:context_get_char_pressed": [
+    "pointer"
+  ],
+  "gfx/context_api.odin:context_get_clipboard_text": [
+    "pointer"
+  ],
+  "gfx/context_api.odin:context_is_key_down": [
+    "pointer"
+  ],
+  "gfx/context_api.odin:context_is_mouse_button_down": [
+    "pointer"
+  ],
+  "gfx/context_api.odin:context_set_frame_strategy": [
+    "pointer"
+  ],
+  "gfx/context_api.odin:context_window_focused": [
+    "pointer"
+  ],
+  "gfx/context_api.odin:context_window_fullscreen": [
+    "pointer"
+  ],
+  "gfx/dragdrop_darwin.odin:platform_dragdrop_init": [
+    "pointer"
+  ],
+  "gfx/dragdrop_linux.odin:platform_dragdrop_tick": [
+    "index",
+    "queue"
+  ],
+  "gfx/dragdrop_windows.odin:dd_drag_enter": [
+    "pointer"
+  ],
+  "gfx/dragdrop_windows.odin:dd_drag_over": [
+    "pointer"
+  ],
+  "gfx/dragdrop_windows.odin:dd_drop": [
+    "pointer",
+    "index",
+    "queue",
+    "ownership"
+  ],
+  "gfx/dragdrop_windows.odin:dd_get_medium": [
+    "pointer"
+  ],
+  "gfx/dragdrop_windows.odin:dd_guid_equal": [
+    "pointer",
+    "index"
+  ],
+  "gfx/dragdrop_windows.odin:dd_query_interface": [
+    "pointer"
+  ],
+  "gfx/drop_state.odin:_drop_complete_context": [
+    "pointer"
+  ],
+  "gfx/drop_state.odin:_drop_hover_stage_context": [
+    "pointer"
+  ],
+  "gfx/gpu3d_pipeline.odin:_gpu_3d_mesh": [
+    "pointer"
+  ],
+  "gfx/gpu3d_pipeline.odin:_gpu_3d_pass_current": [
+    "pointer",
+    "state"
+  ],
+  "gfx/gpu3d_pipeline.odin:_gpu_3d_pipeline": [
+    "pointer",
+    "index",
+    "queue"
+  ],
+  "gfx/gpu3d_pipeline.odin:draw_gpu_mesh": [
+    "pointer",
+    "index"
+  ],
+  "gfx/idle.odin:RequestRedrawContext": [
+    "pointer"
+  ],
+  "gfx/idle.odin:RequestRedrawInContext": [
+    "pointer"
+  ],
+  "gfx/idle.odin:_idle_note_activity": [
+    "pointer"
+  ],
+  "gfx/idle.odin:_idle_request_in": [
+    "pointer"
+  ],
+  "gfx/idle.odin:_idle_request_redraw": [
+    "pointer"
+  ],
+  "gfx/idle.odin:_idle_take_frame": [
+    "pointer"
+  ],
+  "gfx/idle.odin:_idle_wait_timeout": [
+    "pointer"
+  ],
+  "gfx/input.odin:GetCharPressed": [
+    "index"
+  ],
+  "gfx/input.odin:GetKeyPressed": [
+    "index"
+  ],
+  "gfx/input.odin:IsGamepadAvailable": [
+    "index"
+  ],
+  "gfx/input.odin:IsGamepadButtonDown": [
+    "index"
+  ],
+  "gfx/input.odin:IsGamepadButtonPressed": [
+    "index"
+  ],
+  "gfx/input.odin:IsGamepadButtonReleased": [
+    "index"
+  ],
+  "gfx/input.odin:SyncWebControl": [
+    "state"
+  ],
+  "gfx/input.odin:SyncWebTextInput": [
+    "state"
+  ],
+  "gfx/input.odin:_push_char_input": [
+    "pointer",
+    "index"
+  ],
+  "gfx/input.odin:_push_key_input": [
+    "pointer",
+    "index"
+  ],
+  "gfx/input.odin:context_get_mouse_delta": [
+    "pointer"
+  ],
+  "gfx/input.odin:context_get_mouse_position": [
+    "pointer"
+  ],
+  "gfx/input.odin:context_get_mouse_wheel_move_v": [
+    "pointer"
+  ],
+  "gfx/input.odin:context_is_cursor_on_screen": [
+    "pointer"
+  ],
+  "gfx/input.odin:context_is_key_pressed": [
+    "pointer",
+    "index"
+  ],
+  "gfx/input.odin:context_is_key_pressed_repeat": [
+    "pointer",
+    "index"
+  ],
+  "gfx/input.odin:context_is_key_released": [
+    "pointer",
+    "index"
+  ],
+  "gfx/input.odin:context_is_mouse_button_pressed": [
+    "pointer",
+    "index"
+  ],
+  "gfx/input.odin:context_is_mouse_button_released": [
+    "pointer",
+    "index"
+  ],
+  "gfx/input.odin:input_poll": [
+    "index"
+  ],
+  "gfx/input_sim.odin:SimBeginFrame": [
+    "index"
+  ],
+  "gfx/input_sim.odin:sim_key_down": [
+    "index"
+  ],
+  "gfx/input_sim.odin:sim_mouse_button_down": [
+    "index"
+  ],
+  "gfx/input_web.odin:ingot_web_hover": [
+    "index"
+  ],
+  "gfx/input_web.odin:ingot_web_key": [
+    "index"
+  ],
+  "gfx/input_web.odin:ingot_web_mouse_button": [
+    "index"
+  ],
+  "gfx/input_web.odin:ingot_web_preedit_char": [
+    "index"
+  ],
+  "gfx/loop_web.odin:run": [
+    "state"
+  ],
+  "gfx/platform.odin:Run_Proc": [
+    "index",
+    "queue"
+  ],
+  "gfx/platform_native.odin:_callback_context": [
+    "pointer"
+  ],
+  "gfx/platform_native.odin:_key_cb": [
+    "index"
+  ],
+  "gfx/platform_native.odin:_stage_char": [
+    "pointer",
+    "index"
+  ],
+  "gfx/platform_native.odin:_stage_key": [
+    "pointer",
+    "index"
+  ],
+  "gfx/platform_native.odin:platform_input_init": [
+    "index"
+  ],
+  "gfx/platform_native.odin:platform_set_mouse_cursor": [
+    "index"
+  ],
+  "gfx/platform_native.odin:platform_set_window_icon": [
+    "index"
+  ],
+  "gfx/platform_native.odin:platform_start_gpu": [
+    "queue"
+  ],
+  "gfx/platform_native.odin:platform_sync_web_control": [
+    "state"
+  ],
+  "gfx/platform_native.odin:platform_sync_web_text_input": [
+    "state"
+  ],
+  "gfx/platform_native.odin:run": [
+    "state"
+  ],
+  "gfx/platform_web.odin:UnloadDroppedFiles": [
+    "index"
+  ],
+  "gfx/platform_web.odin:_st_push_char": [
+    "index"
+  ],
+  "gfx/platform_web.odin:_st_push_key": [
+    "index"
+  ],
+  "gfx/platform_web.odin:_web_on_adapter": [
+    "pointer",
+    "ownership"
+  ],
+  "gfx/platform_web.odin:_web_on_device": [
+    "pointer",
+    "queue",
+    "ownership"
+  ],
+  "gfx/platform_web.odin:_web_request_live": [
+    "pointer"
+  ],
+  "gfx/platform_web.odin:platform_get_clipboard": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "gfx/platform_web.odin:platform_key_down": [
+    "index"
+  ],
+  "gfx/platform_web.odin:platform_mouse_button": [
+    "index"
+  ],
+  "gfx/platform_web.odin:platform_start_gpu": [
+    "ownership"
+  ],
+  "gfx/platform_web.odin:platform_sync_web_control": [
+    "state"
+  ],
+  "gfx/platform_web.odin:platform_sync_web_text_input": [
+    "pointer",
+    "index",
+    "ownership",
+    "state"
+  ],
+  "gfx/platform_web.odin:web_string_data": [
+    "pointer"
+  ],
+  "gfx/raymath.odin:Lerp": [
+    "state"
+  ],
+  "gfx/render3d.odin:DrawMesh": [
+    "index"
+  ],
+  "gfx/render_target.odin:BeginTextureMode": [
+    "queue",
+    "state"
+  ],
+  "gfx/render_target.odin:_ensure_rt_pass": [
+    "state"
+  ],
+  "gfx/render_target.odin:_rt_projection_vec": [
+    "index"
+  ],
+  "gfx/shader.odin:LoadShaderFromMemory": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "gfx/shader.odin:SetShaderValueMatrix": [
+    "pointer",
+    "index"
+  ],
+  "gfx/shader.odin:SetShaderValueTexture": [
+    "index"
+  ],
+  "gfx/shader.odin:SetShaderValueV": [
+    "pointer",
+    "index",
+    "queue"
+  ],
+  "gfx/shader.odin:_default_tex": [
+    "pointer",
+    "index"
+  ],
+  "gfx/shader.odin:_reflect_textures": [
+    "index",
+    "queue",
+    "ownership"
+  ],
+  "gfx/shader.odin:_reflect_uniforms": [
+    "index",
+    "queue",
+    "ownership"
+  ],
+  "gfx/shader.odin:_shader_flush": [
+    "pointer",
+    "index"
+  ],
+  "gfx/shader.odin:_shader_get": [
+    "pointer"
+  ],
+  "gfx/shader.odin:_shader_pipeline": [
+    "pointer",
+    "index",
+    "queue"
+  ],
+  "gfx/shader.odin:_shader_rebuild_extra": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "gfx/shapes.odin:DrawLineEx": [
+    "index"
+  ],
+  "gfx/shapes.odin:DrawRectangleGradientH": [
+    "queue",
+    "state"
+  ],
+  "gfx/shapes.odin:DrawRectangleGradientV": [
+    "queue",
+    "state"
+  ],
+  "gfx/shapes.odin:_corner_fan": [
+    "pointer",
+    "index"
+  ],
+  "gfx/shapes.odin:_polar": [
+    "index"
+  ],
+  "gfx/stats.odin:_stats_bind_group_switches": [
+    "queue"
+  ],
+  "gfx/stats.odin:_stats_cpu_times": [
+    "state"
+  ],
+  "gfx/stats.odin:_stats_flush": [
+    "index"
+  ],
+  "gfx/stats.odin:context_renderer_stats": [
+    "pointer",
+    "state"
+  ],
+  "gfx/stats.odin:context_renderer_stats_reset": [
+    "pointer"
+  ],
+  "gfx/submission.odin:_submission_find": [
+    "pointer",
+    "index",
+    "queue",
+    "state"
+  ],
+  "gfx/text.odin:DrawTextCodepoint": [
+    "pointer",
+    "index"
+  ],
+  "gfx/text.odin:DrawTextEx": [
+    "index"
+  ],
+  "gfx/text.odin:LoadFontFromMemory": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "gfx/text.odin:MeasureTextEx": [
+    "index"
+  ],
+  "gfx/text.odin:_atlas_build_bind": [
+    "pointer",
+    "index"
+  ],
+  "gfx/text.odin:_atlas_gpu_init": [
+    "pointer",
+    "queue"
+  ],
+  "gfx/text.odin:_atlas_gpu_reupload": [
+    "pointer",
+    "queue"
+  ],
+  "gfx/text.odin:_atlas_pack": [
+    "pointer"
+  ],
+  "gfx/text.odin:_bake_glyph": [
+    "pointer",
+    "index"
+  ],
+  "gfx/text.odin:get_atlas": [
+    "pointer"
+  ],
+  "gfx/text.odin:utf8_encode": [
+    "pointer",
+    "index"
+  ],
+  "gfx/texture.odin:DrawTexturePro": [
+    "index"
+  ],
+  "gfx/texture.odin:LoadImageFromMemory": [
+    "index"
+  ],
+  "gfx/texture.odin:LoadTextureFromImage": [
+    "pointer",
+    "index",
+    "queue",
+    "ownership"
+  ],
+  "gfx/texture.odin:_new_rt_color": [
+    "ownership"
+  ],
+  "gfx/texture.odin:_new_rt_depth": [
+    "ownership"
+  ],
+  "gfx/texture.odin:_tex_build_bind": [
+    "pointer",
+    "index"
+  ],
+  "gfx/texture.odin:_texture_register": [
+    "pointer"
+  ],
+  "gfx/texture.odin:_texture_slot": [
+    "pointer"
+  ],
+  "gfx/texture.odin:_to_rgba_into": [
+    "index"
+  ],
+  "gfx/texture.odin:get_texture": [
+    "pointer"
+  ],
+  "gfx/window_extra.odin:LoadDroppedFiles": [
+    "pointer",
+    "queue"
+  ],
+  "gfx/window_extra.odin:_drop_cb": [
+    "index",
+    "queue"
+  ],
+  "net/http.odin:build_request": [
+    "pointer",
+    "index",
+    "queue"
+  ],
+  "net/http.odin:decode_chunked": [
+    "index",
+    "queue",
+    "ownership"
+  ],
+  "net/http.odin:fetch_job_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "net/http.odin:fetcher_request": [
+    "pointer"
+  ],
+  "net/http.odin:fetcher_request_cached": [
+    "pointer"
+  ],
+  "net/http.odin:fetcher_request_http": [
+    "pointer"
+  ],
+  "net/http.odin:fetcher_request_priority": [
+    "pointer"
+  ],
+  "net/http.odin:fetcher_start": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "net/http.odin:http_get_interruptible": [
+    "pointer"
+  ],
+  "net/http.odin:http_request_clone": [
+    "index",
+    "ownership"
+  ],
+  "net/http.odin:http_request_impl": [
+    "pointer",
+    "index",
+    "queue",
+    "state",
+    "untrusted_input"
+  ],
+  "net/http.odin:http_response_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "net/http.odin:parse_http_header_line": [
+    "index",
+    "ownership"
+  ],
+  "net/http.odin:send_all": [
+    "index"
+  ],
+  "net/http.odin:valid_request": [
+    "index"
+  ],
+  "net/http_secure.odin:curl_body_write": [
+    "pointer",
+    "index",
+    "queue"
+  ],
+  "net/http_secure.odin:curl_request_configure_base": [
+    "pointer"
+  ],
+  "net/http_secure.odin:curl_request_configure_payload": [
+    "pointer"
+  ],
+  "net/http_secure.odin:curl_request_perform": [
+    "pointer"
+  ],
+  "net/http_secure.odin:http_request_is_valid": [
+    "index"
+  ],
+  "net/http_secure.odin:http_request_url": [
+    "index",
+    "ownership"
+  ],
+  "net/http_sim.odin:fetcher_request": [
+    "pointer"
+  ],
+  "net/http_sim.odin:fetcher_request_cached": [
+    "pointer"
+  ],
+  "net/http_sim.odin:fetcher_request_http": [
+    "pointer"
+  ],
+  "net/http_sim.odin:fetcher_request_priority": [
+    "pointer"
+  ],
+  "net/http_sim.odin:fetcher_start": [
+    "pointer",
+    "state"
+  ],
+  "net/http_sim.odin:sim_int_range": [
+    "pointer"
+  ],
+  "net/http_sim.odin:sim_message_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "net/http_sim.odin:sim_next_u64": [
+    "pointer",
+    "state"
+  ],
+  "net/http_sim.odin:sim_prng_make": [
+    "state"
+  ],
+  "net/http_sim.odin:sim_request_clone": [
+    "index",
+    "ownership"
+  ],
+  "net/http_stress.odin:http_net_recv": [
+    "index"
+  ],
+  "net/http_stress.odin:http_net_send": [
+    "index"
+  ],
+  "net/http_transport.odin:http_net_close": [
+    "state"
+  ],
+  "net/http_transport.odin:http_net_recv": [
+    "untrusted_input"
+  ],
+  "net/http_web.odin:encode_headers_json": [
+    "index",
+    "ownership"
+  ],
+  "net/http_web.odin:fetcher_drain": [
+    "pointer",
+    "index",
+    "queue",
+    "ownership",
+    "state"
+  ],
+  "net/http_web.odin:fetcher_request": [
+    "pointer"
+  ],
+  "net/http_web.odin:fetcher_request_cached": [
+    "pointer"
+  ],
+  "net/http_web.odin:fetcher_request_http": [
+    "pointer"
+  ],
+  "net/http_web.odin:fetcher_request_priority": [
+    "pointer"
+  ],
+  "net/http_web.odin:fetcher_start": [
+    "pointer",
+    "index",
+    "ownership",
+    "state"
+  ],
+  "net/http_web.odin:fetcher_stop": [
+    "pointer",
+    "ownership",
+    "state"
+  ],
+  "net/http_web.odin:http_response_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "net/http_web.odin:pending_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "net/http_web.odin:pump": [
+    "pointer",
+    "index",
+    "queue"
+  ],
+  "net/http_web.odin:request_clone": [
+    "index",
+    "ownership"
+  ],
+  "net/url.odin:http_url_parse": [
+    "index"
+  ],
+  "net/url.odin:http_url_resolve": [
+    "index"
+  ],
+  "net/url.odin:query_component_encode": [
+    "pointer",
+    "index"
+  ],
+  "net/url.odin:ws_url_parse": [
+    "index"
+  ],
+  "net/ws.odin:generate_ws_key": [
+    "index"
+  ],
+  "net/ws.odin:ws_accept_for_key": [
+    "pointer",
+    "index"
+  ],
+  "net/ws.odin:ws_close": [
+    "pointer",
+    "ownership",
+    "state"
+  ],
+  "net/ws.odin:ws_conn_gen": [
+    "pointer"
+  ],
+  "net/ws.odin:ws_connect_worker": [
+    "pointer",
+    "state"
+  ],
+  "net/ws.odin:ws_dial_and_handshake": [
+    "pointer",
+    "state"
+  ],
+  "net/ws.odin:ws_drain": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "net/ws.odin:ws_encode_frame": [
+    "index",
+    "ownership",
+    "state",
+    "untrusted_input"
+  ],
+  "net/ws.odin:ws_error": [
+    "pointer"
+  ],
+  "net/ws.odin:ws_handshake": [
+    "pointer",
+    "index",
+    "queue",
+    "untrusted_input"
+  ],
+  "net/ws.odin:ws_has_pending": [
+    "pointer"
+  ],
+  "net/ws.odin:ws_init": [
+    "index",
+    "ownership",
+    "state"
+  ],
+  "net/ws.odin:ws_notify": [
+    "pointer"
+  ],
+  "net/ws.odin:ws_recv_loop": [
+    "pointer",
+    "index",
+    "queue",
+    "ownership",
+    "state",
+    "untrusted_input"
+  ],
+  "net/ws.odin:ws_send": [
+    "pointer"
+  ],
+  "net/ws.odin:ws_send_binary": [
+    "pointer"
+  ],
+  "net/ws.odin:ws_set_state": [
+    "pointer",
+    "state"
+  ],
+  "net/ws.odin:ws_start_connect": [
+    "pointer"
+  ],
+  "net/ws.odin:ws_state": [
+    "pointer",
+    "state"
+  ],
+  "net/ws_sim.odin:sim_next": [
+    "index"
+  ],
+  "net/ws_sim.odin:sim_recv_data_event": [
+    "index",
+    "state",
+    "untrusted_input"
+  ],
+  "net/ws_sim.odin:sim_recv_event": [
+    "index",
+    "queue"
+  ],
+  "net/ws_sim.odin:sim_recv_handshake": [
+    "index"
+  ],
+  "net/ws_sim.odin:sim_recv_pending_burst": [
+    "index",
+    "untrusted_input"
+  ],
+  "net/ws_sim.odin:sim_recv_split_tail": [
+    "index",
+    "queue"
+  ],
+  "net/ws_sim.odin:sim_store_tail": [
+    "index"
+  ],
+  "net/ws_sim.odin:ws_net_close": [
+    "pointer"
+  ],
+  "net/ws_sim.odin:ws_net_recv": [
+    "pointer",
+    "queue"
+  ],
+  "net/ws_sim.odin:ws_net_send": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "net/ws_sim.odin:ws_net_set_recv_timeout": [
+    "pointer"
+  ],
+  "net/ws_transport.odin:ws_net_close": [
+    "pointer",
+    "state"
+  ],
+  "net/ws_transport.odin:ws_net_recv": [
+    "pointer",
+    "queue",
+    "untrusted_input"
+  ],
+  "net/ws_transport.odin:ws_net_send": [
+    "pointer",
+    "queue"
+  ],
+  "net/ws_transport.odin:ws_net_set_recv_timeout": [
+    "pointer"
+  ],
+  "net/ws_transport.odin:ws_tls_configure": [
+    "pointer"
+  ],
+  "net/ws_web.odin:ws_close": [
+    "pointer",
+    "ownership",
+    "state"
+  ],
+  "net/ws_web.odin:ws_conn_gen": [
+    "pointer"
+  ],
+  "net/ws_web.odin:ws_error": [
+    "pointer"
+  ],
+  "net/ws_web.odin:ws_has_pending": [
+    "pointer"
+  ],
+  "net/ws_web.odin:ws_init": [
+    "index",
+    "ownership",
+    "state"
+  ],
+  "net/ws_web.odin:ws_poll_state": [
+    "pointer",
+    "state"
+  ],
+  "net/ws_web.odin:ws_send": [
+    "pointer",
+    "state"
+  ],
+  "net/ws_web.odin:ws_send_binary": [
+    "pointer",
+    "state"
+  ],
+  "net/ws_web.odin:ws_start_connect": [
+    "pointer"
+  ],
+  "net/ws_web.odin:ws_start_connect_url": [
+    "pointer",
+    "state"
+  ],
+  "net/ws_web.odin:ws_state": [
+    "pointer",
+    "state"
+  ],
+  "prefs/prefs.odin:read": [
+    "untrusted_input"
+  ],
+  "prefs/prefs.odin:write": [
+    "ownership",
+    "state"
+  ],
+  "prefs/prefs_web.odin:read": [
+    "pointer",
+    "ownership",
+    "untrusted_input"
+  ],
+  "prefs/prefs_web.odin:write": [
+    "pointer"
+  ],
+  "pty/pty.odin:destroy": [
+    "pointer",
+    "state"
+  ],
+  "pty/pty.odin:drain": [
+    "pointer",
+    "index"
+  ],
+  "pty/pty.odin:errno_ptr": [
+    "pointer"
+  ],
+  "pty/pty.odin:get_default_shell": [
+    "index"
+  ],
+  "pty/pty.odin:read_bytes": [
+    "pointer",
+    "untrusted_input"
+  ],
+  "pty/pty.odin:resize": [
+    "pointer"
+  ],
+  "pty/pty.odin:spawn": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "pty/pty.odin:write_byte": [
+    "pointer",
+    "index"
+  ],
+  "pty/pty.odin:write_bytes": [
+    "pointer"
+  ],
+  "pty/pty.odin:write_string": [
+    "pointer"
+  ],
+  "pty/pty_sim.odin:drain": [
+    "pointer",
+    "index"
+  ],
+  "pty/pty_sim.odin:read_bytes": [
+    "pointer",
+    "index"
+  ],
+  "pty/pty_windows.odin:conpty_close_pipes": [
+    "pointer"
+  ],
+  "pty/pty_windows.odin:destroy": [
+    "pointer"
+  ],
+  "pty/pty_windows.odin:drain": [
+    "pointer",
+    "index"
+  ],
+  "pty/pty_windows.odin:get_default_shell": [
+    "index"
+  ],
+  "pty/pty_windows.odin:read_bytes": [
+    "pointer"
+  ],
+  "pty/pty_windows.odin:resize": [
+    "pointer"
+  ],
+  "pty/pty_windows.odin:write_byte": [
+    "pointer",
+    "index"
+  ],
+  "pty/pty_windows.odin:write_bytes": [
+    "pointer"
+  ],
+  "pty/pty_windows.odin:write_string": [
+    "pointer"
+  ],
+  "sys/cache_native.odin:_valid_cache_app_id": [
+    "pointer"
+  ],
+  "sys/cache_native.odin:cache_dir": [
+    "index"
+  ],
+  "sys/dialog_linux.odin:_dialog_exec": [
+    "ownership",
+    "state"
+  ],
+  "sys/openurl_darwin.odin:open_url": [
+    "state"
+  ],
+  "sys/openurl_linux.odin:open_url": [
+    "state"
+  ],
+  "sys/openurl_policy.odin:_validate_external_url": [
+    "index"
+  ],
+  "sys/openurl_web.odin:open_url": [
+    "pointer"
+  ],
+  "term/term_input.odin:term_handle_input": [
+    "pointer",
+    "index"
+  ],
+  "term/term_input.odin:term_write": [
+    "pointer",
+    "index"
+  ],
+  "term/term_input.odin:vt_bytes_for_key": [
+    "index"
+  ],
+  "term/term_input.odin:vt_sequence_for_key": [
+    "index"
+  ],
+  "term/term_pump.odin:_utf8_complete_prefix": [
+    "index"
+  ],
+  "term/terminal.odin:_screen_sb_clear": [
+    "pointer"
+  ],
+  "term/terminal.odin:_screen_sb_popline": [
+    "pointer",
+    "index"
+  ],
+  "term/terminal.odin:_screen_sb_pushline": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "term/terminal.odin:_screen_settermprop": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "term/terminal.odin:term_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "term/terminal.odin:term_free_emulator": [
+    "pointer",
+    "ownership"
+  ],
+  "term/terminal.odin:term_init_emulator": [
+    "pointer",
+    "index",
+    "ownership",
+    "state"
+  ],
+  "term/terminal.odin:term_reader_loop": [
+    "pointer",
+    "index"
+  ],
+  "term/terminal.odin:term_resize": [
+    "pointer",
+    "ownership"
+  ],
+  "term/terminal.odin:term_start": [
+    "pointer",
+    "index",
+    "ownership",
+    "state"
+  ],
+  "testx/prng.odin:ascii_string": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "testx/prng.odin:int_range": [
+    "pointer"
+  ],
+  "testx/prng.odin:next_u64": [
+    "pointer",
+    "state"
+  ],
+  "testx/prng.odin:prng_make": [
+    "state"
+  ],
+  "testx/prng.odin:random_bytes": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "testx/snapshot.odin:snap": [
+    "pointer"
+  ],
+  "ui/backend_queries.odin:get_mouse_delta": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:get_mouse_position": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:get_mouse_wheel_move": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:get_mouse_wheel_move_v": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:is_key_down": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:is_key_pressed": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:is_key_pressed_or_repeat": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:is_key_pressed_repeat": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:is_key_released": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:is_mouse_button_down": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:is_mouse_button_pressed": [
+    "pointer",
+    "state"
+  ],
+  "ui/backend_queries.odin:is_mouse_button_released": [
+    "pointer",
+    "state"
+  ],
+  "ui/chart.odin:bar_chart": [
+    "pointer",
+    "index",
+    "ownership",
+    "state"
+  ],
+  "ui/chart.odin:chart_anim": [
+    "pointer",
+    "state"
+  ],
+  "ui/chart.odin:chart_draw_axes": [
+    "pointer",
+    "index",
+    "queue",
+    "state"
+  ],
+  "ui/chart.odin:chart_draw_legend": [
+    "pointer",
+    "state"
+  ],
+  "ui/chart.odin:chart_draw_tooltip": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/chart.odin:chart_layout": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/chart.odin:chart_note_hover": [
+    "pointer",
+    "state"
+  ],
+  "ui/chart.odin:chart_series_color": [
+    "pointer",
+    "state"
+  ],
+  "ui/chart.odin:line_chart": [
+    "pointer",
+    "index",
+    "ownership",
+    "state"
+  ],
+  "ui/chart.odin:sparkline": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/controls.odin:checkbox_ui": [
+    "pointer",
+    "state"
+  ],
+  "ui/controls.odin:checkbox_ui_id": [
+    "pointer",
+    "state"
+  ],
+  "ui/controls.odin:radio_ui": [
+    "pointer",
+    "state"
+  ],
+  "ui/controls.odin:radio_ui_id": [
+    "pointer",
+    "state"
+  ],
+  "ui/debug_overlay.odin:debug_overlay_diagnostic_rows": [
+    "pointer",
+    "queue"
+  ],
+  "ui/debug_overlay.odin:debug_overlay_rows": [
+    "pointer",
+    "queue",
+    "state"
+  ],
+  "ui/dpi.odin:auto_scale": [
+    "pointer"
+  ],
+  "ui/draw.odin:draw_circle": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_circle_lines_v": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_circle_v": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_codepoint_command": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_cstring_command": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_line": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_line_ex": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_rectangle": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_rectangle_gradient_v": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_rectangle_lines": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_rectangle_lines_ex": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_rectangle_rec": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_rectangle_rounded": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_rectangle_rounded_lines_ex": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_ring": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_text_command": [
+    "pointer",
+    "state"
+  ],
+  "ui/draw.odin:draw_triangle": [
+    "pointer",
+    "state"
+  ],
+  "ui/focus_ring.odin:draw_focus_ring": [
+    "pointer",
+    "state"
+  ],
+  "ui/focus_ring.odin:focus_opt_activated": [
+    "pointer",
+    "state"
+  ],
+  "ui/identity.odin:id_context_push_string": [
+    "pointer"
+  ],
+  "ui/identity.odin:id_context_push_u64": [
+    "pointer"
+  ],
+  "ui/input_undo.odin:input_snapshot_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "ui/input_undo.odin:input_undo_destroy": [
+    "pointer",
+    "ownership"
+  ],
+  "ui/input_undo.odin:input_undo_record": [
+    "pointer",
+    "index",
+    "queue"
+  ],
+  "ui/input_undo.odin:input_undo_reset": [
+    "pointer"
+  ],
+  "ui/input_undo.odin:make_input_snapshot": [
+    "index",
+    "queue",
+    "ownership"
+  ],
+  "ui/interaction.odin:interact_step": [
+    "pointer"
+  ],
+  "ui/markdown.odin:display_to_raw": [
+    "index"
+  ],
+  "ui/markdown.odin:draw_heading": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:draw_markdown_line_spans": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:draw_markdown_span_chip": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:draw_markdown_span_code": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:draw_markdown_span_emphasis": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:draw_markdown_span_selection": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:draw_markdown_span_style": [
+    "pointer"
+  ],
+  "ui/markdown.odin:draw_text_wrapped_md": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:heading_font_size": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:heading_total_height": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:hit_test_wrapped_md": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:inline_span_append_plain": [
+    "pointer",
+    "index",
+    "queue",
+    "state"
+  ],
+  "ui/markdown.odin:inline_span_find": [
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:inline_span_parse_bold": [
+    "pointer",
+    "index",
+    "queue",
+    "state"
+  ],
+  "ui/markdown.odin:inline_span_parse_code": [
+    "pointer",
+    "index",
+    "queue",
+    "state"
+  ],
+  "ui/markdown.odin:inline_span_parse_link": [
+    "pointer",
+    "index",
+    "queue",
+    "state"
+  ],
+  "ui/markdown.odin:inline_span_parse_pill": [
+    "pointer",
+    "index",
+    "queue",
+    "state"
+  ],
+  "ui/markdown.odin:is_code_fence": [
+    "index"
+  ],
+  "ui/markdown.odin:is_table_separator": [
+    "index"
+  ],
+  "ui/markdown.odin:markdown_hit_bullet": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_hit_code": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_hit_fence": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_hit_heading": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_hit_line": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_hit_plain": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_hit_table": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_table_column_widths": [
+    "index"
+  ],
+  "ui/markdown.odin:markdown_table_distribute_columns": [
+    "pointer",
+    "index"
+  ],
+  "ui/markdown.odin:markdown_table_draw_cell": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_table_draw_row": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_table_fix_columns": [
+    "pointer",
+    "index"
+  ],
+  "ui/markdown.odin:markdown_table_hit_row": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_table_natural_widths": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_table_parse_rows": [
+    "pointer",
+    "index",
+    "queue",
+    "ownership",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_table_row_heights": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/markdown.odin:markdown_table_total_width": [
+    "index"
+  ],
+  "ui/markdown.odin:match_heading": [
+    "index"
+  ],
+  "ui/markdown.odin:match_url": [
+    "index"
+  ],
+  "ui/markdown.odin:measure_markdown": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:measure_wrapped_height": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:measure_wrapped_height_md": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:parse_inline_spans": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:parse_inline_spans_with": [
+    "index",
+    "ownership",
+    "state"
+  ],
+  "ui/markdown.odin:spans_display_string": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:split_table_row_offsets": [
+    "pointer",
+    "state"
+  ],
+  "ui/markdown.odin:split_table_row_offsets_with": [
+    "index",
+    "queue",
+    "ownership"
+  ],
+  "ui/mention_pills.odin:encode_pills": [
+    "index",
+    "state"
+  ],
+  "ui/mention_pills.odin:encode_pills_owned": [
+    "ownership"
+  ],
+  "ui/mention_pills.odin:pill_ending_at": [
+    "index",
+    "state"
+  ],
+  "ui/mention_pills.odin:pill_remove": [
+    "index",
+    "state"
+  ],
+  "ui/mention_pills.odin:pill_snap_caret": [
+    "index",
+    "state"
+  ],
+  "ui/mention_pills.odin:pill_snap_left": [
+    "index",
+    "state"
+  ],
+  "ui/mention_pills.odin:pill_snap_right": [
+    "index",
+    "state"
+  ],
+  "ui/mention_pills.odin:pill_starting_at": [
+    "index",
+    "state"
+  ],
+  "ui/mention_pills.odin:pills_shift_after_delete": [
+    "index",
+    "queue",
+    "ownership",
+    "state"
+  ],
+  "ui/mention_pills.odin:pills_shift_after_insert": [
+    "index",
+    "state"
+  ],
+  "ui/overlay.odin:overlay_line": [
+    "pointer",
+    "state"
+  ],
+  "ui/overlay.odin:overlay_rect": [
+    "pointer",
+    "state"
+  ],
+  "ui/overlay.odin:overlay_rect_lines": [
+    "pointer",
+    "state"
+  ],
+  "ui/overlay.odin:overlay_rounded": [
+    "pointer",
+    "state"
+  ],
+  "ui/overlay.odin:overlay_rounded_lines": [
+    "pointer",
+    "state"
+  ],
+  "ui/overlay.odin:overlay_text": [
+    "pointer",
+    "state"
+  ],
+  "ui/settings_scale.odin:settings_auto_scale": [
+    "pointer"
+  ],
+  "ui/spell_darwin.odin:_spell_backend_init": [
+    "pointer"
+  ],
+  "ui/spell_darwin.odin:_spell_backend_suggest": [
+    "pointer",
+    "index",
+    "queue",
+    "ownership"
+  ],
+  "ui/spell_menu.odin:spell_menu_draw_actions": [
+    "pointer",
+    "state"
+  ],
+  "ui/spell_menu.odin:spell_menu_draw_overlay": [
+    "pointer",
+    "state"
+  ],
+  "ui/spell_menu.odin:spell_menu_draw_row": [
+    "pointer",
+    "state"
+  ],
+  "ui/spell_menu.odin:spell_menu_draw_suggestions": [
+    "pointer",
+    "state"
+  ],
+  "ui/spell_menu.odin:spell_menu_handle_keyboard": [
+    "pointer",
+    "state"
+  ],
+  "ui/spell_menu.odin:spell_menu_handle_pointer": [
+    "pointer",
+    "state"
+  ],
+  "ui/spell_menu.odin:spell_menu_layout": [
+    "pointer",
+    "state"
+  ],
+  "ui/spell_windows.odin:_spell_backend_check": [
+    "pointer"
+  ],
+  "ui/spell_windows.odin:_spell_backend_init": [
+    "pointer",
+    "index"
+  ],
+  "ui/spell_windows.odin:_spell_backend_suggest": [
+    "pointer",
+    "index",
+    "queue",
+    "ownership"
+  ],
+  "ui/spellcheck.odin:draw_squiggle": [
+    "pointer",
+    "state"
+  ],
+  "ui/spellcheck.odin:spell_in_pill": [
+    "index",
+    "state"
+  ],
+  "ui/spellcheck.odin:spell_skip_token": [
+    "index",
+    "state"
+  ],
+  "ui/spellcheck.odin:spell_trim_token": [
+    "index",
+    "state"
+  ],
+  "ui/spellcheck.odin:spellcheck_memo_set_key": [
+    "pointer",
+    "index",
+    "ownership"
+  ],
+  "ui/spellcheck.odin:spellcheck_pills_equal": [
+    "index"
+  ],
+  "ui/text_input.odin:ti_sel_owner": [
+    "pointer",
+    "state"
+  ],
+  "ui/text_input.odin:ti_semantic_push": [
+    "pointer",
+    "state"
+  ],
+  "ui/text_input.odin:undo_record": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/titlebar_windows.odin:tb_handle_nccalcsize": [
+    "pointer",
+    "index"
+  ],
+  "ui/titlebar_windows.odin:titlebar_subclass_proc": [
+    "pointer"
+  ],
+  "ui/ui_context.odin:frame_to_local": [
+    "pointer",
+    "state"
+  ],
+  "ui/ui_context.odin:frame_to_screen": [
+    "pointer",
+    "state"
+  ],
+  "ui/ui_context.odin:ui_frame_drop_degenerate": [
+    "pointer",
+    "state"
+  ],
+  "ui/ui_context.odin:ui_frame_end": [
+    "pointer",
+    "state"
+  ],
+  "ui/ui_context.odin:ui_insets": [
+    "pointer"
+  ],
+  "ui/ui_context.odin:ui_spacer": [
+    "pointer"
+  ],
+  "ui/widgets.odin:back_btn": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:back_btn_w": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:btn_ui": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:btn_ui_id": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:caret_col_to_byte": [
+    "index"
+  ],
+  "ui/widgets.odin:caret_delete_next": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/widgets.odin:caret_delete_prev": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/widgets.odin:caret_from_row_col": [
+    "index"
+  ],
+  "ui/widgets.odin:caret_insert": [
+    "pointer",
+    "index"
+  ],
+  "ui/widgets.odin:caret_line_count": [
+    "index"
+  ],
+  "ui/widgets.odin:caret_line_end": [
+    "index"
+  ],
+  "ui/widgets.odin:caret_line_start": [
+    "index"
+  ],
+  "ui/widgets.odin:caret_row_col": [
+    "index"
+  ],
+  "ui/widgets.odin:caret_word_left": [
+    "index"
+  ],
+  "ui/widgets.odin:caret_word_right": [
+    "index"
+  ],
+  "ui/widgets.odin:draw_card_bg_frame": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:draw_line_with_selection_frame": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/widgets.odin:draw_pill": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:eased": [
+    "pointer"
+  ],
+  "ui/widgets.odin:find_word_bounds": [
+    "index",
+    "state"
+  ],
+  "ui/widgets.odin:get_wheel_move": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:icon_btn": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:list_row_bg": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:mod_down": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:mouse_moved": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:pane_reset": [
+    "pointer"
+  ],
+  "ui/widgets.odin:progress_bar": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:progress_bar_animated": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:section_header": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:spinner": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:status_pill": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:truncate_path_middle_frame": [
+    "pointer",
+    "index",
+    "state"
+  ],
+  "ui/widgets.odin:truncate_to_width_frame": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:truncate_to_width_left_frame": [
+    "pointer",
+    "state"
+  ],
+  "ui/widgets.odin:wheel_row_steps": [
+    "pointer",
+    "state"
+  ],
+  "ui/window_style_darwin.odin:apply_window_style": [
+    "pointer"
+  ],
+  "ui/wrap.odin:fnv1a64": [
+    "index"
+  ],
+  "ui_gfx/adapter.odin:adapter_begin_frame": [
+    "pointer",
+    "state"
+  ],
+  "ui_gfx/adapter.odin:adapter_init": [
+    "pointer"
+  ],
+  "ui_gfx/app.odin:app_run": [
+    "pointer",
+    "state"
+  ],
+  "ui_gfx/input.odin:capture_input": [
+    "pointer"
+  ],
+  "ui_gfx/platform.odin:apply_platform_output": [
+    "pointer"
+  ],
+  "ui_gfx/session.odin:app_session_init": [
+    "pointer",
+    "state"
+  ]
+}
