@@ -77,8 +77,16 @@ run_term() {
 	# as tests (term/term_input_fuzz_test.odin), mirroring net/http_fuzz_test.odin.
 	# INGOT_PTY_SIM scripts the PTY byte source so term_pump's drain/EOF loop
 	# is fuzzed too; INGOT_FUZZ_ITER scales the pump fuzz past the test default.
+	#
+	# ODIN_TEST_THREADS=1 is required, not a preference: the pump fuzz drives
+	# process-global PTY and libvterm state, so concurrent tests corrupt each
+	# other's emulator and segfault intermittently (about one run in six at 12
+	# threads). scripts/test.sh pins the same value for the same reason; this
+	# runner previously omitted it, which is why the crash only ever surfaced
+	# under fuzzing.
 	# shellcheck disable=SC2086
-	odin test "$ROOT/term" $COL $GUARD $SANFLAGS -define:INGOT_PTY_SIM=true -define:INGOT_FUZZ_ITER=3000
+	odin test "$ROOT/term" $COL $GUARD $SANFLAGS -define:INGOT_PTY_SIM=true \
+		-define:INGOT_FUZZ_ITER=3000 -define:ODIN_TEST_THREADS=1
 }
 
 run_gfx_frame() {
