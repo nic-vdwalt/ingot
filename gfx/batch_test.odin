@@ -44,6 +44,25 @@ stream_slot_reports_bounded_exhaustion :: proc(t: ^testing.T) {
 }
 
 @(test)
+stream_slot_abandon_restores_acquisition_capacity :: proc(t: ^testing.T) {
+	renderer := new(Renderer)
+	defer free(renderer)
+	renderer.active_stream_slot = _stream_slots_acquire(renderer.stream_slots[:], 0)
+	testing.expect(t, renderer.active_stream_slot >= 0)
+	slot := &renderer.stream_slots[renderer.active_stream_slot]
+	slot.geometry_write = 128
+	slot.uniform_write = 64
+
+	_stream_slot_abandon(renderer)
+
+	testing.expect_value(t, renderer.active_stream_slot, i32(-1))
+	testing.expect_value(t, slot.state, Stream_Slot_State.Free)
+	testing.expect_value(t, slot.geometry_write, u64(0))
+	testing.expect_value(t, slot.uniform_write, u64(0))
+	testing.expect(t, _stream_slots_acquire(renderer.stream_slots[:], 0) >= 0)
+}
+
+@(test)
 stream_slot_honours_uniform_alignment :: proc(t: ^testing.T) {
 	slot := Stream_Slot {
 		state = .Recording,

@@ -559,6 +559,10 @@ BeginDrawing :: proc() {
 	_stats_frame_begin()
 	platform_web_input_frame_begin()
 
+	if !renderer_frame_begin(&g.rend) {
+		g.frame.has_frame = false
+		return
+	}
 	g.frame.surf_tex = wg.SurfaceGetCurrentTexture(g.surface)
 	#partial switch g.frame.surf_tex.status {
 	case .SuccessOptimal, .SuccessSuboptimal:
@@ -567,6 +571,7 @@ BeginDrawing :: proc() {
 		// The swapchain is stale (e.g. display change); reconfigure so the
 		// next frame can acquire a fresh texture.
 		_release_surface_texture()
+		_stream_slot_abandon(&g.rend)
 		if g.fb_width > 0 && g.fb_height > 0 {
 			wg.SurfaceConfigure(g.surface, &g.config)
 		}
@@ -574,16 +579,11 @@ BeginDrawing :: proc() {
 		return
 	case:
 		_release_surface_texture()
+		_stream_slot_abandon(&g.rend)
 		g.frame.has_frame = false
 		return
 	}
 	g.frame.view = wg.TextureCreateView(g.frame.surf_tex.texture, nil)
-	if !renderer_frame_begin(&g.rend) {
-		wg.TextureViewRelease(g.frame.view)
-		_release_surface_texture()
-		g.frame.has_frame = false
-		return
-	}
 	g.frame.encoder = wg.DeviceCreateCommandEncoder(g.device, nil)
 	g.frame.clear_color = Color{0, 0, 0, 255}
 	g.frame.pass_begun = false
