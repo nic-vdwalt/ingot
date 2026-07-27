@@ -115,6 +115,21 @@ stream_slot_intermediate_work_stays_in_recording_epoch :: proc(t: ^testing.T) {
 }
 
 @(test)
+stream_transients_follow_submission_slot_lifetime :: proc(t: ^testing.T) {
+	renderer := new(Renderer)
+	defer free(renderer)
+	renderer.active_stream_slot = _stream_slots_acquire(renderer.stream_slots[:], 0)
+	buffer := wg.Buffer(uintptr(1))
+	append(&renderer.transient_buffers, buffer)
+
+	_stream_transients_retire(renderer, renderer.active_stream_slot)
+
+	testing.expect_value(t, len(renderer.transient_buffers), 0)
+	testing.expect_value(t, len(renderer.retired_buffers[renderer.active_stream_slot]), 1)
+	testing.expect_value(t, renderer.retired_buffers[renderer.active_stream_slot][0], buffer)
+}
+
+@(test)
 stream_slot_indexed_reservation_reports_exact_layout :: proc(t: ^testing.T) {
 	slot := Stream_Slot {
 		state          = .Recording,

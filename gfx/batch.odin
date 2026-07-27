@@ -118,6 +118,7 @@ Renderer :: struct {
 	active_stream_slot: i32,
 	uniform_alignment:  u64,
 	transient_buffers:  [dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
+	retired_buffers:    [STREAM_SLOT_COUNT][dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
 	proj_w, proj_h:     i32,
 }
 
@@ -491,6 +492,10 @@ renderer_init :: proc(r: ^Renderer) {
 renderer_shutdown :: proc(r: ^Renderer) {
 	for buffer in r.transient_buffers do wg.BufferRelease(buffer)
 	clear(&r.transient_buffers)
+	for &buffers in r.retired_buffers {
+		for buffer in buffers do wg.BufferRelease(buffer)
+		clear(&buffers)
+	}
 	for &slot in r.stream_slots {
 		if slot.uniform_buffer != nil do wg.BufferRelease(slot.uniform_buffer)
 		if slot.geometry_buffer != nil do wg.BufferRelease(slot.geometry_buffer)
@@ -529,12 +534,14 @@ renderer_state_reset :: proc(r: ^Renderer) {
 }
 
 renderer_frame_begin :: proc(r: ^Renderer) -> bool {
-	for buffer in r.transient_buffers do wg.BufferRelease(buffer)
-	clear(&r.transient_buffers)
 	if !_stream_slot_acquire(r, _submission_completed(&g.submissions)) {
 		_stats_stream_slot_exhaustion()
 		return false
 	}
+	retired := &r.retired_buffers[r.active_stream_slot]
+	for buffer in retired^ do wg.BufferRelease(buffer)
+	clear(retired)
+	clear(&r.transient_buffers)
 	clear(&r.verts)
 	clear(&r.indices)
 	renderer_state_reset(r)
@@ -701,21 +708,26 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 				raw_data(r.indices[:]),
 				index_bytes,
 			)
-		if !upload_ok {
+		if upload_ok {
+			vertex_buffer = buffer
+			index_buffer = buffer
+			vertex_offset = uploaded_vertex_offset
+			index_offset = uploaded_index_offset
+		} else {
+			vertex_buffer, index_buffer = _geometry_upload_transient(r)
+			if vertex_buffer == nil || index_buffer == nil {
+				clear(&r.verts)
+				clear(&r.indices)
+				return
+			}
+		}
+	} else {
+		vertex_buffer, index_buffer = _geometry_upload_transient(r)
+		if vertex_buffer == nil || index_buffer == nil {
 			clear(&r.verts)
 			clear(&r.indices)
 			return
 		}
-		vertex_buffer = buffer
-		index_buffer = buffer
-		vertex_offset = uploaded_vertex_offset
-		index_offset = uploaded_index_offset
-	} else {
-		vertex_buffer = wg.DeviceCreateBufferWithData(g.device, &{usage = {.Vertex}}, r.verts[:])
-		index_buffer = wg.DeviceCreateBufferWithData(g.device, &{usage = {.Index}}, r.indices[:])
-		append(&r.transient_buffers, vertex_buffer, index_buffer)
-		_stats_buffer_created(false)
-		_stats_buffer_created(false)
 	}
 	_stats_flush(u64(n), vertex_bytes + index_bytes, cause)
 	when RENDER_STATS_ENABLED {
@@ -760,6 +772,23 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 
 	clear(&r.verts)
 	clear(&r.indices)
+}
+
+@(private)
+_geometry_upload_transient :: proc(r: ^Renderer) -> (wg.Buffer, wg.Buffer) {
+	assert(r != nil)
+	if len(r.transient_buffers) > BATCH_TRANSIENT_BUFFERS_MAX - 2 do return nil, nil
+	vertex_buffer := wg.DeviceCreateBufferWithData(g.device, &{usage = {.Vertex}}, r.verts[:])
+	if vertex_buffer == nil do return nil, nil
+	index_buffer := wg.DeviceCreateBufferWithData(g.device, &{usage = {.Index}}, r.indices[:])
+	if index_buffer == nil {
+		wg.BufferRelease(vertex_buffer)
+		return nil, nil
+	}
+	append(&r.transient_buffers, vertex_buffer, index_buffer)
+	_stats_buffer_created(false)
+	_stats_buffer_created(false)
+	return vertex_buffer, index_buffer
 }
 
 @(private)
@@ -930,12 +959,23 @@ _stream_slot_submit :: proc(slot: ^Stream_Slot, ticket: u64) -> bool {
 }
 
 @(private)
+_stream_transients_retire :: proc(r: ^Renderer, slot_index: i32) {
+	assert(r != nil)
+	assert(slot_index >= 0 && slot_index < len(r.stream_slots))
+	append(&r.retired_buffers[slot_index], ..r.transient_buffers[:])
+	clear(&r.transient_buffers)
+}
+
+@(private)
 _stream_slot_submitted :: proc(r: ^Renderer, ticket: u64) -> bool {
 	assert(r != nil)
 	if r.active_stream_slot < 0 do return false
 	assert(r.active_stream_slot < len(r.stream_slots))
 	ok := _stream_slot_submit(&r.stream_slots[r.active_stream_slot], ticket)
-	if ok do r.active_stream_slot = -1
+	if ok {
+		_stream_transients_retire(r, r.active_stream_slot)
+		r.active_stream_slot = -1
+	}
 	return ok
 }
 
