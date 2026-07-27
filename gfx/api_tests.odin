@@ -136,3 +136,70 @@ frame_pacing_remaining_is_bounded :: proc(t: ^testing.T) {
 	testing.expect_value(t, reached, 0.0)
 	testing.expect(t, abs(regressed - 0.1) < 0.000001)
 }
+
+// --- surface mixing guard --------------------------------------------------
+// gfx exposes two drawing surfaces over one renderer. A raylib-shaped draw
+// acts on the globally active context; an ergonomic draw activates its
+// Frame's owner first. Interleaving them across contexts silently sends
+// geometry to the wrong window, so batch_set consults this predicate.
+
+@(test)
+surface_routing_allows_single_context_mixing :: proc(t: ^testing.T) {
+	// ui_gfx paints by calling raylib-shaped procedures at top level inside
+	// the ergonomic frame it opened on the default context. That is the
+	// common case and must stay allowed.
+	testing.expect(t, !_surface_routing_is_ambiguous(0, 1, true))
+}
+
+@(test)
+surface_routing_allows_plain_raylib_style :: proc(t: ^testing.T) {
+	// BeginDrawing/EndDrawing with no ergonomic frame anywhere.
+	testing.expect(t, !_surface_routing_is_ambiguous(0, 0, false))
+}
+
+@(test)
+surface_routing_exempts_ergonomic_wrappers :: proc(t: ^testing.T) {
+	// Inside draw_rect and friends the owner is activated, so the draw is
+	// routed correctly even while another context holds a frame.
+	testing.expect(t, !_surface_routing_is_ambiguous(1, 2, true))
+	testing.expect(t, !_surface_routing_is_ambiguous(1, 2, false))
+}
+
+@(test)
+surface_routing_rejects_draw_aimed_at_wrong_context :: proc(t: ^testing.T) {
+	// A frame is open on another context and the active one has none: the
+	// draw cannot reach the frame its caller meant.
+	testing.expect(t, _surface_routing_is_ambiguous(0, 1, false))
+}
+
+@(test)
+surface_routing_rejects_interleaved_frames :: proc(t: ^testing.T) {
+	// Two contexts hold frames at once; a top-level draw is ambiguous even
+	// though the active context has one of them.
+	testing.expect(t, _surface_routing_is_ambiguous(0, 2, true))
+}
+
+@(test)
+surface_routing_counters_balance_across_a_frame :: proc(t: ^testing.T) {
+	depth_before := context_activation_depth
+	frames_before := ergonomic_frames_active
+
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.id, ctx.epoch = 2, 4
+
+	previous := _context_activate(ctx)
+	testing.expect_value(t, context_activation_depth, depth_before + 1)
+	_context_restore(previous)
+	testing.expect_value(t, context_activation_depth, depth_before)
+
+	ctx.frame_active = true
+	_ergonomic_frame_opened(ctx)
+	testing.expect_value(t, ergonomic_frames_active, frames_before + 1)
+	testing.expect(t, _surface_routing_is_ambiguous(0, ergonomic_frames_active, false))
+
+	ctx.frame_active = false
+	_ergonomic_frame_closed(ctx)
+	testing.expect_value(t, ergonomic_frames_active, frames_before)
+	testing.expect_value(t, g, default_context())
+}

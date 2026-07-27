@@ -339,16 +339,38 @@ _ergonomic_frame_closed_on_teardown :: proc(ctx: ^Context) {
 	ergonomic_frames_active -= 1
 }
 
+// _surface_routing_is_ambiguous decides whether a raylib-shaped draw can be
+// trusted to reach the context its caller meant.
+//
+// activation_depth > 0 means an ergonomic wrapper activated frame.owner for
+// this call, so the draw is routed by construction. At depth zero the draw
+// lands on the globally active context, which is only unambiguous when no
+// *other* context holds a live ergonomic Frame.
+@(private)
+_surface_routing_is_ambiguous :: proc(
+	activation_depth, frames_active: int,
+	active_context_has_frame: bool,
+) -> bool {
+	assert(activation_depth >= 0, "_surface_routing_is_ambiguous: negative depth")
+	assert(frames_active >= 0, "_surface_routing_is_ambiguous: negative frame count")
+	if activation_depth > 0 do return false
+	owned_here := 1 if active_context_has_frame else 0
+	return frames_active - owned_here > 0
+}
+
 // _assert_surface_not_routed_elsewhere fires when a raylib-shaped draw is
 // issued at top level while a context other than the active one owns a live
 // ergonomic Frame. Draws made through an ergonomic wrapper are exempt: those
 // run at a non-zero activation depth and are routed by construction.
 @(private)
 _assert_surface_not_routed_elsewhere :: proc(loc := #caller_location) {
-	if context_activation_depth > 0 do return
-	owned_here := 1 if g != nil && g.frame_active else 0
+	ambiguous := _surface_routing_is_ambiguous(
+		context_activation_depth,
+		ergonomic_frames_active,
+		g != nil && g.frame_active,
+	)
 	assert(
-		ergonomic_frames_active - owned_here == 0,
+		!ambiguous,
 		"gfx: raylib-shaped draw issued while another context owns an active ergonomic Frame. " +
 		"The draw would land on the globally active context, not that Frame's owner. " +
 		"Use the ergonomic draw_* procedures, or do not interleave frames across contexts.",
