@@ -395,7 +395,15 @@
 					navigator.clipboard.writeText(clipboardText).catch(() => {});
 				}
 			},
-			ingot_web_input_frame_begin: () => { semanticFrame += 1; },			ingot_web_input_frame_end: endSemanticFrame,
+			ingot_set_window_title: (pointer) => {
+				if (!wasmMemoryInterface || !pointer) return;
+				const memory = new Uint8Array(wasmMemoryInterface.memory.buffer);
+				let end = pointer;
+				while (end < memory.length && memory[end] !== 0) end += 1;
+				document.title = new TextDecoder().decode(memory.subarray(pointer, end));
+			},
+			ingot_web_input_frame_begin: () => { semanticFrame += 1; },
+			ingot_web_input_frame_end: endSemanticFrame,
 			ingot_web_input_sync: (formPointer, formLength, fieldPointer, fieldLength,
 				namePointer, nameLength, placeholderPointer, placeholderLength,
 				valuePointer, valueLength, x, y, width, height, inputType,

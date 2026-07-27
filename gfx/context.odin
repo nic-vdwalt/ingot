@@ -154,6 +154,9 @@ Context :: struct {
 	fb_width, fb_height:  i32,
 	dpi:                  f32,
 	force_reconfigure:    bool,
+	// Set by _maybe_reconfigure when the logical size changed at the start of
+	// this frame, so IsWindowResized answers for the frame the caller is in.
+	resized_this_frame:   bool,
 
 	// requested window size, stashed at InitWindow for _gpu_finish (needed
 	// because on web the GPU device resolves asynchronously, after InitWindow
@@ -819,6 +822,11 @@ _maybe_reconfigure :: proc() {
 	fbw, fbh := platform_framebuffer_size()
 	w, h := platform_window_size()
 	changed := fbw != g.fb_width || fbh != g.fb_height
+	// IsWindowResized reports the logical size the application lays out
+	// against, which is what changes under a user drag. A pure DPI change
+	// moves the framebuffer without moving it, and is reported through
+	// GetWindowScaleDPI instead.
+	g.resized_this_frame = w != g.width || h != g.height
 	g.width, g.height = w, h
 	if (changed || g.force_reconfigure) && fbw > 0 && fbh > 0 {
 		g.fb_width, g.fb_height = fbw, fbh
@@ -916,6 +924,35 @@ SetWindowMinSize :: proc(w, h: i32) {
 }
 SetWindowSize :: proc(w, h: i32) {
 	platform_set_window_size(w, h)
+}
+
+SetWindowTitle :: proc(title: cstring) {
+	assert(title != nil, "SetWindowTitle: nil title")
+	platform_set_window_title(title)
+}
+
+// SetWindowPosition and GetWindowPosition address the window's placement on a
+// monitor. A browser has no such placement: the page cannot move its own
+// window and a canvas has no monitor coordinates, so on web the setter does
+// nothing and the getter reports the canvas origin.
+SetWindowPosition :: proc(x, y: i32) {
+	platform_set_window_position(x, y)
+}
+
+GetWindowPosition :: proc() -> Vector2 {
+	x, y := platform_window_position()
+	return {f32(x), f32(y)}
+}
+
+// IsWindowResized reports whether the logical window size changed at the start
+// of the current frame. A DPI-only change is not a resize; see GetWindowScaleDPI.
+IsWindowResized :: proc() -> bool {
+	return context_window_resized(default_context())
+}
+
+context_window_resized :: proc(ctx: ^Context) -> bool {
+	if ctx == nil do return false
+	return ctx.resized_this_frame
 }
 SetExitKey :: proc(key: KeyboardKey) {g.inp.exit_key = key}
 
