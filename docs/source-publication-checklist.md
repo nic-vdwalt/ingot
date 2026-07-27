@@ -41,7 +41,7 @@ claims; those remain governed by `oss-release-checklist.md` and
 - [x] Coordinate the history cutover described in `history-rewrite.md`.
 - [x] Run `scripts/check.sh`, `scripts/test.sh`, and `scripts/check-web.sh` from a
   fresh clone of rewritten history.
-- [ ] Confirm GitHub branch protection is enabled.
+- [x] Confirm GitHub branch protection is enabled.
 - [x] Confirm GitHub private vulnerability reporting is enabled.
 
 Binary and web releases additionally require the deferred toolchain, linked
