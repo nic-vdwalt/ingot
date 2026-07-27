@@ -14,11 +14,13 @@ when !HTTP_STRESS {
 
 	http_net_send :: proc(sock: cnet.TCP_Socket, data: []u8) -> (int, bool) {
 		n, err := cnet.send(sock, data)
+		if err == nil do ensure(n >= 0 && n <= len(data))
 		return n, err == nil
 	}
 
 	http_net_recv :: proc(sock: cnet.TCP_Socket, data: []u8) -> (int, bool) {
 		n, err := cnet.recv(sock, data)
+		if err == nil do ensure(n >= 0 && n <= len(data))
 		return n, err == nil
 	}
 

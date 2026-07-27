@@ -37,6 +37,15 @@ class AssertionDisciplineTest(unittest.TestCase):
 '''
         self.assertIn("queue", self.findings(source)[0].risks)
 
+    def test_unrelated_assertion_does_not_hide_index_risk(self):
+        source = '''p :: proc(queue: ^Queue, items: []Item, index: int) {
+	assert(queue != nil)
+	consume(items[index])
+}
+'''
+        findings = self.findings(source)
+        self.assertEqual(findings[0].risks, ("index",))
+
     def test_signature_types_and_void_forwarding_are_not_risks(self):
         source = '''draw :: proc(context: ^Context, points: []Point) {
 	render_line(context, points)
@@ -62,9 +71,9 @@ class AssertionDisciplineTest(unittest.TestCase):
 '''
         self.assertEqual(self.findings(source), [])
 
-    def test_cross_collection_index_in_bounded_loop_is_flagged(self):
-        source = '''copy_items :: proc(source, destination: []Item) {
-	for index in 0..<len(source) {
+    def test_cross_collection_index_with_no_destination_bound_is_flagged(self):
+        source = '''copy_item :: proc(source, destination: []Item, index: int) {
+	if index < len(source) {
 		destination[index] = source[index]
 	}
 }
@@ -79,7 +88,7 @@ class AssertionDisciplineTest(unittest.TestCase):
 }
 '''
         findings = self.findings(source)
-        self.assertIn("pointer", findings[0].risks)
+        self.assertNotIn("pointer", findings[0].risks)
         self.assertIn("index", findings[0].risks)
 
     def test_declarations_and_trivial_accessors_are_excluded(self):

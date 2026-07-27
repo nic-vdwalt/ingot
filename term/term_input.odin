@@ -159,6 +159,7 @@ vt_control_byte_for_key :: proc(key: rl.KeyboardKey) -> (value: u8, ok: bool) {
 
 @(private)
 vt_sequence_for_key :: proc(key: rl.KeyboardKey, shift: bool, buf: []u8) -> (int, bool) {
+	assert(len(buf) > 0)
 	#partial switch key {
 	case .ENTER:
 		buf[0] = '\r'; return 1, true
@@ -232,6 +233,7 @@ vt_bytes_for_key :: proc(
 	n: int,
 	ok: bool,
 ) {
+	assert(len(buf) > 0)
 	if ctrl && !super {
 		if shift {
 			for sk in skip_ctrl_shift do if key == sk do return 0, false

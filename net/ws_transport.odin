@@ -121,6 +121,7 @@ when !INGOT_WS_SIM {
 		if transport.kind == .TCP {
 			count, err := cnet.send(transport.socket, data)
 			if err != nil do return count, .Other
+			ensure(count >= 0 && count <= len(data))
 			return count, .None
 		}
 		count: c.size_t
@@ -132,6 +133,7 @@ when !INGOT_WS_SIM {
 		)
 		if result == .AGAIN do return int(count), .Timeout
 		if result != .OK do return int(count), .Other
+		ensure(count <= c.size_t(len(data)))
 		return int(count), .None
 	}
 
@@ -143,6 +145,7 @@ when !INGOT_WS_SIM {
 				if err == .Timeout || err == .Would_Block do return count, .Timeout
 				return count, .Other
 			}
+			ensure(count >= 0 && count <= len(buf))
 			return count, .None
 		}
 		count: c.size_t
@@ -154,6 +157,7 @@ when !INGOT_WS_SIM {
 		)
 		if result == .AGAIN do return int(count), .Timeout
 		if result != .OK do return int(count), .Other
+		ensure(count <= c.size_t(len(buf)))
 		return int(count), .None
 	}
 

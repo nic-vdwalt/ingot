@@ -147,8 +147,12 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 // can be fuzzed without a shell process.
 when !INGOT_PTY_SIM {
 	read_bytes :: proc(p: ^Pty, buf: []u8) -> (n: int, eof: bool) {
+		assert(p != nil)
 		r := read(p.master_fd, raw_data(buf), len(buf))
-		if r > 0 do return int(r), false
+		if r > 0 {
+			ensure(r <= c.ssize_t(len(buf)))
+			return int(r), false
+		}
 		if r == 0 do return 0, true
 		e := errno_ptr()^
 		if e == EINTR || e == EAGAIN || e == EWOULDBLOCK do return 0, false
@@ -156,9 +160,11 @@ when !INGOT_PTY_SIM {
 	}
 
 	drain :: proc(p: ^Pty, buf: []u8) -> (data: []u8, eof: bool) {
+		assert(p != nil)
 		total := 0
 		for total < len(buf) {
 			n, e := read_bytes(p, buf[total:])
+			ensure(n >= 0 && n <= len(buf) - total)
 			total += n
 			if e do return buf[:total], true
 			if n == 0 do break
@@ -168,10 +174,14 @@ when !INGOT_PTY_SIM {
 }
 
 write_bytes :: proc(p: ^Pty, data: []u8) -> (written: int, status: Pty_IO_Status) {
+	assert(p != nil)
 	if len(data) == 0 do return 0, .Ok
 	if p.master_fd < 0 do return 0, .Closed
 	n := write(p.master_fd, raw_data(data), len(data))
-	if n >= 0 do return int(n), .Ok
+	if n >= 0 {
+		ensure(n <= c.ssize_t(len(data)))
+		return int(n), .Ok
+	}
 	e := errno_ptr()^
 	if e == EINTR do return 0, .Interrupted
 	if e == EAGAIN || e == EWOULDBLOCK do return 0, .Would_Block
@@ -188,6 +198,7 @@ write_string :: proc(p: ^Pty, s: string) -> (int, Pty_IO_Status) {
 }
 
 resize :: proc(p: ^Pty, cols: u16, rows: u16) {
+	assert(p != nil)
 	if p.master_fd < 0 do return
 	if cols == 0 || rows == 0 || cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return
 	ws := Winsize {
@@ -198,6 +209,7 @@ resize :: proc(p: ^Pty, cols: u16, rows: u16) {
 }
 
 destroy :: proc(p: ^Pty) {
+	assert(p != nil)
 	if p.master_fd >= 0 {
 		close(p.master_fd)
 		p.master_fd = -1

@@ -63,7 +63,7 @@ _term_ingest :: proc(ts: ^Term_Instance, total: int, eof: bool) {
 	assert(total >= 0)
 	assert(total <= len(ts.read_buf))
 	assert(ts.utf8_hold_len >= 0)
-	assert(ts.utf8_hold_len <= len(ts.utf8_hold))
+	assert(ts.utf8_hold_len <= 3)
 	if total <= 0 do return
 	complete := total
 	if !eof {
@@ -86,7 +86,7 @@ _term_ingest :: proc(ts: ^Term_Instance, total: int, eof: bool) {
 		lv.vterm_input_write(ts.vt, raw_data(ts.read_buf[:]), c.size_t(complete))
 	}
 	assert(ts.utf8_hold_len >= 0)
-	assert(ts.utf8_hold_len <= len(ts.utf8_hold))
+	assert(ts.utf8_hold_len <= 3)
 }
 
 // term_pump reads all available PTY output and feeds it to the terminal
@@ -108,7 +108,7 @@ term_pump :: proc(ts: ^Term_Instance) -> (bytes_read: int) {
 		for _ in 0 ..< TERM_PUMP_MAX_BUFS {
 			hold := ts.utf8_hold_len
 			assert(hold >= 0)
-			assert(hold <= len(ts.utf8_hold))
+			assert(hold <= 3)
 			assert(hold < len(ts.read_buf))
 			copy(ts.read_buf[:hold], ts.utf8_hold[:hold])
 			data, eof := pty.drain(&ts.pty, ts.read_buf[hold:])

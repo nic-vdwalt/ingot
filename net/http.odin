@@ -207,6 +207,7 @@ when !INGOT_NET_SIM {
 			recv_calls += 1
 			n, recv_ok := http_net_recv(sock, chunk[:])
 			if n > 0 {
+				ensure(n <= len(chunk))
 				append(&buf, ..chunk[:n])
 				if len(buf) > maximum + MAXIMUM_HEADER_BYTES do return {}, false
 			}
@@ -278,6 +279,7 @@ when !INGOT_NET_SIM {
 		for total < len(data) {
 			n, ok := http_net_send(sock, data[total:])
 			if !ok || n <= 0 do return false
+			ensure(n <= len(data) - total)
 			total += n
 		}
 		return true
@@ -289,6 +291,7 @@ when !INGOT_NET_SIM {
 parse_http_header_line :: proc(line: string, allocator: mem.Allocator) -> (Http_Header, bool) {
 	colon := strings.index(line, ":")
 	if colon <= 0 do return {}, false
+	ensure(colon < len(line))
 	return Http_Header {
 			name = strings.clone(strings.trim_space(line[:colon]), allocator),
 			value = strings.clone(strings.trim_space(line[colon + 1:]), allocator),
@@ -383,6 +386,7 @@ decode_chunked :: proc(data: []u8, maximum_body: int, allocator: mem.Allocator) 
 	for _ in 0 ..< chunks_max {
 		line_end := strings.index(string(data[cursor:]), "\r\n")
 		if line_end < 0 {delete(out); return nil, false}
+		ensure(cursor >= 0 && cursor + line_end <= len(data))
 		size_text := string(data[cursor:cursor + line_end])
 		if extension := strings.index(size_text, ";"); extension >= 0 do size_text = size_text[:extension]
 		size, parsed := strconv.parse_u64(strings.trim_space(size_text), 16)

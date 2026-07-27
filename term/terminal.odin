@@ -333,6 +333,7 @@ term_start :: proc(
 
 @(private = "file")
 term_reader_loop :: proc(ts: ^Term_Instance) {
+	assert(ts != nil)
 	buf: [TERM_OUTPUT_CHUNK_SIZE]u8
 	for sync.atomic_load(&ts.reader_running) {
 		data, eof := pty.drain(&ts.pty, buf[:])
@@ -340,11 +341,15 @@ term_reader_loop :: proc(ts: ^Term_Instance) {
 			queued := false
 			for sync.atomic_load(&ts.reader_running) && !queued {
 				sync.mutex_lock(&ts.output_mutex)
+				assert(ts.output_head >= 0 && ts.output_head < TERM_OUTPUT_QUEUE_CAP)
+				assert(ts.output_count >= 0 && ts.output_count <= TERM_OUTPUT_QUEUE_CAP)
 				if ts.output_count < TERM_OUTPUT_QUEUE_CAP {
 					index := (ts.output_head + ts.output_count) % TERM_OUTPUT_QUEUE_CAP
+					assert(index >= 0 && index < TERM_OUTPUT_QUEUE_CAP)
 					copy(ts.output_queue[index].data[:len(data)], data)
 					ts.output_queue[index].len = len(data)
 					ts.output_count += 1
+					assert(ts.output_count > 0 && ts.output_count <= TERM_OUTPUT_QUEUE_CAP)
 					queued = true
 				}
 				sync.mutex_unlock(&ts.output_mutex)

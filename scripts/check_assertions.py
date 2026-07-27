@@ -43,6 +43,28 @@ MUTATION = re.compile(
     r"|\b(?:append|inject_at|ordered_remove|unordered_remove"
     r"|make|new|delete|free|destroy|clone|resize)\s*\("
 )
+RISK_CONTRACTS = {
+    "pointer": re.compile(r"(?:==|!=)\s*nil|nil\s*(?:==|!=)"),
+    "index": re.compile(
+        r"\blen\s*\(|\b(?:min|max|clamp)\s*\(|\bfor\b[^\n]*\.\.<"
+        r"|(?:<|<=|>|>=)\s*(?:len\s*\(|[A-Z][A-Z0-9_]+)"
+    ),
+    "queue": re.compile(
+        r"\b(?:len|cap)\s*\(|(?:count|head|tail)\s*(?:<|<=|>|>=|==)"
+        r"|(?:<|<=|>|>=)\s*[A-Z][A-Z0-9_]+"
+    ),
+    "ownership": re.compile(
+        r"\bdefer\b|(?:==|!=)\s*nil|nil\s*(?:==|!=)|\b(?:ok|err|result)\b"
+    ),
+    "state": re.compile(
+        r"\b(?:state|running|active|session|lifecycle)\b\s*(?:==|!=)"
+        r"|(?:==|!=)\s*\.[A-Za-z_][A-Za-z0-9_]*"
+    ),
+    "untrusted_input": re.compile(
+        r"\b(?:ok|err|result|status|parsed|eof)\b\s*(?:==|!=)"
+        r"|\bif\b[^\n]*(?:len\s*\(|<|<=|>|>=)"
+    ),
+}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -120,6 +142,35 @@ def risks_for(body: str) -> tuple[str, ...]:
     )
 
 
+def index_contract_present(executable: str) -> bool:
+    indexed = re.findall(
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\[[^\]\n]+\]",
+        mask_proven_bounded_indexes(executable),
+    )
+    if not indexed:
+        return True
+    for collection in set(indexed):
+        bound = re.compile(rf"\blen\s*\(\s*{re.escape(collection)}\s*\)")
+        if not bound.search(executable):
+            return False
+    return True
+
+
+def risk_contract_present(executable: str, risk: str) -> bool:
+    if risk == "index":
+        return index_contract_present(executable)
+    if RISK_CONTRACTS[risk].search(executable):
+        return True
+    if risk == "queue":
+        return re.search(r"(?:assert|ensure)\s*\([^\n)]*\bqueue\b", executable) is not None
+    return False
+
+
+def uncovered_risks(body: str, risks: tuple[str, ...]) -> tuple[str, ...]:
+    executable = executable_text(body)
+    return tuple(risk for risk in risks if not risk_contract_present(executable, risk))
+
+
 def is_trivial(body: str, risks: tuple[str, ...]) -> bool:
     masked = check_odin_style.mask_source(body)
     statements = [line for line in masked.splitlines()[1:-1] if line.strip()]
@@ -159,8 +210,9 @@ def findings_for_source(source: str, path: str) -> list[Finding]:
         if is_trivial(body, risks) or is_thin_forwarder(body, risks):
             continue
         assertions = len(ASSERTION.findall(masked))
-        if risks and assertions == 0:
-            findings.append(Finding(path, procedure.name, procedure.start_line, risks, assertions))
+        uncovered = uncovered_risks(body, risks)
+        if uncovered:
+            findings.append(Finding(path, procedure.name, procedure.start_line, uncovered, assertions))
     return findings
 
 

@@ -219,7 +219,8 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 }
 
 read_bytes :: proc(p: ^Pty, buf: []u8) -> (n: int, eof: bool) {
-	if p == nil || p.pipe_out_r == nil do return 0, true
+	assert(p != nil)
+	if p.pipe_out_r == nil do return 0, true
 	if len(buf) == 0 do return 0, false
 
 	// Non-blocking check: see if data is available.
@@ -244,13 +245,16 @@ read_bytes :: proc(p: ^Pty, buf: []u8) -> (n: int, eof: bool) {
 	if !win32.ReadFile(p.pipe_out_r, raw_data(buf), to_read, &bytes_read, nil) {
 		return 0, true
 	}
+	ensure(bytes_read <= to_read && int(bytes_read) <= len(buf))
 	return int(bytes_read), false
 }
 
 drain :: proc(p: ^Pty, buf: []u8) -> (data: []u8, eof: bool) {
+	assert(p != nil)
 	total := 0
 	for total < len(buf) {
 		n, e := read_bytes(p, buf[total:])
+		ensure(n >= 0 && n <= len(buf) - total)
 		total += n
 		if e do return buf[:total], true
 		if n == 0 do break
@@ -259,13 +263,15 @@ drain :: proc(p: ^Pty, buf: []u8) -> (data: []u8, eof: bool) {
 }
 
 write_bytes :: proc(p: ^Pty, data: []u8) -> (written: int, status: Pty_IO_Status) {
+	assert(p != nil)
 	if len(data) == 0 do return 0, .Ok
-	if p == nil || p.pipe_in_w == nil do return 0, .Closed
+	if p.pipe_in_w == nil do return 0, .Closed
 	bytes_written: win32.DWORD
 	chunk := min(len(data), int(max(win32.DWORD)))
 	if !win32.WriteFile(p.pipe_in_w, raw_data(data), win32.DWORD(chunk), &bytes_written, nil) {
 		return 0, .Failed
 	}
+	ensure(int(bytes_written) <= chunk)
 	return int(bytes_written), .Ok
 }
 
@@ -279,7 +285,8 @@ write_string :: proc(p: ^Pty, s: string) -> (int, Pty_IO_Status) {
 }
 
 resize :: proc(p: ^Pty, cols: u16, rows: u16) {
-	if p == nil || p.hpc == nil do return
+	assert(p != nil)
+	if p.hpc == nil do return
 	if cols == 0 || rows == 0 || cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return
 	if cols == p.cols && rows == p.rows do return
 	size := COORD {
@@ -293,7 +300,7 @@ resize :: proc(p: ^Pty, cols: u16, rows: u16) {
 }
 
 destroy :: proc(p: ^Pty) {
-	if p == nil do return
+	assert(p != nil)
 	// Signal ConPTY to stop FIRST so the conhost I/O threads drain cleanly
 	// before we close the pipes they are reading/writing (matches the Windows
 	// Terminal sample teardown order from Microsoft's ConPTY documentation).

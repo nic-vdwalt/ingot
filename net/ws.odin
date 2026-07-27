@@ -596,6 +596,8 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 // Sec-WebSocket-Accept header (base64(sha1(key + RFC 6455 GUID))).
 @(private = "file")
 ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
+	assert(ws != nil)
+	assert(transport != nil && transport.open)
 	key := generate_ws_key()
 	if len(key) == 0 do return false
 	default_port := (ws.secure && ws.port == 443) || (!ws.secure && ws.port == 80)
@@ -614,6 +616,7 @@ ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
 	for total < len(request_bytes) {
 		count, send_err := ws_net_send(transport, request_bytes[total:])
 		if send_err != .None || count <= 0 do return false
+		ensure(count <= len(request_bytes) - total)
 		total += count
 	}
 	ws_net_set_recv_timeout(transport, ws.handshake_timeout)
@@ -627,6 +630,7 @@ ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
 			continue
 		}
 		if recv_err != .None || read == 0 do return false
+		ensure(read > 0 && read <= len(buf) - count)
 		count += read
 		if strings.contains(string(buf[:count]), "\r\n\r\n") do break
 	}
@@ -658,6 +662,7 @@ ws_accept_for_key :: proc(key: string) -> string {
 // ws.running (which ends the whole session).
 @(private = "file")
 ws_recv_loop :: proc(ws: ^WebSocket) {
+	assert(ws != nil)
 	scratch: [65536]u8
 	acc := make([dynamic]u8) // growable accumulator (handles frames > 64 KB)
 	defer delete(acc)
@@ -694,6 +699,7 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 			ws_set_state(ws, .Disconnected)
 			return
 		}
+		ensure(n > 0 && n <= len(scratch))
 		last_activity = time.now() // any bytes (events OR a PONG) = alive
 		append(&acc, ..scratch[:n])
 		total := len(acc)
@@ -733,6 +739,7 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 			}
 
 			offset += consumed
+			assert(consumed > 0 && offset <= total)
 		}
 
 		// Drop consumed bytes; keep any partial-frame tail for the next recv.
