@@ -46,6 +46,9 @@ when INGOT_PTY_SIM {
 	}
 
 	read_bytes :: proc(p: ^Pty, buf: []u8) -> (n: int, eof: bool) {
+		assert(p != nil)
+		assert(g_pty_sim.pos >= 0)
+		assert(g_pty_sim.pos <= len(g_pty_sim.tape))
 		remaining := len(g_pty_sim.tape) - g_pty_sim.pos
 		if remaining <= 0 {
 			return 0, g_pty_sim.eof_after
@@ -53,17 +56,25 @@ when INGOT_PTY_SIM {
 		n = min(min(sim_chunk(len(buf)), len(buf)), remaining)
 		copy(buf[:n], g_pty_sim.tape[g_pty_sim.pos:g_pty_sim.pos + n])
 		g_pty_sim.pos += n
+		assert(n >= 0)
+		assert(n <= len(buf))
+		assert(g_pty_sim.pos <= len(g_pty_sim.tape))
 		return n, false
 	}
 
 	drain :: proc(p: ^Pty, buf: []u8) -> (data: []u8, eof: bool) {
+		assert(p != nil)
 		total := 0
 		for total < len(buf) {
 			n, e := read_bytes(p, buf[total:])
+			assert(n >= 0)
+			assert(n <= len(buf) - total)
 			total += n
 			if e do return buf[:total], true
 			if n == 0 do break
 		}
+		assert(total >= 0)
+		assert(total <= len(buf))
 		return buf[:total], false
 	}
 }

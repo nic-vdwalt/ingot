@@ -54,6 +54,7 @@ frame_scratch_allocator_proc :: proc(
 }
 frame_scratch_begin :: proc(scratch: ^Frame_Scratch) {
 	assert(scratch != nil)
+	previous_generation := scratch.generation
 	if !scratch.initialized {mem.dynamic_arena_init(&scratch.arena); scratch.initialized = true}
 	scratch.generation += 1
 	when UI_TELEMETRY_ENABLED {
@@ -66,13 +67,19 @@ frame_scratch_begin :: proc(scratch: ^Frame_Scratch) {
 			procedure = frame_scratch_allocator_proc,
 			data      = scratch,
 		}} else {scratch.allocator = mem.dynamic_arena_allocator(&scratch.arena)}
+	assert(scratch.initialized)
+	assert(scratch.generation > previous_generation)
 	assert(scratch.generation > 0)
 }
 frame_scratch_end :: proc(scratch: ^Frame_Scratch) {assert(scratch != nil && scratch.initialized)
-	free_all(scratch.allocator)}
+	assert(scratch.generation > 0)
+	free_all(scratch.allocator)
+	assert(scratch.initialized)}
 frame_scratch_destroy :: proc(scratch: ^Frame_Scratch) {assert(scratch != nil)
 	if scratch.initialized do mem.dynamic_arena_destroy(&scratch.arena)
-	scratch^ = {}}
+	scratch^ = {}
+	assert(!scratch.initialized)
+	assert(scratch.generation == 0)}
 ui_frame_allocator :: proc(frame: ^Ui_Frame) -> mem.Allocator {assert(frame != nil && frame.open)
 	return frame.scratch.allocator}
 frame_view :: proc(frame: ^Ui_Frame, items: []$T) -> Frame_View(T) {assert(

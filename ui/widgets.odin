@@ -1447,10 +1447,81 @@ back_btn :: proc(frame: ^Ui_Frame, x, y: i32, label: string, focus: Focus_Opt = 
 
 // --- standardized collapsible section header -------------------------------
 
-// collapsible_header draws a full-width clickable header band with the label
-// on the left and a chevron state indicator on the right. Toggles open^ on
-// click (or Space/Enter while focused); returns true on the frame it toggled
-// (caller persists open state).
+Collapsible_Header_Options :: struct {
+	icon:        rune,
+	right_label: string,
+	font_size:   i32,
+	height:      i32,
+	focus:       Focus_Opt,
+	field_id:    string,
+	widget:      Widget_Id,
+}
+
+Collapsible_Header_Result :: struct {
+	next_y:  i32,
+	toggled: bool,
+}
+
+collapsible_header_with :: proc(
+	frame: ^Ui_Frame,
+	x, y, w: i32,
+	label: string,
+	open: ^bool,
+	options: Collapsible_Header_Options = {},
+) -> Collapsible_Header_Result {
+	assert(frame != nil && frame.open, "collapsible_header_with: invalid frame")
+	assert(open != nil, "collapsible_header_with: nil open state")
+	if ui_frame_drop_degenerate(frame, w <= 0) do return {next_y = y}
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	font_size := options.font_size if options.font_size > 0 else metrics.FONT_SIZE_LABEL
+	height := options.height if options.height > 0 else ui_frame_sc(frame, 26)
+	rect := Rectangle{f32(x), f32(y), f32(w), f32(height)}
+	interaction := interact(frame, rect)
+	focus_opt_click(frame, options.focus, x, y, w, height)
+	if interaction.hovered do request_cursor(frame, .POINTING_HAND)
+	toggled := interaction.clicked || focus_opt_activated(frame, options.focus)
+	if toggled do open^ = !open^
+	if focus_opt_focused(options.focus) do draw_focus_ring(frame, x, y, w, height)
+
+	pad := ui_frame_sc(frame, 10)
+	text_y := y + (height - font_size) / 2
+	indicator: cstring = "\u25BE" if open^ else "\u25B8"
+	indicator_w := measure_text_frame(frame, indicator, font_size)
+	draw_text_frame(frame, indicator, x + pad, text_y, font_size, style.fg_secondary)
+	left := x + pad + indicator_w + ui_frame_sc(frame, 6)
+	if options.icon != 0 {
+		draw_codepoint_frame(frame, options.icon, left, text_y, font_size, style.fg_accent)
+		left += rune_width_frame(frame, options.icon, font_size) + ui_frame_sc(frame, 6)
+	}
+	label_c := strings.clone_to_cstring(label, context.temp_allocator)
+	draw_text_frame(frame, label_c, left, text_y, font_size, style.fg_label)
+	label_w := measure_text_frame(frame, label_c, font_size)
+	right := x + w - pad
+	if len(options.right_label) > 0 {
+		right_c := strings.clone_to_cstring(options.right_label, context.temp_allocator)
+		right_w := measure_text_frame(frame, right_c, font_size)
+		draw_text_frame(frame, right_c, right - right_w, text_y, font_size, style.fg_secondary)
+		right -= right_w + ui_frame_sc(frame, 8)
+	}
+	line_x := left + label_w + ui_frame_sc(frame, 8)
+	if right > line_x do draw_rectangle(frame, line_x, y + height / 2, right - line_x, 1, style.border_subtle)
+	sem_state: Sem_State
+	if open^ do sem_state += {.Expanded}
+	semantic_push(
+		frame,
+		.Button,
+		{x, y, w, height},
+		label,
+		sem_state,
+		options.focus,
+		field_id = options.field_id,
+		widget = options.widget,
+	)
+	return {next_y = y + height, toggled = toggled}
+}
+
+// collapsible_header preserves the original compact label-and-chevron API.
 collapsible_header :: proc(
 	frame: ^Ui_Frame,
 	x, y, w: i32,
@@ -1458,51 +1529,15 @@ collapsible_header :: proc(
 	open: ^bool,
 	font_size: i32 = 0,
 	focus: Focus_Opt = {},
-) -> (
-	toggled: bool,
-) {
-	assert(open != nil, "collapsible_header: nil open state")
-	assert(w > 0, "collapsible_header: non-positive width")
-	metrics := ui_frame_metrics(frame)
-	style := ui_frame_theme(frame)
-	resolved_font_size := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
-	h := ui_frame_sc(frame, 26)
-	rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	it := interact(frame, rect)
-	hovered := it.hovered
-	focus_opt_click(frame, focus, x, y, w, h)
-	if hovered {
-		request_cursor(frame, .POINTING_HAND)
-	}
-	if it.clicked {
-		open^ = !open^
-		toggled = true
-	}
-	if focus_opt_activated(frame, focus) {
-		open^ = !open^
-		toggled = true
-	}
-	if focus_opt_focused(focus) {
-		draw_focus_ring(frame, x, y, w, h)
-	}
-	lbl := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text_frame(
+) -> bool {
+	result := collapsible_header_with(
 		frame,
-		lbl,
-		x + ui_frame_sc(frame, 10),
-		y + ui_frame_sc(frame, 6),
-		resolved_font_size,
-		style.fg_label,
+		x,
+		y,
+		w,
+		label,
+		open,
+		{font_size = font_size, focus = focus},
 	)
-	ind: cstring = "\u25BE" if open^ else "\u25B8"
-	iw := measure_text_frame(frame, ind, resolved_font_size)
-	draw_text_frame(
-		frame,
-		ind,
-		x + w - iw - ui_frame_sc(frame, 10),
-		y + ui_frame_sc(frame, 6),
-		resolved_font_size,
-		style.fg_primary if hovered else style.fg_secondary,
-	)
-	return
+	return result.toggled
 }

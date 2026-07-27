@@ -56,7 +56,10 @@ widget_id :: proc {
 
 id_context_reset :: proc(ids: ^Id_Context) {
 	assert(ids != nil, "id_context_reset: nil context")
-	ids.depth = 0
+	assert(ids.depth >= 0)
+	assert(ids.depth <= MAX_ID_DEPTH)
+	ids^ = {}
+	assert(ids.depth == 0)
 }
 
 id_context_parent :: proc(ids: ^Id_Context) -> Widget_Id {
@@ -89,6 +92,8 @@ id_context_push_id :: proc(ids: ^Id_Context, id: Widget_Id, loc := #caller_locat
 	ids.stack[ids.depth] = id
 	ids.origins[ids.depth] = loc
 	ids.depth += 1
+	assert(ids.depth > 0)
+	assert(ids.depth <= MAX_ID_DEPTH)
 }
 
 id_context_push_u64 :: proc(ids: ^Id_Context, value: u64, loc := #caller_location) {
@@ -110,6 +115,8 @@ id_context_pop :: proc(ids: ^Id_Context) {
 	ids.depth -= 1
 	ids.stack[ids.depth] = WIDGET_ID_NONE
 	ids.origins[ids.depth] = {}
+	assert(ids.depth >= 0)
+	assert(ids.depth < MAX_ID_DEPTH)
 }
 
 id_context_open_origin :: proc(ids: ^Id_Context) -> runtime.Source_Code_Location {

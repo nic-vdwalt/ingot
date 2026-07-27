@@ -21,7 +21,10 @@ route_begin_frame :: proc(frame: ^Ui_Frame) {
 	assert(state.cur.count >= 0 && state.cur.count <= MAX_ROUTE_CLAIMS)
 	state.prev = state.cur
 	state.cur = {}
-}
+	assert(state.prev.count >= 0)
+	assert(state.prev.count <= MAX_ROUTE_CLAIMS)
+	assert(state.cur.count == 0)
+
 
 route_claim :: proc(frame: ^Ui_Frame, rect: Rectangle) {
 	assert(frame != nil && frame.open, "route_claim: invalid frame")
@@ -33,16 +36,21 @@ route_claim :: proc(frame: ^Ui_Frame, rect: Rectangle) {
 	}
 	state.cur.rects[state.cur.count] = rect
 	state.cur.count += 1
+	assert(state.cur.count > 0)
+	assert(state.cur.count <= MAX_ROUTE_CLAIMS)
 }
 
 route_claim_all :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "route_claim_all: invalid frame")
 	frame.route.cur.all = true
+	assert(frame.route.cur.all)
 }
 
 route_reset :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil, "route_reset: nil frame")
 	frame.route = {}
+	assert(frame.route.prev.count == 0)
+	assert(frame.route.cur.count == 0)
 }
 
 route_occluded_in :: proc(claims: Route_Claims, point: Vector2) -> bool {

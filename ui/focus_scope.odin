@@ -27,6 +27,8 @@ focus_scope_begin :: proc(frame: ^Ui_Frame, id: Focus_Scope_Id, priority: i32) {
 		priority = priority,
 	}
 	stack.count += 1
+	assert(stack.count > 0)
+	assert(stack.count <= MAX_SEM_FOCUS_SCOPES)
 }
 
 focus_scope_end :: proc(frame: ^Ui_Frame, id: Focus_Scope_Id) {
@@ -36,6 +38,8 @@ focus_scope_end :: proc(frame: ^Ui_Frame, id: Focus_Scope_Id) {
 	assert(stack.count > 0, "focus_scope_end: no active scope")
 	assert(stack.entries[stack.count - 1].id == id, "focus_scope_end: mismatched scope")
 	stack.count -= 1
+	assert(stack.count >= 0)
+	assert(stack.count < MAX_SEM_FOCUS_SCOPES)
 }
 
 focus_scope_current :: proc(frame: ^Ui_Frame) -> Focus_Scope_Stamp {
@@ -154,6 +158,8 @@ focus_scope_frame_end :: proc(frame: ^Ui_Frame) {
 	}
 	state.cycle_requested = false
 	state.cycle_backwards = false
+	assert(!state.cycle_requested)
+	assert(!state.cycle_backwards)
 }
 
 focus_scope_clear_live :: proc(frame: ^Ui_Frame) {
@@ -165,4 +171,7 @@ focus_scope_clear_live :: proc(frame: ^Ui_Frame) {
 	frame.semantics.focus_cur.count = 0
 	frame.semantics.action_targets.count = 0
 	frame.semantics.focus_scopes.count = 0
+	assert(frame.semantics.focus_cur.count == 0)
+	assert(frame.semantics.action_targets.count == 0)
+	assert(frame.semantics.focus_scopes.count == 0)
 }
