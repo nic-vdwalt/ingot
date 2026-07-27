@@ -71,14 +71,15 @@ when CAPTURE {
 
 	// The README set: one shot per visually distinct area, in both themes so a
 	// reader can see the theme system is real rather than a recolour.
+	// The README set. Chosen for density: sections whose intrinsic content fills
+	// the frame at CAPTURE_UI_SCALE. Layout, Markdown, and Overlay are captured
+	// by the sequence pass instead — as stills they leave half the frame empty,
+	// which reads as an unfinished framework rather than a focused one.
 	CAPTURE_SHOTS := [?]Capture_Shot {
 		{"gallery-widgets-dark.png", .Widgets, true},
+		{"gallery-charts-dark.png", .Charts, true},
 		{"gallery-buttons-light.png", .Buttons, false},
 		{"gallery-inputs-light.png", .Inputs, false},
-		{"gallery-charts-dark.png", .Charts, true},
-		{"gallery-layout-dark.png", .Layout, true},
-		{"gallery-markdown-light.png", .Markdown, false},
-		{"gallery-overlay-dark.png", .Overlay, true},
 		{"gallery-stress-dark.png", .Stress, true},
 	}
 
@@ -145,7 +146,6 @@ when CAPTURE {
 			&input_state.notes,
 			"Immediate mode all the way up: the caller owns this text, undo, and selection.",
 		)
-		fmt.printfln("capture: seeded name=%q", ui.input_box_text(&input_state.name))
 	}
 
 	// capture_write saves the settled render target and advances the script.
