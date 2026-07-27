@@ -62,6 +62,20 @@ _affine_translated :: proc "contextless" (m: Affine, x, y: f32) -> Affine {
 	return result
 }
 
+// _affine_compose returns the transform that applies `inner` first and `outer`
+// second, so composing a rotation onto an active camera keeps the camera.
+@(private)
+_affine_compose :: proc "contextless" (outer, inner: Affine) -> Affine {
+	return Affine {
+		a = outer.a * inner.a + outer.c * inner.b,
+		b = outer.b * inner.a + outer.d * inner.b,
+		c = outer.a * inner.c + outer.c * inner.d,
+		d = outer.b * inner.c + outer.d * inner.d,
+		tx = outer.a * inner.tx + outer.c * inner.ty + outer.tx,
+		ty = outer.b * inner.tx + outer.d * inner.ty + outer.ty,
+	}
+}
+
 // _affine_from_camera_2d builds raylib's Camera2D transform:
 //
 //	p' = rotate(zoom * (p - target)) + offset

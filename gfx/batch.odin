@@ -609,9 +609,10 @@ _batch_reserve :: proc(r: ^Renderer, vertex_count, index_count: int) -> bool {
 
 // push_quad emits two triangles for rect `d` sampling uv rect `s`.
 //
-// A rectangle survives the model transform as a rectangle only while the
-// transform does not mix the axes, so a rotating transform (BeginMode2D with a
-// rotation) hands the four corners to push_quad4 instead.
+// The push_* procedures are the frame-guarded entry points; the _emit_*
+// procedures below them do the geometry. Splitting the two keeps the model
+// transform testable against a bare Renderer, with no shared frame state for
+// concurrent tests to race on.
 @(private)
 push_quad :: proc(
 	r: ^Renderer,
@@ -621,10 +622,27 @@ push_quad :: proc(
 	mode: Vertex_Mode = .Solid,
 ) {
 	if !g.frame.has_frame do return
+	_emit_quad(r, d, s, col, mode)
+}
+
+// _emit_quad transforms and appends a rectangle.
+//
+// A rectangle survives the model transform as a rectangle only while the
+// transform does not mix the axes, so a rotating transform (BeginMode2D with a
+// rotation) hands the four corners to the general quad path instead.
+@(private)
+_emit_quad :: proc(
+	r: ^Renderer,
+	d: Rectangle,
+	s: Rectangle,
+	col: [4]f32,
+	mode: Vertex_Mode = .Solid,
+) {
+	assert(r != nil, "_emit_quad: nil renderer")
 	u0, v0 := s.x, s.y
 	u1, v1 := s.x + s.width, s.y + s.height
 	if _affine_rotates(r.model_xf) {
-		push_quad4(
+		_emit_quad4(
 			r,
 			{d.x, d.y},
 			{d.x + d.width, d.y},
@@ -658,6 +676,12 @@ push_quad :: proc(
 @(private)
 push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 	if !g.frame.has_frame do return
+	_emit_tri(r, a, b, c, col)
+}
+
+@(private)
+_emit_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
+	assert(r != nil, "_emit_tri: nil renderer")
 	if !_batch_reserve(r, 3, 3) do return
 	pa := _affine_apply(r.model_xf, a)
 	pb := _affine_apply(r.model_xf, b)
@@ -683,6 +707,18 @@ push_quad4 :: proc(
 	mode: Vertex_Mode = .Solid,
 ) {
 	if !g.frame.has_frame do return
+	_emit_quad4(r, tl, tr, br, bl, uv_tl, uv_tr, uv_br, uv_bl, col, mode)
+}
+
+@(private)
+_emit_quad4 :: proc(
+	r: ^Renderer,
+	tl, tr, br, bl: [2]f32,
+	uv_tl, uv_tr, uv_br, uv_bl: [2]f32,
+	col: [4]f32,
+	mode: Vertex_Mode = .Solid,
+) {
+	assert(r != nil, "_emit_quad4: nil renderer")
 	if !_batch_reserve(r, 4, 6) do return
 	tlo := _affine_apply(r.model_xf, tl)
 	tro := _affine_apply(r.model_xf, tr)

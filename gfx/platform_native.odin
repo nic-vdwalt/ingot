@@ -185,6 +185,22 @@ platform_set_window_size :: proc(w, h: i32) {
 }
 
 @(private)
+platform_set_window_title :: proc(title: cstring) {
+	if g.win != nil do glfw.SetWindowTitle(_win(), title)
+}
+
+@(private)
+platform_set_window_position :: proc(x, y: i32) {
+	if g.win != nil do glfw.SetWindowPos(_win(), x, y)
+}
+
+@(private)
+platform_window_position :: proc() -> (i32, i32) {
+	if g.win == nil do return 0, 0
+	return glfw.GetWindowPos(_win())
+}
+
+@(private)
 platform_monitor_refresh_rate :: proc() -> i32 {
 	m := glfw.GetPrimaryMonitor()
 	if m == nil do return 60

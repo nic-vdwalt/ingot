@@ -71,10 +71,13 @@ cam2d: Camera2D
 // The mode does not nest (raylib's does not either). The previous transform is
 // saved so a camera composed on top of an rlgl matrix-stack offset restores
 // that offset rather than resetting to identity.
+//
+// The batch is flushed on entry and exit, matching the .Matrix flush the rlgl
+// matrix stack already performs, so a camera change is a visible draw-call
+// boundary in the renderer stats.
 BeginMode2D :: proc(camera: Camera2D) {
 	assert(!cam2d_active, "BeginMode2D: already inside a 2D camera mode")
-	// Order geometry drawn under the old transform before the new one.
-	FlushBatch()
+	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
 	cam2d_saved = g.rend.model_xf
 	cam2d = camera
 	g.rend.model_xf = _affine_from_camera_2d(camera)
@@ -83,7 +86,7 @@ BeginMode2D :: proc(camera: Camera2D) {
 
 EndMode2D :: proc() {
 	assert(cam2d_active, "EndMode2D: no active 2D camera mode")
-	FlushBatch()
+	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
 	g.rend.model_xf = cam2d_saved
 	cam2d_saved = {}
 	cam2d = {}

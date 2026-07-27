@@ -304,23 +304,29 @@ DrawCircleLinesV :: proc(center: Vector2, radius: f32, color: Color) {
 _gradient_quad :: proc(rec: Rectangle, tl, tr, br, bl: [4]f32) {
 	if !g.frame.has_frame do return
 	batch_set(&g.rend, .Solid, nil)
-	if !_batch_reserve(&g.rend, 4, 6) do return
-	transform := g.rend.model_xf
+	_emit_gradient_quad(&g.rend, rec, tl, tr, br, bl)
+}
+
+@(private)
+_emit_gradient_quad :: proc(r: ^Renderer, rec: Rectangle, tl, tr, br, bl: [4]f32) {
+	assert(r != nil, "_emit_gradient_quad: nil renderer")
+	if !_batch_reserve(r, 4, 6) do return
+	transform := r.model_xf
 	x0, y0 := rec.x, rec.y
 	x1, y1 := rec.x + rec.width, rec.y + rec.height
 	p_tl := _affine_apply(transform, {x0, y0})
 	p_tr := _affine_apply(transform, {x1, y0})
 	p_br := _affine_apply(transform, {x1, y1})
 	p_bl := _affine_apply(transform, {x0, y1})
-	base := u32(len(g.rend.verts))
+	base := u32(len(r.verts))
 	append(
-		&g.rend.verts,
+		&r.verts,
 		Vertex{p_tl, tl, {0, 0}, .Solid},
 		Vertex{p_bl, bl, {0, 0}, .Solid},
 		Vertex{p_tr, tr, {0, 0}, .Solid},
 		Vertex{p_br, br, {0, 0}, .Solid},
 	)
-	append(&g.rend.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
+	append(&r.indices, base, base + 1, base + 2, base + 2, base + 1, base + 3)
 }
 
 // DrawRectangleGradientH draws a rect with a left→right color gradient.
@@ -339,8 +345,157 @@ DrawRectangleGradientV :: proc(posX, posY, width, height: i32, top, bottom: Colo
 	_gradient_quad(rec, ct, ct, cb, cb)
 }
 
-// DrawRectangleGradientEx draws a rect with an independent color per corner,
-// in raylib's order: top-left, bottom-left, bottom-right, top-right.
-DrawRectangleGradientEx :: proc(rec: Rectangle, col1, col2, col3, col4: Color) {
-	_gradient_quad(rec, col_f(col1), col_f(col4), col_f(col3), col_f(col2))
+// DrawRectangleGradientEx draws a rect with an independent color per corner.
+// raylib's parameter order is topLeft, bottomLeft, topRight, bottomRight.
+DrawRectangleGradientEx :: proc(
+	rec: Rectangle,
+	topLeft, bottomLeft, topRight, bottomRight: Color,
+) {
+	_gradient_quad(rec, col_f(topLeft), col_f(topRight), col_f(bottomRight), col_f(bottomLeft))
+}
+
+// --- pixels ----------------------------------------------------------------
+
+DrawPixel :: proc(posX, posY: i32, color: Color) {
+	DrawPixelV({f32(posX), f32(posY)}, color)
+}
+
+DrawPixelV :: proc(position: Vector2, color: Color) {
+	_rect(position.x, position.y, 1, 1, color)
+}
+
+// --- ellipses --------------------------------------------------------------
+
+// _polar_ellipse is _polar with independent radii, for ellipse and sector work.
+@(private)
+_polar_ellipse :: proc(center: Vector2, radiusH, radiusV, deg: f32) -> [2]f32 {
+	rad := deg * math.PI / 180.0
+	return {center.x + radiusH * math.cos(rad), center.y + radiusV * math.sin(rad)}
+}
+
+// _ellipse_segments picks a tessellation fine enough for the larger radius, so
+// a wide flat ellipse does not become visibly polygonal along its long axis.
+@(private)
+_ellipse_segments :: proc(radiusH, radiusV: f32) -> i32 {
+	return i32(max(16, max(abs(radiusH), abs(radiusV))))
+}
+
+DrawEllipse :: proc(centerX, centerY: i32, radiusH, radiusV: f32, color: Color) {
+	center := Vector2{f32(centerX), f32(centerY)}
+	segments := _ellipse_segments(radiusH, radiusV)
+	c := col_f(color)
+	batch_set(&g.rend, .Solid, nil)
+	step := 360.0 / f32(segments)
+	prev := _polar_ellipse(center, radiusH, radiusV, 0)
+	for i in 1 ..= segments {
+		cur := _polar_ellipse(center, radiusH, radiusV, step * f32(i))
+		push_tri(&g.rend, center, prev, cur, c)
+		prev = cur
+	}
+}
+
+DrawEllipseLines :: proc(centerX, centerY: i32, radiusH, radiusV: f32, color: Color) {
+	center := Vector2{f32(centerX), f32(centerY)}
+	segments := _ellipse_segments(radiusH, radiusV)
+	step := 360.0 / f32(segments)
+	prev := _polar_ellipse(center, radiusH, radiusV, 0)
+	for i in 1 ..= segments {
+		cur := _polar_ellipse(center, radiusH, radiusV, step * f32(i))
+		DrawLineEx(prev, cur, 1, color)
+		prev = cur
+	}
+}
+
+// --- circle sectors --------------------------------------------------------
+
+DrawCircleSector :: proc(
+	center: Vector2,
+	radius: f32,
+	startAngle, endAngle: f32,
+	segments: i32,
+	color: Color,
+) {
+	segs := max(segments, 1)
+	batch_set(&g.rend, .Solid, nil)
+	_corner_fan(&g.rend, center, radius, startAngle, endAngle, segs, col_f(color))
+}
+
+// DrawCircleSectorLines outlines the sector: the arc plus the two radii that
+// close it back to the center, which is what makes it a sector rather than an
+// arc.
+DrawCircleSectorLines :: proc(
+	center: Vector2,
+	radius: f32,
+	startAngle, endAngle: f32,
+	segments: i32,
+	color: Color,
+) {
+	segs := max(segments, 1)
+	step := (endAngle - startAngle) / f32(segs)
+	first := _polar(center, radius, startAngle)
+	prev := first
+	for i in 1 ..= segs {
+		cur := _polar(center, radius, startAngle + step * f32(i))
+		DrawLineEx(prev, cur, 1, color)
+		prev = cur
+	}
+	DrawLineEx(center, first, 1, color)
+	DrawLineEx(center, prev, 1, color)
+}
+
+// --- regular polygons ------------------------------------------------------
+
+DrawPoly :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color: Color) {
+	if sides < 3 do return
+	batch_set(&g.rend, .Solid, nil)
+	_corner_fan(&g.rend, center, radius, rotation, rotation + 360, sides, col_f(color))
+}
+
+DrawPolyLines :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color: Color) {
+	DrawPolyLinesEx(center, sides, radius, rotation, 1, color)
+}
+
+DrawPolyLinesEx :: proc(
+	center: Vector2,
+	sides: i32,
+	radius: f32,
+	rotation: f32,
+	lineThick: f32,
+	color: Color,
+) {
+	if sides < 3 do return
+	step := 360.0 / f32(sides)
+	prev := _polar(center, radius, rotation)
+	for i in 1 ..= sides {
+		cur := _polar(center, radius, rotation + step * f32(i))
+		DrawLineEx(prev, cur, lineThick, color)
+		prev = cur
+	}
+}
+
+// --- triangle fans and strips ----------------------------------------------
+
+// DrawTriangleFan draws points[0] joined to every consecutive pair after it.
+DrawTriangleFan :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
+	if points == nil || pointCount < 3 do return
+	c := col_f(color)
+	batch_set(&g.rend, .Solid, nil)
+	for i in 1 ..< pointCount - 1 {
+		push_tri(&g.rend, points[0], points[i], points[i + 1], c)
+	}
+}
+
+// DrawTriangleStrip draws each consecutive triple, alternating winding so the
+// strip stays consistently oriented the way raylib's does.
+DrawTriangleStrip :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
+	if points == nil || pointCount < 3 do return
+	c := col_f(color)
+	batch_set(&g.rend, .Solid, nil)
+	for i in 2 ..< pointCount {
+		if i % 2 == 0 {
+			push_tri(&g.rend, points[i], points[i - 2], points[i - 1], c)
+		} else {
+			push_tri(&g.rend, points[i], points[i - 1], points[i - 2], c)
+		}
+	}
 }

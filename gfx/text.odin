@@ -387,6 +387,43 @@ DrawTextCodepoint :: proc(
 	DrawTextEx(font, cstring(raw_data(s)), position, fontSize, 0, tint)
 }
 
+// DrawTextPro draws text rotated by `rotation` degrees about `origin`, which
+// is given relative to `position`.
+//
+// It composes onto the batch model transform rather than rotating glyph quads
+// itself, so a rotated label inside a BeginMode2D camera rotates with the
+// camera instead of fighting it. No flush is needed around the change: the
+// transform is baked into each vertex as it is emitted, so geometry already in
+// the batch keeps the transform it was drawn under.
+DrawTextPro :: proc(
+	font: Font,
+	text: cstring,
+	position, origin: Vector2,
+	rotation, fontSize, spacing: f32,
+	tint: Color,
+) {
+	if rotation == 0 {
+		DrawTextEx(
+			font,
+			text,
+			{position.x - origin.x, position.y - origin.y},
+			fontSize,
+			spacing,
+			tint,
+		)
+		return
+	}
+	saved := g.rend.model_xf
+	defer g.rend.model_xf = saved
+
+	// Rotate about `position`, then place the text so `origin` lands there.
+	pivot := _affine_from_camera_2d(
+		Camera2D{offset = position, target = position, rotation = rotation, zoom = 1},
+	)
+	g.rend.model_xf = _affine_compose(saved, pivot)
+	DrawTextEx(font, text, {position.x - origin.x, position.y - origin.y}, fontSize, spacing, tint)
+}
+
 MeasureTextEx :: proc(font: Font, text: cstring, fontSize, spacing: f32) -> Vector2 {
 	a := get_atlas(font._atlas)
 	if a == nil do return {0, 0}
