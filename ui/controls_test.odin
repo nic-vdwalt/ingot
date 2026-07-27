@@ -61,6 +61,49 @@ context_menu_height_counts_rows :: proc(t: ^testing.T) {
 }
 
 @(test)
+checkbox_and_radio_labels_stay_inside_their_rect :: proc(t: ^testing.T) {
+	// A caller-sized row (e.g. a fixed-width map overlay panel) must never let
+	// a long label paint past its own rect and onto whatever is behind it.
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	state := Test_Text_Backend_State {
+		advance = 8,
+	}
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	rect := Rect_I32{0, 0, 120, 22}
+	checked := false
+	selected: i32 = 0
+	_ = checkbox_at(&frame, rect, "Municipality screening", &checked)
+	_ = radio_at(&frame, {rect.x, 40, rect.w, rect.h}, "Municipality screening", &selected, 0)
+	ui_frame_end(&frame)
+
+	labels := 0
+	for index in 0 ..< output.main.count {
+		command := output.main.commands[index]
+		if command.kind != .Text do continue
+		labels += 1
+		drawn := paint_text(&output.main, command)
+		width := f32(len(drawn)) * state.advance
+		testing.expect(t, len(drawn) < len("Municipality screening"), "label was not truncated")
+		testing.expect(
+			t,
+			command.p0.x + width <= f32(rect.x + rect.w),
+			"label paints past its rect",
+		)
+	}
+	testing.expect_value(t, labels, 2)
+}
+
+@(test)
 theme_palettes_define_widget_colors :: proc(t: ^testing.T) {
 	// Every color the new widgets rely on must be present in both built-in
 	// palettes; a zero-alpha entry renders the control invisible.
