@@ -5,6 +5,8 @@ Vector2 :: Vec2
 
 Color :: distinct [4]u8
 
+// Rect is the float paint rectangle: the renderer interpolates positions and
+// sizes, so paint commands and hit tests carry subpixel precision.
 Rect :: struct {
 	x:      f32,
 	y:      f32,
@@ -12,6 +14,19 @@ Rect :: struct {
 	height: f32,
 }
 Rectangle :: Rect
+
+// Rect_I32 is the integer-pixel layout rectangle. Layout must land on whole
+// device pixels or repeated division drifts, so slots, containers, and widget
+// geometry stay integral and convert to Rect only at the paint boundary.
+Rect_I32 :: struct {
+	x, y, w, h: i32,
+}
+
+// rect_f32 converts a layout rect to a paint rect at the one boundary where
+// integer geometry meets the renderer.
+rect_f32 :: proc(rect: Rect_I32) -> Rect {
+	return {f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+}
 
 Font_Id :: distinct u32
 

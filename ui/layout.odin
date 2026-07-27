@@ -19,10 +19,7 @@ MAX_LAYOUT_WEIGHTS :: 32
 // MAX_LAYOUT_FLEX bounds one flex declaration to fixed caller-owned storage.
 MAX_LAYOUT_FLEX :: 32
 
-// Rect_I32 is an integer-pixel rect matching the x/y/w/h widget convention.
-Rect_I32 :: struct {
-	x, y, w, h: i32,
-}
+// Rect_I32 and its float paint counterpart live in types.odin.
 
 Insets_I32 :: struct {
 	left, top, right, bottom: i32,
@@ -144,7 +141,7 @@ fit_column_begin :: proc(column: ^Fit_Column, x, y, w: i32, gap: i32 = 0) {
 }
 
 // fit_column_begin_bounded limits the column to max_h pixels. Rows that do not
-// fit are returned with zero height (ui_slot_visible reports them as invisible,
+// fit are returned with zero height (slot_visible reports them as invisible,
 // so widgets skip them) and their lost pixels accumulate in fit_column_overflow.
 //
 // Why clamp rather than assert: max_h is typically computed as
@@ -258,25 +255,25 @@ Layout_Style :: struct {
 	align:   Cross_Align,
 }
 
-Flex_Kind :: enum u8 {
+Track_Kind :: enum u8 {
 	Fit,
 	Grow,
 	Fixed,
 	Percent,
 }
 
-// Flex_Size describes one sibling on the active frame's main axis. max_size
-// is inclusive; zero means unbounded so the zero value remains useful.
-Flex_Size :: struct {
-	kind:     Flex_Kind,
+// Track describes one sibling on the active frame's main axis. max_size is
+// inclusive; zero means unbounded so the zero value remains useful. A Track is
+// unit-agnostic: the facade tier hands it logical units and scales it once,
+// the Layout tier hands it device pixels.
+Track :: struct {
+	kind:     Track_Kind,
 	basis:    i32,
 	weight:   i32,
 	percent:  f32,
 	min_size: i32,
 	max_size: i32,
 }
-
-Layout_Size :: Flex_Size
 
 Layout_Frame :: struct {
 	kind:         Layout_Kind,
@@ -301,39 +298,33 @@ Layout :: struct {
 	depth: int,
 }
 
-// flex_fit uses a caller-measured intrinsic size and may compress to min_size.
-flex_fit :: proc(intrinsic: i32, min_size: i32 = 0, max_size: i32 = 0) -> Flex_Size {
-	assert(intrinsic >= 0, "flex_fit: negative intrinsic size")
-	assert(
-		min_size >= 0 && (max_size == 0 || max_size >= min_size),
-		"flex_fit: invalid constraints",
-	)
-	return Flex_Size{kind = .Fit, basis = intrinsic, min_size = min_size, max_size = max_size}
+// fit uses a caller-measured intrinsic size and may compress to min_size.
+fit :: proc(basis: i32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(basis >= 0, "fit: negative basis")
+	assert(min_size >= 0, "fit: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "fit: invalid maximum")
+	return Track{kind = .Fit, basis = basis, min_size = min_size, max_size = max_size}
 }
 
-// flex_grow shares free space by weight after fixed, fit, and percent bases.
-flex_grow :: proc(weight: i32 = 1, min_size: i32 = 0, max_size: i32 = 0) -> Flex_Size {
-	assert(weight > 0, "flex_grow: weight must be positive")
-	assert(
-		min_size >= 0 && (max_size == 0 || max_size >= min_size),
-		"flex_grow: invalid constraints",
-	)
-	return Flex_Size{kind = .Grow, weight = weight, min_size = min_size, max_size = max_size}
+// grow shares free space by weight after fixed, fit, and percent bases.
+grow :: proc(weight: i32 = 1, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(weight > 0, "grow: weight must be positive")
+	assert(min_size >= 0, "grow: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "grow: invalid maximum")
+	return Track{kind = .Grow, weight = weight, min_size = min_size, max_size = max_size}
 }
 
-flex_fixed :: proc(size: i32) -> Flex_Size {
-	assert(size >= 0, "flex_fixed: negative size")
-	return Flex_Size{kind = .Fixed, basis = size, min_size = size, max_size = size}
+fixed :: proc(size: i32) -> Track {
+	assert(size >= 0, "fixed: negative size")
+	return Track{kind = .Fixed, basis = size, min_size = size, max_size = size}
 }
 
-// flex_percent uses a fraction of remaining frame space after inter-item gaps.
-flex_percent :: proc(percent: f32, min_size: i32 = 0, max_size: i32 = 0) -> Flex_Size {
-	assert(percent >= 0 && percent <= 1, "flex_percent: percent outside 0..1")
-	assert(
-		min_size >= 0 && (max_size == 0 || max_size >= min_size),
-		"flex_percent: invalid constraints",
-	)
-	return Flex_Size{kind = .Percent, percent = percent, min_size = min_size, max_size = max_size}
+// percent uses a fraction of remaining frame space after inter-item gaps.
+percent :: proc(value: f32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(value >= 0 && value <= 1, "percent: value outside 0..1")
+	assert(min_size >= 0, "percent: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "percent: invalid maximum")
+	return Track{kind = .Percent, percent = value, min_size = min_size, max_size = max_size}
 }
 
 // layout_begin opens the root column over the given area. Must be balanced
@@ -433,7 +424,7 @@ layout_pop :: proc(l: ^Layout) {
 }
 
 // flex_begin resolves one bounded sibling sequence before any child is drawn.
-flex_begin :: proc(l: ^Layout, sizes: []Flex_Size) {
+flex_begin :: proc(l: ^Layout, sizes: []Track) {
 	assert(l.depth > 0, "flex_begin: layout not begun")
 	assert(len(sizes) > 0 && len(sizes) <= MAX_LAYOUT_FLEX, "flex_begin: count out of bounds")
 	f := _top(l)
@@ -445,10 +436,30 @@ flex_begin :: proc(l: ^Layout, sizes: []Flex_Size) {
 	_flex_resolve(f, sizes, space)
 }
 
+// flex_end closes a declared run. flex_next_sized auto-terminates a fully
+// consumed run, so this exists to fail an *under*-consumed one at the call
+// site rather than several frames later inside layout_pop.
+flex_end :: proc(l: ^Layout) {
+	assert(l != nil, "flex_end: nil l")
+	assert(l.depth > 0, "flex_end: layout not begun")
+	f := _top(l)
+	assert(f.flex_index == f.flex_count, "flex_end: declared flex sizes not fully consumed")
+	f.flex_count = 0
+	f.flex_index = 0
+}
+
 layout_flex_active :: proc(l: ^Layout) -> bool {
 	assert(l != nil, "layout_flex_active: nil layout")
 	assert(l.depth > 0, "layout_flex_active: layout not begun")
 	return _top(l).flex_count > 0
+}
+
+// layout_cross_align reports the active frame's cross-axis alignment so the
+// facade tier can branch on it without reaching into the frame stack.
+layout_cross_align :: proc(l: ^Layout) -> Cross_Align {
+	assert(l != nil, "layout_cross_align: nil layout")
+	assert(l.depth > 0, "layout_cross_align: layout not begun")
+	return _top(l).cross_align
 }
 
 // flex_next emits the next pre-resolved sibling using ordinary cursor advance.
@@ -630,7 +641,7 @@ _flex_clamp :: proc(size, min_size, max_size: i32) -> i32 {
 }
 
 @(private = "file")
-_flex_compress :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Flex_Size, overflow: i32) {
+_flex_compress :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Track, overflow: i32) {
 	assert(resolved != nil, "_flex_compress: nil sizes")
 	assert(overflow > 0, "_flex_compress: non-positive overflow")
 	capacity: i64
@@ -655,7 +666,7 @@ _flex_compress :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Flex_Size, over
 }
 
 @(private = "file")
-_flex_expand :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Flex_Size, free: i32) {
+_flex_expand :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Track, free: i32) {
 	assert(resolved != nil, "_flex_expand: nil sizes")
 	assert(free > 0, "_flex_expand: non-positive free space")
 	remaining_free := free
@@ -689,7 +700,7 @@ _flex_expand :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Flex_Size, free: 
 }
 
 @(private = "file")
-_flex_resolve :: proc(f: ^Layout_Frame, sizes: []Flex_Size, space: i32) {
+_flex_resolve :: proc(f: ^Layout_Frame, sizes: []Track, space: i32) {
 	assert(f != nil, "_flex_resolve: nil frame")
 	assert(space >= 0 && len(sizes) <= MAX_LAYOUT_FLEX, "_flex_resolve: invalid input")
 	total: i64

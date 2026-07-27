@@ -204,7 +204,7 @@ layout_flex_fixed_fit_grow :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 400, 40)
 	push_row(&l, 40, gap = 10)
-	flex_begin(&l, {flex_fixed(80), flex_fit(100), flex_grow()})
+	flex_begin(&l, {fixed(80), fit(100), grow()})
 	a := flex_next(&l)
 	b := flex_next(&l)
 	c := flex_next(&l)
@@ -220,7 +220,7 @@ layout_flex_percent_uses_content_space :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 400, 40)
 	push_row(&l, 40, gap = 10)
-	flex_begin(&l, {flex_percent(0.25), flex_grow()})
+	flex_begin(&l, {percent(0.25), grow()})
 	a := flex_next(&l)
 	b := flex_next(&l)
 	layout_pop(&l)
@@ -234,7 +234,7 @@ layout_flex_grow_respects_weight_and_max :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 500, 40)
 	push_row(&l, 40)
-	flex_begin(&l, {flex_grow(1, max_size = 100), flex_grow(1), flex_grow(2)})
+	flex_begin(&l, {grow(1, max_size = 100), grow(1), grow(2)})
 	a := flex_next(&l)
 	b := flex_next(&l)
 	c := flex_next(&l)
@@ -250,7 +250,7 @@ layout_flex_compresses_fit_to_minimum :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 180, 40)
 	push_row(&l, 40)
-	flex_begin(&l, {flex_fixed(100), flex_fit(120, min_size = 40)})
+	flex_begin(&l, {fixed(100), fit(120, min_size = 40)})
 	a := flex_next(&l)
 	b := flex_next(&l)
 	layout_pop(&l)
@@ -265,12 +265,7 @@ layout_flex_constraints_rounding_and_column :: proc(t: ^testing.T) {
 	layout_begin(&l, 0, 0, 40, 303, gap = 1)
 	flex_begin(
 		&l,
-		{
-			flex_fit(100, max_size = 60),
-			flex_percent(0.5, max_size = 80),
-			flex_grow(1),
-			flex_grow(2),
-		},
+		{fit(100, max_size = 60), percent(0.5, max_size = 80), grow(1), grow(2)},
 	)
 	a := flex_next(&l)
 	b := flex_next(&l)
@@ -288,7 +283,7 @@ layout_flex_overflow_clips_and_reuses_layout :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 100, 20)
 	push_row(&l, 20)
-	flex_begin(&l, {flex_fixed(80), flex_fixed(80), flex_grow()})
+	flex_begin(&l, {fixed(80), fixed(80), grow()})
 	a := flex_next(&l)
 	b := flex_next(&l)
 	c := flex_next(&l)
@@ -300,7 +295,7 @@ layout_flex_overflow_clips_and_reuses_layout :: proc(t: ^testing.T) {
 
 	layout_begin(&l, 0, 0, 100, 20)
 	push_row(&l, 20)
-	flex_begin(&l, {flex_fixed(20)})
+	flex_begin(&l, {fixed(20)})
 	_ = flex_next(&l)
 	row_weights(&l, {1, 1})
 	d := next_weighted(&l, 1)

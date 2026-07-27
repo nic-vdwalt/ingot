@@ -644,8 +644,6 @@ btn :: proc {
 	btn_at_state,
 	btn_ui,
 	btn_ui_id,
-	btn_ui_state,
-	btn_ui_state_id,
 }
 
 button :: proc(
@@ -658,8 +656,8 @@ button :: proc(
 	assert(u != nil && u.open, "button: frame not open")
 	assert(id != WIDGET_ID_NONE, "button: zero stable id")
 	assert(label != "", "button: empty accessible label")
-	r := btn_ui_slot(u, label)
-	focus := ui_focus(u, id) if enabled && ui_slot_visible(r) else Focus_Opt{}
+	r := btn_slot_px(u, label)
+	focus := focus(u, id) if enabled && slot_visible(r) else Focus_Opt{}
 	return btn_at(
 		u.frame,
 		r.x,
@@ -703,12 +701,12 @@ button_at :: proc(
 }
 
 @(private = "file")
-btn_ui_slot :: proc(u: ^Ui, label: string) -> Rect_I32 {
-	assert(u != nil && u.frame != nil, "btn_ui_slot: invalid UI")
+btn_slot_px :: proc(u: ^Ui, label: string) -> Rect_I32 {
+	assert(u != nil && u.frame != nil, "btn_slot_px: invalid UI")
 	metrics := ui_frame_metrics(u.frame)
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	width := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
-	assert(width > 0, "btn_ui_slot: invalid width")
+	assert(width > 0, "btn_slot_px: invalid width")
 	return slot_next_px(u, width, metrics.ROW_H_MD)
 }
 
@@ -720,8 +718,8 @@ btn_ui :: proc(
 	enabled: bool = true,
 ) -> bool {
 	assert(u != nil, "btn_ui: nil u")
-	r := btn_ui_slot(u, label)
-	fo := ui_focus(u) if enabled && ui_slot_visible(r) else Focus_Opt{}
+	r := btn_slot_px(u, label)
+	fo := focus_sequential(u) if enabled && slot_visible(r) else Focus_Opt{}
 	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
 }
 
@@ -733,68 +731,11 @@ btn_ui_id :: proc(
 	enabled: bool = true,
 ) -> bool {
 	assert(u != nil, "btn_ui_id: nil u")
-	r := btn_ui_slot(u, label)
-	visible := ui_slot_visible(r)
-	fo := ui_focus(u, id) if enabled && visible else Focus_Opt{}
+	r := btn_slot_px(u, label)
+	visible := slot_visible(r)
+	fo := focus(u, id) if enabled && visible else Focus_Opt{}
 	return btn_at(
 		u.frame,
-		r.x,
-		r.y,
-		r.w,
-		r.h,
-		label,
-		style,
-		enabled = enabled,
-		focus = fo,
-		widget = id,
-	)
-}
-
-// Deprecated: no caller across any consumer has needed Button_State together
-// with auto-layout. Use btn_at_state with an explicit rect, or btn_ui when the
-// press animation state is not required.
-@(deprecated = "btn_ui_state is unused; prefer btn_at_state with an explicit rect")
-btn_ui_state :: proc(
-	u: ^Ui,
-	state: ^Button_State,
-	label: string,
-	style: Btn_Style = .Secondary,
-	enabled: bool = true,
-) -> bool {
-	assert(state != nil, "btn_ui_state: nil state")
-	r := btn_ui_slot(u, label)
-	fo := ui_focus(u) if enabled && ui_slot_visible(r) else Focus_Opt{}
-	return btn_at_state(
-		u.frame,
-		state,
-		r.x,
-		r.y,
-		r.w,
-		r.h,
-		label,
-		style,
-		enabled = enabled,
-		focus = fo,
-	)
-}
-
-// Deprecated: see btn_ui_state. Use btn_at_state with an explicit rect and a
-// stable Focus_Id.
-@(deprecated = "btn_ui_state_id is unused; prefer btn_at_state with an explicit rect")
-btn_ui_state_id :: proc(
-	u: ^Ui,
-	id: Widget_Id,
-	state: ^Button_State,
-	label: string,
-	style: Btn_Style = .Secondary,
-	enabled: bool = true,
-) -> bool {
-	assert(state != nil, "btn_ui_state_id: nil state")
-	r := btn_ui_slot(u, label)
-	fo := ui_focus(u, id) if enabled && ui_slot_visible(r) else Focus_Opt{}
-	return btn_at_state(
-		u.frame,
-		state,
 		r.x,
 		r.y,
 		r.w,
@@ -1215,7 +1156,9 @@ truncate_path_middle_frame :: proc(
 ) -> string {
 	assert(frame != nil, "truncate_path_middle_frame: nil frame")
 	assert(font_size > 0, "truncate_path_middle_frame: non-positive font size")
-	measure := Text_Measure{frame = frame}
+	measure := Text_Measure {
+		frame = frame,
+	}
 	if len(path) == 0 do return path
 	full_c := strings.clone_to_cstring(path, context.temp_allocator)
 	if text_measure_width(measure, full_c, font_size) <= max_width {

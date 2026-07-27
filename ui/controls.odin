@@ -53,7 +53,7 @@ checkbox_auto :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
 	r := slot_next_px(u, w, metrics.ROW_H_SM)
-	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	focus := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return checkbox_at(u.frame, r, label, checked, focus, id)
 }
 
@@ -63,8 +63,8 @@ checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
 	assert(checked != nil, "checkbox_ui: nil checked")
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
-	r := ui_slot(u, w, metrics.ROW_H_SM)
-	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
+	r := slot_px(u, w, metrics.ROW_H_SM)
+	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
 	return checkbox_at(u.frame, r, label, checked, fo)
 }
 
@@ -73,8 +73,8 @@ checkbox_ui_id :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> 
 	assert(checked != nil, "checkbox_ui_id: nil checked")
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
-	r := ui_slot(u, w, metrics.ROW_H_SM)
-	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	r := slot_px(u, w, metrics.ROW_H_SM)
+	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return checkbox_at(u.frame, r, label, checked, fo, id)
 }
 
@@ -176,7 +176,7 @@ radio_auto :: proc(
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
 	r := slot_next_px(u, w, metrics.ROW_H_SM)
-	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	focus := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return radio_at(u.frame, r, label, selected, value, focus, id)
 }
 
@@ -186,8 +186,8 @@ radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed:
 	assert(selected != nil, "radio_ui: nil selected")
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
-	r := ui_slot(u, w, metrics.ROW_H_SM)
-	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
+	r := slot_px(u, w, metrics.ROW_H_SM)
+	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
 	return radio_at(u.frame, r, label, selected, value, fo)
 }
 
@@ -204,8 +204,8 @@ radio_ui_id :: proc(
 	assert(selected != nil, "radio_ui_id: nil selected")
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
-	r := ui_slot(u, w, metrics.ROW_H_SM)
-	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	r := slot_px(u, w, metrics.ROW_H_SM)
+	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return radio_at(u.frame, r, label, selected, value, fo, id)
 }
 
@@ -317,18 +317,18 @@ slider_auto :: proc(
 	assert(u != nil && u.open, "slider: frame not open")
 	assert(id != WIDGET_ID_NONE, "slider: zero stable id")
 	assert(a11y_label != "", "slider: empty accessible label")
-	r := slider_ui_slot(u, width)
-	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	r := slider_slot_px(u, width)
+	focus := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return slider_at(u.frame, r, value, lo, hi, step, focus, a11y_label, id)
 }
 
 @(private = "file")
-slider_ui_slot :: proc(u: ^Ui, width: i32) -> Rect_I32 {
-	assert(u != nil && u.frame != nil, "slider_ui_slot: invalid UI")
+slider_slot_px :: proc(u: ^Ui, width: i32) -> Rect_I32 {
+	assert(u != nil && u.frame != nil, "slider_slot_px: invalid UI")
 	metrics := ui_frame_metrics(u.frame)
 	resolved_width :=
 		ui_frame_sc(u.frame, width) if width > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4
-	assert(resolved_width > 0, "slider_ui_slot: invalid width")
+	assert(resolved_width > 0, "slider_slot_px: invalid width")
 	return slot_next_px(u, resolved_width, metrics.ROW_H_SM)
 }
 
@@ -347,8 +347,8 @@ slider_ui :: proc(
 	assert(u != nil, "slider_ui: nil u")
 	assert(value != nil, "slider_ui: nil value")
 	assert(a11y_label != "", "slider_ui: empty accessible label")
-	r := slider_ui_slot(u, w)
-	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
+	r := slider_slot_px(u, w)
+	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
 	return slider_at(u.frame, r, value, lo, hi, step, fo, a11y_label)
 }
 
@@ -366,8 +366,8 @@ slider_ui_id :: proc(
 	assert(u != nil, "slider_ui_id: nil u")
 	assert(value != nil, "slider_ui_id: nil value")
 	assert(a11y_label != "", "slider_ui_id: empty accessible label")
-	r := slider_ui_slot(u, w)
-	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	r := slider_slot_px(u, w)
+	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return slider_at(u.frame, r, value, lo, hi, step, fo, a11y_label)
 }
 
@@ -382,8 +382,8 @@ slider_ui_state :: proc(
 ) -> bool {
 	assert(state != nil, "slider_ui_state: nil state")
 	assert(a11y_label != "", "slider_ui_state: empty accessible label")
-	r := slider_ui_slot(u, w)
-	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
+	r := slider_slot_px(u, w)
+	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
 	return slider_at_state(u.frame, state, r, value, lo, hi, step, fo, a11y_label)
 }
 
@@ -399,8 +399,8 @@ slider_ui_state_id :: proc(
 ) -> bool {
 	assert(state != nil, "slider_ui_state_id: nil state")
 	assert(a11y_label != "", "slider_ui_state_id: empty accessible label")
-	r := slider_ui_slot(u, w)
-	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	r := slider_slot_px(u, w)
+	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return slider_at_state(u.frame, state, r, value, lo, hi, step, fo, a11y_label, id)
 }
 

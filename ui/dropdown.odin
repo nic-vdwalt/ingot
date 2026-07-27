@@ -35,7 +35,7 @@ dropdown_auto :: proc(
 	resolved_width :=
 		ui_frame_sc(u.frame, width) if width > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
 	r := slot_next_px(u, resolved_width, metrics.ROW_H_MD)
-	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	focus := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return dropdown_at(
 		u.frame,
 		r,
@@ -68,8 +68,8 @@ dropdown_ui :: proc(
 	assert(a11y_label != "", "dropdown_ui: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
-	r := ui_slot(u, ww, metrics.ROW_H_MD)
-	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
+	r := slot_px(u, ww, metrics.ROW_H_MD)
+	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
 	return dropdown_at(u.frame, r, items, selected, st, u.screen_w, u.screen_h, fo, a11y_label)
 }
 
@@ -90,8 +90,8 @@ dropdown_ui_id :: proc(
 	assert(a11y_label != "", "dropdown_ui_id: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
-	r := ui_slot(u, ww, metrics.ROW_H_MD)
-	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	r := slot_px(u, ww, metrics.ROW_H_MD)
+	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return dropdown_at(u.frame, r, items, selected, st, u.screen_w, u.screen_h, fo, a11y_label, id)
 }
 

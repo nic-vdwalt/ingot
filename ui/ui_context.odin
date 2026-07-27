@@ -17,47 +17,7 @@ Ui_Focus_Mode :: enum u8 {
 	Stable,
 }
 
-Track_Kind :: enum u8 {
-	Fit,
-	Grow,
-	Fixed,
-	Percent,
-}
-
-Track :: struct {
-	kind:     Track_Kind,
-	basis:    i32,
-	weight:   i32,
-	percent:  f32,
-	min_size: i32,
-	max_size: i32,
-}
-
-fit :: proc(basis: i32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
-	assert(basis >= 0, "fit: negative basis")
-	assert(min_size >= 0, "fit: negative minimum")
-	assert(max_size == 0 || max_size >= min_size, "fit: invalid maximum")
-	return {kind = .Fit, basis = basis, min_size = min_size, max_size = max_size}
-}
-
-grow :: proc(weight: i32 = 1, min_size: i32 = 0, max_size: i32 = 0) -> Track {
-	assert(weight > 0, "grow: weight must be positive")
-	assert(min_size >= 0, "grow: negative minimum")
-	assert(max_size == 0 || max_size >= min_size, "grow: invalid maximum")
-	return {kind = .Grow, weight = weight, min_size = min_size, max_size = max_size}
-}
-
-fixed :: proc(size: i32) -> Track {
-	assert(size >= 0, "fixed: negative size")
-	return {kind = .Fixed, basis = size, min_size = size, max_size = size}
-}
-
-percent :: proc(value: f32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
-	assert(value >= 0 && value <= 1, "percent: value outside 0..1")
-	assert(min_size >= 0, "percent: negative minimum")
-	assert(max_size == 0 || max_size >= min_size, "percent: invalid maximum")
-	return {kind = .Percent, percent = value, min_size = min_size, max_size = max_size}
-}
+// Track and its fit / grow / fixed / percent constructors live in layout.odin.
 
 // Ui is caller-owned. Stable arrays retain only bounded traversal identity;
 // widgets and their values remain entirely caller-owned.
@@ -345,28 +305,23 @@ Ui :: struct {
 	open:         bool,
 }
 
-// ui_begin opens the frame over the given area: caches screen size, runs Tab
+// begin opens the root over a logical rectangle: caches screen size, runs Tab
 // cycling against last frame's focusable count, and opens the root column.
-ui_begin_frame :: proc(u: ^Ui, frame: ^Ui_Frame, x, y, w, h: i32, gap: i32 = 0) {
-	assert(u != nil && frame != nil, "ui_begin_frame: nil Ui or frame")
-	assert(frame.open, "ui_begin_frame: frame not open")
-	u.frame = frame
-	frame.open_roots += 1
-	ui_begin(u, x, y, w, h, gap)
-}
-
 begin :: proc(u: ^Ui, frame: ^Ui_Frame, rect: Rect_I32, gap: Space = .None) {
 	assert(u != nil, "begin: nil Ui")
 	assert(frame != nil && frame.open, "begin: frame not open")
 	assert(rect.w >= 0 && rect.h >= 0, "begin: negative root rectangle")
 	u.frame = frame
 	frame.open_roots += 1
-	ui_begin(u, rect.x, rect.y, rect.w, rect.h, ui_space_px(u, gap))
+	_open(u, rect.x, rect.y, rect.w, rect.h, space_px(u, gap))
 }
 
-ui_begin :: proc(u: ^Ui, x, y, w, h: i32, gap: i32 = 0) {
-	assert(u != nil, "ui_begin: nil Ui")
-	assert(!u.open, "ui_begin: frame already open")
+// _open is the physical-pixel root. Only begin may call it, so the facade has
+// exactly one entry and the open_roots balance can never be bypassed.
+@(private = "file")
+_open :: proc(u: ^Ui, x, y, w, h: i32, gap: i32) {
+	assert(u != nil, "begin: nil Ui")
+	assert(!u.open, "begin: frame already open")
 	frame := u.frame
 	input: Ui_Input
 	if frame != nil && frame.input != nil do input = frame.input^
@@ -386,9 +341,11 @@ ui_begin :: proc(u: ^Ui, x, y, w, h: i32, gap: i32 = 0) {
 	u.open = true
 }
 
-ui_end :: proc(u: ^Ui) {
-	assert(u.open, "ui_end: frame not open")
-	assert(u.ids.depth == 0, "ui_end: unbalanced id scope")
+// end closes the root, rebuilds the focus order, and releases the frame root.
+end :: proc(u: ^Ui) {
+	assert(u != nil && u.open, "end: frame not open")
+	assert(u.ids.depth == 0, "end: unbalanced id scope")
+	assert(u.layout.depth == 1, "end: unbalanced layout container")
 	layout_end(&u.layout)
 	if u.focus_mode == .Stable {
 		if u.stable_focus.active != FOCUS_ID_NONE &&
@@ -404,96 +361,76 @@ ui_end :: proc(u: ^Ui) {
 	}
 	u.open = false
 	if u.frame != nil {
-		assert(u.frame.open_roots > 0, "ui_end: corrupt root count")
+		assert(u.frame.open_roots > 0, "end: corrupt root count")
 		u.frame.open_roots -= 1
 		u.frame = nil
 	}
 }
 
-end :: proc(u: ^Ui) {
-	assert(u != nil && u.open, "end: frame not open")
-	assert(u.layout.depth == 1, "end: unbalanced layout container")
-	ui_end(u)
-}
-
-ui_focus_sequential :: proc(u: ^Ui) -> Focus_Opt {
-	assert(u != nil, "ui_focus_sequential: nil u")
-	assert(u.open, "ui_focus: frame not open")
-	assert(u.focus_mode != .Stable, "ui_focus: mixed focus registration")
-	assert(u.focus_seq < MAX_FOCUSABLES, "ui_focus: too many focusables")
+// Deprecated: sequential focus is order-dependent by construction, so inserting
+// or reordering a control transfers focus to whichever widget inherits its
+// ordinal. Register a Widget_Id from id() / scope_begin() instead.
+@(deprecated = "sequential focus is order-dependent; pass a Widget_Id to focus")
+focus_sequential :: proc(u: ^Ui) -> Focus_Opt {
+	assert(u != nil, "focus: nil u")
+	assert(u.open, "focus: frame not open")
+	assert(u.focus_mode != .Stable, "focus: mixed focus registration")
+	assert(u.focus_seq < MAX_FOCUSABLES, "focus: too many focusables")
 	u.focus_mode = .Sequential
 	u.focus_seq += 1
 	return Focus_Opt{&u.focus_slot, u.focus_seq}
 }
 
-ui_focus_id :: proc(u: ^Ui, id: Widget_Id) -> Focus_Opt {
-	assert(u != nil, "ui_focus_id: nil u")
-	assert(u.open, "ui_focus: frame not open")
-	assert(id != FOCUS_ID_NONE, "ui_focus: zero stable id")
-	assert(u.focus_mode != .Sequential, "ui_focus: mixed focus registration")
-	assert(u.stable_seq < MAX_FOCUSABLES, "ui_focus: too many focusables")
+// focus registers one stable control in this frame's traversal order.
+focus :: proc(u: ^Ui, widget: Widget_Id) -> Focus_Opt {
+	assert(u != nil, "focus: nil u")
+	assert(u.open, "focus: frame not open")
+	assert(widget != WIDGET_ID_NONE, "focus: zero stable id")
+	assert(u.focus_mode != .Sequential, "focus: mixed focus registration")
+	assert(u.stable_seq < MAX_FOCUSABLES, "focus: too many focusables")
 	for registered in u.stable_cur[:u.stable_seq] {
-		assert(registered != id, "ui_focus: duplicate stable id")
+		assert(registered != widget, "focus: duplicate stable id")
 	}
 	u.focus_mode = .Stable
-	u.stable_cur[u.stable_seq] = id
+	u.stable_cur[u.stable_seq] = widget
 	u.stable_seq += 1
-	return focus_link(&u.stable_focus, id)
+	return focus_link(&u.stable_focus, widget)
 }
 
-ui_focus :: proc {
-	ui_focus_sequential,
-	ui_focus_id,
-}
-
-ui_id_u64 :: proc(u: ^Ui, value: u64) -> Widget_Id {
-	assert(u != nil && u.open, "ui_id: frame not open")
+@(private = "package")
+id_u64 :: proc(u: ^Ui, value: u64) -> Widget_Id {
+	assert(u != nil && u.open, "id: frame not open")
 	return id_context_id(&u.ids, value)
 }
 
-ui_id_string :: proc(u: ^Ui, value: string) -> Widget_Id {
-	assert(u != nil && u.open, "ui_id: frame not open")
+@(private = "package")
+id_string :: proc(u: ^Ui, value: string) -> Widget_Id {
+	assert(u != nil && u.open, "id: frame not open")
 	return id_context_id(&u.ids, value)
 }
 
-ui_id :: proc {
-	ui_id_u64,
-	ui_id_string,
-}
-
+// id derives a Widget_Id from the active scope stack plus a caller key.
 id :: proc {
-	ui_id_u64,
-	ui_id_string,
+	id_u64,
+	id_string,
 }
 
-ui_id_push_u64 :: proc(u: ^Ui, value: u64, loc := #caller_location) {
-	assert(u != nil && u.open, "ui_id_push: frame not open")
+@(private = "package")
+scope_begin_u64 :: proc(u: ^Ui, value: u64, loc := #caller_location) {
+	assert(u != nil && u.open, "scope_begin: frame not open")
 	id_context_push(&u.ids, value, loc)
 }
 
-ui_id_push_string :: proc(u: ^Ui, value: string, loc := #caller_location) {
-	assert(u != nil && u.open, "ui_id_push: frame not open")
+@(private = "package")
+scope_begin_string :: proc(u: ^Ui, value: string, loc := #caller_location) {
+	assert(u != nil && u.open, "scope_begin: frame not open")
 	id_context_push(&u.ids, value, loc)
 }
 
-ui_id_push :: proc {
-	ui_id_push_u64,
-	ui_id_push_string,
-}
-
+// scope_begin pushes a component or domain scope onto the identity stack.
 scope_begin :: proc {
-	ui_id_push_u64,
-	ui_id_push_string,
-}
-
-ui_id_root :: proc {
-	ui_id_push_u64,
-	ui_id_push_string,
-}
-
-ui_id_pop :: proc(u: ^Ui) {
-	assert(u != nil && u.open, "ui_id_pop: frame not open")
-	id_context_pop(&u.ids)
+	scope_begin_u64,
+	scope_begin_string,
 }
 
 scope_end :: proc(u: ^Ui) {
@@ -501,21 +438,24 @@ scope_end :: proc(u: ^Ui) {
 	id_context_pop(&u.ids)
 }
 
-ui_focus_clear :: proc(u: ^Ui) {
-	assert(u != nil, "ui_focus_clear: nil Ui")
-	assert(!u.open, "ui_focus_clear: frame open")
+// focus_reset drops retained focus between frames. The root must be closed so
+// this can never race the traversal order being rebuilt in end.
+focus_reset :: proc(u: ^Ui) {
+	assert(u != nil, "focus_reset: nil Ui")
+	assert(!u.open, "focus_reset: frame open")
 	u.focus_slot = 0
 	focus_clear(&u.stable_focus)
 }
 
-// ui_slot carves a w×h rect from the active layout frame. In a column the
-// main axis is h; in a row it is w. Cross-axis placement honors alignment.
-ui_slot :: proc(u: ^Ui, w, h: i32) -> Rect_I32 {
-	assert(u != nil && u.open, "ui_slot: frame not open")
-	assert(w >= 0 && h >= 0, "ui_slot: negative size")
+// slot_px carves a w×h device-pixel rect from the active layout frame. In a
+// column the main axis is h; in a row it is w. Cross-axis placement honors
+// alignment. Widgets use this after resolving their own scaled metrics.
+@(private = "package")
+slot_px :: proc(u: ^Ui, w, h: i32) -> Rect_I32 {
+	assert(u != nil && u.open, "slot_px: frame not open")
+	assert(w >= 0 && h >= 0, "slot_px: negative size")
 	l := &u.layout
-	f := &l.stack[l.depth - 1]
-	if f.cross_align != .Stretch {
+	if layout_cross_align(l) != .Stretch {
 		if layout_kind(l) == .Column do return next_sized(l, h, w)
 		return next_sized(l, w, h)
 	}
@@ -529,7 +469,7 @@ ui_slot :: proc(u: ^Ui, w, h: i32) -> Rect_I32 {
 	return r
 }
 
-ui_slot_visible :: proc(rect: Rect_I32) -> bool {
+slot_visible :: proc(rect: Rect_I32) -> bool {
 	return rect.w > 0 && rect.h > 0
 }
 
@@ -541,14 +481,14 @@ slot_next_px :: proc(u: ^Ui, intrinsic_w, intrinsic_h: i32) -> Rect_I32 {
 		cross_size := intrinsic_w if layout_kind(&u.layout) == .Column else intrinsic_h
 		return flex_next_sized(&u.layout, cross_size)
 	}
-	return ui_slot(u, intrinsic_w, intrinsic_h)
+	return slot_px(u, intrinsic_w, intrinsic_h)
 }
 
 slot_next :: proc(u: ^Ui, width, height: i32) -> Rect_I32 {
 	assert(u != nil && u.open, "slot_next: frame not open")
 	assert(!layout_flex_active(&u.layout), "slot_next: flex tracks active")
 	assert(width >= 0 && height >= 0, "slot_next: negative size")
-	return ui_slot(u, ui_frame_sc(u.frame, width), ui_frame_sc(u.frame, height))
+	return slot_px(u, ui_frame_sc(u.frame, width), ui_frame_sc(u.frame, height))
 }
 
 flex_slot_next :: proc(u: ^Ui, cross_size: i32) -> Rect_I32 {
@@ -558,35 +498,39 @@ flex_slot_next :: proc(u: ^Ui, cross_size: i32) -> Rect_I32 {
 	return flex_next_sized(&u.layout, ui_frame_sc(u.frame, cross_size))
 }
 
-// ui_flex_begin resolves sibling main-axis sizes on the active Ui frame.
-ui_flex_begin :: proc(u: ^Ui, sizes: []Flex_Size) {
-	assert(u != nil, "ui_flex_begin: nil Ui")
-	assert(u.open, "ui_flex_begin: frame not open")
+// flex_begin_px resolves sibling main-axis sizes already in device pixels.
+@(private = "package")
+flex_begin_px :: proc(u: ^Ui, sizes: []Track) {
+	assert(u != nil, "flex_begin_px: nil Ui")
+	assert(u.open, "flex_begin_px: frame not open")
 	flex_begin(&u.layout, sizes)
 }
 
-// ui_flex_slot consumes one flex size and honors active cross-axis alignment.
-ui_flex_slot :: proc(u: ^Ui, cross_size: i32) -> Rect_I32 {
-	assert(u != nil, "ui_flex_slot: nil Ui")
-	assert(u.open && cross_size >= 0, "ui_flex_slot: invalid call")
+// flex_slot_px consumes one flex size and honors active cross-axis alignment.
+@(private = "package")
+flex_slot_px :: proc(u: ^Ui, cross_size: i32) -> Rect_I32 {
+	assert(u != nil, "flex_slot_px: nil Ui")
+	assert(u.open && cross_size >= 0, "flex_slot_px: invalid call")
 	return flex_next_sized(&u.layout, cross_size)
 }
 
+// track_px scales one logical Track into device pixels. This is the single
+// boundary where facade units become Layout units.
 @(private = "file")
-track_px :: proc(u: ^Ui, track: Track) -> Flex_Size {
+track_px :: proc(u: ^Ui, track: Track) -> Track {
 	assert(u != nil && u.frame != nil, "track_px: invalid Ui")
 	basis := ui_frame_sc(u.frame, track.basis)
 	minimum := ui_frame_sc(u.frame, track.min_size)
 	maximum := ui_frame_sc(u.frame, track.max_size) if track.max_size > 0 else 0
 	switch track.kind {
 	case .Fit:
-		return flex_fit(basis, minimum, maximum)
+		return fit(basis, minimum, maximum)
 	case .Grow:
-		return flex_grow(track.weight, minimum, maximum)
+		return grow(track.weight, minimum, maximum)
 	case .Fixed:
-		return flex_fixed(basis)
+		return fixed(basis)
 	case .Percent:
-		return flex_percent(track.percent, minimum, maximum)
+		return percent(track.percent, minimum, maximum)
 	}
 	unreachable()
 }
@@ -596,7 +540,7 @@ flex_begin_tracks :: proc(u: ^Ui, tracks: []Track) {
 	assert(u != nil && u.open, "flex_begin_tracks: frame not open")
 	assert(len(tracks) > 0, "flex_begin_tracks: empty tracks")
 	assert(len(tracks) <= MAX_LAYOUT_FLEX, "flex_begin_tracks: too many tracks")
-	sizes: [MAX_LAYOUT_FLEX]Flex_Size
+	sizes: [MAX_LAYOUT_FLEX]Track
 	for track, index in tracks {
 		sizes[index] = track_px(u, track)
 	}
@@ -611,21 +555,19 @@ container_rect_px :: proc(u: ^Ui, width, height: i32) -> Rect_I32 {
 		cross_size := width if layout_kind(&u.layout) == .Column else height
 		return flex_next_sized(&u.layout, cross_size)
 	}
-	return ui_slot(u, width, height)
+	return slot_px(u, width, height)
 }
 
-ui_padding :: proc(u: ^Ui, value: Insets_I32) {
-	assert(u != nil && u.open, "ui_padding: frame not open")
-	layout_inset(&u.layout, value)
-}
-
+// padding insets the active container by one spacing token on every side.
 padding :: proc(u: ^Ui, value: Space) {
 	assert(u != nil && u.open, "padding: frame not open")
-	layout_inset(&u.layout, ui_insets(u, value))
+	layout_inset(&u.layout, insets_of(u, value))
 }
 
+// padding_insets takes logical per-side insets and scales them once.
 padding_insets :: proc(u: ^Ui, value: Insets_I32) {
 	assert(u != nil && u.open, "padding_insets: frame not open")
+	assert(u.frame != nil, "padding_insets: nil frame")
 	scaled := Insets_I32 {
 		ui_frame_sc(u.frame, value.left),
 		ui_frame_sc(u.frame, value.top),
@@ -635,13 +577,9 @@ padding_insets :: proc(u: ^Ui, value: Insets_I32) {
 	layout_inset(&u.layout, scaled)
 }
 
-ui_fill :: proc(u: ^Ui) -> Rect_I32 {
-	assert(u != nil && u.open, "ui_fill: frame not open")
-	return take_remaining(&u.layout)
-}
-
-ui_space_px :: proc(u: ^Ui, value: Space) -> i32 {
-	assert(u != nil && u.frame != nil, "ui_space_px: frame required")
+// space_px resolves a spacing token to device pixels at the active scale.
+space_px :: proc(u: ^Ui, value: Space) -> i32 {
+	assert(u != nil && u.frame != nil, "space_px: frame required")
 	logical: i32
 	switch value {
 	case .None:
@@ -660,88 +598,47 @@ ui_space_px :: proc(u: ^Ui, value: Space) -> i32 {
 	return ui_frame_sc(u.frame, logical)
 }
 
-ui_insets :: proc(u: ^Ui, value: Space) -> Insets_I32 {
-	return insets(ui_space_px(u, value))
+// insets_of resolves a spacing token to equal insets on every side.
+insets_of :: proc(u: ^Ui, value: Space) -> Insets_I32 {
+	assert(u != nil && u.frame != nil, "insets_of: frame required")
+	return insets(space_px(u, value))
 }
 
-ui_compact :: proc(u: ^Ui, breakpoint: i32 = 640) -> bool {
-	assert(u != nil && u.open && breakpoint > 0, "ui_compact: invalid call")
+// space advances the cursor by one spacing token without carving a slot.
+space :: proc(u: ^Ui, value: Space) {
+	assert(u != nil && u.open, "space: frame not open")
+	spacer(&u.layout, space_px(u, value))
+}
+
+// compact reports whether the active container is narrower than a logical
+// breakpoint, so callers can switch layout without querying the window.
+compact :: proc(u: ^Ui, breakpoint: i32 = 640) -> bool {
+	assert(u != nil && u.open, "compact: frame not open")
+	assert(breakpoint > 0, "compact: non-positive breakpoint")
 	return remaining(&u.layout).w < ui_frame_sc(u.frame, breakpoint)
 }
 
-ui_remaining :: proc(u: ^Ui) -> Rect_I32 {
-	assert(u != nil && u.open, "ui_remaining: frame not open")
+// remaining_rect reports the unconsumed area without advancing the cursor.
+remaining_rect :: proc(u: ^Ui) -> Rect_I32 {
+	assert(u != nil && u.open, "remaining_rect: frame not open")
 	return remaining(&u.layout)
 }
 
-space_px :: proc(u: ^Ui, value: Space) -> i32 {
-	return ui_space_px(u, value)
-}
-
-compact :: proc(u: ^Ui, breakpoint: i32 = 640) -> bool {
-	return ui_compact(u, breakpoint)
-}
-
-remaining_rect :: proc(u: ^Ui) -> Rect_I32 {
-	return ui_remaining(u)
-}
-
+// fill consumes and returns everything left in the active container.
 fill :: proc(u: ^Ui) -> Rect_I32 {
-	return ui_fill(u)
+	assert(u != nil && u.open, "fill: frame not open")
+	return take_remaining(&u.layout)
 }
 
-// ui_row / ui_row_end / ui_space: thin conveniences over the Layout the Ui
-// already owns; callers may equally use push_row(&u.layout, …) directly.
-ui_row :: proc(u: ^Ui, h: i32, gap: i32 = 0, cross_align: Cross_Align = .Start) {
-	assert(u.open, "ui_row: frame not open")
-	push_row(&u.layout, h, gap, cross_align)
-}
-
-ui_row_end :: proc(u: ^Ui) {
-	assert(u.open, "ui_row_end: frame not open")
-	layout_pop(&u.layout)
-}
-
-ui_row_begin :: proc(u: ^Ui, height: i32, sizes: []Layout_Size, style: Layout_Style = {}) {
-	assert(u != nil && len(sizes) > 0, "ui_row_begin: invalid call")
-	ui_row(u, ui_frame_sc(u.frame, height), ui_space_px(u, style.gap), style.align)
-	ui_flex_begin(u, sizes)
-}
-
-ui_column :: proc(u: ^Ui, w: i32, gap: i32 = 0, cross_align: Cross_Align = .Stretch) {
-	assert(u != nil && u.open, "ui_column: frame not open")
-	push_column_sized(&u.layout, w, gap, cross_align)
-}
-
-ui_column_end :: proc(u: ^Ui) {
-	assert(u != nil && u.open, "ui_column_end: frame not open")
-	layout_pop(&u.layout)
-}
-
-ui_column_begin :: proc(u: ^Ui, width: i32, sizes: []Layout_Size, style: Layout_Style = {}) {
-	assert(u != nil && len(sizes) > 0, "ui_column_begin: invalid call")
-	ui_column(u, ui_frame_sc(u.frame, width), ui_space_px(u, style.gap), style.align)
-	ui_flex_begin(u, sizes)
-}
-
-ui_panel_begin :: proc(u: ^Ui, style: Layout_Style = {}) {
-	assert(u != nil && u.open, "ui_panel_begin: frame not open")
-	push_column(&u.layout, ui_space_px(u, style.gap), style.align)
-	ui_padding(u, ui_insets(u, style.padding))
-}
-
-ui_panel_end :: proc(u: ^Ui) {
-	assert(u != nil && u.open, "ui_panel_end: frame not open")
-	layout_pop(&u.layout)
-}
-
-row_begin :: proc(u: ^Ui, height: i32, gap: Space = .None, align: Cross_Align = .Start) {
+// Containers default to .Stretch: a child that declares no cross size should
+// span its parent, which is what every ordinary row and column wants.
+row_begin :: proc(u: ^Ui, height: i32, gap: Space = .None, align: Cross_Align = .Stretch) {
 	assert(u != nil && u.open, "row_begin: frame not open")
 	assert(height >= 0, "row_begin: negative height")
 	height_px := ui_frame_sc(u.frame, height)
 	parent := remaining(&u.layout)
 	rect := container_rect_px(u, parent.w, height_px)
-	layout_push_rect(&u.layout, .Row, rect, ui_space_px(u, gap), align)
+	layout_push_rect(&u.layout, .Row, rect, space_px(u, gap), align)
 }
 
 row_end :: proc(u: ^Ui) {
@@ -755,7 +652,7 @@ flex_row_begin :: proc(
 	height: i32,
 	tracks: []Track,
 	gap: Space = .None,
-	align: Cross_Align = .Start,
+	align: Cross_Align = .Stretch,
 ) {
 	row_begin(u, height, gap, align)
 	flex_begin_tracks(u, tracks)
@@ -772,7 +669,7 @@ column_begin :: proc(u: ^Ui, width: i32, gap: Space = .None, align: Cross_Align 
 	width_px := ui_frame_sc(u.frame, width)
 	parent := remaining(&u.layout)
 	rect := container_rect_px(u, width_px, parent.h)
-	layout_push_rect(&u.layout, .Column, rect, ui_space_px(u, gap), align)
+	layout_push_rect(&u.layout, .Column, rect, space_px(u, gap), align)
 }
 
 column_end :: proc(u: ^Ui) {
@@ -797,43 +694,30 @@ flex_column_end :: proc(u: ^Ui) {
 	column_end(u)
 }
 
-ui_weights :: proc(u: ^Ui, weights: []i32) {
-	assert(u != nil && u.open, "ui_weights: frame not open")
-	row_weights(&u.layout, weights)
+// panel_begin opens a padded column that fills the parent's width. It is the
+// one container whose inset is part of the container itself.
+panel_begin :: proc(u: ^Ui, style: Layout_Style = {}) {
+	assert(u != nil && u.open, "panel_begin: frame not open")
+	push_column(&u.layout, space_px(u, style.gap), style.align)
+	layout_inset(&u.layout, insets_of(u, style.padding))
 }
 
-ui_weighted_slot :: proc(u: ^Ui, weight: i32) -> Rect_I32 {
-	assert(u != nil && u.open, "ui_weighted_slot: frame not open")
-	return next_weighted(&u.layout, weight)
+panel_end :: proc(u: ^Ui) {
+	assert(u != nil && u.open, "panel_end: frame not open")
+	assert(layout_kind(&u.layout) == .Column, "panel_end: active container is not a column")
+	layout_pop(&u.layout)
 }
 
-ui_space :: proc(u: ^Ui, px: i32) {
-	assert(u.open, "ui_space: frame not open")
-	spacer(&u.layout, px)
-}
+// Weighted division is a strict subset of grow() tracks, so flex_row_begin /
+// flex_column_begin is the single declared-sibling path on the facade.
 
-ui_spacer :: proc(u: ^Ui, value: Space) {
-	ui_space(u, ui_space_px(u, value))
-}
-
-spacer_token :: proc(u: ^Ui, value: Space) {
-	ui_spacer(u, value)
-}
-
-ui_separator :: proc(u: ^Ui) {
-	assert(u != nil && u.open && u.frame != nil, "ui_separator: invalid UI")
-	rect := ui_slot(u, remaining(&u.layout).w, 1)
-	if ui_slot_visible(rect) {
-		draw_rectangle_rec(
-			u.frame,
-			{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)},
-			ui_frame_theme(u.frame).border_subtle,
-		)
-	}
-}
-
+// separator draws a one-pixel rule spanning the active container.
 separator :: proc(u: ^Ui) {
-	ui_separator(u)
+	assert(u != nil && u.open && u.frame != nil, "separator: invalid UI")
+	rect := slot_px(u, remaining(&u.layout).w, 1)
+	if slot_visible(rect) {
+		draw_rectangle_rec(u.frame, rect_f32(rect), ui_frame_theme(u.frame).border_subtle)
+	}
 }
 
 // label draws a plain text line, carving its own slot and semantic node.
@@ -844,7 +728,7 @@ label :: proc(u: ^Ui, text: string, font_size: i32 = 0, color: Color = {}) {
 	col := color if color.a > 0 else ui_frame_theme(u.frame).fg_primary
 	text_c := strings.clone_to_cstring(text, context.temp_allocator)
 	r := slot_next_px(u, measure_text_frame(u.frame, text_c, fs), metrics.LINE_HEIGHT)
-	if !ui_slot_visible(r) {
+	if !slot_visible(r) {
 		_ = ui_frame_drop_degenerate(u.frame, true)
 		return
 	}

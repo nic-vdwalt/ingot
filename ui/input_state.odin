@@ -117,7 +117,7 @@ text_input :: proc(
 	resolved_height :=
 		ui_frame_sc(u.frame, height) if height > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
 	r := slot_next_px(u, remaining(&u.layout).w, resolved_height)
-	focus := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	focus := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	focus_opt_click(u.frame, focus, r.x, r.y, r.w, r.h)
 	sem := semantics
 	sem.focus = focus.focus
@@ -177,8 +177,8 @@ input_ui :: proc(
 	assert(semantics.name != "", "input_ui: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	hh := h if h > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
-	r := ui_slot(u, remaining(&u.layout).w, hh)
-	fo := ui_focus(u) if ui_slot_visible(r) else Focus_Opt{}
+	r := slot_px(u, remaining(&u.layout).w, hh)
+	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
 	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
 	sem := semantics
 	sem.focus = fo.focus
@@ -211,8 +211,8 @@ input_ui_id :: proc(
 	assert(semantics.name != "", "input_ui_id: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	hh := h if h > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
-	r := ui_slot(u, remaining(&u.layout).w, hh)
-	fo := ui_focus(u, id) if ui_slot_visible(r) else Focus_Opt{}
+	r := slot_px(u, remaining(&u.layout).w, hh)
+	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
 	sem := semantics
 	sem.focus = fo.focus

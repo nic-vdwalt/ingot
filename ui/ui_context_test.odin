@@ -310,7 +310,7 @@ test_ui_flex_slots_preserve_cross_trim :: proc(t: ^testing.T) {
 	u: Ui
 	ui_begin(&u, 10, 20, 300, 100)
 	ui_row(&u, 40, gap = 10)
-	ui_flex_begin(&u, {flex_fixed(80), flex_grow()})
+	ui_flex_begin(&u, {fixed(80), grow()})
 	a := ui_flex_slot(&u, 20)
 	b := ui_flex_slot(&u, 30)
 	ui_row_end(&u)

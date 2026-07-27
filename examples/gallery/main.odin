@@ -918,10 +918,10 @@ draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
 	ui.flex_begin(
 		&l,
 		{
-			ui.flex_fixed(ui.ui_frame_sc(ui_frame, 72)),
-			ui.flex_fit(ui.ui_frame_sc(ui_frame, 96), min_size = ui.ui_frame_sc(ui_frame, 56)),
-			ui.flex_percent(0.2),
-			ui.flex_grow(),
+			ui.fixed(ui.ui_frame_sc(ui_frame, 72)),
+			ui.fit(ui.ui_frame_sc(ui_frame, 96), min_size = ui.ui_frame_sc(ui_frame, 56)),
+			ui.percent(0.2),
+			ui.grow(),
 		},
 	)
 	cell(ui.flex_next(&l), "fixed")

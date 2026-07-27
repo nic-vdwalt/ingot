@@ -123,17 +123,30 @@ when CAPTURE {
 			section = shot.section
 			dark = shot.dark
 			high_contrast = false
-			// Reduced motion is what removes wall-clock dependence; see the
-			// determinism note at the top of this file.
-			reduced_motion = true
+			// Stills freeze motion so reruns are byte-identical (see the
+			// determinism note at the top of this file). The sequence pass wants
+			// the opposite: it is a recording, so it keeps spinners, eased
+			// progress, and chart reveals running and replays them per step.
+			reduced_motion = !capture_sequence
 			apply_gallery_theme()
 			apply_scale(CAPTURE_UI_SCALE)
 			ui.pane_reset(&content_pane)
 			capture_seed_inputs()
+			if capture_sequence do capture_replay_animations()
 			capture_state_applied = true
 			capture_state_frame = 0
 		}
 		capture_state_frame += 1
+	}
+
+	// capture_replay_animations rewinds the caller-owned animation state so each
+	// sequence step shows its widgets entering rather than already settled.
+	// Nothing here reaches into the library: these are the same fields the
+	// gallery's own "Replay" button resets.
+	capture_replay_animations :: proc() {
+		progress_anim = 0
+		line_state.enter_anim = 0
+		bar_state.enter_anim = 0
 	}
 
 	// capture_seed_inputs fills the text boxes so the Inputs shot shows real
