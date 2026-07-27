@@ -23,6 +23,63 @@ aliases are additive. Internal structures, private procedures, generated web
 runtime files, and undocumented bridge details are not stable APIs. Pin an Ingot
 revision and review the graphics limitations below before replacing imports.
 
+## What compiles is what works
+
+Ingot does not ship a graphics procedure that accepts a call and then renders
+nothing. A feature this renderer cannot honour is absent, so depending on it is
+a compile error at the call site rather than a blank region discovered later.
+A successful `odin build` is therefore evidence that the calls your application
+makes are implemented. It remains no evidence that their output matches raylib
+pixel for pixel, which is what [Migrating from raylib](raylib-migration.md)
+asks you to validate.
+
+There is one documented exception. `UpdateMusicStream` does nothing because
+both backends refill internally: native music streams on the miniaudio device
+thread and browser music is fully decoded. Calling it is harmless, and omitting
+it changes nothing.
+
+## Not implemented, and not planned
+
+These raylib surfaces are out of scope for Ingot. They are listed so that scope
+is a settled question rather than an open one, and so a migration can be
+classified without waiting on a future release:
+
+- CPU image processing: the roughly fifty `Image*` procedures. Decode with
+  `LoadImageFromMemory`, then process pixels in application code or a library.
+- Models, meshes, materials, and skeletal animation. Use Ingot's explicit GPU
+  3D API for depth-capable mesh work.
+- All `DrawSpline*` procedures.
+- Gestures and touch input.
+- VR and stereo rendering.
+- Complete raymath. Ingot exposes only the few helpers its own consumers use.
+  `core:math/linalg` is Odin's general-purpose vector and matrix package and
+  does not need a raylib-shaped wrapper.
+- General immediate-mode `rlgl`. The shim covers the matrix stack, blend state,
+  batch flush, and an internal instancing path. It is not an OpenGL layer.
+- `TakeScreenshot`. Capturing the swapchain needs `CopySrc` usage on the surface
+  across all four backends, an asynchronous buffer readback, and an image
+  encoder, and a browser has nowhere to write the file. Read back from a
+  `RenderTexture2D` in application code instead.
+
+Requesting one of these is a design discussion, not a bug report.
+
+## Mixing the two drawing surfaces
+
+`ingot:gfx` exposes two ways to draw over one renderer. The raylib-shaped
+PascalCase procedures act on whichever context is globally active. The ergonomic
+`Frame` API (`draw_rect`, `draw_text`, and the rest) routes each call to
+`frame.owner` by activating it for the duration of the call.
+
+With a single context, mixing them is safe and expected: `ui_gfx` paints by
+calling PascalCase procedures inside the frame it opened.
+
+With several contexts it is not. A PascalCase draw issued between `begin_frame`
+and `end_frame` lands on the globally active context, which need not be the one
+that owns the `Frame`, so the geometry silently reaches the wrong window. Ingot
+asserts on this rather than rendering it. In a multi-context application, either
+draw through the ergonomic procedures or do not interleave frames across
+contexts.
+
 ## Build dependencies
 
 All targets require the pinned Odin toolchain and Bash for repository scripts.
