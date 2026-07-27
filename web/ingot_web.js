@@ -395,8 +395,7 @@
 					navigator.clipboard.writeText(clipboardText).catch(() => {});
 				}
 			},
-			ingot_web_input_frame_begin: () => { semanticFrame += 1; },
-			ingot_web_input_frame_end: endSemanticFrame,
+			ingot_web_input_frame_begin: () => { semanticFrame += 1; },			ingot_web_input_frame_end: endSemanticFrame,
 			ingot_web_input_sync: (formPointer, formLength, fieldPointer, fieldLength,
 				namePointer, nameLength, placeholderPointer, placeholderLength,
 				valuePointer, valueLength, x, y, width, height, inputType,

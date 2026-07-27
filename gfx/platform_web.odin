@@ -35,6 +35,8 @@ foreign dom {
 	_js_clipboard_copy :: proc(dst: rawptr, cap: i32) -> i32 ---
 	@(link_name = "ingot_set_clipboard")
 	_js_set_clipboard :: proc(text: cstring) ---
+	@(link_name = "ingot_set_window_title")
+	_js_set_window_title :: proc(title: cstring) ---
 	@(link_name = "ingot_web_input_frame_begin")
 	_js_web_input_frame_begin :: proc() ---
 	@(link_name = "ingot_web_input_frame_end")
@@ -256,6 +258,22 @@ platform_set_window_min_size :: proc(w, h: i32) {}
 
 @(private)
 platform_set_window_size :: proc(w, h: i32) {}
+
+// The page owns the document title, so this is the one window property a
+// browser can honour. Position is genuinely unavailable: a canvas has no
+// position on a monitor, and the page cannot move its own window.
+@(private)
+platform_set_window_title :: proc(title: cstring) {
+	_js_set_window_title(title)
+}
+
+@(private)
+platform_set_window_position :: proc(x, y: i32) {}
+
+@(private)
+platform_window_position :: proc() -> (i32, i32) {
+	return 0, 0
+}
 
 @(private)
 platform_monitor_refresh_rate :: proc() -> i32 {
