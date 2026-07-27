@@ -167,6 +167,51 @@ value :: proc() -> int {
         self.assertEqual(len(check_assertions.ASSERTION.findall(masked)), 1)
 
 
+class MapLookupTest(unittest.TestCase):
+    """A comma-ok map lookup is not an array index.
+
+    Odin has no comma-ok indexing form for arrays or slices, so `v, ok := m[k]`
+    is unambiguously a map lookup: total over the key domain, already reporting
+    a miss through `ok`. Flagging it would demand a tautological assertion,
+    which TIGER_STYLE.md forbids by name.
+    """
+
+    def test_comma_ok_map_lookup_is_not_an_index_risk(self):
+        source = '''obj_string :: proc(obj: json.Object, key: string) -> (string, bool) {
+	if v, has := obj[key]; has {
+		if s, is_s := v.(string); is_s do return s, true
+	}
+	return "", false
+}
+'''
+        self.assertNotIn("index", check_assertions.risks_for(source))
+        self.assertEqual(check_assertions.findings_for_source(source, "net/x.odin"), [])
+
+    def test_ordinary_array_index_is_still_an_index_risk(self):
+        source = '''p :: proc(xs: []int, i: int) -> int {
+	return xs[i]
+}
+'''
+        self.assertIn("index", check_assertions.risks_for(source))
+
+    def test_masking_preserves_offsets(self):
+        # Callers slice the original text by an operation's offset, so a mask
+        # that shifted characters would silently corrupt every prefix analysis.
+        source = "\tif v, ok := m[key]; ok do use(v)\n\tvalue := xs[i]\n"
+        masked = check_assertions.mask_map_lookups(source)
+        self.assertEqual(len(masked), len(source))
+        self.assertNotIn("[key]", masked)
+        self.assertIn("[i]", masked)
+
+    def test_map_lookup_does_not_hide_a_later_array_index(self):
+        source = '''p :: proc(m: map[string]int, xs: []int, k: string, i: int) -> int {
+	if v, ok := m[k]; ok do return v
+	return xs[i]
+}
+'''
+        self.assertIn("index", check_assertions.risks_for(source))
+
+
 class PackageSelectionTest(unittest.TestCase):
     """The gate's rules are not ingot-specific; only its default scope is.
 

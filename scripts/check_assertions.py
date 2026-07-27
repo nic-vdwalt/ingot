@@ -36,6 +36,16 @@ RISK_PATTERNS = {
         r"\b(?:decode[A-Za-z0-9_]*|read[A-Za-z0-9_]*|recv[A-Za-z0-9_]*)\s*\("
     ),
 }
+# Odin's comma-ok binding `value, ok := m[key]` is a *map* lookup. Arrays and
+# slices have no comma-ok indexing form, so the shape is unambiguous: the lookup
+# is total over the key domain and already reports a miss through `ok`. It
+# shares syntax with an array index but has no bound to violate, so collecting
+# it as index risk would demand a tautological assertion — the padding
+# TIGER_STYLE.md forbids by name.
+MAP_LOOKUP = re.compile(
+    r"\b[A-Za-z_][A-Za-z0-9_]*\s*,\s*[A-Za-z_][A-Za-z0-9_]*\s*:?=\s*"
+    r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s*(\[[^\]\n]*\])"
+)
 CONTROL_FLOW = re.compile(r"\b(?:if|when|switch|for)\b")
 MUTATION = re.compile(
     r"(?:\.|\])\s*[+\-*/%]?="
@@ -128,13 +138,27 @@ def executable_text(body: str) -> str:
     return masked[opening + 1 : closing]
 
 
+def mask_map_lookups(executable: str) -> str:
+    """Blank the subscript of every comma-ok map lookup.
+
+    Offsets are preserved: callers slice the original text by an operation's
+    offset to inspect what precedes it, so the mask must not shift anything.
+    """
+    masked = list(executable)
+    for match in MAP_LOOKUP.finditer(executable):
+        for position in range(match.start(1), match.end(1)):
+            masked[position] = " "
+    return "".join(masked)
+
+
 def index_operations(executable: str) -> list[Index_Operation]:
     operations: list[Index_Operation] = []
+    subscripts = mask_map_lookups(executable)
     access = re.compile(
         r"\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)"
         r"\s*\[\s*([^\]\n]+)\s*\]"
     )
-    for match in access.finditer(executable):
+    for match in access.finditer(subscripts):
         expression = match.group(2).strip()
         kind = "slice" if ":" in expression else "element"
         operations.append(Index_Operation(match.group(1), expression, match.start(), kind))
@@ -150,7 +174,12 @@ def index_operations(executable: str) -> list[Index_Operation]:
 
 def risks_for(body: str) -> tuple[str, ...]:
     executable = executable_text(body)
-    return tuple(name for name, pattern in RISK_PATTERNS.items() if pattern.search(executable))
+    subscripts = mask_map_lookups(executable)
+    return tuple(
+        name
+        for name, pattern in RISK_PATTERNS.items()
+        if pattern.search(subscripts if name == "index" else executable)
+    )
 
 
 def matching_block_prefix(executable: str, offset: int) -> str:
