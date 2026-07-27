@@ -104,11 +104,12 @@ Renderer :: struct {
 	// flushes use the shader's pipeline + uniform/extra-texture bind groups.
 	active_shader:      u32,
 
-	// 2D model translation (rlgl matrix stack): applied to every emitted vertex
-	// so rlgl.PushMatrix/Translatef/PopMatrix shift subsequent draws (the galaxy
-	// pane origin transform).
-	model_off:          [2]f32,
-	model_stack:        [dynamic; MODEL_STACK_MAX][2]f32,
+	// 2D model transform (rlgl matrix stack and BeginMode2D): applied to every
+	// emitted vertex so rlgl.PushMatrix/Translatef/PopMatrix shift subsequent
+	// draws (the galaxy pane origin transform) and a Camera2D pans, zooms, and
+	// rotates the world it wraps.
+	model_xf:           Affine,
+	model_stack:        [dynamic; MODEL_STACK_MAX]Affine,
 
 	// Custom blend factors (set by rlgl.SetBlendFactors; default = Alpha).
 	cust_src:           wg.BlendFactor,

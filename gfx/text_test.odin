@@ -122,4 +122,54 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	missing: rune = 0xE000
 	testing.expect(t, !_bake_glyph(atlas, missing), "unbundled icon glyph should be absent")
 	testing.expect(t, !atlas.glyphs[missing].valid, "missing glyph should use fallback metrics")
+
+	test_default_font_is_real(t)
+}
+
+// test_default_font_is_real checks that DrawText/MeasureText are backed by an
+// actual baked atlas rather than the stub they replaced, which drew nothing and
+// guessed width as len(text)*fontSize/2. It shares this test's headless device
+// instead of standing up a second one, because gfx tests run concurrently
+// against the same default context.
+test_default_font_is_real :: proc(t: ^testing.T) {
+	// _default_font refuses to bake until the context reports a live device.
+	restore_initialized := g.initialized
+	g.initialized = true
+	defer {
+		if font := g.resources.default_font; font.glyphCount > 0 do UnloadFont(font)
+		g.resources.default_font = {}
+		g.resources.default_font_baked = false
+		g.initialized = restore_initialized
+	}
+
+	font, ok := _default_font(g)
+	testing.expect(t, ok, "default font should bake")
+	testing.expect(t, font.glyphCount > 0, "default font should bake glyphs")
+	testing.expect(t, get_atlas(font._atlas) != nil, "default font should own an atlas")
+
+	again, ok_again := _default_font(g)
+	testing.expect(t, ok_again, "cached default font should stay valid")
+	testing.expect_value(t, again._atlas, font._atlas)
+
+	// The old stub returned len(text)*fontSize/2 for any input, so an empty
+	// string measured 0 by coincidence while every real string was fiction.
+	testing.expect_value(t, MeasureText("", 16), i32(0))
+
+	width := MeasureText("The quick brown fox", 16)
+	testing.expect(t, width > 0, "default-font width should be positive")
+
+	// MeasureText must describe what DrawText renders: both read this atlas.
+	expected := MeasureTextEx(font, "The quick brown fox", 16, 0).x
+	testing.expect_value(t, width, i32(expected))
+
+	// A proportional measurement tracks the font, not the character count.
+	narrow := MeasureText("iiii", 16)
+	wide := MeasureText("MMMM", 16)
+	testing.expect(t, narrow > 0 && wide > 0, "both widths positive")
+	testing.expectf(
+		t,
+		MeasureText("The quick brown fox", 32) > width,
+		"width should grow with font size, got %v at 16",
+		width,
+	)
 }

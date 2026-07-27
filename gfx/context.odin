@@ -63,17 +63,17 @@ _resource_handle_decode :: proc(
 }
 
 Graphics_Resources :: struct {
-	textures:     Texture_Resources,
-	atlases:      Atlas_Resources,
-	shaders:      Shader_Resources,
-	rlgl:         Rlgl_Resources,
-	gpu_3d:       Gpu_3D_Resources,
-	retire:       [dynamic]Retired_Texture,
+	textures:           Texture_Resources,
+	atlases:            Atlas_Resources,
+	shaders:            Shader_Resources,
+	rlgl:               Rlgl_Resources,
+	gpu_3d:             Gpu_3D_Resources,
+	retire:             [dynamic]Retired_Texture,
 
 	// Lazily baked default font backing DrawText/MeasureText
 	// (font_default.odin). Lives here so it is per-context and is cleared by
 	// _graphics_resources_destroy along with the atlas slot it points at.
-	default_font: Font,
+	default_font:       Font,
 	// Set once the bake has been attempted, so a failed bake is not retried
 	// every frame.
 	default_font_baked: bool,
