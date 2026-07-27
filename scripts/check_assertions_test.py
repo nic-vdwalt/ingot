@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+import pathlib
+import shutil
+import subprocess
+import tempfile
 import unittest
 
 import check_assertions
@@ -161,6 +165,39 @@ value :: proc() -> int {
             "p :: proc(a, b: bool) { assert(a && b) }"
         )
         self.assertEqual(len(check_assertions.ASSERTION.findall(masked)), 1)
+
+
+class PackageSelectionTest(unittest.TestCase):
+    """The gate's rules are not ingot-specific; only its default scope is.
+
+    A consumer repository (the scout client, say) keeps its Odin under a path
+    ingot has never heard of. Without a way to name that path the gate silently
+    scans nothing and reports a clean bill of health, which is worse than not
+    running it at all.
+    """
+
+    def setUp(self):
+        self.root = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        for relative in ("ui/a.odin", "client/src/b.odin", "client/src/b_test.odin"):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("p :: proc() {}" + chr(10), encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=self.root, check=True)
+
+    def test_default_scope_sees_only_ingot_packages(self):
+        self.assertEqual(check_assertions.tracked_sources(self.root), ["ui/a.odin"])
+
+    def test_explicit_packages_replace_the_default(self):
+        self.assertEqual(
+            check_assertions.tracked_sources(self.root, ("client/src/",)),
+            ["client/src/b.odin"],
+        )
+
+    def test_explicit_packages_still_exclude_test_sources(self):
+        sources = check_assertions.tracked_sources(self.root, ("client/",))
+        self.assertNotIn("client/src/b_test.odin", sources)
 
 
 if __name__ == "__main__":

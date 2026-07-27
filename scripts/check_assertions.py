@@ -11,6 +11,9 @@ from pathlib import Path
 
 import check_odin_style
 
+# Ingot's own authored packages. A consumer repository passes --packages to
+# point the same gate at its own source tree; the rules are not ingot-specific,
+# only this default is.
 PACKAGES = ("gfx/", "ui/", "ui_gfx/", "term/", "prefs/", "net/", "sys/", "pty/", "testx/")
 EXCLUDED_PREFIXES = ("accesskit/", "libvterm/", "gfx/rlgl")
 EXCLUDED_SUFFIXES = ("_test.odin", "_tests.odin", "_fuzz_test.odin")
@@ -99,14 +102,14 @@ class Finding:
         return f"{self.path}:{self.name}"
 
 
-def tracked_sources(root: Path) -> list[str]:
+def tracked_sources(root: Path, packages: tuple[str, ...] = PACKAGES) -> list[str]:
     process = subprocess.run(
         ["git", "ls-files", "*.odin"], cwd=root, check=True, capture_output=True, text=True
     )
     return [
         path
         for path in process.stdout.splitlines()
-        if path.startswith(PACKAGES)
+        if path.startswith(packages)
         and not path.startswith(EXCLUDED_PREFIXES)
         and not path.endswith(EXCLUDED_SUFFIXES)
     ]
@@ -649,9 +652,9 @@ def findings_for_source(source: str, path: str) -> list[Finding]:
     return findings
 
 
-def current_findings(root: Path) -> dict[str, Finding]:
+def current_findings(root: Path, packages: tuple[str, ...] = PACKAGES) -> dict[str, Finding]:
     findings: dict[str, Finding] = {}
-    for relative in tracked_sources(root):
+    for relative in tracked_sources(root, packages):
         source = (root / relative).read_text(encoding="utf-8")
         for finding in findings_for_source(source, relative):
             findings[finding.key] = finding
@@ -693,8 +696,24 @@ def main() -> int:
     parser.add_argument("root", nargs="?", default=".")
     parser.add_argument("--baseline")
     parser.add_argument("--measure", action="store_true")
+    parser.add_argument(
+        "--packages",
+        help=(
+            "Comma-separated path prefixes to scan, relative to root. "
+            f"Defaults to ingot's own packages: {','.join(PACKAGES)}"
+        ),
+    )
     arguments = parser.parse_args()
-    current = current_findings(Path(arguments.root).resolve())
+    packages = PACKAGES
+    if arguments.packages:
+        packages = tuple(
+            prefix if prefix.endswith("/") else prefix + "/"
+            for prefix in (part.strip() for part in arguments.packages.split(","))
+            if prefix
+        )
+        if not packages:
+            parser.error("--packages was empty after parsing")
+    current = current_findings(Path(arguments.root).resolve(), packages)
     if arguments.measure:
         print(json.dumps(measurement(current), indent=2, sort_keys=True))
         return 0
