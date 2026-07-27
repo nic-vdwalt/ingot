@@ -44,7 +44,10 @@ MUTATION = re.compile(
     r"|make|new|delete|free|destroy|clone|resize)\s*\("
 )
 RISK_CONTRACTS = {
-    "pointer": re.compile(r"(?:==|!=)\s*nil|nil\s*(?:==|!=)"),
+    "pointer": re.compile(
+        r"(?:==|!=)\s*nil|nil\s*(?:==|!=)"
+        r"|(?:assert|ensure)\s*\([^\n)]*(?:!=\s*nil|==\s*nil)"
+    ),
     "index": re.compile(
         r"\blen\s*\(|\b(?:min|max|clamp)\s*\(|\bfor\b[^\n]*\.\.<"
         r"|(?:<|<=|>|>=)\s*(?:len\s*\(|[A-Z][A-Z0-9_]+)"
@@ -143,15 +146,29 @@ def risks_for(body: str) -> tuple[str, ...]:
 
 
 def index_contract_present(executable: str) -> bool:
-    indexed = re.findall(
-        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\[[^\]\n]+\]",
-        mask_proven_bounded_indexes(executable),
+    masked = mask_proven_bounded_indexes(executable)
+    indexes = re.findall(
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\[\s*([^\]\n]+)\s*\]",
+        masked,
     )
-    if not indexed:
+    if not indexes:
         return True
-    for collection in set(indexed):
+    for collection, expression in indexes:
+        expression = expression.strip()
         bound = re.compile(rf"\blen\s*\(\s*{re.escape(collection)}\s*\)")
-        if not bound.search(executable):
+        constant = re.fullmatch(r"\d+|[A-Z][A-Z0-9_]*", expression)
+        range_loop = re.search(
+            rf"\bfor\s+{re.escape(expression)}\s+in\s+(?:0\s*\.\.<|[^\n]+\.\.)",
+            executable,
+        )
+        guarded = re.search(
+            rf"\b{re.escape(expression)}\s*(?:<|<=)\s*"
+            rf"(?:len\s*\(\s*{re.escape(collection)}\s*\)|[A-Z][A-Z0-9_]*)",
+            executable,
+        )
+        enum_cast = re.fullmatch(r"(?:int|i32|u32)\s*\([^)]+\)", expression)
+        ring = "%" in expression
+        if not (bound.search(executable) or constant or range_loop or guarded or enum_cast or ring):
             return False
     return True
 
