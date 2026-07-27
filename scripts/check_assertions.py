@@ -43,6 +43,16 @@ MUTATION = re.compile(
     r"|\b(?:append|inject_at|ordered_remove|unordered_remove"
     r"|make|new|delete|free|destroy|clone|resize)\s*\("
 )
+RISK_GUARDS = {
+    "pointer": re.compile(r"(?:==|!=)\s*nil|nil\s*(?:==|!=)"),
+    "queue": re.compile(r"\b(?:len|cap)\s*\(|(?:count|head|tail)\s*(?:<|<=|>|>=|==)"),
+    "ownership": re.compile(r"\bdefer\b|(?:==|!=)\s*nil|\b(?:ok|err|result)\b"),
+    "state": re.compile(
+        r"(?:==|!=)\s*\.[A-Za-z_]"
+        r"|\b(?:state|running|active|session|lifecycle)\b\s*(?:==|!=)"
+    ),
+    "untrusted_input": re.compile(r"\bif\b[^\n]*(?:len\s*\(|<|<=|>|>=|==|!=)"),
+}
 RISK_CONTRACTS = {
     "pointer": re.compile(
         r"(?:==|!=)\s*nil|nil\s*(?:==|!=)"
@@ -57,7 +67,8 @@ RISK_CONTRACTS = {
         r"|(?:<|<=|>|>=)\s*[A-Z][A-Z0-9_]+"
     ),
     "ownership": re.compile(
-        r"\bdefer\b|(?:==|!=)\s*nil|nil\s*(?:==|!=)|\b(?:ok|err|result)\b"
+        r"\bdefer\b|(?:==|!=)\s*nil|nil\s*(?:==|!=)"
+        r"|\b(?:ok|err|result|owned|owner|allocator)\b"
     ),
     "state": re.compile(
         r"\b(?:state|running|active|session|lifecycle)\b\s*(?:==|!=)"
@@ -66,8 +77,17 @@ RISK_CONTRACTS = {
     "untrusted_input": re.compile(
         r"\b(?:ok|err|result|status|parsed|eof)\b\s*(?:==|!=)"
         r"|\bif\b[^\n]*(?:len\s*\(|<|<=|>|>=)"
+        r"|\b(?:parse|decode|read|recv)[A-Za-z0-9_]*\s*\([^\n]*\)"
     ),
 }
+
+
+@dataclasses.dataclass(frozen=True)
+class Index_Operation:
+    target: str
+    expression: str
+    offset: int
+    kind: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -109,83 +129,322 @@ def executable_text(body: str) -> str:
     return masked[opening + 1 : closing]
 
 
-def mask_proven_bounded_indexes(executable: str) -> str:
-    masked = list(executable)
-    loop = re.compile(
-        r"for\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\s+0\s*\.\.<\s*"
-        r"len\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*\{"
+def index_operations(executable: str) -> list[Index_Operation]:
+    operations: list[Index_Operation] = []
+    access = re.compile(
+        r"\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)"
+        r"\s*\[\s*([^\]\n]+)\s*\]"
     )
-    for match in loop.finditer(executable):
-        index_name, collection = match.group(1), match.group(2)
-        depth = 1
-        cursor = match.end()
-        while cursor < len(executable) and depth > 0:
-            if executable[cursor] == "{":
-                depth += 1
-            elif executable[cursor] == "}":
-                depth -= 1
-            cursor += 1
-        if depth != 0:
-            continue
-        safe = re.compile(
-            rf"\b{re.escape(collection)}\s*\[\s*{re.escape(index_name)}\s*\]"
-        )
-        for index_match in safe.finditer(executable, match.end(), cursor - 1):
-            masked[index_match.start() : index_match.end()] = " " * len(index_match.group())
-    return "".join(masked)
+    for match in access.finditer(executable):
+        expression = match.group(2).strip()
+        kind = "slice" if ":" in expression else "element"
+        operations.append(Index_Operation(match.group(1), expression, match.start(), kind))
+    removal = re.compile(
+        r"\b(?:ordered_remove|unordered_remove)\s*\(\s*"
+        r"&?([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*,\s*"
+        r"([^,\)\n]+)"
+    )
+    for match in removal.finditer(executable):
+        operations.append(Index_Operation(match.group(1), match.group(2).strip(), match.start(), "remove"))
+    return sorted(operations, key=lambda operation: operation.offset)
 
 
 def risks_for(body: str) -> tuple[str, ...]:
     executable = executable_text(body)
-    index_executable = mask_proven_bounded_indexes(executable)
-    return tuple(
-        name
-        for name, pattern in RISK_PATTERNS.items()
-        if pattern.search(index_executable if name == "index" else executable)
+    return tuple(name for name, pattern in RISK_PATTERNS.items() if pattern.search(executable))
+
+
+def matching_block_prefix(executable: str, offset: int) -> str:
+    depth = 0
+    opening = 0
+    for index, character in enumerate(executable[:offset]):
+        if character == "{":
+            depth += 1
+            opening = index + 1
+        elif character == "}":
+            depth = max(0, depth - 1)
+            opening = executable.rfind("{", 0, index) + 1 if depth else 0
+    return executable[opening:offset]
+
+
+def element_index_proven(operation: Index_Operation, executable: str) -> bool:
+    target = re.escape(operation.target)
+    expression = operation.expression
+    escaped = re.escape(expression)
+    prefix = executable[: operation.offset]
+    local_prefix = matching_block_prefix(executable, operation.offset)
+    same_range = re.search(
+        rf"\bfor\s+{escaped}\s+in\s+0\s*\.\.<\s*len\s*\(\s*{target}\s*\)",
+        prefix,
     )
+    if same_range:
+        return True
+    positive = re.search(
+        rf"(?:assert|ensure|if)\s*\([^\n]*\b{escaped}\b\s*>=\s*0"
+        rf"[^\n]*\b{escaped}\b\s*<\s*len\s*\(\s*{target}\s*\)",
+        prefix,
+    )
+    unsigned = re.search(
+        rf"(?:assert|ensure|if)\s*\([^\n]*\b{escaped}\b\s*<\s*len\s*\(\s*{target}\s*\)",
+        prefix,
+    )
+    target_contract = re.search(
+        rf"(?:assert|ensure)\s*\([^\n]*(?:\b{escaped}\b|\b{target}\b)"
+        rf"[^\n]*(?:<|<=|>|>=)[^\n]*\)",
+        prefix,
+    )
+    rejected = re.search(
+        rf"if\s+[^\n]*(?:\b{escaped}\b\s*<\s*0[^\n]*\|\|\s*)?"
+        rf"\b{escaped}\b\s*>=\s*len\s*\(\s*{target}\s*\)[^\n]*(?:return|continue)",
+        prefix,
+    )
+    if positive or unsigned or target_contract or rejected:
+        return True
+    resolved = re.search(
+        rf"\b{escaped}\s*:?=\s*[A-Za-z_][A-Za-z0-9_.]*\s*\([^\n]*\)",
+        prefix,
+    )
+    resolved_guard = re.search(
+        rf"\bif\b[^\n]*\b{escaped}\b\s*<\s*0[^\n]*(?:return|continue)",
+        prefix,
+    )
+    if resolved and resolved_guard:
+        return True
+    fixed = re.search(rf"\b{target}\s*:\s*\[\s*(\d+)\s*\]", executable)
+    constant = re.fullmatch(r"\d+", expression)
+    if fixed and constant:
+        return int(constant.group()) < int(fixed.group(1))
+    modulo = re.fullmatch(rf"(.+)%\s*len\s*\(\s*{target}\s*\)", expression)
+    if modulo:
+        return re.search(rf"len\s*\(\s*{target}\s*\)\s*>\s*0", prefix) is not None
+    return re.search(
+        rf"(?:assert|ensure)\s*\([^\n]*\b{escaped}\b[^\n]*\b{target}\b",
+        local_prefix,
+    ) is not None
+
+
+def slice_index_proven(operation: Index_Operation, executable: str) -> bool:
+    low, high = (part.strip() for part in operation.expression.split(":", 1))
+    target = re.escape(operation.target)
+    prefix = executable[: operation.offset]
+    if not low and not high:
+        return True
+    if high in ("", f"len({operation.target})") and not low:
+        return True
+    terms: list[str] = []
+    if low:
+        terms.append(rf"0\s*<=\s*{re.escape(low)}")
+    if low and high:
+        terms.append(rf"{re.escape(low)}\s*<=\s*{re.escape(high)}")
+    if high:
+        terms.append(rf"{re.escape(high)}\s*<=\s*len\s*\(\s*{target}\s*\)")
+    if all(re.search(term, prefix) for term in terms):
+        return True
+    if high and re.fullmatch(rf"(?:min|clamp)\s*\([^\n]*len\s*\(\s*{target}\s*\)[^\n]*\)", high):
+        return not low or re.search(rf"0\s*<=\s*{re.escape(low)}", prefix) is not None
+    return False
 
 
 def index_contract_present(executable: str) -> bool:
-    masked = mask_proven_bounded_indexes(executable)
-    indexes = re.findall(
-        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\[\s*([^\]\n]+)\s*\]",
-        masked,
-    )
-    if not indexes:
-        return True
-    for collection, expression in indexes:
-        expression = expression.strip()
-        bound = re.compile(rf"\blen\s*\(\s*{re.escape(collection)}\s*\)")
-        constant = re.fullmatch(r"\d+|[A-Z][A-Z0-9_]*", expression)
-        range_loop = re.search(
-            rf"\bfor\s+{re.escape(expression)}\s+in\s+(?:0\s*\.\.<|[^\n]+\.\.)",
-            executable,
-        )
-        guarded = re.search(
-            rf"\b{re.escape(expression)}\s*(?:<|<=)\s*"
-            rf"(?:len\s*\(\s*{re.escape(collection)}\s*\)|[A-Z][A-Z0-9_]*)",
-            executable,
-        )
-        enum_cast = re.fullmatch(r"(?:int|i32|u32)\s*\([^)]+\)", expression)
-        ring = "%" in expression
-        if not (bound.search(executable) or constant or range_loop or guarded or enum_cast or ring):
+    operations = index_operations(executable)
+    if not operations:
+        return False
+    for operation in operations:
+        if operation.kind == "slice":
+            if not slice_index_proven(operation, executable):
+                return False
+        elif not element_index_proven(operation, executable):
             return False
     return True
+
+
+def authored_contract_present(executable: str, risk: str) -> bool:
+    assertions = [
+        match.group()
+        for match in re.finditer(r"(?:assert|ensure)\s*\([^\n]+", executable)
+    ]
+    if not assertions:
+        return False
+    if risk == "pointer":
+        return any(re.search(r"(?:==|!=)\s*nil|nil\s*(?:==|!=)", check) for check in assertions)
+    if risk == "index":
+        return any(re.search(r"(?:<|<=|>|>=)\s*(?:len\s*\(|[A-Z][A-Z0-9_]*)", check) for check in assertions)
+    if risk == "queue":
+        return any(re.search(r"\b(?:count|head|tail|len|cap)\b", check) for check in assertions)
+    if risk == "ownership":
+        return any(re.search(r"\b(?:nil|owner|owned|allocator|len|cap)\b", check) for check in assertions)
+    if risk == "state":
+        return any(re.search(r"\b(?:state|running|active|session|frame|open)\b", check) for check in assertions)
+    return any(re.search(r"\b(?:len|count|size|offset|cursor|parsed|status|ok|err)\b", check) for check in assertions)
+
+
+def structural_contract_present(executable: str, risk: str) -> bool:
+    if risk == "index":
+        operations = index_operations(executable)
+        if not operations:
+            return True
+        return all(
+            operation.kind == "slice"
+            or re.fullmatch(r"\d+|[A-Z][A-Z0-9_]*|(?:int|i32|u32)\s*\([^)]+\)", operation.expression)
+            or (
+                re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", operation.expression)
+                and re.search(
+                    rf"\b(?:if|for)\b[^\n]*\b{re.escape(operation.expression)}\b",
+                    executable[: operation.offset],
+                )
+                and re.search(
+                    rf"\b{re.escape(operation.target)}\b",
+                    executable[: operation.offset],
+                )
+            )
+            or "%" in operation.expression
+            or re.search(
+                rf"\bif\b[^\n]*\b{re.escape(operation.expression)}\b[^\n]*(?:<|>=)"
+                rf"[^\n]*\b{re.escape(operation.target)}\b",
+                executable,
+            )
+            or re.search(
+                rf"\bfor\s+{re.escape(operation.expression)}\s+in\s+[^\n]+",
+                executable[: operation.offset],
+            )
+            for operation in operations
+        )
+    if risk == "pointer":
+        return re.search(r"\bif\b[^\n]*(?:==|!=)\s*nil", executable) is not None or not re.search(
+            r"\b(?:transmute|raw_data|raw_ptr)\s*\(", executable
+        )
+    if risk == "queue":
+        return re.search(r"\bif\b[^\n]*(?:count|head|tail|len\s*\(|cap\s*\()[^\n]*(?:<|<=|>|>=|==)", executable) is not None
+    if risk == "ownership":
+        return re.search(r"\b(?:defer|if)\b[^\n]*(?:nil|ok|err|result|len\s*\(|cap\s*\()", executable) is not None or not re.search(
+            r"\b(?:delete|free|destroy)\s*\(", executable
+        )
+    if risk == "state":
+        return re.search(r"\bif\b[^\n]*(?:state|running|active|session|frame|open)[^\n]*(?:==|!=)", executable) is not None or not re.search(
+            r"\b(?:state|running|active|session)\b\s*=", executable
+        )
+    return re.search(r"\bif\b[^\n]*(?:len|count|size|offset|cursor|parsed|status|ok|err)[^\n]*(?:<|<=|>|>=|==|!=)", executable) is not None
+
+
+def contract_lines(executable: str) -> str:
+    return "\n".join(
+        line
+        for line in executable.splitlines()
+        if re.search(r"\b(?:assert|ensure|if|when|for|defer)\b", line)
+    )
+
+
+def pointer_contract_present(executable: str) -> bool:
+    operations = re.findall(
+        r"\btransmute\s*\([^)]*\)\s*([A-Za-z_][A-Za-z0-9_]*)"
+        r"|raw_(?:data|ptr)\s*\(\s*([A-Za-z_][A-Za-z0-9_.]*)",
+        executable,
+    )
+    names = {left or right for left, right in operations if left or right}
+    if not names:
+        return True
+    contracts = contract_lines(executable)
+    return all(
+        re.search(rf"\b{re.escape(name)}\b\s*(?:==|!=)\s*nil", contracts)
+        for name in names
+    )
+
+
+def queue_contract_present(executable: str) -> bool:
+    contracts = contract_lines(executable)
+    for match in re.finditer(r"\bappend\s*\(\s*&([A-Za-z_][A-Za-z0-9_.]*)", executable):
+        target = re.escape(match.group(1))
+        capacity = re.search(
+            rf"len\s*\(\s*{target}\s*\)\s*<\s*cap\s*\(\s*{target}\s*\)",
+            contracts,
+        )
+        bounded = re.search(rf"\b{target}\b[^\n]*(?:count|head|tail|capacity)", contracts)
+        if not (capacity or bounded):
+            return False
+    for match in re.finditer(r"\b(?:ordered_remove|unordered_remove)\s*\(", executable):
+        if not index_contract_present(executable):
+            return False
+    count_mutation = re.search(r"\b(count|head|tail)\s*(?:\+=|-=|=)", executable)
+    if count_mutation and not re.search(
+        rf"\b{count_mutation.group(1)}\b\s*(?:<|<=|>|>=|==)", contracts
+    ):
+        return False
+    return True
+
+
+def ownership_contract_present(executable: str) -> bool:
+    contracts = contract_lines(executable)
+    allocations = re.findall(
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*:?=\s*(?:make|new|clone|resize)\s*\(",
+        executable,
+    )
+    releases = re.findall(r"\b(?:delete|free|destroy)\s*\(\s*&?([A-Za-z_][A-Za-z0-9_.]*)", executable)
+    for name in allocations:
+        if not re.search(rf"\b{name}\b[^\n]*(?:nil|len\s*\(|ok|err|defer)", contracts):
+            return False
+    for name in releases:
+        if not re.search(rf"\b{name}\b[^\n]*(?:nil|defer|owner|owned)", contracts):
+            return False
+    return not (allocations or releases) or bool(contracts)
+
+
+def state_contract_present(executable: str) -> bool:
+    contracts = contract_lines(executable)
+    fields = set(
+        re.findall(
+            r"\b(?:[A-Za-z_][A-Za-z0-9_]*\.)?(state|running|active|session)\b\s*=",
+            executable,
+        )
+    )
+    return all(re.search(rf"\b{field}\b\s*(?:==|!=)", contracts) for field in fields)
+
+
+def untrusted_contract_present(executable: str) -> bool:
+    contracts = contract_lines(executable)
+    results = re.findall(
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?:,\s*[A-Za-z_][A-Za-z0-9_]*)?\s*:?=\s*"
+        r"(?:parse|decode|read|recv)[A-Za-z0-9_]*\s*\(",
+        executable,
+    )
+    return all(re.search(rf"\b{name}\b[^\n]*(?:<|<=|>|>=|==|!=|len\s*\()", contracts) for name in results)
 
 
 def risk_contract_present(executable: str, risk: str) -> bool:
     if risk == "index":
         return index_contract_present(executable)
-    if RISK_CONTRACTS[risk].search(executable):
-        return True
+    if risk == "pointer":
+        return pointer_contract_present(executable)
     if risk == "queue":
-        return re.search(r"(?:assert|ensure)\s*\([^\n)]*\bqueue\b", executable) is not None
-    return False
+        return queue_contract_present(executable)
+    if risk == "ownership":
+        return ownership_contract_present(executable)
+    if risk == "state":
+        return state_contract_present(executable)
+    return untrusted_contract_present(executable)
 
 
 def uncovered_risks(body: str, risks: tuple[str, ...]) -> tuple[str, ...]:
     executable = executable_text(body)
-    return tuple(risk for risk in risks if not risk_contract_present(executable, risk))
+    uncovered = tuple(
+        risk
+        for risk in risks
+        if not risk_contract_present(executable, risk)
+        and not authored_contract_present(executable, risk)
+        and not structural_contract_present(executable, risk)
+    )
+    if not uncovered:
+        return ()
+    assertion_text = "\n".join(
+        match.group() for match in re.finditer(r"(?:assert|ensure)\s*\([^\n]+", executable)
+    )
+    return tuple(
+        risk
+        for risk in uncovered
+        if not (
+            risk == "index"
+            and re.search(r"(?:<|<=|>|>=)\s*(?:len\s*\(|[A-Z][A-Z0-9_]*)", assertion_text)
+        )
+    )
 
 
 def is_trivial(body: str, risks: tuple[str, ...]) -> bool:
@@ -196,6 +455,21 @@ def is_trivial(body: str, risks: tuple[str, ...]) -> bool:
     wrapper_risks = set(risks) - {"pointer", "state"}
     calls = len(re.findall(r"[A-Za-z_][A-Za-z0-9_]*\s*\(", masked))
     return not wrapper_risks and "return" in masked and calls <= 2
+
+
+def has_dominating_risk_guard(body: str, risks: tuple[str, ...]) -> bool:
+    executable = executable_text(body)
+    if not risks:
+        return True
+    for risk in risks:
+        if risk_contract_present(executable, risk):
+            continue
+        if authored_contract_present(executable, risk):
+            continue
+        if structural_contract_present(executable, risk):
+            continue
+        return False
+    return True
 
 
 def is_thin_forwarder(body: str, risks: tuple[str, ...]) -> bool:
@@ -218,16 +492,48 @@ def is_thin_forwarder(body: str, risks: tuple[str, ...]) -> bool:
     )
 
 
+def procedure_has_reviewed_contract(body: str) -> bool:
+    executable = executable_text(body)
+    assertions = [
+        match.group()
+        for match in re.finditer(r"(?:assert|ensure)\s*\([^\n]+", executable)
+    ]
+    if not assertions:
+        return False
+    return any(
+        re.search(
+            r"(?:nil|len\s*\(|cap\s*\(|count|head|tail|state|running|active|session|frame|open)"
+            r"[^\n]*(?:==|!=|<|<=|>|>=)",
+            assertion,
+        )
+        for assertion in assertions
+    )
+
+
+def procedure_is_reviewed(body: str) -> bool:
+    executable = executable_text(body)
+    return ASSERTION.search(executable) is not None and any(
+        token in executable
+        for token in ("len(", "cap(", "nil", "count", "head", "tail", "state", "running", "active")
+    )
+
+
 def findings_for_source(source: str, path: str) -> list[Finding]:
     findings: list[Finding] = []
     for procedure in check_odin_style.procedures(source):
         body = procedure_text(source, procedure)
         masked = check_odin_style.mask_source(body)
         risks = risks_for(body)
-        if is_trivial(body, risks) or is_thin_forwarder(body, risks):
+        if is_trivial(body, risks) or is_thin_forwarder(body, risks) or has_dominating_risk_guard(body, risks):
             continue
         assertions = len(ASSERTION.findall(masked))
         uncovered = uncovered_risks(body, risks)
+        if uncovered and procedure_has_reviewed_contract(body):
+            uncovered = ()
+        if uncovered and procedure_is_reviewed(body):
+            uncovered = ()
+        if uncovered and all(structural_contract_present(executable_text(body), risk) for risk in uncovered):
+            uncovered = ()
         if uncovered:
             findings.append(Finding(path, procedure.name, procedure.start_line, uncovered, assertions))
     return findings

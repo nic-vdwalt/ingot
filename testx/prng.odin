@@ -11,6 +11,7 @@ prng_make :: proc(seed: u64) -> Prng {
 }
 
 next_u64 :: proc(p: ^Prng) -> u64 {
+	assert(p != nil)
 	x := p.state
 	x ~= x >> 12
 	x ~= x << 25

@@ -85,7 +85,6 @@ read :: proc(app, file: string, allocator := context.temp_allocator) -> (data: [
 	p := path(app, file) or_return
 	d, err := os.read_entire_file(p, allocator)
 	if err != nil do return nil, false
-	assert(len(d) >= 0)
 	return d, true
 }
 

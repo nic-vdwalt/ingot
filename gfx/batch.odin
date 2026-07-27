@@ -781,6 +781,7 @@ _geometry_upload_indexed :: proc(
 	assert(index_data != nil)
 	assert(index_bytes > 0)
 	if r.active_stream_slot < 0 do return nil, 0, 0, false
+	assert(r.active_stream_slot < len(r.stream_slots))
 	slot := &r.stream_slots[r.active_stream_slot]
 	vertex_offset, index_offset, ok := _stream_slot_reserve_indexed(
 		slot,
@@ -856,6 +857,7 @@ _stream_shadow_ensure :: proc(shadow: ^[dynamic]byte, required, capacity: u64) -
 _stream_slot_upload :: proc(r: ^Renderer) -> bool {
 	assert(r != nil)
 	if r.active_stream_slot < 0 do return false
+	assert(r.active_stream_slot < len(r.stream_slots))
 	slot := &r.stream_slots[r.active_stream_slot]
 	assert(slot.state == .Recording)
 	if slot.geometry_write > 0 {
@@ -931,6 +933,7 @@ _stream_slot_submit :: proc(slot: ^Stream_Slot, ticket: u64) -> bool {
 _stream_slot_submitted :: proc(r: ^Renderer, ticket: u64) -> bool {
 	assert(r != nil)
 	if r.active_stream_slot < 0 do return false
+	assert(r.active_stream_slot < len(r.stream_slots))
 	ok := _stream_slot_submit(&r.stream_slots[r.active_stream_slot], ticket)
 	if ok do r.active_stream_slot = -1
 	return ok
@@ -940,6 +943,7 @@ _stream_slot_submitted :: proc(r: ^Renderer, ticket: u64) -> bool {
 _stream_slot_abandon :: proc(r: ^Renderer) {
 	assert(r != nil)
 	if r.active_stream_slot < 0 do return
+	assert(r.active_stream_slot < len(r.stream_slots))
 	slot := &r.stream_slots[r.active_stream_slot]
 	assert(slot.state == .Recording)
 	slot.geometry_write = 0
@@ -1014,6 +1018,7 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 	assert(data != nil)
 	assert(size > 0)
 	if r.active_stream_slot < 0 do return 0, false
+	assert(r.active_stream_slot < len(r.stream_slots))
 	slot := &r.stream_slots[r.active_stream_slot]
 	offset, ok := _stream_slot_reserve_uniform(
 		slot,
@@ -1047,6 +1052,7 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 _active_uniform_buffer :: proc(r: ^Renderer) -> wg.Buffer {
 	assert(r != nil)
 	if r.active_stream_slot < 0 do return nil
+	assert(r.active_stream_slot < len(r.stream_slots))
 	return r.stream_slots[r.active_stream_slot].uniform_buffer
 }
 

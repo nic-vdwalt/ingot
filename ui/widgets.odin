@@ -637,6 +637,42 @@ btn :: proc {
 	btn_ui_state_id,
 }
 
+button :: proc(u: ^Ui, id: Widget_Id, label: string, style: Btn_Style = .Secondary, enabled: bool = true) -> bool {
+	assert(u != nil && u.open, "button: frame not open")
+	assert(id != WIDGET_ID_NONE, "button: zero stable id")
+	assert(label != "", "button: empty accessible label")
+	r := btn_ui_slot(u, label)
+	focus := ui_focus(u, id) if enabled && ui_slot_visible(r) else Focus_Opt{}
+	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = focus, widget = id)
+}
+
+button_at :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	label: string,
+	style: Btn_Style = .Secondary,
+	font_size: i32 = 0,
+	enabled: bool = true,
+	web_form_id: string = "",
+	focus: Focus_Opt = {},
+	widget: Widget_Id = WIDGET_ID_NONE,
+) -> bool {
+	return btn_at(
+		frame,
+		rect.x,
+		rect.y,
+		rect.w,
+		rect.h,
+		label,
+		style,
+		font_size,
+		enabled,
+		web_form_id,
+		focus,
+		widget,
+	)
+}
+
 @(private = "file")
 btn_ui_slot :: proc(u: ^Ui, label: string) -> Rect_I32 {
 	assert(u != nil && u.frame != nil, "btn_ui_slot: invalid UI")
@@ -644,7 +680,7 @@ btn_ui_slot :: proc(u: ^Ui, label: string) -> Rect_I32 {
 	label_c := strings.clone_to_cstring(label, context.temp_allocator)
 	width := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
 	assert(width > 0, "btn_ui_slot: invalid width")
-	return ui_slot(u, width, metrics.ROW_H_MD)
+	return slot_next_px(u, width, metrics.ROW_H_MD)
 }
 
 // btn_ui sizes to its label (+padding) and auto-registers focus.

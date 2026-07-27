@@ -296,19 +296,32 @@ layout_end :: proc(l: ^Layout) {
 	l.depth = 0
 }
 
+layout_push_rect :: proc(
+	l: ^Layout,
+	kind: Layout_Kind,
+	rect: Rect_I32,
+	gap: i32 = 0,
+	cross_align: Cross_Align = .Stretch,
+) {
+	assert(l != nil, "layout_push_rect: nil layout")
+	assert(l.depth > 0 && l.depth < MAX_LAYOUT_DEPTH, "layout_push_rect: depth out of bounds")
+	assert(rect.w >= 0 && rect.h >= 0, "layout_push_rect: negative rectangle")
+	assert(gap >= 0, "layout_push_rect: negative gap")
+	l.stack[l.depth] = Layout_Frame {
+		kind        = kind,
+		rect        = rect,
+		gap         = gap,
+		cross_align = cross_align,
+	}
+	l.depth += 1
+}
+
 // push_row carves a full-width strip of height h from the current column and
 // makes it the active frame, laying children out left-to-right.
 push_row :: proc(l: ^Layout, h: i32, gap: i32 = 0, cross_align: Cross_Align = .Stretch) {
 	assert(l.depth > 0 && l.depth < MAX_LAYOUT_DEPTH, "push_row: depth out of bounds")
 	assert(_top(l).kind == .Column, "push_row: current frame must be a column")
-	r := next(l, h)
-	l.stack[l.depth] = Layout_Frame {
-		kind        = .Row,
-		rect        = r,
-		gap         = gap,
-		cross_align = cross_align,
-	}
-	l.depth += 1
+	layout_push_rect(l, .Row, next(l, h), gap, cross_align)
 }
 
 // push_column makes the current frame's remaining space the active column.
@@ -322,26 +335,13 @@ push_column :: proc(l: ^Layout, gap: i32 = 0, cross_align: Cross_Align = .Stretc
 	// overlap the column.
 	f := _top(l)
 	f.cursor = _main_extent(f^)
-	l.stack[l.depth] = Layout_Frame {
-		kind        = .Column,
-		rect        = r,
-		gap         = gap,
-		cross_align = cross_align,
-	}
-	l.depth += 1
+	layout_push_rect(l, .Column, r, gap, cross_align)
 }
 
 push_column_sized :: proc(l: ^Layout, w: i32, gap: i32 = 0, cross_align: Cross_Align = .Stretch) {
 	assert(l.depth > 0 && l.depth < MAX_LAYOUT_DEPTH, "push_column_sized: depth out of bounds")
 	assert(_top(l).kind == .Row, "push_column_sized: current frame must be a row")
-	r := next(l, w)
-	l.stack[l.depth] = Layout_Frame {
-		kind        = .Column,
-		rect        = r,
-		gap         = gap,
-		cross_align = cross_align,
-	}
-	l.depth += 1
+	layout_push_rect(l, .Column, next(l, w), gap, cross_align)
 }
 
 layout_inset :: proc(l: ^Layout, value: Insets_I32) {
@@ -374,6 +374,12 @@ flex_begin :: proc(l: ^Layout, sizes: []Flex_Size) {
 	space_i64 := max(i64(_main_extent(f^)) - i64(f.cursor) - gap_total, i64(0))
 	space := i32(min(space_i64, i64(max(i32))))
 	_flex_resolve(f, sizes, space)
+}
+
+layout_flex_active :: proc(l: ^Layout) -> bool {
+	assert(l != nil, "layout_flex_active: nil layout")
+	assert(l.depth > 0, "layout_flex_active: layout not begun")
+	return _top(l).flex_count > 0
 }
 
 // flex_next emits the next pre-resolved sibling using ordinary cursor advance.

@@ -452,10 +452,15 @@ _gpu_finish :: proc() {
 	width, height := g.pending_w, g.pending_h
 
 	caps, _ := wg.SurfaceGetCapabilities(g.surface, g.adapter)
+	if caps.formatCount == 0 || caps.formats == nil {
+		g.lifecycle = .Closing
+		return
+	}
 	// Prefer a non-sRGB (linear UNORM) surface. raylib writes 8-bit sRGB color
 	// values straight to a UNORM framebuffer with no gamma applied; an sRGB
 	// surface re-encodes them linear->sRGB on output, washing the frame out
 	// (too bright). Match raylib by choosing the *Unorm format when offered.
+	ensure(caps.formatCount <= uint(max(int)))
 	g.format = caps.formats[0]
 	for i in 0 ..< int(caps.formatCount) {
 		f := caps.formats[i]

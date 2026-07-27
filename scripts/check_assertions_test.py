@@ -20,14 +20,23 @@ class AssertionDisciplineTest(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertIn("queue", findings[0].risks)
 
-    def test_assert_and_ensure_count(self):
+    def test_queue_pointer_check_does_not_cover_queue_mutation(self):
         for assertion in ("assert(queue != nil)", "ensure(queue != nil)"):
             source = f'''p :: proc(queue: ^Queue) {{
 	{assertion}
 	append(&queue.items, 1)
 }}
 '''
-            self.assertEqual(self.findings(source), [])
+            self.assertIn("queue", self.findings(source)[0].risks)
+
+    def test_queue_capacity_contract_covers_queue_mutation(self):
+        source = '''p :: proc(queue: ^Queue) {
+	assert(queue != nil)
+	assert(len(queue.items) < cap(queue.items))
+	append(&queue.items, 1)
+}
+'''
+        self.assertEqual(self.findings(source), [])
 
     def test_compile_assert_does_not_hide_runtime_queue_risk(self):
         source = '''p :: proc(queue: ^Queue) {
@@ -111,7 +120,7 @@ value :: proc() -> int {
 }
 '''
         risks = set(self.findings(source)[0].risks)
-        self.assertEqual(risks, {"pointer", "index", "queue", "ownership", "state", "untrusted_input"})
+        self.assertEqual(risks, {"pointer", "index", "queue", "ownership", "state"})
 
     def test_operating_error_with_no_internal_risk_is_not_flagged(self):
         source = '''open_file :: proc(path: string) -> bool {
@@ -135,6 +144,17 @@ value :: proc() -> int {
         )
         self.assertEqual(len(failures), 1)
         self.assertIn("queue", failures[0])
+
+    def test_empty_baseline_rejects_complete_current_findings(self):
+        finding = check_assertions.Finding("net/x.odin", "new", 2, ("index",), 0)
+        self.assertEqual(len(check_assertions.check_findings({finding.key: finding}, {})), 1)
+
+    def test_measurement_includes_complete_current_findings(self):
+        old = check_assertions.Finding("net/x.odin", "old", 1, ("index",), 0)
+        new = check_assertions.Finding("net/x.odin", "new", 2, ("queue",), 0)
+        result = check_assertions.measurement({old.key: old, new.key: new})
+        self.assertEqual(result["uncovered"], 2)
+        self.assertEqual(result["by_risk"], {"index": 1, "queue": 1})
 
     def test_compound_assertion_is_one_check(self):
         masked = check_assertions.check_odin_style.mask_source(

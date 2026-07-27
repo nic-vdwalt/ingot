@@ -20,7 +20,6 @@ Mention_Match_Score :: enum i32 {
 }
 
 mention_basename :: proc(candidate: string) -> string {
-	assert(len(candidate) >= 0)
 	end := len(candidate)
 	for end > 0 && (candidate[end - 1] == '/' || candidate[end - 1] == '\\') do end -= 1
 	if end == 0 do return candidate[:0]
@@ -30,7 +29,6 @@ mention_basename :: proc(candidate: string) -> string {
 }
 
 mention_match_score :: proc(candidate, query: string) -> Mention_Match_Score {
-	assert(len(candidate) >= 0 && len(query) >= 0)
 	if len(query) == 0 do return .Name_Prefix
 	candidate_lower := strings.to_lower(candidate, context.temp_allocator)
 	query_lower := strings.to_lower(query, context.temp_allocator)
@@ -148,6 +146,9 @@ pills_shift_after_insert :: proc(pills: ^[dynamic]Mention_Span, at, n: int) {
 // Shift pill ranges after deleting bytes [at, at+n). Any pill that overlaps the
 // deleted region is dropped (it stops being an atomic token).
 pills_shift_after_delete :: proc(pills: ^[dynamic]Mention_Span, at, n: int) {
+	assert(pills != nil)
+	assert(at >= 0)
+	assert(n >= 0)
 	keep := make([dynamic]Mention_Span, 0, len(pills), context.temp_allocator)
 	for p in pills {
 		if p.end <= at {
@@ -224,6 +225,8 @@ pill_snap_right :: proc(pills: ^[dynamic]Mention_Span, pos: int) -> int {
 
 // Remove pill at index and return the [start,end) it occupied.
 pill_remove :: proc(pills: ^[dynamic]Mention_Span, idx: int) -> (int, int) {
+	assert(pills != nil)
+	assert(idx >= 0 && idx < len(pills))
 	p := pills[idx]
 	ordered_remove(pills, idx)
 	return p.start, p.end
@@ -255,7 +258,11 @@ encode_pills_owned :: proc(
 	pills: []Mention_Span,
 	allocator := context.allocator,
 ) -> string {
-	return strings.clone(encode_pills(text, pills), allocator)
+	assert(allocator.procedure != nil)
+	encoded := encode_pills(text, pills)
+	result := strings.clone(encoded, allocator)
+	assert(len(result) == len(encoded))
+	return result
 }
 
 // Remove all pill sentinels, returning clean text (for the wire + clipboard).

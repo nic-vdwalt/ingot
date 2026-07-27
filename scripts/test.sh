@@ -54,9 +54,15 @@ for pkg in gfx ui ui_gfx libvterm term prefs net; do
 	if [ "$pkg" = ui ] && ! has_define ODIN_TEST_THREADS "$@"; then
 		extra+=("-define:ODIN_TEST_THREADS=1")
 	fi
-	# term's pump fuzz needs the scripted PTY byte source (no shell spawned).
-	if [ "$pkg" = term ] && ! has_define INGOT_PTY_SIM "$@"; then
-		extra+=("-define:INGOT_PTY_SIM=true")
+	# term's pump fuzz uses process-global PTY and libvterm state, so its tests
+	# must not execute concurrently.
+	if [ "$pkg" = term ]; then
+		if ! has_define INGOT_PTY_SIM "$@"; then
+			extra+=("-define:INGOT_PTY_SIM=true")
+		fi
+		if ! has_define ODIN_TEST_THREADS "$@"; then
+			extra+=("-define:ODIN_TEST_THREADS=1")
+		fi
 	fi
 	run_supervised "$pkg" odin test "$root/$pkg" "$col" "$guard" \
 		-define:ODIN_TEST_FAIL_ON_EMPTY=true ${extra[@]+"${extra[@]}"} "$@"

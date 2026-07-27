@@ -152,13 +152,13 @@ adapter_bind_frame :: proc(adapter: ^Adapter, gfx_frame: ^rl.Frame) {
 }
 
 adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
+	assert(adapter != nil && adapter.initialized, "adapter_end_frame: invalid adapter")
+	assert(frame != nil && frame.output != nil, "adapter_end_frame: invalid frame")
 	when ODIN_OS != .JS {
-		assert(adapter != nil && adapter.initialized, "adapter_end_frame: invalid adapter")
 		assert(
 			adapter.gfx_epoch == rl.context_epoch(adapter.gfx_context),
 			"adapter_end_frame: stale context",
 		)
-		assert(frame != nil && frame.output != nil, "adapter_end_frame: invalid frame")
 	}
 	output := frame.output
 	ui.ui_frame_finalize(frame)
