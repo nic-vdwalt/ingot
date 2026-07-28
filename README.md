@@ -13,6 +13,7 @@
 </p>
 
 <p align="center">
+  <a href="https://openalloy.ai/ingot">Live demo and benchmarks</a> ·
   <a href="#why-ingot">Why Ingot</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#see-it-running">Gallery</a> ·
