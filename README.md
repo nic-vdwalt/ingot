@@ -25,7 +25,7 @@ Windows/D3D12, Linux/Vulkan, and browser WASM/WebGPU. Two-dimensional games are
 supported; polished desktop tools are the mission.
 
 > [!IMPORTANT]
-> `v0.1.1` is the latest source tag for a young `0.x` API. Minor releases may
+> `0.1.2` is the latest source tag for a young `0.x` API. Minor releases may
 > contain breaking changes, and target-specific production validation is not
 > yet recorded. Pin an exact revision and validate every platform your
 > application ships on.
@@ -133,7 +133,7 @@ Add Ingot as a submodule and register it as an Odin collection:
 
 ```sh
 git submodule add https://github.com/Nic-vdwalt/ingot.git libs/ingot
-git -C libs/ingot checkout v0.1.1
+git -C libs/ingot checkout 0.1.2
 odin build src -collection:ingot=libs/ingot
 ```
 
@@ -424,7 +424,7 @@ authorize binary, installer, or web-bundle distribution. Complete the
 visibility change and the [binary and web release checklist](docs/oss-release-checklist.md)
 before redistributing release artifacts.
 
-`v0.1.1` is the latest published tag. It is a source tag: no binaries,
+`0.1.2` is the latest published tag. It is a source tag: no binaries,
 installers, or web bundles are attached, and every row of the release validation
 matrix remains `Not recorded`. See the [changelog](CHANGELOG.md) for what each
 release does and does not claim.
