@@ -29,6 +29,29 @@ supported; polished desktop tools are the mission.
 > changes, and target-specific production validation is not yet recorded. Pin
 > an exact revision and validate every platform your application ships on.
 
+## The experiment
+
+Ingot asks whether deterministic simulation testing can shape an application
+framework from its first subsystem rather than being added after the design has
+settled. How quickly can that approach produce something useful, and how much
+production behavior can run under generated input and failure conditions without
+a window, GPU, network, shell, or assistive technology?
+
+The experiment keeps application state explicit, confines nondeterminism to
+compile-gated seams, bounds work and storage, and makes assertions plus derived
+output the test oracles. Seeded harnesses then drive the code that ships while
+replacing only edges such as sockets, platform input, and PTYs. The current
+harnesses cover real widgets and text editing, HTTP and WebSocket failures,
+worker synchronization, terminal pumping, frame scratch ownership, and selected
+GPU lifetimes. See [Testing Ingot](docs/testing.md) for commands and exact scope.
+
+This is evidence about one engineering approach, not a claim that simulation
+proves correctness or that Ingot is already production-proven. Fuzzing currently
+runs locally, native dependencies remain outside Odin-side sanitizer coverage,
+and each target still needs validation on the operating systems, GPUs, browsers,
+and accessibility stacks an application intends to ship. Real applications are
+needed to establish where the approach remains useful and where it breaks down.
+
 ![The ingot widget gallery cycling sections, themes, and UI scales](https://github.com/Nic-vdwalt/ingot/releases/download/v0.1.0/ingot-gallery.gif)
 
 <details>
