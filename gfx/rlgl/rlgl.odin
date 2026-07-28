@@ -1,4 +1,4 @@
-// ingot:gfx/rlgl — shim over the low-level raylib rlgl API the consumer apps
+// ingot:gfx/rlgl - shim over the low-level raylib rlgl API the consumer apps
 // use. The 2D WebGPU batch renderer doesn't expose an immediate-mode GL layer,
 // so the low-level vertex-array and matrix-stack calls (used only by
 // openalloy's deferred galaxy renderer) map onto an internal instancing path

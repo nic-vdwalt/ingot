@@ -1,5 +1,5 @@
 #+build js
-// ingot:gfx — browser (WASM + WebGPU) platform backend.
+// ingot:gfx - browser (WASM + WebGPU) platform backend.
 //
 // Compiled only on the JS/WASM target. Provides the same platform seam the
 // native backend does, but sourced from the browser: a canvas surface instead
@@ -240,7 +240,7 @@ platform_now :: proc() -> f64 {
 @(private)
 platform_sleep :: proc(seconds: f64) {}
 
-// Web never blocks for events — rAF paces the loop and the idle gate lives in
+// Web never blocks for events - rAF paces the loop and the idle gate lives in
 // step() (loop_web.odin). No-ops keep the shared pump code target-neutral.
 @(private)
 platform_wait_events :: proc(timeout: f64) {}
@@ -295,7 +295,7 @@ platform_set_window_icon :: proc(image: Image) {}
 // after resetting frame-scoped state). To preserve identical timing, the JS
 // event entry points (input_web.odin) write into a STAGING buffer here; the web
 // platform_poll_events drains staging into g.inp at the exact point native
-// fills it — so edge (pressed/released) semantics match frame-for-frame.
+// fills it - so edge (pressed/released) semantics match frame-for-frame.
 
 @(private)
 st_pressed: [KEY_COUNT]bool
@@ -647,7 +647,7 @@ FocusWindow :: proc() {context_focus_window(default_context())}
 // JS (ingot_web.js attachDrop) stages dropped file names + bytes and calls the
 // ingot_web_drop_notify export; the queries below pull the staged names into
 // fixed buffers so FilePathList needs no allocation. Browsers never expose
-// real paths — "paths" here are bare file names; use GetDroppedFileData for
+// real paths - "paths" here are bare file names; use GetDroppedFileData for
 // the contents.
 
 @(private)

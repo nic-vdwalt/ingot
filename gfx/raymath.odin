@@ -1,4 +1,4 @@
-// ingot:gfx — raymath helpers (subset apps reference). Names/semantics match
+// ingot:gfx - raymath helpers (subset apps reference). Names/semantics match
 // raylib's raymath so call sites port unchanged.
 package gfx
 
@@ -11,7 +11,7 @@ Vector2Distance :: proc(v1, v2: Vector2) -> f32 {
 }
 
 // Squared distance (raylib spells this Vector2DistanceSqr; some call sites use
-// the "Sqrt" spelling — both provided, both return the squared distance).
+// the "Sqrt" spelling - both provided, both return the squared distance).
 Vector2DistanceSqr :: proc(v1, v2: Vector2) -> f32 {
 	dx := v2.x - v1.x
 	dy := v2.y - v1.y

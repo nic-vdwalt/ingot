@@ -1,5 +1,5 @@
 #+build !js
-// ingot:gfx — path-based texture loading (native only). The web target has no
+// ingot:gfx - path-based texture loading (native only). The web target has no
 // filesystem paths, so its LoadTexture stub lives in texture_web.odin; web
 // apps fetch bytes and decode with LoadImageFromMemory + LoadTextureFromImage.
 package gfx

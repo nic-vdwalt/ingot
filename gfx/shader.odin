@@ -1,4 +1,4 @@
-// ingot:gfx — custom shader objects (raylib Shader parity) over WebGPU. Backs
+// ingot:gfx - custom shader objects (raylib Shader parity) over WebGPU. Backs
 // LoadShaderFromMemory / GetShaderLocation / SetShaderValue* / BeginShaderMode
 // for fullscreen post-process and custom 2D passes (the galaxy bloom/streak/
 // composite/soft-particle pipeline).

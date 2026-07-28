@@ -1,7 +1,7 @@
 #+build !js
-// ingot:gfx — native window-handle accessor (raylib GetWindowHandle parity).
+// ingot:gfx - native window-handle accessor (raylib GetWindowHandle parity).
 // Returns the platform window object apps need for OS chrome (NSWindow on
-// macOS, HWND on Windows) — used by ingot's window_style_*/titlebar_* glue.
+// macOS, HWND on Windows) - used by ingot's window_style_*/titlebar_* glue.
 // Native-only; the web target provides GetWindowHandle in platform_web.odin.
 package gfx
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tiger Style gate for ingot: strict type-check + vet across every package.
-# This is our "lint" — odin has no separate linter, so -vet -strict-style is it.
+# This is our "lint" - odin has no separate linter, so -vet -strict-style is it.
 # Usage: scripts/check.sh [extra odin flags...]
 # See docs/TIGER_STYLE.md.
 set -euo pipefail

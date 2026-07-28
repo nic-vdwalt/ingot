@@ -1,4 +1,4 @@
-// ingot:gfx — 3D draw calls (raylib parity) realised as CPU-projected 2D
+// ingot:gfx - 3D draw calls (raylib parity) realised as CPU-projected 2D
 // billboards/discs over the batch renderer. A full GPU 3D pipeline (instanced
 // meshes, depth prepass) is a larger effort; this projects world geometry
 // through the active Camera3D (BeginMode3D) and draws camera-facing quads so

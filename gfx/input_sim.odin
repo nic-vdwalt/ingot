@@ -1,15 +1,15 @@
-// ingot:gfx — synthetic input seam for headless harnesses. Compiled only
+// ingot:gfx - synthetic input seam for headless harnesses. Compiled only
 // with -define:INGOT_INPUT_SIM=true (precedent: INGOT_NET_SIM); zero cost
 // and absent from normal builds.
 //
 // Why it exists: edge queries (IsKeyPressed, IsMouseButtonPressed/Released)
 // read the buffered Input struct, but held-state queries (IsKeyDown,
-// IsMouseButtonDown) bypass it and ask the platform live — headless those
+// IsMouseButtonDown) bypass it and ask the platform live - headless those
 // always return false, which falsely trips drag-latch "missed release"
 // logic. The sim maintains its own held state and input.odin's *Down
 // queries consult it under `when INGOT_INPUT_SIM`.
 //
-// Contract: the harness drives frames itself — call SimBeginFrame() at the
+// Contract: the harness drives frames itself - call SimBeginFrame() at the
 // top of each simulated frame (mirrors input_poll's clear phase), then
 // SimMouse/SimButton/SimKey/SimChar to stage events. Never call EndDrawing
 // or input_poll (they touch the platform layer, which has no window).
@@ -85,7 +85,7 @@ when INGOT_INPUT_SIM {
 	}
 
 	// SimWheel stages scroll for this frame (visible immediately, unlike
-	// the real pending buffer — harness frames are already discrete).
+	// the real pending buffer - harness frames are already discrete).
 	SimWheel :: proc(dx, dy: f32) {
 		g.inp.wheel.x += dx
 		g.inp.wheel.y += dy

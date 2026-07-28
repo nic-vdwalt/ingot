@@ -49,14 +49,14 @@ Section :: enum {
 
 SECTION_NAMES := [Section]string {
 	.Api_Relationships = "API Relationships",
-	.Buttons    = "Buttons",
-	.Inputs     = "Inputs",
-	.Widgets    = "Widgets",
-	.Charts     = "Charts",
-	.Markdown   = "Markdown",
-	.Layout     = "Layout",
-	.Overlay    = "Overlay",
-	.Stress     = "Stress",
+	.Buttons           = "Buttons",
+	.Inputs            = "Inputs",
+	.Widgets           = "Widgets",
+	.Charts            = "Charts",
+	.Markdown          = "Markdown",
+	.Layout            = "Layout",
+	.Overlay           = "Overlay",
+	.Stress            = "Stress",
 }
 
 SECTION_LAYERS := [Section]string {
@@ -389,12 +389,7 @@ draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
 	return end_y + ui.ui_frame_sc(frame, 8)
 }
 
-relationship_card :: proc(
-	frame: ^ui.Ui_Frame,
-	rect: ui.Rect_I32,
-	label: string,
-	color: ui.Color,
-) {
+relationship_card :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, label: string, color: ui.Color) {
 	assert(frame != nil, "relationship_card: nil frame")
 	assert(rect.w > 0 && rect.h > 0, "relationship_card: empty rect")
 	ui.draw_rectangle_rounded(
@@ -404,7 +399,13 @@ relationship_card :: proc(
 		4,
 		color,
 	)
-	ui.text(frame, label, rect.x + ui.ui_frame_sc(frame, 10), rect.y + ui.ui_frame_sc(frame, 10), .Label)
+	ui.text(
+		frame,
+		label,
+		rect.x + ui.ui_frame_sc(frame, 10),
+		rect.y + ui.ui_frame_sc(frame, 10),
+		.Label,
+	)
 }
 
 host_ownership_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
@@ -413,7 +414,11 @@ host_ownership_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: 
 	theme := ui.ui_frame_theme(frame)
 	gap := ui.ui_frame_sc(frame, 12)
 	card_w := (rect.w - gap * 2) / 3
-	labels := [?]string{"ui_gfx.App  [default]", "ui_gfx.Session  [custom host]", "ui_gfx.Adapter  [bridge]"}
+	labels := [?]string {
+		"ui_gfx.App  [default]",
+		"ui_gfx.Session  [custom host]",
+		"ui_gfx.Adapter  [bridge]",
+	}
 	for label, index in labels {
 		x := i32(index) * (card_w + gap)
 		relationship_card(frame, {x, 24, card_w, 52}, label, theme.bg_active)
@@ -435,16 +440,37 @@ geometry_ownership_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userda
 	case .Checkbox:
 		facade, explicit = "checkbox(u, \"sync\", ...)", "checkbox_at(frame, rect, ... )"
 	case .Line_Chart:
-		facade, explicit = "line_chart(u, series, state)", "line_chart_at(frame, rect, series, state)"
+		facade, explicit =
+			"line_chart(u, series, state)", "line_chart_at(frame, rect, series, state)"
 	}
 	relationship_card(frame, {0, 24, card_w, 76}, "FACADE LEAF", theme.bg_active)
 	relationship_card(frame, {card_w + gap, 24, card_w, 76}, "EXPLICIT LEAF", theme.bg_selection)
 	ui.text(frame, facade, 10, 68, .Label)
 	ui.text(frame, explicit, card_w + gap + 10, 68, .Label)
-	ui.text(frame, "delegates after supplying geometry  \u2192", card_w - gap / 2, 4, .Label, .Accent)
+	ui.text(
+		frame,
+		"delegates after supplying geometry  \u2192",
+		card_w - gap / 2,
+		4,
+		.Label,
+		.Accent,
+	)
 	ui.text(frame, "logical slot \u00b7 scale \u00b7 ID \u00b7 focus", 10, 112, .Label, .Secondary)
-	ui.text(frame, "physical Rect_I32 \u00b7 placement \u00b7 Focus_Opt", card_w + gap, 112, .Label, .Secondary)
-	ui.text(frame, "SHARED: interaction \u00b7 theme \u00b7 semantics \u00b7 accessibility \u00b7 UI paint", 10, 144, .Label)
+	ui.text(
+		frame,
+		"physical Rect_I32 \u00b7 placement \u00b7 Focus_Opt",
+		card_w + gap,
+		112,
+		.Label,
+		.Secondary,
+	)
+	ui.text(
+		frame,
+		"SHARED: interaction \u00b7 theme \u00b7 semantics \u00b7 accessibility \u00b7 UI paint",
+		10,
+		144,
+		.Label,
+	)
 }
 
 canvas_bridge_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
@@ -453,7 +479,12 @@ canvas_bridge_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: r
 	theme := ui.ui_frame_theme(frame)
 	card_w := min(rect.w / 3, ui.ui_frame_sc(frame, 220))
 	relationship_card(frame, {0, 26, card_w, 54}, "ui.Ui flow", theme.bg_active)
-	relationship_card(frame, {rect.w - card_w, 26, card_w, 54}, "explicit island\nlocal physical rect", theme.bg_selection)
+	relationship_card(
+		frame,
+		{rect.w - card_w, 26, card_w, 54},
+		"explicit island\nlocal physical rect",
+		theme.bg_selection,
+	)
 	ui.text(frame, "reserves logical slot + scales once  \u2192", card_w + 10, 12, .Label, .Accent)
 	ui.text(frame, "\u2190  returns to facade flow", card_w + 30, 78, .Label, .Secondary)
 }
@@ -465,13 +496,30 @@ output_routes_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: r
 	ui.text(frame, "facade leaves", 0, 8, .Label)
 	ui.text(frame, "explicit leaves", 0, 34, .Label)
 	ui.text(frame, "composition protocols", 0, 60, .Label)
-	relationship_card(frame, {rect.w / 3, 22, rect.w / 5, 58}, "Ui_Frame\npaint + semantics", theme.bg_active)
-	relationship_card(frame, {rect.w * 3 / 5, 22, rect.w / 6, 58}, "Adapter\nreplays", theme.bg_secondary)
+	relationship_card(
+		frame,
+		{rect.w / 3, 22, rect.w / 5, 58},
+		"Ui_Frame\npaint + semantics",
+		theme.bg_active,
+	)
+	relationship_card(
+		frame,
+		{rect.w * 3 / 5, 22, rect.w / 6, 58},
+		"Adapter\nreplays",
+		theme.bg_secondary,
+	)
 	relationship_card(frame, {rect.w * 4 / 5, 22, rect.w / 5, 58}, "ingot:gfx", theme.bg_code)
 	ui.text(frame, "emits  \u2192", rect.w / 4, 40, .Label, .Accent)
 	ui.text(frame, "\u2192", rect.w * 11 / 20, 40, .Label, .Accent)
 	ui.text(frame, "\u2192", rect.w * 23 / 30, 40, .Label, .Accent)
-	ui.text(frame, "direct texture / shader / 3D / render-target capability  - - - - - - - - - - - - \u2192", 0, 104, .Label, .Secondary)
+	ui.text(
+		frame,
+		"direct texture / shader / 3D / render-target capability  - - - - - - - - - - - - \u2192",
+		0,
+		104,
+		.Label,
+		.Secondary,
+	)
 }
 
 draw_entry_paths :: proc(u: ^ui.Ui) {
@@ -484,7 +532,11 @@ draw_entry_paths :: proc(u: ^ui.Ui) {
 	ui.space(u, .XS)
 	ui.label(u, "RAYLIB APP  \u2192  ingot:gfx RAYLIB-SHAPED LOOP", color = theme.fg_accent)
 	ui.label(u, "replace imports first; preserve supported behavior")
-	ui.label(u, "compile errors inventory ports; add App/Session + UI only when needed", color = theme.fg_secondary)
+	ui.label(
+		u,
+		"compile errors inventory ports; add App/Session + UI only when needed",
+		color = theme.fg_secondary,
+	)
 	ui.label(u, "rlgl is a bounded migration shim, not OpenGL.", color = theme.fg_tool)
 }
 
@@ -495,8 +547,20 @@ draw_host_ownership :: proc(u: ^ui.Ui) {
 	ui.label(u, "App owns/defaults Session; Session owns/uses Adapter.")
 	_ = ui.canvas(u, {height = 112}, host_ownership_canvas)
 	ui.kv_row(u, "App", "ordinary one-window app", theme.fg_secondary, theme.fg_primary)
-	ui.kv_row(u, "Session", "custom pacing, embedding, contexts", theme.fg_secondary, theme.fg_primary)
-	ui.kv_row(u, "Adapter", "bridge implementation; not an app shell", theme.fg_secondary, theme.fg_primary)
+	ui.kv_row(
+		u,
+		"Session",
+		"custom pacing, embedding, contexts",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Adapter",
+		"bridge implementation; not an app shell",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
 }
 
 draw_geometry_ownership :: proc(u: ^ui.Ui, state: ^Api_Map_State) {
@@ -521,19 +585,55 @@ draw_canvas_bridge :: proc(u: ^ui.Ui) {
 	_ = ui.section_header(u, "4. CANVAS IS A GEOMETRY BRIDGE")
 	ui.label(u, "canvas reserves a facade slot, scales once, and returns to facade flow.")
 	_ = ui.canvas(u, {height = 112}, canvas_bridge_canvas)
-	ui.label(u, "It stays inside the same input snapshot, semantics, clipping, and paint list.", color = theme.fg_secondary)
-	ui.label(u, "Use canvas_begin/end only when the caller owns the physical rect or lifecycle.", color = theme.fg_secondary)
+	ui.label(
+		u,
+		"It stays inside the same input snapshot, semantics, clipping, and paint list.",
+		color = theme.fg_secondary,
+	)
+	ui.label(
+		u,
+		"Use canvas_begin/end only when the caller owns the physical rect or lifecycle.",
+		color = theme.fg_secondary,
+	)
 }
 
 draw_composition_protocols :: proc(u: ^ui.Ui) {
 	assert(u != nil && u.open, "draw_composition_protocols: invalid UI")
 	theme := ui.ui_frame_theme(u.frame)
 	_ = ui.section_header(u, "5. EXPLICIT COMPOSITION PROTOCOLS ARE PEERS")
-	ui.kv_row(u, "pane_begin \u2192 content \u2192 pane_end", "scroll + clip", theme.fg_secondary, theme.fg_primary)
-	ui.kv_row(u, "listbox_begin \u2192 rows \u2192 listbox_end", "selection + navigation", theme.fg_secondary, theme.fg_primary)
-	ui.kv_row(u, "modal / overlay begin \u2192 body \u2192 end", "routing + top-layer paint", theme.fg_secondary, theme.fg_primary)
-	ui.kv_row(u, "markdown + physical layouts", "measurement + placement", theme.fg_secondary, theme.fg_primary)
-	ui.label(u, "They are peers of explicit leaves, not lower-quality facade widgets.", color = theme.fg_tool)
+	ui.kv_row(
+		u,
+		"pane_begin \u2192 content \u2192 pane_end",
+		"scroll + clip",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"listbox_begin \u2192 rows \u2192 listbox_end",
+		"selection + navigation",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"modal / overlay begin \u2192 body \u2192 end",
+		"routing + top-layer paint",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"markdown + physical layouts",
+		"measurement + placement",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.label(
+		u,
+		"They are peers of explicit leaves, not lower-quality facade widgets.",
+		color = theme.fg_tool,
+	)
 }
 
 draw_output_routes :: proc(u: ^ui.Ui) {
@@ -543,7 +643,11 @@ draw_output_routes :: proc(u: ^ui.Ui) {
 	ui.label(u, "All UI declaration paths emit paint and semantics into Ui_Frame.")
 	_ = ui.canvas(u, {height = 136}, output_routes_canvas)
 	ui.label(u, "Adapter replays renderer-independent UI paint through ingot:gfx.")
-	ui.label(u, "Call gfx directly only for capabilities outside UI paint.", color = theme.fg_accent)
+	ui.label(
+		u,
+		"Call gfx directly only for capabilities outside UI paint.",
+		color = theme.fg_accent,
+	)
 }
 
 draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {

@@ -1,5 +1,5 @@
 #+build js
-// ingot:gfx — web stub for the render-target readback path.
+// ingot:gfx - web stub for the render-target readback path.
 //
 // The capture path exists to produce reproducible media and visual-regression
 // fences from a desktop build; the browser has no filesystem to write a PNG to.

@@ -1,11 +1,11 @@
 #+build !js
-// ingot:gfx — native (desktop) platform backend.
+// ingot:gfx - native (desktop) platform backend.
 //
 // Every GLFW call in the engine lives in this file so the shared gfx core stays
 // windowing-backend-agnostic. Compiled on all non-JS targets (macOS/Windows/
 // Linux); the browser target compiles platform_web.odin instead. The logic here
 // is the same GLFW code that previously lived inline in context.odin /
-// input.odin — moved verbatim behind the platform seam, so native behaviour is
+// input.odin - moved verbatim behind the platform seam, so native behaviour is
 // unchanged.
 package gfx
 
@@ -239,7 +239,7 @@ platform_input_init :: proc() {
 	// Activity marks for event-driven frame scheduling (idle.odin). Cursor,
 	// button, focus and size events have no state to store (they are polled),
 	// but must still wake the idle gate; WindowRefresh is the OS damage signal
-	// (uncover/resize) — without it an idle window would show stale content.
+	// (uncover/resize) - without it an idle window would show stale content.
 	glfw.SetCursorPosCallback(_win(), _cursor_pos_cb)
 	glfw.SetMouseButtonCallback(_win(), _mouse_button_cb)
 	glfw.SetWindowRefreshCallback(_win(), _refresh_cb)
@@ -395,7 +395,7 @@ platform_drop_shutdown :: proc() {
 // platform_gamepad_poll snapshots every gamepad slot from GLFW's SDL-mapping
 // database. Buttons arrive in GLFW order and are remapped to the raylib
 // GamepadButton layout via _GLFW_PAD_REMAP; the analog triggers additionally
-// set the digital LEFT/RIGHT_TRIGGER_2 buttons (raylib parity — GLFW exposes
+// set the digital LEFT/RIGHT_TRIGGER_2 buttons (raylib parity - GLFW exposes
 // triggers only as axes).
 @(private)
 platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {

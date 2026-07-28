@@ -1,5 +1,5 @@
 #+build !js
-// ingot:gfx — text-metric regression test. A live raylib baseline can't be
+// ingot:gfx - text-metric regression test. A live raylib baseline can't be
 // linked headlessly, so instead of a cross-library diff we lock the invariants
 // that keep MeasureTextEx faithful to raylib's model: empty == 0, width is
 // exactly linear in font size, a monospace advance is uniform, newlines add

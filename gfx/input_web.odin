@@ -1,10 +1,10 @@
 #+build js
-// ingot:gfx — browser input entry points.
+// ingot:gfx - browser input entry points.
 //
 // These procs are exported to WASM and called from web/ingot_input.js when DOM
 // events fire (keydown/keyup, pointer, wheel, focus). They write into the
 // staging buffer in platform_web.odin, which platform_poll_events drains into
-// the shared Input struct each frame — so the app sees the same g.inp state and
+// the shared Input struct each frame - so the app sees the same g.inp state and
 // raylib-named queries (IsKeyPressed, GetMousePosition, …) as on native.
 //
 // Key codes are pre-mapped in JS (browser KeyboardEvent.code → ingot/raylib
@@ -83,7 +83,7 @@ ingot_web_preedit_char :: proc "contextless" (codepoint: rune) {
 	preedit_caret = preedit_len
 }
 
-// x, y are in CSS pixels (logical points) — matching GetScreenWidth/Height and
+// x, y are in CSS pixels (logical points) - matching GetScreenWidth/Height and
 // the native macOS GetCursorPos convention.
 @(export)
 ingot_web_mouse_move :: proc "contextless" (x, y: f32) {

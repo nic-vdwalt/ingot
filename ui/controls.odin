@@ -232,7 +232,7 @@ radio_at :: proc(
 	}
 	label_x := rect.x + box + metrics.CONTROL_GAP
 	fs := control_label_size(frame, font_size)
-	// Why truncate: mirrors checkbox_at — the label never escapes its own rect.
+	// Why truncate: mirrors checkbox_at - the label never escapes its own rect.
 	draw_text_truncated_frame(
 		frame,
 		label,

@@ -1,4 +1,4 @@
-// ingot:gfx — real offscreen render targets (raylib RenderTexture parity) over
+// ingot:gfx - real offscreen render targets (raylib RenderTexture parity) over
 // WebGPU. A render target is a sampleable colour texture (optionally with a
 // depth attachment); BeginTextureMode..EndTextureMode redirect the batch
 // renderer into a dedicated render pass on its own command encoder, submitted
@@ -6,7 +6,7 @@
 // the main frame pass (DrawTexturePro blit).
 //
 // Coordinate convention: the RT projection flips y (p.z = -1) so the stored
-// texture matches raylib's bottom-left-origin RenderTexture — callers keep
+// texture matches raylib's bottom-left-origin RenderTexture - callers keep
 // blitting with a negative source height to display it upright, unchanged.
 package gfx
 
@@ -16,7 +16,7 @@ RT_PROJECTION_Y_FLIP :: f32(-1.0)
 
 // _rt_projection_vec builds the group(0) projection vector for a render
 // target: reciprocal pixel scale in x/y, the named y-flip in z, 0 in w.
-// Pure — split out of BeginTextureMode so the orientation contract
+// Pure - split out of BeginTextureMode so the orientation contract
 // (docs/rendering.md "Render-target orientation") is locked by a unit test.
 @(private)
 _rt_projection_vec :: proc "contextless" (width, height: i32) -> [4]f32 {
@@ -53,7 +53,7 @@ LoadRenderTextureEx :: proc(
 
 // UnloadRenderTexture releases the color (and optional depth) textures.
 // Both route through the retire queue (context.odin), so unloading is safe
-// at any point in a frame — destruction defers past this frame's submit.
+// at any point in a frame - destruction defers past this frame's submit.
 UnloadRenderTexture :: proc(target: RenderTexture2D) {
 	if target.texture.id != 0 do UnloadTexture(target.texture)
 	if target.depth.id != 0 do _unload_depth(target.depth)

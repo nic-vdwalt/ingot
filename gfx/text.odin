@@ -1,4 +1,4 @@
-// ingot:gfx — glyph-atlas text stack over WebGPU. Mirrors the raylib text API
+// ingot:gfx - glyph-atlas text stack over WebGPU. Mirrors the raylib text API
 // ingot uses: LoadFontFromMemory / UnloadFont / DrawTextEx / MeasureTextEx /
 // DrawTextCodepoint / SetTextureFilter, plus DrawText/MeasureText/DrawTextPro
 // over the embedded default font (font_default.odin).
@@ -99,7 +99,7 @@ LoadFontFromMemory :: proc(
 	// length, so the two can disagree. A negative dataSize reaches make() and
 	// then slices fileData[:dataSize]; a nil fileData with a positive length
 	// slices nothing valid. _to_rgba_into guards its equivalent inputs
-	// (texture.odin:99) — this one did not.
+	// (texture.odin:99) - this one did not.
 	assert(fileData != nil, "LoadFontFromMemory: nil font data")
 	assert(dataSize > 0, "LoadFontFromMemory: non-positive font data size")
 	assert(codepointCount >= 0, "LoadFontFromMemory: negative codepoint count")

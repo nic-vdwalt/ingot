@@ -1,6 +1,6 @@
 package libvterm
 
-// Odin bindings for libvterm 0.3.3 — the VT220/xterm terminal emulator library
+// Odin bindings for libvterm 0.3.3 - the VT220/xterm terminal emulator library
 // used by vim/neovim.
 //
 // See: https://www.leonerd.org.uk/code/libvterm/

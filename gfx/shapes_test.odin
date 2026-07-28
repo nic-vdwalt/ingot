@@ -1,5 +1,5 @@
 #+build !js
-// ingot:gfx — tests for the shape primitives added for raylib parity.
+// ingot:gfx - tests for the shape primitives added for raylib parity.
 //
 // These drive the batch's _emit_* layer through a private Renderer, so they
 // assert the geometry actually produced rather than that a call returned. They
@@ -77,8 +77,8 @@ triangle_fan_and_strip_ignore_degenerate_input :: proc(t: ^testing.T) {
 	g.frame.has_frame = false
 
 	// Empty input is ordinary: raylib draws nothing and so does ingot. A nil
-	// pointer with a *positive* count is a different thing — a programmer
-	// error — and asserts rather than silently drawing nothing, so it is not
+	// pointer with a *positive* count is a different thing - a programmer
+	// error - and asserts rather than silently drawing nothing, so it is not
 	// exercised here.
 	points := [2]Vector2{{0, 0}, {1, 1}}
 	DrawTriangleFan(nil, 0, WHITE)

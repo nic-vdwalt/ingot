@@ -1,5 +1,5 @@
 #+build !js
-// ingot:gfx — additional raylib-named window/mouse/drag-drop procs used by
+// ingot:gfx - additional raylib-named window/mouse/drag-drop procs used by
 // consumer apps (alloy). GLFW-backed; native-only. The web target provides the
 // window-state and drag-drop equivalents in platform_web.odin.
 package gfx

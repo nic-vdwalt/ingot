@@ -1,7 +1,7 @@
 #+build !js
 // Screenshot readback transforms. The GPU half of screenshot.odin needs a
 // device; these two pure steps carry the contract that actually decides whether
-// a captured PNG is correct — row alignment, row order, and channel order — so
+// a captured PNG is correct - row alignment, row order, and channel order - so
 // they are fenced here and run windowless under scripts/test.sh.
 package gfx
 

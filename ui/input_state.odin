@@ -1,7 +1,7 @@
 // LIB-CANDIDATE: imports only core:*.
 // Ergonomic state bundling for text inputs: one caller-owned struct instead
 // of a builder plus a state struct at every call site. Nothing here is
-// library-retained — the bundle lives in the caller's data, and `input` is a
+// library-retained - the bundle lives in the caller's data, and `input` is a
 // thin wrapper over text_input_box.
 package ui
 
@@ -15,7 +15,7 @@ Input_Box :: struct {
 	st: Text_Input_State,
 }
 
-// input_box_init prepares a bundle (optional — the zero value works; init
+// input_box_init prepares a bundle (optional - the zero value works; init
 // exists for symmetry with destroy and for arena-backed builders).
 input_box_init :: proc(b: ^Input_Box, allocator := context.allocator) {
 	assert(b != nil, "input_box_init: nil box")

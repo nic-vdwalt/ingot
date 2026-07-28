@@ -1,5 +1,5 @@
 #+build !js
-// ingot:gfx — deterministic GPU readback of a render target to a PNG file.
+// ingot:gfx - deterministic GPU readback of a render target to a PNG file.
 //
 // Why a render target and not the window: the surface is configured
 // RenderAttachment-only (context.odin, SurfaceConfiguration.usage), and adding
@@ -9,7 +9,7 @@
 //
 // Orientation: render targets store bottom-left origin (RT_PROJECTION_Y_FLIP,
 // render_target.odin), matching raylib. PNG rows are top-down, so the unpad
-// step reverses row order — a capture is upright without the negative source
+// step reverses row order - a capture is upright without the negative source
 // height a blit needs.
 //
 // Determinism: the same frame state produces byte-identical output on every
@@ -41,7 +41,7 @@ _screenshot_padded_bpr :: proc "contextless" (width: int) -> int {
 
 // _screenshot_swizzle_needed reports whether `format` needs a BGRA to RGBA
 // swap before PNG encoding. ok is false for any format this path cannot encode
-// truthfully — callers must fail rather than write mislabelled pixels.
+// truthfully - callers must fail rather than write mislabelled pixels.
 @(private)
 _screenshot_swizzle_needed :: proc "contextless" (
 	format: wg.TextureFormat,

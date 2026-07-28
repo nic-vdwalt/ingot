@@ -1,7 +1,7 @@
 #+build !js
 // Render-target orientation lock-in: the y-flip convention is a compatibility
 // contract (openalloy's nvim render texture and any migrated bloom chain
-// sample against it — docs/rendering.md "Render-target orientation" and
+// sample against it - docs/rendering.md "Render-target orientation" and
 // "Consumer migration guide"). These tests fence the pure projection math;
 // the visual fence is examples/render_fixture's two-pass ping-pong chain
 // blitted with a negative source height.
@@ -26,7 +26,7 @@ test_rt_projection_y_flip_convention :: proc(t: ^testing.T) {
 @(test)
 test_rt_projection_degenerate_extent :: proc(t: ^testing.T) {
 	// Zero/negative extents clamp to 1 (never divide by zero); orientation
-	// stays flipped regardless of target size — pass count and target
+	// stays flipped regardless of target size - pass count and target
 	// dimensions must not affect the convention.
 	p := _rt_projection_vec(0, -5)
 	testing.expect_value(t, p.x, f32(1))

@@ -2,7 +2,7 @@
 // Facade entry points for widgets whose implementation lives in the explicit
 // tier. Each one does exactly three things: carve a bounded slot in logical
 // units, register focus only when that slot is visible, and delegate to the
-// *_at form. No widget state is retained here — the Ui owns layout and focus
+// *_at form. No widget state is retained here - the Ui owns layout and focus
 // order, the caller owns everything else.
 //
 // Interactive widgets take a Widget_Id so identity survives insertion and

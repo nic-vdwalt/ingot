@@ -1,4 +1,4 @@
-// ingot:gfx — raylib-named 2D shape API tessellated onto the batch renderer.
+// ingot:gfx - raylib-named 2D shape API tessellated onto the batch renderer.
 // Signatures/param order match Odin's vendor:raylib so `rl.Draw*`,
 // `rl.*ScissorMode`, and `rl.CheckCollisionPointRec` call sites port unchanged.
 // All coordinates are in logical pixels; scissor is converted to framebuffer
@@ -14,8 +14,8 @@ import wg "vendor:wgpu"
 // Segment counts arrive two ways, and both are unbounded at the call site: a
 // caller passes `segments` directly, or it is derived from a radius that grows
 // without limit under a zoomed Camera2D. Each segment emits a triangle, so an
-// absurd count does not overflow the batch — `_batch_reserve` flushes and
-// retries — it converts one draw call into millions of GPU flushes and hangs
+// absurd count does not overflow the batch - `_batch_reserve` flushes and
+// retries - it converts one draw call into millions of GPU flushes and hangs
 // the frame.
 //
 // 8192 is past the point of visible return: a circle spanning an 8K display is
@@ -28,8 +28,8 @@ SHAPE_SEGMENTS_MAX :: 8192
 
 // _shape_segments clamps a requested or derived segment count into
 // 1..=SHAPE_SEGMENTS_MAX. It clamps rather than asserts because a large count
-// is usually a large radius under zoom — ordinary data, not a programmer error
-// — and refusing to draw or aborting would both be worse than tessellating at
+// is usually a large radius under zoom - ordinary data, not a programmer error
+// - and refusing to draw or aborting would both be worse than tessellating at
 // the resolution limit.
 @(private)
 _shape_segments :: proc(requested: i32, minimum: i32) -> i32 {
@@ -594,8 +594,8 @@ DrawPolyLinesEx :: proc(
 // --- triangle fans and strips ----------------------------------------------
 
 // SHAPE_POINTS_MAX bounds a single fan or strip. Unlike a segment count this
-// cannot be clamped — dropping points would silently corrupt the caller's
-// shape — so it is asserted instead. The bound is the batch's own vertex
+// cannot be clamped - dropping points would silently corrupt the caller's
+// shape - so it is asserted instead. The bound is the batch's own vertex
 // capacity: one fan needing more vertices than the entire batch can hold is a
 // caller passing a bad count, not a legitimate 2D primitive.
 SHAPE_POINTS_MAX :: BATCH_MAX_VERTICES / 3

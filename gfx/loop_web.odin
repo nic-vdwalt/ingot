@@ -1,8 +1,8 @@
 #+build js
-// ingot:gfx — browser frame loop (inversion of control).
+// ingot:gfx - browser frame loop (inversion of control).
 //
 // Native code owns its loop (`for !WindowShouldClose()`), but a browser will not
-// allow an infinite loop — it owns the loop and calls back once per animation
+// allow an infinite loop - it owns the loop and calls back once per animation
 // frame. So on web, run() stores the app's frame callback and returns; the JS
 // shell's requestAnimationFrame drives the exported `step` below, which runs one
 // frame once the GPU device has finished resolving (see platform_web.odin's

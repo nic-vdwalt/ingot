@@ -90,7 +90,7 @@ is_mouse_button_down :: proc(frame: ^Ui_Frame, button: MouseButton) -> bool {
 //
 // The platform adapter drains the backend's character queue into Ui_Input at
 // the top of every frame, so polling the backend from view code always yields
-// nothing — the queue is already empty. Views must read this snapshot instead.
+// nothing - the queue is already empty. Views must read this snapshot instead.
 frame_characters :: proc(frame: ^Ui_Frame) -> []rune {
 	assert(frame != nil, "frame_characters: nil frame")
 	input := frame_input(frame)

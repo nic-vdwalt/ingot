@@ -1,4 +1,4 @@
-// ingot:gfx — image/texture support (raylib-named). Covers what the consumer
+// ingot:gfx - image/texture support (raylib-named). Covers what the consumer
 // apps use: LoadImageFromMemory/LoadTextureFromImage/LoadTexture, UpdateTexture,
 // UnloadTexture, and DrawTexture*/DrawTexturePro, plus SetWindowIcon. Textures
 // live in the active context's bounded pool above the font-atlas ID domain and
@@ -188,7 +188,7 @@ _texture_view :: proc(id: u32) -> wg.TextureView {
 }
 
 // _new_rt_depth creates a Depth24Plus depth attachment registered in the
-// texture registry (no sampler/bind — never sampled). Returns its Texture2D.
+// texture registry (no sampler/bind - never sampled). Returns its Texture2D.
 @(private)
 _new_rt_depth :: proc(w, h: i32) -> Texture2D {
 	e := new(Tex_Entry)
@@ -223,7 +223,7 @@ _unload_depth :: proc(depth: Texture2D) {
 
 // LoadTextureFromImage uploads `image` and registers it in the context's
 // texture pool. Returns a zero Texture2D when the pool is full (see
-// TextureSlotsUsed) or the image is empty — a full pool is an operating
+// TextureSlotsUsed) or the image is empty - a full pool is an operating
 // condition, so callers must check IsTextureValid rather than assume success.
 LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 	if image.data == nil || image.width <= 0 || image.height <= 0 do return Texture2D{}
@@ -305,7 +305,7 @@ UpdateTexture :: proc(texture: Texture2D, pixels: rawptr) {
 	if e == nil || pixels == nil do return
 	// caller passed data matching the source format used at load; the texture
 	// itself is RGBA8, so expand assuming R8G8B8 (concord's screen frames) when
-	// the byte count differs — otherwise treat as RGBA8.
+	// the byte count differs - otherwise treat as RGBA8.
 	pixel_count := int(e.width) * int(e.height)
 	ensure(pixel_count > 0)
 	resources := &g.resources.textures
@@ -370,7 +370,7 @@ TextureSlotsUsed :: proc() -> int {
 }
 
 // IsTextureValid reports whether `texture` refers to a live slot. A loader
-// returning id == 0 means the pool was full — an operating condition callers
+// returning id == 0 means the pool was full - an operating condition callers
 // must handle, not a programmer error, so this is a query and not an assert.
 IsTextureValid :: proc(texture: Texture2D) -> bool {
 	if texture.id == 0 do return false
