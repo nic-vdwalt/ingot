@@ -248,7 +248,7 @@ when CAPTURE {
 		// fixed clear colour, so a light-theme shot is light behind the content
 		// instead of showing the dark configured clear through it.
 		rl.ClearBackground(capture_clear_color())
-		frame(&app, frame_state, nil)
+		gallery_frame(&app, frame_state, nil)
 		ui_gfx.app_session_end_frame_context(&app.session, &gfx_frame)
 		rl.EndTextureMode()
 
@@ -286,7 +286,7 @@ when CAPTURE {
 				clear_color = {24, 26, 32, 255},
 				session = {semantics_enabled = true},
 			},
-			{frame = frame, shutdown = shutdown},
+			{frame = gallery_frame, shutdown = shutdown},
 		)
 		if !started {
 			fmt.eprintln("capture: window initialisation failed")

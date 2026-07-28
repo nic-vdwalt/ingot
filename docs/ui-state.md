@@ -188,8 +188,10 @@ if ui.button_at(frame, rect, "Save", .Primary, focus = save_focus) {
 }
 ```
 
-Every widget has exactly one entry point per tier, and the `*_at` suffix marks
-the explicit one. There are no `*_ui`, `*_ui_id`, or `*_auto` variants.
+Each leaf-widget behavior variant has one canonical geometry shape per tier.
+The `*_at` suffix marks explicit leaf geometry; `_state` and `_animated` mark
+behavior variants. Explicit composition protocols keep lifecycle/subsystem
+names. There are no `*_ui`, `*_ui_id`, or `*_auto` variants.
 
 ### Widget tiers
 
@@ -208,7 +210,7 @@ an identity to key.
 | collapsible header | `collapsible_header(u, id, …)` | `collapsible_header_at` |
 | icon button | `icon_btn(u, id, …)` | `icon_btn_at` |
 | back button | `back_btn(u, id, …)` | `back_btn_at` |
-| tooltip | `tooltip_for(u, …)` | `tooltip` |
+| tooltip | `tooltip(u, …)` | `tooltip_at` |
 | section header | `section_header(u, label)` | `section_header_at` |
 | status pill | `status_pill(u, …)` | `status_pill_at` |
 | progress bar | `progress_bar`, `progress_bar_animated` | `progress_bar_at`, `progress_bar_animated_at` |
@@ -216,10 +218,12 @@ an identity to key.
 | sparkline | `sparkline(u, …)` | `sparkline_at` |
 | line / bar chart | `line_chart`, `bar_chart` | `line_chart_at`, `bar_chart_at` |
 | key/value row | `kv_row(u, …)` | `kv_row_at` |
-| card background | `card_bg(u, …)` | `draw_card_bg_frame` |
+| card background | `card_bg(u, …)` | `card_bg_at` |
 | list row background | — | `list_row_bg_at` |
-| listbox, modal, context menu, markdown | — | explicit only |
-| `Flow_Layout`, `Fit_Column` | — | explicit only, by design |
+| listbox / pane / modal / context menu | — | explicit lifecycle protocols |
+| overlay | — | explicit paint subsystem |
+| markdown | — | `markdown_context` + `markdown_draw` |
+| `Flow_Layout`, `Fit_Column` | — | explicit layout protocols, by design |
 
 Facade and explicit entry points share interaction, focus, semantics, and paint. They differ only in who supplies geometry. Facade dimensions are logical; roots, measured values, metrics, low-level layout, and explicit rectangles are physical.
 
@@ -234,17 +238,13 @@ path. Native spell adapters may use process resources required by the operating
 system, while logical caches, ignored words, and menu state remain explicitly
 owned by runtimes and components.
 
-## Sequential focus (deprecated)
+## Low-level ordinal focus
 
-`focus_sequential` assigns focus by current-frame call order. It is deprecated
-and no widget in the package uses it: insertion, removal, or reordering
-transfers focus to whichever widget inherits an ordinal, which is a defect the
-type system cannot catch. Pass a `Widget_Id` to `focus` instead.
-
-The lower-level `Focus_Opt{&slot, id}` and `form_focus_cycle` APIs remain
-available for applications driving an ordinal form themselves, under the same
-constraint. Do not mix sequential and stable focus registration in one `Ui`
-frame; the mode guard asserts.
+`Ui` has one focus model: generated `Widget_Id` values registered through
+`focus`. The lower-level `Focus_Opt{&slot, id}` and `form_focus_cycle` APIs remain
+available for explicit applications that deliberately own a fixed ordinal form.
+They are not part of the facade: insertion, removal, or reordering transfers
+ordinal focus to whichever control inherits the slot.
 
 ## Accessibility
 
@@ -253,7 +253,7 @@ through app-wide focus scopes and assistive-technology focus actions. A
 generated `Widget_Id` is the authoritative control identity. An explicit
 semantic `field_id` remains available for application-global external identity,
 and a focus link supplies the explicit tier's identity when neither is present.
-`Focus_Id` remains scoped to one `Ui`. Duplicate semantic IDs
+`Focus_Id` is scoped by its caller-owned `Focus_State` / `Focus_Opt`. Duplicate semantic IDs
 drop the later node and increment frame diagnostics. Focus-scope priority
 selects the traversal tier; equal-priority scope IDs merge in draw order.
 
