@@ -630,6 +630,20 @@ btn_gloss :: proc(frame: ^Ui_Frame, theme: ^Theme, rect: Rectangle) {
 	)
 }
 
+Button_Options :: struct {
+	style:    Btn_Style,
+	disabled: bool,
+}
+
+Button_At_Options :: struct {
+	style:       Btn_Style,
+	font_size:   i32,
+	disabled:    bool,
+	web_form_id: string,
+	focus:       Focus_Opt,
+	widget:      Widget_Id,
+}
+
 // Unified button. Returns true if clicked this frame. Hover eases in/out via
 // hover_anim_frac (frame-rate independent); pressed state darkens instantly.
 // Pass `focus` to make the button keyboard-operable: clicking acquires the
@@ -638,7 +652,8 @@ btn_gloss :: proc(frame: ^Ui_Frame, theme: ^Theme, rect: Rectangle) {
 // Widget tiers — see docs/ui-state.md#widget-tiers:
 //   button      facade: a ^Ui plus a Widget_Id, carving a bounded slot.
 //   button_at   explicit: a ^Ui_Frame plus an application-owned Rect_I32.
-button :: proc(
+@(private = "package")
+button_id :: proc(
 	u: ^Ui,
 	id: Widget_Id,
 	label: string,
@@ -651,6 +666,52 @@ button :: proc(
 	r := btn_slot_px(u, label)
 	fo := focus(u, id) if enabled && slot_visible(r) else Focus_Opt{}
 	return button_at(u.frame, r, label, style, enabled = enabled, focus = fo, widget = id)
+}
+
+@(private = "package")
+button_string :: proc(
+	u: ^Ui,
+	key: string,
+	label: string,
+	style: Btn_Style = .Secondary,
+	enabled: bool = true,
+) -> bool {
+	return button_id(u, id(u, key), label, style, enabled)
+}
+
+@(private = "package")
+button_u64 :: proc(
+	u: ^Ui,
+	key: u64,
+	label: string,
+	style: Btn_Style = .Secondary,
+	enabled: bool = true,
+) -> bool {
+	return button_id(u, id(u, key), label, style, enabled)
+}
+
+@(private = "package")
+button_id_options :: proc(u: ^Ui, id: Widget_Id, label: string, options: Button_Options) -> bool {
+	return button_id(u, id, label, options.style, !options.disabled)
+}
+
+@(private = "package")
+button_string_options :: proc(u: ^Ui, key, label: string, options: Button_Options) -> bool {
+	return button_id_options(u, id(u, key), label, options)
+}
+
+@(private = "package")
+button_u64_options :: proc(u: ^Ui, key: u64, label: string, options: Button_Options) -> bool {
+	return button_id_options(u, id(u, key), label, options)
+}
+
+button :: proc {
+	button_id,
+	button_string,
+	button_u64,
+	button_id_options,
+	button_string_options,
+	button_u64_options,
 }
 
 @(private = "file")
@@ -676,7 +737,8 @@ btn_label_fit :: proc(frame: ^Ui_Frame, label: string, w, font_size: i32) -> (cs
 	return text_c, measure_text_frame(frame, text_c, font_size)
 }
 
-button_at :: proc(
+@(private = "package")
+button_at_legacy :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	label: string,
@@ -745,6 +807,31 @@ button_at :: proc(
 	if !enabled do sem += {.Disabled}
 	semantic_push(frame, .Button, rect, label, sem, focus, widget = widget)
 	return clicked && enabled
+}
+
+@(private = "package")
+button_at_options :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	label: string,
+	options: Button_At_Options,
+) -> bool {
+	return button_at_legacy(
+		frame,
+		rect,
+		label,
+		options.style,
+		options.font_size,
+		!options.disabled,
+		options.web_form_id,
+		options.focus,
+		options.widget,
+	)
+}
+
+button_at :: proc {
+	button_at_legacy,
+	button_at_options,
 }
 
 // button_at_state is button_at plus caller-owned hover animation state.

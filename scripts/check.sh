@@ -7,6 +7,10 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 col="-collection:ingot=$root"
 
+echo "== Odin toolchain =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_toolchain_test.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check-toolchain.py"
+
 # Type-check + vet every package. -vet-shadowing and -strict-style turn sloppy
 # code into build failures; -no-entry-point lets us check library packages that
 # have no main().

@@ -33,7 +33,7 @@ Pin all three inputs in source control and CI:
 
 - The source application's working raylib and Odin revisions.
 - The Ingot Git revision being evaluated.
-- Odin `dev-2026-06:285f6d87b`, which is the revision currently tested by Ingot.
+- The Odin revision in that Ingot checkout's `ODIN_VERSION` file.
 
 Record a native visual baseline before changing imports. Include representative
 input, HiDPI, render-target, shader, audio, and gamepad behavior. If the

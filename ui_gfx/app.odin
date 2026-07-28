@@ -11,6 +11,7 @@ App_State :: enum u8 {
 }
 
 App_Frame_Proc :: #type proc(app: ^App, frame: ^ui.Ui_Frame, userdata: rawptr)
+App_Ui_Proc :: #type proc(app: ^App, u: ^ui.Ui, userdata: rawptr)
 App_Shutdown_Proc :: #type proc(app: ^App, userdata: rawptr)
 
 App_Config :: struct {
@@ -26,11 +27,13 @@ App_Config :: struct {
 
 App_Callbacks :: struct {
 	frame:    App_Frame_Proc,
+	ui:       App_Ui_Proc,
 	shutdown: App_Shutdown_Proc,
 }
 
 App :: struct {
 	session:   Session,
+	form:      ui.Ui,
 	config:    App_Config,
 	callbacks: App_Callbacks,
 	userdata:  rawptr,
@@ -48,7 +51,8 @@ app_init :: proc(
 ) -> bool {
 	assert(app != nil && app.state == .Empty, "app_init: invalid app")
 	assert(config.width > 0 && config.height > 0, "app_init: invalid size")
-	assert(config.title != nil && callbacks.frame != nil, "app_init: missing callback or title")
+	assert(config.title != nil, "app_init: missing title")
+	assert((callbacks.frame == nil) != (callbacks.ui == nil), "app_init: expected one frame callback")
 	assert(active_app == nil, "app_init: another application is active")
 	gfx.SetConfigFlags(config.flags)
 	initialized := gfx.context_init(
@@ -75,7 +79,14 @@ app_frame :: proc(app: ^App) -> bool {
 	if !acquired do return false
 	frame := session_begin_frame_context(&app.session, &gfx_frame)
 	gfx.clear_frame(&gfx_frame, app.config.clear_color)
-	app.callbacks.frame(app, frame, app.userdata)
+	if app.callbacks.ui != nil {
+		app_ui_begin(app, frame, &app.form)
+		app.callbacks.ui(app, &app.form, app.userdata)
+		assert(app.form.open, "app_frame: UI callback closed the application root")
+		ui.end(&app.form)
+	} else {
+		app.callbacks.frame(app, frame, app.userdata)
+	}
 	session_end_frame_context(&app.session, &gfx_frame)
 	gfx.end_frame(&gfx_frame)
 	free_all(context.temp_allocator)

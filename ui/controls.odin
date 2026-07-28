@@ -11,7 +11,8 @@ import "core:strings"
 // checkbox draws a check control with a label. Toggles checked^ on click or
 // Space/Enter while focused. Returns true on the frame the value changed.
 // checkbox carves its own content-sized slot; checkbox_at takes an explicit rect.
-checkbox :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (changed: bool) {
+@(private = "package")
+checkbox_id :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (changed: bool) {
 	assert(u != nil && u.open, "checkbox: frame not open")
 	assert(id != WIDGET_ID_NONE, "checkbox: zero stable id")
 	assert(checked != nil, "checkbox: nil checked")
@@ -20,6 +21,22 @@ checkbox :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (chang
 	r := slot_next_px(u, w, metrics.ROW_H_SM)
 	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return checkbox_at(u.frame, r, label, checked, fo, id)
+}
+
+@(private = "package")
+checkbox_string :: proc(u: ^Ui, key, label: string, checked: ^bool) -> bool {
+	return checkbox_id(u, id(u, key), label, checked)
+}
+
+@(private = "package")
+checkbox_u64 :: proc(u: ^Ui, key: u64, label: string, checked: ^bool) -> bool {
+	return checkbox_id(u, id(u, key), label, checked)
+}
+
+checkbox :: proc {
+	checkbox_id,
+	checkbox_string,
+	checkbox_u64,
 }
 
 // control_label_size resolves the size a checkbox/radio label is drawn at.
@@ -134,7 +151,8 @@ checkbox_at :: proc(
 // radio draws one exclusive-choice row. Selecting it stores `value` into
 // selected^. Returns true on the frame the selection changed to this value.
 // radio carves its own content-sized slot; radio_at takes an explicit rect.
-radio :: proc(
+@(private = "package")
+radio_id :: proc(
 	u: ^Ui,
 	id: Widget_Id,
 	label: string,
@@ -151,6 +169,22 @@ radio :: proc(
 	r := slot_next_px(u, w, metrics.ROW_H_SM)
 	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return radio_at(u.frame, r, label, selected, value, fo, id)
+}
+
+@(private = "package")
+radio_string :: proc(u: ^Ui, key, label: string, selected: ^i32, value: i32) -> bool {
+	return radio_id(u, id(u, key), label, selected, value)
+}
+
+@(private = "package")
+radio_u64 :: proc(u: ^Ui, key: u64, label: string, selected: ^i32, value: i32) -> bool {
+	return radio_id(u, id(u, key), label, selected, value)
+}
+
+radio :: proc {
+	radio_id,
+	radio_string,
+	radio_u64,
 }
 
 radio_at :: proc(

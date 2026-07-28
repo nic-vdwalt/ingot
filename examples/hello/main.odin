@@ -5,7 +5,6 @@ import ui "ingot:ui"
 import "ingot:ui_gfx"
 
 State :: struct {
-	form:    ui.Ui,
 	showing: bool,
 	items:   [3]u64,
 }
@@ -30,33 +29,31 @@ main :: proc() {
 			clear_color = {24, 26, 32, 255},
 			session = {semantics_enabled = true},
 		},
-		{frame = draw, shutdown = shutdown},
+		{ui = draw, shutdown = shutdown},
 		&state,
 	)
 }
 
-draw :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
+draw :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
+	assert(app != nil && form != nil, "draw: invalid app or UI")
 	data := cast(^State)userdata
-	root := ui_gfx.app_screen_rect(app)
-	ui.begin(&data.form, frame, root, gap = .SM)
-	ui.padding(&data.form, .LG)
-	ui.scope_begin(&data.form, "hello")
-	ui.label(&data.form, "Hello from Ingot", ui.ui_frame_metrics(frame).FONT_SIZE_TITLE)
-	ui.flex_row_begin(&data.form, 32, {ui.fit(120), ui.grow()}, gap = .SM)
-	ui.label(&data.form, "Controls")
-	if ui.button(&data.form, ui.id(&data.form, "toggle"), "Toggle list") {
+	ui.padding(form, .LG)
+	ui.scope_begin(form, "hello")
+	ui.label(form, "Hello from Ingot", ui.ui_frame_metrics(form.frame).FONT_SIZE_TITLE)
+	ui.flex_row_begin(form, 32, {ui.fit(120), ui.grow()}, gap = .SM)
+	ui.label(form, "Controls")
+	if ui.button(form, "toggle", "Toggle list") {
 		data.showing = !data.showing
 	}
-	ui.flex_row_end(&data.form)
-	if data.showing {
-		ui.scope_begin(&data.form, "items")
-		for item in data.items {
-			_ = ui.button(&data.form, ui.id(&data.form, item), "Stable item")
-		}
-		ui.scope_end(&data.form)
-	}
-	ui.scope_end(&data.form)
-	ui.end(&data.form)
+	ui.flex_row_end(form)
+	if data.showing do ui.scope(form, "items", draw_items, &data.items)
+	ui.scope_end(form)
+}
+
+draw_items :: proc(form: ^ui.Ui, userdata: rawptr) {
+	assert(form != nil && userdata != nil, "draw_items: invalid state")
+	items := cast(^[3]u64)userdata
+	for item in items do _ = ui.button(form, item, "Stable item")
 }
 
 shutdown :: proc(app: ^ui_gfx.App, userdata: rawptr) {

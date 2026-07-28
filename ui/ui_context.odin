@@ -405,6 +405,31 @@ scope_end :: proc(u: ^Ui) {
 	id_context_pop(&u.ids)
 }
 
+Scope_Proc :: #type proc(u: ^Ui, userdata: rawptr)
+
+@(private = "package")
+scope_string :: proc(u: ^Ui, key: string, body: Scope_Proc, userdata: rawptr = nil) {
+	assert(u != nil && u.open, "scope: frame not open")
+	assert(body != nil, "scope: nil body")
+	scope_begin(u, key)
+	defer scope_end(u)
+	body(u, userdata)
+}
+
+@(private = "package")
+scope_u64 :: proc(u: ^Ui, key: u64, body: Scope_Proc, userdata: rawptr = nil) {
+	assert(u != nil && u.open, "scope: frame not open")
+	assert(body != nil, "scope: nil body")
+	scope_begin(u, key)
+	defer scope_end(u)
+	body(u, userdata)
+}
+
+scope :: proc {
+	scope_string,
+	scope_u64,
+}
+
 // focus_reset drops retained focus between frames. The root must be closed so
 // this can never race the traversal order being rebuilt in end.
 focus_reset :: proc(u: ^Ui) {

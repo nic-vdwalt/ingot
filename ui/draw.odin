@@ -217,6 +217,26 @@ canvas_clear :: proc(frame: ^Ui_Frame, rect: Rect_I32, color: Color) {
 	draw_rectangle_rec(frame, Rect{0, 0, f32(rect.w), f32(rect.h)}, color)
 }
 
+Canvas_Options :: struct {
+	height:      i32,
+	translation: Vector2,
+}
+
+Canvas_Proc :: #type proc(frame: ^Ui_Frame, rect: Rect_I32, userdata: rawptr)
+
+canvas :: proc(u: ^Ui, options: Canvas_Options, body: Canvas_Proc, userdata: rawptr = nil) -> Rect_I32 {
+	assert(u != nil && u.open, "canvas: frame not open")
+	assert(options.height > 0, "canvas: non-positive height")
+	assert(body != nil, "canvas: nil body")
+	rect := slot_next_px(u, remaining(&u.layout).w, ui_frame_sc(u.frame, options.height))
+	if !slot_visible(rect) do return rect
+	local := Rect_I32{0, 0, rect.w, rect.h}
+	canvas_begin(u.frame, rect, options.translation)
+	defer canvas_end(u.frame)
+	body(u.frame, local, userdata)
+	return rect
+}
+
 draw_text_command :: proc(
 	frame: ^Ui_Frame,
 	text: string,

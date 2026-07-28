@@ -60,6 +60,33 @@ input_box_destroy_is_idempotent :: proc(t: ^testing.T) {
 }
 
 @(test)
+input_box_group_resets_and_destroys_owned_fields :: proc(t: ^testing.T) {
+	boxes: [2]Input_Box
+	strings.write_string(&boxes[0].sb, "first")
+	strings.write_string(&boxes[1].sb, "second")
+	group: Input_Box_Group
+	input_box_group_init(&group, boxes[:])
+	input_box_group_reset(&group)
+	testing.expect_value(t, input_box_text(&boxes[0]), "")
+	testing.expect_value(t, input_box_text(&boxes[1]), "")
+	strings.write_string(&boxes[0].sb, "owned")
+	input_box_group_destroy(&group)
+	testing.expect(t, group.items == nil)
+	testing.expect_value(t, input_box_text(&boxes[0]), "")
+}
+
+@(test)
+input_box_text_clone_has_independent_lifetime :: proc(t: ^testing.T) {
+	box: Input_Box
+	defer input_box_destroy(&box)
+	strings.write_string(&box.sb, "borrowed")
+	owned := input_box_text_clone(&box)
+	defer delete(owned)
+	input_box_set_text(&box, "changed")
+	testing.expect_value(t, owned, "borrowed")
+}
+
+@(test)
 input_box_reset_clears_wrapped_line_memo :: proc(t: ^testing.T) {
 	b: Input_Box
 	defer input_box_destroy(&b)

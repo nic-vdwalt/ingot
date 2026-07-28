@@ -12,7 +12,8 @@ claims; those remain governed by `oss-release-checklist.md` and
   executables, or superseded patched font.
 - [x] Reachable-history credential scanning found only the documented local WSS
   fixture keys in `testdata/wss`.
-- [x] All tracked ignored files were removed and the hygiene gate runs in CI.
+- [x] All tracked ignored files were removed and the repository hygiene gate
+  passed before publication.
 - [x] Committed binary/font artifacts and checksums are recorded in
   `provenance/third-party-artifacts.json`.
 - [x] JetBrains Mono 2.304 has complete OFL provenance.

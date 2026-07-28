@@ -47,10 +47,36 @@ input_box_reset :: proc(b: ^Input_Box) {
 	assert(!b.st.sel.active && b.st.cursor == 0, "input_box_reset: state not cleared")
 }
 
-// input_box_text returns the current text (a view into the builder).
+// input_box_text returns a borrowed view valid until the box is mutated or destroyed.
 input_box_text :: proc(b: ^Input_Box) -> string {
 	assert(b != nil, "input_box_text: nil box")
 	return strings.to_string(b.sb)
+}
+
+input_box_text_clone :: proc(b: ^Input_Box, allocator := context.allocator) -> string {
+	assert(b != nil, "input_box_text_clone: nil box")
+	return strings.clone(input_box_text(b), allocator)
+}
+
+Input_Box_Group :: struct {
+	items: []Input_Box,
+}
+
+input_box_group_init :: proc(group: ^Input_Box_Group, items: []Input_Box) {
+	assert(group != nil, "input_box_group_init: nil group")
+	assert(group.items == nil, "input_box_group_init: already initialized")
+	group.items = items
+}
+
+input_box_group_reset :: proc(group: ^Input_Box_Group) {
+	assert(group != nil, "input_box_group_reset: nil group")
+	for &item in group.items do input_box_reset(&item)
+}
+
+input_box_group_destroy :: proc(group: ^Input_Box_Group) {
+	assert(group != nil, "input_box_group_destroy: nil group")
+	for &item in group.items do input_box_destroy(&item)
+	group^ = {}
 }
 
 // input_box_set_text replaces the text and parks the caret at the end.
@@ -92,11 +118,24 @@ input_box_selection_clear :: proc(b: ^Input_Box) {
 	text_input_selection_clear(&b.st)
 }
 
+Text_Input_Options :: struct {
+	height:    i32,
+	masked:    bool,
+	semantics: Text_Input_Semantics,
+}
+
+Text_Input_At_Options :: struct {
+	active:    bool,
+	masked:    bool,
+	semantics: Text_Input_Semantics,
+}
+
 // input draws a caret-aware text input backed by an Input_Box, with pills and
 // undo enabled. Same call-site brevity as an immediate-mode one-liner while
 // every byte of state stays caller-owned. Returns true when Enter submitted.
 // text_input carves a full-width slot; text_input_at takes an explicit rect.
-text_input :: proc(
+@(private = "package")
+text_input_id :: proc(
 	u: ^Ui,
 	id: Widget_Id,
 	b: ^Input_Box,
@@ -122,7 +161,76 @@ text_input :: proc(
 	return text_input_at(u.frame, r, b, placeholder, focus_opt_focused(fo), masked, sem)
 }
 
-text_input_at :: proc(
+@(private = "package")
+text_input_string :: proc(
+	u: ^Ui,
+	key: string,
+	b: ^Input_Box,
+	placeholder: string,
+	height: i32 = 0,
+	masked: bool = false,
+	semantics: Text_Input_Semantics = {},
+) -> bool {
+	return text_input_id(u, id(u, key), b, placeholder, height, masked, semantics)
+}
+
+@(private = "package")
+text_input_u64 :: proc(
+	u: ^Ui,
+	key: u64,
+	b: ^Input_Box,
+	placeholder: string,
+	height: i32 = 0,
+	masked: bool = false,
+	semantics: Text_Input_Semantics = {},
+) -> bool {
+	return text_input_id(u, id(u, key), b, placeholder, height, masked, semantics)
+}
+
+@(private = "package")
+text_input_id_options :: proc(
+	u: ^Ui,
+	id: Widget_Id,
+	b: ^Input_Box,
+	placeholder: string,
+	options: Text_Input_Options,
+) -> bool {
+	return text_input_id(u, id, b, placeholder, options.height, options.masked, options.semantics)
+}
+
+@(private = "package")
+text_input_string_options :: proc(
+	u: ^Ui,
+	key: string,
+	b: ^Input_Box,
+	placeholder: string,
+	options: Text_Input_Options,
+) -> bool {
+	return text_input_id_options(u, id(u, key), b, placeholder, options)
+}
+
+@(private = "package")
+text_input_u64_options :: proc(
+	u: ^Ui,
+	key: u64,
+	b: ^Input_Box,
+	placeholder: string,
+	options: Text_Input_Options,
+) -> bool {
+	return text_input_id_options(u, id(u, key), b, placeholder, options)
+}
+
+text_input :: proc {
+	text_input_id,
+	text_input_string,
+	text_input_u64,
+	text_input_id_options,
+	text_input_string_options,
+	text_input_u64_options,
+}
+
+@(private = "package")
+text_input_at_legacy :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	b: ^Input_Box,
@@ -144,4 +252,28 @@ text_input_at :: proc(
 		semantics    = semantics,
 	}
 	return text_input_box(frame, cfg, &b.sb, &b.st)
+}
+
+@(private = "package")
+text_input_at_options :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	b: ^Input_Box,
+	placeholder: string,
+	options: Text_Input_At_Options,
+) -> bool {
+	return text_input_at_legacy(
+		frame,
+		rect,
+		b,
+		placeholder,
+		options.active,
+		options.masked,
+		options.semantics,
+	)
+}
+
+text_input_at :: proc {
+	text_input_at_legacy,
+	text_input_at_options,
 }

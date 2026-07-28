@@ -10,9 +10,14 @@ import rl "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
-dark := true
-line_state: ui.Chart_State
-bar_state: ui.Chart_State
+State :: struct {
+	form:       ui.Ui,
+	dark:       bool,
+	line_state: ui.Chart_State,
+	bar_state:  ui.Chart_State,
+}
+
+state := State{dark = true}
 app: ui_gfx.App
 
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
@@ -51,70 +56,59 @@ main :: proc() {
 			clear_color = {24, 26, 32, 255},
 			session = {semantics_enabled = true},
 		},
-		{frame = frame},
+		{ui = frame},
+		&state,
 	)
 }
 
-frame :: proc(app: ^ui_gfx.App, ui_frame: ^ui.Ui_Frame, userdata: rawptr) {
-	_ = userdata
-	style := ui.ui_frame_theme(ui_frame)
-	metrics := ui.ui_frame_metrics(ui_frame)
-	root := ui_gfx.app_screen_rect(app)
-	sw := root.w
-
-	ui.draw_text_frame(
-		ui_frame,
-		"Chart widgets",
-		24,
-		20,
-		metrics.FONT_SIZE_TITLE,
-		style.fg_primary,
-	)
-	if ui.button_at(ui_frame, {sw - 140, 16, 120, 30}, "Light theme" if dark else "Dark theme") {
-		dark = !dark
+frame :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
+	data := cast(^State)userdata
+	ui.padding(form, .LG)
+	ui.flex_row_begin(form, 36, {ui.grow(), ui.fit(132)}, gap = .MD)
+	ui.label(form, "Chart widgets", ui.ui_frame_metrics(form.frame).FONT_SIZE_TITLE)
+	if ui.button(form, "theme", "Light theme" if data.dark else "Dark theme") {
+		data.dark = !data.dark
 		ui.ui_runtime_set_theme(
 			ui_gfx.app_ui_runtime(app),
-			ui.theme_dark() if dark else ui.theme_light(),
+			ui.theme_dark() if data.dark else ui.theme_light(),
 		)
 	}
+	ui.flex_row_end(form)
+	ui.canvas(form, {height = 620}, draw_dashboard, data)
+}
 
+draw_dashboard :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
+	data := cast(^State)userdata
+	style := ui.ui_frame_theme(frame)
 	line_series := [2]ui.Chart_Series {
 		{name = "Revenue", values = revenue[:]},
 		{name = "Costs", values = costs[:]},
 	}
-	ui.line_chart_at(
-		ui_frame,
-		{24, 64, 580, 300},
-		line_series[:],
-		&line_state,
-		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true, fill = true},
-	)
-
 	bar_series := [2]ui.Chart_Series {
 		{name = "Total h", values = hours[:]},
 		{name = "Billable h", values = billable[:]},
 	}
+	content_w := max(rect.w - 24, 0)
+	chart_w := content_w * 2 / 3
+	side_x := chart_w + 20
+	side_w := max(content_w - chart_w - 20, 0)
+	ui.line_chart_at(
+		frame,
+		{0, 0, chart_w, 288},
+		line_series[:],
+		&data.line_state,
+		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true, fill = true},
+	)
 	ui.bar_chart_at(
-		ui_frame,
-		{24, 396, 580, 280},
+		frame,
+		{0, 312, chart_w, 280},
 		bar_series[:],
-		&bar_state,
+		&data.bar_state,
 		{labels = DAYS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
-
-	stat_card(ui_frame, 628, 64, 308, 92, "ACTIVE PROJECTS", "9.3", spark_up[:], style.fg_success)
-	stat_card(ui_frame, 628, 168, 308, 92, "OPEN TASKS", "4.8", spark_down[:], style.fg_error)
-	stat_card(
-		ui_frame,
-		628,
-		272,
-		308,
-		92,
-		"AVG HOURS / DAY",
-		"5.1",
-		spark_flat[:],
-		style.fg_accent,
-	)
+	stat_card(frame, side_x, 0, side_w, 92, "ACTIVE PROJECTS", "9.3", spark_up[:], style.fg_success)
+	stat_card(frame, side_x, 104, side_w, 92, "OPEN TASKS", "4.8", spark_down[:], style.fg_error)
+	stat_card(frame, side_x, 208, side_w, 92, "AVG HOURS / DAY", "5.1", spark_flat[:], style.fg_accent)
 }
 
 stat_card :: proc(
