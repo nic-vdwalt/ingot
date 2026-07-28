@@ -25,7 +25,7 @@ utf8_holdback_examples :: proc(t: ^testing.T) {
 }
 
 // Property: cutting a valid UTF-8 stream at a random byte boundary and applying
-// _utf8_complete_prefix never splits a multi-byte rune — the completed prefix
+// _utf8_complete_prefix never splits a multi-byte rune - the completed prefix
 // always ends on a rune boundary, and the held-back tail is < 4 bytes.
 @(test)
 utf8_holdback_fuzz :: proc(t: ^testing.T) {
@@ -57,8 +57,8 @@ utf8_holdback_fuzz :: proc(t: ^testing.T) {
 	}
 }
 
-// Property: for FULLY ARBITRARY bytes — including malformed UTF-8 (stray
-// continuation bytes, overlong leads, 0xFE/0xFF) — the completed prefix stays
+// Property: for FULLY ARBITRARY bytes - including malformed UTF-8 (stray
+// continuation bytes, overlong leads, 0xFE/0xFF) - the completed prefix stays
 // within [0, len] and at most 3 bytes are ever held back. This is the
 // hostile-input counterpart of utf8_holdback_fuzz, which only feeds valid
 // streams.

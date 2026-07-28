@@ -1,5 +1,5 @@
 // File dialogs (Windows): GetOpenFileNameW / GetSaveFileNameW from comdlg32
-// via core:sys/windows — no extra linker flags. Cancel is an operating
+// via core:sys/windows - no extra linker flags. Cancel is an operating
 // condition (ok = false).
 package sys
 

@@ -1,5 +1,5 @@
 // File dialogs (Linux): try zenity, then kdialog. Neither installed (or the
-// user cancelled) is an operating condition — ok = false, never an assert.
+// user cancelled) is an operating condition - ok = false, never an assert.
 // argv spawn, no shell, so titles cannot inject commands.
 package sys
 

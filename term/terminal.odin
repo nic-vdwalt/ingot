@@ -269,7 +269,7 @@ term_init_emulator :: proc(
 	return true
 }
 
-// term_free_emulator releases libvterm state, scrollback, and the title —
+// term_free_emulator releases libvterm state, scrollback, and the title -
 // everything term_destroy frees except the PTY. Counterpart of
 // term_init_emulator for instances that never spawned a shell.
 term_free_emulator :: proc(ts: ^Term_Instance) {

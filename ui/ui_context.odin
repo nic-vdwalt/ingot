@@ -55,7 +55,7 @@ Ui_Frame :: struct {
 	// rather than trapping: layout arithmetic legitimately produces those
 	// values when a window is narrowed or a panel collapses, and a trap there
 	// takes the whole app down. Counting the drops keeps that from hiding real
-	// layout bugs — tests assert the counter is zero on golden-path frames.
+	// layout bugs - tests assert the counter is zero on golden-path frames.
 	degenerate_drops:               int,
 	text_input_full_path_count:     u64,
 	text_input_inactive_candidates: u64,

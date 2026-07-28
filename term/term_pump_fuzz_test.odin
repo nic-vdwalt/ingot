@@ -6,7 +6,7 @@ package term
 // and resizes interleaved with a split UTF-8 hold prefix. Requires the
 // scripted PTY (-define:INGOT_PTY_SIM=true, pty/pty_sim.odin); the test
 // no-ops without it so `scripts/test.sh` needs the define to gain coverage
-// (it passes it — see scripts/test.sh). Iterations scale with
+// (it passes it - see scripts/test.sh). Iterations scale with
 // -define:INGOT_FUZZ_ITER for fuzz/run.sh term, and a failure reproduces via
 // -define:INGOT_FUZZ_SEED=n (fuzz/run.sh term <seed> forwards it).
 
@@ -61,7 +61,7 @@ term_pump_resize_fuzz :: proc(t: ^testing.T) {
 					_ = term_pump(ts)
 				case 3:
 					// Public resize path (bookkeeping + vterm), including
-					// no-op same-size calls, mid-tape — i.e. potentially
+					// no-op same-size calls, mid-tape - i.e. potentially
 					// between the halves of a split UTF-8 sequence.
 					term_resize(
 						ts,
@@ -78,7 +78,7 @@ term_pump_resize_fuzz :: proc(t: ^testing.T) {
 					ts.utf8_hold_len >= 0 && ts.utf8_hold_len <= 3,
 					"utf8 hold length out of range",
 				)
-				// Resize bookkeeping must agree with the emulator's real grid —
+				// Resize bookkeeping must agree with the emulator's real grid -
 				// renderers size their cell loops from ts.cols/rows while cell
 				// reads hit vterm; divergence reads out of grid bounds.
 				vrows, vcols: c.int
@@ -89,7 +89,7 @@ term_pump_resize_fuzz :: proc(t: ^testing.T) {
 			}
 
 			// Drain to completion: EOF must stop the pump exactly once,
-			// within a bounded number of calls — an unbounded loop here
+			// within a bounded number of calls - an unbounded loop here
 			// would turn a wedged pump (e.g. a hold prefix that is re-held
 			// forever) into a test hang instead of a failure.
 			if eof_now {

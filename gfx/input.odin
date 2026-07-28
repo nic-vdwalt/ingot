@@ -1,4 +1,4 @@
-// ingot:gfx — input state with raylib-parity queries. Edge (pressed /
+// ingot:gfx - input state with raylib-parity queries. Edge (pressed /
 // released) and repeat state is collected by the platform backend during the
 // poll cycle (driven from EndDrawing) and read by the app on the following
 // frame, matching raylib's poll-at-end-of-frame model. Held state and mouse
@@ -75,7 +75,7 @@ PREEDIT_MAX :: 256
 
 // Preedit staging: written by the platform backend while an OS input method
 // is composing (web composition events; native 3c later), read by the UI via
-// GetPreedit. Absolute state like the mouse position — no edge semantics.
+// GetPreedit. Absolute state like the mouse position - no edge semantics.
 @(private)
 preedit_buf: [PREEDIT_MAX]u8
 @(private)
@@ -107,7 +107,7 @@ input_poll :: proc() {
 
 	// Pump backend events. In event-driven mode the gate may block here
 	// (platform_wait_events) until input/OS damage arrives or the timeout
-	// elapses — this is where idle power saving happens. Web never waits;
+	// elapses - this is where idle power saving happens. Web never waits;
 	// its gate lives in step() (loop_web.odin).
 	platform_drop_prepare_events()
 	if should_wait, timeout := _idle_timeout(); should_wait {
@@ -448,7 +448,7 @@ Web_Control_Result :: struct {
 }
 
 // SyncWebControl mirrors one semantic node (ui/semantics.odin) into a real
-// DOM control with an ARIA role — buttons, checkboxes, radios, sliders,
+// DOM control with an ARIA role - buttons, checkboxes, radios, sliders,
 // dropdowns become genuine browser elements assistive tech can reach, which
 // is stronger than a canvas-side accessibility tree. No-op on native targets
 // (AccessKit covers those). `role` is the Sem_Role ordinal; `state` is the

@@ -1,5 +1,5 @@
 #+build windows
-// ingot:gfx — Windows IME composition-window positioning.
+// ingot:gfx - Windows IME composition-window positioning.
 //
 // GLFW delivers final composed characters via WM_CHAR but never positions the
 // IME composition/candidate window, so it floats at a default location. We
@@ -29,7 +29,7 @@ COMPOSITIONFORM :: struct {
 
 // _ime_set_rect places the composition window at the caret's bottom-left.
 // Coordinates are client-area pixels: on Windows the UI lays out in physical
-// pixels (ui_scale carries the DPI factor — see ui/dpi.odin), which is what
+// pixels (ui_scale carries the DPI factor - see ui/dpi.odin), which is what
 // IMM expects.
 @(private)
 _ime_set_rect :: proc(x, y, w, h: i32) {

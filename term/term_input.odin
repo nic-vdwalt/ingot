@@ -1,6 +1,6 @@
 package term
 
-// term_input — keyboard + clipboard → PTY.
+// term_input - keyboard + clipboard → PTY.
 // Call term_handle_input once per frame when the terminal pane is focused.
 
 import "../pty"
@@ -51,7 +51,7 @@ term_handle_input :: proc(
 	for _ in 0 ..< TERM_INPUT_CHARACTER_DRAIN_MAX {
 		cp := rl.GetCharPressed()
 		if cp == 0 do break
-		// Skip control characters — handled by the key-press path.
+		// Skip control characters - handled by the key-press path.
 		if cp < 0x20 || cp == 0x7f do continue
 		buf, n := utf8.encode_rune(cp)
 		sent = term_write(ts, buf[:n]) || sent
@@ -66,7 +66,7 @@ term_handle_input :: proc(
 		shift := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
 		super := rl.IsKeyDown(.LEFT_SUPER) || rl.IsKeyDown(.RIGHT_SUPER)
 
-		// Cmd+V / Ctrl+Shift+V — paste from clipboard.
+		// Cmd+V / Ctrl+Shift+V - paste from clipboard.
 		if key == .V && (super || (ctrl && shift)) {
 			clip := rl.GetClipboardText()
 			if clip != nil {
@@ -76,8 +76,8 @@ term_handle_input :: proc(
 			continue
 		}
 
-		// Ctrl+letter — send control codes 0x01–0x1A.
-		// Navigation / function keys — VT100/xterm sequences.
+		// Ctrl+letter - send control codes 0x01–0x1A.
+		// Navigation / function keys - VT100/xterm sequences.
 		b: [8]u8
 		if n, ok := vt_bytes_for_key(key, ctrl, shift, super, skip_ctrl_shift, b[:]); ok {
 			sent = term_write(ts, b[:n]) || sent
@@ -222,7 +222,7 @@ vt_sequence_for_key :: proc(key: rl.KeyboardKey, shift: bool, buf: []u8) -> (int
 // expects. Pure: no raylib input, no clipboard. Writes into buf and returns the
 // byte count; ok=false means "emit nothing" (unmapped key, or a host-app
 // Ctrl+Shift chord listed in skip_ctrl_shift). Paste (Cmd/Ctrl+Shift+V) is NOT
-// handled here — the caller intercepts it first because it needs the clipboard.
+// handled here - the caller intercepts it first because it needs the clipboard.
 @(private)
 vt_bytes_for_key :: proc(
 	key: rl.KeyboardKey,

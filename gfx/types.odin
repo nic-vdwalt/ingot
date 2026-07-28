@@ -1,4 +1,4 @@
-// ingot:gfx — the "raylib of WebGPU". Core public types deliberately mirror
+// ingot:gfx - the "raylib of WebGPU". Core public types deliberately mirror
 // raylib's shapes (same names, same enum values) so consuming Odin apps migrate
 // mechanically: `import rl "vendor:raylib"` -> `import rl "ingot:gfx"`, then the
 // existing `rl.*` call sites keep resolving. Values that map onto GLFW/GPU state

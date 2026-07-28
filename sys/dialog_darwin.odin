@@ -1,6 +1,6 @@
 // File dialogs (macOS): AppleScript `choose file` / `choose file name` via
 // osascript. Zero-dependency (argv spawn, no shell) and returns the selected
-// POSIX path on stdout. A dismissed dialog exits non-zero — an operating
+// POSIX path on stdout. A dismissed dialog exits non-zero - an operating
 // condition, reported as ok = false.
 package sys
 

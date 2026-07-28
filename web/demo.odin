@@ -1,4 +1,4 @@
-// ingot web demo — the REAL ingot:gfx engine compiled to WASM + WebGPU.
+// ingot web demo - the REAL ingot:gfx engine compiled to WASM + WebGPU.
 //
 // Unlike the original standalone spike (which hand-rolled its own wgpu surface
 // and pipeline), this drives the actual engine: InitWindow → run(frame), the
@@ -106,7 +106,7 @@ frame :: proc() {
 	mc := held ? rl.Color{80, 220, 120, 255} : rl.Color{220, 220, 230, 255}
 	rl.DrawCircle(i32(m.x), i32(m.y), 10, mc)
 	if rl.IsKeyPressed(.SPACE) {
-		t = 0 // press Space to reset the animation — proves key events arrive
+		t = 0 // press Space to reset the animation - proves key events arrive
 	}
 
 	rl.EndDrawing()

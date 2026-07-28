@@ -1,4 +1,4 @@
-// ingot:gfx — raw rlgl vertex-array / instanced-draw backing over WebGPU. The
+// ingot:gfx - raw rlgl vertex-array / instanced-draw backing over WebGPU. The
 // galaxy's 2D bubble/node/star fields and 3D starfields are drawn as GPU
 // instanced quads through the low-level rlgl API (LoadVertexArray, per-vertex
 // and per-instance attributes via SetVertexAttribute(+Divisor), then

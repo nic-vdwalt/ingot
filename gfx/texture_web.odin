@@ -1,5 +1,5 @@
 #+build js
-// ingot:gfx — LoadTexture is unavailable on the web target. Browsers expose no
+// ingot:gfx - LoadTexture is unavailable on the web target. Browsers expose no
 // filesystem paths, so path-based loading cannot work there.
 //
 // This declaration exists to fail at the call site rather than at package

@@ -44,7 +44,7 @@ fuzz_vt_bytes_for_key :: proc(t: ^testing.T) {
 }
 
 // Host-app Ctrl+Shift chords listed in skip_ctrl_shift must never be
-// forwarded to the terminal — the negative space of the key mapping.
+// forwarded to the terminal - the negative space of the key mapping.
 @(test)
 fuzz_vt_bytes_skip_list_respected :: proc(t: ^testing.T) {
 	skip := []rl.KeyboardKey{.C, .V, .T}

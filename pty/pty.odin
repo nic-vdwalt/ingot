@@ -1,7 +1,7 @@
 #+build linux, darwin
 package pty
 
-// POSIX PTY interface — forkpty + non-blocking I/O.
+// POSIX PTY interface - forkpty + non-blocking I/O.
 // Supports macOS and Linux. Windows uses ConPTY (see pty_windows.odin).
 
 import "core:c"
@@ -108,7 +108,7 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 		// Prefix argv[0] with '-' to spawn as a login shell (POSIX
 		// convention). This causes the shell to source login startup
 		// files (.zprofile, .bash_profile, etc.) so the full user PATH
-		// — including Homebrew, conda, pipx, aws, etc. — is available.
+		// - including Homebrew, conda, pipx, aws, etc. - is available.
 		@(static) login_argv0: [256]u8
 		shell_str := string(shell)
 		base := shell_str

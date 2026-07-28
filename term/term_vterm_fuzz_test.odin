@@ -1,6 +1,6 @@
 package term
 
-// Hostile-input fuzzing of the libvterm ingestion path — the highest-value
+// Hostile-input fuzzing of the libvterm ingestion path - the highest-value
 // memory-safety target in this package: vterm_input_write parses fully
 // untrusted PTY bytes in C (no Odin bounds checks), and the registered screen
 // callbacks (_screen_settermprop, _screen_sb_pushline, _screen_sb_popline,
@@ -64,7 +64,7 @@ FUZZ_CSI_FINALS := [?]string {
 @(private = "file")
 FUZZ_DEC_MODES := [?]string{"?1049h", "?1049l", "?25h", "?25l", "?47h", "?47l", "?2004h", "?2004l"}
 
-// Wide CJK chars, combining marks, and boundary code points — exercises
+// Wide CJK chars, combining marks, and boundary code points - exercises
 // width-2 cell handling and the chars[6] array in VTerm_Screen_Cell.
 @(private = "file")
 FUZZ_TEXT_ATOMS := [?]string {
@@ -109,7 +109,7 @@ fuzz_vt_append_osc_title :: proc(p: ^testx.Prng, buf: ^[dynamic]u8, maximum_titl
 	case 1:
 		append(buf, 0x1B, '\\') // ST terminator
 	case:
-	// Unterminated — the next document/garbage decides what happens.
+	// Unterminated - the next document/garbage decides what happens.
 	}
 }
 
@@ -193,7 +193,7 @@ fuzz_vt_feed :: proc(p: ^testx.Prng, ts: ^Term_Instance, data: []u8) {
 // fuzz_vt_check_invariants verifies emulator + callback state after hostile
 // input: cursor inside the grid, every cell readable with sane width,
 // scrollback within cap with consistent offsets, and the title (if any)
-// fully readable — under ASan each read also proves the memory is live.
+// fully readable - under ASan each read also proves the memory is live.
 // Package-private (not file-private): term_pump_fuzz_test.odin reuses it.
 @(private)
 fuzz_vt_check_invariants :: proc(t: ^testing.T, ts: ^Term_Instance) {
@@ -226,7 +226,7 @@ fuzz_vt_check_invariants :: proc(t: ^testing.T, ts: ^Term_Instance) {
 	testing.expect(t, ts.sb_view_offset <= count, "sb_view_offset past scrollback")
 	testing.expect(t, ts.sb_base >= 0, "sb_base negative")
 	for index in 0 ..< count {
-		// Touch every scrollback line — ASan flags stale/freed rows.
+		// Touch every scrollback line - ASan flags stale/freed rows.
 		for cl in term_scrollback_line(ts, index) {
 			testing.expect(t, cl.width >= -1 && cl.width <= 2, "scrollback cell width corrupt")
 		}

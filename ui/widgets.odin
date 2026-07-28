@@ -649,7 +649,7 @@ Button_At_Options :: struct {
 // Pass `focus` to make the button keyboard-operable: clicking acquires the
 // slot, the ring draws while focused, and Space/Enter activates.
 //
-// Widget tiers — see docs/ui-state.md#widget-tiers:
+// Widget tiers - see docs/ui-state.md#widget-tiers:
 //   button      facade: a ^Ui plus a Widget_Id, carving a bounded slot.
 //   button_at   explicit: a ^Ui_Frame plus an application-owned Rect_I32.
 @(private = "package")
@@ -1036,8 +1036,8 @@ draw_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, fg, bg: 
 
 // Truncate_Side selects which side of the text an ellipsis replaces.
 Truncate_Side :: enum u8 {
-	Tail, // trailing ellipsis — keep the head visible
-	Head, // leading ellipsis — keep the tail visible
+	Tail, // trailing ellipsis - keep the head visible
+	Head, // leading ellipsis - keep the tail visible
 }
 
 // Text_Measure names which measurement path a truncation must use.
@@ -1046,7 +1046,7 @@ Truncate_Side :: enum u8 {
 // is installed (ui_gfx installs one), while measure_text_with only ever asks the
 // legacy Text_System. Auto-sizing widgets measure through the frame, so a
 // truncator that measured through the system disagreed with the width the
-// layout had just reserved and clipped labels that fit exactly — visible as
+// layout had just reserved and clipped labels that fit exactly - visible as
 // "Enable wi…" on a row with room to spare. Both sides now resolve through one
 // procedure, so the sizing and clipping decisions cannot diverge.
 Text_Measure :: struct {
@@ -1175,7 +1175,7 @@ truncate_path_middle_frame :: proc(
 	// Paths use '/' or '\' (Windows); reuse the path's own separator style.
 	last_sep := max(strings.last_index_byte(body, '/'), strings.last_index_byte(body, '\\'))
 	if last_sep < 0 {
-		// No directory component — keep the tail of the bare name visible.
+		// No directory component - keep the tail of the bare name visible.
 		return truncate_to_width_dir_frame(frame, path, max_width, font_size, .Head)
 	}
 	sep := body[last_sep:last_sep + 1]
@@ -1196,14 +1196,14 @@ truncate_path_middle_frame :: proc(
 		return cand
 	}
 
-	// Candidate 2: …/last — drop the leading segment.
+	// Candidate 2: …/last - drop the leading segment.
 	cand2 := strings.concatenate({"…", sep, last_seg, trailing}, context.temp_allocator)
 	cand2_c := strings.clone_to_cstring(cand2, context.temp_allocator)
 	if text_measure_width(measure, cand2_c, font_size) <= max_width {
 		return cand2
 	}
 
-	// Candidate 3: even …/last is too wide — left-truncate the whole thing so
+	// Candidate 3: even …/last is too wide - left-truncate the whole thing so
 	// the filename's tail/extension stays visible.
 	return truncate_to_width_dir_frame(frame, path, max_width, font_size, .Head)
 }
@@ -1518,7 +1518,7 @@ pane_reset :: proc(p: ^Pane) {
 // pane_begin handles wheel input over the pane rect, clamps scroll, begins the
 // scissor, and returns the y cursor the caller should start drawing at. When
 // `keyboard` is true and the mouse hovers the pane, PageUp/PageDown/Home/End
-// and Up/Down arrows scroll it — leave it off for panes that host text inputs
+// and Up/Down arrows scroll it - leave it off for panes that host text inputs
 // (their caret owns those keys).
 pane_begin :: proc(
 	frame: ^Ui_Frame,
@@ -1532,7 +1532,7 @@ pane_begin :: proc(
 	assert(frame != nil, "pane_begin: nil frame")
 	assert(p != nil, "pane_begin: nil p")
 	x, y, w, h := rect.x, rect.y, rect.w, rect.h
-	// Why assert: an already-open pane means a missing pane_end — the scissor
+	// Why assert: an already-open pane means a missing pane_end - the scissor
 	// stack would corrupt every subsequent draw.
 	assert(!p.open, "pane_begin: pane already begun (missing pane_end)")
 	assert(w >= 0 && h >= 0, "pane_begin: negative pane size")

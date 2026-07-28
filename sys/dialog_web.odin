@@ -1,6 +1,6 @@
 #+build js
 // File dialogs (web): browsers cannot open synchronous native file dialogs,
-// and file access is user-gesture-gated — ok = false always. The web path
+// and file access is user-gesture-gated - ok = false always. The web path
 // for getting file contents into an ingot app is drag-and-drop onto the
 // canvas (gfx IsFileDropped / GetDroppedFileData), which works today.
 package sys

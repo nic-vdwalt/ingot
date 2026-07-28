@@ -1,6 +1,6 @@
 package term
 
-// term_pump — per-frame PTY drain → libvterm write.
+// term_pump - per-frame PTY drain → libvterm write.
 // Call every frame from the host app's main loop for ALL terminal instances
 // (not just the visible one) so background shells keep their emulator state
 // current and switching views shows the latest screen instead of a
@@ -31,7 +31,7 @@ _utf8_complete_prefix :: proc(buf: []u8) -> int {
 		if i < 0 do break
 		b := buf[i]
 		if b < 0x80 {
-			// ASCII — the tail is complete.
+			// ASCII - the tail is complete.
 			return n
 		}
 		if b >= 0xC0 {
@@ -47,7 +47,7 @@ _utf8_complete_prefix :: proc(buf: []u8) -> int {
 			}
 			return n
 		}
-		// Continuation byte — keep scanning backwards.
+		// Continuation byte - keep scanning backwards.
 		i -= 1
 	}
 	return n
@@ -77,7 +77,7 @@ _term_ingest :: proc(ts: ^Term_Instance, total: int, eof: bool) {
 			copy(ts.utf8_hold[:tail], ts.read_buf[complete:total])
 			ts.utf8_hold_len = tail
 		} else {
-			// Invalid or oversized tail — feed everything as-is.
+			// Invalid or oversized tail - feed everything as-is.
 			complete = total
 		}
 	}

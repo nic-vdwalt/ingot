@@ -9,7 +9,7 @@
 // prints to a stderr that a bundled GUI app does not have, and traps with no
 // record of what failed.
 //
-// The alternative — assigning `thread.Thread.init_context` — is worse: supplying
+// The alternative - assigning `thread.Thread.init_context` - is worse: supplying
 // an init_context makes core:thread skip
 // `_maybe_destroy_default_temp_allocator`, so every worker leaks its temporary
 // arena on exit. Installing the hook from inside the thread keeps the automatic
@@ -47,7 +47,7 @@ assertion_proc :: proc "contextless" () -> runtime.Assertion_Failure_Proc {
 // libraries and tests keep the runtime default.
 //
 // It returns rather than mutates because Odin's `context` is an implicit
-// parameter — a callee cannot take its address or write through it. Worker
+// parameter - a callee cannot take its address or write through it. Worker
 // procedures call it as:
 //
 //	context.assertion_failure_proc = threadhook.install(context.assertion_failure_proc)
