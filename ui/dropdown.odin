@@ -125,6 +125,8 @@ dropdown_at :: proc(
 	sem_label := a11y_label if a11y_label != "" else items[selected^]
 	semantic_push(frame, .Dropdown, rect, sem_label, sem, focus, widget = widget)
 	if !st.menu.open do return false
+	st.menu.anchor_x = rect.x
+	st.menu.anchor_y = rect.y + rect.h + 2
 
 	menu_items := make([]Menu_Item, len(items), ui_frame_allocator(frame))
 	for item, i in items {
