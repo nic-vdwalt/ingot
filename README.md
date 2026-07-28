@@ -136,8 +136,12 @@ import rl "ingot:gfx"
 import ui "ingot:ui"
 import "ingot:ui_gfx"
 
+App_Data :: struct {
+	form: ui.Ui,
+}
+
 app: ui_gfx.App
-form: ui.Ui
+app_data: App_Data
 
 main :: proc() {
 	flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}
@@ -152,17 +156,22 @@ main :: proc() {
 			session = {semantics_enabled = true},
 		},
 		{frame = frame},
+		&app_data,
 	)
 }
 
 frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
-	ui_gfx.app_ui_begin(app, frame, &form, gap = .SM)
-	ui.padding(&form, .LG)
-	ui.scope_begin(&form, "welcome")
-	ui.label(&form, "Hello from Ingot")
-	_ = ui.button(&form, ui.id(&form, "continue"), "Continue", .Primary)
-	ui.scope_end(&form)
-	ui.end(&form)
+	data := cast(^App_Data)userdata
+	root := ui_gfx.app_screen_rect(app)
+	ui.begin(&data.form, frame, root, gap = .SM)
+	ui.padding(&data.form, .LG)
+	ui.scope_begin(&data.form, "welcome")
+	ui.label(&data.form, "Hello from Ingot")
+	if ui.button(&data.form, ui.id(&data.form, "continue"), "Continue", .Primary) {
+		rl.TraceLog(.INFO, "Continue pressed")
+	}
+	ui.scope_end(&data.form)
+	ui.end(&data.form)
 }
 ```
 
