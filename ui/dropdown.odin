@@ -130,7 +130,7 @@ dropdown_at :: proc(
 			label = item,
 		}
 	}
-	chosen := context_menu(frame, &st.menu, menu_items, screen_w, screen_h)
+	chosen := context_menu(frame, &st.menu, menu_items, {0, 0, screen_w, screen_h})
 	if chosen >= 0 {
 		assert(chosen < len(items), "dropdown: chosen index out of range")
 		changed = i32(chosen) != selected^

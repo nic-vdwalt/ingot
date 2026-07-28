@@ -96,7 +96,12 @@ draw_scale_settings_panel :: proc(
 	st := Modal_State {
 		open = true,
 	}
-	body := modal_begin(frame, &st, "Settings", modal_w, modal_h, screen_width, screen_height)
+	body := modal_begin(
+		frame,
+		&st,
+		"Settings",
+		{size = {modal_w, modal_h}, screen = {0, 0, screen_width, screen_height}},
+	)
 	modal_x := st.rect.x
 	modal_y := st.rect.y
 

@@ -1277,7 +1277,7 @@ draw_markdown_context :: proc(
 	draw: bool = true,
 ) -> i32 {
 	assert(ctx != nil && ctx.frame != nil, "draw_markdown_context: invalid context")
-	return draw_markdown(ctx, x, y, max_width, text, base_color, sel_start, sel_end, out_w, draw)
+	return markdown_draw(ctx, {x, y, max_width, 0}, text, base_color, sel_start, sel_end, out_w, draw)
 }
 
 hit_test_markdown_context :: proc(
@@ -1608,12 +1608,12 @@ markdown_draw_line :: proc(
 	return 0, false
 }
 
-// Render markdown-formatted text with optional selection highlighting.
-// Supports: # headings (H1-H3), - * + bullets, ``` fenced code blocks.
-// Returns the total height drawn.
-draw_markdown :: proc(
+// markdown_draw renders markdown with optional selection highlighting. Bounds
+// are physical: x/y are the origin and w is the wrapping width. Height is not
+// a clip; the returned content height may exceed bounds.h.
+markdown_draw :: proc(
 	ctx: ^Markdown_Context,
-	x, y, max_width: i32,
+	bounds: Rect_I32,
 	text: string,
 	base_color: Color,
 	sel_start: int = -1,
@@ -1621,8 +1621,9 @@ draw_markdown :: proc(
 	out_w: ^i32 = nil,
 	draw: bool = true,
 ) -> i32 {
-	assert(ctx != nil && ctx.frame != nil, "draw_markdown: invalid context")
-	assert(max_width > 0, "draw_markdown: non-positive max_width")
+	assert(ctx != nil && ctx.frame != nil, "markdown_draw: invalid context")
+	assert(bounds.w > 0, "markdown_draw: non-positive width")
+	x, y, max_width := bounds.x, bounds.y, bounds.w
 	assert(
 		sel_start < 0 || sel_end < 0 || sel_start <= sel_end,
 		"draw_markdown: inverted selection",
@@ -1674,11 +1675,9 @@ measure_markdown :: proc(
 	assert(out_w != nil, "measure_markdown: nil out_w")
 	if len(text) == 0 do return 0
 	// draw=false runs the identical layout math but emits no glyph quads.
-	h := draw_markdown(
+	h := markdown_draw(
 		ctx,
-		0,
-		0,
-		width,
+		{0, 0, width, 0},
 		text,
 		ui_frame_theme(ctx.frame).fg_assistant,
 		-1,

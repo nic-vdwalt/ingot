@@ -350,13 +350,11 @@ apply_gallery_theme :: proc() {
 draw_content :: proc(sw, sh: i32) {
 	x := ui.ui_frame_sc(ui_frame, NAV_W)
 	w := sw - x
+	pane_rect := ui.Rect_I32{x, 0, w, sh}
 	y := ui.pane_begin(
 		ui_frame,
 		&content_pane,
-		x,
-		0,
-		w,
-		sh,
+		pane_rect,
 		pad = 14,
 		keyboard = section != .Inputs,
 	)
@@ -376,11 +374,9 @@ draw_content :: proc(sw, sh: i32) {
 	case .Markdown:
 		md_ctx := ui.markdown_context(ui_frame)
 		end_y =
-			ui.draw_markdown(
+			ui.markdown_draw(
 				&md_ctx,
-				cx,
-				y,
-				cw,
+				{cx, y, cw, 0},
 				MARKDOWN_SAMPLE,
 				ui.ui_frame_theme(ui_frame).fg_primary,
 			) +
@@ -392,7 +388,7 @@ draw_content :: proc(sw, sh: i32) {
 	case .Stress:
 		end_y = draw_stress(cx, y, cw)
 	}
-	ui.pane_end(ui_frame, &content_pane, x, 0, w, sh, end_y, pad = 14)
+	ui.pane_end(ui_frame, &content_pane, pane_rect, end_y, pad = 14)
 }
 
 draw_buttons :: proc(x, y0, w: i32) -> i32 {
@@ -564,14 +560,7 @@ draw_widget_volume :: proc(state: ^Widget_State) {
 		5,
 		ui.focus(&state.ctx, ui.id(&state.ctx, "volume")),
 	)
-	ui.tooltip(
-		ui_frame,
-		&state.tooltip,
-		rect,
-		"drag, or use \u2190/\u2192 when focused",
-		state.ctx.screen_w,
-		state.ctx.screen_h,
-	)
+	ui.tooltip(&state.ctx, &state.tooltip, rect, "drag, or use \u2190/\u2192 when focused")
 	ui.label(
 		&state.ctx,
 		fmt.tprintf("%.0f%%", state.volume),
@@ -728,9 +717,9 @@ draw_widget_truncation_card :: proc(x, y0, w: i32) -> i32 {
 		f32(ui.ui_frame_sc(ui_frame, 64)),
 	}
 	ui.draw_shadow_rounded(ui_frame, ui.Rect(card), 0.15)
-	ui.draw_card_bg_frame(
+	ui.card_bg_at(
 		ui_frame,
-		ui.Rect(card),
+		{i32(card.x), i32(card.y), i32(card.width), i32(card.height)},
 		ui.ui_frame_theme(ui_frame).bg_secondary,
 		accent_w = ui.ui_frame_sc(ui_frame, 3),
 	)
@@ -776,7 +765,11 @@ draw_widget_fit_card :: proc(x, y0, w: i32) -> i32 {
 	detail := ui.fit_column_next(&column, ui.ui_frame_sc(ui_frame, 18))
 	content := ui.fit_column_end(&column)
 	card := rl.Rectangle{f32(x), f32(y), f32(fit_w), f32(content.h + pad * 2)}
-	ui.draw_card_bg_frame(ui_frame, ui.Rect(card), ui.ui_frame_theme(ui_frame).bg_secondary)
+	ui.card_bg_at(
+		ui_frame,
+		{i32(card.x), i32(card.y), i32(card.width), i32(card.height)},
+		ui.ui_frame_theme(ui_frame).bg_secondary,
+	)
 	ui.text(ui_frame, "Geometry resolved before drawing", title.x, title.y, .Label)
 	ui.text(ui_frame, "No retained tree or trailing gap", detail.x, detail.y, .Label, .Secondary)
 	return y + i32(card.height) + ui.ui_frame_sc(ui_frame, 16)
@@ -980,7 +973,7 @@ draw_overlay_context_menu :: proc(x, info_y: i32) {
 		}
 		root := ui_gfx.app_screen_rect(&app)
 		when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
-		chosen := ui.context_menu(ui_frame, &ctx_menu, items, root.w, root.h)
+		chosen := ui.context_menu(ui_frame, &ctx_menu, items, root)
 		if chosen == 0 {
 			shielded_clicks = 0
 			ctx_note = "shielded clicks reset via context menu"
@@ -1004,10 +997,10 @@ draw_overlay_modal :: proc() {
 		ui_frame,
 		&about_modal,
 		"Generic modal",
-		ui.ui_frame_sc(ui_frame, 420),
-		ui.ui_frame_sc(ui_frame, 190),
-		root.w,
-		root.h,
+		{
+			size = {ui.ui_frame_sc(ui_frame, 420), ui.ui_frame_sc(ui_frame, 190)},
+			screen = root,
+		},
 	)
 	ui.draw_text_wrapped_frame(
 		ui_frame,

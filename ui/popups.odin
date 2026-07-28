@@ -214,11 +214,13 @@ context_menu :: proc(
 	frame: ^Ui_Frame,
 	st: ^Context_Menu_State,
 	items: []Menu_Item,
-	screen_w, screen_h: i32,
+	screen: Rect_I32,
 ) -> int {
 	assert(st != nil, "context_menu: nil state")
 	if !st.open do return -1
 	assert(len(items) > 0, "context_menu: empty items")
+	screen_w, screen_h := screen.w, screen.h
+	assert(screen_w >= 0 && screen_h >= 0, "context_menu: negative screen bounds")
 
 	menu_w := context_menu_width_frame(frame, items, screen_w)
 	menu_h := context_menu_height_frame(frame, items)
@@ -356,7 +358,7 @@ Tooltip_State :: struct {
 	hover_start: f64,
 }
 
-// tooltip shows `text` near the mouse after the cursor has dwelled over
+// tooltip_at shows `text` near the mouse after the cursor has dwelled over
 // `rect` for TOOLTIP_DELAY seconds. Call it after drawing the target; the tip
 // itself is replayed through the overlay layer so it always paints on top.
 // Keeps frames coming while the dwell timer runs (event-driven hosts).
