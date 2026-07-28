@@ -57,6 +57,10 @@ class PolicyTests(unittest.TestCase):
         messages = self.messages("btn_at :: proc(frame: ^Ui_Frame, rect: Rect_I32) {}\n")
         self.assertTrue(any("deleted UI API" in message for message in messages))
 
+    def test_adapter_lifecycle_names_are_tracked(self) -> None:
+        self.assertIn("adapter_init", policy.ADAPTER_LIFECYCLE)
+        self.assertIn("adapter_end_frame", policy.ADAPTER_LIFECYCLE)
+
 
 if __name__ == "__main__":
     unittest.main()

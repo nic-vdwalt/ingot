@@ -8,6 +8,31 @@ package ui
 import "core:testing"
 
 @(test)
+frame_snapshot_queries_are_deterministic :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	input := Ui_Input {
+		screen_size = {1280, 720},
+		dpi_scale = 2,
+		frame_time = 0.25,
+		time = 42.5,
+		fps = 4,
+		monitor_refresh = 120,
+	}
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime, &input)
+	defer ui_frame_end(&frame)
+
+	testing.expect_value(t, frame_viewport(&frame), Rect_I32{0, 0, 1280, 720})
+	testing.expect_value(t, frame_time(&frame), f32(0.25))
+	testing.expect_value(t, frame_timestamp(&frame), f64(42.5))
+	testing.expect_value(t, frame_dpi_scale(&frame), f32(2))
+	testing.expect_value(t, frame_fps(&frame), i32(4))
+	testing.expect_value(t, frame_monitor_refresh(&frame), i32(120))
+}
+
+@(test)
 frame_characters_reports_typed_runes :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

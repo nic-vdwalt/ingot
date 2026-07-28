@@ -59,6 +59,13 @@ EXPLICIT_PROTOCOLS = {
     "pane_end",
     "selectable_row",
 }
+ADAPTER_LIFECYCLE = {
+    "adapter_begin_frame",
+    "adapter_destroy",
+    "adapter_end_frame",
+    "adapter_init",
+    "adapter_init_context",
+}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -146,6 +153,24 @@ def violations(source: str) -> list[tuple[int, str]]:
     return found
 
 
+def _adapter_violations(root: Path) -> list[str]:
+    failures: list[str] = []
+    pattern = re.compile(r"\b(" + "|".join(sorted(ADAPTER_LIFECYCLE)) + r")\s*\(")
+    allowed = {root / "ui_gfx" / "adapter.odin", root / "ui_gfx" / "session.odin"}
+    for directory in (root / "examples", root / "ui_gfx"):
+        for path in sorted(directory.rglob("*.odin")):
+            if path in allowed or path.name.endswith("_test.odin"):
+                continue
+            source = mask_source(path.read_text(encoding="utf-8"))
+            for match in pattern.finditer(source):
+                line = source.count("\n", 0, match.start()) + 1
+                failures.append(
+                    f"{path.relative_to(root)}:{line}: "
+                    f"backend adapter lifecycle {match.group(1)}; use Session"
+                )
+    return failures
+
+
 def check(root: Path) -> list[str]:
     failures: list[str] = []
     for path in sorted((root / "ui").glob("*.odin")):
@@ -153,6 +178,7 @@ def check(root: Path) -> list[str]:
             continue
         for line, message in violations(path.read_text(encoding="utf-8")):
             failures.append(f"{path.relative_to(root)}:{line}: {message}")
+    failures.extend(_adapter_violations(root))
     return failures
 
 

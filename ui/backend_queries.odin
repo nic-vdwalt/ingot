@@ -6,6 +6,31 @@ frame_input :: proc(frame: ^Ui_Frame) -> ^Ui_Input {
 	return frame.input
 }
 
+frame_viewport :: proc(frame: ^Ui_Frame) -> Rect_I32 {
+	input := frame_input(frame)
+	return {0, 0, i32(input.screen_size.x), i32(input.screen_size.y)}
+}
+
+frame_time :: proc(frame: ^Ui_Frame) -> f32 {
+	return frame_input(frame).frame_time
+}
+
+frame_timestamp :: proc(frame: ^Ui_Frame) -> f64 {
+	return frame_input(frame).time
+}
+
+frame_dpi_scale :: proc(frame: ^Ui_Frame) -> f32 {
+	return frame_input(frame).dpi_scale
+}
+
+frame_fps :: proc(frame: ^Ui_Frame) -> i32 {
+	return frame_input(frame).fps
+}
+
+frame_monitor_refresh :: proc(frame: ^Ui_Frame) -> i32 {
+	return frame_input(frame).monitor_refresh
+}
+
 get_mouse_position :: proc(frame: ^Ui_Frame) -> Vector2 {
 	return frame_input(frame).mouse_position
 }

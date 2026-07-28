@@ -1527,10 +1527,8 @@ pane_end :: proc(frame: ^Ui_Frame, p: ^Pane, rect: Rect_I32, end_y: i32, pad: i3
 back_btn_w :: proc(frame: ^Ui_Frame, label: string) -> i32 {
 	assert(frame != nil, "back_btn_w: nil frame")
 	txt := fmt.ctprintf("\u2190 %s", label)
-	return(
-		measure_text_frame(frame, txt, ui_frame_metrics(frame).FONT_SIZE_LABEL) +
-		ui_frame_sc(frame, 14) \
-	)
+	metrics := ui_frame_metrics(frame)
+	return measure_text_frame(frame, txt, metrics.FONT_SIZE_LABEL) + metrics.CONTROL_GAP * 2
 }
 
 // back_btn draws the standard Ghost-style "← label" navigation button.

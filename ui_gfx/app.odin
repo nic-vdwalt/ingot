@@ -21,7 +21,7 @@ App_Config :: struct {
 	target_fps:    i32,
 	event_waiting: bool,
 	clear_color:   gfx.Color,
-	session:       App_Session_Config,
+	session:       Session_Config,
 }
 
 App_Callbacks :: struct {
@@ -30,7 +30,7 @@ App_Callbacks :: struct {
 }
 
 App :: struct {
-	session:   App_Session,
+	session:   Session,
 	config:    App_Config,
 	callbacks: App_Callbacks,
 	userdata:  rawptr,
@@ -60,7 +60,7 @@ app_init :: proc(
 	if !initialized do return false
 	if config.target_fps > 0 do gfx.SetTargetFPS(config.target_fps)
 	if config.event_waiting do gfx.EnableEventWaiting()
-	app_session_init(&app.session, config.session)
+	session_init(&app.session, config.session)
 	app.config = config
 	app.callbacks = callbacks
 	app.userdata = userdata
@@ -73,10 +73,10 @@ app_frame :: proc(app: ^App) -> bool {
 	assert(app != nil && app.state == .Running, "app_frame: invalid app")
 	gfx_frame, acquired := gfx.begin_frame()
 	if !acquired do return false
-	frame := app_session_begin_frame_context(&app.session, &gfx_frame)
+	frame := session_begin_frame_context(&app.session, &gfx_frame)
 	gfx.clear_frame(&gfx_frame, app.config.clear_color)
 	app.callbacks.frame(app, frame, app.userdata)
-	app_session_end_frame_context(&app.session, &gfx_frame)
+	session_end_frame_context(&app.session, &gfx_frame)
 	gfx.end_frame(&gfx_frame)
 	free_all(context.temp_allocator)
 	return true
@@ -109,7 +109,7 @@ app_destroy :: proc(app: ^App) {
 	assert(app != nil, "app_destroy: nil app")
 	assert(app.state == .Ready || app.state == .Stopped, "app_destroy: invalid state")
 	if app.callbacks.shutdown != nil do app.callbacks.shutdown(app, app.userdata)
-	app_session_destroy(&app.session)
+	session_destroy(&app.session)
 	gfx.context_close(gfx.default_context())
 	if active_app == app do active_app = nil
 	app^ = {}
@@ -132,5 +132,5 @@ app_ui_begin :: proc(app: ^App, frame: ^ui.Ui_Frame, u: ^ui.Ui, gap: ui.Space = 
 
 app_ui_runtime :: proc(app: ^App) -> ^ui.Ui_Runtime {
 	assert(app != nil && app.state != .Empty, "app_ui_runtime: invalid app")
-	return &app.session.runtime
+	return session_runtime(&app.session)
 }
