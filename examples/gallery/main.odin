@@ -213,8 +213,9 @@ gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 
 	if rl.IsKeyPressed(.F12) do debug_on = !debug_on
 
-	draw_nav(frame, sh)
-	draw_content(frame, sw, sh)
+	header_h := ui.ui_frame_metrics(frame).TAB_BAR_HEIGHT
+	draw_nav(frame, header_h, sh)
+	draw_content(frame, sw, header_h, sh)
 
 	if settings_open {
 		res := ui.draw_scale_settings_panel(frame, &settings_sel, stored_scale, sw, sh)
@@ -226,7 +227,11 @@ gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	}
 
 	if debug_on {
-		ui.draw_debug_overlay(frame, sw - ui.ui_frame_sc(frame, 290), ui.ui_frame_sc(frame, 10))
+		ui.draw_debug_overlay(
+			frame,
+			sw - ui.ui_frame_sc(frame, 290),
+			header_h + ui.ui_frame_sc(frame, 10),
+		)
 	}
 
 	_ = ui.draw_app_header(frame, "ingot gallery", sw)
@@ -243,12 +248,12 @@ apply_scale :: proc(scale: f32) {
 	ui.ui_runtime_set_scale(ui_gfx.app_ui_runtime(&app), resolved)
 }
 
-draw_nav :: proc(frame: ^ui.Ui_Frame, sh: i32) {
+draw_nav :: proc(frame: ^ui.Ui_Frame, top, sh: i32) {
 	w := ui.ui_frame_sc(frame, NAV_W)
-	rl.DrawRectangle(0, 0, w, sh, ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).bg_secondary))
-	rl.DrawRectangle(w - 1, 0, 1, sh, ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).border_subtle))
+	rl.DrawRectangle(0, top, w, sh - top, ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).bg_secondary))
+	rl.DrawRectangle(w - 1, top, 1, sh - top, ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).border_subtle))
 
-	y := ui.ui_frame_sc(frame, 14)
+	y := top + ui.ui_frame_sc(frame, 14)
 	ui.text(frame, "ingot gallery", ui.ui_frame_sc(frame, 14), y, .Title)
 	y += ui.ui_frame_sc(frame, 40)
 
@@ -320,10 +325,10 @@ apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
 	if frame != nil do ui.request_redraw(frame)
 }
 
-draw_content :: proc(frame: ^ui.Ui_Frame, sw, sh: i32) {
+draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32) {
 	x := ui.ui_frame_sc(frame, NAV_W)
 	w := sw - x
-	pane_rect := ui.Rect_I32{x, 0, w, sh}
+	pane_rect := ui.Rect_I32{x, top, w, sh - top}
 	y := ui.pane_begin(frame, &content_pane, pane_rect, pad = 14, keyboard = section != .Inputs)
 	cx := x + ui.ui_frame_sc(frame, 18)
 	cw := w - ui.ui_frame_sc(frame, 52)

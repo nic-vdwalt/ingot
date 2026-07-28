@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce the documented ingot:ui public API layers."""
+"""Enforce Ingot UI API layers in the framework and its consumers."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 from check_odin_style import mask_source
-
 
 DELETED_NAMES = {
     "btn",
@@ -60,12 +59,18 @@ EXPLICIT_PROTOCOLS = {
     "selectable_row",
 }
 ADAPTER_LIFECYCLE = {
+    "adapter_attach_runtime",
     "adapter_begin_frame",
+    "adapter_bind_frame",
     "adapter_destroy",
     "adapter_end_frame",
     "adapter_init",
     "adapter_init_context",
+    "adapter_open_frame",
+    "adapter_prepare_frame",
 }
+LEGACY_SESSION = re.compile(r"\b(?:App_Session(?:_Config)?|app_session_[a-z_0-9]+)\b")
+BINDING_IMPORT = re.compile(r'"ingot:(libvterm|pty|accesskit)"')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -153,6 +158,14 @@ def violations(source: str) -> list[tuple[int, str]]:
     return found
 
 
+def _matches(source: str, pattern: re.Pattern[str], message: str, path: Path, root: Path) -> list[str]:
+    failures: list[str] = []
+    for match in pattern.finditer(source):
+        line = source.count("\n", 0, match.start()) + 1
+        failures.append(f"{path.relative_to(root)}:{line}: {message.format(name=match.group(0))}")
+    return failures
+
+
 def _adapter_violations(root: Path) -> list[str]:
     failures: list[str] = []
     pattern = re.compile(r"\b(" + "|".join(sorted(ADAPTER_LIFECYCLE)) + r")\s*\(")
@@ -162,11 +175,28 @@ def _adapter_violations(root: Path) -> list[str]:
             if path in allowed or path.name.endswith("_test.odin"):
                 continue
             source = mask_source(path.read_text(encoding="utf-8"))
-            for match in pattern.finditer(source):
-                line = source.count("\n", 0, match.start()) + 1
-                failures.append(
-                    f"{path.relative_to(root)}:{line}: "
-                    f"backend adapter lifecycle {match.group(1)}; use Session"
+            failures.extend(_matches(source, pattern, "backend adapter call {name}; use Session", path, root))
+    return failures
+
+
+def _inside(path: Path, roots: list[Path]) -> bool:
+    return any(path == root or root in path.parents for root in roots)
+
+
+def consumer_violations(consumer_roots: list[Path], binding_allow: set[Path], ingot_root: Path) -> list[str]:
+    failures: list[str] = []
+    adapter = re.compile(r"\b(" + "|".join(sorted(ADAPTER_LIFECYCLE)) + r")\s*\(")
+    for root in consumer_roots:
+        for path in sorted(root.rglob("*.odin")):
+            resolved = path.resolve()
+            if resolved == ingot_root or ingot_root in resolved.parents:
+                continue
+            source = mask_source(path.read_text(encoding="utf-8"))
+            failures.extend(_matches(source, adapter, "backend adapter call {name}; use Session", path, root))
+            failures.extend(_matches(source, LEGACY_SESSION, "legacy session API {name}; use Session", path, root))
+            if resolved not in binding_allow:
+                failures.extend(
+                    _matches(source, BINDING_IMPORT, "binding import {name}; use the higher-level package", path, root)
                 )
     return failures
 
@@ -185,8 +215,18 @@ def check(root: Path) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
+    parser.add_argument("--consumer-root", action="append", default=[], type=Path)
+    parser.add_argument("--binding-allow", action="append", default=[], type=Path)
     arguments = parser.parse_args()
-    failures = check(arguments.root.resolve())
+    root = arguments.root.resolve()
+    consumer_roots = [path.resolve() for path in arguments.consumer_root]
+    binding_allow = {path.resolve() for path in arguments.binding_allow}
+    invalid = sorted(path for path in binding_allow if not _inside(path, consumer_roots))
+    if invalid:
+        print("binding allowance is outside every consumer root: " + str(invalid[0]), file=sys.stderr)
+        return 2
+    failures = check(root)
+    failures.extend(consumer_violations(consumer_roots, binding_allow, root))
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1

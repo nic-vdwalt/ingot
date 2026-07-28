@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Unit tests for check_ui_api_layers.py."""
 
+import tempfile
 import unittest
+from pathlib import Path
 
 import check_ui_api_layers as policy
 
@@ -59,7 +61,32 @@ class PolicyTests(unittest.TestCase):
 
     def test_adapter_lifecycle_names_are_tracked(self) -> None:
         self.assertIn("adapter_init", policy.ADAPTER_LIFECYCLE)
-        self.assertIn("adapter_end_frame", policy.ADAPTER_LIFECYCLE)
+        self.assertIn("adapter_prepare_frame", policy.ADAPTER_LIFECYCLE)
+
+
+class ConsumerPolicyTests(unittest.TestCase):
+    def check(self, source: str, allow: bool = False) -> list[str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            path = root / "view.odin"
+            path.write_text(source, encoding="utf-8")
+            allowed = {path} if allow else set()
+            return policy.consumer_violations([root], allowed, root / "ingot")
+
+    def test_adapter_and_legacy_session_are_rejected(self) -> None:
+        failures = self.check("package app\nf :: proc() { adapter_bind_frame(nil, nil) }\nx: App_Session\n")
+        self.assertTrue(any("adapter" in failure for failure in failures))
+        self.assertTrue(any("legacy session" in failure for failure in failures))
+
+    def test_binding_allow_only_allows_binding_import(self) -> None:
+        source = 'package app\nimport "ingot:libvterm"\nf :: proc() { adapter_init(nil) }\n'
+        failures = self.check(source, allow=True)
+        self.assertFalse(any("binding import" in failure for failure in failures))
+        self.assertTrue(any("adapter" in failure for failure in failures))
+
+    def test_comments_and_strings_do_not_trigger_consumer_policy(self) -> None:
+        source = 'package app\n// adapter_init(nil)\ns := "App_Session ingot:pty"\n'
+        self.assertEqual(self.check(source), [])
 
 
 if __name__ == "__main__":
