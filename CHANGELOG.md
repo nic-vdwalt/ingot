@@ -19,7 +19,8 @@ API. See [versioning policy](docs/compatibility.md#versioning-policy).
 
 - `ui_gfx.App` now delegates UI lifecycle ownership to `Session`.
 - Direct `ui_gfx.Adapter` lifecycle calls are classified as backend-only.
-- `App_Session` and `app_session_*` remain temporary source migration aliases.
+- `App_Session_Config`, `App_Session`, and `app_session_*` remain available
+  through `v0.2.x` and are removed in `v0.3.0`.
 
 ### Migration
 

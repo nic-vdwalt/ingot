@@ -63,10 +63,10 @@ frame. Markdown uses `Markdown_Context` for its frame, workspace paths, and cull
 band. `Text_Input_State` owns its selection, wrap/spell memoization, undo data,
 and spell menu; destroy it before its runtime.
 
-Native applications using `ui_gfx.App_Session` destroy component/widget state,
-then call `app_session_destroy`, which destroys `Ui_Frame`, `Adapter`, and
-`Ui_Runtime` in order, and finally call `CloseWindow`. Low-level hosts perform
-the same order explicitly. End the active frame before any of those steps.
+Native applications using `ui_gfx.Session` destroy component/widget state, then
+call `session_destroy`, which destroys `Ui_Frame`, the backend adapter, and
+`Ui_Runtime` in order, and finally call `CloseWindow`. End the active frame
+before any of those steps.
 
 Web `rl.run` installs the browser animation-frame callback and returns. State
 read by that callback must have static or otherwise host-managed lifetime; do

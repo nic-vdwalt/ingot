@@ -114,10 +114,10 @@ frame is open, and clone into an owner allocator before retaining the data.
 Call `ui_frame_destroy` when a reusable frame leaves service. Deferred renderers
 must finalize, consume borrowed output, and release in that order.
 
-`ui_gfx.App_Session` is the default graphics host. It owns one runtime, reusable
-frame, input/output pair, and adapter. It does not own widget/component state,
-the graphics window, or `context.temp_allocator`. Advanced hosts may continue
-to bracket these objects through the low-level adapter procedures.
+`ui_gfx.Session` is the custom-loop graphics host. It owns one runtime, reusable
+frame, input/output pair, and backend adapter. It does not own widget/component
+state, the graphics window, or `context.temp_allocator`. Advanced hosts bracket
+frames through the session procedures rather than owning adapter values.
 
 ## Composition and explicit escape hatches
 

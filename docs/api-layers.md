@@ -29,7 +29,7 @@ flowchart TD
     LOOP --> RLGL[Retain documented rlgl compatibility only where needed]
     LOOP -->|Add application UI incrementally| APP
 
-    START -->|Custom host or pacing| SESSION[ui_gfx.App_Session]
+    START -->|Custom host or pacing| SESSION[ui_gfx.Session]
     SESSION --> UI
     SESSION -->|Implementing the bridge itself| ADAPTER[ui_gfx.Adapter]
 
@@ -54,7 +54,7 @@ The two common paths deliberately begin in different places:
 
 - Typical one-window UI application: `ui_gfx.App`.
 - Custom pacing, embedding, multiple contexts, or unusual submission order:
-  `ui_gfx.App_Session`.
+  `ui_gfx.Session`.
 - Renderer/platform integration: `ui_gfx.Adapter`.
 - Forms, settings, toolbars, and panels: `ui.Ui` and facade widgets.
 - Canvases, virtualized or scrolled content, overlays, and custom hit regions:
@@ -205,7 +205,7 @@ or `ui_gfx` to call them.
 When reviewing an Ingot consumer, check boundaries rather than counting low-level
 imports:
 
-1. Does a one-window app manually reproduce `App` or `App_Session` ownership?
+1. Does a one-window app manually reproduce `App` or `Session` ownership?
 2. Do ordinary forms calculate rectangles and focus wiring instead of using
    `ui.Ui`?
 3. Do ordinary views poll `gfx` after input capture or draw outside the paint
@@ -227,7 +227,7 @@ written before the higher layer existed.
 Existing consumers demonstrate both cases:
 
 - A custom loop with minimized-window event pumping, backend ticks, GPU resource
-  ordering, and instrumentation can justify `App_Session` rather than `App`.
+  ordering, and instrumentation can justify `Session` rather than `App`.
   Those requirements do not by themselves justify assembling `Adapter` and all
   of its owned UI values manually.
 - A map or virtualized view can justify explicit geometry while its setup forms
@@ -237,5 +237,5 @@ Existing consumers demonstrate both cases:
   paint/input boundary.
 
 Treat migration as boundary tightening, not a rewrite. Replace duplicated host
-ownership with `App_Session`, move ordinary controls to the facade, and preserve
+ownership with `Session`, move ordinary controls to the facade, and preserve
 small explicit renderer islands where Ingot has no higher-level equivalent.

@@ -103,19 +103,20 @@ paint_clip_balances_when_command_buffer_saturates :: proc(t: ^testing.T) {
 }
 
 @(test)
-paint_clip_end_is_skipped_when_its_begin_was_dropped :: proc(t: ^testing.T) {
+paint_clip_reserves_end_when_body_saturates :: proc(t: ^testing.T) {
 	list := new(Paint_List)
 	defer free(list)
-	// An outer clip that fits, then saturation, then an inner clip that is
-	// dropped. The replayed stream must not contain an unpaired Clip_End.
 	paint_clip_begin(list, {0, 0, 100, 100})
-	for list.count < PAINT_COMMAND_CAP {
-		paint_push(list, {kind = .Rectangle})
-	}
+	for _ in 0 ..< PAINT_COMMAND_CAP do paint_push(list, {kind = .Rectangle})
+	testing.expect_value(t, list.count, PAINT_COMMAND_CAP - 1)
+	testing.expect_value(t, list.clip_end_reserved, 1)
+
 	paint_clip_begin(list, {10, 10, 20, 20})
 	paint_clip_end(list)
 	testing.expect_value(t, list.clip_count, 1)
+	paint_clip_end(list)
 	testing.expect_value(t, list.count, PAINT_COMMAND_CAP)
+	testing.expect_value(t, list.clip_end_reserved, 0)
 
 	begins, ends: int
 	for index in 0 ..< list.count {
@@ -127,7 +128,7 @@ paint_clip_end_is_skipped_when_its_begin_was_dropped :: proc(t: ^testing.T) {
 		}
 	}
 	testing.expect_value(t, begins, 1)
-	testing.expect_value(t, ends, 0)
+	testing.expect_value(t, ends, 1)
 }
 
 @(test)
@@ -179,4 +180,66 @@ canvas_scope_emits_screen_space_paint_and_balanced_clip :: proc(t: ^testing.T) {
 	testing.expect_value(t, output.main.commands[1].rect, Rect{40, 35, 300, 200})
 	testing.expect_value(t, output.main.commands[2].kind, Paint_Kind.Clip_End)
 	testing.expect_value(t, output.main.clip_count, 0)
+}
+
+@(test)
+nested_canvas_uses_cumulative_origin_and_parent_clip :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+
+	canvas_begin(&frame, {100, 50, 200, 120}, {0, -10})
+	canvas_begin(&frame, {20, 30, 100, 80}, {-5, 0})
+	draw_line_ex(&frame, {1, 2}, {3, 4}, 1, {255, 255, 255, 255})
+	testing.expect_value(t, frame_pane_origin(&frame), Vector2{115, 70})
+	testing.expect_value(t, frame_to_local(&frame, {116, 72}), Vector2{1, 2})
+	canvas_end(&frame)
+	canvas_end(&frame)
+	ui_frame_end(&frame)
+
+	testing.expect_value(t, output.main.commands[0].rect, Rect{100, 50, 200, 120})
+	testing.expect_value(t, output.main.commands[1].rect, Rect{120, 70, 100, 80})
+	testing.expect_value(t, output.main.commands[2].p0, Vector2{116, 72})
+	testing.expect_value(t, output.main.commands[2].p1, Vector2{118, 74})
+	testing.expect_value(t, output.main.commands[3].kind, Paint_Kind.Clip_End)
+	testing.expect_value(t, output.main.commands[4].kind, Paint_Kind.Clip_End)
+	testing.expect_value(t, output.main.clip_count, 0)
+	testing.expect_value(t, output.main.clip_end_reserved, 0)
+}
+
+@(test)
+paint_clip_with_one_free_slot_drops_entire_scope :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	list.count = PAINT_COMMAND_CAP - 1
+	paint_clip_begin(list, {0, 0, 10, 10})
+	testing.expect_value(t, list.count, PAINT_COMMAND_CAP - 1)
+	testing.expect_value(t, list.clip_count, 1)
+	testing.expect_value(t, list.clip_end_reserved, 0)
+	paint_clip_end(list)
+	testing.expect_value(t, list.count, PAINT_COMMAND_CAP - 1)
+	testing.expect_value(t, list.clip_count, 0)
+}
+
+@(test)
+paint_clip_sink_observes_balanced_saturated_stream :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	balance: int
+	sink := proc(list: ^Paint_List, command: Paint_Command, userdata: rawptr) {
+		value := cast(^int)userdata
+		if command.kind == .Clip_Begin do value^ += 1
+		if command.kind == .Clip_End do value^ -= 1
+	}
+	paint_list_set_sink(list, sink, &balance)
+	paint_clip_begin(list, {0, 0, 20, 20})
+	for _ in 0 ..< PAINT_COMMAND_CAP do paint_push(list, {kind = .Rectangle})
+	paint_clip_end(list)
+	testing.expect_value(t, balance, 0)
+	testing.expect_value(t, list.clip_end_reserved, 0)
 }

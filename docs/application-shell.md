@@ -65,8 +65,9 @@ when host policy needs those values. Use `session_set_user_scale` instead of
 mutating runtime scale state independently. Direct `adapter_*` lifecycle calls
 are reserved for backend implementation and tests.
 
-The former `App_Session` type and `app_session_*` procedures are temporary source
-migration aliases. New code must use `Session`.
+`App_Session_Config`, `App_Session`, and `app_session_*` remain available through
+`v0.2.x` and are removed in `v0.3.0`. New code uses `Session_Config`, `Session`,
+and `session_*`.
 
 ## Ownership and teardown
 
