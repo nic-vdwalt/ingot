@@ -105,13 +105,13 @@ ui.begin(&form.ui, &frame, {x, y, w, h})
 ui.scope_begin(&form.ui, "editor")
 ui.text_input(
 	&form.ui,
-	ui.id(&form.ui, "title"),
+	"title",
 	&form.title,
 	"Title",
-	semantics = {name = "Title"},
+	ui.Text_Input_Options{semantics = {name = "Title"}},
 )
-ui.checkbox(&form.ui, ui.id(&form.ui, "enabled"), "Enabled", &form.enabled)
-if ui.button(&form.ui, ui.id(&form.ui, "save"), "Save") {
+ui.checkbox(&form.ui, "enabled", "Enabled", &form.enabled)
+if ui.button(&form.ui, "save", "Save") {
 	save()
 }
 ui.scope_end(&form.ui)
@@ -128,8 +128,7 @@ Stable IDs should come from application identity, not row positions:
 
 ```odin
 for item in items {
-	id := ui.id(&list_ui, item.id)
-	if ui.button(&list_ui, id, item.name) {
+	if ui.button(&list_ui, item.id, item.name) {
 		open_item(item.id)
 	}
 }
@@ -169,11 +168,12 @@ the one place the two meet.
 
 ## Widget entry points
 
-Facade widgets take a `^Ui` and a stable `Widget_Id`. They consume one bounded
-slot in logical units and register focus only when visible:
+Facade widgets take a `^Ui` and a stable string/u64 key or explicit
+`Widget_Id`. They consume one bounded slot in logical units and register focus
+only when visible:
 
 ```odin
-if ui.button(&form, ui.id(&form, "save"), "Save", .Primary) {
+if ui.button(&form, "save", "Save", ui.Button_Options{style = .Primary}) {
 	save(app)
 }
 ```
@@ -201,12 +201,12 @@ an identity to key.
 
 | Widget | Facade | Explicit |
 |---|---|---|
-| button | `button(u, id, …)` | `button_at`, `button_at_state` |
-| checkbox | `checkbox(u, id, …)` | `checkbox_at` |
-| radio | `radio(u, id, …)` | `radio_at` |
+| button | `button(u, key/id, label, options)` | `button_at(frame, rect, label, options)`, `button_at_state` |
+| checkbox | `checkbox(u, key/id, …)` | `checkbox_at` |
+| radio | `radio(u, key/id, …)` | `radio_at` |
 | slider | `slider(u, id, …)`, `slider_state` | `slider_at`, `slider_at_state` |
 | dropdown | `dropdown(u, id, …)` | `dropdown_at` |
-| text input | `text_input(u, id, …)` | `text_input_at` |
+| text input | `text_input(u, key/id, box, placeholder, options)` | `text_input_at(frame, rect, box, placeholder, options)` |
 | collapsible header | `collapsible_header(u, id, …)` | `collapsible_header_at` |
 | icon button | `icon_btn(u, id, …)` | `icon_btn_at` |
 | back button | `back_btn(u, id, …)` | `back_btn_at` |
@@ -225,7 +225,32 @@ an identity to key.
 | markdown | — | `markdown_context` + `markdown_draw` |
 | `Flow_Layout`, `Fit_Column` | — | explicit layout protocols, by design |
 
-Facade and explicit entry points share interaction, focus, semantics, and paint. They differ only in who supplies geometry. Facade dimensions are logical; roots, measured values, metrics, low-level layout, and explicit rectangles are physical.
+Facade and explicit entry points share interaction, focus, semantics, paint,
+and option vocabulary. They differ only in who supplies geometry. Facade
+dimensions are logical; roots, measured values, metrics, low-level layout, and
+explicit rectangles are physical.
+
+## Ownership reference
+
+| Type | Zero-ready | Init required | Destroy required | Allocator / borrowing |
+|---|---|---|---|---|
+| `Ui` | yes | no | no | caller-owned bounded state |
+| `Ui_Runtime` | no | `ui_runtime_init` | yes | owns text/spell resources |
+| `Ui_Frame` | yes | opened by host/runtime | `ui_frame_destroy` after final frame | frame views expire at release |
+| `Input_Box` | yes | optional `input_box_init` | yes after first allocation | builder allocator; `input_box_text` borrows |
+| `Input_Box_Group` | yes | `input_box_group_init` | yes for grouped boxes | borrows caller's box slice |
+| `Text_Input_State` | yes | no | yes after first allocation | owns undo, pills, and memos |
+| `Chart_State` | yes | no | no | caller-owned values only |
+| `Button_State`, `Slider_State` | yes | no | no | caller-owned values only |
+| popup/dropdown/tooltip state | yes | no | no | caller-owned values only |
+| `Session` | no | `session_init` | yes | owns runtime, frame, output, adapter |
+| `App` | yes | `app_run`/`app_init` | shell on native; host on web | borrows userdata for run lifetime |
+| `Ui_Output` | yes | no | no | fixed storage; paint text views borrow it |
+| `Frame_View`, `Frame_String` | produced by frame | no | no | invalid after frame release |
+
+Use `input_box_text_clone` when text must outlive a mutation or destruction of
+its box. Aggregate forms may use `Input_Box_Group` or define one component
+`destroy` procedure that calls each owning field's destroy procedure.
 
 Ordinary containers consume intrinsic sizes. Flex containers consume one declared track per widget or `flex_slot_next` call. Every container and scope must be balanced before `end`. Overflow clips to the root and produces zero-area slots rather than retaining or repairing a widget hierarchy.
 

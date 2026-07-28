@@ -119,12 +119,15 @@ ownership order.
 ### Flow UI: `ui.Ui`
 
 Start forms, panels, settings, toolbars, and conventional application chrome
-with `ui.begin`. Use facade widgets such as `button`, `text_input`, `checkbox`,
-and `spinner`. This tier owns slot carving, logical-to-physical scaling, stable
-widget identity, focus registration, semantics, interaction, and paint emission.
+with the `App` UI callback or `ui.begin` in a custom host. Use facade widgets
+such as `button`, `text_input`, `checkbox`, and `spinner`. This tier owns slot
+carving, logical-to-physical scaling, stable widget identity, focus registration,
+semantics, interaction, and paint emission.
 
-Use scoped `Widget_Id` values for conditional controls, collections, and reusable
-components. Labels are presentation and accessibility data, not identity.
+Facade controls accept stable string/u64 keys directly. Pass a precomputed
+`Widget_Id` for domain IDs or hot loops. Use `scope` for balanced component and
+collection namespaces; `scope_begin`/`scope_end` remain the explicit form. Labels
+are presentation and accessibility data, not identity.
 
 ### Canvas UI: application-owned placement
 
@@ -139,9 +142,10 @@ transfer scaling and geometry ownership to the caller. Do not use them for a
 fixed form solely because its rectangles are easy to calculate; the facade
 keeps DPI, focus, and later layout changes centralized.
 
-A screen may mix modes. Let Flow UI own ordinary controls, reserve an explicit
-slot for Canvas UI, use `canvas_begin` and `canvas_end` for translated or scrolled
-paint, and then continue with flow layout. Canvas paint is renderer-independent;
+A screen may mix modes. Let Flow UI own ordinary controls and use `canvas` to
+reserve a logical slot and run a balanced explicit callback inside it. Use
+`canvas_begin` and `canvas_end` directly only when the caller already owns a
+physical rectangle or needs a manual lifecycle. Canvas paint is renderer-independent;
 use direct `gfx` only when its paint commands cannot express the content.
 
 See [Layout conventions](layout.md) and
@@ -239,3 +243,17 @@ Existing consumers demonstrate both cases:
 Treat migration as boundary tightening, not a rewrite. Replace duplicated host
 ownership with `Session`, move ordinary controls to the facade, and preserve
 small explicit renderer islands where Ingot has no higher-level equivalent.
+
+## Additive API migration
+
+| Before | Preferred |
+|---|---|
+| `App_Callbacks{frame = draw}` plus manual `begin`/`end` | `App_Callbacks{ui = draw}` |
+| `button(u, id(u, "save"), "Save", .Primary)` | `button(u, "save", "Save", Button_Options{style = .Primary})` |
+| `scope_begin`; body; `scope_end` | `scope(u, key, body, userdata)` |
+| `canvas_begin`; body; `canvas_end` after carving a slot | `canvas(u, options, body, userdata)` |
+| long optional positional widget arguments | one zero-useful named options literal |
+
+The original signatures remain compatibility overloads. Explicit IDs,
+`scope_begin`/`scope_end`, `canvas_begin`/`canvas_end`, `*_at`, `Session`, and
+`Adapter` remain first-class APIs rather than deprecated paths.

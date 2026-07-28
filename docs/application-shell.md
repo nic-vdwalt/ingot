@@ -12,15 +12,16 @@ main :: proc() {
 	_ = ui_gfx.app_run(
 		&app,
 		{width = 960, height = 640, title = "App", session = {semantics_enabled = true}},
-		{frame = draw, shutdown = shutdown},
+		{ui = draw, shutdown = shutdown},
 		&state,
 	)
 }
 ```
 
-The frame callback receives the explicit app and UI frame. Use `app_ui_begin` to
-open a caller-owned `Ui` across the client area, or `app_screen_rect` when the
-application owns explicit geometry. The shutdown callback runs while the
+The default UI callback receives the explicit app and the shell-owned open
+`Ui`; the shell closes it after the callback. Use a `frame` callback instead
+when the application owns explicit geometry or mixes direct graphics work. A
+callback set must provide exactly one of `ui` or `frame`. The shutdown callback runs while the
 graphics context is valid, so it must destroy caller-owned textures, input
 boxes, builders, and components there.
 
@@ -37,8 +38,9 @@ responsible for stopping the module before replacement.
 | Custom pacing, embedding, or multiple contexts | `ui_gfx.Session` |
 | Renderer/platform bridge implementation | backend `ui_gfx.Adapter` procedures |
 | Forms and panels | Flow UI through `ui.Ui` |
-| Canvas, scrolling, and overlays | `canvas_*`, `*_at`, and explicit geometry |
-| Every interactive facade widget | scoped `Widget_Id` |
+| Canvas inside flow layout | `canvas` callback plus `*_at` inside it |
+| Manual canvas, scrolling, and overlays | `canvas_begin`/`canvas_end` and explicit geometry |
+| Interactive facade widget | stable string/u64 key or explicit `Widget_Id` |
 
 `Session` is the supported custom-loop owner. It contains `Ui_Runtime`, the
 reusable `Ui_Frame`, the captured `Ui_Input`, `Ui_Output`, and the backend

@@ -186,7 +186,7 @@ import ui "ingot:ui"
 import "ingot:ui_gfx"
 
 App_Data :: struct {
-	form: ui.Ui,
+	continued: bool,
 }
 
 app: ui_gfx.App
@@ -204,23 +204,20 @@ main :: proc() {
 			flags = flags,
 			session = {semantics_enabled = true},
 		},
-		{frame = frame},
+		{ui = frame},
 		&app_data,
 	)
 }
 
-frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
+frame :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
+	assert(app != nil && form != nil, "frame: invalid app or UI")
 	data := cast(^App_Data)userdata
-	root := ui_gfx.app_screen_rect(app)
-	ui.begin(&data.form, frame, root, gap = .SM)
-	ui.padding(&data.form, .LG)
-	ui.scope_begin(&data.form, "welcome")
-	ui.label(&data.form, "Hello from Ingot")
-	if ui.button(&data.form, ui.id(&data.form, "continue"), "Continue", .Primary) {
+	ui.padding(form, .LG)
+	ui.label(form, "Hello from Ingot")
+	if ui.button(form, "continue", "Continue", ui.Button_Options{style = .Primary}) {
+		data.continued = true
 		rl.TraceLog(.INFO, "Continue pressed")
 	}
-	ui.scope_end(&data.form)
-	ui.end(&data.form)
 }
 ```
 
@@ -233,8 +230,8 @@ sizes and colors these enums do not name. Where drawing code needs both tables
 at once, `ui.ui_frame_style(frame)` returns them together.
 
 Ordinary leaf widgets ship in two geometry shapes. The bare facade takes a
-`^Ui`, carves a logical slot, and interactive widgets also take a generated
-`Widget_Id`; presentational widgets need no identity. The explicit `*_at` shape
+`^Ui`, carves a logical slot, and interactive widgets take a stable string/u64
+key or an explicit `Widget_Id`; presentational widgets need no identity. The explicit `*_at` shape
 takes a `^Ui_Frame` and an application-owned physical `Rect_I32`. Composition
 protocols such as panes, modals, listboxes, overlays, and markdown stay explicit
 under lifecycle or subsystem names. See
