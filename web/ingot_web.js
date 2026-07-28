@@ -1,8 +1,8 @@
-// ingot_web.js — browser host glue for an ingot (Odin → WASM + WebGPU) app.
+// ingot_web.js - browser host glue for an ingot (Odin → WASM + WebGPU) app.
 //
 // Responsibilities:
 //   1. Provide the "ingot" foreign-import module the engine calls into
-//      (performance.now, canvas CSS size, devicePixelRatio) — see
+//      (performance.now, canvas CSS size, devicePixelRatio) - see
 //      gfx/platform_web.odin.
 //   2. Size the canvas backing store to CSS size × devicePixelRatio so WebGPU
 //      renders at physical resolution (HiDPI-crisp), matching the native
@@ -457,7 +457,7 @@
 					ime.style.left = (r.left + window.scrollX + x) + "px";
 					ime.style.top = (r.top + window.scrollY + y) + "px";
 					ime.style.height = Math.max(h, 1) + "px";
-					// Only steal focus from ourselves — never from semantic
+					// Only steal focus from ourselves - never from semantic
 					// DOM form inputs (ingot-web-input overlays).
 					const a = document.activeElement;
 					if (a !== ime && (a === c || a === document.body || a === null)) {
@@ -551,7 +551,7 @@
 		};
 	}
 
-	// WebAudio bridge ("ingot_audio" import module — gfx/audio_web.odin).
+	// WebAudio bridge ("ingot_audio" import module - gfx/audio_web.odin).
 	// Each slot is one voice: a decoded AudioBuffer + per-slot GainNode,
 	// mirroring the native miniaudio pool. The AudioContext starts suspended
 	// under browser autoplay policy; the first user gesture resumes it, and
@@ -633,7 +633,7 @@
 			// Async file loading: the slot is allocated eagerly so the engine
 			// gets a valid handle immediately; fetch + decodeAudioData resolve
 			// behind it. load: 0 = pending, 1 = ready, 2 = error (slot stays
-			// allocated but permanently silent — mirrors httpSlots' error state).
+			// allocated but permanently silent - mirrors httpSlots' error state).
 			ingot_audio_load: (urlPtr, urlLen, looping) => {
 				if (!audioState.ctx) return -1;
 				const slot = audioState.slots.findIndex((v) => v === null);

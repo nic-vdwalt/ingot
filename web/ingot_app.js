@@ -1,4 +1,4 @@
-// ingot_app.js — reusable app-I/O bridges for ingot web apps.
+// ingot_app.js - reusable app-I/O bridges for ingot web apps.
 //
 // Provides the JS-side implementations of the foreign-import modules the ingot
 // app packages call into:

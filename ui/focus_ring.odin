@@ -5,7 +5,7 @@ package ui
 
 
 // Focus_Id is the explicit tier's identity: a caller-chosen key paired with a
-// caller-owned Focus_State. It is a supported tier, not a compatibility path —
+// caller-owned Focus_State. It is a supported tier, not a compatibility path -
 // applications that own their own geometry own their own focus keys too.
 Focus_Id :: distinct u64
 FOCUS_ID_NONE :: Focus_Id(0)

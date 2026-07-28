@@ -1,5 +1,5 @@
 #!/bin/bash
-# build-accesskit.sh — Fetch the prebuilt AccessKit C API libraries from the
+# build-accesskit.sh - Fetch the prebuilt AccessKit C API libraries from the
 # official accesskit-c release and place them in ingot/accesskit/lib/
 # <platform_arch>/ where the Odin bindings' relative foreign import finds
 # them (no linker flags needed by consumers). The release zip ships static

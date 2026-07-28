@@ -1,6 +1,6 @@
 // node --test suite for the semantic overlay logic in web/ingot_web.js:
 // frame-stamp GC, value-echo protocol, ARIA attributes, and activation
-// staging — run against the hand-rolled DOM stub (dom_stub.mjs).
+// staging - run against the hand-rolled DOM stub (dom_stub.mjs).
 "use strict";
 
 import { test } from "node:test";

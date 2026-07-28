@@ -1,5 +1,5 @@
 // Minimal DOM stub for testing web/ingot_web.js's semantic overlay logic
-// under `node --test` — hand-rolled to keep the repo free of npm
+// under `node --test` - hand-rolled to keep the repo free of npm
 // dependencies (no jsdom). Implements only the surface the overlay uses:
 // createElement, getElementById, appendChild/remove, style, attributes,
 // focus/activeElement, getBoundingClientRect, addEventListener/dispatch.
@@ -140,7 +140,7 @@ export async function install() {
 
 	let hooked = null;
 	globalThis.__ingot_test_hook = (exports) => { hooked = exports; };
-	// Fresh import each call is unnecessary — module state resets via
+	// Fresh import each call is unnecessary - module state resets via
 	// endSemanticFrame; a single import suffices per process.
 	await import("../ingot_web.js");
 	delete globalThis.__ingot_test_hook;

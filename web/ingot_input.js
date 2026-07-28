@@ -1,4 +1,4 @@
-// ingot_input.js — DOM input → ingot engine bridge.
+// ingot_input.js - DOM input → ingot engine bridge.
 //
 // Captures keyboard / pointer / wheel / focus events on the canvas and forwards
 // them into the engine's exported input entry points (gfx/input_web.odin), which
@@ -180,7 +180,7 @@
 			//     mode): normalize to ≈1 unit/notch, matching GLFW's coarse path
 			let dx = e.deltaX, dy = e.deltaY;
 			if (e.deltaMode !== 0) {
-				// line (1) or page (2) units — discrete mouse wheel, already ~notches.
+				// line (1) or page (2) units - discrete mouse wheel, already ~notches.
 			} else {
 				// pixel units. A physical wheel emits large deltas that are integer
 				// multiples of a fixed step (120 in Chrome, 100 elsewhere); trackpad
@@ -216,7 +216,7 @@
 			const x = ex(); if (x) x.ingot_web_hover(false);
 		});
 		listen(canvas, "blur", function (e) {
-			// Focus moving to the IME proxy is still "ours" — don't clear
+			// Focus moving to the IME proxy is still "ours" - don't clear
 			// held keys mid-typing.
 			if (e.relatedTarget && e.relatedTarget.id === "ingot-ime") return;
 			const x = ex(); if (x) x.ingot_web_hover(false);

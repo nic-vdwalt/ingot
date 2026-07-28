@@ -1,7 +1,7 @@
 #+build !js
 package ui
 
-// Unit tests for the composer spellcheck tokenizer — the pure classification
+// Unit tests for the composer spellcheck tokenizer - the pure classification
 // procs that decide which tokens reach the OS spell backend.
 
 import "core:testing"

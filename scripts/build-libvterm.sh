@@ -1,5 +1,5 @@
 #!/bin/bash
-# build-libvterm.sh — Build the libvterm static library from the vendored
+# build-libvterm.sh - Build the libvterm static library from the vendored
 # source in ingot/vendor/libvterm/. The resulting libvterm.a is placed in
 # ingot/libvterm/lib/<platform_arch>/ where the Odin bindings' relative
 # foreign import finds it (no linker flags needed by consumers).

@@ -102,7 +102,7 @@ listbox_wrap_step :: proc(index, delta, count: int, wrap: bool) -> int {
 }
 
 // listbox_nav maps this frame's keys onto a new selection and an activation
-// request. Page Up/Down always clamp — wrapping a whole page would skip rows
+// request. Page Up/Down always clamp - wrapping a whole page would skip rows
 // the user never saw. Pure over the frame's input snapshot.
 listbox_nav :: proc(
 	frame: ^Ui_Frame,

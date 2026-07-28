@@ -8,7 +8,7 @@ import "core:fmt"
 import "core:math"
 import "core:strings"
 
-// Every string a chart draws — axis ticks, legend entries, tooltip rows — is
+// Every string a chart draws - axis ticks, legend entries, tooltip rows - is
 // chrome around the plot, never reading text. Naming the role once here stops
 // the axis and the legend drifting apart the way they can when each call site
 // reaches for its own metric.
@@ -365,7 +365,7 @@ chart_draw_legend :: proc(frame: ^Ui_Frame, cl: Chart_Layout, series: []Chart_Se
 
 // chart_draw_tooltip draws a value readout card near the cursor, clamped to
 // the widget bounds: optional x label header plus one swatched row per series.
-// Recorded on the overlay layer (passive — no input claim) so the card paints
+// Recorded on the overlay layer (passive - no input claim) so the card paints
 // above any widgets drawn after the chart; coords are shifted to screen space
 // because the overlay replays after pane translation is popped.
 @(private = "file")

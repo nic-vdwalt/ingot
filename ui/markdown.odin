@@ -363,7 +363,7 @@ display_to_raw :: proc(spans: []Text_Span, display_pos: int) -> int {
 			return s.raw_start + remaining
 		}
 	}
-	// Past end — return raw end of last span.
+	// Past end - return raw end of last span.
 	if len(spans) > 0 {
 		return spans[len(spans) - 1].raw_end
 	}
@@ -536,7 +536,7 @@ draw_text_wrapped_md :: proc(
 
 	spans := frame_view_items(ctx.frame, parse_inline_spans(ctx.frame, text))
 
-	// Fast path: single plain span — delegate to existing function.
+	// Fast path: single plain span - delegate to existing function.
 	if len(spans) == 1 && !spans[0].bold && !spans[0].pill && !spans[0].code && !spans[0].link {
 		return draw_text_wrapped_frame(
 			ctx.frame,
@@ -1671,7 +1671,7 @@ markdown_draw :: proc(
 // measure_markdown returns the pixel height draw_markdown would produce for
 // `text` at `width`, without any visible output. It calls draw_markdown inside a
 // zero-size scissor so all raylib draws are clipped (cheap, invisible) while the
-// identical layout math runs — guaranteeing the scroll predictor matches what is
+// identical layout math runs - guaranteeing the scroll predictor matches what is
 // actually rendered. draw_markdown performs no input handling, so re-running it
 // here is side-effect free.
 measure_markdown :: proc(

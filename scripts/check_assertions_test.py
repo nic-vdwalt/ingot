@@ -11,7 +11,7 @@ import check_assertions
 
 class AssertionDisciplineTest(unittest.TestCase):
     # An ordinary source path. This used to be "net/x.odin", which two
-    # exclusions special-cased by name — so the suite exercised a branch
+    # exclusions special-cased by name - so the suite exercised a branch
     # production never took, and the loosest rules in the gate went untested.
     FIXTURE_PATH = "ui/fixture.odin"
 
@@ -236,7 +236,7 @@ class PointerParameterTest(unittest.TestCase):
 
     Odin auto-dereferences field access, so a procedure taking ^T and reading
     `t.field` contains no dereference token at all. Matching only an explicit
-    `x^` missed the most common pointer shape in the codebase — and let a
+    `x^` missed the most common pointer shape in the codebase - and let a
     deleted `assert(panel != nil)` pass the gate unnoticed.
     """
 

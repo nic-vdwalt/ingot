@@ -2,7 +2,7 @@
 // ingot_audio_frames): the slot must be allocated eagerly (the engine gets a
 // valid handle immediately), resolve to ready with a frame count once
 // fetch + decodeAudioData land, apply play intent recorded while pending,
-// and mark failed fetches as permanently errored — never throwing into the
+// and mark failed fetches as permanently errored - never throwing into the
 // wasm boundary.
 "use strict";
 

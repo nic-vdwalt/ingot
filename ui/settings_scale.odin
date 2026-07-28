@@ -58,7 +58,7 @@ settings_scale_preset_index :: proc(ui_scale: f32) -> int {
 // result of user interaction this frame. `selected` is the caller-owned
 // highlighted row; `current_scale` is the stored preference (0 = auto).
 // Applying a preset keeps the panel open so the user can preview other
-// scales; Escape (or clicking outside) dismisses — the caller closes the
+// scales; Escape (or clicking outside) dismisses - the caller closes the
 // panel on `dismissed`. Chrome, input claiming, and dismissal ride on the
 // generic modal widget (popups.odin); this proc owns only the preset rows.
 draw_scale_settings_panel :: proc(
@@ -136,7 +136,7 @@ draw_scale_settings_panel :: proc(
 	if have_result {
 		return pending_result
 	}
-	// Enter — apply the highlighted preset.
+	// Enter - apply the highlighted preset.
 	if is_key_pressed(frame, .ENTER) {
 		return Settings_Panel_Result{applied = true, ui_scale = presets[selected^].value}
 	}

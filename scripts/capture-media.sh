@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# capture-media.sh — Reproducible README stills and demo GIF/MP4.
+# capture-media.sh - Reproducible README stills and demo GIF/MP4.
 #
 # Builds examples/gallery with -define:INGOT_CAPTURE=true, which makes the
 # gallery render itself into a fixed 1600x1000 offscreen render target and write

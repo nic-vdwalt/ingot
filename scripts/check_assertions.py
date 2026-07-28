@@ -40,7 +40,7 @@ RISK_PATTERNS = {
 # slices have no comma-ok indexing form, so the shape is unambiguous: the lookup
 # is total over the key domain and already reports a miss through `ok`. It
 # shares syntax with an array index but has no bound to violate, so collecting
-# it as index risk would demand a tautological assertion — the padding
+# it as index risk would demand a tautological assertion - the padding
 # TIGER_STYLE.md forbids by name.
 MAP_LOOKUP = re.compile(
     r"\b[A-Za-z_][A-Za-z0-9_]*\s*,\s*[A-Za-z_][A-Za-z0-9_]*\s*:?=\s*"
@@ -202,7 +202,7 @@ def has_pointer_parameter(body: str) -> bool:
 
     Odin auto-dereferences field access, so a procedure taking ^T and reading
     `t.field` contains no `^` anywhere in its body. Matching only an explicit
-    dereference therefore misses the most common pointer shape in the codebase —
+    dereference therefore misses the most common pointer shape in the codebase -
     including, before this check existed, a deleted nil assertion on a ^T
     parameter.
     """
@@ -466,7 +466,7 @@ def pointer_contract_present(executable: str, body: str = "") -> bool:
     names = {left or right for left, right in operations if left or right}
     # A ^T parameter is a contract the caller must honour, and one the callee
     # cannot see honoured. Odin auto-dereferences, so the body carries no
-    # syntactic trace of the dereference — without this the risk is invisible.
+    # syntactic trace of the dereference - without this the risk is invisible.
     names.update(pointer_parameter_names(body))
     if not names:
         return True
@@ -632,7 +632,7 @@ def is_thin_forwarder(body: str, risks: tuple[str, ...]) -> bool:
 
 # Keywords that evidence a contract for each risk. An assertion mentioning one
 # of these, compared against something, is treated as reasoning about that risk
-# — and only that risk. Pooling them into a single "did the author assert
+# - and only that risk. Pooling them into a single "did the author assert
 # anything" test let an unrelated check discharge a missing one.
 REVIEWED_CONTRACT_TERMS = {
     "pointer": r"\bnil\b",
@@ -732,8 +732,8 @@ def recognized_dynamic_append(body: str) -> bool:
 def fully_guarded_risk(body: str, risk: str) -> bool:
     """Report whether `risk` alone is discharged by evidence about `risk`.
 
-    This used to pool risk-agnostic terms — every `defer`, every comparing `if`,
-    every `min`/`max`/`clamp` call anywhere in the body — into one scalar shared
+    This used to pool risk-agnostic terms - every `defer`, every comparing `if`,
+    every `min`/`max`/`clamp` call anywhere in the body - into one scalar shared
     across all risks, so guarding an index could pay for an unchecked pointer.
     Evidence now has to name the hazard it discharges.
     """
@@ -746,7 +746,7 @@ def discharged_risk(body: str, risk: str) -> bool:
 
     Every predicate here judges the risk it is passed. The chain this replaced
     discharged *all* remaining risks whenever any one of them fired, so a
-    procedure guarding one hazard was excused for the rest — and one that merely
+    procedure guarding one hazard was excused for the rest - and one that merely
     contained a `defer` was excused for everything.
     """
     executable = executable_text(body)

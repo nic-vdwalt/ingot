@@ -23,7 +23,7 @@ interact_step_latchless_click_on_release_over :: proc(t: ^testing.T) {
 @(test)
 interact_step_latchless_press_elsewhere_no_click :: proc(t: ^testing.T) {
 	// A press that began off the widget (e.g. on an overlay covering it)
-	// must not click on release-over — that would leak overlay clicks to
+	// must not click on release-over - that would leak overlay clicks to
 	// the widgets underneath.
 	it := interact_step(Interact_Event{over = true, released = true, press_over = false}, nil)
 	testing.expect(t, !it.clicked)
