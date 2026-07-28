@@ -464,7 +464,7 @@ draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	ui.row_begin(u, 32, gap = .SM)
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Focusable %d", i + 1)
-		if ui.button(u, u64(i), label) do click_count += 1
+		if ui.button(u, u64(i + 1), label) do click_count += 1
 	}
 	ui.row_end(u)
 
