@@ -7,6 +7,7 @@ frame_input :: proc(frame: ^Ui_Frame) -> ^Ui_Input {
 }
 
 frame_viewport :: proc(frame: ^Ui_Frame) -> Rect_I32 {
+	assert(frame != nil, "frame_viewport: nil frame")
 	input := frame_input(frame)
 	return {0, 0, i32(input.screen_size.x), i32(input.screen_size.y)}
 }

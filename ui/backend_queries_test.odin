@@ -13,11 +13,11 @@ frame_snapshot_queries_are_deterministic :: proc(t: ^testing.T) {
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
 	input := Ui_Input {
-		screen_size = {1280, 720},
-		dpi_scale = 2,
-		frame_time = 0.25,
-		time = 42.5,
-		fps = 4,
+		screen_size     = {1280, 720},
+		dpi_scale       = 2,
+		frame_time      = 0.25,
+		time            = 42.5,
+		fps             = 4,
 		monitor_refresh = 120,
 	}
 	frame: Ui_Frame

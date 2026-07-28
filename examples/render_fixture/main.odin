@@ -43,7 +43,7 @@ pong_rt: rl.RenderTexture2D
 gpu_target: rl.Gpu_3D_Target
 gpu_sphere: rl.Gpu_Mesh
 resources_ready: bool
-ui_session: ui_gfx.App_Session
+ui_session: ui_gfx.Session
 ui_frame: ^ui.Ui_Frame
 retina_input: ui.Text_Input_State
 retina_text: strings.Builder
@@ -51,21 +51,21 @@ retina_text: strings.Builder
 main :: proc() {
 	rl.InitWindow(960, 720, "ingot renderer fixture")
 	rl.SetTargetFPS(60)
-	ui_gfx.app_session_init(&ui_session, {semantics_enabled = true})
+	ui_gfx.session_init(&ui_session, {semantics_enabled = true})
 	retina_text = strings.builder_make()
 	strings.write_string(&retina_text, "Runtime text input")
 	rl.run(frame)
 	when ODIN_OS != .JS {
 		ui.text_input_state_destroy(&retina_input)
 		strings.builder_destroy(&retina_text)
-		ui_gfx.app_session_destroy(&ui_session)
+		ui_gfx.session_destroy(&ui_session)
 		rl.CloseWindow()
 	}
 }
 
 frame :: proc() {
 	ensure_resources()
-	ui_frame = ui_gfx.app_session_begin_frame(&ui_session)
+	ui_frame = ui_gfx.session_begin_frame(&ui_session)
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{22, 24, 32, 255})
 	if resources_ready {
@@ -74,7 +74,7 @@ frame :: proc() {
 		draw_stream_lifetime_stress()
 		draw_retina_fixture()
 	}
-	ui_gfx.app_session_end_frame(&ui_session)
+	ui_gfx.session_end_frame(&ui_session)
 	rl.EndDrawing()
 	free_all(context.temp_allocator)
 

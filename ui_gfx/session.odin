@@ -135,6 +135,7 @@ App_Session_Config :: Session_Config
 App_Session :: Session
 
 app_session_init :: proc(session: ^App_Session, config: App_Session_Config = {}) {
+	assert(session != nil, "app_session_init: nil session")
 	session_init(session, config)
 }
 
@@ -143,6 +144,8 @@ app_session_init_context :: proc(
 	gfx_context: ^rl.Context,
 	config: App_Session_Config = {},
 ) {
+	assert(session != nil, "app_session_init_context: nil session")
+	assert(gfx_context != nil, "app_session_init_context: nil graphics context")
 	session_init_context(session, gfx_context, config)
 }
 

@@ -51,6 +51,22 @@ both backends refill internally: native music streams on the miniaudio device
 thread and browser music is fully decoded. Calling it is harmless, and omitting
 it changes nothing.
 
+## Compatibility and binding layers
+
+The following surfaces exist for source migration, FFI, or framework
+implementation. They are not normal application defaults:
+
+- `ingot:gfx/rlgl` is a bounded raylib migration shim, not an OpenGL API.
+- Host/port HTTP procedures and `ws_start_connect` are legacy plaintext paths;
+  new code uses URL-based HTTP and `ws_start_connect_url`.
+- `ingot:libvterm`, `ingot:pty`, and `ingot:accesskit` are bindings used by
+  `term` and `ui_gfx`; applications start with those higher-level packages.
+- Direct `ui_gfx.Adapter` lifecycle calls implement a renderer bridge; custom
+  application loops use `ui_gfx.Session`.
+
+Pinning preserves access to these layers, but does not make them equally suitable
+for new consumer code. See [Choosing an API layer](api-layers.md).
+
 ## Not implemented, and not planned
 
 These raylib surfaces are out of scope for Ingot. They are listed so that scope

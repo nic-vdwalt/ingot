@@ -11,7 +11,7 @@
 // host window size and HiDPI factor.
 //
 // Why its own loop instead of ui_gfx.app_run: widget paint is replayed in
-// app_session_end_frame_context, after the frame callback returns. Wrapping the
+// session_end_frame_context, after the frame callback returns. Wrapping the
 // callback alone would capture the direct gfx draws and none of the widgets, so
 // the target has to bracket the whole session frame.
 //
@@ -240,7 +240,7 @@ when CAPTURE {
 	capture_frame :: proc() {
 		gfx_frame, acquired := rl.begin_frame()
 		if !acquired do return
-		frame_state := ui_gfx.app_session_begin_frame_context(&app.session, &gfx_frame)
+		frame_state := ui_gfx.session_begin_frame_context(&app.session, &gfx_frame)
 		rl.clear_frame(&gfx_frame, app.config.clear_color)
 
 		rl.BeginTextureMode(capture_target)
@@ -249,7 +249,7 @@ when CAPTURE {
 		// instead of showing the dark configured clear through it.
 		rl.ClearBackground(capture_clear_color())
 		gallery_frame(&app, frame_state, nil)
-		ui_gfx.app_session_end_frame_context(&app.session, &gfx_frame)
+		ui_gfx.session_end_frame_context(&app.session, &gfx_frame)
 		rl.EndTextureMode()
 
 		// Negative source height blits the bottom-left-origin target upright

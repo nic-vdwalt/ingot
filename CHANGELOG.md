@@ -6,6 +6,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Ingot uses `0.x` versioning: the leading zero means any release may break the
 API. See [versioning policy](docs/compatibility.md#versioning-policy).
 
+## Unreleased
+
+### Added
+
+- `ui_gfx.Session` as the canonical owner for custom frame loops, with accessors
+  for runtime, frame, input, output, and user-scale updates.
+- Snapshot-backed viewport, time, DPI, FPS, and monitor-refresh frame queries.
+- Balanced Canvas UI scopes for translated, clipped, renderer-independent paint.
+
+### Changed
+
+- `ui_gfx.App` now delegates UI lifecycle ownership to `Session`.
+- Direct `ui_gfx.Adapter` lifecycle calls are classified as backend-only.
+- `App_Session` and `app_session_*` remain temporary source migration aliases.
+
+### Migration
+
+| Previous surface | Replacement |
+|---|---|
+| `App_Session` | `Session` |
+| `app_session_init*` | `session_init*` |
+| `app_session_begin_frame*` | `session_begin_frame*` |
+| `app_session_end_frame*` | `session_end_frame*` |
+| `app_session_destroy` | `session_destroy` |
+| Separate runtime/frame/input/output/adapter values | One `Session` |
+| Direct pane matrix and mouse-offset setup | `canvas_begin` / `canvas_end` |
+| Backend time and viewport polling in views | `frame_*` snapshot queries |
+
 ## [0.1.0] - 2026-07-27
 
 First public source release. Ingot is an immediate-mode application framework

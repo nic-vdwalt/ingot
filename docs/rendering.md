@@ -18,18 +18,19 @@ Public resources use opaque context- and generation-checked handles. Zero is
 invalid, freed slots can be reused, and a handle from another context, an
 unloaded resource, or a previous window lifetime cannot resolve to a replacement
 resource. The context lifecycle epoch
-also rejects frames, adapters, and asynchronous GPU callbacks from an earlier
-window lifetime.
+also rejects frames, sessions, backend adapters, and asynchronous GPU callbacks
+from an earlier window lifetime.
 
 `BeginDrawing`/`EndDrawing`, `BeginTextureMode`/`EndTextureMode`, and
 `begin_gpu_3d`/`end_gpu_3d` must be balanced. `CloseWindow` requires no active
 frame or GPU-3D pass. A partially initialized window may still be closed safely.
 
-`default_context()` exposes the compatibility owner to bridges such as
-`ui_gfx.Adapter`. Explicit frames carry their owner, epoch, and generation and
-route drawing through that context. `ui_gfx.Adapter` captures a context and epoch
-and can bind an explicit graphics frame. Parallel renderer threads remain
-unsupported; browser hosting remains one managed canvas per module session.
+`default_context()` exposes the compatibility owner to `ui_gfx.Session` and its
+backend adapter. Explicit frames carry their owner, epoch, and generation and
+route drawing through that context. A session captures a context and epoch and
+can bind an explicit graphics frame. Direct adapter lifecycle calls are backend
+implementation details. Parallel renderer threads remain unsupported; browser
+hosting remains one managed canvas per module session.
 
 Audio has a separate lifecycle. Pair `InitAudioDevice` with `CloseAudioDevice`;
 `CloseWindow` does not close audio.

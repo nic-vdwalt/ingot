@@ -1,6 +1,8 @@
 # Application shell
 
-`ui_gfx.App` is the common path for a one-window application. The caller owns the `App`, application state, and every persistent widget component. The shell owns only the default graphics context, `App_Session`, and frame ordering.
+`ui_gfx.App` is the common path for a one-window application. The caller owns the
+`App`, application state, and every persistent widget component. The shell owns
+the default graphics context, `Session`, and frame ordering.
 
 ```odin
 app: ui_gfx.App
@@ -16,22 +18,55 @@ main :: proc() {
 }
 ```
 
-The frame callback receives the explicit app and UI frame. Use `app_ui_begin` to open a caller-owned `Ui` across the client area, or `app_screen_rect` when the application owns explicit geometry. The shutdown callback runs while the graphics context is valid, so it must destroy caller-owned textures, input boxes, builders, and components there.
+The frame callback receives the explicit app and UI frame. Use `app_ui_begin` to
+open a caller-owned `Ui` across the client area, or `app_screen_rect` when the
+application owns explicit geometry. The shutdown callback runs while the
+graphics context is valid, so it must destroy caller-owned textures, input
+boxes, builders, and components there.
 
-On native targets `app_run` blocks and performs shutdown after the window closes. On web it installs the browser callback and returns; therefore `App` and userdata must have static or otherwise retained lifetime. A managed web host remains responsible for stopping the module before replacement.
+On native targets `app_run` blocks and performs shutdown after the window closes.
+On web it installs the browser callback and returns; therefore `App` and userdata
+must have static or otherwise retained lifetime. A managed web host remains
+responsible for stopping the module before replacement.
 
 ## Choosing the integration level
 
 | Need | API |
 |---|---|
 | Typical one-window app | `ui_gfx.App` |
-| Custom pacing or embedding | `ui_gfx.App_Session` |
-| Renderer/platform integration | `ui_gfx.Adapter` |
-| Forms and panels | `ui.Ui` layout |
-| Canvas, scrolling, overlays | `*_at` and explicit geometry |
-| Every interactive facade widget | Scoped `Widget_Id` |
+| Custom pacing, embedding, or multiple contexts | `ui_gfx.Session` |
+| Renderer/platform bridge implementation | backend `ui_gfx.Adapter` procedures |
+| Forms and panels | Flow UI through `ui.Ui` |
+| Canvas, scrolling, and overlays | `canvas_*`, `*_at`, and explicit geometry |
+| Every interactive facade widget | scoped `Widget_Id` |
 
-`App_Session` remains the correct choice when an application needs a custom frame loop, explicit minimized-window handling, multiple graphics contexts, custom instrumentation, or unusual submission ordering.
+`Session` is the supported custom-loop owner. It contains `Ui_Runtime`, the
+reusable `Ui_Frame`, the captured `Ui_Input`, `Ui_Output`, and the backend
+adapter. Applications should not declare those values separately.
+
+```odin
+session: ui_gfx.Session
+ui_gfx.session_init(&session, {semantics_enabled = true})
+defer ui_gfx.session_destroy(&session)
+
+for !gfx.WindowShouldClose() {
+	gfx_frame, acquired := gfx.begin_frame()
+	if !acquired do continue
+	frame := ui_gfx.session_begin_frame_context(&session, &gfx_frame)
+	draw(frame)
+	ui_gfx.session_end_frame_context(&session, &gfx_frame)
+	gfx.end_frame(&gfx_frame)
+	free_all(context.temp_allocator)
+}
+```
+
+Use `session_runtime`, `session_frame`, `session_input`, and `session_output` only
+when host policy needs those values. Use `session_set_user_scale` instead of
+mutating runtime scale state independently. Direct `adapter_*` lifecycle calls
+are reserved for backend implementation and tests.
+
+The former `App_Session` type and `app_session_*` procedures are temporary source
+migration aliases. New code must use `Session`.
 
 ## Ownership and teardown
 
@@ -44,7 +79,8 @@ The shell enforces this order:
 5. Submit the graphics frame.
 6. Reset temporary frame allocations.
 7. On shutdown, invoke caller cleanup.
-8. Destroy UI frame, adapter, and runtime.
+8. Destroy UI frame, adapter, and runtime through `session_destroy`.
 9. Close the graphics context.
 
-No active application or frame is exposed through `ui`; callbacks always receive their owners explicitly.
+No active application or frame is exposed through `ui`; callbacks always receive
+their owners explicitly.

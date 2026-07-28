@@ -11,7 +11,10 @@ test_app_session_init_destroy_round_trip :: proc(t: ^testing.T) {
 	defer free(gfx_context)
 	session := new(App_Session)
 	defer free(session)
-	config := App_Session_Config{user_scale = 1.25, semantics_enabled = false}
+	config := App_Session_Config {
+		user_scale        = 1.25,
+		semantics_enabled = false,
+	}
 	app_session_init_context(session, gfx_context, config)
 
 	testing.expect(t, session.initialized)
