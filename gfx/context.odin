@@ -413,7 +413,11 @@ context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool 
 	previous := _context_activate(ctx)
 	defer _context_restore(previous)
 	_init_window_context(ctx, width, height, title)
-	return context_ready(ctx)
+	when ODIN_OS == .JS {
+		return ctx.lifecycle == .Starting || context_ready(ctx)
+	} else {
+		return context_ready(ctx)
+	}
 }
 
 context_close :: proc(ctx: ^Context) {

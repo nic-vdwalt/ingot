@@ -28,8 +28,6 @@ Paint_Kind :: enum u8 {
 	Codepoint,
 	Clip_Begin,
 	Clip_End,
-	Transform_Begin,
-	Transform_End,
 }
 
 Paint_Command :: struct {
@@ -54,7 +52,6 @@ Paint_Command :: struct {
 	text_offset:  int,
 	text_length:  int,
 	clip_restore: bool,
-	translation:  Vec2,
 }
 
 Paint_List :: struct {
@@ -68,6 +65,7 @@ Paint_List :: struct {
 	// begin_scissor_mode call that leaked instead of only its depth.
 	clip_origin:          [PAINT_CLIP_CAP]runtime.Source_Code_Location,
 	clip_count:           int,
+	clip_end_reserved:    int,
 	// Begins rejected after PAINT_CLIP_CAP still need matching ends. Tracking
 	// their logical depth separately lets paint_clip_end consume those ends
 	// without popping a real outer clip.
@@ -94,6 +92,7 @@ paint_list_reset :: proc(list: ^Paint_List) {
 	list.count = 0
 	list.text_len = 0
 	list.clip_count = 0
+	list.clip_end_reserved = 0
 	list.clip_overflow_depth = 0
 	list.dropped_commands = 0
 	list.dropped_text_bytes = 0
@@ -145,7 +144,13 @@ paint_clip_begin :: proc(list: ^Paint_List, rect: Rect, loc := #caller_location)
 	if list.clip_count > 0 {
 		effective = paint_clip_intersection(list.clip_stack[list.clip_count - 1], rect)
 	}
-	emitted := paint_push(list, {kind = .Clip_Begin, rect = effective})
+	emitted := false
+	if list.count + list.clip_end_reserved + 2 <= PAINT_COMMAND_CAP {
+		emitted = paint_push_unreserved(list, {kind = .Clip_Begin, rect = effective})
+		if emitted do list.clip_end_reserved += 1
+	} else {
+		list.dropped_commands += 1
+	}
 	list.clip_stack[list.clip_count] = effective
 	list.clip_emitted[list.clip_count] = emitted
 	list.clip_origin[list.clip_count] = loc
@@ -163,23 +168,37 @@ paint_clip_end :: proc(list: ^Paint_List) {
 	if list.clip_count == 0 do return
 	list.clip_count -= 1
 	if !list.clip_emitted[list.clip_count] do return
+	assert(list.clip_end_reserved > 0, "paint_clip_end: missing reservation")
 	restore := list.clip_count > 0
 	rect: Rect
 	if restore do rect = list.clip_stack[list.clip_count - 1]
-	paint_push(list, {kind = .Clip_End, rect = rect, clip_restore = restore})
+	list.clip_end_reserved -= 1
+	emitted := paint_push_unreserved(
+		list,
+		{kind = .Clip_End, rect = rect, clip_restore = restore},
+	)
+	assert(emitted, "paint_clip_end: reserved append failed")
 }
 
-paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
-	assert(list != nil, "paint_push: nil list")
-	if list.count >= PAINT_COMMAND_CAP {
-		list.dropped_commands += 1
-		return false
-	}
+@(private = "file")
+paint_push_unreserved :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
+	assert(list != nil, "paint_push_unreserved: nil list")
+	if list.count >= PAINT_COMMAND_CAP do return false
 	list.commands[list.count] = command
 	list.count += 1
 	when UI_TELEMETRY_ENABLED do list.command_append_count += 1
 	if list.sink != nil do list.sink(list, command, list.sink_userdata)
 	return true
+}
+
+paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
+	assert(list != nil, "paint_push: nil list")
+	assert(list.clip_end_reserved >= 0, "paint_push: negative reservation")
+	if list.count >= PAINT_COMMAND_CAP - list.clip_end_reserved {
+		list.dropped_commands += 1
+		return false
+	}
+	return paint_push_unreserved(list, command)
 }
 
 paint_push_text :: proc(list: ^Paint_List, command: Paint_Command, text: string) -> bool {

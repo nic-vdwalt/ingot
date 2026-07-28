@@ -7,16 +7,50 @@ frame_paint_list :: proc(frame: ^Ui_Frame, channel: Paint_Channel = .Main) -> ^P
 	return &frame.output.main
 }
 
+paint_command_to_screen :: proc(frame: ^Ui_Frame, command: Paint_Command) -> Paint_Command {
+	assert(frame != nil && frame.open, "paint_command_to_screen: invalid frame")
+	origin := frame_pane_origin(frame)
+	result := command
+	switch command.kind {
+	case .Rectangle, .Rectangle_Outline, .Rectangle_Rounded,
+	     .Rectangle_Rounded_Outline, .Rectangle_Gradient_V:
+		result.rect.x += origin.x
+		result.rect.y += origin.y
+	case .Line:
+		result.p0 += origin
+		result.p1 += origin
+	case .Triangle:
+		result.p0 += origin
+		result.p1 += origin
+		result.p2 += origin
+	case .Circle, .Circle_Outline, .Ring, .Text, .Codepoint:
+		result.p0 += origin
+	case .Clip_Begin, .Clip_End:
+		assert(false, "paint_command_to_screen: structural command")
+	}
+	return result
+}
+
+frame_paint_push :: proc(frame: ^Ui_Frame, command: Paint_Command) -> bool {
+	assert(frame != nil && frame.open, "frame_paint_push: invalid frame")
+	return paint_push(frame_paint_list(frame), paint_command_to_screen(frame, command))
+}
+
+frame_paint_push_text :: proc(frame: ^Ui_Frame, command: Paint_Command, text: string) -> bool {
+	assert(frame != nil && frame.open, "frame_paint_push_text: invalid frame")
+	return paint_push_text(frame_paint_list(frame), paint_command_to_screen(frame, command), text)
+}
+
 draw_rectangle :: proc(frame: ^Ui_Frame, x, y, width, height: i32, color: Color) {
 	assert(frame != nil, "draw_rectangle: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{kind = .Rectangle, rect = {f32(x), f32(y), f32(width), f32(height)}, color = color},
 	)
 }
 
 draw_rectangle_rec :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
-	paint_push(frame_paint_list(frame), {kind = .Rectangle, rect = rect, color = color})
+	frame_paint_push(frame, {kind = .Rectangle, rect = rect, color = color})
 }
 
 draw_rectangle_lines :: proc(frame: ^Ui_Frame, x, y, width, height: i32, color: Color) {
@@ -25,8 +59,8 @@ draw_rectangle_lines :: proc(frame: ^Ui_Frame, x, y, width, height: i32, color: 
 
 draw_rectangle_lines_ex :: proc(frame: ^Ui_Frame, rect: Rectangle, thickness: f32, color: Color) {
 	assert(frame != nil, "draw_rectangle_lines_ex: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{kind = .Rectangle_Outline, rect = rect, thickness = thickness, color = color},
 	)
 }
@@ -39,8 +73,8 @@ draw_rectangle_rounded :: proc(
 	color: Color,
 ) {
 	assert(frame != nil, "draw_rectangle_rounded: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{
 			kind = .Rectangle_Rounded,
 			rect = rect,
@@ -60,8 +94,8 @@ draw_rectangle_rounded_lines_ex :: proc(
 	color: Color,
 ) {
 	assert(frame != nil, "draw_rectangle_rounded_lines_ex: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{
 			kind = .Rectangle_Rounded_Outline,
 			rect = rect,
@@ -75,8 +109,8 @@ draw_rectangle_rounded_lines_ex :: proc(
 
 draw_rectangle_gradient_v :: proc(frame: ^Ui_Frame, x, y, width, height: i32, top, bottom: Color) {
 	assert(frame != nil, "draw_rectangle_gradient_v: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{
 			kind = .Rectangle_Gradient_V,
 			rect = {f32(x), f32(y), f32(width), f32(height)},
@@ -92,8 +126,8 @@ draw_line :: proc(frame: ^Ui_Frame, x0, y0, x1, y1: i32, color: Color) {
 
 draw_line_ex :: proc(frame: ^Ui_Frame, p0, p1: Vector2, thickness: f32, color: Color) {
 	assert(frame != nil, "draw_line_ex: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{kind = .Line, p0 = p0, p1 = p1, thickness = thickness, color = color},
 	)
 }
@@ -104,16 +138,16 @@ draw_circle :: proc(frame: ^Ui_Frame, x, y: i32, radius: f32, color: Color) {
 
 draw_circle_v :: proc(frame: ^Ui_Frame, center: Vector2, radius: f32, color: Color) {
 	assert(frame != nil, "draw_circle_v: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{kind = .Circle, p0 = center, outer_radius = radius, color = color},
 	)
 }
 
 draw_circle_lines_v :: proc(frame: ^Ui_Frame, center: Vector2, radius: f32, color: Color) {
 	assert(frame != nil, "draw_circle_lines_v: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{kind = .Circle_Outline, p0 = center, outer_radius = radius, color = color},
 	)
 }
@@ -126,8 +160,8 @@ draw_ring :: proc(
 	color: Color,
 ) {
 	assert(frame != nil, "draw_ring: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{
 			kind = .Ring,
 			p0 = center,
@@ -143,17 +177,23 @@ draw_ring :: proc(
 
 draw_triangle :: proc(frame: ^Ui_Frame, p0, p1, p2: Vector2, color: Color) {
 	assert(frame != nil, "draw_triangle: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{kind = .Triangle, p0 = p0, p1 = p1, p2 = p2, color = color},
 	)
 }
 
 begin_scissor_mode :: proc(frame: ^Ui_Frame, x, y, width, height: i32) {
 	assert(frame != nil && frame.open, "begin_scissor_mode: invalid frame")
+	origin := frame_pane_origin(frame)
 	paint_clip_begin(
 		frame_paint_list(frame),
-		{f32(x), f32(y), f32(max(width, 0)), f32(max(height, 0))},
+		{
+			f32(x) + origin.x,
+			f32(y) + origin.y,
+			f32(max(width, 0)),
+			f32(max(height, 0)),
+		},
 	)
 }
 
@@ -165,21 +205,21 @@ end_scissor_mode :: proc(frame: ^Ui_Frame) {
 canvas_begin :: proc(frame: ^Ui_Frame, rect: Rect_I32, translation: Vector2 = {}) {
 	assert(frame != nil && frame.open, "canvas_begin: invalid frame")
 	assert(rect.w >= 0 && rect.h >= 0, "canvas_begin: negative rect")
-	origin := Vector2{f32(rect.x), f32(rect.y)}
-	ui_frame_pane_push(frame, origin + translation)
-	paint_push(
+	parent := frame_pane_origin(frame)
+	paint_clip_begin(
 		frame_paint_list(frame),
-		{kind = .Transform_Begin, translation = origin + translation},
+		{parent.x + f32(rect.x), parent.y + f32(rect.y), f32(rect.w), f32(rect.h)},
 	)
-	begin_scissor_mode(frame, rect.x, rect.y, rect.w, rect.h)
+	ui_frame_pane_push(frame, Vector2{f32(rect.x), f32(rect.y)} + translation)
+	assert(frame.pane_count > 0 && frame.pane_count <= MAX_PANE_SCOPES)
 }
 
 canvas_end :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "canvas_end: invalid frame")
 	assert(frame.pane_count > 0, "canvas_end: no canvas")
-	end_scissor_mode(frame)
-	paint_push(frame_paint_list(frame), {kind = .Transform_End})
+	paint_clip_end(frame_paint_list(frame))
 	ui_frame_pane_pop(frame)
+	assert(frame.pane_count >= 0 && frame.pane_count < MAX_PANE_SCOPES)
 }
 
 canvas_clear :: proc(frame: ^Ui_Frame, rect: Rect_I32, color: Color) {
@@ -203,7 +243,7 @@ draw_text_command :: proc(
 		font      = font,
 		font_size = f32(size),
 	}
-	paint_push_text(frame_paint_list(frame), command, text)
+	frame_paint_push_text(frame, command, text)
 }
 
 draw_cstring_command :: proc(
@@ -224,8 +264,8 @@ draw_codepoint_command :: proc(
 	font: Font_Id = 0,
 ) {
 	assert(frame != nil, "draw_codepoint_command: nil frame")
-	paint_push(
-		frame_paint_list(frame),
+	frame_paint_push(
+		frame,
 		{
 			kind = .Codepoint,
 			p0 = {f32(x), f32(y)},

@@ -9,12 +9,10 @@ import "core:math"
 import "core:strings"
 
 
-// begin_pane_scissor converts pane-local geometry to screen coordinates because
-// scissor rectangles are not affected by the drawing transform.
 begin_pane_scissor :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
+	assert(frame != nil && frame.open, "begin_pane_scissor: invalid frame")
 	assert(w > 0 && h > 0, "begin_pane_scissor: invalid rect")
-	point := frame_to_screen(frame, {f32(x), f32(y)})
-	begin_scissor_mode(frame, i32(point.x), i32(point.y), w, h)
+	begin_scissor_mode(frame, x, y, w, h)
 }
 
 // draw_split_divider draws the vertical drag handle between the chat pane and

@@ -140,10 +140,5 @@ replay_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Pain
 				i32(command.rect.height),
 			)
 		}
-	case .Transform_Begin:
-		rl.MatrixModePush()
-		rl.MatrixModeTranslate(command.translation.x, command.translation.y)
-	case .Transform_End:
-		rl.MatrixModePop()
 	}
 }

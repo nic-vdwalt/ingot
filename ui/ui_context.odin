@@ -254,8 +254,10 @@ ui_frame_destroy :: proc(frame: ^Ui_Frame) {assert(frame != nil && !frame.open)
 ui_frame_pane_push :: proc(frame: ^Ui_Frame, origin: Vector2) {
 	assert(frame != nil && frame.open, "pane_push: invalid frame")
 	assert(frame.pane_count < MAX_PANE_SCOPES, "pane_push: scope limit")
-	frame.pane_origins[frame.pane_count] = origin
+	parent := frame_pane_origin(frame)
+	frame.pane_origins[frame.pane_count] = parent + origin
 	frame.pane_count += 1
+	assert(frame.pane_count > 0 && frame.pane_count <= MAX_PANE_SCOPES)
 }
 
 ui_frame_pane_pop :: proc(frame: ^Ui_Frame) {
