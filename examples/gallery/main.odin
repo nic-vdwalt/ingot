@@ -93,40 +93,15 @@ reduced_motion := false
 section := Section.Api_Relationships
 debug_on := false
 
-Galaxy_Relationship :: enum {
-	Contains,
-	References,
-	Delegates,
-	Emits,
-	Direct,
-}
-
-Galaxy_Node :: struct {
-	center: ui.Vector2,
-	radius: f32,
-	label:  string,
-	color:  ui.Color,
-}
-
-Galaxy_Layout :: struct {
-	app:      ui.Rect_I32,
-	session:  ui.Rect_I32,
-	frame:    ui.Vector2,
-	facade:   ui.Vector2,
-	explicit: ui.Vector2,
-	adapter:  ui.Vector2,
-	gfx:      ui.Vector2,
-}
-
-Api_Leaf_Example :: enum {
-	Button,
-	Checkbox,
-	Line_Chart,
+Api_Tree_Node :: struct {
+	rect:   ui.Rect_I32,
+	title:  string,
+	detail: string,
+	accent: ui.Color,
 }
 
 Api_Map_State :: struct {
-	ui:           ui.Ui,
-	leaf_example: Api_Leaf_Example,
+	ui: ui.Ui,
 }
 
 nav_ui: ui.Ui
@@ -414,139 +389,6 @@ draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
 	return end_y + ui.ui_frame_sc(frame, 8)
 }
 
-relationship_card :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, label: string, color: ui.Color) {
-	assert(frame != nil, "relationship_card: nil frame")
-	assert(rect.w > 0 && rect.h > 0, "relationship_card: empty rect")
-	ui.draw_rectangle_rounded(
-		frame,
-		ui.Rect{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)},
-		0.12,
-		4,
-		color,
-	)
-	ui.text(
-		frame,
-		label,
-		rect.x + ui.ui_frame_sc(frame, 10),
-		rect.y + ui.ui_frame_sc(frame, 10),
-		.Label,
-	)
-}
-
-host_ownership_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
-	assert(frame != nil && rect.w > 0, "host_ownership_canvas: invalid canvas")
-	assert(userdata == nil, "host_ownership_canvas: unexpected userdata")
-	theme := ui.ui_frame_theme(frame)
-	gap := ui.ui_frame_sc(frame, 12)
-	card_w := (rect.w - gap * 2) / 3
-	labels := [?]string {
-		"ui_gfx.App  [default]",
-		"ui_gfx.Session  [custom host]",
-		"ui_gfx.Adapter  [bridge]",
-	}
-	for label, index in labels {
-		x := i32(index) * (card_w + gap)
-		relationship_card(frame, {x, 24, card_w, 52}, label, theme.bg_active)
-	}
-	ui.text(frame, "owns / defaults  \u2192", card_w - gap, 4, .Label, .Accent)
-	ui.text(frame, "owns / uses  \u2192", card_w * 2, 82, .Label, .Accent)
-}
-
-geometry_ownership_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
-	assert(frame != nil && rect.w > 0, "geometry_ownership_canvas: invalid canvas")
-	assert(userdata != nil, "geometry_ownership_canvas: nil state")
-	state := cast(^Api_Map_State)userdata
-	theme := ui.ui_frame_theme(frame)
-	gap := ui.ui_frame_sc(frame, 48)
-	card_w := (rect.w - gap) / 2
-	facade, explicit := "button(u, \"save\", \"Save\")", "button_at(frame, rect, \"Save\", ...)"
-	switch state.leaf_example {
-	case .Button:
-	case .Checkbox:
-		facade, explicit = "checkbox(u, \"sync\", ...)", "checkbox_at(frame, rect, ... )"
-	case .Line_Chart:
-		facade, explicit =
-			"line_chart(u, series, state)", "line_chart_at(frame, rect, series, state)"
-	}
-	relationship_card(frame, {0, 24, card_w, 76}, "FACADE LEAF", theme.bg_active)
-	relationship_card(frame, {card_w + gap, 24, card_w, 76}, "EXPLICIT LEAF", theme.bg_selection)
-	ui.text(frame, facade, 10, 68, .Label)
-	ui.text(frame, explicit, card_w + gap + 10, 68, .Label)
-	ui.text(
-		frame,
-		"delegates after supplying geometry  \u2192",
-		card_w - gap / 2,
-		4,
-		.Label,
-		.Accent,
-	)
-	ui.text(frame, "logical slot \u00b7 scale \u00b7 ID \u00b7 focus", 10, 112, .Label, .Secondary)
-	ui.text(
-		frame,
-		"physical Rect_I32 \u00b7 placement \u00b7 Focus_Opt",
-		card_w + gap,
-		112,
-		.Label,
-		.Secondary,
-	)
-	ui.text(
-		frame,
-		"SHARED: interaction \u00b7 theme \u00b7 semantics \u00b7 accessibility \u00b7 UI paint",
-		10,
-		144,
-		.Label,
-	)
-}
-
-canvas_bridge_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
-	assert(frame != nil && rect.w > 0, "canvas_bridge_canvas: invalid canvas")
-	assert(userdata == nil, "canvas_bridge_canvas: unexpected userdata")
-	theme := ui.ui_frame_theme(frame)
-	card_w := min(rect.w / 3, ui.ui_frame_sc(frame, 220))
-	relationship_card(frame, {0, 26, card_w, 54}, "ui.Ui flow", theme.bg_active)
-	relationship_card(
-		frame,
-		{rect.w - card_w, 26, card_w, 54},
-		"explicit island\nlocal physical rect",
-		theme.bg_selection,
-	)
-	ui.text(frame, "reserves logical slot + scales once  \u2192", card_w + 10, 12, .Label, .Accent)
-	ui.text(frame, "\u2190  returns to facade flow", card_w + 30, 78, .Label, .Secondary)
-}
-
-output_routes_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
-	assert(frame != nil && rect.w > 0, "output_routes_canvas: invalid canvas")
-	assert(userdata == nil, "output_routes_canvas: unexpected userdata")
-	theme := ui.ui_frame_theme(frame)
-	ui.text(frame, "facade leaves", 0, 8, .Label)
-	ui.text(frame, "explicit leaves", 0, 34, .Label)
-	ui.text(frame, "composition protocols", 0, 60, .Label)
-	relationship_card(
-		frame,
-		{rect.w / 3, 22, rect.w / 5, 58},
-		"Ui_Frame\npaint + semantics",
-		theme.bg_active,
-	)
-	relationship_card(
-		frame,
-		{rect.w * 3 / 5, 22, rect.w / 6, 58},
-		"Adapter\nreplays",
-		theme.bg_secondary,
-	)
-	relationship_card(frame, {rect.w * 4 / 5, 22, rect.w / 5, 58}, "ingot:gfx", theme.bg_code)
-	ui.text(frame, "emits  \u2192", rect.w / 4, 40, .Label, .Accent)
-	ui.text(frame, "\u2192", rect.w * 11 / 20, 40, .Label, .Accent)
-	ui.text(frame, "\u2192", rect.w * 23 / 30, 40, .Label, .Accent)
-	ui.text(
-		frame,
-		"direct texture / shader / 3D / render-target capability  - - - - - - - - - - - - \u2192",
-		0,
-		104,
-		.Label,
-		.Secondary,
-	)
-}
-
 draw_entry_paths :: proc(u: ^ui.Ui) {
 	assert(u != nil && u.open, "draw_entry_paths: invalid UI")
 	theme := ui.ui_frame_theme(u.frame)
@@ -565,383 +407,363 @@ draw_entry_paths :: proc(u: ^ui.Ui) {
 	ui.label(u, "rlgl is a bounded migration shim, not OpenGL.", color = theme.fg_tool)
 }
 
-draw_host_ownership :: proc(u: ^ui.Ui) {
-	assert(u != nil && u.open, "draw_host_ownership: invalid UI")
-	theme := ui.ui_frame_theme(u.frame)
-	_ = ui.section_header(u, "2. HOST LIFECYCLE OWNERSHIP")
-	ui.label(u, "App owns/defaults Session; Session owns/uses Adapter.")
-	_ = ui.canvas(u, {height = 112}, host_ownership_canvas)
-	ui.kv_row(u, "App", "ordinary one-window app", theme.fg_secondary, theme.fg_primary)
-	ui.kv_row(
-		u,
-		"Session",
-		"custom pacing, embedding, contexts",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"Adapter",
-		"bridge implementation; not an app shell",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-}
-
-draw_geometry_ownership :: proc(u: ^ui.Ui, state: ^Api_Map_State) {
-	assert(u != nil && u.open, "draw_geometry_ownership: invalid UI")
-	assert(state != nil, "draw_geometry_ownership: nil state")
-	_ = ui.section_header(u, "3. GEOMETRY OWNERSHIP: WRAPPER VERSUS EXPLICIT LEAF")
-	ui.label(u, "Facade leaves are ergonomic wrappers where paired explicit leaves exist.")
-	ui.row_begin(u, 32, gap = .SM)
-	for example in Api_Leaf_Example {
-		label := "button \u2192 button_at"
-		if example == .Checkbox do label = "checkbox \u2192 checkbox_at"
-		if example == .Line_Chart do label = "line_chart \u2192 line_chart_at"
-		if ui.button(u, u64(example) + 1, label) do state.leaf_example = example
-	}
-	ui.row_end(u)
-	_ = ui.canvas(u, {height = 178}, geometry_ownership_canvas, state)
-}
-
-draw_canvas_bridge :: proc(u: ^ui.Ui) {
-	assert(u != nil && u.open, "draw_canvas_bridge: invalid UI")
-	theme := ui.ui_frame_theme(u.frame)
-	_ = ui.section_header(u, "4. CANVAS IS A GEOMETRY BRIDGE")
-	ui.label(u, "canvas reserves a facade slot, scales once, and returns to facade flow.")
-	_ = ui.canvas(u, {height = 112}, canvas_bridge_canvas)
-	ui.label(
-		u,
-		"It stays inside the same input snapshot, semantics, clipping, and paint list.",
-		color = theme.fg_secondary,
-	)
-	ui.label(
-		u,
-		"Use canvas_begin/end only when the caller owns the physical rect or lifecycle.",
-		color = theme.fg_secondary,
-	)
-}
-
-draw_composition_protocols :: proc(u: ^ui.Ui) {
-	assert(u != nil && u.open, "draw_composition_protocols: invalid UI")
-	theme := ui.ui_frame_theme(u.frame)
-	_ = ui.section_header(u, "5. EXPLICIT COMPOSITION PROTOCOLS ARE PEERS")
-	ui.kv_row(
-		u,
-		"pane_begin \u2192 content \u2192 pane_end",
-		"scroll + clip",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"listbox_begin \u2192 rows \u2192 listbox_end",
-		"selection + navigation",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"modal / overlay begin \u2192 body \u2192 end",
-		"routing + top-layer paint",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"markdown + physical layouts",
-		"measurement + placement",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.label(
-		u,
-		"They are peers of explicit leaves, not lower-quality facade widgets.",
-		color = theme.fg_tool,
-	)
-}
-
-draw_output_routes :: proc(u: ^ui.Ui) {
-	assert(u != nil && u.open, "draw_output_routes: invalid UI")
-	theme := ui.ui_frame_theme(u.frame)
-	_ = ui.section_header(u, "6. ONE FRAME, TWO ROUTES TO GRAPHICS")
-	ui.label(u, "All UI declaration paths emit paint and semantics into Ui_Frame.")
-	_ = ui.canvas(u, {height = 136}, output_routes_canvas)
-	ui.label(u, "Adapter replays renderer-independent UI paint through ingot:gfx.")
-	ui.label(
-		u,
-		"Call gfx directly only for capabilities outside UI paint.",
-		color = theme.fg_accent,
-	)
-}
-
-galaxy_alpha :: proc(color: ui.Color, alpha: u8) -> ui.Color {
-	result := color
-	result.a = alpha
-	return result
-}
-
-galaxy_sc :: proc(frame: ^ui.Ui_Frame, value: i32) -> i32 {
-	assert(frame != nil, "galaxy_sc: nil frame")
+api_tree_sc :: proc(frame: ^ui.Ui_Frame, value: i32) -> i32 {
+	assert(frame != nil, "api_tree_sc: nil frame")
 	return ui.ui_frame_sc(frame, value)
 }
 
-galaxy_region :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, label: string, color: ui.Color) {
-	assert(frame != nil && rect.w > 0 && rect.h > 0, "galaxy_region: invalid region")
-	paint_rect := ui.rect_f32(rect)
-	ui.draw_rectangle_rounded(frame, paint_rect, 0.08, 8, galaxy_alpha(color, 24))
-	ui.draw_rectangle_rounded_lines_ex(frame, paint_rect, 0.08, 8, 1, galaxy_alpha(color, 180))
-	ui.text(frame, label, rect.x + 12, rect.y + 9, .Label, .Accent)
+api_tree_card :: proc(frame: ^ui.Ui_Frame, node: Api_Tree_Node) {
+	assert(frame != nil, "api_tree_card: nil frame")
+	assert(node.rect.w > 0 && node.rect.h > 0, "api_tree_card: invalid node")
+	theme := ui.ui_frame_theme(frame)
+	paint_rect := ui.rect_f32(node.rect)
+	ui.draw_rectangle_rounded(frame, paint_rect, 0.10, 6, theme.bg_secondary)
+	ui.draw_rectangle_rounded_lines_ex(frame, paint_rect, 0.10, 6, 1, theme.border_color)
+	ui.draw_rectangle(
+		frame,
+		node.rect.x,
+		node.rect.y,
+		api_tree_sc(frame, 4),
+		node.rect.h,
+		node.accent,
+	)
+	ui.text(
+		frame,
+		node.title,
+		node.rect.x + api_tree_sc(frame, 12),
+		node.rect.y + api_tree_sc(frame, 7),
+		.Label,
+		.Primary,
+	)
+	if len(node.detail) > 0 {
+		ui.text(
+			frame,
+			node.detail,
+			node.rect.x + api_tree_sc(frame, 12),
+			node.rect.y + api_tree_sc(frame, 25),
+			.Label,
+			.Secondary,
+		)
+	}
 }
 
-galaxy_node :: proc(frame: ^ui.Ui_Frame, node: Galaxy_Node) {
-	assert(frame != nil && node.radius > 0, "galaxy_node: invalid node")
-	ui.draw_circle_v(frame, node.center, node.radius + 10, galaxy_alpha(node.color, 22))
-	ui.draw_circle_v(frame, node.center, node.radius + 5, galaxy_alpha(node.color, 42))
-	ui.draw_circle_v(frame, node.center, node.radius, galaxy_alpha(node.color, 220))
-	ui.draw_circle_lines_v(frame, node.center, node.radius + 1, node.color)
-	highlight := node.center + ui.Vector2{-node.radius * 0.25, -node.radius * 0.28}
-	ui.draw_circle_v(frame, highlight, max(node.radius * 0.12, 2), ui.Color{255, 255, 255, 170})
-	label_w := ui.text_width(frame, node.label, .Label)
-	ui.text(frame, node.label, i32(node.center.x) - label_w / 2, i32(node.center.y) - 7, .Label)
+api_tree_segment :: proc(frame: ^ui.Ui_Frame, from, to: ui.Vector2, color: ui.Color) {
+	assert(frame != nil, "api_tree_segment: nil frame")
+	assert(from.x == to.x || from.y == to.y, "api_tree_segment: diagonal edge")
+	ui.draw_line_ex(frame, from, to, f32(api_tree_sc(frame, 2)), color)
 }
 
-galaxy_path :: proc(
+api_tree_arrow_down :: proc(frame: ^ui.Ui_Frame, tip: ui.Vector2, color: ui.Color) {
+	assert(frame != nil, "api_tree_arrow_down: nil frame")
+	size := f32(api_tree_sc(frame, 5))
+	ui.draw_triangle(
+		frame,
+		tip,
+		tip + ui.Vector2{-size, -size},
+		tip + ui.Vector2{size, -size},
+		color,
+	)
+}
+
+api_tree_arrow_side :: proc(frame: ^ui.Ui_Frame, tip: ui.Vector2, left: bool, color: ui.Color) {
+	assert(frame != nil, "api_tree_arrow_side: nil frame")
+	size := f32(api_tree_sc(frame, 5))
+	direction: f32 = 1
+	if left do direction = -1
+	ui.draw_triangle(
+		frame,
+		tip,
+		tip + ui.Vector2{-direction * size, -size},
+		tip + ui.Vector2{-direction * size, size},
+		color,
+	)
+}
+
+api_tree_edge_down :: proc(frame: ^ui.Ui_Frame, parent, child: ui.Rect_I32, color: ui.Color) {
+	assert(frame != nil && child.y > parent.y + parent.h, "api_tree_edge_down: invalid edge")
+	from := ui.Vector2{f32(parent.x + parent.w / 2), f32(parent.y + parent.h)}
+	to := ui.Vector2{f32(child.x + child.w / 2), f32(child.y)}
+	elbow_y := f32((parent.y + parent.h + child.y) / 2)
+	api_tree_segment(frame, from, {from.x, elbow_y}, color)
+	api_tree_segment(frame, {from.x, elbow_y}, {to.x, elbow_y}, color)
+	api_tree_segment(frame, {to.x, elbow_y}, to, color)
+	api_tree_arrow_down(frame, to, color)
+}
+
+api_tree_edge_around :: proc(
 	frame: ^ui.Ui_Frame,
-	from, to: ui.Vector2,
-	relationship: Galaxy_Relationship,
+	parent, child: ui.Rect_I32,
+	lane_x: i32,
 	color: ui.Color,
 ) {
-	assert(frame != nil && relationship != .Contains, "galaxy_path: invalid path")
-	delta := to - from
-	if relationship == .References || relationship == .Direct {
-		for index := 0; index < 8; index += 1 {
-			t0 := f32(index) / 8
-			t1 := min(t0 + 0.07, 1)
-			ui.draw_line_ex(frame, from + delta * t0, from + delta * t1, 1, color)
-		}
+	assert(frame != nil && child.y > parent.y + parent.h, "api_tree_edge_around: invalid edge")
+	from := ui.Vector2{f32(parent.x + parent.w), f32(parent.y + parent.h / 2)}
+	to := ui.Vector2{f32(child.x + child.w / 2), f32(child.y)}
+	lane := f32(lane_x)
+	elbow_y := f32(child.y - api_tree_sc(frame, 10))
+	api_tree_segment(frame, from, {lane, from.y}, color)
+	api_tree_segment(frame, {lane, from.y}, {lane, elbow_y}, color)
+	api_tree_segment(frame, {lane, elbow_y}, {to.x, elbow_y}, color)
+	api_tree_segment(frame, {to.x, elbow_y}, to, color)
+	api_tree_arrow_down(frame, to, color)
+}
+
+api_tree_panel :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, title: string) {
+	assert(frame != nil && rect.w > 0 && rect.h > 0, "api_tree_panel: invalid panel")
+	theme := ui.ui_frame_theme(frame)
+	paint_rect := ui.rect_f32(rect)
+	ui.draw_rectangle_rounded(frame, paint_rect, 0.04, 6, theme.bg_code)
+	ui.draw_rectangle_rounded_lines_ex(frame, paint_rect, 0.04, 6, 1, theme.border_color)
+	ui.text(
+		frame,
+		title,
+		rect.x + api_tree_sc(frame, 12),
+		rect.y + api_tree_sc(frame, 10),
+		.Label,
+		.Primary,
+	)
+}
+
+api_tree_centered_rect :: proc(panel: ui.Rect_I32, y, w, h: i32) -> ui.Rect_I32 {
+	assert(panel.w > 0 && panel.h > 0 && w > 0 && h > 0, "api_tree_centered_rect: invalid rect")
+	return {panel.x + (panel.w - w) / 2, y, w, h}
+}
+
+api_tree_draw_edges :: proc(
+	frame: ^ui.Ui_Frame,
+	parent: ui.Rect_I32,
+	children: []ui.Rect_I32,
+	color: ui.Color,
+) {
+	assert(frame != nil && len(children) > 0, "api_tree_draw_edges: invalid children")
+	for child in children {
+		api_tree_edge_down(frame, parent, child, color)
+	}
+}
+
+api_tree_branch_bus :: proc(
+	frame: ^ui.Ui_Frame,
+	parent: ui.Rect_I32,
+	children: []ui.Rect_I32,
+	lane_x: i32,
+	color: ui.Color,
+) {
+	assert(frame != nil && len(children) > 0, "api_tree_branch_bus: invalid children")
+	from := ui.Vector2{f32(parent.x + parent.w / 2), f32(parent.y + parent.h)}
+	first_y := children[0].y + children[0].h / 2
+	last_y := children[len(children) - 1].y + children[len(children) - 1].h / 2
+	api_tree_segment(frame, from, {from.x, f32(first_y - api_tree_sc(frame, 8))}, color)
+	api_tree_segment(
+		frame,
+		{from.x, f32(first_y - api_tree_sc(frame, 8))},
+		{f32(lane_x), f32(first_y - api_tree_sc(frame, 8))},
+		color,
+	)
+	api_tree_segment(
+		frame,
+		{f32(lane_x), f32(first_y - api_tree_sc(frame, 8))},
+		{f32(lane_x), f32(last_y)},
+		color,
+	)
+	for child in children {
+		child_y := f32(child.y + child.h / 2)
+		left := child.x < lane_x
+		tip_x := f32(child.x + child.w) if left else f32(child.x)
+		api_tree_segment(frame, {f32(lane_x), child_y}, {tip_x, child_y}, color)
+		api_tree_arrow_side(frame, {tip_x, child_y}, left, color)
+	}
+}
+
+api_ownership_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: bool) {
+	assert(frame != nil && panel.w > 0 && panel.h > 0, "api_ownership_tree: invalid panel")
+	theme := ui.ui_frame_theme(frame)
+	margin := api_tree_sc(frame, 14)
+	card_w := min(api_tree_sc(frame, 156), (panel.w - margin * 3) / 2)
+	card_h := min(api_tree_sc(frame, 42), max((panel.h - api_tree_sc(frame, 104)) / 8, 30))
+	top := panel.y + api_tree_sc(frame, 38)
+	row_gap := max(api_tree_sc(frame, 8), 6)
+	caller := api_tree_centered_rect(panel, top, min(card_w * 2, panel.w - margin * 2), card_h)
+	app := api_tree_centered_rect(panel, caller.y + card_h + row_gap, card_w, card_h)
+	child_y := app.y + card_h + row_gap
+	session_x := panel.x + margin + api_tree_sc(frame, 20)
+	session := ui.Rect_I32{session_x, child_y, card_w, card_h}
+	ui_card := ui.Rect_I32{panel.x + panel.w - margin - card_w, child_y, card_w, card_h}
+	member_y := session.y + card_h + row_gap
+	member_x := session.x + api_tree_sc(frame, 20)
+	members: [5]ui.Rect_I32
+	for index := 0; index < 5; index += 1 {
+		members[index] = {member_x, member_y + i32(index) * (card_h + row_gap), card_w, card_h}
+	}
+	output_w := min(api_tree_sc(frame, 142), panel.x + panel.w - margin - members[3].x - card_w)
+	output_x := panel.x + panel.w - margin - output_w
+	output_h := min(card_h, api_tree_sc(frame, 36))
+	output_y := members[3].y + card_h + row_gap
+	output_children := [?]ui.Rect_I32 {
+		{output_x, output_y, output_w, output_h},
+		{output_x, output_y + output_h + row_gap, output_w, output_h},
+		{output_x, output_y + (output_h + row_gap) * 2, output_w, output_h},
+	}
+	api_tree_edge_down(frame, caller, app, theme.fg_accent)
+	app_children := [?]ui.Rect_I32{session, ui_card}
+	api_tree_draw_edges(frame, app, app_children[:], theme.fg_accent)
+	api_tree_branch_bus(
+		frame,
+		session,
+		members[:],
+		members[0].x - api_tree_sc(frame, 7),
+		theme.fg_tool,
+	)
+	api_tree_branch_bus(
+		frame,
+		members[3],
+		output_children[:],
+		output_x - api_tree_sc(frame, 7),
+		theme.fg_success,
+	)
+	api_tree_card(
+		frame,
+		{caller, "Caller-owned application state", "owns App value", theme.fg_accent},
+	)
+	api_tree_card(frame, {app, "ui_gfx.App", "default host", theme.fg_accent})
+	api_tree_card(frame, {session, "ui_gfx.Session", "left sibling field", theme.fg_tool})
+	api_tree_card(frame, {ui_card, "reusable ui.Ui", "right sibling field", theme.fg_plan})
+	labels := [?]string {
+		"Ui_Runtime",
+		"Ui_Input",
+		"reusable Ui_Frame",
+		"Ui_Output",
+		"ui_gfx.Adapter",
+	}
+	accents := [?]ui.Color {
+		theme.fg_tool,
+		theme.fg_user,
+		theme.fg_accent,
+		theme.fg_success,
+		theme.fg_assistant,
+	}
+	for member, index in members {
+		api_tree_card(frame, {member, labels[index], "Session-owned", accents[index]})
+	}
+	output_labels := [?]string{"main paint", "overlay paint", "platform output"}
+	for child, index in output_children {
+		api_tree_card(frame, {child, output_labels[index], "Ui_Output-owned", theme.fg_success})
+	}
+}
+
+api_call_paths_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: bool) {
+	assert(frame != nil && panel.w > 0 && panel.h > 0, "api_call_paths_tree: invalid panel")
+	theme := ui.ui_frame_theme(frame)
+	margin := api_tree_sc(frame, 14)
+	gap := api_tree_sc(frame, 12)
+	card_w := min(api_tree_sc(frame, 168), (panel.w - margin * 2 - gap) / 2)
+	card_h := min(api_tree_sc(frame, 48), max((panel.h - api_tree_sc(frame, 104)) / 5, 30))
+	top := panel.y + api_tree_sc(frame, 38)
+	row_gap := max((panel.h - api_tree_sc(frame, 52) - card_h * 5) / 4, 8)
+	entry_w := card_w * 2 + gap
+	entry_x := panel.x + (panel.w - entry_w) / 2
+	facade := ui.Rect_I32{entry_x, top, card_w, card_h}
+	explicit := ui.Rect_I32{entry_x + card_w + gap, top, card_w, card_h}
+	frame_rect := api_tree_centered_rect(panel, top + card_h + row_gap, card_w, card_h)
+	output := api_tree_centered_rect(panel, frame_rect.y + card_h + row_gap, card_w, card_h)
+	adapter := api_tree_centered_rect(panel, output.y + card_h + row_gap, card_w, card_h)
+	gfx := api_tree_centered_rect(panel, adapter.y + card_h + row_gap, card_w, card_h)
+	raylib_x := panel.x + margin
+	if raylib_x + card_w + margin > gfx.x do raylib_x = panel.x + panel.w - margin - card_w
+	raylib := ui.Rect_I32{raylib_x, adapter.y, card_w, card_h}
+	declarations := [?]ui.Rect_I32{facade, explicit}
+	for declaration in declarations {
+		api_tree_edge_down(frame, declaration, frame_rect, theme.fg_accent)
+	}
+	api_tree_edge_down(frame, frame_rect, output, theme.fg_success)
+	api_tree_edge_down(frame, output, adapter, theme.fg_assistant)
+	api_tree_edge_down(frame, adapter, gfx, theme.fg_assistant)
+	lane_x := panel.x + panel.w - api_tree_sc(frame, 8)
+	if raylib.x > gfx.x do lane_x = panel.x + api_tree_sc(frame, 8)
+	api_tree_edge_around(frame, raylib, gfx, lane_x, theme.fg_user)
+	api_tree_card(frame, {facade, "Facade API", "paired *_at when available", theme.fg_plan})
+	api_tree_card(frame, {explicit, "Explicit UI", "*_at · canvas · protocols", theme.fg_accent})
+	api_tree_card(frame, {frame_rect, "Ui_Frame", "records paint + semantics", theme.fg_accent})
+	api_tree_card(frame, {output, "Ui_Output", "main · overlay · platform", theme.fg_success})
+	api_tree_card(frame, {adapter, "ui_gfx.Adapter", "replays UI output", theme.fg_assistant})
+	api_tree_card(frame, {gfx, "ingot:gfx", "backend-facing API", theme.fg_assistant})
+	api_tree_card(
+		frame,
+		{raylib, "Migrated raylib app", "existing loop · direct gfx", theme.fg_user},
+	)
+}
+
+api_relationship_trees_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
+	assert(
+		frame != nil && rect.w > 0 && rect.h > 0,
+		"api_relationship_trees_canvas: invalid canvas",
+	)
+	assert(userdata == nil, "api_relationship_trees_canvas: unexpected userdata")
+	wide := rect.w >= api_tree_sc(frame, 700)
+	pad := api_tree_sc(frame, 16 if wide else 12)
+	gap := api_tree_sc(frame, 20 if wide else 16)
+	ownership, depth: ui.Rect_I32
+	if wide {
+		panel_w := (rect.w - pad * 2 - gap) / 2
+		ownership = {rect.x + pad, rect.y + pad, panel_w, rect.h - pad * 2}
+		depth = {ownership.x + ownership.w + gap, ownership.y, panel_w, ownership.h}
 	} else {
-		thickness: f32 = 2
-		if relationship == .Emits do thickness = 1
-		ui.draw_line_ex(frame, from, to, thickness, color)
-		ui.draw_circle_v(frame, from + delta * 0.62, 3, color)
+		panel_h := (rect.h - pad * 2 - gap) / 2
+		ownership = {rect.x + pad, rect.y + pad, rect.w - pad * 2, panel_h}
+		depth = {ownership.x, ownership.y + ownership.h + gap, ownership.w, panel_h}
 	}
-}
-
-galaxy_stars :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32) {
-	assert(frame != nil && rect.w > 0 && rect.h > 0, "galaxy_stars: invalid field")
-	theme := ui.ui_frame_theme(frame)
-	for index := 0; index < 28; index += 1 {
-		x := rect.x + i32((index * 83 + 29) % int(max(rect.w, 1)))
-		y := rect.y + i32((index * 47 + 17) % int(max(rect.h, 1)))
-		radius: f32 = 1
-		if index % 5 == 0 do radius = 2
-		ui.draw_circle(frame, x, y, radius, galaxy_alpha(theme.fg_secondary, 90))
-	}
-}
-
-galaxy_layout :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, wide: bool) -> Galaxy_Layout {
-	pad := galaxy_sc(frame, 18)
-	app_w := rect.w * 61 / 100
-	app_h := rect.h - galaxy_sc(frame, 118)
-	if !wide {
-		pad = galaxy_sc(frame, 14)
-		app_w = rect.w - pad * 2
-		app_h = rect.h * 46 / 100
-	}
-	app := ui.Rect_I32{pad, galaxy_sc(frame, 32), app_w, app_h}
-	session_inset := min(galaxy_sc(frame, 18), max(app.w / 8, 2))
-	session_top := min(galaxy_sc(frame, 78), max(app.h / 4, 2))
-	session := ui.Rect_I32 {
-		app.x + session_inset,
-		app.y + session_top,
-		max(app.w - session_inset * 2 - galaxy_sc(frame, 90), 8),
-		max(app.h - session_top - galaxy_sc(frame, 26), 8),
-	}
-	explicit := ui.Vector2 {
-		f32(app.x + app.w + galaxy_sc(frame, 105)),
-		f32(app.y + galaxy_sc(frame, 205)),
-	}
-	gfx := ui.Vector2{f32(rect.w - galaxy_sc(frame, 76)), f32(rect.h - galaxy_sc(frame, 80))}
-	if !wide {
-		explicit = {f32(rect.w * 2 / 3), f32(app.y + app.h + galaxy_sc(frame, 130))}
-		gfx = {f32(rect.w * 3 / 4), f32(rect.h - galaxy_sc(frame, 68))}
-	}
-	return {
-		app = app,
-		session = session,
-		frame = {f32(session.x + session.w / 2), f32(session.y + session.h / 2)},
-		facade = {f32(app.x + app.w - galaxy_sc(frame, 67)), f32(app.y + galaxy_sc(frame, 82))},
-		explicit = explicit,
-		adapter = {
-			f32(session.x + session.w * 3 / 4),
-			f32(session.y + session.h - galaxy_sc(frame, 55)),
-		},
-		gfx = gfx,
-	}
-}
-
-galaxy_draw_ownership :: proc(frame: ^ui.Ui_Frame, layout: Galaxy_Layout) {
-	theme := ui.ui_frame_theme(frame)
-	galaxy_region(frame, layout.app, "ui_gfx.App  ·  caller-owned shell", theme.fg_accent)
-	galaxy_region(frame, layout.session, "ui_gfx.Session  ·  owned bundle", theme.fg_tool)
-	runtime := ui.Vector2 {
-		f32(layout.session.x + galaxy_sc(frame, 68)),
-		f32(layout.session.y + galaxy_sc(frame, 80)),
-	}
-	input := ui.Vector2 {
-		f32(layout.session.x + galaxy_sc(frame, 68)),
-		f32(layout.session.y + layout.session.h - galaxy_sc(frame, 62)),
-	}
-	output := ui.Vector2 {
-		f32(layout.session.x + layout.session.w - galaxy_sc(frame, 66)),
-		f32(layout.session.y + galaxy_sc(frame, 78)),
-	}
-	points := [?]ui.Vector2{runtime, input, output}
-	for point in points {
-		galaxy_path(frame, point, layout.frame, .References, galaxy_alpha(theme.fg_secondary, 150))
-	}
-	galaxy_node(frame, {runtime, f32(galaxy_sc(frame, 31)), "Runtime", theme.fg_tool})
-	galaxy_node(frame, {input, f32(galaxy_sc(frame, 30)), "Ui_Input", theme.fg_user})
-	galaxy_node(frame, {output, f32(galaxy_sc(frame, 34)), "Ui_Output", theme.fg_success})
-	galaxy_node(frame, {layout.frame, f32(galaxy_sc(frame, 42)), "Ui_Frame", theme.fg_accent})
-	galaxy_node(frame, {layout.adapter, f32(galaxy_sc(frame, 32)), "Adapter", theme.fg_assistant})
-	galaxy_node(frame, {layout.facade, f32(galaxy_sc(frame, 37)), "ui.Ui", theme.fg_plan})
-	galaxy_path(frame, layout.facade, layout.frame, .References, theme.fg_plan)
-}
-
-galaxy_draw_declarations :: proc(frame: ^ui.Ui_Frame, layout: Galaxy_Layout) {
-	theme := ui.ui_frame_theme(frame)
-	facade_leaf := layout.explicit + ui.Vector2{0, -f32(galaxy_sc(frame, 92))}
-	canvas := layout.explicit + ui.Vector2{-f32(galaxy_sc(frame, 82)), f32(galaxy_sc(frame, 86))}
-	protocols := layout.explicit + ui.Vector2{f32(galaxy_sc(frame, 86)), f32(galaxy_sc(frame, 87))}
-	galaxy_path(frame, facade_leaf, layout.explicit, .Delegates, theme.fg_accent)
-	points := [?]ui.Vector2{layout.explicit, canvas, protocols}
-	for point in points {
-		galaxy_path(frame, point, layout.frame, .Emits, galaxy_alpha(theme.fg_tool, 170))
-	}
-	galaxy_node(frame, {facade_leaf, f32(galaxy_sc(frame, 38)), "facade leaf", theme.fg_plan})
-	galaxy_node(frame, {layout.explicit, f32(galaxy_sc(frame, 36)), "*_at leaf", theme.fg_accent})
-	galaxy_node(frame, {canvas, f32(galaxy_sc(frame, 31)), "ui.canvas", theme.fg_tool})
-	galaxy_node(frame, {protocols, f32(galaxy_sc(frame, 36)), "protocols", theme.fg_tool})
-	ui.text(
-		frame,
-		"slot · scale · ID · focus · semantics",
-		i32(facade_leaf.x) - galaxy_sc(frame, 88),
-		i32(facade_leaf.y) - galaxy_sc(frame, 58),
-		.Label,
-		.Secondary,
-	)
-	ui.text(
-		frame,
-		"panes · lists · overlays · markdown",
-		i32(protocols.x) - galaxy_sc(frame, 88),
-		i32(protocols.y) + galaxy_sc(frame, 48),
-		.Label,
-		.Secondary,
-	)
-}
-
-galaxy_draw_output :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, layout: Galaxy_Layout) {
-	theme := ui.ui_frame_theme(frame)
-	output := ui.Vector2 {
-		f32(layout.session.x + layout.session.w - galaxy_sc(frame, 66)),
-		f32(layout.session.y + galaxy_sc(frame, 78)),
-	}
-	main := output + ui.Vector2{-f32(galaxy_sc(frame, 42)), f32(galaxy_sc(frame, 68))}
-	overlay := output + ui.Vector2{f32(galaxy_sc(frame, 12)), f32(galaxy_sc(frame, 82))}
-	platform := output + ui.Vector2{f32(galaxy_sc(frame, 64)), f32(galaxy_sc(frame, 62))}
-	satellites := [?]Galaxy_Node {
-		{main, f32(galaxy_sc(frame, 20)), "main", theme.fg_success},
-		{overlay, f32(galaxy_sc(frame, 22)), "overlay", theme.fg_success},
-		{platform, f32(galaxy_sc(frame, 22)), "platform", theme.fg_success},
-	}
-	for satellite in satellites {
-		galaxy_path(frame, output, satellite.center, .Emits, galaxy_alpha(theme.fg_success, 150))
-		galaxy_path(frame, satellite.center, layout.adapter, .Emits, theme.fg_success)
-		galaxy_node(frame, satellite)
-	}
-	galaxy_path(frame, layout.adapter, layout.gfx, .Delegates, theme.fg_assistant)
-	galaxy_node(frame, {layout.gfx, f32(galaxy_sc(frame, 38)), "ingot:gfx", theme.fg_assistant})
-	direct := ui.Vector2{f32(rect.w / 4), f32(rect.h - galaxy_sc(frame, 62))}
-	galaxy_node(frame, {direct, f32(galaxy_sc(frame, 34)), "direct gfx", theme.fg_user})
-	galaxy_path(frame, direct, layout.gfx, .Direct, galaxy_alpha(theme.fg_secondary, 190))
-	ui.text(
-		frame,
-		"textures · audio · cameras · targets · shaders · GPU 3D",
-		i32(direct.x) - galaxy_sc(frame, 135),
-		i32(direct.y) - galaxy_sc(frame, 58),
-		.Label,
-		.Secondary,
-	)
-}
-
-galaxy_draw_legend :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32) {
-	theme := ui.ui_frame_theme(frame)
-	y, x := rect.h - galaxy_sc(frame, 22), galaxy_sc(frame, 18)
-	items := [?]string {
-		"nested = owns",
-		"solid pulse = delegates",
-		"soft = emits",
-		"dashed = reference / bypass",
-	}
-	for item, index in items {
-		color := theme.fg_accent if index < 2 else theme.fg_secondary
-		ui.draw_circle(frame, x, y + galaxy_sc(frame, 5), 3, color)
-		ui.text(frame, item, x + galaxy_sc(frame, 9), y, .Label, .Secondary)
-		x += ui.text_width(frame, item, .Label) + galaxy_sc(frame, 34)
-	}
-}
-
-api_galaxy_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
-	assert(frame != nil && rect.w > 0 && rect.h > 0, "api_galaxy_canvas: invalid canvas")
-	assert(userdata == nil, "api_galaxy_canvas: unexpected userdata")
-	ui.draw_rectangle_rounded(frame, ui.rect_f32(rect), 0.025, 8, ui.ui_frame_theme(frame).bg_code)
-	galaxy_stars(frame, rect)
-	layout := galaxy_layout(frame, rect, rect.w >= ui.ui_frame_sc(frame, 700))
-	galaxy_draw_ownership(frame, layout)
-	galaxy_draw_declarations(frame, layout)
-	galaxy_draw_output(frame, rect, layout)
-	galaxy_draw_legend(frame, rect)
+	api_tree_panel(frame, ownership, "1 · LITERAL OWNERSHIP")
+	api_tree_panel(frame, depth, "2 · CALL PATHS · APPLICATION → BACKEND")
+	api_ownership_tree(frame, ownership, !wide)
+	api_call_paths_tree(frame, depth, !wide)
 }
 
 draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 	assert(u != nil && u.open, "draw_api_text_equivalent: invalid UI")
 	theme := ui.ui_frame_theme(u.frame)
-	_ = ui.section_header(u, "READING ORDER")
-	ui.kv_row(u, "Owns", "App ⊃ Session + reusable Ui", theme.fg_accent, theme.fg_primary)
+	_ = ui.section_header(u, "TEXTUAL EQUIVALENT")
+	ui.label(u, "1. LITERAL OWNERSHIP", color = theme.fg_accent)
+	ui.kv_row(u, "Caller", "owns ui_gfx.App", theme.fg_secondary, theme.fg_primary)
 	ui.kv_row(
 		u,
-		"Session",
-		"Runtime + Frame + Input + Output + Adapter",
-		theme.fg_accent,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"References",
-		"Ui opens against Frame; Frame borrows runtime/input/output",
+		"ui_gfx.App",
+		"owns reusable ui.Ui and ui_gfx.Session",
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
 	ui.kv_row(
 		u,
-		"Delegates",
-		"facade policy → paired *_at leaf",
+		"ui_gfx.Session",
+		"owns Runtime, Ui_Frame, Ui_Input, Ui_Output, and Adapter",
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
 	ui.kv_row(
 		u,
-		"Emits",
-		"explicit leaves and protocols → Ui_Frame",
+		"Ui_Output",
+		"owns main paint, overlay paint, and platform output",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.space(u, .XS)
+	ui.label(u, "2. CALL PATHS", color = theme.fg_accent)
+	ui.kv_row(
+		u,
+		"Declaration",
+		"facade or explicit UI → Ui_Frame",
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
 	ui.kv_row(
 		u,
-		"Replays",
-		"Ui_Output → Adapter → ingot:gfx",
+		"Rendering",
+		"Ui_Frame → Ui_Output → Adapter → ingot:gfx",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Migration",
+		"migrated raylib loop → ingot:gfx; UI optional",
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
@@ -951,13 +773,13 @@ draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	assert(frame != nil && w > 0, "draw_api_relationships: invalid geometry")
 	u := &api_map_state.ui
 	wide := w >= ui.ui_frame_sc(frame, 700)
-	canvas_h: i32 = 500 if wide else 860
-	total_h: i32 = canvas_h + 520
+	canvas_h: i32 = 520 if wide else 900
+	total_h: i32 = canvas_h + 420
 	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, total_h)}, gap = .SM)
 	ui.scope_begin(u, "api-relationships")
-	_ = ui.section_header(u, "APP-TO-GFX ENCAPSULATION GALAXY")
-	ui.label(u, "Nested fields show ownership. Paths show temporary relationships and flow.")
-	_ = ui.canvas(u, {height = canvas_h}, api_galaxy_canvas)
+	_ = ui.section_header(u, "API OWNERSHIP AND CALL PATHS")
+	ui.label(u, "Ownership is literal; application-facing routes flow toward ingot:gfx.")
+	_ = ui.canvas(u, {height = canvas_h}, api_relationship_trees_canvas)
 	draw_api_text_equivalent(u)
 	draw_entry_paths(u)
 	ui.scope_end(u)

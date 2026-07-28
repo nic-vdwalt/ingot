@@ -20,54 +20,40 @@ peers and may have no facade form by design.
 ## Entry paths
 
 ```mermaid
-flowchart LR
-    CALLER[Caller-owned application state]
-
-    subgraph APP[ui_gfx.App — default host]
-        FORM[reusable ui.Ui]
-        subgraph SESSION[ui_gfx.Session — lifecycle bundle]
-            RUNTIME[Ui_Runtime]
-            INPUT[Ui_Input]
-            FRAME[reusable Ui_Frame]
-            subgraph OUTPUT[Ui_Output]
-                MAIN[main paint]
-                OVERLAY[overlay paint]
-                PLATFORM[platform output]
-            end
-            ADAPTER[ui_gfx.Adapter]
-        end
-    end
-
-    CALLER -->|owns value| APP
-    FORM -.->|opens against| FRAME
-    FRAME -.->|temporarily references| RUNTIME
-    FRAME -.->|temporarily references| INPUT
-    FRAME -.->|temporarily references| OUTPUT
-
-    FACADE[Facade leaf\nslot + scale + ID + focus + semantics]
-    EXPLICIT[Paired *_at leaf\nphysical rect + caller geometry]
-    CANVAS[ui.canvas\nlogical slot to explicit island]
-    COMPOSE[Explicit composition peers\npanes + lists + overlays + markdown]
-
-    FACADE -->|delegates| EXPLICIT
-    FACADE --> CANVAS
-    EXPLICIT -->|emits paint and semantics| FRAME
-    CANVAS -->|emits in the same frame| FRAME
-    COMPOSE -->|emits paint and semantics| FRAME
-
-    MAIN -->|sink replays as emitted| ADAPTER
-    OVERLAY -->|replayed at frame end| ADAPTER
-    PLATFORM -->|applied by platform bridge| ADAPTER
-    ADAPTER -.->|references active graphics context and frame| GFX[ingot:gfx]
-    DIRECT[Textures + audio + cameras + targets + shaders + GPU 3D] -.->|direct capability route| GFX
+flowchart TB
+    CALLER[Caller-owned application state] -->|owns| APP[ui_gfx.App]
+    APP -->|owns left sibling field| SESSION[ui_gfx.Session]
+    APP -->|owns right sibling field| FORM[reusable ui.Ui]
+    SESSION --> RUNTIME[Ui_Runtime]
+    SESSION --> INPUT[Ui_Input]
+    SESSION --> FRAME[reusable Ui_Frame]
+    SESSION --> OUTPUT[Ui_Output]
+    SESSION --> ADAPTER[ui_gfx.Adapter]
+    OUTPUT --> MAIN[main paint]
+    OUTPUT --> OVERLAY[overlay paint]
+    OUTPUT --> PLATFORM[platform output]
 ```
 
-Containment in this diagram is literal. `App` contains `Session` and its reusable
-`Ui` form as sibling fields. `Session` contains the runtime, reusable frame,
-input, output, and Adapter values. `Ui_Frame` does not contain the runtime,
-input, or output; it temporarily references those Session-owned values while a
-frame is open. Likewise, Adapter references the active graphics context and
-frame rather than owning them.
+The ownership tree is literal. `App` contains `Session` and its reusable `Ui`
+form as sibling fields. `Session` contains five peer fields: the runtime,
+reusable frame, input, output, and Adapter. `Ui_Output` contains the main paint,
+overlay paint, and platform-output groups.
+
+```mermaid
+flowchart TB
+    FACADE[Facade API] -->|paired *_at when available| FRAME[Ui_Frame]
+    EXPLICIT[Explicit UI: *_at, ui.canvas, composition protocols] --> FRAME
+    FRAME --> OUTPUT[Ui_Output]
+    OUTPUT -->|replayed by| ADAPTER[ui_gfx.Adapter]
+    ADAPTER -->|calls through| GFX[ingot:gfx]
+    RAYLIB[Migrated raylib app with existing loop] -->|starts here| GFX
+    DIRECT[Direct gfx capabilities] -.->|bypass UI paint| GFX
+```
+
+The call-path graph runs from application-facing entry points toward the
+backend-facing API; it is not ownership. `Ui_Frame` temporarily references the
+Session-owned runtime, input, and output while a frame is open. Adapter likewise
+references the active graphics context and frame rather than owning them.
 
 `Ui_Output` has distinct replay timing. Main paint passes through the Adapter
 sink as commands are emitted, overlay paint is replayed at frame end, and
@@ -79,9 +65,9 @@ The two common paths deliberately begin in different places:
 1. **New desktop tools:** start at `ui_gfx.App`, compose ordinary controls with
    the bare `ui.Ui` facade, and introduce small explicit regions only where the
    application owns placement or a composition lifecycle.
-2. **Raylib migrations:** first replace the graphics imports and preserve the
-   existing loop. This does not require adopting `ui.Ui`. Add the app shell and
-   facade incrementally when the migrated application needs conventional UI.
+2. **Raylib migrations:** first replace graphics imports and preserve the existing
+   loop at `ingot:gfx`. Add `ui_gfx.Session` when the preserved loop needs UI, or
+   replace the loop with `ui_gfx.App` when the default application host fits.
 
 ## Quick choices
 
