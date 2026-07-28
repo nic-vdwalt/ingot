@@ -93,6 +93,31 @@ reduced_motion := false
 section := Section.Api_Relationships
 debug_on := false
 
+Galaxy_Relationship :: enum {
+	Contains,
+	References,
+	Delegates,
+	Emits,
+	Direct,
+}
+
+Galaxy_Node :: struct {
+	center: ui.Vector2,
+	radius: f32,
+	label:  string,
+	color:  ui.Color,
+}
+
+Galaxy_Layout :: struct {
+	app:      ui.Rect_I32,
+	session:  ui.Rect_I32,
+	frame:    ui.Vector2,
+	facade:   ui.Vector2,
+	explicit: ui.Vector2,
+	adapter:  ui.Vector2,
+	gfx:      ui.Vector2,
+}
+
 Api_Leaf_Example :: enum {
 	Button,
 	Checkbox,
@@ -650,18 +675,291 @@ draw_output_routes :: proc(u: ^ui.Ui) {
 	)
 }
 
+galaxy_alpha :: proc(color: ui.Color, alpha: u8) -> ui.Color {
+	result := color
+	result.a = alpha
+	return result
+}
+
+galaxy_sc :: proc(frame: ^ui.Ui_Frame, value: i32) -> i32 {
+	assert(frame != nil, "galaxy_sc: nil frame")
+	return ui.ui_frame_sc(frame, value)
+}
+
+galaxy_region :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, label: string, color: ui.Color) {
+	assert(frame != nil && rect.w > 0 && rect.h > 0, "galaxy_region: invalid region")
+	paint_rect := ui.rect_f32(rect)
+	ui.draw_rectangle_rounded(frame, paint_rect, 0.08, 8, galaxy_alpha(color, 24))
+	ui.draw_rectangle_rounded_lines_ex(frame, paint_rect, 0.08, 8, 1, galaxy_alpha(color, 180))
+	ui.text(frame, label, rect.x + 12, rect.y + 9, .Label, .Accent)
+}
+
+galaxy_node :: proc(frame: ^ui.Ui_Frame, node: Galaxy_Node) {
+	assert(frame != nil && node.radius > 0, "galaxy_node: invalid node")
+	ui.draw_circle_v(frame, node.center, node.radius + 10, galaxy_alpha(node.color, 22))
+	ui.draw_circle_v(frame, node.center, node.radius + 5, galaxy_alpha(node.color, 42))
+	ui.draw_circle_v(frame, node.center, node.radius, galaxy_alpha(node.color, 220))
+	ui.draw_circle_lines_v(frame, node.center, node.radius + 1, node.color)
+	highlight := node.center + ui.Vector2{-node.radius * 0.25, -node.radius * 0.28}
+	ui.draw_circle_v(frame, highlight, max(node.radius * 0.12, 2), ui.Color{255, 255, 255, 170})
+	label_w := ui.text_width(frame, node.label, .Label)
+	ui.text(frame, node.label, i32(node.center.x) - label_w / 2, i32(node.center.y) - 7, .Label)
+}
+
+galaxy_path :: proc(
+	frame: ^ui.Ui_Frame,
+	from, to: ui.Vector2,
+	relationship: Galaxy_Relationship,
+	color: ui.Color,
+) {
+	assert(frame != nil && relationship != .Contains, "galaxy_path: invalid path")
+	delta := to - from
+	if relationship == .References || relationship == .Direct {
+		for index := 0; index < 8; index += 1 {
+			t0 := f32(index) / 8
+			t1 := min(t0 + 0.07, 1)
+			ui.draw_line_ex(frame, from + delta * t0, from + delta * t1, 1, color)
+		}
+	} else {
+		thickness: f32 = 2
+		if relationship == .Emits do thickness = 1
+		ui.draw_line_ex(frame, from, to, thickness, color)
+		ui.draw_circle_v(frame, from + delta * 0.62, 3, color)
+	}
+}
+
+galaxy_stars :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32) {
+	assert(frame != nil && rect.w > 0 && rect.h > 0, "galaxy_stars: invalid field")
+	theme := ui.ui_frame_theme(frame)
+	for index := 0; index < 28; index += 1 {
+		x := rect.x + i32((index * 83 + 29) % int(max(rect.w, 1)))
+		y := rect.y + i32((index * 47 + 17) % int(max(rect.h, 1)))
+		radius: f32 = 1
+		if index % 5 == 0 do radius = 2
+		ui.draw_circle(frame, x, y, radius, galaxy_alpha(theme.fg_secondary, 90))
+	}
+}
+
+galaxy_layout :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, wide: bool) -> Galaxy_Layout {
+	pad := galaxy_sc(frame, 18)
+	app_w := rect.w * 61 / 100
+	app_h := rect.h - galaxy_sc(frame, 118)
+	if !wide {
+		pad = galaxy_sc(frame, 14)
+		app_w = rect.w - pad * 2
+		app_h = rect.h * 46 / 100
+	}
+	app := ui.Rect_I32{pad, galaxy_sc(frame, 32), app_w, app_h}
+	session_inset := min(galaxy_sc(frame, 18), max(app.w / 8, 2))
+	session_top := min(galaxy_sc(frame, 78), max(app.h / 4, 2))
+	session := ui.Rect_I32 {
+		app.x + session_inset,
+		app.y + session_top,
+		max(app.w - session_inset * 2 - galaxy_sc(frame, 90), 8),
+		max(app.h - session_top - galaxy_sc(frame, 26), 8),
+	}
+	explicit := ui.Vector2 {
+		f32(app.x + app.w + galaxy_sc(frame, 105)),
+		f32(app.y + galaxy_sc(frame, 205)),
+	}
+	gfx := ui.Vector2{f32(rect.w - galaxy_sc(frame, 76)), f32(rect.h - galaxy_sc(frame, 80))}
+	if !wide {
+		explicit = {f32(rect.w * 2 / 3), f32(app.y + app.h + galaxy_sc(frame, 130))}
+		gfx = {f32(rect.w * 3 / 4), f32(rect.h - galaxy_sc(frame, 68))}
+	}
+	return {
+		app = app,
+		session = session,
+		frame = {f32(session.x + session.w / 2), f32(session.y + session.h / 2)},
+		facade = {f32(app.x + app.w - galaxy_sc(frame, 67)), f32(app.y + galaxy_sc(frame, 82))},
+		explicit = explicit,
+		adapter = {
+			f32(session.x + session.w * 3 / 4),
+			f32(session.y + session.h - galaxy_sc(frame, 55)),
+		},
+		gfx = gfx,
+	}
+}
+
+galaxy_draw_ownership :: proc(frame: ^ui.Ui_Frame, layout: Galaxy_Layout) {
+	theme := ui.ui_frame_theme(frame)
+	galaxy_region(frame, layout.app, "ui_gfx.App  ·  caller-owned shell", theme.fg_accent)
+	galaxy_region(frame, layout.session, "ui_gfx.Session  ·  owned bundle", theme.fg_tool)
+	runtime := ui.Vector2 {
+		f32(layout.session.x + galaxy_sc(frame, 68)),
+		f32(layout.session.y + galaxy_sc(frame, 80)),
+	}
+	input := ui.Vector2 {
+		f32(layout.session.x + galaxy_sc(frame, 68)),
+		f32(layout.session.y + layout.session.h - galaxy_sc(frame, 62)),
+	}
+	output := ui.Vector2 {
+		f32(layout.session.x + layout.session.w - galaxy_sc(frame, 66)),
+		f32(layout.session.y + galaxy_sc(frame, 78)),
+	}
+	points := [?]ui.Vector2{runtime, input, output}
+	for point in points {
+		galaxy_path(frame, point, layout.frame, .References, galaxy_alpha(theme.fg_secondary, 150))
+	}
+	galaxy_node(frame, {runtime, f32(galaxy_sc(frame, 31)), "Runtime", theme.fg_tool})
+	galaxy_node(frame, {input, f32(galaxy_sc(frame, 30)), "Ui_Input", theme.fg_user})
+	galaxy_node(frame, {output, f32(galaxy_sc(frame, 34)), "Ui_Output", theme.fg_success})
+	galaxy_node(frame, {layout.frame, f32(galaxy_sc(frame, 42)), "Ui_Frame", theme.fg_accent})
+	galaxy_node(frame, {layout.adapter, f32(galaxy_sc(frame, 32)), "Adapter", theme.fg_assistant})
+	galaxy_node(frame, {layout.facade, f32(galaxy_sc(frame, 37)), "ui.Ui", theme.fg_plan})
+	galaxy_path(frame, layout.facade, layout.frame, .References, theme.fg_plan)
+}
+
+galaxy_draw_declarations :: proc(frame: ^ui.Ui_Frame, layout: Galaxy_Layout) {
+	theme := ui.ui_frame_theme(frame)
+	facade_leaf := layout.explicit + ui.Vector2{0, -f32(galaxy_sc(frame, 92))}
+	canvas := layout.explicit + ui.Vector2{-f32(galaxy_sc(frame, 82)), f32(galaxy_sc(frame, 86))}
+	protocols := layout.explicit + ui.Vector2{f32(galaxy_sc(frame, 86)), f32(galaxy_sc(frame, 87))}
+	galaxy_path(frame, facade_leaf, layout.explicit, .Delegates, theme.fg_accent)
+	points := [?]ui.Vector2{layout.explicit, canvas, protocols}
+	for point in points {
+		galaxy_path(frame, point, layout.frame, .Emits, galaxy_alpha(theme.fg_tool, 170))
+	}
+	galaxy_node(frame, {facade_leaf, f32(galaxy_sc(frame, 38)), "facade leaf", theme.fg_plan})
+	galaxy_node(frame, {layout.explicit, f32(galaxy_sc(frame, 36)), "*_at leaf", theme.fg_accent})
+	galaxy_node(frame, {canvas, f32(galaxy_sc(frame, 31)), "ui.canvas", theme.fg_tool})
+	galaxy_node(frame, {protocols, f32(galaxy_sc(frame, 36)), "protocols", theme.fg_tool})
+	ui.text(
+		frame,
+		"slot · scale · ID · focus · semantics",
+		i32(facade_leaf.x) - galaxy_sc(frame, 88),
+		i32(facade_leaf.y) - galaxy_sc(frame, 58),
+		.Label,
+		.Secondary,
+	)
+	ui.text(
+		frame,
+		"panes · lists · overlays · markdown",
+		i32(protocols.x) - galaxy_sc(frame, 88),
+		i32(protocols.y) + galaxy_sc(frame, 48),
+		.Label,
+		.Secondary,
+	)
+}
+
+galaxy_draw_output :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, layout: Galaxy_Layout) {
+	theme := ui.ui_frame_theme(frame)
+	output := ui.Vector2 {
+		f32(layout.session.x + layout.session.w - galaxy_sc(frame, 66)),
+		f32(layout.session.y + galaxy_sc(frame, 78)),
+	}
+	main := output + ui.Vector2{-f32(galaxy_sc(frame, 42)), f32(galaxy_sc(frame, 68))}
+	overlay := output + ui.Vector2{f32(galaxy_sc(frame, 12)), f32(galaxy_sc(frame, 82))}
+	platform := output + ui.Vector2{f32(galaxy_sc(frame, 64)), f32(galaxy_sc(frame, 62))}
+	satellites := [?]Galaxy_Node {
+		{main, f32(galaxy_sc(frame, 20)), "main", theme.fg_success},
+		{overlay, f32(galaxy_sc(frame, 22)), "overlay", theme.fg_success},
+		{platform, f32(galaxy_sc(frame, 22)), "platform", theme.fg_success},
+	}
+	for satellite in satellites {
+		galaxy_path(frame, output, satellite.center, .Emits, galaxy_alpha(theme.fg_success, 150))
+		galaxy_path(frame, satellite.center, layout.adapter, .Emits, theme.fg_success)
+		galaxy_node(frame, satellite)
+	}
+	galaxy_path(frame, layout.adapter, layout.gfx, .Delegates, theme.fg_assistant)
+	galaxy_node(frame, {layout.gfx, f32(galaxy_sc(frame, 38)), "ingot:gfx", theme.fg_assistant})
+	direct := ui.Vector2{f32(rect.w / 4), f32(rect.h - galaxy_sc(frame, 62))}
+	galaxy_node(frame, {direct, f32(galaxy_sc(frame, 34)), "direct gfx", theme.fg_user})
+	galaxy_path(frame, direct, layout.gfx, .Direct, galaxy_alpha(theme.fg_secondary, 190))
+	ui.text(
+		frame,
+		"textures · audio · cameras · targets · shaders · GPU 3D",
+		i32(direct.x) - galaxy_sc(frame, 135),
+		i32(direct.y) - galaxy_sc(frame, 58),
+		.Label,
+		.Secondary,
+	)
+}
+
+galaxy_draw_legend :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32) {
+	theme := ui.ui_frame_theme(frame)
+	y, x := rect.h - galaxy_sc(frame, 22), galaxy_sc(frame, 18)
+	items := [?]string {
+		"nested = owns",
+		"solid pulse = delegates",
+		"soft = emits",
+		"dashed = reference / bypass",
+	}
+	for item, index in items {
+		color := theme.fg_accent if index < 2 else theme.fg_secondary
+		ui.draw_circle(frame, x, y + galaxy_sc(frame, 5), 3, color)
+		ui.text(frame, item, x + galaxy_sc(frame, 9), y, .Label, .Secondary)
+		x += ui.text_width(frame, item, .Label) + galaxy_sc(frame, 34)
+	}
+}
+
+api_galaxy_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
+	assert(frame != nil && rect.w > 0 && rect.h > 0, "api_galaxy_canvas: invalid canvas")
+	assert(userdata == nil, "api_galaxy_canvas: unexpected userdata")
+	ui.draw_rectangle_rounded(frame, ui.rect_f32(rect), 0.025, 8, ui.ui_frame_theme(frame).bg_code)
+	galaxy_stars(frame, rect)
+	layout := galaxy_layout(frame, rect, rect.w >= ui.ui_frame_sc(frame, 700))
+	galaxy_draw_ownership(frame, layout)
+	galaxy_draw_declarations(frame, layout)
+	galaxy_draw_output(frame, rect, layout)
+	galaxy_draw_legend(frame, rect)
+}
+
+draw_api_text_equivalent :: proc(u: ^ui.Ui) {
+	assert(u != nil && u.open, "draw_api_text_equivalent: invalid UI")
+	theme := ui.ui_frame_theme(u.frame)
+	_ = ui.section_header(u, "READING ORDER")
+	ui.kv_row(u, "Owns", "App ⊃ Session + reusable Ui", theme.fg_accent, theme.fg_primary)
+	ui.kv_row(
+		u,
+		"Session",
+		"Runtime + Frame + Input + Output + Adapter",
+		theme.fg_accent,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"References",
+		"Ui opens against Frame; Frame borrows runtime/input/output",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Delegates",
+		"facade policy → paired *_at leaf",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Emits",
+		"explicit leaves and protocols → Ui_Frame",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Replays",
+		"Ui_Output → Adapter → ingot:gfx",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+}
+
 draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
-	assert(frame != nil, "draw_api_relationships: nil frame")
-	state := &api_map_state
-	u := &state.ui
-	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, 1680)}, gap = .SM)
+	assert(frame != nil && w > 0, "draw_api_relationships: invalid geometry")
+	u := &api_map_state.ui
+	wide := w >= ui.ui_frame_sc(frame, 700)
+	canvas_h: i32 = 500 if wide else 860
+	total_h: i32 = canvas_h + 520
+	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, total_h)}, gap = .SM)
 	ui.scope_begin(u, "api-relationships")
+	_ = ui.section_header(u, "APP-TO-GFX ENCAPSULATION GALAXY")
+	ui.label(u, "Nested fields show ownership. Paths show temporary relationships and flow.")
+	_ = ui.canvas(u, {height = canvas_h}, api_galaxy_canvas)
+	draw_api_text_equivalent(u)
 	draw_entry_paths(u)
-	draw_host_ownership(u)
-	draw_geometry_ownership(u, state)
-	draw_canvas_bridge(u)
-	draw_composition_protocols(u)
-	draw_output_routes(u)
 	ui.scope_end(u)
 	end_y := ui.remaining_rect(u).y
 	ui.end(u)

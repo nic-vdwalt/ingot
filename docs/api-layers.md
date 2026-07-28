@@ -21,31 +21,58 @@ peers and may have no facade form by design.
 
 ```mermaid
 flowchart LR
-    subgraph ENTRY[Entry paths]
-        NEW[New UI application] --> APP[ui_gfx.App]
-        RAY[Existing raylib application] -->|replace imports first| LOOP[ingot:gfx raylib-shaped loop]
-        LOOP -.->|add UI only when needed| APP
+    CALLER[Caller-owned application state]
+
+    subgraph APP[ui_gfx.App — default host]
+        FORM[reusable ui.Ui]
+        subgraph SESSION[ui_gfx.Session — lifecycle bundle]
+            RUNTIME[Ui_Runtime]
+            INPUT[Ui_Input]
+            FRAME[reusable Ui_Frame]
+            subgraph OUTPUT[Ui_Output]
+                MAIN[main paint]
+                OVERLAY[overlay paint]
+                PLATFORM[platform output]
+            end
+            ADAPTER[ui_gfx.Adapter]
+        end
     end
 
-    subgraph HOST[Host lifecycle ownership]
-        APP -->|owns / defaults| SESSION[ui_gfx.Session]
-        SESSION -->|owns / uses| ADAPTER[ui_gfx.Adapter]
-    end
+    CALLER -->|owns value| APP
+    FORM -.->|opens against| FRAME
+    FRAME -.->|temporarily references| RUNTIME
+    FRAME -.->|temporarily references| INPUT
+    FRAME -.->|temporarily references| OUTPUT
 
-    subgraph UI[UI declaration and geometry ownership]
-        FACADE[Facade leaf\nlogical slot + Widget_Id] -->|delegates after supplying geometry| AT[Explicit leaf\nphysical Rect_I32 + Focus_Opt]
-        FACADE -->|canvas reserves and scales a slot| ISLAND[Explicit island]
-        COMPOSE[Explicit composition protocol] --> FRAME[Ui_Frame\ninput + semantics + paint]
-        AT -->|emits paint / semantics| FRAME
-        ISLAND -->|emits paint / semantics| FRAME
-    end
+    FACADE[Facade leaf\nslot + scale + ID + focus + semantics]
+    EXPLICIT[Paired *_at leaf\nphysical rect + caller geometry]
+    CANVAS[ui.canvas\nlogical slot to explicit island]
+    COMPOSE[Explicit composition peers\npanes + lists + overlays + markdown]
 
-    FRAME -->|replayed by Adapter| GFX[ingot:gfx]
-    DIRECT[Texture / audio / camera / shader / GPU 3D island] -.->|direct capability escape| GFX
-    APP --> FACADE
-    SESSION --> FACADE
-    LOOP --> GFX
+    FACADE -->|delegates| EXPLICIT
+    FACADE --> CANVAS
+    EXPLICIT -->|emits paint and semantics| FRAME
+    CANVAS -->|emits in the same frame| FRAME
+    COMPOSE -->|emits paint and semantics| FRAME
+
+    MAIN -->|sink replays as emitted| ADAPTER
+    OVERLAY -->|replayed at frame end| ADAPTER
+    PLATFORM -->|applied by platform bridge| ADAPTER
+    ADAPTER -.->|references active graphics context and frame| GFX[ingot:gfx]
+    DIRECT[Textures + audio + cameras + targets + shaders + GPU 3D] -.->|direct capability route| GFX
 ```
+
+Containment in this diagram is literal. `App` contains `Session` and its reusable
+`Ui` form as sibling fields. `Session` contains the runtime, reusable frame,
+input, output, and Adapter values. `Ui_Frame` does not contain the runtime,
+input, or output; it temporarily references those Session-owned values while a
+frame is open. Likewise, Adapter references the active graphics context and
+frame rather than owning them.
+
+`Ui_Output` has distinct replay timing. Main paint passes through the Adapter
+sink as commands are emitted, overlay paint is replayed at frame end, and
+platform output is applied through the Adapter/platform bridge. The detached
+direct-capability route intentionally bypasses UI paint.
 
 The two common paths deliberately begin in different places:
 
