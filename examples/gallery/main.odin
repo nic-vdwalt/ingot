@@ -206,6 +206,7 @@ frame :: proc(app: ^ui_gfx.App, frame_state: ^ui.Ui_Frame, userdata: rawptr) {
 	_ = userdata
 	ui_frame = frame_state
 	root := ui_gfx.app_screen_rect(app)
+	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
 	sw := root.w
 	sh := root.h
 
@@ -977,12 +978,14 @@ draw_overlay_context_menu :: proc(x, info_y: i32) {
 			{separator = true},
 			{label = "Close menu"},
 		}
+		root := ui_gfx.app_screen_rect(&app)
+		when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
 		chosen := ui.context_menu(
 			ui_frame,
 			&ctx_menu,
 			items,
-			rl.GetScreenWidth(),
-			rl.GetScreenHeight(),
+			root.w,
+			root.h,
 		)
 		if chosen == 0 {
 			shielded_clicks = 0
@@ -1001,14 +1004,16 @@ draw_overlay_context_menu :: proc(x, info_y: i32) {
 
 draw_overlay_modal :: proc() {
 	if !about_modal.open do return
+	root := ui_gfx.app_screen_rect(&app)
+	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
 	body := ui.modal_begin(
 		ui_frame,
 		&about_modal,
 		"Generic modal",
 		ui.ui_frame_sc(ui_frame, 420),
 		ui.ui_frame_sc(ui_frame, 190),
-		rl.GetScreenWidth(),
-		rl.GetScreenHeight(),
+		root.w,
+		root.h,
 	)
 	ui.draw_text_wrapped_frame(
 		ui_frame,

@@ -43,6 +43,8 @@ when CAPTURE {
 	// Fixed output geometry: identical PNGs regardless of host display.
 	CAPTURE_WIDTH :: 1600
 	CAPTURE_HEIGHT :: 1000
+	CAPTURE_WINDOW_WIDTH :: 1280
+	CAPTURE_WINDOW_HEIGHT :: 800
 	// Frames to hold a state before the shot. ui.eased snaps to its target once
 	// it is within 0.001, so a long enough hold makes every eased widget land on
 	// exactly its target value instead of a frame-timing-dependent one. The
@@ -276,8 +278,8 @@ when CAPTURE {
 		started := ui_gfx.app_init(
 			&app,
 			{
-				width = CAPTURE_WIDTH,
-				height = CAPTURE_HEIGHT,
+				width = CAPTURE_WINDOW_WIDTH,
+				height = CAPTURE_WINDOW_HEIGHT,
 				title = "ingot widget gallery (capture)",
 				target_fps = 60,
 				event_waiting = false,
