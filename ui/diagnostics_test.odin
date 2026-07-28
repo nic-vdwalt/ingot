@@ -4,6 +4,16 @@ package ui
 import "core:testing"
 
 @(test)
+paint_storage_stats_match_bounded_representation :: proc(t: ^testing.T) {
+	stats := ui_paint_storage_stats()
+	testing.expect_value(t, stats.command_bytes, u64(size_of(Paint_Command)))
+	testing.expect_value(t, stats.list_bytes, u64(size_of(Paint_List)))
+	testing.expect_value(t, stats.output_bytes, u64(size_of(Ui_Output)))
+	testing.expect_value(t, stats.command_capacity_bytes, stats.command_bytes * PAINT_COMMAND_CAP)
+	testing.expect_value(t, stats.text_capacity_bytes, u64(PAINT_TEXT_CAP))
+}
+
+@(test)
 frame_output_stats_require_completed_frame :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
