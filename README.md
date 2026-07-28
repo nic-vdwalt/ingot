@@ -167,11 +167,12 @@ scaled `Ui_Metrics` and `Ink` against the active `Theme`. The explicit
 sizes and colors these enums do not name. Where drawing code needs both tables
 at once, `ui.ui_frame_style(frame)` returns them together.
 
-Widgets ship in two call shapes, and the name tells you which. The bare name is
-the facade: it takes a `^Ui` and a `Widget_Id`, carves a bounded slot in logical
-units, and registers focus only when visible. The `*_at` suffix is explicit: it
-takes a `^Ui_Frame` and a physical `Rect_I32` the application owns. Conditional
-and dynamic forms derive `Widget_Id` values from bounded scopes. See
+Ordinary leaf widgets ship in two geometry shapes. The bare facade takes a
+`^Ui`, carves a logical slot, and interactive widgets also take a generated
+`Widget_Id`; presentational widgets need no identity. The explicit `*_at` shape
+takes a `^Ui_Frame` and an application-owned physical `Rect_I32`. Composition
+protocols such as panes, modals, listboxes, overlays, and markdown stay explicit
+under lifecycle or subsystem names. See
 [application shell](docs/application-shell.md),
 [layout conventions](docs/layout.md), and
 [UI state and stable focus](docs/ui-state.md#widget-tiers).

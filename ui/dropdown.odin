@@ -3,6 +3,7 @@
 // open state reuses the generic context-menu popup (popups.odin).
 package ui
 
+DROPDOWN_ITEM_COUNT_MAX :: 256
 
 // Dropdown_State is the caller-owned open/closed state of one dropdown.
 Dropdown_State :: struct {
@@ -62,6 +63,7 @@ dropdown_at :: proc(
 	changed: bool,
 ) {
 	assert(st != nil && selected != nil, "dropdown: nil state")
+	assert(len(items) <= DROPDOWN_ITEM_COUNT_MAX, "dropdown: item capacity exceeded")
 	if len(items) == 0 {
 		selected^ = -1
 		st.menu.open = false
@@ -124,7 +126,7 @@ dropdown_at :: proc(
 	semantic_push(frame, .Dropdown, rect, sem_label, sem, focus, widget = widget)
 	if !st.menu.open do return false
 
-	menu_items := make([]Menu_Item, len(items), context.temp_allocator)
+	menu_items := make([]Menu_Item, len(items), ui_frame_allocator(frame))
 	for item, i in items {
 		menu_items[i] = Menu_Item {
 			label = item,

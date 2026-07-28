@@ -4,20 +4,24 @@ Ingot layout is caller-owned, bounded, and single-pass. Start with `Ui` for ordi
 
 ## Tiers
 
-A procedure's name tells you which tier it belongs to and what units its arguments are in. There is exactly one entry point per widget per tier.
+A procedure's name tells you which category owns geometry and which units it expects. Each leaf-widget variant has one canonical geometry shape; `_state` and `_animated` distinguish behavior, not geometry.
 
-| Tier | Receiver | Units | Identity | Naming |
+| Category | Receiver | Units | Identity | Naming |
 |---|---|---|---|---|
-| **Facade** | `u: ^Ui` | logical, scaled once | `Widget_Id` from `id()` / `scope_begin()` | bare name — `button`, `row_begin`, `slot_next` |
-| **Explicit** | `frame: ^Ui_Frame` | physical `Rect_I32` | `Focus_Opt` via `focus_link` / `focus_id_string` | `*_at` suffix — `button_at`, `line_chart_at` |
-| **Physical layout** | `l: ^Layout` | physical pixels | none | verb or `layout_` prefix — `layout_begin`, `push_row`, `next` |
+| **Facade leaf** | `u: ^Ui` | logical, scaled once | `Widget_Id` for interactive widgets; none for presentation | bare name — `button`, `spinner`, `tooltip` |
+| **Explicit leaf** | `frame: ^Ui_Frame` | physical `Rect_I32` | caller-owned `Focus_Opt` where interactive | `*_at` — `button_at`, `line_chart_at` |
+| **Explicit composition** | `^Ui_Frame` + caller state/config | physical named bounds | subsystem-owned | lifecycle/component names — `pane_begin`, `listbox_begin`, `context_menu` |
+| **Paint/measurement** | explicit owner | physical or float paint geometry | none | verbs/subsystem prefix — `markdown_draw`, `overlay_*`, `measure_*` |
+| **Physical layout** | `l: ^Layout` | physical pixels | none | layout verbs — `layout_begin`, `push_row`, `next` |
 
-No procedure that takes a `^Ui` carries a `ui_` prefix; `scripts/check-ui-state.sh` fails the build if one is reintroduced. The `ui_frame_*` and `ui_runtime_*` families are the frame and runtime accessors, not layout, and keep their prefix.
+Ordinary leaf widgets and simple presentation components have facade forms. Application-owned composition protocols — listbox, pane, modal, context menu, overlay, markdown, `Flow_Layout`, and `Fit_Column` — remain explicit by design.
+
+No procedure that takes a `^Ui` carries a `ui_` prefix. `scripts/check_ui_api_layers.py` parses multiline declarations and enforces the category rules. The `ui_frame_*` and `ui_runtime_*` families are frame/runtime accessors and keep their prefix.
 
 ## Units
 
 - Root and explicit `Rect_I32` values are physical pixels.
-- Numeric dimensions passed to the `Ui` facade are logical and scale once.
+- Numeric dimensions and dimension-bearing facade options are logical and scale once. Explicit option structs are physical and are converted by a named facade boundary.
 - Screen rectangles, measured text, and `Ui_Metrics` are already physical values.
 - Fixed literals passed to low-level layout or `*_at` APIs use `ui_frame_sc` once.
 - `Space` tokens are logical values resolved once by `space_px`.

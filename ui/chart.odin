@@ -15,6 +15,18 @@ import "core:strings"
 @(private = "file")
 CHART_TEXT :: Text_Role.Label
 
+CHART_SERIES_COUNT_MAX :: 16
+CHART_SAMPLE_COUNT_MAX :: 4096
+
+@(private)
+chart_capacity_valid :: proc(series: []Chart_Series) -> bool {
+	if len(series) > CHART_SERIES_COUNT_MAX do return false
+	for item in series {
+		if len(item.values) > CHART_SAMPLE_COUNT_MAX do return false
+	}
+	return true
+}
+
 @(private = "file")
 chart_text_size :: proc(frame: ^Ui_Frame) -> i32 {
 	return text_role_size(frame, CHART_TEXT)
@@ -473,12 +485,13 @@ line_chart_at :: proc(
 ) -> int {
 	assert(frame != nil, "line_chart_at: nil frame")
 	assert(state != nil, "line_chart_at: nil state")
+	assert(chart_capacity_valid(series), "line_chart_at: chart capacity exceeded")
 	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	cl, ok := chart_layout(frame, x, y, w, h, series, opts, false)
 	if !ok do return -1
 	anim := chart_anim(frame, state)
 
-	xs := make([]f32, cl.n, context.temp_allocator)
+	xs := make([]f32, cl.n, ui_frame_allocator(frame))
 	if cl.n == 1 {
 		xs[0] = cl.plot.x + cl.plot.width / 2
 	} else {
@@ -561,13 +574,14 @@ bar_chart_at :: proc(
 ) -> int {
 	assert(frame != nil, "bar_chart_at: nil frame")
 	assert(state != nil, "bar_chart_at: nil state")
+	assert(chart_capacity_valid(series), "bar_chart_at: chart capacity exceeded")
 	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	cl, ok := chart_layout(frame, x, y, w, h, series, opts, true)
 	if !ok do return -1
 	anim := chart_anim(frame, state)
 
 	slot := cl.plot.width / f32(cl.n)
-	xs := make([]f32, cl.n, context.temp_allocator)
+	xs := make([]f32, cl.n, ui_frame_allocator(frame))
 	for i in 0 ..< cl.n do xs[i] = cl.plot.x + slot * (f32(i) + 0.5)
 
 	chart_draw_axes(frame, cl, opts, xs)
@@ -617,6 +631,7 @@ bar_chart_at :: proc(
 // sized to fit inside stat cards. A zero color resolves to the theme accent.
 sparkline_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, values: []f32, color: Color = {}) {
 	assert(frame != nil, "sparkline_at: nil frame")
+	assert(len(values) <= CHART_SAMPLE_COUNT_MAX, "sparkline_at: chart capacity exceeded")
 	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	if len(values) == 0 || w <= 0 || h <= 0 do return
 	color := color

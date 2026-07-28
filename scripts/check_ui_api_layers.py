@@ -126,7 +126,7 @@ def violations(source: str) -> list[tuple[int, str]]:
         if name in DELETED_NAMES:
             found.append((declaration.line, f"deleted UI API name: {name}"))
         if "^Ui" in parameters and "^Ui_Frame" not in parameters:
-            if name.startswith("ui_"):
+            if name.startswith("ui_") and not name.startswith(RUNTIME_PREFIXES):
                 found.append((declaration.line, f"facade procedure must use a bare name: {name}"))
             if name.endswith(FORBIDDEN_FACADE_SUFFIXES):
                 found.append((declaration.line, f"forbidden facade suffix: {name}"))

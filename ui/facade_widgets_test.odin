@@ -46,6 +46,7 @@ facade_widgets_register_focus_once_each :: proc(t: ^testing.T) {
 	text_backend: Test_Text_Backend_State
 	facade_widget_frame(&runtime, &frame, output, &text_backend)
 	defer ui_runtime_destroy(&runtime)
+	defer ui_frame_destroy(&frame)
 	defer ui_frame_end(&frame)
 
 	u: Ui
@@ -71,6 +72,7 @@ presentational_facade_widgets_register_no_focus :: proc(t: ^testing.T) {
 	text_backend: Test_Text_Backend_State
 	facade_widget_frame(&runtime, &frame, output, &text_backend)
 	defer ui_runtime_destroy(&runtime)
+	defer ui_frame_destroy(&frame)
 	defer ui_frame_end(&frame)
 
 	u: Ui
@@ -101,6 +103,7 @@ facade_widgets_scale_their_slots :: proc(t: ^testing.T) {
 	text_backend: Test_Text_Backend_State
 	facade_widget_frame(&runtime, &frame, output, &text_backend, 2)
 	defer ui_runtime_destroy(&runtime)
+	defer ui_frame_destroy(&frame)
 	defer ui_frame_end(&frame)
 
 	u: Ui
@@ -121,6 +124,7 @@ facade_widget_options_scale_once :: proc(t: ^testing.T) {
 	text_backend: Test_Text_Backend_State
 	facade_widget_frame(&runtime, &frame, output, &text_backend, 2)
 	defer ui_runtime_destroy(&runtime)
+	defer ui_frame_destroy(&frame)
 	defer ui_frame_end(&frame)
 
 	u: Ui
@@ -159,6 +163,7 @@ facade_widgets_skip_focus_when_slot_collapses :: proc(t: ^testing.T) {
 	text_backend: Test_Text_Backend_State
 	facade_widget_frame(&runtime, &frame, output, &text_backend)
 	defer ui_runtime_destroy(&runtime)
+	defer ui_frame_destroy(&frame)
 	defer ui_frame_end(&frame)
 
 	u: Ui

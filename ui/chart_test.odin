@@ -100,6 +100,26 @@ chart_bar_hover_index :: proc(t: ^testing.T) {
 }
 
 @(test)
+chart_capacity_accepts_named_boundaries :: proc(t: ^testing.T) {
+	values := make([]f32, CHART_SAMPLE_COUNT_MAX)
+	defer delete(values)
+	series := make([]Chart_Series, CHART_SERIES_COUNT_MAX)
+	defer delete(series)
+	for &item in series do item.values = values
+	testing.expect(t, chart_capacity_valid(series))
+
+	too_many_values := make([]f32, CHART_SAMPLE_COUNT_MAX + 1)
+	defer delete(too_many_values)
+	series[0].values = too_many_values
+	testing.expect(t, !chart_capacity_valid(series))
+	series[0].values = values
+
+	too_many_series := make([]Chart_Series, CHART_SERIES_COUNT_MAX + 1)
+	defer delete(too_many_series)
+	testing.expect(t, !chart_capacity_valid(too_many_series))
+}
+
+@(test)
 chart_data_range_cases :: proc(t: ^testing.T) {
 	// No series at all.
 	_, _, _, ok := chart_data_range(nil)
