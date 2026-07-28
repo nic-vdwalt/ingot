@@ -236,15 +236,7 @@ draw_scene :: proc(
 ) {
 	ui.form_focus_cycle(frame, &s.focus, FOCUS_COUNT)
 
-	if ui.btn_at(
-		frame,
-		R_BTN.x,
-		R_BTN.y,
-		R_BTN.w,
-		R_BTN.h,
-		"Fuzz",
-		focus = ui.Focus_Opt{&s.focus, 1},
-	) {
+	if ui.button_at(frame, R_BTN, "Fuzz", focus = ui.Focus_Opt{&s.focus, 1}) {
 		s.button_activations += 1
 	}
 	if ui.checkbox_at(frame, R_CHECK, "Check", &s.checked, ui.Focus_Opt{&s.focus, 2}) {

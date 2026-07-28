@@ -396,9 +396,9 @@ api_layers_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawp
 draw_api_layers :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	assert(frame != nil, "draw_api_layers: nil frame")
 	u := &layers_ui
-	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, 520)}, gap = .SM)
+	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, 760)}, gap = .SM)
 	ui.scope_begin(u, "api-layers")
-	_ = ui.section_header(u, "CHOOSE THE HIGHEST LAYER THAT SATISFIES THE REQUIREMENT")
+	_ = ui.section_header(u, "NEW UI APPLICATION: START AT THE HIGHEST LAYER")
 	ui.label(u, "Start at App + facade. Descend only at a narrow capability boundary.")
 	ui.label(
 		u,
@@ -406,8 +406,49 @@ draw_api_layers :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		color = ui.ui_frame_theme(frame).fg_secondary,
 	)
 	_ = ui.canvas(u, {height = 176}, api_layers_canvas)
-	_ = ui.section_header(u, "HOW THIS GALLERY USES THE STACK")
 	theme := ui.ui_frame_theme(frame)
+	_ = ui.section_header(u, "EXISTING RAYLIB APPLICATION: MIGRATE WITHOUT A REWRITE")
+	ui.kv_row(
+		u,
+		"1. Replace imports",
+		"vendor:raylib \u2192 ingot:gfx",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"2. Preserve behavior",
+		"keep the raylib-shaped loop",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"3. Inventory gaps",
+		"treat unsupported APIs as ports",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"4. Keep rlgl narrow",
+		"documented compatibility only",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"5. Add application UI",
+		"adopt App + facade incrementally",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.label(
+		u,
+		"Do not rewrite working game/render code merely to adopt ui.Ui.",
+		color = theme.fg_accent,
+	)
+	_ = ui.section_header(u, "HOW THIS GALLERY USES THE STACK")
 	ui.kv_row(u, "Ordinary controls", "ui.Ui facade", theme.fg_secondary, theme.fg_primary)
 	ui.kv_row(
 		u,
