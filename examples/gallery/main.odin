@@ -691,9 +691,6 @@ api_call_paths_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: bo
 	output := api_tree_centered_rect(panel, frame_rect.y + card_h + row_gap, card_w, card_h)
 	adapter := api_tree_centered_rect(panel, output.y + card_h + row_gap, card_w, card_h)
 	gfx := api_tree_centered_rect(panel, adapter.y + card_h + row_gap, card_w, card_h)
-	raylib_x := panel.x + margin
-	if raylib_x + card_w + margin > gfx.x do raylib_x = panel.x + panel.w - margin - card_w
-	raylib := ui.Rect_I32{raylib_x, adapter.y, card_w, card_h}
 	declarations := [?]ui.Rect_I32{facade, explicit}
 	for declaration in declarations {
 		api_tree_edge_down(frame, declaration, frame_rect, theme.fg_accent)
@@ -701,19 +698,13 @@ api_call_paths_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: bo
 	api_tree_edge_down(frame, frame_rect, output, theme.fg_success)
 	api_tree_edge_down(frame, output, adapter, theme.fg_assistant)
 	api_tree_edge_down(frame, adapter, gfx, theme.fg_assistant)
-	lane_x := panel.x + panel.w - api_tree_sc(frame, 8)
-	if raylib.x < gfx.x do lane_x = panel.x + api_tree_sc(frame, 8)
-	api_tree_edge_around(frame, raylib, gfx, lane_x, theme.fg_user)
 	api_tree_card(frame, {facade, "Facade API", "paired *_at when available", theme.fg_plan})
 	api_tree_card(frame, {explicit, "Explicit UI", "*_at · canvas · protocols", theme.fg_accent})
 	api_tree_card(frame, {frame_rect, "Ui_Frame", "records paint + semantics", theme.fg_accent})
 	api_tree_card(frame, {output, "Ui_Output", "main · overlay · platform", theme.fg_success})
 	api_tree_card(frame, {adapter, "ui_gfx.Adapter", "replays UI output", theme.fg_assistant})
 	api_tree_card(frame, {gfx, "ingot:gfx", "backend-facing API", theme.fg_assistant})
-	api_tree_card(
-		frame,
-		{raylib, "Migrated raylib app", "existing loop · direct gfx", theme.fg_user},
-	)
+	_ = compact
 }
 
 api_relationship_trees_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
