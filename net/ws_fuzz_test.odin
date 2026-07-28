@@ -9,7 +9,7 @@ import "ingot:testx"
 FUZZ_WS_OPCODES := [?]u8{0x0, WS_OP_TEXT, WS_OP_BINARY, WS_OP_CLOSE, WS_OP_PING, WS_OP_PONG}
 
 // Random payload sized to hit all three header length classes (7-bit,
-// 16-bit, 64-bit — the last capped at ~128 KiB so the test stays fast).
+// 16-bit, 64-bit - the last capped at ~128 KiB so the test stays fast).
 @(private = "file")
 fuzz_ws_payload :: proc(p: ^testx.Prng) -> []u8 {
 	n: int
@@ -218,7 +218,7 @@ fuzz_ws_stream_reassembly :: proc(t: ^testing.T) {
 					failed = true
 					break
 				}
-				// Payload was unmasked in place — compare to source.
+				// Payload was unmasked in place - compare to source.
 				testing.expect_value(t, frame.opcode, opcodes[got])
 				testing.expect_value(t, string(frame.payload), string(payloads[got]))
 				got += 1
@@ -282,7 +282,7 @@ fuzz_ws_fragment_reassembly :: proc(t: ^testing.T) {
 }
 
 // Property: ws_accept_for_key must produce a 28-character base64 digest for
-// ANY key — arbitrary bytes, invalid UTF-8, embedded NULs, 0–256 bytes —
+// ANY key - arbitrary bytes, invalid UTF-8, embedded NULs, 0–256 bytes -
 // without reading past the key or corrupting memory (sha1 + base64 over a
 // tprintf-combined string).
 @(test)
