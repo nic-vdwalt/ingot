@@ -49,11 +49,13 @@ WS_MAX_PAYLOAD :: 32 * 1024 * 1024
 WS_MAX_QUEUED_MESSAGES :: 1024
 WS_MAX_QUEUED_BYTES :: 64 * 1024 * 1024
 
-// Liveness/reconnect tuning. The live socket carries a recv read deadline so a
-// half-open TCP drop (Wi-Fi/VPN/sleep - no FIN/RST) is detected instead of
-// blocking the worker forever: each timeout window sends a PING (the server
-// auto-replies PONG), and the connection is declared dead once no bytes arrive
-// for WS_DEAD_AFTER. WS_RECONNECT_WAIT backs off between dial cycles.
+// Liveness/reconnect tuning. A half-open drop (Wi-Fi/VPN/sleep - no FIN/RST)
+// is detected instead of blocking the worker forever: TCP sockets carry a recv
+// read deadline (WS_RECV_TIMEOUT) while the TLS path polls curl's non-blocking
+// recv; in both cases idle windows send a PING at most every WS_RECV_TIMEOUT
+// (the server auto-replies PONG), and the connection is declared dead once no
+// bytes arrive for WS_DEAD_AFTER. WS_RECONNECT_WAIT backs off between dial
+// cycles.
 WS_RECV_TIMEOUT :: 100 * time.Millisecond
 WS_DEAD_AFTER :: 15 * time.Second
 WS_RECONNECT_WAIT :: 1 * time.Second
@@ -610,8 +612,8 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 	sync.atomic_store(&ws.running, false)
 }
 
-// Send the HTTP upgrade request and validate the 101 response, including the
-// Sec-WebSocket-Accept header (base64(sha1(key + RFC 6455 GUID))).
+// Send the HTTP upgrade request and validate the 101 response (see
+// ws_handshake_response_valid for the RFC 6455 section 4.1 checks).
 @(private = "file")
 ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
 	assert(ws != nil)
@@ -657,9 +659,59 @@ ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
 		if strings.contains(string(buf[:count]), "\r\n\r\n") do break
 	}
 	ws_net_set_recv_timeout(transport, time.Duration(0))
-	response := string(buf[:count])
-	if !strings.has_prefix(response, "HTTP/1.1 101") do return false
-	return strings.contains(response, ws_accept_for_key(key))
+	return ws_handshake_response_valid(string(buf[:count]), key)
+}
+
+// Bound on parsed response header lines (Tiger Style: every loop has a fixed
+// upper bound). A 101 upgrade response carries a handful of headers; 64 is
+// generous.
+WS_HANDSHAKE_HEADERS_MAX :: 64
+
+// ws_handshake_response_valid checks the server's upgrade response against
+// RFC 6455 section 4.1: status 101, an Upgrade header equal to "websocket"
+// (case-insensitive), a Connection header whose token list contains
+// "upgrade", and a Sec-WebSocket-Accept header byte-equal to
+// ws_accept_for_key(key) in header-value position - never substring-matched
+// against the whole response, where a hostile body could plant the token.
+// Package-private (not file-private) so ws_test.odin can exercise it.
+@(private)
+ws_handshake_response_valid :: proc(response: string, key: string) -> bool {
+	assert(len(key) > 0, "ws_handshake_response_valid: empty key")
+	header_end := strings.index(response, "\r\n\r\n")
+	if header_end < 0 do return false
+	lines := strings.split(response[:header_end], "\r\n", context.temp_allocator)
+	if len(lines) == 0 || len(lines) > WS_HANDSHAKE_HEADERS_MAX do return false
+	if !strings.has_prefix(lines[0], "HTTP/1.1 101") do return false
+	expected := ws_accept_for_key(key)
+	assert(len(expected) > 0)
+	upgrade_ok := false
+	connection_ok := false
+	accept_ok := false
+	for line in lines[1:] {
+		colon := strings.index(line, ":")
+		if colon < 0 do continue
+		raw_name := strings.trim_space(line[:colon])
+		name := strings.to_lower(raw_name, context.temp_allocator)
+		value := strings.trim_space(line[colon + 1:])
+		switch name {
+		case "upgrade":
+			if strings.to_lower(value, context.temp_allocator) == "websocket" {
+				upgrade_ok = true
+			}
+		case "connection":
+			tokens := strings.split(value, ",", context.temp_allocator)
+			if len(tokens) > WS_HANDSHAKE_HEADERS_MAX do return false
+			for token in tokens {
+				trimmed := strings.trim_space(token)
+				if strings.to_lower(trimmed, context.temp_allocator) == "upgrade" {
+					connection_ok = true
+				}
+			}
+		case "sec-websocket-accept":
+			if value == expected do accept_ok = true
+		}
+	}
+	return upgrade_ok && connection_ok && accept_ok
 }
 
 // ws_accept_for_key computes the expected Sec-WebSocket-Accept value for a
@@ -677,11 +729,12 @@ ws_accept_for_key :: proc(key: string) -> string {
 }
 
 // Background receive loop. Returns (without clearing ws.running) when the
-// socket drops, so ws_connect_worker can re-dial. A recv read deadline
-// (WS_RECV_TIMEOUT, set after the handshake) makes a silent half-open drop
-// detectable: each timeout window sends a PING and, if no bytes have arrived
-// for WS_DEAD_AFTER, declares the connection dead. Only ws_close clears
-// ws.running (which ends the whole session).
+// socket drops, so ws_connect_worker can re-dial. Recv timeouts (a TCP read
+// deadline of WS_RECV_TIMEOUT set after the handshake, or curl's non-blocking
+// AGAIN on TLS) make a silent half-open drop detectable: idle windows send a
+// PING at most every WS_RECV_TIMEOUT and, if no bytes have arrived for
+// WS_DEAD_AFTER, declare the connection dead. Only ws_close clears ws.running
+// (which ends the whole session).
 @(private = "file")
 ws_recv_loop :: proc(ws: ^WebSocket) {
 	assert(ws != nil)
@@ -695,18 +748,23 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 	defer delete(frag.buf)
 
 	last_activity := time.now()
+	last_ping := time.now()
 	for sync.atomic_load(&ws.running) {
 		n, err := ws_net_recv(&ws.transport, scratch[:])
 		if err != .None {
-			if err == .Timeout && ws.secure {
-				time.sleep(10 * time.Millisecond)
-				continue
-			}
 			// A recv timeout is not a disconnect: probe liveness with a PING
 			// (the server auto-replies PONG, counted as activity below) and
 			// only give up once the connection has been silent too long.
 			if err == .Timeout {
-				ws_send_frame(ws, WS_OP_PING, nil)
+				// curl's easy_recv is non-blocking (AGAIN maps to .Timeout on
+				// every poll), so sleep to avoid a busy spin on TLS.
+				if ws.secure do time.sleep(10 * time.Millisecond)
+				// Rate-limit the probe: TCP's read deadline already paces the
+				// loop at WS_RECV_TIMEOUT, but TLS polls every ~10 ms.
+				if time.since(last_ping) >= ws_scaled(WS_RECV_TIMEOUT) {
+					ws_send_frame(ws, WS_OP_PING, nil)
+					last_ping = time.now()
+				}
 				if time.since(last_activity) > ws_scaled(WS_DEAD_AFTER) {
 					ws_set_state(ws, .Disconnected)
 					return

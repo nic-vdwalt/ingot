@@ -215,7 +215,8 @@ when INGOT_WS_SIM {
 		accept := ws_accept_for_key(string(key_buf[:key_len]))
 		response := strings.concatenate(
 			{
-				"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ",
+				"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n" +
+				"Connection: Upgrade\r\nSec-WebSocket-Accept: ",
 				accept,
 				"\r\n\r\n",
 			},

@@ -366,3 +366,100 @@ test_ws_encode_frame_layout :: proc(t: ^testing.T) {
 	testing.expect_value(t, frame[6], 'a' ~ u8(1))
 	testing.expect_value(t, frame[7], 'b' ~ u8(2))
 }
+
+// -- ws_handshake_response_valid ----------------------------------------------
+
+@(private = "file")
+handshake_response :: proc(status: string, headers: string) -> string {
+	return strings.concatenate({status, "\r\n", headers, "\r\n\r\n"}, context.temp_allocator)
+}
+
+@(test)
+test_ws_handshake_valid_response_accepted :: proc(t: ^testing.T) {
+	key := "dGhlIHNhbXBsZSBub25jZQ=="
+	accept := ws_accept_for_key(key)
+	headers := strings.concatenate(
+		{"UPGRADE: WebSocket\r\nConnection: keep-alive, Upgrade\r\nSec-WebSocket-Accept: ", accept},
+		context.temp_allocator,
+	)
+	response := handshake_response("HTTP/1.1 101 Switching Protocols", headers)
+	testing.expect(t, ws_handshake_response_valid(response, key))
+}
+
+@(test)
+test_ws_handshake_accept_in_body_rejected :: proc(t: ^testing.T) {
+	// The accept token appearing outside the Sec-WebSocket-Accept header must
+	// not satisfy the check (the pre-fix substring match accepted this).
+	key := "dGhlIHNhbXBsZSBub25jZQ=="
+	accept := ws_accept_for_key(key)
+	headers := strings.concatenate(
+		{"Upgrade: websocket\r\nConnection: Upgrade\r\nX-Echo: ", accept},
+		context.temp_allocator,
+	)
+	response := handshake_response("HTTP/1.1 101 Switching Protocols", headers)
+	testing.expect(t, !ws_handshake_response_valid(response, key))
+}
+
+@(test)
+test_ws_handshake_missing_or_wrong_upgrade_rejected :: proc(t: ^testing.T) {
+	key := "dGhlIHNhbXBsZSBub25jZQ=="
+	accept := ws_accept_for_key(key)
+	missing := strings.concatenate(
+		{"Connection: Upgrade\r\nSec-WebSocket-Accept: ", accept},
+		context.temp_allocator,
+	)
+	response := handshake_response("HTTP/1.1 101 Switching Protocols", missing)
+	testing.expect(t, !ws_handshake_response_valid(response, key))
+	wrong := strings.concatenate(
+		{"Upgrade: h2c\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ", accept},
+		context.temp_allocator,
+	)
+	response = handshake_response("HTTP/1.1 101 Switching Protocols", wrong)
+	testing.expect(t, !ws_handshake_response_valid(response, key))
+}
+
+@(test)
+test_ws_handshake_missing_or_wrong_connection_rejected :: proc(t: ^testing.T) {
+	key := "dGhlIHNhbXBsZSBub25jZQ=="
+	accept := ws_accept_for_key(key)
+	missing := strings.concatenate(
+		{"Upgrade: websocket\r\nSec-WebSocket-Accept: ", accept},
+		context.temp_allocator,
+	)
+	response := handshake_response("HTTP/1.1 101 Switching Protocols", missing)
+	testing.expect(t, !ws_handshake_response_valid(response, key))
+	wrong := strings.concatenate(
+		{"Upgrade: websocket\r\nConnection: close\r\nSec-WebSocket-Accept: ", accept},
+		context.temp_allocator,
+	)
+	response = handshake_response("HTTP/1.1 101 Switching Protocols", wrong)
+	testing.expect(t, !ws_handshake_response_valid(response, key))
+}
+
+@(test)
+test_ws_handshake_non_101_rejected :: proc(t: ^testing.T) {
+	key := "dGhlIHNhbXBsZSBub25jZQ=="
+	accept := ws_accept_for_key(key)
+	headers := strings.concatenate(
+		{"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ", accept},
+		context.temp_allocator,
+	)
+	response := handshake_response("HTTP/1.1 200 OK", headers)
+	testing.expect(t, !ws_handshake_response_valid(response, key))
+}
+
+@(test)
+test_ws_handshake_wrong_accept_rejected :: proc(t: ^testing.T) {
+	key := "dGhlIHNhbXBsZSBub25jZQ=="
+	headers := "Upgrade: websocket\r\nConnection: Upgrade\r\n" +
+		"Sec-WebSocket-Accept: bm90LXRoZS1yaWdodC1hbnN3ZXI="
+	response := handshake_response("HTTP/1.1 101 Switching Protocols", headers)
+	testing.expect(t, !ws_handshake_response_valid(response, key))
+}
+
+@(test)
+test_ws_handshake_truncated_headers_rejected :: proc(t: ^testing.T) {
+	key := "dGhlIHNhbXBsZSBub25jZQ=="
+	// No terminating blank line: the response never completed.
+	testing.expect(t, !ws_handshake_response_valid("HTTP/1.1 101\r\nUpgrade: websocket", key))
+}

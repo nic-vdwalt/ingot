@@ -154,15 +154,19 @@ import "ingot:ui_gfx"
 
 ```mermaid
 flowchart LR
-    NEW[New UI app] --> APP[ui_gfx.App]
-    APP --> FACADE[ui.Ui facade\nbare widgets + logical layout]
-    FACADE --> EXPLICIT[Explicit UI when needed\n*_at + composition + physical layout]
+    subgraph NEWPATH[New desktop tool]
+        NEW[New UI app] --> APP[ui_gfx.App]
+        APP --> FACADE[ui.Ui facade<br/>bare widgets + logical layout]
+        FACADE --> EXPLICIT[Explicit UI when needed<br/>*_at + composition + physical layout]
+    end
 
-    RAYLIB[Existing raylib app] --> GFX[Replace imports with ingot:gfx]
-    GFX --> KEEP[Keep the familiar graphics loop]
-    GFX --> ADOPT[Adopt Ingot UI incrementally]
+    subgraph RAYPATH[Raylib migration]
+        RAYLIB[Existing raylib app] --> GFX[Replace imports with ingot:gfx]
+        GFX --> KEEP[Keep the familiar graphics loop]
+        GFX --> ADOPT[Adopt Ingot UI incrementally]
+    end
+
     ADOPT --> APP
-
     EXPLICIT --> FRAME[Ui_Frame paint and input]
     KEEP --> GFXLOW[gfx rendering, audio, cameras, GPU]
     FRAME --> GFXLOW

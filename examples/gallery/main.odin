@@ -155,16 +155,16 @@ API_TIP_UI ::
 	("ui.Ui" +
 		`
 ` +
-		"Owner: ui_gfx.App or caller" +
+		"Owner: ui_gfx.App or caller; backend-free (ingot:ui imports only core)" +
 		`
 ` +
-		"Lifetime: persistent layout context" +
+		"Lifetime: persistent logical root; keeps Tab-focus order across frames" +
 		`
 ` +
 		"Input: open Ui_Frame" +
 		`
 ` +
-		"Role: temporarily attaches to a frame while building one UI root.")
+		"Role: one root over one rectangle; a frame may host many caller-owned roots — App's form is only the default.")
 
 API_TIP_RUNTIME ::
 	("Ui_Runtime" +
@@ -236,10 +236,10 @@ API_TIP_ADAPTER ::
 		"Lifetime: application session" +
 		`
 ` +
-		"Input: gfx events and Ui_Output" +
+		"Input: gfx events, fonts, and Ui_Output" +
 		`
 ` +
-		"Role: captures input and consumes output without owning it.")
+		"Role: ui ↔ gfx bridge — lends Ui_Runtime a text backend, captures Ui_Input, streams main paint, replays overlay, applies platform output, and publishes accessibility.")
 
 API_TIP_MAIN ::
 	("Main paint" +
@@ -360,6 +360,9 @@ API_TIP_CALL_ADAPTER ::
 		`
 ` +
 		"Output: gfx draw calls and platform operations" +
+		`
+` +
+		"Also feeds upstream: text backend for Ui_Runtime, Ui_Input capture, accessibility publish" +
 		`
 ` +
 		"Timing: main streams; overlay replays next; platform applies last.")
@@ -906,7 +909,7 @@ api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui
 	api_tree_card(
 		frame,
 		state,
-		{form, "reusable ui.Ui", "App-owned field", API_TIP_UI, theme.fg_plan},
+		{form, "reusable ui.Ui", "backend-free root", API_TIP_UI, theme.fg_plan},
 	)
 	labels := [?]string {
 		"Ui_Runtime",
@@ -920,7 +923,7 @@ api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui
 		"input snapshot",
 		"frame context",
 		"three channels",
-		"output consumer",
+		"ui ↔ gfx bridge",
 	}
 	tips := [?]string {
 		API_TIP_RUNTIME,
@@ -1099,6 +1102,13 @@ draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 	)
 	ui.kv_row(
 		u,
+		"ui.Ui",
+		"backend-free logical root; a frame may host many caller-owned roots",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
 		"ui_gfx.Session",
 		"owns Runtime, Ui_Frame, Ui_Input, Ui_Output, and Adapter",
 		theme.fg_secondary,
@@ -1108,6 +1118,13 @@ draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 		u,
 		"Ui_Output",
 		"owns main, overlay, and platform buffers; sibling Adapter consumes them",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Adapter",
+		"ui ↔ gfx bridge: text backend, input capture, paint replay, accessibility",
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
@@ -1149,7 +1166,7 @@ draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	u := &state.form
 	wide := w >= ui.ui_frame_sc(frame, 700)
 	canvas_h: i32 = 760 if wide else 980
-	total_h: i32 = canvas_h + 450
+	total_h: i32 = canvas_h + 510
 	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, total_h)}, gap = .SM)
 	ui.scope_begin(u, "api-relationships")
 	_ = ui.section_header(u, "API OWNERSHIP AND CALL PATHS")

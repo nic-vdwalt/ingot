@@ -22,8 +22,9 @@ peers and may have no facade form by design.
 ```mermaid
 flowchart TB
     CALLER[Caller-owned application state] -->|owns| APP[ui_gfx.App]
-    APP -->|owns left sibling field| SESSION[ui_gfx.Session]
-    APP -->|owns right sibling field| FORM[reusable ui.Ui]
+    APP -->|owns| SESSION[ui_gfx.Session]
+    APP -->|owns default root| FORM[reusable ui.Ui\nbackend-free]
+    CALLER -.->|may own more roots| FORM2[additional ui.Ui roots]
     SESSION --> RUNTIME[Ui_Runtime]
     SESSION --> INPUT[Ui_Input]
     SESSION --> FRAME[reusable Ui_Frame]
@@ -39,6 +40,13 @@ form as sibling fields. `Session` contains five peer fields: the runtime,
 reusable frame, input, output, and Adapter. `Ui_Output` contains the main paint,
 overlay paint, and platform-output groups.
 
+`ui.Ui` is deliberately standalone: the `ingot:ui` package imports only
+`core:*`, so a `Ui` root knows nothing about graphics. It is one logical root
+over one rectangle, attaching to a frame only between `ui.begin` and `ui.end`,
+and it persists across frames to keep Tab-focus order. A frame may host any
+number of caller-owned roots; the `App`-owned form is only the default for the
+`ui` callback path.
+
 ```mermaid
 flowchart TB
     FACADE[Facade API] -->|paired *_at when available| FRAME[Ui_Frame]
@@ -46,6 +54,7 @@ flowchart TB
     FRAME --> OUTPUT[Ui_Output]
     OUTPUT -->|replayed by| ADAPTER[ui_gfx.Adapter]
     ADAPTER -->|calls through| GFX[ingot:gfx]
+    ADAPTER -.->|text backend, input capture, a11y publish| FRAME
     RAYLIB[Migrated raylib app with existing loop] -->|starts here| GFX
     DIRECT[Direct gfx capabilities] -.->|bypass UI paint| GFX
 ```
@@ -54,6 +63,11 @@ The call-path graph runs from application-facing entry points toward the
 backend-facing API; it is not ownership. `Ui_Frame` temporarily references the
 Session-owned runtime, input, and output while a frame is open. Adapter likewise
 references the active graphics context and frame rather than owning them.
+
+`Adapter` is a two-way bridge, not just a replay sink. Downstream it translates
+UI output into `gfx` calls; upstream it lends `Ui_Runtime` a text backend for
+measurement and shaping, captures the platform input snapshot into `Ui_Input`
+before each frame, and publishes the accessibility tree after finalization.
 
 `Ui_Output` has distinct replay timing. Main paint passes through the Adapter
 sink as commands are emitted, overlay paint is replayed at frame end, and
