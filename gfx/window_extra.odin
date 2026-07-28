@@ -48,6 +48,13 @@ ToggleFullscreen :: proc() {
 RestoreWindow :: proc() {
 	if g.win != nil do glfw.RestoreWindow(glfw.WindowHandle(g.win))
 }
+context_focus_window :: proc(ctx: ^Context) {
+	if ctx == nil || ctx.win == nil do return
+	glfw.FocusWindow(glfw.WindowHandle(ctx.win))
+}
+FocusWindow :: proc() {
+	context_focus_window(default_context())
+}
 
 // --- drag & drop -----------------------------------------------------------
 

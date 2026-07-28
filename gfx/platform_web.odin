@@ -636,6 +636,11 @@ IsWindowFullscreen :: proc() -> bool {return _js_is_fullscreen() != 0}
 // forwards a click here, satisfying that requirement.
 ToggleFullscreen :: proc() {_js_toggle_fullscreen()}
 RestoreWindow :: proc() {}
+context_focus_window :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_focus_window: nil context")
+	assert(ctx == default_context(), "context_focus_window: non-default web context")
+}
+FocusWindow :: proc() {context_focus_window(default_context())}
 
 // --- drag & drop (web) ------------------------------------------------------
 //
