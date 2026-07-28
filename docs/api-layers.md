@@ -10,6 +10,46 @@ scaling, focus, accessibility, resource lifetime, portability, and testing to th
 application. Keep each escape hatch narrow and return to the higher layer at its
 boundary.
 
+## Entry paths
+
+```mermaid
+flowchart TD
+    START{Where are you starting?}
+
+    START -->|New UI application| APP[ui_gfx.App]
+    APP --> UI[ui.Ui facade]
+    UI --> LEAF[Bare leaf widgets\nlogical dimensions + Widget_Id]
+    UI -->|Geometry or lifecycle is behavior| EXPLICIT[Explicit UI]
+    EXPLICIT --> AT[*_at leaf widgets\nphysical Rect_I32 + Focus_Opt]
+    EXPLICIT --> COMPOSE[Composition protocols\npanes, listboxes, modals, overlays, markdown]
+    EXPLICIT --> LAYOUT[Physical layout\nLayout, Flow_Layout, Fit_Column]
+
+    START -->|Existing raylib application| IMPORT[Replace vendor:raylib with ingot:gfx]
+    IMPORT --> LOOP[Keep the raylib-shaped graphics loop]
+    LOOP --> RLGL[Retain documented rlgl compatibility only where needed]
+    LOOP -->|Add application UI incrementally| APP
+
+    START -->|Custom host or pacing| SESSION[ui_gfx.App_Session]
+    SESSION --> UI
+    SESSION -->|Implementing the bridge itself| ADAPTER[ui_gfx.Adapter]
+
+    LEAF --> FRAME[Ui_Frame paint, input, and output]
+    AT --> FRAME
+    COMPOSE --> FRAME
+    LAYOUT --> FRAME
+    FRAME --> GFX[ingot:gfx rendering and platform capabilities]
+    LOOP --> GFX
+```
+
+The two common paths deliberately begin in different places:
+
+1. **New desktop tools:** start at `ui_gfx.App`, compose ordinary controls with
+   the bare `ui.Ui` facade, and introduce small explicit regions only where the
+   application owns placement or a composition lifecycle.
+2. **Raylib migrations:** first replace the graphics imports and preserve the
+   existing loop. This does not require adopting `ui.Ui`. Add the app shell and
+   facade incrementally when the migrated application needs conventional UI.
+
 ## Quick choices
 
 - Typical one-window UI application: `ui_gfx.App`.

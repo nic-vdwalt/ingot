@@ -127,6 +127,31 @@ import ui "ingot:ui"
 import "ingot:ui_gfx"
 ```
 
+## Choose your entry point
+
+```mermaid
+flowchart LR
+    NEW[New UI app] --> APP[ui_gfx.App]
+    APP --> FACADE[ui.Ui facade\nbare widgets + logical layout]
+    FACADE --> EXPLICIT[Explicit UI when needed\n*_at + composition + physical layout]
+
+    RAYLIB[Existing raylib app] --> GFX[Replace imports with ingot:gfx]
+    GFX --> KEEP[Keep the familiar graphics loop]
+    GFX --> ADOPT[Adopt Ingot UI incrementally]
+    ADOPT --> APP
+
+    EXPLICIT --> FRAME[Ui_Frame paint and input]
+    KEEP --> GFXLOW[gfx rendering, audio, cameras, GPU]
+    FRAME --> GFXLOW
+```
+
+For a new desktop tool, start with `ui_gfx.App` and the bare `ui.Ui` facade
+shown below. Drop to explicit UI only where application behavior owns geometry
+or lifecycle. For an existing raylib application, begin with the documented
+`ingot:gfx` import migration and keep its graphics loop; add `ui_gfx.App` and
+the facade later only if the application needs Ingot widgets. See
+[Choosing an API layer](docs/api-layers.md) for the complete ownership map.
+
 ## Quick start
 
 ```odin
