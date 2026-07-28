@@ -3,10 +3,13 @@
 All notable changes to Ingot are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-Ingot uses `0.x` versioning: the leading zero means any release may break the
-API. See [versioning policy](docs/compatibility.md#versioning-policy).
+Ingot uses `0.x` versioning: patch releases preserve documented public source
+compatibility, while minor releases may break it. See the
+[versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
+
+## [0.1.1] - 2026-07-28
 
 ### Added
 
@@ -14,13 +17,27 @@ API. See [versioning policy](docs/compatibility.md#versioning-policy).
   for runtime, frame, input, output, and user-scale updates.
 - Snapshot-backed viewport, time, DPI, FPS, and monitor-refresh frame queries.
 - Balanced Canvas UI scopes for translated, clipped, renderer-independent paint.
+- `gfx.FocusWindow` and the corresponding explicit-context window-focus API.
+- A gallery header, theme-synchronized background, and redraws after theme
+  changes.
 
 ### Changed
 
 - `ui_gfx.App` now delegates UI lifecycle ownership to `Session`.
-- Direct `ui_gfx.Adapter` lifecycle calls are classified as backend-only.
+- Direct `ui_gfx.Adapter` lifecycle calls are classified as backend-only, and
+  consumer checks enforce the documented UI API layers.
+- UI focus uses stable widget IDs, facade APIs use rectangle bounds consistently,
+  and facade scaling ownership is explicit.
+- Chart and dropdown frame allocations are bounded.
+- Gallery rendering receives its UI frame explicitly.
 - `App_Session_Config`, `App_Session`, and `app_session_*` remain available
   through `v0.2.x` and are removed in `v0.3.0`.
+
+### Fixed
+
+- Pane paint commands are emitted in screen coordinates.
+- Gallery clear and navigation colors follow the active theme.
+- Web application state uses retained userdata across asynchronous startup.
 
 ### Migration
 
@@ -132,4 +149,6 @@ Not validated:
 - Prevented a libvterm UTF-8 decode buffer overflow.
 - Validated `LoadFontFromMemory`'s caller-supplied buffer.
 
+[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Nic-vdwalt/ingot/releases/tag/v0.1.0

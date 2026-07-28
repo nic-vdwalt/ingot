@@ -25,9 +25,10 @@ Windows/D3D12, Linux/Vulkan, and browser WASM/WebGPU. Two-dimensional games are
 supported; polished desktop tools are the mission.
 
 > [!IMPORTANT]
-> `v0.1.0` is a source tag for a young `0.x` API. It may contain breaking
-> changes, and target-specific production validation is not yet recorded. Pin
-> an exact revision and validate every platform your application ships on.
+> `v0.1.1` is the latest source tag for a young `0.x` API. Minor releases may
+> contain breaking changes, and target-specific production validation is not
+> yet recorded. Pin an exact revision and validate every platform your
+> application ships on.
 
 ## The experiment
 
@@ -132,14 +133,14 @@ Add Ingot as a submodule and register it as an Odin collection:
 
 ```sh
 git submodule add https://github.com/Nic-vdwalt/ingot.git libs/ingot
-git -C libs/ingot checkout v0.1.0
+git -C libs/ingot checkout v0.1.1
 odin build src -collection:ingot=libs/ingot
 ```
 
-Pin the submodule to a tag or an exact revision in consumer CI; `0.x` tags may
-break the API in any release. The tested Odin toolchain is
-`dev-2026-06:285f6d87b`; put `odin` and the `odinfmt` bundled with that toolchain
-on `PATH`. Native rendering also needs the wgpu-native library expected by
+Pin the submodule to a tag or an exact revision in consumer CI; `0.x` minor
+tags may break documented public APIs. The tested Odin toolchain is recorded in
+`ODIN_VERSION`; put that `odin` and its bundled `odinfmt` on `PATH`. Native
+rendering also needs the wgpu-native library expected by
 Odin's `vendor:wgpu` package. Terminal support needs the committed libvterm
 library; native accessibility needs the AccessKit library for the target. See
 [Testing Ingot](docs/testing.md#toolchain) for verification commands.
@@ -426,7 +427,7 @@ authorize binary, installer, or web-bundle distribution. Complete the
 visibility change and the [binary and web release checklist](docs/oss-release-checklist.md)
 before redistributing release artifacts.
 
-`v0.1.0` is the first published tag. It is a source tag: no binaries, installers,
-or web bundles are attached, and every row of the release validation matrix
-remains `Not recorded`. See the [changelog](CHANGELOG.md) for what that release
-does and does not claim.
+`v0.1.1` is the latest published tag. It is a source tag: no binaries,
+installers, or web bundles are attached, and every row of the release validation
+matrix remains `Not recorded`. See the [changelog](CHANGELOG.md) for what each
+release does and does not claim.

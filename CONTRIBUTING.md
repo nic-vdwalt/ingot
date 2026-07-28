@@ -6,8 +6,9 @@ API or architecture changes in an issue before investing in an implementation.
 
 ## Development setup
 
-Use the pinned Odin toolchain from `README.md` and put both `odin` and
-`odinfmt` on `PATH`. Clone the repository with its full contents, then run:
+Use the Odin revision recorded in `ODIN_VERSION` and put both `odin` and its
+bundled `odinfmt` on `PATH`. Clone the repository with its full contents, then
+run:
 
 ```sh
 bash scripts/check.sh
@@ -15,9 +16,10 @@ bash scripts/test.sh
 bash scripts/check-web.sh
 ```
 
-The portable CI matrix covers macOS, Linux, and Windows. Some GPU, accessibility,
-dialog, browser, and platform-polish checks require the hardware or interactive
-environment described in `docs/production-readiness.md`.
+Run the matching PowerShell scripts on Windows. These commands provide local
+portable checks, not evidence that every target was exercised for a release.
+GPU, accessibility, dialog, browser, and platform-polish checks require the
+hardware or interactive environment described in `docs/production-readiness.md`.
 
 ## Engineering rules
 

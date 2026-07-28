@@ -6,16 +6,23 @@ capabilities; applications must handle unavailable platform services.
 
 ## Versioning policy
 
-Ingot publishes `0.x` tags. The leading zero is the contract: any release may
-break the API, and no deprecation period is promised. Read the
+Ingot publishes `0.x` tags. Patch releases preserve documented public source
+compatibility within their minor line. Minor releases may change documented
+public APIs while the project is pre-`1.0`; read the
 [changelog](../CHANGELOG.md) before moving a pin.
+
+A planned removal receives a changelog migration entry. Where the old surface
+can remain safely and without preserving a flawed boundary, it remains as a
+compatibility facade for one minor release. Immediate removal is reserved for
+security, correctness, or toolchain changes that cannot support such a window,
+and the changelog records the reason.
 
 Every tag is a **source** tag. Ingot distributes no binaries, installers, or web
 bundles, and a tag does not authorize redistributing them; the
 [binary and web release checklist](oss-release-checklist.md) governs that
-separately. A tag also asserts nothing about platform validation — the
-`Not recorded` rows in
-[production readiness](production-readiness.md) remain open at `v0.1.0`.
+separately. A tag also asserts nothing about platform validation. Consult the
+revision-pinned evidence in [production readiness](production-readiness.md);
+`Not recorded` rows remain unsupported claims for every release.
 
 Pin a tag or an exact Git revision in application source control and CI. A tag is
 the readable choice; an exact revision remains the strictest and is still
@@ -23,18 +30,32 @@ recommended for CI. Upgrade deliberately by reading the changelog, documentation
 and source changes, then run native, web, and application-specific validation
 before updating the pin.
 
-The tested compiler is Odin `dev-2026-06:285f6d87b`. Use the `odinfmt` bundled
-with that toolchain and the repository `.odinfmt.json`. Compiler development
-revisions can change language, ABI, vendor package, and WebGPU runtime behavior;
-a newer revision is not assumed compatible until the full gates pass.
+The tested compiler revision is recorded in `ODIN_VERSION`. Use that compiler,
+its bundled `odinfmt`, and the repository `.odinfmt.json`. Compiler development
+revisions can change language, ABI, vendor packages, and WebGPU runtime behavior;
+a newer revision is not assumed compatible until the full gates pass. This
+compiler and vendor ABI constraint is separate from Ingot's public source API
+policy: matching application source may still require the toolchain pinned by
+the selected Ingot revision.
 
-Public PascalCase graphics procedures and documented public type layouts form
-a targeted source-compatibility surface for common raylib-style 2D applications.
-This is not complete raylib, raymath, 3D, shader, or `rlgl` parity. New Odin-style
-aliases are additive. Internal structures, private procedures, generated web
-runtime files, and undocumented bridge details are not stable APIs. Pin an Ingot
-tag or revision and review the graphics limitations below before replacing
-imports.
+The compatibility classes are:
+
+- Documented application APIs in `ingot:gfx`, `ingot:ui`, `ingot:ui_gfx`,
+  `ingot:net`, `ingot:prefs`, `ingot:sys`, and `ingot:term` receive the patch
+  compatibility and migration policy above.
+- Documented PascalCase graphics procedures and public type layouts are a
+  targeted migration facade for common raylib-style 2D applications. This is
+  not complete raylib, raymath, 3D, shader, or `rlgl` parity.
+- `ingot:gfx/rlgl`, legacy networking entry points, direct `ui_gfx.Adapter`
+  lifecycle procedures, and low-level binding packages are compatibility or
+  implementation layers. They change only with an explicit changelog entry but
+  are not recommended application defaults.
+- Internal structures, private procedures, undocumented bridge details, and
+  generated or staged web runtime files are not public APIs and carry no source
+  compatibility guarantee.
+
+Pin an Ingot tag or revision and review the graphics limitations below before
+replacing imports.
 
 ## What compiles is what works
 

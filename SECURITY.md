@@ -2,10 +2,11 @@
 
 ## Supported versions
 
-Ingot has not published a semantic-versioned release. Security fixes are made
-on the default branch only. Source availability does not imply production or
-binary-release readiness; review `docs/production-readiness.md` before deploying
-Ingot in a security-sensitive application.
+`v0.1.1` is the latest source release. Security fixes land on `main` first and
+are included in a replacement source tag when a release is required; older tags
+do not receive separate maintenance branches. Source availability does not imply
+production or binary-release readiness; review `docs/production-readiness.md`
+before deploying Ingot in a security-sensitive application.
 
 ## Reporting a vulnerability
 
