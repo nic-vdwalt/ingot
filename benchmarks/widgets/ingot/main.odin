@@ -164,12 +164,9 @@ run_isolated_labels :: proc(h: ^Harness, count, frame_index: int, changing: bool
 run_inputs :: proc(h: ^Harness, count: int, active: bool) -> int {
 	assert(h != nil && count > 0 && count <= DASHBOARD_MAX_GROUPS, "run_inputs: invalid argument")
 	for index in 0 ..< count {
-		_ = ui.input_at(
+		_ = ui.text_input_at(
 			&h.frame,
-			0,
-			i32(index) * 26,
-			180,
-			24,
+			{0, i32(index) * 26, 180, 24},
 			&h.dashboard_inputs[index],
 			"Filter",
 			active,
@@ -219,7 +216,7 @@ run_buttons :: proc(h: ^Harness, count: int, semantics: bool) -> int {
 				id    = index + 1,
 			}
 		}
-		_ = ui.btn_at(&h.frame, x, y, 96, 24, "Button", focus = focus, widget = id)
+		_ = ui.button_at(&h.frame, {x, y, 96, 24}, "Button", focus = focus, widget = id)
 	}
 	return count
 }
@@ -240,7 +237,7 @@ run_mixed :: proc(h: ^Harness, groups: int) -> int {
 			a11y_label = "Value",
 		)
 		paint_label(&h.frame, "Input", 375, y, 160)
-		_ = ui.btn_at(&h.frame, 540, y, 96, 24, "Submit", widget = ui.Widget_Id(index + 1))
+		_ = ui.button_at(&h.frame, {540, y, 96, 24}, "Submit", widget = ui.Widget_Id(index + 1))
 	}
 	return groups * 5
 }
@@ -254,8 +251,14 @@ run_dashboard :: proc(h: ^Harness, groups: int) -> int {
 		paint_label(&h.frame, "Healthy", 128, y, 76)
 		_ = ui.checkbox_at(&h.frame, {208, y, 88, 24}, "Live", &h.checked[index])
 		_ = ui.slider_at(&h.frame, {300, y, 130, 24}, &h.values[index], 0, 1, 0.01)
-		_ = ui.input_at(&h.frame, 434, y, 150, 24, &h.dashboard_inputs[index], "Filter", false)
-		_ = ui.btn_at(&h.frame, 588, y, 72, 24, "Open", widget = ui.Widget_Id(index + 1))
+		_ = ui.text_input_at(
+			&h.frame,
+			{434, y, 150, 24},
+			&h.dashboard_inputs[index],
+			"Filter",
+			false,
+		)
+		_ = ui.button_at(&h.frame, {588, y, 72, 24}, "Open", widget = ui.Widget_Id(index + 1))
 		for column in 0 ..< 4 {
 			paint_label(&h.frame, "Data", 664 + i32(column) * 86, y, 82)
 		}

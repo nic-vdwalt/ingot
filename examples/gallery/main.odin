@@ -980,13 +980,7 @@ draw_overlay_context_menu :: proc(x, info_y: i32) {
 		}
 		root := ui_gfx.app_screen_rect(&app)
 		when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
-		chosen := ui.context_menu(
-			ui_frame,
-			&ctx_menu,
-			items,
-			root.w,
-			root.h,
-		)
+		chosen := ui.context_menu(ui_frame, &ctx_menu, items, root.w, root.h)
 		if chosen == 0 {
 			shielded_clicks = 0
 			ctx_note = "shielded clicks reset via context menu"
