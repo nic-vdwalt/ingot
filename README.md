@@ -7,7 +7,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Nic-vdwalt/ingot/actions/workflows/ci.yml"><img src="https://github.com/Nic-vdwalt/ingot/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/targets-macOS%20%7C%20Linux%20%7C%20Windows%20%7C%20WASM%2FWebGPU-lightgrey.svg" alt="Targets: macOS, Linux, Windows, and WASM/WebGPU"></a>
 </p>
