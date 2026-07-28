@@ -126,7 +126,7 @@ stat_card :: proc(
 ) {
 	style := ui.ui_frame_theme(frame)
 	metrics := ui.ui_frame_metrics(frame)
-	ui.draw_card_bg_frame(frame, {f32(x), f32(y), f32(w), f32(h)}, style.bg_secondary)
+	ui.card_bg_at(frame, {x, y, w, h}, style.bg_secondary)
 	ui.draw_text_frame(frame, label, x + 14, y + 12, metrics.FONT_SIZE_LABEL, style.fg_label)
 	ui.draw_text_frame(
 		frame,

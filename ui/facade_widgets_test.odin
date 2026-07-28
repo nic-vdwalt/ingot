@@ -59,8 +59,7 @@ facade_widgets_register_focus_once_each :: proc(t: ^testing.T) {
 	end(&u)
 
 	// Three interactive widgets, three traversal entries, no duplicates.
-	testing.expect_value(t, u.stable_count, 3)
-	testing.expect_value(t, u.focus_count, 0)
+	testing.expect_value(t, u.focus_count, 3)
 }
 
 @(test)
@@ -90,7 +89,6 @@ presentational_facade_widgets_register_no_focus :: proc(t: ^testing.T) {
 	kv_row(&u, "key", "value", Color{200, 200, 200, 255}, Color{255, 255, 255, 255})
 	end(&u)
 
-	testing.expect_value(t, u.stable_count, 0)
 	testing.expect_value(t, u.focus_count, 0)
 }
 
@@ -173,5 +171,5 @@ facade_widgets_skip_focus_when_slot_collapses :: proc(t: ^testing.T) {
 	_ = section_header(&u, "SECTION")
 	end(&u)
 
-	testing.expect_value(t, u.stable_count, 0)
+	testing.expect_value(t, u.focus_count, 0)
 }

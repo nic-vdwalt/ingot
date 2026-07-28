@@ -1,7 +1,6 @@
 // LIB-CANDIDATE: imports only core:*.
-// Ui is a caller-owned context bundling layout and keyboard focus. Static
-// forms may use sequential registration; conditional and dynamic forms pass
-// stable caller IDs whose traversal order is rebuilt in bounded frame arrays.
+// Ui is a caller-owned context bundling layout, generated identity, and stable
+// keyboard focus whose traversal order is rebuilt in bounded frame arrays.
 package ui
 
 import "core:strings"
@@ -10,12 +9,6 @@ import "core:strings"
 // MAX_FOCUSABLES bounds focus registrations per frame (Tiger Style: put a
 // limit on everything).
 MAX_FOCUSABLES :: 256
-
-Ui_Focus_Mode :: enum u8 {
-	None,
-	Sequential,
-	Stable,
-}
 
 // Track and its fit / grow / fixed / percent constructors live in layout.odin.
 
@@ -288,21 +281,17 @@ frame_to_screen :: proc(frame: ^Ui_Frame, point: Vector2) -> Vector2 {
 }
 
 Ui :: struct {
-	frame:        ^Ui_Frame,
-	layout:       Layout,
-	focus_slot:   int,
-	focus_count:  int,
-	focus_seq:    int,
-	stable_focus: Focus_State,
-	stable_prev:  [MAX_FOCUSABLES]Focus_Id,
-	stable_cur:   [MAX_FOCUSABLES]Focus_Id,
-	stable_count: int,
-	stable_seq:   int,
-	focus_mode:   Ui_Focus_Mode,
-	ids:          Id_Context,
-	screen_w:     i32,
-	screen_h:     i32,
-	open:         bool,
+	frame:       ^Ui_Frame,
+	layout:      Layout,
+	focus_state: Focus_State,
+	focus_prev:  [MAX_FOCUSABLES]Focus_Id,
+	focus_cur:   [MAX_FOCUSABLES]Focus_Id,
+	focus_count: int,
+	focus_seq:   int,
+	ids:         Id_Context,
+	screen_w:    i32,
+	screen_h:    i32,
+	open:        bool,
 }
 
 // begin opens the root over a logical rectangle: caches screen size, runs Tab
@@ -327,15 +316,12 @@ _open :: proc(u: ^Ui, x, y, w, h: i32, gap: i32) {
 	if frame != nil && frame.input != nil do input = frame.input^
 	u.screen_w = i32(input.screen_size.x)
 	u.screen_h = i32(input.screen_size.y)
-	if u.focus_count > 0 do form_focus_cycle(frame, &u.focus_slot, u.focus_count)
-	if u.stable_count > 0 && input_key_pressed(&input, .TAB) {
+	if u.focus_count > 0 && input_key_pressed(&input, .TAB) {
 		backwards := input_key_down(&input, .LEFT_SHIFT) || input_key_down(&input, .RIGHT_SHIFT)
-		ids := u.stable_prev[:u.stable_count]
-		u.stable_focus.active = focus_order_next(ids, u.stable_focus.active, backwards)
+		ids := u.focus_prev[:u.focus_count]
+		u.focus_state.active = focus_order_next(ids, u.focus_state.active, backwards)
 	}
 	u.focus_seq = 0
-	u.stable_seq = 0
-	u.focus_mode = .None
 	id_context_reset(&u.ids)
 	layout_begin(&u.layout, x, y, w, h, gap)
 	u.open = true
@@ -347,18 +333,12 @@ end :: proc(u: ^Ui) {
 	assert(u.ids.depth == 0, "end: unbalanced id scope")
 	assert(u.layout.depth == 1, "end: unbalanced layout container")
 	layout_end(&u.layout)
-	if u.focus_mode == .Stable {
-		if u.stable_focus.active != FOCUS_ID_NONE &&
-		   focus_order_index(u.stable_cur[:u.stable_seq], u.stable_focus.active) < 0 {
-			focus_clear(&u.stable_focus)
-		}
-		copy(u.stable_prev[:u.stable_seq], u.stable_cur[:u.stable_seq])
-		u.stable_count = u.stable_seq
-		u.focus_count = 0
-	} else {
-		u.focus_count = u.focus_seq
-		u.stable_count = 0
+	if u.focus_state.active != FOCUS_ID_NONE &&
+	   focus_order_index(u.focus_cur[:u.focus_seq], u.focus_state.active) < 0 {
+		focus_clear(&u.focus_state)
 	}
+	copy(u.focus_prev[:u.focus_seq], u.focus_cur[:u.focus_seq])
+	u.focus_count = u.focus_seq
 	u.open = false
 	if u.frame != nil {
 		assert(u.frame.open_roots > 0, "end: corrupt root count")
@@ -367,36 +347,19 @@ end :: proc(u: ^Ui) {
 	}
 }
 
-// Deprecated: sequential focus is order-dependent by construction, so inserting
-// or reordering a control transfers focus to whichever widget inherits its
-// ordinal. Register a Widget_Id from id() / scope_begin() instead. No widget in
-// this package uses it any more; it survives only for applications mid-migration.
-@(deprecated = "sequential focus is order-dependent; pass a Widget_Id to focus")
-focus_sequential :: proc(u: ^Ui) -> Focus_Opt {
-	assert(u != nil, "focus: nil u")
-	assert(u.open, "focus: frame not open")
-	assert(u.focus_mode != .Stable, "focus: mixed focus registration")
-	assert(u.focus_seq < MAX_FOCUSABLES, "focus: too many focusables")
-	u.focus_mode = .Sequential
-	u.focus_seq += 1
-	return Focus_Opt{&u.focus_slot, u.focus_seq}
-}
-
 // focus registers one stable control in this frame's traversal order.
 focus :: proc(u: ^Ui, widget: Widget_Id) -> Focus_Opt {
 	assert(u != nil, "focus: nil u")
 	assert(u.open, "focus: frame not open")
 	assert(widget != WIDGET_ID_NONE, "focus: zero stable id")
-	assert(u.focus_mode != .Sequential, "focus: mixed focus registration")
-	assert(u.stable_seq < MAX_FOCUSABLES, "focus: too many focusables")
+	assert(u.focus_seq < MAX_FOCUSABLES, "focus: too many focusables")
 	widget_focus := focus_widget_id(widget)
-	for registered in u.stable_cur[:u.stable_seq] {
+	for registered in u.focus_cur[:u.focus_seq] {
 		assert(registered != widget_focus, "focus: duplicate stable id")
 	}
-	u.focus_mode = .Stable
-	u.stable_cur[u.stable_seq] = widget_focus
-	u.stable_seq += 1
-	return focus_link(&u.stable_focus, widget_focus)
+	u.focus_cur[u.focus_seq] = widget_focus
+	u.focus_seq += 1
+	return focus_link(&u.focus_state, widget_focus)
 }
 
 @(private = "package")
@@ -445,8 +408,7 @@ scope_end :: proc(u: ^Ui) {
 focus_reset :: proc(u: ^Ui) {
 	assert(u != nil, "focus_reset: nil Ui")
 	assert(!u.open, "focus_reset: frame open")
-	u.focus_slot = 0
-	focus_clear(&u.stable_focus)
+	focus_clear(&u.focus_state)
 }
 
 // slot_px carves a w×h device-pixel rect from the active layout frame. In a

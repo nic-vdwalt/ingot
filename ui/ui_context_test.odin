@@ -243,7 +243,7 @@ test_explicit_frame_resources_follow_own_runtime :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_stable_focus_survives_insert_and_reorder :: proc(t: ^testing.T) {
+test_focus_state_survives_insert_and_reorder :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	frame: Ui_Frame
 	facade_frame(&runtime, &frame)
@@ -260,12 +260,12 @@ test_stable_focus_survives_insert_and_reorder :: proc(t: ^testing.T) {
 	focus(&u, b)
 	focus(&u, a)
 	end(&u)
-	testing.expect_value(t, u.stable_focus.active, focus_widget_id(b))
-	testing.expect_value(t, u.stable_count, 3)
+	testing.expect_value(t, u.focus_state.active, focus_widget_id(b))
+	testing.expect_value(t, u.focus_count, 3)
 }
 
 @(test)
-test_stable_focus_clears_missing_target :: proc(t: ^testing.T) {
+test_focus_state_clears_missing_target :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	frame: Ui_Frame
 	facade_frame(&runtime, &frame)
@@ -279,7 +279,7 @@ test_stable_focus_clears_missing_target :: proc(t: ^testing.T) {
 	begin(&u, &frame, {0, 0, 100, 100})
 	focus(&u, a)
 	end(&u)
-	testing.expect_value(t, u.stable_focus.active, FOCUS_ID_NONE)
+	testing.expect_value(t, u.focus_state.active, FOCUS_ID_NONE)
 }
 
 @(test)

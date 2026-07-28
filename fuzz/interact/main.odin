@@ -289,7 +289,12 @@ draw_scene :: proc(
 	if allow_random_overlays && !s.modal.open && fuzzx.int_range(p, 0, 97) == 0 do s.modal.open = true
 	if s.modal.open {
 		overlay_active = true
-		_ = ui.modal_begin(frame, &s.modal, "Fuzz Modal", 400, 300, SCREEN_W, SCREEN_H)
+		_ = ui.modal_begin(
+			frame,
+			&s.modal,
+			"Fuzz Modal",
+			{size = {400, 300}, screen = {0, 0, SCREEN_W, SCREEN_H}},
+		)
 		ui.modal_end(&s.modal)
 	}
 	if allow_random_overlays && !s.menu.open && fuzzx.int_range(p, 0, 89) == 0 {
@@ -300,7 +305,7 @@ draw_scene :: proc(
 		)
 	}
 	overlay_active |= s.menu.open
-	if ui.context_menu(frame, &s.menu, MENU_ITEMS[:], SCREEN_W, SCREEN_H) >= 0 {
+	if ui.context_menu(frame, &s.menu, MENU_ITEMS[:], {0, 0, SCREEN_W, SCREEN_H}) >= 0 {
 		s.menu_choices += 1
 	}
 	overlay_active |= s.menu.open
