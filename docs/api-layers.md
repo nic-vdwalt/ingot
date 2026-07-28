@@ -73,8 +73,8 @@ The two common paths deliberately begin in different places:
 ### `ui_gfx.App`: default host
 
 Use `App` for a normal one-window application. It owns the default graphics
-context, an `App_Session`, frame acquisition and submission, temporary-frame
-cleanup, and teardown ordering. The application still owns its state, widget
+context, a `Session`, frame acquisition and submission, temporary-frame cleanup,
+and teardown ordering. The application still owns its state, widget
 components, textures, and other persistent resources.
 
 Choose this layer unless a requirement names something the shell cannot do. An
@@ -82,9 +82,9 @@ application should not manually assemble `Ui_Runtime`, `Ui_Frame`, `Ui_Input`,
 `Ui_Output`, and `Adapter` merely to control its own state; `App` already leaves
 that state caller-owned.
 
-### `ui_gfx.App_Session`: custom host
+### `ui_gfx.Session`: custom host
 
-Use `App_Session` when the application must own the frame loop while retaining
+Use `Session` when the application must own the frame loop while retaining
 Ingot's standard UI lifecycle. Examples include:
 
 - adaptive or externally coordinated pacing;
@@ -94,10 +94,10 @@ Ingot's standard UI lifecycle. Examples include:
 - custom instrumentation around acquisition and submission; or
 - an unusual ordering requirement that `app_run` cannot provide.
 
-`App_Session` owns the runtime, reusable frame, input/output values, adapter, DPI
+`Session` owns the runtime, reusable frame, input/output values, adapter, DPI
 refresh, accessibility finalization, and their teardown order. The host owns the
 graphics window and brackets graphics frames around
-`app_session_begin_frame_context` and `app_session_end_frame_context`.
+`session_begin_frame_context` and `session_end_frame_context`.
 
 ### `ui_gfx.Adapter`: bridge implementation
 
@@ -107,16 +107,16 @@ input, refresh DPI, finalize accessibility, replay output, reclaim temporary
 allocations, and preserve teardown order.
 
 Use it directly only when implementing or replacing those policies. Custom
-pacing alone is not sufficient reason; that is the `App_Session` layer. If a
-consumer repeats the fields of `App_Session` beside an `Adapter`, it should
-normally migrate to `App_Session`.
+pacing alone is not sufficient reason; that is the `Session` layer. If a consumer
+repeats the values owned by `Session` beside an `Adapter`, it should migrate to
+`Session`.
 
 See [Application shell](application-shell.md) for lifecycle examples and exact
 ownership order.
 
 ## UI composition
 
-### `ui.Ui`: ordinary interface
+### Flow UI: `ui.Ui`
 
 Start forms, panels, settings, toolbars, and conventional application chrome
 with `ui.begin`. Use facade widgets such as `button`, `text_input`, `checkbox`,
@@ -126,7 +126,7 @@ widget identity, focus registration, semantics, interaction, and paint emission.
 Use scoped `Widget_Id` values for conditional controls, collections, and reusable
 components. Labels are presentation and accessibility data, not identity.
 
-### Explicit geometry: application-owned placement
+### Canvas UI: application-owned placement
 
 Use `*_at`, `Layout`, `Flow_Layout`, `Fit_Column`, and explicit composition
 protocols when exact placement is part of application behavior. Appropriate
@@ -139,9 +139,10 @@ transfer scaling and geometry ownership to the caller. Do not use them for a
 fixed form solely because its rectangles are easy to calculate; the facade
 keeps DPI, focus, and later layout changes centralized.
 
-A screen may mix tiers. Let the facade own ordinary controls, reserve an explicit
-slot for custom content, draw that content through the frame, and then continue
-with facade layout.
+A screen may mix modes. Let Flow UI own ordinary controls, reserve an explicit
+slot for Canvas UI, use `canvas_begin` and `canvas_end` for translated or scrolled
+paint, and then continue with flow layout. Canvas paint is renderer-independent;
+use direct `gfx` only when its paint commands cannot express the content.
 
 See [Layout conventions](layout.md) and
 [UI state and stable focus](ui-state.md) for units, identity, and component

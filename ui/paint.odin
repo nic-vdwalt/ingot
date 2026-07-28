@@ -28,6 +28,8 @@ Paint_Kind :: enum u8 {
 	Codepoint,
 	Clip_Begin,
 	Clip_End,
+	Transform_Begin,
+	Transform_End,
 }
 
 Paint_Command :: struct {
@@ -52,6 +54,7 @@ Paint_Command :: struct {
 	text_offset:  int,
 	text_length:  int,
 	clip_restore: bool,
+	translation:  Vec2,
 }
 
 Paint_List :: struct {

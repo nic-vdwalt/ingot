@@ -153,3 +153,32 @@ paint_clip_main_overlay_and_pane_coordinates_are_isolated :: proc(t: ^testing.T)
 	testing.expect_value(t, output.main.clip_count, 0)
 	testing.expect_value(t, output.overlay.clip_count, 0)
 }
+
+@(test)
+canvas_scope_emits_balanced_transform_and_clip :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+
+	canvas_begin(&frame, {40, 60, 300, 200}, {0, -25})
+	canvas_clear(&frame, {0, 0, 300, 200}, {10, 20, 30, 255})
+	testing.expect_value(t, frame_pane_origin(&frame), Vector2{40, 35})
+	canvas_end(&frame)
+	testing.expect_value(t, frame_pane_origin(&frame), Vector2{})
+	ui_frame_end(&frame)
+
+	testing.expect_value(t, output.main.count, 5)
+	testing.expect_value(t, output.main.commands[0].kind, Paint_Kind.Transform_Begin)
+	testing.expect_value(t, output.main.commands[0].translation, Vector2{40, 35})
+	testing.expect_value(t, output.main.commands[1].kind, Paint_Kind.Clip_Begin)
+	testing.expect_value(t, output.main.commands[1].rect, Rect{40, 60, 300, 200})
+	testing.expect_value(t, output.main.commands[2].kind, Paint_Kind.Rectangle)
+	testing.expect_value(t, output.main.commands[3].kind, Paint_Kind.Clip_End)
+	testing.expect_value(t, output.main.commands[4].kind, Paint_Kind.Transform_End)
+	testing.expect_value(t, output.main.clip_count, 0)
+}

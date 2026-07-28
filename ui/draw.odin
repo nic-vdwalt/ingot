@@ -162,6 +162,32 @@ end_scissor_mode :: proc(frame: ^Ui_Frame) {
 	paint_clip_end(frame_paint_list(frame))
 }
 
+canvas_begin :: proc(frame: ^Ui_Frame, rect: Rect_I32, translation: Vector2 = {}) {
+	assert(frame != nil && frame.open, "canvas_begin: invalid frame")
+	assert(rect.w >= 0 && rect.h >= 0, "canvas_begin: negative rect")
+	origin := Vector2{f32(rect.x), f32(rect.y)}
+	ui_frame_pane_push(frame, origin + translation)
+	paint_push(
+		frame_paint_list(frame),
+		{kind = .Transform_Begin, translation = origin + translation},
+	)
+	begin_scissor_mode(frame, rect.x, rect.y, rect.w, rect.h)
+}
+
+canvas_end :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "canvas_end: invalid frame")
+	assert(frame.pane_count > 0, "canvas_end: no canvas")
+	end_scissor_mode(frame)
+	paint_push(frame_paint_list(frame), {kind = .Transform_End})
+	ui_frame_pane_pop(frame)
+}
+
+canvas_clear :: proc(frame: ^Ui_Frame, rect: Rect_I32, color: Color) {
+	assert(frame != nil && frame.open, "canvas_clear: invalid frame")
+	assert(rect.w >= 0 && rect.h >= 0, "canvas_clear: negative rect")
+	draw_rectangle_rec(frame, Rect{0, 0, f32(rect.w), f32(rect.h)}, color)
+}
+
 draw_text_command :: proc(
 	frame: ^Ui_Frame,
 	text: string,
