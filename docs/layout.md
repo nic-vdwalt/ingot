@@ -2,6 +2,18 @@
 
 Ingot layout is caller-owned, bounded, and single-pass. Start with `Ui` for ordinary forms and panels. Use `Layout`, `Flow_Layout`, `Fit_Column`, and rect-based `*_at` widgets when geometry itself is application behavior.
 
+## Tiers
+
+A procedure's name tells you which tier it belongs to and what units its arguments are in. There is exactly one entry point per widget per tier.
+
+| Tier | Receiver | Units | Identity | Naming |
+|---|---|---|---|---|
+| **Facade** | `u: ^Ui` | logical, scaled once | `Widget_Id` from `id()` / `scope_begin()` | bare name — `button`, `row_begin`, `slot_next` |
+| **Explicit** | `frame: ^Ui_Frame` | physical `Rect_I32` | `Focus_Opt` via `focus_link` / `focus_id_string` | `*_at` suffix — `button_at`, `line_chart_at` |
+| **Physical layout** | `l: ^Layout` | physical pixels | none | verb or `layout_` prefix — `layout_begin`, `push_row`, `next` |
+
+No procedure that takes a `^Ui` carries a `ui_` prefix; `scripts/check-ui-state.sh` fails the build if one is reintroduced. The `ui_frame_*` and `ui_runtime_*` families are the frame and runtime accessors, not layout, and keep their prefix.
+
 ## Units
 
 - Root and explicit `Rect_I32` values are physical pixels.
@@ -57,7 +69,13 @@ draw_custom(frame, rect)
 ui.row_end(&form)
 
 ui.flex_row_begin(&form, 40, {ui.grow(), ui.fixed(40)})
-_ = ui.text_input(&form, SEARCH_ID, &query, "Search", semantics = {name = "Search"})
+_ = ui.text_input(
+	&form,
+	ui.id(&form, "search"),
+	&query,
+	"Search",
+	semantics = {name = "Search"},
+)
 icon_rect := ui.flex_slot_next(&form, 40)
 draw_icon(frame, icon_rect)
 ui.flex_row_end(&form)
@@ -84,8 +102,12 @@ One flow accepts at most `MAX_FLOW_ITEMS` items. Chunk or virtualize larger coll
 
 ## Measurement and explicit geometry
 
-Intrinsic measurement is explicit: pass measured text or component extents to `fit`, `flex_fit`, `flow_next`, or `fit_column_next`. This keeps layout single-pass and avoids recursive measurement.
+Intrinsic measurement is explicit: pass measured text or component extents to `fit`, `flow_next`, or `fit_column_next`. This keeps layout single-pass and avoids recursive measurement.
+
+`Track` is the one sibling-size type, and `fit` / `grow` / `fixed` / `percent` are its one constructor set. The facade tier reads a `Track` as logical and scales it once; the `Layout` tier reads the same struct as device pixels.
 
 `Fit_Column` returns content-height bounds for caller-sized rows. Existing panes own scrolling and clipping; overlays use explicit `*_at` geometry. Compose those facilities instead of adding a second scroll or overlay state model to layout.
 
-Use rect-based `*_at` for canvases, scroll-offset content, overlays, charts, custom hit regions, and geometry whose exact placement is application behavior. Both facade and explicit entry points share interaction, focus, semantics, and paint; they differ only in who supplies the rectangle.
+Use rect-based `*_at` for canvases, scroll-offset content, overlays, custom hit regions, and geometry whose exact placement is application behavior. Both facade and explicit entry points share interaction, focus, semantics, and paint; they differ only in who supplies the rectangle.
+
+`Flow_Layout` and `Fit_Column` have no facade entry point by design: both exist so the caller can drive placement itself, which is the opposite of what carving a slot from a container does.

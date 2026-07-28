@@ -167,11 +167,9 @@ draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnost
 	text(frame, "DEBUG", x + pad, text_y, .Label, .Label)
 	text_y += label_h + ui_frame_sc(frame, 6)
 	for index in 0 ..< count {
-		kv_row_frame(
+		kv_row_at(
 			frame,
-			x + pad,
-			text_y,
-			width - pad * 2,
+			{x + pad, text_y, width - pad * 2, row_h},
 			rows[index].key,
 			rows[index].value,
 			style.fg_secondary,

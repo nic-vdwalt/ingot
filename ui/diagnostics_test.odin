@@ -82,7 +82,7 @@ frame_telemetry_counts_and_resets_per_frame :: proc(t: ^testing.T) {
 	paint_push_text(&output.overlay, {kind = .Text}, "over")
 	box: Input_Box
 	defer input_box_destroy(&box)
-	_ = input_at(&frame, 0, 0, 120, 24, &box, "input", false)
+	_ = text_input_at(&frame, {0, 0, 120, 24}, &box, "input", false)
 	ui_frame_finalize(&frame)
 	telemetry := ui_frame_telemetry(&frame)
 	when UI_TELEMETRY_ENABLED {

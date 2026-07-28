@@ -4,6 +4,9 @@
 package ui
 
 
+// Focus_Id is the explicit tier's identity: a caller-chosen key paired with a
+// caller-owned Focus_State. It is a supported tier, not a compatibility path —
+// applications that own their own geometry own their own focus keys too.
 Focus_Id :: distinct u64
 FOCUS_ID_NONE :: Focus_Id(0)
 
@@ -11,8 +14,8 @@ Focus_State :: struct {
 	active: Focus_Id,
 }
 
-// Focus_Opt remains two machine words so existing sequential literals stay
-// source-compatible. Stable links use the identical pointer-and-key layout.
+// Focus_Opt is two machine words so one pointer-and-key layout serves both the
+// explicit tier's Focus_State links and the facade tier's stable registrations.
 Focus_Opt :: struct {
 	focus: ^int,
 	id:    int,

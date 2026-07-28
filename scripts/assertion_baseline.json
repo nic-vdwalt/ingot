@@ -151,8 +151,5 @@
   ],
   "ui/ui_context.odin:frame_pane_origin": [
     "index"
-  ],
-  "ui/ui_context.odin:ui_slot": [
-    "index"
   ]
 }

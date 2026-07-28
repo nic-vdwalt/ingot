@@ -9,11 +9,20 @@
 // Buttons section.
 //
 // Conventions this gallery demonstrates (docs/ui-state.md#widget-tiers):
-//   - Widgets use the supported *_at tier: an explicit rect, with every
-//     dimension scaled through ui_frame_sc so it tracks the UI scale.
+//   - The facade tier is the ordinary path: a widget takes a ^Ui and a
+//     Widget_Id, carves its own bounded slot, and registers focus only when
+//     that slot is visible. Identity comes from scope_begin + id, never from
+//     hand-numbered constants, so inserting or reordering a control cannot
+//     move focus to a different one. Inputs, Widgets, and Progress are written
+//     this way.
+//   - The explicit tier is deliberate, not left over: a *_at widget takes a
+//     ^Ui_Frame and a physical Rect_I32. The Layout and Stress sections use it
+//     because they exist to document application-owned geometry, flow_*, and
+//     fit_column_*, which have no facade by design.
+//   - Facade dimensions are logical and scale once; anything handed to a *_at
+//     entry point is already physical, so it goes through ui_frame_sc first.
 //   - Text uses the semantic ui.text / Text_Role / Ink API rather than
-//     re-deriving metrics and theme per call. The Layout section is the one
-//     place the experimental *_ui / Layout tier is exercised.
+//     re-deriving metrics and theme per call.
 package main
 
 import "core:fmt"
@@ -25,6 +34,12 @@ import "ingot:ui_gfx"
 // SMOKE enables the self-driving crash harness in smoke.odin (native only;
 // see scripts/smoke-gallery.sh).
 SMOKE :: #config(INGOT_SMOKE, false)
+
+// CAPTURE enables the media harness in capture.odin (native only; see
+// scripts/capture-media.sh). The flag is declared here rather than in
+// capture.odin because main.odin guards on it and is built for every target,
+// including js, where capture.odin is excluded.
+CAPTURE :: #config(INGOT_CAPTURE, false)
 
 Section :: enum {
 	Buttons,
@@ -102,7 +117,12 @@ app: ui_gfx.App
 ui_frame: ^ui.Ui_Frame
 
 Widget_State :: struct {
+	// One Ui per independently positioned block. Each is a caller-owned
+	// layout and focus context; the gallery keeps them separate because the
+	// section's own y cursor places the blocks, not a single root.
 	ctx:            ui.Ui,
+	progress_ctx:   ui.Ui,
+	kv_ctx:         ui.Ui,
 	check_a:        bool,
 	check_b:        bool,
 	radio_choice:   i32,
@@ -133,17 +153,6 @@ leaked_clicks := 0
 
 stress_clicked := -1
 
-INPUT_NAME_ID :: ui.Focus_Id(101)
-INPUT_PASS_ID :: ui.Focus_Id(102)
-INPUT_NOTES_ID :: ui.Focus_Id(103)
-INPUT_RESET_ID :: ui.Focus_Id(104)
-WIDGET_ENABLE_ID :: ui.Focus_Id(201)
-WIDGET_VERBOSE_ID :: ui.Focus_Id(202)
-WIDGET_SMALL_ID :: ui.Focus_Id(203)
-WIDGET_MEDIUM_ID :: ui.Focus_Id(204)
-WIDGET_LARGE_ID :: ui.Focus_Id(205)
-WIDGET_VOLUME_ID :: ui.Focus_Id(206)
-WIDGET_BACKEND_ID :: ui.Focus_Id(207)
 
 MARKDOWN_SAMPLE ::
 	`# Markdown widget
@@ -254,12 +263,14 @@ draw_nav :: proc(sh: i32) {
 
 	for s in Section {
 		style := ui.Btn_Style.Primary if s == section else .Ghost
-		if ui.btn(
+		if ui.button_at(
 			ui_frame,
-			ui.ui_frame_sc(ui_frame, 10),
-			y,
-			w - ui.ui_frame_sc(ui_frame, 20),
-			ui.ui_frame_sc(ui_frame, 28),
+			{
+				ui.ui_frame_sc(ui_frame, 10),
+				y,
+				w - ui.ui_frame_sc(ui_frame, 20),
+				ui.ui_frame_sc(ui_frame, 28),
+			},
 			SECTION_NAMES[s],
 			style,
 		) {
@@ -270,12 +281,14 @@ draw_nav :: proc(sh: i32) {
 	}
 
 	y = sh - ui.ui_frame_sc(ui_frame, 140)
-	if ui.btn(
+	if ui.button_at(
 		ui_frame,
-		ui.ui_frame_sc(ui_frame, 10),
-		y,
-		w - ui.ui_frame_sc(ui_frame, 20),
-		ui.ui_frame_sc(ui_frame, 26),
+		{
+			ui.ui_frame_sc(ui_frame, 10),
+			y,
+			w - ui.ui_frame_sc(ui_frame, 20),
+			ui.ui_frame_sc(ui_frame, 26),
+		},
 		"Light theme" if dark else "Dark theme",
 	) {
 		dark = !dark
@@ -283,36 +296,42 @@ draw_nav :: proc(sh: i32) {
 		apply_gallery_theme()
 	}
 	y += ui.ui_frame_sc(ui_frame, 32)
-	if ui.btn(
+	if ui.button_at(
 		ui_frame,
-		ui.ui_frame_sc(ui_frame, 10),
-		y,
-		w - ui.ui_frame_sc(ui_frame, 20),
-		ui.ui_frame_sc(ui_frame, 26),
+		{
+			ui.ui_frame_sc(ui_frame, 10),
+			y,
+			w - ui.ui_frame_sc(ui_frame, 20),
+			ui.ui_frame_sc(ui_frame, 26),
+		},
 		"Standard contrast" if high_contrast else "High contrast",
 	) {
 		high_contrast = !high_contrast
 		apply_gallery_theme()
 	}
 	y += ui.ui_frame_sc(ui_frame, 32)
-	if ui.btn(
+	if ui.button_at(
 		ui_frame,
-		ui.ui_frame_sc(ui_frame, 10),
-		y,
-		w - ui.ui_frame_sc(ui_frame, 20),
-		ui.ui_frame_sc(ui_frame, 26),
+		{
+			ui.ui_frame_sc(ui_frame, 10),
+			y,
+			w - ui.ui_frame_sc(ui_frame, 20),
+			ui.ui_frame_sc(ui_frame, 26),
+		},
 		"Motion: reduced" if reduced_motion else "Motion: full",
 	) {
 		reduced_motion = !reduced_motion
 		apply_gallery_theme()
 	}
 	y += ui.ui_frame_sc(ui_frame, 32)
-	if ui.btn(
+	if ui.button_at(
 		ui_frame,
-		ui.ui_frame_sc(ui_frame, 10),
-		y,
-		w - ui.ui_frame_sc(ui_frame, 20),
-		ui.ui_frame_sc(ui_frame, 26),
+		{
+			ui.ui_frame_sc(ui_frame, 10),
+			y,
+			w - ui.ui_frame_sc(ui_frame, 20),
+			ui.ui_frame_sc(ui_frame, 26),
+		},
 		"UI scale\u2026",
 	) {
 		settings_open = true
@@ -376,24 +395,28 @@ draw_content :: proc(sw, sh: i32) {
 }
 
 draw_buttons :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(ui_frame, x, y0, w, "BUTTON STYLES")
+	y := ui.section_header_at(ui_frame, {x, y0, w, 0}, "BUTTON STYLES")
 	bw := ui.ui_frame_sc(ui_frame, 120)
 	bh := ui.ui_frame_sc(ui_frame, 30)
 	gap := ui.ui_frame_sc(ui_frame, 10)
-	if ui.btn(ui_frame, x, y, bw, bh, "Primary", ui.Btn_Style.Primary) do click_count += 1
-	if ui.btn(ui_frame, x + (bw + gap), y, bw, bh, "Secondary", ui.Btn_Style.Secondary) {
+	if ui.button_at(ui_frame, {x, y, bw, bh}, "Primary", ui.Btn_Style.Primary) do click_count += 1
+	if ui.button_at(ui_frame, {x + (bw + gap), y, bw, bh}, "Secondary", ui.Btn_Style.Secondary) {
 		click_count += 1
 	}
-	if ui.btn(ui_frame, x + (bw + gap) * 2, y, bw, bh, "Danger", ui.Btn_Style.Danger) {
+	if ui.button_at(ui_frame, {x + (bw + gap) * 2, y, bw, bh}, "Danger", ui.Btn_Style.Danger) {
 		click_count += 1
 	}
-	if ui.btn(ui_frame, x + (bw + gap) * 3, y, bw, bh, "Ghost", ui.Btn_Style.Ghost) {
+	if ui.button_at(ui_frame, {x + (bw + gap) * 3, y, bw, bh}, "Ghost", ui.Btn_Style.Ghost) {
 		click_count += 1
 	}
 	y += bh + gap
-	ui.btn(ui_frame, x, y, bw, bh, "Disabled", ui.Btn_Style.Primary, enabled = false)
-	if ui.icon_btn(ui_frame, x + bw + gap, y, bh, "\u2715") do click_count += 1
-	if ui.back_btn(ui_frame, x + bw + gap + bh + gap, y + ui.ui_frame_sc(ui_frame, 4), "Back") {
+	ui.button_at(ui_frame, {x, y, bw, bh}, "Disabled", ui.Btn_Style.Primary, enabled = false)
+	if ui.icon_btn_at(ui_frame, {x + bw + gap, y, bh, 0}, "\u2715") do click_count += 1
+	if ui.back_btn_at(
+		ui_frame,
+		{x + bw + gap + bh + gap, y + ui.ui_frame_sc(ui_frame, 4), 0, 0},
+		"Back",
+	) {
 		click_count += 1
 	}
 	y += bh + gap
@@ -402,16 +425,17 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	ui.text(ui_frame, count, x, y, .Label, .Secondary)
 	y += ui.ui_frame_sc(ui_frame, 30)
 
-	y = ui.section_header(ui_frame, x, y, w, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
+	y = ui.section_header_at(
+		ui_frame,
+		{x, y, w, 0},
+		"KEYBOARD FOCUS (Tab cycles, Space/Enter activates)",
+	)
 	ui.form_focus_cycle(ui_frame, &focus_slot, 3)
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Focusable %d", i + 1)
-		if ui.btn(
+		if ui.button_at(
 			ui_frame,
-			x + i32(i) * (bw + gap),
-			y,
-			bw,
-			bh,
+			{x + i32(i) * (bw + gap), y, bw, bh},
 			label,
 			focus = ui.Focus_Opt{&focus_slot, i + 1},
 		) {
@@ -420,14 +444,12 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 	}
 	y += bh + ui.ui_frame_sc(ui_frame, 16)
 
-	y = ui.section_header(ui_frame, x, y, w, "COLLAPSIBLE HEADERS")
+	y = ui.section_header_at(ui_frame, {x, y, w, 0}, "COLLAPSIBLE HEADERS")
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Section %d", i + 1)
-		header := ui.collapsible_header_with(
+		header := ui.collapsible_header_at(
 			ui_frame,
-			x,
-			y,
-			w,
+			{x, y, w, 0},
 			label,
 			&headers_open[i],
 			{
@@ -453,27 +475,28 @@ draw_buttons :: proc(x, y0, w: i32) -> i32 {
 }
 
 draw_inputs :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(
+	y := ui.section_header_at(
 		ui_frame,
-		x,
-		y0,
-		w,
+		{x, y0, w, 0},
 		"TEXT INPUTS (Input_Box bundle: builder + caret + undo + pills)",
 	)
 	iw := min(w, ui.ui_frame_sc(ui_frame, 420))
 
 	state := &input_state
 	ui.begin(&state.ctx, ui_frame, {x, y, iw, ui.ui_frame_sc(ui_frame, 600)}, gap = .SM)
+	// One scope per section: identity is composed, never hand-numbered, so
+	// adding or reordering a field cannot move focus to a different control.
+	ui.scope_begin(&state.ctx, "inputs")
 	ui.text_input(
 		&state.ctx,
-		INPUT_NAME_ID,
+		ui.id(&state.ctx, "name"),
 		&state.name,
 		"Your name (undo, selection, spellcheck)",
 		semantics = ui.Text_Input_Semantics{name = "Name"},
 	)
 	ui.text_input(
 		&state.ctx,
-		INPUT_PASS_ID,
+		ui.id(&state.ctx, "password"),
 		&state.pass,
 		"Password (masked)",
 		masked = true,
@@ -481,14 +504,14 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 	)
 	ui.text_input(
 		&state.ctx,
-		INPUT_NOTES_ID,
+		ui.id(&state.ctx, "notes"),
 		&state.notes,
 		"Notes\u2026 (Shift+Enter for newlines)",
 		height = 90,
 		semantics = ui.Text_Input_Semantics{name = "Notes"},
 	)
 
-	if ui.button(&state.ctx, INPUT_RESET_ID, "Reset all") {
+	if ui.button(&state.ctx, ui.id(&state.ctx, "reset"), "Reset all") {
 		ui.input_box_reset(&state.name)
 		ui.input_box_reset(&state.pass)
 		ui.input_box_reset(&state.notes)
@@ -507,7 +530,8 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 		ui.ui_frame_theme(ui_frame).fg_secondary,
 	)
 
-	end_y := ui.remaining(&state.ctx.layout).y
+	ui.scope_end(&state.ctx)
+	end_y := ui.remaining_rect(&state.ctx).y
 	ui.end(&state.ctx)
 	return end_y + ui.ui_frame_sc(ui_frame, 24)
 }
@@ -515,13 +539,13 @@ draw_inputs :: proc(x, y0, w: i32) -> i32 {
 draw_widget_choices :: proc(state: ^Widget_State) {
 	assert(state != nil, "draw_widget_choices: nil state")
 	ui.row_begin(&state.ctx, 32, gap = .SM)
-	ui.checkbox(&state.ctx, WIDGET_ENABLE_ID, "Enable widgets", &state.check_a)
-	ui.checkbox(&state.ctx, WIDGET_VERBOSE_ID, "Verbose logs", &state.check_b)
+	ui.checkbox(&state.ctx, ui.id(&state.ctx, "enable"), "Enable widgets", &state.check_a)
+	ui.checkbox(&state.ctx, ui.id(&state.ctx, "verbose"), "Verbose logs", &state.check_b)
 	ui.row_end(&state.ctx)
 	ui.row_begin(&state.ctx, 32, gap = .SM)
-	ui.radio(&state.ctx, WIDGET_SMALL_ID, "Small", &state.radio_choice, 0)
-	ui.radio(&state.ctx, WIDGET_MEDIUM_ID, "Medium", &state.radio_choice, 1)
-	ui.radio(&state.ctx, WIDGET_LARGE_ID, "Large", &state.radio_choice, 2)
+	ui.radio(&state.ctx, ui.id(&state.ctx, "small"), "Small", &state.radio_choice, 0)
+	ui.radio(&state.ctx, ui.id(&state.ctx, "medium"), "Medium", &state.radio_choice, 1)
+	ui.radio(&state.ctx, ui.id(&state.ctx, "large"), "Large", &state.radio_choice, 2)
 	ui.row_end(&state.ctx)
 }
 
@@ -537,7 +561,7 @@ draw_widget_volume :: proc(state: ^Widget_State) {
 		0,
 		100,
 		5,
-		ui.focus(&state.ctx, WIDGET_VOLUME_ID),
+		ui.focus(&state.ctx, ui.id(&state.ctx, "volume")),
 	)
 	ui.tooltip(
 		ui_frame,
@@ -557,149 +581,75 @@ draw_widget_volume :: proc(state: ^Widget_State) {
 
 draw_widget_form_controls :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_form_controls: nil state")
-	y := ui.section_header(
+	y := ui.section_header_at(
 		ui_frame,
-		x,
-		y0,
-		w,
+		{x, y0, w, 0},
 		"FORM CONTROLS (checkbox / radio / slider / dropdown)",
 	)
 	ui.begin(&state.ctx, ui_frame, {x, y, w, ui.ui_frame_sc(ui_frame, 400)}, gap = .SM)
+	ui.scope_begin(&state.ctx, "form")
 	draw_widget_choices(state)
 	draw_widget_volume(state)
 	backends := []string{"Metal", "Vulkan", "D3D12", "WebGPU"}
 	ui.dropdown(
 		&state.ctx,
-		WIDGET_BACKEND_ID,
+		ui.id(&state.ctx, "backend"),
 		backends,
 		&state.dd_selected,
 		&state.dropdown,
 		a11y_label = "Graphics backend",
 	)
-	y = ui.remaining(&state.ctx.layout).y + ui.ui_frame_sc(ui_frame, 14)
+	ui.scope_end(&state.ctx)
+	y = ui.remaining_rect(&state.ctx).y + ui.ui_frame_sc(ui_frame, 14)
 	ui.end(&state.ctx)
 	return y
 }
 
-draw_widget_progress :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(ui_frame, x, y0, w, "PROGRESS / SPINNER / PILLS")
-	ui.spinner(
-		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 16),
-		y + ui.ui_frame_sc(ui_frame, 16),
-		ui.ui_frame_scf(ui_frame, 14),
-	)
-	ui.spinner_with(
-		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 48),
-		y + ui.ui_frame_sc(ui_frame, 16),
-		{
-			style = .Orbit_Dots,
-			radius = ui.ui_frame_scf(ui_frame, 10),
-			dot_radius = ui.ui_frame_scf(ui_frame, 2.5),
-			speed = 6,
-		},
-	)
-	ui.progress_bar(
-		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 80),
-		y + ui.ui_frame_sc(ui_frame, 4),
-		ui.ui_frame_sc(ui_frame, 200),
-		ui.ui_frame_sc(ui_frame, 8),
-		0.65,
-		ui.ui_frame_theme(ui_frame).fg_accent,
-	)
-	ui.progress_bar_animated(
-		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 80),
-		y + ui.ui_frame_sc(ui_frame, 24),
-		ui.ui_frame_sc(ui_frame, 200),
-		ui.ui_frame_sc(ui_frame, 8),
-		progress_frac,
-		&progress_anim,
-		ui.ui_frame_theme(ui_frame).fg_success,
-	)
-	ui.progress_bar_with(
-		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 296),
-		y + ui.ui_frame_sc(ui_frame, 4),
-		ui.ui_frame_sc(ui_frame, 8),
-		ui.ui_frame_sc(ui_frame, 32),
-		0.65,
-		ui.ui_frame_theme(ui_frame).fg_tool,
-		{orientation = .Vertical, label = "Vertical progress"},
-	)
-	if ui.btn(
-		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 320),
-		y + ui.ui_frame_sc(ui_frame, 8),
-		ui.ui_frame_sc(ui_frame, 90),
-		ui.ui_frame_sc(ui_frame, 24),
-		"Replay",
-	) {
-		progress_anim = 0
-	}
-	return y + ui.ui_frame_sc(ui_frame, 48)
+// The progress / spinner / pill section is pure facade: every widget carves
+// its own slot from a Ui, so no call site does arithmetic on x/y/w/h.
+draw_widget_progress :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
+	assert(state != nil, "draw_widget_progress: nil state")
+	u := &state.progress_ctx
+	theme := ui.ui_frame_theme(ui_frame)
+	ui.begin(u, ui_frame, {x, y0, w, ui.ui_frame_sc(ui_frame, 200)}, gap = .SM)
+	ui.scope_begin(u, "progress")
+	_ = ui.section_header(u, "PROGRESS / SPINNER / PILLS")
+
+	ui.row_begin(u, 34, gap = .MD, align = .Start)
+	ui.spinner(u, 28)
+	ui.spinner(u, 20, {style = .Orbit_Dots, dot_radius = 2.5, speed = 6})
+	_ = ui.status_pill(u, "active", theme.fg_success)
+	_ = ui.status_pill(u, "warning", theme.fg_tool)
+	_ = ui.status_pill(u, "error", theme.fg_error)
+	ui.row_end(u)
+
+	ui.progress_bar(u, 0.65, theme.fg_accent)
+	ui.progress_bar_animated(u, progress_frac, &progress_anim, theme.fg_success)
+
+	ui.row_begin(u, 30, gap = .SM, align = .Start)
+	if ui.button(u, ui.id(u, "replay"), "Replay") do progress_anim = 0
+	ui.row_end(u)
+
+	ui.scope_end(u)
+	end_y := ui.remaining_rect(u).y
+	ui.end(u)
+	return end_y + ui.ui_frame_sc(ui_frame, 16)
 }
 
-draw_widget_status_pills :: proc(x, y: i32) -> i32 {
-	px := x
-	px +=
-		ui.status_pill(
-			ui_frame,
-			"active",
-			px,
-			y,
-			ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
-			ui.ui_frame_theme(ui_frame).fg_success,
-		) +
-		ui.ui_frame_sc(ui_frame, 8)
-	px +=
-		ui.status_pill(
-			ui_frame,
-			"warning",
-			px,
-			y,
-			ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
-			ui.ui_frame_theme(ui_frame).fg_tool,
-		) +
-		ui.ui_frame_sc(ui_frame, 8)
-	ui.status_pill(
-		ui_frame,
-		"error",
-		px,
-		y,
-		ui.ui_frame_metrics(ui_frame).FONT_SIZE_LABEL,
-		ui.ui_frame_theme(ui_frame).fg_error,
-	)
-	return y + ui.ui_frame_sc(ui_frame, 34)
-}
-
-draw_widget_kv_rows :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(ui_frame, x, y0, w, "KV ROWS + LIST ROWS")
+// The key/value rows are facade too: kv_row spans the container width, so the
+// caller never measures the value to right-align it.
+draw_widget_kv_rows :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
+	assert(state != nil, "draw_widget_kv_rows: nil state")
+	u := &state.kv_ctx
+	theme := ui.ui_frame_theme(ui_frame)
 	width := min(w, ui.ui_frame_sc(ui_frame, 360))
-	ui.kv_row_frame(
-		ui_frame,
-		x,
-		y,
-		width,
-		"Renderer",
-		"WebGPU",
-		ui.ui_frame_theme(ui_frame).fg_secondary,
-		ui.ui_frame_theme(ui_frame).fg_primary,
-	)
-	y += ui.ui_frame_sc(ui_frame, 20)
-	ui.kv_row_frame(
-		ui_frame,
-		x,
-		y,
-		width,
-		"State model",
-		"caller-owned",
-		ui.ui_frame_theme(ui_frame).fg_secondary,
-		ui.ui_frame_theme(ui_frame).fg_primary,
-	)
-	return y + ui.ui_frame_sc(ui_frame, 26)
+	ui.begin(u, ui_frame, {x, y0, width, ui.ui_frame_sc(ui_frame, 120)}, gap = .XS)
+	_ = ui.section_header(u, "KV ROWS + LIST ROWS")
+	ui.kv_row(u, "Renderer", "WebGPU", theme.fg_secondary, theme.fg_primary)
+	ui.kv_row(u, "State model", "caller-owned", theme.fg_secondary, theme.fg_primary)
+	end_y := ui.remaining_rect(u).y
+	ui.end(u)
+	return end_y + ui.ui_frame_sc(ui_frame, 10)
 }
 
 draw_widget_backend_list :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
@@ -735,7 +685,12 @@ draw_widget_backend_list :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 				"Rendering backend option",
 			},
 		)
-		ui.list_row_bg(ui_frame, ui.Rect(rect), row.selected, row.hovered)
+		ui.list_row_bg_at(
+			ui_frame,
+			{i32(rect.x), i32(rect.y), i32(rect.width), i32(rect.height)},
+			row.selected,
+			row.hovered,
+		)
 		if row.activated do state.list_activated = i
 		ui.text(
 			ui_frame,
@@ -764,7 +719,7 @@ draw_widget_backend_list :: proc(x, y0, w: i32, state: ^Widget_State) -> i32 {
 }
 
 draw_widget_truncation_card :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(ui_frame, x, y0, w, "CARD + SHADOW + TRUNCATION")
+	y := ui.section_header_at(ui_frame, {x, y0, w, 0}, "CARD + SHADOW + TRUNCATION")
 	card := rl.Rectangle {
 		f32(x),
 		f32(y),
@@ -805,7 +760,7 @@ draw_widget_truncation_card :: proc(x, y0, w: i32) -> i32 {
 }
 
 draw_widget_fit_card :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(ui_frame, x, y0, w, "FIT-CONTENT CARD")
+	y := ui.section_header_at(ui_frame, {x, y0, w, 0}, "FIT-CONTENT CARD")
 	fit_w := min(w, ui.ui_frame_sc(ui_frame, 360))
 	pad := ui.ui_frame_sc(ui_frame, 12)
 	column: ui.Fit_Column
@@ -829,20 +784,17 @@ draw_widget_fit_card :: proc(x, y0, w: i32) -> i32 {
 draw_widgets :: proc(x, y0, w: i32) -> i32 {
 	state := &widget_state
 	y := draw_widget_form_controls(x, y0, w, state)
-	y = draw_widget_progress(x, y, w)
-	y = draw_widget_status_pills(x, y)
-	y = draw_widget_kv_rows(x, y, w)
+	y = draw_widget_progress(x, y, w, state)
+	y = draw_widget_kv_rows(x, y, w, state)
 	y = draw_widget_backend_list(x, y, w, state)
 	y = draw_widget_truncation_card(x, y, w)
 	return draw_widget_fit_card(x, y, w)
 }
 
 draw_charts :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(
+	y := ui.section_header_at(
 		ui_frame,
-		x,
-		y0,
-		w,
+		{x, y0, w, 0},
 		"LINE + BAR + SPARKLINE (hover for overlay tooltips)",
 	)
 	cw := min(w, ui.ui_frame_sc(ui_frame, 560))
@@ -850,42 +802,42 @@ draw_charts :: proc(x, y0, w: i32) -> i32 {
 		{name = "Revenue", values = revenue[:]},
 		{name = "Costs", values = costs[:]},
 	}
-	ui.line_chart(
+	ui.line_chart_at(
 		ui_frame,
-		x,
-		y,
-		cw,
-		ui.ui_frame_sc(ui_frame, 240),
+		{x, y, cw, ui.ui_frame_sc(ui_frame, 240)},
 		series[:],
 		&line_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true, fill = true},
 	)
 	y += ui.ui_frame_sc(ui_frame, 252)
-	ui.bar_chart(
+	ui.bar_chart_at(
 		ui_frame,
-		x,
-		y,
-		cw,
-		ui.ui_frame_sc(ui_frame, 220),
+		{x, y, cw, ui.ui_frame_sc(ui_frame, 220)},
 		series[:],
 		&bar_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
 	y += ui.ui_frame_sc(ui_frame, 232)
 	ui.text(ui_frame, "sparkline:", x, y + ui.ui_frame_sc(ui_frame, 6), .Label, .Secondary)
-	ui.sparkline(
+	ui.sparkline_at(
 		ui_frame,
-		x + ui.ui_frame_sc(ui_frame, 80),
-		y,
-		ui.ui_frame_sc(ui_frame, 140),
-		ui.ui_frame_sc(ui_frame, 28),
+		{
+			x + ui.ui_frame_sc(ui_frame, 80),
+			y,
+			ui.ui_frame_sc(ui_frame, 140),
+			ui.ui_frame_sc(ui_frame, 28),
+		},
 		spark[:],
 	)
 	return y + ui.ui_frame_sc(ui_frame, 40)
 }
 
 draw_layout_demo :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(ui_frame, x, y0, w, "SINGLE-PASS LAYOUT (weights + flex + flow)")
+	y := ui.section_header_at(
+		ui_frame,
+		{x, y0, w, 0},
+		"SINGLE-PASS LAYOUT (weights + flex + flow)",
+	)
 	l: ui.Layout
 	lw := min(w, ui.ui_frame_sc(ui_frame, 520))
 	ui.layout_begin(&l, x, y, lw, ui.ui_frame_sc(ui_frame, 248), gap = ui.ui_frame_sc(ui_frame, 8))
@@ -981,7 +933,7 @@ draw_overlay_controls :: proc(x, y: i32) -> i32 {
 	for index in 0 ..< 3 {
 		label := fmt.tprintf("Shielded %d", index + 1)
 		button_y := y + i32(index) * (button_h + ui.ui_frame_sc(ui_frame, 8))
-		if ui.btn(ui_frame, x, button_y, button_w, button_h, label) do shielded_clicks += 1
+		if ui.button_at(ui_frame, {x, button_y, button_w, button_h}, label) do shielded_clicks += 1
 	}
 	info_y := y + 3 * (button_h + ui.ui_frame_sc(ui_frame, 8))
 	summary := fmt.tprintf(
@@ -990,23 +942,22 @@ draw_overlay_controls :: proc(x, y: i32) -> i32 {
 	)
 	ui.text(ui_frame, summary, x, info_y, .Label, .Secondary)
 	action_x := x + button_w + ui.ui_frame_sc(ui_frame, 100)
-	if ui.btn(
+	if ui.button_at(
 		ui_frame,
-		action_x,
-		y,
-		ui.ui_frame_sc(ui_frame, 150),
-		button_h,
+		{action_x, y, ui.ui_frame_sc(ui_frame, 150), button_h},
 		"Toggle popup",
 		ui.Btn_Style.Primary,
 	) {
 		popup_open = !popup_open
 	}
-	if ui.btn(
+	if ui.button_at(
 		ui_frame,
-		action_x,
-		y + button_h + ui.ui_frame_sc(ui_frame, 8),
-		ui.ui_frame_sc(ui_frame, 150),
-		button_h,
+		{
+			action_x,
+			y + button_h + ui.ui_frame_sc(ui_frame, 8),
+			ui.ui_frame_sc(ui_frame, 150),
+			button_h,
+		},
 		"Open modal",
 	) {
 		about_modal.open = true
@@ -1070,12 +1021,14 @@ draw_overlay_modal :: proc() {
 		ui.ui_frame_metrics(ui_frame).FONT_SIZE_BODY,
 		ui.ui_frame_metrics(ui_frame).LINE_HEIGHT,
 	)
-	if ui.btn(
+	if ui.button_at(
 		ui_frame,
-		body.x + ui.ui_frame_metrics(ui_frame).PADDING,
-		body.y + body.h - ui.ui_frame_sc(ui_frame, 44),
-		ui.ui_frame_sc(ui_frame, 90),
-		ui.ui_frame_sc(ui_frame, 28),
+		{
+			body.x + ui.ui_frame_metrics(ui_frame).PADDING,
+			body.y + body.h - ui.ui_frame_sc(ui_frame, 44),
+			ui.ui_frame_sc(ui_frame, 90),
+			ui.ui_frame_sc(ui_frame, 28),
+		},
 		"Close",
 		ui.Btn_Style.Primary,
 	) {
@@ -1085,11 +1038,9 @@ draw_overlay_modal :: proc() {
 }
 
 draw_overlay_demo :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(
+	y := ui.section_header_at(
 		ui_frame,
-		x,
-		y0,
-		w,
+		{x, y0, w, 0},
 		"OVERLAY + INPUT ROUTING (popup occludes the buttons under it)",
 	)
 	info_y := draw_overlay_controls(x, y)
@@ -1170,11 +1121,9 @@ draw_demo_popup :: proc(x, y: i32) {
 }
 
 draw_stress :: proc(x, y0, w: i32) -> i32 {
-	y := ui.section_header(
+	y := ui.section_header_at(
 		ui_frame,
-		x,
-		y0,
-		w,
+		{x, y0, w, 0},
 		"STRESS: 1000 BUTTONS (batcher, hover-anim bound, culling)",
 	)
 	cols := max(int(w / ui.ui_frame_sc(ui_frame, 110)), 1)
@@ -1186,7 +1135,7 @@ draw_stress :: proc(x, y0, w: i32) -> i32 {
 		bx := x + i32(col) * (bw + ui.ui_frame_sc(ui_frame, 6))
 		by := y + i32(row) * (bh + ui.ui_frame_sc(ui_frame, 6))
 		label := fmt.tprintf("btn %d", i)
-		if ui.btn(ui_frame, bx, by, bw, bh, label) {
+		if ui.button_at(ui_frame, {bx, by, bw, bh}, label) {
 			stress_clicked = i
 		}
 	}

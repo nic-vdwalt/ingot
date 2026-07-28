@@ -70,7 +70,7 @@ frame :: proc(app: ^ui_gfx.App, ui_frame: ^ui.Ui_Frame, userdata: rawptr) {
 		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
-	if ui.btn(ui_frame, sw - 140, 16, 120, 30, "Light theme" if dark else "Dark theme") {
+	if ui.button_at(ui_frame, {sw - 140, 16, 120, 30}, "Light theme" if dark else "Dark theme") {
 		dark = !dark
 		ui.ui_runtime_set_theme(
 			ui_gfx.app_ui_runtime(app),
@@ -82,12 +82,9 @@ frame :: proc(app: ^ui_gfx.App, ui_frame: ^ui.Ui_Frame, userdata: rawptr) {
 		{name = "Revenue", values = revenue[:]},
 		{name = "Costs", values = costs[:]},
 	}
-	ui.line_chart(
+	ui.line_chart_at(
 		ui_frame,
-		24,
-		64,
-		580,
-		300,
+		{24, 64, 580, 300},
 		line_series[:],
 		&line_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true, fill = true},
@@ -97,12 +94,9 @@ frame :: proc(app: ^ui_gfx.App, ui_frame: ^ui.Ui_Frame, userdata: rawptr) {
 		{name = "Total h", values = hours[:]},
 		{name = "Billable h", values = billable[:]},
 	}
-	ui.bar_chart(
+	ui.bar_chart_at(
 		ui_frame,
-		24,
-		396,
-		580,
-		280,
+		{24, 396, 580, 280},
 		bar_series[:],
 		&bar_state,
 		{labels = DAYS[:], show_grid = true, show_axes = true, show_legend = true},
@@ -142,5 +136,5 @@ stat_card :: proc(
 		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
-	ui.sparkline(frame, x + w - 130, y + h / 2 - 16, 110, 32, values, col)
+	ui.sparkline_at(frame, {x + w - 130, y + h / 2 - 16, 110, 32}, values, col)
 }

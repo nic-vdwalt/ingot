@@ -199,7 +199,7 @@ text_input_survives_degenerate_rects :: proc(t: ^testing.T) {
 				if w > 0 && h > 0 do continue
 				box: Input_Box
 				defer input_box_destroy(&box)
-				_ = input_at(frame, 0, 0, w, h, &box, "placeholder", true)
+				_ = text_input_at(frame, {0, 0, w, h}, &box, "placeholder", true)
 			}
 		}
 	})
@@ -214,7 +214,7 @@ text_input_survives_hostile_labels :: proc(t: ^testing.T) {
 			box: Input_Box
 			defer input_box_destroy(&box)
 			strings.write_string(&box.sb, label)
-			_ = input_at(frame, 0, 0, 200, 24, &box, label, true)
+			_ = text_input_at(frame, {0, 0, 200, 24}, &box, label, true)
 		}
 	})
 	testing.expect_value(t, clip_depth, 0)

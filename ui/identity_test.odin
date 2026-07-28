@@ -63,7 +63,7 @@ generated_focus_survives_reorder :: proc(t: ^testing.T) {
 	focus(&u, id(&u, u64(10)))
 	scope_end(&u)
 	end(&u)
-	testing.expect_value(t, u.stable_focus.active, b)
+	testing.expect_value(t, u.stable_focus.active, focus_widget_id(b))
 }
 
 @(test)

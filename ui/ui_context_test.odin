@@ -249,7 +249,7 @@ test_stable_focus_survives_insert_and_reorder :: proc(t: ^testing.T) {
 	facade_frame(&runtime, &frame)
 	defer facade_frame_end(&runtime, &frame)
 	u: Ui
-	a, b, inserted := focus_id(11), focus_id(22), focus_id(33)
+	a, b, inserted := widget_id(u64(11)), widget_id(u64(22)), widget_id(u64(33))
 	begin(&u, &frame, {0, 0, 100, 100})
 	focus(&u, a)
 	focus_opt_set(focus(&u, b))
@@ -260,7 +260,7 @@ test_stable_focus_survives_insert_and_reorder :: proc(t: ^testing.T) {
 	focus(&u, b)
 	focus(&u, a)
 	end(&u)
-	testing.expect_value(t, u.stable_focus.active, b)
+	testing.expect_value(t, u.stable_focus.active, focus_widget_id(b))
 	testing.expect_value(t, u.stable_count, 3)
 }
 
@@ -271,7 +271,7 @@ test_stable_focus_clears_missing_target :: proc(t: ^testing.T) {
 	facade_frame(&runtime, &frame)
 	defer facade_frame_end(&runtime, &frame)
 	u: Ui
-	a, b := focus_id(1), focus_id(2)
+	a, b := widget_id(u64(1)), widget_id(u64(2))
 	begin(&u, &frame, {0, 0, 100, 100})
 	focus(&u, a)
 	focus_opt_set(focus(&u, b))

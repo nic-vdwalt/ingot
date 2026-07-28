@@ -36,8 +36,8 @@ _ :: rl
 _ :: ui
 _ :: ui_gfx
 
-// CAPTURE enables the media harness (native only; see scripts/capture-media.sh).
-CAPTURE :: #config(INGOT_CAPTURE, false)
+// CAPTURE is declared in main.odin so the js target, which excludes this file,
+// can still compile main.odin's `when CAPTURE` guards.
 
 when CAPTURE {
 	// Fixed output geometry: identical PNGs regardless of host display.

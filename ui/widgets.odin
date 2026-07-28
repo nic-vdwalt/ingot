@@ -637,15 +637,8 @@ btn_gloss :: proc(frame: ^Ui_Frame, theme: ^Theme, rect: Rectangle) {
 // slot, the ring draws while focused, and Space/Enter activates.
 //
 // Widget tiers — see docs/ui-state.md#widget-tiers:
-//   *_at  (supported) explicit x, y, w, h for application-owned layout.
-//   *_ui  (supported) carves a bounded slot and registers focus only when visible.
-btn :: proc {
-	btn_at,
-	btn_at_state,
-	btn_ui,
-	btn_ui_id,
-}
-
+//   button      facade: a ^Ui plus a Widget_Id, carving a bounded slot.
+//   button_at   explicit: a ^Ui_Frame plus an application-owned Rect_I32.
 button :: proc(
 	u: ^Ui,
 	id: Widget_Id,
@@ -657,47 +650,8 @@ button :: proc(
 	assert(id != WIDGET_ID_NONE, "button: zero stable id")
 	assert(label != "", "button: empty accessible label")
 	r := btn_slot_px(u, label)
-	focus := focus(u, id) if enabled && slot_visible(r) else Focus_Opt{}
-	return btn_at(
-		u.frame,
-		r.x,
-		r.y,
-		r.w,
-		r.h,
-		label,
-		style,
-		enabled = enabled,
-		focus = focus,
-		widget = id,
-	)
-}
-
-button_at :: proc(
-	frame: ^Ui_Frame,
-	rect: Rect_I32,
-	label: string,
-	style: Btn_Style = .Secondary,
-	font_size: i32 = 0,
-	enabled: bool = true,
-	web_form_id: string = "",
-	focus: Focus_Opt = {},
-	widget: Widget_Id = WIDGET_ID_NONE,
-) -> bool {
-	assert(frame != nil, "button_at: nil frame")
-	return btn_at(
-		frame,
-		rect.x,
-		rect.y,
-		rect.w,
-		rect.h,
-		label,
-		style,
-		font_size,
-		enabled,
-		web_form_id,
-		focus,
-		widget,
-	)
+	fo := focus(u, id) if enabled && slot_visible(r) else Focus_Opt{}
+	return button_at(u.frame, r, label, style, enabled = enabled, focus = fo, widget = id)
 }
 
 @(private = "file")
@@ -708,44 +662,6 @@ btn_slot_px :: proc(u: ^Ui, label: string) -> Rect_I32 {
 	width := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
 	assert(width > 0, "btn_slot_px: invalid width")
 	return slot_next_px(u, width, metrics.ROW_H_MD)
-}
-
-// btn_ui sizes to its label (+padding) and auto-registers focus.
-btn_ui :: proc(
-	u: ^Ui,
-	label: string,
-	style: Btn_Style = .Secondary,
-	enabled: bool = true,
-) -> bool {
-	assert(u != nil, "btn_ui: nil u")
-	r := btn_slot_px(u, label)
-	fo := focus_sequential(u) if enabled && slot_visible(r) else Focus_Opt{}
-	return btn_at(u.frame, r.x, r.y, r.w, r.h, label, style, enabled = enabled, focus = fo)
-}
-
-btn_ui_id :: proc(
-	u: ^Ui,
-	id: Widget_Id,
-	label: string,
-	style: Btn_Style = .Secondary,
-	enabled: bool = true,
-) -> bool {
-	assert(u != nil, "btn_ui_id: nil u")
-	r := btn_slot_px(u, label)
-	visible := slot_visible(r)
-	fo := focus(u, id) if enabled && visible else Focus_Opt{}
-	return btn_at(
-		u.frame,
-		r.x,
-		r.y,
-		r.w,
-		r.h,
-		label,
-		style,
-		enabled = enabled,
-		focus = fo,
-		widget = id,
-	)
 }
 
 // Fit a button label to the button box: truncate with an ellipsis when it is
@@ -761,9 +677,9 @@ btn_label_fit :: proc(frame: ^Ui_Frame, label: string, w, font_size: i32) -> (cs
 	return text_c, measure_text_frame(frame, text_c, font_size)
 }
 
-btn_at :: proc(
+button_at :: proc(
 	frame: ^Ui_Frame,
-	x, y, w, h: i32,
+	rect: Rect_I32,
 	label: string,
 	style: Btn_Style = .Secondary,
 	font_size: i32 = 0,
@@ -772,14 +688,15 @@ btn_at :: proc(
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> bool {
-	assert(frame != nil, "btn_at: nil frame")
+	assert(frame != nil, "button_at: nil frame")
 	// Why assert: a nameless control is invisible to assistive tech.
-	assert(label != "", "btn: empty accessible label")
+	assert(label != "", "button_at: empty accessible label")
+	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	metrics := ui_frame_metrics(frame)
 	fs := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
 	style_theme := ui_frame_theme(frame)
-	rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	it := interact(frame, rect)
+	rrect := rect_f32(rect)
+	it := interact(frame, rrect)
 	hovered := enabled && it.hovered
 	clicked := enabled && it.clicked
 	if enabled {
@@ -806,12 +723,12 @@ btn_at :: proc(
 		border = Color{0, 0, 0, 0}
 	}
 
-	draw_rectangle_rounded(frame, rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
-	if style == .Primary && enabled do btn_gloss(frame, style_theme, rect)
+	draw_rectangle_rounded(frame, rrect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
+	if style == .Primary && enabled do btn_gloss(frame, style_theme, rrect)
 	if border.a > 0 {
 		draw_rectangle_rounded_lines_ex(
 			frame,
-			rect,
+			rrect,
 			BTN_ROUNDNESS,
 			BTN_SEGMENTS,
 			BTN_BORDER_W,
@@ -827,14 +744,15 @@ btn_at :: proc(
 
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
-	semantic_push(frame, .Button, {x, y, w, h}, label, sem, focus, widget = widget)
+	semantic_push(frame, .Button, rect, label, sem, focus, widget = widget)
 	return clicked && enabled
 }
 
-btn_at_state :: proc(
+// button_at_state is button_at plus caller-owned hover animation state.
+button_at_state :: proc(
 	frame: ^Ui_Frame,
 	state: ^Button_State,
-	x, y, w, h: i32,
+	rect: Rect_I32,
 	label: string,
 	style: Btn_Style = .Secondary,
 	font_size: i32 = 0,
@@ -843,13 +761,14 @@ btn_at_state :: proc(
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> bool {
-	assert(state != nil, "btn_at_state: nil state")
-	assert(label != "", "btn_at_state: empty accessible label")
+	assert(state != nil, "button_at_state: nil state")
+	assert(label != "", "button_at_state: empty accessible label")
+	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	metrics := ui_frame_metrics(frame)
 	fs := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
 	style_theme := ui_frame_theme(frame)
-	rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	it := interact(frame, rect)
+	rrect := rect_f32(rect)
+	it := interact(frame, rrect)
 	hovered := enabled && it.hovered
 	clicked := enabled && it.clicked
 	if enabled {
@@ -874,12 +793,12 @@ btn_at_state :: proc(
 		fg = style_theme.fg_muted_dim
 		border = Color{0, 0, 0, 0}
 	}
-	draw_rectangle_rounded(frame, rect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
-	if style == .Primary && enabled do btn_gloss(frame, style_theme, rect)
+	draw_rectangle_rounded(frame, rrect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
+	if style == .Primary && enabled do btn_gloss(frame, style_theme, rrect)
 	if border.a > 0 {
 		draw_rectangle_rounded_lines_ex(
 			frame,
-			rect,
+			rrect,
 			BTN_ROUNDNESS,
 			BTN_SEGMENTS,
 			BTN_BORDER_W,
@@ -891,7 +810,7 @@ btn_at_state :: proc(
 	draw_text_frame(frame, label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
-	semantic_push(frame, .Button, {x, y, w, h}, label, sem, focus, widget = widget)
+	semantic_push(frame, .Button, rect, label, sem, focus, widget = widget)
 	return clicked && enabled
 }
 
@@ -1255,10 +1174,14 @@ Spinner_Options :: struct {
 	animation_interval: f64,
 }
 
-spinner_with :: proc(frame: ^Ui_Frame, cx, cy: i32, options: Spinner_Options) {
-	assert(frame != nil && frame.open, "spinner_with: invalid frame")
-	assert(options.dot_count >= 0, "spinner_with: negative dot count")
-	radius := options.radius
+// spinner_at centres the indicator in rect; the radius is half the smaller
+// side unless options.radius overrides it.
+spinner_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, options: Spinner_Options = {}) {
+	assert(frame != nil && frame.open, "spinner_at: invalid frame")
+	assert(options.dot_count >= 0, "spinner_at: negative dot count")
+	cx := rect.x + rect.w / 2
+	cy := rect.y + rect.h / 2
+	radius := options.radius if options.radius > 0 else f32(min(rect.w, rect.h)) / 2
 	if ui_frame_drop_degenerate(frame, radius <= 0) do return
 	color := options.color
 	if color == {} || color == THEME_COLOR do color = ui_frame_theme(frame).fg_accent_light
@@ -1306,24 +1229,9 @@ spinner_with :: proc(frame: ^Ui_Frame, cx, cy: i32, options: Spinner_Options) {
 	)
 }
 
-spinner :: proc(
-	frame: ^Ui_Frame,
-	cx, cy: i32,
-	radius: f32,
-	color: Color = THEME_COLOR,
-	segments: i32 = 24,
-) {
-	assert(frame != nil, "spinner: nil frame")
-	spinner_with(
-		frame,
-		cx,
-		cy,
-		{radius = radius, color = color, segments = segments, speed = 6.283185},
-	)
-}
-
-section_header :: proc(frame: ^Ui_Frame, x, y, w: i32, label: string) -> i32 {
-	assert(frame != nil, "section_header: nil frame")
+section_header_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, label: string) -> i32 {
+	assert(frame != nil, "section_header_at: nil frame")
+	x, y, w := rect.x, rect.y, rect.w
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	lc := strings.clone_to_cstring(label, context.temp_allocator)
@@ -1339,14 +1247,22 @@ section_header :: proc(frame: ^Ui_Frame, x, y, w: i32, label: string) -> i32 {
 	return y + metrics.FONT_SIZE_LABEL + ui_frame_sc(frame, 11)
 }
 
-// status_pill draws a pill whose background is the fg color tinted to
-// PILL_TINT_ALPHA. Returns the pill width.
-status_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, color: Color) -> i32 {
+// status_pill_at draws a pill whose background is the fg color tinted to
+// PILL_TINT_ALPHA. Only rect's origin is used: the pill is content-sized, and
+// its measured width is returned so callers can advance a cursor.
+status_pill_at :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	text: string,
+	font_size: i32,
+	color: Color,
+) -> i32 {
+	assert(frame != nil, "status_pill_at: nil frame")
 	return draw_pill(
 		frame,
 		text,
-		x,
-		y,
+		rect.x,
+		rect.y,
 		font_size,
 		color,
 		{color.r, color.g, color.b, PILL_TINT_ALPHA},
@@ -1366,14 +1282,15 @@ Progress_Bar_Options :: struct {
 	widget:      Widget_Id,
 }
 
-progress_bar_with :: proc(
+progress_bar_at :: proc(
 	frame: ^Ui_Frame,
-	x, y, w, h: i32,
+	rect: Rect_I32,
 	fraction: f32,
 	color: Color,
 	options: Progress_Bar_Options = {},
 ) {
-	assert(frame != nil && frame.open, "progress_bar_with: invalid frame")
+	assert(frame != nil && frame.open, "progress_bar_at: invalid frame")
+	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	if ui_frame_drop_degenerate(frame, w <= 0 || h <= 0) do return
 	value := clamp(fraction, 0, 1)
 	track_color := options.track_color
@@ -1406,11 +1323,6 @@ progress_bar_with :: proc(
 	}
 }
 
-// progress_bar preserves the original horizontal progress API.
-progress_bar :: proc(frame: ^Ui_Frame, x, y, w, h: i32, frac: f32, color: Color) {
-	progress_bar_with(frame, x, y, w, h, frac, color)
-}
-
 // eased moves current toward target at `speed` units per second (frame-rate
 // independent exponential ease). Returns the updated value for convenience.
 // Guaranteed to terminate: a step that makes no f32 progress (increment
@@ -1427,60 +1339,63 @@ eased :: proc(current: ^f32, target, dt, speed: f32) -> f32 {
 	return current^
 }
 
-// progress_bar_animated draws a progress bar whose fill eases toward frac.
+// progress_bar_animated_at draws a progress bar whose fill eases toward frac.
 // `anim` is caller-owned eased state (reset it to 0 to replay the fill).
-progress_bar_animated :: proc(
+progress_bar_animated_at :: proc(
 	frame: ^Ui_Frame,
-	x, y, w, h: i32,
+	rect: Rect_I32,
 	frac: f32,
 	anim: ^f32,
 	color: Color,
+	options: Progress_Bar_Options = {},
 ) {
-	assert(frame != nil, "progress_bar_animated: nil frame")
-	assert(anim != nil, "progress_bar_animated: nil anim")
+	assert(frame != nil, "progress_bar_animated_at: nil frame")
+	assert(anim != nil, "progress_bar_animated_at: nil anim")
 	eased(anim, clamp(frac, 0, 1), frame_input(frame).frame_time, 10.0)
 	if abs(clamp(frac, 0, 1) - anim^) >= 0.001 {
 		// Still easing: keep frames coming until the fill settles.
 		request_redraw(frame)
 	}
-	progress_bar(frame, x, y, w, h, anim^, color)
+	progress_bar_at(frame, rect, anim^, color, options)
 }
 
-// icon_btn draws a small square ghost button (for ✕ / ◀ / ▶ style glyphs).
+// icon_btn_at draws a small square ghost button (for ✕ / ◀ / ▶ style glyphs).
 // Returns true if clicked this frame.
-icon_btn :: proc(
+icon_btn_at :: proc(
 	frame: ^Ui_Frame,
-	x, y, size: i32,
+	rect: Rect_I32,
 	label: string,
 	enabled: bool = true,
 	focus: Focus_Opt = {},
+	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> bool {
-	assert(frame != nil, "icon_btn: nil frame")
-	return btn_at(
+	assert(frame != nil, "icon_btn_at: nil frame")
+	return button_at(
 		frame,
-		x,
-		y,
-		size,
-		size,
+		rect,
 		label,
 		.Ghost,
 		ui_frame_metrics(frame).FONT_SIZE_LABEL,
 		enabled,
 		focus = focus,
+		widget = widget,
 	)
 }
 
-kv_row_frame :: proc(
+// kv_row_at draws a key on the left and a right-aligned value inside rect's
+// width. Only the origin and width are used; the row is one text line tall.
+kv_row_at :: proc(
 	frame: ^Ui_Frame,
-	x, y, w: i32,
+	rect: Rect_I32,
 	key, value: string,
 	key_col, val_col: Color,
 	font_size: i32 = 0,
 ) {
-	assert(frame != nil && frame.open, "kv_row_frame: invalid frame")
-	assert(w > 0, "kv_row_frame: invalid width")
+	assert(frame != nil && frame.open, "kv_row_at: invalid frame")
+	assert(rect.w > 0, "kv_row_at: invalid width")
+	x, y, w := rect.x, rect.y, rect.w
 	resolved_font_size := font_size if font_size > 0 else ui_frame_metrics(frame).FONT_SIZE_LABEL
-	assert(resolved_font_size > 0, "kv_row_frame: invalid font size")
+	assert(resolved_font_size > 0, "kv_row_at: invalid font size")
 	value_cstring := strings.clone_to_cstring(value, context.temp_allocator)
 	value_width := measure_text_frame(frame, value_cstring, resolved_font_size)
 	value_x := x + max(w - value_width, 0)
@@ -1491,14 +1406,14 @@ kv_row_frame :: proc(
 	}
 }
 
-// list_row_bg draws the unified rounded row background for hover/selection.
-list_row_bg :: proc(frame: ^Ui_Frame, rect: Rectangle, selected, hovered: bool) {
-	assert(frame != nil, "list_row_bg: nil frame")
+// list_row_bg_at draws the unified rounded row background for hover/selection.
+list_row_bg_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, selected, hovered: bool) {
+	assert(frame != nil, "list_row_bg_at: nil frame")
 	style := ui_frame_theme(frame)
 	if selected {
-		draw_rectangle_rounded(frame, rect, 0.25, 4, style.bg_active)
+		draw_rectangle_rounded(frame, rect_f32(rect), 0.25, 4, style.bg_active)
 	} else if hovered {
-		draw_rectangle_rounded(frame, rect, 0.25, 4, style.bg_hover)
+		draw_rectangle_rounded(frame, rect_f32(rect), 0.25, 4, style.bg_hover)
 	}
 }
 
@@ -1617,19 +1532,19 @@ back_btn_w :: proc(frame: ^Ui_Frame, label: string) -> i32 {
 
 // back_btn draws the standard Ghost-style "← label" navigation button.
 // Returns true if clicked this frame.
-back_btn :: proc(frame: ^Ui_Frame, x, y: i32, label: string, focus: Focus_Opt = {}) -> bool {
-	assert(frame != nil, "back_btn: nil frame")
+// back_btn_at is content-sized: only rect's origin is used, and the width
+// comes from back_btn_w so a caller can reserve the slot before drawing.
+back_btn_at :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	label: string,
+	focus: Focus_Opt = {},
+	widget: Widget_Id = WIDGET_ID_NONE,
+) -> bool {
+	assert(frame != nil, "back_btn_at: nil frame")
 	txt := fmt.tprintf("\u2190 %s", label)
-	return btn_at(
-		frame,
-		x,
-		y,
-		back_btn_w(frame, label),
-		ui_frame_sc(frame, 22),
-		txt,
-		.Ghost,
-		focus = focus,
-	)
+	box := Rect_I32{rect.x, rect.y, back_btn_w(frame, label), ui_frame_sc(frame, 22)}
+	return button_at(frame, box, txt, .Ghost, focus = focus, widget = widget)
 }
 
 // --- standardized collapsible section header -------------------------------
@@ -1649,15 +1564,18 @@ Collapsible_Header_Result :: struct {
 	toggled: bool,
 }
 
-collapsible_header_with :: proc(
+// collapsible_header_at uses rect's origin and width; the row height comes
+// from options.height or the theme default.
+collapsible_header_at :: proc(
 	frame: ^Ui_Frame,
-	x, y, w: i32,
+	rect_in: Rect_I32,
 	label: string,
 	open: ^bool,
 	options: Collapsible_Header_Options = {},
 ) -> Collapsible_Header_Result {
-	assert(frame != nil && frame.open, "collapsible_header_with: invalid frame")
-	assert(open != nil, "collapsible_header_with: nil open state")
+	assert(frame != nil && frame.open, "collapsible_header_at: invalid frame")
+	assert(open != nil, "collapsible_header_at: nil open state")
+	x, y, w := rect_in.x, rect_in.y, rect_in.w
 	if ui_frame_drop_degenerate(frame, w <= 0) do return {next_y = y}
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
@@ -1708,27 +1626,4 @@ collapsible_header_with :: proc(
 		widget = options.widget,
 	)
 	return {next_y = y + height, toggled = toggled}
-}
-
-// collapsible_header preserves the original compact label-and-chevron API.
-collapsible_header :: proc(
-	frame: ^Ui_Frame,
-	x, y, w: i32,
-	label: string,
-	open: ^bool,
-	font_size: i32 = 0,
-	focus: Focus_Opt = {},
-) -> bool {
-	assert(frame != nil, "collapsible_header: nil frame")
-	assert(open != nil, "collapsible_header: nil open")
-	result := collapsible_header_with(
-		frame,
-		x,
-		y,
-		w,
-		label,
-		open,
-		{font_size = font_size, focus = focus},
-	)
-	return result.toggled
 }

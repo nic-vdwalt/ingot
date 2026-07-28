@@ -367,9 +367,11 @@ end :: proc(u: ^Ui) {
 	}
 }
 
-// Sequential focus is order-dependent by construction, so inserting or
-// reordering a control transfers focus to whichever widget inherits its
-// ordinal. Register a Widget_Id from id() / scope_begin() instead.
+// Deprecated: sequential focus is order-dependent by construction, so inserting
+// or reordering a control transfers focus to whichever widget inherits its
+// ordinal. Register a Widget_Id from id() / scope_begin() instead. No widget in
+// this package uses it any more; it survives only for applications mid-migration.
+@(deprecated = "sequential focus is order-dependent; pass a Widget_Id to focus")
 focus_sequential :: proc(u: ^Ui) -> Focus_Opt {
 	assert(u != nil, "focus: nil u")
 	assert(u.open, "focus: frame not open")
@@ -387,13 +389,14 @@ focus :: proc(u: ^Ui, widget: Widget_Id) -> Focus_Opt {
 	assert(widget != WIDGET_ID_NONE, "focus: zero stable id")
 	assert(u.focus_mode != .Sequential, "focus: mixed focus registration")
 	assert(u.stable_seq < MAX_FOCUSABLES, "focus: too many focusables")
+	widget_focus := focus_widget_id(widget)
 	for registered in u.stable_cur[:u.stable_seq] {
-		assert(registered != widget, "focus: duplicate stable id")
+		assert(registered != widget_focus, "focus: duplicate stable id")
 	}
 	u.focus_mode = .Stable
-	u.stable_cur[u.stable_seq] = widget
+	u.stable_cur[u.stable_seq] = widget_focus
 	u.stable_seq += 1
-	return focus_link(&u.stable_focus, widget)
+	return focus_link(&u.stable_focus, widget_focus)
 }
 
 @(private = "package")

@@ -263,10 +263,7 @@ layout_flex_compresses_fit_to_minimum :: proc(t: ^testing.T) {
 layout_flex_constraints_rounding_and_column :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 40, 303, gap = 1)
-	flex_begin(
-		&l,
-		{fit(100, max_size = 60), percent(0.5, max_size = 80), grow(1), grow(2)},
-	)
+	flex_begin(&l, {fit(100, max_size = 60), percent(0.5, max_size = 80), grow(1), grow(2)})
 	a := flex_next(&l)
 	b := flex_next(&l)
 	c := flex_next(&l)

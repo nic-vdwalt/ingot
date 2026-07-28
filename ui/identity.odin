@@ -2,9 +2,21 @@ package ui
 
 import "base:runtime"
 
-Widget_Id :: Focus_Id
-WIDGET_ID_NONE :: Widget_Id(FOCUS_ID_NONE)
+// Widget_Id is the canonical control identity, generated from the active scope
+// stack. It is distinct from Focus_Id so the identity tier can evolve without
+// dragging the focus tier with it: focus_widget_id below is the only place the
+// two meet.
+Widget_Id :: distinct u64
+WIDGET_ID_NONE :: Widget_Id(0)
 MAX_ID_DEPTH :: 16
+
+// focus_widget_id is the single conversion from generated identity to focus
+// identity. Keeping it alone lets the two representations diverge later.
+focus_widget_id :: proc(widget: Widget_Id) -> Focus_Id {
+	assert(widget != WIDGET_ID_NONE, "focus_widget_id: zero widget id")
+	assert(u64(widget) <= u64(max(int)), "focus_widget_id: id exceeds platform int")
+	return Focus_Id(widget)
+}
 
 ID_FNV_OFFSET :: u64(0xcbf29ce484222325)
 ID_FNV_PRIME :: u64(0x00000100000001b3)

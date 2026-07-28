@@ -464,15 +464,16 @@ chart_point_y :: proc(v: f32, cl: Chart_Layout, anim: f32) -> f32 {
 
 // line_chart draws one polyline per series with optional area fill, grid,
 // axes, legend, and a hover tooltip. Returns the hovered point index or -1.
-line_chart :: proc(
+line_chart_at :: proc(
 	frame: ^Ui_Frame,
-	x, y, w, h: i32,
+	rect: Rect_I32,
 	series: []Chart_Series,
 	state: ^Chart_State,
 	opts: Chart_Opts = {},
 ) -> int {
-	assert(frame != nil, "line_chart: nil frame")
-	assert(state != nil, "line_chart: nil state")
+	assert(frame != nil, "line_chart_at: nil frame")
+	assert(state != nil, "line_chart_at: nil state")
+	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	cl, ok := chart_layout(frame, x, y, w, h, series, opts, false)
 	if !ok do return -1
 	anim := chart_anim(frame, state)
@@ -551,15 +552,16 @@ line_chart :: proc(
 // series) with optional grid, axes, legend, and a hover tooltip. The range
 // always includes zero so bars grow from a meaningful baseline. Returns the
 // hovered slot index or -1.
-bar_chart :: proc(
+bar_chart_at :: proc(
 	frame: ^Ui_Frame,
-	x, y, w, h: i32,
+	rect: Rect_I32,
 	series: []Chart_Series,
 	state: ^Chart_State,
 	opts: Chart_Opts = {},
 ) -> int {
-	assert(frame != nil, "bar_chart: nil frame")
-	assert(state != nil, "bar_chart: nil state")
+	assert(frame != nil, "bar_chart_at: nil frame")
+	assert(state != nil, "bar_chart_at: nil state")
+	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	cl, ok := chart_layout(frame, x, y, w, h, series, opts, true)
 	if !ok do return -1
 	anim := chart_anim(frame, state)
@@ -613,8 +615,9 @@ bar_chart :: proc(
 
 // sparkline draws a minimal inline trend line (no axes, no state, no hover)
 // sized to fit inside stat cards. A zero color resolves to the theme accent.
-sparkline :: proc(frame: ^Ui_Frame, x, y, w, h: i32, values: []f32, color: Color = {}) {
-	assert(frame != nil, "sparkline: nil frame")
+sparkline_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, values: []f32, color: Color = {}) {
+	assert(frame != nil, "sparkline_at: nil frame")
+	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	if len(values) == 0 || w <= 0 || h <= 0 do return
 	color := color
 	if color == {} do color = ui_frame_theme(frame).fg_accent_light

@@ -10,9 +10,16 @@ import "core:strings"
 
 // checkbox draws a check control with a label. Toggles checked^ on click or
 // Space/Enter while focused. Returns true on the frame the value changed.
-checkbox :: proc {
-	checkbox_at,
-	checkbox_auto,
+// checkbox carves its own content-sized slot; checkbox_at takes an explicit rect.
+checkbox :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (changed: bool) {
+	assert(u != nil && u.open, "checkbox: frame not open")
+	assert(id != WIDGET_ID_NONE, "checkbox: zero stable id")
+	assert(checked != nil, "checkbox: nil checked")
+	metrics := ui_frame_metrics(u.frame)
+	w := control_row_width(u.frame, label, 0)
+	r := slot_next_px(u, w, metrics.ROW_H_SM)
+	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
+	return checkbox_at(u.frame, r, label, checked, fo, id)
 }
 
 // control_label_size resolves the size a checkbox/radio label is drawn at.
@@ -45,37 +52,6 @@ control_row_width :: proc(frame: ^Ui_Frame, label: string, font_size: i32) -> i3
 		measure_text_frame(frame, label_c, control_label_size(frame, font_size))
 	assert(width > 0, "control_row_width: invalid width")
 	return width
-}
-
-checkbox_auto :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (changed: bool) {
-	assert(u != nil && u.open, "checkbox: frame not open")
-	assert(id != WIDGET_ID_NONE, "checkbox: zero stable id")
-	metrics := ui_frame_metrics(u.frame)
-	w := control_row_width(u.frame, label, 0)
-	r := slot_next_px(u, w, metrics.ROW_H_SM)
-	focus := focus(u, id) if slot_visible(r) else Focus_Opt{}
-	return checkbox_at(u.frame, r, label, checked, focus, id)
-}
-
-// checkbox_ui carves its own slot (content-sized) and auto-registers focus.
-checkbox_ui :: proc(u: ^Ui, label: string, checked: ^bool) -> (changed: bool) {
-	assert(u != nil, "checkbox_ui: nil u")
-	assert(checked != nil, "checkbox_ui: nil checked")
-	metrics := ui_frame_metrics(u.frame)
-	w := control_row_width(u.frame, label, 0)
-	r := slot_px(u, w, metrics.ROW_H_SM)
-	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
-	return checkbox_at(u.frame, r, label, checked, fo)
-}
-
-checkbox_ui_id :: proc(u: ^Ui, id: Widget_Id, label: string, checked: ^bool) -> (changed: bool) {
-	assert(u != nil, "checkbox_ui_id: nil u")
-	assert(checked != nil, "checkbox_ui_id: nil checked")
-	metrics := ui_frame_metrics(u.frame)
-	w := control_row_width(u.frame, label, 0)
-	r := slot_px(u, w, metrics.ROW_H_SM)
-	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
-	return checkbox_at(u.frame, r, label, checked, fo, id)
 }
 
 checkbox_at :: proc(
@@ -157,12 +133,8 @@ checkbox_at :: proc(
 
 // radio draws one exclusive-choice row. Selecting it stores `value` into
 // selected^. Returns true on the frame the selection changed to this value.
-radio :: proc {
-	radio_at,
-	radio_auto,
-}
-
-radio_auto :: proc(
+// radio carves its own content-sized slot; radio_at takes an explicit rect.
+radio :: proc(
 	u: ^Ui,
 	id: Widget_Id,
 	label: string,
@@ -173,38 +145,10 @@ radio_auto :: proc(
 ) {
 	assert(u != nil && u.open, "radio: frame not open")
 	assert(id != WIDGET_ID_NONE, "radio: zero stable id")
+	assert(selected != nil, "radio: nil selected")
 	metrics := ui_frame_metrics(u.frame)
 	w := control_row_width(u.frame, label, 0)
 	r := slot_next_px(u, w, metrics.ROW_H_SM)
-	focus := focus(u, id) if slot_visible(r) else Focus_Opt{}
-	return radio_at(u.frame, r, label, selected, value, focus, id)
-}
-
-// radio_ui carves its own slot (content-sized) and auto-registers focus.
-radio_ui :: proc(u: ^Ui, label: string, selected: ^i32, value: i32) -> (changed: bool) {
-	assert(u != nil, "radio_ui: nil u")
-	assert(selected != nil, "radio_ui: nil selected")
-	metrics := ui_frame_metrics(u.frame)
-	w := control_row_width(u.frame, label, 0)
-	r := slot_px(u, w, metrics.ROW_H_SM)
-	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
-	return radio_at(u.frame, r, label, selected, value, fo)
-}
-
-radio_ui_id :: proc(
-	u: ^Ui,
-	id: Widget_Id,
-	label: string,
-	selected: ^i32,
-	value: i32,
-) -> (
-	changed: bool,
-) {
-	assert(u != nil, "radio_ui_id: nil u")
-	assert(selected != nil, "radio_ui_id: nil selected")
-	metrics := ui_frame_metrics(u.frame)
-	w := control_row_width(u.frame, label, 0)
-	r := slot_px(u, w, metrics.ROW_H_SM)
 	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return radio_at(u.frame, r, label, selected, value, fo, id)
 }
@@ -298,12 +242,9 @@ Slider_State :: struct {
 // slider draws a horizontal slider over [lo, hi] with optional stepping.
 // Dragging or clicking the track moves the value; Left/Right adjust it while
 // focused. Returns true on the frame the value changed.
-slider :: proc {
-	slider_at,
-	slider_auto,
-}
-
-slider_auto :: proc(
+// slider carves its own slot (width 0 = sensible default); slider_at takes an
+// explicit rect. slider_state / slider_at_state add drag-animation state.
+slider :: proc(
 	u: ^Ui,
 	id: Widget_Id,
 	value: ^f32,
@@ -318,8 +259,8 @@ slider_auto :: proc(
 	assert(id != WIDGET_ID_NONE, "slider: zero stable id")
 	assert(a11y_label != "", "slider: empty accessible label")
 	r := slider_slot_px(u, width)
-	focus := focus(u, id) if slot_visible(r) else Focus_Opt{}
-	return slider_at(u.frame, r, value, lo, hi, step, focus, a11y_label, id)
+	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
+	return slider_at(u.frame, r, value, lo, hi, step, fo, a11y_label, id)
 }
 
 @(private = "file")
@@ -332,62 +273,8 @@ slider_slot_px :: proc(u: ^Ui, width: i32) -> Rect_I32 {
 	return slot_next_px(u, resolved_width, metrics.ROW_H_SM)
 }
 
-// slider_ui carves its own slot (width w, 0 = sensible default) and
-// auto-registers focus.
-slider_ui :: proc(
-	u: ^Ui,
-	value: ^f32,
-	lo, hi: f32,
-	step: f32 = 0,
-	w: i32 = 0,
-	a11y_label: string = "",
-) -> (
-	changed: bool,
-) {
-	assert(u != nil, "slider_ui: nil u")
-	assert(value != nil, "slider_ui: nil value")
-	assert(a11y_label != "", "slider_ui: empty accessible label")
-	r := slider_slot_px(u, w)
-	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
-	return slider_at(u.frame, r, value, lo, hi, step, fo, a11y_label)
-}
-
-slider_ui_id :: proc(
-	u: ^Ui,
-	id: Widget_Id,
-	value: ^f32,
-	lo, hi: f32,
-	step: f32 = 0,
-	w: i32 = 0,
-	a11y_label: string = "",
-) -> (
-	changed: bool,
-) {
-	assert(u != nil, "slider_ui_id: nil u")
-	assert(value != nil, "slider_ui_id: nil value")
-	assert(a11y_label != "", "slider_ui_id: empty accessible label")
-	r := slider_slot_px(u, w)
-	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
-	return slider_at(u.frame, r, value, lo, hi, step, fo, a11y_label)
-}
-
-slider_ui_state :: proc(
-	u: ^Ui,
-	state: ^Slider_State,
-	value: ^f32,
-	lo, hi: f32,
-	step: f32 = 0,
-	w: i32 = 0,
-	a11y_label: string = "",
-) -> bool {
-	assert(state != nil, "slider_ui_state: nil state")
-	assert(a11y_label != "", "slider_ui_state: empty accessible label")
-	r := slider_slot_px(u, w)
-	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
-	return slider_at_state(u.frame, state, r, value, lo, hi, step, fo, a11y_label)
-}
-
-slider_ui_state_id :: proc(
+// slider_state is slider plus caller-owned knob animation state.
+slider_state :: proc(
 	u: ^Ui,
 	id: Widget_Id,
 	state: ^Slider_State,
@@ -397,8 +284,10 @@ slider_ui_state_id :: proc(
 	w: i32 = 0,
 	a11y_label: string = "",
 ) -> bool {
-	assert(state != nil, "slider_ui_state_id: nil state")
-	assert(a11y_label != "", "slider_ui_state_id: empty accessible label")
+	assert(u != nil && u.open, "slider_state: frame not open")
+	assert(id != WIDGET_ID_NONE, "slider_state: zero stable id")
+	assert(state != nil, "slider_state: nil state")
+	assert(a11y_label != "", "slider_state: empty accessible label")
 	r := slider_slot_px(u, w)
 	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return slider_at_state(u.frame, state, r, value, lo, hi, step, fo, a11y_label, id)

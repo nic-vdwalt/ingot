@@ -6,10 +6,22 @@ capabilities; applications must handle unavailable platform services.
 
 ## Versioning policy
 
-Ingot does not currently publish semantic-versioned releases. Pin an exact Git
-revision in application source control and CI. Upgrade deliberately by reading
-documentation and source changes, then run native, web, and application-specific
-validation before updating the pin.
+Ingot publishes `0.x` tags. The leading zero is the contract: any release may
+break the API, and no deprecation period is promised. Read the
+[changelog](../CHANGELOG.md) before moving a pin.
+
+Every tag is a **source** tag. Ingot distributes no binaries, installers, or web
+bundles, and a tag does not authorize redistributing them; the
+[binary and web release checklist](oss-release-checklist.md) governs that
+separately. A tag also asserts nothing about platform validation — the
+`Not recorded` rows in
+[production readiness](production-readiness.md) remain open at `v0.1.0`.
+
+Pin a tag or an exact Git revision in application source control and CI. A tag is
+the readable choice; an exact revision remains the strictest and is still
+recommended for CI. Upgrade deliberately by reading the changelog, documentation,
+and source changes, then run native, web, and application-specific validation
+before updating the pin.
 
 The tested compiler is Odin `dev-2026-06:285f6d87b`. Use the `odinfmt` bundled
 with that toolchain and the repository `.odinfmt.json`. Compiler development
@@ -21,7 +33,8 @@ a targeted source-compatibility surface for common raylib-style 2D applications.
 This is not complete raylib, raymath, 3D, shader, or `rlgl` parity. New Odin-style
 aliases are additive. Internal structures, private procedures, generated web
 runtime files, and undocumented bridge details are not stable APIs. Pin an Ingot
-revision and review the graphics limitations below before replacing imports.
+tag or revision and review the graphics limitations below before replacing
+imports.
 
 ## What compiles is what works
 

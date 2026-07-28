@@ -95,12 +95,7 @@ input_box_selection_clear :: proc(b: ^Input_Box) {
 // input draws a caret-aware text input backed by an Input_Box, with pills and
 // undo enabled. Same call-site brevity as an immediate-mode one-liner while
 // every byte of state stays caller-owned. Returns true when Enter submitted.
-input :: proc {
-	input_at,
-	input_ui,
-	input_ui_id,
-}
-
+// text_input carves a full-width slot; text_input_at takes an explicit rect.
 text_input :: proc(
 	u: ^Ui,
 	id: Widget_Id,
@@ -112,29 +107,19 @@ text_input :: proc(
 ) -> bool {
 	assert(u != nil && u.open, "text_input: frame not open")
 	assert(id != WIDGET_ID_NONE, "text_input: zero stable id")
+	assert(b != nil, "text_input: nil box")
 	assert(semantics.name != "", "text_input: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	resolved_height :=
 		ui_frame_sc(u.frame, height) if height > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
 	r := slot_next_px(u, remaining(&u.layout).w, resolved_height)
-	focus := focus(u, id) if slot_visible(r) else Focus_Opt{}
-	focus_opt_click(u.frame, focus, r.x, r.y, r.w, r.h)
+	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
+	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
 	sem := semantics
-	sem.focus = focus.focus
-	sem.focus_id = focus.id
+	sem.focus = fo.focus
+	sem.focus_id = fo.id
 	sem.widget = id
-	return input_at(
-		u.frame,
-		r.x,
-		r.y,
-		r.w,
-		r.h,
-		b,
-		placeholder,
-		focus_opt_focused(focus),
-		masked,
-		sem,
-	)
+	return text_input_at(u.frame, r, b, placeholder, focus_opt_focused(fo), masked, sem)
 }
 
 text_input_at :: proc(
@@ -147,104 +132,10 @@ text_input_at :: proc(
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
 	assert(frame != nil, "text_input_at: nil frame")
-	assert(b != nil, "text_input_at: nil b")
-	return input_at(
-		frame,
-		rect.x,
-		rect.y,
-		rect.w,
-		rect.h,
-		b,
-		placeholder,
-		active,
-		masked,
-		semantics,
-	)
-}
-
-// input_ui carves a full-width slot (height h, 0 = single-line default),
-// acquires focus on click, and is active while it owns the Ui focus slot.
-input_ui :: proc(
-	u: ^Ui,
-	b: ^Input_Box,
-	placeholder: string,
-	h: i32 = 0,
-	masked: bool = false,
-	semantics: Text_Input_Semantics = {},
-) -> bool {
-	assert(u != nil, "input_ui: nil u")
-	assert(b != nil, "input_ui: nil b")
-	assert(semantics.name != "", "input_ui: empty accessible label")
-	metrics := ui_frame_metrics(u.frame)
-	hh := h if h > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
-	r := slot_px(u, remaining(&u.layout).w, hh)
-	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
-	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
-	sem := semantics
-	sem.focus = fo.focus
-	sem.focus_id = fo.id
-	return input_at(
-		u.frame,
-		r.x,
-		r.y,
-		r.w,
-		r.h,
-		b,
-		placeholder,
-		focus_opt_focused(fo),
-		masked,
-		sem,
-	)
-}
-
-input_ui_id :: proc(
-	u: ^Ui,
-	id: Widget_Id,
-	b: ^Input_Box,
-	placeholder: string,
-	h: i32 = 0,
-	masked: bool = false,
-	semantics: Text_Input_Semantics = {},
-) -> bool {
-	assert(u != nil, "input_ui_id: nil u")
-	assert(b != nil, "input_ui_id: nil b")
-	assert(semantics.name != "", "input_ui_id: empty accessible label")
-	metrics := ui_frame_metrics(u.frame)
-	hh := h if h > 0 else metrics.ROW_H_MD + metrics.CONTROL_GAP
-	r := slot_px(u, remaining(&u.layout).w, hh)
-	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
-	focus_opt_click(u.frame, fo, r.x, r.y, r.w, r.h)
-	sem := semantics
-	sem.focus = fo.focus
-	sem.focus_id = fo.id
-	sem.widget = id
-	return input_at(
-		u.frame,
-		r.x,
-		r.y,
-		r.w,
-		r.h,
-		b,
-		placeholder,
-		focus_opt_focused(fo),
-		masked,
-		sem,
-	)
-}
-
-input_at :: proc(
-	frame: ^Ui_Frame,
-	x, y, w, h: i32,
-	b: ^Input_Box,
-	placeholder: string,
-	active: bool,
-	masked: bool = false,
-	semantics: Text_Input_Semantics = {},
-) -> bool {
-	assert(b != nil, "input: nil box")
-	if ui_frame_drop_degenerate(frame, w <= 0 || h <= 0) do return false
+	assert(b != nil, "text_input_at: nil box")
+	if ui_frame_drop_degenerate(frame, rect.w <= 0 || rect.h <= 0) do return false
 	cfg := Text_Input_Config {
-		rect         = Rect_I32{x, y, w, h},
+		rect         = rect,
 		placeholder  = placeholder,
 		active       = active,
 		masked       = masked,

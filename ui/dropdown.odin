@@ -12,12 +12,9 @@ Dropdown_State :: struct {
 // dropdown draws a combo box over `items`. Clicking (or Space/Enter while
 // focused) opens the item popup below the box; choosing an item stores its
 // index into selected^. Returns true on the frame the selection changed.
-dropdown :: proc {
-	dropdown_at,
-	dropdown_auto,
-}
-
-dropdown_auto :: proc(
+// dropdown carves its own slot (width 0 = sensible default) and reads screen
+// size from the Ui; dropdown_at takes an explicit rect and explicit bounds.
+dropdown :: proc(
 	u: ^Ui,
 	id: Widget_Id,
 	items: []string,
@@ -30,12 +27,13 @@ dropdown_auto :: proc(
 ) {
 	assert(u != nil && u.open, "dropdown: frame not open")
 	assert(id != WIDGET_ID_NONE, "dropdown: zero stable id")
+	assert(selected != nil && state != nil, "dropdown: nil state")
 	assert(a11y_label != "", "dropdown: empty accessible label")
 	metrics := ui_frame_metrics(u.frame)
 	resolved_width :=
 		ui_frame_sc(u.frame, width) if width > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
 	r := slot_next_px(u, resolved_width, metrics.ROW_H_MD)
-	focus := focus(u, id) if slot_visible(r) else Focus_Opt{}
+	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
 	return dropdown_at(
 		u.frame,
 		r,
@@ -44,55 +42,10 @@ dropdown_auto :: proc(
 		state,
 		u.screen_w,
 		u.screen_h,
-		focus,
+		fo,
 		a11y_label,
 		id,
 	)
-}
-
-// dropdown_ui carves its slot (width w, 0 = sensible default), reads screen
-// size from the Ui, and auto-registers focus.
-dropdown_ui :: proc(
-	u: ^Ui,
-	items: []string,
-	selected: ^i32,
-	st: ^Dropdown_State,
-	w: i32 = 0,
-	a11y_label: string = "",
-) -> (
-	changed: bool,
-) {
-	assert(u != nil, "dropdown_ui: nil u")
-	assert(selected != nil, "dropdown_ui: nil selected")
-	assert(st != nil, "dropdown_ui: nil st")
-	assert(a11y_label != "", "dropdown_ui: empty accessible label")
-	metrics := ui_frame_metrics(u.frame)
-	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
-	r := slot_px(u, ww, metrics.ROW_H_MD)
-	fo := focus_sequential(u) if slot_visible(r) else Focus_Opt{}
-	return dropdown_at(u.frame, r, items, selected, st, u.screen_w, u.screen_h, fo, a11y_label)
-}
-
-dropdown_ui_id :: proc(
-	u: ^Ui,
-	id: Widget_Id,
-	items: []string,
-	selected: ^i32,
-	st: ^Dropdown_State,
-	w: i32 = 0,
-	a11y_label: string = "",
-) -> (
-	changed: bool,
-) {
-	assert(u != nil, "dropdown_ui_id: nil u")
-	assert(selected != nil, "dropdown_ui_id: nil selected")
-	assert(st != nil, "dropdown_ui_id: nil st")
-	assert(a11y_label != "", "dropdown_ui_id: empty accessible label")
-	metrics := ui_frame_metrics(u.frame)
-	ww := w if w > 0 else metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2
-	r := slot_px(u, ww, metrics.ROW_H_MD)
-	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
-	return dropdown_at(u.frame, r, items, selected, st, u.screen_w, u.screen_h, fo, a11y_label, id)
 }
 
 dropdown_at :: proc(
