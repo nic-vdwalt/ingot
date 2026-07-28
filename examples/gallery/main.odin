@@ -313,6 +313,8 @@ apply_gallery_theme :: proc() {
 		ui.theme_high_contrast() if high_contrast else (ui.theme_dark() if dark else ui.theme_light())
 	t.reduced_motion = reduced_motion
 	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app), t)
+	app.config.clear_color = ui_gfx.color_to_gfx(t.bg_app)
+	app.config.clear_color.a = 255
 }
 
 draw_content :: proc(frame: ^ui.Ui_Frame, sw, sh: i32) {
