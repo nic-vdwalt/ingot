@@ -871,6 +871,24 @@ api_ownership_wide_rects :: proc(
 	return
 }
 
+api_tree_output_flow :: proc(
+	frame: ^ui.Ui_Frame,
+	outputs: []ui.Rect_I32,
+	adapter: ui.Rect_I32,
+	color: ui.Color,
+) {
+	assert(frame != nil && len(outputs) == 3, "api_tree_output_flow: invalid outputs")
+	assert(adapter.w > 0 && adapter.h > 0, "api_tree_output_flow: invalid adapter")
+	lane_y := f32(outputs[0].y + outputs[0].h + api_tree_sc(frame, 8))
+	adapter_x := f32(adapter.x + adapter.w / 2)
+	for output in outputs {
+		from := ui.Vector2{f32(output.x + output.w / 2), f32(output.y + output.h)}
+		api_tree_segment(frame, from, {from.x, lane_y}, color)
+		api_tree_segment(frame, {from.x, lane_y}, {adapter_x, lane_y}, color)
+	}
+	ui.text(frame, "flows to sibling Adapter", adapter.x, i32(lane_y), .Note, .Secondary)
+}
+
 api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui.Rect_I32) {
 	assert(frame != nil && state != nil, "api_ownership_wide: invalid arguments")
 	theme := ui.ui_frame_theme(frame)
@@ -880,6 +898,7 @@ api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui
 	api_tree_draw_edges(frame, app, app_children[:], theme.fg_accent)
 	api_tree_branch_down(frame, session, members[:], theme.fg_tool)
 	api_tree_branch_down(frame, members[3], outputs[:], theme.fg_success)
+	api_tree_output_flow(frame, outputs[:], members[4], theme.fg_assistant)
 	api_tree_card(
 		frame,
 		state,
@@ -1034,15 +1053,13 @@ api_relationship_trees_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, us
 	wide := rect.w >= api_tree_sc(frame, 700)
 	pad := api_tree_sc(frame, 16 if wide else 12)
 	gap := api_tree_sc(frame, 20 if wide else 16)
-	ownership, depth: ui.Rect_I32
-	if wide {
-		panel_w := (rect.w - pad * 2 - gap) / 2
-		ownership = {rect.x + pad, rect.y + pad, panel_w, rect.h - pad * 2}
-		depth = {ownership.x + ownership.w + gap, ownership.y, panel_w, ownership.h}
-	} else {
-		panel_h := (rect.h - pad * 2 - gap) / 2
-		ownership = {rect.x + pad, rect.y + pad, rect.w - pad * 2, panel_h}
-		depth = {ownership.x, ownership.y + ownership.h + gap, ownership.w, panel_h}
+	ownership_h := api_tree_sc(frame, 390 if wide else 560)
+	ownership := ui.Rect_I32{rect.x + pad, rect.y + pad, rect.w - pad * 2, ownership_h}
+	depth := ui.Rect_I32 {
+		ownership.x,
+		ownership.y + ownership.h + gap,
+		ownership.w,
+		rect.h - pad * 2 - gap - ownership.h,
 	}
 	api_tree_panel(frame, ownership, "1 · LITERAL OWNERSHIP")
 	api_tree_panel(frame, depth, "2 · CALL PATHS · APPLICATION → BACKEND")
@@ -1073,7 +1090,14 @@ draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 	ui.kv_row(
 		u,
 		"Ui_Output",
-		"owns main paint, overlay paint, and platform output",
+		"owns main, overlay, and platform buffers; sibling Adapter consumes them",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Output timing",
+		"main streams immediately; overlay replays next; platform applies last",
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
@@ -1107,8 +1131,8 @@ draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	state := &api_map_state
 	u := &state.form
 	wide := w >= ui.ui_frame_sc(frame, 700)
-	canvas_h: i32 = 520 if wide else 900
-	total_h: i32 = canvas_h + 420
+	canvas_h: i32 = 760 if wide else 980
+	total_h: i32 = canvas_h + 450
 	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, total_h)}, gap = .SM)
 	ui.scope_begin(u, "api-relationships")
 	_ = ui.section_header(u, "API OWNERSHIP AND CALL PATHS")
