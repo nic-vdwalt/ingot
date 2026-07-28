@@ -91,27 +91,27 @@ Not validated:
 
 ### Added
 
-- **`ingot:gfx`** — windowing, WebGPU batch rendering, shapes, textures, text,
+- **`ingot:gfx`** - windowing, WebGPU batch rendering, shapes, textures, text,
   input, audio, gamepads, cameras, and a raylib/rlgl-shaped 2D API. Includes
   affine `Camera2D` transforms, per-pipeline blend modes, render targets, an
   opt-in GPU 3D pipeline, coalesced stream uploads, a lazily baked embedded
   default font, and independent multi-context support.
-- **`ingot:ui`** — renderer-independent immediate-mode widgets, bounded
+- **`ingot:ui`** - renderer-independent immediate-mode widgets, bounded
   single-pass flow layout, constrained flex sizing, paint output, input
   snapshots, accessibility semantics, themes, charts, markdown, a unified diff
   viewer, listboxes, overlays, and adaptive frame pacing.
-- **`ingot:ui_gfx`** — adapter that captures `gfx` input, replays UI paint
+- **`ingot:ui_gfx`** - adapter that captures `gfx` input, replays UI paint
   output, applies platform output, and hosts an `App_Session`.
-- **`ingot:net`** — background HTTP and self-healing reconnecting WebSockets,
+- **`ingot:net`** - background HTTP and self-healing reconnecting WebSockets,
   including verified `wss://` with loopback TLS tests.
-- **`ingot:prefs`, `ingot:sys`** — native settings files and web `localStorage`
+- **`ingot:prefs`, `ingot:sys`** - native settings files and web `localStorage`
   behind one API; URLs, native file dialogs, and platform integration.
-- **`ingot:term`, `ingot:libvterm`, `ingot:pty`** — libvterm bindings with
+- **`ingot:term`, `ingot:libvterm`, `ingot:pty`** - libvterm bindings with
   committed static libraries, PTY pumping, key translation, `forkpty` on Unix,
   and ConPTY on Windows.
-- **`ingot:accesskit`** — AccessKit C API bindings with native static libraries;
+- **`ingot:accesskit`** - AccessKit C API bindings with native static libraries;
   UI semantics bridge to native accessibility, and mirror to the DOM on web.
-- **`ingot:testx`** — deterministic PRNG and inline snapshot helpers.
+- **`ingot:testx`** - deterministic PRNG and inline snapshot helpers.
 - Stable widget identity: scoped widget IDs, app-wide keyboard focus traversal,
   and focus scoping by active UI layer.
 - Accessible high-contrast and reduced-motion themes.

@@ -36,7 +36,7 @@ SMOKE :: #config(INGOT_SMOKE, false)
 CAPTURE :: #config(INGOT_CAPTURE, false)
 
 Section :: enum {
-	Api_Layers,
+	Api_Relationships,
 	Buttons,
 	Inputs,
 	Widgets,
@@ -48,7 +48,7 @@ Section :: enum {
 }
 
 SECTION_NAMES := [Section]string {
-	.Api_Layers = "API Layers",
+	.Api_Relationships = "API Relationships",
 	.Buttons    = "Buttons",
 	.Inputs     = "Inputs",
 	.Widgets    = "Widgets",
@@ -60,15 +60,27 @@ SECTION_NAMES := [Section]string {
 }
 
 SECTION_LAYERS := [Section]string {
-	.Api_Layers = "FACADE \u2192 EXPLICIT CANVAS",
-	.Buttons    = "FACADE",
-	.Inputs     = "FACADE",
-	.Widgets    = "FACADE + EXPLICIT COMPOSITION",
-	.Charts     = "FACADE \u2192 EXPLICIT CANVAS",
-	.Markdown   = "EXPLICIT COMPOSITION",
-	.Layout     = "EXPLICIT GEOMETRY",
-	.Overlay    = "EXPLICIT COMPOSITION",
-	.Stress     = "EXPLICIT GEOMETRY",
+	.Api_Relationships = "RELATIONSHIP MAP",
+	.Buttons           = "FACADE LEAVES",
+	.Inputs            = "FACADE LEAVES",
+	.Widgets           = "FACADE + COMPOSITION",
+	.Charts            = "FACADE WRAPPER \u2192 EXPLICIT LEAF",
+	.Markdown          = "EXPLICIT COMPOSITION",
+	.Layout            = "APPLICATION-OWNED GEOMETRY",
+	.Overlay           = "EXPLICIT LIFECYCLE",
+	.Stress            = "APPLICATION-OWNED GEOMETRY",
+}
+
+SECTION_AXES := [Section]string {
+	.Api_Relationships = "ownership \u00b7 delegation \u00b7 output",
+	.Buttons           = "framework owns geometry",
+	.Inputs            = "framework owns geometry",
+	.Widgets           = "geometry and lifecycle owner",
+	.Charts            = "delegation",
+	.Markdown          = "measurement lifecycle",
+	.Layout            = "application owns geometry",
+	.Overlay           = "application owns lifecycle",
+	.Stress            = "application owns geometry",
 }
 
 NAV_W :: 170
@@ -78,12 +90,24 @@ NAV_W :: 170
 dark := true
 high_contrast := false
 reduced_motion := false
-section := Section.Api_Layers
+section := Section.Api_Relationships
 debug_on := false
+
+Api_Leaf_Example :: enum {
+	Button,
+	Checkbox,
+	Line_Chart,
+}
+
+Api_Map_State :: struct {
+	ui:           ui.Ui,
+	leaf_example: Api_Leaf_Example,
+}
 
 nav_ui: ui.Ui
 buttons_ui: ui.Ui
-layers_ui: ui.Ui
+badge_ui: ui.Ui
+api_map_state: Api_Map_State
 content_pane: ui.Pane
 click_count := 0
 headers_open := [3]bool{true, false, false}
@@ -322,8 +346,8 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32) {
 
 	end_y: i32
 	switch section {
-	case .Api_Layers:
-		end_y = draw_api_layers(frame, cx, y, cw)
+	case .Api_Relationships:
+		end_y = draw_api_relationships(frame, cx, y, cw)
 	case .Buttons:
 		end_y = draw_buttons(frame, cx, y, cw)
 	case .Inputs:
@@ -354,11 +378,11 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32) {
 
 draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
 	assert(frame != nil, "draw_section_layer: nil frame")
-	u := &layers_ui
+	u := &badge_ui
 	ui.begin(u, frame, {x, y, w, ui.ui_frame_sc(frame, 44)}, gap = .XS)
 	ui.row_begin(u, 28, gap = .SM, align = .Center)
 	_ = ui.status_pill(u, SECTION_LAYERS[section], ui.ui_frame_theme(frame).fg_accent)
-	ui.label(u, "highest sufficient layer", color = ui.ui_frame_theme(frame).fg_secondary)
+	ui.label(u, SECTION_AXES[section], color = ui.ui_frame_theme(frame).fg_secondary)
 	ui.row_end(u)
 	end_y := ui.remaining_rect(u).y
 	ui.end(u)

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>The Odin app framework for polished native and web desktop tools—without Electron.</strong>
+  <strong>The Odin app framework for polished native and web desktop tools-without Electron.</strong>
 </p>
 
 <p align="center">
@@ -271,12 +271,12 @@ gallery, so refreshing the images above never involves a manual screenshot.
 
 Other focused examples:
 
-- `examples/hello` — canonical application shell, layout, and stable-ID usage.
-- `examples/breakout` — audio, gamepad input, and web export from one source.
-- `examples/idle_demo` — event-driven rendering at approximately zero idle CPU.
-- `examples/chart_demo` — chart widgets and interaction.
-- `examples/render_fixture` — renderer, resource-lifetime, and backend validation.
-- `examples/raylib_migration_fixture` — import-only 2D compatibility contract.
+- `examples/hello` - canonical application shell, layout, and stable-ID usage.
+- `examples/breakout` - audio, gamepad input, and web export from one source.
+- `examples/idle_demo` - event-driven rendering at approximately zero idle CPU.
+- `examples/chart_demo` - chart widgets and interaction.
+- `examples/render_fixture` - renderer, resource-lifetime, and backend validation.
+- `examples/raylib_migration_fixture` - import-only 2D compatibility contract.
 
 Web builds require Bash, Python 3, and the pinned Odin toolchain. From the
 repository root, `bash build_web.sh` writes `web/ingot_web.wasm`; serve `web/`
@@ -309,33 +309,33 @@ an overall framework ranking.
 
 ## Documentation
 
-- [Why immediate mode](docs/immediate-mode.md) — IMGUI's historical intent,
+- [Why immediate mode](docs/immediate-mode.md) - IMGUI's historical intent,
   Ingot's app-framework vision, state boundary, and Tiger Style fit.
-- [Choosing Ingot](docs/comparison.md) — comparisons with immediate, retained,
+- [Choosing Ingot](docs/comparison.md) - comparisons with immediate, retained,
   web, native, raylib, and full game-engine alternatives.
-- [UI state and stable focus](docs/ui-state.md) — runtime/frame/component
+- [UI state and stable focus](docs/ui-state.md) - runtime/frame/component
   ownership, teardown, focus identity, and accessibility identity.
-- [Interaction contract](docs/interaction-contract.md) — pointer, keyboard,
+- [Interaction contract](docs/interaction-contract.md) - pointer, keyboard,
   focus, overlays, forms, accessibility, platform conventions, and approval gates.
-- [Testing Ingot](docs/testing.md) — package tests, deterministic fuzzing,
+- [Testing Ingot](docs/testing.md) - package tests, deterministic fuzzing,
   ASan/TSan, GPU validation, and reproducible seeds.
-- [Widget benchmark](benchmarks/widgets/README.md) — pinned, reproducible core
+- [Widget benchmark](benchmarks/widgets/README.md) - pinned, reproducible core
   comparisons and dated results for Dear ImGui, egui, and Ingot at scale.
-- [Rendering](docs/rendering.md) — renderer ownership, submission lifetime,
+- [Rendering](docs/rendering.md) - renderer ownership, submission lifetime,
   render-target conventions, frame scheduling, and backend validation.
-- [3D content pipeline plan](docs/3d-content-pipeline-plan.md) — proposed
+- [3D content pipeline plan](docs/3d-content-pipeline-plan.md) - proposed
   asset/scene package split, deterministic-simulation oracles, and phases.
-- [Migrating from raylib](docs/raylib-migration.md) — supported 2D profile,
+- [Migrating from raylib](docs/raylib-migration.md) - supported 2D profile,
   compatibility matrix, conversion workflow, examples, and validation checklist.
-- [Networking](docs/networking.md) — HTTP and WebSocket lifecycle, ownership,
+- [Networking](docs/networking.md) - HTTP and WebSocket lifecycle, ownership,
   limits, security, and native/web differences.
-- [Compatibility and platforms](docs/compatibility.md) — toolchain pinning,
+- [Compatibility and platforms](docs/compatibility.md) - toolchain pinning,
   support policy, browser hosting, system integration, and native dependencies.
-- [Production readiness](docs/production-readiness.md) — security boundaries,
+- [Production readiness](docs/production-readiness.md) - security boundaries,
   release validation matrix, and remaining platform work.
-- [Tiger Style](docs/TIGER_STYLE.md) — safety, performance, assertions, bounds,
+- [Tiger Style](docs/TIGER_STYLE.md) - safety, performance, assertions, bounds,
   memory discipline, and contribution rules.
-- [Changelog](CHANGELOG.md) — released versions, and what each one does and does
+- [Changelog](CHANGELOG.md) - released versions, and what each one does and does
   not claim to have validated.
 
 ## Development

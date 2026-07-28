@@ -170,7 +170,7 @@ seam; Ingot only has to call the public procedure.
 
 **Nondeterminism is confined to a few named seams.** Wall clock, sockets, the
 PTY, the platform input queue, and the GPU are the only sources of surprise, and
-each is isolated behind a compile-gated simulation seam — `INGOT_NET_SIM`,
+each is isolated behind a compile-gated simulation seam - `INGOT_NET_SIM`,
 `INGOT_WS_SIM`, `INGOT_INPUT_SIM`, `INGOT_PTY_SIM`. The seam replaces the edge,
 not the logic: `wsreconn` keeps the production worker thread, mutexes, atomics,
 condition variable, queue, and reconnect loop, and scripts only the transport.
@@ -188,8 +188,8 @@ unbounded state the developer never modeled.
 usually not generating input but recognizing wrong behavior. Ingot answers this
 twice. Assertions sit at the boundaries they protect, so corrupt state fails
 immediately at its origin rather than as a later symptom. And frame output is
-plain, inspectable data — focus links, routing claims, semantic nodes, paint
-batches, resource generations — so invariants can be checked as properties of
+plain, inspectable data - focus links, routing claims, semantic nodes, paint
+batches, resource generations - so invariants can be checked as properties of
 values instead of by rendering pixels and comparing them.
 
 Where a property cannot be observed in-process, the harness substitutes a

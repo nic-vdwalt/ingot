@@ -219,11 +219,11 @@ an identity to key.
 | line / bar chart | `line_chart`, `bar_chart` | `line_chart_at`, `bar_chart_at` |
 | key/value row | `kv_row(u, …)` | `kv_row_at` |
 | card background | `card_bg(u, …)` | `card_bg_at` |
-| list row background | — | `list_row_bg_at` |
-| listbox / pane / modal / context menu | — | explicit lifecycle protocols |
-| overlay | — | explicit paint subsystem |
-| markdown | — | `markdown_context` + `markdown_draw` |
-| `Flow_Layout`, `Fit_Column` | — | explicit layout protocols, by design |
+| list row background | - | `list_row_bg_at` |
+| listbox / pane / modal / context menu | - | explicit lifecycle protocols |
+| overlay | - | explicit paint subsystem |
+| markdown | - | `markdown_context` + `markdown_draw` |
+| `Flow_Layout`, `Fit_Column` | - | explicit layout protocols, by design |
 
 Facade and explicit entry points share interaction, focus, semantics, paint,
 and option vocabulary. They differ only in who supplies geometry. Facade
