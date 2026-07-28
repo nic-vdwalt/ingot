@@ -1160,7 +1160,7 @@ draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	ui.row_end(u)
 	ui.row_begin(u, 32, gap = .SM)
 	_ = ui.button(u, "disabled", "Disabled", ui.Btn_Style.Primary, false)
-	if ui.icon_btn(u, ui.id(u, "close"), "Close") do click_count += 1
+	if ui.icon_btn(u, ui.id(u, "close"), "\u2715") do click_count += 1
 	if ui.back_btn(u, ui.id(u, "back"), "Back") do click_count += 1
 	ui.row_end(u)
 	ui.label(
