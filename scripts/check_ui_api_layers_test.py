@@ -47,6 +47,13 @@ class PolicyTests(unittest.TestCase):
         self.assertTrue(any("one Rect_I32" in message for message in messages))
         self.assertTrue(any("loose x/y/w/h" in message for message in messages))
 
+    def test_explicit_leaf_overload_checks_members_at_their_declarations(self) -> None:
+        source = """@(private = \"package\")
+button_legacy_at :: proc(frame: ^Ui_Frame, rect: Rect_I32) {}
+button_at :: proc {button_legacy_at}
+"""
+        self.assertEqual(self.messages(source), [])
+
     def test_explicit_protocol_rejects_loose_rectangle(self) -> None:
         messages = self.messages("pane_begin :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {}\n")
         self.assertTrue(any("explicit protocol" in message for message in messages))
