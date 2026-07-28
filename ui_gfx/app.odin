@@ -52,7 +52,10 @@ app_init :: proc(
 	assert(app != nil && app.state == .Empty, "app_init: invalid app")
 	assert(config.width > 0 && config.height > 0, "app_init: invalid size")
 	assert(config.title != nil, "app_init: missing title")
-	assert((callbacks.frame == nil) != (callbacks.ui == nil), "app_init: expected one frame callback")
+	assert(
+		(callbacks.frame == nil) != (callbacks.ui == nil),
+		"app_init: expected one frame callback",
+	)
 	assert(active_app == nil, "app_init: another application is active")
 	gfx.SetConfigFlags(config.flags)
 	initialized := gfx.context_init(

@@ -4,6 +4,6 @@ import "core:fmt"
 import "ingot:ui"
 
 main :: proc() {
-	stats := ui.ui_paint_storage_stats()
+	stats := ui.paint_storage_stats()
 	fmt.println(stats)
 }

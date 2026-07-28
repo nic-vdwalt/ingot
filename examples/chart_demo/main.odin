@@ -17,7 +17,9 @@ State :: struct {
 	bar_state:  ui.Chart_State,
 }
 
-state := State{dark = true}
+state := State {
+	dark = true,
+}
 app: ui_gfx.App
 
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
@@ -106,9 +108,29 @@ draw_dashboard :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr)
 		&data.bar_state,
 		{labels = DAYS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
-	stat_card(frame, side_x, 0, side_w, 92, "ACTIVE PROJECTS", "9.3", spark_up[:], style.fg_success)
+	stat_card(
+		frame,
+		side_x,
+		0,
+		side_w,
+		92,
+		"ACTIVE PROJECTS",
+		"9.3",
+		spark_up[:],
+		style.fg_success,
+	)
 	stat_card(frame, side_x, 104, side_w, 92, "OPEN TASKS", "4.8", spark_down[:], style.fg_error)
-	stat_card(frame, side_x, 208, side_w, 92, "AVG HOURS / DAY", "5.1", spark_flat[:], style.fg_accent)
+	stat_card(
+		frame,
+		side_x,
+		208,
+		side_w,
+		92,
+		"AVG HOURS / DAY",
+		"5.1",
+		spark_flat[:],
+		style.fg_accent,
+	)
 }
 
 stat_card :: proc(

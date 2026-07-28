@@ -5,7 +5,7 @@ import "core:testing"
 
 @(test)
 paint_storage_stats_match_bounded_representation :: proc(t: ^testing.T) {
-	stats := ui_paint_storage_stats()
+	stats := paint_storage_stats()
 	testing.expect_value(t, stats.command_bytes, u64(size_of(Paint_Command)))
 	testing.expect_value(t, stats.list_bytes, u64(size_of(Paint_List)))
 	testing.expect_value(t, stats.output_bytes, u64(size_of(Ui_Output)))

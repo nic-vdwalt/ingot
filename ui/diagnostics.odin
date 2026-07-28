@@ -19,21 +19,21 @@ Ui_Paint_Telemetry :: struct {
 }
 
 Ui_Paint_Storage_Stats :: struct {
-	command_bytes:  u64,
-	list_bytes:     u64,
-	output_bytes:   u64,
+	command_bytes:          u64,
+	list_bytes:             u64,
+	output_bytes:           u64,
 	command_capacity_bytes: u64,
 	text_capacity_bytes:    u64,
 }
 
-ui_paint_storage_stats :: proc() -> Ui_Paint_Storage_Stats {
+paint_storage_stats :: proc() -> Ui_Paint_Storage_Stats {
 	command_bytes := u64(size_of(Paint_Command))
 	return {
-		command_bytes          = command_bytes,
-		list_bytes             = u64(size_of(Paint_List)),
-		output_bytes           = u64(size_of(Ui_Output)),
+		command_bytes = command_bytes,
+		list_bytes = u64(size_of(Paint_List)),
+		output_bytes = u64(size_of(Ui_Output)),
 		command_capacity_bytes = command_bytes * PAINT_COMMAND_CAP,
-		text_capacity_bytes    = PAINT_TEXT_CAP,
+		text_capacity_bytes = PAINT_TEXT_CAP,
 	}
 }
 

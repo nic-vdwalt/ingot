@@ -171,6 +171,7 @@ text_input_string :: proc(
 	masked: bool = false,
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
+	assert(u != nil && b != nil, "text_input: nil UI or box")
 	return text_input_id(u, id(u, key), b, placeholder, height, masked, semantics)
 }
 
@@ -184,6 +185,7 @@ text_input_u64 :: proc(
 	masked: bool = false,
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
+	assert(u != nil && b != nil, "text_input: nil UI or box")
 	return text_input_id(u, id(u, key), b, placeholder, height, masked, semantics)
 }
 
@@ -229,8 +231,7 @@ text_input :: proc {
 	text_input_u64_options,
 }
 
-@(private = "package")
-text_input_at_legacy :: proc(
+text_input_at :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	b: ^Input_Box,
@@ -255,14 +256,15 @@ text_input_at_legacy :: proc(
 }
 
 @(private = "package")
-text_input_at_options :: proc(
+text_input_with_options_at :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	b: ^Input_Box,
 	placeholder: string,
 	options: Text_Input_At_Options,
 ) -> bool {
-	return text_input_at_legacy(
+	assert(frame != nil && b != nil, "text_input_at: nil frame or box")
+	return text_input_at(
 		frame,
 		rect,
 		b,
@@ -271,9 +273,4 @@ text_input_at_options :: proc(
 		options.masked,
 		options.semantics,
 	)
-}
-
-text_input_at :: proc {
-	text_input_at_legacy,
-	text_input_at_options,
 }

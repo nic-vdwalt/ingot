@@ -810,12 +810,13 @@ button_at_legacy :: proc(
 }
 
 @(private = "package")
-button_at_options :: proc(
+button_with_options_at :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	label: string,
 	options: Button_At_Options,
 ) -> bool {
+	assert(frame != nil, "button_at: nil frame")
 	return button_at_legacy(
 		frame,
 		rect,
@@ -831,7 +832,7 @@ button_at_options :: proc(
 
 button_at :: proc {
 	button_at_legacy,
-	button_at_options,
+	button_with_options_at,
 }
 
 // button_at_state is button_at plus caller-owned hover animation state.

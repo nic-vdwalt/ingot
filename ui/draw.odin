@@ -224,7 +224,12 @@ Canvas_Options :: struct {
 
 Canvas_Proc :: #type proc(frame: ^Ui_Frame, rect: Rect_I32, userdata: rawptr)
 
-canvas :: proc(u: ^Ui, options: Canvas_Options, body: Canvas_Proc, userdata: rawptr = nil) -> Rect_I32 {
+canvas :: proc(
+	u: ^Ui,
+	options: Canvas_Options,
+	body: Canvas_Proc,
+	userdata: rawptr = nil,
+) -> Rect_I32 {
 	assert(u != nil && u.open, "canvas: frame not open")
 	assert(options.height > 0, "canvas: non-positive height")
 	assert(body != nil, "canvas: nil body")
