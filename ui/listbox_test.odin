@@ -218,7 +218,7 @@ listbox_searched_mode_yields_home_end_and_space :: proc(t: ^testing.T) {
 	ui_frame_end(&frame)
 }
 
-// Page Up/Down clamp even when the list wraps — jumping a whole page past the
+// Page Up/Down clamp even when the list wraps - jumping a whole page past the
 // end would skip rows the user never saw. page_rows = 0 disables both keys.
 @(test)
 listbox_page_keys_clamp_and_opt_in :: proc(t: ^testing.T) {

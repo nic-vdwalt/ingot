@@ -3,7 +3,7 @@
 // ws_net_* seam (ws_transport.odin) with a deterministic scripted fake so
 // the reconnect fuzzer can drive the REAL worker thread through dial
 // failures, handshake garbage, frame streams, mid-frame cuts, server
-// closes, and PING starvation — no sockets, no ports, reproducible from a
+// closes, and PING starvation - no sockets, no ports, reproducible from a
 // seed.
 //
 // Threading contract: the script tape is loaded by the harness BEFORE
@@ -27,7 +27,7 @@ when INGOT_WS_SIM {
 
 	// One scripted transport event, consumed in order per dial attempt /
 	// recv call. The tape wraps: when exhausted, further recvs report
-	// .Timeout until WS_DEAD_AFTER declares the connection dead — so every
+	// .Timeout until WS_DEAD_AFTER declares the connection dead - so every
 	// tape terminates.
 	Ws_Sim_Event :: enum u8 {
 		Dial_Fail, // dial refused

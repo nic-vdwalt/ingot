@@ -5,7 +5,7 @@ package ingotnet
 // Same public surface as the real Fetcher, but requests are queued into an
 // in-memory network advanced one step at a time by sim_tick. A seeded
 // xorshift64* PRNG is the sole source of entropy, so one seed reproduces one
-// exact run — identical native and on js_wasm32 (no sockets, no JS, no
+// exact run - identical native and on js_wasm32 (no sockets, no JS, no
 // threads, no clock).
 //
 // Enable with: -define:INGOT_NET_SIM=true
@@ -59,7 +59,7 @@ when INGOT_NET_SIM {
 	}
 
 	// The server model: given a request, produce a response. The body must be
-	// allocated with context.allocator — the app deletes it after handling, the
+	// allocated with context.allocator - the app deletes it after handling, the
 	// same contract as the real transports. The model may draw randomness only
 	// from the provided PRNG so runs stay seed-reproducible.
 	Sim_Respond :: #type proc(request: Http_Request, prng: ^Sim_Prng) -> Fetch_Result
@@ -68,7 +68,7 @@ when INGOT_NET_SIM {
 		host:            string,
 		port:            int,
 		cache_validator: proc(body: []u8) -> bool,
-		prng:            Sim_Prng, // sole entropy source — seed via sim_fetcher_init
+		prng:            Sim_Prng, // sole entropy source - seed via sim_fetcher_init
 		tick:            u64,
 		fault_rate:      f32, // 0..1 probability that a message gets a fault
 		respond:         Sim_Respond,
@@ -82,7 +82,7 @@ when INGOT_NET_SIM {
 		wake:            proc "contextless" (),
 	}
 
-	// xorshift64* — deterministic, identical on every target (mirrors testx.Prng,
+	// xorshift64* - deterministic, identical on every target (mirrors testx.Prng,
 	// duplicated here so ingot:net stays dependency-free).
 	Sim_Prng :: struct {
 		state: u64,

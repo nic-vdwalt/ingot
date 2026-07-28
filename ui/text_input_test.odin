@@ -40,8 +40,8 @@ selection_delete_drops_and_shifts_pills :: proc(t: ^testing.T) {
 	sb := strings.builder_make(context.temp_allocator)
 	strings.write_string(&sb, "aa @pill bb cc")
 	pills := make([dynamic]Mention_Span, context.temp_allocator)
-	append(&pills, Mention_Span{3, 8}) // "@pill" — intersects deletion
-	append(&pills, Mention_Span{12, 14}) // "cc" — after deletion, must shift
+	append(&pills, Mention_Span{3, 8}) // "@pill" - intersects deletion
+	append(&pills, Mention_Span{12, 14}) // "cc" - after deletion, must shift
 	sel: Input_Sel
 	sel_set(&sel, &sb, 3, 9) // delete "@pill "
 	nc := selection_delete(&sel, &sb, &pills)
@@ -68,9 +68,9 @@ pill_delete_atomic_removes_range :: proc(t: ^testing.T) {
 pills_drop_invalid_filters_out_of_bounds :: proc(t: ^testing.T) {
 	pills := make([dynamic]Mention_Span, context.temp_allocator)
 	append(&pills, Mention_Span{0, 4}) // valid for blen 10
-	append(&pills, Mention_Span{8, 14}) // end past blen — dropped
-	append(&pills, Mention_Span{5, 5}) // empty — dropped
-	append(&pills, Mention_Span{-2, 3}) // negative start — dropped
+	append(&pills, Mention_Span{8, 14}) // end past blen - dropped
+	append(&pills, Mention_Span{5, 5}) // empty - dropped
+	append(&pills, Mention_Span{-2, 3}) // negative start - dropped
 	pills_drop_invalid(&pills, 10)
 	testing.expect_value(t, len(pills), 1)
 	testing.expect_value(t, pills[0], Mention_Span{0, 4})

@@ -1,7 +1,7 @@
 // LIB-CANDIDATE: imports only core:*.
 //
-// Adaptive frame pacing. The pacer answers one question per frame — how hard
-// should the app work right now — from user input, an app-supplied busy flag,
+// Adaptive frame pacing. The pacer answers one question per frame - how hard
+// should the app work right now - from user input, an app-supplied busy flag,
 // and a grace window that keeps full rate for a short tail after activity
 // stops (so release/hover/fade visuals settle).
 //
@@ -107,7 +107,7 @@ pacer_frame_input :: proc(p: ^Frame_Pacer, input: ^Ui_Input, busy: bool = false)
 }
 
 // pacer_input_active is superseded by frame_user_input_active, which also
-// counts typed characters and held mouse/keyboard state — a drag or a key
+// counts typed characters and held mouse/keyboard state - a drag or a key
 // repeat is activity even on a frame with no fresh press event. Retained for
 // pacer_frame_input and callers holding only a Ui_Input.
 pacer_input_active :: proc(input: ^Ui_Input) -> bool {

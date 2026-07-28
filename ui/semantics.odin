@@ -6,11 +6,11 @@
 // This is an output buffer like the draw list, not a retained tree: it is
 // reset every frame and rebuilt by the widget calls themselves, so there is
 // no hidden state and no widget-ID hashing. Unlike input_route's claim
-// buffer there is no double buffer — consumers read the completed frame
+// buffer there is no double buffer - consumers read the completed frame
 // after all UI is drawn, so no cross-frame semantics are needed.
 //
-// Node identity (sem_node_id) derives from caller-owned stable state — the
-// form-focus slot pointer + 1-based id, or a text input's field_id string —
+// Node identity (sem_node_id) derives from caller-owned stable state - the
+// form-focus slot pointer + 1-based id, or a text input's field_id string -
 // never from call-site hashing. Widgets without either fall back to per-role
 // call order, which is unstable under layout changes and acceptable only for
 // non-interactive roles (screen readers re-read labels).
@@ -19,7 +19,7 @@ package ui
 import "core:unicode/utf8"
 
 // MAX_SEM_NODES bounds semantic nodes per frame (Tiger Style: put a limit on
-// everything). Saturation drops nodes rather than corrupting the buffer —
+// everything). Saturation drops nodes rather than corrupting the buffer -
 // under-reporting is the safe failure mode for assistive tech.
 MAX_SEM_NODES :: 256
 
@@ -201,7 +201,7 @@ SEM_FNV_PRIME :: u64(0x00000100000001b3)
 //     Focus_State and Focus_Id. This is a supported tier, not a legacy path.
 //  4. fallback: role<<56 | per-role call order this frame. Unstable under
 //     layout changes; acceptable only for non-interactive roles.
-// Pure — unit-testable without a window.
+// Pure - unit-testable without a window.
 sem_node_id :: proc(
 	role: Sem_Role,
 	focus: Focus_Opt,
@@ -237,7 +237,7 @@ sem_node_id :: proc(
 		id = (u64(role) << 56) | u64(ordinal)
 	}
 	// Keep 0 (invalid) and SEM_ID_ROOT reserved even in the astronomically
-	// unlikely collision case — deterministic remap, not an assert, because
+	// unlikely collision case - deterministic remap, not an assert, because
 	// the inputs are caller data.
 	if id <= SEM_ID_ROOT {
 		id += SEM_ID_ROOT + 1
@@ -247,7 +247,7 @@ sem_node_id :: proc(
 
 // sem_label_clip returns the byte length of the longest valid-UTF-8 prefix
 // of `label` that fits SEM_LABEL_MAX. Truncation never splits a rune, and an
-// invalid byte sequence ends the label early — stored labels must always be
+// invalid byte sequence ends the label early - stored labels must always be
 // valid UTF-8 because they cross into AccessKit (Rust: panics on invalid
 // str) and the browser DOM. Pure.
 sem_label_clip :: proc(label: string) -> int {

@@ -610,7 +610,7 @@ ti_keys_select :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 	sb := ctx.sb
 	sel := ctx.sel
 	// A selection owned by a different (now unfocused / possibly dead)
-	// builder is stale — drop it so its pointer is never trusted.
+	// builder is stale - drop it so its pointer is never trusted.
 	if sel.active && sel.sb != sb {
 		sel_reset(sel)
 	}
@@ -641,7 +641,7 @@ ti_keys_select :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 			if ctx.caret do ctx.cursor^ = strings.builder_len(sb^)
 		}
 	}
-	// Copy (Cmd/Ctrl+C) — copies the selected range.
+	// Copy (Cmd/Ctrl+C) - copies the selected range.
 	if mods && is_key_pressed(ctx.frame, .C) && ti_sel_owner(ctx) {
 		s := strings.to_string(sb^)
 		lo, hi := sel_range(sel)
@@ -649,7 +649,7 @@ ti_keys_select :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 			platform_set_clipboard(&ctx.frame.output.platform, s[lo:hi])
 		}
 	}
-	// Cut (Cmd/Ctrl+X) — copies the selected range then deletes it.
+	// Cut (Cmd/Ctrl+X) - copies the selected range then deletes it.
 	if mods && is_key_pressed(ctx.frame, .X) && ti_sel_owner(ctx) {
 		s := strings.to_string(sb^)
 		lo, hi := sel_range(sel)

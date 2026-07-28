@@ -1,5 +1,5 @@
 #+build !js
-// LIB-CANDIDATE: this package must import only core:* and ingot:threadhook —
+// LIB-CANDIDATE: this package must import only core:* and ingot:threadhook -
 // never app packages. threadhook is the one permitted exception: it is a
 // dependency-free leaf (base:runtime + core:sync) that exists so worker-thread
 // assertions can reach the embedder's crash reporter, which they otherwise
@@ -50,7 +50,7 @@ WS_MAX_QUEUED_MESSAGES :: 1024
 WS_MAX_QUEUED_BYTES :: 64 * 1024 * 1024
 
 // Liveness/reconnect tuning. The live socket carries a recv read deadline so a
-// half-open TCP drop (Wi-Fi/VPN/sleep — no FIN/RST) is detected instead of
+// half-open TCP drop (Wi-Fi/VPN/sleep - no FIN/RST) is detected instead of
 // blocking the worker forever: each timeout window sends a PING (the server
 // auto-replies PONG), and the connection is declared dead once no bytes arrive
 // for WS_DEAD_AFTER. WS_RECONNECT_WAIT backs off between dial cycles.
@@ -105,7 +105,7 @@ WS_Frame :: struct {
 //
 // On .Ok, consumed is the full frame size (header [+4 mask] + payload) and
 // frame.payload lies within buf[:consumed]. On .Need_More / .Too_Big,
-// consumed is 0; .Too_Big is a protocol violation — the caller should drop
+// consumed is 0; .Too_Big is a protocol violation - the caller should drop
 // the connection rather than buffer unbounded data.
 ws_parse_frame :: proc(buf: []u8) -> (frame: WS_Frame, consumed: int, status: WS_Parse_Status) {
 	assert(len(buf) >= 0)
@@ -178,7 +178,7 @@ ws_parse_frame :: proc(buf: []u8) -> (frame: WS_Frame, consumed: int, status: WS
 }
 
 // Reassembly state for fragmented messages (RFC 6455 §5.4). Owned by
-// ws_recv_loop (loop-local — the loop owns the connection lifetime).
+// ws_recv_loop (loop-local - the loop owns the connection lifetime).
 // Package-private (not file-private) so ws_test.odin can drive reassembly.
 @(private)
 WS_Frag_State :: struct {
@@ -189,9 +189,9 @@ WS_Frag_State :: struct {
 
 // ws_handle_data_frame applies one TEXT/BINARY/CONTINUATION frame to the
 // reassembly state, enqueueing a complete logical message once FIN closes
-// it. Returns false on a protocol violation — a bare continuation, a data
+// it. Returns false on a protocol violation - a bare continuation, a data
 // frame interleaved inside an unfinished fragment sequence, or an assembled
-// message exceeding WS_MAX_PAYLOAD — in which case the caller must drop the
+// message exceeding WS_MAX_PAYLOAD - in which case the caller must drop the
 // connection (RFC 6455 §5.4 fail-fast).
 @(private)
 ws_handle_data_frame :: proc(ws: ^WebSocket, frag: ^WS_Frag_State, frame: WS_Frame) -> bool {
@@ -294,7 +294,7 @@ WebSocket :: struct {
 	socket_open:       bool,
 	sock_mutex:        sync.Mutex,
 
-	// Written by the worker thread, read by the main thread — always access
+	// Written by the worker thread, read by the main thread - always access
 	// with sync.atomic_load / atomic_store (ws_state is the public read).
 	state:             WS_State,
 	last_error:        WS_Error,
@@ -306,7 +306,7 @@ WebSocket :: struct {
 
 	// host/path above point into url_storage, which owns the only copy of the
 	// URL. It is a raw string rather than a [dynamic], so unlike recv_queue it
-	// does not carry its own allocator — url_allocator records the one that
+	// does not carry its own allocator - url_allocator records the one that
 	// produced it. ws_start_connect_url and ws_close can run under different
 	// ambient allocators (a consumer may connect on one and tear down on
 	// another), and freeing a block from an allocator that did not produce it
@@ -319,7 +319,7 @@ WebSocket :: struct {
 
 	// Self-healing: the worker re-dials on every drop until ws_close, so the
 	// thread lives for the whole session. conn_gen is bumped on each successful
-	// (re)handshake — consumers poll it (ws_conn_gen) to re-establish app-level
+	// (re)handshake - consumers poll it (ws_conn_gen) to re-establish app-level
 	// subscriptions after a recovery. auto_reconnect=false restores the legacy
 	// one-shot behaviour (worker exits after the first drop).
 	conn_gen:          int,
@@ -347,7 +347,7 @@ WebSocket :: struct {
 	send_mutex:        sync.Mutex,
 
 	// Background thread: runs dial + handshake, then the recv loop. running
-	// is written by ws_close and the worker and read across threads — always
+	// is written by ws_close and the worker and read across threads - always
 	// access it with sync.atomic_load / atomic_store.
 	recv_thread:       ^thread.Thread,
 	running:           bool,
@@ -425,7 +425,7 @@ ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Option
 
 // ws_stop_wait sleeps up to d but wakes early when ws_close clears running,
 // so dial-retry and reconnect backoffs never delay shutdown by their full
-// length. Timeout expiry is the normal path — nothing signals during routine
+// length. Timeout expiry is the normal path - nothing signals during routine
 // backoff, only ws_close broadcasts.
 @(private = "file")
 ws_stop_wait :: proc(ws: ^WebSocket, d: time.Duration) {
@@ -445,7 +445,7 @@ ws_notify :: proc(ws: ^WebSocket) {
 	if ws.wake != nil do ws.wake()
 }
 
-// ws_set_state publishes a state transition from the worker thread (atomic —
+// ws_set_state publishes a state transition from the worker thread (atomic -
 // the main thread reads concurrently) and wakes the frame loop so connection
 // status changes appear without waiting for the idle floor.
 @(private = "file")
@@ -458,7 +458,7 @@ ws_set_state :: proc(ws: ^WebSocket, s: WS_State) {
 
 // ws_enqueue appends one received message under recv_mutex, keeping the queue
 // bounded: if the main thread stalls and stops draining, the oldest message
-// is dropped (and counted) rather than letting memory grow without limit —
+// is dropped (and counted) rather than letting memory grow without limit -
 // for a UI consumer the latest data wins.
 @(private = "file")
 ws_enqueue :: proc(ws: ^WebSocket, data: string, binary: bool) {
@@ -604,7 +604,7 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 
 	// The worker exiting means no connection is live: normalize the state
 	// unconditionally. The pre-fix condition preserved a stale .Connected
-	// when ws_close raced the recv loop's running check — the reconnect
+	// when ws_close raced the recv loop's running check - the reconnect
 	// fuzzer (fuzz/wsreconn) found that interleaving.
 	if ws_state(ws) != .Error do ws_set_state(ws, .Disconnected)
 	sync.atomic_store(&ws.running, false)
@@ -733,7 +733,7 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 			frame, consumed, status := ws_parse_frame(buf[offset:])
 			if status == .Need_More do break
 			if status == .Too_Big {
-				// Oversized frame: protocol violation — drop the connection
+				// Oversized frame: protocol violation - drop the connection
 				// rather than buffering unbounded data (worker will re-dial).
 				ws_set_state(ws, .Disconnected)
 				return
@@ -860,7 +860,7 @@ ws_conn_gen :: proc(ws: ^WebSocket) -> int {
 	return sync.atomic_load(&ws.conn_gen)
 }
 
-// ws_state returns the connection state with an atomic read — the worker
+// ws_state returns the connection state with an atomic read - the worker
 // thread writes it concurrently, so a plain field read would be racy.
 ws_state :: proc(ws: ^WebSocket) -> WS_State {
 	return sync.atomic_load(&ws.state)
@@ -873,19 +873,19 @@ ws_error :: proc(ws: ^WebSocket) -> WS_Error {
 // Close the WebSocket connection. Stops the worker thread: broadcasting
 // stop_cond ends any backoff wait early, closing the socket unblocks a
 // blocking recv (handshake or recv loop), and a dial in flight fails on its
-// own — the worker then exits on running == false.
+// own - the worker then exits on running == false.
 ws_close :: proc(ws: ^WebSocket) {
 	assert(ws != nil)
 	sync.atomic_store(&ws.running, false)
 
 	// Wake a worker parked in ws_stop_wait so shutdown is prompt (broadcast
-	// under the mutex — never lost against a concurrent wait).
+	// under the mutex - never lost against a concurrent wait).
 	sync.mutex_lock(&ws.stop_mutex)
 	sync.cond_broadcast(&ws.stop_cond)
 	sync.mutex_unlock(&ws.stop_mutex)
 
 	// Best-effort CLOSE frame while the socket is still open. Must run before
-	// the close below and outside sock_mutex — ws_send_frame takes sock_mutex
+	// the close below and outside sock_mutex - ws_send_frame takes sock_mutex
 	// itself to snapshot the socket.
 	if sync.atomic_load(&ws.state) == .Connected {
 		ws_send_frame(ws, WS_OP_CLOSE, nil)
@@ -906,7 +906,7 @@ ws_close :: proc(ws: ^WebSocket) {
 	}
 	sync.atomic_store(&ws.state, WS_State.Disconnected)
 
-	// Clean up queue (idempotent — ws_close may be called more than once).
+	// Clean up queue (idempotent - ws_close may be called more than once).
 	for msg in ws.recv_queue {
 		delete(msg.data)
 	}

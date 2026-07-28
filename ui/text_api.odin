@@ -3,7 +3,7 @@
 // Semantic text API. Callers name the *role* a string plays and the *ink* it
 // is drawn with; the frame's Ui_Metrics and Theme resolve those to a concrete
 // font size and color. This removes the two most repeated call shapes in
-// consumer code — re-deriving metrics/theme purely to feed a size and a color,
+// consumer code - re-deriving metrics/theme purely to feed a size and a color,
 // and cloning every literal to a cstring at the call site.
 //
 // The explicit draw_text_frame / measure_text_frame / draw_text_wrapped_frame /

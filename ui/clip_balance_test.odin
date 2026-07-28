@@ -9,7 +9,7 @@ package ui
 //   - Exceeding PAINT_CLIP_CAP is a *resource limit*, not an invariant. Alloy
 //     nests chat > markdown block > code block > split pane > sidebar, and a
 //     deep enough document reaches 64. That must degrade the way command and
-//     text overflow already do in this file's sibling paths — drop and count —
+//     text overflow already do in this file's sibling paths - drop and count -
 //     rather than abort the app.
 //
 //   - Ending a clip that was never begun, or leaving one open at frame end, is

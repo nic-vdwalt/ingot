@@ -13,7 +13,7 @@ import win32 "core:sys/windows"
 // WM_NCCALCSIZE, then do all hit-testing ourselves in WM_NCHITTEST. The header
 // row doubles as the title bar: empty strip space drags the window
 // (HTCAPTION), interactive widgets stay HTCLIENT, and three caption buttons at
-// the top-right are non-client (HTMINBUTTON/HTMAXBUTTON/HTCLOSE — HTMAXBUTTON is
+// the top-right are non-client (HTMINBUTTON/HTMAXBUTTON/HTCLOSE - HTMAXBUTTON is
 // what makes the Windows 11 Snap Layouts flyout appear on hover).
 //
 // Because the caption buttons are non-client, GLFW/raylib never receives
@@ -110,7 +110,7 @@ titlebar_state :: proc() -> (hover, pressed: Titlebar_Button, maximized: bool) {
 }
 
 // titlebar_consume_activity reports (and clears) whether non-client state
-// changed since the last frame — used to wake the render loop out of
+// changed since the last frame - used to wake the render loop out of
 // IDLE_FPS so caption-button hover feedback is immediate.
 titlebar_consume_activity :: proc() -> bool {
 	a := tb_activity
@@ -179,7 +179,7 @@ tb_hittest :: proc "system" (hwnd: win32.HWND, cx, cy: i32) -> win32.LRESULT {
 	w := i32(rc.right - rc.left)
 	h := i32(rc.bottom - rc.top)
 
-	// Resize borders (none when maximized — also puts the close button in the
+	// Resize borders (none when maximized - also puts the close button in the
 	// exact top-right corner for easy clicking).
 	if !tb_maximized {
 		b := tb_border_px(hwnd)
@@ -305,7 +305,7 @@ titlebar_subclass_proc :: proc "system" (
 		tb_set_pressed(.None)
 
 	case win32.WM_MOUSEMOVE:
-		// Mouse entered the client area — clear any caption button hover.
+		// Mouse entered the client area - clear any caption button hover.
 		tb_set_hover(.None)
 
 	case win32.WM_NCLBUTTONDOWN:

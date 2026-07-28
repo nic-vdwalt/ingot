@@ -1,5 +1,5 @@
 #+build js
-// Web WebSocket backend — same public API as net/ws.odin, but backed by the
+// Web WebSocket backend - same public API as net/ws.odin, but backed by the
 // browser's native WebSocket (which handles the RFC 6455 framing/handshake/
 // masking the native path implements by hand). Received messages are buffered
 // JS-side and pulled into the shared recv model by ws_drain.

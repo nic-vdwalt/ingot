@@ -441,10 +441,10 @@ when !INGOT_NET_SIM {
 		result_slots:    int,
 		mutex:           sync.Mutex,
 		workers:         [FETCH_WORKERS]^thread.Thread,
-		// Cross-thread stop flag — access with sync.atomic_load / atomic_store.
+		// Cross-thread stop flag - access with sync.atomic_load / atomic_store.
 		running:         bool,
 		// Workers park on jobs_cond (under mutex) until a job arrives or
-		// fetcher_stop broadcasts — no sleep-polling.
+		// fetcher_stop broadcasts - no sleep-polling.
 		jobs_cond:       sync.Cond,
 		// Optional wake hook, called from a worker after a result is queued so an
 		// event-driven-idle frame loop repaints promptly instead of waiting for
@@ -699,7 +699,7 @@ when !INGOT_NET_SIM {
 		assert(idx < FETCH_WORKERS, "fetch_worker: worker index out of range")
 		for {
 			sync.mutex_lock(&f.mutex)
-			// Park until a job arrives or fetcher_stop broadcasts — blocking on the
+			// Park until a job arrives or fetcher_stop broadcasts - blocking on the
 			// condvar replaces the old 10 ms sleep-poll, so idle workers cost
 			// nothing and job pickup is immediate.
 			for len(f.jobs) == 0 && sync.atomic_load(&f.running) {

@@ -3,7 +3,7 @@
 // ImGui contract) as a pure helper. No keyed storage: the caller owns the
 // drag latch (one bool per draggable widget); latch-less widgets get simple
 // hover + release-over click semantics. A module-level pointer arbitrates
-// exclusivity — one mouse means at most one active drag — without retaining
+// exclusivity - one mouse means at most one active drag - without retaining
 // any per-widget state in the library.
 package ui
 
@@ -53,7 +53,7 @@ Interact_Event :: struct {
 //   - a missed release event (button no longer down) drops the latch;
 //   - while another widget holds a latch, this widget stays inert;
 //   - latch-less widgets report release-over as `clicked`, but only when
-//     the press also began on the widget (press_over) — otherwise a press
+//     the press also began on the widget (press_over) - otherwise a press
 //     that starts on an overlay and slides off it would leak a click to
 //     the widget underneath.
 interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {

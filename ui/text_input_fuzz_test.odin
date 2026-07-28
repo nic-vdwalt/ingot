@@ -77,7 +77,7 @@ fz_check :: proc(t: ^testing.T, f: ^Fuzz_Input, seed: u64, i: int) -> bool {
 		ok &&= utf8.rune_start(text[f.cursor])
 	}
 	// Selection: stored values are deliberately unclamped (the widget clamps
-	// at use time against external rewrites) — the contract is that
+	// at use time against external rewrites) - the contract is that
 	// normalization + clamp-at-use always yields a valid range.
 	if ok && f.sel.active && f.sel.sb == &f.sb {
 		lo, hi := sel_range(&f.sel)

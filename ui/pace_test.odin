@@ -2,7 +2,7 @@
 package ui
 
 // Policy tests for the adaptive frame pacer. These exercise the decision
-// itself — rate and frame strategy — with no renderer involved, so they run
+// itself - rate and frame strategy - with no renderer involved, so they run
 // headless alongside the rest of the ui package.
 
 import "core:testing"
@@ -39,7 +39,7 @@ pace_harness_destroy :: proc(h: ^Pace_Harness) {
 //
 // `strategy` is the pacer's retained choice and is always valid. `published`
 // says whether the pacer wrote to Platform_Output this frame, and
-// `published_strategy` is what it wrote — meaningful only when published is
+// `published_strategy` is what it wrote - meaningful only when published is
 // true, because platform_output_reset zeroes the buffer at the top of every
 // frame. Steady-state frames publish nothing, which is the point.
 @(private = "file")

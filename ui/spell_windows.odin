@@ -170,7 +170,7 @@ foreign kernel32_spell {
 g_checker: ^ISpellChecker
 
 _spell_backend_init :: proc() -> bool {
-	// S_FALSE / RPC_E_CHANGED_MODE mean COM is already initialised — proceed.
+	// S_FALSE / RPC_E_CHANGED_MODE mean COM is already initialised - proceed.
 	win.CoInitializeEx(nil, .APARTMENTTHREADED)
 
 	factory: ^ISpellCheckerFactory

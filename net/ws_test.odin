@@ -126,7 +126,7 @@ test_ws_parse_need_more :: proc(t: ^testing.T) {
 
 @(test)
 test_ws_parse_too_big :: proc(t: ^testing.T) {
-	// Declared 64-bit length just above WS_MAX_PAYLOAD (no payload attached —
+	// Declared 64-bit length just above WS_MAX_PAYLOAD (no payload attached -
 	// the limit must trip before completeness is considered).
 	n := u64(WS_MAX_PAYLOAD) + 1
 	buf := make([dynamic]u8, context.temp_allocator)
@@ -141,7 +141,7 @@ test_ws_parse_too_big :: proc(t: ^testing.T) {
 
 @(test)
 test_ws_parse_negative_64bit_length :: proc(t: ^testing.T) {
-	// High bit set in the 64-bit length overflows signed int — must be
+	// High bit set in the 64-bit length overflows signed int - must be
 	// rejected as Too_Big, never treated as a valid (huge) length.
 	buf := []u8{0x81, 127, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}
 	_, consumed, status := ws_parse_frame(buf)
@@ -226,7 +226,7 @@ test_ws_frag_two_part_text :: proc(t: ^testing.T) {
 	)
 	testing.expect_value(t, frag.active, true)
 	testing.expect_value(t, len(ws_drain(&ws)), 0) // nothing until FIN
-	// A control frame (PING) may interleave here — it never touches frag
+	// A control frame (PING) may interleave here - it never touches frag
 	// state, so reassembly must complete normally afterwards.
 	testing.expect(
 		t,
@@ -313,7 +313,7 @@ test_ws_frag_interleaved_data_rejected :: proc(t: ^testing.T) {
 		t,
 		ws_handle_data_frame(&ws, &frag, {opcode = WS_OP_TEXT, payload = {'a'}, fin = false}),
 	)
-	// A new data message may not start inside an unfinished sequence —
+	// A new data message may not start inside an unfinished sequence -
 	// whether or not it is itself fragmented.
 	testing.expect_value(
 		t,
