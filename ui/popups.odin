@@ -52,20 +52,24 @@ route_claim_backdrop :: proc(frame: ^Ui_Frame, panel: Rect_I32, screen_w, screen
 	)
 }
 
+Modal_Config :: struct {
+	size:   [2]i32,
+	screen: Rect_I32,
+}
+
 // modal_begin dims the screen, claims backdrop input (nothing under the dim
 // layer hovers or clicks), draws a centered titled panel clamped to the screen,
 // begins a scissor over it, and returns the body rect below the title band.
-// Pair with modal_end, which handles dismissal. Focus trap: while a modal is
-// open the caller must route Tab cycling only across the widgets it draws
-// inside the body.
 modal_begin :: proc(
 	frame: ^Ui_Frame,
 	st: ^Modal_State,
 	title: string,
-	w, h, screen_w, screen_h: i32,
+	config: Modal_Config,
 ) -> Rect_I32 {
 	assert(st != nil && st.open, "modal_begin: modal not open")
 	assert(!st.drawing, "modal_begin: unbalanced begin (missing modal_end)")
+	w, h := config.size.x, config.size.y
+	screen_w, screen_h := config.screen.w, config.screen.h
 	assert(w > 0 && h > 0, "modal_begin: empty modal size")
 	st.drawing = true
 	st.frame = frame
@@ -356,7 +360,7 @@ Tooltip_State :: struct {
 // `rect` for TOOLTIP_DELAY seconds. Call it after drawing the target; the tip
 // itself is replayed through the overlay layer so it always paints on top.
 // Keeps frames coming while the dwell timer runs (event-driven hosts).
-tooltip :: proc(
+tooltip_at :: proc(
 	frame: ^Ui_Frame,
 	st: ^Tooltip_State,
 	rect: Rect_I32,

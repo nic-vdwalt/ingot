@@ -14,22 +14,36 @@ import "core:strings"
 
 // --- interactive ------------------------------------------------------------
 
+Collapsible_Header_Facade_Options :: struct {
+	icon:        rune,
+	right_label: string,
+	font_size:   i32,
+	height:      i32,
+	field_id:    string,
+}
+
 // collapsible_header carves a full-width row and toggles open^ on click or
-// Space/Enter. Returns true on the frame the disclosure state changed.
+// Space/Enter. Numeric options are logical and scale exactly once here.
 collapsible_header :: proc(
 	u: ^Ui,
 	id: Widget_Id,
 	label: string,
 	open: ^bool,
-	options: Collapsible_Header_Options = {},
+	options: Collapsible_Header_Facade_Options = {},
 ) -> bool {
 	assert(u != nil && u.open, "collapsible_header: frame not open")
 	assert(id != WIDGET_ID_NONE, "collapsible_header: zero stable id")
 	assert(open != nil, "collapsible_header: nil open state")
 	height := options.height if options.height > 0 else 26
-	rect := slot_next(u, remaining_rect(u).w, height)
-	opts := options
-	opts.widget = id
+	rect := slot_next_px(u, remaining(&u.layout).w, ui_frame_sc(u.frame, height))
+	opts := Collapsible_Header_Options {
+		icon        = options.icon,
+		right_label = options.right_label,
+		font_size   = ui_frame_sc(u.frame, options.font_size) if options.font_size > 0 else 0,
+		height      = ui_frame_sc(u.frame, height),
+		field_id    = options.field_id,
+		widget      = id,
+	}
 	if slot_visible(rect) do opts.focus = focus(u, id)
 	return collapsible_header_at(u.frame, rect, label, open, opts).toggled
 }
@@ -56,13 +70,13 @@ back_btn :: proc(u: ^Ui, id: Widget_Id, label: string) -> bool {
 	return back_btn_at(u.frame, rect, label, fo, id)
 }
 
-// tooltip attaches a hover tooltip to a rect a widget already occupies, using
-// the screen bounds the Ui cached at begin so the caller need not thread them.
-tooltip_for :: proc(u: ^Ui, state: ^Tooltip_State, rect: Rect_I32, text: string) {
-	assert(u != nil && u.open, "tooltip_for: frame not open")
-	assert(state != nil, "tooltip_for: nil state")
+// tooltip attaches hover text to a rect a facade widget already occupies,
+// using the screen bounds cached by begin.
+tooltip :: proc(u: ^Ui, state: ^Tooltip_State, rect: Rect_I32, text: string) {
+	assert(u != nil && u.open, "tooltip: frame not open")
+	assert(state != nil, "tooltip: nil state")
 	if !slot_visible(rect) do return
-	tooltip(u.frame, state, rect, text, u.screen_w, u.screen_h)
+	tooltip_at(u.frame, state, rect, text, u.screen_w, u.screen_h)
 }
 
 // --- presentational ---------------------------------------------------------
@@ -132,14 +146,36 @@ progress_bar_animated :: proc(
 	progress_bar_animated_at(u.frame, rect, fraction, anim, color, options)
 }
 
-// spinner carves a square slot of the given logical diameter.
-spinner :: proc(u: ^Ui, diameter: i32 = 24, options: Spinner_Options = {}) {
+Spinner_Facade_Options :: struct {
+	style:              Spinner_Style,
+	radius:             f32,
+	color:              Color,
+	segments:           i32,
+	dot_count:          i32,
+	dot_radius:         f32,
+	speed:              f32,
+	animation_interval: f64,
+}
+
+// spinner carves a square slot of the given logical diameter. Numeric option
+// dimensions are logical and become physical only at this facade boundary.
+spinner :: proc(u: ^Ui, diameter: i32 = 24, options: Spinner_Facade_Options = {}) {
 	assert(u != nil && u.open, "spinner: frame not open")
 	assert(diameter > 0, "spinner: non-positive diameter")
 	size := ui_frame_sc(u.frame, diameter)
 	rect := slot_next_px(u, size, size)
 	if !slot_visible(rect) do return
-	spinner_at(u.frame, rect, options)
+	resolved := Spinner_Options {
+		style              = options.style,
+		radius             = ui_frame_scf(u.frame, options.radius) if options.radius > 0 else 0,
+		color              = options.color,
+		segments           = options.segments,
+		dot_count          = options.dot_count,
+		dot_radius         = ui_frame_scf(u.frame, options.dot_radius) if options.dot_radius > 0 else 0,
+		speed              = options.speed,
+		animation_interval = options.animation_interval,
+	}
+	spinner_at(u.frame, rect, resolved)
 }
 
 // sparkline carves a slot of the given logical size.
@@ -202,5 +238,5 @@ card_bg :: proc(u: ^Ui, bg: Color, accent: Color = THEME_COLOR, accent_w: i32 = 
 	assert(u != nil && u.open, "card_bg: frame not open")
 	rect := remaining(&u.layout)
 	if !slot_visible(rect) do return
-	draw_card_bg_frame(u.frame, rect_f32(rect), bg, accent, accent_w)
+	card_bg_at(u.frame, rect, bg, accent, accent_w)
 }

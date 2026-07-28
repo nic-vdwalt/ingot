@@ -47,7 +47,17 @@ INGOT_CAPTURE_DIR="$STILLS_DIR" "$BIN"
 
 echo "== optimise stills =="
 still_failures=0
-for png in "$STILLS_DIR"/*.png; do
+for png in \
+	"$STILLS_DIR/gallery-widgets-dark.png" \
+	"$STILLS_DIR/gallery-charts-dark.png" \
+	"$STILLS_DIR/gallery-buttons-light.png" \
+	"$STILLS_DIR/gallery-inputs-light.png" \
+	"$STILLS_DIR/gallery-stress-dark.png"
+do
+	if [ ! -f "$png" ]; then
+		echo "capture-media: expected still missing: $png" >&2
+		exit 1
+	fi
 	# -strip drops timestamps and colour profiles, which would otherwise make
 	# two identical captures differ byte-for-byte. -define png:compression-* asks
 	# for the smallest deflate; the images are flat UI art, so quantising to 256

@@ -115,6 +115,44 @@ facade_widgets_scale_their_slots :: proc(t: ^testing.T) {
 }
 
 @(test)
+facade_widget_options_scale_once :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	text_backend: Test_Text_Backend_State
+	facade_widget_frame(&runtime, &frame, output, &text_backend, 2)
+	defer ui_runtime_destroy(&runtime)
+	defer ui_frame_end(&frame)
+
+	u: Ui
+	open := true
+	begin(&u, &frame, {0, 0, 400, 400})
+	_ = collapsible_header(
+		&u,
+		id(&u, "details"),
+		"Details",
+		&open,
+		{height = 30, font_size = 10},
+	)
+	spinner(&u, 24, {style = .Orbit_Dots, radius = 8, dot_radius = 2, dot_count = 3})
+	after := remaining_rect(&u)
+	end(&u)
+
+	// 30 logical header pixels plus a 24 logical spinner consume 108 physical pixels.
+	testing.expect_value(t, after.y, i32(108))
+	// The spinner emits physical dots with radius 4 at scale 2.
+	found_dot := false
+	for command in output.main.commands[:output.main.count] {
+		if command.kind == .Circle && command.outer_radius == 4 {
+			found_dot = true
+			break
+		}
+	}
+	testing.expect(t, found_dot, "logical dot radius must scale once")
+}
+
+@(test)
 facade_widgets_skip_focus_when_slot_collapses :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	frame: Ui_Frame

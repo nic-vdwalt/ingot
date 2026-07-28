@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 240" role="img" aria-labelledby="title desc">
+  <title id="title">Ingot</title>
+  <desc id="desc">The Ingot wordmark beside a geometric gold ingot.</desc>
+  <rect width="960" height="240" rx="30" fill="#1e1e1e"/>
+  <g transform="translate(52 29) scale(.72)">
+    <path d="M48 99 128 58l80 41-80 42Z" fill="#ffc850"/>
+    <path d="m48 99 80 42v61l-80-42Z" fill="#c8b478"/>
+    <path d="m128 141 80-42v61l-80 42Z" fill="#8c6e28"/>
+    <path d="m72 100 56-29 56 29-56 29Z" fill="#ffe39a"/>
+    <path d="M48 99 128 58l80 41v61l-80 42-80-42Z" fill="none" stroke="#464650" stroke-width="6" stroke-linejoin="round"/>
+    <path d="m48 99 80 42 80-42M128 141v61" fill="none" stroke="#464650" stroke-width="6" stroke-linejoin="round"/>
+    <path d="m81 100 47-24 28 14" fill="none" stroke="#fff4cf" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g fill="none" stroke="#f5f5f7" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M278 105v72"/>
+    <path d="M278 69h.1"/>
+    <path d="M342 177v-72m0 26c13-19 48-24 48 12v34"/>
+    <path d="M506 111c-10-9-22-13-34-13-27 0-46 18-46 43s19 43 46 43c13 0 25-5 34-14m0-65v71c0 34-17 49-46 49-10 0-20-3-28-8"/>
+    <path d="M589 98c-28 0-47 18-47 43s19 43 47 43 47-18 47-43-19-43-47-43Z"/>
+    <path d="M699 70v84c0 22 11 31 29 31 7 0 13-1 19-4M675 105h66"/>
+  </g>
+  <path d="M279 202h468" stroke="#ffc850" stroke-width="6" stroke-linecap="round"/>
+</svg>

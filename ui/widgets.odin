@@ -64,16 +64,17 @@ draw_panel_header :: proc(
 	return y + metrics.PANEL_HEADER_H
 }
 
-// draw_card_bg draws the unified card container: rounded background fill +
-// hairline border + optional left accent bar.
-draw_card_bg_frame :: proc(
+// card_bg_at draws the unified card container: rounded background fill,
+// hairline border, and optional left accent bar in a physical rectangle.
+card_bg_at :: proc(
 	frame: ^Ui_Frame,
-	rect: Rectangle,
+	bounds: Rect_I32,
 	bg: Color,
 	accent: Color = THEME_COLOR,
 	accent_w: i32 = 0,
 ) {
-	assert(frame != nil, "draw_card_bg_frame: nil frame")
+	assert(frame != nil, "card_bg_at: nil frame")
+	rect := rect_f32(bounds)
 	min_dim := min(rect.width, rect.height)
 	if min_dim <= 0 do return
 	round := (ui_frame_metrics(frame).CARD_RADIUS_PX * 2) / min_dim
@@ -1443,7 +1444,7 @@ pane_reset :: proc(p: ^Pane) {
 pane_begin :: proc(
 	frame: ^Ui_Frame,
 	p: ^Pane,
-	x, y, w, h: i32,
+	rect: Rect_I32,
 	pad: i32 = 10,
 	keyboard: bool = false,
 ) -> (
@@ -1451,6 +1452,7 @@ pane_begin :: proc(
 ) {
 	assert(frame != nil, "pane_begin: nil frame")
 	assert(p != nil, "pane_begin: nil p")
+	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	// Why assert: an already-open pane means a missing pane_end — the scissor
 	// stack would corrupt every subsequent draw.
 	assert(!p.open, "pane_begin: pane already begun (missing pane_end)")
@@ -1490,9 +1492,16 @@ pane_keyboard_scroll :: proc(frame: ^Ui_Frame, p: ^Pane, h: i32) {
 // pane_end ends the scissor, records the measured content height from the
 // caller's final y cursor, and draws/handles the scrollbar when content
 // overflows the pane.
-pane_end :: proc(frame: ^Ui_Frame, p: ^Pane, x, y, w, h: i32, end_y: i32, pad: i32 = 10) {
+pane_end :: proc(
+	frame: ^Ui_Frame,
+	p: ^Pane,
+	rect: Rect_I32,
+	end_y: i32,
+	pad: i32 = 10,
+) {
 	assert(frame != nil, "pane_end: nil frame")
 	assert(p != nil, "pane_end: nil p")
+	x, y, w, h := rect.x, rect.y, rect.w, rect.h
 	// Why assert: pane_end without pane_begin would pop a scissor the pane
 	// never pushed, clipping unrelated draws.
 	assert(p.open, "pane_end: pane not begun")
