@@ -228,6 +228,8 @@ gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	if debug_on {
 		ui.draw_debug_overlay(frame, sw - ui.ui_frame_sc(frame, 290), ui.ui_frame_sc(frame, 10))
 	}
+
+	_ = ui.draw_app_header(frame, "ingot gallery", sw)
 }
 
 shutdown :: proc(app: ^ui_gfx.App, userdata: rawptr) {
@@ -277,7 +279,7 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, sh: i32) {
 	) {
 		dark = !dark
 		high_contrast = false
-		apply_gallery_theme()
+		apply_gallery_theme(frame)
 	}
 	y += ui.ui_frame_sc(frame, 32)
 	if ui.button_at(
@@ -286,7 +288,7 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, sh: i32) {
 		"Standard contrast" if high_contrast else "High contrast",
 	) {
 		high_contrast = !high_contrast
-		apply_gallery_theme()
+		apply_gallery_theme(frame)
 	}
 	y += ui.ui_frame_sc(frame, 32)
 	if ui.button_at(
@@ -295,7 +297,7 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, sh: i32) {
 		"Motion: reduced" if reduced_motion else "Motion: full",
 	) {
 		reduced_motion = !reduced_motion
-		apply_gallery_theme()
+		apply_gallery_theme(frame)
 	}
 	y += ui.ui_frame_sc(frame, 32)
 	if ui.button_at(
@@ -308,13 +310,14 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, sh: i32) {
 	}
 }
 
-apply_gallery_theme :: proc() {
+apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
 	t :=
 		ui.theme_high_contrast() if high_contrast else (ui.theme_dark() if dark else ui.theme_light())
 	t.reduced_motion = reduced_motion
 	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app), t)
 	app.config.clear_color = ui_gfx.color_to_gfx(t.bg_app)
 	app.config.clear_color.a = 255
+	if frame != nil do ui.request_redraw(frame)
 }
 
 draw_content :: proc(frame: ^ui.Ui_Frame, sw, sh: i32) {
