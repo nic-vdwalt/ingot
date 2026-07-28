@@ -173,10 +173,7 @@ paint_clip_end :: proc(list: ^Paint_List) {
 	rect: Rect
 	if restore do rect = list.clip_stack[list.clip_count - 1]
 	list.clip_end_reserved -= 1
-	emitted := paint_push_unreserved(
-		list,
-		{kind = .Clip_End, rect = rect, clip_restore = restore},
-	)
+	emitted := paint_push_unreserved(list, {kind = .Clip_End, rect = rect, clip_restore = restore})
 	assert(emitted, "paint_clip_end: reserved append failed")
 }
 

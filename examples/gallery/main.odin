@@ -250,8 +250,15 @@ apply_scale :: proc(scale: f32) {
 
 draw_nav :: proc(frame: ^ui.Ui_Frame, top, sh: i32) {
 	w := ui.ui_frame_sc(frame, NAV_W)
-	rl.DrawRectangle(0, top, w, sh - top, ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).bg_secondary))
-	rl.DrawRectangle(w - 1, top, 1, sh - top, ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).border_subtle))
+	rl.DrawRectangle(
+		0,
+		top,
+		w,
+		sh - top,
+		ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).bg_secondary),
+	)
+	border := ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).border_subtle)
+	rl.DrawRectangle(w - 1, top, 1, sh - top, border)
 
 	y := top + ui.ui_frame_sc(frame, 14)
 	ui.text(frame, "ingot gallery", ui.ui_frame_sc(frame, 14), y, .Title)

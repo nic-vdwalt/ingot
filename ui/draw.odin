@@ -12,8 +12,11 @@ paint_command_to_screen :: proc(frame: ^Ui_Frame, command: Paint_Command) -> Pai
 	origin := frame_pane_origin(frame)
 	result := command
 	switch command.kind {
-	case .Rectangle, .Rectangle_Outline, .Rectangle_Rounded,
-	     .Rectangle_Rounded_Outline, .Rectangle_Gradient_V:
+	case .Rectangle,
+	     .Rectangle_Outline,
+	     .Rectangle_Rounded,
+	     .Rectangle_Rounded_Outline,
+	     .Rectangle_Gradient_V:
 		result.rect.x += origin.x
 		result.rect.y += origin.y
 	case .Line:
@@ -126,10 +129,7 @@ draw_line :: proc(frame: ^Ui_Frame, x0, y0, x1, y1: i32, color: Color) {
 
 draw_line_ex :: proc(frame: ^Ui_Frame, p0, p1: Vector2, thickness: f32, color: Color) {
 	assert(frame != nil, "draw_line_ex: nil frame")
-	frame_paint_push(
-		frame,
-		{kind = .Line, p0 = p0, p1 = p1, thickness = thickness, color = color},
-	)
+	frame_paint_push(frame, {kind = .Line, p0 = p0, p1 = p1, thickness = thickness, color = color})
 }
 
 draw_circle :: proc(frame: ^Ui_Frame, x, y: i32, radius: f32, color: Color) {
@@ -138,10 +138,7 @@ draw_circle :: proc(frame: ^Ui_Frame, x, y: i32, radius: f32, color: Color) {
 
 draw_circle_v :: proc(frame: ^Ui_Frame, center: Vector2, radius: f32, color: Color) {
 	assert(frame != nil, "draw_circle_v: nil frame")
-	frame_paint_push(
-		frame,
-		{kind = .Circle, p0 = center, outer_radius = radius, color = color},
-	)
+	frame_paint_push(frame, {kind = .Circle, p0 = center, outer_radius = radius, color = color})
 }
 
 draw_circle_lines_v :: proc(frame: ^Ui_Frame, center: Vector2, radius: f32, color: Color) {
@@ -177,10 +174,7 @@ draw_ring :: proc(
 
 draw_triangle :: proc(frame: ^Ui_Frame, p0, p1, p2: Vector2, color: Color) {
 	assert(frame != nil, "draw_triangle: nil frame")
-	frame_paint_push(
-		frame,
-		{kind = .Triangle, p0 = p0, p1 = p1, p2 = p2, color = color},
-	)
+	frame_paint_push(frame, {kind = .Triangle, p0 = p0, p1 = p1, p2 = p2, color = color})
 }
 
 begin_scissor_mode :: proc(frame: ^Ui_Frame, x, y, width, height: i32) {
@@ -188,12 +182,7 @@ begin_scissor_mode :: proc(frame: ^Ui_Frame, x, y, width, height: i32) {
 	origin := frame_pane_origin(frame)
 	paint_clip_begin(
 		frame_paint_list(frame),
-		{
-			f32(x) + origin.x,
-			f32(y) + origin.y,
-			f32(max(width, 0)),
-			f32(max(height, 0)),
-		},
+		{f32(x) + origin.x, f32(y) + origin.y, f32(max(width, 0)), f32(max(height, 0))},
 	)
 }
 
