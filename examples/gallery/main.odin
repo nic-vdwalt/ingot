@@ -759,18 +759,6 @@ api_tree_arrow_down :: proc(frame: ^ui.Ui_Frame, tip: ui.Vector2, color: ui.Colo
 	)
 }
 
-api_tree_arrow_up :: proc(frame: ^ui.Ui_Frame, tip: ui.Vector2, color: ui.Color) {
-	assert(frame != nil, "api_tree_arrow_up: nil frame")
-	size := f32(api_tree_sc(frame, 5))
-	ui.draw_triangle(
-		frame,
-		tip,
-		tip + ui.Vector2{-size, size},
-		tip + ui.Vector2{size, size},
-		color,
-	)
-}
-
 api_tree_arrow_side :: proc(frame: ^ui.Ui_Frame, tip: ui.Vector2, left: bool, color: ui.Color) {
 	assert(frame != nil, "api_tree_arrow_side: nil frame")
 	size := f32(api_tree_sc(frame, 5))
@@ -895,35 +883,6 @@ api_ownership_wide_rects :: proc(
 	return
 }
 
-api_tree_output_flow :: proc(
-	frame: ^ui.Ui_Frame,
-	outputs: []ui.Rect_I32,
-	adapter: ui.Rect_I32,
-	color: ui.Color,
-) {
-	assert(frame != nil && len(outputs) == 3, "api_tree_output_flow: invalid outputs")
-	assert(adapter.w > 0 && adapter.h > 0, "api_tree_output_flow: invalid adapter")
-	lane_y := f32(outputs[0].y + outputs[0].h + api_tree_sc(frame, 8))
-	first_x := f32(outputs[0].x + outputs[0].w / 2)
-	adapter_x := f32(adapter.x + adapter.w / 2)
-	for output in outputs {
-		from := ui.Vector2{f32(output.x + output.w / 2), f32(output.y + output.h)}
-		api_tree_segment(frame, from, {from.x, lane_y}, color)
-	}
-	api_tree_segment(frame, {first_x, lane_y}, {adapter_x, lane_y}, color)
-	adapter_tip := ui.Vector2{adapter_x, f32(adapter.y + adapter.h)}
-	api_tree_segment(frame, {adapter_x, lane_y}, adapter_tip, color)
-	api_tree_arrow_up(frame, adapter_tip, color)
-	ui.text(
-		frame,
-		"output channels flow to sibling Adapter",
-		outputs[0].x,
-		i32(lane_y + f32(api_tree_sc(frame, 4))),
-		.Note,
-		.Secondary,
-	)
-}
-
 api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui.Rect_I32) {
 	assert(frame != nil && state != nil, "api_ownership_wide: invalid arguments")
 	theme := ui.ui_frame_theme(frame)
@@ -933,7 +892,6 @@ api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui
 	api_tree_draw_edges(frame, app, app_children[:], theme.fg_accent)
 	api_tree_branch_down(frame, session, members[:], theme.fg_tool)
 	api_tree_branch_down(frame, members[3], outputs[:], theme.fg_success)
-	api_tree_output_flow(frame, outputs[:], members[4], theme.fg_assistant)
 	api_tree_card(
 		frame,
 		state,
@@ -1014,19 +972,25 @@ api_call_paths_tree :: proc(
 	theme := ui.ui_frame_theme(frame)
 	margin := api_tree_sc(frame, 14)
 	gap := api_tree_sc(frame, 12)
-	card_w := min(api_tree_sc(frame, 168), (panel.w - margin * 2 - gap) / 2)
+	card_w := min(api_tree_sc(frame, 168), (panel.w - margin * 2 - gap * 2) / 3)
 	card_h := min(api_tree_sc(frame, 48), max((panel.h - api_tree_sc(frame, 104)) / 5, 30))
 	top := panel.y + api_tree_sc(frame, 38)
 	row_gap := max((panel.h - api_tree_sc(frame, 52) - card_h * 5) / 4, 8)
-	entry_w := card_w * 3 + gap * 2
-	entry_x := panel.x + (panel.w - entry_w) / 2
-	facade := ui.Rect_I32{entry_x, top, card_w, card_h}
-	explicit := ui.Rect_I32{entry_x + card_w + gap, top, card_w, card_h}
-	migrated := ui.Rect_I32{explicit.x + card_w + gap, top, card_w, card_h}
-	frame_rect := api_tree_centered_rect(panel, top + card_h + row_gap, card_w, card_h)
-	output := api_tree_centered_rect(panel, frame_rect.y + card_h + row_gap, card_w, card_h)
-	adapter := api_tree_centered_rect(panel, output.y + card_h + row_gap, card_w, card_h)
-	gfx := api_tree_centered_rect(panel, adapter.y + card_h + row_gap, card_w, card_h)
+	ui_center_x := panel.x + panel.w / 3
+	migration_center_x := panel.x + panel.w * 2 / 3
+	facade := ui.Rect_I32{ui_center_x - card_w - gap / 2, top, card_w, card_h}
+	explicit := ui.Rect_I32{ui_center_x + gap / 2, top, card_w, card_h}
+	migrated := ui.Rect_I32{migration_center_x - card_w / 2, top, card_w, card_h}
+	frame_rect := ui.Rect_I32{ui_center_x - card_w / 2, top + card_h + row_gap, card_w, card_h}
+	output := ui.Rect_I32 {
+		ui_center_x - card_w / 2,
+		frame_rect.y + card_h + row_gap,
+		card_w,
+		card_h,
+	}
+	adapter := ui.Rect_I32{ui_center_x - card_w / 2, output.y + card_h + row_gap, card_w, card_h}
+	gfx := ui.Rect_I32{ui_center_x - card_w / 2, adapter.y + card_h + row_gap, card_w, card_h}
+	migrated_gfx := ui.Rect_I32{migration_center_x - card_w / 2, gfx.y, card_w, card_h}
 	declarations := [?]ui.Rect_I32{facade, explicit}
 	for declaration in declarations {
 		api_tree_edge_down(frame, declaration, frame_rect, theme.fg_accent)
@@ -1034,18 +998,7 @@ api_call_paths_tree :: proc(
 	api_tree_edge_down(frame, frame_rect, output, theme.fg_success)
 	api_tree_edge_down(frame, output, adapter, theme.fg_assistant)
 	api_tree_edge_down(frame, adapter, gfx, theme.fg_assistant)
-	migration_lane_x := f32(panel.x + panel.w - margin)
-	migration_from := ui.Vector2{f32(migrated.x + migrated.w / 2), f32(migrated.y + migrated.h)}
-	migration_tip := ui.Vector2{f32(gfx.x + gfx.w), f32(gfx.y + gfx.h / 2)}
-	api_tree_segment(frame, migration_from, {migration_from.x, migration_tip.y}, theme.fg_tool)
-	api_tree_segment(
-		frame,
-		{migration_from.x, migration_tip.y},
-		{migration_lane_x, migration_tip.y},
-		theme.fg_tool,
-	)
-	api_tree_segment(frame, {migration_lane_x, migration_tip.y}, migration_tip, theme.fg_tool)
-	api_tree_arrow_side(frame, migration_tip, true, theme.fg_tool)
+	api_tree_edge_down(frame, migrated, migrated_gfx, theme.fg_tool)
 	api_tree_card(
 		frame,
 		state,
@@ -1097,7 +1050,12 @@ api_call_paths_tree :: proc(
 	api_tree_card(
 		frame,
 		state,
-		{gfx, "ingot:gfx", "backend-facing API", API_TIP_GFX, theme.fg_assistant},
+		{gfx, "ingot:gfx", "UI backend calls", API_TIP_GFX, theme.fg_assistant},
+	)
+	api_tree_card(
+		frame,
+		state,
+		{migrated_gfx, "ingot:gfx", "direct raylib-shaped calls", API_TIP_GFX, theme.fg_tool},
 	)
 	_ = compact
 }

@@ -93,6 +93,7 @@ echo "  ${frames} frames"
 
 mkdir -p "$DIST_DIR"
 GIF="$DIST_DIR/ingot-gallery.gif"
+README_GIF="$STILLS_DIR/ingot-gallery.gif"
 MP4="$DIST_DIR/ingot-gallery.mp4"
 
 echo "== gif =="
@@ -105,6 +106,7 @@ ffmpeg -y -loglevel error -framerate 60 -i "$SEQ_DIR/frame_%05d.png" \
 ffmpeg -y -loglevel error -framerate 60 -i "$SEQ_DIR/frame_%05d.png" -i "$SEQ_DIR/palette.png" \
 	-lavfi "fps=20,scale=1280:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3" \
 	"$GIF"
+cp "$GIF" "$README_GIF"
 
 echo "== mp4 =="
 # yuv420p and an even height keep the file playable in browsers and on GitHub.
@@ -124,5 +126,5 @@ fi
 
 echo
 echo "capture-media: PASS"
-echo "  committed stills: docs/media/"
-echo "  release assets:   dist/media/ (git-ignored; upload with gh release upload)"
+echo "  committed media: docs/media/"
+echo "  release assets:  dist/media/ (git-ignored; upload with gh release upload)"
