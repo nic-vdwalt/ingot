@@ -66,10 +66,10 @@ Each stage gets an oracle that fails deterministically under a recorded seed.
 
 | Stage | Target | Oracles |
 |---|---|---|
-| Import: glTF/GLB, image, WGSL | `fuzz/run.sh asset` — valid template corpus plus `fuzzx.mutate` and `fuzzx.splice`, shaped like `fuzz/net` | No crash, no leak, no bad free. Every rejection is a handled error, never an assertion. Node graph traversal is an explicit bounded stack with a depth limit, so cyclic or deep hierarchies terminate. Index and accessor ranges are validated against buffer extents before any use |
+| Import: glTF/GLB, image, WGSL | `fuzz/run.sh asset` - valid template corpus plus `fuzzx.mutate` and `fuzzx.splice`, shaped like `fuzz/net` | No crash, no leak, no bad free. Every rejection is a handled error, never an assertion. Node graph traversal is an explicit bounded stack with a depth limit, so cyclic or deep hierarchies terminate. Index and accessor ranges are validated against buffer extents before any use |
 | Cook: normals, tangents, level of detail, mip chains, atlas packing | In-package fuzz tests, following the `input` and `term` pattern | Determinism: identical input produces byte-identical output under two different allocators. Metamorphic: vertex reordering preserves the topology hash, a rigid transform preserves the axis-aligned bounds relationship, level of detail triangle counts are monotonically non-increasing, mip dimensions halve exactly. Roundtrip: import of export is the identity |
 | Scene build and draw list | `fuzz/run.sh scene`, headless | Draw list stays inside its bound. No dangling mesh, material, or texture handle. Visibility never drops a fully visible object and never retains a fully excluded one. Sort order is stable for equal keys. `testx.snap` holds a golden textual dump of the draw list |
-| Residency, streaming, hot reload | `fuzz/run.sh assetio` — modeled on `wsreconn`: the real worker thread with a scripted I/O tape behind `INGOT_ASSET_SIM`, producing truncated reads, cancellations, evictions, and reload mid-frame. Also run in the `tsan` phase | A partially uploaded mesh is never submitted. Eviction respects the in-flight frame epoch. Reference counts balance across the run. The request queue is bounded and drops are counted |
+| Residency, streaming, hot reload | `fuzz/run.sh assetio` - modeled on `wsreconn`: the real worker thread with a scripted I/O tape behind `INGOT_ASSET_SIM`, producing truncated reads, cancellations, evictions, and reload mid-frame. Also run in the `tsan` phase | A partially uploaded mesh is never submitted. Eviction respects the in-flight frame epoch. Reference counts balance across the run. The request queue is bounded and drops are counted |
 | GPU upload and lifetime | Extend `fuzz/gfx_frame` with create and destroy of meshes, materials, and 3D targets inside a live pass, under `INGOT_GPU_STRICT` | Zero WebGPU validation messages. Generation checks reject stale handles. Pool exhaustion is counted, never fatal |
 | Budgets | Any stage | Declared upper bounds on vertices, draw calls, uploaded bytes per frame, and resident memory are asserted, so a capacity regression fails the harness rather than the user's frame time |
 
@@ -103,40 +103,40 @@ Each phase ends with a green run of the package tests, the strict gate, the web
 gate, and its own fuzz target. No phase advances while a source, layout,
 ownership, timing, or visual contract differs from the recorded baseline.
 
-### Phase 0 — Harness foundations
+### Phase 0 - Harness foundations
 
 Operation tape, shrinker, single PRNG, seed corpus replay. No pipeline code.
 Verified by replaying existing `interact` and `net` findings through the new
 tape path.
 
-### Phase 1 — `ingot:asset` import
+### Phase 1 - `ingot:asset` import
 
 glTF 2.0 and GLB parsing into a bounded intermediate representation, plus image
 decode routed through the existing native path. Rejection is total: malformed
 input returns an error with a reason and allocates nothing that outlives the
 call. Ships with `fuzz/run.sh asset` and a committed corpus.
 
-### Phase 2 — Cook
+### Phase 2 - Cook
 
 Normals, tangents, index optimization, level of detail generation, mip chains,
 and a deterministic output container. The cooked form is the only thing the
 runtime consumes. Determinism and metamorphic oracles are the acceptance
 criteria, not visual inspection.
 
-### Phase 3 — `ingot:scene` and the draw list
+### Phase 3 - `ingot:scene` and the draw list
 
 Bounded scene storage, transform resolution through an explicit stack,
 frustum visibility, level of detail selection, sorting, and batching into the
 draw list. Fully headless. `testx.snap` golden dumps are the review artifact.
 
-### Phase 4 — `ingot:scene_gfx` and residency
+### Phase 4 - `ingot:scene_gfx` and residency
 
 Upload of cooked data into `gfx` pools, generation-checked handles, the worker
 and its scripted I/O seam, eviction bound to frame epochs, and draw-list replay
 onto `begin_gpu_3d`. Verified by `fuzz/run.sh assetio`, the `tsan` phase, and
 an extended `gfx-frame`.
 
-### Phase 5 — Migration and documentation
+### Phase 5 - Migration and documentation
 
 Move the CPU-projected calls in `gfx/render3d.odin` onto the real path behind
 an explicit opt-in, update `rendering.md` so the escape-hatch language reflects

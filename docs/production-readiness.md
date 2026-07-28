@@ -92,12 +92,12 @@ backend, date, commands, and outcome with `scripts/validation-evidence.py` and
 `scripts/validation-matrix.py`; missing evidence remains Not recorded. Use only
 these status terms:
 
-- `compiled` — source built for the target; runtime behavior is unverified.
-- `validated` — the dated release fixture and platform checks passed without
+- `compiled` - source built for the target; runtime behavior is unverified.
+- `validated` - the dated release fixture and platform checks passed without
   validation errors.
-- `blocked` — the check could not run; record the missing hardware, dependency,
+- `blocked` - the check could not run; record the missing hardware, dependency,
   credential, or platform capability.
-- `failed` — the check ran and exposed a defect; link the reproducer or issue.
+- `failed` - the check ran and exposed a defect; link the reproducer or issue.
 
 Do not infer `validated` from a build-only or Node-only result.
 

@@ -1,4 +1,4 @@
-# ingot — Agent Guide
+# ingot - Agent Guide
 
 `ingot` is an Odin-first, immediate-mode app/engine on WebGPU. One source runs
 natively (macOS/Metal, Windows/D3D12, Linux/Vulkan) and in the browser (WASM +
@@ -34,32 +34,32 @@ worked example applied to a subsystem before it is written.
 
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
-- **Test**: `bash scripts/test.sh` — runs `odin test` on `gfx ui ui_gfx
+- **Test**: `bash scripts/test.sh` - runs `odin test` on `gfx ui ui_gfx
   libvterm term prefs net`, the offline WSS/TLS matrix, then type-checks
   `sys pty accesskit testx`. Python 3
   supervises each command. Pass extra Odin flags through, e.g.
   `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.
-- **Check / lint** (Tiger Style gate): `bash scripts/check.sh` — strict
+- **Check / lint** (Tiger Style gate): `bash scripts/check.sh` - strict
   type-check + `-vet -strict-style -vet-shadowing`, 100-line procedure and
   100-character physical-line checks, plus an `odinfmt` format check.
 - **Format**: `odinfmt -w .` (settings pinned in `.odinfmt.json`: tabs width 4,
   100-column lines).
 - **Web build**: `bash build_web.sh` → `web/ingot_web.wasm`; serve with
   `(cd web && python3 -m http.server 8000)`.
-- **Web gate**: `bash scripts/check-web.sh` — compiles gallery, Breakout, and the
+- **Web gate**: `bash scripts/check-web.sh` - compiles gallery, Breakout, and the
   default demo, then runs `web/test/*.test.mjs` with dependency-free Node.
 - **Rebuild libvterm** (rarely needed): `scripts/build-libvterm.sh` (macOS) /
   `scripts/build-libvterm.bat` (Windows).
 
-## Coding style — Tiger Style
+## Coding style - Tiger Style
 
 `ingot` follows **Tiger Style** (adapted from TigerBeetle). Read
 [`docs/TIGER_STYLE.md`](docs/TIGER_STYLE.md) before contributing. The
 non-negotiables:
 
 - **Safety > performance > developer experience**, in that order. Zero technical
-  debt — fix showstoppers in design, not production.
-- **Assertions catch programmer errors** (not operating errors — a closed PTY, a
+  debt - fix showstoppers in design, not production.
+- **Assertions catch programmer errors** (not operating errors - a closed PTY, a
   dropped socket, and a missing file are *handled*, not asserted). Average **≥ 2
   assertions per substantive authored production procedure** is a design-review
   target, not a padding quota. Use `assert` for debug checks, `ensure` for
@@ -67,20 +67,20 @@ non-negotiables:
   `#assert` for compile-time relationships. Pair checks across real boundaries.
   Changed/new risk-bearing procedures may not add uncovered debt; run
   `scripts/check_assertions.py` through `scripts/check.sh`.
-- **No recursion. Put a limit on everything** — every loop and queue has a fixed
+- **No recursion. Put a limit on everything** - every loop and queue has a fixed
   upper bound (see `term.TERM_PUMP_MAX_BUFS`) or an asserted exit invariant.
 - **Immediate-mode / static allocation**: callers own state and pass it each
   frame; allocate long-lived buffers once; use `context.temp_allocator` for
   per-frame scratch.
 - **Explicit sized types** at wire/file/FFI boundaries (never `int`/`uint`
   there); keep `index` / `count` / `size` distinct.
-- **Handle every returned `ok` / error** — no silent `or_return` drops.
+- **Handle every returned `ok` / error** - no silent `or_return` drops.
 - **100 lines per procedure, 100 columns per line, tabs width 4.** Run `odinfmt`.
-- **Always say why** in comments — full sentences. The UTF-8 hold-back note in
+- **Always say why** in comments - full sentences. The UTF-8 hold-back note in
   `term/term_pump.odin` is the bar.
 
 **Rollout policy:** new and changed procedures must carry their assertions and
 stay within the length/width limits. Existing code is upgraded to the standard
-when it is next touched — improve on contact, don't mass-rewrite.
+when it is next touched - improve on contact, don't mass-rewrite.
 
 `term/term_pump.odin` (`term_pump`) carries worked-example assertions to copy.

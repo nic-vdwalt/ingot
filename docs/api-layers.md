@@ -2,42 +2,48 @@
 
 Ingot exposes several layers so applications can choose how much lifecycle,
 layout, rendering, and platform work the framework owns. Start at the highest
-layer that satisfies the requirement. Move down only for a concrete capability
-that the higher layer cannot express.
+layer that satisfies the requirement. Here, **highest** means the most
+framework-owned policy appropriate to that axis, not one total ordering across
+hosting, geometry, composition, and rendering. Move down only for a concrete
+capability that the higher layer cannot express.
 
 A lower layer is not a more capable default. It transfers ownership of ordering,
 scaling, focus, accessibility, resource lifetime, portability, and testing to the
 application. Keep each escape hatch narrow and return to the higher layer at its
 boundary.
 
+Facade leaves are ergonomic wrappers around explicit leaves where paired forms
+exist. They add slot carving, logical scaling, stable identity, and focus
+registration before delegating. Explicit composition protocols are separate
+peers and may have no facade form by design.
+
 ## Entry paths
 
 ```mermaid
-flowchart TD
-    START{Where are you starting?}
+flowchart LR
+    subgraph ENTRY[Entry paths]
+        NEW[New UI application] --> APP[ui_gfx.App]
+        RAY[Existing raylib application] -->|replace imports first| LOOP[ingot:gfx raylib-shaped loop]
+        LOOP -.->|add UI only when needed| APP
+    end
 
-    START -->|New UI application| APP[ui_gfx.App]
-    APP --> UI[ui.Ui facade]
-    UI --> LEAF[Bare leaf widgets\nlogical dimensions + Widget_Id]
-    UI -->|Geometry or lifecycle is behavior| EXPLICIT[Explicit UI]
-    EXPLICIT --> AT[*_at leaf widgets\nphysical Rect_I32 + Focus_Opt]
-    EXPLICIT --> COMPOSE[Composition protocols\npanes, listboxes, modals, overlays, markdown]
-    EXPLICIT --> LAYOUT[Physical layout\nLayout, Flow_Layout, Fit_Column]
+    subgraph HOST[Host lifecycle ownership]
+        APP -->|owns / defaults| SESSION[ui_gfx.Session]
+        SESSION -->|owns / uses| ADAPTER[ui_gfx.Adapter]
+    end
 
-    START -->|Existing raylib application| IMPORT[Replace vendor:raylib with ingot:gfx]
-    IMPORT --> LOOP[Keep the raylib-shaped graphics loop]
-    LOOP --> RLGL[Retain documented rlgl compatibility only where needed]
-    LOOP -->|Add application UI incrementally| APP
+    subgraph UI[UI declaration and geometry ownership]
+        FACADE[Facade leaf\nlogical slot + Widget_Id] -->|delegates after supplying geometry| AT[Explicit leaf\nphysical Rect_I32 + Focus_Opt]
+        FACADE -->|canvas reserves and scales a slot| ISLAND[Explicit island]
+        COMPOSE[Explicit composition protocol] --> FRAME[Ui_Frame\ninput + semantics + paint]
+        AT -->|emits paint / semantics| FRAME
+        ISLAND -->|emits paint / semantics| FRAME
+    end
 
-    START -->|Custom host or pacing| SESSION[ui_gfx.Session]
-    SESSION --> UI
-    SESSION -->|Implementing the bridge itself| ADAPTER[ui_gfx.Adapter]
-
-    LEAF --> FRAME[Ui_Frame paint, input, and output]
-    AT --> FRAME
-    COMPOSE --> FRAME
-    LAYOUT --> FRAME
-    FRAME --> GFX[ingot:gfx rendering and platform capabilities]
+    FRAME -->|replayed by Adapter| GFX[ingot:gfx]
+    DIRECT[Texture / audio / camera / shader / GPU 3D island] -.->|direct capability escape| GFX
+    APP --> FACADE
+    SESSION --> FACADE
     LOOP --> GFX
 ```
 

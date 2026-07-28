@@ -11,7 +11,7 @@ file wins for `ingot`, because it accounts for our language and our domain.
 
 Style is design. Our design goals, in order, are **safety, performance, and
 developer experience**. Good style advances those goals; it is not decoration.
-Simplicity is not a free pass — it is the hardest revision, the "super idea" that
+Simplicity is not a free pass - it is the hardest revision, the "super idea" that
 solves several axes at once. We spend the mental energy up front, in design,
 because an hour of design saves weeks in production.
 
@@ -26,13 +26,13 @@ translated to Odin.
 
 ### Control flow
 
-- Use **only simple, explicit control flow**. **No recursion** — it makes bounds
+- Use **only simple, explicit control flow**. **No recursion** - it makes bounds
   impossible to prove statically. Any loop that could run unbounded (an event
   loop, a drain loop) must either have a fixed upper bound or an assertion that
   it terminates.
 
 - **Put a limit on everything.** Every loop and every queue has a fixed upper
-  bound. `ingot` already does this — see `term.TERM_PUMP_MAX_BUFS`, which caps
+  bound. `ingot` already does this - see `term.TERM_PUMP_MAX_BUFS`, which caps
   the PTY drain per frame. Follow that pattern: name the bound as a constant near
   the top of the file and explain *why* that number.
 
@@ -69,16 +69,16 @@ nobody modelled. Writing to these rules is what makes the harnesses in
   ownership, lifecycle, or untrusted-input contract. The monotonic gate in
   `scripts/check_assertions.py` prevents new uncovered assertion debt.
 
-- Odin gives you several tools — use the right one:
-  - `assert(cond)` / `assert(cond, "message")` — runtime precondition/invariant.
+- Odin gives you several tools - use the right one:
+  - `assert(cond)` / `assert(cond, "message")` - runtime precondition/invariant.
     Compiled out in `-o:speed -disable-assert` builds, so never rely on its side
     effects.
-  - `ensure(cond, "message")` — like `assert` but **kept in release builds**. Use
+  - `ensure(cond, "message")` - like `assert` but **kept in release builds**. Use
     it for checks that must hold even in shipped binaries (e.g. bounds derived
     from untrusted input before an unchecked slice).
-  - `#assert(compile_time_cond)` — compile-time. Assert relationships between
+  - `#assert(compile_time_cond)` - compile-time. Assert relationships between
     constants and type sizes; these are checked before the program even runs.
-  - `panic("...")` / `unreachable()` — for states that must never occur.
+  - `panic("...")` / `unreachable()` - for states that must never occur.
 
 - **Pair assertions across real boundaries.** Check producer/consumer,
   enqueue/dequeue, serialize/parse, begin/end, and allocate/destroy seams.
@@ -86,7 +86,7 @@ nobody modelled. Writing to these rules is what makes the harnesses in
   you read it back. Bugs live where data crosses the valid/invalid boundary.
 
 - **Split compound assertions.** Prefer `assert(a); assert(b)` over
-  `assert(a && b)` — the split form points at the exact failure. Include units
+  `assert(a && b)` - the split form points at the exact failure. Include units
   or bounds in messages where they make the violated contract clearer.
 
 - Use a single-line `if` to assert an implication: `if a do assert(b)`.
@@ -103,13 +103,13 @@ nobody modelled. Writing to these rules is what makes the harnesses in
 ### Memory
 
 - `ingot` is immediate-mode: **callers own their state and pass it in each
-  frame.** Honour that — do not hide retained trees or grow per-frame heap
+  frame.** Honour that - do not hide retained trees or grow per-frame heap
   allocations.
 
 - Prefer **static / arena allocation** and reuse. Allocate long-lived buffers
   once (see the per-instance `read_buf` / `utf8_hold` in `term`) rather than
   per frame. For scratch work use `context.temp_allocator` and let the frame
-  boundary reclaim it — never leak it into retained state. Hosts must call
+  boundary reclaim it - never leak it into retained state. Hosts must call
   `free_all(context.temp_allocator)` after each complete frame; libraries
   borrow the arena and must not reclaim storage they do not own.
 
@@ -125,7 +125,7 @@ nobody modelled. Writing to these rules is what makes the harnesses in
 
 ### Types
 
-- Odin is already explicitly sized — use it. Prefer `u32`, `i64`, etc. **Do not
+- Odin is already explicitly sized - use it. Prefer `u32`, `i64`, etc. **Do not
   use `int`/`uint` at wire, file, or FFI boundaries**; a serialized field has a
   fixed width, so name it with one. `int` is fine for local indices and lengths
   where the platform width genuinely doesn't matter.
@@ -184,15 +184,15 @@ nobody modelled. Writing to these rules is what makes the harnesses in
 
 ## Performance
 
-- Solve performance **in the design phase** — that's where the 1000x wins live,
+- Solve performance **in the design phase** - that's where the 1000x wins live,
   precisely when you can't yet profile. Have mechanical sympathy; work with the
   grain.
 
-- Sketch back-of-the-envelope costs across the four resources — **network, disk,
-  memory, CPU** — and their two characteristics, bandwidth and latency.
+- Sketch back-of-the-envelope costs across the four resources - **network, disk,
+  memory, CPU** - and their two characteristics, bandwidth and latency.
 
 - Optimize the slowest resource first (network, disk, memory, CPU in that
-  order), after weighting for how often each is hit — a cache miss that happens
+  order), after weighting for how often each is hit - a cache miss that happens
   a million times can cost more than one fsync.
 
 - **Batch** to amortize costs. `ingot` is immediate-mode and batches draw calls;
@@ -200,14 +200,14 @@ nobody modelled. Writing to these rules is what makes the harnesses in
   make it zig-zag.
 
 - Extract hot loops into stand-alone procedures taking primitive arguments (no
-  `self`), so the reader — and the optimizer — can see there is nothing hidden.
+  `self`), so the reader - and the optimizer - can see there is nothing hidden.
 
 ## Developer experience
 
 ### Naming
 
 - Get the nouns and verbs right; great names are the essence of great code.
-- `ingot` and Odin both use `snake_case` for procedures, variables, and files —
+- `ingot` and Odin both use `snake_case` for procedures, variables, and files -
   keep it. The underscore is our stand-in for a space; use it for descriptive
   names.
 - Do not abbreviate, except a primitive integer used as a sort/loop index.
@@ -228,7 +228,7 @@ nobody modelled. Writing to these rules is what makes the harnesses in
 
 - **Always say why.** Code shows *what*; comments justify the *why* and show your
   workings. `ingot`'s existing comments (e.g. the UTF-8 hold-back rationale in
-  `term/term_pump.odin`) are the bar — match them.
+  `term/term_pump.odin`) are the bar - match them.
 - Comments are prose: a capital letter and a full stop. End-of-line comments may
   be phrases without punctuation.
 - For a test or a subsystem, put a short paragraph at the top explaining the goal
@@ -236,7 +236,7 @@ nobody modelled. Writing to these rules is what makes the harnesses in
 
 ### Cache invalidation
 
-- Don't duplicate state or alias it — copies drift out of sync.
+- Don't duplicate state or alias it - copies drift out of sync.
 - Compute or check a value close to where it is used; don't introduce variables
   before they're needed or leave them lying around after.
 - Prefer simpler signatures to reduce dimensionality at the call site: `void`
@@ -248,19 +248,19 @@ nobody modelled. Writing to these rules is what makes the harnesses in
   it.
 - **Indent with tabs, width 4.** This is the Odin / `odinfmt` norm and what the
   entire `ingot` tree already uses. (TigerBeetle uses 4 spaces because that's the
-  Zig norm — we deliberately keep tabs so the formatter never churns the tree.)
+  Zig norm - we deliberately keep tabs so the formatter never churns the tree.)
 - **Hard limit lines to 100 columns.** Use the width, never exceed it. Set a
   column ruler in your editor (`.editorconfig` declares it). The style gate
   counts physical source characters. It excludes vendored `libvterm`,
   `accesskit`, generated `gfx/rlgl`, and foreign ABI declaration files that
   `odinfmt` necessarily renders on one line.
-- Add braces to an `if` unless it fits on a single line — defense in depth
+- Add braces to an `if` unless it fits on a single line - defense in depth
   against "goto fail" bugs.
 
 ## Dependencies and tooling
 
 - `ingot` is **pure Odin on `vendor:*`** (wgpu, glfw, stb) with committed
-  libvterm static libs — effectively a zero-external-dependency policy. Keep it
+  libvterm static libs - effectively a zero-external-dependency policy. Keep it
   that way: every dependency is a supply-chain, safety, and performance risk that
   is amplified through everything that builds on the engine.
 - Standardize on Odin for tooling too. Prefer an Odin program over a one-off
@@ -269,4 +269,4 @@ nobody modelled. Writing to these rules is what makes the harnesses in
 ## The last stage
 
 Keep trying things, have fun, and remember it's called `ingot` because it starts
-small and solid — a billet you forge, not a framework you inherit.
+small and solid - a billet you forge, not a framework you inherit.

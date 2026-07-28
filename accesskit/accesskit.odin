@@ -1,4 +1,4 @@
-// Minimal Odin bindings to the AccessKit C API (accesskit_c 0.22.3) — just
+// Minimal Odin bindings to the AccessKit C API (accesskit_c 0.22.3) - just
 // the surface ingot's accessibility bridge needs: node/tree-update builders
 // and the per-platform window adapters. Prebuilt static libraries ship next
 // to this package (lib/<platform_arch>/, see scripts/build-accesskit.sh) so

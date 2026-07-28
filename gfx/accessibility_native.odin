@@ -1,20 +1,20 @@
 #+build !js
-// ingot:gfx — native accessibility seam over the AccessKit C API.
+// ingot:gfx - native accessibility seam over the AccessKit C API.
 //
 // The widget toolkit records a per-frame semantic buffer (ui/semantics.odin);
 // its bridge (ui/a11y_bridge.odin) converts that buffer into AccessKit tree
 // updates through the factory registered here. This file owns only the
 // platform adapter lifecycle and the AT action queue:
 //
-//   InitAccessibility  — attach the adapter to the window (NSWindow content
+//   InitAccessibility  - attach the adapter to the window (NSWindow content
 //                        view on macOS, HWND subclass on Windows, AT-SPI on
 //                        Linux). Lazy: AccessKit builds nothing until
 //                        assistive tech actually requests the tree, so this
 //                        is free for non-AT users.
-//   PushAccessibilityUpdate — per frame; invokes the factory only while AT
+//   PushAccessibilityUpdate - per frame; invokes the factory only while AT
 //                        is active (update_if_active), then raises queued
 //                        platform events.
-//   PollAccessibilityAction — drains AT-initiated actions (Click/Focus/...)
+//   PollAccessibilityAction - drains AT-initiated actions (Click/Focus/...)
 //                        staged by the adapter callback, which may run off
 //                        the main thread (bounded ring + mutex).
 //
@@ -28,7 +28,7 @@ import ak "ingot:accesskit"
 A11Y_ENABLED :: ak.ENABLED
 
 // MAX_A11Y_ACTIONS bounds the staged AT action queue (Tiger Style: put a
-// limit on everything). Overflow drops the newest action — AT retries.
+// limit on everything). Overflow drops the newest action - AT retries.
 MAX_A11Y_ACTIONS :: 64
 
 // A11y_Action is one assistive-tech request against a semantic node.
@@ -144,7 +144,7 @@ when A11Y_ENABLED && ODIN_OS != .Darwin && ODIN_OS != .Windows {
 
 // PushAccessibilityUpdate offers this frame's tree to the adapter. The
 // factory only runs while assistive tech consumes the tree (update_if_active)
-// — the per-frame cost without AT is one branch. Call at end of frame, after
+// - the per-frame cost without AT is one branch. Call at end of frame, after
 // all UI is drawn.
 PushAccessibilityUpdate :: proc() {
 	when A11Y_ENABLED {

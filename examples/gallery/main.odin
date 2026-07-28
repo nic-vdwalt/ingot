@@ -474,6 +474,96 @@ output_routes_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: r
 	ui.text(frame, "direct texture / shader / 3D / render-target capability  - - - - - - - - - - - - \u2192", 0, 104, .Label, .Secondary)
 }
 
+draw_entry_paths :: proc(u: ^ui.Ui) {
+	assert(u != nil && u.open, "draw_entry_paths: invalid UI")
+	theme := ui.ui_frame_theme(u.frame)
+	_ = ui.section_header(u, "1. CHOOSE AN ENTRY PATH")
+	ui.label(u, "NEW UI APP  \u2192  ui_gfx.App", color = theme.fg_accent)
+	ui.label(u, "ui callback: ordinary facade UI; frame callback: mixed UI or graphics")
+	ui.label(u, "Need a custom loop? Use Session, not Adapter.", color = theme.fg_secondary)
+	ui.space(u, .XS)
+	ui.label(u, "RAYLIB APP  \u2192  ingot:gfx RAYLIB-SHAPED LOOP", color = theme.fg_accent)
+	ui.label(u, "replace imports first; preserve supported behavior")
+	ui.label(u, "compile errors inventory ports; add App/Session + UI only when needed", color = theme.fg_secondary)
+	ui.label(u, "rlgl is a bounded migration shim, not OpenGL.", color = theme.fg_tool)
+}
+
+draw_host_ownership :: proc(u: ^ui.Ui) {
+	assert(u != nil && u.open, "draw_host_ownership: invalid UI")
+	theme := ui.ui_frame_theme(u.frame)
+	_ = ui.section_header(u, "2. HOST LIFECYCLE OWNERSHIP")
+	ui.label(u, "App owns/defaults Session; Session owns/uses Adapter.")
+	_ = ui.canvas(u, {height = 112}, host_ownership_canvas)
+	ui.kv_row(u, "App", "ordinary one-window app", theme.fg_secondary, theme.fg_primary)
+	ui.kv_row(u, "Session", "custom pacing, embedding, contexts", theme.fg_secondary, theme.fg_primary)
+	ui.kv_row(u, "Adapter", "bridge implementation; not an app shell", theme.fg_secondary, theme.fg_primary)
+}
+
+draw_geometry_ownership :: proc(u: ^ui.Ui, state: ^Api_Map_State) {
+	assert(u != nil && u.open, "draw_geometry_ownership: invalid UI")
+	assert(state != nil, "draw_geometry_ownership: nil state")
+	_ = ui.section_header(u, "3. GEOMETRY OWNERSHIP: WRAPPER VERSUS EXPLICIT LEAF")
+	ui.label(u, "Facade leaves are ergonomic wrappers where paired explicit leaves exist.")
+	ui.row_begin(u, 32, gap = .SM)
+	for example in Api_Leaf_Example {
+		label := "button \u2192 button_at"
+		if example == .Checkbox do label = "checkbox \u2192 checkbox_at"
+		if example == .Line_Chart do label = "line_chart \u2192 line_chart_at"
+		if ui.button(u, u64(example) + 1, label) do state.leaf_example = example
+	}
+	ui.row_end(u)
+	_ = ui.canvas(u, {height = 178}, geometry_ownership_canvas, state)
+}
+
+draw_canvas_bridge :: proc(u: ^ui.Ui) {
+	assert(u != nil && u.open, "draw_canvas_bridge: invalid UI")
+	theme := ui.ui_frame_theme(u.frame)
+	_ = ui.section_header(u, "4. CANVAS IS A GEOMETRY BRIDGE")
+	ui.label(u, "canvas reserves a facade slot, scales once, and returns to facade flow.")
+	_ = ui.canvas(u, {height = 112}, canvas_bridge_canvas)
+	ui.label(u, "It stays inside the same input snapshot, semantics, clipping, and paint list.", color = theme.fg_secondary)
+	ui.label(u, "Use canvas_begin/end only when the caller owns the physical rect or lifecycle.", color = theme.fg_secondary)
+}
+
+draw_composition_protocols :: proc(u: ^ui.Ui) {
+	assert(u != nil && u.open, "draw_composition_protocols: invalid UI")
+	theme := ui.ui_frame_theme(u.frame)
+	_ = ui.section_header(u, "5. EXPLICIT COMPOSITION PROTOCOLS ARE PEERS")
+	ui.kv_row(u, "pane_begin \u2192 content \u2192 pane_end", "scroll + clip", theme.fg_secondary, theme.fg_primary)
+	ui.kv_row(u, "listbox_begin \u2192 rows \u2192 listbox_end", "selection + navigation", theme.fg_secondary, theme.fg_primary)
+	ui.kv_row(u, "modal / overlay begin \u2192 body \u2192 end", "routing + top-layer paint", theme.fg_secondary, theme.fg_primary)
+	ui.kv_row(u, "markdown + physical layouts", "measurement + placement", theme.fg_secondary, theme.fg_primary)
+	ui.label(u, "They are peers of explicit leaves, not lower-quality facade widgets.", color = theme.fg_tool)
+}
+
+draw_output_routes :: proc(u: ^ui.Ui) {
+	assert(u != nil && u.open, "draw_output_routes: invalid UI")
+	theme := ui.ui_frame_theme(u.frame)
+	_ = ui.section_header(u, "6. ONE FRAME, TWO ROUTES TO GRAPHICS")
+	ui.label(u, "All UI declaration paths emit paint and semantics into Ui_Frame.")
+	_ = ui.canvas(u, {height = 136}, output_routes_canvas)
+	ui.label(u, "Adapter replays renderer-independent UI paint through ingot:gfx.")
+	ui.label(u, "Call gfx directly only for capabilities outside UI paint.", color = theme.fg_accent)
+}
+
+draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
+	assert(frame != nil, "draw_api_relationships: nil frame")
+	state := &api_map_state
+	u := &state.ui
+	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, 1680)}, gap = .SM)
+	ui.scope_begin(u, "api-relationships")
+	draw_entry_paths(u)
+	draw_host_ownership(u)
+	draw_geometry_ownership(u, state)
+	draw_canvas_bridge(u)
+	draw_composition_protocols(u)
+	draw_output_routes(u)
+	ui.scope_end(u)
+	end_y := ui.remaining_rect(u).y
+	ui.end(u)
+	return end_y + ui.ui_frame_sc(frame, 16)
+}
+
 draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	assert(frame != nil, "draw_buttons: nil frame")
 	u := &buttons_ui

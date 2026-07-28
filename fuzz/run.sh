@@ -16,7 +16,7 @@
 #                              # ASan and TSan cannot share a binary, so this
 #                              # is a separate phase, appended to each soak round
 #   fuzz/run.sh gfx-frame      # WINDOWED GPU lifecycle fuzzer (needs a display;
-#                              # NOT part of `all`/`soak` — run explicitly)
+#                              # NOT part of `all`/`soak` - run explicitly)
 #   fuzz/run.sh all            # headless fuzzers + threaded TSan stress phase
 #   fuzz/run.sh soak           # `all` for ROUNDS rounds with fresh seeds
 #
@@ -26,7 +26,7 @@
 # so ANY wgpu validation message aborts the run.
 #
 # TSan scope note: term/pty are single-threaded by design (no reader threads;
-# synchronous non-blocking PTY drains), so TSan there exercises nothing — the
+# synchronous non-blocking PTY drains), so TSan there exercises nothing - the
 # tsan target covers the only threaded code: the WS worker, the HTTP fetch
 # pool, and the a11y action queue.
 #
@@ -100,7 +100,7 @@ run_term() {
 run_gfx_frame() {
 	# Windowed: opens a real window + WebGPU device and interleaves resource
 	# destruction (fonts, textures, render targets, UI rescale) inside live
-	# frames — the destroy-before-submit bug class that headless tests can't
+	# frames - the destroy-before-submit bug class that headless tests can't
 	# reach. Built without a sanitizer flag override is fine, but ASan works.
 	# INGOT_GPU_STRICT aborts on any wgpu validation message (see header).
 	# shellcheck disable=SC2086
@@ -133,7 +133,7 @@ run_wsreconn() {
 }
 
 run_tsan() {
-	# ThreadSanitizer phase (separate binaries — TSan and ASan don't compose).
+	# ThreadSanitizer phase (separate binaries - TSan and ASan don't compose).
 	local TS="-debug -sanitize:thread"
 	# shellcheck disable=SC2086
 	odin build "$ROOT/fuzz/wsreconn" $COL $TS -define:INGOT_WS_SIM=true -out:"$ROOT/fuzz/wsreconn/fuzz_wsreconn_tsan"
@@ -193,7 +193,7 @@ soak)
 		echo "=== soak round $round/$ROUNDS seed=$round_seed ==="
 		for harness in net ui interact wsreconn; do
 			if ! "run_$harness" "-seed:$round_seed" "${ITERATIONS:+-iterations:$ITERATIONS}"; then
-				echo "SOAK FAILED — reproduce with: fuzz/run.sh $harness $round_seed" >&2
+				echo "SOAK FAILED - reproduce with: fuzz/run.sh $harness $round_seed" >&2
 				exit 1
 			fi
 		done
@@ -202,11 +202,11 @@ soak)
 			exit 1
 		fi
 		if ! run_term; then
-			echo "SOAK FAILED in term tests (deterministic seeds — rerun: fuzz/run.sh term)" >&2
+			echo "SOAK FAILED in term tests (deterministic seeds - rerun: fuzz/run.sh term)" >&2
 			exit 1
 		fi
 		if ! run_tsan "-seed:$round_seed"; then
-			echo "SOAK FAILED in TSan phase — reproduce with: fuzz/run.sh tsan $round_seed" >&2
+			echo "SOAK FAILED in TSan phase - reproduce with: fuzz/run.sh tsan $round_seed" >&2
 			exit 1
 		fi
 	done

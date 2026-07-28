@@ -152,7 +152,7 @@ def write_markdown(rows, records, path):
         frame = phases.get("frame")
         if build is None or finalize is None:
             continue
-        total = "—" if frame is None else f"{frame['median_ns'] / 1000:.2f}/{frame['p95_ns'] / 1000:.2f}"
+        total = "-" if frame is None else f"{frame['median_ns'] / 1000:.2f}/{frame['p95_ns'] / 1000:.2f}"
         lines.append(
             f"| {key[0]} | `{key[1][:12]}` | {key[2]} | {key[3]} | {total} | "
             f"{build['median_ns'] / 1000:.2f}/{build['p95_ns'] / 1000:.2f} | "
