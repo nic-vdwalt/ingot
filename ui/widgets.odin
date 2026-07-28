@@ -737,8 +737,7 @@ btn_label_fit :: proc(frame: ^Ui_Frame, label: string, w, font_size: i32) -> (cs
 	return text_c, measure_text_frame(frame, text_c, font_size)
 }
 
-@(private = "package")
-button_at_legacy :: proc(
+button_at :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	label: string,
@@ -809,7 +808,6 @@ button_at_legacy :: proc(
 	return clicked && enabled
 }
 
-@(private = "package")
 button_with_options_at :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
@@ -817,7 +815,7 @@ button_with_options_at :: proc(
 	options: Button_At_Options,
 ) -> bool {
 	assert(frame != nil, "button_at: nil frame")
-	return button_at_legacy(
+	return button_at(
 		frame,
 		rect,
 		label,
@@ -828,11 +826,6 @@ button_with_options_at :: proc(
 		options.focus,
 		options.widget,
 	)
-}
-
-button_at :: proc {
-	button_at_legacy,
-	button_with_options_at,
 }
 
 // button_at_state is button_at plus caller-owned hover animation state.

@@ -231,8 +231,7 @@ text_input :: proc {
 	text_input_u64_options,
 }
 
-@(private = "package")
-text_input_at_legacy :: proc(
+text_input_at :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
 	b: ^Input_Box,
@@ -256,7 +255,6 @@ text_input_at_legacy :: proc(
 	return text_input_box(frame, cfg, &b.sb, &b.st)
 }
 
-@(private = "package")
 text_input_with_options_at :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
@@ -265,7 +263,7 @@ text_input_with_options_at :: proc(
 	options: Text_Input_At_Options,
 ) -> bool {
 	assert(frame != nil && b != nil, "text_input_at: nil frame or box")
-	return text_input_at_legacy(
+	return text_input_at(
 		frame,
 		rect,
 		b,
@@ -274,9 +272,4 @@ text_input_with_options_at :: proc(
 		options.masked,
 		options.semantics,
 	)
-}
-
-text_input_at :: proc {
-	text_input_at_legacy,
-	text_input_with_options_at,
 }

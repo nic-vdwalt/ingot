@@ -8,26 +8,20 @@
 // -define:INGOT_RENDER_STATS=true). Tab cycles keyboard focus in the
 // Buttons section.
 //
-// Conventions this gallery demonstrates (docs/ui-state.md#widget-tiers):
-//   - The facade tier is the ordinary path: a widget takes a ^Ui and a
-//     Widget_Id, carves its own bounded slot, and registers focus only when
-//     that slot is visible. Identity comes from scope_begin + id, never from
-//     hand-numbered constants, so inserting or reordering a control cannot
-//     move focus to a different one. Inputs, Widgets, and Progress are written
-//     this way.
-//   - The explicit tier is deliberate, not left over: a *_at widget takes a
-//     ^Ui_Frame and a physical Rect_I32. The Layout and Stress sections use it
-//     because they exist to document application-owned geometry, flow_*, and
-//     fit_column_*, which have no facade by design.
+// Conventions this gallery demonstrates (docs/api-layers.md):
+//   - ui_gfx.App owns the ordinary one-window lifecycle.
+//   - ui.Ui is the default for application chrome, forms, and widgets. It owns
+//     slot carving, scaling, stable identity, focus, semantics, and UI paint.
+//   - Explicit UI stays inside named islands where geometry or lifecycle is
+//     behavior: panes, charts, layout, overlays, listboxes, and the stress grid.
+//   - ingot:gfx is absent from this application UI; capture.odin alone uses it
+//     for the render-target and PNG capabilities missing from UI paint.
 //   - Facade dimensions are logical and scale once; anything handed to a *_at
 //     entry point is already physical, so it goes through frame_sc first.
-//   - Text uses the semantic ui.text / Text_Role / Ink API rather than
-//     re-deriving metrics and theme per call.
 package main
 
 import "core:fmt"
 import "core:strings"
-import rl "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
@@ -42,6 +36,7 @@ SMOKE :: #config(INGOT_SMOKE, false)
 CAPTURE :: #config(INGOT_CAPTURE, false)
 
 Section :: enum {
+	Api_Layers,
 	Buttons,
 	Inputs,
 	Widgets,
@@ -53,14 +48,27 @@ Section :: enum {
 }
 
 SECTION_NAMES := [Section]string {
-	.Buttons  = "Buttons",
-	.Inputs   = "Inputs",
-	.Widgets  = "Widgets",
-	.Charts   = "Charts",
-	.Markdown = "Markdown",
-	.Layout   = "Layout",
-	.Overlay  = "Overlay",
-	.Stress   = "Stress",
+	.Api_Layers = "API Layers",
+	.Buttons    = "Buttons",
+	.Inputs     = "Inputs",
+	.Widgets    = "Widgets",
+	.Charts     = "Charts",
+	.Markdown   = "Markdown",
+	.Layout     = "Layout",
+	.Overlay    = "Overlay",
+	.Stress     = "Stress",
+}
+
+SECTION_LAYERS := [Section]string {
+	.Api_Layers = "FACADE \u2192 EXPLICIT CANVAS",
+	.Buttons    = "FACADE",
+	.Inputs     = "FACADE",
+	.Widgets    = "FACADE + EXPLICIT COMPOSITION",
+	.Charts     = "FACADE \u2192 EXPLICIT CANVAS",
+	.Markdown   = "EXPLICIT COMPOSITION",
+	.Layout     = "EXPLICIT GEOMETRY",
+	.Overlay    = "EXPLICIT COMPOSITION",
+	.Stress     = "EXPLICIT GEOMETRY",
 }
 
 NAV_W :: 170
@@ -70,12 +78,14 @@ NAV_W :: 170
 dark := true
 high_contrast := false
 reduced_motion := false
-section := Section.Buttons
+section := Section.Api_Layers
 debug_on := false
 
+nav_ui: ui.Ui
+buttons_ui: ui.Ui
+layers_ui: ui.Ui
 content_pane: ui.Pane
 click_count := 0
-focus_slot := 0
 headers_open := [3]bool{true, false, false}
 
 Input_State :: struct {
@@ -211,7 +221,7 @@ gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	when SMOKE do smoke_step()
 	when CAPTURE do capture_step()
 
-	if rl.IsKeyPressed(.F12) do debug_on = !debug_on
+	if ui.is_key_pressed(frame, .F12) do debug_on = !debug_on
 
 	header_h := ui.ui_frame_metrics(frame).TAB_BAR_HEIGHT
 	draw_nav(frame, header_h, sh)
@@ -249,77 +259,46 @@ apply_scale :: proc(scale: f32) {
 }
 
 draw_nav :: proc(frame: ^ui.Ui_Frame, top, sh: i32) {
+	assert(frame != nil, "draw_nav: nil frame")
 	w := ui.ui_frame_sc(frame, NAV_W)
-	rl.DrawRectangle(
-		0,
-		top,
-		w,
-		sh - top,
-		ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).bg_secondary),
-	)
-	border := ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).border_subtle)
-	rl.DrawRectangle(w - 1, top, 1, sh - top, border)
+	theme := ui.ui_frame_theme(frame)
+	ui.draw_rectangle(frame, 0, top, w, sh - top, theme.bg_secondary)
+	ui.draw_rectangle(frame, w - 1, top, 1, sh - top, theme.border_subtle)
 
-	y := top + ui.ui_frame_sc(frame, 14)
-	ui.text(frame, "ingot gallery", ui.ui_frame_sc(frame, 14), y, .Title)
-	y += ui.ui_frame_sc(frame, 40)
-
+	u := &nav_ui
+	ui.begin(u, frame, {0, top, w, sh - top}, gap = .XS)
+	ui.padding(u, .SM)
+	ui.scope_begin(u, "navigation")
+	ui.label(u, "ingot gallery", ui.ui_frame_metrics(frame).FONT_SIZE_TITLE)
+	ui.separator(u)
 	for s in Section {
 		style := ui.Btn_Style.Primary if s == section else .Ghost
-		if ui.button_at(
-			frame,
-			{
-				ui.ui_frame_sc(frame, 10),
-				y,
-				w - ui.ui_frame_sc(frame, 20),
-				ui.ui_frame_sc(frame, 28),
-			},
-			SECTION_NAMES[s],
-			style,
-		) {
+		if ui.button(u, SECTION_NAMES[s], SECTION_NAMES[s], style) {
 			section = s
 			ui.pane_reset(&content_pane)
 		}
-		y += ui.ui_frame_sc(frame, 32)
 	}
-
-	y = sh - ui.ui_frame_sc(frame, 140)
-	if ui.button_at(
-		frame,
-		{ui.ui_frame_sc(frame, 10), y, w - ui.ui_frame_sc(frame, 20), ui.ui_frame_sc(frame, 26)},
-		"Light theme" if dark else "Dark theme",
-	) {
+	ui.space(u, .SM)
+	ui.separator(u)
+	if ui.button(u, "theme", "Light theme" if dark else "Dark theme") {
 		dark = !dark
 		high_contrast = false
 		apply_gallery_theme(frame)
 	}
-	y += ui.ui_frame_sc(frame, 32)
-	if ui.button_at(
-		frame,
-		{ui.ui_frame_sc(frame, 10), y, w - ui.ui_frame_sc(frame, 20), ui.ui_frame_sc(frame, 26)},
-		"Standard contrast" if high_contrast else "High contrast",
-	) {
+	if ui.button(u, "contrast", "Standard contrast" if high_contrast else "High contrast") {
 		high_contrast = !high_contrast
 		apply_gallery_theme(frame)
 	}
-	y += ui.ui_frame_sc(frame, 32)
-	if ui.button_at(
-		frame,
-		{ui.ui_frame_sc(frame, 10), y, w - ui.ui_frame_sc(frame, 20), ui.ui_frame_sc(frame, 26)},
-		"Motion: reduced" if reduced_motion else "Motion: full",
-	) {
+	if ui.button(u, "motion", "Motion: reduced" if reduced_motion else "Motion: full") {
 		reduced_motion = !reduced_motion
 		apply_gallery_theme(frame)
 	}
-	y += ui.ui_frame_sc(frame, 32)
-	if ui.button_at(
-		frame,
-		{ui.ui_frame_sc(frame, 10), y, w - ui.ui_frame_sc(frame, 20), ui.ui_frame_sc(frame, 26)},
-		"UI scale\u2026",
-	) {
+	if ui.button(u, "scale", "UI scale\u2026") {
 		settings_open = true
 		settings_sel = ui.settings_scale_preset_index(stored_scale)
 	}
+	ui.scope_end(u)
+	ui.end(u)
 }
 
 apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
@@ -339,9 +318,12 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32) {
 	y := ui.pane_begin(frame, &content_pane, pane_rect, pad = 14, keyboard = section != .Inputs)
 	cx := x + ui.ui_frame_sc(frame, 18)
 	cw := w - ui.ui_frame_sc(frame, 52)
+	y = draw_section_layer(frame, cx, y, cw)
 
 	end_y: i32
 	switch section {
+	case .Api_Layers:
+		end_y = draw_api_layers(frame, cx, y, cw)
 	case .Buttons:
 		end_y = draw_buttons(frame, cx, y, cw)
 	case .Inputs:
@@ -370,84 +352,144 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32) {
 	ui.pane_end(frame, &content_pane, pane_rect, end_y, pad = 14)
 }
 
-draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
-	y := ui.section_header_at(frame, {x, y0, w, 0}, "BUTTON STYLES")
-	bw := ui.ui_frame_sc(frame, 120)
-	bh := ui.ui_frame_sc(frame, 30)
-	gap := ui.ui_frame_sc(frame, 10)
-	if ui.button_at(frame, {x, y, bw, bh}, "Primary", ui.Btn_Style.Primary) do click_count += 1
-	if ui.button_at(frame, {x + (bw + gap), y, bw, bh}, "Secondary", ui.Btn_Style.Secondary) {
-		click_count += 1
-	}
-	if ui.button_at(frame, {x + (bw + gap) * 2, y, bw, bh}, "Danger", ui.Btn_Style.Danger) {
-		click_count += 1
-	}
-	if ui.button_at(frame, {x + (bw + gap) * 3, y, bw, bh}, "Ghost", ui.Btn_Style.Ghost) {
-		click_count += 1
-	}
-	y += bh + gap
-	ui.button_at(frame, {x, y, bw, bh}, "Disabled", ui.Btn_Style.Primary, enabled = false)
-	if ui.icon_btn_at(frame, {x + bw + gap, y, bh, 0}, "\u2715") do click_count += 1
-	if ui.back_btn_at(
-		frame,
-		{x + bw + gap + bh + gap, y + ui.ui_frame_sc(frame, 4), 0, 0},
-		"Back",
-	) {
-		click_count += 1
-	}
-	y += bh + gap
+draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
+	assert(frame != nil, "draw_section_layer: nil frame")
+	u := &layers_ui
+	ui.begin(u, frame, {x, y, w, ui.ui_frame_sc(frame, 44)}, gap = .XS)
+	ui.row_begin(u, 28, gap = .SM, align = .Center)
+	_ = ui.status_pill(u, SECTION_LAYERS[section], ui.ui_frame_theme(frame).fg_accent)
+	ui.label(u, "highest sufficient layer", color = ui.ui_frame_theme(frame).fg_secondary)
+	ui.row_end(u)
+	end_y := ui.remaining_rect(u).y
+	ui.end(u)
+	return end_y + ui.ui_frame_sc(frame, 8)
+}
 
-	count := fmt.tprintf("clicks: %d", click_count)
-	ui.text(frame, count, x, y, .Label, .Secondary)
-	y += ui.ui_frame_sc(frame, 30)
+api_layers_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
+	assert(frame != nil, "api_layers_canvas: nil frame")
+	assert(rect.w > 0 && rect.h > 0, "api_layers_canvas: empty rect")
+	assert(userdata == nil, "api_layers_canvas: unexpected userdata")
+	theme := ui.ui_frame_theme(frame)
+	inset := ui.ui_frame_sc(frame, 14)
+	step := ui.ui_frame_sc(frame, 42)
+	labels := [?]string {
+		"ui_gfx.App  \u00b7 lifecycle and submission",
+		"ui.Ui  \u00b7 ordinary layout, widgets, focus, semantics",
+		"Explicit UI island  \u00b7 geometry or lifecycle is behavior",
+		"ingot:gfx  \u00b7 capability absent from UI paint",
+	}
+	colors := [?]ui.Color{theme.bg_secondary, theme.bg_active, theme.bg_selection, theme.bg_code}
+	for label, index in labels {
+		offset := i32(index) * inset
+		r := ui.Rect_I32{offset, i32(index) * step, rect.w - offset * 2, step - inset / 2}
+		ui.draw_rectangle_rounded(
+			frame,
+			ui.Rect{f32(r.x), f32(r.y), f32(r.w), f32(r.h)},
+			0.12,
+			4,
+			colors[index],
+		)
+		ui.text(frame, label, r.x + inset, r.y + ui.ui_frame_sc(frame, 10), .Label)
+	}
+}
 
-	y = ui.section_header_at(
-		frame,
-		{x, y, w, 0},
-		"KEYBOARD FOCUS (Tab cycles, Space/Enter activates)",
+draw_api_layers :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
+	assert(frame != nil, "draw_api_layers: nil frame")
+	u := &layers_ui
+	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, 520)}, gap = .SM)
+	ui.scope_begin(u, "api-layers")
+	_ = ui.section_header(u, "CHOOSE THE HIGHEST LAYER THAT SATISFIES THE REQUIREMENT")
+	ui.label(u, "Start at App + facade. Descend only at a narrow capability boundary.")
+	ui.label(
+		u,
+		"The source for this page follows the same split shown below.",
+		color = ui.ui_frame_theme(frame).fg_secondary,
 	)
-	ui.form_focus_cycle(frame, &focus_slot, 3)
+	_ = ui.canvas(u, {height = 176}, api_layers_canvas)
+	_ = ui.section_header(u, "HOW THIS GALLERY USES THE STACK")
+	theme := ui.ui_frame_theme(frame)
+	ui.kv_row(u, "Ordinary controls", "ui.Ui facade", theme.fg_secondary, theme.fg_primary)
+	ui.kv_row(
+		u,
+		"Charts, layout, stress",
+		"explicit islands",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Panes, menus, modals",
+		"explicit lifecycle",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Render target + PNG",
+		"gfx in capture.odin only",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.label(u, "gfx is not the default UI renderer.", color = theme.fg_accent)
+	ui.scope_end(u)
+	end_y := ui.remaining_rect(u).y
+	ui.end(u)
+	return end_y + ui.ui_frame_sc(frame, 16)
+}
+
+draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
+	assert(frame != nil, "draw_buttons: nil frame")
+	u := &buttons_ui
+	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, 620)}, gap = .SM)
+	ui.scope_begin(u, "buttons")
+	_ = ui.section_header(u, "BUTTON STYLES")
+	ui.row_begin(u, 32, gap = .SM)
+	if ui.button(u, "primary", "Primary", ui.Btn_Style.Primary) do click_count += 1
+	if ui.button(u, "secondary", "Secondary", ui.Btn_Style.Secondary) do click_count += 1
+	if ui.button(u, "danger", "Danger", ui.Btn_Style.Danger) do click_count += 1
+	if ui.button(u, "ghost", "Ghost", ui.Btn_Style.Ghost) do click_count += 1
+	ui.row_end(u)
+	ui.row_begin(u, 32, gap = .SM)
+	_ = ui.button(u, "disabled", "Disabled", ui.Btn_Style.Primary, false)
+	if ui.icon_btn(u, ui.id(u, "close"), "Close") do click_count += 1
+	if ui.back_btn(u, ui.id(u, "back"), "Back") do click_count += 1
+	ui.row_end(u)
+	ui.label(
+		u,
+		fmt.tprintf("clicks: %d", click_count),
+		color = ui.ui_frame_theme(frame).fg_secondary,
+	)
+
+	_ = ui.section_header(u, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
+	ui.row_begin(u, 32, gap = .SM)
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Focusable %d", i + 1)
-		if ui.button_at(
-			frame,
-			{x + i32(i) * (bw + gap), y, bw, bh},
-			label,
-			focus = ui.Focus_Opt{&focus_slot, i + 1},
-		) {
-			click_count += 1
-		}
+		if ui.button(u, u64(i), label) do click_count += 1
 	}
-	y += bh + ui.ui_frame_sc(frame, 16)
+	ui.row_end(u)
 
-	y = ui.section_header_at(frame, {x, y, w, 0}, "COLLAPSIBLE HEADERS")
+	_ = ui.section_header(u, "COLLAPSIBLE HEADERS")
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Section %d", i + 1)
-		header := ui.collapsible_header_at(
-			frame,
-			{x, y, w, 0},
+		_ = ui.collapsible_header(
+			u,
+			ui.id(u, fmt.tprintf("header:%d", i)),
 			label,
 			&headers_open[i],
-			{
-				icon = 0x25C6,
-				right_label = "Details",
-				field_id = fmt.tprintf("gallery:header:%d", i),
-			},
+			{icon = 0x25C6, right_label = "Details"},
 		)
-		y = header.next_y + ui.ui_frame_sc(frame, 2)
 		if headers_open[i] {
-			ui.text(
-				frame,
-				"Collapsed state is a caller-owned bool.",
-				x + ui.ui_frame_sc(frame, 12),
-				y,
-				.Label,
-				.Secondary,
+			ui.label(
+				u,
+				"Collapsed state is caller-owned.",
+				color = ui.ui_frame_theme(frame).fg_secondary,
 			)
-			y += ui.ui_frame_sc(frame, 24)
 		}
 	}
-	return y
+	ui.scope_end(u)
+	end_y := ui.remaining_rect(u).y
+	ui.end(u)
+	return end_y + ui.ui_frame_sc(frame, 16)
 }
 
 draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
@@ -526,20 +568,20 @@ draw_widget_choices :: proc(state: ^Widget_State) {
 }
 
 draw_widget_volume :: proc(frame: ^ui.Ui_Frame, state: ^Widget_State) {
+	assert(frame != nil, "draw_widget_volume: nil frame")
 	assert(state != nil, "draw_widget_volume: nil state")
 	ui.row_begin(&state.ctx, 32, gap = .SM)
-	rect := ui.slot_next(&state.ctx, 240, 32)
-	ui.slider_at_state(
-		frame,
+	_ = ui.slider_state(
+		&state.ctx,
+		ui.id(&state.ctx, "volume"),
 		&state.slider,
-		rect,
 		&state.volume,
 		0,
 		100,
 		5,
-		ui.focus(&state.ctx, ui.id(&state.ctx, "volume")),
+		240,
+		"Volume",
 	)
-	ui.tooltip(&state.ctx, &state.tooltip, rect, "drag, or use \u2190/\u2192 when focused")
 	ui.label(
 		&state.ctx,
 		fmt.tprintf("%.0f%%", state.volume),
@@ -644,7 +686,7 @@ draw_widget_backend_list :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Wid
 	}
 	result := ui.listbox_begin(frame, &state.listbox, config)
 	for label, i in labels {
-		rect := rl.Rectangle{f32(x), f32(y), f32(width), f32(ui.ui_frame_sc(frame, 24))}
+		rect := ui.Rect_I32{x, y, width, ui.ui_frame_sc(frame, 24)}
 		row := ui.selectable_row(
 			frame,
 			&state.listbox,
@@ -658,12 +700,7 @@ draw_widget_backend_list :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Wid
 				"Rendering backend option",
 			},
 		)
-		ui.list_row_bg_at(
-			frame,
-			{i32(rect.x), i32(rect.y), i32(rect.width), i32(rect.height)},
-			row.selected,
-			row.hovered,
-		)
+		ui.list_row_bg_at(frame, rect, row.selected, row.hovered)
 		if row.activated do state.list_activated = i
 		ui.text(frame, label, x + ui.ui_frame_sc(frame, 8), y + ui.ui_frame_sc(frame, 4), .Label)
 		y += step
@@ -687,16 +724,12 @@ draw_widget_backend_list :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Wid
 
 draw_widget_truncation_card :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	y := ui.section_header_at(frame, {x, y0, w, 0}, "CARD + SHADOW + TRUNCATION")
-	card := rl.Rectangle {
-		f32(x),
-		f32(y),
-		f32(min(w, ui.ui_frame_sc(frame, 360))),
-		f32(ui.ui_frame_sc(frame, 64)),
-	}
-	ui.draw_shadow_rounded(frame, ui.Rect(card), 0.15)
+	card := ui.Rect_I32{x, y, min(w, ui.ui_frame_sc(frame, 360)), ui.ui_frame_sc(frame, 64)}
+	shadow := ui.Rect{f32(card.x), f32(card.y), f32(card.w), f32(card.h)}
+	ui.draw_shadow_rounded(frame, shadow, 0.15)
 	ui.card_bg_at(
 		frame,
-		{i32(card.x), i32(card.y), i32(card.width), i32(card.height)},
+		card,
 		ui.ui_frame_theme(frame).bg_secondary,
 		accent_w = ui.ui_frame_sc(frame, 3),
 	)
@@ -705,14 +738,14 @@ draw_widget_truncation_card :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		"A very long label that will be cut with an ellipsis when it overflows the card",
 		x + ui.ui_frame_sc(frame, 12),
 		y + ui.ui_frame_sc(frame, 12),
-		i32(card.width) - ui.ui_frame_sc(frame, 24),
+		card.w - ui.ui_frame_sc(frame, 24),
 		ui.ui_frame_metrics(frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(frame).fg_primary,
 	)
 	path := ui.truncate_path_middle_frame(
 		frame,
 		"ingot/examples/gallery/very/deep/dir/main.odin",
-		i32(card.width) - ui.ui_frame_sc(frame, 24),
+		card.w - ui.ui_frame_sc(frame, 24),
 		ui.ui_frame_metrics(frame).FONT_SIZE_LABEL,
 	)
 	ui.text(
@@ -723,7 +756,7 @@ draw_widget_truncation_card :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		.Label,
 		.Secondary,
 	)
-	return y + i32(card.height) + ui.ui_frame_sc(frame, 16)
+	return y + card.h + ui.ui_frame_sc(frame, 16)
 }
 
 draw_widget_fit_card :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
@@ -735,15 +768,11 @@ draw_widget_fit_card :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	title := ui.fit_column_next(&column, ui.ui_frame_sc(frame, 18))
 	detail := ui.fit_column_next(&column, ui.ui_frame_sc(frame, 18))
 	content := ui.fit_column_end(&column)
-	card := rl.Rectangle{f32(x), f32(y), f32(fit_w), f32(content.h + pad * 2)}
-	ui.card_bg_at(
-		frame,
-		{i32(card.x), i32(card.y), i32(card.width), i32(card.height)},
-		ui.ui_frame_theme(frame).bg_secondary,
-	)
+	card := ui.Rect_I32{x, y, fit_w, content.h + pad * 2}
+	ui.card_bg_at(frame, card, ui.ui_frame_theme(frame).bg_secondary)
 	ui.text(frame, "Geometry resolved before drawing", title.x, title.y, .Label)
 	ui.text(frame, "No retained tree or trailing gap", detail.x, detail.y, .Label, .Secondary)
-	return y + i32(card.height) + ui.ui_frame_sc(frame, 16)
+	return y + card.h + ui.ui_frame_sc(frame, 16)
 }
 
 draw_widgets :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
@@ -859,14 +888,8 @@ draw_layout_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 
 cell :: proc(frame: ^ui.Ui_Frame, r: ui.Rect_I32, label: string) {
 	if r.w <= 0 || r.h <= 0 do return
-	rl.DrawRectangle(r.x, r.y, r.w, r.h, ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).bg_active))
-	rl.DrawRectangleLines(
-		r.x,
-		r.y,
-		r.w,
-		r.h,
-		ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).border_color),
-	)
+	ui.draw_rectangle(frame, r.x, r.y, r.w, r.h, ui.ui_frame_theme(frame).bg_active)
+	ui.draw_rectangle_lines(frame, r.x, r.y, r.w, r.h, ui.ui_frame_theme(frame).border_color)
 	tw := ui.text_width(frame, label, .Label)
 	ui.text(
 		frame,
@@ -912,8 +935,8 @@ draw_overlay_controls :: proc(frame: ^ui.Ui_Frame, x, y: i32) -> i32 {
 }
 
 draw_overlay_context_menu :: proc(frame: ^ui.Ui_Frame, x, info_y: i32) {
-	if rl.IsMouseButtonPressed(.RIGHT) && !ctx_menu.open && !about_modal.open {
-		mouse := rl.GetMousePosition()
+	if ui.is_mouse_button_pressed(frame, .RIGHT) && !ctx_menu.open && !about_modal.open {
+		mouse := ui.get_mouse_position(frame)
 		ui.context_menu_open(&ctx_menu, i32(mouse.x), i32(mouse.y))
 	}
 	if ctx_menu.open {
@@ -998,17 +1021,10 @@ draw_overlay_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 	w := ui.ui_frame_sc(frame, 220)
 	h := ui.ui_frame_sc(frame, 130)
-	rect := rl.Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	ui.overlay_begin(frame, ui.Rect(rect), claim_input = true)
-	ui.overlay_rounded(frame, ui.Rect(rect), 0.1, 6, ui.ui_frame_theme(frame).bg_popup)
-	ui.overlay_rounded_lines(
-		frame,
-		ui.Rect(rect),
-		0.1,
-		6,
-		1.0,
-		ui.ui_frame_theme(frame).border_color,
-	)
+	rect := ui.Rect{f32(x), f32(y), f32(w), f32(h)}
+	ui.overlay_begin(frame, rect, claim_input = true)
+	ui.overlay_rounded(frame, rect, 0.1, 6, ui.ui_frame_theme(frame).bg_popup)
+	ui.overlay_rounded_lines(frame, rect, 0.1, 6, 1.0, ui.ui_frame_theme(frame).border_color)
 	ui.overlay_text(
 		frame,
 		"Overlay popup",
@@ -1035,14 +1051,14 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 	)
 
 	// Close row: the popup is topmost, so it hit-tests raw input.
-	row := rl.Rectangle {
+	row := ui.Rect {
 		f32(x + ui.ui_frame_sc(frame, 12)),
 		f32(y + h - ui.ui_frame_sc(frame, 30)),
 		f32(w - ui.ui_frame_sc(frame, 24)),
 		f32(ui.ui_frame_sc(frame, 22)),
 	}
-	mouse := rl.GetMousePosition()
-	hovered := rl.CheckCollisionPointRec(mouse, row)
+	mouse := ui.get_mouse_position(frame)
+	hovered := ui.point_in_rect(mouse, row)
 	if hovered {
 		ui.overlay_rect(frame, ui.Rect(row), ui.ui_frame_theme(frame).bg_active)
 		ui.request_cursor(frame, .POINTING_HAND)
@@ -1055,7 +1071,7 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 		ui.ui_frame_metrics(frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(frame).fg_accent,
 	)
-	if hovered && rl.IsMouseButtonReleased(.LEFT) {
+	if hovered && ui.is_mouse_button_released(frame, .LEFT) {
 		popup_open = false
 	}
 	ui.overlay_end(frame)
