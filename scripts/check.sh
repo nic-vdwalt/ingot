@@ -27,6 +27,10 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions.py" \
 	--baseline "$root/scripts/assertion_baseline.json" \
 	"$root"
 
+echo "== UI API layers =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_ui_api_layers_test.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_ui_api_layers.py" "$root"
+
 for pkg in gfx ui ui_gfx term prefs net sys pty testx; do
 	echo "== checking $pkg =="
 	# shellcheck disable=SC2086
