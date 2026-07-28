@@ -497,7 +497,9 @@ api_tree_edge_around :: proc(
 	color: ui.Color,
 ) {
 	assert(frame != nil && child.y > parent.y + parent.h, "api_tree_edge_around: invalid edge")
-	from := ui.Vector2{f32(parent.x + parent.w), f32(parent.y + parent.h / 2)}
+	left := lane_x < parent.x
+	from_x := parent.x if left else parent.x + parent.w
+	from := ui.Vector2{f32(from_x), f32(parent.y + parent.h / 2)}
 	to := ui.Vector2{f32(child.x + child.w / 2), f32(child.y)}
 	lane := f32(lane_x)
 	elbow_y := f32(child.y - api_tree_sc(frame, 10))
@@ -574,6 +576,28 @@ api_tree_branch_bus :: proc(
 	}
 }
 
+api_tree_branch_right :: proc(
+	frame: ^ui.Ui_Frame,
+	parent: ui.Rect_I32,
+	children: []ui.Rect_I32,
+	lane_x: i32,
+	color: ui.Color,
+) {
+	assert(frame != nil && len(children) > 0, "api_tree_branch_right: invalid children")
+	assert(lane_x > parent.x + parent.w, "api_tree_branch_right: invalid lane")
+	from := ui.Vector2{f32(parent.x + parent.w), f32(parent.y + parent.h / 2)}
+	first_y := f32(children[0].y + children[0].h / 2)
+	last_y := f32(children[len(children) - 1].y + children[len(children) - 1].h / 2)
+	api_tree_segment(frame, from, {f32(lane_x), from.y}, color)
+	api_tree_segment(frame, {f32(lane_x), first_y}, {f32(lane_x), last_y}, color)
+	for child in children {
+		child_y := f32(child.y + child.h / 2)
+		tip := ui.Vector2{f32(child.x), child_y}
+		api_tree_segment(frame, {f32(lane_x), child_y}, tip, color)
+		api_tree_arrow_side(frame, tip, false, color)
+	}
+}
+
 api_ownership_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: bool) {
 	assert(frame != nil && panel.w > 0 && panel.h > 0, "api_ownership_tree: invalid panel")
 	theme := ui.ui_frame_theme(frame)
@@ -597,7 +621,7 @@ api_ownership_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: boo
 	output_w := min(api_tree_sc(frame, 142), panel.x + panel.w - margin - members[3].x - card_w)
 	output_x := panel.x + panel.w - margin - output_w
 	output_h := min(card_h, api_tree_sc(frame, 36))
-	output_y := members[3].y + card_h + row_gap
+	output_y := members[3].y - output_h - row_gap
 	output_children := [?]ui.Rect_I32 {
 		{output_x, output_y, output_w, output_h},
 		{output_x, output_y + output_h + row_gap, output_w, output_h},
@@ -613,7 +637,7 @@ api_ownership_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: boo
 		members[0].x - api_tree_sc(frame, 7),
 		theme.fg_tool,
 	)
-	api_tree_branch_bus(
+	api_tree_branch_right(
 		frame,
 		members[3],
 		output_children[:],
@@ -678,7 +702,7 @@ api_call_paths_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: bo
 	api_tree_edge_down(frame, output, adapter, theme.fg_assistant)
 	api_tree_edge_down(frame, adapter, gfx, theme.fg_assistant)
 	lane_x := panel.x + panel.w - api_tree_sc(frame, 8)
-	if raylib.x > gfx.x do lane_x = panel.x + api_tree_sc(frame, 8)
+	if raylib.x < gfx.x do lane_x = panel.x + api_tree_sc(frame, 8)
 	api_tree_edge_around(frame, raylib, gfx, lane_x, theme.fg_user)
 	api_tree_card(frame, {facade, "Facade API", "paired *_at when available", theme.fg_plan})
 	api_tree_card(frame, {explicit, "Explicit UI", "*_at · canvas · protocols", theme.fg_accent})
