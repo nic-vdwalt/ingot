@@ -58,3 +58,34 @@ route_claim_backdrop_handles_fullscreen_panel :: proc(t: ^testing.T) {
 	testing.expect(t, !route_occluded(&frame, Vector2{200, 150}), "full-screen panel stays live")
 	testing.expect(t, !route_occluded(&frame, Vector2{0, 0}), "no band should occlude")
 }
+
+@(test)
+tooltip_wrapped_at_waits_then_emits_multiline_overlay :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	input := Ui_Input {
+		mouse_position = {20, 20},
+		screen_size    = {120, 80},
+	}
+	frame := Ui_Frame {
+		output = output,
+	}
+	ui_frame_begin(&frame, &runtime, &input)
+	defer ui_frame_end(&frame)
+	state: Tooltip_State
+	target := Rect_I32{10, 10, 40, 20}
+	text := "one two three four"
+	tooltip_wrapped_at(&frame, &state, target, text, 120, 80, {max_width = 48})
+	testing.expect_value(t, overlay_cmd_count(&frame), 0)
+	input.time = TOOLTIP_DELAY
+	tooltip_wrapped_at(&frame, &state, target, text, 120, 80, {max_width = 48})
+	list := &output.overlay
+	testing.expect_value(t, list.count, 6)
+	testing.expect_value(t, list.commands[0].rect.x, f32(32))
+	testing.expect_value(t, list.commands[0].rect.y, f32(0))
+	testing.expect_value(t, list.commands[0].rect.width, f32(44))
+	testing.expect_value(t, list.commands[0].rect.height, f32(100))
+}

@@ -94,15 +94,275 @@ section := Section.Api_Relationships
 debug_on := false
 
 Api_Tree_Node :: struct {
-	rect:   ui.Rect_I32,
-	title:  string,
-	detail: string,
-	accent: ui.Color,
+	rect:    ui.Rect_I32,
+	title:   string,
+	detail:  string,
+	tooltip: string,
+	accent:  ui.Color,
 }
 
 Api_Map_State :: struct {
-	ui: ui.Ui,
+	form:    ui.Ui,
+	tooltip: ui.Tooltip_State,
 }
+
+API_TIP_CALLER ::
+	("Caller-owned application state" +
+		`
+` +
+		"Owner: application" +
+		`
+` +
+		"Lifetime: application" +
+		`
+` +
+		"Owns: ui_gfx.App and the application model" +
+		`
+` +
+		"Role: supplies state read and changed by each UI frame.")
+
+API_TIP_APP ::
+	("ui_gfx.App" +
+		`
+` +
+		"Owner: caller" +
+		`
+` +
+		"Lifetime: application" +
+		`
+` +
+		"Owns: ui_gfx.Session and persistent ui.Ui" +
+		`
+` +
+		"Role: runs the default graphics and UI frame loop.")
+
+API_TIP_SESSION ::
+	("ui_gfx.Session" +
+		`
+` +
+		"Owner: ui_gfx.App" +
+		`
+` +
+		"Lifetime: application session" +
+		`
+` +
+		"Owns: Runtime, Input, Frame, Output, and Adapter" +
+		`
+` +
+		"Role: coordinates capture, construction, replay, and cleanup.")
+
+API_TIP_UI ::
+	("ui.Ui" +
+		`
+` +
+		"Owner: ui_gfx.App or caller" +
+		`
+` +
+		"Lifetime: persistent layout context" +
+		`
+` +
+		"Input: open Ui_Frame" +
+		`
+` +
+		"Role: temporarily attaches to a frame while building one UI root.")
+
+API_TIP_RUNTIME ::
+	("Ui_Runtime" +
+		`
+` +
+		"Owner: ui_gfx.Session" +
+		`
+` +
+		"Lifetime: application session" +
+		`
+` +
+		"Owns: text, semantics, scale, and theme services" +
+		`
+` +
+		"Output: services used by every Ui_Frame.")
+
+API_TIP_INPUT ::
+	("Ui_Input" +
+		`
+` +
+		"Owner: ui_gfx.Session" +
+		`
+` +
+		"Lifetime: reusable frame storage" +
+		`
+` +
+		"Input: graphics and platform events" +
+		`
+` +
+		"Output: renderer-neutral snapshot read during UI construction.")
+
+API_TIP_FRAME ::
+	("Ui_Frame" +
+		`
+` +
+		"Owner: ui_gfx.Session" +
+		`
+` +
+		"Lifetime: reused, open for one frame" +
+		`
+` +
+		"References: Runtime, Input, and Output" +
+		`
+` +
+		"Role: records paint, semantics, interaction, and platform requests.")
+
+API_TIP_OUTPUT ::
+	("Ui_Output" +
+		`
+` +
+		"Owner: ui_gfx.Session" +
+		`
+` +
+		"Lifetime: reusable and reset at frame begin" +
+		`
+` +
+		"Owns: main, overlay, and platform buffers" +
+		`
+` +
+		"Output: consumed by the sibling ui_gfx.Adapter.")
+
+API_TIP_ADAPTER ::
+	("ui_gfx.Adapter" +
+		`
+` +
+		"Owner: ui_gfx.Session; sibling of Ui_Output" +
+		`
+` +
+		"Lifetime: application session" +
+		`
+` +
+		"Input: gfx events and Ui_Output" +
+		`
+` +
+		"Role: captures input and consumes output without owning it.")
+
+API_TIP_MAIN ::
+	("Main paint" +
+		`
+` +
+		"Owner: Ui_Output" +
+		`
+` +
+		"Lifetime: one frame" +
+		`
+` +
+		"Contains: ordinary paint and text commands" +
+		`
+` +
+		"Flow: retained for diagnostics and streamed through Adapter as appended.")
+
+API_TIP_OVERLAY ::
+	("Overlay paint" +
+		`
+` +
+		"Owner: Ui_Output" +
+		`
+` +
+		"Lifetime: one frame" +
+		`
+` +
+		"Contains: popups, menus, and tooltips" +
+		`
+` +
+		"Flow: replayed by Adapter after UI frame finalization.")
+
+API_TIP_PLATFORM ::
+	("Platform output" +
+		`
+` +
+		"Owner: Ui_Output" +
+		`
+` +
+		"Lifetime: one frame" +
+		`
+` +
+		"Contains: cursor, clipboard, text-input, redraw, and window requests" +
+		`
+` +
+		"Flow: applied by Adapter after overlay replay.")
+
+API_TIP_FACADE ::
+	("Facade API" +
+		`
+` +
+		"Owner: caller-owned ui.Ui" +
+		`
+` +
+		"Input: application data" +
+		`
+` +
+		"Output: widget paint, semantics, and requests recorded through Ui_Frame" +
+		`
+` +
+		"Use: ordinary auto-layout application UI.")
+
+API_TIP_EXPLICIT ::
+	("Explicit UI" +
+		`
+` +
+		"Owner: caller" +
+		`
+` +
+		"Input: explicit rectangles, canvas callbacks, or protocols" +
+		`
+` +
+		"Output: records into the same Ui_Frame" +
+		`
+` +
+		"Use: mixed UI, custom layout, and advanced integrations.")
+
+API_TIP_CALL_FRAME ::
+	("Ui_Frame call path" +
+		`
+` +
+		"Input: facade and explicit UI declarations" +
+		`
+` +
+		"Output: renderer-neutral Ui_Output" +
+		`
+` +
+		"Timing: open only while application UI is constructed.")
+
+API_TIP_CALL_OUTPUT ::
+	("Ui_Output call path" +
+		`
+` +
+		"Input: commands and requests recorded through Ui_Frame" +
+		`
+` +
+		"Output: main streams now; overlay and platform remain deferred" +
+		`
+` +
+		"Consumer: sibling Adapter.")
+
+API_TIP_CALL_ADAPTER ::
+	("ui_gfx.Adapter call path" +
+		`
+` +
+		"Input: main, overlay, and platform output channels" +
+		`
+` +
+		"Output: gfx draw calls and platform operations" +
+		`
+` +
+		"Timing: main streams; overlay replays next; platform applies last.")
+
+API_TIP_GFX ::
+	("ingot:gfx" +
+		`
+` +
+		"Boundary: renderer and platform-facing API" +
+		`
+` +
+		"Input: operations translated by ui_gfx.Adapter" +
+		`
+` +
+		"Output: graphics commands, window changes, and captured input.")
 
 nav_ui: ui.Ui
 buttons_ui: ui.Ui
@@ -412,13 +672,25 @@ api_tree_sc :: proc(frame: ^ui.Ui_Frame, value: i32) -> i32 {
 	return ui.ui_frame_sc(frame, value)
 }
 
-api_tree_card :: proc(frame: ^ui.Ui_Frame, node: Api_Tree_Node) {
-	assert(frame != nil, "api_tree_card: nil frame")
+api_tree_card :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, node: Api_Tree_Node) {
+	assert(frame != nil && state != nil, "api_tree_card: invalid arguments")
 	assert(node.rect.w > 0 && node.rect.h > 0, "api_tree_card: invalid node")
+	assert(len(node.title) > 0 && len(node.tooltip) > 0, "api_tree_card: missing text")
 	theme := ui.ui_frame_theme(frame)
+	origin := ui.frame_pane_origin(frame)
+	screen_rect := ui.Rect_I32 {
+		node.rect.x + i32(origin.x),
+		node.rect.y + i32(origin.y),
+		node.rect.w,
+		node.rect.h,
+	}
+	hovered := ui.point_in_rect(ui.get_mouse_position(frame), ui.rect_f32(screen_rect))
 	paint_rect := ui.rect_f32(node.rect)
 	ui.draw_rectangle_rounded(frame, paint_rect, 0.10, 6, theme.bg_secondary)
 	ui.draw_rectangle_rounded_lines_ex(frame, paint_rect, 0.10, 6, 1, theme.border_color)
+	if hovered {
+		ui.draw_rectangle_rounded_lines_ex(frame, paint_rect, 0.10, 6, 2, node.accent)
+	}
 	ui.draw_rectangle(
 		frame,
 		node.rect.x,
@@ -445,6 +717,16 @@ api_tree_card :: proc(frame: ^ui.Ui_Frame, node: Api_Tree_Node) {
 			.Secondary,
 		)
 	}
+	viewport := ui.frame_viewport(frame)
+	ui.tooltip_wrapped_at(
+		frame,
+		&state.tooltip,
+		screen_rect,
+		node.tooltip,
+		viewport.w,
+		viewport.h,
+		{max_width = api_tree_sc(frame, 320)},
+	)
 }
 
 api_tree_segment :: proc(frame: ^ui.Ui_Frame, from, to: ui.Vector2, color: ui.Color) {
@@ -490,26 +772,6 @@ api_tree_edge_down :: proc(frame: ^ui.Ui_Frame, parent, child: ui.Rect_I32, colo
 	api_tree_arrow_down(frame, to, color)
 }
 
-api_tree_edge_around :: proc(
-	frame: ^ui.Ui_Frame,
-	parent, child: ui.Rect_I32,
-	lane_x: i32,
-	color: ui.Color,
-) {
-	assert(frame != nil && child.y > parent.y + parent.h, "api_tree_edge_around: invalid edge")
-	left := lane_x < parent.x
-	from_x := parent.x if left else parent.x + parent.w
-	from := ui.Vector2{f32(from_x), f32(parent.y + parent.h / 2)}
-	to := ui.Vector2{f32(child.x + child.w / 2), f32(child.y)}
-	lane := f32(lane_x)
-	elbow_y := f32(child.y - api_tree_sc(frame, 10))
-	api_tree_segment(frame, from, {lane, from.y}, color)
-	api_tree_segment(frame, {lane, from.y}, {lane, elbow_y}, color)
-	api_tree_segment(frame, {lane, elbow_y}, {to.x, elbow_y}, color)
-	api_tree_segment(frame, {to.x, elbow_y}, to, color)
-	api_tree_arrow_down(frame, to, color)
-}
-
 api_tree_panel :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, title: string) {
 	assert(frame != nil && rect.w > 0 && rect.h > 0, "api_tree_panel: invalid panel")
 	theme := ui.ui_frame_theme(frame)
@@ -543,120 +805,117 @@ api_tree_draw_edges :: proc(
 	}
 }
 
-api_tree_branch_bus :: proc(
+api_tree_branch_down :: proc(
 	frame: ^ui.Ui_Frame,
 	parent: ui.Rect_I32,
 	children: []ui.Rect_I32,
-	lane_x: i32,
 	color: ui.Color,
 ) {
-	assert(frame != nil && len(children) > 0, "api_tree_branch_bus: invalid children")
-	from := ui.Vector2{f32(parent.x + parent.w / 2), f32(parent.y + parent.h)}
-	first_y := children[0].y + children[0].h / 2
-	last_y := children[len(children) - 1].y + children[len(children) - 1].h / 2
-	api_tree_segment(frame, from, {from.x, f32(first_y - api_tree_sc(frame, 8))}, color)
-	api_tree_segment(
-		frame,
-		{from.x, f32(first_y - api_tree_sc(frame, 8))},
-		{f32(lane_x), f32(first_y - api_tree_sc(frame, 8))},
-		color,
-	)
-	api_tree_segment(
-		frame,
-		{f32(lane_x), f32(first_y - api_tree_sc(frame, 8))},
-		{f32(lane_x), f32(last_y)},
-		color,
-	)
+	assert(frame != nil && len(children) > 0, "api_tree_branch_down: invalid children")
+	assert(children[0].y > parent.y + parent.h, "api_tree_branch_down: invalid hierarchy")
+	parent_x := f32(parent.x + parent.w / 2)
+	bus_y := f32((parent.y + parent.h + children[0].y) / 2)
+	first_x := f32(children[0].x + children[0].w / 2)
+	last := children[len(children) - 1]
+	last_x := f32(last.x + last.w / 2)
+	api_tree_segment(frame, {parent_x, f32(parent.y + parent.h)}, {parent_x, bus_y}, color)
+	api_tree_segment(frame, {first_x, bus_y}, {last_x, bus_y}, color)
 	for child in children {
-		child_y := f32(child.y + child.h / 2)
-		left := child.x < lane_x
-		tip_x := f32(child.x + child.w) if left else f32(child.x)
-		api_tree_segment(frame, {f32(lane_x), child_y}, {tip_x, child_y}, color)
-		api_tree_arrow_side(frame, {tip_x, child_y}, left, color)
+		to := ui.Vector2{f32(child.x + child.w / 2), f32(child.y)}
+		api_tree_segment(frame, {to.x, bus_y}, to, color)
+		api_tree_arrow_down(frame, to, color)
 	}
 }
 
-api_tree_branch_right :: proc(
+api_ownership_wide_rects :: proc(
 	frame: ^ui.Ui_Frame,
-	parent: ui.Rect_I32,
-	children: []ui.Rect_I32,
-	lane_x: i32,
-	color: ui.Color,
+	panel: ui.Rect_I32,
+) -> (
+	caller, app, session, form: ui.Rect_I32,
+	members: [5]ui.Rect_I32,
+	outputs: [3]ui.Rect_I32,
 ) {
-	assert(frame != nil && len(children) > 0, "api_tree_branch_right: invalid children")
-	assert(lane_x > parent.x + parent.w, "api_tree_branch_right: invalid lane")
-	from := ui.Vector2{f32(parent.x + parent.w), f32(parent.y + parent.h / 2)}
-	first_y := f32(children[0].y + children[0].h / 2)
-	last_y := f32(children[len(children) - 1].y + children[len(children) - 1].h / 2)
-	api_tree_segment(frame, from, {f32(lane_x), from.y}, color)
-	api_tree_segment(frame, {f32(lane_x), first_y}, {f32(lane_x), last_y}, color)
-	for child in children {
-		child_y := f32(child.y + child.h / 2)
-		tip := ui.Vector2{f32(child.x), child_y}
-		api_tree_segment(frame, {f32(lane_x), child_y}, tip, color)
-		api_tree_arrow_side(frame, tip, false, color)
-	}
-}
-
-api_ownership_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: bool) {
-	assert(frame != nil && panel.w > 0 && panel.h > 0, "api_ownership_tree: invalid panel")
-	theme := ui.ui_frame_theme(frame)
+	assert(frame != nil && panel.w > 0 && panel.h > 0, "api_ownership_wide_rects: invalid panel")
 	margin := api_tree_sc(frame, 14)
-	card_w := min(api_tree_sc(frame, 156), (panel.w - margin * 3) / 2)
-	card_h := min(api_tree_sc(frame, 42), max((panel.h - api_tree_sc(frame, 104)) / 8, 30))
+	card_h := api_tree_sc(frame, 42)
+	card_w := min(api_tree_sc(frame, 180), (panel.w - margin * 3) / 2)
 	top := panel.y + api_tree_sc(frame, 38)
-	row_gap := max(api_tree_sc(frame, 8), 6)
-	caller := api_tree_centered_rect(panel, top, min(card_w * 2, panel.w - margin * 2), card_h)
-	app := api_tree_centered_rect(panel, caller.y + card_h + row_gap, card_w, card_h)
-	child_y := app.y + card_h + row_gap
-	session_x := panel.x + margin + api_tree_sc(frame, 20)
-	session := ui.Rect_I32{session_x, child_y, card_w, card_h}
-	ui_card := ui.Rect_I32{panel.x + panel.w - margin - card_w, child_y, card_w, card_h}
-	member_y := session.y + card_h + row_gap
-	member_x := session.x + api_tree_sc(frame, 20)
-	members: [5]ui.Rect_I32
-	for index := 0; index < 5; index += 1 {
-		members[index] = {member_x, member_y + i32(index) * (card_h + row_gap), card_w, card_h}
+	caller = api_tree_centered_rect(panel, top, min(card_w * 2, panel.w - margin * 2), card_h)
+	app = api_tree_centered_rect(panel, top + api_tree_sc(frame, 54), card_w, card_h)
+	child_y := app.y + api_tree_sc(frame, 62)
+	session = {panel.x + panel.w / 2 - card_w - margin / 2, child_y, card_w, card_h}
+	form = {panel.x + panel.w / 2 + margin / 2, child_y, card_w, card_h}
+	member_gap := api_tree_sc(frame, 8)
+	member_w := (panel.w - margin * 2 - member_gap * 4) / 5
+	member_y := child_y + api_tree_sc(frame, 72)
+	for index := 0; index < len(members); index += 1 {
+		members[index] = {
+			panel.x + margin + i32(index) * (member_w + member_gap),
+			member_y,
+			member_w,
+			card_h,
+		}
 	}
-	output_w := min(api_tree_sc(frame, 142), panel.x + panel.w - margin - members[3].x - card_w)
-	output_x := panel.x + panel.w - margin - output_w
-	output_h := min(card_h, api_tree_sc(frame, 36))
-	output_y := members[3].y - output_h - row_gap
-	output_children := [?]ui.Rect_I32 {
-		{output_x, output_y, output_w, output_h},
-		{output_x, output_y + output_h + row_gap, output_w, output_h},
-		{output_x, output_y + (output_h + row_gap) * 2, output_w, output_h},
+	output_gap := api_tree_sc(frame, 12)
+	output_w := min(api_tree_sc(frame, 180), (panel.w - margin * 2 - output_gap * 2) / 3)
+	output_y := member_y + api_tree_sc(frame, 76)
+	output_start := panel.x + (panel.w - output_w * 3 - output_gap * 2) / 2
+	for index := 0; index < len(outputs); index += 1 {
+		outputs[index] = {
+			output_start + i32(index) * (output_w + output_gap),
+			output_y,
+			output_w,
+			card_h,
+		}
 	}
+	return
+}
+
+api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui.Rect_I32) {
+	assert(frame != nil && state != nil, "api_ownership_wide: invalid arguments")
+	theme := ui.ui_frame_theme(frame)
+	caller, app, session, form, members, outputs := api_ownership_wide_rects(frame, panel)
 	api_tree_edge_down(frame, caller, app, theme.fg_accent)
-	app_children := [?]ui.Rect_I32{session, ui_card}
+	app_children := [?]ui.Rect_I32{session, form}
 	api_tree_draw_edges(frame, app, app_children[:], theme.fg_accent)
-	api_tree_branch_bus(
+	api_tree_branch_down(frame, session, members[:], theme.fg_tool)
+	api_tree_branch_down(frame, members[3], outputs[:], theme.fg_success)
+	api_tree_card(
 		frame,
-		session,
-		members[:],
-		members[0].x - api_tree_sc(frame, 7),
-		theme.fg_tool,
+		state,
+		{caller, "Caller application state", "owns App value", API_TIP_CALLER, theme.fg_accent},
 	)
-	api_tree_branch_right(
+	api_tree_card(frame, state, {app, "ui_gfx.App", "default host", API_TIP_APP, theme.fg_accent})
+	api_tree_card(
 		frame,
-		members[3],
-		output_children[:],
-		output_x - api_tree_sc(frame, 7),
-		theme.fg_success,
+		state,
+		{session, "ui_gfx.Session", "App-owned field", API_TIP_SESSION, theme.fg_tool},
 	)
 	api_tree_card(
 		frame,
-		{caller, "Caller-owned application state", "owns App value", theme.fg_accent},
+		state,
+		{form, "reusable ui.Ui", "App-owned field", API_TIP_UI, theme.fg_plan},
 	)
-	api_tree_card(frame, {app, "ui_gfx.App", "default host", theme.fg_accent})
-	api_tree_card(frame, {session, "ui_gfx.Session", "left sibling field", theme.fg_tool})
-	api_tree_card(frame, {ui_card, "reusable ui.Ui", "right sibling field", theme.fg_plan})
 	labels := [?]string {
 		"Ui_Runtime",
 		"Ui_Input",
 		"reusable Ui_Frame",
 		"Ui_Output",
 		"ui_gfx.Adapter",
+	}
+	details := [?]string {
+		"persistent services",
+		"input snapshot",
+		"frame context",
+		"three channels",
+		"output consumer",
+	}
+	tips := [?]string {
+		API_TIP_RUNTIME,
+		API_TIP_INPUT,
+		API_TIP_FRAME,
+		API_TIP_OUTPUT,
+		API_TIP_ADAPTER,
 	}
 	accents := [?]ui.Color {
 		theme.fg_tool,
@@ -666,16 +925,38 @@ api_ownership_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: boo
 		theme.fg_assistant,
 	}
 	for member, index in members {
-		api_tree_card(frame, {member, labels[index], "Session-owned", accents[index]})
+		api_tree_card(
+			frame,
+			state,
+			{member, labels[index], details[index], tips[index], accents[index]},
+		)
 	}
 	output_labels := [?]string{"main paint", "overlay paint", "platform output"}
-	for child, index in output_children {
-		api_tree_card(frame, {child, output_labels[index], "Ui_Output-owned", theme.fg_success})
+	output_details := [?]string{"streams now", "replays next", "applies last"}
+	output_tips := [?]string{API_TIP_MAIN, API_TIP_OVERLAY, API_TIP_PLATFORM}
+	for output, index in outputs {
+		api_tree_card(
+			frame,
+			state,
+			{
+				output,
+				output_labels[index],
+				output_details[index],
+				output_tips[index],
+				theme.fg_success,
+			},
+		)
 	}
 }
 
-api_call_paths_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: bool) {
-	assert(frame != nil && panel.w > 0 && panel.h > 0, "api_call_paths_tree: invalid panel")
+api_call_paths_tree :: proc(
+	frame: ^ui.Ui_Frame,
+	state: ^Api_Map_State,
+	panel: ui.Rect_I32,
+	compact: bool,
+) {
+	assert(frame != nil && state != nil, "api_call_paths_tree: invalid arguments")
+	assert(panel.w > 0 && panel.h > 0, "api_call_paths_tree: invalid panel")
 	theme := ui.ui_frame_theme(frame)
 	margin := api_tree_sc(frame, 14)
 	gap := api_tree_sc(frame, 12)
@@ -698,12 +979,48 @@ api_call_paths_tree :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, compact: bo
 	api_tree_edge_down(frame, frame_rect, output, theme.fg_success)
 	api_tree_edge_down(frame, output, adapter, theme.fg_assistant)
 	api_tree_edge_down(frame, adapter, gfx, theme.fg_assistant)
-	api_tree_card(frame, {facade, "Facade API", "paired *_at when available", theme.fg_plan})
-	api_tree_card(frame, {explicit, "Explicit UI", "*_at · canvas · protocols", theme.fg_accent})
-	api_tree_card(frame, {frame_rect, "Ui_Frame", "records paint + semantics", theme.fg_accent})
-	api_tree_card(frame, {output, "Ui_Output", "main · overlay · platform", theme.fg_success})
-	api_tree_card(frame, {adapter, "ui_gfx.Adapter", "replays UI output", theme.fg_assistant})
-	api_tree_card(frame, {gfx, "ingot:gfx", "backend-facing API", theme.fg_assistant})
+	api_tree_card(
+		frame,
+		state,
+		{facade, "Facade API", "paired *_at when available", API_TIP_FACADE, theme.fg_plan},
+	)
+	api_tree_card(
+		frame,
+		state,
+		{
+			explicit,
+			"Explicit UI",
+			"*_at · canvas · protocols",
+			API_TIP_EXPLICIT,
+			theme.fg_accent,
+		},
+	)
+	api_tree_card(
+		frame,
+		state,
+		{frame_rect, "Ui_Frame", "records paint + semantics", API_TIP_CALL_FRAME, theme.fg_accent},
+	)
+	api_tree_card(
+		frame,
+		state,
+		{
+			output,
+			"Ui_Output",
+			"main · overlay · platform",
+			API_TIP_CALL_OUTPUT,
+			theme.fg_success,
+		},
+	)
+	api_tree_card(
+		frame,
+		state,
+		{adapter, "ui_gfx.Adapter", "replays UI output", API_TIP_CALL_ADAPTER, theme.fg_assistant},
+	)
+	api_tree_card(
+		frame,
+		state,
+		{gfx, "ingot:gfx", "backend-facing API", API_TIP_GFX, theme.fg_assistant},
+	)
 	_ = compact
 }
 
@@ -712,7 +1029,8 @@ api_relationship_trees_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, us
 		frame != nil && rect.w > 0 && rect.h > 0,
 		"api_relationship_trees_canvas: invalid canvas",
 	)
-	assert(userdata == nil, "api_relationship_trees_canvas: unexpected userdata")
+	assert(userdata != nil, "api_relationship_trees_canvas: nil state")
+	state := cast(^Api_Map_State)userdata
 	wide := rect.w >= api_tree_sc(frame, 700)
 	pad := api_tree_sc(frame, 16 if wide else 12)
 	gap := api_tree_sc(frame, 20 if wide else 16)
@@ -728,8 +1046,8 @@ api_relationship_trees_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, us
 	}
 	api_tree_panel(frame, ownership, "1 · LITERAL OWNERSHIP")
 	api_tree_panel(frame, depth, "2 · CALL PATHS · APPLICATION → BACKEND")
-	api_ownership_tree(frame, ownership, !wide)
-	api_call_paths_tree(frame, depth, !wide)
+	api_ownership_wide(frame, state, ownership)
+	api_call_paths_tree(frame, state, depth, !wide)
 }
 
 draw_api_text_equivalent :: proc(u: ^ui.Ui) {
@@ -786,7 +1104,8 @@ draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 
 draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	assert(frame != nil && w > 0, "draw_api_relationships: invalid geometry")
-	u := &api_map_state.ui
+	state := &api_map_state
+	u := &state.form
 	wide := w >= ui.ui_frame_sc(frame, 700)
 	canvas_h: i32 = 520 if wide else 900
 	total_h: i32 = canvas_h + 420
@@ -794,7 +1113,7 @@ draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	ui.scope_begin(u, "api-relationships")
 	_ = ui.section_header(u, "API OWNERSHIP AND CALL PATHS")
 	ui.label(u, "Ownership is literal; application-facing routes flow toward ingot:gfx.")
-	_ = ui.canvas(u, {height = canvas_h}, api_relationship_trees_canvas)
+	_ = ui.canvas(u, {height = canvas_h}, api_relationship_trees_canvas, state)
 	draw_api_text_equivalent(u)
 	draw_entry_paths(u)
 	ui.scope_end(u)

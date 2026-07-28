@@ -358,6 +358,10 @@ Tooltip_State :: struct {
 	hover_start: f64,
 }
 
+Tooltip_Options :: struct {
+	max_width: i32,
+}
+
 // tooltip_at shows `text` near the mouse after the cursor has dwelled over
 // `rect` for TOOLTIP_DELAY seconds. Call it after drawing the target; the tip
 // itself is replayed through the overlay layer so it always paints on top.
@@ -369,8 +373,20 @@ tooltip_at :: proc(
 	text: string,
 	screen_w, screen_h: i32,
 ) {
+	tooltip_wrapped_at(frame, st, rect, text, screen_w, screen_h, {})
+}
+
+tooltip_wrapped_at :: proc(
+	frame: ^Ui_Frame,
+	st: ^Tooltip_State,
+	rect: Rect_I32,
+	text: string,
+	screen_w, screen_h: i32,
+	options: Tooltip_Options,
+) {
 	assert(st != nil, "tooltip: nil state")
 	assert(rect.w > 0 && rect.h > 0, "tooltip: empty target rect")
+	assert(screen_w > 0 && screen_h > 0, "tooltip: invalid viewport")
 	mouse := get_mouse_position(frame)
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	key :=
@@ -387,29 +403,34 @@ tooltip_at :: proc(
 	}
 	elapsed := now - st.hover_start
 	if elapsed < TOOLTIP_DELAY {
-		// Event-driven frames: schedule the repaint that reveals the tip.
 		request_redraw_in(frame, TOOLTIP_DELAY - elapsed)
 		return
 	}
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
-	text_c := strings.clone_to_cstring(text, context.temp_allocator)
-	tw := measure_text_frame(frame, text_c, metrics.FONT_SIZE_LABEL)
+	viewport_limit := max(screen_w - metrics.TOOLTIP_PAD * 4, metrics.FONT_SIZE_LABEL)
+	requested_width := options.max_width if options.max_width > 0 else viewport_limit
+	text_limit := min(requested_width, viewport_limit)
+	lines := wrap_text_frame(frame, text, text_limit, metrics.FONT_SIZE_LABEL)
+	tw := wrapped_max_line_width_frame(frame, text, text_limit, metrics.FONT_SIZE_LABEL)
+	line_height := metrics.LINE_HEIGHT
 	bw := tw + metrics.TOOLTIP_PAD * 2
-	bh := metrics.FONT_SIZE_LABEL + metrics.TOOLTIP_PAD * 2
+	bh := i32(len(lines)) * line_height + metrics.TOOLTIP_PAD * 2
 	tx := clamp(i32(mouse.x) + ui_frame_sc(frame, 12), 0, max(screen_w - bw, 0))
 	ty := clamp(i32(mouse.y) + ui_frame_sc(frame, 18), 0, max(screen_h - bh, 0))
 	tip := Rectangle{f32(tx), f32(ty), f32(bw), f32(bh)}
 	overlay_begin(frame, tip, claim_input = false)
 	overlay_rect(frame, tip, style.bg_popup)
 	overlay_rect_lines(frame, tip, ui_frame_scf(frame, 1), style.border_color)
-	overlay_text(
-		frame,
-		text,
-		tx + metrics.TOOLTIP_PAD,
-		ty + metrics.TOOLTIP_PAD,
-		metrics.FONT_SIZE_LABEL,
-		style.fg_primary,
-	)
+	for line, index in lines {
+		overlay_text(
+			frame,
+			text[line.start:line.end],
+			tx + metrics.TOOLTIP_PAD,
+			ty + metrics.TOOLTIP_PAD + i32(index) * line_height,
+			metrics.FONT_SIZE_LABEL,
+			style.fg_primary,
+		)
+	}
 	overlay_end(frame)
 }

@@ -48,6 +48,7 @@ INGOT_CAPTURE_DIR="$STILLS_DIR" "$BIN"
 echo "== optimise stills =="
 still_failures=0
 for png in \
+	"$STILLS_DIR/gallery-api-relationships-dark.png" \
 	"$STILLS_DIR/gallery-widgets-dark.png" \
 	"$STILLS_DIR/gallery-charts-dark.png" \
 	"$STILLS_DIR/gallery-buttons-light.png" \
