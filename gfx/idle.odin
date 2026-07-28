@@ -1,12 +1,12 @@
-// ingot:gfx — event-driven frame scheduling (power-save) policy.
+// ingot:gfx - event-driven frame scheduling (power-save) policy.
 //
 // Immediate-mode apps rebuild and present every frame even when nothing
 // changes. With SetFrameStrategy(.Event_Driven) the engine instead idles
 // between frames: the native pump blocks in platform_wait_events until input
 // or OS damage arrives, and the web step() early-outs without running the app
 // frame (the browser's rAF keeps ticking cheaply). The policy here is
-// platform-neutral; platforms contribute two primitives — platform_wait_events
-// and platform_wake — plus activity marks from their input callbacks.
+// platform-neutral; platforms contribute two primitives - platform_wait_events
+// and platform_wake - plus activity marks from their input callbacks.
 //
 // A frame runs when:
 //   - input or OS damage arrives (platform callbacks call _idle_note_activity)
@@ -139,14 +139,14 @@ _idle_wait_timeout :: proc "contextless" (s: ^Idle_State, now: f64) -> f64 {
 }
 
 // _idle_timeout is the native pump gate, called once per frame from
-// input_poll. Web never waits — rAF paces the loop and step() gates instead
+// input_poll. Web never waits - rAF paces the loop and step() gates instead
 // (waiting here would block the browser event loop).
 @(private)
 _idle_timeout :: proc() -> (should_wait: bool, timeout: f64) {
 	when ODIN_OS == .JS {
 		return false, 0
 	} else {
-		// Minimized: nothing is visible, so render nothing — just wait in
+		// Minimized: nothing is visible, so render nothing - just wait in
 		// bounded slices (events still wake us; restore marks activity).
 		if g.idle.strategy == .Event_Driven && platform_window_iconified() {
 			return true, IDLE_MAX_WAIT

@@ -1,4 +1,4 @@
-// ingot widget gallery — the imgui_demo.cpp equivalent: living documentation,
+// ingot widget gallery - the imgui_demo.cpp equivalent: living documentation,
 // copy-paste cookbook, and regression/stress surface for every ui widget.
 // Frames are event-driven (EnableEventWaiting). Build & run:
 //
@@ -389,117 +389,89 @@ draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
 	return end_y + ui.ui_frame_sc(frame, 8)
 }
 
-api_layers_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
-	assert(frame != nil, "api_layers_canvas: nil frame")
-	assert(rect.w > 0 && rect.h > 0, "api_layers_canvas: empty rect")
-	assert(userdata == nil, "api_layers_canvas: unexpected userdata")
-	theme := ui.ui_frame_theme(frame)
-	inset := ui.ui_frame_sc(frame, 14)
-	step := ui.ui_frame_sc(frame, 42)
-	labels := [?]string {
-		"ui_gfx.App  \u00b7 lifecycle and submission",
-		"ui.Ui  \u00b7 ordinary layout, widgets, focus, semantics",
-		"Explicit UI island  \u00b7 geometry or lifecycle is behavior",
-		"ingot:gfx  \u00b7 capability absent from UI paint",
-	}
-	colors := [?]ui.Color{theme.bg_secondary, theme.bg_active, theme.bg_selection, theme.bg_code}
-	for label, index in labels {
-		offset := i32(index) * inset
-		r := ui.Rect_I32{offset, i32(index) * step, rect.w - offset * 2, step - inset / 2}
-		ui.draw_rectangle_rounded(
-			frame,
-			ui.Rect{f32(r.x), f32(r.y), f32(r.w), f32(r.h)},
-			0.12,
-			4,
-			colors[index],
-		)
-		ui.text(frame, label, r.x + inset, r.y + ui.ui_frame_sc(frame, 10), .Label)
-	}
+relationship_card :: proc(
+	frame: ^ui.Ui_Frame,
+	rect: ui.Rect_I32,
+	label: string,
+	color: ui.Color,
+) {
+	assert(frame != nil, "relationship_card: nil frame")
+	assert(rect.w > 0 && rect.h > 0, "relationship_card: empty rect")
+	ui.draw_rectangle_rounded(
+		frame,
+		ui.Rect{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)},
+		0.12,
+		4,
+		color,
+	)
+	ui.text(frame, label, rect.x + ui.ui_frame_sc(frame, 10), rect.y + ui.ui_frame_sc(frame, 10), .Label)
 }
 
-draw_api_layers :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
-	assert(frame != nil, "draw_api_layers: nil frame")
-	u := &layers_ui
-	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, 760)}, gap = .SM)
-	ui.scope_begin(u, "api-layers")
-	_ = ui.section_header(u, "NEW UI APPLICATION: START AT THE HIGHEST LAYER")
-	ui.label(u, "Start at App + facade. Descend only at a narrow capability boundary.")
-	ui.label(
-		u,
-		"The source for this page follows the same split shown below.",
-		color = ui.ui_frame_theme(frame).fg_secondary,
-	)
-	_ = ui.canvas(u, {height = 176}, api_layers_canvas)
+host_ownership_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
+	assert(frame != nil && rect.w > 0, "host_ownership_canvas: invalid canvas")
+	assert(userdata == nil, "host_ownership_canvas: unexpected userdata")
 	theme := ui.ui_frame_theme(frame)
-	_ = ui.section_header(u, "EXISTING RAYLIB APPLICATION: MIGRATE WITHOUT A REWRITE")
-	ui.kv_row(
-		u,
-		"1. Replace imports",
-		"vendor:raylib \u2192 ingot:gfx",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"2. Preserve behavior",
-		"keep the raylib-shaped loop",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"3. Inventory gaps",
-		"treat unsupported APIs as ports",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"4. Keep rlgl narrow",
-		"documented compatibility only",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"5. Add application UI",
-		"adopt App + facade incrementally",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.label(
-		u,
-		"Do not rewrite working game/render code merely to adopt ui.Ui.",
-		color = theme.fg_accent,
-	)
-	_ = ui.section_header(u, "HOW THIS GALLERY USES THE STACK")
-	ui.kv_row(u, "Ordinary controls", "ui.Ui facade", theme.fg_secondary, theme.fg_primary)
-	ui.kv_row(
-		u,
-		"Charts, layout, stress",
-		"explicit islands",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"Panes, menus, modals",
-		"explicit lifecycle",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.kv_row(
-		u,
-		"Render target + PNG",
-		"gfx in capture.odin only",
-		theme.fg_secondary,
-		theme.fg_primary,
-	)
-	ui.label(u, "gfx is not the default UI renderer.", color = theme.fg_accent)
-	ui.scope_end(u)
-	end_y := ui.remaining_rect(u).y
-	ui.end(u)
-	return end_y + ui.ui_frame_sc(frame, 16)
+	gap := ui.ui_frame_sc(frame, 12)
+	card_w := (rect.w - gap * 2) / 3
+	labels := [?]string{"ui_gfx.App  [default]", "ui_gfx.Session  [custom host]", "ui_gfx.Adapter  [bridge]"}
+	for label, index in labels {
+		x := i32(index) * (card_w + gap)
+		relationship_card(frame, {x, 24, card_w, 52}, label, theme.bg_active)
+	}
+	ui.text(frame, "owns / defaults  \u2192", card_w - gap, 4, .Label, .Accent)
+	ui.text(frame, "owns / uses  \u2192", card_w * 2, 82, .Label, .Accent)
+}
+
+geometry_ownership_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
+	assert(frame != nil && rect.w > 0, "geometry_ownership_canvas: invalid canvas")
+	assert(userdata != nil, "geometry_ownership_canvas: nil state")
+	state := cast(^Api_Map_State)userdata
+	theme := ui.ui_frame_theme(frame)
+	gap := ui.ui_frame_sc(frame, 48)
+	card_w := (rect.w - gap) / 2
+	facade, explicit := "button(u, \"save\", \"Save\")", "button_at(frame, rect, \"Save\", ...)"
+	switch state.leaf_example {
+	case .Button:
+	case .Checkbox:
+		facade, explicit = "checkbox(u, \"sync\", ...)", "checkbox_at(frame, rect, ... )"
+	case .Line_Chart:
+		facade, explicit = "line_chart(u, series, state)", "line_chart_at(frame, rect, series, state)"
+	}
+	relationship_card(frame, {0, 24, card_w, 76}, "FACADE LEAF", theme.bg_active)
+	relationship_card(frame, {card_w + gap, 24, card_w, 76}, "EXPLICIT LEAF", theme.bg_selection)
+	ui.text(frame, facade, 10, 68, .Label)
+	ui.text(frame, explicit, card_w + gap + 10, 68, .Label)
+	ui.text(frame, "delegates after supplying geometry  \u2192", card_w - gap / 2, 4, .Label, .Accent)
+	ui.text(frame, "logical slot \u00b7 scale \u00b7 ID \u00b7 focus", 10, 112, .Label, .Secondary)
+	ui.text(frame, "physical Rect_I32 \u00b7 placement \u00b7 Focus_Opt", card_w + gap, 112, .Label, .Secondary)
+	ui.text(frame, "SHARED: interaction \u00b7 theme \u00b7 semantics \u00b7 accessibility \u00b7 UI paint", 10, 144, .Label)
+}
+
+canvas_bridge_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
+	assert(frame != nil && rect.w > 0, "canvas_bridge_canvas: invalid canvas")
+	assert(userdata == nil, "canvas_bridge_canvas: unexpected userdata")
+	theme := ui.ui_frame_theme(frame)
+	card_w := min(rect.w / 3, ui.ui_frame_sc(frame, 220))
+	relationship_card(frame, {0, 26, card_w, 54}, "ui.Ui flow", theme.bg_active)
+	relationship_card(frame, {rect.w - card_w, 26, card_w, 54}, "explicit island\nlocal physical rect", theme.bg_selection)
+	ui.text(frame, "reserves logical slot + scales once  \u2192", card_w + 10, 12, .Label, .Accent)
+	ui.text(frame, "\u2190  returns to facade flow", card_w + 30, 78, .Label, .Secondary)
+}
+
+output_routes_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
+	assert(frame != nil && rect.w > 0, "output_routes_canvas: invalid canvas")
+	assert(userdata == nil, "output_routes_canvas: unexpected userdata")
+	theme := ui.ui_frame_theme(frame)
+	ui.text(frame, "facade leaves", 0, 8, .Label)
+	ui.text(frame, "explicit leaves", 0, 34, .Label)
+	ui.text(frame, "composition protocols", 0, 60, .Label)
+	relationship_card(frame, {rect.w / 3, 22, rect.w / 5, 58}, "Ui_Frame\npaint + semantics", theme.bg_active)
+	relationship_card(frame, {rect.w * 3 / 5, 22, rect.w / 6, 58}, "Adapter\nreplays", theme.bg_secondary)
+	relationship_card(frame, {rect.w * 4 / 5, 22, rect.w / 5, 58}, "ingot:gfx", theme.bg_code)
+	ui.text(frame, "emits  \u2192", rect.w / 4, 40, .Label, .Accent)
+	ui.text(frame, "\u2192", rect.w * 11 / 20, 40, .Label, .Accent)
+	ui.text(frame, "\u2192", rect.w * 23 / 30, 40, .Label, .Accent)
+	ui.text(frame, "direct texture / shader / 3D / render-target capability  - - - - - - - - - - - - \u2192", 0, 104, .Label, .Secondary)
 }
 
 draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {

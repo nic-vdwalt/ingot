@@ -62,7 +62,7 @@ w3c_pad_remap_covers_all_buttons_once :: proc(t: ^testing.T) {
 	for mapped in _W3C_PAD_REMAP {
 		seen[int(mapped)] += 1
 	}
-	// W3C standard mapping has 17 buttons — all raylib buttons except UNKNOWN
+	// W3C standard mapping has 17 buttons - all raylib buttons except UNKNOWN
 	// are hit exactly once (triggers are digital buttons 6/7 on the web).
 	testing.expect_value(t, seen[int(GamepadButton.UNKNOWN)], 0)
 	for b in 1 ..< GAMEPAD_BUTTON_COUNT {
@@ -130,7 +130,7 @@ gamepad_edge_detection_uses_prev_buttons :: proc(t: ^testing.T) {
 @(test)
 load_sound_from_wave_requires_ready_device :: proc(t: ^testing.T) {
 	// Without InitAudioDevice the loader must return the invalid Sound and
-	// touch nothing — verifies the "audio off is a safe no-op" contract.
+	// touch nothing - verifies the "audio off is a safe no-op" contract.
 	samples := [4]i16{0, 16384, -16384, 0}
 	wave := Wave {
 		frameCount = 4,

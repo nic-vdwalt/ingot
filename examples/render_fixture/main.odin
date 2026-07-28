@@ -140,7 +140,7 @@ draw_render_targets :: proc() {
 	gpu_pass, ok := rl.begin_gpu_3d(&gpu_target, camera)
 	if ok {
 		// Depth proof: the blue sphere (z=0) must occlude the orange one
-		// (z=-1) where they overlap — validates depthCompare = .Less.
+		// (z=-1) where they overlap - validates depthCompare = .Less.
 		rl.draw_gpu_mesh(
 			&gpu_pass,
 			gpu_sphere,
@@ -154,7 +154,7 @@ draw_render_targets :: proc() {
 			{color = rl.Color{255, 120, 80, 255}},
 		)
 		// Cull proof: a sphere behind the camera (z=+7, camera at z=+5
-		// looking at origin) must contribute no pixels — validates clip-
+		// looking at origin) must contribute no pixels - validates clip-
 		// space rejection. If green appears anywhere the projection broke.
 		rl.draw_gpu_mesh(
 			&gpu_pass,

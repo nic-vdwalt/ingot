@@ -1,4 +1,4 @@
-// ingot:gfx — embedded default font backing the raylib-shaped DrawText and
+// ingot:gfx - embedded default font backing the raylib-shaped DrawText and
 // MeasureText.
 //
 // raylib ships a built-in font so DrawText works with no asset loading at all.

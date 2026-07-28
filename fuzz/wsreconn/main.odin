@@ -1,7 +1,7 @@
 #+build !js
 package fuzz_wsreconn
 
-// WebSocket reconnect state-machine fuzzer — the first genuinely CONCURRENT
+// WebSocket reconnect state-machine fuzzer - the first genuinely CONCURRENT
 // harness: the real worker thread (dial → handshake → recv loop → backoff →
 // re-dial, net/ws.odin) runs against the scripted sim transport
 // (-define:INGOT_WS_SIM=true, net/ws_sim.odin) while the main thread races
@@ -182,7 +182,7 @@ main :: proc() {
 	track: mem.Tracking_Allocator
 	mem.tracking_allocator_init(&track, context.allocator)
 	// Worker-thread allocations (recv-queue payload clones) use the worker's
-	// default context allocator, not the tracking wrapper installed below —
+	// default context allocator, not the tracking wrapper installed below -
 	// free them with the same base allocator they came from.
 	worker_allocator := context.allocator
 	context.allocator = mem.tracking_allocator(&track)

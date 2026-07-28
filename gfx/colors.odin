@@ -1,4 +1,4 @@
-// ingot:gfx — raylib-named color constants (subset apps reference, e.g. WHITE)
+// ingot:gfx - raylib-named color constants (subset apps reference, e.g. WHITE)
 // and the pure color helpers that go with them.
 package gfx
 

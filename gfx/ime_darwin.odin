@@ -1,5 +1,5 @@
 #+build darwin
-// ingot:gfx — macOS IME candidate-window positioning.
+// ingot:gfx - macOS IME candidate-window positioning.
 //
 // GLFW's GLFWContentView conforms to NSTextInputClient but hard-codes
 // firstRectForCharacterRange: to the window frame, so the IME candidate list
@@ -38,7 +38,7 @@ g_ime_screen_rect: NS.Rect
 g_ime_swizzled: bool
 
 // Replacement for -[GLFWContentView firstRectForCharacterRange:actualRange:].
-// NSRange in, NSRect out — both pass in registers on arm64/x86_64 C ABI.
+// NSRange in, NSRect out - both pass in registers on arm64/x86_64 C ABI.
 @(private = "file")
 _ime_first_rect_imp :: proc "c" (
 	self: rawptr,
@@ -49,7 +49,7 @@ _ime_first_rect_imp :: proc "c" (
 	return g_ime_screen_rect
 }
 
-// _ime_set_rect converts the caret rect (view points, top-left origin — the
+// _ime_set_rect converts the caret rect (view points, top-left origin - the
 // GLFW content view is flipped) to screen coordinates and stores it for the
 // swizzled method. Installs the method replacement on first use.
 @(private)
@@ -89,7 +89,7 @@ _ime_set_rect :: proc(x, y, w, h: i32) {
 	g_ime_screen_rect = intrinsics.objc_send(NS.Rect, win, "convertRectToScreen:", win_rect)
 }
 
-// _ime_deactivate: nothing to tear down — the swizzled method keeps returning
+// _ime_deactivate: nothing to tear down - the swizzled method keeps returning
 // the last caret rect, which is harmless while no text field is focused.
 @(private)
 _ime_deactivate :: proc() {

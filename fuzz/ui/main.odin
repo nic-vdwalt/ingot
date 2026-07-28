@@ -1,6 +1,6 @@
 package fuzz_ui
 
-// Memory-safety fuzzer for the pure text-parsing surface of ingot:ui —
+// Memory-safety fuzzer for the pure text-parsing surface of ingot:ui -
 // markdown inline spans, raw/display offset maps, and GFM table splitting.
 // These parsers consume untrusted strings (chat/LLM output), so they are
 // hammered with biased random bytes AND realistic markdown templates run
@@ -253,7 +253,7 @@ exercise_eased :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 		fuzzx.check(c, settled, "eased failed to converge to target")
 	}
 
-	// Partition: m sub-steps stay in band and end no closer than one step —
+	// Partition: m sub-steps stay in band and end no closer than one step -
 	// unless a sub-step hit the f32-stall terminal snap (split == target).
 	steps := fuzzx.int_range(p, 2, 9)
 	split := current0

@@ -1,9 +1,9 @@
-// idle_demo — proves event-driven frame scheduling (power-save mode).
+// idle_demo - proves event-driven frame scheduling (power-save mode).
 //
 // The overlay shows a frame counter and FPS: when you stop interacting the
 // counter freezes within IDLE_SETTLE_FRAMES frames (~0% CPU; check with a
 // process monitor), and resumes instantly on mouse/keyboard input. The caret
-// box keeps blinking while focused via RequestRedrawIn — timed repaints work
+// box keeps blinking while focused via RequestRedrawIn - timed repaints work
 // without continuous rendering. Click the button to toggle back to
 // .Continuous and watch the counter free-run again.
 //

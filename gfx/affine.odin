@@ -1,4 +1,4 @@
-// ingot:gfx — the 2D model transform applied to batch geometry.
+// ingot:gfx - the 2D model transform applied to batch geometry.
 //
 // Two public surfaces feed it: rlgl's matrix stack (PushMatrix / Translatef /
 // PopMatrix) and raylib's Camera2D (BeginMode2D / EndMode2D). Both need more
@@ -52,8 +52,8 @@ _f32_is_finite :: proc "contextless" (value: f32) -> bool {
 //
 // A non-finite transform is not a rendering edge case, it is a silent one: it
 // maps every vertex to NaN, the GPU discards the primitives, and the frame
-// comes out blank with nothing logged. Application code reaches it easily —
-// a zoom animation dividing by zero, or normalising a zero-length vector — so
+// comes out blank with nothing logged. Application code reaches it easily -
+// a zoom animation dividing by zero, or normalising a zero-length vector - so
 // the pipeline asserts on it rather than drawing nothing.
 @(private)
 _affine_is_finite :: proc "contextless" (m: Affine) -> bool {

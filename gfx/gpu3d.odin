@@ -1,9 +1,9 @@
-// ingot:gfx — 3D / shader / render-target API surface (raylib parity).
+// ingot:gfx - 3D / shader / render-target API surface (raylib parity).
 //
 // STATUS: this is a compile-compatible, runtime-SAFE surface, not yet a
 // functional WebGPU 3D renderer. The consumer that exercises it (openalloy's
 // galaxy view: a 7-shader HDR bloom + soft-particle + instanced-mesh pipeline)
-// needs a dedicated WebGPU port — GLSL→WGSL for every shader, render-target
+// needs a dedicated WebGPU port - GLSL→WGSL for every shader, render-target
 // ping-pong with mip chains, and instanced mesh drawing. Until that lands these
 // procs are no-ops so the app builds and its 2D UI + terminal run on WebGPU;
 // draws issued into a render-target (BeginTextureMode..EndTextureMode) are

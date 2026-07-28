@@ -184,7 +184,7 @@ audio, accessibility, or GPU behavior.
 The matrix is authoritative for migration classification. These snippets show
 the most common transitions; they do not widen the supported surface.
 
-### Imports and build command — mechanical edit
+### Imports and build command - mechanical edit
 
 ```odin
 // Before.
@@ -202,7 +202,7 @@ odin build src
 odin build src -collection:ingot=libs/ingot
 ```
 
-### Native loop to shared native/web loop — mechanical edit
+### Native loop to shared native/web loop - mechanical edit
 
 ```odin
 // Before: native blocking loop.
@@ -217,7 +217,7 @@ rl.run(frame)
 Keep callback state in global, static, heap, or otherwise application-owned
 storage. Do not capture pointers to `main` locals for the web callback.
 
-### Texture lifetime — unchanged call shape
+### Texture lifetime - unchanged call shape
 
 ```odin
 image := rl.LoadImage("assets/player.png")
@@ -232,7 +232,7 @@ rl.UnloadTexture(texture)
 On web, `assets/player.png` must be hosted at the URL resolved by the page. Check
 that the image and texture handles are valid before drawing.
 
-### Render textures — unchanged call shape, behavior review
+### Render textures - unchanged call shape, behavior review
 
 ```odin
 target := rl.LoadRenderTexture(640, 360)
@@ -258,7 +258,7 @@ The negative source height is the established fixture convention when presenting
 a render texture. Validate orientation instead of applying it blindly to every
 asset path.
 
-### 2D cameras — unchanged call shape
+### 2D cameras - unchanged call shape
 
 ```odin
 camera := rl.Camera2D {
@@ -285,7 +285,7 @@ picking code cannot propagate NaNs into layout.
 Cameras do not nest, matching raylib. A camera composes on top of any active
 `rlgl` matrix-stack offset and restores it on `EndMode2D`.
 
-### Custom shaders — redesign
+### Custom shaders - redesign
 
 ```odin
 // Before: raylib accepts GLSL source selected for its OpenGL backend.
@@ -300,7 +300,7 @@ primary texture and sampler are group 1, reflected custom uniforms are group 2,
 and up to four extra sampled textures plus their sampler are group 3. Port and
 review uniform layout; this is not syntax translation alone.
 
-### Audio — unchanged basic calls, behavior review
+### Audio - unchanged basic calls, behavior review
 
 ```odin
 rl.InitAudioDevice()
@@ -319,7 +319,7 @@ hosted URL asynchronously, and playback may remain unavailable until a user
 gesture unlocks WebAudio. `LoadSoundFromWave` is the synchronous cross-target
 path used by [Breakout](../examples/breakout/main.odin).
 
-### Web-safe persistent state — mechanical edit
+### Web-safe persistent state - mechanical edit
 
 ```odin
 App_State :: struct {
@@ -369,9 +369,9 @@ Do not rely on these compatibility behaviors as rendered implementations:
 - Compatibility meshes can be projected 2D approximations rather than geometry.
 - Low-level `rlgl` is not a general immediate-mode OpenGL layer.
 
-The no-op procedures previously listed here — `SetMouseOffset`, `SetDepthMask`,
+The no-op procedures previously listed here - `SetMouseOffset`, `SetDepthMask`,
 `rlgl.EnableDepthMask`/`DisableDepthMask`, and the `rlgl` framebuffer
-enable/attach/complete calls — have been removed. A dependency on any of them is
+enable/attach/complete calls - have been removed. A dependency on any of them is
 now a compile error at the call site rather than a silent absence of output.
 
 ## Native versus web lifecycle

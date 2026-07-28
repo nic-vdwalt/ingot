@@ -1,5 +1,5 @@
 #+build !js
-// Headless GPU-3D coverage: everything testable without a WebGPU device —
+// Headless GPU-3D coverage: everything testable without a WebGPU device -
 // sphere geometry generation (counts, bounds, normals, index validity),
 // parameter rejection, and pool-handle mapping. On-device behavior (depth
 // test, per-backend rendering) is validated by examples/render_fixture; see

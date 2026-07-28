@@ -1,4 +1,4 @@
-// ingot:gfx — camera + matrix helpers (raylib-named). 3D is CPU-projected: a
+// ingot:gfx - camera + matrix helpers (raylib-named). 3D is CPU-projected: a
 // Camera3D view-projection maps world points to screen space so DrawLine3D and
 // GetWorldToScreen work without a dedicated 3D pipeline. This covers the light
 // 3D use (axis lines, world->screen anchors); a full mesh/material/instanced 3D

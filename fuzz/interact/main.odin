@@ -1,12 +1,12 @@
 package fuzz_interact
 
-// Widget interaction-sequence fuzzer for ingot:ui — HEADLESS (no window, no
+// Widget interaction-sequence fuzzer for ingot:ui - HEADLESS (no window, no
 // GPU; part of `fuzz/run.sh all`). Built with -define:INGOT_INPUT_SIM=true
 // so gfx's synthetic input seam (gfx/input_sim.odin) replaces the platform
 // input layer.
 //
-// Motivation: widget *state machines* — the one-frame route-claim double
-// buffer, form focus, drag latches, modal/menu lifecycles — were only
+// Motivation: widget *state machines* - the one-frame route-claim double
+// buffer, form focus, drag latches, modal/menu lifecycles - were only
 // covered by fixed unit tests. This harness drives a fixed scene of real
 // widgets with random event sequences (mouse moves biased to widget rects,
 // press/release, Tab/arrows/Space/Enter/Escape, wheel) and checks the state
@@ -223,7 +223,7 @@ capture_sim_input :: proc(input: ^ui.Ui_Input) {
 
 // draw_scene runs one frame of the widget scene, mirroring how an app would.
 // Returns whether any claiming overlay (modal, menu, dropdown popup) was
-// active at any point during the frame — end-of-frame state is not enough
+// active at any point during the frame - end-of-frame state is not enough
 // because a menu can open and be chosen-from (row release) in one frame,
 // legitimately registering a claim while ending the frame closed.
 draw_scene :: proc(
@@ -312,7 +312,7 @@ check_invariants :: proc(c: ^fuzzx.Ctx, frame: ^ui.Ui_Frame, s: ^Scene, overlay_
 	)
 	// Claim latency by design: claims registered during the overlay's last
 	// open frame (N) occlude through N+1 and expire at the rotation into
-	// N+2 — so zero claims is first guaranteed on the third free frame.
+	// N+2 - so zero claims is first guaranteed on the third free frame.
 	if overlay_free_frames >= 3 {
 		fuzzx.check(c, ui.route_claim_count(frame) == 0, "route claims leaked past overlay close")
 	}

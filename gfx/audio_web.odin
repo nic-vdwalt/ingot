@@ -1,13 +1,13 @@
 #+build js
-// ingot:gfx — web audio backend. Sounds are decoded/held as WebAudio buffers
+// ingot:gfx - web audio backend. Sounds are decoded/held as WebAudio buffers
 // on the JS side (web/ingot_web.js, "ingot_audio" import module); each slot is
 // one voice with its own GainNode, mirroring the native miniaudio pool. The
-// AudioContext unlocks on the first user gesture (browser autoplay policy) —
+// AudioContext unlocks on the first user gesture (browser autoplay policy) -
 // PlaySound calls before that are dropped silently.
 //
 // LoadSound/LoadMusicStream treat the file name as a URL (relative to the
-// page origin): the JS bridge allocates the slot eagerly — so the handle is
-// valid immediately — then fetch()es and decodeAudioData()s behind it. Plays
+// page origin): the JS bridge allocates the slot eagerly - so the handle is
+// valid immediately - then fetch()es and decodeAudioData()s behind it. Plays
 // issued while the decode is in flight are recorded and applied when it
 // lands; poll IsSoundReady/IsMusicReady for completion. Embedded bytes via
 // LoadSoundFromWave remain the synchronous path (see examples/breakout).
@@ -69,7 +69,7 @@ _audio_web_resolve :: proc(handle: u32) -> i32 {
 // platform_audio_load_file: the name is a URL fetched + decoded by the JS
 // bridge. The slot (and thus the handle) is allocated eagerly; frames stays
 // 0 until the async decode resolves (a failed fetch leaves the slot
-// permanently silent — an operating condition, not a programmer error).
+// permanently silent - an operating condition, not a programmer error).
 // `stream` maps to looping intent recorded on the JS slot.
 @(private)
 platform_audio_load_file :: proc(fileName: cstring, stream: bool) -> (handle: u32, frames: u32) {

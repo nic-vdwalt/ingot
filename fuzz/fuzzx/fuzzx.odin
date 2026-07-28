@@ -69,7 +69,7 @@ parse_options :: proc(iterations_default: int) -> (seed: u64, iterations: int, r
 	return seed, iterations, rounds
 }
 
-// BOUNDARY_BYTES are values that sit on sign/UTF-8/ASCII edges — injected to
+// BOUNDARY_BYTES are values that sit on sign/UTF-8/ASCII edges - injected to
 // poison length fields, delimiters, and rune decoding.
 BOUNDARY_BYTES := [?]u8{0x00, 0x7F, 0x80, 0xFF}
 
@@ -115,7 +115,7 @@ mutate :: proc(p: ^Prng, data: []u8) -> []u8 {
 			at := int_range(p, 0, len(buf) + 1)
 			insert_byte(&buf, at, BOUNDARY_BYTES[int_range(p, 0, len(BOUNDARY_BYTES))])
 		case 6:
-			// ASCII digit run — poisons length/chunk-size fields
+			// ASCII digit run - poisons length/chunk-size fields
 			at := int_range(p, 0, len(buf) + 1)
 			count := int_range(p, 1, 21)
 			digits := "0123456789ABCDEFabcdef"
@@ -181,7 +181,7 @@ report :: proc(track: ^mem.Tracking_Allocator, name: string, seed: u64) {
 			fmt.eprintfln("LEAK %v bytes @ %v", entry.size, entry.location)
 		}
 		fmt.eprintfln(
-			"%s FAILED: %d leaks — reproduce with -seed:%d",
+			"%s FAILED: %d leaks - reproduce with -seed:%d",
 			name,
 			len(track.allocation_map),
 			seed,
@@ -190,7 +190,7 @@ report :: proc(track: ^mem.Tracking_Allocator, name: string, seed: u64) {
 	}
 	if len(track.bad_free_array) > 0 {
 		fmt.eprintfln(
-			"%s FAILED: %d bad frees — reproduce with -seed:%d",
+			"%s FAILED: %d bad frees - reproduce with -seed:%d",
 			name,
 			len(track.bad_free_array),
 			seed,

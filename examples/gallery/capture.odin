@@ -75,7 +75,7 @@ when CAPTURE {
 	// reader can see the theme system is real rather than a recolour.
 	// The README set. Chosen for density: sections whose intrinsic content fills
 	// the frame at CAPTURE_UI_SCALE. Layout, Markdown, and Overlay are captured
-	// by the sequence pass instead — as stills they leave half the frame empty,
+	// by the sequence pass instead - as stills they leave half the frame empty,
 	// which reads as an unfinished framework rather than a focused one.
 	CAPTURE_SHOTS := [?]Capture_Shot {
 		{"gallery-api-relationships-dark.png", .Api_Relationships, true},
@@ -237,7 +237,7 @@ when CAPTURE {
 	}
 
 	// capture_frame is the whole loop body: it brackets the entire session
-	// frame — build and paint replay — with the capture target, then blits the
+	// frame - build and paint replay - with the capture target, then blits the
 	// result to the window so the run is visible while it records.
 	capture_frame :: proc() {
 		gfx_frame, acquired := rl.begin_frame()

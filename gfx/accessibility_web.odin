@@ -1,5 +1,5 @@
 #+build js
-// ingot:gfx — web accessibility stubs. The browser target mirrors semantic
+// ingot:gfx - web accessibility stubs. The browser target mirrors semantic
 // nodes into real DOM controls (SyncWebControl / web/ingot_web.js) instead
 // of AccessKit, so the native adapter API is a no-op here; apps can call it
 // unconditionally.

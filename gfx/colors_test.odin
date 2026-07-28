@@ -1,5 +1,5 @@
 #+build !js
-// ingot:gfx — color helper tests. These are pure functions ported to match
+// ingot:gfx - color helper tests. These are pure functions ported to match
 // raylib's integer arithmetic exactly, because callers use them to precompute
 // colors that must agree with what raylib produced.
 package gfx

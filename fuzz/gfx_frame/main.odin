@@ -1,6 +1,6 @@
 package fuzz_gfx_frame
 
-// GPU resource-lifecycle fuzzer for ingot:gfx — WINDOWED (opens a real
+// GPU resource-lifecycle fuzzer for ingot:gfx - WINDOWED (opens a real
 // window and a real WebGPU device; excluded from `fuzz/run.sh all`).
 //
 // Motivation: the UI-scale crash class. Destroying a texture between
@@ -54,7 +54,7 @@ make_texture :: proc(p: ^Prng) -> rl.Texture2D {
 }
 
 // draw_some records draws referencing current resources so the frame's
-// command buffer actually captures them — the precondition for the bug.
+// command buffer actually captures them - the precondition for the bug.
 draw_some :: proc(p: ^Prng) {
 	rl.DrawText("lifecycle fuzz", 10, 10, 16, rl.WHITE)
 	rl.DrawText("0123456789", 10, 40, 13, rl.LIGHTGRAY)
@@ -79,7 +79,7 @@ draw_some :: proc(p: ^Prng) {
 	}
 }
 
-// mutate_resources performs one random lifecycle op — the destroy/rescale
+// mutate_resources performs one random lifecycle op - the destroy/rescale
 // half of the interleave. Weighted so unload/rescale (the dangerous ops)
 // dominate.
 mutate_resources :: proc(p: ^Prng) {
@@ -140,7 +140,7 @@ mutate_resources :: proc(p: ^Prng) {
 		}
 		rl.SetWindowSize(w, h)
 	case 12:
-		// Compound case: resize immediately followed by UI rescale — the
+		// Compound case: resize immediately followed by UI rescale - the
 		// swapchain reconfigure + atlas churn interleaving.
 		rl.SetWindowSize(i32(fuzzx.int_range(p, 300, 1601)), i32(fuzzx.int_range(p, 200, 1201)))
 		ui.ui_runtime_set_scale(&ui_runtime, f32(fuzzx.int_range(p, 50, 301)) / 100.0)

@@ -6,7 +6,7 @@ import wg "vendor:wgpu"
 // Fixed pools (Tiger Style: every pool has a static upper bound). Exhaustion
 // is an operating condition, not a programmer error: create_sphere_mesh
 // returns ok=false and draw_gpu_mesh skips draws once the pipeline pool is
-// full — both are counted in renderer_stats().gpu3d_pool_exhaustions.
+// full - both are counted in renderer_stats().gpu3d_pool_exhaustions.
 GPU_3D_MAX_MESHES :: 256
 GPU_3D_MAX_PIPELINES :: 8
 
@@ -140,8 +140,8 @@ destroy_gpu_3d_target :: proc(target: ^Gpu_3D_Target) {
 	assert(target.texture.texture.id == 0)
 }
 
-// _sphere_mesh_geometry generates a UV sphere's vertex/index lists — pure
-// CPU, no GPU calls — split out of create_sphere_mesh so headless tests can
+// _sphere_mesh_geometry generates a UV sphere's vertex/index lists - pure
+// CPU, no GPU calls - split out of create_sphere_mesh so headless tests can
 // validate counts, bounds, and normals without a device.
 @(private)
 _sphere_mesh_geometry :: proc(
@@ -185,7 +185,7 @@ create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) 
 	if !g.initialized || rings < 2 || slices < 3 do return {}, false
 	resources := &g.resources.gpu_3d
 	if resources.mesh_count >= GPU_3D_MAX_MESHES {
-		// Pool full: operating condition — caller gets ok=false (counted).
+		// Pool full: operating condition - caller gets ok=false (counted).
 		_stats_gpu3d_pool_exhaustion()
 		return {}, false
 	}
@@ -425,7 +425,7 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 	}
 	if resources.pipeline_count >= GPU_3D_MAX_PIPELINES {
 		// Pool full: draws to targets in unseen formats are skipped from now
-		// on (bounded pool, never grows) — operating condition, counted.
+		// on (bounded pool, never grows) - operating condition, counted.
 		_stats_gpu3d_pool_exhaustion()
 		return nil
 	}

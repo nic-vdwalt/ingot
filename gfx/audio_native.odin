@@ -1,9 +1,9 @@
 #+build !js
-// ingot:gfx — native audio backend on vendor:miniaudio (ships with Odin; no
+// ingot:gfx - native audio backend on vendor:miniaudio (ships with Odin; no
 // external libs to vendor). One ma.engine owns the output device and its
 // mixing thread; sounds live in a fixed pool of MAX_SOUNDS slots with
 // generation counters, so no allocation happens per play and a stale handle
-// can never touch a recycled slot. All procs here are main-thread-only — the
+// can never touch a recycled slot. All procs here are main-thread-only - the
 // miniaudio device thread reads slot data through miniaudio's own
 // synchronization, never through ours.
 package gfx

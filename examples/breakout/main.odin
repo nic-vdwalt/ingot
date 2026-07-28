@@ -1,4 +1,4 @@
-// breakout — the Phase 1 proof game: audio (synthesized via LoadSoundFromWave,
+// breakout - the Phase 1 proof game: audio (synthesized via LoadSoundFromWave,
 // zero asset files), gamepad + keyboard input, and the same source running
 // natively and in the browser.
 //
@@ -67,7 +67,7 @@ main :: proc() {
 	rl.run(frame)
 }
 
-// make_beep synthesizes a square-wave Sound — no asset files, identical on
+// make_beep synthesizes a square-wave Sound - no asset files, identical on
 // native and web (LoadSoundFromWave is the target-portable loader).
 make_beep :: proc(freq: f32, seconds: f32) -> rl.Sound {
 	RATE :: 44100
@@ -243,7 +243,7 @@ frame :: proc() {
 	case .Ready:
 		draw_center("press Space / gamepad A to launch", 300)
 	case .Over:
-		draw_center("game over — press Space to restart", 300)
+		draw_center("game over - press Space to restart", 300)
 	case .Won:
 		draw_center("you win! press Space to play again", 300)
 	case .Playing:

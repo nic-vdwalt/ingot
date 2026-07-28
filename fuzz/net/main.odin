@@ -3,8 +3,8 @@ package fuzz_net
 // Memory-safety fuzzer for ingot:net (TigerBeetle VOPR style).
 //
 // Structured-random hostile input is driven through the public parsing surface
-// (parse_http_response + ws_parse_frame) and — when built with
-// -define:INGOT_NET_SIM=true — through the full simulated Fetcher loop. Every
+// (parse_http_response + ws_parse_frame) and - when built with
+// -define:INGOT_NET_SIM=true - through the full simulated Fetcher loop. Every
 // allocation is tracked; a leak or bad free fails the run. Build with
 // -sanitize:address for use-after-free / out-of-bounds detection on top.
 //
@@ -22,7 +22,7 @@ import fuzzx "ingot:fuzz/fuzzx"
 import ingotnet "ingot:net"
 
 ITERATIONS_DEFAULT :: 100_000
-MAXIMUM_WIRE_BYTES :: 4096 // hostile response size cap — parser must bound its own work
+MAXIMUM_WIRE_BYTES :: 4096 // hostile response size cap - parser must bound its own work
 MAXIMUM_WIRE_BYTES_LARGE :: 256 * 1024 // rare large class (~1 in 200)
 MAXIMUM_WS_PAYLOAD_LARGE :: 1024 * 1024 // rare large class (~1 in 200)
 MAXIMUM_BODY_LIMIT :: 64 * 1024
@@ -44,7 +44,7 @@ HTTP_TEMPLATES := [?]string {
 	"HTTP/1.1 304 Not Modified\r\nETag: \"abc\"\r\n\r\n",
 	HTTP_SPACED,
 	"HTTP/1.1 99999 Enhance Your Calm\r\nContent-Length: 3\r\n\r\nabc",
-	// Extreme length claims — must be rejected or bounded, never allocated.
+	// Extreme length claims - must be rejected or bounded, never allocated.
 	"HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\nx",
 	"HTTP/1.1 200 OK\r\nContent-Length: 9223372036854775808\r\n\r\nx",
 	"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nFFFFFFFFFFFFFFFF\r\nx\r\n0\r\n\r\n",
@@ -145,7 +145,7 @@ mutated_ws_frame :: proc(p: ^Prng) -> []u8 {
 
 // extreme_ws_header hand-crafts a frame header claiming a 64-bit payload
 // length far beyond any allocation (up to 1<<63). The parser must classify
-// it (Need_More / Too_Big) without allocating or consuming — this exercises
+// it (Need_More / Too_Big) without allocating or consuming - this exercises
 // the overflow paths that bounded payload generation can never reach.
 extreme_ws_header :: proc(p: ^Prng) -> []u8 {
 	buf := make([dynamic]u8, 0, 32, context.temp_allocator)
@@ -163,7 +163,7 @@ extreme_ws_header :: proc(p: ^Prng) -> []u8 {
 		key := ws_mask_key(p)
 		append(&buf, ..key[:])
 	}
-	// A few payload bytes — never enough to satisfy the claim.
+	// A few payload bytes - never enough to satisfy the claim.
 	trailing := fuzzx.random_bytes(p, 32)
 	append(&buf, ..trailing)
 	return buf[:]
@@ -214,7 +214,7 @@ exercise_ws_parse :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 
 // exercise_ws_stream concatenates several valid frames and reassembles them
 // from random 1–1500-byte TCP-like chunks, mirroring ws_recv_loop's
-// accumulator — under ASan and the tracking allocator, unlike the odin-test
+// accumulator - under ASan and the tracking allocator, unlike the odin-test
 // mirror in net/ws_fuzz_test.odin.
 ws_server_frame :: proc(opcode: u8, payload: []u8) -> []u8 {
 	body := payload

@@ -1,4 +1,4 @@
-// ingot:gfx — raylib-shaped audio API (InitAudioDevice, LoadSound, PlaySound,
+// ingot:gfx - raylib-shaped audio API (InitAudioDevice, LoadSound, PlaySound,
 // …). The shared layer owns handle packing and PCM normalization; the device
 // backend lives behind the platform_audio_* seam: audio_native.odin
 // (vendor:miniaudio engine + fixed sound pool) and audio_web.odin (WebAudio
@@ -17,7 +17,7 @@ Sound :: struct {
 }
 
 // Music is a streamed Sound (file-backed; native only). UpdateMusicStream is
-// a no-op on both targets — native streams on the miniaudio device thread.
+// a no-op on both targets - native streams on the miniaudio device thread.
 Music :: struct {
 	frameCount: u32,
 	looping:    bool,
@@ -88,7 +88,7 @@ SetMasterVolume :: proc(volume: f32) {
 // LoadSound decodes a file (wav/ogg/mp3/flac) into memory. On web the name
 // is treated as a URL (relative to the page origin) and fetched + decoded
 // asynchronously: the returned handle is valid immediately but stays silent
-// until the decode resolves — poll IsSoundReady. A play issued while the
+// until the decode resolves - poll IsSoundReady. A play issued while the
 // fetch is in flight is applied when the decode lands.
 LoadSound :: proc(fileName: cstring) -> Sound {
 	assert(fileName != nil, "LoadSound: nil fileName")
@@ -170,7 +170,7 @@ SetSoundPitch :: proc(sound: Sound, pitch: f32) {
 // IsSoundReady reports whether the sound's samples are decoded and playable.
 // Native loads are synchronous, so any live handle is ready; on web a
 // file-backed Sound resolves asynchronously (fetch + decodeAudioData) and
-// stays unready — silent to play — until the decode lands. A failed fetch
+// stays unready - silent to play - until the decode lands. A failed fetch
 // leaves it permanently unready (operating condition, not an error).
 IsSoundReady :: proc(sound: Sound) -> bool {
 	if !g_audio.ready || sound._handle == 0 do return false
@@ -182,7 +182,7 @@ IsSoundReady :: proc(sound: Sound) -> bool {
 
 // LoadMusicStream opens a file for streamed playback. Native streams from
 // disk on the device thread; web fetches + decodes the whole file into a
-// buffer asynchronously (same story as LoadSound — poll IsMusicReady).
+// buffer asynchronously (same story as LoadSound - poll IsMusicReady).
 LoadMusicStream :: proc(fileName: cstring) -> Music {
 	assert(fileName != nil, "LoadMusicStream: nil fileName")
 	if !g_audio.ready do return Music{}

@@ -5,7 +5,7 @@ package gfx
 // action callback off the main thread while the app drains from the frame
 // loop. A producer thread hammers _a11y_stage (the exact staging path the
 // adapter callback uses) while the main thread drains via
-// PollAccessibilityAction — under -sanitize:thread any missing guard on the
+// PollAccessibilityAction - under -sanitize:thread any missing guard on the
 // queue is flagged; under plain builds this still checks FIFO integrity and
 // bounded-drop behavior.
 
@@ -64,7 +64,7 @@ a11y_action_queue_stress :: proc(t: ^testing.T) {
 
 	produced := sync.atomic_load(&ctx.produced)
 	testing.expect_value(t, produced, 20_000)
-	// Overflow drops newest (bounded queue) — drained can be less, never more.
+	// Overflow drops newest (bounded queue) - drained can be less, never more.
 	testing.expect(t, drained <= produced, "drained more than produced")
 	testing.expect(t, drained > 0, "nothing drained")
 

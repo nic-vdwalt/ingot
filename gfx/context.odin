@@ -1,4 +1,4 @@
-// ingot:gfx — window + WebGPU context lifecycle and the raylib-named entry
+// ingot:gfx - window + WebGPU context lifecycle and the raylib-named entry
 // points apps call (InitWindow/BeginDrawing/EndDrawing/ClearBackground/...).
 // All mutable package state lives in the single `g` global so every gfx file
 // (batch, shapes, text, texture, input) shares one context.
@@ -115,7 +115,7 @@ Frame_State :: struct {
 	rt_clear:               Color,
 	// True when ClearBackground was called after BeginTextureMode (before the
 	// RT pass began). Selects loadOp = .Clear; otherwise the RT pass uses
-	// loadOp = .Load to preserve the target's prior contents (raylib parity —
+	// loadOp = .Load to preserve the target's prior contents (raylib parity -
 	// BeginTextureMode alone does not clear). Incremental renderers (the nvim
 	// grid's per-row dirty redraw) and additive-accumulation passes (galaxy
 	// streak combine) depend on this preserve-by-default behaviour.
@@ -148,7 +148,7 @@ Context :: struct {
 	config:               wg.SurfaceConfiguration,
 	config_flags:         ConfigFlags,
 
-	// logical (point) size — what GetScreenWidth/Height and the ortho
+	// logical (point) size - what GetScreenWidth/Height and the ortho
 	// projection use; physical framebuffer may be larger under HiDPI.
 	width, height:        i32,
 	fb_width, fb_height:  i32,
@@ -221,7 +221,7 @@ _retire_texture :: proc(
 	view: wg.TextureView,
 	tex: wg.Texture,
 ) {
-	// Why assert: all-nil handles mean the entry was already destroyed — a
+	// Why assert: all-nil handles mean the entry was already destroyed - a
 	// double-unload of the same font/texture.
 	assert(
 		bind != nil || sampler != nil || view != nil || tex != nil,
@@ -497,7 +497,7 @@ _on_device :: proc "c" (
 
 // INGOT_GPU_STRICT turns any uncaptured wgpu validation message into an
 // immediate abort. Fuzz harnesses build with it (fuzz/run.sh gfx-frame) so
-// GPU misuse that would otherwise be logged and survived fails the run —
+// GPU misuse that would otherwise be logged and survived fails the run -
 // partial compensation for wgpu-native being a prebuilt release library
 // outside AddressSanitizer's reach.
 INGOT_GPU_STRICT :: #config(INGOT_GPU_STRICT, false)
@@ -970,7 +970,7 @@ IsWindowFocused :: proc() -> bool {
 }
 
 // FlushBatch forces pending 2D geometry to record into the current render pass
-// (raylib rlDrawRenderBatchActive parity — used to order custom draws).
+// (raylib rlDrawRenderBatchActive parity - used to order custom draws).
 FlushBatch :: proc() {
 	if g.frame.has_frame && _active_pass_begun() && !g.frame.scissor_empty {
 		renderer_flush(&g.rend, active_pass())

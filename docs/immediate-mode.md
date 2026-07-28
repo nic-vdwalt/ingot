@@ -128,8 +128,8 @@ are logical and widgets consume bounded single-pass slots without retaining
 children or application state.
 
 Use rect-based `*_at` leaves for custom geometry. Application-owned composition
-protocols — panes, listboxes, modals, context menus, overlays, markdown,
-`Flow_Layout`, and `Fit_Column` — remain explicit under lifecycle or subsystem
+protocols - panes, listboxes, modals, context menus, overlays, markdown,
+`Flow_Layout`, and `Fit_Column` - remain explicit under lifecycle or subsystem
 names because their geometry is application behavior. The explicit tier uses a
 `Focus_Opt` over caller-owned `Focus_State` where needed; both paths preserve
 caller ownership.

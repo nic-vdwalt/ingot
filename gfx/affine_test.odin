@@ -1,5 +1,5 @@
 #+build !js
-// ingot:gfx — 2D model-transform tests.
+// ingot:gfx - 2D model-transform tests.
 //
 // These fence the maths behind BeginMode2D and the rlgl matrix stack without a
 // GPU: every batch primitive runs its vertices through _affine_apply, so
