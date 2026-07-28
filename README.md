@@ -80,8 +80,9 @@ a private object graph. This is a natural fit for Ingot's Tiger Style approach.
 
 Read [Why immediate mode](docs/immediate-mode.md) for the argument and boundaries,
 [Choosing Ingot](docs/comparison.md) for comparisons with other app and UI
-stacks, [UI state and stable focus](docs/ui-state.md) for the ownership model,
-and [Testing Ingot](docs/testing.md) for the deterministic and sanitizer-backed
+stacks, [Choosing an API layer](docs/api-layers.md) for consumer boundaries,
+[UI state and stable focus](docs/ui-state.md) for the ownership model, and
+[Testing Ingot](docs/testing.md) for the deterministic and sanitizer-backed
 harnesses.
 
 </details>
@@ -136,6 +137,7 @@ import ui "ingot:ui"
 import "ingot:ui_gfx"
 
 app: ui_gfx.App
+form: ui.Ui
 
 main :: proc() {
 	flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}
@@ -154,8 +156,13 @@ main :: proc() {
 }
 
 frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
-	root := ui_gfx.app_screen_rect(app)
-	ui.text(frame, "Hello from Ingot", root.x + 24, root.y + 24, .Large)
+	ui_gfx.app_ui_begin(app, frame, &form, gap = .SM)
+	ui.padding(&form, .LG)
+	ui.scope_begin(&form, "welcome")
+	ui.label(&form, "Hello from Ingot")
+	_ = ui.button(&form, ui.id(&form, "continue"), "Continue", .Primary)
+	ui.scope_end(&form)
+	ui.end(&form)
 }
 ```
 

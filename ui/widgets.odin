@@ -1492,13 +1492,7 @@ pane_keyboard_scroll :: proc(frame: ^Ui_Frame, p: ^Pane, h: i32) {
 // pane_end ends the scissor, records the measured content height from the
 // caller's final y cursor, and draws/handles the scrollbar when content
 // overflows the pane.
-pane_end :: proc(
-	frame: ^Ui_Frame,
-	p: ^Pane,
-	rect: Rect_I32,
-	end_y: i32,
-	pad: i32 = 10,
-) {
+pane_end :: proc(frame: ^Ui_Frame, p: ^Pane, rect: Rect_I32, end_y: i32, pad: i32 = 10) {
 	assert(frame != nil, "pane_end: nil frame")
 	assert(p != nil, "pane_end: nil p")
 	x, y, w, h := rect.x, rect.y, rect.w, rect.h

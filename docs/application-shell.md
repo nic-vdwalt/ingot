@@ -16,7 +16,7 @@ main :: proc() {
 }
 ```
 
-The frame callback receives the explicit app and UI frame. It may use `app_screen_rect`, `app_ui_runtime`, `ingot:gfx`, and any `ingot:ui` drawing API. The shutdown callback runs while the graphics context is valid, so it must destroy caller-owned textures, input boxes, builders, and components there.
+The frame callback receives the explicit app and UI frame. Use `app_ui_begin` to open a caller-owned `Ui` across the client area, or `app_screen_rect` when the application owns explicit geometry. The shutdown callback runs while the graphics context is valid, so it must destroy caller-owned textures, input boxes, builders, and components there.
 
 On native targets `app_run` blocks and performs shutdown after the window closes. On web it installs the browser callback and returns; therefore `App` and userdata must have static or otherwise retained lifetime. A managed web host remains responsible for stopping the module before replacement.
 
@@ -29,8 +29,7 @@ On native targets `app_run` blocks and performs shutdown after the window closes
 | Renderer/platform integration | `ui_gfx.Adapter` |
 | Forms and panels | `ui.Ui` layout |
 | Canvas, scrolling, overlays | `*_at` and explicit geometry |
-| Static fixed form | Sequential widget identity |
-| Conditional, list, reusable component | Scoped `Widget_Id` |
+| Every interactive facade widget | Scoped `Widget_Id` |
 
 `App_Session` remains the correct choice when an application needs a custom frame loop, explicit minimized-window handling, multiple graphics contexts, custom instrumentation, or unusual submission ordering.
 

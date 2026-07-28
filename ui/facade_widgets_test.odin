@@ -130,13 +130,7 @@ facade_widget_options_scale_once :: proc(t: ^testing.T) {
 	u: Ui
 	open := true
 	begin(&u, &frame, {0, 0, 400, 400})
-	_ = collapsible_header(
-		&u,
-		id(&u, "details"),
-		"Details",
-		&open,
-		{height = 30, font_size = 10},
-	)
+	_ = collapsible_header(&u, id(&u, "details"), "Details", &open, {height = 30, font_size = 10})
 	spinner(&u, 24, {style = .Orbit_Dots, radius = 8, dot_radius = 2, dot_count = 3})
 	after := remaining_rect(&u)
 	end(&u)

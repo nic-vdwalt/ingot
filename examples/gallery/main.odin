@@ -226,11 +226,7 @@ gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	}
 
 	if debug_on {
-		ui.draw_debug_overlay(
-			frame,
-			sw - ui.ui_frame_sc(frame, 290),
-			ui.ui_frame_sc(frame, 10),
-		)
+		ui.draw_debug_overlay(frame, sw - ui.ui_frame_sc(frame, 290), ui.ui_frame_sc(frame, 10))
 	}
 }
 
@@ -248,13 +244,7 @@ apply_scale :: proc(scale: f32) {
 draw_nav :: proc(frame: ^ui.Ui_Frame, sh: i32) {
 	w := ui.ui_frame_sc(frame, NAV_W)
 	rl.DrawRectangle(0, 0, w, sh, ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).bg_secondary))
-	rl.DrawRectangle(
-		w - 1,
-		0,
-		1,
-		sh,
-		ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).border_subtle),
-	)
+	rl.DrawRectangle(w - 1, 0, 1, sh, ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).border_subtle))
 
 	y := ui.ui_frame_sc(frame, 14)
 	ui.text(frame, "ingot gallery", ui.ui_frame_sc(frame, 14), y, .Title)
@@ -282,12 +272,7 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, sh: i32) {
 	y = sh - ui.ui_frame_sc(frame, 140)
 	if ui.button_at(
 		frame,
-		{
-			ui.ui_frame_sc(frame, 10),
-			y,
-			w - ui.ui_frame_sc(frame, 20),
-			ui.ui_frame_sc(frame, 26),
-		},
+		{ui.ui_frame_sc(frame, 10), y, w - ui.ui_frame_sc(frame, 20), ui.ui_frame_sc(frame, 26)},
 		"Light theme" if dark else "Dark theme",
 	) {
 		dark = !dark
@@ -297,12 +282,7 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, sh: i32) {
 	y += ui.ui_frame_sc(frame, 32)
 	if ui.button_at(
 		frame,
-		{
-			ui.ui_frame_sc(frame, 10),
-			y,
-			w - ui.ui_frame_sc(frame, 20),
-			ui.ui_frame_sc(frame, 26),
-		},
+		{ui.ui_frame_sc(frame, 10), y, w - ui.ui_frame_sc(frame, 20), ui.ui_frame_sc(frame, 26)},
 		"Standard contrast" if high_contrast else "High contrast",
 	) {
 		high_contrast = !high_contrast
@@ -311,12 +291,7 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, sh: i32) {
 	y += ui.ui_frame_sc(frame, 32)
 	if ui.button_at(
 		frame,
-		{
-			ui.ui_frame_sc(frame, 10),
-			y,
-			w - ui.ui_frame_sc(frame, 20),
-			ui.ui_frame_sc(frame, 26),
-		},
+		{ui.ui_frame_sc(frame, 10), y, w - ui.ui_frame_sc(frame, 20), ui.ui_frame_sc(frame, 26)},
 		"Motion: reduced" if reduced_motion else "Motion: full",
 	) {
 		reduced_motion = !reduced_motion
@@ -325,12 +300,7 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, sh: i32) {
 	y += ui.ui_frame_sc(frame, 32)
 	if ui.button_at(
 		frame,
-		{
-			ui.ui_frame_sc(frame, 10),
-			y,
-			w - ui.ui_frame_sc(frame, 20),
-			ui.ui_frame_sc(frame, 26),
-		},
+		{ui.ui_frame_sc(frame, 10), y, w - ui.ui_frame_sc(frame, 20), ui.ui_frame_sc(frame, 26)},
 		"UI scale\u2026",
 	) {
 		settings_open = true
@@ -349,13 +319,7 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, sh: i32) {
 	x := ui.ui_frame_sc(frame, NAV_W)
 	w := sw - x
 	pane_rect := ui.Rect_I32{x, 0, w, sh}
-	y := ui.pane_begin(
-		frame,
-		&content_pane,
-		pane_rect,
-		pad = 14,
-		keyboard = section != .Inputs,
-	)
+	y := ui.pane_begin(frame, &content_pane, pane_rect, pad = 14, keyboard = section != .Inputs)
 	cx := x + ui.ui_frame_sc(frame, 18)
 	cw := w - ui.ui_frame_sc(frame, 52)
 
@@ -599,11 +563,7 @@ draw_widget_form_controls :: proc(
 
 // The progress / spinner / pill section is pure facade: every widget carves
 // its own slot from a Ui, so no call site does arithmetic on x/y/w/h.
-draw_widget_progress :: proc(
-	frame: ^ui.Ui_Frame,
-	x, y0, w: i32,
-	state: ^Widget_State,
-) -> i32 {
+draw_widget_progress :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_progress: nil state")
 	u := &state.progress_ctx
 	theme := ui.ui_frame_theme(frame)
@@ -634,11 +594,7 @@ draw_widget_progress :: proc(
 
 // The key/value rows are facade too: kv_row spans the container width, so the
 // caller never measures the value to right-align it.
-draw_widget_kv_rows :: proc(
-	frame: ^ui.Ui_Frame,
-	x, y0, w: i32,
-	state: ^Widget_State,
-) -> i32 {
+draw_widget_kv_rows :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_kv_rows: nil state")
 	u := &state.kv_ctx
 	theme := ui.ui_frame_theme(frame)
@@ -652,11 +608,7 @@ draw_widget_kv_rows :: proc(
 	return end_y + ui.ui_frame_sc(frame, 10)
 }
 
-draw_widget_backend_list :: proc(
-	frame: ^ui.Ui_Frame,
-	x, y0, w: i32,
-	state: ^Widget_State,
-) -> i32 {
+draw_widget_backend_list :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_backend_list: nil state")
 	y := y0
 	labels := [?]string{"Metal", "Vulkan", "D3D12", "WebGPU"}
@@ -696,13 +648,7 @@ draw_widget_backend_list :: proc(
 			row.hovered,
 		)
 		if row.activated do state.list_activated = i
-		ui.text(
-			frame,
-			label,
-			x + ui.ui_frame_sc(frame, 8),
-			y + ui.ui_frame_sc(frame, 4),
-			.Label,
-		)
+		ui.text(frame, label, x + ui.ui_frame_sc(frame, 8), y + ui.ui_frame_sc(frame, 4), .Label)
 		y += step
 	}
 	ui.listbox_end(frame, &state.listbox)
@@ -768,13 +714,7 @@ draw_widget_fit_card :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	fit_w := min(w, ui.ui_frame_sc(frame, 360))
 	pad := ui.ui_frame_sc(frame, 12)
 	column: ui.Fit_Column
-	ui.fit_column_begin(
-		&column,
-		x + pad,
-		y + pad,
-		fit_w - pad * 2,
-		gap = ui.ui_frame_sc(frame, 6),
-	)
+	ui.fit_column_begin(&column, x + pad, y + pad, fit_w - pad * 2, gap = ui.ui_frame_sc(frame, 6))
 	title := ui.fit_column_next(&column, ui.ui_frame_sc(frame, 18))
 	detail := ui.fit_column_next(&column, ui.ui_frame_sc(frame, 18))
 	content := ui.fit_column_end(&column)
@@ -829,23 +769,14 @@ draw_charts :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	ui.text(frame, "sparkline:", x, y + ui.ui_frame_sc(frame, 6), .Label, .Secondary)
 	ui.sparkline_at(
 		frame,
-		{
-			x + ui.ui_frame_sc(frame, 80),
-			y,
-			ui.ui_frame_sc(frame, 140),
-			ui.ui_frame_sc(frame, 28),
-		},
+		{x + ui.ui_frame_sc(frame, 80), y, ui.ui_frame_sc(frame, 140), ui.ui_frame_sc(frame, 28)},
 		spark[:],
 	)
 	return y + ui.ui_frame_sc(frame, 40)
 }
 
 draw_layout_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
-	y := ui.section_header_at(
-		frame,
-		{x, y0, w, 0},
-		"SINGLE-PASS LAYOUT (weights + flex + flow)",
-	)
+	y := ui.section_header_at(frame, {x, y0, w, 0}, "SINGLE-PASS LAYOUT (weights + flex + flow)")
 	l: ui.Layout
 	lw := min(w, ui.ui_frame_sc(frame, 520))
 	ui.layout_begin(&l, x, y, lw, ui.ui_frame_sc(frame, 248), gap = ui.ui_frame_sc(frame, 8))
@@ -911,13 +842,7 @@ draw_layout_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 
 cell :: proc(frame: ^ui.Ui_Frame, r: ui.Rect_I32, label: string) {
 	if r.w <= 0 || r.h <= 0 do return
-	rl.DrawRectangle(
-		r.x,
-		r.y,
-		r.w,
-		r.h,
-		ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).bg_active),
-	)
+	rl.DrawRectangle(r.x, r.y, r.w, r.h, ui_gfx.color_to_gfx(ui.ui_frame_theme(frame).bg_active))
 	rl.DrawRectangleLines(
 		r.x,
 		r.y,
@@ -961,12 +886,7 @@ draw_overlay_controls :: proc(frame: ^ui.Ui_Frame, x, y: i32) -> i32 {
 	}
 	if ui.button_at(
 		frame,
-		{
-			action_x,
-			y + button_h + ui.ui_frame_sc(frame, 8),
-			ui.ui_frame_sc(frame, 150),
-			button_h,
-		},
+		{action_x, y + button_h + ui.ui_frame_sc(frame, 8), ui.ui_frame_sc(frame, 150), button_h},
 		"Open modal",
 	) {
 		about_modal.open = true
@@ -1012,10 +932,7 @@ draw_overlay_modal :: proc(frame: ^ui.Ui_Frame) {
 		frame,
 		&about_modal,
 		"Generic modal",
-		{
-			size = {ui.ui_frame_sc(frame, 420), ui.ui_frame_sc(frame, 190)},
-			screen = root,
-		},
+		{size = {ui.ui_frame_sc(frame, 420), ui.ui_frame_sc(frame, 190)}, screen = root},
 	)
 	ui.draw_text_wrapped_frame(
 		frame,

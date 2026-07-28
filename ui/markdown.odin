@@ -1277,7 +1277,16 @@ draw_markdown_context :: proc(
 	draw: bool = true,
 ) -> i32 {
 	assert(ctx != nil && ctx.frame != nil, "draw_markdown_context: invalid context")
-	return markdown_draw(ctx, {x, y, max_width, 0}, text, base_color, sel_start, sel_end, out_w, draw)
+	return markdown_draw(
+		ctx,
+		{x, y, max_width, 0},
+		text,
+		base_color,
+		sel_start,
+		sel_end,
+		out_w,
+		draw,
+	)
 }
 
 hit_test_markdown_context :: proc(

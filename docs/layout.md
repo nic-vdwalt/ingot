@@ -30,7 +30,7 @@ No procedure that takes a `^Ui` carries a `ui_` prefix. `scripts/check_ui_api_la
 ## Common composition
 
 ```odin
-ui.begin(&form, frame, root, gap = .SM)
+ui_gfx.app_ui_begin(app, frame, &form, gap = .SM)
 ui.padding(&form, .LG)
 ui.scope_begin(&form, "settings")
 
