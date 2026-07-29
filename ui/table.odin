@@ -74,7 +74,7 @@ table_header :: proc(
 	for column, index in columns {
 		rect := flex_slot_next(u, height)
 		if !slot_visible(rect) do continue
-		widget := id(u, u64(index))
+		widget := id(u, u64(index) + 1)
 		fo := focus(u, widget)
 		focus_opt_click(frame, fo, rect.x, rect.y, rect.w, rect.h)
 		rrect := rect_f32(rect)
