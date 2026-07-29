@@ -78,7 +78,6 @@ when CAPTURE {
 	// by the sequence pass instead - as stills they leave half the frame empty,
 	// which reads as an unfinished framework rather than a focused one.
 	CAPTURE_SHOTS := [?]Capture_Shot {
-		{"gallery-api-relationships-dark.png", .Api_Relationships, true},
 		{"gallery-widgets-dark.png", .Widgets, true},
 		{"gallery-charts-dark.png", .Charts, true},
 		{"gallery-buttons-light.png", .Buttons, false},
@@ -89,7 +88,6 @@ when CAPTURE {
 	// The GIF script: every section in order, alternating theme so the motion
 	// shows both navigation and theming without any synthetic input.
 	CAPTURE_SEQUENCE := [?]Capture_Shot {
-		{"", .Api_Relationships, true},
 		{"", .Buttons, true},
 		{"", .Inputs, true},
 		{"", .Widgets, true},
