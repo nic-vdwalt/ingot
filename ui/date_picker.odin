@@ -40,8 +40,8 @@ CALENDAR_MONTH_NAMES := [12]string {
 
 // calendar_days_in_month returns the day count, honoring leap years.
 calendar_days_in_month :: proc(year, month: i32) -> i32 {
-	assert(month >= 1 && month <= 12, "calendar_days_in_month: month out of range")
 	lengths := [12]i32{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	assert(month >= 1 && int(month) <= len(lengths), "calendar_days_in_month: bad month")
 	if month == 2 {
 		leap := (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 		return 29 if leap else 28

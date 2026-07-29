@@ -34,9 +34,15 @@ Web_Form_Backend :: struct {
 }
 
 ui_runtime_set_web_form_backend :: proc(runtime: ^Ui_Runtime, backend: Web_Form_Backend) {
+	assert(runtime != nil, "ui_runtime_set_web_form_backend: nil runtime")
+	assert(runtime.initialized, "ui_runtime_set_web_form_backend: runtime not initialized")
+	// The zero value is the documented no-op backend. Anything carrying a data
+	// pointer must expose at least one sync proc, otherwise the install looks
+	// successful but can never run.
+	has_sync := backend.sync_text_input != nil || backend.sync_submit_button != nil
 	assert(
-		runtime != nil && runtime.initialized,
-		"ui_runtime_set_web_form_backend: invalid runtime",
+		backend.data == nil || has_sync,
+		"ui_runtime_set_web_form_backend: data without a sync proc",
 	)
 	runtime.web_form = backend
 }

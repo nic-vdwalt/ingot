@@ -54,6 +54,7 @@ toast_push :: proc(st: ^Toast_State, kind: Toast_Kind, message: string) {
 toast_tick :: proc(st: ^Toast_State, dt: f32) {
 	assert(st != nil, "toast_tick: nil state")
 	assert(dt >= 0, "toast_tick: negative dt")
+	assert(st.count >= 0 && st.count <= len(st.items), "toast_tick: count out of range")
 	kept := 0
 	for index in 0 ..< st.count {
 		st.items[index].remaining -= dt
