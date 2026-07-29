@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -15,6 +16,9 @@ constexpr int kFramesDefault = 2000;
 constexpr int kVirtualRows = 40;
 constexpr int kVirtualOverscan = 2;
 constexpr int kDashboardWidgetsPerGroup = 10;
+// Matches the Ingot adapter's MAX_SCALE and spec/dataset.json
+// label_index_modulus so precomputed label tables agree byte for byte.
+constexpr int kMaxScale = 16384;
 constexpr std::uint64_t kFnvBasis = 1469598103934665603ULL;
 constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -62,16 +66,43 @@ bool parse_options(int argc, char** argv, Options* options) {
     return options->scale > 0 && options->frames > 0;
 }
 
-std::string label_for(int index, bool unique) {
-    return unique ? "Widget " + std::to_string(index) : "Widget";
+// Labels are pinned by spec/dataset.json ("Widget %08d") and precomputed
+// outside the timed region so frames measure widget submission, not string
+// formatting.
+std::vector<std::string> g_labels;
+
+void precompute_labels() {
+    g_labels.resize(static_cast<std::size_t>(kMaxScale));
+    char buffer[32];
+    for (int index = 0; index < kMaxScale; ++index) {
+        std::snprintf(buffer, sizeof buffer, "Widget %08d", index);
+        g_labels[static_cast<std::size_t>(index)] = buffer;
+    }
+}
+
+const char* label_for(int index, bool unique) {
+    if (!unique) return "Widget";
+    return g_labels[static_cast<std::size_t>(index % kMaxScale)].c_str();
 }
 
 int run_labels(int count, bool unique) {
     for (int index = 0; index < count; ++index) {
-        const std::string label = label_for(index, unique);
         ImGui::SetCursorPos(ImVec2(static_cast<float>(index % 10) * 126.0f,
                                   static_cast<float>(index / 10) * 18.0f));
-        ImGui::TextUnformatted(label.c_str());
+        ImGui::TextUnformatted(label_for(index, unique));
+    }
+    return count;
+}
+
+// Spec churn rule (spec/workloads.json dynamic_churn): position p is churned
+// when (p + frame) % 10 == 0 and then draws label (p + frame) % scale; other
+// positions draw stable label p.
+int run_churn(int count, int frame_index) {
+    for (int position = 0; position < count; ++position) {
+        const bool churned = (position + frame_index) % 10 == 0;
+        const int label_index = churned ? (position + frame_index) % count : position;
+        ImGui::SetCursorPos(ImVec2(0.0f, static_cast<float>(position) * 18.0f));
+        ImGui::TextUnformatted(label_for(label_index, true));
     }
     return count;
 }
@@ -111,8 +142,7 @@ int run_dashboard(int groups, std::vector<bool>* checked, std::vector<float>* va
     for (int index = 0; index < groups; ++index) {
         ImGui::PushID(index);
         const float y = static_cast<float>(index) * 30.0f;
-        const std::string title = label_for(index, true);
-        ImGui::SetCursorPos(ImVec2(0.0f, y)); ImGui::TextUnformatted(title.c_str());
+        ImGui::SetCursorPos(ImVec2(0.0f, y)); ImGui::TextUnformatted(label_for(index, true));
         ImGui::SetCursorPos(ImVec2(128.0f, y)); ImGui::TextUnformatted("Healthy");
         bool checked_value = (*checked)[index];
         ImGui::SetCursorPos(ImVec2(208.0f, y)); ImGui::Checkbox("Live", &checked_value);
@@ -135,9 +165,8 @@ int run_virtual(int logical_count) {
     const int submitted = std::min(logical_count, kVirtualRows + kVirtualOverscan * 2);
     const int start = std::max(logical_count / 2 - kVirtualOverscan, 0);
     for (int offset = 0; offset < submitted; ++offset) {
-        const std::string label = label_for(start + offset, true);
         ImGui::SetCursorPos(ImVec2(0.0f, static_cast<float>(offset) * 18.0f));
-        ImGui::TextUnformatted(label.c_str());
+        ImGui::TextUnformatted(label_for(start + offset, true));
     }
     return submitted;
 }
@@ -145,10 +174,9 @@ int run_virtual(int logical_count) {
 int run_table(int rows, bool unique) {
     for (int row = 0; row < rows; ++row) {
         for (int column = 0; column < 4; ++column) {
-            const std::string label = label_for(row * 4 + column, unique);
             ImGui::SetCursorPos(ImVec2(static_cast<float>(column) * 220.0f,
                                       static_cast<float>(row) * 18.0f));
-            ImGui::TextUnformatted(label.c_str());
+            ImGui::TextUnformatted(label_for((row * 4 + column) % kMaxScale, unique));
         }
     }
     return rows * 4;
@@ -165,12 +193,7 @@ int run_workload(const Options& options, int frame_index, std::vector<bool>* che
     if (id == "list_virtual") return run_virtual(options.scale);
     if (id == "table_repeated") return run_table(options.scale, false);
     if (id == "table_unique") return run_table(options.scale, true);
-    if (id == "dynamic_churn") {
-        ImGui::PushID(frame_index % options.scale);
-        const int result = run_labels(options.scale, true);
-        ImGui::PopID();
-        return result;
-    }
+    if (id == "dynamic_churn") return run_churn(options.scale, frame_index);
     return -1;
 }
 
@@ -190,6 +213,7 @@ void print_array(const std::vector<std::int64_t>& values) {
 int main(int argc, char** argv) {
     Options options;
     if (!parse_options(argc, argv, &options)) return 2;
+    precompute_labels();
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();

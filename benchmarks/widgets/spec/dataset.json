@@ -3,6 +3,8 @@
   "seed": 12648430,
   "label_repeated": "Widget",
   "label_format": "Widget %08d",
+  "label_index_modulus": 16384,
+  "label_precompute": "unique labels are precomputed outside the timed region; timed regions must not format strings",
   "table_columns": ["Name", "State", "Value", "Updated"],
   "row_height": 18,
   "button_size": [96, 24],

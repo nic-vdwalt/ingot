@@ -10,6 +10,7 @@ import ui "ingot:ui"
 WARMUP_DEFAULT :: 300
 FRAMES_DEFAULT :: 2000
 MAX_SCALE :: 16384
+STABLE_LABEL_LEN :: 15 // len("Widget 00000000")
 VIRTUAL_ROWS :: 40
 VIRTUAL_OVERSCAN :: 2
 DASHBOARD_WIDGETS_PER_GROUP :: 10
@@ -57,7 +58,6 @@ Harness :: struct {
 	output:           ui.Ui_Output,
 	checked:          [MAX_SCALE]bool,
 	values:           [MAX_SCALE]f32,
-	labels:           [MAX_SCALE][32]u8,
 	stable_labels:    [MAX_SCALE][32]u8,
 	changing_labels:  [MAX_SCALE][32]u8,
 	dashboard_inputs: [DASHBOARD_MAX_GROUPS]ui.Input_Box,
@@ -105,16 +105,17 @@ harness_destroy :: proc(h: ^Harness) {
 }
 
 label_for :: proc(h: ^Harness, index: int, unique: bool) -> string {
-	assert(h != nil && index >= 0 && index < MAX_SCALE, "label_for: invalid argument")
+	assert(h != nil && index >= 0, "label_for: invalid argument")
 	if !unique do return "Widget"
-	buffer := &h.labels[index]
-	value := fmt.bprintf(buffer[:], "Widget %08d", index)
-	return value
+	// Precomputed at harness init: the timed region must measure widget
+	// submission, not core:fmt. Indexing is pinned by spec/dataset.json
+	// label_index_modulus.
+	return string(h.stable_labels[index % MAX_SCALE][:STABLE_LABEL_LEN])
 }
 
 stable_label_for :: proc(h: ^Harness, index: int) -> string {
 	assert(h != nil && index >= 0 && index < MAX_SCALE, "stable_label_for: invalid argument")
-	return string(h.stable_labels[index][:15])
+	return string(h.stable_labels[index][:STABLE_LABEL_LEN])
 }
 
 changing_label_for :: proc(h: ^Harness, index, frame_index: int) -> string {
@@ -135,8 +136,7 @@ paint_label :: proc(frame: ^ui.Ui_Frame, label: string, x, y, w: i32) {
 	assert(frame != nil && frame.open, "paint_label: invalid frame")
 	assert(w > 0, "paint_label: invalid width")
 	ui.draw_rectangle(frame, x, y, w, 18, ui.Color{35, 38, 45, 255})
-	text := strings.clone_to_cstring(label, context.temp_allocator)
-	ui.draw_text_frame(frame, text, x + 2, y + 2, 14, ui.Color{230, 230, 230, 255})
+	ui.draw_text_string_frame(frame, label, x + 2, y + 2, 14, ui.Color{230, 230, 230, 255})
 }
 
 run_labels :: proc(h: ^Harness, count: int, unique: bool) -> int {
@@ -292,7 +292,7 @@ run_virtual_list :: proc(h: ^Harness, logical_count: int) -> int {
 	start := clamp(logical_count / 2 - VIRTUAL_OVERSCAN, 0, logical_count - submitted)
 	for offset in 0 ..< submitted {
 		index := start + offset
-		paint_label(&h.frame, label_for(h, index % MAX_SCALE, true), 0, i32(offset) * 18, 320)
+		paint_label(&h.frame, label_for(h, index, true), 0, i32(offset) * 18, 320)
 	}
 	return submitted
 }
@@ -301,18 +301,22 @@ run_table :: proc(h: ^Harness, rows: int, unique: bool) -> int {
 	assert(h != nil && rows > 0 && rows <= MAX_SCALE, "run_table: invalid argument")
 	for row in 0 ..< rows {
 		for column in 0 ..< 4 {
-			label := label_for(h, row * 4 % MAX_SCALE, unique)
+			label := label_for(h, (row * 4 + column) % MAX_SCALE, unique)
 			paint_label(&h.frame, label, i32(column) * 220, i32(row) * 18, 216)
 		}
 	}
 	return rows * 4
 }
 
+// Spec churn rule (spec/workloads.json dynamic_churn): position p is churned
+// when (p + frame) % 10 == 0 and then draws label (p + frame) % scale; other
+// positions draw stable label p.
 run_churn :: proc(h: ^Harness, count, frame_index: int) -> int {
 	assert(h != nil && count > 0 && count <= MAX_SCALE, "run_churn: invalid argument")
-	offset := frame_index % count
+	assert(frame_index >= 0, "run_churn: negative frame index")
 	for position in 0 ..< count {
-		index := (position + offset) % count
+		churned := (position + frame_index) % 10 == 0
+		index := (position + frame_index) % count if churned else position
 		paint_label(&h.frame, label_for(h, index, true), 0, i32(position) * 18, 320)
 	}
 	return count

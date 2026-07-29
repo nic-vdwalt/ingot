@@ -18,9 +18,9 @@
     {"id": "layout_flow", "kind": "layout_flow", "scales": [32, 128, 512, 1024], "frameworks": ["ingot"]},
     {"id": "list_full", "kind": "list", "scales": [100, 1000, 5000, 10000], "virtualized": false},
     {"id": "list_virtual", "kind": "list", "scales": [1000, 10000, 100000, 1000000], "virtualized": true, "visible_rows": 40, "overscan": 2},
-    {"id": "table_repeated", "kind": "table", "scales": [20, 100, 250, 1000], "columns": 4, "unique_text": false},
-    {"id": "table_unique", "kind": "table", "scales": [20, 100, 250, 1000], "columns": 4, "unique_text": true},
-    {"id": "dynamic_churn", "kind": "churn", "scales": [100, 1000, 5000], "churn_percent": 10},
+    {"id": "table_repeated", "kind": "table", "scales": [20, 100, 250, 1000], "columns": 4, "unique_text": false, "cell_label_index": "(row * columns + column) % 16384"},
+    {"id": "table_unique", "kind": "table", "scales": [20, 100, 250, 1000], "columns": 4, "unique_text": true, "cell_label_index": "(row * columns + column) % 16384"},
+    {"id": "dynamic_churn", "kind": "churn", "scales": [100, 1000, 5000], "churn_percent": 10, "churn_rule": "position p churned when (p + frame) % 10 == 0; churned label index = (p + frame) % scale; other positions draw stable label p"},
     {"id": "accessibility", "kind": "buttons", "scales": [25, 100, 250], "accessibility": true},
     {"id": "capacity", "kind": "capacity", "scales": [128, 256, 512, 1024, 2048, 4096, 8192, 16384], "expected_overflow": true}
   ],

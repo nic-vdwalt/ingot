@@ -49,10 +49,9 @@ draw_panel_header :: proc(
 	metrics := ui_frame_metrics(frame)
 	accent := accent
 	if accent == THEME_COLOR do accent = style.fg_label
-	lc := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text_frame(
+	draw_text_string_frame(
 		frame,
-		lc,
+		label,
 		x + metrics.PADDING,
 		y + (metrics.PANEL_HEADER_H - metrics.FONT_SIZE_LABEL) / 2,
 		metrics.FONT_SIZE_LABEL,
@@ -1040,8 +1039,7 @@ draw_text_wrapped_frame :: proc(
 					sel_end,
 				)
 			} else {
-				value_c := strings.clone_to_cstring(value, context.temp_allocator)
-				draw_text_frame(frame, value_c, x, current_y, font_size, color)
+				draw_text_string_frame(frame, value, x, current_y, font_size, color)
 			}
 		}
 		current_y += line_height
@@ -1061,22 +1059,20 @@ draw_text_truncated_frame :: proc(
 	assert(max_width >= 0 && font_size > 0, "draw_text_truncated_frame: invalid metrics")
 	if len(text) == 0 do return
 	out := truncate_to_width_frame(frame, text, max_width, font_size)
-	out_c := strings.clone_to_cstring(out, context.temp_allocator)
-	draw_text_frame(frame, out_c, x, y, font_size, color)
+	draw_text_string_frame(frame, out, x, y, font_size, color)
 }
 
 // Draw a rounded "pill" badge with text. Returns the pill's full width so the
 // caller can advance horizontally. Background and foreground are caller-chosen.
 draw_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, fg, bg: Color) -> i32 {
 	assert(frame != nil, "draw_pill: nil frame")
-	c := strings.clone_to_cstring(text, context.temp_allocator)
-	tw := measure_text_frame(frame, c, font_size)
+	tw := measure_text_string_frame(frame, text, font_size)
 	pad_h: i32 = 6
 	pill_w := tw + pad_h * 2
 	pill_h := font_size + 4
 	rect := Rectangle{f32(x), f32(y), f32(pill_w), f32(pill_h)}
 	draw_rectangle_rounded(frame, rect, 0.6, 6, bg)
-	draw_text_frame(frame, c, x + pad_h, y + 2, font_size, fg)
+	draw_text_string_frame(frame, text, x + pad_h, y + 2, font_size, fg)
 	return pill_w
 }
 
@@ -1368,8 +1364,7 @@ section_header_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, label: string) -> i3
 	x, y, w := rect.x, rect.y, rect.w
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
-	lc := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text_frame(frame, lc, x, y, metrics.FONT_SIZE_LABEL, style.fg_label)
+	draw_text_string_frame(frame, label, x, y, metrics.FONT_SIZE_LABEL, style.fg_label)
 	draw_rectangle(
 		frame,
 		x,
@@ -1530,11 +1525,10 @@ kv_row_at :: proc(
 	x, y, w := rect.x, rect.y, rect.w
 	resolved_font_size := font_size if font_size > 0 else ui_frame_metrics(frame).FONT_SIZE_LABEL
 	assert(resolved_font_size > 0, "kv_row_at: invalid font size")
-	value_cstring := strings.clone_to_cstring(value, context.temp_allocator)
-	value_width := measure_text_frame(frame, value_cstring, resolved_font_size)
+	value_width := measure_text_string_frame(frame, value, resolved_font_size)
 	value_x := x + max(w - value_width, 0)
 	key_width := max(w - value_width - ui_frame_sc(frame, 8), 0)
-	draw_text_frame(frame, value_cstring, value_x, y, resolved_font_size, val_col)
+	draw_text_string_frame(frame, value, value_x, y, resolved_font_size, val_col)
 	if key_width > 0 {
 		draw_text_truncated_frame(frame, key, x, y, key_width, resolved_font_size, key_col)
 	}
@@ -1733,14 +1727,19 @@ collapsible_header_at :: proc(
 		draw_codepoint_frame(frame, options.icon, left, text_y, font_size, style.fg_accent)
 		left += rune_width_frame(frame, options.icon, font_size) + ui_frame_sc(frame, 6)
 	}
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	draw_text_frame(frame, label_c, left, text_y, font_size, style.fg_label)
-	label_w := measure_text_frame(frame, label_c, font_size)
+	draw_text_string_frame(frame, label, left, text_y, font_size, style.fg_label)
+	label_w := measure_text_string_frame(frame, label, font_size)
 	right := x + w - pad
 	if len(options.right_label) > 0 {
-		right_c := strings.clone_to_cstring(options.right_label, context.temp_allocator)
-		right_w := measure_text_frame(frame, right_c, font_size)
-		draw_text_frame(frame, right_c, right - right_w, text_y, font_size, style.fg_secondary)
+		right_w := measure_text_string_frame(frame, options.right_label, font_size)
+		draw_text_string_frame(
+			frame,
+			options.right_label,
+			right - right_w,
+			text_y,
+			font_size,
+			style.fg_secondary,
+		)
 		right -= right_w + ui_frame_sc(frame, 8)
 	}
 	line_x := left + label_w + ui_frame_sc(frame, 8)

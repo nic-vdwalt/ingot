@@ -9,6 +9,9 @@ const FRAMES_DEFAULT: usize = 2000;
 const VIRTUAL_ROWS: usize = 40;
 const VIRTUAL_OVERSCAN: usize = 2;
 const DASHBOARD_WIDGETS_PER_GROUP: usize = 10;
+// Matches the Ingot adapter's MAX_SCALE and spec/dataset.json
+// label_index_modulus so precomputed label tables agree byte for byte.
+const MAX_SCALE: usize = 16384;
 const FNV_BASIS: u64 = 1_469_598_103_934_665_603;
 const FNV_PRIME: u64 = 1_099_511_628_211;
 
@@ -99,21 +102,41 @@ fn hash_u64(mut hash: u64, value: u64) -> u64 {
     hash
 }
 
-fn label_for(index: usize, unique: bool) -> String {
+// Labels are pinned by spec/dataset.json ("Widget %08d") and precomputed
+// outside the timed region so frames measure widget submission, not string
+// formatting.
+fn precompute_labels() -> Vec<String> {
+    (0..MAX_SCALE).map(|index| format!("Widget {index:08}")).collect()
+}
+
+fn label_for(labels: &[String], index: usize, unique: bool) -> &str {
     if unique {
-        format!("Widget {index:08}")
+        &labels[index % MAX_SCALE]
     } else {
-        "Widget".to_owned()
+        "Widget"
     }
 }
 
-fn labels(ui: &mut egui::Ui, count: usize, unique: bool) -> usize {
+fn labels_run(ui: &mut egui::Ui, labels: &[String], count: usize, unique: bool) -> usize {
     for index in 0..count {
         let rect = Rect::from_min_size(
             pos2((index % 10) as f32 * 126.0, (index / 10) as f32 * 18.0),
             vec2(124.0, 18.0),
         );
-        ui.put(rect, egui::Label::new(label_for(index, unique)));
+        ui.put(rect, egui::Label::new(label_for(labels, index, unique)));
+    }
+    count
+}
+
+// Spec churn rule (spec/workloads.json dynamic_churn): position p is churned
+// when (p + frame) % 10 == 0 and then draws label (p + frame) % scale; other
+// positions draw stable label p.
+fn churn(ui: &mut egui::Ui, labels: &[String], count: usize, frame: usize) -> usize {
+    for position in 0..count {
+        let churned = (position + frame) % 10 == 0;
+        let label_index = if churned { (position + frame) % count } else { position };
+        let rect = Rect::from_min_size(pos2(0.0, position as f32 * 18.0), vec2(320.0, 18.0));
+        ui.put(rect, egui::Label::new(label_for(labels, label_index, true)));
     }
     count
 }
@@ -166,6 +189,7 @@ fn mixed(
 
 fn dashboard(
     ui: &mut egui::Ui,
+    labels: &[String],
     groups: usize,
     checked: &mut [bool],
     values: &mut [f32],
@@ -174,8 +198,8 @@ fn dashboard(
     for index in 0..groups {
         let y = index as f32 * 30.0;
         let widgets = [
-            (0.0, 124.0, label_for(index, true)),
-            (128.0, 76.0, "Healthy".to_owned()),
+            (0.0, 124.0, label_for(labels, index, true)),
+            (128.0, 76.0, "Healthy"),
         ];
         for (x, width, label) in widgets {
             ui.put(
@@ -211,26 +235,29 @@ fn dashboard(
     groups * DASHBOARD_WIDGETS_PER_GROUP
 }
 
-fn virtual_list(ui: &mut egui::Ui, logical_count: usize) -> usize {
+fn virtual_list(ui: &mut egui::Ui, labels: &[String], logical_count: usize) -> usize {
     let submitted = logical_count.min(VIRTUAL_ROWS + VIRTUAL_OVERSCAN * 2);
     let start = logical_count
         .saturating_div(2)
         .saturating_sub(VIRTUAL_OVERSCAN);
     for offset in 0..submitted {
         let rect = Rect::from_min_size(pos2(0.0, offset as f32 * 18.0), vec2(320.0, 18.0));
-        ui.put(rect, egui::Label::new(label_for(start + offset, true)));
+        ui.put(rect, egui::Label::new(label_for(labels, start + offset, true)));
     }
     submitted
 }
 
-fn table(ui: &mut egui::Ui, rows: usize, unique: bool) -> usize {
+fn table(ui: &mut egui::Ui, labels: &[String], rows: usize, unique: bool) -> usize {
     for row in 0..rows {
         for column in 0..4 {
             let rect = Rect::from_min_size(
                 pos2(column as f32 * 220.0, row as f32 * 18.0),
                 vec2(216.0, 18.0),
             );
-            ui.put(rect, egui::Label::new(label_for(row * 4 + column, unique)));
+            ui.put(
+                rect,
+                egui::Label::new(label_for(labels, (row * 4 + column) % MAX_SCALE, unique)),
+            );
         }
     }
     rows * 4
@@ -238,6 +265,7 @@ fn table(ui: &mut egui::Ui, rows: usize, unique: bool) -> usize {
 
 fn workload(
     ui: &mut egui::Ui,
+    labels: &[String],
     options: &Options,
     frame: usize,
     checked: &mut [bool],
@@ -245,18 +273,15 @@ fn workload(
     text: &mut [String],
 ) -> Option<usize> {
     match options.workload.as_str() {
-        "labels_repeated" => Some(labels(ui, options.scale, false)),
-        "labels_unique" | "list_full" => Some(labels(ui, options.scale, true)),
+        "labels_repeated" => Some(labels_run(ui, labels, options.scale, false)),
+        "labels_unique" | "list_full" => Some(labels_run(ui, labels, options.scale, true)),
         "button_grid" | "accessibility" | "capacity" => Some(buttons(ui, options.scale)),
         "mixed_form" => Some(mixed(ui, options.scale, checked, values, text)),
-        "complex_dashboard" => Some(dashboard(ui, options.scale, checked, values, text)),
-        "list_virtual" => Some(virtual_list(ui, options.scale)),
-        "table_repeated" => Some(table(ui, options.scale, false)),
-        "table_unique" => Some(table(ui, options.scale, true)),
-        "dynamic_churn" => ui
-            .push_id(frame % options.scale, |ui| labels(ui, options.scale, true))
-            .inner
-            .into(),
+        "complex_dashboard" => Some(dashboard(ui, labels, options.scale, checked, values, text)),
+        "list_virtual" => Some(virtual_list(ui, labels, options.scale)),
+        "table_repeated" => Some(table(ui, labels, options.scale, false)),
+        "table_unique" => Some(table(ui, labels, options.scale, true)),
+        "dynamic_churn" => Some(churn(ui, labels, options.scale, frame)),
         _ => None,
     }
 }
@@ -266,6 +291,7 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     };
     let context = Context::default();
+    let unique_labels = precompute_labels();
     let state_count = options.scale.max(1);
     let mut checked = vec![false; state_count];
     let mut values = vec![0.5; state_count];
@@ -283,8 +309,16 @@ fn main() -> ExitCode {
         let build_started = Instant::now();
         let output = context.run(input, |context| {
             egui::CentralPanel::default().show(context, |ui| {
-                submitted = workload(ui, &options, frame, &mut checked, &mut values, &mut text)
-                    .unwrap_or(0);
+                submitted = workload(
+                    ui,
+                    &unique_labels,
+                    &options,
+                    frame,
+                    &mut checked,
+                    &mut values,
+                    &mut text,
+                )
+                .unwrap_or(0);
             });
         });
         let build_ns = build_started.elapsed().as_nanos() as u64;
