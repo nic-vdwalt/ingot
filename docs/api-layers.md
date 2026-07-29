@@ -33,7 +33,17 @@ flowchart TB
     OUTPUT --> MAIN[main paint]
     OUTPUT --> OVERLAY[overlay paint]
     OUTPUT --> PLATFORM[platform output]
+    FRAME -.->|references while open| RUNTIME
+    FRAME -.->|references while open| INPUT
+    FRAME -.->|references while open| OUTPUT
+    ADAPTER -.->|consumes without owning| OUTPUT
 ```
+
+Solid edges are ownership (struct fields); dashed edges are frame-time
+references. The five Session members are siblings — `Ui_Output` does not live
+inside `Ui_Frame`, and `Adapter` does not own the output it consumes. While a
+frame is open, `Ui_Frame` borrows the Session-owned runtime, input, and output;
+the call-path diagram below shows that same relationship as dataflow.
 
 The ownership tree is literal. `App` contains `Session` and its reusable `Ui`
 form as sibling fields. `Session` contains five peer fields: the runtime,

@@ -164,7 +164,8 @@ API_TIP_UI ::
 		"Input: open Ui_Frame" +
 		`
 ` +
-		"Role: one root over one rectangle; a frame may host many caller-owned roots — App's form is only the default.")
+		"Role: one root over one rectangle; a frame may host many caller-owned " +
+		"roots — App's form is only the default.")
 
 API_TIP_RUNTIME ::
 	("Ui_Runtime" +
@@ -239,7 +240,9 @@ API_TIP_ADAPTER ::
 		"Input: gfx events, fonts, and Ui_Output" +
 		`
 ` +
-		"Role: ui ↔ gfx bridge — lends Ui_Runtime a text backend, captures Ui_Input, streams main paint, replays overlay, applies platform output, and publishes accessibility.")
+		"Role: ui ↔ gfx bridge — lends Ui_Runtime a text backend, captures " +
+		"Ui_Input, streams main paint, replays overlay, applies platform output, " +
+		"and publishes accessibility.")
 
 API_TIP_MAIN ::
 	("Main paint" +
@@ -808,6 +811,67 @@ api_tree_centered_rect :: proc(panel: ui.Rect_I32, y, w, h: i32) -> ui.Rect_I32 
 	return {panel.x + (panel.w - w) / 2, y, w, h}
 }
 
+api_tree_dashed_segment :: proc(frame: ^ui.Ui_Frame, from, to: ui.Vector2, color: ui.Color) {
+	assert(frame != nil, "api_tree_dashed_segment: nil frame")
+	assert(from.x == to.x || from.y == to.y, "api_tree_dashed_segment: diagonal edge")
+	dash := f32(api_tree_sc(frame, 5))
+	gap := f32(api_tree_sc(frame, 4))
+	thickness := f32(api_tree_sc(frame, 2))
+	delta := to - from
+	length := abs(delta.x) + abs(delta.y)
+	if length <= 0 do return
+	direction := delta / length
+	traveled: f32 = 0
+	for traveled < length {
+		segment := min(dash, length - traveled)
+		ui.draw_line_ex(
+			frame,
+			from + direction * traveled,
+			from + direction * (traveled + segment),
+			thickness,
+			color,
+		)
+		traveled += segment + gap
+	}
+}
+
+// api_tree_ref_edge_side draws a horizontal dashed "references" arrow between
+// two cards on the same row, from the facing edge of `from` into `to`.
+api_tree_ref_edge_side :: proc(frame: ^ui.Ui_Frame, from, to: ui.Rect_I32, color: ui.Color) {
+	assert(frame != nil, "api_tree_ref_edge_side: nil frame")
+	assert(from.x != to.x, "api_tree_ref_edge_side: overlapping cards")
+	y := f32(from.y + from.h / 2)
+	going_right := to.x > from.x
+	from_x := f32(from.x + from.w) if going_right else f32(from.x)
+	to_x := f32(to.x) if going_right else f32(to.x + to.w)
+	api_tree_dashed_segment(frame, {from_x, y}, {to_x, y}, color)
+	api_tree_arrow_side(frame, {to_x, y}, !going_right, color)
+}
+
+// api_tree_ref_edge_up_side routes a dashed "feeds upstream" arrow from the
+// left edge of `from` around to the left edge of the higher `to` card.
+api_tree_ref_edge_up_side :: proc(frame: ^ui.Ui_Frame, from, to: ui.Rect_I32, color: ui.Color) {
+	assert(frame != nil, "api_tree_ref_edge_up_side: nil frame")
+	assert(to.y + to.h < from.y, "api_tree_ref_edge_up_side: target not above source")
+	detour := f32(api_tree_sc(frame, 26))
+	start := ui.Vector2{f32(from.x), f32(from.y + from.h / 2)}
+	corner_x := f32(min(from.x, to.x)) - detour
+	end := ui.Vector2{f32(to.x), f32(to.y + to.h / 2)}
+	api_tree_dashed_segment(frame, start, {corner_x, start.y}, color)
+	api_tree_dashed_segment(frame, {corner_x, start.y}, {corner_x, end.y}, color)
+	api_tree_dashed_segment(frame, {corner_x, end.y}, end, color)
+	api_tree_arrow_side(frame, end, false, color)
+}
+
+// api_tree_legend draws right-aligned helper text on the panel title row.
+api_tree_legend :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, legend: string) {
+	assert(frame != nil && len(legend) > 0, "api_tree_legend: invalid legend")
+	width := ui.text_width(frame, legend, .Label)
+	x := panel.x + panel.w - api_tree_sc(frame, 12) - width
+	if x <= panel.x + api_tree_sc(frame, 170) do return
+	ui.text(frame, legend, x, panel.y + api_tree_sc(frame, 10), .Label, .Secondary)
+}
+
 api_tree_draw_edges :: proc(
 	frame: ^ui.Ui_Frame,
 	parent: ui.Rect_I32,
@@ -860,7 +924,7 @@ api_ownership_wide_rects :: proc(
 	child_y := app.y + api_tree_sc(frame, 62)
 	session = {panel.x + panel.w / 2 - card_w - margin / 2, child_y, card_w, card_h}
 	form = {panel.x + panel.w / 2 + margin / 2, child_y, card_w, card_h}
-	member_gap := api_tree_sc(frame, 8)
+	member_gap := api_tree_sc(frame, 20)
 	member_w := (panel.w - margin * 2 - member_gap * 4) / 5
 	member_y := child_y + api_tree_sc(frame, 72)
 	for index := 0; index < len(members); index += 1 {
@@ -890,11 +954,15 @@ api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui
 	assert(frame != nil && state != nil, "api_ownership_wide: invalid arguments")
 	theme := ui.ui_frame_theme(frame)
 	caller, app, session, form, members, outputs := api_ownership_wide_rects(frame, panel)
+	api_tree_legend(frame, panel, "solid → owns · dashed → references while a frame is open")
 	api_tree_edge_down(frame, caller, app, theme.fg_accent)
 	app_children := [?]ui.Rect_I32{session, form}
 	api_tree_draw_edges(frame, app, app_children[:], theme.fg_accent)
 	api_tree_branch_down(frame, session, members[:], theme.fg_tool)
 	api_tree_branch_down(frame, members[3], outputs[:], theme.fg_success)
+	api_tree_ref_edge_side(frame, members[2], members[1], theme.fg_secondary)
+	api_tree_ref_edge_side(frame, members[2], members[3], theme.fg_secondary)
+	api_tree_ref_edge_side(frame, members[4], members[3], theme.fg_secondary)
 	api_tree_card(
 		frame,
 		state,
@@ -921,7 +989,7 @@ api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui
 	details := [?]string {
 		"persistent services",
 		"input snapshot",
-		"frame context",
+		"references siblings",
 		"three channels",
 		"ui ↔ gfx bridge",
 	}
@@ -964,6 +1032,38 @@ api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui
 	}
 }
 
+Api_Call_Path_Rects :: struct {
+	facade:       ui.Rect_I32,
+	explicit:     ui.Rect_I32,
+	migrated:     ui.Rect_I32,
+	frame_rect:   ui.Rect_I32,
+	output:       ui.Rect_I32,
+	adapter:      ui.Rect_I32,
+	gfx:          ui.Rect_I32,
+	migrated_gfx: ui.Rect_I32,
+}
+
+api_call_paths_rects :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32) -> (r: Api_Call_Path_Rects) {
+	assert(frame != nil && panel.w > 0 && panel.h > 0, "api_call_paths_rects: invalid panel")
+	margin := api_tree_sc(frame, 14)
+	gap := api_tree_sc(frame, 12)
+	card_w := min(api_tree_sc(frame, 168), (panel.w - margin * 2 - gap * 2) / 3)
+	card_h := min(api_tree_sc(frame, 48), max((panel.h - api_tree_sc(frame, 104)) / 5, 30))
+	top := panel.y + api_tree_sc(frame, 38)
+	row_gap := max((panel.h - api_tree_sc(frame, 52) - card_h * 5) / 4, 8)
+	ui_center_x := panel.x + panel.w / 3
+	migration_center_x := panel.x + panel.w * 2 / 3
+	r.facade = {ui_center_x - card_w - gap / 2, top, card_w, card_h}
+	r.explicit = {ui_center_x + gap / 2, top, card_w, card_h}
+	r.migrated = {migration_center_x - card_w / 2, top, card_w, card_h}
+	r.frame_rect = {ui_center_x - card_w / 2, top + card_h + row_gap, card_w, card_h}
+	r.output = {ui_center_x - card_w / 2, r.frame_rect.y + card_h + row_gap, card_w, card_h}
+	r.adapter = {ui_center_x - card_w / 2, r.output.y + card_h + row_gap, card_w, card_h}
+	r.gfx = {ui_center_x - card_w / 2, r.adapter.y + card_h + row_gap, card_w, card_h}
+	r.migrated_gfx = {migration_center_x - card_w / 2, r.gfx.y, card_w, card_h}
+	return
+}
+
 api_call_paths_tree :: proc(
 	frame: ^ui.Ui_Frame,
 	state: ^Api_Map_State,
@@ -973,27 +1073,15 @@ api_call_paths_tree :: proc(
 	assert(frame != nil && state != nil, "api_call_paths_tree: invalid arguments")
 	assert(panel.w > 0 && panel.h > 0, "api_call_paths_tree: invalid panel")
 	theme := ui.ui_frame_theme(frame)
-	margin := api_tree_sc(frame, 14)
-	gap := api_tree_sc(frame, 12)
-	card_w := min(api_tree_sc(frame, 168), (panel.w - margin * 2 - gap * 2) / 3)
-	card_h := min(api_tree_sc(frame, 48), max((panel.h - api_tree_sc(frame, 104)) / 5, 30))
-	top := panel.y + api_tree_sc(frame, 38)
-	row_gap := max((panel.h - api_tree_sc(frame, 52) - card_h * 5) / 4, 8)
-	ui_center_x := panel.x + panel.w / 3
-	migration_center_x := panel.x + panel.w * 2 / 3
-	facade := ui.Rect_I32{ui_center_x - card_w - gap / 2, top, card_w, card_h}
-	explicit := ui.Rect_I32{ui_center_x + gap / 2, top, card_w, card_h}
-	migrated := ui.Rect_I32{migration_center_x - card_w / 2, top, card_w, card_h}
-	frame_rect := ui.Rect_I32{ui_center_x - card_w / 2, top + card_h + row_gap, card_w, card_h}
-	output := ui.Rect_I32 {
-		ui_center_x - card_w / 2,
-		frame_rect.y + card_h + row_gap,
-		card_w,
-		card_h,
-	}
-	adapter := ui.Rect_I32{ui_center_x - card_w / 2, output.y + card_h + row_gap, card_w, card_h}
-	gfx := ui.Rect_I32{ui_center_x - card_w / 2, adapter.y + card_h + row_gap, card_w, card_h}
-	migrated_gfx := ui.Rect_I32{migration_center_x - card_w / 2, gfx.y, card_w, card_h}
+	r := api_call_paths_rects(frame, panel)
+	facade := r.facade
+	explicit := r.explicit
+	migrated := r.migrated
+	frame_rect := r.frame_rect
+	output := r.output
+	adapter := r.adapter
+	gfx := r.gfx
+	migrated_gfx := r.migrated_gfx
 	declarations := [?]ui.Rect_I32{facade, explicit}
 	for declaration in declarations {
 		api_tree_edge_down(frame, declaration, frame_rect, theme.fg_accent)
@@ -1002,6 +1090,12 @@ api_call_paths_tree :: proc(
 	api_tree_edge_down(frame, output, adapter, theme.fg_assistant)
 	api_tree_edge_down(frame, adapter, gfx, theme.fg_assistant)
 	api_tree_edge_down(frame, migrated, migrated_gfx, theme.fg_tool)
+	api_tree_ref_edge_up_side(frame, adapter, frame_rect, theme.fg_secondary)
+	api_tree_legend(
+		frame,
+		panel,
+		"dataflow, not ownership · dashed → Adapter feeds text, input, and a11y upstream",
+	)
 	api_tree_card(
 		frame,
 		state,
