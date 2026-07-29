@@ -63,7 +63,7 @@ PHASE_COUNT :: 6
 // names the actor first, then the target.
 PHASE_CAPTIONS := [PHASE_COUNT + 1]string {
 	"Click a phase to walk one frame \u00b7 boxes nest by ownership \u00b7 hover any node",
-	"Adapter captures platform events into the Ui_Input snapshot",
+	"Adapter captures platform events into Ui_Input and lends Ui_Runtime its text backend",
 	"Facade and explicit UI read that snapshot and declare widgets into the frame",
 	"Ui_Frame records paint, semantics, and platform requests into Ui_Output",
 	"Main paint streams to the Adapter live, as each command is appended",
@@ -75,7 +75,7 @@ PHASE_CAPTIONS := [PHASE_COUNT + 1]string {
 // the demo cites the source it is describing.
 PHASE_SOURCES := [PHASE_COUNT + 1]string {
 	"",
-	"ui_gfx/adapter.odin capture_input_context",
+	"ui_gfx/adapter.odin adapter_prepare_frame: capture_input_context + adapter_attach_runtime",
 	"ui_gfx/app.odin app_frame \u00b7 the ui callback",
 	"ui/ui_context.odin ui_frame_begin",
 	"ui_gfx/adapter.odin paint_list_set_sink(&output.main)",
@@ -163,6 +163,9 @@ TIP_RUNTIME ::
 		`
 ` +
 		"Owns: fonts, theme, scale, DPI, and semantics infrastructure" +
+		`
+` +
+		"Step 1: receives the Adapter's text backend as the frame is prepared" +
 		`
 ` +
 		"Steps 2 and 3: every widget measures and shapes text through it" +
@@ -942,11 +945,12 @@ map_edges :: proc(frame: ^ui.Ui_Frame, l: Map_Layout) {
 		},
 	)
 
-	// The runtime column carries a symmetric pair. Up, dashed: the adapter
-	// lends a text backend (service, no step). Down, solid: at finalize the
-	// runtime's semantics snapshot is handed to the adapter for publication -
-	// part of step 5, so it lights with it; the badge stays on the replay
-	// arrow.
+	// The runtime column carries a symmetric pair, and both belong to a step.
+	// Up, dashed: adapter_prepare_frame attaches the text backend in the same
+	// call that captures input, so the lend is part of step 1 - it lights
+	// with capture while the badge stays on the capture arrow. Down, solid:
+	// at finalize the runtime's semantics snapshot is handed to the adapter
+	// for publication - part of step 5, badge on the replay arrow.
 	map_edge(
 		frame,
 		{
@@ -956,6 +960,8 @@ map_edges :: proc(frame: ^ui.Ui_Frame, l: Map_Layout) {
 			color = theme.fg_secondary,
 			dashed = true,
 			head = true,
+			phase = 1,
+			quiet = true,
 			label = "text backend",
 			right = false,
 			space = l.text_space,
@@ -1087,7 +1093,7 @@ api_map_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr)
 			"measure \u00b7 semantics",
 			TIP_RUNTIME,
 			theme.fg_tool,
-			{2, 3, 5},
+			{1, 2, 3, 5},
 		},
 	)
 	map_card(
