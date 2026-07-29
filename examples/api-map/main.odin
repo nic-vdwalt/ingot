@@ -1213,6 +1213,30 @@ apply_theme :: proc(frame: ^ui.Ui_Frame = nil) {
 	if frame != nil do ui.request_redraw(frame)
 }
 
+// map_fit_scale sizes the UI so the whole diagram fits the window with no
+// pane scrollbar. The layout is linear in the UI scale, so one multiplicative
+// correction converges in a frame or two; the epsilon stops oscillation from
+// integer rounding. Skipped in capture mode, which owns its scale.
+MAP_FIT_MIN :: f32(0.55)
+MAP_FIT_MAX :: f32(2.2)
+
+map_fit_scale :: proc(frame: ^ui.Ui_Frame, root: ui.Rect_I32, header_h: i32) {
+	assert(frame != nil, "map_fit_scale: nil frame")
+	cw := root.w - ui.ui_frame_sc(frame, 52)
+	avail := root.h - header_h - ui.ui_frame_sc(frame, 28)
+	if cw <= 0 || avail <= 0 do return
+	_, canvas_px := map_layout(frame, 0, 0, cw)
+	m := map_metrics(frame)
+	toolbar_px := m.label * 5 + m.card_h + m.lg * 2 + ui.ui_frame_sc(frame, 16)
+	needed := canvas_px + toolbar_px
+	if needed <= 0 do return
+	current := ui.ui_frame_scf(frame, 1)
+	target := clamp(current * f32(avail) / f32(needed), MAP_FIT_MIN, MAP_FIT_MAX)
+	if abs(target - current) / current < 0.02 do return
+	ui.ui_runtime_set_scale(ui_gfx.app_ui_runtime(&app), target)
+	ui.request_redraw(frame)
+}
+
 map_frame :: proc(a: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	_ = userdata
 	root := ui_gfx.app_screen_rect(a)
@@ -1221,6 +1245,7 @@ map_frame :: proc(a: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	when LAYOUT_CHECK do layout_check(frame)
 	if ui.is_key_pressed(frame, .F12) do debug_on = !debug_on
 	header_h := ui.ui_frame_metrics(frame).TAB_BAR_HEIGHT
+	when !MAP_CAPTURE do map_fit_scale(frame, root, header_h)
 	pane_rect := ui.Rect_I32{0, header_h, root.w, root.h - header_h}
 	y := ui.pane_begin(frame, &content_pane, pane_rect, pad = 14)
 	cx := ui.ui_frame_sc(frame, 18)
