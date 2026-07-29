@@ -289,6 +289,18 @@ API_TIP_PLATFORM ::
 ` +
 		"Flow: applied by Adapter after overlay replay.")
 
+API_TIP_CAPTURE ::
+	("Input capture" +
+		`
+` +
+		"Actor: ui_gfx.Adapter, before the frame opens" +
+		`
+` +
+		"Input: platform events from ingot:gfx" +
+		`
+` +
+		"Output: renderer-neutral Ui_Input snapshot read by every declaration.")
+
 API_TIP_FACADE ::
 	("Facade API" +
 		`
@@ -1010,6 +1022,27 @@ api_tree_under_label :: proc(frame: ^ui.Ui_Frame, card: ui.Rect_I32, label: stri
 	ui.text(frame, label, x, card.y + card.h + api_tree_sc(frame, 8), .Label, .Secondary)
 }
 
+// api_tree_phase_badge draws a numbered circle on a card's top-right corner to
+// mark its position in the per-frame cycle.
+api_tree_phase_badge :: proc(frame: ^ui.Ui_Frame, card: ui.Rect_I32, phase: int) {
+	assert(frame != nil && phase >= 1 && phase <= 9, "api_tree_phase_badge: invalid phase")
+	theme := ui.ui_frame_theme(frame)
+	radius := f32(api_tree_sc(frame, 9))
+	center := ui.Vector2{f32(card.x + card.w), f32(card.y)}
+	ui.draw_circle_v(frame, center, radius, theme.fg_accent)
+	digit := fmt.tprintf("%d", phase)
+	width := ui.text_width(frame, digit, .Label)
+	size := ui.text_role_size(frame, .Label)
+	ui.text(
+		frame,
+		digit,
+		i32(center.x) - width / 2,
+		i32(center.y) - size / 2,
+		.Label,
+		.Inverse,
+	)
+}
+
 api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui.Rect_I32) {
 	assert(frame != nil && state != nil, "api_ownership_wide: invalid arguments")
 	theme := ui.ui_frame_theme(frame)
@@ -1110,6 +1143,7 @@ api_ownership_cards :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, r: Api_O
 }
 
 Api_Call_Path_Rects :: struct {
+	capture:      ui.Rect_I32,
 	facade:       ui.Rect_I32,
 	explicit:     ui.Rect_I32,
 	migrated:     ui.Rect_I32,
@@ -1124,16 +1158,19 @@ api_call_paths_rects :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32) -> (r: Api
 	assert(frame != nil && panel.w > 0 && panel.h > 0, "api_call_paths_rects: invalid panel")
 	margin := api_tree_sc(frame, 14)
 	gap := api_tree_sc(frame, 12)
-	card_w := min(api_tree_sc(frame, 168), (panel.w - margin * 2 - gap * 2) / 3)
-	card_h := min(api_tree_sc(frame, 48), max((panel.h - api_tree_sc(frame, 104)) / 5, 30))
+	card_w := max(min(api_tree_sc(frame, 168), (panel.w - margin * 2 - gap * 2) / 3), 1)
+	card_h := min(api_tree_sc(frame, 48), max((panel.h - api_tree_sc(frame, 112)) / 6, 30))
 	top := panel.y + api_tree_sc(frame, 38)
-	row_gap := max((panel.h - api_tree_sc(frame, 52) - card_h * 5) / 4, 8)
+	row_gap := max((panel.h - api_tree_sc(frame, 52) - card_h * 6) / 5, 8)
 	ui_center_x := panel.x + panel.w / 3
 	migration_center_x := panel.x + panel.w * 2 / 3
-	r.facade = {ui_center_x - card_w - gap / 2, top, card_w, card_h}
-	r.explicit = {ui_center_x + gap / 2, top, card_w, card_h}
-	r.migrated = {migration_center_x - card_w / 2, top, card_w, card_h}
-	r.frame_rect = {ui_center_x - card_w / 2, top + card_h + row_gap, card_w, card_h}
+	capture_w := max(min(card_w * 2 + gap, panel.w - margin * 2), 1)
+	r.capture = {ui_center_x - capture_w / 2, top, capture_w, card_h}
+	declare_y := top + card_h + row_gap
+	r.facade = {ui_center_x - card_w - gap / 2, declare_y, card_w, card_h}
+	r.explicit = {ui_center_x + gap / 2, declare_y, card_w, card_h}
+	r.migrated = {migration_center_x - card_w / 2, declare_y, card_w, card_h}
+	r.frame_rect = {ui_center_x - card_w / 2, declare_y + card_h + row_gap, card_w, card_h}
 	r.output = {ui_center_x - card_w / 2, r.frame_rect.y + card_h + row_gap, card_w, card_h}
 	r.adapter = {ui_center_x - card_w / 2, r.output.y + card_h + row_gap, card_w, card_h}
 	r.gfx = {ui_center_x - card_w / 2, r.adapter.y + card_h + row_gap, card_w, card_h}
@@ -1151,38 +1188,50 @@ api_call_paths_tree :: proc(
 	assert(panel.w > 0 && panel.h > 0, "api_call_paths_tree: invalid panel")
 	theme := ui.ui_frame_theme(frame)
 	r := api_call_paths_rects(frame, panel)
-	facade := r.facade
-	explicit := r.explicit
-	migrated := r.migrated
-	frame_rect := r.frame_rect
-	output := r.output
-	adapter := r.adapter
-	gfx := r.gfx
-	migrated_gfx := r.migrated_gfx
-	declarations := [?]ui.Rect_I32{facade, explicit}
+	declarations := [?]ui.Rect_I32{r.facade, r.explicit}
 	for declaration in declarations {
-		api_tree_edge_down(frame, declaration, frame_rect, theme.fg_accent)
+		api_tree_edge_down(frame, r.capture, declaration, theme.fg_user)
+		api_tree_edge_down(frame, declaration, r.frame_rect, theme.fg_accent)
 	}
-	api_tree_edge_down(frame, frame_rect, output, theme.fg_success)
-	api_tree_edge_down(frame, output, adapter, theme.fg_assistant)
-	api_tree_edge_down(frame, adapter, gfx, theme.fg_assistant)
-	api_tree_edge_down(frame, migrated, migrated_gfx, theme.fg_tool)
-	api_tree_ref_edge_up_side(frame, adapter, frame_rect, theme.fg_secondary)
+	api_tree_edge_down(frame, r.frame_rect, r.output, theme.fg_success)
+	api_tree_edge_down(frame, r.output, r.adapter, theme.fg_assistant)
+	api_tree_edge_down(frame, r.adapter, r.gfx, theme.fg_assistant)
+	api_tree_edge_down(frame, r.migrated, r.migrated_gfx, theme.fg_tool)
+	api_tree_ref_edge_up_side(frame, r.adapter, r.frame_rect, theme.fg_secondary)
 	api_tree_legend(
 		frame,
 		panel,
-		"dataflow, not ownership · dashed → Adapter feeds text, input, and a11y upstream",
+		"① capture → ② declare → ③ record → ④ buffer → ⑤ replay → ⑥ draw · " +
+			"dashed → text + a11y upstream",
+	)
+	api_call_paths_cards(frame, state, r)
+	_ = compact
+}
+
+api_call_paths_cards :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, r: Api_Call_Path_Rects) {
+	assert(frame != nil && state != nil, "api_call_paths_cards: invalid arguments")
+	theme := ui.ui_frame_theme(frame)
+	api_tree_card(
+		frame,
+		state,
+		{
+			r.capture,
+			"Input capture",
+			"Adapter samples gfx → Ui_Input",
+			API_TIP_CAPTURE,
+			theme.fg_user,
+		},
 	)
 	api_tree_card(
 		frame,
 		state,
-		{facade, "Facade API", "paired *_at when available", API_TIP_FACADE, theme.fg_plan},
+		{r.facade, "Facade API", "paired *_at when available", API_TIP_FACADE, theme.fg_plan},
 	)
 	api_tree_card(
 		frame,
 		state,
 		{
-			explicit,
+			r.explicit,
 			"Explicit UI",
 			"*_at · canvas · protocols",
 			API_TIP_EXPLICIT,
@@ -1193,7 +1242,7 @@ api_call_paths_tree :: proc(
 		frame,
 		state,
 		{
-			migrated,
+			r.migrated,
 			"Migrated raylib",
 			"direct ingot:gfx loop",
 			API_TIP_MIGRATED_RAYLIB,
@@ -1203,13 +1252,19 @@ api_call_paths_tree :: proc(
 	api_tree_card(
 		frame,
 		state,
-		{frame_rect, "Ui_Frame", "records paint + semantics", API_TIP_CALL_FRAME, theme.fg_accent},
+		{
+			r.frame_rect,
+			"Ui_Frame",
+			"records paint + semantics",
+			API_TIP_CALL_FRAME,
+			theme.fg_accent,
+		},
 	)
 	api_tree_card(
 		frame,
 		state,
 		{
-			output,
+			r.output,
 			"Ui_Output",
 			"main · overlay · platform",
 			API_TIP_CALL_OUTPUT,
@@ -1219,19 +1274,31 @@ api_call_paths_tree :: proc(
 	api_tree_card(
 		frame,
 		state,
-		{adapter, "ui_gfx.Adapter", "replays UI output", API_TIP_CALL_ADAPTER, theme.fg_assistant},
+		{
+			r.adapter,
+			"ui_gfx.Adapter",
+			"streams · replays · applies",
+			API_TIP_CALL_ADAPTER,
+			theme.fg_assistant,
+		},
 	)
 	api_tree_card(
 		frame,
 		state,
-		{gfx, "ingot:gfx", "UI backend calls", API_TIP_GFX, theme.fg_assistant},
+		{r.gfx, "ingot:gfx", "UI backend calls", API_TIP_GFX, theme.fg_assistant},
 	)
 	api_tree_card(
 		frame,
 		state,
-		{migrated_gfx, "ingot:gfx", "direct raylib-shaped calls", API_TIP_GFX, theme.fg_tool},
+		{r.migrated_gfx, "ingot:gfx", "direct raylib-shaped calls", API_TIP_GFX, theme.fg_tool},
 	)
-	_ = compact
+	api_tree_phase_badge(frame, r.capture, 1)
+	api_tree_phase_badge(frame, r.facade, 2)
+	api_tree_phase_badge(frame, r.explicit, 2)
+	api_tree_phase_badge(frame, r.frame_rect, 3)
+	api_tree_phase_badge(frame, r.output, 4)
+	api_tree_phase_badge(frame, r.adapter, 5)
+	api_tree_phase_badge(frame, r.gfx, 6)
 }
 
 api_relationship_trees_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
