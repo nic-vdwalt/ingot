@@ -11,6 +11,18 @@ compatibility, while minor releases may break it. See the
 
 ### Added
 
+- `Grid` (`grid_begin` / `grid_next` / `grid_end`): a bounded single-pass
+  cell grid with exact column division, replacing per-cell x/y arithmetic.
+- `Main_Align` justification (`Start` / `Center` / `End` / `Space_Between`)
+  for declared flex runs, on `flex_begin`, `flex_row_begin`, and
+  `flex_column_begin`.
+- `end` now returns the consumed content extent, and `ROOT_EXTENT_OPEN`
+  names the root height for a `Ui` inside a scrolling pane, removing the
+  magic-height and end-of-section pad arithmetic from call sites.
+- Semantic styling variants: `label` accepts `Text_Role` + `Ink`, and
+  `status_pill`, `progress_bar`, `progress_bar_animated`, and `kv_row`
+  accept `Ink` values (with muted-key / emphasized-value defaults for
+  `kv_row`) instead of raw theme colors.
 - `combobox`: a searchable dropdown with a filter text field, keyboard
   navigation, and a bounded overlay popup.
 - `date_picker`: an ISO-date field with a calendar popup, plus pure

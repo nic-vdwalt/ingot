@@ -784,9 +784,8 @@ WIDGET_TABLE_COLUMNS := [3]ui.Table_Column {
 draw_widget_tabs_table :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_tabs_table: nil state")
 	u := &state.data_ctx
-	theme := ui.ui_frame_theme(frame)
 	width := min(w, ui.ui_frame_sc(frame, 420))
-	ui.begin(u, frame, {x, y0, width, ui.ui_frame_sc(frame, 380)}, gap = .SM)
+	ui.begin(u, frame, {x, y0, width, ui.ROOT_EXTENT_OPEN}, gap = .SM)
 	ui.scope_begin(u, "data")
 
 	_ = ui.section_header(u, "TAB BAR")
@@ -795,8 +794,8 @@ draw_widget_tabs_table :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widge
 	ui.label(
 		u,
 		fmt.tprintf("active tab: %s \u00b7 state is one caller-owned i32", tabs[state.tab_active]),
-		ui.ui_frame_metrics(frame).FONT_SIZE_LABEL,
-		theme.fg_secondary,
+		ui.Text_Role.Label,
+		ui.Ink.Secondary,
 	)
 
 	ui.space(u, .SM)
@@ -821,9 +820,8 @@ draw_widget_tabs_table :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widge
 	}
 
 	ui.scope_end(u)
-	end_y := ui.remaining_rect(u).y
-	ui.end(u)
-	return end_y + ui.ui_frame_sc(frame, 16)
+	ui.space(u, .LG)
+	return ui.end(u)
 }
 
 draw_widget_table_cell :: proc(
@@ -877,10 +875,14 @@ draw_charts :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 }
 
 draw_layout_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
-	y := ui.section_header_at(frame, {x, y0, w, 0}, "SINGLE-PASS LAYOUT (weights + flex + flow)")
+	y := ui.section_header_at(
+		frame,
+		{x, y0, w, 0},
+		"SINGLE-PASS LAYOUT (weights + flex + justify + flow)",
+	)
 	l: ui.Layout
 	lw := min(w, ui.ui_frame_sc(frame, 520))
-	ui.layout_begin(&l, x, y, lw, ui.ui_frame_sc(frame, 248), gap = ui.ui_frame_sc(frame, 8))
+	ui.layout_begin(&l, x, y, lw, ui.ui_frame_sc(frame, 296), gap = ui.ui_frame_sc(frame, 8))
 
 	ui.push_row(&l, ui.ui_frame_sc(frame, 40), gap = ui.ui_frame_sc(frame, 8))
 	ui.row_weights(&l, {1, 2, 1})
@@ -923,8 +925,25 @@ draw_layout_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	cell(frame, ui.flex_next(&l), "grow")
 	ui.layout_pop(&l)
 
+	// justify packs a declared run whose tracks leave free space; here the
+	// leftover is distributed between three fixed cells.
+	ui.push_row(&l, ui.ui_frame_sc(frame, 40), gap = ui.ui_frame_sc(frame, 8))
+	ui.flex_begin(
+		&l,
+		{
+			ui.fixed(ui.ui_frame_sc(frame, 90)),
+			ui.fixed(ui.ui_frame_sc(frame, 90)),
+			ui.fixed(ui.ui_frame_sc(frame, 90)),
+		},
+		justify = .Space_Between,
+	)
+	cell(frame, ui.flex_next(&l), "between")
+	cell(frame, ui.flex_next(&l), "between")
+	cell(frame, ui.flex_next(&l), "between")
+	ui.layout_pop(&l)
+
 	ui.layout_end(&l)
-	flow_y := y + ui.ui_frame_sc(frame, 258)
+	flow_y := y + ui.ui_frame_sc(frame, 306)
 	flow: ui.Flow_Layout
 	ui.flow_begin(
 		&flow,
@@ -957,53 +976,45 @@ cell :: proc(frame: ^ui.Ui_Frame, r: ui.Rect_I32, label: string) {
 }
 
 draw_overlay_controls :: proc(frame: ^ui.Ui_Frame, x, y: i32) -> i32 {
-	button_w := ui.ui_frame_sc(frame, 150)
-	button_h := ui.ui_frame_sc(frame, 30)
-	for index in 0 ..< 3 {
-		label := fmt.tprintf("Shielded %d", index + 1)
-		button_y := y + i32(index) * (button_h + ui.ui_frame_sc(frame, 8))
-		if ui.button_at(frame, {x, button_y, button_w, button_h}, label) do shielded_clicks += 1
+	// A two-column grid places the shielded stack and the action stack; no
+	// call site does per-button x/y arithmetic and the columns stay aligned.
+	gap := ui.ui_frame_sc(frame, 8)
+	grid: ui.Grid
+	ui.grid_begin(
+		&grid,
+		{x, y, ui.ui_frame_sc(frame, 340), 0},
+		cols = 2,
+		row_h = ui.ui_frame_sc(frame, 30),
+		gap_x = gap,
+		gap_y = gap,
+	)
+	if ui.button_at(frame, ui.grid_next(&grid), "Shielded 1") do shielded_clicks += 1
+	if ui.button_at(frame, ui.grid_next(&grid), "Toggle popup", ui.Btn_Style.Primary) {
+		popup_open = !popup_open
 	}
-	info_y := y + 4 * (button_h + ui.ui_frame_sc(frame, 8))
+	if ui.button_at(frame, ui.grid_next(&grid), "Shielded 2") do shielded_clicks += 1
+	if ui.button_at(frame, ui.grid_next(&grid), "Open modal") {
+		about_modal.open = true
+	}
+	if ui.button_at(frame, ui.grid_next(&grid), "Shielded 3") do shielded_clicks += 1
+	if ui.button_at(frame, ui.grid_next(&grid), "Push toast") {
+		toast_count += 1
+		kind := ui.Toast_Kind(toast_count % 3)
+		ui.toast_push(&toasts, kind, fmt.tprintf("Toast %d \u00b7 newest on top", toast_count))
+	}
+	// The shielded column has only three rows; skip its fourth cell so the
+	// danger action stays in the action column.
+	_ = ui.grid_next(&grid)
+	if ui.button_at(frame, ui.grid_next(&grid), "Delete\u2026", ui.Btn_Style.Danger) {
+		ui.confirm_dialog_open(&confirm)
+	}
+	content := ui.grid_end(&grid)
+	info_y := content.y + content.h + gap
 	summary := fmt.tprintf(
 		"shielded clicks: %d (should not rise while the popup covers them)",
 		shielded_clicks,
 	)
 	ui.text(frame, summary, x, info_y, .Label, .Secondary)
-	action_x := x + button_w + ui.ui_frame_sc(frame, 100)
-	action_step := button_h + ui.ui_frame_sc(frame, 8)
-	if ui.button_at(
-		frame,
-		{action_x, y, ui.ui_frame_sc(frame, 150), button_h},
-		"Toggle popup",
-		ui.Btn_Style.Primary,
-	) {
-		popup_open = !popup_open
-	}
-	if ui.button_at(
-		frame,
-		{action_x, y + action_step, ui.ui_frame_sc(frame, 150), button_h},
-		"Open modal",
-	) {
-		about_modal.open = true
-	}
-	if ui.button_at(
-		frame,
-		{action_x, y + 2 * action_step, ui.ui_frame_sc(frame, 150), button_h},
-		"Push toast",
-	) {
-		toast_count += 1
-		kind := ui.Toast_Kind(toast_count % 3)
-		ui.toast_push(&toasts, kind, fmt.tprintf("Toast %d \u00b7 newest on top", toast_count))
-	}
-	if ui.button_at(
-		frame,
-		{action_x, y + 3 * action_step, ui.ui_frame_sc(frame, 150), button_h},
-		"Delete\u2026",
-		ui.Btn_Style.Danger,
-	) {
-		ui.confirm_dialog_open(&confirm)
-	}
 	return info_y
 }
 
@@ -1186,21 +1197,19 @@ draw_stress :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		{x, y0, w, 0},
 		"STRESS: 1000 BUTTONS (batcher, hover-anim bound, culling)",
 	)
-	cols := max(int(w / ui.ui_frame_sc(frame, 110)), 1)
-	bw := ui.ui_frame_sc(frame, 100)
-	bh := ui.ui_frame_sc(frame, 26)
+	// The grid owns cell geometry: exact column division, no per-button math.
+	cols := max(w / ui.ui_frame_sc(frame, 110), 1)
+	gap := ui.ui_frame_sc(frame, 6)
+	grid: ui.Grid
+	ui.grid_begin(&grid, {x, y, w, 0}, cols, ui.ui_frame_sc(frame, 26), gap, gap)
 	for i in 0 ..< 1000 {
-		col := i % cols
-		row := i / cols
-		bx := x + i32(col) * (bw + ui.ui_frame_sc(frame, 6))
-		by := y + i32(row) * (bh + ui.ui_frame_sc(frame, 6))
 		label := fmt.tprintf("btn %d", i)
-		if ui.button_at(frame, {bx, by, bw, bh}, label) {
+		if ui.button_at(frame, ui.grid_next(&grid), label) {
 			stress_clicked = i
 		}
 	}
-	rows := (1000 + cols - 1) / cols
-	y += i32(rows) * (bh + ui.ui_frame_sc(frame, 6)) + ui.ui_frame_sc(frame, 10)
+	content := ui.grid_end(&grid)
+	y = content.y + content.h + ui.ui_frame_sc(frame, 10)
 	if stress_clicked >= 0 {
 		msg := fmt.tprintf("last clicked: btn %d", stress_clicked)
 		ui.text(frame, msg, x, y, .Label, .Secondary)

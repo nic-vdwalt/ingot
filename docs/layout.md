@@ -1,6 +1,6 @@
 # Layout conventions
 
-Ingot layout is caller-owned, bounded, and single-pass. Start with `Ui` for ordinary forms and panels. Use `Layout`, `Flow_Layout`, `Fit_Column`, and rect-based `*_at` widgets when geometry itself is application behavior.
+Ingot layout is caller-owned, bounded, and single-pass. Start with `Ui` for ordinary forms and panels. Use `Layout`, `Flow_Layout`, `Fit_Column`, `Grid`, and rect-based `*_at` widgets when geometry itself is application behavior.
 
 ## Tiers
 
@@ -14,7 +14,7 @@ A procedure's name tells you which category owns geometry and which units it exp
 | **Paint/measurement** | explicit owner | physical or float paint geometry | none | verbs/subsystem prefix - `markdown_draw`, `overlay_*`, `measure_*` |
 | **Physical layout** | `l: ^Layout` | physical pixels | none | layout verbs - `layout_begin`, `push_row`, `next` |
 
-Ordinary leaf widgets and simple presentation components have facade forms. Application-owned composition protocols - listbox, pane, modal, context menu, overlay, markdown, `Flow_Layout`, and `Fit_Column` - remain explicit by design.
+Ordinary leaf widgets and simple presentation components have facade forms. Application-owned composition protocols - listbox, pane, modal, context menu, overlay, markdown, `Flow_Layout`, `Fit_Column`, and `Grid` - remain explicit by design.
 
 No procedure that takes a `^Ui` carries a `ui_` prefix. `scripts/check_ui_api_layers.py` parses multiline declarations and enforces the category rules. The `ui_frame_*` and `ui_runtime_*` families are frame/runtime accessors and keep their prefix.
 
@@ -57,6 +57,10 @@ ui.end(&form)
 ```
 
 Ordinary `row_begin` and `column_begin` consume intrinsic child sizes. Flex variants resolve a bounded logical `Track` sequence up front. `fit(120)` is a caller-supplied basis; it does not measure later children. A nested container consumes exactly one parent slot before opening its own frame.
+
+Flex containers optionally take `justify` (`Main_Align`: `Start`, `Center`, `End`, `Space_Between`) to pack the resolved run along the main axis. Justification is a flex-only feature because only a declared run knows its total size before any child draws; free space exists only when no uncapped `grow` track absorbed it.
+
+`end` returns the physical coordinate where the consumed content ends, including any trailing `space` token. Sections that chain on the explicit tier finish with `ui.space(u, .LG); return ui.end(u)` instead of re-deriving the cursor and adding a magic pad. For a root inside a scrolling pane, pass `ROOT_EXTENT_OPEN` as the root height: the pane owns the vertical bound, and `end` reports the extent `pane_end` needs.
 
 Interactive facade widgets require caller-derived stable IDs. Labels are presentation and accessibility data, never identity.
 
@@ -104,6 +108,21 @@ content := ui.flow_end(&flow)
 
 One flow accepts at most `MAX_FLOW_ITEMS` items. Chunk or virtualize larger collections. `MAX_LAYOUT_FLEX` bounds one pre-resolved flex sequence, not ordinary slots, fit columns, or flow declarations.
 
+## Explicit grid
+
+`Grid` places caller-drawn cells on a fixed column count with a uniform row height, in row-major order. Column widths come from cumulative division, so every row spans the bounds exactly and no call site does per-cell x/y arithmetic. Gaps that do not fit a narrow bounds collapse cells to invisible (`slot_visible` is false) instead of trapping.
+
+```odin
+grid: ui.Grid
+ui.grid_begin(&grid, bounds, cols, row_h, gap, gap)
+for item in items {
+	draw_item(ui.grid_next(&grid), item)
+}
+content := ui.grid_end(&grid)
+```
+
+One grid accepts at most `MAX_GRID_ITEMS` cells; chunk or virtualize larger collections.
+
 ## Measurement and explicit geometry
 
 Intrinsic measurement is explicit: pass measured text or component extents to `fit`, `flow_next`, or `fit_column_next`. This keeps layout single-pass and avoids recursive measurement.
@@ -114,4 +133,4 @@ Intrinsic measurement is explicit: pass measured text or component extents to `f
 
 Use rect-based `*_at` for canvases, scroll-offset content, overlays, custom hit regions, and geometry whose exact placement is application behavior. Both facade and explicit entry points share interaction, focus, semantics, and paint; they differ only in who supplies the rectangle.
 
-`Flow_Layout` and `Fit_Column` have no facade entry point by design: both exist so the caller can drive placement itself, which is the opposite of what carving a slot from a container does.
+`Flow_Layout`, `Fit_Column`, and `Grid` have no facade entry point by design: all exist so the caller can drive placement itself, which is the opposite of what carving a slot from a container does.
