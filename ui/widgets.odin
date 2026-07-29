@@ -729,8 +729,8 @@ button :: proc {
 btn_slot_px :: proc(u: ^Ui, label: string) -> Rect_I32 {
 	assert(u != nil && u.frame != nil, "btn_slot_px: invalid UI")
 	metrics := ui_frame_metrics(u.frame)
-	label_c := strings.clone_to_cstring(label, context.temp_allocator)
-	width := measure_text_frame(u.frame, label_c, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
+	width :=
+		measure_text_string_frame(u.frame, label, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
 	assert(width > 0, "btn_slot_px: invalid width")
 	return slot_next_px(u, width, metrics.ROW_H_MD)
 }
@@ -738,14 +738,16 @@ btn_slot_px :: proc(u: ^Ui, label: string) -> Rect_I32 {
 // Fit a button label to the button box: truncate with an ellipsis when it is
 // too wide, and return the drawn text plus its measured width for centring.
 @(private = "file")
-btn_label_fit :: proc(frame: ^Ui_Frame, label: string, w, font_size: i32) -> (cstring, i32) {
+btn_label_fit :: proc(frame: ^Ui_Frame, label: string, w, font_size: i32) -> (string, i32) {
 	assert(frame != nil, "btn_label_fit: nil frame")
 	assert(font_size > 0, "btn_label_fit: non-positive font size")
 	assert(label != "", "btn_label_fit: empty label")
 	pad := ui_frame_metrics(frame).CONTROL_GAP
-	fitted := truncate_to_width_frame(frame, label, max(w - pad * 2, 0), font_size)
-	text_c := strings.clone_to_cstring(fitted, context.temp_allocator)
-	return text_c, measure_text_frame(frame, text_c, font_size)
+	avail := max(w - pad * 2, 0)
+	width := measure_text_string_frame(frame, label, font_size)
+	if width <= avail do return label, width
+	fitted := truncate_to_width_frame(frame, label, avail, font_size)
+	return fitted, measure_text_string_frame(frame, fitted, font_size)
 }
 
 // btn_sync_web_submit mirrors a button into the browser form overlay (web
@@ -842,8 +844,8 @@ button_at :: proc(
 		draw_focus_ring(frame, x, y, w, h)
 	}
 
-	label_c, text_w := btn_label_fit(frame, label, w, fs)
-	draw_text_frame(frame, label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+	label_s, text_w := btn_label_fit(frame, label, w, fs)
+	draw_text_string_frame(frame, label_s, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
@@ -930,8 +932,8 @@ button_at_state :: proc(
 		)
 	}
 	if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
-	label_c, text_w := btn_label_fit(frame, label, w, fs)
-	draw_text_frame(frame, label_c, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+	label_s, text_w := btn_label_fit(frame, label, w, fs)
+	draw_text_string_frame(frame, label_s, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
 	semantic_push(frame, .Button, rect, label, sem, focus, widget = widget)
@@ -1106,6 +1108,18 @@ text_measure_width :: proc(measure: Text_Measure, text: cstring, font_size: i32)
 	return measure_text_with(measure.system, text, font_size)
 }
 
+// text_measure_width_string measures a string without forcing a cstring clone
+// on the frame path; the legacy Text_System path still clones because its
+// measure entry point takes a cstring.
+@(private)
+text_measure_width_string :: proc(measure: Text_Measure, text: string, font_size: i32) -> i32 {
+	assert(measure.frame != nil || measure.system != nil, "text_measure_width_string: no measurer")
+	assert(font_size > 0, "text_measure_width_string: non-positive font size")
+	if measure.frame != nil do return measure_text_string_frame(measure.frame, text, font_size)
+	text_c := strings.clone_to_cstring(text, context.temp_allocator)
+	return measure_text_with(measure.system, text_c, font_size)
+}
+
 // Return text truncated with an ellipsis on `side` so it fits max_width.
 // The returned string is allocated in the temp allocator (or is the input
 // unchanged when it already fits).
@@ -1119,20 +1133,17 @@ truncate_to_width_dir_measure :: proc(
 	assert(max_width >= 0, "truncate_to_width_dir: negative width")
 	assert(font_size > 0, "truncate_to_width_dir: non-positive font size")
 	if len(text) == 0 do return text
-	full_c := strings.clone_to_cstring(text, context.temp_allocator)
-	if text_measure_width(measure, full_c, font_size) <= max_width {
+	if text_measure_width_string(measure, text, font_size) <= max_width {
 		return text
 	}
-	ell_c := strings.clone_to_cstring("…", context.temp_allocator)
-	avail := max_width - text_measure_width(measure, ell_c, font_size)
+	avail := max_width - text_measure_width_string(measure, "…", font_size)
 	if side == .Tail {
 		// Walk runes forward accumulating width until we run out of room.
 		end := 0
 		for end < len(text) {
 			next_i := end + 1
 			for next_i < len(text) && (text[next_i] & 0xC0) == 0x80 do next_i += 1
-			seg_c := strings.clone_to_cstring(text[:next_i], context.temp_allocator)
-			if text_measure_width(measure, seg_c, font_size) > avail do break
+			if text_measure_width_string(measure, text[:next_i], font_size) > avail do break
 			end = next_i
 		}
 		return strings.concatenate({text[:end], "…"}, context.temp_allocator)
@@ -1142,8 +1153,7 @@ truncate_to_width_dir_measure :: proc(
 	for start > 0 {
 		prev := start - 1
 		for prev > 0 && (text[prev] & 0xC0) == 0x80 do prev -= 1
-		seg_c := strings.clone_to_cstring(text[prev:], context.temp_allocator)
-		if text_measure_width(measure, seg_c, font_size) > avail do break
+		if text_measure_width_string(measure, text[prev:], font_size) > avail do break
 		start = prev
 	}
 	return strings.concatenate({"…", text[start:]}, context.temp_allocator)

@@ -139,22 +139,42 @@ draw_text_with :: proc(system: ^Text_System, text: cstring, x, y, size: i32, col
 	assert(system != nil)
 }
 
-draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color: Color) {
-	assert(frame != nil, "draw_text_frame: nil frame")
-	assert(size > 0, "draw_text_frame: invalid size")
+@(private)
+frame_font_for_size :: proc(frame: ^Ui_Frame, size: i32) -> Font_Id {
+	assert(frame != nil, "frame_font_for_size: nil frame")
+	assert(size > 0, "frame_font_for_size: invalid size")
+	if size == frame.font_memo_size do return frame.font_memo_id
 	font := Font_Id(0)
-	if size == frame.font_memo_size {
-		font = frame.font_memo_id
-	} else if text_backend_valid(frame.runtime.text_backend) {
+	if text_backend_valid(frame.runtime.text_backend) {
 		font = text_backend_font(frame.runtime.text_backend, size)
 		frame.font_memo_size = size
 		frame.font_memo_id = font
 	}
+	return font
+}
+
+draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color: Color) {
+	assert(frame != nil, "draw_text_frame: nil frame")
+	assert(size > 0, "draw_text_frame: invalid size")
+	font := frame_font_for_size(frame, size)
 	assert(
 		frame.output == nil || font != 0,
 		"draw_text_frame: paint output requires a text backend",
 	)
 	draw_cstring_command(frame, text, x, y, size, color, font)
+}
+
+// draw_text_string_frame is draw_text_frame for string labels: it skips the
+// cstring clone the cstring entry point would otherwise force on callers.
+draw_text_string_frame :: proc(frame: ^Ui_Frame, text: string, x, y, size: i32, color: Color) {
+	assert(frame != nil, "draw_text_string_frame: nil frame")
+	assert(size > 0, "draw_text_string_frame: invalid size")
+	font := frame_font_for_size(frame, size)
+	assert(
+		frame.output == nil || font != 0,
+		"draw_text_string_frame: paint output requires a text backend",
+	)
+	draw_text_command(frame, text, x, y, size, color, font)
 }
 
 MEASURE_CACHE_MAX :: 8192
@@ -219,7 +239,7 @@ measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
 	assert(frame != nil, "measure_text_frame: nil frame")
 	assert(size > 0, "measure_text_frame: invalid size")
 	if text_backend_valid(frame.runtime.text_backend) {
-		font := text_backend_font(frame.runtime.text_backend, size)
+		font := frame_font_for_size(frame, size)
 		measurement := text_backend_measure(
 			frame.runtime.text_backend,
 			font,
@@ -230,6 +250,20 @@ measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
 		return i32(measurement.x + 0.5)
 	}
 	return measure_text_with(ui_frame_text(frame), text, size)
+}
+
+// measure_text_string_frame is measure_text_frame for string labels: the
+// backend path measures the string directly with no cstring clone.
+measure_text_string_frame :: proc(frame: ^Ui_Frame, text: string, size: i32) -> i32 {
+	assert(frame != nil, "measure_text_string_frame: nil frame")
+	assert(size > 0, "measure_text_string_frame: invalid size")
+	if text_backend_valid(frame.runtime.text_backend) {
+		font := frame_font_for_size(frame, size)
+		measurement := text_backend_measure(frame.runtime.text_backend, font, text, f32(size), 0)
+		return i32(measurement.x + 0.5)
+	}
+	text_c := strings.clone_to_cstring(text, context.temp_allocator)
+	return measure_text_with(ui_frame_text(frame), text_c, size)
 }
 
 rune_utf8_encode :: proc(value: rune, buf: ^[5]u8) -> int {
