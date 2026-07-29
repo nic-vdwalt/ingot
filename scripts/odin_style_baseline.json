@@ -1,1 +1,6 @@
-{}
+{
+  "examples/api-map/main.odin:map_layout": 142,
+  "examples/api-map/main.odin:map_edges": 188,
+  "examples/api-map/main.odin:api_map_canvas": 116,
+  "ui/date_picker.odin:date_picker_popup": 142
+}

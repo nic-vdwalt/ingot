@@ -491,12 +491,7 @@ map_box :: proc(
 		map_pill(frame, rect.x + rect.w - m.sm - pill_w, rect.y + m.sm - m.xs / 2, pill)
 	}
 	origin := ui.frame_pane_origin(frame)
-	title_rect := ui.Rect_I32 {
-		rect.x + i32(origin.x),
-		rect.y + i32(origin.y),
-		rect.w,
-		m.head_h,
-	}
+	title_rect := ui.Rect_I32{rect.x + i32(origin.x), rect.y + i32(origin.y), rect.w, m.head_h}
 	viewport := ui.frame_viewport(frame)
 	ui.tooltip_wrapped_at(
 		frame,
@@ -692,7 +687,8 @@ map_layout :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> (l: Map_Layout, total_h
 		col_w - m.sm * 3,
 	)
 	strip_w := min(
-		map_text_w(frame, "ui.Ui form", "facade widgets", "*_at islands", "explicit UI") + m.md * 2,
+		map_text_w(frame, "ui.Ui form", "facade widgets", "*_at islands", "explicit UI") +
+		m.md * 2,
 		(flow_w - m.lg) / 2,
 	)
 
@@ -702,15 +698,7 @@ map_layout :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> (l: Map_Layout, total_h
 	zone_foot := m.label + m.xs * 2
 	output_h := m.head_h + m.mini_h + m.sm
 	session_h :=
-		m.head_h +
-		m.xs +
-		m.card_h +
-		m.arrow_h +
-		output_h +
-		zone_foot +
-		m.arrow_h +
-		m.card_h +
-		m.sm
+		m.head_h + m.xs + m.card_h + m.arrow_h + output_h + zone_foot + m.arrow_h + m.card_h + m.sm
 	app_h := m.head_h + m.xs + m.card_h + m.arrow_h + session_h + m.sm
 	caller_h := m.head_h + app_h + m.sm
 	total_h = caller_h + m.arrow_h + m.card_h + m.xs + m.pill_h + m.md * 2
@@ -779,10 +767,7 @@ map_layout :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> (l: Map_Layout, total_h
 	}
 	assert(l.zone.x > l.runtime.x + l.runtime.w, "map_layout: zone covers retained state")
 	assert(l.zone.y >= l.session.y + m.head_h, "map_layout: zone reaches the title row")
-	assert(
-		l.col_capture > l.zone.x + l.zone.w,
-		"map_layout: capture corridor crosses the zone",
-	)
+	assert(l.col_capture > l.zone.x + l.zone.w, "map_layout: capture corridor crosses the zone")
 	assert(l.col_capture < inner_x + inner_w, "map_layout: capture corridor escapes session")
 
 	// ingot:gfx is the backend under everything the caller owns, so it spans
@@ -917,17 +902,17 @@ map_edges :: proc(frame: ^ui.Ui_Frame, l: Map_Layout) {
 	map_edge(
 		frame,
 		{
-			x = l.col_main,
+			x      = l.col_main,
 			from_y = l.output.y + l.output.h,
-			to_y = l.adapter.y,
-			color = theme.fg_user,
-			head = true,
-			phase = 4,
-			label = "live",
-			right = false,
+			to_y   = l.adapter.y,
+			color  = theme.fg_user,
+			head   = true,
+			phase  = 4,
+			label  = "live",
+			right  = false,
 			// The corridor ends at the semantics run, which passes through
 			// the same strip on its way down to the adapter.
-			space = l.col_main - l.col_sem - m.lg,
+			space  = l.col_main - l.col_sem - m.lg,
 		},
 	)
 	map_edge(
@@ -1064,7 +1049,15 @@ api_map_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr)
 		pill = "custom loop only",
 	)
 	map_zone(frame, l)
-	map_box(frame, state, l.output, "ui.Ui_Output", TIP_OUTPUT, theme.bg_secondary, phases = {3, 4, 5})
+	map_box(
+		frame,
+		state,
+		l.output,
+		"ui.Ui_Output",
+		TIP_OUTPUT,
+		theme.bg_secondary,
+		phases = {3, 4, 5},
+	)
 	map_edges(frame, l)
 
 	// Nodes carry the set of steps they take part in, as actor or target, so
@@ -1159,12 +1152,14 @@ map_legend :: proc(u: ^ui.Ui) {
 	}
 	ui.label(
 		u,
-		"boxes \u2192 ownership \u00b7 numbered arrows \u2192 the six steps of one frame \u00b7 dashed \u2192 service or escape hatch \u00b7 tint \u2192 rebuilt each frame",
+		"boxes \u2192 ownership \u00b7 numbered arrows \u2192 the six steps of one frame " +
+		"\u00b7 dashed \u2192 service or escape hatch \u00b7 tint \u2192 rebuilt each frame",
 		color = theme.fg_secondary,
 	)
 	ui.label(
 		u,
-		"Start at the highest tier that fits: App before Session before gfx \u00b7 facade widgets by default, *_at islands only where the app owns geometry",
+		"Start at the highest tier that fits: App before Session before gfx \u00b7 " +
+		"facade widgets by default, *_at islands only where the app owns geometry",
 		color = theme.fg_secondary,
 	)
 }

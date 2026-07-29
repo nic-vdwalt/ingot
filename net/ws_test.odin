@@ -379,7 +379,10 @@ test_ws_handshake_valid_response_accepted :: proc(t: ^testing.T) {
 	key := "dGhlIHNhbXBsZSBub25jZQ=="
 	accept := ws_accept_for_key(key)
 	headers := strings.concatenate(
-		{"UPGRADE: WebSocket\r\nConnection: keep-alive, Upgrade\r\nSec-WebSocket-Accept: ", accept},
+		{
+			"UPGRADE: WebSocket\r\nConnection: keep-alive, Upgrade\r\nSec-WebSocket-Accept: ",
+			accept,
+		},
 		context.temp_allocator,
 	)
 	response := handshake_response("HTTP/1.1 101 Switching Protocols", headers)
@@ -451,7 +454,8 @@ test_ws_handshake_non_101_rejected :: proc(t: ^testing.T) {
 @(test)
 test_ws_handshake_wrong_accept_rejected :: proc(t: ^testing.T) {
 	key := "dGhlIHNhbXBsZSBub25jZQ=="
-	headers := "Upgrade: websocket\r\nConnection: Upgrade\r\n" +
+	headers :=
+		"Upgrade: websocket\r\nConnection: Upgrade\r\n" +
 		"Sec-WebSocket-Accept: bm90LXRoZS1yaWdodC1hbnN3ZXI="
 	response := handshake_response("HTTP/1.1 101 Switching Protocols", headers)
 	testing.expect(t, !ws_handshake_response_valid(response, key))

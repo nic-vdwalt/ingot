@@ -30,10 +30,7 @@ layout_check :: proc(frame: ^ui.Ui_Frame) {
 				l, total := map_layout(frame, 0, 0, physical)
 				assert(total > 0, "layout_check: empty layout")
 				assert(l.gfx.y + l.gfx.h <= total, "layout_check: gfx below canvas")
-				assert(
-					l.runtime.x + l.runtime.w < l.frame_card.x,
-					"layout_check: row 1 overlaps",
-				)
+				assert(l.runtime.x + l.runtime.w < l.frame_card.x, "layout_check: row 1 overlaps")
 				assert(l.frame_card.x + l.frame_card.w < l.input.x, "layout_check: row 1 overlaps")
 				assert(l.form.x + l.form.w < l.explicit.x, "layout_check: declare strip overlaps")
 				assert(

@@ -162,10 +162,10 @@ Widget_State :: struct {
 }
 
 widget_state := Widget_State {
-	check_a        = true,
-	volume         = 40,
+	check_a = true,
+	volume = 40,
 	list_activated = -1,
-	table_sort     = {column = -1},
+	table_sort = {column = -1},
 }
 
 // Generic modal + context menu (Overlay section).
@@ -840,7 +840,12 @@ draw_widget_tabs_table :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widge
 		ui.flex_row_begin(u, row_h, ui.table_tracks(columns, tracks_buffer[:]), align = .Center)
 		draw_widget_table_cell(frame, ui.flex_slot_next(u, row_h), row.widget, false)
 		draw_widget_table_cell(frame, ui.flex_slot_next(u, row_h), row.layer, false)
-		draw_widget_table_cell(frame, ui.flex_slot_next(u, row_h), fmt.tprintf("%d", row.procs), true)
+		draw_widget_table_cell(
+			frame,
+			ui.flex_slot_next(u, row_h),
+			fmt.tprintf("%d", row.procs),
+			true,
+		)
 		ui.flex_row_end(u)
 	}
 
@@ -850,7 +855,12 @@ draw_widget_tabs_table :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widge
 	return end_y + ui.ui_frame_sc(frame, 16)
 }
 
-draw_widget_table_cell :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, label: string, numeric: bool) {
+draw_widget_table_cell :: proc(
+	frame: ^ui.Ui_Frame,
+	rect: ui.Rect_I32,
+	label: string,
+	numeric: bool,
+) {
 	if rect.w <= 0 || rect.h <= 0 do return
 	pad := ui.ui_frame_sc(frame, 4)
 	text_x := rect.x + pad
