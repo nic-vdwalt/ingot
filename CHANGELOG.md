@@ -9,6 +9,23 @@ compatibility, while minor releases may break it. See the
 
 ## Unreleased
 
+### Added
+
+- `combobox`: a searchable dropdown with a filter text field, keyboard
+  navigation, and a bounded overlay popup.
+- `date_picker`: an ISO-date field with a calendar popup, plus pure
+  `calendar_*` helpers (leap years, Zeller weekday, parse/format).
+- `table_header` / `table_tracks` / `Table_Sort`: sortable table headers that
+  share flex tracks with caller-drawn rows.
+- `tab_bar`: a focusable tab strip with an accent underline.
+- `toast_push` / `toasts_draw`: a bounded timed notification queue drawn on
+  the overlay layer.
+- `confirm_dialog`: a modal preset with Cancel / Confirm for destructive
+  actions.
+- A web form backend (`ui_runtime_set_web_form_backend`) so text inputs and
+  submit buttons mirror into real browser form controls again; the graphics
+  adapter installs it automatically.
+
 ## [0.1.1] - 2026-07-28
 
 ### Added
