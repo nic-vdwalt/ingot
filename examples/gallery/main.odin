@@ -21,6 +21,7 @@
 package main
 
 import "core:fmt"
+import "core:slice"
 import "core:strings"
 import "ingot:ui"
 import "ingot:ui_gfx"
@@ -97,10 +98,14 @@ click_count := 0
 headers_open := [3]bool{true, false, false}
 
 Input_State :: struct {
-	ctx:   ui.Ui,
-	name:  ui.Input_Box,
-	pass:  ui.Input_Box,
-	notes: ui.Input_Box,
+	ctx:            ui.Ui,
+	name:           ui.Input_Box,
+	pass:           ui.Input_Box,
+	notes:          ui.Input_Box,
+	combo:          ui.Combobox_State,
+	combo_selected: u64,
+	date:           ui.Date_Picker_State,
+	date_value:     ui.Calendar_Date,
 }
 
 input_state: Input_State
@@ -140,6 +145,7 @@ Widget_State :: struct {
 	ctx:            ui.Ui,
 	progress_ctx:   ui.Ui,
 	kv_ctx:         ui.Ui,
+	data_ctx:       ui.Ui,
 	check_a:        bool,
 	check_b:        bool,
 	radio_choice:   i32,
@@ -151,18 +157,26 @@ Widget_State :: struct {
 	listbox:        ui.Listbox_State,
 	list_selected:  int,
 	list_activated: int,
+	tab_active:     i32,
+	table_sort:     ui.Table_Sort,
 }
 
 widget_state := Widget_State {
 	check_a        = true,
 	volume         = 40,
 	list_activated = -1,
+	table_sort     = {column = -1},
 }
 
 // Generic modal + context menu (Overlay section).
 about_modal: ui.Modal_State
 ctx_menu: ui.Context_Menu_State
 ctx_note := "right-click in this section for a context menu"
+
+// Toasts + confirm dialog (Overlay section). Zero values are ready to use.
+toasts: ui.Toast_State
+confirm: ui.Confirm_Dialog_State
+toast_count := 0
 
 popup_open := false
 shielded_clicks := 0
@@ -217,6 +231,7 @@ input_state_destroy :: proc(state: ^Input_State) {
 	ui.input_box_destroy(&state.name)
 	ui.input_box_destroy(&state.pass)
 	ui.input_box_destroy(&state.notes)
+	ui.combobox_state_destroy(&state.combo)
 }
 
 gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
@@ -482,6 +497,45 @@ draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		ui.ui_frame_theme(frame).fg_secondary,
 	)
 
+	ui.space(&state.ctx, .SM)
+	_ = ui.section_header(&state.ctx, "COMBOBOX (type to filter) + DATE PICKER")
+	languages := []ui.Combobox_Item {
+		{1, "Odin"},
+		{2, "C"},
+		{3, "Zig"},
+		{4, "Rust"},
+		{5, "Go"},
+		{6, "Hare"},
+	}
+	_ = ui.combobox(
+		&state.ctx,
+		"language",
+		&state.combo,
+		languages,
+		&state.combo_selected,
+		"Language\u2026",
+		"Language",
+	)
+	_ = ui.date_picker(
+		&state.ctx,
+		"release",
+		&state.date,
+		&state.date_value,
+		"Release date\u2026",
+		"Release date",
+	)
+	picked := fmt.tprintf(
+		"language id: %d \u00b7 date: %s",
+		state.combo_selected,
+		ui.calendar_format(state.date_value) if ui.calendar_date_valid(state.date_value) else "unset",
+	)
+	ui.label(
+		&state.ctx,
+		picked,
+		ui.ui_frame_metrics(frame).FONT_SIZE_LABEL,
+		ui.ui_frame_theme(frame).fg_secondary,
+	)
+
 	ui.scope_end(&state.ctx)
 	end_y := ui.remaining_rect(&state.ctx).y
 	ui.end(&state.ctx)
@@ -715,8 +769,94 @@ draw_widgets :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	y = draw_widget_progress(frame, x, y, w, state)
 	y = draw_widget_kv_rows(frame, x, y, w, state)
 	y = draw_widget_backend_list(frame, x, y, w, state)
+	y = draw_widget_tabs_table(frame, x, y, w, state)
 	y = draw_widget_truncation_card(frame, x, y, w)
 	return draw_widget_fit_card(frame, x, y, w)
+}
+
+// The tab bar keeps only a caller-owned active index; the table header owns
+// click-to-sort while the caller owns the data, the sorting, and the rows.
+Widget_Table_Row :: struct {
+	widget: string,
+	layer:  string,
+	procs:  i32,
+}
+
+WIDGET_TABLE_ROWS := [5]Widget_Table_Row {
+	{"button", "facade leaf", 2},
+	{"combobox", "facade + popup", 2},
+	{"listbox", "explicit composite", 3},
+	{"toast", "explicit lifecycle", 3},
+	{"chart", "facade wrapper", 6},
+}
+
+widget_table_less :: proc(a, b: Widget_Table_Row) -> bool {
+	sort := widget_state.table_sort
+	lhs, rhs := a, b
+	if sort.descending do lhs, rhs = rhs, lhs
+	switch sort.column {
+	case 0:
+		return lhs.widget < rhs.widget
+	case 1:
+		return lhs.layer < rhs.layer
+	case:
+		return lhs.procs < rhs.procs
+	}
+}
+
+WIDGET_TABLE_COLUMNS := [3]ui.Table_Column {
+	{label = "Widget", track = {kind = .Grow, weight = 1}},
+	{label = "Layer", track = {kind = .Fixed, basis = 150}},
+	{label = "Procs", track = {kind = .Fixed, basis = 60}, numeric = true},
+}
+
+draw_widget_tabs_table :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
+	assert(state != nil, "draw_widget_tabs_table: nil state")
+	u := &state.data_ctx
+	theme := ui.ui_frame_theme(frame)
+	width := min(w, ui.ui_frame_sc(frame, 420))
+	ui.begin(u, frame, {x, y0, width, ui.ui_frame_sc(frame, 380)}, gap = .SM)
+	ui.scope_begin(u, "data")
+
+	_ = ui.section_header(u, "TAB BAR")
+	tabs := []string{"Overview", "Details", "Logs"}
+	_ = ui.tab_bar(u, "tabs", tabs, &state.tab_active)
+	ui.label(
+		u,
+		fmt.tprintf("active tab: %s \u00b7 state is one caller-owned i32", tabs[state.tab_active]),
+		ui.ui_frame_metrics(frame).FONT_SIZE_LABEL,
+		theme.fg_secondary,
+	)
+
+	ui.space(u, .SM)
+	_ = ui.section_header(u, "TABLE (click headers to sort)")
+	columns := WIDGET_TABLE_COLUMNS[:]
+	_ = ui.table_header(u, "table", columns, &state.table_sort)
+	rows := slice.clone(WIDGET_TABLE_ROWS[:], context.temp_allocator)
+	if state.table_sort.column >= 0 do slice.sort_by(rows, widget_table_less)
+	row_h: i32 = 24
+	tracks_buffer: [ui.TABLE_COLUMN_COUNT_MAX]ui.Track
+	for row in rows {
+		ui.flex_row_begin(u, row_h, ui.table_tracks(columns, tracks_buffer[:]), align = .Center)
+		draw_widget_table_cell(frame, ui.flex_slot_next(u, row_h), row.widget, false)
+		draw_widget_table_cell(frame, ui.flex_slot_next(u, row_h), row.layer, false)
+		draw_widget_table_cell(frame, ui.flex_slot_next(u, row_h), fmt.tprintf("%d", row.procs), true)
+		ui.flex_row_end(u)
+	}
+
+	ui.scope_end(u)
+	end_y := ui.remaining_rect(u).y
+	ui.end(u)
+	return end_y + ui.ui_frame_sc(frame, 16)
+}
+
+draw_widget_table_cell :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, label: string, numeric: bool) {
+	if rect.w <= 0 || rect.h <= 0 do return
+	pad := ui.ui_frame_sc(frame, 4)
+	text_x := rect.x + pad
+	if numeric do text_x = rect.x + rect.w - ui.text_width(frame, label, .Label) - pad
+	text_y := rect.y + (rect.h - ui.ui_frame_metrics(frame).FONT_SIZE_LABEL) / 2
+	ui.text(frame, label, text_x, text_y, .Label)
 }
 
 draw_charts :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
@@ -843,13 +983,14 @@ draw_overlay_controls :: proc(frame: ^ui.Ui_Frame, x, y: i32) -> i32 {
 		button_y := y + i32(index) * (button_h + ui.ui_frame_sc(frame, 8))
 		if ui.button_at(frame, {x, button_y, button_w, button_h}, label) do shielded_clicks += 1
 	}
-	info_y := y + 3 * (button_h + ui.ui_frame_sc(frame, 8))
+	info_y := y + 4 * (button_h + ui.ui_frame_sc(frame, 8))
 	summary := fmt.tprintf(
 		"shielded clicks: %d (should not rise while the popup covers them)",
 		shielded_clicks,
 	)
 	ui.text(frame, summary, x, info_y, .Label, .Secondary)
 	action_x := x + button_w + ui.ui_frame_sc(frame, 100)
+	action_step := button_h + ui.ui_frame_sc(frame, 8)
 	if ui.button_at(
 		frame,
 		{action_x, y, ui.ui_frame_sc(frame, 150), button_h},
@@ -860,16 +1001,36 @@ draw_overlay_controls :: proc(frame: ^ui.Ui_Frame, x, y: i32) -> i32 {
 	}
 	if ui.button_at(
 		frame,
-		{action_x, y + button_h + ui.ui_frame_sc(frame, 8), ui.ui_frame_sc(frame, 150), button_h},
+		{action_x, y + action_step, ui.ui_frame_sc(frame, 150), button_h},
 		"Open modal",
 	) {
 		about_modal.open = true
+	}
+	if ui.button_at(
+		frame,
+		{action_x, y + 2 * action_step, ui.ui_frame_sc(frame, 150), button_h},
+		"Push toast",
+	) {
+		toast_count += 1
+		kind := ui.Toast_Kind(toast_count % 3)
+		ui.toast_push(&toasts, kind, fmt.tprintf("Toast %d \u00b7 newest on top", toast_count))
+	}
+	if ui.button_at(
+		frame,
+		{action_x, y + 3 * action_step, ui.ui_frame_sc(frame, 150), button_h},
+		"Delete\u2026",
+		ui.Btn_Style.Danger,
+	) {
+		ui.confirm_dialog_open(&confirm)
 	}
 	return info_y
 }
 
 draw_overlay_context_menu :: proc(frame: ^ui.Ui_Frame, x, info_y: i32) {
-	if ui.is_mouse_button_pressed(frame, .RIGHT) && !ctx_menu.open && !about_modal.open {
+	if ui.is_mouse_button_pressed(frame, .RIGHT) &&
+	   !ctx_menu.open &&
+	   !about_modal.open &&
+	   !confirm.modal.open {
 		mouse := ui.get_mouse_position(frame)
 		ui.context_menu_open(&ctx_menu, i32(mouse.x), i32(mouse.y))
 	}
@@ -947,7 +1108,34 @@ draw_overlay_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		draw_demo_popup(frame, x - ui.ui_frame_sc(frame, 8), y - ui.ui_frame_sc(frame, 8))
 	}
 	draw_overlay_modal(frame)
+	draw_overlay_confirm(frame)
+	root := ui_gfx.app_screen_rect(&app)
+	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
+	ui.toasts_draw(frame, &toasts, root)
 	return info_y + ui.ui_frame_sc(frame, 52)
+}
+
+// draw_overlay_confirm runs the built-in confirm dialog and reports the
+// outcome through a toast, chaining the two lifecycle widgets together.
+draw_overlay_confirm :: proc(frame: ^ui.Ui_Frame) {
+	if !confirm.modal.open do return
+	root := ui_gfx.app_screen_rect(&app)
+	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
+	choice := ui.confirm_dialog(
+		frame,
+		&confirm,
+		"Delete everything?",
+		"confirm_dialog wraps the same modal pair; Escape or a click outside cancels.",
+		"Delete",
+		root,
+	)
+	switch choice {
+	case .Confirmed:
+		ui.toast_push(&toasts, .Error, "Deleted (nothing was actually deleted)")
+	case .Canceled:
+		ui.toast_push(&toasts, .Info, "Delete canceled")
+	case .None:
+	}
 }
 
 // draw_demo_popup records a popup on the overlay layer (drawn above content
