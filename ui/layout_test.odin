@@ -443,3 +443,106 @@ layout_weighted_math_handles_large_valid_values :: proc(t: ^testing.T) {
 	testing.expect_value(t, i64(a.w) + i64(b.w), i64(max(i32)))
 	testing.expect_value(t, i64(b.x) + i64(b.w), i64(max(i32)))
 }
+
+@(test)
+layout_flex_justify_center_and_end_offset_the_run :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 400, 80)
+	push_row(&l, 40, gap = 10)
+	flex_begin(&l, {fixed(50), fixed(50)}, justify = .Center)
+	a := flex_next(&l)
+	b := flex_next(&l)
+	layout_pop(&l)
+	// 400 - 110 run = 290 leftover; centered run starts at 145.
+	testing.expect_value(t, a.x, i32(145))
+	testing.expect_value(t, b.x, i32(205))
+	push_row(&l, 40, gap = 10)
+	flex_begin(&l, {fixed(50), fixed(50)}, justify = .End)
+	c := flex_next(&l)
+	d := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, c.x, i32(290))
+	testing.expect_value(t, d.x + d.w, i32(400))
+}
+
+@(test)
+layout_flex_justify_space_between_sums_exactly :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 313, 40) // leftover deliberately not divisible
+	push_row(&l, 40)
+	flex_begin(&l, {fixed(50), fixed(50), fixed(50)}, justify = .Space_Between)
+	a := flex_next(&l)
+	b := flex_next(&l)
+	c := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, a.x, i32(0))
+	testing.expect_value(t, c.x + c.w, i32(313))
+	// Both between-gaps carry the 163 leftover, split without loss.
+	gap_ab := b.x - (a.x + a.w)
+	gap_bc := c.x - (b.x + b.w)
+	testing.expect_value(t, gap_ab + gap_bc, i32(163))
+	testing.expect(t, abs(gap_ab - gap_bc) <= 1, "shares must differ by at most one pixel")
+}
+
+@(test)
+layout_flex_justify_with_grow_leaves_no_free_space :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 300, 40)
+	push_row(&l, 40)
+	flex_begin(&l, {fixed(60), grow()}, justify = .Space_Between)
+	a := flex_next(&l)
+	b := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	// An uncapped grow track absorbs the free space, so justify is a no-op.
+	testing.expect_value(t, a, Rect_I32{0, 0, 60, 40})
+	testing.expect_value(t, b, Rect_I32{60, 0, 240, 40})
+}
+
+@(test)
+grid_cells_span_bounds_exactly_and_wrap :: proc(t: ^testing.T) {
+	grid: Grid
+	grid_begin(&grid, {10, 20, 313, 0}, cols = 3, row_h = 26, gap_x = 4, gap_y = 6)
+	a := grid_next(&grid)
+	b := grid_next(&grid)
+	c := grid_next(&grid)
+	d := grid_next(&grid)
+	bounds := grid_end(&grid)
+	// 313 - 2 gaps (8) = 305 divided 3 ways; the last cell ends on the edge.
+	testing.expect_value(t, a.w + b.w + c.w, i32(305))
+	testing.expect_value(t, c.x + c.w, i32(323))
+	testing.expect(t, abs(a.w - c.w) <= 1, "cell widths must differ by at most one pixel")
+	testing.expect_value(t, a, Rect_I32{10, 20, a.w, 26})
+	testing.expect_value(t, d, Rect_I32{10, 52, a.w, 26})
+	testing.expect_value(t, bounds, Rect_I32{10, 20, 313, 58})
+}
+
+@(test)
+grid_degrades_on_narrow_bounds_and_reuses_state :: proc(t: ^testing.T) {
+	grid: Grid
+	// Gaps wider than the bounds: cells collapse to invisible, no trap.
+	grid_begin(&grid, {0, 0, 5, 0}, cols = 4, row_h = 10, gap_x = 8)
+	squeezed := grid_next(&grid)
+	_ = grid_end(&grid)
+	testing.expect_value(t, squeezed.w, i32(0))
+	testing.expect(t, !slot_visible(squeezed), "collapsed cell must report invisible")
+	grid_begin(&grid, {2, 3, 100, 0}, cols = 2, row_h = 12)
+	first := grid_next(&grid)
+	second := grid_end(&grid)
+	testing.expect_value(t, first, Rect_I32{2, 3, 50, 12})
+	testing.expect_value(t, second, Rect_I32{2, 3, 100, 12})
+}
+
+@(test)
+grid_empty_and_full_capacity_are_bounded :: proc(t: ^testing.T) {
+	grid: Grid
+	grid_begin(&grid, {0, 0, 100, 0}, cols = 1, row_h = 9)
+	empty := grid_end(&grid)
+	testing.expect_value(t, empty, Rect_I32{0, 0, 100, 0})
+	grid_begin(&grid, {0, 0, 4096, 0}, cols = 64, row_h = 1)
+	for _ in 0 ..< MAX_GRID_ITEMS do _ = grid_next(&grid)
+	bounds := grid_end(&grid)
+	testing.expect_value(t, bounds.h, i32(64))
+}

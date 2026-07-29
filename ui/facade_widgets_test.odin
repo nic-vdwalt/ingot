@@ -172,3 +172,60 @@ facade_widgets_skip_focus_when_slot_collapses :: proc(t: ^testing.T) {
 
 	testing.expect_value(t, u.focus_count, 0)
 }
+
+// The ink variants exist so status call sites name a meaning instead of a
+// palette slot. The resolved color must be the theme field, byte for byte.
+@(test)
+facade_ink_variants_resolve_theme_colors :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	text_backend: Test_Text_Backend_State
+	facade_widget_frame(&runtime, &frame, output, &text_backend)
+	defer ui_runtime_destroy(&runtime)
+	defer ui_frame_destroy(&frame)
+	defer ui_frame_end(&frame)
+
+	u: Ui
+	anim: f32 = 1
+	begin(&u, &frame, {0, 0, 400, 800})
+	_ = status_pill(&u, "ready", Ink.Success)
+	progress_bar(&u, 1, Ink.Success)
+	progress_bar_animated(&u, 1, &anim, Ink.Danger)
+	kv_row(&u, "Renderer", "WebGPU")
+	label(&u, "note", Text_Role.Label, Ink.Secondary)
+	end(&u)
+
+	testing.expect_value(t, u.focus_count, 0)
+	found_success := false
+	for command in output.main.commands[:output.main.count] {
+		if command.color == runtime.style.fg_success do found_success = true
+	}
+	testing.expect(t, found_success, "ink .Success must paint the theme's fg_success")
+}
+
+// label_role and label_sized are one proc group and must consume identical
+// slots, so switching a call site to semantic styling cannot move layout.
+@(test)
+facade_label_role_matches_sized_slot :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	text_backend: Test_Text_Backend_State
+	facade_widget_frame(&runtime, &frame, output, &text_backend)
+	defer ui_runtime_destroy(&runtime)
+	defer ui_frame_destroy(&frame)
+	defer ui_frame_end(&frame)
+
+	u: Ui
+	begin(&u, &frame, {0, 0, 400, 400})
+	label(&u, "alpha")
+	after_sized := remaining_rect(&u)
+	label(&u, "alpha", Text_Role.Body)
+	after_role := remaining_rect(&u)
+	end(&u)
+	testing.expect_value(t, after_role.y - after_sized.y, after_sized.y)
+	testing.expect_value(t, after_sized.y, ui_runtime_metrics(&runtime).LINE_HEIGHT)
+}

@@ -228,6 +228,80 @@ fit_column_end :: proc(column: ^Fit_Column) -> Rect_I32 {
 	return result
 }
 
+// MAX_GRID_ITEMS bounds one grid to fixed work per frame; larger collections
+// belong on the chunked or virtualized paths, matching MAX_FLOW_ITEMS.
+MAX_GRID_ITEMS :: 4096
+
+// Grid places caller-drawn cells on a fixed column count with a uniform row
+// height, in row-major order. Column widths come from cumulative division
+// (like next_weighted), so every row spans the bounds exactly and no call
+// site does per-cell x/y arithmetic. Single pass, no retained children: the
+// caller declares the shape up front and grid_end reports the consumed rect.
+Grid :: struct {
+	bounds:       Rect_I32,
+	cols:         i32,
+	row_h:        i32,
+	gap_x, gap_y: i32,
+	index:        i32,
+	open:         bool,
+}
+
+grid_begin :: proc(
+	grid: ^Grid,
+	bounds: Rect_I32,
+	cols, row_h: i32,
+	gap_x: i32 = 0,
+	gap_y: i32 = 0,
+) {
+	assert(grid != nil, "grid_begin: nil grid")
+	assert(!grid.open, "grid_begin: grid already open")
+	assert(bounds.w >= 0 && bounds.h >= 0, "grid_begin: negative bounds")
+	assert(cols > 0 && cols <= MAX_GRID_ITEMS, "grid_begin: column count out of bounds")
+	assert(row_h >= 0 && gap_x >= 0 && gap_y >= 0, "grid_begin: negative dimension")
+	assert(i64(bounds.x) + i64(bounds.w) <= i64(max(i32)), "grid_begin: horizontal overflow")
+	grid^ = Grid {
+		bounds = bounds,
+		cols   = cols,
+		row_h  = row_h,
+		gap_x  = gap_x,
+		gap_y  = gap_y,
+		open   = true,
+	}
+}
+
+// grid_next returns the next cell in row-major order. Gaps that do not fit a
+// narrow bounds clamp the shared content width to zero instead of trapping,
+// so a squeezed window degrades to invisible cells (slot_visible is false).
+grid_next :: proc(grid: ^Grid) -> Rect_I32 {
+	assert(grid != nil && grid.open, "grid_next: grid not open")
+	assert(grid.index < MAX_GRID_ITEMS, "grid_next: too many items")
+	col := i64(grid.index % grid.cols)
+	row := i64(grid.index / grid.cols)
+	content_w := max(i64(grid.bounds.w) - i64(grid.gap_x) * i64(grid.cols - 1), 0)
+	x0 := col * content_w / i64(grid.cols)
+	x1 := (col + 1) * content_w / i64(grid.cols)
+	x := i64(grid.bounds.x) + x0 + col * i64(grid.gap_x)
+	y := i64(grid.bounds.y) + row * (i64(grid.row_h) + i64(grid.gap_y))
+	assert(x + (x1 - x0) <= i64(max(i32)), "grid_next: horizontal overflow")
+	assert(y + i64(grid.row_h) <= i64(max(i32)), "grid_next: vertical overflow")
+	grid.index += 1
+	return Rect_I32{i32(x), i32(y), i32(x1 - x0), grid.row_h}
+}
+
+// grid_end reports the content rect the placed cells consumed and closes the
+// grid for reuse.
+grid_end :: proc(grid: ^Grid) -> Rect_I32 {
+	assert(grid != nil && grid.open, "grid_end: grid not open")
+	assert(grid.index >= 0 && grid.index <= MAX_GRID_ITEMS, "grid_end: corrupt grid")
+	rows := i64((grid.index + grid.cols - 1) / grid.cols)
+	content_h: i64
+	if rows > 0 do content_h = rows * i64(grid.row_h) + (rows - 1) * i64(grid.gap_y)
+	assert(i64(grid.bounds.y) + content_h <= i64(max(i32)), "grid_end: content overflow")
+	result := Rect_I32{grid.bounds.x, grid.bounds.y, grid.bounds.w, i32(content_h)}
+	grid.open = false
+	return result
+}
+
 Layout_Kind :: enum u8 {
 	Column, // children stack vertically; main axis = y
 	Row, // children stack horizontally; main axis = x
@@ -238,6 +312,16 @@ Cross_Align :: enum u8 {
 	Start,
 	Center,
 	End,
+}
+
+// Main_Align packs a declared flex run along the main axis. It only applies
+// to flex containers because only a declared run knows its total size before
+// any child is drawn; ordinary cursor rows would need a second pass.
+Main_Align :: enum u8 {
+	Start, // pack at the cursor (default)
+	Center, // center the run inside the free space
+	End, // pack against the far edge
+	Space_Between, // distribute the free space between siblings
 }
 
 Space :: enum u8 {
@@ -290,6 +374,9 @@ Layout_Frame :: struct {
 	flex_sizes:   [MAX_LAYOUT_FLEX]i32,
 	flex_count:   i32,
 	flex_index:   i32,
+	// Space_Between leftover, distributed between flex siblings by cumulative
+	// division so the shares sum exactly.
+	flex_between: i32,
 }
 
 // Layout is caller-owned per-frame scratch state; zero value is ready to use.
@@ -424,7 +511,9 @@ layout_pop :: proc(l: ^Layout) {
 }
 
 // flex_begin resolves one bounded sibling sequence before any child is drawn.
-flex_begin :: proc(l: ^Layout, sizes: []Track) {
+// justify packs the resolved run along the main axis; free space only exists
+// when no uncapped grow track absorbed it.
+flex_begin :: proc(l: ^Layout, sizes: []Track, justify: Main_Align = .Start) {
 	assert(l.depth > 0, "flex_begin: layout not begun")
 	assert(len(sizes) > 0 && len(sizes) <= MAX_LAYOUT_FLEX, "flex_begin: count out of bounds")
 	f := _top(l)
@@ -434,6 +523,7 @@ flex_begin :: proc(l: ^Layout, sizes: []Track) {
 	space_i64 := max(i64(_main_extent(f^)) - i64(f.cursor) - gap_total, i64(0))
 	space := i32(min(space_i64, i64(max(i32))))
 	_flex_resolve(f, sizes, space)
+	_flex_justify(f, space, justify)
 }
 
 // flex_end closes a declared run. flex_next_sized auto-terminates a fully
@@ -446,6 +536,7 @@ flex_end :: proc(l: ^Layout) {
 	assert(f.flex_index == f.flex_count, "flex_end: declared flex sizes not fully consumed")
 	f.flex_count = 0
 	f.flex_index = 0
+	f.flex_between = 0
 }
 
 layout_flex_active :: proc(l: ^Layout) -> bool {
@@ -476,11 +567,20 @@ flex_next_sized :: proc(l: ^Layout, cross_size: i32) -> Rect_I32 {
 	assert(cross_size >= 0, "flex_next_sized: negative cross size")
 	f := _top(l)
 	assert(f.flex_index < f.flex_count, "flex_next_sized: no flex size available")
+	if f.flex_between > 0 && f.flex_index > 0 {
+		// Cumulative division over the gaps so the shares sum exactly to the
+		// leftover recorded by flex_begin.
+		gaps := i64(f.flex_count - 1)
+		before := (i64(f.flex_index) - 1) * i64(f.flex_between) / gaps
+		after := i64(f.flex_index) * i64(f.flex_between) / gaps
+		spacer(l, i32(after - before))
+	}
 	size := f.flex_sizes[f.flex_index]
 	f.flex_index += 1
 	if f.flex_index == f.flex_count {
 		f.flex_count = 0
 		f.flex_index = 0
+		f.flex_between = 0
 	}
 	return next_sized(l, size, cross_size)
 }
@@ -628,6 +728,32 @@ next_weighted :: proc(l: ^Layout, weight: i32) -> Rect_I32 {
 		f.weight_acc = 0
 	}
 	return next(l, i32(after - before))
+}
+
+// _flex_justify packs a freshly resolved run along the main axis. Center and
+// End advance the cursor once; Space_Between records the leftover so
+// flex_next_sized can distribute it between siblings.
+@(private = "file")
+_flex_justify :: proc(f: ^Layout_Frame, space: i32, justify: Main_Align) {
+	assert(f != nil, "_flex_justify: nil frame")
+	assert(space >= 0 && f.flex_count > 0, "_flex_justify: invalid input")
+	f.flex_between = 0
+	if justify == .Start do return
+	total: i64
+	for size in f.flex_sizes[:f.flex_count] do total += i64(size)
+	leftover := i32(clamp(i64(space) - total, 0, i64(max(i32))))
+	if leftover == 0 do return
+	switch justify {
+	case .Start:
+	case .Center:
+		f.cursor += leftover / 2
+	case .End:
+		f.cursor += leftover
+	case .Space_Between:
+		// A single sibling has no between-gaps; pack it at the start.
+		if f.flex_count > 1 do f.flex_between = leftover
+	}
+	assert(f.cursor >= 0, "_flex_justify: corrupt cursor")
 }
 
 @(private = "file")

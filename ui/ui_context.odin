@@ -312,6 +312,13 @@ begin :: proc(u: ^Ui, frame: ^Ui_Frame, rect: Rect_I32, gap: Space = .None) {
 	_open(u, rect.x, rect.y, rect.w, rect.h, space_px(u, gap))
 }
 
+// ROOT_EXTENT_OPEN is the root height for a Ui laid out inside a scrolling
+// pane, where the pane - not the root rectangle - owns the vertical bound.
+// It replaces per-call-site "big enough" magic heights while keeping every
+// derived coordinate far from i32 overflow; end reports the extent the
+// content actually consumed, which is what pane_end needs.
+ROOT_EXTENT_OPEN :: i32(1 << 20)
+
 // _open is the physical-pixel root. Only begin may call it, so the facade has
 // exactly one entry and the open_roots balance can never be bypassed.
 @(private = "file")
@@ -335,10 +342,16 @@ _open :: proc(u: ^Ui, x, y, w, h: i32, gap: i32) {
 }
 
 // end closes the root, rebuilds the focus order, and releases the frame root.
-end :: proc(u: ^Ui) {
+// It returns the physical y where the consumed content ends (including any
+// trailing space token), so sections chain without re-deriving the cursor:
+//
+//	ui.space(u, .LG)
+//	return ui.end(u)
+end :: proc(u: ^Ui) -> i32 {
 	assert(u != nil && u.open, "end: frame not open")
 	assert(u.ids.depth == 0, "end: unbalanced id scope")
 	assert(u.layout.depth == 1, "end: unbalanced layout container")
+	content_end := remaining(&u.layout).y
 	layout_end(&u.layout)
 	if u.focus_state.active != FOCUS_ID_NONE &&
 	   focus_order_index(u.focus_cur[:u.focus_seq], u.focus_state.active) < 0 {
@@ -352,6 +365,7 @@ end :: proc(u: ^Ui) {
 		u.frame.open_roots -= 1
 		u.frame = nil
 	}
+	return content_end
 }
 
 // focus registers one stable control in this frame's traversal order.
@@ -496,10 +510,10 @@ flex_slot_next :: proc(u: ^Ui, cross_size: i32) -> Rect_I32 {
 
 // flex_begin_px resolves sibling main-axis sizes already in device pixels.
 @(private = "package")
-flex_begin_px :: proc(u: ^Ui, sizes: []Track) {
+flex_begin_px :: proc(u: ^Ui, sizes: []Track, justify: Main_Align = .Start) {
 	assert(u != nil, "flex_begin_px: nil Ui")
 	assert(u.open, "flex_begin_px: frame not open")
-	flex_begin(&u.layout, sizes)
+	flex_begin(&u.layout, sizes, justify)
 }
 
 // flex_slot_px consumes one flex size and honors active cross-axis alignment.
@@ -532,7 +546,7 @@ track_px :: proc(u: ^Ui, track: Track) -> Track {
 }
 
 @(private = "file")
-flex_begin_tracks :: proc(u: ^Ui, tracks: []Track) {
+flex_begin_tracks :: proc(u: ^Ui, tracks: []Track, justify: Main_Align = .Start) {
 	assert(u != nil && u.open, "flex_begin_tracks: frame not open")
 	assert(len(tracks) > 0, "flex_begin_tracks: empty tracks")
 	assert(len(tracks) <= MAX_LAYOUT_FLEX, "flex_begin_tracks: too many tracks")
@@ -540,7 +554,7 @@ flex_begin_tracks :: proc(u: ^Ui, tracks: []Track) {
 	for track, index in tracks {
 		sizes[index] = track_px(u, track)
 	}
-	flex_begin(&u.layout, sizes[:len(tracks)])
+	flex_begin(&u.layout, sizes[:len(tracks)], justify)
 }
 
 @(private = "file")
@@ -649,9 +663,10 @@ flex_row_begin :: proc(
 	tracks: []Track,
 	gap: Space = .None,
 	align: Cross_Align = .Stretch,
+	justify: Main_Align = .Start,
 ) {
 	row_begin(u, height, gap, align)
-	flex_begin_tracks(u, tracks)
+	flex_begin_tracks(u, tracks, justify)
 }
 
 flex_row_end :: proc(u: ^Ui) {
@@ -680,9 +695,10 @@ flex_column_begin :: proc(
 	tracks: []Track,
 	gap: Space = .None,
 	align: Cross_Align = .Stretch,
+	justify: Main_Align = .Start,
 ) {
 	column_begin(u, width, gap, align)
-	flex_begin_tracks(u, tracks)
+	flex_begin_tracks(u, tracks, justify)
 }
 
 flex_column_end :: proc(u: ^Ui) {
@@ -717,19 +733,42 @@ separator :: proc(u: ^Ui) {
 }
 
 // label draws a plain text line, carving its own slot and semantic node.
-label :: proc(u: ^Ui, text: string, font_size: i32 = 0, color: Color = {}) {
+// label_sized takes an explicit physical size and raw color for callers that
+// need values the semantic enums do not name.
+label_sized :: proc(u: ^Ui, text: string, font_size: i32 = 0, color: Color = {}) {
 	assert(u.open && u.frame != nil, "label: frame not open")
 	metrics := ui_frame_metrics(u.frame)
 	fs := font_size if font_size > 0 else metrics.FONT_SIZE_BODY
 	col := color if color.a > 0 else ui_frame_theme(u.frame).fg_primary
+	_label_px(u, text, fs, col)
+}
+
+// label_role resolves a typographic role and semantic ink against the active
+// metrics and theme, so call sites stop re-deriving FONT_SIZE_* + fg_* pairs.
+label_role :: proc(u: ^Ui, text: string, role: Text_Role, ink: Ink = .Primary) {
+	assert(u != nil && u.open, "label: frame not open")
+	assert(u.frame != nil, "label: nil frame")
+	_label_px(u, text, text_role_size(u.frame, role), text_ink(u.frame, ink))
+}
+
+label :: proc {
+	label_sized,
+	label_role,
+}
+
+@(private = "file")
+_label_px :: proc(u: ^Ui, text: string, font_size: i32, color: Color) {
+	assert(u != nil && u.open, "_label_px: frame not open")
+	assert(font_size > 0 && color.a > 0, "_label_px: unresolved style")
+	metrics := ui_frame_metrics(u.frame)
 	text_c := strings.clone_to_cstring(text, context.temp_allocator)
-	r := slot_next_px(u, measure_text_frame(u.frame, text_c, fs), metrics.LINE_HEIGHT)
+	r := slot_next_px(u, measure_text_frame(u.frame, text_c, font_size), metrics.LINE_HEIGHT)
 	if !slot_visible(r) {
 		_ = ui_frame_drop_degenerate(u.frame, true)
 		return
 	}
 	begin_scissor_mode(u.frame, r.x, r.y, r.w, r.h)
-	draw_text_frame(u.frame, text_c, r.x, r.y + (r.h - fs) / 2, fs, col)
+	draw_text_frame(u.frame, text_c, r.x, r.y + (r.h - font_size) / 2, font_size, color)
 	end_scissor_mode(u.frame)
 	semantic_push(u.frame, .Label, r, text, {})
 }

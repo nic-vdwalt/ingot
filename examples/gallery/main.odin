@@ -292,7 +292,7 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, top, sh: i32) {
 	ui.begin(u, frame, {0, top, w, sh - top}, gap = .XS)
 	ui.padding(u, .SM)
 	ui.scope_begin(u, "navigation")
-	ui.label(u, "ingot gallery", ui.ui_frame_metrics(frame).FONT_SIZE_TITLE)
+	ui.label(u, "ingot gallery", ui.Text_Role.Title)
 	ui.separator(u)
 	for s in Section {
 		style := ui.Btn_Style.Primary if s == section else .Ghost
@@ -378,18 +378,17 @@ draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
 	u := &badge_ui
 	ui.begin(u, frame, {x, y, w, ui.ui_frame_sc(frame, 44)}, gap = .XS)
 	ui.row_begin(u, 28, gap = .SM, align = .Center)
-	_ = ui.status_pill(u, SECTION_LAYERS[section], ui.ui_frame_theme(frame).fg_accent)
-	ui.label(u, SECTION_AXES[section], color = ui.ui_frame_theme(frame).fg_secondary)
+	_ = ui.status_pill(u, SECTION_LAYERS[section], ui.Ink.Accent)
+	ui.label(u, SECTION_AXES[section], ui.Text_Role.Body, ui.Ink.Secondary)
 	ui.row_end(u)
-	end_y := ui.remaining_rect(u).y
-	ui.end(u)
-	return end_y + ui.ui_frame_sc(frame, 8)
+	ui.space(u, .SM)
+	return ui.end(u)
 }
 
 draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	assert(frame != nil, "draw_buttons: nil frame")
 	u := &buttons_ui
-	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, 620)}, gap = .SM)
+	ui.begin(u, frame, {x, y0, w, ui.ROOT_EXTENT_OPEN}, gap = .SM)
 	ui.scope_begin(u, "buttons")
 	_ = ui.section_header(u, "BUTTON STYLES")
 	ui.row_begin(u, 32, gap = .SM)
@@ -403,11 +402,7 @@ draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	if ui.icon_btn(u, ui.id(u, "close"), "\u2715") do click_count += 1
 	if ui.back_btn(u, ui.id(u, "back"), "Back") do click_count += 1
 	ui.row_end(u)
-	ui.label(
-		u,
-		fmt.tprintf("clicks: %d", click_count),
-		color = ui.ui_frame_theme(frame).fg_secondary,
-	)
+	ui.label(u, fmt.tprintf("clicks: %d", click_count), ui.Text_Role.Body, ui.Ink.Secondary)
 
 	_ = ui.section_header(u, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
 	ui.row_begin(u, 32, gap = .SM)
@@ -428,17 +423,12 @@ draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 			{icon = 0x25C6, right_label = "Details"},
 		)
 		if headers_open[i] {
-			ui.label(
-				u,
-				"Collapsed state is caller-owned.",
-				color = ui.ui_frame_theme(frame).fg_secondary,
-			)
+			ui.label(u, "Collapsed state is caller-owned.", ui.Text_Role.Body, ui.Ink.Secondary)
 		}
 	}
 	ui.scope_end(u)
-	end_y := ui.remaining_rect(u).y
-	ui.end(u)
-	return end_y + ui.ui_frame_sc(frame, 16)
+	ui.space(u, .LG)
+	return ui.end(u)
 }
 
 draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
@@ -450,7 +440,7 @@ draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	iw := min(w, ui.ui_frame_sc(frame, 420))
 
 	state := &input_state
-	ui.begin(&state.ctx, frame, {x, y, iw, ui.ui_frame_sc(frame, 600)}, gap = .SM)
+	ui.begin(&state.ctx, frame, {x, y, iw, ui.ROOT_EXTENT_OPEN}, gap = .SM)
 	// One scope per section: identity is composed, never hand-numbered, so
 	// adding or reordering a field cannot move focus to a different control.
 	ui.scope_begin(&state.ctx, "inputs")
@@ -490,12 +480,7 @@ draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		ui.input_box_text(&state.name),
 		len(ui.input_box_text(&state.notes)),
 	)
-	ui.label(
-		&state.ctx,
-		summary,
-		ui.ui_frame_metrics(frame).FONT_SIZE_LABEL,
-		ui.ui_frame_theme(frame).fg_secondary,
-	)
+	ui.label(&state.ctx, summary, ui.Text_Role.Label, ui.Ink.Secondary)
 
 	ui.space(&state.ctx, .SM)
 	_ = ui.section_header(&state.ctx, "COMBOBOX (type to filter) + DATE PICKER")
@@ -529,17 +514,11 @@ draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		state.combo_selected,
 		ui.calendar_format(state.date_value) if ui.calendar_date_valid(state.date_value) else "unset",
 	)
-	ui.label(
-		&state.ctx,
-		picked,
-		ui.ui_frame_metrics(frame).FONT_SIZE_LABEL,
-		ui.ui_frame_theme(frame).fg_secondary,
-	)
+	ui.label(&state.ctx, picked, ui.Text_Role.Label, ui.Ink.Secondary)
 
 	ui.scope_end(&state.ctx)
-	end_y := ui.remaining_rect(&state.ctx).y
-	ui.end(&state.ctx)
-	return end_y + ui.ui_frame_sc(frame, 24)
+	ui.space(&state.ctx, .XL)
+	return ui.end(&state.ctx)
 }
 
 draw_widget_choices :: proc(state: ^Widget_State) {
@@ -570,11 +549,7 @@ draw_widget_volume :: proc(frame: ^ui.Ui_Frame, state: ^Widget_State) {
 		240,
 		"Volume",
 	)
-	ui.label(
-		&state.ctx,
-		fmt.tprintf("%.0f%%", state.volume),
-		color = ui.ui_frame_theme(frame).fg_secondary,
-	)
+	ui.label(&state.ctx, fmt.tprintf("%.0f%%", state.volume), ui.Text_Role.Body, ui.Ink.Secondary)
 	ui.row_end(&state.ctx)
 }
 
@@ -589,7 +564,7 @@ draw_widget_form_controls :: proc(
 		{x, y0, w, 0},
 		"FORM CONTROLS (checkbox / radio / slider / dropdown)",
 	)
-	ui.begin(&state.ctx, frame, {x, y, w, ui.ui_frame_sc(frame, 400)}, gap = .SM)
+	ui.begin(&state.ctx, frame, {x, y, w, ui.ROOT_EXTENT_OPEN}, gap = .SM)
 	ui.scope_begin(&state.ctx, "form")
 	draw_widget_choices(state)
 	draw_widget_volume(frame, state)
@@ -603,9 +578,8 @@ draw_widget_form_controls :: proc(
 		a11y_label = "Graphics backend",
 	)
 	ui.scope_end(&state.ctx)
-	y = ui.remaining_rect(&state.ctx).y + ui.ui_frame_sc(frame, 14)
-	ui.end(&state.ctx)
-	return y
+	ui.space(&state.ctx, .MD)
+	return ui.end(&state.ctx)
 }
 
 // The progress / spinner / pill section is pure facade: every widget carves
@@ -613,46 +587,43 @@ draw_widget_form_controls :: proc(
 draw_widget_progress :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_progress: nil state")
 	u := &state.progress_ctx
-	theme := ui.ui_frame_theme(frame)
-	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, 200)}, gap = .SM)
+	ui.begin(u, frame, {x, y0, w, ui.ROOT_EXTENT_OPEN}, gap = .SM)
 	ui.scope_begin(u, "progress")
 	_ = ui.section_header(u, "PROGRESS / SPINNER / PILLS")
 
 	ui.row_begin(u, 34, gap = .MD, align = .Start)
 	ui.spinner(u, 28)
 	ui.spinner(u, 20, {style = .Orbit_Dots, dot_radius = 2.5, speed = 6})
-	_ = ui.status_pill(u, "active", theme.fg_success)
-	_ = ui.status_pill(u, "warning", theme.fg_tool)
-	_ = ui.status_pill(u, "error", theme.fg_error)
+	_ = ui.status_pill(u, "active", ui.Ink.Success)
+	_ = ui.status_pill(u, "warning", ui.Ink.Tool)
+	_ = ui.status_pill(u, "error", ui.Ink.Danger)
 	ui.row_end(u)
 
-	ui.progress_bar(u, 0.65, theme.fg_accent)
-	ui.progress_bar_animated(u, progress_frac, &progress_anim, theme.fg_success)
+	ui.progress_bar(u, 0.65)
+	ui.progress_bar_animated(u, progress_frac, &progress_anim, ui.Ink.Success)
 
 	ui.row_begin(u, 30, gap = .SM, align = .Start)
 	if ui.button(u, ui.id(u, "replay"), "Replay") do progress_anim = 0
 	ui.row_end(u)
 
 	ui.scope_end(u)
-	end_y := ui.remaining_rect(u).y
-	ui.end(u)
-	return end_y + ui.ui_frame_sc(frame, 16)
+	ui.space(u, .LG)
+	return ui.end(u)
 }
 
 // The key/value rows are facade too: kv_row spans the container width, so the
-// caller never measures the value to right-align it.
+// caller never measures the value to right-align it, and the default inks are
+// the muted-key / emphasized-value pairing.
 draw_widget_kv_rows :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_kv_rows: nil state")
 	u := &state.kv_ctx
-	theme := ui.ui_frame_theme(frame)
 	width := min(w, ui.ui_frame_sc(frame, 360))
-	ui.begin(u, frame, {x, y0, width, ui.ui_frame_sc(frame, 120)}, gap = .XS)
+	ui.begin(u, frame, {x, y0, width, ui.ROOT_EXTENT_OPEN}, gap = .XS)
 	_ = ui.section_header(u, "KV ROWS + LIST ROWS")
-	ui.kv_row(u, "Renderer", "WebGPU", theme.fg_secondary, theme.fg_primary)
-	ui.kv_row(u, "State model", "caller-owned", theme.fg_secondary, theme.fg_primary)
-	end_y := ui.remaining_rect(u).y
-	ui.end(u)
-	return end_y + ui.ui_frame_sc(frame, 10)
+	ui.kv_row(u, "Renderer", "WebGPU")
+	ui.kv_row(u, "State model", "caller-owned")
+	ui.space(u, .SM)
+	return ui.end(u)
 }
 
 draw_widget_backend_list :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {

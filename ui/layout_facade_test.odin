@@ -95,3 +95,40 @@ layout_flow_reflows_when_available_width_changes :: proc(t: ^testing.T) {
 	testing.expect_value(t, narrow_second, Rect_I32{0, 26, 50, 20})
 	testing.expect_value(t, narrow_bounds.h, i32(46))
 }
+
+@(test)
+layout_end_reports_consumed_extent :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 50, 300, ROOT_EXTENT_OPEN})
+	row_begin(&u, 40)
+	row_end(&u)
+	space(&u, .LG)
+	end_y := end(&u)
+	// 50 root origin + 40 row + 16 trailing token; no magic epilogue math.
+	testing.expect_value(t, end_y, i32(106))
+}
+
+@(test)
+layout_facade_flex_justify_packs_space_between :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 100})
+	flex_row_begin(&u, 40, {fixed(60), fixed(60)}, justify = .Space_Between)
+	first := flex_slot_next(&u, 40)
+	second := flex_slot_next(&u, 40)
+	flex_row_end(&u)
+	end(&u)
+	testing.expect_value(t, first, Rect_I32{0, 0, 60, 40})
+	testing.expect_value(t, second, Rect_I32{240, 0, 60, 40})
+}

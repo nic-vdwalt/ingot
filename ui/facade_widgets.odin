@@ -104,7 +104,8 @@ pill_width_px :: proc(frame: ^Ui_Frame, text: string, font_size: i32) -> i32 {
 }
 
 // status_pill carves a content-sized slot and returns the drawn pill width.
-status_pill :: proc(u: ^Ui, text: string, color: Color, font_size: i32 = 0) -> i32 {
+// status_pill_color takes a raw accent for values the Ink enum does not name.
+status_pill_color :: proc(u: ^Ui, text: string, color: Color, font_size: i32 = 0) -> i32 {
 	assert(u != nil && u.open, "status_pill: frame not open")
 	assert(text != "", "status_pill: empty text")
 	metrics := ui_frame_metrics(u.frame)
@@ -114,8 +115,21 @@ status_pill :: proc(u: ^Ui, text: string, color: Color, font_size: i32 = 0) -> i
 	return status_pill_at(u.frame, rect, text, fs, color)
 }
 
+// status_pill_ink resolves a semantic ink against the theme, so status call
+// sites say what a pill means rather than which palette slot it uses.
+status_pill_ink :: proc(u: ^Ui, text: string, ink: Ink = .Accent, font_size: i32 = 0) -> i32 {
+	assert(u != nil && u.open, "status_pill: frame not open")
+	assert(text != "", "status_pill: empty text")
+	return status_pill_color(u, text, text_ink(u.frame, ink), font_size)
+}
+
+status_pill :: proc {
+	status_pill_color,
+	status_pill_ink,
+}
+
 // progress_bar carves a full-width bar of the given logical height.
-progress_bar :: proc(
+progress_bar_color :: proc(
 	u: ^Ui,
 	fraction: f32,
 	color: Color,
@@ -129,8 +143,26 @@ progress_bar :: proc(
 	progress_bar_at(u.frame, rect, fraction, color, options)
 }
 
+// progress_bar_ink is progress_bar with a semantic fill color.
+progress_bar_ink :: proc(
+	u: ^Ui,
+	fraction: f32,
+	ink: Ink = .Accent,
+	height: i32 = 8,
+	options: Progress_Bar_Options = {},
+) {
+	assert(u != nil && u.open, "progress_bar: frame not open")
+	assert(height > 0, "progress_bar: non-positive height")
+	progress_bar_color(u, fraction, text_ink(u.frame, ink), height, options)
+}
+
+progress_bar :: proc {
+	progress_bar_color,
+	progress_bar_ink,
+}
+
 // progress_bar_animated is progress_bar with caller-owned eased fill state.
-progress_bar_animated :: proc(
+progress_bar_animated_color :: proc(
 	u: ^Ui,
 	fraction: f32,
 	anim: ^f32,
@@ -144,6 +176,25 @@ progress_bar_animated :: proc(
 	rect := slot_next_px(u, remaining(&u.layout).w, ui_frame_sc(u.frame, height))
 	if !slot_visible(rect) do return
 	progress_bar_animated_at(u.frame, rect, fraction, anim, color, options)
+}
+
+// progress_bar_animated_ink is progress_bar_animated with a semantic fill.
+progress_bar_animated_ink :: proc(
+	u: ^Ui,
+	fraction: f32,
+	anim: ^f32,
+	ink: Ink = .Accent,
+	height: i32 = 8,
+	options: Progress_Bar_Options = {},
+) {
+	assert(u != nil && u.open, "progress_bar_animated: frame not open")
+	assert(anim != nil, "progress_bar_animated: nil anim")
+	progress_bar_animated_color(u, fraction, anim, text_ink(u.frame, ink), height, options)
+}
+
+progress_bar_animated :: proc {
+	progress_bar_animated_color,
+	progress_bar_animated_ink,
 }
 
 Spinner_Facade_Options :: struct {
@@ -260,13 +311,32 @@ bar_chart :: proc {
 }
 
 // kv_row carves a full-width row with a key left and a right-aligned value.
-kv_row :: proc(u: ^Ui, key, value: string, key_col, val_col: Color, font_size: i32 = 0) {
+kv_row_color :: proc(u: ^Ui, key, value: string, key_col, val_col: Color, font_size: i32 = 0) {
 	assert(u != nil && u.open, "kv_row: frame not open")
 	metrics := ui_frame_metrics(u.frame)
 	fs := ui_frame_sc(u.frame, font_size) if font_size > 0 else metrics.FONT_SIZE_LABEL
 	rect := slot_next_px(u, remaining(&u.layout).w, metrics.LINE_HEIGHT)
 	if !slot_visible(rect) do return
 	kv_row_at(u.frame, rect, key, value, key_col, val_col, fs)
+}
+
+// kv_row_ink is kv_row with semantic inks; the defaults are the muted-key /
+// emphasized-value pairing every settings and diagnostics panel repeats.
+kv_row_ink :: proc(
+	u: ^Ui,
+	key, value: string,
+	key_ink: Ink = .Secondary,
+	val_ink: Ink = .Primary,
+	font_size: i32 = 0,
+) {
+	assert(u != nil && u.open, "kv_row: frame not open")
+	assert(u.frame != nil, "kv_row: nil frame")
+	kv_row_color(u, key, value, text_ink(u.frame, key_ink), text_ink(u.frame, val_ink), font_size)
+}
+
+kv_row :: proc {
+	kv_row_color,
+	kv_row_ink,
 }
 
 // card_bg fills the remaining container area with the card background. It does
