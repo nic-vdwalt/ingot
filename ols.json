@@ -1,0 +1,10 @@
+{
+	"$schema": "https://raw.githubusercontent.com/DanielGavin/ols/master/misc/ols.schema.json",
+	"collections": [
+		{ "name": "ingot", "path": "." }
+	],
+	"enable_document_symbols": true,
+	"enable_hover": true,
+	"enable_semantic_tokens": true,
+	"enable_inlay_hints": true
+}
