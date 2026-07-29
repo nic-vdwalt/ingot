@@ -34,43 +34,15 @@ supported; polished desktop tools are the mission.
 
 Ingot asks whether deterministic simulation testing can shape an application
 framework from its first subsystem rather than being added after the design has
-settled. How quickly can that approach produce something useful, and how much
-production behavior can run under generated input and failure conditions without
-a window, GPU, network, shell, or assistive technology?
-
-The experiment keeps application state explicit, confines nondeterminism to
-compile-gated seams, bounds work and storage, and makes assertions plus derived
-output the test oracles. Seeded harnesses then drive the code that ships while
-replacing only edges such as sockets, platform input, and PTYs. The current
-harnesses cover real widgets and text editing, HTTP and WebSocket failures,
-worker synchronization, terminal pumping, frame scratch ownership, and selected
-GPU lifetimes. See [Testing Ingot](docs/testing.md) for commands and exact scope.
-
-This is evidence about one engineering approach, not a claim that simulation
-proves correctness or that Ingot is already production-proven. Fuzzing currently
-runs locally, native dependencies remain outside Odin-side sanitizer coverage,
-and each target still needs validation on the operating systems, GPUs, browsers,
-and accessibility stacks an application intends to ship. Real applications are
-needed to establish where the approach remains useful and where it breaks down.
-
-[![The Ingot API map: start tiers, ownership, and the six steps of one frame](docs/media/api-map-dark.png)](https://openalloy.ai/demos/ingot-api-map/)
-
-[Explore the interactive API map](https://openalloy.ai/demos/ingot-api-map/) —
-hover any node for its contract, click a step to walk one frame. GitHub README
-files cannot embed a WebGPU application, so this generated still links to the
-live demo. The [widget gallery](https://openalloy.ai/demos/ingot-gallery/)
-remains available for every control.
-
-<details>
-<summary><strong>Screenshot reproducibility details</strong></summary>
-
-`odin run examples/api-map -collection:ingot=. -define:INGOT_MAP_CAPTURE=true`
-renders `examples/api-map` into a fixed offscreen target and reads it back
-through `gfx.SaveRenderTexturePng`, writing deterministic dark and light stills
-into `docs/media/`. The same source is published at the live link.
-`bash scripts/capture-media.sh` produces the gallery media the same way.
-
-</details>
+settled. Application state stays explicit, nondeterminism is confined to
+compile-gated seams, and seeded harnesses drive the code that ships—real
+widgets and text editing, HTTP and WebSocket failures, worker synchronization,
+terminal pumping, and selected GPU lifetimes—without a window, GPU, network,
+shell, or assistive technology. This is evidence about one engineering
+approach, not a claim that simulation proves correctness or that Ingot is
+production-proven; each target still needs validation on the systems an
+application ships on. See [Testing Ingot](docs/testing.md) for commands and
+exact scope.
 
 ## Why Ingot
 
@@ -155,25 +127,13 @@ import "ingot:ui_gfx"
 
 ## Choose your entry point
 
-```mermaid
-flowchart LR
-    subgraph NEWPATH[New desktop tool]
-        NEW[New UI app] --> APP[ui_gfx.App]
-        APP --> FACADE[ui.Ui facade<br/>bare widgets + logical layout]
-        FACADE --> EXPLICIT[Explicit UI when needed<br/>*_at + composition + physical layout]
-    end
+[![The Ingot API map: start tiers, ownership, and the six steps of one frame](docs/media/api-map-dark.png)](https://openalloy.ai/demos/ingot-api-map/)
 
-    subgraph RAYPATH[Raylib migration]
-        RAYLIB[Existing raylib app] --> GFX[Replace imports with ingot:gfx]
-        GFX --> KEEP[Keep the familiar graphics loop]
-        GFX --> ADOPT[Adopt Ingot UI incrementally]
-    end
-
-    ADOPT --> APP
-    EXPLICIT --> FRAME[Ui_Frame paint and input]
-    KEEP --> GFXLOW[gfx rendering, audio, cameras, GPU]
-    FRAME --> GFXLOW
-```
+[Explore the interactive API map](https://openalloy.ai/demos/ingot-api-map/) —
+hover any node for its contract, click a step to walk one frame. The still is
+generated deterministically by
+`odin run examples/api-map -collection:ingot=. -define:INGOT_MAP_CAPTURE=true`;
+`bash scripts/capture-media.sh` refreshes all README media the same way.
 
 For a new desktop tool, start with `ui_gfx.App` and the bare `ui.Ui` facade
 shown below. Drop to explicit UI only where application behavior owns geometry
@@ -227,91 +187,58 @@ frame :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
 }
 ```
 
-Text takes a semantic *role* and *ink* rather than a raw size and color, so
-call sites do not re-derive metrics and theme. `ui.text`, `ui.text_wrapped`,
-`ui.text_truncated`, and `ui.text_width` resolve `Text_Role` against the
-scaled `Ui_Metrics` and `Ink` against the active `Theme`. The explicit
-`draw_text_frame` and `measure_text_frame` entry points remain available for
-sizes and colors these enums do not name. Where drawing code needs both tables
-at once, `ui.ui_frame_style(frame)` returns them together.
-
-Ordinary leaf widgets ship in two geometry shapes. The bare facade takes a
-`^Ui`, carves a logical slot, and interactive widgets take a stable string/u64
-key or an explicit `Widget_Id`; presentational widgets need no identity. The explicit `*_at` shape
-takes a `^Ui_Frame` and an application-owned physical `Rect_I32`. Composition
-protocols such as panes, modals, listboxes, overlays, and markdown stay explicit
-under lifecycle or subsystem names. See
+Text takes a semantic *role* and *ink* rather than a raw size and color:
+`ui.text` and friends resolve `Text_Role` and `Ink` against the scaled metrics
+and active theme, with explicit `draw_text_frame`/`measure_text_frame` still
+available. Leaf widgets ship in two geometry shapes—the bare facade (`^Ui`,
+logical slot, stable key) and the explicit `*_at` form (`^Ui_Frame`,
+application-owned `Rect_I32`). See
 [application shell](docs/application-shell.md),
 [layout conventions](docs/layout.md), and
 [UI state and stable focus](docs/ui-state.md#widget-tiers).
 
 `rl.run` blocks on native targets and installs the animation-frame callback on
-web. State used by `frame` must therefore outlive `main` on web. A managed web
-host must retain the session returned by `ingotWeb.run()` and call
-`session.destroy()` before replacement, or `ingotWeb.stop()` during global page
-teardown.
-
-For an existing raylib application, start by replacing
-`import rl "vendor:raylib"` with `import rl "ingot:gfx"` and
-`vendor:raylib/rlgl` with `ingot:gfx/rlgl`. This import-only path targets common
-2D call sites; other subsystems can require mechanical edits, behavior review,
-or redesign. Follow [Migrating from raylib](docs/raylib-migration.md).
+web, so state used by `frame` must outlive `main` on web; a managed web host
+must retain the session returned by `ingotWeb.run()` and destroy it on
+teardown. For an existing raylib application, replace
+`import rl "vendor:raylib"` with `import rl "ingot:gfx"` (and `rlgl`
+likewise) and follow [Migrating from raylib](docs/raylib-migration.md).
 
 ## See it running
 
 `examples/gallery` is the living widget reference, including layout, text input,
 overlays, charts, markdown, accessibility semantics, a 1,000-button stress view,
-and an F12 metrics overlay.
+and an F12 metrics overlay. The public build runs at
+[openalloy.ai/demos/ingot-gallery/](https://openalloy.ai/demos/ingot-gallery/).
 
 ```sh
 odin run examples/gallery -collection:ingot=.
-bash scripts/smoke-gallery.sh
+bash scripts/smoke-gallery.sh   # windowed GPU smoke test; needs a display
 ```
 
-The smoke script is a separate windowed GPU test, not part of `scripts/test.sh`.
-It requires a working display and drives every scale, theme, and gallery section.
+Other focused examples: `examples/hello` (application shell and stable IDs),
+`examples/breakout` (audio, gamepads, web export), `examples/idle_demo`
+(near-zero idle CPU), `examples/chart_demo`, `examples/render_fixture`
+(renderer and backend validation), and `examples/raylib_migration_fixture`
+(import-only 2D compatibility contract).
 
-`bash scripts/capture-media.sh` is the other windowed tool. It rebuilds the
-stills in `docs/media/` and the demo GIF/MP4 in `dist/media/` from the same
-gallery, so refreshing the images above never involves a manual screenshot.
-
-Other focused examples:
-
-- `examples/hello` - canonical application shell, layout, and stable-ID usage.
-- `examples/breakout` - audio, gamepad input, and web export from one source.
-- `examples/idle_demo` - event-driven rendering at approximately zero idle CPU.
-- `examples/chart_demo` - chart widgets and interaction.
-- `examples/render_fixture` - renderer, resource-lifetime, and backend validation.
-- `examples/raylib_migration_fixture` - import-only 2D compatibility contract.
-
-Web builds require Bash, Python 3, and the pinned Odin toolchain. From the
-repository root, `bash build_web.sh examples/gallery` writes the gallery to
-`web/ingot_web.wasm`; serve `web/` over HTTP and use a WebGPU browser
-(Chrome/Edge 113+ or Safari 18+). The current public build runs at
-[openalloy.ai/demos/ingot-gallery/](https://openalloy.ai/demos/ingot-gallery/).
-`bash scripts/check-web.sh` compiles the gallery, Breakout, and default demo,
-then runs dependency-free Node lifecycle and semantic tests. Each build replaces
-the same WASM output, and the headless gate does not replace real-browser or
-assistive-technology testing.
-
-Consumer builds should use `scripts/stage-web-runtime.sh DEST`. It copies the
-pinned Odin and WebGPU JavaScript runtimes, applies Ingot's compatibility
-transform, and copies the managed host glue for external destinations. It does
-not copy the application WASM or HTML entry point.
-
-See [Networking](docs/networking.md) for HTTP/WebSocket lifecycle and ownership,
-and [Compatibility and platforms](docs/compatibility.md) for browser, dialog,
-preferences, terminal, accessibility, and versioning constraints.
+For web, `bash build_web.sh examples/gallery` writes `web/ingot_web.wasm`;
+serve `web/` over HTTP in a WebGPU browser (Chrome/Edge 113+ or Safari 18+).
+`bash scripts/check-web.sh` compiles the demos and runs headless Node checks
+(not a substitute for real-browser or assistive-technology testing), and
+consumer builds stage the pinned JavaScript runtimes with
+`scripts/stage-web-runtime.sh DEST`. See [Networking](docs/networking.md) and
+[Compatibility and platforms](docs/compatibility.md) for lifecycle, browser,
+and platform constraints.
 
 ## Measured performance
 
 An accepted [2026-07-26 Apple M2 Max Phase 2 baseline](benchmarks/widgets/results/2026-07-26-m2-max-phase-2.md)
 measured a deterministic 100-row dashboard with 1,000 submitted UI elements at a
-46.21 µs total median and 53.46 µs total p95. The build median was 45.88 µs and
-finalization p95 was 0.04 µs across seven fresh processes, each with 300 warm-up
-and 2,000 measured frames. These are fixed-geometry headless-core CPU results,
-not native host, GPU, presentation, memory, idle-power, or complete application
-measurements. The earlier [cross-framework run](benchmarks/widgets/results/2026-07-26-m2-max-core.md)
+46.21 µs total median and 53.46 µs total p95 (seven fresh processes, 300
+warm-up and 2,000 measured frames each). These are fixed-geometry headless-core
+CPU results, not GPU, presentation, or complete-application measurements. The
+earlier [cross-framework run](benchmarks/widgets/results/2026-07-26-m2-max-core.md)
 remains workload-specific evidence for pinned Dear ImGui and egui adapters, not
 an overall framework ranking.
 
@@ -366,54 +293,23 @@ checking, and an average target of at least two assertions per procedure.
 
 ## Direction
 
-The near-term priority remains proof over feature count: validate every native
-WebGPU backend, publish the live gallery, document raylib migration, report
-concrete idle CPU, binary-size, build-time, and frame-work measurements, and
-reach Linux desktop-polish parity.
-
-The remaining maturity priorities, including the gaps against focused embeddable
-layout libraries such as Clay, are:
-
-1. **Platform evidence:** replace every `Not recorded` release-matrix entry with
-   revision-pinned macOS, Linux, Windows, browser, TLS, GPU, and accessibility
-   evidence without treating compile-only or Node-only checks as validation.
-2. **Multi-context proof:** validate simultaneous native windows on Metal,
-   Vulkan, and D3D12, including independent input/resources, interleaved frames,
-   close/recreate behavior, and stale or cross-context handle rejection.
-3. **Portable integration:** reduce the integration surface, document renderer
-   and host boundaries, publish focused embedding examples, and measure build
-   time and binary size. Ingot remains Odin-first rather than pursuing Clay's
-   single-header C portability.
-4. **Layout confidence:** expand the bounded explicit-size flow beyond its initial
-   fuzzing, responsive gallery fixture, and geometry benchmark with clipping,
-   focus, accessibility, and real-application evidence while preserving bounded
-   work and explicit caller-owned state.
-
-These are release gates and engineering targets, not claims of completed
-validation. Detailed evidence requirements remain in
+The near-term priority remains proof over feature count: replace every
+`Not recorded` release-matrix entry with revision-pinned platform, GPU, and
+accessibility evidence; validate simultaneous native windows on Metal, Vulkan,
+and D3D12; reduce and document the integration surface with measured build
+time and binary size; and extend layout confidence with clipping, focus,
+accessibility, and real-application evidence. These are release gates, not
+claims of completed validation—detailed requirements remain in
 [`docs/production-readiness.md`](docs/production-readiness.md).
 
-Advanced widgets will be built in dependency order:
-
-1. **Collection foundation:** a bounded two-axis virtual viewport, visible-range
-   calculation, scroll-to-item behavior, stable selection, keyboard navigation,
-   and composite accessibility semantics.
-2. **Virtualized data views:** list, searchable combo box and command palette,
-   then sortable and resizable data grid, tree view, and property grid widgets.
-3. **Workspace composition:** tabs and resizable split panes, followed by a
-   serializable docking workspace with keyboard-accessible drag targets.
-4. **Terminal view:** package the existing PTY and libvterm core as a reusable
-   widget with styled cells, selection, clipboard, scrollback, and resize support.
-5. **Remote editor surface:** provide bounded cell-grid state, dirty-row paint,
-   cursor and selection input, overlays, and accessibility for applications that
-   embed an editing engine such as Neovim. Protocol adapters and renderer-specific
-   render-target caching remain application-owned.
-6. **Code editor:** build an optional native editor on scalable text storage,
-   styled runs, two-axis virtualization, gutters, diagnostics, and complete IME
-   handling rather than requiring it for embedded-engine applications.
-
-Each stage must preserve caller-owned state, bounded frame work, event-driven
-idle behavior, stable focus, and accessibility across native and web targets.
+Advanced widgets will be built in dependency order: a bounded virtual-viewport
+collection foundation; virtualized list, combo/command-palette, data grid,
+tree, and property views; tabs, split panes, and a serializable docking
+workspace; a reusable terminal widget on the existing PTY/libvterm core; a
+remote editor surface for embedded engines such as Neovim; and finally an
+optional native code editor. Each stage must preserve caller-owned state,
+bounded frame work, event-driven idle behavior, stable focus, and
+accessibility across native and web targets.
 
 A 3D content pipeline, mobile targets, scripting layers, visual designers, and
 game or content-production editors remain out of scope. Ingot's optional 3D path
