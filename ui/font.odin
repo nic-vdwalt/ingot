@@ -143,8 +143,12 @@ draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color:
 	assert(frame != nil, "draw_text_frame: nil frame")
 	assert(size > 0, "draw_text_frame: invalid size")
 	font := Font_Id(0)
-	if text_backend_valid(frame.runtime.text_backend) {
+	if size == frame.font_memo_size {
+		font = frame.font_memo_id
+	} else if text_backend_valid(frame.runtime.text_backend) {
 		font = text_backend_font(frame.runtime.text_backend, size)
+		frame.font_memo_size = size
+		frame.font_memo_id = font
 	}
 	assert(
 		frame.output == nil || font != 0,
@@ -155,6 +159,10 @@ draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color:
 
 MEASURE_CACHE_MAX :: 8192
 MEASURE_CACHE_MAX_KEY_LEN :: 256
+
+// Refresh an entry's LRU stamp only after it ages by this much, so cache
+// hits are read-only in the common case instead of a map write per measure.
+MEASURE_CACHE_STAMP_SLACK :: 1024
 
 @(private)
 measure_evict_oldest :: proc(system: ^Text_System) {
@@ -183,9 +191,11 @@ measure_text_with :: proc(system: ^Text_System, text: cstring, size: i32) -> i32
 	}
 	if entry, ok := system.measure_cache[key]; ok {
 		when UI_TELEMETRY_ENABLED do system.measure_cache_hits += 1
-		system.measure_stamp += 1
-		entry.stamp = system.measure_stamp
-		system.measure_cache[key] = entry
+		if system.measure_stamp - entry.stamp > MEASURE_CACHE_STAMP_SLACK {
+			system.measure_stamp += 1
+			entry.stamp = system.measure_stamp
+			system.measure_cache[key] = entry
+		}
 		return entry.width
 	}
 	when UI_TELEMETRY_ENABLED do system.measure_cache_misses += 1

@@ -7,41 +7,52 @@ frame_paint_list :: proc(frame: ^Ui_Frame, channel: Paint_Channel = .Main) -> ^P
 	return &frame.output.main
 }
 
-paint_command_to_screen :: proc(frame: ^Ui_Frame, command: Paint_Command) -> Paint_Command {
-	assert(frame != nil && frame.open, "paint_command_to_screen: invalid frame")
-	origin := frame_pane_origin(frame)
-	result := command
+paint_command_apply_pane :: proc(frame: ^Ui_Frame, command: ^Paint_Command) {
+	assert(frame != nil && frame.open, "paint_command_apply_pane: invalid frame")
+	assert(command != nil, "paint_command_apply_pane: nil command")
+	if frame.pane_count == 0 do return
+	origin := frame.pane_origins[frame.pane_count - 1]
 	switch command.kind {
 	case .Rectangle,
 	     .Rectangle_Outline,
 	     .Rectangle_Rounded,
 	     .Rectangle_Rounded_Outline,
 	     .Rectangle_Gradient_V:
-		result.rect.x += origin.x
-		result.rect.y += origin.y
+		command.rect.x += origin.x
+		command.rect.y += origin.y
 	case .Line:
-		result.p0 += origin
-		result.p1 += origin
+		command.p0 += origin
+		command.p1 += origin
 	case .Triangle:
-		result.p0 += origin
-		result.p1 += origin
-		result.p2 += origin
+		command.p0 += origin
+		command.p1 += origin
+		command.p2 += origin
 	case .Circle, .Circle_Outline, .Ring, .Text, .Codepoint:
-		result.p0 += origin
+		command.p0 += origin
 	case .Clip_Begin, .Clip_End:
-		assert(false, "paint_command_to_screen: structural command")
+		assert(false, "paint_command_apply_pane: structural command")
 	}
+}
+
+// Compatibility wrapper; prefer paint_command_apply_pane on hot paths.
+paint_command_to_screen :: proc(frame: ^Ui_Frame, command: Paint_Command) -> Paint_Command {
+	result := command
+	paint_command_apply_pane(frame, &result)
 	return result
 }
 
 frame_paint_push :: proc(frame: ^Ui_Frame, command: Paint_Command) -> bool {
 	assert(frame != nil && frame.open, "frame_paint_push: invalid frame")
-	return paint_push(frame_paint_list(frame), paint_command_to_screen(frame, command))
+	command := command
+	paint_command_apply_pane(frame, &command)
+	return paint_push(frame_paint_list(frame), command)
 }
 
 frame_paint_push_text :: proc(frame: ^Ui_Frame, command: Paint_Command, text: string) -> bool {
 	assert(frame != nil && frame.open, "frame_paint_push_text: invalid frame")
-	return paint_push_text(frame_paint_list(frame), paint_command_to_screen(frame, command), text)
+	command := command
+	paint_command_apply_pane(frame, &command)
+	return paint_push_text(frame_paint_list(frame), command, text)
 }
 
 draw_rectangle :: proc(frame: ^Ui_Frame, x, y, width, height: i32, color: Color) {

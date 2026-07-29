@@ -48,6 +48,8 @@ Ui_Frame :: struct {
 	semantics:                      Semantics_State,
 	pane_origins:                   [MAX_PANE_SCOPES]Vector2,
 	pane_count:                     int,
+	font_memo_size:                 i32,
+	font_memo_id:                   Font_Id,
 	text_cull_top:                  i32,
 	text_cull_bottom:               i32,
 	open_roots:                     int,
@@ -202,6 +204,8 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame.cursor.requested = .DEFAULT
 	frame.overlay = {}
 	frame.pane_count = 0
+	frame.font_memo_size = 0
+	frame.font_memo_id = 0
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
 	frame.open_roots = 0
