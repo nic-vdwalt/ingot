@@ -196,7 +196,7 @@ p95. The workload submits 1,000 fixed-geometry UI elements; its build median was
 300 warm-up and 2,000 measured frames. Isolated cases separately measure stable
 and changing labels, active and inactive inputs, widgets, and semantics.
 
-The earlier [cross-framework run](../benchmarks/widgets/results/2026-07-26-m2-max-core.md)
+The [2026-07-29 cross-framework run](../benchmarks/widgets/results/2026-07-29-m2-max-core.md)
 remains evidence for specific pinned Dear ImGui and egui adapters and workloads.
 Neither result establishes an overall framework ranking or proves equivalent
 feature work. These headless-core CPU adapters do not measure native host

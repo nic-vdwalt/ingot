@@ -248,9 +248,9 @@ measured a deterministic 100-row dashboard with 1,000 submitted UI elements at a
 46.21 µs total median and 53.46 µs total p95 (seven fresh processes, 300
 warm-up and 2,000 measured frames each). These are fixed-geometry headless-core
 CPU results, not GPU, presentation, or complete-application measurements. The
-earlier [cross-framework run](benchmarks/widgets/results/2026-07-26-m2-max-core.md)
-remains workload-specific evidence for pinned Dear ImGui and egui adapters, not
-an overall framework ranking.
+[2026-07-29 cross-framework run](benchmarks/widgets/results/2026-07-29-m2-max-core.md)
+with spec-conformant adapters remains workload-specific evidence for pinned
+Dear ImGui and egui adapters, not an overall framework ranking.
 
 ## Documentation
 

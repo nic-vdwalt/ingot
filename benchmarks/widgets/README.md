@@ -5,11 +5,11 @@ deterministic geometry, fixed workloads, randomized process order, correctness v
 JSONL output. It does not produce an overall score.
 
 The latest checked-in evidence is the
-[2026-07-26 Apple M2 Max core run](results/2026-07-26-m2-max-core.md). Ingot was competitive with Dear
-ImGui in that run: Ingot led repeated labels, mixed forms, and a virtualized list, while Dear ImGui led
-the button grid, full list, table-like, and churn cases. egui used materially more core CPU in these
-fixed-geometry adapters. Treat those as workload-specific headless results, not native application or
-GPU rankings.
+[2026-07-29 Apple M2 Max core run](results/2026-07-29-m2-max-core.md), the first run with
+spec-conformant adapters and cross-framework state-checksum agreement. Ingot led every
+representative case except accessibility buttons, where Dear ImGui led while emitting no
+accessibility output. egui used materially more core CPU in these fixed-geometry adapters. Treat
+those as workload-specific headless results, not native application or GPU rankings.
 
 ## Requirements
 
