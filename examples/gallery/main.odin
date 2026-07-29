@@ -880,7 +880,7 @@ api_tree_legend :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32, legend: string)
 	assert(frame != nil && len(legend) > 0, "api_tree_legend: invalid legend")
 	width := ui.text_width(frame, legend, .Label)
 	x := panel.x + panel.w - api_tree_sc(frame, 12) - width
-	if x <= panel.x + api_tree_sc(frame, 170) do return
+	if x <= panel.x + api_tree_sc(frame, 260) do return
 	ui.text(frame, legend, x, panel.y + api_tree_sc(frame, 10), .Label, .Secondary)
 }
 
@@ -1320,15 +1320,22 @@ api_relationship_trees_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, us
 		rect.h - pad * 2 - gap - ownership.h,
 	}
 	api_tree_panel(frame, ownership, "1 · LITERAL OWNERSHIP")
-	api_tree_panel(frame, depth, "2 · CALL PATHS · APPLICATION → BACKEND")
+	api_tree_panel(frame, depth, "2 · PER-FRAME CALL PATHS")
 	api_ownership_wide(frame, state, ownership)
 	api_call_paths_tree(frame, state, depth, !wide)
 }
 
 draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 	assert(u != nil && u.open, "draw_api_text_equivalent: invalid UI")
-	theme := ui.ui_frame_theme(u.frame)
 	_ = ui.section_header(u, "TEXTUAL EQUIVALENT")
+	draw_api_text_ownership(u)
+	ui.space(u, .XS)
+	draw_api_text_call_paths(u)
+}
+
+draw_api_text_ownership :: proc(u: ^ui.Ui) {
+	assert(u != nil && u.open, "draw_api_text_ownership: invalid UI")
+	theme := ui.ui_frame_theme(u.frame)
 	ui.label(u, "1. LITERAL OWNERSHIP", color = theme.fg_accent)
 	ui.kv_row(u, "Caller", "owns ui_gfx.App", theme.fg_secondary, theme.fg_primary)
 	ui.kv_row(
@@ -1380,7 +1387,11 @@ draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
-	ui.space(u, .XS)
+}
+
+draw_api_text_call_paths :: proc(u: ^ui.Ui) {
+	assert(u != nil && u.open, "draw_api_text_call_paths: invalid UI")
+	theme := ui.ui_frame_theme(u.frame)
 	ui.label(u, "2. CALL PATHS · PER-FRAME ORDER", color = theme.fg_accent)
 	ui.kv_row(
 		u,
