@@ -72,7 +72,7 @@ SECTION_LAYERS := [Section]string {
 }
 
 SECTION_AXES := [Section]string {
-	.Api_Relationships = "ownership \u00b7 delegation \u00b7 output",
+	.Api_Relationships = "start tier \u00b7 ownership \u00b7 call paths",
 	.Buttons           = "framework owns geometry",
 	.Inputs            = "framework owns geometry",
 	.Widgets           = "geometry and lifecycle owner",
@@ -394,6 +394,114 @@ API_TIP_GFX ::
 ` +
 		"Output: graphics commands, window changes, and captured input.")
 
+API_TIP_START_NEW ::
+	("New one-window UI application" +
+		`
+` +
+		"Start: ui_gfx.App with the ui callback" +
+		`
+` +
+		"Default: facade ui.Ui widgets for chrome, forms, and panels" +
+		`
+` +
+		"Escape: explicit islands only where the app owns geometry or lifecycle.")
+
+API_TIP_START_LOOP ::
+	("Must own the frame loop?" +
+		`
+` +
+		"Start: ui_gfx.Session" +
+		`
+` +
+		"Fits: custom pacing, embedding, multiple contexts, instrumentation" +
+		`
+` +
+		"Keeps: the standard UI lifecycle; do not assemble Adapter by hand.")
+
+API_TIP_START_PORT ::
+	("Porting a raylib app?" +
+		`
+` +
+		"Start: the ingot:gfx raylib-shaped loop" +
+		`
+` +
+		"First: replace imports; compile errors inventory the port" +
+		`
+` +
+		"Later: add Session or App only when the loop needs UI.")
+
+API_TIP_START_APP ::
+	("ui_gfx.App" +
+		`
+` +
+		"Tier: default host \u2014 start here" +
+		`
+` +
+		"Owns: window, Session, frame loop, and teardown order" +
+		`
+` +
+		"Move down only for a capability App cannot express.")
+
+API_TIP_START_SESSION ::
+	("ui_gfx.Session" +
+		`
+` +
+		"Tier: custom host" +
+		`
+` +
+		"Owns: runtime, frame, input, output, Adapter, and teardown order" +
+		`
+` +
+		"Caller owns: the window and the frame-loop brackets.")
+
+API_TIP_START_GFX_LOOP ::
+	("ingot:gfx migration loop" +
+		`
+` +
+		"Tier: graphics-only start" +
+		`
+` +
+		"Path: preserve the existing loop on the raylib-shaped API" +
+		`
+` +
+		"rlgl is a bounded migration shim, not OpenGL.")
+
+API_TIP_START_FACADE ::
+	("Facade ui.Ui widgets" +
+		`
+` +
+		"Tier: default UI composition" +
+		`
+` +
+		"Owns: slots, scaling, identity, focus, semantics, and paint" +
+		`
+` +
+		"Use for forms, settings, toolbars, and panels.")
+
+API_TIP_START_EXPLICIT ::
+	("*_at and explicit composition" +
+		`
+` +
+		"Tier: escape hatch \u2014 application owns geometry" +
+		`
+` +
+		"Fits: canvases, virtualized lists, overlays, and custom hit regions" +
+		`
+` +
+		"Keep islands narrow; return to the facade at the boundary.")
+
+API_TIP_START_DIRECT_GFX ::
+	("Direct ingot:gfx" +
+		`
+` +
+		"Tier: escape hatch \u2014 outside the paint model" +
+		`
+` +
+		"Fits: windowing, textures, audio, cameras, shaders, and GPU 3D" +
+		`
+` +
+		"Keep calls in a narrow renderer boundary.")
+
 nav_ui: ui.Ui
 buttons_ui: ui.Ui
 badge_ui: ui.Ui
@@ -679,22 +787,52 @@ draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
 	return end_y + ui.ui_frame_sc(frame, 8)
 }
 
-draw_entry_paths :: proc(u: ^ui.Ui) {
-	assert(u != nil && u.open, "draw_entry_paths: invalid UI")
+draw_api_text_start :: proc(u: ^ui.Ui) {
+	assert(u != nil && u.open, "draw_api_text_start: invalid UI")
 	theme := ui.ui_frame_theme(u.frame)
-	_ = ui.section_header(u, "1. CHOOSE AN ENTRY PATH")
-	ui.label(u, "NEW UI APP  \u2192  ui_gfx.App", color = theme.fg_accent)
-	ui.label(u, "ui callback: ordinary facade UI; frame callback: mixed UI or graphics")
-	ui.label(u, "Need a custom loop? Use Session, not Adapter.", color = theme.fg_secondary)
-	ui.space(u, .XS)
-	ui.label(u, "RAYLIB APP  \u2192  ingot:gfx RAYLIB-SHAPED LOOP", color = theme.fg_accent)
-	ui.label(u, "replace imports first; preserve supported behavior")
-	ui.label(
+	ui.label(u, "0. WHERE TO START", color = theme.fg_accent)
+	ui.kv_row(
 		u,
-		"compile errors inventory ports; add App/Session + UI only when needed",
-		color = theme.fg_secondary,
+		"New UI app",
+		"ui_gfx.App + facade ui.Ui; ui callback for ordinary UI",
+		theme.fg_secondary,
+		theme.fg_primary,
 	)
-	ui.label(u, "rlgl is a bounded migration shim, not OpenGL.", color = theme.fg_tool)
+	ui.kv_row(
+		u,
+		"Custom loop",
+		"ui_gfx.Session keeps the standard UI lifecycle; not Adapter",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Raylib port",
+		"ingot:gfx raylib-shaped loop; add Session or App when UI is needed",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Exact placement",
+		"*_at and explicit composition islands inside facade UI",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"GPU content",
+		"direct ingot:gfx in a narrow renderer boundary",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"Rule",
+		"start at the highest tier that fits; move down only for a named capability",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
 }
 
 api_tree_sc :: proc(frame: ^ui.Ui_Frame, value: i32) -> i32 {
@@ -860,6 +998,21 @@ api_tree_ref_edge_side :: proc(frame: ^ui.Ui_Frame, from, to: ui.Rect_I32, color
 	api_tree_arrow_side(frame, {to_x, y}, !going_right, color)
 }
 
+// api_tree_ref_edge_down draws a dashed elbow arrow from the bottom of `from`
+// into the top of the lower `to` card: the escape-hatch counterpart of the
+// solid ownership edge.
+api_tree_ref_edge_down :: proc(frame: ^ui.Ui_Frame, from, to: ui.Rect_I32, color: ui.Color) {
+	assert(frame != nil, "api_tree_ref_edge_down: nil frame")
+	assert(to.y > from.y + from.h, "api_tree_ref_edge_down: target not below source")
+	start := ui.Vector2{f32(from.x + from.w / 2), f32(from.y + from.h)}
+	end := ui.Vector2{f32(to.x + to.w / 2), f32(to.y)}
+	elbow_y := f32((from.y + from.h + to.y) / 2)
+	api_tree_dashed_segment(frame, start, {start.x, elbow_y}, color)
+	api_tree_dashed_segment(frame, {start.x, elbow_y}, {end.x, elbow_y}, color)
+	api_tree_dashed_segment(frame, {end.x, elbow_y}, end, color)
+	api_tree_arrow_down(frame, end, color)
+}
+
 // api_tree_ref_edge_up_side routes a dashed "feeds upstream" arrow from the
 // left edge of `from` around to the left edge of the higher `to` card.
 api_tree_ref_edge_up_side :: proc(frame: ^ui.Ui_Frame, from, to: ui.Rect_I32, color: ui.Color) {
@@ -950,10 +1103,7 @@ api_ownership_wide_rects :: proc(
 	inner_gap := api_tree_sc(frame, 10)
 	group_pad := api_tree_sc(frame, 10)
 	caption_h := api_tree_sc(frame, 24)
-	member_w := max(
-		(panel.w - margin * 2 - outer_gap * 2 - group_pad * 2 - inner_gap * 2) / 5,
-		1,
-	)
+	member_w := max((panel.w - margin * 2 - outer_gap * 2 - group_pad * 2 - inner_gap * 2) / 5, 1)
 	member_y := child_y + api_tree_sc(frame, 100)
 	r.frame_card = {panel.x + margin, member_y, member_w, card_h}
 	group_x := r.frame_card.x + member_w + outer_gap
@@ -973,10 +1123,7 @@ api_ownership_wide_rects :: proc(
 	}
 	r.adapter_card = {r.group.x + r.group.w + outer_gap, member_y, member_w, card_h}
 	output_gap := api_tree_sc(frame, 12)
-	output_w := max(
-		min(api_tree_sc(frame, 180), (panel.w - margin * 2 - output_gap * 2) / 3),
-		1,
-	)
+	output_w := max(min(api_tree_sc(frame, 180), (panel.w - margin * 2 - output_gap * 2) / 3), 1)
 	output_y := member_y + card_h + api_tree_sc(frame, 56)
 	output_total := output_w * 3 + output_gap * 2
 	output_center := r.borrowed[2].x + r.borrowed[2].w / 2
@@ -1033,14 +1180,7 @@ api_tree_phase_badge :: proc(frame: ^ui.Ui_Frame, card: ui.Rect_I32, phase: int)
 	digit := fmt.tprintf("%d", phase)
 	width := ui.text_width(frame, digit, .Label)
 	size := ui.text_role_size(frame, .Label)
-	ui.text(
-		frame,
-		digit,
-		i32(center.x) - width / 2,
-		i32(center.y) - size / 2,
-		.Label,
-		.Inverse,
-	)
+	ui.text(frame, digit, i32(center.x) - width / 2, i32(center.y) - size / 2, .Label, .Inverse)
 }
 
 api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui.Rect_I32) {
@@ -1202,7 +1342,7 @@ api_call_paths_tree :: proc(
 		frame,
 		panel,
 		"① capture → ② declare → ③ record → ④ buffer → ⑤ replay → ⑥ draw · " +
-			"dashed → text + a11y upstream",
+		"dashed → text + a11y upstream",
 	)
 	api_call_paths_cards(frame, state, r)
 	_ = compact
@@ -1311,23 +1451,152 @@ api_relationship_trees_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, us
 	wide := rect.w >= api_tree_sc(frame, 700)
 	pad := api_tree_sc(frame, 16 if wide else 12)
 	gap := api_tree_sc(frame, 20 if wide else 16)
+	start_h := api_tree_sc(frame, 360)
 	ownership_h := api_tree_sc(frame, 440 if wide else 610)
-	ownership := ui.Rect_I32{rect.x + pad, rect.y + pad, rect.w - pad * 2, ownership_h}
+	start := ui.Rect_I32{rect.x + pad, rect.y + pad, rect.w - pad * 2, start_h}
+	ownership := ui.Rect_I32{start.x, start.y + start.h + gap, start.w, ownership_h}
 	depth := ui.Rect_I32 {
 		ownership.x,
 		ownership.y + ownership.h + gap,
 		ownership.w,
-		rect.h - pad * 2 - gap - ownership.h,
+		rect.h - pad * 2 - gap * 2 - start_h - ownership_h,
 	}
+	api_tree_panel(frame, start, "0 · WHERE TO START")
 	api_tree_panel(frame, ownership, "1 · LITERAL OWNERSHIP")
 	api_tree_panel(frame, depth, "2 · PER-FRAME CALL PATHS")
+	api_start_tree(frame, state, start)
 	api_ownership_wide(frame, state, ownership)
 	api_call_paths_tree(frame, state, depth, !wide)
+}
+
+Api_Start_Rects :: struct {
+	questions: [3]ui.Rect_I32,
+	starts:    [3]ui.Rect_I32,
+	facade:    ui.Rect_I32,
+	explicit:  ui.Rect_I32,
+	gfx_leaf:  ui.Rect_I32,
+}
+
+api_start_rects :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32) -> (r: Api_Start_Rects) {
+	assert(frame != nil && panel.w > 0 && panel.h > 0, "api_start_rects: invalid panel")
+	margin := api_tree_sc(frame, 14)
+	gap := api_tree_sc(frame, 12)
+	card_h := api_tree_sc(frame, 42)
+	card_w := max(min(api_tree_sc(frame, 200), (panel.w - margin * 2 - gap * 2) / 3), 1)
+	row_gap := api_tree_sc(frame, 40)
+	top := panel.y + api_tree_sc(frame, 38)
+	for index in 0 ..< 3 {
+		center := panel.x + panel.w * (2 * i32(index) + 1) / 6
+		x := clamp(center - card_w / 2, panel.x + margin, panel.x + panel.w - margin - card_w)
+		r.questions[index] = {x, top, card_w, card_h}
+		r.starts[index] = {x, top + card_h + row_gap, card_w, card_h}
+	}
+	facade_y := r.starts[0].y + card_h + row_gap
+	r.facade = {r.starts[0].x, facade_y, card_w, card_h}
+	escape_y := facade_y + card_h + row_gap
+	r.explicit = {r.starts[0].x, escape_y, card_w, card_h}
+	r.gfx_leaf = {r.starts[1].x, escape_y, card_w, card_h}
+	return
+}
+
+// api_start_tree is the decision layer: three situations, the tier each one
+// starts at, and the two escape hatches below the default facade path.
+api_start_tree :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui.Rect_I32) {
+	assert(frame != nil && state != nil, "api_start_tree: invalid arguments")
+	assert(panel.w > 0 && panel.h > 0, "api_start_tree: invalid panel")
+	theme := ui.ui_frame_theme(frame)
+	r := api_start_rects(frame, panel)
+	api_tree_legend(
+		frame,
+		panel,
+		"solid → default path · dashed → escape hatch or later step",
+	)
+	column_colors := [3]ui.Color{theme.fg_success, theme.fg_tool, theme.fg_user}
+	for index in 0 ..< 3 {
+		api_tree_edge_down(frame, r.questions[index], r.starts[index], column_colors[index])
+	}
+	api_tree_edge_down(frame, r.starts[0], r.facade, theme.fg_success)
+	api_tree_ref_edge_down(frame, r.facade, r.explicit, theme.fg_secondary)
+	api_tree_ref_edge_down(frame, r.facade, r.gfx_leaf, theme.fg_secondary)
+	api_tree_ref_edge_side(frame, r.starts[2], r.starts[1], theme.fg_secondary)
+	api_tree_under_label(frame, r.starts[2], "port first · add UI later")
+	api_start_cards(frame, state, r)
+}
+
+api_start_cards :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, r: Api_Start_Rects) {
+	assert(frame != nil && state != nil, "api_start_cards: invalid arguments")
+	theme := ui.ui_frame_theme(frame)
+	question_titles := [3]string{"New UI app?", "Own the frame loop?", "Porting raylib?"}
+	question_details := [3]string{"the common case", "pacing · embedding", "existing gfx loop"}
+	question_tips := [3]string{API_TIP_START_NEW, API_TIP_START_LOOP, API_TIP_START_PORT}
+	start_titles := [3]string{"ui_gfx.App", "ui_gfx.Session", "ingot:gfx"}
+	start_details := [3]string{"START HERE · default host", "custom host", "raylib-shaped loop"}
+	start_tips := [3]string{API_TIP_START_APP, API_TIP_START_SESSION, API_TIP_START_GFX_LOOP}
+	column_colors := [3]ui.Color{theme.fg_success, theme.fg_tool, theme.fg_user}
+	for index in 0 ..< 3 {
+		api_tree_card(
+			frame,
+			state,
+			{
+				r.questions[index],
+				question_titles[index],
+				question_details[index],
+				question_tips[index],
+				column_colors[index],
+			},
+		)
+		api_tree_card(
+			frame,
+			state,
+			{
+				r.starts[index],
+				start_titles[index],
+				start_details[index],
+				start_tips[index],
+				column_colors[index],
+			},
+		)
+	}
+	api_tree_card(
+		frame,
+		state,
+		{
+			r.facade,
+			"facade ui.Ui widgets",
+			"forms · chrome · panels",
+			API_TIP_START_FACADE,
+			theme.fg_success,
+		},
+	)
+	api_tree_card(
+		frame,
+		state,
+		{
+			r.explicit,
+			"*_at · explicit islands",
+			"canvases · lists · overlays",
+			API_TIP_START_EXPLICIT,
+			theme.fg_accent,
+		},
+	)
+	api_tree_card(
+		frame,
+		state,
+		{
+			r.gfx_leaf,
+			"direct ingot:gfx",
+			"textures · audio · shaders",
+			API_TIP_START_DIRECT_GFX,
+			theme.fg_assistant,
+		},
+	)
 }
 
 draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 	assert(u != nil && u.open, "draw_api_text_equivalent: invalid UI")
 	_ = ui.section_header(u, "TEXTUAL EQUIVALENT")
+	draw_api_text_start(u)
+	ui.space(u, .XS)
 	draw_api_text_ownership(u)
 	ui.space(u, .XS)
 	draw_api_text_call_paths(u)
@@ -1449,15 +1718,17 @@ draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	state := &api_map_state
 	u := &state.form
 	wide := w >= ui.ui_frame_sc(frame, 700)
-	canvas_h: i32 = 880 if wide else 1120
+	canvas_h: i32 = 1260 if wide else 1500
 	total_h: i32 = canvas_h + 620
 	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, total_h)}, gap = .SM)
 	ui.scope_begin(u, "api-relationships")
-	_ = ui.section_header(u, "API OWNERSHIP AND CALL PATHS")
-	ui.label(u, "Ownership is literal; application-facing routes flow toward ingot:gfx.")
+	_ = ui.section_header(u, "API TIERS: WHERE TO START, OWNERSHIP, CALL PATHS")
+	ui.label(
+		u,
+		"Start at the highest tier that fits; ownership is literal; routes flow toward ingot:gfx.",
+	)
 	_ = ui.canvas(u, {height = canvas_h}, api_relationship_trees_canvas, state)
 	draw_api_text_equivalent(u)
-	draw_entry_paths(u)
 	ui.scope_end(u)
 	end_y := ui.remaining_rect(u).y
 	ui.end(u)
