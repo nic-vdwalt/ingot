@@ -559,10 +559,39 @@ ti_sel_owner :: proc(ctx: ^TI_Ctx) -> bool {
 }
 
 // ti_sync_web mirrors the input into the browser DOM (web builds) and applies
-// DOM-side edits/focus back into the builder. No-op on native targets.
+// DOM-side edits/focus back into the builder. No-op wherever no web form
+// backend is installed (native targets, headless tests).
 @(private = "file")
 ti_sync_web :: proc(ctx: ^TI_Ctx) {
 	assert(ctx.sb != nil, "ti_sync_web: nil builder")
+	backend := ui_frame_runtime(ctx.frame).web_form
+	if backend.sync_text_input == nil do return
+	sem := ctx.semantics
+	if sem.form_id == "" || sem.field_id == "" do return
+	result := backend.sync_text_input(
+		backend.data,
+		sem.form_id,
+		sem.field_id,
+		sem.name,
+		ctx.placeholder,
+		strings.to_string(ctx.sb^),
+		ctx.x,
+		ctx.y,
+		ctx.w,
+		ctx.h,
+		i32(sem.input_type),
+		i32(sem.autocomplete),
+		ctx.active,
+	)
+	if !result.changed do return
+	value := result.value
+	// DOM edits obey the same byte budget as keyboard edits; clamp on a rune
+	// boundary so a truncated autofill never splits a codepoint.
+	if len(value) > ctx.max_bytes do value = value[:caret_clamp(value, ctx.max_bytes)]
+	strings.builder_reset(ctx.sb)
+	strings.write_string(ctx.sb, value)
+	if ctx.cursor != nil do ctx.cursor^ = caret_clamp(value, result.cursor)
+	if ctx.sel.active && ctx.sel.sb == ctx.sb do sel_reset(ctx.sel)
 }
 
 // ti_semantic_push records the input in the semantic layer. Label prefers

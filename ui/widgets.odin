@@ -631,8 +631,9 @@ btn_gloss :: proc(frame: ^Ui_Frame, theme: ^Theme, rect: Rectangle) {
 }
 
 Button_Options :: struct {
-	style:    Btn_Style,
-	disabled: bool,
+	style:       Btn_Style,
+	disabled:    bool,
+	web_form_id: string,
 }
 
 Button_At_Options :: struct {
@@ -659,13 +660,23 @@ button_id :: proc(
 	label: string,
 	style: Btn_Style = .Secondary,
 	enabled: bool = true,
+	web_form_id: string = "",
 ) -> bool {
 	assert(u != nil && u.open, "button: frame not open")
 	assert(id != WIDGET_ID_NONE, "button: zero stable id")
 	assert(label != "", "button: empty accessible label")
 	r := btn_slot_px(u, label)
 	fo := focus(u, id) if enabled && slot_visible(r) else Focus_Opt{}
-	return button_at(u.frame, r, label, style, enabled = enabled, focus = fo, widget = id)
+	return button_at(
+		u.frame,
+		r,
+		label,
+		style,
+		enabled = enabled,
+		web_form_id = web_form_id,
+		focus = fo,
+		widget = id,
+	)
 }
 
 @(private = "package")
@@ -692,7 +703,7 @@ button_u64 :: proc(
 
 @(private = "package")
 button_id_options :: proc(u: ^Ui, id: Widget_Id, label: string, options: Button_Options) -> bool {
-	return button_id(u, id, label, options.style, !options.disabled)
+	return button_id(u, id, label, options.style, !options.disabled, options.web_form_id)
 }
 
 @(private = "package")
@@ -737,6 +748,37 @@ btn_label_fit :: proc(frame: ^Ui_Frame, label: string, w, font_size: i32) -> (cs
 	return text_c, measure_text_frame(frame, text_c, font_size)
 }
 
+// btn_sync_web_submit mirrors a button into the browser form overlay (web
+// builds with an installed backend): the DOM submit button drives the
+// browser's save-password and autofill flows. Returns true when the DOM form
+// submitted this frame.
+@(private = "file")
+btn_sync_web_submit :: proc(
+	frame: ^Ui_Frame,
+	web_form_id, label: string,
+	x, y, w, h: i32,
+	style: Btn_Style,
+	font_size: i32,
+	enabled: bool,
+) -> bool {
+	assert(frame != nil, "btn_sync_web_submit: nil frame")
+	if web_form_id == "" do return false
+	backend := ui_frame_runtime(frame).web_form
+	if backend.sync_submit_button == nil do return false
+	return backend.sync_submit_button(
+		backend.data,
+		web_form_id,
+		label,
+		x,
+		y,
+		w,
+		h,
+		i32(style),
+		font_size,
+		enabled,
+	)
+}
+
 button_at :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
@@ -763,7 +805,8 @@ button_at :: proc(
 		focus_opt_click(frame, focus, x, y, w, h)
 		clicked = clicked || focus_opt_activated(frame, focus)
 	}
-	_ = web_form_id
+	clicked =
+		clicked || btn_sync_web_submit(frame, web_form_id, label, x, y, w, h, style, fs, enabled)
 	if hovered do request_cursor(frame, .POINTING_HAND)
 
 	t: f32 = 1 if hovered else 0
@@ -855,7 +898,8 @@ button_at_state :: proc(
 		focus_opt_click(frame, focus, x, y, w, h)
 		clicked = clicked || focus_opt_activated(frame, focus)
 	}
-	_ = web_form_id
+	clicked =
+		clicked || btn_sync_web_submit(frame, web_form_id, label, x, y, w, h, style, fs, enabled)
 	if hovered do request_cursor(frame, .POINTING_HAND)
 	t := hover_anim_frac(frame, state, hovered) if enabled else 0
 	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style_theme, style)

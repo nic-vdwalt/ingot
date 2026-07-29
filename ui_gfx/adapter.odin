@@ -67,6 +67,53 @@ adapter_attach_runtime :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime) {
 	assert(adapter != nil && adapter.initialized, "adapter_attach_runtime: invalid adapter")
 	assert(runtime != nil && runtime.initialized, "adapter_attach_runtime: invalid runtime")
 	ui.ui_runtime_set_text_backend(runtime, adapter_text_backend(adapter))
+	ui.ui_runtime_set_web_form_backend(runtime, adapter_web_form_backend())
+}
+
+// adapter_web_form_backend bridges the ui web-form hooks to the gfx browser
+// overlay. Installed on every target: outside JS the gfx procs are no-op
+// stubs, so the bridge costs nothing while keeping call sites unconditional.
+adapter_web_form_backend :: proc() -> ui.Web_Form_Backend {
+	return ui.Web_Form_Backend {
+		sync_text_input = adapter_web_form_sync_text,
+		sync_submit_button = adapter_web_form_sync_submit,
+	}
+}
+
+@(private = "file")
+adapter_web_form_sync_text :: proc(
+	data: rawptr,
+	form_id, field_id, name, placeholder, value: string,
+	x, y, w, h, input_type, autocomplete: i32,
+	active: bool,
+) -> ui.Web_Form_Text_Result {
+	_ = data
+	result := rl.SyncWebTextInput(
+		form_id,
+		field_id,
+		name,
+		placeholder,
+		value,
+		x,
+		y,
+		w,
+		h,
+		input_type,
+		autocomplete,
+		active,
+	)
+	return {result.value, result.cursor, result.changed, result.focused}
+}
+
+@(private = "file")
+adapter_web_form_sync_submit :: proc(
+	data: rawptr,
+	form_id, label: string,
+	x, y, w, h, style, font_size: i32,
+	enabled: bool,
+) -> bool {
+	_ = data
+	return rl.SyncWebSubmitButton(form_id, label, x, y, w, h, style, font_size, enabled)
 }
 
 adapter_destroy :: proc(adapter: ^Adapter) {
