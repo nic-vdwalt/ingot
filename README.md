@@ -125,6 +125,16 @@ import ui "ingot:ui"
 import "ingot:ui_gfx"
 ```
 
+For editor support, tell [OLS](https://github.com/DanielGavin/ols) about the
+collection with an `ols.json` at your project root:
+
+```json
+{
+	"$schema": "https://raw.githubusercontent.com/DanielGavin/ols/master/misc/ols.schema.json",
+	"collections": [{ "name": "ingot", "path": "libs/ingot" }]
+}
+```
+
 ## Choose your entry point
 
 [![The Ingot API map: start tiers, ownership, and the six steps of one frame](docs/media/api-map-dark.png)](https://openalloy.ai/demos/ingot-api-map/)
