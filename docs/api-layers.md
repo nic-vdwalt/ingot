@@ -25,25 +25,29 @@ flowchart TB
     APP -->|owns| SESSION[ui_gfx.Session]
     APP -->|owns default root| FORM[reusable ui.Ui\nbackend-free]
     CALLER -.->|may own more roots| FORM2[additional ui.Ui roots]
-    SESSION --> RUNTIME[Ui_Runtime]
-    SESSION --> INPUT[Ui_Input]
     SESSION --> FRAME[reusable Ui_Frame]
-    SESSION --> OUTPUT[Ui_Output]
+    SESSION --> BORROWED
     SESSION --> ADAPTER[ui_gfx.Adapter]
+    subgraph BORROWED[borrowed session state]
+        RUNTIME[Ui_Runtime]
+        INPUT[Ui_Input]
+        OUTPUT[Ui_Output]
+    end
     OUTPUT --> MAIN[main paint]
     OUTPUT --> OVERLAY[overlay paint]
     OUTPUT --> PLATFORM[platform output]
-    FRAME -.->|references while open| RUNTIME
-    FRAME -.->|references while open| INPUT
-    FRAME -.->|references while open| OUTPUT
-    ADAPTER -.->|consumes without owning| OUTPUT
+    FRAME -.->|borrows all while open| BORROWED
+    ADAPTER -.->|consumes + feeds all| BORROWED
 ```
 
 Solid edges are ownership (struct fields); dashed edges are frame-time
-references. The five Session members are siblings — `Ui_Output` does not live
-inside `Ui_Frame`, and `Adapter` does not own the output it consumes. While a
-frame is open, `Ui_Frame` borrows the Session-owned runtime, input, and output;
-the call-path diagram below shows that same relationship as dataflow.
+borrowing, and they are complete — no references are omitted. The five Session
+members are siblings; `Ui_Output` does not live inside `Ui_Frame`, and
+`Adapter` does not own what it touches. While a frame is open, `Ui_Frame`
+borrows all three passive members: runtime services, input reads, output
+writes. `Adapter` likewise touches all three: it feeds `Ui_Runtime` a text
+backend, captures platform events into `Ui_Input`, and consumes `Ui_Output`.
+The call-path diagram below shows the same relationships as dataflow.
 
 The ownership tree is literal. `App` contains `Session` and its reusable `Ui`
 form as sibling fields. `Session` contains five peer fields: the runtime,

@@ -207,7 +207,7 @@ API_TIP_FRAME ::
 		"Lifetime: reused, open for one frame" +
 		`
 ` +
-		"References: Runtime, Input, and Output" +
+		"Borrows all three: Runtime (services), Input (reads), Output (writes)" +
 		`
 ` +
 		"Role: records paint, semantics, interaction, and platform requests.")
@@ -231,18 +231,18 @@ API_TIP_ADAPTER ::
 	("ui_gfx.Adapter" +
 		`
 ` +
-		"Owner: ui_gfx.Session; sibling of Ui_Output" +
+		"Owner: ui_gfx.Session; sibling of the borrowed state" +
 		`
 ` +
 		"Lifetime: application session" +
 		`
 ` +
-		"Input: gfx events, fonts, and Ui_Output" +
+		"Touches all three: feeds Runtime a text backend, captures into Input, " +
+		"consumes Output" +
 		`
 ` +
-		"Role: ui ↔ gfx bridge — lends Ui_Runtime a text backend, captures " +
-		"Ui_Input, streams main paint, replays overlay, applies platform output, " +
-		"and publishes accessibility.")
+		"Role: ui ↔ gfx bridge — streams main paint, replays overlay, applies " +
+		"platform output, and publishes accessibility.")
 
 API_TIP_MAIN ::
 	("Main paint" +
@@ -906,41 +906,75 @@ api_tree_branch_down :: proc(
 	}
 }
 
+Api_Ownership_Rects :: struct {
+	caller:       ui.Rect_I32,
+	app:          ui.Rect_I32,
+	session:      ui.Rect_I32,
+	form:         ui.Rect_I32,
+	frame_card:   ui.Rect_I32,
+	adapter_card: ui.Rect_I32,
+	group:        ui.Rect_I32,
+	borrowed:     [3]ui.Rect_I32,
+	outputs:      [3]ui.Rect_I32,
+}
+
 api_ownership_wide_rects :: proc(
 	frame: ^ui.Ui_Frame,
 	panel: ui.Rect_I32,
 ) -> (
-	caller, app, session, form: ui.Rect_I32,
-	members: [5]ui.Rect_I32,
-	outputs: [3]ui.Rect_I32,
+	r: Api_Ownership_Rects,
 ) {
 	assert(frame != nil && panel.w > 0 && panel.h > 0, "api_ownership_wide_rects: invalid panel")
 	margin := api_tree_sc(frame, 14)
 	card_h := api_tree_sc(frame, 42)
 	card_w := min(api_tree_sc(frame, 180), (panel.w - margin * 3) / 2)
 	top := panel.y + api_tree_sc(frame, 38)
-	caller = api_tree_centered_rect(panel, top, min(card_w * 2, panel.w - margin * 2), card_h)
-	app = api_tree_centered_rect(panel, top + api_tree_sc(frame, 54), card_w, card_h)
-	child_y := app.y + api_tree_sc(frame, 62)
-	session = {panel.x + panel.w / 2 - card_w - margin / 2, child_y, card_w, card_h}
-	form = {panel.x + panel.w / 2 + margin / 2, child_y, card_w, card_h}
-	member_gap := api_tree_sc(frame, 20)
-	member_w := (panel.w - margin * 2 - member_gap * 4) / 5
-	member_y := child_y + api_tree_sc(frame, 72)
-	for index := 0; index < len(members); index += 1 {
-		members[index] = {
-			panel.x + margin + i32(index) * (member_w + member_gap),
+	r.caller = api_tree_centered_rect(panel, top, min(card_w * 2, panel.w - margin * 2), card_h)
+	r.app = api_tree_centered_rect(panel, top + api_tree_sc(frame, 54), card_w, card_h)
+	child_y := r.app.y + api_tree_sc(frame, 62)
+	r.session = {panel.x + panel.w / 2 - card_w - margin / 2, child_y, card_w, card_h}
+	r.form = {panel.x + panel.w / 2 + margin / 2, child_y, card_w, card_h}
+	outer_gap := api_tree_sc(frame, 30)
+	inner_gap := api_tree_sc(frame, 10)
+	group_pad := api_tree_sc(frame, 10)
+	caption_h := api_tree_sc(frame, 24)
+	member_w := max(
+		(panel.w - margin * 2 - outer_gap * 2 - group_pad * 2 - inner_gap * 2) / 5,
+		1,
+	)
+	member_y := child_y + api_tree_sc(frame, 100)
+	r.frame_card = {panel.x + margin, member_y, member_w, card_h}
+	group_x := r.frame_card.x + member_w + outer_gap
+	r.group = {
+		group_x,
+		member_y - caption_h,
+		group_pad * 2 + member_w * 3 + inner_gap * 2,
+		caption_h + card_h + group_pad,
+	}
+	for index := 0; index < len(r.borrowed); index += 1 {
+		r.borrowed[index] = {
+			group_x + group_pad + i32(index) * (member_w + inner_gap),
 			member_y,
 			member_w,
 			card_h,
 		}
 	}
+	r.adapter_card = {r.group.x + r.group.w + outer_gap, member_y, member_w, card_h}
 	output_gap := api_tree_sc(frame, 12)
-	output_w := min(api_tree_sc(frame, 180), (panel.w - margin * 2 - output_gap * 2) / 3)
-	output_y := member_y + api_tree_sc(frame, 76)
-	output_start := panel.x + (panel.w - output_w * 3 - output_gap * 2) / 2
-	for index := 0; index < len(outputs); index += 1 {
-		outputs[index] = {
+	output_w := max(
+		min(api_tree_sc(frame, 180), (panel.w - margin * 2 - output_gap * 2) / 3),
+		1,
+	)
+	output_y := member_y + card_h + api_tree_sc(frame, 56)
+	output_total := output_w * 3 + output_gap * 2
+	output_center := r.borrowed[2].x + r.borrowed[2].w / 2
+	output_start := clamp(
+		output_center - output_total / 2,
+		panel.x + margin,
+		panel.x + panel.w - margin - output_total,
+	)
+	for index := 0; index < len(r.outputs); index += 1 {
+		r.outputs[index] = {
 			output_start + i32(index) * (output_w + output_gap),
 			output_y,
 			output_w,
@@ -950,74 +984,117 @@ api_ownership_wide_rects :: proc(
 	return
 }
 
+// api_tree_group_box draws the borrowed-state container: rounded outline with
+// a caption strip above the grouped cards.
+api_tree_group_box :: proc(frame: ^ui.Ui_Frame, group: ui.Rect_I32, caption: string) {
+	assert(frame != nil && group.w > 0 && group.h > 0, "api_tree_group_box: invalid group")
+	theme := ui.ui_frame_theme(frame)
+	paint_rect := ui.rect_f32(group)
+	ui.draw_rectangle_rounded(frame, paint_rect, 0.06, 6, theme.bg_secondary)
+	ui.draw_rectangle_rounded_lines_ex(frame, paint_rect, 0.06, 6, 1, theme.border_subtle)
+	ui.text(
+		frame,
+		caption,
+		group.x + api_tree_sc(frame, 10),
+		group.y + api_tree_sc(frame, 6),
+		.Label,
+		.Muted,
+	)
+}
+
+// api_tree_under_label centers helper text beneath a card.
+api_tree_under_label :: proc(frame: ^ui.Ui_Frame, card: ui.Rect_I32, label: string) {
+	assert(frame != nil && len(label) > 0, "api_tree_under_label: invalid label")
+	width := ui.text_width(frame, label, .Label)
+	x := card.x + (card.w - width) / 2
+	ui.text(frame, label, x, card.y + card.h + api_tree_sc(frame, 8), .Label, .Secondary)
+}
+
 api_ownership_wide :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, panel: ui.Rect_I32) {
 	assert(frame != nil && state != nil, "api_ownership_wide: invalid arguments")
 	theme := ui.ui_frame_theme(frame)
-	caller, app, session, form, members, outputs := api_ownership_wide_rects(frame, panel)
-	api_tree_legend(frame, panel, "solid → owns · dashed → references while a frame is open")
-	api_tree_edge_down(frame, caller, app, theme.fg_accent)
-	app_children := [?]ui.Rect_I32{session, form}
-	api_tree_draw_edges(frame, app, app_children[:], theme.fg_accent)
-	api_tree_branch_down(frame, session, members[:], theme.fg_tool)
-	api_tree_branch_down(frame, members[3], outputs[:], theme.fg_success)
-	api_tree_ref_edge_side(frame, members[2], members[1], theme.fg_secondary)
-	api_tree_ref_edge_side(frame, members[2], members[3], theme.fg_secondary)
-	api_tree_ref_edge_side(frame, members[4], members[3], theme.fg_secondary)
+	r := api_ownership_wide_rects(frame, panel)
+	api_tree_legend(frame, panel, "solid → owns · dashed → borrows while a frame is open")
+	api_tree_edge_down(frame, r.caller, r.app, theme.fg_accent)
+	app_children := [?]ui.Rect_I32{r.session, r.form}
+	api_tree_draw_edges(frame, r.app, app_children[:], theme.fg_accent)
+	owned := [?]ui.Rect_I32 {
+		r.frame_card,
+		{r.borrowed[0].x, r.group.y, r.borrowed[0].w, 1},
+		{r.borrowed[1].x, r.group.y, r.borrowed[1].w, 1},
+		{r.borrowed[2].x, r.group.y, r.borrowed[2].w, 1},
+		r.adapter_card,
+	}
+	api_tree_branch_down(frame, r.session, owned[:], theme.fg_tool)
+	api_tree_group_box(frame, r.group, "BORROWED SESSION STATE")
+	api_tree_branch_down(frame, r.borrowed[2], r.outputs[:], theme.fg_success)
+	api_tree_ref_edge_side(frame, r.frame_card, r.group, theme.fg_secondary)
+	api_tree_ref_edge_side(frame, r.adapter_card, r.group, theme.fg_secondary)
+	api_tree_under_label(frame, r.frame_card, "borrows all")
+	api_tree_under_label(frame, r.adapter_card, "consumes + feeds all")
+	api_ownership_cards(frame, state, r)
+}
+
+api_ownership_cards :: proc(frame: ^ui.Ui_Frame, state: ^Api_Map_State, r: Api_Ownership_Rects) {
+	assert(frame != nil && state != nil, "api_ownership_cards: invalid arguments")
+	theme := ui.ui_frame_theme(frame)
 	api_tree_card(
 		frame,
 		state,
-		{caller, "Caller application state", "owns App value", API_TIP_CALLER, theme.fg_accent},
-	)
-	api_tree_card(frame, state, {app, "ui_gfx.App", "default host", API_TIP_APP, theme.fg_accent})
-	api_tree_card(
-		frame,
-		state,
-		{session, "ui_gfx.Session", "App-owned field", API_TIP_SESSION, theme.fg_tool},
+		{r.caller, "Caller application state", "owns App value", API_TIP_CALLER, theme.fg_accent},
 	)
 	api_tree_card(
 		frame,
 		state,
-		{form, "reusable ui.Ui", "backend-free root", API_TIP_UI, theme.fg_plan},
+		{r.app, "ui_gfx.App", "default host", API_TIP_APP, theme.fg_accent},
 	)
-	labels := [?]string {
-		"Ui_Runtime",
-		"Ui_Input",
-		"reusable Ui_Frame",
-		"Ui_Output",
-		"ui_gfx.Adapter",
-	}
-	details := [?]string {
-		"persistent services",
-		"input snapshot",
-		"references siblings",
-		"three channels",
-		"ui ↔ gfx bridge",
-	}
-	tips := [?]string {
-		API_TIP_RUNTIME,
-		API_TIP_INPUT,
-		API_TIP_FRAME,
-		API_TIP_OUTPUT,
-		API_TIP_ADAPTER,
-	}
-	accents := [?]ui.Color {
-		theme.fg_tool,
-		theme.fg_user,
-		theme.fg_accent,
-		theme.fg_success,
-		theme.fg_assistant,
-	}
-	for member, index in members {
+	api_tree_card(
+		frame,
+		state,
+		{r.session, "ui_gfx.Session", "App-owned field", API_TIP_SESSION, theme.fg_tool},
+	)
+	api_tree_card(
+		frame,
+		state,
+		{r.form, "reusable ui.Ui", "backend-free root", API_TIP_UI, theme.fg_plan},
+	)
+	api_tree_card(
+		frame,
+		state,
+		{r.frame_card, "reusable Ui_Frame", "records the frame", API_TIP_FRAME, theme.fg_accent},
+	)
+	borrowed_labels := [?]string{"Ui_Runtime", "Ui_Input", "Ui_Output"}
+	borrowed_details := [?]string{"persistent services", "input snapshot", "three channels"}
+	borrowed_tips := [?]string{API_TIP_RUNTIME, API_TIP_INPUT, API_TIP_OUTPUT}
+	borrowed_accents := [?]ui.Color{theme.fg_tool, theme.fg_user, theme.fg_success}
+	for card, index in r.borrowed {
 		api_tree_card(
 			frame,
 			state,
-			{member, labels[index], details[index], tips[index], accents[index]},
+			{
+				card,
+				borrowed_labels[index],
+				borrowed_details[index],
+				borrowed_tips[index],
+				borrowed_accents[index],
+			},
 		)
 	}
+	api_tree_card(
+		frame,
+		state,
+		{
+			r.adapter_card,
+			"ui_gfx.Adapter",
+			"ui ↔ gfx bridge",
+			API_TIP_ADAPTER,
+			theme.fg_assistant,
+		},
+	)
 	output_labels := [?]string{"main paint", "overlay paint", "platform output"}
 	output_details := [?]string{"streams now", "replays next", "applies last"}
 	output_tips := [?]string{API_TIP_MAIN, API_TIP_OVERLAY, API_TIP_PLATFORM}
-	for output, index in outputs {
+	for output, index in r.outputs {
 		api_tree_card(
 			frame,
 			state,
@@ -1167,7 +1244,7 @@ api_relationship_trees_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, us
 	wide := rect.w >= api_tree_sc(frame, 700)
 	pad := api_tree_sc(frame, 16 if wide else 12)
 	gap := api_tree_sc(frame, 20 if wide else 16)
-	ownership_h := api_tree_sc(frame, 390 if wide else 560)
+	ownership_h := api_tree_sc(frame, 440 if wide else 610)
 	ownership := ui.Rect_I32{rect.x + pad, rect.y + pad, rect.w - pad * 2, ownership_h}
 	depth := ui.Rect_I32 {
 		ownership.x,
@@ -1210,6 +1287,13 @@ draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 	)
 	ui.kv_row(
 		u,
+		"Ui_Frame",
+		"borrows all three while open: Runtime services, Input reads, Output writes",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
 		"Ui_Output",
 		"owns main, overlay, and platform buffers; sibling Adapter consumes them",
 		theme.fg_secondary,
@@ -1218,7 +1302,7 @@ draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 	ui.kv_row(
 		u,
 		"Adapter",
-		"ui ↔ gfx bridge: text backend, input capture, paint replay, accessibility",
+		"touches all three: feeds Runtime text, captures Input, consumes Output",
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
@@ -1259,8 +1343,8 @@ draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	state := &api_map_state
 	u := &state.form
 	wide := w >= ui.ui_frame_sc(frame, 700)
-	canvas_h: i32 = 760 if wide else 980
-	total_h: i32 = canvas_h + 510
+	canvas_h: i32 = 810 if wide else 1030
+	total_h: i32 = canvas_h + 540
 	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, total_h)}, gap = .SM)
 	ui.scope_begin(u, "api-relationships")
 	_ = ui.section_header(u, "API OWNERSHIP AND CALL PATHS")
