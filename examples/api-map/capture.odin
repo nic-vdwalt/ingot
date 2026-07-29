@@ -23,13 +23,14 @@ import "ingot:ui_gfx"
 
 when MAP_CAPTURE {
 	// Fixed output geometry: identical PNGs regardless of host display. The
-	// height gives the derived diagram room for the gfx bar and its pill; the
-	// first frame asserts nothing falls outside the target.
-	MAP_CAPTURE_WIDTH :: 1600
-	MAP_CAPTURE_HEIGHT :: 1130
+	// target is 2x the logical composition (UI scale doubled with it), so the
+	// README still stays crisp on HiDPI displays; the first frame asserts
+	// nothing falls outside the target.
+	MAP_CAPTURE_WIDTH :: 3200
+	MAP_CAPTURE_HEIGHT :: 2000
 	MAP_CAPTURE_WINDOW_WIDTH :: 1280
 	MAP_CAPTURE_WINDOW_HEIGHT :: 800
-	MAP_CAPTURE_UI_SCALE :: f32(1.15)
+	MAP_CAPTURE_UI_SCALE :: f32(2.3)
 	// Frames to hold before each shot so fonts, DPI, and theme all settle.
 	MAP_CAPTURE_SETTLE_FRAMES :: 30
 
