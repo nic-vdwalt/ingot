@@ -53,19 +53,22 @@ and each target still needs validation on the operating systems, GPUs, browsers,
 and accessibility stacks an application intends to ship. Real applications are
 needed to establish where the approach remains useful and where it breaks down.
 
-[![The animated Ingot gallery](docs/media/ingot-gallery.gif)](https://openalloy.ai/demos/ingot-gallery/)
+[![The Ingot API map: start tiers, ownership, and the six steps of one frame](docs/media/api-map-dark.png)](https://openalloy.ai/demos/ingot-api-map/)
 
-[Launch the interactive WebGPU gallery](https://openalloy.ai/demos/ingot-gallery/).
-GitHub README files cannot embed an interactive iframe or WebGPU application, so
-this generated animation links to the live gallery.
+[Explore the interactive API map](https://openalloy.ai/demos/ingot-api-map/) —
+hover any node for its contract, click a step to walk one frame. GitHub README
+files cannot embed a WebGPU application, so this generated still links to the
+live demo. The [widget gallery](https://openalloy.ai/demos/ingot-gallery/)
+remains available for every control.
 
 <details>
-<summary><strong>Gallery reproducibility details</strong></summary>
+<summary><strong>Screenshot reproducibility details</strong></summary>
 
-`bash scripts/capture-media.sh` renders `examples/gallery` into a fixed offscreen
-target and reads it back through `gfx.SaveRenderTexturePng`. It generates the
-animation above, deterministic stills in `docs/media/`, and release GIF/MP4
-assets in `dist/media/`. The same gallery source is published at the live link.
+`odin run examples/api-map -collection:ingot=. -define:INGOT_MAP_CAPTURE=true`
+renders `examples/api-map` into a fixed offscreen target and reads it back
+through `gfx.SaveRenderTexturePng`, writing deterministic dark and light stills
+into `docs/media/`. The same source is published at the live link.
+`bash scripts/capture-media.sh` produces the gallery media the same way.
 
 </details>
 
