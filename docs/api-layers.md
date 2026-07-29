@@ -63,25 +63,33 @@ number of caller-owned roots; the `App`-owned form is only the default for the
 
 ```mermaid
 flowchart TB
-    FACADE[Facade API] -->|paired *_at when available| FRAME[Ui_Frame]
-    EXPLICIT[Explicit UI: *_at, ui.canvas, composition protocols] --> FRAME
-    FRAME --> OUTPUT[Ui_Output]
-    OUTPUT -->|replayed by| ADAPTER[ui_gfx.Adapter]
-    ADAPTER -->|calls through| GFX[ingot:gfx]
-    ADAPTER -.->|text backend, input capture, a11y publish| FRAME
+    CAPTURE[① Input capture\nAdapter samples gfx events → Ui_Input] --> FACADE
+    CAPTURE --> EXPLICIT
+    FACADE[② Facade API] -->|paired *_at when available| FRAME[③ Ui_Frame\nrecords paint + semantics]
+    EXPLICIT[② Explicit UI: *_at, ui.canvas, composition protocols] --> FRAME
+    FRAME --> OUTPUT[④ Ui_Output\nmain · overlay · platform]
+    OUTPUT -->|replayed by| ADAPTER[⑤ ui_gfx.Adapter\nstreams · replays · applies]
+    ADAPTER -->|calls through| GFX[⑥ ingot:gfx]
+    ADAPTER -.->|text backend, a11y publish| FRAME
     RAYLIB[Migrated raylib app with existing loop] -->|starts here| GFX
     DIRECT[Direct gfx capabilities] -.->|bypass UI paint| GFX
 ```
 
 The call-path graph runs from application-facing entry points toward the
-backend-facing API; it is not ownership. `Ui_Frame` temporarily references the
-Session-owned runtime, input, and output while a frame is open. Adapter likewise
-references the active graphics context and frame rather than owning them.
+backend-facing API in per-frame order; it is not ownership. The six phases of
+one frame are: ① Adapter captures platform events into the `Ui_Input` snapshot,
+② facade or explicit UI reads that snapshot and declares widgets, ③ `Ui_Frame`
+records paint, semantics, and platform requests, ④ `Ui_Output` buffers the
+three channels, ⑤ Adapter streams main paint, replays overlay, and applies
+platform output, ⑥ `ingot:gfx` executes the backend calls. `Ui_Frame`
+temporarily references the Session-owned runtime, input, and output while a
+frame is open. Adapter likewise references the active graphics context and
+frame rather than owning them.
 
 `Adapter` is a two-way bridge, not just a replay sink. Downstream it translates
 UI output into `gfx` calls; upstream it lends `Ui_Runtime` a text backend for
-measurement and shaping, captures the platform input snapshot into `Ui_Input`
-before each frame, and publishes the accessibility tree after finalization.
+measurement and shaping and publishes the accessibility tree after
+finalization. The migrated-raylib route sits outside the frame cycle entirely.
 
 `Ui_Output` has distinct replay timing. Main paint passes through the Adapter
 sink as commands are emitted, overlay paint is replayed at frame end, and

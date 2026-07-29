@@ -1381,25 +1381,53 @@ draw_api_text_equivalent :: proc(u: ^ui.Ui) {
 		theme.fg_primary,
 	)
 	ui.space(u, .XS)
-	ui.label(u, "2. CALL PATHS", color = theme.fg_accent)
+	ui.label(u, "2. CALL PATHS · PER-FRAME ORDER", color = theme.fg_accent)
 	ui.kv_row(
 		u,
-		"Declaration",
-		"facade or explicit UI → Ui_Frame",
+		"① Capture",
+		"Adapter samples gfx events into the Ui_Input snapshot",
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
 	ui.kv_row(
 		u,
-		"Rendering",
-		"Ui_Frame → Ui_Output → Adapter → ingot:gfx",
+		"② Declare",
+		"facade or explicit UI reads Ui_Input and declares widgets",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"③ Record",
+		"Ui_Frame records paint, semantics, and platform requests",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"④ Buffer",
+		"Ui_Output holds main, overlay, and platform channels",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"⑤ Replay",
+		"Adapter streams main, replays overlay, applies platform output",
+		theme.fg_secondary,
+		theme.fg_primary,
+	)
+	ui.kv_row(
+		u,
+		"⑥ Draw",
+		"ingot:gfx executes the backend calls",
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
 	ui.kv_row(
 		u,
 		"Migration",
-		"migrated raylib loop → ingot:gfx; UI optional",
+		"migrated raylib loop → ingot:gfx; outside the cycle, UI optional",
 		theme.fg_secondary,
 		theme.fg_primary,
 	)
@@ -1410,8 +1438,8 @@ draw_api_relationships :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	state := &api_map_state
 	u := &state.form
 	wide := w >= ui.ui_frame_sc(frame, 700)
-	canvas_h: i32 = 810 if wide else 1030
-	total_h: i32 = canvas_h + 540
+	canvas_h: i32 = 880 if wide else 1120
+	total_h: i32 = canvas_h + 620
 	ui.begin(u, frame, {x, y0, w, ui.ui_frame_sc(frame, total_h)}, gap = .SM)
 	ui.scope_begin(u, "api-relationships")
 	_ = ui.section_header(u, "API OWNERSHIP AND CALL PATHS")
