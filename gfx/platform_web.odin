@@ -249,7 +249,7 @@ platform_should_close :: proc() -> bool {
 
 @(private)
 platform_poll_events :: proc() {
-	_input_drain(&g.inp)
+	_platform_drain_mouse_edges(&g.inp)
 }
 
 @(private)
@@ -318,85 +318,46 @@ platform_set_window_icon :: proc(image: Image) {}
 // Browser input events fire asynchronously (between frames), whereas the native
 // backend fills g.inp synchronously inside PollEvents (which input_poll calls
 // after resetting frame-scoped state). To preserve identical timing, the JS
-// event entry points (input_web.odin) write into a STAGING buffer here; the web
-// platform_poll_events drains staging into g.inp at the exact point native
-// fills it - so edge (pressed/released) semantics match frame-for-frame.
+// event entry points (input_web.odin) stage into g.inp's staging buffer - the
+// same one the GLFW callbacks use - and input_poll publishes it at the exact
+// point native fills it, so edge (pressed/released) semantics match
+// frame-for-frame.
+//
+// The globals below are NOT staged events. They are the browser's answer to
+// the live platform queries GLFW services from the window (key held, cursor
+// position, button held, pointer inside), plus the one edge pair the browser
+// genuinely must stage: a touch tap replays press and release between two
+// frames, so a level comparison at frame time would miss it entirely.
 
 @(private)
-st_pressed: [KEY_COUNT]bool
+st_held: [KEY_COUNT]bool // sticky held state, backs platform_key_down
 @(private)
-st_released: [KEY_COUNT]bool
+st_mouse: Vector2 // last cursor position, backs platform_cursor_pos
 @(private)
-st_repeat: [KEY_COUNT]bool
-@(private)
-st_held: [KEY_COUNT]bool // sticky held state for IsKeyDown
-@(private)
-st_keys: [CHAR_Q]KeyboardKey // ring of pressed keys (GetKeyPressed)
-@(private)
-st_key_h, st_key_t: int
-@(private)
-st_chars: [CHAR_Q]rune // ring of typed runes (GetCharPressed)
-@(private)
-st_char_h, st_char_t: int
-@(private)
-st_wheel: Vector2
-@(private)
-st_mouse: Vector2
-@(private)
-st_mb: [8]bool
+st_mb: [8]bool // sticky held state, backs platform_mouse_button
 @(private)
 st_mb_pressed: [8]bool
 @(private)
 st_mb_released: [8]bool
 @(private)
-st_hovered: bool
+st_hovered: bool // pointer inside the canvas, backs platform_window_hovered
 
+// _platform_drain_mouse_edges publishes the staged button edges. Called from
+// platform_poll_events (i.e. from input_poll, right after it clears the
+// per-frame edge state and before input_poll's own level comparison, which
+// ORs against these - see the ODIN_OS == .JS branch there).
+//
+// Keys, characters and wheel are absent by design: those stage through
+// g.inp and are published by _input_publish_staged, so no second copy of
+// them can drift out of sync with the shared one.
 @(private)
-_st_push_key :: proc "contextless" (k: KeyboardKey) {
-	nt := (st_key_t + 1) % CHAR_Q
-	if nt == st_key_h do return
-	st_keys[st_key_t] = k
-	st_key_t = nt
-}
-
-@(private)
-_st_push_char :: proc "contextless" (r: rune) {
-	nt := (st_char_t + 1) % CHAR_Q
-	if nt == st_char_h do return
-	st_chars[st_char_t] = r
-	st_char_t = nt
-}
-
-// _input_drain merges staged events into g.inp. Called from platform_poll_events
-// (i.e. from input_poll, right after it clears the per-frame edge/queue state).
-@(private)
-_input_drain :: proc(inp: ^Input) {
-	assert(inp != nil, "_input_drain: nil input")
-	// Edges land in the shared staging arrays, never in the published ones:
-	// input_poll calls _input_publish_staged after this, and that is the one
-	// place inp.pressed/released/repeat may be written.
-	for i in 0 ..< KEY_COUNT {
-		if st_pressed[i] {inp.st_pressed[i] = true}
-		if st_released[i] {inp.st_released[i] = true}
-		if st_repeat[i] {inp.st_repeat[i] = true}
-		st_pressed[i], st_released[i], st_repeat[i] = false, false, false
-	}
-	for st_key_h != st_key_t {
-		_push_key(st_keys[st_key_h])
-		st_key_h = (st_key_h + 1) % CHAR_Q
-	}
-	for st_char_h != st_char_t {
-		_push_char(st_chars[st_char_h])
-		st_char_h = (st_char_h + 1) % CHAR_Q
-	}
-	inp.wheel_pending.x += st_wheel.x
-	inp.wheel_pending.y += st_wheel.y
-	st_wheel = {0, 0}
-	for i in 0 ..< 8 {
-		if st_mb_pressed[i] do inp.mb_pressed[i] = true
-		if st_mb_released[i] do inp.mb_released[i] = true
-		st_mb_pressed[i] = false
-		st_mb_released[i] = false
+_platform_drain_mouse_edges :: proc(inp: ^Input) {
+	assert(inp != nil, "_platform_drain_mouse_edges: nil input")
+	for button in 0 ..< 8 {
+		if st_mb_pressed[button] do inp.mb_pressed[button] = true
+		if st_mb_released[button] do inp.mb_released[button] = true
+		st_mb_pressed[button] = false
+		st_mb_released[button] = false
 	}
 }
 

@@ -458,24 +458,6 @@ _callback_context :: proc "contextless" (win: glfw.WindowHandle) -> ^Context {
 }
 
 @(private)
-_stage_key :: proc "contextless" (inp: ^Input, key: KeyboardKey) {
-	if inp == nil do return
-	nt := (inp.st_key_t + 1) % CHAR_Q
-	if nt == inp.st_key_h do return
-	inp.st_key_q[inp.st_key_t] = key
-	inp.st_key_t = nt
-}
-
-@(private)
-_stage_char :: proc "contextless" (inp: ^Input, value: rune) {
-	if inp == nil do return
-	nt := (inp.st_char_t + 1) % CHAR_Q
-	if nt == inp.st_char_h do return
-	inp.st_char_q[inp.st_char_t] = value
-	inp.st_char_t = nt
-}
-
-@(private)
 _key_cb :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	ctx := _callback_context(win)
 	if ctx == nil do return

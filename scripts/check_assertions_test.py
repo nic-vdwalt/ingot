@@ -335,3 +335,41 @@ class PackageSelectionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ContextlessAssertionTest(unittest.TestCase):
+    # assert_contextless is the only assertion form available inside a
+    # `proc "contextless"`, which is what every platform event callback must
+    # be. A gate that recognised only `assert` pushed those callbacks into the
+    # baseline as permanent debt, or worse, invited moving the contract to a
+    # caller that cannot enforce it. \bassert\b never matches inside
+    # assert_contextless, so this needed to be spelled out explicitly.
+    FIXTURE_PATH = "gfx/fixture.odin"
+
+    def findings(self, source: str):
+        return check_assertions.findings_for_source(source, self.FIXTURE_PATH)
+
+    def test_assert_contextless_counts_as_an_assertion(self):
+        source = '''p :: proc "contextless" (inp: ^Input, value: rune) {
+	if inp == nil do return
+	assert_contextless(inp.tail >= 0 && inp.tail < CHAR_Q, "p: bad tail")
+	inp.queue[inp.tail] = value
+}
+'''
+        findings = self.findings(source)
+        self.assertEqual(findings, [], findings)
+
+    def test_assert_contextless_is_not_confused_with_bare_assert(self):
+        # The alternation must not let the shorter token win and leave the
+        # index risk uncovered.
+        source = '''p :: proc "contextless" (inp: ^Input, value: rune) {
+	if inp == nil do return
+	inp.queue[inp.tail] = value
+}
+'''
+        findings = self.findings(source)
+        self.assertTrue(any("index" in f.risks for f in findings), findings)
+
+
+if __name__ == "__main__":
+    unittest.main()

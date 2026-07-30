@@ -17,7 +17,7 @@ import check_odin_style
 PACKAGES = ("gfx/", "ui/", "ui_gfx/", "term/", "prefs/", "net/", "sys/", "pty/", "testx/")
 EXCLUDED_PREFIXES = ("accesskit/", "libvterm/", "gfx/rlgl")
 EXCLUDED_SUFFIXES = ("_test.odin", "_tests.odin", "_fuzz_test.odin")
-ASSERTION = re.compile(r"(?<![A-Za-z0-9_#])(?:assert|ensure)\s*\(")
+ASSERTION = re.compile(r"(?<![A-Za-z0-9_#])(?:assert_contextless|assert|ensure)\s*\(")
 RISK_PATTERNS = {
     "pointer": re.compile(
         r"\b[A-Za-z_][A-Za-z0-9_]*\^|raw_(?:data|ptr)\s*\(|\btransmute\s*\("
@@ -68,7 +68,7 @@ RISK_GUARDS = {
 RISK_CONTRACTS = {
     "pointer": re.compile(
         r"(?:==|!=)\s*nil|nil\s*(?:==|!=)"
-        r"|(?:assert|ensure)\s*\([^\n)]*(?:!=\s*nil|==\s*nil)"
+        r"|(?:assert_contextless|assert|ensure)\s*\([^\n)]*(?:!=\s*nil|==\s*nil)"
     ),
     "index": re.compile(
         r"\blen\s*\(|\b(?:min|max|clamp)\s*\(|\bfor\b[^\n]*\.\.<"
@@ -248,16 +248,16 @@ def element_index_proven(operation: Index_Operation, executable: str) -> bool:
     if same_range:
         return True
     positive = re.search(
-        rf"(?:assert|ensure|if)\s*\([^\n]*\b{escaped}\b\s*>=\s*0"
+        rf"(?:assert_contextless|assert|ensure|if)\s*\([^\n]*\b{escaped}\b\s*>=\s*0"
         rf"[^\n]*\b{escaped}\b\s*<\s*len\s*\(\s*{target}\s*\)",
         prefix,
     )
     unsigned = re.search(
-        rf"(?:assert|ensure|if)\s*\([^\n]*\b{escaped}\b\s*<\s*len\s*\(\s*{target}\s*\)",
+        rf"(?:assert_contextless|assert|ensure|if)\s*\([^\n]*\b{escaped}\b\s*<\s*len\s*\(\s*{target}\s*\)",
         prefix,
     )
     target_contract = re.search(
-        rf"(?:assert|ensure)\s*\([^\n]*(?:\b{escaped}\b|\b{target}\b)"
+        rf"(?:assert_contextless|assert|ensure)\s*\([^\n]*(?:\b{escaped}\b|\b{target}\b)"
         rf"[^\n]*(?:<|<=|>|>=)[^\n]*\)",
         prefix,
     )
@@ -269,7 +269,7 @@ def element_index_proven(operation: Index_Operation, executable: str) -> bool:
     if positive or unsigned or target_contract or rejected:
         return True
     enum_guard = re.search(
-        rf"\b(?:if|assert|ensure)\b[^\n]*\b{escaped}\b\s*(?:<|<=|>|>=)\s*"
+        rf"\b(?:if|assert_contextless|assert|ensure)\b[^\n]*\b{escaped}\b\s*(?:<|<=|>|>=)\s*"
         rf"[A-Z][A-Z0-9_]*",
         prefix,
     )
@@ -293,7 +293,7 @@ def element_index_proven(operation: Index_Operation, executable: str) -> bool:
     if modulo:
         return re.search(rf"len\s*\(\s*{target}\s*\)\s*>\s*0", prefix) is not None
     return re.search(
-        rf"(?:assert|ensure)\s*\([^\n]*\b{escaped}\b[^\n]*\b{target}\b",
+        rf"(?:assert_contextless|assert|ensure)\s*\([^\n]*\b{escaped}\b[^\n]*\b{target}\b",
         local_prefix,
     ) is not None
 
@@ -336,7 +336,7 @@ def index_contract_present(executable: str) -> bool:
 def authored_contract_present(executable: str, risk: str) -> bool:
     assertions = [
         match.group()
-        for match in re.finditer(r"(?:assert|ensure)\s*\([^\n]+", executable)
+        for match in re.finditer(r"(?:assert_contextless|assert|ensure)\s*\([^\n]+", executable)
     ]
     if not assertions:
         return False
@@ -417,7 +417,7 @@ def contract_lines(executable: str) -> str:
     return "\n".join(
         line
         for line in executable.splitlines()
-        if re.search(r"\b(?:assert|ensure|if|when|for|defer)\b", line)
+        if re.search(r"\b(?:assert_contextless|assert|ensure|if|when|for|defer)\b", line)
     )
 
 
@@ -573,7 +573,7 @@ def uncovered_risks(body: str, risks: tuple[str, ...]) -> tuple[str, ...]:
     if not uncovered:
         return ()
     assertion_text = "\n".join(
-        match.group() for match in re.finditer(r"(?:assert|ensure)\s*\([^\n]+", executable)
+        match.group() for match in re.finditer(r"(?:assert_contextless|assert|ensure)\s*\([^\n]+", executable)
     )
     return tuple(
         risk
@@ -655,7 +655,7 @@ def procedure_has_reviewed_contract(body: str, risk: str) -> bool:
     executable = executable_text(body)
     assertions = [
         match.group()
-        for match in re.finditer(r"(?:assert|ensure)\s*\([^\n]+", executable)
+        for match in re.finditer(r"(?:assert_contextless|assert|ensure)\s*\([^\n]+", executable)
     ]
     if not assertions:
         return False
@@ -682,7 +682,7 @@ def inferred_contract_present(body: str, risk: str) -> bool:
             operation.kind == "slice"
             or re.fullmatch(r"\d+|[A-Z][A-Z0-9_]*", operation.expression)
             or re.search(
-                rf"\b(?:for|assert|ensure)\b[^\n]*\b{re.escape(operation.expression)}\b"
+                rf"\b(?:for|assert_contextless|assert|ensure)\b[^\n]*\b{re.escape(operation.expression)}\b"
                 rf"[^\n]*\b{re.escape(operation.target)}\b",
                 executable[: operation.offset],
             )
@@ -699,12 +699,12 @@ def inferred_contract_present(body: str, risk: str) -> bool:
             and re.search(r"\^\s*=\s*\{\}|=\s*nil", executable)
         )
     if risk == "queue":
-        return re.search(r"\b(?:if|assert|ensure)\b[^\n]*(?:count|head|tail|len\s*\(|cap\s*\()", executable) is not None or bool(
+        return re.search(r"\b(?:if|assert_contextless|assert|ensure)\b[^\n]*(?:count|head|tail|len\s*\(|cap\s*\()", executable) is not None or bool(
             re.search(r"\bappend\s*\(", executable)
             and re.search(r"\[dynamic", executable)
         )
     if risk == "state":
-        return re.search(r"\b(?:if|assert|ensure)\b[^\n]*(?:state|running|active|session|frame|open)", executable) is not None or bool(
+        return re.search(r"\b(?:if|assert_contextless|assert|ensure)\b[^\n]*(?:state|running|active|session|frame|open)", executable) is not None or bool(
             re.search(r"\b(?:state|running|active|session)\b\s*=", executable)
             and re.search(r"\b(?:destroy|close|stop|run)\s*\(", executable)
         )

@@ -57,6 +57,12 @@ compatibility, while minor releases may break it. See the
 
 ### Changed
 
+- `scripts/check_assertions.py` recognises `assert_contextless` as an
+  assertion. `\bassert\b` never matches inside it, so every
+  `proc "contextless"` - which is what a platform event callback must be -
+  could only ever reach the gate as baseline debt, or be "fixed" by moving its
+  contract to a caller that cannot enforce it.
+
 - **Paint capacities right-sized from measurement.** `PAINT_COMMAND_CAP` is
   now `8192` (was `32768`) and `PAINT_TEXT_CAP` is `32768` (was `262144`),
   both overridable via `-define:INGOT_PAINT_COMMAND_CAP` /
@@ -86,14 +92,20 @@ compatibility, while minor releases may break it. See the
 
 ### Fixed
 
-- Web: every edge-driven key was dropped. `_input_publish_staged` assigned the
-  shared staging arrays over `Input.pressed` / `released` / `repeat`, wiping
-  the browser edges `_input_drain` had just published earlier in the same
-  `input_poll`. Typed characters kept working because they travel in the char
-  ring, which made it look like input worked while Enter, Backspace, Delete,
-  Tab and the arrow keys did nothing. The web drain now stages through the
-  same arrays as the GLFW path, and publication merges instead of assigning so
-  no producer can silently erase another.
+- Web: every edge-driven key was dropped. The browser backend kept its own
+  copy of the key/char/wheel staging buffer, named identically to the shared
+  one in `Input`, and published it straight into `Input.pressed` / `released`
+  / `repeat` from `platform_poll_events`; `_input_publish_staged` then
+  assigned over the result later in the same `input_poll` and erased it.
+  Typed characters kept working because they travel in the char ring, so the
+  fault read as flaky input rather than a dead code path while Enter,
+  Backspace, Delete, Tab and the arrow keys did nothing. The duplicate buffer
+  is gone: the DOM entry points now stage into `g.inp` through the same
+  `_stage_key` / `_stage_char` the GLFW callbacks use, leaving one staging
+  buffer and one publisher, and `_input_publish_staged` asserts on entry that
+  nothing published ahead of it so the ordering contract cannot rot again.
+  Only the browser's live platform-query state (key held, cursor position,
+  button held, hover) and the touch-tap button edges remain web-local.
 - Web: Enter is consumed on the hidden IME proxy, so it can no longer insert a
   newline into the `<textarea>` value the engine never reads.
 - `text_input` boxes tall enough to show two or more lines now type a newline
