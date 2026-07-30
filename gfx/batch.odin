@@ -127,6 +127,12 @@ Renderer :: struct {
 	uniform_bytes:      u64,
 	transient_buffers:  [dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
 	retired_buffers:    [STREAM_SLOT_COUNT][dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
+	// Bytes that missed the geometry stream this frame and fell back to
+	// one-shot buffers. Reset per frame and reported once at frame end so a
+	// pathological scene names itself instead of quietly allocating up to
+	// BATCH_TRANSIENT_BUFFERS_MAX buffers until the tab dies.
+	overflow_bytes:     u64,
+	overflow_draws:     u32,
 	proj_w, proj_h:     i32,
 }
 
@@ -559,6 +565,8 @@ renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 	clear(&r.transient_buffers)
 	clear(&r.verts)
 	clear(&r.indices)
+	r.overflow_bytes = 0
+	r.overflow_draws = 0
 	renderer_state_reset(r)
 	r.cur_u = r.ubind
 	r.active_shader = 0
@@ -861,10 +869,45 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 // The device is passed in rather than read from the active-context global, so
 // this leaf stays pure and its caller owns the context lookup (the same shape
 // as _neutral_texture_init).
+// GEOMETRY_OVERFLOW_REPORTS_MAX bounds how many overflow frames are reported.
+// A scene that overflows usually overflows every frame, and an unbounded log
+// would itself become the performance problem (and would flood the on-page
+// crash panel on web, hiding the first occurrence).
+GEOMETRY_OVERFLOW_REPORTS_MAX :: 4
+
+@(private)
+g_overflow_reports: u32
+
+// _renderer_report_overflow logs, at most GEOMETRY_OVERFLOW_REPORTS_MAX times,
+// that this frame's geometry did not fit the stream and fell back to one-shot
+// buffers. Silence here was a cliff: the fallback quietly allocates up to
+// BATCH_TRANSIENT_BUFFERS_MAX buffers per frame, which on a memory-constrained
+// device (a phone) ends as a killed tab with no diagnostic at all.
+@(private)
+_renderer_report_overflow :: proc(r: ^Renderer) {
+	assert(r != nil, "_renderer_report_overflow: nil renderer")
+	if r.overflow_draws == 0 do return
+	if g_overflow_reports >= GEOMETRY_OVERFLOW_REPORTS_MAX do return
+	g_overflow_reports += 1
+	final := g_overflow_reports == GEOMETRY_OVERFLOW_REPORTS_MAX
+	fmt.eprintfln(
+		"gfx: geometry stream overflow - %d draw(s), %d KiB spilled (stream %d KiB)%s",
+		r.overflow_draws,
+		r.overflow_bytes / 1024,
+		r.geometry_bytes / 1024,
+		" [further reports suppressed]" if final else "",
+	)
+}
+
 @(private)
 _geometry_upload_transient :: proc(r: ^Renderer, device: wg.Device) -> (wg.Buffer, wg.Buffer) {
 	assert(r != nil, "_geometry_upload_transient: nil renderer")
 	assert(device != nil, "_geometry_upload_transient: nil device")
+	// Record the overflow before attempting the allocation: a scene reaching
+	// this path at all is the signal worth reporting, whether or not the
+	// fallback itself succeeds.
+	r.overflow_bytes += u64(len(r.verts)) * size_of(Vertex) + u64(len(r.indices)) * size_of(u32)
+	r.overflow_draws += 1
 	// Two buffers are appended below, so stop one pair short of the cap.
 	if len(r.transient_buffers) > BATCH_TRANSIENT_BUFFERS_MAX - 2 do return nil, nil
 	vertex_buffer := wg.DeviceCreateBufferWithData(device, &{usage = {.Vertex}}, r.verts[:])

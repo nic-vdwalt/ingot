@@ -810,41 +810,48 @@ button_at :: proc(
 		clicked || btn_sync_web_submit(frame, web_form_id, label, x, y, w, h, style, fs, enabled)
 	if hovered do request_cursor(frame, .POINTING_HAND)
 
-	t: f32 = 1 if hovered else 0
-	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style_theme, style)
-	bg := color_mix(bg0, bg1, t)
-	fg := color_mix(fg0, fg1, t)
-	border := color_mix(bd0, bd1, t)
-	// Pressed feedback while the mouse button is held over the button.
-	if hovered &&
-	   is_mouse_button_down(frame, .LEFT) &&
-	   (style == .Primary || style == .Secondary) {
-		bg = style_theme.button_pressed
-	}
-	if !enabled {
-		bg = style_theme.button_disabled_bg
-		fg = style_theme.fg_muted_dim
-		border = Color{0, 0, 0, 0}
-	}
+	// Painting is skipped for a button scrolled outside the enclosing pane;
+	// interaction, focus, and semantics above and below still run, so a
+	// culled button keeps its identity, tab order, and screen-reader record.
+	// The scissor would discard this geometry at raster time anyway - the
+	// saving is in never building, copying, and uploading it.
+	if !rect_culled_frame(frame, rect) {
+		t: f32 = 1 if hovered else 0
+		bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style_theme, style)
+		bg := color_mix(bg0, bg1, t)
+		fg := color_mix(fg0, fg1, t)
+		border := color_mix(bd0, bd1, t)
+		// Pressed feedback while the mouse button is held over the button.
+		if hovered &&
+		   is_mouse_button_down(frame, .LEFT) &&
+		   (style == .Primary || style == .Secondary) {
+			bg = style_theme.button_pressed
+		}
+		if !enabled {
+			bg = style_theme.button_disabled_bg
+			fg = style_theme.fg_muted_dim
+			border = Color{0, 0, 0, 0}
+		}
 
-	draw_rectangle_rounded(frame, rrect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
-	if style == .Primary && enabled do btn_gloss(frame, style_theme, rrect)
-	if border.a > 0 {
-		draw_rectangle_rounded_lines_ex(
-			frame,
-			rrect,
-			BTN_ROUNDNESS,
-			BTN_SEGMENTS,
-			BTN_BORDER_W,
-			border,
-		)
-	}
-	if enabled && focus_opt_focused(focus) {
-		draw_focus_ring(frame, x, y, w, h)
-	}
+		draw_rectangle_rounded(frame, rrect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
+		if style == .Primary && enabled do btn_gloss(frame, style_theme, rrect)
+		if border.a > 0 {
+			draw_rectangle_rounded_lines_ex(
+				frame,
+				rrect,
+				BTN_ROUNDNESS,
+				BTN_SEGMENTS,
+				BTN_BORDER_W,
+				border,
+			)
+		}
+		if enabled && focus_opt_focused(focus) {
+			draw_focus_ring(frame, x, y, w, h)
+		}
 
-	label_s, text_w := btn_label_fit(frame, label, w, fs)
-	draw_text_string_frame(frame, label_s, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+		label_s, text_w := btn_label_fit(frame, label, w, fs)
+		draw_text_string_frame(frame, label_s, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+	}
 
 	sem: Sem_State
 	if !enabled do sem += {.Disabled}
@@ -1003,6 +1010,25 @@ line_culled_frame :: proc(frame: ^Ui_Frame, y, line_height: i32) -> bool {
 	assert(frame != nil && frame.open, "line_culled_frame: invalid frame")
 	assert(line_height > 0, "line_culled_frame: invalid line height")
 	return y + line_height < frame.text_cull_top || y > frame.text_cull_bottom
+}
+
+// rect_culled_frame reports whether a widget rect lies entirely outside the
+// current vertical cull band, so leaf painters can skip emitting geometry the
+// scissor would discard anyway. The rect analogue of line_culled_frame.
+//
+// Culling is vertical only: panes scroll on Y, and a band is far cheaper to
+// maintain than a full rect intersection. A degenerate (zero-height) rect is
+// never culled - callers already special-case those, and treating them as
+// culled here would silently change existing behavior.
+//
+// This decides *painting* only. Interaction, focus registration, and semantics
+// must still run for culled widgets or a scrolled-away control would lose its
+// identity, tab order, and accessibility record.
+rect_culled_frame :: proc(frame: ^Ui_Frame, rect: Rect_I32) -> bool {
+	assert(frame != nil && frame.open, "rect_culled_frame: invalid frame")
+	assert(frame.text_cull_top <= frame.text_cull_bottom, "rect_culled_frame: inverted band")
+	if rect.h <= 0 do return false
+	return rect.y + rect.h < frame.text_cull_top || rect.y > frame.text_cull_bottom
 }
 
 draw_text_wrapped_frame :: proc(
@@ -1550,10 +1576,15 @@ list_row_bg_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, selected, hovered: bool
 // Pane is caller-owned state for a scissored, wheel-scrollable region with a
 // measured content height (clamps scroll on the next frame) and a scrollbar.
 Pane :: struct {
-	scroll:    f32,
-	content_h: i32, // measured by pane_end, consumed next frame
-	open:      bool, // set by pane_begin, cleared by pane_end (balance check)
-	sbar:      Scrollbar_State, // per-pane scrollbar drag state
+	scroll:         f32,
+	content_h:      i32, // measured by pane_end, consumed next frame
+	open:           bool, // set by pane_begin, cleared by pane_end (balance check)
+	sbar:           Scrollbar_State, // per-pane scrollbar drag state
+	// Cull band in effect before pane_begin, restored by pane_end. Saved
+	// rather than reset to infinity so nested panes compose: an inner pane
+	// must not widen the band its parent narrowed.
+	saved_cull_top: i32,
+	saved_cull_bot: i32,
 }
 
 pane_reset :: proc(p: ^Pane) {
@@ -1596,6 +1627,18 @@ pane_begin :: proc(
 	}
 	p.scroll = clamp(p.scroll, 0, f32(max(p.content_h - h, 0)))
 	begin_pane_scissor(frame, x, y, w, h)
+	// Narrow the cull band to the pane's visible rows so leaf painters can
+	// skip geometry the scissor would discard at raster time. The band must
+	// match the scissor exactly or widgets vanish at the pane edges; both use
+	// the same y and h. Intersecting with the saved band keeps a nested pane
+	// from widening its parent's.
+	p.saved_cull_top = frame.text_cull_top
+	p.saved_cull_bot = frame.text_cull_bottom
+	set_text_cull_band_frame(
+		frame,
+		max(y, p.saved_cull_top),
+		max(min(y + h, p.saved_cull_bot), max(y, p.saved_cull_top)),
+	)
 	return y + ui_frame_sc(frame, pad) - i32(p.scroll)
 }
 
@@ -1629,6 +1672,11 @@ pane_end :: proc(frame: ^Ui_Frame, p: ^Pane, rect: Rect_I32, end_y: i32, pad: i3
 	assert(h >= 0, "pane_end: negative pane height")
 	p.open = false
 	end_scissor_mode(frame)
+	// Restore the enclosing band before the scrollbar draws: the scrollbar
+	// sits inside the pane rect but outside the scissor, and a nested pane's
+	// parent must get its own band back unchanged.
+	assert(p.saved_cull_top <= p.saved_cull_bot, "pane_end: corrupt saved cull band")
+	set_text_cull_band_frame(frame, p.saved_cull_top, p.saved_cull_bot)
 	start_y := y + ui_frame_sc(frame, pad) - i32(p.scroll)
 	p.content_h = end_y - start_y + ui_frame_sc(frame, pad)
 	if p.content_h > h {

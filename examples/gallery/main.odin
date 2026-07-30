@@ -1191,23 +1191,56 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 	ui.overlay_end(frame)
 }
 
+// STRESS_BUTTONS is the grid size the section advertises. Every one of them is
+// laid out and measured for the scroll range; only the on-screen rows are
+// built and painted (see draw_stress).
+STRESS_BUTTONS :: 1000
+
 draw_stress :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
-	y := ui.section_header_at(
-		frame,
-		{x, y0, w, 0},
-		"STRESS: 1000 BUTTONS (batcher, hover-anim bound, culling)",
-	)
 	// The grid owns cell geometry: exact column division, no per-button math.
 	cols := max(w / ui.ui_frame_sc(frame, 110), 1)
 	gap := ui.ui_frame_sc(frame, 6)
+	row_h := ui.ui_frame_sc(frame, 26)
+	// The header's height does not depend on its text, so the grid's origin
+	// is known before the label is built - which is what lets the label
+	// report the drawn count.
+	header_h := ui.ui_frame_metrics(frame).FONT_SIZE_LABEL + ui.ui_frame_sc(frame, 11)
+	bounds := ui.Rect_I32{x, y0 + header_h, w, 0}
+	// Only the rows intersecting the pane's cull band are built. Without this
+	// the section constructs 1000 labels, measures and interacts with all of
+	// them, and emits ~11 MB of vertex data per frame for the ~25 buttons on
+	// screen - enough to exhaust the geometry stream on a phone.
+	first, end := ui.grid_visible_range(
+		bounds,
+		cols,
+		row_h,
+		gap,
+		STRESS_BUTTONS,
+		frame.text_cull_top,
+		frame.text_cull_bottom,
+	)
+	y := ui.section_header_at(
+		frame,
+		{x, y0, w, 0},
+		fmt.tprintf(
+			"STRESS: %d BUTTONS (batcher, hover-anim bound, culling: %d drawn)",
+			STRESS_BUTTONS,
+			end - first,
+		),
+	)
+	assert(y == bounds.y, "draw_stress: header height mismatch")
 	grid: ui.Grid
-	ui.grid_begin(&grid, {x, y, w, 0}, cols, ui.ui_frame_sc(frame, 26), gap, gap)
-	for i in 0 ..< 1000 {
+	ui.grid_begin(&grid, bounds, cols, row_h, gap, gap)
+	ui.grid_skip_to(&grid, first)
+	for i in first ..< end {
 		label := fmt.tprintf("btn %d", i)
 		if ui.button_at(frame, ui.grid_next(&grid), label) {
-			stress_clicked = i
+			stress_clicked = int(i)
 		}
 	}
+	// Advance the cursor past the skipped tail so grid_end still measures the
+	// full content height - the pane's scroll range depends on it.
+	ui.grid_skip_to(&grid, STRESS_BUTTONS)
 	content := ui.grid_end(&grid)
 	y = content.y + content.h + ui.ui_frame_sc(frame, 10)
 	if stress_clicked >= 0 {

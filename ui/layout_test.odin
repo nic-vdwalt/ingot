@@ -546,3 +546,83 @@ grid_empty_and_full_capacity_are_bounded :: proc(t: ^testing.T) {
 	bounds := grid_end(&grid)
 	testing.expect_value(t, bounds.h, i32(64))
 }
+
+// grid_visible_range lets a large grid skip building off-screen cells, so its
+// range must agree exactly with the geometry grid_next produces. The stress
+// case that motivated it is 1000 buttons in a 200 px pane: an off-by-one here
+// shows up as a row of controls missing at a viewport edge.
+@(test)
+grid_visible_range_matches_cell_geometry :: proc(t: ^testing.T) {
+	// 4 columns, 20 px rows, 5 px gaps: row r spans y = r*25 .. r*25 + 20.
+	BOUNDS :: Rect_I32{0, 0, 400, 0}
+	COUNT :: i32(40) // 10 rows
+	// Band covering rows 2..4 (y 50..120) exactly.
+	first, end := grid_visible_range(BOUNDS, 4, 20, 5, COUNT, 50, 120)
+	testing.expect_value(t, first, i32(8)) // row 2 * 4 cols
+	testing.expect_value(t, end, i32(20)) // through row 4
+
+	// Cross-check against the real layout: every returned cell intersects the
+	// band, and the cells just outside the range do not.
+	grid: Grid
+	grid_begin(&grid, BOUNDS, cols = 4, row_h = 20, gap_y = 5)
+	for index in i32(0) ..< COUNT {
+		cell := grid_next(&grid)
+		intersects := cell.y + cell.h >= 50 && cell.y <= 120
+		in_range := index >= first && index < end
+		testing.expect_value(t, in_range, intersects)
+	}
+	_ = grid_end(&grid)
+}
+
+@(test)
+grid_visible_range_handles_edges_and_degenerate_input :: proc(t: ^testing.T) {
+	BOUNDS :: Rect_I32{0, 100, 400, 0}
+	COUNT :: i32(40)
+
+	// A band entirely above or below the content selects nothing.
+	first, end := grid_visible_range(BOUNDS, 4, 20, 5, COUNT, 0, 50)
+	testing.expect_value(t, first, i32(0))
+	testing.expect_value(t, end, i32(0))
+	first, end = grid_visible_range(BOUNDS, 4, 20, 5, COUNT, 10_000, 20_000)
+	testing.expect_value(t, first, i32(0))
+	testing.expect_value(t, end, i32(0))
+
+	// An unbounded band selects everything, which is what a widget drawn
+	// outside any pane must get.
+	first, end = grid_visible_range(BOUNDS, 4, 20, 5, COUNT, min(i32) / 2, max(i32) / 2)
+	testing.expect_value(t, first, i32(0))
+	testing.expect_value(t, end, COUNT)
+
+	// A band starting above the grid origin must not round the first row up
+	// and drop it: floor division toward negative infinity is the fix this
+	// pins. Row 0 spans 100..120 and is visible from a band starting at 90.
+	first, end = grid_visible_range(BOUNDS, 4, 20, 5, COUNT, 90, 130)
+	testing.expect_value(t, first, i32(0))
+	testing.expect(t, end >= 4, "the first row must be included")
+
+	// Empty grids and zero-height rows degrade instead of trapping.
+	first, end = grid_visible_range(BOUNDS, 4, 20, 5, 0, 0, 100)
+	testing.expect_value(t, first, i32(0))
+	testing.expect_value(t, end, i32(0))
+	first, end = grid_visible_range(BOUNDS, 4, 0, 0, COUNT, 0, 100)
+	testing.expect_value(t, first, i32(0))
+	testing.expect_value(t, end, COUNT)
+}
+
+@(test)
+grid_skip_to_preserves_measured_height :: proc(t: ^testing.T) {
+	// Skipping cells must not shrink the reported content rect, or a
+	// virtualized pane would collapse its own scroll range to the visible
+	// window and make the rest unreachable.
+	full: Grid
+	grid_begin(&full, {0, 0, 400, 0}, cols = 4, row_h = 20, gap_y = 5)
+	for _ in 0 ..< 40 do _ = grid_next(&full)
+	expected := grid_end(&full)
+
+	partial: Grid
+	grid_begin(&partial, {0, 0, 400, 0}, cols = 4, row_h = 20, gap_y = 5)
+	grid_skip_to(&partial, 8)
+	for _ in 8 ..< 20 do _ = grid_next(&partial)
+	grid_skip_to(&partial, 40)
+	testing.expect_value(t, grid_end(&partial), expected)
+}

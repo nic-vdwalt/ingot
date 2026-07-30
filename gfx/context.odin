@@ -808,6 +808,7 @@ EndDrawing :: proc() {
 		_release_surface_texture()
 		g.frame.has_frame = false
 		_flush_retired()
+		_renderer_report_overflow(&ctx.rend)
 	} else {
 		clear(&g.rend.verts)
 		clear(&g.rend.indices)

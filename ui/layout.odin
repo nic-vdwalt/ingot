@@ -302,6 +302,89 @@ grid_end :: proc(grid: ^Grid) -> Rect_I32 {
 	return result
 }
 
+// grid_visible_range reports the half-open index range [first, end) whose
+// cells intersect the vertical band [top, bottom], for a grid whose geometry
+// matches grid_begin's arguments. Pure: it does not touch the grid's cursor,
+// so a caller can compute the range up front and then place only those cells.
+//
+// This exists so a large grid can skip *building* off-screen cells - labels,
+// measurement, interaction - not just skip painting them. Painting is already
+// culled by the frame's cull band (widgets.odin); the remaining per-cell cost
+// is the caller's, and only the caller can avoid it.
+//
+// `count` is the total number of cells the caller intends to place. The
+// returned range is always within [0, count], and is empty (first == end)
+// when nothing intersects.
+grid_visible_range :: proc(
+	bounds: Rect_I32,
+	cols, row_h, gap_y, count: i32,
+	top, bottom: i32,
+) -> (
+	first: i32,
+	end: i32,
+) {
+	assert(cols > 0, "grid_visible_range: non-positive column count")
+	assert(row_h >= 0, "grid_visible_range: negative row height")
+	assert(gap_y >= 0, "grid_visible_range: negative gap")
+	assert(count >= 0 && count <= MAX_GRID_ITEMS, "grid_visible_range: count out of bounds")
+	assert(top <= bottom, "grid_visible_range: inverted band")
+	if count == 0 do return 0, 0
+	// A zero-height stride would make every row start at the same y, so the
+	// row arithmetic below cannot select a subset. Draw everything and let
+	// the paint-level cull handle it.
+	stride := i64(row_h) + i64(gap_y)
+	if stride <= 0 do return 0, count
+	rows := i64((count + cols - 1) / cols)
+
+	// Row r spans [bounds.y + r*stride, bounds.y + r*stride + row_h].
+	// Visible when that span intersects [top, bottom]:
+	//   first visible row: smallest r with r*stride >= top - bounds.y - row_h
+	//                      -> ceiling, or a row whose bottom edge stops just
+	//                         short of the band would be included
+	//   last visible row:  largest  r with r*stride <= bottom - bounds.y
+	//                      -> floor
+	first_row := _grid_row_ceil(i64(top) - i64(bounds.y) - i64(row_h), stride)
+	last_row := _grid_row_floor(i64(bottom) - i64(bounds.y), stride)
+	first_row = clamp(first_row, 0, rows)
+	last_row = clamp(last_row, -1, rows - 1)
+	if last_row < first_row do return 0, 0
+
+	first = i32(min(first_row * i64(cols), i64(count)))
+	end = i32(min((last_row + 1) * i64(cols), i64(count)))
+	assert(first >= 0 && first <= count, "grid_visible_range: first out of bounds")
+	assert(end >= first && end <= count, "grid_visible_range: end out of bounds")
+	return first, end
+}
+
+// _grid_row_floor divides toward negative infinity. Odin's `/` truncates
+// toward zero, which for a negative offset would round the wrong way.
+@(private = "file")
+_grid_row_floor :: proc(value, stride: i64) -> i64 {
+	assert(stride > 0, "_grid_row_floor: non-positive stride")
+	quotient := value / stride
+	if value % stride != 0 && value < 0 do quotient -= 1
+	return quotient
+}
+
+// _grid_row_ceil divides toward positive infinity, for the same reason.
+@(private = "file")
+_grid_row_ceil :: proc(value, stride: i64) -> i64 {
+	assert(stride > 0, "_grid_row_ceil: non-positive stride")
+	quotient := value / stride
+	if value % stride != 0 && value > 0 do quotient += 1
+	return quotient
+}
+
+// grid_skip_to advances the grid's cursor to `index` without placing cells, so
+// a caller that computed a visible range with grid_visible_range can start
+// there and still have grid_end measure the full content height.
+grid_skip_to :: proc(grid: ^Grid, index: i32) {
+	assert(grid != nil && grid.open, "grid_skip_to: grid not open")
+	assert(index >= grid.index, "grid_skip_to: cannot rewind the cursor")
+	assert(index <= MAX_GRID_ITEMS, "grid_skip_to: index out of bounds")
+	grid.index = index
+}
+
 Layout_Kind :: enum u8 {
 	Column, // children stack vertically; main axis = y
 	Row, // children stack horizontally; main axis = x
