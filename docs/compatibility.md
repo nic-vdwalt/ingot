@@ -144,6 +144,26 @@ The core framework API is written in Odin, but native integration is not
 literally dependency-free or pure Odin. Applications that omit terminal or
 accessibility features need not initialize those services.
 
+### macOS binary size
+
+A macOS build carries its zero-initialised globals verbatim, so `ingot`'s fixed
+capacity pools - `gfx.Context` is around 11 MB, mostly the batch arrays - are
+present in full. A gallery build is about 28 MB, over half of it zeros.
+
+This is a consequence of Odin's default parallel build, not a defect. Separate
+modules compile each package independently, so a global may be emitted more
+than once and must carry `weak` linkage for the linker to select a definition.
+Mach-O cannot place a weak symbol in a zerofill section, because a weak
+definition has to be materialised to be chosen. ELF has no such restriction, so
+the same source targeting Linux does use `.bss`.
+
+`-use-single-module` switches the global to `internal` linkage and restores
+zerofill placement, roughly halving the binary (28.4 MB to 14.5 MB for the
+gallery) at the cost of non-parallel compilation. Consider it for release
+builds where distribution size matters; measure the build-time cost first.
+
+Nothing about this affects the WASM target, which is always single-module.
+
 ## Browser hosting
 
 `bash build_web.sh` writes `web/ingot_web.wasm`. Serve the `web/` directory over
@@ -176,6 +196,46 @@ Browser limitations include:
 - Accessibility uses a semantic DOM overlay and requires real browser/screen-
   reader validation.
 - PTY and native terminal process spawning are unavailable.
+
+### Module size and serving
+
+A demo module is roughly 1.2 MB, of which the data section is a few hundred
+kilobytes. Two properties of the toolchain make that number easy to lose by
+accident, and both have bitten this repository:
+
+**Serve WASM compressed.** The module is highly compressible - the demos reach
+roughly 24x - and browsers request `Content-Encoding: gzip` for it like any
+other asset. Some servers omit `application/wasm` from their compressible MIME
+list and cannot be overridden per-directory (LiteSpeed is one), in which case
+pre-compress at deploy time and negotiate with a rewrite. An uncompressed
+multi-megabyte module is not only slow: a transfer cut short on a mobile
+connection surfaces only as `unexpected end of data` from the WASM parser, with
+nothing pointing at the download.
+
+**Do not statically initialise a large global.** WebAssembly memory is
+zero-initialised by specification, so an all-zero global costs nothing in the
+module. Give it any non-zero initialiser and LLVM must move the *entire* object
+from `.bss` into `.data`, where every byte is emitted verbatim:
+
+```odin
+// 11 MB of zeros in every module, from four bytes of initialiser.
+default_context_storage: Context = {id = 1}
+
+// Nothing in the module; the id is assigned before main.
+default_context_storage: Context
+
+@(init, private)
+_default_context_init :: proc "contextless" () {
+	default_context_storage.id = DEFAULT_CONTEXT_ID
+}
+```
+
+`gfx.Context` is around 11 MB, mostly the batch vertex and index arrays, so
+that single field cost 11.1 MB - the demo modules were 12.3 MB rather than
+1.2 MB. This is ordinary LLVM behaviour, not an Odin defect; C reproduces it
+exactly. `scripts/check_wasm_bloat.py` runs in `scripts/check-web.sh` and fails
+any data segment over 64 KB that is more than half zeros, so a future
+initialiser cannot quietly reintroduce it.
 
 ## Native system integration
 
