@@ -70,6 +70,12 @@ _texture_slot_context :: proc(
 	id: u32,
 ) -> ^Texture_Slot {
 	assert(resources != nil, "_texture_slot_context: nil resources")
+	// A zero context id never matches a packed handle, because
+	// _resource_handle_make_context refuses to mint one. Looking up with zero
+	// would therefore miss every slot and read as an ordinary stale handle.
+	// The only way to get here with zero is an unassigned context id - see the
+	// note above _default_context_init in context.odin.
+	assert(context_id != 0, "_texture_slot_context: unassigned context id")
 	if id & TEX_ID_BASE == 0 do return nil
 	raw_id := id & ~TEX_ID_BASE
 	handle_context := (raw_id >> RESOURCE_SLOT_BITS) & RESOURCE_CONTEXT_MASK

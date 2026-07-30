@@ -199,18 +199,84 @@ texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
 // scripts/check_wasm_bloat.py). The id is assigned by an @(init) procedure
 // instead.
 //
-// That trade is only safe while the id is genuinely in place before any caller
-// reads it. These tests pin the property the initialiser used to guarantee.
+// That trade rests on an ordering the language does not specify. Odin's
+// init_procedures_cmp sorts @(init) by package import order, then filename,
+// then source offset. Across packages that is safe - import cycles are a
+// compile error, so anything reaching gfx sorts after it. Within gfx it is
+// not: the tiebreak is the filename, and context.odin does not sort first, so
+// a second @(init) in an earlier-named file would read an unassigned id.
+//
+// The tests below cannot observe that. They run after every @(init), so they
+// pin the outcome, not the ordering that produced it - an @(init) reading the
+// id too early would still find these green. The ordering itself is enforced
+// statically by scripts/check_init_order.py, which fails the build if any
+// @(init) other than _default_context_init appears in gfx, and dynamically by
+// the assertions in context_id and _texture_slot_context.
 
 @(test)
 default_context_has_its_reserved_id :: proc(t: ^testing.T) {
 	// @(init) runs before the test runner, so observing the id here is the
-	// same observation any caller makes.
+	// same observation any caller makes after startup - but not the same as
+	// one made from another @(init). See the note above.
 	testing.expect_value(t, default_context().id, DEFAULT_CONTEXT_ID)
 	testing.expect_value(t, context_id(default_context()), DEFAULT_CONTEXT_ID)
 	// A zero id means "unassigned" throughout the resource handle code, so
 	// the default context must never present as one.
 	testing.expect(t, default_context().id != 0)
+}
+
+@(test)
+unassigned_context_ids_still_read_as_zero :: proc(t: ^testing.T) {
+	// context_id's assertion is deliberately narrow: it fires only for the
+	// default context. A context that has not opened a window has no id yet -
+	// _context_assign_id runs at window creation - and reading zero from one
+	// is the documented contract, not a fault. A blanket "non-nil implies
+	// non-zero" assertion here would abort on every pre-init context.
+	testing.expect_value(t, context_id(nil), u32(0))
+
+	// Heap-allocated: Context is ~11 MB, past a safe stack frame.
+	fresh := new(Context)
+	defer free(fresh)
+	testing.expect_value(t, fresh.id, u32(0))
+	testing.expect_value(t, context_id(fresh), u32(0))
+}
+
+@(test)
+no_resource_handle_can_carry_a_zero_context :: proc(t: ^testing.T) {
+	// This is why a zero context id has to abort rather than return nil:
+	// _resource_handle_make_context refuses to mint a handle for context 0, so
+	// no live handle can ever carry one. A lookup with zero therefore cannot
+	// match anything, and would report an unassigned context as an ordinary
+	// stale handle - the two are indistinguishable at the call site.
+	resources: Texture_Resources
+	entry: Tex_Entry
+	id := _texture_register_context(DEFAULT_CONTEXT_ID, &resources, &entry)
+	testing.expect(t, id != 0)
+
+	raw_id := id & ~TEX_ID_BASE
+	handle_context := (raw_id >> RESOURCE_SLOT_BITS) & RESOURCE_CONTEXT_MASK
+	testing.expect(t, handle_context != 0)
+	testing.expect_value(t, handle_context, DEFAULT_CONTEXT_ID)
+}
+
+@(test)
+texture_lookup_rejects_an_unassigned_context_id :: proc(t: ^testing.T) {
+	// The oracle itself, rather than the reasoning behind it: looking up with
+	// an unassigned context id aborts instead of silently missing. Without
+	// this the guard in _texture_slot_context could be deleted and every other
+	// test would stay green.
+	testing.expect_assert_message(t, "_texture_slot_context: unassigned context id")
+
+	resources: Texture_Resources
+	entry: Tex_Entry
+	id := _texture_register_context(DEFAULT_CONTEXT_ID, &resources, &entry)
+	_ = _texture_slot_context(0, &resources, id)
+
+	// Only reached if the assertion did not fire. expect_assert_message merely
+	// tolerates an abort, it does not require one, so a test that ends at the
+	// call above passes just as happily with the assertion deleted. fail_now
+	// is what makes this test an oracle rather than a description.
+	testing.fail_now(t, "_texture_slot_context accepted an unassigned context id")
 }
 
 @(test)

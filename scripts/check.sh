@@ -25,6 +25,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" \
 	--baseline "$root/scripts/gfx_context_baseline.json" \
 	"$root"
 
+# @(init) order within a package is filename order, and gfx/context.odin does
+# not sort first. A second @(init) in gfx would run before the one that assigns
+# the default context id and read it as zero - see check_init_order.py.
+echo "== gfx @(init) ordering guard =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_init_order_test.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_init_order.py" "$root"
+
 echo "== assertion discipline =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions.py" \

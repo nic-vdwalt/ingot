@@ -250,6 +250,9 @@ text_input_at :: proc(
 		masked       = masked,
 		enable_pills = true,
 		enable_undo  = true,
+		// A box the caller sized for more than one line is a text area, so
+		// Enter types a newline there instead of submitting.
+		submit       = text_input_default_submit(frame, rect.h),
 		semantics    = semantics,
 	}
 	return text_input_box(frame, cfg, &b.sb, &b.st)

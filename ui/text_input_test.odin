@@ -239,3 +239,94 @@ text_input_state_destroy_clears :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(st.undo.undo), 0)
 	testing.expect(t, !st.sel.active)
 }
+
+// --- Enter semantics by box height ------------------------------------------
+//
+// A box the caller sized for several lines is a text area, and a text area
+// that swallows Enter reads as broken input. These pin the rule that height
+// alone decides: one visible line submits, two or more type a newline.
+
+@(private = "file")
+ti_enter_frame :: proc(t: ^testing.T, height: i32, shift: bool) -> string {
+	runtime := new(Ui_Runtime)
+	defer free(runtime)
+	ui_runtime_init(runtime)
+	defer ui_runtime_destroy(runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := new(Ui_Frame)
+	defer free(frame)
+	defer ui_frame_destroy(frame)
+	frame.output = output
+
+	input: Ui_Input
+	input.screen_size = {800, 600}
+	input.keys_pressed[input_key_index(.ENTER)] = true
+	if shift do input.keys_down[input_key_index(.LEFT_SHIFT)] = true
+
+	box: Input_Box
+	defer input_box_destroy(&box)
+	strings.write_string(&box.sb, "ab")
+	box.st.cursor = 2
+
+	ui_frame_begin(frame, runtime, &input)
+	_ = text_input_at(frame, {0, 0, 300, height}, &box, "notes", true, semantics = {name = "N"})
+	ui_frame_end(frame)
+	return strings.clone(strings.to_string(box.sb), context.temp_allocator)
+}
+
+@(test)
+text_input_enter_types_newline_in_a_text_area :: proc(t: ^testing.T) {
+	testing.expect_value(t, ti_enter_frame(t, 90, false), "ab\n")
+}
+
+@(test)
+text_input_enter_submits_a_single_line_field :: proc(t: ^testing.T) {
+	testing.expect_value(t, ti_enter_frame(t, 30, false), "ab")
+}
+
+@(test)
+text_input_shift_enter_still_types_a_newline_in_a_field :: proc(t: ^testing.T) {
+	testing.expect_value(t, ti_enter_frame(t, 30, true), "ab\n")
+}
+
+@(test)
+text_input_visible_lines_matches_the_rendered_band :: proc(t: ^testing.T) {
+	runtime := new(Ui_Runtime)
+	defer free(runtime)
+	ui_runtime_init(runtime)
+	defer ui_runtime_destroy(runtime)
+	frame := new(Ui_Frame)
+	defer free(frame)
+	defer ui_frame_destroy(frame)
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(frame, runtime)
+	defer ui_frame_end(frame)
+
+	metrics := ui_frame_metrics(frame)
+	pad := ui_frame_sc(frame, 12)
+	testing.expect_value(t, text_input_visible_lines(frame, 1), i32(1))
+	testing.expect_value(t, text_input_visible_lines(frame, pad + metrics.LINE_HEIGHT), i32(1))
+	testing.expect_value(t, text_input_visible_lines(frame, pad + metrics.LINE_HEIGHT * 3), i32(3))
+	testing.expect_value(
+		t,
+		text_input_default_submit(frame, pad + metrics.LINE_HEIGHT),
+		Text_Input_Submit.Enter,
+	)
+	testing.expect_value(
+		t,
+		text_input_default_submit(frame, pad + metrics.LINE_HEIGHT * 2),
+		Text_Input_Submit.Never,
+	)
+}

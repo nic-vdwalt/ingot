@@ -423,6 +423,25 @@ Text_Input_Submit :: enum u8 {
 	Never,
 }
 
+// text_input_visible_lines reports how many lines of text a box of this pixel
+// height can show. It is the same expression ti_layout uses to size the
+// visible band, so behaviour and rendering can never disagree about whether a
+// box is one line tall.
+text_input_visible_lines :: proc(frame: ^Ui_Frame, height: i32) -> i32 {
+	assert(frame != nil, "text_input_visible_lines: nil frame")
+	assert(height > 0, "text_input_visible_lines: non-positive height")
+	metrics := ui_frame_metrics(frame)
+	assert(metrics.LINE_HEIGHT > 0, "text_input_visible_lines: non-positive line height")
+	return max(1, (height - ui_frame_sc(frame, 12)) / metrics.LINE_HEIGHT)
+}
+
+// text_input_default_submit picks the Enter behaviour a box of this height
+// should have. A box showing two or more lines is a text area, where every
+// platform inserts a newline on Enter; a one-line field submits.
+text_input_default_submit :: proc(frame: ^Ui_Frame, height: i32) -> Text_Input_Submit {
+	return .Never if text_input_visible_lines(frame, height) > 1 else .Enter
+}
+
 Text_Input_Filter :: #type proc(value: rune) -> bool
 
 Text_Input_Semantics :: struct {
@@ -844,17 +863,20 @@ ti_keys_enter :: proc(ctx: ^TI_Ctx) -> bool {
 	sb := ctx.sb
 	entered := false
 	shift_down := is_key_down(ctx.frame, .LEFT_SHIFT) || is_key_down(ctx.frame, .RIGHT_SHIFT)
+	// Enter is the spell menu's accept key while it is open, so neither
+	// submission nor newline insertion may claim it in that frame.
+	spelling := spell_menu_active(ctx.spell_menu, sb)
 	// Enter submits. Suppressed while the spell menu is open so Enter applies
 	// the highlighted suggestion instead of sending.
-	if ctx.submit == .Enter &&
-	   is_key_pressed(ctx.frame, .ENTER) &&
-	   !shift_down &&
-	   !spell_menu_active(ctx.spell_menu, sb) {
+	if ctx.submit == .Enter && is_key_pressed(ctx.frame, .ENTER) && !shift_down && !spelling {
 		entered = true
 		sel_reset(ctx.sel)
 	}
-	// Shift+Enter inserts a newline.
-	if !ctx.single_line && is_key_pressed(ctx.frame, .ENTER) && shift_down {
+	// Enter inserts a newline in a box that does not submit on Enter (a text
+	// area); where Enter submits, Shift+Enter is the newline. A field that
+	// swallowed Enter entirely would read as a broken text area.
+	newline := ctx.submit == .Never || shift_down
+	if !ctx.single_line && is_key_pressed(ctx.frame, .ENTER) && newline && !spelling {
 		undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
 		if ti_sel_owner(ctx) {
 			nc := selection_delete(ctx.sel, sb, ctx.pills)

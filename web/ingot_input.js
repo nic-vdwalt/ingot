@@ -39,8 +39,11 @@
 	const BTN = { 0: 0, 1: 2, 2: 1, 3: 3, 4: 4 };
 
 	// Keys we consume so the browser doesn't scroll/navigate when the canvas has
-	// focus (arrows, space, tab, backspace, page up/down, home/end).
-	const CONSUME = new Set([32, 258, 259, 262, 263, 264, 265, 266, 267, 268, 269]);
+	// focus (arrows, space, tab, backspace, enter, page up/down, home/end).
+	// Enter is in the set because the hidden IME proxy is a textarea: left to
+	// its default it would insert a newline into the proxy's own value, which
+	// the engine never reads and which grows the element under the caret.
+	const CONSUME = new Set([32, 257, 258, 259, 262, 263, 264, 265, 266, 267, 268, 269]);
 
 	// --- touch drag scrolling ---------------------------------------------
 	// The engine scrolls panes from wheel deltas (ui/widgets.odin pane_begin

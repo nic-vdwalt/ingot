@@ -592,7 +592,7 @@ draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		&state.ctx,
 		ui.id(&state.ctx, "notes"),
 		&state.notes,
-		"Notes\u2026 (Shift+Enter for newlines)",
+		"Notes\u2026 (multi-line: Enter for newlines)",
 		height = 90,
 		semantics = ui.Text_Input_Semantics{name = "Notes"},
 	)

@@ -164,10 +164,13 @@ _input_reset_mouse_edges :: proc(inp: ^Input) {
 @(private)
 _input_publish_staged :: proc(inp: ^Input) {
 	assert(inp != nil, "_input_publish_staged: nil input")
+	// Merge, never assign: input_poll clears the published edges at the top of
+	// the frame, so OR is identical for the GLFW path while keeping any other
+	// producer that ran earlier in the same poll (the web drain) intact.
 	for index in 0 ..< KEY_COUNT {
-		inp.pressed[index] = inp.st_pressed[index]
-		inp.released[index] = inp.st_released[index]
-		inp.repeat[index] = inp.st_repeat[index]
+		inp.pressed[index] |= inp.st_pressed[index]
+		inp.released[index] |= inp.st_released[index]
+		inp.repeat[index] |= inp.st_repeat[index]
 		inp.st_pressed[index] = false
 		inp.st_released[index] = false
 		inp.st_repeat[index] = false
