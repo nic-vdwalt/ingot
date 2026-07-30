@@ -13,6 +13,10 @@
 			border: 1px solid #46464f; border-radius: 8px; background: #000;
 			outline: none; touch-action: none; }
 		#msg { font-size: 13px; color: #a0a0aa; }
+		#crash { display: none; font-size: 12px; color: #ff8080; background: #2a1e1e;
+			border: 1px solid #5a3030; border-radius: 6px; padding: 8px 10px;
+			max-width: 92vw; max-height: 30vh; overflow: auto; white-space: pre-wrap;
+			word-break: break-word; margin: 0; }
 		a { color: #64a0ff; }
 	</style>
 </head>
@@ -22,7 +26,57 @@
 		<!-- tabindex makes the canvas focusable so it receives keyboard events -->
 		<canvas id="ingot-canvas" width="1280" height="720" tabindex="0"></canvas>
 		<div id="msg">initializing…</div>
+		<pre id="crash"></pre>
 	</div>
+
+	<!-- On-device crash reporting: mobile browsers have no reachable console,
+	     so a wasm trap in the requestAnimationFrame step (odin.js stops the
+	     loop) or an Odin panic would otherwise be a silent black canvas.
+	     Mirror recent console output and surface uncaught errors on the page.
+	     Installed before the runtimes load so nothing is missed. -->
+	<script>
+		(function () {
+			const RING_MAX = 40;
+			const ring = [];
+			let fatal = false;
+			function record(line) {
+				ring.push(line);
+				if (ring.length > RING_MAX) ring.shift();
+				// Odin panics/asserts and gfx errors arrive as console lines
+				// *before* the trap unwinds; show them even if the subsequent
+				// window error event is swallowed by the browser.
+				if (/panic|assert|fatal|gfx: /i.test(line)) show(line);
+			}
+			function show(reason) {
+				fatal = true;
+				const crash = document.getElementById("crash");
+				const msg = document.getElementById("msg");
+				if (msg) msg.textContent = "crashed - details below";
+				if (crash) {
+					crash.style.display = "block";
+					crash.textContent = "reason: " + reason +
+						"\n\nrecent console output:\n" + ring.join("\n");
+				}
+			}
+			for (const level of ["log", "warn", "error"]) {
+				const original = console[level].bind(console);
+				console[level] = function (...args) {
+					try {
+						record(args.map((a) =>
+							typeof a === "string" ? a : String(a)).join(" "));
+					} catch (_) {}
+					original(...args);
+				};
+			}
+			window.addEventListener("error", (e) => {
+				show(e.message + (e.filename ? " (" + e.filename + ":" + e.lineno + ")" : ""));
+			});
+			window.addEventListener("unhandledrejection", (e) => {
+				show("unhandled rejection: " + (e.reason && e.reason.message || e.reason));
+			});
+			window.__ingotCrashed = () => fatal;
+		})();
+	</script>
 
 	<!-- Odin JS runtime + vendor:wgpu browser glue (staged by build_web.sh). -->
 	<script src="odin.js"></script>
@@ -33,7 +87,7 @@
 	<script>
 		const msg = document.getElementById("msg");
 		window.ingotWeb.run("ingot_web.wasm")
-			.then(() => { msg.textContent = "running (WebGPU)"; })
+			.then(() => { if (!window.__ingotCrashed()) msg.textContent = "running (WebGPU)"; })
 			.catch((e) => { msg.textContent = "error: " + e; console.error(e); });
 	</script>
 </body>

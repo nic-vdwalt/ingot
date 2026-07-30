@@ -566,6 +566,7 @@ _gpu_finish :: proc() {
 
 	caps, _ := wg.SurfaceGetCapabilities(g.surface, g.adapter)
 	if caps.formatCount == 0 || caps.formats == nil {
+		fmt.eprintln("gfx: surface reports no supported formats; cannot configure swapchain")
 		g.lifecycle = .Closing
 		return
 	}

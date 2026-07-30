@@ -12,6 +12,7 @@
 package gfx
 
 import "base:runtime"
+import "core:fmt"
 import wg "vendor:wgpu"
 
 // JS runtime bridges (provided by web/ingot_web.js as the "ingot" import
@@ -148,6 +149,12 @@ _web_on_adapter :: proc "c" (
 	context = g_web_ctx
 	request := cast(^Web_GPU_Request)u1
 	if status != .Success || !_web_request_live(request) {
+		if status != .Success {
+			// Mobile browsers commonly resolve with a null adapter (blocklisted
+			// GPU, compat-mode-only device). Without this line the canvas just
+			// stays black forever - surface the reason instead.
+			fmt.eprintfln("gfx: WebGPU adapter request failed (%v): %s", status, string(msg))
+		}
 		if adapter != nil do wg.AdapterRelease(adapter)
 		free(request)
 		return
@@ -158,7 +165,7 @@ _web_on_adapter :: proc "c" (
 	free(request)
 	wg.AdapterRequestDevice(
 		g.adapter,
-		nil,
+		&wg.DeviceDescriptor{uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error}},
 		{callback = _web_on_device, userdata1 = device_request},
 	)
 }
@@ -173,6 +180,9 @@ _web_on_device :: proc "c" (
 	context = g_web_ctx
 	request := cast(^Web_GPU_Request)u1
 	if status != .Success || !_web_request_live(request) {
+		if status != .Success {
+			fmt.eprintfln("gfx: WebGPU device request failed (%v): %s", status, string(msg))
+		}
 		if device != nil do wg.DeviceRelease(device)
 		free(request)
 		return
