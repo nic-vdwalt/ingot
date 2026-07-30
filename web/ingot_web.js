@@ -25,6 +25,22 @@
 	const semanticInputs = new Map();
 	const semanticForms = new Map();
 	const semanticControls = new Map();
+	// Mobile-browser guard: mirroring semantic nodes into DOM costs style
+	// writes + a forced reflow per element per frame. Desktop absorbs
+	// thousands; iOS Safari's watchdog kills the tab (see the gallery's
+	// 1000-button stress grid). Cap how many controls are mirrored per frame;
+	// AT still reaches everything below the cap, and the canvas remains fully
+	// interactive for everyone else.
+	const SEMANTIC_CONTROLS_MAX = 256;
+	let semanticControlsSynced = 0;
+	// Shared codecs: per-call `new TextDecoder()` allocations at 1000+ calls
+	// per frame create GC pressure that stalls mobile browsers.
+	const textDecoder = new TextDecoder();
+	const textEncoder = new TextEncoder();
+	// Canvas rect cached per semantic frame: getBoundingClientRect between
+	// style writes forces a reflow per mirrored element - the main cost that
+	// froze mobile Safari.
+	let canvasRectCache = null;
 	const INPUT_TYPES = ["text", "email", "password"];
 	const AUTOCOMPLETE = ["off", "username", "current-password", "new-password"];
 	// Dropped files staged for the engine (names + bytes; browsers never expose
@@ -42,7 +58,15 @@
 	}
 
 	function wasmText(pointer, length) {
-		return new TextDecoder().decode(wasmBytes(pointer, length));
+		return textDecoder.decode(wasmBytes(pointer, length));
+	}
+
+	function canvasRect() {
+		if (canvasRectCache) return canvasRectCache;
+		const canvas = document.getElementById(CANVAS_ID);
+		if (!canvas) return null;
+		canvasRectCache = canvas.getBoundingClientRect();
+		return canvasRectCache;
 	}
 
 	function httpImports(wmi) {
@@ -137,13 +161,19 @@
 		return state;
 	}
 
-	function semanticBounds(element, x, y, width, height) {
-		const canvas = document.getElementById(CANVAS_ID);
-		if (!canvas) return;
-		const rect = canvas.getBoundingClientRect();
+	function semanticBounds(state, element, x, y, width, height) {
+		const rect = canvasRect();
+		if (!rect) return;
+		const left = rect.left + x;
+		const top = rect.top + y;
+		// Style writes invalidate layout even when values are unchanged on some
+		// engines; diffing keeps steady-state frames free of DOM mutations.
+		const b = state.bounds || (state.bounds = {});
+		if (b.left === left && b.top === top && b.width === width && b.height === height) return;
+		b.left = left; b.top = top; b.width = width; b.height = height;
 		element.style.position = "fixed";
-		element.style.left = `${rect.left + x}px`;
-		element.style.top = `${rect.top + y}px`;
+		element.style.left = `${left}px`;
+		element.style.top = `${top}px`;
 		element.style.width = `${width}px`;
 		element.style.height = `${height}px`;
 		element.style.zIndex = "10";
@@ -206,7 +236,7 @@
 		input.autocomplete = AUTOCOMPLETE[autocomplete] || "off";
 		input.placeholder = placeholder;
 		input.setAttribute("aria-label", placeholder);
-		semanticBounds(input, x, y, width, height);
+		semanticBounds(state, input, x, y, width, height);
 		if (odinValue !== state.lastOdinValue && input.value === state.lastOdinValue) {
 			input.value = odinValue;
 		}
@@ -239,7 +269,7 @@
 		button.style.padding = "0";
 		button.style.font = `${fontSize}px sans-serif`;
 		button.style.cursor = enabled ? "pointer" : "default";
-		semanticBounds(button, x, y, width, height);
+		semanticBounds(state, button, x, y, width, height);
 		const submitted = state.submitted;
 		state.submitted = false;
 		return submitted ? 1 : 0;
@@ -301,13 +331,18 @@
 			semanticControls.delete(key);
 			state = null;
 		}
+		if (!state && semanticControlsSynced >= SEMANTIC_CONTROLS_MAX) return 0;
 		if (!state) state = createSemanticControl(key, role);
 		if (!state) return 0;
+		semanticControlsSynced += 1;
 		state.seen = semanticFrame;
 		const el = state.el;
-		el.setAttribute("aria-label", label);
-		if (el.tagName === "BUTTON") el.textContent = label;
-		semanticBounds(el, x, y, width, height);
+		if (state.label !== label) {
+			state.label = label;
+			el.setAttribute("aria-label", label);
+			if (el.tagName === "BUTTON") el.textContent = label;
+		}
+		semanticBounds(state, el, x, y, width, height);
 		el.disabled = (stateBits & 2) !== 0;
 		if (state.role === 2 || state.role === 3) el.checked = (stateBits & 1) !== 0;
 		if (state.role === 6) el.setAttribute("aria-expanded", (stateBits & 8) !== 0 ? "true" : "false");
@@ -333,7 +368,7 @@
 
 	function semanticCursorByteOffset(input) {
 		const end = input.selectionStart === null ? input.value.length : input.selectionStart;
-		return new TextEncoder().encode(input.value.slice(0, end)).length;
+		return textEncoder.encode(input.value.slice(0, end)).length;
 	}
 
 	function endSemanticFrame() {
@@ -378,9 +413,9 @@
 				const c = document.getElementById(CANVAS_ID);
 				if (c) c.style.cursor = CURSORS[cur] || "default";
 			},
-			ingot_clipboard_len: () => new TextEncoder().encode(clipboardText).length,
+			ingot_clipboard_len: () => textEncoder.encode(clipboardText).length,
 			ingot_clipboard_copy: (destination, capacity) => {
-				const bytes = new TextEncoder().encode(clipboardText);
+				const bytes = textEncoder.encode(clipboardText);
 				const count = Math.min(capacity, bytes.length);
 				if (count > 0) wasmBytes(destination, count).set(bytes.subarray(0, count));
 				return count;
@@ -390,7 +425,7 @@
 				const memory = new Uint8Array(wasmMemoryInterface.memory.buffer);
 				let end = pointer;
 				while (end < memory.length && memory[end] !== 0) end += 1;
-				clipboardText = new TextDecoder().decode(memory.subarray(pointer, end));
+				clipboardText = textDecoder.decode(memory.subarray(pointer, end));
 				if (navigator.clipboard && navigator.clipboard.writeText) {
 					navigator.clipboard.writeText(clipboardText).catch(() => {});
 				}
@@ -400,9 +435,13 @@
 				const memory = new Uint8Array(wasmMemoryInterface.memory.buffer);
 				let end = pointer;
 				while (end < memory.length && memory[end] !== 0) end += 1;
-				document.title = new TextDecoder().decode(memory.subarray(pointer, end));
+				document.title = textDecoder.decode(memory.subarray(pointer, end));
 			},
-			ingot_web_input_frame_begin: () => { semanticFrame += 1; },
+			ingot_web_input_frame_begin: () => {
+				semanticFrame += 1;
+				semanticControlsSynced = 0;
+				canvasRectCache = null;
+			},
 			ingot_web_input_frame_end: endSemanticFrame,
 			ingot_web_input_sync: (formPointer, formLength, fieldPointer, fieldLength,
 				namePointer, nameLength, placeholderPointer, placeholderLength,
@@ -416,12 +455,12 @@
 			),
 			ingot_web_input_value_len: (fieldPointer, fieldLength) => {
 				const state = semanticInputState(wasmText(fieldPointer, fieldLength));
-				return state ? new TextEncoder().encode(state.input.value).length : 0;
+				return state ? textEncoder.encode(state.input.value).length : 0;
 			},
 			ingot_web_input_value_copy: (fieldPointer, fieldLength, destination, capacity) => {
 				const state = semanticInputState(wasmText(fieldPointer, fieldLength));
 				if (!state) return 0;
-				const bytes = new TextEncoder().encode(state.input.value);
+				const bytes = textEncoder.encode(state.input.value);
 				const count = Math.min(capacity, bytes.length);
 				if (count > 0) wasmBytes(destination, count).set(bytes.subarray(0, count));
 				return count;
@@ -493,7 +532,7 @@
 					axes[4] = lt * 2 - 1;
 					axes[5] = rt * 2 - 1;
 				}
-				const id = new TextEncoder().encode(pad.id || "");
+				const id = textEncoder.encode(pad.id || "");
 				const n = Math.min(nameCap, id.length);
 				if (n > 0) wasmBytes(namePtr, n).set(id.subarray(0, n));
 				return n;
