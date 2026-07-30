@@ -21,6 +21,15 @@ import rl "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
+// Imports are used only under `when MAP_CAPTURE`; anchor them for normal
+// builds, matching examples/gallery/capture.odin.
+_ :: fmt
+_ :: os
+_ :: strings
+_ :: rl
+_ :: ui
+_ :: ui_gfx
+
 when MAP_CAPTURE {
 	// Fixed output geometry: identical PNGs regardless of host display. The
 	// target is 2x the logical composition (UI scale doubled with it), so the
