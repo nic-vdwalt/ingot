@@ -148,67 +148,52 @@ _gpu_budget_from_limits :: proc(limits: wg.Limits) -> Gpu_Budget {
 	return budget
 }
 
-// _gpu_required_limits builds the DeviceDescriptor.requiredLimits the engine
-// asks for. Requesting explicitly (rather than passing nil and inheriting
-// whatever defaults the browser picks) means a device that cannot serve the
-// engine fails loudly at request time with a browser-supplied reason, instead
-// of succeeding and then erroring on the first oversized allocation.
+// Why the engine does NOT pass DeviceDescriptor.requiredLimits on web:
+// vendor:wgpu's browser glue decodes that pointer as a WGPURequiredLimits
+// wrapper - web/wgpu.js's RequiredLimitsPtr reads `this.Limits(start + 8)`
+// and Limits() then skips another 4 bytes, so fields are read from
+// pointer+12. A bare ^wg.Limits has its fields at offset 4, which mis-aligns
+// all 31 limits (maxTextureDimension1D picks up half of a u64) and makes
+// Safari reject the device outright - a black canvas on every mobile boot.
+// The marshaller reads all 31 fields from that same base, so no subset of the
+// struct is safe to fill either.
 //
-// Only the limits the engine genuinely depends on are raised above the spec
-// minimum; everything else is left at the adapter's own value so a constrained
-// device is never rejected for capabilities we do not use.
-@(private)
-_gpu_required_limits :: proc(supported: wg.Limits, budget: Gpu_Budget) -> wg.Limits {
-	assert(gpu_budget_is_usable(budget), "_gpu_required_limits: unusable budget")
-	required := supported
-	required.nextInChain = nil
-	required.maxBufferSize = max(budget.geometry_stream_bytes, budget.uniform_stream_bytes)
-	if supported.maxBufferSize > 0 {
-		required.maxBufferSize = min(required.maxBufferSize, supported.maxBufferSize)
-		// Asking above the adapter's ceiling fails the device request
-		// outright, which is the failure mode this whole file exists to
-		// avoid.
-		assert(
-			required.maxBufferSize <= supported.maxBufferSize,
-			"_gpu_required_limits: buffer request exceeds support",
-		)
-	}
-	required.maxTextureDimension2D = max(budget.atlas_dim, supported.maxTextureDimension2D)
-	assert(required.maxBufferSize > 0, "_gpu_required_limits: zero buffer request")
-	return required
-}
+// Adapter limits are still read, but only to SIZE our pools
+// (_gpu_budget_from_limits above). The bounded halve-and-retry in
+// batch.odin's _stream_buffer_create is the real safety net for a device that
+// refuses a large buffer, and it needs no cooperation from the JS glue.
 
-// gpu_negotiate_budget queries the adapter, records the resulting budget on
-// the active context, and returns the limits to request the device with.
-// Called by both platform backends immediately before AdapterRequestDevice.
+// gpu_negotiate_budget queries the adapter and returns the pool budget this
+// device can serve. Called by both platform backends immediately before
+// AdapterRequestDevice; the caller stores it on the context, keeping this a
+// leaf that owns no mutable state (Tiger Style: the parent owns the globals).
 //
 // A constrained device is logged rather than silently accepted: on mobile the
 // browser console is unreachable, so this line is what the on-page crash
 // panel shows when a phone cannot serve the desktop-class pools.
 @(private)
-gpu_negotiate_budget :: proc(adapter: wg.Adapter) -> wg.Limits {
+gpu_negotiate_budget :: proc(adapter: wg.Adapter) -> Gpu_Budget {
 	assert(adapter != nil, "gpu_negotiate_budget: nil adapter")
 	supported, status := wg.AdapterGetLimits(adapter)
 	if status != .Success {
 		// Operating error, not a programmer error: keep the desktop targets
 		// and let the allocation retry in _stream_slots_init find the real
 		// ceiling.
-		g.budget = gpu_budget_default()
 		fmt.eprintln("gfx: adapter limits unavailable; using default GPU budget")
-		return _gpu_required_limits(wg.Limits{}, g.budget)
+		return gpu_budget_default()
 	}
-	g.budget = _gpu_budget_from_limits(supported)
-	if !gpu_budget_is_full(g.budget) {
+	budget := _gpu_budget_from_limits(supported)
+	if !gpu_budget_is_full(budget) {
 		fmt.eprintfln(
 			"gfx: constrained GPU budget (geometry=%d KiB uniform=%d KiB atlas=%d, maxBufferSize=%d KiB)",
-			g.budget.geometry_stream_bytes / 1024,
-			g.budget.uniform_stream_bytes / 1024,
-			g.budget.atlas_dim,
+			budget.geometry_stream_bytes / 1024,
+			budget.uniform_stream_bytes / 1024,
+			budget.atlas_dim,
 			supported.maxBufferSize / 1024,
 		)
 	}
-	assert(gpu_budget_is_usable(g.budget), "gpu_negotiate_budget: unusable budget recorded")
-	return _gpu_required_limits(supported, g.budget)
+	assert(gpu_budget_is_usable(budget), "gpu_negotiate_budget: unusable budget")
+	return budget
 }
 
 // gpu_budget_active returns the negotiated budget, substituting the desktop

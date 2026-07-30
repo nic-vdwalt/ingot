@@ -87,26 +87,11 @@ gpu_budget_floors_degenerate_limits :: proc(t: ^testing.T) {
 	testing.expect(t, budget.atlas_dim > 0)
 }
 
-@(test)
-gpu_required_limits_never_exceed_support :: proc(t: ^testing.T) {
-	// Asking for more than the adapter supports would fail the device
-	// request outright, so the requested ceiling must stay within support.
-	supported := _mobile_limits()
-	budget := _gpu_budget_from_limits(supported)
-	required := _gpu_required_limits(supported, budget)
-	testing.expect(t, required.maxBufferSize <= supported.maxBufferSize)
-	testing.expect(t, required.maxBufferSize >= budget.geometry_stream_bytes)
-	testing.expect(t, required.maxBufferSize >= budget.uniform_stream_bytes)
-	testing.expect(t, required.maxTextureDimension2D >= budget.atlas_dim)
-	testing.expect(t, required.nextInChain == nil)
-	// Limits the engine does not care about pass through untouched, so a
-	// constrained device is never rejected for capabilities we never use.
-	testing.expect_value(
-		t,
-		required.minUniformBufferOffsetAlignment,
-		supported.minUniformBufferOffsetAlignment,
-	)
-}
+// There is deliberately no requiredLimits test: the engine no longer passes
+// DeviceDescriptor.requiredLimits, because vendor:wgpu's browser glue decodes
+// that pointer at the wrong offset and Safari rejects the device. See the
+// hazard note in limits.odin. Adapter limits are read for pool sizing only,
+// which is what the tests above and below cover.
 
 @(test)
 gpu_budget_active_never_returns_zero :: proc(t: ^testing.T) {

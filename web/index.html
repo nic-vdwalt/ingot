@@ -29,54 +29,9 @@
 		<pre id="crash"></pre>
 	</div>
 
-	<!-- On-device crash reporting: mobile browsers have no reachable console,
-	     so a wasm trap in the requestAnimationFrame step (odin.js stops the
-	     loop) or an Odin panic would otherwise be a silent black canvas.
-	     Mirror recent console output and surface uncaught errors on the page.
-	     Installed before the runtimes load so nothing is missed. -->
-	<script>
-		(function () {
-			const RING_MAX = 40;
-			const ring = [];
-			let fatal = false;
-			function record(line) {
-				ring.push(line);
-				if (ring.length > RING_MAX) ring.shift();
-				// Odin panics/asserts and gfx errors arrive as console lines
-				// *before* the trap unwinds; show them even if the subsequent
-				// window error event is swallowed by the browser.
-				if (/panic|assert|fatal|gfx: /i.test(line)) show(line);
-			}
-			function show(reason) {
-				fatal = true;
-				const crash = document.getElementById("crash");
-				const msg = document.getElementById("msg");
-				if (msg) msg.textContent = "crashed - details below";
-				if (crash) {
-					crash.style.display = "block";
-					crash.textContent = "reason: " + reason +
-						"\n\nrecent console output:\n" + ring.join("\n");
-				}
-			}
-			for (const level of ["log", "warn", "error"]) {
-				const original = console[level].bind(console);
-				console[level] = function (...args) {
-					try {
-						record(args.map((a) =>
-							typeof a === "string" ? a : String(a)).join(" "));
-					} catch (_) {}
-					original(...args);
-				};
-			}
-			window.addEventListener("error", (e) => {
-				show(e.message + (e.filename ? " (" + e.filename + ":" + e.lineno + ")" : ""));
-			});
-			window.addEventListener("unhandledrejection", (e) => {
-				show("unhandled rejection: " + (e.reason && e.reason.message || e.reason));
-			});
-			window.__ingotCrashed = () => fatal;
-		})();
-	</script>
+	<!-- On-device crash reporting. Loaded first so it captures everything the
+	     runtimes log during boot; see ingot_crash.js for why. -->
+	<script src="ingot_crash.js"></script>
 
 	<!-- Odin JS runtime + vendor:wgpu browser glue (staged by build_web.sh). -->
 	<script src="odin.js"></script>
@@ -87,8 +42,15 @@
 	<script>
 		const msg = document.getElementById("msg");
 		window.ingotWeb.run("ingot_web.wasm")
-			.then(() => { if (!window.__ingotCrashed()) msg.textContent = "running (WebGPU)"; })
-			.catch((e) => { msg.textContent = "error: " + e; console.error(e); });
+			.then(() => {
+				if (!window.ingotCrash.crashed()) msg.textContent = "running (WebGPU)";
+			})
+			.catch((error) => {
+				// Route through the reporter so the panel shows this alongside
+				// the engine's own log lines instead of replacing them.
+				window.ingotCrash.report(error && error.message || error);
+				console.error(error);
+			});
 	</script>
 </body>
 </html>

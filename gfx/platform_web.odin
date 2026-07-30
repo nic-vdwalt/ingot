@@ -139,6 +139,16 @@ platform_start_gpu :: proc() {
 	)
 }
 
+// _web_reason renders a browser-supplied failure message for logging. Safari
+// forwards an empty rejection reason for some device failures, which used to
+// print as "failed (Error):" with nothing after the colon - a dead end for
+// anyone reading the on-page crash panel. Say so explicitly instead.
+@(private)
+_web_reason :: proc(msg: wg.StringView) -> string {
+	text := string(msg)
+	return text if len(text) > 0 else "(browser supplied no message)"
+}
+
 @(private)
 _web_on_adapter :: proc "c" (
 	status: wg.RequestAdapterStatus,
@@ -153,7 +163,7 @@ _web_on_adapter :: proc "c" (
 			// Mobile browsers commonly resolve with a null adapter (blocklisted
 			// GPU, compat-mode-only device). Without this line the canvas just
 			// stays black forever - surface the reason instead.
-			fmt.eprintfln("gfx: WebGPU adapter request failed (%v): %s", status, string(msg))
+			fmt.eprintfln("gfx: WebGPU adapter request failed (%v): %s", status, _web_reason(msg))
 		}
 		if adapter != nil do wg.AdapterRelease(adapter)
 		free(request)
@@ -163,18 +173,14 @@ _web_on_adapter :: proc "c" (
 	device_request := new(Web_GPU_Request)
 	device_request.epoch = request.epoch
 	free(request)
-	// Negotiate before requesting: mobile GPUs report far lower ceilings than
-	// desktop, and asking for a device we cannot actually use only defers the
-	// failure to the first oversized allocation. Both stay live for the
-	// duration of the call, which reads the descriptor synchronously.
-	required := gpu_negotiate_budget(adapter)
-	descriptor := wg.DeviceDescriptor {
-		requiredLimits = &required,
-		uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error},
-	}
+	// Read the adapter's limits to size our pools (limits.odin). The device
+	// itself is requested with default limits: see the hazard note in
+	// limits.odin for why passing requiredLimits through the JS glue makes
+	// Safari reject the device.
+	g.budget = gpu_negotiate_budget(adapter)
 	wg.AdapterRequestDevice(
 		g.adapter,
-		&descriptor,
+		&wg.DeviceDescriptor{uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error}},
 		{callback = _web_on_device, userdata1 = device_request},
 	)
 }
@@ -190,7 +196,7 @@ _web_on_device :: proc "c" (
 	request := cast(^Web_GPU_Request)u1
 	if status != .Success || !_web_request_live(request) {
 		if status != .Success {
-			fmt.eprintfln("gfx: WebGPU device request failed (%v): %s", status, string(msg))
+			fmt.eprintfln("gfx: WebGPU device request failed (%v): %s", status, _web_reason(msg))
 		}
 		if device != nil do wg.DeviceRelease(device)
 		free(request)

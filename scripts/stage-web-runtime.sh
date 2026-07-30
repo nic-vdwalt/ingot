@@ -32,4 +32,5 @@ if [ "$ROOT/web" != "$(cd "$DEST" && pwd)" ]; then
 	cp "$ROOT/web/ingot_web.js" "$DEST/ingot_web.js"
 	cp "$ROOT/web/ingot_input.js" "$DEST/ingot_input.js"
 	cp "$ROOT/web/ingot_app.js" "$DEST/ingot_app.js"
+	cp "$ROOT/web/ingot_crash.js" "$DEST/ingot_crash.js"
 fi
