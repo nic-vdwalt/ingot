@@ -73,7 +73,11 @@ platform_start_gpu :: proc() {
 	g.adapter = ares.adapter
 
 	dres: Device_Res
+	// ares.adapter, not g.adapter: this leaf keeps its context reads in one
+	// place at the top rather than reaching back into the global mid-sequence.
+	required := gpu_negotiate_budget(ares.adapter)
 	dev_desc := wg.DeviceDescriptor {
+		requiredLimits = &required,
 		uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error},
 	}
 	wg.AdapterRequestDevice(

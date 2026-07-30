@@ -8,6 +8,7 @@
 package gfx
 
 import "core:c"
+import "core:fmt"
 import "core:math"
 import "core:strings"
 import tt "vendor:stb/truetype"
@@ -16,6 +17,19 @@ import wg "vendor:wgpu"
 ATLAS_DIM :: 2048 // multiple of 256 so R8 bytesPerRow is copy-aligned
 ATLAS_PAD :: 1
 MAX_ATLASES :: 256
+
+// The atlas dimension stays a compile-time constant because glyph UVs, the
+// bitmap stride, and the copy layout all derive from it. WebGPU guarantees
+// maxTextureDimension2D >= 8192, so every conformant device - mobile included
+// - can host it; the negotiated budget (limits.odin) only has to confirm that
+// before the atlas is created, which _atlas_dim_supported does.
+#assert(ATLAS_DIM % 256 == 0)
+#assert(u32(ATLAS_DIM) <= GPU_BUDGET_ATLAS_DIM_DEFAULT)
+
+@(private)
+_atlas_dim_supported :: proc() -> bool {
+	return gpu_budget_active().atlas_dim >= u32(ATLAS_DIM)
+}
 
 Glyph :: struct {
 	x, y, w, h: u16, // atlas cell (pixels)
@@ -104,6 +118,17 @@ LoadFontFromMemory :: proc(
 	assert(dataSize > 0, "LoadFontFromMemory: non-positive font data size")
 	assert(codepointCount >= 0, "LoadFontFromMemory: negative codepoint count")
 	if codepointCount > 0 do assert(codepoints != nil, "LoadFontFromMemory: nil codepoints")
+	if !_atlas_dim_supported() {
+		// A device below the WebGPU-guaranteed texture ceiling cannot host
+		// the atlas. Return an empty font (callers already handle
+		// glyphCount == 0) instead of creating an invalid texture.
+		fmt.eprintfln(
+			"gfx: device texture limit %d below atlas dimension %d; font not loaded",
+			gpu_budget_active().atlas_dim,
+			ATLAS_DIM,
+		)
+		return Font{}
+	}
 	a := new(Atlas)
 	a.data = make([]byte, int(dataSize))
 	copy(a.data, fileData[:dataSize])

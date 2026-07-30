@@ -163,9 +163,18 @@ _web_on_adapter :: proc "c" (
 	device_request := new(Web_GPU_Request)
 	device_request.epoch = request.epoch
 	free(request)
+	// Negotiate before requesting: mobile GPUs report far lower ceilings than
+	// desktop, and asking for a device we cannot actually use only defers the
+	// failure to the first oversized allocation. Both stay live for the
+	// duration of the call, which reads the descriptor synchronously.
+	required := gpu_negotiate_budget(adapter)
+	descriptor := wg.DeviceDescriptor {
+		requiredLimits = &required,
+		uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error},
+	}
 	wg.AdapterRequestDevice(
 		g.adapter,
-		&wg.DeviceDescriptor{uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error}},
+		&descriptor,
 		{callback = _web_on_device, userdata1 = device_request},
 	)
 }

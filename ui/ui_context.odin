@@ -3,7 +3,6 @@
 // keyboard focus whose traversal order is rebuilt in bounded frame arrays.
 package ui
 
-import "core:strings"
 
 
 // MAX_FOCUSABLES bounds focus registrations per frame (Tiger Style: put a
@@ -761,14 +760,13 @@ _label_px :: proc(u: ^Ui, text: string, font_size: i32, color: Color) {
 	assert(u != nil && u.open, "_label_px: frame not open")
 	assert(font_size > 0 && color.a > 0, "_label_px: unresolved style")
 	metrics := ui_frame_metrics(u.frame)
-	text_c := strings.clone_to_cstring(text, context.temp_allocator)
-	r := slot_next_px(u, measure_text_frame(u.frame, text_c, font_size), metrics.LINE_HEIGHT)
+	r := slot_next_px(u, measure_text_string_frame(u.frame, text, font_size), metrics.LINE_HEIGHT)
 	if !slot_visible(r) {
 		_ = ui_frame_drop_degenerate(u.frame, true)
 		return
 	}
 	begin_scissor_mode(u.frame, r.x, r.y, r.w, r.h)
-	draw_text_frame(u.frame, text_c, r.x, r.y + (r.h - font_size) / 2, font_size, color)
+	draw_text_string_frame(u.frame, text, r.x, r.y + (r.h - font_size) / 2, font_size, color)
 	end_scissor_mode(u.frame)
 	semantic_push(u.frame, .Label, r, text, {})
 }

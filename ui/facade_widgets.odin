@@ -10,8 +10,6 @@
 // there is nothing for an identity to key.
 package ui
 
-import "core:strings"
-
 // --- interactive ------------------------------------------------------------
 
 Collapsible_Header_Facade_Options :: struct {
@@ -99,8 +97,7 @@ section_header :: proc(u: ^Ui, label: string) -> i32 {
 pill_width_px :: proc(frame: ^Ui_Frame, text: string, font_size: i32) -> i32 {
 	assert(frame != nil, "pill_width_px: nil frame")
 	assert(font_size > 0, "pill_width_px: non-positive font size")
-	c := strings.clone_to_cstring(text, context.temp_allocator)
-	return measure_text_frame(frame, c, font_size) + 12
+	return measure_text_string_frame(frame, text, font_size) + 12
 }
 
 // status_pill carves a content-sized slot and returns the drawn pill width.

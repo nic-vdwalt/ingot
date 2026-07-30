@@ -90,7 +90,11 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	g.queue = wg.DeviceGetQueue(g.device)
 	g.format = .BGRA8Unorm
 	_submission_init(&g.submissions, g)
-	renderer_init(&g.rend)
+	// The test's device is real, so the stream pools must allocate; a false
+	// here means the harness itself is broken, not that a device degraded.
+	renderer_ready := renderer_init(&g.rend)
+	testing.expect(t, renderer_ready, "text test harness: renderer_init failed")
+	if !renderer_ready do return
 
 	cps: [95]rune
 	for i in 0 ..< 95 {cps[i] = rune(32 + i)}

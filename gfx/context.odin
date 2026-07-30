@@ -147,6 +147,10 @@ Context :: struct {
 	format:               wg.TextureFormat,
 	config:               wg.SurfaceConfiguration,
 	config_flags:         ConfigFlags,
+	// Pool sizes negotiated against the adapter's reported limits before the
+	// device was requested (limits.odin). The renderer and font atlas size
+	// themselves from this rather than from desktop constants.
+	budget:               Gpu_Budget,
 
 	// logical (point) size - what GetScreenWidth/Height and the ortho
 	// projection use; physical framebuffer may be larger under HiDPI.
@@ -620,7 +624,13 @@ _gpu_finish :: proc() {
 	g.target_fps = 0
 
 	_submission_init(&g.submissions, g)
-	renderer_init(&g.rend)
+	if !renderer_init(&g.rend) {
+		// The device could not supply the stream pools even at the floor.
+		// Closing here surfaces a diagnosable state; the alternative used to
+		// be an assert, which on web traps the module and freezes the canvas.
+		g.lifecycle = .Closing
+		return
+	}
 	_graphics_resources_init(&g.resources)
 	platform_input_init()
 	platform_drop_init()

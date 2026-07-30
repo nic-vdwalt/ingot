@@ -7,6 +7,7 @@
 // flushes.
 package gfx
 
+import "core:fmt"
 import "core:mem"
 import wg "vendor:wgpu"
 
@@ -39,9 +40,10 @@ Blend_Slot :: enum {
 	Custom,
 }
 
-GEOMETRY_STREAM_BYTES :: u64(16 * 1024 * 1024)
+// GPU_BUDGET_* in limits.odin are the desktop targets these default to. The
+// live sizes are negotiated per-device and stored on the Renderer, because a
+// mobile GPU cannot afford STREAM_SLOT_COUNT pairs of 16 MiB buffers.
 GEOMETRY_STREAM_ALIGN :: u64(4)
-UNIFORM_STREAM_BYTES :: u64(16 * 1024 * 1024)
 STREAM_SLOT_COUNT :: 3
 BATCH_MAX_VERTICES :: 262_144
 BATCH_MAX_INDICES :: 393_216
@@ -118,6 +120,11 @@ Renderer :: struct {
 	stream_slots:       [STREAM_SLOT_COUNT]Stream_Slot,
 	active_stream_slot: i32,
 	uniform_alignment:  u64,
+	// Per-slot pool sizes actually allocated on this device (limits.odin).
+	// Every reservation and shadow bound reads these, never a constant, so a
+	// constrained device streams within what its GPU granted.
+	geometry_bytes:     u64,
+	uniform_bytes:      u64,
 	transient_buffers:  [dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
 	retired_buffers:    [STREAM_SLOT_COUNT][dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
 	proj_w, proj_h:     i32,
@@ -408,7 +415,10 @@ _neutral_texture_shutdown :: proc(r: ^Renderer) {
 	r.neutral_tex = nil
 }
 
-renderer_init :: proc(r: ^Renderer) {
+// renderer_init builds the pipelines and stream pools. Returns false when the
+// device cannot supply even floor-sized stream buffers, so the caller can
+// close the context instead of running with an unusable renderer.
+renderer_init :: proc(r: ^Renderer) -> bool {
 	assert(r != nil, "renderer_init: nil renderer")
 	device, queue, format := g.device, g.queue, g.format
 	assert(device != nil && queue != nil, "renderer_init: invalid context")
@@ -422,7 +432,7 @@ renderer_init :: proc(r: ^Renderer) {
 		},
 	)
 	r.shader = shader
-	_stream_slots_init(r)
+	if !_stream_slots_init(r, device, gpu_budget_active()) do return false
 
 	// group(0): projection uniform
 	r.ubind_layout = wg.DeviceCreateBindGroupLayout(
@@ -490,6 +500,7 @@ renderer_init :: proc(r: ^Renderer) {
 	}
 
 	renderer_state_reset(r)
+	return true
 }
 
 renderer_shutdown :: proc(r: ^Renderer) {
@@ -895,7 +906,7 @@ _geometry_upload_indexed :: proc(
 		slot,
 		vertex_bytes,
 		index_bytes,
-		GEOMETRY_STREAM_BYTES,
+		r.geometry_bytes,
 	)
 	if !ok {
 		_stats_reservation_failure(false)
@@ -903,7 +914,7 @@ _geometry_upload_indexed :: proc(
 	}
 
 	copy_started := platform_now()
-	if !_stream_shadow_ensure(&slot.geometry_shadow, slot.geometry_write, GEOMETRY_STREAM_BYTES) {
+	if !_stream_shadow_ensure(&slot.geometry_shadow, slot.geometry_write, r.geometry_bytes) {
 		slot.geometry_write = vertex_offset
 		_stats_reservation_failure(false)
 		return nil, 0, 0, false
@@ -920,27 +931,108 @@ _geometry_upload_indexed :: proc(
 	return slot.geometry_buffer, vertex_offset, index_offset, true
 }
 
+// Halving 16 MiB down to the 1 MiB floor takes four steps, so eight attempts
+// is generous headroom while still bounding the retry statically (Tiger Style:
+// put a limit on everything). A budget that needed more halvings than this
+// would already be below the floor the caller asserts.
+STREAM_BUFFER_ATTEMPTS_MAX :: 8
+
+// _stream_buffer_create allocates one stream buffer, halving the request until
+// the device accepts it or the floor is reached. A phone can refuse a
+// desktop-sized buffer even when the reported limits allow it (limits describe
+// the API ceiling, not free VRAM), and the previous code asserted on the nil
+// return - an Odin panic, which on web traps the wasm module and kills the
+// requestAnimationFrame loop for good. Degrading beats dying.
+//
+// Returns a nil buffer when even the floor-sized allocation fails, which the
+// caller treats as an operating error rather than a programmer error.
 @(private)
-_stream_slots_init :: proc(r: ^Renderer) {
-	assert(r != nil)
-	limits, status := wg.DeviceGetLimits(g.device)
+_stream_buffer_create :: proc(
+	device: wg.Device,
+	usage: wg.BufferUsageFlags,
+	requested, minimum: u64,
+) -> (
+	wg.Buffer,
+	u64,
+) {
+	assert(device != nil, "_stream_buffer_create: nil device")
+	assert(minimum > 0, "_stream_buffer_create: zero floor")
+	assert(requested >= minimum, "_stream_buffer_create: request below floor")
+	size := requested
+	for _ in 0 ..< STREAM_BUFFER_ATTEMPTS_MAX {
+		buffer := wg.DeviceCreateBuffer(device, &{usage = usage, size = size})
+		if buffer != nil {
+			assert(size >= minimum, "_stream_buffer_create: allocated below floor")
+			return buffer, size
+		}
+		if size <= minimum do return nil, 0
+		size = max(size / 2, minimum)
+	}
+	// Exhausting the bound means the floor was never reached, which only a
+	// mis-sized budget constant could cause.
+	assert(size <= minimum, "_stream_buffer_create: retries exhausted above floor")
+	return nil, 0
+}
+
+// _stream_slots_init allocates the per-slot geometry and uniform pools. The
+// device and budget are passed in rather than read from the active-context
+// global so this stays a pure leaf its caller can test (the same shape as
+// _geometry_upload_transient). Returns false when even the floor-sized pools
+// cannot be allocated, leaving the caller to decide the context's fate.
+@(private)
+_stream_slots_init :: proc(r: ^Renderer, device: wg.Device, budget: Gpu_Budget) -> bool {
+	assert(r != nil, "_stream_slots_init: nil renderer")
+	assert(device != nil, "_stream_slots_init: nil device")
+	assert(budget.geometry_stream_bytes > 0, "_stream_slots_init: empty geometry budget")
+	assert(budget.uniform_stream_bytes > 0, "_stream_slots_init: empty uniform budget")
+	limits, status := wg.DeviceGetLimits(device)
 	r.uniform_alignment = u64(limits.minUniformBufferOffsetAlignment)
 	if status != .Success || r.uniform_alignment == 0 do r.uniform_alignment = 256
 	r.active_stream_slot = -1
+	r.geometry_bytes = budget.geometry_stream_bytes
+	r.uniform_bytes = budget.uniform_stream_bytes
 	for &slot in r.stream_slots {
-		slot.geometry_buffer = wg.DeviceCreateBuffer(
-			g.device,
-			&{usage = {.Vertex, .Index, .CopyDst}, size = GEOMETRY_STREAM_BYTES},
+		geometry, geometry_size := _stream_buffer_create(
+			device,
+			{.Vertex, .Index, .CopyDst},
+			r.geometry_bytes,
+			GPU_BUDGET_GEOMETRY_BYTES_MINIMUM,
 		)
-		slot.uniform_buffer = wg.DeviceCreateBuffer(
-			g.device,
-			&{usage = {.Uniform, .CopyDst}, size = UNIFORM_STREAM_BYTES},
+		uniform, uniform_size := _stream_buffer_create(
+			device,
+			{.Uniform, .CopyDst},
+			r.uniform_bytes,
+			GPU_BUDGET_UNIFORM_BYTES_MINIMUM,
 		)
+		if geometry == nil || uniform == nil {
+			// Below the floor the engine cannot draw at all. Report it and
+			// let the caller close the context rather than aborting the
+			// process (a panic here traps the wasm module for good).
+			if geometry != nil do wg.BufferRelease(geometry)
+			if uniform != nil do wg.BufferRelease(uniform)
+			fmt.eprintln("gfx: GPU stream buffer allocation failed; device out of memory")
+			return false
+		}
 		_stats_buffer_created(false)
 		_stats_buffer_created(false)
-		assert(slot.geometry_buffer != nil)
-		assert(slot.uniform_buffer != nil)
+		slot.geometry_buffer = geometry
+		slot.uniform_buffer = uniform
+		// Every slot shares one reservation bound, so a slot that had to
+		// shrink pulls the whole renderer down with it.
+		r.geometry_bytes = min(r.geometry_bytes, geometry_size)
+		r.uniform_bytes = min(r.uniform_bytes, uniform_size)
 	}
+	if r.geometry_bytes != budget.geometry_stream_bytes ||
+	   r.uniform_bytes != budget.uniform_stream_bytes {
+		fmt.eprintfln(
+			"gfx: stream pools reduced to geometry=%d KiB uniform=%d KiB after allocation failure",
+			r.geometry_bytes / 1024,
+			r.uniform_bytes / 1024,
+		)
+	}
+	assert(r.geometry_bytes >= GPU_BUDGET_GEOMETRY_BYTES_MINIMUM)
+	assert(r.uniform_bytes >= GPU_BUDGET_UNIFORM_BYTES_MINIMUM)
+	return true
 }
 
 @(private)
@@ -1139,18 +1231,13 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 	if r.active_stream_slot < 0 do return 0, false
 	assert(r.active_stream_slot < len(r.stream_slots))
 	slot := &r.stream_slots[r.active_stream_slot]
-	offset, ok := _stream_slot_reserve_uniform(
-		slot,
-		size,
-		r.uniform_alignment,
-		UNIFORM_STREAM_BYTES,
-	)
+	offset, ok := _stream_slot_reserve_uniform(slot, size, r.uniform_alignment, r.uniform_bytes)
 	if !ok {
 		_stats_reservation_failure(true)
 		return 0, false
 	}
 	copy_started := platform_now()
-	if !_stream_shadow_ensure(&slot.uniform_shadow, slot.uniform_write, UNIFORM_STREAM_BYTES) {
+	if !_stream_shadow_ensure(&slot.uniform_shadow, slot.uniform_write, r.uniform_bytes) {
 		slot.uniform_write = offset
 		_stats_reservation_failure(true)
 		return 0, false
