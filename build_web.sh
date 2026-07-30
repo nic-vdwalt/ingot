@@ -22,25 +22,32 @@ echo "Building wasm..."
 SRC="${1:-$WEB/demo.odin}"
 FILE_FLAG="-file"
 if [ -d "$SRC" ]; then FILE_FLAG=""; fi
-# -o:size trims the compiled code, but note what it does NOT fix: measured on
-# examples/gallery, default is 12,280,961 bytes and -o:size is 12,181,913 - a
-# 0.8% saving. Adding -disable-assert reaches 11,977,472, still only 2.5%.
+# No optimisation flag is set here, and that is a measured decision rather than
+# an oversight. 96% of the binary is the DATA section (11.5 MB against 434 KB
+# of code): the engine's fixed-capacity inline arrays (gfx.Renderer.verts,
+# ui.Paint_List x2) are static globals baked into the module. No code
+# optimisation touches those - only changing the capacities does, which is why
+# they are now sized from measurement (see ui/paint.odin).
 #
-# The reason is that 96% of the binary is the DATA section (11.5 MB) and only
-# 434 KB is code: the engine's fixed-capacity inline arrays
-# (gfx.Renderer.verts is 9 MiB, ui.Paint_List is 4 MiB x2) are static globals
-# baked into the module. No optimisation flag touches those; only changing the
-# capacities would.
+# Measured on examples/gallery, so nobody has to re-derive this:
 #
-# -disable-assert is deliberately NOT used: it would buy another 1.7% while
-# removing every Tiger Style assertion from the shipped demo, which is exactly
-# the diagnostic signal we want when a browser kills the tab.
+#   default                    12,280,961 bytes
+#   -o:size                    12,181,913 bytes   0.8% smaller
+#   -o:speed                   12,149,770 bytes   1.1% smaller
+#   -o:size -disable-assert    11,977,472 bytes   2.5% smaller
+#
+# -o:size was tried and reverted: on examples/hello it took the build from
+# 424 ms to 1800 ms (4.2x) for 1.3% less output, and check-web.sh compiles five
+# wasm targets, so it cost about seven seconds on every web gate run.
+#
+# -disable-assert is deliberately NOT used either: it would buy another 1.7%
+# while removing every Tiger Style assertion from the shipped demo, which is
+# exactly the diagnostic signal we want when a browser kills the tab.
 # shellcheck disable=SC2086
 odin build "$SRC" $FILE_FLAG \
 	-target:js_wasm32 \
 	-collection:ingot="$ROOT" \
 	-out:"$WEB/ingot_web.wasm" \
-	-o:size \
 	-extra-linker-flags:"--export-table"
 
 echo "Staging JS runtimes..."

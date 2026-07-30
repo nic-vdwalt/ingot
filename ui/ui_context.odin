@@ -4,7 +4,6 @@
 package ui
 
 
-
 // MAX_FOCUSABLES bounds focus registrations per frame (Tiger Style: put a
 // limit on everything).
 MAX_FOCUSABLES :: 256

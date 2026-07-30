@@ -76,7 +76,12 @@ export class StubElement {
 		this.dispatch("blur");
 	}
 	getBoundingClientRect() {
-		return { left: 0, top: 0, width: 800, height: 600 };
+		// Overridable per element: the dpr tests need a phone-sized CSS box
+		// to check the backing-store arithmetic against.
+		return this._rect || { left: 0, top: 0, width: 800, height: 600 };
+	}
+	setBoundingClientRect(rect) {
+		this._rect = { left: 0, top: 0, ...rect };
 	}
 	querySelectorAll(sel) {
 		// Only "input" is used by the overlay's Tab handler.

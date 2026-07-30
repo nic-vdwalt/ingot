@@ -298,6 +298,62 @@ apply_scale :: proc(scale: f32) {
 // consumed. Wide viewports get the sidebar (0 vertical space, it lives beside
 // the content); narrow ones get a horizontal strip whose height the caller
 // must subtract from the content area.
+// Nav_Control is the set of non-section buttons both nav layouts carry. It
+// exists so the sidebar and the narrow strip cannot disagree about which
+// controls exist or what they do: an earlier revision duplicated these four
+// as inline `if ui.button(...)` blocks in each layout, and the strip silently
+// lost Motion. Adding a fifth control now lands in both layouts by
+// construction.
+Nav_Control :: enum {
+	Theme,
+	Contrast,
+	Motion,
+	Scale,
+}
+
+// nav_control_label returns the button text for a control. `compact` selects
+// the short form the narrow strip needs, where a full sentence would not fit
+// a phone-width cell. Pure: no frame, no side effects.
+nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
+	switch control {
+	case .Theme:
+		if compact do return "Light" if dark else "Dark"
+		return "Light theme" if dark else "Dark theme"
+	case .Contrast:
+		if compact do return "Contrast"
+		return "Standard contrast" if high_contrast else "High contrast"
+	case .Motion:
+		if compact do return "Motion"
+		return "Motion: reduced" if reduced_motion else "Motion: full"
+	case .Scale:
+		if compact do return "Scale\u2026"
+		return "UI scale\u2026"
+	}
+	return ""
+}
+
+// nav_control_activate applies one control's effect. The single owner of these
+// state transitions, so the two layouts cannot drift apart again.
+nav_control_activate :: proc(control: Nav_Control, frame: ^ui.Ui_Frame) {
+	assert(frame != nil, "nav_control_activate: nil frame")
+	switch control {
+	case .Theme:
+		dark = !dark
+		// Leaving high contrast on would override the theme just chosen.
+		high_contrast = false
+		apply_gallery_theme(frame)
+	case .Contrast:
+		high_contrast = !high_contrast
+		apply_gallery_theme(frame)
+	case .Motion:
+		reduced_motion = !reduced_motion
+		apply_gallery_theme(frame)
+	case .Scale:
+		settings_open = true
+		settings_sel = ui.settings_scale_preset_index(stored_scale)
+	}
+}
+
 draw_nav :: proc(frame: ^ui.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
 	assert(frame != nil, "draw_nav: nil frame")
 	if narrow do return draw_nav_strip(frame, top, sw)
@@ -321,33 +377,30 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
 	}
 	ui.space(u, .SM)
 	ui.separator(u)
-	if ui.button(u, "theme", "Light theme" if dark else "Dark theme") {
-		dark = !dark
-		high_contrast = false
-		apply_gallery_theme(frame)
-	}
-	if ui.button(u, "contrast", "Standard contrast" if high_contrast else "High contrast") {
-		high_contrast = !high_contrast
-		apply_gallery_theme(frame)
-	}
-	if ui.button(u, "motion", "Motion: reduced" if reduced_motion else "Motion: full") {
-		reduced_motion = !reduced_motion
-		apply_gallery_theme(frame)
-	}
-	if ui.button(u, "scale", "UI scale\u2026") {
-		settings_open = true
-		settings_sel = ui.settings_scale_preset_index(stored_scale)
+	for control in Nav_Control {
+		if ui.button(u, NAV_CONTROL_IDS[control], nav_control_label(control, false)) {
+			nav_control_activate(control, frame)
+		}
 	}
 	ui.scope_end(u)
 	ui.end(u)
 	return 0
 }
 
-// draw_nav_strip is the narrow-viewport nav: two rows of wrapped buttons under
-// the header, so every section stays reachable on a phone without spending
-// 44% of the width on a sidebar. The theme controls move here too rather than
-// being dropped - a demo that hides its own features on mobile is worse than
-// one that scrolls.
+// Stable widget identities for the shared controls. Derived from the enum so a
+// new control cannot be added without one.
+NAV_CONTROL_IDS := [Nav_Control]string {
+	.Theme    = "theme",
+	.Contrast = "contrast",
+	.Motion   = "motion",
+	.Scale    = "scale",
+}
+
+// draw_nav_strip is the narrow-viewport nav: wrapped rows of section buttons
+// under the header, so every section stays reachable on a phone without
+// spending 44% of the width on a sidebar. It carries the same Nav_Control set
+// the sidebar does - a demo that hides its own features on mobile is worse
+// than one that scrolls.
 draw_nav_strip :: proc(frame: ^ui.Ui_Frame, top, sw: i32) -> i32 {
 	assert(frame != nil, "draw_nav_strip: nil frame")
 	assert(sw > 0, "draw_nav_strip: empty viewport")
@@ -355,7 +408,7 @@ draw_nav_strip :: proc(frame: ^ui.Ui_Frame, top, sw: i32) -> i32 {
 	pad := ui.ui_frame_sc(frame, 8)
 	gap := ui.ui_frame_sc(frame, 6)
 	row_h := ui.ui_frame_sc(frame, NAV_STRIP_ROW_H)
-	// Section buttons wrap into as many rows as the width needs; the theme
+	// Section buttons wrap into as many rows as the width needs; the control
 	// row always follows on its own line.
 	cols := max((sw - pad * 2 + gap) / (ui.ui_frame_sc(frame, NAV_STRIP_CELL_W) + gap), 1)
 	rows := (i32(len(Section)) + cols - 1) / cols
@@ -375,29 +428,21 @@ draw_nav_strip :: proc(frame: ^ui.Ui_Frame, top, sw: i32) -> i32 {
 	}
 	content := ui.grid_end(&grid)
 
-	// Theme, contrast, and scale share one row: three short labels fit where
-	// the sidebar's full sentences would not.
+	// One cell per control, using the compact labels: four short words fit
+	// where the sidebar's full sentences would not.
 	controls: ui.Grid
 	ui.grid_begin(
 		&controls,
 		{pad, content.y + content.h + gap, sw - pad * 2, 0},
-		3,
+		i32(len(Nav_Control)),
 		row_h,
 		gap,
 		gap,
 	)
-	if ui.button_at(frame, ui.grid_next(&controls), "Light" if dark else "Dark") {
-		dark = !dark
-		high_contrast = false
-		apply_gallery_theme(frame)
-	}
-	if ui.button_at(frame, ui.grid_next(&controls), "Contrast") {
-		high_contrast = !high_contrast
-		apply_gallery_theme(frame)
-	}
-	if ui.button_at(frame, ui.grid_next(&controls), "Scale\u2026") {
-		settings_open = true
-		settings_sel = ui.settings_scale_preset_index(stored_scale)
+	for control in Nav_Control {
+		if ui.button_at(frame, ui.grid_next(&controls), nav_control_label(control, true)) {
+			nav_control_activate(control, frame)
+		}
 	}
 	_ = ui.grid_end(&controls)
 	return height
