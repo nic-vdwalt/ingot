@@ -11,6 +11,11 @@ compatibility, while minor releases may break it. See the
 
 ### Added
 
+- `gfx.renderer_peak_usage` and `Paint_List.peak_count` / `peak_text_len`:
+  always-on high-water marks for the batch and paint buffers, reported by the
+  gallery smoke run. Unlike `Renderer_Stats` these are not gated behind a
+  build flag, because they are the evidence the fixed capacities are sized
+  from - a bound nobody can measure is a guess.
 - `Grid` (`grid_begin` / `grid_next` / `grid_end`): a bounded single-pass
   cell grid with exact column division, replacing per-cell x/y arithmetic.
 - `Main_Align` justification (`Start` / `Center` / `End` / `Space_Between`)
@@ -52,6 +57,23 @@ compatibility, while minor releases may break it. See the
 
 ### Changed
 
+- **Paint capacities right-sized from measurement.** `PAINT_COMMAND_CAP` is
+  now `8192` (was `32768`) and `PAINT_TEXT_CAP` is `32768` (was `262144`),
+  both overridable via `-define:INGOT_PAINT_COMMAND_CAP` /
+  `INGOT_PAINT_TEXT_CAP`. These are inline arrays and `Ui_Output` holds two of
+  them, so the old values reserved 8.4 MiB per app permanently. The gallery
+  smoke run - every section including the 1000-button stress grid - peaks at
+  2,046 commands and 7,138 text bytes at 3840x2160, so the new caps keep ~4x
+  headroom over the heaviest measured frame while cutting `Ui_Output` to
+  1.97 MiB. Overflow remains graceful and counted (`dropped_commands`,
+  `dropped_text_bytes`); a consumer with heavier frames can raise either cap.
+  Net effect on the web demo: initial wasm memory drops from 20.8 MB to
+  12.5 MB.
+- `gfx.BATCH_MAX_VERTICES` / `BATCH_MAX_INDICES` are now `#config`
+  overridable. Their defaults are **unchanged**: the same measurement shows
+  4K already reaching 41% of the vertex capacity, so these are correctly
+  sized for desktop and only a target with a known-small framebuffer should
+  lower them.
 - `ui_gfx.App` now delegates UI lifecycle ownership to `Session`.
 - Direct `ui_gfx.Adapter` lifecycle calls are classified as backend-only, and
   consumer checks enforce the documented UI API layers.

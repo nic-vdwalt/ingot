@@ -114,6 +114,25 @@ Paint_List :: struct {
 	sink_userdata:        rawptr,
 }
 
+// Ui_Output holds both paint channels by value, deliberately.
+//
+// Heap-allocating them was considered while cutting the engine's static
+// footprint and rejected on the measurements. After right-sizing the
+// capacities above, Paint_List is 0.97 MiB and Ui_Output is 1.97 MiB, so
+// moving the overlay channel to the heap would save at most 0.97 MiB - and
+// only for an app that never shows an overlay, since an app that does still
+// allocates it. For the common case the saving is zero: the memory moves from
+// a statically bounded region to the heap without shrinking.
+//
+// Against that: it would break Session's API, add a create/destroy lifecycle
+// and an allocation-failure path to something that currently cannot fail, and
+// trade static allocation for dynamic - the opposite of the preference in
+// docs/TIGER_STYLE.md.
+//
+// The remaining static weight is gfx.Context at 10.7 MiB, essentially all of
+// it the batch vertex/index arrays, which the 4K measurement shows are NOT
+// oversized (see BATCH_MAX_VERTICES). Sizing those from the real framebuffer
+// at init is the change with actual headroom behind it, and it belongs in gfx.
 Ui_Output :: struct {
 	main:     Paint_List,
 	overlay:  Paint_List,

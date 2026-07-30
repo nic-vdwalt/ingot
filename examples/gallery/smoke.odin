@@ -70,6 +70,17 @@ when SMOKE {
 	// button stress grid, so these numbers are the evidence for sizing them.
 	smoke_report_peaks :: proc() {
 		usage := gfx.renderer_peak_usage()
+		// A full run that drew every section cannot legitimately report a
+		// zero peak: that means the recording call was lost, and the numbers
+		// the capacities are sized from would silently become fiction. Unit
+		// tests cannot cover renderer_flush's call site (it needs a live GPU
+		// pass), so this run is where that wiring is verified.
+		assert(usage.vertices > 0, "smoke: no vertex peak recorded - peak tracking is broken")
+		assert(usage.indices > 0, "smoke: no index peak recorded - peak tracking is broken")
+		assert(
+			usage.vertices <= usage.vertices_capacity,
+			"smoke: vertex peak exceeded its capacity",
+		)
 		fmt.printfln(
 			"smoke: peak vertices %d/%d (%.1f%%), indices %d/%d (%.1f%%)",
 			usage.vertices,
@@ -81,6 +92,7 @@ when SMOKE {
 		)
 		output := ui_gfx.session_output(&app.session)
 		if output == nil do return
+		assert(output.main.peak_count > 0, "smoke: no paint peak recorded")
 		fmt.printfln(
 			"smoke: peak paint main %d/%d cmds %d/%d text, overlay %d/%d cmds %d/%d text",
 			output.main.peak_count,
