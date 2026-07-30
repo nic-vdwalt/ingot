@@ -189,3 +189,56 @@ texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
 	testing.expect_value(t, TextureSlotsUsed(), before)
 	testing.expect(t, !IsTextureValid(Texture2D{id = id}))
 }
+
+// --- default context identity -----------------------------------------------
+//
+// default_context_storage is deliberately left without a static initialiser:
+// Context is ~11 MB, and any initialiser - even a single field - moves the
+// whole struct from .bss to .data, which the wasm target then emits verbatim
+// as 11 MB of zeros (see the note in context.odin, and
+// scripts/check_wasm_bloat.py). The id is assigned by an @(init) procedure
+// instead.
+//
+// That trade is only safe while the id is genuinely in place before any caller
+// reads it. These tests pin the property the initialiser used to guarantee.
+
+@(test)
+default_context_has_its_reserved_id :: proc(t: ^testing.T) {
+	// @(init) runs before the test runner, so observing the id here is the
+	// same observation any caller makes.
+	testing.expect_value(t, default_context().id, DEFAULT_CONTEXT_ID)
+	testing.expect_value(t, context_id(default_context()), DEFAULT_CONTEXT_ID)
+	// A zero id means "unassigned" throughout the resource handle code, so
+	// the default context must never present as one.
+	testing.expect(t, default_context().id != 0)
+}
+
+@(test)
+assigned_context_ids_never_collide_with_the_default :: proc(t: ^testing.T) {
+	// _context_assign_id hands out ids from CONTEXT_ID_FIRST. If that ever
+	// started at or below the reserved id, two contexts would share an id and
+	// their resource handles would alias.
+	testing.expect(t, CONTEXT_ID_FIRST > DEFAULT_CONTEXT_ID)
+
+	saved := context_id_next
+	defer context_id_next = saved
+	context_id_next = CONTEXT_ID_FIRST
+
+	// Heap-allocated: Context is ~11 MB, past a safe stack frame.
+	first := new(Context)
+	defer free(first)
+	testing.expect(t, _context_assign_id(first))
+	testing.expect_value(t, first.id, CONTEXT_ID_FIRST)
+	testing.expect(t, first.id != DEFAULT_CONTEXT_ID)
+
+	second := new(Context)
+	defer free(second)
+	testing.expect(t, _context_assign_id(second))
+	testing.expect(t, second.id != first.id)
+	testing.expect(t, second.id != DEFAULT_CONTEXT_ID)
+
+	// Assignment is idempotent: a context that already has an id keeps it.
+	previous := first.id
+	testing.expect(t, _context_assign_id(first))
+	testing.expect_value(t, first.id, previous)
+}

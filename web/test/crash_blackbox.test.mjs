@@ -53,7 +53,20 @@ function makeStorage(mode = "ok", initial = {}) {
 }
 
 function makeElement(id) {
-	return { id, hidden: false, textContent: "", style: {} };
+	const listeners = new Map();
+	return {
+		id,
+		hidden: false,
+		textContent: "",
+		style: {},
+		addEventListener(type, fn) {
+			if (!listeners.has(type)) listeners.set(type, []);
+			listeners.get(type).push(fn);
+		},
+		click() {
+			for (const fn of listeners.get("click") || []) fn({});
+		},
+	};
 }
 
 // load simulates one page load against a given storage, returning the test
@@ -143,24 +156,71 @@ test("a session killed without pagehide is recovered as a crash", () => {
 	const store = makeStorage();
 	const first = load(store);
 	first.api.mark("entered stress section");
+	// A heartbeat is what marks the session as having actually run; without
+	// one, a reload during startup would be indistinguishable from a kill.
+	first.tick();
 	// No pagehide: the tab was terminated by the OS.
 	assert.ok(store.data.has("ingot.blackbox"));
 
 	const second = load(store);
 	assert.equal(second.api.recovered(), true);
 	assert.equal(second.crash.style.display, "block");
-	assert.match(second.crash.textContent, /PREVIOUS SESSION DIED WITHOUT SHUTTING DOWN/);
+	assert.match(second.crash.textContent, /PREVIOUS SESSION DID NOT SHUT DOWN CLEANLY/);
 	assert.match(second.crash.textContent, /MARK entered stress section/);
-	// The status line must say the crash was the previous session's, not
-	// this one's - this session is running fine.
-	assert.equal(second.msg.hidden, false);
-	assert.match(second.msg.textContent, /previous session/);
 	assert.equal(second.api.crashed(), false);
+});
+
+test("a post-mortem never covers a working demo", () => {
+	// #msg is a full-screen opaque overlay on the demo pages. Showing it for
+	// a PREVIOUS session's report hid a demo that was rendering perfectly -
+	// the report must stay confined to the bottom-docked #crash panel.
+	const store = makeStorage();
+	const killed = load(store);
+	killed.tick();
+
+	const next = load(store);
+	assert.equal(next.api.recovered(), true);
+	assert.equal(next.crash.style.display, "block", "the report still shows");
+	assert.equal(next.msg.textContent, "", "the overlay must not be repurposed");
+	assert.equal(next.msg.hidden, false, "and must be left for the page to hide");
+});
+
+test("a post-mortem can be dismissed but a live crash cannot", () => {
+	const store = makeStorage();
+	load(store).tick();
+	const next = load(store);
+	assert.match(next.crash.textContent, /PREVIOUS SESSION/);
+	next.crash.click();
+	assert.equal(next.crash.style.display, "none", "dismissing hides the panel");
+
+	// A live crash survives dismissal: the app is broken and hiding that
+	// would mislead. render() re-appends the live headline unconditionally,
+	// so this holds by construction; the early return in the click handler
+	// is defence in depth for a future change to render().
+	next.api.report("device lost");
+	assert.match(next.crash.textContent, /device lost/);
+	next.crash.click();
+	assert.equal(next.crash.style.display, "block");
+	assert.match(next.crash.textContent, /device lost/);
+});
+
+test("a reload before the first heartbeat is not reported as a crash", () => {
+	// Hitting refresh while the module is still downloading leaves a record
+	// with no heartbeat. Reporting that would cry wolf on an ordinary
+	// refresh, which is what made the panel appear on a working demo.
+	const store = makeStorage();
+	load(store); // no tick: never got running
+	assert.ok(store.data.has("ingot.blackbox"), "a record still exists");
+
+	const next = load(store);
+	assert.equal(next.api.recovered(), false);
+	assert.equal(next.crash.style.display, undefined);
+	assert.equal(next.msg.textContent, "");
 });
 
 test("recovery is one-shot: a second reload does not re-report the death", () => {
 	const store = makeStorage();
-	load(store); // killed
+	load(store).tick(); // killed after running
 	const second = load(store);
 	assert.equal(second.api.recovered(), true);
 	second.fire("pagehide");
@@ -177,6 +237,7 @@ test("recovering a record consumes it, even if nothing overwrites it", () => {
 	// (quota exhausted) would re-report an older session's death forever.
 	const store = makeStorage();
 	const killed = load(store);
+	killed.tick();
 	killed.hook.boxRecord("the original death");
 	killed.hook.boxFlush(true);
 	const stale = store.data.get("ingot.blackbox");
@@ -258,12 +319,12 @@ test("a truncated record is ignored rather than breaking startup", () => {
 
 test("a live crash and a recovered one are reported together", () => {
 	const store = makeStorage();
-	load(store); // killed
+	load(store).tick(); // killed after running
 	const second = load(store);
 	second.api.report("device lost");
 	// Both matter: the post-mortem explains the reload, the live reason
 	// explains this session.
-	assert.match(second.crash.textContent, /PREVIOUS SESSION DIED/);
+	assert.match(second.crash.textContent, /PREVIOUS SESSION DID NOT SHUT DOWN/);
 	assert.match(second.crash.textContent, /reason: device lost/);
 	assert.match(second.msg.textContent, /^crashed/);
 });

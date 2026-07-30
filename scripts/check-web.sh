@@ -25,6 +25,13 @@ bash "$ROOT/build_web.sh" examples/raylib_migration_fixture >/dev/null
 echo "== wasm compile: default web demo =="
 bash "$ROOT/build_web.sh" >/dev/null
 
+# The last build left its module in web/; check it for the zero-segment bloat
+# that a static initialiser on a large global reintroduces. See
+# check_wasm_bloat.py - this cost 11 MB of every demo download until it was
+# found, and nothing else in the tree would notice it coming back.
+echo "== wasm data segment bloat =="
+python3 "$ROOT/scripts/check_wasm_bloat.py" "$ROOT/web/ingot_web.wasm" --report
+
 echo "== web lifecycle and semantic tests =="
 node --test "$ROOT"/web/test/*.test.mjs
 
