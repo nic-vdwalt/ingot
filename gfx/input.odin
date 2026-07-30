@@ -25,8 +25,10 @@ Input :: struct {
 	key_q:                [CHAR_Q]KeyboardKey,
 	key_h, key_t:         int,
 
-	// Native callbacks stage per-window events until that context publishes
-	// its next frame-visible input snapshot.
+	// Platform event callbacks stage per-window events here until that
+	// context publishes its next frame-visible input snapshot. Every backend
+	// writes these and only _input_publish_staged reads them, so the browser
+	// and GLFW paths cannot disagree about who owns an edge.
 	st_pressed:           [KEY_COUNT]bool,
 	st_released:          [KEY_COUNT]bool,
 	st_repeat:            [KEY_COUNT]bool,
@@ -161,28 +163,74 @@ _input_reset_mouse_edges :: proc(inp: ^Input) {
 
 // --- queue helpers (shared; called by the platform input backend) ----------
 
+// _stage_key and _stage_char are the only way an event reaches the input
+// snapshot. Both backends enqueue here - GLFW from its window callbacks,
+// the browser from the exported DOM entry points - so there is exactly one
+// staging buffer per context and exactly one publisher draining it.
+//
+// Both run from platform callbacks with no Odin context, so the index
+// contract is checked with assert_contextless. A ring index out of range is a
+// programmer error; a full ring is an operating condition (the user out-typed
+// one frame) and drops the newest event instead.
+@(private)
+_stage_key :: proc "contextless" (inp: ^Input, key: KeyboardKey) {
+	if inp == nil do return
+	assert_contextless(inp.st_key_h >= 0 && inp.st_key_h < CHAR_Q, "_stage_key: bad head")
+	assert_contextless(inp.st_key_t >= 0 && inp.st_key_t < CHAR_Q, "_stage_key: bad tail")
+	nt := (inp.st_key_t + 1) % CHAR_Q
+	if nt == inp.st_key_h do return // full: drop rather than overwrite unread keys
+	inp.st_key_q[inp.st_key_t] = key
+	inp.st_key_t = nt
+}
+
+@(private)
+_stage_char :: proc "contextless" (inp: ^Input, value: rune) {
+	if inp == nil do return
+	assert_contextless(inp.st_char_h >= 0 && inp.st_char_h < CHAR_Q, "_stage_char: bad head")
+	assert_contextless(inp.st_char_t >= 0 && inp.st_char_t < CHAR_Q, "_stage_char: bad tail")
+	nt := (inp.st_char_t + 1) % CHAR_Q
+	if nt == inp.st_char_h do return // full: drop rather than overwrite unread chars
+	inp.st_char_q[inp.st_char_t] = value
+	inp.st_char_t = nt
+}
+
+// _input_publish_staged moves one frame of staged events into the published
+// snapshot. It is the single writer of the published key edges: input_poll
+// clears them immediately before calling this, and every producer stages
+// instead of publishing. A backend that wrote the published arrays directly
+// would have its edges silently overwritten here - that erased every browser
+// key edge (Enter, Backspace, Tab, arrows) while typed characters, which ride
+// the char ring, kept working and hid the fault. The entry assertions are the
+// standing oracle for that contract.
 @(private)
 _input_publish_staged :: proc(inp: ^Input) {
 	assert(inp != nil, "_input_publish_staged: nil input")
-	// Merge, never assign: input_poll clears the published edges at the top of
-	// the frame, so OR is identical for the GLFW path while keeping any other
-	// producer that ran earlier in the same poll (the web drain) intact.
 	for index in 0 ..< KEY_COUNT {
-		inp.pressed[index] |= inp.st_pressed[index]
-		inp.released[index] |= inp.st_released[index]
-		inp.repeat[index] |= inp.st_repeat[index]
+		assert(!inp.pressed[index], "_input_publish_staged: press published before staging")
+		assert(!inp.released[index], "_input_publish_staged: release published before staging")
+		assert(!inp.repeat[index], "_input_publish_staged: repeat published before staging")
+		inp.pressed[index] = inp.st_pressed[index]
+		inp.released[index] = inp.st_released[index]
+		inp.repeat[index] = inp.st_repeat[index]
 		inp.st_pressed[index] = false
 		inp.st_released[index] = false
 		inp.st_repeat[index] = false
 	}
-	for inp.st_key_h != inp.st_key_t {
+	// Both rings hold at most CHAR_Q - 1 entries (the head/tail encoding
+	// keeps one slot empty), so the drains are bounded by construction; the
+	// loop bound states it rather than trusting the indices to stay sane.
+	for _ in 0 ..< CHAR_Q {
+		if inp.st_key_h == inp.st_key_t do break
 		_push_key_input(inp, inp.st_key_q[inp.st_key_h])
 		inp.st_key_h = (inp.st_key_h + 1) % CHAR_Q
 	}
-	for inp.st_char_h != inp.st_char_t {
+	for _ in 0 ..< CHAR_Q {
+		if inp.st_char_h == inp.st_char_t do break
 		_push_char_input(inp, inp.st_char_q[inp.st_char_h])
 		inp.st_char_h = (inp.st_char_h + 1) % CHAR_Q
 	}
+	assert(inp.st_key_h == inp.st_key_t, "_input_publish_staged: key ring not drained")
+	assert(inp.st_char_h == inp.st_char_t, "_input_publish_staged: char ring not drained")
 	inp.wheel_pending += inp.st_wheel
 	inp.st_wheel = {}
 }

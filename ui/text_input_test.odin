@@ -244,10 +244,38 @@ text_input_state_destroy_clears :: proc(t: ^testing.T) {
 //
 // A box the caller sized for several lines is a text area, and a text area
 // that swallows Enter reads as broken input. These pin the rule that height
-// alone decides: one visible line submits, two or more type a newline.
+// alone decides: one visible line submits, two or more type a newline. Both
+// halves of the contract are checked every time - the buffer the user sees
+// and the submitted flag the caller branches on - because a box that both
+// typed a newline and reported a submit would look right and act wrong.
+//
+// ti_key_frame drives one real frame through text_input_at rather than
+// calling the edit helpers directly, so the keyboard pipeline, the masked
+// renderer and the caret model are all on the path a user's keystroke takes.
 
 @(private = "file")
-ti_enter_frame :: proc(t: ^testing.T, height: i32, shift: bool) -> string {
+Ti_Key_Frame :: struct {
+	text:    string, // initial buffer contents
+	cursor:  int, // -1 places the caret at the end
+	key:     KeyboardKey,
+	shift:   bool,
+	masked:  bool,
+	height:  i32,
+	repeat:  bool, // send the auto-repeat edge instead of the initial press
+	presses: int, // how many frames to run; zero means one
+}
+
+@(private = "file")
+Ti_Key_Result :: struct {
+	text:      string,
+	cursor:    int,
+	submitted: bool,
+}
+
+@(private = "file")
+ti_key_frame :: proc(config: Ti_Key_Frame) -> Ti_Key_Result {
+	assert(config.height > 0, "ti_key_frame: non-positive height")
+	assert(config.presses >= 0, "ti_key_frame: negative press count")
 	runtime := new(Ui_Runtime)
 	defer free(runtime)
 	ui_runtime_init(runtime)
@@ -270,33 +298,77 @@ ti_enter_frame :: proc(t: ^testing.T, height: i32, shift: bool) -> string {
 
 	input: Ui_Input
 	input.screen_size = {800, 600}
-	input.keys_pressed[input_key_index(.ENTER)] = true
-	if shift do input.keys_down[input_key_index(.LEFT_SHIFT)] = true
+	index := input_key_index(config.key)
+	assert(index >= 0, "ti_key_frame: unknown key")
+	if config.repeat {
+		input.keys_repeat[index] = true
+	} else {
+		input.keys_pressed[index] = true
+	}
+	if config.shift do input.keys_down[input_key_index(.LEFT_SHIFT)] = true
 
 	box: Input_Box
 	defer input_box_destroy(&box)
-	strings.write_string(&box.sb, "ab")
-	box.st.cursor = 2
+	strings.write_string(&box.sb, config.text)
+	box.st.cursor = len(config.text) if config.cursor < 0 else config.cursor
 
-	ui_frame_begin(frame, runtime, &input)
-	_ = text_input_at(frame, {0, 0, 300, height}, &box, "notes", true, semantics = {name = "N"})
-	ui_frame_end(frame)
-	return strings.clone(strings.to_string(box.sb), context.temp_allocator)
+	submitted := false
+	frames := max(config.presses, 1)
+	for _ in 0 ..< frames {
+		ui_frame_begin(frame, runtime, &input)
+		if text_input_at(
+			frame,
+			{0, 0, 300, config.height},
+			&box,
+			"field",
+			true,
+			masked = config.masked,
+			semantics = {name = "N"},
+		) {
+			submitted = true
+		}
+		ui_frame_end(frame)
+	}
+	return {
+		strings.clone(strings.to_string(box.sb), context.temp_allocator),
+		box.st.cursor,
+		submitted,
+	}
+}
+
+@(private = "file")
+Ti_Enter_Result :: struct {
+	text:      string,
+	submitted: bool,
+}
+
+@(private = "file")
+ti_enter_frame :: proc(height: i32, shift: bool) -> Ti_Enter_Result {
+	result := ti_key_frame(
+		{text = "ab", cursor = -1, key = .ENTER, shift = shift, height = height},
+	)
+	return {result.text, result.submitted}
 }
 
 @(test)
 text_input_enter_types_newline_in_a_text_area :: proc(t: ^testing.T) {
-	testing.expect_value(t, ti_enter_frame(t, 90, false), "ab\n")
+	result := ti_enter_frame(90, false)
+	testing.expect_value(t, result.text, "ab\n")
+	testing.expect(t, !result.submitted, "a text area must not submit on Enter")
 }
 
 @(test)
 text_input_enter_submits_a_single_line_field :: proc(t: ^testing.T) {
-	testing.expect_value(t, ti_enter_frame(t, 30, false), "ab")
+	result := ti_enter_frame(30, false)
+	testing.expect_value(t, result.text, "ab")
+	testing.expect(t, result.submitted, "a one-line field must submit on Enter")
 }
 
 @(test)
 text_input_shift_enter_still_types_a_newline_in_a_field :: proc(t: ^testing.T) {
-	testing.expect_value(t, ti_enter_frame(t, 30, true), "ab\n")
+	result := ti_enter_frame(30, true)
+	testing.expect_value(t, result.text, "ab\n")
+	testing.expect(t, !result.submitted, "Shift+Enter must not also submit")
 }
 
 @(test)
@@ -329,4 +401,184 @@ text_input_visible_lines_matches_the_rendered_band :: proc(t: ^testing.T) {
 		text_input_default_submit(frame, pad + metrics.LINE_HEIGHT * 2),
 		Text_Input_Submit.Never,
 	)
+}
+
+// --- Backspace and forward delete -------------------------------------------
+//
+// Every field shape must delete, including the masked one: a password box the
+// user cannot correct a typo in is unusable, and masking is a render-time
+// concern that must not reach the edit path. These run through the same
+// keyboard pipeline a real keystroke takes, so the web regression that dropped
+// every BACKSPACE edge would fail here rather than only in a browser.
+
+@(test)
+text_input_backspace_deletes_the_previous_rune :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = -1, key = .BACKSPACE, height = 30})
+	testing.expect_value(t, result.text, "ab")
+	testing.expect_value(t, result.cursor, 2)
+}
+
+@(test)
+text_input_backspace_deletes_in_a_masked_field :: proc(t: ^testing.T) {
+	result := ti_key_frame(
+		{text = "secret", cursor = -1, key = .BACKSPACE, masked = true, height = 30},
+	)
+	testing.expect_value(t, result.text, "secre")
+	testing.expect_value(t, result.cursor, 5)
+}
+
+@(test)
+text_input_backspace_deletes_in_a_text_area :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "line", cursor = -1, key = .BACKSPACE, height = 90})
+	testing.expect_value(t, result.text, "lin")
+	testing.expect_value(t, result.cursor, 3)
+}
+
+// A multi-byte rune must leave on one keystroke, not one byte at a time.
+@(test)
+text_input_backspace_removes_a_whole_rune :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "h\u00e9", cursor = -1, key = .BACKSPACE, height = 30})
+	testing.expect_value(t, result.text, "h")
+	testing.expect_value(t, result.cursor, 1)
+}
+
+@(test)
+text_input_backspace_masked_removes_a_whole_rune :: proc(t: ^testing.T) {
+	result := ti_key_frame(
+		{text = "p\u00e4ss", cursor = -1, key = .BACKSPACE, masked = true, height = 30},
+	)
+	testing.expect_value(t, result.text, "p\u00e4s")
+	testing.expect_value(t, result.cursor, 4)
+}
+
+// Auto-repeat is a separate platform edge from the initial press; a field that
+// reads only one of them either drops the first tap or never repeats.
+@(test)
+text_input_backspace_honours_auto_repeat :: proc(t: ^testing.T) {
+	result := ti_key_frame(
+		{text = "abcd", cursor = -1, key = .BACKSPACE, repeat = true, height = 30},
+	)
+	testing.expect_value(t, result.text, "abc")
+}
+
+@(test)
+text_input_backspace_repeats_across_frames :: proc(t: ^testing.T) {
+	result := ti_key_frame(
+		{text = "abcd", cursor = -1, key = .BACKSPACE, height = 30, presses = 3},
+	)
+	testing.expect_value(t, result.text, "a")
+	testing.expect_value(t, result.cursor, 1)
+}
+
+// Negative space: nothing before the caret means nothing to delete, and an
+// empty buffer must not underflow.
+@(test)
+text_input_backspace_at_the_start_is_a_no_op :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = 0, key = .BACKSPACE, height = 30})
+	testing.expect_value(t, result.text, "abc")
+	testing.expect_value(t, result.cursor, 0)
+}
+
+@(test)
+text_input_backspace_on_an_empty_field_is_a_no_op :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "", cursor = 0, key = .BACKSPACE, masked = true, height = 30})
+	testing.expect_value(t, result.text, "")
+	testing.expect_value(t, result.cursor, 0)
+}
+
+@(test)
+text_input_forward_delete_removes_the_next_rune :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = 1, key = .DELETE, height = 30})
+	testing.expect_value(t, result.text, "ac")
+	testing.expect_value(t, result.cursor, 1)
+}
+
+@(test)
+text_input_forward_delete_removes_in_a_masked_field :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = 0, key = .DELETE, masked = true, height = 30})
+	testing.expect_value(t, result.text, "bc")
+	testing.expect_value(t, result.cursor, 0)
+}
+
+@(test)
+text_input_forward_delete_at_the_end_is_a_no_op :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = -1, key = .DELETE, height = 30})
+	testing.expect_value(t, result.text, "abc")
+	testing.expect_value(t, result.cursor, 3)
+}
+
+// A caret mid-string must delete at the caret, not at the end - the bug an
+// end-anchored fallback would hide.
+@(test)
+text_input_backspace_deletes_at_the_caret_not_the_end :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abcd", cursor = 2, key = .BACKSPACE, height = 30})
+	testing.expect_value(t, result.text, "acd")
+	testing.expect_value(t, result.cursor, 1)
+}
+
+// --- IME proxy arming --------------------------------------------------------
+//
+// On web the caret rect is what focuses the hidden textarea that carries
+// keystrokes and composition into the engine; when no field arms it,
+// input_poll deactivates platform text input and focus returns to the canvas.
+// Masking is a render-time concern, so a password field must arm it exactly
+// like a plain one - otherwise the proxy never takes focus and the field is
+// dead to the keyboard on the browser target.
+
+@(private = "file")
+ti_text_input_active :: proc(masked: bool, active: bool) -> bool {
+	runtime := new(Ui_Runtime)
+	defer free(runtime)
+	ui_runtime_init(runtime)
+	defer ui_runtime_destroy(runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := new(Ui_Frame)
+	defer free(frame)
+	defer ui_frame_destroy(frame)
+	frame.output = output
+
+	box: Input_Box
+	defer input_box_destroy(&box)
+	strings.write_string(&box.sb, "abc")
+	box.st.cursor = 3
+
+	ui_frame_begin(frame, runtime)
+	_ = text_input_at(
+		frame,
+		{0, 0, 300, 30},
+		&box,
+		"field",
+		active,
+		masked = masked,
+		semantics = {name = "N"},
+	)
+	armed := frame.output.platform.text_input_active
+	ui_frame_end(frame)
+	return armed
+}
+
+@(test)
+text_input_active_field_arms_the_caret_rect :: proc(t: ^testing.T) {
+	testing.expect(t, ti_text_input_active(false, true), "a plain field must arm the IME proxy")
+}
+
+@(test)
+text_input_masked_field_arms_the_caret_rect :: proc(t: ^testing.T) {
+	testing.expect(t, ti_text_input_active(true, true), "a password field must arm the IME proxy")
+}
+
+@(test)
+text_input_inactive_field_leaves_the_caret_rect_alone :: proc(t: ^testing.T) {
+	testing.expect(t, !ti_text_input_active(false, false), "an unfocused field must not arm it")
+	testing.expect(t, !ti_text_input_active(true, false), "an unfocused field must not arm it")
 }

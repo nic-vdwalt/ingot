@@ -50,19 +50,7 @@
   "gfx/input.odin:_push_key_input": [
     "index"
   ],
-  "gfx/platform_native.odin:_stage_char": [
-    "index"
-  ],
-  "gfx/platform_native.odin:_stage_key": [
-    "index"
-  ],
   "gfx/platform_native.odin:platform_input_init": [
-    "index"
-  ],
-  "gfx/platform_web.odin:_st_push_char": [
-    "index"
-  ],
-  "gfx/platform_web.odin:_st_push_key": [
     "index"
   ],
   "gfx/shader.odin:_shader_slot": [

@@ -2,10 +2,16 @@
 // ingot:gfx - browser input entry points.
 //
 // These procs are exported to WASM and called from web/ingot_input.js when DOM
-// events fire (keydown/keyup, pointer, wheel, focus). They write into the
-// staging buffer in platform_web.odin, which platform_poll_events drains into
-// the shared Input struct each frame - so the app sees the same g.inp state and
-// raylib-named queries (IsKeyPressed, GetMousePosition, …) as on native.
+// events fire (keydown/keyup, pointer, wheel, focus). Keys, characters and
+// wheel stage into g.inp's staging buffer - the same one the GLFW callbacks in
+// platform_native.odin write - and input_poll's _input_publish_staged drains it
+// each frame, so the app sees the same g.inp state and raylib-named queries
+// (IsKeyPressed, GetMousePosition, …) as on native.
+//
+// Publishing directly here instead would be silently undone: input_poll clears
+// the published edges before the pump and fills them from staging after it.
+// Held/hover/cursor state is different in kind - it answers a live platform
+// query rather than describing an event - so it lives in platform_web.odin.
 //
 // Key codes are pre-mapped in JS (browser KeyboardEvent.code → ingot/raylib
 // KeyboardKey integer, which equals the GLFW value the native path uses), so the
@@ -18,14 +24,14 @@ ingot_web_key :: proc "contextless" (key: i32, down: bool, repeat: bool) {
 	if key < 0 || key >= KEY_COUNT do return
 	if down {
 		if repeat {
-			st_repeat[key] = true
+			g.inp.st_repeat[key] = true
 		} else {
-			st_pressed[key] = true
+			g.inp.st_pressed[key] = true
 			st_held[key] = true
-			_st_push_key(KeyboardKey(key))
+			_stage_key(&g.inp, KeyboardKey(key))
 		}
 	} else {
-		st_released[key] = true
+		g.inp.st_released[key] = true
 		st_held[key] = false
 	}
 }
@@ -33,7 +39,7 @@ ingot_web_key :: proc "contextless" (key: i32, down: bool, repeat: bool) {
 @(export)
 ingot_web_char :: proc "contextless" (codepoint: rune) {
 	_idle_note_activity(&g.idle)
-	_st_push_char(codepoint)
+	_stage_char(&g.inp, codepoint)
 }
 
 // ingot_web_preedit_clear resets the staged IME composition string. Called
@@ -104,8 +110,8 @@ ingot_web_mouse_button :: proc "contextless" (button: i32, down: bool) {
 @(export)
 ingot_web_wheel :: proc "contextless" (dx, dy: f32) {
 	_idle_note_activity(&g.idle)
-	st_wheel.x += dx
-	st_wheel.y += dy
+	g.inp.st_wheel.x += dx
+	g.inp.st_wheel.y += dy
 }
 
 @(export)

@@ -448,10 +448,7 @@ context_id :: proc(ctx: ^Context) -> u32 {
 	// exception: its id comes from _default_context_init, so a zero here means
 	// that @(init) has not run yet and the caller is about to mint or match
 	// handles against context 0. See the note above _default_context_init.
-	assert(
-		ctx != &default_context_storage || ctx.id != 0,
-		"gfx: default context has no id; something ran before _default_context_init",
-	)
+	if ctx == &default_context_storage do assert(ctx.id != 0, "context_id: no id before init")
 	return ctx.id
 }
 
