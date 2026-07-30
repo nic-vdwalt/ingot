@@ -86,6 +86,22 @@ compatibility, while minor releases may break it. See the
 
 ### Fixed
 
+- Web: every edge-driven key was dropped. `_input_publish_staged` assigned the
+  shared staging arrays over `Input.pressed` / `released` / `repeat`, wiping
+  the browser edges `_input_drain` had just published earlier in the same
+  `input_poll`. Typed characters kept working because they travel in the char
+  ring, which made it look like input worked while Enter, Backspace, Delete,
+  Tab and the arrow keys did nothing. The web drain now stages through the
+  same arrays as the GLFW path, and publication merges instead of assigning so
+  no producer can silently erase another.
+- Web: Enter is consumed on the hidden IME proxy, so it can no longer insert a
+  newline into the `<textarea>` value the engine never reads.
+- `text_input` boxes tall enough to show two or more lines now type a newline
+  on Enter instead of submitting, matching every platform's text area. New
+  `text_input_visible_lines` / `text_input_default_submit` expose the rule.
+  One-line fields are unchanged, and Shift+Enter still types a newline there.
+- Enter no longer both accepts a spelling suggestion and inserts a newline in
+  the same frame.
 - Pane paint commands are emitted in screen coordinates.
 - Gallery clear and navigation colors follow the active theme.
 - Web application state uses retained userdata across asynchronous startup.

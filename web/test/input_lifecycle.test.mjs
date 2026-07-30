@@ -165,3 +165,78 @@ test("simultaneous touches are bounded", async () => {
 	assert.ok(presses.length <= 10, `expected <= 10 tracked taps, got ${presses.length}`);
 	detach();
 });
+
+// --- keyboard forwarding ----------------------------------------------------
+//
+// Canvas-drawn text fields get their keys through the hidden IME proxy, a
+// real <textarea>. Editing keys must reach the engine as key events and must
+// not also drive the proxy's own default behaviour - an unconsumed Enter
+// types a newline into a value the engine never reads.
+
+function keyRecorder() {
+	const keys = [];
+	return {
+		keys,
+		exports: { ...exports, ingot_web_key: (k, down, repeat) => keys.push([k, down, repeat]) },
+	};
+}
+
+const keyEvent = (code, extra = {}) => {
+	let prevented = false;
+	return {
+		code,
+		key: code,
+		repeat: false,
+		ctrlKey: false,
+		metaKey: false,
+		preventDefault: () => { prevented = true; },
+		get prevented() { return prevented; },
+		...extra,
+	};
+};
+
+test("editing keys reach the engine from the IME proxy", async () => {
+	const { keys, exports: ex } = keyRecorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	const ime = stubDocument.getElementById("ingot-ime");
+	assert.ok(ime, "the IME proxy must exist");
+
+	for (const code of ["Enter", "Backspace", "Delete", "ArrowLeft", "Tab"]) {
+		await ime.dispatch("keydown", keyEvent(code));
+	}
+
+	assert.deepEqual(keys.map((k) => k[0]), [257, 259, 261, 263, 258]);
+	assert.ok(keys.every((k) => k[1] === true), "every keydown must report a press");
+	detach();
+});
+
+test("Enter and Backspace are consumed so the proxy never edits itself", async () => {
+	const { exports: ex } = keyRecorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	const ime = stubDocument.getElementById("ingot-ime");
+
+	for (const code of ["Enter", "Backspace", "Tab", "ArrowUp"]) {
+		const event = keyEvent(code);
+		await ime.dispatch("keydown", event);
+		assert.equal(event.prevented, true, `${code} must be consumed`);
+	}
+	// A printable key is not ours to swallow: the browser still owns
+	// composition and the char callback carries the value.
+	const letter = keyEvent("KeyA", { key: "a" });
+	await ime.dispatch("keydown", letter);
+	assert.equal(letter.prevented, false, "printable keys must not be consumed");
+	detach();
+});
+
+test("key repeat is reported as repeat, not as a fresh press", async () => {
+	const { keys, exports: ex } = keyRecorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	const ime = stubDocument.getElementById("ingot-ime");
+
+	await ime.dispatch("keydown", keyEvent("Backspace"));
+	await ime.dispatch("keydown", keyEvent("Backspace", { repeat: true }));
+	await ime.dispatch("keyup", keyEvent("Backspace"));
+
+	assert.deepEqual(keys, [[259, true, false], [259, true, true], [259, false, false]]);
+	detach();
+});

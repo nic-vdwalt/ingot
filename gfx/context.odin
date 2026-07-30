@@ -301,6 +301,27 @@ context_id_next: u32 = CONTEXT_ID_FIRST
 
 // @(init) runs before main on every target, so the id is in place before any
 // caller can observe it - the property the old static initialiser provided.
+//
+// The ordering between @(init) procedures is not specified by the language. It
+// is Odin's init_procedures_cmp: package import order, then filename, then
+// source offset. Both halves matter here, and only one of them is safe by
+// construction:
+//
+//   Across packages, it holds. Import cycles are a compile error, so the
+//   import graph is a DAG and an imported package always sorts before its
+//   importer. Anything that reaches gfx must import gfx, so its @(init) runs
+//   after this one.
+//
+//   Within gfx, it does not. The tiebreak is the filename, and context.odin is
+//   not first - roughly half the package sorts ahead of it (api.odin,
+//   audio.odin, batch.odin, camera.odin, colors.odin, ...). A second @(init)
+//   in any of those files would run before this one and read an unassigned id.
+//
+// So the invariant this trade rests on is: _default_context_init is the only
+// @(init) in gfx. scripts/check_init_order.py enforces that; if you need
+// initialisation elsewhere in the package, call it from here rather than
+// adding another @(init). context_id and _texture_slot_context assert a
+// non-zero id so a violation aborts instead of silently aliasing handles.
 @(init, private)
 _default_context_init :: proc "contextless" () {
 	default_context_storage.id = DEFAULT_CONTEXT_ID
@@ -421,6 +442,16 @@ context_epoch :: proc(ctx: ^Context) -> u64 {
 
 context_id :: proc(ctx: ^Context) -> u32 {
 	if ctx == nil do return 0
+	// Zero means "unassigned" everywhere in the resource handle code, and a
+	// context that has not opened a window legitimately reads as zero -
+	// _context_assign_id runs at window creation. The default context is the
+	// exception: its id comes from _default_context_init, so a zero here means
+	// that @(init) has not run yet and the caller is about to mint or match
+	// handles against context 0. See the note above _default_context_init.
+	assert(
+		ctx != &default_context_storage || ctx.id != 0,
+		"gfx: default context has no id; something ran before _default_context_init",
+	)
 	return ctx.id
 }
 

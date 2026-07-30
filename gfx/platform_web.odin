@@ -372,10 +372,13 @@ _st_push_char :: proc "contextless" (r: rune) {
 @(private)
 _input_drain :: proc(inp: ^Input) {
 	assert(inp != nil, "_input_drain: nil input")
+	// Edges land in the shared staging arrays, never in the published ones:
+	// input_poll calls _input_publish_staged after this, and that is the one
+	// place inp.pressed/released/repeat may be written.
 	for i in 0 ..< KEY_COUNT {
-		if st_pressed[i] {inp.pressed[i] = true}
-		if st_released[i] {inp.released[i] = true}
-		if st_repeat[i] {inp.repeat[i] = true}
+		if st_pressed[i] {inp.st_pressed[i] = true}
+		if st_released[i] {inp.st_released[i] = true}
+		if st_repeat[i] {inp.st_repeat[i] = true}
 		st_pressed[i], st_released[i], st_repeat[i] = false, false, false
 	}
 	for st_key_h != st_key_t {
