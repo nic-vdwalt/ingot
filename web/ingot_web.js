@@ -127,6 +127,23 @@
 		};
 	}
 
+	// Cap the backing-store scale. A modern phone reports devicePixelRatio 3,
+	// which on a 390x844 CSS viewport means a 1170x2532 framebuffer - 11.9 MB
+	// per buffer, and a swapchain holds several. Capping at 2 renders
+	// 780x1688 = 5.3 MB, saving ~6.6 MB per buffer for a difference few
+	// people can see at arm's length.
+	//
+	// Both the backing store (fitCanvas) and the value the engine reads
+	// (ingot_device_pixel_ratio) must use this same number: gfx computes its
+	// framebuffer size as css x dpr, so a disagreement would configure a
+	// swapchain that does not match the canvas.
+	const CANVAS_DPR_MAX = 2;
+
+	function canvasDpr() {
+		const dpr = window.devicePixelRatio || 1;
+		return Math.min(dpr, CANVAS_DPR_MAX);
+	}
+
 	// Resize the canvas backing store to match its CSS box × devicePixelRatio.
 	// gfx reads css size + dpr each frame (_maybe_reconfigure) and reconfigures
 	// the swapchain when the framebuffer size changes, so we only need to keep
@@ -134,7 +151,7 @@
 	function fitCanvas() {
 		const c = document.getElementById(CANVAS_ID);
 		if (!c) return;
-		const dpr = window.devicePixelRatio || 1;
+		const dpr = canvasDpr();
 		const rect = c.getBoundingClientRect();
 		const w = Math.max(1, Math.round(rect.width * dpr));
 		const h = Math.max(1, Math.round(rect.height * dpr));
@@ -408,7 +425,7 @@
 				const c = document.getElementById(CANVAS_ID);
 				return c ? c.getBoundingClientRect().height : 0;
 			},
-			ingot_device_pixel_ratio: () => window.devicePixelRatio || 1,
+			ingot_device_pixel_ratio: () => canvasDpr(),
 			ingot_set_cursor: (cur) => {
 				const c = document.getElementById(CANVAS_ID);
 				if (c) c.style.cursor = CURSORS[cur] || "default";
@@ -870,16 +887,37 @@
 		const wmi = new window.odin.WasmMemoryInterface();
 		wasmMemoryInterface = wmi;
 		const webgpu = new window.odin.WebGPUInterface(wmi);
-		// Feed the crash recorder the wasm heap size. A tab killed under
-		// memory pressure leaves no JavaScript error, so this growth curve in
-		// the black box is the only evidence of an OOM available from inside
-		// the page (ingot_crash.js). Optional: the demos load the recorder,
-		// embedders may not.
+		// Feed the crash recorder the metrics that can explain a kill from
+		// inside the page. The wasm heap alone proved insufficient: a real
+		// capture showed it flat at 43 MiB while the tab died anyway, so the
+		// memory must be outside it. These probes narrow that down.
+		// Optional: the demos load the recorder, embedders may not.
 		if (window.ingotCrash && window.ingotCrash.watch) {
 			window.ingotCrash.watch("wasmMiB", () => {
 				const memory = wmi.memory;
 				if (!memory || !memory.buffer) return null;
 				return (memory.buffer.byteLength / (1024 * 1024)).toFixed(1);
+			});
+			// The framebuffer is the leading suspect for off-heap memory: at
+			// dpr 3 a phone-sized canvas is ~12 MB per swapchain buffer.
+			// Reported as WxH@dpr plus the megabytes one buffer occupies.
+			window.ingotCrash.watch("canvas", () => {
+				const c = document.getElementById(CANVAS_ID);
+				if (!c) return null;
+				const mib = (c.width * c.height * 4) / (1024 * 1024);
+				return `${c.width}x${c.height}@${canvasDpr()}=${mib.toFixed(1)}MiB`;
+			});
+			// Chrome (and CriOS) expose the JS heap; Safari does not, so this
+			// probe simply reports nothing there rather than guessing.
+			window.ingotCrash.watch("jsHeapMiB", () => {
+				const memory = performance.memory;
+				if (!memory || !memory.usedJSHeapSize) return null;
+				return (memory.usedJSHeapSize / (1024 * 1024)).toFixed(1);
+			});
+			// The semantic mirror creates real DOM nodes per widget. A count
+			// that climbs frame over frame would mean the reaper is failing.
+			window.ingotCrash.watch("domNodes", () => {
+				return document.getElementsByTagName("*").length;
 			});
 		}
 		const listeners = [];

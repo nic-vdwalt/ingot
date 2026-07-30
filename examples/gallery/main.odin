@@ -82,6 +82,15 @@ SECTION_AXES := [Section]string {
 
 NAV_W :: 170
 
+// Below this logical width the sidebar is not affordable: a portrait phone is
+// about 390 CSS px, and 170 of those (44%) would leave 168 px of content once
+// the pane padding is taken. The nav becomes a horizontal strip instead.
+NARROW_WIDTH_MAX :: 640
+// Strip geometry. The row height is a comfortable touch target rather than a
+// desktop button height; the cell width fits the longest section name.
+NAV_STRIP_ROW_H :: 34
+NAV_STRIP_CELL_W :: 92
+
 // --- caller-owned state (the whole point: no hidden library state) ----------
 
 dark := true
@@ -247,8 +256,12 @@ gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	if ui.is_key_pressed(frame, .F12) do debug_on = !debug_on
 
 	header_h := ui.ui_frame_metrics(frame).TAB_BAR_HEIGHT
-	draw_nav(frame, header_h, sh)
-	draw_content(frame, sw, header_h, sh)
+	// One decision, taken in the parent and passed down (Tiger Style: push
+	// ifs up). Below the breakpoint the sidebar would eat 170 of ~390
+	// logical pixels, so the nav becomes a horizontal strip instead.
+	narrow := sw <= NARROW_WIDTH_MAX
+	nav_h := draw_nav(frame, header_h, sw, sh, narrow)
+	draw_content(frame, sw, header_h + nav_h, sh, narrow)
 
 	if settings_open {
 		res := ui.draw_scale_settings_panel(frame, &settings_sel, stored_scale, sw, sh)
@@ -281,8 +294,13 @@ apply_scale :: proc(scale: f32) {
 	ui.ui_runtime_set_scale(ui_gfx.app_ui_runtime(&app), resolved)
 }
 
-draw_nav :: proc(frame: ^ui.Ui_Frame, top, sh: i32) {
+// draw_nav renders the section switcher and returns the vertical space it
+// consumed. Wide viewports get the sidebar (0 vertical space, it lives beside
+// the content); narrow ones get a horizontal strip whose height the caller
+// must subtract from the content area.
+draw_nav :: proc(frame: ^ui.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
 	assert(frame != nil, "draw_nav: nil frame")
+	if narrow do return draw_nav_strip(frame, top, sw)
 	w := ui.ui_frame_sc(frame, NAV_W)
 	theme := ui.ui_frame_theme(frame)
 	ui.draw_rectangle(frame, 0, top, w, sh - top, theme.bg_secondary)
@@ -322,6 +340,67 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, top, sh: i32) {
 	}
 	ui.scope_end(u)
 	ui.end(u)
+	return 0
+}
+
+// draw_nav_strip is the narrow-viewport nav: two rows of wrapped buttons under
+// the header, so every section stays reachable on a phone without spending
+// 44% of the width on a sidebar. The theme controls move here too rather than
+// being dropped - a demo that hides its own features on mobile is worse than
+// one that scrolls.
+draw_nav_strip :: proc(frame: ^ui.Ui_Frame, top, sw: i32) -> i32 {
+	assert(frame != nil, "draw_nav_strip: nil frame")
+	assert(sw > 0, "draw_nav_strip: empty viewport")
+	theme := ui.ui_frame_theme(frame)
+	pad := ui.ui_frame_sc(frame, 8)
+	gap := ui.ui_frame_sc(frame, 6)
+	row_h := ui.ui_frame_sc(frame, NAV_STRIP_ROW_H)
+	// Section buttons wrap into as many rows as the width needs; the theme
+	// row always follows on its own line.
+	cols := max((sw - pad * 2 + gap) / (ui.ui_frame_sc(frame, NAV_STRIP_CELL_W) + gap), 1)
+	rows := (i32(len(Section)) + cols - 1) / cols
+	height := pad * 2 + rows * row_h + (rows - 1) * gap + gap + row_h
+
+	ui.draw_rectangle(frame, 0, top, sw, height, theme.bg_secondary)
+	ui.draw_rectangle(frame, 0, top + height - 1, sw, 1, theme.border_subtle)
+
+	grid: ui.Grid
+	ui.grid_begin(&grid, {pad, top + pad, sw - pad * 2, 0}, cols, row_h, gap, gap)
+	for s in Section {
+		style := ui.Btn_Style.Primary if s == section else .Ghost
+		if ui.button_at(frame, ui.grid_next(&grid), SECTION_NAMES[s], style) {
+			section = s
+			ui.pane_reset(&content_pane)
+		}
+	}
+	content := ui.grid_end(&grid)
+
+	// Theme, contrast, and scale share one row: three short labels fit where
+	// the sidebar's full sentences would not.
+	controls: ui.Grid
+	ui.grid_begin(
+		&controls,
+		{pad, content.y + content.h + gap, sw - pad * 2, 0},
+		3,
+		row_h,
+		gap,
+		gap,
+	)
+	if ui.button_at(frame, ui.grid_next(&controls), "Light" if dark else "Dark") {
+		dark = !dark
+		high_contrast = false
+		apply_gallery_theme(frame)
+	}
+	if ui.button_at(frame, ui.grid_next(&controls), "Contrast") {
+		high_contrast = !high_contrast
+		apply_gallery_theme(frame)
+	}
+	if ui.button_at(frame, ui.grid_next(&controls), "Scale\u2026") {
+		settings_open = true
+		settings_sel = ui.settings_scale_preset_index(stored_scale)
+	}
+	_ = ui.grid_end(&controls)
+	return height
 }
 
 apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
@@ -334,13 +413,18 @@ apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
 	if frame != nil do ui.request_redraw(frame)
 }
 
-draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32) {
-	x := ui.ui_frame_sc(frame, NAV_W)
+draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32, narrow: bool) {
+	// Narrow viewports have no sidebar to sit beside, so the content starts
+	// at the left edge and takes the full width. The inner padding shrinks
+	// too: 18+52 logical px of margin is a third of a phone's width.
+	x := i32(0) if narrow else ui.ui_frame_sc(frame, NAV_W)
 	w := sw - x
 	pane_rect := ui.Rect_I32{x, top, w, sh - top}
 	y := ui.pane_begin(frame, &content_pane, pane_rect, pad = 14, keyboard = section != .Inputs)
-	cx := x + ui.ui_frame_sc(frame, 18)
-	cw := w - ui.ui_frame_sc(frame, 52)
+	inset := ui.ui_frame_sc(frame, 8 if narrow else 18)
+	gutter := ui.ui_frame_sc(frame, 20 if narrow else 52)
+	cx := x + inset
+	cw := w - gutter
 	y = draw_section_layer(frame, cx, y, cw)
 
 	end_y: i32

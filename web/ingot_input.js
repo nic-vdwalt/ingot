@@ -164,9 +164,38 @@
 			if (!e.isComposing) ime.value = "";
 		});
 
+		// isTouch centralises the one predicate every branch below depends on.
+		// Pen reports its own type and keeps the mouse path: a stylus has the
+		// precision to hit a scrollbar, a fingertip does not.
+		const isTouch = (e) => e.pointerType === "touch";
+
 		listen(canvas, "pointermove", function (e) {
 			const x = ex();
-			if (x) x.ingot_web_mouse_move(e.offsetX, e.offsetY);
+			if (!x) return;
+			if (isTouch(e)) {
+				const touch = touches.get(e.pointerId);
+				if (touch === undefined) return;
+				// Hover follows the finger either way, so widgets under it
+				// light up exactly as they would under a mouse.
+				x.ingot_web_mouse_move(e.offsetX, e.offsetY);
+				if (!touch.panning) {
+					const moved = Math.hypot(
+						e.clientX - touch.startX,
+						e.clientY - touch.startY,
+					);
+					if (moved < TOUCH_DRAG_SLOP_PX) return;
+					touch.panning = true;
+				}
+				// Drag down (clientY increasing) reveals earlier content,
+				// which is a positive wheel value in the engine's GLFW
+				// convention - the same sign the wheel handler produces for a
+				// scroll-up gesture.
+				const dy = e.clientY - touch.lastY;
+				touch.lastY = e.clientY;
+				if (dy !== 0) x.ingot_web_wheel(0, dy / TOUCH_WHEEL_PIXELS_PER_NOTCH);
+				return;
+			}
+			x.ingot_web_mouse_move(e.offsetX, e.offsetY);
 		});
 
 		listen(canvas, "pointerdown", function (e) {
@@ -176,6 +205,20 @@
 			canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
 			x.ingot_web_mouse_move(e.offsetX, e.offsetY);
 			const b = BTN[e.button];
+			if (isTouch(e)) {
+				// The press is deferred: pressing now and releasing on a drag
+				// would activate whatever button the finger started on. It is
+				// emitted on pointerup only if the gesture stayed a tap.
+				if (touches.size >= TOUCH_POINTERS_MAX) return;
+				touches.set(e.pointerId, {
+					startX: e.clientX,
+					startY: e.clientY,
+					lastY: e.clientY,
+					button: b,
+					panning: false,
+				});
+				return;
+			}
 			if (b !== undefined) {
 				pressedButtons.add(b);
 				x.ingot_web_mouse_button(b, true);
@@ -185,6 +228,19 @@
 		listen(canvas, "pointerup", function (e) {
 			const x = ex();
 			if (!x) return;
+			if (isTouch(e)) {
+				const touch = touches.get(e.pointerId);
+				touches.delete(e.pointerId);
+				if (touch === undefined) return;
+				// A gesture that never exceeded the slop was a tap: replay it
+				// as a full press+release so the widget under the finger
+				// activates on this frame.
+				if (!touch.panning && touch.button !== undefined) {
+					x.ingot_web_mouse_button(touch.button, true);
+					x.ingot_web_mouse_button(touch.button, false);
+				}
+				return;
+			}
 			const b = BTN[e.button];
 			if (b !== undefined) pressedButtons.delete(b);
 			if (b !== undefined) x.ingot_web_mouse_button(b, false);
@@ -228,6 +284,10 @@
 			}
 			pressedKeys.clear();
 			pressedButtons.clear();
+			// Pending taps are abandoned, never activated: a cancelled
+			// gesture is the OS taking the touch away (a system swipe, an
+			// incoming call), which must not press a button.
+			touches.clear();
 		};
 		listen(canvas, "pointercancel", releaseHeldInput);
 		listen(canvas, "lostpointercapture", releaseHeldInput);

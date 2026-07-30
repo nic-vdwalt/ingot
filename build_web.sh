@@ -22,11 +22,25 @@ echo "Building wasm..."
 SRC="${1:-$WEB/demo.odin}"
 FILE_FLAG="-file"
 if [ -d "$SRC" ]; then FILE_FLAG=""; fi
+# -o:size trims the compiled code, but note what it does NOT fix: measured on
+# examples/gallery, default is 12,280,961 bytes and -o:size is 12,181,913 - a
+# 0.8% saving. Adding -disable-assert reaches 11,977,472, still only 2.5%.
+#
+# The reason is that 96% of the binary is the DATA section (11.5 MB) and only
+# 434 KB is code: the engine's fixed-capacity inline arrays
+# (gfx.Renderer.verts is 9 MiB, ui.Paint_List is 4 MiB x2) are static globals
+# baked into the module. No optimisation flag touches those; only changing the
+# capacities would.
+#
+# -disable-assert is deliberately NOT used: it would buy another 1.7% while
+# removing every Tiger Style assertion from the shipped demo, which is exactly
+# the diagnostic signal we want when a browser kills the tab.
 # shellcheck disable=SC2086
 odin build "$SRC" $FILE_FLAG \
 	-target:js_wasm32 \
 	-collection:ingot="$ROOT" \
 	-out:"$WEB/ingot_web.wasm" \
+	-o:size \
 	-extra-linker-flags:"--export-table"
 
 echo "Staging JS runtimes..."
