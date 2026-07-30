@@ -80,6 +80,35 @@ context_renderer_stats_reset :: proc(ctx: ^Context) {
 	}
 }
 
+// Peak_Usage reports the largest batch this context has accumulated between
+// flushes, against the capacities reserved for it. The capacities are static
+// inline arrays (see BATCH_MAX_VERTICES), so the headroom reported here is
+// memory that is always resident whether or not it is ever used - which makes
+// this the measurement that justifies those numbers.
+//
+// Tracked unconditionally, unlike Renderer_Stats: capacity sizing must not
+// depend on a build flag being set.
+Peak_Usage :: struct {
+	vertices:          int,
+	vertices_capacity: int,
+	indices:           int,
+	indices_capacity:  int,
+}
+
+renderer_peak_usage :: proc() -> Peak_Usage {
+	return context_renderer_peak_usage(default_context())
+}
+
+context_renderer_peak_usage :: proc(ctx: ^Context) -> Peak_Usage {
+	if ctx == nil do return {}
+	return Peak_Usage {
+		vertices = ctx.rend.peak_verts,
+		vertices_capacity = BATCH_MAX_VERTICES,
+		indices = ctx.rend.peak_indices,
+		indices_capacity = BATCH_MAX_INDICES,
+	}
+}
+
 @(private)
 _stats_frame_begin :: proc() {
 	when RENDER_STATS_ENABLED {

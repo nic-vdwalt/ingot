@@ -45,8 +45,40 @@ Blend_Slot :: enum {
 // mobile GPU cannot afford STREAM_SLOT_COUNT pairs of 16 MiB buffers.
 GEOMETRY_STREAM_ALIGN :: u64(4)
 STREAM_SLOT_COUNT :: 3
-BATCH_MAX_VERTICES :: 262_144
-BATCH_MAX_INDICES :: 393_216
+
+// Batch capacity: the CPU-side run accumulated between flushes. These are
+// inline arrays in Renderer, which is inside the static `g` Context, so the
+// full 10.5 MiB is resident for the whole session.
+//
+// Measured with the gallery smoke run (scripts/smoke-gallery.sh), which walks
+// every section including the 1000-button stress grid:
+//
+//   viewport            vertices    indices   % of cap
+//   phone  780x1688       26,964     31,374      10.3%
+//   laptop 1100x760       15,680     18,228       6.0%
+//   4K     3840x2160     107,968    125,880      41.2%
+//
+// The vertex count tracks visible widget count, so it scales with framebuffer
+// area: 4K already reaches 41%, and a 5K/6K display would approach the cap.
+// These defaults are therefore NOT oversized for desktop and are deliberately
+// left alone - an earlier plan proposed cutting them to 32,768 on the
+// strength of the laptop measurement alone, which would have overflowed every
+// large display.
+//
+// They are #config so a target with a known-small framebuffer can reclaim the
+// memory. A web build capped at devicePixelRatio 2 (see web/ingot_web.js)
+// cannot exceed a tablet-sized framebuffer, so halving these there is safe;
+// overflow degrades through _geometry_upload_transient rather than corrupting,
+// and now logs (_renderer_report_overflow).
+BATCH_MAX_VERTICES :: #config(INGOT_BATCH_MAX_VERTICES, 262_144)
+BATCH_MAX_INDICES :: #config(INGOT_BATCH_MAX_INDICES, 393_216)
+
+// A batch below the measured 4K peak would spill to one-shot buffers during
+// ordinary use on a large display.
+#assert(BATCH_MAX_VERTICES >= 131_072)
+// Indices run about 1.5x vertices (a quad is 4 vertices, 6 indices).
+#assert(BATCH_MAX_INDICES >= BATCH_MAX_VERTICES)
+
 BATCH_TRANSIENT_BUFFERS_MAX :: 4096
 MODEL_STACK_MAX :: 64
 STREAMED_RENDERER_ENABLED :: #config(INGOT_STREAMED_RENDERER, true)
@@ -98,6 +130,13 @@ Renderer :: struct {
 	// current run
 	verts:              [dynamic; BATCH_MAX_VERTICES]Vertex,
 	indices:            [dynamic; BATCH_MAX_INDICES]u32,
+	// High-water marks across the context's lifetime, in elements. Always
+	// tracked (two max() per flush) rather than gated behind
+	// RENDER_STATS_ENABLED, because these are what justify the capacities
+	// above: a bound nobody can measure is a guess. Read via
+	// renderer_peak_usage.
+	peak_verts:         int,
+	peak_indices:       int,
 	cur_kind:           Pipe_Kind,
 	cur_bind:           wg.BindGroup,
 	cur_blend:          Blend_Slot,
@@ -775,12 +814,29 @@ MatrixModeTranslate :: proc(x, y: f32) {
 	g.rend.model_xf = _affine_translated(g.rend.model_xf, x, y)
 }
 
+// _batch_record_peak folds one flush's batch size into the renderer's
+// high-water marks. Split out from renderer_flush so it can be tested without
+// a live GPU pass: renderer_flush needs a real RenderPassEncoder, which would
+// leave the only measurement that justifies BATCH_MAX_VERTICES unverified.
+@(private)
+_batch_record_peak :: proc(r: ^Renderer, vertex_count, index_count: int) {
+	assert(r != nil, "_batch_record_peak: nil renderer")
+	assert(vertex_count >= 0 && index_count >= 0, "_batch_record_peak: negative count")
+	r.peak_verts = max(r.peak_verts, vertex_count)
+	r.peak_indices = max(r.peak_indices, index_count)
+	assert(r.peak_verts >= vertex_count, "_batch_record_peak: peak below sample")
+}
+
 renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Cause = .Manual) {
 	n := len(r.verts)
 	if n == 0 do return
 
 	index_count := len(r.indices)
 	assert(index_count > 0)
+	// Record before the buffers are cleared below: this is the whole batch
+	// that accumulated since the last flush, which is exactly the quantity
+	// BATCH_MAX_VERTICES has to cover.
+	_batch_record_peak(r, n, index_count)
 	vertex_bytes := u64(n) * size_of(Vertex)
 	index_bytes := u64(index_count) * size_of(u32)
 	// Resolved once here so the upload leaves stay context-free.

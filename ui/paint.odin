@@ -2,9 +2,35 @@ package ui
 
 import "base:runtime"
 
-PAINT_COMMAND_CAP :: 32768
-PAINT_TEXT_CAP :: 262144
+// Paint capacities. These are inline arrays inside Paint_List, and Ui_Output
+// holds two lists (main + overlay), so every byte here is resident for the
+// whole session whether or not it is ever written - which is why they are
+// sized from measurement rather than round numbers.
+//
+// Measured with the gallery smoke run (scripts/smoke-gallery.sh), which walks
+// every section including the 1000-button stress grid, at three viewports:
+//
+//   viewport            commands   text bytes
+//   phone  780x1688          548        1,887
+//   laptop 1100x760          341        1,166
+//   4K     3840x2160       2,046        7,138
+//
+// The caps below give ~4x headroom over the 4K peak. The previous values
+// (32,768 commands / 262,144 bytes) were 16x and 36x that, costing 4.2 MiB
+// per list - 8.4 MiB per Ui_Output - to hold space nothing ever used.
+//
+// Overflow is graceful and counted (dropped_commands / dropped_text_bytes,
+// see paint_push), not corrupting, so a heavier consumer degrades visibly
+// rather than crashing. Both are #config for exactly that case.
+PAINT_COMMAND_CAP :: #config(INGOT_PAINT_COMMAND_CAP, 8192)
+PAINT_TEXT_CAP :: #config(INGOT_PAINT_TEXT_CAP, 32768)
 PAINT_CLIP_CAP :: 64
+
+// Sanity bounds: a capacity below the measured 4K peak would drop commands on
+// an ordinary large display, and the code assumes room for at least one clip
+// pair plus content.
+#assert(PAINT_COMMAND_CAP >= 4096)
+#assert(PAINT_TEXT_CAP >= 16384)
 
 Paint_Channel :: enum u8 {
 	Main,
@@ -72,6 +98,13 @@ Paint_List :: struct {
 	clip_overflow_depth:  int,
 	dropped_commands:     int,
 	dropped_text_bytes:   int,
+	// High-water marks across this list's lifetime, surviving the per-frame
+	// reset. Always tracked (two max() per frame) rather than gated behind
+	// UI_TELEMETRY_ENABLED, because these are what justify PAINT_COMMAND_CAP
+	// and PAINT_TEXT_CAP: a bound nobody can measure is a guess. The arrays
+	// are inline, so unused capacity is memory that is always resident.
+	peak_count:           int,
+	peak_text_len:        int,
 	command_append_count: u64,
 	text_append_count:    u64,
 	text_bytes_copied:    u64,
@@ -183,6 +216,7 @@ paint_push_unreserved :: proc(list: ^Paint_List, command: Paint_Command) -> bool
 	if list.count >= PAINT_COMMAND_CAP do return false
 	list.commands[list.count] = command
 	list.count += 1
+	list.peak_count = max(list.peak_count, list.count)
 	when UI_TELEMETRY_ENABLED do list.command_append_count += 1
 	if list.sink != nil do list.sink(list, command, list.sink_userdata)
 	return true
@@ -209,6 +243,7 @@ paint_push_text :: proc(list: ^Paint_List, command: Paint_Command, text: string)
 	stored_command.text_length = len(text)
 	copy(list.text[list.text_len:], transmute([]u8)text)
 	list.text_len += len(text)
+	list.peak_text_len = max(list.peak_text_len, list.text_len)
 	when UI_TELEMETRY_ENABLED {
 		list.text_append_count += 1
 		list.text_bytes_copied += u64(len(text))

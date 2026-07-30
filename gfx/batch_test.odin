@@ -220,3 +220,103 @@ vertex_modes_are_distinct_and_gpu_sized :: proc(t: ^testing.T) {
 	testing.expect_value(t, u32(Vertex_Mode.Text), u32(1))
 	testing.expect_value(t, size_of(Vertex_Mode), size_of(u32))
 }
+
+// --- capacity and overflow --------------------------------------------------
+//
+// BATCH_MAX_VERTICES was cut from a round number to a measured one, so the
+// behaviour at the boundary has to be pinned: reaching the cap must flush and
+// continue, never corrupt or silently drop geometry. A request larger than the
+// whole batch is the one case that cannot be served at all, and it must be
+// refused rather than overrun the array.
+
+@(test)
+batch_reserve_refuses_requests_larger_than_capacity :: proc(t: ^testing.T) {
+	// Heap-allocated: Renderer is ~11 MB, far past a safe stack frame - the
+	// very cost this capacity work is about.
+	r := new(Renderer)
+	defer free(r)
+	// No active pass, so _batch_reserve cannot flush its way out: this
+	// isolates the pure capacity check from the flush path.
+	testing.expect(
+		t,
+		!_batch_reserve(r, BATCH_MAX_VERTICES + 1, 6),
+		"a vertex request above the cap must be refused",
+	)
+	testing.expect(
+		t,
+		!_batch_reserve(r, 4, BATCH_MAX_INDICES + 1),
+		"an index request above the cap must be refused",
+	)
+	// Nothing was written for a refused reservation.
+	testing.expect_value(t, len(r.verts), 0)
+	testing.expect_value(t, len(r.indices), 0)
+}
+
+@(test)
+batch_reserve_fits_exactly_to_capacity :: proc(t: ^testing.T) {
+	r := new(Renderer)
+	defer free(r)
+	// The boundary itself must succeed: an off-by-one here would waste the
+	// last slot of a now-measured capacity.
+	testing.expect(
+		t,
+		_batch_reserve(r, BATCH_MAX_VERTICES, BATCH_MAX_INDICES),
+		"a request of exactly the capacity must fit an empty batch",
+	)
+}
+
+@(test)
+batch_peak_tracks_high_water_across_flushes :: proc(t: ^testing.T) {
+	// The peak is what justifies the capacity constants, so it must survive
+	// the per-flush clear rather than reporting only the last batch. Calls
+	// the production helper renderer_flush uses - asserting on a value the
+	// test itself assigned would prove nothing.
+	r := new(Renderer)
+	defer free(r)
+	_batch_record_peak(r, 100, 150)
+	testing.expect_value(t, r.peak_verts, 100)
+	testing.expect_value(t, r.peak_indices, 150)
+
+	// A smaller later batch must not lower the mark.
+	_batch_record_peak(r, 40, 60)
+	testing.expect_value(t, r.peak_verts, 100)
+	testing.expect_value(t, r.peak_indices, 150)
+
+	// A larger one must raise it.
+	_batch_record_peak(r, 250, 300)
+	testing.expect_value(t, r.peak_verts, 250)
+	testing.expect_value(t, r.peak_indices, 300)
+
+	// And the public accessor reports it against the capacity, which is what
+	// the smoke harness prints.
+	usage := Peak_Usage {
+		vertices          = r.peak_verts,
+		vertices_capacity = BATCH_MAX_VERTICES,
+		indices           = r.peak_indices,
+		indices_capacity  = BATCH_MAX_INDICES,
+	}
+	testing.expect(t, usage.vertices <= usage.vertices_capacity)
+	testing.expect(t, usage.indices <= usage.indices_capacity)
+}
+
+@(test)
+batch_capacities_cover_the_measured_peak :: proc(t: ^testing.T) {
+	// Measured with the gallery smoke run at 3840x2160, the heaviest scene
+	// in the repo. The capacity must clear that peak with real headroom: a
+	// display larger than 4K scales the vertex count further, and falling
+	// back to one-shot buffers during ordinary use is the regression this
+	// guards. 1.5x is the minimum margin, which 262,144 satisfies at 2.4x.
+	MEASURED_4K_VERTICES :: 107_968
+	MEASURED_4K_INDICES :: 125_880
+	CAPACITY_MARGIN_MIN :: 3 // expressed as thirds to stay integer: 3/2 = 1.5x
+	testing.expect(
+		t,
+		BATCH_MAX_VERTICES * 2 >= MEASURED_4K_VERTICES * CAPACITY_MARGIN_MIN,
+		"vertex capacity must clear the measured 4K peak by at least 1.5x",
+	)
+	testing.expect(
+		t,
+		BATCH_MAX_INDICES * 2 >= MEASURED_4K_INDICES * CAPACITY_MARGIN_MIN,
+		"index capacity must clear the measured 4K peak by at least 1.5x",
+	)
+}
