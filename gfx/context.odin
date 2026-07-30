@@ -268,14 +268,43 @@ _flush_retired :: proc() {
 	clear(&g.resources.retire)
 }
 
+// The default context is deliberately NOT statically initialised, and the id
+// is assigned by _default_context_init below instead.
+//
+// A static initialiser - even `= {id = 1}`, a single non-zero byte - forces
+// LLVM to place the whole struct in .data rather than .bss. Context is ~11 MB
+// (mostly Renderer's vertex and index arrays), and .data is emitted verbatim
+// into the binary while .bss is elided, because WebAssembly and every ELF
+// loader zero fresh memory anyway. On the wasm target that one byte cost
+// 11.1 MB of zeros in the module: 12.3 MB down to 1.2 MB when removed.
+//
+// Keep this declaration bare. If a field ever needs a non-zero default, set it
+// in _default_context_init.
 @(private)
-default_context_storage: Context = {
-	id = 1,
-}
+default_context_storage: Context
 @(private)
 g: ^Context = &default_context_storage
+
+// DEFAULT_CONTEXT_ID is the reserved id of the default context. Every other
+// context is numbered from CONTEXT_ID_FIRST upward by _context_assign_id.
+DEFAULT_CONTEXT_ID :: u32(1)
+CONTEXT_ID_FIRST :: DEFAULT_CONTEXT_ID + 1
+
+// The reserved id must not be handed out again, and both must fit the field
+// width resource handles pack them into. Derived rather than written as a
+// literal 2 so the two cannot drift apart.
+#assert(CONTEXT_ID_FIRST > DEFAULT_CONTEXT_ID)
+#assert(CONTEXT_ID_FIRST <= RESOURCE_CONTEXT_MASK)
+
 @(private)
-context_id_next: u32 = 2
+context_id_next: u32 = CONTEXT_ID_FIRST
+
+// @(init) runs before main on every target, so the id is in place before any
+// caller can observe it - the property the old static initialiser provided.
+@(init, private)
+_default_context_init :: proc "contextless" () {
+	default_context_storage.id = DEFAULT_CONTEXT_ID
+}
 
 default_context :: proc() -> ^Context {
 	return &default_context_storage

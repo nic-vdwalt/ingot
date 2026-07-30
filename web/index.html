@@ -43,9 +43,9 @@
 		const msg = document.getElementById("msg");
 		window.ingotWeb.run("ingot_web.wasm")
 			.then(() => {
-				// A recovered post-mortem must stay on screen even when this
-				// session boots fine - it is the only report of the last one.
-				if (window.ingotCrash.crashed() || window.ingotCrash.recovered()) return;
+				// A previous session's post-mortem renders into #crash and
+				// must not suppress this session's status line.
+				if (window.ingotCrash.crashed()) return;
 				msg.textContent = "running (WebGPU)";
 			})
 			.catch((error) => {

@@ -149,6 +149,13 @@
 	// boxRecover reads and clears any record left by a previous session in
 	// this tab. Read-and-clear makes recovery one-shot: reloading twice must
 	// not report the same death again.
+	//
+	// A record is only treated as a crash when the previous session actually
+	// got running, evidenced by at least one heartbeat. Without that check a
+	// reload issued while the module was still downloading looks identical to
+	// a kill, and reporting it would cry wolf on an ordinary refresh. A
+	// session that dies before its first heartbeat had no frames to lose, so
+	// nothing diagnostic is given up.
 	function boxRecover() {
 		const store = storage();
 		if (!store) return null;
@@ -163,6 +170,8 @@
 		try {
 			const parsed = JSON.parse(raw);
 			if (!parsed || !Array.isArray(parsed.crumbs)) return null;
+			const ran = parsed.crumbs.some((crumb) => crumb.includes("HEARTBEAT"));
+			if (!ran) return null;
 			return parsed;
 		} catch (_) {
 			// A truncated write (killed mid-setItem) leaves invalid JSON.
@@ -176,25 +185,35 @@
 		const crumbs = postMortem.crumbs.length > 0
 			? postMortem.crumbs.join("\n")
 			: "(no breadcrumbs recorded)";
-		// "Most likely", not "was": an ungraceful end is also what a hard
-		// browser crash or a force-quit looks like.
-		return "PREVIOUS SESSION DIED WITHOUT SHUTTING DOWN\n" +
-			"The tab was terminated - most likely killed by the OS under memory\n" +
-			"pressure, which produces no JavaScript error. Last breadcrumbs:\n\n" +
+		// "Did not shut down cleanly", not "was killed": the same evidence is
+		// produced by a hard browser crash, a force-quit, and some reload
+		// paths where pagehide never fires. Overstating it would send the
+		// next reader hunting a memory bug that may not exist.
+		return "PREVIOUS SESSION DID NOT SHUT DOWN CLEANLY\n" +
+			"It ended without reaching pagehide - most often an OS memory kill,\n" +
+			"which produces no JavaScript error. Tap this panel to dismiss.\n\n" +
 			crumbs + "\n\n" + "-".repeat(48) + "\n\n";
 	}
+
+	// dismissed suppresses a post-mortem the reader has already seen, so the
+	// report never becomes furniture on a demo that is running fine.
+	let dismissed = false;
 
 	function render() {
 		const crash = element("crash");
 		const msg = element("msg");
-		if (msg) {
+		// Only a LIVE crash may touch #msg. On the demo pages that element is
+		// a full-screen opaque overlay (position:absolute; inset:0), so
+		// showing it for a previous session's post-mortem hides a demo that
+		// is rendering perfectly - which is exactly the regression this guard
+		// exists to prevent. A live crash is different: there is nothing
+		// working underneath to obscure.
+		if (msg && headline !== null) {
 			msg.hidden = false;
-			msg.textContent = headline !== null
-				? "crashed - details below"
-				: "previous session crashed - details below";
+			msg.textContent = "crashed - details below";
 		}
 		if (!crash) return;
-		let text = postMortemText();
+		let text = dismissed ? "" : postMortemText();
 		if (headline !== null) {
 			text += "reason: " + headline;
 			if (cascade.length > 0) {
@@ -203,8 +222,27 @@
 			}
 			text += "\n\nrecent console output:\n" + ring.join("\n");
 		}
+		if (text === "") {
+			crash.style.display = "none";
+			return;
+		}
 		crash.style.display = "block";
 		crash.textContent = text;
+	}
+
+	// A post-mortem is informational, not fatal, so it must be dismissable.
+	// Attached once, lazily, because #crash may not exist on an embedder's
+	// page.
+	function attachDismiss() {
+		const crash = element("crash");
+		if (!crash || !crash.addEventListener) return;
+		crash.addEventListener("click", () => {
+			// Only the post-mortem is dismissable. A live crash report stays:
+			// the app is broken and hiding that would be misleading.
+			if (headline !== null) return;
+			dismissed = true;
+			render();
+		});
 	}
 
 	function show(reason) {
@@ -313,21 +351,26 @@
 	boxFlush(true);
 	startHeartbeat();
 	if (postMortem) {
-		// Render immediately: the previous session's report must appear even
-		// if this one goes on to run perfectly.
-		if (document.readyState === "loading") {
-			window.addEventListener("DOMContentLoaded", render);
-		} else {
+		// Render into #crash only; see render() for why #msg is off limits
+		// here. The demo keeps running behind the panel.
+		const start = () => {
+			attachDismiss();
 			render();
+		};
+		if (document.readyState === "loading") {
+			window.addEventListener("DOMContentLoaded", start);
+		} else {
+			start();
 		}
 	}
 
 	window.ingotCrash = {
 		report: show,
 		crashed: () => headline !== null,
-		// True when the PREVIOUS session in this tab was killed. Pages use it
-		// to keep the report visible instead of hiding the status line after
-		// a successful boot.
+		// True when the PREVIOUS session in this tab ended without shutting
+		// down cleanly. Informational only: a page must NOT use this to keep
+		// a loading overlay up, because the current session may be running
+		// perfectly and the overlay would hide it.
 		recovered: () => postMortem !== null,
 		// Breadcrumb from application code, for phases the console does not
 		// cover ("entered stress section"), so a kill can be attributed.

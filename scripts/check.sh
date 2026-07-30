@@ -93,6 +93,12 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_odin_style.py" \
 	--baseline "$root/scripts/odin_style_baseline.json" \
 	"$root"
 
+# The guard itself runs in check-web.sh against a freshly built module; its
+# unit tests belong here with the other script tests, so a broken parser
+# cannot silently pass every wasm it is handed.
+echo "== wasm bloat guard tests =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_wasm_bloat_test.py"
+
 # odinfmt has no list/check flag (only -w/-stdin), so compare each file
 # against its formatted output. Formatting is part of the strict gate.
 if ! command -v odinfmt >/dev/null 2>&1; then
