@@ -870,6 +870,18 @@
 		const wmi = new window.odin.WasmMemoryInterface();
 		wasmMemoryInterface = wmi;
 		const webgpu = new window.odin.WebGPUInterface(wmi);
+		// Feed the crash recorder the wasm heap size. A tab killed under
+		// memory pressure leaves no JavaScript error, so this growth curve in
+		// the black box is the only evidence of an OOM available from inside
+		// the page (ingot_crash.js). Optional: the demos load the recorder,
+		// embedders may not.
+		if (window.ingotCrash && window.ingotCrash.watch) {
+			window.ingotCrash.watch("wasmMiB", () => {
+				const memory = wmi.memory;
+				if (!memory || !memory.buffer) return null;
+				return (memory.buffer.byteLength / (1024 * 1024)).toFixed(1);
+			});
+		}
 		const listeners = [];
 		const listen = (target, type, handler) => {
 			target.addEventListener(type, handler);

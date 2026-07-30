@@ -42,6 +42,30 @@
 	// focus (arrows, space, tab, backspace, page up/down, home/end).
 	const CONSUME = new Set([32, 258, 259, 262, 263, 264, 265, 266, 267, 268, 269]);
 
+	// --- touch drag scrolling ---------------------------------------------
+	// The engine scrolls panes from wheel deltas (ui/widgets.odin pane_begin
+	// reads get_wheel_move), and touch never emits `wheel`. Without this a
+	// pane is frozen on a phone: the only handle is a 5-logical-pixel
+	// scrollbar thumb, far under Apple's 44pt minimum touch target.
+	//
+	// A one-finger drag is therefore translated into wheel deltas, so every
+	// existing scroll consumer works unchanged and no engine code is touched.
+	// Mouse and pen input keep the original press/move/release path.
+
+	// Movement under this distance is still a tap. Apple's guidance and the
+	// common browser default are both around 8 CSS px: small enough that a
+	// deliberate drag latches almost immediately, large enough to absorb the
+	// finger roll that happens during an ordinary tap.
+	const TOUCH_DRAG_SLOP_PX = 8;
+	// pane_begin scrolls by `get_wheel_move(frame) * ui_frame_sc(frame, 24)`,
+	// so one wheel notch moves 24 logical pixels. Dividing the drag distance
+	// by the same 24 makes the content track the finger 1:1.
+	const TOUCH_WHEEL_PIXELS_PER_NOTCH = 24;
+	// Bounded per Tiger Style: a pointer whose up/cancel never arrives (the
+	// browser can drop them when a gesture is stolen by the OS) must not
+	// accumulate. Ten simultaneous touches is already beyond any real hand.
+	const TOUCH_POINTERS_MAX = 10;
+
 	let detachCurrent = null;
 
 	function attach(canvasId, wmi) {
@@ -51,6 +75,8 @@
 		const listeners = [];
 		const pressedKeys = new Set();
 		const pressedButtons = new Set();
+		// pointerId -> { startX, startY, lastY, button, panning }
+		const touches = new Map();
 		const listen = (target, type, handler, options) => {
 			target.addEventListener(type, handler, options);
 			listeners.push([target, type, handler, options]);
