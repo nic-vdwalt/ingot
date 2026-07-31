@@ -548,3 +548,53 @@ draw_pigment_block :: proc(frame: ^Ui_Frame, rect: Rectangle, pigment: Color) {
 		pale,
 	)
 }
+
+// CHALK_STROKES is how many strokes a highlight lays along a lit edge. Three
+// gives a falloff without the cost scaling with the surface: a highlight on a
+// full-width card costs exactly what one on a chip does.
+CHALK_STROKES :: 3
+
+// draw_chalk_highlight lays white gouache along the lit edge of a surface.
+//
+// This is the counterpart to draw_shadow_hard, and together they are why toned
+// paper exists as a medium. A white ground can only be worked *darker*, so a
+// form is built entirely from shadow. A toned ground can be worked in both
+// directions - ink below it, chalk above it - which is how a sheet of kraft
+// carries a lit edge and a cast shadow at the same time.
+//
+// Ignoring the light direction is what made the first toned palettes look like
+// dimmed light themes: they were worked only darker, so the ground had to stay
+// pale for the ink to have anywhere to go.
+//
+// A palette without chalk (every screen palette) zeroes the colour and this
+// returns without drawing, matching how every other material opts out.
+draw_chalk_highlight :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius) {
+	assert(frame != nil, "draw_chalk_highlight: nil frame")
+	assert(rect.width > 0 && rect.height > 0, "draw_chalk_highlight: empty rect")
+	base := ui_frame_theme(frame).chalk
+	if base.a == 0 do return
+
+	thickness := border_pixels(frame, .Hairline)
+	// The highlight is inset past the corner radius. Backend clips do not
+	// nest, so a stroke running the full width would overhang a rounded corner
+	// rather than following it - the same constraint btn_gloss works around.
+	inset := radius_pixels(frame, radius, min(rect.width, rect.height))
+	span := rect.width - inset * 2
+	if span <= 0 do return
+
+	for index in 0 ..< CHALK_STROKES {
+		// Each stroke sits a little lower and fades, so the edge reads as a
+		// soft lit band rather than as a drawn line.
+		fade := f32(CHALK_STROKES - index) / f32(CHALK_STROKES)
+		alpha := u8(f32(base.a) * fade * 0.5)
+		if alpha == 0 do continue
+		y := rect.y + thickness * f32(index)
+		draw_line_ex(
+			frame,
+			{rect.x + inset, y},
+			{rect.x + inset + span, y},
+			thickness,
+			Color{base.r, base.g, base.b, alpha},
+		)
+	}
+}

@@ -58,13 +58,23 @@ compatibility, while minor releases may break it. See the
   `draw_hand_underline`, each bounded by a named constant derived from the
   paint budget.
 - `THEME_SKETCH_WARM` and `THEME_SKETCH_GREY` (`theme_sketch_warm` /
-  `theme_sketch_grey`): toned sketchbook stock - warm kraft and cool grey -
-  carrying saturated artist pigments (ultramarine, vermilion, viridian, yellow
-  ochre, burnt sienna). Both clear full WCAG AA (4.5:1) across every reading
-  ink and surface, which the existing dark and light palettes do not. The
-  pigments are darkened from their true hues because toned ground compresses
-  contrast from both directions: vermilion at full saturation measures 2.4:1
-  on kraft.
+  `theme_sketch_grey`): toned sketchbook stock - kraft tan (190,158,116) and
+  slate blue-grey (150,164,168) - carrying saturated artist pigments. Both
+  clear full WCAG AA (4.5:1) across every reading ink and surface, which the
+  existing dark and light palettes do not.
+- `Pigment` enum and `Theme.pigments`: a paint table separate from the `fg_*`
+  text inks, resolved by `theme_pigment` with a fallback to the matching ink so
+  pigment-aware widgets need no branch on palettes that carry no paint.
+  Pigment and ink were originally the same values, which made every pigment
+  inherit a text role's duty to clear AA against the ground - and since the
+  lightest pigment then dictated how light the paper could be, yellow ochre
+  held the grounds two steps paler than real toned stock. Paint carries no
+  text, so it is bound by no text rule; splitting the two is what let the
+  grounds be properly toned.
+- `Theme.chalk` and `draw_chalk_highlight`: the light direction. A white ground
+  can only be worked darker, so a form is built entirely from shadow; a toned
+  ground is worked both ways - ink below it, chalk above it. Ignoring that is
+  why the first toned palettes read as dimmed light themes.
 - `scatter_hash` / `scatter_unit`: a pure index hash for deterministic
   scattering. Frames are event-driven, so a random generator would reshuffle
   paper grain on every unrelated redraw and break capture reproducibility.

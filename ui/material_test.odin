@@ -444,3 +444,45 @@ wash_is_a_gradient :: proc(t: ^testing.T) {
 	testing.expect_value(t, command.color_end, pigment)
 	testing.expect_value(t, command.color.r, pigment.r)
 }
+
+// The chalk highlight is fixed-cost, like every other material: a lit edge on
+// a full-width card must not cost more than one on a chip.
+@(test)
+chalk_highlight_cost_is_independent_of_size :: proc(t: ^testing.T) {
+	counts: [3]int
+	sizes := [3][2]f32{{60, 24}, {400, 200}, {1800, 900}}
+	for size, index in sizes {
+		runtime: Ui_Runtime
+		output := new(Ui_Output)
+		defer free(output)
+		frame: Ui_Frame
+		material_frame(&runtime, &frame, output, 1.0)
+		defer ui_runtime_destroy(&runtime)
+
+		ui_runtime_set_theme(&runtime, THEME_SKETCH_WARM)
+		draw_chalk_highlight(&frame, {0, 0, size[0], size[1]}, .MD)
+		ui_frame_end(&frame)
+		counts[index] = output.main.count
+	}
+	testing.expect_value(t, counts[0], counts[1])
+	testing.expect_value(t, counts[1], counts[2])
+	testing.expect_value(t, counts[0], CHALK_STROKES)
+}
+
+// Negative space: a palette with no chalk draws nothing. This is how the
+// screen palettes opt out - by zeroing the colour, not by a branch at the call
+// site - so it has to actually hold.
+@(test)
+chalk_highlight_absent_without_a_chalk_color :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	material_frame(&runtime, &frame, output, 1.0)
+	defer ui_runtime_destroy(&runtime)
+
+	ui_runtime_set_theme(&runtime, THEME_DARK)
+	draw_chalk_highlight(&frame, {0, 0, 200, 80}, .MD)
+	ui_frame_end(&frame)
+	testing.expect_value(t, output.main.count, 0)
+}

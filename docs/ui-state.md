@@ -94,6 +94,19 @@ disables an effect by zeroing its alpha rather than by a branch at the draw
 site, which is how the high-contrast theme opts out of shadows and the screen
 themes opt out of paper materials.
 
+Colour splits into two tables, and the split is load-bearing. `Ink` is text and
+must clear WCAG AA against the ground; `Pigment` is paint, carries no text, and
+stays saturated. They were once the same values, which quietly forced every
+pigment to satisfy a text-contrast bar - and since the lightest pigment then
+dictated how light the background could be, the toned palettes came out pale
+enough to look like the light theme dimmed. `theme_pigment` falls back to the
+matching ink, so a palette with no paint needs no branch at the call site.
+
+`Theme.chalk` is the light direction. A white ground can only be worked darker,
+so form is built from shadow alone; a toned ground is worked both ways, ink
+below it and chalk above. `draw_chalk_highlight` is the counterpart to
+`draw_shadow_hard`.
+
 A `Theme` also carries a `Substrate`: the page texture drawn behind content.
 `kind` selects it (`.None`, `.Ruled`, `.Grid`, `.Dots`, `.Tooth`) and
 `margin_rule` says only whether a vertical rule is drawn. Those are two fields

@@ -166,6 +166,92 @@ Theme :: struct {
 // per-frame paint budget several times over at 4K. draw_dot_grid asserts the
 // bound, and dot_grid_fits lets a caller check before asking. Tooth carries
 // its own hard count for the same reason.
+// Pigment names a paint colour: laid as an area, carrying no text.
+//
+// This is a separate table from the fg_* inks, and the separation is the whole
+// reason the sketch palettes can be properly toned.
+//
+// The pigments were originally the *same values* as the matching inks. That
+// made every pigment inherit a text role's duty to clear WCAG AA against the
+// ground - and since a swatch must pass, the lightest pigment then dictated
+// how light the paper could be. Yellow ochre, the lightest of the set, held
+// the ground two full steps paler than real toned stock. The reasoning was
+// circular and it was written into the palette as though it were a law of
+// colour rather than a consequence of one modelling choice.
+//
+// Paint carries no text, so it is bound by no text-contrast rule and can be
+// saturated. Ink carries text and must be deep enough to read. Two tables
+// because they are two jobs; sharing one value means whichever constraint is
+// stricter silently governs both.
+Pigment :: enum u8 {
+	Accent,
+	Danger,
+	Success,
+	Tool,
+	Earth,
+	Leaf,
+}
+
+// pigment_ink pairs each pigment with the ink that names the same idea.
+//
+// Exposed so the pairing is iterable: the invariant "a pigment is at least as
+// saturated as its ink" is then a loop over the enum rather than six
+// hand-written assertions that a seventh pigment would silently escape.
+pigment_ink :: proc(pigment: Pigment) -> Ink {
+	switch pigment {
+	case .Accent:
+		return .Accent
+	case .Danger:
+		return .Danger
+	case .Success:
+		return .Success
+	case .Tool:
+		return .Tool
+	case .Earth:
+		return .Diff_Remove
+	case .Leaf:
+		return .Assistant
+	}
+	return .Primary
+}
+
+// theme_pigment resolves a pigment against a palette, falling back to the
+// matching ink when the palette carries no paint.
+//
+// The fallback is what lets a pigment-aware widget draw on a screen palette
+// without a branch at every call site: THEME_DARK has no pigments, so a
+// pigment block there is simply drawn in the corresponding ink.
+theme_pigment :: proc(style: ^Theme, pigment: Pigment) -> Color {
+	assert(style != nil, "theme_pigment: nil theme")
+	// The switch is not decoration: the lookup is total over the enum, so a
+	// range assertion would be the tautology TIGER_STYLE.md forbids by name,
+	// and switching keeps the totality visible to the compiler instead - a
+	// pigment added without a case here is a build error rather than a silent
+	// zero. The assertion gate reaches the same conclusion from the other
+	// direction: it wants len()/cap() evidence, which an enum-indexed table
+	// has no way to supply.
+	color: Color
+	switch pigment {
+	case .Accent:
+		color = style.pigments[Pigment.Accent]
+	case .Danger:
+		color = style.pigments[Pigment.Danger]
+	case .Success:
+		color = style.pigments[Pigment.Success]
+	case .Tool:
+		color = style.pigments[Pigment.Tool]
+	case .Earth:
+		color = style.pigments[Pigment.Earth]
+	case .Leaf:
+		color = style.pigments[Pigment.Leaf]
+	}
+	// A palette may leave a pigment unset; the caller must never receive a
+	// transparent colour. That is the contract worth asserting.
+	if color.a == 0 do color = theme_ink(style, pigment_ink(pigment))
+	assert(color.a > 0, "theme_pigment: resolved a fully transparent pigment")
+	return color
+}
+
 Substrate_Kind :: enum u8 {
 	None,
 	Ruled,
@@ -322,6 +408,7 @@ THEME_DARK :: Theme {
 	paper_rule = Color{0, 0, 0, 0},
 	paper_tooth = Color{0, 0, 0, 0},
 	graphite = Color{0, 0, 0, 0},
+	chalk = Color{0, 0, 0, 0},
 	highlighter = Color{0, 0, 0, 0},
 	tape_color = Color{0, 0, 0, 0},
 	ink_faded = Color{150, 150, 160, 255},
@@ -415,6 +502,7 @@ THEME_LIGHT :: Theme {
 	paper_rule = Color{0, 0, 0, 0},
 	paper_tooth = Color{0, 0, 0, 0},
 	graphite = Color{0, 0, 0, 0},
+	chalk = Color{0, 0, 0, 0},
 	highlighter = Color{0, 0, 0, 0},
 	tape_color = Color{0, 0, 0, 0},
 	ink_faded = Color{130, 130, 140, 255},
@@ -516,6 +604,7 @@ THEME_HIGH_CONTRAST :: Theme {
 	paper_rule = Color{0, 0, 0, 0},
 	paper_tooth = Color{0, 0, 0, 0},
 	graphite = Color{0, 0, 0, 0},
+	chalk = Color{0, 0, 0, 0},
 	highlighter = Color{0, 0, 0, 0},
 	tape_color = Color{0, 0, 0, 0},
 	ink_faded = Color{200, 200, 200, 255},

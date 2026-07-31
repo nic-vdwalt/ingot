@@ -402,3 +402,92 @@ sketch_palette_audit :: proc(t: ^testing.T) {
 		)
 	}
 }
+
+// The pigment/ink split, checked as an invariant rather than by inspection.
+//
+// A pigment must be more saturated than the ink of the same name. If the two
+// ever converge, the split has been silently undone - and the consequence is
+// not cosmetic: a pigment doing text duty inherits the AA bar, which is
+// exactly what forced the ground pale enough to look like the light theme.
+// Iterating the enum means a seventh pigment cannot escape the check.
+@(test)
+sketch_pigments_outrank_their_inks :: proc(t: ^testing.T) {
+	for th in sketch_themes() {
+		style := th
+		for pigment in Pigment {
+			paint := theme_pigment(&style, pigment)
+			ink := theme_ink(&style, pigment_ink(pigment))
+			paint_chroma := color_chroma(paint)
+			ink_chroma := color_chroma(ink)
+			testing.expectf(
+				t,
+				paint_chroma > ink_chroma,
+				"pigment %v has chroma %d but its ink has %d: the paint/text split has collapsed",
+				pigment,
+				paint_chroma,
+				ink_chroma,
+			)
+		}
+	}
+}
+
+// Every pigment must be present on a sketch palette. A zeroed entry falls back
+// to its ink, which is correct on a screen palette and a silent downgrade
+// here - the study would render deep text colours where paint was intended.
+@(test)
+sketch_palettes_carry_every_pigment :: proc(t: ^testing.T) {
+	for th in sketch_themes() {
+		style := th
+		for pigment in Pigment {
+			testing.expectf(
+				t,
+				style.pigments[pigment].a > 0,
+				"sketch palette is missing pigment %v",
+				pigment,
+			)
+		}
+	}
+}
+
+// Screen palettes carry no pigments, and must fall back cleanly rather than
+// resolving to something transparent.
+@(test)
+screen_palettes_fall_back_to_ink :: proc(t: ^testing.T) {
+	for th in builtin_themes() {
+		style := th
+		for pigment in Pigment {
+			testing.expect(t, style.pigments[pigment].a == 0)
+			resolved := theme_pigment(&style, pigment)
+			testing.expect(t, resolved.a > 0)
+			testing.expect_value(t, resolved, theme_ink(&style, pigment_ink(pigment)))
+		}
+	}
+}
+
+// Chalk is the light direction, and it only means anything if it is genuinely
+// lighter than the ground it sits on.
+//
+// It is deliberately NOT held to a text-contrast bar on these mid grounds: it
+// measures around 2.3:1 there, which is a lit edge rather than something to
+// read. Asserting AA for it would be asserting the wrong contract and would
+// force either a darker ground or a colour that is no longer chalk.
+@(test)
+sketch_chalk_is_the_light_direction :: proc(t: ^testing.T) {
+	for th in sketch_themes() {
+		style := th
+		testing.expect(t, style.chalk.a > 0)
+		testing.expectf(
+			t,
+			relative_luminance(style.chalk) > relative_luminance(style.bg_color),
+			"chalk %v is not lighter than the ground %v: it cannot be a highlight",
+			style.chalk,
+			style.bg_color,
+		)
+		// And ink works the other way, so the ground is genuinely worked from
+		// both sides rather than only darkened.
+		testing.expect(
+			t,
+			relative_luminance(style.fg_primary) < relative_luminance(style.bg_color),
+		)
+	}
+}
