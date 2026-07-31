@@ -1296,7 +1296,7 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 				sx,
 				line_y + font_size + ui_frame_sc(ctx.frame, 1),
 				sw,
-				SPELL_SQUIGGLE_COLOR,
+				ui_frame_theme(ctx.frame).spell_error,
 			)
 		}
 		render_idx += 1

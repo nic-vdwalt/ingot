@@ -53,6 +53,47 @@ keep `Button_State`, `Slider_State`, `Input_Box`, menu state, and scrollbar stat
 in the component that draws them. Stable IDs identify focus targets; they do not
 own widget state.
 
+## Design tokens
+
+Visual decisions resolve through named tokens rather than being made at each
+call site. There are three families, and between them they cover every
+question a widget can ask about appearance:
+
+| Question | Token | Resolver |
+| --- | --- | --- |
+| How large is this text? | `Text_Role` | `text_role_size` |
+| What color is this text? | `Ink` | `text_ink` / `theme_ink` |
+| How much room between things? | `Space` | `space_px` |
+| What kind of filled region is this? | `Surface` | `surface_colors` |
+| What is the user doing to it? | `Visual_State` | `surface_colors` |
+| How round are its corners? | `Radius` | `radius_ratio` / `radius_pixels` |
+| How thick is its border? | `Border` | `border_pixels` |
+| How far does it float? | `Elevation` | `elevation_offset` |
+| How translucent is this overlay? | `Tint` | `tint_alpha` / `color_tinted` |
+
+`draw_surface` composes the surface tokens into a single fill, border and
+shadow call. Prefer it over assembling `draw_rectangle_rounded` and
+`draw_rectangle_rounded_lines_ex` by hand: two widgets that compose their own
+surfaces will eventually disagree about one of the four properties, which is
+exactly how seven mutually incompatible corner radii accumulated.
+
+Two rules follow from this, and both are enforced rather than advisory:
+
+- **Never pass a raw number where a token exists.** A literal border width is
+  a DPI bug waiting to happen - `border_pixels` is the one place scaling is
+  applied, so a bare `1` is a border that stays one physical pixel while
+  everything around it doubles.
+- **Never resolve a color by arithmetic.** Lightening a hover or darkening a
+  press cannot be right for both a light and a dark palette; add a palette
+  role instead, as `surface_pressed` does.
+
+Palettes are values, not code: `THEME_DARK`, `THEME_LIGHT`,
+`THEME_HIGH_CONTRAST`, `THEME_PAPER`, and `THEME_PAPER_NIGHT` are plain
+`Theme` structs swapped at runtime by `ui_runtime_set_theme`. A palette
+disables an effect by zeroing its alpha rather than by a branch at the draw
+site, which is how the high-contrast theme opts out of shadows and the screen
+themes opt out of paper materials.
+
 Ingot has no implicit active runtime or frame. Geometry-level widgets receive a
 `^Ui_Frame`; facade widgets forward the frame attached by `begin`.
 Text, wrap, and spell helpers receive their owning system explicitly. A host

@@ -45,6 +45,7 @@ Section :: enum {
 	Layout,
 	Overlay,
 	Stress,
+	Theme,
 }
 
 SECTION_NAMES := [Section]string {
@@ -56,6 +57,7 @@ SECTION_NAMES := [Section]string {
 	.Layout   = "Layout",
 	.Overlay  = "Overlay",
 	.Stress   = "Stress",
+	.Theme    = "Theme",
 }
 
 SECTION_LAYERS := [Section]string {
@@ -67,6 +69,7 @@ SECTION_LAYERS := [Section]string {
 	.Layout   = "APPLICATION-OWNED GEOMETRY",
 	.Overlay  = "EXPLICIT LIFECYCLE",
 	.Stress   = "APPLICATION-OWNED GEOMETRY",
+	.Theme    = "DESIGN TOKENS",
 }
 
 SECTION_AXES := [Section]string {
@@ -78,6 +81,7 @@ SECTION_AXES := [Section]string {
 	.Layout   = "application owns geometry",
 	.Overlay  = "application owns lifecycle",
 	.Stress   = "application owns geometry",
+	.Theme    = "palette and token resolution",
 }
 
 NAV_W :: 170
@@ -227,7 +231,6 @@ main :: proc() {
 				title = "ingot widget gallery",
 				target_fps = 60,
 				event_waiting = !SMOKE,
-				clear_color = {24, 26, 32, 255},
 				session = {semantics_enabled = true},
 			},
 			{frame = gallery_frame, shutdown = shutdown},
@@ -453,8 +456,6 @@ apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
 		ui.theme_high_contrast() if high_contrast else (ui.theme_dark() if dark else ui.theme_light())
 	t.reduced_motion = reduced_motion
 	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app), t)
-	app.config.clear_color = ui_gfx.color_to_gfx(t.bg_app)
-	app.config.clear_color.a = 255
 	if frame != nil do ui.request_redraw(frame)
 }
 
@@ -498,6 +499,8 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32, narrow: bool) {
 		end_y = draw_overlay_demo(frame, cx, y, cw)
 	case .Stress:
 		end_y = draw_stress(frame, cx, y, cw)
+	case .Theme:
+		end_y = draw_theme_section(frame, cx, y, cw)
 	}
 	ui.pane_end(frame, &content_pane, pane_rect, end_y, pad = 14)
 }

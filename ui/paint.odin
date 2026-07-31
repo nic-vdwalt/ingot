@@ -32,6 +32,20 @@ PAINT_CLIP_CAP :: 64
 #assert(PAINT_COMMAND_CAP >= 4096)
 #assert(PAINT_TEXT_CAP >= 16384)
 
+// The measured 4K peak from the table above, rounded up to a power of two.
+// Named because "how much room is left" is a question every new whole-viewport
+// effect has to answer, and answering it against PAINT_COMMAND_CAP overstates
+// the budget by everything ordinary widgets already spend.
+PAINT_COMMANDS_PEAK_4K :: 2048
+
+// What a new per-frame decoration may spend at 4K before an ordinary frame
+// starts dropping commands. Decorative subsystems bound themselves against
+// this rather than against the raw cap, so raising the cap raises their
+// allowance automatically, and lowering it fails the build at compile time
+// instead of silently degrading a frame at 4K.
+PAINT_COMMANDS_HEADROOM :: PAINT_COMMAND_CAP - PAINT_COMMANDS_PEAK_4K
+#assert(PAINT_COMMANDS_HEADROOM > 0)
+
 Paint_Channel :: enum u8 {
 	Main,
 	Overlay,

@@ -21,7 +21,6 @@ App_Config :: struct {
 	flags:         gfx.ConfigFlags,
 	target_fps:    i32,
 	event_waiting: bool,
-	clear_color:   gfx.Color,
 	session:       Session_Config,
 }
 
@@ -81,7 +80,7 @@ app_frame :: proc(app: ^App) -> bool {
 	gfx_frame, acquired := gfx.begin_frame()
 	if !acquired do return false
 	frame := session_begin_frame_context(&app.session, &gfx_frame)
-	gfx.clear_frame(&gfx_frame, app.config.clear_color)
+	gfx.clear_frame(&gfx_frame, app_clear_color(app))
 	if app.callbacks.ui != nil {
 		app_ui_begin(app, frame, &app.form)
 		app.callbacks.ui(app, &app.form, app.userdata)
@@ -147,4 +146,25 @@ app_ui_begin :: proc(app: ^App, frame: ^ui.Ui_Frame, u: ^ui.Ui, gap: ui.Space = 
 app_ui_runtime :: proc(app: ^App) -> ^ui.Ui_Runtime {
 	assert(app != nil && app.state != .Empty, "app_ui_runtime: invalid app")
 	return session_runtime(&app.session)
+}
+
+// app_clear_color derives the window clear color from the active theme.
+//
+// It is derived rather than stored. App_Config used to carry a clear_color
+// field, which made the window background a *copy* of theme.bg_app - and a
+// copy that every theme switch had to remember to update. One demo forgot:
+// chart_demo swapped to the light palette and kept a dark window, because
+// nothing tied the two together. Deriving here means the window cannot
+// disagree with the interface drawn on it, and deletes the six hardcoded
+// literals and two hand-rolled sync blocks that existed to paper over the gap.
+//
+// The alpha is forced opaque because bg_app may be translucent on platforms
+// with a vibrancy backdrop, and a translucent *clear* would accumulate the
+// previous frame rather than replace it.
+app_clear_color :: proc(app: ^App) -> gfx.Color {
+	assert(app != nil && app.state != .Empty, "app_clear_color: invalid app")
+	background := ui.ui_runtime_theme(app_ui_runtime(app)).bg_app
+	color := color_to_gfx(background)
+	color.a = 255
+	return color
 }

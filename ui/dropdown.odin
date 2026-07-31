@@ -86,7 +86,7 @@ dropdown_at :: proc(
 	border :=
 		style.fg_accent if st.menu.open || it.hovered || focus_opt_focused(focus) else style.border_color
 	draw_rectangle_rec(frame, rrect, bg)
-	draw_rectangle_lines_ex(frame, rrect, 1, border)
+	draw_rectangle_lines_ex(frame, rrect, border_pixels(frame, .Hairline), border)
 	chev :: "\u25BE"
 	chev_size := text_role_size(frame, .Label)
 	chev_w := text_width(frame, chev, .Label)

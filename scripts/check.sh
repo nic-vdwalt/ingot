@@ -42,6 +42,16 @@ echo "== UI API layers =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_ui_api_layers_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_ui_api_layers.py" "$root"
 
+# Design tokens: raw color literals, unscaled border widths, and numeric corner
+# radii in ui/. Each is invisible in review - a bare `1` for a border width
+# looks correct until you know the surrounding convention - and each produced a
+# defect that shipped. Monotonic baseline: recorded violations may only shrink.
+echo "== UI design tokens =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_theme_tokens_test.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_theme_tokens.py" \
+	--baseline "$root/scripts/theme_token_baseline.json" \
+	"$root"
+
 for pkg in gfx ui ui_gfx term prefs net sys pty testx; do
 	echo "== checking $pkg =="
 	# shellcheck disable=SC2086
