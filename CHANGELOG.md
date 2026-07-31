@@ -88,9 +88,19 @@ compatibility, while minor releases may break it. See the
   own geometry and has no `Ui` to ask, so it previously had to re-declare the
   spacing scale locally; `space_px` now delegates here so there is one table.
 - Gallery: the theme control cycles Dark, Light, Sketch Warm and Sketch Grey
-  instead of toggling a boolean, so both toned palettes are reachable. Before
-  this the paper materials had no callers at all - the aesthetic existed in the
-  library but could not be seen from any application.
+  instead of toggling a boolean, so both toned palettes are reachable. High
+  contrast joined that same cycle, replacing a separate `high_contrast` boolean
+  and its dedicated Contrast button: the two flags spanned eight combinations
+  but only five were reachable, because selecting high contrast had to
+  force-clear the palette - applying that palette discards the other choice
+  entirely, so they were one decision modelled as two. As an enum the
+  exclusivity is structural and the force-clear is gone. Reduced motion stays a
+  separate control because it genuinely is orthogonal: it applies to every
+  palette, high contrast included. Gallery smoke now derives its theme steps
+  from the enum rather than a hand-written table, so a new palette is covered
+  without anyone remembering to extend it. Before this work the paper materials
+  had no callers at all - the aesthetic existed in the library but could not be
+  seen from any application.
 - Gallery: the `Theme` section is a sketchbook colour study - toned ground with
   paper grain, overlapping pigment washes, and measurements hung in a reserved
   margin column. `Selected` renders as a highlighter swipe and `Pressed` as a

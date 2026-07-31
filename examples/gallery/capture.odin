@@ -130,7 +130,6 @@ when CAPTURE {
 			shot := script[capture_step_index]
 			section = shot.section
 			palette = shot.palette
-			high_contrast = false
 			// Stills freeze motion so reruns are byte-identical (see the
 			// determinism note at the top of this file). The sequence pass wants
 			// the opposite: it is a recording, so it keeps spinners, eased
