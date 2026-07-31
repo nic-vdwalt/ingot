@@ -40,27 +40,35 @@ SWATCH_W :: CHIP_W * 2
 SPECIMEN :: "Sphinx of black quartz, judge my vow"
 
 // Pigment_Study names one entry in the opening colour study. The pigments are
-// the palette's own accent roles rather than a separate table, so a retheme
-// repaints the study instead of leaving it showing stale colours.
+// the palette's own roles rather than a separate table, so a retheme repaints
+// the study instead of leaving it showing stale colours.
 //
-// The *label* therefore has to name the role, not the pigment. On the sketch
-// palettes Ink.Accent is ultramarine, but on high contrast it is gold, and a
-// block captioned "ultramarine" while rendering yellow is simply wrong. The
-// pigment name is kept as a secondary note: it describes the sketch palettes
-// rather than whatever is currently on screen.
-Pigment_Study :: struct {
-	role:    string,
-	pigment: string,
-	ink:     ui.Ink,
+// The blocks read the *pigment* table, not the ink table. That is the whole
+// point of the split: pigments are paint and stay saturated, while the labels
+// beside them are ink and stay legible. Reading inks here is what tied the
+// study to the text-contrast bar and forced the grounds pale.
+//
+// The label names the role rather than the pigment, because the role is true
+// on every palette. On the sketch palettes Pigment.Accent is ultramarine; on
+// high contrast there is no pigment table at all and theme_pigment falls back
+// to gold. A block captioned "ultramarine" while rendering yellow is simply
+// wrong, so the pigment names are a secondary row shown only where they apply.
+PIGMENT_ROLES := [ui.Pigment]string {
+	.Accent  = "accent",
+	.Danger  = "danger",
+	.Success = "success",
+	.Tool    = "tool",
+	.Earth   = "earth",
+	.Leaf    = "leaf",
 }
 
-PIGMENT_STUDIES := [?]Pigment_Study {
-	{"accent", "ultramarine", .Accent},
-	{"danger", "vermilion", .Danger},
-	{"success", "viridian", .Success},
-	{"tool", "yellow ochre", .Tool},
-	{"removed", "burnt sienna", .Diff_Remove},
-	{"assistant", "sap green", .Assistant},
+PIGMENT_NAMES := [ui.Pigment]string {
+	.Accent  = "ultramarine",
+	.Danger  = "vermilion",
+	.Success = "viridian",
+	.Tool    = "yellow ochre",
+	.Earth   = "burnt sienna",
+	.Leaf    = "sap green",
 }
 
 // Page is the writing cursor: a physical-pixel position that flows downward.
@@ -203,7 +211,7 @@ draw_pigment_studies :: proc(page: ^Page) {
 
 	body := page_body(page)
 	available := page.w - page.indent
-	count := i32(len(PIGMENT_STUDIES))
+	count := i32(len(ui.Pigment))
 	// Blocks are wider than their pitch so they overlap, which is where the
 	// bleed produces its darker seam. That means the last block extends past
 	// the last pitch step, so the pitch is solved from the *total* width the
@@ -220,9 +228,12 @@ draw_pigment_studies :: proc(page: ^Page) {
 	band_h := page.line * 4
 	band := page_advance(page, band_h + page.line)
 
-	for study, index in PIGMENT_STUDIES {
+	style := ui.ui_frame_theme(page.frame)
+	for pigment_role, index in ui.Pigment {
 		i := u32(index)
-		pigment := ui.text_ink(page.frame, study.ink)
+		// The pigment table, not the ink table. Paint stays saturated; the
+		// labels below stay legible because they are ink.
+		pigment := ui.theme_pigment(style, pigment_role)
 		// Bounded jitter: enough that the row is not a ruler, small enough
 		// that nothing escapes its slot or collides with the label below.
 		wobble_x := (ui.scatter_unit(i, 0) - 0.5) * f32(page.line) * 0.5
@@ -236,6 +247,10 @@ draw_pigment_studies :: proc(page: ^Page) {
 			height,
 		}
 		ui.draw_pigment_block(page.frame, block, pigment)
+		// One block carries a chalk highlight, so the two-direction working
+		// that toned paper exists for is visible in the exhibit that is about
+		// colour. Only one: a lit edge on every block reads as a gloss.
+		if index == 0 do ui.draw_chalk_highlight(page.frame, block, .None)
 	}
 
 	// Names sit under the band rather than on the paint: a label on a wash is
@@ -246,10 +261,10 @@ draw_pigment_studies :: proc(page: ^Page) {
 	// since they describe the sketch palettes rather than the swatches on
 	// screen - on high contrast these same roles resolve to gold and white.
 	label_row := page_rows(page, 1)
-	for study, index in PIGMENT_STUDIES {
+	for pigment_role, index in ui.Pigment {
 		ui.text_truncated(
 			page.frame,
-			study.role,
+			PIGMENT_ROLES[pigment_role],
 			body + i32(index) * pitch,
 			label_row.y,
 			pitch - ui.ui_frame_sc(page.frame, 4),
@@ -263,10 +278,10 @@ draw_pigment_studies :: proc(page: ^Page) {
 	// they would be a lie: Ink.Accent is gold there, not ultramarine.
 	if ui.ui_frame_theme(page.frame).substrate.kind != .None {
 		pigment_row := page_rows(page, 1)
-		for study, index in PIGMENT_STUDIES {
+		for pigment_role, index in ui.Pigment {
 			ui.text_truncated(
 				page.frame,
-				study.pigment,
+				PIGMENT_NAMES[pigment_role],
 				body + i32(index) * pitch,
 				pigment_row.y,
 				pitch - ui.ui_frame_sc(page.frame, 4),
@@ -510,6 +525,10 @@ draw_shape_notes :: proc(page: ^Page) {
 		f32(row.h - ui.ui_frame_sc(page.frame, 8)),
 	}
 	ui.draw_surface(page.frame, card, .Card, .Rest, .MD, .Hairline, .Lifted)
+	// The lit edge. draw_surface already laid the cast shadow, so the card is
+	// now worked from both directions - which is what a raised sheet on toned
+	// stock actually looks like, and what a white ground cannot express.
+	ui.draw_chalk_highlight(page.frame, card, .MD)
 	// A card is a smaller sheet: it gets its own grain, which is the one place
 	// a bounded texture is affordable.
 	if theme.paper_tooth.a > 0 {
@@ -519,7 +538,10 @@ draw_shape_notes :: proc(page: ^Page) {
 		page.frame,
 		card,
 		f32(ui.ui_frame_sc(page.frame, 14)),
-		theme.bg_app,
+		// The folded flap catches the light, so it takes chalk rather than
+		// borrowing the app background. On a screen palette chalk is zeroed
+		// and the fold falls back to the ground, as before.
+		theme.chalk if theme.chalk.a > 0 else theme.bg_app,
 		theme.border_subtle,
 	)
 	ui.text(

@@ -2,231 +2,269 @@
 //
 // Sketchbook palettes: toned drawing stock with saturated artist pigments.
 //
-// These replace an earlier pair of cream "notebook" palettes that read as
-// stationery rather than as an artist's book. The difference is what the paper
-// is *for*. Writing paper carries rules because text has to sit on something;
-// drawing paper is blank and toned, and shows its grain instead. Everything
-// here follows from that: no rules, no margin line, a warm ground rather than
-// a white one, and accents drawn from pigment rather than from UI convention.
+// Writing paper carries rules because text has to sit on something; drawing
+// paper is blank and toned, and shows its grain instead. Everything here
+// follows from that: no rules, no margin line, a toned ground rather than a
+// white one, and colour drawn from pigment rather than from UI convention.
 //
-// Four rules shaped the values, and the first three are checked by tests:
+// Five rules shaped the values, and the first four are checked by tests in
+// sketch_test.odin:
 //
-//   - Every reading pair clears full WCAG AA (4.5:1). Toned stock compresses
-//     contrast from both directions - it is neither white nor dark - so the
-//     values were computed against every surface in the palette before being
-//     written here, not chosen by eye and adjusted afterwards.
+//   - Every reading pair clears full WCAG AA (4.5:1), computed against every
+//     surface in the palette before being written here rather than chosen by
+//     eye and adjusted afterwards.
 //
-//   - The pigments are darkened from their true hues. Vermilion at full
-//     saturation is 2.4:1 on kraft; the version here is 4.9:1. That is the
-//     honest cost of putting saturated colour on a mid-toned ground, and it
-//     is why "use the real pigment value" is not an option for anything that
-//     carries text.
+//   - The ground is genuinely toned: mid-value, carrying a real cast, and far
+//     enough from both screen palettes that it cannot read as one of them
+//     dimmed or lifted.
 //
-//   - Interaction states are palette roles, never arithmetic. A press on warm
-//     stock darkens toward the tone; on grey it darkens toward neutral. No
-//     single lighten/darken rule gets both right.
+//   - Pigment and ink are separate. Ink is text and must clear AA; pigment is
+//     paint and is bound by no text rule, so it stays saturated. This is the
+//     split that lets the ground be properly toned - see the Pigment enum in
+//     theme.odin for the circular constraint it replaced.
+//
+//   - Interaction states are palette roles, never arithmetic. A press on kraft
+//     darkens toward the tone; on grey it darkens toward slate. No single
+//     lighten/darken rule gets both right.
 //
 //   - Surfaces are opaque. The macOS vibrancy backdrop showing through toned
 //     paper turns kraft into mud.
+//
+// The inks are deep - deeper than the pigments they are named for. That is the
+// honest cost of a toned ground: a mid-value paper compresses contrast from
+// both directions, so anything carrying text has to be pushed well below it.
+// The saturation lives in the pigment table instead, where it is laid as paint
+// and has no text to carry.
 package ui
 
-// THEME_SKETCH_WARM is toned kraft stock: warm tan ground, graphite line, and
-// pigments that would sit in a watercolour box.
+// THEME_SKETCH_WARM is toned kraft stock: warm tan ground, deep ink, and a
+// pigment box of saturated colour.
 //
-// The ground is the light end of the toned range. True mid-kraft carries
-// graphite well enough but strangles the coloured pigments - ochre lands at
-// 3.5:1 there, and ochre is the lightest pigment in the set, so it sets the
-// floor for how dark the paper may be.
+// The ground measures chroma 74 and luminance 0.367 - close to real Canson
+// kraft (183,150,105). An earlier version of this palette sat at chroma 44 and
+// luminance 0.680, which measured only 1.32:1 from the light theme and read as
+// light mode dimmed. It was pale because the pigments were doubling as text
+// inks and the lightest of them, yellow ochre, could not clear AA on anything
+// darker. Splitting pigment from ink removed that constraint entirely.
 THEME_SKETCH_WARM :: Theme {
-	bg_app = Color{230, 213, 186, 255},
-	bg_chat = Color{230, 213, 186, 255},
-	bg_panel = Color{222, 203, 173, 255},
-	bg_app_windowed = Color{230, 213, 186, 255},
-	bg_chat_windowed = Color{230, 213, 186, 255},
-	bg_panel_windowed = Color{222, 203, 173, 255},
-	bg_app_fullscreen = Color{230, 213, 186, 255},
-	bg_chat_fullscreen = Color{230, 213, 186, 255},
-	bg_panel_fullscreen = Color{222, 203, 173, 255},
-	bg_color = Color{230, 213, 186, 255},
-	bg_secondary = Color{222, 203, 173, 255},
-	bg_active = Color{206, 183, 150, 255},
-	bg_hover = Color{220, 200, 168, 255},
-	bg_input = Color{240, 228, 208, 255},
-	bg_code = Color{219, 199, 169, 255},
-	fg_primary = Color{48, 44, 40, 255}, // graphite
-	fg_secondary = Color{92, 84, 72, 255},
-	fg_accent = Color{26, 42, 120, 255}, // ultramarine
-	fg_user = Color{38, 52, 96, 255}, // indigo
-	fg_assistant = Color{46, 84, 36, 255}, // sap green
-	fg_error = Color{158, 38, 26, 255}, // vermilion
-	fg_success = Color{16, 86, 70, 255}, // viridian
-	fg_tool = Color{112, 62, 8, 255}, // yellow ochre
-	fg_diff_remove = Color{150, 36, 24, 255},
-	fg_diff_add = Color{20, 88, 44, 255},
-	fg_diff_gutter = Color{140, 128, 108, 255},
-	border_color = Color{176, 154, 122, 255},
-	border_subtle = Color{210, 190, 158, 255},
-	badge_color = Color{158, 38, 26, 255},
-	merge_link_color = Color{122, 58, 32, 255},
-	button_bg = Color{26, 42, 120, 255},
-	button_hover = Color{18, 30, 96, 255},
-	button_text = Color{242, 232, 214, 255},
-	bg_popup = Color{238, 224, 202, 255},
-	fg_disabled = Color{164, 150, 128, 255},
-	bg_plan_bar = Color{232, 210, 164, 255},
-	fg_plan = Color{120, 72, 10, 255},
-	fg_planning = Color{26, 42, 120, 255},
-	bg_selection = Color{242, 206, 116, 255},
-	bg_plan_title = Color{228, 204, 158, 255},
-	bg_tool_card = Color{236, 221, 198, 255},
-	bg_tool_card_hover = Color{229, 212, 186, 255},
-	fg_heading = Color{28, 26, 24, 255},
-	fg_bullet = Color{26, 42, 120, 255},
-	fg_bold = Color{20, 18, 16, 255},
-	fg_code_inline = Color{122, 58, 32, 255}, // burnt sienna
-	bg_table_header = Color{217, 197, 166, 255},
-	wave_color_a = Color{26, 42, 120, 255},
-	wave_color_b = Color{120, 146, 200, 255},
-	drop_zone_bg = Color{212, 220, 240, 235},
-	drop_zone_border = Color{26, 42, 120, 255},
-	fg_debug = Color{92, 44, 120, 255},
-	bg_debug_title = Color{224, 208, 226, 255},
-	fg_debug_changed = Color{120, 72, 10, 255},
-	fg_debug_annotation = Color{92, 84, 72, 255},
-	bg_chip = Color{214, 194, 163, 255},
-	bg_chip_hover = Color{204, 182, 148, 255},
-	bg_user_card = Color{222, 218, 236, 255},
-	border_user_card = Color{178, 172, 206, 255},
-	bg_band_error = Color{238, 208, 196, 255},
-	fg_label = Color{92, 82, 68, 255},
-	button_danger_bg = Color{158, 38, 26, 255},
-	button_danger_hover = Color{128, 28, 18, 255},
-	button_danger_fg = Color{242, 232, 214, 255},
-	button_disabled_bg = Color{218, 202, 176, 255},
-	button_pressed = Color{14, 24, 78, 255},
-	surface_pressed = Color{196, 172, 138, 255},
-	fg_accent_light = Color{40, 60, 150, 255},
-	fg_muted_dim = Color{140, 128, 108, 255},
-	modal_dim = Color{44, 34, 20, 120},
-	focus_ring = Color{26, 42, 120, 235},
+	bg_app = Color{190, 158, 116, 255},
+	bg_chat = Color{190, 158, 116, 255},
+	bg_panel = Color{179, 149, 109, 255},
+	bg_app_windowed = Color{190, 158, 116, 255},
+	bg_chat_windowed = Color{190, 158, 116, 255},
+	bg_panel_windowed = Color{179, 149, 109, 255},
+	bg_app_fullscreen = Color{190, 158, 116, 255},
+	bg_chat_fullscreen = Color{190, 158, 116, 255},
+	bg_panel_fullscreen = Color{179, 149, 109, 255},
+	bg_color = Color{190, 158, 116, 255},
+	bg_secondary = Color{179, 149, 109, 255},
+	bg_active = Color{167, 139, 102, 255},
+	bg_hover = Color{180, 150, 110, 255},
+	bg_input = Color{198, 170, 133, 255},
+	bg_code = Color{171, 142, 104, 255},
+	fg_primary = Color{38, 34, 30, 255},
+	fg_secondary = Color{48, 42, 33, 255},
+	fg_accent = Color{20, 30, 88, 255},
+	fg_user = Color{24, 36, 72, 255},
+	fg_assistant = Color{26, 48, 18, 255},
+	fg_error = Color{88, 17, 12, 255},
+	fg_success = Color{8, 48, 36, 255},
+	fg_tool = Color{64, 37, 6, 255},
+	fg_diff_remove = Color{85, 17, 12, 255},
+	fg_diff_add = Color{10, 49, 24, 255},
+	fg_diff_gutter = Color{122, 101, 74, 255},
+	border_color = Color{148, 123, 90, 255},
+	border_subtle = Color{175, 145, 107, 255},
+	badge_color = Color{88, 17, 12, 255},
+	merge_link_color = Color{69, 30, 16, 255},
+	button_bg = Color{20, 30, 88, 255},
+	button_hover = Color{14, 22, 68, 255},
+	button_text = Color{246, 241, 236, 255},
+	bg_popup = Color{195, 165, 126, 255},
+	fg_disabled = Color{133, 111, 81, 255},
+	bg_plan_bar = Color{196, 162, 106, 255},
+	fg_plan = Color{64, 37, 6, 255},
+	fg_planning = Color{20, 30, 88, 255},
+	bg_selection = Color{222, 178, 74, 255},
+	bg_plan_title = Color{188, 155, 102, 255},
+	bg_tool_card = Color{193, 163, 123, 255},
+	bg_tool_card_hover = Color{185, 154, 114, 255},
+	fg_heading = Color{22, 20, 18, 255},
+	fg_bullet = Color{20, 30, 88, 255},
+	fg_bold = Color{14, 12, 10, 255},
+	fg_code_inline = Color{69, 30, 16, 255},
+	bg_table_header = Color{177, 147, 108, 255},
+	wave_color_a = Color{20, 30, 88, 255},
+	wave_color_b = Color{50, 62, 180, 255},
+	drop_zone_bg = Color{174, 176, 206, 235},
+	drop_zone_border = Color{20, 30, 88, 255},
+	fg_debug = Color{62, 24, 82, 255},
+	bg_debug_title = Color{186, 158, 138, 255},
+	fg_debug_changed = Color{64, 37, 6, 255},
+	fg_debug_annotation = Color{48, 42, 33, 255},
+	bg_chip = Color{173, 144, 106, 255},
+	bg_chip_hover = Color{164, 136, 100, 255},
+	bg_user_card = Color{180, 160, 148, 255},
+	border_user_card = Color{150, 128, 118, 255},
+	bg_band_error = Color{196, 148, 120, 255},
+	fg_label = Color{48, 42, 33, 255},
+	button_danger_bg = Color{88, 17, 12, 255},
+	button_danger_hover = Color{66, 12, 8, 255},
+	button_danger_fg = Color{246, 241, 236, 255},
+	button_disabled_bg = Color{172, 145, 110, 255},
+	button_pressed = Color{10, 16, 52, 255},
+	surface_pressed = Color{152, 126, 93, 255},
+	fg_accent_light = Color{28, 39, 96, 255},
+	fg_muted_dim = Color{114, 95, 70, 255},
+	modal_dim = Color{40, 30, 16, 130},
+	focus_ring = Color{20, 30, 88, 235},
 	// Toned stock throws a warm, narrow shadow rather than the neutral grey a
 	// screen palette uses.
-	shadow_color = Color{92, 70, 40, 76},
-	// No gloss: a sheen is a glass cue and reads as a rendering artifact on
-	// paper.
+	shadow_color = Color{78, 56, 30, 90},
+	// No gloss: a sheen is a glass cue and reads as an artifact on paper.
 	button_primary_grad_top = Color{0, 0, 0, 0},
 	button_primary_grad_bottom = Color{0, 0, 0, 0},
 	// No rules. A sketchbook page is blank; paper_rule stays zeroed so
-	// draw_rule_lines short-circuits without needing a branch at the caller.
+	// draw_rule_lines short-circuits without a branch at the caller.
 	paper_rule = Color{0, 0, 0, 0},
-	paper_tooth = Color{176, 152, 116, 90},
-	graphite = Color{86, 78, 66, 210},
-	highlighter = Color{242, 206, 116, 255},
-	tape_color = Color{226, 214, 186, 200},
-	ink_faded = Color{128, 116, 98, 255},
-	fg_on_accent = Color{242, 232, 214, 255},
-	caption_hover = Color{214, 194, 163, 255},
-	caption_pressed = Color{200, 178, 144, 255},
-	caption_close_hover = Color{176, 44, 30, 255},
-	caption_close_pressed = Color{140, 32, 22, 255},
-	spell_error = Color{176, 44, 30, 255},
+	paper_tooth = Color{156, 130, 95, 110},
+	graphite = Color{80, 66, 49, 220},
+	// Chalk is the light direction: white gouache above the ground, where ink
+	// works below it. On this mid ground it is a highlight material and never
+	// a text colour - it measures about 2.3:1 here, which is a lit edge rather
+	// than something to read.
+	chalk = Color{246, 241, 236, 255},
+	highlighter = Color{222, 178, 74, 255},
+	tape_color = Color{206, 186, 152, 205},
+	ink_faded = Color{110, 92, 68, 255},
+	fg_on_accent = Color{246, 241, 236, 255},
+	caption_hover = Color{173, 144, 106, 255},
+	caption_pressed = Color{158, 131, 96, 255},
+	caption_close_hover = Color{146, 30, 20, 255},
+	caption_close_pressed = Color{112, 22, 15, 255},
+	spell_error = Color{146, 30, 20, 255},
+	// Pigments: saturated, because they carry no text. Each is far more
+	// chromatic than the ink of the same name, which is the invariant
+	// sketch_test.odin checks - if the two ever converge, the split has been
+	// undone and the ground will be forced pale again.
+	pigments = {
+		.Accent  = Color{50, 62, 180, 255}, // ultramarine
+		.Danger  = Color{206, 58, 42, 255}, // vermilion
+		.Success = Color{40, 120, 96, 255}, // viridian
+		.Tool    = Color{206, 132, 32, 255}, // yellow ochre
+		.Earth   = Color{160, 72, 36, 255}, // burnt sienna
+		.Leaf    = Color{96, 132, 48, 255}, // sap green
+	},
 	substrate = Substrate{kind = .Tooth, margin_rule = false},
 }
 
-// THEME_SKETCH_GREY is the cool counterpart: neutral grey toned stock, the
-// same pigment set shifted very slightly darker.
+// THEME_SKETCH_GREY is cool toned stock: a blue-grey ground with the same
+// pigment box.
 //
-// Grey stock is marginally darker in luminance than the warm ground at the
-// same apparent tone, so several pigments needed another step down to hold AA.
-// Ochre was the binding constraint - it is the lightest pigment in the set and
-// determined how light the ground had to be.
+// The cast is the point. An earlier version measured chroma 6 - dead neutral -
+// which reads as interface grey however the luminance is tuned, because the
+// eye has no colour cue to tell it this is paper. This ground carries chroma
+// 18, enough to read as slate-toned stock rather than as a dimmed screen.
+//
+// It sits slightly lighter than the warm ground (luminance 0.359 against
+// 0.367 is near-identical, but grey has no warm channel to carry luminance),
+// which leaves the deep inks room to clear AA without collapsing to black.
 THEME_SKETCH_GREY :: Theme {
-	bg_app = Color{206, 205, 200, 255},
-	bg_chat = Color{206, 205, 200, 255},
-	bg_panel = Color{197, 196, 190, 255},
-	bg_app_windowed = Color{206, 205, 200, 255},
-	bg_chat_windowed = Color{206, 205, 200, 255},
-	bg_panel_windowed = Color{197, 196, 190, 255},
-	bg_app_fullscreen = Color{206, 205, 200, 255},
-	bg_chat_fullscreen = Color{206, 205, 200, 255},
-	bg_panel_fullscreen = Color{197, 196, 190, 255},
-	bg_color = Color{206, 205, 200, 255},
-	bg_secondary = Color{197, 196, 190, 255},
-	bg_active = Color{180, 179, 173, 255},
-	bg_hover = Color{192, 191, 185, 255},
-	bg_input = Color{218, 217, 213, 255},
-	bg_code = Color{194, 193, 187, 255},
-	fg_primary = Color{42, 42, 40, 255},
-	fg_secondary = Color{78, 78, 74, 255},
-	fg_accent = Color{26, 42, 120, 255},
-	fg_user = Color{34, 48, 92, 255},
-	fg_assistant = Color{40, 76, 32, 255},
-	fg_error = Color{148, 34, 22, 255},
-	fg_success = Color{12, 74, 58, 255},
-	fg_tool = Color{98, 54, 6, 255},
-	fg_diff_remove = Color{140, 32, 20, 255},
-	fg_diff_add = Color{18, 80, 40, 255},
-	fg_diff_gutter = Color{132, 132, 126, 255},
-	border_color = Color{158, 157, 151, 255},
-	border_subtle = Color{188, 187, 181, 255},
-	badge_color = Color{148, 34, 22, 255},
-	merge_link_color = Color{108, 50, 26, 255},
-	button_bg = Color{26, 42, 120, 255},
-	button_hover = Color{18, 30, 96, 255},
-	button_text = Color{232, 231, 226, 255},
-	bg_popup = Color{215, 214, 209, 255},
-	fg_disabled = Color{156, 156, 150, 255},
-	bg_plan_bar = Color{212, 206, 184, 255},
-	fg_plan = Color{106, 64, 8, 255},
-	fg_planning = Color{26, 42, 120, 255},
-	bg_selection = Color{226, 206, 138, 255},
-	bg_plan_title = Color{206, 200, 178, 255},
-	bg_tool_card = Color{213, 212, 207, 255},
-	bg_tool_card_hover = Color{204, 203, 198, 255},
-	fg_heading = Color{24, 24, 22, 255},
-	fg_bullet = Color{26, 42, 120, 255},
-	fg_bold = Color{16, 16, 14, 255},
-	fg_code_inline = Color{108, 50, 26, 255},
-	bg_table_header = Color{193, 192, 186, 255},
-	wave_color_a = Color{26, 42, 120, 255},
-	wave_color_b = Color{112, 132, 186, 255},
-	drop_zone_bg = Color{206, 212, 232, 235},
-	drop_zone_border = Color{26, 42, 120, 255},
-	fg_debug = Color{84, 40, 112, 255},
-	bg_debug_title = Color{208, 200, 214, 255},
-	fg_debug_changed = Color{106, 64, 8, 255},
-	fg_debug_annotation = Color{78, 78, 74, 255},
-	bg_chip = Color{190, 189, 183, 255},
-	bg_chip_hover = Color{180, 179, 173, 255},
-	bg_user_card = Color{204, 206, 220, 255},
-	border_user_card = Color{164, 166, 190, 255},
-	bg_band_error = Color{218, 200, 194, 255},
-	fg_label = Color{78, 78, 74, 255},
-	button_danger_bg = Color{148, 34, 22, 255},
-	button_danger_hover = Color{120, 26, 16, 255},
-	button_danger_fg = Color{232, 231, 226, 255},
-	button_disabled_bg = Color{198, 197, 192, 255},
-	button_pressed = Color{14, 24, 78, 255},
-	surface_pressed = Color{170, 169, 163, 255},
-	fg_accent_light = Color{38, 56, 142, 255},
-	fg_muted_dim = Color{132, 132, 126, 255},
-	modal_dim = Color{24, 24, 22, 130},
-	focus_ring = Color{26, 42, 120, 235},
-	shadow_color = Color{40, 40, 38, 82},
+	bg_app = Color{150, 164, 168, 255},
+	bg_chat = Color{150, 164, 168, 255},
+	bg_panel = Color{141, 154, 158, 255},
+	bg_app_windowed = Color{150, 164, 168, 255},
+	bg_chat_windowed = Color{150, 164, 168, 255},
+	bg_panel_windowed = Color{141, 154, 158, 255},
+	bg_app_fullscreen = Color{150, 164, 168, 255},
+	bg_chat_fullscreen = Color{150, 164, 168, 255},
+	bg_panel_fullscreen = Color{141, 154, 158, 255},
+	bg_color = Color{150, 164, 168, 255},
+	bg_secondary = Color{141, 154, 158, 255},
+	bg_active = Color{132, 144, 148, 255},
+	bg_hover = Color{142, 156, 160, 255},
+	bg_input = Color{163, 175, 178, 255},
+	bg_code = Color{135, 148, 151, 255},
+	fg_primary = Color{38, 34, 30, 255},
+	fg_secondary = Color{48, 42, 33, 255},
+	fg_accent = Color{20, 30, 88, 255},
+	fg_user = Color{24, 36, 72, 255},
+	fg_assistant = Color{26, 48, 18, 255},
+	fg_error = Color{81, 16, 11, 255},
+	fg_success = Color{8, 48, 36, 255},
+	fg_tool = Color{64, 37, 6, 255},
+	fg_diff_remove = Color{85, 17, 12, 255},
+	fg_diff_add = Color{10, 49, 24, 255},
+	fg_diff_gutter = Color{96, 105, 108, 255},
+	border_color = Color{117, 128, 131, 255},
+	border_subtle = Color{138, 151, 155, 255},
+	badge_color = Color{81, 16, 11, 255},
+	merge_link_color = Color{69, 30, 16, 255},
+	button_bg = Color{20, 30, 88, 255},
+	button_hover = Color{14, 22, 68, 255},
+	button_text = Color{240, 242, 243, 255},
+	bg_popup = Color{157, 170, 174, 255},
+	fg_disabled = Color{105, 115, 118, 255},
+	bg_plan_bar = Color{164, 160, 132, 255},
+	fg_plan = Color{64, 37, 6, 255},
+	fg_planning = Color{20, 30, 88, 255},
+	bg_selection = Color{206, 186, 106, 255},
+	bg_plan_title = Color{156, 152, 126, 255},
+	bg_tool_card = Color{155, 169, 172, 255},
+	bg_tool_card_hover = Color{147, 160, 164, 255},
+	fg_heading = Color{22, 20, 18, 255},
+	fg_bullet = Color{20, 30, 88, 255},
+	fg_bold = Color{14, 12, 10, 255},
+	fg_code_inline = Color{69, 30, 16, 255},
+	bg_table_header = Color{140, 153, 156, 255},
+	wave_color_a = Color{20, 30, 88, 255},
+	wave_color_b = Color{50, 62, 180, 255},
+	drop_zone_bg = Color{158, 168, 202, 235},
+	drop_zone_border = Color{20, 30, 88, 255},
+	fg_debug = Color{62, 24, 82, 255},
+	bg_debug_title = Color{152, 156, 174, 255},
+	fg_debug_changed = Color{64, 37, 6, 255},
+	fg_debug_annotation = Color{48, 42, 33, 255},
+	bg_chip = Color{136, 149, 153, 255},
+	bg_chip_hover = Color{128, 140, 144, 255},
+	bg_user_card = Color{148, 158, 178, 255},
+	border_user_card = Color{124, 134, 156, 255},
+	bg_band_error = Color{168, 146, 144, 255},
+	fg_label = Color{48, 42, 33, 255},
+	button_danger_bg = Color{81, 16, 11, 255},
+	button_danger_hover = Color{60, 11, 7, 255},
+	button_danger_fg = Color{240, 242, 243, 255},
+	button_disabled_bg = Color{144, 157, 161, 255},
+	button_pressed = Color{10, 16, 52, 255},
+	surface_pressed = Color{120, 131, 134, 255},
+	fg_accent_light = Color{26, 36, 88, 255},
+	fg_muted_dim = Color{90, 98, 101, 255},
+	modal_dim = Color{18, 22, 24, 140},
+	focus_ring = Color{20, 30, 88, 235},
+	shadow_color = Color{30, 38, 42, 92},
 	button_primary_grad_top = Color{0, 0, 0, 0},
 	button_primary_grad_bottom = Color{0, 0, 0, 0},
 	paper_rule = Color{0, 0, 0, 0},
-	paper_tooth = Color{150, 150, 144, 92},
-	graphite = Color{78, 78, 74, 210},
-	highlighter = Color{226, 206, 138, 255},
-	tape_color = Color{212, 211, 204, 200},
-	ink_faded = Color{120, 120, 114, 255},
-	fg_on_accent = Color{232, 231, 226, 255},
-	caption_hover = Color{190, 189, 183, 255},
-	caption_pressed = Color{176, 175, 169, 255},
-	caption_close_hover = Color{166, 40, 28, 255},
-	caption_close_pressed = Color{132, 30, 20, 255},
-	spell_error = Color{166, 40, 28, 255},
+	paper_tooth = Color{123, 134, 138, 110},
+	graphite = Color{63, 69, 71, 220},
+	chalk = Color{240, 242, 243, 255},
+	highlighter = Color{206, 186, 106, 255},
+	tape_color = Color{196, 202, 204, 205},
+	ink_faded = Color{88, 96, 99, 255},
+	fg_on_accent = Color{240, 242, 243, 255},
+	caption_hover = Color{136, 149, 153, 255},
+	caption_pressed = Color{124, 136, 139, 255},
+	caption_close_hover = Color{138, 28, 19, 255},
+	caption_close_pressed = Color{104, 20, 14, 255},
+	spell_error = Color{138, 28, 19, 255},
+	pigments = {
+		.Accent = Color{50, 62, 180, 255},
+		.Danger = Color{206, 58, 42, 255},
+		.Success = Color{40, 120, 96, 255},
+		.Tool = Color{206, 132, 32, 255},
+		.Earth = Color{160, 72, 36, 255},
+		.Leaf = Color{96, 132, 48, 255},
+	},
 	substrate = Substrate{kind = .Tooth, margin_rule = false},
 }
 
@@ -235,7 +273,7 @@ theme_sketch_warm :: proc() -> Theme {
 	return THEME_SKETCH_WARM
 }
 
-// theme_sketch_grey returns the cool grey toned palette.
+// theme_sketch_grey returns the cool toned palette.
 theme_sketch_grey :: proc() -> Theme {
 	return THEME_SKETCH_GREY
 }
