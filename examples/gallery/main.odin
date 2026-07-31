@@ -23,6 +23,7 @@ package main
 import "core:fmt"
 import "core:slice"
 import "core:strings"
+import "ingot:sys"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
@@ -131,9 +132,12 @@ reduced_motion := false
 section := Section.Buttons
 debug_on := false
 
-// palette_next advances the cycle. Pure, so the label and the action cannot
-// disagree about what comes next: the button shows palette_next(palette) and
-// pressing it assigns exactly that.
+// palette_next advances the cycle, wrapping at the end.
+//
+// Pure and total: every palette has a successor, so the button can never land
+// on a state the enum does not name. The label reads `palette` directly rather
+// than calling this, so the sidebar reports what is switched on rather than
+// what pressing it would do - see nav_control_label.
 palette_next :: proc(current: Palette) -> Palette {
 	return Palette((int(current) + 1) % len(Palette))
 }
@@ -371,11 +375,21 @@ Nav_Control :: enum {
 nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
 	switch control {
 	case .Theme:
-		// Naming the *next* palette rather than the current one: the button is
-		// an action, and a button labelled with the state you are already in
-		// reads as a status display. The compact form is identical because the
-		// palette names are already short enough for a phone-width cell.
-		return PALETTE_NAMES[palette_next(palette)]
+		// Naming the palette you are *in*, not the one the button leads to.
+		//
+		// This previously showed palette_next(palette), on the theory that a
+		// button is an action and should be labelled with what it does. The
+		// theory does not survive contact with the control sitting directly
+		// beneath it: Motion reports its current state ("Motion: full"), so a
+		// Theme button reporting its *next* state made two adjacent controls
+		// in one list read in opposite directions. Selecting "Sketch warm"
+		// left the sidebar saying "Sketch grey", which reads as the wrong mode
+		// having been applied.
+		//
+		// Consistency within the list beats the theory. Both controls now
+		// answer the same question: what is switched on right now.
+		if compact do return PALETTE_NAMES[palette]
+		return fmt.tprintf("Theme: %s", PALETTE_NAMES[palette])
 	case .Motion:
 		if compact do return "Motion"
 		return "Motion: reduced" if reduced_motion else "Motion: full"
@@ -600,6 +614,17 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32, narrow: bool) {
 				ui.ui_frame_theme(frame).fg_primary,
 			) +
 			y
+		// ui reports the click; the application decides what a link means.
+		// That split is forced by the API layers - ui imports only core:* and
+		// cannot reach sys - and it is also correct: an application may route
+		// a relative target internally rather than hand it to a browser.
+		if url, activated := ui.markdown_link_activated(&md_ctx); activated {
+			// Defaults allow http and https only. A markdown document is
+			// untrusted input, so file:// and custom schemes stay blocked
+			// rather than becoming a way to launch arbitrary handlers.
+			status := sys.open_url(url)
+			if status != .Opened do fmt.eprintfln("gallery: open %s failed (%v)", url, status)
+		}
 	case .Layout:
 		end_y = draw_layout_demo(frame, cx, y, cw)
 	case .Overlay:

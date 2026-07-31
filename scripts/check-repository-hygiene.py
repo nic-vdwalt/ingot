@@ -16,6 +16,7 @@ GENERATED_PATHS = {
     "fuzz/interact/fuzz_interact",
     "fuzz/net/fuzz_net",
     "fuzz/ui/fuzz_ui",
+    "fuzz/view/fuzz_view",
     "fuzz/wsreconn/fuzz_wsreconn",
     "fuzz/wsreconn/fuzz_wsreconn_tsan",
 }
