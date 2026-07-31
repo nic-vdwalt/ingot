@@ -208,22 +208,6 @@ when CAPTURE {
 		}
 	}
 
-	// capture_clear_color is the active theme's app background forced opaque.
-	//
-	// bg_app carries the vibrancy/Mica alpha (dark windowed is alpha 162), which
-	// is correct for a composited window but wrong for a file: it produced PNGs
-	// with a 0.74 mean alpha that render washed-out grey on any non-white page.
-	// Captured media is flat artwork, so the shot takes the colour and drops the
-	// translucency.
-	capture_clear_color :: proc() -> rl.Color {
-		theme := ui.ui_runtime_theme(ui_gfx.app_ui_runtime(&app))
-		assert(theme != nil, "capture_clear_color: nil theme")
-		color := ui_gfx.color_to_gfx(theme.bg_app)
-		color.a = 255
-		assert(color.a == 255, "capture_clear_color: capture background must be opaque")
-		return color
-	}
-
 	// capture_finish releases the target and exits successfully. The process
 	// terminates here rather than returning, so the harness never depends on
 	// the window being closed by a human.
@@ -241,13 +225,18 @@ when CAPTURE {
 		gfx_frame, acquired := rl.begin_frame()
 		if !acquired do return
 		frame_state := ui_gfx.session_begin_frame_context(&app.session, &gfx_frame)
-		rl.clear_frame(&gfx_frame, app.config.clear_color)
+		// Window and target share one derived background. This used to be two
+		// values - a fixed configured clear behind a theme-derived target
+		// clear - which is why a light-theme shot showed the dark configured
+		// colour through it. bg_app also carries the vibrancy alpha (dark
+		// windowed is alpha 162), so app_clear_color forces it opaque: a
+		// translucent clear produced PNGs with 0.74 mean alpha that rendered
+		// washed-out grey on any non-white page.
+		background := ui_gfx.app_clear_color(&app)
+		rl.clear_frame(&gfx_frame, background)
 
 		rl.BeginTextureMode(capture_target)
-		// Clear to the *active theme's* app background rather than the window's
-		// fixed clear colour, so a light-theme shot is light behind the content
-		// instead of showing the dark configured clear through it.
-		rl.ClearBackground(capture_clear_color())
+		rl.ClearBackground(background)
 		gallery_frame(&app, frame_state, nil)
 		ui_gfx.session_end_frame_context(&app.session, &gfx_frame)
 		rl.EndTextureMode()
@@ -283,7 +272,6 @@ when CAPTURE {
 				title = "ingot widget gallery (capture)",
 				target_fps = 60,
 				event_waiting = false,
-				clear_color = {24, 26, 32, 255},
 				session = {semantics_enabled = true},
 			},
 			{frame = gallery_frame, shutdown = shutdown},

@@ -84,7 +84,16 @@ text_role_line_height :: proc(frame: ^Ui_Frame, role: Text_Role) -> i32 {
 // text_ink resolves a semantic ink against the frame's theme.
 text_ink :: proc(frame: ^Ui_Frame, ink: Ink) -> Color {
 	assert(frame != nil, "text_ink: nil frame")
-	style := ui_frame_theme(frame)
+	return theme_ink(ui_frame_theme(frame), ink)
+}
+
+// theme_ink is the pure half of text_ink: it maps an ink onto a palette field
+// without needing a live frame. Contrast auditing has to walk every ink of
+// every built-in palette, and a unit test cannot conjure a frame, so the
+// mapping lives here and text_ink delegates to it. One switch means an ink
+// cannot end up audited-but-undrawn, or drawn-but-unaudited.
+theme_ink :: proc(style: ^Theme, ink: Ink) -> Color {
+	assert(style != nil, "theme_ink: nil theme")
 	color: Color
 	switch ink {
 	case .Primary:
@@ -122,7 +131,7 @@ text_ink :: proc(frame: ^Ui_Frame, ink: Ink) -> Color {
 	case .Plan:
 		color = style.fg_plan
 	}
-	assert(color.a > 0, "text_ink: theme resolved a fully transparent ink")
+	assert(color.a > 0, "theme_ink: theme resolved a fully transparent ink")
 	return color
 }
 

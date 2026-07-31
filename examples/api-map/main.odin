@@ -1209,8 +1209,6 @@ draw_map :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 apply_theme :: proc(frame: ^ui.Ui_Frame = nil) {
 	t := ui.theme_dark() if dark else ui.theme_light()
 	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app), t)
-	app.config.clear_color = ui_gfx.color_to_gfx(t.bg_app)
-	app.config.clear_color.a = 255
 	if frame != nil do ui.request_redraw(frame)
 }
 
@@ -1277,7 +1275,6 @@ main :: proc() {
 				title = "ingot api map",
 				target_fps = 60,
 				event_waiting = true,
-				clear_color = {24, 26, 32, 255},
 				session = {semantics_enabled = true},
 			},
 			{frame = map_frame},

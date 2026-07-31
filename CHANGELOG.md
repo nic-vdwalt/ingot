@@ -42,6 +42,66 @@ compatibility, while minor releases may break it. See the
 - A web form backend (`ui_runtime_set_web_form_backend`) so text inputs and
   submit buttons mirror into real browser form controls again; the graphics
   adapter installs it automatically.
+- Surface design tokens (`ui/tokens.odin`): `Surface`, `Visual_State`,
+  `Radius`, `Border`, `Elevation`, and `Tint`, resolved by `surface_colors`,
+  `radius_ratio`, `radius_pixels`, `radius_segments`, `border_pixels`,
+  `elevation_offset`, `tint_alpha`, and `color_tinted`. These are the missing
+  peer of `Text_Role`/`Ink` (type and text color) and `Space` (spacing):
+  nothing previously named what a *filled region* meant, so each widget
+  answered independently and the answers drifted apart.
+- `draw_surface`: one fill + border + shadow entry point for a token-styled
+  region, so two widgets cannot disagree about the same surface class.
+- Paper materials (`ui/material.odin`): `draw_shadow_hard`, `draw_rule_lines`,
+  `draw_margin_rule`, `draw_dot_grid`, `dot_grid_fits`,
+  `draw_highlight_swipe`, `draw_scribble_fill`, `draw_tape_strip`, and
+  `draw_dog_ear`, each bounded by a named constant derived from the paint
+  budget.
+- `THEME_PAPER` and `THEME_PAPER_NIGHT` (`theme_paper` / `theme_paper_night`):
+  warm ink-on-paper palettes. Both clear full WCAG AA (4.5:1) across every
+  reading ink and surface, which the existing dark and light palettes do not.
+- `Theme.surface_pressed`, `fg_on_accent`, `caption_hover`, `caption_pressed`,
+  `caption_close_hover`, `caption_close_pressed`, `spell_error`, `paper_rule`,
+  `paper_margin`, `highlighter`, `tape_color`, `ink_faded`, and `substrate`.
+- `theme_ink`: the pure half of `text_ink`, so contrast can be audited without
+  a live frame.
+- `PAINT_COMMANDS_PEAK_4K` and `PAINT_COMMANDS_HEADROOM`: the measured 4K
+  command peak and the room left over, so new per-frame decoration is bounded
+  against real headroom rather than against the raw capacity.
+- Gallery: a `Theme` section rendering the whole token system, including a
+  Surface x Visual_State matrix driven by explicit state rather than by
+  pointer position. Hover and pressed were previously unobservable in any
+  screenshot, which is how two state defects shipped.
+
+### Changed
+
+- **Breaking:** `ui_gfx.App_Config.clear_color` is removed. The window
+  background is now derived from the active theme by `ui_gfx.app_clear_color`.
+  The field was a stored *copy* of `theme.bg_app`, and every theme switch had
+  to remember to update it; `chart_demo` did not, so switching it to the light
+  palette left a dark window. Applications should delete their `clear_color`
+  assignment - the window now follows the theme automatically. Because every
+  call site uses named-field literals, removing the field is a compile error
+  rather than a silent behaviour change.
+- Caption buttons, the spellcheck squiggle, and the split-drop hint read their
+  colors from the palette instead of from file-local constants. The caption
+  constants were a 15-alpha and a 10-alpha white wash, which is invisible on
+  the high-contrast palette's pure black title bar.
+- Disabled controls resolve to `fg_disabled` everywhere. `button_at` used
+  `fg_muted_dim` while menus used `fg_disabled`, so a disabled button and a
+  disabled menu item rendered in different colors in the same frame.
+  `fg_muted_dim` is now `Ink.Muted` only.
+- Gallery smoke runs theme *combinations* rather than four mutually exclusive
+  steps, so high contrast with reduced motion is exercised.
+
+### Fixed
+
+- Dropdown, date-picker, and checkbox borders were passing an unscaled `1`
+  where their own popups scaled correctly, so at 2x DPI a field's border was
+  one physical pixel and its popup's was two. All borders now resolve through
+  `border_pixels`.
+- `THEME_HIGH_CONTRAST.button_pressed` was pure white, identical to
+  `button_hover`, so a pressed high-contrast button gave no feedback
+  distinguishable from hover.
 
 ## [0.1.1] - 2026-07-28
 

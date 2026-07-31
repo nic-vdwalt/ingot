@@ -72,6 +72,14 @@ non-negotiables:
 - **Immediate-mode / static allocation**: callers own state and pass it each
   frame; allocate long-lived buffers once; use `context.temp_allocator` for
   per-frame scratch.
+- **Resolve visuals through tokens, never literals.** Sizes come from
+  `Text_Role`, text colors from `Ink`, gaps from `Space`, and fills, corners,
+  borders, shadows and interaction states from `Surface` / `Radius` / `Border`
+  / `Elevation` / `Visual_State` / `Tint` (`ui/tokens.odin`). Prefer
+  `draw_surface` over hand-composing a fill and a border. A bare number for a
+  border width is a DPI bug, and a color computed by arithmetic cannot be
+  right for both a light and a dark palette - add a `Theme` role instead.
+  `scripts/check_theme_tokens.py` enforces this with a monotonic baseline.
 - **Explicit sized types** at wire/file/FFI boundaries (never `int`/`uint`
   there); keep `index` / `count` / `size` distinct.
 - **Handle every returned `ok` / error** - no silent `or_return` drops.

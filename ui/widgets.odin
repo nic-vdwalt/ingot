@@ -107,9 +107,12 @@ draw_split_drop_hint :: proc(frame: ^Ui_Frame, screen_w, screen_h: i32, side_lef
 	style := ui_frame_theme(frame)
 	top := ui_frame_metrics(frame).TAB_BAR_HEIGHT
 	h := screen_h - top
-	draw_rectangle(frame, 0, top, screen_w, h, Color{0, 0, 0, 70})
+	// The scrim and the target tint were a hardcoded black and an inline
+	// re-alpha of fg_accent, while drop_zone_bg and drop_zone_border sat in
+	// every palette unused. These are the roles that were meant for this.
+	draw_rectangle(frame, 0, top, screen_w, h, color_tinted(style.modal_dim, .Medium))
 	half := screen_w / 2
-	hl := Color{style.fg_accent.r, style.fg_accent.g, style.fg_accent.b, 70}
+	hl := color_tinted(style.drop_zone_bg, .Medium)
 	if side_left {
 		draw_rectangle(frame, 0, top, half, h, hl)
 	} else {
@@ -121,7 +124,7 @@ draw_split_drop_hint :: proc(frame: ^Ui_Frame, screen_w, screen_h: i32, side_lef
 		top,
 		ui_frame_sc(frame, 2),
 		h,
-		style.fg_accent,
+		style.drop_zone_border,
 	)
 }
 
@@ -829,7 +832,10 @@ button_at :: proc(
 		}
 		if !enabled {
 			bg = style_theme.button_disabled_bg
-			fg = style_theme.fg_muted_dim
+			// fg_disabled, not fg_muted_dim. Two roles for one concept meant a
+			// disabled button and a disabled menu item rendered in different
+			// colors in the same frame; fg_muted_dim is now Ink.Muted only.
+			fg = style_theme.fg_disabled
 			border = Color{0, 0, 0, 0}
 		}
 
@@ -922,7 +928,8 @@ button_at_state :: proc(
 	if !enabled {
 		state.hover = 0
 		bg = style_theme.button_disabled_bg
-		fg = style_theme.fg_muted_dim
+		// See button_at: one disabled ink across every surface.
+		fg = style_theme.fg_disabled
 		border = Color{0, 0, 0, 0}
 	}
 	draw_rectangle_rounded(frame, rrect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)

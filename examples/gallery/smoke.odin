@@ -25,6 +25,28 @@ _ :: ui_gfx
 when SMOKE {
 	SMOKE_STEP_FRAMES :: 20 // ~1/3 s per step at 60 fps
 	SMOKE_SCALES := [?]f32{0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 0} // 0 = auto
+
+	// Theme states as explicit combinations rather than as a counter.
+	//
+	// These used to be four mutually exclusive steps derived from an index
+	// (dark = t==0, high_contrast = t==2, reduced_motion = t==3), which meant
+	// high contrast was only ever exercised with full motion and reduced
+	// motion only ever with the light palette. The combinations that were
+	// never reached are exactly the ones an accessibility user runs.
+	Smoke_Theme :: struct {
+		dark:           bool,
+		high_contrast:  bool,
+		reduced_motion: bool,
+	}
+	SMOKE_THEMES := [?]Smoke_Theme {
+		{dark = true, high_contrast = false, reduced_motion = false},
+		{dark = false, high_contrast = false, reduced_motion = false},
+		{dark = true, high_contrast = false, reduced_motion = true},
+		{dark = false, high_contrast = false, reduced_motion = true},
+		{dark = true, high_contrast = true, reduced_motion = false},
+		{dark = true, high_contrast = true, reduced_motion = true},
+	}
+
 	smoke_frame: int
 	smoke_step_index: int
 
@@ -35,7 +57,7 @@ when SMOKE {
 		smoke_step_index += 1
 
 		scale_steps := len(SMOKE_SCALES)
-		theme_steps := 4 // dark, light, high contrast, reduced motion
+		theme_steps := len(SMOKE_THEMES)
 		section_steps := len(Section)
 		total := scale_steps + theme_steps + section_steps
 
@@ -45,12 +67,12 @@ when SMOKE {
 			apply_scale(stored_scale)
 			fmt.printfln("smoke: scale %.2f", stored_scale)
 		case step < scale_steps + theme_steps:
-			t := step - scale_steps
-			dark = t == 0
-			high_contrast = t == 2
-			reduced_motion = t == 3
+			combo := SMOKE_THEMES[step - scale_steps]
+			dark = combo.dark
+			high_contrast = combo.high_contrast
+			reduced_motion = combo.reduced_motion
 			apply_gallery_theme()
-			fmt.printfln("smoke: theme step %d (hc=%v rm=%v)", t, high_contrast, reduced_motion)
+			fmt.printfln("smoke: theme dark=%v hc=%v rm=%v", dark, high_contrast, reduced_motion)
 		case step < total:
 			section = Section(step - scale_steps - theme_steps)
 			ui.pane_reset(&content_pane)

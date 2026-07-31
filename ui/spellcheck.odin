@@ -8,7 +8,6 @@ Spell_Range :: struct {
 	end:   int,
 }
 
-SPELL_SQUIGGLE_COLOR :: Color{235, 90, 90, 220}
 SPELL_MAX_TEXT :: 8 * 1024
 
 Spellcheck_Memo :: struct {
