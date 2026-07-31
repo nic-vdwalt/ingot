@@ -37,7 +37,7 @@ when SMOKE {
 	// Every palette appears with motion both on and off, because the paper
 	// palettes take a drawing path the screen ones do not: they carry a
 	// substrate, so a crash in the rule or margin code would otherwise only
-	// surface when a human happened to select paper.
+	// surface when a human happened to select a sketch palette.
 	Smoke_Theme :: struct {
 		palette:        Palette,
 		high_contrast:  bool,
@@ -46,14 +46,14 @@ when SMOKE {
 	SMOKE_THEMES := [?]Smoke_Theme {
 		{palette = .Dark, high_contrast = false, reduced_motion = false},
 		{palette = .Light, high_contrast = false, reduced_motion = false},
-		{palette = .Paper, high_contrast = false, reduced_motion = false},
-		{palette = .Paper_Night, high_contrast = false, reduced_motion = false},
+		{palette = .Sketch_Warm, high_contrast = false, reduced_motion = false},
+		{palette = .Sketch_Grey, high_contrast = false, reduced_motion = false},
 		{palette = .Dark, high_contrast = false, reduced_motion = true},
 		{palette = .Light, high_contrast = false, reduced_motion = true},
-		{palette = .Paper, high_contrast = false, reduced_motion = true},
-		{palette = .Paper_Night, high_contrast = false, reduced_motion = true},
+		{palette = .Sketch_Warm, high_contrast = false, reduced_motion = true},
+		{palette = .Sketch_Grey, high_contrast = false, reduced_motion = true},
 		{palette = .Dark, high_contrast = true, reduced_motion = false},
-		{palette = .Paper, high_contrast = true, reduced_motion = false},
+		{palette = .Sketch_Warm, high_contrast = true, reduced_motion = false},
 		{palette = .Dark, high_contrast = true, reduced_motion = true},
 	}
 

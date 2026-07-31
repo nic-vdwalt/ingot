@@ -52,16 +52,26 @@ compatibility, while minor releases may break it. See the
 - `draw_surface`: one fill + border + shadow entry point for a token-styled
   region, so two widgets cannot disagree about the same surface class.
 - Paper materials (`ui/material.odin`): `draw_shadow_hard`, `draw_rule_lines`,
-  `draw_margin_rule`, `draw_dot_grid`, `dot_grid_fits`,
-  `draw_highlight_swipe`, `draw_scribble_fill`, `draw_tape_strip`, and
-  `draw_dog_ear`, each bounded by a named constant derived from the paint
-  budget.
-- `THEME_PAPER` and `THEME_PAPER_NIGHT` (`theme_paper` / `theme_paper_night`):
-  warm ink-on-paper palettes. Both clear full WCAG AA (4.5:1) across every
-  reading ink and surface, which the existing dark and light palettes do not.
+  `draw_margin_rule`, `draw_dot_grid`, `dot_grid_fits`, `draw_paper_tooth`,
+  `draw_wash`, `draw_pigment_block`, `draw_highlight_swipe`,
+  `draw_scribble_fill`, `draw_tape_strip`, `draw_dog_ear`, and
+  `draw_hand_underline`, each bounded by a named constant derived from the
+  paint budget.
+- `THEME_SKETCH_WARM` and `THEME_SKETCH_GREY` (`theme_sketch_warm` /
+  `theme_sketch_grey`): toned sketchbook stock - warm kraft and cool grey -
+  carrying saturated artist pigments (ultramarine, vermilion, viridian, yellow
+  ochre, burnt sienna). Both clear full WCAG AA (4.5:1) across every reading
+  ink and surface, which the existing dark and light palettes do not. The
+  pigments are darkened from their true hues because toned ground compresses
+  contrast from both directions: vermilion at full saturation measures 2.4:1
+  on kraft.
+- `scatter_hash` / `scatter_unit`: a pure index hash for deterministic
+  scattering. Frames are event-driven, so a random generator would reshuffle
+  paper grain on every unrelated redraw and break capture reproducibility.
 - `Theme.surface_pressed`, `fg_on_accent`, `caption_hover`, `caption_pressed`,
   `caption_close_hover`, `caption_close_pressed`, `spell_error`, `paper_rule`,
-  `paper_margin`, `highlighter`, `tape_color`, `ink_faded`, and `substrate`.
+  `paper_tooth`, `graphite`, `highlighter`, `tape_color`, `ink_faded`, and
+  `substrate`.
 - `theme_ink`: the pure half of `text_ink`, so contrast can be audited without
   a live frame.
 - `PAINT_COMMANDS_PEAK_4K` and `PAINT_COMMANDS_HEADROOM`: the measured 4K
@@ -77,18 +87,28 @@ compatibility, while minor releases may break it. See the
 - `space_pixels`: the frame-level spacing resolver. The explicit tier owns its
   own geometry and has no `Ui` to ask, so it previously had to re-declare the
   spacing scale locally; `space_px` now delegates here so there is one table.
-- Gallery: the theme control cycles Dark, Light, Paper and Paper Night instead
-  of toggling a boolean, so both paper palettes are reachable. Before this the
-  paper materials had no callers at all - the aesthetic existed in the library
-  but could not be seen from any application.
-- Gallery: the `Theme` section is laid out as a ruled page - substrate rules
-  behind the content, a margin rule with the measurements hung beside it as
-  annotations, and hand-drawn heading underlines. `Selected` renders as a
-  highlighter swipe and `Pressed` as a scribble, so the materials are
-  exercised on every frame rather than only in tests.
+- Gallery: the theme control cycles Dark, Light, Sketch Warm and Sketch Grey
+  instead of toggling a boolean, so both toned palettes are reachable. Before
+  this the paper materials had no callers at all - the aesthetic existed in the
+  library but could not be seen from any application.
+- Gallery: the `Theme` section is a sketchbook colour study - toned ground with
+  paper grain, overlapping pigment washes, and measurements hung in a reserved
+  margin column. `Selected` renders as a highlighter swipe and `Pressed` as a
+  scribble, so the materials run every frame rather than only in tests.
 
 ### Changed
 
+- `Substrate.margin` is now `Substrate.margin_rule`, and controls *only*
+  whether the vertical rule is drawn. The body indent follows from
+  `kind != .None`. The single flag previously meant both, so "keep the reserved
+  margin column, drop the rule down it" could not be expressed - and the column
+  is what keeps measurements out of the swatches they describe.
+- `Theme.paper_margin` is replaced by `Theme.graphite` (pencil marks: heading
+  underlines and captions). With the margin rule gone from the built-in
+  palettes the old role had no meaning.
+- `Substrate_Kind` gains `.Tooth`, the sketchbook substrate. The built-in
+  themes no longer select `.Ruled`; `draw_rule_lines` and `draw_margin_rule`
+  remain exported and tested for consumers who want writing paper.
 - **Breaking:** `ui_gfx.App_Config.clear_color` is removed. The window
   background is now derived from the active theme by `ui_gfx.app_clear_color`.
   The field was a stored *copy* of `theme.bg_app`, and every theme switch had

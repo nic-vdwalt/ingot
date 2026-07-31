@@ -85,7 +85,7 @@ when CAPTURE {
 		{"gallery-stress-dark.png", .Stress, .Dark},
 		// The Theme page on paper: the one shot where the substrate, the
 		// margin and the hand-drawn accents are all visible at once.
-		{"gallery-theme-paper.png", .Theme, .Paper},
+		{"gallery-theme-sketch.png", .Theme, .Sketch_Warm},
 	}
 
 	// The GIF script: every section in order, alternating theme so the motion
@@ -101,7 +101,7 @@ when CAPTURE {
 		{"", .Stress, .Dark},
 		// End on paper so the sequence closes on the aesthetic rather than on
 		// the stress grid.
-		{"", .Theme, .Paper},
+		{"", .Theme, .Sketch_Warm},
 	}
 
 	capture_target: rl.RenderTexture2D

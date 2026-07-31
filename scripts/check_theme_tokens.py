@@ -46,7 +46,7 @@ EXCLUDED_SUFFIXES = ("_test.odin",)
 
 # The palette files are where literal colors are *supposed* to live: a theme is
 # data. Excluding them is what makes a literal anywhere else meaningful.
-PALETTE_FILES = {"ui/theme.odin", "ui/paper.odin"}
+PALETTE_FILES = {"ui/theme.odin", "ui/sketch.odin"}
 
 # tokens.odin defines the scale itself and material.odin implements the
 # primitives the scale resolves to, so both legitimately name raw numbers.
@@ -120,7 +120,7 @@ def current_counts(root: Path) -> dict[str, int]:
 
 
 ADVICE = {
-    "raw_color": "use a Theme field; palettes are data and live in theme.odin or paper.odin",
+    "raw_color": "use a Theme field; palettes are data and live in theme.odin or sketch.odin",
     "numeric_roundness": "use radius_ratio(frame, Radius, rect) and radius_segments",
     "unscaled_border": "use border_pixels(frame, Border) so the width scales with DPI",
 }
