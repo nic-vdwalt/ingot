@@ -2,9 +2,11 @@
 # Build and run the ingot memory-safety fuzz harnesses under a sanitizer
 # with a tracking allocator (leaks / bad frees fail the run).
 #
-# Usage: fuzz/run.sh [net|ui|term|interact|input|gfx-frame|all|soak] [seed] [iterations]
+# Usage: fuzz/run.sh [net|ui|view|term|interact|input|gfx-frame|all|soak] [seed] [iterations]
 #   fuzz/run.sh net            # random seed, default iterations
 #   fuzz/run.sh net 12345      # reproduce a specific seed
+#   fuzz/run.sh view           # .ingv decoder: random bytes, mutated files, and
+#                              # forged length fields over a valid payload
 #   fuzz/run.sh term           # in-package fuzz tests (private procs) via odin test
 #   fuzz/run.sh interact       # widget interaction-sequence fuzzer (headless,
 #                              # synthetic input via -define:INGOT_INPUT_SIM=true)
@@ -70,6 +72,17 @@ run_ui() {
 	# shellcheck disable=SC2086
 	odin build "$ROOT/fuzz/ui" $COL $GUARD $SANFLAGS -out:"$ROOT/fuzz/ui/fuzz_ui"
 	"$ROOT/fuzz/ui/fuzz_ui" "$@"
+}
+
+run_view() {
+	# The view decoder is that package's only untrusted-input seam: a .ingv file
+	# may be shipped, fetched, or hand-edited. The harness mixes random bytes,
+	# mutations of a valid file, and forged node_count/text_length fields, and
+	# repairs the CRC on half of them so mutations reach past the checksum into
+	# the record loop instead of all dying at the header.
+	# shellcheck disable=SC2086
+	odin build "$ROOT/fuzz/view" $COL $GUARD $SANFLAGS -out:"$ROOT/fuzz/view/fuzz_view"
+	"$ROOT/fuzz/view/fuzz_view" "$@"
 }
 
 run_term() {
@@ -156,6 +169,9 @@ net)
 ui)
 	run_ui "${ARGS[@]+"${ARGS[@]}"}"
 	;;
+view)
+	run_view "${ARGS[@]+"${ARGS[@]}"}"
+	;;
 term)
 	run_term
 	;;
@@ -177,6 +193,7 @@ tsan)
 all)
 	run_net "${ARGS[@]+"${ARGS[@]}"}"
 	run_ui "${ARGS[@]+"${ARGS[@]}"}"
+	run_view "${ARGS[@]+"${ARGS[@]}"}"
 	run_interact "${ARGS[@]+"${ARGS[@]}"}"
 	run_wsreconn "${ARGS[@]+"${ARGS[@]}"}"
 	run_input
@@ -191,7 +208,7 @@ soak)
 	for round in $(seq 1 "$ROUNDS"); do
 		round_seed="$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')"
 		echo "=== soak round $round/$ROUNDS seed=$round_seed ==="
-		for harness in net ui interact wsreconn; do
+		for harness in net ui view interact wsreconn; do
 			if ! "run_$harness" "-seed:$round_seed" "${ITERATIONS:+-iterations:$ITERATIONS}"; then
 				echo "SOAK FAILED - reproduce with: fuzz/run.sh $harness $round_seed" >&2
 				exit 1
@@ -212,7 +229,7 @@ soak)
 	done
 	;;
 *)
-	echo "unknown target '$TARGET' (expected net|ui|term|interact|input|wsreconn|tsan|gfx-frame|all|soak)" >&2
+	echo "unknown target '$TARGET' (expected net|ui|view|term|interact|input|wsreconn|tsan|gfx-frame|all|soak)" >&2
 	exit 2
 	;;
 esac

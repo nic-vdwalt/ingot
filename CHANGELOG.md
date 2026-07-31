@@ -150,6 +150,20 @@ compatibility, while minor releases may break it. See the
 
 ### Fixed
 
+- Markdown `[label](target)` links were not parsed, and the failure was not a
+  clean one: parsing began at the scheme, so `[docs](https://x)` rendered as
+  the literal text `[docs](`, then a live link reading the raw URL, then `)`.
+  The markup was visible and the label was not. `Text_Span` gains `href`, which
+  a bare URL sets to its own text, so a consumer never has to ask which
+  spelling produced the span.
+- Markdown links were never clickable. The type comment claimed they were, but
+  nothing hit-tested them - they were accent-coloured underlined text and
+  nothing more. `Markdown_Context` now records the hovered link during the draw
+  pass, requests a pointer cursor, brightens the hovered span, and reports
+  activation through `markdown_link_activated`. The package imports only
+  `core:*` so it cannot open a URL itself; the application decides what
+  following a link means, which also lets it route relative targets internally
+  rather than handing every click to a browser.
 - Dropdown, date-picker, and checkbox borders were passing an unscaled `1`
   where their own popups scaled correctly, so at 2x DPI a field's border was
   one physical pixel and its popup's was two. All borders now resolve through
