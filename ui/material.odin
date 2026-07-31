@@ -43,11 +43,21 @@ SUBSTRATE_RULES_MAX :: 256
 // rect it is handed cannot exceed it.
 SUBSTRATE_DOTS_MAX :: 1024
 
-// Both substrates must fit in the headroom an ordinary 4K frame leaves, not in
+// Paper tooth is the sketchbook substrate: sparse flecks standing in for the
+// grain of toned drawing stock. Like the dot grid it is quadratic in area, so
+// it carries a hard count rather than a density - a density would look
+// identical on a laptop and quietly cost sixteen times as much at 4K.
+//
+// 512 is what reads as grain rather than as noise across a full viewport;
+// beyond it the flecks merge into a wash and stop being texture.
+SUBSTRATE_FLECKS_MAX :: 512
+
+// Every substrate must fit in the headroom an ordinary 4K frame leaves, not in
 // the raw command cap. Checking this at compile time means lowering the paint
 // budget fails the build here rather than silently truncating a page at 4K.
 #assert(SUBSTRATE_RULES_MAX <= PAINT_COMMANDS_HEADROOM)
 #assert(SUBSTRATE_DOTS_MAX <= PAINT_COMMANDS_HEADROOM)
+#assert(SUBSTRATE_FLECKS_MAX <= PAINT_COMMANDS_HEADROOM)
 
 // A marker fill reads as a scribble from about five strokes; past that the
 // strokes merge and the extra commands buy nothing. A fixed count also makes a
@@ -383,5 +393,153 @@ draw_dog_ear :: proc(frame: ^Ui_Frame, rect: Rectangle, size: f32, fold, shade: 
 		{right - span, bottom - span},
 		{right, bottom - span},
 		shade,
+	)
+}
+
+// scatter_hash maps an index to a well-distributed 32-bit value.
+//
+// This is deliberately a pure function of the index rather than a random
+// number generator, and that choice is load-bearing. Frames here are
+// event-driven: the interface redraws when anything at all changes, so a
+// stateful generator would deal a different sequence on every redraw and the
+// paper grain would crawl while the user typed. It would also break the
+// capture harness, whose output is expected to be byte-reproducible.
+//
+// The constants are the standard integer finalizer from MurmurHash3, chosen
+// because it avalanches well at small indices, which is exactly the range a
+// fleck field uses.
+scatter_hash :: proc(index: u32) -> u32 {
+	value := index
+	value ~= value >> 16
+	value *= 0x7feb352d
+	value ~= value >> 15
+	value *= 0x846ca68b
+	value ~= value >> 16
+	return value
+}
+
+// scatter_unit returns a deterministic value in [0, 1) for an index and a
+// stream. The stream lets one index produce several independent coordinates -
+// an x, a y and a size - without the three correlating into a diagonal line.
+scatter_unit :: proc(index, stream: u32) -> f32 {
+	raw := scatter_hash(index * 3 + stream)
+	return f32(raw % 4096) / 4096
+}
+
+// draw_paper_tooth scatters flecks across a region to suggest the grain of
+// toned drawing stock.
+//
+// This is the sketchbook's answer to ruled lines. Rules are for writing on;
+// drawing paper is blank and shows its texture instead, so the substrate has
+// to read as a surface rather than as a guide.
+//
+// The count scales with area so a small card is not as busy as a full page,
+// but is hard-capped: a fleck field costs area, and a density that looks right
+// on a laptop is sixteen times as expensive at 4K.
+draw_paper_tooth :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
+	assert(frame != nil, "draw_paper_tooth: nil frame")
+	if rect.width <= 0 || rect.height <= 0 || color.a == 0 do return
+
+	// One fleck per this many square logical pixels. Sparse by design: grain
+	// is felt rather than seen, and anything denser reads as noise or dirt.
+	FLECK_AREA :: f32(2600)
+	scale := max(ui_frame_scf(frame, 1), 0.001)
+	logical_area := (rect.width / scale) * (rect.height / scale)
+	count := int(logical_area / FLECK_AREA)
+	count = clamp(count, 0, SUBSTRATE_FLECKS_MAX)
+	if count == 0 do return
+
+	size := max(border_pixels(frame, .Hairline), 1)
+	for index in 0 ..< count {
+		i := u32(index)
+		x := rect.x + scatter_unit(i, 0) * rect.width
+		y := rect.y + scatter_unit(i, 1) * rect.height
+		// Two thirds of the flecks are single specks and a third are doubled,
+		// which is what keeps the field from looking like a regular stipple.
+		wide := size * 2 if scatter_unit(i, 2) > 0.66 else size
+		draw_rectangle_rec(frame, {x, y, wide, size}, color)
+	}
+}
+
+// WASH_BLEED_STRIPS is how many translucent overhang strips a pigment block
+// lays past its own edge. Three is enough for the edge to read as soaked
+// rather than cut; a fixed count keeps a large swatch exactly as expensive as
+// a small one, which a proportional bleed would not.
+WASH_BLEED_STRIPS :: 3
+
+// draw_wash lays a pigment gradient that pools toward the bottom.
+//
+// Watercolour is not a flat fill: gravity and drying carry pigment downward,
+// so a laid wash is lighter where it starts and denser where it settles. The
+// renderer has exactly one gradient primitive and it happens to be vertical,
+// which is the direction this effect needs.
+draw_wash :: proc(frame: ^Ui_Frame, rect: Rectangle, pigment: Color) {
+	assert(frame != nil, "draw_wash: nil frame")
+	if rect.width <= 0 || rect.height <= 0 || pigment.a == 0 do return
+	// The top is thinned toward the paper rather than toward white, so a wash
+	// reads as pigment on stock rather than as a fade to nothing.
+	top := Color{pigment.r, pigment.g, pigment.b, u8(f32(pigment.a) * 0.72)}
+	draw_rectangle_gradient_v(
+		frame,
+		i32(rect.x),
+		i32(rect.y),
+		i32(rect.width),
+		i32(rect.height),
+		top,
+		pigment,
+	)
+}
+
+// draw_pigment_block paints a swatch: a wash, plus a bleed past its edges.
+//
+// The bleed is the whole point. A filled rectangle reads as a table cell no
+// matter what colour it is; paint stops unevenly, soaks past where the brush
+// went, and darkens where it overlaps something already laid down. Drawing the
+// bleed translucently means two adjacent blocks produce that darker seam for
+// free, without either needing to know about the other.
+//
+// Cost is fixed: one wash plus WASH_BLEED_STRIPS * 2 strips plus two corner
+// triangles, regardless of the swatch's size.
+draw_pigment_block :: proc(frame: ^Ui_Frame, rect: Rectangle, pigment: Color) {
+	assert(frame != nil, "draw_pigment_block: nil frame")
+	if rect.width <= 0 || rect.height <= 0 || pigment.a == 0 do return
+	draw_wash(frame, rect, pigment)
+
+	step := max(border_pixels(frame, .Hairline), 1)
+	for index in 1 ..= WASH_BLEED_STRIPS {
+		// Each successive strip is fainter and reaches further, which is how
+		// a soaked edge actually falls off.
+		fade := f32(WASH_BLEED_STRIPS + 1 - index) / f32(WASH_BLEED_STRIPS + 1)
+		alpha := u8(f32(pigment.a) * fade * 0.45)
+		if alpha == 0 do continue
+		wash := Color{pigment.r, pigment.g, pigment.b, alpha}
+		reach := step * f32(index)
+		// Bottom edge bleeds further than the top: pigment runs downhill.
+		draw_rectangle_rec(frame, {rect.x, rect.y - reach, rect.width, reach}, wash)
+		draw_rectangle_rec(
+			frame,
+			{rect.x, rect.y + rect.height + reach - step, rect.width, reach},
+			wash,
+		)
+	}
+
+	// Two soft corners, so the block is not a perfect rectangle. Opposite
+	// corners rather than all four: a brush lifts somewhere, not everywhere.
+	notch := min(rect.width, rect.height) * 0.18
+	if notch <= 0 do return
+	pale := Color{pigment.r, pigment.g, pigment.b, u8(f32(pigment.a) * 0.35)}
+	draw_triangle(
+		frame,
+		{rect.x, rect.y},
+		{rect.x + notch, rect.y},
+		{rect.x, rect.y + notch},
+		pale,
+	)
+	draw_triangle(
+		frame,
+		{rect.x + rect.width, rect.y + rect.height},
+		{rect.x + rect.width - notch, rect.y + rect.height},
+		{rect.x + rect.width, rect.y + rect.height - notch},
+		pale,
 	)
 }
