@@ -390,6 +390,21 @@ Layout_Kind :: enum u8 {
 	Row, // children stack horizontally; main axis = x
 }
 
+// Flex_Axis lets a caller state which way it believes a declared flex run
+// travels, so flex_begin can reject a run opened against the wrong frame.
+//
+// A separate type rather than an optional Layout_Kind: several places branch
+// as `if kind == .Column { ... } else { ... }`, so an extra Layout_Kind member
+// would be treated as a row by every one of them. Adding a state that lays out
+// silently-but-wrongly to fix a bug about laying out silently-but-wrongly is
+// not a trade worth making. Unspecified is the zero value, so omitting the
+// argument keeps the previous behaviour exactly.
+Flex_Axis :: enum u8 {
+	Unspecified, // no opinion; no axis check is performed
+	Column, // caller expects the run to travel down the main axis y
+	Row, // caller expects the run to travel across the main axis x
+}
+
 Cross_Align :: enum u8 {
 	Stretch, // children fill the cross axis (default)
 	Start,
@@ -596,10 +611,30 @@ layout_pop :: proc(l: ^Layout) {
 // flex_begin resolves one bounded sibling sequence before any child is drawn.
 // justify packs the resolved run along the main axis; free space only exists
 // when no uncapped grow track absorbed it.
-flex_begin :: proc(l: ^Layout, sizes: []Track, justify: Main_Align = .Start) {
+//
+// axis states which way the caller believes the tracks run. It defaults to
+// .Unspecified so every existing call is unaffected, but passing the intended
+// axis converts the worst failure this API has into an assertion: tracks meant
+// for a row, declared against a column frame, carve the frame's HEIGHT into N
+// bands instead of its width into N cells. Every cell then draws at the same
+// x, and because the run is still fully consumed, flex_end, layout_pop and
+// layout_end all pass. The geometry is silently wrong and nothing in the
+// library can tell, because the intent exists only at the call site.
+//
+// This mirrors push_row, which already asserts its parent frame is a column:
+// the library checked the axis when pushing a FRAME but not when declaring a
+// SEQUENCE inside one.
+flex_begin :: proc(
+	l: ^Layout,
+	sizes: []Track,
+	justify: Main_Align = .Start,
+	axis: Flex_Axis = .Unspecified,
+) {
+	assert(l != nil, "flex_begin: nil l")
 	assert(l.depth > 0, "flex_begin: layout not begun")
 	assert(len(sizes) > 0 && len(sizes) <= MAX_LAYOUT_FLEX, "flex_begin: count out of bounds")
 	f := _top(l)
+	assert(axis_matches(axis, f.kind), "flex_begin: axis mismatch with active frame")
 	assert(f.weight_left == 0, "flex_begin: weighted sequence is active")
 	assert(f.flex_index == f.flex_count, "flex_begin: previous flex sequence not consumed")
 	gap_total := i64(f.gap) * i64(len(sizes) - 1)
@@ -953,6 +988,22 @@ _top :: proc(l: ^Layout) -> ^Layout_Frame {
 	assert(l.depth > 0, "_top: empty layout stack")
 	assert(l.depth <= MAX_LAYOUT_DEPTH, "_top: depth out of bounds")
 	return &l.stack[l.depth - 1]
+}
+
+// axis_matches reports whether a caller-declared axis agrees with the active
+// frame. Pure and exported, so the contract is testable without building a
+// layout: see layout_test.odin. .Unspecified always matches, which is what
+// keeps every pre-existing flex_begin call behaving exactly as before.
+axis_matches :: proc(axis: Flex_Axis, kind: Layout_Kind) -> bool {
+	switch axis {
+	case .Unspecified:
+		return true
+	case .Column:
+		return kind == .Column
+	case .Row:
+		return kind == .Row
+	}
+	return false
 }
 
 // _main_extent returns the frame's total main-axis length in pixels.
