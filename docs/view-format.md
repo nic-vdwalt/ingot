@@ -87,6 +87,19 @@ So the format has two types:
 This also makes `view_play` properly immediate-mode: it borrows caller-owned
 storage and retains nothing.
 
+## Packages
+
+`ingot:view` is the runtime: types, codec, validation, and `view_play`. It
+imports `ingot:ui` and `core:*` only, and `ui` gains no file-format knowledge.
+
+The generator lives in a **separate package**, `ingot:view/generate`, because it
+needs `core:fmt` and `core:fmt` pulls `core:os`, which does not exist on
+js/wasm. Keeping it out of the runtime means a web consumer that only plays
+views never pays for the generator and cannot fail to compile because of it. The
+same reasoning applies to test files: they carry `#+build !js`, as `ui`'s do.
+
+`tools/viewc` is the CLI over `ingot:view/generate`.
+
 ## The document
 
 ### Nodes

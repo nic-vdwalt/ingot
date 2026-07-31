@@ -445,3 +445,104 @@ test_play_renders_every_kind :: proc(t: ^testing.T) {
 		harness_end(h)
 	}
 }
+
+// Every leaf kind must be usable inside a flex container. A flex run declares
+// one track per carving child up front and ui asserts that each is consumed, so
+// a kind whose slot behaviour this package models wrongly aborts the frame.
+// Testing each kind alone is what names the culprit; a mixed document only says
+// that something is wrong.
+@(test)
+test_every_leaf_kind_works_inside_a_flex_row :: proc(t: ^testing.T) {
+	for kind in View_Kind {
+		if view_kind_is_container(kind) do continue
+		doc: View_Doc
+		doc_reset(&doc)
+		root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+		row, _ := doc_add_keyed(&doc, root, .Flex_Row, "row", "", View_Node{size_main = 40})
+		node := View_Node {
+			track = ui.Track{kind = .Grow, weight = 1},
+			number_hi = 1,
+		}
+		if view_kind_binding(kind) != .None do node.binding = 0
+		doc_add_keyed(&doc, row, kind, "leaf", "Leaf", node)
+
+		flag: bool
+		number: f32
+		integer: i32
+		box: ui.Input_Box
+		ui.input_box_init(&box)
+		defer ui.input_box_destroy(&box)
+		slots := [1]Binding{}
+		#partial switch view_kind_binding(kind) {
+		case .Boolean:
+			slots[0] = bind_boolean(&flag)
+		case .Number:
+			slots[0] = bind_number(&number)
+		case .Integer:
+			slots[0] = bind_integer(&integer)
+		case .Text:
+			slots[0] = bind_text(&box)
+		}
+		bindings := Bindings {
+			slots = slots[:],
+		}
+
+		result, ok := view_validate(view_of(&doc))
+		testing.expectf(t, ok, "%v: fixture did not validate: %v", kind, result)
+		if !ok do continue
+		h := harness_begin()
+		view_play(&h.u, view_of(&doc), &bindings)
+		testing.expectf(t, h.u.ids.depth == 0, "%v: unbalanced id scope", kind)
+		harness_end(h)
+	}
+}
+
+// Containers nest inside flex containers too, and they do not all take a track:
+// Panel opens through push_column, which swallows the parent's remaining space
+// instead. This is the case that produced "declared flex sizes not fully
+// consumed" from a document that had already validated.
+@(test)
+test_every_container_kind_works_inside_a_flex_row :: proc(t: ^testing.T) {
+	for kind in View_Kind {
+		if !view_kind_is_container(kind) do continue
+		doc: View_Doc
+		doc_reset(&doc)
+		root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+		row, _ := doc_add_keyed(&doc, root, .Flex_Row, "row", "", View_Node{size_main = 60})
+		// A sibling on either side, so a wrong track count shows up as a
+		// mismatch rather than as an empty run that happens to balance.
+		doc_add_keyed(
+			&doc,
+			row,
+			.Label,
+			"before",
+			"Before",
+			View_Node{track = ui.Track{kind = .Grow, weight = 1}},
+		)
+		nested, _ := doc_add_keyed(
+			&doc,
+			row,
+			kind,
+			"nested",
+			"",
+			View_Node{track = ui.Track{kind = .Fixed, basis = 80}, size_main = 40},
+		)
+		doc_add_keyed(&doc, nested, .Label, "inner", "Inner")
+		doc_add_keyed(
+			&doc,
+			row,
+			.Label,
+			"after",
+			"After",
+			View_Node{track = ui.Track{kind = .Grow, weight = 1}},
+		)
+
+		result, ok := view_validate(view_of(&doc))
+		testing.expectf(t, ok, "%v: fixture did not validate: %v", kind, result)
+		if !ok do continue
+		h := harness_begin()
+		view_play(&h.u, view_of(&doc), nil)
+		testing.expectf(t, h.u.ids.depth == 0, "%v: unbalanced id scope", kind)
+		harness_end(h)
+	}
+}

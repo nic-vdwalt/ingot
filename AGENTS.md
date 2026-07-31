@@ -21,6 +21,8 @@ worked example applied to a subsystem before it is written.
 | `ingot:gfx`      | graphics core (raylib-shaped): window/context, 2D shapes, textures, text atlas, input, math, cameras, `rlgl` shim |
 | `ingot:ui`       | renderer-independent immediate-mode toolkit: widgets consume `Ui_Input` and append bounded paint, semantics, and platform output. It must not import `ingot:gfx`. |
 | `ingot:ui_gfx`   | bridge that snapshots `gfx` input, replays UI paint, manages UI fonts, and applies platform output |
+| `ingot:view`     | saved views: a flat, POD UI description a tool can author and any client can replay through `ui`. Imports `ingot:ui` only, and stays web-safe |
+| `ingot:view/generate` | build-time Odin emitter for a saved view; kept out of `ingot:view` because `core:fmt` pulls `core:os`, which js/wasm lacks |
 | `ingot:prefs`    | per-app settings persistence (native file / web `localStorage`) |
 | `ingot:net`      | background HTTP `Fetcher` + self-healing RFC 6455 `WebSocket` client; the HTTP implementation is temporary until Odin provides its proper package |
 | `ingot:sys`      | system integration: URLs, cache paths, and native dialogs |
@@ -34,8 +36,8 @@ worked example applied to a subsystem before it is written.
 
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
-- **Test**: `bash scripts/test.sh` - runs `odin test` on `gfx ui ui_gfx
-  libvterm term prefs net`, the offline WSS/TLS matrix, then type-checks
+- **Test**: `bash scripts/test.sh` - runs `odin test` on `gfx ui ui_gfx view
+  view/generate libvterm term prefs net`, the offline WSS/TLS matrix, then type-checks
   `sys pty accesskit testx`. Python 3
   supervises each command. Pass extra Odin flags through, e.g.
   `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.

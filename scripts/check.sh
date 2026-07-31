@@ -52,7 +52,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_theme_tokens.py" \
 	--baseline "$root/scripts/theme_token_baseline.json" \
 	"$root"
 
-for pkg in gfx ui ui_gfx term prefs net sys pty testx; do
+for pkg in gfx ui ui_gfx view view/generate term prefs net sys pty testx; do
 	echo "== checking $pkg =="
 	# shellcheck disable=SC2086
 	odin check "$root/$pkg" $col $vet_flags "$@"
@@ -99,6 +99,7 @@ for example in \
 	chart_demo \
 	render_fixture \
 	multi_context_fixture \
+	view_builder \
 	raylib_migration_fixture; do
 	echo "== building example $example =="
 	odin build "$root/examples/$example" $col "-out:$example_out/$example" "$@"

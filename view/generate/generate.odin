@@ -1,5 +1,11 @@
 // Generating Odin source from a document.
 //
+// This is a separate package from ingot:view on purpose. Generation needs
+// core:fmt and core:strings, and core:fmt drags core:os, which does not exist
+// on js/wasm. Keeping it out of the runtime package means a web consumer that
+// only plays views never pays for the generator, and cannot fail to compile
+// because of it.
+//
 // Goal: ship a view with no runtime parse and no runtime format-version risk,
 // without introducing a second implementation of what a node means.
 //
@@ -13,16 +19,17 @@
 //
 // Two properties of the output are load-bearing:
 //
-//   - The node array is emitted at its exact length, never at VIEW_NODES_MAX.
+//   - The node array is emitted at its exact length, never at the authoring capacity.
 //     A [512]View_Node with a static initialiser would put ~69 KB of mostly
 //     zeros in .data and fail scripts/check_wasm_bloat.py, which exists because
 //     a global reaches .data the moment it has an initialiser.
 //   - Text is one string constant, so it lands in .rodata rather than being
 //     rebuilt at startup.
-package view
+package view_generate
 
 import "core:fmt"
 import "core:strings"
+import "ingot:view"
 
 // GENERATE_LINE_COLUMNS is the repository's physical line limit. The generator
 // polices itself against it rather than being excluded from the gate, because a
@@ -35,20 +42,20 @@ Generate_Options :: struct {
 	source_path:  string, // recorded in the header comment for provenance
 }
 
-// view_generate writes Odin source for view into a builder owned by the caller.
+// generate writes Odin source for a view into a builder owned by the caller.
 // It returns ok = false only when the options are unusable; a document that got
 // this far has already been validated.
-view_generate :: proc(b: ^strings.Builder, view: View, options: Generate_Options) -> (ok: bool) {
-	assert(b != nil, "view_generate: nil builder")
-	assert(len(view.nodes) <= VIEW_NODES_MAX, "view_generate: too many nodes")
+generate :: proc(b: ^strings.Builder, source: view.View, options: Generate_Options) -> (ok: bool) {
+	assert(b != nil, "generate: nil builder")
+	assert(len(source.nodes) <= view.VIEW_NODES_MAX, "generate: too many nodes")
 	symbol := options.symbol
 	if !identifier_ok(symbol) do return false
 	package_name := options.package_name if options.package_name != "" else "views"
 	if !identifier_ok(package_name) do return false
 
-	generate_header(b, view, options, package_name)
-	generate_text(b, view, symbol)
-	generate_nodes(b, view, symbol)
+	generate_header(b, source, options, package_name)
+	generate_text(b, source, symbol)
+	generate_nodes(b, source, symbol)
 	generate_accessor(b, symbol)
 	return true
 }
@@ -59,7 +66,7 @@ view_generate :: proc(b: ^strings.Builder, view: View, options: Generate_Options
 @(private = "file")
 generate_header :: proc(
 	b: ^strings.Builder,
-	view: View,
+	source: view.View,
 	options: Generate_Options,
 	package_name: string,
 ) {
@@ -69,9 +76,9 @@ generate_header :: proc(
 	if options.source_path != "" {
 		fmt.sbprintfln(b, "// source:  %s", options.source_path)
 	}
-	fmt.sbprintfln(b, "// format:  version %d", VIEW_FORMAT_VERSION)
-	fmt.sbprintfln(b, "// nodes:   %d", len(view.nodes))
-	fmt.sbprintfln(b, "// digest:  %08x", view_digest(view))
+	fmt.sbprintfln(b, "// format:  version %d", view.VIEW_FORMAT_VERSION)
+	fmt.sbprintfln(b, "// nodes:   %d", len(source.nodes))
+	fmt.sbprintfln(b, "// digest:  %08x", view_digest(source))
 	fmt.sbprintln(b, "//")
 	fmt.sbprintln(b, "// The document is emitted as data, not as widget calls: view.view_play")
 	fmt.sbprintln(b, "// remains the single implementation of what a node means.")
@@ -85,11 +92,11 @@ generate_header :: proc(
 // conservative: any byte outside printable ASCII becomes \x??, so the output is
 // valid source regardless of what the builder interned.
 @(private = "file")
-generate_text :: proc(b: ^strings.Builder, view: View, symbol: string) {
+generate_text :: proc(b: ^strings.Builder, source: view.View, symbol: string) {
 	assert(b != nil, "generate_text: nil builder")
 	fmt.sbprintln(b, "@(private)")
 	fmt.sbprintf(b, "%s_text :: \"", symbol)
-	for byte in transmute([]u8)view.text {
+	for byte in transmute([]u8)source.text {
 		write_escaped_byte(b, byte)
 	}
 	strings.write_string(b, "\"\n\n")
@@ -127,11 +134,11 @@ write_escaped_byte :: proc(b: ^strings.Builder, value: u8) {
 // canonical form means the generator polices itself instead of needing an
 // exclusion, and the staleness test can compare bytes rather than reformat.
 @(private = "file")
-generate_nodes :: proc(b: ^strings.Builder, view: View, symbol: string) {
+generate_nodes :: proc(b: ^strings.Builder, source: view.View, symbol: string) {
 	assert(b != nil, "generate_nodes: nil builder")
 	fmt.sbprintfln(b, "@(private)")
-	fmt.sbprintfln(b, "%s_nodes := [%d]view.View_Node {{", symbol, len(view.nodes))
-	for node in view.nodes {
+	fmt.sbprintfln(b, "%s_nodes := [%d]view.View_Node {{", symbol, len(source.nodes))
+	for node in source.nodes {
 		generate_node(b, node)
 	}
 	fmt.sbprintln(b, "}")
@@ -139,7 +146,7 @@ generate_nodes :: proc(b: ^strings.Builder, view: View, symbol: string) {
 }
 
 @(private = "file")
-generate_node :: proc(b: ^strings.Builder, node: View_Node) {
+generate_node :: proc(b: ^strings.Builder, node: view.View_Node) {
 	assert(b != nil, "generate_node: nil builder")
 	fmt.sbprintln(b, "\t{")
 	fmt.sbprintfln(b, "\t\tkind = .%v,", node.kind)
@@ -155,7 +162,7 @@ generate_node :: proc(b: ^strings.Builder, node: View_Node) {
 }
 
 @(private = "file")
-generate_node_text :: proc(b: ^strings.Builder, node: View_Node) {
+generate_node_text :: proc(b: ^strings.Builder, node: view.View_Node) {
 	assert(b != nil, "generate_node_text: nil builder")
 	if node.key_length != 0 {
 		fmt.sbprintfln(b, "\t\tkey_offset = %d,", node.key_offset)
@@ -169,13 +176,13 @@ generate_node_text :: proc(b: ^strings.Builder, node: View_Node) {
 		fmt.sbprintfln(b, "\t\tvalue_offset = %d,", node.value_offset)
 		fmt.sbprintfln(b, "\t\tvalue_length = %d,", node.value_length)
 	}
-	if node.binding != VIEW_BINDING_NONE {
+	if node.binding != view.VIEW_BINDING_NONE {
 		fmt.sbprintfln(b, "\t\tbinding = %d,", node.binding)
 	}
 }
 
 @(private = "file")
-generate_node_style :: proc(b: ^strings.Builder, node: View_Node) {
+generate_node_style :: proc(b: ^strings.Builder, node: view.View_Node) {
 	assert(b != nil, "generate_node_style: nil builder")
 	if node.flags != {} do fmt.sbprintfln(b, "\t\tflags = %v,", node.flags)
 	if node.ink != {} do fmt.sbprintfln(b, "\t\tink = .%v,", node.ink)
@@ -188,7 +195,7 @@ generate_node_style :: proc(b: ^strings.Builder, node: View_Node) {
 }
 
 @(private = "file")
-generate_node_numbers :: proc(b: ^strings.Builder, node: View_Node) {
+generate_node_numbers :: proc(b: ^strings.Builder, node: view.View_Node) {
 	assert(b != nil, "generate_node_numbers: nil builder")
 	// A Track stays on one line: odinfmt keeps a short nested literal inline,
 	// and every field it can carry fits well inside the column limit.
@@ -225,12 +232,12 @@ generate_accessor :: proc(b: ^strings.Builder, symbol: string) {
 // generated header so a reviewer can tell a real change from a re-run. It is
 // the same CRC the file format uses, over the same bytes, for the same reason:
 // one implementation rather than two.
-view_digest :: proc(view: View) -> u32 {
-	assert(len(view.nodes) <= VIEW_NODES_MAX, "view_digest: too many nodes")
-	buffer := make([]u8, view_encoded_size(view), context.temp_allocator)
-	written, ok := view_encode(view, buffer)
+view_digest :: proc(source: view.View) -> u32 {
+	assert(len(source.nodes) <= view.VIEW_NODES_MAX, "view_digest: too many nodes")
+	buffer := make([]u8, view.view_encoded_size(source), context.temp_allocator)
+	written, ok := view.view_encode(source, buffer)
 	assert(ok && written == len(buffer), "view_digest: encoding a valid document failed")
-	return view_checksum(buffer[VIEW_HEADER_BYTES:])
+	return view.view_checksum(buffer[view.VIEW_HEADER_BYTES:])
 }
 
 // identifier_ok rejects a symbol that would not compile. The generator's

@@ -36,6 +36,11 @@ emit_leaf :: proc(u: ^ui.Ui, view: View, node: View_Node, index: i32, bindings: 
 	}
 }
 
+// emit_presentational must call exactly one widget per node, unconditionally.
+// An earlier version skipped a label with empty text, which made a node's
+// layout footprint depend on its content and left a flex run one track short of
+// what child_tracks had declared. Kinds that cannot tolerate empty text are
+// rejected by view_validate instead of being skipped here.
 @(private = "file")
 emit_presentational :: proc(
 	u: ^ui.Ui,
@@ -47,11 +52,13 @@ emit_presentational :: proc(
 	assert(u != nil, "emit_presentational: nil Ui")
 	#partial switch node.kind {
 	case .Label:
-		if label != "" do ui.label(u, label, node.text_role, node.ink)
+		ui.label(u, label, node.text_role, node.ink)
 	case .Section_Header:
-		if label != "" do ui.section_header(u, label)
+		ensure(label != "", "emit_presentational: ui.section_header requires text")
+		ui.section_header(u, label)
 	case .Status_Pill:
-		if label != "" do ui.status_pill(u, label, node.ink, node.size_main)
+		ensure(label != "", "emit_presentational: ui.status_pill requires text")
+		ui.status_pill(u, label, node.ink, node.size_main)
 	case .Kv_Row:
 		ui.kv_row(u, label, value, node.ink, ui.Ink.Primary, node.size_main)
 	case .Progress_Bar:

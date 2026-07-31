@@ -21,6 +21,7 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 import "ingot:view"
+import gen "ingot:view/generate"
 
 Options :: struct {
 	input:        string,
@@ -67,10 +68,10 @@ run :: proc(options: Options) -> int {
 
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
-	generated := view.view_generate(
+	generated := gen.generate(
 		&builder,
 		view.view_of(doc),
-		view.Generate_Options {
+		gen.Generate_Options {
 			package_name = options.package_name,
 			symbol = options.symbol,
 			source_path = filepath.base(options.input),

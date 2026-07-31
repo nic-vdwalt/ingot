@@ -103,6 +103,8 @@ bind_label :: proc(value: string) -> Binding {
 // that accumulated across frames would report a click forever.
 sink_reset :: proc(sink: ^Event_Sink) {
 	assert(sink != nil, "sink_reset: nil sink")
+	assert(sink.count >= 0 && sink.count <= VIEW_EVENTS_MAX, "sink_reset: count out of range")
+	assert(sink.dropped >= 0, "sink_reset: negative dropped count")
 	sink.count = 0
 	sink.dropped = 0
 }
@@ -134,6 +136,13 @@ view_fired :: proc(view: View, sink: ^Event_Sink, key: string) -> bool {
 		if text_slice(view, event.key_offset, event.key_length) == key do return true
 	}
 	return false
+}
+
+// view_text resolves a node's offset/length pair against the text blob. Tools
+// that read or rewrite a document need it, and a caller computing the slice
+// itself would be re-deriving a bound this package already checks.
+view_text :: proc(view: View, offset: u32, length: u16) -> string {
+	return text_slice(view, offset, length)
 }
 
 // text_slice resolves an offset/length pair against the text blob. Every read

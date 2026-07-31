@@ -11,6 +11,29 @@ compatibility, while minor releases may break it. See the
 
 ### Added
 
+- `ingot:view`: saved views. A view is a flat, byte-copyable description of a
+  UI that a tool can author, save, ship, and diff, replayed through the public
+  `ui` facade by `view.view_play`. Format version 1 covers layout containers,
+  buttons, the core form controls, and presentational widgets.
+  - `View_Doc` is the mutable authoring buffer; `View` is the exactly-sized
+    borrowed form `view_play` consumes, so a shipped view costs only its own
+    node bytes rather than the authoring capacity.
+  - `view_decode` validates and returns `ok = false` for any malformed input.
+    It never asserts on file content, because a corrupt or truncated `.ingv` is
+    an operating error and a view may arrive over a network.
+  - `Bindings` is the consumer contract: the document owns no state, the caller
+    supplies pointers and reads interaction from an `Event_Sink`. Identity comes
+    from author-assigned keys, so a control survives relabelling and reordering.
+  - `tools/viewc` compiles a `.ingv` into Odin source. It emits the document as
+    a static `View` literal rather than as unrolled widget calls, so `view_play`
+    stays the only implementation of what a node means and there is no second
+    emitter to drift from it.
+  - `examples/view_builder` is a working builder whose canvas is the runtime: it
+    plays the document being edited through the same `view_play` a shipping
+    consumer uses. `scripts/smoke-view-builder.sh` drives it headlessly.
+  - `fuzz/run.sh view` fuzzes the decoder with random bytes, mutated files, and
+    forged length fields.
+  - See [the view format](docs/view-format.md).
 - `gfx.renderer_peak_usage` and `Paint_List.peak_count` / `peak_text_len`:
   always-on high-water marks for the batch and paint buffers, reported by the
   gallery smoke run. Unlike `Renderer_Stats` these are not gated behind a

@@ -155,12 +155,14 @@ get_u32 :: proc(c: ^Cursor) -> (value: u32, ok: bool) {
 
 @(private = "package")
 get_i32 :: proc(c: ^Cursor) -> (value: i32, ok: bool) {
+	assert(c != nil, "get_i32: nil cursor")
 	raw := get_u32(c) or_return
 	return i32(raw), true
 }
 
 @(private = "package")
 get_f32 :: proc(c: ^Cursor) -> (value: f32, ok: bool) {
+	assert(c != nil, "get_f32: nil cursor")
 	raw := get_u32(c) or_return
 	return transmute(f32)raw, true
 }
@@ -171,7 +173,8 @@ get_f32 :: proc(c: ^Cursor) -> (value: f32, ok: bool) {
 // exhaustiveness.
 @(private = "package")
 get_enum :: proc(c: ^Cursor, $T: typeid, count: int) -> (value: T, ok: bool) {
-	assert(count > 0, "get_enum: empty enum")
+	assert(c != nil, "get_enum: nil cursor")
+	assert(count > 0 && count <= int(max(u8)) + 1, "get_enum: enum does not fit one byte")
 	raw := get_u8(c) or_return
 	if int(raw) >= count do return T{}, false
 	return T(raw), true

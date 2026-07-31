@@ -33,6 +33,7 @@ Validate_Fault :: enum u8 {
 	Missing_Label,
 	Focusable_Count,
 	Leaf_Has_Child,
+	Track_Range,
 }
 
 Validate_Result :: struct {
@@ -135,6 +136,9 @@ validate_payloads :: proc(view: View) -> Validate_Result {
 		if view_kind_needs_label(node.kind) && node.label_length == 0 {
 			return {fault = .Missing_Label, node = at}
 		}
+		// Decode checks this too, but a hand-built document never went through
+		// decode, and a negative track size reaches ui's flex solver directly.
+		if !track_ok(node.track) do return {fault = .Track_Range, node = at}
 	}
 	if focusables > ui.MAX_FOCUSABLES do return {fault = .Focusable_Count, node = VIEW_NODE_NONE}
 	return {}
@@ -150,6 +154,13 @@ validate_node_binding :: proc(node: View_Node, at: i32) -> Validate_Result {
 	if node.binding == VIEW_BINDING_NONE do return {fault = .Missing_Binding, node = at}
 	if node.binding < 0 do return {fault = .Binding_Range, node = at}
 	return {}
+}
+
+@(private = "file")
+track_ok :: proc(track: ui.Track) -> bool {
+	if track.basis < 0 || track.weight < 0 do return false
+	if track.min_size < 0 || track.max_size < 0 do return false
+	return true
 }
 
 @(private = "file")
