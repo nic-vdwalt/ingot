@@ -28,9 +28,20 @@ compatibility, while minor releases may break it. See the
     a static `View` literal rather than as unrolled widget calls, so `view_play`
     stays the only implementation of what a node means and there is no second
     emitter to drift from it.
+  - `view.Play_Trace` + `view_play_traced`: optional per-node rect recording
+    over the same single walk, so a tool can hit-test the played frame
+    (`trace_node_at`, `trace_container_at`). Builder instrumentation, not part
+    of the wire format.
+  - `doc_set_key` / `doc_set_label` / `doc_set_value` and `doc_text_compact`:
+    text editing over the append-only blob, with compaction so an editing
+    session cannot exhaust it.
   - `examples/view_builder` is a working builder whose canvas is the runtime: it
     plays the document being edited through the same `view_play` a shipping
-    consumer uses. `scripts/smoke-view-builder.sh` drives it headlessly.
+    consumer uses. Widgets drag from the palette onto the canvas with a live
+    drop-target highlight; in Edit mode clicking the canvas selects the element
+    under the cursor (Live mode keeps widgets interactive); the inspector is a
+    kind-aware config panel with real text fields for key/label/placeholder.
+    `scripts/smoke-view-builder.sh` drives it headlessly.
   - `fuzz/run.sh view` fuzzes the decoder with random bytes, mutated files, and
     forged length fields.
   - See [the view format](docs/view-format.md).

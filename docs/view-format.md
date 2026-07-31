@@ -100,6 +100,13 @@ same reasoning applies to test files: they carry `#+build !js`, as `ui`'s do.
 
 `tools/viewc` is the CLI over `ingot:view/generate`.
 
+`ingot:view` also carries `Play_Trace`: an optional per-node rect recording
+filled by `view_play_traced` over the same walk `view_play` uses. It exists so
+a builder can hit-test the played frame - click to select, hover to target a
+drop. It is instrumentation, not format: nothing about it is serialized, its
+rects are physical pixels valid for exactly one played frame, and a consumer
+that only plays views never touches it.
+
 ## The document
 
 ### Nodes

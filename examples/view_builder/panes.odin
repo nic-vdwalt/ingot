@@ -61,7 +61,10 @@ draw_mode_toggle :: proc(form: ^ui.Ui, data: ^State) {
 toggle_mode :: proc(data: ^State) {
 	assert(data != nil, "toggle_mode: nil state")
 	data.mode = data.mode == .Edit ? .Live : .Edit
-	set_status(data, data.mode == .Edit ? "edit mode: click to select" : "live mode: widgets active")
+	set_status(
+		data,
+		data.mode == .Edit ? "edit mode: click to select" : "live mode: widgets active",
+	)
 }
 
 // draw_status reports validity every frame rather than only after an action.
@@ -255,7 +258,12 @@ draw_canvas :: proc(form: ^ui.Ui, data: ^State) {
 	source := view.view_of(&data.doc)
 	result, ok := view.view_validate(source)
 	if !ok {
-		ui.label(form, fmt.tprintf("cannot render: %v", result.fault), ui.Text_Role.Body, ui.Ink.Danger)
+		ui.label(
+			form,
+			fmt.tprintf("cannot render: %v", result.fault),
+			ui.Text_Role.Body,
+			ui.Ink.Danger,
+		)
 		return
 	}
 	table := bindings(data)
@@ -328,12 +336,7 @@ selection_tag :: proc(frame: ^ui.Ui_Frame, data: ^State, selected: ui.Rect_I32) 
 	size := metrics.FONT_SIZE_NOTE
 	width := ui.measure_text_string_frame(frame, label, size) + 10
 	tag_h := size + 6
-	tag := ui.Rect {
-		f32(selected.x),
-		f32(selected.y - tag_h - 2),
-		f32(width),
-		f32(tag_h),
-	}
+	tag := ui.Rect{f32(selected.x), f32(selected.y - tag_h - 2), f32(width), f32(tag_h)}
 	// Keep the tag on screen when the selection touches the canvas top.
 	if tag.y < f32(data.canvas.y) do tag.y = f32(selected.y) + 2
 	ui.overlay_rounded(frame, tag, 0.5, 6, theme.fg_accent)

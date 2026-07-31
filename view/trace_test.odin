@@ -18,12 +18,7 @@ mono_font :: proc(data: rawptr, size: i32) -> ui.Font_Id {
 }
 
 @(private = "file")
-mono_measure :: proc(
-	data: rawptr,
-	font: ui.Font_Id,
-	text: string,
-	size, spacing: f32,
-) -> ui.Vec2 {
+mono_measure :: proc(data: rawptr, font: ui.Font_Id, text: string, size, spacing: f32) -> ui.Vec2 {
 	return ui.Vec2{MONO_CELL * f32(len(text)), size}
 }
 
