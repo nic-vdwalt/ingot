@@ -84,25 +84,76 @@ sketch_surfaces_are_opaque :: proc(t: ^testing.T) {
 	}
 }
 
-// The ground must actually be toned. A sketch palette whose paper drifted to
-// white would be a light theme with pigment accents, which is not the point:
-// these pigments are chosen to sit on a mid ground and look weak on white.
+// A sketch ground must read as its own stock, not as a screen palette shifted
+// a little.
+//
+// The bar this replaces was ">1.15:1 against white", which a ground measuring
+// 1.32:1 passed while looking like the light theme dimmed by a third. Distance
+// from white is the wrong measurement: a user never compares the ground to
+// white, they compare it to the other palettes in the cycle. Measured that way,
+// 1.8:1 is about where "light theme, slightly darker" stops and "toned paper"
+// begins.
+SKETCH_GROUND_SEPARATION_MIN :: 1.8
+
+// Toned stock is mid-value by definition: dark enough that white chalk reads
+// against it, light enough that graphite still does. That two-way working is
+// the entire reason toned paper exists, and it is only available in this
+// window.
+//
+// The floor replaces a bare `relative_luminance(bg) > 0.35` that carried no
+// message and no derivation. It was not a property of toned paper - it was the
+// luminance of the grounds that happened to be committed at the time, frozen
+// into an assertion, and it rejected every genuinely toned value.
+SKETCH_GROUND_LUMINANCE_MIN :: 0.20
+SKETCH_GROUND_LUMINANCE_MAX :: 0.55
+
+// The ground must be visibly distinct from both screen palettes.
+//
+// Checking both directions matters: a ground can be far from white and still
+// be indistinguishable from the dark theme, and a "sketch" palette that
+// collapses onto either one is not a third choice, it is a duplicate.
 @(test)
 sketch_ground_is_toned :: proc(t: ^testing.T) {
-	white := Color{255, 255, 255, 255}
+	light := Theme(THEME_LIGHT)
+	dark := Theme(THEME_DARK)
 	for th in sketch_themes() {
 		style := th
-		ratio := contrast_ratio(style.bg_color, white)
+		from_light := contrast_ratio(style.bg_color, light.bg_color)
 		testing.expectf(
 			t,
-			ratio > 1.15,
-			"sketch ground %v is only %.2f:1 from white: not toned stock",
+			from_light >= SKETCH_GROUND_SEPARATION_MIN,
+			"sketch ground %v is %.2f:1 from the light theme, below %.1f:1: reads as light mode dimmed",
 			style.bg_color,
-			ratio,
+			from_light,
+			f64(SKETCH_GROUND_SEPARATION_MIN),
 		)
-		// ...but not so dark it stops being paper and becomes a dark theme,
-		// where the pigments would need inverting rather than darkening.
-		testing.expect(t, relative_luminance(style.bg_color) > 0.35)
+		from_dark := contrast_ratio(style.bg_color, dark.bg_color)
+		testing.expectf(
+			t,
+			from_dark >= SKETCH_GROUND_SEPARATION_MIN,
+			"sketch ground %v is %.2f:1 from the dark theme, below %.1f:1: reads as dark mode lifted",
+			style.bg_color,
+			from_dark,
+			f64(SKETCH_GROUND_SEPARATION_MIN),
+		)
+
+		luminance := relative_luminance(style.bg_color)
+		testing.expectf(
+			t,
+			luminance >= SKETCH_GROUND_LUMINANCE_MIN,
+			"sketch ground %v has luminance %.3f, below %.2f: too dark for graphite to read",
+			style.bg_color,
+			luminance,
+			f64(SKETCH_GROUND_LUMINANCE_MIN),
+		)
+		testing.expectf(
+			t,
+			luminance <= SKETCH_GROUND_LUMINANCE_MAX,
+			"sketch ground %v has luminance %.3f, above %.2f: too pale for chalk to read",
+			style.bg_color,
+			luminance,
+			f64(SKETCH_GROUND_LUMINANCE_MAX),
+		)
 	}
 }
 
@@ -249,6 +300,105 @@ on_accent_ink_reads_on_accent_fills :: proc(t: ^testing.T) {
 			ratio >= MIN_TEXT_CONTRAST,
 			"fg_on_accent on button_bg is %.2f:1, below AA",
 			ratio,
+		)
+	}
+}
+
+// SKETCH_GROUND_CHROMA_MIN is how much colour a ground must carry to be stock
+// rather than a UI neutral.
+//
+// Chroma is max(r,g,b) - min(r,g,b): the plain distance from grey. A ground at
+// chroma 6 is neutral by any measure, and neutral means the eye reads it as
+// "interface grey, dimmed" no matter how the luminance is tuned. Real toned
+// papers measure 60-80 for tan and kraft; even a "grey" toned sheet carries a
+// blue or green cast rather than being dead neutral.
+//
+// 12 is the floor for a cast to be perceptible at all; the warm ground is held
+// far higher by sketch_warm_ground_is_warm below.
+SKETCH_GROUND_CHROMA_MIN :: 12
+
+color_chroma :: proc(color: Color) -> int {
+	high := max(int(color.r), max(int(color.g), int(color.b)))
+	low := min(int(color.r), min(int(color.g), int(color.b)))
+	return high - low
+}
+
+// Every ground carries a cast. A neutral ground is a UI grey, whatever its
+// luminance.
+@(test)
+sketch_grounds_carry_a_cast :: proc(t: ^testing.T) {
+	for th in sketch_themes() {
+		style := th
+		chroma := color_chroma(style.bg_color)
+		testing.expectf(
+			t,
+			chroma >= SKETCH_GROUND_CHROMA_MIN,
+			"sketch ground %v has chroma %d, below %d: it is a UI neutral, not toned stock",
+			style.bg_color,
+			chroma,
+			SKETCH_GROUND_CHROMA_MIN,
+		)
+	}
+}
+
+// The warm ground has to be visibly warm, not faintly beige. Kraft and tan
+// stock measure 60-80; below about 40 the cast stops reading as paper colour
+// and starts reading as a slightly off-white screen.
+@(test)
+sketch_warm_ground_is_warm :: proc(t: ^testing.T) {
+	WARM_CHROMA_MIN :: 40
+	style := Theme(THEME_SKETCH_WARM)
+	chroma := color_chroma(style.bg_color)
+	testing.expectf(
+		t,
+		chroma >= WARM_CHROMA_MIN,
+		"warm ground %v has chroma %d, below %d: not kraft, just off-white",
+		style.bg_color,
+		chroma,
+		WARM_CHROMA_MIN,
+	)
+	// Warm means red-leaning: a "warm" ground whose blue channel led would be
+	// cool no matter how much chroma it carried.
+	testing.expect(t, style.bg_color.r > style.bg_color.b)
+}
+
+// The audit: the whole contrast matrix, printed on failure.
+//
+// This exists because the values in sketch.odin were derived in a throwaway
+// script and nothing in the repository could reproduce them. Numbers that
+// justify a design and live nowhere near it are how a palette gets retuned by
+// guesswork later. On failure this prints every ground, ink and pigment ratio,
+// so the next person to touch these values re-derives rather than re-guesses.
+@(test)
+sketch_palette_audit :: proc(t: ^testing.T) {
+	for th, index in sketch_themes() {
+		style := th
+		surfaces := theme_reading_surfaces(&style)
+		worst := f64(21)
+		worst_ink := Ink.Primary
+		for ink in READING_INKS {
+			color := theme_ink(&style, ink)
+			for surface in surfaces {
+				ratio := contrast_ratio(color, surface)
+				if ratio < worst {
+					worst = ratio
+					worst_ink = ink
+				}
+			}
+		}
+		// The audit is a measurement, not a second AA gate - that is
+		// sketch_themes_meet_full_aa's job. It fails only when the margin has
+		// become so thin that the palette is one rounding away from illegible.
+		testing.expectf(
+			t,
+			worst >= MIN_TEXT_CONTRAST,
+			"palette %d: worst reading pair is ink %v at %.2f:1 (ground %v, luminance %.3f, chroma %d)",
+			index,
+			worst_ink,
+			worst,
+			style.bg_color,
+			relative_luminance(style.bg_color),
+			color_chroma(style.bg_color),
 		)
 	}
 }

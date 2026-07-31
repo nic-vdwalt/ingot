@@ -26,35 +26,26 @@ when SMOKE {
 	SMOKE_STEP_FRAMES :: 20 // ~1/3 s per step at 60 fps
 	SMOKE_SCALES := [?]f32{0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 0} // 0 = auto
 
-	// Theme states as explicit combinations rather than as a counter.
+	// Theme steps: every palette, with reduced motion off and then on.
 	//
-	// These used to be four mutually exclusive steps derived from an index
+	// This used to be four mutually exclusive steps derived from an index
 	// (dark = t==0, high_contrast = t==2, reduced_motion = t==3), which meant
 	// high contrast was only ever exercised with full motion and reduced
-	// motion only ever with the light palette. The combinations that were
-	// never reached are exactly the ones an accessibility user runs.
+	// motion only ever with the light palette. The combinations never reached
+	// were exactly the ones an accessibility user runs.
 	//
-	// Every palette appears with motion both on and off, because the paper
-	// palettes take a drawing path the screen ones do not: they carry a
-	// substrate, so a crash in the rule or margin code would otherwise only
-	// surface when a human happened to select a sketch palette.
-	Smoke_Theme :: struct {
-		palette:        Palette,
-		high_contrast:  bool,
-		reduced_motion: bool,
-	}
-	SMOKE_THEMES := [?]Smoke_Theme {
-		{palette = .Dark, high_contrast = false, reduced_motion = false},
-		{palette = .Light, high_contrast = false, reduced_motion = false},
-		{palette = .Sketch_Warm, high_contrast = false, reduced_motion = false},
-		{palette = .Sketch_Grey, high_contrast = false, reduced_motion = false},
-		{palette = .Dark, high_contrast = false, reduced_motion = true},
-		{palette = .Light, high_contrast = false, reduced_motion = true},
-		{palette = .Sketch_Warm, high_contrast = false, reduced_motion = true},
-		{palette = .Sketch_Grey, high_contrast = false, reduced_motion = true},
-		{palette = .Dark, high_contrast = true, reduced_motion = false},
-		{palette = .Sketch_Warm, high_contrast = true, reduced_motion = false},
-		{palette = .Dark, high_contrast = true, reduced_motion = true},
+	// It is now derived from the enum rather than listed, so a palette added
+	// to the gallery is smoke-tested without anyone remembering to extend a
+	// table. That matters because the sketch palettes take a drawing path the
+	// screen ones do not - they carry a substrate, so a crash in the tooth or
+	// margin code would otherwise surface only when a human happened to
+	// select one.
+	//
+	// Motion stays a separate axis because it genuinely is orthogonal: it
+	// applies to every palette, high contrast included.
+	SMOKE_MOTION := [?]bool{false, true}
+	smoke_theme_steps :: proc() -> int {
+		return len(Palette) * 2
 	}
 
 	smoke_frame: int
@@ -67,7 +58,7 @@ when SMOKE {
 		smoke_step_index += 1
 
 		scale_steps := len(SMOKE_SCALES)
-		theme_steps := len(SMOKE_THEMES)
+		theme_steps := smoke_theme_steps()
 		section_steps := len(Section)
 		total := scale_steps + theme_steps + section_steps
 
@@ -77,17 +68,13 @@ when SMOKE {
 			apply_scale(stored_scale)
 			fmt.printfln("smoke: scale %.2f", stored_scale)
 		case step < scale_steps + theme_steps:
-			combo := SMOKE_THEMES[step - scale_steps]
-			palette = combo.palette
-			high_contrast = combo.high_contrast
-			reduced_motion = combo.reduced_motion
+			// Palette advances fastest so each motion setting sweeps the whole
+			// palette set, rather than one palette being tested twice in a row.
+			index := step - scale_steps
+			palette = Palette(index % len(Palette))
+			reduced_motion = SMOKE_MOTION[index / len(Palette)]
 			apply_gallery_theme()
-			fmt.printfln(
-				"smoke: theme %s hc=%v rm=%v",
-				PALETTE_NAMES[palette],
-				high_contrast,
-				reduced_motion,
-			)
+			fmt.printfln("smoke: theme %s rm=%v", PALETTE_NAMES[palette], reduced_motion)
 		case step < total:
 			section = Section(step - scale_steps - theme_steps)
 			ui.pane_reset(&content_pane)

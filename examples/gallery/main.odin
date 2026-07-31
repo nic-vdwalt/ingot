@@ -97,25 +97,36 @@ NAV_STRIP_CELL_W :: 92
 
 // --- caller-owned state (the whole point: no hidden library state) ----------
 
-// Palette is a cycle rather than a `dark: bool`, because a boolean cannot
-// express four choices. Ordered so the button walks screen themes first and
-// then sketchbook, which reads as a progression rather than a jumble.
+// Palette is a single cycle over every appearance the gallery offers,
+// including high contrast.
+//
+// It started as `dark: bool`, then grew a `high_contrast: bool` beside it.
+// Two booleans span eight combinations, but only five were reachable:
+// selecting high contrast had to force-clear the palette, because "high
+// contrast *and* sketch warm" is not a thing - applying the high-contrast
+// palette discards the other choice entirely. The flags were modelling one
+// decision as two, and the force-clear was the workaround for that.
+//
+// One enum makes the exclusivity structural rather than enforced. Ordered so
+// the button walks screen themes, then sketchbook, then the accessibility
+// palette last: a progression rather than a jumble.
 Palette :: enum {
 	Dark,
 	Light,
 	Sketch_Warm,
 	Sketch_Grey,
+	High_Contrast,
 }
 
 PALETTE_NAMES := [Palette]string {
-	.Dark        = "Dark",
-	.Light       = "Light",
-	.Sketch_Warm = "Sketch warm",
-	.Sketch_Grey = "Sketch grey",
+	.Dark          = "Dark",
+	.Light         = "Light",
+	.Sketch_Warm   = "Sketch warm",
+	.Sketch_Grey   = "Sketch grey",
+	.High_Contrast = "High contrast",
 }
 
 palette := Palette.Dark
-high_contrast := false
 reduced_motion := false
 section := Section.Buttons
 debug_on := false
@@ -138,6 +149,8 @@ palette_theme :: proc(value: Palette) -> ui.Theme {
 		return ui.theme_sketch_warm()
 	case .Sketch_Grey:
 		return ui.theme_sketch_grey()
+	case .High_Contrast:
+		return ui.theme_high_contrast()
 	}
 	return ui.theme_dark()
 }
@@ -348,7 +361,6 @@ apply_scale :: proc(scale: f32) {
 // construction.
 Nav_Control :: enum {
 	Theme,
-	Contrast,
 	Motion,
 	Scale,
 }
@@ -361,13 +373,9 @@ nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
 	case .Theme:
 		// Naming the *next* palette rather than the current one: the button is
 		// an action, and a button labelled with the state you are already in
-		// reads as a status display.
-		next := PALETTE_NAMES[palette_next(palette)]
-		if compact do return next
-		return next
-	case .Contrast:
-		if compact do return "Contrast"
-		return "Standard contrast" if high_contrast else "High contrast"
+		// reads as a status display. The compact form is identical because the
+		// palette names are already short enough for a phone-width cell.
+		return PALETTE_NAMES[palette_next(palette)]
 	case .Motion:
 		if compact do return "Motion"
 		return "Motion: reduced" if reduced_motion else "Motion: full"
@@ -384,12 +392,9 @@ nav_control_activate :: proc(control: Nav_Control, frame: ^ui.Ui_Frame) {
 	assert(frame != nil, "nav_control_activate: nil frame")
 	switch control {
 	case .Theme:
+		// No force-clear needed: high contrast is a palette now, so choosing
+		// another one leaves it by construction rather than by cleanup.
 		palette = palette_next(palette)
-		// Leaving high contrast on would override the palette just chosen.
-		high_contrast = false
-		apply_gallery_theme(frame)
-	case .Contrast:
-		high_contrast = !high_contrast
 		apply_gallery_theme(frame)
 	case .Motion:
 		reduced_motion = !reduced_motion
@@ -436,10 +441,9 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
 // Stable widget identities for the shared controls. Derived from the enum so a
 // new control cannot be added without one.
 NAV_CONTROL_IDS := [Nav_Control]string {
-	.Theme    = "theme",
-	.Contrast = "contrast",
-	.Motion   = "motion",
-	.Scale    = "scale",
+	.Theme  = "theme",
+	.Motion = "motion",
+	.Scale  = "scale",
 }
 
 // draw_nav_strip is the narrow-viewport nav: wrapped rows of section buttons
@@ -495,9 +499,14 @@ draw_nav_strip :: proc(frame: ^ui.Ui_Frame, top, sw: i32) -> i32 {
 }
 
 apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
-	// High contrast is an override rather than a fifth palette: it exists to
-	// win over whatever else is selected, so it is checked first.
-	t := ui.theme_high_contrast() if high_contrast else palette_theme(palette)
+	// One lookup. High contrast used to be an override checked ahead of the
+	// palette; folding it into the enum removed the branch along with the
+	// force-clear that kept the two in step.
+	//
+	// reduced_motion stays separate because it genuinely is orthogonal: it
+	// applies to every palette, including high contrast, and a user who needs
+	// both must be able to have both.
+	t := palette_theme(palette)
 	t.reduced_motion = reduced_motion
 	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app), t)
 	if frame != nil do ui.request_redraw(frame)

@@ -133,9 +133,14 @@ Theme :: struct {
 	paper_rule:                 Color, // Ruled notebook line
 	paper_tooth:                Color, // Sketchbook paper grain flecks
 	graphite:                   Color, // Pencil: heading underlines, captions
+	chalk:                      Color, // White gouache: the light direction
 	highlighter:                Color, // Marker swipe behind selected content
 	tape_color:                 Color, // Tape strip across a corner
 	ink_faded:                  Color, // Ink that has soaked or dried lighter
+
+	// Pigments are paint, not text. See the Pigment enum for why they are a
+	// separate table from the fg_* inks rather than the same values reused.
+	pigments:                   [Pigment]Color,
 
 	// Roles that resolve a state or placement the palette previously left to
 	// each widget to guess.

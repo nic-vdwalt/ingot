@@ -42,18 +42,25 @@ SPECIMEN :: "Sphinx of black quartz, judge my vow"
 // Pigment_Study names one entry in the opening colour study. The pigments are
 // the palette's own accent roles rather than a separate table, so a retheme
 // repaints the study instead of leaving it showing stale colours.
+//
+// The *label* therefore has to name the role, not the pigment. On the sketch
+// palettes Ink.Accent is ultramarine, but on high contrast it is gold, and a
+// block captioned "ultramarine" while rendering yellow is simply wrong. The
+// pigment name is kept as a secondary note: it describes the sketch palettes
+// rather than whatever is currently on screen.
 Pigment_Study :: struct {
-	name: string,
-	ink:  ui.Ink,
+	role:    string,
+	pigment: string,
+	ink:     ui.Ink,
 }
 
 PIGMENT_STUDIES := [?]Pigment_Study {
-	{"ultramarine", .Accent},
-	{"vermilion", .Danger},
-	{"viridian", .Success},
-	{"yellow ochre", .Tool},
-	{"burnt sienna", .Diff_Remove},
-	{"sap green", .Assistant},
+	{"accent", "ultramarine", .Accent},
+	{"danger", "vermilion", .Danger},
+	{"success", "viridian", .Success},
+	{"tool", "yellow ochre", .Tool},
+	{"removed", "burnt sienna", .Diff_Remove},
+	{"assistant", "sap green", .Assistant},
 }
 
 // Page is the writing cursor: a physical-pixel position that flows downward.
@@ -233,17 +240,41 @@ draw_pigment_studies :: proc(page: ^Page) {
 
 	// Names sit under the band rather than on the paint: a label on a wash is
 	// unreadable at whatever alpha the wash happens to be.
+	//
+	// The role goes under each block because that is what the colour actually
+	// is on any palette. The pigment names are a single note in the margin,
+	// since they describe the sketch palettes rather than the swatches on
+	// screen - on high contrast these same roles resolve to gold and white.
 	label_row := page_rows(page, 1)
 	for study, index in PIGMENT_STUDIES {
 		ui.text_truncated(
 			page.frame,
-			study.name,
+			study.role,
 			body + i32(index) * pitch,
 			label_row.y,
 			pitch - ui.ui_frame_sc(page.frame, 4),
 			.Note,
 			.Secondary,
 		)
+	}
+
+	// The pigment names only under a sketch palette, in muted ink so they read
+	// as a caption rather than as a second set of labels. On a screen palette
+	// they would be a lie: Ink.Accent is gold there, not ultramarine.
+	if ui.ui_frame_theme(page.frame).substrate.kind != .None {
+		pigment_row := page_rows(page, 1)
+		for study, index in PIGMENT_STUDIES {
+			ui.text_truncated(
+				page.frame,
+				study.pigment,
+				body + i32(index) * pitch,
+				pigment_row.y,
+				pitch - ui.ui_frame_sc(page.frame, 4),
+				.Note,
+				.Muted,
+			)
+		}
+		annotate(page, pigment_row, "pigments")
 	}
 	page_rows(page, 1)
 }
