@@ -108,8 +108,17 @@ Theme :: struct {
 	button_danger_fg:           Color,
 	button_disabled_bg:         Color,
 	button_pressed:             Color,
+
+	// surface_pressed is the generic press tint for every surface that is not
+	// the primary button: rows, tabs, menu items, chips, cards. Before it
+	// existed only the primary button had a pressed color, so every other
+	// surface stayed visually identical between "hovered" and "being clicked".
+	// It is a palette role rather than an arithmetic darkening of bg_hover
+	// because a light theme must press *darker* and a dark theme *lighter*,
+	// and no single arithmetic rule gets both right.
+	surface_pressed:            Color,
 	fg_accent_light:            Color, // Lighter accent for text on dark
-	fg_muted_dim:               Color, // Dimmed text (muted users, disabled)
+	fg_muted_dim:               Color, // Dimmed text; Ink.Muted only, not disabled state
 	modal_dim:                  Color, // Backdrop dim behind modals
 	focus_ring:                 Color, // Keyboard focus-visible ring around widgets
 
@@ -118,9 +127,146 @@ Theme :: struct {
 	button_primary_grad_top:    Color, // Gloss sheen on primary buttons (top)
 	button_primary_grad_bottom: Color, // Gloss fade-out color (bottom)
 
+	// Paper materials. A palette that leaves these zeroed simply draws no
+	// paper: material.odin treats a zero-alpha color as "effect disabled", so
+	// the screen palettes need no special case to opt out.
+	paper_rule:                 Color, // Ruled notebook line
+	paper_tooth:                Color, // Sketchbook paper grain flecks
+	graphite:                   Color, // Pencil: heading underlines, captions
+	chalk:                      Color, // White gouache: the light direction
+	highlighter:                Color, // Marker swipe behind selected content
+	tape_color:                 Color, // Tape strip across a corner
+	ink_faded:                  Color, // Ink that has soaked or dried lighter
+
+	// Pigments are paint, not text. See the Pigment enum for why they are a
+	// separate table from the fg_* inks rather than the same values reused.
+	pigments:                   [Pigment]Color,
+
+	// Roles that resolve a state or placement the palette previously left to
+	// each widget to guess.
+	fg_on_accent:               Color, // Text drawn on any accent fill
+	caption_hover:              Color, // Window caption button hover
+	caption_pressed:            Color, // Window caption button press
+	caption_close_hover:        Color, // Close button hover (destructive)
+	caption_close_pressed:      Color, // Close button press
+	spell_error:                Color, // Spellcheck squiggle
+
+	// Substrate selects the page texture drawn behind panels and cards.
+	substrate:                  Substrate,
+
 	// Accessibility. reduced_motion snaps animations (hover ease, caret
 	// blink) to their final state for vestibular/motion-sensitive users.
 	reduced_motion:             bool,
+}
+
+// Substrate_Kind names the page texture drawn behind a surface.
+//
+// Dots are deliberately not a whole-page option even though the enum permits
+// asking: a dot grid is quadratic in the area it covers and would exceed the
+// per-frame paint budget several times over at 4K. draw_dot_grid asserts the
+// bound, and dot_grid_fits lets a caller check before asking. Tooth carries
+// its own hard count for the same reason.
+// Pigment names a paint colour: laid as an area, carrying no text.
+//
+// This is a separate table from the fg_* inks, and the separation is the whole
+// reason the sketch palettes can be properly toned.
+//
+// The pigments were originally the *same values* as the matching inks. That
+// made every pigment inherit a text role's duty to clear WCAG AA against the
+// ground - and since a swatch must pass, the lightest pigment then dictated
+// how light the paper could be. Yellow ochre, the lightest of the set, held
+// the ground two full steps paler than real toned stock. The reasoning was
+// circular and it was written into the palette as though it were a law of
+// colour rather than a consequence of one modelling choice.
+//
+// Paint carries no text, so it is bound by no text-contrast rule and can be
+// saturated. Ink carries text and must be deep enough to read. Two tables
+// because they are two jobs; sharing one value means whichever constraint is
+// stricter silently governs both.
+Pigment :: enum u8 {
+	Accent,
+	Danger,
+	Success,
+	Tool,
+	Earth,
+	Leaf,
+}
+
+// pigment_ink pairs each pigment with the ink that names the same idea.
+//
+// Exposed so the pairing is iterable: the invariant "a pigment is at least as
+// saturated as its ink" is then a loop over the enum rather than six
+// hand-written assertions that a seventh pigment would silently escape.
+pigment_ink :: proc(pigment: Pigment) -> Ink {
+	switch pigment {
+	case .Accent:
+		return .Accent
+	case .Danger:
+		return .Danger
+	case .Success:
+		return .Success
+	case .Tool:
+		return .Tool
+	case .Earth:
+		return .Diff_Remove
+	case .Leaf:
+		return .Assistant
+	}
+	return .Primary
+}
+
+// theme_pigment resolves a pigment against a palette, falling back to the
+// matching ink when the palette carries no paint.
+//
+// The fallback is what lets a pigment-aware widget draw on a screen palette
+// without a branch at every call site: THEME_DARK has no pigments, so a
+// pigment block there is simply drawn in the corresponding ink.
+theme_pigment :: proc(style: ^Theme, pigment: Pigment) -> Color {
+	assert(style != nil, "theme_pigment: nil theme")
+	// The switch is not decoration: the lookup is total over the enum, so a
+	// range assertion would be the tautology TIGER_STYLE.md forbids by name,
+	// and switching keeps the totality visible to the compiler instead - a
+	// pigment added without a case here is a build error rather than a silent
+	// zero. The assertion gate reaches the same conclusion from the other
+	// direction: it wants len()/cap() evidence, which an enum-indexed table
+	// has no way to supply.
+	color: Color
+	switch pigment {
+	case .Accent:
+		color = style.pigments[Pigment.Accent]
+	case .Danger:
+		color = style.pigments[Pigment.Danger]
+	case .Success:
+		color = style.pigments[Pigment.Success]
+	case .Tool:
+		color = style.pigments[Pigment.Tool]
+	case .Earth:
+		color = style.pigments[Pigment.Earth]
+	case .Leaf:
+		color = style.pigments[Pigment.Leaf]
+	}
+	// A palette may leave a pigment unset; the caller must never receive a
+	// transparent colour. That is the contract worth asserting.
+	if color.a == 0 do color = theme_ink(style, pigment_ink(pigment))
+	assert(color.a > 0, "theme_pigment: resolved a fully transparent pigment")
+	return color
+}
+
+Substrate_Kind :: enum u8 {
+	None,
+	Ruled,
+	Grid,
+	Dots,
+	Tooth,
+}
+
+Substrate :: struct {
+	kind:        Substrate_Kind,
+	// Draw the vertical margin rule. Separate from the body indent because a
+	// sketchbook wants the reserved space without the exercise-book line, and
+	// a caller cannot ask for that if one flag stands for both. The indent
+	// follows from kind != .None; this controls only whether a line is drawn.
+	margin_rule: bool,
 }
 
 // Glass surface source values per theme. On glass platforms (macOS) the
@@ -181,160 +327,192 @@ when GLASS_ENABLED {
 
 // THEME_DARK preserves the original compile-time palette values exactly.
 THEME_DARK :: Theme {
-	bg_app                     = DARK_BG_APP_WINDOWED,
-	bg_chat                    = DARK_BG_CHAT_WINDOWED,
-	bg_panel                   = DARK_BG_PANEL_WINDOWED,
-	bg_app_windowed            = DARK_BG_APP_WINDOWED,
-	bg_chat_windowed           = DARK_BG_CHAT_WINDOWED,
-	bg_panel_windowed          = DARK_BG_PANEL_WINDOWED,
-	bg_app_fullscreen          = DARK_BG_APP_FULLSCREEN,
-	bg_chat_fullscreen         = DARK_BG_CHAT_FULLSCREEN,
-	bg_panel_fullscreen        = DARK_BG_PANEL_FULLSCREEN,
-	bg_color                   = Color{30, 30, 30, 255},
-	bg_secondary               = Color{40, 40, 40, 255},
-	bg_active                  = Color{50, 50, 60, 255},
-	bg_hover                   = Color{55, 55, 65, 255},
-	bg_input                   = Color{45, 45, 50, 255},
-	bg_code                    = Color{35, 35, 40, 255},
-	fg_primary                 = Color{220, 220, 220, 255},
-	fg_secondary               = Color{160, 160, 170, 255},
-	fg_accent                  = Color{100, 160, 255, 255},
-	fg_user                    = Color{180, 200, 255, 255},
-	fg_assistant               = Color{200, 220, 200, 255},
-	fg_error                   = Color{255, 120, 120, 255},
-	fg_success                 = Color{120, 220, 120, 255},
-	fg_tool                    = Color{200, 180, 120, 255},
-	fg_diff_remove             = Color{255, 140, 140, 255},
-	fg_diff_add                = Color{140, 230, 140, 255},
-	bg_diff_remove             = Color{60, 30, 30, 255},
-	bg_diff_add                = Color{28, 50, 30, 255},
-	fg_diff_gutter             = Color{110, 110, 120, 255},
-	border_color               = Color{70, 70, 80, 255},
-	border_subtle              = Color{52, 52, 60, 255},
-	badge_color                = Color{255, 100, 100, 255},
-	merge_link_color           = Color{70, 110, 170, 255},
-	button_bg                  = Color{60, 100, 180, 255},
-	button_hover               = Color{70, 120, 200, 255},
-	button_text                = Color{255, 255, 255, 255},
-	bg_popup                   = Color{35, 35, 42, 255},
-	fg_disabled                = Color{90, 90, 100, 255},
-	bg_plan_bar                = Color{60, 50, 20, 255},
-	fg_plan                    = Color{255, 200, 80, 255},
-	fg_planning                = Color{110, 170, 240, 255},
-	bg_selection               = Color{60, 80, 130, 255},
-	bg_plan_title              = Color{48, 42, 24, 255},
-	bg_tool_card               = Color{38, 38, 45, 255},
-	bg_tool_card_hover         = Color{45, 45, 55, 255},
-	fg_heading                 = Color{230, 230, 240, 255},
-	fg_bullet                  = Color{140, 160, 200, 255},
-	fg_bold                    = Color{255, 255, 255, 255},
-	fg_code_inline             = Color{214, 182, 150, 255},
-	bg_table_header            = Color{45, 45, 52, 255},
-	wave_color_a               = Color{30, 95, 138, 255},
-	wave_color_b               = Color{126, 206, 240, 255},
-	drop_zone_bg               = Color{45, 55, 75, 235},
-	drop_zone_border           = Color{100, 160, 255, 255},
-	fg_debug                   = Color{180, 140, 255, 255},
-	bg_debug_title             = Color{40, 32, 52, 255},
-	fg_debug_changed           = Color{255, 180, 80, 255},
-	fg_debug_annotation        = Color{140, 160, 180, 255},
-	bg_chip                    = Color{55, 60, 72, 255},
-	bg_chip_hover              = Color{70, 76, 92, 255},
-	bg_user_card               = Color{44, 52, 74, 255},
-	border_user_card           = Color{78, 96, 140, 255},
-	bg_band_error              = Color{52, 34, 34, 255},
-	fg_label                   = Color{130, 135, 150, 255},
-	button_danger_bg           = Color{62, 36, 36, 255},
-	button_danger_hover        = Color{80, 35, 35, 255},
-	button_danger_fg           = Color{255, 180, 180, 255},
-	button_disabled_bg         = Color{47, 49, 54, 255},
-	button_pressed             = Color{58, 67, 160, 255},
-	fg_accent_light            = Color{129, 140, 248, 255},
-	fg_muted_dim               = Color{110, 115, 122, 255},
-	modal_dim                  = Color{0, 0, 0, 140},
-	focus_ring                 = Color{129, 160, 255, 220},
-	shadow_color               = Color{0, 0, 0, 120},
-	button_primary_grad_top    = Color{255, 255, 255, 20},
+	bg_app = DARK_BG_APP_WINDOWED,
+	bg_chat = DARK_BG_CHAT_WINDOWED,
+	bg_panel = DARK_BG_PANEL_WINDOWED,
+	bg_app_windowed = DARK_BG_APP_WINDOWED,
+	bg_chat_windowed = DARK_BG_CHAT_WINDOWED,
+	bg_panel_windowed = DARK_BG_PANEL_WINDOWED,
+	bg_app_fullscreen = DARK_BG_APP_FULLSCREEN,
+	bg_chat_fullscreen = DARK_BG_CHAT_FULLSCREEN,
+	bg_panel_fullscreen = DARK_BG_PANEL_FULLSCREEN,
+	bg_color = Color{30, 30, 30, 255},
+	bg_secondary = Color{40, 40, 40, 255},
+	bg_active = Color{50, 50, 60, 255},
+	bg_hover = Color{55, 55, 65, 255},
+	bg_input = Color{45, 45, 50, 255},
+	bg_code = Color{35, 35, 40, 255},
+	fg_primary = Color{220, 220, 220, 255},
+	fg_secondary = Color{160, 160, 170, 255},
+	fg_accent = Color{100, 160, 255, 255},
+	fg_user = Color{180, 200, 255, 255},
+	fg_assistant = Color{200, 220, 200, 255},
+	fg_error = Color{255, 120, 120, 255},
+	fg_success = Color{120, 220, 120, 255},
+	fg_tool = Color{200, 180, 120, 255},
+	fg_diff_remove = Color{255, 140, 140, 255},
+	fg_diff_add = Color{140, 230, 140, 255},
+	bg_diff_remove = Color{60, 30, 30, 255},
+	bg_diff_add = Color{28, 50, 30, 255},
+	fg_diff_gutter = Color{110, 110, 120, 255},
+	border_color = Color{70, 70, 80, 255},
+	border_subtle = Color{52, 52, 60, 255},
+	badge_color = Color{255, 100, 100, 255},
+	merge_link_color = Color{70, 110, 170, 255},
+	button_bg = Color{60, 100, 180, 255},
+	button_hover = Color{70, 120, 200, 255},
+	button_text = Color{255, 255, 255, 255},
+	bg_popup = Color{35, 35, 42, 255},
+	fg_disabled = Color{90, 90, 100, 255},
+	bg_plan_bar = Color{60, 50, 20, 255},
+	fg_plan = Color{255, 200, 80, 255},
+	fg_planning = Color{110, 170, 240, 255},
+	bg_selection = Color{60, 80, 130, 255},
+	bg_plan_title = Color{48, 42, 24, 255},
+	bg_tool_card = Color{38, 38, 45, 255},
+	bg_tool_card_hover = Color{45, 45, 55, 255},
+	fg_heading = Color{230, 230, 240, 255},
+	fg_bullet = Color{140, 160, 200, 255},
+	fg_bold = Color{255, 255, 255, 255},
+	fg_code_inline = Color{214, 182, 150, 255},
+	bg_table_header = Color{45, 45, 52, 255},
+	wave_color_a = Color{30, 95, 138, 255},
+	wave_color_b = Color{126, 206, 240, 255},
+	drop_zone_bg = Color{45, 55, 75, 235},
+	drop_zone_border = Color{100, 160, 255, 255},
+	fg_debug = Color{180, 140, 255, 255},
+	bg_debug_title = Color{40, 32, 52, 255},
+	fg_debug_changed = Color{255, 180, 80, 255},
+	fg_debug_annotation = Color{140, 160, 180, 255},
+	bg_chip = Color{55, 60, 72, 255},
+	bg_chip_hover = Color{70, 76, 92, 255},
+	bg_user_card = Color{44, 52, 74, 255},
+	border_user_card = Color{78, 96, 140, 255},
+	bg_band_error = Color{52, 34, 34, 255},
+	fg_label = Color{130, 135, 150, 255},
+	button_danger_bg = Color{62, 36, 36, 255},
+	button_danger_hover = Color{80, 35, 35, 255},
+	button_danger_fg = Color{255, 180, 180, 255},
+	button_disabled_bg = Color{47, 49, 54, 255},
+	button_pressed = Color{58, 67, 160, 255},
+	surface_pressed = Color{68, 68, 80, 255},
+	fg_accent_light = Color{129, 140, 248, 255},
+	fg_muted_dim = Color{110, 115, 122, 255},
+	modal_dim = Color{0, 0, 0, 140},
+	focus_ring = Color{129, 160, 255, 220},
+	shadow_color = Color{0, 0, 0, 120},
+	button_primary_grad_top = Color{255, 255, 255, 20},
 	button_primary_grad_bottom = Color{0, 0, 0, 0},
+	// No paper materials: this is a screen palette, and a zero-alpha color
+	// disables the effect in material.odin without a branch there.
+	paper_rule = Color{0, 0, 0, 0},
+	paper_tooth = Color{0, 0, 0, 0},
+	graphite = Color{0, 0, 0, 0},
+	chalk = Color{0, 0, 0, 0},
+	highlighter = Color{0, 0, 0, 0},
+	tape_color = Color{0, 0, 0, 0},
+	ink_faded = Color{150, 150, 160, 255},
+	fg_on_accent = Color{255, 255, 255, 255},
+	caption_hover = Color{70, 70, 82, 255},
+	caption_pressed = Color{88, 88, 104, 255},
+	caption_close_hover = Color{232, 64, 52, 255},
+	caption_close_pressed = Color{180, 40, 32, 255},
+	spell_error = Color{255, 120, 120, 255},
+	substrate = Substrate{kind = .None, margin_rule = false},
 }
 
 // THEME_LIGHT is a light counterpart tuned for equivalent contrast roles.
 THEME_LIGHT :: Theme {
-	bg_app                     = LIGHT_BG_APP_WINDOWED,
-	bg_chat                    = LIGHT_BG_CHAT_WINDOWED,
-	bg_panel                   = LIGHT_BG_PANEL_WINDOWED,
-	bg_app_windowed            = LIGHT_BG_APP_WINDOWED,
-	bg_chat_windowed           = LIGHT_BG_CHAT_WINDOWED,
-	bg_panel_windowed          = LIGHT_BG_PANEL_WINDOWED,
-	bg_app_fullscreen          = LIGHT_BG_APP_FULLSCREEN,
-	bg_chat_fullscreen         = LIGHT_BG_CHAT_FULLSCREEN,
-	bg_panel_fullscreen        = LIGHT_BG_PANEL_FULLSCREEN,
-	bg_color                   = Color{245, 245, 247, 255},
-	bg_secondary               = Color{235, 235, 238, 255},
-	bg_active                  = Color{220, 224, 235, 255},
-	bg_hover                   = Color{214, 218, 228, 255},
-	bg_input                   = Color{255, 255, 255, 255},
-	bg_code                    = Color{238, 238, 242, 255},
-	fg_primary                 = Color{35, 35, 40, 255},
-	fg_secondary               = Color{95, 95, 105, 255},
-	fg_accent                  = Color{20, 90, 200, 255},
-	fg_user                    = Color{40, 70, 140, 255},
-	fg_assistant               = Color{40, 90, 50, 255},
-	fg_error                   = Color{190, 40, 40, 255},
-	fg_success                 = Color{30, 140, 60, 255},
-	fg_tool                    = Color{140, 110, 40, 255},
-	fg_diff_remove             = Color{180, 40, 40, 255},
-	fg_diff_add                = Color{30, 130, 50, 255},
-	bg_diff_remove             = Color{250, 225, 225, 255},
-	bg_diff_add                = Color{223, 245, 225, 255},
-	fg_diff_gutter             = Color{140, 140, 150, 255},
-	border_color               = Color{200, 200, 210, 255},
-	border_subtle              = Color{222, 222, 228, 255},
-	badge_color                = Color{220, 60, 60, 255},
-	merge_link_color           = Color{80, 120, 180, 255},
-	button_bg                  = Color{55, 110, 210, 255},
-	button_hover               = Color{45, 95, 190, 255},
-	button_text                = Color{255, 255, 255, 255},
-	bg_popup                   = Color{250, 250, 252, 255},
-	fg_disabled                = Color{170, 170, 180, 255},
-	bg_plan_bar                = Color{250, 238, 205, 255},
-	fg_plan                    = Color{150, 110, 10, 255},
-	fg_planning                = Color{40, 110, 200, 255},
-	bg_selection               = Color{180, 205, 245, 255},
-	bg_plan_title              = Color{247, 240, 215, 255},
-	bg_tool_card               = Color{240, 240, 244, 255},
-	bg_tool_card_hover         = Color{232, 232, 238, 255},
-	fg_heading                 = Color{25, 25, 35, 255},
-	fg_bullet                  = Color{80, 110, 170, 255},
-	fg_bold                    = Color{0, 0, 0, 255},
-	fg_code_inline             = Color{150, 90, 30, 255},
-	bg_table_header            = Color{232, 232, 238, 255},
-	wave_color_a               = Color{30, 95, 138, 255},
-	wave_color_b               = Color{90, 170, 220, 255},
-	drop_zone_bg               = Color{215, 228, 248, 235},
-	drop_zone_border           = Color{20, 90, 200, 255},
-	fg_debug                   = Color{120, 70, 200, 255},
-	bg_debug_title             = Color{238, 230, 248, 255},
-	fg_debug_changed           = Color{190, 120, 20, 255},
-	fg_debug_annotation        = Color{110, 130, 150, 255},
-	bg_chip                    = Color{225, 229, 238, 255},
-	bg_chip_hover              = Color{212, 218, 232, 255},
-	bg_user_card               = Color{225, 232, 248, 255},
-	border_user_card           = Color{170, 190, 225, 255},
-	bg_band_error              = Color{250, 228, 228, 255},
-	fg_label                   = Color{110, 115, 130, 255},
-	button_danger_bg           = Color{235, 205, 205, 255},
-	button_danger_hover        = Color{225, 185, 185, 255},
-	button_danger_fg           = Color{160, 40, 40, 255},
-	button_disabled_bg         = Color{228, 228, 232, 255},
-	button_pressed             = Color{120, 135, 235, 255},
-	fg_accent_light            = Color{80, 95, 220, 255},
-	fg_muted_dim               = Color{150, 155, 165, 255},
-	modal_dim                  = Color{0, 0, 0, 90},
-	focus_ring                 = Color{30, 100, 220, 220},
-	shadow_color               = Color{40, 45, 70, 70},
-	button_primary_grad_top    = Color{255, 255, 255, 55},
+	bg_app = LIGHT_BG_APP_WINDOWED,
+	bg_chat = LIGHT_BG_CHAT_WINDOWED,
+	bg_panel = LIGHT_BG_PANEL_WINDOWED,
+	bg_app_windowed = LIGHT_BG_APP_WINDOWED,
+	bg_chat_windowed = LIGHT_BG_CHAT_WINDOWED,
+	bg_panel_windowed = LIGHT_BG_PANEL_WINDOWED,
+	bg_app_fullscreen = LIGHT_BG_APP_FULLSCREEN,
+	bg_chat_fullscreen = LIGHT_BG_CHAT_FULLSCREEN,
+	bg_panel_fullscreen = LIGHT_BG_PANEL_FULLSCREEN,
+	bg_color = Color{245, 245, 247, 255},
+	bg_secondary = Color{235, 235, 238, 255},
+	bg_active = Color{220, 224, 235, 255},
+	bg_hover = Color{214, 218, 228, 255},
+	bg_input = Color{255, 255, 255, 255},
+	bg_code = Color{238, 238, 242, 255},
+	fg_primary = Color{35, 35, 40, 255},
+	fg_secondary = Color{95, 95, 105, 255},
+	fg_accent = Color{20, 90, 200, 255},
+	fg_user = Color{40, 70, 140, 255},
+	fg_assistant = Color{40, 90, 50, 255},
+	fg_error = Color{190, 40, 40, 255},
+	fg_success = Color{30, 140, 60, 255},
+	fg_tool = Color{140, 110, 40, 255},
+	fg_diff_remove = Color{180, 40, 40, 255},
+	fg_diff_add = Color{30, 130, 50, 255},
+	bg_diff_remove = Color{250, 225, 225, 255},
+	bg_diff_add = Color{223, 245, 225, 255},
+	fg_diff_gutter = Color{140, 140, 150, 255},
+	border_color = Color{200, 200, 210, 255},
+	border_subtle = Color{222, 222, 228, 255},
+	badge_color = Color{220, 60, 60, 255},
+	merge_link_color = Color{80, 120, 180, 255},
+	button_bg = Color{55, 110, 210, 255},
+	button_hover = Color{45, 95, 190, 255},
+	button_text = Color{255, 255, 255, 255},
+	bg_popup = Color{250, 250, 252, 255},
+	fg_disabled = Color{170, 170, 180, 255},
+	bg_plan_bar = Color{250, 238, 205, 255},
+	fg_plan = Color{150, 110, 10, 255},
+	fg_planning = Color{40, 110, 200, 255},
+	bg_selection = Color{180, 205, 245, 255},
+	bg_plan_title = Color{247, 240, 215, 255},
+	bg_tool_card = Color{240, 240, 244, 255},
+	bg_tool_card_hover = Color{232, 232, 238, 255},
+	fg_heading = Color{25, 25, 35, 255},
+	fg_bullet = Color{80, 110, 170, 255},
+	fg_bold = Color{0, 0, 0, 255},
+	fg_code_inline = Color{150, 90, 30, 255},
+	bg_table_header = Color{232, 232, 238, 255},
+	wave_color_a = Color{30, 95, 138, 255},
+	wave_color_b = Color{90, 170, 220, 255},
+	drop_zone_bg = Color{215, 228, 248, 235},
+	drop_zone_border = Color{20, 90, 200, 255},
+	fg_debug = Color{120, 70, 200, 255},
+	bg_debug_title = Color{238, 230, 248, 255},
+	fg_debug_changed = Color{190, 120, 20, 255},
+	fg_debug_annotation = Color{110, 130, 150, 255},
+	bg_chip = Color{225, 229, 238, 255},
+	bg_chip_hover = Color{212, 218, 232, 255},
+	bg_user_card = Color{225, 232, 248, 255},
+	border_user_card = Color{170, 190, 225, 255},
+	bg_band_error = Color{250, 228, 228, 255},
+	fg_label = Color{110, 115, 130, 255},
+	button_danger_bg = Color{235, 205, 205, 255},
+	button_danger_hover = Color{225, 185, 185, 255},
+	button_danger_fg = Color{160, 40, 40, 255},
+	button_disabled_bg = Color{228, 228, 232, 255},
+	button_pressed = Color{120, 135, 235, 255},
+	surface_pressed = Color{196, 202, 214, 255},
+	fg_accent_light = Color{80, 95, 220, 255},
+	fg_muted_dim = Color{150, 155, 165, 255},
+	modal_dim = Color{0, 0, 0, 90},
+	focus_ring = Color{30, 100, 220, 220},
+	shadow_color = Color{40, 45, 70, 70},
+	button_primary_grad_top = Color{255, 255, 255, 55},
 	button_primary_grad_bottom = Color{0, 0, 0, 0},
+	paper_rule = Color{0, 0, 0, 0},
+	paper_tooth = Color{0, 0, 0, 0},
+	graphite = Color{0, 0, 0, 0},
+	chalk = Color{0, 0, 0, 0},
+	highlighter = Color{0, 0, 0, 0},
+	tape_color = Color{0, 0, 0, 0},
+	ink_faded = Color{130, 130, 140, 255},
+	fg_on_accent = Color{255, 255, 255, 255},
+	caption_hover = Color{222, 222, 228, 255},
+	caption_pressed = Color{204, 204, 212, 255},
+	caption_close_hover = Color{232, 64, 52, 255},
+	caption_close_pressed = Color{180, 40, 32, 255},
+	spell_error = Color{190, 40, 40, 255},
+	substrate = Substrate{kind = .None, margin_rule = false},
 }
 
 // THEME_HIGH_CONTRAST is a maximum-legibility palette: opaque black
@@ -342,81 +520,104 @@ THEME_LIGHT :: Theme {
 // translucency or glass. Every text/background role pair clears WCAG AA by a
 // wide margin; the focus ring is fully opaque.
 THEME_HIGH_CONTRAST :: Theme {
-	bg_app                     = Color{0, 0, 0, 255},
-	bg_chat                    = Color{0, 0, 0, 255},
-	bg_panel                   = Color{0, 0, 0, 255},
-	bg_app_windowed            = Color{0, 0, 0, 255},
-	bg_chat_windowed           = Color{0, 0, 0, 255},
-	bg_panel_windowed          = Color{0, 0, 0, 255},
-	bg_app_fullscreen          = Color{0, 0, 0, 255},
-	bg_chat_fullscreen         = Color{0, 0, 0, 255},
-	bg_panel_fullscreen        = Color{0, 0, 0, 255},
-	bg_color                   = Color{0, 0, 0, 255},
-	bg_secondary               = Color{15, 15, 15, 255},
-	bg_active                  = Color{60, 60, 60, 255},
-	bg_hover                   = Color{40, 40, 40, 255},
-	bg_input                   = Color{0, 0, 0, 255},
-	bg_code                    = Color{15, 15, 15, 255},
-	fg_primary                 = Color{255, 255, 255, 255},
-	fg_secondary               = Color{255, 255, 255, 255},
-	fg_accent                  = Color{255, 215, 0, 255},
-	fg_user                    = Color{255, 255, 255, 255},
-	fg_assistant               = Color{255, 255, 255, 255},
-	fg_error                   = Color{255, 100, 100, 255},
-	fg_success                 = Color{100, 255, 100, 255},
-	fg_tool                    = Color{255, 215, 0, 255},
-	fg_diff_remove             = Color{255, 130, 130, 255},
-	fg_diff_add                = Color{130, 255, 130, 255},
-	bg_diff_remove             = Color{60, 0, 0, 255},
-	bg_diff_add                = Color{0, 50, 0, 255},
-	fg_diff_gutter             = Color{255, 255, 255, 255},
-	border_color               = Color{255, 255, 255, 255},
-	border_subtle              = Color{200, 200, 200, 255},
-	badge_color                = Color{255, 100, 100, 255},
-	merge_link_color           = Color{255, 215, 0, 255},
-	button_bg                  = Color{255, 215, 0, 255},
-	button_hover               = Color{255, 255, 255, 255},
-	button_text                = Color{0, 0, 0, 255},
-	bg_popup                   = Color{0, 0, 0, 255},
-	fg_disabled                = Color{160, 160, 160, 255},
-	bg_plan_bar                = Color{45, 45, 0, 255},
-	fg_plan                    = Color{255, 215, 0, 255},
-	fg_planning                = Color{255, 215, 0, 255},
-	bg_selection               = Color{90, 90, 0, 255},
-	bg_plan_title              = Color{30, 30, 0, 255},
-	bg_tool_card               = Color{15, 15, 15, 255},
-	bg_tool_card_hover         = Color{40, 40, 40, 255},
-	fg_heading                 = Color{255, 255, 255, 255},
-	fg_bullet                  = Color{255, 215, 0, 255},
-	fg_bold                    = Color{255, 255, 255, 255},
-	fg_code_inline             = Color{255, 215, 0, 255},
-	bg_table_header            = Color{30, 30, 30, 255},
-	wave_color_a               = Color{255, 215, 0, 255},
-	wave_color_b               = Color{255, 255, 255, 255},
-	drop_zone_bg               = Color{45, 45, 0, 255},
-	drop_zone_border           = Color{255, 215, 0, 255},
-	fg_debug                   = Color{255, 215, 0, 255},
-	bg_debug_title             = Color{30, 30, 30, 255},
-	fg_debug_changed           = Color{255, 215, 0, 255},
-	fg_debug_annotation        = Color{255, 255, 255, 255},
-	bg_chip                    = Color{30, 30, 30, 255},
-	bg_chip_hover              = Color{55, 55, 55, 255},
-	bg_user_card               = Color{20, 20, 20, 255},
-	border_user_card           = Color{255, 255, 255, 255},
-	bg_band_error              = Color{60, 0, 0, 255},
-	fg_label                   = Color{255, 255, 255, 255},
-	button_danger_bg           = Color{90, 0, 0, 255},
-	button_danger_hover        = Color{130, 0, 0, 255},
-	button_danger_fg           = Color{255, 130, 130, 255},
-	button_disabled_bg         = Color{30, 30, 30, 255},
-	button_pressed             = Color{255, 255, 255, 255},
-	fg_accent_light            = Color{255, 215, 0, 255},
-	fg_muted_dim               = Color{190, 190, 190, 255},
-	modal_dim                  = Color{0, 0, 0, 210},
-	focus_ring                 = Color{255, 215, 0, 255},
-	shadow_color               = Color{0, 0, 0, 0},
-	button_primary_grad_top    = Color{0, 0, 0, 0},
+	bg_app = Color{0, 0, 0, 255},
+	bg_chat = Color{0, 0, 0, 255},
+	bg_panel = Color{0, 0, 0, 255},
+	bg_app_windowed = Color{0, 0, 0, 255},
+	bg_chat_windowed = Color{0, 0, 0, 255},
+	bg_panel_windowed = Color{0, 0, 0, 255},
+	bg_app_fullscreen = Color{0, 0, 0, 255},
+	bg_chat_fullscreen = Color{0, 0, 0, 255},
+	bg_panel_fullscreen = Color{0, 0, 0, 255},
+	bg_color = Color{0, 0, 0, 255},
+	bg_secondary = Color{15, 15, 15, 255},
+	bg_active = Color{60, 60, 60, 255},
+	bg_hover = Color{40, 40, 40, 255},
+	bg_input = Color{0, 0, 0, 255},
+	bg_code = Color{15, 15, 15, 255},
+	fg_primary = Color{255, 255, 255, 255},
+	fg_secondary = Color{255, 255, 255, 255},
+	fg_accent = Color{255, 215, 0, 255},
+	fg_user = Color{255, 255, 255, 255},
+	fg_assistant = Color{255, 255, 255, 255},
+	fg_error = Color{255, 100, 100, 255},
+	fg_success = Color{100, 255, 100, 255},
+	fg_tool = Color{255, 215, 0, 255},
+	fg_diff_remove = Color{255, 130, 130, 255},
+	fg_diff_add = Color{130, 255, 130, 255},
+	bg_diff_remove = Color{60, 0, 0, 255},
+	bg_diff_add = Color{0, 50, 0, 255},
+	fg_diff_gutter = Color{255, 255, 255, 255},
+	border_color = Color{255, 255, 255, 255},
+	border_subtle = Color{200, 200, 200, 255},
+	badge_color = Color{255, 100, 100, 255},
+	merge_link_color = Color{255, 215, 0, 255},
+	button_bg = Color{255, 215, 0, 255},
+	button_hover = Color{255, 255, 255, 255},
+	button_text = Color{0, 0, 0, 255},
+	bg_popup = Color{0, 0, 0, 255},
+	fg_disabled = Color{160, 160, 160, 255},
+	bg_plan_bar = Color{45, 45, 0, 255},
+	fg_plan = Color{255, 215, 0, 255},
+	fg_planning = Color{255, 215, 0, 255},
+	bg_selection = Color{90, 90, 0, 255},
+	bg_plan_title = Color{30, 30, 0, 255},
+	bg_tool_card = Color{15, 15, 15, 255},
+	bg_tool_card_hover = Color{40, 40, 40, 255},
+	fg_heading = Color{255, 255, 255, 255},
+	fg_bullet = Color{255, 215, 0, 255},
+	fg_bold = Color{255, 255, 255, 255},
+	fg_code_inline = Color{255, 215, 0, 255},
+	bg_table_header = Color{30, 30, 30, 255},
+	wave_color_a = Color{255, 215, 0, 255},
+	wave_color_b = Color{255, 255, 255, 255},
+	drop_zone_bg = Color{45, 45, 0, 255},
+	drop_zone_border = Color{255, 215, 0, 255},
+	fg_debug = Color{255, 215, 0, 255},
+	bg_debug_title = Color{30, 30, 30, 255},
+	fg_debug_changed = Color{255, 215, 0, 255},
+	fg_debug_annotation = Color{255, 255, 255, 255},
+	bg_chip = Color{30, 30, 30, 255},
+	bg_chip_hover = Color{55, 55, 55, 255},
+	bg_user_card = Color{20, 20, 20, 255},
+	border_user_card = Color{255, 255, 255, 255},
+	bg_band_error = Color{60, 0, 0, 255},
+	fg_label = Color{255, 255, 255, 255},
+	button_danger_bg = Color{90, 0, 0, 255},
+	button_danger_hover = Color{130, 0, 0, 255},
+	button_danger_fg = Color{255, 130, 130, 255},
+	button_disabled_bg = Color{30, 30, 30, 255},
+	// Pressed was pure white, identical to button_hover, so a high-contrast
+	// button gave no feedback distinguishable from hover. Amber sits between
+	// the gold rest state and the white hover state in luminance, keeps black
+	// button_text far above AA, and stays inside the palette's yellow accent
+	// language rather than introducing a hue only this state uses.
+	button_pressed = Color{255, 170, 0, 255},
+	surface_pressed = Color{90, 90, 90, 255},
+	fg_accent_light = Color{255, 215, 0, 255},
+	fg_muted_dim = Color{190, 190, 190, 255},
+	modal_dim = Color{0, 0, 0, 210},
+	focus_ring = Color{255, 215, 0, 255},
+	shadow_color = Color{0, 0, 0, 0},
+	button_primary_grad_top = Color{0, 0, 0, 0},
 	button_primary_grad_bottom = Color{0, 0, 0, 0},
+	paper_rule = Color{0, 0, 0, 0},
+	paper_tooth = Color{0, 0, 0, 0},
+	graphite = Color{0, 0, 0, 0},
+	chalk = Color{0, 0, 0, 0},
+	highlighter = Color{0, 0, 0, 0},
+	tape_color = Color{0, 0, 0, 0},
+	ink_faded = Color{200, 200, 200, 255},
+	fg_on_accent = Color{0, 0, 0, 255},
+	// The caption buttons this palette shipped were a 10-to-15 alpha white
+	// wash over pure black: a different color by inspection, and no visible
+	// feedback at all in use. These are opaque for that reason.
+	caption_hover = Color{255, 255, 255, 255},
+	caption_pressed = Color{255, 215, 0, 255},
+	caption_close_hover = Color{255, 80, 80, 255},
+	caption_close_pressed = Color{255, 140, 140, 255},
+	spell_error = Color{255, 100, 100, 255},
+	substrate = Substrate{kind = .None, margin_rule = false},
 }
 
 // THEME_COLOR is the zero-color sentinel for widget color parameters whose
@@ -503,6 +704,17 @@ ui_runtime_set_glass_fullscreen :: proc(runtime: ^Ui_Runtime, fullscreen: bool) 
 }
 
 // Unified button system (shape metrics, not colors).
+//
+// Superseded by the Radius and Border tokens in tokens.odin. These remain
+// exported and unchanged for one release because consumers outside this
+// repository draw button-shaped surfaces with them.
+//
+// BTN_ROUNDNESS is the specific value the tokens exist to retire: it is a
+// *ratio*, so the same 0.3 yields a visibly different corner on a 24px button
+// than on a 200px card, and no amount of care at a call site can make the two
+// agree. radius_ratio takes an absolute radius and converts it per-rect, which
+// is what lets a button and the card beside it match at every UI scale.
+// Prefer radius_ratio, radius_segments, and border_pixels in new code.
 BTN_ROUNDNESS :: f32(0.3)
 BTN_SEGMENTS :: i32(6)
 BTN_BORDER_W :: f32(1.0)

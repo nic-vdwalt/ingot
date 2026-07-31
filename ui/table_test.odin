@@ -59,9 +59,19 @@ test_toast_tick_keeps_fresh_items :: proc(t: ^testing.T) {
 
 @(private = "file")
 test_columns :: proc(buffer: []Table_Column) -> []Table_Column {
-	buffer[0] = {label = "Name", track = grow(3, 0)}
-	buffer[1] = {label = "Count", track = fixed(80), numeric = true}
-	buffer[2] = {label = "State", track = fixed(120)}
+	buffer[0] = {
+		label = "Name",
+		track = grow(3, 0),
+	}
+	buffer[1] = {
+		label   = "Count",
+		track   = fixed(80),
+		numeric = true,
+	}
+	buffer[2] = {
+		label = "State",
+		track = fixed(120),
+	}
 	return buffer[:3]
 }
 
@@ -142,7 +152,7 @@ test_table_row_reuses_the_header_tracks :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 600, 200)
 	table_row_begin(&l, 28, specs, row_tracks[:])
-	for index in 0 ..< len(specs) {
+	for _ in 0 ..< len(specs) {
 		_ = flex_next(&l)
 	}
 	table_row_end(&l)
@@ -167,13 +177,13 @@ test_table_rows_stack_downward :: proc(t: ^testing.T) {
 	layout_begin(&l, 0, 0, 600, 200)
 	table_row_begin(&l, 30, specs, tracks[:])
 	first := flex_next(&l)
-	for index in 1 ..< len(specs) {
+	for _ in 1 ..< len(specs) {
 		_ = flex_next(&l)
 	}
 	table_row_end(&l)
 	table_row_begin(&l, 30, specs, tracks[:])
 	second := flex_next(&l)
-	for index in 1 ..< len(specs) {
+	for _ in 1 ..< len(specs) {
 		_ = flex_next(&l)
 	}
 	table_row_end(&l)

@@ -23,6 +23,7 @@ package main
 import "core:fmt"
 import "core:slice"
 import "core:strings"
+import "ingot:sys"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
@@ -45,6 +46,7 @@ Section :: enum {
 	Layout,
 	Overlay,
 	Stress,
+	Theme,
 }
 
 SECTION_NAMES := [Section]string {
@@ -56,6 +58,7 @@ SECTION_NAMES := [Section]string {
 	.Layout   = "Layout",
 	.Overlay  = "Overlay",
 	.Stress   = "Stress",
+	.Theme    = "Theme",
 }
 
 SECTION_LAYERS := [Section]string {
@@ -67,6 +70,7 @@ SECTION_LAYERS := [Section]string {
 	.Layout   = "APPLICATION-OWNED GEOMETRY",
 	.Overlay  = "EXPLICIT LIFECYCLE",
 	.Stress   = "APPLICATION-OWNED GEOMETRY",
+	.Theme    = "APPLICATION-OWNED GEOMETRY",
 }
 
 SECTION_AXES := [Section]string {
@@ -78,6 +82,7 @@ SECTION_AXES := [Section]string {
 	.Layout   = "application owns geometry",
 	.Overlay  = "application owns lifecycle",
 	.Stress   = "application owns geometry",
+	.Theme    = "palette and token resolution",
 }
 
 NAV_W :: 170
@@ -93,11 +98,66 @@ NAV_STRIP_CELL_W :: 92
 
 // --- caller-owned state (the whole point: no hidden library state) ----------
 
-dark := true
-high_contrast := false
+// Palette is a single cycle over every appearance the gallery offers,
+// including high contrast.
+//
+// It started as `dark: bool`, then grew a `high_contrast: bool` beside it.
+// Two booleans span eight combinations, but only five were reachable:
+// selecting high contrast had to force-clear the palette, because "high
+// contrast *and* sketch warm" is not a thing - applying the high-contrast
+// palette discards the other choice entirely. The flags were modelling one
+// decision as two, and the force-clear was the workaround for that.
+//
+// One enum makes the exclusivity structural rather than enforced. Ordered so
+// the button walks screen themes, then sketchbook, then the accessibility
+// palette last: a progression rather than a jumble.
+Palette :: enum {
+	Dark,
+	Light,
+	Sketch_Warm,
+	Sketch_Grey,
+	High_Contrast,
+}
+
+PALETTE_NAMES := [Palette]string {
+	.Dark          = "Dark",
+	.Light         = "Light",
+	.Sketch_Warm   = "Sketch warm",
+	.Sketch_Grey   = "Sketch grey",
+	.High_Contrast = "High contrast",
+}
+
+palette := Palette.Dark
 reduced_motion := false
 section := Section.Buttons
 debug_on := false
+
+// palette_next advances the cycle, wrapping at the end.
+//
+// Pure and total: every palette has a successor, so the button can never land
+// on a state the enum does not name. The label reads `palette` directly rather
+// than calling this, so the sidebar reports what is switched on rather than
+// what pressing it would do - see nav_control_label.
+palette_next :: proc(current: Palette) -> Palette {
+	return Palette((int(current) + 1) % len(Palette))
+}
+
+// palette_theme resolves a palette to its Theme value.
+palette_theme :: proc(value: Palette) -> ui.Theme {
+	switch value {
+	case .Dark:
+		return ui.theme_dark()
+	case .Light:
+		return ui.theme_light()
+	case .Sketch_Warm:
+		return ui.theme_sketch_warm()
+	case .Sketch_Grey:
+		return ui.theme_sketch_grey()
+	case .High_Contrast:
+		return ui.theme_high_contrast()
+	}
+	return ui.theme_dark()
+}
 
 nav_ui: ui.Ui
 buttons_ui: ui.Ui
@@ -227,7 +287,6 @@ main :: proc() {
 				title = "ingot widget gallery",
 				target_fps = 60,
 				event_waiting = !SMOKE,
-				clear_color = {24, 26, 32, 255},
 				session = {semantics_enabled = true},
 			},
 			{frame = gallery_frame, shutdown = shutdown},
@@ -306,7 +365,6 @@ apply_scale :: proc(scale: f32) {
 // construction.
 Nav_Control :: enum {
 	Theme,
-	Contrast,
 	Motion,
 	Scale,
 }
@@ -317,11 +375,21 @@ Nav_Control :: enum {
 nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
 	switch control {
 	case .Theme:
-		if compact do return "Light" if dark else "Dark"
-		return "Light theme" if dark else "Dark theme"
-	case .Contrast:
-		if compact do return "Contrast"
-		return "Standard contrast" if high_contrast else "High contrast"
+		// Naming the palette you are *in*, not the one the button leads to.
+		//
+		// This previously showed palette_next(palette), on the theory that a
+		// button is an action and should be labelled with what it does. The
+		// theory does not survive contact with the control sitting directly
+		// beneath it: Motion reports its current state ("Motion: full"), so a
+		// Theme button reporting its *next* state made two adjacent controls
+		// in one list read in opposite directions. Selecting "Sketch warm"
+		// left the sidebar saying "Sketch grey", which reads as the wrong mode
+		// having been applied.
+		//
+		// Consistency within the list beats the theory. Both controls now
+		// answer the same question: what is switched on right now.
+		if compact do return PALETTE_NAMES[palette]
+		return fmt.tprintf("Theme: %s", PALETTE_NAMES[palette])
 	case .Motion:
 		if compact do return "Motion"
 		return "Motion: reduced" if reduced_motion else "Motion: full"
@@ -338,12 +406,9 @@ nav_control_activate :: proc(control: Nav_Control, frame: ^ui.Ui_Frame) {
 	assert(frame != nil, "nav_control_activate: nil frame")
 	switch control {
 	case .Theme:
-		dark = !dark
-		// Leaving high contrast on would override the theme just chosen.
-		high_contrast = false
-		apply_gallery_theme(frame)
-	case .Contrast:
-		high_contrast = !high_contrast
+		// No force-clear needed: high contrast is a palette now, so choosing
+		// another one leaves it by construction rather than by cleanup.
+		palette = palette_next(palette)
 		apply_gallery_theme(frame)
 	case .Motion:
 		reduced_motion = !reduced_motion
@@ -390,10 +455,9 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
 // Stable widget identities for the shared controls. Derived from the enum so a
 // new control cannot be added without one.
 NAV_CONTROL_IDS := [Nav_Control]string {
-	.Theme    = "theme",
-	.Contrast = "contrast",
-	.Motion   = "motion",
-	.Scale    = "scale",
+	.Theme  = "theme",
+	.Motion = "motion",
+	.Scale  = "scale",
 }
 
 // draw_nav_strip is the narrow-viewport nav: wrapped rows of section buttons
@@ -449,13 +513,70 @@ draw_nav_strip :: proc(frame: ^ui.Ui_Frame, top, sw: i32) -> i32 {
 }
 
 apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
-	t :=
-		ui.theme_high_contrast() if high_contrast else (ui.theme_dark() if dark else ui.theme_light())
+	// One lookup. High contrast used to be an override checked ahead of the
+	// palette; folding it into the enum removed the branch along with the
+	// force-clear that kept the two in step.
+	//
+	// reduced_motion stays separate because it genuinely is orthogonal: it
+	// applies to every palette, including high contrast, and a user who needs
+	// both must be able to have both.
+	t := palette_theme(palette)
 	t.reduced_motion = reduced_motion
 	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app), t)
-	app.config.clear_color = ui_gfx.color_to_gfx(t.bg_app)
-	app.config.clear_color.a = 255
 	if frame != nil do ui.request_redraw(frame)
+}
+
+// MARGIN_INSET is where the vertical margin rule sits, in logical pixels.
+// Wide enough for a right-aligned annotation at note size, narrow enough not
+// to steal content width. Dropped entirely on narrow viewports: a 390px phone
+// cannot afford 56 of them.
+MARGIN_INSET :: 56
+
+// draw_page_substrate lays the page texture behind the content.
+//
+// It is drawn *after* pane_begin and anchored to the content origin the pane
+// returns, which is already scroll-adjusted. That matters for any substrate
+// with structure: a texture pinned to the viewport would stay put while the
+// content slid over it, which reads as a rendering fault rather than as paper.
+//
+// Switching on kind keeps every substrate reachable. The built-in sketch
+// palettes ask for Tooth, but the ruled path stays available for a consumer
+// who wants writing paper - the materials are sound, they are simply not the
+// aesthetic these themes chose.
+//
+// Screen palettes set kind = .None and zero the material colors, so this costs
+// them one comparison and no draw calls.
+draw_page_substrate :: proc(frame: ^ui.Ui_Frame, pane: ui.Rect_I32, anchor: i32, narrow: bool) {
+	assert(frame != nil, "draw_page_substrate: nil frame")
+	theme := ui.ui_frame_theme(frame)
+	if theme.substrate.kind == .None do return
+
+	// The texture runs from the content anchor to the bottom of the pane, so
+	// it scrolls with the content rather than under it.
+	height := pane.y + pane.h - anchor
+	if height <= 0 do return
+	region := ui.Rectangle{f32(pane.x), f32(anchor), f32(pane.w), f32(height)}
+
+	switch theme.substrate.kind {
+	case .None:
+	// Handled above; listed so a new kind cannot be silently ignored.
+	case .Ruled:
+		ui.draw_rule_lines(frame, region, color = theme.paper_rule)
+	case .Grid, .Dots:
+		spacing := ui.ui_frame_metrics(frame).LINE_HEIGHT
+		if ui.dot_grid_fits(region, spacing) {
+			ui.draw_dot_grid(frame, region, spacing, theme.paper_rule)
+		}
+	case .Tooth:
+		ui.draw_paper_tooth(frame, region, theme.paper_tooth)
+	}
+
+	// The margin rule is now independent of the body indent, so a palette can
+	// keep the reserved column without the exercise-book line down it.
+	if theme.substrate.margin_rule && !narrow {
+		page := ui.Rectangle{f32(pane.x), f32(pane.y), f32(pane.w), f32(pane.h)}
+		ui.draw_margin_rule(frame, page, MARGIN_INSET, theme.graphite)
+	}
 }
 
 draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32, narrow: bool) {
@@ -466,6 +587,7 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32, narrow: bool) {
 	w := sw - x
 	pane_rect := ui.Rect_I32{x, top, w, sh - top}
 	y := ui.pane_begin(frame, &content_pane, pane_rect, pad = 14, keyboard = section != .Inputs)
+	draw_page_substrate(frame, pane_rect, y, narrow)
 	inset := ui.ui_frame_sc(frame, 8 if narrow else 18)
 	gutter := ui.ui_frame_sc(frame, 20 if narrow else 52)
 	cx := x + inset
@@ -492,26 +614,45 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32, narrow: bool) {
 				ui.ui_frame_theme(frame).fg_primary,
 			) +
 			y
+		// ui reports the click; the application decides what a link means.
+		// That split is forced by the API layers - ui imports only core:* and
+		// cannot reach sys - and it is also correct: an application may route
+		// a relative target internally rather than hand it to a browser.
+		if url, activated := ui.markdown_link_activated(&md_ctx); activated {
+			// Defaults allow http and https only. A markdown document is
+			// untrusted input, so file:// and custom schemes stay blocked
+			// rather than becoming a way to launch arbitrary handlers.
+			status := sys.open_url(url)
+			if status != .Opened do fmt.eprintfln("gallery: open %s failed (%v)", url, status)
+		}
 	case .Layout:
 		end_y = draw_layout_demo(frame, cx, y, cw)
 	case .Overlay:
 		end_y = draw_overlay_demo(frame, cx, y, cw)
 	case .Stress:
 		end_y = draw_stress(frame, cx, y, cw)
+	case .Theme:
+		end_y = draw_theme_section(frame, cx, y, cw)
 	}
 	ui.pane_end(frame, &content_pane, pane_rect, end_y, pad = 14)
 }
 
 draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
 	assert(frame != nil, "draw_section_layer: nil frame")
+	// Exactly two rule-heights tall. Every section below this band inherits
+	// its starting y from here, so a band of some other height would push all
+	// of them a fraction of a line off the ruled paper. Two lines is also what
+	// the previous hardcoded 44 logical px happened to be, so nothing moves on
+	// the unruled palettes.
+	band := ui.ui_frame_metrics(frame).LINE_HEIGHT * 2
 	u := &badge_ui
-	ui.begin(u, frame, {x, y, w, ui.ui_frame_sc(frame, 44)}, gap = .XS)
+	ui.begin(u, frame, {x, y, w, band}, gap = .XS)
 	ui.row_begin(u, 28, gap = .SM, align = .Center)
 	_ = ui.status_pill(u, SECTION_LAYERS[section], ui.Ink.Accent)
 	ui.label(u, SECTION_AXES[section], ui.Text_Role.Body, ui.Ink.Secondary)
 	ui.row_end(u)
-	ui.space(u, .SM)
-	return ui.end(u)
+	_ = ui.end(u)
+	return y + band
 }
 
 draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {

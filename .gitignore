@@ -14,6 +14,7 @@ web/wgpu.js
 /idle_demo
 fuzz/net/fuzz_net
 fuzz/ui/fuzz_ui
+fuzz/view/fuzz_view
 fuzz/gfx_frame/fuzz_gfx_frame
 fuzz/interact/fuzz_interact
 fuzz/wsreconn/fuzz_wsreconn

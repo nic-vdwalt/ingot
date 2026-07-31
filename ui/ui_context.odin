@@ -543,7 +543,9 @@ track_px :: proc(u: ^Ui, track: Track) -> Track {
 	unreachable()
 }
 
-@(private = "file")
+// Package-visible: the facade row widgets (facade_rows.odin) open flex runs
+// inside a row strip they carve themselves.
+@(private = "package")
 flex_begin_tracks :: proc(u: ^Ui, tracks: []Track, justify: Main_Align = .Start) {
 	assert(u != nil && u.open, "flex_begin_tracks: frame not open")
 	assert(len(tracks) > 0, "flex_begin_tracks: empty tracks")
@@ -555,7 +557,9 @@ flex_begin_tracks :: proc(u: ^Ui, tracks: []Track, justify: Main_Align = .Start)
 	flex_begin(&u.layout, sizes[:len(tracks)], justify)
 }
 
-@(private = "file")
+// Package-visible: facade_rows.odin carves row strips with the same
+// container semantics row_begin uses.
+@(private = "package")
 container_rect_px :: proc(u: ^Ui, width, height: i32) -> Rect_I32 {
 	assert(u != nil && u.open, "container_rect_px: frame not open")
 	assert(width >= 0 && height >= 0, "container_rect_px: negative size")
@@ -588,6 +592,18 @@ padding_insets :: proc(u: ^Ui, value: Insets_I32) {
 // space_px resolves a spacing token to device pixels at the active scale.
 space_px :: proc(u: ^Ui, value: Space) -> i32 {
 	assert(u != nil && u.frame != nil, "space_px: frame required")
+	return space_pixels(u.frame, value)
+}
+
+// space_pixels is the frame-level spacing resolver.
+//
+// The explicit tier owns its own geometry and has no Ui to ask, but it still
+// has to agree with the facade about what "MD" means. Without this, a caller
+// laying out an application-owned region has no choice but to re-declare the
+// scale locally - and a second copy of a shared scale drifts the moment either
+// side is tuned. space_px delegates here so there is exactly one table.
+space_pixels :: proc(frame: ^Ui_Frame, value: Space) -> i32 {
+	assert(frame != nil, "space_pixels: nil frame")
 	logical: i32
 	switch value {
 	case .None:
@@ -603,7 +619,7 @@ space_px :: proc(u: ^Ui, value: Space) -> i32 {
 	case .XL:
 		logical = 24
 	}
-	return ui_frame_sc(u.frame, logical)
+	return ui_frame_sc(frame, logical)
 }
 
 // insets_of resolves a spacing token to equal insets on every side.

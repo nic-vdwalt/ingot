@@ -68,7 +68,7 @@ when CAPTURE {
 	Capture_Shot :: struct {
 		file:    string,
 		section: Section,
-		dark:    bool,
+		palette: Palette,
 	}
 
 	// The README set: one shot per visually distinct area, in both themes so a
@@ -78,24 +78,30 @@ when CAPTURE {
 	// by the sequence pass instead - as stills they leave half the frame empty,
 	// which reads as an unfinished framework rather than a focused one.
 	CAPTURE_SHOTS := [?]Capture_Shot {
-		{"gallery-widgets-dark.png", .Widgets, true},
-		{"gallery-charts-dark.png", .Charts, true},
-		{"gallery-buttons-light.png", .Buttons, false},
-		{"gallery-inputs-light.png", .Inputs, false},
-		{"gallery-stress-dark.png", .Stress, true},
+		{"gallery-widgets-dark.png", .Widgets, .Dark},
+		{"gallery-charts-dark.png", .Charts, .Dark},
+		{"gallery-buttons-light.png", .Buttons, .Light},
+		{"gallery-inputs-light.png", .Inputs, .Light},
+		{"gallery-stress-dark.png", .Stress, .Dark},
+		// The Theme page on paper: the one shot where the substrate, the
+		// margin and the hand-drawn accents are all visible at once.
+		{"gallery-theme-sketch.png", .Theme, .Sketch_Warm},
 	}
 
 	// The GIF script: every section in order, alternating theme so the motion
 	// shows both navigation and theming without any synthetic input.
 	CAPTURE_SEQUENCE := [?]Capture_Shot {
-		{"", .Buttons, true},
-		{"", .Inputs, true},
-		{"", .Widgets, true},
-		{"", .Charts, true},
-		{"", .Markdown, false},
-		{"", .Layout, false},
-		{"", .Overlay, true},
-		{"", .Stress, true},
+		{"", .Buttons, .Dark},
+		{"", .Inputs, .Dark},
+		{"", .Widgets, .Dark},
+		{"", .Charts, .Dark},
+		{"", .Markdown, .Light},
+		{"", .Layout, .Light},
+		{"", .Overlay, .Dark},
+		{"", .Stress, .Dark},
+		// End on paper so the sequence closes on the aesthetic rather than on
+		// the stress grid.
+		{"", .Theme, .Sketch_Warm},
 	}
 
 	capture_target: rl.RenderTexture2D
@@ -123,8 +129,7 @@ when CAPTURE {
 		if !capture_state_applied {
 			shot := script[capture_step_index]
 			section = shot.section
-			dark = shot.dark
-			high_contrast = false
+			palette = shot.palette
 			// Stills freeze motion so reruns are byte-identical (see the
 			// determinism note at the top of this file). The sequence pass wants
 			// the opposite: it is a recording, so it keeps spinners, eased
@@ -208,22 +213,6 @@ when CAPTURE {
 		}
 	}
 
-	// capture_clear_color is the active theme's app background forced opaque.
-	//
-	// bg_app carries the vibrancy/Mica alpha (dark windowed is alpha 162), which
-	// is correct for a composited window but wrong for a file: it produced PNGs
-	// with a 0.74 mean alpha that render washed-out grey on any non-white page.
-	// Captured media is flat artwork, so the shot takes the colour and drops the
-	// translucency.
-	capture_clear_color :: proc() -> rl.Color {
-		theme := ui.ui_runtime_theme(ui_gfx.app_ui_runtime(&app))
-		assert(theme != nil, "capture_clear_color: nil theme")
-		color := ui_gfx.color_to_gfx(theme.bg_app)
-		color.a = 255
-		assert(color.a == 255, "capture_clear_color: capture background must be opaque")
-		return color
-	}
-
 	// capture_finish releases the target and exits successfully. The process
 	// terminates here rather than returning, so the harness never depends on
 	// the window being closed by a human.
@@ -241,13 +230,18 @@ when CAPTURE {
 		gfx_frame, acquired := rl.begin_frame()
 		if !acquired do return
 		frame_state := ui_gfx.session_begin_frame_context(&app.session, &gfx_frame)
-		rl.clear_frame(&gfx_frame, app.config.clear_color)
+		// Window and target share one derived background. This used to be two
+		// values - a fixed configured clear behind a theme-derived target
+		// clear - which is why a light-theme shot showed the dark configured
+		// colour through it. bg_app also carries the vibrancy alpha (dark
+		// windowed is alpha 162), so app_clear_color forces it opaque: a
+		// translucent clear produced PNGs with 0.74 mean alpha that rendered
+		// washed-out grey on any non-white page.
+		background := ui_gfx.app_clear_color(&app)
+		rl.clear_frame(&gfx_frame, background)
 
 		rl.BeginTextureMode(capture_target)
-		// Clear to the *active theme's* app background rather than the window's
-		// fixed clear colour, so a light-theme shot is light behind the content
-		// instead of showing the dark configured clear through it.
-		rl.ClearBackground(capture_clear_color())
+		rl.ClearBackground(background)
 		gallery_frame(&app, frame_state, nil)
 		ui_gfx.session_end_frame_context(&app.session, &gfx_frame)
 		rl.EndTextureMode()
@@ -283,7 +277,6 @@ when CAPTURE {
 				title = "ingot widget gallery (capture)",
 				target_fps = 60,
 				event_waiting = false,
-				clear_color = {24, 26, 32, 255},
 				session = {semantics_enabled = true},
 			},
 			{frame = gallery_frame, shutdown = shutdown},

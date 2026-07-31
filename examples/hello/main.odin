@@ -26,7 +26,6 @@ main :: proc() {
 			flags = flags,
 			target_fps = 60,
 			event_waiting = true,
-			clear_color = {24, 26, 32, 255},
 			session = {semantics_enabled = true},
 		},
 		{ui = draw, shutdown = shutdown},

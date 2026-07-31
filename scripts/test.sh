@@ -46,7 +46,7 @@ has_define() {
 	return 1
 }
 
-for pkg in gfx ui ui_gfx libvterm term prefs net; do
+for pkg in gfx ui ui_gfx view view/generate libvterm term prefs net; do
 	echo "== testing $pkg =="
 	extra=()
 	# UI tests use deterministic single-thread execution for native graphics
@@ -64,7 +64,10 @@ for pkg in gfx ui ui_gfx libvterm term prefs net; do
 			extra+=("-define:ODIN_TEST_THREADS=1")
 		fi
 	fi
-	run_supervised "$pkg" odin test "$root/$pkg" "$col" "$guard" \
+	# The supervisor names its failure log after the label, so a nested package
+	# path has to be flattened: "view/generate" would otherwise write into a
+	# directory that does not exist.
+	run_supervised "${pkg//\//-}" odin test "$root/$pkg" "$col" "$guard" \
 		-define:ODIN_TEST_FAIL_ON_EMPTY=true ${extra[@]+"${extra[@]}"} "$@"
 done
 
