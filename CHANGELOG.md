@@ -45,6 +45,21 @@ compatibility, while minor releases may break it. See the
   - `fuzz/run.sh view` fuzzes the decoder with random bytes, mutated files, and
     forged length fields.
   - See [the view format](docs/view-format.md).
+- `Flex_Axis` and the optional `axis` argument on `flex_begin`: a caller can
+  now state which way it believes a declared run travels, and a run opened
+  against the wrong frame asserts instead of laying out silently wrong. Tracks
+  meant for a row, declared on a column, carve the frame's HEIGHT into N bands
+  so every cell draws at the same x - and because the run is still fully
+  consumed, `flex_end`, `layout_pop` and `layout_end` all pass. The intent
+  exists only at the call site, so only the call site can supply it.
+  `.Unspecified` is the default and preserves existing behaviour exactly.
+  A separate enum rather than a new `Layout_Kind` member on purpose: several
+  places branch as `if kind == .Column { ... } else { ... }`, so an extra
+  `Layout_Kind` state would be treated as a row by all of them.
+- `table_row_begin` / `table_row_end`: carve one data row and open the
+  header's column tracks across it in a single call, so a table row cannot be
+  declared down the enclosing column. Pairs the `push_row` and the `flex_begin`
+  that the two-step form left to every caller to remember.
 - `gfx.renderer_peak_usage` and `Paint_List.peak_count` / `peak_text_len`:
   always-on high-water marks for the batch and paint buffers, reported by the
   gallery smoke run. Unlike `Renderer_Stats` these are not gated behind a
