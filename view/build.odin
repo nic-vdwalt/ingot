@@ -123,3 +123,107 @@ doc_add_keyed :: proc(
 	entry.label_offset, entry.label_length = doc_intern(doc, label) or_return
 	return doc_add(doc, parent, entry)
 }
+
+// --- editing text ------------------------------------------------------------
+//
+// The blob is append-only, so "set" means re-intern: the new text goes at the
+// end and the old bytes become garbage. That is the right trade for an editor -
+// setting is O(new text) with no index rewriting - but a long session would
+// fill the blob with dead bytes, which is what doc_text_compact exists for.
+
+// doc_set_key replaces a node's key. Returns ok = false when the node is out of
+// range or the blob cannot hold the new text; a no-op set (same text) returns
+// early so per-frame comparison in an editor never grows the blob.
+doc_set_key :: proc(doc: ^View_Doc, node: i32, text: string) -> bool {
+	assert(doc != nil, "doc_set_key: nil doc")
+	if node < 0 || node >= doc.count do return false
+	entry := &doc.nodes[node]
+	if text_slice(view_of(doc), entry.key_offset, entry.key_length) == text do return true
+	offset, length, ok := doc_intern(doc, text)
+	if !ok do return false
+	entry.key_offset = offset
+	entry.key_length = length
+	return true
+}
+
+// doc_set_label replaces a node's display text. Identity is the key, never the
+// label, so this cannot reset widget state - which is the whole reason the two
+// are separate fields.
+doc_set_label :: proc(doc: ^View_Doc, node: i32, text: string) -> bool {
+	assert(doc != nil, "doc_set_label: nil doc")
+	if node < 0 || node >= doc.count do return false
+	entry := &doc.nodes[node]
+	if text_slice(view_of(doc), entry.label_offset, entry.label_length) == text do return true
+	offset, length, ok := doc_intern(doc, text)
+	if !ok do return false
+	entry.label_offset = offset
+	entry.label_length = length
+	return true
+}
+
+// doc_set_value replaces a node's secondary text (a kv_row's value, a
+// text_input's placeholder).
+doc_set_value :: proc(doc: ^View_Doc, node: i32, text: string) -> bool {
+	assert(doc != nil, "doc_set_value: nil doc")
+	if node < 0 || node >= doc.count do return false
+	entry := &doc.nodes[node]
+	if text_slice(view_of(doc), entry.value_offset, entry.value_length) == text do return true
+	offset, length, ok := doc_intern(doc, text)
+	if !ok do return false
+	entry.value_offset = offset
+	entry.value_length = length
+	return true
+}
+
+// doc_text_compact rebuilds the blob keeping only the bytes some node still
+// references, in one bounded pass over count nodes. Every string survives
+// byte-for-byte; only garbage from earlier doc_set_* calls is dropped.
+//
+// The scratch is a second full-size blob on the stack of whoever calls this,
+// via a temp struct - not a global, so two documents can compact concurrently.
+// Compaction cannot fail: the live text fit before, so it fits after.
+doc_text_compact :: proc(doc: ^View_Doc) {
+	assert(doc != nil, "doc_text_compact: nil doc")
+	assert(doc.count >= 0 && doc.count <= VIEW_NODES_MAX, "doc_text_compact: count out of range")
+	assert(doc.text_len <= VIEW_TEXT_BYTES_MAX, "doc_text_compact: text_len out of range")
+	scratch := new(Compact_Scratch, context.temp_allocator)
+	source := view_of(doc)
+	for index in 0 ..< int(doc.count) {
+		node := &doc.nodes[index]
+		node.key_offset, node.key_length = compact_move(
+			scratch,
+			text_slice(source, node.key_offset, node.key_length),
+		)
+		node.label_offset, node.label_length = compact_move(
+			scratch,
+			text_slice(source, node.label_offset, node.label_length),
+		)
+		node.value_offset, node.value_length = compact_move(
+			scratch,
+			text_slice(source, node.value_offset, node.value_length),
+		)
+	}
+	assert(scratch.len <= doc.text_len, "doc_text_compact: compaction grew the blob")
+	copy(doc.text[:scratch.len], scratch.text[:scratch.len])
+	doc.text_len = scratch.len
+}
+
+@(private = "file")
+Compact_Scratch :: struct {
+	text: [VIEW_TEXT_BYTES_MAX]u8,
+	len:  u32,
+}
+
+@(private = "file")
+compact_move :: proc(scratch: ^Compact_Scratch, text: string) -> (offset: u32, length: u16) {
+	assert(scratch != nil, "compact_move: nil scratch")
+	if text == "" do return 0, 0
+	assert(
+		u64(scratch.len) + u64(len(text)) <= u64(VIEW_TEXT_BYTES_MAX),
+		"compact_move: live text exceeds the blob it came from",
+	)
+	start := scratch.len
+	copy(scratch.text[start:], text)
+	scratch.len = start + u32(len(text))
+	return start, u16(len(text))
+}
