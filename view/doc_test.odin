@@ -350,3 +350,97 @@ test_validate_rejects_negative_track_sizes :: proc(t: ^testing.T) {
 		)
 	}
 }
+
+@(test)
+test_doc_set_label_changes_only_that_field :: proc(t: ^testing.T) {
+	doc: View_Doc
+	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	node, _ := doc_add_keyed(&doc, root, .Button, "save", "Save")
+	before := doc.nodes[node]
+	testing.expect(t, doc_set_label(&doc, node, "Save changes"), "set failed")
+	after := doc.nodes[node]
+	source := view_of(&doc)
+	testing.expect_value(t, view_text(source, after.label_offset, after.label_length), "Save changes")
+	testing.expect_value(t, view_text(source, after.key_offset, after.key_length), "save")
+	testing.expect_value(t, after.key_offset, before.key_offset)
+	testing.expect_value(t, after.kind, before.kind)
+	result, ok := view_validate(source)
+	testing.expectf(t, ok, "document invalid after set: %v", result)
+}
+
+@(test)
+test_doc_set_noop_does_not_grow_the_blob :: proc(t: ^testing.T) {
+	doc: View_Doc
+	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	node, _ := doc_add_keyed(&doc, root, .Button, "save", "Save")
+	before := doc.text_len
+	// An editor compares and writes back every frame; sixty no-op sets a second
+	// must not consume the blob.
+	for _ in 0 ..< 100 {
+		testing.expect(t, doc_set_label(&doc, node, "Save"), "no-op set failed")
+		testing.expect(t, doc_set_key(&doc, node, "save"), "no-op set failed")
+	}
+	testing.expect_value(t, doc.text_len, before)
+}
+
+@(test)
+test_doc_set_rejects_bad_node :: proc(t: ^testing.T) {
+	doc: View_Doc
+	doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	testing.expect(t, !doc_set_label(&doc, -1, "x"), "negative index accepted")
+	testing.expect(t, !doc_set_label(&doc, 5, "x"), "out-of-range index accepted")
+}
+
+@(test)
+test_doc_text_compact_preserves_strings_and_shrinks :: proc(t: ^testing.T) {
+	defer free_all(context.temp_allocator)
+	doc: View_Doc
+	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	a, _ := doc_add_keyed(&doc, root, .Button, "first", "First")
+	b, _ := doc_add_keyed(&doc, root, .Kv_Row, "", "Version")
+	doc.nodes[b].value_offset, doc.nodes[b].value_length, _ = doc_intern(&doc, "1.0.0")
+	// Churn the labels so the blob accumulates garbage.
+	for round in 0 ..< 40 {
+		label := round % 2 == 0 ? "First edited" : "First"
+		testing.expect(t, doc_set_label(&doc, a, label), "set failed")
+	}
+	grown := doc.text_len
+	testing.expect(t, grown > 40, "churn did not grow the blob")
+
+	doc_text_compact(&doc)
+	testing.expect(t, doc.text_len < grown, "compaction did not shrink the blob")
+	source := view_of(&doc)
+	na := doc.nodes[a]
+	nb := doc.nodes[b]
+	testing.expect_value(t, view_text(source, na.key_offset, na.key_length), "first")
+	testing.expect_value(t, view_text(source, na.label_offset, na.label_length), "First")
+	testing.expect_value(t, view_text(source, nb.label_offset, nb.label_length), "Version")
+	testing.expect_value(t, view_text(source, nb.value_offset, nb.value_length), "1.0.0")
+	result, ok := view_validate(source)
+	testing.expectf(t, ok, "document invalid after compact: %v", result)
+}
+
+@(test)
+test_doc_edit_session_cannot_exhaust_the_blob :: proc(t: ^testing.T) {
+	defer free_all(context.temp_allocator)
+	doc: View_Doc
+	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	node, _ := doc_add_keyed(&doc, root, .Label, "l", "text")
+	// Simulate a long session: thousands of distinct edits, compacting at the
+	// builder's threshold. If compaction were broken this would fail long
+	// before the loop ends.
+	buffer: [64]u8
+	for round in 0 ..< 5000 {
+		length := 8 + round % 40
+		for i in 0 ..< length do buffer[i] = u8('a' + (round + i) % 26)
+		ok := doc_set_label(&doc, node, string(buffer[:length]))
+		if !ok {
+			doc_text_compact(&doc)
+			ok = doc_set_label(&doc, node, string(buffer[:length]))
+		}
+		testing.expectf(t, ok, "edit %d failed even after compaction", round)
+		if doc.text_len > VIEW_TEXT_BYTES_MAX * 3 / 4 do doc_text_compact(&doc)
+	}
+	result, valid := view_validate(view_of(&doc))
+	testing.expectf(t, valid, "document invalid after session: %v", result)
+}

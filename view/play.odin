@@ -25,31 +25,50 @@ import "ingot:ui"
 // Nothing is retained past this call, which is what keeps a saved view
 // compatible with immediate mode rather than a retained tree in disguise.
 view_play :: proc(u: ^ui.Ui, view: View, bindings: ^Bindings) {
+	view_play_traced(u, view, bindings, nil)
+}
+
+// view_play_traced is view_play with an optional per-node rect recording, for
+// tools that need to hit-test the played frame (see trace.odin). One walk, one
+// implementation: view_play delegates here, and a nil trace makes every tap a
+// no-op, so playing and tracing cannot disagree about what a node means.
+view_play_traced :: proc(u: ^ui.Ui, view: View, bindings: ^Bindings, trace: ^Play_Trace) {
 	assert(u != nil, "view_play: nil Ui")
 	assert(len(view.nodes) <= VIEW_NODES_MAX, "view_play: too many nodes")
 	if bindings != nil && bindings.events != nil do sink_reset(bindings.events)
 	depth_at_entry := u.ids.depth
+	// The document cannot know what container the caller opened around this
+	// call, so depth-0 nodes take their axis from the live layout.
+	root_horizontal := ui.layout_kind(&u.layout) == .Row
+	tap: Trace_Tap
+	tap_begin(&tap, trace, view)
 
 	walk := walk_begin(view)
 	for {
 		step, more := walk_next(&walk)
 		if !more do break
 		node := view.nodes[step.node]
+		horizontal := parent_axis_horizontal(view, step.node, root_horizontal)
 		if step.event == .Exit {
 			close_container(u, node.kind)
 			ui.scope_end(u)
+			tap_container_exit(&tap, step.node, node.kind, ui.remaining_rect(u), horizontal)
 			continue
 		}
 		if view_kind_is_container(node.kind) {
+			tap_container_enter(&tap, ui.remaining_rect(u))
 			ui.scope_begin(u, scope_key(view, node, step.node))
 			open_container(u, view, node, step.node)
 			continue
 		}
+		before := ui.remaining_rect(u)
 		emit_leaf(u, view, node, step.node, bindings)
+		tap_leaf(&tap, step.node, before, ui.remaining_rect(u), horizontal)
 	}
 
 	assert(walk_balanced(&walk), "view_play: walk did not balance")
 	assert(u.ids.depth == depth_at_entry, "view_play: unbalanced id scope")
+	assert(tap.depth == 0, "view_play: unbalanced trace stack")
 }
 
 // scope_key gives every container a scope, using its index when it has no
