@@ -149,13 +149,25 @@ decode_node :: proc(c: ^Cursor) -> (node: View_Node, ok: bool) {
 	node.align = get_enum(c, ui.Cross_Align, len(ui.Cross_Align)) or_return
 	node.justify = get_enum(c, ui.Main_Align, len(ui.Main_Align)) or_return
 	node.style = get_enum(c, ui.Btn_Style, len(ui.Btn_Style)) or_return
-	node.track = decode_track(c) or_return
+	// A Track feeds layout arithmetic directly, so its numerics are checked
+	// here rather than trusted. Negative sizes are not merely wrong, they make
+	// ui's flex solver compute nonsense, and nothing downstream re-checks them.
+	track := decode_track(c) or_return
+	if track.basis < 0 || track.weight < 0 do return {}, false
+	if track.min_size < 0 || track.max_size < 0 do return {}, false
+	node.track = track
 	node.size_main = get_i32(c) or_return
 	node.integer = get_i32(c) or_return
 	node.number_lo = get_f32(c) or_return
 	node.number_hi = get_f32(c) or_return
 	node.number_step = get_f32(c) or_return
-	if c.at - start != VIEW_RECORD_BYTES do return {}, false
+	// The record must have been consumed exactly. Reading past it would mean
+	// this and encode_node disagree about the layout, which is a programmer
+	// error and asserts; falling short means the input ran out, which is an
+	// operating error and returns.
+	consumed := c.at - start
+	assert(consumed <= VIEW_RECORD_BYTES, "decode_node: read past the record")
+	if consumed < VIEW_RECORD_BYTES do return {}, false
 	return node, true
 }
 

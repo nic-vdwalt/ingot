@@ -13,6 +13,8 @@ package view
 
 doc_reset :: proc(doc: ^View_Doc) {
 	assert(doc != nil, "doc_reset: nil doc")
+	assert(doc.count >= 0 && doc.count <= VIEW_NODES_MAX, "doc_reset: count out of range")
+	assert(doc.text_len <= VIEW_TEXT_BYTES_MAX, "doc_reset: text_len out of range")
 	doc.count = 0
 	doc.text_len = 0
 }
@@ -84,6 +86,11 @@ doc_link :: proc(doc: ^View_Doc, parent: i32, index: i32) {
 doc_chain_head :: proc(doc: ^View_Doc, parent: i32, index: i32) -> i32 {
 	assert(doc != nil, "doc_chain_head: nil doc")
 	assert(index >= 0 && index < doc.count, "doc_chain_head: index out of range")
+	assert(doc.count <= VIEW_NODES_MAX, "doc_chain_head: count exceeds capacity")
+	assert(
+		parent == VIEW_NODE_NONE || (parent >= 0 && parent < doc.count),
+		"doc_chain_head: parent out of range",
+	)
 	if parent == VIEW_NODE_NONE {
 		if index == 0 do return VIEW_NODE_NONE
 		return 0

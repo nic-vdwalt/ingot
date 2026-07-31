@@ -1,3 +1,4 @@
+#+build !js
 package view
 
 import "core:testing"
@@ -316,4 +317,36 @@ test_validate_rejects_text_input_without_label :: proc(t: ^testing.T) {
 	result, ok := view_validate(view_of(&doc))
 	testing.expect(t, !ok, "ui.text_input asserts on an empty accessible label")
 	testing.expect_value(t, result.fault, Validate_Fault.Missing_Label)
+}
+
+@(test)
+test_validate_rejects_negative_track_sizes :: proc(t: ^testing.T) {
+	// A Track feeds ui's flex solver directly, so a negative size is not a
+	// cosmetic defect: it produces nonsense geometry that nothing downstream
+	// re-checks.
+	fields := [?]string{"basis", "weight", "min_size", "max_size"}
+	for field, index in fields {
+		doc: View_Doc
+		root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Flex_Row, "root", "")
+		child, _ := doc_add_keyed(&doc, root, .Label, "a", "A")
+		switch index {
+		case 0:
+			doc.nodes[child].track.basis = -1
+		case 1:
+			doc.nodes[child].track.weight = -1
+		case 2:
+			doc.nodes[child].track.min_size = -1
+		case 3:
+			doc.nodes[child].track.max_size = -1
+		}
+		result, ok := view_validate(view_of(&doc))
+		testing.expectf(t, !ok, "negative %s must not validate", field)
+		testing.expectf(
+			t,
+			result.fault == .Track_Range,
+			"negative %s: want Track_Range, got %v",
+			field,
+			result.fault,
+		)
+	}
 }

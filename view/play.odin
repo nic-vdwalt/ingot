@@ -157,14 +157,17 @@ close_container :: proc(u: ^ui.Ui, kind: View_Kind) {
 	}
 }
 
-// child_tracks gathers a flex container's children into the slice ui.flex_*
-// wants. A flex run must know every sibling's size before the first is drawn,
-// so this cannot be done incrementally as the walk reaches each child.
+// child_tracks gathers a flex container's slot-carving children into the slice
+// ui.flex_* wants. A flex run must know every sibling's size before the first
+// is drawn, so this cannot be done incrementally as the walk reaches each child.
 //
-// An empty result is meaningful: a flex container with no children must not
-// open a flex run at all, because ui asserts that every declared track is
-// consumed. An empty container is what the builder holds the instant after the
-// user drops one on the canvas, so it has to render rather than abort.
+// Only carving children get a track, because ui asserts that every declared
+// track is consumed and a Separator or Spacer never consumes one.
+//
+// An empty result is meaningful: a flex container with no carving children must
+// not open a flex run at all. That is what the builder holds the instant after
+// the user drops a container on the canvas, so it has to render rather than
+// abort.
 //
 // The scratch array is file-scoped rather than per-call because tracks are
 // consumed by flex_*_begin immediately; nesting is handled by ui's own track
@@ -178,8 +181,10 @@ child_tracks :: proc(view: View, parent: i32) -> []ui.Track {
 	count := 0
 	child := view.nodes[parent].first_child
 	for child != VIEW_NODE_NONE && count < VIEW_FLEX_TRACKS_MAX {
-		flex_scratch[count] = view.nodes[child].track
-		count += 1
+		if view_kind_carves_slot(view.nodes[child].kind) {
+			flex_scratch[count] = view.nodes[child].track
+			count += 1
+		}
 		child = view.nodes[child].next_sibling
 	}
 	return flex_scratch[:count]

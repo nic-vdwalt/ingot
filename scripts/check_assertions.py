@@ -14,7 +14,18 @@ import check_odin_style
 # Ingot's own authored packages. A consumer repository passes --packages to
 # point the same gate at its own source tree; the rules are not ingot-specific,
 # only this default is.
-PACKAGES = ("gfx/", "ui/", "ui_gfx/", "term/", "prefs/", "net/", "sys/", "pty/", "testx/")
+PACKAGES = (
+    "gfx/",
+    "ui/",
+    "ui_gfx/",
+    "view/",
+    "term/",
+    "prefs/",
+    "net/",
+    "sys/",
+    "pty/",
+    "testx/",
+)
 EXCLUDED_PREFIXES = ("accesskit/", "libvterm/", "gfx/rlgl")
 EXCLUDED_SUFFIXES = ("_test.odin", "_tests.odin", "_fuzz_test.odin")
 ASSERTION = re.compile(r"(?<![A-Za-z0-9_#])(?:assert_contextless|assert|ensure)\s*\(")

@@ -206,11 +206,80 @@ view_kind_is_interactive :: proc(kind: View_Kind) -> bool {
 	return false
 }
 
-// view_kind_needs_label reports whether a kind's label doubles as its
-// accessible name. ui.slider and ui.text_input both assert on an empty one, so
-// this is the rule that stops a document reaching an assertion inside ui.
+// view_kind_carves_slot reports whether a kind consumes one slot from its
+// parent's layout run.
+//
+// This matters only inside a flex container, where ui asserts that every
+// declared track is consumed. Three kinds do not take one:
+//
+//   - Separator carves through slot_px, which is not the flex-aware path.
+//   - Spacer only advances the cursor and carves nothing at all.
+//   - Panel opens through push_column, which swallows the parent's entire
+//     remaining space rather than taking a slot from it. That also means a
+//     Panel is a poor flex child, but rejecting it outright would be a
+//     surprising restriction; declaring no track for it is enough to keep the
+//     run consistent.
+//
+// Every other kind reaches slot_next_px, which resolves a flex track.
+//
+// The rule is a function of kind alone, never of a node's content. An earlier
+// version skipped emitting a label with empty text, which made a node's layout
+// footprint depend on its data and left a flex run one track short.
+view_kind_carves_slot :: proc(kind: View_Kind) -> bool {
+	switch kind {
+	case .Separator, .Spacer, .Panel:
+		return false
+	case .Row,
+	     .Column,
+	     .Flex_Row,
+	     .Flex_Column,
+	     .Button,
+	     .Icon_Button,
+	     .Back_Button,
+	     .Checkbox,
+	     .Radio,
+	     .Slider,
+	     .Text_Input,
+	     .Collapsible_Header,
+	     .Label,
+	     .Section_Header,
+	     .Status_Pill,
+	     .Kv_Row,
+	     .Progress_Bar,
+	     .Spinner:
+		return true
+	}
+	return true
+}
+
+// view_kind_needs_label reports whether a kind requires a non-empty label.
+// ui.slider and ui.text_input use it as the accessible name, and
+// ui.section_header and ui.status_pill assert on empty text outright. This is
+// the rule that stops a document reaching an assertion inside ui.
 view_kind_needs_label :: proc(kind: View_Kind) -> bool {
-	return kind == .Slider || kind == .Text_Input
+	switch kind {
+	case .Slider, .Text_Input, .Section_Header, .Status_Pill:
+		return true
+	case .Row,
+	     .Column,
+	     .Panel,
+	     .Flex_Row,
+	     .Flex_Column,
+	     .Button,
+	     .Icon_Button,
+	     .Back_Button,
+	     .Checkbox,
+	     .Radio,
+	     .Collapsible_Header,
+	     .Label,
+	     .Kv_Row,
+	     .Progress_Bar,
+	     .Spinner,
+	     .Separator,
+	     .Spacer:
+		return false
+	}
+	return false
 }
 
 // view_kind_binding reports the binding kind a node of this kind requires, or

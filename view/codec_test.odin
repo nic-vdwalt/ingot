@@ -1,3 +1,4 @@
+#+build !js
 package view
 
 import "core:testing"
@@ -393,3 +394,28 @@ test_decode_survives_random_input :: proc(t: ^testing.T) {
 		}
 	}
 }
+
+@(test)
+test_decode_rejects_negative_track_sizes :: proc(t: ^testing.T) {
+	defer free_all(context.temp_allocator)
+	doc: View_Doc
+	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Flex_Row, "root", "")
+	doc_add_keyed(&doc, root, .Label, "a", "A", View_Node{track = ui.Track{kind = .Grow}})
+	// Forge the wire bytes rather than the document: this is the check that
+	// stops a hostile file reaching ui's flex solver, so it must be exercised
+	// through the decoder rather than through view_validate alone.
+	bytes := corrupt(encode_to_temp(view_of(&doc)))
+	// Record 1, past the fixed prefix, is the child's track.basis.
+	at := VIEW_HEADER_BYTES + VIEW_RECORD_BYTES + TRACK_BASIS_RECORD_OFFSET
+	bytes[at + 0] = 0xff
+	bytes[at + 1] = 0xff
+	bytes[at + 2] = 0xff
+	bytes[at + 3] = 0xff
+	rewrite_checksum(bytes)
+	expect_fault(t, bytes, .Bad_Enum, "negative track basis")
+}
+
+// The byte offset of track.basis inside a record, derived from the field order
+// encode_node writes rather than counted by hand.
+@(private = "file")
+TRACK_BASIS_RECORD_OFFSET :: 1 + 2 + 4 * 3 + (4 + 2) * 3 + 4 + 7 + 1
