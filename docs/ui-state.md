@@ -88,11 +88,20 @@ Two rules follow from this, and both are enforced rather than advisory:
   role instead, as `surface_pressed` does.
 
 Palettes are values, not code: `THEME_DARK`, `THEME_LIGHT`,
-`THEME_HIGH_CONTRAST`, `THEME_PAPER`, and `THEME_PAPER_NIGHT` are plain
+`THEME_HIGH_CONTRAST`, `THEME_SKETCH_WARM`, and `THEME_SKETCH_GREY` are plain
 `Theme` structs swapped at runtime by `ui_runtime_set_theme`. A palette
 disables an effect by zeroing its alpha rather than by a branch at the draw
 site, which is how the high-contrast theme opts out of shadows and the screen
 themes opt out of paper materials.
+
+A `Theme` also carries a `Substrate`: the page texture drawn behind content.
+`kind` selects it (`.None`, `.Ruled`, `.Grid`, `.Dots`, `.Tooth`) and
+`margin_rule` says only whether a vertical rule is drawn. Those are two fields
+because they are two decisions - a page may want the reserved margin column
+without a line down it, and one flag standing for both makes that
+inexpressible. Any substrate with structure must be anchored to the scrolling
+content rather than to the viewport, or the texture slides under the content
+it belongs to.
 
 Ingot has no implicit active runtime or frame. Geometry-level widgets receive a
 `^Ui_Frame`; facade widgets forward the frame attached by `begin`.

@@ -28,7 +28,7 @@ class RawColorTests(unittest.TestCase):
     def test_ignores_palette_files(self) -> None:
         """A theme is data; literal colors are the point of these files."""
         source = "fg_primary = Color{44, 42, 38, 255},\n"
-        for path in ("ui/theme.odin", "ui/paper.odin"):
+        for path in ("ui/theme.odin", "ui/sketch.odin"):
             counts = gate.counts_for_source(source, path)
             self.assertNotIn(f"{path}:raw_color", counts)
 

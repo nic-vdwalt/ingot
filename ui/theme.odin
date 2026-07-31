@@ -315,8 +315,8 @@ THEME_DARK :: Theme {
 	// No paper materials: this is a screen palette, and a zero-alpha color
 	// disables the effect in material.odin without a branch there.
 	paper_rule = Color{0, 0, 0, 0},
-	paper_tooth                = Color{0, 0, 0, 0},
-	graphite                   = Color{0, 0, 0, 0},
+	paper_tooth = Color{0, 0, 0, 0},
+	graphite = Color{0, 0, 0, 0},
 	highlighter = Color{0, 0, 0, 0},
 	tape_color = Color{0, 0, 0, 0},
 	ink_faded = Color{150, 150, 160, 255},
@@ -326,7 +326,7 @@ THEME_DARK :: Theme {
 	caption_close_hover = Color{232, 64, 52, 255},
 	caption_close_pressed = Color{180, 40, 32, 255},
 	spell_error = Color{255, 120, 120, 255},
-	substrate                  = Substrate{kind = .None, margin_rule = false},
+	substrate = Substrate{kind = .None, margin_rule = false},
 }
 
 // THEME_LIGHT is a light counterpart tuned for equivalent contrast roles.
@@ -408,8 +408,8 @@ THEME_LIGHT :: Theme {
 	button_primary_grad_top = Color{255, 255, 255, 55},
 	button_primary_grad_bottom = Color{0, 0, 0, 0},
 	paper_rule = Color{0, 0, 0, 0},
-	paper_tooth                = Color{0, 0, 0, 0},
-	graphite                   = Color{0, 0, 0, 0},
+	paper_tooth = Color{0, 0, 0, 0},
+	graphite = Color{0, 0, 0, 0},
 	highlighter = Color{0, 0, 0, 0},
 	tape_color = Color{0, 0, 0, 0},
 	ink_faded = Color{130, 130, 140, 255},
@@ -419,7 +419,7 @@ THEME_LIGHT :: Theme {
 	caption_close_hover = Color{232, 64, 52, 255},
 	caption_close_pressed = Color{180, 40, 32, 255},
 	spell_error = Color{190, 40, 40, 255},
-	substrate                  = Substrate{kind = .None, margin_rule = false},
+	substrate = Substrate{kind = .None, margin_rule = false},
 }
 
 // THEME_HIGH_CONTRAST is a maximum-legibility palette: opaque black
@@ -509,8 +509,8 @@ THEME_HIGH_CONTRAST :: Theme {
 	button_primary_grad_top = Color{0, 0, 0, 0},
 	button_primary_grad_bottom = Color{0, 0, 0, 0},
 	paper_rule = Color{0, 0, 0, 0},
-	paper_tooth                = Color{0, 0, 0, 0},
-	graphite                   = Color{0, 0, 0, 0},
+	paper_tooth = Color{0, 0, 0, 0},
+	graphite = Color{0, 0, 0, 0},
 	highlighter = Color{0, 0, 0, 0},
 	tape_color = Color{0, 0, 0, 0},
 	ink_faded = Color{200, 200, 200, 255},
@@ -523,7 +523,7 @@ THEME_HIGH_CONTRAST :: Theme {
 	caption_close_hover = Color{255, 80, 80, 255},
 	caption_close_pressed = Color{255, 140, 140, 255},
 	spell_error = Color{255, 100, 100, 255},
-	substrate                  = Substrate{kind = .None, margin_rule = false},
+	substrate = Substrate{kind = .None, margin_rule = false},
 }
 
 // THEME_COLOR is the zero-color sentinel for widget color parameters whose

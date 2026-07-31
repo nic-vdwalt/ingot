@@ -99,7 +99,7 @@ NAV_STRIP_CELL_W :: 92
 
 // Palette is a cycle rather than a `dark: bool`, because a boolean cannot
 // express four choices. Ordered so the button walks screen themes first and
-// then paper, which reads as a progression rather than a jumble.
+// then sketchbook, which reads as a progression rather than a jumble.
 Palette :: enum {
 	Dark,
 	Light,

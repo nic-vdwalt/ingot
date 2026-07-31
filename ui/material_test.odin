@@ -285,3 +285,162 @@ hand_underline_survives_every_scale :: proc(t: ^testing.T) {
 		)
 	}
 }
+
+// The tooth is texture, so its cost must follow area - and be capped. A fleck
+// field is the same quadratic trap as the dot grid: a density that looks right
+// on a laptop costs sixteen times as much at 4K.
+@(test)
+paper_tooth_respects_its_bound :: proc(t: ^testing.T) {
+	sizes := [?][2]f32{{200, 120}, {1280, 800}, {3840, 2160}, {12000, 8000}}
+	for size in sizes {
+		runtime: Ui_Runtime
+		output := new(Ui_Output)
+		defer free(output)
+		frame: Ui_Frame
+		material_frame(&runtime, &frame, output, 1.0)
+		defer ui_runtime_destroy(&runtime)
+
+		draw_paper_tooth(&frame, {0, 0, size[0], size[1]}, Color{100, 90, 70, 90})
+		ui_frame_end(&frame)
+		testing.expectf(
+			t,
+			output.main.count <= SUBSTRATE_FLECKS_MAX,
+			"a %vx%v region emitted %d flecks, above the bound of %d",
+			size[0],
+			size[1],
+			output.main.count,
+			SUBSTRATE_FLECKS_MAX,
+		)
+	}
+}
+
+// A larger region must carry more grain than a small one, or the texture is a
+// fixed sprinkle that looks sparse on a page and dense on a chip.
+@(test)
+paper_tooth_scales_with_area :: proc(t: ^testing.T) {
+	counts: [2]int
+	for size, index in ([2]f32{300, 1400}) {
+		runtime: Ui_Runtime
+		output := new(Ui_Output)
+		defer free(output)
+		frame: Ui_Frame
+		material_frame(&runtime, &frame, output, 1.0)
+		defer ui_runtime_destroy(&runtime)
+
+		draw_paper_tooth(&frame, {0, 0, size, size}, Color{100, 90, 70, 90})
+		ui_frame_end(&frame)
+		counts[index] = output.main.count
+	}
+	testing.expect(t, counts[1] > counts[0])
+}
+
+// The determinism property, and the reason placement is a hash rather than an
+// RNG. Frames here are event-driven: a stateful generator would deal a new
+// pattern on every unrelated redraw, so the grain would crawl while the user
+// typed and the capture harness would stop being byte-reproducible.
+//
+// A generator would still pass every other test in this file, which is exactly
+// why this one exists.
+@(test)
+paper_tooth_is_identical_across_frames :: proc(t: ^testing.T) {
+	first: [64]Rect
+	second: [64]Rect
+	counts: [2]int
+	for pass in 0 ..< 2 {
+		runtime: Ui_Runtime
+		output := new(Ui_Output)
+		defer free(output)
+		frame: Ui_Frame
+		material_frame(&runtime, &frame, output, 1.0)
+		defer ui_runtime_destroy(&runtime)
+
+		draw_paper_tooth(&frame, {0, 0, 600, 400}, Color{100, 90, 70, 90})
+		ui_frame_end(&frame)
+		counts[pass] = output.main.count
+		for index in 0 ..< min(output.main.count, 64) {
+			if pass == 0 do first[index] = output.main.commands[index].rect
+			else do second[index] = output.main.commands[index].rect
+		}
+	}
+	testing.expect_value(t, counts[0], counts[1])
+	for index in 0 ..< min(counts[0], 64) {
+		testing.expectf(
+			t,
+			first[index] == second[index],
+			"fleck %d moved between frames: %v then %v",
+			index,
+			first[index],
+			second[index],
+		)
+	}
+}
+
+// Negative space: a degenerate or invisible region draws nothing rather than
+// emitting a fleck at a nonsense coordinate.
+@(test)
+paper_tooth_declines_degenerate_input :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	material_frame(&runtime, &frame, output, 1.0)
+	defer ui_runtime_destroy(&runtime)
+
+	draw_paper_tooth(&frame, {0, 0, 0, 0}, Color{100, 90, 70, 90})
+	testing.expect_value(t, output.main.count, 0)
+	draw_paper_tooth(&frame, {0, 0, -10, -10}, Color{100, 90, 70, 90})
+	testing.expect_value(t, output.main.count, 0)
+	draw_paper_tooth(&frame, {0, 0, 500, 500}, Color{100, 90, 70, 0})
+	testing.expect_value(t, output.main.count, 0)
+	ui_frame_end(&frame)
+}
+
+// A pigment block costs the same whether it is a chip or a full-width study.
+// A size-proportional bleed would make a large swatch arbitrarily expensive
+// for an effect that only happens at its edges.
+@(test)
+pigment_block_cost_is_independent_of_size :: proc(t: ^testing.T) {
+	counts: [3]int
+	sizes := [3][2]f32{{40, 20}, {400, 200}, {2000, 900}}
+	for size, index in sizes {
+		runtime: Ui_Runtime
+		output := new(Ui_Output)
+		defer free(output)
+		frame: Ui_Frame
+		material_frame(&runtime, &frame, output, 1.0)
+		defer ui_runtime_destroy(&runtime)
+
+		draw_pigment_block(&frame, {0, 0, size[0], size[1]}, Color{40, 60, 150, 255})
+		ui_frame_end(&frame)
+		counts[index] = output.main.count
+	}
+	testing.expect_value(t, counts[0], counts[1])
+	testing.expect_value(t, counts[1], counts[2])
+	// One wash, two bleed strips per level, and two corner notches.
+	testing.expect_value(t, counts[0], 1 + WASH_BLEED_STRIPS * 2 + 2)
+}
+
+// The wash must be a gradient, not a fill: pigment pools where it settles, and
+// a flat rectangle is what makes a swatch read as a table cell.
+@(test)
+wash_is_a_gradient :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	material_frame(&runtime, &frame, output, 1.0)
+	defer ui_runtime_destroy(&runtime)
+
+	pigment := Color{40, 60, 150, 255}
+	draw_wash(&frame, {0, 0, 100, 60}, pigment)
+	ui_frame_end(&frame)
+
+	testing.expect_value(t, output.main.count, 1)
+	command := output.main.commands[0]
+	testing.expect_value(t, command.kind, Paint_Kind.Rectangle_Gradient_V)
+	// Denser at the bottom than the top, and the hue is preserved: a wash that
+	// faded toward white would read as a highlight rather than as thin paint.
+	testing.expect(t, command.color_end.a > command.color.a)
+	testing.expect_value(t, command.color_end, pigment)
+	testing.expect_value(t, command.color.r, pigment.r)
+}

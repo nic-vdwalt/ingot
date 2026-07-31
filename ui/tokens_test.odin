@@ -34,7 +34,13 @@ all_surfaces :: proc() -> [13]Surface {
 // all five rather than a representative one; every defect these tests replace
 // was itself palette-specific.
 token_themes :: proc() -> [5]Theme {
-	return [5]Theme{THEME_DARK, THEME_LIGHT, THEME_HIGH_CONTRAST, THEME_SKETCH_WARM, THEME_SKETCH_GREY}
+	return [5]Theme {
+		THEME_DARK,
+		THEME_LIGHT,
+		THEME_HIGH_CONTRAST,
+		THEME_SKETCH_WARM,
+		THEME_SKETCH_GREY,
+	}
 }
 
 // A surface being interacted with must be visible in every palette. This is

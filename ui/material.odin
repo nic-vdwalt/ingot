@@ -478,7 +478,12 @@ draw_wash :: proc(frame: ^Ui_Frame, rect: Rectangle, pigment: Color) {
 	if rect.width <= 0 || rect.height <= 0 || pigment.a == 0 do return
 	// The top is thinned toward the paper rather than toward white, so a wash
 	// reads as pigment on stock rather than as a fade to nothing.
-	top := Color{pigment.r, pigment.g, pigment.b, u8(f32(pigment.a) * 0.72)}
+	//
+	// Only slightly thinned. An earlier value of 0.72 let so much ground show
+	// through that overlapping blocks read as stacked panes of tinted glass
+	// rather than as paint: laid pigment covers its paper, and the density
+	// difference between where a wash starts and where it pools is subtle.
+	top := Color{pigment.r, pigment.g, pigment.b, u8(f32(pigment.a) * 0.88)}
 	draw_rectangle_gradient_v(
 		frame,
 		i32(rect.x),
