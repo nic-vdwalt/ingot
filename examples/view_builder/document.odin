@@ -76,7 +76,7 @@ add_node_into :: proc(data: ^State, parent: i32, kind: view.View_Kind) {
 		return
 	}
 	node := view.View_Node {
-		track     = ui.Track{kind = .Grow, weight = 1},
+		track = ui.Track{kind = .Grow, weight = 1},
 		size_main = default_size(kind),
 		number_hi = 1,
 	}

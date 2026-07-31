@@ -360,7 +360,11 @@ test_doc_set_label_changes_only_that_field :: proc(t: ^testing.T) {
 	testing.expect(t, doc_set_label(&doc, node, "Save changes"), "set failed")
 	after := doc.nodes[node]
 	source := view_of(&doc)
-	testing.expect_value(t, view_text(source, after.label_offset, after.label_length), "Save changes")
+	testing.expect_value(
+		t,
+		view_text(source, after.label_offset, after.label_length),
+		"Save changes",
+	)
 	testing.expect_value(t, view_text(source, after.key_offset, after.key_length), "save")
 	testing.expect_value(t, after.key_offset, before.key_offset)
 	testing.expect_value(t, after.kind, before.kind)

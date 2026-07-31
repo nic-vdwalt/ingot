@@ -119,6 +119,7 @@ Trace_Tap :: struct {
 @(private = "package")
 tap_begin :: proc(tap: ^Trace_Tap, trace: ^Play_Trace, source: View) {
 	assert(tap != nil, "tap_begin: nil tap")
+	assert(len(source.nodes) <= VIEW_NODES_MAX, "tap_begin: too many nodes")
 	tap.trace = trace
 	tap.depth = 0
 	if trace == nil do return

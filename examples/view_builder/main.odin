@@ -198,7 +198,11 @@ save :: proc(data: ^State) {
 	assert(data != nil, "save: nil state")
 	source := view.view_of(&data.doc)
 	if result, ok := view.view_validate(source); !ok {
-		set_status(data, fmt.tprintf("cannot save: %v at node %d", result.fault, result.node), true)
+		set_status(
+			data,
+			fmt.tprintf("cannot save: %v at node %d", result.fault, result.node),
+			true,
+		)
 		return
 	}
 	buffer := make([]u8, view.view_encoded_size(source), context.temp_allocator)

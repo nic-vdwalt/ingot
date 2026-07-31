@@ -124,16 +124,34 @@ config_text_fields :: proc(form: ^ui.Ui, data: ^State, kind: view.View_Kind) {
 
 	if view.view_kind_is_interactive(kind) {
 		ui.label(form, "Key (identity)", ui.Text_Role.Note, ui.Ink.Secondary)
-		_ = ui.text_input(form, "cfg-key", &data.key_box, "stable key", 26)
+		_ = ui.text_input(
+			form,
+			"cfg-key",
+			&data.key_box,
+			"stable key",
+			ui.Text_Input_Options{height = 26, semantics = {name = "Key"}},
+		)
 	}
 	if kind_has_label(kind) {
 		ui.label(form, "Label", ui.Text_Role.Note, ui.Ink.Secondary)
-		_ = ui.text_input(form, "cfg-label", &data.label_box, "display text", 26)
+		_ = ui.text_input(
+			form,
+			"cfg-label",
+			&data.label_box,
+			"display text",
+			ui.Text_Input_Options{height = 26, semantics = {name = "Label"}},
+		)
 	}
 	if kind == .Kv_Row || kind == .Text_Input {
 		name := kind == .Text_Input ? "Placeholder" : "Value"
 		ui.label(form, name, ui.Text_Role.Note, ui.Ink.Secondary)
-		_ = ui.text_input(form, "cfg-value", &data.value_box, "secondary text", 26)
+		_ = ui.text_input(
+			form,
+			"cfg-value",
+			&data.value_box,
+			"secondary text",
+			ui.Text_Input_Options{height = 26, semantics = {name = name}},
+		)
 	}
 	inspector_writeback(data, kind)
 }
@@ -245,7 +263,12 @@ config_range :: proc(form: ^ui.Ui, data: ^State, node: ^view.View_Node, kind: vi
 	stepper_f32(form, data, "Step", &node.number_step, 0.05)
 }
 
-config_appearance :: proc(form: ^ui.Ui, data: ^State, node: ^view.View_Node, kind: view.View_Kind) {
+config_appearance :: proc(
+	form: ^ui.Ui,
+	data: ^State,
+	node: ^view.View_Node,
+	kind: view.View_Kind,
+) {
 	assert(form != nil && data != nil && node != nil, "config_appearance: invalid arguments")
 	ui.space(form, .XS)
 	ui.label(form, "Appearance", ui.Text_Role.Note, ui.Ink.Secondary)
