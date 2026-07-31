@@ -33,18 +33,28 @@ when SMOKE {
 	// high contrast was only ever exercised with full motion and reduced
 	// motion only ever with the light palette. The combinations that were
 	// never reached are exactly the ones an accessibility user runs.
+	//
+	// Every palette appears with motion both on and off, because the paper
+	// palettes take a drawing path the screen ones do not: they carry a
+	// substrate, so a crash in the rule or margin code would otherwise only
+	// surface when a human happened to select paper.
 	Smoke_Theme :: struct {
-		dark:           bool,
+		palette:        Palette,
 		high_contrast:  bool,
 		reduced_motion: bool,
 	}
 	SMOKE_THEMES := [?]Smoke_Theme {
-		{dark = true, high_contrast = false, reduced_motion = false},
-		{dark = false, high_contrast = false, reduced_motion = false},
-		{dark = true, high_contrast = false, reduced_motion = true},
-		{dark = false, high_contrast = false, reduced_motion = true},
-		{dark = true, high_contrast = true, reduced_motion = false},
-		{dark = true, high_contrast = true, reduced_motion = true},
+		{palette = .Dark, high_contrast = false, reduced_motion = false},
+		{palette = .Light, high_contrast = false, reduced_motion = false},
+		{palette = .Paper, high_contrast = false, reduced_motion = false},
+		{palette = .Paper_Night, high_contrast = false, reduced_motion = false},
+		{palette = .Dark, high_contrast = false, reduced_motion = true},
+		{palette = .Light, high_contrast = false, reduced_motion = true},
+		{palette = .Paper, high_contrast = false, reduced_motion = true},
+		{palette = .Paper_Night, high_contrast = false, reduced_motion = true},
+		{palette = .Dark, high_contrast = true, reduced_motion = false},
+		{palette = .Paper, high_contrast = true, reduced_motion = false},
+		{palette = .Dark, high_contrast = true, reduced_motion = true},
 	}
 
 	smoke_frame: int
@@ -68,11 +78,16 @@ when SMOKE {
 			fmt.printfln("smoke: scale %.2f", stored_scale)
 		case step < scale_steps + theme_steps:
 			combo := SMOKE_THEMES[step - scale_steps]
-			dark = combo.dark
+			palette = combo.palette
 			high_contrast = combo.high_contrast
 			reduced_motion = combo.reduced_motion
 			apply_gallery_theme()
-			fmt.printfln("smoke: theme dark=%v hc=%v rm=%v", dark, high_contrast, reduced_motion)
+			fmt.printfln(
+				"smoke: theme %s hc=%v rm=%v",
+				PALETTE_NAMES[palette],
+				high_contrast,
+				reduced_motion,
+			)
 		case step < total:
 			section = Section(step - scale_steps - theme_steps)
 			ui.pane_reset(&content_pane)

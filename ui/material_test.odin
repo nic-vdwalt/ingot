@@ -97,7 +97,7 @@ rule_bound_is_sized_from_the_worst_real_case :: proc(t: ^testing.T) {
 	testing.expectf(
 		t,
 		count > SUBSTRATE_RULES_MAX / 2,
-		"worst-case 4K page needs only %d rules against a bound of %d: the bound is not derived from measurement",
+		"worst-case 4K page needs only %d rules against a bound of %d: bound not from measurement",
 		count,
 		SUBSTRATE_RULES_MAX,
 	)
@@ -171,4 +171,117 @@ scribble_cost_is_independent_of_size :: proc(t: ^testing.T) {
 	testing.expect(t, SCRIBBLE_STROKES_MAX <= 16)
 	// Even a thousand pressed rows in one frame stay inside the headroom.
 	testing.expect(t, SCRIBBLE_STROKES_MAX * 100 <= PAINT_COMMANDS_HEADROOM)
+}
+
+// material_frame builds a live runtime and frame so a test can count the
+// commands a material actually emits, rather than reasoning about what it
+// ought to emit. Counting the real stream is what catches a loop that draws
+// per-pixel instead of per-stroke.
+@(private = "file")
+material_frame :: proc(runtime: ^Ui_Runtime, frame: ^Ui_Frame, output: ^Ui_Output, scale: f32) {
+	assert(runtime != nil && frame != nil && output != nil, "material_frame: nil argument")
+	ui_runtime_init(runtime)
+	ui_runtime_set_scale(runtime, scale)
+	frame.output = output
+	ui_frame_begin(frame, runtime)
+}
+
+// The underline is two strokes at any width: one full pass and one shorter
+// return pass. A width-proportional command count would make a long heading
+// arbitrarily expensive for a purely decorative mark.
+@(test)
+hand_underline_is_two_strokes_at_any_width :: proc(t: ^testing.T) {
+	for width in ([?]i32{12, 60, 240, 1200}) {
+		runtime: Ui_Runtime
+		output := new(Ui_Output)
+		defer free(output)
+		frame: Ui_Frame
+		material_frame(&runtime, &frame, output, 1.0)
+		defer ui_runtime_destroy(&runtime)
+
+		draw_hand_underline(&frame, 10, 20, width, Color{10, 20, 30, 255})
+		ui_frame_end(&frame)
+
+		testing.expectf(
+			t,
+			output.main.count == 2,
+			"width %d emitted %d commands, expected 2",
+			width,
+			output.main.count,
+		)
+		testing.expect_value(t, output.main.commands[0].kind, Paint_Kind.Line)
+		testing.expect_value(t, output.main.commands[1].kind, Paint_Kind.Line)
+	}
+}
+
+// The second stroke must be genuinely different from the first - shorter, and
+// offset both ways. Two identical passes would render as one thick line and
+// lose the drawn-by-hand reading the doubling exists to create.
+@(test)
+hand_underline_second_stroke_differs :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	material_frame(&runtime, &frame, output, 1.0)
+	defer ui_runtime_destroy(&runtime)
+
+	draw_hand_underline(&frame, 0, 100, 240, Color{10, 20, 30, 255})
+	ui_frame_end(&frame)
+
+	first := output.main.commands[0]
+	second := output.main.commands[1]
+	testing.expect(t, (second.p1.x - second.p0.x) < (first.p1.x - first.p0.x))
+	testing.expect(t, second.p0.x > first.p0.x)
+	testing.expect(t, second.p0.y > first.p0.y)
+}
+
+// Negative space: a zero width and a fully transparent colour must both draw
+// nothing rather than emit a degenerate line.
+@(test)
+hand_underline_declines_degenerate_input :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	material_frame(&runtime, &frame, output, 1.0)
+	defer ui_runtime_destroy(&runtime)
+
+	draw_hand_underline(&frame, 0, 10, 0, Color{10, 20, 30, 255})
+	testing.expect_value(t, output.main.count, 0)
+
+	draw_hand_underline(&frame, 0, 10, 100, Color{10, 20, 30, 0})
+	testing.expect_value(t, output.main.count, 0)
+	ui_frame_end(&frame)
+}
+
+// The underline has to survive the scale range the rest of the page does and
+// stay two commands throughout. A stroke that rounded away at small scale
+// would leave a heading with no underline at all.
+@(test)
+hand_underline_survives_every_scale :: proc(t: ^testing.T) {
+	for scale in ([?]f32{0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0}) {
+		runtime: Ui_Runtime
+		output := new(Ui_Output)
+		defer free(output)
+		frame: Ui_Frame
+		material_frame(&runtime, &frame, output, scale)
+		defer ui_runtime_destroy(&runtime)
+
+		draw_hand_underline(&frame, 0, 10, 200, Color{10, 20, 30, 255})
+		ui_frame_end(&frame)
+		testing.expectf(
+			t,
+			output.main.count == 2,
+			"scale %v emitted %d commands, expected 2",
+			scale,
+			output.main.count,
+		)
+		testing.expectf(
+			t,
+			output.main.commands[0].thickness > 0,
+			"scale %v rounded the stroke away to nothing",
+			scale,
+		)
+	}
 }

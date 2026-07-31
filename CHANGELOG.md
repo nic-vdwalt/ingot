@@ -71,6 +71,21 @@ compatibility, while minor releases may break it. See the
   Surface x Visual_State matrix driven by explicit state rather than by
   pointer position. Hover and pressed were previously unobservable in any
   screenshot, which is how two state defects shipped.
+- `draw_hand_underline`: the doubled, unequal stroke pair a person makes when
+  underlining by hand. A single straight rule under a heading reads as a
+  border - the eye takes it as the top edge of whatever follows.
+- `space_pixels`: the frame-level spacing resolver. The explicit tier owns its
+  own geometry and has no `Ui` to ask, so it previously had to re-declare the
+  spacing scale locally; `space_px` now delegates here so there is one table.
+- Gallery: the theme control cycles Dark, Light, Paper and Paper Night instead
+  of toggling a boolean, so both paper palettes are reachable. Before this the
+  paper materials had no callers at all - the aesthetic existed in the library
+  but could not be seen from any application.
+- Gallery: the `Theme` section is laid out as a ruled page - substrate rules
+  behind the content, a margin rule with the measurements hung beside it as
+  annotations, and hand-drawn heading underlines. `Selected` renders as a
+  highlighter swipe and `Pressed` as a scribble, so the materials are
+  exercised on every frame rather than only in tests.
 
 ### Changed
 

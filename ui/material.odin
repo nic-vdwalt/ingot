@@ -178,6 +178,39 @@ draw_margin_rule :: proc(frame: ^Ui_Frame, rect: Rectangle, inset: i32, color: C
 	)
 }
 
+// draw_hand_underline draws the double stroke people actually make when
+// underlining by hand: one full pass, then a shorter second pass slightly
+// below and inset from the start.
+//
+// A single straight rule under a heading reads as a border - the eye takes it
+// as the top edge of whatever follows. The doubled, deliberately unequal pair
+// reads as a pen instead, because no one draws the same line twice.
+//
+// The insets are fractions of the width rather than fixed pixels, so a short
+// heading and a long one both look drawn by the same hand; a fixed inset makes
+// a short underline look like a full one that failed to reach the end.
+draw_hand_underline :: proc(frame: ^Ui_Frame, x, y, width: i32, color: Color) {
+	assert(frame != nil, "draw_hand_underline: nil frame")
+	assert(width >= 0, "draw_hand_underline: negative width")
+	if width == 0 || color.a == 0 do return
+	thickness := border_pixels(frame, .Hairline)
+	assert(thickness > 0, "draw_hand_underline: scaled the stroke to nothing")
+
+	span := f32(width)
+	top := f32(y)
+	draw_line_ex(frame, {f32(x), top}, {f32(x) + span, top}, thickness, color)
+
+	// The return stroke: starts a twelfth in, stops a fifth short, and sits
+	// one hairline lower. Deterministic, because frames here are event-driven
+	// and a randomised second stroke would reshuffle on unrelated input - the
+	// underline would appear to twitch whenever anything else redrew.
+	second_y := top + thickness + ui_frame_scf(frame, 1)
+	start := f32(x) + span / 12
+	end := f32(x) + span * 0.8
+	if end <= start do return
+	draw_line_ex(frame, {start, second_y}, {end, second_y}, thickness, color)
+}
+
 // dot_grid_fits reports whether a region can be dotted within the command
 // bound. Exposed so a caller can choose a different substrate rather than
 // tripping the assertion in draw_dot_grid.
@@ -277,20 +310,57 @@ draw_scribble_fill :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
 // tilted card is unrepresentable here, but a tilted *strip* is two triangles,
 // and it carries the same "placed by hand" reading without needing the label
 // inside it to tilt as well.
+// draw_tape_strip lays a band of tape diagonally across the top-left corner.
+//
+// Tape and the dog ear below are the two substitutes for rotating a card. A
+// tilted card is unrepresentable here, but a tilted *strip* is two triangles,
+// and it carries the same "placed by hand" reading without needing the label
+// inside it to tilt as well.
+//
+// The geometry is a band centred on the corner diagonal, not a quad hung off
+// the corner point. An earlier version offset each vertex by half the span
+// independently, which produced a diamond floating outside the rect entirely -
+// it read as a rendering fault rather than as tape. Building the band from the
+// diagonal and its perpendicular keeps it symmetrical about the corner at any
+// size.
 draw_tape_strip :: proc(frame: ^Ui_Frame, rect: Rectangle, length: f32, color: Color) {
 	assert(frame != nil, "draw_tape_strip: nil frame")
 	assert(length >= 0, "draw_tape_strip: negative length")
 	if rect.width <= 0 || rect.height <= 0 || color.a == 0 || length == 0 do return
 	span := min(length, min(rect.width, rect.height))
-	// A quad across the top-left corner, built from two triangles because the
-	// renderer has no rotated-rect primitive.
-	half := span * 0.5
-	a := Vector2{rect.x - half, rect.y + half}
-	b := Vector2{rect.x + half, rect.y - half}
-	c := Vector2{rect.x + span + half, rect.y + half}
-	d := Vector2{rect.x + half, rect.y + span + half}
-	draw_triangle(frame, a, d, c, color)
-	draw_triangle(frame, a, c, b, color)
+	if span <= 0 do return
+
+	// Unit vectors along the corner diagonal and across it. The diagonal runs
+	// from the left edge up toward the top edge, so the tape reads as applied
+	// from the lower left.
+	DIAGONAL :: f32(0.70710678) // 1/sqrt(2): the 45-degree component
+	along := Vector2{DIAGONAL, -DIAGONAL}
+	across := Vector2{DIAGONAL, DIAGONAL}
+
+	centre := Vector2{rect.x + span * 0.5, rect.y + span * 0.5}
+	// Overhang the corner slightly so the tape appears to hold the sheet down
+	// rather than to float on top of it.
+	half_length := span * 0.85
+	half_width := span * 0.28
+
+	p0 := Vector2 {
+		centre.x - along.x * half_length - across.x * half_width,
+		centre.y - along.y * half_length - across.y * half_width,
+	}
+	p1 := Vector2 {
+		centre.x + along.x * half_length - across.x * half_width,
+		centre.y + along.y * half_length - across.y * half_width,
+	}
+	p2 := Vector2 {
+		centre.x + along.x * half_length + across.x * half_width,
+		centre.y + along.y * half_length + across.y * half_width,
+	}
+	p3 := Vector2 {
+		centre.x - along.x * half_length + across.x * half_width,
+		centre.y - along.y * half_length + across.y * half_width,
+	}
+	draw_triangle(frame, p0, p3, p2, color)
+	draw_triangle(frame, p0, p2, p1, color)
 }
 
 // draw_dog_ear folds one corner of a page.

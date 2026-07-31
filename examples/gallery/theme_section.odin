@@ -1,297 +1,509 @@
-// The Theme section: a rendered inventory of the token layer.
+// The Theme section, composed as a page rather than as a specification sheet.
 //
-// It exists because the tokens are only trustworthy if their guarantees are
-// visible. Two of the defects the tokens were built to fix - a high-contrast
-// caption hover that was a 10-alpha wash on black, and a pressed state
-// identical to hover - had both shipped, because neither is observable in an
-// ordinary screenshot. Hover and pressed require a mouse to be somewhere
-// specific, and the capture harness deliberately parks the cursor off-widget
-// so the shipped media is deterministic.
+// The earlier version of this file inventoried the token enums: seven stacked
+// grids, an ALL-CAPS header on each, a bordered box around every cell, and a
+// uniform header-grid-space cadence throughout. That is what a form looks like.
+// A written page has almost no boxes - it has a margin, indentation,
+// underlines and whitespace, and it lets alignment do the work the borders
+// were doing.
 //
-// The state matrix below therefore paints every surface in every state at
-// once, driven by an explicit Visual_State rather than by pointer position.
-// Nothing here forces state into a widget: it calls ui.draw_surface directly,
-// the same path the widgets take, so the matrix and the real controls cannot
-// disagree without one of them being wrong.
+// Three rules shape everything below, and the first is not negotiable:
 //
-// Every grid iterates its enum rather than a hand-written list, so a token
-// added to the library appears here without anyone remembering to add it.
+//   1. Every vertical advance is a whole number of rule-heights. On ruled
+//      paper this is the difference between a page and a background texture:
+//      text sitting *between* two rules reads as a rendering fault, and a
+//      near-miss looks worse than no rules at all.
+//   2. Content hangs off the margin. Labels and measurements go in the margin
+//      where an annotation belongs, not crammed inside the swatch they
+//      describe.
+//   3. The hand-drawn accents are spent, not sprinkled. One taped swatch, one
+//      dog-eared card, one highlighter. Tape on everything is a scrapbook;
+//      tape on one thing is composed.
+//
+// The state row is also the materials demo: Selected *is* a highlighter swipe
+// and Pressed *is* a scribble, rather than a flat fill beside a caption
+// claiming as much. The materials are therefore exercised on every frame
+// instead of only in tests.
+//
+// Geometry here is application-owned and physical, like the Charts, Layout and
+// Stress sections. That is a deliberate choice rather than a shortcut: the
+// facade's slot_next takes *logical* units and scales them per call, and
+// scaling is not distributive over rounding - at 1.25x scale a two-line slot
+// resolves to 55 physical pixels while two one-line rules resolve to 56. A
+// facade-built page would drift a pixel off its own rules at some scales,
+// which is precisely the defect the baseline grid exists to prevent. Advancing
+// by the already-scaled metric keeps text and rules exact at every scale.
 package main
 
 import "core:fmt"
 import "ingot:ui"
 
-theme_ui: ui.Ui
+// Column geometry in logical pixels; everything horizontal is expressed
+// against these so the page has one measure rather than per-section widths.
+LABEL_COL_W :: 118
+CHIP_W :: 96
+SWATCH_W :: CHIP_W * 2
 
-// Swatch geometry, in logical pixels. slot_next scales these, so nothing in
-// this file multiplies by the UI scale itself.
-SWATCH_W :: 132
-SWATCH_H :: 34
-// Six columns fills the 1100px default window without wrapping mid-group. It
-// is a maximum, not a fixed count: narrower containers wrap earlier.
-SWATCH_COLUMNS_MAX :: 6
+// The specimen sentence. A pangram earns its place in a type specimen: it puts
+// every letter in front of the reader, which is the one thing a specimen does.
+SPECIMEN :: "Sphinx of black quartz, judge my vow"
 
-// A state-matrix cell: wide enough for the longest Visual_State name at note
-// size, tall enough to show a corner radius and a border clearly.
-MATRIX_CELL_W :: 92
-MATRIX_CELL_H :: 30
-MATRIX_LABEL_W :: 120
-MATRIX_HEAD_H :: 20
+// Page is the writing cursor: a physical-pixel position on the ruled grid.
+//
+// It replaces the ad-hoc row heights the previous version used (30, 34, 40, 44
+// and 52 - none of them related to LINE_HEIGHT, so nothing landed on a rule).
+Page :: struct {
+	frame:  ^ui.Ui_Frame,
+	x:      i32, // Left edge of the page, physical.
+	y:      i32, // Current baseline, physical. Advances only through page_line.
+	w:      i32, // Page width, physical.
+	indent: i32, // Body inset clear of the margin rule, physical.
+	line:   i32, // One rule-height, physical. The grid unit.
+}
 
-SCALE_CELL_W :: 96
+page_begin :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> Page {
+	assert(frame != nil, "page_begin: nil frame")
+	assert(w > 0, "page_begin: non-positive width")
+	line := ui.ui_frame_metrics(frame).LINE_HEIGHT
+	assert(line > 0, "page_begin: metrics carry a non-positive line height")
+	return {frame = frame, x = x, y = y, w = w, indent = page_indent(frame), line = line}
+}
 
-// A logical width larger than any container the gallery uses. slot_px clamps
-// a column slot's width to what remains, so asking for more than exists is the
-// idiom for "take the full row" rather than a bug.
-ROW_FULL_W :: 4096
-SPACING_LABEL_W :: 48
-SPACING_BAR_H :: 18
+// page_line consumes `count` rule-heights and returns the row it occupied.
+//
+// The single place the cursor moves. Because it advances by whole multiples of
+// the already-scaled metric, a row's top always coincides with a rule.
+page_line :: proc(page: ^Page, count: i32) -> ui.Rect_I32 {
+	assert(page != nil, "page_line: nil page")
+	assert(count > 0, "page_line: non-positive line count")
+	row := ui.Rect_I32{page.x, page.y, page.w, page.line * count}
+	page.y += page.line * count
+	return row
+}
+
+// page_body returns the left edge of body content: clear of the margin rule
+// when the palette draws one, flush with the page when it does not.
+page_body :: proc(page: ^Page) -> i32 {
+	assert(page != nil, "page_body: nil page")
+	return page.x + page.indent
+}
+
+// page_indent resolves the body inset for the active palette.
+page_indent :: proc(frame: ^ui.Ui_Frame) -> i32 {
+	assert(frame != nil, "page_indent: nil frame")
+	theme := ui.ui_frame_theme(frame)
+	if theme.substrate.kind == .None || !theme.substrate.margin do return 0
+	// Clear of the rule by a hair, so the writing does not touch it.
+	return ui.ui_frame_sc(frame, MARGIN_INSET + 10)
+}
+
+// annotate writes a right-aligned note in the margin beside a row.
+//
+// This is what a margin is for. The contrast ratios and pixel sizes it carries
+// used to be crammed inside each swatch as a second line of tiny text, which
+// is both harder to read and the reason every swatch had to be a box tall
+// enough to hold two lines.
+annotate :: proc(page: ^Page, row: ui.Rect_I32, note: string) {
+	assert(page != nil, "annotate: nil page")
+	if len(note) == 0 || page.indent == 0 do return
+	width := ui.text_width(page.frame, note, .Note)
+	gap := ui.ui_frame_sc(page.frame, 8)
+	x := page.x + page.indent - width - gap
+	if x < page.x do return
+	ui.text(page.frame, note, x, row.y, .Note, .Muted)
+}
+
+// page_heading writes a heading with a hand-drawn underline sized to the words
+// rather than to the column.
+//
+// A rule running the full width reads as a border - the eye takes it as the
+// top edge of whatever follows. One that stops where the text stops reads as
+// something a person drew.
+page_heading :: proc(page: ^Page, title: string) {
+	assert(page != nil, "page_heading: nil page")
+	row := page_line(page, 1)
+	ui.text(page.frame, title, page_body(page), row.y, .Title, .Heading)
+
+	theme := ui.ui_frame_theme(page.frame)
+	// On a paper palette the underline is ink; a screen palette has no pen, so
+	// it falls back to the ordinary hairline colour.
+	color := theme.paper_margin if theme.paper_margin.a > 0 else theme.border_subtle
+	ui.draw_hand_underline(
+		page.frame,
+		page_body(page),
+		row.y + row.h - ui.ui_frame_sc(page.frame, 5),
+		ui.text_width(page.frame, title, .Title),
+		color,
+	)
+	page_line(page, 1)
+}
 
 draw_theme_section :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	assert(frame != nil, "draw_theme_section: nil frame")
-	u := &theme_ui
-	ui.begin(u, frame, {x, y0, w, ui.ROOT_EXTENT_OPEN}, gap = .SM)
-	ui.scope_begin(u, "theme")
+	page := page_begin(frame, x, y0, w)
 
-	draw_state_matrix(u, frame)
-	ui.space(u, .LG)
-	draw_ink_specimen(u, frame)
-	ui.space(u, .LG)
-	draw_type_scale(u, frame)
-	ui.space(u, .LG)
-	draw_radius_scale(u, frame)
-	ui.space(u, .LG)
-	draw_elevation_scale(u, frame)
-	ui.space(u, .LG)
-	draw_tint_scale(u, frame)
-	ui.space(u, .LG)
-	draw_spacing_scale(u, frame)
+	draw_page_opening(&page)
+	draw_surface_states(&page)
+	draw_ink_chips(&page)
+	draw_taped_accent(&page)
+	draw_type_specimen(&page)
+	draw_shape_notes(&page)
+	draw_measure_notes(&page)
 
-	ui.scope_end(u)
-	return ui.end(u)
+	return page.y
 }
 
-// The headline exhibit: every Surface against every Visual_State.
-//
-// Reading down a column shows whether a palette keeps one state consistent
-// across surfaces; reading across a row shows whether a surface's states are
-// distinguishable at all. Both are properties tokens_test.odin asserts
-// numerically, so this is the visual counterpart of a test rather than a
-// decorative sample.
-draw_state_matrix :: proc(u: ^ui.Ui, frame: ^ui.Ui_Frame) {
-	assert(u != nil && frame != nil, "draw_state_matrix: invalid argument")
-	_ = ui.section_header(u, "SURFACE x STATE")
-	ui.label(
-		u,
-		"every surface in every state, forced rather than hovered",
-		ui.Text_Role.Note,
-		ui.Ink.Secondary,
+// The opening: title, underline, and one line of orienting prose. One
+// sentence, not a paragraph - a note to yourself is short.
+draw_page_opening :: proc(page: ^Page) {
+	assert(page != nil, "draw_page_opening: nil page")
+	page_heading(page, "Design tokens")
+	row := page_line(page, 1)
+	ui.text(
+		page.frame,
+		"every value below resolves from the active palette",
+		page_body(page),
+		row.y,
+		.Body,
+		.Secondary,
 	)
-	ui.space(u, .SM)
+	page_line(page, 1)
+}
 
-	ui.row_begin(u, MATRIX_HEAD_H, gap = .XS, align = .Center)
-	_ = ui.slot_next(u, MATRIX_LABEL_W, MATRIX_HEAD_H)
-	for state in ui.Visual_State {
-		cell := ui.slot_next(u, MATRIX_CELL_W, MATRIX_HEAD_H)
-		ui.text(frame, fmt.tprint(state), cell.x, cell.y, .Note, .Label)
+// state_cell_width divides the space right of the label column between the
+// states. Separate so the heading row and the body rows cannot disagree about
+// column width, which is the drift that puts a heading over the wrong column.
+state_cell_width :: proc(page: ^Page, label_w: i32) -> i32 {
+	assert(page != nil, "state_cell_width: nil page")
+	count := i32(len(ui.Visual_State))
+	gap := ui.ui_frame_sc(page.frame, 6)
+	available := page.w - page.indent - label_w - gap * (count - 1)
+	minimum := ui.ui_frame_sc(page.frame, 38)
+	// Capped rather than filling the column. A cell stretched across the whole
+	// page turns the highlighter into a 190-pixel band over 20 pixels of text,
+	// which reads as a fill rather than as a mark someone made.
+	maximum := ui.ui_frame_sc(page.frame, 76)
+	if available < minimum * count do return minimum
+	return min(available / count, maximum)
+}
+
+// Surfaces and their states, one band per surface.
+//
+// This is both the state matrix and the materials demo. Selected renders as a
+// marker swipe and Pressed as a scribble, because a token whose whole job is
+// to describe an appearance should be shown in it rather than labelled with it.
+draw_surface_states :: proc(page: ^Page) {
+	assert(page != nil, "draw_surface_states: nil page")
+	page_heading(page, "Surfaces")
+
+	label_w := ui.ui_frame_sc(page.frame, LABEL_COL_W)
+	gap := ui.ui_frame_sc(page.frame, 6)
+	cell_w := state_cell_width(page, label_w)
+	body := page_body(page)
+	// Cells are inset vertically so consecutive rows do not touch. Without
+	// this, thirteen highlighter swipes stack into one continuous yellow
+	// column with a sawtooth edge - it reads as a rendering fault rather than
+	// as thirteen separate marks.
+	inset := ui.ui_frame_sc(page.frame, 2)
+
+	// The key sits on its own line in the muted ink an annotation uses, so it
+	// reads as a legend rather than as content.
+	head := page_line(page, 1)
+	for state, index in ui.Visual_State {
+		x := body + label_w + i32(index) * (cell_w + gap)
+		ui.text(page.frame, fmt.tprint(state), x, head.y, .Note, .Muted)
 	}
-	ui.row_end(u)
 
 	for surface in ui.Surface {
-		ui.row_begin(u, MATRIX_CELL_H, gap = .XS, align = .Center)
-		name := ui.slot_next(u, MATRIX_LABEL_W, MATRIX_CELL_H)
-		ui.text(
-			frame,
+		row := page_line(page, 1)
+		ui.text_truncated(
+			page.frame,
 			fmt.tprint(surface),
-			name.x,
-			name.y + ui.ui_frame_sc(frame, 8),
+			body,
+			row.y,
+			label_w - gap,
 			.Note,
 			.Secondary,
 		)
-		for state in ui.Visual_State {
-			cell := ui.slot_next(u, MATRIX_CELL_W, MATRIX_CELL_H)
-			ui.draw_surface(frame, ui.rect_f32(cell), surface, state, .MD, .Hairline, .Flat)
-			// "Ag" carries both an ascender and a descender, so a fill or a
-			// rule that clips text shows up here rather than hiding behind an
-			// all-caps sample.
-			colors := ui.surface_colors(frame, surface, state)
-			ui.draw_text_frame(
-				frame,
-				"Ag",
-				cell.x + ui.ui_frame_sc(frame, 8),
-				cell.y + ui.ui_frame_sc(frame, 7),
-				ui.text_role_size(frame, .Note),
-				colors.fg,
-			)
+		for state, index in ui.Visual_State {
+			cell := ui.Rectangle {
+				f32(body + label_w + i32(index) * (cell_w + gap)),
+				f32(row.y + inset),
+				f32(cell_w),
+				f32(page.line - inset * 2),
+			}
+			draw_state_cell(page.frame, cell, surface, state)
 		}
-		ui.row_end(u)
 	}
+	page_line(page, 1)
 }
 
-// Every Ink on a card surface, with its measured contrast ratio.
+// draw_state_cell paints one surface in one state, using the material that
+// state actually means.
+draw_state_cell :: proc(
+	frame: ^ui.Ui_Frame,
+	cell: ui.Rectangle,
+	surface: ui.Surface,
+	state: ui.Visual_State,
+) {
+	assert(frame != nil, "draw_state_cell: nil frame")
+	theme := ui.ui_frame_theme(frame)
+	colors := ui.surface_colors(frame, surface, state)
+
+	switch state {
+	case .Selected:
+		// A highlighter is how a person marks a selection on paper. A screen
+		// palette has no marker, so the ordinary selected fill stands in.
+		if theme.highlighter.a > 0 {
+			ui.draw_highlight_swipe(frame, cell, theme.highlighter)
+		} else {
+			ui.draw_surface(frame, cell, surface, state, .SM, .None, .Flat)
+		}
+	case .Pressed:
+		// Pressed is a scribble over the resting surface: the mark you make
+		// while pushing on something, not a different colour of paint.
+		ui.draw_surface(frame, cell, surface, .Rest, .SM, .None, .Flat)
+		ui.draw_scribble_fill(frame, cell, colors.bg)
+	case .Rest, .Hover, .Disabled:
+		ui.draw_surface(frame, cell, surface, state, .SM, .None, .Flat)
+	}
+
+	// "Ag" carries an ascender and a descender, so a fill that clips text or a
+	// rule that cuts through it shows up here rather than hiding behind an
+	// all-caps sample.
+	ui.text(frame, "Ag", i32(cell.x) + ui.ui_frame_sc(frame, 5), i32(cell.y), .Note, .Primary)
+}
+
+// legible_on picks whichever of the palette's two extreme inks reads better on
+// a given fill.
 //
-// The number is the point: a swatch shows a color, a ratio shows whether the
-// color is legible. Sub-AA pairs are called out rather than left to the eye.
-draw_ink_specimen :: proc(u: ^ui.Ui, frame: ^ui.Ui_Frame) {
-	assert(u != nil && frame != nil, "draw_ink_specimen: invalid argument")
-	_ = ui.section_header(u, "INK x CONTRAST")
-	ui.label(
-		u,
-		"measured against the card surface; AA for normal text is 4.5:1",
-		ui.Text_Role.Note,
-		ui.Ink.Secondary,
-	)
-	ui.space(u, .SM)
+// A swatch labelled in a fixed colour is only readable across half a palette:
+// the dark inks disappear into their own chips and the light ones into the
+// pale chips, which looks like a rendering fault rather than a swatch. Picking
+// per chip is also the honest demonstration, since it is what any real
+// interface has to do when it puts text on an arbitrary fill.
+legible_on :: proc(frame: ^ui.Ui_Frame, fill: ui.Color) -> ui.Ink {
+	assert(frame != nil, "legible_on: nil frame")
+	dark := ui.text_ink(frame, .Primary)
+	light := ui.text_ink(frame, .Inverse)
+	if ui.contrast_ratio(light, fill) > ui.contrast_ratio(dark, fill) do return .Inverse
+	return .Primary
+}
 
-	style := ui.ui_frame_theme(frame)
-	card := ui.surface_colors(frame, .Card, .Rest)
-	available := ui.remaining_rect(u).w / max(ui.ui_frame_sc(frame, SWATCH_W), 1)
-	per_row := clamp(available, 1, SWATCH_COLUMNS_MAX)
+// Every ink as a paint chip, with the row's worst contrast in the margin.
+//
+// No borders: a run of unboxed colour chips is how a paint card is laid out,
+// and a fill is its own boundary.
+draw_ink_chips :: proc(page: ^Page) {
+	assert(page != nil, "draw_ink_chips: nil page")
+	page_heading(page, "Ink")
 
+	chip_w := ui.ui_frame_sc(page.frame, CHIP_W)
+	gap := ui.ui_frame_sc(page.frame, 6)
+	card := ui.surface_colors(page.frame, .Card, .Rest)
+	body := page_body(page)
+	per_row := max((page.w - page.indent) / (chip_w + gap), 1)
+	inset := ui.ui_frame_sc(page.frame, 2)
+
+	row := page_line(page, 1)
 	column := i32(0)
+	worst := f64(21)
 	for ink in ui.Ink {
-		if column == 0 do ui.row_begin(u, SWATCH_H, gap = .XS, align = .Stretch)
-		cell := ui.slot_next(u, SWATCH_W, SWATCH_H)
-		ui.draw_surface(frame, ui.rect_f32(cell), .Card, .Rest, .SM, .Hairline, .Flat)
-		color := ui.text_ink(frame, ink)
+		if column >= per_row {
+			annotate(page, row, fmt.tprintf("min %.1f:1", worst))
+			row = page_line(page, 1)
+			column = 0
+			worst = 21
+		}
+		color := ui.text_ink(page.frame, ink)
 		ratio := ui.contrast_ratio(color, card.bg)
-		ui.draw_text_frame(
-			frame,
-			fmt.ctprint(ink),
-			cell.x + ui.ui_frame_sc(frame, 6),
-			cell.y + ui.ui_frame_sc(frame, 4),
-			ui.text_role_size(frame, .Note),
-			color,
-		)
-		// Several sub-AA inks are legitimate: Disabled and Muted are meant to
-		// be dim, and Inverse is a fill ink shown out of context here.
-		// contrast_test.odin encodes which exemptions are principled; this
-		// only marks the number so the reader knows to check.
-		flagged := ratio < 4.5
-		ui.draw_text_frame(
-			frame,
-			fmt.ctprintf("%.1f:1", ratio),
-			cell.x + ui.ui_frame_sc(frame, 6),
-			cell.y + ui.ui_frame_sc(frame, 18),
-			ui.text_role_size(frame, .Note),
-			style.fg_error if flagged else style.fg_secondary,
+		if ratio < worst do worst = ratio
+
+		cell := ui.Rectangle {
+			f32(body + column * (chip_w + gap)),
+			f32(row.y + inset),
+			f32(chip_w),
+			f32(page.line - inset * 2),
+		}
+		ui.draw_rectangle_rec(page.frame, cell, color)
+		// The label is drawn in whichever of the page's two extreme inks reads
+		// better *on this chip*, rather than always in Primary. A fixed label
+		// colour left half the row unreadable - the dark inks vanished into
+		// their own chips, which looked like a bug rather than a swatch.
+		ui.text_truncated(
+			page.frame,
+			fmt.tprint(ink),
+			i32(cell.x) + ui.ui_frame_sc(page.frame, 4),
+			i32(cell.y),
+			chip_w - ui.ui_frame_sc(page.frame, 8),
+			.Note,
+			legible_on(page.frame, color),
 		)
 		column += 1
-		if column >= per_row {
-			ui.row_end(u)
-			column = 0
-		}
 	}
-	if column != 0 do ui.row_end(u)
+	annotate(page, row, fmt.tprintf("min %.1f:1", worst))
+	page_line(page, 1)
 }
 
-// The four type roles at their resolved pixel sizes.
-draw_type_scale :: proc(u: ^ui.Ui, frame: ^ui.Ui_Frame) {
-	assert(u != nil && frame != nil, "draw_type_scale: invalid argument")
-	_ = ui.section_header(u, "TYPE SCALE")
-	for role in ui.Text_Role {
-		size := ui.text_role_size(frame, role)
-		height := ui.text_role_line_height(frame, role)
-		rect := ui.slot_next(u, ROW_FULL_W, height)
-		ui.draw_text_frame(
-			frame,
-			fmt.ctprintf("%v %dpx - Sphinx of black quartz, judge my vow", role, size),
-			rect.x,
-			rect.y,
-			size,
-			ui.text_ink(frame, .Primary),
-		)
-	}
-}
-
-// The radius tokens on identical rects, so the progression is comparable.
+// The one taped item on the page: the accent colour, tape over its corner,
+// hex in the margin.
 //
-// Radius is the token with the clearest before and after: a ratio and an
-// absolute pixel value cannot be reconciled, and putting them on equal
-// geometry is what makes a mismatch obvious rather than arguable.
-draw_radius_scale :: proc(u: ^ui.Ui, frame: ^ui.Ui_Frame) {
-	assert(u != nil && frame != nil, "draw_radius_scale: invalid argument")
-	_ = ui.section_header(u, "RADIUS")
-	ui.row_begin(u, 44, gap = .SM, align = .Center)
-	for radius in ui.Radius {
-		cell := ui.slot_next(u, SCALE_CELL_W, 40)
-		ui.draw_surface(frame, ui.rect_f32(cell), .Card, .Rest, radius, .Hairline, .Flat)
-		ui.text(
-			frame,
-			fmt.tprint(radius),
-			cell.x + ui.ui_frame_sc(frame, 8),
-			cell.y + ui.ui_frame_sc(frame, 12),
-			.Note,
-			.Secondary,
-		)
+// Exactly one. A page where everything is taped down is a scrapbook; a page
+// with a single taped swatch reads as something a person placed deliberately.
+draw_taped_accent :: proc(page: ^Page) {
+	assert(page != nil, "draw_taped_accent: nil page")
+	theme := ui.ui_frame_theme(page.frame)
+	if theme.tape_color.a == 0 do return
+
+	row := page_line(page, 2)
+	accent := theme.fg_accent
+	swatch := ui.Rectangle {
+		f32(page_body(page)),
+		f32(row.y),
+		f32(ui.ui_frame_sc(page.frame, SWATCH_W)),
+		f32(row.h - ui.ui_frame_sc(page.frame, 6)),
 	}
-	ui.row_end(u)
+	ui.draw_shadow_hard(page.frame, swatch, .SM, .Lifted)
+	ui.draw_rectangle_rec(page.frame, swatch, accent)
+	ui.draw_tape_strip(page.frame, swatch, f32(ui.ui_frame_sc(page.frame, 26)), theme.tape_color)
+	annotate(page, row, fmt.tprintf("#%02X%02X%02X", accent.r, accent.g, accent.b))
+	page_line(page, 1)
 }
 
-// The elevation tokens. On a palette with zero shadow alpha - high contrast -
-// every cell here is deliberately flat, which is itself the thing to see.
-draw_elevation_scale :: proc(u: ^ui.Ui, frame: ^ui.Ui_Frame) {
-	assert(u != nil && frame != nil, "draw_elevation_scale: invalid argument")
-	_ = ui.section_header(u, "ELEVATION")
-	ui.row_begin(u, 52, gap = .MD, align = .Center)
-	for elevation in ui.Elevation {
-		cell := ui.slot_next(u, SCALE_CELL_W, 40)
-		ui.draw_surface(frame, ui.rect_f32(cell), .Card, .Rest, .MD, .Hairline, elevation)
-		ui.text(
-			frame,
-			fmt.tprint(elevation),
-			cell.x + ui.ui_frame_sc(frame, 8),
-			cell.y + ui.ui_frame_sc(frame, 12),
-			.Note,
-			.Secondary,
-		)
-	}
-	ui.row_end(u)
-}
-
-// The tint levels over the accent color, which is how they are used: as
-// translucency on a palette hue rather than as standalone colors.
-draw_tint_scale :: proc(u: ^ui.Ui, frame: ^ui.Ui_Frame) {
-	assert(u != nil && frame != nil, "draw_tint_scale: invalid argument")
-	_ = ui.section_header(u, "TINT")
-	style := ui.ui_frame_theme(frame)
-	ui.row_begin(u, 40, gap = .SM, align = .Center)
-	for tint in ui.Tint {
-		cell := ui.slot_next(u, SCALE_CELL_W, 36)
-		ui.draw_rectangle_rec(frame, ui.rect_f32(cell), ui.color_tinted(style.fg_accent, tint))
-		ui.text(
-			frame,
-			fmt.tprintf("%v %d", tint, ui.tint_alpha(tint)),
-			cell.x + ui.ui_frame_sc(frame, 6),
-			cell.y + ui.ui_frame_sc(frame, 10),
-			.Note,
+// The four type roles, each a specimen on its own baseline with the resolved
+// pixel size in the margin.
+//
+// The size used to be part of the sample string ("Body 16px - Sphinx of..."),
+// which is not a specimen: a specimen shows the face, and the measurement is
+// an annotation about it.
+draw_type_specimen :: proc(page: ^Page) {
+	assert(page != nil, "draw_type_specimen: nil page")
+	page_heading(page, "Type")
+	for role in ui.Text_Role {
+		// Title is taller than one rule, so it takes two and stays on grid.
+		count := i32(1)
+		if ui.text_role_line_height(page.frame, role) > page.line do count = 2
+		row := page_line(page, count)
+		ui.text_truncated(
+			page.frame,
+			SPECIMEN,
+			page_body(page),
+			row.y,
+			page.w - page.indent,
+			role,
 			.Primary,
 		)
+		annotate(page, row, fmt.tprintf("%v %dpx", role, ui.text_role_size(page.frame, role)))
 	}
-	ui.row_end(u)
+	page_line(page, 1)
 }
 
-// The spacing tokens as bars, so the ratios between them are visible.
+// Radius and elevation together on one dog-eared card.
 //
-// Spacing predates this work; it is included so the section is a complete
-// inventory of the token system rather than only the parts that are new.
-draw_spacing_scale :: proc(u: ^ui.Ui, frame: ^ui.Ui_Frame) {
-	assert(u != nil && frame != nil, "draw_spacing_scale: invalid argument")
-	_ = ui.section_header(u, "SPACING")
-	style := ui.ui_frame_theme(frame)
-	for space in ui.Space {
-		row := ui.slot_next(u, ROW_FULL_W, SPACING_BAR_H)
-		ui.text(frame, fmt.tprint(space), row.x, row.y, .Note, .Secondary)
-		// A zero-width token still needs a visible row, or None reads as a
-		// missing entry rather than a deliberate zero.
-		width := max(ui.space_px(u, space), 1)
-		ui.draw_rectangle(
-			frame,
-			row.x + ui.ui_frame_sc(frame, SPACING_LABEL_W),
-			row.y,
-			width,
-			ui.ui_frame_sc(frame, 12),
-			style.fg_accent,
+// The fold and the hard shadow belong in the same exhibit because they are the
+// same idea: a sheet lifted off the page has both a shadow and a corner you
+// can turn.
+draw_shape_notes :: proc(page: ^Page) {
+	assert(page != nil, "draw_shape_notes: nil page")
+	page_heading(page, "Shape")
+
+	theme := ui.ui_frame_theme(page.frame)
+	row := page_line(page, 3)
+	card := ui.Rectangle {
+		f32(page_body(page)),
+		f32(row.y),
+		f32(ui.ui_frame_sc(page.frame, 150)),
+		f32(row.h - ui.ui_frame_sc(page.frame, 8)),
+	}
+	ui.draw_surface(page.frame, card, .Card, .Rest, .MD, .Hairline, .Lifted)
+	// A card is a smaller sheet, and a bounded one - the only place a dot grid
+	// is affordable, since it costs area rather than height. The dots take the
+	// margin ink, not the rule ink: rules are pale by design because text sits
+	// on them, and a one-pixel dot at that alpha is invisible.
+	if theme.paper_margin.a > 0 {
+		spacing := page.line / 2
+		if ui.dot_grid_fits(card, spacing) {
+			ui.draw_dot_grid(page.frame, card, spacing, theme.paper_margin)
+		}
+	}
+	ui.draw_dog_ear(
+		page.frame,
+		card,
+		f32(ui.ui_frame_sc(page.frame, 14)),
+		theme.bg_app,
+		theme.border_subtle,
+	)
+	ui.text(
+		page.frame,
+		"Lifted",
+		i32(card.x) + ui.ui_frame_sc(page.frame, 10),
+		i32(card.y) + ui.ui_frame_sc(page.frame, 4),
+		.Note,
+		.Secondary,
+	)
+	annotate(page, row, "card")
+
+	// The radii as an unboxed run beside the card: filled blocks with no
+	// border, so the corner is the only thing that differs between them.
+	block_x := i32(card.x + card.width) + ui.ui_frame_sc(page.frame, 16)
+	block_w := ui.ui_frame_sc(page.frame, 52)
+	gap := ui.ui_frame_sc(page.frame, 8)
+	for radius, index in ui.Radius {
+		block := ui.Rectangle {
+			f32(block_x + i32(index) * (block_w + gap)),
+			card.y,
+			f32(block_w),
+			f32(page.line * 2),
+		}
+		if block.x + block.width > f32(page.x + page.w) do break
+		ui.draw_surface(page.frame, block, .Chip, .Rest, radius, .None, .Flat)
+		ui.text(
+			page.frame,
+			fmt.tprint(radius),
+			i32(block.x) + ui.ui_frame_sc(page.frame, 4),
+			i32(block.y) + page.line * 2,
+			.Note,
+			.Muted,
 		)
 	}
+	page_line(page, 1)
+}
+
+// Spacing and tint as indented runs hanging off the margin.
+draw_measure_notes :: proc(page: ^Page) {
+	assert(page != nil, "draw_measure_notes: nil page")
+	page_heading(page, "Measure")
+
+	theme := ui.ui_frame_theme(page.frame)
+	bar_h := ui.ui_frame_sc(page.frame, 10)
+	body := page_body(page)
+	for space in ui.Space {
+		row := page_line(page, 1)
+		width := ui.space_pixels(page.frame, space)
+		// A zero-width token still needs a visible row, or None reads as a
+		// missing entry rather than as a deliberate zero.
+		ui.draw_rectangle(
+			page.frame,
+			body,
+			row.y + ui.ui_frame_sc(page.frame, 5),
+			max(width, 1),
+			bar_h,
+			theme.fg_accent,
+		)
+		annotate(page, row, fmt.tprintf("%v %dpx", space, width))
+	}
+	page_line(page, 1)
+
+	for tint in ui.Tint {
+		row := page_line(page, 1)
+		bar := ui.Rectangle {
+			f32(body),
+			f32(row.y + ui.ui_frame_sc(page.frame, 3)),
+			f32(ui.ui_frame_sc(page.frame, SWATCH_W)),
+			f32(page.line - ui.ui_frame_sc(page.frame, 6)),
+		}
+		ui.draw_rectangle_rec(page.frame, bar, ui.color_tinted(theme.fg_accent, tint))
+		annotate(page, row, fmt.tprintf("%v %d", tint, ui.tint_alpha(tint)))
+	}
+	page_line(page, 1)
 }
