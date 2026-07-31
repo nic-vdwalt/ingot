@@ -104,8 +104,20 @@ checkbox_at :: proc(
 	box_rect := Rectangle{f32(bx), f32(by), f32(box), f32(box)}
 	bg := style.button_bg if checked^ else style.bg_input
 	border := style.fg_accent if hovered || focus_opt_focused(focus) else style.border_color
-	draw_rectangle_rounded(frame, box_rect, 0.25, 4, bg)
-	draw_rectangle_rounded_lines_ex(frame, box_rect, 0.25, 4, 1.0, border)
+	// Radius and segments come from the token layer so the checkbox rounds to
+	// the same curve as the button beside it; the 0.25 literal this replaces
+	// was a fixed ratio that drifted from every other corner in the tree.
+	box_round := radius_ratio(frame, .SM, box_rect)
+	box_segments := radius_segments(radius_pixels(frame, .SM, f32(box)))
+	draw_rectangle_rounded(frame, box_rect, box_round, box_segments, bg)
+	draw_rectangle_rounded_lines_ex(
+		frame,
+		box_rect,
+		box_round,
+		box_segments,
+		border_pixels(frame, .Hairline),
+		border,
+	)
 	if checked^ {
 		// Check mark: two strokes proportional to the box size.
 		cx := f32(bx)

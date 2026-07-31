@@ -15,6 +15,20 @@ Markdown_Context :: struct {
 	workspace_files: []string,
 	cull_top:        i32,
 	cull_bottom:     i32,
+	// Link under the pointer this frame, filled in during the draw pass.
+	//
+	// Recorded while drawing rather than found by a second traversal: the draw
+	// already computes each span's exact rect, and a separate hit-test pass
+	// would have to reproduce that geometry and could disagree with it.
+	//
+	// Empty when the pointer is over no link. Borrowed from the text the
+	// caller passed to markdown_draw, so it stays valid exactly as long as
+	// that text does.
+	hovered_link:    string,
+	// Whether the pointer was pressed on that link this frame. This package
+	// imports only core:*, so it cannot open a URL itself: activation is
+	// reported and the application decides what following a link means.
+	link_pressed:    bool,
 }
 
 markdown_context :: proc(frame: ^Ui_Frame, workspace_files: []string = nil) -> Markdown_Context {
@@ -63,7 +77,12 @@ Text_Span :: struct {
 	pill:      bool, // PILL_OPEN..PILL_CLOSE file-mention chip
 	code:      bool, // `backtick` inline code; rendered as a file pill when it
 	// names a real workspace path, else as inline-code text.
-	link:      bool, // Bare http(s):// URL; rendered accent+underline, clickable.
+	link:      bool, // Rendered accent + underline, and activates on click.
+	// Where a link span points. Held separately from `text` because the two
+	// differ for [label](target) syntax: the label is what the reader sees,
+	// the target is where the click goes. A bare URL sets both to the same
+	// string, so a consumer never has to ask which spelling it came from.
+	href:      string,
 }
 
 @(private = "file")
@@ -191,16 +210,65 @@ inline_span_parse_link :: proc(state: ^Inline_Span_Parse_State) -> bool {
 	end, ok := match_url(state.line, state.index)
 	if !ok do return false
 	inline_span_append_plain(state, state.seg_start, state.index)
+	url := state.line[state.index:end]
 	append(
 		&state.spans,
 		Text_Span {
-			text = state.line[state.index:end],
+			text      = url,
 			raw_start = state.index,
-			raw_end = end,
-			link = true,
+			raw_end   = end,
+			link      = true,
+			// A bare URL is its own target: display and destination coincide.
+			href      = url,
 		},
 	)
 	state.index = end
+	state.seg_start = state.index
+	return true
+}
+
+// inline_span_parse_reference_link parses [label](target).
+//
+// Without this the syntax was not handled at all, and the failure was not a
+// clean one: parsing began at the 'h' of the scheme, so `[docs](https://x)`
+// rendered as the literal text "[docs](", then a live link reading
+// "https://x", then ")". The reader saw the markup *and* the wrong text.
+//
+// Returns false without consuming anything when the shape does not match, so
+// a lone '[' still falls through to plain text.
+@(private = "file")
+inline_span_parse_reference_link :: proc(state: ^Inline_Span_Parse_State) -> bool {
+	assert(state != nil, "inline_span_parse_reference_link: nil state")
+	line := state.line
+	label_end := inline_span_find(line, state.index + 1, ']')
+	if label_end < 0 do return false
+	// The parenthesis must follow the bracket immediately; "[a] (b)" is two
+	// pieces of ordinary text, not a link.
+	if label_end + 1 >= len(line) || line[label_end + 1] != '(' do return false
+	target_end := inline_span_find(line, label_end + 2, ')')
+	if target_end < 0 do return false
+
+	label := line[state.index + 1:label_end]
+	target := line[label_end + 2:target_end]
+	// An empty label would render as a zero-width link the reader cannot see
+	// or click; an empty target has nowhere to go. Both fall back to plain
+	// text, which at least shows the author what they wrote.
+	if len(label) == 0 || len(target) == 0 do return false
+
+	inline_span_append_plain(state, state.seg_start, state.index)
+	append(
+		&state.spans,
+		Text_Span {
+			text      = label,
+			// The raw range covers the whole [label](target) source, so text
+			// selection offsets stay aligned with the original document.
+			raw_start = state.index,
+			raw_end   = target_end + 1,
+			link      = true,
+			href      = target,
+		},
+	)
+	state.index = target_end + 1
 	state.seg_start = state.index
 	return true
 }
@@ -248,7 +316,10 @@ parse_inline_spans_with :: proc(line: string, allocator := context.temp_allocato
 	has_pill := strings.index_byte(line, PILL_OPEN) >= 0
 	has_code := strings.index_byte(line, '`') >= 0
 	has_link := strings.contains(line, "http://") || strings.contains(line, "https://")
-	if !has_bold && !has_pill && !has_code && !has_link {
+	// A reference link needs no scheme in the target - [spec](#anchor) is
+	// valid - so the bracket is its own fast-path signal.
+	has_reference := strings.index_byte(line, '[') >= 0
+	if !has_bold && !has_pill && !has_code && !has_link && !has_reference {
 		spans := make([]Text_Span, 1, allocator)
 		spans[0] = Text_Span {
 			text      = line,
@@ -267,6 +338,7 @@ parse_inline_spans_with :: proc(line: string, allocator := context.temp_allocato
 			inline_span_parse_pill(&state)
 		case line[state.index] == '`':
 			inline_span_parse_code(&state)
+		case line[state.index] == '[' && inline_span_parse_reference_link(&state):
 		case line[state.index] == 'h' && inline_span_parse_link(&state):
 		case state.index + 1 < len(line) &&
 		     line[state.index] == '*' &&
@@ -452,11 +524,58 @@ draw_markdown_span_emphasis :: proc(
 		draw_text_frame(ctx.frame, text, x, y, font_size, style.fg_bold)
 	} else if span.link {
 		width := measure_text_frame(ctx.frame, text, font_size)
-		draw_text_frame(ctx.frame, text, x, y, font_size, style.fg_accent)
-		draw_line(ctx.frame, x, y + font_size + 1, x + width, y + font_size + 1, style.fg_accent)
+		markdown_track_link(ctx, span, x, y, width, font_size)
+		// A hovered link brightens, so the pointer cursor is not the only
+		// feedback: touch and keyboard users see nothing from a cursor change.
+		color := style.fg_accent
+		if len(span.href) > 0 && span.href == ctx.hovered_link do color = style.fg_accent_light
+		draw_text_frame(ctx.frame, text, x, y, font_size, color)
+		draw_line(ctx.frame, x, y + font_size + 1, x + width, y + font_size + 1, color)
 	} else {
 		draw_text_frame(ctx.frame, text, x, y, font_size, base_color)
 	}
+}
+
+// markdown_track_link records whether the pointer is over this link span.
+//
+// Called from the draw pass so the rect it tests is the same one the glyphs
+// were laid into. The hit box is the text box grown by a hairline on each
+// side: an exact glyph box makes a single-line link feel like it slips out
+// from under the cursor at the boundary.
+@(private = "file")
+markdown_track_link :: proc(
+	ctx: ^Markdown_Context,
+	span: ^Text_Span,
+	x, y, width, font_size: i32,
+) {
+	assert(ctx != nil, "markdown_track_link: nil ctx")
+	assert(span != nil, "markdown_track_link: nil span")
+	if len(span.href) == 0 || width <= 0 do return
+	pad := ui_frame_sc(ctx.frame, 2)
+	box := Rect{f32(x - pad), f32(y - pad), f32(width + pad * 2), f32(font_size + pad * 2)}
+	if !point_in_rect(get_mouse_position(ctx.frame), box) do return
+	ctx.hovered_link = span.href
+	request_cursor(ctx.frame, .POINTING_HAND)
+	if is_mouse_button_pressed(ctx.frame, .LEFT) do ctx.link_pressed = true
+}
+
+// markdown_link_activated reports a link the user just clicked, if any.
+//
+// The package cannot follow the link itself: it imports only core:*, and
+// opening a URL is a platform capability that lives in `sys`. Reporting it is
+// also the right split on merit - an application may want to route a relative
+// target internally rather than hand every click to a browser.
+markdown_link_activated :: proc(ctx: ^Markdown_Context) -> (string, bool) {
+	assert(ctx != nil, "markdown_link_activated: nil ctx")
+	// Both fields are tested rather than asserting that a press implies a
+	// link. That assertion looked like an invariant and was not: a caller may
+	// draw one context twice - a measure pass then a real pass, or two
+	// documents sharing a context - and the second pass can clear
+	// hovered_link after the first recorded a press. That is an ordinary
+	// sequence of events, not corrupt state, so it reports "no link" rather
+	// than aborting the application.
+	if !ctx.link_pressed || len(ctx.hovered_link) == 0 do return "", false
+	return ctx.hovered_link, true
 }
 
 @(private = "file")
@@ -1632,6 +1751,18 @@ markdown_draw :: proc(
 ) -> i32 {
 	assert(ctx != nil && ctx.frame != nil, "markdown_draw: invalid context")
 	assert(bounds.w > 0, "markdown_draw: non-positive width")
+	// Link state is per-draw and must be cleared here, not accumulated.
+	//
+	// Without this a press recorded on one frame survives into the next, so
+	// the application opens the URL again on every subsequent frame until the
+	// pointer happens to move off the link. The one-frame lifetime matches how
+	// the rest of the frame state in this package behaves, and it is why the
+	// hovered link may be borrowed from `text` - it never outlives this call.
+	//
+	// A measure pass clears it too: a caller that measures after drawing
+	// should not be left holding a click the user already made.
+	ctx.hovered_link = ""
+	ctx.link_pressed = false
 	x, y, max_width := bounds.x, bounds.y, bounds.w
 	assert(
 		sel_start < 0 || sel_end < 0 || sel_start <= sel_end,

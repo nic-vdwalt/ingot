@@ -11,6 +11,55 @@ compatibility, while minor releases may break it. See the
 
 ### Added
 
+- `ingot:view`: saved views. A view is a flat, byte-copyable description of a
+  UI that a tool can author, save, ship, and diff, replayed through the public
+  `ui` facade by `view.view_play`. Format version 1 covers layout containers,
+  buttons, the core form controls, and presentational widgets.
+  - `View_Doc` is the mutable authoring buffer; `View` is the exactly-sized
+    borrowed form `view_play` consumes, so a shipped view costs only its own
+    node bytes rather than the authoring capacity.
+  - `view_decode` validates and returns `ok = false` for any malformed input.
+    It never asserts on file content, because a corrupt or truncated `.ingv` is
+    an operating error and a view may arrive over a network.
+  - `Bindings` is the consumer contract: the document owns no state, the caller
+    supplies pointers and reads interaction from an `Event_Sink`. Identity comes
+    from author-assigned keys, so a control survives relabelling and reordering.
+  - `tools/viewc` compiles a `.ingv` into Odin source. It emits the document as
+    a static `View` literal rather than as unrolled widget calls, so `view_play`
+    stays the only implementation of what a node means and there is no second
+    emitter to drift from it.
+  - `view.Play_Trace` + `view_play_traced`: optional per-node rect recording
+    over the same single walk, so a tool can hit-test the played frame
+    (`trace_node_at`, `trace_container_at`). Builder instrumentation, not part
+    of the wire format.
+  - `doc_set_key` / `doc_set_label` / `doc_set_value` and `doc_text_compact`:
+    text editing over the append-only blob, with compaction so an editing
+    session cannot exhaust it.
+  - `examples/view_builder` is a working builder whose canvas is the runtime: it
+    plays the document being edited through the same `view_play` a shipping
+    consumer uses. Widgets drag from the palette onto the canvas with a live
+    drop-target highlight; in Edit mode clicking the canvas selects the element
+    under the cursor (Live mode keeps widgets interactive); the inspector is a
+    kind-aware config panel with real text fields for key/label/placeholder.
+    `scripts/smoke-view-builder.sh` drives it headlessly.
+  - `fuzz/run.sh view` fuzzes the decoder with random bytes, mutated files, and
+    forged length fields.
+  - See [the view format](docs/view-format.md).
+- `Flex_Axis` and the optional `axis` argument on `flex_begin`: a caller can
+  now state which way it believes a declared run travels, and a run opened
+  against the wrong frame asserts instead of laying out silently wrong. Tracks
+  meant for a row, declared on a column, carve the frame's HEIGHT into N bands
+  so every cell draws at the same x - and because the run is still fully
+  consumed, `flex_end`, `layout_pop` and `layout_end` all pass. The intent
+  exists only at the call site, so only the call site can supply it.
+  `.Unspecified` is the default and preserves existing behaviour exactly.
+  A separate enum rather than a new `Layout_Kind` member on purpose: several
+  places branch as `if kind == .Column { ... } else { ... }`, so an extra
+  `Layout_Kind` state would be treated as a row by all of them.
+- `table_row_begin` / `table_row_end`: carve one data row and open the
+  header's column tracks across it in a single call, so a table row cannot be
+  declared down the enclosing column. Pairs the `push_row` and the `flex_begin`
+  that the two-step form left to every caller to remember.
 - `gfx.renderer_peak_usage` and `Paint_List.peak_count` / `peak_text_len`:
   always-on high-water marks for the batch and paint buffers, reported by the
   gallery smoke run. Unlike `Renderer_Stats` these are not gated behind a
@@ -42,6 +91,135 @@ compatibility, while minor releases may break it. See the
 - A web form backend (`ui_runtime_set_web_form_backend`) so text inputs and
   submit buttons mirror into real browser form controls again; the graphics
   adapter installs it automatically.
+- Surface design tokens (`ui/tokens.odin`): `Surface`, `Visual_State`,
+  `Radius`, `Border`, `Elevation`, and `Tint`, resolved by `surface_colors`,
+  `radius_ratio`, `radius_pixels`, `radius_segments`, `border_pixels`,
+  `elevation_offset`, `tint_alpha`, and `color_tinted`. These are the missing
+  peer of `Text_Role`/`Ink` (type and text color) and `Space` (spacing):
+  nothing previously named what a *filled region* meant, so each widget
+  answered independently and the answers drifted apart.
+- `draw_surface`: one fill + border + shadow entry point for a token-styled
+  region, so two widgets cannot disagree about the same surface class.
+- Paper materials (`ui/material.odin`): `draw_shadow_hard`, `draw_rule_lines`,
+  `draw_margin_rule`, `draw_dot_grid`, `dot_grid_fits`, `draw_paper_tooth`,
+  `draw_wash`, `draw_pigment_block`, `draw_highlight_swipe`,
+  `draw_scribble_fill`, `draw_tape_strip`, `draw_dog_ear`, and
+  `draw_hand_underline`, each bounded by a named constant derived from the
+  paint budget.
+- `THEME_SKETCH_WARM` and `THEME_SKETCH_GREY` (`theme_sketch_warm` /
+  `theme_sketch_grey`): toned sketchbook stock - kraft tan (190,158,116) and
+  slate blue-grey (150,164,168) - carrying saturated artist pigments. Both
+  clear full WCAG AA (4.5:1) across every reading ink and surface, which the
+  existing dark and light palettes do not.
+- `Pigment` enum and `Theme.pigments`: a paint table separate from the `fg_*`
+  text inks, resolved by `theme_pigment` with a fallback to the matching ink so
+  pigment-aware widgets need no branch on palettes that carry no paint.
+  Pigment and ink were originally the same values, which made every pigment
+  inherit a text role's duty to clear AA against the ground - and since the
+  lightest pigment then dictated how light the paper could be, yellow ochre
+  held the grounds two steps paler than real toned stock. Paint carries no
+  text, so it is bound by no text rule; splitting the two is what let the
+  grounds be properly toned.
+- `Theme.chalk` and `draw_chalk_highlight`: the light direction. A white ground
+  can only be worked darker, so a form is built entirely from shadow; a toned
+  ground is worked both ways - ink below it, chalk above it. Ignoring that is
+  why the first toned palettes read as dimmed light themes.
+- `scatter_hash` / `scatter_unit`: a pure index hash for deterministic
+  scattering. Frames are event-driven, so a random generator would reshuffle
+  paper grain on every unrelated redraw and break capture reproducibility.
+- `Theme.surface_pressed`, `fg_on_accent`, `caption_hover`, `caption_pressed`,
+  `caption_close_hover`, `caption_close_pressed`, `spell_error`, `paper_rule`,
+  `paper_tooth`, `graphite`, `highlighter`, `tape_color`, `ink_faded`, and
+  `substrate`.
+- `theme_ink`: the pure half of `text_ink`, so contrast can be audited without
+  a live frame.
+- `PAINT_COMMANDS_PEAK_4K` and `PAINT_COMMANDS_HEADROOM`: the measured 4K
+  command peak and the room left over, so new per-frame decoration is bounded
+  against real headroom rather than against the raw capacity.
+- Gallery: a `Theme` section rendering the whole token system, including a
+  Surface x Visual_State matrix driven by explicit state rather than by
+  pointer position. Hover and pressed were previously unobservable in any
+  screenshot, which is how two state defects shipped.
+- `draw_hand_underline`: the doubled, unequal stroke pair a person makes when
+  underlining by hand. A single straight rule under a heading reads as a
+  border - the eye takes it as the top edge of whatever follows.
+- `space_pixels`: the frame-level spacing resolver. The explicit tier owns its
+  own geometry and has no `Ui` to ask, so it previously had to re-declare the
+  spacing scale locally; `space_px` now delegates here so there is one table.
+- Gallery: the theme control cycles Dark, Light, Sketch Warm and Sketch Grey
+  instead of toggling a boolean, so both toned palettes are reachable. High
+  contrast joined that same cycle, replacing a separate `high_contrast` boolean
+  and its dedicated Contrast button: the two flags spanned eight combinations
+  but only five were reachable, because selecting high contrast had to
+  force-clear the palette - applying that palette discards the other choice
+  entirely, so they were one decision modelled as two. As an enum the
+  exclusivity is structural and the force-clear is gone. Reduced motion stays a
+  separate control because it genuinely is orthogonal: it applies to every
+  palette, high contrast included. Gallery smoke now derives its theme steps
+  from the enum rather than a hand-written table, so a new palette is covered
+  without anyone remembering to extend it. Before this work the paper materials
+  had no callers at all - the aesthetic existed in the library but could not be
+  seen from any application.
+- Gallery: the `Theme` section is a sketchbook colour study - toned ground with
+  paper grain, overlapping pigment washes, and measurements hung in a reserved
+  margin column. `Selected` renders as a highlighter swipe and `Pressed` as a
+  scribble, so the materials run every frame rather than only in tests.
+
+### Changed
+
+- `Substrate.margin` is now `Substrate.margin_rule`, and controls *only*
+  whether the vertical rule is drawn. The body indent follows from
+  `kind != .None`. The single flag previously meant both, so "keep the reserved
+  margin column, drop the rule down it" could not be expressed - and the column
+  is what keeps measurements out of the swatches they describe.
+- `Theme.paper_margin` is replaced by `Theme.graphite` (pencil marks: heading
+  underlines and captions). With the margin rule gone from the built-in
+  palettes the old role had no meaning.
+- `Substrate_Kind` gains `.Tooth`, the sketchbook substrate. The built-in
+  themes no longer select `.Ruled`; `draw_rule_lines` and `draw_margin_rule`
+  remain exported and tested for consumers who want writing paper.
+- **Breaking:** `ui_gfx.App_Config.clear_color` is removed. The window
+  background is now derived from the active theme by `ui_gfx.app_clear_color`.
+  The field was a stored *copy* of `theme.bg_app`, and every theme switch had
+  to remember to update it; `chart_demo` did not, so switching it to the light
+  palette left a dark window. Applications should delete their `clear_color`
+  assignment - the window now follows the theme automatically. Because every
+  call site uses named-field literals, removing the field is a compile error
+  rather than a silent behaviour change.
+- Caption buttons, the spellcheck squiggle, and the split-drop hint read their
+  colors from the palette instead of from file-local constants. The caption
+  constants were a 15-alpha and a 10-alpha white wash, which is invisible on
+  the high-contrast palette's pure black title bar.
+- Disabled controls resolve to `fg_disabled` everywhere. `button_at` used
+  `fg_muted_dim` while menus used `fg_disabled`, so a disabled button and a
+  disabled menu item rendered in different colors in the same frame.
+  `fg_muted_dim` is now `Ink.Muted` only.
+- Gallery smoke runs theme *combinations* rather than four mutually exclusive
+  steps, so high contrast with reduced motion is exercised.
+
+### Fixed
+
+- Markdown `[label](target)` links were not parsed, and the failure was not a
+  clean one: parsing began at the scheme, so `[docs](https://x)` rendered as
+  the literal text `[docs](`, then a live link reading the raw URL, then `)`.
+  The markup was visible and the label was not. `Text_Span` gains `href`, which
+  a bare URL sets to its own text, so a consumer never has to ask which
+  spelling produced the span.
+- Markdown links were never clickable. The type comment claimed they were, but
+  nothing hit-tested them - they were accent-coloured underlined text and
+  nothing more. `Markdown_Context` now records the hovered link during the draw
+  pass, requests a pointer cursor, brightens the hovered span, and reports
+  activation through `markdown_link_activated`. The package imports only
+  `core:*` so it cannot open a URL itself; the application decides what
+  following a link means, which also lets it route relative targets internally
+  rather than handing every click to a browser.
+- Dropdown, date-picker, and checkbox borders were passing an unscaled `1`
+  where their own popups scaled correctly, so at 2x DPI a field's border was
+  one physical pixel and its popup's was two. All borders now resolve through
+  `border_pixels`.
+- `THEME_HIGH_CONTRAST.button_pressed` was pure white, identical to
+  `button_hover`, so a pressed high-contrast button gave no feedback
+  distinguishable from hover.
 
 ## [0.1.1] - 2026-07-28
 

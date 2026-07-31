@@ -120,6 +120,7 @@ The two common paths deliberately begin in different places:
 - General URL requests: `http_request_url`; background or web HTTP: `Fetcher`.
 - Reconnecting WebSockets: URL-based `ws_start_connect_url`.
 - Settings, cache paths, dialogs, and URLs: `ingot:prefs` and `ingot:sys`.
+- Tool-authored or shipped UI descriptions: `ingot:view`.
 - Terminal lifecycle and pumping: `ingot:term`.
 - FFI or platform implementation: bindings such as `libvterm`, `pty`, and `accesskit`.
 
@@ -245,6 +246,44 @@ Use `prefs` rather than choosing native files versus browser storage in
 application code. Use `sys` for cache directories, external URLs, and dialogs.
 Platform-specific implementations belong below these packages unless the
 cross-platform contract cannot represent the required behavior.
+
+## Saved views
+
+`ingot:view` is an optional layer above `ui`, not beside it. A **view** is a
+declarative description of a UI that a tool can author, save, ship, and diff;
+`view.view_play` walks it and calls the same public `^Ui` facade an application
+would call by hand. It depends on `ui` and nothing else, and `ui` does not know
+it exists.
+
+Use it when the UI is authored rather than written: a builder, a form defined by
+configuration, or a screen a non-programmer edits. Do not use it for ordinary
+application UI. A hand-written frame procedure is clearer, is fully checked by
+the compiler, and can express everything the format deliberately cannot.
+
+The format is narrower than the facade on purpose. It covers layout containers,
+buttons, the core form controls, and presentational widgets; charts, dropdowns,
+listboxes, and anything needing an array binding or retained widget state are
+excluded from version 1. A node kind that `view_play` cannot render does not
+exist, which is what keeps the document and the renderer from drifting.
+
+Two consumption paths, both playing the same document through the same code:
+
+- **Generated source.** `tools/viewc` emits a static `View` literal. Nothing is
+  parsed at run time, every enum and index is checked by the compiler, and a
+  format change becomes a compile error. Prefer this for a view that ships.
+- **Loaded data.** `#load` or read the `.ingv`, then call `view.view_decode`.
+  Required on web, and required whenever the view is not known at build time.
+
+A view owns no state. The document describes structure; the consumer supplies a
+`view.Bindings` table of pointers and reads interaction back from an event sink.
+That table is the interface a consumer implements, and identity comes from
+author-assigned keys, so a control keeps its state across relabelling,
+reordering, and process restarts.
+
+`view.view_decode` validates: it returns `ok = false` for any malformed input
+and never asserts on file content. A view from an untrusted source is made safe
+by that validation, not by its checksum. See
+[the view format](view-format.md).
 
 ## Terminal stack and bindings
 

@@ -152,7 +152,7 @@ date_picker_at :: proc(
 	border :=
 		style.fg_accent if st.open || it.hovered || focus_opt_focused(focus) else style.border_color
 	draw_rectangle_rec(frame, rrect, bg)
-	draw_rectangle_lines_ex(frame, rrect, 1, border)
+	draw_rectangle_lines_ex(frame, rrect, border_pixels(frame, .Hairline), border)
 	label := placeholder
 	label_color := Ink.Secondary
 	if calendar_date_valid(value^) {

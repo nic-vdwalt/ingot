@@ -106,16 +106,6 @@ when MAP_CAPTURE {
 		map_capture_applied = false
 	}
 
-	// Captured media is flat artwork: take the theme colour, drop the window
-	// translucency (see gallery capture.odin for the full rationale).
-	map_capture_clear_color :: proc() -> rl.Color {
-		theme := ui.ui_runtime_theme(ui_gfx.app_ui_runtime(&app))
-		assert(theme != nil, "map_capture_clear_color: nil theme")
-		color := ui_gfx.color_to_gfx(theme.bg_app)
-		color.a = 255
-		return color
-	}
-
 	map_capture_finish :: proc() {
 		if map_capture_target.texture.id != 0 do rl.UnloadRenderTexture(map_capture_target)
 		os.exit(0)
@@ -125,11 +115,15 @@ when MAP_CAPTURE {
 		gfx_frame, acquired := rl.begin_frame()
 		if !acquired do return
 		frame_state := ui_gfx.session_begin_frame_context(&app.session, &gfx_frame)
-		rl.clear_frame(&gfx_frame, app.config.clear_color)
+		// Captured media is flat artwork: app_clear_color takes the theme
+		// colour and drops the window translucency (see gallery capture.odin
+		// for the full rationale).
+		background := ui_gfx.app_clear_color(&app)
+		rl.clear_frame(&gfx_frame, background)
 
 		map_capture_step()
 		rl.BeginTextureMode(map_capture_target)
-		rl.ClearBackground(map_capture_clear_color())
+		rl.ClearBackground(background)
 		map_frame(&app, frame_state, nil)
 		ui_gfx.session_end_frame_context(&app.session, &gfx_frame)
 		rl.EndTextureMode()
@@ -159,7 +153,6 @@ when MAP_CAPTURE {
 				title = "ingot api map (capture)",
 				target_fps = 60,
 				event_waiting = false,
-				clear_color = {24, 26, 32, 255},
 				session = {semantics_enabled = true},
 			},
 			{frame = map_frame},
