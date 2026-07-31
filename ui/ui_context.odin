@@ -543,7 +543,9 @@ track_px :: proc(u: ^Ui, track: Track) -> Track {
 	unreachable()
 }
 
-@(private = "file")
+// Package-visible: the facade row widgets (facade_rows.odin) open flex runs
+// inside a row strip they carve themselves.
+@(private = "package")
 flex_begin_tracks :: proc(u: ^Ui, tracks: []Track, justify: Main_Align = .Start) {
 	assert(u != nil && u.open, "flex_begin_tracks: frame not open")
 	assert(len(tracks) > 0, "flex_begin_tracks: empty tracks")
@@ -555,7 +557,9 @@ flex_begin_tracks :: proc(u: ^Ui, tracks: []Track, justify: Main_Align = .Start)
 	flex_begin(&u.layout, sizes[:len(tracks)], justify)
 }
 
-@(private = "file")
+// Package-visible: facade_rows.odin carves row strips with the same
+// container semantics row_begin uses.
+@(private = "package")
 container_rect_px :: proc(u: ^Ui, width, height: i32) -> Rect_I32 {
 	assert(u != nil && u.open, "container_rect_px: frame not open")
 	assert(width >= 0 && height >= 0, "container_rect_px: negative size")
