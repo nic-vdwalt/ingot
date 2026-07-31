@@ -2,6 +2,27 @@ package term
 
 import "core:testing"
 import rl "ingot:gfx"
+import "ingot:pty"
+import "ingot:ui"
+
+@(test)
+term_ui_input_reads_captured_characters :: proc(t: ^testing.T) {
+	p, ok := pty.spawn("/bin/cat", 80, 24)
+	testing.expect(t, ok, "failed to spawn PTY")
+	if !ok do return
+	defer pty.destroy(&p)
+	ts := new(Term_Instance)
+	defer free(ts)
+	ts.pty = p
+	ts.pty_running = true
+	ts.sb_view_offset = 4
+	input: ui.Ui_Input
+	input.characters[0] = 'x'
+	input.character_count = 1
+
+	testing.expect(t, term_handle_ui_input(ts, &input))
+	testing.expect_value(t, ts.sb_view_offset, 0)
+}
 
 @(test)
 vt_key_map :: proc(t: ^testing.T) {
