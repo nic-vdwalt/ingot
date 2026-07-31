@@ -626,3 +626,78 @@ grid_skip_to_preserves_measured_height :: proc(t: ^testing.T) {
 	grid_skip_to(&partial, 40)
 	testing.expect_value(t, grid_end(&partial), expected)
 }
+
+// --- Flex axis --------------------------------------------------------------
+// A run of cells declared against the wrong frame is the worst failure this
+// API has: tracks meant for a row, opened on a column, carve the frame's
+// HEIGHT into N bands so every cell draws at the same x. The run is still
+// fully consumed, so flex_end / layout_pop / layout_end all pass and nothing
+// in the library notices. These pin the opt-in check that catches it.
+
+@(test)
+layout_axis_matches_is_permissive_when_unspecified :: proc(t: ^testing.T) {
+	// Backwards compatibility in one assertion: every pre-existing call omits
+	// the axis, so .Unspecified must accept either frame.
+	testing.expect(t, axis_matches(.Unspecified, .Column))
+	testing.expect(t, axis_matches(.Unspecified, .Row))
+}
+
+@(test)
+layout_axis_matches_rejects_the_wrong_frame :: proc(t: ^testing.T) {
+	testing.expect(t, axis_matches(.Row, .Row))
+	testing.expect(t, axis_matches(.Column, .Column))
+	testing.expect(t, !axis_matches(.Row, .Column), "row tracks on a column must not match")
+	testing.expect(t, !axis_matches(.Column, .Row), "column tracks on a row must not match")
+}
+
+@(test)
+layout_flex_row_axis_produces_horizontal_cells :: proc(t: ^testing.T) {
+	// The positive space: declared .Row against a pushed row lays out across x.
+	l: Layout
+	layout_begin(&l, 10, 100, 300, 28)
+	push_row(&l, 28)
+	flex_begin(&l, {fixed(100), fixed(100), fixed(100)}, axis = .Row)
+	a := flex_next(&l)
+	b := flex_next(&l)
+	c := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect(t, b.x > a.x, "cells must advance along x")
+	testing.expect(t, c.x > b.x, "cells must advance along x")
+	testing.expect_value(t, a.y, b.y)
+	testing.expect_value(t, a.h, i32(28))
+	testing.expect(t, b.x >= a.x + a.w, "cells must not overlap")
+}
+
+@(test)
+layout_flex_column_axis_produces_vertical_bands :: proc(t: ^testing.T) {
+	// The same declaration on a column is legitimate — it is only wrong when
+	// the caller meant a row, which is exactly what the axis argument states.
+	l: Layout
+	layout_begin(&l, 0, 0, 300, 90)
+	flex_begin(&l, {fixed(30), fixed(30), fixed(30)}, axis = .Column)
+	a := flex_next(&l)
+	b := flex_next(&l)
+	_ = flex_next(&l) // a declared run must be fully consumed before layout_end
+	layout_end(&l)
+	testing.expect(t, b.y > a.y, "bands must advance along y")
+	testing.expect_value(t, a.x, b.x)
+}
+
+@(test)
+layout_flex_default_axis_is_unchanged :: proc(t: ^testing.T) {
+	// Characterisation: omitting the axis must behave exactly as before the
+	// argument existed, or every existing call site silently changed meaning.
+	l: Layout
+	layout_begin(&l, 0, 0, 400, 40)
+	push_row(&l, 40, gap = 10)
+	flex_begin(&l, {fixed(80), fit(100), grow()})
+	a := flex_next(&l)
+	b := flex_next(&l)
+	c := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, a.w, i32(80))
+	testing.expect_value(t, b.w, i32(100))
+	testing.expect_value(t, c.w, i32(200))
+}
