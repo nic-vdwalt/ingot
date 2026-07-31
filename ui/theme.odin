@@ -131,7 +131,8 @@ Theme :: struct {
 	// paper: material.odin treats a zero-alpha color as "effect disabled", so
 	// the screen palettes need no special case to opt out.
 	paper_rule:                 Color, // Ruled notebook line
-	paper_margin:               Color, // Vertical margin rule
+	paper_tooth:                Color, // Sketchbook paper grain flecks
+	graphite:                   Color, // Pencil: heading underlines, captions
 	highlighter:                Color, // Marker swipe behind selected content
 	tape_color:                 Color, // Tape strip across a corner
 	ink_faded:                  Color, // Ink that has soaked or dried lighter
@@ -158,17 +159,23 @@ Theme :: struct {
 // Dots are deliberately not a whole-page option even though the enum permits
 // asking: a dot grid is quadratic in the area it covers and would exceed the
 // per-frame paint budget several times over at 4K. draw_dot_grid asserts the
-// bound, and dot_grid_fits lets a caller check before asking.
+// bound, and dot_grid_fits lets a caller check before asking. Tooth carries
+// its own hard count for the same reason.
 Substrate_Kind :: enum u8 {
 	None,
 	Ruled,
 	Grid,
 	Dots,
+	Tooth,
 }
 
 Substrate :: struct {
-	kind:   Substrate_Kind,
-	margin: bool, // Draw the vertical margin rule down the left edge.
+	kind:        Substrate_Kind,
+	// Draw the vertical margin rule. Separate from the body indent because a
+	// sketchbook wants the reserved space without the exercise-book line, and
+	// a caller cannot ask for that if one flag stands for both. The indent
+	// follows from kind != .None; this controls only whether a line is drawn.
+	margin_rule: bool,
 }
 
 // Glass surface source values per theme. On glass platforms (macOS) the
@@ -308,7 +315,8 @@ THEME_DARK :: Theme {
 	// No paper materials: this is a screen palette, and a zero-alpha color
 	// disables the effect in material.odin without a branch there.
 	paper_rule = Color{0, 0, 0, 0},
-	paper_margin = Color{0, 0, 0, 0},
+	paper_tooth                = Color{0, 0, 0, 0},
+	graphite                   = Color{0, 0, 0, 0},
 	highlighter = Color{0, 0, 0, 0},
 	tape_color = Color{0, 0, 0, 0},
 	ink_faded = Color{150, 150, 160, 255},
@@ -318,7 +326,7 @@ THEME_DARK :: Theme {
 	caption_close_hover = Color{232, 64, 52, 255},
 	caption_close_pressed = Color{180, 40, 32, 255},
 	spell_error = Color{255, 120, 120, 255},
-	substrate = Substrate{kind = .None, margin = false},
+	substrate                  = Substrate{kind = .None, margin_rule = false},
 }
 
 // THEME_LIGHT is a light counterpart tuned for equivalent contrast roles.
@@ -400,7 +408,8 @@ THEME_LIGHT :: Theme {
 	button_primary_grad_top = Color{255, 255, 255, 55},
 	button_primary_grad_bottom = Color{0, 0, 0, 0},
 	paper_rule = Color{0, 0, 0, 0},
-	paper_margin = Color{0, 0, 0, 0},
+	paper_tooth                = Color{0, 0, 0, 0},
+	graphite                   = Color{0, 0, 0, 0},
 	highlighter = Color{0, 0, 0, 0},
 	tape_color = Color{0, 0, 0, 0},
 	ink_faded = Color{130, 130, 140, 255},
@@ -410,7 +419,7 @@ THEME_LIGHT :: Theme {
 	caption_close_hover = Color{232, 64, 52, 255},
 	caption_close_pressed = Color{180, 40, 32, 255},
 	spell_error = Color{190, 40, 40, 255},
-	substrate = Substrate{kind = .None, margin = false},
+	substrate                  = Substrate{kind = .None, margin_rule = false},
 }
 
 // THEME_HIGH_CONTRAST is a maximum-legibility palette: opaque black
@@ -500,7 +509,8 @@ THEME_HIGH_CONTRAST :: Theme {
 	button_primary_grad_top = Color{0, 0, 0, 0},
 	button_primary_grad_bottom = Color{0, 0, 0, 0},
 	paper_rule = Color{0, 0, 0, 0},
-	paper_margin = Color{0, 0, 0, 0},
+	paper_tooth                = Color{0, 0, 0, 0},
+	graphite                   = Color{0, 0, 0, 0},
 	highlighter = Color{0, 0, 0, 0},
 	tape_color = Color{0, 0, 0, 0},
 	ink_faded = Color{200, 200, 200, 255},
@@ -513,7 +523,7 @@ THEME_HIGH_CONTRAST :: Theme {
 	caption_close_hover = Color{255, 80, 80, 255},
 	caption_close_pressed = Color{255, 140, 140, 255},
 	spell_error = Color{255, 100, 100, 255},
-	substrate = Substrate{kind = .None, margin = false},
+	substrate                  = Substrate{kind = .None, margin_rule = false},
 }
 
 // THEME_COLOR is the zero-color sentinel for widget color parameters whose

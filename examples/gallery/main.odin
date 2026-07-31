@@ -103,15 +103,15 @@ NAV_STRIP_CELL_W :: 92
 Palette :: enum {
 	Dark,
 	Light,
-	Paper,
-	Paper_Night,
+	Sketch_Warm,
+	Sketch_Grey,
 }
 
 PALETTE_NAMES := [Palette]string {
 	.Dark        = "Dark",
 	.Light       = "Light",
-	.Paper       = "Paper",
-	.Paper_Night = "Paper night",
+	.Sketch_Warm = "Sketch warm",
+	.Sketch_Grey = "Sketch grey",
 }
 
 palette := Palette.Dark
@@ -134,10 +134,10 @@ palette_theme :: proc(value: Palette) -> ui.Theme {
 		return ui.theme_dark()
 	case .Light:
 		return ui.theme_light()
-	case .Paper:
-		return ui.theme_paper()
-	case .Paper_Night:
-		return ui.theme_paper_night()
+	case .Sketch_Warm:
+		return ui.theme_sketch_warm()
+	case .Sketch_Grey:
+		return ui.theme_sketch_grey()
 	}
 	return ui.theme_dark()
 }
@@ -509,32 +509,50 @@ apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
 // cannot afford 56 of them.
 MARGIN_INSET :: 56
 
-// draw_page_substrate lays the ruled paper behind the content.
+// draw_page_substrate lays the page texture behind the content.
 //
 // It is drawn *after* pane_begin and anchored to the content origin the pane
-// returns, which is already scroll-adjusted. That is the whole trick: rules
-// pinned to the viewport would stay put while the text slid over them, and
-// text crossing its own rules reads as a rendering fault. Anchored to the
-// content, the rules scroll with the writing and every baseline keeps its line.
+// returns, which is already scroll-adjusted. That matters for any substrate
+// with structure: a texture pinned to the viewport would stay put while the
+// content slid over it, which reads as a rendering fault rather than as paper.
 //
-// Screen palettes set substrate.kind = .None and zero the rule colors, so this
-// costs them one comparison and no draw calls.
+// Switching on kind keeps every substrate reachable. The built-in sketch
+// palettes ask for Tooth, but the ruled path stays available for a consumer
+// who wants writing paper - the materials are sound, they are simply not the
+// aesthetic these themes chose.
+//
+// Screen palettes set kind = .None and zero the material colors, so this costs
+// them one comparison and no draw calls.
 draw_page_substrate :: proc(frame: ^ui.Ui_Frame, pane: ui.Rect_I32, anchor: i32, narrow: bool) {
 	assert(frame != nil, "draw_page_substrate: nil frame")
 	theme := ui.ui_frame_theme(frame)
 	if theme.substrate.kind == .None do return
 
-	// Rules run from the content anchor to the bottom of the pane. Starting
-	// at the anchor rather than at the pane top is what puts a rule under
-	// every baseline instead of near it.
+	// The texture runs from the content anchor to the bottom of the pane, so
+	// it scrolls with the content rather than under it.
 	height := pane.y + pane.h - anchor
 	if height <= 0 do return
-	ruled := ui.Rectangle{f32(pane.x), f32(anchor), f32(pane.w), f32(height)}
-	ui.draw_rule_lines(frame, ruled, color = theme.paper_rule)
+	region := ui.Rectangle{f32(pane.x), f32(anchor), f32(pane.w), f32(height)}
 
-	if theme.substrate.margin && !narrow {
+	switch theme.substrate.kind {
+	case .None:
+	// Handled above; listed so a new kind cannot be silently ignored.
+	case .Ruled:
+		ui.draw_rule_lines(frame, region, color = theme.paper_rule)
+	case .Grid, .Dots:
+		spacing := ui.ui_frame_metrics(frame).LINE_HEIGHT
+		if ui.dot_grid_fits(region, spacing) {
+			ui.draw_dot_grid(frame, region, spacing, theme.paper_rule)
+		}
+	case .Tooth:
+		ui.draw_paper_tooth(frame, region, theme.paper_tooth)
+	}
+
+	// The margin rule is now independent of the body indent, so a palette can
+	// keep the reserved column without the exercise-book line down it.
+	if theme.substrate.margin_rule && !narrow {
 		page := ui.Rectangle{f32(pane.x), f32(pane.y), f32(pane.w), f32(pane.h)}
-		ui.draw_margin_rule(frame, page, MARGIN_INSET, theme.paper_margin)
+		ui.draw_margin_rule(frame, page, MARGIN_INSET, theme.graphite)
 	}
 }
 
