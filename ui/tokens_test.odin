@@ -299,8 +299,7 @@ surface_colors_public_path_holds_for_every_combination :: proc(t: ^testing.T) {
 
 // Negative space: exactly two surfaces may be transparent at rest. If a third
 // is added without thought, the opacity assertion in surface_colors silently
-// stops covering it.
-@(test)
+// stops covering it.@(test)
 only_row_and_ghost_are_transparent_at_rest :: proc(t: ^testing.T) {
 	count := 0
 	for surface in all_surfaces() {
@@ -326,5 +325,47 @@ surface_list_covers_every_surface :: proc(t: ^testing.T) {
 			surface,
 			count,
 		)
+	}
+}
+
+// A border must never resolve below one physical pixel.
+//
+// Sub-pixel strokes are not thin, they are absent: the rasteriser spreads them
+// across a pixel at a fraction of their alpha and nothing survives. This was
+// found by capturing the gallery at 0.75 scale, where the ruled page rendered
+// completely blank - the rules were being asked for at 0.75px and drawn as
+// nothing. Every hairline in the interface had the same defect below 1x.
+@(test)
+borders_never_resolve_below_one_pixel :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+
+	for scale in ([?]f32{0.5, 0.6, 0.75, 0.9, 1.0, 1.5, 2.0, 3.0}) {
+		ui_runtime_set_scale(&runtime, scale)
+		frame: Ui_Frame
+		ui_frame_begin(&frame, &runtime)
+		for border in Border {
+			thickness := border_pixels(&frame, border)
+			if border == .None {
+				testing.expect_value(t, thickness, 0)
+				continue
+			}
+			testing.expectf(
+				t,
+				thickness >= 1,
+				"scale %v: %v resolved to %v physical pixels, which renders as nothing",
+				scale,
+				border,
+				thickness,
+			)
+		}
+		// Above 1x the weights must still be ordered; the floor must not
+		// flatten Emphasis and Ink into Hairline.
+		if scale >= 1 {
+			testing.expect(t, border_pixels(&frame, .Hairline) < border_pixels(&frame, .Emphasis))
+			testing.expect(t, border_pixels(&frame, .Emphasis) < border_pixels(&frame, .Ink))
+		}
+		ui_frame_end(&frame)
 	}
 }

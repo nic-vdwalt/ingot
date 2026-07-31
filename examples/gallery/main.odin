@@ -69,7 +69,7 @@ SECTION_LAYERS := [Section]string {
 	.Layout   = "APPLICATION-OWNED GEOMETRY",
 	.Overlay  = "EXPLICIT LIFECYCLE",
 	.Stress   = "APPLICATION-OWNED GEOMETRY",
-	.Theme    = "DESIGN TOKENS",
+	.Theme    = "APPLICATION-OWNED GEOMETRY",
 }
 
 SECTION_AXES := [Section]string {
@@ -97,11 +97,50 @@ NAV_STRIP_CELL_W :: 92
 
 // --- caller-owned state (the whole point: no hidden library state) ----------
 
-dark := true
+// Palette is a cycle rather than a `dark: bool`, because a boolean cannot
+// express four choices. Ordered so the button walks screen themes first and
+// then paper, which reads as a progression rather than a jumble.
+Palette :: enum {
+	Dark,
+	Light,
+	Paper,
+	Paper_Night,
+}
+
+PALETTE_NAMES := [Palette]string {
+	.Dark        = "Dark",
+	.Light       = "Light",
+	.Paper       = "Paper",
+	.Paper_Night = "Paper night",
+}
+
+palette := Palette.Dark
 high_contrast := false
 reduced_motion := false
 section := Section.Buttons
 debug_on := false
+
+// palette_next advances the cycle. Pure, so the label and the action cannot
+// disagree about what comes next: the button shows palette_next(palette) and
+// pressing it assigns exactly that.
+palette_next :: proc(current: Palette) -> Palette {
+	return Palette((int(current) + 1) % len(Palette))
+}
+
+// palette_theme resolves a palette to its Theme value.
+palette_theme :: proc(value: Palette) -> ui.Theme {
+	switch value {
+	case .Dark:
+		return ui.theme_dark()
+	case .Light:
+		return ui.theme_light()
+	case .Paper:
+		return ui.theme_paper()
+	case .Paper_Night:
+		return ui.theme_paper_night()
+	}
+	return ui.theme_dark()
+}
 
 nav_ui: ui.Ui
 buttons_ui: ui.Ui
@@ -320,8 +359,12 @@ Nav_Control :: enum {
 nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
 	switch control {
 	case .Theme:
-		if compact do return "Light" if dark else "Dark"
-		return "Light theme" if dark else "Dark theme"
+		// Naming the *next* palette rather than the current one: the button is
+		// an action, and a button labelled with the state you are already in
+		// reads as a status display.
+		next := PALETTE_NAMES[palette_next(palette)]
+		if compact do return next
+		return next
 	case .Contrast:
 		if compact do return "Contrast"
 		return "Standard contrast" if high_contrast else "High contrast"
@@ -341,8 +384,8 @@ nav_control_activate :: proc(control: Nav_Control, frame: ^ui.Ui_Frame) {
 	assert(frame != nil, "nav_control_activate: nil frame")
 	switch control {
 	case .Theme:
-		dark = !dark
-		// Leaving high contrast on would override the theme just chosen.
+		palette = palette_next(palette)
+		// Leaving high contrast on would override the palette just chosen.
 		high_contrast = false
 		apply_gallery_theme(frame)
 	case .Contrast:
@@ -452,11 +495,47 @@ draw_nav_strip :: proc(frame: ^ui.Ui_Frame, top, sw: i32) -> i32 {
 }
 
 apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
-	t :=
-		ui.theme_high_contrast() if high_contrast else (ui.theme_dark() if dark else ui.theme_light())
+	// High contrast is an override rather than a fifth palette: it exists to
+	// win over whatever else is selected, so it is checked first.
+	t := ui.theme_high_contrast() if high_contrast else palette_theme(palette)
 	t.reduced_motion = reduced_motion
 	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app), t)
 	if frame != nil do ui.request_redraw(frame)
+}
+
+// MARGIN_INSET is where the vertical margin rule sits, in logical pixels.
+// Wide enough for a right-aligned annotation at note size, narrow enough not
+// to steal content width. Dropped entirely on narrow viewports: a 390px phone
+// cannot afford 56 of them.
+MARGIN_INSET :: 56
+
+// draw_page_substrate lays the ruled paper behind the content.
+//
+// It is drawn *after* pane_begin and anchored to the content origin the pane
+// returns, which is already scroll-adjusted. That is the whole trick: rules
+// pinned to the viewport would stay put while the text slid over them, and
+// text crossing its own rules reads as a rendering fault. Anchored to the
+// content, the rules scroll with the writing and every baseline keeps its line.
+//
+// Screen palettes set substrate.kind = .None and zero the rule colors, so this
+// costs them one comparison and no draw calls.
+draw_page_substrate :: proc(frame: ^ui.Ui_Frame, pane: ui.Rect_I32, anchor: i32, narrow: bool) {
+	assert(frame != nil, "draw_page_substrate: nil frame")
+	theme := ui.ui_frame_theme(frame)
+	if theme.substrate.kind == .None do return
+
+	// Rules run from the content anchor to the bottom of the pane. Starting
+	// at the anchor rather than at the pane top is what puts a rule under
+	// every baseline instead of near it.
+	height := pane.y + pane.h - anchor
+	if height <= 0 do return
+	ruled := ui.Rectangle{f32(pane.x), f32(anchor), f32(pane.w), f32(height)}
+	ui.draw_rule_lines(frame, ruled, color = theme.paper_rule)
+
+	if theme.substrate.margin && !narrow {
+		page := ui.Rectangle{f32(pane.x), f32(pane.y), f32(pane.w), f32(pane.h)}
+		ui.draw_margin_rule(frame, page, MARGIN_INSET, theme.paper_margin)
+	}
 }
 
 draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32, narrow: bool) {
@@ -467,6 +546,7 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32, narrow: bool) {
 	w := sw - x
 	pane_rect := ui.Rect_I32{x, top, w, sh - top}
 	y := ui.pane_begin(frame, &content_pane, pane_rect, pad = 14, keyboard = section != .Inputs)
+	draw_page_substrate(frame, pane_rect, y, narrow)
 	inset := ui.ui_frame_sc(frame, 8 if narrow else 18)
 	gutter := ui.ui_frame_sc(frame, 20 if narrow else 52)
 	cx := x + inset
@@ -507,14 +587,20 @@ draw_content :: proc(frame: ^ui.Ui_Frame, sw, top, sh: i32, narrow: bool) {
 
 draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
 	assert(frame != nil, "draw_section_layer: nil frame")
+	// Exactly two rule-heights tall. Every section below this band inherits
+	// its starting y from here, so a band of some other height would push all
+	// of them a fraction of a line off the ruled paper. Two lines is also what
+	// the previous hardcoded 44 logical px happened to be, so nothing moves on
+	// the unruled palettes.
+	band := ui.ui_frame_metrics(frame).LINE_HEIGHT * 2
 	u := &badge_ui
-	ui.begin(u, frame, {x, y, w, ui.ui_frame_sc(frame, 44)}, gap = .XS)
+	ui.begin(u, frame, {x, y, w, band}, gap = .XS)
 	ui.row_begin(u, 28, gap = .SM, align = .Center)
 	_ = ui.status_pill(u, SECTION_LAYERS[section], ui.Ink.Accent)
 	ui.label(u, SECTION_AXES[section], ui.Text_Role.Body, ui.Ink.Secondary)
 	ui.row_end(u)
-	ui.space(u, .SM)
-	return ui.end(u)
+	_ = ui.end(u)
+	return y + band
 }
 
 draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {

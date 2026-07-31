@@ -68,7 +68,7 @@ when CAPTURE {
 	Capture_Shot :: struct {
 		file:    string,
 		section: Section,
-		dark:    bool,
+		palette: Palette,
 	}
 
 	// The README set: one shot per visually distinct area, in both themes so a
@@ -78,24 +78,30 @@ when CAPTURE {
 	// by the sequence pass instead - as stills they leave half the frame empty,
 	// which reads as an unfinished framework rather than a focused one.
 	CAPTURE_SHOTS := [?]Capture_Shot {
-		{"gallery-widgets-dark.png", .Widgets, true},
-		{"gallery-charts-dark.png", .Charts, true},
-		{"gallery-buttons-light.png", .Buttons, false},
-		{"gallery-inputs-light.png", .Inputs, false},
-		{"gallery-stress-dark.png", .Stress, true},
+		{"gallery-widgets-dark.png", .Widgets, .Dark},
+		{"gallery-charts-dark.png", .Charts, .Dark},
+		{"gallery-buttons-light.png", .Buttons, .Light},
+		{"gallery-inputs-light.png", .Inputs, .Light},
+		{"gallery-stress-dark.png", .Stress, .Dark},
+		// The Theme page on paper: the one shot where the substrate, the
+		// margin and the hand-drawn accents are all visible at once.
+		{"gallery-theme-paper.png", .Theme, .Paper},
 	}
 
 	// The GIF script: every section in order, alternating theme so the motion
 	// shows both navigation and theming without any synthetic input.
 	CAPTURE_SEQUENCE := [?]Capture_Shot {
-		{"", .Buttons, true},
-		{"", .Inputs, true},
-		{"", .Widgets, true},
-		{"", .Charts, true},
-		{"", .Markdown, false},
-		{"", .Layout, false},
-		{"", .Overlay, true},
-		{"", .Stress, true},
+		{"", .Buttons, .Dark},
+		{"", .Inputs, .Dark},
+		{"", .Widgets, .Dark},
+		{"", .Charts, .Dark},
+		{"", .Markdown, .Light},
+		{"", .Layout, .Light},
+		{"", .Overlay, .Dark},
+		{"", .Stress, .Dark},
+		// End on paper so the sequence closes on the aesthetic rather than on
+		// the stress grid.
+		{"", .Theme, .Paper},
 	}
 
 	capture_target: rl.RenderTexture2D
@@ -123,7 +129,7 @@ when CAPTURE {
 		if !capture_state_applied {
 			shot := script[capture_step_index]
 			section = shot.section
-			dark = shot.dark
+			palette = shot.palette
 			high_contrast = false
 			// Stills freeze motion so reruns are byte-identical (see the
 			// determinism note at the top of this file). The sequence pass wants

@@ -316,6 +316,12 @@ border_pixels :: proc(frame: ^Ui_Frame, border: Border) -> f32 {
 		logical = 3
 	}
 	thickness := ui_frame_scf(frame, logical)
+	// A border narrower than one physical pixel is not a thin border, it is an
+	// absent one: the rasteriser spreads it across a pixel at a fraction of
+	// its alpha and it reads as nothing. At 0.75 scale this silently erased
+	// the notebook rules, and with them every hairline in the interface.
+	// Scaling *down* has a floor for the same reason scaling up has none.
+	if thickness < 1 do thickness = 1
 	assert(thickness > 0, "border_pixels: scaled a visible border to nothing")
 	return thickness
 }
