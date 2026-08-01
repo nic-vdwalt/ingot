@@ -23,11 +23,11 @@ SRC="${1:-$WEB/demo.odin}"
 FILE_FLAG="-file"
 if [ -d "$SRC" ]; then FILE_FLAG=""; fi
 # No optimisation flag is set here, and that is a measured decision rather than
-# an oversight. 96% of the binary is the DATA section (11.5 MB against 434 KB
-# of code): the engine's fixed-capacity inline arrays (gfx.Renderer.verts,
-# ui.Paint_List x2) are static globals baked into the module. No code
-# optimisation touches those - only changing the capacities does, which is why
-# they are now sized from measurement (see ui/paint.odin).
+# an oversight. Most of the binary is fixed-capacity data, so web uses the
+# measured phone-safe batch floor below. The GPU stream defaults are also
+# capped at 4 MiB per slot: adapter maxBufferSize is an allocation ceiling, not
+# a memory budget, and using its desktop-sized allowance retained up to 96 MiB
+# of GPU buffers plus matching WASM shadows on mobile.
 #
 # Measured on examples/gallery, so nobody has to re-derive this:
 #
@@ -43,11 +43,17 @@ if [ -d "$SRC" ]; then FILE_FLAG=""; fi
 # -disable-assert is deliberately NOT used either: it would buy another 1.7%
 # while removing every Tiger Style assertion from the shipped demo, which is
 # exactly the diagnostic signal we want when a browser kills the tab.
+# The gallery phone peak is 26,964 vertices / 31,374 indices; these capacities
+# retain more than 4x headroom while halving the resident WASM batch arrays.
 # shellcheck disable=SC2086
 odin build "$SRC" $FILE_FLAG \
 	-target:js_wasm32 \
 	-collection:ingot="$ROOT" \
 	-out:"$WEB/ingot_web.wasm" \
+	-define:INGOT_GPU_GEOMETRY_BYTES=4194304 \
+	-define:INGOT_GPU_UNIFORM_BYTES=4194304 \
+	-define:INGOT_BATCH_MAX_VERTICES=131072 \
+	-define:INGOT_BATCH_MAX_INDICES=196608 \
 	-extra-linker-flags:"--export-table"
 
 echo "Staging JS runtimes..."
