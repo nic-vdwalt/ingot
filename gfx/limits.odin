@@ -17,9 +17,9 @@ import wg "vendor:wgpu"
 
 // Desktop-class targets. A device that can afford these gets them unchanged,
 // so nothing about existing native behavior moves.
-GPU_BUDGET_GEOMETRY_BYTES_DEFAULT :: u64(16 * 1024 * 1024)
-GPU_BUDGET_UNIFORM_BYTES_DEFAULT :: u64(16 * 1024 * 1024)
-GPU_BUDGET_ATLAS_DIM_DEFAULT :: u32(2048)
+GPU_BUDGET_GEOMETRY_BYTES_DEFAULT :: u64(#config(INGOT_GPU_GEOMETRY_BYTES, 16 * 1024 * 1024))
+GPU_BUDGET_UNIFORM_BYTES_DEFAULT :: u64(#config(INGOT_GPU_UNIFORM_BYTES, 16 * 1024 * 1024))
+GPU_BUDGET_ATLAS_DIM_DEFAULT :: u32(#config(INGOT_GPU_ATLAS_DIM, 2048))
 
 // Floors: below these the engine cannot draw a useful frame, so a device that
 // cannot meet them has failed regardless. They also stop a zero-filled or

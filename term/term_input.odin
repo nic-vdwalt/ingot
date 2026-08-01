@@ -6,11 +6,13 @@ package term
 import "../pty"
 import "core:unicode/utf8"
 import rl "ingot:gfx"
+import "ingot:ui"
 
 TERM_PASTE_MAX_BYTES :: 1024 * 1024
 TERM_WRITE_MAX_ATTEMPTS :: 16
 TERM_INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
 TERM_INPUT_KEY_DRAIN_MAX :: rl.CHAR_Q
+#assert(ui.INPUT_KEY_COUNT <= int(rl.KeyboardKey.KB_MENU) + 1)
 
 @(private = "file")
 term_write :: proc(ts: ^Term_Instance, data: []u8) -> bool {
@@ -87,6 +89,58 @@ term_handle_input :: proc(
 	if sent {
 		ts.sb_view_offset = 0
 	}
+	return
+}
+
+term_handle_ui_input :: proc(
+	ts: ^Term_Instance,
+	input: ^ui.Ui_Input,
+	skip_ctrl_shift: []rl.KeyboardKey = nil,
+) -> (
+	sent: bool,
+) {
+	assert(input != nil, "term_handle_ui_input: nil input")
+	assert(
+		input.character_count >= 0 && input.character_count <= ui.INPUT_CHAR_CAP,
+		"term_handle_ui_input: invalid character count",
+	)
+	if ts == nil || !ts.pty_running do return
+	ctrl := ui.input_key_down(input, .LEFT_CONTROL) || ui.input_key_down(input, .RIGHT_CONTROL)
+	shift := ui.input_key_down(input, .LEFT_SHIFT) || ui.input_key_down(input, .RIGHT_SHIFT)
+	super := ui.input_key_down(input, .LEFT_SUPER) || ui.input_key_down(input, .RIGHT_SUPER)
+
+	if !ctrl && !super {
+		count := min(input.character_count, ui.INPUT_CHAR_CAP)
+		for cp in input.characters[:count] {
+			if cp < 0x20 || cp == 0x7f do continue
+			buf, n := utf8.encode_rune(cp)
+			sent = term_write(ts, buf[:n]) || sent
+		}
+	}
+
+	for index in 0 ..< ui.INPUT_KEY_COUNT {
+		if !input.keys_pressed[index] && !input.keys_repeat[index] do continue
+		key := ui.KeyboardKey(index)
+		if key == .V && (super || (ctrl && shift)) {
+			paste := ui.input_clipboard(input)
+			if len(paste) <= TERM_PASTE_MAX_BYTES {
+				sent = term_write(ts, transmute([]u8)paste) || sent
+			}
+			continue
+		}
+		b: [8]u8
+		if n, ok := vt_bytes_for_key(
+			rl.KeyboardKey(key),
+			ctrl,
+			shift,
+			super,
+			skip_ctrl_shift,
+			b[:],
+		); ok {
+			sent = term_write(ts, b[:n]) || sent
+		}
+	}
+	if sent do ts.sb_view_offset = 0
 	return
 }
 
