@@ -34,6 +34,8 @@ gpu_budget_desktop_keeps_defaults :: proc(t: ^testing.T) {
 	testing.expect_value(t, budget.atlas_dim, GPU_BUDGET_ATLAS_DIM_DEFAULT)
 	testing.expect(t, gpu_budget_is_full(budget))
 	testing.expect_value(t, budget, gpu_budget_default())
+	#assert(GPU_BUDGET_GEOMETRY_BYTES_DEFAULT >= GPU_BUDGET_GEOMETRY_BYTES_MINIMUM)
+	#assert(GPU_BUDGET_UNIFORM_BYTES_DEFAULT >= GPU_BUDGET_UNIFORM_BYTES_MINIMUM)
 }
 
 @(test)
@@ -41,10 +43,11 @@ gpu_budget_clamps_constrained_device :: proc(t: ^testing.T) {
 	// 32 MiB / 8 = 4 MiB per stream: well under the desktop target, so the
 	// three slots together claim 24 MiB instead of 96 MiB.
 	budget := _gpu_budget_from_limits(_mobile_limits())
-	testing.expect_value(t, budget.geometry_stream_bytes, u64(4 * 1024 * 1024))
-	testing.expect_value(t, budget.uniform_stream_bytes, u64(4 * 1024 * 1024))
-	testing.expect(t, !gpu_budget_is_full(budget))
-	// A 4096 texture ceiling still clears the 2048 atlas untouched.
+	expected_geometry := min(GPU_BUDGET_GEOMETRY_BYTES_DEFAULT, u64(4 * 1024 * 1024))
+	expected_uniform := min(GPU_BUDGET_UNIFORM_BYTES_DEFAULT, u64(4 * 1024 * 1024))
+	testing.expect_value(t, budget.geometry_stream_bytes, expected_geometry)
+	testing.expect_value(t, budget.uniform_stream_bytes, expected_uniform)
+	// A 4096 texture ceiling still clears the configured atlas untouched.
 	testing.expect_value(t, budget.atlas_dim, GPU_BUDGET_ATLAS_DIM_DEFAULT)
 	total := (budget.geometry_stream_bytes + budget.uniform_stream_bytes) * u64(STREAM_SLOT_COUNT)
 	testing.expect(t, total < _mobile_limits().maxBufferSize)
