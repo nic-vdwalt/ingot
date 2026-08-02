@@ -90,7 +90,7 @@
 				const body = bodyLength > 0 ? wasmBytes(bodyPointer, bodyLength).slice() : undefined;
 				const controller = new AbortController();
 				slot.controller = controller;
-				const timeout = setTimeout(() => controller.abort(), 30000);
+				const timeout = setTimeout(() => controller.abort(), 120000);
 				fetch(wasmText(urlPointer, urlLength), {
 					method: methods[method] || "GET",
 					headers,
