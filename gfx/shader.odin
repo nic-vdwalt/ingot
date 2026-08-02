@@ -145,6 +145,7 @@ _shader_checked_align :: proc(value, alignment: u32) -> (aligned: u32, ok: bool)
 
 @(private)
 _shader_uniforms_destroy :: proc(uniforms: []Shader_Uniform) {
+	assert(len(uniforms) <= SHADER_UNIFORMS_MAX, "_shader_uniforms_destroy: invalid length")
 	for uniform in uniforms do delete(uniform.name)
 	delete(uniforms)
 }
@@ -260,7 +261,12 @@ _shader_uniforms_valid :: proc(uniforms: []Shader_Uniform, total: u32) -> bool {
 }
 
 @(private)
-_shader_extra_layout_init :: proc(entry: ^Shader_Entry, source: string) -> bool {
+_shader_extra_layout_init :: proc(
+	device: wg.Device,
+	entry: ^Shader_Entry,
+	source: string,
+) -> bool {
+	assert(device != nil, "_shader_extra_layout_init: nil device")
 	assert(entry != nil, "_shader_extra_layout_init: nil entry")
 	entry.tex_names = _reflect_textures(source)
 	entry.extra_count = len(entry.tex_names)
@@ -279,7 +285,7 @@ _shader_extra_layout_init :: proc(entry: ^Shader_Entry, source: string) -> bool 
 		sampler = {type = .Filtering},
 	}
 	entry.extra_layout = wg.DeviceCreateBindGroupLayout(
-		g.device,
+		device,
 		&{entryCount = uint(entry.extra_count + 1), entries = raw_data(entries)},
 	)
 	entry.extra_dirty = entry.extra_layout != nil
@@ -354,7 +360,7 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 		}
 	}
 
-	if !_shader_extra_layout_init(e, src) {
+	if !_shader_extra_layout_init(g.device, e, src) {
 		_shader_entry_destroy(e)
 		return {}
 	}
