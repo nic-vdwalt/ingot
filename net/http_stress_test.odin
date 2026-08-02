@@ -49,9 +49,21 @@ when HTTP_STRESS {
 			maximum_body = 64,
 			receive_timeout = 60 * time.Second,
 		}
-		job := Fetch_Job{request = http_request_clone(request, context.allocator)}
-		testing.expect_value(t, job.request.receive_timeout, request.receive_timeout)
-		fetch_job_destroy(&job, context.allocator)
+		f: Fetcher
+		fetcher_start(&f, "stress", 1)
+		testing.expect(t, fetcher_request_http(&f, 1, request))
+		started := time.now()
+		completed := false
+		for !completed && time.since(started) < time.Second {
+			for result in fetcher_drain(&f) {
+				completed = true
+				delete(result.body)
+			}
+			thread.yield()
+		}
+		testing.expect(t, completed)
+		fetcher_stop(&f)
+		testing.expect_value(t, http_stress_receive_timeout(), request.receive_timeout)
 
 		response, ok = http_request(
 			"stress",
