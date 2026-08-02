@@ -96,13 +96,20 @@ text_test_atlas_accounting :: proc(t: ^testing.T, pixel_size: i32) {
 		if codepoint == ' ' {
 			testing.expect(t, glyph.xadvance > 0, "ASCII space should retain advance")
 		} else {
-			testing.expectf(t, glyph.valid, "ASCII U+%04X should be drawable at %dpx", codepoint, pixel_size)
+			testing.expectf(
+				t,
+				glyph.valid,
+				"ASCII U+%04X should be drawable at %dpx",
+				codepoint,
+				pixel_size,
+			)
 		}
 	}
 	testing.expectf(
 		t,
 		packing_failed == 0,
-		"%dpx atlas exhausted: requested=%d valid=%d missing=%d zero=%d packing_failed=%d cursor=(%d,%d) shelf=%d",
+		"%dpx atlas exhausted: requested=%d valid=%d missing=%d zero=%d " +
+		"packing_failed=%d cursor=(%d,%d) shelf=%d",
 		pixel_size,
 		len(codepoints),
 		valid,

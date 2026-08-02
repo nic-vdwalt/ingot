@@ -52,6 +52,33 @@ test_draw_text_frame_copies_text_with_backend_font :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_target_codepoint_uses_backend_font_without_pane_translation :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	state: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	ui_frame_pane_push(&frame, {100, 200})
+	draw_target_codepoint_frame(&frame, 'A', 4, 8, 16, Color{255, 255, 255, 255})
+	ui_frame_pane_pop(&frame)
+	ui_frame_end(&frame)
+
+	testing.expect_value(t, output.main.count, 1)
+	command := output.main.commands[0]
+	testing.expect_value(t, command.font, Font_Id(16))
+	testing.expect_value(t, command.p0, Vec2{4, 8})
+	testing.expect_value(t, state.font_calls, 1)
+}
+
+@(test)
 test_measure_text_frame_uses_backend_font :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

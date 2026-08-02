@@ -180,6 +180,26 @@ codepoint_scope_emits_cumulative_screen_coordinates :: proc(t: ^testing.T) {
 }
 
 @(test)
+target_codepoint_scope_preserves_target_coordinates :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	ui_frame_pane_push(&frame, {40, 60})
+	draw_target_codepoint_command(&frame, 'A', 3, 7, 16, {255, 255, 255, 255}, 1)
+	ui_frame_pane_pop(&frame)
+	ui_frame_end(&frame)
+
+	testing.expect_value(t, output.main.count, 1)
+	testing.expect_value(t, output.main.commands[0].kind, Paint_Kind.Codepoint)
+	testing.expect_value(t, output.main.commands[0].p0, Vector2{3, 7})
+}
+
+@(test)
 canvas_scope_emits_screen_space_paint_and_balanced_clip :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

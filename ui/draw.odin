@@ -48,6 +48,11 @@ frame_paint_push :: proc(frame: ^Ui_Frame, command: Paint_Command) -> bool {
 	return paint_push(frame_paint_list(frame), command)
 }
 
+frame_target_paint_push :: proc(frame: ^Ui_Frame, command: Paint_Command) -> bool {
+	assert(frame != nil && frame.open, "frame_target_paint_push: invalid frame")
+	return paint_push(frame_paint_list(frame), command)
+}
+
 frame_paint_push_text :: proc(frame: ^Ui_Frame, command: Paint_Command, text: string) -> bool {
 	assert(frame != nil && frame.open, "frame_paint_push_text: invalid frame")
 	command := command
@@ -290,6 +295,27 @@ draw_codepoint_command :: proc(
 ) {
 	assert(frame != nil, "draw_codepoint_command: nil frame")
 	frame_paint_push(
+		frame,
+		{
+			kind = .Codepoint,
+			p0 = {f32(x), f32(y)},
+			color = color,
+			font = font,
+			font_size = f32(size),
+			codepoint = codepoint,
+		},
+	)
+}
+
+draw_target_codepoint_command :: proc(
+	frame: ^Ui_Frame,
+	codepoint: rune,
+	x, y, size: i32,
+	color: Color,
+	font: Font_Id,
+) {
+	assert(frame != nil, "draw_target_codepoint_command: nil frame")
+	frame_target_paint_push(
 		frame,
 		{
 			kind = .Codepoint,
