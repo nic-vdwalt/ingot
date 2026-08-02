@@ -76,7 +76,10 @@
 			if (!slot || !slot.reader || slot.chunk.length > 0 || slot.state !== 0) return;
 			slot.reader.read().then(({ done, value }) => {
 				if (done) {
+					slot.chunk = slot.carry;
+					slot.carry = new Uint8Array();
 					slot.state = 1;
+					clearTimeout(slot.timeout);
 					return;
 				}
 				if (!(value instanceof Uint8Array) || value.length === 0) {
@@ -87,8 +90,21 @@
 					throw new Error("response too large");
 				}
 				slot.received += value.length;
-				slot.chunk = value;
-			}).catch(() => { slot.state = 2; });
+				const merged = new Uint8Array(slot.carry.length + value.length);
+				merged.set(slot.carry);
+				merged.set(value, slot.carry.length);
+				const newline = merged.lastIndexOf(10);
+				if (newline < 0) {
+					slot.carry = merged;
+					streamRead(slot);
+					return;
+				}
+				slot.chunk = merged.slice(0, newline + 1);
+				slot.carry = merged.slice(newline + 1);
+			}).catch(() => {
+				slot.state = 2;
+				clearTimeout(slot.timeout);
+			});
 		};
 		return {
 			ingot_http_request: (method, urlPointer, urlLength, headersPointer,
@@ -129,10 +145,11 @@
 				if (id < 0 || maximumBody <= 0) return -1;
 				const slot = {
 					state: 0, status: 0, body: new Uint8Array(), chunk: new Uint8Array(),
-					controller: new AbortController(), reader: null, received: 0, maximumBody,
+					carry: new Uint8Array(), controller: new AbortController(), reader: null,
+					received: 0, maximumBody, timeout: null,
 				};
 				httpSlots[id] = slot;
-				const timeout = setTimeout(() => slot.controller.abort(), 120000);
+				slot.timeout = setTimeout(() => slot.controller.abort(), 120000);
 				fetch(wasmText(urlPointer, urlLength), {
 					method: "GET", credentials: "same-origin", signal: slot.controller.signal,
 				}).then((response) => {
@@ -140,7 +157,10 @@
 					if (!response.body) throw new Error("stream unavailable");
 					slot.reader = response.body.getReader();
 					streamRead(slot);
-				}).catch(() => { slot.state = 2; }).finally(() => clearTimeout(timeout));
+				}).catch(() => {
+					slot.state = 2;
+					clearTimeout(slot.timeout);
+				});
 				return id;
 			},
 			ingot_http_stream_chunk_len: (id) => {
@@ -161,6 +181,7 @@
 				if (!slot) return 0;
 				if (slot.reader) slot.reader.cancel().catch(() => {});
 				if (slot.controller) slot.controller.abort();
+				if (slot.timeout) clearTimeout(slot.timeout);
 				httpSlots[id] = null;
 				return 1;
 			},
