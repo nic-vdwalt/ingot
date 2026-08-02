@@ -264,6 +264,13 @@ bash scripts/smoke-gallery.sh
 odin run examples/multi_context_fixture -collection:ingot=.
 ```
 
+Native shell-close validation uses an application with a deliberately delayed
+shutdown callback. On macOS, Windows, and Linux, verify that the native window
+disappears as soon as its close control is used, that cleanup completes before
+`app_run` returns, and that caller-owned graphics resources remain releasable
+during shutdown. Repeat with event waiting enabled and with a one-frame-per-second
+target to cover both GLFW event paths and close-frame pacing.
+
 `scripts/capture-media.sh` is the third windowed tool outside `scripts/test.sh`.
 It renders the gallery into a fixed 1600x1000 offscreen target and reads it back
 with `gfx.SaveRenderTexturePng`, writing the committed stills in `docs/media/`

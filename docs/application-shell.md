@@ -21,11 +21,14 @@ main :: proc() {
 The default UI callback receives the explicit app and the shell-owned open
 `Ui`; the shell closes it after the callback. Use a `frame` callback instead
 when the application owns explicit geometry or mixes direct graphics work. A
-callback set must provide exactly one of `ui` or `frame`. The shutdown callback runs while the
-graphics context is valid, so it must destroy caller-owned textures, input
-boxes, builders, and components there.
+callback set must provide exactly one of `ui` or `frame`. The shutdown callback
+runs while the graphics context is valid, so it must destroy caller-owned
+textures, input boxes, builders, and components there.
 
-On native targets `app_run` blocks and performs shutdown after the window closes.
+On native targets, accepting an OS close request hides the window immediately,
+then `app_run` remains blocked while shutdown and framework teardown run
+synchronously. Shutdown code retains a valid graphics context but must not
+expect another visible frame. The native window is destroyed after cleanup.
 On web it installs the browser callback and returns; therefore `App` and userdata
 must have static or otherwise retained lifetime. A managed web host remains
 responsible for stopping the module before replacement.
@@ -82,9 +85,10 @@ The shell enforces this order:
 4. Finalize semantics and replay UI output.
 5. Submit the graphics frame.
 6. Reset temporary frame allocations.
-7. On shutdown, invoke caller cleanup.
-8. Destroy UI frame, adapter, and runtime through `session_destroy`.
-9. Close the graphics context.
+7. On a native OS close request, hide the native window.
+8. Invoke caller cleanup while the graphics context remains valid.
+9. Destroy UI frame, adapter, and runtime through `session_destroy`.
+10. Close the graphics context and destroy the native window.
 
 No active application or frame is exposed through `ui`; callbacks always receive
 their owners explicitly.

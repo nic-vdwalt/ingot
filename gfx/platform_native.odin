@@ -248,6 +248,7 @@ platform_input_init :: proc() {
 	// (uncover/resize) - without it an idle window would show stale content.
 	glfw.SetCursorPosCallback(_win(), _cursor_pos_cb)
 	glfw.SetMouseButtonCallback(_win(), _mouse_button_cb)
+	glfw.SetWindowCloseCallback(_win(), _close_cb)
 	glfw.SetWindowRefreshCallback(_win(), _refresh_cb)
 	glfw.SetWindowFocusCallback(_win(), _focus_cb)
 	glfw.SetWindowIconifyCallback(_win(), _iconify_cb)
@@ -502,6 +503,11 @@ _cursor_pos_cb :: proc "c" (win: glfw.WindowHandle, xpos, ypos: f64) {
 @(private)
 _mouse_button_cb :: proc "c" (win: glfw.WindowHandle, button, action, mods: i32) {
 	if ctx := _callback_context(win); ctx != nil do _idle_note_activity(&ctx.idle)
+}
+
+@(private)
+_close_cb :: proc "c" (win: glfw.WindowHandle) {
+	if win != nil do glfw.HideWindow(win)
 }
 
 @(private)

@@ -137,6 +137,14 @@ frame_pacing_remaining_is_bounded :: proc(t: ^testing.T) {
 	testing.expect(t, abs(regressed - 0.1) < 0.000001)
 }
 
+@(test)
+close_requested_disables_frame_pacing :: proc(t: ^testing.T) {
+	testing.expect(t, _frame_pacing_enabled(60, false))
+	testing.expect(t, !_frame_pacing_enabled(60, true))
+	testing.expect(t, !_frame_pacing_enabled(0, false))
+	testing.expect(t, !_frame_pacing_enabled(-1, false))
+}
+
 // --- surface mixing guard --------------------------------------------------
 // gfx exposes two drawing surfaces over one renderer. A raylib-shaped draw
 // acts on the globally active context; an ergonomic draw activates its
