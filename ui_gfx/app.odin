@@ -134,12 +134,18 @@ app_screen_rect :: proc(app: ^App) -> ui.Rect_I32 {
 	return {0, 0, gfx.context_screen_width(ctx), gfx.context_screen_height(ctx)}
 }
 
-app_ui_begin :: proc(app: ^App, frame: ^ui.Ui_Frame, u: ^ui.Ui, gap: ui.Space = .None) {
+app_ui_begin :: proc(
+	app: ^App,
+	frame: ^ui.Ui_Frame,
+	u: ^ui.Ui,
+	gap: ui.Space = .None,
+	tab_navigation: bool = true,
+) {
 	assert(app != nil && app.state == .Running, "app_ui_begin: application not running")
 	assert(frame != nil && frame.open, "app_ui_begin: frame not open")
 	assert(u != nil && !u.open, "app_ui_begin: invalid ui lifetime")
 	assert(frame.runtime == &app.session.runtime, "app_ui_begin: frame belongs to another app")
-	ui.begin(u, frame, app_screen_rect(app), gap)
+	ui.begin(u, frame, app_screen_rect(app), gap, tab_navigation)
 	assert(u.open && u.frame == frame, "app_ui_begin: ui did not open")
 }
 

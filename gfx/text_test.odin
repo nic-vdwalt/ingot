@@ -7,13 +7,113 @@
 // positive. A headless wgpu device backs the atlas so no window is needed.
 package gfx
 
+import "core:c"
 import "core:math"
 import "core:testing"
+import tt "vendor:stb/truetype"
 import wg "vendor:wgpu"
 
 FONT_TTF := #load("../assets/fonts/JetBrainsMono-Regular.ttf")
 TEXT_TARGET_SIZE :: 64
 TEXT_TARGET_PIXEL_COUNT :: TEXT_TARGET_SIZE * TEXT_TARGET_SIZE
+TEXT_CODEPOINT_RANGES := [14][2]rune {
+	{0x0020, 0x007E},
+	{0x00A0, 0x00FF},
+	{0x0100, 0x024F},
+	{0x2000, 0x206F},
+	{0x2190, 0x21FF},
+	{0x2200, 0x22FF},
+	{0x2300, 0x23FF},
+	{0x2500, 0x257F},
+	{0x2580, 0x259F},
+	{0x25A0, 0x25FF},
+	{0x2600, 0x26FF},
+	{0x2700, 0x27BF},
+	{0x2800, 0x28FF},
+	{0x2B00, 0x2B73},
+}
+
+text_test_codepoints :: proc() -> []rune {
+	count := 0
+	for value in TEXT_CODEPOINT_RANGES {
+		count += int(value[1] - value[0]) + 1
+	}
+	result := make([]rune, count)
+	index := 0
+	for value in TEXT_CODEPOINT_RANGES {
+		for codepoint := value[0]; codepoint <= value[1]; codepoint += 1 {
+			result[index] = codepoint
+			index += 1
+		}
+	}
+	return result
+}
+
+text_test_atlas_accounting :: proc(t: ^testing.T, pixel_size: i32) {
+	codepoints := text_test_codepoints()
+	defer delete(codepoints)
+	font := LoadFontFromMemory(
+		".ttf",
+		raw_data(FONT_TTF),
+		i32(len(FONT_TTF)),
+		pixel_size,
+		raw_data(codepoints),
+		i32(len(codepoints)),
+	)
+	defer UnloadFont(font)
+	atlas := get_atlas(font._atlas)
+	testing.expect(t, atlas != nil, "accounting font should own an atlas")
+	if atlas == nil do return
+	valid, missing, zero_area, packing_failed := 0, 0, 0, 0
+	for codepoint in codepoints {
+		glyph := atlas.glyphs[codepoint]
+		glyph_index := tt.FindGlyphIndex(&atlas.info, codepoint)
+		if glyph_index == 0 && codepoint != ' ' {
+			missing += 1
+		} else {
+			ix0, iy0, ix1, iy1: c.int
+			tt.GetCodepointBitmapBox(
+				&atlas.info,
+				codepoint,
+				atlas.scale,
+				atlas.scale,
+				&ix0,
+				&iy0,
+				&ix1,
+				&iy1,
+			)
+			if ix1 <= ix0 || iy1 <= iy0 {
+				zero_area += 1
+			} else if glyph.valid {
+				valid += 1
+			} else {
+				packing_failed += 1
+			}
+		}
+	}
+	for codepoint := rune(0x20); codepoint <= 0x7E; codepoint += 1 {
+		glyph := atlas.glyphs[codepoint]
+		if codepoint == ' ' {
+			testing.expect(t, glyph.xadvance > 0, "ASCII space should retain advance")
+		} else {
+			testing.expectf(t, glyph.valid, "ASCII U+%04X should be drawable at %dpx", codepoint, pixel_size)
+		}
+	}
+	testing.expectf(
+		t,
+		packing_failed == 0,
+		"%dpx atlas exhausted: requested=%d valid=%d missing=%d zero=%d packing_failed=%d cursor=(%d,%d) shelf=%d",
+		pixel_size,
+		len(codepoints),
+		valid,
+		missing,
+		zero_area,
+		packing_failed,
+		atlas.cur_x,
+		atlas.cur_y,
+		atlas.shelf_h,
+	)
+}
 
 text_target_has_non_clear_pixel :: proc(pixels: []u8, clear: Color) -> bool {
 	assert(len(pixels) == TEXT_TARGET_PIXEL_COUNT * 4)
@@ -24,6 +124,28 @@ text_target_has_non_clear_pixel :: proc(pixels: []u8, clear: Color) -> bool {
 		   pixels[byte_index + 2] != clear.b ||
 		   pixels[byte_index + 3] != clear.a {
 			return true
+		}
+	}
+	return false
+}
+
+text_target_region_has_non_clear_pixel :: proc(
+	pixels: []u8,
+	clear: Color,
+	x0, y0, width, height: int,
+) -> bool {
+	assert(len(pixels) == TEXT_TARGET_PIXEL_COUNT * 4)
+	assert(x0 >= 0 && y0 >= 0 && width > 0 && height > 0)
+	assert(x0 + width <= TEXT_TARGET_SIZE && y0 + height <= TEXT_TARGET_SIZE)
+	for y in y0 ..< y0 + height {
+		for x in x0 ..< x0 + width {
+			byte_index := (y * TEXT_TARGET_SIZE + x) * 4
+			if pixels[byte_index + 0] != clear.r ||
+			   pixels[byte_index + 1] != clear.g ||
+			   pixels[byte_index + 2] != clear.b ||
+			   pixels[byte_index + 3] != clear.a {
+				return true
+			}
 		}
 	}
 	return false
@@ -92,7 +214,65 @@ test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
 	testing.expect(t, painted_ok, "painted target should be readable")
 	if painted_ok {
 		testing.expect(t, text_target_has_non_clear_pixel(painted_pixels, clear))
-		delete(painted_pixels)
+	}
+
+	BeginTextureMode(target)
+	ClearBackground(clear)
+	DrawTextCodepoint(font, '→', {4, 4}, 32, WHITE)
+	EndTextureMode()
+	repainted_pixels, repainted_ok := _screenshot_pixels(target)
+	testing.expect(t, repainted_ok, "repainted target should be readable")
+	if painted_ok && repainted_ok {
+		testing.expect_value(t, len(repainted_pixels), len(painted_pixels))
+		for index in 0 ..< len(painted_pixels) {
+			testing.expect_value(t, repainted_pixels[index], painted_pixels[index])
+		}
+	}
+	if painted_ok do delete(painted_pixels)
+	if repainted_ok do delete(repainted_pixels)
+}
+
+test_lazy_glyph_batch_boundary :: proc(t: ^testing.T, font: Font) {
+	atlas := get_atlas(font._atlas)
+	testing.expect(t, atlas != nil, "boundary font should own an atlas")
+	if atlas == nil do return
+	cold: rune = '→'
+	delete_key(&atlas.glyphs, cold)
+	atlas.dirty = false
+
+	restore_initialized := g.initialized
+	g.initialized = true
+	defer {g.initialized = restore_initialized}
+	frame_ready := renderer_frame_begin(&g.rend)
+	testing.expect(t, frame_ready, "boundary test should acquire a stream slot")
+	if !frame_ready do return
+	g.frame.has_frame = true
+	defer {
+		g.frame.has_frame = false
+		_stream_slot_abandon(&g.rend)
+		_flush_retired()
+	}
+	target := LoadRenderTexture(TEXT_TARGET_SIZE, TEXT_TARGET_SIZE)
+	testing.expect(t, target.texture.id != 0, "boundary target should load")
+	if target.texture.id == 0 do return
+	defer UnloadRenderTexture(target)
+	clear := Color{23, 37, 53, 255}
+	BeginTextureMode(target)
+	ClearBackground(clear)
+	for _ in 0 ..< BATCH_MAX_VERTICES / 4 {
+		DrawTextCodepoint(font, 'A', {-128, -128}, 32, WHITE)
+	}
+	testing.expect_value(t, len(g.rend.verts), BATCH_MAX_VERTICES)
+	DrawTextCodepoint(font, cold, {4, 4}, 32, WHITE)
+	testing.expect(t, atlas.glyphs[cold].valid, "boundary glyph should bake")
+	testing.expect(t, !atlas.dirty, "boundary glyph should upload before submit")
+	EndTextureMode()
+
+	pixels, ok := _screenshot_pixels(target)
+	testing.expect(t, ok, "boundary target should be readable")
+	if ok {
+		testing.expect(t, text_target_region_has_non_clear_pixel(pixels, clear, 0, 0, 48, 48))
+		delete(pixels)
 	}
 }
 
@@ -202,6 +382,8 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	}
 
 	test_font_measure_invariants(t, f)
+	text_test_atlas_accounting(t, 32)
+	text_test_atlas_accounting(t, 64)
 	atlas := get_atlas(f._atlas)
 	testing.expect(t, atlas != nil, "font should own an atlas")
 	for codepoint in ([]rune{'A', 'é', '→', '─', '█'}) {
@@ -213,6 +395,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	testing.expect(t, !atlas.glyphs[missing].valid, "missing glyph should use fallback metrics")
 
 	test_lazy_glyph_first_target_paint(t)
+	test_lazy_glyph_batch_boundary(t, f)
 	test_default_font_is_real(t)
 	_flush_retired()
 }
