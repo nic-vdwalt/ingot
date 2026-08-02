@@ -346,6 +346,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 		nil,
 		{mode = .AllowProcessEvents, callback = _on_adapter, userdata1 = &ares},
 	)
+	// tigerstyle: allow-unbounded-loop -- adapter callback ends test device setup
 	for !ares.done {wg.InstanceProcessEvents(g.instance)}
 	g.adapter = ares.adapter
 
@@ -355,6 +356,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 		nil,
 		{mode = .AllowProcessEvents, callback = _on_device, userdata1 = &dres},
 	)
+	// tigerstyle: allow-unbounded-loop -- device callback ends test device setup
 	for !dres.done {wg.InstanceProcessEvents(g.instance)}
 	g.device = dres.device
 	g.queue = wg.DeviceGetQueue(g.device)

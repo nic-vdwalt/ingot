@@ -144,7 +144,7 @@ when HTTP_STRESS {
 		}
 		testing.expect(t, !fetcher_request(&f, 999, "/full"))
 		started := time.now()
-		for {
+		for time.since(started) < 2 * time.Second {
 			sync.mutex_lock(&f.mutex)
 			completed := len(f.results)
 			sync.mutex_unlock(&f.mutex)

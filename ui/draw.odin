@@ -73,7 +73,8 @@ draw_rectangle_rec :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
 }
 
 draw_rectangle_lines :: proc(frame: ^Ui_Frame, x, y, width, height: i32, color: Color) {
-	draw_rectangle_lines_ex(frame, {f32(x), f32(y), f32(width), f32(height)}, 1, color)
+	thickness := ui_frame_scf(frame, 1)
+	draw_rectangle_lines_ex(frame, {f32(x), f32(y), f32(width), f32(height)}, thickness, color)
 }
 
 draw_rectangle_lines_ex :: proc(frame: ^Ui_Frame, rect: Rectangle, thickness: f32, color: Color) {

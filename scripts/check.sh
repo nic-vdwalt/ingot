@@ -109,7 +109,7 @@ for example in \
 	odin build "$root/examples/$example" $col "-out:$example_out/$example" "$@"
 done
 
-echo "== Odin physical style limits =="
+echo "== Odin TigerStyle checks =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_odin_style_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_odin_style.py" \
 	--baseline "$root/scripts/odin_style_baseline.json" \

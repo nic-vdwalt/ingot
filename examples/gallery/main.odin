@@ -959,7 +959,7 @@ draw_widget_truncation_card :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	y := ui.section_header_at(frame, {x, y0, w, 0}, "CARD + SHADOW + TRUNCATION")
 	card := ui.Rect_I32{x, y, min(w, ui.ui_frame_sc(frame, 360)), ui.ui_frame_sc(frame, 64)}
 	shadow := ui.Rect{f32(card.x), f32(card.y), f32(card.w), f32(card.h)}
-	ui.draw_shadow_rounded(frame, shadow, 0.15)
+	ui.draw_shadow_hard(frame, shadow, .MD, .Raised)
 	ui.card_bg_at(
 		frame,
 		card,

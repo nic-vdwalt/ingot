@@ -339,10 +339,12 @@ term_start :: proc(
 term_reader_loop :: proc(ts: ^Term_Instance) {
 	assert(ts != nil)
 	buf: [TERM_OUTPUT_CHUNK_SIZE]u8
+	// tigerstyle: allow-unbounded-loop -- term_destroy terminates the reader lifetime
 	for sync.atomic_load(&ts.reader_running) {
 		data, eof := pty.drain(&ts.pty, buf[:])
 		if len(data) > 0 {
 			queued := false
+			// tigerstyle: allow-unbounded-loop -- reader shutdown cancels queue backpressure
 			for sync.atomic_load(&ts.reader_running) && !queued {
 				sync.mutex_lock(&ts.output_mutex)
 				assert(ts.output_head >= 0 && ts.output_head < TERM_OUTPUT_QUEUE_CAP)

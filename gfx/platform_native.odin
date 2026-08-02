@@ -69,6 +69,7 @@ platform_start_gpu :: proc() {
 		&{compatibleSurface = g.surface},
 		{mode = .AllowProcessEvents, callback = _on_adapter, userdata1 = &ares},
 	)
+	// tigerstyle: allow-unbounded-loop -- adapter callback ends synchronous device setup
 	for !ares.done {wg.InstanceProcessEvents(g.instance)}
 	g.adapter = ares.adapter
 
@@ -87,6 +88,7 @@ platform_start_gpu :: proc() {
 		&dev_desc,
 		{mode = .AllowProcessEvents, callback = _on_device, userdata1 = &dres},
 	)
+	// tigerstyle: allow-unbounded-loop -- device callback ends synchronous device setup
 	for !dres.done {wg.InstanceProcessEvents(g.instance)}
 	g.device = dres.device
 	g.queue = wg.DeviceGetQueue(g.device)
@@ -551,6 +553,7 @@ _fb_size_cb :: proc "c" (win: glfw.WindowHandle, width, height: i32) {
 // their own `for !WindowShouldClose()` loop; run() exists so the same app source
 // also targets web, where the browser owns the loop (see loop_web.odin).
 run :: proc(frame: Run_Proc) {
+	// tigerstyle: allow-unbounded-loop -- window close terminates the application lifetime
 	for !WindowShouldClose() {
 		frame()
 	}

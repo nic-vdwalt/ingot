@@ -36,8 +36,15 @@ translated to Odin.
   the PTY drain per frame. Follow that pattern: name the bound as a constant near
   the top of the file and explain *why* that number.
 
-- Prefer bounded `for _ in 0 ..< N` over open `for {}`. Where a genuinely
-  unbounded loop is unavoidable, `assert` the exit invariant.
+- Prefer bounded `for _ in 0 ..< N` over open `for {}`. The style gate accepts
+  collection/range iteration, monotonic loops with explicit comparisons,
+  `len`/`cap` bounds, named constants, and deadline/timeout conditions. A
+  `break` hidden in the body is not a structural bound.
+
+- A process-lifetime worker or event loop may use one immediately preceding
+  waiver with its shutdown mechanism: `// tigerstyle: allow-unbounded-loop --
+  <rationale>`. The waiver applies only to the next loop and never permits
+  recursion. Ordinary parsing, draining, retrying, and traversal remain bounded.
 
 ### Assertions
 
