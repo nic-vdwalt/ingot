@@ -435,17 +435,21 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
 	ui.separator(u)
 	for s in Section {
 		style := ui.Btn_Style.Primary if s == section else .Ghost
+		ui.flex_row_begin(u, 28, {ui.grow()})
 		if ui.button(u, SECTION_NAMES[s], SECTION_NAMES[s], style) {
 			section = s
 			ui.pane_reset(&content_pane)
 		}
+		ui.flex_row_end(u)
 	}
 	ui.space(u, .SM)
 	ui.separator(u)
 	for control in Nav_Control {
+		ui.flex_row_begin(u, 28, {ui.grow()})
 		if ui.button(u, NAV_CONTROL_IDS[control], nav_control_label(control, false)) {
 			nav_control_activate(control, frame)
 		}
+		ui.flex_row_end(u)
 	}
 	ui.scope_end(u)
 	ui.end(u)
