@@ -148,6 +148,13 @@ app_ui_runtime :: proc(app: ^App) -> ^ui.Ui_Runtime {
 	return session_runtime(&app.session)
 }
 
+app_font :: proc(app: ^App, size: i32) -> (gfx.Font, bool) {
+	assert(app != nil && app.state != .Empty, "app_font: invalid app")
+	assert(size > 0, "app_font: invalid size")
+	id := adapter_font_for_size(&app.session.adapter, size)
+	return adapter_font(&app.session.adapter, id)
+}
+
 // app_clear_color derives the window clear color from the active theme.
 //
 // It is derived rather than stored. App_Config used to carry a clear_color
