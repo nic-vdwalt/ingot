@@ -1,12 +1,25 @@
 #+build !js
 package ui_gfx
 
+import "core:sync"
 import "core:testing"
 import rl "ingot:gfx"
 import "ingot:ui"
 
+test_context_mutex: sync.Mutex
+
+test_context_lock :: proc() {
+	sync.mutex_lock(&test_context_mutex)
+}
+
+test_context_unlock :: proc() {
+	sync.mutex_unlock(&test_context_mutex)
+}
+
 @(test)
 test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
 	gfx_context := new(rl.Context)
 	defer free(gfx_context)
 	session := new(Session)
@@ -39,6 +52,8 @@ test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
 
 @(test)
 test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
 	gfx_context := new(rl.Context)
 	defer free(gfx_context)
 	session := new(Session)
@@ -66,6 +81,8 @@ test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
 
 @(test)
 test_adapter_font_dpi_normalizes :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
 	gfx_context := new(rl.Context)
 	defer free(gfx_context)
 	adapter: Adapter
@@ -86,6 +103,8 @@ test_adapter_font_dpi_normalizes :: proc(t: ^testing.T) {
 
 @(test)
 test_session_frame_captures_context_input :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
 	gfx_context := new(rl.Context)
 	defer free(gfx_context)
 	gfx_context.width = 640
@@ -155,6 +174,8 @@ test_pointer_snapshot_policy :: proc(t: ^testing.T) {
 
 @(test)
 test_app_session_compatibility_aliases_compile :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
 	gfx_context := new(rl.Context)
 	defer free(gfx_context)
 	session := new(App_Session)
