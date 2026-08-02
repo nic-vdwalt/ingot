@@ -20,7 +20,10 @@ titlebar_enabled :: proc() -> bool {
 	return false
 }
 
-titlebar_set_layout :: proc(min_r, max_r, close_r: Rectangle, interactive_right: i32) {}
+titlebar_set_layout :: proc(
+	min_r, max_r, close_r: Rectangle,
+	interactive_right, caption_height: i32,
+) {}
 
 titlebar_state :: proc() -> (hover, pressed: Titlebar_Button, maximized: bool) {
 	return .None, .None, false

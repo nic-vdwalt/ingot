@@ -44,7 +44,7 @@ draw_app_header :: proc(frame: ^Ui_Frame, title: cstring, screen_w: i32) -> (hea
 			}
 			min_r, max_r, close_r := draw_caption_buttons(frame, screen_w, cap_in)
 			// interactive_right = 0: the whole strip (minus buttons) drags.
-			titlebar_set_layout(min_r, max_r, close_r, 0)
+			titlebar_set_layout(min_r, max_r, close_r, 0, header_h)
 		}
 	}
 
