@@ -391,11 +391,11 @@ slider_at :: proc(
 	// Track + fill + knob.
 	cy := f32(rect.y) + f32(rect.h) / 2
 	th := f32(metrics.SLIDER_TRACK_H)
-	draw_rectangle_rounded(frame, {track_x, cy - th / 2, track_w, th}, 1.0, 4, style.bg_active)
+	draw_rounded_fill(frame, {track_x, cy - th / 2, track_w, th}, .Pill, style.bg_active)
 	frac := (value^ - lo) / (hi - lo)
 	fill_w := track_w * frac
 	if fill_w > 0 {
-		draw_rectangle_rounded(frame, {track_x, cy - th / 2, fill_w, th}, 1.0, 4, style.fg_accent)
+		draw_rounded_fill(frame, {track_x, cy - th / 2, fill_w, th}, .Pill, style.fg_accent)
 	}
 	knob_x := track_x + track_w * frac
 	knob_col := style.fg_accent if hovered || focus_opt_focused(focus) else style.fg_secondary
@@ -460,11 +460,11 @@ slider_at_state :: proc(
 	value^ = clamp(value^, lo, hi)
 	cy := f32(rect.y) + f32(rect.h) / 2
 	th := f32(metrics.SLIDER_TRACK_H)
-	draw_rectangle_rounded(frame, {track_x, cy - th / 2, track_w, th}, 1.0, 4, style.bg_active)
+	draw_rounded_fill(frame, {track_x, cy - th / 2, track_w, th}, .Pill, style.bg_active)
 	frac := (value^ - lo) / (hi - lo)
 	fill_w := track_w * frac
 	if fill_w > 0 {
-		draw_rectangle_rounded(frame, {track_x, cy - th / 2, fill_w, th}, 1.0, 4, style.fg_accent)
+		draw_rounded_fill(frame, {track_x, cy - th / 2, fill_w, th}, .Pill, style.fg_accent)
 	}
 	knob_x := track_x + track_w * frac
 	active := it.hovered || state.dragging || focus_opt_focused(focus)

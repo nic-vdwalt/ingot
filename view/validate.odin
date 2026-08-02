@@ -87,7 +87,7 @@ link_in_range :: proc(link: i32, count: i32) -> bool {
 validate_reachability :: proc(view: View) -> Validate_Result {
 	seen: [VIEW_NODES_MAX]bool
 	walk := walk_begin(view)
-	for {
+	for _ in 0 ..< WALK_STEPS_MAX {
 		step, more := walk_next(&walk)
 		if !more do break
 		if step.event != .Enter do continue

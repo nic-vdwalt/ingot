@@ -707,11 +707,13 @@ when !INGOT_NET_SIM {
 	fetch_worker :: proc(f: ^Fetcher, idx: int) {
 		assert(idx >= 0, "fetch_worker: negative worker index")
 		assert(idx < FETCH_WORKERS, "fetch_worker: worker index out of range")
+		// tigerstyle: allow-unbounded-loop -- fetcher_stop terminates the worker lifetime
 		for {
 			sync.mutex_lock(&f.mutex)
 			// Park until a job arrives or fetcher_stop broadcasts - blocking on the
 			// condvar replaces the old 10 ms sleep-poll, so idle workers cost
 			// nothing and job pickup is immediate.
+			// tigerstyle: allow-unbounded-loop -- fetcher_stop broadcasts the wait condition
 			for len(f.jobs) == 0 && sync.atomic_load(&f.running) {
 				sync.cond_wait(&f.jobs_cond, &f.mutex)
 			}

@@ -150,7 +150,14 @@ _shader_uniforms_destroy :: proc(uniforms: []Shader_Uniform) {
 }
 
 @(private)
-_reflect_uniform_member :: proc(raw: string, cursor: u32) -> (uniform: Shader_Uniform, end: u32, ok: bool) {
+_reflect_uniform_member :: proc(
+	raw: string,
+	cursor: u32,
+) -> (
+	uniform: Shader_Uniform,
+	end: u32,
+	ok: bool,
+) {
 	member := strings.trim_space(raw)
 	colon := strings.index(member, ":")
 	if colon <= 0 do return {}, 0, false
@@ -163,7 +170,12 @@ _reflect_uniform_member :: proc(raw: string, cursor: u32) -> (uniform: Shader_Un
 	offset, aligned := _shader_checked_align(cursor, alignment)
 	if !aligned || offset > SHADER_UNIFORM_BYTES_MAX do return {}, 0, false
 	if size > SHADER_UNIFORM_BYTES_MAX - offset do return {}, 0, false
-	return Shader_Uniform{name = strings.clone(name), offset = offset, size = size}, offset + size, true
+	uniform = {
+		name   = strings.clone(name),
+		offset = offset,
+		size   = size,
+	}
+	return uniform, offset + size, true
 }
 
 // _reflect_uniforms parses `struct U { name: type, ... }` into offset table.
@@ -247,6 +259,33 @@ _shader_uniforms_valid :: proc(uniforms: []Shader_Uniform, total: u32) -> bool {
 	return true
 }
 
+@(private)
+_shader_extra_layout_init :: proc(entry: ^Shader_Entry, source: string) -> bool {
+	assert(entry != nil, "_shader_extra_layout_init: nil entry")
+	entry.tex_names = _reflect_textures(source)
+	entry.extra_count = len(entry.tex_names)
+	if entry.extra_count == 0 do return true
+	entries := make([]wg.BindGroupLayoutEntry, entry.extra_count + 1, context.temp_allocator)
+	for index in 0 ..< entry.extra_count {
+		entries[index] = {
+			binding = u32(index),
+			visibility = {.Fragment},
+			texture = {sampleType = .Float, viewDimension = ._2D},
+		}
+	}
+	entries[entry.extra_count] = {
+		binding = u32(entry.extra_count),
+		visibility = {.Fragment},
+		sampler = {type = .Filtering},
+	}
+	entry.extra_layout = wg.DeviceCreateBindGroupLayout(
+		g.device,
+		&{entryCount = uint(entry.extra_count + 1), entries = raw_data(entries)},
+	)
+	entry.extra_dirty = entry.extra_layout != nil
+	return entry.extra_dirty
+}
+
 LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 	if !g.initialized do return Shader{}
 	vertex := string(vsCode) if vsCode != nil else ""
@@ -315,31 +354,9 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 		}
 	}
 
-	e.tex_names = _reflect_textures(src)
-	e.extra_count = len(e.tex_names)
-	if e.extra_count > 0 {
-		entries := make([]wg.BindGroupLayoutEntry, e.extra_count + 1, context.temp_allocator)
-		for i in 0 ..< e.extra_count {
-			entries[i] = {
-				binding = u32(i),
-				visibility = {.Fragment},
-				texture = {sampleType = .Float, viewDimension = ._2D},
-			}
-		}
-		entries[e.extra_count] = {
-			binding = u32(e.extra_count),
-			visibility = {.Fragment},
-			sampler = {type = .Filtering},
-		}
-		e.extra_layout = wg.DeviceCreateBindGroupLayout(
-			g.device,
-			&{entryCount = uint(e.extra_count + 1), entries = raw_data(entries)},
-		)
-		if e.extra_layout == nil {
-			_shader_entry_destroy(e)
-			return {}
-		}
-		e.extra_dirty = true
+	if !_shader_extra_layout_init(e, src) {
+		_shader_entry_destroy(e)
+		return {}
 	}
 
 	id := _shader_register(&g.resources.shaders, e)

@@ -307,5 +307,5 @@ draw_input_pill_bg_frame :: proc(frame: ^Ui_Frame, x, y, w: i32) {
 		f32(w + pad * 2),
 		f32(text_role_size(frame, .Body) + ui_frame_sc(frame, 4)),
 	}
-	draw_rectangle_rounded(frame, rect, 0.5, 6, ui_frame_theme(frame).bg_chip)
+	draw_rounded_fill(frame, rect, .Pill, ui_frame_theme(frame).bg_chip)
 }

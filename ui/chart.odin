@@ -348,11 +348,10 @@ chart_draw_legend :: proc(frame: ^Ui_Frame, cl: Chart_Layout, series: []Chart_Se
 	sw := ui_frame_sc(frame, 10)
 	for s, i in series {
 		col := s.color if s.color != {} else chart_series_color(frame, i)
-		draw_rectangle_rounded(
+		draw_rounded_fill(
 			frame,
 			{f32(lx), f32(ly + (chart_text_size(frame) - sw) / 2), f32(sw), f32(sw)},
-			0.4,
-			4,
+			.SM,
 			col,
 		)
 		lx += sw + ui_frame_sc(frame, 5)
@@ -422,8 +421,8 @@ chart_draw_tooltip :: proc(
 	ox := i32(origin.x)
 	rect := Rectangle{f32(tx + ox), f32(ty), f32(tw), f32(th)}
 	overlay_begin(frame, rect, claim_input = false)
-	overlay_rounded(frame, rect, 0.2, 4, style.bg_popup)
-	overlay_rounded_lines(frame, rect, 0.2, 4, ui_frame_scf(frame, 1), style.border_color)
+	overlay_rounded_fill(frame, rect, .MD, style.bg_popup)
+	overlay_rounded_border(frame, rect, .MD, .Hairline, style.border_color)
 
 	// Draw pass.
 	ry := ty + pad
@@ -441,11 +440,10 @@ chart_draw_tooltip :: proc(
 	for s, si in series {
 		if idx >= len(s.values) do continue
 		col := s.color if s.color != {} else chart_series_color(frame, si)
-		overlay_rounded(
+		overlay_rounded_fill(
 			frame,
 			{f32(tx + ox + pad), f32(ry + (chart_text_size(frame) - sw) / 2), f32(sw), f32(sw)},
-			0.5,
-			4,
+			.SM,
 			col,
 		)
 		val := chart_format_value(opts, s.values[idx], buf[:])
@@ -615,7 +613,7 @@ bar_chart_at :: proc(
 			if bh < 0.5 do continue
 			rect := Rectangle{bx, min(py, yb), max(bw - 1, 1), bh}
 			if bh >= ui_frame_scf(frame, 6) { 	// avoid degenerate rounding on tiny bars
-				draw_rectangle_rounded(frame, rect, 0.25, 4, col)
+				draw_rounded_fill(frame, rect, .SM, col)
 			} else {
 				draw_rectangle_rec(frame, rect, col)
 			}

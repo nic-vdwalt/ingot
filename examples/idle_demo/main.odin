@@ -32,7 +32,7 @@ frame :: proc() {
 	frame_count += 1
 
 	// Text input: append typed runes, backspace deletes.
-	for {
+	for _ in 0 ..< 256 {
 		r := rl.GetCharPressed()
 		if r == 0 do break
 		strings.write_rune(&text_buf, r)

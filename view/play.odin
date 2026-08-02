@@ -44,7 +44,7 @@ view_play_traced :: proc(u: ^ui.Ui, view: View, bindings: ^Bindings, trace: ^Pla
 	tap_begin(&tap, trace, view)
 
 	walk := walk_begin(view)
-	for {
+	for _ in 0 ..< WALK_STEPS_MAX {
 		step, more := walk_next(&walk)
 		if !more do break
 		node := view.nodes[step.node]

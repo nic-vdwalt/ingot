@@ -41,6 +41,7 @@ a11y_action_queue_stress :: proc(t: ^testing.T) {
 	// order (the queue is a mutex-guarded array, not lock-free).
 	drained := 0
 	last_node := ak.Node_Id(0)
+	// tigerstyle: allow-unbounded-loop -- producer completion terminates concurrent draining
 	for {
 		action, ok := PollAccessibilityAction()
 		if ok {
@@ -54,7 +55,7 @@ a11y_action_queue_stress :: proc(t: ^testing.T) {
 		thread.yield()
 	}
 	// Final drain after the producer stopped.
-	for {
+	for _ in 0 ..< 20_000 {
 		action, ok := PollAccessibilityAction()
 		if !ok do break
 		drained += 1
