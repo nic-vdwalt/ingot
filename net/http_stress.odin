@@ -11,12 +11,13 @@ _ :: time
 
 when HTTP_STRESS {
 	Http_Stress_State :: struct {
-		handle_seq:  i64,
-		requests:    int,
-		completions: int,
-		closes:      int,
-		partial:     [FETCH_MAXIMUM_PENDING * 2]bool,
-		mutex:       sync.Mutex,
+		handle_seq:     i64,
+		requests:       int,
+		completions:    int,
+		closes:         int,
+		receive_timeout: time.Duration,
+		partial:        [FETCH_MAXIMUM_PENDING * 2]bool,
+		mutex:          sync.Mutex,
 	}
 
 	@(private = "file")
@@ -28,6 +29,7 @@ when HTTP_STRESS {
 		http_stress.requests = 0
 		http_stress.completions = 0
 		http_stress.closes = 0
+		http_stress.receive_timeout = 0
 		http_stress.partial = {}
 		sync.mutex_unlock(&http_stress.mutex)
 	}
@@ -39,6 +41,12 @@ when HTTP_STRESS {
 		closes = http_stress.closes
 		sync.mutex_unlock(&http_stress.mutex)
 		return
+	}
+
+	http_stress_receive_timeout :: proc() -> time.Duration {
+		sync.mutex_lock(&http_stress.mutex)
+		defer sync.mutex_unlock(&http_stress.mutex)
+		return http_stress.receive_timeout
 	}
 
 	http_net_dial :: proc(ep: cnet.Endpoint) -> (cnet.TCP_Socket, bool) {
@@ -88,5 +96,8 @@ when HTTP_STRESS {
 	}
 
 	http_net_set_recv_timeout :: proc(sock: cnet.TCP_Socket, duration: time.Duration) {
+		sync.mutex_lock(&http_stress.mutex)
+		http_stress.receive_timeout = duration
+		sync.mutex_unlock(&http_stress.mutex)
 	}
 }

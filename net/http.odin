@@ -14,6 +14,8 @@ import "core:time"
 import "ingot:threadhook"
 
 DEFAULT_MAXIMUM_BODY :: 64 * 1024 * 1024
+DEFAULT_RECEIVE_TIMEOUT :: 5 * time.Second
+MAXIMUM_RECEIVE_TIMEOUT :: 2 * time.Minute
 MAXIMUM_HEADER_BYTES :: 64 * 1024
 HTTP_RECV_CALLS_MAX :: DEFAULT_MAXIMUM_BODY + MAXIMUM_HEADER_BYTES + 1
 
@@ -31,11 +33,12 @@ Http_Header :: struct {
 }
 
 Http_Request :: struct {
-	method:       Http_Method,
-	path:         string,
-	headers:      []Http_Header,
-	body:         []u8,
-	maximum_body: u64,
+	method:          Http_Method,
+	path:            string,
+	headers:         []Http_Header,
+	body:            []u8,
+	maximum_body:    u64,
+	receive_timeout: time.Duration,
 }
 
 Fetch_Priority :: enum u8 {
@@ -197,7 +200,7 @@ when !INGOT_NET_SIM {
 		wire := build_request(host, port, request)
 		if len(wire) == 0 do return {}, false
 		if !send_all(sock, wire) do return {}, false
-		http_net_set_recv_timeout(sock, 5 * time.Second)
+		http_net_set_recv_timeout(sock, resolve_receive_timeout(request.receive_timeout))
 		if request.maximum_body > u64(max(int) - MAXIMUM_HEADER_BYTES) do return {}, false
 		maximum := int(request.maximum_body)
 		if maximum <= 0 do maximum = DEFAULT_MAXIMUM_BODY
@@ -218,6 +221,12 @@ when !INGOT_NET_SIM {
 		if recv_calls >= HTTP_RECV_CALLS_MAX do return {}, false
 		if len(buf) == 0 do return {}, false
 		return parse_http_response(buf[:], maximum, allocator)
+	}
+
+	@(private = "file")
+	resolve_receive_timeout :: proc(timeout: time.Duration) -> time.Duration {
+		if timeout <= 0 do return DEFAULT_RECEIVE_TIMEOUT
+		return min(timeout, MAXIMUM_RECEIVE_TIMEOUT)
 	}
 
 	@(private = "file")
@@ -636,6 +645,7 @@ when !INGOT_NET_SIM {
 			headers = headers,
 			body = body,
 			maximum_body = request.maximum_body,
+			receive_timeout = request.receive_timeout,
 		}
 	}
 
