@@ -361,13 +361,13 @@ _context_restore :: proc(previous: ^Context) {
 //
 // context_activation_depth is non-zero while an ergonomic wrapper has activated
 // its owner, marking the draw as correctly routed.
-@(private)
+@(thread_local, private)
 context_activation_depth: int
 
 // ergonomic_frames_active counts contexts with a live ergonomic Frame. Contexts
 // are not registered anywhere, so this is maintained alongside
 // Context.frame_active by context_begin_frame, end_frame, and window teardown.
-@(private)
+@(thread_local, private)
 ergonomic_frames_active: int
 
 @(private)
