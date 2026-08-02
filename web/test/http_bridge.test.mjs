@@ -116,6 +116,23 @@ test("reports malformed headers and oversized responses as bridge errors", async
 	assert.equal(http.ingot_http_body_copy(oversized, 0, 0), 0);
 });
 
+test("allows long-running API responses to complete", () => {
+	const { request } = fixture();
+	let delay = null;
+	const originalSetTimeout = globalThis.setTimeout;
+	globalThis.setTimeout = (_callback, milliseconds) => {
+		delay = milliseconds;
+		return 1;
+	};
+	globalThis.fetch = () => new Promise(() => {});
+	try {
+		request();
+		assert.equal(delay, 120000);
+	} finally {
+		globalThis.setTimeout = originalSetTimeout;
+	}
+});
+
 test("cancel and destroy abort only live owned requests", () => {
 	const { http, request, session } = fixture();
 	let aborted = 0;
