@@ -52,6 +52,10 @@ Bundled files:
 - `libvterm/lib/darwin_amd64/libvterm.a`
 - `libvterm/lib/windows_amd64/vterm.lib`
 
+Linux archives are generated on the native target from the same pinned,
+patched vendored source by `scripts/check-linux-dependencies.sh`; they are build
+outputs rather than committed release artifacts.
+
 Source: <https://www.leonerd.org.uk/code/libvterm/libvterm-0.3.3.tar.gz>
 
 The exact upstream source is committed under `vendor/libvterm`. The source

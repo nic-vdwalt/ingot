@@ -36,6 +36,20 @@ python3 scripts/check-toolchain.py
 odinfmt -help
 ```
 
+On a native Linux host, verify native dependencies and build the pinned
+architecture-matched libvterm archive before the standard gates:
+
+```sh
+bash scripts/check-linux-dependencies.sh
+bash scripts/check-linux.sh
+```
+
+Set `INGOT_LINUX_RUNTIME=1` on a Linux host with `xvfb-run` and a Vulkan driver
+to include gallery and view-builder windowed smoke tests. The Linux gate is
+local and native; no macOS-to-Linux cross toolchain is supplied. AccessKit is
+validated on Linux amd64 and intentionally unavailable on Linux arm64 until a
+verified arm64 artifact exists.
+
 ## Standard checks
 
 Run the package tests:

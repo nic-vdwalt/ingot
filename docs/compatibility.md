@@ -134,11 +134,19 @@ contexts.
 
 All targets require the pinned Odin toolchain and Bash for repository scripts.
 `scripts/test.sh` requires Python 3. `scripts/check-web.sh` requires Node with the
-built-in test runner. Native rendering requires the wgpu-native library expected
-by Odin's `vendor:wgpu`; terminal and native accessibility features require the
-committed libvterm and AccessKit libraries for the selected target. Native HTTPS
-and WSS use libcurl. Ingot always enables peer and hostname verification; the
-application deployment must provide libcurl's required CA trust source.
+built-in test runner. Native rendering requires the target wgpu-native library
+expected by Odin's `vendor:wgpu`. Native HTTPS and WSS use libcurl. Ingot always
+enables peer and hostname verification; deployments must provide libcurl's CA
+trust source.
+
+Linux additionally requires a C toolchain, `pkg-config`, libcurl and Vulkan
+development files, plus the X11 libraries used by Odin's GLFW package. Run
+`bash scripts/check-linux-dependencies.sh` before compiling; it validates these
+inputs and builds the architecture-matched libvterm archive from pinned vendored
+source. `xdg-open`, `zenity`, and `kdialog` are optional runtime helpers. Linux
+AccessKit is enabled on amd64 only; arm64 compiles without native accessibility
+until a verified archive exists. macOS-to-Linux cross-compilation is not
+supported by the repository scripts.
 
 The core framework API is written in Odin, but native integration is not
 literally dependency-free or pure Odin. Applications that omit terminal or

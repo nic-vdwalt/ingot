@@ -16,9 +16,7 @@ import "core:c"
 // -define:INGOT_ACCESSKIT=false. Linux arm64 stays disabled until a verified
 // accesskit-c archive is available for that architecture.
 PLATFORM_SUPPORTED ::
-	ODIN_OS == .Darwin ||
-	ODIN_OS == .Windows ||
-	(ODIN_OS == .Linux && ODIN_ARCH == .amd64)
+	ODIN_OS == .Darwin || ODIN_OS == .Windows || (ODIN_OS == .Linux && ODIN_ARCH == .amd64)
 ENABLED :: #config(INGOT_ACCESSKIT, true) && PLATFORM_SUPPORTED
 
 #assert(!(ODIN_OS == .Linux && ODIN_ARCH != .amd64) || !ENABLED)

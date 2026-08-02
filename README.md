@@ -114,9 +114,12 @@ odin build src -collection:ingot=libs/ingot
 Pin the submodule to a tag or an exact revision in consumer CI; `0.x` minor
 tags may break documented public APIs. The tested Odin toolchain is recorded in
 `ODIN_VERSION`; put that `odin` and its bundled `odinfmt` on `PATH`. Native
-rendering also needs the wgpu-native library expected by
-Odin's `vendor:wgpu` package. Terminal support needs the committed libvterm
-library; native accessibility needs the AccessKit library for the target. See
+rendering also needs the wgpu-native library expected by Odin's `vendor:wgpu`
+package. On Linux, run `bash scripts/check-linux-dependencies.sh` to verify the
+native toolchain and build the pinned libvterm archive before compilation.
+AccessKit is available on Linux amd64; Linux arm64 disables it until a verified
+artifact exists. Linux builds must run on a native Linux host because the
+repository does not provide a cross toolchain. See
 [Testing Ingot](docs/testing.md#toolchain) for verification commands.
 
 ```odin
