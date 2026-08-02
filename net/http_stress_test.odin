@@ -44,9 +44,9 @@ when HTTP_STRESS {
 		http_response_destroy(&response)
 		testing.expect_value(t, http_stress_receive_timeout(), 60 * time.Second)
 		request := Http_Request {
-			method = .Get,
-			path = "/queued",
-			maximum_body = 64,
+			method          = .Get,
+			path            = "/queued",
+			maximum_body    = 64,
 			receive_timeout = 60 * time.Second,
 		}
 		f: Fetcher
