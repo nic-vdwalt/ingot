@@ -199,11 +199,11 @@ compatibility, while minor releases may break it. See the
 
 ### Fixed
 
-- Native windows remained visible while synchronous application and graphics
-  shutdown completed after an OS close request. They now hide as soon as GLFW
-  accepts the request, and the closing frame skips target-FPS pacing, while the
-  shutdown callback retains a valid graphics context and all resources continue
-  through the existing ordered teardown.
+- Windows remained visible while synchronous application and graphics shutdown
+  completed after an OS close request. Windows now hide as soon as GLFW accepts
+  the request, while macOS and Linux retain their native close behavior. The
+  closing frame skips target-FPS pacing, the shutdown callback retains a valid
+  graphics context, and all resources continue through ordered teardown.
 - Markdown `[label](target)` links were not parsed, and the failure was not a
   clean one: parsing began at the scheme, so `[docs](https://x)` rendered as
   the literal text `[docs](`, then a live link reading the raw URL, then `)`.

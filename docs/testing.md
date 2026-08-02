@@ -265,9 +265,10 @@ odin run examples/multi_context_fixture -collection:ingot=.
 ```
 
 Native shell-close validation uses an application with a deliberately delayed
-shutdown callback. On macOS, Windows, and Linux, verify that the native window
-disappears as soon as its close control is used, that cleanup completes before
-`app_run` returns, and that caller-owned graphics resources remain releasable
+shutdown callback. On Windows, verify that the native window disappears as soon
+as its close control is used. On macOS and Linux, verify normal window-manager
+close behavior. On every native target, verify that cleanup completes before
+`app_run` returns and that caller-owned graphics resources remain releasable
 during shutdown. Repeat with event waiting enabled and with a one-frame-per-second
 target to cover both GLFW event paths and close-frame pacing.
 

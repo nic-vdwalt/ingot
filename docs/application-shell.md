@@ -25,11 +25,12 @@ callback set must provide exactly one of `ui` or `frame`. The shutdown callback
 runs while the graphics context is valid, so it must destroy caller-owned
 textures, input boxes, builders, and components there.
 
-On native targets, accepting an OS close request hides the window immediately,
-then `app_run` remains blocked while shutdown and framework teardown run
-synchronously. Shutdown code retains a valid graphics context but must not
-expect another visible frame. The native window is destroyed after cleanup.
-On web it installs the browser callback and returns; therefore `App` and userdata
+On Windows, accepting an OS close request hides the window immediately. On
+macOS and Linux, native window-manager behavior remains unchanged. On every
+native target, `app_run` remains blocked while shutdown and framework teardown
+run synchronously. Shutdown code retains a valid graphics context but must not
+expect another frame. The native window is destroyed after cleanup. On web it
+installs the browser callback and returns; therefore `App` and userdata
 must have static or otherwise retained lifetime. A managed web host remains
 responsible for stopping the module before replacement.
 
@@ -85,7 +86,7 @@ The shell enforces this order:
 4. Finalize semantics and replay UI output.
 5. Submit the graphics frame.
 6. Reset temporary frame allocations.
-7. On a native OS close request, hide the native window.
+7. On a Windows close request, hide the native window.
 8. Invoke caller cleanup while the graphics context remains valid.
 9. Destroy UI frame, adapter, and runtime through `session_destroy`.
 10. Close the graphics context and destroy the native window.
