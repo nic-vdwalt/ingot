@@ -22,7 +22,7 @@ open_file_dialog :: proc(
 	buffer: [_DIALOG_PATH_CAP]u16
 	ofn := win.OPENFILENAMEW {
 		lStructSize = size_of(win.OPENFILENAMEW),
-		lpstrFile   = raw_data(buffer[:]),
+		lpstrFile   = win.wstring(&buffer[0]),
 		nMaxFile    = _DIALOG_PATH_CAP,
 		lpstrTitle  = win.utf8_to_wstring(title, context.temp_allocator),
 		Flags       = win.OFN_FILEMUSTEXIST | win.OFN_PATHMUSTEXIST | win.OFN_NOCHANGEDIR,
@@ -50,7 +50,7 @@ save_file_dialog :: proc(
 	}
 	ofn := win.OPENFILENAMEW {
 		lStructSize = size_of(win.OPENFILENAMEW),
-		lpstrFile   = raw_data(buffer[:]),
+		lpstrFile   = win.wstring(&buffer[0]),
 		nMaxFile    = _DIALOG_PATH_CAP,
 		lpstrTitle  = win.utf8_to_wstring(title, context.temp_allocator),
 		Flags       = win.OFN_OVERWRITEPROMPT | win.OFN_NOCHANGEDIR,
