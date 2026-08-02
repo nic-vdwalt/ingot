@@ -10,6 +10,10 @@ output_limit_bytes="${INGOT_TEST_OUTPUT_LIMIT_BYTES:-16777216}"
 log_dir="${INGOT_TEST_FAILURE_LOG_DIR:-${TMPDIR:-/tmp}/ingot-test-failures}"
 supervisor="$root/scripts/test-supervisor.py"
 
+if [ "$(uname -s)" = "Linux" ]; then
+	bash "$root/scripts/check-linux-dependencies.sh"
+fi
+
 require_positive_integer() {
 	local name="$1"
 	local value="$2"

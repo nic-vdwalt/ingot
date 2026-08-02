@@ -7,7 +7,9 @@
 # Usage:
 #   ./scripts/build-libvterm.sh [--target darwin_arm64|darwin_amd64|linux_amd64|linux_arm64]
 #
-# Without --target the script auto-detects the current platform and arch.
+# Without --target the script auto-detects the current platform and arch. A
+# target must match the native host because this script does not provide a
+# cross compiler or sysroot.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -40,6 +42,22 @@ else
     PLATFORM_ARCH="$TARGET"
 fi
 
+case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) HOST_PLATFORM_ARCH="darwin_arm64" ;;
+    Darwin-x86_64) HOST_PLATFORM_ARCH="darwin_amd64" ;;
+    Linux-aarch64|Linux-arm64) HOST_PLATFORM_ARCH="linux_arm64" ;;
+    Linux-x86_64|Linux-amd64) HOST_PLATFORM_ARCH="linux_amd64" ;;
+    *) echo "Unsupported host: $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+esac
+if [ "$PLATFORM_ARCH" != "$HOST_PLATFORM_ARCH" ]; then
+    echo "Cross-compilation is unsupported: host=$HOST_PLATFORM_ARCH target=$PLATFORM_ARCH" >&2
+    exit 1
+fi
+if [ ! -d "$SRC_DIR" ] || [ ! -d "$INC_DIR" ]; then
+    echo "Vendored libvterm source is missing under vendor/libvterm" >&2
+    exit 1
+fi
+
 OUT_DIR="$SCRIPT_DIR/libvterm/lib/$PLATFORM_ARCH"
 OUT_LIB="$OUT_DIR/libvterm.a"
 mkdir -p "$OUT_DIR"
@@ -50,8 +68,7 @@ echo "Building libvterm for $PLATFORM_ARCH..."
 case "$PLATFORM_ARCH" in
     darwin_arm64)  ARCH_FLAG="-arch arm64" ;;
     darwin_amd64)  ARCH_FLAG="-arch x86_64" ;;
-    linux_arm64)   ARCH_FLAG="" ;; # native cross-compilation not supported here
-    linux_amd64)   ARCH_FLAG="" ;;
+    linux_arm64|linux_amd64) ARCH_FLAG="" ;;
     *) echo "Unknown target: $PLATFORM_ARCH"; exit 1 ;;
 esac
 
@@ -72,4 +89,12 @@ done
 # would fail the hygiene gate through no fault of their own.
 ZERO_AR_DATE=1 ar rcs "$OUT_LIB" "$BUILD_TMP"/*.o
 echo "Output: $OUT_LIB"
-echo "sha256: $(shasum -a 256 "$OUT_LIB" | cut -d' ' -f1)"
+if command -v sha256sum >/dev/null 2>&1; then
+    checksum="$(sha256sum "$OUT_LIB" | cut -d' ' -f1)"
+elif command -v shasum >/dev/null 2>&1; then
+    checksum="$(shasum -a 256 "$OUT_LIB" | cut -d' ' -f1)"
+else
+    echo "Neither sha256sum nor shasum is available" >&2
+    exit 1
+fi
+echo "sha256: $checksum"
