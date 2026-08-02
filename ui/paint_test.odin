@@ -156,6 +156,30 @@ paint_clip_main_overlay_and_pane_coordinates_are_isolated :: proc(t: ^testing.T)
 }
 
 @(test)
+codepoint_scope_emits_cumulative_screen_coordinates :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	ui_frame_pane_push(&frame, {40, 60})
+	ui_frame_pane_push(&frame, {5, -10})
+	draw_codepoint_command(&frame, 'A', 3, 7, 16, {255, 255, 255, 255}, 1)
+	ui_frame_pane_pop(&frame)
+	ui_frame_pane_pop(&frame)
+	ui_frame_end(&frame)
+
+	testing.expect_value(t, output.main.count, 1)
+	testing.expect_value(t, output.main.commands[0].kind, Paint_Kind.Codepoint)
+	testing.expect_value(t, output.main.commands[0].p0, Vector2{48, 57})
+	testing.expect_value(t, output.main.commands[0].font, Font_Id(1))
+	testing.expect_value(t, output.main.commands[0].codepoint, rune('A'))
+}
+
+@(test)
 canvas_scope_emits_screen_space_paint_and_balanced_clip :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

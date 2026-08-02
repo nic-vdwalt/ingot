@@ -292,6 +292,27 @@ test_focus_order_wraps_and_recovers :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_root_can_disable_tab_navigation :: proc(t: ^testing.T) {
+	input: Ui_Input
+	input.keys_pressed[input_key_index(.TAB)] = true
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime, &input)
+	defer ui_frame_end(&frame)
+	u: Ui
+	button := widget_id(u64(7))
+	begin(&u, &frame, {0, 0, 100, 100})
+	focus(&u, button)
+	end(&u)
+	begin(&u, &frame, {0, 0, 100, 100}, tab_navigation = false)
+	focus(&u, button)
+	end(&u)
+	testing.expect_value(t, u.focus_state.active, FOCUS_ID_NONE)
+}
+
+@(test)
 test_slot_next_row_cross_trim :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	frame: Ui_Frame
