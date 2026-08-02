@@ -5,6 +5,7 @@ import "base:runtime"
 import "core:encoding/json"
 import "core:fmt"
 import "core:strings"
+import "core:time"
 
 DEFAULT_MAXIMUM_BODY :: 64 * 1024 * 1024
 FETCH_MAXIMUM_PENDING :: 64
@@ -22,11 +23,12 @@ Http_Header :: struct {
 	value: string,
 }
 Http_Request :: struct {
-	method:       Http_Method,
-	path:         string,
-	headers:      []Http_Header,
-	body:         []u8,
-	maximum_body: u64,
+	method:          Http_Method,
+	path:            string,
+	headers:         []Http_Header,
+	body:            []u8,
+	maximum_body:    u64,
+	receive_timeout: time.Duration,
 }
 Fetch_Priority :: enum u8 {
 	Normal,

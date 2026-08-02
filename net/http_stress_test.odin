@@ -19,6 +19,56 @@ when HTTP_STRESS {
 	}
 
 	@(test)
+	http_request_receive_timeout_is_resolved :: proc(t: ^testing.T) {
+		http_stress_reset()
+		response, ok := http_request(
+			"stress",
+			1,
+			Http_Request{method = .Get, path = "/default", maximum_body = 64},
+		)
+		testing.expect(t, ok)
+		http_response_destroy(&response)
+		testing.expect_value(t, http_stress_receive_timeout(), DEFAULT_RECEIVE_TIMEOUT)
+
+		response, ok = http_request(
+			"stress",
+			1,
+			Http_Request {
+				method = .Get,
+				path = "/extended",
+				maximum_body = 64,
+				receive_timeout = 60 * time.Second,
+			},
+		)
+		testing.expect(t, ok)
+		http_response_destroy(&response)
+		testing.expect_value(t, http_stress_receive_timeout(), 60 * time.Second)
+		request := Http_Request {
+			method = .Get,
+			path = "/queued",
+			maximum_body = 64,
+			receive_timeout = 60 * time.Second,
+		}
+		job := Fetch_Job{request = http_request_clone(request, context.allocator)}
+		testing.expect_value(t, job.request.receive_timeout, request.receive_timeout)
+		fetch_job_destroy(&job, context.allocator)
+
+		response, ok = http_request(
+			"stress",
+			1,
+			Http_Request {
+				method = .Get,
+				path = "/clamped",
+				maximum_body = 64,
+				receive_timeout = MAXIMUM_RECEIVE_TIMEOUT + time.Second,
+			},
+		)
+		testing.expect(t, ok)
+		http_response_destroy(&response)
+		testing.expect_value(t, http_stress_receive_timeout(), MAXIMUM_RECEIVE_TIMEOUT)
+	}
+
+	@(test)
 	http_fetch_pool_condvar_stress :: proc(t: ^testing.T) {
 		for round in 0 ..< 100 {
 			http_stress_reset()
