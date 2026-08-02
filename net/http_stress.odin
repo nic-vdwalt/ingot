@@ -11,13 +11,13 @@ _ :: time
 
 when HTTP_STRESS {
 	Http_Stress_State :: struct {
-		handle_seq:     i64,
-		requests:       int,
-		completions:    int,
-		closes:         int,
+		handle_seq:      i64,
+		requests:        int,
+		completions:     int,
+		closes:          int,
 		receive_timeout: time.Duration,
-		partial:        [FETCH_MAXIMUM_PENDING * 2]bool,
-		mutex:          sync.Mutex,
+		partial:         [FETCH_MAXIMUM_PENDING * 2]bool,
+		mutex:           sync.Mutex,
 	}
 
 	@(private = "file")
