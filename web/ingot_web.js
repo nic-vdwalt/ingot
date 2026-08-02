@@ -72,6 +72,24 @@
 	function httpImports(wmi) {
 		if (wmi) wasmMemoryInterface = wmi;
 		const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+		const streamRead = (slot) => {
+			if (!slot || !slot.reader || slot.chunk.length > 0 || slot.state !== 0) return;
+			slot.reader.read().then(({ done, value }) => {
+				if (done) {
+					slot.state = 1;
+					return;
+				}
+				if (!(value instanceof Uint8Array) || value.length === 0) {
+					streamRead(slot);
+					return;
+				}
+				if (slot.received > slot.maximumBody - value.length) {
+					throw new Error("response too large");
+				}
+				slot.received += value.length;
+				slot.chunk = value;
+			}).catch(() => { slot.state = 2; });
+		};
 		return {
 			ingot_http_request: (method, urlPointer, urlLength, headersPointer,
 				headersLength, bodyPointer, bodyLength, maximumBody) => {
@@ -105,6 +123,46 @@
 					slot.state = 1;
 				}).catch(() => { slot.state = 2; }).finally(() => clearTimeout(timeout));
 				return id;
+			},
+			ingot_http_stream_request: (urlPointer, urlLength, maximumBody) => {
+				const id = httpSlots.findIndex((slot) => slot === null);
+				if (id < 0 || maximumBody <= 0) return -1;
+				const slot = {
+					state: 0, status: 0, body: new Uint8Array(), chunk: new Uint8Array(),
+					controller: new AbortController(), reader: null, received: 0, maximumBody,
+				};
+				httpSlots[id] = slot;
+				const timeout = setTimeout(() => slot.controller.abort(), 120000);
+				fetch(wasmText(urlPointer, urlLength), {
+					method: "GET", credentials: "same-origin", signal: slot.controller.signal,
+				}).then((response) => {
+					slot.status = response.status;
+					if (!response.body) throw new Error("stream unavailable");
+					slot.reader = response.body.getReader();
+					streamRead(slot);
+				}).catch(() => { slot.state = 2; }).finally(() => clearTimeout(timeout));
+				return id;
+			},
+			ingot_http_stream_chunk_len: (id) => {
+				const slot = httpSlots[id];
+				return slot ? slot.chunk.length : -1;
+			},
+			ingot_http_stream_chunk_copy: (id, destination, capacity) => {
+				const slot = httpSlots[id];
+				if (!slot || capacity < slot.chunk.length) return -1;
+				const count = slot.chunk.length;
+				if (count > 0) wasmBytes(destination, count).set(slot.chunk);
+				slot.chunk = new Uint8Array();
+				streamRead(slot);
+				return count;
+			},
+			ingot_http_stream_release: (id) => {
+				const slot = httpSlots[id];
+				if (!slot) return 0;
+				if (slot.reader) slot.reader.cancel().catch(() => {});
+				if (slot.controller) slot.controller.abort();
+				httpSlots[id] = null;
+				return 1;
 			},
 			ingot_http_poll: (id) => httpSlots[id] ? httpSlots[id].state : 2,
 			ingot_http_status: (id) => httpSlots[id] ? httpSlots[id].status : 0,
