@@ -133,6 +133,37 @@ test("allows long-running API responses to complete", () => {
 	}
 });
 
+test("streams complete newline-delimited chunks in order", async () => {
+	const { memory, http } = fixture();
+	const chunks = [encoder.encode("one\npartial"), encoder.encode("-two\n")];
+	let index = 0;
+	globalThis.fetch = () => Promise.resolve({
+		status: 200,
+		body: {
+			getReader: () => ({
+				read: () => Promise.resolve(
+					index < chunks.length ? { done: false, value: chunks[index++] } : { done: true },
+				),
+				cancel: () => Promise.resolve(),
+			}),
+		},
+	});
+	const url = encoder.encode("https://test.local/stream");
+	new Uint8Array(memory.buffer).set(url, 8);
+	const id = http.ingot_http_stream_request(8, url.length, 1024);
+	await settle();
+	assert.equal(http.ingot_http_stream_chunk_len(id), 4);
+	assert.equal(http.ingot_http_stream_chunk_copy(id, 1024, 4), 4);
+	assert.equal(new TextDecoder().decode(new Uint8Array(memory.buffer, 1024, 4)), "one\n");
+	await settle();
+	assert.equal(http.ingot_http_stream_chunk_len(id), 12);
+	assert.equal(http.ingot_http_stream_chunk_copy(id, 1024, 12), 12);
+	assert.equal(new TextDecoder().decode(new Uint8Array(memory.buffer, 1024, 12)), "partial-two\n");
+	await settle();
+	assert.equal(http.ingot_http_poll(id), 1);
+	assert.equal(http.ingot_http_stream_release(id), 1);
+});
+
 test("cancel and destroy abort only live owned requests", () => {
 	const { http, request, session } = fixture();
 	let aborted = 0;
