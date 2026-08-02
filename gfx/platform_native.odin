@@ -507,7 +507,9 @@ _mouse_button_cb :: proc "c" (win: glfw.WindowHandle, button, action, mods: i32)
 
 @(private)
 _close_cb :: proc "c" (win: glfw.WindowHandle) {
-	if win != nil do glfw.HideWindow(win)
+	when ODIN_OS == .Windows {
+		if win != nil do glfw.HideWindow(win)
+	}
 }
 
 @(private)
