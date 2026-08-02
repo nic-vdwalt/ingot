@@ -7,6 +7,10 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 col="-collection:ingot=$root"
 
+if [ "$(uname -s)" = "Linux" ]; then
+	bash "$root/scripts/check-linux-dependencies.sh"
+fi
+
 echo "== Odin toolchain =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_toolchain_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check-toolchain.py"

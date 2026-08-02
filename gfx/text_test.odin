@@ -12,6 +12,89 @@ import "core:testing"
 import wg "vendor:wgpu"
 
 FONT_TTF := #load("../assets/fonts/JetBrainsMono-Regular.ttf")
+TEXT_TARGET_SIZE :: 64
+TEXT_TARGET_PIXEL_COUNT :: TEXT_TARGET_SIZE * TEXT_TARGET_SIZE
+
+text_target_has_non_clear_pixel :: proc(pixels: []u8, clear: Color) -> bool {
+	assert(len(pixels) == TEXT_TARGET_PIXEL_COUNT * 4)
+	for pixel_index in 0 ..< TEXT_TARGET_PIXEL_COUNT {
+		byte_index := pixel_index * 4
+		if pixels[byte_index + 0] != clear.r ||
+		   pixels[byte_index + 1] != clear.g ||
+		   pixels[byte_index + 2] != clear.b ||
+		   pixels[byte_index + 3] != clear.a {
+			return true
+		}
+	}
+	return false
+}
+
+test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
+	initial_codepoints := [1]rune{' '}
+	font := LoadFontFromMemory(
+		".ttf",
+		raw_data(FONT_TTF),
+		i32(len(FONT_TTF)),
+		32,
+		raw_data(initial_codepoints[:]),
+		len(initial_codepoints),
+	)
+	defer {
+		UnloadFont(font)
+		if !g.frame.has_frame do _flush_retired()
+	}
+	testing.expect(t, font.glyphCount == 1, "font should contain only the initial glyph")
+
+	atlas := get_atlas(font._atlas)
+	testing.expect(t, atlas != nil, "font should own an atlas")
+	if atlas == nil do return
+	_, was_baked := atlas.glyphs['→']
+	testing.expect(t, !was_baked, "test glyph should begin unbaked")
+	width := MeasureTextEx(font, "→", 32, 0).x
+	testing.expect(t, width > 0, "measurement should use the lazy glyph advance")
+	testing.expect(t, atlas.glyphs['→'].valid, "measurement should bake the glyph")
+	testing.expect(t, atlas.dirty, "measurement should leave lazy glyph pixels pending")
+
+	restore_initialized := g.initialized
+	g.initialized = true
+	defer {g.initialized = restore_initialized}
+	frame_ready := renderer_frame_begin(&g.rend)
+	testing.expect(t, frame_ready, "text target test should acquire a stream slot")
+	if !frame_ready do return
+	g.frame.has_frame = true
+	defer {
+		g.frame.has_frame = false
+		_stream_slot_abandon(&g.rend)
+		_flush_retired()
+	}
+
+	target := LoadRenderTexture(TEXT_TARGET_SIZE, TEXT_TARGET_SIZE)
+	testing.expect(t, target.texture.id != 0, "text target should load")
+	if target.texture.id == 0 do return
+	defer UnloadRenderTexture(target)
+	clear := Color{17, 31, 47, 255}
+
+	BeginTextureMode(target)
+	ClearBackground(clear)
+	EndTextureMode()
+	clear_pixels, clear_ok := _screenshot_pixels(target)
+	testing.expect(t, clear_ok, "clear target should be readable")
+	if clear_ok {
+		testing.expect(t, !text_target_has_non_clear_pixel(clear_pixels, clear))
+		delete(clear_pixels)
+	}
+
+	BeginTextureMode(target)
+	DrawTextCodepoint(font, '→', {4, 4}, 32, WHITE)
+	EndTextureMode()
+	testing.expect(t, !atlas.dirty, "first draw should upload measured glyph pixels")
+	painted_pixels, painted_ok := _screenshot_pixels(target)
+	testing.expect(t, painted_ok, "painted target should be readable")
+	if painted_ok {
+		testing.expect(t, text_target_has_non_clear_pixel(painted_pixels, clear))
+		delete(painted_pixels)
+	}
+}
 
 test_font_measure_invariants :: proc(t: ^testing.T, font: Font) {
 	testing.expect(t, font.glyphCount > 0, "font should bake glyphs")
@@ -108,6 +191,8 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	)
 	defer {
 		UnloadFont(f)
+		_flush_retired()
+		delete(g.resources.retire)
 		renderer_shutdown(&g.rend)
 		_submission_shutdown(&g.submissions)
 		wg.QueueRelease(g.queue)
@@ -127,7 +212,9 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	testing.expect(t, !_bake_glyph(atlas, missing), "unbundled icon glyph should be absent")
 	testing.expect(t, !atlas.glyphs[missing].valid, "missing glyph should use fallback metrics")
 
+	test_lazy_glyph_first_target_paint(t)
 	test_default_font_is_real(t)
+	_flush_retired()
 }
 
 // test_default_font_is_real checks that DrawText/MeasureText are backed by an
