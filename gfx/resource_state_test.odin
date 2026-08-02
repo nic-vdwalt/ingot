@@ -167,6 +167,20 @@ texture_pool_reports_exhaustion_instead_of_asserting :: proc(t: ^testing.T) {
 }
 
 @(test)
+shader_pool_reports_exhaustion_instead_of_asserting :: proc(t: ^testing.T) {
+	resources: Shader_Resources
+	entries := make([]Shader_Entry, MAX_SHADERS)
+	defer delete(entries)
+	for index in 0 ..< MAX_SHADERS {
+		testing.expect(t, _shader_register(&resources, &entries[index]) != 0)
+	}
+	testing.expect_value(t, int(resources.count), MAX_SHADERS)
+	overflow: Shader_Entry
+	testing.expect_value(t, _shader_register(&resources, &overflow), u32(0))
+	testing.expect_value(t, int(resources.count), MAX_SHADERS)
+}
+
+@(test)
 texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
 	// Consumers size their caches off these accessors, so the used count must
 	// track registration exactly and IsTextureValid must reject a zero handle.
