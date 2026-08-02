@@ -63,7 +63,7 @@ titlebar_init :: proc(window_handle: rawptr = nil) {
 	tb_hwnd = cast(win32.HWND)window_handle
 	if tb_hwnd == nil do return
 
-	tb_caption_h = TAB_BAR_HEIGHT
+	tb_caption_h = 35
 	tb_maximized = bool(win32.IsZoomed(tb_hwnd))
 
 	win32.SetWindowSubclass(tb_hwnd, titlebar_subclass_proc, TITLEBAR_SUBCLASS_ID, 0)
@@ -101,7 +101,7 @@ titlebar_set_layout :: proc(min_r, max_r, close_r: Rectangle, interactive_right:
 	tb_btn_min = min_r
 	tb_btn_max = max_r
 	tb_btn_close = close_r
-	tb_caption_h = TAB_BAR_HEIGHT
+	tb_caption_h = i32(close_r.y + close_r.height)
 	tb_interactive_right = interactive_right
 }
 
