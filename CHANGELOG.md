@@ -9,6 +9,8 @@ compatibility, while minor releases may break it. See the
 
 ## Unreleased
 
+## [0.1.3] - 2026-08-03
+
 ### Added
 
 - `ingot:view`: saved views. A view is a flat, byte-copyable description of a
@@ -411,6 +413,8 @@ Not validated:
 - Prevented a libvterm UTF-8 decode buffer overflow.
 - Validated `LoadFontFromMemory`'s caller-supplied buffer.
 
-[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Nic-vdwalt/ingot/releases/tag/v0.1.0
