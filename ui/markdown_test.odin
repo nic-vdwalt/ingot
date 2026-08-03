@@ -282,6 +282,7 @@ markdown_link_state_does_not_survive_a_redraw :: proc(t: ^testing.T) {
 	output := new(Ui_Output)
 	defer free(output)
 	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
 	frame.output = output
 	ui_frame_begin(&frame, &runtime)
 
