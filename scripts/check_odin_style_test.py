@@ -58,6 +58,43 @@ class OdinStyleTest(unittest.TestCase):
         violations = check_odin_style.check_source(source, {"x:p": 100}, "x")
         self.assertEqual(len(violations), 1)
 
+    def test_direct_recursion_is_rejected_but_qualified_call_is_allowed(self):
+        source = "p :: proc() {\n\tobject.p()\n\tp()\n}\n"
+        violations = check_odin_style.check_source(source)
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].line, 3)
+        self.assertIn("direct recursion", violations[0].message)
+
+    def test_open_loop_requires_a_rationale_bearing_waiver(self):
+        rejected = "p :: proc() {\n\tfor {\n\t}\n}\n"
+        self.assertIn("no structurally provable", check_odin_style.check_source(rejected)[0].message)
+        accepted = (
+            "p :: proc() {\n"
+            "\t// tigerstyle: allow-unbounded-loop -- worker exits when stopped\n"
+            "\tfor {\n\t}\n}\n"
+        )
+        self.assertEqual(check_odin_style.check_source(accepted), [])
+
+    def test_bounded_loop_shapes_are_accepted(self):
+        source = (
+            "LIMIT :: 10\n"
+            "p :: proc(items: []int) {\n"
+            "\tfor item in items { _ = item }\n"
+            "\tfor index in 0 ..< LIMIT { _ = index }\n"
+            "\tfor index := 0; index < len(items); index += 1 { _ = items[index] }\n"
+            "}\n"
+        )
+        self.assertEqual(check_odin_style.check_source(source), [])
+
+    def test_condition_only_loop_and_empty_waiver_are_rejected(self):
+        source = (
+            "p :: proc(running: bool) {\n"
+            "\t// tigerstyle: allow-unbounded-loop --\n"
+            "\tfor running {\n\t}\n}\n"
+        )
+        violations = check_odin_style.check_source(source)
+        self.assertEqual(len(violations), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

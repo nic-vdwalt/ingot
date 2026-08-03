@@ -323,9 +323,24 @@ draw_codepoint_frame :: proc(
 ) {
 	assert(frame != nil, "draw_codepoint_frame: nil frame")
 	assert(size > 0, "draw_codepoint_frame: invalid size")
-	font := Font_Id(0)
-	if text_backend_valid(frame.runtime.text_backend) {
-		font = text_backend_font(frame.runtime.text_backend, size)
-	}
+	font := frame_font_for_size(frame, size)
+	assert(
+		frame.output == nil || font != 0,
+		"draw_codepoint_frame: paint output requires a text backend",
+	)
 	draw_codepoint_command(frame, codepoint, x, y, size, color, font)
+}
+
+draw_target_codepoint_frame :: proc(
+	frame: ^Ui_Frame,
+	codepoint: rune,
+	x, y: i32,
+	size: i32,
+	color: Color,
+) {
+	assert(frame != nil, "draw_target_codepoint_frame: nil frame")
+	assert(size > 0, "draw_target_codepoint_frame: invalid size")
+	font := frame_font_for_size(frame, size)
+	assert(font != 0, "draw_target_codepoint_frame: text backend required")
+	draw_target_codepoint_command(frame, codepoint, x, y, size, color, font)
 }

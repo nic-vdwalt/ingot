@@ -101,6 +101,7 @@ Paint_List :: struct {
 	text_len:             int,
 	clip_stack:           [PAINT_CLIP_CAP]Rect,
 	clip_emitted:         [PAINT_CLIP_CAP]bool,
+	clip_streamed:        [PAINT_CLIP_CAP]bool,
 	// Origin of each open clip so an unbalanced frame can name the exact
 	// begin_scissor_mode call that leaked instead of only its depth.
 	clip_origin:          [PAINT_CLIP_CAP]runtime.Source_Code_Location,
@@ -201,24 +202,36 @@ paint_clip_begin :: proc(list: ^Paint_List, rect: Rect, loc := #caller_location)
 	// Layout-derived negative extents mean an empty clip, not a malformed
 	// command. Clamp them before intersection so the stack remains balanced.
 	clamped := Rect{rect.x, rect.y, max(f32(0), rect.width), max(f32(0), rect.height)}
-	if list.clip_count >= PAINT_CLIP_CAP {
-		list.clip_overflow_depth += 1
-		list.dropped_commands += 1
-		return
-	}
 	effective := clamped
 	if list.clip_count > 0 {
 		effective = paint_clip_intersection(list.clip_stack[list.clip_count - 1], rect)
 	}
+	command := Paint_Command {
+		kind = .Clip_Begin,
+		rect = effective,
+	}
+	if list.clip_count >= PAINT_CLIP_CAP {
+		list.clip_overflow_depth += 1
+		list.dropped_commands += 1
+		if list.sink != nil do list.sink(list, command, list.sink_userdata)
+		return
+	}
 	emitted := false
+	streamed := false
 	if list.count + list.clip_end_reserved + 2 <= PAINT_COMMAND_CAP {
-		emitted = paint_push_unreserved(list, {kind = .Clip_Begin, rect = effective})
+		emitted = paint_push_unreserved(list, command)
+		streamed = emitted && list.sink != nil
 		if emitted do list.clip_end_reserved += 1
 	} else {
 		list.dropped_commands += 1
+		if list.sink != nil {
+			list.sink(list, command, list.sink_userdata)
+			streamed = true
+		}
 	}
 	list.clip_stack[list.clip_count] = effective
 	list.clip_emitted[list.clip_count] = emitted
+	list.clip_streamed[list.clip_count] = streamed
 	list.clip_origin[list.clip_count] = loc
 	list.clip_count += 1
 }
@@ -227,17 +240,37 @@ paint_clip_end :: proc(list: ^Paint_List) {
 	assert(list != nil, "paint_clip_end: nil list")
 	if list.clip_overflow_depth > 0 {
 		list.clip_overflow_depth -= 1
+		if list.sink != nil {
+			list.sink(
+				list,
+				{
+					kind = .Clip_End,
+					rect = list.clip_stack[list.clip_count - 1],
+					clip_restore = true,
+				},
+				list.sink_userdata,
+			)
+		}
 		return
 	}
 	// An unmatched end is a caller bug, but ignoring it is the safe failure:
 	// driving depth negative would corrupt the next view's clip index.
 	if list.clip_count == 0 do return
 	list.clip_count -= 1
-	if !list.clip_emitted[list.clip_count] do return
-	assert(list.clip_end_reserved > 0, "paint_clip_end: missing reservation")
 	restore := list.clip_count > 0
 	rect: Rect
 	if restore do rect = list.clip_stack[list.clip_count - 1]
+	if !list.clip_emitted[list.clip_count] {
+		if list.clip_streamed[list.clip_count] {
+			list.sink(
+				list,
+				{kind = .Clip_End, rect = rect, clip_restore = restore},
+				list.sink_userdata,
+			)
+		}
+		return
+	}
+	assert(list.clip_end_reserved > 0, "paint_clip_end: missing reservation")
 	list.clip_end_reserved -= 1
 	emitted := paint_push_unreserved(list, {kind = .Clip_End, rect = rect, clip_restore = restore})
 	assert(emitted, "paint_clip_end: reserved append failed")
@@ -260,6 +293,7 @@ paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
 	assert(list.clip_end_reserved >= 0, "paint_push: negative reservation")
 	if list.count >= PAINT_COMMAND_CAP - list.clip_end_reserved {
 		list.dropped_commands += 1
+		if list.sink != nil do list.sink(list, command, list.sink_userdata)
 		return false
 	}
 	return paint_push_unreserved(list, command)

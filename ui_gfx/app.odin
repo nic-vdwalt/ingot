@@ -56,7 +56,13 @@ app_init :: proc(
 		"app_init: expected one frame callback",
 	)
 	assert(active_app == nil, "app_init: another application is active")
-	gfx.SetConfigFlags(config.flags)
+	// Windows' AccessKit subclassing adapter must be installed before the
+	// window is first shown or it panics. session_init installs the adapter, so
+	// create the window hidden and reveal it below once the session is live.
+	// Other platforms have no such ordering constraint and show immediately.
+	window_flags := config.flags
+	when ODIN_OS == .Windows do window_flags += {.WINDOW_HIDDEN}
+	gfx.SetConfigFlags(window_flags)
 	initialized := gfx.context_init(
 		gfx.default_context(),
 		config.width,
@@ -67,6 +73,7 @@ app_init :: proc(
 	if config.target_fps > 0 do gfx.SetTargetFPS(config.target_fps)
 	if config.event_waiting do gfx.EnableEventWaiting()
 	session_init(&app.session, config.session)
+	when ODIN_OS == .Windows do gfx.ShowWindow()
 	app.config = config
 	app.callbacks = callbacks
 	app.userdata = userdata
@@ -134,18 +141,31 @@ app_screen_rect :: proc(app: ^App) -> ui.Rect_I32 {
 	return {0, 0, gfx.context_screen_width(ctx), gfx.context_screen_height(ctx)}
 }
 
-app_ui_begin :: proc(app: ^App, frame: ^ui.Ui_Frame, u: ^ui.Ui, gap: ui.Space = .None) {
+app_ui_begin :: proc(
+	app: ^App,
+	frame: ^ui.Ui_Frame,
+	u: ^ui.Ui,
+	gap: ui.Space = .None,
+	tab_navigation: bool = true,
+) {
 	assert(app != nil && app.state == .Running, "app_ui_begin: application not running")
 	assert(frame != nil && frame.open, "app_ui_begin: frame not open")
 	assert(u != nil && !u.open, "app_ui_begin: invalid ui lifetime")
 	assert(frame.runtime == &app.session.runtime, "app_ui_begin: frame belongs to another app")
-	ui.begin(u, frame, app_screen_rect(app), gap)
+	ui.begin(u, frame, app_screen_rect(app), gap, tab_navigation)
 	assert(u.open && u.frame == frame, "app_ui_begin: ui did not open")
 }
 
 app_ui_runtime :: proc(app: ^App) -> ^ui.Ui_Runtime {
 	assert(app != nil && app.state != .Empty, "app_ui_runtime: invalid app")
 	return session_runtime(&app.session)
+}
+
+app_font :: proc(app: ^App, size: i32) -> (gfx.Font, bool) {
+	assert(app != nil && app.state != .Empty, "app_font: invalid app")
+	assert(size > 0, "app_font: invalid size")
+	id := adapter_font_for_size(&app.session.adapter, size)
+	return adapter_font(&app.session.adapter, id)
 }
 
 // app_clear_color derives the window clear color from the active theme.

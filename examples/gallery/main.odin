@@ -435,17 +435,21 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
 	ui.separator(u)
 	for s in Section {
 		style := ui.Btn_Style.Primary if s == section else .Ghost
+		ui.flex_row_begin(u, 28, {ui.grow()})
 		if ui.button(u, SECTION_NAMES[s], SECTION_NAMES[s], style) {
 			section = s
 			ui.pane_reset(&content_pane)
 		}
+		ui.flex_row_end(u)
 	}
 	ui.space(u, .SM)
 	ui.separator(u)
 	for control in Nav_Control {
+		ui.flex_row_begin(u, 28, {ui.grow()})
 		if ui.button(u, NAV_CONTROL_IDS[control], nav_control_label(control, false)) {
 			nav_control_activate(control, frame)
 		}
+		ui.flex_row_end(u)
 	}
 	ui.scope_end(u)
 	ui.end(u)
@@ -955,7 +959,7 @@ draw_widget_truncation_card :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	y := ui.section_header_at(frame, {x, y0, w, 0}, "CARD + SHADOW + TRUNCATION")
 	card := ui.Rect_I32{x, y, min(w, ui.ui_frame_sc(frame, 360)), ui.ui_frame_sc(frame, 64)}
 	shadow := ui.Rect{f32(card.x), f32(card.y), f32(card.w), f32(card.h)}
-	ui.draw_shadow_rounded(frame, shadow, 0.15)
+	ui.draw_shadow_hard(frame, shadow, .MD, .Lifted)
 	ui.card_bg_at(
 		frame,
 		card,

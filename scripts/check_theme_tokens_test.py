@@ -55,6 +55,17 @@ class RoundnessTests(unittest.TestCase):
         counts = gate.counts_for_source(source, "ui/controls.odin")
         self.assertNotIn("ui/controls.odin:numeric_roundness", counts)
 
+    def test_detects_segments_with_composite_rect_and_qualified_call(self) -> None:
+        source = "ui.draw_rectangle_rounded(frame, {x, y, w, h}, ratio, 4, bg)\n"
+        counts = gate.counts_for_source(source, "ui/controls.odin")
+        self.assertEqual(counts.get("ui/controls.odin:numeric_segments"), 1)
+
+    def test_detects_overlay_roundness_and_segments(self) -> None:
+        source = "overlay_rounded(frame, rect_f32({x, y, w, h}), 0.5, 4, bg)\n"
+        counts = gate.counts_for_source(source, "ui/chart.odin")
+        self.assertEqual(counts.get("ui/chart.odin:numeric_roundness"), 1)
+        self.assertEqual(counts.get("ui/chart.odin:numeric_segments"), 1)
+
 
 class BorderTests(unittest.TestCase):
     def test_detects_unscaled_border_width(self) -> None:

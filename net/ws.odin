@@ -562,6 +562,7 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 	previous_generation := sync.atomic_load(&ws.conn_gen)
 	assert(previous_generation >= 0)
 	first := true
+	// tigerstyle: allow-unbounded-loop -- ws_close terminates the connection worker lifetime
 	for sync.atomic_load(&ws.running) {
 		ws_set_state(ws, first ? .Connecting : .Reconnecting)
 
@@ -749,6 +750,7 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 
 	last_activity := time.now()
 	last_ping := time.now()
+	// tigerstyle: allow-unbounded-loop -- ws_close terminates the receive worker lifetime
 	for sync.atomic_load(&ws.running) {
 		n, err := ws_net_recv(&ws.transport, scratch[:])
 		if err != .None {

@@ -63,7 +63,7 @@ titlebar_init :: proc(window_handle: rawptr = nil) {
 	tb_hwnd = cast(win32.HWND)window_handle
 	if tb_hwnd == nil do return
 
-	tb_caption_h = TAB_BAR_HEIGHT
+	tb_caption_h = 35
 	tb_maximized = bool(win32.IsZoomed(tb_hwnd))
 
 	win32.SetWindowSubclass(tb_hwnd, titlebar_subclass_proc, TITLEBAR_SUBCLASS_ID, 0)
@@ -97,11 +97,16 @@ titlebar_enabled :: proc() -> bool {
 // of the interactive header region (widgets that must stay clickable) for
 // non-client hit-testing. Call every frame after drawing. interactive_right
 // == 0 means the whole caption band (minus buttons) is a drag region.
-titlebar_set_layout :: proc(min_r, max_r, close_r: Rectangle, interactive_right: i32) {
+titlebar_set_layout :: proc(
+	min_r, max_r, close_r: Rectangle,
+	interactive_right, caption_height: i32,
+) {
+	assert(caption_height > 0, "titlebar_set_layout: invalid caption height")
+	assert(interactive_right >= 0, "titlebar_set_layout: invalid interactive edge")
 	tb_btn_min = min_r
 	tb_btn_max = max_r
 	tb_btn_close = close_r
-	tb_caption_h = TAB_BAR_HEIGHT
+	tb_caption_h = caption_height
 	tb_interactive_right = interactive_right
 }
 

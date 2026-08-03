@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Enforce ingot's physical Odin line and procedure limits."""
+"""Enforce ingot's physical and control-flow TigerStyle rules."""
 
 import argparse
 import dataclasses
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -172,6 +173,70 @@ def procedures(source: str) -> list[Procedure]:
     return result
 
 
+WAIVER = re.compile(r"^\s*//\s*tigerstyle:\s*allow-unbounded-loop\s*--\s*(.+?)\s*$")
+INVALID_WAIVER = re.compile(r"^\s*//\s*tigerstyle:\s*allow-unbounded-loop(?:\s*--\s*)?$")
+
+
+def procedure_source(source: str, procedure: Procedure) -> str:
+    return "\n".join(source.splitlines()[procedure.start_line - 1 : procedure.end_line])
+
+
+def direct_recursion_violations(source: str, procedure: Procedure) -> list[Violation]:
+    body = mask_source(procedure_source(source, procedure))
+    pattern = re.compile(rf"(?<![.A-Za-z0-9_]){re.escape(procedure.name)}\s*\(")
+    result: list[Violation] = []
+    for match in pattern.finditer(body):
+        line = procedure.start_line + body.count("\n", 0, match.start())
+        if line == procedure.start_line:
+            continue
+        result.append(Violation(line, f"direct recursion: procedure {procedure.name} calls itself"))
+    return result
+
+
+def loop_header_bounded(header: str) -> bool:
+    compact = " ".join(header.split())
+    if not compact or compact == "true":
+        return False
+    if re.search(r"\bin\b", compact):
+        return True
+    if compact.count(";") == 2:
+        _, condition, update = (part.strip() for part in compact.split(";"))
+        if not condition:
+            return False
+        if not update:
+            return bool(re.search(r"\b(?:len|cap)\s*\(", condition))
+        return bool(
+            re.search(r"(?:==|<|<=|>|>=|!=)", condition)
+            and re.search(r"(?:\+=|-=|\+\+|--|=)", update)
+        )
+    return bool(
+        re.search(r"(?:<|<=|>|>=|!=)", compact)
+        or re.search(r"\b(?:time|timeout|deadline|elapsed|duration|since)\b", compact, re.I)
+    )
+
+
+def control_flow_violations(source: str, procedure: Procedure) -> list[Violation]:
+    original = procedure_source(source, procedure)
+    masked = mask_source(original)
+    original_lines = original.splitlines()
+    result = direct_recursion_violations(source, procedure)
+    for match in re.finditer(r"\bfor\b(?P<header>[^{}]*)\{", masked):
+        line_offset = masked.count("\n", 0, match.start())
+        line = procedure.start_line + line_offset
+        if loop_header_bounded(match.group("header")):
+            continue
+        previous = line_offset - 1
+        while previous >= 0 and not original_lines[previous].strip():
+            previous -= 1
+        if previous >= 0 and WAIVER.match(original_lines[previous]):
+            continue
+        result.append(Violation(line, "loop has no structurally provable upper bound"))
+    for index, line_text in enumerate(original_lines):
+        if INVALID_WAIVER.match(line_text):
+            result.append(Violation(procedure.start_line + index, "unbounded-loop waiver requires a rationale"))
+    return result
+
+
 def check_source(source: str, baseline: dict[str, int] | None = None, path: str = "") -> list[Violation]:
     baseline = baseline or {}
     violations: list[Violation] = []
@@ -188,7 +253,8 @@ def check_source(source: str, baseline: dict[str, int] | None = None, path: str 
                     f"procedure {procedure.name} has {procedure.lines} lines; limit is {allowed}",
                 )
             )
-    return violations
+        violations.extend(control_flow_violations(source, procedure))
+    return sorted(violations, key=lambda violation: (violation.line, violation.message))
 
 
 def tracked_odin_files(root: Path) -> list[str]:

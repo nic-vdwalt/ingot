@@ -124,12 +124,27 @@ tagged_option_row :: proc(frame: ^Ui_Frame, config: Tagged_Option_Config) -> Tag
 
 // --- Markdown file-pill context ---------------------------------------------
 
+workspace_reference_path :: proc(reference: string) -> string {
+	if len(reference) == 0 || len(reference) > 256 do return reference
+	colon := strings.last_index_byte(reference, ':')
+	if colon <= 0 || colon + 1 >= len(reference) do return reference
+	line: u64 = 0
+	for digit in reference[colon + 1:] {
+		if digit < '0' || digit > '9' do return reference
+		line = line * 10 + u64(digit - '0')
+		if line > u64(max(i32)) do return reference
+	}
+	if line == 0 do return reference
+	return reference[:colon]
+}
+
 workspace_has_path_with :: proc(files: []string, rel: string) -> bool {
 	if len(files) == 0 || len(rel) == 0 || len(rel) > 256 do return false
 	if strings.index_byte(rel, ' ') >= 0 || strings.index_byte(rel, '\n') >= 0 do return false
-	directory := strings.concatenate({rel, "/"}, context.temp_allocator)
+	path_reference := workspace_reference_path(rel)
+	directory := strings.concatenate({path_reference, "/"}, context.temp_allocator)
 	for path in files {
-		if path == rel || path == directory do return true
+		if path == path_reference || path == directory do return true
 	}
 	return false
 }
@@ -292,5 +307,5 @@ draw_input_pill_bg_frame :: proc(frame: ^Ui_Frame, x, y, w: i32) {
 		f32(w + pad * 2),
 		f32(text_role_size(frame, .Body) + ui_frame_sc(frame, 4)),
 	}
-	draw_rectangle_rounded(frame, rect, 0.5, 6, ui_frame_theme(frame).bg_chip)
+	draw_rounded_fill(frame, rect, .Pill, ui_frame_theme(frame).bg_chip)
 }

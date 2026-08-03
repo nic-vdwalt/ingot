@@ -42,6 +42,12 @@ platform_create_window :: proc(width, height: i32, title: cstring, flags: Config
 	glfw.WindowHint(glfw.RESIZABLE, .WINDOW_RESIZABLE in flags ? 1 : 0)
 	glfw.WindowHint(glfw.TRANSPARENT_FRAMEBUFFER, .WINDOW_TRANSPARENT in flags ? 1 : 0)
 	glfw.WindowHint(glfw.DECORATED, .WINDOW_UNDECORATED in flags ? 0 : 1)
+	// WINDOW_HIDDEN defers the first show so a caller can attach platform state
+	// that must exist before the window is visible. Windows' AccessKit
+	// subclassing adapter is the motivating case: it must be installed before
+	// the window is shown for the first time or it panics. Reveal with
+	// ShowWindow once that state is live.
+	glfw.WindowHint(glfw.VISIBLE, .WINDOW_HIDDEN in flags ? 0 : 1)
 	win := glfw.CreateWindow(width, height, title, nil, nil)
 	if win == nil {
 		if glfw_live_windows == 0 do glfw.Terminate()
@@ -69,6 +75,7 @@ platform_start_gpu :: proc() {
 		&{compatibleSurface = g.surface},
 		{mode = .AllowProcessEvents, callback = _on_adapter, userdata1 = &ares},
 	)
+	// tigerstyle: allow-unbounded-loop -- adapter callback ends synchronous device setup
 	for !ares.done {wg.InstanceProcessEvents(g.instance)}
 	g.adapter = ares.adapter
 
@@ -87,6 +94,7 @@ platform_start_gpu :: proc() {
 		&dev_desc,
 		{mode = .AllowProcessEvents, callback = _on_device, userdata1 = &dres},
 	)
+	// tigerstyle: allow-unbounded-loop -- device callback ends synchronous device setup
 	for !dres.done {wg.InstanceProcessEvents(g.instance)}
 	g.device = dres.device
 	g.queue = wg.DeviceGetQueue(g.device)
@@ -248,6 +256,7 @@ platform_input_init :: proc() {
 	// (uncover/resize) - without it an idle window would show stale content.
 	glfw.SetCursorPosCallback(_win(), _cursor_pos_cb)
 	glfw.SetMouseButtonCallback(_win(), _mouse_button_cb)
+	glfw.SetWindowCloseCallback(_win(), _close_cb)
 	glfw.SetWindowRefreshCallback(_win(), _refresh_cb)
 	glfw.SetWindowFocusCallback(_win(), _focus_cb)
 	glfw.SetWindowIconifyCallback(_win(), _iconify_cb)
@@ -505,6 +514,13 @@ _mouse_button_cb :: proc "c" (win: glfw.WindowHandle, button, action, mods: i32)
 }
 
 @(private)
+_close_cb :: proc "c" (win: glfw.WindowHandle) {
+	when ODIN_OS == .Windows {
+		if win != nil do glfw.HideWindow(win)
+	}
+}
+
+@(private)
 _refresh_cb :: proc "c" (win: glfw.WindowHandle) {
 	ctx := _callback_context(win)
 	if ctx == nil do return
@@ -543,6 +559,7 @@ _fb_size_cb :: proc "c" (win: glfw.WindowHandle, width, height: i32) {
 // their own `for !WindowShouldClose()` loop; run() exists so the same app source
 // also targets web, where the browser owns the loop (see loop_web.odin).
 run :: proc(frame: Run_Proc) {
+	// tigerstyle: allow-unbounded-loop -- window close terminates the application lifetime
 	for !WindowShouldClose() {
 		frame()
 	}

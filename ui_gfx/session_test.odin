@@ -1,12 +1,25 @@
 #+build !js
 package ui_gfx
 
+import "core:sync"
 import "core:testing"
 import rl "ingot:gfx"
 import "ingot:ui"
 
+test_context_mutex: sync.Mutex
+
+test_context_lock :: proc() {
+	sync.mutex_lock(&test_context_mutex)
+}
+
+test_context_unlock :: proc() {
+	sync.mutex_unlock(&test_context_mutex)
+}
+
 @(test)
 test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
 	gfx_context := new(rl.Context)
 	defer free(gfx_context)
 	session := new(Session)
@@ -39,6 +52,8 @@ test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
 
 @(test)
 test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
 	gfx_context := new(rl.Context)
 	defer free(gfx_context)
 	session := new(Session)
@@ -66,6 +81,8 @@ test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
 
 @(test)
 test_adapter_font_dpi_normalizes :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
 	gfx_context := new(rl.Context)
 	defer free(gfx_context)
 	adapter: Adapter
@@ -86,6 +103,8 @@ test_adapter_font_dpi_normalizes :: proc(t: ^testing.T) {
 
 @(test)
 test_session_frame_captures_context_input :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
 	gfx_context := new(rl.Context)
 	defer free(gfx_context)
 	gfx_context.width = 640
@@ -109,7 +128,54 @@ test_session_frame_captures_context_input :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_pointer_snapshot_policy :: proc(t: ^testing.T) {
+	focused := ui.Ui_Input {
+		mouse_position   = {40, 24},
+		mouse_delta      = {3, -2},
+		mouse_wheel      = {0, 1},
+		window_focused   = true,
+		cursor_on_screen = true,
+	}
+	focused.mouse_pressed[0] = true
+	focused.mouse_released[1] = true
+	focused.mouse_down[2] = true
+	pointer_snapshot_sanitize(&focused)
+	testing.expect_value(t, focused.mouse_position, ui.Vec2{40, 24})
+	testing.expect_value(t, focused.mouse_delta, ui.Vec2{3, -2})
+	testing.expect_value(t, focused.mouse_wheel, ui.Vec2{0, 1})
+	testing.expect(t, focused.mouse_pressed[0])
+	testing.expect(t, focused.mouse_released[1])
+	testing.expect(t, focused.mouse_down[2])
+
+	unfocused := focused
+	unfocused.window_focused = false
+	pointer_snapshot_sanitize(&unfocused)
+	testing.expect(t, !unfocused.window_focused)
+	testing.expect(t, !unfocused.cursor_on_screen)
+	testing.expect_value(t, unfocused.mouse_position, ui.Vec2{-1, -1})
+	testing.expect_value(t, unfocused.mouse_delta, ui.Vec2{})
+	testing.expect_value(t, unfocused.mouse_wheel, ui.Vec2{})
+	testing.expect(t, !unfocused.mouse_pressed[0])
+	testing.expect(t, !unfocused.mouse_released[1])
+	testing.expect(t, !unfocused.mouse_down[2])
+
+	outside := focused
+	outside.cursor_on_screen = false
+	pointer_snapshot_sanitize(&outside)
+	testing.expect(t, outside.window_focused)
+	testing.expect(t, !outside.cursor_on_screen)
+	testing.expect_value(t, outside.mouse_position, ui.Vec2{-1, -1})
+	testing.expect_value(t, outside.mouse_delta, ui.Vec2{})
+	testing.expect_value(t, outside.mouse_wheel, ui.Vec2{})
+	testing.expect(t, !outside.mouse_pressed[0])
+	testing.expect(t, !outside.mouse_released[1])
+	testing.expect(t, !outside.mouse_down[2])
+}
+
+@(test)
 test_app_session_compatibility_aliases_compile :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
 	gfx_context := new(rl.Context)
 	defer free(gfx_context)
 	session := new(App_Session)

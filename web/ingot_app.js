@@ -138,6 +138,18 @@
 				if (id >= 0) active.add(id);
 				return id;
 			},
+			ingot_http_stream_request: (...args) => {
+				const id = canonical.ingot_http_stream_request(...args);
+				if (id >= 0) active.add(id);
+				return id;
+			},
+			ingot_http_stream_chunk_len: (id) => canonical.ingot_http_stream_chunk_len(id),
+			ingot_http_stream_chunk_copy: (...args) => canonical.ingot_http_stream_chunk_copy(...args),
+			ingot_http_stream_release: (id) => {
+				const released = canonical.ingot_http_stream_release(id);
+				active.delete(id);
+				return released;
+			},
 			ingot_http_poll: (id) => canonical.ingot_http_poll(id),
 			ingot_http_status: (id) => canonical.ingot_http_status(id),
 			ingot_http_body_len: (id) => canonical.ingot_http_body_len(id),

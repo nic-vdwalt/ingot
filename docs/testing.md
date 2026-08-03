@@ -36,6 +36,20 @@ python3 scripts/check-toolchain.py
 odinfmt -help
 ```
 
+On a native Linux host, verify native dependencies and build the pinned
+architecture-matched libvterm archive before the standard gates:
+
+```sh
+bash scripts/check-linux-dependencies.sh
+bash scripts/check-linux.sh
+```
+
+Set `INGOT_LINUX_RUNTIME=1` on a Linux host with `xvfb-run` and a Vulkan driver
+to include gallery and view-builder windowed smoke tests. The Linux gate is
+local and native; no macOS-to-Linux cross toolchain is supplied. AccessKit is
+validated on Linux amd64 and intentionally unavailable on Linux arm64 until a
+verified arm64 artifact exists.
+
 ## Standard checks
 
 Run the package tests:
@@ -263,6 +277,14 @@ other remains renderable:
 bash scripts/smoke-gallery.sh
 odin run examples/multi_context_fixture -collection:ingot=.
 ```
+
+Native shell-close validation uses an application with a deliberately delayed
+shutdown callback. On Windows, verify that the native window disappears as soon
+as its close control is used. On macOS and Linux, verify normal window-manager
+close behavior. On every native target, verify that cleanup completes before
+`app_run` returns and that caller-owned graphics resources remain releasable
+during shutdown. Repeat with event waiting enabled and with a one-frame-per-second
+target to cover both GLFW event paths and close-frame pacing.
 
 `scripts/capture-media.sh` is the third windowed tool outside `scripts/test.sh`.
 It renders the gallery into a fixed 1600x1000 offscreen target and reads it back
