@@ -90,14 +90,16 @@ Stream_Slot_State :: enum {
 }
 
 Stream_Slot :: struct {
-	geometry_buffer: wg.Buffer,
-	uniform_buffer:  wg.Buffer,
-	geometry_shadow: [dynamic]byte,
-	uniform_shadow:  [dynamic]byte,
-	geometry_write:  u64,
-	uniform_write:   u64,
-	ticket:          u64,
-	state:           Stream_Slot_State,
+	geometry_buffer:   wg.Buffer,
+	uniform_buffer:    wg.Buffer,
+	geometry_shadow:   [dynamic]byte,
+	uniform_shadow:    [dynamic]byte,
+	geometry_write:    u64,
+	geometry_uploaded: u64,
+	uniform_write:     u64,
+	uniform_uploaded:  u64,
+	ticket:            u64,
+	state:             Stream_Slot_State,
 }
 
 Renderer :: struct {
@@ -1001,6 +1003,7 @@ _geometry_upload_indexed :: proc(
 	if r.active_stream_slot < 0 do return nil, 0, 0, false
 	assert(r.active_stream_slot < len(r.stream_slots))
 	slot := &r.stream_slots[r.active_stream_slot]
+	write_before := slot.geometry_write
 	vertex_offset, index_offset, ok := _stream_slot_reserve_indexed(
 		slot,
 		vertex_bytes,
@@ -1014,7 +1017,7 @@ _geometry_upload_indexed :: proc(
 
 	copy_started := platform_now()
 	if !_stream_shadow_ensure(&slot.geometry_shadow, slot.geometry_write, r.geometry_bytes) {
-		slot.geometry_write = vertex_offset
+		slot.geometry_write = write_before
 		_stats_reservation_failure(false)
 		return nil, 0, 0, false
 	}
@@ -1159,27 +1162,35 @@ _stream_slot_upload :: proc(r: ^Renderer) -> bool {
 	assert(r.active_stream_slot < len(r.stream_slots))
 	slot := &r.stream_slots[r.active_stream_slot]
 	assert(slot.state == .Recording)
-	if slot.geometry_write > 0 {
+	assert(slot.geometry_uploaded <= slot.geometry_write)
+	assert(slot.uniform_uploaded <= slot.uniform_write)
+	if slot.geometry_write > slot.geometry_uploaded {
 		started := platform_now()
+		start := slot.geometry_uploaded
+		byte_count := slot.geometry_write - start
 		wg.QueueWriteBuffer(
 			g.queue,
 			slot.geometry_buffer,
-			0,
-			raw_data(slot.geometry_shadow[:slot.geometry_write]),
-			uint(slot.geometry_write),
+			start,
+			raw_data(slot.geometry_shadow[start:slot.geometry_write]),
+			uint(byte_count),
 		)
-		_stats_stream_write(false, slot.geometry_write, platform_now() - started)
+		slot.geometry_uploaded = slot.geometry_write
+		_stats_stream_write(false, byte_count, platform_now() - started)
 	}
-	if slot.uniform_write > 0 {
+	if slot.uniform_write > slot.uniform_uploaded {
 		started := platform_now()
+		start := slot.uniform_uploaded
+		byte_count := slot.uniform_write - start
 		wg.QueueWriteBuffer(
 			g.queue,
 			slot.uniform_buffer,
-			0,
-			raw_data(slot.uniform_shadow[:slot.uniform_write]),
-			uint(slot.uniform_write),
+			start,
+			raw_data(slot.uniform_shadow[start:slot.uniform_write]),
+			uint(byte_count),
 		)
-		_stats_stream_write(true, slot.uniform_write, platform_now() - started)
+		slot.uniform_uploaded = slot.uniform_write
+		_stats_stream_write(true, byte_count, platform_now() - started)
 	}
 	return true
 }
@@ -1189,7 +1200,9 @@ _stream_slots_poll :: proc(slots: []Stream_Slot, completed: u64) {
 	for &slot in slots {
 		if slot.state == .Submitted && completed >= slot.ticket {
 			slot.geometry_write = 0
+			slot.geometry_uploaded = 0
 			slot.uniform_write = 0
+			slot.uniform_uploaded = 0
 			slot.ticket = 0
 			slot.state = .Free
 		}
@@ -1202,7 +1215,9 @@ _stream_slots_acquire :: proc(slots: []Stream_Slot, completed: u64) -> i32 {
 	for &slot, index in slots {
 		if slot.state == .Free {
 			slot.geometry_write = 0
+			slot.geometry_uploaded = 0
 			slot.uniform_write = 0
+			slot.uniform_uploaded = 0
 			slot.ticket = 0
 			slot.state = .Recording
 			return i32(index)
@@ -1257,7 +1272,9 @@ _stream_slot_abandon :: proc(r: ^Renderer) {
 	slot := &r.stream_slots[r.active_stream_slot]
 	assert(slot.state == .Recording)
 	slot.geometry_write = 0
+	slot.geometry_uploaded = 0
 	slot.uniform_write = 0
+	slot.uniform_uploaded = 0
 	slot.ticket = 0
 	slot.state = .Free
 	r.active_stream_slot = -1
