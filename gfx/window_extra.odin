@@ -48,6 +48,16 @@ ToggleFullscreen :: proc() {
 RestoreWindow :: proc() {
 	if g.win != nil do glfw.RestoreWindow(glfw.WindowHandle(g.win))
 }
+
+// ShowWindow reveals a window created with the WINDOW_HIDDEN config flag. It
+// pairs with that flag's deferred-show contract: create hidden, install any
+// state that must precede the first show (e.g. the Windows AccessKit adapter),
+// then call this exactly once to make the window visible.
+ShowWindow :: proc() {
+	assert(g != nil, "ShowWindow: no active context")
+	assert(g.win != nil, "ShowWindow: no window")
+	glfw.ShowWindow(glfw.WindowHandle(g.win))
+}
 context_focus_window :: proc(ctx: ^Context) {
 	if ctx == nil || ctx.win == nil do return
 	glfw.FocusWindow(glfw.WindowHandle(ctx.win))
