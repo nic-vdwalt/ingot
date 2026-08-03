@@ -41,7 +41,7 @@ draw_node_list :: proc(form: ^ui.Ui, data: ^State) {
 	assert(form != nil && data != nil, "draw_node_list: invalid arguments")
 	source := view.view_of(&data.doc)
 	walk := view.walk_begin(source)
-	for {
+	for _ in 0 ..< view.WALK_STEPS_MAX {
 		step, more := view.walk_next(&walk)
 		if !more do break
 		if step.event != .Enter do continue

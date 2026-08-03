@@ -480,7 +480,7 @@ draw_markdown_span_chip :: proc(ctx: ^Markdown_Context, text: cstring, x, y: i32
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	width := measure_text_frame(ctx.frame, text, font_size)
 	rect := Rectangle{f32(x - 3), f32(y - 1), f32(width + 6), f32(font_size + 4)}
-	draw_rectangle_rounded(ctx.frame, rect, 0.5, 6, ui_frame_theme(ctx.frame).bg_chip)
+	draw_rounded_fill(ctx.frame, rect, .Pill, ui_frame_theme(ctx.frame).bg_chip)
 	draw_text_frame(ctx.frame, text, x, y, font_size, ui_frame_theme(ctx.frame).fg_accent)
 }
 

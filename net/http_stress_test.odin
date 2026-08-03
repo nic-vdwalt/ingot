@@ -19,6 +19,68 @@ when HTTP_STRESS {
 	}
 
 	@(test)
+	http_request_receive_timeout_is_resolved :: proc(t: ^testing.T) {
+		http_stress_reset()
+		response, ok := http_request(
+			"stress",
+			1,
+			Http_Request{method = .Get, path = "/default", maximum_body = 64},
+		)
+		testing.expect(t, ok)
+		http_response_destroy(&response)
+		testing.expect_value(t, http_stress_receive_timeout(), DEFAULT_RECEIVE_TIMEOUT)
+
+		response, ok = http_request(
+			"stress",
+			1,
+			Http_Request {
+				method = .Get,
+				path = "/extended",
+				maximum_body = 64,
+				receive_timeout = 60 * time.Second,
+			},
+		)
+		testing.expect(t, ok)
+		http_response_destroy(&response)
+		testing.expect_value(t, http_stress_receive_timeout(), 60 * time.Second)
+		request := Http_Request {
+			method          = .Get,
+			path            = "/queued",
+			maximum_body    = 64,
+			receive_timeout = 60 * time.Second,
+		}
+		f: Fetcher
+		fetcher_start(&f, "stress", 1)
+		testing.expect(t, fetcher_request_http(&f, 1, request))
+		started := time.now()
+		completed := false
+		for !completed && time.since(started) < time.Second {
+			for result in fetcher_drain(&f) {
+				completed = true
+				delete(result.body)
+			}
+			thread.yield()
+		}
+		testing.expect(t, completed)
+		fetcher_stop(&f)
+		testing.expect_value(t, http_stress_receive_timeout(), request.receive_timeout)
+
+		response, ok = http_request(
+			"stress",
+			1,
+			Http_Request {
+				method = .Get,
+				path = "/clamped",
+				maximum_body = 64,
+				receive_timeout = MAXIMUM_RECEIVE_TIMEOUT + time.Second,
+			},
+		)
+		testing.expect(t, ok)
+		http_response_destroy(&response)
+		testing.expect_value(t, http_stress_receive_timeout(), MAXIMUM_RECEIVE_TIMEOUT)
+	}
+
+	@(test)
 	http_fetch_pool_condvar_stress :: proc(t: ^testing.T) {
 		for round in 0 ..< 100 {
 			http_stress_reset()
@@ -82,7 +144,7 @@ when HTTP_STRESS {
 		}
 		testing.expect(t, !fetcher_request(&f, 999, "/full"))
 		started := time.now()
-		for {
+		for time.since(started) < 2 * time.Second {
 			sync.mutex_lock(&f.mutex)
 			completed := len(f.results)
 			sync.mutex_unlock(&f.mutex)

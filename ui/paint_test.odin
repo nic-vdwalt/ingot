@@ -156,6 +156,50 @@ paint_clip_main_overlay_and_pane_coordinates_are_isolated :: proc(t: ^testing.T)
 }
 
 @(test)
+codepoint_scope_emits_cumulative_screen_coordinates :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	ui_frame_pane_push(&frame, {40, 60})
+	ui_frame_pane_push(&frame, {5, -10})
+	draw_codepoint_command(&frame, 'A', 3, 7, 16, {255, 255, 255, 255}, 1)
+	ui_frame_pane_pop(&frame)
+	ui_frame_pane_pop(&frame)
+	ui_frame_end(&frame)
+
+	testing.expect_value(t, output.main.count, 1)
+	testing.expect_value(t, output.main.commands[0].kind, Paint_Kind.Codepoint)
+	testing.expect_value(t, output.main.commands[0].p0, Vector2{48, 57})
+	testing.expect_value(t, output.main.commands[0].font, Font_Id(1))
+	testing.expect_value(t, output.main.commands[0].codepoint, rune('A'))
+}
+
+@(test)
+target_codepoint_scope_preserves_target_coordinates :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	ui_frame_pane_push(&frame, {40, 60})
+	draw_target_codepoint_command(&frame, 'A', 3, 7, 16, {255, 255, 255, 255}, 1)
+	ui_frame_pane_pop(&frame)
+	ui_frame_end(&frame)
+
+	testing.expect_value(t, output.main.count, 1)
+	testing.expect_value(t, output.main.commands[0].kind, Paint_Kind.Codepoint)
+	testing.expect_value(t, output.main.commands[0].p0, Vector2{3, 7})
+}
+
+@(test)
 canvas_scope_emits_screen_space_paint_and_balanced_clip :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
@@ -241,5 +285,68 @@ paint_clip_sink_observes_balanced_saturated_stream :: proc(t: ^testing.T) {
 	for _ in 0 ..< PAINT_COMMAND_CAP do paint_push(list, {kind = .Rectangle})
 	paint_clip_end(list)
 	testing.expect_value(t, balance, 0)
+	testing.expect_value(t, list.clip_end_reserved, 0)
+}
+
+@(test)
+paint_sink_streams_commands_after_recording_saturates :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	streamed: int
+	sink := proc(list: ^Paint_List, command: Paint_Command, userdata: rawptr) {
+		assert(list != nil)
+		assert(command.kind == .Rectangle)
+		value := cast(^int)userdata
+		value^ += 1
+	}
+	paint_list_set_sink(list, sink, &streamed)
+	for _ in 0 ..< PAINT_COMMAND_CAP + 3 do paint_push(list, {kind = .Rectangle})
+	testing.expect_value(t, streamed, PAINT_COMMAND_CAP + 3)
+	testing.expect_value(t, list.count, PAINT_COMMAND_CAP)
+	testing.expect_value(t, list.dropped_commands, 3)
+}
+
+@(test)
+paint_sink_streams_text_after_command_recording_saturates :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	streamed_text := ""
+	sink := proc(list: ^Paint_List, command: Paint_Command, userdata: rawptr) {
+		assert(list != nil)
+		assert(command.kind == .Text)
+		value := cast(^string)userdata
+		value^ = paint_text(list, command)
+	}
+	for _ in 0 ..< PAINT_COMMAND_CAP do paint_push(list, {kind = .Rectangle})
+	paint_list_set_sink(list, sink, &streamed_text)
+	retained := paint_push_text(list, {kind = .Text}, "include")
+	testing.expect(t, !retained)
+	testing.expect_value(t, streamed_text, "include")
+	testing.expect_value(t, list.count, PAINT_COMMAND_CAP)
+	testing.expect_value(t, list.text_len, len("include"))
+	testing.expect_value(t, list.dropped_commands, 1)
+}
+
+@(test)
+paint_sink_balances_clip_started_after_recording_saturates :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	balance: int
+	sink := proc(list: ^Paint_List, command: Paint_Command, userdata: rawptr) {
+		assert(list != nil)
+		assert(command.kind == .Clip_Begin || command.kind == .Clip_End)
+		value := cast(^int)userdata
+		if command.kind == .Clip_Begin do value^ += 1
+		if command.kind == .Clip_End do value^ -= 1
+	}
+	for _ in 0 ..< PAINT_COMMAND_CAP do paint_push(list, {kind = .Rectangle})
+	paint_list_set_sink(list, sink, &balance)
+	paint_clip_begin(list, {0, 0, 20, 20})
+	testing.expect_value(t, balance, 1)
+	paint_clip_end(list)
+	testing.expect_value(t, balance, 0)
+	testing.expect_value(t, list.count, PAINT_COMMAND_CAP)
+	testing.expect_value(t, list.dropped_commands, 1)
+	testing.expect_value(t, list.clip_count, 0)
 	testing.expect_value(t, list.clip_end_reserved, 0)
 }

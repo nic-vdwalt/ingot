@@ -201,11 +201,13 @@ vterm_abi_validate :: proc() -> bool {
 // Foreign library import
 // ---------------------------------------------------------------------------
 
-// Prebuilt static libraries ship next to this package so consumers need no
-// extra linker flags. Linux falls back to a system-installed libvterm (build
-// one with scripts/build-libvterm.sh --target linux_amd64 if preferred).
-when ODIN_OS == .Linux {
-	foreign import lib "system:vterm"
+// Native libraries ship next to this package so consumers need no extra linker
+// flags. Linux archives are reproducibly built from vendor/libvterm by the
+// Linux dependency gate before compilation.
+when ODIN_OS == .Linux && ODIN_ARCH == .arm64 {
+	foreign import lib "lib/linux_arm64/libvterm.a"
+} else when ODIN_OS == .Linux {
+	foreign import lib "lib/linux_amd64/libvterm.a"
 } else when ODIN_OS == .Darwin && ODIN_ARCH == .arm64 {
 	foreign import lib "lib/darwin_arm64/libvterm.a"
 } else when ODIN_OS == .Darwin {

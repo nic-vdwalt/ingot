@@ -104,6 +104,72 @@ draw_surface :: proc(
 	}
 }
 
+draw_rounded_fill :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius, color: Color) {
+	assert(frame != nil, "draw_rounded_fill: nil frame")
+	if rect.width <= 0 || rect.height <= 0 || color.a == 0 do return
+	radius_px := radius_pixels(frame, radius, min(rect.width, rect.height))
+	draw_rectangle_rounded(
+		frame,
+		rect,
+		radius_ratio(frame, radius, rect),
+		radius_segments(radius_px),
+		color,
+	)
+}
+
+draw_rounded_border :: proc(
+	frame: ^Ui_Frame,
+	rect: Rectangle,
+	radius: Radius,
+	border: Border,
+	color: Color,
+) {
+	assert(frame != nil, "draw_rounded_border: nil frame")
+	if rect.width <= 0 || rect.height <= 0 || border == .None || color.a == 0 do return
+	radius_px := radius_pixels(frame, radius, min(rect.width, rect.height))
+	draw_rectangle_rounded_lines_ex(
+		frame,
+		rect,
+		radius_ratio(frame, radius, rect),
+		radius_segments(radius_px),
+		border_pixels(frame, border),
+		color,
+	)
+}
+
+overlay_rounded_fill :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius, color: Color) {
+	assert(frame != nil, "overlay_rounded_fill: nil frame")
+	if rect.width <= 0 || rect.height <= 0 || color.a == 0 do return
+	radius_px := radius_pixels(frame, radius, min(rect.width, rect.height))
+	overlay_rounded(
+		frame,
+		rect,
+		radius_ratio(frame, radius, rect),
+		radius_segments(radius_px),
+		color,
+	)
+}
+
+overlay_rounded_border :: proc(
+	frame: ^Ui_Frame,
+	rect: Rectangle,
+	radius: Radius,
+	border: Border,
+	color: Color,
+) {
+	assert(frame != nil, "overlay_rounded_border: nil frame")
+	if rect.width <= 0 || rect.height <= 0 || border == .None || color.a == 0 do return
+	radius_px := radius_pixels(frame, radius, min(rect.width, rect.height))
+	overlay_rounded_lines(
+		frame,
+		rect,
+		radius_ratio(frame, radius, rect),
+		radius_segments(radius_px),
+		border_pixels(frame, border),
+		color,
+	)
+}
+
 // draw_shadow_hard offsets one rounded rect behind a surface.
 //
 // It replaces draw_shadow_rounded's four expanding translucent rings. That

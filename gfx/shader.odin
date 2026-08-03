@@ -22,6 +22,9 @@ import wg "vendor:wgpu"
 SHADER_TEX_LOC_BASE :: 1000
 SHADER_MAX_TEX :: 4
 MAX_SHADERS :: 256
+SHADER_SOURCE_BYTES_MAX :: 1024 * 1024
+SHADER_UNIFORMS_MAX :: 1024
+SHADER_UNIFORM_BYTES_MAX :: 64 * 1024
 
 @(private)
 Shader_Uniform :: struct {
@@ -116,60 +119,100 @@ _default_tex :: proc() -> u32 {
 // --- WGSL uniform reflection ------------------------------------------------
 
 @(private)
-_wgsl_type_layout :: proc(t: string) -> (size, align: u32) {
+_wgsl_type_layout :: proc(t: string) -> (size, alignment: u32, ok: bool) {
 	switch t {
 	case "f32", "i32", "u32":
-		return 4, 4
+		return 4, 4, true
 	case "vec2<f32>", "vec2<i32>", "vec2<u32>":
-		return 8, 8
+		return 8, 8, true
 	case "vec3<f32>", "vec3<i32>", "vec3<u32>":
-		return 12, 16
+		return 12, 16, true
 	case "vec4<f32>", "vec4<i32>", "vec4<u32>":
-		return 16, 16
+		return 16, 16, true
 	case "mat4x4<f32>":
-		return 64, 16
+		return 64, 16, true
 	}
-	return 4, 4
+	return 0, 0, false
 }
 
 @(private)
-_align_up :: proc(v, a: u32) -> u32 {
-	if a == 0 do return v
-	return (v + a - 1) / a * a
+_shader_checked_align :: proc(value, alignment: u32) -> (aligned: u32, ok: bool) {
+	if alignment == 0 || alignment & (alignment - 1) != 0 do return 0, false
+	padding := alignment - 1
+	if value > max(u32) - padding do return 0, false
+	return (value + padding) / alignment * alignment, true
+}
+
+@(private)
+_shader_uniforms_destroy :: proc(uniforms: []Shader_Uniform) {
+	assert(len(uniforms) <= SHADER_UNIFORMS_MAX, "_shader_uniforms_destroy: invalid length")
+	for uniform in uniforms do delete(uniform.name)
+	delete(uniforms)
+}
+
+@(private)
+_reflect_uniform_member :: proc(
+	raw: string,
+	cursor: u32,
+) -> (
+	uniform: Shader_Uniform,
+	end: u32,
+	ok: bool,
+) {
+	member := strings.trim_space(raw)
+	colon := strings.index(member, ":")
+	if colon <= 0 do return {}, 0, false
+	name := strings.trim_space(member[:colon])
+	typ := strings.trim_space(member[colon + 1:])
+	if len(name) == 0 || len(typ) == 0 do return {}, 0, false
+	if space := strings.index(typ, " "); space >= 0 do typ = typ[:space]
+	size, alignment, layout_ok := _wgsl_type_layout(typ)
+	if !layout_ok do return {}, 0, false
+	offset, aligned := _shader_checked_align(cursor, alignment)
+	if !aligned || offset > SHADER_UNIFORM_BYTES_MAX do return {}, 0, false
+	if size > SHADER_UNIFORM_BYTES_MAX - offset do return {}, 0, false
+	uniform = {
+		name   = strings.clone(name),
+		offset = offset,
+		size   = size,
+	}
+	return uniform, offset + size, true
 }
 
 // _reflect_uniforms parses `struct U { name: type, ... }` into offset table.
 @(private)
-_reflect_uniforms :: proc(src: string) -> (out: []Shader_Uniform, total: u32) {
+_reflect_uniforms :: proc(src: string) -> (out: []Shader_Uniform, total: u32, ok: bool) {
 	list: [dynamic]Shader_Uniform
 	si := strings.index(src, "struct U")
-	if si < 0 do return list[:], 0
-	ob := strings.index(src[si:], "{")
-	if ob < 0 do return list[:], 0
-	ob += si
-	cb := strings.index(src[ob:], "}")
-	if cb < 0 do return list[:], 0
-	cb += ob
-	body := src[ob + 1:cb]
-	cursor: u32 = 0
-	// members separated by ',' or newlines
-	for raw in strings.split_multi(body, {",", "\n"}, context.temp_allocator) {
-		m := strings.trim_space(raw)
-		if len(m) == 0 do continue
-		colon := strings.index(m, ":")
-		if colon < 0 do continue
-		name := strings.trim_space(m[:colon])
-		typ := strings.trim_space(m[colon + 1:])
-		// strip trailing tokens/comments
-		if sp := strings.index(typ, " "); sp >= 0 do typ = typ[:sp]
-		sz, al := _wgsl_type_layout(typ)
-		off := _align_up(cursor, al)
-		append(&list, Shader_Uniform{name = strings.clone(name), offset = off, size = sz})
-		cursor = off + sz
+	if si < 0 do return list[:], 16, true
+	opening := strings.index(src[si:], "{")
+	if opening < 0 do return nil, 0, false
+	opening += si
+	closing := strings.index(src[opening:], "}")
+	if closing < 0 do return nil, 0, false
+	closing += opening
+	cursor: u32
+	for raw in strings.split_multi(src[opening + 1:closing], {",", "\n"}, context.temp_allocator) {
+		if len(strings.trim_space(raw)) == 0 do continue
+		if len(list) >= SHADER_UNIFORMS_MAX {
+			_shader_uniforms_destroy(list[:])
+			return nil, 0, false
+		}
+		uniform, end, member_ok := _reflect_uniform_member(raw, cursor)
+		if !member_ok {
+			_shader_uniforms_destroy(list[:])
+			return nil, 0, false
+		}
+		append(&list, uniform)
+		cursor = end
 	}
-	total = _align_up(cursor, 16)
-	if total == 0 do total = 16
-	return list[:], total
+	aligned_total, aligned := _shader_checked_align(cursor, 16)
+	if !aligned || aligned_total > SHADER_UNIFORM_BYTES_MAX {
+		_shader_uniforms_destroy(list[:])
+		return nil, 0, false
+	}
+	if aligned_total == 0 do aligned_total = 16
+	return list[:], aligned_total, true
 }
 
 // _reflect_textures finds group(3) texture_2d bindings, in binding order.
@@ -177,7 +220,7 @@ _reflect_uniforms :: proc(src: string) -> (out: []Shader_Uniform, total: u32) {
 _reflect_textures :: proc(src: string) -> []string {
 	names: [dynamic]string
 	rest := src
-	for {
+	for _ in 0 ..< SHADER_MAX_TEX {
 		i := strings.index(rest, "@group(3)")
 		if i < 0 do break
 		line_end := strings.index(rest[i:], ";")
@@ -193,29 +236,80 @@ _reflect_textures :: proc(src: string) -> []string {
 		if colon < 0 do continue
 		name := strings.trim_space(after[:colon])
 		append(&names, strings.clone(name))
-		if len(names) >= SHADER_MAX_TEX do break
 	}
 	return names[:]
 }
 
 // --- public API -------------------------------------------------------------
 
+@(private)
+_shader_source_size_valid :: proc(vertex, fragment: string, combined: bool) -> bool {
+	if len(vertex) > SHADER_SOURCE_BYTES_MAX || len(fragment) > SHADER_SOURCE_BYTES_MAX do return false
+	separator := 1 if combined else 0
+	if len(vertex) > SHADER_SOURCE_BYTES_MAX - separator do return false
+	return len(fragment) <= SHADER_SOURCE_BYTES_MAX - separator - len(vertex)
+}
+
+@(private)
+_shader_uniforms_valid :: proc(uniforms: []Shader_Uniform, total: u32) -> bool {
+	if total < 16 || total > SHADER_UNIFORM_BYTES_MAX || total % 16 != 0 do return false
+	for uniform in uniforms {
+		if uniform.offset > total do return false
+		if uniform.size > total - uniform.offset do return false
+	}
+	return true
+}
+
+@(private)
+_shader_extra_layout_init :: proc(
+	device: wg.Device,
+	entry: ^Shader_Entry,
+	source: string,
+) -> bool {
+	assert(device != nil, "_shader_extra_layout_init: nil device")
+	assert(entry != nil, "_shader_extra_layout_init: nil entry")
+	entry.tex_names = _reflect_textures(source)
+	entry.extra_count = len(entry.tex_names)
+	if entry.extra_count == 0 do return true
+	entries := make([]wg.BindGroupLayoutEntry, entry.extra_count + 1, context.temp_allocator)
+	for index in 0 ..< entry.extra_count {
+		entries[index] = {
+			binding = u32(index),
+			visibility = {.Fragment},
+			texture = {sampleType = .Float, viewDimension = ._2D},
+		}
+	}
+	entries[entry.extra_count] = {
+		binding = u32(entry.extra_count),
+		visibility = {.Fragment},
+		sampler = {type = .Filtering},
+	}
+	entry.extra_layout = wg.DeviceCreateBindGroupLayout(
+		device,
+		&{entryCount = uint(entry.extra_count + 1), entries = raw_data(entries)},
+	)
+	entry.extra_dirty = entry.extra_layout != nil
+	return entry.extra_dirty
+}
+
 LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 	if !g.initialized do return Shader{}
-	// Build the full WGSL module source. Fullscreen passes provide the whole
-	// module in fsCode; 3D shaders provide vs+fs which are concatenated.
-	src: string
-	if vsCode != nil && fsCode != nil {
-		src = strings.concatenate({string(vsCode), "\n", string(fsCode)}, context.temp_allocator)
-	} else if fsCode != nil {
-		src = string(fsCode)
-	} else if vsCode != nil {
-		src = string(vsCode)
-	} else {
-		return Shader{}
+	vertex := string(vsCode) if vsCode != nil else ""
+	fragment := string(fsCode) if fsCode != nil else ""
+	combined := vsCode != nil && fsCode != nil
+	if vsCode == nil && fsCode == nil do return {}
+	if !_shader_source_size_valid(vertex, fragment, combined) do return {}
+	src := fragment if vsCode == nil else vertex
+	if combined do src = strings.concatenate({vertex, "\n", fragment}, context.temp_allocator)
+	uniforms, total, reflected := _reflect_uniforms(src)
+	if !reflected || !_shader_uniforms_valid(uniforms, total) {
+		_shader_uniforms_destroy(uniforms)
+		return {}
 	}
 
 	e := new(Shader_Entry)
+	e.uniforms = uniforms
+	e.ushadow = make([]u8, int(total))
 	src_clone := strings.clone(src)
 	e.module = wg.DeviceCreateShaderModule(
 		g.device,
@@ -227,13 +321,10 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 		},
 	)
 	delete(src_clone)
-	e.uniforms, _ = _reflect_uniforms(src)
-	total: u32 = 16
-	for u in e.uniforms {
-		if u.offset + u.size > total do total = u.offset + u.size
+	if e.module == nil {
+		_shader_entry_destroy(e)
+		return {}
 	}
-	total = _align_up(total, 16)
-	e.ushadow = make([]u8, int(total))
 
 	e.u_layout = wg.DeviceCreateBindGroupLayout(
 		g.device,
@@ -246,6 +337,10 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 			},
 		},
 	)
+	if e.u_layout == nil {
+		_shader_entry_destroy(e)
+		return {}
+	}
 	for &bind, index in e.u_bind {
 		bind = wg.DeviceCreateBindGroup(
 			g.device,
@@ -259,29 +354,15 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 				},
 			},
 		)
+		if bind == nil {
+			_shader_entry_destroy(e)
+			return {}
+		}
 	}
 
-	e.tex_names = _reflect_textures(src)
-	e.extra_count = len(e.tex_names)
-	if e.extra_count > 0 {
-		entries := make([]wg.BindGroupLayoutEntry, e.extra_count + 1, context.temp_allocator)
-		for i in 0 ..< e.extra_count {
-			entries[i] = {
-				binding = u32(i),
-				visibility = {.Fragment},
-				texture = {sampleType = .Float, viewDimension = ._2D},
-			}
-		}
-		entries[e.extra_count] = {
-			binding = u32(e.extra_count),
-			visibility = {.Fragment},
-			sampler = {type = .Filtering},
-		}
-		e.extra_layout = wg.DeviceCreateBindGroupLayout(
-			g.device,
-			&{entryCount = uint(e.extra_count + 1), entries = raw_data(entries)},
-		)
-		e.extra_dirty = true
+	if !_shader_extra_layout_init(g.device, e, src) {
+		_shader_entry_destroy(e)
+		return {}
 	}
 
 	id := _shader_register(&g.resources.shaders, e)
@@ -364,15 +445,22 @@ SetShaderValueV :: proc(
 	uniformType: ShaderUniformDataType,
 	count: i32,
 ) {
+	if value == nil do return
 	e := _shader_get(shader.id)
 	if e == nil || locIndex < 0 || int(locIndex) >= len(e.uniforms) do return
-	u := e.uniforms[locIndex]
-	sz := _uniform_type_size(uniformType) * u32(max(count, 1))
-	if sz > u.size do sz = u.size
-	dst := raw_data(e.ushadow[u.offset:])
-	src := ([^]u8)(value)
-	for i in 0 ..< int(sz) {
-		([^]u8)(dst)[i] = src[i]
+	element_size, type_ok := _uniform_type_size(uniformType)
+	if !type_ok do return
+	uniform := e.uniforms[locIndex]
+	offset := int(uniform.offset)
+	if offset > len(e.ushadow) do return
+	if int(uniform.size) > len(e.ushadow) - offset do return
+	elements := u64(max(count, 1))
+	copy_size := u64(uniform.size)
+	if elements <= copy_size / u64(element_size) do copy_size = elements * u64(element_size)
+	destination := raw_data(e.ushadow[offset:])
+	source := ([^]u8)(value)
+	for index in 0 ..< int(copy_size) {
+		([^]u8)(destination)[index] = source[index]
 	}
 }
 
@@ -422,20 +510,20 @@ ShaderUnbindRaw :: proc() {
 }
 
 @(private)
-_uniform_type_size :: proc(t: ShaderUniformDataType) -> u32 {
+_uniform_type_size :: proc(t: ShaderUniformDataType) -> (size: u32, ok: bool) {
 	switch t {
 	case .FLOAT, .INT:
-		return 4
+		return 4, true
 	case .VEC2, .IVEC2:
-		return 8
+		return 8, true
 	case .VEC3, .IVEC3:
-		return 12
+		return 12, true
 	case .VEC4, .IVEC4:
-		return 16
+		return 16, true
 	case .SAMPLER2D:
-		return 4
+		return 4, true
 	}
-	return 4
+	return 0, false
 }
 
 // _shader_pipeline returns (building if needed) the pipeline for `fmt`.

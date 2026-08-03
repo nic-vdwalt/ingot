@@ -100,6 +100,23 @@ stream_slot_zero_ticket_preserves_recording_ownership :: proc(t: ^testing.T) {
 }
 
 @(test)
+renderer_zero_ticket_preserves_active_stream_slot :: proc(t: ^testing.T) {
+	renderer := new(Renderer)
+	defer free(renderer)
+	renderer.active_stream_slot = _stream_slots_acquire(renderer.stream_slots[:], 0)
+	slot_index := renderer.active_stream_slot
+
+	testing.expect(t, !_stream_slot_submitted(renderer, 0))
+
+	testing.expect_value(t, renderer.active_stream_slot, slot_index)
+	testing.expect_value(
+		t,
+		renderer.stream_slots[slot_index].state,
+		Stream_Slot_State.Recording,
+	)
+}
+
+@(test)
 stream_slot_intermediate_work_stays_in_recording_epoch :: proc(t: ^testing.T) {
 	slot := Stream_Slot {
 		state = .Recording,
@@ -140,6 +157,23 @@ stream_slot_indexed_reservation_reports_exact_layout :: proc(t: ^testing.T) {
 	testing.expect_value(t, vertex, u64(4))
 	testing.expect_value(t, index, u64(12))
 	testing.expect_value(t, slot.geometry_write, u64(15))
+}
+
+@(test)
+stream_slot_upload_watermarks_reset_on_reuse :: proc(t: ^testing.T) {
+	slots: [1]Stream_Slot
+	index := _stream_slots_acquire(slots[:], 0)
+	slots[index].geometry_write = 128
+	slots[index].geometry_uploaded = 128
+	slots[index].uniform_write = 64
+	slots[index].uniform_uploaded = 64
+	testing.expect(t, _stream_slot_submit(&slots[index], 1))
+
+	reused := _stream_slots_acquire(slots[:], 1)
+
+	testing.expect_value(t, reused, index)
+	testing.expect_value(t, slots[reused].geometry_uploaded, u64(0))
+	testing.expect_value(t, slots[reused].uniform_uploaded, u64(0))
 }
 
 @(test)

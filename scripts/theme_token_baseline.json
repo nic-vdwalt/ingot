@@ -1,7 +1,1 @@
-{
-  "ui/chart.odin:numeric_roundness": 1,
-  "ui/markdown.odin:numeric_roundness": 1,
-  "ui/mention_pills.odin:numeric_roundness": 1,
-  "ui/widgets.odin:numeric_roundness": 4,
-  "ui/widgets.odin:raw_color": 2
-}
+{}

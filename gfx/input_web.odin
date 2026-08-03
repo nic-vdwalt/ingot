@@ -20,26 +20,28 @@ package gfx
 
 @(export)
 ingot_web_key :: proc "contextless" (key: i32, down: bool, repeat: bool) {
-	_idle_note_activity(&g.idle)
+	ctx := g
+	_idle_note_activity(&ctx.idle)
 	if key < 0 || key >= KEY_COUNT do return
 	if down {
 		if repeat {
-			g.inp.st_repeat[key] = true
+			ctx.inp.st_repeat[key] = true
 		} else {
-			g.inp.st_pressed[key] = true
+			ctx.inp.st_pressed[key] = true
 			st_held[key] = true
-			_stage_key(&g.inp, KeyboardKey(key))
+			_stage_key(&ctx.inp, KeyboardKey(key))
 		}
 	} else {
-		g.inp.st_released[key] = true
+		ctx.inp.st_released[key] = true
 		st_held[key] = false
 	}
 }
 
 @(export)
 ingot_web_char :: proc "contextless" (codepoint: rune) {
-	_idle_note_activity(&g.idle)
-	_stage_char(&g.inp, codepoint)
+	ctx := g
+	_idle_note_activity(&ctx.idle)
+	_stage_char(&ctx.inp, codepoint)
 }
 
 // ingot_web_preedit_clear resets the staged IME composition string. Called
@@ -109,9 +111,10 @@ ingot_web_mouse_button :: proc "contextless" (button: i32, down: bool) {
 
 @(export)
 ingot_web_wheel :: proc "contextless" (dx, dy: f32) {
-	_idle_note_activity(&g.idle)
-	g.inp.st_wheel.x += dx
-	g.inp.st_wheel.y += dy
+	ctx := g
+	_idle_note_activity(&ctx.idle)
+	ctx.inp.st_wheel.x += dx
+	ctx.inp.st_wheel.y += dy
 }
 
 @(export)

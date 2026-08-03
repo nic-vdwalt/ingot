@@ -261,7 +261,7 @@ copy_subtree :: proc(dst: ^view.View_Doc, src: ^view.View_Doc, root: i32, mappin
 	copy_node(dst, src, root, mapping)
 	source := view.view_of(src)
 	walk := view.walk_begin(source)
-	for {
+	for _ in 0 ..< view.WALK_STEPS_MAX {
 		step, more := view.walk_next(&walk)
 		if !more do break
 		if step.event != .Enter do continue

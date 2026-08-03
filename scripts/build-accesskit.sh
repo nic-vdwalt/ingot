@@ -15,6 +15,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="0.22.3"
+ARCHIVE_SHA256="b652e380fb78efe6721ad892f15b2224f38f661c3fb20436ef4c5b3ce0fe8177"
 ALL=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -30,6 +31,18 @@ trap 'rm -rf "$TMP"' EXIT
 
 echo "Fetching accesskit-c $VERSION..."
 curl -fsSL "$URL" -o "$TMP/accesskit-c.zip"
+if command -v sha256sum >/dev/null 2>&1; then
+    actual_sha256="$(sha256sum "$TMP/accesskit-c.zip" | cut -d' ' -f1)"
+elif command -v shasum >/dev/null 2>&1; then
+    actual_sha256="$(shasum -a 256 "$TMP/accesskit-c.zip" | cut -d' ' -f1)"
+else
+    echo "Neither sha256sum nor shasum is available" >&2
+    exit 1
+fi
+if [ "$VERSION" = "0.22.3" ] && [ "$actual_sha256" != "$ARCHIVE_SHA256" ]; then
+    echo "AccessKit source archive checksum mismatch" >&2
+    exit 1
+fi
 unzip -q "$TMP/accesskit-c.zip" -d "$TMP"
 SRC="$TMP/accesskit-c-$VERSION"
 
@@ -67,6 +80,10 @@ else
         Darwin-arm64)  install_lib_macos arm64 darwin_arm64 ;;
         Darwin-x86_64) install_lib_macos x86_64 darwin_amd64 ;;
         Linux-x86_64)  install_lib linux/x86_64/static linux_amd64 libaccesskit.a ;;
+        Linux-aarch64|Linux-arm64)
+            echo "AccessKit 0.22.3 has no verified Linux arm64 artifact" >&2
+            exit 1
+            ;;
         *) echo "Unsupported platform; use --all or copy manually"; exit 1 ;;
     esac
 fi

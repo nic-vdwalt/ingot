@@ -57,19 +57,65 @@ TOKEN_FILES = {"ui/tokens.odin", "ui/material.odin"}
 # deliberately requires digits.
 RAW_COLOR = re.compile(r"\bColor\{\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*\d+\s*)?\}")
 
-# A numeric roundness argument to the rounded-rect primitives. Group 1 is the
-# rect argument, group 2 the roundness; a token-resolved call passes an
-# identifier there instead of a number.
-NUMERIC_ROUNDNESS = re.compile(
-    r"draw_rectangle_rounded(?:_lines_ex)?\s*\(\s*[^,]+,\s*[^,]+,\s*(\d+(?:\.\d+)?)\s*,"
-)
+NUMERIC_LITERAL = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
+ROUNDED_CALLS = {
+    "draw_rectangle_rounded": (2, 3, None),
+    "draw_rectangle_rounded_lines_ex": (2, 3, 4),
+    "overlay_rounded": (2, 3, None),
+    "overlay_rounded_lines": (2, 3, 4),
+}
+BORDER_CALLS = {"draw_rectangle_lines_ex": 2, "overlay_rect_lines": 2}
 
-# An unscaled numeric thickness passed to a *_lines_ex border call. The
-# scaled forms go through border_pixels or ui_frame_scf and so are identifiers
-# or calls, never bare digits.
-UNSCALED_BORDER = re.compile(
-    r"draw_rectangle_lines_ex\s*\(\s*[^,]+,\s*[^,]+,\s*(\d+(?:\.\d+)?)\s*,"
-)
+
+def call_arguments(source: str, opening: int) -> tuple[list[str], int]:
+    arguments: list[str] = []
+    start = opening + 1
+    parentheses = braces = brackets = 0
+    index = start
+    while index < len(source):
+        character = source[index]
+        if character == "(" :
+            parentheses += 1
+        elif character == ")":
+            if parentheses == 0 and braces == 0 and brackets == 0:
+                arguments.append(source[start:index].strip())
+                return arguments, index + 1
+            parentheses -= 1
+        elif character == "{":
+            braces += 1
+        elif character == "}":
+            braces -= 1
+        elif character == "[":
+            brackets += 1
+        elif character == "]":
+            brackets -= 1
+        elif character == "," and parentheses == 0 and braces == 0 and brackets == 0:
+            arguments.append(source[start:index].strip())
+            start = index + 1
+        index += 1
+    return [], opening + 1
+
+
+def visual_call_counts(masked: str) -> dict[str, int]:
+    counts = {"numeric_roundness": 0, "numeric_segments": 0, "unscaled_border": 0}
+    call = re.compile(r"\b(?:[A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+    cursor = 0
+    while match := call.search(masked, cursor):
+        arguments, cursor = call_arguments(masked, match.end() - 1)
+        name = match.group(1)
+        if name in ROUNDED_CALLS and arguments:
+            roundness, segments, border = ROUNDED_CALLS[name]
+            if len(arguments) > roundness and NUMERIC_LITERAL.fullmatch(arguments[roundness]):
+                counts["numeric_roundness"] += 1
+            if len(arguments) > segments and NUMERIC_LITERAL.fullmatch(arguments[segments]):
+                counts["numeric_segments"] += 1
+            if border is not None and len(arguments) > border and NUMERIC_LITERAL.fullmatch(arguments[border]):
+                counts["unscaled_border"] += 1
+        if name in BORDER_CALLS and arguments:
+            border = BORDER_CALLS[name]
+            if len(arguments) > border and NUMERIC_LITERAL.fullmatch(arguments[border]):
+                counts["unscaled_border"] += 1
+    return counts
 
 
 def tracked_sources(root: Path) -> list[str]:
@@ -100,13 +146,9 @@ def counts_for_source(source: str, path: str) -> dict[str, int]:
             counts[f"{path}:raw_color"] = raw_colors
 
     if path not in TOKEN_FILES:
-        roundness = len(NUMERIC_ROUNDNESS.findall(masked))
-        if roundness:
-            counts[f"{path}:numeric_roundness"] = roundness
-
-        border = len(UNSCALED_BORDER.findall(masked))
-        if border:
-            counts[f"{path}:unscaled_border"] = border
+        for kind, count in visual_call_counts(masked).items():
+            if count:
+                counts[f"{path}:{kind}"] = count
 
     return counts
 
@@ -121,7 +163,8 @@ def current_counts(root: Path) -> dict[str, int]:
 
 ADVICE = {
     "raw_color": "use a Theme field; palettes are data and live in theme.odin or sketch.odin",
-    "numeric_roundness": "use radius_ratio(frame, Radius, rect) and radius_segments",
+    "numeric_roundness": "use a Radius-aware material helper or radius_ratio",
+    "numeric_segments": "use a Radius-aware material helper or radius_segments",
     "unscaled_border": "use border_pixels(frame, Border) so the width scales with DPI",
 }
 

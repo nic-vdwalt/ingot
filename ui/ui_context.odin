@@ -301,13 +301,19 @@ Ui :: struct {
 
 // begin opens the root over a logical rectangle: caches screen size, runs Tab
 // cycling against last frame's focusable count, and opens the root column.
-begin :: proc(u: ^Ui, frame: ^Ui_Frame, rect: Rect_I32, gap: Space = .None) {
+begin :: proc(
+	u: ^Ui,
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	gap: Space = .None,
+	tab_navigation: bool = true,
+) {
 	assert(u != nil, "begin: nil Ui")
 	assert(frame != nil && frame.open, "begin: frame not open")
 	assert(rect.w >= 0 && rect.h >= 0, "begin: negative root rectangle")
 	u.frame = frame
 	frame.open_roots += 1
-	_open(u, rect.x, rect.y, rect.w, rect.h, space_px(u, gap))
+	_open(u, rect.x, rect.y, rect.w, rect.h, space_px(u, gap), tab_navigation)
 }
 
 // ROOT_EXTENT_OPEN is the root height for a Ui laid out inside a scrolling
@@ -320,7 +326,7 @@ ROOT_EXTENT_OPEN :: i32(1 << 20)
 // _open is the physical-pixel root. Only begin may call it, so the facade has
 // exactly one entry and the open_roots balance can never be bypassed.
 @(private = "file")
-_open :: proc(u: ^Ui, x, y, w, h: i32, gap: i32) {
+_open :: proc(u: ^Ui, x, y, w, h: i32, gap: i32, tab_navigation: bool) {
 	assert(u != nil, "begin: nil Ui")
 	assert(!u.open, "begin: frame already open")
 	frame := u.frame
@@ -328,7 +334,7 @@ _open :: proc(u: ^Ui, x, y, w, h: i32, gap: i32) {
 	if frame != nil && frame.input != nil do input = frame.input^
 	u.screen_w = i32(input.screen_size.x)
 	u.screen_h = i32(input.screen_size.y)
-	if u.focus_count > 0 && input_key_pressed(&input, .TAB) {
+	if tab_navigation && u.focus_count > 0 && input_key_pressed(&input, .TAB) {
 		backwards := input_key_down(&input, .LEFT_SHIFT) || input_key_down(&input, .RIGHT_SHIFT)
 		ids := u.focus_prev[:u.focus_count]
 		u.focus_state.active = focus_order_next(ids, u.focus_state.active, backwards)

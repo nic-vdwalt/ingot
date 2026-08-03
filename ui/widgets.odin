@@ -74,17 +74,8 @@ card_bg_at :: proc(
 	rect := rect_f32(bounds)
 	min_dim := min(rect.width, rect.height)
 	if min_dim <= 0 do return
-	round := (ui_frame_metrics(frame).CARD_RADIUS_PX * 2) / min_dim
-	if round > 1 do round = 1
-	draw_rectangle_rounded(frame, rect, round, 6, bg)
-	draw_rectangle_rounded_lines_ex(
-		frame,
-		rect,
-		round,
-		6,
-		ui_frame_scf(frame, 1),
-		ui_frame_theme(frame).border_subtle,
-	)
+	draw_rounded_fill(frame, rect, .MD, bg)
+	draw_rounded_border(frame, rect, .MD, .Hairline, ui_frame_theme(frame).border_subtle)
 	if accent_w > 0 {
 		inset := ui_frame_sc(frame, 2)
 		draw_rectangle(
@@ -515,42 +506,6 @@ color_mix :: proc(a, b: Color, t: f32) -> Color {
 	}
 }
 
-// draw_shadow_rounded draws a soft drop shadow behind a rounded rect by
-// stacking expanded translucent rings (gfx has no blur primitive). Draw it
-// *before* the card fill so only the fringe remains visible. strength scales
-// the theme.shadow_color alpha; 1.0 is the standard card shadow.
-draw_shadow_rounded :: proc(
-	frame: ^Ui_Frame,
-	rect: Rectangle,
-	roundness: f32,
-	strength: f32 = 1.0,
-) {
-	assert(frame != nil, "draw_shadow_rounded: nil frame")
-	assert(rect.width > 0 && rect.height > 0, "draw_shadow_rounded: empty rect")
-	assert(strength >= 0 && strength <= 4, "draw_shadow_rounded: strength out of range")
-	base := ui_frame_theme(frame).shadow_color
-	if base.a == 0 || strength == 0 do return
-	// Fixed layer count: bounded work per call ("put a limit on everything").
-	SHADOW_LAYERS :: 4
-	alpha := clamp(f32(base.a) * strength / f32(SHADOW_LAYERS + 2), 0, 255)
-	for i := SHADOW_LAYERS; i >= 1; i -= 1 {
-		spread := f32(i) * 2
-		layer := Rectangle {
-			rect.x - spread,
-			rect.y - spread + 3, // bias downward for a lit-from-above look
-			rect.width + spread * 2,
-			rect.height + spread * 2,
-		}
-		draw_rectangle_rounded(
-			frame,
-			layer,
-			roundness,
-			BTN_SEGMENTS,
-			{base.r, base.g, base.b, u8(alpha)},
-		)
-	}
-}
-
 Button_State :: struct {
 	hover: f32,
 }
@@ -617,7 +572,7 @@ btn_gloss :: proc(frame: ^Ui_Frame, theme: ^Theme, rect: Rectangle) {
 	assert(frame != nil && theme != nil, "btn_gloss: invalid argument")
 	top := theme.button_primary_grad_top
 	if top.a == 0 do return
-	radius := BTN_ROUNDNESS * min(rect.width, rect.height) * 0.5
+	radius := radius_pixels(frame, .MD, min(rect.width, rect.height))
 	inset := i32(radius) + 1
 	gw := i32(rect.width) - inset * 2
 	if gw <= 0 do return
@@ -836,21 +791,12 @@ button_at :: proc(
 			// disabled button and a disabled menu item rendered in different
 			// colors in the same frame; fg_muted_dim is now Ink.Muted only.
 			fg = style_theme.fg_disabled
-			border = Color{0, 0, 0, 0}
+			border = {}
 		}
 
-		draw_rectangle_rounded(frame, rrect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
+		draw_rounded_fill(frame, rrect, .MD, bg)
 		if style == .Primary && enabled do btn_gloss(frame, style_theme, rrect)
-		if border.a > 0 {
-			draw_rectangle_rounded_lines_ex(
-				frame,
-				rrect,
-				BTN_ROUNDNESS,
-				BTN_SEGMENTS,
-				BTN_BORDER_W,
-				border,
-			)
-		}
+		draw_rounded_border(frame, rrect, .MD, .Hairline, border)
 		if enabled && focus_opt_focused(focus) {
 			draw_focus_ring(frame, x, y, w, h)
 		}
@@ -930,20 +876,11 @@ button_at_state :: proc(
 		bg = style_theme.button_disabled_bg
 		// See button_at: one disabled ink across every surface.
 		fg = style_theme.fg_disabled
-		border = Color{0, 0, 0, 0}
+		border = {}
 	}
-	draw_rectangle_rounded(frame, rrect, BTN_ROUNDNESS, BTN_SEGMENTS, bg)
+	draw_rounded_fill(frame, rrect, .MD, bg)
 	if style == .Primary && enabled do btn_gloss(frame, style_theme, rrect)
-	if border.a > 0 {
-		draw_rectangle_rounded_lines_ex(
-			frame,
-			rrect,
-			BTN_ROUNDNESS,
-			BTN_SEGMENTS,
-			BTN_BORDER_W,
-			border,
-		)
-	}
+	draw_rounded_border(frame, rrect, .MD, .Hairline, border)
 	if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
 	label_s, text_w := btn_label_fit(frame, label, w, fs)
 	draw_text_string_frame(frame, label_s, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
@@ -1104,7 +1041,7 @@ draw_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, fg, bg: 
 	pill_w := tw + pad_h * 2
 	pill_h := font_size + 4
 	rect := Rectangle{f32(x), f32(y), f32(pill_w), f32(pill_h)}
-	draw_rectangle_rounded(frame, rect, 0.6, 6, bg)
+	draw_rounded_fill(frame, rect, .Pill, bg)
 	draw_text_string_frame(frame, text, x + pad_h, y + 2, font_size, fg)
 	return pill_w
 }
@@ -1458,14 +1395,14 @@ progress_bar_at :: proc(
 	track_color := options.track_color
 	if track_color == {} do track_color = ui_frame_theme(frame).bg_active
 	track := Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	draw_rectangle_rounded(frame, track, 1.0, 4, track_color)
+	draw_rounded_fill(frame, track, .Pill, track_color)
 	if options.orientation == .Vertical {
 		fill_h := f32(h) * value
 		if fill_h > 0 do draw_rectangle_rec(frame, {f32(x), f32(y + h) - fill_h, f32(w), fill_h}, color)
 	} else {
 		fill_w := f32(w) * value
 		if fill_w >= f32(h) {
-			draw_rectangle_rounded(frame, {f32(x), f32(y), fill_w, f32(h)}, 1.0, 4, color)
+			draw_rounded_fill(frame, {f32(x), f32(y), fill_w, f32(h)}, .Pill, color)
 		} else if fill_w > 0 {
 			draw_rectangle_rec(frame, {f32(x), f32(y), fill_w, f32(h)}, color)
 		}
@@ -1570,11 +1507,10 @@ kv_row_at :: proc(
 // list_row_bg_at draws the unified rounded row background for hover/selection.
 list_row_bg_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, selected, hovered: bool) {
 	assert(frame != nil, "list_row_bg_at: nil frame")
-	style := ui_frame_theme(frame)
 	if selected {
-		draw_rectangle_rounded(frame, rect_f32(rect), 0.25, 4, style.bg_active)
+		draw_surface(frame, rect_f32(rect), .Row, .Selected, radius = .SM, border = .None)
 	} else if hovered {
-		draw_rectangle_rounded(frame, rect_f32(rect), 0.25, 4, style.bg_hover)
+		draw_surface(frame, rect_f32(rect), .Row, .Hover, radius = .SM, border = .None)
 	}
 }
 

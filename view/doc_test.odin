@@ -75,7 +75,7 @@ test_walk_visits_every_node_once_and_balances :: proc(t: ^testing.T) {
 	enters: [VIEW_NODES_MAX]int
 	exits := 0
 	walk := walk_begin(view)
-	for {
+	for _ in 0 ..< WALK_STEPS_MAX {
 		step, more := walk_next(&walk)
 		if !more do break
 		if step.event == .Enter {
@@ -101,7 +101,7 @@ test_walk_terminates_on_sibling_cycle :: proc(t: ^testing.T) {
 	doc.nodes[1].next_sibling = 1
 	walk := walk_begin(view_of(&doc))
 	steps := 0
-	for {
+	for _ in 0 ..< WALK_STEPS_MAX {
 		_, more := walk_next(&walk)
 		if !more do break
 		steps += 1

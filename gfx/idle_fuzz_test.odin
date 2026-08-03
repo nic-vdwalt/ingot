@@ -47,7 +47,9 @@ fuzz_idle_deadline_wakeups :: proc(t: ^testing.T) {
 		// Positive base time: a deadline of 0 is the "none" sentinel.
 		now := 10.0
 		// Drain any settle allowance so the pump is truly idle.
-		for _idle_take_frame(&s, now) {}
+		for _ in 0 ..< IDLE_SETTLE_FRAMES {
+			if !_idle_take_frame(&s, now) do break
+		}
 		delay := f64(testx.int_range(&p, 0, 2_000)) / 1000.0
 		_idle_request_in(&s, now, delay) // RequestRedrawIn
 		testing.expect(t, delay == 0 || !_idle_take_frame(&s, now), "woke before deadline")

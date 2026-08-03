@@ -11,12 +11,15 @@ package accesskit
 
 import "core:c"
 
-// ENABLED is false on platforms without an AccessKit adapter (the web target
-// uses the DOM mirror instead) and when compiled out via
-// -define:INGOT_ACCESSKIT=false.
-ENABLED ::
-	#config(INGOT_ACCESSKIT, true) &&
-	(ODIN_OS == .Darwin || ODIN_OS == .Windows || ODIN_OS == .Linux)
+// ENABLED is false on platforms without a committed AccessKit adapter (the web
+// target uses the DOM mirror instead) and when compiled out via
+// -define:INGOT_ACCESSKIT=false. Linux arm64 stays disabled until a verified
+// accesskit-c archive is available for that architecture.
+PLATFORM_SUPPORTED ::
+	ODIN_OS == .Darwin || ODIN_OS == .Windows || (ODIN_OS == .Linux && ODIN_ARCH == .amd64)
+ENABLED :: #config(INGOT_ACCESSKIT, true) && PLATFORM_SUPPORTED
+
+#assert(!(ODIN_OS == .Linux && ODIN_ARCH != .amd64) || !ENABLED)
 
 // ---------------------------------------------------------------------------
 // Types (mirror accesskit.h; explicit ordinals for sparse enums)

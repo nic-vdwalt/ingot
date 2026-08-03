@@ -361,13 +361,13 @@ _context_restore :: proc(previous: ^Context) {
 //
 // context_activation_depth is non-zero while an ergonomic wrapper has activated
 // its owner, marking the draw as correctly routed.
-@(private)
+@(thread_local, private)
 context_activation_depth: int
 
 // ergonomic_frames_active counts contexts with a live ergonomic Frame. Contexts
 // are not registered anywhere, so this is maintained alongside
 // Context.frame_active by context_begin_frame, end_frame, and window teardown.
-@(private)
+@(thread_local, private)
 ergonomic_frames_active: int
 
 @(private)
@@ -876,7 +876,7 @@ EndDrawing :: proc() {
 	when ODIN_OS != .JS {
 		input_poll()
 	}
-	_frame_timing()
+	_frame_timing(platform_should_close())
 }
 
 // _release_surface_texture drops the owned reference returned by
@@ -925,10 +925,15 @@ _frame_pacing_remaining :: proc(now, last, target: f64) -> f64 {
 }
 
 @(private)
-_frame_timing :: proc() {
+_frame_pacing_enabled :: proc(target_fps: i32, close_requested: bool) -> bool {
+	return target_fps > 0 && !close_requested
+}
+
+@(private)
+_frame_timing :: proc(close_requested: bool) {
 	// Native pacing uses a bounded spin so a stalled clock cannot hang a frame.
 	when ODIN_OS != .JS {
-		if g.target_fps > 0 {
+		if _frame_pacing_enabled(g.target_fps, close_requested) {
 			target := 1.0 / f64(g.target_fps)
 			assert(target > 0, "_frame_timing: non-positive target")
 			remaining := _frame_pacing_remaining(_now(), g.last_time, target)

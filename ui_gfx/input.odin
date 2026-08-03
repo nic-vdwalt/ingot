@@ -10,6 +10,19 @@ capture_input :: proc(input: ^ui.Ui_Input) {
 	capture_input_context(rl.default_context(), input)
 }
 
+pointer_snapshot_sanitize :: proc(input: ^ui.Ui_Input) {
+	assert(input != nil, "pointer_snapshot_sanitize: nil input")
+	if input.window_focused && input.cursor_on_screen do return
+	input.cursor_on_screen = false
+	input.mouse_position = {-1, -1}
+	input.mouse_delta = {}
+	input.mouse_wheel = {}
+	input.mouse_pressed = {}
+	input.mouse_released = {}
+	input.mouse_down = {}
+	assert(input.mouse_delta == {} && input.mouse_wheel == {})
+}
+
 capture_input_context :: proc(ctx: ^rl.Context, input: ^ui.Ui_Input) {
 	assert(ctx != nil && input != nil, "capture_input_context: nil argument")
 	input^ = {}
@@ -63,4 +76,5 @@ capture_input_context :: proc(ctx: ^rl.Context, input: ^ui.Ui_Input) {
 	}
 	assert(input.character_count <= ui.INPUT_CHAR_CAP)
 	assert(characters_drained <= INPUT_CHARACTER_DRAIN_MAX)
+	pointer_snapshot_sanitize(input)
 }

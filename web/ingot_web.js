@@ -72,6 +72,40 @@
 	function httpImports(wmi) {
 		if (wmi) wasmMemoryInterface = wmi;
 		const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+		const streamRead = (slot) => {
+			if (!slot || !slot.reader || slot.chunk.length > 0 || slot.state !== 0) return;
+			slot.reader.read().then(({ done, value }) => {
+				if (done) {
+					slot.chunk = slot.carry;
+					slot.carry = new Uint8Array();
+					slot.state = 1;
+					clearTimeout(slot.timeout);
+					return;
+				}
+				if (!(value instanceof Uint8Array) || value.length === 0) {
+					streamRead(slot);
+					return;
+				}
+				if (slot.received > slot.maximumBody - value.length) {
+					throw new Error("response too large");
+				}
+				slot.received += value.length;
+				const merged = new Uint8Array(slot.carry.length + value.length);
+				merged.set(slot.carry);
+				merged.set(value, slot.carry.length);
+				const newline = merged.lastIndexOf(10);
+				if (newline < 0) {
+					slot.carry = merged;
+					streamRead(slot);
+					return;
+				}
+				slot.chunk = merged.slice(0, newline + 1);
+				slot.carry = merged.slice(newline + 1);
+			}).catch(() => {
+				slot.state = 2;
+				clearTimeout(slot.timeout);
+			});
+		};
 		return {
 			ingot_http_request: (method, urlPointer, urlLength, headersPointer,
 				headersLength, bodyPointer, bodyLength, maximumBody) => {
@@ -90,7 +124,7 @@
 				const body = bodyLength > 0 ? wasmBytes(bodyPointer, bodyLength).slice() : undefined;
 				const controller = new AbortController();
 				slot.controller = controller;
-				const timeout = setTimeout(() => controller.abort(), 30000);
+				const timeout = setTimeout(() => controller.abort(), 120000);
 				fetch(wasmText(urlPointer, urlLength), {
 					method: methods[method] || "GET",
 					headers,
@@ -105,6 +139,51 @@
 					slot.state = 1;
 				}).catch(() => { slot.state = 2; }).finally(() => clearTimeout(timeout));
 				return id;
+			},
+			ingot_http_stream_request: (urlPointer, urlLength, maximumBody) => {
+				const id = httpSlots.findIndex((slot) => slot === null);
+				if (id < 0 || maximumBody <= 0) return -1;
+				const slot = {
+					state: 0, status: 0, body: new Uint8Array(), chunk: new Uint8Array(),
+					carry: new Uint8Array(), controller: new AbortController(), reader: null,
+					received: 0, maximumBody, timeout: null,
+				};
+				httpSlots[id] = slot;
+				slot.timeout = setTimeout(() => slot.controller.abort(), 120000);
+				fetch(wasmText(urlPointer, urlLength), {
+					method: "GET", credentials: "same-origin", signal: slot.controller.signal,
+				}).then((response) => {
+					slot.status = response.status;
+					if (!response.body) throw new Error("stream unavailable");
+					slot.reader = response.body.getReader();
+					streamRead(slot);
+				}).catch(() => {
+					slot.state = 2;
+					clearTimeout(slot.timeout);
+				});
+				return id;
+			},
+			ingot_http_stream_chunk_len: (id) => {
+				const slot = httpSlots[id];
+				return slot ? slot.chunk.length : -1;
+			},
+			ingot_http_stream_chunk_copy: (id, destination, capacity) => {
+				const slot = httpSlots[id];
+				if (!slot || capacity < slot.chunk.length) return -1;
+				const count = slot.chunk.length;
+				if (count > 0) wasmBytes(destination, count).set(slot.chunk);
+				slot.chunk = new Uint8Array();
+				streamRead(slot);
+				return count;
+			},
+			ingot_http_stream_release: (id) => {
+				const slot = httpSlots[id];
+				if (!slot) return 0;
+				if (slot.reader) slot.reader.cancel().catch(() => {});
+				if (slot.controller) slot.controller.abort();
+				if (slot.timeout) clearTimeout(slot.timeout);
+				httpSlots[id] = null;
+				return 1;
 			},
 			ingot_http_poll: (id) => httpSlots[id] ? httpSlots[id].state : 2,
 			ingot_http_status: (id) => httpSlots[id] ? httpSlots[id].status : 0,
