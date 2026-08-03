@@ -56,7 +56,13 @@ app_init :: proc(
 		"app_init: expected one frame callback",
 	)
 	assert(active_app == nil, "app_init: another application is active")
-	gfx.SetConfigFlags(config.flags)
+	// Windows' AccessKit subclassing adapter must be installed before the
+	// window is first shown or it panics. session_init installs the adapter, so
+	// create the window hidden and reveal it below once the session is live.
+	// Other platforms have no such ordering constraint and show immediately.
+	window_flags := config.flags
+	when ODIN_OS == .Windows do window_flags += {.WINDOW_HIDDEN}
+	gfx.SetConfigFlags(window_flags)
 	initialized := gfx.context_init(
 		gfx.default_context(),
 		config.width,
@@ -67,6 +73,7 @@ app_init :: proc(
 	if config.target_fps > 0 do gfx.SetTargetFPS(config.target_fps)
 	if config.event_waiting do gfx.EnableEventWaiting()
 	session_init(&app.session, config.session)
+	when ODIN_OS == .Windows do gfx.ShowWindow()
 	app.config = config
 	app.callbacks = callbacks
 	app.userdata = userdata
