@@ -109,11 +109,7 @@ renderer_zero_ticket_preserves_active_stream_slot :: proc(t: ^testing.T) {
 	testing.expect(t, !_stream_slot_submitted(renderer, 0))
 
 	testing.expect_value(t, renderer.active_stream_slot, slot_index)
-	testing.expect_value(
-		t,
-		renderer.stream_slots[slot_index].state,
-		Stream_Slot_State.Recording,
-	)
+	testing.expect_value(t, renderer.stream_slots[slot_index].state, Stream_Slot_State.Recording)
 }
 
 @(test)

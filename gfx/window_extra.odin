@@ -53,10 +53,13 @@ RestoreWindow :: proc() {
 // pairs with that flag's deferred-show contract: create hidden, install any
 // state that must precede the first show (e.g. the Windows AccessKit adapter),
 // then call this exactly once to make the window visible.
+context_show_window :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_show_window: nil context")
+	assert(ctx.win != nil, "context_show_window: no window")
+	glfw.ShowWindow(glfw.WindowHandle(ctx.win))
+}
 ShowWindow :: proc() {
-	assert(g != nil, "ShowWindow: no active context")
-	assert(g.win != nil, "ShowWindow: no window")
-	glfw.ShowWindow(glfw.WindowHandle(g.win))
+	context_show_window(default_context())
 }
 context_focus_window :: proc(ctx: ^Context) {
 	if ctx == nil || ctx.win == nil do return
