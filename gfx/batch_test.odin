@@ -330,6 +330,21 @@ batch_peak_tracks_high_water_across_flushes :: proc(t: ^testing.T) {
 }
 
 @(test)
+stream_peak_tracks_high_water_within_capacity :: proc(t: ^testing.T) {
+	r := new(Renderer)
+	defer free(r)
+	r.geometry_bytes = 4096
+	r.uniform_bytes = 2048
+	_stream_record_peak(r, 1024, 256)
+	_stream_record_peak(r, 512, 1024)
+	testing.expect_value(t, r.peak_geometry_bytes, u64(1024))
+	testing.expect_value(t, r.peak_uniform_bytes, u64(1024))
+	_stream_record_peak(r, 4096, 2048)
+	testing.expect_value(t, r.peak_geometry_bytes, r.geometry_bytes)
+	testing.expect_value(t, r.peak_uniform_bytes, r.uniform_bytes)
+}
+
+@(test)
 batch_capacities_cover_the_measured_peak :: proc(t: ^testing.T) {
 	// Measured with the gallery smoke run at 3840x2160, the heaviest scene
 	// in the repo. The capacity must clear that peak with real headroom: a

@@ -103,80 +103,80 @@ Stream_Slot :: struct {
 }
 
 Renderer :: struct {
-	shader:             wg.ShaderModule, // kept alive so Custom pipelines can be rebuilt
-	pipes:              [Pipe_Kind][Blend_Slot]wg.RenderPipeline,
+	shader:              wg.ShaderModule, // kept alive so Custom pipelines can be rebuilt
+	pipes:               [Pipe_Kind][Blend_Slot]wg.RenderPipeline,
 
 	// Lazy batch pipelines for non-swapchain target formats (e.g. the galaxy
 	// HDR RGBA16Float render targets). Keyed by colour format.
-	alt_fmt:            [4]wg.TextureFormat,
-	alt_pipes:          [4][Pipe_Kind][Blend_Slot]wg.RenderPipeline,
-	alt_n:              int,
-	ubuf:               wg.Buffer,
-	ubind:              wg.BindGroup,
-	ubind_layout:       wg.BindGroupLayout,
-	tex_layout:         wg.BindGroupLayout, // group(1): texture + sampler
-	neutral_tex:        wg.Texture,
-	neutral_view:       wg.TextureView,
-	neutral_sampler:    wg.Sampler,
-	neutral_bind:       wg.BindGroup,
+	alt_fmt:             [4]wg.TextureFormat,
+	alt_pipes:           [4][Pipe_Kind][Blend_Slot]wg.RenderPipeline,
+	alt_n:               int,
+	ubuf:                wg.Buffer,
+	ubind:               wg.BindGroup,
+	ubind_layout:        wg.BindGroupLayout,
+	tex_layout:          wg.BindGroupLayout, // group(1): texture + sampler
+	neutral_tex:         wg.Texture,
+	neutral_view:        wg.TextureView,
+	neutral_sampler:     wg.Sampler,
+	neutral_bind:        wg.BindGroup,
 
 	// Alternate group(0) uniform for render-target passes: an RT renders in its
 	// own pixel space, so it needs its own ortho projection that must NOT clobber
 	// the window projection used by the main pass in the same frame. cur_u is the
 	// group(0) bind the next flush uses (r.ubind for the window, r.rt_ubind for
 	// the active render target).
-	rt_ubuf:            wg.Buffer,
-	rt_ubind:           wg.BindGroup,
-	cur_u:              wg.BindGroup,
+	rt_ubuf:             wg.Buffer,
+	rt_ubind:            wg.BindGroup,
+	cur_u:               wg.BindGroup,
 
 	// current run
-	verts:              [dynamic; BATCH_MAX_VERTICES]Vertex,
-	indices:            [dynamic; BATCH_MAX_INDICES]u32,
+	verts:               [dynamic; BATCH_MAX_VERTICES]Vertex,
+	indices:             [dynamic; BATCH_MAX_INDICES]u32,
 	// High-water marks across the context's lifetime, in elements. Always
 	// tracked (two max() per flush) rather than gated behind
 	// RENDER_STATS_ENABLED, because these are what justify the capacities
 	// above: a bound nobody can measure is a guess. Read via
 	// renderer_peak_usage.
-	peak_verts:         int,
-	peak_indices:       int,
+	peak_verts:          int,
+	peak_indices:        int,
 	peak_geometry_bytes: u64,
 	peak_uniform_bytes:  u64,
-	cur_kind:           Pipe_Kind,
-	cur_bind:           wg.BindGroup,
-	cur_blend:          Blend_Slot,
+	cur_kind:            Pipe_Kind,
+	cur_bind:            wg.BindGroup,
+	cur_blend:           Blend_Slot,
 
 	// Active custom shader (BeginShaderMode); 0 = none. When set, Image-kind
 	// flushes use the shader's pipeline + uniform/extra-texture bind groups.
-	active_shader:      u32,
+	active_shader:       u32,
 
 	// 2D model transform (rlgl matrix stack and BeginMode2D): applied to every
 	// emitted vertex so rlgl.PushMatrix/Translatef/PopMatrix shift subsequent
 	// draws (the galaxy pane origin transform) and a Camera2D pans, zooms, and
 	// rotates the world it wraps.
-	model_xf:           Affine,
-	model_stack:        [dynamic; MODEL_STACK_MAX]Affine,
+	model_xf:            Affine,
+	model_stack:         [dynamic; MODEL_STACK_MAX]Affine,
 
 	// Custom blend factors (set by rlgl.SetBlendFactors; default = Alpha).
-	cust_src:           wg.BlendFactor,
-	cust_dst:           wg.BlendFactor,
-	cust_op:            wg.BlendOperation,
-	stream_slots:       [STREAM_SLOT_COUNT]Stream_Slot,
-	active_stream_slot: i32,
-	uniform_alignment:  u64,
+	cust_src:            wg.BlendFactor,
+	cust_dst:            wg.BlendFactor,
+	cust_op:             wg.BlendOperation,
+	stream_slots:        [STREAM_SLOT_COUNT]Stream_Slot,
+	active_stream_slot:  i32,
+	uniform_alignment:   u64,
 	// Per-slot pool sizes actually allocated on this device (limits.odin).
 	// Every reservation and shadow bound reads these, never a constant, so a
 	// constrained device streams within what its GPU granted.
-	geometry_bytes:     u64,
-	uniform_bytes:      u64,
-	transient_buffers:  [dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
-	retired_buffers:    [STREAM_SLOT_COUNT][dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
+	geometry_bytes:      u64,
+	uniform_bytes:       u64,
+	transient_buffers:   [dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
+	retired_buffers:     [STREAM_SLOT_COUNT][dynamic; BATCH_TRANSIENT_BUFFERS_MAX]wg.Buffer,
 	// Bytes that missed the geometry stream this frame and fell back to
 	// one-shot buffers. Reset per frame and reported once at frame end so a
 	// pathological scene names itself instead of quietly allocating up to
 	// BATCH_TRANSIENT_BUFFERS_MAX buffers until the tab dies.
-	overflow_bytes:     u64,
-	overflow_draws:     u32,
-	proj_w, proj_h:     i32,
+	overflow_bytes:      u64,
+	overflow_draws:      u32,
+	proj_w, proj_h:      i32,
 }
 
 // _blend_for returns the wgpu blend state for a slot. Colour and alpha share
@@ -1036,8 +1036,7 @@ _geometry_upload_indexed :: proc(
 	}
 	mem.copy(raw_data(slot.geometry_shadow[vertex_offset:]), vertex_data, int(vertex_bytes))
 	mem.copy(raw_data(slot.geometry_shadow[index_offset:]), index_data, int(index_bytes))
-	r.peak_geometry_bytes = max(r.peak_geometry_bytes, slot.geometry_write)
-	assert(r.peak_geometry_bytes <= r.geometry_bytes)
+	_stream_record_peak(r, slot.geometry_write, r.peak_uniform_bytes)
 	_stats_stream_copy(platform_now() - copy_started)
 	when RENDER_STATS_ENABLED {
 		g.stats_current.peak_geometry_arena_bytes = max(
@@ -1374,8 +1373,7 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 		return 0, false
 	}
 	mem.copy(raw_data(slot.uniform_shadow[offset:]), data, int(size))
-	r.peak_uniform_bytes = max(r.peak_uniform_bytes, slot.uniform_write)
-	assert(r.peak_uniform_bytes <= r.uniform_bytes)
+	_stream_record_peak(r, r.peak_geometry_bytes, slot.uniform_write)
 	_stats_stream_copy(platform_now() - copy_started)
 	when RENDER_STATS_ENABLED {
 		g.stats_current.peak_uniform_arena_bytes = max(

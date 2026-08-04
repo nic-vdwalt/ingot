@@ -89,14 +89,14 @@ context_renderer_stats_reset :: proc(ctx: ^Context) {
 // Tracked unconditionally, unlike Renderer_Stats: capacity sizing must not
 // depend on a build flag being set.
 Peak_Usage :: struct {
-	vertices:               int,
-	vertices_capacity:      int,
-	indices:                int,
-	indices_capacity:       int,
-	geometry_stream_bytes:  u64,
+	vertices:                int,
+	vertices_capacity:       int,
+	indices:                 int,
+	indices_capacity:        int,
+	geometry_stream_bytes:   u64,
 	geometry_capacity_bytes: u64,
-	uniform_stream_bytes:   u64,
-	uniform_capacity_bytes: u64,
+	uniform_stream_bytes:    u64,
+	uniform_capacity_bytes:  u64,
 }
 
 renderer_peak_usage :: proc() -> Peak_Usage {
