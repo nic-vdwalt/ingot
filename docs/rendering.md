@@ -151,6 +151,14 @@ implied.
 
 ## Event-driven frame scheduling
 
+Frame pacing and frame strategy are separate policies. `ui_gfx.App` defaults to
+`.Fixed`, where `target_fps` controls native sleep pacing. `.Uncapped` disables
+that pacing. `.Monitor_Refresh` queries the App's bound context and follows the
+refresh rate of the monitor with the largest overlap with its window; moving the
+window between monitors updates the target on a later `app_tick`. A positive
+`target_fps` is used when native refresh information is unavailable. Browser
+hosting remains paced by `requestAnimationFrame` rather than native sleeping.
+
 The default strategy is `.Continuous`. Applications may call
 `SetFrameStrategy(.Event_Driven)` or the compatibility alias
 `EnableEventWaiting()` to avoid building or submitting frames while idle. The

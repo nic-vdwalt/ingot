@@ -122,6 +122,7 @@ main :: proc() {
 			height = 720,
 			title = "Ingot view builder",
 			flags = flags,
+			frame_pacing = .Monitor_Refresh,
 			target_fps = 60,
 			event_waiting = true,
 			session = {semantics_enabled = true},

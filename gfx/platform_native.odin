@@ -236,20 +236,20 @@ platform_monitor_overlap :: proc(
 }
 
 @(private)
-platform_window_monitor :: proc() -> glfw.MonitorHandle {
-	if g.win == nil do return nil
-	window := _win()
+platform_window_monitor :: proc(window: glfw.WindowHandle) -> glfw.MonitorHandle {
+	if window == nil do return nil
 	fullscreen_monitor := glfw.GetWindowMonitor(window)
 	if fullscreen_monitor != nil do return fullscreen_monitor
 	window_x, window_y := glfw.GetWindowPos(window)
 	window_width, window_height := glfw.GetWindowSize(window)
 	if window_width <= 0 || window_height <= 0 do return glfw.GetPrimaryMonitor()
 	monitors := glfw.GetMonitors()
-	assert(len(monitors) <= PLATFORM_MONITORS_MAX, "platform_window_monitor: too many monitors")
+	monitor_count := min(len(monitors), PLATFORM_MONITORS_MAX)
 	best_monitor := glfw.GetPrimaryMonitor()
 	best_overlap: i64
-	for monitor, monitor_index in monitors {
-		assert(monitor_index < PLATFORM_MONITORS_MAX)
+	for monitor_index in 0 ..< monitor_count {
+		assert(monitor_index >= 0 && monitor_index < PLATFORM_MONITORS_MAX)
+		monitor := monitors[monitor_index]
 		overlap := platform_monitor_overlap(
 			window_x,
 			window_y,
@@ -267,7 +267,7 @@ platform_window_monitor :: proc() -> glfw.MonitorHandle {
 
 @(private)
 platform_monitor_refresh_rate :: proc() -> i32 {
-	monitor := platform_window_monitor()
+	monitor := platform_window_monitor(_win())
 	if monitor == nil do return 0
 	mode := glfw.GetVideoMode(monitor)
 	if mode == nil || mode.refresh_rate <= 0 do return 0

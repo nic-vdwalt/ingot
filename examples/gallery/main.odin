@@ -285,6 +285,7 @@ main :: proc() {
 				width = 1100,
 				height = 760,
 				title = "ingot widget gallery",
+				frame_pacing = .Monitor_Refresh,
 				target_fps = 60,
 				event_waiting = !SMOKE,
 				session = {semantics_enabled = true},

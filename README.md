@@ -183,6 +183,8 @@ main :: proc() {
 			height = 640,
 			title = "Ingot app",
 			flags = flags,
+			frame_pacing = .Monitor_Refresh,
+			target_fps = 60,
 			session = {semantics_enabled = true},
 		},
 		{ui = frame},
