@@ -1273,6 +1273,7 @@ main :: proc() {
 				width = 1180,
 				height = 860,
 				title = "ingot api map",
+				frame_pacing = .Monitor_Refresh,
 				target_fps = 60,
 				event_waiting = true,
 				session = {semantics_enabled = true},

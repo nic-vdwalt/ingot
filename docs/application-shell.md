@@ -14,12 +14,27 @@ state: State
 main :: proc() {
 	_ = ui_gfx.app_run(
 		&app,
-		{width = 960, height = 640, title = "App", session = {semantics_enabled = true}},
+		{
+			width = 960,
+			height = 640,
+			title = "App",
+			frame_pacing = .Monitor_Refresh,
+			target_fps = 60,
+			session = {semantics_enabled = true},
+		},
 		{ui = draw, shutdown = shutdown},
 		&state,
 	)
 }
 ```
+
+`App_Config.frame_pacing` makes pacing policy explicit. `.Fixed` is the default
+and uses `target_fps`, preserving existing configurations. `.Uncapped` disables
+native sleep pacing. `.Monitor_Refresh` follows the display containing the
+largest area of that App's window and re-evaluates it on each bounded tick; a
+positive `target_fps` is the fallback when refresh information is unavailable.
+Browser Apps ignore native sleep pacing because `requestAnimationFrame` owns
+the callback rate and follows the browser's current display policy.
 
 The default UI callback receives the explicit app and the shell-owned open
 `Ui`; the shell closes it after the callback. Use a `frame` callback instead
