@@ -122,10 +122,17 @@ The ordinary `term` run enables `INGOT_PTY_SIM=true`. It validates terminal pump
 behavior without spawning a shell. Real Unix PTY and Windows ConPTY validation is
 a separate platform integration gate.
 
-Windows uses `scripts/test.ps1` and `scripts/check.ps1`. Validation runs use
-`scripts/validation-evidence.py` to emit bounded, redacted JSON and logs matching
-`docs/validation/schema.json`. `scripts/validation-matrix.py` generates status
-rows from committed evidence and leaves targets without evidence as Not recorded.
+Windows uses `scripts/test.ps1` and `scripts/check.ps1`. Both launchers consume
+`scripts/gate-manifest.json`, and package tests use the same bounded Python
+supervisor, simulation defaults, timeout, output budget, and failure-log policy
+as Unix. `.github/workflows/windows.yml` is manual until the pinned Odin and
+native libraries have a reproducible runner installation path; it must not be
+made mandatory with an ambient or unpinned toolchain.
+
+Validation runs use `scripts/validation-evidence.py` to emit bounded, redacted
+JSON and logs matching `docs/validation/schema.json`.
+`scripts/validation-matrix.py` generates status rows from committed evidence and
+leaves targets without evidence as Not recorded.
 
 ## Deterministic fuzzing
 

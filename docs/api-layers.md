@@ -115,8 +115,10 @@ The two common paths deliberately begin in different places:
 - Canvases, virtualized or scrolled content, overlays, and custom hit regions:
   `*_at`, explicit composition, and physical layout.
 - Ordinary UI drawing and input: `Ui_Frame` paint and input snapshots.
-- Windowing, textures, audio, cameras, and custom GPU content: `ingot:gfx`.
-- Raylib source migration where behavior is documented: `ingot:gfx/rlgl`.
+- Owned direct drawing: `gfx.Frame`; window, input, resources, and hosting:
+  `gfx.Context` procedures.
+- Raylib source migration where behavior is documented: the PascalCase
+  `ingot:gfx` and `ingot:gfx/rlgl` facade.
 - General URL requests: `http_request_url`; background or web HTTP: `Fetcher`.
 - Reconnecting WebSockets: URL-based `ws_start_connect_url`.
 - Settings, cache paths, dialogs, and URLs: `ingot:prefs` and `ingot:sys`.
@@ -128,10 +130,12 @@ The two common paths deliberately begin in different places:
 
 ### `ui_gfx.App`: default host
 
-Use `App` for a normal one-window application. It owns the default graphics
-context, a `Session`, frame acquisition and submission, temporary-frame cleanup,
-and teardown ordering. The application still owns its state, widget
-components, textures, and other persistent resources.
+Use `App` for a normal one-window application. `app_run` binds it to the default
+graphics context and owns a `Session`, frame acquisition and submission,
+temporary-frame cleanup, and teardown ordering. Native custom hosts may bind an
+App to a caller-owned context with `app_init_context` and drive one bounded tick
+at a time. The application still owns its state, contexts, widget components,
+textures, and other persistent resources.
 
 Choose this layer unless a requirement names something the shell cannot do. An
 application should not manually assemble `Ui_Runtime`, `Ui_Frame`, `Ui_Input`,

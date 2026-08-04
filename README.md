@@ -149,10 +149,12 @@ generated deterministically by
 `bash scripts/capture-media.sh` refreshes all README media the same way.
 
 For a new desktop tool, start with `ui_gfx.App` and the bare `ui.Ui` facade
-shown below. Drop to explicit UI only where application behavior owns geometry
-or lifecycle. For an existing raylib application, begin with the documented
-`ingot:gfx` import migration and keep its graphics loop; add `ui_gfx.App` and
-the facade later only if the application needs Ingot widgets. See
+shown below. Native multi-window hosts can bind caller-owned contexts with
+`app_init_context` and drive one bounded `app_tick` per host iteration. Drop to
+explicit UI only where application behavior owns geometry or lifecycle. For an
+existing raylib application, begin with the documented `ingot:gfx` import
+migration and keep its graphics loop; add `ui_gfx.App` and the facade later only
+if the application needs Ingot widgets. See
 [Choosing an API layer](docs/api-layers.md) for the complete ownership map.
 
 ## Quick start

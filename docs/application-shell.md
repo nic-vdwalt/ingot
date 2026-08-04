@@ -1,8 +1,11 @@
 # Application shell
 
 `ui_gfx.App` is the common path for a one-window application. The caller owns the
-`App`, application state, and every persistent widget component. The shell owns
-the default graphics context, `Session`, and frame ordering.
+`App`, application state, and every persistent widget component. `app_run` uses
+the default graphics context and owns `Session` and frame ordering. Native hosts
+that need several windows use `app_init_context`, `app_start`, one bounded
+`app_tick` per host iteration, `app_stop`, and `app_destroy` with caller-owned
+contexts. Browser hosting remains one App and one canvas.
 
 ```odin
 app: ui_gfx.App

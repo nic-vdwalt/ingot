@@ -31,16 +31,14 @@ App_Callbacks :: struct {
 }
 
 App :: struct {
-	session:   Session,
-	form:      ui.Ui,
-	config:    App_Config,
-	callbacks: App_Callbacks,
-	userdata:  rawptr,
-	state:     App_State,
+	gfx_context: ^gfx.Context,
+	session:     Session,
+	form:        ui.Ui,
+	config:      App_Config,
+	callbacks:   App_Callbacks,
+	userdata:    rawptr,
+	state:       App_State,
 }
-
-@(private)
-active_app: ^App
 
 app_init :: proc(
 	app: ^App,
@@ -48,43 +46,44 @@ app_init :: proc(
 	callbacks: App_Callbacks,
 	userdata: rawptr = nil,
 ) -> bool {
-	assert(app != nil && app.state == .Empty, "app_init: invalid app")
-	assert(config.width > 0 && config.height > 0, "app_init: invalid size")
-	assert(config.title != nil, "app_init: missing title")
+	return app_init_context(app, gfx.default_context(), config, callbacks, userdata)
+}
+
+app_init_context :: proc(
+	app: ^App,
+	gfx_context: ^gfx.Context,
+	config: App_Config,
+	callbacks: App_Callbacks,
+	userdata: rawptr = nil,
+) -> bool {
+	assert(app != nil && app.state == .Empty, "app_init_context: invalid app")
+	assert(gfx_context != nil, "app_init_context: nil graphics context")
+	assert(config.width > 0 && config.height > 0, "app_init_context: invalid size")
+	assert(config.title != nil, "app_init_context: missing title")
 	assert(
 		(callbacks.frame == nil) != (callbacks.ui == nil),
-		"app_init: expected one frame callback",
+		"app_init_context: expected one frame callback",
 	)
-	assert(active_app == nil, "app_init: another application is active")
-	// Windows' AccessKit subclassing adapter must be installed before the
-	// window is first shown or it panics. session_init installs the adapter, so
-	// create the window hidden and reveal it below once the session is live.
-	// Other platforms have no such ordering constraint and show immediately.
 	window_flags := config.flags
 	when ODIN_OS == .Windows do window_flags += {.WINDOW_HIDDEN}
-	gfx.SetConfigFlags(window_flags)
-	initialized := gfx.context_init(
-		gfx.default_context(),
-		config.width,
-		config.height,
-		config.title,
-	)
-	if !initialized do return false
-	if config.target_fps > 0 do gfx.SetTargetFPS(config.target_fps)
-	if config.event_waiting do gfx.EnableEventWaiting()
-	session_init(&app.session, config.session)
-	when ODIN_OS == .Windows do gfx.ShowWindow()
+	gfx.context_set_config_flags(gfx_context, window_flags)
+	if !gfx.context_init(gfx_context, config.width, config.height, config.title) do return false
+	if config.target_fps > 0 do gfx.context_set_target_fps(gfx_context, config.target_fps)
+	if config.event_waiting do gfx.context_set_frame_strategy(gfx_context, .Event_Driven)
+	session_init_context(&app.session, gfx_context, config.session)
+	when ODIN_OS == .Windows do gfx.context_show_window(gfx_context)
+	app.gfx_context = gfx_context
 	app.config = config
 	app.callbacks = callbacks
 	app.userdata = userdata
 	app.state = .Ready
-	active_app = app
+	assert(app.session.adapter.gfx_context == app.gfx_context)
 	return true
 }
 
 app_frame :: proc(app: ^App) -> bool {
 	assert(app != nil && app.state == .Running, "app_frame: invalid app")
-	gfx_frame, acquired := gfx.begin_frame()
+	gfx_frame, acquired := gfx.context_begin_frame(app.gfx_context)
 	if !acquired do return false
 	frame := session_begin_frame_context(&app.session, &gfx_frame)
 	gfx.clear_frame(&gfx_frame, app_clear_color(app))
@@ -102,10 +101,34 @@ app_frame :: proc(app: ^App) -> bool {
 	return true
 }
 
+app_start :: proc(app: ^App) -> bool {
+	if app == nil || app.state != .Ready do return false
+	if !gfx.context_ready(app.gfx_context) do return false
+	app.state = .Running
+	assert(app.session.initialized, "app_start: session not initialized")
+	assert(app.gfx_context == app.session.adapter.gfx_context, "app_start: context mismatch")
+	return true
+}
+
+app_tick :: proc(app: ^App) -> bool {
+	if app == nil || app.state != .Running do return false
+	if gfx.context_should_close(app.gfx_context) do return false
+	return app_frame(app)
+}
+
+app_stop :: proc(app: ^App) -> bool {
+	if app == nil || app.state != .Running do return false
+	assert(!app.session.frame_open, "app_stop: frame open")
+	app.state = .Stopped
+	assert(app.state == .Stopped)
+	return true
+}
+
 @(private)
-app_frame_active :: proc() {
-	assert(active_app != nil, "app_frame_active: no application")
-	_ = app_frame(active_app)
+app_frame_data :: proc(userdata: rawptr) {
+	app := cast(^App)userdata
+	assert(app != nil && app.state == .Running, "app_frame_data: invalid app")
+	_ = app_tick(app)
 }
 
 app_run :: proc(
@@ -116,10 +139,17 @@ app_run :: proc(
 ) -> bool {
 	assert(app != nil, "app_run: nil app")
 	if !app_init(app, config, callbacks, userdata) do return false
-	app.state = .Running
-	gfx.run(app_frame_active)
+	if !app_start(app) {
+		app_destroy(app)
+		return false
+	}
+	if !gfx.run_data(app_frame_data, app) {
+		_ = app_stop(app)
+		app_destroy(app)
+		return false
+	}
 	when ODIN_OS != .JS {
-		app.state = .Stopped
+		if !app_stop(app) do return false
 		app_destroy(app)
 	}
 	return true
@@ -130,15 +160,18 @@ app_destroy :: proc(app: ^App) {
 	assert(app.state == .Ready || app.state == .Stopped, "app_destroy: invalid state")
 	if app.callbacks.shutdown != nil do app.callbacks.shutdown(app, app.userdata)
 	session_destroy(&app.session)
-	gfx.context_close(gfx.default_context())
-	if active_app == app do active_app = nil
+	gfx.context_close(app.gfx_context)
 	app^ = {}
 }
 
 app_screen_rect :: proc(app: ^App) -> ui.Rect_I32 {
 	assert(app != nil && app.state != .Empty, "app_screen_rect: invalid app")
-	ctx := gfx.default_context()
-	return {0, 0, gfx.context_screen_width(ctx), gfx.context_screen_height(ctx)}
+	return {
+		0,
+		0,
+		gfx.context_screen_width(app.gfx_context),
+		gfx.context_screen_height(app.gfx_context),
+	}
 }
 
 app_ui_begin :: proc(

@@ -86,9 +86,8 @@ adapter_font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
 	assert(adapter.font_count < FONT_CAP, "adapter_font_for_size: font limit")
 	pixel_size := i32(f32(size) * adapter.font_dpi + 0.5)
 	if pixel_size < 1 do pixel_size = 1
-	scope := rl.context_scope_enter(adapter.gfx_context)
-	defer rl.context_scope_leave(&scope)
-	font := rl.LoadFontFromMemory(
+	font := rl.context_load_font_from_memory(
+		adapter.gfx_context,
 		".ttf",
 		raw_data(FONT_DATA),
 		i32(len(FONT_DATA)),
@@ -97,7 +96,7 @@ adapter_font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
 		i32(len(adapter.font_codepoints)),
 	)
 	assert(font.glyphCount > 0, "adapter_font_for_size: bundled font failed to load")
-	rl.SetTextureFilter(font.texture, .BILINEAR)
+	rl.context_set_texture_filter(adapter.gfx_context, font.texture, .BILINEAR)
 	return adapter_register_font(adapter, size, font)
 }
 
@@ -126,10 +125,9 @@ adapter_set_font_dpi :: proc(adapter: ^Adapter, scale: f32) {
 adapter_reset_fonts :: proc(data: rawptr) {
 	adapter := cast(^Adapter)data
 	assert(adapter != nil && adapter.initialized, "adapter_reset_fonts: invalid adapter")
-	scope := rl.context_scope_enter(adapter.gfx_context)
-	defer rl.context_scope_leave(&scope)
+	assert(adapter.gfx_context != nil, "adapter_reset_fonts: nil graphics context")
 	for index in 0 ..< adapter.font_count {
-		if adapter.fonts[index].glyphCount > 0 do rl.UnloadFont(adapter.fonts[index])
+		rl.context_unload_font(adapter.gfx_context, adapter.fonts[index])
 		adapter.fonts[index] = {}
 		adapter.font_sizes[index] = 0
 	}

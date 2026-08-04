@@ -18,6 +18,7 @@ frame_validation_rejects_stale_generation :: proc(t: ^testing.T) {
 	g.frame_generation = 4
 	g.frame_active = true
 	frame := Frame {
+		owner      = &default_context_storage,
 		epoch      = 2,
 		generation = 3,
 		active     = true,
@@ -40,6 +41,7 @@ frame_validation_rejects_inactive_frame :: proc(t: ^testing.T) {
 	g.frame_generation = 4
 	g.frame_active = true
 	frame := Frame {
+		owner      = &default_context_storage,
 		epoch      = 2,
 		generation = 4,
 		active     = false,

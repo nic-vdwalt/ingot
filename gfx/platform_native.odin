@@ -558,9 +558,23 @@ _fb_size_cb :: proc "c" (win: glfw.WindowHandle, width, height: i32) {
 // until the window is asked to close, then returns. Apps may equivalently write
 // their own `for !WindowShouldClose()` loop; run() exists so the same app source
 // also targets web, where the browser owns the loop (see loop_web.odin).
-run :: proc(frame: Run_Proc) {
+run_data :: proc(frame: Run_Data_Proc, userdata: rawptr) -> bool {
+	if frame == nil do return false
 	// tigerstyle: allow-unbounded-loop -- window close terminates the application lifetime
 	for !WindowShouldClose() {
-		frame()
+		frame(userdata)
 	}
+	return true
+}
+
+@(private)
+run_compat_frame :: proc(userdata: rawptr) {
+	frame := cast(Run_Proc)userdata
+	assert(frame != nil, "run_compat_frame: nil frame")
+	frame()
+}
+
+run :: proc(frame: Run_Proc) {
+	assert(frame != nil, "run: nil frame")
+	_ = run_data(run_compat_frame, cast(rawptr)frame)
 }

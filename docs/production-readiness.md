@@ -120,9 +120,10 @@ Before describing a revision as production-ready for a target:
 
 - Native WSS has deterministic loopback coverage; revision-pinned macOS, Linux,
   Windows, proxy, IPv4/IPv6, and public-Internet evidence remains required.
-- Native multi-context rendering requires representative Metal, D3D12, and
-  Vulkan validation evidence; browser multi-canvas and parallel rendering remain
-  separate future capabilities.
+- Native multi-context and high-level multi-App rendering have compile and
+  deterministic ownership coverage, but still require representative Metal,
+  D3D12, and Vulkan runtime evidence. Browser multi-canvas and parallel
+  rendering remain separate future capabilities.
 - Real PTY/ConPTY, native dialogs, accessibility, browser, and backend GPU jobs need
   representative hardware or virtualized runners.
 - Strict CSP deployment and content-hashed browser assets remain packaging work.

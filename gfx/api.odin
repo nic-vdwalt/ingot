@@ -130,6 +130,126 @@ draw_text :: proc(
 	assert(frame.active)
 }
 
+frame_draw_rectangle_lines :: proc(frame: ^Frame, rect: Rect, thick: f32, color: RGBA) {
+	assert(frame != nil && thick >= 0, "frame_draw_rectangle_lines: invalid argument")
+	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
+	DrawRectangleLinesEx(rect, thick, color)
+}
+
+frame_draw_rectangle_rounded :: proc(
+	frame: ^Frame,
+	rect: Rect,
+	roundness: f32,
+	segments: i32,
+	color: RGBA,
+) {
+	assert(frame != nil && roundness >= 0, "frame_draw_rectangle_rounded: invalid argument")
+	assert(segments >= 0, "frame_draw_rectangle_rounded: negative segments")
+	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
+	DrawRectangleRounded(rect, roundness, segments, color)
+}
+
+frame_draw_rectangle_rounded_lines :: proc(
+	frame: ^Frame,
+	rect: Rect,
+	roundness: f32,
+	segments: i32,
+	thick: f32,
+	color: RGBA,
+) {
+	assert(frame != nil && roundness >= 0, "frame_draw_rectangle_rounded_lines: invalid argument")
+	assert(segments >= 0 && thick >= 0, "frame_draw_rectangle_rounded_lines: invalid stroke")
+	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
+	DrawRectangleRoundedLinesEx(rect, roundness, segments, thick, color)
+}
+
+frame_draw_rectangle_gradient_v :: proc(frame: ^Frame, rect: Rect, top, bottom: RGBA) {
+	assert(frame != nil, "frame_draw_rectangle_gradient_v: nil frame")
+	assert(rect.width >= 0 && rect.height >= 0, "frame_draw_rectangle_gradient_v: negative size")
+	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
+	DrawRectangleGradientV(
+		i32(rect.x),
+		i32(rect.y),
+		i32(rect.width),
+		i32(rect.height),
+		top,
+		bottom,
+	)
+}
+
+frame_draw_circle_lines :: proc(frame: ^Frame, center: Vec2, radius: f32, color: RGBA) {
+	assert(frame != nil && radius >= 0, "frame_draw_circle_lines: invalid argument")
+	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
+	DrawCircleLinesV(center, radius, color)
+}
+
+frame_draw_ring :: proc(
+	frame: ^Frame,
+	center: Vec2,
+	inner_radius, outer_radius, start_angle, end_angle: f32,
+	segments: i32,
+	color: RGBA,
+) {
+	assert(frame != nil && inner_radius >= 0, "frame_draw_ring: invalid argument")
+	assert(outer_radius >= inner_radius && segments >= 0, "frame_draw_ring: invalid geometry")
+	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
+	DrawRing(center, inner_radius, outer_radius, start_angle, end_angle, segments, color)
+}
+
+frame_draw_triangle :: proc(frame: ^Frame, p0, p1, p2: Vec2, color: RGBA) {
+	assert(frame != nil, "frame_draw_triangle: nil frame")
+	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
+	DrawTriangle(p0, p1, p2, color)
+	assert(frame.active)
+}
+
+frame_draw_codepoint :: proc(
+	frame: ^Frame,
+	font: Font,
+	codepoint: rune,
+	position: Vec2,
+	font_size: f32,
+	tint: RGBA,
+) {
+	assert(frame != nil && font_size >= 0, "frame_draw_codepoint: invalid argument")
+	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
+	DrawTextCodepoint(font, codepoint, position, font_size, tint)
+}
+
+frame_scissor_begin :: proc(frame: ^Frame, x, y, width, height: i32) {
+	assert(frame != nil, "frame_scissor_begin: nil frame")
+	assert(width >= 0 && height >= 0, "frame_scissor_begin: negative size")
+	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
+	BeginScissorMode(x, y, width, height)
+}
+
+frame_scissor_end :: proc(frame: ^Frame) {
+	assert(frame != nil, "frame_scissor_end: nil frame")
+	if !_frame_valid(frame) do return
+	previous := _context_activate(frame.owner)
+	defer _context_restore(previous)
+	EndScissorMode()
+	assert(frame.active)
+}
+
 measure_text :: proc(font: Font, text: cstring, font_size, spacing: f32) -> Vec2 {
 	return context_measure_text(default_context(), font, text, font_size, spacing)
 }

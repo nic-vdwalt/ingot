@@ -1,21 +1,38 @@
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Collection = "-collection:ingot=$Root"
-
-& "$PSScriptRoot/check-ui-state.ps1"
+$Guard = "-define:INGOT_FRAME_SCRATCH_GUARD=true"
+$TimeoutSeconds = if ($env:INGOT_TEST_TIMEOUT_SECONDS) { $env:INGOT_TEST_TIMEOUT_SECONDS } else { "300" }
+$OutputLimit = if ($env:INGOT_TEST_OUTPUT_LIMIT_BYTES) { $env:INGOT_TEST_OUTPUT_LIMIT_BYTES } else { "16777216" }
+$LogDir = if ($env:INGOT_TEST_FAILURE_LOG_DIR) { $env:INGOT_TEST_FAILURE_LOG_DIR } else { Join-Path $env:TEMP "ingot-test-failures" }
+$Manifest = Get-Content (Join-Path $PSScriptRoot "gate-manifest.json") | ConvertFrom-Json
+$Supervisor = Join-Path $PSScriptRoot "test-supervisor.py"
 $env:PYTHONDONTWRITEBYTECODE = "1"
-& python "$PSScriptRoot/check_gfx_context.py" --baseline "$PSScriptRoot/gfx_context_baseline.json" "$Root"
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-foreach ($Package in @("gfx", "ui", "ui_gfx", "libvterm", "term", "prefs", "net")) {
-    Write-Host "== testing $Package =="
-    & odin test "$Root/$Package" $Collection -define:INGOT_FRAME_SCRATCH_GUARD=true -define:ODIN_TEST_FAIL_ON_EMPTY=true
+
+function Invoke-Supervised {
+    param([string]$Label, [string[]]$Command)
+    & python $Supervisor --package $Label --timeout $TimeoutSeconds --output-limit $OutputLimit --log-dir $LogDir -- @Command
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
-Write-Host "== testing native WSS loopback TLS =="
-& python "$PSScriptRoot/wss-loopback-test.py" --fixture "$Root/examples/wss_fixture" "--collection=$Collection"
+
+& "$PSScriptRoot/check-ui-state.ps1"
+& python "$PSScriptRoot/check_gfx_context.py" --baseline "$PSScriptRoot/gfx_context_baseline.json" "$Root"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-foreach ($Package in @("sys", "pty", "accesskit", "testx")) {
+foreach ($Package in $Manifest.test_packages) {
+    Write-Host "== testing $Package =="
+    $Extra = @()
+    if ($Package -eq "ui") { $Extra += "-define:ODIN_TEST_THREADS=1" }
+    if ($Package -eq "term") {
+        $Extra += "-define:INGOT_PTY_SIM=true"
+        $Extra += "-define:ODIN_TEST_THREADS=1"
+    }
+    $Label = $Package.Replace("/", "-")
+    $Command = @("odin", "test", "$Root/$Package", $Collection, $Guard, "-define:ODIN_TEST_FAIL_ON_EMPTY=true") + $Extra
+    Invoke-Supervised $Label $Command
+}
+Write-Host "== testing native WSS loopback TLS =="
+Invoke-Supervised "wss-loopback" @("python", "$PSScriptRoot/wss-loopback-test.py", "--fixture", "$Root/examples/wss_fixture", "--collection=$Collection")
+foreach ($Package in $Manifest.compile_packages) {
     Write-Host "== checking $Package =="
-    & odin check "$Root/$Package" $Collection -no-entry-point
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Invoke-Supervised "$Package-check" @("odin", "check", "$Root/$Package", $Collection, "-no-entry-point")
 }

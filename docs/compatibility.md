@@ -113,22 +113,22 @@ classified without waiting on a future release:
 
 Requesting one of these is a design discussion, not a bug report.
 
-## Mixing the two drawing surfaces
+## Graphics ownership layers
 
-`ingot:gfx` exposes two ways to draw over one renderer. The raylib-shaped
-PascalCase procedures act on whichever context is globally active. The ergonomic
-`Frame` API (`draw_rect`, `draw_text`, and the rest) routes each call to
-`frame.owner` by activating it for the duration of the call.
+`ingot:gfx` exposes three layers over one renderer. PascalCase procedures are the
+source-migration facade and act on the default context. The `Frame` API owns
+ordinary drawing and routes every call through `frame.owner`. Explicit `Context`
+procedures own window, input, resource, and host integration.
 
-With a single context, mixing them is safe and expected: `ui_gfx` paints by
-calling PascalCase procedures inside the frame it opened.
+New Ingot-native code should use `Frame` and `Context`. PascalCase remains
+supported for the documented raylib migration subset, but is not a second
+context-capable API and is not extended merely to mirror each explicit
+capability.
 
-With several contexts it is not. A PascalCase draw issued between `begin_frame`
-and `end_frame` lands on the globally active context, which need not be the one
-that owns the `Frame`, so the geometry silently reaches the wrong window. Ingot
-asserts on this rather than rendering it. In a multi-context application, either
-draw through the ergonomic procedures or do not interleave frames across
-contexts.
+Mixing is supported only in a single default-context frame. Framework internals
+and multi-context applications must use owned `Frame` or `Context` procedures.
+Ingot asserts when a PascalCase draw could route to a different live context
+rather than silently rendering into the wrong window.
 
 ## Build dependencies
 

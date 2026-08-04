@@ -6,6 +6,12 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 col="-collection:ingot=$root"
+manifest="$root/scripts/gate-manifest.json"
+
+manifest_values() {
+	python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); print(" ".join(data[sys.argv[2]]))' \
+		"$manifest" "$1"
+}
 
 if [ "$(uname -s)" = "Linux" ]; then
 	bash "$root/scripts/check-linux-dependencies.sh"
@@ -56,7 +62,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_theme_tokens.py" \
 	--baseline "$root/scripts/theme_token_baseline.json" \
 	"$root"
 
-for pkg in gfx ui ui_gfx view view/generate term prefs net sys pty testx; do
+for pkg in $(manifest_values check_packages); do
 	echo "== checking $pkg =="
 	# shellcheck disable=SC2086
 	odin check "$root/$pkg" $col $vet_flags "$@"
@@ -85,7 +91,7 @@ done
 
 # Foreign bindings intentionally mirror upstream names and declarations, but
 # they must still type-check against the pinned toolchain.
-for pkg in libvterm accesskit; do
+for pkg in $(manifest_values binding_packages); do
 	echo "== checking binding $pkg =="
 	odin check "$root/$pkg" $col -no-entry-point "$@"
 done
@@ -95,19 +101,13 @@ done
 # all library packages green while breaking every real application.
 example_out="${TMPDIR:-/tmp}/ingot-example-check"
 mkdir -p "$example_out"
-for example in \
-	hello \
-	gallery \
-	breakout \
-	idle_demo \
-	chart_demo \
-	render_fixture \
-	multi_context_fixture \
-	view_builder \
-	raylib_migration_fixture; do
+for example in $(manifest_values examples); do
 	echo "== building example $example =="
 	odin build "$root/examples/$example" $col "-out:$example_out/$example" "$@"
 done
+
+echo "== gate manifest =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/gate_manifest_test.py"
 
 echo "== Odin TigerStyle checks =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_odin_style_test.py"

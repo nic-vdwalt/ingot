@@ -1,0 +1,24 @@
+name: Windows gates
+
+on:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify provisioned toolchain
+        shell: pwsh
+        run: |
+          if (-not (Get-Command odin -ErrorAction SilentlyContinue)) {
+            throw "Provision the exact ODIN_VERSION toolchain before enabling this workflow"
+          }
+          python scripts/check-toolchain.py
+      - name: Test
+        shell: pwsh
+        run: ./scripts/test.ps1
+      - name: Check
+        shell: pwsh
+        run: ./scripts/check.ps1

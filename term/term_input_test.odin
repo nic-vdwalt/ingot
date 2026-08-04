@@ -5,16 +5,28 @@ import rl "ingot:gfx"
 import "ingot:pty"
 import "ingot:ui"
 
+INGOT_TERM_PTY_SIM :: #config(INGOT_PTY_SIM, false)
+
 @(test)
 term_ui_input_reads_captured_characters :: proc(t: ^testing.T) {
-	p, ok := pty.spawn("/bin/cat", 80, 24)
-	testing.expect(t, ok, "failed to spawn PTY")
-	if !ok do return
-	defer pty.destroy(&p)
 	ts := new(Term_Instance)
 	defer free(ts)
-	ts.pty = p
-	ts.pty_running = true
+	when INGOT_TERM_PTY_SIM {
+		p, ok := pty.spawn("sim", 80, 24)
+		testing.expect(t, ok, "failed to spawn simulated PTY")
+		if !ok do return
+		defer pty.destroy(&p)
+		ts.pty = p
+		ts.pty_running = true
+	} else {
+		when ODIN_OS == .Windows do return
+		p, ok := pty.spawn("/bin/cat", 80, 24)
+		testing.expect(t, ok, "failed to spawn PTY")
+		if !ok do return
+		defer pty.destroy(&p)
+		ts.pty = p
+		ts.pty_running = true
+	}
 	ts.sb_view_offset = 4
 	input: ui.Ui_Input
 	input.characters[0] = 'x'
