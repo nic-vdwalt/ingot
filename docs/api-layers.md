@@ -156,8 +156,12 @@ Ingot's standard UI lifecycle. Examples include:
 
 `Session` owns the runtime, reusable frame, input/output values, adapter, DPI
 refresh, accessibility finalization, and their teardown order. The host owns the
-graphics window and brackets graphics frames around
-`session_begin_frame_context` and `session_end_frame_context`.
+graphics window and normally brackets drawing with `session_acquire_frame` and
+`session_present_frame`. The returned `Session_Frame` keeps the UI and graphics
+owners paired without allocating or retaining application state. Hosts that
+must separate those boundaries may continue to use
+`session_begin_frame_context` and `session_end_frame_context`, while assuming
+graphics submission and frame-temporary cleanup themselves.
 
 ### `ui_gfx.Adapter`: bridge implementation
 

@@ -11,6 +11,10 @@ compatibility, while minor releases may break it. See the
 
 ### Added
 
+- `ui_gfx.session_acquire_frame` and `session_present_frame`, an allocation-free
+  capability pair that binds UI paint to its graphics owner and handles normal
+  submission and frame-temporary cleanup. Existing low-level session frame APIs
+  remain available for hosts with split lifecycle requirements.
 - Context-bound `ui_gfx.App` hosting through `app_init_context`, `app_start`,
   `app_tick`, and `app_stop`, including a two-App native contract fixture.
 - Shared bounded Unix/Windows gate manifests and cross-platform test supervision.
