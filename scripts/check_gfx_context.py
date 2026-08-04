@@ -11,11 +11,12 @@ import check_odin_style
 
 EXCLUDED_SUFFIXES = ("_test.odin", "_fuzz_test.odin")
 DIRECT_GLOBAL = re.compile(r"(?<![A-Za-z0-9_])g(?![A-Za-z0-9_])")
+CONTEXT_ESCAPE = re.compile(r"\b(?:default_context|context_scope_enter)\s*\(")
 
 
-def tracked_sources(root: Path) -> list[str]:
+def tracked_sources(root: Path, patterns: list[str]) -> list[str]:
     process = subprocess.run(
-        ["git", "ls-files", "gfx/*.odin"],
+        ["git", "ls-files", *patterns],
         cwd=root,
         check=True,
         capture_output=True,
@@ -24,23 +25,25 @@ def tracked_sources(root: Path) -> list[str]:
     return [path for path in process.stdout.splitlines() if not path.endswith(EXCLUDED_SUFFIXES)]
 
 
-def counts_for_source(source: str, path: str) -> dict[str, int]:
+def counts_for_source(source: str, path: str, pattern=DIRECT_GLOBAL) -> dict[str, int]:
     masked = check_odin_style.mask_source(source)
     counts: dict[str, int] = {}
+    lines = masked.splitlines(keepends=True)
     for procedure in check_odin_style.procedures(source):
-        lines = masked.splitlines(keepends=True)
         body = "".join(lines[procedure.start_line - 1:procedure.end_line])
-        count = len(DIRECT_GLOBAL.findall(body))
+        count = len(pattern.findall(body))
         if count > 0:
             counts[f"{path}:{procedure.name}"] = count
     return counts
 
 
-def current_counts(root: Path) -> dict[str, int]:
+def current_counts(root: Path, patterns=None, debt_pattern=DIRECT_GLOBAL) -> dict[str, int]:
+    if patterns is None:
+        patterns = ["gfx/*.odin"]
     counts: dict[str, int] = {}
-    for relative in tracked_sources(root):
+    for relative in tracked_sources(root, patterns):
         source = (root / relative).read_text(encoding="utf-8")
-        counts.update(counts_for_source(source, relative))
+        counts.update(counts_for_source(source, relative, debt_pattern))
     return counts
 
 
@@ -59,17 +62,27 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default=".")
     parser.add_argument("--baseline")
+    parser.add_argument("--escape-baseline")
     parser.add_argument("--measure", action="store_true")
     arguments = parser.parse_args()
     root = Path(arguments.root).resolve()
     current = current_counts(root)
+    escapes = current_counts(root, ["gfx/*.odin", "ui_gfx/*.odin"], CONTEXT_ESCAPE)
     if arguments.measure:
-        print(json.dumps(current, indent=2, sort_keys=True))
+        print(json.dumps({"globals": current, "escapes": escapes}, indent=2, sort_keys=True))
         return 0
     if not arguments.baseline:
         parser.error("--baseline is required unless --measure is used")
-    baseline = json.loads(Path(arguments.baseline).read_text(encoding="utf-8"))
+    baseline_path = Path(arguments.baseline)
+    escape_path = (
+        Path(arguments.escape_baseline)
+        if arguments.escape_baseline
+        else baseline_path.with_name("gfx_context_escape_baseline.json")
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    escape_baseline = json.loads(escape_path.read_text(encoding="utf-8"))
     failures = check_counts(current, baseline)
+    failures += check_counts(escapes, escape_baseline)
     for failure in failures:
         print(failure)
     return 1 if failures else 0

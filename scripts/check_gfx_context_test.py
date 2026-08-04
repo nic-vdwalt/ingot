@@ -29,6 +29,23 @@ second :: proc() {
             {"gfx/x.odin:first": 2, "gfx/x.odin:second": 1},
         )
 
+    def test_context_escapes_are_counted_by_procedure(self):
+        source = '''first :: proc() {
+	ctx := default_context()
+}
+second :: proc() {
+	scope := context_scope_enter(ctx)
+}
+'''
+        self.assertEqual(
+            check_gfx_context.counts_for_source(
+                source,
+                "ui_gfx/x.odin",
+                check_gfx_context.CONTEXT_ESCAPE,
+            ),
+            {"ui_gfx/x.odin:first": 1, "ui_gfx/x.odin:second": 1},
+        )
+
     def test_baseline_rejects_growth_and_stale_entries(self):
         current = {"gfx/x.odin:p": 2}
         self.assertEqual(check_gfx_context.check_counts(current, {"gfx/x.odin:p": 2}), [])

@@ -130,10 +130,9 @@ adapter_destroy :: proc(adapter: ^Adapter) {
 adapter_paint_sink :: proc(list: ^ui.Paint_List, command: ui.Paint_Command, userdata: rawptr) {
 	adapter := (^Adapter)(userdata)
 	assert(adapter != nil && adapter.initialized, "adapter_paint_sink: invalid adapter")
+	assert(adapter.gfx_frame != nil, "adapter_paint_sink: no bound graphics frame")
 	assert(list != nil, "adapter_paint_sink: nil list")
-	scope := rl.context_scope_enter(adapter.gfx_context)
-	defer rl.context_scope_leave(&scope)
-	replay_command(adapter, list, command)
+	replay_command(adapter, adapter.gfx_frame, list, command)
 }
 
 adapter_begin_frame :: proc(
@@ -210,9 +209,11 @@ adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	output := frame.output
 	ui.ui_frame_finalize(frame)
 	adapter_a11y_publish(adapter, frame)
-	scope := rl.context_scope_enter(adapter.gfx_context)
-	replay_list(adapter, &output.overlay)
-	rl.context_scope_leave(&scope)
+	if adapter.gfx_frame != nil {
+		replay_list(adapter, adapter.gfx_frame, &output.overlay)
+	} else {
+		assert(output.overlay.count == 0, "adapter_end_frame: overlay without graphics frame")
+	}
 	apply_platform_output_context(adapter.gfx_context, &output.platform)
 	ui.paint_list_set_sink(&output.main, nil, nil)
 	ui.ui_frame_release(frame)

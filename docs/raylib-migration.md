@@ -11,10 +11,11 @@ state, CPU image processing, or low-level `rlgl` rendering require a manual
 WebGPU port.
 
 Compatibility covers the documented PascalCase procedures and public layouts in
-`ingot:gfx` at a pinned Ingot revision. Internal registries, private procedures,
-and undocumented bridge behavior are not stable APIs. A successful compile
-proves source compatibility only; it does not prove visual, timing, input,
-audio, browser, or GPU-backend equivalence.
+`ingot:gfx` at a pinned Ingot revision. This facade targets the default context;
+new Ingot-native and multi-context code uses the owned `Frame` and `Context`
+APIs. Internal registries, private procedures, and undocumented bridge behavior
+are not stable APIs. A successful compile proves source compatibility only; it
+does not prove visual, timing, input, audio, browser, or GPU-backend equivalence.
 
 Ingot does not ship a graphics procedure that renders nothing. Anything this
 renderer cannot honour is absent, so the compile errors you get during a

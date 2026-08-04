@@ -1,0 +1,47 @@
+{
+  "test_packages": [
+    "gfx",
+    "ui",
+    "ui_gfx",
+    "view",
+    "view/generate",
+    "libvterm",
+    "term",
+    "prefs",
+    "net"
+  ],
+  "check_packages": [
+    "gfx",
+    "ui",
+    "ui_gfx",
+    "view",
+    "view/generate",
+    "term",
+    "prefs",
+    "net",
+    "sys",
+    "pty",
+    "testx"
+  ],
+  "binding_packages": ["libvterm", "accesskit"],
+  "compile_packages": ["sys", "pty", "accesskit", "testx"],
+  "examples": [
+    "hello",
+    "gallery",
+    "breakout",
+    "idle_demo",
+    "chart_demo",
+    "render_fixture",
+    "multi_context_fixture",
+    "multi_app_fixture",
+    "view_builder",
+    "raylib_migration_fixture"
+  ],
+  "simulation_modes": [
+    ["net", "INGOT_NET_SIM=true"],
+    ["net", "INGOT_WS_SIM=true"],
+    ["pty", "INGOT_PTY_SIM=true"],
+    ["term", "INGOT_PTY_SIM=true"],
+    ["gfx", "INGOT_INPUT_SIM=true"]
+  ]
+}

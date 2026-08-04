@@ -11,12 +11,30 @@
 package gfx
 
 @(private)
-g_web_frame: Run_Proc
+g_web_callback: Run_Callback
+
+run_data :: proc(frame: Run_Data_Proc, userdata: rawptr) -> bool {
+	if frame == nil || g_web_callback.active do return false
+	g_web_callback = {
+		frame    = frame,
+		userdata = userdata,
+		active   = true,
+	}
+	return true
+}
+
+@(private)
+run_compat_frame :: proc(userdata: rawptr) {
+	frame := cast(Run_Proc)userdata
+	assert(frame != nil, "run_compat_frame: nil frame")
+	frame()
+}
 
 // run stores the per-frame callback and returns immediately. The browser's
 // requestAnimationFrame loop calls `step` each tick.
 run :: proc(frame: Run_Proc) {
-	g_web_frame = frame
+	assert(frame != nil, "run: nil frame")
+	_ = run_data(run_compat_frame, cast(rawptr)frame)
 }
 
 // step is exported to WASM and invoked once per animation frame by the JS shell
@@ -40,8 +58,9 @@ step :: proc(dt: f32) -> bool {
 		return true // idle: keep rAF alive, skip the app frame
 	}
 	input_poll()
-	if g_web_frame != nil {
-		g_web_frame()
+	if g_web_callback.active {
+		assert(g_web_callback.frame != nil, "step: active callback has no frame")
+		g_web_callback.frame(g_web_callback.userdata)
 	}
 	return true
 }

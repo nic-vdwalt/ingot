@@ -9,6 +9,18 @@ compatibility, while minor releases may break it. See the
 
 ## Unreleased
 
+### Added
+
+- Context-bound `ui_gfx.App` hosting through `app_init_context`, `app_start`,
+  `app_tick`, and `app_stop`, including a two-App native contract fixture.
+- Shared bounded Unix/Windows gate manifests and cross-platform test supervision.
+
+### Changed
+
+- UI paint replay now uses owner-validated graphics frames rather than the
+  PascalCase compatibility surface. PascalCase remains the default-context
+  raylib migration facade.
+
 ## [0.1.3] - 2026-08-03
 
 ### Added

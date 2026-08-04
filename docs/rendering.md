@@ -142,10 +142,12 @@ Rect :: Rectangle
 ```
 
 The additive frame API returns a context-, epoch-, and generation-checked
-`Frame`; stale, cross-context, and double-ended handles are rejected. Each
-explicit context owns an independent renderer while the PascalCase API remains a
-thin default-context facade. No deprecation of the PascalCase API is
-currently implied.
+`Frame`; stale, cross-context, and double-ended handles are rejected. Explicit
+`Context` procedures own window, input, resource, and host integration. Each
+context owns an independent renderer while the PascalCase API remains a thin
+default-context migration facade. New Ingot-native code uses `Frame` and
+`Context`; no deprecation of the documented PascalCase subset is currently
+implied.
 
 ## Event-driven frame scheduling
 

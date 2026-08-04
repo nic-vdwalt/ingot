@@ -18,6 +18,13 @@ Window_Handle :: distinct rawptr
 // Run_Proc is the per-frame application callback passed to run(). It should
 // perform one frame: BeginDrawing → draw → EndDrawing.
 Run_Proc :: proc()
+Run_Data_Proc :: #type proc(userdata: rawptr)
+
+Run_Callback :: struct {
+	frame:    Run_Data_Proc,
+	userdata: rawptr,
+	active:   bool,
+}
 
 // FilePathList mirrors raylib's dropped-file list. Its paths are borrowed until
 // UnloadDroppedFiles, the next completed drop, or CloseWindow.
