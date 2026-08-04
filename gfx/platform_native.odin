@@ -214,12 +214,63 @@ platform_window_position :: proc() -> (i32, i32) {
 	return glfw.GetWindowPos(_win())
 }
 
+PLATFORM_MONITORS_MAX :: 16
+
+@(private)
+platform_monitor_overlap :: proc(
+	window_x, window_y, window_width, window_height: i32,
+	monitor: glfw.MonitorHandle,
+) -> i64 {
+	assert(window_width > 0 && window_height > 0, "platform_monitor_overlap: invalid window")
+	assert(monitor != nil, "platform_monitor_overlap: nil monitor")
+	monitor_x, monitor_y, monitor_width, monitor_height := glfw.GetMonitorWorkarea(monitor)
+	overlap_width := max(
+		0,
+		min(window_x + window_width, monitor_x + monitor_width) - max(window_x, monitor_x),
+	)
+	overlap_height := max(
+		0,
+		min(window_y + window_height, monitor_y + monitor_height) - max(window_y, monitor_y),
+	)
+	return i64(overlap_width) * i64(overlap_height)
+}
+
+@(private)
+platform_window_monitor :: proc() -> glfw.MonitorHandle {
+	if g.win == nil do return nil
+	window := _win()
+	fullscreen_monitor := glfw.GetWindowMonitor(window)
+	if fullscreen_monitor != nil do return fullscreen_monitor
+	window_x, window_y := glfw.GetWindowPos(window)
+	window_width, window_height := glfw.GetWindowSize(window)
+	if window_width <= 0 || window_height <= 0 do return glfw.GetPrimaryMonitor()
+	monitors := glfw.GetMonitors()
+	assert(len(monitors) <= PLATFORM_MONITORS_MAX, "platform_window_monitor: too many monitors")
+	best_monitor := glfw.GetPrimaryMonitor()
+	best_overlap: i64
+	for monitor, monitor_index in monitors {
+		assert(monitor_index < PLATFORM_MONITORS_MAX)
+		overlap := platform_monitor_overlap(
+			window_x,
+			window_y,
+			window_width,
+			window_height,
+			monitor,
+		)
+		if overlap > best_overlap {
+			best_monitor = monitor
+			best_overlap = overlap
+		}
+	}
+	return best_monitor
+}
+
 @(private)
 platform_monitor_refresh_rate :: proc() -> i32 {
-	m := glfw.GetPrimaryMonitor()
-	if m == nil do return 60
-	mode := glfw.GetVideoMode(m)
-	if mode == nil do return 60
+	monitor := platform_window_monitor()
+	if monitor == nil do return 0
+	mode := glfw.GetVideoMode(monitor)
+	if mode == nil || mode.refresh_rate <= 0 do return 0
 	return mode.refresh_rate
 }
 

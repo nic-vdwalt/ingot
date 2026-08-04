@@ -18,6 +18,21 @@ app_lifecycle_rejects_invalid_transitions :: proc(t: ^testing.T) {
 }
 
 @(test)
+app_pacing_resolves_explicit_modes :: proc(t: ^testing.T) {
+	config := App_Config {
+		target_fps = 60,
+	}
+	testing.expect_value(t, app_resolve_target_fps(config, 144), i32(60))
+	config.frame_pacing = .Uncapped
+	testing.expect_value(t, app_resolve_target_fps(config, 144), i32(0))
+	config.frame_pacing = .Monitor_Refresh
+	testing.expect_value(t, app_resolve_target_fps(config, 144), i32(144))
+	testing.expect_value(t, app_resolve_target_fps(config, 0), i32(60))
+	config.target_fps = 0
+	testing.expect_value(t, app_resolve_target_fps(config, 0), i32(0))
+}
+
+@(test)
 app_screen_rect_reads_owned_context :: proc(t: ^testing.T) {
 	app := new(App)
 	gfx_context := new(gfx.Context)

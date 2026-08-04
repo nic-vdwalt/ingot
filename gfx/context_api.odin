@@ -74,6 +74,13 @@ context_set_target_fps :: proc(ctx: ^Context, fps: i32) {
 	ctx.target_fps = fps
 }
 
+context_monitor_refresh_rate :: proc(ctx: ^Context) -> i32 {
+	if ctx == nil || !context_ready(ctx) do return 0
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
+	return platform_monitor_refresh_rate()
+}
+
 context_set_mouse_cursor :: proc(ctx: ^Context, cursor: MouseCursor) {
 	if ctx == nil do return
 	previous := _context_activate(ctx)

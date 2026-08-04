@@ -10,6 +10,12 @@ App_State :: enum u8 {
 	Stopped,
 }
 
+App_Frame_Pacing :: enum u8 {
+	Fixed,
+	Uncapped,
+	Monitor_Refresh,
+}
+
 App_Frame_Proc :: #type proc(app: ^App, frame: ^ui.Ui_Frame, userdata: rawptr)
 App_Ui_Proc :: #type proc(app: ^App, u: ^ui.Ui, userdata: rawptr)
 App_Shutdown_Proc :: #type proc(app: ^App, userdata: rawptr)
@@ -19,9 +25,36 @@ App_Config :: struct {
 	height:        i32,
 	title:         cstring,
 	flags:         gfx.ConfigFlags,
+	frame_pacing:  App_Frame_Pacing,
 	target_fps:    i32,
 	event_waiting: bool,
 	session:       Session_Config,
+}
+
+@(private)
+app_resolve_target_fps :: proc(config: App_Config, monitor_refresh: i32) -> i32 {
+	assert(config.target_fps >= 0, "app_resolve_target_fps: negative target")
+	#partial switch config.frame_pacing {
+	case .Fixed:
+		return config.target_fps
+	case .Uncapped:
+		return 0
+	case .Monitor_Refresh:
+		if monitor_refresh > 0 do return monitor_refresh
+		return config.target_fps
+	}
+	return 0
+}
+
+@(private)
+app_apply_frame_pacing :: proc(app: ^App) {
+	assert(app != nil && app.gfx_context != nil, "app_apply_frame_pacing: invalid app")
+	when ODIN_OS != .JS {
+		refresh := gfx.context_monitor_refresh_rate(app.gfx_context)
+		target := app_resolve_target_fps(app.config, refresh)
+		gfx.context_set_target_fps(app.gfx_context, target)
+		assert(target >= 0, "app_apply_frame_pacing: invalid target")
+	}
 }
 
 App_Callbacks :: struct {
@@ -60,6 +93,7 @@ app_init_context :: proc(
 	assert(gfx_context != nil, "app_init_context: nil graphics context")
 	assert(config.width > 0 && config.height > 0, "app_init_context: invalid size")
 	assert(config.title != nil, "app_init_context: missing title")
+	assert(config.target_fps >= 0, "app_init_context: negative target FPS")
 	assert(
 		(callbacks.frame == nil) != (callbacks.ui == nil),
 		"app_init_context: expected one frame callback",
@@ -68,12 +102,12 @@ app_init_context :: proc(
 	when ODIN_OS == .Windows do window_flags += {.WINDOW_HIDDEN}
 	gfx.context_set_config_flags(gfx_context, window_flags)
 	if !gfx.context_init(gfx_context, config.width, config.height, config.title) do return false
-	if config.target_fps > 0 do gfx.context_set_target_fps(gfx_context, config.target_fps)
 	if config.event_waiting do gfx.context_set_frame_strategy(gfx_context, .Event_Driven)
 	session_init_context(&app.session, gfx_context, config.session)
 	when ODIN_OS == .Windows do gfx.context_show_window(gfx_context)
 	app.gfx_context = gfx_context
 	app.config = config
+	app_apply_frame_pacing(app)
 	app.callbacks = callbacks
 	app.userdata = userdata
 	app.state = .Ready
@@ -113,6 +147,7 @@ app_start :: proc(app: ^App) -> bool {
 app_tick :: proc(app: ^App) -> bool {
 	if app == nil || app.state != .Running do return false
 	if gfx.context_should_close(app.gfx_context) do return false
+	if app.config.frame_pacing == .Monitor_Refresh do app_apply_frame_pacing(app)
 	return app_frame(app)
 }
 

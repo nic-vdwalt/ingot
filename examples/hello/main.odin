@@ -24,6 +24,7 @@ main :: proc() {
 			height = 480,
 			title = "Ingot hello",
 			flags = flags,
+			frame_pacing = .Monitor_Refresh,
 			target_fps = 60,
 			event_waiting = true,
 			session = {semantics_enabled = true},

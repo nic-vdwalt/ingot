@@ -53,6 +53,7 @@ main :: proc() {
 			width = 960,
 			height = 720,
 			title = "ingot chart demo",
+			frame_pacing = .Monitor_Refresh,
 			target_fps = 60,
 			event_waiting = true,
 			session = {semantics_enabled = true},
