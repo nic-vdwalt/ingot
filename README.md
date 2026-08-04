@@ -234,10 +234,11 @@ bash scripts/smoke-gallery.sh   # windowed GPU smoke test; needs a display
 ```
 
 Other focused examples: `examples/hello` (application shell and stable IDs),
-`examples/breakout` (audio, gamepads, web export), `examples/idle_demo`
-(near-zero idle CPU), `examples/chart_demo`, `examples/render_fixture`
-(renderer and backend validation), and `examples/raylib_migration_fixture`
-(import-only 2D compatibility contract).
+`examples/session_loop` (custom-host Session lifecycle), `examples/breakout`
+(audio, gamepads, web export), `examples/idle_demo` (near-zero idle CPU),
+`examples/chart_demo`, `examples/render_fixture` (renderer, backend, and Session
+lifecycle validation), and `examples/raylib_migration_fixture` (import-only 2D
+compatibility contract).
 
 For web, `bash build_web.sh examples/gallery` writes `web/ingot_web.wasm`;
 serve `web/` over HTTP in a WebGPU browser (Chrome/Edge 113+ or Safari 18+).

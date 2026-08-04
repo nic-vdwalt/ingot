@@ -65,18 +65,18 @@ main :: proc() {
 
 frame :: proc() {
 	ensure_resources()
-	ui_frame = ui_gfx.session_begin_frame(&ui_session)
-	rl.BeginDrawing()
-	rl.ClearBackground(rl.Color{22, 24, 32, 255})
+	frame, acquired := ui_gfx.session_acquire_frame(&ui_session)
+	if !acquired do return
+	ui_frame = frame.ui
+	rl.clear_frame(frame.gfx, rl.Color{22, 24, 32, 255})
 	if resources_ready {
 		draw_render_targets()
 		draw_main_fixture()
 		draw_stream_lifetime_stress()
 		draw_retina_fixture()
 	}
-	ui_gfx.session_end_frame(&ui_session)
-	rl.EndDrawing()
-	free_all(context.temp_allocator)
+	ui_gfx.session_present_frame(&frame)
+	ui_frame = nil
 
 	when rl.RENDER_STATS_ENABLED {
 		@(static) reported := false
