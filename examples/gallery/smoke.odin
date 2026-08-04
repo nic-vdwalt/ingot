@@ -114,6 +114,13 @@ when SMOKE {
 			usage.indices_capacity,
 			f64(usage.indices) * 100 / f64(max(usage.indices_capacity, 1)),
 		)
+		fmt.printfln(
+			"smoke: peak streams geometry %d/%d KiB, uniform %d/%d KiB",
+			usage.geometry_stream_bytes / 1024,
+			usage.geometry_capacity_bytes / 1024,
+			usage.uniform_stream_bytes / 1024,
+			usage.uniform_capacity_bytes / 1024,
+		)
 		output := ui_gfx.session_output(&app.session)
 		if output == nil do return
 		assert(output.main.peak_count > 0, "smoke: no paint peak recorded")

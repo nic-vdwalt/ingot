@@ -89,10 +89,14 @@ context_renderer_stats_reset :: proc(ctx: ^Context) {
 // Tracked unconditionally, unlike Renderer_Stats: capacity sizing must not
 // depend on a build flag being set.
 Peak_Usage :: struct {
-	vertices:          int,
-	vertices_capacity: int,
-	indices:           int,
-	indices_capacity:  int,
+	vertices:               int,
+	vertices_capacity:      int,
+	indices:                int,
+	indices_capacity:       int,
+	geometry_stream_bytes:  u64,
+	geometry_capacity_bytes: u64,
+	uniform_stream_bytes:   u64,
+	uniform_capacity_bytes: u64,
 }
 
 renderer_peak_usage :: proc() -> Peak_Usage {
@@ -101,11 +105,17 @@ renderer_peak_usage :: proc() -> Peak_Usage {
 
 context_renderer_peak_usage :: proc(ctx: ^Context) -> Peak_Usage {
 	if ctx == nil do return {}
+	assert(ctx.rend.peak_geometry_bytes <= ctx.rend.geometry_bytes)
+	assert(ctx.rend.peak_uniform_bytes <= ctx.rend.uniform_bytes)
 	return Peak_Usage {
 		vertices = ctx.rend.peak_verts,
 		vertices_capacity = BATCH_MAX_VERTICES,
 		indices = ctx.rend.peak_indices,
 		indices_capacity = BATCH_MAX_INDICES,
+		geometry_stream_bytes = ctx.rend.peak_geometry_bytes,
+		geometry_capacity_bytes = ctx.rend.geometry_bytes,
+		uniform_stream_bytes = ctx.rend.peak_uniform_bytes,
+		uniform_capacity_bytes = ctx.rend.uniform_bytes,
 	}
 }
 

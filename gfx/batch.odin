@@ -139,6 +139,8 @@ Renderer :: struct {
 	// renderer_peak_usage.
 	peak_verts:         int,
 	peak_indices:       int,
+	peak_geometry_bytes: u64,
+	peak_uniform_bytes:  u64,
 	cur_kind:           Pipe_Kind,
 	cur_bind:           wg.BindGroup,
 	cur_blend:          Blend_Slot,
@@ -829,6 +831,17 @@ _batch_record_peak :: proc(r: ^Renderer, vertex_count, index_count: int) {
 	assert(r.peak_verts >= vertex_count, "_batch_record_peak: peak below sample")
 }
 
+@(private)
+_stream_record_peak :: proc(r: ^Renderer, geometry_bytes, uniform_bytes: u64) {
+	assert(r != nil, "_stream_record_peak: nil renderer")
+	assert(geometry_bytes <= r.geometry_bytes, "_stream_record_peak: geometry exceeds capacity")
+	assert(uniform_bytes <= r.uniform_bytes, "_stream_record_peak: uniform exceeds capacity")
+	r.peak_geometry_bytes = max(r.peak_geometry_bytes, geometry_bytes)
+	r.peak_uniform_bytes = max(r.peak_uniform_bytes, uniform_bytes)
+	assert(r.peak_geometry_bytes <= r.geometry_bytes)
+	assert(r.peak_uniform_bytes <= r.uniform_bytes)
+}
+
 renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Cause = .Manual) {
 	n := len(r.verts)
 	if n == 0 do return
@@ -1023,6 +1036,8 @@ _geometry_upload_indexed :: proc(
 	}
 	mem.copy(raw_data(slot.geometry_shadow[vertex_offset:]), vertex_data, int(vertex_bytes))
 	mem.copy(raw_data(slot.geometry_shadow[index_offset:]), index_data, int(index_bytes))
+	r.peak_geometry_bytes = max(r.peak_geometry_bytes, slot.geometry_write)
+	assert(r.peak_geometry_bytes <= r.geometry_bytes)
 	_stats_stream_copy(platform_now() - copy_started)
 	when RENDER_STATS_ENABLED {
 		g.stats_current.peak_geometry_arena_bytes = max(
@@ -1359,6 +1374,8 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 		return 0, false
 	}
 	mem.copy(raw_data(slot.uniform_shadow[offset:]), data, int(size))
+	r.peak_uniform_bytes = max(r.peak_uniform_bytes, slot.uniform_write)
+	assert(r.peak_uniform_bytes <= r.uniform_bytes)
 	_stats_stream_copy(platform_now() - copy_started)
 	when RENDER_STATS_ENABLED {
 		g.stats_current.peak_uniform_arena_bytes = max(
