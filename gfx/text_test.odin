@@ -49,6 +49,19 @@ text_test_codepoints :: proc() -> []rune {
 	return result
 }
 
+@(test)
+text_atlas_upload_stride_is_aligned_and_bounded :: proc(t: ^testing.T) {
+	testing.expect_value(t, _atlas_upload_stride(1), ATLAS_UPLOAD_ALIGN)
+	testing.expect_value(t, _atlas_upload_stride(ATLAS_UPLOAD_ALIGN), ATLAS_UPLOAD_ALIGN)
+	testing.expect_value(t, _atlas_upload_stride(ATLAS_UPLOAD_ALIGN + 1), ATLAS_UPLOAD_ALIGN * 2)
+	for width_int in 1 ..= ATLAS_DIM {
+		width := i32(width_int)
+		stride := _atlas_upload_stride(width)
+		testing.expect(t, stride >= width)
+		testing.expect(t, stride - width < ATLAS_UPLOAD_ALIGN)
+	}
+}
+
 text_test_atlas_accounting :: proc(t: ^testing.T, pixel_size: i32) {
 	codepoints := text_test_codepoints()
 	defer delete(codepoints)
@@ -181,8 +194,7 @@ test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
 	testing.expect(t, !was_baked, "test glyph should begin unbaked")
 	width := MeasureTextEx(font, "→", 32, 0).x
 	testing.expect(t, width > 0, "measurement should use the lazy glyph advance")
-	testing.expect(t, atlas.glyphs['→'].valid, "measurement should bake the glyph")
-	testing.expect(t, atlas.dirty, "measurement should leave lazy glyph pixels pending")
+	testing.expect(t, atlas.glyphs['→'].valid, "measurement should bake and upload the glyph")
 
 	restore_initialized := g.initialized
 	g.initialized = true
@@ -216,7 +228,6 @@ test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
 	BeginTextureMode(target)
 	DrawTextCodepoint(font, '→', {4, 4}, 32, WHITE)
 	EndTextureMode()
-	testing.expect(t, !atlas.dirty, "first draw should upload measured glyph pixels")
 	painted_pixels, painted_ok := _screenshot_pixels(target)
 	testing.expect(t, painted_ok, "painted target should be readable")
 	if painted_ok {
@@ -245,7 +256,6 @@ test_lazy_glyph_batch_boundary :: proc(t: ^testing.T, font: Font) {
 	if atlas == nil do return
 	cold: rune = '→'
 	delete_key(&atlas.glyphs, cold)
-	atlas.dirty = false
 
 	restore_initialized := g.initialized
 	g.initialized = true
@@ -271,8 +281,7 @@ test_lazy_glyph_batch_boundary :: proc(t: ^testing.T, font: Font) {
 	}
 	testing.expect_value(t, len(g.rend.verts), BATCH_MAX_VERTICES)
 	DrawTextCodepoint(font, cold, {4, 4}, 32, WHITE)
-	testing.expect(t, atlas.glyphs[cold].valid, "boundary glyph should bake")
-	testing.expect(t, !atlas.dirty, "boundary glyph should upload before submit")
+	testing.expect(t, atlas.glyphs[cold].valid, "boundary glyph should bake and upload")
 	EndTextureMode()
 
 	pixels, ok := _screenshot_pixels(target)

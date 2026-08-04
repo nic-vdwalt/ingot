@@ -14,8 +14,9 @@ import "core:strings"
 import tt "vendor:stb/truetype"
 import wg "vendor:wgpu"
 
-ATLAS_DIM :: 2048 // multiple of 256 so R8 bytesPerRow is copy-aligned
+ATLAS_DIM :: 2048
 ATLAS_PAD :: 1
+ATLAS_UPLOAD_ALIGN :: 256
 MAX_ATLASES :: 256
 
 // The atlas dimension stays a compile-time constant because glyph UVs, the
@@ -46,9 +47,7 @@ Atlas :: struct {
 	ascent:                f32, // baked px
 	line_adv:              f32, // baked px (ascent - descent + line gap)
 	glyphs:                map[rune]Glyph,
-	bitmap:                []byte, // ATLAS_DIM*ATLAS_DIM, single channel
 	cur_x, cur_y, shelf_h: i32,
-	dirty:                 bool, // CPU bitmap has un-uploaded glyphs (lazy bake/measure)
 	tex:                   wg.Texture,
 	view:                  wg.TextureView,
 	sampler:               wg.Sampler,
@@ -143,9 +142,12 @@ LoadFontFromMemory :: proc(
 	tt.GetFontVMetrics(&a.info, &asc, &desc, &gap)
 	a.ascent = math.round(f32(asc) * a.scale)
 	a.line_adv = math.round(f32(asc - desc + gap) * a.scale)
-	a.bitmap = make([]byte, ATLAS_DIM * ATLAS_DIM)
 	a.glyphs = make(map[rune]Glyph)
 	a.filter = .BILINEAR
+	if !_atlas_gpu_init(a) {
+		_atlas_entry_destroy(a)
+		return {}
+	}
 
 	baked: i32 = 0
 	for i in 0 ..< int(codepointCount) {
@@ -158,8 +160,6 @@ LoadFontFromMemory :: proc(
 		_atlas_entry_destroy(a)
 		return {}
 	}
-
-	_atlas_gpu_init(a)
 
 	f: Font
 	f.baseSize = fontSize
@@ -216,19 +216,13 @@ _bake_glyph :: proc(a: ^Atlas, cp: rune) -> bool {
 		return false
 	}
 
-	// render directly into the atlas bitmap at (px,py) with atlas stride
-	dst := raw_data(a.bitmap[py * ATLAS_DIM + px:])
-	tt.MakeCodepointBitmap(
-		&a.info,
-		dst,
-		c.int(gw),
-		c.int(gh),
-		c.int(ATLAS_DIM),
-		a.scale,
-		a.scale,
-		cp,
-	)
-	a.dirty = true
+	if !_atlas_upload_glyph(a, cp, px, py, gw, gh) {
+		a.glyphs[cp] = Glyph {
+			xadvance = xadvance,
+			valid    = false,
+		}
+		return false
+	}
 
 	a.glyphs[cp] = Glyph {
 		x        = u16(px),
@@ -262,7 +256,48 @@ _atlas_pack :: proc(a: ^Atlas, w, h: i32) -> (x, y: i32, ok: bool) {
 }
 
 @(private)
-_atlas_gpu_init :: proc(a: ^Atlas) {
+_atlas_upload_stride :: proc(width: i32) -> i32 {
+	assert(width > 0, "_atlas_upload_stride: non-positive width")
+	assert(ATLAS_UPLOAD_ALIGN > 0, "_atlas_upload_stride: invalid alignment")
+	stride := (width + ATLAS_UPLOAD_ALIGN - 1) / ATLAS_UPLOAD_ALIGN * ATLAS_UPLOAD_ALIGN
+	assert(stride >= width)
+	assert(stride % ATLAS_UPLOAD_ALIGN == 0)
+	return stride
+}
+
+@(private)
+_atlas_upload_glyph :: proc(a: ^Atlas, cp: rune, x, y, width, height: i32) -> bool {
+	assert(a != nil && a.tex != nil, "_atlas_upload_glyph: invalid atlas")
+	assert(width > 0 && height > 0, "_atlas_upload_glyph: invalid glyph size")
+	assert(x >= 0 && y >= 0 && x + width <= ATLAS_DIM && y + height <= ATLAS_DIM)
+	stride := _atlas_upload_stride(width)
+	pixels := make([]byte, stride * height)
+	tt.MakeCodepointBitmap(
+		&a.info,
+		raw_data(pixels),
+		c.int(width),
+		c.int(height),
+		c.int(stride),
+		a.scale,
+		a.scale,
+		cp,
+	)
+	wg.QueueWriteTexture(
+		g.queue,
+		&{texture = a.tex, origin = {u32(x), u32(y), 0}},
+		raw_data(pixels),
+		uint(len(pixels)),
+		&{bytesPerRow = u32(stride), rowsPerImage = u32(height)},
+		&{u32(width), u32(height), 1},
+	)
+	delete(pixels)
+	return true
+}
+
+@(private)
+_atlas_gpu_init :: proc(a: ^Atlas) -> bool {
+	assert(a != nil, "_atlas_gpu_init: nil atlas")
+	assert(g.device != nil && g.queue != nil, "_atlas_gpu_init: invalid context")
 	a.tex = wg.DeviceCreateTexture(
 		g.device,
 		&{
@@ -274,17 +309,21 @@ _atlas_gpu_init :: proc(a: ^Atlas) {
 			sampleCount = 1,
 		},
 	)
+	if a.tex == nil do return false
+	zeros := make([]byte, ATLAS_DIM * ATLAS_DIM)
 	wg.QueueWriteTexture(
 		g.queue,
 		&{texture = a.tex},
-		raw_data(a.bitmap),
-		uint(len(a.bitmap)),
+		raw_data(zeros),
+		uint(len(zeros)),
 		&{bytesPerRow = ATLAS_DIM, rowsPerImage = ATLAS_DIM},
 		&{ATLAS_DIM, ATLAS_DIM, 1},
 	)
-	a.dirty = false
+	delete(zeros)
 	a.view = wg.TextureCreateView(a.tex, nil)
+	if a.view == nil do return false
 	_atlas_build_bind(a)
+	return a.bind != nil
 }
 
 @(private)
@@ -321,7 +360,6 @@ _atlas_entry_destroy :: proc(entry: ^Atlas) {
 		_retire_texture(entry.bind, entry.sampler, entry.view, entry.tex)
 	}
 	delete(entry.glyphs)
-	delete(entry.bitmap)
 	delete(entry.data)
 	free(entry)
 }
@@ -406,7 +444,6 @@ DrawTextEx :: proc(
 		}
 		pen_x += gl.xadvance * sf + spacing
 	}
-	if a.dirty do _atlas_gpu_reupload(a)
 }
 
 DrawTextCodepoint :: proc(
@@ -495,20 +532,6 @@ MeasureTextEx :: proc(font: Font, text: cstring, fontSize, spacing: f32) -> Vect
 
 // DrawText and MeasureText live in font_default.odin: they are the default-font
 // entry points and exist only when the embedded face is compiled in.
-
-// Re-upload the whole atlas after a lazy on-demand glyph bake.
-@(private)
-_atlas_gpu_reupload :: proc(a: ^Atlas) {
-	wg.QueueWriteTexture(
-		g.queue,
-		&{texture = a.tex},
-		raw_data(a.bitmap),
-		uint(len(a.bitmap)),
-		&{bytesPerRow = ATLAS_DIM, rowsPerImage = ATLAS_DIM},
-		&{ATLAS_DIM, ATLAS_DIM, 1},
-	)
-	a.dirty = false
-}
 
 // utf8_encode writes `r` into buf as null-terminated UTF-8, returns the slice.
 @(private)
