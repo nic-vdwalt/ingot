@@ -226,10 +226,11 @@ odin run examples/multi_context_fixture -collection:ingot=.
 bash build_web.sh examples/render_fixture
 ```
 
-The fixture covers mixed batches, state changes, target preserve/clear behavior,
-ping-pong orientation, custom uniforms, instancing, and depth-overlapping 3D
-geometry. For each release backend, record operating system, architecture, GPU,
-driver, backend, browser where applicable, and date. A successful compile is
+The fixture covers the ergonomic custom-Session lifecycle, mixed batches, state
+changes, target preserve/clear behavior, ping-pong orientation, custom uniforms,
+instancing, and depth-overlapping 3D geometry. For each release backend, record
+operating system, architecture, GPU, driver, backend, browser where applicable,
+and date. A successful compile is
 `compiled`; only a clean fixture run without validation errors is `validated`.
 
 Current validation status and remaining platform work are maintained in

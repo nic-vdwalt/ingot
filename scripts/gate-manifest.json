@@ -27,6 +27,7 @@
   "compile_packages": ["sys", "pty", "accesskit", "testx"],
   "examples": [
     "hello",
+    "session_loop",
     "gallery",
     "breakout",
     "idle_demo",

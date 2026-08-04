@@ -82,6 +82,9 @@ for !gfx.WindowShouldClose() {
 }
 ```
 
+The same custom-host lifecycle is executable in
+[`examples/session_loop`](../examples/session_loop/main.odin).
+
 `Session_Frame` is a borrowed, single-frame capability. Its `ui` and `gfx`
 pointers are valid only until `session_present_frame` returns. Acquisition can
 fail as an operating condition and leaves the session unopened; the host must
