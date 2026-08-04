@@ -37,6 +37,8 @@ test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
 	testing.expect_value(t, session.adapter.gfx_epoch, rl.context_epoch(gfx_context))
 	testing.expect_value(t, session.adapter.font_dpi, f32(1))
 	testing.expect(t, !session.frame_open)
+	testing.expect(t, !session.acquired_frame.active)
+	testing.expect_value(t, session.frame_generation, u64(0))
 	testing.expect(t, session.gfx_frame == nil)
 	testing.expect_value(t, session.config, config)
 
@@ -47,6 +49,8 @@ test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
 	testing.expect(t, !session.adapter.initialized)
 	testing.expect(t, session.adapter.gfx_context == nil)
 	testing.expect(t, session.adapter.gfx_frame == nil)
+	testing.expect(t, !session.acquired_frame.active)
+	testing.expect_value(t, session.frame_generation, u64(0))
 	testing.expect(t, session.gfx_frame == nil)
 }
 
@@ -77,6 +81,16 @@ test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
 		testing.expect(t, session.adapter.gfx_frame == nil)
 		testing.expect(t, session.gfx_frame == nil)
 	}
+}
+
+@(test)
+test_session_frame_api_compiles :: proc(t: ^testing.T) {
+	acquire: proc(session: ^Session) -> (frame: Session_Frame, acquired: bool) =
+		session_acquire_frame
+	present: proc(frame: ^Session_Frame) = session_present_frame
+
+	testing.expect(t, acquire != nil)
+	testing.expect(t, present != nil)
 }
 
 @(test)

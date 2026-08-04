@@ -74,15 +74,26 @@ ui_gfx.session_init(&session, {semantics_enabled = true})
 defer ui_gfx.session_destroy(&session)
 
 for !gfx.WindowShouldClose() {
-	gfx_frame, acquired := gfx.begin_frame()
+	frame, acquired := ui_gfx.session_acquire_frame(&session)
 	if !acquired do continue
-	frame := ui_gfx.session_begin_frame_context(&session, &gfx_frame)
-	draw(frame)
-	ui_gfx.session_end_frame_context(&session, &gfx_frame)
-	gfx.end_frame(&gfx_frame)
-	free_all(context.temp_allocator)
+	gfx.clear_frame(frame.gfx, background)
+	draw(frame.ui)
+	ui_gfx.session_present_frame(&frame)
 }
 ```
+
+`Session_Frame` is a borrowed, single-frame capability. Its `ui` and `gfx`
+pointers are valid only until `session_present_frame` returns. Acquisition can
+fail as an operating condition and leaves the session unopened; the host must
+handle the returned `acquired` value. Presentation finalizes UI and semantics,
+submits graphics, invalidates the capability, and resets temporary frame
+allocations. Retaining, copying, nesting, or presenting a stale capability is a
+programmer error guarded by ownership and generation assertions.
+
+Use `session_begin_frame_context` and `session_end_frame_context` only when a
+host deliberately needs to separate UI and graphics timing, complete UI-only
+frames, or control submission itself. Those calls retain their existing
+contract and require the host to submit graphics and reset temporary storage.
 
 Use `session_runtime`, `session_frame`, `session_input`, and `session_output` only
 when host policy needs those values. Use `session_set_user_scale` instead of
@@ -98,12 +109,12 @@ uses `Session_Config`, `Session`, and `session_*`.
 
 The shell enforces this order:
 
-1. Acquire the graphics frame.
-2. Open the UI session frame.
+1. Acquire graphics and bind the UI session through `session_acquire_frame`.
+2. Expose the borrowed `Session_Frame` capability to the host.
 3. Invoke application drawing.
-4. Finalize semantics and replay UI output.
-5. Submit the graphics frame.
-6. Reset temporary frame allocations.
+4. Finalize semantics and replay UI output through `session_present_frame`.
+5. Submit graphics and invalidate the capability.
+6. Reset frame-temporary allocations.
 7. On a Windows close request, hide the native window.
 8. Invoke caller cleanup while the graphics context remains valid.
 9. Destroy UI frame, adapter, and runtime through `session_destroy`.

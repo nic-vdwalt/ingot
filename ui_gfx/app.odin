@@ -117,21 +117,18 @@ app_init_context :: proc(
 
 app_frame :: proc(app: ^App) -> bool {
 	assert(app != nil && app.state == .Running, "app_frame: invalid app")
-	gfx_frame, acquired := gfx.context_begin_frame(app.gfx_context)
+	frame, acquired := session_acquire_frame(&app.session)
 	if !acquired do return false
-	frame := session_begin_frame_context(&app.session, &gfx_frame)
-	gfx.clear_frame(&gfx_frame, app_clear_color(app))
+	gfx.clear_frame(frame.gfx, app_clear_color(app))
 	if app.callbacks.ui != nil {
-		app_ui_begin(app, frame, &app.form)
+		app_ui_begin(app, frame.ui, &app.form)
 		app.callbacks.ui(app, &app.form, app.userdata)
 		assert(app.form.open, "app_frame: UI callback closed the application root")
 		ui.end(&app.form)
 	} else {
-		app.callbacks.frame(app, frame, app.userdata)
+		app.callbacks.frame(app, frame.ui, app.userdata)
 	}
-	session_end_frame_context(&app.session, &gfx_frame)
-	gfx.end_frame(&gfx_frame)
-	free_all(context.temp_allocator)
+	session_present_frame(&frame)
 	return true
 }
 

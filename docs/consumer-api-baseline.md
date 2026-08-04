@@ -11,9 +11,11 @@ and custom-host paths are covered by `examples/hello` and
 | Form (`consumer_api_test`) | 1 | 4 | 6 | 6 arguments | 3 |
 | Repeated-ID list (`consumer_api_test`) | 1 | 0 additional | 5 | 3 arguments | 0 additional |
 | Canvas region (`consumer_api_test`) | 1 | 2 | 0 | 3 arguments | 0 |
-| Custom `Session` (`session_test`) | 3 | 3 | 0 | 3 arguments | 1 |
+| Custom `Session` (low-level) | 3 | 5 | 0 | 3 arguments | 2 |
+| Custom `Session` (capability) | 3 | 3 | 0 | 3 arguments | 1 |
 
 “Lifecycle calls” counts explicit begin/end or run/init operations visible to the
 consumer. “Identity calls” counts `id`, `scope_begin`, and `scope_end`. The
 baseline is intentionally mechanical: an additive API change is worthwhile only
 when it lowers these counts without hiding ownership, bounds, or failure modes.
+Capability presentation owns graphics submission and temporary-frame cleanup.
