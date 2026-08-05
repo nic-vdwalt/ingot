@@ -280,8 +280,9 @@ create_gpu_mesh :: proc(
 	Gpu_Mesh,
 	bool,
 ) {
-	if !g.initialized || !_gpu_3d_geometry_valid(vertices, indices, primitive) do return {}, false
-	resources := &g.resources.gpu_3d
+	ctx := &default_context_storage
+	if !ctx.initialized || !_gpu_3d_geometry_valid(vertices, indices, primitive) do return {}, false
+	resources := &ctx.resources.gpu_3d
 	if resources.mesh_count >= GPU_3D_MAX_MESHES {
 		_stats_gpu3d_pool_exhaustion()
 		return {}, false
@@ -312,7 +313,7 @@ create_gpu_mesh :: proc(
 		slot.entry = entry
 		slot.occupied = true
 		resources.mesh_count += 1
-		_stats_gpu3d_mesh_upload(entry.vertex_count, entry.index_count)
+		_stats_gpu3d_mesh_upload(ctx, entry.vertex_count, entry.index_count)
 		return Gpu_Mesh{id = _resource_handle_make(index, slot.generation)}, true
 	}
 	assert(false, "create_gpu_mesh: count mismatch")
@@ -402,7 +403,7 @@ draw_gpu_mesh :: proc(
 	transform: Matrix,
 	material: Gpu_Material,
 ) {
-	if !_gpu_3d_pass_current(&g.resources.gpu_3d, pass) do return
+	if pass == nil || !_gpu_3d_pass_current(&pass.owner.resources.gpu_3d, pass) do return
 	entry := _gpu_3d_mesh(mesh)
 	if entry == nil do return
 	target_entry := get_texture(pass.target.texture.texture.id)
@@ -431,7 +432,7 @@ draw_gpu_mesh :: proc(
 	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderSetIndexBuffer(pass.pass, entry.index_buffer, .Uint32, 0, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderDrawIndexed(pass.pass, entry.index_count, 1, 0, 0, 0)
-	_stats_gpu3d_draw(entry.vertex_count, entry.index_count)
+	_stats_gpu3d_draw(pass.owner, entry.vertex_count, entry.index_count)
 	_stats_pipeline_switch()
 	_stats_bind_group_switches(1)
 }
