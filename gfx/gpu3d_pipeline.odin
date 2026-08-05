@@ -8,10 +8,19 @@ import wg "vendor:wgpu"
 // returns ok=false and draw_gpu_mesh skips draws once the pipeline pool is
 // full - both are counted in renderer_stats().gpu3d_pool_exhaustions.
 GPU_3D_MAX_MESHES :: 256
-GPU_3D_MAX_PIPELINES :: 8
+GPU_3D_MAX_PIPELINES :: 24
+GPU_3D_MAX_VERTICES :: 1_048_576
+GPU_3D_MAX_INDICES :: 6_291_456
+GPU_3D_MAX_MESH_BYTES :: 128 * 1024 * 1024
 
 Gpu_Mesh :: struct {
 	id: u32,
+}
+
+Gpu_Primitive :: enum u8 {
+	Triangles,
+	Lines,
+	Points,
 }
 
 Gpu_3D_Target :: struct {
@@ -19,7 +28,9 @@ Gpu_3D_Target :: struct {
 }
 
 Gpu_Material :: struct {
-	color: Color,
+	color:      Color,
+	color_high: Color,
+	use_scalar: bool,
 }
 
 Gpu_3D_Load_Action :: enum {
@@ -42,12 +53,16 @@ Gpu_3D_Pass :: struct {
 Gpu_3D_Vertex :: struct {
 	position: [3]f32,
 	normal:   [3]f32,
+	scalar:   f32,
 }
 
 Gpu_3D_Uniforms :: struct {
 	view_projection: Matrix,
 	model:           Matrix,
 	color:           [4]f32,
+	color_high:      [4]f32,
+	use_scalar:      u32,
+	_padding:        [3]u32,
 }
 
 // The dynamic-offset uniform bind group declares minBindingSize =
@@ -57,21 +72,24 @@ Gpu_3D_Uniforms :: struct {
 // binding larger than the shader view. Lock the invariants a struct edit
 // could silently break: never smaller than the shader view, always 16-byte
 // aligned as dynamic offsets require.
-#assert(size_of(Gpu_3D_Uniforms) >= 144)
+#assert(size_of(Gpu_3D_Uniforms) >= 176)
 #assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
-#assert(size_of(Gpu_3D_Vertex) == 24)
+#assert(size_of(Gpu_3D_Vertex) == 28)
 
 @(private)
 Gpu_3D_Mesh_Entry :: struct {
 	vertex_buffer: wg.Buffer,
 	index_buffer:  wg.Buffer,
 	index_count:   u32,
+	vertex_count:  u32,
+	primitive:     Gpu_Primitive,
 }
 
 @(private)
 Gpu_3D_Pipeline_Entry :: struct {
-	format:   wg.TextureFormat,
-	pipeline: wg.RenderPipeline,
+	format:    wg.TextureFormat,
+	primitive: Gpu_Primitive,
+	pipeline:  wg.RenderPipeline,
 }
 
 @(private)
@@ -100,19 +118,28 @@ struct Uniforms {
     view_projection: mat4x4<f32>,
     model: mat4x4<f32>,
     color: vec4<f32>,
+    color_high: vec4<f32>,
+    use_scalar: u32,
+    padding: vec3<u32>,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
 struct VertexOut {
     @builtin(position) position: vec4<f32>,
     @location(0) normal: vec3<f32>,
+    @location(1) scalar: f32,
 };
 
 @vertex
-fn vs_main(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>) -> VertexOut {
+fn vs_main(
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) scalar: f32,
+) -> VertexOut {
     var out: VertexOut;
     out.position = u.view_projection * u.model * vec4<f32>(position, 1.0);
     out.normal = normalize((u.model * vec4<f32>(normal, 0.0)).xyz);
+    out.scalar = scalar;
     return out;
 }
 
@@ -120,7 +147,11 @@ fn vs_main(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>) -> 
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let light = normalize(vec3<f32>(0.4, 0.8, 0.3));
     let diffuse = 0.25 + 0.75 * max(dot(normalize(in.normal), light), 0.0);
-    return vec4<f32>(u.color.rgb * diffuse * u.color.a, u.color.a);
+    var base = u.color;
+    if u.use_scalar != 0u {
+        base = mix(u.color, u.color_high, clamp(in.scalar, 0.0, 1.0));
+    }
+    return vec4<f32>(base.rgb * diffuse * base.a, base.a);
 }
 `
 
@@ -138,6 +169,19 @@ destroy_gpu_3d_target :: proc(target: ^Gpu_3D_Target) {
 	if target.texture.texture.id != 0 do UnloadRenderTexture(target.texture)
 	target^ = {}
 	assert(target.texture.texture.id == 0)
+}
+
+resize_gpu_3d_target :: proc(target: ^Gpu_3D_Target, width, height: i32) -> bool {
+	assert(target != nil, "resize_gpu_3d_target: nil target")
+	if width <= 0 || height <= 0 do return false
+	if target.texture.texture.width == width && target.texture.texture.height == height do return true
+	replacement, ok := create_gpu_3d_target(width, height)
+	if !ok do return false
+	destroy_gpu_3d_target(target)
+	target^ = replacement
+	assert(target.texture.texture.width == width, "resize_gpu_3d_target: wrong width")
+	assert(target.texture.texture.height == height, "resize_gpu_3d_target: wrong height")
+	return true
 }
 
 // _sphere_mesh_geometry generates a UV sphere's vertex/index lists - pure
@@ -208,6 +252,8 @@ create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) 
 		{.Index},
 	)
 	entry.index_count = u32(len(indices))
+	entry.vertex_count = u32(len(vertices))
+	entry.primitive = .Triangles
 	if entry.vertex_buffer == nil || entry.index_buffer == nil {
 		if entry.vertex_buffer != nil do wg.BufferRelease(entry.vertex_buffer)
 		if entry.index_buffer != nil do wg.BufferRelease(entry.index_buffer)
@@ -223,6 +269,53 @@ create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) 
 		return Gpu_Mesh{id = _resource_handle_make(index, slot.generation)}, true
 	}
 	assert(false, "create_sphere_mesh: count mismatch")
+	return {}, false
+}
+
+create_gpu_mesh :: proc(
+	vertices: []Gpu_3D_Vertex,
+	indices: []u32,
+	primitive: Gpu_Primitive = .Triangles,
+) -> (
+	Gpu_Mesh,
+	bool,
+) {
+	if !g.initialized || !_gpu_3d_geometry_valid(vertices, indices, primitive) do return {}, false
+	resources := &g.resources.gpu_3d
+	if resources.mesh_count >= GPU_3D_MAX_MESHES {
+		_stats_gpu3d_pool_exhaustion()
+		return {}, false
+	}
+	entry := new(Gpu_3D_Mesh_Entry)
+	entry.vertex_buffer = _gpu_3d_buffer(
+		raw_data(vertices),
+		u64(len(vertices)) * size_of(Gpu_3D_Vertex),
+		{.Vertex},
+	)
+	entry.index_buffer = _gpu_3d_buffer(
+		raw_data(indices),
+		u64(len(indices)) * size_of(u32),
+		{.Index},
+	)
+	entry.index_count = u32(len(indices))
+	entry.vertex_count = u32(len(vertices))
+	entry.primitive = primitive
+	if entry.vertex_buffer == nil || entry.index_buffer == nil {
+		if entry.vertex_buffer != nil do wg.BufferRelease(entry.vertex_buffer)
+		if entry.index_buffer != nil do wg.BufferRelease(entry.index_buffer)
+		free(entry)
+		return {}, false
+	}
+	for &slot, index in resources.meshes {
+		if slot.occupied do continue
+		slot.generation = _resource_generation_next(slot.generation)
+		slot.entry = entry
+		slot.occupied = true
+		resources.mesh_count += 1
+		_stats_gpu3d_mesh_upload(entry.vertex_count, entry.index_count)
+		return Gpu_Mesh{id = _resource_handle_make(index, slot.generation)}, true
+	}
+	assert(false, "create_gpu_mesh: count mismatch")
 	return {}, false
 }
 
@@ -314,13 +407,17 @@ draw_gpu_mesh :: proc(
 	if entry == nil do return
 	target_entry := get_texture(pass.target.texture.texture.id)
 	if target_entry == nil do return
-	pipeline := _gpu_3d_pipeline(target_entry.wgformat)
+	pipeline := _gpu_3d_pipeline(target_entry.wgformat, entry.primitive)
 	if pipeline == nil do return
 
+	color_high := material.color_high
+	if color_high == (Color{}) do color_high = material.color
 	uniforms := Gpu_3D_Uniforms {
 		view_projection = pass.view_projection,
 		model           = transform,
 		color           = col_f(material.color),
+		color_high      = col_f(color_high),
+		use_scalar      = u32(1) if material.use_scalar else 0,
 	}
 	offset, ok := _uniform_upload(&g.rend, &uniforms, size_of(uniforms))
 	if !ok || g.rend.active_stream_slot < 0 do return
@@ -334,6 +431,7 @@ draw_gpu_mesh :: proc(
 	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderSetIndexBuffer(pass.pass, entry.index_buffer, .Uint32, 0, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderDrawIndexed(pass.pass, entry.index_count, 1, 0, 0, 0)
+	_stats_gpu3d_draw(entry.vertex_count, entry.index_count)
 	_stats_pipeline_switch()
 	_stats_bind_group_switches(1)
 }
@@ -407,6 +505,29 @@ _gpu_3d_mesh_entry_destroy :: proc(entry: ^Gpu_3D_Mesh_Entry) {
 }
 
 @(private)
+_gpu_3d_geometry_valid :: proc(
+	vertices: []Gpu_3D_Vertex,
+	indices: []u32,
+	primitive: Gpu_Primitive,
+) -> bool {
+	if len(vertices) == 0 || len(indices) == 0 do return false
+	if len(vertices) > GPU_3D_MAX_VERTICES || len(indices) > GPU_3D_MAX_INDICES do return false
+	bytes := u64(len(vertices)) * size_of(Gpu_3D_Vertex) + u64(len(indices)) * size_of(u32)
+	if bytes > GPU_3D_MAX_MESH_BYTES do return false
+	#partial switch primitive {
+	case .Triangles:
+		if len(indices) % 3 != 0 do return false
+	case .Lines:
+		if len(indices) % 2 != 0 do return false
+	case .Points:
+	}
+	for index in indices {
+		if int(index) >= len(vertices) do return false
+	}
+	return true
+}
+
+@(private)
 _gpu_3d_buffer :: proc(data: rawptr, size: u64, usage: wg.BufferUsageFlags) -> wg.Buffer {
 	assert(data != nil)
 	assert(size > 0)
@@ -418,10 +539,11 @@ _gpu_3d_buffer :: proc(data: rawptr, size: u64, usage: wg.BufferUsageFlags) -> w
 }
 
 @(private)
-_gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
+_gpu_3d_pipeline :: proc(format: wg.TextureFormat, primitive: Gpu_Primitive) -> wg.RenderPipeline {
 	resources := &g.resources.gpu_3d
 	for index in 0 ..< resources.pipeline_count {
-		if resources.pipelines[index].format == format do return resources.pipelines[index].pipeline
+		entry := resources.pipelines[index]
+		if entry.format == format && entry.primitive == primitive do return entry.pipeline
 	}
 	if resources.pipeline_count >= GPU_3D_MAX_PIPELINES {
 		// Pool full: draws to targets in unseen formats are skipped from now
@@ -430,9 +552,10 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 		return nil
 	}
 	_gpu_3d_init_shared(resources)
-	attrs := [2]wg.VertexAttribute {
+	attrs := [3]wg.VertexAttribute {
 		{format = .Float32x3, offset = 0, shaderLocation = 0},
 		{format = .Float32x3, offset = u64(offset_of(Gpu_3D_Vertex, normal)), shaderLocation = 1},
+		{format = .Float32, offset = u64(offset_of(Gpu_3D_Vertex, scalar)), shaderLocation = 2},
 	}
 	vertex_layout := wg.VertexBufferLayout {
 		arrayStride    = size_of(Gpu_3D_Vertex),
@@ -457,6 +580,15 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 		stencilReadMask   = 0xff,
 		stencilWriteMask  = 0xff,
 	}
+	topology: wg.PrimitiveTopology
+	#partial switch primitive {
+	case .Triangles:
+		topology = .TriangleList
+	case .Lines:
+		topology = .LineList
+	case .Points:
+		topology = .PointList
+	}
 	pipeline := wg.DeviceCreateRenderPipeline(
 		g.device,
 		&{
@@ -467,7 +599,11 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 				bufferCount = 1,
 				buffers = &vertex_layout,
 			},
-			primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .Back},
+			primitive = {
+				topology = topology,
+				frontFace = .CCW,
+				cullMode = .Back if primitive == .Triangles else .None,
+			},
 			depthStencil = &depth,
 			multisample = {count = 1, mask = ~u32(0)},
 			fragment = &wg.FragmentState {
@@ -481,8 +617,9 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat) -> wg.RenderPipeline {
 	wg.PipelineLayoutRelease(layout)
 	index := resources.pipeline_count
 	resources.pipelines[index] = {
-		format   = format,
-		pipeline = pipeline,
+		format    = format,
+		primitive = primitive,
+		pipeline  = pipeline,
 	}
 	resources.pipeline_count += 1
 	return pipeline

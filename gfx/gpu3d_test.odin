@@ -65,6 +65,39 @@ test_create_sphere_mesh_rejects_headless :: proc(t: ^testing.T) {
 	testing.expect_value(t, mesh.id, u32(0))
 }
 
+@(test)
+test_gpu_3d_geometry_validation :: proc(t: ^testing.T) {
+	vertices := [?]Gpu_3D_Vertex {
+		{position = {0, 0, 0}, normal = {0, 1, 0}, scalar = 0},
+		{position = {1, 0, 0}, normal = {0, 1, 0}, scalar = 0.5},
+		{position = {0, 0, 1}, normal = {0, 1, 0}, scalar = 1},
+	}
+	triangles := [?]u32{0, 1, 2}
+	lines := [?]u32{0, 1, 1, 2}
+	points := [?]u32{0, 1, 2}
+	bad_index := [?]u32{0, 1, 3}
+
+	testing.expect(t, _gpu_3d_geometry_valid(vertices[:], triangles[:], .Triangles))
+	testing.expect(t, _gpu_3d_geometry_valid(vertices[:], lines[:], .Lines))
+	testing.expect(t, _gpu_3d_geometry_valid(vertices[:], points[:], .Points))
+	testing.expect(t, !_gpu_3d_geometry_valid(vertices[:], lines[:], .Triangles))
+	testing.expect(t, !_gpu_3d_geometry_valid(vertices[:], bad_index[:], .Triangles))
+	testing.expect(t, !_gpu_3d_geometry_valid(nil, triangles[:], .Triangles))
+}
+
+@(test)
+test_create_gpu_mesh_rejects_headless :: proc(t: ^testing.T) {
+	vertices := [?]Gpu_3D_Vertex {
+		{position = {0, 0, 0}, normal = {0, 1, 0}},
+		{position = {1, 0, 0}, normal = {0, 1, 0}},
+		{position = {0, 0, 1}, normal = {0, 1, 0}},
+	}
+	indices := [?]u32{0, 1, 2}
+	mesh, ok := create_gpu_mesh(vertices[:], indices[:])
+	testing.expect_value(t, ok, false)
+	testing.expect_value(t, mesh.id, u32(0))
+}
+
 // -- pool handle mapping -------------------------------------------------------
 
 @(test)
