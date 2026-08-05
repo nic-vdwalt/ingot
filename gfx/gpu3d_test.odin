@@ -8,6 +8,7 @@ package gfx
 
 import "core:math"
 import "core:testing"
+import wg "vendor:wgpu"
 
 // -- _sphere_mesh_geometry -----------------------------------------------------
 
@@ -96,6 +97,29 @@ test_create_gpu_mesh_rejects_headless :: proc(t: ^testing.T) {
 	mesh, ok := create_gpu_mesh(vertices[:], indices[:])
 	testing.expect_value(t, ok, false)
 	testing.expect_value(t, mesh.id, u32(0))
+}
+
+@(test)
+test_gpu_3d_opaque_overlay_policy :: proc(t: ^testing.T) {
+	default := _gpu_3d_material_policy(.Default)
+	overlay := _gpu_3d_material_policy(.Opaque_Overlay)
+	testing.expect(t, default.blend)
+	testing.expect_value(t, default.depth_bias, i32(0))
+	testing.expect(t, !overlay.blend)
+	testing.expect(t, overlay.depth_write)
+	testing.expect_value(t, overlay.depth_compare, wg.CompareFunction.Less)
+	testing.expect(t, overlay.depth_bias < 0)
+}
+
+@(test)
+test_gpu_3d_pipeline_identity_includes_material_style :: proc(t: ^testing.T) {
+	entry := Gpu_3D_Pipeline_Entry {
+		format = .RGBA8Unorm,
+		primitive = .Triangles,
+		style = .Default,
+	}
+	testing.expect(t, _gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default))
+	testing.expect(t, !_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque_Overlay))
 }
 
 // -- pool handle mapping -------------------------------------------------------

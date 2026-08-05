@@ -27,10 +27,16 @@ Gpu_3D_Target :: struct {
 	texture: RenderTexture2D,
 }
 
+Gpu_Material_Style :: enum {
+	Default,
+	Opaque_Overlay,
+}
+
 Gpu_Material :: struct {
 	color:      Color,
 	color_high: Color,
 	use_scalar: bool,
+	style:      Gpu_Material_Style,
 }
 
 Gpu_3D_Load_Action :: enum {
@@ -89,7 +95,36 @@ Gpu_3D_Mesh_Entry :: struct {
 Gpu_3D_Pipeline_Entry :: struct {
 	format:    wg.TextureFormat,
 	primitive: Gpu_Primitive,
+	style:     Gpu_Material_Style,
 	pipeline:  wg.RenderPipeline,
+}
+
+@(private)
+Gpu_3D_Material_Policy :: struct {
+	blend:       bool,
+	depth_write: bool,
+	depth_compare: wg.CompareFunction,
+	depth_bias:  i32,
+}
+
+@(private)
+_gpu_3d_material_policy :: proc(style: Gpu_Material_Style) -> Gpu_3D_Material_Policy {
+	return {
+		blend = style == .Default,
+		depth_write = true,
+		depth_compare = .Less,
+		depth_bias = -2 if style == .Opaque_Overlay else 0,
+	}
+}
+
+@(private)
+_gpu_3d_pipeline_matches :: proc(
+	entry: Gpu_3D_Pipeline_Entry,
+	format: wg.TextureFormat,
+	primitive: Gpu_Primitive,
+	style: Gpu_Material_Style,
+) -> bool {
+	return entry.format == format && entry.primitive == primitive && entry.style == style
 }
 
 @(private)
@@ -408,7 +443,7 @@ draw_gpu_mesh :: proc(
 	if entry == nil do return
 	target_entry := get_texture(pass.target.texture.texture.id)
 	if target_entry == nil do return
-	pipeline := _gpu_3d_pipeline(target_entry.wgformat, entry.primitive)
+	pipeline := _gpu_3d_pipeline(target_entry.wgformat, entry.primitive, material.style)
 	if pipeline == nil do return
 
 	color_high := material.color_high
@@ -540,11 +575,15 @@ _gpu_3d_buffer :: proc(data: rawptr, size: u64, usage: wg.BufferUsageFlags) -> w
 }
 
 @(private)
-_gpu_3d_pipeline :: proc(format: wg.TextureFormat, primitive: Gpu_Primitive) -> wg.RenderPipeline {
+_gpu_3d_pipeline :: proc(
+	format: wg.TextureFormat,
+	primitive: Gpu_Primitive,
+	style: Gpu_Material_Style,
+) -> wg.RenderPipeline {
 	resources := &g.resources.gpu_3d
 	for index in 0 ..< resources.pipeline_count {
 		entry := resources.pipelines[index]
-		if entry.format == format && entry.primitive == primitive do return entry.pipeline
+		if _gpu_3d_pipeline_matches(entry, format, primitive, style) do return entry.pipeline
 	}
 	if resources.pipeline_count >= GPU_3D_MAX_PIPELINES {
 		// Pool full: draws to targets in unseen formats are skipped from now
@@ -568,18 +607,20 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat, primitive: Gpu_Primitive) -> 
 		g.device,
 		&{bindGroupLayoutCount = 1, bindGroupLayouts = &resources.layout},
 	)
+	policy := _gpu_3d_material_policy(style)
 	blend := _blend_for(&g.rend, .Alpha)
 	target := wg.ColorTargetState {
 		format    = format,
-		blend     = &blend,
 		writeMask = wg.ColorWriteMaskFlags_All,
 	}
+	if policy.blend do target.blend = &blend
 	depth := wg.DepthStencilState {
 		format            = .Depth24Plus,
-		depthWriteEnabled = .True,
-		depthCompare      = .Less,
+		depthWriteEnabled = .True if policy.depth_write else .False,
+		depthCompare      = policy.depth_compare,
 		stencilReadMask   = 0xff,
 		stencilWriteMask  = 0xff,
+		depthBias         = policy.depth_bias,
 	}
 	topology: wg.PrimitiveTopology
 	#partial switch primitive {
@@ -620,6 +661,7 @@ _gpu_3d_pipeline :: proc(format: wg.TextureFormat, primitive: Gpu_Primitive) -> 
 	resources.pipelines[index] = {
 		format    = format,
 		primitive = primitive,
+		style     = style,
 		pipeline  = pipeline,
 	}
 	resources.pipeline_count += 1
