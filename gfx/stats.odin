@@ -48,6 +48,11 @@ Renderer_Stats :: struct {
 	submission_tracking_failures:  u32,
 	stream_retirement_failures:    u32,
 	gpu3d_pool_exhaustions:        u32,
+	gpu3d_mesh_uploads:            u32,
+	gpu3d_draws:                   u32,
+	gpu3d_vertices_resident:       u64,
+	gpu3d_vertices_drawn:          u64,
+	gpu3d_indices_drawn:           u64,
 	composite_alpha_mode:          wg.CompositeAlphaMode,
 	flush_causes:                  [Flush_Cause]u32,
 }
@@ -336,6 +341,27 @@ _stats_stream_slot_exhaustion :: proc() {
 _stats_gpu3d_pool_exhaustion :: proc() {
 	when RENDER_STATS_ENABLED {
 		g.stats_current.gpu3d_pool_exhaustions += 1
+	}
+}
+
+@(private)
+_stats_gpu3d_mesh_upload :: proc(vertices, indices: u32) {
+	assert(vertices > 0, "_stats_gpu3d_mesh_upload: empty vertices")
+	assert(indices > 0, "_stats_gpu3d_mesh_upload: empty indices")
+	when RENDER_STATS_ENABLED {
+		g.stats_current.gpu3d_mesh_uploads += 1
+		g.stats_current.gpu3d_vertices_resident += u64(vertices)
+	}
+}
+
+@(private)
+_stats_gpu3d_draw :: proc(vertices, indices: u32) {
+	assert(vertices > 0, "_stats_gpu3d_draw: empty vertices")
+	assert(indices > 0, "_stats_gpu3d_draw: empty indices")
+	when RENDER_STATS_ENABLED {
+		g.stats_current.gpu3d_draws += 1
+		g.stats_current.gpu3d_vertices_drawn += u64(vertices)
+		g.stats_current.gpu3d_indices_drawn += u64(indices)
 	}
 }
 

@@ -35,6 +35,12 @@ Every context has a monotonically increasing lifecycle epoch. Frames, asynchrono
 WebGPU adapter/device completion, and submission callbacks validate that epoch so
 work from a closed lifetime cannot mutate a replacement lifetime.
 
+The explicit GPU 3D path accepts bounded indexed triangle, line, and point meshes.
+Mesh handles are generation checked, input counts and byte sizes are capped, and
+invalid indices are rejected before GPU allocation. Target resize is transactional:
+a failed replacement keeps the previous target alive. Renderer statistics expose
+mesh uploads, draw counts, vertex counts, and pool exhaustion when enabled.
+
 `ui_gfx.Adapter` records its graphics context and epoch at initialization,
 rejects stale use, and can bind an explicit graphics frame. Native contexts own
 independent windows, renderers, resources, input, timing, statistics, and

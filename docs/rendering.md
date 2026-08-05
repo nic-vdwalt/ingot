@@ -108,16 +108,23 @@ Depth attachments are fixed when a render pass begins. The legacy
 GPU depth rendering uses the separate opt-in API in `gfx/gpu3d.odin`:
 
 - Create and explicitly unload generation-checked GPU meshes and targets.
+- Upload bounded indexed triangle, line, or point geometry with `create_gpu_mesh`.
+  Vertices carry position, normal, and a normalized scalar that materials may map
+  between two colors. Oversized, malformed, and out-of-range geometry is rejected.
+- Resize offscreen targets transactionally with `resize_gpu_3d_target`; allocation
+  failure leaves the previous valid target intact.
 - Begin the pass with `begin_gpu_3d`, selecting color/depth load actions before
   pass creation.
 - Submit meshes with `draw_gpu_mesh`.
 - Balance the pass with `end_gpu_3d`.
 
-The opaque pipeline uses indexed mesh buffers, submission-safe instance and
-uniform records, `.Depth24Plus`, depth writes, and `.Less` comparison for opaque
-geometry. Transparent and additive behavior uses distinct pipeline state.
-Billboards, lines, and legacy mesh calls retain their existing behavior until a
-caller deliberately migrates them.
+The opaque pipeline uses indexed mesh buffers, submission-safe uniform records,
+`.Depth24Plus`, depth writes, and `.Less` comparison for opaque geometry. Generic
+GPU meshes support triangle, line, and point-list topology. The current point path
+uses the adapter's one-pixel point primitive; larger point sprites and dynamic
+instancing remain future extensions. Transparent and additive behavior uses
+distinct pipeline state. Billboards and legacy mesh calls retain their existing
+behavior until a caller deliberately migrates them.
 
 The GPU 3D API is a visualization escape hatch rather than a scene graph,
 material system, asset pipeline, or full game engine.
