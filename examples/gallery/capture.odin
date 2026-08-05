@@ -41,8 +41,8 @@ _ :: ui_gfx
 
 when CAPTURE {
 	// Fixed output geometry: identical PNGs regardless of host display.
-	CAPTURE_WIDTH :: 1600
-	CAPTURE_HEIGHT :: 1000
+	CAPTURE_WIDTH :: #config(INGOT_CAPTURE_WIDTH, 1600)
+	CAPTURE_HEIGHT :: #config(INGOT_CAPTURE_HEIGHT, 1000)
 	CAPTURE_WINDOW_WIDTH :: 1280
 	CAPTURE_WINDOW_HEIGHT :: 800
 	// Frames to hold a state before the shot. ui.eased snaps to its target once
@@ -54,7 +54,7 @@ when CAPTURE {
 	// Explicit UI scale. Fixed rather than auto so HiDPI hosts cannot change
 	// the output, and above 1.0 so the gallery's intrinsic content height
 	// fills CAPTURE_HEIGHT instead of leaving dead space below the fold.
-	CAPTURE_UI_SCALE :: f32(1.5)
+	CAPTURE_UI_SCALE :: f32(#config(INGOT_CAPTURE_UI_SCALE, 1.5))
 	// Where the harness parks the cursor. Hover, tooltips, and pointer-driven
 	// focus rings would otherwise depend on wherever the operator left the
 	// mouse, so every shot pins it to the same inert spot in the nav gutter.
