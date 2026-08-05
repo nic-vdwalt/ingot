@@ -95,6 +95,7 @@ NARROW_WIDTH_MAX :: 640
 // desktop button height; the cell width fits the longest section name.
 NAV_STRIP_ROW_H :: 34
 NAV_STRIP_CELL_W :: 92
+NAV_SIDEBAR_ROW_H :: 28
 
 // --- caller-owned state (the whole point: no hidden library state) ----------
 
@@ -319,7 +320,7 @@ gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	// One decision, taken in the parent and passed down (Tiger Style: push
 	// ifs up). Below the breakpoint the sidebar would eat 170 of ~390
 	// logical pixels, so the nav becomes a horizontal strip instead.
-	narrow := sw <= NARROW_WIDTH_MAX
+	narrow := nav_uses_strip(frame, sw, sh - header_h)
 	nav_h := draw_nav(frame, header_h, sw, sh, narrow)
 	draw_content(frame, sw, header_h + nav_h, sh, narrow)
 
@@ -352,6 +353,24 @@ shutdown :: proc(app: ^ui_gfx.App, userdata: rawptr) {
 apply_scale :: proc(scale: f32) {
 	resolved := scale if scale > 0 else ui.settings_auto_scale(&app.session.input)
 	ui.ui_runtime_set_scale(ui_gfx.app_ui_runtime(&app), resolved)
+}
+
+nav_sidebar_min_height :: proc(frame: ^ui.Ui_Frame) -> i32 {
+	assert(frame != nil, "nav_sidebar_min_height: nil frame")
+	padding := ui.ui_frame_sc(frame, 8)
+	gap := ui.ui_frame_sc(frame, 4)
+	row_h := ui.ui_frame_sc(frame, NAV_SIDEBAR_ROW_H)
+	row_count := i32(len(Section) + len(Nav_Control))
+	item_count := row_count + 3
+	return padding * 3 + ui.ui_frame_metrics(frame).LINE_HEIGHT + 2 + row_count * row_h +
+		(item_count - 1) * gap
+}
+
+nav_uses_strip :: proc(frame: ^ui.Ui_Frame, width, available_height: i32) -> bool {
+	assert(frame != nil, "nav_uses_strip: nil frame")
+	assert(width >= 0, "nav_uses_strip: negative width")
+	return width <= ui.ui_frame_sc(frame, NARROW_WIDTH_MAX) ||
+		available_height < nav_sidebar_min_height(frame)
 }
 
 // draw_nav renders the section switcher and returns the vertical space it
@@ -436,7 +455,7 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
 	ui.separator(u)
 	for s in Section {
 		style := ui.Btn_Style.Primary if s == section else .Ghost
-		ui.flex_row_begin(u, 28, {ui.grow()})
+		ui.flex_row_begin(u, NAV_SIDEBAR_ROW_H, {ui.grow()})
 		if ui.button(u, SECTION_NAMES[s], SECTION_NAMES[s], style) {
 			section = s
 			ui.pane_reset(&content_pane)
@@ -446,7 +465,7 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
 	ui.space(u, .SM)
 	ui.separator(u)
 	for control in Nav_Control {
-		ui.flex_row_begin(u, 28, {ui.grow()})
+		ui.flex_row_begin(u, NAV_SIDEBAR_ROW_H, {ui.grow()})
 		if ui.button(u, NAV_CONTROL_IDS[control], nav_control_label(control, false)) {
 			nav_control_activate(control, frame)
 		}
