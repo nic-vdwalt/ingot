@@ -345,23 +345,25 @@ _stats_gpu3d_pool_exhaustion :: proc() {
 }
 
 @(private)
-_stats_gpu3d_mesh_upload :: proc(vertices, indices: u32) {
+_stats_gpu3d_mesh_upload :: proc(ctx: ^Context, vertices, indices: u32) {
+	assert(ctx != nil, "_stats_gpu3d_mesh_upload: nil context")
 	assert(vertices > 0, "_stats_gpu3d_mesh_upload: empty vertices")
 	assert(indices > 0, "_stats_gpu3d_mesh_upload: empty indices")
 	when RENDER_STATS_ENABLED {
-		g.stats_current.gpu3d_mesh_uploads += 1
-		g.stats_current.gpu3d_vertices_resident += u64(vertices)
+		ctx.stats_current.gpu3d_mesh_uploads += 1
+		ctx.stats_current.gpu3d_vertices_resident += u64(vertices)
 	}
 }
 
 @(private)
-_stats_gpu3d_draw :: proc(vertices, indices: u32) {
+_stats_gpu3d_draw :: proc(ctx: ^Context, vertices, indices: u32) {
+	assert(ctx != nil, "_stats_gpu3d_draw: nil context")
 	assert(vertices > 0, "_stats_gpu3d_draw: empty vertices")
 	assert(indices > 0, "_stats_gpu3d_draw: empty indices")
 	when RENDER_STATS_ENABLED {
-		g.stats_current.gpu3d_draws += 1
-		g.stats_current.gpu3d_vertices_drawn += u64(vertices)
-		g.stats_current.gpu3d_indices_drawn += u64(indices)
+		ctx.stats_current.gpu3d_draws += 1
+		ctx.stats_current.gpu3d_vertices_drawn += u64(vertices)
+		ctx.stats_current.gpu3d_indices_drawn += u64(indices)
 	}
 }
 
