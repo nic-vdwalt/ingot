@@ -25,6 +25,12 @@ bash "$ROOT/build_web.sh" examples/raylib_migration_fixture >/dev/null
 echo "== wasm compile: default web demo =="
 bash "$ROOT/build_web.sh" >/dev/null
 
+# examples/wss_fixture is a native-only CLI (argv/exit codes via core:os), so
+# it can't be built for the web; type-check net for js instead so the web
+# WebSocket backend (ws_web.odin) can't rot unnoticed.
+echo "== wasm check: net =="
+(cd "$ROOT" && odin check net -collection:ingot=. -target:js_wasm32 -no-entry-point)
+
 # The last build left its module in web/; check it for the zero-segment bloat
 # that a static initialiser on a large global reintroduces. See
 # check_wasm_bloat.py - this cost 11 MB of every demo download until it was

@@ -8,6 +8,7 @@ package ingotnet
 import "base:runtime"
 import "core:fmt"
 import "core:strings"
+import "core:time"
 
 // JS bridge (provided by the client web shell). A socket is identified by an
 // integer id; messages are queued in JS and pulled via ws_recv_*.
@@ -37,13 +38,15 @@ WS_OP_BINARY :: 0x2
 WS_MAX_PAYLOAD :: 1 << 20
 WS_MAX_QUEUED_MESSAGES :: 1024
 WS_MAX_QUEUED_BYTES :: 64 * 1024 * 1024
-WS_CONNECT_TIMEOUT :: 10
-WS_HANDSHAKE_TIMEOUT :: 5
+WS_CONNECT_TIMEOUT :: 10 * time.Second
+WS_HANDSHAKE_TIMEOUT :: 5 * time.Second
 
+// Timeouts are accepted for API parity with the native backend but unused:
+// the browser owns connect/handshake timing for its WebSocket.
 WS_Options :: struct {
 	max_attempts:      int,
-	connect_timeout:   int,
-	handshake_timeout: int,
+	connect_timeout:   time.Duration,
+	handshake_timeout: time.Duration,
 	ca_file:           string,
 	headers:           []Http_Header,
 }
@@ -73,6 +76,9 @@ WebSocket :: struct {
 	recv_queue: [dynamic]WS_Message,
 	// API parity with the native backend so app code can set a wake hook on
 	// every target; the browser's rAF-driven loop polls, so it is never called.
+	// Event-driven web apps still see queued messages promptly: the gfx web
+	// gate runs a floor frame every IDLE_MAX_WAIT seconds (_idle_web_gate),
+	// which drains this socket even with no user input.
 	wake:       proc "contextless" (),
 }
 
@@ -209,6 +215,13 @@ ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
 ws_has_pending :: proc(ws: ^WebSocket) -> bool {
 	if ws.id < 0 do return false
 	return ingot_ws_recv_len(ws.id) >= 0
+}
+
+// ws_recv_dropped mirrors the native accessor. The browser buffers received
+// messages without a drop-oldest cap on the Odin side, so this is always 0.
+ws_recv_dropped :: proc(ws: ^WebSocket) -> u64 {
+	assert(ws != nil, "ws_recv_dropped: nil ws")
+	return 0
 }
 
 ws_close :: proc(ws: ^WebSocket) {
