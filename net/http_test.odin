@@ -4,6 +4,7 @@ package ingotnet
 import "core:fmt"
 import "core:os"
 import "core:testing"
+import curl "vendor:curl"
 
 @(test)
 test_http_request_validation_helpers :: proc(t: ^testing.T) {
@@ -58,6 +59,21 @@ test_http_request_method_and_body_limit_helpers :: proc(t: ^testing.T) {
 	request.maximum_body = 0
 	options.limits.maximum_body_bytes = 0
 	testing.expect_value(t, http_request_maximum_body(request, options), DEFAULT_MAXIMUM_BODY)
+}
+
+@(test)
+test_secure_request_header_bounds :: proc(t: ^testing.T) {
+	too_many := make([]Http_Header, HTTP_REQUEST_HEADERS_MAX + 1)
+	defer delete(too_many)
+	_, err := curl_request_headers(Http_Request{path = "/", headers = too_many})
+	testing.expect_value(t, err, Http_Error.Invalid_Request)
+	headers, valid_err := curl_request_headers(Http_Request {
+		path = "/",
+		headers = {Http_Header{name = "Authorization", value = "Bearer redacted"}},
+	})
+	testing.expect_value(t, valid_err, Http_Error.None)
+	testing.expect(t, headers != nil)
+	if headers != nil do curl.slist_free_all(headers)
 }
 
 @(test)

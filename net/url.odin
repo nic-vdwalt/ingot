@@ -84,6 +84,7 @@ Http_Request_Options :: struct {
 	limits:    Http_Parser_Limits,
 	timeouts:  Http_Timeouts,
 	redirects: Http_Redirect_Policy,
+	ca_file:   string,
 }
 
 http_url_parse :: proc(raw: string) -> (url: Http_URL, err: Http_Error) {
