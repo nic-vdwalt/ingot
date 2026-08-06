@@ -358,7 +358,8 @@ end :: proc(u: ^Ui) -> i32 {
 	content_end := remaining(&u.layout).y
 	layout_end(&u.layout)
 	if u.focus_state.active != FOCUS_ID_NONE &&
-	   focus_order_index(u.focus_cur[:u.focus_seq], u.focus_state.active) < 0 {
+	   (u.focus_seq == 0 ||
+			   focus_order_index(u.focus_cur[:u.focus_seq], u.focus_state.active) < 0) {
 		focus_clear(&u.focus_state)
 	}
 	copy(u.focus_prev[:u.focus_seq], u.focus_cur[:u.focus_seq])

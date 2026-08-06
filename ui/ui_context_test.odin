@@ -283,6 +283,23 @@ test_focus_state_clears_missing_target :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_focus_state_clears_when_frame_has_no_focusables :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	facade_frame(&runtime, &frame)
+	defer facade_frame_end(&runtime, &frame)
+	u: Ui
+	a := widget_id(u64(7))
+	begin(&u, &frame, {0, 0, 100, 100})
+	focus_opt_set(focus(&u, a))
+	end(&u)
+	begin(&u, &frame, {0, 0, 100, 100})
+	end(&u)
+	testing.expect_value(t, u.focus_state.active, FOCUS_ID_NONE)
+	testing.expect_value(t, u.focus_count, 0)
+}
+
+@(test)
 test_focus_order_wraps_and_recovers :: proc(t: ^testing.T) {
 	ids := [?]Focus_Id{focus_id(4), focus_id(8), focus_id(12)}
 	testing.expect_value(t, focus_order_next(ids[:], FOCUS_ID_NONE, false), ids[0])
