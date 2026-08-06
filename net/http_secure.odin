@@ -3,6 +3,7 @@ package ingotnet
 
 import "base:runtime"
 import "core:c"
+import "core:fmt"
 import "core:mem"
 import "core:strings"
 import "core:sync"
@@ -71,6 +72,35 @@ http_request_is_valid :: proc(request: Http_Request) -> bool {
 	return true
 }
 
+HTTP_REQUEST_HEADERS_MAX :: 32
+HTTP_REQUEST_HEADER_NAME_BYTES_MAX :: 128
+HTTP_REQUEST_HEADER_VALUE_BYTES_MAX :: 8192
+
+@(private)
+curl_request_headers :: proc(request: Http_Request) -> (headers: ^curl.slist, err: Http_Error) {
+	if len(request.headers) > HTTP_REQUEST_HEADERS_MAX do return nil, .Invalid_Request
+	for header in request.headers {
+		if len(header.name) > HTTP_REQUEST_HEADER_NAME_BYTES_MAX ||
+		   len(header.value) > HTTP_REQUEST_HEADER_VALUE_BYTES_MAX {
+			if headers != nil do curl.slist_free_all(headers)
+			return nil, .Invalid_Request
+		}
+		line := fmt.tprintf("%s: %s", header.name, header.value)
+		line_c, clone_err := strings.clone_to_cstring(line, context.temp_allocator)
+		if clone_err != nil {
+			if headers != nil do curl.slist_free_all(headers)
+			return nil, .Allocation
+		}
+		next := curl.slist_append(headers, line_c)
+		if next == nil {
+			if headers != nil do curl.slist_free_all(headers)
+			return nil, .Allocation
+		}
+		headers = next
+	}
+	return headers, .None
+}
+
 @(private)
 http_request_maximum_body :: proc(request: Http_Request, options: Http_Request_Options) -> u64 {
 	maximum := request.maximum_body
@@ -103,12 +133,18 @@ curl_request_configure_base :: proc(
 	handle: $Handle,
 	raw_url: string,
 	body: ^Curl_Body,
+	ca_file: string,
 ) -> Http_Error {
 	url_c, clone_err := strings.clone_to_cstring(raw_url, context.temp_allocator)
 	if clone_err != nil do return .Allocation
 	if curl.easy_setopt(handle, .URL, url_c) != .E_OK do return .Invalid_URL
 	if curl.easy_setopt(handle, .SSL_VERIFYPEER, c.long(1)) != .E_OK do return .TLS
 	if curl.easy_setopt(handle, .SSL_VERIFYHOST, c.long(2)) != .E_OK do return .TLS
+	if len(ca_file) > 0 {
+		ca_c, ca_err := strings.clone_to_cstring(ca_file, context.temp_allocator)
+		if ca_err != nil do return .Allocation
+		if curl.easy_setopt(handle, .CAINFO, ca_c) != .E_OK do return .TLS
+	}
 	if curl.easy_setopt(handle, .DISALLOW_USERNAME_IN_URL, c.long(1)) != .E_OK {
 		return .Invalid_URL
 	}
@@ -199,8 +235,14 @@ http_request_url :: proc(
 	}
 	body.bytes.allocator = allocator
 	defer if err != .None do delete(body.bytes)
-	if setup_err := curl_request_configure_base(handle, raw_url, &body); setup_err != .None {
+	if setup_err := curl_request_configure_base(handle, raw_url, &body, options.ca_file); setup_err != .None {
 		return {}, setup_err
+	}
+	headers, headers_err := curl_request_headers(request)
+	if headers_err != .None do return {}, headers_err
+	defer if headers != nil do curl.slist_free_all(headers)
+	if headers != nil && curl.easy_setopt(handle, .HTTPHEADER, headers) != .E_OK {
+		return {}, .Invalid_Request
 	}
 	if setup_err := curl_request_configure_policy(handle, options); setup_err != .None {
 		return {}, setup_err
