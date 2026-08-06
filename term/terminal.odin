@@ -312,6 +312,62 @@ term_start :: proc(
 		free(ts)
 		return nil
 	}
+	return term_adopt_pty(ts, p, wake)
+}
+
+// term_start_argv is term_start for an arbitrary command instead of the
+// default shell: argv[0] is resolved via PATH and executed directly on the
+// PTY (no shell, no login startup noise). Returns nil on failure.
+term_start_argv :: proc(
+	argv: []cstring,
+	workspace_path: string,
+	cols, rows: u16,
+	default_fg: [3]u8 = {220, 220, 220},
+	default_bg: [3]u8 = {27, 27, 27},
+	wake: proc "contextless" () = nil,
+) -> ^Term_Instance {
+	assert(len(argv) > 0, "term_start_argv: empty argv")
+	ts := new(Term_Instance)
+	if !term_init_emulator(ts, cols, rows, default_fg, default_bg) {
+		free(ts)
+		return nil
+	}
+
+	workdir := strings.clone_to_cstring(workspace_path, context.temp_allocator)
+	p, ok := pty.spawn_argv(argv, cols, rows, workdir)
+	if !ok {
+		term_free_emulator(ts)
+		free(ts)
+		return nil
+	}
+	return term_adopt_pty(ts, p, wake)
+}
+
+// term_child_pid returns the PTY child process id, or 0 when unavailable.
+term_child_pid :: proc(ts: ^Term_Instance) -> int {
+	if ts == nil do return 0
+	return pty.child_pid_of(&ts.pty)
+}
+
+// term_child_poll reports whether the PTY child has exited and its exit code.
+term_child_poll :: proc(ts: ^Term_Instance) -> (exited: bool, code: int) {
+	if ts == nil do return false, 0
+	return pty.child_poll(&ts.pty)
+}
+
+// term_child_signal asks the PTY child to terminate (force = SIGKILL).
+term_child_signal :: proc(ts: ^Term_Instance, force: bool = false) {
+	if ts == nil do return
+	pty.child_signal(&ts.pty, force)
+}
+
+@(private = "file")
+term_adopt_pty :: proc(
+	ts: ^Term_Instance,
+	p: pty.Pty,
+	wake: proc "contextless" (),
+) -> ^Term_Instance {
+	assert(ts != nil, "term_adopt_pty: nil instance")
 	ts.pty = p
 	ts.pty_running = true
 	ts.wake = wake

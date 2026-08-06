@@ -37,6 +37,8 @@ Pty_IO_Status :: enum u8 {
 Pty :: struct {
 	master_fd: c.int,
 	child_pid: c.int,
+	exit_seen: bool,
+	exit_code: int,
 }
 
 
@@ -65,6 +67,7 @@ when ODIN_OS == .Darwin {
 		write :: proc(fd: c.int, buf: rawptr, count: c.size_t) -> c.ssize_t ---
 		fcntl :: proc(fd: c.int, cmd: c.int, #c_vararg args: ..any) -> c.int ---
 		waitpid :: proc(pid: c.int, status: ^c.int, options: c.int) -> c.int ---
+		kill :: proc(pid: c.int, sig: c.int) -> c.int ---
 		setenv :: proc(name: cstring, value: cstring, overwrite: c.int) -> c.int ---
 		chdir :: proc(path: cstring) -> c.int ---
 		_exit :: proc(status: c.int) ---
@@ -83,6 +86,7 @@ when ODIN_OS == .Darwin {
 		write :: proc(fd: c.int, buf: rawptr, count: c.size_t) -> c.ssize_t ---
 		fcntl :: proc(fd: c.int, cmd: c.int, #c_vararg args: ..any) -> c.int ---
 		waitpid :: proc(pid: c.int, status: ^c.int, options: c.int) -> c.int ---
+		kill :: proc(pid: c.int, sig: c.int) -> c.int ---
 		setenv :: proc(name: cstring, value: cstring, overwrite: c.int) -> c.int ---
 		chdir :: proc(path: cstring) -> c.int ---
 		_exit :: proc(status: c.int) ---
@@ -127,10 +131,48 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 		_exit(1)
 	}
 
+	if !master_setup(master_fd, cols, rows) do return {}, false
+	return Pty{master_fd = master_fd, child_pid = pid}, true
+}
+
+SPAWN_ARGV_MAX :: 256
+
+// spawn_argv runs an arbitrary command (argv[0] resolved via PATH) directly
+// on a fresh PTY, without a shell. TERM/COLORTERM are exported so children
+// detect a color-capable terminal. Returns false on invalid input or fork
+// failure.
+spawn_argv :: proc(argv: []cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
+	if len(argv) == 0 || len(argv) > SPAWN_ARGV_MAX || argv[0] == nil do return {}, false
+	if cols == 0 || rows == 0 do return {}, false
+	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, false
+	// Build the null-terminated exec vector before forking: allocating
+	// between fork and exec is unsafe in a multithreaded parent.
+	@(static) exec_argv: [SPAWN_ARGV_MAX + 1]cstring
+	for arg, i in argv do exec_argv[i] = arg
+	exec_argv[len(argv)] = nil
+	master_fd: c.int
+	pid := forkpty(&master_fd, nil, nil, nil)
+
+	if pid < 0 do return {}, false
+
+	if pid == 0 {
+		if workdir != nil do chdir(workdir)
+		setenv("TERM", "xterm-256color", 1)
+		setenv("COLORTERM", "truecolor", 1)
+		execvp(argv[0], raw_data(exec_argv[:]))
+		_exit(127)
+	}
+
+	if !master_setup(master_fd, cols, rows) do return {}, false
+	return Pty{master_fd = master_fd, child_pid = pid}, true
+}
+
+@(private)
+master_setup :: proc(master_fd: c.int, cols: u16, rows: u16) -> bool {
 	flags := fcntl(master_fd, F_GETFL)
 	if flags < 0 || fcntl(master_fd, F_SETFL, flags | O_NONBLOCK) < 0 {
 		close(master_fd)
-		return {}, false
+		return false
 	}
 
 	ws := Winsize {
@@ -138,8 +180,7 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 		ws_row = c.ushort(rows),
 	}
 	ioctl(master_fd, TIOCSWINSZ, &ws)
-
-	return Pty{master_fd = master_fd, child_pid = pid}, true
+	return true
 }
 
 // read_bytes/drain are replaced by a scripted byte source when built
@@ -220,6 +261,41 @@ destroy :: proc(p: ^Pty) {
 		reaped := waitpid(p.child_pid, &status, WNOHANG)
 		if reaped == p.child_pid do p.child_pid = 0
 	}
+}
+
+// child_pid_of returns the child process id, or 0 when no child is tracked.
+child_pid_of :: proc(p: ^Pty) -> int {
+	assert(p != nil)
+	return int(p.child_pid)
+}
+
+// child_poll reaps the child without blocking. exited is true once the child
+// has terminated (further calls keep returning the cached result); code is
+// the exit status, or 128+signal when signal-terminated.
+child_poll :: proc(p: ^Pty) -> (exited: bool, code: int) {
+	assert(p != nil)
+	if p.child_pid == 0 do return p.exit_seen, p.exit_code
+	status: c.int
+	reaped := waitpid(p.child_pid, &status, WNOHANG)
+	if reaped != p.child_pid do return false, 0
+	p.child_pid = 0
+	p.exit_seen = true
+	if status & 0x7f == 0 {
+		p.exit_code = int((status >> 8) & 0xff)
+	} else {
+		p.exit_code = 128 + int(status & 0x7f)
+	}
+	return p.exit_seen, p.exit_code
+}
+
+SIGTERM :: 15
+SIGKILL :: 9
+
+// child_signal sends SIGTERM (or SIGKILL when force) to the child.
+child_signal :: proc(p: ^Pty, force: bool = false) {
+	assert(p != nil)
+	if p.child_pid <= 0 do return
+	kill(p.child_pid, SIGKILL if force else SIGTERM)
 }
 
 get_default_shell :: proc() -> cstring {
