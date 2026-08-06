@@ -67,6 +67,7 @@ WS_Options :: struct {
 	connect_timeout:   time.Duration,
 	handshake_timeout: time.Duration,
 	ca_file:           string,
+	headers:           []Http_Header,
 }
 
 WS_Error :: enum u8 {
@@ -315,6 +316,7 @@ WebSocket :: struct {
 	// is undefined, not merely a leak.
 	url_storage:       string,
 	url_allocator:     mem.Allocator,
+	headers:           []Http_Header,
 	connect_timeout:   time.Duration,
 	handshake_timeout: time.Duration,
 	max_attempts:      int,
@@ -379,7 +381,7 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 
 ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Options = {}) -> bool {
 	parsed, parse_err := ws_url_parse(raw_url)
-	if parse_err != .None {
+	if parse_err != .None || !ws_headers_valid(options.headers) {
 		sync.atomic_store(&ws.last_error, WS_Error.Invalid_URL)
 		sync.atomic_store(&ws.state, WS_State.Error)
 		return false
@@ -390,6 +392,11 @@ ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Option
 	_ws_url_storage_free(ws)
 	ws.url_allocator = context.allocator
 	ws.url_storage = strings.clone(raw_url, ws.url_allocator)
+	ws.headers = make([]Http_Header, len(options.headers), ws.url_allocator)
+	for header, i in options.headers do ws.headers[i] = Http_Header {
+		name  = strings.clone(header.name, ws.url_allocator),
+		value = strings.clone(header.value, ws.url_allocator),
+	}
 	parsed, parse_err = ws_url_parse(ws.url_storage)
 	assert(parse_err == .None, "cloned WebSocket URL failed to parse")
 	ws.host = parsed.host
@@ -628,15 +635,20 @@ ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
 	default_port := (ws.secure && ws.port == 443) || (!ws.secure && ws.port == 80)
 	host_value := ws.host
 	if !default_port do host_value = fmt.tprintf("%s:%d", ws.host, ws.port)
-	request := fmt.tprintf(
+	request_builder := strings.builder_make(context.temp_allocator)
+	strings.write_string(&request_builder, fmt.tprintf(
 		"GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\n" +
 		"Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\n" +
-		"Sec-WebSocket-Version: 13\r\n\r\n",
+		"Sec-WebSocket-Version: 13\r\n",
 		ws.path,
 		host_value,
 		key,
-	)
-	request_bytes := transmute([]u8)request
+	))
+	for header in ws.headers {
+		strings.write_string(&request_builder, fmt.tprintf("%s: %s\r\n", header.name, header.value))
+	}
+	strings.write_string(&request_builder, "\r\n")
+	request_bytes := transmute([]u8)strings.to_string(request_builder)
 	total := 0
 	for total < len(request_bytes) {
 		count, send_err := ws_net_send(transport, request_bytes[total:])
@@ -991,11 +1003,28 @@ _ws_url_storage_free :: proc(ws: ^WebSocket) {
 	assert(ws.url_allocator.procedure != nil, "_ws_url_storage_free: url storage has no allocator")
 	delete(ws.url_storage, ws.url_allocator)
 	ws.url_storage = ""
+	for header in ws.headers {
+		delete(header.name, ws.url_allocator)
+		delete(header.value, ws.url_allocator)
+	}
+	delete(ws.headers, ws.url_allocator)
+	ws.headers = nil
 	// host and path pointed into the freed block; leaving them set would make
 	// a use-after-free look like an ordinary field read.
 	ws.host = ""
 	ws.path = ""
 	assert(len(ws.url_storage) == 0)
+}
+
+@(private = "file")
+ws_headers_valid :: proc(headers: []Http_Header) -> bool {
+	if len(headers) > 32 do return false
+	for header in headers {
+		if len(header.name) == 0 || len(header.name) > 128 || len(header.value) > 8192 do return false
+		if strings.contains(header.name, ":") || strings.contains(header.name, "\r") || strings.contains(header.name, "\n") do return false
+		if strings.contains(header.value, "\r") || strings.contains(header.value, "\n") do return false
+	}
+	return true
 }
 
 // Generate a random WebSocket key for the handshake.
