@@ -72,6 +72,8 @@ Pty :: struct {
 	hThread:    win32.HANDLE,
 	cols:       u16,
 	rows:       u16,
+	exit_seen:  bool,
+	exit_code:  int,
 }
 
 Conpty_Pipes :: struct {
@@ -143,7 +145,8 @@ conpty_create_attribute_list :: proc(hpc: HPCON) -> (LPPROC_THREAD_ATTRIBUTE_LIS
 }
 
 conpty_create_process :: proc(
-	shell, workdir: cstring,
+	command: string,
+	workdir: cstring,
 	list: LPPROC_THREAD_ATTRIBUTE_LIST,
 ) -> (
 	win32.PROCESS_INFORMATION,
@@ -152,10 +155,7 @@ conpty_create_process :: proc(
 	startup: STARTUPINFOEXW
 	startup.StartupInfo.cb = size_of(STARTUPINFOEXW)
 	startup.lpAttributeList = list
-	shell_string := string(shell)
-	command_line := strings.clone_to_cstring(shell_string, context.temp_allocator)
-	command_line_w := win32.utf8_to_wstring(string(command_line), context.temp_allocator)
-	shell_w := win32.utf8_to_wstring(shell_string, context.temp_allocator)
+	command_line_w := win32.utf8_to_wstring(command, context.temp_allocator)
 	working_dir_w: win32.wstring
 	if workdir != nil && len(string(workdir)) > 0 {
 		working_dir_w = win32.utf8_to_wstring(string(workdir), context.temp_allocator)
@@ -163,7 +163,7 @@ conpty_create_process :: proc(
 	process: win32.PROCESS_INFORMATION
 	EXTENDED_STARTUPINFO_PRESENT :: 0x00080000
 	ok := win32.CreateProcessW(
-		shell_w,
+		nil,
 		command_line_w,
 		nil,
 		nil,
@@ -179,6 +179,68 @@ conpty_create_process :: proc(
 
 spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
 	if shell == nil || cols == 0 || rows == 0 do return {}, false
+	return conpty_spawn_command(string(shell), cols, rows, workdir)
+}
+
+SPAWN_ARGV_MAX :: 256
+
+// spawn_argv runs an arbitrary command on a fresh ConPTY. Arguments
+// containing spaces or quotes are quoted with standard Windows rules.
+spawn_argv :: proc(argv: []cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
+	if len(argv) == 0 || len(argv) > SPAWN_ARGV_MAX || argv[0] == nil do return {}, false
+	if cols == 0 || rows == 0 do return {}, false
+	command := argv_to_command_line(argv, context.temp_allocator)
+	return conpty_spawn_command(command, cols, rows, workdir)
+}
+
+// argv_to_command_line joins argv with standard Windows quoting: arguments
+// containing spaces, tabs or quotes are wrapped in double quotes with
+// embedded quotes and preceding backslashes escaped.
+argv_to_command_line :: proc(argv: []cstring, allocator := context.allocator) -> string {
+	sb: strings.Builder
+	strings.builder_init(&sb, allocator)
+	for arg, i in argv {
+		if i > 0 do strings.write_byte(&sb, ' ')
+		s := string(arg)
+		needs_quote := len(s) == 0 || strings.contains_any(s, " \t\"")
+		if !needs_quote {
+			strings.write_string(&sb, s)
+			continue
+		}
+		strings.write_byte(&sb, '"')
+		backslashes := 0
+		for j in 0 ..< len(s) {
+			ch := s[j]
+			if ch == '\\' {
+				backslashes += 1
+				continue
+			}
+			if ch == '"' {
+				for _ in 0 ..< backslashes * 2 + 1 do strings.write_byte(&sb, '\\')
+				backslashes = 0
+				strings.write_byte(&sb, '"')
+				continue
+			}
+			for _ in 0 ..< backslashes do strings.write_byte(&sb, '\\')
+			backslashes = 0
+			strings.write_byte(&sb, ch)
+		}
+		for _ in 0 ..< backslashes * 2 do strings.write_byte(&sb, '\\')
+		strings.write_byte(&sb, '"')
+	}
+	return strings.to_string(sb)
+}
+
+@(private)
+conpty_spawn_command :: proc(
+	command: string,
+	cols: u16,
+	rows: u16,
+	workdir: cstring,
+) -> (
+	Pty,
+	bool,
+) {
 	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, false
 	pipes, pipes_ok := conpty_create_pipes()
 	if !pipes_ok do return {}, false
@@ -204,7 +266,7 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 		conpty_close_pipes(&pipes)
 		return {}, false
 	}
-	process, process_ok := conpty_create_process(shell, workdir, attributes)
+	process, process_ok := conpty_create_process(command, workdir, attributes)
 	conpty_destroy_attribute_list(attributes)
 	if !process_ok {
 		ClosePseudoConsole(p.hpc)
@@ -342,4 +404,32 @@ get_default_shell :: proc() -> cstring {
 		return cstring(&shell_buf[0])
 	}
 	return "cmd.exe"
+}
+
+// child_pid_of returns the child process id, or 0 when no child is tracked.
+child_pid_of :: proc(p: ^Pty) -> int {
+	assert(p != nil)
+	if p.hProcess == nil do return 0
+	return int(win32.GetProcessId(p.hProcess))
+}
+
+// child_poll reports whether the child has exited and its exit code.
+child_poll :: proc(p: ^Pty) -> (exited: bool, code: int) {
+	assert(p != nil)
+	if p.hProcess == nil do return p.exit_seen, p.exit_code
+	exit_code: win32.DWORD
+	if !win32.GetExitCodeProcess(p.hProcess, &exit_code) do return false, 0
+	if exit_code == STILL_ACTIVE do return false, 0
+	p.exit_seen = true
+	p.exit_code = int(exit_code)
+	return p.exit_seen, p.exit_code
+}
+
+// child_signal terminates the child (Windows has no SIGTERM; both graceful
+// and forced requests terminate the process).
+child_signal :: proc(p: ^Pty, force: bool = false) {
+	assert(p != nil)
+	_ = force
+	if p.hProcess == nil do return
+	win32.TerminateProcess(p.hProcess, 1)
 }
