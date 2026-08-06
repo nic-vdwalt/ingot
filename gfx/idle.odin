@@ -32,7 +32,9 @@ Frame_Strategy :: enum {
 IDLE_SETTLE_FRAMES :: 3
 
 // Maximum seconds a native wait may block. Bounds close-button latency and
-// guarantees a periodic frame (a ~1 fps idle floor keeps content fresh).
+// guarantees a periodic frame (a ~1 fps idle floor keeps content fresh). Web
+// applies the same floor in _idle_web_gate, so background data (WS/HTTP)
+// becomes visible within IDLE_MAX_WAIT on every target.
 IDLE_MAX_WAIT :: 1.0
 
 Idle_State :: struct {
@@ -40,6 +42,7 @@ Idle_State :: struct {
 	settle_frames:   i32, // full frames still owed after the last activity
 	redraw_deadline: f64, // absolute _now() time of earliest RequestRedrawIn; 0 = none
 	redraw_pending:  bool, // worker-published redraw request; accessed atomically
+	last_frame_time: f64, // _now() of the last granted frame (web idle floor)
 }
 
 // --- public API -------------------------------------------------------------
@@ -109,7 +112,8 @@ _idle_request_in :: proc "contextless" (s: ^Idle_State, now, seconds: f64) {
 
 // _idle_take_frame fires a due deadline and consumes one frame of settle
 // credit; returns whether a frame should run now. Must be called exactly once
-// per frame per target: from _idle_timeout on native, from step() on web.
+// per frame per target: from _idle_timeout on native, from _idle_web_gate
+// (step()) on web.
 @(private)
 _idle_take_frame :: proc "contextless" (s: ^Idle_State, now: f64) -> bool {
 	if sync.atomic_exchange(&s.redraw_pending, false) {
@@ -136,6 +140,22 @@ _idle_wait_timeout :: proc "contextless" (s: ^Idle_State, now: f64) -> f64 {
 		t = min(t, max(s.redraw_deadline - now, 0.001))
 	}
 	return t
+}
+
+// _idle_web_gate is the web pump gate, called once per rAF tick from step().
+// The native pump gets a ~1 fps idle floor for free: platform_wait_events
+// blocks at most IDLE_MAX_WAIT and the frame runs anyway when it returns. Web
+// has no blocking wait - step() skips the app frame entirely - so without an
+// explicit floor, data arriving outside the input path (WS messages queued
+// JS-side, HTTP completions) would sit invisible until user input. Granting a
+// frame whenever IDLE_MAX_WAIT has elapsed since the last one restores parity.
+@(private)
+_idle_web_gate :: proc "contextless" (s: ^Idle_State, now: f64) -> bool {
+	if _idle_take_frame(s, now) || now - s.last_frame_time >= IDLE_MAX_WAIT {
+		s.last_frame_time = now
+		return true
+	}
+	return false
 }
 
 // _idle_timeout is the native pump gate, called once per frame from

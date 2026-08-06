@@ -114,3 +114,39 @@ idle_negative_request_is_immediate :: proc(t: ^testing.T) {
 	testing.expect_value(t, s.redraw_deadline, 10.0)
 	testing.expect(t, _idle_take_frame(&s, 10.0))
 }
+
+@(test)
+idle_web_gate_has_idle_floor :: proc(t: ^testing.T) {
+	s := Idle_State {
+		strategy = .Event_Driven,
+	}
+	// Run a burst: a redraw request grants a frame plus the settle credit.
+	_idle_request_redraw(&s)
+	testing.expect(t, _idle_web_gate(&s, 0), "redraw frame")
+	testing.expect(t, _idle_web_gate(&s, 0.01), "settle frame")
+	testing.expect(t, _idle_web_gate(&s, 0.02), "settle frame")
+	testing.expect(t, !_idle_web_gate(&s, 0.1), "idle after the burst")
+	// Fully idle: the gate still grants a floor frame once IDLE_MAX_WAIT
+	// elapses since the last granted frame, so data arriving outside the
+	// input path (WS/HTTP) becomes visible without user input.
+	testing.expect(t, !_idle_web_gate(&s, IDLE_MAX_WAIT + 0.01), "floor not yet due")
+	testing.expect(t, _idle_web_gate(&s, IDLE_MAX_WAIT + 0.02), "floor frame due")
+	testing.expect(
+		t,
+		!_idle_web_gate(&s, IDLE_MAX_WAIT + 0.1),
+		"floor resets after granting a frame",
+	)
+}
+
+@(test)
+idle_web_gate_grants_redraw_immediately :: proc(t: ^testing.T) {
+	s := Idle_State {
+		strategy = .Event_Driven,
+	}
+	testing.expect(t, !_idle_web_gate(&s, 0.5), "fresh idle state skips the frame")
+	// A worker-published redraw grants a frame immediately (no floor wait).
+	_idle_request_redraw(&s)
+	testing.expect(t, _idle_web_gate(&s, 0.6), "published redraw must grant a frame")
+	testing.expect_value(t, s.settle_frames, i32(IDLE_SETTLE_FRAMES - 1))
+	testing.expect_value(t, s.last_frame_time, 0.6)
+}

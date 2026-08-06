@@ -46,15 +46,19 @@ run :: proc(frame: Run_Proc) {
 // frames or due deadlines remain, the app frame is skipped entirely (no
 // BeginDrawing, no GPU work) while rAF keeps ticking cheaply. Input exports
 // (input_web.odin) mark activity, so the next tick after an event runs a real
-// frame. Returning false instead would end the module permanently (odin.js
-// stops scheduling), so the loop always stays alive.
+// frame. A periodic floor frame still runs every IDLE_MAX_WAIT seconds
+// (_idle_web_gate) so data arriving outside the input path — WS messages
+// queued JS-side, HTTP completions — becomes visible without user input,
+// matching the native pump's bounded-wait floor. Returning false instead
+// would end the module permanently (odin.js stops scheduling), so the loop
+// always stays alive.
 @(export)
 step :: proc(dt: f32) -> bool {
 	context = g_web_ctx
 	if !g.initialized {
 		return true // GPU device still resolving; retry next frame
 	}
-	if !_idle_take_frame(&g.idle, _now()) {
+	if !_idle_web_gate(&g.idle, _now()) {
 		return true // idle: keep rAF alive, skip the app frame
 	}
 	input_poll()

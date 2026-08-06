@@ -924,6 +924,18 @@ ws_has_pending :: proc(ws: ^WebSocket) -> bool {
 	return len(ws.recv_queue) > 0
 }
 
+// ws_recv_dropped returns the total number of received messages discarded
+// because the recv queue hit its cap (drop-oldest, see ws_enqueue). For a
+// "latest wins" feed drops are benign; for a protocol stream a non-zero value
+// means frames were lost and the consumer should log it and resynchronize at
+// the application level. Thread-safe.
+ws_recv_dropped :: proc(ws: ^WebSocket) -> u64 {
+	assert(ws != nil, "ws_recv_dropped: nil ws")
+	sync.mutex_lock(&ws.recv_mutex)
+	defer sync.mutex_unlock(&ws.recv_mutex)
+	return ws.recv_dropped
+}
+
 // ws_conn_gen returns a counter incremented on each successful (re)handshake.
 // Consumers poll it to re-establish app-level subscriptions after a recovery:
 // when the value advances, a fresh connection is live and any prior server-side
@@ -1021,7 +1033,11 @@ ws_headers_valid :: proc(headers: []Http_Header) -> bool {
 	if len(headers) > 32 do return false
 	for header in headers {
 		if len(header.name) == 0 || len(header.name) > 128 || len(header.value) > 8192 do return false
-		if strings.contains(header.name, ":") || strings.contains(header.name, "\r") || strings.contains(header.name, "\n") do return false
+		if strings.contains(header.name, ":") ||
+		   strings.contains(header.name, "\r") ||
+		   strings.contains(header.name, "\n") {
+			return false
+		}
 		if strings.contains(header.value, "\r") || strings.contains(header.value, "\n") do return false
 	}
 	return true
