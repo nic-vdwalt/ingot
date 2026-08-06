@@ -8,7 +8,6 @@ import "core:mem"
 import "core:strings"
 import "core:sync"
 import "core:time"
-import curl "vendor:curl"
 
 @(private = "file")
 Curl_Body :: struct {
@@ -27,7 +26,7 @@ curl_initialize :: proc() -> bool {
 	sync.mutex_lock(&g_curl_mutex)
 	defer sync.mutex_unlock(&g_curl_mutex)
 	if g_curl_initialized do return true
-	if curl.global_init(curl.GLOBAL_ALL) != .E_OK do return false
+	if http_curl_global_init(HTTP_CURL_GLOBAL_ALL) != .OK do return false
 	g_curl_initialized = true
 	return true
 }
@@ -77,23 +76,23 @@ HTTP_REQUEST_HEADER_NAME_BYTES_MAX :: 128
 HTTP_REQUEST_HEADER_VALUE_BYTES_MAX :: 8192
 
 @(private)
-curl_request_headers :: proc(request: Http_Request) -> (headers: ^curl.slist, err: Http_Error) {
+curl_request_headers :: proc(request: Http_Request) -> (headers: ^Http_Curl_Slist, err: Http_Error) {
 	if len(request.headers) > HTTP_REQUEST_HEADERS_MAX do return nil, .Invalid_Request
 	for header in request.headers {
 		if len(header.name) > HTTP_REQUEST_HEADER_NAME_BYTES_MAX ||
 		   len(header.value) > HTTP_REQUEST_HEADER_VALUE_BYTES_MAX {
-			if headers != nil do curl.slist_free_all(headers)
+			if headers != nil do http_curl_slist_free_all(headers)
 			return nil, .Invalid_Request
 		}
 		line := fmt.tprintf("%s: %s", header.name, header.value)
 		line_c, clone_err := strings.clone_to_cstring(line, context.temp_allocator)
 		if clone_err != nil {
-			if headers != nil do curl.slist_free_all(headers)
+			if headers != nil do http_curl_slist_free_all(headers)
 			return nil, .Allocation
 		}
-		next := curl.slist_append(headers, line_c)
+		next := http_curl_slist_append(headers, line_c)
 		if next == nil {
-			if headers != nil do curl.slist_free_all(headers)
+			if headers != nil do http_curl_slist_free_all(headers)
 			return nil, .Allocation
 		}
 		headers = next
@@ -137,19 +136,19 @@ curl_request_configure_base :: proc(
 ) -> Http_Error {
 	url_c, clone_err := strings.clone_to_cstring(raw_url, context.temp_allocator)
 	if clone_err != nil do return .Allocation
-	if curl.easy_setopt(handle, .URL, url_c) != .E_OK do return .Invalid_URL
-	if curl.easy_setopt(handle, .SSL_VERIFYPEER, c.long(1)) != .E_OK do return .TLS
-	if curl.easy_setopt(handle, .SSL_VERIFYHOST, c.long(2)) != .E_OK do return .TLS
+	if http_curl_easy_setopt(handle, HTTP_CURL_URL, url_c) != .OK do return .Invalid_URL
+	if http_curl_easy_setopt(handle, HTTP_CURL_SSL_VERIFYPEER, c.long(1)) != .OK do return .TLS
+	if http_curl_easy_setopt(handle, HTTP_CURL_SSL_VERIFYHOST, c.long(2)) != .OK do return .TLS
 	if len(ca_file) > 0 {
 		ca_c, ca_err := strings.clone_to_cstring(ca_file, context.temp_allocator)
 		if ca_err != nil do return .Allocation
-		if curl.easy_setopt(handle, .CAINFO, ca_c) != .E_OK do return .TLS
+		if http_curl_easy_setopt(handle, HTTP_CURL_CAINFO, ca_c) != .OK do return .TLS
 	}
-	if curl.easy_setopt(handle, .DISALLOW_USERNAME_IN_URL, c.long(1)) != .E_OK {
+	if http_curl_easy_setopt(handle, HTTP_CURL_DISALLOW_USERNAME_IN_URL, c.long(1)) != .OK {
 		return .Invalid_URL
 	}
-	if curl.easy_setopt(handle, .WRITEFUNCTION, curl_body_write) != .E_OK do return .Protocol
-	if curl.easy_setopt(handle, .WRITEDATA, body) != .E_OK do return .Protocol
+	if http_curl_easy_setopt(handle, HTTP_CURL_WRITEFUNCTION, curl_body_write) != .OK do return .Protocol
+	if http_curl_easy_setopt(handle, HTTP_CURL_WRITEDATA, body) != .OK do return .Protocol
 	return .None
 }
 
@@ -159,19 +158,19 @@ curl_request_configure_policy :: proc(
 	options: Http_Request_Options,
 ) -> Http_Error {
 	if options.redirects.maximum_redirects > 0 {
-		if curl.easy_setopt(handle, .FOLLOWLOCATION, c.long(1)) != .E_OK do return .Redirect
-		if curl.easy_setopt(handle, .MAXREDIRS, c.long(options.redirects.maximum_redirects)) !=
-		   .E_OK {
+		if http_curl_easy_setopt(handle, HTTP_CURL_FOLLOWLOCATION, c.long(1)) != .OK do return .Redirect
+		if http_curl_easy_setopt(handle, HTTP_CURL_MAXREDIRS, c.long(options.redirects.maximum_redirects)) !=
+		   .OK {
 			return .Redirect
 		}
 	}
 	if options.timeouts.connect > 0 {
 		milliseconds := c.long(options.timeouts.connect / time.Millisecond)
-		if curl.easy_setopt(handle, .CONNECTTIMEOUT_MS, milliseconds) != .E_OK do return .Timeout
+		if http_curl_easy_setopt(handle, HTTP_CURL_CONNECTTIMEOUT_MS, milliseconds) != .OK do return .Timeout
 	}
 	if options.timeouts.total > 0 {
 		milliseconds := c.long(options.timeouts.total / time.Millisecond)
-		if curl.easy_setopt(handle, .TIMEOUT_MS, milliseconds) != .E_OK do return .Timeout
+		if http_curl_easy_setopt(handle, HTTP_CURL_TIMEOUT_MS, milliseconds) != .OK do return .Timeout
 	}
 	return .None
 }
@@ -183,12 +182,12 @@ curl_request_configure_payload :: proc(handle: $Handle, request: Http_Request) -
 		context.temp_allocator,
 	)
 	if clone_err != nil do return .Allocation
-	if curl.easy_setopt(handle, .CUSTOMREQUEST, method_c) != .E_OK do return .Invalid_Request
+	if http_curl_easy_setopt(handle, HTTP_CURL_CUSTOMREQUEST, method_c) != .OK do return .Invalid_Request
 	if len(request.body) == 0 do return .None
-	if curl.easy_setopt(handle, .POSTFIELDS, raw_data(request.body)) != .E_OK {
+	if http_curl_easy_setopt(handle, HTTP_CURL_POSTFIELDS, raw_data(request.body)) != .OK {
 		return .Invalid_Request
 	}
-	if curl.easy_setopt(handle, .POSTFIELDSIZE, c.long(len(request.body))) != .E_OK {
+	if http_curl_easy_setopt(handle, HTTP_CURL_POSTFIELDSIZE, c.long(len(request.body))) != .OK {
 		return .Invalid_Request
 	}
 	return .None
@@ -204,12 +203,12 @@ curl_request_perform :: proc(
 	Http_Error,
 ) {
 	assert(body != nil, "curl_request_perform: nil body")
-	if curl.easy_perform(handle) != .E_OK {
+	if http_curl_easy_perform(handle) != .OK {
 		if body.overflow do return 0, .Body_Too_Large
 		return 0, scheme == .Https ? .TLS : .Connect
 	}
 	status: c.long
-	if curl.easy_getinfo(handle, .RESPONSE_CODE, &status) != .E_OK do return 0, .Protocol
+	if http_curl_easy_getinfo(handle, HTTP_CURL_RESPONSE_CODE, &status) != .OK do return 0, .Protocol
 	if status < 100 || status > 599 do return 0, .Protocol
 	return u16(status), .None
 }
@@ -227,9 +226,9 @@ http_request_url :: proc(
 	if parse_err != .None do return {}, parse_err
 	if !http_request_is_valid(request) do return {}, .Invalid_Request
 	if !curl_initialize() do return {}, .TLS
-	handle := curl.easy_init()
+	handle := http_curl_easy_init()
 	if handle == nil do return {}, .Allocation
-	defer curl.easy_cleanup(handle)
+	defer http_curl_easy_cleanup(handle)
 	body := Curl_Body {
 		maximum = http_request_maximum_body(request, options),
 	}
@@ -240,8 +239,8 @@ http_request_url :: proc(
 	}
 	headers, headers_err := curl_request_headers(request)
 	if headers_err != .None do return {}, headers_err
-	defer if headers != nil do curl.slist_free_all(headers)
-	if headers != nil && curl.easy_setopt(handle, .HTTPHEADER, headers) != .E_OK {
+	defer if headers != nil do http_curl_slist_free_all(headers)
+	if headers != nil && http_curl_easy_setopt(handle, HTTP_CURL_HTTPHEADER, headers) != .OK {
 		return {}, .Invalid_Request
 	}
 	if setup_err := curl_request_configure_policy(handle, options); setup_err != .None {

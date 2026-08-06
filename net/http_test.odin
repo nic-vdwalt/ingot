@@ -4,7 +4,6 @@ package ingotnet
 import "core:fmt"
 import "core:os"
 import "core:testing"
-import curl "vendor:curl"
 
 @(test)
 test_http_request_validation_helpers :: proc(t: ^testing.T) {
@@ -73,7 +72,7 @@ test_secure_request_header_bounds :: proc(t: ^testing.T) {
 	})
 	testing.expect_value(t, valid_err, Http_Error.None)
 	testing.expect(t, headers != nil)
-	if headers != nil do curl.slist_free_all(headers)
+	if headers != nil do http_curl_slist_free_all(headers)
 }
 
 @(test)
