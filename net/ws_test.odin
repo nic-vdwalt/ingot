@@ -57,6 +57,33 @@ test_ws_invalid_url_fails_synchronously :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_ws_headers_reject_injection_and_are_owned :: proc(t: ^testing.T) {
+	ws := ws_init()
+	bad := ws_start_connect_url(
+		&ws,
+		"ws://127.0.0.1:65534/events",
+		WS_Options{headers = {Http_Header{name = "Authorization", value = "Bearer ok\r\nInjected: yes"}}},
+	)
+	testing.expect(t, !bad)
+	ws_close(&ws)
+
+	ws = ws_init()
+	name := strings.clone("Authorization")
+	value := strings.clone("Bearer secret")
+	started := ws_start_connect_url(
+		&ws,
+		"ws://127.0.0.1:65534/events",
+		WS_Options{max_attempts = 1, headers = {Http_Header{name = name, value = value}}},
+	)
+	delete(name)
+	delete(value)
+	testing.expect(t, started)
+	testing.expect_value(t, ws.headers[0].name, "Authorization")
+	testing.expect_value(t, ws.headers[0].value, "Bearer secret")
+	ws_close(&ws)
+}
+
+@(test)
 test_ws_connection_owns_url_components :: proc(t: ^testing.T) {
 	ws := ws_init()
 	raw_url := strings.clone("ws://127.0.0.1:65534/session")

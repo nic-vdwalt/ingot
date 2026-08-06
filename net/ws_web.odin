@@ -45,6 +45,7 @@ WS_Options :: struct {
 	connect_timeout:   int,
 	handshake_timeout: int,
 	ca_file:           string,
+	headers:           []Http_Header,
 }
 
 WS_Error :: enum u8 {
@@ -90,7 +91,7 @@ ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: 
 
 ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Options = {}) -> bool {
 	url, parse_err := ws_url_parse(raw_url)
-	if parse_err != .None || options.ca_file != "" {
+	if parse_err != .None || options.ca_file != "" || len(options.headers) > 0 {
 		ws.last_error = .Invalid_URL
 		ws.state = .Error
 		return false
