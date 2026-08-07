@@ -8,6 +8,7 @@
 package gfx
 
 import "core:math"
+import "core:math/linalg"
 
 // --- meshes / materials ----------------------------------------------------
 
@@ -59,7 +60,17 @@ DrawBillboard :: proc(
 	tint: Color,
 ) {
 	src := Rectangle{0, 0, f32(texture.width), f32(texture.height)}
-	_draw_billboard_world(texture, src, position, {size, size}, tint)
+	_draw_billboard_world(
+		camera,
+		texture,
+		src,
+		position,
+		camera.up,
+		{size, size},
+		{size / 2, size / 2},
+		0,
+		tint,
+	)
 }
 
 DrawBillboardPro :: proc(
@@ -73,7 +84,7 @@ DrawBillboardPro :: proc(
 	rotation: f32,
 	tint: Color,
 ) {
-	_draw_billboard_world(texture, source, position, size, tint)
+	_draw_billboard_world(camera, texture, source, position, up, size, origin, rotation, tint)
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -83,47 +94,64 @@ _v3len :: proc(v: Vector3) -> f32 {
 	return math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
 }
 
-// _draw_billboard_world projects a world-space, camera-facing quad and emits it
-// through the image pipeline (so an active custom shader / blend mode applies).
+@(private)
+_billboard_world_corners :: proc(
+	camera: Camera,
+	position, up: Vector3,
+	size, origin: Vector2,
+	rotation: f32,
+) -> (
+	[4]Vector3,
+	bool,
+) {
+	forward, forward_ok := _camera_vector_normalize(camera.target - camera.position)
+	vertical, vertical_ok := _camera_vector_normalize(up)
+	if !forward_ok || !vertical_ok do return {}, false
+	right, right_ok := _camera_vector_normalize(linalg.cross(forward, vertical))
+	if !right_ok do return {}, false
+	vertical, _ = _camera_vector_normalize(linalg.cross(right, forward))
+	angle := rotation * math.PI / 180
+	cosine := math.cos(angle)
+	sine := math.sin(angle)
+	local := [4]Vector2 {
+		{-origin.x, origin.y},
+		{size.x - origin.x, origin.y},
+		{size.x - origin.x, origin.y - size.y},
+		{-origin.x, origin.y - size.y},
+	}
+	corners: [4]Vector3
+	for offset, index in local {
+		x := offset.x * cosine - offset.y * sine
+		y := offset.x * sine + offset.y * cosine
+		corners[index] = position + right * x + vertical * y
+	}
+	return corners, true
+}
+
+// Explicit camera geometry keeps matrix-only Pro projection independent from
+// hidden compatibility camera state while preserving the active VP transform.
 @(private)
 _draw_billboard_world :: proc(
+	camera: Camera,
 	texture: Texture2D,
 	source: Rectangle,
-	position: Vector3,
-	size: Vector2,
+	position, up: Vector3,
+	size, origin: Vector2,
+	rotation: f32,
 	tint: Color,
 ) {
 	if !cam3d_active do return
+	assert(_camera_vector_is_finite(position), "DrawBillboardPro: non-finite position")
+	assert(_camera_vector_is_finite(up), "DrawBillboardPro: non-finite up")
+	assert(_f32_is_finite(size.x) && _f32_is_finite(size.y), "DrawBillboardPro: non-finite size")
+	assert(_f32_is_finite(rotation), "DrawBillboardPro: non-finite rotation")
+	corners, ok := _billboard_world_corners(camera, position, up, size, origin, rotation)
+	if !ok do return
 	e := get_texture(texture.id)
-	hw := size.x * 0.5
-	hh := size.y * 0.5
-	// world-space corners on the camera plane
-	r := cam3d_right
-	u := cam3d_up
-	wtl := Vector3 {
-		position.x - r.x * hw + u.x * hh,
-		position.y - r.y * hw + u.y * hh,
-		position.z - r.z * hw + u.z * hh,
-	}
-	wtr := Vector3 {
-		position.x + r.x * hw + u.x * hh,
-		position.y + r.y * hw + u.y * hh,
-		position.z + r.z * hw + u.z * hh,
-	}
-	wbr := Vector3 {
-		position.x + r.x * hw - u.x * hh,
-		position.y + r.y * hw - u.y * hh,
-		position.z + r.z * hw - u.z * hh,
-	}
-	wbl := Vector3 {
-		position.x - r.x * hw - u.x * hh,
-		position.y - r.y * hw - u.y * hh,
-		position.z - r.z * hw - u.z * hh,
-	}
-	tl, ok0 := _project(cam3d_vp, wtl)
-	tr, ok1 := _project(cam3d_vp, wtr)
-	br, ok2 := _project(cam3d_vp, wbr)
-	bl, ok3 := _project(cam3d_vp, wbl)
+	tl, ok0 := _project(cam3d_vp, corners[0])
+	tr, ok1 := _project(cam3d_vp, corners[1])
+	br, ok2 := _project(cam3d_vp, corners[2])
+	bl, ok3 := _project(cam3d_vp, corners[3])
 	if !(ok0 && ok1 && ok2 && ok3) do return
 
 	tw := f32(max(texture.width, 1))
