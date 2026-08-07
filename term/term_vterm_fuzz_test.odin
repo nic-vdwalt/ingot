@@ -419,3 +419,38 @@ vterm_utf8_decode_respects_codepoint_buffer_bound :: proc(t: ^testing.T) {
 		)
 	}
 }
+
+// Regression: a double-width glyph placed on the final column has no room for
+// its continuation cell, so screen.c putglyph's getcell() returns NULL for it.
+// Upstream dereferenced that result unconditionally; the undefined behaviour
+// let the compiler drop getcell()'s bounds checks and write one cell past the
+// screen buffer (deterministic Segmentation_Fault on linux_amd64, found by
+// fuzz_vterm_ingest). A 1-column grid forces every wide glyph onto the edge.
+//
+// Fixed in vendor/libvterm/src/screen.c; see THIRD_PARTY_NOTICES.md.
+@(test)
+vterm_wide_glyph_on_last_column_stays_in_bounds :: proc(t: ^testing.T) {
+	for cols in u16(1) ..= u16(2) {
+		ts := fuzz_vt_make(cols, 4)
+		testing.expectf(t, ts != nil, "emulator should initialise (cols %v)", cols)
+		if ts == nil do continue
+		defer fuzz_vt_destroy(ts)
+
+		// U+5BBD (宽) is double width; repeat it so it lands on the final
+		// column of every row regardless of wrapping behaviour.
+		wide := "宽宽宽宽宽宽宽宽"
+		n := copy(ts.read_buf[:], wide)
+		ts.utf8_hold_len = 0
+
+		_term_ingest(ts, n, false)
+
+		// Surviving the ingest without an out-of-bounds write is the
+		// assertion; the grid check confirms the emulator is still intact.
+		testing.expectf(
+			t,
+			int(ts.cols) == int(cols) && int(ts.rows) == 4,
+			"grid should survive wide-glyph ingest (cols %v)",
+			cols,
+		)
+	}
+}

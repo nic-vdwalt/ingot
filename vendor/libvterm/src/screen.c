@@ -186,8 +186,17 @@ static int putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
   if(i < VTERM_MAX_CHARS_PER_CELL)
     cell->chars[i] = 0;
 
-  for(int col = 1; col < info->width; col++)
-    getcell(screen, pos.row, pos.col + col)->chars[0] = (uint32_t)-1;
+  for(int col = 1; col < info->width; col++) {
+    /* LOCAL PATCH: a double-width glyph placed on the final column leaves its
+     * continuation cell outside the buffer, so getcell() returns NULL here.
+     * The unconditional dereference was undefined behaviour that let the
+     * compiler elide getcell()'s bounds checks and emit an out-of-bounds
+     * write; found by fuzz/run.sh term on linux_amd64. */
+    ScreenCell *extra = getcell(screen, pos.row, pos.col + col);
+    if(!extra)
+      break;
+    extra->chars[0] = (uint32_t)-1;
+  }
 
   VTermRect rect = {
     .start_row = pos.row,
