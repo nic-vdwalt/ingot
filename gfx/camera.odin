@@ -26,6 +26,8 @@ cam3d_right: Vector3
 cam3d_up: Vector3
 @(private)
 cam3d_fwd: Vector3
+@(private)
+cam3d_projection_available: bool
 
 @(private)
 _camera_matrices :: proc(camera: Camera3D, width, height: i32) -> (Matrix, Matrix, Matrix) {
@@ -48,9 +50,34 @@ _camera_matrices :: proc(camera: Camera3D, width, height: i32) -> (Matrix, Matri
 }
 
 @(private)
+_camera_vector_is_finite :: proc(value: Vector3) -> bool {
+	return _f32_is_finite(value.x) && _f32_is_finite(value.y) && _f32_is_finite(value.z)
+}
+
+@(private)
+_camera_matrix_is_finite :: proc(value: Matrix) -> bool {
+	for row in 0 ..< 4 {
+		for column in 0 ..< 4 {
+			if !_f32_is_finite(value[row, column]) do return false
+		}
+	}
+	return true
+}
+
+@(private)
+_camera_motion_is_finite :: proc(motion: Camera3D_Motion) -> bool {
+	return(
+		_camera_vector_is_finite(motion.linear_velocity) &&
+		_camera_vector_is_finite(motion.angular_velocity) &&
+		_f32_is_finite(motion.zoom_velocity) \
+	)
+}
+
+@(private)
 _camera_vector_normalize :: proc(value: Vector3) -> (Vector3, bool) {
+	if !_camera_vector_is_finite(value) do return {}, false
 	length_squared := linalg.dot(value, value)
-	if length_squared <= 1e-12 do return {}, false
+	if !_f32_is_finite(length_squared) || length_squared <= 1e-12 do return {}, false
 	return value / math.sqrt(length_squared), true
 }
 
@@ -86,25 +113,43 @@ _camera_rotate_axis :: proc(value, axis: Vector3, angle: f32) -> Vector3 {
 
 @(private)
 _camera_motion_displacement :: proc(velocity, axis: Vector3, speed, dt: f32) -> Vector3 {
-	if speed <= 1e-6 do return velocity * dt
 	angle := speed * dt
+	angle_squared := angle * angle
+	cosine_coefficient: f32
+	sine_coefficient: f32
+	// The series avoids cancellation while preserving curved translation when a
+	// small angular speed accumulates into a meaningful turn over a large step.
+	if abs(angle) <= 1e-3 {
+		cosine_coefficient = dt * (angle / 2 - angle * angle_squared / 24)
+		sine_coefficient = dt * (angle_squared / 6 - angle_squared * angle_squared / 120)
+	} else {
+		cosine_coefficient = (1 - f32(math.cos(f64(angle)))) / speed
+		sine_coefficient = (angle - f32(math.sin(f64(angle)))) / speed
+	}
 	axis_cross_velocity := linalg.cross(axis, velocity)
 	axis_cross_twice := linalg.cross(axis, axis_cross_velocity)
 	return(
 		velocity * dt +
-		axis_cross_velocity * ((1 - f32(math.cos(f64(angle)))) / speed) +
-		axis_cross_twice * ((angle - f32(math.sin(f64(angle)))) / speed) \
+		axis_cross_velocity * cosine_coefficient +
+		axis_cross_twice * sine_coefficient \
 	)
 }
 
 UpdateCamera :: proc(camera: ^Camera3D, motion: Camera3D_Motion, dt: f32) {
 	assert(camera != nil, "UpdateCamera: nil camera")
+	assert(_f32_is_finite(dt), "UpdateCamera: non-finite delta time")
 	assert(dt >= 0, "UpdateCamera: negative delta time")
+	assert(_camera_motion_is_finite(motion), "UpdateCamera: non-finite motion")
+	assert(_camera_vector_is_finite(camera.position), "UpdateCamera: non-finite position")
+	assert(_camera_vector_is_finite(camera.target), "UpdateCamera: non-finite target")
+	assert(_camera_vector_is_finite(camera.up), "UpdateCamera: non-finite up")
 	if dt == 0 do return
 	forward := GetCameraForward(camera^)
 	right := GetCameraRight(camera^)
 	up := GetCameraUp(camera^)
-	if forward == (Vector3{}) || right == (Vector3{}) || up == (Vector3{}) do return
+	assert(forward != (Vector3{}), "UpdateCamera: coincident position and target")
+	assert(right != (Vector3{}), "UpdateCamera: forward and up are parallel")
+	assert(up != (Vector3{}), "UpdateCamera: invalid camera basis")
 	left := -right
 	distance := math.sqrt(
 		linalg.dot(camera.target - camera.position, camera.target - camera.position),
@@ -117,8 +162,10 @@ UpdateCamera :: proc(camera: ^Camera3D, motion: Camera3D_Motion, dt: f32) {
 		forward * motion.angular_velocity.x +
 		left * motion.angular_velocity.y +
 		up * motion.angular_velocity.z
-	axis, rotating := _camera_vector_normalize(world_angular)
 	angular_speed := math.sqrt(linalg.dot(world_angular, world_angular))
+	rotating := angular_speed > 0
+	axis: Vector3
+	if rotating do axis = world_angular / angular_speed
 	if rotating {
 		camera.position += _camera_motion_displacement(world_velocity, axis, angular_speed, dt)
 		forward = _camera_rotate_axis(forward, axis, angular_speed * dt)
@@ -129,11 +176,15 @@ UpdateCamera :: proc(camera: ^Camera3D, motion: Camera3D_Motion, dt: f32) {
 	distance = max(distance - motion.zoom_velocity * dt, 1e-4)
 	camera.target = camera.position + forward * distance
 	camera.up, _ = _camera_vector_normalize(up)
+	assert(_camera_vector_is_finite(camera.position), "UpdateCamera: produced non-finite position")
+	assert(_camera_vector_is_finite(camera.target), "UpdateCamera: produced non-finite target")
+	assert(_camera_vector_is_finite(camera.up), "UpdateCamera: produced non-finite up")
 }
 
 // GetProjectionMatrix returns the last 3D projection matrix (rlgl parity for
 // GetMatrixProjection). Identity before any BeginMode3D.
 GetProjectionMatrix :: proc() -> Matrix {
+	assert(cam3d_projection_available, "GetProjectionMatrix: unavailable in matrix-only Pro mode")
 	if cam3d_proj == (Matrix{}) do return Matrix(1)
 	return cam3d_proj
 }
@@ -217,33 +268,47 @@ GetScreenToWorld2D :: proc(position: Vector2, camera: Camera2D) -> Vector2 {
 }
 
 BeginMode3D :: proc(camera: Camera3D) {
+	assert(!cam3d_active, "BeginMode3D: already inside a 3D camera mode")
 	width, height := _target_dims_i32()
 	cam3d_view, cam3d_proj, cam3d_vp = _camera_matrices(camera, width, height)
+	assert(_camera_matrix_is_finite(cam3d_vp), "BeginMode3D: non-finite camera matrix")
 	cam3d = camera
 	cam3d_fwd = GetCameraForward(camera)
 	cam3d_right = GetCameraRight(camera)
 	cam3d_up = GetCameraUp(camera)
+	assert(cam3d_fwd != (Vector3{}), "BeginMode3D: coincident position and target")
+	assert(cam3d_right != (Vector3{}), "BeginMode3D: forward and up are parallel")
+	cam3d_projection_available = true
 	cam3d_active = true
-	// order any pending 2D geometry before 3D draws in the same pass
+	// Ordering pending 2D geometry before 3D makes the camera change a visible
+	// draw-call boundary instead of retroactively transforming queued vertices.
 	FlushBatch()
+	assert(cam3d_active)
 }
 
 BeginMode3DPro :: proc(view_projection: Matrix) {
+	assert(!cam3d_active, "BeginMode3DPro: already inside a 3D camera mode")
 	assert(view_projection != (Matrix{}), "BeginMode3DPro: zero view-projection")
-	cam3d_view = Matrix(1)
-	cam3d_proj = view_projection
+	assert(_camera_matrix_is_finite(view_projection), "BeginMode3DPro: non-finite view-projection")
+	cam3d_view = {}
+	cam3d_proj = {}
 	cam3d_vp = view_projection
 	cam3d = {}
 	cam3d_fwd = {}
 	cam3d_right = {}
 	cam3d_up = {}
+	cam3d_projection_available = false
 	cam3d_active = true
 	FlushBatch()
+	assert(cam3d_active)
 }
 
 EndMode3D :: proc() {
+	assert(cam3d_active, "EndMode3D: no active 3D camera mode")
 	FlushBatch()
 	cam3d_active = false
+	cam3d_projection_available = false
+	assert(!cam3d_active)
 }
 
 // _target_dims returns the pixel dimensions of the pass 3D draws land in: the
@@ -292,6 +357,8 @@ GetWorldToScreen :: proc(position: Vector3, camera: Camera3D) -> Vector2 {
 }
 
 GetWorldToScreenPro :: proc(position: Vector3, view_projection: Matrix) -> Vector2 {
+	assert(_camera_vector_is_finite(position), "GetWorldToScreenPro: non-finite position")
+	assert(_camera_matrix_is_finite(view_projection), "GetWorldToScreenPro: non-finite matrix")
 	return _world_to_screen_pro(position, view_projection, GetScreenWidth(), GetScreenHeight())
 }
 

@@ -113,6 +113,10 @@ Camera3D :: struct {
 }
 Camera :: Camera3D
 
+// Motion rates use the camera-local ROS basis. Linear components are
+// forward/left/up units per second; angular components are roll/pitch/yaw radians
+// per second about those same axes. Zoom velocity dollies by changing target
+// distance rather than field of view.
 Camera3D_Motion :: struct {
 	linear_velocity:  Vector3,
 	angular_velocity: Vector3,

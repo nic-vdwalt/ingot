@@ -7,6 +7,7 @@
 package gfx
 
 import "core:math"
+import "core:math/linalg"
 import "core:testing"
 import wg "vendor:wgpu"
 
@@ -56,6 +57,24 @@ test_sphere_geometry_bounds_and_normals :: proc(t: ^testing.T) {
 	// Every index addresses a real vertex.
 	for index in indices {
 		testing.expect(t, int(index) < len(vertices), "index out of range")
+	}
+}
+
+@(test)
+test_sphere_geometry_winding_faces_outward :: proc(t: ^testing.T) {
+	vertices := make([dynamic]Gpu_3D_Vertex, context.temp_allocator)
+	indices := make([dynamic]u32, context.temp_allocator)
+	_sphere_mesh_geometry(1, 8, 12, &vertices, &indices)
+	// Skip pole cells because their duplicate vertices form intentional
+	// zero-area triangles; every interior face must remain outward and CCW.
+	for triangle := 24; triangle < len(indices) - 24; triangle += 3 {
+		a := vertices[indices[triangle]].position
+		b := vertices[indices[triangle + 1]].position
+		c := vertices[indices[triangle + 2]].position
+		face := linalg.cross(b - a, c - a)
+		if linalg.dot(face, face) <= 1e-12 do continue
+		center := (a + b + c) / 3
+		testing.expect(t, linalg.dot(face, center) > 0, "sphere triangle faces inward")
 	}
 }
 
