@@ -40,6 +40,12 @@ hatch.
 
 ## Architectural prerequisite: the scene split
 
+The canonical cooked, scene, draw-list, and renderer basis is right-handed ROS:
+**+X forward, +Y left, +Z up**. Importers convert positions, normals, tangents,
+winding, transforms, animation, cameras, lights, rays, and bounds exactly once.
+Cooked data carries no implicit source-format basis and renderers do not repeat
+the conversion.
+
 The single decision that makes the rest cheap is mirroring the `ui` / `ui_gfx`
 split:
 

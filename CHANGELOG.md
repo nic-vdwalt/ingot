@@ -11,6 +11,8 @@ compatibility, while minor releases may break it. See the
 
 ### Added
 
+- Deterministic, delta-time camera motion helpers and matrix-driven Pro 3D entry
+  points for compatibility and explicit GPU rendering.
 - `ui_gfx.session_acquire_frame` and `session_present_frame`, an allocation-free
   capability pair that binds UI paint to its graphics owner and handles normal
   submission and frame-temporary cleanup. Existing low-level session frame APIs
@@ -21,6 +23,8 @@ compatibility, while minor releases may break it. See the
 
 ### Changed
 
+- **Breaking:** 3D examples, generated primitives, and documented world-space
+  behavior now use right-handed ROS coordinates: +X forward, +Y left, +Z up.
 - UI paint replay now uses owner-validated graphics frames rather than the
   PascalCase compatibility surface. PascalCase remains the default-context
   raylib migration facade.

@@ -35,6 +35,11 @@ test_sphere_geometry_bounds_and_normals :: proc(t: ^testing.T) {
 	indices := make([dynamic]u32, context.temp_allocator)
 	_sphere_mesh_geometry(radius, 8, 12, &vertices, &indices)
 
+	testing.expect_value(t, vertices[0].position, Vector3{0, 0, radius})
+	testing.expect(t, abs(vertices[len(vertices) - 1].position.z + radius) < 1e-4)
+	equator := vertices[4 * 13].position
+	testing.expect(t, abs(equator.z) < 1e-4)
+
 	for v in vertices {
 		pos_len := math.sqrt(
 			v.position.x * v.position.x +
@@ -69,9 +74,9 @@ test_create_sphere_mesh_rejects_headless :: proc(t: ^testing.T) {
 @(test)
 test_gpu_3d_geometry_validation :: proc(t: ^testing.T) {
 	vertices := [?]Gpu_3D_Vertex {
-		{position = {0, 0, 0}, normal = {0, 1, 0}, scalar = 0},
-		{position = {1, 0, 0}, normal = {0, 1, 0}, scalar = 0.5},
-		{position = {0, 0, 1}, normal = {0, 1, 0}, scalar = 1},
+		{position = {0, 0, 0}, normal = CAMERA_WORLD_UP, scalar = 0},
+		{position = {1, 0, 0}, normal = CAMERA_WORLD_UP, scalar = 0.5},
+		{position = {0, 1, 0}, normal = CAMERA_WORLD_UP, scalar = 1},
 	}
 	triangles := [?]u32{0, 1, 2}
 	lines := [?]u32{0, 1, 1, 2}
@@ -89,9 +94,9 @@ test_gpu_3d_geometry_validation :: proc(t: ^testing.T) {
 @(test)
 test_create_gpu_mesh_rejects_headless :: proc(t: ^testing.T) {
 	vertices := [?]Gpu_3D_Vertex {
-		{position = {0, 0, 0}, normal = {0, 1, 0}},
-		{position = {1, 0, 0}, normal = {0, 1, 0}},
-		{position = {0, 0, 1}, normal = {0, 1, 0}},
+		{position = {0, 0, 0}, normal = CAMERA_WORLD_UP},
+		{position = {1, 0, 0}, normal = CAMERA_WORLD_UP},
+		{position = {0, 1, 0}, normal = CAMERA_WORLD_UP},
 	}
 	indices := [?]u32{0, 1, 2}
 	mesh, ok := create_gpu_mesh(vertices[:], indices[:])
@@ -114,9 +119,9 @@ test_gpu_3d_opaque_overlay_policy :: proc(t: ^testing.T) {
 @(test)
 test_gpu_3d_pipeline_identity_includes_material_style :: proc(t: ^testing.T) {
 	entry := Gpu_3D_Pipeline_Entry {
-		format = .RGBA8Unorm,
+		format    = .RGBA8Unorm,
 		primitive = .Triangles,
-		style = .Default,
+		style     = .Default,
 	}
 	testing.expect(t, _gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default))
 	testing.expect(t, !_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque_Overlay))

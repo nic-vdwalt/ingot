@@ -131,35 +131,35 @@ ensure_resources :: proc() {
 
 draw_render_targets :: proc() {
 	camera := rl.Camera3D {
-		position   = {0, 0, 5},
+		position   = {-5, 0, 0},
 		target     = {0, 0, 0},
-		up         = {0, 1, 0},
+		up         = rl.CAMERA_WORLD_UP,
 		fovy       = 45,
 		projection = .PERSPECTIVE,
 	}
 	gpu_pass, ok := rl.begin_gpu_3d(&gpu_target, camera)
 	if ok {
-		// Depth proof: the blue sphere (z=0) must occlude the orange one
-		// (z=-1) where they overlap - validates depthCompare = .Less.
+		// ROS basis: +X forward, +Y left, +Z up. The blue sphere at x=0
+		// must occlude the orange sphere at x=1 where they overlap.
 		rl.draw_gpu_mesh(
 			&gpu_pass,
 			gpu_sphere,
-			rl.MatrixTranslate(-0.65, 0, 0),
+			rl.MatrixTranslate(0, 0.65, 0),
 			{color = rl.Color{80, 160, 255, 255}},
 		)
 		rl.draw_gpu_mesh(
 			&gpu_pass,
 			gpu_sphere,
-			rl.MatrixTranslate(0.65, 0, -1),
+			rl.MatrixTranslate(1, -0.65, 0),
 			{color = rl.Color{255, 120, 80, 255}},
 		)
-		// Cull proof: a sphere behind the camera (z=+7, camera at z=+5
-		// looking at origin) must contribute no pixels - validates clip-
+		// Cull proof: a sphere behind the camera (x=-7, camera at x=-5
+		// looking toward +X) must contribute no pixels - validates clip-
 		// space rejection. If green appears anywhere the projection broke.
 		rl.draw_gpu_mesh(
 			&gpu_pass,
 			gpu_sphere,
-			rl.MatrixTranslate(0, 0, 7),
+			rl.MatrixTranslate(-7, 0, 0),
 			{color = rl.Color{80, 255, 120, 255}},
 		)
 		rl.end_gpu_3d(&gpu_pass)

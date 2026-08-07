@@ -99,6 +99,11 @@ CameraProjection :: enum i32 {
 	ORTHOGRAPHIC,
 }
 
+CAMERA_WORLD_FORWARD :: Vector3{1, 0, 0}
+CAMERA_WORLD_LEFT :: Vector3{0, 1, 0}
+CAMERA_WORLD_UP :: Vector3{0, 0, 1}
+CAMERA_WORLD_RIGHT :: Vector3{0, -1, 0}
+
 Camera3D :: struct {
 	position:   Vector3,
 	target:     Vector3,
@@ -107,6 +112,12 @@ Camera3D :: struct {
 	projection: CameraProjection,
 }
 Camera :: Camera3D
+
+Camera3D_Motion :: struct {
+	linear_velocity:  Vector3,
+	angular_velocity: Vector3,
+	zoom_velocity:    f32,
+}
 
 Camera2D :: struct {
 	offset:   Vector2,

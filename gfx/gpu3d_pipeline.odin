@@ -101,10 +101,10 @@ Gpu_3D_Pipeline_Entry :: struct {
 
 @(private)
 Gpu_3D_Material_Policy :: struct {
-	blend:       bool,
-	depth_write: bool,
+	blend:         bool,
+	depth_write:   bool,
 	depth_compare: wg.CompareFunction,
-	depth_bias:  i32,
+	depth_bias:    i32,
 }
 
 @(private)
@@ -241,8 +241,8 @@ _sphere_mesh_geometry :: proc(
 			theta := u * f32(math.TAU)
 			normal := [3]f32 {
 				f32(math.sin(f64(phi))) * f32(math.cos(f64(theta))),
-				f32(math.cos(f64(phi))),
 				f32(math.sin(f64(phi))) * f32(math.sin(f64(theta))),
+				f32(math.cos(f64(phi))),
 			}
 			append(vertices, Gpu_3D_Vertex{position = normal * radius, normal = normal})
 		}
@@ -430,6 +430,28 @@ begin_gpu_3d :: proc(
 	}
 	_gpu_3d_set_camera(&result, camera)
 	return result, true
+}
+
+begin_gpu_3d_pro :: proc(
+	target: ^Gpu_3D_Target,
+	view_projection: Matrix,
+	load: Gpu_3D_Load_Action = .Clear,
+) -> (
+	Gpu_3D_Pass,
+	bool,
+) {
+	assert(target != nil)
+	assert(view_projection != (Matrix{}), "begin_gpu_3d_pro: zero view-projection")
+	camera := Camera3D {
+		position   = -CAMERA_WORLD_FORWARD,
+		target     = {},
+		up         = CAMERA_WORLD_UP,
+		fovy       = 60,
+		projection = .PERSPECTIVE,
+	}
+	pass, ok := begin_gpu_3d(target, camera, load)
+	if ok do pass.view_projection = view_projection
+	return pass, ok
 }
 
 draw_gpu_mesh :: proc(
