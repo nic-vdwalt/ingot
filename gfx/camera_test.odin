@@ -5,12 +5,59 @@ import "core:testing"
 
 camera_test_value :: proc(projection: CameraProjection = .PERSPECTIVE) -> Camera3D {
 	return {
-		position = {0, 0, 10},
+		position = {-10, 0, 0},
 		target = {0, 0, 0},
-		up = {0, 1, 0},
+		up = CAMERA_WORLD_UP,
 		fovy = 60,
 		projection = projection,
 	}
+}
+
+camera_test_vector_near :: proc(t: ^testing.T, got, want: Vector3, tolerance: f32) {
+	testing.expect(t, abs(got.x - want.x) < tolerance)
+	testing.expect(t, abs(got.y - want.y) < tolerance)
+	testing.expect(t, abs(got.z - want.z) < tolerance)
+}
+
+@(test)
+camera_basis_uses_ros_world_axes :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	testing.expect_value(t, GetCameraForward(camera), CAMERA_WORLD_FORWARD)
+	testing.expect_value(t, GetCameraRight(camera), CAMERA_WORLD_RIGHT)
+	testing.expect_value(t, GetCameraUp(camera), CAMERA_WORLD_UP)
+}
+
+@(test)
+camera_update_is_frame_rate_independent :: proc(t: ^testing.T) {
+	one_step := camera_test_value()
+	many_steps := one_step
+	motion := Camera3D_Motion {
+		linear_velocity  = {4, 2, 1},
+		angular_velocity = {0.1, -0.2, 0.3},
+		zoom_velocity    = 2,
+	}
+	UpdateCamera(&one_step, motion, 1)
+	for _ in 0 ..< 100 do UpdateCamera(&many_steps, motion, 0.01)
+	camera_test_vector_near(t, many_steps.position, one_step.position, 1e-3)
+	camera_test_vector_near(t, many_steps.target, one_step.target, 1e-3)
+	camera_test_vector_near(t, many_steps.up, one_step.up, 1e-4)
+}
+
+@(test)
+camera_update_zero_delta_is_noop :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	want := camera
+	UpdateCamera(&camera, {}, 0)
+	testing.expect_value(t, camera, want)
+}
+
+@(test)
+camera_update_rejects_degenerate_basis :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	camera.target = camera.position
+	want := camera
+	UpdateCamera(&camera, {linear_velocity = {1, 0, 0}}, 1)
+	testing.expect_value(t, camera, want)
 }
 
 @(test)
@@ -50,6 +97,25 @@ world_to_screen_does_not_mutate_active_projection :: proc(t: ^testing.T) {
 	point := GetWorldToScreen({0, 0, 0}, camera_test_value())
 	testing.expect(t, abs(point.x - 400) < 1e-4)
 	testing.expect(t, abs(point.y - 300) < 1e-4)
+	testing.expect_value(t, cam3d_proj, Matrix(2))
+	testing.expect_value(t, cam3d_view, Matrix(3))
+	testing.expect_value(t, cam3d_vp, Matrix(4))
+}
+
+@(test)
+world_to_screen_pro_uses_supplied_matrix :: proc(t: ^testing.T) {
+	old_width, old_height := g.width, g.height
+	old_projection, old_view, old_vp := cam3d_proj, cam3d_view, cam3d_vp
+	defer {
+		g.width, g.height = old_width, old_height
+		cam3d_proj, cam3d_view, cam3d_vp = old_projection, old_view, old_vp
+	}
+	g.width, g.height = 800, 600
+	cam3d_proj = Matrix(2)
+	cam3d_view = Matrix(3)
+	cam3d_vp = Matrix(4)
+	point := GetWorldToScreenPro({0, 0, 0}, Matrix(1))
+	testing.expect_value(t, point, Vector2{400, 300})
 	testing.expect_value(t, cam3d_proj, Matrix(2))
 	testing.expect_value(t, cam3d_view, Matrix(3))
 	testing.expect_value(t, cam3d_vp, Matrix(4))

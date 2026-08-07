@@ -115,8 +115,15 @@ GPU depth rendering uses the separate opt-in API in `gfx/gpu3d.odin`:
   failure leaves the previous valid target intact.
 - Begin the pass with `begin_gpu_3d`, selecting color/depth load actions before
   pass creation.
+- Call `begin_gpu_3d_pro` when the caller already owns a view-projection matrix.
 - Submit meshes with `draw_gpu_mesh`.
 - Balance the pass with `end_gpu_3d`.
+
+All Ingot 3D APIs use the right-handed ROS world basis: **+X forward, +Y left,
++Z up** (`+X × +Y = +Z`). Camera vectors, model transforms, mesh positions and
+normals, lights, bounds, rays, and scene data use this basis. Importers convert
+source data exactly once at the import/cook boundary. Matrix-driven Pro entry
+points intentionally trust the supplied matrix and perform no axis conversion.
 
 The opaque pipeline uses indexed mesh buffers, submission-safe uniform records,
 `.Depth24Plus`, depth writes, and `.Less` comparison for opaque geometry. Generic

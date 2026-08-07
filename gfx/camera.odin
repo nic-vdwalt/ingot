@@ -47,6 +47,90 @@ _camera_matrices :: proc(camera: Camera3D, width, height: i32) -> (Matrix, Matri
 	return view, projection, projection * view
 }
 
+@(private)
+_camera_vector_normalize :: proc(value: Vector3) -> (Vector3, bool) {
+	length_squared := linalg.dot(value, value)
+	if length_squared <= 1e-12 do return {}, false
+	return value / math.sqrt(length_squared), true
+}
+
+GetCameraForward :: proc(camera: Camera3D) -> Vector3 {
+	forward, _ := _camera_vector_normalize(camera.target - camera.position)
+	return forward
+}
+
+GetCameraRight :: proc(camera: Camera3D) -> Vector3 {
+	forward, forward_ok := _camera_vector_normalize(camera.target - camera.position)
+	if !forward_ok do return {}
+	right, _ := _camera_vector_normalize(linalg.cross(forward, camera.up))
+	return right
+}
+
+GetCameraUp :: proc(camera: Camera3D) -> Vector3 {
+	forward := GetCameraForward(camera)
+	right := GetCameraRight(camera)
+	up, _ := _camera_vector_normalize(linalg.cross(right, forward))
+	return up
+}
+
+@(private)
+_camera_rotate_axis :: proc(value, axis: Vector3, angle: f32) -> Vector3 {
+	cosine := f32(math.cos(f64(angle)))
+	sine := f32(math.sin(f64(angle)))
+	return(
+		value * cosine +
+		linalg.cross(axis, value) * sine +
+		axis * linalg.dot(axis, value) * (1 - cosine) \
+	)
+}
+
+@(private)
+_camera_motion_displacement :: proc(velocity, axis: Vector3, speed, dt: f32) -> Vector3 {
+	if speed <= 1e-6 do return velocity * dt
+	angle := speed * dt
+	axis_cross_velocity := linalg.cross(axis, velocity)
+	axis_cross_twice := linalg.cross(axis, axis_cross_velocity)
+	return(
+		velocity * dt +
+		axis_cross_velocity * ((1 - f32(math.cos(f64(angle)))) / speed) +
+		axis_cross_twice * ((angle - f32(math.sin(f64(angle)))) / speed) \
+	)
+}
+
+UpdateCamera :: proc(camera: ^Camera3D, motion: Camera3D_Motion, dt: f32) {
+	assert(camera != nil, "UpdateCamera: nil camera")
+	assert(dt >= 0, "UpdateCamera: negative delta time")
+	if dt == 0 do return
+	forward := GetCameraForward(camera^)
+	right := GetCameraRight(camera^)
+	up := GetCameraUp(camera^)
+	if forward == (Vector3{}) || right == (Vector3{}) || up == (Vector3{}) do return
+	left := -right
+	distance := math.sqrt(
+		linalg.dot(camera.target - camera.position, camera.target - camera.position),
+	)
+	world_velocity :=
+		forward * motion.linear_velocity.x +
+		left * motion.linear_velocity.y +
+		up * motion.linear_velocity.z
+	world_angular :=
+		forward * motion.angular_velocity.x +
+		left * motion.angular_velocity.y +
+		up * motion.angular_velocity.z
+	axis, rotating := _camera_vector_normalize(world_angular)
+	angular_speed := math.sqrt(linalg.dot(world_angular, world_angular))
+	if rotating {
+		camera.position += _camera_motion_displacement(world_velocity, axis, angular_speed, dt)
+		forward = _camera_rotate_axis(forward, axis, angular_speed * dt)
+		up = _camera_rotate_axis(up, axis, angular_speed * dt)
+	} else {
+		camera.position += world_velocity * dt
+	}
+	distance = max(distance - motion.zoom_velocity * dt, 1e-4)
+	camera.target = camera.position + forward * distance
+	camera.up, _ = _camera_vector_normalize(up)
+}
+
 // GetProjectionMatrix returns the last 3D projection matrix (rlgl parity for
 // GetMatrixProjection). Identity before any BeginMode3D.
 GetProjectionMatrix :: proc() -> Matrix {
@@ -136,15 +220,24 @@ BeginMode3D :: proc(camera: Camera3D) {
 	width, height := _target_dims_i32()
 	cam3d_view, cam3d_proj, cam3d_vp = _camera_matrices(camera, width, height)
 	cam3d = camera
-	// camera basis (world space) for CPU-projected billboards
-	fwd := linalg.normalize(camera.target - camera.position)
-	right := linalg.normalize(linalg.cross(fwd, camera.up))
-	up := linalg.cross(right, fwd)
-	cam3d_fwd = fwd
-	cam3d_right = right
-	cam3d_up = up
+	cam3d_fwd = GetCameraForward(camera)
+	cam3d_right = GetCameraRight(camera)
+	cam3d_up = GetCameraUp(camera)
 	cam3d_active = true
 	// order any pending 2D geometry before 3D draws in the same pass
+	FlushBatch()
+}
+
+BeginMode3DPro :: proc(view_projection: Matrix) {
+	assert(view_projection != (Matrix{}), "BeginMode3DPro: zero view-projection")
+	cam3d_view = Matrix(1)
+	cam3d_proj = view_projection
+	cam3d_vp = view_projection
+	cam3d = {}
+	cam3d_fwd = {}
+	cam3d_right = {}
+	cam3d_up = {}
+	cam3d_active = true
 	FlushBatch()
 }
 
@@ -195,8 +288,26 @@ DrawLine3D :: proc(startPos, endPos: Vector3, color: Color) {
 // GetWorldToScreen projects to the logical window (screen overlays / picking),
 // independent of any active render target.
 GetWorldToScreen :: proc(position: Vector3, camera: Camera3D) -> Vector2 {
-	_, _, vp := _camera_matrices(camera, g.width, g.height)
-	s, _ := _project_dims(vp, position, f32(g.width), f32(g.height))
+	return GetWorldToScreenPro(position, _camera_view_projection(camera, g.width, g.height))
+}
+
+GetWorldToScreenPro :: proc(position: Vector3, view_projection: Matrix) -> Vector2 {
+	return _world_to_screen_pro(position, view_projection, GetScreenWidth(), GetScreenHeight())
+}
+
+@(private)
+_camera_view_projection :: proc(camera: Camera3D, width, height: i32) -> Matrix {
+	_, _, view_projection := _camera_matrices(camera, width, height)
+	return view_projection
+}
+
+@(private)
+_world_to_screen_pro :: proc(
+	position: Vector3,
+	view_projection: Matrix,
+	width, height: i32,
+) -> Vector2 {
+	s, _ := _project_dims(view_projection, position, f32(width), f32(height))
 	return s
 }
 
