@@ -29,6 +29,7 @@ jobs:
             libcurl4-openssl-dev \
             libvulkan-dev \
             mesa-vulkan-drivers \
+            libglfw3-dev \
             libx11-dev \
             libxrandr-dev \
             libxi-dev \
