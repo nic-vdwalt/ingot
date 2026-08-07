@@ -636,16 +636,22 @@ ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
 	host_value := ws.host
 	if !default_port do host_value = fmt.tprintf("%s:%d", ws.host, ws.port)
 	request_builder := strings.builder_make(context.temp_allocator)
-	strings.write_string(&request_builder, fmt.tprintf(
-		"GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\n" +
-		"Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\n" +
-		"Sec-WebSocket-Version: 13\r\n",
-		ws.path,
-		host_value,
-		key,
-	))
+	strings.write_string(
+		&request_builder,
+		fmt.tprintf(
+			"GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\n" +
+			"Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\n" +
+			"Sec-WebSocket-Version: 13\r\n",
+			ws.path,
+			host_value,
+			key,
+		),
+	)
 	for header in ws.headers {
-		strings.write_string(&request_builder, fmt.tprintf("%s: %s\r\n", header.name, header.value))
+		strings.write_string(
+			&request_builder,
+			fmt.tprintf("%s: %s\r\n", header.name, header.value),
+		)
 	}
 	strings.write_string(&request_builder, "\r\n")
 	request_bytes := transmute([]u8)strings.to_string(request_builder)

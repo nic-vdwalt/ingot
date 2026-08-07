@@ -362,15 +362,22 @@ nav_sidebar_min_height :: proc(frame: ^ui.Ui_Frame) -> i32 {
 	row_h := ui.ui_frame_sc(frame, NAV_SIDEBAR_ROW_H)
 	row_count := i32(len(Section) + len(Nav_Control))
 	item_count := row_count + 3
-	return padding * 3 + ui.ui_frame_metrics(frame).LINE_HEIGHT + 2 + row_count * row_h +
-		(item_count - 1) * gap
+	return(
+		padding * 3 +
+		ui.ui_frame_metrics(frame).LINE_HEIGHT +
+		2 +
+		row_count * row_h +
+		(item_count - 1) * gap \
+	)
 }
 
 nav_uses_strip :: proc(frame: ^ui.Ui_Frame, width, available_height: i32) -> bool {
 	assert(frame != nil, "nav_uses_strip: nil frame")
 	assert(width >= 0, "nav_uses_strip: negative width")
-	return width <= ui.ui_frame_sc(frame, NARROW_WIDTH_MAX) ||
-		available_height < nav_sidebar_min_height(frame)
+	return(
+		width <= ui.ui_frame_sc(frame, NARROW_WIDTH_MAX) ||
+		available_height < nav_sidebar_min_height(frame) \
+	)
 }
 
 // draw_nav renders the section switcher and returns the vertical space it

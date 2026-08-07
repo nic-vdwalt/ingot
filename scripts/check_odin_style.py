@@ -16,6 +16,7 @@ EXCLUDED_PREFIXES = (
     "libvterm/",
     "gfx/rlgl",
     "gfx/platform_web.odin",
+    "net/http_curl.odin",
     "net/http_web.odin",
     "net/ws_curl.odin",
     "pty/pty_windows.odin",

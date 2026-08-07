@@ -62,7 +62,9 @@ test_ws_headers_reject_injection_and_are_owned :: proc(t: ^testing.T) {
 	bad := ws_start_connect_url(
 		&ws,
 		"ws://127.0.0.1:65534/events",
-		WS_Options{headers = {Http_Header{name = "Authorization", value = "Bearer ok\r\nInjected: yes"}}},
+		WS_Options {
+			headers = {Http_Header{name = "Authorization", value = "Bearer ok\r\nInjected: yes"}},
+		},
 	)
 	testing.expect(t, !bad)
 	ws_close(&ws)
