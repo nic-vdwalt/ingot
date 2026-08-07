@@ -57,6 +57,8 @@ jobs:
             -H "Accept: application/octet-stream" > "$RUNNER_TEMP/wgpu.zip"
           mkdir "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
           unzip -q "$RUNNER_TEMP/wgpu.zip" -d "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
+          make -C "$RUNNER_TEMP/odin/vendor/miniaudio/src"
+          make -C "$RUNNER_TEMP/odin/vendor/stb/src"
           echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"
           echo "$RUNNER_TEMP/ols" >> "$GITHUB_PATH"
       - name: Verify pinned Odin toolchain
