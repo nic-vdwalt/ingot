@@ -104,8 +104,7 @@ intersect_sphere :: proc(ray: Ray_3D, sphere: Sphere_3D) -> (Ray_Hit, bool) {
 	offset := ray.origin - sphere.center
 	projection := linalg.dot(offset, ray.direction)
 	discriminant :=
-		projection * projection -
-		(linalg.dot(offset, offset) - sphere.radius * sphere.radius)
+		projection * projection - (linalg.dot(offset, offset) - sphere.radius * sphere.radius)
 	if discriminant < 0 do return {}, false
 	root := math.sqrt(discriminant)
 	distance := -projection - root
@@ -114,7 +113,11 @@ intersect_sphere :: proc(ray: Ray_3D, sphere: Sphere_3D) -> (Ray_Hit, bool) {
 	position := ray.origin + ray.direction * distance
 	normal, normal_ok := _camera_vector_normalize(position - sphere.center)
 	assert(normal_ok, "intersect_sphere: invalid hit normal")
-	hit := Ray_Hit{position = position, normal = normal, distance = distance}
+	hit := Ray_Hit {
+		position = position,
+		normal   = normal,
+		distance = distance,
+	}
 	assert(_ray_hit_valid(hit), "intersect_sphere: produced invalid hit")
 	return hit, true
 }
@@ -205,11 +208,7 @@ _ray_hit :: proc(ray: Ray_3D, distance: f32, normal: Vector3) -> Ray_Hit {
 	assert(_f32_is_finite(distance), "_ray_hit: non-finite distance")
 	assert(distance >= 0, "_ray_hit: negative distance")
 	assert(_camera_vector_is_finite(normal), "_ray_hit: non-finite normal")
-	return {
-		position = ray.origin + ray.direction * distance,
-		normal   = normal,
-		distance = distance,
-	}
+	return {position = ray.origin + ray.direction * distance, normal = normal, distance = distance}
 }
 
 @(private)

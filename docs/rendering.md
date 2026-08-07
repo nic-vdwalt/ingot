@@ -125,6 +125,25 @@ normals, lights, bounds, rays, and scene data use this basis. Importers convert
 source data exactly once at the import/cook boundary. Matrix-driven Pro entry
 points intentionally trust the supplied matrix and perform no axis conversion.
 
+Native CPU picking is allocation-free and does not require a graphics context,
+frame, render target, or GPU pass:
+
+- `screen_to_world_ray` constructs a normalized `Ray_3D` from explicit viewport
+  dimensions and a `Camera3D`. Perspective rays begin at the camera position;
+  orthographic rays begin at the corresponding point on the camera plane.
+- `intersect_plane`, `intersect_sphere`, and `intersect_bounds` return
+  `(Ray_Hit, ok)`. A miss is `ok = false`; a hit reports its ROS-world position,
+  surface normal, and non-negative world-space distance from the ray origin.
+- Rays supplied to intersection procedures must have normalized directions.
+  Plane normals are normalized by the query. Invalid or non-finite geometry is
+  a programmer error and asserts; parallel rays and ordinary misses are handled.
+- A ray originating inside a sphere or bounds reports its first forward exit.
+  A ray lying in a plane reports a zero-distance hit.
+
+The initial native surface is camera-driven. There is no matrix-driven
+`screen_to_world_ray_pro`; callers that own a custom inverse view-projection
+matrix retain responsibility for unprojection until that contract is added.
+
 The opaque pipeline uses indexed mesh buffers, submission-safe uniform records,
 `.Depth24Plus`, depth writes, and `.Less` comparison for opaque geometry. Generic
 GPU meshes support triangle, line, and point-list topology. The current point path

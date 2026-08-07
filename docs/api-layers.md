@@ -225,9 +225,10 @@ headless tests, and renderer independence.
 
 Use `ingot:gfx` directly for capabilities outside the paint model: windowing,
 textures and image blits, audio, cameras, render targets, shaders, supported GPU
-3D, and specialized native renderers. Keep those calls in a narrow renderer or
-host boundary. Feed view decisions from captured frame input rather than polling
-`gfx` again after UI input capture.
+3D, CPU 3D picking, and specialized native renderers. Keep those calls in a
+narrow renderer or host boundary. Feed the screen position used for
+`screen_to_world_ray` from captured frame input rather than polling `gfx` again
+after UI input capture.
 
 `ingot:gfx/rlgl` is a source-migration compatibility shim. It is not a general
 OpenGL layer. New code should prefer `gfx` drawing, render targets, shaders, or

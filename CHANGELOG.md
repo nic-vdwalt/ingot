@@ -11,6 +11,9 @@ compatibility, while minor releases may break it. See the
 
 ### Added
 
+- Allocation-free native `screen_to_world_ray`, `intersect_plane`,
+  `intersect_sphere`, and `intersect_bounds` queries with normalized rays and
+  ROS-world hit positions, normals, and distances.
 - Deterministic, delta-time camera motion helpers and matrix-driven Pro 3D entry
   points for compatibility and explicit GPU rendering.
 - `ui_gfx.session_acquire_frame` and `session_present_frame`, an allocation-free

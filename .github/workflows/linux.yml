@@ -34,15 +34,22 @@ jobs:
             libxcursor-dev \
             libxinerama-dev
       - name: Install pinned Odin toolchain
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git init "$RUNNER_TEMP/odin"
-          git -C "$RUNNER_TEMP/odin" remote add origin https://github.com/odin-lang/Odin
-          git -C "$RUNNER_TEMP/odin" fetch --depth=1 origin 285f6d87bc86b17329fb23416fd512da4393885b
-          git -C "$RUNNER_TEMP/odin" checkout --detach FETCH_HEAD
-          git -C "$RUNNER_TEMP/odin" config core.abbrev 9
-          cd "$RUNNER_TEMP/odin"
-          ./build_odin.sh release
+          mkdir "$RUNNER_TEMP/odin"
+          gh api repos/odin-lang/Odin/releases/assets/443563911 \
+            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/odin.tar.gz"
+          tar -xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
+          gh api repos/DanielGavin/ols/releases/assets/487668598 \
+            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/ols.zip"
+          unzip -q "$RUNNER_TEMP/ols.zip" -d "$RUNNER_TEMP/ols"
+          mv "$RUNNER_TEMP/ols/odinfmt-x86_64-unknown-linux-gnu" "$RUNNER_TEMP/ols/odinfmt"
+          gh api repos/gfx-rs/wgpu-native/releases/assets/392896163 \
+            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/wgpu.zip"
+          unzip -q "$RUNNER_TEMP/wgpu.zip" -d "$RUNNER_TEMP/odin/vendor/wgpu/lib"
           echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/ols" >> "$GITHUB_PATH"
       - name: Verify pinned Odin toolchain
         run: python3 scripts/check-toolchain.py
       - name: Run Linux native gate
