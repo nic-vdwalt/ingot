@@ -76,7 +76,12 @@ HTTP_REQUEST_HEADER_NAME_BYTES_MAX :: 128
 HTTP_REQUEST_HEADER_VALUE_BYTES_MAX :: 8192
 
 @(private)
-curl_request_headers :: proc(request: Http_Request) -> (headers: ^Http_Curl_Slist, err: Http_Error) {
+curl_request_headers :: proc(
+	request: Http_Request,
+) -> (
+	headers: ^Http_Curl_Slist,
+	err: Http_Error,
+) {
 	if len(request.headers) > HTTP_REQUEST_HEADERS_MAX do return nil, .Invalid_Request
 	for header in request.headers {
 		if len(header.name) > HTTP_REQUEST_HEADER_NAME_BYTES_MAX ||
@@ -147,7 +152,9 @@ curl_request_configure_base :: proc(
 	if http_curl_easy_setopt(handle, HTTP_CURL_DISALLOW_USERNAME_IN_URL, c.long(1)) != .OK {
 		return .Invalid_URL
 	}
-	if http_curl_easy_setopt(handle, HTTP_CURL_WRITEFUNCTION, curl_body_write) != .OK do return .Protocol
+	if http_curl_easy_setopt(handle, HTTP_CURL_WRITEFUNCTION, curl_body_write) != .OK {
+		return .Protocol
+	}
 	if http_curl_easy_setopt(handle, HTTP_CURL_WRITEDATA, body) != .OK do return .Protocol
 	return .None
 }
@@ -159,14 +166,16 @@ curl_request_configure_policy :: proc(
 ) -> Http_Error {
 	if options.redirects.maximum_redirects > 0 {
 		if http_curl_easy_setopt(handle, HTTP_CURL_FOLLOWLOCATION, c.long(1)) != .OK do return .Redirect
-		if http_curl_easy_setopt(handle, HTTP_CURL_MAXREDIRS, c.long(options.redirects.maximum_redirects)) !=
-		   .OK {
+		maximum := c.long(options.redirects.maximum_redirects)
+		if http_curl_easy_setopt(handle, HTTP_CURL_MAXREDIRS, maximum) != .OK {
 			return .Redirect
 		}
 	}
 	if options.timeouts.connect > 0 {
 		milliseconds := c.long(options.timeouts.connect / time.Millisecond)
-		if http_curl_easy_setopt(handle, HTTP_CURL_CONNECTTIMEOUT_MS, milliseconds) != .OK do return .Timeout
+		if http_curl_easy_setopt(handle, HTTP_CURL_CONNECTTIMEOUT_MS, milliseconds) != .OK {
+			return .Timeout
+		}
 	}
 	if options.timeouts.total > 0 {
 		milliseconds := c.long(options.timeouts.total / time.Millisecond)
@@ -182,7 +191,9 @@ curl_request_configure_payload :: proc(handle: $Handle, request: Http_Request) -
 		context.temp_allocator,
 	)
 	if clone_err != nil do return .Allocation
-	if http_curl_easy_setopt(handle, HTTP_CURL_CUSTOMREQUEST, method_c) != .OK do return .Invalid_Request
+	if http_curl_easy_setopt(handle, HTTP_CURL_CUSTOMREQUEST, method_c) != .OK {
+		return .Invalid_Request
+	}
 	if len(request.body) == 0 do return .None
 	if http_curl_easy_setopt(handle, HTTP_CURL_POSTFIELDS, raw_data(request.body)) != .OK {
 		return .Invalid_Request
@@ -234,8 +245,9 @@ http_request_url :: proc(
 	}
 	body.bytes.allocator = allocator
 	defer if err != .None do delete(body.bytes)
-	if setup_err := curl_request_configure_base(handle, raw_url, &body, options.ca_file); setup_err != .None {
-		return {}, setup_err
+	base_err := curl_request_configure_base(handle, raw_url, &body, options.ca_file)
+	if base_err != .None {
+		return {}, base_err
 	}
 	headers, headers_err := curl_request_headers(request)
 	if headers_err != .None do return {}, headers_err

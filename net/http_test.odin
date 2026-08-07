@@ -66,10 +66,12 @@ test_secure_request_header_bounds :: proc(t: ^testing.T) {
 	defer delete(too_many)
 	_, err := curl_request_headers(Http_Request{path = "/", headers = too_many})
 	testing.expect_value(t, err, Http_Error.Invalid_Request)
-	headers, valid_err := curl_request_headers(Http_Request {
-		path = "/",
-		headers = {Http_Header{name = "Authorization", value = "Bearer redacted"}},
-	})
+	headers, valid_err := curl_request_headers(
+		Http_Request {
+			path = "/",
+			headers = {Http_Header{name = "Authorization", value = "Bearer redacted"}},
+		},
+	)
 	testing.expect_value(t, valid_err, Http_Error.None)
 	testing.expect(t, headers != nil)
 	if headers != nil do http_curl_slist_free_all(headers)
