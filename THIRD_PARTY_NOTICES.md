@@ -67,8 +67,8 @@ the corresponding mirror tag points to commit
 
 ### Local modifications
 
-The vendored source is upstream 0.3.3 with two memory-safety patches
-applied. Both were found by `fuzz/run.sh term`, which now fences them:
+The vendored source is upstream 0.3.3 with three memory-safety patches
+applied. All were found by fuzzing the `term` package, which now fences them:
 
 - `src/screen.c`, `erase_internal()`: skip cells for which `getcell()` returns
   `NULL` instead of writing through the null pointer. The row loop bounds
@@ -92,6 +92,18 @@ applied. Both were found by `fuzz/run.sh term`, which now fences them:
   same partial-consumption path already used for text runs longer than the
   codepoint buffer.
 
+- `src/screen.c`, `putglyph()`: stop writing continuation cells for a
+  double-width glyph once `getcell()` returns `NULL`. A wide glyph placed on
+  the final column has no room for its continuation cell, so `getcell()`
+  returns `NULL` for it, and the unconditional dereference of that result was
+  undefined behaviour: the compiler is entitled to elide `getcell()`'s bounds
+  checks and emit a direct write one cell past the screen buffer, which is
+  exactly what clang does on linux_amd64 at `-O2`. It surfaced as a
+  deterministic `Segmentation_Fault` in `term.fuzz_vterm_ingest` in Linux CI
+  and is fenced by `term.vterm_wide_glyph_on_last_column_stays_in_bounds`. The
+  guard uses the same `if(!cell)` idiom the rest of the file already applies
+  to `getcell()` results.
+
 Any upstream refresh must re-apply these patches or confirm upstream has fixed
 them. Both macOS archives have been rebuilt from the patched source and their
 checksums updated in `docs/provenance/third-party-artifacts.json`.
@@ -100,7 +112,7 @@ source reproduces the recorded checksum byte for byte; without it `ar` stamps
 each member with the build time and the manifest would only ever match the one
 machine that produced it.
 
-**`libvterm/lib/windows_amd64/vterm.lib` predates both patches** and must be
+**`libvterm/lib/windows_amd64/vterm.lib` predates all of these patches** and must be
 rebuilt with `scripts/build-libvterm.bat` on Windows, then have its checksum
 refreshed in the same manifest, which currently marks it
 `"built_from": "upstream-unpatched"`. The hygiene gate verifies each archive
