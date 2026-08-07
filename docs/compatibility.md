@@ -125,6 +125,11 @@ supported for the documented raylib migration subset, but is not a second
 context-capable API and is not extended merely to mirror each explicit
 capability.
 
+Native 3D picking follows the same rule: `screen_to_world_ray`,
+`intersect_plane`, `intersect_sphere`, and `intersect_bounds` are snake_case
+Ingot APIs in the ROS world basis. They do not add PascalCase raylib collision
+aliases or broaden the compatibility facade into complete raymath support.
+
 Mixing is supported only in a single default-context frame. Framework internals
 and multi-context applications must use owned `Frame` or `Context` procedures.
 Ingot asserts when a PascalCase draw could route to a different live context
