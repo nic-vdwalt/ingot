@@ -5,7 +5,9 @@
 // Native-only; the web target provides GetWindowHandle in platform_web.odin.
 package gfx
 
-import "vendor:glfw"
+// glfw is used only under the Darwin/Windows branches; @(require) keeps the
+// import legal on Linux where the generic branch returns g.win directly.
+@(require) import "vendor:glfw"
 
 when ODIN_OS == .Darwin {
 	GetWindowHandle :: proc() -> rawptr {
