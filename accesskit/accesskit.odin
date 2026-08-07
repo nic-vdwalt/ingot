@@ -156,6 +156,7 @@ Deactivation_Handler :: proc "c" (userdata: rawptr)
 
 when ENABLED {
 	when ODIN_OS == .Linux {
+		@(extra_linker_flags = "-Wl,--allow-multiple-definition")
 		foreign import lib "lib/linux_amd64/libaccesskit.a"
 	} else when ODIN_OS == .Darwin && ODIN_ARCH == .arm64 {
 		foreign import lib "lib/darwin_arm64/libaccesskit.a"
