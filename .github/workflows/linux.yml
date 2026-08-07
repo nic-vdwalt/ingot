@@ -34,10 +34,14 @@ jobs:
             libxcursor-dev \
             libxinerama-dev
       - name: Install pinned Odin toolchain
-        uses: laytan/setup-odin@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          release: dev-2026-06
+        run: |
+          git init "$RUNNER_TEMP/odin"
+          git -C "$RUNNER_TEMP/odin" remote add origin https://github.com/odin-lang/Odin
+          git -C "$RUNNER_TEMP/odin" fetch --depth=1 origin 285f6d87bc86b17329fb23416fd512da4393885b
+          git -C "$RUNNER_TEMP/odin" checkout --detach FETCH_HEAD
+          cd "$RUNNER_TEMP/odin"
+          ./build_odin.sh release
+          echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"
       - name: Verify pinned Odin toolchain
         run: python3 scripts/check-toolchain.py
       - name: Run Linux native gate
