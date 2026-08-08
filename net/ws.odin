@@ -197,7 +197,7 @@ WS_Frag_State :: struct {
 // message exceeding WS_MAX_PAYLOAD - in which case the caller must drop the
 // connection (RFC 6455 §5.4 fail-fast).
 @(private)
-ws_handle_data_frame :: proc(ws: ^WebSocket, frag: ^WS_Frag_State, frame: WS_Frame) -> bool {
+ws_handle_data_frame :: proc(ws: ^Web_Socket, frag: ^WS_Frag_State, frame: WS_Frame) -> bool {
 	assert(ws != nil, "ws_handle_data_frame: nil ws")
 	assert(frag != nil, "ws_handle_data_frame: nil frag")
 	assert(
@@ -290,7 +290,7 @@ ws_encode_frame :: proc(
 	return frame
 }
 
-WebSocket :: struct {
+Web_Socket :: struct {
 	// Transport lifecycle is shared between the worker and ws_close. TLS handles
 	// remain worker-owned; ws_close signals cancellation and joins the worker.
 	transport:         Ws_Transport,
@@ -358,8 +358,8 @@ WebSocket :: struct {
 }
 
 // Initialize a WebSocket connection.
-ws_init :: proc() -> WebSocket {
-	ws: WebSocket
+ws_init :: proc() -> Web_Socket {
+	ws: Web_Socket
 	ws.state = .Disconnected
 	ws.recv_queue = make([dynamic]WS_Message)
 	ws.running = false
@@ -374,12 +374,12 @@ ws_init :: proc() -> WebSocket {
 // Blocking network calls (dial + handshake recv) must not run on the render
 // thread: on Windows, connect() to a loopback port that is not listening yet
 // takes ~0.5-1s per attempt, which would freeze the UI.
-ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: int) {
+ws_start_connect :: proc(ws: ^Web_Socket, host: string, port: int, max_attempts: int) {
 	url := fmt.tprintf("ws://%s:%d/ws", host, port)
 	_ = ws_start_connect_url(ws, url, WS_Options{max_attempts = max_attempts})
 }
 
-ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Options = {}) -> bool {
+ws_start_connect_url :: proc(ws: ^Web_Socket, raw_url: string, options: WS_Options = {}) -> bool {
 	parsed, parse_err := ws_url_parse(raw_url)
 	if parse_err != .None || !ws_headers_valid(options.headers) {
 		sync.atomic_store(&ws.last_error, WS_Error.Invalid_URL)
@@ -416,7 +416,7 @@ ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Option
 	sync.atomic_store(&ws.running, true)
 	ws.recv_thread = thread.create(proc(t: ^thread.Thread) {
 		context.assertion_failure_proc = threadhook.install(context.assertion_failure_proc)
-		ws_connect_worker(cast(^WebSocket)t.data)
+		ws_connect_worker(cast(^Web_Socket)t.data)
 	})
 	if ws.recv_thread == nil {
 		sync.atomic_store(&ws.running, false)
@@ -437,7 +437,7 @@ ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Option
 // length. Timeout expiry is the normal path - nothing signals during routine
 // backoff, only ws_close broadcasts.
 @(private = "file")
-ws_stop_wait :: proc(ws: ^WebSocket, d: time.Duration) {
+ws_stop_wait :: proc(ws: ^Web_Socket, d: time.Duration) {
 	assert(ws != nil, "ws_stop_wait: nil ws")
 	assert(d > 0, "backoff wait must be positive")
 	sync.mutex_lock(&ws.stop_mutex)
@@ -450,7 +450,7 @@ ws_stop_wait :: proc(ws: ^WebSocket, d: time.Duration) {
 // queued message or state change is rendered promptly even when the app idles
 // in event-driven frame mode between inputs.
 @(private = "file")
-ws_notify :: proc(ws: ^WebSocket) {
+ws_notify :: proc(ws: ^Web_Socket) {
 	if ws.wake != nil do ws.wake()
 }
 
@@ -458,7 +458,7 @@ ws_notify :: proc(ws: ^WebSocket) {
 // the main thread reads concurrently) and wakes the frame loop so connection
 // status changes appear without waiting for the idle floor.
 @(private = "file")
-ws_set_state :: proc(ws: ^WebSocket, s: WS_State) {
+ws_set_state :: proc(ws: ^Web_Socket, s: WS_State) {
 	assert(ws != nil)
 	assert(s >= .Disconnected && s <= .Error)
 	sync.atomic_store(&ws.state, s)
@@ -470,7 +470,7 @@ ws_set_state :: proc(ws: ^WebSocket, s: WS_State) {
 // is dropped (and counted) rather than letting memory grow without limit -
 // for a UI consumer the latest data wins.
 @(private = "file")
-ws_enqueue :: proc(ws: ^WebSocket, data: string, binary: bool) {
+ws_enqueue :: proc(ws: ^Web_Socket, data: string, binary: bool) {
 	assert(ws != nil)
 	if len(data) > WS_MAX_QUEUED_BYTES {
 		delete(data)
@@ -505,7 +505,7 @@ ws_enqueue :: proc(ws: ^WebSocket, data: string, binary: bool) {
 // deadline set (see ws_recv_loop's heartbeat). Returns false if every attempt
 // failed or ws_close cut in. The socket is left retracted on failure.
 @(private = "file")
-ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
+ws_dial_and_handshake :: proc(ws: ^Web_Socket) -> bool {
 	assert(ws != nil, "ws_dial_and_handshake: nil ws")
 	for attempt := 0; attempt < ws.max_attempts && sync.atomic_load(&ws.running); attempt += 1 {
 		transport: Ws_Transport
@@ -564,7 +564,7 @@ ws_dial_and_handshake :: proc(ws: ^WebSocket) -> bool {
 // auto_reconnect is off or ws_close set running=false). conn_gen is bumped on
 // each successful handshake so consumers can re-establish subscriptions.
 @(private = "file")
-ws_connect_worker :: proc(ws: ^WebSocket) {
+ws_connect_worker :: proc(ws: ^Web_Socket) {
 	assert(ws != nil)
 	previous_generation := sync.atomic_load(&ws.conn_gen)
 	assert(previous_generation >= 0)
@@ -623,7 +623,7 @@ ws_connect_worker :: proc(ws: ^WebSocket) {
 // Send the HTTP upgrade request and validate the 101 response (see
 // ws_handshake_response_valid for the RFC 6455 section 4.1 checks).
 @(private = "file")
-ws_handshake :: proc(ws: ^WebSocket, transport: ^Ws_Transport) -> bool {
+ws_handshake :: proc(ws: ^Web_Socket, transport: ^Ws_Transport) -> bool {
 	assert(ws != nil)
 	assert(transport != nil, "ws_handshake: nil transport")
 	// Read through the accessor: ws_close can mark the transport closed from
@@ -755,7 +755,7 @@ ws_accept_for_key :: proc(key: string) -> string {
 // WS_DEAD_AFTER, declare the connection dead. Only ws_close clears ws.running
 // (which ends the whole session).
 @(private = "file")
-ws_recv_loop :: proc(ws: ^WebSocket) {
+ws_recv_loop :: proc(ws: ^Web_Socket) {
 	assert(ws != nil)
 	scratch: [65536]u8
 	acc := make([dynamic]u8) // growable accumulator (handles frames > 64 KB)
@@ -850,7 +850,7 @@ ws_recv_loop :: proc(ws: ^WebSocket) {
 }
 
 // Send a text message over WebSocket.
-ws_send :: proc(ws: ^WebSocket, data: string) -> bool {
+ws_send :: proc(ws: ^Web_Socket, data: string) -> bool {
 	assert(ws != nil)
 	if ws_state(ws) != .Connected do return false
 	if len(data) > WS_MAX_PAYLOAD do return false
@@ -858,7 +858,7 @@ ws_send :: proc(ws: ^WebSocket, data: string) -> bool {
 }
 
 // Send a binary message over WebSocket.
-ws_send_binary :: proc(ws: ^WebSocket, data: []u8) -> bool {
+ws_send_binary :: proc(ws: ^Web_Socket, data: []u8) -> bool {
 	assert(ws != nil)
 	if ws_state(ws) != .Connected do return false
 	if len(data) > WS_MAX_PAYLOAD do return false
@@ -866,7 +866,7 @@ ws_send_binary :: proc(ws: ^WebSocket, data: []u8) -> bool {
 }
 
 // Send a raw WebSocket frame.
-ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
+ws_send_frame :: proc(ws: ^Web_Socket, opcode: u8, payload: []u8) -> bool {
 	assert(ws != nil, "ws_send_frame: nil ws")
 	assert(opcode <= 0x0F, "opcode is a 4-bit field")
 	assert(len(payload) <= WS_MAX_PAYLOAD, "payload exceeds WS_MAX_PAYLOAD")
@@ -903,7 +903,7 @@ ws_send_frame :: proc(ws: ^WebSocket, opcode: u8, payload: []u8) -> bool {
 // Drain all received messages in one lock (call from main thread). The
 // returned slice is temp-allocated; each message's `data` string is heap-
 // allocated and owned by the caller (delete after processing).
-ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
+ws_drain :: proc(ws: ^Web_Socket) -> []WS_Message {
 	assert(ws != nil)
 	sync.mutex_lock(&ws.recv_mutex)
 	defer sync.mutex_unlock(&ws.recv_mutex)
@@ -923,7 +923,7 @@ ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
 }
 
 // Thread-safe check for undrained received messages.
-ws_has_pending :: proc(ws: ^WebSocket) -> bool {
+ws_has_pending :: proc(ws: ^Web_Socket) -> bool {
 	assert(ws != nil, "ws_has_pending: nil ws")
 	sync.mutex_lock(&ws.recv_mutex)
 	defer sync.mutex_unlock(&ws.recv_mutex)
@@ -935,7 +935,7 @@ ws_has_pending :: proc(ws: ^WebSocket) -> bool {
 // "latest wins" feed drops are benign; for a protocol stream a non-zero value
 // means frames were lost and the consumer should log it and resynchronize at
 // the application level. Thread-safe.
-ws_recv_dropped :: proc(ws: ^WebSocket) -> u64 {
+ws_recv_dropped :: proc(ws: ^Web_Socket) -> u64 {
 	assert(ws != nil, "ws_recv_dropped: nil ws")
 	sync.mutex_lock(&ws.recv_mutex)
 	defer sync.mutex_unlock(&ws.recv_mutex)
@@ -946,17 +946,17 @@ ws_recv_dropped :: proc(ws: ^WebSocket) -> u64 {
 // Consumers poll it to re-establish app-level subscriptions after a recovery:
 // when the value advances, a fresh connection is live and any prior server-side
 // subscription (bound to the old socket) is gone.
-ws_conn_gen :: proc(ws: ^WebSocket) -> int {
+ws_conn_gen :: proc(ws: ^Web_Socket) -> int {
 	return sync.atomic_load(&ws.conn_gen)
 }
 
 // ws_state returns the connection state with an atomic read - the worker
 // thread writes it concurrently, so a plain field read would be racy.
-ws_state :: proc(ws: ^WebSocket) -> WS_State {
+ws_state :: proc(ws: ^Web_Socket) -> WS_State {
 	return sync.atomic_load(&ws.state)
 }
 
-ws_error :: proc(ws: ^WebSocket) -> WS_Error {
+ws_error :: proc(ws: ^Web_Socket) -> WS_Error {
 	return sync.atomic_load(&ws.last_error)
 }
 
@@ -964,7 +964,7 @@ ws_error :: proc(ws: ^WebSocket) -> WS_Error {
 // stop_cond ends any backoff wait early, closing the socket unblocks a
 // blocking recv (handshake or recv loop), and a dial in flight fails on its
 // own - the worker then exits on running == false.
-ws_close :: proc(ws: ^WebSocket) {
+ws_close :: proc(ws: ^Web_Socket) {
 	assert(ws != nil)
 	sync.atomic_store(&ws.running, false)
 
@@ -1013,7 +1013,7 @@ ws_close :: proc(ws: ^WebSocket) {
 // produced it, and clears the borrowed views into it. Idempotent, because
 // ws_close may be called more than once.
 @(private = "file")
-_ws_url_storage_free :: proc(ws: ^WebSocket) {
+_ws_url_storage_free :: proc(ws: ^Web_Socket) {
 	assert(ws != nil, "_ws_url_storage_free: nil socket")
 	if len(ws.url_storage) == 0 do return
 	// url_storage and url_allocator are only ever assigned together, so a

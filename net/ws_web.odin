@@ -66,7 +66,7 @@ WS_Message :: struct {
 	binary: bool,
 }
 
-WebSocket :: struct {
+Web_Socket :: struct {
 	id:         i32,
 	state:      WS_State,
 	last_error: WS_Error,
@@ -82,20 +82,20 @@ WebSocket :: struct {
 	wake:       proc "contextless" (),
 }
 
-ws_init :: proc() -> WebSocket {
-	ws: WebSocket
+ws_init :: proc() -> Web_Socket {
+	ws: Web_Socket
 	ws.id = -1
 	ws.state = .Disconnected
 	ws.recv_queue = make([dynamic]WS_Message)
 	return ws
 }
 
-ws_start_connect :: proc(ws: ^WebSocket, host: string, port: int, max_attempts: int) {
+ws_start_connect :: proc(ws: ^Web_Socket, host: string, port: int, max_attempts: int) {
 	url := fmt.tprintf("ws://%s:%d/ws", host, port)
 	_ = ws_start_connect_url(ws, url, WS_Options{max_attempts = max_attempts})
 }
 
-ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Options = {}) -> bool {
+ws_start_connect_url :: proc(ws: ^Web_Socket, raw_url: string, options: WS_Options = {}) -> bool {
 	url, parse_err := ws_url_parse(raw_url)
 	if parse_err != .None || options.ca_file != "" || len(options.headers) > 0 {
 		ws.last_error = .Invalid_URL
@@ -118,7 +118,7 @@ ws_start_connect_url :: proc(ws: ^WebSocket, raw_url: string, options: WS_Option
 
 // ws_poll_state refreshes ws.state from the JS socket.
 @(private = "file")
-ws_poll_state :: proc(ws: ^WebSocket) {
+ws_poll_state :: proc(ws: ^Web_Socket) {
 	assert(ws != nil, "ws_poll_state: nil ws")
 	if ws.id < 0 do return
 	prev := ws.state
@@ -140,23 +140,23 @@ ws_poll_state :: proc(ws: ^WebSocket) {
 }
 
 // ws_conn_gen mirrors the native accessor (see net/ws.odin).
-ws_conn_gen :: proc(ws: ^WebSocket) -> int {
+ws_conn_gen :: proc(ws: ^Web_Socket) -> int {
 	ws_poll_state(ws)
 	return ws.conn_gen
 }
 
 // ws_state mirrors the native accessor; the web backend is single-threaded,
 // so it just refreshes from the JS socket and returns the field.
-ws_state :: proc(ws: ^WebSocket) -> WS_State {
+ws_state :: proc(ws: ^Web_Socket) -> WS_State {
 	ws_poll_state(ws)
 	return ws.state
 }
 
-ws_error :: proc(ws: ^WebSocket) -> WS_Error {
+ws_error :: proc(ws: ^Web_Socket) -> WS_Error {
 	return ws.last_error
 }
 
-ws_send :: proc(ws: ^WebSocket, data: string) -> bool {
+ws_send :: proc(ws: ^Web_Socket, data: string) -> bool {
 	ws_poll_state(ws)
 	if ws.state != .Connected || ws.id < 0 do return false
 	b := transmute([]byte)data
@@ -164,7 +164,7 @@ ws_send :: proc(ws: ^WebSocket, data: string) -> bool {
 	return ingot_ws_send_text(ws.id, raw_data(b), i32(len(b))) == 0
 }
 
-ws_send_binary :: proc(ws: ^WebSocket, data: []u8) -> bool {
+ws_send_binary :: proc(ws: ^Web_Socket, data: []u8) -> bool {
 	ws_poll_state(ws)
 	if ws.state != .Connected || ws.id < 0 do return false
 	if len(data) > WS_MAX_PAYLOAD do return false
@@ -173,7 +173,7 @@ ws_send_binary :: proc(ws: ^WebSocket, data: []u8) -> bool {
 
 // ws_drain pulls all JS-queued messages into temp-allocated WS_Message slices.
 // Each message's `data` is heap-allocated and owned by the caller.
-ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
+ws_drain :: proc(ws: ^Web_Socket) -> []WS_Message {
 	ws_poll_state(ws)
 	if ws.id < 0 do return nil
 
@@ -212,19 +212,19 @@ ws_drain :: proc(ws: ^WebSocket) -> []WS_Message {
 	return msgs[:]
 }
 
-ws_has_pending :: proc(ws: ^WebSocket) -> bool {
+ws_has_pending :: proc(ws: ^Web_Socket) -> bool {
 	if ws.id < 0 do return false
 	return ingot_ws_recv_len(ws.id) >= 0
 }
 
 // ws_recv_dropped mirrors the native accessor. The browser buffers received
 // messages without a drop-oldest cap on the Odin side, so this is always 0.
-ws_recv_dropped :: proc(ws: ^WebSocket) -> u64 {
+ws_recv_dropped :: proc(ws: ^Web_Socket) -> u64 {
 	assert(ws != nil, "ws_recv_dropped: nil ws")
 	return 0
 }
 
-ws_close :: proc(ws: ^WebSocket) {
+ws_close :: proc(ws: ^Web_Socket) {
 	assert(ws != nil, "ws_close: nil ws")
 	if ws.id >= 0 {
 		ingot_ws_close(ws.id)

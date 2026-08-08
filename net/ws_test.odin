@@ -231,7 +231,7 @@ test_ws_parse_fin_bit :: proc(t: ^testing.T) {
 // Drain exactly one message and return it (empty message + false if the
 // queue does not hold exactly one).
 @(private = "file")
-drain_one :: proc(t: ^testing.T, ws: ^WebSocket, loc := #caller_location) -> (WS_Message, bool) {
+drain_one :: proc(t: ^testing.T, ws: ^Web_Socket, loc := #caller_location) -> (WS_Message, bool) {
 	msgs := ws_drain(ws)
 	testing.expect_value(t, len(msgs), 1, loc = loc)
 	if len(msgs) != 1 do return {}, false

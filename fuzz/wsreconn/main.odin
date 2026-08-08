@@ -89,7 +89,7 @@ Ws_Reconn_Observations :: struct {
 exercise_ws_reconnect_ops :: proc(
 	c: ^fuzzx.Ctx,
 	p: ^Prng,
-	ws: ^ingotnet.WebSocket,
+	ws: ^ingotnet.Web_Socket,
 	worker_allocator: mem.Allocator,
 	session_start: time.Time,
 ) -> Ws_Reconn_Observations {
@@ -133,7 +133,7 @@ exercise_ws_reconnect_ops :: proc(
 
 close_and_check_ws_reconnect_session :: proc(
 	c: ^fuzzx.Ctx,
-	ws: ^ingotnet.WebSocket,
+	ws: ^ingotnet.Web_Socket,
 	worker_allocator: mem.Allocator,
 	session_start: time.Time,
 	observations: Ws_Reconn_Observations,
