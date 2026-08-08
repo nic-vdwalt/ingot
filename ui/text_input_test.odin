@@ -254,7 +254,7 @@ text_input_state_destroy_clears :: proc(t: ^testing.T) {
 // renderer and the caret model are all on the path a user's keystroke takes.
 
 @(private = "file")
-Ti_Key_Frame :: struct {
+TI_Key_Frame :: struct {
 	text:    string, // initial buffer contents
 	cursor:  int, // -1 places the caret at the end
 	key:     KeyboardKey,
@@ -273,7 +273,7 @@ Ti_Key_Result :: struct {
 }
 
 @(private = "file")
-ti_key_frame :: proc(config: Ti_Key_Frame) -> Ti_Key_Result {
+ti_key_frame :: proc(config: TI_Key_Frame) -> Ti_Key_Result {
 	assert(config.height > 0, "ti_key_frame: non-positive height")
 	assert(config.presses >= 0, "ti_key_frame: negative press count")
 	runtime := new(Ui_Runtime)
