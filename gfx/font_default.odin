@@ -13,6 +13,8 @@
 // a face with LoadFontFromMemory and call DrawTextEx/MeasureTextEx instead.
 package gfx
 
+import "core:fmt"
+
 INGOT_DEFAULT_FONT :: #config(INGOT_DEFAULT_FONT, true)
 
 // Pixel size the default atlas bakes at. DrawText scales from this size to the
@@ -85,6 +87,11 @@ when INGOT_DEFAULT_FONT {
 		font, ok := _default_font(g)
 		if !ok do return 0
 		return i32(MeasureTextEx(font, text, f32(fontSize), 0).x)
+	}
+
+	// DrawFPS matches raylib: current FPS in green at the given position.
+	DrawFPS :: proc(posX, posY: i32) {
+		DrawText(fmt.ctprintf("%d FPS", GetFPS()), posX, posY, 20, LIME)
 	}
 
 }

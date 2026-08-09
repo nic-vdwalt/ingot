@@ -11,6 +11,9 @@ compatibility, while minor releases may break it. See the
 
 ### Added
 
+- Raylib-parity additions to `ingot:gfx`: `DrawRectanglePro` (rotated filled
+  rectangle with origin pivot), `DrawFPS` (default-font FPS overlay), and the
+  `PI`, `RAD2DEG`, `DEG2RAD` constants.
 - Allocation-free native `screen_to_world_ray`, `intersect_plane`,
   `intersect_sphere`, and `intersect_bounds` queries with normalized rays and
   ROS-world hit positions, normals, and distances.
