@@ -1,0 +1,372 @@
+package main
+
+import "core:fmt"
+import "core:math"
+import "core:math/linalg"
+import rl "ingot:gfx"
+import b3 "vendor:box3d"
+
+BOX_MAX :: 64
+BOX_COUNT :: 36
+FIXED_DT :: f32(1.0 / 60.0)
+PHYSICS_SUBSTEPS :: 4
+MAX_STEPS_PER_FRAME :: 8
+MAX_FRAME_DT :: f32(0.25)
+SCREEN_WIDTH :: 1280
+SCREEN_HEIGHT :: 720
+
+BOX_COLORS := [6]rl.Color {
+	{92, 176, 255, 255},
+	{255, 151, 92, 255},
+	{132, 218, 146, 255},
+	{223, 126, 214, 255},
+	{247, 213, 105, 255},
+	{133, 134, 235, 255},
+}
+
+Box :: struct {
+	body:         b3.BodyId,
+	half_extents: [3]f32,
+	transform:    rl.Matrix,
+}
+
+State :: struct {
+	world:          b3.WorldId,
+	floor:          b3.BodyId,
+	boxes:          [BOX_MAX]Box,
+	box_count:      u32,
+	accumulator:    f32,
+	fixed_steps:    u32,
+	dropped_steps:  u64,
+	paused:         bool,
+	step_once:      bool,
+	ready:          bool,
+	target:         rl.Gpu_3D_Target,
+	cube:           rl.Gpu_Mesh,
+	camera:         rl.Camera3D,
+	orbit_angle:    f32,
+	orbit_radius:   f32,
+	graphics_ready: bool,
+}
+
+state: State
+
+main :: proc() {
+	rl.SetConfigFlags({.VSYNC_HINT})
+	rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ingot + box3d stack")
+	if !graphics_create(&state) || !physics_create(&state) {
+		shutdown(&state)
+		return
+	}
+	rl.run(frame)
+	shutdown(&state)
+}
+
+graphics_create :: proc(value: ^State) -> bool {
+	assert(value != nil, "graphics_create: nil state")
+	assert(!value.graphics_ready, "graphics_create: graphics already ready")
+	value.camera = {
+		position   = {-14, -14, 10},
+		target     = {0, 0, 3},
+		up         = rl.CAMERA_WORLD_UP,
+		fovy       = 50,
+		projection = .PERSPECTIVE,
+	}
+	value.orbit_angle = -2.35
+	value.orbit_radius = 20
+	target_ok, cube_ok: bool
+	value.target, target_ok = rl.create_gpu_3d_target(SCREEN_WIDTH, SCREEN_HEIGHT)
+	value.cube, cube_ok = cube_mesh_create()
+	value.graphics_ready = target_ok && cube_ok
+	return value.graphics_ready
+}
+
+cube_mesh_create :: proc() -> (rl.Gpu_Mesh, bool) {
+	vertices := [?]rl.Gpu_3D_Vertex {
+		{position = {0.5, -0.5, -0.5}, normal = {1, 0, 0}},
+		{position = {0.5, 0.5, -0.5}, normal = {1, 0, 0}},
+		{position = {0.5, 0.5, 0.5}, normal = {1, 0, 0}},
+		{position = {0.5, -0.5, 0.5}, normal = {1, 0, 0}},
+		{position = {-0.5, 0.5, -0.5}, normal = {-1, 0, 0}},
+		{position = {-0.5, -0.5, -0.5}, normal = {-1, 0, 0}},
+		{position = {-0.5, -0.5, 0.5}, normal = {-1, 0, 0}},
+		{position = {-0.5, 0.5, 0.5}, normal = {-1, 0, 0}},
+		{position = {-0.5, 0.5, -0.5}, normal = {0, 1, 0}},
+		{position = {0.5, 0.5, -0.5}, normal = {0, 1, 0}},
+		{position = {0.5, 0.5, 0.5}, normal = {0, 1, 0}},
+		{position = {-0.5, 0.5, 0.5}, normal = {0, 1, 0}},
+		{position = {0.5, -0.5, -0.5}, normal = {0, -1, 0}},
+		{position = {-0.5, -0.5, -0.5}, normal = {0, -1, 0}},
+		{position = {-0.5, -0.5, 0.5}, normal = {0, -1, 0}},
+		{position = {0.5, -0.5, 0.5}, normal = {0, -1, 0}},
+		{position = {-0.5, -0.5, 0.5}, normal = {0, 0, 1}},
+		{position = {0.5, -0.5, 0.5}, normal = {0, 0, 1}},
+		{position = {0.5, 0.5, 0.5}, normal = {0, 0, 1}},
+		{position = {-0.5, 0.5, 0.5}, normal = {0, 0, 1}},
+		{position = {-0.5, 0.5, -0.5}, normal = {0, 0, -1}},
+		{position = {0.5, 0.5, -0.5}, normal = {0, 0, -1}},
+		{position = {0.5, -0.5, -0.5}, normal = {0, 0, -1}},
+		{position = {-0.5, -0.5, -0.5}, normal = {0, 0, -1}},
+	}
+	indices := [?]u32 {
+		0,
+		1,
+		2,
+		0,
+		2,
+		3,
+		4,
+		5,
+		6,
+		4,
+		6,
+		7,
+		8,
+		9,
+		10,
+		8,
+		10,
+		11,
+		12,
+		13,
+		14,
+		12,
+		14,
+		15,
+		16,
+		17,
+		18,
+		16,
+		18,
+		19,
+		20,
+		21,
+		22,
+		20,
+		22,
+		23,
+	}
+	return rl.create_gpu_mesh(vertices[:], indices[:])
+}
+
+physics_create :: proc(value: ^State) -> bool {
+	assert(value != nil, "physics_create: nil state")
+	assert(BOX_COUNT <= BOX_MAX, "physics_create: box capacity too small")
+	world_def := b3.DefaultWorldDef()
+	world_def.gravity = {0, 0, -9.81}
+	value.world = b3.CreateWorld(world_def)
+	if !b3.World_IsValid(value.world) do return false
+	if !floor_create(value) {
+		physics_destroy(value)
+		return false
+	}
+	for index in 0 ..< BOX_COUNT {
+		if !box_create(value, index) {
+			physics_destroy(value)
+			return false
+		}
+	}
+	value.ready = true
+	box_transforms_sync(value)
+	assert(value.box_count == BOX_COUNT, "physics_create: incomplete stack")
+	return true
+}
+
+floor_create :: proc(value: ^State) -> bool {
+	assert(value != nil, "floor_create: nil state")
+	assert(b3.World_IsValid(value.world), "floor_create: invalid world")
+	body_def := b3.DefaultBodyDef()
+	body_def.type = .staticBody
+	body_def.position = {0, 0, -0.5}
+	value.floor = b3.CreateBody(value.world, body_def)
+	if !b3.Body_IsValid(value.floor) do return false
+	shape_def := b3.DefaultShapeDef()
+	hull := b3.MakeBoxHull(10, 10, 0.5)
+	shape := b3.CreateHullShape(value.floor, shape_def, &hull.base)
+	return b3.Shape_IsValid(shape)
+}
+
+box_create :: proc(value: ^State, index: int) -> bool {
+	assert(value != nil, "box_create: nil state")
+	assert(index >= 0 && index < BOX_COUNT, "box_create: index out of range")
+	row := index / 6
+	column := index % 6
+	half_extents := [3]f32 {
+		0.42 + f32(index % 3) * 0.06,
+		0.42 + f32((index + 1) % 3) * 0.05,
+		0.42 + f32((index + 2) % 3) * 0.04,
+	}
+	body_def := b3.DefaultBodyDef()
+	body_def.type = .dynamicBody
+	body_def.position = {
+		(f32(column) - 2.5) * 1.15,
+		(f32(row % 2) - 0.5) * 0.35,
+		1.2 + f32(row) * 1.08,
+	}
+	angle := f32((index * 17) % 11 - 5) * 0.025
+	body_def.rotation = b3.MakeQuatFromAxisAngle({0, 0, 1}, angle)
+	body := b3.CreateBody(value.world, body_def)
+	if !b3.Body_IsValid(body) do return false
+	shape_def := b3.DefaultShapeDef()
+	shape_def.density = 1
+	hull := b3.MakeBoxHull(half_extents.x, half_extents.y, half_extents.z)
+	shape := b3.CreateHullShape(body, shape_def, &hull.base)
+	if !b3.Shape_IsValid(shape) {
+		b3.DestroyBody(body)
+		return false
+	}
+	value.boxes[index] = {
+		body         = body,
+		half_extents = half_extents,
+	}
+	value.box_count += 1
+	return true
+}
+
+physics_update :: proc(value: ^State, frame_dt: f32) {
+	assert(value != nil, "physics_update: nil state")
+	assert(value.box_count <= BOX_MAX, "physics_update: box count overflow")
+	value.fixed_steps = 0
+	if !value.ready do return
+	if value.paused && !value.step_once do return
+	if value.step_once {
+		b3.World_Step(value.world, FIXED_DT, PHYSICS_SUBSTEPS)
+		value.fixed_steps = 1
+		value.step_once = false
+		box_transforms_sync(value)
+		return
+	}
+	value.accumulator += clamp(frame_dt, 0, MAX_FRAME_DT)
+	for _ in 0 ..< MAX_STEPS_PER_FRAME {
+		if value.accumulator < FIXED_DT do break
+		b3.World_Step(value.world, FIXED_DT, PHYSICS_SUBSTEPS)
+		value.accumulator -= FIXED_DT
+		value.fixed_steps += 1
+	}
+	if value.accumulator >= FIXED_DT {
+		dropped := u64(value.accumulator / FIXED_DT)
+		value.accumulator -= f32(dropped) * FIXED_DT
+		value.dropped_steps += dropped
+	}
+	box_transforms_sync(value)
+}
+
+box_transforms_sync :: proc(value: ^State) {
+	assert(value != nil, "box_transforms_sync: nil state")
+	assert(value.box_count <= BOX_MAX, "box_transforms_sync: box count overflow")
+	for &box in value.boxes[:value.box_count] {
+		if !b3.Body_IsValid(box.body) do continue
+		transform := b3.Body_GetTransform(box.body)
+		box.transform = linalg.matrix4_from_trs_f32(transform.p, transform.q, box.half_extents * 2)
+	}
+}
+
+physics_input :: proc(value: ^State) {
+	assert(value != nil, "physics_input: nil state")
+	assert(value.box_count <= BOX_MAX, "physics_input: box count overflow")
+	if rl.IsKeyPressed(.SPACE) do value.paused = !value.paused
+	if rl.IsKeyPressed(.N) && value.paused do value.step_once = true
+	if rl.IsKeyPressed(.R) {
+		paused := value.paused
+		physics_destroy(value)
+		_ = physics_create(value)
+		value.paused = paused
+	}
+}
+
+camera_update :: proc(value: ^State, frame_dt: f32) {
+	assert(value != nil, "camera_update: nil state")
+	assert(value.orbit_radius > 0, "camera_update: invalid radius")
+	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) do value.orbit_angle += frame_dt
+	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) do value.orbit_angle -= frame_dt
+	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) do value.orbit_radius -= 10 * frame_dt
+	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) do value.orbit_radius += 10 * frame_dt
+	value.orbit_radius = clamp(value.orbit_radius - rl.GetMouseWheelMove(), 10, 32)
+	value.camera.target = {0, 0, 3}
+	value.camera.position = {
+		math.cos(value.orbit_angle) * value.orbit_radius,
+		math.sin(value.orbit_angle) * value.orbit_radius,
+		7 + value.orbit_radius * 0.2,
+	}
+}
+
+frame :: proc() {
+	frame_dt := clamp(rl.GetFrameTime(), 0, MAX_FRAME_DT)
+	physics_input(&state)
+	camera_update(&state, frame_dt)
+	physics_update(&state, frame_dt)
+	draw_world(&state)
+	draw_screen(&state)
+}
+
+draw_world :: proc(value: ^State) {
+	assert(value != nil, "draw_world: nil state")
+	assert(value.box_count <= BOX_MAX, "draw_world: box count overflow")
+	pass, ok := rl.begin_gpu_3d(&value.target, value.camera)
+	if !ok do return
+	rl.set_gpu_3d_light(&pass, {{-0.4, 0.5, 0.8}, 0.3, 0.7})
+	floor_transform := rl.MatrixTranslate(0, 0, -0.5) * rl.MatrixScale(20, 20, 1)
+	rl.draw_gpu_mesh(&pass, value.cube, floor_transform, {color = {64, 72, 82, 255}})
+	for box, index in value.boxes[:value.box_count] {
+		color := BOX_COLORS[index % len(BOX_COLORS)]
+		rl.draw_gpu_mesh(&pass, value.cube, box.transform, {color = color})
+	}
+	rl.end_gpu_3d(&pass)
+}
+
+draw_screen :: proc(value: ^State) {
+	assert(value != nil, "draw_screen: nil state")
+	assert(value.box_count <= BOX_MAX, "draw_screen: box count overflow")
+	rl.BeginDrawing()
+	rl.ClearBackground({15, 20, 28, 255})
+	rl.DrawTexturePro(
+		value.target.texture.texture,
+		{0, 0, SCREEN_WIDTH, SCREEN_HEIGHT},
+		{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())},
+		{},
+		0,
+		rl.WHITE,
+	)
+	status := "paused" if value.paused else "running"
+	hud := fmt.ctprintf(
+		"box3d %s  bodies %d  steps %d  dropped %d",
+		status,
+		value.box_count,
+		value.fixed_steps,
+		value.dropped_steps,
+	)
+	rl.DrawText(hud, 18, 18, 22, rl.RAYWHITE)
+	rl.DrawText(
+		"R reset  Space pause  N single-step  A/D orbit  W/S or wheel zoom",
+		18,
+		50,
+		18,
+		rl.LIGHTGRAY,
+	)
+	rl.EndDrawing()
+}
+
+physics_destroy :: proc(value: ^State) {
+	assert(value != nil, "physics_destroy: nil state")
+	assert(value.box_count <= BOX_MAX, "physics_destroy: box count overflow")
+	if b3.World_IsValid(value.world) do b3.DestroyWorld(value.world)
+	value.world = {}
+	value.floor = {}
+	value.boxes = {}
+	value.box_count = 0
+	value.accumulator = 0
+	value.fixed_steps = 0
+	value.step_once = false
+	value.ready = false
+	assert(value.box_count == 0, "physics_destroy: state not cleared")
+}
+
+shutdown :: proc(value: ^State) {
+	assert(value != nil, "shutdown: nil state")
+	assert(value.box_count <= BOX_MAX, "shutdown: box count overflow")
+	physics_destroy(value)
+	if value.cube.id != 0 do rl.destroy_gpu_mesh(&value.cube)
+	if value.target.texture.texture.id != 0 do rl.destroy_gpu_3d_target(&value.target)
+	value.graphics_ready = false
+	rl.CloseWindow()
+}
