@@ -189,9 +189,13 @@ combobox_popup :: proc(
 	count := max(len(visible), 1)
 	menu_h := i32(count) * row_h + metrics.MENU_PAD * 2
 	menu_w := rect.w
-	mx := clamp(rect.x, 0, max(screen_w - menu_w, 0))
-	my := rect.y + rect.h + 2
-	if my + menu_h > screen_h do my = max(rect.y - menu_h - 2, 0)
+	origin := frame_pane_origin(frame)
+	ox, oy := i32(origin.x), i32(origin.y)
+	box_screen := frame_to_screen(frame, {f32(rect.x), f32(rect.y)})
+	sx := clamp(i32(box_screen.x), 0, max(screen_w - menu_w, 0))
+	sy := i32(box_screen.y) + rect.h + 2
+	if sy + menu_h > screen_h do sy = max(i32(box_screen.y) - menu_h - 2, 0)
+	mx, my := sx - ox, sy - oy
 
 	mouse := get_mouse_position(frame)
 	mouse = frame_to_local(frame, mouse)
@@ -206,9 +210,7 @@ combobox_popup :: proc(
 	}
 	st.just_opened = false
 
-	origin := frame_pane_origin(frame)
-	ox := i32(origin.x)
-	screen_rect := Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
+	screen_rect := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
 	overlay_begin(frame, screen_rect, claim_input = true)
 	overlay_rect(frame, screen_rect, style.bg_popup)
 	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
@@ -216,8 +218,8 @@ combobox_popup :: proc(
 		overlay_text(
 			frame,
 			"No matches",
-			mx + ox + metrics.PADDING,
-			my + metrics.MENU_PAD + (row_h - metrics.FONT_SIZE_BODY) / 2,
+			sx + metrics.PADDING,
+			sy + metrics.MENU_PAD + (row_h - metrics.FONT_SIZE_BODY) / 2,
 			metrics.FONT_SIZE_BODY,
 			style.fg_secondary,
 		)
@@ -231,7 +233,7 @@ combobox_popup :: proc(
 		if st.hover == row {
 			overlay_rect(
 				frame,
-				{f32(mx + ox), f32(item_y), f32(menu_w), f32(row_h)},
+				{f32(sx), f32(item_y + oy), f32(menu_w), f32(row_h)},
 				style.bg_active,
 			)
 		}
@@ -245,14 +247,14 @@ combobox_popup :: proc(
 		overlay_text(
 			frame,
 			label,
-			mx + ox + metrics.PADDING,
-			item_y + (row_h - metrics.FONT_SIZE_BODY) / 2,
+			sx + metrics.PADDING,
+			item_y + oy + (row_h - metrics.FONT_SIZE_BODY) / 2,
 			metrics.FONT_SIZE_BODY,
 			style.fg_primary,
 		)
 		sem: Sem_State
 		if item.id == selected^ do sem += {.Selected}
-		semantic_push(frame, .Option, {mx + ox, item_y, menu_w, row_h}, item.label, sem)
+		semantic_push(frame, .Option, {sx, item_y + oy, menu_w, row_h}, item.label, sem)
 		if hovered && is_mouse_button_pressed(frame, .LEFT) {
 			changed = selected^ != item.id
 			selected^ = item.id

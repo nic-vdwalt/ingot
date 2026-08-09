@@ -58,6 +58,22 @@ test_slot_next_column_and_row :: proc(t: ^testing.T) {
 }
 
 @(test)
+frame_rect_to_screen_tracks_nested_pane_origins :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	frame: Ui_Frame
+	facade_frame(&runtime, &frame)
+	defer facade_frame_end(&runtime, &frame)
+	rect := Rectangle{1, 2, 30, 40}
+	testing.expect_value(t, frame_rect_to_screen(&frame, rect), rect)
+	ui_frame_pane_push(&frame, {10, 20})
+	testing.expect_value(t, frame_rect_to_screen(&frame, rect), Rectangle{11, 22, 30, 40})
+	ui_frame_pane_push(&frame, {-4, -8})
+	testing.expect_value(t, frame_rect_to_screen(&frame, rect), Rectangle{7, 14, 30, 40})
+	ui_frame_pane_pop(&frame)
+	ui_frame_pane_pop(&frame)
+}
+
+@(test)
 layout_weighted_division_matches_declared_shares :: proc(t: ^testing.T) {
 	// Weighted division has no facade entry point: flex tracks supersede it.
 	// The physical tier keeps it for callers driving a Layout directly.

@@ -285,6 +285,11 @@ frame_to_screen :: proc(frame: ^Ui_Frame, point: Vector2) -> Vector2 {
 	return {point.x + origin.x, point.y + origin.y}
 }
 
+frame_rect_to_screen :: proc(frame: ^Ui_Frame, rect: Rectangle) -> Rectangle {
+	origin := frame_pane_origin(frame)
+	return {rect.x + origin.x, rect.y + origin.y, rect.width, rect.height}
+}
+
 Ui :: struct {
 	frame:       ^Ui_Frame,
 	layout:      Layout,
