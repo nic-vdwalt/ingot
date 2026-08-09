@@ -25,6 +25,101 @@ slider_keyboard_delta_prefers_step :: proc(t: ^testing.T) {
 	testing.expect_value(t, slider_keyboard_delta(0, 100, 0), f32(1))
 }
 
+@(private = "file")
+slider_test_input :: proc(
+	mouse: Vec2,
+	pressed := false,
+	released := false,
+	down := false,
+) -> Ui_Input {
+	input: Ui_Input
+	input.mouse_position = mouse
+	index := input_mouse_index(.LEFT)
+	assert(index >= 0, "slider_test_input: invalid mouse button")
+	input.mouse_pressed[index] = pressed
+	input.mouse_released[index] = released
+	input.mouse_down[index] = down
+	return input
+}
+
+@(test)
+slider_pointer_mapping_uses_pane_local_coordinates :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+	frame.output = output
+	rect := Rect_I32{20, 10, 200, 24}
+	origin := Vector2{100, 50}
+	knob_r := runtime.metrics.SLIDER_KNOB_R
+	track_x := origin.x + f32(rect.x) + knob_r
+	track_w := f32(rect.w) - knob_r * 2
+	x_positions := [3]f32{track_x, track_x + track_w / 2, track_x + track_w}
+	want_values := [3]f32{0, 5, 10}
+
+	for index in 0 ..< len(x_positions) {
+		value: f32 = -1
+		mouse := Vector2{x_positions[index], origin.y + f32(rect.y) + 1}
+		input := slider_test_input(mouse, pressed = true, down = true)
+		ui_frame_begin(&frame, &runtime, &input)
+		ui_frame_pane_push(&frame, origin)
+		changed := slider_at(&frame, rect, &value, 0, 10)
+		ui_frame_pane_pop(&frame)
+		ui_frame_end(&frame)
+		testing.expect(t, changed, "translated slider press did not change value")
+		testing.expect_value(t, value, want_values[index])
+	}
+}
+
+@(test)
+slider_state_drag_uses_pane_local_coordinates :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+	frame.output = output
+	state: Slider_State
+	value: f32 = 0
+	rect := Rect_I32{20, 10, 200, 24}
+	origin := Vector2{100, 50}
+	knob_r := runtime.metrics.SLIDER_KNOB_R
+	track_x := origin.x + f32(rect.x) + knob_r
+	track_w := f32(rect.w) - knob_r * 2
+	mouse_y := origin.y + f32(rect.y) + 1
+
+	input := slider_test_input({track_x, mouse_y}, pressed = true, down = true)
+	ui_frame_begin(&frame, &runtime, &input)
+	ui_frame_pane_push(&frame, origin)
+	_ = slider_at_state(&frame, &state, rect, &value, 0, 10)
+	ui_frame_pane_pop(&frame)
+	ui_frame_end(&frame)
+	testing.expect(t, state.dragging, "translated slider did not begin dragging")
+	testing.expect_value(t, value, f32(0))
+
+	input = slider_test_input({track_x + track_w / 2, mouse_y}, down = true)
+	ui_frame_begin(&frame, &runtime, &input)
+	ui_frame_pane_push(&frame, origin)
+	changed := slider_at_state(&frame, &state, rect, &value, 0, 10)
+	ui_frame_pane_pop(&frame)
+	ui_frame_end(&frame)
+	testing.expect(t, changed, "translated slider drag did not change value")
+	testing.expect_value(t, value, f32(5))
+
+	input = slider_test_input({track_x + track_w, mouse_y}, released = true)
+	ui_frame_begin(&frame, &runtime, &input)
+	ui_frame_pane_push(&frame, origin)
+	_ = slider_at_state(&frame, &state, rect, &value, 0, 10)
+	ui_frame_pane_pop(&frame)
+	ui_frame_end(&frame)
+	testing.expect(t, !state.dragging, "translated slider remained latched after release")
+}
+
 @(test)
 menu_nav_skips_separators_and_disabled :: proc(t: ^testing.T) {
 	items := []Menu_Item {
