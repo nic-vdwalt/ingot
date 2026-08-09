@@ -29,8 +29,8 @@ package main
 import "core:fmt"
 import "ingot:ui"
 
-// Column geometry in logical pixels. Everything horizontal is expressed
-// against these so the page has one measure rather than per-section widths.
+// Column geometry in design units. Everything horizontal is expressed against
+// these so the page has one measure rather than per-section widths.
 LABEL_COL_W :: 118
 CHIP_W :: 96
 SWATCH_W :: CHIP_W * 2
@@ -93,7 +93,7 @@ page_begin :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> Page {
 	return {frame = frame, x = x, y = y, w = w, indent = page_indent(frame), line = line}
 }
 
-// page_advance consumes `height` physical pixels and returns the block.
+// page_advance consumes `height` screen-space pixels and returns the block.
 //
 // The single place the cursor moves, which is what keeps a loose layout from
 // becoming an unbounded one.

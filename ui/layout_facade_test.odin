@@ -40,7 +40,7 @@ layout_named_row_resolves_exact_slots :: proc(t: ^testing.T) {
 }
 
 @(test)
-layout_root_stays_physical_while_children_scale :: proc(t: ^testing.T) {
+layout_root_stays_screen_space_while_children_scale :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)

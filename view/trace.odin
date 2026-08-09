@@ -13,8 +13,8 @@
 // the gap selecting the nearer element is what a user expects anyway.
 //
 // The trace is builder instrumentation, not part of the format. It records
-// physical pixels for one played frame and is stale the moment the document or
-// the window changes, which is why it is caller-owned and re-filled per frame
+// screen-space pixels for one played frame and is stale the moment the document
+// or window changes, which is why it is caller-owned and re-filled per frame
 // like every other immediate-mode output.
 package view
 

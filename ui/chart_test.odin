@@ -25,22 +25,30 @@ chart_tooltip_uses_both_pane_origin_axes :: proc(t: ^testing.T) {
 	)
 	output := new(Ui_Output)
 	defer free(output)
+	input := Ui_Input {
+		mouse_position = {140.5, 140.25},
+	}
 	frame := Ui_Frame {
 		output = output,
 	}
-	ui_frame_begin(&frame, &runtime)
-	defer ui_frame_end(&frame)
-	ui_frame_pane_push(&frame, {40, 70})
+	ui_frame_begin(&frame, &runtime, &input)
+	defer {
+		ui_frame_end(&frame)
+		ui_frame_destroy(&frame)
+	}
+	ui_frame_pane_push(&frame, {40.5, 70.25})
 	defer ui_frame_pane_pop(&frame)
 	values := []f32{5}
 	series := []Chart_Series{{name = "A", values = values}}
-	layout := Chart_Layout {
-		chart = {10, 20, 200, 100},
+	state := Chart_State {
+		enter_anim = 1,
+		hover_idx  = -1,
 	}
-	chart_draw_tooltip(&frame, layout, series, {}, 0, {20, 80})
-	testing.expect(t, output.overlay.count > 0)
-	testing.expect(t, output.overlay.commands[0].rect.x >= 50)
-	testing.expect(t, output.overlay.commands[0].rect.y >= 90)
+	hovered := line_chart_at(&frame, {10, 20, 200, 100}, series, &state)
+	testing.expect_value(t, hovered, 0)
+	testing.expect_value(t, output.overlay.count, 4)
+	testing.expect_value(t, output.overlay.commands[0].rect, Rectangle{154.5, 105.25, 77, 29})
+	testing.expect_value(t, output.overlay.commands[2].rect, Rectangle{160, 113, 8, 8})
 }
 
 @(test)

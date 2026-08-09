@@ -174,7 +174,7 @@ chart_series_color :: proc(frame: ^Ui_Frame, i: int) -> Color {
 
 // --- shared drawing internals ------------------------------------------------
 
-@(private)
+@(private = "file")
 Chart_Layout :: struct {
 	chart:        Rectangle, // full widget bounds
 	plot:         Rectangle, // inner data area
@@ -367,7 +367,7 @@ chart_draw_legend :: proc(frame: ^Ui_Frame, cl: Chart_Layout, series: []Chart_Se
 // Recorded on the overlay layer (passive - no input claim) so the card paints
 // above any widgets drawn after the chart; coords are shifted to screen space
 // because the overlay replays after pane translation is popped.
-@(private)
+@(private = "file")
 chart_draw_tooltip :: proc(
 	frame: ^Ui_Frame,
 	cl: Chart_Layout,
@@ -500,7 +500,7 @@ line_chart_at :: proc(
 
 	chart_draw_axes(frame, cl, opts, xs)
 
-	mouse := get_mouse_position(frame)
+	mouse := frame_to_local(frame, get_mouse_position(frame))
 	hovered := line_hover_index(mouse, cl.plot, cl.n)
 	chart_note_hover(frame, state, hovered)
 
@@ -585,7 +585,7 @@ bar_chart_at :: proc(
 
 	chart_draw_axes(frame, cl, opts, xs)
 
-	mouse := get_mouse_position(frame)
+	mouse := frame_to_local(frame, get_mouse_position(frame))
 	hovered := bar_hover_index(mouse, cl.plot, cl.n)
 	chart_note_hover(frame, state, hovered)
 

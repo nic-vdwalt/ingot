@@ -12,7 +12,7 @@ A procedure's name tells you which category owns geometry and which units it exp
 | **Explicit leaf** | `frame: ^Ui_Frame` | screen-space `Rect_I32` | caller-owned `Focus_Opt` where interactive | `*_at` - `button_at`, `line_chart_at` |
 | **Explicit composition** | `^Ui_Frame` + caller state/config | screen-space named bounds | subsystem-owned | lifecycle/component names - `pane_begin`, `listbox_begin`, `context_menu` |
 | **Paint/measurement** | explicit owner | screen-space or float paint geometry | none | verbs/subsystem prefix - `markdown_draw`, `overlay_*`, `measure_*` |
-| **Explicit layout** | `l: ^Layout` | logical screen pixels | none | layout verbs - `layout_begin`, `push_row`, `next` |
+| **Explicit layout** | `l: ^Layout` | screen-space pixels | none | layout verbs - `layout_begin`, `push_row`, `next` |
 
 Ordinary leaf widgets and simple presentation components have facade forms. Application-owned composition protocols - listbox, pane, modal, context menu, overlay, markdown, `Flow_Layout`, `Fit_Column`, and `Grid` - remain explicit by design.
 
@@ -20,13 +20,13 @@ No procedure that takes a `^Ui` carries a `ui_` prefix. `scripts/check_ui_api_la
 
 ## Units
 
-- Root and explicit `Rect_I32` values are logical screen pixels, not framebuffer pixels.
-- Numeric dimensions and dimension-bearing facade options are logical and scale once. Explicit option structs are scaled screen-space values and are converted by a named facade boundary.
-- Screen rectangles, measured text, and `Ui_Metrics` are already scaled screen-space values.
-- Fixed literals passed to low-level layout or `*_at` APIs use `ui_frame_sc` once.
-- Framebuffer or attachment pixels are a backend domain reached only at explicit conversion boundaries such as scissor setup.
+- **Design units** are unscaled numeric dimensions accepted by facade APIs. They cross `ui_frame_sc` or `ui_frame_scf` exactly once.
+- **Screen-space pixels** are root and explicit `Rect_I32` values, layout output, measured text, `Ui_Metrics`, paint coordinates, and hit-test coordinates. They are already resolved and must not be scaled again.
+- Explicit option structs contain screen-space values; a named facade boundary converts design-unit options before calling the explicit API.
+- Fixed design-unit literals passed to low-level layout or `*_at` APIs use `ui_frame_sc` once.
+- **Framebuffer pixels** are render attachment dimensions reached only at explicit backend conversion boundaries such as scissor setup.
 - These 2D units are separate from the right-handed ROS 3D world basis (+X forward, +Y left, +Z up).
-- `Space` tokens are logical values resolved once by `space_px`.
+- `Space` tokens contain design units resolved once by `space_px`.
 - Flex weights, percentages, animation fractions, and data values are dimensionless.
 
 ## Common composition
@@ -129,7 +129,7 @@ One grid accepts at most `MAX_GRID_ITEMS` cells; chunk or virtualize larger coll
 
 Intrinsic measurement is explicit: pass measured text or component extents to `fit`, `flow_next`, or `fit_column_next`. This keeps layout single-pass and avoids recursive measurement.
 
-`Track` is the one sibling-size type, and `fit` / `grow` / `fixed` / `percent` are its one constructor set. The facade tier reads a `Track` as logical and scales it once; the `Layout` tier reads the same struct as device pixels.
+`Track` is the one sibling-size type, and `fit` / `grow` / `fixed` / `percent` are its one constructor set. The facade tier reads a `Track` in design units and scales it once; the `Layout` tier reads the same struct in screen-space pixels.
 
 `Fit_Column` returns content-height bounds for caller-sized rows. Existing panes own scrolling and clipping; overlays use explicit `*_at` geometry. Compose those facilities instead of adding a second scroll or overlay state model to layout.
 

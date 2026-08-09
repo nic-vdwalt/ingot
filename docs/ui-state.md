@@ -80,8 +80,8 @@ exactly how seven mutually incompatible corner radii accumulated.
 Two rules follow from this, and both are enforced rather than advisory:
 
 - **Never pass a raw number where a token exists.** A literal border width is
-  a DPI bug waiting to happen - `border_pixels` is the one place scaling is
-  applied, so a bare `1` is a border that stays one physical pixel while
+  a DPI bug waiting to happen - `border_pixels` is the one place design units
+  become screen-space pixels, so a bare `1` stays one screen-space pixel while
   everything around it doubles.
 - **Never resolve a color by arithmetic.** Lightening a hover or darkening a
   press cannot be right for both a light and a dark palette; add a palette
@@ -232,7 +232,7 @@ the one place the two meet.
 ## Widget entry points
 
 Facade widgets take a `^Ui` and a stable string/u64 key or explicit
-`Widget_Id`. They consume one bounded slot in logical units and register focus
+`Widget_Id`. They consume one bounded slot in design units and register focus
 only when visible:
 
 ```odin

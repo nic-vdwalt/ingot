@@ -24,8 +24,8 @@ ui_frame_style_matches_individual_accessors :: proc(t: ^testing.T) {
 	testing.expect_value(t, style.fg_primary, theme_light().fg_primary)
 }
 
-// Facade geometry tests run at scale 1 so logical and device pixels coincide
-// and the expected rectangles stay readable.
+// Facade geometry tests run at scale 1 so design units and screen-space pixels
+// coincide and the expected rectangles stay readable.
 @(private = "file")
 facade_frame :: proc(runtime: ^Ui_Runtime, frame: ^Ui_Frame) {
 	assert(runtime != nil && frame != nil, "facade_frame: nil argument")
@@ -65,10 +65,20 @@ frame_rect_to_screen_tracks_nested_pane_origins :: proc(t: ^testing.T) {
 	defer facade_frame_end(&runtime, &frame)
 	rect := Rectangle{1, 2, 30, 40}
 	testing.expect_value(t, frame_rect_to_screen(&frame, rect), rect)
-	ui_frame_pane_push(&frame, {10, 20})
-	testing.expect_value(t, frame_rect_to_screen(&frame, rect), Rectangle{11, 22, 30, 40})
-	ui_frame_pane_push(&frame, {-4, -8})
-	testing.expect_value(t, frame_rect_to_screen(&frame, rect), Rectangle{7, 14, 30, 40})
+	testing.expect_value(t, frame_rect_to_local(&frame, rect), rect)
+	ui_frame_pane_push(&frame, {10.5, 20.25})
+	screen := Rectangle{11.5, 22.25, 30, 40}
+	testing.expect_value(t, frame_rect_to_screen(&frame, rect), screen)
+	testing.expect_value(t, frame_rect_to_local(&frame, screen), rect)
+	testing.expect_value(
+		t,
+		frame_to_local(&frame, frame_to_screen(&frame, {3.5, -2.25})),
+		Vector2{3.5, -2.25},
+	)
+	ui_frame_pane_push(&frame, {-4.25, -8.5})
+	screen = Rectangle{7.25, 13.75, 30, 40}
+	testing.expect_value(t, frame_rect_to_screen(&frame, rect), screen)
+	testing.expect_value(t, frame_rect_to_local(&frame, screen), rect)
 	ui_frame_pane_pop(&frame)
 	ui_frame_pane_pop(&frame)
 }

@@ -104,21 +104,27 @@ context_menu_clamps_and_claims_in_screen_space :: proc(t: ^testing.T) {
 		output = output,
 	}
 	ui_frame_begin(&frame, &runtime, &input)
-	defer ui_frame_end(&frame)
-	ui_frame_pane_push(&frame, {180, 120})
+	defer {
+		ui_frame_end(&frame)
+		ui_frame_destroy(&frame)
+	}
+	ui_frame_pane_push(&frame, {180.5, 120.25})
 	defer ui_frame_pane_pop(&frame)
 	state := Context_Menu_State {
 		open        = true,
 		just_opened = true,
+		selected    = 99,
 		anchor_x    = 100,
 		anchor_y    = 100,
 	}
-	items := []Menu_Item{{label = "One"}}
-	_ = context_menu(&frame, &state, items, {0, 0, 300, 200})
-	menu_w := context_menu_width_frame(&frame, items, 300)
+	items := []Menu_Item{{label = "Skip", disabled = true}, {label = "One"}}
+	_ = context_menu(&frame, &state, items, {20, 10, 280, 190})
+	menu_w := context_menu_width_frame(&frame, items, 280)
 	menu_h := context_menu_height_frame(&frame, items)
 	expected := Rectangle{f32(300 - menu_w), f32(200 - menu_h), f32(menu_w), f32(menu_h)}
+	testing.expect_value(t, state.selected, 1)
 	testing.expect_value(t, output.overlay.commands[0].rect, expected)
+	testing.expect_value(t, sem_frame(&frame).nodes[0].rect.y, i32(expected.y) + 4)
 	route_begin_frame(&frame)
 	testing.expect(t, route_occluded(&frame, {expected.x + 1, expected.y + 1}))
 }

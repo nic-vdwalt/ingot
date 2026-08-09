@@ -20,15 +20,15 @@ Caption_Input :: struct {
 	maximized: bool,
 }
 
-// Total width of the three-button block, in physical pixels.
+// Total width of the three-button block, in screen-space pixels.
 caption_buttons_width :: proc(frame: ^Ui_Frame) -> i32 {
 	assert(frame != nil && frame.open, "caption_buttons_width: invalid frame")
 	return 3 * ui_frame_metrics(frame).CAPTION_BTN_W
 }
 
 // draw_caption_buttons renders the three caption buttons flush to the
-// top-right corner and returns their rects (physical client px) so the
-// caller can publish them to the non-client hit-test.
+// top-right corner and returns their screen-space client rects so the caller
+// can publish them to the non-client hit-test.
 draw_caption_buttons :: proc(
 	frame: ^Ui_Frame,
 	screen_w: i32,

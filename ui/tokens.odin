@@ -10,8 +10,8 @@
 //     (theme.odin) while CARD_RADIUS_PX is absolute pixels (scale.odin), so a
 //     button and a card of equal height could not be made to match at any
 //     scale, and five more raw literals had accumulated around them.
-//   - Border widths scaled in some call sites and not others, so at 2x DPI a
-//     dropdown field's border was one physical pixel while its own popup's
+//   - Border widths scaled in some call sites and not others, so at 2x UI scale
+//     a dropdown field's border was one screen-space pixel while its own popup's
 //     was two.
 //   - "Disabled" resolved to fg_muted_dim in buttons and fg_disabled in menus.
 //   - "Pressed" existed only for buttons; rows, tabs and menu items had no
@@ -316,11 +316,11 @@ border_pixels :: proc(frame: ^Ui_Frame, border: Border) -> f32 {
 		logical = 3
 	}
 	thickness := ui_frame_scf(frame, logical)
-	// A border narrower than one physical pixel is not a thin border, it is an
-	// absent one: the rasteriser spreads it across a pixel at a fraction of
-	// its alpha and it reads as nothing. At 0.75 scale this silently erased
-	// the notebook rules, and with them every hairline in the interface.
-	// Scaling *down* has a floor for the same reason scaling up has none.
+	// A border narrower than one screen-space pixel is not a thin border, it is
+	// an absent one: the rasteriser spreads it at a fraction of its alpha and it
+	// reads as nothing. At 0.75 scale this silently erased the notebook rules,
+	// and with them every hairline in the interface. The backend may map this
+	// floor to multiple framebuffer pixels under HiDPI.
 	if thickness < 1 do thickness = 1
 	assert(thickness > 0, "border_pixels: scaled a visible border to nothing")
 	return thickness

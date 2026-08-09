@@ -319,7 +319,7 @@ gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	header_h := ui.ui_frame_metrics(frame).TAB_BAR_HEIGHT
 	// One decision, taken in the parent and passed down (Tiger Style: push
 	// ifs up). Below the breakpoint the sidebar would eat 170 of ~390
-	// logical pixels, so the nav becomes a horizontal strip instead.
+	// design units, so the nav becomes a horizontal strip instead.
 	narrow := nav_uses_strip(frame, sw, sh - header_h)
 	nav_h := draw_nav(frame, header_h, sw, sh, narrow)
 	draw_content(frame, sw, header_h + nav_h, sh, narrow)
@@ -557,7 +557,7 @@ apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
 	if frame != nil do ui.request_redraw(frame)
 }
 
-// MARGIN_INSET is where the vertical margin rule sits, in logical pixels.
+// MARGIN_INSET is where the vertical margin rule sits, in design units.
 // Wide enough for a right-aligned annotation at note size, narrow enough not
 // to steal content width. Dropped entirely on narrow viewports: a 390px phone
 // cannot afford 56 of them.

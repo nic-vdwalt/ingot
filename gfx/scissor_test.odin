@@ -33,8 +33,8 @@ scissor_rect_scales_and_clips_visible_rect :: proc(t: ^testing.T) {
 @(test)
 scissor_rect_flips_y_for_render_targets :: proc(t: ^testing.T) {
 	// Render targets are drawn through a y-flipped projection, so a band 10
-	// logical pixels from the top must clip 10 pixels from the *bottom* of the
-	// attachment. Without this, a short clip such as a text input's inner
+	// screen-space pixels from the top must clip 10 pixels from the *bottom* of
+	// the attachment. Without this, a short clip such as a text input's inner
 	// scissor lands on the opposite edge and hides its own content.
 	x, y, width, height, visible := _scissor_rect(0, 10, 100, 20, 100, 100, 100, 100, true)
 	testing.expect(t, visible)

@@ -111,7 +111,7 @@ facade_widgets_scale_their_slots :: proc(t: ^testing.T) {
 	progress_bar(&u, 0.25, Color{0, 120, 255, 255}, height = 10)
 	after := remaining_rect(&u)
 	end(&u)
-	// A logical height of 10 consumes 20 device pixels at scale 2.
+	// A height of 10 design units consumes 20 screen-space pixels at scale 2.
 	testing.expect_value(t, after.y, i32(20))
 }
 
@@ -135,9 +135,9 @@ facade_widget_options_scale_once :: proc(t: ^testing.T) {
 	after := remaining_rect(&u)
 	end(&u)
 
-	// 30 logical header pixels plus a 24 logical spinner consume 108 physical pixels.
+	// A 30-unit header plus a 24-unit spinner consume 108 screen-space pixels.
 	testing.expect_value(t, after.y, i32(108))
-	// The spinner emits physical dots with radius 4 at scale 2.
+	// The spinner emits screen-space dots with radius 4 at scale 2.
 	found_dot := false
 	for command in output.main.commands[:output.main.count] {
 		if command.kind == .Circle && command.outer_radius == 4 {

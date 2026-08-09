@@ -78,7 +78,7 @@ combobox_popup_clamps_and_records_in_screen_space :: proc(t: ^testing.T) {
 		ui_frame_end(&frame)
 		ui_frame_destroy(&frame)
 	}
-	ui_frame_pane_push(&frame, {180, 120})
+	ui_frame_pane_push(&frame, {180.5, 120.25})
 	defer ui_frame_pane_pop(&frame)
 	state := Combobox_State {
 		open        = true,
@@ -94,6 +94,8 @@ combobox_popup_clamps_and_records_in_screen_space :: proc(t: ^testing.T) {
 		output.overlay.commands[0].rect,
 		Rectangle{200, f32(160 - menu_h - 2), 100, f32(menu_h)},
 	)
+	testing.expect_value(t, output.overlay.commands[3].rect.y, f32(160 - menu_h + 2))
+	testing.expect_value(t, sem_frame(&frame).nodes[1].rect.y, 160 - menu_h + 2)
 	route_begin_frame(&frame)
 	testing.expect(t, route_occluded(&frame, {201, f32(160 - menu_h - 1)}))
 }

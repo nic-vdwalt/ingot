@@ -104,7 +104,7 @@ same reasoning applies to test files: they carry `#+build !js`, as `ui`'s do.
 filled by `view_play_traced` over the same walk `view_play` uses. It exists so
 a builder can hit-test the played frame - click to select, hover to target a
 drop. It is instrumentation, not format: nothing about it is serialized, its
-rects are logical screen pixels valid for exactly one played frame, and a consumer
+rects are screen-space pixels valid for exactly one played frame, and a consumer
 that only plays views never touches it.
 
 ## The document

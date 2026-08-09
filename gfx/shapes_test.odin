@@ -123,15 +123,21 @@ gradient_ex_maps_raylib_corner_order :: proc(t: ^testing.T) {
 gradient_quad_preserves_fractional_geometry :: proc(t: ^testing.T) {
 	r := new_test_renderer()
 	defer free(r)
-	top := [4]f32{1, 0, 0, 1}
-	bottom := [4]f32{0, 0, 1, 1}
-	_emit_gradient_quad(r, {1.25, 2.5, 3.75, 4.5}, top, top, bottom, bottom)
+	top := Color{255, 0, 0, 255}
+	bottom := Color{0, 0, 255, 255}
+	_emit_gradient_v(r, {1.25, 2.5, 3.75, 4.5}, top, bottom)
 	expect_point_near(t, r.verts[0].pos, {1.25, 2.5}, "tl")
 	expect_point_near(t, r.verts[1].pos, {1.25, 7}, "bl")
 	expect_point_near(t, r.verts[2].pos, {5, 2.5}, "tr")
 	expect_point_near(t, r.verts[3].pos, {5, 7}, "br")
-	testing.expect_value(t, r.verts[0].col, top)
-	testing.expect_value(t, r.verts[3].col, bottom)
+	testing.expect_value(t, r.verts[0].col, col_f(top))
+	testing.expect_value(t, r.verts[1].col, col_f(bottom))
+	testing.expect_value(t, r.verts[2].col, col_f(top))
+	testing.expect_value(t, r.verts[3].col, col_f(bottom))
+	testing.expect_value(t, len(r.indices), 6)
+	for expected, index in ([6]u32{0, 1, 2, 2, 1, 3}) {
+		testing.expect_value(t, r.indices[index], expected)
+	}
 }
 
 @(test)

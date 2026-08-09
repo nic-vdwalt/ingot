@@ -14,7 +14,7 @@ package ui
 
 import "core:testing"
 
-// The largest viewport the bounds are sized against, in physical pixels.
+// The largest viewport the bounds are sized against, in screen-space pixels.
 @(private = "file")
 VIEWPORT_4K_W :: f32(3840)
 @(private = "file")

@@ -28,8 +28,8 @@ package ui
 // Substrate bounds.
 //
 // A ruled page draws one line per text baseline. At 4K the viewport is 2160
-// physical pixels tall, and the smallest LINE_HEIGHT the metrics can produce
-// is 11 (22 logical at the 0.5 minimum UI scale), giving 197 rules worst case.
+// screen-space pixels tall, and the smallest LINE_HEIGHT the metrics can produce
+// is 11 (22 design units at the 0.5 minimum UI scale), giving 197 rules worst case.
 // 256 rounds that up for headroom. Beyond it the rules are closer together
 // than the text they are meant to sit behind, so drawing more is not a
 // legibility trade, it is pure cost.
@@ -506,8 +506,8 @@ draw_paper_tooth :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
 	assert(frame != nil, "draw_paper_tooth: nil frame")
 	if rect.width <= 0 || rect.height <= 0 || color.a == 0 do return
 
-	// One fleck per this many square logical pixels. Sparse by design: grain
-	// is felt rather than seen, and anything denser reads as noise or dirt.
+	// One fleck per this many square design units. Sparse by design: grain is
+	// felt rather than seen, and anything denser reads as noise or dirt.
 	FLECK_AREA :: f32(2600)
 	scale := max(ui_frame_scf(frame, 1), 0.001)
 	logical_area := (rect.width / scale) * (rect.height / scale)
