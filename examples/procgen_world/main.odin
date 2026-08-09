@@ -108,12 +108,9 @@ frame :: proc() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{18, 24, 32, 255})
 	if state.ready {
-		rl.DrawTexturePro(
-			state.target.texture.texture,
-			{0, 0, WORLD_WIDTH, WORLD_HEIGHT},
+		rl.draw_gpu_3d_target(
+			&state.target,
 			{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())},
-			{},
-			0,
 			rl.WHITE,
 		)
 		label := fmt.ctprintf(

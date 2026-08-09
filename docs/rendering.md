@@ -131,6 +131,10 @@ GPU depth rendering uses the separate opt-in API in `gfx/gpu3d.odin`:
   mode. An MSAA `.Preserve` pass retains its multisample attachments; rendering
   directly into only the resolved texture between passes cannot be loaded back into
   those attachments.
+- Present a completed target with `draw_gpu_3d_target`, providing caller-owned
+  destination placement and tint. It derives the full positive-height source
+  rectangle from the live target, quietly skips invalid or stale target textures,
+  and must not be called while a GPU 3D pass is active.
 - Begin the pass with `begin_gpu_3d`, selecting color/depth load actions before
   pass creation.
 - Call `begin_gpu_3d_pro` when the caller already owns a view-projection matrix.
@@ -144,10 +148,10 @@ GPU depth rendering uses the separate opt-in API in `gfx/gpu3d.odin`:
   `frustum_intersects_bounds` before submitting meshes.
 - Balance the pass with `end_gpu_3d`.
 
-Explicit GPU 3D passes write their attachment in presentation orientation. Blit a
-`Gpu_3D_Target` with a positive source height. The negative-source-height rule
-applies to targets rendered through `BeginTextureMode`, whose 2D projection is
-intentionally Y-flipped to preserve raylib compatibility.
+Explicit GPU 3D passes write their attachment in presentation orientation.
+`draw_gpu_3d_target` preserves that orientation with a positive source height. The
+negative-source-height rule applies to targets rendered through `BeginTextureMode`,
+whose 2D projection is intentionally Y-flipped to preserve raylib compatibility.
 
 All Ingot 3D APIs use the right-handed ROS world basis: **+X forward, +Y left,
 +Z up** (`+X × +Y = +Z`). Camera vectors, model transforms, mesh positions and

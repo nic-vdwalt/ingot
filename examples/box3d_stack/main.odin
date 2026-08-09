@@ -31,26 +31,26 @@ Box :: struct {
 }
 
 State :: struct {
-	world:          b3.WorldId,
-	floor:          b3.BodyId,
-	boxes:          [BOX_MAX]Box,
-	box_count:      u32,
-	accumulator:    f32,
-	fixed_steps:    u32,
-	dropped_steps:  u64,
-	paused:         bool,
-	step_once:      bool,
-	reset_down:     bool,
-	pause_down:     bool,
-	step_down:      bool,
-	ready:          bool,
-	target:         rl.Gpu_3D_Target,
-	cube:           rl.Gpu_Mesh,
-	cube_edges:     rl.Gpu_Mesh,
-	camera:         rl.Camera3D,
-	orbit_angle:    f32,
-	orbit_radius:   f32,
-	graphics_ready: bool,
+	world:                b3.WorldId,
+	floor:                b3.BodyId,
+	boxes:                [BOX_MAX]Box,
+	box_count:            u32,
+	accumulator:          f32,
+	fixed_steps:          u32,
+	dropped_steps:        u64,
+	paused:               bool,
+	step_once:            bool,
+	ready:                bool,
+	target:               rl.Gpu_3D_Target,
+	resize_failed_width:  i32,
+	resize_failed_height: i32,
+	resize_failures:      u64,
+	cube:                 rl.Gpu_Mesh,
+	cube_edges:           rl.Gpu_Mesh,
+	camera:               rl.Camera3D,
+	orbit_angle:          f32,
+	orbit_radius:         f32,
+	graphics_ready:       bool,
 }
 
 state: State
@@ -97,7 +97,17 @@ graphics_target_resize :: proc(value: ^State) {
 	width := rl.GetRenderWidth()
 	height := rl.GetRenderHeight()
 	if width <= 0 || height <= 0 do return
-	_ = rl.resize_gpu_3d_target(&value.target, width, height)
+	texture := value.target.texture.texture
+	if texture.width == width && texture.height == height do return
+	if value.resize_failed_width == width && value.resize_failed_height == height do return
+	if !rl.resize_gpu_3d_target(&value.target, width, height) {
+		value.resize_failed_width = width
+		value.resize_failed_height = height
+		value.resize_failures += 1
+		return
+	}
+	value.resize_failed_width = 0
+	value.resize_failed_height = 0
 }
 
 physics_create :: proc(value: ^State) -> bool {
@@ -205,20 +215,17 @@ box_transforms_sync :: proc(value: ^State) {
 physics_input :: proc(value: ^State) {
 	assert(value != nil, "physics_input: nil state")
 	assert(value.box_count <= BOX_MAX, "physics_input: box count overflow")
-	reset_down := rl.IsKeyDown(.R)
-	pause_down := rl.IsKeyDown(.SPACE)
-	step_down := rl.IsKeyDown(.N)
-	if pause_down && !value.pause_down do value.paused = !value.paused
-	if step_down && !value.step_down && value.paused do value.step_once = true
-	if reset_down && !value.reset_down {
+	if rl.IsKeyPressed(.SPACE) do value.paused = !value.paused
+	if rl.IsKeyPressed(.N) && value.paused do value.step_once = true
+	if rl.IsKeyPressed(.R) {
 		paused := value.paused
 		physics_destroy(value)
-		_ = physics_create(value)
+		if !physics_create(value) {
+			value.paused = paused
+			return
+		}
 		value.paused = paused
 	}
-	value.reset_down = reset_down
-	value.pause_down = pause_down
-	value.step_down = step_down
 }
 
 camera_update :: proc(value: ^State, frame_dt: f32) {
@@ -273,21 +280,19 @@ draw_screen :: proc(value: ^State) {
 	assert(value.box_count <= BOX_MAX, "draw_screen: box count overflow")
 	rl.BeginDrawing()
 	rl.ClearBackground({15, 20, 28, 255})
-	rl.DrawTexturePro(
-		value.target.texture.texture,
-		{0, 0, f32(value.target.texture.texture.width), f32(value.target.texture.texture.height)},
+	rl.draw_gpu_3d_target(
+		&value.target,
 		{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())},
-		{},
-		0,
 		rl.WHITE,
 	)
-	status := "paused" if value.paused else "running"
+	status := "unavailable" if !value.ready else "paused" if value.paused else "running"
 	hud := fmt.ctprintf(
-		"box3d %s  bodies %d  steps %d  dropped %d",
+		"box3d %s  bodies %d  steps %d  dropped %d  resize failures %d",
 		status,
 		value.box_count,
 		value.fixed_steps,
 		value.dropped_steps,
+		value.resize_failures,
 	)
 	rl.DrawText(hud, 18, 18, 22, rl.RAYWHITE)
 	rl.DrawText(

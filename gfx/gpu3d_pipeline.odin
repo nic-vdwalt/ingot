@@ -433,6 +433,26 @@ resize_gpu_3d_target :: proc(target: ^Gpu_3D_Target, width, height: i32) -> bool
 }
 
 @(private)
+_gpu_3d_target_source_rectangle :: proc(target: ^Gpu_3D_Target) -> (Rectangle, bool) {
+	assert(target != nil, "_gpu_3d_target_source_rectangle: nil target")
+	texture := target.texture.texture
+	if texture.width <= 0 || texture.height <= 0 do return {}, false
+	return {0, 0, f32(texture.width), f32(texture.height)}, true
+}
+
+draw_gpu_3d_target :: proc(target: ^Gpu_3D_Target, destination: Rectangle, tint: Color = WHITE) {
+	assert(target != nil, "draw_gpu_3d_target: nil target")
+	ctx := default_context()
+	assert(
+		ctx.resources.gpu_3d.active_pass_generation == 0,
+		"draw_gpu_3d_target: active GPU 3D pass",
+	)
+	source, ok := _gpu_3d_target_source_rectangle(target)
+	if !ok do return
+	DrawTexturePro(target.texture.texture, source, destination, {}, 0, tint)
+}
+
+@(private)
 _cube_mesh_geometry :: proc(
 	vertices: ^[GPU_3D_CUBE_VERTEX_COUNT]Gpu_3D_Vertex,
 	indices: ^[GPU_3D_CUBE_INDEX_COUNT]u32,

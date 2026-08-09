@@ -14,6 +14,21 @@ import "core:testing"
 import wg "vendor:wgpu"
 
 @(test)
+test_gpu_3d_target_source_rectangle :: proc(t: ^testing.T) {
+	target: Gpu_3D_Target
+	target.texture.texture.width = 384
+	target.texture.texture.height = 240
+	source, ok := _gpu_3d_target_source_rectangle(&target)
+	testing.expect_value(t, ok, true)
+	testing.expect_value(t, source, Rectangle{0, 0, 384, 240})
+
+	target.texture.texture.height = 0
+	invalid, invalid_ok := _gpu_3d_target_source_rectangle(&target)
+	testing.expect_value(t, invalid_ok, false)
+	testing.expect_value(t, invalid, Rectangle{})
+}
+
+@(test)
 test_cube_geometry_contract :: proc(t: ^testing.T) {
 	vertices: [GPU_3D_CUBE_VERTEX_COUNT]Gpu_3D_Vertex
 	indices: [GPU_3D_CUBE_INDEX_COUNT]u32
