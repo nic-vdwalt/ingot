@@ -19,6 +19,9 @@ bash "$ROOT/build_web.sh" examples/gallery >/dev/null
 echo "== wasm compile: examples/breakout =="
 bash "$ROOT/build_web.sh" examples/breakout >/dev/null
 
+echo "== wasm compile: examples/procgen_world =="
+bash "$ROOT/build_web.sh" examples/procgen_world >/dev/null
+
 echo "== wasm compile: examples/raylib_migration_fixture =="
 bash "$ROOT/build_web.sh" examples/raylib_migration_fixture >/dev/null
 

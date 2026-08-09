@@ -15,7 +15,11 @@ import check_odin_style
 # point the same gate at its own source tree; the rules are not ingot-specific,
 # only this default is.
 PACKAGES = (
+    "asset/",
     "gfx/",
+    "procgen/",
+    "scene/",
+    "scene_gfx/",
     "ui/",
     "ui_gfx/",
     "view/",
