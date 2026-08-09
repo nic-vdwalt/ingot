@@ -1057,8 +1057,10 @@ _gpu_3d_draw_indexed :: proc(
 		offsets[:],
 	)
 	wg.RenderPassEncoderSetBindGroup(pass.pass, 1, texture_bind)
-	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, wg.WHOLE_SIZE)
-	wg.RenderPassEncoderSetIndexBuffer(pass.pass, entry.index_buffer, .Uint32, 0, wg.WHOLE_SIZE)
+	vertex_bytes := u64(entry.vertex_count) * size_of(Gpu_3D_Vertex)
+	index_bytes := u64(entry.index_count) * size_of(u32)
+	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, vertex_bytes)
+	wg.RenderPassEncoderSetIndexBuffer(pass.pass, entry.index_buffer, .Uint32, 0, index_bytes)
 	wg.RenderPassEncoderDrawIndexed(pass.pass, entry.index_count, instance_count, 0, 0, 0)
 	_stats_gpu3d_draw(
 		pass.owner,
