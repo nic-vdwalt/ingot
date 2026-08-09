@@ -105,7 +105,16 @@ scissor_rect_right_anchored_clip_reaches_fractional_attachment_edge :: proc(t: ^
 @(test)
 scissor_rect_adjacent_fractional_clips_leave_no_gap :: proc(t: ^testing.T) {
 	left_x, _, left_width, _, left_visible := _scissor_rect(0, 0, 1080, 833, 1440, 833, 2879, 1665)
-	right_x, _, right_width, _, right_visible := _scissor_rect(1080, 0, 360, 833, 1440, 833, 2879, 1665)
+	right_x, _, right_width, _, right_visible := _scissor_rect(
+		1080,
+		0,
+		360,
+		833,
+		1440,
+		833,
+		2879,
+		1665,
+	)
 	testing.expect(t, left_visible && right_visible)
 	testing.expect(t, left_x + left_width >= right_x)
 	testing.expect_value(t, right_x + right_width, u32(2879))

@@ -31,6 +31,9 @@ ITERATIONS_DEFAULT :: 400
 MAX_LIVE_TEXTURES :: 8
 MAX_LIVE_TARGETS :: 4
 MAX_LIVE_GPU_MESHES :: 8
+FONT_CODEPOINT_COUNT :: 95
+
+FONT_DATA := #load("../../assets/fonts/JetBrainsMono-Regular.ttf")
 
 Prng :: fuzzx.Prng
 
@@ -38,8 +41,27 @@ live_textures: [MAX_LIVE_TEXTURES]rl.Texture2D
 live_targets: [MAX_LIVE_TARGETS]rl.RenderTexture2D
 live_gpu_meshes: [MAX_LIVE_GPU_MESHES]rl.Gpu_Mesh
 gpu_target: rl.Gpu_3D_Target
+fuzz_font: rl.Font
 ui_runtime: ui.Ui_Runtime
 ui_frame: ui.Ui_Frame
+
+load_font :: proc(pixel_size: i32) -> rl.Font {
+	assert(pixel_size > 0, "load_font: non-positive pixel size")
+	codepoints: [FONT_CODEPOINT_COUNT]rune
+	for &codepoint, index in codepoints {
+		codepoint = rune(32 + index)
+	}
+	font := rl.LoadFontFromMemory(
+		".ttf",
+		raw_data(FONT_DATA),
+		i32(len(FONT_DATA)),
+		pixel_size,
+		raw_data(codepoints[:]),
+		len(codepoints),
+	)
+	assert(font.glyphCount > 0, "load_font: bundled font failed to load")
+	return font
+}
 
 make_texture :: proc(p: ^Prng) -> rl.Texture2D {
 	w := i32(fuzzx.int_range(p, 1, 65))
@@ -59,8 +81,8 @@ make_texture :: proc(p: ^Prng) -> rl.Texture2D {
 // draw_some records draws referencing current resources so the frame's
 // command buffer actually captures them - the precondition for the bug.
 draw_some :: proc(p: ^Prng) {
-	rl.DrawText("lifecycle fuzz", 10, 10, 16, rl.WHITE)
-	rl.DrawText("0123456789", 10, 40, 13, rl.LIGHTGRAY)
+	rl.DrawTextEx(fuzz_font, "lifecycle fuzz", {10, 10}, 16, 0, rl.WHITE)
+	rl.DrawTextEx(fuzz_font, "0123456789", {10, 40}, 13, 0, rl.LIGHTGRAY)
 	for t in live_textures {
 		if t.id == 0 do continue
 		rl.DrawTexture(
@@ -160,11 +182,10 @@ mutate_resources :: proc(p: ^Prng) {
 			ui.ui_runtime_set_theme(&ui_runtime, ui.theme_high_contrast())
 		}
 	case 9:
-		ui.set_font_dpi_with(
-			ui.ui_runtime_text(&ui_runtime),
-			f32(fuzzx.int_range(p, 100, 301)) / 100.0,
-		)
-		ui.reset_font_atlases_with(ui.ui_runtime_text(&ui_runtime))
+		font_dpi := f32(fuzzx.int_range(p, 100, 301)) / 100.0
+		ui.set_font_dpi_with(ui.ui_runtime_text(&ui_runtime), font_dpi)
+		rl.UnloadFont(fuzz_font)
+		fuzz_font = load_font(max(i32(16 * font_dpi), 1))
 	case 10, 11:
 		// Surface lifecycle: resize mid-frame (swapchain reconfigure),
 		// including repeated same-size calls (must be idempotent).
@@ -194,6 +215,7 @@ main :: proc() {
 
 	rl.InitWindow(480, 320, "gfx frame lifecycle fuzz")
 	rl.SetTargetFPS(0) // uncapped: iterations bound the run, not wall time
+	fuzz_font = load_font(16)
 	ui.ui_runtime_init(&ui_runtime)
 	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
 
@@ -230,6 +252,7 @@ main :: proc() {
 	for rt in live_targets do if rt.id != 0 do rl.UnloadRenderTexture(rt)
 	for &mesh in live_gpu_meshes do if mesh.id != 0 do rl.destroy_gpu_mesh(&mesh)
 	if gpu_target.texture.texture.id != 0 do rl.destroy_gpu_3d_target(&gpu_target)
+	rl.UnloadFont(fuzz_font)
 	ui.ui_frame_destroy(&ui_frame)
 	ui.ui_runtime_destroy(&ui_runtime)
 	rl.CloseWindow()

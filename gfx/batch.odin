@@ -629,11 +629,11 @@ renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 }
 
 @(private)
-renderer_window_projection_refresh :: proc(r: ^Renderer, width, height: i32) {
+renderer_window_projection_refresh :: proc(r: ^Renderer, queue: wg.Queue, width, height: i32) {
 	assert(r != nil, "renderer_window_projection_refresh: nil renderer")
-	assert(g != nil && g.queue != nil, "renderer_window_projection_refresh: invalid context")
+	assert(queue != nil, "renderer_window_projection_refresh: nil queue")
 	projection := _window_projection(width, height)
-	wg.QueueWriteBuffer(g.queue, r.ubuf, 0, &projection, size_of(projection))
+	wg.QueueWriteBuffer(queue, r.ubuf, 0, &projection, size_of(projection))
 }
 
 @(private)
