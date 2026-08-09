@@ -276,7 +276,7 @@ draw_main_fixture :: proc() {
 	)
 	rl.DrawTexturePro(
 		gpu_target.texture.texture,
-		{0, 0, 384, -240},
+		{0, 0, 384, 240},
 		{432, 236, 384, 240},
 		{0, 0},
 		0,
