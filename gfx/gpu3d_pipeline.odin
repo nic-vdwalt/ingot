@@ -71,16 +71,16 @@ Gpu_3D_Load_Action :: enum {
 }
 
 Gpu_3D_Pass :: struct {
-	owner:           ^Context,
-	epoch:           u64,
-	encoder:         wg.CommandEncoder,
-	pass:            wg.RenderPassEncoder,
-	target:          ^Gpu_3D_Target,
-	view_projection: Matrix,
-	light:           Gpu_3D_Light,
-	generation:      u64,
-	active:          bool,
-	owns_stream:     bool,
+	owner:                     ^Context,
+	epoch:                     u64,
+	encoder:                   wg.CommandEncoder,
+	pass:                      wg.RenderPassEncoder,
+	target:                    ^Gpu_3D_Target,
+	view_projection:           Matrix,
+	light:                     Gpu_3D_Light,
+	generation:                u64,
+	active:                    bool,
+	owns_stream:               bool,
 	// Offset of the shared identity instance block uploaded once per pass;
 	// plain draw_gpu_mesh calls reuse it so the instance binding's
 	// minBindingSize cost is paid once per pass, not once per draw.
@@ -510,15 +510,15 @@ begin_gpu_3d :: proc(
 	resources.active_pass_generation = resources.next_pass_generation
 	_stats_render_pass()
 	result := Gpu_3D_Pass {
-		owner       = ctx,
-		epoch       = ctx.epoch,
-		encoder     = encoder,
-		pass        = pass,
-		target      = target,
-		light       = GPU_3D_DEFAULT_LIGHT,
-		generation  = resources.active_pass_generation,
-		active      = true,
-		owns_stream = owns_stream,
+		owner                     = ctx,
+		epoch                     = ctx.epoch,
+		encoder                   = encoder,
+		pass                      = pass,
+		target                    = target,
+		light                     = GPU_3D_DEFAULT_LIGHT,
+		generation                = resources.active_pass_generation,
+		active                    = true,
+		owns_stream               = owns_stream,
 		identity_instances_offset = identity_offset,
 	}
 	_gpu_3d_set_camera(&result, camera)
@@ -631,7 +631,10 @@ draw_gpu_mesh_instanced :: proc(
 _gpu_3d_chunk_count :: proc(transform_count: int) -> int {
 	assert(transform_count >= 0, "_gpu_3d_chunk_count: negative count")
 	count := (transform_count + GPU_3D_MAX_INSTANCES_PER_DRAW - 1) / GPU_3D_MAX_INSTANCES_PER_DRAW
-	assert(count * GPU_3D_MAX_INSTANCES_PER_DRAW >= transform_count, "_gpu_3d_chunk_count: chunks too few")
+	assert(
+		count * GPU_3D_MAX_INSTANCES_PER_DRAW >= transform_count,
+		"_gpu_3d_chunk_count: chunks too few",
+	)
 	return count
 }
 

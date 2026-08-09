@@ -91,9 +91,14 @@ frustum_intersects_bounds :: proc(frustum: Frustum_3D, bounds: Bounds_3D) -> boo
 
 @(private)
 _frustum_matrix_row :: proc(value: Matrix, row: int) -> [4]f32 {
+	assert(_camera_matrix_is_finite(value), "_frustum_matrix_row: non-finite matrix")
 	assert(row >= 0, "_frustum_matrix_row: negative row")
 	assert(row < 4, "_frustum_matrix_row: row out of range")
-	return {value[row, 0], value[row, 1], value[row, 2], value[row, 3]}
+	result := [4]f32{value[row, 0], value[row, 1], value[row, 2], value[row, 3]}
+	for component in result {
+		assert(_f32_is_finite(component), "_frustum_matrix_row: non-finite component")
+	}
+	return result
 }
 
 // _frustum_plane_normalize scales a raw clip-row plane to a unit normal so
