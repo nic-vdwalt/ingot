@@ -164,6 +164,7 @@ and identify the offending source location.
 | `interact` | Real widgets under synthetic input and routing/focus invariants |
 | `input` | Text edits, caret, selection, undo, mentions, wrapping, and spell state |
 | `wsreconn` | Real worker synchronization with a seed-scripted socket transport |
+| `gpu3d` | Headless mesh, camera, frustum, picking, chunking, and handle invariants |
 | `tsan` | WebSocket, HTTP worker-pool, and accessibility-queue concurrency |
 | `gfx-frame` | Windowed GPU resource lifetime under strict WebGPU validation |
 | `all` | Every headless harness plus the TSan phase |
