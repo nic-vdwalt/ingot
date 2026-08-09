@@ -7,22 +7,13 @@ import rl "ingot:gfx"
 import b3 "vendor:box3d"
 
 BOX_MAX :: 64
-BOX_COUNT :: 36
+BOX_COUNT :: 25
 FIXED_DT :: f32(1.0 / 60.0)
 PHYSICS_SUBSTEPS :: 4
 MAX_STEPS_PER_FRAME :: 8
 MAX_FRAME_DT :: f32(0.25)
 SCREEN_WIDTH :: 1280
 SCREEN_HEIGHT :: 720
-
-BOX_COLORS := [6]rl.Color {
-	{92, 176, 255, 255},
-	{255, 151, 92, 255},
-	{132, 218, 146, 255},
-	{223, 126, 214, 255},
-	{247, 213, 105, 255},
-	{133, 134, 235, 255},
-}
 
 Box :: struct {
 	body:         b3.BodyId,
@@ -40,6 +31,9 @@ State :: struct {
 	dropped_steps:  u64,
 	paused:         bool,
 	step_once:      bool,
+	reset_down:     bool,
+	pause_down:     bool,
+	step_down:      bool,
 	ready:          bool,
 	target:         rl.Gpu_3D_Target,
 	cube:           rl.Gpu_Mesh,
@@ -54,6 +48,7 @@ state: State
 main :: proc() {
 	rl.SetConfigFlags({.VSYNC_HINT})
 	rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ingot + box3d stack")
+	rl.SetTargetFPS(60)
 	if !graphics_create(&state) || !physics_create(&state) {
 		shutdown(&state)
 		return
@@ -122,17 +117,17 @@ cube_mesh_create :: proc() -> (rl.Gpu_Mesh, bool) {
 		6,
 		7,
 		8,
+		10,
 		9,
-		10,
 		8,
-		10,
 		11,
+		10,
 		12,
+		14,
 		13,
-		14,
 		12,
-		14,
 		15,
+		14,
 		16,
 		17,
 		18,
@@ -153,7 +148,7 @@ physics_create :: proc(value: ^State) -> bool {
 	assert(value != nil, "physics_create: nil state")
 	assert(BOX_COUNT <= BOX_MAX, "physics_create: box capacity too small")
 	world_def := b3.DefaultWorldDef()
-	world_def.gravity = {0, 0, -9.81}
+	world_def.gravity = {0, 0, -10}
 	value.world = b3.CreateWorld(world_def)
 	if !b3.World_IsValid(value.world) do return false
 	if !floor_create(value) {
@@ -177,11 +172,11 @@ floor_create :: proc(value: ^State) -> bool {
 	assert(b3.World_IsValid(value.world), "floor_create: invalid world")
 	body_def := b3.DefaultBodyDef()
 	body_def.type = .staticBody
-	body_def.position = {0, 0, -0.5}
+	body_def.position = {0, 0, -10}
 	value.floor = b3.CreateBody(value.world, body_def)
 	if !b3.Body_IsValid(value.floor) do return false
 	shape_def := b3.DefaultShapeDef()
-	hull := b3.MakeBoxHull(10, 10, 0.5)
+	hull := b3.MakeBoxHull(50, 50, 10)
 	shape := b3.CreateHullShape(value.floor, shape_def, &hull.base)
 	return b3.Shape_IsValid(shape)
 }
@@ -189,27 +184,17 @@ floor_create :: proc(value: ^State) -> bool {
 box_create :: proc(value: ^State, index: int) -> bool {
 	assert(value != nil, "box_create: nil state")
 	assert(index >= 0 && index < BOX_COUNT, "box_create: index out of range")
-	row := index / 6
-	column := index % 6
-	half_extents := [3]f32 {
-		0.42 + f32(index % 3) * 0.06,
-		0.42 + f32((index + 1) % 3) * 0.05,
-		0.42 + f32((index + 2) % 3) * 0.04,
-	}
+	half_extents := [3]f32{1, 1, 1}
 	body_def := b3.DefaultBodyDef()
 	body_def.type = .dynamicBody
-	body_def.position = {
-		(f32(column) - 2.5) * 1.15,
-		(f32(row % 2) - 0.5) * 0.35,
-		1.2 + f32(row) * 1.08,
-	}
-	angle := f32((index * 17) % 11 - 5) * 0.025
-	body_def.rotation = b3.MakeQuatFromAxisAngle({0, 0, 1}, angle)
+	offset := f32(0.05) if index % 2 == 0 else f32(-0.05)
+	body_def.position = {offset, 0, 2 + f32(index) * 2.5}
 	body := b3.CreateBody(value.world, body_def)
 	if !b3.Body_IsValid(body) do return false
 	shape_def := b3.DefaultShapeDef()
 	shape_def.density = 1
-	hull := b3.MakeBoxHull(half_extents.x, half_extents.y, half_extents.z)
+	shape_def.baseMaterial.friction = 0.3
+	hull := b3.MakeCubeHull(1)
 	shape := b3.CreateHullShape(body, shape_def, &hull.base)
 	if !b3.Shape_IsValid(shape) {
 		b3.DestroyBody(body)
@@ -264,14 +249,20 @@ box_transforms_sync :: proc(value: ^State) {
 physics_input :: proc(value: ^State) {
 	assert(value != nil, "physics_input: nil state")
 	assert(value.box_count <= BOX_MAX, "physics_input: box count overflow")
-	if rl.IsKeyPressed(.SPACE) do value.paused = !value.paused
-	if rl.IsKeyPressed(.N) && value.paused do value.step_once = true
-	if rl.IsKeyPressed(.R) {
+	reset_down := rl.IsKeyDown(.R)
+	pause_down := rl.IsKeyDown(.SPACE)
+	step_down := rl.IsKeyDown(.N)
+	if pause_down && !value.pause_down do value.paused = !value.paused
+	if step_down && !value.step_down && value.paused do value.step_once = true
+	if reset_down && !value.reset_down {
 		paused := value.paused
 		physics_destroy(value)
 		_ = physics_create(value)
 		value.paused = paused
 	}
+	value.reset_down = reset_down
+	value.pause_down = pause_down
+	value.step_down = step_down
 }
 
 camera_update :: proc(value: ^State, frame_dt: f32) {
@@ -305,11 +296,10 @@ draw_world :: proc(value: ^State) {
 	pass, ok := rl.begin_gpu_3d(&value.target, value.camera)
 	if !ok do return
 	rl.set_gpu_3d_light(&pass, {{-0.4, 0.5, 0.8}, 0.3, 0.7})
-	floor_transform := rl.MatrixTranslate(0, 0, -0.5) * rl.MatrixScale(20, 20, 1)
-	rl.draw_gpu_mesh(&pass, value.cube, floor_transform, {color = {64, 72, 82, 255}})
-	for box, index in value.boxes[:value.box_count] {
-		color := BOX_COLORS[index % len(BOX_COLORS)]
-		rl.draw_gpu_mesh(&pass, value.cube, box.transform, {color = color})
+	floor_transform := rl.MatrixTranslate(0, 0, -2) * rl.MatrixScale(100, 100, 4)
+	rl.draw_gpu_mesh(&pass, value.cube, floor_transform, {color = rl.LIGHTGRAY})
+	for box in value.boxes[:value.box_count] {
+		rl.draw_gpu_mesh(&pass, value.cube, box.transform, {color = rl.BLUE})
 	}
 	rl.end_gpu_3d(&pass)
 }

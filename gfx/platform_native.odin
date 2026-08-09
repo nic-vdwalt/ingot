@@ -311,6 +311,7 @@ platform_input_init :: proc() {
 	glfw.SetWindowRefreshCallback(_win(), _refresh_cb)
 	glfw.SetWindowFocusCallback(_win(), _focus_cb)
 	glfw.SetWindowIconifyCallback(_win(), _iconify_cb)
+	glfw.SetWindowSizeCallback(_win(), _window_size_cb)
 	glfw.SetFramebufferSizeCallback(_win(), _fb_size_cb)
 
 	if g_cursors[MouseCursor.DEFAULT] == nil {
@@ -592,6 +593,14 @@ _iconify_cb :: proc "c" (win: glfw.WindowHandle, iconified: i32) {
 	ctx := _callback_context(win)
 	if ctx == nil do return
 	if iconified == 0 do ctx.force_reconfigure = true
+	_idle_note_activity(&ctx.idle)
+}
+
+@(private)
+_window_size_cb :: proc "c" (win: glfw.WindowHandle, width, height: i32) {
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	ctx.force_reconfigure = true
 	_idle_note_activity(&ctx.idle)
 }
 
