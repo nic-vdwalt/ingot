@@ -85,93 +85,10 @@ graphics_create :: proc(value: ^State) -> bool {
 		rl.GetRenderHeight(),
 		.MSAA_4X,
 	)
-	value.cube, cube_ok = cube_mesh_create()
-	value.cube_edges, edges_ok = cube_edge_mesh_create()
+	value.cube, cube_ok = rl.create_cube_mesh()
+	value.cube_edges, edges_ok = rl.create_cube_edge_mesh()
 	value.graphics_ready = target_ok && cube_ok && edges_ok
 	return value.graphics_ready
-}
-
-cube_mesh_create :: proc() -> (rl.Gpu_Mesh, bool) {
-	vertices := [?]rl.Gpu_3D_Vertex {
-		{position = {0.5, -0.5, -0.5}, normal = {1, 0, 0}},
-		{position = {0.5, 0.5, -0.5}, normal = {1, 0, 0}},
-		{position = {0.5, 0.5, 0.5}, normal = {1, 0, 0}},
-		{position = {0.5, -0.5, 0.5}, normal = {1, 0, 0}},
-		{position = {-0.5, 0.5, -0.5}, normal = {-1, 0, 0}},
-		{position = {-0.5, -0.5, -0.5}, normal = {-1, 0, 0}},
-		{position = {-0.5, -0.5, 0.5}, normal = {-1, 0, 0}},
-		{position = {-0.5, 0.5, 0.5}, normal = {-1, 0, 0}},
-		{position = {-0.5, 0.5, -0.5}, normal = {0, 1, 0}},
-		{position = {0.5, 0.5, -0.5}, normal = {0, 1, 0}},
-		{position = {0.5, 0.5, 0.5}, normal = {0, 1, 0}},
-		{position = {-0.5, 0.5, 0.5}, normal = {0, 1, 0}},
-		{position = {0.5, -0.5, -0.5}, normal = {0, -1, 0}},
-		{position = {-0.5, -0.5, -0.5}, normal = {0, -1, 0}},
-		{position = {-0.5, -0.5, 0.5}, normal = {0, -1, 0}},
-		{position = {0.5, -0.5, 0.5}, normal = {0, -1, 0}},
-		{position = {-0.5, -0.5, 0.5}, normal = {0, 0, 1}},
-		{position = {0.5, -0.5, 0.5}, normal = {0, 0, 1}},
-		{position = {0.5, 0.5, 0.5}, normal = {0, 0, 1}},
-		{position = {-0.5, 0.5, 0.5}, normal = {0, 0, 1}},
-		{position = {-0.5, 0.5, -0.5}, normal = {0, 0, -1}},
-		{position = {0.5, 0.5, -0.5}, normal = {0, 0, -1}},
-		{position = {0.5, -0.5, -0.5}, normal = {0, 0, -1}},
-		{position = {-0.5, -0.5, -0.5}, normal = {0, 0, -1}},
-	}
-	indices := [?]u32 {
-		0,
-		1,
-		2,
-		0,
-		2,
-		3,
-		4,
-		5,
-		6,
-		4,
-		6,
-		7,
-		8,
-		10,
-		9,
-		8,
-		11,
-		10,
-		12,
-		14,
-		13,
-		12,
-		15,
-		14,
-		16,
-		17,
-		18,
-		16,
-		18,
-		19,
-		20,
-		21,
-		22,
-		20,
-		22,
-		23,
-	}
-	return rl.create_gpu_mesh(vertices[:], indices[:])
-}
-
-cube_edge_mesh_create :: proc() -> (rl.Gpu_Mesh, bool) {
-	vertices := [?]rl.Gpu_3D_Vertex {
-		{position = {-0.5, -0.5, -0.5}},
-		{position = {0.5, -0.5, -0.5}},
-		{position = {0.5, 0.5, -0.5}},
-		{position = {-0.5, 0.5, -0.5}},
-		{position = {-0.5, -0.5, 0.5}},
-		{position = {0.5, -0.5, 0.5}},
-		{position = {0.5, 0.5, 0.5}},
-		{position = {-0.5, 0.5, 0.5}},
-	}
-	indices := [?]u32{0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7}
-	return rl.create_gpu_mesh(vertices[:], indices[:], .Lines)
 }
 
 graphics_target_resize :: proc(value: ^State) {

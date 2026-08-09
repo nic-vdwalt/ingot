@@ -112,6 +112,13 @@ GPU depth rendering uses the separate opt-in API in `gfx/gpu3d.odin`:
   Vertices carry position, normal, texture coordinates, and a normalized scalar
   that materials may map between two colors. Oversized, malformed, and out-of-range
   geometry is rejected.
+- Create caller-owned unit-cube geometry with `create_cube_mesh` or
+  `create_cube_edge_mesh`. Both are centered at the local origin with bounds
+  `[-0.5, +0.5]`; model transforms provide the final dimensions. The solid mesh
+  has flat outward normals, counter-clockwise triangles, and face-local `[0, 1]`
+  UVs. The edge mesh contains the same cube's 12 edges as lines. Both return
+  `ok=false` for context, pool, validation, or GPU allocation failures and must be
+  released with `destroy_gpu_mesh`.
 - Materials may bind a generation-checked `Texture2D`; a zero or stale handle falls
   back to the neutral white texture. `depth_nudge` offsets clip depth uniformly for
   coplanar triangle, line, and point overlays without changing model geometry.
