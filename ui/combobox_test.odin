@@ -74,7 +74,10 @@ combobox_popup_clamps_and_records_in_screen_space :: proc(t: ^testing.T) {
 		output = output,
 	}
 	ui_frame_begin(&frame, &runtime, &input)
-	defer ui_frame_end(&frame)
+	defer {
+		ui_frame_end(&frame)
+		ui_frame_destroy(&frame)
+	}
 	ui_frame_pane_push(&frame, {180, 120})
 	defer ui_frame_pane_pop(&frame)
 	state := Combobox_State {
