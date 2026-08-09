@@ -274,14 +274,7 @@ draw_main_fixture :: proc() {
 		0,
 		rl.WHITE,
 	)
-	rl.DrawTexturePro(
-		gpu_target.texture.texture,
-		{0, 0, 384, 240},
-		{432, 236, 384, 240},
-		{0, 0},
-		0,
-		rl.WHITE,
-	)
+	rl.draw_gpu_3d_target(&gpu_target, {432, 236, 384, 240}, rl.WHITE)
 
 	if font_ready {
 		rl.DrawTextEx(font, "FIXTURE: 2D / RT / SCISSOR", {24, 504}, 20, 1, rl.RAYWHITE)
