@@ -81,6 +81,50 @@ DrawRectangleV :: proc(position, size: Vector2, color: Color) {
 	DrawRectangleRec({position.x, position.y, size.x, size.y}, color)
 }
 
+// DrawRectanglePro matches raylib: the rectangle is rotated (degrees, clockwise)
+// about `rec.xy + origin` after its corners are offset by `-origin`, so `origin`
+// is both the pivot and the anchor that lands on `rec.x/rec.y`. Corner math
+// mirrors DrawTexturePro.
+DrawRectanglePro :: proc(rec: Rectangle, origin: Vector2, rotation: f32, color: Color) {
+	assert(
+		_shape_geometry_is_finite({rec.x, rec.y}, rec.width) &&
+		_f32_is_finite(rec.height) &&
+		_f32_is_finite(rotation),
+		"DrawRectanglePro: non-finite geometry",
+	)
+	if rotation == 0 {
+		DrawRectangleRec({rec.x - origin.x, rec.y - origin.y, rec.width, rec.height}, color)
+		return
+	}
+
+	w := rec.width
+	h := rec.height
+	tl := [2]f32{-origin.x, -origin.y}
+	tr := [2]f32{w - origin.x, -origin.y}
+	br := [2]f32{w - origin.x, h - origin.y}
+	bl := [2]f32{-origin.x, h - origin.y}
+
+	rad := rotation * DEG2RAD
+	c := math.cos(rad)
+	s := math.sin(rad)
+	rot :: proc(p: [2]f32, c, s: f32) -> [2]f32 {
+		return {p.x * c - p.y * s, p.x * s + p.y * c}
+	}
+	tl = rot(tl, c, s); tr = rot(tr, c, s); br = rot(br, c, s); bl = rot(bl, c, s)
+
+	off := [2]f32{rec.x, rec.y}
+	batch_set(&g.rend, .Solid, nil)
+	push_quad4(
+		&g.rend,
+		{tl.x + off.x, tl.y + off.y},
+		{tr.x + off.x, tr.y + off.y},
+		{br.x + off.x, br.y + off.y},
+		{bl.x + off.x, bl.y + off.y},
+		{0, 0}, {1, 0}, {1, 1}, {0, 1},
+		col_f(color),
+	)
+}
+
 // --- rectangle outlines ----------------------------------------------------
 
 DrawRectangleLines :: proc(posX, posY, width, height: i32, color: Color) {

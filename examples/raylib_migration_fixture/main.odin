@@ -136,6 +136,11 @@ draw_shape_surface :: proc() {
 	rl.DrawRectangleGradientH(280, 300, 90, 40, rl.ColorAlpha(rl.SKYBLUE, 0.8), rl.BLANK)
 	rl.DrawRectangleGradientV(380, 300, 90, 40, rl.VIOLET, rl.BLANK)
 	_ = rl.ColorAlphaBlend(rl.BLACK, rl.Fade(rl.WHITE, 0.5), rl.WHITE)
+
+	// Rotated rectangle pivoting about its centre; the angle round-trips through
+	// DEG2RAD/RAD2DEG so the constants stay part of the compile gate.
+	angle_deg := f32((30 * rl.DEG2RAD) * rl.RAD2DEG)
+	rl.DrawRectanglePro({520, 320, 60, 24}, {30, 12}, angle_deg, rl.Color{200, 160, 60, 255})
 }
 
 // draw_default_font_text uses the no-asset text path. It renders real glyphs
@@ -146,6 +151,7 @@ draw_default_font_text :: proc() {
 	rl.DrawText(label, 24, 360, 20, rl.RAYWHITE)
 	width := rl.MeasureText(label, 20)
 	rl.DrawRectangle(24, 384, width, 2, rl.Color{120, 180, 255, 255})
+	rl.DrawFPS(540, 360)
 
 	if rl.IsWindowResized() {
 		rl.DrawText("resized", 24, 396, 16, rl.Color{255, 190, 80, 255})

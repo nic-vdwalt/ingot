@@ -7,6 +7,11 @@ package gfx
 
 // --- math / color ----------------------------------------------------------
 
+// Degree/radian conversion factors, matching raylib's raymath constants.
+PI :: 3.14159265358979323846
+RAD2DEG :: 180.0 / PI
+DEG2RAD :: PI / 180.0
+
 Vector2 :: [2]f32
 Vector3 :: [3]f32
 Vector4 :: [4]f32

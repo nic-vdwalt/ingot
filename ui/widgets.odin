@@ -692,6 +692,18 @@ btn_slot_px :: proc(u: ^Ui, label: string) -> Rect_I32 {
 	return slot_next_px(u, width, metrics.ROW_H_MD)
 }
 
+// button_fit_w_frame returns the pixel width a rect-based button (button_at,
+// icon_btn_at) needs to draw `label` without ellipsis truncation: the measured
+// text plus the standard horizontal padding on both sides. Size caller-owned
+// rects with it instead of hardcoding widths that silently truncate.
+button_fit_w_frame :: proc(frame: ^Ui_Frame, label: string, font_size: i32 = 0) -> i32 {
+	assert(frame != nil, "button_fit_w_frame: nil frame")
+	assert(label != "", "button_fit_w_frame: empty label")
+	metrics := ui_frame_metrics(frame)
+	fs := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
+	return measure_text_string_frame(frame, label, fs) + metrics.PADDING * 2
+}
+
 // Fit a button label to the button box: truncate with an ellipsis when it is
 // too wide, and return the drawn text plus its measured width for centring.
 @(private = "file")
