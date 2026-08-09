@@ -16,6 +16,7 @@ libvterm/lib/linux_arm64/
 /idle_demo
 /procgen_world
 /box3d_stack
+/render_fixture
 fuzz/net/fuzz_net
 fuzz/ui/fuzz_ui
 fuzz/view/fuzz_view
