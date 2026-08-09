@@ -89,6 +89,20 @@ spell_menu_place_clamps_to_input_and_screen_top :: proc(t: ^testing.T) {
 }
 
 @(test)
+spell_menu_screen_rect_uses_both_pane_origin_axes :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	ui_frame_pane_push(&frame, {40, 70})
+	defer ui_frame_pane_pop(&frame)
+	layout := Spell_Menu_Layout{menu_x = 10, menu_y = 20, menu_w = 100, menu_h = 80}
+	testing.expect_value(t, spell_menu_screen_rect(&frame, &layout), Rectangle{50, 90, 100, 80})
+}
+
+@(test)
 spell_menu_move_selection_wraps :: proc(t: ^testing.T) {
 	testing.expect_value(t, spell_menu_move_selection(0, 5, -1), 4)
 	testing.expect_value(t, spell_menu_move_selection(4, 5, 1), 0)

@@ -10,6 +10,32 @@ expect_close :: proc(t: ^testing.T, got, want: f32, loc := #caller_location) {
 }
 
 @(test)
+chart_tooltip_uses_both_pane_origin_axes :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame{output = output}
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	ui_frame_pane_push(&frame, {40, 70})
+	defer ui_frame_pane_pop(&frame)
+	values := []f32{5}
+	series := []Chart_Series{{name = "A", values = values}}
+	layout := Chart_Layout{chart = {10, 20, 200, 100}}
+	chart_draw_tooltip(&frame, layout, series, {}, 0, {20, 80})
+	testing.expect(t, output.overlay.count > 0)
+	testing.expect(t, output.overlay.commands[0].rect.x >= 50)
+	testing.expect(t, output.overlay.commands[0].rect.y >= 90)
+}
+
+@(test)
 chart_nice_ticks_basic :: proc(t: ^testing.T) {
 	lo, hi, step := nice_ticks(0, 100, 5)
 	expect_close(t, step, 20)

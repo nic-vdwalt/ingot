@@ -226,9 +226,13 @@ date_picker_popup :: proc(
 	grid_w := cell * 7
 	menu_w := grid_w + pad * 2
 	menu_h := header_h + cell + cell * 6 + pad * 2
-	mx := clamp(rect.x, 0, max(screen_w - menu_w, 0))
-	my := rect.y + rect.h + 2
-	if my + menu_h > screen_h do my = max(rect.y - menu_h - 2, 0)
+	origin := frame_pane_origin(frame)
+	ox, oy := i32(origin.x), i32(origin.y)
+	anchor := frame_to_screen(frame, {f32(rect.x), f32(rect.y)})
+	sx := clamp(i32(anchor.x), 0, max(screen_w - menu_w, 0))
+	sy := i32(anchor.y) + rect.h + 2
+	if sy + menu_h > screen_h do sy = max(i32(anchor.y) - menu_h - 2, 0)
+	mx, my := sx - ox, sy - oy
 
 	mouse := frame_to_local(frame, get_mouse_position(frame))
 	menu_rect := Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
@@ -239,9 +243,7 @@ date_picker_popup :: proc(
 	}
 	st.just_opened = false
 
-	origin := frame_pane_origin(frame)
-	ox := i32(origin.x)
-	screen_rect := Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
+	screen_rect := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
 	overlay_begin(frame, screen_rect, claim_input = true)
 	overlay_rect(frame, screen_rect, style.bg_popup)
 	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
@@ -266,16 +268,16 @@ date_picker_popup :: proc(
 	overlay_text(
 		frame,
 		"\u2039",
-		mx + ox + pad + nav_w / 3,
-		my + pad,
+		sx + pad + nav_w / 3,
+		sy + pad,
 		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
 	overlay_text(
 		frame,
 		"\u203A",
-		mx + ox + menu_w - pad - nav_w * 2 / 3,
-		my + pad,
+		sx + menu_w - pad - nav_w * 2 / 3,
+		sy + pad,
 		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
@@ -284,8 +286,8 @@ date_picker_popup :: proc(
 	overlay_text(
 		frame,
 		title,
-		mx + ox + (menu_w - title_w) / 2,
-		my + pad + 2,
+		sx + (menu_w - title_w) / 2,
+		sy + pad + 2,
 		metrics.FONT_SIZE_BODY,
 		style.fg_primary,
 	)
@@ -298,8 +300,8 @@ date_picker_popup :: proc(
 		overlay_text(
 			frame,
 			name,
-			mx + ox + pad + i32(column) * cell + (cell - name_w) / 2,
-			row_y + (cell - metrics.FONT_SIZE_LABEL) / 2,
+			sx + pad + i32(column) * cell + (cell - name_w) / 2,
+			row_y + oy + (cell - metrics.FONT_SIZE_LABEL) / 2,
 			metrics.FONT_SIZE_LABEL,
 			style.fg_secondary,
 		)
@@ -320,9 +322,9 @@ date_picker_popup :: proc(
 		is_selected :=
 			value.day == day && value.month == st.view_month && value.year == st.view_year
 		if is_selected {
-			overlay_rect(frame, {f32(cx + ox), f32(cy), f32(cell), f32(cell)}, style.fg_accent)
+			overlay_rect(frame, {f32(cx + ox), f32(cy + oy), f32(cell), f32(cell)}, style.fg_accent)
 		} else if hovered {
-			overlay_rect(frame, {f32(cx + ox), f32(cy), f32(cell), f32(cell)}, style.bg_active)
+			overlay_rect(frame, {f32(cx + ox), f32(cy + oy), f32(cell), f32(cell)}, style.bg_active)
 		}
 		if hovered do request_cursor(frame, .POINTING_HAND)
 		day_text := fmt.tprintf("%d", day)
@@ -332,7 +334,7 @@ date_picker_popup :: proc(
 			frame,
 			day_text,
 			cx + ox + (cell - day_w) / 2,
-			cy + (cell - metrics.FONT_SIZE_LABEL) / 2,
+			cy + oy + (cell - metrics.FONT_SIZE_LABEL) / 2,
 			metrics.FONT_SIZE_LABEL,
 			day_color,
 		)
