@@ -767,6 +767,8 @@ BeginDrawing :: proc() {
 		g.frame.has_frame = false
 		return
 	}
+	_assert_window_frame_contract()
+	renderer_window_projection_refresh(&g.rend, g.width, g.height)
 	g.frame.view = wg.TextureCreateView(g.frame.surf_tex.texture, nil)
 	g.frame.encoder = wg.DeviceCreateCommandEncoder(g.device, nil)
 	g.frame.clear_color = Color{0, 0, 0, 255}
@@ -774,6 +776,15 @@ BeginDrawing :: proc() {
 	g.frame.has_frame = true
 	g.frame.scissor_on = false
 	g.frame.scissor_empty = false
+}
+
+@(private)
+_assert_window_frame_contract :: proc() {
+	assert(g.width > 0 && g.height > 0, "_assert_window_frame_contract: invalid logical size")
+	assert(g.fb_width > 0 && g.fb_height > 0, "_assert_window_frame_contract: invalid framebuffer")
+	assert(g.config.width == u32(g.fb_width), "_assert_window_frame_contract: width mismatch")
+	assert(g.config.height == u32(g.fb_height), "_assert_window_frame_contract: height mismatch")
+	assert(g.frame.surf_tex.texture != nil, "_assert_window_frame_contract: nil texture")
 }
 
 ClearBackground :: proc(c: Color) {

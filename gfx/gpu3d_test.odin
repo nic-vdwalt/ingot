@@ -138,14 +138,25 @@ test_gpu_3d_opaque_overlay_policy :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_gpu_3d_pipeline_identity_includes_material_style :: proc(t: ^testing.T) {
+test_gpu_3d_antialiasing_sample_count :: proc(t: ^testing.T) {
+	testing.expect_value(t, _gpu_3d_sample_count(.None), u32(1))
+	testing.expect_value(t, _gpu_3d_sample_count(.MSAA_4X), u32(4))
+}
+
+@(test)
+test_gpu_3d_pipeline_identity_includes_compatibility_fields :: proc(t: ^testing.T) {
 	entry := Gpu_3D_Pipeline_Entry {
-		format    = .RGBA8Unorm,
-		primitive = .Triangles,
-		style     = .Default,
+		format       = .RGBA8Unorm,
+		primitive    = .Triangles,
+		style        = .Default,
+		sample_count = 4,
 	}
-	testing.expect(t, _gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default))
-	testing.expect(t, !_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque_Overlay))
+	testing.expect(t, _gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default, 4))
+	testing.expect(
+		t,
+		!_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque_Overlay, 4),
+	)
+	testing.expect(t, !_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default, 1))
 }
 
 // -- pool handle mapping -------------------------------------------------------

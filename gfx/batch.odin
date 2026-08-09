@@ -176,7 +176,17 @@ Renderer :: struct {
 	// BATCH_TRANSIENT_BUFFERS_MAX buffers until the tab dies.
 	overflow_bytes:      u64,
 	overflow_draws:      u32,
-	proj_w, proj_h:      i32,
+}
+
+@(private)
+_window_projection :: proc(width, height: i32) -> [4]f32 {
+	assert(width > 0 && height > 0, "_window_projection: invalid logical size")
+	return {1.0 / f32(width), 1.0 / f32(height), 1.0, 0.0}
+}
+
+@(private)
+_window_projection_ndc :: proc(point: [2]f32, projection: [4]f32) -> [2]f32 {
+	return {point.x * projection.x * 2.0 - 1.0, 1.0 - point.y * projection.y * 2.0}
 }
 
 // _blend_for returns the wgpu blend state for a slot. Colour and alpha share
@@ -615,14 +625,15 @@ renderer_frame_begin :: proc(r: ^Renderer) -> bool {
 	r.active_shader = 0
 	r.model_xf = AFFINE_IDENTITY
 	clear(&r.model_stack)
-
-	// keep projection in sync with the logical window size (p.z = +1: no flip)
-	if r.proj_w != g.width || r.proj_h != g.height {
-		p := [4]f32{1.0 / f32(max(g.width, 1)), 1.0 / f32(max(g.height, 1)), 1.0, 0.0}
-		wg.QueueWriteBuffer(g.queue, r.ubuf, 0, &p, size_of(p))
-		r.proj_w, r.proj_h = g.width, g.height
-	}
 	return true
+}
+
+@(private)
+renderer_window_projection_refresh :: proc(r: ^Renderer, width, height: i32) {
+	assert(r != nil, "renderer_window_projection_refresh: nil renderer")
+	assert(g != nil && g.queue != nil, "renderer_window_projection_refresh: invalid context")
+	projection := _window_projection(width, height)
+	wg.QueueWriteBuffer(g.queue, r.ubuf, 0, &projection, size_of(projection))
 }
 
 @(private)

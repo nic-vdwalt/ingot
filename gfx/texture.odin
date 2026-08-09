@@ -14,14 +14,15 @@ TEX_ID_BASE :: u32(0x4000_0000)
 MAX_TEXTURES :: RESOURCE_SLOT_COUNT
 
 Tex_Entry :: struct {
-	tex:      wg.Texture,
-	view:     wg.TextureView,
-	sampler:  wg.Sampler,
-	bind:     wg.BindGroup,
-	width:    i32,
-	height:   i32,
-	filter:   TextureFilter,
-	wgformat: wg.TextureFormat, // backing wgpu format (for render-target pipelines)
+	tex:          wg.Texture,
+	view:         wg.TextureView,
+	sampler:      wg.Sampler,
+	bind:         wg.BindGroup,
+	width:        i32,
+	height:       i32,
+	filter:       TextureFilter,
+	wgformat:     wg.TextureFormat, // backing wgpu format (for render-target pipelines)
+	sample_count: u32,
 }
 
 @(private)
@@ -152,6 +153,7 @@ _new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
 	e.height = h
 	e.filter = .BILINEAR
 	e.wgformat = format
+	e.sample_count = 1
 	// CopySrc is what makes SaveRenderTexturePng (screenshot.odin) possible: the
 	// swapchain is configured RenderAttachment-only (context.odin), so every
 	// readback must route through a render target. The flag is free on an
@@ -184,6 +186,51 @@ _new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
 	return Texture2D{id = id, width = w, height = h, mipmaps = 1, format = pf}
 }
 
+@(private)
+_new_rt_attachment :: proc(
+	ctx: ^Context,
+	w, h: i32,
+	format: wg.TextureFormat,
+	sample_count: u32,
+) -> ^Tex_Entry {
+	assert(ctx != nil && ctx.device != nil, "_new_rt_attachment: invalid context")
+	assert(w > 0 && h > 0, "_new_rt_attachment: invalid dimensions")
+	assert(sample_count == 1 || sample_count == 4, "_new_rt_attachment: unsupported sample count")
+	entry := new(Tex_Entry)
+	entry.width = w
+	entry.height = h
+	entry.wgformat = format
+	entry.sample_count = sample_count
+	entry.tex = wg.DeviceCreateTexture(
+		ctx.device,
+		&{
+			usage = {.RenderAttachment},
+			dimension = ._2D,
+			size = {u32(w), u32(h), 1},
+			format = format,
+			mipLevelCount = 1,
+			sampleCount = sample_count,
+		},
+	)
+	if entry.tex == nil {
+		free(entry)
+		return nil
+	}
+	entry.view = wg.TextureCreateView(entry.tex, nil)
+	if entry.view == nil {
+		wg.TextureRelease(entry.tex)
+		free(entry)
+		return nil
+	}
+	return entry
+}
+
+@(private)
+_destroy_rt_attachment :: proc(entry: ^Tex_Entry) {
+	if entry == nil do return
+	_texture_entry_destroy(entry)
+}
+
 // _texture_view returns the wgpu view backing a registered texture id (used as
 // a render-target attachment). nil if not found.
 @(private)
@@ -201,6 +248,7 @@ _new_rt_depth :: proc(w, h: i32) -> Texture2D {
 	e.width = w
 	e.height = h
 	e.wgformat = .Depth24Plus
+	e.sample_count = 1
 	e.tex = wg.DeviceCreateTexture(
 		g.device,
 		&{
@@ -241,6 +289,7 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 	e.height = image.height
 	e.filter = .BILINEAR
 	e.wgformat = .RGBA8Unorm
+	e.sample_count = 1
 	e.tex = wg.DeviceCreateTexture(
 		g.device,
 		&{

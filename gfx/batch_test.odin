@@ -5,6 +5,36 @@ import "core:testing"
 import wg "vendor:wgpu"
 
 @(test)
+window_projection_maps_default_logical_edges :: proc(t: ^testing.T) {
+	projection := _window_projection(1440, 900)
+	top_left := _window_projection_ndc({0, 0}, projection)
+	bottom_right := _window_projection_ndc({1440, 900}, projection)
+	testing.expect_value(t, top_left, [2]f32{-1, 1})
+	testing.expect_value(t, bottom_right, [2]f32{1, -1})
+}
+
+@(test)
+window_projection_maps_resized_logical_edges :: proc(t: ^testing.T) {
+	projection := _window_projection(1643, 881)
+	bottom_right := _window_projection_ndc({1643, 881}, projection)
+	testing.expect(t, abs(bottom_right.x - 1.0) <= 0.000001)
+	testing.expect(t, abs(bottom_right.y + 1.0) <= 0.000001)
+}
+
+@(test)
+window_projection_maps_edges_to_scaled_attachment :: proc(t: ^testing.T) {
+	logical_size := [2]f32{1440, 900}
+	attachment_size := [2]f32{2880, 1800}
+	projection := _window_projection(i32(logical_size.x), i32(logical_size.y))
+	ndc := _window_projection_ndc(logical_size, projection)
+	attachment_point := [2]f32 {
+		(ndc.x + 1.0) * 0.5 * attachment_size.x,
+		(1.0 - ndc.y) * 0.5 * attachment_size.y,
+	}
+	testing.expect_value(t, attachment_point, attachment_size)
+}
+
+@(test)
 stream_slot_does_not_reuse_submitted_work :: proc(t: ^testing.T) {
 	slots: [2]Stream_Slot
 	first := _stream_slots_acquire(slots[:], 0)
