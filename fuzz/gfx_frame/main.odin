@@ -30,11 +30,14 @@ import "ingot:ui"
 ITERATIONS_DEFAULT :: 400
 MAX_LIVE_TEXTURES :: 8
 MAX_LIVE_TARGETS :: 4
+MAX_LIVE_GPU_MESHES :: 8
 
 Prng :: fuzzx.Prng
 
 live_textures: [MAX_LIVE_TEXTURES]rl.Texture2D
 live_targets: [MAX_LIVE_TARGETS]rl.RenderTexture2D
+live_gpu_meshes: [MAX_LIVE_GPU_MESHES]rl.Gpu_Mesh
+gpu_target: rl.Gpu_3D_Target
 ui_runtime: ui.Ui_Runtime
 ui_frame: ui.Ui_Frame
 
@@ -76,6 +79,39 @@ draw_some :: proc(p: ^Prng) {
 		src := rl.Rectangle{0, 0, f32(rt.texture.width), -f32(rt.texture.height)}
 		dst := rl.Rectangle{240, 10, 64, 64}
 		rl.DrawTexturePro(rt.texture, src, dst, {0, 0}, 0, rl.WHITE)
+	}
+}
+
+draw_gpu3d :: proc(p: ^Prng) {
+	if gpu_target.texture.texture.id == 0 {
+		gpu_target, _ = rl.create_gpu_3d_target(192, 128)
+	}
+	mesh_slot := fuzzx.int_range(p, 0, MAX_LIVE_GPU_MESHES)
+	if live_gpu_meshes[mesh_slot].id == 0 {
+		live_gpu_meshes[mesh_slot], _ = rl.create_sphere_mesh(
+			f32(fuzzx.int_range(p, 1, 9)) / 4,
+			u32(fuzzx.int_range(p, 2, 17)),
+			u32(fuzzx.int_range(p, 3, 25)),
+		)
+	}
+	camera := rl.Camera3D {
+		position   = {-5, 0, 0},
+		target     = {},
+		up         = rl.CAMERA_WORLD_UP,
+		fovy       = 45,
+		projection = .PERSPECTIVE,
+	}
+	pass, ok := rl.begin_gpu_3d(&gpu_target, camera)
+	if !ok do return
+	for mesh in live_gpu_meshes {
+		if mesh.id != 0 do rl.draw_gpu_mesh(&pass, mesh, 1, {color = rl.WHITE})
+	}
+	if fuzzx.int_range(p, 0, 3) == 0 && live_gpu_meshes[mesh_slot].id != 0 {
+		rl.destroy_gpu_mesh(&live_gpu_meshes[mesh_slot])
+	}
+	rl.end_gpu_3d(&pass)
+	if fuzzx.int_range(p, 0, 8) == 0 {
+		rl.destroy_gpu_3d_target(&gpu_target)
 	}
 }
 
@@ -180,6 +216,7 @@ main :: proc() {
 				mutate_resources(&p)
 				if fuzzx.int_range(&p, 0, 2) == 0 do draw_some(&p)
 			}
+			draw_gpu3d(&p)
 
 			ui.ui_frame_end(&ui_frame)
 			rl.EndDrawing()
@@ -191,6 +228,8 @@ main :: proc() {
 	// Teardown outside any frame exercises the immediate-destroy path.
 	for t in live_textures do if t.id != 0 do rl.UnloadTexture(t)
 	for rt in live_targets do if rt.id != 0 do rl.UnloadRenderTexture(rt)
+	for &mesh in live_gpu_meshes do if mesh.id != 0 do rl.destroy_gpu_mesh(&mesh)
+	if gpu_target.texture.texture.id != 0 do rl.destroy_gpu_3d_target(&gpu_target)
 	ui.ui_frame_destroy(&ui_frame)
 	ui.ui_runtime_destroy(&ui_runtime)
 	rl.CloseWindow()

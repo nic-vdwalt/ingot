@@ -96,7 +96,9 @@ ui_runtime_destroy :: proc(runtime: ^Ui_Runtime) {
 }
 
 ui_runtime_set_scale :: proc(runtime: ^Ui_Runtime, value: f32) {
-	assert(runtime != nil && runtime.initialized, "ui_runtime_set_scale: invalid runtime")
+	assert(runtime != nil, "ui_runtime_set_scale: nil runtime")
+	assert(runtime.initialized, "ui_runtime_set_scale: runtime not initialized")
+	assert(scale_f32_is_finite(value), "ui_runtime_set_scale: non-finite scale")
 	scale := clamp(value, 0.5, 3)
 	if scale == runtime.scale do return
 	runtime.scale = scale
@@ -168,16 +170,22 @@ ui_frame_style :: proc(frame: ^Ui_Frame) -> (^Ui_Metrics, ^Theme) {
 }
 
 ui_frame_sc :: proc(frame: ^Ui_Frame, value: i32) -> i32 {
+	assert(frame != nil, "ui_frame_sc: nil frame")
 	runtime := ui_frame_runtime(frame)
-	assert(runtime.scale > 0, "ui_frame_sc: invalid scale")
-	return i32(f32(value) * runtime.scale + 0.5)
+	assert(scale_f32_is_finite(runtime.scale), "ui_frame_sc: non-finite scale")
+	assert(runtime.scale > 0, "ui_frame_sc: non-positive scale")
+	return scale_i32(value, runtime.scale)
 }
 
 ui_frame_scf :: proc(frame: ^Ui_Frame, value: f32) -> f32 {
 	assert(frame != nil, "ui_frame_scf: nil frame")
+	assert(scale_f32_is_finite(value), "ui_frame_scf: non-finite value")
 	runtime := ui_frame_runtime(frame)
-	assert(runtime.scale > 0, "ui_frame_scf: invalid scale")
-	return value * runtime.scale
+	assert(scale_f32_is_finite(runtime.scale), "ui_frame_scf: non-finite scale")
+	assert(runtime.scale > 0, "ui_frame_scf: non-positive scale")
+	result := value * runtime.scale
+	assert(scale_f32_is_finite(result), "ui_frame_scf: non-finite result")
+	return result
 }
 
 ui_runtime_set_scale_hooks :: proc(
@@ -283,6 +291,11 @@ frame_to_local :: proc(frame: ^Ui_Frame, point: Vector2) -> Vector2 {
 frame_to_screen :: proc(frame: ^Ui_Frame, point: Vector2) -> Vector2 {
 	origin := frame_pane_origin(frame)
 	return {point.x + origin.x, point.y + origin.y}
+}
+
+frame_rect_to_local :: proc(frame: ^Ui_Frame, rect: Rectangle) -> Rectangle {
+	origin := frame_pane_origin(frame)
+	return {rect.x - origin.x, rect.y - origin.y, rect.width, rect.height}
 }
 
 frame_rect_to_screen :: proc(frame: ^Ui_Frame, rect: Rectangle) -> Rectangle {

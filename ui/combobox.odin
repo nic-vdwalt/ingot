@@ -189,17 +189,16 @@ combobox_popup :: proc(
 	count := max(len(visible), 1)
 	menu_h := i32(count) * row_h + metrics.MENU_PAD * 2
 	menu_w := rect.w
-	origin := frame_pane_origin(frame)
-	ox, oy := i32(origin.x), i32(origin.y)
+	assert(screen_w >= 0 && screen_h >= 0, "combobox_popup: negative screen bounds")
+	assert(menu_w >= 0 && menu_h >= 0, "combobox_popup: negative menu size")
 	box_screen := frame_to_screen(frame, {f32(rect.x), f32(rect.y)})
 	sx := clamp(i32(box_screen.x), 0, max(screen_w - menu_w, 0))
 	sy := i32(box_screen.y) + rect.h + 2
 	if sy + menu_h > screen_h do sy = max(i32(box_screen.y) - menu_h - 2, 0)
-	mx, my := sx - ox, sy - oy
+	screen_rect := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
+	menu_rect := frame_rect_to_local(frame, screen_rect)
 
-	mouse := get_mouse_position(frame)
-	mouse = frame_to_local(frame, mouse)
-	menu_rect := Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
+	mouse := frame_to_local(frame, get_mouse_position(frame))
 	box_rect := rect_f32(rect)
 	if !st.just_opened &&
 	   is_mouse_button_pressed(frame, .LEFT) &&
@@ -210,7 +209,6 @@ combobox_popup :: proc(
 	}
 	st.just_opened = false
 
-	screen_rect := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
 	overlay_begin(frame, screen_rect, claim_input = true)
 	overlay_rect(frame, screen_rect, style.bg_popup)
 	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
@@ -224,19 +222,14 @@ combobox_popup :: proc(
 			style.fg_secondary,
 		)
 	}
-	item_y := my + metrics.MENU_PAD
+	item_y := menu_rect.y + f32(metrics.MENU_PAD)
 	for index, row in visible {
 		item := items[index]
-		row_rect := Rectangle{f32(mx), f32(item_y), f32(menu_w), f32(row_h)}
+		row_rect := Rectangle{menu_rect.x, item_y, f32(menu_w), f32(row_h)}
+		row_screen := frame_rect_to_screen(frame, row_rect)
 		hovered := point_in_rect(mouse, row_rect)
 		if hovered && mouse_moved(frame) do st.hover = row
-		if st.hover == row {
-			overlay_rect(
-				frame,
-				{f32(sx), f32(item_y + oy), f32(menu_w), f32(row_h)},
-				style.bg_active,
-			)
-		}
+		if st.hover == row do overlay_rect(frame, row_screen, style.bg_active)
 		if hovered do request_cursor(frame, .POINTING_HAND)
 		label := truncate_to_width_frame(
 			frame,
@@ -247,21 +240,27 @@ combobox_popup :: proc(
 		overlay_text(
 			frame,
 			label,
-			sx + metrics.PADDING,
-			item_y + oy + (row_h - metrics.FONT_SIZE_BODY) / 2,
+			i32(row_screen.x) + metrics.PADDING,
+			i32(row_screen.y) + (row_h - metrics.FONT_SIZE_BODY) / 2,
 			metrics.FONT_SIZE_BODY,
 			style.fg_primary,
 		)
 		sem: Sem_State
 		if item.id == selected^ do sem += {.Selected}
-		semantic_push(frame, .Option, {sx, item_y + oy, menu_w, row_h}, item.label, sem)
+		semantic_push(
+			frame,
+			.Option,
+			{i32(row_screen.x), i32(row_screen.y), menu_w, row_h},
+			item.label,
+			sem,
+		)
 		if hovered && is_mouse_button_pressed(frame, .LEFT) {
 			changed = selected^ != item.id
 			selected^ = item.id
 			input_box_set_text(&st.box, item.label)
 			st.open = false
 		}
-		item_y += row_h
+		item_y += f32(row_h)
 	}
 	overlay_end(frame)
 	return changed

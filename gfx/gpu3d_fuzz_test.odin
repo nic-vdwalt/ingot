@@ -91,9 +91,15 @@ gpu3d_fuzz_camera :: proc(t: ^testing.T, p: ^testx.Prng) -> bool {
 	hit, hit_ok := intersect_sphere(ray, {center = center, radius = radius})
 	ok := hit_ok && abs(hit.distance - (distance - radius)) <= max(distance * 1e-4, f32(1e-4))
 	ok &&= frustum_contains_point(frustum, center)
-	bounds := Bounds_3D{minimum = center - radius, maximum = center + radius}
+	bounds := Bounds_3D {
+		minimum = center - radius,
+		maximum = center + radius,
+	}
 	ok &&= frustum_intersects_bounds(frustum, bounds)
-	behind := Sphere_3D{center = ray.origin - ray.direction * distance, radius = radius}
+	behind := Sphere_3D {
+		center = ray.origin - ray.direction * distance,
+		radius = radius,
+	}
 	_, behind_hit := intersect_sphere(ray, behind)
 	ok &&= !behind_hit
 	testing.expect(t, ok, "camera, frustum, and picking contracts diverged")
@@ -118,7 +124,9 @@ gpu3d_fuzz_handles :: proc(t: ^testing.T, p: ^testx.Prng) -> bool {
 			slot.generation = _resource_generation_next(slot.generation)
 			slot.entry = &entries[index]
 			slot.occupied = true
-			live[index] = {id = _resource_handle_make(index, slot.generation)}
+			live[index] = {
+				id = _resource_handle_make(index, slot.generation),
+			}
 			testing.expect(t, _gpu_3d_mesh_slot(&resources, live[index]) == slot)
 			if stale.id != 0 do testing.expect(t, _gpu_3d_mesh_slot(&resources, stale) == nil)
 		}
