@@ -339,20 +339,19 @@ _scissor_rect :: proc(
 	}
 	assert(logical_w > 0)
 	assert(logical_h > 0)
-	sx := attachment_w / logical_w
-	sy := attachment_h / logical_h
-	fx := clamp(f32(x) * sx, 0, attachment_w)
-	fy := clamp(f32(y) * sy, 0, attachment_h)
-	pw := u32(clamp(f32(width) * sx, 0, attachment_w - fx))
-	ph := u32(clamp(f32(height) * sy, 0, attachment_h - fy))
+	sx := f64(attachment_w) / f64(logical_w)
+	sy := f64(attachment_h) / f64(logical_h)
+	x0 := u32(math.floor(clamp(f64(x) * sx, 0, f64(attachment_w))))
+	x1 := u32(math.ceil(clamp(f64(x) + f64(width), 0, f64(logical_w)) * sx))
+	y0 := u32(math.floor(clamp(f64(y) * sy, 0, f64(attachment_h))))
+	y1 := u32(math.ceil(clamp(f64(y) + f64(height), 0, f64(logical_h)) * sy))
+	pw := x1 - x0
+	ph := y1 - y0
 	if flip_y {
-		// Mirror the band, then re-clamp: the top edge measured from the
-		// bottom is attachment_h - (y + height).
-		top := clamp(attachment_h - (f32(y) + f32(height)) * sy, 0, attachment_h)
-		ph = u32(clamp(f32(height) * sy, 0, attachment_h - top))
-		return u32(fx), u32(top), pw, ph, pw > 0 && ph > 0
+		top := u32(attachment_h) - y1
+		return x0, top, pw, ph, pw > 0 && ph > 0
 	}
-	return u32(fx), u32(fy), pw, ph, pw > 0 && ph > 0
+	return x0, y0, pw, ph, pw > 0 && ph > 0
 }
 
 BeginScissorMode :: proc(x, y, width, height: i32) {

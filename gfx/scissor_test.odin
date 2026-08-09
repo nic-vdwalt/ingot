@@ -84,3 +84,38 @@ scissor_rect_flip_clamps_at_the_top_edge :: proc(t: ^testing.T) {
 	testing.expect_value(t, height, u32(0))
 	testing.expect(t, !visible)
 }
+
+@(test)
+scissor_rect_full_logical_clip_covers_odd_attachment :: proc(t: ^testing.T) {
+	x, y, width, height, visible := _scissor_rect(0, 0, 1440, 833, 1440, 833, 2879, 1665)
+	testing.expect(t, visible)
+	testing.expect_value(t, x, u32(0))
+	testing.expect_value(t, y, u32(0))
+	testing.expect_value(t, width, u32(2879))
+	testing.expect_value(t, height, u32(1665))
+}
+
+@(test)
+scissor_rect_right_anchored_clip_reaches_fractional_attachment_edge :: proc(t: ^testing.T) {
+	x, _, width, _, visible := _scissor_rect(1080, 0, 360, 833, 1440, 833, 2879, 1665)
+	testing.expect(t, visible)
+	testing.expect_value(t, x + width, u32(2879))
+}
+
+@(test)
+scissor_rect_adjacent_fractional_clips_leave_no_gap :: proc(t: ^testing.T) {
+	left_x, _, left_width, _, left_visible := _scissor_rect(0, 0, 1080, 833, 1440, 833, 2879, 1665)
+	right_x, _, right_width, _, right_visible := _scissor_rect(1080, 0, 360, 833, 1440, 833, 2879, 1665)
+	testing.expect(t, left_visible && right_visible)
+	testing.expect(t, left_x + left_width >= right_x)
+	testing.expect_value(t, right_x + right_width, u32(2879))
+}
+
+@(test)
+scissor_rect_flipped_clip_preserves_attachment_edges :: proc(t: ^testing.T) {
+	x, y, width, height, visible := _scissor_rect(1080, 0, 360, 833, 1440, 833, 2879, 1665, true)
+	testing.expect(t, visible)
+	testing.expect_value(t, x + width, u32(2879))
+	testing.expect_value(t, y, u32(0))
+	testing.expect_value(t, height, u32(1665))
+}
