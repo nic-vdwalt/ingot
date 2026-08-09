@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import "core:math/linalg"
+import "core:math/rand"
 import rl "ingot:gfx"
 import b3 "vendor:box3d"
 
@@ -140,8 +141,11 @@ box_create :: proc(value: ^State, index: int) -> bool {
 	half_extents := [3]f32{1, 1, 1}
 	body_def := b3.DefaultBodyDef()
 	body_def.type = .dynamicBody
-	offset := f32(0.05) if index % 2 == 0 else f32(-0.05)
-	body_def.position = {offset, 0, 2 + f32(index) * 2.5}
+	body_def.position = {
+		rand.float32_range(-15, 15), // random forward position
+		rand.float32_range(-15, 15), // random lateral position
+		rand.float32_range(10, 30), // random height
+	}
 	body := b3.CreateBody(value.world, body_def)
 	if !b3.Body_IsValid(body) do return false
 	shape_def := b3.DefaultShapeDef()
@@ -316,3 +320,4 @@ shutdown :: proc(value: ^State) {
 	value.graphics_ready = false
 	rl.CloseWindow()
 }
+
