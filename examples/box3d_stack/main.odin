@@ -57,12 +57,12 @@ main :: proc() {
 	rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_RESIZABLE})
 	rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ingot + box3d stack")
 	rl.SetTargetFPS(60)
-	if !graphics_create(&state) || !physics_create(&state) {
-		shutdown(&state)
+	if !physics_create(&state) {
+		when ODIN_OS != .JS do shutdown(&state)
 		return
 	}
 	rl.run(frame)
-	shutdown(&state)
+	when ODIN_OS != .JS do shutdown(&state)
 }
 
 graphics_create :: proc(value: ^State) -> bool {
@@ -234,6 +234,9 @@ camera_update :: proc(value: ^State, frame_dt: f32) {
 }
 
 frame :: proc() {
+	if !state.graphics_ready {
+		if !graphics_create(&state) do return
+	}
 	frame_dt := clamp(rl.GetFrameTime(), 0, MAX_FRAME_DT)
 	physics_input(&state)
 	camera_update(&state, frame_dt)
