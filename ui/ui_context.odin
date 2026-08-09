@@ -103,7 +103,7 @@ ui_runtime_set_scale :: proc(runtime: ^Ui_Runtime, value: f32) {
 	if scale == runtime.scale do return
 	runtime.scale = scale
 	runtime.metrics = ui_metrics(scale)
-	reset_font_atlases_with(&runtime.text)
+	if runtime.text_backend.reset != nil do runtime.text_backend.reset(runtime.text_backend.data)
 	ui_runtime_invalidate_scale_caches(runtime)
 	if runtime.scale_metrics_hook != nil do runtime.scale_metrics_hook(scale)
 	runtime.generation += 1

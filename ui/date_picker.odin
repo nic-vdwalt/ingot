@@ -202,6 +202,59 @@ date_picker_at :: proc(
 	return date_picker_popup(frame, st, value, rect, screen_w, screen_h)
 }
 
+Date_Picker_Popup_Layout :: struct {
+	local:    Rectangle,
+	screen:   Rectangle,
+	cell:     i32,
+	pad:      i32,
+	header_h: i32,
+	grid_y:   f32,
+}
+
+@(private = "file")
+date_picker_popup_layout :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	screen_w, screen_h: i32,
+) -> Date_Picker_Popup_Layout {
+	assert(frame != nil, "date_picker_popup_layout: nil frame")
+	assert(screen_w >= 0 && screen_h >= 0, "date_picker_popup_layout: negative screen")
+	metrics := ui_frame_metrics(frame)
+	cell := ui_frame_sc(frame, 30)
+	header_h := ui_frame_sc(frame, 30)
+	menu_w := cell * 7 + metrics.PADDING * 2
+	menu_h := header_h + cell * 7 + metrics.PADDING * 2
+	assert(menu_w >= 0 && menu_h >= 0, "date_picker_popup_layout: negative menu")
+	anchor := frame_to_screen(frame, {f32(rect.x), f32(rect.y)})
+	sx := clamp(i32(anchor.x), 0, max(screen_w - menu_w, 0))
+	sy := i32(anchor.y) + rect.h + 2
+	if sy + menu_h > screen_h do sy = max(i32(anchor.y) - menu_h - 2, 0)
+	screen := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
+	local := frame_rect_to_local(frame, screen)
+	return {local, screen, cell, metrics.PADDING, header_h, local.y + f32(metrics.PADDING + header_h + cell)}
+}
+
+@(private = "file")
+date_picker_popup_weekdays :: proc(frame: ^Ui_Frame, layout: Date_Picker_Popup_Layout) {
+	assert(frame != nil, "date_picker_popup_weekdays: nil frame")
+	assert(layout.cell > 0, "date_picker_popup_weekdays: invalid cell")
+	metrics := ui_frame_metrics(frame)
+	weekdays := [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}
+	row_y := layout.screen.y + f32(layout.pad + layout.header_h)
+	for name, column in weekdays {
+		name_w := text_width(frame, name, .Label)
+		overlay_text(
+			frame,
+			name,
+			i32(layout.screen.x) + layout.pad + i32(column) * layout.cell +
+				(layout.cell - name_w) / 2,
+			i32(row_y) + (layout.cell - metrics.FONT_SIZE_LABEL) / 2,
+			metrics.FONT_SIZE_LABEL,
+			ui_frame_theme(frame).fg_secondary,
+		)
+	}
+}
+
 // date_picker_popup records the calendar panel on the overlay layer: month
 // header with prev/next, weekday labels, and the day grid. Returns true when
 // a day was chosen (which also closes the popup).

@@ -216,23 +216,26 @@ context_menu :: proc(
 	items: []Menu_Item,
 	screen: Rect_I32,
 ) -> int {
+	assert(frame != nil, "context_menu: nil frame")
 	assert(st != nil, "context_menu: nil state")
 	if !st.open do return -1
 	assert(len(items) > 0, "context_menu: empty items")
-	screen_w, screen_h := screen.w, screen.h
-	assert(screen_w >= 0 && screen_h >= 0, "context_menu: negative screen bounds")
+	assert(screen.w > 0 && screen.h >= 0, "context_menu: invalid screen bounds")
+	screen_right := i64(screen.x) + i64(screen.w)
+	screen_bottom := i64(screen.y) + i64(screen.h)
+	assert(screen_right <= i64(max(i32)), "context_menu: screen right overflow")
+	assert(screen_bottom <= i64(max(i32)), "context_menu: screen bottom overflow")
 
-	menu_w := context_menu_width_frame(frame, items, screen_w)
+	menu_w := context_menu_width_frame(frame, items, screen.w)
 	menu_h := context_menu_height_frame(frame, items)
-	origin := frame_pane_origin(frame)
-	ox, oy := i32(origin.x), i32(origin.y)
 	anchor := frame_to_screen(frame, {f32(st.anchor_x), f32(st.anchor_y)})
-	sx := clamp(i32(anchor.x), 0, max(screen_w - menu_w, 0))
-	sy := clamp(i32(anchor.y), 0, max(screen_h - menu_h, 0))
-	mx, my := sx - ox, sy - oy
-	menu_rect := Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
+	sx := clamp(i32(anchor.x), screen.x, max(i32(screen_right) - menu_w, screen.x))
+	sy := clamp(i32(anchor.y), screen.y, max(i32(screen_bottom) - menu_h, screen.y))
+	screen_rect := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
+	menu_rect := frame_rect_to_local(frame, screen_rect)
 
-	// Ensure the selection starts on a selectable row.
+	// Caller-owned state may outlive or be reused with a different item slice.
+	if st.selected < 0 || st.selected >= len(items) do st.selected = 0
 	if items[st.selected].separator || items[st.selected].disabled {
 		st.selected = menu_nav_next(items, st.selected, 1)
 	}
@@ -264,12 +267,11 @@ context_menu :: proc(
 	// Record all panel draws on the overlay layer in screen space so the menu
 	// replays above content painted later in the frame (and outside any pane
 	// scissor); the group rect also claims the covered area with the router.
-	screen_rect := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
 	style := ui_frame_theme(frame)
 	overlay_begin(frame, screen_rect, claim_input = true)
 	overlay_rect(frame, screen_rect, style.bg_popup)
 	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
-	chosen := context_menu_rows(frame, st, items, mx, my, menu_w, ox, oy, mouse)
+	chosen := context_menu_rows(frame, st, items, menu_rect, screen_rect, mouse)
 	overlay_end(frame)
 	return chosen
 }
@@ -282,7 +284,7 @@ context_menu_rows :: proc(
 	frame: ^Ui_Frame,
 	st: ^Context_Menu_State,
 	items: []Menu_Item,
-	mx, my, menu_w, ox, oy: i32,
+	menu_local, menu_screen: Rectangle,
 	mouse: Vector2,
 ) -> int {
 	assert(frame != nil, "context_menu_rows: nil frame")
@@ -292,40 +294,37 @@ context_menu_rows :: proc(
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	inset := ui_frame_sc(frame, 2)
-	item_x := mx + inset
-	item_w := menu_w - inset * 2
-	item_y := my + metrics.MENU_PAD
+	item_x := menu_local.x + f32(inset)
+	item_w := i32(menu_local.width) - inset * 2
+	item_y := menu_local.y + f32(metrics.MENU_PAD)
 	chosen := -1
 	for it, i in items {
 		if it.separator {
 			sep_h := ui_frame_sc(frame, 5)
-			overlay_rect(
-				frame,
-				{f32(mx + ox + 6), f32(item_y + oy + sep_h / 2), f32(menu_w - 12), 1},
-				style.border_color,
-			)
-			item_y += sep_h
+			separator := Rectangle {
+				menu_screen.x + f32(ui_frame_sc(frame, 6)),
+				frame_to_screen(frame, {0, item_y}).y + f32(sep_h / 2),
+				menu_screen.width - f32(ui_frame_sc(frame, 12)),
+				ui_frame_scf(frame, 1),
+			}
+			overlay_rect(frame, separator, style.border_color)
+			item_y += f32(sep_h)
 			continue
 		}
-		row_rect := Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(metrics.MENU_ITEM_H)}
+		row_rect := Rectangle{item_x, item_y, f32(item_w), f32(metrics.MENU_ITEM_H)}
+		row_screen := frame_rect_to_screen(frame, row_rect)
 		hovered := point_in_rect(mouse, row_rect)
 		sem: Sem_State
 		if it.disabled do sem += {.Disabled}
 		semantic_push(
 			frame,
 			.Menu_Item,
-			{item_x + ox, item_y + oy, item_w, metrics.MENU_ITEM_H},
+			{i32(row_screen.x), i32(row_screen.y), item_w, metrics.MENU_ITEM_H},
 			it.label,
 			sem,
 		)
 		if hovered && !it.disabled && mouse_moved(frame) do st.selected = i
-		if st.selected == i {
-			overlay_rect(
-				frame,
-				{f32(item_x + ox), f32(item_y + oy), f32(item_w), f32(metrics.MENU_ITEM_H)},
-				style.bg_active,
-			)
-		}
+		if st.selected == i do overlay_rect(frame, row_screen, style.bg_active)
 		if hovered && !it.disabled do request_cursor(frame, .POINTING_HAND)
 		col := style.fg_disabled if it.disabled else style.fg_primary
 		txt := truncate_to_width_frame(
@@ -337,8 +336,8 @@ context_menu_rows :: proc(
 		overlay_text(
 			frame,
 			txt,
-			item_x + ox + ui_frame_sc(frame, 8),
-			item_y + oy + (metrics.MENU_ITEM_H - metrics.FONT_SIZE_BODY) / 2,
+			i32(row_screen.x) + ui_frame_sc(frame, 8),
+			i32(row_screen.y) + (metrics.MENU_ITEM_H - metrics.FONT_SIZE_BODY) / 2,
 			metrics.FONT_SIZE_BODY,
 			col,
 		)
@@ -346,7 +345,7 @@ context_menu_rows :: proc(
 			st.open = false
 			chosen = i
 		}
-		item_y += metrics.MENU_ITEM_H
+		item_y += f32(metrics.MENU_ITEM_H)
 	}
 	return chosen
 }
