@@ -451,6 +451,13 @@ _gradient_quad :: proc(rec: Rectangle, tl, tr, br, bl: [4]f32) {
 }
 
 @(private)
+_gradient_v :: proc(rec: Rectangle, top, bottom: Color) {
+	color_top := col_f(top)
+	color_bottom := col_f(bottom)
+	_gradient_quad(rec, color_top, color_top, color_bottom, color_bottom)
+}
+
+@(private)
 _emit_gradient_v :: proc(r: ^Renderer, rec: Rectangle, top, bottom: Color) {
 	assert(r != nil, "_emit_gradient_v: nil renderer")
 	assert(rec.width >= 0 && rec.height >= 0, "_emit_gradient_v: negative size")
@@ -492,9 +499,7 @@ DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Colo
 // DrawRectangleGradientV draws a rect with a top→bottom color gradient.
 DrawRectangleGradientV :: proc(posX, posY, width, height: i32, top, bottom: Color) {
 	rec := Rectangle{f32(posX), f32(posY), f32(width), f32(height)}
-	if !g.frame.has_frame do return
-	batch_set(&g.rend, .Solid, nil)
-	_emit_gradient_v(&g.rend, rec, top, bottom)
+	_gradient_v(rec, top, bottom)
 }
 
 // DrawRectangleGradientEx draws a rect with an independent color per corner.

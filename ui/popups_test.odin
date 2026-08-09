@@ -95,6 +95,7 @@ context_menu_clamps_and_claims_in_screen_space :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
+	sem_enable(&runtime, true)
 	output := new(Ui_Output)
 	defer free(output)
 	input := Ui_Input {

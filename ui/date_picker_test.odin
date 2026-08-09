@@ -91,5 +91,6 @@ date_picker_popup_clamps_and_records_in_screen_space :: proc(t: ^testing.T) {
 	menu_h := ui_frame_sc(&frame, 30) * 8 + metrics.PADDING * 2
 	expected := Rectangle{f32(800 - menu_w), f32(500 - menu_h - 2), f32(menu_w), f32(menu_h)}
 	testing.expect_value(t, output.overlay.commands[0].rect, expected)
-	testing.expect_value(t, output.overlay.commands[3].rect.y, expected.y + f32(metrics.PADDING))
+	testing.expect_value(t, output.overlay.commands[3].kind, Paint_Kind.Text)
+	testing.expect_value(t, output.overlay.commands[3].p0.y, expected.y + f32(metrics.PADDING))
 }
