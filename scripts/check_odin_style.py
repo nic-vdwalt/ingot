@@ -281,7 +281,10 @@ def main() -> int:
         baseline = json.loads(Path(arguments.baseline).read_text())
     failed = False
     for relative in tracked_odin_files(root):
-        source = (root / relative).read_text(encoding="utf-8")
+        path = root / relative
+        if not path.is_file():
+            continue
+        source = path.read_text(encoding="utf-8")
         if arguments.print_procedures:
             for procedure in procedures(source):
                 if procedure.lines > PROCEDURE_LIMIT:

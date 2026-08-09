@@ -619,7 +619,7 @@ main :: proc() {
 		ODIN_OS,
 		"\",\"arch\":\"",
 		ODIN_ARCH,
-		"\",\"cpu\":\"runner\",\"toolchain\":\"odin dev-2026-06:285f6d87b\"}}\n",
+		"\",\"cpu\":\"runner\",\"toolchain\":\"odin dev-2026-08:8412dc37a\"}}\n",
 	)
 	ui.ui_frame_release(&h.frame)
 }

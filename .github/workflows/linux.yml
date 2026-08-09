@@ -40,22 +40,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir "$RUNNER_TEMP/odin"
-          gh api repos/odin-lang/Odin/releases/assets/443563911 \
+          gh api repos/odin-lang/Odin/releases/assets/504110654 \
             -H "Accept: application/octet-stream" > "$RUNNER_TEMP/odin.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
-          git init "$RUNNER_TEMP/odin-source"
-          git -C "$RUNNER_TEMP/odin-source" remote add origin https://github.com/odin-lang/Odin
-          git -C "$RUNNER_TEMP/odin-source" fetch --depth=1 origin 285f6d87bc86b17329fb23416fd512da4393885b
-          git -C "$RUNNER_TEMP/odin-source" checkout --detach FETCH_HEAD
-          git -C "$RUNNER_TEMP/odin-source" config core.abbrev 9
-          cd "$RUNNER_TEMP/odin-source"
-          ./build_odin.sh release
-          cp odin "$RUNNER_TEMP/odin/odin"
           gh api repos/DanielGavin/ols/releases/assets/487668598 \
             -H "Accept: application/octet-stream" > "$RUNNER_TEMP/ols.zip"
           unzip -q "$RUNNER_TEMP/ols.zip" -d "$RUNNER_TEMP/ols"
           mv "$RUNNER_TEMP/ols/odinfmt-x86_64-unknown-linux-gnu" "$RUNNER_TEMP/ols/odinfmt"
-          gh api repos/gfx-rs/wgpu-native/releases/assets/392896163 \
+          gh api repos/gfx-rs/wgpu-native/releases/assets/455571719 \
             -H "Accept: application/octet-stream" > "$RUNNER_TEMP/wgpu.zip"
           mkdir "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
           unzip -q "$RUNNER_TEMP/wgpu.zip" -d "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
