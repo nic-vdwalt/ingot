@@ -97,13 +97,22 @@ context_menu_clamps_and_claims_in_screen_space :: proc(t: ^testing.T) {
 	defer ui_runtime_destroy(&runtime)
 	output := new(Ui_Output)
 	defer free(output)
-	input := Ui_Input{screen_size = {300, 200}}
-	frame := Ui_Frame{output = output}
+	input := Ui_Input {
+		screen_size = {300, 200},
+	}
+	frame := Ui_Frame {
+		output = output,
+	}
 	ui_frame_begin(&frame, &runtime, &input)
 	defer ui_frame_end(&frame)
 	ui_frame_pane_push(&frame, {180, 120})
 	defer ui_frame_pane_pop(&frame)
-	state := Context_Menu_State{open = true, just_opened = true, anchor_x = 100, anchor_y = 100}
+	state := Context_Menu_State {
+		open        = true,
+		just_opened = true,
+		anchor_x    = 100,
+		anchor_y    = 100,
+	}
 	items := []Menu_Item{{label = "One"}}
 	_ = context_menu(&frame, &state, items, {0, 0, 300, 200})
 	menu_w := context_menu_width_frame(&frame, items, 300)

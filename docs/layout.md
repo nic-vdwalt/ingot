@@ -9,10 +9,10 @@ A procedure's name tells you which category owns geometry and which units it exp
 | Category | Receiver | Units | Identity | Naming |
 |---|---|---|---|---|
 | **Facade leaf** | `u: ^Ui` | logical, scaled once | `Widget_Id` for interactive widgets; none for presentation | bare name - `button`, `spinner`, `tooltip` |
-| **Explicit leaf** | `frame: ^Ui_Frame` | physical `Rect_I32` | caller-owned `Focus_Opt` where interactive | `*_at` - `button_at`, `line_chart_at` |
-| **Explicit composition** | `^Ui_Frame` + caller state/config | physical named bounds | subsystem-owned | lifecycle/component names - `pane_begin`, `listbox_begin`, `context_menu` |
-| **Paint/measurement** | explicit owner | physical or float paint geometry | none | verbs/subsystem prefix - `markdown_draw`, `overlay_*`, `measure_*` |
-| **Physical layout** | `l: ^Layout` | physical pixels | none | layout verbs - `layout_begin`, `push_row`, `next` |
+| **Explicit leaf** | `frame: ^Ui_Frame` | screen-space `Rect_I32` | caller-owned `Focus_Opt` where interactive | `*_at` - `button_at`, `line_chart_at` |
+| **Explicit composition** | `^Ui_Frame` + caller state/config | screen-space named bounds | subsystem-owned | lifecycle/component names - `pane_begin`, `listbox_begin`, `context_menu` |
+| **Paint/measurement** | explicit owner | screen-space or float paint geometry | none | verbs/subsystem prefix - `markdown_draw`, `overlay_*`, `measure_*` |
+| **Explicit layout** | `l: ^Layout` | logical screen pixels | none | layout verbs - `layout_begin`, `push_row`, `next` |
 
 Ordinary leaf widgets and simple presentation components have facade forms. Application-owned composition protocols - listbox, pane, modal, context menu, overlay, markdown, `Flow_Layout`, `Fit_Column`, and `Grid` - remain explicit by design.
 
@@ -20,10 +20,12 @@ No procedure that takes a `^Ui` carries a `ui_` prefix. `scripts/check_ui_api_la
 
 ## Units
 
-- Root and explicit `Rect_I32` values are physical pixels.
-- Numeric dimensions and dimension-bearing facade options are logical and scale once. Explicit option structs are physical and are converted by a named facade boundary.
-- Screen rectangles, measured text, and `Ui_Metrics` are already physical values.
+- Root and explicit `Rect_I32` values are logical screen pixels, not framebuffer pixels.
+- Numeric dimensions and dimension-bearing facade options are logical and scale once. Explicit option structs are scaled screen-space values and are converted by a named facade boundary.
+- Screen rectangles, measured text, and `Ui_Metrics` are already scaled screen-space values.
 - Fixed literals passed to low-level layout or `*_at` APIs use `ui_frame_sc` once.
+- Framebuffer or attachment pixels are a backend domain reached only at explicit conversion boundaries such as scissor setup.
+- These 2D units are separate from the right-handed ROS 3D world basis (+X forward, +Y left, +Z up).
 - `Space` tokens are logical values resolved once by `space_px`.
 - Flex weights, percentages, animation fractions, and data values are dimensionless.
 

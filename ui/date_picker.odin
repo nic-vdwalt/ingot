@@ -223,8 +223,7 @@ date_picker_popup :: proc(
 	cell := ui_frame_sc(frame, 30)
 	pad := metrics.PADDING
 	header_h := ui_frame_sc(frame, 30)
-	grid_w := cell * 7
-	menu_w := grid_w + pad * 2
+	menu_w := cell * 7 + pad * 2
 	menu_h := header_h + cell + cell * 6 + pad * 2
 	origin := frame_pane_origin(frame)
 	ox, oy := i32(origin.x), i32(origin.y)
@@ -248,7 +247,6 @@ date_picker_popup :: proc(
 	overlay_rect(frame, screen_rect, style.bg_popup)
 	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
 
-	// Month header: [<] Month Year [>]
 	nav_w := ui_frame_sc(frame, 26)
 	prev_rect := Rectangle{f32(mx + pad), f32(my + pad), f32(nav_w), f32(header_h - 4)}
 	next_rect := Rectangle {
@@ -307,24 +305,50 @@ date_picker_popup :: proc(
 		)
 	}
 
-	// Day grid.
+	changed = date_picker_days(
+		frame,
+		st,
+		value,
+		mouse,
+		mx,
+		row_y + cell,
+		ox,
+		oy,
+		cell,
+		pad,
+		pressed,
+	)
+	overlay_end(frame)
+	return changed
+}
+
+@(private = "file")
+date_picker_days :: proc(
+	frame: ^Ui_Frame,
+	st: ^Date_Picker_State,
+	value: ^Calendar_Date,
+	mouse: Vector2,
+	mx, grid_y, ox, oy, cell, pad: i32,
+	pressed: bool,
+) -> (
+	changed: bool,
+) {
+	assert(frame != nil && st != nil && value != nil, "date_picker_days: invalid call")
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
 	first_weekday := calendar_weekday(st.view_year, st.view_month, 1)
 	day_count := calendar_days_in_month(st.view_year, st.view_month)
-	grid_y := row_y + cell
 	for day in 1 ..= day_count {
 		slot := first_weekday + day - 1
-		column := slot % 7
-		row := slot / 7
-		cx := mx + pad + column * cell
-		cy := grid_y + row * cell
+		cx := mx + pad + slot % 7 * cell
+		cy := grid_y + slot / 7 * cell
 		cell_rect := Rectangle{f32(cx), f32(cy), f32(cell), f32(cell)}
 		hovered := point_in_rect(mouse, cell_rect)
 		is_selected :=
 			value.day == day && value.month == st.view_month && value.year == st.view_year
-		if is_selected {
-			overlay_rect(frame, {f32(cx + ox), f32(cy + oy), f32(cell), f32(cell)}, style.fg_accent)
-		} else if hovered {
-			overlay_rect(frame, {f32(cx + ox), f32(cy + oy), f32(cell), f32(cell)}, style.bg_active)
+		if is_selected || hovered {
+			color := style.fg_accent if is_selected else style.bg_active
+			overlay_rect(frame, frame_rect_to_screen(frame, cell_rect), color)
 		}
 		if hovered do request_cursor(frame, .POINTING_HAND)
 		day_text := fmt.tprintf("%d", day)
@@ -340,13 +364,12 @@ date_picker_popup :: proc(
 		)
 		if hovered && pressed {
 			chosen := Calendar_Date{st.view_year, st.view_month, day}
-			assert(calendar_date_valid(chosen), "date_picker_popup: produced invalid date")
+			assert(calendar_date_valid(chosen), "date_picker_days: produced invalid date")
 			changed = value^ != chosen
 			value^ = chosen
 			st.open = false
 		}
 	}
-	overlay_end(frame)
 	return changed
 }
 

@@ -132,6 +132,7 @@ draw_text :: proc(
 
 frame_draw_rectangle_lines :: proc(frame: ^Frame, rect: Rect, thick: f32, color: RGBA) {
 	assert(frame != nil && thick >= 0, "frame_draw_rectangle_lines: invalid argument")
+	assert(rect.width >= 0 && rect.height >= 0, "frame_draw_rectangle_lines: negative size")
 	if !_frame_valid(frame) do return
 	previous := _context_activate(frame.owner)
 	defer _context_restore(previous)
@@ -146,6 +147,7 @@ frame_draw_rectangle_rounded :: proc(
 	color: RGBA,
 ) {
 	assert(frame != nil && roundness >= 0, "frame_draw_rectangle_rounded: invalid argument")
+	assert(rect.width >= 0 && rect.height >= 0, "frame_draw_rectangle_rounded: negative size")
 	assert(segments >= 0, "frame_draw_rectangle_rounded: negative segments")
 	if !_frame_valid(frame) do return
 	previous := _context_activate(frame.owner)
@@ -162,6 +164,10 @@ frame_draw_rectangle_rounded_lines :: proc(
 	color: RGBA,
 ) {
 	assert(frame != nil && roundness >= 0, "frame_draw_rectangle_rounded_lines: invalid argument")
+	assert(
+		rect.width >= 0 && rect.height >= 0,
+		"frame_draw_rectangle_rounded_lines: negative size",
+	)
 	assert(segments >= 0 && thick >= 0, "frame_draw_rectangle_rounded_lines: invalid stroke")
 	if !_frame_valid(frame) do return
 	previous := _context_activate(frame.owner)
@@ -175,14 +181,7 @@ frame_draw_rectangle_gradient_v :: proc(frame: ^Frame, rect: Rect, top, bottom: 
 	if !_frame_valid(frame) do return
 	previous := _context_activate(frame.owner)
 	defer _context_restore(previous)
-	DrawRectangleGradientV(
-		i32(rect.x),
-		i32(rect.y),
-		i32(rect.width),
-		i32(rect.height),
-		top,
-		bottom,
-	)
+	DrawRectangleGradientEx(rect, top, bottom, top, bottom)
 }
 
 frame_draw_circle_lines :: proc(frame: ^Frame, center: Vec2, radius: f32, color: RGBA) {

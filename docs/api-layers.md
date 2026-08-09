@@ -201,7 +201,7 @@ cases include canvases, maps, timelines, overlays, scroll-offset content,
 virtualized lists, custom hit regions, and components with measured external
 content.
 
-Explicit APIs are first-class, not deprecated. They take physical pixels and
+Explicit APIs are first-class, not deprecated. They take logical screen pixels and
 transfer scaling and geometry ownership to the caller. Do not use them for a
 fixed form solely because its rectangles are easy to calculate; the facade
 keeps DPI, focus, and later layout changes centralized.
@@ -209,7 +209,7 @@ keeps DPI, focus, and later layout changes centralized.
 A screen may mix modes. Let Flow UI own ordinary controls and use `canvas` to
 reserve a logical slot and run a balanced explicit callback inside it. Use
 `canvas_begin` and `canvas_end` directly only when the caller already owns a
-physical rectangle or needs a manual lifecycle. Canvas paint is renderer-independent;
+screen-space rectangle or needs a manual lifecycle. Canvas paint is renderer-independent;
 use direct `gfx` only when its paint commands cannot express the content.
 
 See [Layout conventions](layout.md) and

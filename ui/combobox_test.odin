@@ -59,17 +59,28 @@ combobox_popup_clamps_and_records_in_screen_space :: proc(t: ^testing.T) {
 	text_backend: Test_Text_Backend_State
 	ui_runtime_set_text_backend(
 		&runtime,
-		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
 	)
 	output := new(Ui_Output)
 	defer free(output)
-	input := Ui_Input{screen_size = {300, 200}}
-	frame := Ui_Frame{output = output}
+	input := Ui_Input {
+		screen_size = {300, 200},
+	}
+	frame := Ui_Frame {
+		output = output,
+	}
 	ui_frame_begin(&frame, &runtime, &input)
 	defer ui_frame_end(&frame)
 	ui_frame_pane_push(&frame, {180, 120})
 	defer ui_frame_pane_pop(&frame)
-	state := Combobox_State{open = true, just_opened = true}
+	state := Combobox_State {
+		open        = true,
+		just_opened = true,
+	}
 	defer combobox_state_destroy(&state)
 	items := []Combobox_Item{{1, "One"}}
 	selected: u64

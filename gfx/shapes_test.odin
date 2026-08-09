@@ -120,6 +120,21 @@ gradient_ex_maps_raylib_corner_order :: proc(t: ^testing.T) {
 }
 
 @(test)
+gradient_quad_preserves_fractional_geometry :: proc(t: ^testing.T) {
+	r := new_test_renderer()
+	defer free(r)
+	top := [4]f32{1, 0, 0, 1}
+	bottom := [4]f32{0, 0, 1, 1}
+	_emit_gradient_quad(r, {1.25, 2.5, 3.75, 4.5}, top, top, bottom, bottom)
+	expect_point_near(t, r.verts[0].pos, {1.25, 2.5}, "tl")
+	expect_point_near(t, r.verts[1].pos, {1.25, 7}, "bl")
+	expect_point_near(t, r.verts[2].pos, {5, 2.5}, "tr")
+	expect_point_near(t, r.verts[3].pos, {5, 7}, "br")
+	testing.expect_value(t, r.verts[0].col, top)
+	testing.expect_value(t, r.verts[3].col, bottom)
+}
+
+@(test)
 polar_places_points_on_the_circle :: proc(t: ^testing.T) {
 	center := Vector2{10, 20}
 	for degrees in ([]f32{0, 45, 90, 180, 270, 360}) {
