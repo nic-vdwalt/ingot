@@ -89,7 +89,7 @@ harnesses.
 
 | Package | Role |
 |---|---|
-| `ingot:gfx` | Windowing, WebGPU rendering, shapes, textures, text, input, audio, cameras, and a raylib/rlgl-shaped API |
+| `ingot:gfx` | Windowing, WebGPU 2D/3D rendering, textured and instanced meshes, configurable lights, frustum queries, shapes, text, input, audio, cameras, and a raylib/rlgl-shaped API |
 | `ingot:ui` | Renderer-independent immediate-mode widgets, layout, paint output, input snapshots, accessibility semantics, and themes |
 | `ingot:ui_gfx` | Adapter that captures `gfx` input, replays UI paint output, and applies platform output |
 | `ingot:prefs` | Native settings files and web `localStorage` behind one API |

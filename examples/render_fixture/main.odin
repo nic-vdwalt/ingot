@@ -42,6 +42,9 @@ ping_rt: rl.RenderTexture2D
 pong_rt: rl.RenderTexture2D
 gpu_target: rl.Gpu_3D_Target
 gpu_sphere: rl.Gpu_Mesh
+gpu_textured_quad: rl.Gpu_Mesh
+gpu_overlay_line: rl.Gpu_Mesh
+gpu_overlay_points: rl.Gpu_Mesh
 resources_ready: bool
 ui_session: ui_gfx.Session
 ui_frame: ^ui.Ui_Frame
@@ -119,6 +122,7 @@ ensure_resources :: proc() {
 	target_ok, sphere_ok: bool
 	gpu_target, target_ok = rl.create_gpu_3d_target(384, 240)
 	gpu_sphere, sphere_ok = rl.create_sphere_mesh(1, 16, 24)
+	fixture_meshes_ok := ensure_gpu_fixture_meshes()
 	resources_ready =
 		font_ready &&
 		source_texture.id != 0 &&
@@ -126,7 +130,29 @@ ensure_resources :: proc() {
 		ping_rt.texture.id != 0 &&
 		pong_rt.texture.id != 0 &&
 		target_ok &&
-		sphere_ok
+		sphere_ok &&
+		fixture_meshes_ok
+}
+
+// ensure_gpu_fixture_meshes creates the smallest geometry that exercises
+// textured triangles plus coplanar line/point overlays. Keeping the fixture
+// tiny makes backend validation failures attributable to pipeline state, not
+// geometry volume.
+ensure_gpu_fixture_meshes :: proc() -> bool {
+	vertices := [?]rl.Gpu_3D_Vertex {
+		{position = {0, -1, -1}, normal = {1, 0, 0}, uv = {0, 0}},
+		{position = {0, 1, -1}, normal = {1, 0, 0}, uv = {1, 0}},
+		{position = {0, -1, 1}, normal = {1, 0, 0}, uv = {0, 1}},
+		{position = {0, 1, 1}, normal = {1, 0, 0}, uv = {1, 1}},
+	}
+	triangles := [?]u32{0, 1, 2, 1, 3, 2}
+	lines := [?]u32{0, 3, 1, 2}
+	points := [?]u32{0, 1, 2, 3}
+	quad_ok, line_ok, point_ok: bool
+	gpu_textured_quad, quad_ok = rl.create_gpu_mesh(vertices[:], triangles[:], .Triangles)
+	gpu_overlay_line, line_ok = rl.create_gpu_mesh(vertices[:], lines[:], .Lines)
+	gpu_overlay_points, point_ok = rl.create_gpu_mesh(vertices[:], points[:], .Points)
+	return quad_ok && line_ok && point_ok
 }
 
 draw_render_targets :: proc() {
@@ -139,6 +165,12 @@ draw_render_targets :: proc() {
 	}
 	gpu_pass, ok := rl.begin_gpu_3d(&gpu_target, camera)
 	if ok {
+		// Non-default side light proves pass-level lighting reaches the shader;
+		// the direction remains fixed in ROS world space across model transforms.
+		rl.set_gpu_3d_light(
+			&gpu_pass,
+			{direction = {-0.2, 0.8, 0.5}, ambient = 0.35, diffuse = 0.65},
+		)
 		// ROS basis: +X forward, +Y left, +Z up. The blue sphere at x=0
 		// must occlude the orange sphere at x=1 where they overlap.
 		rl.draw_gpu_mesh(
@@ -161,6 +193,44 @@ draw_render_targets :: proc() {
 			gpu_sphere,
 			rl.MatrixTranslate(-7, 0, 0),
 			{color = rl.Color{80, 255, 120, 255}},
+		)
+		// A real texture bind on a UV mesh validates group(1). Coplanar line
+		// and point draws use shader depth nudge because WebGPU pipeline
+		// depthBias cannot cover their topologies.
+		fixture_model := rl.MatrixTranslate(2.4, 0, 0)
+		rl.draw_gpu_mesh(
+			&gpu_pass,
+			gpu_textured_quad,
+			fixture_model,
+			{color = rl.WHITE, texture = source_texture},
+		)
+		rl.draw_gpu_mesh(
+			&gpu_pass,
+			gpu_overlay_line,
+			fixture_model,
+			{color = rl.Color{255, 240, 80, 255}, depth_nudge = 0.0005},
+		)
+		rl.draw_gpu_mesh(
+			&gpu_pass,
+			gpu_overlay_points,
+			fixture_model,
+			{color = rl.Color{255, 80, 220, 255}, depth_nudge = 0.001},
+		)
+		// 300 instances cross the 256-transform uniform chunk boundary. Their
+		// small scale keeps the complete grid inside the fixture viewport.
+		transforms: [300]rl.Matrix
+		for &transform, index in transforms {
+			row := index / 20
+			column := index % 20
+			transform =
+				rl.MatrixTranslate(0.8, (f32(column) - 9.5) * 0.08, (f32(row) - 7) * 0.08) *
+				rl.MatrixScale(0.025, 0.025, 0.025)
+		}
+		rl.draw_gpu_mesh_instanced(
+			&gpu_pass,
+			gpu_sphere,
+			transforms[:],
+			{color = rl.Color{180, 235, 255, 255}},
 		)
 		rl.end_gpu_3d(&gpu_pass)
 	}

@@ -109,14 +109,25 @@ GPU depth rendering uses the separate opt-in API in `gfx/gpu3d.odin`:
 
 - Create and explicitly unload generation-checked GPU meshes and targets.
 - Upload bounded indexed triangle, line, or point geometry with `create_gpu_mesh`.
-  Vertices carry position, normal, and a normalized scalar that materials may map
-  between two colors. Oversized, malformed, and out-of-range geometry is rejected.
+  Vertices carry position, normal, texture coordinates, and a normalized scalar
+  that materials may map between two colors. Oversized, malformed, and out-of-range
+  geometry is rejected.
+- Materials may bind a generation-checked `Texture2D`; a zero or stale handle falls
+  back to the neutral white texture. `depth_nudge` offsets clip depth uniformly for
+  coplanar triangle, line, and point overlays without changing model geometry.
 - Resize offscreen targets transactionally with `resize_gpu_3d_target`; allocation
   failure leaves the previous valid target intact.
 - Begin the pass with `begin_gpu_3d`, selecting color/depth load actions before
   pass creation.
 - Call `begin_gpu_3d_pro` when the caller already owns a view-projection matrix.
-- Submit meshes with `draw_gpu_mesh`.
+- Configure the pass light with `set_gpu_3d_light`; the default preserves the
+  legacy direction and ambient/diffuse factors.
+- Submit one model with `draw_gpu_mesh`, or bounded transform batches with
+  `draw_gpu_mesh_instanced` (at most 256 instances per encoded draw; larger slices
+  are chunked without heap allocation).
+- Build allocation-free culling volumes with `camera_frustum` or
+  `frustum_from_matrix`, then use `frustum_contains_point` and
+  `frustum_intersects_bounds` before submitting meshes.
 - Balance the pass with `end_gpu_3d`.
 
 All Ingot 3D APIs use the right-handed ROS world basis: **+X forward, +Y left,
@@ -147,10 +158,11 @@ matrix retain responsibility for unprojection until that contract is added.
 The opaque pipeline uses indexed mesh buffers, submission-safe uniform records,
 `.Depth24Plus`, depth writes, and `.Less` comparison for opaque geometry. Generic
 GPU meshes support triangle, line, and point-list topology. The current point path
-uses the adapter's one-pixel point primitive; larger point sprites and dynamic
-instancing remain future extensions. Transparent and additive behavior uses
-distinct pipeline state. Billboards and legacy mesh calls retain their existing
-behavior until a caller deliberately migrates them.
+uses the adapter's one-pixel point primitive; larger point sprites remain a future
+extension. Bounded dynamic instancing uses a uniform transform block and chunks at
+256 instances per draw. Transparent and additive behavior uses distinct pipeline
+state. Billboards and legacy mesh calls retain their existing behavior until a
+caller deliberately migrates them.
 
 The GPU 3D API is a visualization escape hatch rather than a scene graph,
 material system, asset pipeline, or full game engine.
@@ -261,7 +273,18 @@ bash build_web.sh examples/render_fixture
 
 The fixture covers the ergonomic custom-Session lifecycle, mixed batches, state
 changes, target preserve/clear behavior, ping-pong orientation, custom uniforms,
-instancing, and depth-overlapping 3D geometry. For each release backend, record
+and depth-overlapping 3D geometry. Its GPU 3D validation matrix is:
+
+| Fixture | Contract |
+|---|---|
+| Two overlapping spheres | Depth writes and `.Less` comparison |
+| Green sphere behind camera | Clip-space rejection |
+| Non-default side light | `set_gpu_3d_light` pass uniforms |
+| Textured quad | UV vertex attribute and shared texture bind group |
+| Coplanar line and points | Shader `depth_nudge` on non-triangle topologies |
+| 300-sphere grid | Instanced draw and 256-instance chunk boundary |
+
+For each release backend, record
 operating system, architecture, GPU, driver, backend, browser where applicable,
 and date. A successful compile is
 `compiled`; only a clean fixture run without validation errors is `validated`.

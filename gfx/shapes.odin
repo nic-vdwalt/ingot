@@ -113,16 +113,14 @@ DrawRectanglePro :: proc(rec: Rectangle, origin: Vector2, rotation: f32, color: 
 	tl = rot(tl, c, s); tr = rot(tr, c, s); br = rot(br, c, s); bl = rot(bl, c, s)
 
 	off := [2]f32{rec.x, rec.y}
-	batch_set(&g.rend, .Solid, nil)
-	push_quad4(
-		&g.rend,
-		{tl.x + off.x, tl.y + off.y},
-		{tr.x + off.x, tr.y + off.y},
-		{br.x + off.x, br.y + off.y},
-		{bl.x + off.x, bl.y + off.y},
-		{0, 0}, {1, 0}, {1, 1}, {0, 1},
-		col_f(color),
-	)
+	top_left := Vector2{tl.x + off.x, tl.y + off.y}
+	top_right := Vector2{tr.x + off.x, tr.y + off.y}
+	bottom_right := Vector2{br.x + off.x, br.y + off.y}
+	bottom_left := Vector2{bl.x + off.x, bl.y + off.y}
+	// Reuse the existing triangle submission boundary so this compatibility
+	// wrapper does not reach into the default graphics context directly.
+	DrawTriangle(top_left, top_right, bottom_right, color)
+	DrawTriangle(top_left, bottom_right, bottom_left, color)
 }
 
 // --- rectangle outlines ----------------------------------------------------
