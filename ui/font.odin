@@ -57,11 +57,6 @@ set_font_dpi_with :: proc(system: ^Text_System, scale: f32) {
 	system.font_dpi = scale if scale > 0 else 1.0
 }
 
-reset_font_atlases_with :: proc(system: ^Text_System) {
-	assert(system != nil)
-	if !system.font_loaded do return
-}
-
 measure_cache_stats_with :: proc(system: ^Text_System) -> (entries: int, evictions: int) {
 	assert(system != nil)
 	return len(system.measure_cache), system.measure_cache_evictions
@@ -126,10 +121,7 @@ clear_measure_cache_with :: proc(system: ^Text_System) {
 
 text_system_destroy :: proc(system: ^Text_System) {
 	assert(system != nil)
-	if system.font_loaded {
-		reset_font_atlases_with(system)
-		delete(system.font_codepoints)
-	}
+	if system.font_loaded do delete(system.font_codepoints)
 	clear_measure_cache_with(system)
 	clear_wrap_cache_with(system)
 	system^ = {}
