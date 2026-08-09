@@ -60,7 +60,15 @@ terrain_indices_are_valid_and_consistently_wound :: proc(t: ^testing.T) {
 		b := storage.indices[triangle * 3 + 1]
 		c := storage.indices[triangle * 3 + 2]
 		testing.expect(t, a != b && b != c && a != c)
+		position_a := storage.vertices[a].position
+		position_b := storage.vertices[b].position
+		position_c := storage.vertices[c].position
+		edge_ab := position_b - position_a
+		edge_ac := position_c - position_a
+		cross_z := edge_ab[0] * edge_ac[1] - edge_ab[1] * edge_ac[0]
+		testing.expect(t, cross_z > 0)
 	}
+	for vertex in storage.vertices do testing.expect(t, vertex.normal[2] > 0)
 }
 
 @(test)

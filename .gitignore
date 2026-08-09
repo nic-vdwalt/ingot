@@ -19,6 +19,7 @@ fuzz/ui/fuzz_ui
 fuzz/view/fuzz_view
 fuzz/gfx_frame/fuzz_gfx_frame
 fuzz/interact/fuzz_interact
+fuzz/procgen/fuzz_procgen
 fuzz/wsreconn/fuzz_wsreconn
 fuzz/wsreconn/fuzz_wsreconn_tsan
 benchmarks/widgets/build/

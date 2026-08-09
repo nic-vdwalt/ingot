@@ -110,7 +110,7 @@ frame :: proc() {
 	if state.ready {
 		rl.DrawTexturePro(
 			state.target.texture.texture,
-			{0, 0, WORLD_WIDTH, -WORLD_HEIGHT},
+			{0, 0, WORLD_WIDTH, WORLD_HEIGHT},
 			{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())},
 			{},
 			0,

@@ -130,6 +130,11 @@ GPU depth rendering uses the separate opt-in API in `gfx/gpu3d.odin`:
   `frustum_intersects_bounds` before submitting meshes.
 - Balance the pass with `end_gpu_3d`.
 
+Explicit GPU 3D passes write their attachment in presentation orientation. Blit a
+`Gpu_3D_Target` with a positive source height. The negative-source-height rule
+applies to targets rendered through `BeginTextureMode`, whose 2D projection is
+intentionally Y-flipped to preserve raylib compatibility.
+
 All Ingot 3D APIs use the right-handed ROS world basis: **+X forward, +Y left,
 +Z up** (`+X × +Y = +Z`). Camera vectors, model transforms, mesh positions and
 normals, lights, bounds, rays, and scene data use this basis. Importers convert
