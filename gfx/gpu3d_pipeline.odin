@@ -419,27 +419,14 @@ destroy_gpu_3d_target :: proc(target: ^Gpu_3D_Target) {
 	_gpu_3d_target_destroy(default_context(), target)
 }
 
-@(private)
-_gpu_3d_target_size :: proc(
-	ctx: ^Context,
-	target: ^Gpu_3D_Target,
-) -> (
-	width, height: i32,
-	ok: bool,
-) {
-	if ctx == nil || target == nil do return 0, 0, false
-	color := _texture_slot_context(ctx.id, &ctx.resources.textures, target.texture.texture.id)
-	depth := _texture_slot_context(ctx.id, &ctx.resources.textures, target.texture.depth.id)
-	if color == nil || depth == nil || color.entry == nil || depth.entry == nil do return 0, 0, false
-	if color.entry.width <= 0 || color.entry.height <= 0 do return 0, 0, false
-	if color.entry.width != depth.entry.width || color.entry.height != depth.entry.height {
-		return 0, 0, false
-	}
-	return color.entry.width, color.entry.height, true
-}
-
 gpu_3d_target_size :: proc(target: ^Gpu_3D_Target) -> (width, height: i32, ok: bool) {
-	return _gpu_3d_target_size(default_context(), target)
+	if target == nil do return 0, 0, false
+	color := target.texture.texture
+	depth := target.texture.depth
+	if color.id == 0 || depth.id == 0 do return 0, 0, false
+	if color.width <= 0 || color.height <= 0 do return 0, 0, false
+	if color.width != depth.width || color.height != depth.height do return 0, 0, false
+	return color.width, color.height, true
 }
 
 resize_gpu_3d_target :: proc(target: ^Gpu_3D_Target, width, height: i32) -> bool {

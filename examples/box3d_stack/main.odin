@@ -311,7 +311,8 @@ shutdown :: proc(value: ^State) {
 	physics_destroy(value)
 	if value.cube_edges.id != 0 do rl.destroy_gpu_mesh(&value.cube_edges)
 	if value.cube.id != 0 do rl.destroy_gpu_mesh(&value.cube)
-	if value.target.texture.texture.id != 0 do rl.destroy_gpu_3d_target(&value.target)
+	_, _, target_ok := rl.gpu_3d_target_size(&value.target)
+	if target_ok do rl.destroy_gpu_3d_target(&value.target)
 	value.graphics_ready = false
 	rl.CloseWindow()
 }
