@@ -6,10 +6,9 @@ capabilities; applications must handle unavailable platform services.
 
 ## Versioning policy
 
-Ingot publishes `0.x` tags. Patch releases preserve documented public source
-compatibility within their minor line. Minor releases may change documented
-public APIs while the project is pre-`1.0`; read the
-[changelog](../CHANGELOG.md) before moving a pin.
+Ingot publishes pre-`1.0` source tags. Any `0.x` tag may change documented
+public APIs, including through breaking changes; every such change is recorded
+in the [changelog](../CHANGELOG.md). Pin exact tags and upgrade deliberately.
 
 A planned removal receives a changelog migration entry. Where the old surface
 can remain safely and without preserving a flawed boundary, it remains as a
