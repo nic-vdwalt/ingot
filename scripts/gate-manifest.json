@@ -42,6 +42,7 @@
     "chart_demo",
     "render_fixture",
     "procgen_world",
+    "box3d_stack",
     "multi_context_fixture",
     "multi_app_fixture",
     "view_builder",
