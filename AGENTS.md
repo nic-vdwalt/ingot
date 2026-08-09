@@ -52,8 +52,8 @@ ui_gfx view view/generate libvterm term prefs net`, the offline WSS/TLS matrix, 
   100-column lines).
 - **Web build**: `bash build_web.sh` → `web/ingot_web.wasm`; serve with
   `(cd web && python3 -m http.server 8000)`.
-- **Web gate**: `bash scripts/check-web.sh` - compiles gallery, Breakout, and the
-  default demo, then runs `web/test/*.test.mjs` with dependency-free Node.
+- **Web gate**: `bash scripts/check-web.sh` - compiles gallery, Breakout, Box3D,
+  and the default demo, then runs `web/test/*.test.mjs` with dependency-free Node.
 - **Rebuild libvterm** (rarely needed): `scripts/build-libvterm.sh` (macOS) /
   `scripts/build-libvterm.bat` (Windows).
 

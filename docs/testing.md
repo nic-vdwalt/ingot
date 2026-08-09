@@ -113,10 +113,10 @@ Validate the browser target with:
 bash scripts/check-web.sh
 ```
 
-This compiles the gallery, Breakout, and default web demo, then runs the
-dependency-free JavaScript lifecycle and semantic DOM tests. These tests do not
-launch a browser; see `production-readiness.md` for the real browser, operating-
-system, PTY, GPU, networking, and accessibility matrix.
+This compiles the gallery, Breakout, Box3D stack, and default web demo, then runs
+the dependency-free JavaScript lifecycle and semantic DOM tests. These tests do
+not launch a browser; see `production-readiness.md` for the real browser,
+operating-system, PTY, GPU, networking, and accessibility matrix.
 
 The ordinary `term` run enables `INGOT_PTY_SIM=true`. It validates terminal pump
 behavior without spawning a shell. Real Unix PTY and Windows ConPTY validation is

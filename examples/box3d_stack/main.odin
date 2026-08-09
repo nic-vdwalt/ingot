@@ -320,4 +320,3 @@ shutdown :: proc(value: ^State) {
 	value.graphics_ready = false
 	rl.CloseWindow()
 }
-

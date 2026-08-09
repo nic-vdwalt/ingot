@@ -9,6 +9,11 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+### Added
+
+- `examples/box3d_stack` now builds for WebGPU browsers through Odin's
+  `vendor:box3d` WASM object and is covered by the web compile gate.
+
 ## [0.1.5] - 2026-08-09
 
 `0.1.4` was not published. This is a source-only release; no binaries,

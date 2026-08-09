@@ -245,18 +245,18 @@ lifecycle validation), `examples/procgen_world` (deterministic terrain, biome
 placement, culling, and GPU residency without external assets), and
 `examples/raylib_migration_fixture` (import-only 2D compatibility contract).
 
-`examples/box3d_stack` is a native-only, zero-asset Box3D integration: Ingot owns
-the WebGPU renderer, camera, input, lighting, and HUD while `vendor:box3d` owns a
-bounded fixed-step simulation. Run it with:
+`examples/box3d_stack` is a zero-asset Box3D integration: Ingot owns the WebGPU
+renderer, camera, input, lighting, and HUD while `vendor:box3d` owns a bounded
+fixed-step simulation. Run it natively or build it for the browser with:
 
 ```sh
 odin run examples/box3d_stack -collection:ingot=.
+bash build_web.sh examples/box3d_stack
 ```
 
 Use R to reset, Space to pause, N to single-step, A/D, arrows, or left-drag to
-orbit, and W/S, the mouse wheel, or trackpad scrolling to zoom. It is intentionally
-absent from the web build because the official Box3D vendor package does not
-establish `js_wasm32` support.
+orbit, and W/S, the mouse wheel, or trackpad scrolling to zoom. Browser builds use
+Box3D's serial worker configuration; native builds may opt into platform threads.
 
 For web, `bash build_web.sh examples/gallery` writes `web/ingot_web.wasm`;
 serve `web/` over HTTP in a WebGPU browser (Chrome/Edge 113+ or Safari 18+).
