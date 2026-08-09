@@ -15,6 +15,15 @@ MAX_FRAME_DT :: f32(0.25)
 SCREEN_WIDTH :: 1280
 SCREEN_HEIGHT :: 720
 
+BOX_COLORS := [6]rl.Color {
+	{92, 176, 255, 255},
+	{255, 151, 92, 255},
+	{132, 218, 146, 255},
+	{223, 126, 214, 255},
+	{247, 213, 105, 255},
+	{133, 134, 235, 255},
+}
+
 Box :: struct {
 	body:         b3.BodyId,
 	half_extents: [3]f32,
@@ -298,8 +307,9 @@ draw_world :: proc(value: ^State) {
 	rl.set_gpu_3d_light(&pass, {{-0.4, 0.5, 0.8}, 0.3, 0.7})
 	floor_transform := rl.MatrixTranslate(0, 0, -2) * rl.MatrixScale(100, 100, 4)
 	rl.draw_gpu_mesh(&pass, value.cube, floor_transform, {color = rl.LIGHTGRAY})
-	for box in value.boxes[:value.box_count] {
-		rl.draw_gpu_mesh(&pass, value.cube, box.transform, {color = rl.BLUE})
+	for box, index in value.boxes[:value.box_count] {
+		color := BOX_COLORS[index % len(BOX_COLORS)]
+		rl.draw_gpu_mesh(&pass, value.cube, box.transform, {color = color})
 	}
 	rl.end_gpu_3d(&pass)
 }
