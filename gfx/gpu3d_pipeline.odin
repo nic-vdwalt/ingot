@@ -12,6 +12,10 @@ GPU_3D_MAX_PIPELINES :: 24
 GPU_3D_MAX_VERTICES :: 1_048_576
 GPU_3D_MAX_INDICES :: 6_291_456
 GPU_3D_MAX_MESH_BYTES :: 128 * 1024 * 1024
+// 256 transforms fill one 16 KiB uniform binding - safely under the 64 KiB
+// maxUniformBufferBindingSize floor WebGPU guarantees on every adapter, and
+// large enough that per-chunk overhead amortizes to one upload and one draw.
+GPU_3D_MAX_INSTANCES_PER_DRAW :: 256
 
 Gpu_Mesh :: struct {
 	id: u32,
@@ -33,10 +37,32 @@ Gpu_Material_Style :: enum {
 }
 
 Gpu_Material :: struct {
-	color:      Color,
-	color_high: Color,
-	use_scalar: bool,
-	style:      Gpu_Material_Style,
+	color:       Color,
+	color_high:  Color,
+	use_scalar:  bool,
+	style:       Gpu_Material_Style,
+	// depth_nudge shifts fragments toward the camera by a constant NDC
+	// offset. Unlike pipeline depthBias - which WebGPU forbids on line and
+	// point topologies - it works on every primitive, so overlays (wire
+	// grids, point clouds) can sit on coplanar surfaces without z-fighting.
+	depth_nudge: f32,
+	// texture with a zero id means untextured: the draw binds the shared
+	// neutral white texture and the shader multiplies by pure white.
+	texture:     Texture2D,
+}
+
+Gpu_3D_Light :: struct {
+	direction: Vector3, // world-space direction toward the light
+	ambient:   f32, // 0..1 base illumination independent of angle
+	diffuse:   f32, // 0..1 angle-dependent contribution
+}
+
+// Matches the previously hard-coded shader constants so default rendering is
+// bit-identical for consumers that never call set_gpu_3d_light.
+GPU_3D_DEFAULT_LIGHT :: Gpu_3D_Light {
+	direction = {0.4, 0.8, 0.3},
+	ambient   = 0.25,
+	diffuse   = 0.75,
 }
 
 Gpu_3D_Load_Action :: enum {
@@ -51,15 +77,21 @@ Gpu_3D_Pass :: struct {
 	pass:            wg.RenderPassEncoder,
 	target:          ^Gpu_3D_Target,
 	view_projection: Matrix,
+	light:           Gpu_3D_Light,
 	generation:      u64,
 	active:          bool,
 	owns_stream:     bool,
+	// Offset of the shared identity instance block uploaded once per pass;
+	// plain draw_gpu_mesh calls reuse it so the instance binding's
+	// minBindingSize cost is paid once per pass, not once per draw.
+	identity_instances_offset: u32,
 }
 
 Gpu_3D_Vertex :: struct {
 	position: [3]f32,
 	normal:   [3]f32,
 	scalar:   f32,
+	uv:       [2]f32,
 }
 
 Gpu_3D_Uniforms :: struct {
@@ -67,20 +99,35 @@ Gpu_3D_Uniforms :: struct {
 	model:           Matrix,
 	color:           [4]f32,
 	color_high:      [4]f32,
+	light_direction: [4]f32, // xyz direction toward the light, w unused
+	light_params:    [4]f32, // x ambient, y diffuse, z depth_nudge, w unused
 	use_scalar:      u32,
-	_padding:        [3]u32,
+	use_texture:     u32,
+	_padding:        [2]u32,
+}
+
+// Per-instance model transforms for draw_gpu_mesh_instanced, read by the
+// shader through @builtin(instance_index). The block is copied raw into the
+// uniform stream, so the Odin layout must match the WGSL
+// array<mat4x4<f32>, N> stride of 64 bytes exactly on every target.
+Gpu_3D_Instance_Uniforms :: struct {
+	transforms: [GPU_3D_MAX_INSTANCES_PER_DRAW]Matrix,
 }
 
 // The dynamic-offset uniform bind group declares minBindingSize =
-// size_of(Gpu_3D_Uniforms). The WGSL view of the struct is 144 bytes (two
-// mat4x4 + vec4); Odin may append tail padding (matrix alignment is
-// target-dependent: 160 on native SIMD, 144 on wasm), and WebGPU permits a
-// binding larger than the shader view. Lock the invariants a struct edit
-// could silently break: never smaller than the shader view, always 16-byte
+// size_of(Gpu_3D_Uniforms). The WGSL view of the struct is 208 bytes (two
+// mat4x4 + four vec4 + one 16-byte u32 block); Odin may append tail padding
+// (matrix alignment is target-dependent), and WebGPU permits a binding
+// larger than the shader view. Lock the invariants a struct edit could
+// silently break: never smaller than the shader view, always 16-byte
 // aligned as dynamic offsets require.
-#assert(size_of(Gpu_3D_Uniforms) >= 176)
+#assert(size_of(Gpu_3D_Uniforms) >= 208)
 #assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
-#assert(size_of(Gpu_3D_Vertex) == 28)
+#assert(size_of(Gpu_3D_Vertex) == 36)
+#assert(size_of(Matrix) == 64)
+#assert(size_of(Gpu_3D_Instance_Uniforms) == GPU_3D_MAX_INSTANCES_PER_DRAW * size_of(Matrix))
+// Stay under the 64 KiB uniform-binding floor WebGPU guarantees everywhere.
+#assert(size_of(Gpu_3D_Instance_Uniforms) <= 65536)
 
 @(private)
 Gpu_3D_Mesh_Entry :: struct {
@@ -154,38 +201,64 @@ struct Uniforms {
     model: mat4x4<f32>,
     color: vec4<f32>,
     color_high: vec4<f32>,
+    light_direction: vec4<f32>,
+    light_params: vec4<f32>,
     use_scalar: u32,
-    padding: vec3<u32>,
+    use_texture: u32,
+    padding: vec2<u32>,
+};
+// Array length mirrors GPU_3D_MAX_INSTANCES_PER_DRAW.
+struct Instances {
+    transforms: array<mat4x4<f32>, 256>,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(1) var<uniform> instances: Instances;
+@group(1) @binding(0) var mesh_texture: texture_2d<f32>;
+@group(1) @binding(1) var mesh_sampler: sampler;
 
 struct VertexOut {
     @builtin(position) position: vec4<f32>,
     @location(0) normal: vec3<f32>,
     @location(1) scalar: f32,
+    @location(2) uv: vec2<f32>,
 };
 
 @vertex
 fn vs_main(
+    @builtin(instance_index) instance_index: u32,
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) scalar: f32,
+    @location(3) uv: vec2<f32>,
 ) -> VertexOut {
     var out: VertexOut;
-    out.position = u.view_projection * u.model * vec4<f32>(position, 1.0);
-    out.normal = normalize((u.model * vec4<f32>(normal, 0.0)).xyz);
+    let model = u.model * instances.transforms[instance_index];
+    out.position = u.view_projection * model * vec4<f32>(position, 1.0);
+    // Nudge NDC depth after projection; multiplying by w keeps the offset a
+    // constant NDC shift after the perspective divide, which lets overlay
+    // materials win the depth test on line and point topologies where
+    // WebGPU forbids pipeline depthBias.
+    out.position.z -= u.light_params.z * out.position.w;
+    out.normal = normalize((model * vec4<f32>(normal, 0.0)).xyz);
     out.scalar = scalar;
+    out.uv = uv;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    let light = normalize(vec3<f32>(0.4, 0.8, 0.3));
-    let diffuse = 0.25 + 0.75 * max(dot(normalize(in.normal), light), 0.0);
+    let light = normalize(u.light_direction.xyz);
+    let diffuse = u.light_params.x + u.light_params.y * max(dot(normalize(in.normal), light), 0.0);
+    // Sample unconditionally and select by flag: textureSample requires
+    // uniform control flow, and the unconditional form is trivially uniform
+    // regardless of analyzer strictness. Untextured draws bind the neutral
+    // white texture, so the multiply is exact identity.
+    let texel = textureSample(mesh_texture, mesh_sampler, in.uv);
     var base = u.color;
     if u.use_scalar != 0u {
         base = mix(u.color, u.color_high, clamp(in.scalar, 0.0, 1.0));
     }
+    base = mix(base, base * texel, f32(u.use_texture));
     return vec4<f32>(base.rgb * diffuse * base.a, base.a);
 }
 `
@@ -244,7 +317,12 @@ _sphere_mesh_geometry :: proc(
 				f32(math.sin(f64(phi))) * f32(math.sin(f64(theta))),
 				f32(math.cos(f64(phi))),
 			}
-			append(vertices, Gpu_3D_Vertex{position = normal * radius, normal = normal})
+			// Spherical UVs: u wraps the equator, v runs pole to pole - both
+			// already computed as the parametric ring/slice fractions.
+			append(
+				vertices,
+				Gpu_3D_Vertex{position = normal * radius, normal = normal, uv = {u, v}},
+			)
 		}
 	}
 	row := slices + 1
@@ -393,6 +471,14 @@ begin_gpu_3d :: proc(
 		_stats_stream_slot_exhaustion()
 		return {}, false
 	}
+	identity_offset, identity_ok := _gpu_3d_identity_instances_upload(&g.rend)
+	if !identity_ok {
+		// Uniform stream exhausted at pass start: operating condition - the
+		// reservation failure is counted inside _uniform_upload, and a slot
+		// acquired only for this pass must be handed back.
+		if owns_stream do _stream_slot_abandon(&g.rend)
+		return {}, false
+	}
 
 	color := wg.RenderPassColorAttachment {
 		view       = color_view,
@@ -424,12 +510,40 @@ begin_gpu_3d :: proc(
 		encoder     = encoder,
 		pass        = pass,
 		target      = target,
+		light       = GPU_3D_DEFAULT_LIGHT,
 		generation  = resources.active_pass_generation,
 		active      = true,
 		owns_stream = owns_stream,
+		identity_instances_offset = identity_offset,
 	}
 	_gpu_3d_set_camera(&result, camera)
 	return result, true
+}
+
+// set_gpu_3d_light overrides the pass light for subsequent draw calls. The
+// direction is normalized and intensities clamped to [0, 1] so the shader
+// contract (unit direction, bounded factors) always holds.
+set_gpu_3d_light :: proc(pass: ^Gpu_3D_Pass, light: Gpu_3D_Light) {
+	assert(pass != nil, "set_gpu_3d_light: nil pass")
+	normalized, ok := _light_normalize(light)
+	assert(ok, "set_gpu_3d_light: degenerate light direction")
+	pass.light = normalized
+}
+
+// _light_normalize is the pure core of set_gpu_3d_light, split out so the
+// clamping and normalization contract is headless-testable.
+@(private)
+_light_normalize :: proc(light: Gpu_3D_Light) -> (Gpu_3D_Light, bool) {
+	assert(_f32_is_finite(light.ambient), "_light_normalize: non-finite ambient")
+	assert(_f32_is_finite(light.diffuse), "_light_normalize: non-finite diffuse")
+	direction, direction_ok := _camera_vector_normalize(light.direction)
+	if !direction_ok do return {}, false
+	return {
+			direction = direction,
+			ambient = clamp(light.ambient, 0, 1),
+			diffuse = clamp(light.diffuse, 0, 1),
+		},
+		true
 }
 
 begin_gpu_3d_pro :: proc(
@@ -463,35 +577,177 @@ draw_gpu_mesh :: proc(
 	if pass == nil || !_gpu_3d_pass_current(&pass.owner.resources.gpu_3d, pass) do return
 	entry := _gpu_3d_mesh(mesh)
 	if entry == nil do return
+	// A skipped draw (pool or stream exhaustion) is the documented operating
+	// behavior; the failure is counted inside the helper.
+	_ = _gpu_3d_draw_indexed(pass, entry, material, transform, pass.identity_instances_offset, 1)
+}
+
+// draw_gpu_mesh_instanced draws one mesh under many model transforms. Input
+// is chunked at GPU_3D_MAX_INSTANCES_PER_DRAW; each chunk is one uniform
+// upload plus one indexed draw, which is the batching win over per-mesh
+// draw_gpu_mesh calls.
+draw_gpu_mesh_instanced :: proc(
+	pass: ^Gpu_3D_Pass,
+	mesh: Gpu_Mesh,
+	transforms: []Matrix,
+	material: Gpu_Material,
+) {
+	if pass == nil || !_gpu_3d_pass_current(&pass.owner.resources.gpu_3d, pass) do return
+	// An empty transform list is a valid no-op, not a programmer error.
+	if len(transforms) == 0 do return
+	entry := _gpu_3d_mesh(mesh)
+	if entry == nil do return
+	chunk_count := _gpu_3d_chunk_count(len(transforms))
+	assert(chunk_count > 0, "draw_gpu_mesh_instanced: zero chunks for non-empty input")
+	for chunk_index in 0 ..< chunk_count {
+		start := chunk_index * GPU_3D_MAX_INSTANCES_PER_DRAW
+		count := min(len(transforms) - start, GPU_3D_MAX_INSTANCES_PER_DRAW)
+		assert(count > 0, "draw_gpu_mesh_instanced: empty chunk")
+		assert(start + count <= len(transforms), "draw_gpu_mesh_instanced: chunk out of range")
+		instances_offset, upload_ok := _gpu_3d_instance_upload(
+			&g.rend,
+			transforms[start:start + count],
+		)
+		if !upload_ok {
+			// Uniform stream exhausted mid-batch: stop rather than draw with
+			// stale instance data - counted inside _uniform_upload.
+			return
+		}
+		// The chunk transforms carry the full model matrix, so the shared
+		// uniform model slot is identity for instanced draws.
+		if !_gpu_3d_draw_indexed(pass, entry, material, 1, instances_offset, u32(count)) do return
+		_stats_gpu3d_instanced_draw(pass.owner)
+	}
+}
+
+// _gpu_3d_chunk_count is the pure chunking rule for instanced draws, split
+// out so the boundary arithmetic is headless-testable.
+@(private)
+_gpu_3d_chunk_count :: proc(transform_count: int) -> int {
+	assert(transform_count >= 0, "_gpu_3d_chunk_count: negative count")
+	count := (transform_count + GPU_3D_MAX_INSTANCES_PER_DRAW - 1) / GPU_3D_MAX_INSTANCES_PER_DRAW
+	assert(count * GPU_3D_MAX_INSTANCES_PER_DRAW >= transform_count, "_gpu_3d_chunk_count: chunks too few")
+	return count
+}
+
+// _gpu_3d_instance_upload copies one chunk of instance transforms into the
+// uniform stream. The full block size is reserved even for partial chunks
+// because the bind group layout's minBindingSize covers the whole array.
+@(private)
+_gpu_3d_instance_upload :: proc(r: ^Renderer, transforms: []Matrix) -> (u32, bool) {
+	assert(r != nil, "_gpu_3d_instance_upload: nil renderer")
+	assert(len(transforms) > 0, "_gpu_3d_instance_upload: empty chunk")
+	assert(
+		len(transforms) <= GPU_3D_MAX_INSTANCES_PER_DRAW,
+		"_gpu_3d_instance_upload: chunk exceeds GPU_3D_MAX_INSTANCES_PER_DRAW",
+	)
+	block: Gpu_3D_Instance_Uniforms
+	copy(block.transforms[:len(transforms)], transforms)
+	return _uniform_upload(r, &block, size_of(Gpu_3D_Instance_Uniforms))
+}
+
+@(private)
+_gpu_3d_identity_block: Gpu_3D_Instance_Uniforms
+@(private)
+_gpu_3d_identity_block_ready: bool
+
+// _gpu_3d_identity_instances_upload reserves the shared per-pass instance
+// block. Every slot is identity so a hypothetical out-of-range instance
+// index would render untransformed instead of collapsing geometry through a
+// zero matrix.
+@(private)
+_gpu_3d_identity_instances_upload :: proc(r: ^Renderer) -> (u32, bool) {
+	assert(r != nil, "_gpu_3d_identity_instances_upload: nil renderer")
+	if !_gpu_3d_identity_block_ready {
+		for index in 0 ..< GPU_3D_MAX_INSTANCES_PER_DRAW {
+			_gpu_3d_identity_block.transforms[index] = 1
+		}
+		_gpu_3d_identity_block_ready = true
+	}
+	assert(
+		_gpu_3d_identity_block.transforms[0] == Matrix(1),
+		"_gpu_3d_identity_instances_upload: corrupted identity block",
+	)
+	return _uniform_upload(r, &_gpu_3d_identity_block, size_of(Gpu_3D_Instance_Uniforms))
+}
+
+// _gpu_3d_texture_bind resolves the material texture to a bind group. Stale
+// or destroyed handles are an operating condition (a consumer may destroy a
+// texture between frames): fall back to the neutral white texture instead of
+// failing the draw, matching the 2D batch behavior.
+@(private)
+_gpu_3d_texture_bind :: proc(material: Gpu_Material) -> (wg.BindGroup, bool) {
+	assert(g.initialized, "_gpu_3d_texture_bind: uninitialized context")
+	assert(g.rend.neutral_bind != nil, "_gpu_3d_texture_bind: missing neutral texture")
+	if material.texture.id != 0 {
+		if tex_entry := get_texture(material.texture.id); tex_entry != nil && tex_entry.bind != nil {
+			return tex_entry.bind, true
+		}
+	}
+	return g.rend.neutral_bind, false
+}
+
+// _gpu_3d_draw_indexed encodes one indexed draw: uniforms, both bind groups,
+// buffers, and stats. Shared by plain and instanced draws so the two paths
+// cannot drift.
+@(private)
+_gpu_3d_draw_indexed :: proc(
+	pass: ^Gpu_3D_Pass,
+	entry: ^Gpu_3D_Mesh_Entry,
+	material: Gpu_Material,
+	transform: Matrix,
+	instances_offset: u32,
+	instance_count: u32,
+) -> bool {
+	assert(pass != nil, "_gpu_3d_draw_indexed: nil pass")
+	assert(entry != nil, "_gpu_3d_draw_indexed: nil mesh entry")
+	assert(instance_count >= 1, "_gpu_3d_draw_indexed: zero instances")
+	assert(
+		instance_count <= GPU_3D_MAX_INSTANCES_PER_DRAW,
+		"_gpu_3d_draw_indexed: instance count exceeds GPU_3D_MAX_INSTANCES_PER_DRAW",
+	)
 	target_entry := get_texture(pass.target.texture.texture.id)
-	if target_entry == nil do return
+	if target_entry == nil do return false
 	pipeline := _gpu_3d_pipeline(target_entry.wgformat, entry.primitive, material.style)
-	if pipeline == nil do return
+	if pipeline == nil do return false
+	texture_bind, textured := _gpu_3d_texture_bind(material)
 
 	color_high := material.color_high
 	if color_high == (Color{}) do color_high = material.color
+	light := pass.light
 	uniforms := Gpu_3D_Uniforms {
 		view_projection = pass.view_projection,
 		model           = transform,
 		color           = col_f(material.color),
 		color_high      = col_f(color_high),
+		light_direction = {light.direction.x, light.direction.y, light.direction.z, 0},
+		light_params    = {light.ambient, light.diffuse, material.depth_nudge, 0},
 		use_scalar      = u32(1) if material.use_scalar else 0,
+		use_texture     = u32(1) if textured else 0,
 	}
 	offset, ok := _uniform_upload(&g.rend, &uniforms, size_of(uniforms))
-	if !ok || g.rend.active_stream_slot < 0 do return
+	if !ok || g.rend.active_stream_slot < 0 do return false
 	wg.RenderPassEncoderSetPipeline(pass.pass, pipeline)
+	// Dynamic offsets follow binding order: shared uniforms then instances.
+	offsets := [2]u32{offset, instances_offset}
 	wg.RenderPassEncoderSetBindGroup(
 		pass.pass,
 		0,
 		g.resources.gpu_3d.bind[g.rend.active_stream_slot],
-		{offset},
+		offsets[:],
 	)
+	wg.RenderPassEncoderSetBindGroup(pass.pass, 1, texture_bind)
 	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderSetIndexBuffer(pass.pass, entry.index_buffer, .Uint32, 0, wg.WHOLE_SIZE)
-	wg.RenderPassEncoderDrawIndexed(pass.pass, entry.index_count, 1, 0, 0, 0)
-	_stats_gpu3d_draw(pass.owner, entry.vertex_count, entry.index_count)
+	wg.RenderPassEncoderDrawIndexed(pass.pass, entry.index_count, instance_count, 0, 0, 0)
+	_stats_gpu3d_draw(
+		pass.owner,
+		entry.vertex_count * instance_count,
+		entry.index_count * instance_count,
+	)
 	_stats_pipeline_switch()
-	_stats_bind_group_switches(1)
+	_stats_bind_group_switches(2)
+	return true
 }
 
 end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
@@ -614,10 +870,11 @@ _gpu_3d_pipeline :: proc(
 		return nil
 	}
 	_gpu_3d_init_shared(resources)
-	attrs := [3]wg.VertexAttribute {
+	attrs := [4]wg.VertexAttribute {
 		{format = .Float32x3, offset = 0, shaderLocation = 0},
 		{format = .Float32x3, offset = u64(offset_of(Gpu_3D_Vertex, normal)), shaderLocation = 1},
 		{format = .Float32, offset = u64(offset_of(Gpu_3D_Vertex, scalar)), shaderLocation = 2},
+		{format = .Float32x2, offset = u64(offset_of(Gpu_3D_Vertex, uv)), shaderLocation = 3},
 	}
 	vertex_layout := wg.VertexBufferLayout {
 		arrayStride    = size_of(Gpu_3D_Vertex),
@@ -625,9 +882,12 @@ _gpu_3d_pipeline :: proc(
 		attributeCount = len(attrs),
 		attributes     = raw_data(attrs[:]),
 	}
+	// Group 1 reuses the 2D renderer's texture layout so 3D materials bind
+	// the same per-texture bind groups (and the neutral white fallback).
+	group_layouts := [2]wg.BindGroupLayout{resources.layout, g.rend.tex_layout}
 	layout := wg.DeviceCreatePipelineLayout(
 		g.device,
-		&{bindGroupLayoutCount = 1, bindGroupLayouts = &resources.layout},
+		&{bindGroupLayoutCount = 2, bindGroupLayouts = raw_data(group_layouts[:])},
 	)
 	policy := _gpu_3d_material_policy(style)
 	blend := _blend_for(&g.rend, .Alpha)
@@ -693,6 +953,9 @@ _gpu_3d_pipeline :: proc(
 @(private)
 _gpu_3d_init_shared :: proc(resources: ^Gpu_3D_Resources) {
 	assert(resources != nil, "_gpu_3d_init_shared: nil resources")
+	// Renderer init precedes any 3D pass, so the shared 2D texture layout
+	// must already exist - a nil here is a programmer error in init order.
+	assert(g.rend.tex_layout != nil, "_gpu_3d_init_shared: missing renderer texture layout")
 	if resources.shader != nil do return
 	resources.shader = wg.DeviceCreateShaderModule(
 		g.device,
@@ -703,33 +966,46 @@ _gpu_3d_init_shared :: proc(resources: ^Gpu_3D_Resources) {
 			},
 		},
 	)
-	resources.layout = wg.DeviceCreateBindGroupLayout(
-		g.device,
-		&{
-			entryCount = 1,
-			entries = &wg.BindGroupLayoutEntry {
-				binding = 0,
-				visibility = {.Vertex, .Fragment},
-				buffer = {
-					type = .Uniform,
-					hasDynamicOffset = true,
-					minBindingSize = size_of(Gpu_3D_Uniforms),
-				},
+	layout_entries := [2]wg.BindGroupLayoutEntry {
+		{
+			binding = 0,
+			visibility = {.Vertex, .Fragment},
+			buffer = {
+				type = .Uniform,
+				hasDynamicOffset = true,
+				minBindingSize = size_of(Gpu_3D_Uniforms),
 			},
 		},
+		{
+			binding = 1,
+			visibility = {.Vertex},
+			buffer = {
+				type = .Uniform,
+				hasDynamicOffset = true,
+				minBindingSize = size_of(Gpu_3D_Instance_Uniforms),
+			},
+		},
+	}
+	resources.layout = wg.DeviceCreateBindGroupLayout(
+		g.device,
+		&{entryCount = 2, entries = raw_data(layout_entries[:])},
 	)
 	for &bind, index in resources.bind {
+		bind_entries := [2]wg.BindGroupEntry {
+			{
+				binding = 0,
+				buffer = g.rend.stream_slots[index].uniform_buffer,
+				size = size_of(Gpu_3D_Uniforms),
+			},
+			{
+				binding = 1,
+				buffer = g.rend.stream_slots[index].uniform_buffer,
+				size = size_of(Gpu_3D_Instance_Uniforms),
+			},
+		}
 		bind = wg.DeviceCreateBindGroup(
 			g.device,
-			&{
-				layout = resources.layout,
-				entryCount = 1,
-				entries = &wg.BindGroupEntry {
-					binding = 0,
-					buffer = g.rend.stream_slots[index].uniform_buffer,
-					size = size_of(Gpu_3D_Uniforms),
-				},
-			},
+			&{layout = resources.layout, entryCount = 2, entries = raw_data(bind_entries[:])},
 		)
 	}
 	assert(resources.shader != nil)

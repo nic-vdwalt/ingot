@@ -50,6 +50,7 @@ Renderer_Stats :: struct {
 	gpu3d_pool_exhaustions:        u32,
 	gpu3d_mesh_uploads:            u32,
 	gpu3d_draws:                   u32,
+	gpu3d_instanced_draws:         u32,
 	gpu3d_vertices_resident:       u64,
 	gpu3d_vertices_drawn:          u64,
 	gpu3d_indices_drawn:           u64,
@@ -364,6 +365,16 @@ _stats_gpu3d_draw :: proc(ctx: ^Context, vertices, indices: u32) {
 		ctx.stats_current.gpu3d_draws += 1
 		ctx.stats_current.gpu3d_vertices_drawn += u64(vertices)
 		ctx.stats_current.gpu3d_indices_drawn += u64(indices)
+	}
+}
+
+// _stats_gpu3d_instanced_draw counts instanced draw chunks so hosts can
+// verify batching (one chunk per GPU_3D_MAX_INSTANCES_PER_DRAW transforms).
+@(private)
+_stats_gpu3d_instanced_draw :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_stats_gpu3d_instanced_draw: nil context")
+	when RENDER_STATS_ENABLED {
+		ctx.stats_current.gpu3d_instanced_draws += 1
 	}
 }
 
