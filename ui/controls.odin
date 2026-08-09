@@ -355,7 +355,7 @@ slider_at :: proc(
 	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
 	old := value^
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	mouse := get_mouse_position(frame)
+	mouse := frame_to_local(frame, get_mouse_position(frame))
 	press := frame_to_local(frame, frame.interaction.press_pos)
 	dragging :=
 		is_mouse_button_down(frame, .LEFT) &&
@@ -435,7 +435,7 @@ slider_at_state :: proc(
 	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
 	old := value^
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	mouse := get_mouse_position(frame)
+	mouse := frame_to_local(frame, get_mouse_position(frame))
 	it := interact(frame, rrect, &state.dragging)
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
 	if it.hovered do request_cursor(frame, .POINTING_HAND)
