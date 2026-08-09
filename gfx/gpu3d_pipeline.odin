@@ -458,25 +458,30 @@ begin_gpu_3d :: proc(
 	bool,
 ) {
 	assert(target != nil)
-	resources := &g.resources.gpu_3d
+	ctx := default_context()
+	resources := &ctx.resources.gpu_3d
 	if resources.active_pass_generation != 0 do return {}, false
-	if !g.initialized || target.texture.texture.id == 0 || target.texture.depth.id == 0 {
+	if !ctx.initialized || target.texture.texture.id == 0 || target.texture.depth.id == 0 {
 		return {}, false
 	}
-	color_view := _texture_view(target.texture.texture.id)
-	depth_view := _texture_view(target.texture.depth.id)
+	color_slot := _texture_slot_context(ctx.id, &ctx.resources.textures, target.texture.texture.id)
+	depth_slot := _texture_slot_context(ctx.id, &ctx.resources.textures, target.texture.depth.id)
+	if color_slot == nil || depth_slot == nil do return {}, false
+	if color_slot.entry == nil || depth_slot.entry == nil do return {}, false
+	color_view := color_slot.entry.view
+	depth_view := depth_slot.entry.view
 	if color_view == nil || depth_view == nil do return {}, false
-	owns_stream := !g.frame.has_frame
-	if owns_stream && !_stream_slot_acquire(&g.rend, _submission_completed(&g.submissions)) {
+	owns_stream := !ctx.frame.has_frame
+	if owns_stream && !_stream_slot_acquire(&ctx.rend, _submission_completed(&ctx.submissions)) {
 		_stats_stream_slot_exhaustion()
 		return {}, false
 	}
-	identity_offset, identity_ok := _gpu_3d_identity_instances_upload(&g.rend)
+	identity_offset, identity_ok := _gpu_3d_identity_instances_upload(&ctx.rend)
 	if !identity_ok {
 		// Uniform stream exhausted at pass start: operating condition - the
 		// reservation failure is counted inside _uniform_upload, and a slot
 		// acquired only for this pass must be handed back.
-		if owns_stream do _stream_slot_abandon(&g.rend)
+		if owns_stream do _stream_slot_abandon(&ctx.rend)
 		return {}, false
 	}
 
@@ -495,7 +500,7 @@ begin_gpu_3d :: proc(
 		stencilLoadOp   = .Undefined,
 		stencilStoreOp  = .Undefined,
 	}
-	encoder := wg.DeviceCreateCommandEncoder(g.device, nil)
+	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
 	pass := wg.CommandEncoderBeginRenderPass(
 		encoder,
 		&{colorAttachmentCount = 1, colorAttachments = &color, depthStencilAttachment = &depth},
@@ -505,8 +510,8 @@ begin_gpu_3d :: proc(
 	resources.active_pass_generation = resources.next_pass_generation
 	_stats_render_pass()
 	result := Gpu_3D_Pass {
-		owner       = default_context(),
-		epoch       = g.epoch,
+		owner       = ctx,
+		epoch       = ctx.epoch,
 		encoder     = encoder,
 		pass        = pass,
 		target      = target,
@@ -575,7 +580,7 @@ draw_gpu_mesh :: proc(
 	material: Gpu_Material,
 ) {
 	if pass == nil || !_gpu_3d_pass_current(&pass.owner.resources.gpu_3d, pass) do return
-	entry := _gpu_3d_mesh(mesh)
+	entry := _gpu_3d_mesh(&pass.owner.resources.gpu_3d, mesh)
 	if entry == nil do return
 	// A skipped draw (pool or stream exhaustion) is the documented operating
 	// behavior; the failure is counted inside the helper.
@@ -595,7 +600,7 @@ draw_gpu_mesh_instanced :: proc(
 	if pass == nil || !_gpu_3d_pass_current(&pass.owner.resources.gpu_3d, pass) do return
 	// An empty transform list is a valid no-op, not a programmer error.
 	if len(transforms) == 0 do return
-	entry := _gpu_3d_mesh(mesh)
+	entry := _gpu_3d_mesh(&pass.owner.resources.gpu_3d, mesh)
 	if entry == nil do return
 	chunk_count := _gpu_3d_chunk_count(len(transforms))
 	assert(chunk_count > 0, "draw_gpu_mesh_instanced: zero chunks for non-empty input")
@@ -605,7 +610,7 @@ draw_gpu_mesh_instanced :: proc(
 		assert(count > 0, "draw_gpu_mesh_instanced: empty chunk")
 		assert(start + count <= len(transforms), "draw_gpu_mesh_instanced: chunk out of range")
 		instances_offset, upload_ok := _gpu_3d_instance_upload(
-			&g.rend,
+			&pass.owner.rend,
 			transforms[start:start + count],
 		)
 		if !upload_ok {
@@ -676,15 +681,17 @@ _gpu_3d_identity_instances_upload :: proc(r: ^Renderer) -> (u32, bool) {
 // texture between frames): fall back to the neutral white texture instead of
 // failing the draw, matching the 2D batch behavior.
 @(private)
-_gpu_3d_texture_bind :: proc(material: Gpu_Material) -> (wg.BindGroup, bool) {
-	assert(g.initialized, "_gpu_3d_texture_bind: uninitialized context")
-	assert(g.rend.neutral_bind != nil, "_gpu_3d_texture_bind: missing neutral texture")
+_gpu_3d_texture_bind :: proc(ctx: ^Context, material: Gpu_Material) -> (wg.BindGroup, bool) {
+	assert(ctx != nil, "_gpu_3d_texture_bind: nil context")
+	assert(ctx.initialized, "_gpu_3d_texture_bind: uninitialized context")
+	assert(ctx.rend.neutral_bind != nil, "_gpu_3d_texture_bind: missing neutral texture")
 	if material.texture.id != 0 {
-		if tex_entry := get_texture(material.texture.id); tex_entry != nil && tex_entry.bind != nil {
-			return tex_entry.bind, true
+		slot := _texture_slot_context(ctx.id, &ctx.resources.textures, material.texture.id)
+		if slot != nil && slot.entry != nil && slot.entry.bind != nil {
+			return slot.entry.bind, true
 		}
 	}
-	return g.rend.neutral_bind, false
+	return ctx.rend.neutral_bind, false
 }
 
 // _gpu_3d_draw_indexed encodes one indexed draw: uniforms, both bind groups,
@@ -706,11 +713,20 @@ _gpu_3d_draw_indexed :: proc(
 		instance_count <= GPU_3D_MAX_INSTANCES_PER_DRAW,
 		"_gpu_3d_draw_indexed: instance count exceeds GPU_3D_MAX_INSTANCES_PER_DRAW",
 	)
-	target_entry := get_texture(pass.target.texture.texture.id)
-	if target_entry == nil do return false
-	pipeline := _gpu_3d_pipeline(target_entry.wgformat, entry.primitive, material.style)
+	target_slot := _texture_slot_context(
+		pass.owner.id,
+		&pass.owner.resources.textures,
+		pass.target.texture.texture.id,
+	)
+	if target_slot == nil || target_slot.entry == nil do return false
+	pipeline := _gpu_3d_pipeline(
+		pass.owner,
+		target_slot.entry.wgformat,
+		entry.primitive,
+		material.style,
+	)
 	if pipeline == nil do return false
-	texture_bind, textured := _gpu_3d_texture_bind(material)
+	texture_bind, textured := _gpu_3d_texture_bind(pass.owner, material)
 
 	color_high := material.color_high
 	if color_high == (Color{}) do color_high = material.color
@@ -725,15 +741,15 @@ _gpu_3d_draw_indexed :: proc(
 		use_scalar      = u32(1) if material.use_scalar else 0,
 		use_texture     = u32(1) if textured else 0,
 	}
-	offset, ok := _uniform_upload(&g.rend, &uniforms, size_of(uniforms))
-	if !ok || g.rend.active_stream_slot < 0 do return false
+	offset, ok := _uniform_upload(&pass.owner.rend, &uniforms, size_of(uniforms))
+	if !ok || pass.owner.rend.active_stream_slot < 0 do return false
 	wg.RenderPassEncoderSetPipeline(pass.pass, pipeline)
 	// Dynamic offsets follow binding order: shared uniforms then instances.
 	offsets := [2]u32{offset, instances_offset}
 	wg.RenderPassEncoderSetBindGroup(
 		pass.pass,
 		0,
-		g.resources.gpu_3d.bind[g.rend.active_stream_slot],
+		pass.owner.resources.gpu_3d.bind[pass.owner.rend.active_stream_slot],
 		offsets[:],
 	)
 	wg.RenderPassEncoderSetBindGroup(pass.pass, 1, texture_bind)
@@ -797,8 +813,9 @@ _gpu_3d_mesh_slot :: proc(resources: ^Gpu_3D_Resources, mesh: Gpu_Mesh) -> ^Gpu_
 }
 
 @(private)
-_gpu_3d_mesh :: proc(mesh: Gpu_Mesh) -> ^Gpu_3D_Mesh_Entry {
-	slot := _gpu_3d_mesh_slot(&g.resources.gpu_3d, mesh)
+_gpu_3d_mesh :: proc(resources: ^Gpu_3D_Resources, mesh: Gpu_Mesh) -> ^Gpu_3D_Mesh_Entry {
+	assert(resources != nil, "_gpu_3d_mesh: nil resources")
+	slot := _gpu_3d_mesh_slot(resources, mesh)
 	if slot == nil do return nil
 	return slot.entry
 }
@@ -854,11 +871,14 @@ _gpu_3d_buffer :: proc(data: rawptr, size: u64, usage: wg.BufferUsageFlags) -> w
 
 @(private)
 _gpu_3d_pipeline :: proc(
+	ctx: ^Context,
 	format: wg.TextureFormat,
 	primitive: Gpu_Primitive,
 	style: Gpu_Material_Style,
 ) -> wg.RenderPipeline {
-	resources := &g.resources.gpu_3d
+	assert(ctx != nil, "_gpu_3d_pipeline: nil context")
+	assert(ctx.initialized, "_gpu_3d_pipeline: uninitialized context")
+	resources := &ctx.resources.gpu_3d
 	for index in 0 ..< resources.pipeline_count {
 		entry := resources.pipelines[index]
 		if _gpu_3d_pipeline_matches(entry, format, primitive, style) do return entry.pipeline
@@ -869,7 +889,7 @@ _gpu_3d_pipeline :: proc(
 		_stats_gpu3d_pool_exhaustion()
 		return nil
 	}
-	_gpu_3d_init_shared(resources)
+	_gpu_3d_init_shared(ctx, resources)
 	attrs := [4]wg.VertexAttribute {
 		{format = .Float32x3, offset = 0, shaderLocation = 0},
 		{format = .Float32x3, offset = u64(offset_of(Gpu_3D_Vertex, normal)), shaderLocation = 1},
@@ -884,13 +904,13 @@ _gpu_3d_pipeline :: proc(
 	}
 	// Group 1 reuses the 2D renderer's texture layout so 3D materials bind
 	// the same per-texture bind groups (and the neutral white fallback).
-	group_layouts := [2]wg.BindGroupLayout{resources.layout, g.rend.tex_layout}
+	group_layouts := [2]wg.BindGroupLayout{resources.layout, ctx.rend.tex_layout}
 	layout := wg.DeviceCreatePipelineLayout(
-		g.device,
+		ctx.device,
 		&{bindGroupLayoutCount = 2, bindGroupLayouts = raw_data(group_layouts[:])},
 	)
 	policy := _gpu_3d_material_policy(style)
-	blend := _blend_for(&g.rend, .Alpha)
+	blend := _blend_for(&ctx.rend, .Alpha)
 	target := wg.ColorTargetState {
 		format    = format,
 		writeMask = wg.ColorWriteMaskFlags_All,
@@ -914,7 +934,7 @@ _gpu_3d_pipeline :: proc(
 		topology = .PointList
 	}
 	pipeline := wg.DeviceCreateRenderPipeline(
-		g.device,
+		ctx.device,
 		&{
 			layout = layout,
 			vertex = {
@@ -951,14 +971,15 @@ _gpu_3d_pipeline :: proc(
 }
 
 @(private)
-_gpu_3d_init_shared :: proc(resources: ^Gpu_3D_Resources) {
+_gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
+	assert(ctx != nil, "_gpu_3d_init_shared: nil context")
 	assert(resources != nil, "_gpu_3d_init_shared: nil resources")
 	// Renderer init precedes any 3D pass, so the shared 2D texture layout
 	// must already exist - a nil here is a programmer error in init order.
-	assert(g.rend.tex_layout != nil, "_gpu_3d_init_shared: missing renderer texture layout")
+	assert(ctx.rend.tex_layout != nil, "_gpu_3d_init_shared: missing renderer texture layout")
 	if resources.shader != nil do return
 	resources.shader = wg.DeviceCreateShaderModule(
-		g.device,
+		ctx.device,
 		&{
 			nextInChain = &wg.ShaderSourceWGSL {
 				chain = {sType = .ShaderSourceWGSL},
@@ -987,24 +1008,24 @@ _gpu_3d_init_shared :: proc(resources: ^Gpu_3D_Resources) {
 		},
 	}
 	resources.layout = wg.DeviceCreateBindGroupLayout(
-		g.device,
+		ctx.device,
 		&{entryCount = 2, entries = raw_data(layout_entries[:])},
 	)
 	for &bind, index in resources.bind {
 		bind_entries := [2]wg.BindGroupEntry {
 			{
 				binding = 0,
-				buffer = g.rend.stream_slots[index].uniform_buffer,
+				buffer = ctx.rend.stream_slots[index].uniform_buffer,
 				size = size_of(Gpu_3D_Uniforms),
 			},
 			{
 				binding = 1,
-				buffer = g.rend.stream_slots[index].uniform_buffer,
+				buffer = ctx.rend.stream_slots[index].uniform_buffer,
 				size = size_of(Gpu_3D_Instance_Uniforms),
 			},
 		}
 		bind = wg.DeviceCreateBindGroup(
-			g.device,
+			ctx.device,
 			&{layout = resources.layout, entryCount = 2, entries = raw_data(bind_entries[:])},
 		)
 	}

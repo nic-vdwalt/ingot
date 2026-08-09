@@ -1,9 +1,11 @@
 #+build !js
 // Headless GPU-3D coverage: everything testable without a WebGPU device -
-// sphere geometry generation (counts, bounds, normals, index validity),
-// parameter rejection, and pool-handle mapping. On-device behavior (depth
-// test, per-backend rendering) is validated by examples/render_fixture; see
-// docs/rendering.md "GPU 3D validation matrix".
+// sphere geometry generation (counts, bounds, normals, UVs, index validity),
+// parameter rejection, pool-handle mapping, light normalization, uniform
+// layout locks, and instanced-draw chunk arithmetic. On-device behavior
+// (depth test, lighting, textures, instancing, per-backend rendering) is
+// validated by examples/render_fixture; see docs/rendering.md "GPU 3D
+// validation matrix".
 package gfx
 
 import "core:math"
@@ -169,4 +171,92 @@ test_gpu_3d_mesh_handle_mapping :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, _gpu_3d_mesh_slot(&resources, old_mesh) == nil)
 	testing.expect(t, _gpu_3d_mesh_slot(&resources, new_mesh) == slot)
+}
+
+// -- lighting, uniforms, textures, instancing ----------------------------------
+
+@(test)
+test_gpu_3d_uniforms_layout_locked :: proc(t: ^testing.T) {
+	// The Odin structs are copied raw into the uniform stream and read back
+	// through the WGSL views, so their sizes are load-bearing contracts.
+	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 208, "uniforms smaller than WGSL view")
+	testing.expect_value(t, size_of(Gpu_3D_Uniforms) % 16, 0)
+	testing.expect_value(t, size_of(Gpu_3D_Vertex), 36)
+	testing.expect_value(t, size_of(Matrix), 64)
+	testing.expect_value(
+		t,
+		size_of(Gpu_3D_Instance_Uniforms),
+		GPU_3D_MAX_INSTANCES_PER_DRAW * size_of(Matrix),
+	)
+	testing.expect(t, size_of(Gpu_3D_Instance_Uniforms) <= 65536, "over uniform-binding floor")
+}
+
+@(test)
+test_gpu_3d_default_light_matches_legacy_shader :: proc(t: ^testing.T) {
+	// These values were the hard-coded shader constants before lighting
+	// became configurable; default rendering must stay bit-identical.
+	testing.expect_value(t, GPU_3D_DEFAULT_LIGHT.direction, Vector3{0.4, 0.8, 0.3})
+	testing.expect_value(t, GPU_3D_DEFAULT_LIGHT.ambient, f32(0.25))
+	testing.expect_value(t, GPU_3D_DEFAULT_LIGHT.diffuse, f32(0.75))
+}
+
+@(test)
+test_light_normalize_contract :: proc(t: ^testing.T) {
+	normalized, ok := _light_normalize({direction = {0, 0, 10}, ambient = -1, diffuse = 7})
+	testing.expect(t, ok)
+	testing.expect_value(t, normalized.direction, Vector3{0, 0, 1})
+	testing.expect_value(t, normalized.ambient, f32(0))
+	testing.expect_value(t, normalized.diffuse, f32(1))
+
+	kept, kept_ok := _light_normalize({direction = {1, 0, 0}, ambient = 0.4, diffuse = 0.5})
+	testing.expect(t, kept_ok)
+	testing.expect_value(t, kept.ambient, f32(0.4))
+	testing.expect_value(t, kept.diffuse, f32(0.5))
+
+	// Degenerate direction is rejected, not silently defaulted.
+	_, zero_ok := _light_normalize({direction = {}, ambient = 0.5, diffuse = 0.5})
+	testing.expect(t, !zero_ok)
+}
+
+@(test)
+test_sphere_mesh_uvs_cover_unit_square :: proc(t: ^testing.T) {
+	vertices := make([dynamic]Gpu_3D_Vertex, context.temp_allocator)
+	indices := make([dynamic]u32, context.temp_allocator)
+	_sphere_mesh_geometry(1, 8, 12, &vertices, &indices)
+	u_min, v_min := f32(1), f32(1)
+	u_max, v_max := f32(0), f32(0)
+	for v in vertices {
+		testing.expect(t, v.uv.x >= 0 && v.uv.x <= 1, "u outside [0, 1]")
+		testing.expect(t, v.uv.y >= 0 && v.uv.y <= 1, "v outside [0, 1]")
+		u_min = min(u_min, v.uv.x)
+		u_max = max(u_max, v.uv.x)
+		v_min = min(v_min, v.uv.y)
+		v_max = max(v_max, v.uv.y)
+	}
+	// The parametric grid must span the full square including the wrap seam.
+	testing.expect_value(t, u_min, f32(0))
+	testing.expect_value(t, u_max, f32(1))
+	testing.expect_value(t, v_min, f32(0))
+	testing.expect_value(t, v_max, f32(1))
+}
+
+@(test)
+test_gpu_3d_chunk_count_boundaries :: proc(t: ^testing.T) {
+	testing.expect_value(t, _gpu_3d_chunk_count(0), 0)
+	testing.expect_value(t, _gpu_3d_chunk_count(1), 1)
+	testing.expect_value(t, _gpu_3d_chunk_count(GPU_3D_MAX_INSTANCES_PER_DRAW - 1), 1)
+	testing.expect_value(t, _gpu_3d_chunk_count(GPU_3D_MAX_INSTANCES_PER_DRAW), 1)
+	testing.expect_value(t, _gpu_3d_chunk_count(GPU_3D_MAX_INSTANCES_PER_DRAW + 1), 2)
+	testing.expect_value(t, _gpu_3d_chunk_count(2 * GPU_3D_MAX_INSTANCES_PER_DRAW + 1), 3)
+}
+
+@(test)
+test_draw_gpu_mesh_instanced_rejects_headless :: proc(t: ^testing.T) {
+	// Without a device there is no active pass; both the nil pass and the
+	// empty transform list must be quiet no-ops, never crashes.
+	transforms := [?]Matrix{1}
+	draw_gpu_mesh_instanced(nil, Gpu_Mesh{}, transforms[:], {})
+	pass: Gpu_3D_Pass
+	draw_gpu_mesh_instanced(&pass, Gpu_Mesh{}, nil, {})
+	testing.expect(t, !pass.active)
 }

@@ -17,7 +17,8 @@ extends.
 
 | Surface | State |
 |---|---|
-| `gfx/gpu3d_pipeline.odin` | Real WebGPU path: indexed meshes, depth, fixed pools (`GPU_3D_MAX_MESHES`, `GPU_3D_MAX_PIPELINES`), generation-checked handles, exhaustion counted in `renderer_stats().gpu3d_pool_exhaustions` |
+| `gfx/gpu3d_pipeline.odin` | Real WebGPU escape hatch: indexed meshes, depth, UV textures, configurable directional lighting, shader depth nudge, bounded instancing, fixed pools (`GPU_3D_MAX_MESHES`, `GPU_3D_MAX_PIPELINES`), generation-checked handles, and counted exhaustion |
+| `gfx/frustum.odin` | Allocation-free camera/matrix frustum extraction and conservative bounds tests; visibility primitive for the future `ingot:scene` draw list |
 | `gfx/render3d.odin` | Legacy raylib-shaped calls approximated as CPU-projected billboards and discs |
 | `gfx/gpu3d.odin` | Compile-compatible surface, several procedures still safe no-ops |
 | Asset handling | None. `LoadTexture` reads a file natively and is unavailable on web. There is no mesh import, no cook step, no residency model |
