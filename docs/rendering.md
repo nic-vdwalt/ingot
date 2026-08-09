@@ -115,8 +115,15 @@ GPU depth rendering uses the separate opt-in API in `gfx/gpu3d.odin`:
 - Materials may bind a generation-checked `Texture2D`; a zero or stale handle falls
   back to the neutral white texture. `depth_nudge` offsets clip depth uniformly for
   coplanar triangle, line, and point overlays without changing model geometry.
+- Pass `.MSAA_4X` to `create_gpu_3d_target` for four-sample color and depth. The
+  target’s public texture remains single-sampled and receives the resolved color,
+  so existing presentation and texture-material paths remain unchanged. Omitting
+  the option preserves single-sample rendering.
 - Resize offscreen targets transactionally with `resize_gpu_3d_target`; allocation
-  failure leaves the previous valid target intact.
+  failure leaves the previous valid target intact and preserves its antialiasing
+  mode. An MSAA `.Preserve` pass retains its multisample attachments; rendering
+  directly into only the resolved texture between passes cannot be loaded back into
+  those attachments.
 - Begin the pass with `begin_gpu_3d`, selecting color/depth load actions before
   pass creation.
 - Call `begin_gpu_3d_pro` when the caller already owns a view-projection matrix.

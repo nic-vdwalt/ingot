@@ -8,7 +8,7 @@ import wg "vendor:wgpu"
 // returns ok=false and draw_gpu_mesh skips draws once the pipeline pool is
 // full - both are counted in renderer_stats().gpu3d_pool_exhaustions.
 GPU_3D_MAX_MESHES :: 256
-GPU_3D_MAX_PIPELINES :: 24
+GPU_3D_MAX_PIPELINES :: 48
 GPU_3D_MAX_VERTICES :: 1_048_576
 GPU_3D_MAX_INDICES :: 6_291_456
 GPU_3D_MAX_MESH_BYTES :: 128 * 1024 * 1024
@@ -27,8 +27,16 @@ Gpu_Primitive :: enum u8 {
 	Points,
 }
 
+Gpu_3D_Antialiasing :: enum u8 {
+	None,
+	MSAA_4X,
+}
+
 Gpu_3D_Target :: struct {
-	texture: RenderTexture2D,
+	texture:           RenderTexture2D,
+	antialiasing:      Gpu_3D_Antialiasing,
+	multisample_color: ^Tex_Entry,
+	multisample_depth: ^Tex_Entry,
 }
 
 Gpu_Material_Style :: enum {
@@ -80,6 +88,7 @@ Gpu_3D_Pass :: struct {
 	light:                     Gpu_3D_Light,
 	generation:                u64,
 	active:                    bool,
+	sample_count:              u32,
 	owns_stream:               bool,
 	// Offset of the shared identity instance block uploaded once per pass;
 	// plain draw_gpu_mesh calls reuse it so the instance binding's
@@ -140,10 +149,11 @@ Gpu_3D_Mesh_Entry :: struct {
 
 @(private)
 Gpu_3D_Pipeline_Entry :: struct {
-	format:    wg.TextureFormat,
-	primitive: Gpu_Primitive,
-	style:     Gpu_Material_Style,
-	pipeline:  wg.RenderPipeline,
+	format:       wg.TextureFormat,
+	primitive:    Gpu_Primitive,
+	style:        Gpu_Material_Style,
+	sample_count: u32,
+	pipeline:     wg.RenderPipeline,
 }
 
 @(private)
@@ -170,8 +180,14 @@ _gpu_3d_pipeline_matches :: proc(
 	format: wg.TextureFormat,
 	primitive: Gpu_Primitive,
 	style: Gpu_Material_Style,
+	sample_count: u32,
 ) -> bool {
-	return entry.format == format && entry.primitive == primitive && entry.style == style
+	return(
+		entry.format == format &&
+		entry.primitive == primitive &&
+		entry.style == style &&
+		entry.sample_count == sample_count \
+	)
 }
 
 @(private)
@@ -263,32 +279,141 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 }
 `
 
-create_gpu_3d_target :: proc(width, height: i32) -> (Gpu_3D_Target, bool) {
-	if !g.initialized || width <= 0 || height <= 0 do return {}, false
-	target := Gpu_3D_Target {
-		texture = LoadRenderTextureEx(width, height, g.format, true),
+@(private)
+_gpu_3d_sample_count :: proc(antialiasing: Gpu_3D_Antialiasing) -> u32 {
+	#partial switch antialiasing {
+	case .None:
+		return 1
+	case .MSAA_4X:
+		return 4
 	}
-	ok := target.texture.texture.id != 0 && target.texture.depth.id != 0
-	return target, ok
+	return 1
 }
 
-destroy_gpu_3d_target :: proc(target: ^Gpu_3D_Target) {
-	assert(target != nil)
+@(private)
+_gpu_3d_target_create :: proc(
+	ctx: ^Context,
+	width, height: i32,
+	antialiasing: Gpu_3D_Antialiasing,
+) -> (
+	Gpu_3D_Target,
+	bool,
+) {
+	assert(ctx != nil, "_gpu_3d_target_create: nil context")
+	if !ctx.initialized || width <= 0 || height <= 0 do return {}, false
+	target := Gpu_3D_Target {
+		texture      = LoadRenderTextureEx(width, height, ctx.format, true),
+		antialiasing = antialiasing,
+	}
+	ok := target.texture.texture.id != 0 && target.texture.depth.id != 0
+	if !ok {
+		if target.texture.texture.id != 0 do UnloadRenderTexture(target.texture)
+		return {}, false
+	}
+	if antialiasing == .MSAA_4X {
+		target.multisample_color = _new_rt_attachment(ctx, width, height, ctx.format, 4)
+		target.multisample_depth = _new_rt_attachment(ctx, width, height, .Depth24Plus, 4)
+		if target.multisample_color == nil || target.multisample_depth == nil {
+			_gpu_3d_target_destroy(ctx, &target)
+			return {}, false
+		}
+	}
+	return target, true
+}
+
+@(private)
+_gpu_3d_target_destroy :: proc(ctx: ^Context, target: ^Gpu_3D_Target) {
+	assert(ctx != nil, "_gpu_3d_target_destroy: nil context")
+	assert(target != nil, "_gpu_3d_target_destroy: nil target")
+	assert(
+		ctx.resources.gpu_3d.active_pass_generation == 0,
+		"_gpu_3d_target_destroy: active GPU 3D pass",
+	)
+	_destroy_rt_attachment(target.multisample_color)
+	_destroy_rt_attachment(target.multisample_depth)
 	if target.texture.texture.id != 0 do UnloadRenderTexture(target.texture)
 	target^ = {}
 	assert(target.texture.texture.id == 0)
+	assert(target.multisample_color == nil && target.multisample_depth == nil)
+}
+
+@(private)
+_gpu_3d_target_views :: proc(
+	ctx: ^Context,
+	target: ^Gpu_3D_Target,
+) -> (
+	wg.TextureView,
+	wg.TextureView,
+	wg.TextureView,
+	u32,
+	bool,
+) {
+	assert(ctx != nil && target != nil, "_gpu_3d_target_views: invalid arguments")
+	color_slot := _texture_slot_context(ctx.id, &ctx.resources.textures, target.texture.texture.id)
+	depth_slot := _texture_slot_context(ctx.id, &ctx.resources.textures, target.texture.depth.id)
+	if color_slot == nil || depth_slot == nil do return nil, nil, nil, 0, false
+	if color_slot.entry == nil || depth_slot.entry == nil do return nil, nil, nil, 0, false
+	if color_slot.entry.view == nil || depth_slot.entry.view == nil do return nil, nil, nil, 0, false
+	assert(color_slot.entry.sample_count == 1, "_gpu_3d_target_views: multisampled resolve color")
+	assert(depth_slot.entry.sample_count == 1, "_gpu_3d_target_views: multisampled resolve depth")
+	sample_count := _gpu_3d_sample_count(target.antialiasing)
+	if sample_count == 1 do return color_slot.entry.view, depth_slot.entry.view, nil, 1, true
+	assert(target.multisample_color != nil, "_gpu_3d_target_views: missing multisample color")
+	assert(target.multisample_depth != nil, "_gpu_3d_target_views: missing multisample depth")
+	color := target.multisample_color
+	depth := target.multisample_depth
+	assert(
+		color.view != nil && depth.view != nil,
+		"_gpu_3d_target_views: invalid multisample view",
+	)
+	assert(color.sample_count == sample_count, "_gpu_3d_target_views: color sample-count mismatch")
+	assert(depth.sample_count == sample_count, "_gpu_3d_target_views: depth sample-count mismatch")
+	assert(
+		color.wgformat == color_slot.entry.wgformat,
+		"_gpu_3d_target_views: resolve format mismatch",
+	)
+	assert(
+		color.width == color_slot.entry.width && color.height == color_slot.entry.height,
+		"_gpu_3d_target_views: resolve dimensions mismatch",
+	)
+	assert(
+		depth.width == depth_slot.entry.width && depth.height == depth_slot.entry.height,
+		"_gpu_3d_target_views: depth dimensions mismatch",
+	)
+	return color.view, depth.view, color_slot.entry.view, sample_count, true
+}
+
+create_gpu_3d_target :: proc(
+	width, height: i32,
+	antialiasing: Gpu_3D_Antialiasing = .None,
+) -> (
+	Gpu_3D_Target,
+	bool,
+) {
+	return _gpu_3d_target_create(default_context(), width, height, antialiasing)
+}
+
+destroy_gpu_3d_target :: proc(target: ^Gpu_3D_Target) {
+	_gpu_3d_target_destroy(default_context(), target)
 }
 
 resize_gpu_3d_target :: proc(target: ^Gpu_3D_Target, width, height: i32) -> bool {
 	assert(target != nil, "resize_gpu_3d_target: nil target")
+	ctx := default_context()
+	assert(
+		ctx.resources.gpu_3d.active_pass_generation == 0,
+		"resize_gpu_3d_target: active GPU 3D pass",
+	)
 	if width <= 0 || height <= 0 do return false
 	if target.texture.texture.width == width && target.texture.texture.height == height do return true
-	replacement, ok := create_gpu_3d_target(width, height)
+	antialiasing := target.antialiasing
+	replacement, ok := _gpu_3d_target_create(ctx, width, height, antialiasing)
 	if !ok do return false
-	destroy_gpu_3d_target(target)
+	_gpu_3d_target_destroy(ctx, target)
 	target^ = replacement
 	assert(target.texture.texture.width == width, "resize_gpu_3d_target: wrong width")
 	assert(target.texture.texture.height == height, "resize_gpu_3d_target: wrong height")
+	assert(target.antialiasing == antialiasing, "resize_gpu_3d_target: wrong antialiasing")
 	return true
 }
 
@@ -464,13 +589,11 @@ begin_gpu_3d :: proc(
 	if !ctx.initialized || target.texture.texture.id == 0 || target.texture.depth.id == 0 {
 		return {}, false
 	}
-	color_slot := _texture_slot_context(ctx.id, &ctx.resources.textures, target.texture.texture.id)
-	depth_slot := _texture_slot_context(ctx.id, &ctx.resources.textures, target.texture.depth.id)
-	if color_slot == nil || depth_slot == nil do return {}, false
-	if color_slot.entry == nil || depth_slot.entry == nil do return {}, false
-	color_view := color_slot.entry.view
-	depth_view := depth_slot.entry.view
-	if color_view == nil || depth_view == nil do return {}, false
+	color_view, depth_view, resolve_view, sample_count, views_ok := _gpu_3d_target_views(
+		ctx,
+		target,
+	)
+	if !views_ok do return {}, false
 	owns_stream := !ctx.frame.has_frame
 	if owns_stream && !_stream_slot_acquire(&ctx.rend, _submission_completed(&ctx.submissions)) {
 		_stats_stream_slot_exhaustion()
@@ -486,11 +609,12 @@ begin_gpu_3d :: proc(
 	}
 
 	color := wg.RenderPassColorAttachment {
-		view       = color_view,
-		depthSlice = wg.DEPTH_SLICE_UNDEFINED,
-		loadOp     = load == .Clear ? .Clear : .Load,
-		storeOp    = .Store,
-		clearValue = {0, 0, 0, 0},
+		view          = color_view,
+		resolveTarget = resolve_view,
+		depthSlice    = wg.DEPTH_SLICE_UNDEFINED,
+		loadOp        = load == .Clear ? .Clear : .Load,
+		storeOp       = .Store,
+		clearValue    = {0, 0, 0, 0},
 	}
 	depth := wg.RenderPassDepthStencilAttachment {
 		view            = depth_view,
@@ -518,6 +642,7 @@ begin_gpu_3d :: proc(
 		light                     = GPU_3D_DEFAULT_LIGHT,
 		generation                = resources.active_pass_generation,
 		active                    = true,
+		sample_count              = sample_count,
 		owns_stream               = owns_stream,
 		identity_instances_offset = identity_offset,
 	}
@@ -727,6 +852,7 @@ _gpu_3d_draw_indexed :: proc(
 		target_slot.entry.wgformat,
 		entry.primitive,
 		material.style,
+		pass.sample_count,
 	)
 	if pipeline == nil do return false
 	texture_bind, textured := _gpu_3d_texture_bind(pass.owner, material)
@@ -873,18 +999,35 @@ _gpu_3d_buffer :: proc(data: rawptr, size: u64, usage: wg.BufferUsageFlags) -> w
 }
 
 @(private)
+_gpu_3d_primitive_topology :: proc(primitive: Gpu_Primitive) -> wg.PrimitiveTopology {
+	#partial switch primitive {
+	case .Triangles:
+		return .TriangleList
+	case .Lines:
+		return .LineList
+	case .Points:
+		return .PointList
+	}
+	return .TriangleList
+}
+
+@(private)
 _gpu_3d_pipeline :: proc(
 	ctx: ^Context,
 	format: wg.TextureFormat,
 	primitive: Gpu_Primitive,
 	style: Gpu_Material_Style,
+	sample_count: u32,
 ) -> wg.RenderPipeline {
 	assert(ctx != nil, "_gpu_3d_pipeline: nil context")
 	assert(ctx.initialized, "_gpu_3d_pipeline: uninitialized context")
+	assert(sample_count == 1 || sample_count == 4, "_gpu_3d_pipeline: unsupported sample count")
 	resources := &ctx.resources.gpu_3d
 	for index in 0 ..< resources.pipeline_count {
 		entry := resources.pipelines[index]
-		if _gpu_3d_pipeline_matches(entry, format, primitive, style) do return entry.pipeline
+		if _gpu_3d_pipeline_matches(entry, format, primitive, style, sample_count) {
+			return entry.pipeline
+		}
 	}
 	if resources.pipeline_count >= GPU_3D_MAX_PIPELINES {
 		// Pool full: draws to targets in unseen formats are skipped from now
@@ -913,6 +1056,7 @@ _gpu_3d_pipeline :: proc(
 		&{bindGroupLayoutCount = 2, bindGroupLayouts = raw_data(group_layouts[:])},
 	)
 	policy := _gpu_3d_material_policy(style)
+	if primitive != .Triangles do policy.depth_bias = 0
 	blend := _blend_for(&ctx.rend, .Alpha)
 	target := wg.ColorTargetState {
 		format    = format,
@@ -927,15 +1071,7 @@ _gpu_3d_pipeline :: proc(
 		stencilWriteMask  = 0xff,
 		depthBias         = policy.depth_bias,
 	}
-	topology: wg.PrimitiveTopology
-	#partial switch primitive {
-	case .Triangles:
-		topology = .TriangleList
-	case .Lines:
-		topology = .LineList
-	case .Points:
-		topology = .PointList
-	}
+	topology := _gpu_3d_primitive_topology(primitive)
 	pipeline := wg.DeviceCreateRenderPipeline(
 		ctx.device,
 		&{
@@ -952,7 +1088,7 @@ _gpu_3d_pipeline :: proc(
 				cullMode = .Back if primitive == .Triangles else .None,
 			},
 			depthStencil = &depth,
-			multisample = {count = 1, mask = ~u32(0)},
+			multisample = {count = sample_count, mask = ~u32(0)},
 			fragment = &wg.FragmentState {
 				module = resources.shader,
 				entryPoint = "fs_main",
@@ -964,10 +1100,11 @@ _gpu_3d_pipeline :: proc(
 	wg.PipelineLayoutRelease(layout)
 	index := resources.pipeline_count
 	resources.pipelines[index] = {
-		format    = format,
-		primitive = primitive,
-		style     = style,
-		pipeline  = pipeline,
+		format       = format,
+		primitive    = primitive,
+		style        = style,
+		sample_count = sample_count,
+		pipeline     = pipeline,
 	}
 	resources.pipeline_count += 1
 	return pipeline

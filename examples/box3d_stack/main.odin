@@ -46,6 +46,7 @@ State :: struct {
 	ready:          bool,
 	target:         rl.Gpu_3D_Target,
 	cube:           rl.Gpu_Mesh,
+	cube_edges:     rl.Gpu_Mesh,
 	camera:         rl.Camera3D,
 	orbit_angle:    f32,
 	orbit_radius:   f32,
@@ -55,7 +56,7 @@ State :: struct {
 state: State
 
 main :: proc() {
-	rl.SetConfigFlags({.VSYNC_HINT})
+	rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_RESIZABLE})
 	rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ingot + box3d stack")
 	rl.SetTargetFPS(60)
 	if !graphics_create(&state) || !physics_create(&state) {
@@ -73,15 +74,20 @@ graphics_create :: proc(value: ^State) -> bool {
 		position   = {-14, -14, 10},
 		target     = {0, 0, 3},
 		up         = rl.CAMERA_WORLD_UP,
-		fovy       = 50,
+		fovy       = 42,
 		projection = .PERSPECTIVE,
 	}
 	value.orbit_angle = -2.35
 	value.orbit_radius = 20
-	target_ok, cube_ok: bool
-	value.target, target_ok = rl.create_gpu_3d_target(SCREEN_WIDTH, SCREEN_HEIGHT)
+	target_ok, cube_ok, edges_ok: bool
+	value.target, target_ok = rl.create_gpu_3d_target(
+		rl.GetRenderWidth(),
+		rl.GetRenderHeight(),
+		.MSAA_4X,
+	)
 	value.cube, cube_ok = cube_mesh_create()
-	value.graphics_ready = target_ok && cube_ok
+	value.cube_edges, edges_ok = cube_edge_mesh_create()
+	value.graphics_ready = target_ok && cube_ok && edges_ok
 	return value.graphics_ready
 }
 
@@ -151,6 +157,30 @@ cube_mesh_create :: proc() -> (rl.Gpu_Mesh, bool) {
 		23,
 	}
 	return rl.create_gpu_mesh(vertices[:], indices[:])
+}
+
+cube_edge_mesh_create :: proc() -> (rl.Gpu_Mesh, bool) {
+	vertices := [?]rl.Gpu_3D_Vertex {
+		{position = {-0.5, -0.5, -0.5}},
+		{position = {0.5, -0.5, -0.5}},
+		{position = {0.5, 0.5, -0.5}},
+		{position = {-0.5, 0.5, -0.5}},
+		{position = {-0.5, -0.5, 0.5}},
+		{position = {0.5, -0.5, 0.5}},
+		{position = {0.5, 0.5, 0.5}},
+		{position = {-0.5, 0.5, 0.5}},
+	}
+	indices := [?]u32{0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7}
+	return rl.create_gpu_mesh(vertices[:], indices[:], .Lines)
+}
+
+graphics_target_resize :: proc(value: ^State) {
+	assert(value != nil, "graphics_target_resize: nil state")
+	if !value.graphics_ready do return
+	width := rl.GetRenderWidth()
+	height := rl.GetRenderHeight()
+	if width <= 0 || height <= 0 do return
+	_ = rl.resize_gpu_3d_target(&value.target, width, height)
 }
 
 physics_create :: proc(value: ^State) -> bool {
@@ -295,6 +325,7 @@ frame :: proc() {
 	physics_input(&state)
 	camera_update(&state, frame_dt)
 	physics_update(&state, frame_dt)
+	graphics_target_resize(&state)
 	draw_world(&state)
 	draw_screen(&state)
 }
@@ -304,12 +335,18 @@ draw_world :: proc(value: ^State) {
 	assert(value.box_count <= BOX_MAX, "draw_world: box count overflow")
 	pass, ok := rl.begin_gpu_3d(&value.target, value.camera)
 	if !ok do return
-	rl.set_gpu_3d_light(&pass, {{-0.4, 0.5, 0.8}, 0.3, 0.7})
+	rl.set_gpu_3d_light(&pass, {{-0.4, 0.5, 0.8}, 0.15, 0.85})
 	floor_transform := rl.MatrixTranslate(0, 0, -2) * rl.MatrixScale(100, 100, 4)
 	rl.draw_gpu_mesh(&pass, value.cube, floor_transform, {color = rl.LIGHTGRAY})
 	for box, index in value.boxes[:value.box_count] {
 		color := BOX_COLORS[index % len(BOX_COLORS)]
 		rl.draw_gpu_mesh(&pass, value.cube, box.transform, {color = color})
+		rl.draw_gpu_mesh(
+			&pass,
+			value.cube_edges,
+			box.transform,
+			{color = {24, 28, 36, 255}, style = .Opaque_Overlay, depth_nudge = 0.0005},
+		)
 	}
 	rl.end_gpu_3d(&pass)
 }
@@ -321,7 +358,7 @@ draw_screen :: proc(value: ^State) {
 	rl.ClearBackground({15, 20, 28, 255})
 	rl.DrawTexturePro(
 		value.target.texture.texture,
-		{0, 0, SCREEN_WIDTH, SCREEN_HEIGHT},
+		{0, 0, f32(value.target.texture.texture.width), f32(value.target.texture.texture.height)},
 		{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())},
 		{},
 		0,
@@ -365,6 +402,7 @@ shutdown :: proc(value: ^State) {
 	assert(value != nil, "shutdown: nil state")
 	assert(value.box_count <= BOX_MAX, "shutdown: box count overflow")
 	physics_destroy(value)
+	if value.cube_edges.id != 0 do rl.destroy_gpu_mesh(&value.cube_edges)
 	if value.cube.id != 0 do rl.destroy_gpu_mesh(&value.cube)
 	if value.target.texture.texture.id != 0 do rl.destroy_gpu_3d_target(&value.target)
 	value.graphics_ready = false
