@@ -1,7 +1,6 @@
 package main
 
 import "core:fmt"
-import "core:math"
 import "ingot:asset"
 import rl "ingot:gfx"
 import "ingot:procgen"
@@ -24,8 +23,8 @@ State :: struct {
 	bridge:       scene_gfx.Bridge,
 	target:       rl.Gpu_3D_Target,
 	camera:       rl.Camera3D,
-	orbit_angle:  f32,
-	orbit_radius: f32,
+	orbit:        rl.Orbit_Camera_State,
+	orbit_config: rl.Orbit_Camera_Config,
 	ready:        bool,
 }
 
@@ -45,8 +44,6 @@ main :: proc() {
 
 initialize :: proc(seed: u64) {
 	state.config = procgen.terrain_default_config(seed)
-	state.orbit_angle = 3.5
-	state.orbit_radius = 210
 	state.camera = {
 		position   = {-90, 0, 55},
 		target     = {96, 96, 0},
@@ -54,6 +51,12 @@ initialize :: proc(seed: u64) {
 		fovy       = 55,
 		projection = .PERSPECTIVE,
 	}
+	state.orbit, _ = rl.orbit_camera_from_camera(state.camera)
+	state.orbit_config = rl.orbit_camera_config_default()
+	state.orbit_config.zoom_speed = 80
+	state.orbit_config.scroll_distance = 8
+	state.orbit_config.min_distance = 90
+	state.orbit_config.max_distance = 420
 	target_ok: bool
 	state.target, target_ok = rl.create_gpu_3d_target(WORLD_WIDTH, WORLD_HEIGHT)
 	if !target_ok do return
@@ -122,25 +125,21 @@ frame :: proc() {
 			state.bridge.missing_draws,
 		)
 		rl.DrawText(label, 16, 16, 20, rl.RAYWHITE)
-		rl.DrawText("A/D or arrows orbit, W/S or wheel zoom", 16, 44, 18, rl.LIGHTGRAY)
+		rl.DrawText("A/D or left-drag orbit, W/S or wheel zoom", 16, 44, 18, rl.LIGHTGRAY)
 	}
 	rl.EndDrawing()
 }
 
 update_camera :: proc() {
-	delta := rl.GetFrameTime()
-	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) do state.orbit_angle += delta
-	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) do state.orbit_angle -= delta
-	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) do state.orbit_radius -= 80 * delta
-	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) do state.orbit_radius += 80 * delta
-	state.orbit_radius = clamp(state.orbit_radius - rl.GetMouseWheelMove() * 8, 90, 420)
-	center := rl.Vector3{96, 96, 0}
-	state.camera.target = center
-	state.camera.position = {
-		center.x + math.cos(state.orbit_angle) * state.orbit_radius,
-		center.y + math.sin(state.orbit_angle) * state.orbit_radius,
-		70 + state.orbit_radius * 0.22,
-	}
+	input: rl.Orbit_Camera_Input
+	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) do input.rotate_rate.x += 1
+	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) do input.rotate_rate.x -= 1
+	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) do input.zoom_rate -= 1
+	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) do input.zoom_rate += 1
+	if rl.IsMouseButtonDown(.LEFT) do input.pointer_drag = -rl.GetMouseDelta()
+	input.scroll = rl.GetMouseWheelMoveV().y
+	rl.update_orbit_camera(&state.orbit, input, state.orbit_config, rl.GetFrameTime())
+	rl.orbit_camera_apply(state.orbit, &state.camera)
 }
 
 identity_matrix :: proc() -> scene.Matrix_4 {

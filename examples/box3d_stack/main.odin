@@ -1,7 +1,6 @@
 package main
 
 import "core:fmt"
-import "core:math"
 import "core:math/linalg"
 import rl "ingot:gfx"
 import b3 "vendor:box3d"
@@ -12,8 +11,6 @@ FIXED_DT :: f32(1.0 / 60.0)
 PHYSICS_SUBSTEPS :: 4
 MAX_STEPS_PER_FRAME :: 8
 MAX_FRAME_DT :: f32(0.25)
-CAMERA_DRAG_ORBIT_SPEED :: f32(0.01)
-CAMERA_WHEEL_ZOOM_SPEED :: f32(2)
 SCREEN_WIDTH :: 1280
 SCREEN_HEIGHT :: 720
 
@@ -33,26 +30,24 @@ Box :: struct {
 }
 
 State :: struct {
-	world:                b3.WorldId,
-	floor:                b3.BodyId,
-	boxes:                [BOX_MAX]Box,
-	box_count:            u32,
-	accumulator:          f32,
-	fixed_steps:          u32,
-	dropped_steps:        u64,
-	paused:               bool,
-	step_once:            bool,
-	ready:                bool,
-	target:               rl.Gpu_3D_Target,
-	resize_failed_width:  i32,
-	resize_failed_height: i32,
-	resize_failures:      u64,
-	cube:                 rl.Gpu_Mesh,
-	cube_edges:           rl.Gpu_Mesh,
-	camera:               rl.Camera3D,
-	orbit_angle:          f32,
-	orbit_radius:         f32,
-	graphics_ready:       bool,
+	world:           b3.WorldId,
+	floor:           b3.BodyId,
+	boxes:           [BOX_MAX]Box,
+	box_count:       u32,
+	accumulator:     f32,
+	fixed_steps:     u32,
+	dropped_steps:   u64,
+	paused:          bool,
+	step_once:       bool,
+	ready:           bool,
+	target:          rl.Gpu_3D_Target,
+	resize_failures: u64,
+	cube:            rl.Gpu_Mesh,
+	cube_edges:      rl.Gpu_Mesh,
+	camera:          rl.Camera3D,
+	orbit:           rl.Orbit_Camera_State,
+	orbit_config:    rl.Orbit_Camera_Config,
+	graphics_ready:  bool,
 }
 
 state: State
@@ -79,8 +74,10 @@ graphics_create :: proc(value: ^State) -> bool {
 		fovy       = 42,
 		projection = .PERSPECTIVE,
 	}
-	value.orbit_angle = -2.35
-	value.orbit_radius = 20
+	value.orbit, _ = rl.orbit_camera_from_camera(value.camera)
+	value.orbit_config = rl.orbit_camera_config_default()
+	value.orbit_config.min_distance = 10
+	value.orbit_config.max_distance = 128
 	target_ok, cube_ok, edges_ok: bool
 	value.target, target_ok = rl.create_gpu_3d_target(
 		rl.GetRenderWidth(),
@@ -96,20 +93,8 @@ graphics_create :: proc(value: ^State) -> bool {
 graphics_target_resize :: proc(value: ^State) {
 	assert(value != nil, "graphics_target_resize: nil state")
 	if !value.graphics_ready do return
-	width := rl.GetRenderWidth()
-	height := rl.GetRenderHeight()
-	if width <= 0 || height <= 0 do return
-	texture := value.target.texture.texture
-	if texture.width == width && texture.height == height do return
-	if value.resize_failed_width == width && value.resize_failed_height == height do return
-	if !rl.resize_gpu_3d_target(&value.target, width, height) {
-		value.resize_failed_width = width
-		value.resize_failed_height = height
-		value.resize_failures += 1
-		return
-	}
-	value.resize_failed_width = 0
-	value.resize_failed_height = 0
+	result := rl.resize_gpu_3d_target_to_render_size(&value.target)
+	if result == .Failed do value.resize_failures += 1
 }
 
 physics_create :: proc(value: ^State) -> bool {
@@ -232,22 +217,16 @@ physics_input :: proc(value: ^State) {
 
 camera_update :: proc(value: ^State, frame_dt: f32) {
 	assert(value != nil, "camera_update: nil state")
-	assert(value.orbit_radius > 0, "camera_update: invalid radius")
-	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) do value.orbit_angle += frame_dt
-	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) do value.orbit_angle -= frame_dt
-	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) do value.orbit_radius -= 10 * frame_dt
-	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) do value.orbit_radius += 10 * frame_dt
-	if rl.IsMouseButtonDown(.LEFT) {
-		value.orbit_angle -= rl.GetMouseDelta().x * CAMERA_DRAG_ORBIT_SPEED
-	}
-	wheel := rl.GetMouseWheelMoveV()
-	value.orbit_radius = clamp(value.orbit_radius - wheel.y * CAMERA_WHEEL_ZOOM_SPEED, 10, 128)
-	value.camera.target = {0, 0, 3}
-	value.camera.position = {
-		math.cos(value.orbit_angle) * value.orbit_radius,
-		math.sin(value.orbit_angle) * value.orbit_radius,
-		7 + value.orbit_radius * 0.2,
-	}
+	assert(value.orbit.distance > 0, "camera_update: invalid distance")
+	input: rl.Orbit_Camera_Input
+	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) do input.rotate_rate.x += 1
+	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) do input.rotate_rate.x -= 1
+	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) do input.zoom_rate -= 1
+	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) do input.zoom_rate += 1
+	if rl.IsMouseButtonDown(.LEFT) do input.pointer_drag = -rl.GetMouseDelta()
+	input.scroll = rl.GetMouseWheelMoveV().y
+	rl.update_orbit_camera(&value.orbit, input, value.orbit_config, frame_dt)
+	rl.orbit_camera_apply(value.orbit, &value.camera)
 }
 
 frame :: proc() {

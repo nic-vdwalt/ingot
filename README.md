@@ -253,9 +253,10 @@ bounded fixed-step simulation. Run it with:
 odin run examples/box3d_stack -collection:ingot=.
 ```
 
-Use R to reset, Space to pause, N to single-step, A/D or arrows to orbit, and W/S
-or the mouse wheel to zoom. It is intentionally absent from the web build because
-the official Box3D vendor package does not establish `js_wasm32` support.
+Use R to reset, Space to pause, N to single-step, A/D, arrows, or left-drag to
+orbit, and W/S, the mouse wheel, or trackpad scrolling to zoom. It is intentionally
+absent from the web build because the official Box3D vendor package does not
+establish `js_wasm32` support.
 
 For web, `bash build_web.sh examples/gallery` writes `web/ingot_web.wasm`;
 serve `web/` over HTTP in a WebGPU browser (Chrome/Edge 113+ or Safari 18+).
