@@ -377,6 +377,8 @@ chart_draw_tooltip :: proc(
 	mouse: Vector2,
 ) {
 	assert(frame != nil, "chart_draw_tooltip: nil frame")
+	assert(idx >= 0, "chart_draw_tooltip: negative index")
+	assert(cl.chart.width >= 0 && cl.chart.height >= 0, "chart_draw_tooltip: invalid chart")
 	style := ui_frame_theme(frame)
 	buf: [32]u8
 	pad := ui_frame_sc(frame, 6)
@@ -417,9 +419,8 @@ chart_draw_tooltip :: proc(
 		i32(cl.chart.y),
 		max(i32(cl.chart.y + cl.chart.height) - th, i32(cl.chart.y)),
 	)
-	screen_origin := frame_to_screen(frame, {f32(tx), f32(ty)})
-	sx, sy := i32(screen_origin.x), i32(screen_origin.y)
-	rect := Rectangle{f32(sx), f32(sy), f32(tw), f32(th)}
+	rect := frame_rect_to_screen(frame, {f32(tx), f32(ty), f32(tw), f32(th)})
+	sx, sy := i32(rect.x), i32(rect.y)
 	overlay_begin(frame, rect, claim_input = false)
 	overlay_rounded_fill(frame, rect, .MD, style.bg_popup)
 	overlay_rounded_border(frame, rect, .MD, .Hairline, style.border_color)

@@ -231,7 +231,14 @@ date_picker_popup_layout :: proc(
 	if sy + menu_h > screen_h do sy = max(i32(anchor.y) - menu_h - 2, 0)
 	screen := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
 	local := frame_rect_to_local(frame, screen)
-	return {local, screen, cell, metrics.PADDING, header_h, local.y + f32(metrics.PADDING + header_h + cell)}
+	return {
+		local,
+		screen,
+		cell,
+		metrics.PADDING,
+		header_h,
+		local.y + f32(metrics.PADDING + header_h + cell),
+	}
 }
 
 @(private = "file")
@@ -246,8 +253,10 @@ date_picker_popup_weekdays :: proc(frame: ^Ui_Frame, layout: Date_Picker_Popup_L
 		overlay_text(
 			frame,
 			name,
-			i32(layout.screen.x) + layout.pad + i32(column) * layout.cell +
-				(layout.cell - name_w) / 2,
+			i32(layout.screen.x) +
+			layout.pad +
+			i32(column) * layout.cell +
+			(layout.cell - name_w) / 2,
 			i32(row_y) + (layout.cell - metrics.FONT_SIZE_LABEL) / 2,
 			metrics.FONT_SIZE_LABEL,
 			ui_frame_theme(frame).fg_secondary,
@@ -271,43 +280,47 @@ date_picker_popup :: proc(
 	assert(frame != nil && st != nil, "date_picker_popup: invalid call")
 	assert(st.open, "date_picker_popup: popup not open")
 	assert(st.view_month >= 1 && st.view_month <= 12, "date_picker_popup: bad view month")
-	metrics := ui_frame_metrics(frame)
-	style := ui_frame_theme(frame)
-	cell := ui_frame_sc(frame, 30)
-	pad := metrics.PADDING
-	header_h := ui_frame_sc(frame, 30)
-	menu_w := cell * 7 + pad * 2
-	menu_h := header_h + cell + cell * 6 + pad * 2
-	origin := frame_pane_origin(frame)
-	ox, oy := i32(origin.x), i32(origin.y)
-	anchor := frame_to_screen(frame, {f32(rect.x), f32(rect.y)})
-	sx := clamp(i32(anchor.x), 0, max(screen_w - menu_w, 0))
-	sy := i32(anchor.y) + rect.h + 2
-	if sy + menu_h > screen_h do sy = max(i32(anchor.y) - menu_h - 2, 0)
-	mx, my := sx - ox, sy - oy
-
+	layout := date_picker_popup_layout(frame, rect, screen_w, screen_h)
 	mouse := frame_to_local(frame, get_mouse_position(frame))
-	menu_rect := Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
 	pressed := is_mouse_button_pressed(frame, .LEFT)
-	if !st.just_opened && pressed && !point_in_rect(mouse, menu_rect) {
+	if !st.just_opened && pressed && !point_in_rect(mouse, layout.local) {
 		st.open = false
 		return false
 	}
 	st.just_opened = false
 
-	screen_rect := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
-	overlay_begin(frame, screen_rect, claim_input = true)
-	overlay_rect(frame, screen_rect, style.bg_popup)
-	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
+	style := ui_frame_theme(frame)
+	overlay_begin(frame, layout.screen, claim_input = true)
+	overlay_rect(frame, layout.screen, style.bg_popup)
+	overlay_rect_lines(frame, layout.screen, ui_frame_scf(frame, 1), style.border_color)
+	date_picker_popup_header(frame, st, layout, mouse, pressed)
+	date_picker_popup_weekdays(frame, layout)
+	changed = date_picker_days(frame, st, value, layout, mouse, pressed)
+	overlay_end(frame)
+	return changed
+}
 
+@(private = "file")
+date_picker_popup_header :: proc(
+	frame: ^Ui_Frame,
+	st: ^Date_Picker_State,
+	layout: Date_Picker_Popup_Layout,
+	mouse: Vector2,
+	pressed: bool,
+) {
+	assert(frame != nil && st != nil, "date_picker_popup_header: invalid call")
+	assert(st.view_month >= 1 && st.view_month <= 12, "date_picker_popup_header: bad month")
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
 	nav_w := ui_frame_sc(frame, 26)
-	prev_rect := Rectangle{f32(mx + pad), f32(my + pad), f32(nav_w), f32(header_h - 4)}
-	next_rect := Rectangle {
-		f32(mx + menu_w - pad - nav_w),
-		f32(my + pad),
+	prev_rect := Rectangle {
+		layout.local.x + f32(layout.pad),
+		layout.local.y + f32(layout.pad),
 		f32(nav_w),
-		f32(header_h - 4),
+		f32(layout.header_h - ui_frame_sc(frame, 4)),
 	}
+	next_rect := prev_rect
+	next_rect.x = layout.local.x + layout.local.width - f32(layout.pad + nav_w)
 	if point_in_rect(mouse, prev_rect) {
 		request_cursor(frame, .POINTING_HAND)
 		if pressed do date_picker_shift_month(st, -1)
@@ -316,19 +329,20 @@ date_picker_popup :: proc(
 		request_cursor(frame, .POINTING_HAND)
 		if pressed do date_picker_shift_month(st, 1)
 	}
+	sx, sy := i32(layout.screen.x), i32(layout.screen.y)
 	overlay_text(
 		frame,
 		"\u2039",
-		sx + pad + nav_w / 3,
-		sy + pad,
+		sx + layout.pad + nav_w / 3,
+		sy + layout.pad,
 		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
 	overlay_text(
 		frame,
 		"\u203A",
-		sx + menu_w - pad - nav_w * 2 / 3,
-		sy + pad,
+		sx + i32(layout.screen.width) - layout.pad - nav_w * 2 / 3,
+		sy + layout.pad,
 		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
@@ -337,42 +351,11 @@ date_picker_popup :: proc(
 	overlay_text(
 		frame,
 		title,
-		sx + (menu_w - title_w) / 2,
-		sy + pad + 2,
+		sx + (i32(layout.screen.width) - title_w) / 2,
+		sy + layout.pad + ui_frame_sc(frame, 2),
 		metrics.FONT_SIZE_BODY,
 		style.fg_primary,
 	)
-
-	// Weekday header row.
-	weekdays := [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}
-	row_y := my + pad + header_h
-	for name, column in weekdays {
-		name_w := text_width(frame, name, .Label)
-		overlay_text(
-			frame,
-			name,
-			sx + pad + i32(column) * cell + (cell - name_w) / 2,
-			row_y + oy + (cell - metrics.FONT_SIZE_LABEL) / 2,
-			metrics.FONT_SIZE_LABEL,
-			style.fg_secondary,
-		)
-	}
-
-	changed = date_picker_days(
-		frame,
-		st,
-		value,
-		mouse,
-		mx,
-		row_y + cell,
-		ox,
-		oy,
-		cell,
-		pad,
-		pressed,
-	)
-	overlay_end(frame)
-	return changed
 }
 
 @(private = "file")
@@ -380,28 +363,34 @@ date_picker_days :: proc(
 	frame: ^Ui_Frame,
 	st: ^Date_Picker_State,
 	value: ^Calendar_Date,
+	layout: Date_Picker_Popup_Layout,
 	mouse: Vector2,
-	mx, grid_y, ox, oy, cell, pad: i32,
 	pressed: bool,
 ) -> (
 	changed: bool,
 ) {
 	assert(frame != nil && st != nil && value != nil, "date_picker_days: invalid call")
+	assert(layout.cell > 0, "date_picker_days: invalid cell")
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	first_weekday := calendar_weekday(st.view_year, st.view_month, 1)
 	day_count := calendar_days_in_month(st.view_year, st.view_month)
+	assert(day_count >= 28 && day_count <= 31, "date_picker_days: invalid day count")
 	for day in 1 ..= day_count {
 		slot := first_weekday + day - 1
-		cx := mx + pad + slot % 7 * cell
-		cy := grid_y + slot / 7 * cell
-		cell_rect := Rectangle{f32(cx), f32(cy), f32(cell), f32(cell)}
+		cell_rect := Rectangle {
+			layout.local.x + f32(layout.pad + slot % 7 * layout.cell),
+			layout.grid_y + f32(slot / 7 * layout.cell),
+			f32(layout.cell),
+			f32(layout.cell),
+		}
+		screen_cell := frame_rect_to_screen(frame, cell_rect)
 		hovered := point_in_rect(mouse, cell_rect)
 		is_selected :=
 			value.day == day && value.month == st.view_month && value.year == st.view_year
 		if is_selected || hovered {
 			color := style.fg_accent if is_selected else style.bg_active
-			overlay_rect(frame, frame_rect_to_screen(frame, cell_rect), color)
+			overlay_rect(frame, screen_cell, color)
 		}
 		if hovered do request_cursor(frame, .POINTING_HAND)
 		day_text := fmt.tprintf("%d", day)
@@ -410,8 +399,8 @@ date_picker_days :: proc(
 		overlay_text(
 			frame,
 			day_text,
-			cx + ox + (cell - day_w) / 2,
-			cy + oy + (cell - metrics.FONT_SIZE_LABEL) / 2,
+			i32(screen_cell.x) + (layout.cell - day_w) / 2,
+			i32(screen_cell.y) + (layout.cell - metrics.FONT_SIZE_LABEL) / 2,
 			metrics.FONT_SIZE_LABEL,
 			day_color,
 		)
