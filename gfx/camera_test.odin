@@ -120,6 +120,81 @@ camera_update_rejects_non_finite_input :: proc(t: ^testing.T) {
 }
 
 @(test)
+orbit_camera_round_trips_camera :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	state, ok := orbit_camera_from_camera(camera)
+	testing.expect(t, ok)
+	result := camera
+	orbit_camera_apply(state, &result)
+	camera_test_vector_near(t, result.position, camera.position, 1e-5)
+	camera_test_vector_near(t, result.target, camera.target, 1e-5)
+}
+
+@(test)
+orbit_camera_rates_are_frame_rate_independent :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	one_step, _ := orbit_camera_from_camera(camera)
+	many_steps := one_step
+	config := orbit_camera_config_default()
+	input := Orbit_Camera_Input {
+		rotate_rate = {0.5, 0.25},
+		zoom_rate   = 0.5,
+	}
+	update_orbit_camera(&one_step, input, config, 1)
+	for _ in 0 ..< 100 do update_orbit_camera(&many_steps, input, config, 0.01)
+	testing.expect(t, abs(one_step.yaw - many_steps.yaw) < 1e-4)
+	testing.expect(t, abs(one_step.pitch - many_steps.pitch) < 1e-4)
+	testing.expect(t, abs(one_step.distance - many_steps.distance) < 1e-4)
+}
+
+@(test)
+orbit_camera_drag_and_scroll_are_frame_deltas :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	first, _ := orbit_camera_from_camera(camera)
+	second := first
+	config := orbit_camera_config_default()
+	input := Orbit_Camera_Input {
+		pointer_drag = {10, 5},
+		scroll       = 0.25,
+	}
+	update_orbit_camera(&first, input, config, 0)
+	update_orbit_camera(&second, input, config, 1)
+	testing.expect_value(t, first, second)
+	testing.expect(t, first.yaw != 0)
+	testing.expect(t, first.pitch != 0)
+	testing.expect(t, first.distance == 9.5)
+}
+
+@(test)
+orbit_camera_clamps_pitch_and_distance :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	state, _ := orbit_camera_from_camera(camera)
+	config := orbit_camera_config_default()
+	input := Orbit_Camera_Input {
+		pointer_drag = {0, 10000},
+		scroll       = 10000,
+	}
+	update_orbit_camera(&state, input, config, 1)
+	testing.expect_value(t, state.pitch, config.max_pitch)
+	testing.expect_value(t, state.distance, config.min_distance)
+	input = {
+		pointer_drag = {0, -20000},
+		scroll       = -10000,
+	}
+	update_orbit_camera(&state, input, config, 1)
+	testing.expect_value(t, state.pitch, config.min_pitch)
+	testing.expect_value(t, state.distance, config.max_distance)
+}
+
+@(test)
+orbit_camera_rejects_coincident_camera :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	camera.position = camera.target
+	_, ok := orbit_camera_from_camera(camera)
+	testing.expect_value(t, ok, false)
+}
+
+@(test)
 camera_matrices_use_explicit_dimensions :: proc(t: ^testing.T) {
 	camera := camera_test_value()
 	view_square, projection_square, vp_square := _camera_matrices(camera, 800, 800)

@@ -181,6 +181,90 @@ UpdateCamera :: proc(camera: ^Camera3D, motion: Camera3D_Motion, dt: f32) {
 	assert(_camera_vector_is_finite(camera.up), "UpdateCamera: produced non-finite up")
 }
 
+orbit_camera_config_default :: proc() -> Orbit_Camera_Config {
+	return {
+		world_up = CAMERA_WORLD_UP,
+		rotate_speed = math.PI / 2,
+		zoom_speed = 10,
+		drag_radians_per_pixel = 0.01,
+		scroll_distance = 2,
+		min_distance = 1,
+		max_distance = 1000,
+		min_pitch = -math.PI / 2 + 0.01,
+		max_pitch = math.PI / 2 - 0.01,
+	}
+}
+
+orbit_camera_from_camera :: proc(camera: Camera3D) -> (Orbit_Camera_State, bool) {
+	if !_camera_vector_is_finite(camera.position) || !_camera_vector_is_finite(camera.target) {
+		return {}, false
+	}
+	offset := camera.position - camera.target
+	distance_squared := linalg.dot(offset, offset)
+	if !_f32_is_finite(distance_squared) || distance_squared <= 1e-12 do return {}, false
+	distance := math.sqrt(distance_squared)
+	return {
+			target = camera.target,
+			yaw = math.atan2(offset.y, offset.x),
+			pitch = math.asin(clamp(offset.z / distance, -1, 1)),
+			distance = distance,
+		},
+		true
+}
+
+update_orbit_camera :: proc(
+	state: ^Orbit_Camera_State,
+	input: Orbit_Camera_Input,
+	config: Orbit_Camera_Config,
+	dt: f32,
+) {
+	assert(state != nil, "update_orbit_camera: nil state")
+	assert(_f32_is_finite(dt) && dt >= 0, "update_orbit_camera: invalid delta time")
+	assert(_camera_vector_is_finite(state.target), "update_orbit_camera: invalid target")
+	assert(_camera_vector_is_finite(config.world_up), "update_orbit_camera: invalid world up")
+	assert(config.world_up == CAMERA_WORLD_UP, "update_orbit_camera: unsupported world up")
+	assert(config.min_distance > 0, "update_orbit_camera: invalid minimum distance")
+	assert(
+		config.max_distance >= config.min_distance,
+		"update_orbit_camera: invalid distance range",
+	)
+	assert(config.max_pitch >= config.min_pitch, "update_orbit_camera: invalid pitch range")
+	assert(_f32_is_finite(input.rotate_rate.x), "update_orbit_camera: invalid rotation input")
+	assert(_f32_is_finite(input.rotate_rate.y), "update_orbit_camera: invalid rotation input")
+	assert(_f32_is_finite(input.pointer_drag.x), "update_orbit_camera: invalid drag input")
+	assert(_f32_is_finite(input.pointer_drag.y), "update_orbit_camera: invalid drag input")
+	assert(_f32_is_finite(input.zoom_rate), "update_orbit_camera: invalid zoom input")
+	assert(_f32_is_finite(input.scroll), "update_orbit_camera: invalid scroll input")
+	state.yaw += input.rotate_rate.x * config.rotate_speed * dt
+	state.yaw += input.pointer_drag.x * config.drag_radians_per_pixel
+	state.pitch += input.rotate_rate.y * config.rotate_speed * dt
+	state.pitch += input.pointer_drag.y * config.drag_radians_per_pixel
+	state.pitch = clamp(state.pitch, config.min_pitch, config.max_pitch)
+	state.distance += input.zoom_rate * config.zoom_speed * dt
+	state.distance -= input.scroll * config.scroll_distance
+	state.distance = clamp(state.distance, config.min_distance, config.max_distance)
+	assert(_f32_is_finite(state.yaw) && _f32_is_finite(state.pitch))
+	assert(_f32_is_finite(state.distance) && state.distance > 0)
+}
+
+orbit_camera_apply :: proc(state: Orbit_Camera_State, camera: ^Camera3D) {
+	assert(camera != nil, "orbit_camera_apply: nil camera")
+	assert(_camera_vector_is_finite(state.target), "orbit_camera_apply: invalid target")
+	assert(_f32_is_finite(state.yaw) && _f32_is_finite(state.pitch))
+	assert(_f32_is_finite(state.distance) && state.distance > 0)
+	horizontal := state.distance * f32(math.cos(f64(state.pitch)))
+	camera.target = state.target
+	camera.position =
+		state.target +
+		Vector3 {
+				horizontal * f32(math.cos(f64(state.yaw))),
+				horizontal * f32(math.sin(f64(state.yaw))),
+				state.distance * f32(math.sin(f64(state.pitch))),
+			}
+	camera.up = CAMERA_WORLD_UP
+	assert(_camera_vector_is_finite(camera.position), "orbit_camera_apply: invalid position")
+}
+
 // GetProjectionMatrix returns the last 3D projection matrix (rlgl parity for
 // GetMatrixProjection). Identity before any BeginMode3D.
 GetProjectionMatrix :: proc() -> Matrix {

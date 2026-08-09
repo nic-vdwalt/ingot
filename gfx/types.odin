@@ -128,6 +128,32 @@ Camera3D_Motion :: struct {
 	zoom_velocity:    f32,
 }
 
+Orbit_Camera_State :: struct {
+	target:   Vector3,
+	yaw:      f32,
+	pitch:    f32,
+	distance: f32,
+}
+
+Orbit_Camera_Input :: struct {
+	rotate_rate:  Vector2,
+	zoom_rate:    f32,
+	pointer_drag: Vector2,
+	scroll:       f32,
+}
+
+Orbit_Camera_Config :: struct {
+	world_up:               Vector3,
+	rotate_speed:           f32,
+	zoom_speed:             f32,
+	drag_radians_per_pixel: f32,
+	scroll_distance:        f32,
+	min_distance:           f32,
+	max_distance:           f32,
+	min_pitch:              f32,
+	max_pitch:              f32,
+}
+
 Camera2D :: struct {
 	offset:   Vector2,
 	target:   Vector2,

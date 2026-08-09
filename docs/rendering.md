@@ -126,11 +126,16 @@ GPU depth rendering uses the separate opt-in API in `gfx/gpu3d.odin`:
   target’s public texture remains single-sampled and receives the resolved color,
   so existing presentation and texture-material paths remain unchanged. Omitting
   the option preserves single-sample rendering.
-- Resize offscreen targets transactionally with `resize_gpu_3d_target`; allocation
-  failure leaves the previous valid target intact and preserves its antialiasing
-  mode. An MSAA `.Preserve` pass retains its multisample attachments; rendering
-  directly into only the resolved texture between passes cannot be loaded back into
-  those attachments.
+- Query live target dimensions with `gpu_3d_target_size` instead of reaching
+  through the target's resolved render texture. Resize offscreen targets
+  transactionally with `resize_gpu_3d_target`; allocation failure leaves the
+  previous valid target intact and preserves its antialiasing mode.
+  `resize_gpu_3d_target_to_render_size` explicitly synchronizes a target each frame
+  and reports `.Unchanged`, `.Resized`, `.Deferred`, or `.Failed`. Deferred sizes
+  cover minimized and otherwise non-renderable windows without attempting an
+  allocation. An MSAA `.Preserve` pass retains its multisample attachments;
+  rendering directly into only the resolved texture between passes cannot be loaded
+  back into those attachments.
 - Present a completed target with `draw_gpu_3d_target`, providing caller-owned
   destination placement and tint. It derives the full positive-height source
   rectangle from the live target, quietly skips invalid or stale target textures,
@@ -147,6 +152,14 @@ GPU depth rendering uses the separate opt-in API in `gfx/gpu3d.odin`:
   `frustum_from_matrix`, then use `frustum_contains_point` and
   `frustum_intersects_bounds` before submitting meshes.
 - Balance the pass with `end_gpu_3d`.
+
+Target-centered cameras use caller-owned `Orbit_Camera_State`, semantic
+`Orbit_Camera_Input`, and `Orbit_Camera_Config`. `update_orbit_camera` is a pure
+state/input/delta-time step: keyboard rotation and zoom are rates multiplied by
+`dt`, while pointer drag and fractional wheel or trackpad scroll are frame deltas.
+`orbit_camera_apply` projects the bounded yaw, pitch, and distance back into a
+`Camera3D` using Ingot's +Z world-up basis. Applications retain their own key and
+pointer bindings rather than coupling camera behavior to the default input context.
 
 Explicit GPU 3D passes write their attachment in presentation orientation.
 `draw_gpu_3d_target` preserves that orientation with a positive source height. The
