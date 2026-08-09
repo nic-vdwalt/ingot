@@ -309,7 +309,9 @@ date_picker_popup_header :: proc(
 	pressed: bool,
 ) {
 	assert(frame != nil && st != nil, "date_picker_popup_header: invalid call")
-	assert(st.view_month >= 1 && st.view_month <= 12, "date_picker_popup_header: bad month")
+	month_index := int(st.view_month - 1)
+	assert(month_index >= 0, "date_picker_popup_header: month below range")
+	assert(month_index < len(CALENDAR_MONTH_NAMES), "date_picker_popup_header: month above range")
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	nav_w := ui_frame_sc(frame, 26)
@@ -346,7 +348,7 @@ date_picker_popup_header :: proc(
 		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
-	title := fmt.tprintf("%s %d", CALENDAR_MONTH_NAMES[st.view_month - 1], st.view_year)
+	title := fmt.tprintf("%s %d", CALENDAR_MONTH_NAMES[month_index], st.view_year)
 	title_w := text_width(frame, title, .Body)
 	overlay_text(
 		frame,

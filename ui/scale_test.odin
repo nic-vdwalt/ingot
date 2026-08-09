@@ -45,7 +45,10 @@ scale_change_resets_backend_once :: proc(t: ^testing.T) {
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
 	state: Scale_Reset_State
-	runtime.text_backend = {data = &state, reset = scale_reset_count}
+	runtime.text_backend = {
+		data  = &state,
+		reset = scale_reset_count,
+	}
 
 	ui_runtime_set_scale(&runtime, 2)
 	testing.expect_value(t, state.count, 1)

@@ -181,8 +181,7 @@ frame_draw_rectangle_gradient_v :: proc(frame: ^Frame, rect: Rect, top, bottom: 
 	if !_frame_valid(frame) do return
 	previous := _context_activate(frame.owner)
 	defer _context_restore(previous)
-	batch_set(&g.rend, .Solid, nil)
-	_emit_gradient_v(&g.rend, rect, top, bottom)
+	_gradient_v(rect, top, bottom)
 }
 
 frame_draw_circle_lines :: proc(frame: ^Frame, center: Vec2, radius: f32, color: RGBA) {
