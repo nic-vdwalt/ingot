@@ -2,7 +2,7 @@
 # Build and run the ingot memory-safety fuzz harnesses under a sanitizer
 # with a tracking allocator (leaks / bad frees fail the run).
 #
-# Usage: fuzz/run.sh [net|ui|view|term|interact|input|gfx-frame|all|soak] [seed] [iterations]
+# Usage: fuzz/run.sh [net|ui|view|term|interact|input|gpu3d|gfx-frame|all|soak] [seed] [iterations]
 #   fuzz/run.sh net            # random seed, default iterations
 #   fuzz/run.sh net 12345      # reproduce a specific seed
 #   fuzz/run.sh view           # .ingv decoder: random bytes, mutated files, and
@@ -13,6 +13,7 @@
 #   fuzz/run.sh input          # text-input edit-op fuzzer (in-package, high iterations)
 #   fuzz/run.sh wsreconn       # WS reconnect state machine vs real worker thread
 #                              # (sim transport via -define:INGOT_WS_SIM=true)
+#   fuzz/run.sh gpu3d          # headless 3D mesh/camera/frustum/picking DTS
 #   fuzz/run.sh tsan           # ThreadSanitizer pass over the threaded surfaces
 #                              # (wsreconn + net tests + a11y queue stress);
 #                              # ASan and TSan cannot share a binary, so this
@@ -145,6 +146,22 @@ run_wsreconn() {
 	"$ROOT/fuzz/wsreconn/fuzz_wsreconn" "$@"
 }
 
+run_gpu3d() {
+	local seed_define=()
+	local iteration_define=()
+	if [ -n "$SEED" ]; then
+		seed_define=("-define:INGOT_GPU3D_FUZZ_SEED=$SEED")
+	fi
+	if [ -n "$ITERATIONS" ]; then
+		iteration_define=("-define:INGOT_GPU3D_FUZZ_ITER=$ITERATIONS")
+	fi
+	# shellcheck disable=SC2086
+	odin test "$ROOT/gfx" $COL $GUARD $SANFLAGS -define:ODIN_TEST_THREADS=1 \
+		-define:ODIN_TEST_NAMES=gfx.gpu_3d_deterministic_simulation \
+		${seed_define[@]+"${seed_define[@]}"} \
+		${iteration_define[@]+"${iteration_define[@]}"}
+}
+
 run_tsan() {
 	# ThreadSanitizer phase (separate binaries - TSan and ASan don't compose).
 	local TS="-debug -sanitize:thread"
@@ -187,6 +204,9 @@ input)
 wsreconn)
 	run_wsreconn "${ARGS[@]+"${ARGS[@]}"}"
 	;;
+gpu3d)
+	run_gpu3d
+	;;
 tsan)
 	run_tsan "${ARGS[@]+"${ARGS[@]}"}"
 	;;
@@ -198,6 +218,7 @@ all)
 	run_wsreconn "${ARGS[@]+"${ARGS[@]}"}"
 	run_input
 	run_term
+	run_gpu3d
 	run_tsan "${ARGS[@]+"${ARGS[@]}"}"
 	;;
 soak)
@@ -222,6 +243,11 @@ soak)
 			echo "SOAK FAILED in term tests (deterministic seeds - rerun: fuzz/run.sh term)" >&2
 			exit 1
 		fi
+		SEED="$round_seed"
+		if ! run_gpu3d; then
+			echo "SOAK FAILED in GPU 3D DTS - reproduce with: fuzz/run.sh gpu3d $round_seed" >&2
+			exit 1
+		fi
 		if ! run_tsan "-seed:$round_seed"; then
 			echo "SOAK FAILED in TSan phase - reproduce with: fuzz/run.sh tsan $round_seed" >&2
 			exit 1
@@ -229,7 +255,7 @@ soak)
 	done
 	;;
 *)
-	echo "unknown target '$TARGET' (expected net|ui|view|term|interact|input|wsreconn|tsan|gfx-frame|all|soak)" >&2
+	echo "unknown target '$TARGET' (expected net|ui|view|term|interact|input|wsreconn|gpu3d|tsan|gfx-frame|all|soak)" >&2
 	exit 2
 	;;
 esac

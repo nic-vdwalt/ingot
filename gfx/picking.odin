@@ -101,22 +101,38 @@ intersect_sphere :: proc(ray: Ray_3D, sphere: Sphere_3D) -> (Ray_Hit, bool) {
 	assert(_camera_vector_is_finite(sphere.center), "intersect_sphere: non-finite center")
 	assert(_f32_is_finite(sphere.radius), "intersect_sphere: non-finite radius")
 	assert(sphere.radius > 0, "intersect_sphere: non-positive radius")
-	offset := ray.origin - sphere.center
-	projection := linalg.dot(offset, ray.direction)
-	discriminant :=
-		projection * projection - (linalg.dot(offset, offset) - sphere.radius * sphere.radius)
+	offset := [3]f64 {
+		f64(ray.origin.x - sphere.center.x),
+		f64(ray.origin.y - sphere.center.y),
+		f64(ray.origin.z - sphere.center.z),
+	}
+	direction := [3]f64{f64(ray.direction.x), f64(ray.direction.y), f64(ray.direction.z)}
+	projection := offset[0] * direction[0] + offset[1] * direction[1] + offset[2] * direction[2]
+	offset_squared := offset[0] * offset[0] + offset[1] * offset[1] + offset[2] * offset[2]
+	radius := f64(sphere.radius)
+	discriminant := projection * projection - (offset_squared - radius * radius)
 	if discriminant < 0 do return {}, false
 	root := math.sqrt(discriminant)
 	distance := -projection - root
 	if distance < 0 do distance = -projection + root
 	if distance < 0 do return {}, false
-	position := ray.origin + ray.direction * distance
-	normal, normal_ok := _camera_vector_normalize(position - sphere.center)
-	assert(normal_ok, "intersect_sphere: invalid hit normal")
+	normal64 := [3]f64 {
+		offset[0] + direction[0] * distance,
+		offset[1] + direction[1] * distance,
+		offset[2] + direction[2] * distance,
+	}
+	normal_length := math.sqrt(
+		normal64[0] * normal64[0] + normal64[1] * normal64[1] + normal64[2] * normal64[2],
+	)
+	assert(normal_length > 0, "intersect_sphere: invalid hit normal")
 	hit := Ray_Hit {
-		position = position,
-		normal   = normal,
-		distance = distance,
+		position = ray.origin + ray.direction * f32(distance),
+		normal   = {
+			f32(normal64[0] / normal_length),
+			f32(normal64[1] / normal_length),
+			f32(normal64[2] / normal_length),
+		},
+		distance = f32(distance),
 	}
 	assert(_ray_hit_valid(hit), "intersect_sphere: produced invalid hit")
 	return hit, true
