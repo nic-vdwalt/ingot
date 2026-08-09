@@ -17,8 +17,8 @@ class PinTests(unittest.TestCase):
     def test_read_pin_accepts_revision_and_trailing_newline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ODIN_VERSION"
-            path.write_text("dev-2026-06:285f6d87b\n", encoding="utf-8")
-            self.assertEqual(check_toolchain.read_pin(path), "dev-2026-06:285f6d87b")
+            path.write_text("dev-2026-08:8412dc37a\n", encoding="utf-8")
+            self.assertEqual(check_toolchain.read_pin(path), "dev-2026-08:8412dc37a")
 
     def test_read_pin_rejects_invalid_value(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -28,10 +28,10 @@ class PinTests(unittest.TestCase):
                 check_toolchain.read_pin(path)
 
     def test_version_matches_exact_revision_token(self) -> None:
-        expected = "dev-2026-06:285f6d87b"
+        expected = "dev-2026-08:8412dc37a"
         self.assertTrue(check_toolchain.version_matches(f"odin version {expected}\n", expected))
         self.assertFalse(check_toolchain.version_matches(f"odin version {expected}0\n", expected))
-        self.assertFalse(check_toolchain.version_matches("odin version dev-2026-07:12345678\n", expected))
+        self.assertFalse(check_toolchain.version_matches("odin version dev-2026-09:12345678\n", expected))
 
 
 if __name__ == "__main__":
