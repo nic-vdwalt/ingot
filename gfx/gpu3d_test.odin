@@ -14,18 +14,17 @@ import "core:testing"
 import wg "vendor:wgpu"
 
 @(test)
-test_gpu_3d_target_source_rectangle :: proc(t: ^testing.T) {
-	target: Gpu_3D_Target
-	target.texture.texture.width = 384
-	target.texture.texture.height = 240
-	source, ok := _gpu_3d_target_source_rectangle(&target)
-	testing.expect_value(t, ok, true)
-	testing.expect_value(t, source, Rectangle{0, 0, 384, 240})
+test_gpu_3d_target_size_rejects_invalid_target :: proc(t: ^testing.T) {
+	width, height, ok := gpu_3d_target_size(nil)
+	testing.expect_value(t, width, i32(0))
+	testing.expect_value(t, height, i32(0))
+	testing.expect_value(t, ok, false)
 
-	target.texture.texture.height = 0
-	invalid, invalid_ok := _gpu_3d_target_source_rectangle(&target)
-	testing.expect_value(t, invalid_ok, false)
-	testing.expect_value(t, invalid, Rectangle{})
+	target: Gpu_3D_Target
+	width, height, ok = gpu_3d_target_size(&target)
+	testing.expect_value(t, width, i32(0))
+	testing.expect_value(t, height, i32(0))
+	testing.expect_value(t, ok, false)
 }
 
 @(test)
