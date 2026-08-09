@@ -98,7 +98,12 @@ spell_menu_screen_rect_uses_both_pane_origin_axes :: proc(t: ^testing.T) {
 	defer ui_frame_end(&frame)
 	ui_frame_pane_push(&frame, {40, 70})
 	defer ui_frame_pane_pop(&frame)
-	layout := Spell_Menu_Layout{menu_x = 10, menu_y = 20, menu_w = 100, menu_h = 80}
+	layout := Spell_Menu_Layout {
+		menu_x = 10,
+		menu_y = 20,
+		menu_w = 100,
+		menu_h = 80,
+	}
 	testing.expect_value(t, spell_menu_screen_rect(&frame, &layout), Rectangle{50, 90, 100, 80})
 }
 

@@ -241,7 +241,7 @@ if ui.button(&form, "save", "Save", ui.Button_Options{style = .Primary}) {
 }
 ```
 
-Explicit widgets take a `^Ui_Frame` and a physical `Rect_I32`. Use them for
+Explicit widgets take a `^Ui_Frame` and a logical screen-space `Rect_I32`. Use them for
 canvases, scroll-offset content, overlays, and custom geometry:
 
 ```odin
