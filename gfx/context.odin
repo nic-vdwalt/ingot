@@ -738,7 +738,8 @@ WindowShouldClose :: proc() -> bool {
 // --- per-frame -------------------------------------------------------------
 
 BeginDrawing :: proc() {
-	assert(g != nil, "BeginDrawing: nil context")
+	ctx := g
+	assert(ctx != nil, "BeginDrawing: nil context")
 	_maybe_reconfigure()
 	_stats_frame_begin()
 	platform_web_input_frame_begin()
@@ -767,8 +768,8 @@ BeginDrawing :: proc() {
 		g.frame.has_frame = false
 		return
 	}
-	_assert_window_frame_contract()
-	renderer_window_projection_refresh(&g.rend, g.width, g.height)
+	_assert_window_frame_contract(ctx)
+	renderer_window_projection_refresh(&ctx.rend, ctx.queue, ctx.width, ctx.height)
 	g.frame.view = wg.TextureCreateView(g.frame.surf_tex.texture, nil)
 	g.frame.encoder = wg.DeviceCreateCommandEncoder(g.device, nil)
 	g.frame.clear_color = Color{0, 0, 0, 255}
@@ -779,12 +780,13 @@ BeginDrawing :: proc() {
 }
 
 @(private)
-_assert_window_frame_contract :: proc() {
-	assert(g.width > 0 && g.height > 0, "_assert_window_frame_contract: invalid logical size")
-	assert(g.fb_width > 0 && g.fb_height > 0, "_assert_window_frame_contract: invalid framebuffer")
-	assert(g.config.width == u32(g.fb_width), "_assert_window_frame_contract: width mismatch")
-	assert(g.config.height == u32(g.fb_height), "_assert_window_frame_contract: height mismatch")
-	assert(g.frame.surf_tex.texture != nil, "_assert_window_frame_contract: nil texture")
+_assert_window_frame_contract :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_assert_window_frame_contract: nil context")
+	assert(ctx.width > 0 && ctx.height > 0, "_assert_window_frame_contract: invalid logical size")
+	assert(ctx.fb_width > 0 && ctx.fb_height > 0, "_assert_window_frame_contract: invalid framebuffer")
+	assert(ctx.config.width == u32(ctx.fb_width), "_assert_window_frame_contract: width mismatch")
+	assert(ctx.config.height == u32(ctx.fb_height), "_assert_window_frame_contract: height mismatch")
+	assert(ctx.frame.surf_tex.texture != nil, "_assert_window_frame_contract: nil texture")
 }
 
 ClearBackground :: proc(c: Color) {

@@ -235,7 +235,7 @@ camera_update :: proc(value: ^State, frame_dt: f32) {
 	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) do value.orbit_angle -= frame_dt
 	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) do value.orbit_radius -= 10 * frame_dt
 	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) do value.orbit_radius += 10 * frame_dt
-	value.orbit_radius = clamp(value.orbit_radius - rl.GetMouseWheelMove(), 10, 32)
+	value.orbit_radius = clamp(value.orbit_radius - rl.GetMouseWheelMove(), 10, 128)
 	value.camera.target = {0, 0, 3}
 	value.camera.position = {
 		math.cos(value.orbit_angle) * value.orbit_radius,
@@ -330,3 +330,4 @@ shutdown :: proc(value: ^State) {
 	value.graphics_ready = false
 	rl.CloseWindow()
 }
+
