@@ -783,9 +783,15 @@ BeginDrawing :: proc() {
 _assert_window_frame_contract :: proc(ctx: ^Context) {
 	assert(ctx != nil, "_assert_window_frame_contract: nil context")
 	assert(ctx.width > 0 && ctx.height > 0, "_assert_window_frame_contract: invalid logical size")
-	assert(ctx.fb_width > 0 && ctx.fb_height > 0, "_assert_window_frame_contract: invalid framebuffer")
+	assert(
+		ctx.fb_width > 0 && ctx.fb_height > 0,
+		"_assert_window_frame_contract: invalid framebuffer",
+	)
 	assert(ctx.config.width == u32(ctx.fb_width), "_assert_window_frame_contract: width mismatch")
-	assert(ctx.config.height == u32(ctx.fb_height), "_assert_window_frame_contract: height mismatch")
+	assert(
+		ctx.config.height == u32(ctx.fb_height),
+		"_assert_window_frame_contract: height mismatch",
+	)
 	assert(ctx.frame.surf_tex.texture != nil, "_assert_window_frame_contract: nil texture")
 }
 
