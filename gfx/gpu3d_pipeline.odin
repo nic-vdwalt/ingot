@@ -47,6 +47,13 @@ Gpu_3D_Antialiasing :: enum u8 {
 	MSAA_4X,
 }
 
+Gpu_3D_Target_Resize_Result :: enum u8 {
+	Unchanged,
+	Resized,
+	Deferred,
+	Failed,
+}
+
 Gpu_3D_Target :: struct {
 	texture:           RenderTexture2D,
 	antialiasing:      Gpu_3D_Antialiasing,
@@ -412,6 +419,29 @@ destroy_gpu_3d_target :: proc(target: ^Gpu_3D_Target) {
 	_gpu_3d_target_destroy(default_context(), target)
 }
 
+@(private)
+_gpu_3d_target_size :: proc(
+	ctx: ^Context,
+	target: ^Gpu_3D_Target,
+) -> (
+	width, height: i32,
+	ok: bool,
+) {
+	if ctx == nil || target == nil do return 0, 0, false
+	color := _texture_slot_context(ctx.id, &ctx.resources.textures, target.texture.texture.id)
+	depth := _texture_slot_context(ctx.id, &ctx.resources.textures, target.texture.depth.id)
+	if color == nil || depth == nil || color.entry == nil || depth.entry == nil do return 0, 0, false
+	if color.entry.width <= 0 || color.entry.height <= 0 do return 0, 0, false
+	if color.entry.width != depth.entry.width || color.entry.height != depth.entry.height {
+		return 0, 0, false
+	}
+	return color.entry.width, color.entry.height, true
+}
+
+gpu_3d_target_size :: proc(target: ^Gpu_3D_Target) -> (width, height: i32, ok: bool) {
+	return _gpu_3d_target_size(default_context(), target)
+}
+
 resize_gpu_3d_target :: proc(target: ^Gpu_3D_Target, width, height: i32) -> bool {
 	assert(target != nil, "resize_gpu_3d_target: nil target")
 	ctx := default_context()
@@ -432,12 +462,26 @@ resize_gpu_3d_target :: proc(target: ^Gpu_3D_Target, width, height: i32) -> bool
 	return true
 }
 
+resize_gpu_3d_target_to_render_size :: proc(
+	target: ^Gpu_3D_Target,
+) -> Gpu_3D_Target_Resize_Result {
+	assert(target != nil, "resize_gpu_3d_target_to_render_size: nil target")
+	width := GetRenderWidth()
+	height := GetRenderHeight()
+	if width <= 0 || height <= 0 do return .Deferred
+	current_width, current_height, ok := gpu_3d_target_size(target)
+	if !ok do return .Failed
+	if current_width == width && current_height == height do return .Unchanged
+	if !resize_gpu_3d_target(target, width, height) do return .Failed
+	return .Resized
+}
+
 @(private)
 _gpu_3d_target_source_rectangle :: proc(target: ^Gpu_3D_Target) -> (Rectangle, bool) {
 	assert(target != nil, "_gpu_3d_target_source_rectangle: nil target")
-	texture := target.texture.texture
-	if texture.width <= 0 || texture.height <= 0 do return {}, false
-	return {0, 0, f32(texture.width), f32(texture.height)}, true
+	width, height, ok := gpu_3d_target_size(target)
+	if !ok do return {}, false
+	return {0, 0, f32(width), f32(height)}, true
 }
 
 draw_gpu_3d_target :: proc(target: ^Gpu_3D_Target, destination: Rectangle, tint: Color = WHITE) {
