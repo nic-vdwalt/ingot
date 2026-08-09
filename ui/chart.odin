@@ -174,7 +174,7 @@ chart_series_color :: proc(frame: ^Ui_Frame, i: int) -> Color {
 
 // --- shared drawing internals ------------------------------------------------
 
-@(private = "file")
+@(private)
 Chart_Layout :: struct {
 	chart:        Rectangle, // full widget bounds
 	plot:         Rectangle, // inner data area
@@ -367,7 +367,7 @@ chart_draw_legend :: proc(frame: ^Ui_Frame, cl: Chart_Layout, series: []Chart_Se
 // Recorded on the overlay layer (passive - no input claim) so the card paints
 // above any widgets drawn after the chart; coords are shifted to screen space
 // because the overlay replays after pane translation is popped.
-@(private = "file")
+@(private)
 chart_draw_tooltip :: proc(
 	frame: ^Ui_Frame,
 	cl: Chart_Layout,
@@ -417,20 +417,20 @@ chart_draw_tooltip :: proc(
 		i32(cl.chart.y),
 		max(i32(cl.chart.y + cl.chart.height) - th, i32(cl.chart.y)),
 	)
-	origin := frame_pane_origin(frame)
-	ox := i32(origin.x)
-	rect := Rectangle{f32(tx + ox), f32(ty), f32(tw), f32(th)}
+	screen_origin := frame_to_screen(frame, {f32(tx), f32(ty)})
+	sx, sy := i32(screen_origin.x), i32(screen_origin.y)
+	rect := Rectangle{f32(sx), f32(sy), f32(tw), f32(th)}
 	overlay_begin(frame, rect, claim_input = false)
 	overlay_rounded_fill(frame, rect, .MD, style.bg_popup)
 	overlay_rounded_border(frame, rect, .MD, .Hairline, style.border_color)
 
 	// Draw pass.
-	ry := ty + pad
+	ry := sy + pad
 	if has_header {
 		overlay_text(
 			frame,
 			opts.labels[idx],
-			tx + ox + pad,
+			sx + pad,
 			ry,
 			chart_text_size(frame),
 			style.fg_primary,
@@ -442,7 +442,7 @@ chart_draw_tooltip :: proc(
 		col := s.color if s.color != {} else chart_series_color(frame, si)
 		overlay_rounded_fill(
 			frame,
-			{f32(tx + ox + pad), f32(ry + (chart_text_size(frame) - sw) / 2), f32(sw), f32(sw)},
+			{f32(sx + pad), f32(ry + (chart_text_size(frame) - sw) / 2), f32(sw), f32(sw)},
 			.SM,
 			col,
 		)
@@ -451,7 +451,7 @@ chart_draw_tooltip :: proc(
 		overlay_text(
 			frame,
 			fmt.tprintf("%s: %s", name, val),
-			tx + ox + pad + sw + ui_frame_sc(frame, 5),
+			sx + pad + sw + ui_frame_sc(frame, 5),
 			ry,
 			chart_text_size(frame),
 			style.fg_secondary,

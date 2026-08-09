@@ -48,3 +48,30 @@ test_date_picker_month_shift_wraps_years :: proc(t: ^testing.T) {
 	testing.expect_value(t, st.view_year, i32(2026))
 	testing.expect_value(t, st.view_month, i32(1))
 }
+
+@(test)
+date_picker_popup_clamps_and_records_in_screen_space :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	input := Ui_Input{screen_size = {800, 600}}
+	frame := Ui_Frame{output = output}
+	ui_frame_begin(&frame, &runtime, &input)
+	defer ui_frame_end(&frame)
+	ui_frame_pane_push(&frame, {500, 300})
+	defer ui_frame_pane_pop(&frame)
+	state := Date_Picker_State{open = true, just_opened = true, view_year = 2026, view_month = 8}
+	value := Calendar_Date{2026, 8, 9}
+	_ = date_picker_at(&frame, {200, 200, 120, 30}, &state, &value, "", 800, 600)
+	metrics := ui_frame_metrics(&frame)
+	menu_w := ui_frame_sc(&frame, 30) * 7 + metrics.PADDING * 2
+	menu_h := ui_frame_sc(&frame, 30) * 8 + metrics.PADDING * 2
+	testing.expect_value(t, output.overlay.commands[0].rect, Rectangle{f32(800 - menu_w), f32(500 - menu_h - 2), f32(menu_w), f32(menu_h)})
+}

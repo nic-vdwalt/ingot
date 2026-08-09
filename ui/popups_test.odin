@@ -89,3 +89,27 @@ tooltip_wrapped_at_waits_then_emits_multiline_overlay :: proc(t: ^testing.T) {
 	testing.expect_value(t, list.commands[0].rect.width, f32(44))
 	testing.expect_value(t, list.commands[0].rect.height, f32(100))
 }
+
+@(test)
+context_menu_clamps_and_claims_in_screen_space :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	input := Ui_Input{screen_size = {300, 200}}
+	frame := Ui_Frame{output = output}
+	ui_frame_begin(&frame, &runtime, &input)
+	defer ui_frame_end(&frame)
+	ui_frame_pane_push(&frame, {180, 120})
+	defer ui_frame_pane_pop(&frame)
+	state := Context_Menu_State{open = true, just_opened = true, anchor_x = 100, anchor_y = 100}
+	items := []Menu_Item{{label = "One"}}
+	_ = context_menu(&frame, &state, items, {0, 0, 300, 200})
+	menu_w := context_menu_width_frame(&frame, items, 300)
+	menu_h := context_menu_height_frame(&frame, items)
+	expected := Rectangle{f32(300 - menu_w), f32(200 - menu_h), f32(menu_w), f32(menu_h)}
+	testing.expect_value(t, output.overlay.commands[0].rect, expected)
+	route_begin_frame(&frame)
+	testing.expect(t, route_occluded(&frame, {expected.x + 1, expected.y + 1}))
+}

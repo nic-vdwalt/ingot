@@ -224,8 +224,12 @@ context_menu :: proc(
 
 	menu_w := context_menu_width_frame(frame, items, screen_w)
 	menu_h := context_menu_height_frame(frame, items)
-	mx := clamp(st.anchor_x, 0, max(screen_w - menu_w, 0))
-	my := clamp(st.anchor_y, 0, max(screen_h - menu_h, 0))
+	origin := frame_pane_origin(frame)
+	ox, oy := i32(origin.x), i32(origin.y)
+	anchor := frame_to_screen(frame, {f32(st.anchor_x), f32(st.anchor_y)})
+	sx := clamp(i32(anchor.x), 0, max(screen_w - menu_w, 0))
+	sy := clamp(i32(anchor.y), 0, max(screen_h - menu_h, 0))
+	mx, my := sx - ox, sy - oy
 	menu_rect := Rectangle{f32(mx), f32(my), f32(menu_w), f32(menu_h)}
 
 	// Ensure the selection starts on a selectable row.
@@ -260,27 +264,25 @@ context_menu :: proc(
 	// Record all panel draws on the overlay layer in screen space so the menu
 	// replays above content painted later in the frame (and outside any pane
 	// scissor); the group rect also claims the covered area with the router.
-	origin := frame_pane_origin(frame)
-	ox := i32(origin.x)
-	screen_rect := Rectangle{f32(mx + ox), f32(my), f32(menu_w), f32(menu_h)}
+	screen_rect := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
 	style := ui_frame_theme(frame)
 	overlay_begin(frame, screen_rect, claim_input = true)
 	overlay_rect(frame, screen_rect, style.bg_popup)
 	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
-	chosen := context_menu_rows(frame, st, items, mx, my, menu_w, ox, mouse)
+	chosen := context_menu_rows(frame, st, items, mx, my, menu_w, ox, oy, mouse)
 	overlay_end(frame)
 	return chosen
 }
 
 // context_menu_rows records the rows on the overlay layer and handles
 // hover/click (hit-testing in pane-local coords, drawing in screen space via
-// `ox`). Returns the clicked index or -1.
+// the pane offset). Returns the clicked index or -1.
 @(private = "file")
 context_menu_rows :: proc(
 	frame: ^Ui_Frame,
 	st: ^Context_Menu_State,
 	items: []Menu_Item,
-	mx, my, menu_w, ox: i32,
+	mx, my, menu_w, ox, oy: i32,
 	mouse: Vector2,
 ) -> int {
 	assert(frame != nil, "context_menu_rows: nil frame")
@@ -299,7 +301,7 @@ context_menu_rows :: proc(
 			sep_h := ui_frame_sc(frame, 5)
 			overlay_rect(
 				frame,
-				{f32(mx + ox + 6), f32(item_y + sep_h / 2), f32(menu_w - 12), 1},
+				{f32(mx + ox + 6), f32(item_y + oy + sep_h / 2), f32(menu_w - 12), 1},
 				style.border_color,
 			)
 			item_y += sep_h
@@ -312,7 +314,7 @@ context_menu_rows :: proc(
 		semantic_push(
 			frame,
 			.Menu_Item,
-			{item_x + ox, item_y, item_w, metrics.MENU_ITEM_H},
+			{item_x + ox, item_y + oy, item_w, metrics.MENU_ITEM_H},
 			it.label,
 			sem,
 		)
@@ -320,7 +322,7 @@ context_menu_rows :: proc(
 		if st.selected == i {
 			overlay_rect(
 				frame,
-				{f32(item_x + ox), f32(item_y), f32(item_w), f32(metrics.MENU_ITEM_H)},
+				{f32(item_x + ox), f32(item_y + oy), f32(item_w), f32(metrics.MENU_ITEM_H)},
 				style.bg_active,
 			)
 		}
@@ -336,7 +338,7 @@ context_menu_rows :: proc(
 			frame,
 			txt,
 			item_x + ox + ui_frame_sc(frame, 8),
-			item_y + (metrics.MENU_ITEM_H - metrics.FONT_SIZE_BODY) / 2,
+			item_y + oy + (metrics.MENU_ITEM_H - metrics.FONT_SIZE_BODY) / 2,
 			metrics.FONT_SIZE_BODY,
 			col,
 		)
