@@ -3,11 +3,16 @@
 All notable changes to Ingot are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-Ingot uses `0.x` versioning: patch releases preserve documented public source
-compatibility, while minor releases may break it. See the
-[versioning policy](docs/compatibility.md#versioning-policy).
+Ingot uses pre-`1.0` versioning: source tags may contain documented public API
+changes, including breaking changes. Pin an exact tag and read the changelog.
+See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
+
+## [0.1.5] - 2026-08-09
+
+`0.1.4` was not published. This is a source-only release; no binaries,
+installers, or web bundles are attached.
 
 ### Added
 
@@ -439,8 +444,9 @@ Not validated:
 - Prevented a libvterm UTF-8 decode buffer overflow.
 - Validated `LoadFontFromMemory`'s caller-supplied buffer.
 
-[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.3...HEAD
-[0.1.3]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/Nic-vdwalt/ingot/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/Nic-vdwalt/ingot/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.1.5...HEAD
+[0.1.5]: https://github.com/Nic-vdwalt/ingot/compare/0.1.3...0.1.5
+[0.1.3]: https://github.com/Nic-vdwalt/ingot/compare/0.1.2...0.1.3
+[0.1.2]: https://github.com/Nic-vdwalt/ingot/compare/0.1.1...0.1.2
+[0.1.1]: https://github.com/Nic-vdwalt/ingot/compare/0.1.0...0.1.1
+[0.1.0]: https://github.com/Nic-vdwalt/ingot/releases/tag/0.1.0
