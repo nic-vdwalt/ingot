@@ -12,6 +12,8 @@ FIXED_DT :: f32(1.0 / 60.0)
 PHYSICS_SUBSTEPS :: 4
 MAX_STEPS_PER_FRAME :: 8
 MAX_FRAME_DT :: f32(0.25)
+CAMERA_DRAG_ZOOM_SPEED :: f32(0.1)
+CAMERA_WHEEL_ZOOM_SPEED :: f32(2)
 SCREEN_WIDTH :: 1280
 SCREEN_HEIGHT :: 720
 
@@ -235,7 +237,11 @@ camera_update :: proc(value: ^State, frame_dt: f32) {
 	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) do value.orbit_angle -= frame_dt
 	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) do value.orbit_radius -= 10 * frame_dt
 	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) do value.orbit_radius += 10 * frame_dt
-	value.orbit_radius = clamp(value.orbit_radius - rl.GetMouseWheelMove(), 10, 128)
+	if rl.IsMouseButtonDown(.LEFT) {
+		value.orbit_radius += rl.GetMouseDelta().y * CAMERA_DRAG_ZOOM_SPEED
+	}
+	wheel := rl.GetMouseWheelMoveV()
+	value.orbit_radius = clamp(value.orbit_radius - wheel.y * CAMERA_WHEEL_ZOOM_SPEED, 10, 128)
 	value.camera.target = {0, 0, 3}
 	value.camera.position = {
 		math.cos(value.orbit_angle) * value.orbit_radius,
@@ -296,7 +302,7 @@ draw_screen :: proc(value: ^State) {
 	)
 	rl.DrawText(hud, 18, 18, 22, rl.RAYWHITE)
 	rl.DrawText(
-		"R reset  Space pause  N single-step  A/D orbit  W/S or wheel zoom",
+		"R reset  Space pause  N step  A/D orbit  W/S, wheel, or left-drag zoom",
 		18,
 		50,
 		18,
@@ -330,4 +336,3 @@ shutdown :: proc(value: ^State) {
 	value.graphics_ready = false
 	rl.CloseWindow()
 }
-
