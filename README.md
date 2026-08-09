@@ -89,6 +89,10 @@ harnesses.
 
 | Package | Role |
 |---|---|
+| `ingot:asset` | Renderer-independent validated cooked meshes and bounds |
+| `ingot:procgen` | Seeded, bounded terrain, biome, vegetation, and building generation |
+| `ingot:scene` | Renderer-independent objects, visibility, LOD, sorting, and bounded draw lists |
+| `ingot:scene_gfx` | GPU residency and replay bridge for `scene` draw lists |
 | `ingot:gfx` | Windowing, WebGPU 2D/3D rendering, textured and instanced meshes, configurable lights, frustum queries, shapes, text, input, audio, cameras, and a raylib/rlgl-shaped API |
 | `ingot:ui` | Renderer-independent immediate-mode widgets, layout, paint output, input snapshots, accessibility semantics, and themes |
 | `ingot:ui_gfx` | Adapter that captures `gfx` input, replays UI paint output, and applies platform output |
@@ -237,8 +241,9 @@ Other focused examples: `examples/hello` (application shell and stable IDs),
 `examples/session_loop` (custom-host Session lifecycle), `examples/breakout`
 (audio, gamepads, web export), `examples/idle_demo` (near-zero idle CPU),
 `examples/chart_demo`, `examples/render_fixture` (renderer, backend, and Session
-lifecycle validation), and `examples/raylib_migration_fixture` (import-only 2D
-compatibility contract).
+lifecycle validation), `examples/procgen_world` (deterministic terrain, biome
+placement, culling, and GPU residency without external assets), and
+`examples/raylib_migration_fixture` (import-only 2D compatibility contract).
 
 For web, `bash build_web.sh examples/gallery` writes `web/ingot_web.wasm`;
 serve `web/` over HTTP in a WebGPU browser (Chrome/Edge 113+ or Safari 18+).

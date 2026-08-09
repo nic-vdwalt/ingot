@@ -106,6 +106,16 @@ does not block on it.
 
 ## Phases
 
+Procedural content establishes the cooked-data and scene contracts before file
+import. `examples/procgen_world` is the first end-to-end consumer: deterministic
+terrain chunks, biome placements, bounded draw-list construction, residency,
+and explicit GPU 3D replay. glTF import follows once generated and imported
+content can converge on the same validated cooked representation.
+
+The initial terrain renderer uses the existing scalar two-color material.
+Biome texture blending, normal maps, alpha-cutout foliage, trees, buildings,
+streaming, and hot reload are additive phases after the vertical slice.
+
 Each phase ends with a green run of the package tests, the strict gate, the web
 gate, and its own fuzz target. No phase advances while a source, layout,
 ownership, timing, or visual contract differs from the recorded baseline.

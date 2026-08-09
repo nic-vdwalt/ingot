@@ -2,7 +2,7 @@
 # Build and run the ingot memory-safety fuzz harnesses under a sanitizer
 # with a tracking allocator (leaks / bad frees fail the run).
 #
-# Usage: fuzz/run.sh [net|ui|view|term|interact|input|gpu3d|gfx-frame|all|soak] [seed] [iterations]
+# Usage: fuzz/run.sh [net|ui|view|term|interact|input|procgen|gpu3d|gfx-frame|all|soak] [seed] [iterations]
 #   fuzz/run.sh net            # random seed, default iterations
 #   fuzz/run.sh net 12345      # reproduce a specific seed
 #   fuzz/run.sh view           # .ingv decoder: random bytes, mutated files, and
@@ -146,6 +146,12 @@ run_wsreconn() {
 	"$ROOT/fuzz/wsreconn/fuzz_wsreconn" "$@"
 }
 
+run_procgen() {
+	# shellcheck disable=SC2086
+	odin build "$ROOT/fuzz/procgen" $COL $GUARD $SANFLAGS -out:"$ROOT/fuzz/procgen/fuzz_procgen"
+	"$ROOT/fuzz/procgen/fuzz_procgen" "$@"
+}
+
 run_gpu3d() {
 	local seed_define=()
 	local iteration_define=()
@@ -204,6 +210,9 @@ input)
 wsreconn)
 	run_wsreconn "${ARGS[@]+"${ARGS[@]}"}"
 	;;
+procgen)
+	run_procgen "${ARGS[@]+"${ARGS[@]}"}"
+	;;
 gpu3d)
 	run_gpu3d
 	;;
@@ -216,6 +225,7 @@ all)
 	run_view "${ARGS[@]+"${ARGS[@]}"}"
 	run_interact "${ARGS[@]+"${ARGS[@]}"}"
 	run_wsreconn "${ARGS[@]+"${ARGS[@]}"}"
+	run_procgen "${ARGS[@]+"${ARGS[@]}"}"
 	run_input
 	run_term
 	run_gpu3d
@@ -229,7 +239,7 @@ soak)
 	for round in $(seq 1 "$ROUNDS"); do
 		round_seed="$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')"
 		echo "=== soak round $round/$ROUNDS seed=$round_seed ==="
-		for harness in net ui view interact wsreconn; do
+		for harness in net ui view interact wsreconn procgen; do
 			if ! "run_$harness" "-seed:$round_seed" "${ITERATIONS:+-iterations:$ITERATIONS}"; then
 				echo "SOAK FAILED - reproduce with: fuzz/run.sh $harness $round_seed" >&2
 				exit 1
@@ -255,7 +265,7 @@ soak)
 	done
 	;;
 *)
-	echo "unknown target '$TARGET' (expected net|ui|view|term|interact|input|wsreconn|gpu3d|tsan|gfx-frame|all|soak)" >&2
+	echo "unknown target '$TARGET' (expected net|ui|view|term|interact|input|wsreconn|procgen|gpu3d|tsan|gfx-frame|all|soak)" >&2
 	exit 2
 	;;
 esac

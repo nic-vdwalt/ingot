@@ -18,6 +18,10 @@ worked example applied to a subsystem before it is written.
 
 | Package          | Role |
 |------------------|------|
+| `ingot:asset` | Validated cooked mesh data. Must not import `ingot:gfx`. |
+| `ingot:procgen` | Seeded bounded generators. Imports `asset`, never `gfx`. |
+| `ingot:scene` | Visibility, LOD, sorting, and draw lists. Must not import `gfx`. |
+| `ingot:scene_gfx` | The only scene-to-`gfx` upload and replay bridge. |
 | `ingot:gfx`      | graphics core (raylib-shaped): window/context, 2D shapes, textures, text atlas, input, math, cameras, `rlgl` shim |
 | `ingot:ui`       | renderer-independent immediate-mode toolkit: widgets consume `Ui_Input` and append bounded paint, semantics, and platform output. It must not import `ingot:gfx`. |
 | `ingot:ui_gfx`   | bridge that snapshots `gfx` input, replays UI paint, manages UI fonts, and applies platform output |
@@ -36,8 +40,8 @@ worked example applied to a subsystem before it is written.
 
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
-- **Test**: `bash scripts/test.sh` - runs `odin test` on `gfx ui ui_gfx view
-  view/generate libvterm term prefs net`, the offline WSS/TLS matrix, then type-checks
+- **Test**: `bash scripts/test.sh` - runs `odin test` on `asset gfx procgen scene scene_gfx ui
+  ui_gfx view view/generate libvterm term prefs net`, the offline WSS/TLS matrix, then type-checks
   `sys pty accesskit testx`. Python 3
   supervises each command. Pass extra Odin flags through, e.g.
   `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.
