@@ -13,6 +13,98 @@ import "core:math/linalg"
 import "core:testing"
 import wg "vendor:wgpu"
 
+@(test)
+test_cube_geometry_contract :: proc(t: ^testing.T) {
+	vertices: [GPU_3D_CUBE_VERTEX_COUNT]Gpu_3D_Vertex
+	indices: [GPU_3D_CUBE_INDEX_COUNT]u32
+	_cube_mesh_geometry(&vertices, &indices)
+	testing.expect_value(t, len(vertices), GPU_3D_CUBE_VERTEX_COUNT)
+	testing.expect_value(t, len(indices), GPU_3D_CUBE_INDEX_COUNT)
+	testing.expect_value(t, len(indices) % 3, 0)
+	bounds_min := Vector3{0.5, 0.5, 0.5}
+	bounds_max := Vector3{-0.5, -0.5, -0.5}
+	for vertex, vertex_index in vertices {
+		for component in vertex.position {
+			testing.expect(t, component == -0.5 || component == 0.5, "cube position off bound")
+		}
+		bounds_min.x = min(bounds_min.x, vertex.position.x)
+		bounds_min.y = min(bounds_min.y, vertex.position.y)
+		bounds_min.z = min(bounds_min.z, vertex.position.z)
+		bounds_max.x = max(bounds_max.x, vertex.position.x)
+		bounds_max.y = max(bounds_max.y, vertex.position.y)
+		bounds_max.z = max(bounds_max.z, vertex.position.z)
+		normal_length_squared := linalg.dot(vertex.normal, vertex.normal)
+		testing.expect_value(t, normal_length_squared, f32(1))
+		testing.expect(t, vertex.uv.x >= 0 && vertex.uv.x <= 1, "cube u outside domain")
+		testing.expect(t, vertex.uv.y >= 0 && vertex.uv.y <= 1, "cube v outside domain")
+		face_start := vertex_index / GPU_3D_CUBE_FACE_VERTEX_COUNT * GPU_3D_CUBE_FACE_VERTEX_COUNT
+		testing.expect_value(t, vertex.normal, vertices[face_start].normal)
+	}
+	testing.expect_value(t, bounds_min, Vector3{-0.5, -0.5, -0.5})
+	testing.expect_value(t, bounds_max, Vector3{0.5, 0.5, 0.5})
+	for index in indices {
+		testing.expect(t, index < GPU_3D_CUBE_VERTEX_COUNT, "cube index out of range")
+	}
+	for face in 0 ..< GPU_3D_CUBE_FACE_COUNT {
+		face_start := face * GPU_3D_CUBE_FACE_VERTEX_COUNT
+		testing.expect_value(t, vertices[face_start + 0].uv, Vector2{0, 0})
+		testing.expect_value(t, vertices[face_start + 1].uv, Vector2{1, 0})
+		testing.expect_value(t, vertices[face_start + 2].uv, Vector2{1, 1})
+		testing.expect_value(t, vertices[face_start + 3].uv, Vector2{0, 1})
+	}
+}
+
+@(test)
+test_cube_geometry_winding_faces_outward :: proc(t: ^testing.T) {
+	vertices: [GPU_3D_CUBE_VERTEX_COUNT]Gpu_3D_Vertex
+	indices: [GPU_3D_CUBE_INDEX_COUNT]u32
+	_cube_mesh_geometry(&vertices, &indices)
+	for triangle := 0; triangle < len(indices); triangle += 3 {
+		a := vertices[indices[triangle]].position
+		b := vertices[indices[triangle + 1]].position
+		c := vertices[indices[triangle + 2]].position
+		face := linalg.cross(b - a, c - a)
+		center := (a + b + c) / 3
+		testing.expect(t, linalg.dot(face, center) > 0, "cube triangle faces inward")
+	}
+}
+
+@(test)
+test_cube_edge_geometry_contract :: proc(t: ^testing.T) {
+	vertices: [GPU_3D_CUBE_CORNER_COUNT]Gpu_3D_Vertex
+	indices: [GPU_3D_CUBE_EDGE_INDEX_COUNT]u32
+	_cube_edge_mesh_geometry(&vertices, &indices)
+	testing.expect_value(t, len(vertices), GPU_3D_CUBE_CORNER_COUNT)
+	testing.expect_value(t, len(indices), GPU_3D_CUBE_EDGE_INDEX_COUNT)
+	testing.expect_value(t, len(indices) % 2, 0)
+	seen: [GPU_3D_CUBE_CORNER_COUNT * GPU_3D_CUBE_CORNER_COUNT]bool
+	for edge := 0; edge < len(indices); edge += 2 {
+		a_index := indices[edge]
+		b_index := indices[edge + 1]
+		testing.expect(t, a_index < GPU_3D_CUBE_CORNER_COUNT, "cube edge index out of range")
+		testing.expect(t, b_index < GPU_3D_CUBE_CORNER_COUNT, "cube edge index out of range")
+		a := vertices[a_index].position
+		b := vertices[b_index].position
+		different_axes := int(a.x != b.x) + int(a.y != b.y) + int(a.z != b.z)
+		testing.expect_value(t, different_axes, 1)
+		low := min(a_index, b_index)
+		high := max(a_index, b_index)
+		key := low * GPU_3D_CUBE_CORNER_COUNT + high
+		testing.expect(t, !seen[key], "duplicate cube edge")
+		seen[key] = true
+	}
+}
+
+@(test)
+test_create_cube_meshes_reject_headless :: proc(t: ^testing.T) {
+	cube, cube_ok := create_cube_mesh()
+	edges, edges_ok := create_cube_edge_mesh()
+	testing.expect_value(t, cube_ok, false)
+	testing.expect_value(t, cube.id, u32(0))
+	testing.expect_value(t, edges_ok, false)
+	testing.expect_value(t, edges.id, u32(0))
+}
+
 // -- _sphere_mesh_geometry -----------------------------------------------------
 
 @(test)

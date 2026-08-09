@@ -12,6 +12,21 @@ GPU_3D_MAX_PIPELINES :: 48
 GPU_3D_MAX_VERTICES :: 1_048_576
 GPU_3D_MAX_INDICES :: 6_291_456
 GPU_3D_MAX_MESH_BYTES :: 128 * 1024 * 1024
+GPU_3D_CUBE_FACE_COUNT :: 6
+GPU_3D_CUBE_FACE_VERTEX_COUNT :: 4
+GPU_3D_CUBE_FACE_TRIANGLE_COUNT :: 2
+GPU_3D_CUBE_TRIANGLE_INDEX_COUNT :: 3
+GPU_3D_CUBE_VERTEX_COUNT :: 24
+GPU_3D_CUBE_INDEX_COUNT :: 36
+GPU_3D_CUBE_CORNER_COUNT :: 8
+GPU_3D_CUBE_EDGE_COUNT :: 12
+GPU_3D_CUBE_EDGE_INDEX_COUNT :: 24
+#assert(GPU_3D_CUBE_VERTEX_COUNT == GPU_3D_CUBE_FACE_COUNT * GPU_3D_CUBE_FACE_VERTEX_COUNT)
+#assert(
+	GPU_3D_CUBE_INDEX_COUNT ==
+	GPU_3D_CUBE_FACE_COUNT * GPU_3D_CUBE_FACE_TRIANGLE_COUNT * GPU_3D_CUBE_TRIANGLE_INDEX_COUNT,
+)
+#assert(GPU_3D_CUBE_EDGE_INDEX_COUNT == GPU_3D_CUBE_EDGE_COUNT * 2)
 // 256 transforms fill one 16 KiB uniform binding - safely under the 64 KiB
 // maxUniformBufferBindingSize floor WebGPU guarantees on every adapter, and
 // large enough that per-chunk overhead amortizes to one upload and one draw.
@@ -415,6 +430,115 @@ resize_gpu_3d_target :: proc(target: ^Gpu_3D_Target, width, height: i32) -> bool
 	assert(target.texture.texture.height == height, "resize_gpu_3d_target: wrong height")
 	assert(target.antialiasing == antialiasing, "resize_gpu_3d_target: wrong antialiasing")
 	return true
+}
+
+@(private)
+_cube_mesh_geometry :: proc(
+	vertices: ^[GPU_3D_CUBE_VERTEX_COUNT]Gpu_3D_Vertex,
+	indices: ^[GPU_3D_CUBE_INDEX_COUNT]u32,
+) {
+	assert(vertices != nil, "_cube_mesh_geometry: nil vertices")
+	assert(indices != nil, "_cube_mesh_geometry: nil indices")
+	vertices^ = {
+		{position = {0.5, -0.5, -0.5}, normal = {1, 0, 0}, uv = {0, 0}},
+		{position = {0.5, 0.5, -0.5}, normal = {1, 0, 0}, uv = {1, 0}},
+		{position = {0.5, 0.5, 0.5}, normal = {1, 0, 0}, uv = {1, 1}},
+		{position = {0.5, -0.5, 0.5}, normal = {1, 0, 0}, uv = {0, 1}},
+		{position = {-0.5, 0.5, -0.5}, normal = {-1, 0, 0}, uv = {0, 0}},
+		{position = {-0.5, -0.5, -0.5}, normal = {-1, 0, 0}, uv = {1, 0}},
+		{position = {-0.5, -0.5, 0.5}, normal = {-1, 0, 0}, uv = {1, 1}},
+		{position = {-0.5, 0.5, 0.5}, normal = {-1, 0, 0}, uv = {0, 1}},
+		{position = {-0.5, 0.5, -0.5}, normal = {0, 1, 0}, uv = {0, 0}},
+		{position = {0.5, 0.5, -0.5}, normal = {0, 1, 0}, uv = {1, 0}},
+		{position = {0.5, 0.5, 0.5}, normal = {0, 1, 0}, uv = {1, 1}},
+		{position = {-0.5, 0.5, 0.5}, normal = {0, 1, 0}, uv = {0, 1}},
+		{position = {0.5, -0.5, -0.5}, normal = {0, -1, 0}, uv = {0, 0}},
+		{position = {-0.5, -0.5, -0.5}, normal = {0, -1, 0}, uv = {1, 0}},
+		{position = {-0.5, -0.5, 0.5}, normal = {0, -1, 0}, uv = {1, 1}},
+		{position = {0.5, -0.5, 0.5}, normal = {0, -1, 0}, uv = {0, 1}},
+		{position = {-0.5, -0.5, 0.5}, normal = {0, 0, 1}, uv = {0, 0}},
+		{position = {0.5, -0.5, 0.5}, normal = {0, 0, 1}, uv = {1, 0}},
+		{position = {0.5, 0.5, 0.5}, normal = {0, 0, 1}, uv = {1, 1}},
+		{position = {-0.5, 0.5, 0.5}, normal = {0, 0, 1}, uv = {0, 1}},
+		{position = {-0.5, 0.5, -0.5}, normal = {0, 0, -1}, uv = {0, 0}},
+		{position = {0.5, 0.5, -0.5}, normal = {0, 0, -1}, uv = {1, 0}},
+		{position = {0.5, -0.5, -0.5}, normal = {0, 0, -1}, uv = {1, 1}},
+		{position = {-0.5, -0.5, -0.5}, normal = {0, 0, -1}, uv = {0, 1}},
+	}
+	indices^ = {
+		0,
+		1,
+		2,
+		0,
+		2,
+		3,
+		4,
+		5,
+		6,
+		4,
+		6,
+		7,
+		8,
+		10,
+		9,
+		8,
+		11,
+		10,
+		12,
+		14,
+		13,
+		12,
+		15,
+		14,
+		16,
+		17,
+		18,
+		16,
+		18,
+		19,
+		20,
+		21,
+		22,
+		20,
+		22,
+		23,
+	}
+	assert(_gpu_3d_geometry_valid(vertices^[:], indices^[:], .Triangles))
+}
+
+@(private)
+_cube_edge_mesh_geometry :: proc(
+	vertices: ^[GPU_3D_CUBE_CORNER_COUNT]Gpu_3D_Vertex,
+	indices: ^[GPU_3D_CUBE_EDGE_INDEX_COUNT]u32,
+) {
+	assert(vertices != nil, "_cube_edge_mesh_geometry: nil vertices")
+	assert(indices != nil, "_cube_edge_mesh_geometry: nil indices")
+	vertices^ = {
+		{position = {-0.5, -0.5, -0.5}},
+		{position = {0.5, -0.5, -0.5}},
+		{position = {0.5, 0.5, -0.5}},
+		{position = {-0.5, 0.5, -0.5}},
+		{position = {-0.5, -0.5, 0.5}},
+		{position = {0.5, -0.5, 0.5}},
+		{position = {0.5, 0.5, 0.5}},
+		{position = {-0.5, 0.5, 0.5}},
+	}
+	indices^ = {0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7}
+	assert(_gpu_3d_geometry_valid(vertices^[:], indices^[:], .Lines))
+}
+
+create_cube_mesh :: proc() -> (Gpu_Mesh, bool) {
+	vertices: [GPU_3D_CUBE_VERTEX_COUNT]Gpu_3D_Vertex
+	indices: [GPU_3D_CUBE_INDEX_COUNT]u32
+	_cube_mesh_geometry(&vertices, &indices)
+	return create_gpu_mesh(vertices[:], indices[:], .Triangles)
+}
+
+create_cube_edge_mesh :: proc() -> (Gpu_Mesh, bool) {
+	vertices: [GPU_3D_CUBE_CORNER_COUNT]Gpu_3D_Vertex
+	indices: [GPU_3D_CUBE_EDGE_INDEX_COUNT]u32
+	_cube_edge_mesh_geometry(&vertices, &indices)
+	return create_gpu_mesh(vertices[:], indices[:], .Lines)
 }
 
 // _sphere_mesh_geometry generates a UV sphere's vertex/index lists - pure
