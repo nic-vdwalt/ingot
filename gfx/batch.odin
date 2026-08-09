@@ -1,5 +1,5 @@
 // ingot:gfx - CPU 2D vertex batcher over WebGPU. Two pipelines share one
-// vertex layout (pos in logical pixels, rgba, uv, mode) and one ortho projection
+// vertex layout (screen-space position, rgba, uv, mode) and one ortho projection
 // uniform: `solid` handles flat color and R8 text coverage, while `image`
 // handles RGBA textures. Draws accumulate into a CPU run and flush into the
 // frame's render pass whenever the pipeline/texture/scissor changes or at

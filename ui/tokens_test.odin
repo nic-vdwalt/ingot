@@ -334,7 +334,7 @@ surface_list_covers_every_surface :: proc(t: ^testing.T) {
 	}
 }
 
-// A border must never resolve below one physical pixel.
+// A border must never resolve below one screen-space pixel.
 //
 // Sub-pixel strokes are not thin, they are absent: the rasteriser spreads them
 // across a pixel at a fraction of their alpha and nothing survives. This was
@@ -360,7 +360,7 @@ borders_never_resolve_below_one_pixel :: proc(t: ^testing.T) {
 			testing.expectf(
 				t,
 				thickness >= 1,
-				"scale %v: %v resolved to %v physical pixels, which renders as nothing",
+				"scale %v: %v resolved to %v screen-space pixels, which renders as nothing",
 				scale,
 				border,
 				thickness,

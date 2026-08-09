@@ -531,7 +531,7 @@ flex_slot_next :: proc(u: ^Ui, cross_size: i32) -> Rect_I32 {
 	return flex_next_sized(&u.layout, ui_frame_sc(u.frame, cross_size))
 }
 
-// flex_begin_px resolves sibling main-axis sizes already in device pixels.
+// flex_begin_px resolves sibling main-axis sizes already in screen-space pixels.
 @(private = "package")
 flex_begin_px :: proc(u: ^Ui, sizes: []Track, justify: Main_Align = .Start) {
 	assert(u != nil, "flex_begin_px: nil Ui")
@@ -547,8 +547,8 @@ flex_slot_px :: proc(u: ^Ui, cross_size: i32) -> Rect_I32 {
 	return flex_next_sized(&u.layout, cross_size)
 }
 
-// track_px scales one logical Track into device pixels. This is the single
-// boundary where facade units become Layout units.
+// track_px scales one design-unit Track into screen-space pixels. This is the
+// single boundary where facade units become Layout units.
 @(private = "file")
 track_px :: proc(u: ^Ui, track: Track) -> Track {
 	assert(u != nil && u.frame != nil, "track_px: invalid Ui")
@@ -601,7 +601,7 @@ padding :: proc(u: ^Ui, value: Space) {
 	layout_inset(&u.layout, insets_of(u, value))
 }
 
-// padding_insets takes logical per-side insets and scales them once.
+// padding_insets takes design-unit per-side insets and scales them once.
 padding_insets :: proc(u: ^Ui, value: Insets_I32) {
 	assert(u != nil && u.open, "padding_insets: frame not open")
 	assert(u.frame != nil, "padding_insets: nil frame")
@@ -614,7 +614,7 @@ padding_insets :: proc(u: ^Ui, value: Insets_I32) {
 	layout_inset(&u.layout, scaled)
 }
 
-// space_px resolves a spacing token to device pixels at the active scale.
+// space_px resolves a spacing token to screen-space pixels at the active scale.
 space_px :: proc(u: ^Ui, value: Space) -> i32 {
 	assert(u != nil && u.frame != nil, "space_px: frame required")
 	return space_pixels(u.frame, value)

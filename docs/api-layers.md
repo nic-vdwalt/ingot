@@ -201,7 +201,7 @@ cases include canvases, maps, timelines, overlays, scroll-offset content,
 virtualized lists, custom hit regions, and components with measured external
 content.
 
-Explicit APIs are first-class, not deprecated. They take logical screen pixels and
+Explicit APIs are first-class, not deprecated. They take screen-space pixels and
 transfer scaling and geometry ownership to the caller. Do not use them for a
 fixed form solely because its rectangles are easy to calculate; the facade
 keeps DPI, focus, and later layout changes centralized.

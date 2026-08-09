@@ -4,6 +4,7 @@ package ui
 // Unit tests for the composer spellcheck tokenizer - the pure classification
 // procs that decide which tokens reach the OS spell backend.
 
+import "core:strings"
 import "core:testing"
 
 @(test)
@@ -73,46 +74,49 @@ spell_in_pill_overlap :: proc(t: ^testing.T) {
 }
 
 @(test)
-spell_menu_place_clamps_to_input_and_screen_top :: proc(t: ^testing.T) {
-	x, y := spell_menu_place(120, 200, 100, 400, 240, 100, 4)
-	testing.expect_value(t, x, i32(120))
-	testing.expect_value(t, y, i32(96))
-	x, y = spell_menu_place(400, 200, 100, 400, 240, 100, 4)
-	testing.expect_value(t, x, i32(260))
-	testing.expect_value(t, y, i32(96))
-	x, y = spell_menu_place(20, 200, 100, 400, 240, 100, 4)
-	testing.expect_value(t, x, i32(100))
-	testing.expect_value(t, y, i32(96))
-	x, y = spell_menu_place(120, 80, 100, 400, 240, 100, 4)
-	testing.expect_value(t, x, i32(120))
-	testing.expect_value(t, y, i32(0))
-}
-
-@(test)
-spell_menu_screen_rect_uses_both_pane_origin_axes :: proc(t: ^testing.T) {
+spell_menu_public_path_clamps_and_translates_overlay :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
-	frame: Ui_Frame
-	ui_frame_begin(&frame, &runtime)
-	defer ui_frame_end(&frame)
-	ui_frame_pane_push(&frame, {40, 70})
-	defer ui_frame_pane_pop(&frame)
-	layout := Spell_Menu_Layout {
-		menu_x = 10,
-		menu_y = 20,
-		menu_w = 100,
-		menu_h = 80,
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	input: Ui_Input
+	input.keys_pressed[input_key_index(.UP)] = true
+	frame := Ui_Frame {
+		output = output,
 	}
-	testing.expect_value(t, spell_menu_screen_rect(&frame, &layout), Rectangle{50, 90, 100, 80})
-}
-
-@(test)
-spell_menu_move_selection_wraps :: proc(t: ^testing.T) {
-	testing.expect_value(t, spell_menu_move_selection(0, 5, -1), 4)
-	testing.expect_value(t, spell_menu_move_selection(4, 5, 1), 0)
-	testing.expect_value(t, spell_menu_move_selection(2, 5, -1), 1)
-	testing.expect_value(t, spell_menu_move_selection(2, 5, 1), 3)
-	testing.expect_value(t, spell_menu_move_selection(0, 2, -1), 1)
-	testing.expect_value(t, spell_menu_move_selection(1, 2, 1), 0)
+	ui_frame_begin(&frame, &runtime, &input)
+	defer {
+		ui_frame_end(&frame)
+		ui_frame_destroy(&frame)
+	}
+	ui_frame_pane_push(&frame, {40.5, 70.25})
+	defer ui_frame_pane_pop(&frame)
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	strings.write_string(&builder, "word")
+	menu := Spell_Menu {
+		open        = true,
+		just_opened = true,
+		sb          = &builder,
+		word        = strings.clone("word"),
+		text_hash   = fnv1a64("word"),
+		text_len    = 4,
+		anchor_x    = 400,
+		anchor_y    = 200,
+	}
+	defer spell_menu_close(&menu)
+	draw_spell_menu(&frame, &menu, &runtime.spell, 100, 200, 400)
+	testing.expect_value(t, menu.selected, 1)
+	testing.expect_value(t, output.overlay.commands[0].rect, Rectangle{300.5, 175.25, 240, 91})
+	testing.expect_value(t, output.overlay.commands[3].rect.y, f32(207.25))
 }

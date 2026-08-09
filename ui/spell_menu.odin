@@ -143,7 +143,7 @@ Spell_Menu_Layout :: struct {
 	menu_rect:        Rectangle,
 }
 
-@(private)
+@(private = "file")
 spell_menu_place :: proc(
 	anchor_x, anchor_y, input_x, input_w, menu_w, menu_h, gap: i32,
 ) -> (
@@ -158,7 +158,7 @@ spell_menu_place :: proc(
 	return x, y
 }
 
-@(private)
+@(private = "file")
 spell_menu_move_selection :: proc(selected, nav_count, delta: int) -> int {
 	return (selected + nav_count + delta) % nav_count
 }
@@ -256,7 +256,7 @@ spell_menu_handle_pointer :: proc(
 spell_menu_draw_row :: proc(
 	frame: ^Ui_Frame,
 	menu: ^Spell_Menu,
-	origin_x, origin_y, item_x, item_y, item_w, item_h: i32,
+	row_local: Rectangle,
 	label: string,
 	nav_index: int,
 	mouse: Vector2,
@@ -264,24 +264,20 @@ spell_menu_draw_row :: proc(
 ) -> bool {
 	assert(frame != nil, "spell_menu_draw_row: nil frame")
 	assert(menu != nil, "spell_menu_draw_row: nil menu")
-	row_rect := Rectangle{f32(item_x), f32(item_y), f32(item_w), f32(item_h)}
-	hovered := point_in_rect(mouse, row_rect)
+	assert(row_local.width >= 0 && row_local.height >= 0, "spell_menu_draw_row: invalid row")
+	row_screen := frame_rect_to_screen(frame, row_local)
+	hovered := point_in_rect(mouse, row_local)
 	if hovered && mouse_moved(frame) do menu.selected = nav_index
-	if menu.selected == nav_index {
-		overlay_rect(
-			frame,
-			{f32(item_x + origin_x), f32(item_y + origin_y), f32(item_w), f32(item_h)},
-			ui_frame_theme(frame).bg_active,
-		)
-	}
+	if menu.selected == nav_index do overlay_rect(frame, row_screen, ui_frame_theme(frame).bg_active)
 	if hovered do request_cursor(frame, .POINTING_HAND)
 	font_size := text_role_size(frame, .Body)
+	item_w, item_h := i32(row_screen.width), i32(row_screen.height)
 	text := truncate_to_width_frame(frame, label, item_w - ui_frame_sc(frame, 16), font_size)
 	overlay_text(
 		frame,
 		text,
-		item_x + origin_x + ui_frame_sc(frame, 8),
-		item_y + origin_y + (item_h - font_size) / 2,
+		i32(row_screen.x) + ui_frame_sc(frame, 8),
+		i32(row_screen.y) + (item_h - font_size) / 2,
 		font_size,
 		color,
 	)
@@ -293,7 +289,6 @@ spell_menu_draw_suggestions :: proc(
 	frame: ^Ui_Frame,
 	menu: ^Spell_Menu,
 	layout: ^Spell_Menu_Layout,
-	origin_x, origin_y: i32,
 	mouse: Vector2,
 ) -> (
 	int,
@@ -302,6 +297,7 @@ spell_menu_draw_suggestions :: proc(
 	assert(frame != nil, "spell_menu_draw_suggestions: nil frame")
 	assert(menu != nil, "spell_menu_draw_suggestions: nil menu")
 	assert(layout != nil, "spell_menu_draw_suggestions: nil layout")
+	assert(layout.suggestion_count == len(menu.suggestions), "spell_menu_draw_suggestions: count")
 	item_y := layout.menu_y + layout.menu_pad
 	apply_index := -1
 	if layout.suggestion_count == 0 {
@@ -312,11 +308,15 @@ spell_menu_draw_suggestions :: proc(
 			layout.item_w - ui_frame_sc(frame, 16),
 			font_size,
 		)
+		row_screen := frame_rect_to_screen(
+			frame,
+			{f32(layout.item_x), f32(item_y), f32(layout.item_w), f32(layout.item_h)},
+		)
 		overlay_text(
 			frame,
 			text,
-			layout.item_x + origin_x + ui_frame_sc(frame, 8),
-			item_y + origin_y + (layout.item_h - font_size) / 2,
+			i32(row_screen.x) + ui_frame_sc(frame, 8),
+			i32(row_screen.y) + (layout.item_h - font_size) / 2,
 			font_size,
 			text_ink(frame, .Disabled),
 		)
@@ -326,12 +326,7 @@ spell_menu_draw_suggestions :: proc(
 		if spell_menu_draw_row(
 			frame,
 			menu,
-			origin_x,
-			origin_y,
-			layout.item_x,
-			item_y,
-			layout.item_w,
-			layout.item_h,
+			{f32(layout.item_x), f32(item_y), f32(layout.item_w), f32(layout.item_h)},
 			suggestion,
 			index,
 			mouse,
@@ -349,7 +344,7 @@ spell_menu_draw_actions :: proc(
 	frame: ^Ui_Frame,
 	menu: ^Spell_Menu,
 	layout: ^Spell_Menu_Layout,
-	origin_x, origin_y, item_y: i32,
+	item_y: i32,
 	mouse: Vector2,
 ) -> int {
 	assert(frame != nil, "spell_menu_draw_actions: nil frame")
@@ -357,28 +352,23 @@ spell_menu_draw_actions :: proc(
 	assert(layout != nil, "spell_menu_draw_actions: nil layout")
 	style := ui_frame_theme(frame)
 	current_y := item_y
-	overlay_rect(
+	separator := frame_rect_to_screen(
 		frame,
 		{
-			f32(layout.menu_x + origin_x + ui_frame_sc(frame, 6)),
-			f32(current_y + origin_y + layout.separator_h / 2),
+			f32(layout.menu_x + ui_frame_sc(frame, 6)),
+			f32(current_y + layout.separator_h / 2),
 			f32(layout.menu_w - ui_frame_sc(frame, 12)),
-			1,
+			ui_frame_scf(frame, 1),
 		},
-		style.border_color,
 	)
+	overlay_rect(frame, separator, style.border_color)
 	current_y += layout.separator_h
 	apply_index := -1
 	learn := strings.concatenate({"Learn \"", menu.word, "\""}, context.temp_allocator)
 	if spell_menu_draw_row(
 		frame,
 		menu,
-		origin_x,
-		origin_y,
-		layout.item_x,
-		current_y,
-		layout.item_w,
-		layout.item_h,
+		{f32(layout.item_x), f32(current_y), f32(layout.item_w), f32(layout.item_h)},
 		learn,
 		layout.suggestion_count,
 		mouse,
@@ -390,12 +380,7 @@ spell_menu_draw_actions :: proc(
 	if spell_menu_draw_row(
 		frame,
 		menu,
-		origin_x,
-		origin_y,
-		layout.item_x,
-		current_y,
-		layout.item_w,
-		layout.item_h,
+		{f32(layout.item_x), f32(current_y), f32(layout.item_w), f32(layout.item_h)},
 		"Ignore",
 		layout.suggestion_count + 1,
 		mouse,
@@ -404,16 +389,6 @@ spell_menu_draw_actions :: proc(
 		apply_index = layout.suggestion_count + 1
 	}
 	return apply_index
-}
-
-@(private)
-spell_menu_screen_rect :: proc(frame: ^Ui_Frame, layout: ^Spell_Menu_Layout) -> Rectangle {
-	assert(frame != nil, "spell_menu_screen_rect: nil frame")
-	assert(layout != nil, "spell_menu_screen_rect: nil layout")
-	return frame_rect_to_screen(
-		frame,
-		{f32(layout.menu_x), f32(layout.menu_y), f32(layout.menu_w), f32(layout.menu_h)},
-	)
 }
 
 @(private = "file")
@@ -427,21 +402,12 @@ spell_menu_draw_overlay :: proc(
 	assert(menu != nil, "spell_menu_draw_overlay: nil menu")
 	assert(layout != nil, "spell_menu_draw_overlay: nil layout")
 	style := ui_frame_theme(frame)
-	origin := frame_pane_origin(frame)
-	origin_x, origin_y := i32(origin.x), i32(origin.y)
-	screen_rect := spell_menu_screen_rect(frame, layout)
+	screen_rect := frame_rect_to_screen(frame, layout.menu_rect)
 	overlay_begin(frame, screen_rect, claim_input = true)
 	overlay_rect(frame, screen_rect, style.bg_popup)
 	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
-	apply_index, item_y := spell_menu_draw_suggestions(
-		frame,
-		menu,
-		layout,
-		origin_x,
-		origin_y,
-		mouse,
-	)
-	action_index := spell_menu_draw_actions(frame, menu, layout, origin_x, origin_y, item_y, mouse)
+	apply_index, item_y := spell_menu_draw_suggestions(frame, menu, layout, mouse)
+	action_index := spell_menu_draw_actions(frame, menu, layout, item_y, mouse)
 	if action_index >= 0 do apply_index = action_index
 	overlay_end(frame)
 	return apply_index

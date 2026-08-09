@@ -1,8 +1,8 @@
 // ingot:gfx - raylib-named 2D shape API tessellated onto the batch renderer.
 // Signatures/param order match Odin's vendor:raylib so `rl.Draw*`,
 // `rl.*ScissorMode`, and `rl.CheckCollisionPointRec` call sites port unchanged.
-// All coordinates are in logical pixels; scissor is converted to framebuffer
-// pixels for the render pass.
+// All coordinates are in screen-space pixels; scissor is converted to
+// framebuffer pixels for the render pass.
 package gfx
 
 import "core:math"
@@ -451,6 +451,15 @@ _gradient_quad :: proc(rec: Rectangle, tl, tr, br, bl: [4]f32) {
 }
 
 @(private)
+_emit_gradient_v :: proc(r: ^Renderer, rec: Rectangle, top, bottom: Color) {
+	assert(r != nil, "_emit_gradient_v: nil renderer")
+	assert(rec.width >= 0 && rec.height >= 0, "_emit_gradient_v: negative size")
+	color_top := col_f(top)
+	color_bottom := col_f(bottom)
+	_emit_gradient_quad(r, rec, color_top, color_top, color_bottom, color_bottom)
+}
+
+@(private)
 _emit_gradient_quad :: proc(r: ^Renderer, rec: Rectangle, tl, tr, br, bl: [4]f32) {
 	assert(r != nil, "_emit_gradient_quad: nil renderer")
 	if !_batch_reserve(r, 4, 6) do return
@@ -483,9 +492,9 @@ DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Colo
 // DrawRectangleGradientV draws a rect with a top→bottom color gradient.
 DrawRectangleGradientV :: proc(posX, posY, width, height: i32, top, bottom: Color) {
 	rec := Rectangle{f32(posX), f32(posY), f32(width), f32(height)}
-	ct := col_f(top)
-	cb := col_f(bottom)
-	_gradient_quad(rec, ct, ct, cb, cb)
+	if !g.frame.has_frame do return
+	batch_set(&g.rend, .Solid, nil)
+	_emit_gradient_v(&g.rend, rec, top, bottom)
 }
 
 // DrawRectangleGradientEx draws a rect with an independent color per corner.

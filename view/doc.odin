@@ -80,7 +80,7 @@ View_Flags :: bit_set[View_Flag;u16]
 
 // View_Node is one element. parent, first_child and next_sibling are indices
 // into the same array; VIEW_NODE_NONE terminates. Text fields index doc.text.
-// Numeric geometry is in logical units, so the ui facade scales it exactly once
+// Numeric geometry is in design units, so the ui facade scales it exactly once
 // at the boundary rather than the document baking in a DPI.
 View_Node :: struct {
 	kind:         View_Kind,

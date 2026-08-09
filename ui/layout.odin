@@ -446,8 +446,8 @@ Track_Kind :: enum u8 {
 
 // Track describes one sibling on the active frame's main axis. max_size is
 // inclusive; zero means unbounded so the zero value remains useful. A Track is
-// unit-agnostic: the facade tier hands it logical units and scales it once,
-// the Layout tier hands it device pixels.
+// unit-agnostic: the facade tier hands it design units and scales it once, while
+// the Layout tier hands it screen-space pixels.
 Track :: struct {
 	kind:     Track_Kind,
 	basis:    i32,

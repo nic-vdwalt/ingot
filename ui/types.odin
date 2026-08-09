@@ -16,8 +16,8 @@ Rect :: struct {
 Rectangle :: Rect
 
 // Rect_I32 is the integer-pixel layout rectangle. Layout must land on whole
-// device pixels or repeated division drifts, so slots, containers, and widget
-// geometry stay integral and convert to Rect only at the paint boundary.
+// screen-space pixels or repeated division drifts, so slots, containers, and
+// widget geometry stay integral and convert to Rect only at the paint boundary.
 Rect_I32 :: struct {
 	x, y, w, h: i32,
 }
