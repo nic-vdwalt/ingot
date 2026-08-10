@@ -93,12 +93,14 @@ g_web_ctx: runtime.Context
 
 @(private)
 Web_GPU_Request :: struct {
+	owner: ^Context,
 	epoch: u64,
 }
 
 @(private)
 _web_request_live :: proc(request: ^Web_GPU_Request) -> bool {
-	return request != nil && request.epoch == g.epoch && g.lifecycle == .Starting
+	return request != nil && request.owner != nil && request.epoch == request.owner.epoch &&
+		request.owner.lifecycle == .Starting
 }
 
 @(private)
@@ -130,11 +132,13 @@ platform_create_surface :: proc(instance: wg.Instance) -> wg.Surface {
 // frame loop skips drawing until then.
 @(private)
 platform_start_gpu :: proc() {
+	ctx := g
 	request := new(Web_GPU_Request)
-	request.epoch = g.epoch
+	request.owner = ctx
+	request.epoch = ctx.epoch
 	wg.InstanceRequestAdapter(
-		g.instance,
-		&{compatibleSurface = g.surface},
+		ctx.instance,
+		&{compatibleSurface = ctx.surface},
 		{callback = _web_on_adapter, userdata1 = request},
 	)
 }
@@ -182,8 +186,8 @@ _web_on_adapter :: proc "c" (
 	u1, u2: rawptr,
 ) {
 	context = g_web_ctx
-	ctx := g
 	request := cast(^Web_GPU_Request)u1
+	ctx := request.owner if request != nil else nil
 	if status != .Success || !_web_request_live(request) {
 		if status != .Success {
 			// Mobile browsers commonly resolve with a null adapter (blocklisted
@@ -199,6 +203,7 @@ _web_on_adapter :: proc "c" (
 	}
 	ctx.adapter = adapter
 	device_request := new(Web_GPU_Request)
+	device_request.owner = ctx
 	device_request.epoch = request.epoch
 	free(request)
 	// Read the adapter's limits to size our pools (limits.odin). The device
@@ -221,8 +226,8 @@ _web_on_device :: proc "c" (
 	u1, u2: rawptr,
 ) {
 	context = g_web_ctx
-	ctx := g
 	request := cast(^Web_GPU_Request)u1
+	ctx := request.owner if request != nil else nil
 	if status != .Success || !_web_request_live(request) {
 		if status != .Success {
 			fmt.eprintfln("gfx: WebGPU device request failed (%v): %s", status, _web_reason(msg))
