@@ -62,3 +62,60 @@ route_claims_behaviour :: proc(t: ^testing.T) {
 	route_begin_frame(&frame)
 	testing.expect(t, route_occluded(&frame, Vector2{500, 500}))
 }
+
+@(test)
+route_block_z_reports_the_topmost_claim :: proc(t: ^testing.T) {
+	// An uncovered point is blocked by nothing, which must compare as
+	// unblocked even against the lowest named tier.
+	c: Route_Claims
+	testing.expect_value(t, route_block_z_in(c, Vector2{10, 10}), Z_NONE)
+	testing.expect(t, route_block_z_in(c, Vector2{10, 10}) <= Z_CONTENT)
+
+	// A single claim reports its own z, and only inside its rect.
+	c.rects[0] = Rectangle{100, 100, 50, 50}
+	c.zs[0] = Z_PANEL
+	c.count = 1
+	testing.expect_value(t, route_block_z_in(c, Vector2{120, 120}), Z_PANEL)
+	testing.expect_value(t, route_block_z_in(c, Vector2{99, 120}), Z_NONE)
+
+	// Overlapping claims report the highest, whatever order they were made in.
+	c.rects[1] = Rectangle{110, 110, 50, 50}
+	c.zs[1] = Z_MODAL
+	c.count = 2
+	testing.expect_value(t, route_block_z_in(c, Vector2{120, 120}), Z_MODAL)
+	c.zs[0] = Z_TOAST
+	testing.expect_value(t, route_block_z_in(c, Vector2{120, 120}), Z_TOAST)
+
+	// An overflowed set claims everywhere at its saturated z.
+	all: Route_Claims
+	all.all = true
+	all.all_z = Z_POPUP
+	testing.expect_value(t, route_block_z_in(all, Vector2{0, 0}), Z_POPUP)
+	testing.expect_value(t, route_block_z_in(all, Vector2{9999, 9999}), Z_POPUP)
+}
+
+@(test)
+route_occluded_matches_route_block_z :: proc(t: ^testing.T) {
+	// route_occluded_in is defined as "something strictly above me claims this
+	// point". Pin that identity so the two cannot drift apart.
+	sets: [3]Route_Claims
+	sets[1].rects[0] = Rectangle{0, 0, 100, 100}
+	sets[1].zs[0] = Z_PANEL
+	sets[1].count = 1
+	sets[2].all = true
+	sets[2].all_z = Z_MODAL
+
+	points := [3]Vector2{{10, 10}, {50, 50}, {500, 500}}
+	zs := [6]Z_Order{Z_CONTENT, Z_PANEL, Z_POPUP, Z_MODAL, Z_TOAST, Z_TOOLTIP}
+	for claims in sets {
+		for point in points {
+			for z in zs {
+				testing.expect_value(
+					t,
+					route_occluded_in(claims, point, z),
+					route_block_z_in(claims, point) > z,
+				)
+			}
+		}
+	}
+}
