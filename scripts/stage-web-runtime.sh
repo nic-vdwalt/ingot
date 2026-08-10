@@ -15,10 +15,9 @@ mkdir -p "$DEST"
 cp "$ODIN_ROOT/core/sys/wasm/js/odin.js" "$DEST/odin.js"
 # Threaded builds import a `shared: true` memory. Blink and Gecko both reject
 # SharedArrayBuffer-backed views in TextDecoder.decode and crypto.getRandomValues,
-# so the stock runtime throws on the first string read or rand_bytes call.
-# getRandomValues also caps a single call at 65536 bytes, so the staged rand_bytes
-# fills in chunks. Node accepts shared views and enforces no quota, which is why
-# `node --test` never sees any of this; scripts/check_shared_views.py is the gate.
+# so the stock runtime throws on the first string read or rand_bytes call. Node
+# accepts shared views, which is why `node --test` never sees this;
+# scripts/check_shared_views.py is the gate.
 # The replacements below are byte-identical to odin-lang/Odin#7272, so once that
 # lands every transform no-ops and this whole block can be deleted.
 python3 - "$DEST/odin.js" <<'PY'
@@ -91,23 +90,16 @@ RAND_OLD = (
 RAND_NEW = (
 	"\t\t\trand_bytes: (ptr, len) => {\n"
 	"\t\t\t\tconst view = new Uint8Array(wasmMemoryInterface.memory.buffer, ptr, len)\n"
-	"\t\t\t\t// getRandomValues rejects a shared view and fills in place, so a\n"
-	"\t\t\t\t// shared memory needs an unshared staging buffer written back;\n"
-	"\t\t\t\t// copying the view alone would discard the entropy. Its 65536\n"
-	"\t\t\t\t// byte quota applies on both paths, so fill in chunks.\n"
-	"\t\t\t\tconst QUOTA = 65536\n"
+	"\t\t\t\t// getRandomValues fills in place and rejects a shared view, so a\n"
+	"\t\t\t\t// shared memory needs an unshared staging buffer written back.\n"
+	"\t\t\t\t// Copying the view alone would discard the entropy.\n"
 	"\t\t\t\tif (wasmMemoryInterface.isShared) {\n"
-	"\t\t\t\t\tconst tmp = new Uint8Array(Math.min(len, QUOTA))\n"
-	"\t\t\t\t\tfor (let off = 0; off < len; off += QUOTA) {\n"
-	"\t\t\t\t\t\tconst chunk = tmp.subarray(0, Math.min(QUOTA, len - off))\n"
-	"\t\t\t\t\t\tcrypto.getRandomValues(chunk)\n"
-	"\t\t\t\t\t\tview.set(chunk, off)\n"
-	"\t\t\t\t\t}\n"
+	"\t\t\t\t\tconst tmp = new Uint8Array(len)\n"
+	"\t\t\t\t\tcrypto.getRandomValues(tmp)\n"
+	"\t\t\t\t\tview.set(tmp)\n"
 	"\t\t\t\t\treturn\n"
 	"\t\t\t\t}\n"
-	"\t\t\t\tfor (let off = 0; off < len; off += QUOTA) {\n"
-	"\t\t\t\t\tcrypto.getRandomValues(view.subarray(off, Math.min(off + QUOTA, len)))\n"
-	"\t\t\t\t}\n"
+	"\t\t\t\tcrypto.getRandomValues(view)\n"
 	"\t\t\t},"
 )
 
@@ -118,7 +110,7 @@ TRANSFORMS = (
     ("constructor", "this.isShared = false;",                   1, CTOR_OLD,   CTOR_NEW),
     ("setMemory",   "this.isShared = typeof SharedArrayBuffer", 1, SETMEM_OLD, SETMEM_NEW),
     ("loadString",  "loadBytesUnshared",                        2, DECODE_OLD, DECODE_NEW),
-    ("rand_bytes",  "const QUOTA = 65536",                      1, RAND_OLD,   RAND_NEW),
+    ("rand_bytes",  "wasmMemoryInterface.isShared",             1, RAND_OLD,   RAND_NEW),
 )
 
 changed = False

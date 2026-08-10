@@ -8,9 +8,10 @@ though the Encoding spec allows them (AllowSharedBufferSource, whatwg/encoding
 PR 182). Without a defensive copy the threaded build dies on its first string
 read.
 
-getRandomValues additionally caps a single call at 65536 bytes, so rand_bytes
-has to fill in chunks; that quota is not shared-memory specific but the copy
-path is where it surfaces.
+getRandomValues additionally caps a single call at 65536 bytes. Odin never
+exceeds it: base/runtime/os_specific_js.odin chunks at MAX_PER_CALL_BYTES
+before the import is reached, and the quota throws only above 65536. The check
+below pins that boundary rather than an out-of-contract size.
 
 Node accepts shared views and enforces no quota, so `node --test` passes either
 way. Only a real browser can catch a regression here, which is what this script
@@ -88,22 +89,23 @@ SCRIPT = r"""() => {
     return nonzero + "/64 nonzero";
   });
 
-  // getRandomValues throws QuotaExceededError above 65536 bytes, so the staged
-  // path must chunk. Assert the bytes past the first chunk really were filled.
-  rec("odin.js rand_bytes > 64KiB", () => {
-    const OFF = 4096, LEN = 70000;
+  // The largest call Odin can emit is exactly 65536 bytes: base/runtime/
+  // os_specific_js.odin chunks at MAX_PER_CALL_BYTES before reaching JS, and
+  // getRandomValues throws QuotaExceededError only *above* 65536. Pin that
+  // boundary through the shared staging path.
+  rec("odin.js rand_bytes at quota", () => {
+    const OFF = 4096, LEN = 65536;
     const imports = window.odin.setupDefaultImports(wmi);
     new Uint8Array(memory.buffer, OFF, LEN).fill(0);
     imports.odin_env.rand_bytes(OFF, LEN);
     const v = new Uint8Array(memory.buffer, OFF, LEN);
-    let nonzero = 0, tail = 0;
-    for (let i = 0; i < LEN; i += 1) {
-      if (v[i] !== 0) { nonzero += 1; if (i >= 65536) tail += 1; }
-    }
+    let nonzero = 0;
+    for (let i = 0; i < LEN; i += 1) if (v[i] !== 0) nonzero += 1;
     // ~1/256 of random bytes are legitimately zero, so 90% is a safe floor.
     if (nonzero < LEN * 0.9) throw new Error("entropy discarded: " + nonzero + "/" + LEN + " nonzero");
-    if (tail === 0) throw new Error("bytes past the 65536 byte quota were never filled");
-    return nonzero + "/" + LEN + " nonzero, " + tail + " past quota";
+    const spill = new Uint8Array(memory.buffer, OFF + LEN, 8);
+    for (let i = 0; i < spill.length; i += 1) if (spill[i] !== 0) throw new Error("wrote past the requested range");
+    return nonzero + "/" + LEN + " nonzero";
   });
 
   // ingot_app.js readStr has no public export, so drive it through the real

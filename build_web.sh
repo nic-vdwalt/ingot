@@ -46,6 +46,54 @@ assert_toolchain() {
 }
 assert_toolchain
 
+# A threaded build needs more than an Odin that matches the pin: it needs the
+# box3d vendor that can supply a threaded object. assert_toolchain above cannot
+# see that difference, and the failure mode when it is missing is remote from
+# the cause - vendor/box3d/box3d.odin without the BOX3D_WASM_THREADS selector
+# silently links the SINGLE-threaded lib/box3d_wasm.o, whose finishTask runs
+# inline on the calling thread, while -target-features:atomics still compiles
+# the Odin side's wasm_memory_atomic_wait32. The module builds, stages, gzips
+# and deploys clean, then traps in the browser on the first physics step with
+# "Atomics.wait cannot be called in this context" - on the main thread, where
+# the spec forbids blocking.
+#
+# That shipped to production once. The pinned master checkout reports the exact
+# revision and so passed assert_toolchain, while the checkout that actually has
+# the threading work is built locally and reports no revision at all, which only
+# earns a warning. The guard therefore preferred the wrong toolchain.
+#
+# So check for the artifact itself rather than any version string.
+assert_box3d_threads() {
+	local root object
+	if ! root="$(odin root 2>/dev/null)"; then
+		echo "error: could not resolve the Odin root via 'odin root'" >&2
+		exit 1
+	fi
+	object="${root%/}/vendor/box3d/lib/box3d_wasm_threads.o"
+	if [ ! -s "$object" ]; then
+		echo "error: threaded build requested but the box3d threaded object is missing" >&2
+		echo "       expected: $object" >&2
+		echo "       This Odin has the single-threaded box3d vendor. Build with the" >&2
+		echo "       checkout carrying the Box3D wasm threading work, e.g." >&2
+		echo "       PATH=\"/path/to/odin-box3d-workers:\$PATH\" INGOT_WEB_THREADS=1 bash build_web.sh ..." >&2
+		exit 1
+	fi
+	# The object is tracked with Git LFS. An un-pulled pointer is a ~130 byte
+	# text file that -s accepts and wasm-ld rejects far later, so name it here.
+	if head -c 40 "$object" | grep -q '^version https://git-lfs.github.com/spec/v1'; then
+		echo "error: $object is an un-pulled Git LFS pointer" >&2
+		echo "       run: git -C \"$root\" lfs pull" >&2
+		exit 1
+	fi
+	if ! grep -q 'BOX3D_WASM_THREADS' "${root%/}/vendor/box3d/box3d.odin"; then
+		echo "error: $object exists but vendor/box3d/box3d.odin cannot select it" >&2
+		echo "       the bindings have no BOX3D_WASM_THREADS config, so LIB_PATH" >&2
+		echo "       resolves to the single-threaded lib/box3d_wasm.o regardless" >&2
+		exit 1
+	fi
+	echo "Box3D threaded object: $object"
+}
+
 echo "Building wasm..."
 # --export-table is REQUIRED by vendor:wgpu on JS so the browser glue can invoke
 # Odin callbacks (adapter/device requests) through the function table.
@@ -61,6 +109,7 @@ if [ -d "$SRC" ]; then FILE_FLAG=""; fi
 TARGET_FLAGS=""
 LINKER_FLAGS="--export-table"
 if [ "$WEB_THREADS" = "1" ]; then
+	assert_box3d_threads
 	TARGET_FLAGS="-target-features:atomics"
 	TARGET_FLAGS="$TARGET_FLAGS -define:BOX3D_WASM_THREADS=true"
 	TARGET_FLAGS="$TARGET_FLAGS -define:INGOT_BOX3D_WORKERS=true"
