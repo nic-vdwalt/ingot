@@ -44,6 +44,12 @@ function reportedRatio() {
 	return globalThis.ingotWeb.ingotImports().ingot_device_pixel_ratio();
 }
 
+test("threaded binaries receive serial fallback imports", () => {
+	const imports = installed.hook.box3dWorkerImports(null);
+	assert.equal(imports.schedule(0, 0), false);
+	assert.equal(imports.request_step(), false);
+});
+
 test("high device pixel ratios are capped", () => {
 	// dpr 3 would cost 2.25x the pixels of dpr 2 for a difference few people
 	// can see at arm's length.

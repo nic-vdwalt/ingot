@@ -955,6 +955,14 @@
 		semanticControls.clear();
 	}
 
+	function box3dWorkerImports(box3dWorkers) {
+		if (box3dWorkers) return box3dWorkers.imports;
+		return {
+			schedule: () => false,
+			request_step: () => false,
+		};
+	}
+
 	async function createSession(wasmPath, opts) {
 		opts = opts || {};
 		wasmPath = wasmPath || "ingot_web.wasm";
@@ -1045,7 +1053,7 @@
 			ingot: ingotImports(),
 			ingot_http: httpImports(),
 			ingot_audio: audioImports(),
-			ingot_box3d_workers: box3dWorkers ? box3dWorkers.imports : {},
+			ingot_box3d_workers: box3dWorkerImports(box3dWorkers),
 		}, appSession ? appSession.imports : {}, opts.imports || {});
 		let destroyed = false;
 		const session = {
@@ -1117,6 +1125,7 @@
 			beginSemanticFrame: () => { semanticFrame += 1; },
 			semanticState: () => ({ semanticInputs, semanticForms, semanticControls }),
 			attachDrop,
+			box3dWorkerImports,
 		});
 	}
 })();

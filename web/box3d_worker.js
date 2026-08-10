@@ -11,6 +11,8 @@ function imports(memory) {
 			rand_bytes(pointer, length) {
 				crypto.getRandomValues(new Uint8Array(memory.buffer, pointer, length));
 			},
+			sin: Math.sin,
+			cos: Math.cos,
 		},
 		wgpu: new Proxy({}, { get: () => () => 0 }),
 		ingot: new Proxy({}, { get: () => () => 0 }),

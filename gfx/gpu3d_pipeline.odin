@@ -195,7 +195,7 @@ Gpu_3D_Material_Policy :: struct {
 _gpu_3d_material_policy :: proc(style: Gpu_Material_Style) -> Gpu_3D_Material_Policy {
 	return {
 		blend = style == .Default,
-		depth_write = true,
+		depth_write = style != .Opaque_Overlay,
 		depth_compare = .Less,
 		depth_bias = -2 if style == .Opaque_Overlay else 0,
 	}

@@ -300,7 +300,7 @@ test_gpu_3d_opaque_material_policies :: proc(t: ^testing.T) {
 	testing.expect_value(t, opaque.depth_compare, wg.CompareFunction.Less)
 	testing.expect_value(t, opaque.depth_bias, i32(0))
 	testing.expect(t, !overlay.blend)
-	testing.expect(t, overlay.depth_write)
+	testing.expect(t, !overlay.depth_write)
 	testing.expect_value(t, overlay.depth_compare, wg.CompareFunction.Less)
 	testing.expect(t, overlay.depth_bias < 0)
 }
