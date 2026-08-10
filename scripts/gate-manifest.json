@@ -1,6 +1,7 @@
 {
   "test_packages": [
     "asset",
+    "box3d_workers",
     "gfx",
     "procgen",
     "scene",
@@ -16,6 +17,7 @@
   ],
   "check_packages": [
     "asset",
+    "box3d_workers",
     "gfx",
     "procgen",
     "scene",

@@ -16,6 +16,7 @@ import check_odin_style
 # only this default is.
 PACKAGES = (
     "asset/",
+    "box3d_workers/",
     "gfx/",
     "procgen/",
     "scene/",

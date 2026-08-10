@@ -1164,7 +1164,7 @@ draw_gpu_mesh_outlined :: proc(
 	material: Gpu_Material,
 	outline_color: Color,
 ) {
-	if pass == nil do return
+	if pass == nil || !_gpu_3d_pass_current(&pass.owner.resources.gpu_3d, pass) do return
 	solid_material := material
 	solid_material.style = .Opaque
 	draw_gpu_mesh(pass, mesh, transform, solid_material)
