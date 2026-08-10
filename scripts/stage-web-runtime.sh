@@ -15,15 +15,46 @@ mkdir -p "$DEST"
 cp "$ODIN_ROOT/core/sys/wasm/js/odin.js" "$DEST/odin.js"
 # Threaded builds import a `shared: true` memory. Blink and Gecko both reject
 # SharedArrayBuffer-backed views in TextDecoder.decode and crypto.getRandomValues,
-# so the stock runtime throws on the first string read or rand_bytes call. Node
-# accepts shared views, which is why `node --test` never sees this. Delete this
-# block once the upstream fix lands (odin-lang/Odin, wasm js shared memory).
+# so the stock runtime throws on the first string read or rand_bytes call.
+# getRandomValues also caps a single call at 65536 bytes, so the staged rand_bytes
+# fills in chunks. Node accepts shared views and enforces no quota, which is why
+# `node --test` never sees any of this; scripts/check_shared_views.py is the gate.
+# The replacements below are byte-identical to odin-lang/Odin#7272, so once that
+# lands every transform no-ops and this whole block can be deleted.
 python3 - "$DEST/odin.js" <<'PY'
 import sys
 path = sys.argv[1]
 source = open(path).read()
 
-GUARD = "bytes.buffer instanceof SharedArrayBuffer"
+CTOR_OLD = (
+	"\t\tthis.listenerMap = new Map();\n"
+	"\n"
+	"\t\t// Size (in bytes) of the integer type"
+)
+CTOR_NEW = (
+	"\t\tthis.listenerMap = new Map();\n"
+	"\n"
+	"\t\t// Whether `memory.buffer` is a SharedArrayBuffer. Resolved once in\n"
+	"\t\t// setMemory; Web APIs that reject shared views are checked against it.\n"
+	"\t\tthis.isShared = false;\n"
+	"\n"
+	"\t\t// Size (in bytes) of the integer type"
+)
+
+SETMEM_OLD = (
+	"\tsetMemory(memory) {\n"
+	"\t\tthis.memory = memory;\n"
+	"\t}"
+)
+SETMEM_NEW = (
+	"\tsetMemory(memory) {\n"
+	"\t\tthis.memory = memory;\n"
+	"\t\t// Not `instanceof`, so a memory transferred in from another realm (an\n"
+	"\t\t// iframe, or a worker with its own intrinsics) is still detected.\n"
+	"\t\tthis.isShared = typeof SharedArrayBuffer !== \"undefined\" && memory != null &&\n"
+	"\t\t\tObject.prototype.toString.call(memory.buffer) === \"[object SharedArrayBuffer]\";\n"
+	"\t}"
+)
 
 DECODE_OLD = (
 	"\tloadString(ptr, len) {\n"
@@ -32,9 +63,15 @@ DECODE_OLD = (
 	"\t}"
 )
 DECODE_NEW = (
+	"\t// Copy out of a shared memory so the result can be passed to Web APIs that\n"
+	"\t// reject SharedArrayBuffer-backed views. The Encoding spec allows shared\n"
+	"\t// input (AllowSharedBufferSource) but neither Blink nor Gecko implement it,\n"
+	"\t// so with `--import-memory` and a `shared: true` memory the uncopied view\n"
+	"\t// throws a TypeError. Node accepts shared views, so this never reproduces\n"
+	"\t// outside a browser.\n"
 	"\tloadBytesUnshared(ptr, len) {\n"
 	"\t\tconst bytes = this.loadBytes(ptr, len);\n"
-	"\t\tif (typeof SharedArrayBuffer !== \"undefined\" && bytes.buffer instanceof SharedArrayBuffer) {\n"
+	"\t\tif (this.isShared) {\n"
 	"\t\t\treturn bytes.slice();\n"
 	"\t\t}\n"
 	"\t\treturn bytes;\n"
@@ -54,30 +91,51 @@ RAND_OLD = (
 RAND_NEW = (
 	"\t\t\trand_bytes: (ptr, len) => {\n"
 	"\t\t\t\tconst view = new Uint8Array(wasmMemoryInterface.memory.buffer, ptr, len)\n"
-	"\t\t\t\tif (typeof SharedArrayBuffer !== \"undefined\" && view.buffer instanceof SharedArrayBuffer) {\n"
-	"\t\t\t\t\tconst tmp = new Uint8Array(len)\n"
-	"\t\t\t\t\tcrypto.getRandomValues(tmp)\n"
-	"\t\t\t\t\tview.set(tmp)\n"
+	"\t\t\t\t// getRandomValues rejects a shared view and fills in place, so a\n"
+	"\t\t\t\t// shared memory needs an unshared staging buffer written back;\n"
+	"\t\t\t\t// copying the view alone would discard the entropy. Its 65536\n"
+	"\t\t\t\t// byte quota applies on both paths, so fill in chunks.\n"
+	"\t\t\t\tconst QUOTA = 65536\n"
+	"\t\t\t\tif (wasmMemoryInterface.isShared) {\n"
+	"\t\t\t\t\tconst tmp = new Uint8Array(Math.min(len, QUOTA))\n"
+	"\t\t\t\t\tfor (let off = 0; off < len; off += QUOTA) {\n"
+	"\t\t\t\t\t\tconst chunk = tmp.subarray(0, Math.min(QUOTA, len - off))\n"
+	"\t\t\t\t\t\tcrypto.getRandomValues(chunk)\n"
+	"\t\t\t\t\t\tview.set(chunk, off)\n"
+	"\t\t\t\t\t}\n"
 	"\t\t\t\t\treturn\n"
 	"\t\t\t\t}\n"
-	"\t\t\t\tcrypto.getRandomValues(view)\n"
+	"\t\t\t\tfor (let off = 0; off < len; off += QUOTA) {\n"
+	"\t\t\t\t\tcrypto.getRandomValues(view.subarray(off, Math.min(off + QUOTA, len)))\n"
+	"\t\t\t\t}\n"
 	"\t\t\t},"
 )
 
-if GUARD not in source:
-    if source.count(DECODE_OLD) != 1:
-        raise SystemExit("unexpected Odin loadString implementation")
-    if source.count(RAND_OLD) != 1:
-        raise SystemExit("unexpected Odin rand_bytes implementation")
-    source = source.replace(DECODE_OLD, DECODE_NEW, 1)
-    source = source.replace(RAND_OLD, RAND_NEW, 1)
+# (label, already-applied sentinel, expected sentinel count, old text, new text).
+# Each transform is independent and idempotent, so a partially upstreamed fix
+# still gets the remaining pieces instead of being skipped wholesale.
+TRANSFORMS = (
+    ("constructor", "this.isShared = false;",                   1, CTOR_OLD,   CTOR_NEW),
+    ("setMemory",   "this.isShared = typeof SharedArrayBuffer", 1, SETMEM_OLD, SETMEM_NEW),
+    ("loadString",  "loadBytesUnshared",                        2, DECODE_OLD, DECODE_NEW),
+    ("rand_bytes",  "const QUOTA = 65536",                      1, RAND_OLD,   RAND_NEW),
+)
+
+changed = False
+for label, sentinel, _count, old, new in TRANSFORMS:
+    if sentinel in source:
+        continue
+    if source.count(old) != 1:
+        raise SystemExit("unexpected Odin %s implementation" % label)
+    source = source.replace(old, new, 1)
+    changed = True
+if changed:
     open(path, "w").write(source)
 
 result = open(path).read()
-if result.count(GUARD) != 1:
-    raise SystemExit("invalid SharedArrayBuffer compatibility transform: loadString")
-if result.count("view.buffer instanceof SharedArrayBuffer") != 1:
-    raise SystemExit("invalid SharedArrayBuffer compatibility transform: rand_bytes")
+for label, sentinel, count, _old, _new in TRANSFORMS:
+    if result.count(sentinel) != count:
+        raise SystemExit("invalid SharedArrayBuffer compatibility transform: %s" % label)
 PY
 cp "$ODIN_ROOT/vendor/wgpu/wgpu.js" "$DEST/wgpu.js"
 python3 - "$DEST/wgpu.js" <<'PY'

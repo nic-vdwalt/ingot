@@ -8,8 +8,13 @@ though the Encoding spec allows them (AllowSharedBufferSource, whatwg/encoding
 PR 182). Without a defensive copy the threaded build dies on its first string
 read.
 
-Node accepts shared views, so `node --test` passes either way. Only a real
-browser can catch a regression here, which is what this script is for.
+getRandomValues additionally caps a single call at 65536 bytes, so rand_bytes
+has to fill in chunks; that quota is not shared-memory specific but the copy
+path is where it surfaces.
+
+Node accepts shared views and enforces no quota, so `node --test` passes either
+way. Only a real browser can catch a regression here, which is what this script
+is for.
 
 Loads the staged web/odin.js, web/ingot_web.js and web/ingot_app.js into a
 cross-origin-isolated page, installs a shared memory, and asserts every fixed
@@ -40,11 +45,15 @@ SCRIPT = r"""() => {
 
   const wmi = new window.odin.WasmMemoryInterface();
   wmi.setIntSize(4);
-  const memory = new WebAssembly.Memory({ initial: 2, maximum: 4, shared: true });
+  const memory = new WebAssembly.Memory({ initial: 4, maximum: 8, shared: true });
   wmi.setMemory(memory);
   rec("memory is shared", () => {
     if (!(memory.buffer instanceof SharedArrayBuffer)) throw new Error("memory is not shared");
     return "yes";
+  });
+  rec("wmi.isShared cached", () => {
+    if (wmi.isShared !== true) throw new Error("setMemory did not resolve isShared");
+    return "true";
   });
 
   // "Hello, Odin\0"
@@ -77,6 +86,24 @@ SCRIPT = r"""() => {
     for (let i = 0; i < v.length; i += 1) if (v[i] !== 0) nonzero += 1;
     if (nonzero === 0) throw new Error("entropy discarded: all 64 bytes still zero");
     return nonzero + "/64 nonzero";
+  });
+
+  // getRandomValues throws QuotaExceededError above 65536 bytes, so the staged
+  // path must chunk. Assert the bytes past the first chunk really were filled.
+  rec("odin.js rand_bytes > 64KiB", () => {
+    const OFF = 4096, LEN = 70000;
+    const imports = window.odin.setupDefaultImports(wmi);
+    new Uint8Array(memory.buffer, OFF, LEN).fill(0);
+    imports.odin_env.rand_bytes(OFF, LEN);
+    const v = new Uint8Array(memory.buffer, OFF, LEN);
+    let nonzero = 0, tail = 0;
+    for (let i = 0; i < LEN; i += 1) {
+      if (v[i] !== 0) { nonzero += 1; if (i >= 65536) tail += 1; }
+    }
+    // ~1/256 of random bytes are legitimately zero, so 90% is a safe floor.
+    if (nonzero < LEN * 0.9) throw new Error("entropy discarded: " + nonzero + "/" + LEN + " nonzero");
+    if (tail === 0) throw new Error("bytes past the 65536 byte quota were never filled");
+    return nonzero + "/" + LEN + " nonzero, " + tail + " past quota";
   });
 
   // ingot_app.js readStr has no public export, so drive it through the real
