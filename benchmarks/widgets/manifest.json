@@ -4,7 +4,7 @@
   "viewport": {"width": 1280, "height": 720, "scale_factor": 1.0},
   "collection": {"warmup_frames": 300, "measured_frames": 2000, "repetitions": 7, "native_seconds": 10, "idle_seconds": 30},
   "toolchains": {
-    "odin": "dev-2026-08:8412dc37a",
+    "odin": "dev-2026-08-nightly:902106f",
     "cpp": "c++17",
     "rust": "1.90.0"
   },

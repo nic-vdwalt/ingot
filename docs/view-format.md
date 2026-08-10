@@ -17,9 +17,9 @@ break, [Tiger Style](TIGER_STYLE.md) defines the safety policy, and
 
 ## Non-goals
 
-- **No retained tree.** A view is not a widget model the application keeps in
-  sync. `view_play` walks it and forgets it, exactly as a hand-written frame
-  procedure would.
+- **No retained behavior tree.** A view retains declarative structure, not
+  control values or widget behavior. `view_play` walks it without retaining
+  runtime instances, exactly as a hand-written frame procedure would.
 - **No general DSL.** The format expresses what the public `^Ui` facade already
   exposes and nothing else. A node kind that cannot be played cannot exist.
 - **No styling arithmetic.** Tokens only. A literal color or pixel gap in a view

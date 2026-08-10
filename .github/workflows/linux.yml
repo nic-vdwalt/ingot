@@ -59,3 +59,5 @@ jobs:
         run: python3 scripts/check-toolchain.py
       - name: Run Linux native gate
         run: bash scripts/check-linux.sh
+      - name: Run headless web gate
+        run: bash scripts/check-web.sh

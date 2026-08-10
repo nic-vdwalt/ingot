@@ -16,6 +16,9 @@ libvterm/lib/linux_arm64/
 /idle_demo
 /procgen_world
 /box3d_stack
+/box3d_advanced
+/box3d_benchmark
+/box3d_water
 /render_fixture
 /artifacts/box3d_advanced
 /artifacts/box3d_water
