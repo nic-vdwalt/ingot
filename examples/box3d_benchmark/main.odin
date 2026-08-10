@@ -100,6 +100,12 @@ when BOX3D_WORKERS_ENABLED {
 
 box3d_task_slots: [BOX3D_TASK_MAX]Box3D_Task_Slot
 box3d_batch_pending: u32
+// Set while a batch is stepped on the browser's main thread. box3d hands every
+// parallel-for to box3d_worker_enqueue, and the matching finish blocks on
+// memory.atomic.wait32 until a worker reports back - which the main thread is
+// forbidden to do. Running those tasks inline instead is the only way to step
+// there at all.
+box3d_inline_tasks: u32
 state: State
 
 when ODIN_OS == .JS {
@@ -240,8 +246,13 @@ benchmark_batch_request :: proc(step_count: int) {
 	when BOX3D_WORKERS_ENABLED {
 		intrinsics.atomic_store_explicit(&box3d_batch_pending, 1, .Release)
 		if box3d_worker_request_batch(u32(step_count)) do return
+		// The pool refuses a batch while it is still starting up, and again
+		// after any failure, so this fallback runs on a normal page - not just
+		// a degraded one.
 		started := rl.GetTime()
+		intrinsics.atomic_store_explicit(&box3d_inline_tasks, 1, .Release)
 		ok := box3d_benchmark_batch(u32(step_count))
+		intrinsics.atomic_store_explicit(&box3d_inline_tasks, 0, .Release)
 		intrinsics.atomic_store_explicit(&box3d_batch_pending, 0, .Release)
 		if !ok {
 			state.phase = .Failed
@@ -373,6 +384,11 @@ when BOX3D_WORKERS_ENABLED {
 	) -> rawptr {
 		_ = user_context
 		_ = task_name
+		if intrinsics.atomic_load_explicit(&box3d_inline_tasks, .Acquire) != 0 {
+			callback := transmute(b3.TaskCallback)task
+			callback(task_context)
+			return nil
+		}
 		for index in 0 ..< BOX3D_TASK_MAX {
 			slot := &box3d_task_slots[index]
 			_, claimed := intrinsics.atomic_compare_exchange_strong_explicit(

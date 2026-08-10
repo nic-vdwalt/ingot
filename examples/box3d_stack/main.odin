@@ -47,6 +47,12 @@ when BOX3D_WORKERS_ENABLED {
 
 box3d_task_slots: [BOX3D_TASK_MAX]Box3D_Task_Slot
 box3d_step_pending: u32
+// Set while the world is stepped on the browser's main thread. box3d hands
+// every parallel-for to box3d_worker_enqueue, and the matching finish blocks on
+// memory.atomic.wait32 until a worker reports back - which the main thread is
+// forbidden to do. Running those tasks inline instead is the only way to step
+// there at all.
+box3d_inline_tasks: u32
 state: State
 
 main :: proc() {
@@ -108,7 +114,12 @@ frame :: proc() {
 			intrinsics.atomic_store_explicit(&box3d_step_pending, 1, .Release)
 			if !box3d_worker_request_step() {
 				intrinsics.atomic_store_explicit(&box3d_step_pending, 0, .Release)
+				// The pool refuses a step while it is still starting up, and
+				// again after any failure, so this fallback runs on a normal
+				// page - not just a degraded one.
+				intrinsics.atomic_store_explicit(&box3d_inline_tasks, 1, .Release)
 				b3.World_Step(state.world, 1.0 / 60.0, 4)
+				intrinsics.atomic_store_explicit(&box3d_inline_tasks, 0, .Release)
 			}
 		}
 	} else {
@@ -149,6 +160,11 @@ when BOX3D_WORKERS_ENABLED {
 	) -> rawptr {
 		_ = user_context
 		_ = task_name
+		if intrinsics.atomic_load_explicit(&box3d_inline_tasks, .Acquire) != 0 {
+			callback := transmute(b3.TaskCallback)task
+			callback(task_context)
+			return nil
+		}
 		for index in 0 ..< BOX3D_TASK_MAX {
 			slot := &box3d_task_slots[index]
 			_, claimed := intrinsics.atomic_compare_exchange_strong_explicit(
