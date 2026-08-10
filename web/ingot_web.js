@@ -971,18 +971,21 @@
 			throw new Error(
 				"WebGPU is not available. Use Chrome/Edge 113+ or Safari 18+.");
 		}
-		const threaded = opts.box3dWorkers === true &&
-			typeof SharedArrayBuffer !== "undefined" && crossOriginIsolated === true;
+		const sharedMemory = typeof SharedArrayBuffer !== "undefined" &&
+			crossOriginIsolated === true;
+		const threaded = opts.box3dWorkers === true && sharedMemory;
 		const wmi = new window.odin.WasmMemoryInterface();
 		let box3dWorkers = null;
-		if (threaded) {
+		if (sharedMemory) {
 			const memory = new WebAssembly.Memory({
 				initial: 1024,
 				maximum: 4096,
 				shared: true,
 			});
 			wmi.setMemory(memory);
-			box3dWorkers = await window.ingotBox3dWorkers.create(wasmPath, memory, opts);
+			if (threaded) {
+				box3dWorkers = await window.ingotBox3dWorkers.create(wasmPath, memory, opts);
+			}
 		}
 		wasmMemoryInterface = wmi;
 		const webgpu = new window.odin.WebGPUInterface(wmi);
