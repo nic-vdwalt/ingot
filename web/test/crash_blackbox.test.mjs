@@ -30,6 +30,12 @@ import { dirname, join } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SOURCE = readFileSync(join(HERE, "..", "ingot_crash.js"), "utf8");
 
+// The storage key is namespaced by path, so every assertion about the record
+// has to name the document it belongs to. See BOX_KEY in ingot_crash.js.
+const PATH = "/demos/test/";
+const KEY = "ingot.blackbox:" + PATH;
+const keyFor = (path) => "ingot.blackbox:" + path;
+
 // A minimal sessionStorage. `mode` injects the two real-world failures:
 // "throw-access" is private browsing, "throw-write" is quota exhaustion.
 function makeStorage(mode = "ok", initial = {}) {
@@ -71,7 +77,7 @@ function makeElement(id) {
 
 // load simulates one page load against a given storage, returning the test
 // hook plus the DOM elements the panel renders into.
-function load(store, { readyState = "complete" } = {}) {
+function load(store, { readyState = "complete", pathname = PATH } = {}) {
 	const crash = makeElement("crash");
 	const msg = makeElement("msg");
 	const listeners = new Map();
@@ -105,7 +111,7 @@ function load(store, { readyState = "complete" } = {}) {
 		console: { log() {}, warn() {}, error() {} },
 		performance: { now: () => (now += 5) },
 		navigator: { userAgent: "test-agent" },
-		location: { pathname: "/demos/test/" },
+		location: { pathname },
 		setInterval: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
 	};
 	win.requestAnimationFrame = (fn) => { rafCallback = fn; return 1; };
@@ -142,9 +148,9 @@ test("a session that shuts down cleanly leaves no record", () => {
 	const first = load(store);
 	// Breadcrumbs exist while running, so a kill mid-session has something
 	// to recover.
-	assert.ok(store.data.has("ingot.blackbox"));
+	assert.ok(store.data.has(KEY));
 	first.fire("pagehide");
-	assert.equal(store.data.has("ingot.blackbox"), false);
+	assert.equal(store.data.has(KEY), false);
 
 	// The next load must not cry wolf.
 	const second = load(store);
@@ -160,7 +166,7 @@ test("a session killed without pagehide is recovered as a crash", () => {
 	// one, a reload during startup would be indistinguishable from a kill.
 	first.tick();
 	// No pagehide: the tab was terminated by the OS.
-	assert.ok(store.data.has("ingot.blackbox"));
+	assert.ok(store.data.has(KEY));
 
 	const second = load(store);
 	assert.equal(second.api.recovered(), true);
@@ -210,7 +216,7 @@ test("a reload before the first heartbeat is not reported as a crash", () => {
 	// refresh, which is what made the panel appear on a working demo.
 	const store = makeStorage();
 	load(store); // no tick: never got running
-	assert.ok(store.data.has("ingot.blackbox"), "a record still exists");
+	assert.ok(store.data.has(KEY), "a record still exists");
 
 	const next = load(store);
 	assert.equal(next.api.recovered(), false);
@@ -240,20 +246,117 @@ test("recovering a record consumes it, even if nothing overwrites it", () => {
 	killed.tick();
 	killed.hook.boxRecord("the original death");
 	killed.hook.boxFlush(true);
-	const stale = store.data.get("ingot.blackbox");
+	const stale = store.data.get(KEY);
 	assert.match(stale, /the original death/);
 
 	// End to end: a session whose writes all fail must still consume the
 	// previous death rather than leave it for the session after it. With
 	// writes blocked, read-and-clear is the only thing that can remove it.
-	const blocked = makeStorage("throw-write", { "ingot.blackbox": stale });
+	const blocked = makeStorage("throw-write", { [KEY]: stale });
 	const cannotWrite = load(blocked);
 	assert.equal(cannotWrite.api.recovered(), true);
-	assert.equal(blocked.data.has("ingot.blackbox"), false, "record must be consumed");
+	assert.equal(blocked.data.has(KEY), false, "record must be consumed");
 
 	// And the session after that sees a clean slate.
 	const after = load(blocked);
 	assert.equal(after.api.recovered(), false);
+});
+
+// --- one black box per document ---------------------------------------------
+//
+// sessionStorage is shared by every same-origin document in a tab, iframes
+// included. The marketing page embeds four demos at once, so a single fixed
+// key made each demo read the record a live SIBLING was still writing - full
+// of heartbeats, because the sibling was rendering perfectly - and report it
+// as a crashed previous session. The panel appeared on all four demos on a
+// plain refresh. The same collision lost real evidence in the other
+// direction: whichever demo shut down first deleted the shared key.
+
+test("a sibling demo's live session is never reported as a crash", () => {
+	const store = makeStorage();
+	const a = load(store, { pathname: "/demos/ingot-gallery/" });
+	a.tick(); // running, healthy, heartbeats in storage
+
+	// The reader taps a second embed a moment later.
+	const b = load(store, { pathname: "/demos/ingot-box3d-advanced/" });
+	assert.equal(b.api.recovered(), false, "a live neighbour is not a corpse");
+	assert.doesNotMatch(b.crash.textContent, /PREVIOUS SESSION/);
+	assert.equal(b.msg.textContent, "");
+
+	// Read-and-clear must not have consumed a record it does not own.
+	assert.ok(store.data.has(keyFor("/demos/ingot-gallery/")),
+		"the neighbour's black box must survive another demo booting");
+});
+
+test("a sibling shutting down does not destroy this demo's record", () => {
+	const store = makeStorage();
+	const a = load(store, { pathname: "/demos/ingot-gallery/" });
+	a.tick();
+	const b = load(store, { pathname: "/demos/ingot-api-map/" });
+	b.tick();
+
+	// The embed controller stops a demo by pointing its frame at
+	// about:blank, which fires pagehide in that document alone.
+	b.fire("pagehide");
+	assert.equal(store.data.has(keyFor("/demos/ingot-api-map/")), false);
+	assert.ok(store.data.has(keyFor("/demos/ingot-gallery/")),
+		"a neighbour's clean exit must not erase this demo's evidence");
+
+	// So a genuine kill of the still-running demo is still reportable.
+	const revisit = load(store, { pathname: "/demos/ingot-gallery/" });
+	assert.equal(revisit.api.recovered(), true);
+});
+
+test("a record written by another path is ignored", () => {
+	// Defence in depth behind the namespaced key: a post-mortem attributed
+	// to the wrong demo is worse than none, because it sends the next
+	// reader hunting through unrelated code.
+	const foreign = JSON.stringify({
+		started: "earlier",
+		path: "/demos/somewhere-else/",
+		crumbs: ["0ms HEARTBEAT frames=1"],
+	});
+	const store = makeStorage("ok", { [KEY]: foreign });
+	const next = load(store);
+	assert.equal(next.api.recovered(), false);
+	assert.doesNotMatch(next.crash.textContent, /PREVIOUS SESSION/);
+});
+
+test("a pre-namespace shared record is evicted, never reported", () => {
+	// sessionStorage survives a reload, so a tab left open across this fix
+	// would otherwise carry the poisoned shared record for its whole life.
+	const legacy = JSON.stringify({
+		started: "earlier",
+		path: PATH,
+		crumbs: ["0ms HEARTBEAT frames=1"],
+	});
+	const store = makeStorage("ok", { "ingot.blackbox": legacy });
+	const next = load(store);
+	assert.equal(next.api.recovered(), false, "the old key is never read");
+	assert.equal(store.data.has("ingot.blackbox"), false, "and is cleaned up");
+});
+
+test("a bfcache restore re-arms the recorder", () => {
+	// pagehide also fires when a page enters the back/forward cache, but no
+	// script re-runs on restore. Leaving the box closed there would silence
+	// the recorder for the rest of the document's life - and a kill after a
+	// restore is exactly the case the black box exists for.
+	const store = makeStorage();
+	const session = load(store);
+	session.fire("pagehide");
+	assert.equal(store.data.has(KEY), false);
+
+	session.fire("pageshow", { persisted: true });
+	session.tick();
+	assert.ok(store.data.has(KEY), "the box must record again after a restore");
+	assert.match(store.data.get(KEY), /restored from bfcache/);
+
+	// An ordinary load fires pageshow with persisted=false; that must not
+	// disturb a session that never closed.
+	const fresh = load(makeStorage());
+	fresh.fire("pageshow", { persisted: false });
+	assert.equal(fresh.hook.state().box.closed, false);
+	assert.doesNotMatch(JSON.stringify(fresh.hook.state().box.crumbs), /bfcache/);
 });
 
 test("breadcrumbs stay bounded and long lines are truncated", () => {
@@ -263,14 +366,14 @@ test("breadcrumbs stay bounded and long lines are truncated", () => {
 
 	for (let i = 0; i < BOX_CRUMBS_MAX * 3; i += 1) hook.boxRecord("crumb " + i);
 	hook.boxFlush(true);
-	const record = JSON.parse(store.data.get("ingot.blackbox"));
+	const record = JSON.parse(store.data.get(KEY));
 	assert.equal(record.crumbs.length, BOX_CRUMBS_MAX);
 	// The ring keeps the NEWEST crumbs: the phase that died is the last one.
 	assert.match(record.crumbs[record.crumbs.length - 1], /crumb 59$/);
 
 	hook.boxRecord("x".repeat(BOX_CRUMB_CHARS_MAX * 4));
 	hook.boxFlush(true);
-	const grown = JSON.parse(store.data.get("ingot.blackbox"));
+	const grown = JSON.parse(store.data.get(KEY));
 	const last = grown.crumbs[grown.crumbs.length - 1];
 	assert.ok(last.length < BOX_CRUMB_CHARS_MAX + 40, "long crumb must be truncated");
 	assert.match(last, /\.\.\.$/);
@@ -280,17 +383,17 @@ test("writes are coalesced but a forced flush always persists", () => {
 	const store = makeStorage();
 	const { hook } = load(store);
 	hook.boxFlush(true);
-	const before = store.data.get("ingot.blackbox");
+	const before = store.data.get(KEY);
 
 	// Unforced flushes inside the interval must not rewrite storage: this is
 	// what keeps the recorder off the frame loop's critical path.
 	hook.boxRecord("quiet one");
 	hook.boxRecord("quiet two");
-	assert.equal(store.data.get("ingot.blackbox"), before);
+	assert.equal(store.data.get(KEY), before);
 
 	hook.boxFlush(true);
-	assert.notEqual(store.data.get("ingot.blackbox"), before);
-	assert.match(store.data.get("ingot.blackbox"), /quiet two/);
+	assert.notEqual(store.data.get(KEY), before);
+	assert.match(store.data.get(KEY), /quiet two/);
 });
 
 test("unavailable storage disables the box without breaking the panel", () => {
@@ -311,7 +414,7 @@ test("unavailable storage disables the box without breaking the panel", () => {
 
 test("a truncated record is ignored rather than breaking startup", () => {
 	// A tab killed mid-setItem can leave invalid JSON behind.
-	const store = makeStorage("ok", { "ingot.blackbox": '{"crumbs":[' });
+	const store = makeStorage("ok", { [KEY]: '{"crumbs":[' });
 	const next = load(store);
 	assert.equal(next.api.recovered(), false);
 	assert.doesNotMatch(next.crash.textContent, /PREVIOUS SESSION/);
@@ -343,7 +446,7 @@ test("heartbeat records liveness and is scheduled on load", () => {
 	assert.equal(session.timers.length, 1, "a heartbeat timer must be scheduled");
 
 	session.tick();
-	const record = JSON.parse(store.data.get("ingot.blackbox"));
+	const record = JSON.parse(store.data.get(KEY));
 	const last = record.crumbs[record.crumbs.length - 1];
 	assert.match(last, /HEARTBEAT frames=0/);
 });
@@ -358,7 +461,7 @@ test("heartbeat reports frame progress so a stalled loop is visible", () => {
 	session.frame();
 	session.frame();
 	session.tick();
-	const record = JSON.parse(store.data.get("ingot.blackbox"));
+	const record = JSON.parse(store.data.get(KEY));
 	assert.match(record.crumbs[record.crumbs.length - 1], /frames=[1-9]/);
 });
 
@@ -373,7 +476,7 @@ test("watched probes appear in every heartbeat", () => {
 	heap = 210.5;
 	session.tick();
 
-	const record = JSON.parse(store.data.get("ingot.blackbox"));
+	const record = JSON.parse(store.data.get(KEY));
 	const text = record.crumbs.join("\n");
 	assert.match(text, /wasmMiB=19\.0/);
 	assert.match(text, /wasmMiB=210\.5/);
@@ -385,7 +488,7 @@ test("a throwing probe does not break the heartbeat", () => {
 	session.api.watch("bad", () => { throw new Error("probe failed"); });
 	session.api.watch("good", () => 42);
 	session.tick();
-	const record = JSON.parse(store.data.get("ingot.blackbox"));
+	const record = JSON.parse(store.data.get(KEY));
 	const last = record.crumbs[record.crumbs.length - 1];
 	// A broken diagnostic must not silence the working ones.
 	assert.match(last, /good=42/);

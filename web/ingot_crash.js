@@ -39,7 +39,22 @@
 	// --- black box --------------------------------------------------------
 	// sessionStorage (not localStorage) so a report belongs to one tab, does
 	// not leak between tabs, and does not outlive the browsing session.
-	const BOX_KEY = "ingot.blackbox";
+	//
+	// The key is namespaced by path because sessionStorage is shared by every
+	// same-origin document in a tab, INCLUDING iframes. The marketing page
+	// embeds four demos at once, and with a single shared key each demo read,
+	// on boot, the record a SIBLING was still actively writing. That record
+	// has heartbeats in it - the sibling is alive and rendering - so every
+	// demo reported a healthy neighbour as a crashed previous session. The
+	// same collision destroyed real evidence in the other direction: any one
+	// demo shutting down cleanly removed the shared key out from under the
+	// others, so a genuine kill afterwards had nothing to recover. One record
+	// per document keeps each session's black box its own.
+	const BOX_KEY = "ingot.blackbox:" + location.pathname;
+	// The pre-namespace key. sessionStorage survives a reload, so a tab left
+	// open across this change would otherwise carry a poisoned shared record
+	// for the rest of its life. It is never read again, only cleared.
+	const BOX_LEGACY_KEY = "ingot.blackbox";
 	// Breadcrumbs kept across a kill. Deliberately smaller than RING_MAX:
 	// this is rewritten to storage repeatedly, and the last handful of lines
 	// is what identifies the phase that died.
@@ -139,11 +154,17 @@
 	function boxClose() {
 		if (box.closed) return;
 		box.closed = true;
+		boxForget(BOX_KEY);
+	}
+
+	// boxForget drops a key without touching this session's state, for the
+	// legacy record that must be evicted but must never be reported.
+	function boxForget(key) {
 		const store = storage();
 		if (!store) return;
 		try {
-			store.removeItem(BOX_KEY);
-		} catch (_) { /* nothing useful to do at shutdown */ }
+			store.removeItem(key);
+		} catch (_) { /* nothing useful to do about a failed cleanup */ }
 	}
 
 	// boxRecover reads and clears any record left by a previous session in
@@ -156,6 +177,11 @@
 	// a kill, and reporting it would cry wolf on an ordinary refresh. A
 	// session that dies before its first heartbeat had no frames to lose, so
 	// nothing diagnostic is given up.
+	//
+	// "Previous session in this tab" has to mean the previous session of THIS
+	// document. A sibling demo running concurrently in another iframe is not a
+	// corpse, and reporting its live heartbeats as a death is a pure false
+	// alarm - see BOX_KEY for how that reached production.
 	function boxRecover() {
 		const store = storage();
 		if (!store) return null;
@@ -170,6 +196,12 @@
 		try {
 			const parsed = JSON.parse(raw);
 			if (!parsed || !Array.isArray(parsed.crumbs)) return null;
+			// Belt and braces alongside the namespaced key: a post-mortem
+			// attributed to the wrong demo is worse than no post-mortem,
+			// because it sends the next reader into unrelated code.
+			if (parsed.path !== undefined && parsed.path !== location.pathname) {
+				return null;
+			}
 			const ran = parsed.crumbs.some((crumb) => crumb.includes("HEARTBEAT"));
 			if (!ran) return null;
 			return parsed;
@@ -345,7 +377,21 @@
 	// means this session ended on its own terms.
 	window.addEventListener("pagehide", boxClose);
 
+	// A page restored from the back/forward cache is the same session waking
+	// up, not a new one: no script re-runs, so nothing else would re-arm the
+	// box. pagehide has already closed it, and without this the recorder stays
+	// dead for the rest of the document's life - a later kill would leave no
+	// evidence at all, which is the one case the black box exists for.
+	window.addEventListener("pageshow", (event) => {
+		if (!event || !event.persisted) return;
+		if (!storage()) return;
+		box.closed = false;
+		boxRecord("restored from bfcache");
+		boxFlush(true);
+	});
+
 	box.started = new Date().toISOString();
+	boxForget(BOX_LEGACY_KEY);
 	postMortem = boxRecover();
 	boxRecord("session start " + navigator.userAgent);
 	boxFlush(true);
@@ -403,7 +449,13 @@
 			render,
 			heartbeat,
 			state: () => ({box, postMortem, headline, probes, frames}),
-			limits: {BOX_KEY, BOX_CRUMBS_MAX, BOX_CRUMB_CHARS_MAX, HEARTBEAT_PROBES_MAX},
+			limits: {
+				BOX_KEY,
+				BOX_LEGACY_KEY,
+				BOX_CRUMBS_MAX,
+				BOX_CRUMB_CHARS_MAX,
+				HEARTBEAT_PROBES_MAX,
+			},
 		});
 	}
 })();
