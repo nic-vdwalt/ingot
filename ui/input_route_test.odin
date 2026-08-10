@@ -6,20 +6,26 @@ import "core:testing"
 
 @(test)
 route_claims_behaviour :: proc(t: ^testing.T) {
-	// Pure claim-set queries.
+	// Pure claim-set queries. A hand-built set must state its z: the zero value
+	// is Z_CONTENT, and a claim only occludes what sits strictly below it.
 	c: Route_Claims
 	testing.expect(t, !route_occluded_in(c, Vector2{10, 10}))
 
 	c.rects[0] = Rectangle{100, 100, 50, 50}
+	c.zs[0] = Z_PANEL
 	c.count = 1
 	testing.expect(t, route_occluded_in(c, Vector2{120, 120}))
 	testing.expect(t, !route_occluded_in(c, Vector2{99, 120}))
 	testing.expect(t, !route_occluded_in(c, Vector2{120, 151}))
+	// A widget at the claim's own z is not occluded by it.
+	testing.expect(t, !route_occluded_in(c, Vector2{120, 120}, Z_PANEL))
 
 	all: Route_Claims
 	all.all = true
+	all.all_z = Z_PANEL
 	testing.expect(t, route_occluded_in(all, Vector2{0, 0}))
 	testing.expect(t, route_occluded_in(all, Vector2{9999, 9999}))
+	testing.expect(t, !route_occluded_in(all, Vector2{0, 0}, Z_MODAL))
 
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

@@ -63,11 +63,37 @@ installers, or web bundles are attached.
 
 ### Changed
 
+- Pointer input claims now carry a z-order. `ui.route_claim` and
+  `ui.route_claim_all` take an optional `z` (default `Z_PANEL`), and a widget is
+  occluded only by claims *strictly above* its ambient z-scope (default
+  `Z_CONTENT`). Equal z does not occlude, so a docked panel can claim its own
+  rect, keep its own widgets interactive, and make the canvas beneath it inert -
+  which a flat claim set could not express. Existing call sites are unchanged in
+  both source and behaviour: every current claim is a popup or modal that should
+  sit above content. New: `ui.Z_Order`, `ui.Z_CONTENT`, `ui.Z_PANEL`,
+  `ui.Z_POPUP`, `ui.Z_MODAL`, `ui.Z_TOAST`, `ui.Z_TOOLTIP`, `ui.z_scope_begin`,
+  `ui.z_scope_end`, `ui.frame_z`.
+- `ui.overlay_begin` takes an optional `z` (default `Z_POPUP`) and, when it
+  claims input, opens a matching z scope closed by `ui.overlay_end`.
 - **Breaking:** 3D examples, generated primitives, and documented world-space
   behavior now use right-handed ROS coordinates: +X forward, +Y left, +Z up.
 - UI paint replay now uses owner-validated graphics frames rather than the
   PascalCase compatibility surface. PascalCase remains the default-context
   raylib migration facade.
+
+### Deprecated
+
+- `ui.route_claim_backdrop`: retained for one release. Modals now claim the whole
+  screen at `Z_MODAL` and draw inside a matching z scope, so the four-band
+  construction that existed only to avoid self-occlusion is no longer needed.
+  Replace with `ui.route_claim(frame, rect, ui.Z_MODAL)` plus
+  `ui.z_scope_begin`/`ui.z_scope_end`.
+
+### Added
+
+- `ui.point_in_rect_i32`: hit-tests a pointer against a layout `Rect_I32`. Four
+  independent copies of this predicate existed across the library's examples and
+  its consumers, each re-deriving the half-open edge semantics.
 
 ## [0.1.3] - 2026-08-03
 

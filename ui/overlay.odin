@@ -8,19 +8,35 @@ OVERLAY_TEXT_CAP :: PAINT_TEXT_CAP
 Overlay_State :: struct {
 	open:    bool,
 	dropped: int,
+	// A claiming group opens a matching z scope so the surface's own widgets
+	// are not occluded by its own claim. Recorded so overlay_end closes exactly
+	// the scopes overlay_begin opened.
+	claimed: bool,
 }
 
-overlay_begin :: proc(frame: ^Ui_Frame, rect: Rectangle, claim_input: bool) {
+// overlay_begin opens the overlay paint group. When claim_input is set the rect
+// is claimed at `z` and an ambient z scope is opened at the same depth, so the
+// group's own widgets stay interactive while everything below `z` goes inert.
+overlay_begin :: proc(frame: ^Ui_Frame, rect: Rectangle, claim_input: bool, z: Z_Order = Z_POPUP) {
 	assert(frame != nil && frame.open, "overlay_begin: invalid frame")
 	assert(!frame.overlay.open, "overlay_begin: group already open")
 	assert(rect.width >= 0 && rect.height >= 0, "overlay_begin: negative rect")
+	assert(!frame.overlay.claimed, "overlay_begin: stale claim scope")
 	frame.overlay.open = true
-	if claim_input do route_claim(frame, rect)
+	if claim_input {
+		route_claim(frame, rect, z)
+		z_scope_begin(frame, z)
+		frame.overlay.claimed = true
+	}
 }
 
 overlay_end :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "overlay_end: invalid frame")
 	assert(frame.overlay.open, "overlay_end: no group open")
+	if frame.overlay.claimed {
+		z_scope_end(frame)
+		frame.overlay.claimed = false
+	}
 	frame.overlay.open = false
 }
 

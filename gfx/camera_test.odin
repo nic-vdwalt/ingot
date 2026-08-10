@@ -21,6 +21,20 @@ camera_test_vector_near :: proc(t: ^testing.T, got, want: Vector3, tolerance: f3
 	testing.expect(t, abs(got.z - want.z) < tolerance)
 }
 
+// The four world-axis constants must agree with each other, not merely with
+// their own names: a swapped pair still reads correctly at each use site and
+// only shows up as mirrored geometry much later. linalg.cross is not a
+// compile-time expression, so this is a runtime test rather than a #assert.
+@(test)
+camera_world_axes_are_right_handed :: proc(t: ^testing.T) {
+	testing.expect_value(t, linalg.cross(CAMERA_WORLD_FORWARD, CAMERA_WORLD_LEFT), CAMERA_WORLD_UP)
+	testing.expect_value(t, CAMERA_WORLD_RIGHT, -CAMERA_WORLD_LEFT)
+	// Completing the cycle catches a pair swapped in a way the first identity
+	// alone would accept.
+	testing.expect_value(t, linalg.cross(CAMERA_WORLD_LEFT, CAMERA_WORLD_UP), CAMERA_WORLD_FORWARD)
+	testing.expect_value(t, linalg.cross(CAMERA_WORLD_UP, CAMERA_WORLD_FORWARD), CAMERA_WORLD_LEFT)
+}
+
 @(test)
 camera_basis_uses_ros_world_axes :: proc(t: ^testing.T) {
 	camera := camera_test_value()

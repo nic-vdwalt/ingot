@@ -11,6 +11,41 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 WEB="$ROOT/web"
 
+# The staged odin.js is copied out of the toolchain that compiled the module,
+# so the two must come from the same Odin. Homebrew's odin and the pinned
+# checkout ship different copies of core/sys/wasm/js/odin.js, and building
+# against the wrong one yields a demo that boots locally and then fails in the
+# browser in ways that read like an engine bug.
+#
+# This is deliberately weaker than scripts/check-toolchain.py, which check.sh
+# and CI run: a locally built odin reports its version as "dev-2026-08" with no
+# revision, so a strict comparison rejects the CORRECT toolchain. Only a
+# toolchain that names a revision AND disagrees with the pin is provably wrong,
+# and that is exactly the Homebrew case this guards against. When no revision
+# is reported the build proceeds and says so, because refusing to build on
+# absent evidence would stop the pinned checkout working at all.
+assert_toolchain() {
+	local pin actual revision
+	pin="$(tr -d '\r\n' < "$ROOT/ODIN_VERSION")"
+	if ! actual="$(odin version 2>&1)"; then
+		echo "error: odin not found on PATH; expected $pin" >&2
+		exit 1
+	fi
+	revision="$(printf '%s' "$actual" | tr ' ' '\n' | grep '^dev-[0-9-]*:' || true)"
+	if [ -z "$revision" ]; then
+		echo "warning: odin did not report a revision, cannot verify the $pin pin"
+		return 0
+	fi
+	if [ "$revision" != "$pin" ]; then
+		echo "error: Odin toolchain mismatch: expected $pin, got $revision" >&2
+		echo "       put the pinned checkout first on PATH, e.g." >&2
+		echo "       PATH=\"/path/to/odin-box3d-workers:\$PATH\" bash build_web.sh ..." >&2
+		exit 1
+	fi
+	echo "Odin toolchain: $revision"
+}
+assert_toolchain
+
 echo "Building wasm..."
 # --export-table is REQUIRED by vendor:wgpu on JS so the browser glue can invoke
 # Odin callbacks (adapter/device requests) through the function table.

@@ -21,6 +21,14 @@ Bridge :: struct {
 	missing_draws:   u32,
 }
 
+// bridge_upload_mesh makes a cooked mesh resident on the GPU.
+//
+// Vertices are reinterpreted, never converted: cooked data must ALREADY be in
+// Ingot's right-handed ROS basis (+X forward, +Y left, +Z up), with outward
+// counter-clockwise winding to match the pipeline's front-face policy. Axis
+// conversion belongs at the import/cook boundary and happens exactly once; the
+// #assert pairs below check only that the two vertex layouts still match in
+// memory, which cannot detect swapped axes or inverted normals.
 bridge_upload_mesh :: proc(bridge: ^Bridge, mesh: asset.Mesh_View) -> bool {
 	assert(bridge != nil, "bridge_upload_mesh: nil bridge")
 	if !asset.mesh_validate(mesh) do return false
