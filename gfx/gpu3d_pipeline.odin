@@ -913,7 +913,10 @@ _plane_mesh_geometry :: proc(
 // and the row-major ordering documented on _plane_mesh_geometry to address it.
 create_plane_mesh :: proc(extent: f32, cells: u32) -> (Gpu_Mesh, bool) {
 	assert(extent > 0, "create_plane_mesh: non-positive extent")
-	if !g.initialized || cells < 1 || cells > GPU_3D_PLANE_MAX_CELLS do return {}, false
+	// The context is read the same way create_gpu_mesh reads it, so a plane
+	// built for an explicitly created context is not gated on the default one.
+	ctx := &default_context_storage
+	if !ctx.initialized || cells < 1 || cells > GPU_3D_PLANE_MAX_CELLS do return {}, false
 
 	vertices := make([dynamic]Gpu_3D_Vertex, int(plane_mesh_vertex_count(cells)))
 	indices := make([dynamic]u32, int(plane_mesh_index_count(cells)))

@@ -10,6 +10,30 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# The vendored Box3D objects are Git LFS-tracked. On a checkout made without
+# git-lfs they are 130-byte text pointers, and the only symptom is an opaque
+# `wasm-ld: error: unknown file type` several minutes into the gate. Name the
+# real problem up front instead.
+check_box3d_artifacts() {
+	local odin_root
+	odin_root="$(odin root 2>/dev/null)" || return 0
+	[ -n "$odin_root" ] || return 0
+	local lib_dir="${odin_root%/}/vendor/box3d/lib"
+	[ -d "$lib_dir" ] || return 0
+	local artifact
+	for artifact in "$lib_dir/box3d_wasm.o" "$lib_dir/box3d_wasm_threads.o" \
+		"$lib_dir/darwin/libbox3d.a"; do
+		[ -f "$artifact" ] || continue
+		if head -c 40 "$artifact" | grep -q "git-lfs.github.com/spec"; then
+			echo "check-web: $artifact is a Git LFS pointer, not a real object." >&2
+			echo "check-web: install git-lfs and run 'git lfs pull' in $odin_root," >&2
+			echo "check-web: or rebuild with 'bash vendor/box3d/src/build.sh'." >&2
+			exit 1
+		fi
+	done
+}
+check_box3d_artifacts
+
 echo "== wasm compile: examples/hello =="
 bash "$ROOT/build_web.sh" examples/hello >/dev/null
 
