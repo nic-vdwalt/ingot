@@ -43,6 +43,7 @@
     "render_fixture",
     "procgen_world",
     "box3d_stack",
+    "box3d_advanced",
     "multi_context_fixture",
     "multi_app_fixture",
     "view_builder",

@@ -963,7 +963,19 @@
 			throw new Error(
 				"WebGPU is not available. Use Chrome/Edge 113+ or Safari 18+.");
 		}
+		const threaded = opts.box3dWorkers === true &&
+			typeof SharedArrayBuffer !== "undefined" && crossOriginIsolated === true;
 		const wmi = new window.odin.WasmMemoryInterface();
+		let box3dWorkers = null;
+		if (threaded) {
+			const memory = new WebAssembly.Memory({
+				initial: 1024,
+				maximum: 4096,
+				shared: true,
+			});
+			wmi.setMemory(memory);
+			box3dWorkers = await window.ingotBox3dWorkers.create(wasmPath, memory, opts);
+		}
 		wasmMemoryInterface = wmi;
 		const webgpu = new window.odin.WebGPUInterface(wmi);
 		// Feed the crash recorder the metrics that can explain a kill from
@@ -1033,6 +1045,7 @@
 			ingot: ingotImports(),
 			ingot_http: httpImports(),
 			ingot_audio: audioImports(),
+			ingot_box3d_workers: box3dWorkers ? box3dWorkers.imports : {},
 		}, appSession ? appSession.imports : {}, opts.imports || {});
 		let destroyed = false;
 		const session = {
@@ -1047,6 +1060,7 @@
 				};
 				if (opts.onDestroy) safely(() => opts.onDestroy(x));
 				if (x && x.client_web_shutdown) safely(() => x.client_web_shutdown());
+				if (box3dWorkers) safely(() => box3dWorkers.destroy());
 				for (const slot of httpSlots) {
 					if (slot && slot.controller) safely(() => slot.controller.abort());
 				}

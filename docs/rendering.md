@@ -104,17 +104,18 @@ platform that exposes only unpremultiplied surface composition.
 ## Explicit GPU 3D
 
 Depth attachments are fixed when a render pass begins. `BeginMode3D` therefore
-flushes pending 2D work and opens a compatibility-owned depth pass for
-`DrawCube`, `DrawCubeV`, `DrawCubeWires`, `DrawCubeWiresV`, and `DrawGrid`.
-`EndMode3D` composites that transparent pass before later 2D draws. Resources
-are lazy, resize with the render size, and are released by `CloseWindow`.
+flushes pending 2D work and opens a compatibility-owned depth pass for the cube
+helpers and `DrawGrid`. `DrawCubeTransform` and `DrawCubeWiresTransform` accept
+complete model matrices for rigid-body or other transformed cubes. `EndMode3D`
+composites that transparent pass before later 2D draws. Resources are lazy,
+resize with the render size, and are released by `CloseWindow`.
 
 `DrawGrid` is centered on Z=0 in Ingot's XY ground plane. It accepts 1 through
 256 slices and caches at most eight slice-count meshes per context; later new
 slice counts are skipped once that bound is reached. Cube helpers use ambient-
 only lighting so their input colors are preserved, while wires use a depth
-nudge to avoid coplanar fighting. These helpers do not make the `rlgl` shim a
-3D matrix stack.
+nudge to avoid coplanar fighting. Transform helpers provide per-cube model
+matrices without making the `rlgl` shim a 3D matrix stack.
 
 For custom geometry, materials, lighting, targets, or passes, use the explicit
 GPU 3D API:

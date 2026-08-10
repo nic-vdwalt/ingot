@@ -25,6 +25,9 @@ bash "$ROOT/build_web.sh" examples/procgen_world >/dev/null
 echo "== wasm compile: examples/box3d_stack =="
 bash "$ROOT/build_web.sh" examples/box3d_stack >/dev/null
 
+echo "== wasm compile: examples/box3d_advanced =="
+bash "$ROOT/build_web.sh" examples/box3d_advanced >/dev/null
+
 echo "== wasm compile: examples/raylib_migration_fixture =="
 bash "$ROOT/build_web.sh" examples/raylib_migration_fixture >/dev/null
 
