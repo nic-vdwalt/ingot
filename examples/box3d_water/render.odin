@@ -134,7 +134,8 @@ draw_world :: proc(value: ^State) {
 	pass, ok := rl.begin_gpu_3d(&value.target, value.camera)
 	if !ok do return
 	rl.set_gpu_3d_light(&pass, {{-0.35, 0.45, 0.82}, 0.22, 0.78})
-	floor := rl.MatrixTranslate(0, 0, FLOOR_Z) * rl.MatrixScale(2 * POOL_EXTENT, 2 * POOL_EXTENT, 1)
+	floor :=
+		rl.MatrixTranslate(0, 0, FLOOR_Z) * rl.MatrixScale(2 * POOL_EXTENT, 2 * POOL_EXTENT, 1)
 	rl.draw_gpu_mesh(&pass, value.cube, floor, {color = {38, 44, 56, 255}, style = .Opaque})
 	draw_floaters(value, &pass)
 	// The surface is blended, so it is drawn last: the opaque floor and cubes
@@ -143,7 +144,7 @@ draw_world :: proc(value: ^State) {
 	rl.draw_gpu_mesh(
 		&pass,
 		value.water,
-		rl.MatrixIdentity(),
+		rl.Matrix(1),
 		{color = WATER_COLOR_LOW, color_high = WATER_COLOR_HIGH, use_scalar = true},
 	)
 	rl.end_gpu_3d(&pass)

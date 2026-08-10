@@ -44,6 +44,7 @@
     "procgen_world",
     "box3d_stack",
     "box3d_advanced",
+    "box3d_water",
     "multi_context_fixture",
     "multi_app_fixture",
     "view_builder",

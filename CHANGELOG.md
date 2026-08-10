@@ -13,6 +13,18 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 - `examples/box3d_stack` now builds for WebGPU browsers through Odin's
   `vendor:box3d` WASM object and is covered by the web compile gate.
+- `gfx.update_gpu_mesh_vertices`: rewrites an existing mesh's vertex buffer in
+  place, keeping its indices, primitive, and handle. Deforming geometry changes
+  positions and normals every frame while its topology never moves, so the only
+  previous option - destroy and recreate - released and reallocated a GPU buffer
+  per frame and burned a pool slot's generation for nothing. The vertex count
+  stays fixed at creation, because a resize is a different mesh.
+- `examples/box3d_water`: floating rigid bodies on an analytical travelling
+  wave. Box3D has no fluid representation, so the water is a wave function the
+  application owns and the coupling is one buoyancy-plus-drag force per body per
+  fixed step. The surface mesh is driven by the same function the physics
+  samples, so the picture and the simulation cannot disagree, and the wave phase
+  advances only inside a simulation step so pause and single-step freeze both.
 
 ## [0.1.5] - 2026-08-09
 
