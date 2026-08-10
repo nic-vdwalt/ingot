@@ -502,10 +502,11 @@ _graphics_resources_init :: proc(resources: ^Graphics_Resources) {
 }
 
 @(private)
-_graphics_resources_destroy :: proc(resources: ^Graphics_Resources) {
+_graphics_resources_destroy :: proc(ctx: ^Context, resources: ^Graphics_Resources) {
+	assert(ctx != nil, "_graphics_resources_destroy: nil context")
 	assert(resources != nil, "_graphics_resources_destroy: nil resources")
-	assert(!g.frame.has_frame, "_graphics_resources_destroy: active frame")
-	_gpu_3d_resources_destroy(g, &resources.gpu_3d)
+	assert(!ctx.frame.has_frame, "_graphics_resources_destroy: active frame")
+	_gpu_3d_resources_destroy(ctx, &resources.gpu_3d)
 	_rlgl_resources_destroy(&resources.rlgl)
 	_shader_resources_destroy(&resources.shaders)
 	_atlas_resources_destroy(&resources.atlases)
@@ -709,7 +710,7 @@ _close_window_context :: proc(ctx: ^Context) {
 	g.lifecycle = .Closing
 	if g.initialized {
 		platform_drop_shutdown()
-		_graphics_resources_destroy(&g.resources)
+		_graphics_resources_destroy(ctx, &ctx.resources)
 		renderer_shutdown(&g.rend)
 		_submission_shutdown(&g.submissions)
 	}
