@@ -167,7 +167,7 @@ simulation_box_create :: proc(index, count: u32, mode: Simulation_Mode) -> bool 
 		body_def.position = {
 			f32(i32(column) - 16) * 2.05 + f32(row % 2) * 0.025,
 			f32(i32(row % 8) - 4) * 2.05,
-			2 + f32(row / 8) * 2.05,
+			20 + f32(row / 8) * 2.05,
 		}
 	}
 	body := b3.CreateBody(simulation.world, body_def)
@@ -426,11 +426,12 @@ draw_screen :: proc(value: ^State) {
 		"failed" if value.worker_failed else "unavailable" if !value.ready else "paused" if value.paused else "running"
 	mode := "stress" if value.active_mode == .Stress else "visual"
 	hud := fmt.ctprintf(
-		"box3d %s  mode %s  bodies %d  workers %d  physics %.3fms  steps %d  dropped %d",
+		"box3d %s  mode %s  bodies %d  workers %d  fps %d  physics %.3fms  steps %d  dropped %d",
 		status,
 		mode,
 		value.body_count,
 		value.worker_count,
+		rl.GetFPS(),
 		f64(value.physics_micros) / 1000,
 		value.fixed_steps,
 		value.dropped_steps,
