@@ -77,9 +77,27 @@ frame :: proc() {
 		rl.DrawCircle(134, 124, 18, rl.Color{255, 190, 80, 255})
 	}
 	draw_camera_scene()
+	draw_3d_primitive_surface()
 	draw_shape_surface()
 	draw_default_font_text()
 	rl.EndDrawing()
+}
+
+draw_3d_primitive_surface :: proc() {
+	camera := rl.Camera3D {
+		position   = {-10, -10, 8},
+		target     = {0, 0, 0},
+		up         = rl.CAMERA_WORLD_UP,
+		fovy       = 45,
+		projection = .PERSPECTIVE,
+	}
+	rl.BeginMode3D(camera)
+	rl.DrawCube({0, 0, 1}, 2, 2, 2, rl.BLUE)
+	rl.DrawCubeV({0, 3, 0.5}, {1, 1, 1}, rl.SKYBLUE)
+	rl.DrawCubeWires({0, 0, 1}, 2, 2, 2, rl.DARKBLUE)
+	rl.DrawCubeWiresV({0, 3, 0.5}, {1, 1, 1}, rl.DARKBLUE)
+	rl.DrawGrid(20, 1)
+	rl.EndMode3D()
 }
 
 // draw_camera_scene exercises BeginMode2D/EndMode2D and the 2D camera
