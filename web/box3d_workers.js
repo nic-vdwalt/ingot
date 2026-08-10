@@ -16,6 +16,11 @@
 			const timeout = setTimeout(() => reject(new Error("Box3D worker ready timeout")),
 				READY_TIMEOUT_MS);
 			worker.onmessage = (event) => {
+				if (event.data.type === "error") {
+					clearTimeout(timeout);
+					reject(new Error(event.data.message || "Box3D worker failed"));
+					return;
+				}
 				if (event.data.type !== "ready") return;
 				clearTimeout(timeout);
 				resolve(worker);
@@ -60,7 +65,15 @@
 		};
 		const attachTaskWorker = (worker) => {
 			worker.onmessage = (event) => {
+				if (event.data.type === "error") {
+					fail(new Error(event.data.message || "Box3D task worker failed"));
+					return;
+				}
 				if (event.data.type === "complete") {
+					if (!event.data.ok) {
+						fail(new Error("Box3D task dispatch failed"));
+						return;
+					}
 					idle.push(worker);
 					dispatch();
 				}
@@ -79,7 +92,14 @@
 				if (role === "coordinator") {
 					coordinator = worker;
 					worker.onmessage = (event) => {
-						if (event.data.type === "step-complete") stepPending = false;
+						if (event.data.type === "error") {
+							fail(new Error(event.data.message || "Box3D coordinator failed"));
+							return;
+						}
+						if (event.data.type === "step-complete") {
+							stepPending = false;
+							if (!event.data.ok) fail(new Error("Box3D world step failed"));
+						}
 						if (event.data.type === "schedule") {
 							if (event.data.slot >= TASK_MAX || pending.length >= TASK_MAX) {
 								fail(new Error("Box3D worker task capacity exceeded"));
