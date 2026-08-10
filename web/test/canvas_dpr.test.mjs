@@ -48,6 +48,15 @@ test("threaded binaries receive serial fallback imports", () => {
 	const imports = installed.hook.box3dWorkerImports(null);
 	assert.equal(imports.schedule(0, 0), false);
 	assert.equal(imports.request_step(), false);
+	assert.equal(imports.request_batch(30), false);
+	assert.equal(imports.batch_ready(), false);
+	assert.equal(imports.batch_elapsed_micros(), 0);
+	assert.equal(imports.batch_step_count(), 0);
+	assert.equal(imports.task_count(), 0);
+	assert.equal(imports.queue_high_water(), 0);
+	assert.equal(imports.failure_count(), 0);
+	assert.equal(imports.completion_generation(), 0);
+	assert.equal(imports.worker_count(), 1);
 });
 
 test("high device pixel ratios are capped", () => {

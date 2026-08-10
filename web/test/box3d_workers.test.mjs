@@ -54,3 +54,72 @@ test("Box3D worker bootstrap errors reject immediately", async () => {
 	const memory = new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true });
 	await assert.rejects(api.create("fixture.wasm", memory, {}), /bootstrap/);
 });
+
+function workerApi(WorkerClass, workerCount = 2) {
+	return loadApi(workerCount, {
+		Worker: WorkerClass,
+		fetch: async () => ({
+			ok: true,
+			arrayBuffer: async () => Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]).buffer,
+		}),
+	});
+}
+
+test("Box3D benchmark completion retains timing and counters", async () => {
+	class BenchmarkWorker {
+		postMessage(message) {
+			if (message.type === "init") {
+				this.role = message.role;
+				queueMicrotask(() => this.onmessage({ data: { type: "ready" } }));
+			} else if (message.type === "batch") {
+				queueMicrotask(() => this.onmessage({ data: {
+					type: "batch-complete", ok: true, elapsedMs: 12.345, stepCount: message.stepCount,
+				} }));
+			} else if (message.type === "task") {
+				queueMicrotask(() => this.onmessage({ data: { type: "complete", ok: true } }));
+			}
+		}
+		terminate() {}
+	}
+	const api = workerApi(BenchmarkWorker);
+	const memory = new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true });
+	const pool = await api.create("fixture.wasm", memory, { workerCount: 2 });
+	assert.equal(pool.imports.request_batch(30), true);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(pool.imports.batch_ready(), true);
+	assert.equal(pool.imports.batch_ready(), false);
+	assert.equal(pool.imports.batch_elapsed_micros(), 12345);
+	assert.equal(pool.imports.batch_step_count(), 30);
+	assert.equal(pool.imports.completion_generation(), 1);
+	assert.equal(pool.imports.worker_count(), 2);
+	assert.equal(pool.imports.schedule(1, 1), true);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(pool.imports.task_count(), 1);
+	assert.equal(pool.imports.queue_high_water(), 1);
+	assert.equal(pool.imports.failure_count(), 0);
+	pool.destroy();
+});
+
+test("Box3D benchmark rejects invalid batches and records step failure", async () => {
+	class FailingStepWorker {
+		postMessage(message) {
+			if (message.type === "init") {
+				this.role = message.role;
+				queueMicrotask(() => this.onmessage({ data: { type: "ready" } }));
+			} else if (message.type === "batch") {
+				queueMicrotask(() => this.onmessage({ data: {
+					type: "batch-complete", ok: false, elapsedMs: 1, stepCount: message.stepCount,
+				} }));
+			}
+		}
+		terminate() {}
+	}
+	const api = workerApi(FailingStepWorker);
+	const memory = new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true });
+	const pool = await api.create("fixture.wasm", memory, { workerCount: 2 });
+	assert.equal(pool.imports.request_batch(0), false);
+	assert.equal(pool.imports.request_batch(601), false);
+	assert.equal(pool.imports.request_batch(1), true);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(pool.imports.failure_count(), 1);
+});

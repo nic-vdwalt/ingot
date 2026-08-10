@@ -46,6 +46,9 @@ self.onmessage = async (event) => {
 			role = message.role;
 			instance = await WebAssembly.instantiate(message.module, imports(message.memory));
 			instance.exports.__stack_pointer.value = message.stackTop;
+			if (instance.exports.ingot_box3d_worker_init) {
+				instance.exports.ingot_box3d_worker_init();
+			}
 			self.postMessage({ type: "ready", role });
 			return;
 		}
@@ -85,7 +88,12 @@ self.onmessage = async (event) => {
 			});
 		}
 	} catch (error) {
-		self.postMessage({ type: "error", message: error.message || String(error) });
+		self.postMessage({
+			type: "error",
+			message: error.message || String(error),
+			stack: error.stack || "",
+			role,
+		});
 		throw error;
 	}
 };
