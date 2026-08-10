@@ -140,10 +140,7 @@ completion_generation :: proc() -> u32 {
 }
 
 when ENABLED {
-	enqueue :: proc "c" (
-		task, task_context, user_context: rawptr,
-		task_name: cstring,
-	) -> rawptr {
+	enqueue :: proc "c" (task, task_context, user_context: rawptr, task_name: cstring) -> rawptr {
 		context = runtime.default_context()
 		_ = user_context
 		_ = task_name

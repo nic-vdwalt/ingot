@@ -17,6 +17,8 @@ libvterm/lib/linux_arm64/
 /procgen_world
 /box3d_stack
 /render_fixture
+/artifacts/box3d_advanced
+/artifacts/box3d_water
 fuzz/net/fuzz_net
 fuzz/ui/fuzz_ui
 fuzz/view/fuzz_view

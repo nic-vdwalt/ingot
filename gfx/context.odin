@@ -482,8 +482,9 @@ context_ready :: proc(ctx: ^Context) -> bool {
 // Waiting is safe: gfx.step skips the app callback until g.initialized flips,
 // and context_begin_frame refuses to open a frame before then.
 context_live :: proc(ctx: ^Context) -> bool {
+	if ctx == nil do return false
 	when ODIN_OS == .JS {
-		return ctx != nil && (ctx.lifecycle == .Starting || context_ready(ctx))
+		return ctx.lifecycle == .Starting || context_ready(ctx)
 	} else {
 		return context_ready(ctx)
 	}

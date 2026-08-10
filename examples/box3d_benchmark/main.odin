@@ -39,17 +39,17 @@ Benchmark_Oracle :: struct {
 }
 
 State :: struct {
-	world:      b3.WorldId,
-	bodies:     [BODY_COUNT_MAX]b3.BodyId,
-	body_count: int,
-	ready:      bool,
-	oracle:          Benchmark_Oracle,
-	phase:           Benchmark_Phase,
-	warmup_complete: int,
-	batches_complete: int,
-	measured_steps:  int,
-	total_ms:        f64,
-	reported:        bool,
+	world:                b3.WorldId,
+	bodies:               [BODY_COUNT_MAX]b3.BodyId,
+	body_count:           int,
+	ready:                bool,
+	oracle:               Benchmark_Oracle,
+	phase:                Benchmark_Phase,
+	warmup_complete:      int,
+	batches_complete:     int,
+	measured_steps:       int,
+	total_ms:             f64,
+	reported:             bool,
 	profile_step_sum:     f64,
 	profile_pairs_sum:    f64,
 	profile_collide_sum:  f64,
@@ -226,7 +226,13 @@ benchmark_report :: proc() {
 	profile_collide_ms := state.profile_collide_sum / profile_samples
 	profile_solve_ms := state.profile_solve_sum / profile_samples
 	fmt.printfln(
-		"INGOT_BOX3D_BENCHMARK %c\"body_count\":%d,\"worker_count\":%d,\"steps\":%d,\"total_ms\":%.3f,\"ms_per_step\":%.6f,\"steps_per_second\":%.3f,\"profile_step_ms\":%.4f,\"profile_pairs_ms\":%.4f,\"profile_collide_ms\":%.4f,\"profile_solve_ms\":%.4f,\"profile_samples\":%d,\"task_count\":%d,\"queue_high_water\":%d,\"failure_count\":%d,\"checksum\":\"%016x\",\"contacts\":%d,\"awake_contacts\":%d,\"islands\":%d%c",
+		"INGOT_BOX3D_BENCHMARK %c\"body_count\":%d,\"worker_count\":%d," +
+		"\"steps\":%d,\"total_ms\":%.3f,\"ms_per_step\":%.6f," +
+		"\"steps_per_second\":%.3f,\"profile_step_ms\":%.4f," +
+		"\"profile_pairs_ms\":%.4f,\"profile_collide_ms\":%.4f," +
+		"\"profile_solve_ms\":%.4f,\"profile_samples\":%d,\"task_count\":%d," +
+		"\"queue_high_water\":%d,\"failure_count\":%d,\"checksum\":\"%016x\"," +
+		"\"contacts\":%d,\"awake_contacts\":%d,\"islands\":%d%c",
 		'{',
 		BODY_COUNT,
 		worker_count,
