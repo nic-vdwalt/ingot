@@ -162,15 +162,15 @@ _web_reason :: proc(msg: wg.StringView) -> string {
 // state, so keep this loud even though the condition is legitimate during a
 // deliberate close.
 @(private)
-_web_report_discarded :: proc(what: string, request: ^Web_GPU_Request) {
+_web_report_discarded :: proc(ctx: ^Context, what: string, request: ^Web_GPU_Request) {
 	fmt.eprintfln(
 		"gfx: discarding a resolved WebGPU %s: context is %v, not Starting " +
 		"(request epoch %v, context epoch %v). The canvas will stay blank until " +
 		"the context is initialised again.",
 		what,
-		g.lifecycle,
+		ctx.lifecycle,
 		request.epoch if request != nil else 0,
-		g.epoch,
+		ctx.epoch,
 	)
 }
 
@@ -182,6 +182,7 @@ _web_on_adapter :: proc "c" (
 	u1, u2: rawptr,
 ) {
 	context = g_web_ctx
+	ctx := g
 	request := cast(^Web_GPU_Request)u1
 	if status != .Success || !_web_request_live(request) {
 		if status != .Success {
@@ -190,13 +191,13 @@ _web_on_adapter :: proc "c" (
 			// stays black forever - surface the reason instead.
 			fmt.eprintfln("gfx: WebGPU adapter request failed (%v): %s", status, _web_reason(msg))
 		} else {
-			_web_report_discarded("adapter", request)
+			_web_report_discarded(ctx, "adapter", request)
 		}
 		if adapter != nil do wg.AdapterRelease(adapter)
 		free(request)
 		return
 	}
-	g.adapter = adapter
+	ctx.adapter = adapter
 	device_request := new(Web_GPU_Request)
 	device_request.epoch = request.epoch
 	free(request)
@@ -204,9 +205,9 @@ _web_on_adapter :: proc "c" (
 	// itself is requested with default limits: see the hazard note in
 	// limits.odin for why passing requiredLimits through the JS glue makes
 	// Safari reject the device.
-	g.budget = gpu_negotiate_budget(adapter)
+	ctx.budget = gpu_negotiate_budget(adapter)
 	wg.AdapterRequestDevice(
-		g.adapter,
+		ctx.adapter,
 		&wg.DeviceDescriptor{uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error}},
 		{callback = _web_on_device, userdata1 = device_request},
 	)
@@ -220,20 +221,21 @@ _web_on_device :: proc "c" (
 	u1, u2: rawptr,
 ) {
 	context = g_web_ctx
+	ctx := g
 	request := cast(^Web_GPU_Request)u1
 	if status != .Success || !_web_request_live(request) {
 		if status != .Success {
 			fmt.eprintfln("gfx: WebGPU device request failed (%v): %s", status, _web_reason(msg))
 		} else {
-			_web_report_discarded("device", request)
+			_web_report_discarded(ctx, "device", request)
 		}
 		if device != nil do wg.DeviceRelease(device)
 		free(request)
 		return
 	}
 	free(request)
-	g.device = device
-	g.queue = wg.DeviceGetQueue(g.device)
+	ctx.device = device
+	ctx.queue = wg.DeviceGetQueue(ctx.device)
 	_gpu_finish()
 }
 
