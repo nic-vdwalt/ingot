@@ -33,7 +33,12 @@ function imports(memory) {
 			},
 			request_step() { return false; },
 			request_batch() { return false; },
+			request_command() { return false; },
+			step_ready() { return false; },
 			batch_ready() { return false; },
+			command_ready() { return false; },
+			elapsed_micros() { return 0; },
+			completed_value() { return 0; },
 			batch_elapsed_micros() { return 0; },
 			batch_step_count() { return 0; },
 			task_count() { return 0; },
@@ -92,6 +97,22 @@ self.onmessage = async (event) => {
 				elapsedMs: performance.now() - started,
 				stepCount: message.stepCount,
 			});
+			return;
+		}
+		if (message.type === "command" && role === "coordinator") {
+			const started = performance.now();
+			const command = instance.exports.ingot_box3d_worker_command;
+			if (typeof command !== "function") {
+				throw new Error("WASM module does not export ingot_box3d_worker_command");
+			}
+			const ok = command(message.command, message.value);
+			self.postMessage({
+				type: "command-complete",
+				ok: Boolean(ok),
+				elapsedMs: performance.now() - started,
+				value: message.value,
+			});
+			return;
 		}
 	} catch (error) {
 		self.postMessage({

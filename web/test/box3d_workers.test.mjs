@@ -100,6 +100,54 @@ test("Box3D benchmark completion retains timing and counters", async () => {
 	pool.destroy();
 });
 
+test("Box3D coordinator commands are exclusive and publish one-shot completion", async () => {
+	class CommandWorker {
+		postMessage(message) {
+			if (message.type === "init") {
+				this.role = message.role;
+				queueMicrotask(() => this.onmessage({ data: { type: "ready" } }));
+			} else if (message.type === "command") {
+				queueMicrotask(() => this.onmessage({ data: {
+					type: "command-complete", ok: true, elapsedMs: 2.5, value: message.value,
+				} }));
+			}
+		}
+		terminate() {}
+	}
+	const api = workerApi(CommandWorker);
+	const memory = new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true });
+	const pool = await api.create("fixture.wasm", memory, { workerCount: 2 });
+	assert.equal(pool.imports.request_command(2, 1024), true);
+	assert.equal(pool.imports.request_step(), false);
+	assert.equal(pool.imports.request_batch(1), false);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(pool.imports.command_ready(), true);
+	assert.equal(pool.imports.command_ready(), false);
+	assert.equal(pool.imports.elapsed_micros(), 2500);
+	assert.equal(pool.imports.completed_value(), 1024);
+	assert.equal(pool.imports.completion_generation(), 1);
+	pool.destroy();
+});
+
+test("Box3D coordinator rejects invalid commands", async () => {
+	class ReadyWorker {
+		postMessage(message) {
+			if (message.type === "init") {
+				queueMicrotask(() => this.onmessage({ data: { type: "ready" } }));
+			}
+		}
+		terminate() {}
+	}
+	const api = workerApi(ReadyWorker);
+	const memory = new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true });
+	const pool = await api.create("fixture.wasm", memory, { workerCount: 2 });
+	assert.equal(pool.imports.request_command(0, 0), false);
+	assert.equal(pool.imports.request_command(1.5, 0), false);
+	assert.equal(pool.imports.request_command(1, -1), false);
+	assert.equal(pool.imports.request_command(1, 0x100000000), false);
+	pool.destroy();
+});
+
 test("Box3D benchmark rejects invalid batches and records step failure", async () => {
 	class FailingStepWorker {
 		postMessage(message) {
@@ -124,8 +172,9 @@ test("Box3D benchmark rejects invalid batches and records step failure", async (
 	assert.equal(pool.imports.failure_count(), 1);
 });
 
-async function workerScriptImports() {
+async function workerScriptImports(exports = {}) {
 	let captured = null;
+	const messages = [];
 	const self = {};
 	const context = {
 		self,
@@ -142,30 +191,44 @@ async function workerScriptImports() {
 			instantiate(module, imports) {
 				captured = imports;
 				return Promise.resolve({
-					exports: { __stack_pointer: { value: 0 } },
+					exports: { __stack_pointer: { value: 0 }, ...exports },
 				});
 			},
 		},
 		globalThis: null,
 	};
 	context.globalThis = context;
-	context.self.postMessage = () => {};
+	context.self.postMessage = (message) => messages.push(message);
 	vm.runInNewContext(fs.readFileSync(new URL("../box3d_worker.js", import.meta.url), "utf8"),
 		context);
 	const memory = new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true });
 	await self.onmessage({
 		data: { type: "init", role: "coordinator", module: {}, memory, stackTop: 0 },
 	});
-	return captured;
+	return { imports: captured, messages, self };
 }
 
 test("Box3D worker supplies a monotonic clock import to Box3D", async () => {
-	const imports = await workerScriptImports();
+	const { imports } = await workerScriptImports();
 	assert.equal(typeof imports.odin_env.tick_now, "function");
 	const first = imports.odin_env.tick_now();
 	assert.equal(typeof first, "number");
 	assert.ok(first > 0);
 	assert.ok(imports.odin_env.tick_now() >= first);
+});
+
+test("Box3D worker dispatches coordinator commands exactly once", async () => {
+	const calls = [];
+	const script = await workerScriptImports({
+		ingot_box3d_worker_command(command, value) {
+			calls.push([command, value]);
+			return true;
+		},
+	});
+	await script.self.onmessage({ data: { type: "command", command: 2, value: 1024 } });
+	assert.deepEqual(calls, [[2, 1024]]);
+	assert.equal(script.messages.at(-1).type, "command-complete");
+	assert.equal(script.messages.at(-1).value, 1024);
 });
 
 test("Box3D benchmark profile fields survive the result path", async () => {

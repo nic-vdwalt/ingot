@@ -48,18 +48,30 @@
 		let destroyed = false;
 		let stepPending = false;
 		let batchPending = false;
+		let commandPending = false;
+		let stepReady = false;
 		let batchReady = false;
-		let batchElapsedMicros = 0;
-		let batchStepCount = 0;
+		let commandReady = false;
+		let elapsedMicros = 0;
+		let completedValue = 0;
 		let taskCount = 0;
 		let queueHighWater = 0;
 		let failureCount = 0;
 		let completionGeneration = 0;
 
+		const clearCommands = () => {
+			stepPending = false;
+			batchPending = false;
+			commandPending = false;
+			stepReady = false;
+			batchReady = false;
+			commandReady = false;
+		};
 		const fail = (error) => {
 			if (destroyed) return;
 			failureCount += 1;
 			console.error("Box3D worker pool failed", error);
+			clearCommands();
 			for (const worker of workers) worker.terminate();
 			workers.length = 0;
 			idle.length = 0;
@@ -109,6 +121,12 @@
 						if (event.data.type === "step-complete") {
 							stepPending = false;
 							if (!event.data.ok) fail(new Error("Box3D world step failed"));
+							else {
+								elapsedMicros = Math.max(0, Math.round(event.data.elapsedMs * 1000));
+								completedValue = 1;
+								completionGeneration += 1;
+								stepReady = true;
+							}
 						}
 						if (event.data.type === "batch-complete") {
 							batchPending = false;
@@ -116,10 +134,21 @@
 								fail(new Error("Box3D benchmark batch failed"));
 								return;
 							}
-							batchElapsedMicros = Math.max(0, Math.round(event.data.elapsedMs * 1000));
-							batchStepCount = Math.max(0, Math.floor(event.data.stepCount));
+							elapsedMicros = Math.max(0, Math.round(event.data.elapsedMs * 1000));
+							completedValue = Math.max(0, Math.floor(event.data.stepCount));
 							completionGeneration += 1;
 							batchReady = true;
+						}
+						if (event.data.type === "command-complete") {
+							commandPending = false;
+							if (!event.data.ok) {
+								fail(new Error("Box3D coordinator command failed"));
+								return;
+							}
+							elapsedMicros = Math.max(0, Math.round(event.data.elapsedMs * 1000));
+							completedValue = Math.max(0, Math.floor(event.data.value));
+							completionGeneration += 1;
+							commandReady = true;
 						}
 						if (event.data.type === "schedule") {
 							if (event.data.slot >= TASK_MAX || pending.length >= TASK_MAX) {
@@ -145,6 +174,7 @@
 			throw error;
 		}
 
+		const busy = () => destroyed || !coordinator || stepPending || batchPending || commandPending;
 		return {
 			module,
 			memory,
@@ -158,26 +188,48 @@
 					return true;
 				},
 				request_step: () => {
-					if (destroyed || !coordinator || stepPending || batchPending) return false;
+					if (busy()) return false;
+					stepReady = false;
 					stepPending = true;
 					coordinator.postMessage({ type: "step" });
 					return true;
 				},
 				request_batch: (stepCount) => {
-					if (destroyed || !coordinator || stepPending || batchPending) return false;
+					if (busy()) return false;
 					if (!Number.isInteger(stepCount) || stepCount <= 0 || stepCount > 600) return false;
 					batchReady = false;
 					batchPending = true;
 					coordinator.postMessage({ type: "batch", stepCount });
 					return true;
 				},
+				request_command: (command, value) => {
+					if (busy()) return false;
+					if (!Number.isInteger(command) || command <= 0 || command > 0xffffffff) return false;
+					if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) return false;
+					commandReady = false;
+					commandPending = true;
+					coordinator.postMessage({ type: "command", command, value });
+					return true;
+				},
+				step_ready: () => {
+					const ready = stepReady;
+					stepReady = false;
+					return ready;
+				},
 				batch_ready: () => {
 					const ready = batchReady;
 					batchReady = false;
 					return ready;
 				},
-				batch_elapsed_micros: () => batchElapsedMicros,
-				batch_step_count: () => batchStepCount,
+				command_ready: () => {
+					const ready = commandReady;
+					commandReady = false;
+					return ready;
+				},
+				elapsed_micros: () => elapsedMicros,
+				completed_value: () => completedValue,
+				batch_elapsed_micros: () => elapsedMicros,
+				batch_step_count: () => completedValue,
 				task_count: () => taskCount,
 				queue_high_water: () => queueHighWater,
 				failure_count: () => failureCount,
@@ -187,6 +239,7 @@
 			destroy() {
 				if (destroyed) return;
 				destroyed = true;
+				clearCommands();
 				for (const worker of workers) worker.terminate();
 				workers.length = 0;
 				idle.length = 0;
