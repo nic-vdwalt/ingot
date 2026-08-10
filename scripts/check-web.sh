@@ -38,6 +38,9 @@ fi
 echo "== wasm compile: examples/box3d_advanced =="
 bash "$ROOT/build_web.sh" examples/box3d_advanced >/dev/null
 
+echo "== wasm compile: examples/box3d_water =="
+bash "$ROOT/build_web.sh" examples/box3d_water >/dev/null
+
 echo "== wasm compile: examples/raylib_migration_fixture =="
 bash "$ROOT/build_web.sh" examples/raylib_migration_fixture >/dev/null
 

@@ -105,11 +105,7 @@ physics_apply_water :: proc(value: ^State) {
 		velocity := b3.Body_GetLinearVelocity(floater.body)
 		surface := water_height(f32(center.x), f32(center.y), value.phase)
 		surface_velocity := water_surface_velocity(f32(center.x), f32(center.y), value.phase)
-		floater.submerged = water_submerged_fraction(
-			f32(center.z),
-			FLOATER_HALF_EXTENT,
-			surface,
-		)
+		floater.submerged = water_submerged_fraction(f32(center.z), FLOATER_HALF_EXTENT, surface)
 		force := water_force(
 			f32(center.z),
 			FLOATER_HALF_EXTENT,

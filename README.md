@@ -264,6 +264,27 @@ A/D, arrows, or left-drag to orbit, and W/S or wheel to zoom. Browser builds
 use Box3D's serial worker configuration; native builds may opt into platform
 threads.
 
+`examples/box3d_water` answers the question Box3D itself cannot: it is a
+rigid-body solver with no fluid representation, so the water is an analytical
+travelling wave the application owns, and the only thing handed to Box3D is a
+buoyancy and drag force applied to each floating body before every fixed step.
+The same wave function drives the surface mesh, which is rebuilt each frame
+through `update_gpu_mesh_vertices` rather than reallocated, so the picture and
+the physics can never disagree. Phase advances only inside a simulation step, so
+pause and single-step freeze the water and the bodies together. This covers
+lakes, boats, buoys, and stylized swell; it is not a CFD or SPH solver, so
+splashes, breaking waves, and flowing volumes need a separate fluid simulation
+coupled to Box3D.
+
+```sh
+odin run examples/box3d_water -collection:ingot=.
+bash build_web.sh examples/box3d_water
+```
+
+Controls match the advanced example. The HUD reports mean immersion, which
+settles near the equilibrium the buoyancy gain implies rather than drifting to
+fully submerged or fully airborne.
+
 For web, `bash build_web.sh examples/gallery` writes `web/ingot_web.wasm`;
 serve `web/` over HTTP in a WebGPU browser (Chrome/Edge 113+ or Safari 18+).
 `bash scripts/check-web.sh` compiles the demos and runs headless Node checks
