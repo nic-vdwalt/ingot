@@ -37,6 +37,21 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   fixed step. The surface mesh is driven by the same function the physics
   samples, so the picture and the simulation cannot disagree, and the wave phase
   advances only inside a simulation step so pause and single-step freeze both.
+- `ui.route_block_z`, `ui.route_block_z_in`, and `ui.Z_NONE`: report the highest
+  z claiming a point rather than a yes/no answer relative to one depth.
+  `route_occluded_in` is now derived from it, so the two cannot disagree.
+
+### Fixed
+
+- `ui`: z-ordered input claims silently suppressed every click inside the
+  claiming surface. `interact_frame_begin` latched press occlusion once per
+  gesture, but it runs before any z scope opens, so a press inside a `Z_PANEL`
+  or `Z_MODAL` claim resolved at the ambient `Z_CONTENT` and was recorded as
+  occluded for every reader - including the panel's own widgets. Hover and
+  pressed still resolved correctly inside the widget's scope, so affected
+  buttons looked live and did nothing. Occlusion cannot be answered at frame
+  begin because the answer depends on the reader's depth, so the latch now
+  stores the blocking z and `interact` compares it against the widget's own.
 
 ## [0.1.5] - 2026-08-09
 

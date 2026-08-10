@@ -20,6 +20,10 @@ Z_MODAL :: Z_Order(300) // modal dialogs
 Z_TOAST :: Z_Order(400) // transient notifications
 Z_TOOLTIP :: Z_Order(500) // hover tips (usually claim no input at all)
 
+// Z_NONE is below every named tier, so "nothing covers this point" compares as
+// unblocked against any surface depth.
+Z_NONE :: Z_Order(min(f32))
+
 Route_Claims :: struct {
 	rects: [MAX_ROUTE_CLAIMS]Rectangle,
 	zs:    [MAX_ROUTE_CLAIMS]Z_Order,
@@ -92,16 +96,35 @@ route_reset :: proc(frame: ^Ui_Frame) {
 	assert(frame.route.cur.count == 0)
 }
 
+// route_block_z_in reports the highest z claiming `point`, or Z_NONE when no
+// claim covers it. Occlusion is derived from this: a point is occluded for a
+// surface at z when something strictly above z claims it.
+//
+// Separate from route_occluded_in because a press origin must be captured when
+// the press happens but read by widgets at many different depths, so the depth
+// comparison cannot be folded in at capture time.
+route_block_z_in :: proc(claims: Route_Claims, point: Vector2) -> Z_Order {
+	assert(claims.count >= 0 && claims.count <= MAX_ROUTE_CLAIMS)
+	top := Z_NONE
+	if claims.all do top = claims.all_z
+	for i in 0 ..< claims.count {
+		if point_in_rect(point, claims.rects[i]) do top = max(top, claims.zs[i])
+	}
+	return top
+}
+
+// route_block_z reports the highest z claiming `point` among the claims active
+// this frame.
+route_block_z :: proc(frame: ^Ui_Frame, point: Vector2) -> Z_Order {
+	assert(frame != nil && frame.open, "route_block_z: invalid frame")
+	return route_block_z_in(frame.route.prev, point)
+}
+
 // route_occluded_in reports whether `point` is covered by a claim strictly
 // above `z`. Equal z does not occlude: that is what lets a surface claim its
 // own rect without going inert.
 route_occluded_in :: proc(claims: Route_Claims, point: Vector2, z: Z_Order = Z_CONTENT) -> bool {
-	assert(claims.count >= 0 && claims.count <= MAX_ROUTE_CLAIMS)
-	if claims.all && claims.all_z > z do return true
-	for i in 0 ..< claims.count {
-		if claims.zs[i] > z && point_in_rect(point, claims.rects[i]) do return true
-	}
-	return false
+	return route_block_z_in(claims, point) > z
 }
 
 // route_occluded tests against the ambient z-scope, so ordinary widgets need

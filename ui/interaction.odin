@@ -94,19 +94,26 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 }
 
 Interaction_State :: struct {
-	active_latch:   ^bool,
+	active_latch:  ^bool,
 	// Runtime frame generation in which active_latch was last confirmed by
 	// the widget that owns it. A latch whose owner stops being drawn is
 	// otherwise never released, and `blocked` above then makes every widget
 	// in the window inert. Compared, never used to reach the owner.
-	latch_gen:      u64,
-	press_pos:      Vector2,
-	press_occluded: bool,
+	latch_gen:     u64,
+	press_pos:     Vector2,
+	// Highest z-order claiming the press origin, or Z_NONE when nothing
+	// claimed it. Not a bool: the same press is occluding for a widget at
+	// content depth and not occluding for the panel that claimed the rect,
+	// so the answer depends on the reader's depth. The origin is captured at
+	// frame begin, where no z scope is open, so resolving occlusion there
+	// would pin every reader to the ambient depth and make a claiming
+	// surface unable to activate its own widgets.
+	press_block_z: Z_Order,
 	// True only while a primary press is in flight: set on the press edge,
 	// cleared once the button is up and its release edge has been consumed.
 	// press_over below is derived from press_pos, so an unbounded press_seen
 	// would let a stale origin outlive the gesture that produced it.
-	press_seen:     bool,
+	press_seen:    bool,
 }
 
 // interact_frame_begin snapshots the primary press origin for this frame.
@@ -135,11 +142,11 @@ interact_frame_begin :: proc(frame: ^Ui_Frame) {
 	if state.press_seen && !down && !released {
 		state.press_seen = false
 		state.press_pos = {}
-		state.press_occluded = false
+		state.press_block_z = Z_NONE
 	}
 	if is_mouse_button_pressed(frame, .LEFT) {
 		frame.interaction.press_pos = get_mouse_position(frame)
-		frame.interaction.press_occluded = route_occluded(frame, frame.interaction.press_pos)
+		frame.interaction.press_block_z = route_block_z(frame, frame.interaction.press_pos)
 		frame.interaction.press_seen = true
 	}
 	// Why assert: press_over is only meaningful for a live gesture; a
@@ -213,13 +220,16 @@ interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Inter
 	mouse := get_mouse_position(frame)
 	local := frame_to_local(frame, mouse)
 	local_press := frame_to_local(frame, state.press_pos)
+	// The press was latched with the depth that blocked it, not a yes/no
+	// answer, so occlusion resolves here against this surface's own z.
+	press_unblocked := state.press_seen && state.press_block_z <= frame_z(frame)
 	ev := Interact_Event {
 		over       = point_in_rect(local, rect) && !route_occluded(frame, mouse),
 		pressed    = is_mouse_button_pressed(frame, .LEFT),
 		released   = is_mouse_button_released(frame, .LEFT),
 		down       = is_mouse_button_down(frame, .LEFT),
 		blocked    = state.active_latch != nil && state.active_latch != latch,
-		press_over = state.press_seen && !state.press_occluded && point_in_rect(local_press, rect),
+		press_over = press_unblocked && point_in_rect(local_press, rect),
 	}
 	it := interact_step(ev, latch)
 	if latch != nil {

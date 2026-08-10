@@ -313,3 +313,64 @@ interaction_forget_releases_matching_latch_only :: proc(t: ^testing.T) {
 	testing.expect_value(t, frame.interaction.latch_gen, u64(0))
 	ui_frame_end(&frame)
 }
+
+// A surface that claims its own rect must still activate its own widgets. The
+// press origin is captured at frame begin, where no z scope is open, so a latch
+// resolved there against the ambient depth reports every press inside the claim
+// as occluded - including for the claimant. Hover and press visuals survive
+// that (they are resolved inside the scope), which is why the failure looks
+// like a button that highlights and depresses but never fires.
+@(test)
+interaction_click_inside_own_claim_activates :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	panel := Rectangle{0, 0, 200, 200}
+	button := Rectangle{10, 10, 100, 30}
+
+	// Frame 1: the panel claims its rect. Claims take effect next frame.
+	input := interact_test_input({50, 20})
+	ui_frame_begin(&frame, &runtime, &input)
+	route_claim(&frame, panel, Z_PANEL)
+	ui_frame_end(&frame)
+
+	// Frame 2: the claim is live. A tap on the panel's own button, inside a
+	// matching z scope, must click.
+	input = interact_test_input({50, 20}, pressed = true, released = true)
+	ui_frame_begin(&frame, &runtime, &input)
+	route_claim(&frame, panel, Z_PANEL)
+	z_scope_begin(&frame, Z_PANEL)
+	it := interact(&frame, button)
+	z_scope_end(&frame)
+	testing.expect(t, it.hovered, "the claimant's own widget hovers")
+	testing.expect(t, it.pressed, "the press lands on it")
+	testing.expect(t, it.clicked, "and it activates")
+	ui_frame_end(&frame)
+}
+
+// The same press, read at content depth, must stay inert: that is the whole
+// point of the claim. Occlusion depends on the reader's depth, so one frame's
+// press cannot be resolved to a single boolean.
+@(test)
+interaction_click_under_a_claim_stays_inert :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	panel := Rectangle{0, 0, 200, 200}
+	canvas_widget := Rectangle{10, 10, 100, 30}
+
+	input := interact_test_input({50, 20})
+	ui_frame_begin(&frame, &runtime, &input)
+	route_claim(&frame, panel, Z_PANEL)
+	ui_frame_end(&frame)
+
+	input = interact_test_input({50, 20}, pressed = true, released = true)
+	ui_frame_begin(&frame, &runtime, &input)
+	route_claim(&frame, panel, Z_PANEL)
+	it := interact(&frame, canvas_widget)
+	testing.expect(t, !it.hovered, "content under the panel does not hover")
+	testing.expect(t, !it.clicked, "and does not click through")
+	ui_frame_end(&frame)
+}
