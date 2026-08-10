@@ -47,9 +47,18 @@
 		let coordinator = null;
 		let destroyed = false;
 		let stepPending = false;
+		let batchPending = false;
+		let batchReady = false;
+		let batchElapsedMicros = 0;
+		let batchStepCount = 0;
+		let taskCount = 0;
+		let queueHighWater = 0;
+		let failureCount = 0;
+		let completionGeneration = 0;
 
 		const fail = (error) => {
 			if (destroyed) return;
+			failureCount += 1;
 			console.error("Box3D worker pool failed", error);
 			for (const worker of workers) worker.terminate();
 			workers.length = 0;
@@ -70,6 +79,7 @@
 					return;
 				}
 				if (event.data.type === "complete") {
+					taskCount += 1;
 					if (!event.data.ok) {
 						fail(new Error("Box3D task dispatch failed"));
 						return;
@@ -100,6 +110,17 @@
 							stepPending = false;
 							if (!event.data.ok) fail(new Error("Box3D world step failed"));
 						}
+						if (event.data.type === "batch-complete") {
+							batchPending = false;
+							if (!event.data.ok) {
+								fail(new Error("Box3D benchmark batch failed"));
+								return;
+							}
+							batchElapsedMicros = Math.max(0, Math.round(event.data.elapsedMs * 1000));
+							batchStepCount = Math.max(0, Math.floor(event.data.stepCount));
+							completionGeneration += 1;
+							batchReady = true;
+						}
 						if (event.data.type === "schedule") {
 							if (event.data.slot >= TASK_MAX || pending.length >= TASK_MAX) {
 								fail(new Error("Box3D worker task capacity exceeded"));
@@ -110,6 +131,7 @@
 								slot: event.data.slot,
 								generation: event.data.generation,
 							});
+							queueHighWater = Math.max(queueHighWater, pending.length);
 							dispatch();
 						}
 					};
@@ -131,15 +153,36 @@
 				schedule: (slot, generation) => {
 					if (destroyed || slot >= TASK_MAX || pending.length >= TASK_MAX) return false;
 					pending.push({ type: "task", slot, generation });
+					queueHighWater = Math.max(queueHighWater, pending.length);
 					dispatch();
 					return true;
 				},
 				request_step: () => {
-					if (destroyed || !coordinator || stepPending) return false;
+					if (destroyed || !coordinator || stepPending || batchPending) return false;
 					stepPending = true;
 					coordinator.postMessage({ type: "step" });
 					return true;
 				},
+				request_batch: (stepCount) => {
+					if (destroyed || !coordinator || stepPending || batchPending) return false;
+					if (!Number.isInteger(stepCount) || stepCount <= 0 || stepCount > 600) return false;
+					batchReady = false;
+					batchPending = true;
+					coordinator.postMessage({ type: "batch", stepCount });
+					return true;
+				},
+				batch_ready: () => {
+					const ready = batchReady;
+					batchReady = false;
+					return ready;
+				},
+				batch_elapsed_micros: () => batchElapsedMicros,
+				batch_step_count: () => batchStepCount,
+				task_count: () => taskCount,
+				queue_high_water: () => queueHighWater,
+				failure_count: () => failureCount,
+				completion_generation: () => completionGeneration,
+				worker_count: () => count,
 			},
 			destroy() {
 				if (destroyed) return;
