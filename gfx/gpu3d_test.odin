@@ -159,6 +159,14 @@ test_cube_transform_contract :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_transform_primitives_skip_without_mode :: proc(t: ^testing.T) {
+	transform := MatrixTranslate(1, 2, 3) * MatrixScale(4, 5, 6)
+	DrawCubeTransform(transform, WHITE)
+	DrawCubeWiresTransform(transform, WHITE)
+	testing.expect(t, !g.resources.gpu_3d.compat.pass_available)
+}
+
+@(test)
 test_compat_primitives_skip_without_mode :: proc(t: ^testing.T) {
 	DrawCube({}, 1, 1, 1, WHITE)
 	DrawCubeV({}, {1, 1, 1}, WHITE)
