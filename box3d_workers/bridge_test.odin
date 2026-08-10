@@ -1,3 +1,4 @@
+#+build !js
 package box3d_workers
 
 import "core:testing"
