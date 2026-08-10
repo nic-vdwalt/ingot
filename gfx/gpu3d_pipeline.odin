@@ -67,6 +67,7 @@ Gpu_3D_Target :: struct {
 
 Gpu_Material_Style :: enum {
 	Default,
+	Opaque,
 	Opaque_Overlay,
 }
 
