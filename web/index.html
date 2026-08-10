@@ -42,8 +42,13 @@
 	<script src="ingot_web.js"></script>
 	<script>
 		const msg = document.getElementById("msg");
-		const box3dWorkers = new URLSearchParams(location.search).has("box3d-workers");
-		window.ingotWeb.run("ingot_web.wasm", { box3dWorkers })
+		const params = new URLSearchParams(location.search);
+		const box3dWorkers = params.has("box3d-workers");
+		const requestedWorkerCount = Number(params.get("worker-count"));
+		const workerCount = Number.isFinite(requestedWorkerCount)
+			? Math.max(2, Math.min(4, Math.floor(requestedWorkerCount)))
+			: undefined;
+		window.ingotWeb.run("ingot_web.wasm", { box3dWorkers, workerCount })
 			.then(() => {
 				// A previous session's post-mortem renders into #crash and
 				// must not suppress this session's status line.

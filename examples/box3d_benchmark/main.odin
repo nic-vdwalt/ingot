@@ -1,6 +1,7 @@
 package main
 
 import "base:intrinsics"
+import "core:fmt"
 import rl "ingot:gfx"
 import b3 "vendor:box3d"
 
@@ -36,6 +37,13 @@ Box3D_Task_Slot :: struct {
 	generation:   u32,
 }
 
+Benchmark_Phase :: enum u32 {
+	Warmup,
+	Measured,
+	Complete,
+	Failed,
+}
+
 Benchmark_Oracle :: struct {
 	checksum:            u64,
 	body_count:          i32,
@@ -53,7 +61,13 @@ State :: struct {
 	bodies:     [BODY_COUNT_MAX]b3.BodyId,
 	body_count: int,
 	ready:      bool,
-	oracle:     Benchmark_Oracle,
+	oracle:          Benchmark_Oracle,
+	phase:           Benchmark_Phase,
+	warmup_complete: int,
+	batches_complete: int,
+	measured_steps:  int,
+	total_ms:        f64,
+	reported:        bool,
 }
 
 when BOX3D_WORKERS_ENABLED {
@@ -64,6 +78,18 @@ when BOX3D_WORKERS_ENABLED {
 		box3d_worker_schedule :: proc(slot, generation: u32) -> bool ---
 		@(link_name = "request_batch")
 		box3d_worker_request_batch :: proc(step_count: u32) -> bool ---
+		@(link_name = "batch_ready")
+		box3d_worker_batch_ready :: proc() -> bool ---
+		@(link_name = "batch_elapsed_micros")
+		box3d_worker_batch_elapsed_micros :: proc() -> u32 ---
+		@(link_name = "batch_step_count")
+		box3d_worker_batch_step_count :: proc() -> u32 ---
+		@(link_name = "task_count")
+		box3d_worker_task_count :: proc() -> u32 ---
+		@(link_name = "queue_high_water")
+		box3d_worker_queue_high_water :: proc() -> u32 ---
+		@(link_name = "failure_count")
+		box3d_worker_failure_count :: proc() -> u32 ---
 		@(link_name = "worker_count")
 		box3d_worker_count :: proc() -> u32 ---
 	}
@@ -178,12 +204,129 @@ benchmark_oracle_record :: proc "contextless" () {
 	}
 }
 
+benchmark_batch_complete :: proc(step_count: int, elapsed_ms: f64) {
+	if state.phase == .Warmup {
+		state.warmup_complete += step_count
+		if state.warmup_complete >= WARMUP_STEPS do state.phase = .Measured
+	} else if state.phase == .Measured {
+		state.batches_complete += 1
+		state.measured_steps += step_count
+		state.total_ms += elapsed_ms
+		if state.batches_complete >= MEASURED_BATCH_COUNT do state.phase = .Complete
+	}
+}
+
+benchmark_batch_request :: proc(step_count: int) {
+	assert(step_count > 0 && step_count <= STEPS_PER_BATCH_MAX)
+	when BOX3D_WORKERS_ENABLED {
+		intrinsics.atomic_store_explicit(&box3d_batch_pending, 1, .Release)
+		if box3d_worker_request_batch(u32(step_count)) do return
+		started := rl.GetTime()
+		ok := box3d_benchmark_batch(u32(step_count))
+		if !ok {
+			state.phase = .Failed
+			return
+		}
+		benchmark_batch_complete(step_count, (rl.GetTime() - started) * 1000)
+	} else {
+		started := rl.GetTime()
+		for _ in 0 ..< step_count {
+			b3.World_Step(state.world, 1.0 / 60.0, PHYSICS_SUBSTEPS)
+		}
+		benchmark_oracle_record()
+		benchmark_batch_complete(step_count, (rl.GetTime() - started) * 1000)
+	}
+}
+
+benchmark_report :: proc() {
+	if state.reported || state.phase != .Complete do return
+	worker_count: u32 = 1
+	task_count: u32 = 0
+	queue_high_water: u32 = 0
+	failures: u32 = 0
+	when BOX3D_WORKERS_ENABLED {
+		worker_count = box3d_worker_count()
+		task_count = box3d_worker_task_count()
+		queue_high_water = box3d_worker_queue_high_water()
+		failures = box3d_worker_failure_count()
+	}
+	ms_per_step := state.total_ms / f64(max(state.measured_steps, 1))
+	steps_per_second := 1000 / ms_per_step
+	fmt.printfln(
+		"INGOT_BOX3D_BENCHMARK {\"body_count\":%d,\"worker_count\":%d,\"steps\":%d,\"total_ms\":%.3f,\"ms_per_step\":%.6f,\"steps_per_second\":%.3f,\"profile_step_ms\":%.3f,\"profile_collide_ms\":%.3f,\"profile_solve_ms\":%.3f,\"task_count\":%d,\"queue_high_water\":%d,\"failure_count\":%d,\"checksum\":\"%016x\",\"contacts\":%d,\"awake_contacts\":%d,\"islands\":%d}",
+		BODY_COUNT,
+		worker_count,
+		state.measured_steps,
+		state.total_ms,
+		ms_per_step,
+		steps_per_second,
+		state.oracle.profile_step_ms,
+		state.oracle.profile_collide_ms,
+		state.oracle.profile_solve_ms,
+		task_count,
+		queue_high_water,
+		failures,
+		state.oracle.checksum,
+		state.oracle.contact_count,
+		state.oracle.awake_contact_count,
+		state.oracle.island_count,
+	)
+	state.reported = true
+}
+
+benchmark_update :: proc() {
+	if !state.ready || state.phase == .Complete || state.phase == .Failed do return
+	when BOX3D_WORKERS_ENABLED {
+		if box3d_worker_failure_count() > 0 {
+			state.phase = .Failed
+			return
+		}
+		if intrinsics.atomic_load_explicit(&box3d_batch_pending, .Acquire) != 0 do return
+		if box3d_worker_batch_ready() {
+			benchmark_batch_complete(
+				int(box3d_worker_batch_step_count()),
+				f64(box3d_worker_batch_elapsed_micros()) / 1000,
+			)
+		}
+	}
+	if state.phase == .Warmup {
+		remaining := WARMUP_STEPS - state.warmup_complete
+		if remaining <= 0 {
+			state.phase = .Measured
+		} else {
+			benchmark_batch_request(min(remaining, STEPS_PER_BATCH))
+		}
+	} else if state.phase == .Measured {
+		benchmark_batch_request(STEPS_PER_BATCH)
+	}
+	benchmark_report()
+}
+
 frame :: proc() {
+	benchmark_update()
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{24, 26, 32, 255})
 	rl.DrawText("Box3D browser worker benchmark", 24, 24, 24, rl.RAYWHITE)
 	if state.ready {
 		rl.DrawText("deterministic convex piles ready", 24, 58, 20, rl.LIGHTGRAY)
+	}
+	status := fmt.ctprintf(
+		"phase %v  warmup %d/%d  batches %d/%d",
+		state.phase,
+		state.warmup_complete,
+		WARMUP_STEPS,
+		state.batches_complete,
+		MEASURED_BATCH_COUNT,
+	)
+	rl.DrawText(status, 24, 90, 20, rl.LIGHTGRAY)
+	if state.phase == .Complete {
+		result := fmt.ctprintf(
+			"%.3f ms total  %.6f ms/step  checksum %016x",
+			state.total_ms,
+			state.total_ms / f64(max(state.measured_steps, 1)),
+			state.oracle.checksum,
+		)
+		rl.DrawText(result, 24, 122, 20, rl.GREEN)
 	}
 	rl.EndDrawing()
 }
