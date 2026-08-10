@@ -383,7 +383,7 @@ draw_world :: proc(value: ^State) {
 			&pass,
 			value.cube_edges,
 			transform,
-			{color = {24, 28, 36, 255}, style = .Opaque_Overlay, depth_nudge = 0.0005},
+			{color = {24, 28, 36, 255}, style = .Opaque_Outline},
 		)
 	}
 	rl.end_gpu_3d(&pass)

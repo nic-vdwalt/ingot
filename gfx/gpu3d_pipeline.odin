@@ -81,6 +81,7 @@ Gpu_Material_Style :: enum {
 	Default,
 	Opaque,
 	Opaque_Overlay,
+	Opaque_Outline,
 }
 
 Gpu_Material :: struct {
@@ -207,8 +208,8 @@ Gpu_3D_Material_Policy :: struct {
 _gpu_3d_material_policy :: proc(style: Gpu_Material_Style) -> Gpu_3D_Material_Policy {
 	return {
 		blend = style == .Default,
-		depth_write = style != .Opaque_Overlay,
-		depth_compare = .Less,
+		depth_write = style != .Opaque_Overlay && style != .Opaque_Outline,
+		depth_compare = .LessEqual if style == .Opaque_Outline else .Less,
 		depth_bias = -2 if style == .Opaque_Overlay else 0,
 	}
 }
