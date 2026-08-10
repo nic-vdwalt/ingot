@@ -1,7 +1,7 @@
 package box3d_workers
 
 import "base:intrinsics"
-import "base:runtime"
+@(require) import "base:runtime"
 import b3 "vendor:box3d"
 
 ENABLED :: ODIN_OS == .JS && #config(INGOT_BOX3D_WORKERS, false)
