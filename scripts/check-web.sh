@@ -25,6 +25,12 @@ bash "$ROOT/build_web.sh" examples/procgen_world >/dev/null
 echo "== wasm compile: examples/box3d_stack =="
 bash "$ROOT/build_web.sh" examples/box3d_stack >/dev/null
 
+if [ "${INGOT_CHECK_WEB_THREADS:-0}" = "1" ]; then
+	echo "== wasm compile: threaded examples/box3d_stack =="
+	INGOT_WEB_THREADS=1 bash "$ROOT/build_web.sh" examples/box3d_stack >/dev/null
+	python3 "$ROOT/scripts/check_wasm_threads.py" "$ROOT/web/ingot_web.wasm"
+fi
+
 echo "== wasm compile: examples/box3d_advanced =="
 bash "$ROOT/build_web.sh" examples/box3d_advanced >/dev/null
 
