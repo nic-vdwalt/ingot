@@ -146,12 +146,13 @@ draw_floaters :: proc(value: ^State, pass: ^rl.Gpu_3D_Pass) {
 	assert(pass != nil, "draw_floaters: nil pass")
 	for floater, index in value.floaters[:value.floater_count] {
 		color := FLOATER_COLORS[index % len(FLOATER_COLORS)]
-		rl.draw_gpu_mesh(pass, value.cube, floater.transform, {color = color, style = .Opaque})
-		rl.draw_gpu_mesh(
+		rl.draw_gpu_mesh_outlined(
 			pass,
+			value.cube,
 			value.cube_edges,
 			floater.transform,
-			{color = {20, 24, 32, 255}, style = .Opaque_Outline},
+			{color = color},
+			{20, 24, 32, 255},
 		)
 	}
 }

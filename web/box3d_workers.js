@@ -110,7 +110,9 @@
 				workers.push(worker);
 				const role = index === 0 ? "coordinator" : "task";
 				const stackTop = 7 * 1024 * 1024 - index * STACK_BYTES;
-				await workerReady(worker, { type: "init", module, memory, role, stackTop });
+				await workerReady(worker, {
+					type: "init", module, memory, role, stackTop, workerCount: count,
+				});
 				if (role === "coordinator") {
 					coordinator = worker;
 					worker.onmessage = (event) => {
