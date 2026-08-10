@@ -32,6 +32,9 @@ Ui_Runtime :: struct {
 }
 
 MAX_PANE_SCOPES :: 16
+// Content, panel, popup, modal, toast, tooltip is six; eight leaves room for
+// one application tier between two of them without an unbounded stack.
+MAX_Z_SCOPES :: 8
 
 Ui_Frame :: struct {
 	runtime:                        ^Ui_Runtime,
@@ -46,6 +49,8 @@ Ui_Frame :: struct {
 	semantics:                      Semantics_State,
 	pane_origins:                   [MAX_PANE_SCOPES]Vector2,
 	pane_count:                     int,
+	z_scopes:                       [MAX_Z_SCOPES]Z_Order,
+	z_count:                        int,
 	font_memo_size:                 i32,
 	font_memo_id:                   Font_Id,
 	text_cull_top:                  i32,
@@ -210,6 +215,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame.cursor.requested = .DEFAULT
 	frame.overlay = {}
 	frame.pane_count = 0
+	frame.z_count = 0
 	frame.font_memo_size = 0
 	frame.font_memo_id = 0
 	frame.text_cull_top = min(i32)
@@ -230,6 +236,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 ui_frame_finalize :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open && !frame.finalized)
 	assert(frame.open_roots == 0 && frame.pane_count == 0 && !frame.overlay.open)
+	assert(frame.z_count == 0, "ui_frame_finalize: unbalanced z scope")
 	if frame.output != nil {
 		// Report the leaking begin_scissor_mode call site: the depth alone
 		// says nothing about which view forgot to pop.
@@ -281,6 +288,40 @@ frame_pane_origin :: proc(frame: ^Ui_Frame) -> Vector2 {
 	assert(frame != nil && frame.open, "pane_origin: invalid frame")
 	if frame.pane_count == 0 do return {}
 	return frame.pane_origins[frame.pane_count - 1]
+}
+
+// frame_z reports the ambient input z-order. An empty stack is Z_CONTENT, so a
+// frame that never opens a scope behaves exactly as it did before z-ordering.
+frame_z :: proc(frame: ^Ui_Frame) -> Z_Order {
+	assert(frame != nil, "frame_z: nil frame")
+	assert(frame.z_count >= 0 && frame.z_count <= MAX_Z_SCOPES, "frame_z: corrupt z scope")
+	if frame.z_count == 0 do return Z_CONTENT
+	return frame.z_scopes[frame.z_count - 1]
+}
+
+// z_scope_begin raises the ambient input z for the widgets drawn inside it, so
+// a surface that claimed its own rect is not occluded by that claim.
+//
+// Nesting may only ascend: a surface drawn inside a modal cannot quietly place
+// itself beneath the content the modal is covering, which would make it
+// clickable through the modal.
+z_scope_begin :: proc(frame: ^Ui_Frame, z: Z_Order) {
+	assert(frame != nil && frame.open, "z_scope_begin: invalid frame")
+	assert(frame.z_count < MAX_Z_SCOPES, "z_scope_begin: z scope overflow")
+	// A NaN z compares false against everything, which would silently disable
+	// occlusion for every widget inside the scope.
+	assert(z == z, "z_scope_begin: z-order is NaN")
+	assert(z >= frame_z(frame), "z_scope_begin: nested scope below its parent")
+	frame.z_scopes[frame.z_count] = z
+	frame.z_count += 1
+	assert(frame.z_count > 0 && frame.z_count <= MAX_Z_SCOPES)
+}
+
+z_scope_end :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "z_scope_end: invalid frame")
+	assert(frame.z_count > 0, "z_scope_end: no scope open")
+	frame.z_count -= 1
+	assert(frame.z_count >= 0, "z_scope_end: corrupt z scope")
 }
 
 frame_to_local :: proc(frame: ^Ui_Frame, point: Vector2) -> Vector2 {

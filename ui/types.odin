@@ -178,3 +178,12 @@ point_in_rect :: proc(point: Vec2, rect: Rect) -> bool {
 		point.y < rect.y + rect.height \
 	)
 }
+
+// point_in_rect_i32 tests a pointer against a layout rect. Hit tests against
+// layout geometry are common enough that routing every one through rect_f32
+// invites each consumer to re-derive the edge semantics instead; four such
+// copies existed before this was exported. Empty and negative rects contain
+// nothing, because the comparison is half-open in both dimensions.
+point_in_rect_i32 :: proc(point: Vec2, rect: Rect_I32) -> bool {
+	return point_in_rect(point, rect_f32(rect))
+}

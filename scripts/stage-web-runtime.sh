@@ -33,4 +33,9 @@ if [ "$ROOT/web" != "$(cd "$DEST" && pwd)" ]; then
 	cp "$ROOT/web/ingot_input.js" "$DEST/ingot_input.js"
 	cp "$ROOT/web/ingot_app.js" "$DEST/ingot_app.js"
 	cp "$ROOT/web/ingot_crash.js" "$DEST/ingot_crash.js"
+	# Box3D worker pool. box3d_worker.js is loaded by new Worker() from
+	# box3d_workers.js relative to the DOCUMENT url, so it must sit next to
+	# index.html even though no <script> tag ever references it.
+	cp "$ROOT/web/box3d_workers.js" "$DEST/box3d_workers.js"
+	cp "$ROOT/web/box3d_worker.js" "$DEST/box3d_worker.js"
 fi

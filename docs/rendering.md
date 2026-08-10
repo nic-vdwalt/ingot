@@ -200,6 +200,23 @@ normals, lights, bounds, rays, and scene data use this basis. Importers convert
 source data exactly once at the import/cook boundary. Matrix-driven Pro entry
 points intentionally trust the supplied matrix and perform no axis conversion.
 
+`CAMERA_WORLD_FORWARD`, `CAMERA_WORLD_LEFT`, `CAMERA_WORLD_UP`, and
+`CAMERA_WORLD_RIGHT` encode the basis, and
+`camera_world_axes_are_right_handed` holds the identity over all four: a
+swapped pair reads correctly at every use site and would otherwise surface only
+as mirrored geometry.
+
+A geographic application maps its own axis names onto this basis rather than
+redefining it. **East/north/up is the same basis** — `forward` is east and
+`left` is north, because `east × north = up`. Heading measured clockwise from
+north is therefore *not* the orbit camera's `yaw`, which is counter-clockwise
+from +X; convert once at the application boundary rather than per call site.
+
+Orbit `yaw` is the azimuth of the camera's offset *from* the target
+(`atan2(offset.y, offset.x)`), not the direction the camera looks. Yaw 0 places
+the camera on the target's +X side looking back along −X, and positive yaw turns
+counter-clockwise seen from +Z.
+
 Native CPU picking is allocation-free and does not require a graphics context,
 frame, render target, or GPU pass:
 

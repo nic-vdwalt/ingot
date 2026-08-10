@@ -8,7 +8,6 @@ import b3 "vendor:box3d"
 NUM_BOXES :: 25
 
 BOX3D_WORKERS_ENABLED :: ODIN_OS == .JS && #config(INGOT_BOX3D_WORKERS, false)
-BOX3D_WORKER_COUNT :: 4
 BOX3D_TASK_MAX :: b3.MAX_TASKS
 
 Box3D_Task_Status :: enum u32 {
@@ -41,6 +40,8 @@ when BOX3D_WORKERS_ENABLED {
 		box3d_worker_schedule :: proc(slot, generation: u32) -> bool ---
 		@(link_name = "request_step")
 		box3d_worker_request_step :: proc() -> bool ---
+		@(link_name = "worker_count")
+		box3d_worker_count :: proc() -> u32 ---
 	}
 }
 
@@ -61,7 +62,10 @@ main :: proc() {
 	world_def := b3.DefaultWorldDef()
 	world_def.gravity = {0, 0, -10}
 	when BOX3D_WORKERS_ENABLED {
-		world_def.workerCount = BOX3D_WORKER_COUNT
+		// The JS pool sizes itself min(4, max(2, hardwareConcurrency)), so a
+		// fixed count here would partition work for workers that do not exist
+		// on a low-core machine. Ask the pool what it actually created.
+		world_def.workerCount = box3d_worker_count()
 		world_def.enqueueTask = box3d_worker_enqueue
 		world_def.finishTask = box3d_worker_finish
 	}

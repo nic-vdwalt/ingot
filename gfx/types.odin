@@ -104,6 +104,16 @@ CameraProjection :: enum i32 {
 	ORTHOGRAPHIC,
 }
 
+// The canonical world basis: right-handed ROS, +X forward, +Y left, +Z up,
+// satisfying +X x +Y = +Z. Every 3D API in Ingot - camera vectors, model
+// transforms, mesh positions and normals, lights, bounds, rays, and scene data
+// - is expressed in it. Importers convert source data exactly once at the
+// import/cook boundary so no renderer repeats the conversion. Held by
+// camera_world_axes_are_right_handed.
+//
+// A geographic consumer maps its own names onto the same basis rather than
+// redefining it: east/north/up is this basis with forward=east and left=north,
+// because east x north = up.
 CAMERA_WORLD_FORWARD :: Vector3{1, 0, 0}
 CAMERA_WORLD_LEFT :: Vector3{0, 1, 0}
 CAMERA_WORLD_UP :: Vector3{0, 0, 1}
@@ -128,6 +138,14 @@ Camera3D_Motion :: struct {
 	zoom_velocity:    f32,
 }
 
+// Orbit_Camera_State is a bounded azimuth/elevation orbit about `target`.
+//
+// yaw is the azimuth of the CAMERA's offset from the target - atan2(offset.y,
+// offset.x) - not the direction the camera looks, which is its opposite. Yaw 0
+// therefore places the camera on the target's +X side looking back along -X.
+// Positive yaw turns the offset from +X toward +Y, which is counter-clockwise
+// seen from +Z looking down. pitch is the elevation of that same offset, so
+// positive pitch lifts the camera above the target.
 Orbit_Camera_State :: struct {
 	target:   Vector3,
 	yaw:      f32,

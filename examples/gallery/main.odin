@@ -252,6 +252,14 @@ popup_open := false
 shielded_clicks := 0
 leaked_clicks := 0
 
+// Docked-panel-over-canvas journey. The canvas counters must not advance while
+// the pointer is over the panel: that is the whole claim of z-ordered input.
+dock_canvas_wheel := 0
+dock_canvas_clicks := 0
+dock_panel_clicks := 0
+dock_panel_pane: ui.Pane
+dock_panel_ui: ui.Ui
+
 stress_clicked := -1
 
 
@@ -1396,6 +1404,7 @@ draw_overlay_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		"OVERLAY + INPUT ROUTING (popup occludes the buttons under it)",
 	)
 	info_y := draw_overlay_controls(frame, x, y)
+	info_y = draw_docked_panel_over_canvas(frame, x, info_y, w)
 	draw_overlay_context_menu(frame, x, info_y)
 	if popup_open {
 		draw_demo_popup(frame, x - ui.ui_frame_sc(frame, 8), y - ui.ui_frame_sc(frame, 8))
@@ -1406,6 +1415,114 @@ draw_overlay_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
 	ui.toasts_draw(frame, &toasts, root)
 	return info_y + ui.ui_frame_sc(frame, 52)
+}
+
+// draw_docked_panel_over_canvas is the z-ordered input journey: a full-width
+// canvas with a panel docked over its right edge. The panel claims its own rect
+// at Z_PANEL and draws inside a matching z scope, so the canvas beneath it goes
+// inert while the panel's own buttons and scroll pane keep working.
+//
+// Acceptance is mechanical and on screen: the canvas counters must not advance
+// while the pointer is over the panel. Before z-ordering, a panel that claimed
+// its own rect went inert, and one that did not claim leaked input to the canvas
+// underneath - there was no third option.
+draw_docked_panel_over_canvas :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
+	assert(frame != nil, "draw_docked_panel_over_canvas: nil frame")
+	assert(w >= 0, "draw_docked_panel_over_canvas: negative width")
+	y := ui.section_header_at(
+		frame,
+		{x, y0, w, 0},
+		"Z-ORDERED INPUT (canvas counters stay put under the docked panel)",
+	)
+	canvas_h := ui.ui_frame_sc(frame, 150)
+	panel_w := min(ui.ui_frame_sc(frame, 190), w)
+	canvas := ui.Rect_I32{x, y, w, canvas_h}
+	panel := ui.Rect_I32{x + w - panel_w, y, panel_w, canvas_h}
+	if w <= 0 || canvas_h <= 0 do return y
+
+	theme := ui.ui_frame_theme(frame)
+	ui.draw_surface(frame, ui.rect_f32(canvas), .Panel, radius = .SM, border = .Hairline)
+
+	// The canvas spans the full width and is drawn first, so the panel floats
+	// over its right edge rather than sitting beside it.
+	canvas_hit := ui.interact(frame, ui.rect_f32(canvas))
+	if canvas_hit.hovered {
+		wheel := ui.get_wheel_move(frame)
+		if wheel != 0 do dock_canvas_wheel += 1
+	}
+	if canvas_hit.clicked do dock_canvas_clicks += 1
+	metrics := ui.ui_frame_metrics(frame)
+	ui.draw_text_frame(
+		frame,
+		fmt.ctprintf("canvas wheel: %d", dock_canvas_wheel),
+		x + ui.ui_frame_sc(frame, 12),
+		y + ui.ui_frame_sc(frame, 12),
+		metrics.FONT_SIZE_BODY,
+		theme.fg_primary,
+	)
+	ui.draw_text_frame(
+		frame,
+		fmt.ctprintf("canvas clicks: %d", dock_canvas_clicks),
+		x + ui.ui_frame_sc(frame, 12),
+		y + ui.ui_frame_sc(frame, 12) + metrics.LINE_HEIGHT,
+		metrics.FONT_SIZE_BODY,
+		theme.fg_primary,
+	)
+	ui.draw_text_frame(
+		frame,
+		"wheel and click here, then over the panel",
+		x + ui.ui_frame_sc(frame, 12),
+		y + ui.ui_frame_sc(frame, 12) + metrics.LINE_HEIGHT * 2,
+		metrics.FONT_SIZE_NOTE,
+		theme.fg_secondary,
+	)
+
+	draw_dock_panel(frame, panel)
+	return y + canvas_h + ui.ui_frame_sc(frame, 12)
+}
+
+// draw_dock_panel is the docked surface: one claim, one matching z scope, and
+// ordinary widgets inside. Nothing here hit-tests raw input.
+draw_dock_panel :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32) {
+	assert(frame != nil, "draw_dock_panel: nil frame")
+	assert(panel.w > 0 && panel.h > 0, "draw_dock_panel: empty panel")
+	ui.draw_surface(frame, ui.rect_f32(panel), .Panel, radius = .SM, border = .Hairline)
+	ui.route_claim(frame, ui.rect_f32(panel), ui.Z_PANEL)
+	ui.z_scope_begin(frame, ui.Z_PANEL)
+	defer ui.z_scope_end(frame)
+
+	// A scroll pane inside the claim: pane_begin consults the router, so this
+	// is the exact case that went dead when a panel claimed its own rect.
+	content_y := ui.pane_begin(frame, &dock_panel_pane, panel, pad = 10)
+	u := &dock_panel_ui
+	ui.begin(
+		u,
+		frame,
+		{
+			panel.x + ui.ui_frame_sc(frame, 10),
+			content_y,
+			panel.w - ui.ui_frame_sc(frame, 24),
+			ui.ROOT_EXTENT_OPEN,
+		},
+		gap = .XS,
+	)
+	ui.scope_begin(u, "dock-panel")
+	ui.label(u, "DOCKED PANEL", ui.Text_Role.Label, ui.Ink.Heading)
+	ui.label(u, "Claims Z_PANEL over the canvas.", ui.Text_Role.Note, ui.Ink.Secondary)
+	if ui.button(u, "dock-a", "Panel button A") do dock_panel_clicks += 1
+	if ui.button(u, "dock-b", "Panel button B") do dock_panel_clicks += 1
+	ui.label(
+		u,
+		fmt.tprintf("panel clicks: %d", dock_panel_clicks),
+		ui.Text_Role.Body,
+		ui.Ink.Primary,
+	)
+	for row in 0 ..< 8 {
+		ui.label(u, fmt.tprintf("scroll row %d", row), ui.Text_Role.Note, ui.Ink.Secondary)
+	}
+	ui.scope_end(u)
+	end_y := ui.end(u)
+	ui.pane_end(frame, &dock_panel_pane, panel, end_y, pad = 10)
 }
 
 // draw_overlay_confirm runs the built-in confirm dialog and reports the
@@ -1465,16 +1582,16 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 		ui.ui_frame_theme(frame).fg_secondary,
 	)
 
-	// Close row: the popup is topmost, so it hit-tests raw input.
+	// Close row: the popup sits in its own Z_POPUP scope, so its own claim
+	// does not occlude it and the ordinary interaction path applies.
 	row := ui.Rect {
 		f32(x + ui.ui_frame_sc(frame, 12)),
 		f32(y + h - ui.ui_frame_sc(frame, 30)),
 		f32(w - ui.ui_frame_sc(frame, 24)),
 		f32(ui.ui_frame_sc(frame, 22)),
 	}
-	mouse := ui.get_mouse_position(frame)
-	hovered := ui.point_in_rect(mouse, row)
-	if hovered {
+	close := ui.interact(frame, row)
+	if close.hovered {
 		ui.overlay_rect(frame, ui.Rect(row), ui.ui_frame_theme(frame).bg_active)
 		ui.request_cursor(frame, .POINTING_HAND)
 	}
@@ -1486,7 +1603,7 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 		ui.ui_frame_metrics(frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(frame).fg_accent,
 	)
-	if hovered && ui.is_mouse_button_released(frame, .LEFT) {
+	if close.clicked {
 		popup_open = false
 	}
 	ui.overlay_end(frame)

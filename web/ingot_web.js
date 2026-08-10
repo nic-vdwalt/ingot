@@ -985,16 +985,21 @@
 		const threaded = opts.box3dWorkers === true && sharedMemory;
 		const wmi = new window.odin.WasmMemoryInterface();
 		let box3dWorkers = null;
-		if (sharedMemory) {
+		// Only the threaded module imports env.memory; every other build
+		// exports its own. Allocating a shared buffer for them wastes 64 MiB
+		// and makes odin.js warn about a memory it is about to discard, which
+		// became reachable on every demo once the site turned on COOP/COEP.
+		if (threaded) {
 			const memory = new WebAssembly.Memory({
 				initial: 1024,
 				maximum: 4096,
 				shared: true,
 			});
 			wmi.setMemory(memory);
-			if (threaded) {
-				box3dWorkers = await window.ingotBox3dWorkers.create(wasmPath, memory, opts);
+			if (!window.ingotBox3dWorkers) {
+				throw new Error("box3dWorkers requested but box3d_workers.js is not loaded");
 			}
+			box3dWorkers = await window.ingotBox3dWorkers.create(wasmPath, memory, opts);
 		}
 		wasmMemoryInterface = wmi;
 		const webgpu = new window.odin.WebGPUInterface(wmi);

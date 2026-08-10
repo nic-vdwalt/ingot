@@ -25,13 +25,10 @@ Modal_State :: struct {
 // route_claim_backdrop claims pointer input for the region *around* a panel so
 // widgets underneath neither hover nor click while it is open.
 //
-// The four bands around the panel are claimed rather than the whole screen:
-// interact resolves hover against the claim set, so a full-screen claim would
-// also disable the panel's own widgets. Must be called on every frame the
-// panel is open, because the router tests against the previous frame's claims.
-//
-// modal_begin calls this for callers using the built-in modal chrome; callers
-// that draw their own panel call it directly.
+// DEPRECATED: retained for one release. Claims now carry a z-order, so a modal
+// claims the whole screen at Z_MODAL and opens a matching z scope around its
+// own widgets; equal z does not occlude, which is what the four bands were
+// working around. New callers should use route_claim with a z and z_scope_begin.
 route_claim_backdrop :: proc(frame: ^Ui_Frame, panel: Rect_I32, screen_w, screen_h: i32) {
 	assert(frame != nil, "route_claim_backdrop: nil frame")
 	assert(screen_w >= 0 && screen_h >= 0, "route_claim_backdrop: negative screen size")
@@ -83,7 +80,10 @@ modal_begin :: proc(
 	mx := (screen_w - mw) / 2
 	my := (screen_h - mh) / 2
 	st.rect = Rect_I32{mx, my, mw, mh}
-	route_claim_backdrop(frame, st.rect, screen_w, screen_h)
+	// The whole screen is claimed, not the four bands around the panel: at
+	// Z_MODAL the panel's own widgets are not occluded by an equal-z claim.
+	route_claim(frame, Rectangle{0, 0, f32(screen_w), f32(screen_h)}, Z_MODAL)
+	z_scope_begin(frame, Z_MODAL)
 
 	draw_rectangle(frame, mx, my, mw, mh, style.bg_secondary)
 	draw_rectangle_lines(frame, mx, my, mw, mh, style.border_color)
@@ -114,6 +114,9 @@ modal_end :: proc(st: ^Modal_State) {
 	frame := st.frame
 	assert(frame != nil, "modal_end: missing frame")
 	end_scissor_mode(frame)
+	// Both exits must close the scope modal_begin opened, or the balance
+	// assertion in ui_frame_finalize fires.
+	z_scope_end(frame)
 	if is_key_pressed(frame, .ESCAPE) {
 		st.open = false
 		st.dismissed = true
