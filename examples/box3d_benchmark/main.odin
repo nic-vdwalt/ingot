@@ -3,6 +3,7 @@ package main
 import "base:intrinsics"
 import "core:fmt"
 import "core:time"
+import workers "ingot:box3d_workers"
 import rl "ingot:gfx"
 import b3 "vendor:box3d"
 
@@ -20,23 +21,6 @@ WARMUP_STEPS_MAX :: 600
 MEASURED_BATCH_COUNT_MAX :: 64
 STEPS_PER_BATCH_MAX :: 600
 PHYSICS_SUBSTEPS_MAX :: 16
-BOX3D_WORKERS_ENABLED :: ODIN_OS == .JS && #config(INGOT_BOX3D_WORKERS, false)
-BOX3D_TASK_MAX :: b3.MAX_TASKS
-
-Box3D_Task_Status :: enum u32 {
-	Free,
-	Reserved,
-	Pending,
-	Complete,
-	Failed,
-}
-
-Box3D_Task_Slot :: struct {
-	status:       Box3D_Task_Status,
-	task:         rawptr,
-	task_context: rawptr,
-	generation:   u32,
-}
 
 Benchmark_Phase :: enum u32 {
 	Warmup,
@@ -73,39 +57,7 @@ State :: struct {
 	profile_sample_count: int,
 }
 
-when BOX3D_WORKERS_ENABLED {
-	foreign import box3d_workers "ingot_box3d_workers"
-	@(default_calling_convention = "c")
-	foreign box3d_workers {
-		@(link_name = "schedule")
-		box3d_worker_schedule :: proc(slot, generation: u32) -> bool ---
-		@(link_name = "request_batch")
-		box3d_worker_request_batch :: proc(step_count: u32) -> bool ---
-		@(link_name = "batch_ready")
-		box3d_worker_batch_ready :: proc() -> bool ---
-		@(link_name = "batch_elapsed_micros")
-		box3d_worker_batch_elapsed_micros :: proc() -> u32 ---
-		@(link_name = "batch_step_count")
-		box3d_worker_batch_step_count :: proc() -> u32 ---
-		@(link_name = "task_count")
-		box3d_worker_task_count :: proc() -> u32 ---
-		@(link_name = "queue_high_water")
-		box3d_worker_queue_high_water :: proc() -> u32 ---
-		@(link_name = "failure_count")
-		box3d_worker_failure_count :: proc() -> u32 ---
-		@(link_name = "worker_count")
-		box3d_worker_count :: proc() -> u32 ---
-	}
-}
-
-box3d_task_slots: [BOX3D_TASK_MAX]Box3D_Task_Slot
 box3d_batch_pending: u32
-// Set while a batch is stepped on the browser's main thread. box3d hands every
-// parallel-for to box3d_worker_enqueue, and the matching finish blocks on
-// memory.atomic.wait32 until a worker reports back - which the main thread is
-// forbidden to do. Running those tasks inline instead is the only way to step
-// there at all.
-box3d_inline_tasks: u32
 state: State
 
 when ODIN_OS == .JS {
@@ -140,11 +92,7 @@ benchmark_world_init :: proc() {
 	world_def := b3.DefaultWorldDef()
 	world_def.gravity = {0, 0, -10}
 	world_def.enableSleep = false
-	when BOX3D_WORKERS_ENABLED {
-		world_def.workerCount = box3d_worker_count()
-		world_def.enqueueTask = box3d_worker_enqueue
-		world_def.finishTask = box3d_worker_finish
-	}
+	workers.configure_world(&world_def)
 	state.world = b3.CreateWorld(world_def)
 	assert(b3.World_IsValid(state.world))
 
@@ -243,22 +191,11 @@ benchmark_batch_complete :: proc(step_count: int, elapsed_ms: f64) {
 
 benchmark_batch_request :: proc(step_count: int) {
 	assert(step_count > 0 && step_count <= STEPS_PER_BATCH_MAX)
-	when BOX3D_WORKERS_ENABLED {
+	when workers.ENABLED {
 		intrinsics.atomic_store_explicit(&box3d_batch_pending, 1, .Release)
-		if box3d_worker_request_batch(u32(step_count)) do return
-		// The pool refuses a batch while it is still starting up, and again
-		// after any failure, so this fallback runs on a normal page - not just
-		// a degraded one.
-		started := rl.GetTime()
-		intrinsics.atomic_store_explicit(&box3d_inline_tasks, 1, .Release)
-		ok := box3d_benchmark_batch(u32(step_count))
-		intrinsics.atomic_store_explicit(&box3d_inline_tasks, 0, .Release)
+		if workers.request_batch(u32(step_count)) do return
 		intrinsics.atomic_store_explicit(&box3d_batch_pending, 0, .Release)
-		if !ok {
-			state.phase = .Failed
-			return
-		}
-		benchmark_batch_complete(step_count, (rl.GetTime() - started) * 1000)
+		state.phase = .Failed
 	} else {
 		started := rl.GetTime()
 		for _ in 0 ..< step_count {
@@ -275,11 +212,11 @@ benchmark_report :: proc() {
 	task_count: u32 = 0
 	queue_high_water: u32 = 0
 	failures: u32 = 0
-	when BOX3D_WORKERS_ENABLED {
-		worker_count = box3d_worker_count()
-		task_count = box3d_worker_task_count()
-		queue_high_water = box3d_worker_queue_high_water()
-		failures = box3d_worker_failure_count()
+	when workers.ENABLED {
+		worker_count = workers.worker_count()
+		task_count = workers.task_count()
+		queue_high_water = workers.queue_high_water()
+		failures = workers.failure_count()
 	}
 	ms_per_step := state.total_ms / f64(max(state.measured_steps, 1))
 	steps_per_second := 1000 / ms_per_step
@@ -320,16 +257,16 @@ benchmark_update :: proc() {
 		benchmark_report()
 		return
 	}
-	when BOX3D_WORKERS_ENABLED {
-		if box3d_worker_failure_count() > 0 {
+	when workers.ENABLED {
+		if workers.failure_count() > 0 {
 			state.phase = .Failed
 			return
 		}
-		if box3d_worker_batch_ready() {
+		if workers.batch_ready() {
 			intrinsics.atomic_store_explicit(&box3d_batch_pending, 0, .Release)
 			benchmark_batch_complete(
-				int(box3d_worker_batch_step_count()),
-				f64(box3d_worker_batch_elapsed_micros()) / 1000,
+				int(workers.completed_value()),
+				f64(workers.elapsed_micros()) / 1000,
 			)
 			return
 		}
@@ -377,74 +314,7 @@ frame :: proc() {
 	rl.EndDrawing()
 }
 
-when BOX3D_WORKERS_ENABLED {
-	box3d_worker_enqueue :: proc "c" (
-		task, task_context, user_context: rawptr,
-		task_name: cstring,
-	) -> rawptr {
-		_ = user_context
-		_ = task_name
-		if intrinsics.atomic_load_explicit(&box3d_inline_tasks, .Acquire) != 0 {
-			callback := transmute(b3.TaskCallback)task
-			callback(task_context)
-			return nil
-		}
-		for index in 0 ..< BOX3D_TASK_MAX {
-			slot := &box3d_task_slots[index]
-			_, claimed := intrinsics.atomic_compare_exchange_strong_explicit(
-				&slot.status,
-				.Free,
-				.Reserved,
-				.Acq_Rel,
-				.Acquire,
-			)
-			if !claimed do continue
-			slot.task = task
-			slot.task_context = task_context
-			slot.generation += 1
-			intrinsics.atomic_store_explicit(&slot.status, .Pending, .Release)
-			if box3d_worker_schedule(u32(index), slot.generation) do return slot
-			callback := transmute(b3.TaskCallback)task
-			callback(task_context)
-			intrinsics.atomic_store_explicit(&slot.status, .Free, .Release)
-			return nil
-		}
-		callback := transmute(b3.TaskCallback)task
-		callback(task_context)
-		return nil
-	}
-
-	box3d_worker_finish :: proc "c" (user_task, user_context: rawptr) {
-		_ = user_context
-		if user_task == nil do return
-		slot := (^Box3D_Task_Slot)(user_task)
-		for attempt in 0 ..< BOX3D_TASK_MAX {
-			status := intrinsics.atomic_load_explicit(&slot.status, .Acquire)
-			if status == .Complete || status == .Failed do break
-			_ = intrinsics.wasm_memory_atomic_wait32(
-				(^u32)(&slot.status),
-				u32(Box3D_Task_Status.Pending),
-				1_000_000_000,
-			)
-			if attempt + 1 >= BOX3D_TASK_MAX do return
-		}
-		if slot.status != .Complete do return
-		intrinsics.atomic_store_explicit(&slot.status, .Free, .Release)
-	}
-
-	@(export, link_name = "ingot_box3d_worker_dispatch")
-	box3d_worker_dispatch :: proc "contextless" (index, generation: u32) -> bool {
-		if index >= BOX3D_TASK_MAX do return false
-		slot := &box3d_task_slots[index]
-		if slot.generation != generation do return false
-		if intrinsics.atomic_load_explicit(&slot.status, .Acquire) != .Pending do return false
-		callback := transmute(b3.TaskCallback)slot.task
-		callback(slot.task_context)
-		intrinsics.atomic_store_explicit(&slot.status, .Complete, .Release)
-		_ = intrinsics.wasm_memory_atomic_notify32((^u32)(&slot.status), 1)
-		return true
-	}
-
+when workers.ENABLED {
 	@(export, link_name = "ingot_box3d_benchmark_batch")
 	box3d_benchmark_batch :: proc "contextless" (step_count: u32) -> bool {
 		if !b3.World_IsValid(state.world) do return false
