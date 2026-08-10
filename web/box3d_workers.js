@@ -74,7 +74,7 @@
 				const worker = new Worker("box3d_worker.js");
 				workers.push(worker);
 				const role = index === 0 ? "coordinator" : "task";
-				const stackTop = 5 * 1024 * 1024 - index * STACK_BYTES;
+				const stackTop = 7 * 1024 * 1024 - index * STACK_BYTES;
 				await workerReady(worker, { type: "init", module, memory, role, stackTop });
 				if (role === "coordinator") {
 					coordinator = worker;
