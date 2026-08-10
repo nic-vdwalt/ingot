@@ -223,6 +223,7 @@ benchmark_batch_request :: proc(step_count: int) {
 		if box3d_worker_request_batch(u32(step_count)) do return
 		started := rl.GetTime()
 		ok := box3d_benchmark_batch(u32(step_count))
+		intrinsics.atomic_store_explicit(&box3d_batch_pending, 0, .Release)
 		if !ok {
 			state.phase = .Failed
 			return
@@ -277,19 +278,25 @@ benchmark_report :: proc() {
 }
 
 benchmark_update :: proc() {
-	if !state.ready || state.phase == .Complete || state.phase == .Failed do return
+	if !state.ready || state.phase == .Failed do return
+	if state.phase == .Complete {
+		benchmark_report()
+		return
+	}
 	when BOX3D_WORKERS_ENABLED {
 		if box3d_worker_failure_count() > 0 {
 			state.phase = .Failed
 			return
 		}
-		if intrinsics.atomic_load_explicit(&box3d_batch_pending, .Acquire) != 0 do return
 		if box3d_worker_batch_ready() {
+			intrinsics.atomic_store_explicit(&box3d_batch_pending, 0, .Release)
 			benchmark_batch_complete(
 				int(box3d_worker_batch_step_count()),
 				f64(box3d_worker_batch_elapsed_micros()) / 1000,
 			)
+			return
 		}
+		if intrinsics.atomic_load_explicit(&box3d_batch_pending, .Acquire) != 0 do return
 	}
 	if state.phase == .Warmup {
 		remaining := WARMUP_STEPS - state.warmup_complete
@@ -404,7 +411,6 @@ when BOX3D_WORKERS_ENABLED {
 			b3.World_Step(state.world, 1.0 / 60.0, PHYSICS_SUBSTEPS)
 		}
 		benchmark_oracle_record()
-		intrinsics.atomic_store_explicit(&box3d_batch_pending, 0, .Release)
 		return true
 	}
 }

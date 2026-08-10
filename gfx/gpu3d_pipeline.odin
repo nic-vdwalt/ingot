@@ -860,6 +860,30 @@ create_gpu_mesh :: proc(
 	return {}, false
 }
 
+// update_gpu_mesh_vertices rewrites an existing mesh's vertex buffer in place,
+// keeping its index buffer, primitive, and handle. Deforming geometry - a water
+// surface, a cloth, a morphing blend shape - changes positions and normals every
+// frame while its topology never moves, so destroying and recreating the mesh
+// would release and reallocate a GPU buffer per frame and burn a pool slot's
+// generation for nothing.
+//
+// The vertex count is deliberately fixed at creation: a resize is a different
+// mesh, and allowing one here would mean silently reallocating the buffer behind
+// a caller that believes it is writing into the geometry it built.
+update_gpu_mesh_vertices :: proc(mesh: Gpu_Mesh, vertices: []Gpu_3D_Vertex) -> bool {
+	ctx := &default_context_storage
+	if !ctx.initialized || len(vertices) == 0 do return false
+	entry := _gpu_3d_mesh(&ctx.resources.gpu_3d, mesh)
+	if entry == nil do return false
+	if u32(len(vertices)) != entry.vertex_count do return false
+	assert(entry.vertex_buffer != nil, "update_gpu_mesh_vertices: mesh without a buffer")
+	bytes := uint(len(vertices)) * size_of(Gpu_3D_Vertex)
+	assert(bytes > 0, "update_gpu_mesh_vertices: empty write")
+	wg.QueueWriteBuffer(ctx.queue, entry.vertex_buffer, 0, raw_data(vertices), bytes)
+	_stats_gpu3d_mesh_upload(ctx, entry.vertex_count, entry.index_count)
+	return true
+}
+
 destroy_gpu_mesh :: proc(mesh: ^Gpu_Mesh) {
 	assert(mesh != nil)
 	slot := _gpu_3d_mesh_slot(&g.resources.gpu_3d, mesh^)
