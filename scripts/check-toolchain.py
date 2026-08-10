@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-PIN_PATTERN = re.compile(r"dev-[0-9]{4}-[0-9]{2}:[0-9a-f]+")
+PIN_PATTERN = re.compile(r"dev-[0-9]{4}-[0-9]{2}(?:-nightly)?:[0-9a-f]+")
 
 
 def read_pin(path: Path) -> str:

@@ -31,7 +31,7 @@ assert_toolchain() {
 		echo "error: odin not found on PATH; expected $pin" >&2
 		exit 1
 	fi
-	revision="$(printf '%s' "$actual" | tr ' ' '\n' | grep '^dev-[0-9-]*:' || true)"
+	revision="$(printf '%s' "$actual" | tr ' ' '\n' | grep '^dev-[0-9][0-9-]*\(-nightly\)\{0,1\}:' || true)"
 	if [ -z "$revision" ]; then
 		echo "warning: odin did not report a revision, cannot verify the $pin pin"
 		return 0
