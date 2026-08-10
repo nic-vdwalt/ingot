@@ -11,6 +11,18 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `gfx.orbit_camera_input_poll` and `gfx.Orbit_Camera_Bindings`: an optional,
+  opt-in binding layer that samples the default input context into
+  `Orbit_Camera_Input`. Three examples carried a byte-identical copy of the same
+  polling block. `gfx/camera.odin` stays free of input polling, so the pure
+  `update_orbit_camera` path is unchanged and still accepts input from any
+  source.
+- `gfx.create_plane_mesh`, `gfx.plane_mesh_vertex_count`, and
+  `gfx.plane_mesh_index_count`: a subdivided XY plane with `+Z` normals and
+  documented row-major vertex order, bounded by `GPU_3D_PLANE_MAX_CELLS`. It is
+  the topology half of a deforming surface, whose other half is
+  `update_gpu_mesh_vertices`; the published counts let a caller size and check
+  its own vertex buffer against the generator instead of re-deriving it.
 - `examples/box3d_stack` now builds for WebGPU browsers through Odin's
   `vendor:box3d` WASM object and is covered by the web compile gate.
 - `gfx.update_gpu_mesh_vertices`: rewrites an existing mesh's vertex buffer in

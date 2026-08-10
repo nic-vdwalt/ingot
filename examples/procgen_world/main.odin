@@ -14,18 +14,19 @@ WORLD_WIDTH :: 1280
 WORLD_HEIGHT :: 720
 
 State :: struct {
-	config:       procgen.Terrain_Config,
-	chunks:       [WORLD_CHUNK_COUNT]procgen.Terrain_Chunk,
-	vertices:     [WORLD_CHUNK_COUNT][procgen.TERRAIN_CHUNK_VERTICES]asset.Vertex,
-	indices:      [WORLD_CHUNK_COUNT][procgen.TERRAIN_CHUNK_INDICES]u32,
-	world:        scene.Scene,
-	draws:        scene.Draw_List,
-	bridge:       scene_gfx.Bridge,
-	target:       rl.Gpu_3D_Target,
-	camera:       rl.Camera3D,
-	orbit:        rl.Orbit_Camera_State,
-	orbit_config: rl.Orbit_Camera_Config,
-	ready:        bool,
+	config:         procgen.Terrain_Config,
+	chunks:         [WORLD_CHUNK_COUNT]procgen.Terrain_Chunk,
+	vertices:       [WORLD_CHUNK_COUNT][procgen.TERRAIN_CHUNK_VERTICES]asset.Vertex,
+	indices:        [WORLD_CHUNK_COUNT][procgen.TERRAIN_CHUNK_INDICES]u32,
+	world:          scene.Scene,
+	draws:          scene.Draw_List,
+	bridge:         scene_gfx.Bridge,
+	target:         rl.Gpu_3D_Target,
+	camera:         rl.Camera3D,
+	orbit:          rl.Orbit_Camera_State,
+	orbit_config:   rl.Orbit_Camera_Config,
+	orbit_bindings: rl.Orbit_Camera_Bindings,
+	ready:          bool,
 }
 
 state: State
@@ -57,6 +58,7 @@ initialize :: proc(seed: u64) {
 	state.orbit_config.scroll_distance = 8
 	state.orbit_config.min_distance = 90
 	state.orbit_config.max_distance = 420
+	state.orbit_bindings = rl.orbit_camera_bindings_default()
 	target_ok: bool
 	state.target, target_ok = rl.create_gpu_3d_target(WORLD_WIDTH, WORLD_HEIGHT)
 	if !target_ok do return
@@ -131,13 +133,7 @@ frame :: proc() {
 }
 
 update_camera :: proc() {
-	input: rl.Orbit_Camera_Input
-	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) do input.rotate_rate.x += 1
-	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) do input.rotate_rate.x -= 1
-	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) do input.zoom_rate -= 1
-	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) do input.zoom_rate += 1
-	if rl.IsMouseButtonDown(.LEFT) do input.pointer_drag = -rl.GetMouseDelta()
-	input.scroll = rl.GetMouseWheelMoveV().y
+	input := rl.orbit_camera_input_poll(state.orbit_bindings)
 	rl.update_orbit_camera(&state.orbit, input, state.orbit_config, rl.GetFrameTime())
 	rl.orbit_camera_apply(state.orbit, &state.camera)
 }
