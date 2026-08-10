@@ -960,6 +960,15 @@
 		return {
 			schedule: () => false,
 			request_step: () => false,
+			request_batch: () => false,
+			batch_ready: () => false,
+			batch_elapsed_micros: () => 0,
+			batch_step_count: () => 0,
+			task_count: () => 0,
+			queue_high_water: () => 0,
+			failure_count: () => 0,
+			completion_generation: () => 0,
+			worker_count: () => 1,
 		};
 	}
 
