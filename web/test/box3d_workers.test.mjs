@@ -203,7 +203,9 @@ async function workerScriptImports(exports = {}) {
 		context);
 	const memory = new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true });
 	await self.onmessage({
-		data: { type: "init", role: "coordinator", module: {}, memory, stackTop: 0 },
+		data: {
+			type: "init", role: "coordinator", module: {}, memory, stackTop: 0, workerCount: 2,
+		},
 	});
 	return { imports: captured, messages, self };
 }

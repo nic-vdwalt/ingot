@@ -40,14 +40,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-# box3d_workers.js refuses a step whenever the coordinator is not yet assigned,
-# a step is already in flight, or the pool has failed. The app then steps the
-# world on the main thread, where box3d's parallel-for cannot block - so this is
-# the path that traps, and on a healthy machine the startup window that exercises
-# it is only a few frames wide. Holding request_step/request_batch false makes
-# that window the whole run, which is the difference between a check that
-# reproduces the failure and one that happens not to.
-FORCE_MAIN_THREAD = """
+REFUSE_REQUESTS = """
   Object.defineProperty(window, 'ingotBox3dWorkers', {
     configurable: true,
     set(v) {
@@ -56,6 +49,31 @@ FORCE_MAIN_THREAD = """
         const pool = await orig.apply(this, a);
         pool.imports.request_step = () => false;
         pool.imports.request_batch = () => false;
+        pool.imports.request_command = () => false;
+        return pool;
+      };
+      Object.defineProperty(window, 'ingotBox3dWorkers',
+        {value: v, writable: true, configurable: true});
+    }
+  });
+"""
+
+REFUSE_STARTUP = """
+  Object.defineProperty(window, 'ingotBox3dWorkers', {
+    configurable: true,
+    set(v) {
+      const orig = v.create;
+      v.create = async function(...a) {
+        const pool = await orig.apply(this, a);
+        const request = pool.imports.request_command;
+        let remaining = 8;
+        pool.imports.request_command = (...args) => {
+          if (remaining > 0) {
+            remaining -= 1;
+            return false;
+          }
+          return request(...args);
+        };
         return pool;
       };
       Object.defineProperty(window, 'ingotBox3dWorkers',
@@ -69,9 +87,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo-dir", required=True, help="staged demo directory to serve")
     ap.add_argument("--seconds", type=float, default=8.0, help="how long to let it run")
-    ap.add_argument("--force-main-thread", action="store_true",
-                    help="make the worker pool refuse every step, forcing the "
-                         "app's main-thread fallback")
+    refusal = ap.add_mutually_exclusive_group()
+    refusal.add_argument("--refuse-requests", action="store_true",
+                         help="make the worker pool refuse every app request")
+    refusal.add_argument("--refuse-startup", action="store_true",
+                         help="refuse initial command requests, then recover")
     args = ap.parse_args()
 
     demo = pathlib.Path(args.demo_dir).resolve()
@@ -106,8 +126,10 @@ def main():
                 return 0
 
             page = browser.new_context().new_page()
-            if args.force_main_thread:
-                page.add_init_script(FORCE_MAIN_THREAD)
+            if args.refuse_requests:
+                page.add_init_script(REFUSE_REQUESTS)
+            elif args.refuse_startup:
+                page.add_init_script(REFUSE_STARTUP)
             page.on("pageerror", lambda e: errors.append("pageerror: %s" % e))
             page.on("console", lambda m: (
                 logs.append("%s: %s" % (m.type, m.text)),

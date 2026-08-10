@@ -1157,6 +1157,19 @@ draw_gpu_mesh :: proc(
 	_ = _gpu_3d_draw_indexed(pass, entry, material, transform, pass.identity_instances_offset, 1)
 }
 
+draw_gpu_mesh_outlined :: proc(
+	pass: ^Gpu_3D_Pass,
+	mesh, outline_mesh: Gpu_Mesh,
+	transform: Matrix,
+	material: Gpu_Material,
+	outline_color: Color,
+) {
+	solid_material := material
+	solid_material.style = .Opaque
+	draw_gpu_mesh(pass, mesh, transform, solid_material)
+	draw_gpu_mesh(pass, outline_mesh, transform, {color = outline_color, style = .Opaque_Outline})
+}
+
 // draw_gpu_mesh_instanced draws one mesh under many model transforms. Input
 // is chunked at GPU_3D_MAX_INSTANCES_PER_DRAW; each chunk is one uniform
 // upload plus one indexed draw, which is the batching win over per-mesh
@@ -1529,11 +1542,7 @@ _gpu_3d_pipeline :: proc(
 				bufferCount = 1,
 				buffers = &vertex_layout,
 			},
-			primitive = {
-				topology = topology,
-				frontFace = .CCW,
-				cullMode = .None,
-			},
+			primitive = {topology = topology, frontFace = .CCW, cullMode = .None},
 			depthStencil = &depth,
 			multisample = {count = sample_count, mask = ~u32(0)},
 			fragment = &wg.FragmentState {

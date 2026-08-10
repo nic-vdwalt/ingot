@@ -2,6 +2,7 @@
 
 let instance = null;
 let role = null;
+let workerCount = 1;
 
 function imports(memory) {
 	return {
@@ -45,7 +46,7 @@ function imports(memory) {
 			queue_high_water() { return 0; },
 			failure_count() { return 0; },
 			completion_generation() { return 0; },
-			worker_count() { return 1; },
+			worker_count() { return workerCount; },
 		},
 	};
 }
@@ -55,6 +56,10 @@ self.onmessage = async (event) => {
 	try {
 		if (message.type === "init") {
 			role = message.role;
+			workerCount = message.workerCount;
+			if (!Number.isInteger(workerCount) || workerCount < 2 || workerCount > 4) {
+				throw new Error("invalid Box3D worker count");
+			}
 			instance = await WebAssembly.instantiate(message.module, imports(message.memory));
 			instance.exports.__stack_pointer.value = message.stackTop;
 			if (instance.exports.ingot_box3d_worker_init) {

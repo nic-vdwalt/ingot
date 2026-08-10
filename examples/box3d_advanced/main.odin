@@ -59,6 +59,8 @@ State :: struct {
 	consumed_gen:    u32,
 	render_index:    u32,
 	command_pending: u32,
+	pending_command: Simulation_Command,
+	pending_value:   u32,
 	requested_mode:  u32,
 	reset_requested: u32,
 	active_mode:     Simulation_Mode,
@@ -71,6 +73,7 @@ State :: struct {
 	paused:          bool,
 	step_once:       bool,
 	ready:           bool,
+	worker_failed:   bool,
 	target:          rl.Gpu_3D_Target,
 	resize_failures: u64,
 	cube:            rl.Gpu_Mesh,
@@ -93,9 +96,7 @@ main :: proc() {
 	rl.SetTargetFPS(60)
 	state.requested_mode = u32(Simulation_Mode.Visual)
 	state.worker_count = workers.worker_count()
-	when workers.ENABLED {
-		if !simulation_command_request(.Reset, u32(Simulation_Mode.Visual)) do return
-	} else {
+	when !workers.ENABLED {
 		if !simulation_reset(.Visual) do return
 		snapshot_publish()
 		snapshot_consume()
@@ -138,7 +139,7 @@ graphics_target_resize :: proc(value: ^State) {
 	if result == .Failed do value.resize_failures += 1
 }
 
-simulation_floor_create :: proc () -> bool {
+simulation_floor_create :: proc() -> bool {
 	assert(b3.World_IsValid(simulation.world))
 	body_def := b3.DefaultBodyDef()
 	body_def.type = .staticBody
@@ -150,7 +151,7 @@ simulation_floor_create :: proc () -> bool {
 	return b3.Shape_IsValid(shape)
 }
 
-simulation_box_create :: proc (index, count: u32, mode: Simulation_Mode) -> bool {
+simulation_box_create :: proc(index, count: u32, mode: Simulation_Mode) -> bool {
 	assert(index < count && count <= BOX_MAX)
 	body_def := b3.DefaultBodyDef()
 	body_def.type = .dynamicBody
@@ -185,7 +186,7 @@ simulation_box_create :: proc (index, count: u32, mode: Simulation_Mode) -> bool
 	return true
 }
 
-simulation_reset :: proc (mode: Simulation_Mode) -> bool {
+simulation_reset :: proc(mode: Simulation_Mode) -> bool {
 	assert(mode == .Visual || mode == .Stress)
 	if b3.World_IsValid(simulation.world) do b3.DestroyWorld(simulation.world)
 	simulation = {}
@@ -205,7 +206,7 @@ simulation_reset :: proc (mode: Simulation_Mode) -> bool {
 	return simulation.ready
 }
 
-snapshot_publish :: proc () {
+snapshot_publish :: proc() {
 	current := intrinsics.atomic_load_explicit(&state.published_index, .Acquire)
 	next := (current + 1) % 2
 	snapshot := &state.snapshots[next]
@@ -262,10 +263,15 @@ simulation_command_execute :: proc "contextless" (command, value: u32) -> bool {
 
 simulation_command_request :: proc(command: Simulation_Command, value: u32) -> bool {
 	assert(command != .None)
+	assert(state.pending_command == .None)
 	if intrinsics.atomic_load_explicit(&state.command_pending, .Acquire) != 0 do return false
+	state.pending_command = command
+	state.pending_value = value
 	intrinsics.atomic_store_explicit(&state.command_pending, 1, .Release)
 	when workers.ENABLED {
 		if workers.request_command(u32(command), value) do return true
+		state.pending_command = .None
+		state.pending_value = 0
 		intrinsics.atomic_store_explicit(&state.command_pending, 0, .Release)
 		return false
 	}
@@ -273,6 +279,9 @@ simulation_command_request :: proc(command: Simulation_Command, value: u32) -> b
 	ok := simulation_command_execute(u32(command), value)
 	elapsed := max(f64(0), (rl.GetTime() - started) * 1_000_000)
 	state.physics_micros = u32(elapsed)
+	if ok && command == .Advance do state.fixed_steps = value
+	state.pending_command = .None
+	state.pending_value = 0
 	intrinsics.atomic_store_explicit(&state.command_pending, 0, .Release)
 	snapshot_consume()
 	return ok
@@ -280,29 +289,37 @@ simulation_command_request :: proc(command: Simulation_Command, value: u32) -> b
 
 simulation_completion_consume :: proc() {
 	when workers.ENABLED {
+		if state.worker_failed do return
+		if workers.failure_count() != 0 {
+			state.worker_failed = true
+			return
+		}
 		if !workers.command_ready() do return
+		assert(state.pending_command != .None)
+		assert(intrinsics.atomic_load_explicit(&state.command_pending, .Acquire) != 0)
 		state.physics_micros = workers.elapsed_micros()
-		state.fixed_steps = workers.completed_value()
+		completed := workers.completed_value()
+		if state.pending_command == .Advance {
+			assert(completed == state.pending_value)
+			state.fixed_steps = completed
+		}
+		state.pending_command = .None
+		state.pending_value = 0
 		intrinsics.atomic_store_explicit(&state.command_pending, 0, .Release)
 		snapshot_consume()
 	}
 }
 
-physics_steps_due :: proc(value: ^State, frame_dt: f32) -> u32 {
+physics_time_accumulate :: proc(value: ^State, frame_dt: f32) {
 	assert(value != nil)
-	if value.paused && !value.step_once do return 0
-	if value.step_once {
-		value.step_once = false
-		return 1
-	}
+	assert(value.accumulator >= 0)
+	if value.paused do return
 	value.accumulator += clamp(frame_dt, 0, MAX_FRAME_DT)
-	steps := min(u32(value.accumulator / FIXED_DT), u32(MAX_STEPS_PER_FRAME))
-	if steps == MAX_STEPS_PER_FRAME && value.accumulator >= FIXED_DT * f32(steps + 1) {
-		dropped := u64(value.accumulator / FIXED_DT) - u64(steps)
-		value.accumulator -= f32(dropped) * FIXED_DT
-		value.dropped_steps += dropped
-	}
-	return steps
+	maximum := f32(MAX_STEPS_PER_FRAME + 1) * FIXED_DT
+	if value.accumulator < maximum do return
+	dropped := u64(value.accumulator / FIXED_DT) - u64(MAX_STEPS_PER_FRAME)
+	value.accumulator -= f32(dropped) * FIXED_DT
+	value.dropped_steps += dropped
 }
 
 physics_update :: proc(value: ^State, frame_dt: f32) {
@@ -310,6 +327,8 @@ physics_update :: proc(value: ^State, frame_dt: f32) {
 	assert(value.body_count <= BOX_MAX)
 	value.fixed_steps = 0
 	simulation_completion_consume()
+	if value.worker_failed do return
+	physics_time_accumulate(value, frame_dt)
 	if intrinsics.atomic_load_explicit(&value.command_pending, .Acquire) != 0 do return
 	requested := intrinsics.atomic_load_explicit(&value.requested_mode, .Acquire)
 	reset := intrinsics.atomic_load_explicit(&value.reset_requested, .Acquire) != 0
@@ -320,11 +339,14 @@ physics_update :: proc(value: ^State, frame_dt: f32) {
 		}
 		return
 	}
-	steps := physics_steps_due(value, frame_dt)
+	if value.paused {
+		if value.step_once && simulation_command_request(.Advance, 1) do value.step_once = false
+		return
+	}
+	steps := min(u32(value.accumulator / FIXED_DT), u32(MAX_STEPS_PER_FRAME))
 	if steps == 0 do return
 	if simulation_command_request(.Advance, steps) {
-		value.accumulator -= min(value.accumulator, f32(steps) * FIXED_DT)
-		value.fixed_steps = steps
+		value.accumulator -= f32(steps) * FIXED_DT
 	}
 }
 
@@ -378,12 +400,13 @@ draw_world :: proc(value: ^State) {
 	snapshot := &value.snapshots[value.render_index]
 	for transform, index in snapshot.transforms[:value.body_count] {
 		color := BOX_COLORS[index % len(BOX_COLORS)]
-		rl.draw_gpu_mesh(&pass, value.cube, transform, {color = color})
-		rl.draw_gpu_mesh(
+		rl.draw_gpu_mesh_outlined(
 			&pass,
+			value.cube,
 			value.cube_edges,
 			transform,
-			{color = {24, 28, 36, 255}, style = .Opaque_Outline},
+			{color = color},
+			{24, 28, 36, 255},
 		)
 	}
 	rl.end_gpu_3d(&pass)
@@ -399,7 +422,8 @@ draw_screen :: proc(value: ^State) {
 		{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())},
 		rl.WHITE,
 	)
-	status := "unavailable" if !value.ready else "paused" if value.paused else "running"
+	status :=
+		"failed" if value.worker_failed else "unavailable" if !value.ready else "paused" if value.paused else "running"
 	mode := "stress" if value.active_mode == .Stress else "visual"
 	hud := fmt.ctprintf(
 		"box3d %s  mode %s  bodies %d  workers %d  physics %.3fms  steps %d  dropped %d",

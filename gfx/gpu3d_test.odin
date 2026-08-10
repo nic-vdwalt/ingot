@@ -394,6 +394,7 @@ test_gpu_3d_opaque_material_policies :: proc(t: ^testing.T) {
 	default := _gpu_3d_material_policy(.Default)
 	opaque := _gpu_3d_material_policy(.Opaque)
 	overlay := _gpu_3d_material_policy(.Opaque_Overlay)
+	outline := _gpu_3d_material_policy(.Opaque_Outline)
 	testing.expect(t, default.blend)
 	testing.expect_value(t, default.depth_bias, i32(0))
 	testing.expect(t, !opaque.blend)
@@ -404,6 +405,10 @@ test_gpu_3d_opaque_material_policies :: proc(t: ^testing.T) {
 	testing.expect(t, !overlay.depth_write)
 	testing.expect_value(t, overlay.depth_compare, wg.CompareFunction.Less)
 	testing.expect(t, overlay.depth_bias < 0)
+	testing.expect(t, !outline.blend)
+	testing.expect(t, !outline.depth_write)
+	testing.expect_value(t, outline.depth_compare, wg.CompareFunction.LessEqual)
+	testing.expect_value(t, outline.depth_bias, i32(0))
 }
 
 @(test)
@@ -425,6 +430,10 @@ test_gpu_3d_pipeline_identity_includes_compatibility_fields :: proc(t: ^testing.
 	testing.expect(
 		t,
 		!_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque_Overlay, 4),
+	)
+	testing.expect(
+		t,
+		!_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque_Outline, 4),
 	)
 	testing.expect(t, !_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default, 1))
 }
@@ -539,5 +548,7 @@ test_draw_gpu_mesh_instanced_rejects_headless :: proc(t: ^testing.T) {
 	draw_gpu_mesh_instanced(nil, Gpu_Mesh{}, transforms[:], {})
 	pass: Gpu_3D_Pass
 	draw_gpu_mesh_instanced(&pass, Gpu_Mesh{}, nil, {})
+	draw_gpu_mesh_outlined(nil, {}, {}, 1, {}, {})
+	draw_gpu_mesh_outlined(&pass, {}, {}, 1, {}, {})
 	testing.expect(t, !pass.active)
 }
