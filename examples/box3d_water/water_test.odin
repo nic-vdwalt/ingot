@@ -84,6 +84,65 @@ water_submerged_fraction_saturates_at_both_ends :: proc(t: ^testing.T) {
 }
 
 @(test)
+water_surface_actually_moves_with_phase :: proc(t: ^testing.T) {
+	// Without this, the periodicity test above is satisfied by a constant
+	// function: a wave that never moves repeats over every period trivially.
+	// This is the test that says the water is a wave at all, and the one that
+	// would fail if the phase term were dropped from the sine argument during
+	// a refactor.
+	x := f32(3)
+	y := f32(-2)
+	rest := water_height(x, y, 0)
+	moved := false
+	for step in 1 ..< 64 {
+		phase := f32(step) * WATER_PHASE_RATE * FIXED_DT
+		if abs(water_height(x, y, phase) - rest) > 1e-3 {
+			moved = true
+			break
+		}
+	}
+	testing.expect(t, moved, "surface never changed as the phase advanced")
+}
+
+@(test)
+water_model_outputs_stay_finite :: proc(t: ^testing.T) {
+	// Every value here feeds a Box3D force, and a single non-finite component
+	// poisons a body's integration for the rest of the session with nothing
+	// logged. The sweep covers positions well outside the pool and velocities
+	// far beyond anything the solver should produce.
+	for step in 0 ..< 256 {
+		phase := f32(step) * WATER_PHASE_PERIOD / 256
+		x := f32(step) * 7 - 900
+		y := f32(step) * -5 + 700
+		testing.expect(t, water_finite(water_height(x, y, phase)), "height went non-finite")
+		testing.expect(
+			t,
+			water_finite(water_surface_velocity(x, y, phase)),
+			"surface velocity went non-finite",
+		)
+		testing.expect(t, water_vector_finite(water_normal(x, y, phase)), "normal non-finite")
+		velocity := [3]f32{f32(step) * 40, f32(step) * -30, f32(step) * 55}
+		force := water_force(0, 1, 12, water_height(x, y, phase), 3, velocity)
+		testing.expect(t, water_vector_finite(force), "force went non-finite")
+		for component in force {
+			testing.expect(t, abs(component) <= WATER_FORCE_MAX, "force escaped its clamp")
+		}
+	}
+}
+
+@(test)
+water_finite_rejects_nan_and_both_infinities :: proc(t: ^testing.T) {
+	// Checking only for NaN is the tempting half-measure; these are the exact
+	// values that half-measure would let through into a force calculation.
+	testing.expect(t, water_finite(0))
+	testing.expect(t, !water_finite(math.nan_f32()))
+	testing.expect(t, !water_finite(math.inf_f32(1)))
+	testing.expect(t, !water_finite(math.inf_f32(-1)))
+	testing.expect(t, !water_vector_finite({0, math.inf_f32(1), 0}))
+	testing.expect(t, water_vector_finite({1, 2, 3}))
+}
+
+@(test)
 water_force_is_zero_above_the_surface :: proc(t: ^testing.T) {
 	force := water_force(10, 1, 8, 0, 0, {2, -3, 4})
 	testing.expect_value(t, force, [3]f32{0, 0, 0})
