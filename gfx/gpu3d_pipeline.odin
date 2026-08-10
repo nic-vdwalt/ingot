@@ -1530,8 +1530,8 @@ _gpu_3d_pipeline :: proc(
 			},
 			primitive = {
 				topology = topology,
-				frontFace = .CW,
-				cullMode = .Back if primitive == .Triangles else .None,
+				frontFace = .CCW,
+				cullMode = .None,
 			},
 			depthStencil = &depth,
 			multisample = {count = sample_count, mask = ~u32(0)},

@@ -64,6 +64,11 @@ if [ "${INGOT_CHECK_WEB_THREADS:-0}" = "1" ]; then
 	INGOT_WEB_THREADS=1 bash "$ROOT/build_web.sh" examples/box3d_benchmark >/dev/null
 	python3 "$ROOT/scripts/check_wasm_threads.py" "$ROOT/web/ingot_web.wasm" \
 		--required-export ingot_box3d_benchmark_batch
+	echo "== wasm compile: threaded examples/box3d_advanced =="
+	INGOT_WEB_THREADS=1 bash "$ROOT/build_web.sh" examples/box3d_advanced >/dev/null
+	python3 "$ROOT/scripts/check_wasm_threads.py" "$ROOT/web/ingot_web.wasm" \
+		--required-export ingot_box3d_worker_command \
+		--required-export ingot_box3d_advanced_set_stress
 	# Shared-memory view rejection. Skips cleanly without playwright.
 	echo "== shared view check (real browsers) =="
 	python3 "$ROOT/scripts/check_shared_views.py"

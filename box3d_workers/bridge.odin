@@ -1,6 +1,7 @@
 package box3d_workers
 
 import "base:intrinsics"
+import "base:runtime"
 import b3 "vendor:box3d"
 
 ENABLED :: ODIN_OS == .JS && #config(INGOT_BOX3D_WORKERS, false)
@@ -143,6 +144,7 @@ when ENABLED {
 		task, task_context, user_context: rawptr,
 		task_name: cstring,
 	) -> rawptr {
+		context = runtime.default_context()
 		_ = user_context
 		_ = task_name
 		assert(task != nil)
