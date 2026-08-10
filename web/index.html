@@ -38,10 +38,12 @@
 	<script src="wgpu.js"></script>
 	<!-- ingot host glue: "ingot" import module, canvas sizing, boot. -->
 	<script src="ingot_input.js"></script>
+	<script src="box3d_workers.js"></script>
 	<script src="ingot_web.js"></script>
 	<script>
 		const msg = document.getElementById("msg");
-		window.ingotWeb.run("ingot_web.wasm")
+		const box3dWorkers = new URLSearchParams(location.search).has("box3d-workers");
+		window.ingotWeb.run("ingot_web.wasm", { box3dWorkers })
 			.then(() => {
 				// A previous session's post-mortem renders into #crash and
 				// must not suppress this session's status line.

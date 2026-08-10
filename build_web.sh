@@ -20,8 +20,19 @@ echo "Building wasm..."
 #   bash build_web.sh examples/breakout    # a package directory
 #   bash build_web.sh web/demo.odin        # a single file (default)
 SRC="${1:-$WEB/demo.odin}"
+WEB_THREADS="${INGOT_WEB_THREADS:-0}"
 FILE_FLAG="-file"
 if [ -d "$SRC" ]; then FILE_FLAG=""; fi
+TARGET_FLAGS=()
+LINKER_FLAGS="--export-table"
+if [ "$WEB_THREADS" = "1" ]; then
+	TARGET_FLAGS+=("-target-features:atomics")
+	TARGET_FLAGS+=("-define:BOX3D_WASM_THREADS=true")
+	TARGET_FLAGS+=("-define:INGOT_BOX3D_WORKERS=true")
+	LINKER_FLAGS="$LINKER_FLAGS --shared-memory --import-memory --export=__stack_pointer"
+	LINKER_FLAGS="$LINKER_FLAGS --initial-memory=67108864 --max-memory=268435456"
+	LINKER_FLAGS="$LINKER_FLAGS -z stack-size=5242880"
+fi
 # No optimisation flag is set here, and that is a measured decision rather than
 # an oversight. Most of the binary is fixed-capacity data, so web uses the
 # measured phone-safe batch floor below. The GPU stream defaults are also
@@ -48,13 +59,14 @@ if [ -d "$SRC" ]; then FILE_FLAG=""; fi
 # shellcheck disable=SC2086
 odin build "$SRC" $FILE_FLAG \
 	-target:js_wasm32 \
+	"${TARGET_FLAGS[@]}" \
 	-collection:ingot="$ROOT" \
 	-out:"$WEB/ingot_web.wasm" \
 	-define:INGOT_GPU_GEOMETRY_BYTES=4194304 \
 	-define:INGOT_GPU_UNIFORM_BYTES=4194304 \
 	-define:INGOT_BATCH_MAX_VERTICES=131072 \
 	-define:INGOT_BATCH_MAX_INDICES=196608 \
-	-extra-linker-flags:"--export-table"
+	-extra-linker-flags:"$LINKER_FLAGS"
 
 echo "Staging JS runtimes..."
 "$ROOT/scripts/stage-web-runtime.sh" "$WEB"

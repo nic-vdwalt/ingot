@@ -245,18 +245,24 @@ lifecycle validation), `examples/procgen_world` (deterministic terrain, biome
 placement, culling, and GPU residency without external assets), and
 `examples/raylib_migration_fixture` (import-only 2D compatibility contract).
 
-`examples/box3d_stack` is a zero-asset Box3D integration: Ingot owns the WebGPU
-renderer, camera, input, lighting, and HUD while `vendor:box3d` owns a bounded
-fixed-step simulation. Run it natively or build it for the browser with:
+`examples/box3d_stack` is a zero-asset port of Odin's Box3D + Raylib sample.
+It preserves the 25-body stack, fixed 60 Hz step, rigid-body transforms, floor,
+grid, and HUD while adapting the world to Ingot's ROS Z-up coordinates. The
+separate `examples/box3d_advanced` demonstrates Ingot's explicit GPU 3D target,
+meshes, lighting, resize handling, orbit camera, fixed-step accumulator, and
+simulation controls. Run either natively or build either for the browser with:
 
 ```sh
 odin run examples/box3d_stack -collection:ingot=.
+odin run examples/box3d_advanced -collection:ingot=.
 bash build_web.sh examples/box3d_stack
+bash build_web.sh examples/box3d_advanced
 ```
 
-Use R to reset, Space to pause, N to single-step, A/D, arrows, or left-drag to
-orbit, and W/S, the mouse wheel, or trackpad scrolling to zoom. Browser builds use
-Box3D's serial worker configuration; native builds may opt into platform threads.
+The advanced example supports R to reset, Space to pause, N to single-step,
+A/D, arrows, or left-drag to orbit, and W/S or wheel to zoom. Browser builds
+use Box3D's serial worker configuration; native builds may opt into platform
+threads.
 
 For web, `bash build_web.sh examples/gallery` writes `web/ingot_web.wasm`;
 serve `web/` over HTTP in a WebGPU browser (Chrome/Edge 113+ or Safari 18+).
