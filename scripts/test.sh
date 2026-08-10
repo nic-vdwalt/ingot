@@ -75,6 +75,10 @@ for pkg in asset box3d_workers gfx procgen scene scene_gfx ui ui_gfx view view/g
 		-define:ODIN_TEST_FAIL_ON_EMPTY=true ${extra[@]+"${extra[@]}"} "$@"
 done
 
+echo "== testing examples/box3d_advanced =="
+run_supervised "box3d-advanced-example" odin test "$root/examples/box3d_advanced" "$col" \
+	"$guard" -define:ODIN_TEST_FAIL_ON_EMPTY=true "$@"
+
 echo "== testing native WSS loopback TLS =="
 run_supervised "wss-loopback" python3 "$root/scripts/wss-loopback-test.py" \
 	--fixture "$root/examples/wss_fixture" "--collection=$col"

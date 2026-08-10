@@ -47,13 +47,15 @@ Simulation_State :: struct {
 }
 
 Snapshot :: struct {
-	transforms: [BOX_MAX]rl.Matrix,
+	previous:   [BOX_MAX]b3.WorldTransform,
+	current:    [BOX_MAX]b3.WorldTransform,
 	body_count: u32,
 	mode:       Simulation_Mode,
 }
 
 State :: struct {
 	snapshots:       [2]Snapshot,
+	draw_transforms: [BOX_MAX]rl.Matrix,
 	published_index: u32,
 	published_gen:   u32,
 	consumed_gen:    u32,
@@ -98,7 +100,7 @@ main :: proc() {
 	state.worker_count = workers.worker_count()
 	when !workers.ENABLED {
 		if !simulation_reset(.Visual) do return
-		snapshot_publish()
+		snapshot_publish_reset()
 		snapshot_consume()
 	}
 	rl.run(frame)
@@ -121,10 +123,12 @@ graphics_create :: proc(value: ^State) -> bool {
 	value.orbit_config.max_distance = 128
 	value.orbit_bindings = rl.orbit_camera_bindings_default()
 	target_ok, cube_ok, edges_ok: bool
+	antialiasing := rl.Gpu_3D_Antialiasing.MSAA_4X
+	when ODIN_OS == .JS do antialiasing = .None
 	value.target, target_ok = rl.create_gpu_3d_target(
 		rl.GetRenderWidth(),
 		rl.GetRenderHeight(),
-		.MSAA_4X,
+		antialiasing,
 	)
 	value.cube, cube_ok = rl.create_cube_mesh()
 	value.cube_edges, edges_ok = rl.create_cube_edge_mesh()
@@ -206,24 +210,49 @@ simulation_reset :: proc(mode: Simulation_Mode) -> bool {
 	return simulation.ready
 }
 
-snapshot_publish :: proc() {
+snapshot_capture :: proc(transforms: ^[BOX_MAX]b3.WorldTransform) {
+	assert(transforms != nil)
+	assert(simulation.body_count <= BOX_MAX)
+	for index in 0 ..< simulation.body_count {
+		transforms[index] = b3.Body_GetTransform(simulation.bodies[index])
+	}
+}
+
+snapshot_commit :: proc(index: u32) {
+	assert(index < 2)
+	assert(simulation.body_count <= BOX_MAX)
+	snapshot := &state.snapshots[index]
+	snapshot.body_count = simulation.body_count
+	snapshot.mode = simulation.mode
+	intrinsics.atomic_store_explicit(&state.published_index, index, .Release)
+	generation := intrinsics.atomic_load_explicit(&state.published_gen, .Acquire)
+	intrinsics.atomic_store_explicit(&state.published_gen, generation + 1, .Release)
+}
+
+snapshot_publish_reset :: proc() {
 	current := intrinsics.atomic_load_explicit(&state.published_index, .Acquire)
 	next := (current + 1) % 2
 	snapshot := &state.snapshots[next]
-	assert(simulation.body_count <= BOX_MAX)
+	snapshot_capture(&snapshot.current)
 	for index in 0 ..< simulation.body_count {
-		transform := b3.Body_GetTransform(simulation.bodies[index])
-		snapshot.transforms[index] = linalg.matrix4_from_trs_f32(
-			transform.p,
-			transform.q,
-			[3]f32{2, 2, 2},
-		)
+		snapshot.previous[index] = snapshot.current[index]
 	}
-	snapshot.body_count = simulation.body_count
-	snapshot.mode = simulation.mode
-	intrinsics.atomic_store_explicit(&state.published_index, next, .Release)
-	generation := intrinsics.atomic_load_explicit(&state.published_gen, .Acquire)
-	intrinsics.atomic_store_explicit(&state.published_gen, generation + 1, .Release)
+	snapshot_commit(next)
+}
+
+simulation_advance :: proc(step_count: u32) {
+	assert(step_count > 0 && step_count <= MAX_STEPS_PER_FRAME)
+	assert(simulation.ready)
+	current := intrinsics.atomic_load_explicit(&state.published_index, .Acquire)
+	next := (current + 1) % 2
+	snapshot := &state.snapshots[next]
+	for _ in 1 ..< step_count {
+		b3.World_Step(simulation.world, FIXED_DT, PHYSICS_SUBSTEPS)
+	}
+	snapshot_capture(&snapshot.previous)
+	b3.World_Step(simulation.world, FIXED_DT, PHYSICS_SUBSTEPS)
+	snapshot_capture(&snapshot.current)
+	snapshot_commit(next)
 }
 
 snapshot_consume :: proc() {
@@ -247,13 +276,12 @@ simulation_command_execute :: proc "contextless" (command, value: u32) -> bool {
 	case .Reset:
 		if value > u32(Simulation_Mode.Stress) do return false
 		if !simulation_reset(Simulation_Mode(value)) do return false
-		snapshot_publish()
+		snapshot_publish_reset()
 		return true
 	case .Advance:
 		if value == 0 || value > MAX_STEPS_PER_FRAME do return false
 		if !simulation.ready do return false
-		for _ in 0 ..< value do b3.World_Step(simulation.world, FIXED_DT, PHYSICS_SUBSTEPS)
-		snapshot_publish()
+		simulation_advance(value)
 		return true
 	case .None:
 		return false
@@ -310,10 +338,10 @@ simulation_completion_consume :: proc() {
 	}
 }
 
-physics_time_accumulate :: proc(value: ^State, frame_dt: f32) {
+physics_time_accumulate :: proc(value: ^State, frame_dt: f32, active: bool) {
 	assert(value != nil)
 	assert(value.accumulator >= 0)
-	if value.paused do return
+	if value.paused || !active do return
 	value.accumulator += clamp(frame_dt, 0, MAX_FRAME_DT)
 	maximum := f32(MAX_STEPS_PER_FRAME + 1) * FIXED_DT
 	if value.accumulator < maximum do return
@@ -328,13 +356,16 @@ physics_update :: proc(value: ^State, frame_dt: f32) {
 	value.fixed_steps = 0
 	simulation_completion_consume()
 	if value.worker_failed do return
-	physics_time_accumulate(value, frame_dt)
-	if intrinsics.atomic_load_explicit(&value.command_pending, .Acquire) != 0 do return
 	requested := intrinsics.atomic_load_explicit(&value.requested_mode, .Acquire)
 	reset := intrinsics.atomic_load_explicit(&value.reset_requested, .Acquire) != 0
+	pending := intrinsics.atomic_load_explicit(&value.command_pending, .Acquire) != 0
+	active := value.ready && requested == u32(value.active_mode) && !reset
+	active = active && (!pending || value.pending_command == .Advance)
+	physics_time_accumulate(value, frame_dt, active)
+	if pending do return
 	if !value.ready || requested != u32(value.active_mode) || reset {
+		value.accumulator = 0
 		if simulation_command_request(.Reset, requested) {
-			value.accumulator = 0
 			intrinsics.atomic_store_explicit(&value.reset_requested, 0, .Release)
 		}
 		return
@@ -350,11 +381,30 @@ physics_update :: proc(value: ^State, frame_dt: f32) {
 	}
 }
 
+snapshot_transform_interpolate :: proc(a, b: b3.WorldTransform, alpha: f32) -> b3.WorldTransform {
+	assert(alpha >= 0 && alpha <= 1)
+	position := b3.LerpPosition(a.p, b.p, alpha)
+	return {p = position, q = b3.NLerp(a.q, b.q, alpha)}
+}
+
+snapshot_render_alpha :: proc(value: ^State) -> f32 {
+	assert(value != nil)
+	assert(value.accumulator >= 0)
+	if value.paused do return 1
+	return clamp(value.accumulator / FIXED_DT, 0, 1)
+}
+
 @(export, link_name = "ingot_box3d_advanced_set_stress")
 set_stress :: proc "contextless" (enabled: u32) -> bool {
 	if enabled > 1 do return false
 	intrinsics.atomic_store_explicit(&state.requested_mode, enabled, .Release)
 	return true
+}
+
+@(export, link_name = "ingot_box3d_advanced_fps")
+current_fps :: proc "contextless" () -> i32 {
+	context = runtime.default_context()
+	return rl.GetFPS()
 }
 
 physics_input :: proc(value: ^State) {
@@ -398,15 +448,30 @@ draw_world :: proc(value: ^State) {
 	floor_transform := rl.MatrixTranslate(0, 0, -2) * rl.MatrixScale(100, 100, 4)
 	rl.draw_gpu_mesh(&pass, value.cube, floor_transform, {color = rl.LIGHTGRAY})
 	snapshot := &value.snapshots[value.render_index]
-	for transform, index in snapshot.transforms[:value.body_count] {
-		color := BOX_COLORS[index % len(BOX_COLORS)]
-		rl.draw_gpu_mesh_outlined(
+	alpha := snapshot_render_alpha(value)
+	for color, color_index in BOX_COLORS {
+		count := 0
+		for index in 0 ..< value.body_count {
+			if index % u32(len(BOX_COLORS)) != u32(color_index) do continue
+			physics_transform := snapshot_transform_interpolate(
+				snapshot.previous[index],
+				snapshot.current[index],
+				alpha,
+			)
+			value.draw_transforms[count] = linalg.matrix4_from_trs_f32(
+				physics_transform.p,
+				physics_transform.q,
+				[3]f32{2, 2, 2},
+			)
+			count += 1
+		}
+		transforms := value.draw_transforms[:count]
+		rl.draw_gpu_mesh_instanced(&pass, value.cube, transforms, {color = color, style = .Opaque})
+		rl.draw_gpu_mesh_instanced(
 			&pass,
-			value.cube,
 			value.cube_edges,
-			transform,
-			{color = color},
-			{24, 28, 36, 255},
+			transforms,
+			{color = {24, 28, 36, 255}, style = .Opaque_Outline},
 		)
 	}
 	rl.end_gpu_3d(&pass)
@@ -422,8 +487,14 @@ draw_screen :: proc(value: ^State) {
 		{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())},
 		rl.WHITE,
 	)
-	status :=
-		"failed" if value.worker_failed else "unavailable" if !value.ready else "paused" if value.paused else "running"
+	status := "running"
+	if value.worker_failed {
+		status = "failed"
+	} else if !value.ready {
+		status = "unavailable"
+	} else if value.paused {
+		status = "paused"
+	}
 	mode := "stress" if value.active_mode == .Stress else "visual"
 	hud := fmt.ctprintf(
 		"box3d %s  mode %s  bodies %d  workers %d  fps %d  physics %.3fms  steps %d  dropped %d",
