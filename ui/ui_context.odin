@@ -23,6 +23,10 @@ Ui_Runtime :: struct {
 	dpi_last:              f32,
 	generation:            u64,
 	frame_generation:      u64,
+	// Bumped whenever the text backend discards its loaded fonts. Font_Id
+	// values are indices into that table, so anything holding one across a
+	// reset is holding a dangling handle.
+	font_epoch:            u64,
 	pending_a11y:          A11y_Pending_Action,
 	semantics_enabled:     bool,
 	semantics_snapshot:    Sem_Frame,
@@ -53,6 +57,7 @@ Ui_Frame :: struct {
 	z_count:                        int,
 	font_memo_size:                 i32,
 	font_memo_id:                   Font_Id,
+	font_memo_epoch:                u64,
 	text_cull_top:                  i32,
 	text_cull_bottom:               i32,
 	open_roots:                     int,
@@ -108,7 +113,13 @@ ui_runtime_set_scale :: proc(runtime: ^Ui_Runtime, value: f32) {
 	if scale == runtime.scale do return
 	runtime.scale = scale
 	runtime.metrics = ui_metrics(scale)
-	if runtime.text_backend.reset != nil do runtime.text_backend.reset(runtime.text_backend.data)
+	// Scale changes can originate mid-frame (an auto-fit pass sizing content to
+	// its container), so the reset must publish a new epoch: the open frame's
+	// memoised Font_Id refers to a table this call is about to empty.
+	if runtime.text_backend.reset != nil {
+		runtime.text_backend.reset(runtime.text_backend.data)
+		runtime.font_epoch += 1
+	}
 	ui_runtime_invalidate_scale_caches(runtime)
 	if runtime.scale_metrics_hook != nil do runtime.scale_metrics_hook(scale)
 	runtime.generation += 1
@@ -218,6 +229,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame.z_count = 0
 	frame.font_memo_size = 0
 	frame.font_memo_id = 0
+	frame.font_memo_epoch = runtime.font_epoch
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
 	frame.open_roots = 0

@@ -149,3 +149,75 @@ test_markdown_width_uses_render_backend :: proc(t: ^testing.T) {
 	testing.expect_value(t, bold_width, i32(44))
 	testing.expect(t, state.measure_calls > 0, "markdown width must use the render backend")
 }
+
+// A resetting backend models ui_gfx: Font_Id values index a font table that
+// reset empties, so an id handed out before a reset dangles after it.
+Test_Resetting_Backend_State :: struct {
+	using base:  Test_Text_Backend_State,
+	live_size:   i32,
+	reset_calls: int,
+	invalid_use: int,
+}
+
+test_resetting_font_for_size :: proc(data: rawptr, size: i32) -> Font_Id {
+	state := cast(^Test_Resetting_Backend_State)data
+	state.font_calls += 1
+	state.live_size = size
+	return Font_Id(size)
+}
+
+test_resetting_measure :: proc(
+	data: rawptr,
+	font: Font_Id,
+	text: string,
+	size, spacing: f32,
+) -> Vec2 {
+	state := cast(^Test_Resetting_Backend_State)data
+	state.measure_calls += 1
+	// Stands in for ui_gfx's "adapter_measure: invalid font" assertion.
+	if font != Font_Id(state.live_size) do state.invalid_use += 1
+	return {f32(len(text)) * size, size}
+}
+
+test_resetting_reset :: proc(data: rawptr) {
+	state := cast(^Test_Resetting_Backend_State)data
+	state.reset_calls += 1
+	state.live_size = 0
+}
+
+@(test)
+test_mid_frame_scale_change_invalidates_font_memo :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	state: Test_Resetting_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &state,
+			font_for_size = test_resetting_font_for_size,
+			measure = test_resetting_measure,
+			reset = test_resetting_reset,
+		},
+	)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+
+	_ = measure_text_string_frame(&frame, "before", 16)
+	testing.expect_value(t, state.invalid_use, 0)
+
+	// An auto-fit pass resizing content to its container, mid-frame.
+	ui_runtime_set_scale(&runtime, 1.5)
+	testing.expect_value(t, state.reset_calls, 1)
+
+	_ = measure_text_string_frame(&frame, "after", 16)
+	ui_frame_end(&frame)
+	ui_frame_destroy(&frame)
+	ui_runtime_destroy(&runtime)
+
+	testing.expect_value(t, state.invalid_use, 0)
+	testing.expect(
+		t,
+		state.font_calls >= 2,
+		"a font reset must force the frame to re-resolve its font",
+	)
+}

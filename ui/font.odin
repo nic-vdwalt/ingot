@@ -135,12 +135,17 @@ draw_text_with :: proc(system: ^Text_System, text: cstring, x, y, size: i32, col
 frame_font_for_size :: proc(frame: ^Ui_Frame, size: i32) -> Font_Id {
 	assert(frame != nil, "frame_font_for_size: nil frame")
 	assert(size > 0, "frame_font_for_size: invalid size")
-	if size == frame.font_memo_size do return frame.font_memo_id
+	assert(frame.runtime != nil, "frame_font_for_size: nil runtime")
+	epoch := frame.runtime.font_epoch
+	if size == frame.font_memo_size && epoch == frame.font_memo_epoch {
+		return frame.font_memo_id
+	}
 	font := Font_Id(0)
 	if text_backend_valid(frame.runtime.text_backend) {
 		font = text_backend_font(frame.runtime.text_backend, size)
 		frame.font_memo_size = size
 		frame.font_memo_id = font
+		frame.font_memo_epoch = epoch
 	}
 	return font
 }
