@@ -505,7 +505,7 @@ _graphics_resources_init :: proc(resources: ^Graphics_Resources) {
 _graphics_resources_destroy :: proc(resources: ^Graphics_Resources) {
 	assert(resources != nil, "_graphics_resources_destroy: nil resources")
 	assert(!g.frame.has_frame, "_graphics_resources_destroy: active frame")
-	_gpu_3d_resources_destroy(&resources.gpu_3d)
+	_gpu_3d_resources_destroy(g, &resources.gpu_3d)
 	_rlgl_resources_destroy(&resources.rlgl)
 	_shader_resources_destroy(&resources.shaders)
 	_atlas_resources_destroy(&resources.atlases)

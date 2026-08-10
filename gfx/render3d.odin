@@ -68,7 +68,7 @@ DrawCube :: proc(position: Vector3, width, height, length: f32, color: Color) {
 
 DrawCubeV :: proc(position, size: Vector3, color: Color) {
 	if !cam3d_active do return
-	compat := &g.resources.gpu_3d.compat
+	compat := &default_context_storage.resources.gpu_3d.compat
 	if !compat.pass_available do return
 	draw_gpu_mesh(&compat.pass, compat.cube, _cube_transform(position, size), {color = color})
 }
@@ -79,7 +79,7 @@ DrawCubeWires :: proc(position: Vector3, width, height, length: f32, color: Colo
 
 DrawCubeWiresV :: proc(position, size: Vector3, color: Color) {
 	if !cam3d_active do return
-	compat := &g.resources.gpu_3d.compat
+	compat := &default_context_storage.resources.gpu_3d.compat
 	if !compat.pass_available do return
 	draw_gpu_mesh(
 		&compat.pass,
@@ -93,7 +93,7 @@ DrawGrid :: proc(slices: i32, spacing: f32) {
 	if !cam3d_active do return
 	assert(_f32_is_finite(spacing), "DrawGrid: non-finite spacing")
 	if spacing <= 0 do return
-	resources := &g.resources.gpu_3d
+	resources := &default_context_storage.resources.gpu_3d
 	if !resources.compat.pass_available do return
 	grid, ok := _gpu_3d_compat_grid(resources, slices)
 	if !ok do return
