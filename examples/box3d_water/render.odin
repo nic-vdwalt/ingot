@@ -151,7 +151,7 @@ draw_floaters :: proc(value: ^State, pass: ^rl.Gpu_3D_Pass) {
 			pass,
 			value.cube_edges,
 			floater.transform,
-			{color = {20, 24, 32, 255}, style = .Opaque_Overlay, depth_nudge = 0.0005},
+			{color = {20, 24, 32, 255}, style = .Opaque_Outline},
 		)
 	}
 }

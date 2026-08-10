@@ -95,7 +95,7 @@ DrawCubeWiresTransform :: proc(transform: Matrix, color: Color) {
 		&compat.pass,
 		compat.cube_edges,
 		transform,
-		{color = color, style = .Opaque_Overlay, depth_nudge = 0.0005},
+		{color = color, style = .Opaque_Outline},
 	)
 }
 
