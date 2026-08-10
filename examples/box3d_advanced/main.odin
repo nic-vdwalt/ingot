@@ -48,6 +48,7 @@ State :: struct {
 	camera:          rl.Camera3D,
 	orbit:           rl.Orbit_Camera_State,
 	orbit_config:    rl.Orbit_Camera_Config,
+	orbit_bindings:  rl.Orbit_Camera_Bindings,
 	graphics_ready:  bool,
 }
 
@@ -79,6 +80,7 @@ graphics_create :: proc(value: ^State) -> bool {
 	value.orbit_config = rl.orbit_camera_config_default()
 	value.orbit_config.min_distance = 10
 	value.orbit_config.max_distance = 128
+	value.orbit_bindings = rl.orbit_camera_bindings_default()
 	target_ok, cube_ok, edges_ok: bool
 	value.target, target_ok = rl.create_gpu_3d_target(
 		rl.GetRenderWidth(),
@@ -222,13 +224,7 @@ physics_input :: proc(value: ^State) {
 camera_update :: proc(value: ^State, frame_dt: f32) {
 	assert(value != nil, "camera_update: nil state")
 	assert(value.orbit.distance > 0, "camera_update: invalid distance")
-	input: rl.Orbit_Camera_Input
-	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) do input.rotate_rate.x += 1
-	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) do input.rotate_rate.x -= 1
-	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) do input.zoom_rate -= 1
-	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) do input.zoom_rate += 1
-	if rl.IsMouseButtonDown(.LEFT) do input.pointer_drag = -rl.GetMouseDelta()
-	input.scroll = rl.GetMouseWheelMoveV().y
+	input := rl.orbit_camera_input_poll(value.orbit_bindings)
 	rl.update_orbit_camera(&value.orbit, input, value.orbit_config, frame_dt)
 	rl.orbit_camera_apply(value.orbit, &value.camera)
 }

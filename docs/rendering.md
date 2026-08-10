@@ -132,6 +132,14 @@ GPU 3D API:
   UVs. The edge mesh contains the same cube's 12 edges as lines. Both return
   `ok=false` for context, pool, validation, or GPU allocation failures and must be
   released with `destroy_gpu_mesh`.
+- Create a caller-owned subdivided plane with `create_plane_mesh`. It is centered
+  on the local origin in the XY plane with `+Z` normals, `[0, 1]` UVs, and
+  counter-clockwise triangles matching the cube's outward winding. Vertex order
+  is row-major, `row * (cells + 1) + column`; `plane_mesh_vertex_count` and
+  `plane_mesh_index_count` publish the same arithmetic so an application that
+  deforms the surface through `update_gpu_mesh_vertices` can size and check its
+  own buffer against the generator rather than re-deriving it. Cell counts are
+  bounded by `GPU_3D_PLANE_MAX_CELLS`.
 - Materials may bind a generation-checked `Texture2D`; a zero or stale handle falls
   back to the neutral white texture. `depth_nudge` offsets clip depth uniformly for
   coplanar triangle, line, and point overlays without changing model geometry.
@@ -173,6 +181,13 @@ state/input/delta-time step: keyboard rotation and zoom are rates multiplied by
 `orbit_camera_apply` projects the bounded yaw, pitch, and distance back into a
 `Camera3D` using Ingot's +Z world-up basis. Applications retain their own key and
 pointer bindings rather than coupling camera behavior to the default input context.
+`orbit_camera_input_poll` is an optional convenience that samples the default
+input context into `Orbit_Camera_Input` under a caller-supplied
+`Orbit_Camera_Bindings`; `orbit_camera_bindings_default` returns the
+conventional arrow/WASD scheme. It lives in `gfx/camera_input.odin` so
+`gfx/camera.odin` stays free of input polling, and it is strictly additive:
+`update_orbit_camera` still accepts any `Orbit_Camera_Input`, including one
+built from a replay, a network stream, or a test.
 
 Explicit GPU 3D passes write their attachment in presentation orientation.
 `draw_gpu_3d_target` preserves that orientation with a positive source height. The
