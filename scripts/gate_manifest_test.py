@@ -24,6 +24,12 @@ class GateManifestTest(unittest.TestCase):
         for example in MANIFEST["examples"]:
             self.assertTrue((ROOT / "examples" / example).is_dir(), example)
 
+    def test_test_packages_receive_a_compile_gate(self):
+        checked = set(MANIFEST["check_packages"])
+        bindings = set(MANIFEST["binding_packages"])
+        for package in MANIFEST["test_packages"]:
+            self.assertIn(package, checked | bindings, package)
+
     def test_launchers_consume_shared_manifest(self):
         shell = (ROOT / "scripts/check.sh").read_text(encoding="utf-8")
         powershell = (ROOT / "scripts/check.ps1").read_text(encoding="utf-8")

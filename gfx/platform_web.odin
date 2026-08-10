@@ -99,8 +99,12 @@ Web_GPU_Request :: struct {
 
 @(private)
 _web_request_live :: proc(request: ^Web_GPU_Request) -> bool {
-	return request != nil && request.owner != nil && request.epoch == request.owner.epoch &&
-		request.owner.lifecycle == .Starting
+	return(
+		request != nil &&
+		request.owner != nil &&
+		request.epoch == request.owner.epoch &&
+		request.owner.lifecycle == .Starting \
+	)
 }
 
 @(private)
