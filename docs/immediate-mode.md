@@ -15,7 +15,7 @@ Ingot keeps those concerns separate. The application owns persistent behavior
 and presents the current interface when a frame is required. The framework
 derives bounded frame output from that declaration: draw commands, interactions,
 overlays, focus registration, and accessibility semantics. There is no
-framework-owned widget tree and no label-hashed state store.
+framework-owned behavioral widget tree and no label-hashed state store.
 
 This is not a claim that useful interfaces have no state. It is a claim that the
 state should have an obvious owner.
@@ -278,6 +278,13 @@ management, accessibility adapters, and platform integration may retain data
 behind explicit service boundaries.
 
 The distinction is authority and ownership:
+
+A saved `view.View` may retain declarative structure, just as a document or
+scene retains application data. Replay still derives the current frame through
+the public immediate API, and bindings keep values and component behavior in
+caller-owned state. The line is crossed only if that description becomes a
+framework-owned source of persistent control behavior that the application must
+synchronize with its own model.
 
 > Immediate mode describes how the interface is declared and derived. It does
 > not mean application state disappears or that the implementation is stateless.

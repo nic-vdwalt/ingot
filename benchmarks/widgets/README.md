@@ -13,7 +13,7 @@ those as workload-specific headless results, not native application or GPU ranki
 
 ## Requirements
 
-- Odin `dev-2026-08:8412dc37a`
+- Odin revision pinned in `ODIN_VERSION`
 - Python 3
 - Rust 1.90.0 with Cargo
 - A C++17 compiler
