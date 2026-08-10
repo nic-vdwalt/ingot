@@ -11,6 +11,7 @@ function imports(memory) {
 			rand_bytes(pointer, length) {
 				crypto.getRandomValues(new Uint8Array(memory.buffer, pointer, length));
 			},
+			tick_now: () => performance.now(),
 			pow: Math.pow,
 			sin: Math.sin,
 			cos: Math.cos,

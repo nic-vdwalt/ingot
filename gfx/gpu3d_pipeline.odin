@@ -25,6 +25,18 @@ GPU_3D_COMPAT_GRID_CACHE_COUNT :: 8
 GPU_3D_COMPAT_GRID_MAX_SLICES :: 256
 GPU_3D_COMPAT_GRID_MAX_VERTICES :: (GPU_3D_COMPAT_GRID_MAX_SLICES + 1) * 4
 GPU_3D_COMPAT_GRID_MAX_INDICES :: GPU_3D_COMPAT_GRID_MAX_VERTICES
+// A plane's cost is quadratic in its cell count, so the bound is chosen as the
+// largest power of two whose geometry still clears every mesh cap below with
+// room to spare: 513*513 vertices and 512*512*6 indices is about 15 MiB.
+GPU_3D_PLANE_MAX_CELLS :: 512
+GPU_3D_PLANE_MAX_VERTICES :: (GPU_3D_PLANE_MAX_CELLS + 1) * (GPU_3D_PLANE_MAX_CELLS + 1)
+GPU_3D_PLANE_MAX_INDICES :: GPU_3D_PLANE_MAX_CELLS * GPU_3D_PLANE_MAX_CELLS * 6
+#assert(GPU_3D_PLANE_MAX_VERTICES <= GPU_3D_MAX_VERTICES)
+#assert(GPU_3D_PLANE_MAX_INDICES <= GPU_3D_MAX_INDICES)
+#assert(
+	GPU_3D_PLANE_MAX_VERTICES * size_of(Gpu_3D_Vertex) + GPU_3D_PLANE_MAX_INDICES * 4 <=
+	GPU_3D_MAX_MESH_BYTES,
+)
 #assert(GPU_3D_CUBE_VERTEX_COUNT == GPU_3D_CUBE_FACE_COUNT * GPU_3D_CUBE_FACE_VERTEX_COUNT)
 #assert(
 	GPU_3D_CUBE_INDEX_COUNT ==
@@ -810,6 +822,109 @@ create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) 
 	}
 	assert(false, "create_sphere_mesh: count mismatch")
 	return {}, false
+}
+
+// plane_mesh_vertex_count and plane_mesh_index_count expose create_plane_mesh's
+// geometry arithmetic so an application that reuses the topology - rewriting
+// vertices each frame through update_gpu_mesh_vertices - can size and check its
+// own storage against the same formula the generator uses, instead of
+// re-deriving it and drifting.
+plane_mesh_vertex_count :: proc(cells: u32) -> u32 {
+	assert(cells >= 1, "plane_mesh_vertex_count: empty plane")
+	assert(cells <= GPU_3D_PLANE_MAX_CELLS, "plane_mesh_vertex_count: cells over bound")
+	return (cells + 1) * (cells + 1)
+}
+
+plane_mesh_index_count :: proc(cells: u32) -> u32 {
+	assert(cells >= 1, "plane_mesh_index_count: empty plane")
+	assert(cells <= GPU_3D_PLANE_MAX_CELLS, "plane_mesh_index_count: cells over bound")
+	return cells * cells * 6
+}
+
+// _plane_mesh_geometry generates a flat XY plane centered on the local origin -
+// pure CPU, no GPU calls - split out of create_plane_mesh so headless tests can
+// validate counts, ordering, winding, and UVs without a device.
+//
+// Vertex order is row-major with y outermost and x innermost, and index
+// (row, column) is therefore at row * (cells + 1) + column. That ordering is
+// part of the public contract because callers that deform the surface refill
+// the vertex buffer themselves and must address the same vertices.
+@(private)
+_plane_mesh_geometry :: proc(
+	extent: f32,
+	cells: u32,
+	vertices: []Gpu_3D_Vertex,
+	indices: []u32,
+) -> (
+	vertex_count, index_count: int,
+	ok: bool,
+) {
+	assert(extent > 0, "_plane_mesh_geometry: non-positive extent")
+	assert(cells >= 1, "_plane_mesh_geometry: empty plane")
+	assert(cells <= GPU_3D_PLANE_MAX_CELLS, "_plane_mesh_geometry: cells over bound")
+	vertex_count = int(plane_mesh_vertex_count(cells))
+	index_count = int(plane_mesh_index_count(cells))
+	// Undersized caller storage is an operating condition, not a programmer
+	// error: cells is often a runtime tuning value.
+	if len(vertices) < vertex_count || len(indices) < index_count do return 0, 0, false
+	stride := cells + 1
+	step := 2 * extent / f32(cells)
+	vertex := 0
+	for row in 0 ..= cells {
+		y := -extent + f32(row) * step
+		for column in 0 ..= cells {
+			x := -extent + f32(column) * step
+			vertices[vertex] = {
+				position = {x, y, 0},
+				normal   = CAMERA_WORLD_UP,
+				uv       = {f32(column) / f32(cells), f32(row) / f32(cells)},
+			}
+			vertex += 1
+		}
+	}
+	index := 0
+	for row in 0 ..< cells {
+		for column in 0 ..< cells {
+			origin := row * stride + column
+			// Counter-clockwise seen from +Z, matching the cube's outward
+			// winding so one cull policy serves both.
+			indices[index + 0] = origin
+			indices[index + 1] = origin + 1
+			indices[index + 2] = origin + stride
+			indices[index + 3] = origin + 1
+			indices[index + 4] = origin + stride + 1
+			indices[index + 5] = origin + stride
+			index += 6
+		}
+	}
+	assert(vertex == vertex_count, "_plane_mesh_geometry: vertex count mismatch")
+	assert(index == index_count, "_plane_mesh_geometry: index count mismatch")
+	return vertex_count, index_count, true
+}
+
+// create_plane_mesh uploads a flat XY plane centered on the local origin with
+// +Z normals and [0, 1] UVs, spanning [-extent, +extent] on both axes and
+// subdivided into cells x cells quads. Model transforms provide the final
+// placement.
+//
+// A deforming surface - water, terrain, cloth - creates this once for its
+// topology and then rewrites positions and normals each frame with
+// update_gpu_mesh_vertices, using plane_mesh_vertex_count to size its buffer
+// and the row-major ordering documented on _plane_mesh_geometry to address it.
+create_plane_mesh :: proc(extent: f32, cells: u32) -> (Gpu_Mesh, bool) {
+	assert(extent > 0, "create_plane_mesh: non-positive extent")
+	if !g.initialized || cells < 1 || cells > GPU_3D_PLANE_MAX_CELLS do return {}, false
+
+	vertices := make([dynamic]Gpu_3D_Vertex, int(plane_mesh_vertex_count(cells)))
+	indices := make([dynamic]u32, int(plane_mesh_index_count(cells)))
+	defer delete(vertices)
+	defer delete(indices)
+	vertex_count, index_count, ok := _plane_mesh_geometry(extent, cells, vertices[:], indices[:])
+	if !ok do return {}, false
+	assert(vertex_count == len(vertices), "create_plane_mesh: vertex storage mismatch")
+	assert(index_count == len(indices), "create_plane_mesh: index storage mismatch")
+
+	return create_gpu_mesh(vertices[:], indices[:], .Triangles)
 }
 
 create_gpu_mesh :: proc(

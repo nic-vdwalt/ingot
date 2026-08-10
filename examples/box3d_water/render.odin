@@ -18,7 +18,6 @@ WATER_COLOR_HIGH :: rl.Color{140, 210, 240, 205}
 // POOL_VERTEX_COUNT * size_of(Gpu_3D_Vertex) bytes, rebuilt every frame, and a
 // buffer that large has no business being copied through a stack frame.
 water_vertices: [POOL_VERTEX_COUNT]rl.Gpu_3D_Vertex
-water_indices: [POOL_INDEX_COUNT]u32
 
 graphics_create :: proc(value: ^State) -> bool {
 	assert(value != nil, "graphics_create: nil state")
@@ -34,6 +33,7 @@ graphics_create :: proc(value: ^State) -> bool {
 	value.orbit_config = rl.orbit_camera_config_default()
 	value.orbit_config.min_distance = 12
 	value.orbit_config.max_distance = 120
+	value.orbit_bindings = rl.orbit_camera_bindings_default()
 	target_ok, cube_ok, edges_ok: bool
 	value.target, target_ok = rl.create_gpu_3d_target(
 		rl.GetRenderWidth(),
@@ -55,31 +55,28 @@ graphics_target_resize :: proc(value: ^State) {
 	if result == .Failed do value.resize_failures += 1
 }
 
-// water_mesh_create builds the fixed topology once. Indices are never touched
-// again, which is precisely why the per-frame update only has to rewrite
-// vertices - the expensive part of a mesh upload is the part that is constant.
+// water_mesh_create builds the fixed topology once with the engine's plane
+// helper. Indices are never touched again, which is precisely why the per-frame
+// update only has to rewrite vertices - the expensive part of a mesh upload is
+// the part that is constant.
 water_mesh_create :: proc(value: ^State) -> bool {
 	assert(value != nil, "water_mesh_create: nil state")
 	assert(POOL_CELLS > 0, "water_mesh_create: empty grid")
-	water_vertices_fill(value.phase)
-	stride := u32(POOL_CELLS + 1)
-	count := 0
-	for row in 0 ..< u32(POOL_CELLS) {
-		for column in 0 ..< u32(POOL_CELLS) {
-			origin := row * stride + column
-			water_indices[count + 0] = origin
-			water_indices[count + 1] = origin + 1
-			water_indices[count + 2] = origin + stride
-			water_indices[count + 3] = origin + 1
-			water_indices[count + 4] = origin + stride + 1
-			water_indices[count + 5] = origin + stride
-			count += 6
-		}
-	}
-	assert(count == POOL_INDEX_COUNT, "water_mesh_create: index count mismatch")
-	mesh, ok := rl.create_gpu_mesh(water_vertices[:], water_indices[:], .Triangles)
+	// The local vertex buffer is refilled in place every frame, so it must
+	// address exactly the vertices the engine generated. Checking the count
+	// against the engine's own formula is what makes the shared row-major
+	// ordering contract a checked one rather than an assumed one.
+	assert(
+		int(rl.plane_mesh_vertex_count(POOL_CELLS)) == POOL_VERTEX_COUNT,
+		"water_mesh_create: plane vertex layout changed",
+	)
+	mesh, ok := rl.create_plane_mesh(POOL_EXTENT, POOL_CELLS)
 	if !ok do return false
 	value.water = mesh
+	// The engine's plane is flat; the first displaced surface is uploaded here
+	// so frame zero already shows the wave rather than a plate of glass.
+	water_vertices_fill(value.phase)
+	if !rl.update_gpu_mesh_vertices(value.water, water_vertices[:]) do return false
 	return true
 }
 
@@ -112,13 +109,7 @@ water_vertices_fill :: proc(phase: f32) {
 camera_update :: proc(value: ^State, frame_dt: f32) {
 	assert(value != nil, "camera_update: nil state")
 	assert(value.orbit.distance > 0, "camera_update: invalid distance")
-	input: rl.Orbit_Camera_Input
-	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) do input.rotate_rate.x += 1
-	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) do input.rotate_rate.x -= 1
-	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) do input.zoom_rate -= 1
-	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) do input.zoom_rate += 1
-	if rl.IsMouseButtonDown(.LEFT) do input.pointer_drag = -rl.GetMouseDelta()
-	input.scroll = rl.GetMouseWheelMoveV().y
+	input := rl.orbit_camera_input_poll(value.orbit_bindings)
 	rl.update_orbit_camera(&value.orbit, input, value.orbit_config, frame_dt)
 	rl.orbit_camera_apply(value.orbit, &value.camera)
 }

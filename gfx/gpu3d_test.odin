@@ -243,6 +243,93 @@ test_sphere_geometry_winding_faces_outward :: proc(t: ^testing.T) {
 	}
 }
 
+// -- _plane_mesh_geometry ------------------------------------------------------
+
+@(test)
+test_plane_geometry_counts :: proc(t: ^testing.T) {
+	cases := [?]u32{1, 2, 8, 40, 64}
+	for cells in cases {
+		vertex_total := int(plane_mesh_vertex_count(cells))
+		vertices := make([]Gpu_3D_Vertex, vertex_total, context.temp_allocator)
+		indices := make([]u32, int(plane_mesh_index_count(cells)), context.temp_allocator)
+		vertex_count, index_count, ok := _plane_mesh_geometry(1, cells, vertices, indices)
+		testing.expect(t, ok)
+		testing.expect_value(t, vertex_count, int((cells + 1) * (cells + 1)))
+		testing.expect_value(t, index_count, int(cells * cells * 6))
+		testing.expect_value(t, index_count % 3, 0)
+	}
+}
+
+// Undersized storage must be refused, not overrun - cells is a runtime value.
+@(test)
+test_plane_geometry_rejects_short_storage :: proc(t: ^testing.T) {
+	vertices := make([]Gpu_3D_Vertex, 4, context.temp_allocator)
+	indices := make([]u32, 6, context.temp_allocator)
+	_, _, ok := _plane_mesh_geometry(1, 4, vertices, indices)
+	testing.expect(t, !ok)
+	_, _, exact := _plane_mesh_geometry(1, 1, vertices, indices)
+	testing.expect(t, exact)
+}
+
+// Row-major ordering is a published contract: deforming callers refill this
+// buffer themselves and address it with row * (cells + 1) + column.
+@(test)
+test_plane_geometry_is_row_major_and_centered :: proc(t: ^testing.T) {
+	cells := u32(4)
+	extent := f32(2)
+	vertices := make([]Gpu_3D_Vertex, int(plane_mesh_vertex_count(cells)), context.temp_allocator)
+	indices := make([]u32, int(plane_mesh_index_count(cells)), context.temp_allocator)
+	_, _, ok := _plane_mesh_geometry(extent, cells, vertices, indices)
+	testing.expect(t, ok)
+	stride := int(cells + 1)
+	testing.expect_value(t, vertices[0].position, Vector3{-extent, -extent, 0})
+	testing.expect_value(t, vertices[stride - 1].position, Vector3{extent, -extent, 0})
+	testing.expect_value(t, vertices[stride * stride - 1].position, Vector3{extent, extent, 0})
+	// Column advances fastest; the row only changes every stride vertices.
+	testing.expect_value(t, vertices[1].position.y, -extent)
+	testing.expect_value(t, vertices[stride].position.x, -extent)
+	for v in vertices {
+		testing.expect_value(t, v.position.z, f32(0))
+		testing.expect_value(t, v.normal, CAMERA_WORLD_UP)
+		testing.expect(t, v.uv.x >= 0 && v.uv.x <= 1, "u outside [0, 1]")
+		testing.expect(t, v.uv.y >= 0 && v.uv.y <= 1, "v outside [0, 1]")
+	}
+	for index in indices {
+		testing.expect(t, int(index) < len(vertices), "index out of range")
+	}
+}
+
+// Winding must match the cube's outward convention or one cull policy cannot
+// serve both meshes.
+@(test)
+test_plane_geometry_winding_faces_up :: proc(t: ^testing.T) {
+	cells := u32(4)
+	vertices := make([]Gpu_3D_Vertex, int(plane_mesh_vertex_count(cells)), context.temp_allocator)
+	indices := make([]u32, int(plane_mesh_index_count(cells)), context.temp_allocator)
+	_, index_count, ok := _plane_mesh_geometry(1, cells, vertices, indices)
+	testing.expect(t, ok)
+	for triangle := 0; triangle < index_count; triangle += 3 {
+		a := vertices[indices[triangle]].position
+		b := vertices[indices[triangle + 1]].position
+		c := vertices[indices[triangle + 2]].position
+		face := linalg.cross(b - a, c - a)
+		testing.expect(t, face.z > 0, "plane triangle faces down")
+	}
+}
+
+// A headless run has no device, so creation must refuse rather than build a
+// mesh nothing can draw; out-of-range cell counts are refused independently.
+@(test)
+test_create_plane_mesh_rejects_headless_and_out_of_range :: proc(t: ^testing.T) {
+	mesh, ok := create_plane_mesh(1, 4)
+	testing.expect_value(t, ok, false)
+	testing.expect_value(t, mesh.id, u32(0))
+	_, zero_ok := create_plane_mesh(1, 0)
+	testing.expect_value(t, zero_ok, false)
+	_, over_ok := create_plane_mesh(1, GPU_3D_PLANE_MAX_CELLS + 1)
+	testing.expect_value(t, over_ok, false)
+}
+
 // -- create_sphere_mesh: parameter/uninitialized rejection ---------------------
 
 @(test)
