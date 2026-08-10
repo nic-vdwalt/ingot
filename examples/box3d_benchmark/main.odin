@@ -19,7 +19,6 @@ WARMUP_STEPS_MAX :: 600
 MEASURED_BATCH_COUNT_MAX :: 64
 STEPS_PER_BATCH_MAX :: 600
 PHYSICS_SUBSTEPS_MAX :: 16
-BOX3D_ARENA_BYTES :: 48 * 1024 * 1024
 BOX3D_WORKERS_ENABLED :: ODIN_OS == .JS && #config(INGOT_BOX3D_WORKERS, false)
 BOX3D_TASK_MAX :: b3.MAX_TASKS
 
@@ -98,8 +97,6 @@ when BOX3D_WORKERS_ENABLED {
 
 box3d_task_slots: [BOX3D_TASK_MAX]Box3D_Task_Slot
 box3d_batch_pending: u32
-box3d_arena: [BOX3D_ARENA_BYTES]byte
-box3d_arena_offset: u32
 state: State
 
 main :: proc() {
@@ -113,32 +110,11 @@ main :: proc() {
 
 	rl.InitWindow(1024, 576, "Box3D browser worker benchmark")
 	rl.SetTargetFPS(60)
-	when BOX3D_WORKERS_ENABLED do b3.SetAllocator(box3d_arena_alloc, box3d_arena_free)
 	benchmark_world_init()
 	rl.run(frame)
 	when ODIN_OS != .JS {
 		b3.DestroyWorld(state.world)
 		rl.CloseWindow()
-	}
-}
-
-when BOX3D_WORKERS_ENABLED {
-	box3d_arena_alloc :: proc "c" (size, alignment: i32) -> rawptr {
-		if size <= 0 || alignment <= 0 do return nil
-		reserved := u32(size + alignment - 1)
-		start := intrinsics.atomic_add_explicit(&box3d_arena_offset, reserved, .Acq_Rel)
-		aligned := (start + u32(alignment - 1)) & ~u32(alignment - 1)
-		if aligned + u32(size) > BOX3D_ARENA_BYTES do return nil
-		return rawptr(&box3d_arena[aligned])
-	}
-
-	box3d_arena_free :: proc "c" (memory: rawptr) {
-		_ = memory
-	}
-
-	@(export, link_name = "ingot_box3d_worker_init")
-	box3d_worker_init :: proc "contextless" () {
-		b3.SetAllocator(box3d_arena_alloc, box3d_arena_free)
 	}
 }
 
