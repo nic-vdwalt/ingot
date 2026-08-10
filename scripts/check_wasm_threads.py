@@ -75,6 +75,7 @@ def exports(data):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("module")
+    parser.add_argument("--required-export", action="append", default=[])
     args = parser.parse_args()
     data = open(args.module, "rb").read()
     if data[:8] != b"\0asm\x01\0\0\0":
@@ -103,8 +104,8 @@ def main():
     required_exports = {
         "__stack_pointer",
         "ingot_box3d_worker_dispatch",
-        "ingot_box3d_worker_step",
     }
+    required_exports.update(args.required_export or ["ingot_box3d_worker_step"])
     missing = required_exports - export_names
     if missing:
         raise SystemExit(f"missing worker exports: {sorted(missing)}")

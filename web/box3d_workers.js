@@ -75,7 +75,7 @@
 		const attachTaskWorker = (worker) => {
 			worker.onmessage = (event) => {
 				if (event.data.type === "error") {
-					fail(new Error(event.data.message || "Box3D task worker failed"));
+					fail(new Error(event.data.stack || event.data.message || "Box3D task worker failed"));
 					return;
 				}
 				if (event.data.type === "complete") {
@@ -103,7 +103,7 @@
 					coordinator = worker;
 					worker.onmessage = (event) => {
 						if (event.data.type === "error") {
-							fail(new Error(event.data.message || "Box3D coordinator failed"));
+							fail(new Error(event.data.stack || event.data.message || "Box3D coordinator failed"));
 							return;
 						}
 						if (event.data.type === "step-complete") {
