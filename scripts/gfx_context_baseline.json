@@ -39,7 +39,6 @@
   "gfx/context.odin:_flush_retired": 3,
   "gfx/context.odin:_frame_timing": 8,
   "gfx/context.odin:_gpu_finish": 29,
-  "gfx/context.odin:_graphics_resources_destroy": 1,
   "gfx/context.odin:_init_window_context": 11,
   "gfx/context.odin:_maybe_reconfigure": 16,
   "gfx/context.odin:_now": 1,
