@@ -60,12 +60,28 @@ WATER_DRAG :: f32(3.0)
 // the world before the next frame can correct it.
 WATER_FORCE_MAX :: f32(4000)
 
+// water_finite rejects both NaN and the infinities. Checking only for NaN is
+// the tempting half-measure and it is not enough: an infinite velocity reaching
+// the drag term produces an infinite force, and while the clamp below survives
+// that, an infinity multiplied by a zero submerged fraction yields NaN, which
+// the clamp cannot repair and which silently poisons the body's integration.
+// Every value entering the model is derived from solver state, so this is the
+// boundary where that state stops being trusted.
+water_finite :: proc(value: f32) -> bool {
+	return !math.is_nan(value) && !math.is_inf(value, 0)
+}
+
+water_vector_finite :: proc(value: [3]f32) -> bool {
+	for component in value do if !water_finite(component) do return false
+	return true
+}
+
 // water_height evaluates the surface at a world XY position for a given phase.
 // Phase, not time, is the parameter: the caller decides when the simulation
 // advances, so a paused world simply keeps passing the same phase.
 water_height :: proc(x, y, phase: f32) -> f32 {
-	assert(!math.is_nan(x) && !math.is_nan(y), "water_height: non-finite position")
-	assert(!math.is_nan(phase), "water_height: non-finite phase")
+	assert(water_finite(x) && water_finite(y), "water_height: non-finite position")
+	assert(water_finite(phase), "water_height: non-finite phase")
 	primary := WATER_AMPLITUDE * math.sin(WATER_WAVE_NUMBER_X * x + phase)
 	cross_angle := WATER_WAVE_NUMBER_Y * y + WATER_CROSS_PHASE_RATE * phase
 	cross := WATER_CROSS_AMPLITUDE * math.sin(cross_angle)
@@ -77,8 +93,8 @@ water_height :: proc(x, y, phase: f32) -> f32 {
 // world, or a body riding a rising crest is damped as though the water were
 // still and the float looks glued in place.
 water_surface_velocity :: proc(x, y, phase: f32) -> f32 {
-	assert(!math.is_nan(x) && !math.is_nan(y), "water_surface_velocity: bad position")
-	assert(!math.is_nan(phase), "water_surface_velocity: non-finite phase")
+	assert(water_finite(x) && water_finite(y), "water_surface_velocity: bad position")
+	assert(water_finite(phase), "water_surface_velocity: non-finite phase")
 	primary := WATER_AMPLITUDE * WATER_PHASE_RATE
 	primary *= math.cos(WATER_WAVE_NUMBER_X * x + phase)
 	cross_rate := WATER_CROSS_AMPLITUDE * WATER_CROSS_PHASE_RATE * WATER_PHASE_RATE
@@ -90,8 +106,8 @@ water_surface_velocity :: proc(x, y, phase: f32) -> f32 {
 // mesh is uploaded once, so lighting has to come from the exact derivative
 // rather than from cross products over neighbouring triangles.
 water_normal :: proc(x, y, phase: f32) -> [3]f32 {
-	assert(!math.is_nan(x) && !math.is_nan(y), "water_normal: non-finite position")
-	assert(!math.is_nan(phase), "water_normal: non-finite phase")
+	assert(water_finite(x) && water_finite(y), "water_normal: non-finite position")
+	assert(water_finite(phase), "water_normal: non-finite phase")
 	slope_x := WATER_AMPLITUDE * WATER_WAVE_NUMBER_X
 	slope_x *= math.cos(WATER_WAVE_NUMBER_X * x + phase)
 	cross_angle := WATER_WAVE_NUMBER_Y * y + WATER_CROSS_PHASE_RATE * phase
@@ -107,8 +123,8 @@ water_normal :: proc(x, y, phase: f32) -> [3]f32 {
 // fraction rather than a depth is what keeps the force law independent of the
 // body's size: the caller multiplies it by the body's own weight.
 water_submerged_fraction :: proc(center_z, half_height, water_z: f32) -> f32 {
-	assert(!math.is_nan(center_z), "water_submerged_fraction: non-finite centre")
-	assert(!math.is_nan(water_z), "water_submerged_fraction: non-finite surface")
+	assert(water_finite(center_z), "water_submerged_fraction: non-finite centre")
+	assert(water_finite(water_z), "water_submerged_fraction: non-finite surface")
 	if half_height <= 0 do return 0
 	bottom := center_z - half_height
 	top := center_z + half_height
@@ -128,7 +144,9 @@ water_force :: proc(
 	velocity: [3]f32,
 ) -> [3]f32 {
 	assert(half_height >= 0, "water_force: negative half height")
-	assert(!math.is_nan(water_velocity_z), "water_force: non-finite surface speed")
+	assert(water_finite(water_velocity_z), "water_force: non-finite surface speed")
+	assert(water_finite(mass), "water_force: non-finite mass")
+	assert(water_vector_finite(velocity), "water_force: non-finite velocity")
 	if mass <= 0 do return {}
 	submerged := water_submerged_fraction(center_z, half_height, water_z)
 	if submerged <= 0 do return {}
@@ -139,5 +157,6 @@ water_force :: proc(
 	for &component in force {
 		component = clamp(component, -WATER_FORCE_MAX, WATER_FORCE_MAX)
 	}
+	assert(water_vector_finite(force), "water_force: produced a non-finite force")
 	return force
 }
