@@ -367,6 +367,7 @@ BeginMode3D :: proc(camera: Camera3D) {
 	// Ordering pending 2D geometry before 3D makes the camera change a visible
 	// draw-call boundary instead of retroactively transforming queued vertices.
 	FlushBatch()
+	_ = _gpu_3d_compat_begin(camera)
 	assert(cam3d_active)
 }
 
@@ -390,6 +391,7 @@ BeginMode3DPro :: proc(view_projection: Matrix) {
 EndMode3D :: proc() {
 	assert(cam3d_active, "EndMode3D: no active 3D camera mode")
 	FlushBatch()
+	_gpu_3d_compat_end()
 	cam3d_active = false
 	cam3d_projection_available = false
 	assert(!cam3d_active)

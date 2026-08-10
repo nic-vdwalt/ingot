@@ -21,6 +21,10 @@ GPU_3D_CUBE_INDEX_COUNT :: 36
 GPU_3D_CUBE_CORNER_COUNT :: 8
 GPU_3D_CUBE_EDGE_COUNT :: 12
 GPU_3D_CUBE_EDGE_INDEX_COUNT :: 24
+GPU_3D_COMPAT_GRID_CACHE_COUNT :: 8
+GPU_3D_COMPAT_GRID_MAX_SLICES :: 256
+GPU_3D_COMPAT_GRID_MAX_VERTICES :: (GPU_3D_COMPAT_GRID_MAX_SLICES + 1) * 4
+GPU_3D_COMPAT_GRID_MAX_INDICES :: GPU_3D_COMPAT_GRID_MAX_VERTICES
 #assert(GPU_3D_CUBE_VERTEX_COUNT == GPU_3D_CUBE_FACE_COUNT * GPU_3D_CUBE_FACE_VERTEX_COUNT)
 #assert(
 	GPU_3D_CUBE_INDEX_COUNT ==
@@ -219,6 +223,23 @@ Gpu_3D_Mesh_Slot :: struct {
 	occupied:   bool,
 }
 
+@(private)
+Gpu_3D_Compat_Grid :: struct {
+	mesh:   Gpu_Mesh,
+	slices: i32,
+}
+
+@(private)
+Gpu_3D_Compat :: struct {
+	target:         Gpu_3D_Target,
+	cube:           Gpu_Mesh,
+	cube_edges:     Gpu_Mesh,
+	grids:          [GPU_3D_COMPAT_GRID_CACHE_COUNT]Gpu_3D_Compat_Grid,
+	grid_count:     u32,
+	pass:           Gpu_3D_Pass,
+	pass_available: bool,
+}
+
 Gpu_3D_Resources :: struct {
 	meshes:                 [GPU_3D_MAX_MESHES]Gpu_3D_Mesh_Slot,
 	mesh_count:             u32,
@@ -229,6 +250,7 @@ Gpu_3D_Resources :: struct {
 	bind:                   [STREAM_SLOT_COUNT]wg.BindGroup,
 	next_pass_generation:   u64,
 	active_pass_generation: u64,
+	compat:                 Gpu_3D_Compat,
 }
 
 #assert(GPU_3D_MAX_MESHES <= RESOURCE_SLOT_COUNT)
@@ -484,6 +506,53 @@ draw_gpu_3d_target :: proc(target: ^Gpu_3D_Target, destination: Rectangle, tint:
 }
 
 @(private)
+_gpu_3d_compat_ensure :: proc(resources: ^Gpu_3D_Resources) -> bool {
+	assert(resources != nil, "_gpu_3d_compat_ensure: nil resources")
+	assert(g.initialized, "_gpu_3d_compat_ensure: uninitialized context")
+	if resources.active_pass_generation != 0 do return false
+	compat := &resources.compat
+	width := GetRenderWidth()
+	height := GetRenderHeight()
+	if width <= 0 || height <= 0 do return false
+	_, _, target_ok := gpu_3d_target_size(&compat.target)
+	if !target_ok {
+		compat.target, target_ok = create_gpu_3d_target(width, height, .MSAA_4X)
+	} else if resize_gpu_3d_target_to_render_size(&compat.target) == .Failed {
+		return false
+	}
+	if compat.cube.id == 0 do compat.cube, _ = create_cube_mesh()
+	if compat.cube_edges.id == 0 do compat.cube_edges, _ = create_cube_edge_mesh()
+	return target_ok && compat.cube.id != 0 && compat.cube_edges.id != 0
+}
+
+@(private)
+_gpu_3d_compat_begin :: proc(camera: Camera3D) -> bool {
+	resources := &g.resources.gpu_3d
+	compat := &resources.compat
+	assert(!compat.pass_available, "_gpu_3d_compat_begin: pass already available")
+	if !g.frame.has_frame || !_gpu_3d_compat_ensure(resources) do return false
+	compat.pass, compat.pass_available = begin_gpu_3d(&compat.target, camera)
+	if !compat.pass_available do return false
+	set_gpu_3d_light(&compat.pass, {direction = CAMERA_WORLD_UP, ambient = 1, diffuse = 0})
+	return true
+}
+
+@(private)
+_gpu_3d_compat_end :: proc() {
+	compat := &g.resources.gpu_3d.compat
+	if !compat.pass_available do return
+	assert(compat.pass.active, "_gpu_3d_compat_end: inactive pass")
+	end_gpu_3d(&compat.pass)
+	compat.pass_available = false
+	draw_gpu_3d_target(
+		&compat.target,
+		{0, 0, f32(GetScreenWidth()), f32(GetScreenHeight())},
+		WHITE,
+	)
+	assert(!compat.pass.active, "_gpu_3d_compat_end: pass still active")
+}
+
+@(private)
 _cube_mesh_geometry :: proc(
 	vertices: ^[GPU_3D_CUBE_VERTEX_COUNT]Gpu_3D_Vertex,
 	indices: ^[GPU_3D_CUBE_INDEX_COUNT]u32,
@@ -590,6 +659,60 @@ create_cube_edge_mesh :: proc() -> (Gpu_Mesh, bool) {
 	indices: [GPU_3D_CUBE_EDGE_INDEX_COUNT]u32
 	_cube_edge_mesh_geometry(&vertices, &indices)
 	return create_gpu_mesh(vertices[:], indices[:], .Lines)
+}
+
+@(private)
+_grid_mesh_geometry :: proc(
+	slices: i32,
+	vertices: ^[GPU_3D_COMPAT_GRID_MAX_VERTICES]Gpu_3D_Vertex,
+	indices: ^[GPU_3D_COMPAT_GRID_MAX_INDICES]u32,
+) -> (
+	vertex_count, index_count: int,
+	ok: bool,
+) {
+	assert(vertices != nil, "_grid_mesh_geometry: nil vertices")
+	assert(indices != nil, "_grid_mesh_geometry: nil indices")
+	if slices < 1 || slices > GPU_3D_COMPAT_GRID_MAX_SLICES do return 0, 0, false
+	line_count := (slices + 1) * 2
+	vertex_count = int(line_count * 2)
+	index_count = vertex_count
+	extent := f32(slices) * 0.5
+	for line in 0 ..= slices {
+		offset := f32(line) - extent
+		vertex := int(line * 4)
+		vertices[vertex + 0].position = {-extent, offset, 0}
+		vertices[vertex + 1].position = {extent, offset, 0}
+		vertices[vertex + 2].position = {offset, -extent, 0}
+		vertices[vertex + 3].position = {offset, extent, 0}
+		for index in 0 ..< 4 do indices[vertex + index] = u32(vertex + index)
+	}
+	assert(vertex_count <= len(vertices), "_grid_mesh_geometry: vertex overflow")
+	assert(index_count <= len(indices), "_grid_mesh_geometry: index overflow")
+	return vertex_count, index_count, true
+}
+
+@(private)
+_gpu_3d_compat_grid :: proc(resources: ^Gpu_3D_Resources, slices: i32) -> (Gpu_Mesh, bool) {
+	assert(resources != nil, "_gpu_3d_compat_grid: nil resources")
+	assert(resources.compat.grid_count <= GPU_3D_COMPAT_GRID_CACHE_COUNT)
+	for grid in resources.compat.grids[:resources.compat.grid_count] {
+		if grid.slices == slices do return grid.mesh, true
+	}
+	if resources.compat.grid_count >= GPU_3D_COMPAT_GRID_CACHE_COUNT do return {}, false
+	vertices: [GPU_3D_COMPAT_GRID_MAX_VERTICES]Gpu_3D_Vertex
+	indices: [GPU_3D_COMPAT_GRID_MAX_INDICES]u32
+	vertex_count, index_count, geometry_ok := _grid_mesh_geometry(slices, &vertices, &indices)
+	if !geometry_ok do return {}, false
+	mesh, mesh_ok := create_gpu_mesh(vertices[:vertex_count], indices[:index_count], .Lines)
+	if !mesh_ok do return {}, false
+	index := resources.compat.grid_count
+	resources.compat.grids[index] = {
+		mesh   = mesh,
+		slices = slices,
+	}
+	resources.compat.grid_count += 1
+	assert(resources.compat.grid_count <= GPU_3D_COMPAT_GRID_CACHE_COUNT)
+	return mesh, true
 }
 
 // _sphere_mesh_geometry generates a UV sphere's vertex/index lists - pure
@@ -1354,6 +1477,9 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 _gpu_3d_resources_destroy :: proc(resources: ^Gpu_3D_Resources) {
 	assert(resources != nil, "_gpu_3d_resources_destroy: nil resources")
 	assert(resources.active_pass_generation == 0, "_gpu_3d_resources_destroy: active pass")
+	compat := &resources.compat
+	if compat.target.texture.texture.id != 0 do _gpu_3d_target_destroy(g, &compat.target)
+	compat^ = {}
 	for &slot in resources.meshes {
 		if slot.occupied do _gpu_3d_mesh_entry_destroy(slot.entry)
 	}

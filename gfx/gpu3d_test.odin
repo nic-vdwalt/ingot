@@ -119,6 +119,55 @@ test_create_cube_meshes_reject_headless :: proc(t: ^testing.T) {
 	testing.expect_value(t, edges.id, u32(0))
 }
 
+@(test)
+test_grid_geometry_contract :: proc(t: ^testing.T) {
+	vertices: [GPU_3D_COMPAT_GRID_MAX_VERTICES]Gpu_3D_Vertex
+	indices: [GPU_3D_COMPAT_GRID_MAX_INDICES]u32
+	vertex_count, index_count, ok := _grid_mesh_geometry(20, &vertices, &indices)
+	testing.expect(t, ok)
+	testing.expect_value(t, vertex_count, 84)
+	testing.expect_value(t, index_count, vertex_count)
+	for index in 0 ..< vertex_count {
+		testing.expect_value(t, vertices[index].position.z, f32(0))
+		testing.expect_value(t, indices[index], u32(index))
+	}
+	testing.expect_value(t, vertices[0].position, Vector3{-10, -10, 0})
+	testing.expect_value(t, vertices[1].position, Vector3{10, -10, 0})
+	testing.expect_value(t, vertices[2].position, Vector3{-10, -10, 0})
+	testing.expect_value(t, vertices[3].position, Vector3{-10, 10, 0})
+	testing.expect_value(t, vertices[vertex_count - 1].position, Vector3{10, 10, 0})
+}
+
+@(test)
+test_grid_geometry_rejects_invalid_slices :: proc(t: ^testing.T) {
+	vertices: [GPU_3D_COMPAT_GRID_MAX_VERTICES]Gpu_3D_Vertex
+	indices: [GPU_3D_COMPAT_GRID_MAX_INDICES]u32
+	cases := [?]i32{0, -1, GPU_3D_COMPAT_GRID_MAX_SLICES + 1}
+	for slices in cases {
+		vertex_count, index_count, ok := _grid_mesh_geometry(slices, &vertices, &indices)
+		testing.expect_value(t, vertex_count, 0)
+		testing.expect_value(t, index_count, 0)
+		testing.expect(t, !ok)
+	}
+}
+
+@(test)
+test_cube_transform_contract :: proc(t: ^testing.T) {
+	transform := _cube_transform({1, 2, 3}, {4, 5, 6})
+	testing.expect_value(t, transform * [4]f32{0, 0, 0, 1}, [4]f32{1, 2, 3, 1})
+	testing.expect_value(t, transform * [4]f32{0.5, 0.5, 0.5, 1}, [4]f32{3, 4.5, 6, 1})
+}
+
+@(test)
+test_compat_primitives_skip_without_mode :: proc(t: ^testing.T) {
+	DrawCube({}, 1, 1, 1, WHITE)
+	DrawCubeV({}, {1, 1, 1}, WHITE)
+	DrawCubeWires({}, 1, 1, 1, WHITE)
+	DrawCubeWiresV({}, {1, 1, 1}, WHITE)
+	DrawGrid(20, 1)
+	testing.expect(t, !g.resources.gpu_3d.compat.pass_available)
+}
+
 // -- _sphere_mesh_geometry -----------------------------------------------------
 
 @(test)

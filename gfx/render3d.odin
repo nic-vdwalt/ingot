@@ -50,6 +50,57 @@ DrawMesh :: proc(mesh: Mesh, material: Material, transform: Matrix) {
 	_draw_disc_world(pos, radius, col)
 }
 
+// --- depth-tested primitives -----------------------------------------------
+
+@(private)
+_cube_transform :: proc(position, size: Vector3) -> Matrix {
+	assert(_camera_vector_is_finite(position), "_cube_transform: non-finite position")
+	assert(_camera_vector_is_finite(size), "_cube_transform: non-finite size")
+	return(
+		MatrixTranslate(position.x, position.y, position.z) *
+		MatrixScale(size.x, size.y, size.z) \
+	)
+}
+
+DrawCube :: proc(position: Vector3, width, height, length: f32, color: Color) {
+	DrawCubeV(position, {width, height, length}, color)
+}
+
+DrawCubeV :: proc(position, size: Vector3, color: Color) {
+	if !cam3d_active do return
+	compat := &g.resources.gpu_3d.compat
+	if !compat.pass_available do return
+	draw_gpu_mesh(&compat.pass, compat.cube, _cube_transform(position, size), {color = color})
+}
+
+DrawCubeWires :: proc(position: Vector3, width, height, length: f32, color: Color) {
+	DrawCubeWiresV(position, {width, height, length}, color)
+}
+
+DrawCubeWiresV :: proc(position, size: Vector3, color: Color) {
+	if !cam3d_active do return
+	compat := &g.resources.gpu_3d.compat
+	if !compat.pass_available do return
+	draw_gpu_mesh(
+		&compat.pass,
+		compat.cube_edges,
+		_cube_transform(position, size),
+		{color = color, style = .Opaque_Overlay, depth_nudge = 0.0005},
+	)
+}
+
+DrawGrid :: proc(slices: i32, spacing: f32) {
+	if !cam3d_active do return
+	assert(_f32_is_finite(spacing), "DrawGrid: non-finite spacing")
+	if spacing <= 0 do return
+	resources := &g.resources.gpu_3d
+	if !resources.compat.pass_available do return
+	grid, ok := _gpu_3d_compat_grid(resources, slices)
+	if !ok do return
+	transform := MatrixScale(spacing, spacing, 1)
+	draw_gpu_mesh(&resources.compat.pass, grid, transform, {color = GRAY, depth_nudge = 0.0005})
+}
+
 // --- billboards ------------------------------------------------------------
 
 DrawBillboard :: proc(
