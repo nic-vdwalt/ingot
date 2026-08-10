@@ -84,6 +84,14 @@ echo "== wasm check: net =="
 echo "== wasm data segment bloat =="
 python3 "$ROOT/scripts/check_wasm_bloat.py" "$ROOT/web/ingot_web.wasm" --report
 
+# Compiling proves the web target builds; it says nothing about whether the app
+# ever acquires a GPU device. A host that gated startup on context_ready shipped
+# a black canvas in every browser while every compile check above stayed green:
+# the wasm was perfectly valid and the mistake was a lifecycle one. See
+# check_web_startup.py.
+echo "== web startup gating =="
+python3 "$ROOT/scripts/check_web_startup.py" "$ROOT"
+
 echo "== web lifecycle and semantic tests =="
 node --test "$ROOT"/web/test/*.test.mjs
 
