@@ -5,6 +5,13 @@
 # `node --test` against the hand-rolled DOM stub (web/test/dom_stub.mjs; no
 # npm dependencies).
 #
+# The node suite has one structural blind spot: V8 accepts SharedArrayBuffer
+# backed views in TextDecoder.decode and crypto.getRandomValues, while Blink
+# and Gecko reject them. Threaded builds hand shared views to both APIs, so a
+# missing defensive copy passes every node test and still dies in a real
+# browser on the first string read. scripts/check_shared_views.py is the only
+# check that can see it, and it runs in the threaded block below.
+#
 # Fast and headless - safe for CI. Real-browser assistive-tech behavior
 # remains a manual pass (VoiceOver+Safari / ChromeVox).
 set -euo pipefail
@@ -57,6 +64,9 @@ if [ "${INGOT_CHECK_WEB_THREADS:-0}" = "1" ]; then
 	INGOT_WEB_THREADS=1 bash "$ROOT/build_web.sh" examples/box3d_benchmark >/dev/null
 	python3 "$ROOT/scripts/check_wasm_threads.py" "$ROOT/web/ingot_web.wasm" \
 		--required-export ingot_box3d_benchmark_batch
+	# Shared-memory view rejection. Skips cleanly without playwright.
+	echo "== shared view check (real browsers) =="
+	python3 "$ROOT/scripts/check_shared_views.py"
 fi
 
 echo "== wasm compile: examples/box3d_advanced =="

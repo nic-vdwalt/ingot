@@ -13,6 +13,72 @@ if [ ! -f "$ODIN_ROOT/core/sys/wasm/js/odin.js" ]; then
 fi
 mkdir -p "$DEST"
 cp "$ODIN_ROOT/core/sys/wasm/js/odin.js" "$DEST/odin.js"
+# Threaded builds import a `shared: true` memory. Blink and Gecko both reject
+# SharedArrayBuffer-backed views in TextDecoder.decode and crypto.getRandomValues,
+# so the stock runtime throws on the first string read or rand_bytes call. Node
+# accepts shared views, which is why `node --test` never sees this. Delete this
+# block once the upstream fix lands (odin-lang/Odin, wasm js shared memory).
+python3 - "$DEST/odin.js" <<'PY'
+import sys
+path = sys.argv[1]
+source = open(path).read()
+
+GUARD = "bytes.buffer instanceof SharedArrayBuffer"
+
+DECODE_OLD = (
+	"\tloadString(ptr, len) {\n"
+	"\t\tconst bytes = this.loadBytes(ptr, Number(len));\n"
+	"\t\treturn new TextDecoder().decode(bytes);\n"
+	"\t}"
+)
+DECODE_NEW = (
+	"\tloadBytesUnshared(ptr, len) {\n"
+	"\t\tconst bytes = this.loadBytes(ptr, len);\n"
+	"\t\tif (typeof SharedArrayBuffer !== \"undefined\" && bytes.buffer instanceof SharedArrayBuffer) {\n"
+	"\t\t\treturn bytes.slice();\n"
+	"\t\t}\n"
+	"\t\treturn bytes;\n"
+	"\t}\n"
+	"\n"
+	"\tloadString(ptr, len) {\n"
+	"\t\treturn new TextDecoder().decode(this.loadBytesUnshared(ptr, Number(len)));\n"
+	"\t}"
+)
+
+RAND_OLD = (
+	"\t\t\trand_bytes: (ptr, len) => {\n"
+	"\t\t\t\tconst view = new Uint8Array(wasmMemoryInterface.memory.buffer, ptr, len)\n"
+	"\t\t\t\tcrypto.getRandomValues(view)\n"
+	"\t\t\t},"
+)
+RAND_NEW = (
+	"\t\t\trand_bytes: (ptr, len) => {\n"
+	"\t\t\t\tconst view = new Uint8Array(wasmMemoryInterface.memory.buffer, ptr, len)\n"
+	"\t\t\t\tif (typeof SharedArrayBuffer !== \"undefined\" && view.buffer instanceof SharedArrayBuffer) {\n"
+	"\t\t\t\t\tconst tmp = new Uint8Array(len)\n"
+	"\t\t\t\t\tcrypto.getRandomValues(tmp)\n"
+	"\t\t\t\t\tview.set(tmp)\n"
+	"\t\t\t\t\treturn\n"
+	"\t\t\t\t}\n"
+	"\t\t\t\tcrypto.getRandomValues(view)\n"
+	"\t\t\t},"
+)
+
+if GUARD not in source:
+    if source.count(DECODE_OLD) != 1:
+        raise SystemExit("unexpected Odin loadString implementation")
+    if source.count(RAND_OLD) != 1:
+        raise SystemExit("unexpected Odin rand_bytes implementation")
+    source = source.replace(DECODE_OLD, DECODE_NEW, 1)
+    source = source.replace(RAND_OLD, RAND_NEW, 1)
+    open(path, "w").write(source)
+
+result = open(path).read()
+if result.count(GUARD) != 1:
+    raise SystemExit("invalid SharedArrayBuffer compatibility transform: loadString")
+if result.count("view.buffer instanceof SharedArrayBuffer") != 1:
+    raise SystemExit("invalid SharedArrayBuffer compatibility transform: rand_bytes")
+PY
 cp "$ODIN_ROOT/vendor/wgpu/wgpu.js" "$DEST/wgpu.js"
 python3 - "$DEST/wgpu.js" <<'PY'
 import sys
