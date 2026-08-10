@@ -40,6 +40,12 @@
 	<script src="ingot_input.js"></script>
 	<script src="box3d_workers.js"></script>
 	<script src="ingot_web.js"></script>
+	<!-- App-I/O bridges: ingot_ws / ingot_http / ingot_store / ingot_open.
+	     Loaded unconditionally so this dev harness hosts every example the
+	     same way the deployed pages do. web/demo.odin imports none of these,
+	     so leaving it out used to boot fine here while examples/gallery -
+	     which calls sys.open_url - failed instantiate in production. -->
+	<script src="ingot_app.js"></script>
 	<script>
 		const msg = document.getElementById("msg");
 		const params = new URLSearchParams(location.search);
@@ -48,7 +54,11 @@
 		const workerCount = Number.isFinite(requestedWorkerCount)
 			? Math.max(2, Math.min(4, Math.floor(requestedWorkerCount)))
 			: undefined;
-		window.ingotWeb.run("ingot_web.wasm", { box3dWorkers, workerCount })
+		window.ingotWeb.run("ingot_web.wasm", {
+			box3dWorkers,
+			workerCount,
+			appSessionFactory: window.ingotApp.createSession,
+		})
 			.then(() => {
 				// A previous session's post-mortem renders into #crash and
 				// must not suppress this session's status line.
