@@ -288,6 +288,20 @@ test_create_gpu_mesh_rejects_headless :: proc(t: ^testing.T) {
 	testing.expect_value(t, mesh.id, u32(0))
 }
 
+// A headless run has no device, so the update must refuse rather than write
+// through a nil buffer. This is the only reachable failure path without a GPU,
+// and it is the one an app hits when it updates a mesh it never created.
+@(test)
+test_update_gpu_mesh_vertices_rejects_headless :: proc(t: ^testing.T) {
+	vertices := [?]Gpu_3D_Vertex {
+		{position = {0, 0, 0}, normal = CAMERA_WORLD_UP},
+		{position = {1, 0, 0}, normal = CAMERA_WORLD_UP},
+		{position = {0, 1, 0}, normal = CAMERA_WORLD_UP},
+	}
+	testing.expect(t, !update_gpu_mesh_vertices(Gpu_Mesh{}, vertices[:]))
+	testing.expect(t, !update_gpu_mesh_vertices(Gpu_Mesh{}, nil))
+}
+
 @(test)
 test_gpu_3d_opaque_material_policies :: proc(t: ^testing.T) {
 	default := _gpu_3d_material_policy(.Default)
