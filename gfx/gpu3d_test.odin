@@ -538,6 +538,7 @@ test_gpu_3d_chunk_count_boundaries :: proc(t: ^testing.T) {
 	testing.expect_value(t, _gpu_3d_chunk_count(GPU_3D_MAX_INSTANCES_PER_DRAW), 1)
 	testing.expect_value(t, _gpu_3d_chunk_count(GPU_3D_MAX_INSTANCES_PER_DRAW + 1), 2)
 	testing.expect_value(t, _gpu_3d_chunk_count(2 * GPU_3D_MAX_INSTANCES_PER_DRAW + 1), 3)
+	testing.expect_value(t, _gpu_3d_chunk_count(171), 1)
 }
 
 @(test)

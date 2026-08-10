@@ -87,6 +87,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo-dir", required=True, help="staged demo directory to serve")
     ap.add_argument("--seconds", type=float, default=8.0, help="how long to let it run")
+    ap.add_argument("--minimum-fps", type=int, default=0,
+                    help="fail when the app FPS export settles below this value")
     refusal = ap.add_mutually_exclusive_group()
     refusal.add_argument("--refuse-requests", action="store_true",
                          help="make the worker pool refuse every app request")
@@ -157,6 +159,9 @@ def main():
                 "() => !!(window.ingotCrash && window.ingotCrash.crashed())")
             crash_text = page.evaluate(
                 "() => (document.getElementById('crash') || {}).textContent || ''")
+            fps = page.evaluate(
+                "() => window.ingotBox3dAdvancedStats ? "
+                "window.ingotBox3dAdvancedStats().fps : 0")
             browser.close()
     finally:
         server.shutdown()
@@ -164,6 +169,7 @@ def main():
     print("== %s ==" % demo.name)
     print("   crossOriginIsolated  %s" % isolated)
     print("   mode chip            %r" % mode)
+    print("   app FPS              %d" % fps)
     print("   crash recorder       %s" % ("CRASHED" if crashed else "clean"))
     for line in logs:
         print("   log: %s" % line[:160])
@@ -175,6 +181,8 @@ def main():
         failures.append("worker pool not enabled (mode chip: %r)" % mode)
     if crashed:
         failures.append("crash recorder fired: %s" % crash_text.strip()[:300])
+    if args.minimum_fps > 0 and fps < args.minimum_fps:
+        failures.append("app FPS %d is below required %d" % (fps, args.minimum_fps))
     failures.extend(errors)
 
     if failures:
