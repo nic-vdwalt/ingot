@@ -9,7 +9,12 @@ function imports(memory) {
 		odin_env: {
 			write() {},
 			rand_bytes(pointer, length) {
-				crypto.getRandomValues(new Uint8Array(memory.buffer, pointer, length));
+				// This worker always runs on a shared memory, and both Blink and
+				// Gecko reject shared views in getRandomValues. It fills in place,
+				// so the entropy has to be staged unshared and written back.
+				const tmp = new Uint8Array(length);
+				crypto.getRandomValues(tmp);
+				new Uint8Array(memory.buffer, pointer, length).set(tmp);
 			},
 			tick_now: () => performance.now(),
 			pow: Math.pow,

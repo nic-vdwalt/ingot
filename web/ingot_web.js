@@ -57,8 +57,19 @@
 		return new Uint8Array(wasmMemoryInterface.memory.buffer, pointer, length);
 	}
 
+	// Threaded builds import a `shared: true` memory, and both Blink and Gecko
+	// reject SharedArrayBuffer-backed views in TextDecoder.decode even though
+	// the Encoding spec allows them. Copy first when the view is shared. Node
+	// accepts shared views, so `node --test` cannot catch a regression here.
+	function decodeUtf8(view) {
+		if (typeof SharedArrayBuffer !== "undefined" && view.buffer instanceof SharedArrayBuffer) {
+			return textDecoder.decode(view.slice());
+		}
+		return textDecoder.decode(view);
+	}
+
 	function wasmText(pointer, length) {
-		return textDecoder.decode(wasmBytes(pointer, length));
+		return decodeUtf8(wasmBytes(pointer, length));
 	}
 
 	function canvasRect() {
@@ -521,7 +532,7 @@
 				const memory = new Uint8Array(wasmMemoryInterface.memory.buffer);
 				let end = pointer;
 				while (end < memory.length && memory[end] !== 0) end += 1;
-				clipboardText = textDecoder.decode(memory.subarray(pointer, end));
+				clipboardText = decodeUtf8(memory.subarray(pointer, end));
 				if (navigator.clipboard && navigator.clipboard.writeText) {
 					navigator.clipboard.writeText(clipboardText).catch(() => {});
 				}
@@ -531,7 +542,7 @@
 				const memory = new Uint8Array(wasmMemoryInterface.memory.buffer);
 				let end = pointer;
 				while (end < memory.length && memory[end] !== 0) end += 1;
-				document.title = textDecoder.decode(memory.subarray(pointer, end));
+				document.title = decodeUtf8(memory.subarray(pointer, end));
 			},
 			ingot_web_input_frame_begin: () => {
 				semanticFrame += 1;

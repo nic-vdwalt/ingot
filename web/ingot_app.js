@@ -27,7 +27,16 @@
 	// Per-WMI memory helpers (linear memory can grow, so re-view each access).
 	function helpers(WMI) {
 		const mem = () => new Uint8Array(WMI.memory.buffer);
-		const readStr = (ptr, len) => new TextDecoder().decode(mem().subarray(ptr, ptr + len));
+		// Threaded builds import a `shared: true` memory, and both Blink and
+		// Gecko reject SharedArrayBuffer-backed views in TextDecoder.decode.
+		// Copy first when shared; Node accepts them, so node tests cannot see it.
+		const readStr = (ptr, len) => {
+			const view = mem().subarray(ptr, ptr + len);
+			if (typeof SharedArrayBuffer !== "undefined" && view.buffer instanceof SharedArrayBuffer) {
+				return new TextDecoder().decode(view.slice());
+			}
+			return new TextDecoder().decode(view);
+		};
 		const writeBytes = (dst, bytes, cap) => {
 			const n = Math.min(bytes.length, cap);
 			mem().set(bytes.subarray(0, n), dst);
