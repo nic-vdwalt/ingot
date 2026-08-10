@@ -38,7 +38,11 @@ POOL_INDEX_COUNT :: POOL_CELLS * POOL_CELLS * 6
 FLOOR_Z :: f32(-8)
 
 #assert(FLOATER_COUNT <= FLOATER_MAX)
-#assert(POOL_VERTEX_COUNT < 65536)
+// The grid is checked against the renderer's own caps rather than a round
+// number, so raising POOL_CELLS fails at compile time on the limit that
+// actually applies instead of being rejected at runtime by create_gpu_mesh.
+#assert(POOL_VERTEX_COUNT <= rl.GPU_3D_MAX_VERTICES)
+#assert(POOL_INDEX_COUNT <= rl.GPU_3D_MAX_INDICES)
 
 FLOATER_COLORS := [6]rl.Color {
 	{247, 213, 105, 255},

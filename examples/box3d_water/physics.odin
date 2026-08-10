@@ -103,11 +103,19 @@ physics_apply_water :: proc(value: ^State) {
 		if !b3.Body_IsValid(floater.body) do continue
 		center := b3.Body_GetWorldCenter(floater.body)
 		velocity := b3.Body_GetLinearVelocity(floater.body)
-		surface := water_height(f32(center.x), f32(center.y), value.phase)
-		surface_velocity := water_surface_velocity(f32(center.x), f32(center.y), value.phase)
-		floater.submerged = water_submerged_fraction(f32(center.z), FLOATER_HALF_EXTENT, surface)
+		// Solver state is untrusted input to the water model, not a value
+		// this code produced. A body that has already diverged is skipped
+		// rather than asserted on: pushing a force onto a non-finite
+		// position is meaningless, and aborting the whole app over one bad
+		// body would turn a recoverable visual glitch into a crash.
+		position := [3]f32{f32(center.x), f32(center.y), f32(center.z)}
+		if !water_vector_finite(position) do continue
+		if !water_vector_finite(velocity) do continue
+		surface := water_height(position.x, position.y, value.phase)
+		surface_velocity := water_surface_velocity(position.x, position.y, value.phase)
+		floater.submerged = water_submerged_fraction(position.z, FLOATER_HALF_EXTENT, surface)
 		force := water_force(
-			f32(center.z),
+			position.z,
 			FLOATER_HALF_EXTENT,
 			floater.mass,
 			surface,
