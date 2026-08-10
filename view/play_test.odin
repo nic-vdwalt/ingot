@@ -344,6 +344,30 @@ test_play_accepts_an_empty_flex_container :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_play_unkeyed_container_scopes_do_not_collide :: proc(t: ^testing.T) {
+	doc: View_Doc
+	root, ok := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	testing.expect(t, ok, "root add failed")
+	for index in 0 ..< 33 {
+		_, added := doc_add(&doc, root, View_Node{kind = .Column})
+		testing.expectf(t, added, "container %d add failed", index)
+	}
+	result, valid := view_validate(view_of(&doc))
+	testing.expectf(t, valid, "view validation failed: %v", result)
+	h := harness_begin()
+	defer harness_end(h)
+	ids: [33]ui.Widget_Id
+	source := view_of(&doc)
+	for index in 0 ..< len(ids) {
+		node_index := i32(index + 1)
+		scope_begin_node(&h.u, source, source.nodes[node_index], node_index)
+		ids[index] = ui.id(&h.u, "action")
+		ui.scope_end(&h.u)
+		for prior in 0 ..< index do testing.expect(t, ids[prior] != ids[index])
+	}
+}
+
+@(test)
 test_play_emits_semantics_for_interactive_nodes :: proc(t: ^testing.T) {
 	doc: View_Doc
 	demo_doc(&doc)

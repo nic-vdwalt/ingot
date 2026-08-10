@@ -57,7 +57,7 @@ view_play_traced :: proc(u: ^ui.Ui, view: View, bindings: ^Bindings, trace: ^Pla
 		}
 		if view_kind_is_container(node.kind) {
 			tap_container_enter(&tap, ui.remaining_rect(u))
-			ui.scope_begin(u, scope_key(view, node, step.node))
+			scope_begin_node(u, view, node, step.node)
 			open_container(u, view, node, step.node)
 			continue
 		}
@@ -71,57 +71,19 @@ view_play_traced :: proc(u: ^ui.Ui, view: View, bindings: ^Bindings, trace: ^Pla
 	assert(tap.depth == 0, "view_play: unbalanced trace stack")
 }
 
-// scope_key gives every container a scope, using its index when it has no
-// author key. Falling back to the index keeps identity stable for the common
-// case of an unkeyed layout wrapper, while a keyed container keeps its identity
-// across insertion of a sibling before it.
-@(private = "file")
-scope_key :: proc(view: View, node: View_Node, index: i32) -> string {
+// scope_begin_node gives every container a scope. An author key preserves
+// identity across document reordering; the one-based node index is the bounded
+// fallback for an unkeyed layout wrapper and cannot collide inside one view.
+@(private = "package")
+scope_begin_node :: proc(u: ^ui.Ui, view: View, node: View_Node, index: i32) {
+	assert(u != nil, "scope_begin_node: nil Ui")
+	assert(index >= 0 && int(index) < len(view.nodes), "scope_begin_node: index out of range")
 	key := text_slice(view, node.key_offset, node.key_length)
-	if key != "" do return key
-	return INDEX_KEYS[index % len(INDEX_KEYS)]
-}
-
-// INDEX_KEYS avoids formatting a string per unkeyed container per frame, which
-// would allocate in the hot path. The modulo is safe for identity because a
-// scope is derived from the whole enclosing path, so two containers sharing a
-// fallback key still differ unless they are also siblings - and a builder that
-// emits more than this many unkeyed siblings under one parent should be keying
-// them anyway.
-@(private = "file")
-INDEX_KEYS := [32]string {
-	"v0",
-	"v1",
-	"v2",
-	"v3",
-	"v4",
-	"v5",
-	"v6",
-	"v7",
-	"v8",
-	"v9",
-	"v10",
-	"v11",
-	"v12",
-	"v13",
-	"v14",
-	"v15",
-	"v16",
-	"v17",
-	"v18",
-	"v19",
-	"v20",
-	"v21",
-	"v22",
-	"v23",
-	"v24",
-	"v25",
-	"v26",
-	"v27",
-	"v28",
-	"v29",
-	"v30",
-	"v31",
+	if key != "" {
+		ui.scope_begin(u, key)
+		return
+	}
+	ui.scope_begin(u, u64(index) + 1)
 }
 
 @(private = "file")
