@@ -506,9 +506,10 @@ draw_gpu_3d_target :: proc(target: ^Gpu_3D_Target, destination: Rectangle, tint:
 }
 
 @(private)
-_gpu_3d_compat_ensure :: proc(resources: ^Gpu_3D_Resources) -> bool {
-	assert(resources != nil, "_gpu_3d_compat_ensure: nil resources")
-	assert(g.initialized, "_gpu_3d_compat_ensure: uninitialized context")
+_gpu_3d_compat_ensure :: proc(ctx: ^Context) -> bool {
+	assert(ctx != nil, "_gpu_3d_compat_ensure: nil context")
+	assert(ctx.initialized, "_gpu_3d_compat_ensure: uninitialized context")
+	resources := &ctx.resources.gpu_3d
 	if resources.active_pass_generation != 0 do return false
 	compat := &resources.compat
 	width := GetRenderWidth()
@@ -526,11 +527,12 @@ _gpu_3d_compat_ensure :: proc(resources: ^Gpu_3D_Resources) -> bool {
 }
 
 @(private)
-_gpu_3d_compat_begin :: proc(camera: Camera3D) -> bool {
-	resources := &g.resources.gpu_3d
+_gpu_3d_compat_begin :: proc(ctx: ^Context, camera: Camera3D) -> bool {
+	assert(ctx != nil, "_gpu_3d_compat_begin: nil context")
+	resources := &ctx.resources.gpu_3d
 	compat := &resources.compat
 	assert(!compat.pass_available, "_gpu_3d_compat_begin: pass already available")
-	if !g.frame.has_frame || !_gpu_3d_compat_ensure(resources) do return false
+	if !ctx.frame.has_frame || !_gpu_3d_compat_ensure(ctx) do return false
 	compat.pass, compat.pass_available = begin_gpu_3d(&compat.target, camera)
 	if !compat.pass_available do return false
 	set_gpu_3d_light(&compat.pass, {direction = CAMERA_WORLD_UP, ambient = 1, diffuse = 0})
@@ -538,8 +540,9 @@ _gpu_3d_compat_begin :: proc(camera: Camera3D) -> bool {
 }
 
 @(private)
-_gpu_3d_compat_end :: proc() {
-	compat := &g.resources.gpu_3d.compat
+_gpu_3d_compat_end :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_gpu_3d_compat_end: nil context")
+	compat := &ctx.resources.gpu_3d.compat
 	if !compat.pass_available do return
 	assert(compat.pass.active, "_gpu_3d_compat_end: inactive pass")
 	end_gpu_3d(&compat.pass)
@@ -1474,11 +1477,12 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 }
 
 @(private)
-_gpu_3d_resources_destroy :: proc(resources: ^Gpu_3D_Resources) {
+_gpu_3d_resources_destroy :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
+	assert(ctx != nil, "_gpu_3d_resources_destroy: nil context")
 	assert(resources != nil, "_gpu_3d_resources_destroy: nil resources")
 	assert(resources.active_pass_generation == 0, "_gpu_3d_resources_destroy: active pass")
 	compat := &resources.compat
-	if compat.target.texture.texture.id != 0 do _gpu_3d_target_destroy(g, &compat.target)
+	if compat.target.texture.texture.id != 0 do _gpu_3d_target_destroy(ctx, &compat.target)
 	compat^ = {}
 	for &slot in resources.meshes {
 		if slot.occupied do _gpu_3d_mesh_entry_destroy(slot.entry)
