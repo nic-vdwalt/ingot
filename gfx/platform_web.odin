@@ -149,6 +149,31 @@ _web_reason :: proc(msg: wg.StringView) -> string {
 	return text if len(text) > 0 else "(browser supplied no message)"
 }
 
+// _web_report_discarded names the one GPU startup failure that otherwise
+// produces no output at all: the browser resolved the request successfully,
+// but by the time it did the context was no longer starting, so the result is
+// thrown away and the canvas stays black forever.
+//
+// Every other path here already logs, because a null adapter or a rejected
+// device carries a status the caller can print. A discarded SUCCESS carries
+// none, and the silence is what makes it expensive: the symptom is an empty
+// canvas with a clean console, identical to an app that simply drew nothing.
+// A ui_gfx.App host that closed the context during startup shipped in that
+// state, so keep this loud even though the condition is legitimate during a
+// deliberate close.
+@(private)
+_web_report_discarded :: proc(what: string, request: ^Web_GPU_Request) {
+	fmt.eprintfln(
+		"gfx: discarding a resolved WebGPU %s: context is %v, not Starting " +
+		"(request epoch %v, context epoch %v). The canvas will stay blank until " +
+		"the context is initialised again.",
+		what,
+		g.lifecycle,
+		request.epoch if request != nil else 0,
+		g.epoch,
+	)
+}
+
 @(private)
 _web_on_adapter :: proc "c" (
 	status: wg.RequestAdapterStatus,
@@ -164,6 +189,8 @@ _web_on_adapter :: proc "c" (
 			// GPU, compat-mode-only device). Without this line the canvas just
 			// stays black forever - surface the reason instead.
 			fmt.eprintfln("gfx: WebGPU adapter request failed (%v): %s", status, _web_reason(msg))
+		} else {
+			_web_report_discarded("adapter", request)
 		}
 		if adapter != nil do wg.AdapterRelease(adapter)
 		free(request)
@@ -197,6 +224,8 @@ _web_on_device :: proc "c" (
 	if status != .Success || !_web_request_live(request) {
 		if status != .Success {
 			fmt.eprintfln("gfx: WebGPU device request failed (%v): %s", status, _web_reason(msg))
+		} else {
+			_web_report_discarded("device", request)
 		}
 		if device != nil do wg.DeviceRelease(device)
 		free(request)

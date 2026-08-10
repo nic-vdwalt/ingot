@@ -466,6 +466,29 @@ context_ready :: proc(ctx: ^Context) -> bool {
 	return ctx != nil && ctx.lifecycle == .Ready && ctx.initialized
 }
 
+// context_live reports a context a host may run a frame loop against: ready to
+// draw now, or - on the web only - still resolving its GPU device on the
+// browser event loop.
+//
+// Hosts must gate startup on this rather than on context_ready. On the web the
+// adapter and device resolve several animation frames AFTER context_init
+// returns, so context_ready is necessarily false at startup; a host that reads
+// that as failure and tears the context down also cancels the in-flight
+// adapter request, because _web_on_adapter drops any request whose context is
+// no longer .Starting. The result is a permanently black canvas with no error
+// logged on either side of the wasm boundary. ui_gfx.app_start shipped exactly
+// that bug, so keep the rule here where both callers share it.
+//
+// Waiting is safe: gfx.step skips the app callback until g.initialized flips,
+// and context_begin_frame refuses to open a frame before then.
+context_live :: proc(ctx: ^Context) -> bool {
+	when ODIN_OS == .JS {
+		return ctx != nil && (ctx.lifecycle == .Starting || context_ready(ctx))
+	} else {
+		return context_ready(ctx)
+	}
+}
+
 context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool {
 	assert(ctx != nil && title != nil, "context_init: nil argument")
 	when ODIN_OS == .JS {
@@ -474,11 +497,7 @@ context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool 
 	previous := _context_activate(ctx)
 	defer _context_restore(previous)
 	_init_window_context(ctx, width, height, title)
-	when ODIN_OS == .JS {
-		return ctx.lifecycle == .Starting || context_ready(ctx)
-	} else {
-		return context_ready(ctx)
-	}
+	return context_live(ctx)
 }
 
 context_close :: proc(ctx: ^Context) {

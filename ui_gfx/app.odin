@@ -134,7 +134,14 @@ app_frame :: proc(app: ^App) -> bool {
 
 app_start :: proc(app: ^App) -> bool {
 	if app == nil || app.state != .Ready do return false
-	if !gfx.context_ready(app.gfx_context) do return false
+	// context_live, not context_ready: on the web the GPU device is still
+	// resolving on the browser event loop at this point and readiness is
+	// necessarily false. Requiring readiness here made app_run treat every
+	// web startup as a failure and call app_destroy, whose context_close
+	// cancelled the in-flight adapter request - a black canvas, silently,
+	// for every ui_gfx.App app in a browser. Frames simply do not run until
+	// the device lands; gfx.step gates the callback on that.
+	if !gfx.context_live(app.gfx_context) do return false
 	app.state = .Running
 	assert(app.session.initialized, "app_start: session not initialized")
 	assert(app.gfx_context == app.session.adapter.gfx_context, "app_start: context mismatch")
