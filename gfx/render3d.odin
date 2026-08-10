@@ -67,10 +67,15 @@ DrawCube :: proc(position: Vector3, width, height, length: f32, color: Color) {
 }
 
 DrawCubeV :: proc(position, size: Vector3, color: Color) {
+	DrawCubeTransform(_cube_transform(position, size), color)
+}
+
+DrawCubeTransform :: proc(transform: Matrix, color: Color) {
 	if !cam3d_active do return
+	assert(_camera_matrix_is_finite(transform), "DrawCubeTransform: non-finite transform")
 	compat := &default_context_storage.resources.gpu_3d.compat
 	if !compat.pass_available do return
-	draw_gpu_mesh(&compat.pass, compat.cube, _cube_transform(position, size), {color = color})
+	draw_gpu_mesh(&compat.pass, compat.cube, transform, {color = color})
 }
 
 DrawCubeWires :: proc(position: Vector3, width, height, length: f32, color: Color) {
@@ -78,13 +83,18 @@ DrawCubeWires :: proc(position: Vector3, width, height, length: f32, color: Colo
 }
 
 DrawCubeWiresV :: proc(position, size: Vector3, color: Color) {
+	DrawCubeWiresTransform(_cube_transform(position, size), color)
+}
+
+DrawCubeWiresTransform :: proc(transform: Matrix, color: Color) {
 	if !cam3d_active do return
+	assert(_camera_matrix_is_finite(transform), "DrawCubeWiresTransform: non-finite transform")
 	compat := &default_context_storage.resources.gpu_3d.compat
 	if !compat.pass_available do return
 	draw_gpu_mesh(
 		&compat.pass,
 		compat.cube_edges,
-		_cube_transform(position, size),
+		transform,
 		{color = color, style = .Opaque_Overlay, depth_nudge = 0.0005},
 	)
 }
