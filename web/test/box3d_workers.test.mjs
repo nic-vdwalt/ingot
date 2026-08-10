@@ -123,3 +123,73 @@ test("Box3D benchmark rejects invalid batches and records step failure", async (
 	await new Promise((resolve) => setImmediate(resolve));
 	assert.equal(pool.imports.failure_count(), 1);
 });
+
+async function workerScriptImports() {
+	let captured = null;
+	const self = {};
+	const context = {
+		self,
+		console,
+		crypto,
+		performance,
+		Proxy,
+		Math,
+		Uint8Array,
+		Error,
+		String,
+		Boolean,
+		WebAssembly: {
+			instantiate(module, imports) {
+				captured = imports;
+				return Promise.resolve({
+					exports: { __stack_pointer: { value: 0 } },
+				});
+			},
+		},
+		globalThis: null,
+	};
+	context.globalThis = context;
+	context.self.postMessage = () => {};
+	vm.runInNewContext(fs.readFileSync(new URL("../box3d_worker.js", import.meta.url), "utf8"),
+		context);
+	const memory = new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true });
+	await self.onmessage({
+		data: { type: "init", role: "coordinator", module: {}, memory, stackTop: 0 },
+	});
+	return captured;
+}
+
+test("Box3D worker supplies a monotonic clock import to Box3D", async () => {
+	const imports = await workerScriptImports();
+	assert.equal(typeof imports.odin_env.tick_now, "function");
+	const first = imports.odin_env.tick_now();
+	assert.equal(typeof first, "number");
+	assert.ok(first > 0);
+	assert.ok(imports.odin_env.tick_now() >= first);
+});
+
+test("Box3D benchmark profile fields survive the result path", async () => {
+	class ProfilingWorker {
+		postMessage(message) {
+			if (message.type === "init") {
+				this.role = message.role;
+				queueMicrotask(() => this.onmessage({ data: { type: "ready" } }));
+			} else if (message.type === "batch") {
+				queueMicrotask(() => this.onmessage({ data: {
+					type: "batch-complete", ok: true, elapsedMs: 40.5, stepCount: message.stepCount,
+				} }));
+			}
+		}
+		terminate() {}
+	}
+	const api = workerApi(ProfilingWorker);
+	const memory = new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true });
+	const pool = await api.create("fixture.wasm", memory, { workerCount: 2 });
+	assert.equal(pool.imports.request_batch(20), true);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(pool.imports.batch_ready(), true);
+	assert.equal(pool.imports.batch_elapsed_micros(), 40500);
+	assert.equal(pool.imports.batch_step_count(), 20);
+	assert.equal(pool.imports.failure_count(), 0);
+	pool.destroy();
+});

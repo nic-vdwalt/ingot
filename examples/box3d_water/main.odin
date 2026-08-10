@@ -34,7 +34,6 @@ SCREEN_HEIGHT :: 720
 POOL_EXTENT :: f32(14)
 POOL_CELLS :: 40
 POOL_VERTEX_COUNT :: (POOL_CELLS + 1) * (POOL_CELLS + 1)
-POOL_INDEX_COUNT :: POOL_CELLS * POOL_CELLS * 6
 FLOOR_Z :: f32(-8)
 
 #assert(FLOATER_COUNT <= FLOATER_MAX)
@@ -42,7 +41,7 @@ FLOOR_Z :: f32(-8)
 // number, so raising POOL_CELLS fails at compile time on the limit that
 // actually applies instead of being rejected at runtime by create_gpu_mesh.
 #assert(POOL_VERTEX_COUNT <= rl.GPU_3D_MAX_VERTICES)
-#assert(POOL_INDEX_COUNT <= rl.GPU_3D_MAX_INDICES)
+#assert(POOL_CELLS <= rl.GPU_3D_PLANE_MAX_CELLS)
 
 FLOATER_COLORS := [6]rl.Color {
 	{247, 213, 105, 255},
@@ -80,6 +79,7 @@ State :: struct {
 	camera:          rl.Camera3D,
 	orbit:           rl.Orbit_Camera_State,
 	orbit_config:    rl.Orbit_Camera_Config,
+	orbit_bindings:  rl.Orbit_Camera_Bindings,
 	graphics_ready:  bool,
 }
 

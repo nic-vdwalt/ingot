@@ -2,6 +2,7 @@ package main
 
 import "base:intrinsics"
 import "core:fmt"
+import "core:time"
 import rl "ingot:gfx"
 import b3 "vendor:box3d"
 
@@ -51,9 +52,6 @@ Benchmark_Oracle :: struct {
 	awake_contact_count: i32,
 	island_count:        i32,
 	task_count:          i32,
-	profile_step_ms:     f32,
-	profile_collide_ms:  f32,
-	profile_solve_ms:    f32,
 }
 
 State :: struct {
@@ -68,6 +66,11 @@ State :: struct {
 	measured_steps:  int,
 	total_ms:        f64,
 	reported:        bool,
+	profile_step_sum:     f64,
+	profile_pairs_sum:    f64,
+	profile_collide_sum:  f64,
+	profile_solve_sum:    f64,
+	profile_sample_count: int,
 }
 
 when BOX3D_WORKERS_ENABLED {
@@ -98,6 +101,15 @@ when BOX3D_WORKERS_ENABLED {
 box3d_task_slots: [BOX3D_TASK_MAX]Box3D_Task_Slot
 box3d_batch_pending: u32
 state: State
+
+when ODIN_OS == .JS {
+	@(export, link_name = "b3PlatformTicks")
+	box3d_platform_ticks :: proc "c" () -> u64 {
+		nanos := time.tick_now()._nsec
+		if nanos <= 0 do return 0
+		return u64(nanos) / 1000
+	}
+}
 
 main :: proc() {
 	assert(BODY_COUNT > 0 && BODY_COUNT <= BODY_COUNT_MAX)
@@ -174,6 +186,17 @@ checksum_mix :: proc "contextless" (checksum: u64, value: f32) -> u64 {
 	return (checksum ~ u64(bits)) * 1099511628211
 }
 
+benchmark_step_once :: proc "contextless" () {
+	b3.World_Step(state.world, 1.0 / 60.0, PHYSICS_SUBSTEPS)
+	if state.phase != .Measured do return
+	profile := b3.World_GetProfile(state.world)
+	state.profile_step_sum += f64(profile.step)
+	state.profile_pairs_sum += f64(profile.pairs)
+	state.profile_collide_sum += f64(profile.collide)
+	state.profile_solve_sum += f64(profile.solve)
+	state.profile_sample_count += 1
+}
+
 benchmark_oracle_record :: proc "contextless" () {
 	checksum: u64 = 14695981039346656037
 	sample_count := min(BODY_COUNT, 128)
@@ -190,7 +213,6 @@ benchmark_oracle_record :: proc "contextless" () {
 		checksum = checksum_mix(checksum, transform.q.w)
 	}
 	counters := b3.World_GetCounters(state.world)
-	profile := b3.World_GetProfile(state.world)
 	state.oracle = {
 		checksum            = checksum,
 		body_count          = i32(counters.bodyCount),
@@ -198,9 +220,6 @@ benchmark_oracle_record :: proc "contextless" () {
 		awake_contact_count = i32(counters.awakeContactCount),
 		island_count        = i32(counters.islandCount),
 		task_count          = i32(counters.taskCount),
-		profile_step_ms     = profile.step,
-		profile_collide_ms  = profile.collide,
-		profile_solve_ms    = profile.solve,
 	}
 }
 
@@ -232,7 +251,7 @@ benchmark_batch_request :: proc(step_count: int) {
 	} else {
 		started := rl.GetTime()
 		for _ in 0 ..< step_count {
-			b3.World_Step(state.world, 1.0 / 60.0, PHYSICS_SUBSTEPS)
+			benchmark_step_once()
 		}
 		benchmark_oracle_record()
 		benchmark_batch_complete(step_count, (rl.GetTime() - started) * 1000)
@@ -253,8 +272,13 @@ benchmark_report :: proc() {
 	}
 	ms_per_step := state.total_ms / f64(max(state.measured_steps, 1))
 	steps_per_second := 1000 / ms_per_step
+	profile_samples := f64(max(state.profile_sample_count, 1))
+	profile_step_ms := state.profile_step_sum / profile_samples
+	profile_pairs_ms := state.profile_pairs_sum / profile_samples
+	profile_collide_ms := state.profile_collide_sum / profile_samples
+	profile_solve_ms := state.profile_solve_sum / profile_samples
 	fmt.printfln(
-		"INGOT_BOX3D_BENCHMARK %c\"body_count\":%d,\"worker_count\":%d,\"steps\":%d,\"total_ms\":%.3f,\"ms_per_step\":%.6f,\"steps_per_second\":%.3f,\"profile_step_ms\":%.3f,\"profile_collide_ms\":%.3f,\"profile_solve_ms\":%.3f,\"task_count\":%d,\"queue_high_water\":%d,\"failure_count\":%d,\"checksum\":\"%016x\",\"contacts\":%d,\"awake_contacts\":%d,\"islands\":%d%c",
+		"INGOT_BOX3D_BENCHMARK %c\"body_count\":%d,\"worker_count\":%d,\"steps\":%d,\"total_ms\":%.3f,\"ms_per_step\":%.6f,\"steps_per_second\":%.3f,\"profile_step_ms\":%.4f,\"profile_pairs_ms\":%.4f,\"profile_collide_ms\":%.4f,\"profile_solve_ms\":%.4f,\"profile_samples\":%d,\"task_count\":%d,\"queue_high_water\":%d,\"failure_count\":%d,\"checksum\":\"%016x\",\"contacts\":%d,\"awake_contacts\":%d,\"islands\":%d%c",
 		'{',
 		BODY_COUNT,
 		worker_count,
@@ -262,9 +286,11 @@ benchmark_report :: proc() {
 		state.total_ms,
 		ms_per_step,
 		steps_per_second,
-		state.oracle.profile_step_ms,
-		state.oracle.profile_collide_ms,
-		state.oracle.profile_solve_ms,
+		profile_step_ms,
+		profile_pairs_ms,
+		profile_collide_ms,
+		profile_solve_ms,
+		state.profile_sample_count,
 		task_count,
 		queue_high_water,
 		failures,
@@ -408,7 +434,7 @@ when BOX3D_WORKERS_ENABLED {
 		if !b3.World_IsValid(state.world) do return false
 		if step_count == 0 || step_count > STEPS_PER_BATCH_MAX do return false
 		for _ in 0 ..< step_count {
-			b3.World_Step(state.world, 1.0 / 60.0, PHYSICS_SUBSTEPS)
+			benchmark_step_once()
 		}
 		benchmark_oracle_record()
 		return true

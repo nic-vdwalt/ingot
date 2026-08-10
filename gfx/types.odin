@@ -154,6 +154,27 @@ Orbit_Camera_Config :: struct {
 	max_pitch:              f32,
 }
 
+// Orbit_Camera_Key_Pair binds one camera axis to up to two keys, because the
+// conventional binding is an arrow key and a letter key for the same action.
+// KEY_NULL means unbound and is never queried against the platform.
+Orbit_Camera_Key_Pair :: struct {
+	primary:   KeyboardKey,
+	secondary: KeyboardKey,
+}
+
+// Orbit_Camera_Bindings maps physical input to the semantic Orbit_Camera_Input.
+// It is separate from Orbit_Camera_Config because a binding is a user
+// preference while a config is a camera property: rebinding a key must not be
+// able to change the pitch limits.
+Orbit_Camera_Bindings :: struct {
+	rotate_left:        Orbit_Camera_Key_Pair,
+	rotate_right:       Orbit_Camera_Key_Pair,
+	zoom_in:            Orbit_Camera_Key_Pair,
+	zoom_out:           Orbit_Camera_Key_Pair,
+	drag_button:        MouseButton,
+	pointer_drag_scale: Vector2,
+}
+
 Camera2D :: struct {
 	offset:   Vector2,
 	target:   Vector2,
