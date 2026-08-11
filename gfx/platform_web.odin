@@ -26,6 +26,10 @@ foreign dom {
 	_js_css_width :: proc() -> f64 ---
 	@(link_name = "ingot_canvas_css_height")
 	_js_css_height :: proc() -> f64 ---
+	@(link_name = "ingot_canvas_pixel_width")
+	_js_pixel_width :: proc() -> i32 ---
+	@(link_name = "ingot_canvas_pixel_height")
+	_js_pixel_height :: proc() -> i32 ---
 	@(link_name = "ingot_device_pixel_ratio")
 	_js_dpr :: proc() -> f64 ---
 	@(link_name = "ingot_set_cursor")
@@ -255,14 +259,13 @@ platform_process_events :: proc(instance: wg.Instance) {}
 
 @(private)
 platform_framebuffer_size :: proc() -> (i32, i32) {
-	// Physical pixels = CSS size × devicePixelRatio (mirrors macOS HiDPI: the
-	// swapchain is at physical resolution, logical layout stays in points).
-	dpr := _js_dpr()
-	if dpr <= 0 do dpr = 1
-	w := i32(_js_css_width() * dpr + 0.5)
-	h := i32(_js_css_height() * dpr + 0.5)
-	if w <= 0 do w = g.width
-	if h <= 0 do h = g.height
+	// The host validates and caps the backing store before assigning it. Reading
+	// those integer dimensions here keeps SurfaceConfigure exactly in sync with
+	// the canvas during mobile viewport transitions.
+	w := _js_pixel_width()
+	h := _js_pixel_height()
+	if w <= 0 do w = max(g.fb_width, 1)
+	if h <= 0 do h = max(g.fb_height, 1)
 	return w, h
 }
 

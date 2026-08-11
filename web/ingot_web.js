@@ -228,23 +228,30 @@
 	// framebuffer size as css x dpr, so a disagreement would configure a
 	// swapchain that does not match the canvas.
 	const CANVAS_DPR_MAX = 2;
+	const CANVAS_DIMENSION_MAX = 8192;
+	const CANVAS_PIXELS_MAX = 4 * 1024 * 1024;
 
 	function canvasDpr() {
-		const dpr = window.devicePixelRatio || 1;
+		const dpr = Number(window.devicePixelRatio);
+		if (!Number.isFinite(dpr) || dpr <= 0) return 1;
 		return Math.min(dpr, CANVAS_DPR_MAX);
 	}
 
-	// Resize the canvas backing store to match its CSS box × devicePixelRatio.
-	// gfx reads css size + dpr each frame (_maybe_reconfigure) and reconfigures
-	// the swapchain when the framebuffer size changes, so we only need to keep
-	// the backing store in sync here.
 	function fitCanvas() {
 		const c = document.getElementById(CANVAS_ID);
 		if (!c) return;
 		const dpr = canvasDpr();
 		const rect = c.getBoundingClientRect();
-		const w = Math.max(1, Math.round(rect.width * dpr));
-		const h = Math.max(1, Math.round(rect.height * dpr));
+		const dimension = (value) => Number.isFinite(value)
+			? Math.min(CANVAS_DIMENSION_MAX, Math.max(1, Math.round(value * dpr)))
+			: 1;
+		let w = dimension(rect.width);
+		let h = dimension(rect.height);
+		if (w * h > CANVAS_PIXELS_MAX) {
+			const scale = Math.sqrt(CANVAS_PIXELS_MAX / (w * h));
+			w = Math.max(1, Math.floor(w * scale));
+			h = Math.max(1, Math.floor(h * scale));
+		}
 		if (c.width !== w) c.width = w;
 		if (c.height !== h) c.height = h;
 	}
@@ -514,6 +521,14 @@
 			ingot_canvas_css_height: () => {
 				const c = document.getElementById(CANVAS_ID);
 				return c ? c.getBoundingClientRect().height : 0;
+			},
+			ingot_canvas_pixel_width: () => {
+				const c = document.getElementById(CANVAS_ID);
+				return c ? c.width : 0;
+			},
+			ingot_canvas_pixel_height: () => {
+				const c = document.getElementById(CANVAS_ID);
+				return c ? c.height : 0;
 			},
 			ingot_device_pixel_ratio: () => canvasDpr(),
 			ingot_set_cursor: (cur) => {

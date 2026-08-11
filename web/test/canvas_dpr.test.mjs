@@ -44,6 +44,11 @@ function reportedRatio() {
 	return globalThis.ingotWeb.ingotImports().ingot_device_pixel_ratio();
 }
 
+function reportedSize() {
+	const imports = globalThis.ingotWeb.ingotImports();
+	return [imports.ingot_canvas_pixel_width(), imports.ingot_canvas_pixel_height()];
+}
+
 test("threaded binaries receive serial fallback imports", () => {
 	const imports = installed.hook.box3dWorkerImports(null);
 	assert.equal(imports.schedule(0, 0), false);
@@ -73,10 +78,13 @@ test("ordinary device pixel ratios pass through untouched", () => {
 	withRatio(2, () => assert.equal(reportedRatio(), 2));
 });
 
-test("a missing or zero ratio falls back to 1", () => {
-	// Some embedded webviews report 0 or omit the property; sizing a canvas
-	// to zero would produce an unusable surface rather than a small one.
+test("an invalid ratio falls back to 1", () => {
+	// Some embedded webviews report invalid values during viewport transitions;
+	// sizing from one would produce an illegal or enormous surface.
 	withRatio(0, () => assert.equal(reportedRatio(), 1));
+	withRatio(-1, () => assert.equal(reportedRatio(), 1));
+	withRatio(Infinity, () => assert.equal(reportedRatio(), 1));
+	withRatio(NaN, () => assert.equal(reportedRatio(), 1));
 	withRatio(undefined, () => assert.equal(reportedRatio(), 1));
 });
 
@@ -137,4 +145,26 @@ test("a degenerate css box still yields a usable canvas", () => {
 		assert.ok(element.width >= 1);
 		assert.ok(element.height >= 1);
 	});
+});
+
+test("invalid and enormous css dimensions stay within WebGPU's portable bound", () => {
+	const element = canvas();
+	for (const size of [Infinity, NaN, Number.MAX_VALUE]) {
+		element.setBoundingClientRect({ width: size, height: size });
+		globalThis.ingotWeb.fitCanvas();
+		assert.ok(element.width >= 1 && element.width <= 8192);
+		assert.ok(element.height >= 1 && element.height <= 8192);
+		assert.ok(element.width * element.height <= 4 * 1024 * 1024);
+		assert.deepEqual(reportedSize(), [element.width, element.height]);
+	}
+});
+
+test("the engine reads the validated backing store during viewport transitions", () => {
+	const element = canvas();
+	element.setBoundingClientRect({ width: PHONE_CSS_WIDTH, height: PHONE_CSS_HEIGHT });
+	withRatio(3, () => globalThis.ingotWeb.fitCanvas());
+	assert.deepEqual(reportedSize(), [780, 1688]);
+	element.setBoundingClientRect({ width: 0, height: 0 });
+	withRatio(Infinity, () => globalThis.ingotWeb.fitCanvas());
+	assert.deepEqual(reportedSize(), [1, 1]);
 });
