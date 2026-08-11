@@ -1,0 +1,69 @@
+package game
+
+import "core:fmt"
+import ui "ingot:ui"
+
+GAME_STATE_SCHEMA :: u64(1)
+
+Game_State :: struct {
+	click_count:       u64,
+	reload_generation: u64,
+}
+
+g: ^Game_State
+
+@(export)
+game_init :: proc() -> bool {
+	assert(g == nil, "game_init: state already initialized")
+	g = new(Game_State)
+	if g == nil do return false
+	g.reload_generation = 1
+	assert(g.reload_generation > 0)
+	return true
+}
+
+@(export)
+game_draw :: proc(frame: ^ui.Ui_Frame) {
+	assert(frame != nil && frame.open, "game_draw: invalid frame")
+	assert(g != nil, "game_draw: missing state")
+	ui.text(frame, "Ingot hot reload", 32, 32, .Title)
+	ui.text(frame, "The host keeps the window, GPU, and session alive.", 32, 76, .Body, .Secondary)
+	ui.text(frame, fmt.tprintf("Reload generation: %d", g.reload_generation), 32, 116, .Label)
+	ui.text(frame, fmt.tprintf("Persistent clicks: %d", g.click_count), 32, 148, .Label)
+	if ui.button_at(frame, {32, 188, 180, 40}, "Count persistent click", .Primary) {
+		g.click_count += 1
+	}
+	ui.text(frame, "Edit game/game.odin, then run the build script again.", 32, 252, .Note, .Muted)
+}
+
+@(export)
+game_shutdown :: proc() {
+	assert(g != nil, "game_shutdown: missing state")
+	free(g)
+	g = nil
+	assert(g == nil)
+}
+
+@(export)
+game_memory :: proc() -> rawptr {
+	assert(g != nil, "game_memory: missing state")
+	return g
+}
+
+@(export)
+game_memory_size :: proc() -> u64 {
+	return u64(size_of(Game_State))
+}
+
+@(export)
+game_memory_schema :: proc() -> u64 {
+	return GAME_STATE_SCHEMA
+}
+
+@(export)
+game_hot_reloaded :: proc(memory: rawptr) {
+	assert(memory != nil, "game_hot_reloaded: nil state")
+	g = cast(^Game_State)memory
+	g.reload_generation += 1
+	assert(g.reload_generation > 1)
+}
