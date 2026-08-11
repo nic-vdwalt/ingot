@@ -13,6 +13,11 @@ import rl "ingot:gfx"
 // custom shader.
 WATER_COLOR_LOW :: rl.Color{18, 62, 112, 205}
 WATER_COLOR_HIGH :: rl.Color{140, 210, 240, 205}
+BOX_LIGHT :: rl.Gpu_3D_Light {
+	direction = {-0.35, 0.45, 0.82},
+	ambient   = 0.30,
+	diffuse   = 0.70,
+}
 
 // Vertex storage lives at package scope rather than on the stack: it is
 // POOL_VERTEX_COUNT * size_of(Gpu_3D_Vertex) bytes, rebuilt every frame, and a
@@ -124,7 +129,7 @@ draw_world :: proc(value: ^State) {
 	_ = rl.update_gpu_mesh_vertices(value.water, water_vertices[:])
 	pass, ok := rl.begin_gpu_3d(&value.target, value.camera)
 	if !ok do return
-	rl.set_gpu_3d_light(&pass, {{-0.35, 0.45, 0.82}, 0.22, 0.78})
+	rl.set_gpu_3d_light(&pass, BOX_LIGHT)
 	floor :=
 		rl.MatrixTranslate(0, 0, FLOOR_Z) * rl.MatrixScale(2 * POOL_EXTENT, 2 * POOL_EXTENT, 1)
 	rl.draw_gpu_mesh(&pass, value.cube, floor, {color = {38, 44, 56, 255}, style = .Opaque})

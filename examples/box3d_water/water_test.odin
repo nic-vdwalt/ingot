@@ -10,6 +10,19 @@ import "core:math"
 import "core:testing"
 
 @(test)
+box_light_preserves_visible_fill :: proc(t: ^testing.T) {
+	length_squared := f32(0)
+	for component in BOX_LIGHT.direction {
+		testing.expect(t, !math.is_nan(component) && !math.is_inf(component, 0))
+		length_squared += component * component
+	}
+	testing.expect(t, length_squared > 0)
+	testing.expect(t, BOX_LIGHT.ambient >= 0.3)
+	testing.expect(t, BOX_LIGHT.diffuse >= 0)
+	testing.expect(t, abs(BOX_LIGHT.ambient + BOX_LIGHT.diffuse - 1) < 1e-6)
+}
+
+@(test)
 water_height_stays_within_its_declared_span :: proc(t: ^testing.T) {
 	// WATER_HEIGHT_SPAN sizes the mesh bounds and the colour ramp, so a
 	// retuned amplitude that breaks it has to fail here rather than clip
