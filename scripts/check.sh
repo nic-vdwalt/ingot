@@ -106,6 +106,17 @@ for example in $(manifest_values examples); do
 	odin build "$root/examples/$example" $col "-out:$example_out/$example" "$@"
 done
 
+case "$(uname -s)" in
+Darwin) hot_reload_extension=".dylib" ;;
+Linux) hot_reload_extension=".so" ;;
+*) hot_reload_extension=".dll" ;;
+esac
+echo "== building example hot_reload/game =="
+odin build "$root/examples/hot_reload/game" $col -build-mode:dll \
+	"-out:$example_out/hot_reload_game$hot_reload_extension" "$@"
+echo "== building example hot_reload/host =="
+odin build "$root/examples/hot_reload/host" $col "-out:$example_out/hot_reload_host" "$@"
+
 echo "== gate manifest =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/gate_manifest_test.py"
 

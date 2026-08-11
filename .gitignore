@@ -9,6 +9,7 @@ web/wgpu.js
 
 # build artifacts
 *.dSYM/
+examples/hot_reload/build/
 libvterm/lib/linux_amd64/
 libvterm/lib/linux_arm64/
 /gallery

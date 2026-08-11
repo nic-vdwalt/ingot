@@ -238,12 +238,13 @@ bash scripts/smoke-gallery.sh   # windowed GPU smoke test; needs a display
 ```
 
 Other focused examples: `examples/hello` (application shell and stable IDs),
-`examples/session_loop` (custom-host Session lifecycle), `examples/breakout`
-(audio, gamepads, web export), `examples/idle_demo` (near-zero idle CPU),
-`examples/chart_demo`, `examples/render_fixture` (renderer, backend, and Session
-lifecycle validation), `examples/procgen_world` (deterministic terrain, biome
-placement, culling, and GPU residency without external assets), and
-`examples/raylib_migration_fixture` (import-only 2D compatibility contract).
+`examples/session_loop` (custom-host Session lifecycle),
+[`examples/hot_reload`](examples/hot_reload/) (native code and state hot reload),
+`examples/breakout` (audio, gamepads, web export), `examples/idle_demo` (near-zero
+idle CPU), `examples/chart_demo`, `examples/render_fixture` (renderer, backend,
+and Session lifecycle validation), `examples/procgen_world` (deterministic
+terrain, biome placement, culling, and GPU residency without external assets),
+and `examples/raylib_migration_fixture` (import-only 2D compatibility contract).
 
 `examples/box3d_stack` is a zero-asset port of Odin's Box3D + Raylib sample.
 It preserves the 25-body stack, fixed 60 Hz step, rigid-body transforms, floor,
