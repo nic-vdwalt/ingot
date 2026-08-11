@@ -26,6 +26,7 @@ jobs:
             build-essential \
             pkg-config \
             python3 \
+            lld \
             libcurl4-openssl-dev \
             libvulkan-dev \
             mesa-vulkan-drivers \
