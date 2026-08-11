@@ -17,6 +17,11 @@ MAX_STEPS_PER_FRAME :: 8
 MAX_FRAME_DT :: f32(0.25)
 SCREEN_WIDTH :: 1280
 SCREEN_HEIGHT :: 720
+BOX_LIGHT :: rl.Gpu_3D_Light {
+	direction = {-0.4, 0.5, 0.8},
+	ambient   = 0.35,
+	diffuse   = 0.65,
+}
 
 BOX_COLORS := [6]rl.Color {
 	{92, 176, 255, 255},
@@ -444,7 +449,7 @@ draw_world :: proc(value: ^State) {
 	assert(value.body_count <= BOX_MAX)
 	pass, ok := rl.begin_gpu_3d(&value.target, value.camera)
 	if !ok do return
-	rl.set_gpu_3d_light(&pass, {{-0.4, 0.5, 0.8}, 0.15, 0.85})
+	rl.set_gpu_3d_light(&pass, BOX_LIGHT)
 	floor_transform := rl.MatrixTranslate(0, 0, -2) * rl.MatrixScale(100, 100, 4)
 	rl.draw_gpu_mesh(&pass, value.cube, floor_transform, {color = rl.LIGHTGRAY})
 	snapshot := &value.snapshots[value.render_index]
