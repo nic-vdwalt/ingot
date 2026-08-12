@@ -20,6 +20,12 @@ TERM_SCROLLBACK_MAX :: 5000
 TERM_OUTPUT_CHUNK_SIZE :: 65532
 TERM_OUTPUT_QUEUE_CAP :: 16
 
+Cursor_Shape :: enum u8 {
+	Block = 1,
+	Underline,
+	Bar_Left,
+}
+
 Term_Output_Chunk :: struct {
 	data: [TERM_OUTPUT_CHUNK_SIZE]u8,
 	len:  int,
@@ -46,6 +52,7 @@ Term_Instance :: struct {
 	output_eof:     bool,
 	cursor_visible: bool,
 	cursor_blink:   bool,
+	cursor_shape:   Cursor_Shape,
 	altscreen:      bool,
 	read_buf:       [65536]u8,
 	title:          string, // heap-owned; freed in term_destroy
@@ -107,6 +114,16 @@ _screen_settermprop :: proc "c" (
 		ts.cursor_visible = val.boolean != 0
 	case .Cursorblink:
 		ts.cursor_blink = val.boolean != 0
+	case .Cursorshape:
+		switch val.number {
+		case 1:
+			ts.cursor_shape = .Block
+		case 2:
+			ts.cursor_shape = .Underline
+		case 3:
+			ts.cursor_shape = .Bar_Left
+		case:
+		}
 	case .Altscreen:
 		ts.altscreen = val.boolean != 0
 	case:
@@ -221,6 +238,7 @@ term_init_emulator :: proc(
 	ts.cols = cols
 	ts.rows = rows
 	ts.cursor_visible = true
+	ts.cursor_shape = .Block
 	ts.sb_ring = make([dynamic][]lv.VTerm_Screen_Cell, TERM_SCROLLBACK_MAX)
 
 	ts.vt = lv.vterm_new(c.int(rows), c.int(cols))

@@ -2,6 +2,7 @@ package term
 
 import "core:testing"
 import "core:unicode/utf8"
+import lv "ingot:libvterm"
 import "ingot:pty"
 import "ingot:testx"
 
@@ -108,4 +109,48 @@ output_queue_publishes_before_pump :: proc(t: ^testing.T) {
 		testing.expect_value(t, bytes, 1)
 		testing.expect_value(t, ts.output_count, 0)
 	}
+}
+
+@(test)
+cursor_properties_and_position_follow_terminal_input :: proc(t: ^testing.T) {
+	ts := new(Term_Instance)
+	defer free(ts)
+	testing.expect(t, term_init_emulator(ts, 80, 24))
+	defer term_free_emulator(ts)
+	testing.expect(t, ts.cursor_visible)
+	testing.expect(t, ts.cursor_blink)
+	testing.expect_value(t, ts.cursor_shape, Cursor_Shape.Block)
+	_test_ingest(ts, "ABC")
+	_test_expect_cursor(t, ts, 0, 3)
+	_test_ingest(ts, "\x1b[2;5H")
+	_test_expect_cursor(t, ts, 1, 4)
+	_test_ingest(ts, "\x1b[?25l\x1b[?12l\x1b[4 q")
+	testing.expect(t, !ts.cursor_visible)
+	testing.expect(t, !ts.cursor_blink)
+	testing.expect_value(t, ts.cursor_shape, Cursor_Shape.Underline)
+	_test_ingest(ts, "\x1b[?25h\x1b[?12h")
+	testing.expect(t, ts.cursor_visible)
+	testing.expect(t, ts.cursor_blink)
+	_test_ingest(ts, "\x1b[6 q")
+	testing.expect(t, !ts.cursor_blink)
+	testing.expect_value(t, ts.cursor_shape, Cursor_Shape.Bar_Left)
+	_test_ingest(ts, "\x1b[2 q")
+	testing.expect(t, !ts.cursor_blink)
+	testing.expect_value(t, ts.cursor_shape, Cursor_Shape.Block)
+}
+
+_test_ingest :: proc(ts: ^Term_Instance, input: string) {
+	assert(ts != nil)
+	assert(len(input) <= len(ts.read_buf))
+	copy(ts.read_buf[:len(input)], transmute([]u8)input)
+	_term_ingest(ts, len(input), true)
+}
+
+_test_expect_cursor :: proc(t: ^testing.T, ts: ^Term_Instance, row, col: i32) {
+	assert(t != nil)
+	assert(ts != nil)
+	position: lv.VTerm_Pos
+	lv.vterm_state_get_cursorpos(ts.state, &position)
+	testing.expect_value(t, position.row, row)
+	testing.expect_value(t, position.col, col)
 }
