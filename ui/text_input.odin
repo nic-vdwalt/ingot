@@ -27,20 +27,26 @@ TI_PAD_VERT :: TI_PAD_TOP * 2
 // Inset of the single-line caret (and its IME rect) from the box edges.
 @(private = "file")
 TI_CARET_INSET :: 5
+// Minimum seconds between drag auto-scroll row steps while the mouse is held
+// outside the box's vertical band. Bounds the scroll rate independently of
+// the frame rate (one row per tick, never more).
+@(private = "file")
+TI_DRAG_SCROLL_SECS :: 0.05
 
 
 // Range selection for a text input. `anchor` is where the selection started
 // (mouse press / shift origin) and `extent` is the moving end; both are byte
 // offsets into the owning builder and may be in either order.
 Input_Sel :: struct {
-	sb:              ^strings.Builder,
-	anchor:          int,
-	extent:          int,
-	active:          bool,
-	dragging:        bool,
-	last_click_time: f64,
-	last_click_byte: int,
-	click_count:     int,
+	sb:               ^strings.Builder,
+	anchor:           int,
+	extent:           int,
+	active:           bool,
+	dragging:         bool,
+	last_click_time:  f64,
+	last_click_byte:  int,
+	click_count:      int,
+	drag_scroll_time: f64,
 }
 
 // sel_range returns the normalized (lo <= hi) range of a selection.
@@ -599,6 +605,7 @@ Text_Input_Config :: struct {
 Text_Input_State :: struct {
 	cursor:      int,
 	desired_col: int,
+	desired_x:   i32, // preserved caret x (px) for visual-row Up/Down
 	scroll_line: int,
 	sel:         Input_Sel,
 	undo:        Input_Undo,
@@ -660,6 +667,7 @@ TI_Ctx :: struct {
 	sb:          ^strings.Builder,
 	cursor:      ^int, // nil = end-anchored legacy input (no caret model)
 	desired_col: ^int,
+	desired_x:   ^i32,
 	scroll_line: ^int,
 	pills:       ^[dynamic]Mention_Span,
 	undo:        ^Input_Undo,
@@ -1816,6 +1824,7 @@ text_input_box :: proc(
 		sb          = sb,
 		cursor      = &st.cursor,
 		desired_col = &st.desired_col,
+		desired_x   = &st.desired_x,
 		scroll_line = &st.scroll_line,
 		pills       = &st.pills if cfg.enable_pills else nil,
 		undo        = &st.undo if cfg.enable_undo else nil,
