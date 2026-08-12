@@ -28,6 +28,58 @@ test_doc_add_rejects_leaf_parent :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_doc_add_keyed_rolls_back_text_on_label_overflow :: proc(t: ^testing.T) {
+	doc: View_Doc
+	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	// Fill the blob so the key fits but the label cannot.
+	filler := make([]u8, VIEW_TEXT_BYTES_MAX - int(doc.text_len) - 2)
+	defer delete(filler)
+	for index in 0 ..< len(filler) do filler[index] = 'x'
+	_, _, fill_err := doc_intern(&doc, string(filler))
+	testing.expect(t, fill_err == .None, "filler intern failed")
+	saved := doc.text_len
+	count := doc.count
+	_, err := doc_add_keyed(&doc, root, .Button, "kk", "a label that cannot fit")
+	testing.expect_value(t, err, Build_Error.Text_Full)
+	testing.expect_value(t, doc.text_len, saved)
+	testing.expect_value(t, doc.count, count)
+}
+
+@(test)
+test_doc_add_keyed_rolls_back_text_when_nodes_full :: proc(t: ^testing.T) {
+	doc: View_Doc
+	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	for index in 1 ..< VIEW_NODES_MAX {
+		_, fill_err := doc_add(&doc, root, View_Node{kind = .Separator})
+		testing.expectf(t, fill_err == .None, "add %d failed early", index)
+	}
+	saved := doc.text_len
+	// Both interns succeed, then doc_add fails: the interned bytes must not
+	// survive the failed add.
+	_, err := doc_add_keyed(&doc, root, .Button, "late", "Late label")
+	testing.expect_value(t, err, Build_Error.Nodes_Full)
+	testing.expect_value(t, doc.text_len, saved)
+}
+
+@(test)
+test_build_error_variants_are_distinct :: proc(t: ^testing.T) {
+	doc: View_Doc
+	root, root_err := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	testing.expect_value(t, root_err, Build_Error.None)
+	leaf, _ := doc_add_keyed(&doc, root, .Label, "leaf", "L")
+	_, parent_err := doc_add_keyed(&doc, leaf, .Label, "c", "C")
+	testing.expect_value(t, parent_err, Build_Error.Parent_Not_Container)
+	_, range_err := doc_add_keyed(&doc, 99, .Label, "c", "C")
+	testing.expect_value(t, range_err, Build_Error.Parent_Out_Of_Range)
+	testing.expect_value(t, doc_set_label(&doc, 99, "x"), Build_Error.Node_Out_Of_Range)
+	big := make([]u8, int(max(u16)) + 1)
+	defer delete(big)
+	for index in 0 ..< len(big) do big[index] = 'x'
+	_, _, long_err := doc_intern(&doc, string(big))
+	testing.expect_value(t, long_err, Build_Error.Text_Too_Long)
+}
+
+@(test)
 test_doc_add_rejects_overflow :: proc(t: ^testing.T) {
 	doc: View_Doc
 	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
