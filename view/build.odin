@@ -6,10 +6,23 @@
 //
 // Method: append-only. A node is added under a parent and linked at the end of
 // that parent's child chain; text is interned into the blob. Both operations
-// report ok rather than asserting on exhaustion, because running out of a fixed
-// capacity is an operating condition of a large document, not a programmer
-// error.
+// report a Build_Error rather than asserting on exhaustion, because running
+// out of a fixed capacity is an operating condition of a large document, not a
+// programmer error.
 package view
+
+// Build_Error is the reason an authoring operation failed. The zero value
+// .None means success, so `or_return` composes builder calls the same way
+// Allocator_Error does.
+Build_Error :: enum u8 {
+	None,
+	Nodes_Full, // doc.count == VIEW_NODES_MAX
+	Parent_Out_Of_Range, // parent index is not a node in doc
+	Parent_Not_Container, // parent kind cannot hold children
+	Text_Full, // blob capacity exceeded
+	Text_Too_Long, // single string longer than max(u16)
+	Node_Out_Of_Range, // doc_set_* target is not a node in doc
+}
 
 doc_reset :: proc(doc: ^View_Doc) {
 	assert(doc != nil, "doc_reset: nil doc")
@@ -23,29 +36,36 @@ doc_reset :: proc(doc: ^View_Doc) {
 // are not deduplicated: dedup would make the encoder's output depend on
 // insertion order in a way that is invisible in a diff, and the blob is bounded
 // anyway.
-doc_intern :: proc(doc: ^View_Doc, text: string) -> (offset: u32, length: u16, ok: bool) {
+doc_intern :: proc(
+	doc: ^View_Doc,
+	text: string,
+) -> (
+	offset: u32,
+	length: u16,
+	err: Build_Error,
+) {
 	assert(doc != nil, "doc_intern: nil doc")
 	assert(doc.text_len <= VIEW_TEXT_BYTES_MAX, "doc_intern: text_len out of range")
-	if text == "" do return 0, 0, true
-	if len(text) > int(max(u16)) do return 0, 0, false
-	if u64(doc.text_len) + u64(len(text)) > u64(VIEW_TEXT_BYTES_MAX) do return 0, 0, false
+	if text == "" do return 0, 0, .None
+	if len(text) > int(max(u16)) do return 0, 0, .Text_Too_Long
+	if u64(doc.text_len) + u64(len(text)) > u64(VIEW_TEXT_BYTES_MAX) do return 0, 0, .Text_Full
 	start := doc.text_len
 	copy(doc.text[start:], text)
 	doc.text_len = start + u32(len(text))
 	assert(doc.text_len <= VIEW_TEXT_BYTES_MAX, "doc_intern: overran text blob")
-	return start, u16(len(text)), true
+	return start, u16(len(text)), .None
 }
 
 // doc_add appends a node under parent and returns its index. Pass
 // VIEW_NODE_NONE as parent for a root. The node's links are set here and must
 // not be assigned by the caller, so the tree stays well-formed by construction.
-doc_add :: proc(doc: ^View_Doc, parent: i32, node: View_Node) -> (index: i32, ok: bool) {
+doc_add :: proc(doc: ^View_Doc, parent: i32, node: View_Node) -> (index: i32, err: Build_Error) {
 	assert(doc != nil, "doc_add: nil doc")
 	assert(doc.count >= 0 && doc.count <= VIEW_NODES_MAX, "doc_add: count out of range")
-	if doc.count >= VIEW_NODES_MAX do return VIEW_NODE_NONE, false
+	if doc.count >= VIEW_NODES_MAX do return VIEW_NODE_NONE, .Nodes_Full
 	if parent != VIEW_NODE_NONE {
-		if parent < 0 || parent >= doc.count do return VIEW_NODE_NONE, false
-		if !view_kind_is_container(doc.nodes[parent].kind) do return VIEW_NODE_NONE, false
+		if parent < 0 || parent >= doc.count do return VIEW_NODE_NONE, .Parent_Out_Of_Range
+		if !view_kind_is_container(doc.nodes[parent].kind) do return VIEW_NODE_NONE, .Parent_Not_Container
 	}
 	index = doc.count
 	entry := node
@@ -57,7 +77,7 @@ doc_add :: proc(doc: ^View_Doc, parent: i32, node: View_Node) -> (index: i32, ok
 	doc.count += 1
 	doc_link(doc, parent, index)
 	assert(doc.count > index, "doc_add: count did not advance")
-	return index, true
+	return index, .None
 }
 
 // doc_link attaches a new node at the end of its sibling chain. Appending
@@ -104,7 +124,9 @@ doc_chain_head :: proc(doc: ^View_Doc, parent: i32, index: i32) -> i32 {
 
 // doc_add_keyed is the common case: a node with a key and a label. It interns
 // both before appending so a text-blob overflow cannot leave a node referring
-// to a range that was never written.
+// to a range that was never written, and it is transactional: on any failure
+// (either intern, or doc_add itself) the blob is restored to its entry
+// length, so a failed add never leaks interned bytes.
 doc_add_keyed :: proc(
 	doc: ^View_Doc,
 	parent: i32,
@@ -114,14 +136,26 @@ doc_add_keyed :: proc(
 	node: View_Node = {},
 ) -> (
 	index: i32,
-	ok: bool,
+	err: Build_Error,
 ) {
 	assert(doc != nil, "doc_add_keyed: nil doc")
+	saved := doc.text_len
 	entry := node
 	entry.kind = kind
-	entry.key_offset, entry.key_length = doc_intern(doc, key) or_return
-	entry.label_offset, entry.label_length = doc_intern(doc, label) or_return
-	return doc_add(doc, parent, entry)
+	entry.key_offset, entry.key_length, err = doc_intern(doc, key)
+	if err == .None {
+		entry.label_offset, entry.label_length, err = doc_intern(doc, label)
+	}
+	if err == .None {
+		index, err = doc_add(doc, parent, entry)
+	} else {
+		index = VIEW_NODE_NONE
+	}
+	if err != .None {
+		doc.text_len = saved
+		assert(doc.text_len == saved, "doc_add_keyed: rollback failed")
+	}
+	return index, err
 }
 
 // --- editing text ------------------------------------------------------------
@@ -131,48 +165,50 @@ doc_add_keyed :: proc(
 // setting is O(new text) with no index rewriting - but a long session would
 // fill the blob with dead bytes, which is what doc_text_compact exists for.
 
-// doc_set_key replaces a node's key. Returns ok = false when the node is out of
+// doc_set_key replaces a node's key. Reports an error when the node is out of
 // range or the blob cannot hold the new text; a no-op set (same text) returns
-// early so per-frame comparison in an editor never grows the blob.
-doc_set_key :: proc(doc: ^View_Doc, node: i32, text: string) -> bool {
+// early so per-frame comparison in an editor never grows the blob. No rollback
+// is needed here: a single intern either fully succeeds or leaves the blob
+// untouched, and the node is only updated on success.
+doc_set_key :: proc(doc: ^View_Doc, node: i32, text: string) -> Build_Error {
 	assert(doc != nil, "doc_set_key: nil doc")
-	if node < 0 || node >= doc.count do return false
+	if node < 0 || node >= doc.count do return .Node_Out_Of_Range
 	entry := &doc.nodes[node]
-	if text_slice(view_of(doc), entry.key_offset, entry.key_length) == text do return true
-	offset, length, ok := doc_intern(doc, text)
-	if !ok do return false
+	if text_slice(view_of(doc), entry.key_offset, entry.key_length) == text do return .None
+	offset, length, err := doc_intern(doc, text)
+	if err != .None do return err
 	entry.key_offset = offset
 	entry.key_length = length
-	return true
+	return .None
 }
 
 // doc_set_label replaces a node's display text. Identity is the key, never the
 // label, so this cannot reset widget state - which is the whole reason the two
 // are separate fields.
-doc_set_label :: proc(doc: ^View_Doc, node: i32, text: string) -> bool {
+doc_set_label :: proc(doc: ^View_Doc, node: i32, text: string) -> Build_Error {
 	assert(doc != nil, "doc_set_label: nil doc")
-	if node < 0 || node >= doc.count do return false
+	if node < 0 || node >= doc.count do return .Node_Out_Of_Range
 	entry := &doc.nodes[node]
-	if text_slice(view_of(doc), entry.label_offset, entry.label_length) == text do return true
-	offset, length, ok := doc_intern(doc, text)
-	if !ok do return false
+	if text_slice(view_of(doc), entry.label_offset, entry.label_length) == text do return .None
+	offset, length, err := doc_intern(doc, text)
+	if err != .None do return err
 	entry.label_offset = offset
 	entry.label_length = length
-	return true
+	return .None
 }
 
 // doc_set_value replaces a node's secondary text (a kv_row's value, a
 // text_input's placeholder).
-doc_set_value :: proc(doc: ^View_Doc, node: i32, text: string) -> bool {
+doc_set_value :: proc(doc: ^View_Doc, node: i32, text: string) -> Build_Error {
 	assert(doc != nil, "doc_set_value: nil doc")
-	if node < 0 || node >= doc.count do return false
+	if node < 0 || node >= doc.count do return .Node_Out_Of_Range
 	entry := &doc.nodes[node]
-	if text_slice(view_of(doc), entry.value_offset, entry.value_length) == text do return true
-	offset, length, ok := doc_intern(doc, text)
-	if !ok do return false
+	if text_slice(view_of(doc), entry.value_offset, entry.value_length) == text do return .None
+	offset, length, err := doc_intern(doc, text)
+	if err != .None do return err
 	entry.value_offset = offset
 	entry.value_length = length
-	return true
+	return .None
 }
 
 // doc_text_compact rebuilds the blob keeping only the bytes some node still
