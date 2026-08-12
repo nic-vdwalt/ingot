@@ -19,6 +19,7 @@ worked example applied to a subsystem before it is written.
 | Package               | Role                                                                                                                                                              |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ingot:asset`         | Validated cooked mesh data. Must not import `ingot:gfx`.                                                                                                          |
+| `ingot:ecs`           | Sparse-set ECS: generational `Entity_Pool`, typed `Set(T)` registered via `Set_Header`, join iterators, bounded `Deferred` buffer, blittable snapshots. Zero non-`base` imports. |
 | `ingot:procgen`       | Seeded bounded generators. Imports `asset`, never `gfx`.                                                                                                          |
 | `ingot:scene`         | Visibility, LOD, sorting, and draw lists. Must not import `gfx`.                                                                                                  |
 | `ingot:scene_gfx`     | The only scene-to-`gfx` upload and replay bridge.                                                                                                                 |
