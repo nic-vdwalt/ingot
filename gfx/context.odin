@@ -1026,16 +1026,16 @@ context_fps :: proc(ctx: ^Context) -> i32 {
 	return i32(1.0 / ctx.real_frame_time + 0.5)
 }
 
-GetScreenWidth :: proc() -> i32 {return context_screen_width(default_context())}
-GetScreenHeight :: proc() -> i32 {return context_screen_height(default_context())}
-GetWindowScaleDPI :: proc() -> Vector2 {return context_window_scale_dpi(default_context())}
-GetRenderWidth :: proc() -> i32 {return context_render_width(default_context())}
-GetRenderHeight :: proc() -> i32 {return context_render_height(default_context())}
+GetScreenWidth :: proc() -> i32 {return context_screen_width(g)}
+GetScreenHeight :: proc() -> i32 {return context_screen_height(g)}
+GetWindowScaleDPI :: proc() -> Vector2 {return context_window_scale_dpi(g)}
+GetRenderWidth :: proc() -> i32 {return context_render_width(g)}
+GetRenderHeight :: proc() -> i32 {return context_render_height(g)}
 
 SetTargetFPS :: proc(fps: i32) {default_context().target_fps = fps}
-GetFrameTime :: proc() -> f32 {return context_frame_time(default_context())}
-GetTime :: proc() -> f64 {return context_time(default_context())}
-GetFPS :: proc() -> i32 {return context_fps(default_context())}
+GetFrameTime :: proc() -> f32 {return context_frame_time(g)}
+GetTime :: proc() -> f64 {return context_time(g)}
+GetFPS :: proc() -> i32 {return context_fps(g)}
 
 SetWindowMinSize :: proc(w, h: i32) {
 	platform_set_window_min_size(w, h)
@@ -1065,7 +1065,7 @@ GetWindowPosition :: proc() -> Vector2 {
 // IsWindowResized reports whether the logical window size changed at the start
 // of the current frame. A DPI-only change is not a resize; see GetWindowScaleDPI.
 IsWindowResized :: proc() -> bool {
-	return context_window_resized(default_context())
+	return context_window_resized(g)
 }
 
 context_window_resized :: proc(ctx: ^Context) -> bool {

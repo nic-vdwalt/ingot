@@ -274,7 +274,7 @@ context_is_key_pressed :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 }
 
 IsKeyPressed :: proc(key: KeyboardKey) -> bool {
-	return context_is_key_pressed(default_context(), key)
+	return context_is_key_pressed(g, key)
 }
 
 context_is_key_pressed_repeat :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
@@ -285,7 +285,7 @@ context_is_key_pressed_repeat :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 }
 
 IsKeyPressedRepeat :: proc(key: KeyboardKey) -> bool {
-	return context_is_key_pressed_repeat(default_context(), key)
+	return context_is_key_pressed_repeat(g, key)
 }
 
 context_is_key_released :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
@@ -296,7 +296,7 @@ context_is_key_released :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 }
 
 IsKeyReleased :: proc(key: KeyboardKey) -> bool {
-	return context_is_key_released(default_context(), key)
+	return context_is_key_released(g, key)
 }
 
 IsKeyDown :: proc(key: KeyboardKey) -> bool {
@@ -329,7 +329,7 @@ context_is_mouse_button_pressed :: proc(ctx: ^Context, button: MouseButton) -> b
 }
 
 IsMouseButtonPressed :: proc(button: MouseButton) -> bool {
-	return context_is_mouse_button_pressed(default_context(), button)
+	return context_is_mouse_button_pressed(g, button)
 }
 
 context_is_mouse_button_released :: proc(ctx: ^Context, button: MouseButton) -> bool {
@@ -340,7 +340,7 @@ context_is_mouse_button_released :: proc(ctx: ^Context, button: MouseButton) -> 
 }
 
 IsMouseButtonReleased :: proc(button: MouseButton) -> bool {
-	return context_is_mouse_button_released(default_context(), button)
+	return context_is_mouse_button_released(g, button)
 }
 
 IsMouseButtonDown :: proc(button: MouseButton) -> bool {
@@ -412,8 +412,8 @@ context_get_mouse_wheel_move_v :: proc(ctx: ^Context) -> Vector2 {
 	return ctx == nil ? Vector2{} : ctx.inp.wheel
 }
 
-GetMousePosition :: proc() -> Vector2 {return context_get_mouse_position(default_context())}
-GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(default_context())}
+GetMousePosition :: proc() -> Vector2 {return context_get_mouse_position(g)}
+GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(g)}
 
 // SetMousePosition warps the cursor to window coordinates (raylib parity).
 // The buffered position updates immediately so the frame that requests the warp
@@ -446,7 +446,7 @@ GetMouseWheelMove :: proc() -> f32 {
 	if abs(g.inp.wheel.x) > abs(g.inp.wheel.y) do return g.inp.wheel.x
 	return g.inp.wheel.y
 }
-GetMouseWheelMoveV :: proc() -> Vector2 {return context_get_mouse_wheel_move_v(default_context())}
+GetMouseWheelMoveV :: proc() -> Vector2 {return context_get_mouse_wheel_move_v(g)}
 
 GetClipboardText :: proc() -> cstring {
 	s := platform_get_clipboard()
@@ -562,7 +562,7 @@ context_is_cursor_on_screen :: proc(ctx: ^Context) -> bool {
 	return ctx != nil && ctx.inp.cursor_on_screen
 }
 
-IsCursorOnScreen :: proc() -> bool {return context_is_cursor_on_screen(default_context())}
+IsCursorOnScreen :: proc() -> bool {return context_is_cursor_on_screen(g)}
 
 // SetTextInputRect reports the focused text field's caret rect (UI logical
 // pixels, top-left origin). Call every frame while a field is active; the OS

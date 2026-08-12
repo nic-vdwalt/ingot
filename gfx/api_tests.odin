@@ -97,6 +97,37 @@ context_queries_are_isolated :: proc(t: ^testing.T) {
 }
 
 @(test)
+context_scope_routes_convenience_queries_and_restores_default :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	default_width := default_context_storage.width
+	default_mouse := default_context_storage.inp.mouse
+	default_pressed := default_context_storage.inp.pressed[KeyboardKey.A]
+	defer {
+		default_context_storage.width = default_width
+		default_context_storage.inp.mouse = default_mouse
+		default_context_storage.inp.pressed[KeyboardKey.A] = default_pressed
+	}
+	default_context_storage.width = 640
+	default_context_storage.inp.mouse = {10, 20}
+	default_context_storage.inp.pressed[KeyboardKey.A] = false
+	ctx.width = 320
+	ctx.inp.mouse = {30, 40}
+	ctx.inp.pressed[KeyboardKey.A] = true
+	testing.expect_value(t, GetScreenWidth(), i32(640))
+	testing.expect_value(t, GetMousePosition(), Vector2{10, 20})
+	testing.expect(t, !IsKeyPressed(.A))
+	scope := context_scope_enter(ctx)
+	testing.expect_value(t, GetScreenWidth(), i32(320))
+	testing.expect_value(t, GetMousePosition(), Vector2{30, 40})
+	testing.expect(t, IsKeyPressed(.A))
+	context_scope_leave(&scope)
+	testing.expect_value(t, GetScreenWidth(), i32(640))
+	testing.expect_value(t, GetMousePosition(), Vector2{10, 20})
+	testing.expect(t, !IsKeyPressed(.A))
+}
+
+@(test)
 mouse_edges_reset_without_clearing_held_state :: proc(t: ^testing.T) {
 	inp := Input{}
 	inp.mb_pressed[0] = true
