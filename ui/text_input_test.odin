@@ -260,8 +260,12 @@ TI_Key_Frame :: struct {
 	cursor:  int, // -1 places the caret at the end
 	key:     KeyboardKey,
 	shift:   bool,
+	alt:     bool, // Alt/Option held (word variants)
+	cmd:     bool, // Cmd/Ctrl held (line variants)
 	masked:  bool,
 	height:  i32,
+	width:   i32, // zero uses 300
+	pill:    Mention_Span, // zero = no pill
 	repeat:  bool, // send the auto-repeat edge instead of the initial press
 	presses: int, // how many frames to run; zero means one
 }
@@ -272,6 +276,7 @@ Ti_Key_Result :: struct {
 	cursor:    int,
 	submitted: bool,
 	undo_len:  int,
+	pill_len:  int,
 }
 
 @(private = "file")
@@ -308,19 +313,23 @@ ti_key_frame :: proc(config: TI_Key_Frame) -> Ti_Key_Result {
 		input.keys_pressed[index] = true
 	}
 	if config.shift do input.keys_down[input_key_index(.LEFT_SHIFT)] = true
+	if config.alt do input.keys_down[input_key_index(.LEFT_ALT)] = true
+	if config.cmd do input.keys_down[input_key_index(.LEFT_CONTROL)] = true
 
 	box: Input_Box
 	defer input_box_destroy(&box)
 	strings.write_string(&box.sb, config.text)
 	box.st.cursor = len(config.text) if config.cursor < 0 else config.cursor
+	if config.pill.end > config.pill.start do append(&box.st.pills, config.pill)
 
+	width := config.width if config.width > 0 else 300
 	submitted := false
 	frames := max(config.presses, 1)
 	for _ in 0 ..< frames {
 		ui_frame_begin(frame, runtime, &input)
 		if text_input_at(
 			frame,
-			{0, 0, 300, config.height},
+			{0, 0, width, config.height},
 			&box,
 			"field",
 			true,
@@ -336,6 +345,7 @@ ti_key_frame :: proc(config: TI_Key_Frame) -> Ti_Key_Result {
 		box.st.cursor,
 		submitted,
 		len(box.st.undo.undo),
+		len(box.st.pills),
 	}
 }
 
@@ -894,4 +904,243 @@ vlines_incremental_matches_full_rewrap :: proc(t: ^testing.T) {
 		if !ok do return
 		free_all(context.temp_allocator)
 	}
+}
+
+// --- Word / line delete ------------------------------------------------------
+//
+// Alt+Backspace is composer muscle memory; a field that only deletes runes
+// makes rewriting a sentence painful. Cmd+Backspace (line start) rides the
+// same helper.
+
+@(test)
+text_input_alt_backspace_deletes_the_previous_word :: proc(t: ^testing.T) {
+	result := ti_key_frame(
+		{text = "hello world", cursor = -1, key = .BACKSPACE, alt = true, height = 30},
+	)
+	testing.expect_value(t, result.text, "hello ")
+	testing.expect_value(t, result.cursor, 6)
+	testing.expect_value(t, result.undo_len, 1)
+}
+
+@(test)
+text_input_alt_backspace_at_the_start_is_a_no_op :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = 0, key = .BACKSPACE, alt = true, height = 30})
+	testing.expect_value(t, result.text, "abc")
+	testing.expect_value(t, result.undo_len, 0)
+}
+
+@(test)
+text_input_alt_delete_removes_the_next_word :: proc(t: ^testing.T) {
+	result := ti_key_frame(
+		{text = "hello world", cursor = 5, key = .DELETE, alt = true, height = 30},
+	)
+	testing.expect_value(t, result.text, "hello")
+	testing.expect_value(t, result.cursor, 5)
+	testing.expect_value(t, result.undo_len, 1)
+}
+
+@(test)
+text_input_alt_delete_at_the_end_is_a_no_op :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = -1, key = .DELETE, alt = true, height = 30})
+	testing.expect_value(t, result.text, "abc")
+	testing.expect_value(t, result.undo_len, 0)
+}
+
+@(test)
+text_input_cmd_backspace_deletes_to_line_start :: proc(t: ^testing.T) {
+	result := ti_key_frame(
+		{text = "ab cd\nef gh", cursor = -1, key = .BACKSPACE, cmd = true, height = 90},
+	)
+	testing.expect_value(t, result.text, "ab cd\n")
+	testing.expect_value(t, result.cursor, 6)
+}
+
+@(test)
+text_input_word_delete_over_a_pill_drops_the_pill :: proc(t: ^testing.T) {
+	// "@pill.txt" is one word; deleting the range it occupies must drop the
+	// span too, or a stale pill would chip-highlight unrelated text.
+	result := ti_key_frame(
+		{
+			text = "hi @pill.txt",
+			cursor = -1,
+			key = .BACKSPACE,
+			alt = true,
+			pill = {3, 12},
+			height = 30,
+		},
+	)
+	testing.expect_value(t, result.text, "hi ")
+	testing.expect_value(t, result.cursor, 3)
+	testing.expect_value(t, result.pill_len, 0)
+}
+
+// --- Visual-row vertical navigation ------------------------------------------
+//
+// The test backend measures 16px per byte and the wrap adds 1px spacing per
+// rune, so a 120px box (inner 100px) wraps "aaaa bbbb cccc" into three
+// four-char visual rows. Up/Down must move between those rows - jumping the
+// whole logical paragraph is the bug these pin down.
+
+@(test)
+text_input_down_moves_one_visual_row_in_wrapped_text :: proc(t: ^testing.T) {
+	result := ti_key_frame(
+		{text = "aaaa bbbb cccc", cursor = 2, key = .DOWN, width = 120, height = 90},
+	)
+	// Row 1 is "bbbb" at bytes [5,9); x was 2 runes -> column 2.
+	testing.expect_value(t, result.cursor, 7)
+}
+
+@(test)
+text_input_up_moves_one_visual_row_in_wrapped_text :: proc(t: ^testing.T) {
+	result := ti_key_frame(
+		{text = "aaaa bbbb cccc", cursor = 7, key = .UP, width = 120, height = 90},
+	)
+	testing.expect_value(t, result.cursor, 2)
+}
+
+@(test)
+text_input_up_on_the_first_row_moves_to_text_start :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = 2, key = .UP, height = 30})
+	testing.expect_value(t, result.cursor, 0)
+}
+
+@(test)
+text_input_down_on_the_last_row_moves_to_text_end :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = 1, key = .DOWN, height = 30})
+	testing.expect_value(t, result.cursor, 3)
+}
+
+@(test)
+text_input_vertical_nav_preserves_the_column_across_short_lines :: proc(t: ^testing.T) {
+	// Down twice from column 3 through a one-char line must land on column 3
+	// of the third line, not column 1 - the desired-x memory these pin down.
+	result := ti_key_frame(
+		{text = "aaaa\nb\ncccc", cursor = 3, key = .DOWN, height = 90, presses = 2},
+	)
+	testing.expect_value(t, result.cursor, 10)
+}
+
+@(test)
+text_input_page_up_and_down_move_by_the_visible_page :: proc(t: ^testing.T) {
+	// Six visual rows, three visible (h=90): PageUp from row 5 lands row 2.
+	text := "aaaa bbbb cccc dddd eeee ffff"
+	up := ti_key_frame({text = text, cursor = 25, key = .PAGE_UP, width = 120, height = 90})
+	testing.expect_value(t, up.cursor, 10)
+	down := ti_key_frame({text = text, cursor = 0, key = .PAGE_DOWN, width = 120, height = 90})
+	testing.expect_value(t, down.cursor, 15)
+}
+
+// --- Shift+click and drag auto-scroll ----------------------------------------
+
+@(private = "file")
+TI_Click_Frame :: struct {
+	text:   string,
+	cursor: int,
+	mouse:  Vec2, // pane-local press position
+	shift:  bool,
+	height: i32,
+}
+
+@(private = "file")
+Ti_Click_Result :: struct {
+	cursor:      int,
+	sel_lo:      int,
+	sel_hi:      int,
+	selecting:   bool,
+	click_count: int,
+}
+
+// ti_click_frame drives one real frame with a left-button press so the
+// press/drag pipeline (shift-extend included) runs exactly as a user's click
+// does.
+@(private = "file")
+ti_click_frame :: proc(config: TI_Click_Frame) -> Ti_Click_Result {
+	assert(config.height > 0, "ti_click_frame: non-positive height")
+	runtime := new(Ui_Runtime)
+	defer free(runtime)
+	ui_runtime_init(runtime)
+	defer ui_runtime_destroy(runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := new(Ui_Frame)
+	defer free(frame)
+	defer ui_frame_destroy(frame)
+	frame.output = output
+
+	input: Ui_Input
+	input.screen_size = {800, 600}
+	input.mouse_position = config.mouse
+	input.mouse_pressed[input_mouse_index(.LEFT)] = true
+	input.mouse_down[input_mouse_index(.LEFT)] = true
+	if config.shift do input.keys_down[input_key_index(.LEFT_SHIFT)] = true
+
+	box: Input_Box
+	defer input_box_destroy(&box)
+	strings.write_string(&box.sb, config.text)
+	box.st.cursor = config.cursor
+
+	ui_frame_begin(frame, runtime, &input)
+	_ = text_input_at(
+		frame,
+		{0, 0, 300, config.height},
+		&box,
+		"field",
+		true,
+		semantics = {name = "N"},
+	)
+	ui_frame_end(frame)
+	lo, hi := text_input_selection_range(&box.st)
+	return {box.st.cursor, lo, hi, box.st.sel.active, box.st.sel.click_count}
+}
+
+@(test)
+text_input_shift_click_extends_from_the_caret :: proc(t: ^testing.T) {
+	// inner_x = PADDING (10); 16px per byte puts column 5 at x = 10 + 80.
+	result := ti_click_frame(
+		{text = "hello world", cursor = 0, mouse = {90, 10}, shift = true, height = 30},
+	)
+	testing.expect(t, result.selecting, "shift+click must create a selection")
+	testing.expect_value(t, result.sel_lo, 0)
+	testing.expect_value(t, result.sel_hi, 5)
+	testing.expect_value(t, result.cursor, 5)
+	// Shift+click must not advance the double/triple-click state machine.
+	testing.expect_value(t, result.click_count, 0)
+}
+
+@(test)
+text_input_plain_click_places_the_caret :: proc(t: ^testing.T) {
+	result := ti_click_frame(
+		{text = "hello world", cursor = 0, mouse = {90, 10}, shift = false, height = 30},
+	)
+	testing.expect(t, !result.selecting, "a plain click must not select")
+	testing.expect_value(t, result.cursor, 5)
+	testing.expect_value(t, result.click_count, 1)
+}
+
+@(test)
+drag_autoscroll_row_steps_are_rate_limited_and_clamped :: proc(t: ^testing.T) {
+	sel: Input_Sel
+	// First tick steps one row down.
+	row, stepped := ti_drag_autoscroll_row(&sel, 3, 10, false, TI_DRAG_SCROLL_SECS)
+	testing.expect(t, stepped)
+	testing.expect_value(t, row, 4)
+	// A tick inside the window must not step again.
+	_, stepped = ti_drag_autoscroll_row(&sel, 4, 10, false, TI_DRAG_SCROLL_SECS * 1.5)
+	testing.expect(t, !stepped, "steps inside the rate window must be suppressed")
+	// After the window, stepping resumes; upward steps clamp at row zero.
+	row, stepped = ti_drag_autoscroll_row(&sel, 0, 10, true, TI_DRAG_SCROLL_SECS * 3)
+	testing.expect(t, !stepped, "a clamped step at the top edge is not a step")
+	testing.expect_value(t, row, 0)
+	row, stepped = ti_drag_autoscroll_row(&sel, 9, 10, false, TI_DRAG_SCROLL_SECS * 4)
+	testing.expect(t, !stepped, "a clamped step at the bottom edge is not a step")
+	testing.expect_value(t, row, 9)
 }

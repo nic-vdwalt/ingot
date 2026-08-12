@@ -236,15 +236,33 @@ update_orbit_camera :: proc(
 	assert(_f32_is_finite(input.zoom_rate), "update_orbit_camera: invalid zoom input")
 	assert(_f32_is_finite(input.scroll), "update_orbit_camera: invalid scroll input")
 	assert(_camera_vector_is_finite(input.pan), "update_orbit_camera: invalid pan input")
+	assert(_f32_is_finite(input.pan_rate.x), "update_orbit_camera: invalid pan rate")
+	assert(_f32_is_finite(input.pan_rate.y), "update_orbit_camera: invalid pan rate")
+	assert(_f32_is_finite(config.pan_speed), "update_orbit_camera: invalid pan speed")
 	state.target += input.pan
 	state.yaw += input.rotate_rate.x * config.rotate_speed * dt
 	state.yaw += input.pointer_drag.x * config.drag_radians_per_pixel
+	// Yaw limits are opt-in: they only clamp when the range is non-empty, so
+	// zero-initialised configs keep the historical free-orbit behaviour.
+	if config.max_yaw > config.min_yaw {
+		state.yaw = clamp(state.yaw, config.min_yaw, config.max_yaw)
+	}
 	state.pitch += input.rotate_rate.y * config.rotate_speed * dt
 	state.pitch += input.pointer_drag.y * config.drag_radians_per_pixel
 	state.pitch = clamp(state.pitch, config.min_pitch, config.max_pitch)
 	state.distance += input.zoom_rate * config.zoom_speed * dt
 	state.distance -= input.scroll * config.scroll_distance
 	state.distance = clamp(state.distance, config.min_distance, config.max_distance)
+	// Keyboard pan is camera-relative: forward is the ground-projected view
+	// direction, right is its clockwise perpendicular. Speed scales with
+	// distance so the world moves at constant screen speed at any zoom.
+	if config.pan_speed > 0 && (input.pan_rate.x != 0 || input.pan_rate.y != 0) {
+		forward := Vector2{-f32(math.cos(f64(state.yaw))), -f32(math.sin(f64(state.yaw)))}
+		right := Vector2{forward.y, -forward.x}
+		movement := right * input.pan_rate.x + forward * input.pan_rate.y
+		scale := config.pan_speed * state.distance * dt
+		state.target += Vector3{movement.x * scale, movement.y * scale, 0}
+	}
 	assert(
 		_camera_vector_is_finite(state.target),
 		"update_orbit_camera: pan produced invalid target",

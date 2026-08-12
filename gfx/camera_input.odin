@@ -42,6 +42,10 @@ orbit_camera_input_poll :: proc(bindings: Orbit_Camera_Bindings) -> Orbit_Camera
 	if _orbit_key_pair_down(bindings.rotate_right) do input.rotate_rate.x -= 1
 	if _orbit_key_pair_down(bindings.zoom_in) do input.zoom_rate -= 1
 	if _orbit_key_pair_down(bindings.zoom_out) do input.zoom_rate += 1
+	if _orbit_key_pair_down(bindings.pan_forward) do input.pan_rate.y += 1
+	if _orbit_key_pair_down(bindings.pan_back) do input.pan_rate.y -= 1
+	if _orbit_key_pair_down(bindings.pan_left) do input.pan_rate.x -= 1
+	if _orbit_key_pair_down(bindings.pan_right) do input.pan_rate.x += 1
 	if IsMouseButtonDown(bindings.drag_button) {
 		input.pointer_drag = GetMouseDelta() * bindings.pointer_drag_scale
 	}
