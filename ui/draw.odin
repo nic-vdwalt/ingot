@@ -3,7 +3,9 @@ package ui
 frame_paint_list :: proc(frame: ^Ui_Frame, channel: Paint_Channel = .Main) -> ^Paint_List {
 	assert(frame != nil && frame.open, "frame_paint_list: invalid frame")
 	assert(frame.output != nil, "frame_paint_list: missing output")
-	if channel == .Overlay do return &frame.output.overlay
+	// Any z scope above content promotes ordinary drawing to the retained
+	// overlay channel, so "higher input z" and "paints later" cannot diverge.
+	if channel == .Overlay || frame_z(frame) > Z_CONTENT do return &frame.output.overlay
 	return &frame.output.main
 }
 

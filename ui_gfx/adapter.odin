@@ -210,7 +210,7 @@ adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	ui.ui_frame_finalize(frame)
 	adapter_a11y_publish(adapter, frame)
 	if adapter.gfx_frame != nil {
-		replay_list(adapter, adapter.gfx_frame, &output.overlay)
+		replay_list_tiered(adapter, adapter.gfx_frame, &output.overlay)
 	} else {
 		assert(output.overlay.count == 0, "adapter_end_frame: overlay without graphics frame")
 	}

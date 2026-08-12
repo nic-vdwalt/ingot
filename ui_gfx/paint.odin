@@ -9,7 +9,7 @@ replay :: proc(adapter: ^Adapter, output: ^ui.Ui_Output) {
 	assert(adapter.gfx_frame != nil, "replay: no bound graphics frame")
 	assert(output != nil, "replay: nil output")
 	replay_list(adapter, adapter.gfx_frame, &output.main)
-	replay_list(adapter, adapter.gfx_frame, &output.overlay)
+	replay_list_tiered(adapter, adapter.gfx_frame, &output.overlay)
 }
 
 replay_list :: proc(adapter: ^Adapter, frame: ^rl.Frame, list: ^ui.Paint_List) {
@@ -23,6 +23,26 @@ replay_list :: proc(adapter: ^Adapter, frame: ^rl.Frame, list: ^ui.Paint_List) {
 	for index in 0 ..< list.count {
 		assert(index >= 0 && index < len(list.commands), "replay_list: invalid index")
 		replay_command(adapter, frame, list, list.commands[index])
+	}
+}
+
+// replay_list_tiered walks the retained list once per paint tier, ascending,
+// preserving submission order within each tier. Six bounded scans instead of a
+// sort: no comparator, no reordering buffer, deterministic.
+replay_list_tiered :: proc(adapter: ^Adapter, frame: ^rl.Frame, list: ^ui.Paint_List) {
+	assert(adapter != nil && adapter.initialized, "replay_list_tiered: invalid adapter")
+	assert(
+		frame != nil && rl.frame_context(frame) == adapter.gfx_context,
+		"replay_list_tiered: invalid frame",
+	)
+	assert(list != nil && list.count >= 0, "replay_list_tiered: invalid list")
+	assert(list.count <= len(list.commands), "replay_list_tiered: invalid count")
+	for tier in 0 ..< ui.PAINT_TIER_COUNT {
+		for index in 0 ..< list.count {
+			command := list.commands[index]
+			if int(command.tier) != tier do continue
+			replay_command(adapter, frame, list, command)
+		}
 	}
 }
 
