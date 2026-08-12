@@ -340,9 +340,13 @@ orbit_camera_zoom_toward :: proc(
 	assert(state.distance >= config.min_distance && state.distance <= config.max_distance)
 }
 
-// orbit_camera_grab_pan_begin anchors the pan at a picked world point.
+// orbit_camera_grab_pan_begin anchors the pan at a picked world point. A
+// begin while a grab is already active means the caller lost the matching
+// end (a missed release), so the state machine traps rather than silently
+// re-anchoring mid-gesture.
 orbit_camera_grab_pan_begin :: proc(pan: ^Orbit_Camera_Grab_Pan, anchor: Vector3) {
 	assert(pan != nil, "orbit_camera_grab_pan_begin: nil state")
+	assert(pan.active == false, "orbit_camera_grab_pan_begin: grab pan already active")
 	assert(_camera_vector_is_finite(anchor), "orbit_camera_grab_pan_begin: invalid anchor")
 	pan.active = true
 	pan.anchor = anchor

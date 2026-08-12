@@ -5,6 +5,7 @@
 #+build !js
 package gfx
 
+import "core:sync"
 import "core:testing"
 
 @(test)
@@ -26,10 +27,30 @@ orbit_camera_input_poll_ignores_unbound_keys :: proc(t: ^testing.T) {
 }
 
 when INGOT_INPUT_SIM {
+	// The sim seam is process-global (g_sim plus the default input context),
+	// so the sim-backed tests must not run concurrently.
+	@(private = "file")
+	g_sim_test_guard: sync.Mutex
+
+	// sim_lock serializes the sim-backed tests: the test runner is
+	// multithreaded by default, and two tests staging events into the shared
+	// seam concurrently read each other's keys and wheels.
+	@(private = "file")
+	sim_lock :: proc() {
+		sync.mutex_lock(&g_sim_test_guard)
+		SimReset()
+	}
+
+	@(private = "file")
+	sim_unlock :: proc() {
+		SimReset()
+		sync.mutex_unlock(&g_sim_test_guard)
+	}
+
 	@(test)
 	orbit_camera_input_poll_maps_keys_to_rates :: proc(t: ^testing.T) {
-		SimReset()
-		defer SimReset()
+		sim_lock()
+		defer sim_unlock()
 		bindings := orbit_camera_bindings_default()
 
 		SimBeginFrame()
@@ -52,8 +73,8 @@ when INGOT_INPUT_SIM {
 	// Opposed keys must cancel rather than latch to whichever was tested last.
 	@(test)
 	orbit_camera_input_poll_cancels_opposed_keys :: proc(t: ^testing.T) {
-		SimReset()
-		defer SimReset()
+		sim_lock()
+		defer sim_unlock()
 		SimBeginFrame()
 		SimKey(.A, true)
 		SimKey(.D, true)
@@ -66,8 +87,8 @@ when INGOT_INPUT_SIM {
 
 	@(test)
 	orbit_camera_input_poll_reads_drag_only_while_held :: proc(t: ^testing.T) {
-		SimReset()
-		defer SimReset()
+		sim_lock()
+		defer sim_unlock()
 		bindings := orbit_camera_bindings_default()
 
 		SimBeginFrame()
@@ -87,8 +108,8 @@ when INGOT_INPUT_SIM {
 
 	@(test)
 	orbit_camera_pointer_intent_gates_rotate_behind_modifier :: proc(t: ^testing.T) {
-		SimReset()
-		defer SimReset()
+		sim_lock()
+		defer sim_unlock()
 		bindings := orbit_camera_bindings_default()
 		bindings.drag_modifier = {
 			primary = .LEFT_ALT,
@@ -119,8 +140,8 @@ when INGOT_INPUT_SIM {
 
 	@(test)
 	orbit_camera_input_poll_takes_vertical_wheel :: proc(t: ^testing.T) {
-		SimReset()
-		defer SimReset()
+		sim_lock()
+		defer sim_unlock()
 		SimBeginFrame()
 		SimWheel(3, -2)
 		input := orbit_camera_input_poll(orbit_camera_bindings_default())
@@ -132,8 +153,8 @@ when INGOT_INPUT_SIM {
 	// is the whole point of the two living in the same package.
 	@(test)
 	orbit_camera_input_poll_feeds_the_camera_step :: proc(t: ^testing.T) {
-		SimReset()
-		defer SimReset()
+		sim_lock()
+		defer sim_unlock()
 		SimBeginFrame()
 		SimKey(.A, true)
 		SimWheel(0, 1)

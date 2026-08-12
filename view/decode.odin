@@ -72,6 +72,9 @@ view_decode :: proc(data: []u8, doc: ^View_Doc) -> (result: Decode_Result, ok: b
 		doc_reset(doc)
 		return {fault = .Invalid_Document, validate = validate}, false
 	}
+	// Nodes were written directly, bypassing doc_add: rebuild the authoring
+	// tail cache so later doc_add calls append after the decoded chain ends.
+	doc_tail_rebuild(doc)
 	return {}, true
 }
 

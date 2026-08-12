@@ -28,6 +28,66 @@ test_doc_add_rejects_leaf_parent :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_doc_add_links_a_wide_document_in_order :: proc(t: ^testing.T) {
+	doc: View_Doc
+	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	for index in 1 ..< VIEW_NODES_MAX {
+		_, err := doc_add(&doc, root, View_Node{kind = .Separator})
+		testing.expectf(t, err == .None, "add %d failed", index)
+	}
+	// Walk the chain: every child must appear once, in append order.
+	cursor := doc.nodes[root].first_child
+	expected := i32(1)
+	for cursor != VIEW_NODE_NONE {
+		testing.expect_value(t, cursor, expected)
+		cursor = doc.nodes[cursor].next_sibling
+		expected += 1
+	}
+	testing.expect_value(t, expected, i32(VIEW_NODES_MAX))
+}
+
+@(test)
+test_doc_add_interleaved_parents_keep_per_parent_order :: proc(t: ^testing.T) {
+	doc: View_Doc
+	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	a, _ := doc_add_keyed(&doc, root, .Row, "a", "")
+	b, _ := doc_add_keyed(&doc, root, .Row, "b", "")
+	a1, _ := doc_add_keyed(&doc, a, .Label, "a1", "A1")
+	b1, _ := doc_add_keyed(&doc, b, .Label, "b1", "B1")
+	a2, _ := doc_add_keyed(&doc, a, .Label, "a2", "A2")
+	b2, _ := doc_add_keyed(&doc, b, .Label, "b2", "B2")
+	testing.expect_value(t, doc.nodes[a].first_child, a1)
+	testing.expect_value(t, doc.nodes[a1].next_sibling, a2)
+	testing.expect_value(t, doc.nodes[a2].next_sibling, VIEW_NODE_NONE)
+	testing.expect_value(t, doc.nodes[b].first_child, b1)
+	testing.expect_value(t, doc.nodes[b1].next_sibling, b2)
+	testing.expect_value(t, doc.nodes[b2].next_sibling, VIEW_NODE_NONE)
+}
+
+@(test)
+test_doc_add_appends_after_a_decoded_tail :: proc(t: ^testing.T) {
+	defer free_all(context.temp_allocator)
+	source: View_Doc
+	root, _ := doc_add_keyed(&source, VIEW_NODE_NONE, .Column, "root", "")
+	first, _ := doc_add_keyed(&source, root, .Label, "a", "A")
+	encoded := make([]u8, view_encoded_size(view_of(&source)), context.temp_allocator)
+	_, encode_ok := view_encode(view_of(&source), encoded)
+	testing.expect(t, encode_ok, "encode failed")
+
+	decoded: View_Doc
+	_, decode_ok := view_decode(encoded, &decoded)
+	testing.expect(t, decode_ok, "decode failed")
+	// The decoder writes nodes directly; a later doc_add must still land after
+	// the decoded chain end, which proves the tail cache was rebuilt.
+	appended, err := doc_add_keyed(&decoded, root, .Label, "b", "B")
+	testing.expect_value(t, err, Build_Error.None)
+	testing.expect_value(t, decoded.nodes[first].next_sibling, appended)
+	testing.expect_value(t, decoded.nodes[appended].next_sibling, VIEW_NODE_NONE)
+	result, valid := view_validate(view_of(&decoded))
+	testing.expectf(t, valid, "document invalid after append: %v", result)
+}
+
+@(test)
 test_doc_add_keyed_rolls_back_text_on_label_overflow :: proc(t: ^testing.T) {
 	doc: View_Doc
 	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")

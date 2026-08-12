@@ -30,6 +30,7 @@ doc_reset :: proc(doc: ^View_Doc) {
 	assert(doc.text_len <= VIEW_TEXT_BYTES_MAX, "doc_reset: text_len out of range")
 	doc.count = 0
 	doc.text_len = 0
+	doc.tail = {}
 }
 
 // doc_intern appends text to the blob and returns its range. Identical strings
@@ -82,44 +83,50 @@ doc_add :: proc(doc: ^View_Doc, parent: i32, node: View_Node) -> (index: i32, er
 
 // doc_link attaches a new node at the end of its sibling chain. Appending
 // rather than prepending keeps document order equal to authoring order, which
-// is what makes a generated literal readable and a diff meaningful.
+// is what makes a generated literal readable and a diff meaningful. The tail
+// cache makes the append O(1): without it, linking each of n children under
+// one parent walks the whole chain and building a wide document costs O(n²).
 @(private = "file")
 doc_link :: proc(doc: ^View_Doc, parent: i32, index: i32) {
 	assert(doc != nil, "doc_link: nil doc")
 	assert(index >= 0 && index < doc.count, "doc_link: index out of range")
-	first := doc_chain_head(doc, parent, index)
-	if first == VIEW_NODE_NONE do return
-	cursor := first
-	steps := 0
-	for doc.nodes[cursor].next_sibling != VIEW_NODE_NONE {
-		cursor = doc.nodes[cursor].next_sibling
-		steps += 1
-		assert(steps <= VIEW_NODES_MAX, "doc_link: unbounded sibling chain")
-	}
-	doc.nodes[cursor].next_sibling = index
-}
-
-// doc_chain_head returns the head of the chain index joins, after installing
-// index as that head if the chain was empty. Returning VIEW_NODE_NONE means the
-// caller has nothing left to do.
-@(private = "file")
-doc_chain_head :: proc(doc: ^View_Doc, parent: i32, index: i32) -> i32 {
-	assert(doc != nil, "doc_chain_head: nil doc")
-	assert(index >= 0 && index < doc.count, "doc_chain_head: index out of range")
-	assert(doc.count <= VIEW_NODES_MAX, "doc_chain_head: count exceeds capacity")
 	assert(
 		parent == VIEW_NODE_NONE || (parent >= 0 && parent < doc.count),
-		"doc_chain_head: parent out of range",
+		"doc_link: parent out of range",
 	)
-	if parent == VIEW_NODE_NONE {
-		if index == 0 do return VIEW_NODE_NONE
-		return 0
-	}
-	if doc.nodes[parent].first_child == VIEW_NODE_NONE {
+	slot := parent == VIEW_NODE_NONE ? i32(VIEW_NODES_MAX) : parent
+	assert(slot >= 0 && slot <= VIEW_NODES_MAX, "doc_link: slot out of range")
+	prev := doc.tail[slot] - 1
+	if prev >= 0 {
+		assert(prev < doc.count, "doc_link: stale tail cache")
+		assert(
+			doc.nodes[prev].next_sibling == VIEW_NODE_NONE,
+			"doc_link: cached tail is not the chain end",
+		)
+		doc.nodes[prev].next_sibling = index
+	} else if parent != VIEW_NODE_NONE {
+		assert(
+			doc.nodes[parent].first_child == VIEW_NODE_NONE,
+			"doc_link: parent has children but no cached tail",
+		)
 		doc.nodes[parent].first_child = index
-		return VIEW_NODE_NONE
 	}
-	return doc.nodes[parent].first_child
+	doc.tail[slot] = index + 1
+}
+
+// doc_tail_rebuild derives the tail cache from the links in one bounded pass,
+// for documents whose nodes were written directly rather than through doc_add
+// (view_decode). A chain's tail is its only member with no next sibling.
+doc_tail_rebuild :: proc(doc: ^View_Doc) {
+	assert(doc != nil, "doc_tail_rebuild: nil doc")
+	assert(doc.count >= 0 && doc.count <= VIEW_NODES_MAX, "doc_tail_rebuild: count out of range")
+	doc.tail = {}
+	for index in 0 ..< doc.count {
+		node := doc.nodes[index]
+		if node.next_sibling != VIEW_NODE_NONE do continue
+		slot := node.parent == VIEW_NODE_NONE ? i32(VIEW_NODES_MAX) : node.parent
+		doc.tail[slot] = index + 1
+	}
 }
 
 // doc_add_keyed is the common case: a node with a key and a label. It interns

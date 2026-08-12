@@ -116,11 +116,18 @@ View_Node :: struct {
 
 // View_Doc is the authoring buffer. Static allocation: the builder owns one for
 // its whole lifetime and never grows it.
+//
+// tail is an authoring-only acceleration: the last child of each parent (the
+// slot at VIEW_NODES_MAX is the root chain), stored as index + 1 so the zero
+// value means "no children" and a zero-initialized View_Doc is valid without
+// doc_reset. It is never encoded - the wire format and View are unchanged -
+// and view_decode rebuilds it after writing nodes directly.
 View_Doc :: struct {
 	nodes:    [VIEW_NODES_MAX]View_Node,
 	count:    i32,
 	text:     [VIEW_TEXT_BYTES_MAX]u8,
 	text_len: u32,
+	tail:     [VIEW_NODES_MAX + 1]i32,
 }
 
 // View is the play-time form: borrowed, exactly sized, retaining nothing. This

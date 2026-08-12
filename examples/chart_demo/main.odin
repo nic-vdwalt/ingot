@@ -6,7 +6,6 @@
 //	odin run examples/chart_demo -collection:ingot=.
 package main
 
-import rl "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 

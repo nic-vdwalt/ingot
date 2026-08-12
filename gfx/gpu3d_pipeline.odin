@@ -9,6 +9,7 @@ import wg "vendor:wgpu"
 // full - both are counted in renderer_stats().gpu3d_pool_exhaustions.
 GPU_3D_MAX_MESHES :: 256
 GPU_3D_MAX_PIPELINES :: 48
+GPU_3D_MAX_SHADERS :: 8
 GPU_3D_MAX_VERTICES :: 1_048_576
 GPU_3D_MAX_INDICES :: 6_291_456
 GPU_3D_MAX_MESH_BYTES :: 128 * 1024 * 1024
@@ -97,6 +98,10 @@ Gpu_Material :: struct {
 	// texture with a zero id means untextured: the draw binds the shared
 	// neutral white texture and the shader multiplies by pure white.
 	texture:     Texture2D,
+	// shader with a zero id means the built-in GPU_3D_SHADER; a custom
+	// handle from create_gpu_3d_shader replaces both shader stages. Stale
+	// handles fall back to the built-in shader (operating condition).
+	shader:      Gpu_3D_Shader,
 }
 
 Gpu_3D_Light :: struct {
@@ -126,6 +131,14 @@ Gpu_3D_Pass :: struct {
 	target:                    ^Gpu_3D_Target,
 	view_projection:           Matrix,
 	light:                     Gpu_3D_Light,
+	// World-space camera eye fed to shaders for view-dependent shading.
+	// begin_gpu_3d fills it from the camera; begin_gpu_3d_pro supplies a
+	// synthetic camera, so callers wanting meaningful view-dependent
+	// shading there must set this field themselves after begin.
+	camera_position:           Vector3,
+	// Pass start time in seconds since context start, fed to shaders via
+	// light_params.w for animation.
+	time:                      f32,
 	generation:                u64,
 	active:                    bool,
 	sample_count:              u32,
@@ -149,7 +162,8 @@ Gpu_3D_Uniforms :: struct {
 	color:           [4]f32,
 	color_high:      [4]f32,
 	light_direction: [4]f32, // xyz direction toward the light, w unused
-	light_params:    [4]f32, // x ambient, y diffuse, z depth_nudge, w unused
+	light_params:    [4]f32, // x ambient, y diffuse, z depth_nudge, w time seconds
+	camera_position: [4]f32, // xyz world-space camera position, w unused
 	use_scalar:      u32,
 	use_texture:     u32,
 	_padding:        [2]u32,
@@ -164,13 +178,13 @@ Gpu_3D_Instance_Uniforms :: struct {
 }
 
 // The dynamic-offset uniform bind group declares minBindingSize =
-// size_of(Gpu_3D_Uniforms). The WGSL view of the struct is 208 bytes (two
-// mat4x4 + four vec4 + one 16-byte u32 block); Odin may append tail padding
+// size_of(Gpu_3D_Uniforms). The WGSL view of the struct is 224 bytes (two
+// mat4x4 + five vec4 + one 16-byte u32 block); Odin may append tail padding
 // (matrix alignment is target-dependent), and WebGPU permits a binding
 // larger than the shader view. Lock the invariants a struct edit could
 // silently break: never smaller than the shader view, always 16-byte
 // aligned as dynamic offsets require.
-#assert(size_of(Gpu_3D_Uniforms) >= 208)
+#assert(size_of(Gpu_3D_Uniforms) >= 224)
 #assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
 #assert(size_of(Gpu_3D_Vertex) == 36)
 #assert(size_of(Matrix) == 64)
@@ -193,6 +207,7 @@ Gpu_3D_Pipeline_Entry :: struct {
 	primitive:    Gpu_Primitive,
 	style:        Gpu_Material_Style,
 	sample_count: u32,
+	shader_id:    u32, // 0 = built-in GPU_3D_SHADER
 	pipeline:     wg.RenderPipeline,
 }
 
@@ -221,18 +236,35 @@ _gpu_3d_pipeline_matches :: proc(
 	primitive: Gpu_Primitive,
 	style: Gpu_Material_Style,
 	sample_count: u32,
+	shader_id: u32,
 ) -> bool {
 	return(
 		entry.format == format &&
 		entry.primitive == primitive &&
 		entry.style == style &&
-		entry.sample_count == sample_count \
+		entry.sample_count == sample_count &&
+		entry.shader_id == shader_id \
 	)
 }
 
 @(private)
 Gpu_3D_Mesh_Slot :: struct {
 	entry:      ^Gpu_3D_Mesh_Entry,
+	generation: u32,
+	occupied:   bool,
+}
+
+// Handle to a custom WGSL module usable in Gpu_Material.shader. The module
+// must declare the exact same bind groups, vertex attributes, and entry
+// points (vs_main / fs_main) as GPU_3D_SHADER; only the shading logic may
+// differ. id 0 means the built-in shader.
+Gpu_3D_Shader :: struct {
+	id: u32,
+}
+
+@(private)
+Gpu_3D_Shader_Slot :: struct {
+	module:     wg.ShaderModule,
 	generation: u32,
 	occupied:   bool,
 }
@@ -259,6 +291,8 @@ Gpu_3D_Resources :: struct {
 	mesh_count:             u32,
 	pipelines:              [GPU_3D_MAX_PIPELINES]Gpu_3D_Pipeline_Entry,
 	pipeline_count:         u32,
+	shaders:                [GPU_3D_MAX_SHADERS]Gpu_3D_Shader_Slot,
+	shader_count:           u32,
 	shader:                 wg.ShaderModule,
 	layout:                 wg.BindGroupLayout,
 	bind:                   [STREAM_SLOT_COUNT]wg.BindGroup,
@@ -268,6 +302,7 @@ Gpu_3D_Resources :: struct {
 }
 
 #assert(GPU_3D_MAX_MESHES <= RESOURCE_SLOT_COUNT)
+#assert(GPU_3D_MAX_SHADERS <= RESOURCE_SLOT_COUNT)
 
 GPU_3D_SHADER :: `
 struct Uniforms {
@@ -277,6 +312,7 @@ struct Uniforms {
     color_high: vec4<f32>,
     light_direction: vec4<f32>,
     light_params: vec4<f32>,
+    camera_position: vec4<f32>,
     use_scalar: u32,
     use_texture: u32,
     padding: vec2<u32>,
@@ -1019,6 +1055,97 @@ destroy_gpu_mesh :: proc(mesh: ^Gpu_Mesh) {
 	assert(mesh.id == 0)
 }
 
+// create_gpu_3d_shader registers a custom WGSL module for use in
+// Gpu_Material.shader. The code must declare the same bind groups, vertex
+// attributes, and vs_main/fs_main entry points as GPU_3D_SHADER; pipeline
+// validation failures surface as skipped draws, not crashes. Pool
+// exhaustion is an operating condition: ok=false, counted.
+create_gpu_3d_shader :: proc(code: string) -> (Gpu_3D_Shader, bool) {
+	ctx := &default_context_storage
+	if !ctx.initialized || len(code) == 0 do return {}, false
+	resources := &ctx.resources.gpu_3d
+	if resources.shader_count >= GPU_3D_MAX_SHADERS {
+		_stats_gpu3d_pool_exhaustion()
+		return {}, false
+	}
+	module := wg.DeviceCreateShaderModule(
+		ctx.device,
+		&{
+			nextInChain = &wg.ShaderSourceWGSL {
+				chain = {sType = .ShaderSourceWGSL},
+				code = code,
+			},
+		},
+	)
+	if module == nil do return {}, false
+	for &slot, index in resources.shaders {
+		if slot.occupied do continue
+		slot.generation = _resource_generation_next(slot.generation)
+		slot.module = module
+		slot.occupied = true
+		resources.shader_count += 1
+		return Gpu_3D_Shader{id = _resource_handle_make(index, slot.generation)}, true
+	}
+	assert(false, "create_gpu_3d_shader: count mismatch")
+	return {}, false
+}
+
+// destroy_gpu_3d_shader releases a custom shader module and every cached
+// pipeline built from it. Zero or stale handles are a no-op; the handle is
+// zeroed either way. Must not be called inside an active 3D pass.
+destroy_gpu_3d_shader :: proc(shader: ^Gpu_3D_Shader) {
+	assert(shader != nil, "destroy_gpu_3d_shader: nil shader")
+	ctx := &default_context_storage
+	defer shader^ = {}
+	if !ctx.initialized || shader.id == 0 do return
+	resources := &ctx.resources.gpu_3d
+	assert(resources.active_pass_generation == 0, "destroy_gpu_3d_shader: active pass")
+	index, generation, ok := _resource_handle_decode(shader.id, len(resources.shaders))
+	if !ok do return
+	slot := &resources.shaders[index]
+	if !slot.occupied || slot.generation != generation do return
+	// Swap-remove cached pipelines built from this module; the cache is a
+	// dense linear-scan array so order does not matter.
+	pipeline_index := u32(0)
+	for pipeline_index < resources.pipeline_count {
+		entry := &resources.pipelines[pipeline_index]
+		if entry.shader_id != shader.id {
+			pipeline_index += 1
+			continue
+		}
+		if entry.pipeline != nil do wg.RenderPipelineRelease(entry.pipeline)
+		resources.pipeline_count -= 1
+		entry^ = resources.pipelines[resources.pipeline_count]
+		resources.pipelines[resources.pipeline_count] = {}
+	}
+	wg.ShaderModuleRelease(slot.module)
+	slot.module = nil
+	slot.occupied = false
+	assert(resources.shader_count > 0, "destroy_gpu_3d_shader: count underflow")
+	resources.shader_count -= 1
+}
+
+// _gpu_3d_shader_resolve maps a material's shader handle to the module used
+// for pipeline creation. Zero or stale handles fall back to the built-in
+// shader (nil module, id 0) - an operating condition matching the texture
+// fallback policy.
+@(private)
+_gpu_3d_shader_resolve :: proc(
+	resources: ^Gpu_3D_Resources,
+	shader: Gpu_3D_Shader,
+) -> (
+	wg.ShaderModule,
+	u32,
+) {
+	assert(resources != nil, "_gpu_3d_shader_resolve: nil resources")
+	if shader.id == 0 do return nil, 0
+	index, generation, ok := _resource_handle_decode(shader.id, len(resources.shaders))
+	if !ok do return nil, 0
+	slot := &resources.shaders[index]
+	if !slot.occupied || slot.generation != generation do return nil, 0
+	return slot.module, shader.id
+}
+
 begin_gpu_3d :: proc(
 	target: ^Gpu_3D_Target,
 	camera: Camera3D,
@@ -1085,6 +1212,8 @@ begin_gpu_3d :: proc(
 		pass                      = pass,
 		target                    = target,
 		light                     = GPU_3D_DEFAULT_LIGHT,
+		camera_position           = camera.position,
+		time                      = f32(context_time(ctx)),
 		generation                = resources.active_pass_generation,
 		active                    = true,
 		sample_count              = sample_count,
@@ -1306,12 +1435,18 @@ _gpu_3d_draw_indexed :: proc(
 		pass.target.texture.texture.id,
 	)
 	if target_slot == nil || target_slot.entry == nil do return false
+	shader_module, shader_id := _gpu_3d_shader_resolve(
+		&pass.owner.resources.gpu_3d,
+		material.shader,
+	)
 	pipeline := _gpu_3d_pipeline(
 		pass.owner,
 		target_slot.entry.wgformat,
 		entry.primitive,
 		material.style,
 		pass.sample_count,
+		shader_id,
+		shader_module,
 	)
 	if pipeline == nil do return false
 	texture_bind, textured := _gpu_3d_texture_bind(pass.owner, material)
@@ -1325,7 +1460,13 @@ _gpu_3d_draw_indexed :: proc(
 		color           = col_f(material.color),
 		color_high      = col_f(color_high),
 		light_direction = {light.direction.x, light.direction.y, light.direction.z, 0},
-		light_params    = {light.ambient, light.diffuse, material.depth_nudge, 0},
+		light_params    = {light.ambient, light.diffuse, material.depth_nudge, pass.time},
+		camera_position = {
+			pass.camera_position.x,
+			pass.camera_position.y,
+			pass.camera_position.z,
+			0,
+		},
 		use_scalar      = u32(1) if material.use_scalar else 0,
 		use_texture     = u32(1) if textured else 0,
 	}
@@ -1479,14 +1620,20 @@ _gpu_3d_pipeline :: proc(
 	primitive: Gpu_Primitive,
 	style: Gpu_Material_Style,
 	sample_count: u32,
+	shader_id: u32 = 0,
+	shader_module: wg.ShaderModule = nil,
 ) -> wg.RenderPipeline {
 	assert(ctx != nil, "_gpu_3d_pipeline: nil context")
 	assert(ctx.initialized, "_gpu_3d_pipeline: uninitialized context")
 	assert(sample_count == 1 || sample_count == 4, "_gpu_3d_pipeline: unsupported sample count")
+	assert(
+		(shader_id == 0) == (shader_module == nil),
+		"_gpu_3d_pipeline: shader id and module must agree",
+	)
 	resources := &ctx.resources.gpu_3d
 	for index in 0 ..< resources.pipeline_count {
 		entry := resources.pipelines[index]
-		if _gpu_3d_pipeline_matches(entry, format, primitive, style, sample_count) {
+		if _gpu_3d_pipeline_matches(entry, format, primitive, style, sample_count, shader_id) {
 			return entry.pipeline
 		}
 	}
@@ -1497,6 +1644,9 @@ _gpu_3d_pipeline :: proc(
 		return nil
 	}
 	_gpu_3d_init_shared(ctx, resources)
+	// A custom module replaces both stages; the built-in module otherwise.
+	module := resources.shader
+	if shader_module != nil do module = shader_module
 	attrs := [4]wg.VertexAttribute {
 		{format = .Float32x3, offset = 0, shaderLocation = 0},
 		{format = .Float32x3, offset = u64(offset_of(Gpu_3D_Vertex, normal)), shaderLocation = 1},
@@ -1538,7 +1688,7 @@ _gpu_3d_pipeline :: proc(
 		&{
 			layout = layout,
 			vertex = {
-				module = resources.shader,
+				module = module,
 				entryPoint = "vs_main",
 				bufferCount = 1,
 				buffers = &vertex_layout,
@@ -1547,7 +1697,7 @@ _gpu_3d_pipeline :: proc(
 			depthStencil = &depth,
 			multisample = {count = sample_count, mask = ~u32(0)},
 			fragment = &wg.FragmentState {
-				module = resources.shader,
+				module = module,
 				entryPoint = "fs_main",
 				targetCount = 1,
 				targets = &target,
@@ -1561,6 +1711,7 @@ _gpu_3d_pipeline :: proc(
 		primitive    = primitive,
 		style        = style,
 		sample_count = sample_count,
+		shader_id    = shader_id,
 		pipeline     = pipeline,
 	}
 	resources.pipeline_count += 1
@@ -1645,6 +1796,9 @@ _gpu_3d_resources_destroy :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 		if resources.pipelines[index].pipeline != nil {
 			wg.RenderPipelineRelease(resources.pipelines[index].pipeline)
 		}
+	}
+	for &slot in resources.shaders {
+		if slot.occupied && slot.module != nil do wg.ShaderModuleRelease(slot.module)
 	}
 	for bind in resources.bind {
 		if bind != nil do wg.BindGroupRelease(bind)
