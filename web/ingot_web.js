@@ -503,11 +503,12 @@
 		}
 	}
 
-	// browser CSS cursor strings indexed by ingot MouseCursor enum (gfx/types.odin)
+	// browser CSS cursor strings indexed by ingot MouseCursor enum (gfx/types.odin);
+	// index 11 is the hidden-cursor sentinel used by platform_set_cursor_hidden.
 	const CURSORS = [
 		"default", "default", "text", "crosshair", "pointer",
 		"ew-resize", "ns-resize", "nwse-resize", "nesw-resize", "move",
-		"not-allowed",
+		"not-allowed", "none",
 	];
 
 	// The "ingot" foreign-import module (see gfx/platform_web.odin).

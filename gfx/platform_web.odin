@@ -580,6 +580,12 @@ platform_set_mouse_cursor :: proc(cursor: MouseCursor) {
 	_js_set_cursor(i32(cursor))
 }
 
+// 11 indexes the "none" entry appended to CURSORS in web/ingot_web.js.
+@(private)
+platform_set_cursor_hidden :: proc(hidden: bool) {
+	_js_set_cursor(11 if hidden else i32(g.inp.cur_cursor))
+}
+
 @(private)
 platform_get_clipboard :: proc() -> string {
 	length := _js_clipboard_len()

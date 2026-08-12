@@ -424,6 +424,13 @@ platform_set_mouse_cursor :: proc(cursor: MouseCursor) {
 }
 
 @(private)
+platform_set_cursor_hidden :: proc(hidden: bool) {
+	if g.win == nil do return
+	mode: i32 = glfw.CURSOR_HIDDEN if hidden else glfw.CURSOR_NORMAL
+	glfw.SetInputMode(_win(), glfw.CURSOR, mode)
+}
+
+@(private)
 platform_get_clipboard :: proc() -> string {
 	if g.win == nil do return ""
 	return glfw.GetClipboardString(_win())

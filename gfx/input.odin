@@ -51,6 +51,7 @@ Input :: struct {
 	wheel_pending:        Vector2,
 	cursor_on_screen:     bool,
 	cur_cursor:           MouseCursor,
+	cursor_hidden:        bool,
 
 	// Gamepads: fixed pool, snapshot-polled once per frame through the
 	// platform seam (GLFW GetGamepadState native, navigator.getGamepads()
@@ -535,7 +536,26 @@ SetMouseCursor :: proc(cursor: MouseCursor) {
 	if i < 0 || i >= 11 do return
 	if cursor == g.inp.cur_cursor do return
 	g.inp.cur_cursor = cursor
-	platform_set_mouse_cursor(cursor)
+	if !g.inp.cursor_hidden do platform_set_mouse_cursor(cursor)
+}
+
+// HideCursor hides the OS cursor over the window; SetMouseCursor calls made
+// while hidden are remembered and reapplied by ShowCursor.
+HideCursor :: proc() {
+	if g.inp.cursor_hidden do return
+	g.inp.cursor_hidden = true
+	platform_set_cursor_hidden(true)
+}
+
+ShowCursor :: proc() {
+	if !g.inp.cursor_hidden do return
+	g.inp.cursor_hidden = false
+	platform_set_cursor_hidden(false)
+	platform_set_mouse_cursor(g.inp.cur_cursor)
+}
+
+IsCursorHidden :: proc() -> bool {
+	return g.inp.cursor_hidden
 }
 
 context_is_cursor_on_screen :: proc(ctx: ^Context) -> bool {
