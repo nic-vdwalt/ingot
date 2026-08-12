@@ -8,6 +8,10 @@ package gfx
 import "core:sync"
 import "core:testing"
 
+// sync is only referenced under the INGOT_INPUT_SIM gate below; keep the
+// import satisfied when the sim seam is compiled out.
+_ :: sync
+
 @(test)
 orbit_camera_bindings_default_is_accepted_by_the_camera :: proc(t: ^testing.T) {
 	bindings := orbit_camera_bindings_default()

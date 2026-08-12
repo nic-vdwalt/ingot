@@ -464,13 +464,60 @@ test_gpu_3d_mesh_handle_mapping :: proc(t: ^testing.T) {
 	testing.expect(t, _gpu_3d_mesh_slot(&resources, new_mesh) == slot)
 }
 
+@(test)
+test_gpu_3d_shader_handle_mapping :: proc(t: ^testing.T) {
+	resources: Gpu_3D_Resources
+	// Zero handle resolves to the built-in shader (nil module, id 0).
+	module, id := _gpu_3d_shader_resolve(&resources, Gpu_3D_Shader{})
+	testing.expect(t, module == nil)
+	testing.expect_value(t, id, u32(0))
+
+	slot := &resources.shaders[0]
+	slot.generation = _resource_generation_next(slot.generation)
+	slot.module = wg.ShaderModule(rawptr(uintptr(0xBEEF)))
+	slot.occupied = true
+	old_shader := Gpu_3D_Shader {
+		id = _resource_handle_make(0, slot.generation),
+	}
+	module, id = _gpu_3d_shader_resolve(&resources, old_shader)
+	testing.expect(t, module == slot.module)
+	testing.expect_value(t, id, old_shader.id)
+
+	// A stale generation falls back to the built-in shader, matching the
+	// texture fallback policy.
+	slot.generation = _resource_generation_next(slot.generation)
+	module, id = _gpu_3d_shader_resolve(&resources, old_shader)
+	testing.expect(t, module == nil)
+	testing.expect_value(t, id, u32(0))
+
+	// Out-of-range and unoccupied handles also fall back.
+	slot.occupied = false
+	current := Gpu_3D_Shader {
+		id = _resource_handle_make(0, slot.generation),
+	}
+	module, id = _gpu_3d_shader_resolve(&resources, current)
+	testing.expect(t, module == nil)
+	testing.expect_value(t, id, u32(0))
+}
+
+@(test)
+test_gpu_3d_shader_pool_bounds :: proc(t: ^testing.T) {
+	// The pool bound must fit the handle index space like the mesh pool.
+	testing.expect(t, GPU_3D_MAX_SHADERS <= RESOURCE_SLOT_COUNT)
+	testing.expect(t, GPU_3D_MAX_SHADERS > 0)
+	// Custom pipelines share the bounded pipeline cache; keep headroom so a
+	// full shader pool cannot alone exhaust it (one entry per format/style
+	// combination actually drawn, at least one per shader).
+	testing.expect(t, GPU_3D_MAX_SHADERS < GPU_3D_MAX_PIPELINES)
+}
+
 // -- lighting, uniforms, textures, instancing ----------------------------------
 
 @(test)
 test_gpu_3d_uniforms_layout_locked :: proc(t: ^testing.T) {
 	// The Odin structs are copied raw into the uniform stream and read back
 	// through the WGSL views, so their sizes are load-bearing contracts.
-	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 208, "uniforms smaller than WGSL view")
+	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 224, "uniforms smaller than WGSL view")
 	testing.expect_value(t, size_of(Gpu_3D_Uniforms) % 16, 0)
 	testing.expect_value(t, size_of(Gpu_3D_Vertex), 36)
 	testing.expect_value(t, size_of(Matrix), 64)
