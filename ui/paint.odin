@@ -72,6 +72,9 @@ Paint_Kind :: enum u8 {
 
 Paint_Command :: struct {
 	kind:         Paint_Kind,
+	// Paint tier (0..PAINT_TIER_COUNT-1) stamped at push time from the list's
+	// current tier. Replay walks tiers in ascending order, stable within each.
+	tier:         u8,
 	rect:         Rect,
 	p0:           Vec2,
 	p1:           Vec2,
@@ -105,6 +108,10 @@ Paint_List :: struct {
 	// Origin of each open clip so an unbalanced frame can name the exact
 	// begin_scissor_mode call that leaked instead of only its depth.
 	clip_origin:          [PAINT_CLIP_CAP]runtime.Source_Code_Location,
+	// Tier at which each open clip was begun. A clip pair replayed in two
+	// different scans would unbalance the scissor state, so paint_clip_end
+	// asserts the pair is same-tier.
+	clip_tier:            [PAINT_CLIP_CAP]u8,
 	clip_count:           int,
 	clip_end_reserved:    int,
 	// Begins rejected after PAINT_CLIP_CAP still need matching ends. Tracking
@@ -125,6 +132,9 @@ Paint_List :: struct {
 	text_bytes_copied:    u64,
 	command_growth_count: u64,
 	text_growth_count:    u64,
+	// Ambient tier stamped onto every pushed command. Maintained by
+	// z_scope_begin/end and passive overlay groups; 0 (content) for main.
+	current_tier:         u8,
 	sink:                 Paint_Sink,
 	sink_userdata:        rawptr,
 }
@@ -163,6 +173,7 @@ paint_list_reset :: proc(list: ^Paint_List) {
 	list.clip_overflow_depth = 0
 	list.dropped_commands = 0
 	list.dropped_text_bytes = 0
+	list.current_tier = 0
 	when UI_TELEMETRY_ENABLED {
 		list.command_append_count = 0
 		list.text_append_count = 0
@@ -233,6 +244,7 @@ paint_clip_begin :: proc(list: ^Paint_List, rect: Rect, loc := #caller_location)
 	list.clip_emitted[list.clip_count] = emitted
 	list.clip_streamed[list.clip_count] = streamed
 	list.clip_origin[list.clip_count] = loc
+	list.clip_tier[list.clip_count] = list.current_tier
 	list.clip_count += 1
 }
 
@@ -256,6 +268,12 @@ paint_clip_end :: proc(list: ^Paint_List) {
 	// An unmatched end is a caller bug, but ignoring it is the safe failure:
 	// driving depth negative would corrupt the next view's clip index.
 	if list.clip_count == 0 do return
+	// Replay walks tiers in separate scans; a pair split across tiers would
+	// leave a Clip_Begin without its End inside one scan.
+	assert(
+		list.clip_tier[list.clip_count - 1] == list.current_tier,
+		"paint_clip_end: clip pair spans paint tiers",
+	)
 	list.clip_count -= 1
 	restore := list.clip_count > 0
 	rect: Rect
@@ -280,6 +298,8 @@ paint_clip_end :: proc(list: ^Paint_List) {
 paint_push_unreserved :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
 	assert(list != nil, "paint_push_unreserved: nil list")
 	if list.count >= PAINT_COMMAND_CAP do return false
+	command := command
+	command.tier = list.current_tier
 	list.commands[list.count] = command
 	list.count += 1
 	list.peak_count = max(list.peak_count, list.count)
@@ -291,6 +311,8 @@ paint_push_unreserved :: proc(list: ^Paint_List, command: Paint_Command) -> bool
 paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
 	assert(list != nil, "paint_push: nil list")
 	assert(list.clip_end_reserved >= 0, "paint_push: negative reservation")
+	command := command
+	command.tier = list.current_tier
 	if list.count >= PAINT_COMMAND_CAP - list.clip_end_reserved {
 		list.dropped_commands += 1
 		if list.sink != nil do list.sink(list, command, list.sink_userdata)
@@ -338,4 +360,12 @@ paint_list_set_sink :: proc(list: ^Paint_List, sink: Paint_Sink, userdata: rawpt
 	assert((sink == nil) == (userdata == nil), "paint_list_set_sink: incomplete sink")
 	list.sink = sink
 	list.sink_userdata = userdata
+}
+
+// paint_list_set_tier sets the ambient tier stamped onto subsequently pushed
+// commands. Driven by z scopes and passive overlay groups, not by widgets.
+paint_list_set_tier :: proc(list: ^Paint_List, tier: u8) {
+	assert(list != nil, "paint_list_set_tier: nil list")
+	assert(int(tier) < PAINT_TIER_COUNT, "paint_list_set_tier: tier out of range")
+	list.current_tier = tier
 }

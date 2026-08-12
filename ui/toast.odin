@@ -93,7 +93,7 @@ toasts_draw :: proc(frame: ^Ui_Frame, st: ^Toast_State, screen: Rect_I32) {
 		case .Error:
 			accent = style.fg_error
 		}
-		overlay_begin(frame, rect, claim_input = false)
+		overlay_begin(frame, rect, claim_input = false, z = Z_TOAST)
 		overlay_rect(frame, rect, style.bg_popup)
 		overlay_rect_lines(frame, rect, ui_frame_scf(frame, 1), style.border_subtle)
 		overlay_rect(frame, {rect.x, rect.y, f32(ui_frame_sc(frame, 3)), rect.height}, accent)

@@ -421,7 +421,7 @@ chart_draw_tooltip :: proc(
 	)
 	rect := frame_rect_to_screen(frame, {f32(tx), f32(ty), f32(tw), f32(th)})
 	sx, sy := i32(rect.x), i32(rect.y)
-	overlay_begin(frame, rect, claim_input = false)
+	overlay_begin(frame, rect, claim_input = false, z = Z_TOOLTIP)
 	overlay_rounded_fill(frame, rect, .MD, style.bg_popup)
 	overlay_rounded_border(frame, rect, .MD, .Hairline, style.border_color)
 

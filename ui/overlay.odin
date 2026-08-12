@@ -6,12 +6,15 @@ MAX_OVERLAY_CMDS :: PAINT_COMMAND_CAP
 OVERLAY_TEXT_CAP :: PAINT_TEXT_CAP
 
 Overlay_State :: struct {
-	open:    bool,
-	dropped: int,
+	open:       bool,
+	dropped:    int,
 	// A claiming group opens a matching z scope so the surface's own widgets
 	// are not occluded by its own claim. Recorded so overlay_end closes exactly
 	// the scopes overlay_begin opened.
-	claimed: bool,
+	claimed:    bool,
+	// Tier to restore when a passive (non-claiming) group closes. Claiming
+	// groups restore through z_scope_end instead.
+	saved_tier: u8,
 }
 
 // overlay_begin opens the overlay paint group. When claim_input is set the rect
@@ -27,6 +30,11 @@ overlay_begin :: proc(frame: ^Ui_Frame, rect: Rectangle, claim_input: bool, z: Z
 		route_claim(frame, rect, z)
 		z_scope_begin(frame, z)
 		frame.overlay.claimed = true
+	} else if frame.output != nil {
+		// Passive surfaces (tooltips, toasts) take no input but still paint at
+		// their declared tier, so a toast outlives a later-drawn popup visually.
+		frame.overlay.saved_tier = frame.output.overlay.current_tier
+		paint_list_set_tier(&frame.output.overlay, z_paint_tier(z))
 	}
 }
 
@@ -36,6 +44,8 @@ overlay_end :: proc(frame: ^Ui_Frame) {
 	if frame.overlay.claimed {
 		z_scope_end(frame)
 		frame.overlay.claimed = false
+	} else if frame.output != nil {
+		paint_list_set_tier(&frame.output.overlay, frame.overlay.saved_tier)
 	}
 	frame.overlay.open = false
 }

@@ -73,7 +73,6 @@ modal_begin :: proc(
 	st.dismissed = false
 	style := ui_frame_theme(frame)
 	metrics := ui_frame_metrics(frame)
-	draw_rectangle(frame, 0, 0, screen_w, screen_h, style.modal_dim)
 
 	mw := min(w, screen_w - metrics.PADDING * 4)
 	mh := min(h, screen_h - metrics.PADDING * 2)
@@ -85,6 +84,9 @@ modal_begin :: proc(
 	route_claim(frame, Rectangle{0, 0, f32(screen_w), f32(screen_h)}, Z_MODAL)
 	z_scope_begin(frame, Z_MODAL)
 
+	// Dimmed inside the modal's z scope so it paints at the modal tier and
+	// covers every lower tier, including content submitted after modal_end.
+	draw_rectangle(frame, 0, 0, screen_w, screen_h, style.modal_dim)
 	draw_rectangle(frame, mx, my, mw, mh, style.bg_secondary)
 	draw_rectangle_lines(frame, mx, my, mw, mh, style.border_color)
 	begin_scissor_mode(frame, mx, my, mw, mh)
@@ -423,7 +425,7 @@ tooltip_wrapped_at :: proc(
 	tx := clamp(i32(mouse.x) + ui_frame_sc(frame, 12), 0, max(screen_w - bw, 0))
 	ty := clamp(i32(mouse.y) + ui_frame_sc(frame, 18), 0, max(screen_h - bh, 0))
 	tip := Rectangle{f32(tx), f32(ty), f32(bw), f32(bh)}
-	overlay_begin(frame, tip, claim_input = false)
+	overlay_begin(frame, tip, claim_input = false, z = Z_TOOLTIP)
 	overlay_rect(frame, tip, style.bg_popup)
 	overlay_rect_lines(frame, tip, ui_frame_scf(frame, 1), style.border_color)
 	for line, index in lines {

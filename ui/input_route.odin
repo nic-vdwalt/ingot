@@ -24,6 +24,23 @@ Z_TOOLTIP :: Z_Order(500) // hover tips (usually claim no input at all)
 // unblocked against any surface depth.
 Z_NONE :: Z_Order(min(f32))
 
+// Paint tiers bucket the continuous Z_Order space into the six named bands.
+// A command's tier decides which replay scan paints it; within a tier,
+// submission order is preserved. An application z between two named tiers
+// (e.g. Z_PANEL + 50) paints with the band below it.
+PAINT_TIER_COUNT :: 6
+
+z_paint_tier :: proc(z: Z_Order) -> u8 {
+	// NaN compares false against every threshold and would silently land in
+	// tier 0; reject it like z_scope_begin does.
+	assert(z == z, "z_paint_tier: z-order is NaN")
+	thresholds := [PAINT_TIER_COUNT - 1]Z_Order{Z_PANEL, Z_POPUP, Z_MODAL, Z_TOAST, Z_TOOLTIP}
+	tier := u8(0)
+	for threshold in thresholds do if z >= threshold do tier += 1
+	assert(int(tier) < PAINT_TIER_COUNT, "z_paint_tier: tier out of range")
+	return tier
+}
+
 Route_Claims :: struct {
 	rects: [MAX_ROUTE_CLAIMS]Rectangle,
 	zs:    [MAX_ROUTE_CLAIMS]Z_Order,
