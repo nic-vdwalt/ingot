@@ -198,8 +198,8 @@ test_identity_is_stable_across_a_label_rename :: proc(t: ^testing.T) {
 	demo_doc(&renamed)
 	for index in 0 ..< int(renamed.count) {
 		if renamed.nodes[index].kind != .Button do continue
-		offset, length, ok := doc_intern(&renamed, "Save changes")
-		testing.expect(t, ok, "intern failed")
+		offset, length, err := doc_intern(&renamed, "Save changes")
+		testing.expect(t, err == .None, "intern failed")
 		renamed.nodes[index].label_offset = offset
 		renamed.nodes[index].label_length = length
 		break
@@ -346,11 +346,11 @@ test_play_accepts_an_empty_flex_container :: proc(t: ^testing.T) {
 @(test)
 test_play_unkeyed_container_scopes_do_not_collide :: proc(t: ^testing.T) {
 	doc: View_Doc
-	root, ok := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
-	testing.expect(t, ok, "root add failed")
+	root, err := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	testing.expect(t, err == .None, "root add failed")
 	for index in 0 ..< 33 {
 		_, added := doc_add(&doc, root, View_Node{kind = .Column})
-		testing.expectf(t, added, "container %d add failed", index)
+		testing.expectf(t, added == .None, "container %d add failed", index)
 	}
 	result, valid := view_validate(view_of(&doc))
 	testing.expectf(t, valid, "view validation failed: %v", result)

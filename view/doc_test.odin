@@ -7,11 +7,11 @@ import "ingot:ui"
 @(test)
 test_doc_add_links_siblings_in_order :: proc(t: ^testing.T) {
 	doc: View_Doc
-	root, root_ok := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
-	testing.expect(t, root_ok, "root add failed")
-	first, first_ok := doc_add_keyed(&doc, root, .Label, "a", "A")
-	second, second_ok := doc_add_keyed(&doc, root, .Label, "b", "B")
-	testing.expect(t, first_ok && second_ok, "child add failed")
+	root, root_err := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+	testing.expect(t, root_err == .None, "root add failed")
+	first, first_err := doc_add_keyed(&doc, root, .Label, "a", "A")
+	second, second_err := doc_add_keyed(&doc, root, .Label, "b", "B")
+	testing.expect(t, first_err == .None && second_err == .None, "child add failed")
 	testing.expect_value(t, doc.nodes[root].first_child, first)
 	testing.expect_value(t, doc.nodes[first].next_sibling, second)
 	testing.expect_value(t, doc.nodes[second].next_sibling, VIEW_NODE_NONE)
@@ -23,8 +23,8 @@ test_doc_add_rejects_leaf_parent :: proc(t: ^testing.T) {
 	doc: View_Doc
 	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
 	leaf, _ := doc_add_keyed(&doc, root, .Label, "leaf", "L")
-	_, ok := doc_add_keyed(&doc, leaf, .Label, "child", "C")
-	testing.expect(t, !ok, "a leaf must not accept a child")
+	_, err := doc_add_keyed(&doc, leaf, .Label, "child", "C")
+	testing.expect_value(t, err, Build_Error.Parent_Not_Container)
 }
 
 @(test)
@@ -32,11 +32,11 @@ test_doc_add_rejects_overflow :: proc(t: ^testing.T) {
 	doc: View_Doc
 	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
 	for index in 1 ..< VIEW_NODES_MAX {
-		_, ok := doc_add(&doc, root, View_Node{kind = .Separator})
-		testing.expectf(t, ok, "add %d failed early", index)
+		_, err := doc_add(&doc, root, View_Node{kind = .Separator})
+		testing.expectf(t, err == .None, "add %d failed early", index)
 	}
-	_, ok := doc_add(&doc, root, View_Node{kind = .Separator})
-	testing.expect(t, !ok, "add past capacity must fail")
+	_, err := doc_add(&doc, root, View_Node{kind = .Separator})
+	testing.expect_value(t, err, Build_Error.Nodes_Full)
 	testing.expect_value(t, doc.count, i32(VIEW_NODES_MAX))
 }
 
@@ -46,10 +46,10 @@ test_doc_intern_rejects_blob_overflow :: proc(t: ^testing.T) {
 	big := make([]u8, VIEW_TEXT_BYTES_MAX)
 	defer delete(big)
 	for index in 0 ..< len(big) do big[index] = 'x'
-	_, _, ok := doc_intern(&doc, string(big))
-	testing.expect(t, ok, "a blob-sized string must fit exactly once")
+	_, _, err := doc_intern(&doc, string(big))
+	testing.expect(t, err == .None, "a blob-sized string must fit exactly once")
 	_, _, again := doc_intern(&doc, "y")
-	testing.expect(t, !again, "intern past capacity must fail")
+	testing.expect_value(t, again, Build_Error.Text_Full)
 }
 
 @(test)
@@ -217,8 +217,8 @@ test_validate_rejects_depth_overflow :: proc(t: ^testing.T) {
 	doc: View_Doc
 	parent := VIEW_NODE_NONE
 	for depth in 0 ..= VIEW_DEPTH_MAX {
-		index, ok := doc_add(&doc, parent, View_Node{kind = .Column})
-		testing.expectf(t, ok, "add at depth %d failed", depth)
+		index, err := doc_add(&doc, parent, View_Node{kind = .Column})
+		testing.expectf(t, err == .None, "add at depth %d failed", depth)
 		parent = index
 	}
 	result, ok := view_validate(view_of(&doc))
@@ -357,7 +357,7 @@ test_doc_set_label_changes_only_that_field :: proc(t: ^testing.T) {
 	root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
 	node, _ := doc_add_keyed(&doc, root, .Button, "save", "Save")
 	before := doc.nodes[node]
-	testing.expect(t, doc_set_label(&doc, node, "Save changes"), "set failed")
+	testing.expect(t, doc_set_label(&doc, node, "Save changes") == .None, "set failed")
 	after := doc.nodes[node]
 	source := view_of(&doc)
 	testing.expect_value(
@@ -381,8 +381,8 @@ test_doc_set_noop_does_not_grow_the_blob :: proc(t: ^testing.T) {
 	// An editor compares and writes back every frame; sixty no-op sets a second
 	// must not consume the blob.
 	for _ in 0 ..< 100 {
-		testing.expect(t, doc_set_label(&doc, node, "Save"), "no-op set failed")
-		testing.expect(t, doc_set_key(&doc, node, "save"), "no-op set failed")
+		testing.expect(t, doc_set_label(&doc, node, "Save") == .None, "no-op set failed")
+		testing.expect(t, doc_set_key(&doc, node, "save") == .None, "no-op set failed")
 	}
 	testing.expect_value(t, doc.text_len, before)
 }
@@ -391,8 +391,8 @@ test_doc_set_noop_does_not_grow_the_blob :: proc(t: ^testing.T) {
 test_doc_set_rejects_bad_node :: proc(t: ^testing.T) {
 	doc: View_Doc
 	doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
-	testing.expect(t, !doc_set_label(&doc, -1, "x"), "negative index accepted")
-	testing.expect(t, !doc_set_label(&doc, 5, "x"), "out-of-range index accepted")
+	testing.expect_value(t, doc_set_label(&doc, -1, "x"), Build_Error.Node_Out_Of_Range)
+	testing.expect_value(t, doc_set_label(&doc, 5, "x"), Build_Error.Node_Out_Of_Range)
 }
 
 @(test)
@@ -406,7 +406,7 @@ test_doc_text_compact_preserves_strings_and_shrinks :: proc(t: ^testing.T) {
 	// Churn the labels so the blob accumulates garbage.
 	for round in 0 ..< 40 {
 		label := round % 2 == 0 ? "First edited" : "First"
-		testing.expect(t, doc_set_label(&doc, a, label), "set failed")
+		testing.expect(t, doc_set_label(&doc, a, label) == .None, "set failed")
 	}
 	grown := doc.text_len
 	testing.expect(t, grown > 40, "churn did not grow the blob")
@@ -437,10 +437,10 @@ test_doc_edit_session_cannot_exhaust_the_blob :: proc(t: ^testing.T) {
 	for round in 0 ..< 5000 {
 		length := 8 + round % 40
 		for i in 0 ..< length do buffer[i] = u8('a' + (round + i) % 26)
-		ok := doc_set_label(&doc, node, string(buffer[:length]))
+		ok := doc_set_label(&doc, node, string(buffer[:length])) == .None
 		if !ok {
 			doc_text_compact(&doc)
-			ok = doc_set_label(&doc, node, string(buffer[:length]))
+			ok = doc_set_label(&doc, node, string(buffer[:length])) == .None
 		}
 		testing.expectf(t, ok, "edit %d failed even after compaction", round)
 		if doc.text_len > VIEW_TEXT_BYTES_MAX * 3 / 4 do doc_text_compact(&doc)

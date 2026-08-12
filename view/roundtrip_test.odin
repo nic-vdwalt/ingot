@@ -348,8 +348,8 @@ build_random_document :: proc(doc: ^View_Doc, rng: ^testx.Prng) {
 		key := KEYS[index % len(KEYS)]
 		if open < VIEW_DEPTH_MAX - 1 && testx.int_range(rng, 0, 4) == 0 {
 			kind := CONTAINER_KINDS[testx.int_range(rng, 0, len(CONTAINER_KINDS))]
-			child, ok := doc_add_keyed(doc, parent, kind, key, "", View_Node{gap = .SM})
-			if !ok do break
+			child, err := doc_add_keyed(doc, parent, kind, key, "", View_Node{gap = .SM})
+			if err != .None do break
 			containers[open] = child
 			open += 1
 			continue

@@ -353,7 +353,6 @@ slider_at :: proc(
 ) {
 	assert(value != nil, "slider: nil value")
 	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
-	old := value^
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	mouse := frame_to_local(frame, get_mouse_position(frame))
 	press := frame_to_local(frame, frame.interaction.press_pos)
@@ -365,16 +364,86 @@ slider_at :: proc(
 	hovered := it.hovered
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
 	if hovered do request_cursor(frame, .POINTING_HAND)
+	return slider_resolve_and_paint(
+		frame,
+		rect,
+		value,
+		lo,
+		hi,
+		step,
+		focus,
+		a11y_label,
+		widget,
+		it.pressed || dragging,
+		mouse.x,
+		hovered || focus_opt_focused(focus),
+	)
+}
 
+slider_at_state :: proc(
+	frame: ^Ui_Frame,
+	state: ^Slider_State,
+	rect: Rect_I32,
+	value: ^f32,
+	lo, hi: f32,
+	step: f32 = 0,
+	focus: Focus_Opt = {},
+	a11y_label: string = "",
+	widget: Widget_Id = WIDGET_ID_NONE,
+) -> bool {
+	assert(state != nil && value != nil, "slider_at_state: nil state or value")
+	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
+	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+	mouse := frame_to_local(frame, get_mouse_position(frame))
+	it := interact(frame, rrect, &state.dragging)
+	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	if it.hovered do request_cursor(frame, .POINTING_HAND)
+	return slider_resolve_and_paint(
+		frame,
+		rect,
+		value,
+		lo,
+		hi,
+		step,
+		focus,
+		a11y_label,
+		widget,
+		it.held,
+		mouse.x,
+		it.hovered || state.dragging || focus_opt_focused(focus),
+	)
+}
+
+// slider_resolve_and_paint is the shared tail of slider_at and
+// slider_at_state: pointer/keyboard value resolution, clamping, painting, the
+// focus ring, and the semantic node. The two entry points differ only in how
+// they source interaction (press-rect drag vs caller-owned drag state), so
+// they compute apply_pointer and knob_active and delegate everything else.
+@(private = "file")
+slider_resolve_and_paint :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	value: ^f32,
+	lo, hi, step: f32,
+	focus: Focus_Opt,
+	a11y_label: string,
+	widget: Widget_Id,
+	apply_pointer: bool,
+	mouse_x: f32,
+	knob_active: bool,
+) -> (
+	changed: bool,
+) {
+	assert(value != nil, "slider_resolve_and_paint: nil value")
+	old := value^
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	knob_r := metrics.SLIDER_KNOB_R
 	track_x := f32(rect.x) + knob_r
-	track_w := f32(rect.w) - knob_r * 2
-	if track_w < 1 do track_w = 1
+	track_w := max(f32(rect.w) - knob_r * 2, 1)
 
-	if it.pressed || dragging {
-		t := clamp((mouse.x - track_x) / track_w, 0, 1)
+	if apply_pointer {
+		t := clamp((mouse_x - track_x) / track_w, 0, 1)
 		value^ = slider_step_value(lo, hi, step, t)
 	}
 	if focus_opt_focused(focus) {
@@ -398,81 +467,13 @@ slider_at :: proc(
 		draw_rounded_fill(frame, {track_x, cy - th / 2, fill_w, th}, .Pill, style.fg_accent)
 	}
 	knob_x := track_x + track_w * frac
-	knob_col := style.fg_accent if hovered || focus_opt_focused(focus) else style.fg_secondary
+	knob_col := style.fg_accent if knob_active else style.fg_secondary
 	draw_circle_v(frame, {knob_x, cy}, knob_r, style.bg_input)
 	draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
 	draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)
 	if focus_opt_focused(focus) {
 		draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 	}
-	semantic_push(
-		frame,
-		.Slider,
-		rect,
-		a11y_label,
-		{},
-		focus,
-		value = value^,
-		lo = lo,
-		hi = hi,
-		widget = widget,
-	)
-	return value^ != old
-}
-
-slider_at_state :: proc(
-	frame: ^Ui_Frame,
-	state: ^Slider_State,
-	rect: Rect_I32,
-	value: ^f32,
-	lo, hi: f32,
-	step: f32 = 0,
-	focus: Focus_Opt = {},
-	a11y_label: string = "",
-	widget: Widget_Id = WIDGET_ID_NONE,
-) -> bool {
-	assert(state != nil && value != nil, "slider_at_state: nil state or value")
-	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
-	old := value^
-	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	mouse := frame_to_local(frame, get_mouse_position(frame))
-	it := interact(frame, rrect, &state.dragging)
-	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
-	if it.hovered do request_cursor(frame, .POINTING_HAND)
-	metrics := ui_frame_metrics(frame)
-	style := ui_frame_theme(frame)
-	knob_r := metrics.SLIDER_KNOB_R
-	track_x := f32(rect.x) + knob_r
-	track_w := max(f32(rect.w) - knob_r * 2, 1)
-	if it.held {
-		t := clamp((mouse.x - track_x) / track_w, 0, 1)
-		value^ = slider_step_value(lo, hi, step, t)
-	}
-	if focus_opt_focused(focus) {
-		d := slider_keyboard_delta(lo, hi, step)
-		if is_key_pressed(frame, .LEFT) || is_key_pressed_repeat(frame, .LEFT) {
-			value^ = clamp(value^ - d, lo, hi)
-		}
-		if is_key_pressed(frame, .RIGHT) || is_key_pressed_repeat(frame, .RIGHT) {
-			value^ = clamp(value^ + d, lo, hi)
-		}
-	}
-	value^ = clamp(value^, lo, hi)
-	cy := f32(rect.y) + f32(rect.h) / 2
-	th := f32(metrics.SLIDER_TRACK_H)
-	draw_rounded_fill(frame, {track_x, cy - th / 2, track_w, th}, .Pill, style.bg_active)
-	frac := (value^ - lo) / (hi - lo)
-	fill_w := track_w * frac
-	if fill_w > 0 {
-		draw_rounded_fill(frame, {track_x, cy - th / 2, fill_w, th}, .Pill, style.fg_accent)
-	}
-	knob_x := track_x + track_w * frac
-	active := it.hovered || state.dragging || focus_opt_focused(focus)
-	knob_col := style.fg_accent if active else style.fg_secondary
-	draw_circle_v(frame, {knob_x, cy}, knob_r, style.bg_input)
-	draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
-	draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)
-	if focus_opt_focused(focus) do draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 	semantic_push(
 		frame,
 		.Slider,
