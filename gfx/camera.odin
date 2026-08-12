@@ -29,21 +29,41 @@ cam3d_fwd: Vector3
 @(private)
 cam3d_projection_available: bool
 
+CAMERA_DEFAULT_NEAR_PLANE :: f32(0.01)
+CAMERA_DEFAULT_FAR_PLANE :: f32(1000.0)
+
+// _camera_clip_planes resolves the camera's clip planes, substituting the
+// historical defaults for zero fields so zero-initialised cameras keep their
+// long-standing behaviour.
+@(private)
+_camera_clip_planes :: proc(camera: Camera3D) -> (f32, f32) {
+	near := camera.near_plane
+	far := camera.far_plane
+	if near == 0 do near = CAMERA_DEFAULT_NEAR_PLANE
+	if far == 0 do far = CAMERA_DEFAULT_FAR_PLANE
+	assert(_f32_is_finite(near), "camera: non-finite near plane")
+	assert(_f32_is_finite(far), "camera: non-finite far plane")
+	assert(near > 0, "camera: non-positive near plane")
+	assert(far > near, "camera: far plane not beyond near plane")
+	return near, far
+}
+
 @(private)
 _camera_matrices :: proc(camera: Camera3D, width, height: i32) -> (Matrix, Matrix, Matrix) {
 	aspect := f32(max(width, 1)) / f32(max(height, 1))
 	view := linalg.matrix4_look_at_f32(camera.position, camera.target, camera.up)
+	near, far := _camera_clip_planes(camera)
 	projection: Matrix
 	if camera.projection == .ORTHOGRAPHIC {
 		top := camera.fovy / 2.0
 		right := top * aspect
-		projection = linalg.matrix_ortho3d_f32(-right, right, -top, top, 0.01, 1000.0)
+		projection = linalg.matrix_ortho3d_f32(-right, right, -top, top, near, far)
 	} else {
 		projection = linalg.matrix4_perspective_f32(
 			camera.fovy * math.PI / 180.0,
 			aspect,
-			0.01,
-			1000.0,
+			near,
+			far,
 		)
 	}
 	return view, projection, projection * view

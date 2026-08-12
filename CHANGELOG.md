@@ -11,6 +11,15 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `ui.layer_begin`/`ui.layer_end`: the single raised-surface primitive. One
+  call couples input occlusion (an optional claim rect), paint order (the z
+  tier), and coordinates (the pane origin is zeroed, so every ordinary `draw_*`
+  call inside a layer emits screen space). Popups, modals, tooltips, toasts,
+  comboboxes, the date picker, chart hover cards, and the spell menu all run on
+  layers now; a modal opened from inside a pane is no longer double-translated.
+- `ui.draw_text_string`: string draw with soft backend-font fallback, the
+  layer-friendly twin of `overlay_text`, so headless tests can paint text
+  without a text backend.
 - `gfx.Orbit_Camera_Bindings.drag_modifier` and `.pan_button`, with
   `gfx.orbit_camera_pointer_intent`: a bound modifier key gates drag-rotation
   and a distinct pan-button role marks grab-pan intent, so MOBA/RTS schemes
@@ -49,6 +58,17 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - `ui.route_block_z`, `ui.route_block_z_in`, and `ui.Z_NONE`: report the highest
   z claiming a point rather than a yes/no answer relative to one depth.
   `route_occluded_in` is now derived from it, so the two cannot disagree.
+
+### Deprecated
+
+- The `ui.overlay_*` group (`overlay_begin/end`, `overlay_rect`,
+  `overlay_rect_lines`, `overlay_rounded`, `overlay_rounded_lines`,
+  `overlay_line`, `overlay_text`, `overlay_text_str`): thin wrappers over
+  `layer_begin`/`layer_end` + `draw_*` for one release, then removed. Passive
+  groups now open a z scope, so a passive overlay opened below an already-open
+  higher scope traps instead of silently painting out of order.
+  `overlay_dropped` now reports the overlay list's `dropped_commands` counter;
+  text overflow is counted in `dropped_text_bytes`.
 
 ### Changed
 

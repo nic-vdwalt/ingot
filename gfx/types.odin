@@ -125,6 +125,14 @@ Camera3D :: struct {
 	up:         Vector3,
 	fovy:       f32,
 	projection: CameraProjection,
+	// Optional clip planes: zero keeps the historical 0.01/1000 defaults so
+	// zero-initialised cameras behave as before. Perspective depth precision
+	// is dominated by the near plane - with near=0.01 a Depth24Plus buffer
+	// quantises to meter scale a few hundred units out - so a viewpoint that
+	// never approaches geometry (RTS, flyover) should raise near_plane toward
+	// its closest approach distance.
+	near_plane: f32,
+	far_plane:  f32,
 }
 Camera :: Camera3D
 

@@ -141,7 +141,7 @@ overlay_rounded_fill :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius, 
 	assert(frame != nil, "overlay_rounded_fill: nil frame")
 	if rect.width <= 0 || rect.height <= 0 || color.a == 0 do return
 	radius_px := radius_pixels(frame, radius, min(rect.width, rect.height))
-	overlay_rounded(
+	draw_rectangle_rounded(
 		frame,
 		rect,
 		radius_ratio(frame, radius, rect),
@@ -160,7 +160,7 @@ overlay_rounded_border :: proc(
 	assert(frame != nil, "overlay_rounded_border: nil frame")
 	if rect.width <= 0 || rect.height <= 0 || border == .None || color.a == 0 do return
 	radius_px := radius_pixels(frame, radius, min(rect.width, rect.height))
-	overlay_rounded_lines(
+	draw_rectangle_rounded_lines_ex(
 		frame,
 		rect,
 		radius_ratio(frame, radius, rect),

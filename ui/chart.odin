@@ -421,14 +421,14 @@ chart_draw_tooltip :: proc(
 	)
 	rect := frame_rect_to_screen(frame, {f32(tx), f32(ty), f32(tw), f32(th)})
 	sx, sy := i32(rect.x), i32(rect.y)
-	overlay_begin(frame, rect, claim_input = false, z = Z_TOOLTIP)
+	layer_begin(frame, Z_TOOLTIP)
 	overlay_rounded_fill(frame, rect, .MD, style.bg_popup)
 	overlay_rounded_border(frame, rect, .MD, .Hairline, style.border_color)
 
 	// Draw pass.
 	ry := sy + pad
 	if has_header {
-		overlay_text(
+		draw_text_string(
 			frame,
 			opts.labels[idx],
 			sx + pad,
@@ -449,7 +449,7 @@ chart_draw_tooltip :: proc(
 		)
 		val := chart_format_value(opts, s.values[idx], buf[:])
 		name := s.name if len(s.name) > 0 else fmt.tprintf("series %d", si + 1)
-		overlay_text(
+		draw_text_string(
 			frame,
 			fmt.tprintf("%s: %s", name, val),
 			sx + pad + sw + ui_frame_sc(frame, 5),
@@ -459,7 +459,7 @@ chart_draw_tooltip :: proc(
 		)
 		ry += row_h
 	}
-	overlay_end(frame)
+	layer_end(frame)
 }
 
 // chart_point_y maps a value to its animated pixel y: during the enter

@@ -161,6 +161,16 @@ draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color:
 	draw_cstring_command(frame, text, x, y, size, color, font)
 }
 
+// draw_text_string is the layer-friendly string draw: it resolves the backend
+// font when one exists and falls back to Font_Id(0) otherwise, so headless
+// tests can paint text without a text backend.
+draw_text_string :: proc(frame: ^Ui_Frame, text: string, x, y, size: i32, color: Color) {
+	assert(frame != nil, "draw_text_string: nil frame")
+	assert(size > 0, "draw_text_string: invalid size")
+	font := frame_font_for_size(frame, size)
+	draw_text_command(frame, text, x, y, size, color, font)
+}
+
 // draw_text_string_frame is draw_text_frame for string labels: it skips the
 // cstring clone the cstring entry point would otherwise force on callers.
 draw_text_string_frame :: proc(frame: ^Ui_Frame, text: string, x, y, size: i32, color: Color) {

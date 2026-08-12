@@ -208,6 +208,8 @@ Date_Picker_Popup_Layout :: struct {
 	cell:     i32,
 	pad:      i32,
 	header_h: i32,
+	// Screen-space y of the day grid: popup drawing happens inside a layer,
+	// where the pane origin is zero and all coordinates are screen space.
 	grid_y:   f32,
 }
 
@@ -237,7 +239,7 @@ date_picker_popup_layout :: proc(
 		cell,
 		metrics.PADDING,
 		header_h,
-		local.y + f32(metrics.PADDING + header_h + cell),
+		screen.y + f32(metrics.PADDING + header_h + cell),
 	}
 }
 
@@ -250,7 +252,7 @@ date_picker_popup_weekdays :: proc(frame: ^Ui_Frame, layout: Date_Picker_Popup_L
 	row_y := layout.screen.y + f32(layout.pad + layout.header_h)
 	for name, column in weekdays {
 		name_w := text_width(frame, name, .Label)
-		overlay_text(
+		draw_text_string(
 			frame,
 			name,
 			i32(layout.screen.x) +
@@ -264,7 +266,7 @@ date_picker_popup_weekdays :: proc(frame: ^Ui_Frame, layout: Date_Picker_Popup_L
 	}
 }
 
-// date_picker_popup records the calendar panel on the overlay layer: month
+// date_picker_popup records the calendar panel on a popup layer: month
 // header with prev/next, weekday labels, and the day grid. Returns true when
 // a day was chosen (which also closes the popup).
 @(private = "file")
@@ -290,13 +292,14 @@ date_picker_popup :: proc(
 	st.just_opened = false
 
 	style := ui_frame_theme(frame)
-	overlay_begin(frame, layout.screen, claim_input = true)
-	overlay_rect(frame, layout.screen, style.bg_popup)
-	overlay_rect_lines(frame, layout.screen, ui_frame_scf(frame, 1), style.border_color)
-	date_picker_popup_header(frame, st, layout, mouse, pressed)
+	mouse_screen := get_mouse_position(frame)
+	layer_begin(frame, Z_POPUP, claim = layout.screen)
+	draw_rectangle_rec(frame, layout.screen, style.bg_popup)
+	draw_rectangle_lines_ex(frame, layout.screen, ui_frame_scf(frame, 1), style.border_color)
+	date_picker_popup_header(frame, st, layout, mouse_screen, pressed)
 	date_picker_popup_weekdays(frame, layout)
-	changed = date_picker_days(frame, st, value, layout, mouse, pressed)
-	overlay_end(frame)
+	changed = date_picker_days(frame, st, value, layout, mouse_screen, pressed)
+	layer_end(frame)
 	return changed
 }
 
@@ -316,13 +319,13 @@ date_picker_popup_header :: proc(
 	style := ui_frame_theme(frame)
 	nav_w := ui_frame_sc(frame, 26)
 	prev_rect := Rectangle {
-		layout.local.x + f32(layout.pad),
-		layout.local.y + f32(layout.pad),
+		layout.screen.x + f32(layout.pad),
+		layout.screen.y + f32(layout.pad),
 		f32(nav_w),
 		f32(layout.header_h - ui_frame_sc(frame, 4)),
 	}
 	next_rect := prev_rect
-	next_rect.x = layout.local.x + layout.local.width - f32(layout.pad + nav_w)
+	next_rect.x = layout.screen.x + layout.screen.width - f32(layout.pad + nav_w)
 	if point_in_rect(mouse, prev_rect) {
 		request_cursor(frame, .POINTING_HAND)
 		if pressed do date_picker_shift_month(st, -1)
@@ -332,7 +335,7 @@ date_picker_popup_header :: proc(
 		if pressed do date_picker_shift_month(st, 1)
 	}
 	sx, sy := i32(layout.screen.x), i32(layout.screen.y)
-	overlay_text(
+	draw_text_string(
 		frame,
 		"\u2039",
 		sx + layout.pad + nav_w / 3,
@@ -340,7 +343,7 @@ date_picker_popup_header :: proc(
 		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
-	overlay_text(
+	draw_text_string(
 		frame,
 		"\u203A",
 		sx + i32(layout.screen.width) - layout.pad - nav_w * 2 / 3,
@@ -350,7 +353,7 @@ date_picker_popup_header :: proc(
 	)
 	title := fmt.tprintf("%s %d", CALENDAR_MONTH_NAMES[month_index], st.view_year)
 	title_w := text_width(frame, title, .Body)
-	overlay_text(
+	draw_text_string(
 		frame,
 		title,
 		sx + (i32(layout.screen.width) - title_w) / 2,
@@ -380,25 +383,24 @@ date_picker_days :: proc(
 	assert(day_count >= 28 && day_count <= 31, "date_picker_days: invalid day count")
 	for day in 1 ..= day_count {
 		slot := first_weekday + day - 1
-		cell_rect := Rectangle {
-			layout.local.x + f32(layout.pad + slot % 7 * layout.cell),
+		screen_cell := Rectangle {
+			layout.screen.x + f32(layout.pad + slot % 7 * layout.cell),
 			layout.grid_y + f32(slot / 7 * layout.cell),
 			f32(layout.cell),
 			f32(layout.cell),
 		}
-		screen_cell := frame_rect_to_screen(frame, cell_rect)
-		hovered := point_in_rect(mouse, cell_rect)
+		hovered := point_in_rect(mouse, screen_cell)
 		is_selected :=
 			value.day == day && value.month == st.view_month && value.year == st.view_year
 		if is_selected || hovered {
 			color := style.fg_accent if is_selected else style.bg_active
-			overlay_rect(frame, screen_cell, color)
+			draw_rectangle_rec(frame, screen_cell, color)
 		}
 		if hovered do request_cursor(frame, .POINTING_HAND)
 		day_text := fmt.tprintf("%d", day)
 		day_w := text_width(frame, day_text, .Label)
 		day_color := style.button_text if is_selected else style.fg_primary
-		overlay_text(
+		draw_text_string(
 			frame,
 			day_text,
 			i32(screen_cell.x) + (layout.cell - day_w) / 2,

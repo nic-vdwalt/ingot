@@ -6,77 +6,44 @@ MAX_OVERLAY_CMDS :: PAINT_COMMAND_CAP
 OVERLAY_TEXT_CAP :: PAINT_TEXT_CAP
 
 Overlay_State :: struct {
-	open:       bool,
-	dropped:    int,
-	// A claiming group opens a matching z scope so the surface's own widgets
-	// are not occluded by its own claim. Recorded so overlay_end closes exactly
-	// the scopes overlay_begin opened.
-	claimed:    bool,
-	// Tier to restore when a passive (non-claiming) group closes. Claiming
-	// groups restore through z_scope_end instead.
-	saved_tier: u8,
+	open: bool,
 }
 
-// overlay_begin opens the overlay paint group. When claim_input is set the rect
-// is claimed at `z` and an ambient z scope is opened at the same depth, so the
-// group's own widgets stay interactive while everything below `z` goes inert.
+// DEPRECATED: use layer_begin. overlay_begin survives one release as a thin
+// wrapper: a claiming group becomes a layer with a claim rect, a passive group
+// becomes a paint-only layer at the same z.
 overlay_begin :: proc(frame: ^Ui_Frame, rect: Rectangle, claim_input: bool, z: Z_Order = Z_POPUP) {
 	assert(frame != nil && frame.open, "overlay_begin: invalid frame")
 	assert(!frame.overlay.open, "overlay_begin: group already open")
 	assert(rect.width >= 0 && rect.height >= 0, "overlay_begin: negative rect")
-	assert(!frame.overlay.claimed, "overlay_begin: stale claim scope")
+	claim := claim_input ? rect : Rectangle{}
+	layer_begin(frame, z, claim)
 	frame.overlay.open = true
-	if claim_input {
-		route_claim(frame, rect, z)
-		z_scope_begin(frame, z)
-		frame.overlay.claimed = true
-	} else if frame.output != nil {
-		// Passive surfaces (tooltips, toasts) take no input but still paint at
-		// their declared tier, so a toast outlives a later-drawn popup visually.
-		frame.overlay.saved_tier = frame.output.overlay.current_tier
-		paint_list_set_tier(&frame.output.overlay, z_paint_tier(z))
-	}
 }
 
+// DEPRECATED: use layer_end.
 overlay_end :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "overlay_end: invalid frame")
 	assert(frame.overlay.open, "overlay_end: no group open")
-	if frame.overlay.claimed {
-		z_scope_end(frame)
-		frame.overlay.claimed = false
-	} else if frame.output != nil {
-		paint_list_set_tier(&frame.output.overlay, frame.overlay.saved_tier)
-	}
+	layer_end(frame)
 	frame.overlay.open = false
 }
 
-overlay_list :: proc(frame: ^Ui_Frame) -> ^Paint_List {
-	assert(frame != nil && frame.open, "overlay_list: invalid frame")
-	assert(frame.overlay.open, "overlay_list: group not open")
-	return frame_paint_list(frame, .Overlay)
-}
-
+// DEPRECATED: use draw_rectangle_rec inside a layer.
 overlay_rect :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
 	assert(frame != nil, "overlay_rect: nil frame")
-	command := Paint_Command {
-		kind  = .Rectangle,
-		rect  = rect,
-		color = color,
-	}
-	if !paint_push(overlay_list(frame), command) do frame.overlay.dropped += 1
+	assert(frame.overlay.open, "overlay_rect: group not open")
+	draw_rectangle_rec(frame, rect, color)
 }
 
+// DEPRECATED: use draw_rectangle_lines_ex inside a layer.
 overlay_rect_lines :: proc(frame: ^Ui_Frame, rect: Rectangle, thickness: f32, color: Color) {
 	assert(frame != nil, "overlay_rect_lines: nil frame")
-	command := Paint_Command {
-		kind      = .Rectangle_Outline,
-		rect      = rect,
-		thickness = thickness,
-		color     = color,
-	}
-	if !paint_push(overlay_list(frame), command) do frame.overlay.dropped += 1
+	assert(frame.overlay.open, "overlay_rect_lines: group not open")
+	draw_rectangle_lines_ex(frame, rect, thickness, color)
 }
 
+// DEPRECATED: use draw_rectangle_rounded inside a layer.
 overlay_rounded :: proc(
 	frame: ^Ui_Frame,
 	rect: Rectangle,
@@ -85,16 +52,11 @@ overlay_rounded :: proc(
 	color: Color,
 ) {
 	assert(frame != nil, "overlay_rounded: nil frame")
-	command := Paint_Command {
-		kind      = .Rectangle_Rounded,
-		rect      = rect,
-		roundness = roundness,
-		segments  = segments,
-		color     = color,
-	}
-	if !paint_push(overlay_list(frame), command) do frame.overlay.dropped += 1
+	assert(frame.overlay.open, "overlay_rounded: group not open")
+	draw_rectangle_rounded(frame, rect, roundness, segments, color)
 }
 
+// DEPRECATED: use draw_rectangle_rounded_lines_ex inside a layer.
 overlay_rounded_lines :: proc(
 	frame: ^Ui_Frame,
 	rect: Rectangle,
@@ -104,43 +66,22 @@ overlay_rounded_lines :: proc(
 	color: Color,
 ) {
 	assert(frame != nil, "overlay_rounded_lines: nil frame")
-	command := Paint_Command {
-		kind      = .Rectangle_Rounded_Outline,
-		rect      = rect,
-		roundness = roundness,
-		segments  = segments,
-		thickness = thickness,
-		color     = color,
-	}
-	if !paint_push(overlay_list(frame), command) do frame.overlay.dropped += 1
+	assert(frame.overlay.open, "overlay_rounded_lines: group not open")
+	draw_rectangle_rounded_lines_ex(frame, rect, roundness, segments, thickness, color)
 }
 
+// DEPRECATED: use draw_line_ex inside a layer.
 overlay_line :: proc(frame: ^Ui_Frame, p0, p1: Vector2, color: Color) {
 	assert(frame != nil, "overlay_line: nil frame")
-	command := Paint_Command {
-		kind      = .Line,
-		p0        = p0,
-		p1        = p1,
-		thickness = 1,
-		color     = color,
-	}
-	if !paint_push(overlay_list(frame), command) do frame.overlay.dropped += 1
+	assert(frame.overlay.open, "overlay_line: group not open")
+	draw_line_ex(frame, p0, p1, 1, color)
 }
 
+// DEPRECATED: use draw_text_string inside a layer.
 overlay_text :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, color: Color) {
 	assert(frame != nil, "overlay_text: nil frame")
-	font := Font_Id(0)
-	if text_backend_valid(frame.runtime.text_backend) {
-		font = text_backend_font(frame.runtime.text_backend, font_size)
-	}
-	command := Paint_Command {
-		kind      = .Text,
-		p0        = {f32(x), f32(y)},
-		font      = font,
-		font_size = f32(font_size),
-		color     = color,
-	}
-	if !paint_push_text(overlay_list(frame), command, text) do frame.overlay.dropped += 1
+	assert(frame.overlay.open, "overlay_text: group not open")
+	draw_text_string(frame, text, x, y, font_size, color)
 }
 
 overlay_cmd_count :: proc(frame: ^Ui_Frame) -> int {
@@ -148,9 +89,12 @@ overlay_cmd_count :: proc(frame: ^Ui_Frame) -> int {
 	return frame.output.overlay.count
 }
 
+// overlay_dropped reports commands the overlay list refused for capacity; text
+// overflow is counted separately in output.overlay.dropped_text_bytes.
 overlay_dropped :: proc(frame: ^Ui_Frame) -> int {
 	assert(frame != nil, "overlay_dropped: nil frame")
-	return frame.overlay.dropped
+	assert(frame.output != nil, "overlay_dropped: missing output")
+	return frame.output.overlay.dropped_commands
 }
 
 overlay_reset :: proc(frame: ^Ui_Frame) {
@@ -164,6 +108,7 @@ overlay_flush :: proc(frame: ^Ui_Frame) {
 	assert(!frame.overlay.open, "overlay_flush: group still open")
 }
 
+// DEPRECATED: use draw_text_string inside a layer.
 overlay_text_str :: proc(
 	frame: ^Ui_Frame,
 	sb: ^strings.Builder,

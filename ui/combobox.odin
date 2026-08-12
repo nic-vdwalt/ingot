@@ -209,11 +209,12 @@ combobox_popup :: proc(
 	}
 	st.just_opened = false
 
-	overlay_begin(frame, screen_rect, claim_input = true)
-	overlay_rect(frame, screen_rect, style.bg_popup)
-	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
+	mouse_screen := get_mouse_position(frame)
+	layer_begin(frame, Z_POPUP, claim = screen_rect)
+	draw_rectangle_rec(frame, screen_rect, style.bg_popup)
+	draw_rectangle_lines_ex(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
 	if len(visible) == 0 {
-		overlay_text(
+		draw_text_string(
 			frame,
 			"No matches",
 			sx + metrics.PADDING,
@@ -222,14 +223,13 @@ combobox_popup :: proc(
 			style.fg_secondary,
 		)
 	}
-	item_y := menu_rect.y + f32(metrics.MENU_PAD)
+	item_y := screen_rect.y + f32(metrics.MENU_PAD)
 	for index, row in visible {
 		item := items[index]
-		row_rect := Rectangle{menu_rect.x, item_y, f32(menu_w), f32(row_h)}
-		row_screen := frame_rect_to_screen(frame, row_rect)
-		hovered := point_in_rect(mouse, row_rect)
+		row_screen := Rectangle{screen_rect.x, item_y, f32(menu_w), f32(row_h)}
+		hovered := point_in_rect(mouse_screen, row_screen)
 		if hovered && mouse_moved(frame) do st.hover = row
-		if st.hover == row do overlay_rect(frame, row_screen, style.bg_active)
+		if st.hover == row do draw_rectangle_rec(frame, row_screen, style.bg_active)
 		if hovered do request_cursor(frame, .POINTING_HAND)
 		label := truncate_to_width_frame(
 			frame,
@@ -237,7 +237,7 @@ combobox_popup :: proc(
 			menu_w - metrics.PADDING * 2,
 			metrics.FONT_SIZE_BODY,
 		)
-		overlay_text(
+		draw_text_string(
 			frame,
 			label,
 			i32(row_screen.x) + metrics.PADDING,
@@ -262,6 +262,6 @@ combobox_popup :: proc(
 		}
 		item_y += f32(row_h)
 	}
-	overlay_end(frame)
+	layer_end(frame)
 	return changed
 }

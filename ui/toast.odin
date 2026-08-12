@@ -67,7 +67,7 @@ toast_tick :: proc(st: ^Toast_State, dt: f32) {
 }
 
 // toasts_draw ticks the queue with the frame's delta time and records the
-// visible toasts on the overlay layer, newest at the top.
+// visible toasts on a passive toast layer, newest at the top.
 toasts_draw :: proc(frame: ^Ui_Frame, st: ^Toast_State, screen: Rect_I32) {
 	assert(frame != nil, "toasts_draw: nil frame")
 	assert(st != nil, "toasts_draw: nil state")
@@ -93,10 +93,14 @@ toasts_draw :: proc(frame: ^Ui_Frame, st: ^Toast_State, screen: Rect_I32) {
 		case .Error:
 			accent = style.fg_error
 		}
-		overlay_begin(frame, rect, claim_input = false, z = Z_TOAST)
-		overlay_rect(frame, rect, style.bg_popup)
-		overlay_rect_lines(frame, rect, ui_frame_scf(frame, 1), style.border_subtle)
-		overlay_rect(frame, {rect.x, rect.y, f32(ui_frame_sc(frame, 3)), rect.height}, accent)
+		layer_begin(frame, Z_TOAST)
+		draw_rectangle_rec(frame, rect, style.bg_popup)
+		draw_rectangle_lines_ex(frame, rect, ui_frame_scf(frame, 1), style.border_subtle)
+		draw_rectangle_rec(
+			frame,
+			{rect.x, rect.y, f32(ui_frame_sc(frame, 3)), rect.height},
+			accent,
+		)
 		message := string(item.text[:item.text_len])
 		shown := truncate_to_width_frame(
 			frame,
@@ -104,7 +108,7 @@ toasts_draw :: proc(frame: ^Ui_Frame, st: ^Toast_State, screen: Rect_I32) {
 			width - metrics.PADDING * 2,
 			metrics.FONT_SIZE_BODY,
 		)
-		overlay_text(
+		draw_text_string(
 			frame,
 			shown,
 			x + metrics.PADDING,
@@ -112,7 +116,7 @@ toasts_draw :: proc(frame: ^Ui_Frame, st: ^Toast_State, screen: Rect_I32) {
 			metrics.FONT_SIZE_BODY,
 			style.fg_primary,
 		)
-		overlay_end(frame)
+		layer_end(frame)
 		semantic_push(frame, .Status, {x, y, width, height}, message)
 		y += height + gap
 	}
