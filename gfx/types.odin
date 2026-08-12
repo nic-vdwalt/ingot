@@ -153,11 +153,17 @@ Orbit_Camera_State :: struct {
 	distance: f32,
 }
 
+// Orbit_Camera_Input.pan is a world-space delta applied to the orbit target
+// each update. There is no default binding for it because computing a useful
+// pan (drag a grabbed ground point, edge scrolling, WASD in camera space)
+// needs application knowledge such as picking; callers fill it in after
+// orbit_camera_input_poll.
 Orbit_Camera_Input :: struct {
 	rotate_rate:  Vector2,
 	zoom_rate:    f32,
 	pointer_drag: Vector2,
 	scroll:       f32,
+	pan:          Vector3,
 }
 
 Orbit_Camera_Config :: struct {

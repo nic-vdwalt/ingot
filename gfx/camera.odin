@@ -235,6 +235,8 @@ update_orbit_camera :: proc(
 	assert(_f32_is_finite(input.pointer_drag.y), "update_orbit_camera: invalid drag input")
 	assert(_f32_is_finite(input.zoom_rate), "update_orbit_camera: invalid zoom input")
 	assert(_f32_is_finite(input.scroll), "update_orbit_camera: invalid scroll input")
+	assert(_camera_vector_is_finite(input.pan), "update_orbit_camera: invalid pan input")
+	state.target += input.pan
 	state.yaw += input.rotate_rate.x * config.rotate_speed * dt
 	state.yaw += input.pointer_drag.x * config.drag_radians_per_pixel
 	state.pitch += input.rotate_rate.y * config.rotate_speed * dt
@@ -243,8 +245,55 @@ update_orbit_camera :: proc(
 	state.distance += input.zoom_rate * config.zoom_speed * dt
 	state.distance -= input.scroll * config.scroll_distance
 	state.distance = clamp(state.distance, config.min_distance, config.max_distance)
+	assert(
+		_camera_vector_is_finite(state.target),
+		"update_orbit_camera: pan produced invalid target",
+	)
 	assert(_f32_is_finite(state.yaw) && _f32_is_finite(state.pitch))
 	assert(_f32_is_finite(state.distance) && state.distance > 0)
+}
+
+// orbit_camera_zoom_toward dollies the orbit toward a world-space focus point
+// instead of the orbit target: distance shrinks (or grows) exactly as plain
+// scroll zoom would, and the target slides toward the focus by the same
+// proportion, so with the camera direction unchanged the focus point keeps
+// its screen position. Callers typically pass the picked world point under
+// the cursor and fall back to plain scroll zoom when nothing is hit.
+orbit_camera_zoom_toward :: proc(
+	state: ^Orbit_Camera_State,
+	focus: Vector3,
+	scroll: f32,
+	config: Orbit_Camera_Config,
+) {
+	assert(state != nil, "orbit_camera_zoom_toward: nil state")
+	assert(_camera_vector_is_finite(state.target), "orbit_camera_zoom_toward: invalid target")
+	assert(_camera_vector_is_finite(focus), "orbit_camera_zoom_toward: invalid focus")
+	assert(_f32_is_finite(scroll), "orbit_camera_zoom_toward: invalid scroll")
+	assert(_f32_is_finite(state.distance) && state.distance > 0)
+	assert(config.min_distance > 0, "orbit_camera_zoom_toward: invalid minimum distance")
+	assert(
+		config.max_distance >= config.min_distance,
+		"orbit_camera_zoom_toward: invalid distance range",
+	)
+	if scroll == 0 do return
+	old_distance := state.distance
+	new_distance := clamp(
+		old_distance - scroll * config.scroll_distance,
+		config.min_distance,
+		config.max_distance,
+	)
+	if new_distance == old_distance do return
+	// Sliding the target by the fractional distance change keeps the ray from
+	// the camera through the focus fixed, which is what makes the point under
+	// the cursor appear stationary while zooming.
+	fraction := 1 - new_distance / old_distance
+	state.target += (focus - state.target) * fraction
+	state.distance = new_distance
+	assert(
+		_camera_vector_is_finite(state.target),
+		"orbit_camera_zoom_toward: produced invalid target",
+	)
+	assert(state.distance >= config.min_distance && state.distance <= config.max_distance)
 }
 
 orbit_camera_apply :: proc(state: Orbit_Camera_State, camera: ^Camera3D) {

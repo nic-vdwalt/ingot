@@ -14,6 +14,20 @@ import "core:math"
 import "core:strings"
 import "core:unicode/utf8"
 
+// Vertical padding above the first text line inside the box. Mouse
+// hit-testing and rendering must resolve this through one shared constant
+// (scaled per frame) or clicks map to the wrong row at UI scales other
+// than 1.
+@(private = "file")
+TI_PAD_TOP :: 6
+// Total vertical padding (top + bottom) a box spends around its text; the
+// visible line count is derived from the height that remains.
+@(private = "file")
+TI_PAD_VERT :: TI_PAD_TOP * 2
+// Inset of the single-line caret (and its IME rect) from the box edges.
+@(private = "file")
+TI_CARET_INSET :: 5
+
 
 // Range selection for a text input. `anchor` is where the selection started
 // (mouse press / shift origin) and `extent` is the moving end; both are byte
@@ -131,7 +145,10 @@ input_mouse_to_byte :: proc(
 	metrics := ui_frame_metrics(frame)
 	assert(len(vlines) > 0, "input_mouse_to_byte: empty visual lines")
 	assert(vis_start <= vis_end, "input_mouse_to_byte: inverted visible band")
-	row := vis_start + int((mouse.y - f32(y + 6)) / f32(metrics.LINE_HEIGHT))
+	// The same scaled padding the renderer offsets lines by; an unscaled
+	// literal here made clicks land one row off at non-1 UI scales.
+	pad := ui_frame_sc(frame, TI_PAD_TOP)
+	row := vis_start + int((mouse.y - f32(y + pad)) / f32(metrics.LINE_HEIGHT))
 	if row < vis_start do row = vis_start
 	if row > vis_end - 1 do row = vis_end - 1
 	if row < 0 do row = 0
@@ -292,6 +309,139 @@ input_vlines_memo_commit :: proc(
 // memo. Each logical line (split on '\n') is word-wrapped to inner_w; the
 // returned ranges are absolute byte offsets into `text`. Always returns at
 // least one (possibly empty) line.
+//
+// The wrap callee is threaded as a raw pointer + proc so the Text_System and
+// Ui_Frame entry points share one implementation (including the incremental
+// splice below) instead of drifting as line-for-line duplicates.
+@(private = "file")
+TI_Wrap_Fn :: #type proc(data: rawptr, logical: string, max_width, font_size: i32) -> []Wrap_Line
+
+@(private = "file")
+ti_wrap_with :: proc(data: rawptr, logical: string, max_width, font_size: i32) -> []Wrap_Line {
+	assert(data != nil, "ti_wrap_with: nil text system")
+	assert(font_size > 0, "ti_wrap_with: invalid font size")
+	return wrap_compute_with((^Text_System)(data), logical, max_width, font_size)
+}
+
+@(private = "file")
+ti_wrap_frame :: proc(data: rawptr, logical: string, max_width, font_size: i32) -> []Wrap_Line {
+	assert(data != nil, "ti_wrap_frame: nil frame")
+	assert(font_size > 0, "ti_wrap_frame: invalid font size")
+	return wrap_compute_frame((^Ui_Frame)(data), logical, max_width, font_size)
+}
+
+// input_vlines_wrap_region appends the soft-wrapped lines of text[lo:hi]
+// (split on '\n') to out, with byte ranges absolute into `text`.
+@(private = "file")
+input_vlines_wrap_region :: proc(
+	wrap_data: rawptr,
+	wrap_fn: TI_Wrap_Fn,
+	out: ^[dynamic]Wrap_Line,
+	text: string,
+	lo, hi: int,
+	inner_w, font_size: i32,
+) {
+	assert(wrap_fn != nil, "input_vlines_wrap_region: nil wrap fn")
+	assert(0 <= lo && lo <= hi && hi <= len(text), "input_vlines_wrap_region: bad region")
+	base := lo
+	for logical in strings.split(text[lo:hi], "\n", context.temp_allocator) {
+		// Uncached wrap: the memo already ensures this only runs when the
+		// text/width changed, and routing a large paste through the global
+		// wrap_text cache would evict the transcript's layouts.
+		for seg in wrap_fn(wrap_data, logical, inner_w, font_size) {
+			append(out, Wrap_Line{base + seg.start, base + seg.end})
+		}
+		base += len(logical) + 1 // +1 for the consumed '\n'
+	}
+}
+
+// input_vlines_incremental rewraps only the logical lines an edit touched,
+// reusing the memo's lines before and after the change. Wrapping is
+// context-free per logical line (each is wrapped in isolation), so splicing
+// is exact; the win is that typing in a large document re-measures one
+// logical line instead of all of them.
+@(private = "file")
+input_vlines_incremental :: proc(
+	wrap_data: rawptr,
+	wrap_fn: TI_Wrap_Fn,
+	memo: ^Input_Vlines_Memo,
+	text: string,
+	inner_w, font_size: i32,
+) -> []Wrap_Line {
+	assert(memo != nil, "input_vlines_incremental: nil memo")
+	assert(memo.valid && memo.owned, "input_vlines_incremental: cold memo")
+	assert(
+		memo.width == inner_w && memo.font_size == font_size,
+		"input_vlines_incremental: geometry changed",
+	)
+	old := memo.text
+	// Common prefix/suffix in bytes; the suffix may not overlap the prefix.
+	limit := min(len(old), len(text))
+	p := 0
+	for p < limit && old[p] == text[p] do p += 1
+	s := 0
+	for s < limit - p && old[len(old) - 1 - s] == text[len(text) - 1 - s] do s += 1
+	// Widen the changed region to whole logical lines. The bytes before `ls`
+	// and the trailing `s` bytes are identical in both strings, so line
+	// boundaries found in one hold in the other.
+	ls := strings.last_index_byte(text[:p], '\n') + 1
+	new_hi := len(text) - s
+	old_hi := len(old) - s
+	rel := strings.index_byte(text[new_hi:], '\n')
+	new_end := len(text) if rel < 0 else new_hi + rel
+	old_end := len(old) if rel < 0 else old_hi + rel
+	delta := len(text) - len(old)
+	vlines := make([dynamic]Wrap_Line, context.temp_allocator)
+	// Lines wholly before the changed logical line: their ranges end before
+	// the '\n' that precedes `ls`, so `end < ls` is an exact cut.
+	for vl in memo.val {
+		if vl.end >= ls do break
+		append(&vlines, vl)
+	}
+	input_vlines_wrap_region(wrap_data, wrap_fn, &vlines, text, ls, new_end, inner_w, font_size)
+	// Lines wholly after the changed region start past the '\n' at old_end;
+	// the shared suffix shifts by the edit's byte delta.
+	for vl in memo.val {
+		if vl.start <= old_end do continue
+		append(&vlines, Wrap_Line{vl.start + delta, vl.end + delta})
+	}
+	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
+	// Oracle: a splice producing out-of-bounds or backward ranges would
+	// corrupt every caret/selection mapping downstream.
+	prev := 0
+	for vl in vlines {
+		assert(vl.start >= prev && vl.start <= vl.end, "input_vlines_incremental: unordered")
+		assert(vl.end <= len(text), "input_vlines_incremental: out of bounds")
+		prev = vl.start
+	}
+	return vlines[:]
+}
+
+@(private = "file")
+input_vlines_memo_build :: proc(
+	wrap_data: rawptr,
+	wrap_fn: TI_Wrap_Fn,
+	memo: ^Input_Vlines_Memo,
+	text: string,
+	inner_w: i32,
+	font_size: i32,
+) -> []Wrap_Line {
+	assert(memo != nil, "input_vlines_memo_build: nil memo")
+	assert(inner_w >= 0 && font_size > 0, "input_vlines_memo_build: invalid dimensions")
+	if input_vlines_memo_matches(memo, text, inner_w, font_size) do return memo.val
+	// A warm memo whose geometry still matches means only the text changed:
+	// splice around the edit instead of rewrapping the whole document.
+	if memo.valid && memo.owned && memo.width == inner_w && memo.font_size == font_size {
+		spliced := input_vlines_incremental(wrap_data, wrap_fn, memo, text, inner_w, font_size)
+		return input_vlines_memo_commit(memo, text, inner_w, font_size, spliced)
+	}
+	vlines := make([dynamic]Wrap_Line, context.temp_allocator)
+	input_vlines_wrap_region(wrap_data, wrap_fn, &vlines, text, 0, len(text), inner_w, font_size)
+	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
+	// Persist copies so the memo survives the temp allocator reset.
+	return input_vlines_memo_commit(memo, text, inner_w, font_size, vlines[:])
+}
+
 input_visual_lines_memo_with :: proc(
 	system: ^Text_System,
 	memo: ^Input_Vlines_Memo,
@@ -301,22 +451,7 @@ input_visual_lines_memo_with :: proc(
 ) -> []Wrap_Line {
 	assert(system != nil, "input_visual_lines_memo: nil text system")
 	assert(memo != nil, "input_visual_lines_memo: nil memo")
-	assert(inner_w >= 0 && font_size > 0, "input_visual_lines_memo: invalid dimensions")
-	if input_vlines_memo_matches(memo, text, inner_w, font_size) do return memo.val
-	vlines := make([dynamic]Wrap_Line, context.temp_allocator)
-	base := 0
-	for logical in strings.split(text, "\n", context.temp_allocator) {
-		// Uncached wrap: the memo above already ensures this only runs when
-		// the text/width changed, and routing a large paste through the
-		// global wrap_text cache would evict the transcript's layouts.
-		for seg in wrap_compute_with(system, logical, inner_w, font_size) {
-			append(&vlines, Wrap_Line{base + seg.start, base + seg.end})
-		}
-		base += len(logical) + 1 // +1 for the consumed '\n'
-	}
-	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
-	// Persist copies so the memo survives the temp allocator reset.
-	return input_vlines_memo_commit(memo, text, inner_w, font_size, vlines[:])
+	return input_vlines_memo_build(system, ti_wrap_with, memo, text, inner_w, font_size)
 }
 
 input_visual_lines_memo_frame :: proc(
@@ -328,18 +463,7 @@ input_visual_lines_memo_frame :: proc(
 ) -> []Wrap_Line {
 	assert(frame != nil && frame.open, "input_visual_lines_memo_frame: invalid frame")
 	assert(memo != nil, "input_visual_lines_memo_frame: nil memo")
-	assert(inner_w >= 0 && font_size > 0, "input_visual_lines_memo_frame: invalid dimensions")
-	if input_vlines_memo_matches(memo, text, inner_w, font_size) do return memo.val
-	vlines := make([dynamic]Wrap_Line, context.temp_allocator)
-	base := 0
-	for logical in strings.split(text, "\n", context.temp_allocator) {
-		for seg in wrap_compute_frame(frame, logical, inner_w, font_size) {
-			append(&vlines, Wrap_Line{base + seg.start, base + seg.end})
-		}
-		base += len(logical) + 1
-	}
-	if len(vlines) == 0 do append(&vlines, Wrap_Line{0, 0})
-	return input_vlines_memo_commit(memo, text, inner_w, font_size, vlines[:])
+	return input_vlines_memo_build(frame, ti_wrap_frame, memo, text, inner_w, font_size)
 }
 
 // input_vlines_memo_destroy releases a memo's owned clones.
@@ -432,7 +556,7 @@ text_input_visible_lines :: proc(frame: ^Ui_Frame, height: i32) -> i32 {
 	assert(height > 0, "text_input_visible_lines: non-positive height")
 	metrics := ui_frame_metrics(frame)
 	assert(metrics.LINE_HEIGHT > 0, "text_input_visible_lines: non-positive line height")
-	return max(1, (height - ui_frame_sc(frame, 12)) / metrics.LINE_HEIGHT)
+	return max(1, (height - ui_frame_sc(frame, TI_PAD_VERT)) / metrics.LINE_HEIGHT)
 }
 
 // text_input_default_submit picks the Enter behaviour a box of this height
@@ -562,6 +686,7 @@ TI_Ctx :: struct {
 @(private = "file")
 TI_View :: struct {
 	vlines:        []Wrap_Line,
+	masked_text:   string, // per-frame star string for masked inputs
 	vis_start:     int,
 	vis_end:       int,
 	cur_vrow:      int,
@@ -689,20 +814,24 @@ ti_keys_select :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 			if ctx.caret do ctx.cursor^ = strings.builder_len(sb^)
 		}
 	}
-	// Copy (Cmd/Ctrl+C) - copies the selected range.
-	if mods && is_key_pressed(ctx.frame, .C) && ti_sel_owner(ctx) {
+	// Copy (Cmd/Ctrl+C) - copies the selected range. Masked (password)
+	// inputs never export plaintext, matching the semantic layer's masking.
+	if mods && is_key_pressed(ctx.frame, .C) && ti_sel_owner(ctx) && !ctx.masked {
 		s := strings.to_string(sb^)
 		lo, hi := sel_range(sel)
 		if lo < hi && hi <= len(s) {
 			platform_set_clipboard(&ctx.frame.output.platform, s[lo:hi])
 		}
 	}
-	// Cut (Cmd/Ctrl+X) - copies the selected range then deletes it.
+	// Cut (Cmd/Ctrl+X) - copies the selected range then deletes it. A masked
+	// input still deletes, but never populates the clipboard.
 	if mods && is_key_pressed(ctx.frame, .X) && ti_sel_owner(ctx) {
 		s := strings.to_string(sb^)
 		lo, hi := sel_range(sel)
 		if lo < hi && hi <= len(s) {
-			platform_set_clipboard(&ctx.frame.output.platform, s[lo:hi])
+			if !ctx.masked {
+				platform_set_clipboard(&ctx.frame.output.platform, s[lo:hi])
+			}
 			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
 			nc := selection_delete(sel, sb, ctx.pills)
 			if ctx.caret do ctx.cursor^ = nc
@@ -713,6 +842,44 @@ ti_keys_select :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 	   ctx.undo != nil &&
 	   (is_key_pressed(ctx.frame, .Z) || is_key_pressed_repeat(ctx.frame, .Z)) {
 		undo_apply(sel, ctx.undo, sb, ctx.cursor, ctx.pills, redo = shift)
+	}
+}
+
+// ti_budget_len is the builder length that survives the pending edit: an
+// owned selection is deleted before an insert, so its bytes don't count
+// against the byte budget.
+@(private = "file")
+ti_budget_len :: proc(ctx: ^TI_Ctx) -> int {
+	assert(ctx.sb != nil, "ti_budget_len: nil builder")
+	length := strings.builder_len(ctx.sb^)
+	if ti_sel_owner(ctx) {
+		lo, hi := sel_range(ctx.sel)
+		length -= hi - lo
+	}
+	assert(length >= 0, "ti_budget_len: negative budget")
+	return length
+}
+
+// ti_insert_text records one undo step, replaces any owned selection with
+// `insert`, and keeps mention pills in step. One shared helper because four
+// call sites used to duplicate this block and drift apart (the paste
+// byte-budget bug). Callers enforce the byte budget before calling.
+@(private = "file")
+ti_insert_text :: proc(ctx: ^TI_Ctx, insert: string, kind: Input_Edit_Kind) {
+	assert(ctx.sb != nil, "ti_insert_text: nil builder")
+	assert(len(insert) > 0, "ti_insert_text: empty insert")
+	sb := ctx.sb
+	undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, ti_sel_owner(ctx) ? .Other : kind)
+	if ti_sel_owner(ctx) {
+		nc := selection_delete(ctx.sel, sb, ctx.pills)
+		if ctx.caret do ctx.cursor^ = nc
+	}
+	if ctx.caret {
+		before := ctx.cursor^
+		ctx.cursor^ = caret_insert(sb, ctx.cursor^, insert)
+		if ctx.pills != nil do pills_shift_after_insert(ctx.pills, before, ctx.cursor^ - before)
+	} else {
+		strings.write_string(sb, insert)
 	}
 }
 
@@ -729,64 +896,39 @@ ti_keys_insert :: proc(ctx: ^TI_Ctx, mods: bool) {
 		if mods || (ctx.single_line && ch == '\n') do continue
 		if ctx.filter != nil && !ctx.filter(ch) do continue
 		buf, rune_size := utf8.encode_rune(ch)
-		selected_bytes := 0
-		if ti_sel_owner(ctx) {
-			lo, hi := sel_range(ctx.sel)
-			selected_bytes = hi - lo
-		}
-		if strings.builder_len(sb^) - selected_bytes + rune_size > ctx.max_bytes do continue
+		if ti_budget_len(ctx) + rune_size > ctx.max_bytes do continue
 		// Typing over a selection replaces it (one undo step).
-		undo_record(
-			ctx.frame,
-			ctx.undo,
-			sb,
-			ctx.cursor,
-			ctx.pills,
-			ti_sel_owner(ctx) ? .Other : .Insert,
-		)
-		if ti_sel_owner(ctx) {
-			nc := selection_delete(ctx.sel, sb, ctx.pills)
-			if ctx.caret do ctx.cursor^ = nc
-		}
-		if ctx.caret {
-			before := ctx.cursor^
-			ctx.cursor^ = caret_insert(sb, ctx.cursor^, string(buf[:rune_size]))
-			if ctx.pills != nil do pills_shift_after_insert(ctx.pills, before, ctx.cursor^ - before)
-		} else {
-			strings.write_rune(sb, ch)
-		}
+		ti_insert_text(ctx, string(buf[:rune_size]), .Insert)
 	}
 	// Handle paste (Cmd+V / Ctrl+V).
 	if is_key_pressed(ctx.frame, .V) && mods {
 		clip_str := input_clipboard(frame_input(ctx.frame))
+		// Pasting over a selection deletes it first, so the byte budget is
+		// measured against the post-delete length - otherwise pasting over
+		// select-all in a nearly full buffer is wrongly truncated.
+		base_len := ti_budget_len(ctx)
 		paste := strings.builder_make(context.temp_allocator)
 		for ch in clip_str {
 			if ctx.single_line && ch == '\n' do continue
+			// Strip carriage returns so CRLF clipboard text pastes as LF.
+			if ch == '\r' do continue
 			if ctx.filter != nil && !ctx.filter(ch) do continue
 			_, rune_size := utf8.encode_rune(ch)
-			if strings.builder_len(sb^) + strings.builder_len(paste) + rune_size > ctx.max_bytes do break
+			if base_len + strings.builder_len(paste) + rune_size > ctx.max_bytes do break
 			strings.write_rune(&paste, ch)
 		}
 		paste_text := strings.to_string(paste)
 		if len(paste_text) > 0 {
-			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
-			if ti_sel_owner(ctx) {
-				nc := selection_delete(ctx.sel, sb, ctx.pills)
-				if ctx.caret do ctx.cursor^ = nc
-			}
-			if ctx.caret {
-				before := ctx.cursor^
-				ctx.cursor^ = caret_insert(sb, ctx.cursor^, paste_text)
-				if ctx.pills != nil do pills_shift_after_insert(ctx.pills, before, ctx.cursor^ - before)
-			} else {
-				strings.write_string(sb, paste_text)
-			}
+			ti_insert_text(ctx, paste_text, .Other)
+			assert(strings.builder_len(sb^) <= ctx.max_bytes, "ti_keys_insert: paste over budget")
 		}
 	}
 }
 
 // ti_keys_delete handles backspace and forward delete, including atomic
-// mention-pill removal.
+// mention-pill removal. Snapshots are only recorded when something will
+// actually change: a snapshot for a no-op delete makes one Cmd+Z appear to
+// do nothing.
 @(private = "file")
 ti_keys_delete :: proc(ctx: ^TI_Ctx) {
 	assert(ctx.sb != nil, "ti_keys_delete: nil builder")
@@ -799,31 +941,29 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx) {
 			nc := selection_delete(ctx.sel, sb, ctx.pills)
 			if ctx.caret do ctx.cursor^ = nc
 		} else if ctx.caret {
-			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
-			if ctx.pills != nil {
-				if idx, ok := pill_ending_at(ctx.pills, ctx.cursor^); ok {
-					// Atomic: delete the whole pill range in one keystroke.
-					ctx.cursor^ = pill_delete_atomic(sb, ctx.pills, idx)
+			if ctx.cursor^ > 0 {
+				undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
+				if ctx.pills != nil {
+					if idx, ok := pill_ending_at(ctx.pills, ctx.cursor^); ok {
+						// Atomic: delete the whole pill range in one keystroke.
+						ctx.cursor^ = pill_delete_atomic(sb, ctx.pills, idx)
+					} else {
+						before := ctx.cursor^
+						ctx.cursor^ = caret_delete_prev(sb, ctx.cursor^)
+						pills_shift_after_delete(ctx.pills, ctx.cursor^, before - ctx.cursor^)
+					}
 				} else {
-					before := ctx.cursor^
 					ctx.cursor^ = caret_delete_prev(sb, ctx.cursor^)
-					pills_shift_after_delete(ctx.pills, ctx.cursor^, before - ctx.cursor^)
 				}
-			} else {
-				ctx.cursor^ = caret_delete_prev(sb, ctx.cursor^)
 			}
 		} else {
 			s := strings.to_string(sb^)
 			if len(s) > 0 {
 				undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
-				// Remove last rune.
-				last_rune_start := len(s)
-				for last_rune_start > 0 {
-					last_rune_start -= 1
-					if (s[last_rune_start] & 0xC0) != 0x80 do break
-				}
+				// Remove the last whole rune, not the last byte.
+				keep := caret_prev_rune(s, len(s))
 				strings.builder_reset(sb)
-				strings.write_string(sb, s[:last_rune_start])
+				strings.write_string(sb, s[:keep])
 			}
 		}
 	}
@@ -833,23 +973,24 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx) {
 		if ti_sel_owner(ctx) {
 			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
 			ctx.cursor^ = selection_delete(ctx.sel, sb, ctx.pills)
-		} else if ctx.pills != nil {
+		} else if ctx.cursor^ < strings.builder_len(sb^) {
 			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
-			if idx, ok := pill_starting_at(ctx.pills, ctx.cursor^); ok {
-				// Atomic: delete the whole pill range in one keystroke.
-				ctx.cursor^ = pill_delete_atomic(sb, ctx.pills, idx)
+			if ctx.pills != nil {
+				if idx, ok := pill_starting_at(ctx.pills, ctx.cursor^); ok {
+					// Atomic: delete the whole pill range in one keystroke.
+					ctx.cursor^ = pill_delete_atomic(sb, ctx.pills, idx)
+				} else {
+					old_len := strings.builder_len(sb^)
+					ctx.cursor^ = caret_delete_next(sb, ctx.cursor^)
+					pills_shift_after_delete(
+						ctx.pills,
+						ctx.cursor^,
+						old_len - strings.builder_len(sb^),
+					)
+				}
 			} else {
-				old_len := strings.builder_len(sb^)
 				ctx.cursor^ = caret_delete_next(sb, ctx.cursor^)
-				pills_shift_after_delete(
-					ctx.pills,
-					ctx.cursor^,
-					old_len - strings.builder_len(sb^),
-				)
 			}
-		} else {
-			undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
-			ctx.cursor^ = caret_delete_next(sb, ctx.cursor^)
 		}
 	}
 }
@@ -877,17 +1018,11 @@ ti_keys_enter :: proc(ctx: ^TI_Ctx) -> bool {
 	// swallowed Enter entirely would read as a broken text area.
 	newline := ctx.submit == .Never || shift_down
 	if !ctx.single_line && is_key_pressed(ctx.frame, .ENTER) && newline && !spelling {
-		undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Other)
-		if ti_sel_owner(ctx) {
-			nc := selection_delete(ctx.sel, sb, ctx.pills)
-			if ctx.caret do ctx.cursor^ = nc
-		}
-		if ctx.caret {
-			before := ctx.cursor^
-			ctx.cursor^ = caret_insert(sb, ctx.cursor^, "\n")
-			if ctx.pills != nil do pills_shift_after_insert(ctx.pills, before, ctx.cursor^ - before)
-		} else if strings.builder_len(sb^) < INPUT_MAX_LEN {
-			strings.write_byte(sb, '\n')
+		// The caret path clamps inside caret_insert; the legacy path obeys
+		// the same per-box byte budget as every other edit, not the global
+		// cap it used to check.
+		if ctx.caret || ti_budget_len(ctx) < ctx.max_bytes {
+			ti_insert_text(ctx, "\n", .Other)
 		}
 	}
 	return entered
@@ -998,7 +1133,12 @@ ti_layout :: proc(ctx: ^TI_Ctx, text: string) -> TI_View {
 	v.caret_render = ctx.caret && !ctx.masked
 	v.masked_caret = ctx.caret && ctx.masked
 	metrics := ui_frame_metrics(ctx.frame)
-	v.visible_lines = max(1, (ctx.h - ui_frame_sc(ctx.frame, 12)) / metrics.LINE_HEIGHT)
+	// Shared with text_input_visible_lines so behaviour (Enter semantics)
+	// and rendering can never disagree about a box's line count.
+	v.visible_lines = text_input_visible_lines(ctx.frame, ctx.h)
+	// One star string per frame: the mouse, render, and caret paths all
+	// consume the same temp-allocated mask instead of rebuilding it.
+	if ctx.masked do v.masked_text = masked_display(text)
 	if !v.caret_render do return v
 	v.vlines = input_visual_lines_memo_frame(
 		ctx.frame,
@@ -1034,7 +1174,7 @@ ti_layout :: proc(ctx: ^TI_Ctx, text: string) -> TI_View {
 
 // ti_mouse_masked places the caret from a click in a masked (password) input.
 @(private = "file")
-ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string) {
+ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	assert(ctx != nil, "ti_mouse_masked: nil ctx")
 	assert(ctx.caret, "ti_mouse_masked: caret model required")
 	assert(ctx.masked, "ti_mouse_masked: masked input required")
@@ -1043,7 +1183,7 @@ ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string) {
 	if route_occluded(ctx.frame, mouse) do return
 	mouse = frame_to_local(ctx.frame, mouse)
 	if !point_in_rect(mouse, ctx.rect) do return
-	masked_text := masked_display(text)
+	masked_text := v.masked_text
 	masked_c := strings.clone_to_cstring(masked_text, context.temp_allocator)
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	masked_w := measure_text_frame(ctx.frame, masked_c, font_size)
@@ -1108,6 +1248,7 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	mouse := get_mouse_position(ctx.frame)
 	occluded := route_occluded(ctx.frame, mouse)
 	mouse = frame_to_local(ctx.frame, mouse)
+	moved := false
 	if is_mouse_button_pressed(ctx.frame, .LEFT) && !occluded {
 		if point_in_rect(mouse, ctx.rect) {
 			off := input_mouse_to_byte(
@@ -1122,6 +1263,7 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 			)
 			ti_click_count_update(sel, off, frame_input(ctx.frame).time)
 			ti_click_apply(ctx, text, off)
+			moved = true
 			if ctx.desired_col != nil {
 				_, c := caret_row_col(text, ctx.cursor^)
 				ctx.desired_col^ = c
@@ -1145,19 +1287,25 @@ ti_mouse_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 			sel.extent = off
 			sel.active = sel.anchor != sel.extent
 			ctx.cursor^ = off
+			moved = true
 		}
 	}
 	if sel.dragging && is_mouse_button_released(ctx.frame, .LEFT) {
 		sel.dragging = false
 		if sel.anchor == sel.extent do sel.active = false
 	}
-	v.cur_vrow, v.cur_caret_x = input_caret_visual_frame(
-		ctx.frame,
-		v.vlines,
-		text,
-		ctx.cursor^,
-		int(ui_frame_metrics(ctx.frame).FONT_SIZE_BODY),
-	)
+	// ti_layout already computed the caret's visual position this frame;
+	// recompute only when a click or drag actually moved it, so idle frames
+	// skip the second prefix measure.
+	if moved {
+		v.cur_vrow, v.cur_caret_x = input_caret_visual_frame(
+			ctx.frame,
+			v.vlines,
+			text,
+			ctx.cursor^,
+			int(ui_frame_metrics(ctx.frame).FONT_SIZE_BODY),
+		)
+	}
 }
 
 // ti_spell scans the composer for misspelled words (memoized) and opens the
@@ -1223,6 +1371,41 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 	return squiggles
 }
 
+// TI_Span_Px is one byte-range's resolved geometry on a visual line.
+@(private = "file")
+TI_Span_Px :: struct {
+	seg: cstring,
+	x:   i32,
+	w:   i32,
+}
+
+// ti_line_span_px measures the overlap of [lo,hi) with visual line `vl`
+// once, so the chip background, accent text, and squiggle passes reuse one
+// geometry instead of re-measuring the same prefixes per pass.
+@(private = "file")
+ti_line_span_px :: proc(
+	ctx: ^TI_Ctx,
+	text: string,
+	vl: Wrap_Line,
+	lo, hi: int,
+	font_size: i32,
+) -> (
+	span: TI_Span_Px,
+	ok: bool,
+) {
+	assert(ctx != nil, "ti_line_span_px: nil ctx")
+	assert(vl.start <= vl.end && vl.end <= len(text), "ti_line_span_px: bad line")
+	assert(lo <= hi, "ti_line_span_px: inverted span")
+	s := max(lo, vl.start)
+	e := min(hi, vl.end)
+	if s >= e do return {}, false
+	pre_c := strings.clone_to_cstring(text[vl.start:s], context.temp_allocator)
+	span.seg = strings.clone_to_cstring(text[s:e], context.temp_allocator)
+	span.x = ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
+	span.w = measure_text_frame(ctx.frame, span.seg, font_size)
+	return span, true
+}
+
 // ti_render_caret_lines draws the visible window of soft-wrapped lines with
 // selection highlight, pill chips, and spell squiggles.
 @(private = "file")
@@ -1240,64 +1423,43 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 	render_idx: i32 = 0
 	for vi := v.vis_start; vi < v.vis_end; vi += 1 {
 		vl := v.vlines[vi]
-		line := text[vl.start:vl.end]
-		line_c := strings.clone_to_cstring(line, context.temp_allocator)
-		line_y := ctx.y + ui_frame_sc(ctx.frame, 6) + render_idx * line_height
+		line_c := strings.clone_to_cstring(text[vl.start:vl.end], context.temp_allocator)
+		line_y := ctx.y + ui_frame_sc(ctx.frame, TI_PAD_TOP) + render_idx * line_height
 		// Selection highlight: overlap of this visual line with the range.
 		if sel.active && sel.sb == ctx.sb {
 			lo, hi := sel_range(sel)
-			hs := max(lo, vl.start)
-			he := min(hi, vl.end)
-			if hs < he {
-				pre_c := strings.clone_to_cstring(text[vl.start:hs], context.temp_allocator)
-				hx := ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
-				span_c := strings.clone_to_cstring(text[hs:he], context.temp_allocator)
-				hw := measure_text_frame(ctx.frame, span_c, font_size)
-				draw_rectangle(ctx.frame, hx, line_y, hw, font_size, style.bg_selection)
+			if hl, hl_ok := ti_line_span_px(ctx, text, vl, lo, hi, font_size); hl_ok {
+				draw_rectangle(ctx.frame, hl.x, line_y, hl.w, font_size, style.bg_selection)
 			}
 		}
-		// Pill backgrounds behind any mention chips on this visual line.
+		// Pill spans are measured once and reused for the chip background and
+		// the accent redraw (previously two identical measure passes).
+		pill_spans := make([dynamic]TI_Span_Px, context.temp_allocator)
 		if ctx.pills != nil {
 			for p in ctx.pills {
-				ps := max(p.start, vl.start)
-				pe := min(p.end, vl.end)
-				if ps >= pe do continue
-				pre_c := strings.clone_to_cstring(text[vl.start:ps], context.temp_allocator)
-				seg_c := strings.clone_to_cstring(text[ps:pe], context.temp_allocator)
-				px := ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
-				pw := measure_text_frame(ctx.frame, seg_c, font_size)
-				draw_input_pill_bg_frame(ctx.frame, px, line_y, pw)
+				if span, p_ok := ti_line_span_px(ctx, text, vl, p.start, p.end, font_size); p_ok {
+					append(&pill_spans, span)
+				}
 			}
+		}
+		for span in pill_spans {
+			draw_input_pill_bg_frame(ctx.frame, span.x, line_y, span.w)
 		}
 		draw_text_frame(ctx.frame, line_c, ctx.inner_x, line_y, font_size, style.fg_primary)
-		// Redraw pill substrings in the accent color over the chip bg.
-		if ctx.pills != nil {
-			for p in ctx.pills {
-				ps := max(p.start, vl.start)
-				pe := min(p.end, vl.end)
-				if ps >= pe do continue
-				pre_c := strings.clone_to_cstring(text[vl.start:ps], context.temp_allocator)
-				seg_c := strings.clone_to_cstring(text[ps:pe], context.temp_allocator)
-				px := ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
-				draw_text_frame(ctx.frame, seg_c, px, line_y, font_size, style.fg_accent)
-			}
+		for span in pill_spans {
+			draw_text_frame(ctx.frame, span.seg, span.x, line_y, font_size, style.fg_accent)
 		}
 		// Red squiggles under misspelled words on this visual line.
 		for r in squiggles {
-			rs := max(r.start, vl.start)
-			re := min(r.end, vl.end)
-			if rs >= re do continue
-			pre_c := strings.clone_to_cstring(text[vl.start:rs], context.temp_allocator)
-			seg_c := strings.clone_to_cstring(text[rs:re], context.temp_allocator)
-			sx := ctx.inner_x + measure_text_frame(ctx.frame, pre_c, font_size)
-			sw := measure_text_frame(ctx.frame, seg_c, font_size)
-			draw_squiggle(
-				ctx.frame,
-				sx,
-				line_y + font_size + ui_frame_sc(ctx.frame, 1),
-				sw,
-				ui_frame_theme(ctx.frame).spell_error,
-			)
+			if span, s_ok := ti_line_span_px(ctx, text, vl, r.start, r.end, font_size); s_ok {
+				draw_squiggle(
+					ctx.frame,
+					span.x,
+					line_y + font_size + ui_frame_sc(ctx.frame, 1),
+					span.w,
+					style.spell_error,
+				)
+			}
 		}
 		render_idx += 1
 	}
@@ -1321,7 +1483,7 @@ ti_render_multiline :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bo
 	for i := start_line; i < i32(len(lines)); i += 1 {
 		line := lines[i]
 		line_c := strings.clone_to_cstring(line, context.temp_allocator)
-		line_y := ctx.y + ui_frame_sc(ctx.frame, 6) + render_idx * line_height
+		line_y := ctx.y + ui_frame_sc(ctx.frame, TI_PAD_TOP) + render_idx * line_height
 		// Only the last line gets horizontal scrolling (cursor is at the end).
 		if i == i32(len(lines)) - 1 {
 			line_pixel_w := measure_text_frame(ctx.frame, line_c, font_size)
@@ -1355,14 +1517,14 @@ ti_render_multiline :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bo
 // ti_render_single draws the single-line (optionally masked) path with
 // horizontal end-scroll.
 @(private = "file")
-ti_render_single :: proc(ctx: ^TI_Ctx, text: string, sel_all: bool) {
+ti_render_single :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bool) {
 	assert(ctx != nil, "ti_render_single: nil ctx")
 	assert(len(text) > 0, "ti_render_single: empty text")
 	assert(ctx.inner_w >= 0, "ti_render_single: negative inner width")
 	metrics := ui_frame_metrics(ctx.frame)
 	style := ui_frame_theme(ctx.frame)
 	font_size := metrics.FONT_SIZE_BODY
-	display_text := masked_display(text) if ctx.masked else text
+	display_text := v.masked_text if ctx.masked else text
 	display_c := strings.clone_to_cstring(display_text, context.temp_allocator)
 	text_pixel_w := measure_text_frame(ctx.frame, display_c, font_size)
 	text_offset: i32 = 0
@@ -1418,7 +1580,9 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 		if v.cur_vrow >= v.vis_start && v.cur_vrow < v.vis_end {
 			cursor_x := ctx.inner_x + v.cur_caret_x
 			cursor_line_y :=
-				ctx.y + ui_frame_sc(ctx.frame, 6) + i32(v.cur_vrow - v.vis_start) * line_height
+				ctx.y +
+				ui_frame_sc(ctx.frame, TI_PAD_TOP) +
+				i32(v.cur_vrow - v.vis_start) * line_height
 			set_text_input_rect(ctx.frame, cursor_x, cursor_line_y, 1, font_size)
 			if blink_on {
 				draw_line(
@@ -1445,7 +1609,8 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 		}
 		cursor_x := ctx.inner_x + cursor_text_w - cursor_offset
 		visible_count := min(i32(len(lines)), v.visible_lines)
-		cursor_line_y := ctx.y + ui_frame_sc(ctx.frame, 6) + (visible_count - 1) * line_height
+		cursor_line_y :=
+			ctx.y + ui_frame_sc(ctx.frame, TI_PAD_TOP) + (visible_count - 1) * line_height
 		set_text_input_rect(ctx.frame, cursor_x, cursor_line_y, 1, font_size)
 		if blink_on {
 			draw_line(
@@ -1459,19 +1624,19 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 		}
 		return
 	}
-	ti_draw_caret_single(ctx, text, blink_on)
+	ti_draw_caret_single(ctx, text, v, blink_on)
 }
 
 // ti_draw_caret_single draws the caret for the single-line render path,
 // mapping the byte cursor through the (possibly masked) display string.
 @(private = "file")
-ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, blink_on: bool) {
+ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, blink_on: bool) {
 	assert(ctx != nil, "ti_draw_caret_single: nil ctx")
 	assert(ctx.active, "ti_draw_caret_single: input not active")
 	assert(ctx.h > 0, "ti_draw_caret_single: non-positive height")
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	style := ui_frame_theme(ctx.frame)
-	display_for_cursor := masked_display(text) if ctx.masked else text
+	display_for_cursor := v.masked_text if ctx.masked else text
 	cursor_text_w := measure_text_frame(
 		ctx.frame,
 		strings.clone_to_cstring(display_for_cursor, context.temp_allocator),
@@ -1498,9 +1663,11 @@ ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, blink_on: bool) {
 		font_size,
 	)
 	cursor_x := ctx.inner_x + cursor_prefix_w - cursor_offset
-	set_text_input_rect(ctx.frame, cursor_x, ctx.y + 5, 1, ctx.h - 10)
+	// The IME rect and the drawn caret share one scaled inset, or the
+	// candidate window drifts from the caret at UI scales other than 1.
+	inset := ui_frame_sc(ctx.frame, TI_CARET_INSET)
+	set_text_input_rect(ctx.frame, cursor_x, ctx.y + inset, 1, ctx.h - inset * 2)
 	if blink_on {
-		inset := ui_frame_sc(ctx.frame, 5)
 		draw_line(
 			ctx.frame,
 			cursor_x,
@@ -1565,7 +1732,7 @@ ti_render_content :: proc(
 	} else if view.has_newlines {
 		ti_render_multiline(ctx, text, view, ti_selection_is_all(ctx, len(text)))
 	} else {
-		ti_render_single(ctx, text, ti_selection_is_all(ctx, len(text)))
+		ti_render_single(ctx, text, view, ti_selection_is_all(ctx, len(text)))
 	}
 }
 
@@ -1576,7 +1743,7 @@ ti_draw_clipped :: proc(ctx: ^TI_Ctx) {
 	begin_pane_scissor(ctx.frame, ctx.inner_x, ctx.y, ctx.inner_w, ctx.h)
 	text := strings.to_string(ctx.sb^)
 	view := ti_layout(ctx, text)
-	if ctx.active && view.masked_caret do ti_mouse_masked(ctx, text)
+	if ctx.active && view.masked_caret do ti_mouse_masked(ctx, text, &view)
 	if ctx.active && view.caret_render do ti_mouse_caret(ctx, text, &view)
 	spell_squiggles: []Spell_Range
 	if ctx.active && view.caret_render && ctx.pills != nil && ctx.undo != nil {

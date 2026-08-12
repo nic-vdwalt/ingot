@@ -31,12 +31,16 @@ Input_Edit_Kind :: enum u8 {
 
 // Undo/redo stacks for the composer. A snapshot is taken before each edit
 // burst; consecutive same-kind edits within the coalesce window share one
-// snapshot so undo reverts runs of typing, not single keystrokes.
+// snapshot so undo reverts runs of typing, not single keystrokes. The window
+// is anchored at the group's first edit (`group_start_time`), not the most
+// recent one - a sliding anchor would fold minutes of steady typing into a
+// single undo step.
 Input_Undo :: struct {
-	undo:           [dynamic]Input_Snapshot,
-	redo:           [dynamic]Input_Snapshot,
-	last_edit_time: f64,
-	last_edit_kind: Input_Edit_Kind,
+	undo:             [dynamic]Input_Snapshot,
+	redo:             [dynamic]Input_Snapshot,
+	last_edit_time:   f64,
+	group_start_time: f64,
+	last_edit_kind:   Input_Edit_Kind,
 }
 
 INPUT_UNDO_MAX :: 100
@@ -73,22 +77,27 @@ input_undo_record :: proc(
 	now: f64,
 ) {
 	assert(u != nil, "input_undo_record: nil u")
+	assert(cursor >= 0, "input_undo_record: negative cursor")
 	for &s in u.redo do input_snapshot_destroy(&s)
 	clear(&u.redo)
+	// Coalesce against the group's start, so every group has a bounded
+	// duration: a keystroke landing past the window always snapshots, no
+	// matter how recent the previous keystroke was.
 	coalesce :=
 		kind != .Other &&
 		kind == u.last_edit_kind &&
-		now - u.last_edit_time < INPUT_UNDO_COALESCE_SECS &&
+		now - u.group_start_time < INPUT_UNDO_COALESCE_SECS &&
 		len(u.undo) > 0
 	u.last_edit_time = now
 	u.last_edit_kind = kind
 	if coalesce do return
 	if len(u.undo) >= INPUT_UNDO_MAX {
-		s := u.undo[0]
-		input_snapshot_destroy(&s)
+		input_snapshot_destroy(&u.undo[0])
 		ordered_remove(&u.undo, 0)
 	}
 	append(&u.undo, make_input_snapshot(text, cursor, pills))
+	u.group_start_time = now
+	assert(len(u.undo) <= INPUT_UNDO_MAX, "input_undo_record: stack over cap")
 }
 
 input_undo_reset :: proc(u: ^Input_Undo) {
@@ -98,6 +107,7 @@ input_undo_reset :: proc(u: ^Input_Undo) {
 	for &s in u.redo do input_snapshot_destroy(&s)
 	clear(&u.redo)
 	u.last_edit_kind = .None
+	u.group_start_time = 0
 }
 
 input_undo_destroy :: proc(u: ^Input_Undo) {
