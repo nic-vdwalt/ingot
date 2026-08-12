@@ -357,13 +357,7 @@ orbit_camera_grab_pan_end :: proc(pan: ^Orbit_Camera_Grab_Pan) {
 // anchor under the given cursor ray. The plane is horizontal at the anchor
 // height, which keeps the drag stable across ridges and valleys. Feed the
 // result to Orbit_Camera_Input.pan.
-orbit_camera_grab_pan_delta :: proc(
-	pan: Orbit_Camera_Grab_Pan,
-	ray: Ray_3D,
-) -> (
-	Vector3,
-	bool,
-) {
+orbit_camera_grab_pan_delta :: proc(pan: Orbit_Camera_Grab_Pan, ray: Ray_3D) -> (Vector3, bool) {
 	assert(_camera_vector_is_finite(pan.anchor), "orbit_camera_grab_pan_delta: invalid anchor")
 	if !pan.active do return {}, false
 	plane := Plane_3D {
