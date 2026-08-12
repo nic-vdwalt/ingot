@@ -8,6 +8,7 @@ package ui
 import "core:strings"
 import "core:testing"
 import "core:unicode/utf8"
+import "ingot:testx"
 
 @(private = "file")
 TI_CELL :: i32(10)
@@ -270,6 +271,7 @@ Ti_Key_Result :: struct {
 	text:      string,
 	cursor:    int,
 	submitted: bool,
+	undo_len:  int,
 }
 
 @(private = "file")
@@ -333,6 +335,7 @@ ti_key_frame :: proc(config: TI_Key_Frame) -> Ti_Key_Result {
 		strings.clone(strings.to_string(box.sb), context.temp_allocator),
 		box.st.cursor,
 		submitted,
+		len(box.st.undo.undo),
 	}
 }
 
@@ -581,4 +584,314 @@ text_input_masked_field_arms_the_caret_rect :: proc(t: ^testing.T) {
 text_input_inactive_field_leaves_the_caret_rect_alone :: proc(t: ^testing.T) {
 	testing.expect(t, !ti_text_input_active(false, false), "an unfocused field must not arm it")
 	testing.expect(t, !ti_text_input_active(true, false), "an unfocused field must not arm it")
+}
+
+// --- Undo snapshot hygiene ---------------------------------------------------
+//
+// A snapshot for an edit that changed nothing makes one Cmd+Z appear dead,
+// and a coalesce window that slides with every keystroke folds minutes of
+// typing into a single undo step. Both are pinned here.
+
+@(test)
+undo_coalesce_window_is_anchored_at_the_group_start :: proc(t: ^testing.T) {
+	u: Input_Undo
+	defer input_undo_destroy(&u)
+	// Keystrokes 0.9s apart: a sliding window would coalesce them forever.
+	input_undo_record(&u, "a", 1, nil, .Insert, 0.0)
+	input_undo_record(&u, "ab", 2, nil, .Insert, 0.9)
+	testing.expect_value(t, len(u.undo), 1)
+	input_undo_record(&u, "abc", 3, nil, .Insert, 1.8)
+	testing.expect_value(t, len(u.undo), 2)
+}
+
+@(test)
+text_input_noop_backspace_records_no_undo_snapshot :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = 0, key = .BACKSPACE, height = 30})
+	testing.expect_value(t, result.text, "abc")
+	testing.expect_value(t, result.undo_len, 0)
+}
+
+@(test)
+text_input_noop_forward_delete_records_no_undo_snapshot :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = -1, key = .DELETE, height = 30})
+	testing.expect_value(t, result.text, "abc")
+	testing.expect_value(t, result.undo_len, 0)
+}
+
+@(test)
+text_input_real_delete_records_one_undo_snapshot :: proc(t: ^testing.T) {
+	result := ti_key_frame({text = "abc", cursor = -1, key = .BACKSPACE, height = 30})
+	testing.expect_value(t, result.text, "ab")
+	testing.expect_value(t, result.undo_len, 1)
+}
+
+// --- Clipboard: copy / cut / paste -------------------------------------------
+//
+// ti_clip_frame drives one real frame with a clipboard modifier held, so the
+// copy, cut, and paste tests run the exact keyboard pipeline a user's
+// shortcut takes. Clipboard output is read before ui_frame_end, matching how
+// the platform layer consumes it.
+
+@(private = "file")
+TI_Clip_Frame :: struct {
+	text:      string, // initial buffer contents (caret parks at the end)
+	sel_lo:    int,
+	sel_hi:    int, // sel_hi > sel_lo pre-selects that range
+	key:       KeyboardKey,
+	masked:    bool,
+	clipboard: string, // pre-loaded clipboard (for paste)
+	max_bytes: int, // zero uses the default cap
+	height:    i32,
+}
+
+@(private = "file")
+Ti_Clip_Result :: struct {
+	text:            string,
+	clipboard_write: bool,
+	clipboard_text:  string,
+}
+
+@(private = "file")
+ti_clip_frame :: proc(config: TI_Clip_Frame) -> Ti_Clip_Result {
+	assert(config.height > 0, "ti_clip_frame: non-positive height")
+	assert(config.sel_lo <= config.sel_hi, "ti_clip_frame: inverted selection")
+	runtime := new(Ui_Runtime)
+	defer free(runtime)
+	ui_runtime_init(runtime)
+	defer ui_runtime_destroy(runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := new(Ui_Frame)
+	defer free(frame)
+	defer ui_frame_destroy(frame)
+	frame.output = output
+
+	input: Ui_Input
+	input.screen_size = {800, 600}
+	input.keys_down[input_key_index(.LEFT_CONTROL)] = true
+	input.keys_pressed[input_key_index(config.key)] = true
+	copy(input.clipboard[:], transmute([]u8)config.clipboard)
+	input.clipboard_len = len(config.clipboard)
+
+	sb := strings.builder_make()
+	defer strings.builder_destroy(&sb)
+	strings.write_string(&sb, config.text)
+	st: Text_Input_State
+	defer text_input_state_destroy(&st)
+	st.cursor = len(config.text)
+	if config.sel_hi > config.sel_lo {
+		text_input_selection_set(&st, &sb, config.sel_lo, config.sel_hi)
+	}
+
+	cfg := Text_Input_Config {
+		rect = {0, 0, 300, config.height},
+		placeholder = "field",
+		active = true,
+		masked = config.masked,
+		enable_undo = true,
+		max_bytes = config.max_bytes,
+		submit = .Never,
+		semantics = {name = "N"},
+	}
+	ui_frame_begin(frame, runtime, &input)
+	_ = text_input_box(frame, cfg, &sb, &st)
+	result := Ti_Clip_Result {
+		text            = strings.clone(strings.to_string(sb), context.temp_allocator),
+		clipboard_write = frame.output.platform.clipboard_write,
+	}
+	if result.clipboard_write {
+		plat := &frame.output.platform
+		result.clipboard_text = strings.clone(
+			string(plat.clipboard_text[:plat.clipboard_text_len]),
+			context.temp_allocator,
+		)
+	}
+	ui_frame_end(frame)
+	return result
+}
+
+@(test)
+text_input_copy_on_masked_field_leaves_clipboard_alone :: proc(t: ^testing.T) {
+	result := ti_clip_frame(
+		{text = "secret", sel_lo = 0, sel_hi = 6, key = .C, masked = true, height = 30},
+	)
+	testing.expect(t, !result.clipboard_write, "a password must never reach the clipboard")
+	testing.expect_value(t, result.text, "secret")
+}
+
+@(test)
+text_input_cut_on_masked_field_deletes_without_copying :: proc(t: ^testing.T) {
+	result := ti_clip_frame(
+		{text = "secret", sel_lo = 0, sel_hi = 6, key = .X, masked = true, height = 30},
+	)
+	testing.expect(t, !result.clipboard_write, "a password must never reach the clipboard")
+	testing.expect_value(t, result.text, "")
+}
+
+@(test)
+text_input_copy_and_cut_still_work_on_plain_fields :: proc(t: ^testing.T) {
+	copied := ti_clip_frame({text = "hello", sel_lo = 0, sel_hi = 5, key = .C, height = 30})
+	testing.expect(t, copied.clipboard_write, "copy must reach the clipboard")
+	testing.expect_value(t, copied.clipboard_text, "hello")
+	testing.expect_value(t, copied.text, "hello")
+	cut := ti_clip_frame({text = "hello", sel_lo = 0, sel_hi = 5, key = .X, height = 30})
+	testing.expect(t, cut.clipboard_write, "cut must reach the clipboard")
+	testing.expect_value(t, cut.clipboard_text, "hello")
+	testing.expect_value(t, cut.text, "")
+}
+
+@(test)
+text_input_paste_over_selection_budgets_after_the_delete :: proc(t: ^testing.T) {
+	// The buffer sits at max_bytes; the selection frees exactly the space
+	// the paste needs, so the paste must fully replace it.
+	result := ti_clip_frame(
+		{
+			text = "aaaaa",
+			sel_lo = 0,
+			sel_hi = 5,
+			key = .V,
+			clipboard = "bbbbb",
+			max_bytes = 5,
+			height = 30,
+		},
+	)
+	testing.expect_value(t, result.text, "bbbbb")
+}
+
+@(test)
+text_input_paste_strips_carriage_returns :: proc(t: ^testing.T) {
+	result := ti_clip_frame({text = "", key = .V, clipboard = "a\r\nb\r", height = 90})
+	testing.expect_value(t, result.text, "a\nb")
+}
+
+// --- Pixel-to-column and incremental rewrap equivalence ----------------------
+
+// A deterministic variable-width backend: per-rune advances summed over the
+// string, so prefix widths are monotonic but not uniform.
+@(private = "file")
+ti_var_width :: proc(text: cstring, size: i32) -> i32 {
+	_ = size
+	total: i32 = 0
+	for r in string(text) do total += 4 + i32(r) % 7
+	return total
+}
+
+// The pre-optimization linear scan, kept as the reference oracle for the
+// binary-search implementation.
+@(private = "file")
+ti_pixel_col_linear :: proc(system: ^Text_System, line: string, px, font_size: i32) -> int {
+	if px <= 0 do return 0
+	col := 0
+	i := 0
+	for i < len(line) {
+		j := i + 1
+		for j < len(line) && (line[j] & 0xC0) == 0x80 do j += 1
+		prefix := strings.clone_to_cstring(line[:j], context.temp_allocator)
+		width := measure_text_with(system, prefix, font_size)
+		if width > px {
+			previous := strings.clone_to_cstring(line[:i], context.temp_allocator)
+			previous_width := measure_text_with(system, previous, font_size)
+			if px - previous_width < width - px do return col
+			return col + 1
+		}
+		col += 1
+		i = j
+	}
+	return col
+}
+
+@(test)
+caret_pixel_to_col_search_matches_the_linear_scan :: proc(t: ^testing.T) {
+	system: Text_System
+	set_measure_backend_with(&system, ti_var_width)
+	defer text_system_destroy(&system)
+	lines := []string {
+		"",
+		"a",
+		"hello world",
+		"h\u00e9llo w\u00f6rld",
+		"\u65e5\u672c\u8a9e\u30c6\u30ad\u30b9\u30c8",
+		"aaaa bbbb cccc dddd",
+	}
+	for line in lines {
+		line_c := strings.clone_to_cstring(line, context.temp_allocator)
+		full := measure_text_with(&system, line_c, 16)
+		for px in i32(-2) ..= full + 3 {
+			want := ti_pixel_col_linear(&system, line, px, 16)
+			got := caret_pixel_to_col_with(&system, line, px, 16)
+			testing.expectf(t, want == got, "line=%q px=%d want=%d got=%d", line, px, want, got)
+			if want != got do return
+		}
+		free_all(context.temp_allocator)
+	}
+}
+
+// Randomized edits against a warm memo must produce exactly the lines a cold
+// full rewrap produces - the incremental splice is only a performance path.
+@(test)
+vlines_incremental_matches_full_rewrap :: proc(t: ^testing.T) {
+	system: Text_System
+	set_measure_backend_with(&system, ti_mono)
+	defer text_system_destroy(&system)
+	warm: Input_Vlines_Memo
+	defer input_vlines_memo_destroy(&warm)
+	p := testx.prng_make(0x7)
+	doc := strings.builder_make()
+	defer strings.builder_destroy(&doc)
+	strings.write_string(&doc, "alpha beta gamma\ndelta epsilon\n\nzeta eta theta iota")
+	w := 6 * TI_CELL
+	_ = input_visual_lines_memo_with(&system, &warm, strings.to_string(doc), w, 16)
+	runes := []rune{'a', 'b', ' ', '\n', '\u00e9', '\u4e16'}
+	for iter in 0 ..< 500 {
+		text := strings.to_string(doc)
+		pos := caret_clamp(text, testx.int_range(&p, 0, len(text) + 1))
+		if testx.int_range(&p, 0, 3) == 0 && len(text) > 0 {
+			end := caret_clamp(text, min(len(text), pos + testx.int_range(&p, 1, 8)))
+			if end > pos {
+				combined := strings.concatenate({text[:pos], text[end:]}, context.temp_allocator)
+				strings.builder_reset(&doc)
+				strings.write_string(&doc, combined)
+			}
+		} else {
+			ins := strings.builder_make(context.temp_allocator)
+			for _ in 0 ..< testx.int_range(&p, 1, 6) {
+				strings.write_rune(&ins, runes[testx.int_range(&p, 0, len(runes))])
+			}
+			combined := strings.concatenate(
+				{text[:pos], strings.to_string(ins), text[pos:]},
+				context.temp_allocator,
+			)
+			strings.builder_reset(&doc)
+			strings.write_string(&doc, combined)
+		}
+		cur := strings.to_string(doc)
+		spliced := input_visual_lines_memo_with(&system, &warm, cur, w, 16)
+		cold: Input_Vlines_Memo
+		full := input_visual_lines_memo_with(&system, &cold, cur, w, 16)
+		ok := len(spliced) == len(full)
+		if ok {
+			for vl, i in spliced do ok &&= vl == full[i]
+		}
+		testing.expectf(
+			t,
+			ok,
+			"seed=0x7 iter=%d spliced=%v full=%v text=%q",
+			iter,
+			spliced,
+			full,
+			cur,
+		)
+		input_vlines_memo_destroy(&cold)
+		if !ok do return
+		free_all(context.temp_allocator)
+	}
 }

@@ -310,3 +310,55 @@ gpu_camera_setup_preserves_window_and_active_camera :: proc(t: ^testing.T) {
 	testing.expect_value(t, cam3d_view, Matrix(3))
 	testing.expect_value(t, cam3d_vp, Matrix(4))
 }
+
+@(test)
+orbit_camera_pan_moves_only_target :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	state, _ := orbit_camera_from_camera(camera)
+	before := state
+	config := orbit_camera_config_default()
+	input := Orbit_Camera_Input {
+		pan = {3, -2, 1},
+	}
+	update_orbit_camera(&state, input, config, 0.016)
+	camera_test_vector_near(t, state.target, before.target + Vector3{3, -2, 1}, 1e-6)
+	testing.expect_value(t, state.yaw, before.yaw)
+	testing.expect_value(t, state.pitch, before.pitch)
+	testing.expect_value(t, state.distance, before.distance)
+}
+
+@(test)
+orbit_camera_zoom_toward_keeps_focus_direction :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	state, _ := orbit_camera_from_camera(camera)
+	config := orbit_camera_config_default()
+	focus := Vector3{4, 6, 0}
+	applied := camera
+	orbit_camera_apply(state, &applied)
+	direction_before := linalg.normalize(focus - applied.position)
+	orbit_camera_zoom_toward(&state, focus, 1, config)
+	testing.expect(t, state.distance == 8)
+	orbit_camera_apply(state, &applied)
+	direction_after := linalg.normalize(focus - applied.position)
+	camera_test_vector_near(t, direction_after, direction_before, 1e-5)
+}
+
+@(test)
+orbit_camera_zoom_toward_respects_clamps_and_zero_scroll :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	state, _ := orbit_camera_from_camera(camera)
+	config := orbit_camera_config_default()
+	before := state
+	// Zero scroll is the identity.
+	orbit_camera_zoom_toward(&state, {5, 5, 0}, 0, config)
+	testing.expect_value(t, state, before)
+	// A huge zoom-in clamps at min_distance and still moves the target only
+	// by the clamped fraction.
+	orbit_camera_zoom_toward(&state, {5, 5, 0}, 10000, config)
+	testing.expect_value(t, state.distance, config.min_distance)
+	// Already at the clamp: further zoom-in is the identity, so the target
+	// cannot creep toward the focus without any distance change.
+	at_clamp := state
+	orbit_camera_zoom_toward(&state, {5, 5, 0}, 1, config)
+	testing.expect_value(t, state, at_clamp)
+}

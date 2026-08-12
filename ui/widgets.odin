@@ -338,50 +338,81 @@ caret_col_to_byte :: proc(line: string, col: int) -> int {
 	return i
 }
 
+@(private = "file")
+caret_measure_with :: proc(data: rawptr, prefix: cstring, font_size: i32) -> i32 {
+	assert(data != nil, "caret_measure_with: nil system")
+	assert(font_size > 0, "caret_measure_with: invalid font size")
+	return measure_text_with((^Text_System)(data), prefix, font_size)
+}
+
+@(private = "file")
+caret_measure_frame :: proc(data: rawptr, prefix: cstring, font_size: i32) -> i32 {
+	assert(data != nil, "caret_measure_frame: nil frame")
+	assert(font_size > 0, "caret_measure_frame: invalid font size")
+	return measure_text_frame((^Ui_Frame)(data), prefix, font_size)
+}
+
 caret_pixel_to_col_with :: proc(system: ^Text_System, line: string, px, font_size: i32) -> int {
 	assert(system != nil, "caret_pixel_to_col_with: nil text system")
 	assert(font_size > 0, "caret_pixel_to_col_with: invalid font size")
-	if px <= 0 do return 0
-	col := 0
-	i := 0
-	for i < len(line) {
-		j := i + 1
-		for j < len(line) && (line[j] & 0xC0) == 0x80 do j += 1
-		prefix := strings.clone_to_cstring(line[:j], context.temp_allocator)
-		width := measure_text_with(system, prefix, font_size)
-		if width > px {
-			previous := strings.clone_to_cstring(line[:i], context.temp_allocator)
-			previous_width := measure_text_with(system, previous, font_size)
-			if px - previous_width < width - px do return col
-			return col + 1
-		}
-		col += 1
-		i = j
-	}
-	return col
+	return caret_pixel_to_col_search(system, caret_measure_with, line, px, font_size)
 }
 
 caret_pixel_to_col_frame :: proc(frame: ^Ui_Frame, line: string, px, font_size: i32) -> int {
 	assert(frame != nil && frame.open, "caret_pixel_to_col_frame: invalid frame")
 	assert(font_size > 0, "caret_pixel_to_col_frame: invalid font size")
+	return caret_pixel_to_col_search(frame, caret_measure_frame, line, px, font_size)
+}
+
+// caret_pixel_to_col_search maps a pixel offset to the nearest rune column
+// by binary-searching prefix widths (monotonic in prefix length). The old
+// linear scan measured every prefix - O(n^2) work per call, re-run every
+// frame of a mouse drag; the search does O(log n) prefix measures and
+// returns the identical nearest-boundary column.
+@(private = "file")
+caret_pixel_to_col_search :: proc(
+	measure_data: rawptr,
+	measure: proc(data: rawptr, prefix: cstring, font_size: i32) -> i32,
+	line: string,
+	px, font_size: i32,
+) -> int {
+	assert(measure != nil, "caret_pixel_to_col_search: nil measure")
+	assert(font_size > 0, "caret_pixel_to_col_search: invalid font size")
 	if px <= 0 do return 0
-	col := 0
-	i := 0
-	for i < len(line) {
+	// Rune-start offsets plus the end-of-line sentinel: starts[k] is the byte
+	// length of the k-rune prefix.
+	starts := make([dynamic]int, context.temp_allocator)
+	append(&starts, 0)
+	for i := 0; i < len(line); {
 		j := i + 1
 		for j < len(line) && (line[j] & 0xC0) == 0x80 do j += 1
-		prefix := strings.clone_to_cstring(line[:j], context.temp_allocator)
-		width := measure_text_frame(frame, prefix, font_size)
-		if width > px {
-			previous := strings.clone_to_cstring(line[:i], context.temp_allocator)
-			previous_width := measure_text_frame(frame, previous, font_size)
-			if px - previous_width < width - px do return col
-			return col + 1
-		}
-		col += 1
+		append(&starts, j)
 		i = j
 	}
-	return col
+	count := len(starts) - 1
+	if count == 0 do return 0
+	full := strings.clone_to_cstring(line, context.temp_allocator)
+	hi_width := measure(measure_data, full, font_size)
+	if hi_width <= px do return count
+	// Invariant: width(lo runes) <= px < width(hi runes); the gap halves
+	// every iteration, so the loop is bounded by log2(count).
+	lo, hi := 0, count
+	lo_width: i32 = 0
+	for hi - lo > 1 {
+		mid := lo + (hi - lo) / 2
+		prefix := strings.clone_to_cstring(line[:starts[mid]], context.temp_allocator)
+		width := measure(measure_data, prefix, font_size)
+		if width > px {
+			hi, hi_width = mid, width
+		} else {
+			lo, lo_width = mid, width
+		}
+	}
+	assert(lo_width <= px && px < hi_width, "caret_pixel_to_col_search: invariant broken")
+	// Snap to whichever boundary of the straddling rune is nearer, exactly
+	// as the linear scan did.
+	if px - lo_width < hi_width - px do return lo
+	return hi
 }
 
 // Delete the rune before `pos` (backspace). Returns the new caret position.
