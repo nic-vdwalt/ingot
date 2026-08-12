@@ -188,22 +188,22 @@ drop_target :: proc(data: ^State, mouse: ui.Vector2) -> i32 {
 	return target
 }
 
-// drag_overlays paints the ghost chip and the drop-target highlight into the
-// overlay channel with input claimed, so nothing beneath reacts mid-drag.
+// drag_overlays paints the ghost chip and the drop-target highlight on a
+// popup layer with input claimed, so nothing beneath reacts mid-drag.
 drag_overlays :: proc(form: ^ui.Ui, data: ^State, mouse: ui.Vector2, target: i32) {
 	assert(form != nil && data != nil, "drag_overlays: invalid arguments")
 	frame := form.frame
 	theme := ui.ui_frame_theme(frame)
-	ui.overlay_begin(frame, ui.rect_f32(data.canvas), claim_input = true)
-	defer ui.overlay_end(frame)
+	ui.layer_begin(frame, ui.Z_POPUP, claim = ui.rect_f32(data.canvas))
+	defer ui.layer_end(frame)
 
 	if target != view.VIEW_NODE_NONE {
 		rect := view.trace_rect(&data.trace, target)
 		if rect.w > 0 && rect.h > 0 {
-			ui.overlay_rect_lines(frame, ui.rect_f32(rect), 2, theme.fg_accent)
+			ui.draw_rectangle_lines_ex(frame, ui.rect_f32(rect), 2, theme.fg_accent)
 			tint := theme.fg_accent
 			tint.a = 24
-			ui.overlay_rect(frame, ui.rect_f32(rect), tint)
+			ui.draw_rectangle_rec(frame, ui.rect_f32(rect), tint)
 		}
 	}
 
@@ -211,9 +211,9 @@ drag_overlays :: proc(form: ^ui.Ui, data: ^State, mouse: ui.Vector2, target: i32
 	metrics := ui.ui_frame_metrics(frame)
 	width := ui.measure_text_string_frame(frame, label, metrics.FONT_SIZE_LABEL) + 20
 	chip := ui.Rect{mouse.x + 12, mouse.y + 12, f32(width), 26}
-	ui.overlay_rounded(frame, chip, 0.4, 8, theme.bg_panel)
-	ui.overlay_rounded_lines(frame, chip, 0.4, 8, 1, theme.fg_accent)
-	ui.overlay_text(
+	ui.draw_rectangle_rounded(frame, chip, 0.4, 8, theme.bg_panel)
+	ui.draw_rectangle_rounded_lines_ex(frame, chip, 0.4, 8, 1, theme.fg_accent)
+	ui.draw_text_string(
 		frame,
 		label,
 		i32(chip.x) + 10,
@@ -295,8 +295,8 @@ canvas_edit_overlay :: proc(form: ^ui.Ui, data: ^State, source: view.View) {
 	assert(form != nil && data != nil, "canvas_edit_overlay: invalid arguments")
 	frame := form.frame
 	theme := ui.ui_frame_theme(frame)
-	ui.overlay_begin(frame, ui.rect_f32(data.canvas), claim_input = true)
-	defer ui.overlay_end(frame)
+	ui.layer_begin(frame, ui.Z_POPUP, claim = ui.rect_f32(data.canvas))
+	defer ui.layer_end(frame)
 
 	mouse := ui.get_mouse_position(frame)
 	over_canvas := point_in_rect(mouse, data.canvas)
@@ -308,7 +308,7 @@ canvas_edit_overlay :: proc(form: ^ui.Ui, data: ^State, source: view.View) {
 		hovered = view.trace_node_at(&data.trace, source, mouse)
 		if hovered != view.VIEW_NODE_NONE && hovered != data.selected {
 			rect := view.trace_rect(&data.trace, hovered)
-			ui.overlay_rect_lines(frame, ui.rect_f32(rect), 1, theme.border_color)
+			ui.draw_rectangle_lines_ex(frame, ui.rect_f32(rect), 1, theme.border_color)
 			ui.request_cursor(frame, .POINTING_HAND)
 		}
 	}
@@ -316,7 +316,7 @@ canvas_edit_overlay :: proc(form: ^ui.Ui, data: ^State, source: view.View) {
 	// Selection outline + kind tag.
 	selected := view.trace_rect(&data.trace, data.selected)
 	if selected.w > 0 && selected.h > 0 {
-		ui.overlay_rect_lines(frame, ui.rect_f32(selected), 2, theme.fg_accent)
+		ui.draw_rectangle_lines_ex(frame, ui.rect_f32(selected), 2, theme.fg_accent)
 		selection_tag(frame, data, selected)
 	}
 
@@ -339,8 +339,8 @@ selection_tag :: proc(frame: ^ui.Ui_Frame, data: ^State, selected: ui.Rect_I32) 
 	tag := ui.Rect{f32(selected.x), f32(selected.y - tag_h - 2), f32(width), f32(tag_h)}
 	// Keep the tag on screen when the selection touches the canvas top.
 	if tag.y < f32(data.canvas.y) do tag.y = f32(selected.y) + 2
-	ui.overlay_rounded(frame, tag, 0.5, 6, theme.fg_accent)
-	ui.overlay_text(frame, label, i32(tag.x) + 5, i32(tag.y) + 3, size, theme.fg_on_accent)
+	ui.draw_rectangle_rounded(frame, tag, 0.5, 6, theme.fg_accent)
+	ui.draw_text_string(frame, label, i32(tag.x) + 5, i32(tag.y) + 3, size, theme.fg_on_accent)
 }
 
 // report_events shows what the played document did this frame in Live mode.

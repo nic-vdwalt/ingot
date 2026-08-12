@@ -9,16 +9,11 @@ overlay_recorder_behaviour :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
-	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
-	frame.runtime = &runtime
+	frame: Ui_Frame
 	frame.output = output
-	frame.open = true
-	overlay_reset(&frame)
-	route_reset(&frame)
-	defer overlay_reset(&frame)
-	defer route_reset(&frame)
+	ui_frame_begin(&frame, &runtime)
 
 	// Commands record in order.
 	overlay_begin(&frame, Rectangle{0, 0, 100, 100}, claim_input = false)
@@ -44,14 +39,15 @@ overlay_recorder_behaviour :: proc(t: ^testing.T) {
 	testing.expect_value(t, overlay_dropped(&frame), 5)
 	overlay_reset(&frame)
 
-	// Text buffer is bounded: an overlong string drops its command.
+	// Text buffer is bounded: an overlong string drops its command. Text
+	// overflow is counted on the list's text counter, not dropped_commands.
 	overlay_begin(&frame, Rectangle{0, 0, 10, 10}, claim_input = false)
 	big := make([]u8, PAINT_TEXT_CAP + 1)
 	defer delete(big)
 	for &b in big do b = 'a'
 	overlay_text(&frame, string(big), 0, 0, 13, Color{})
 	testing.expect_value(t, overlay_cmd_count(&frame), 0)
-	testing.expect_value(t, overlay_dropped(&frame), 1)
+	testing.expect_value(t, output.overlay.dropped_text_bytes, PAINT_TEXT_CAP + 1)
 	overlay_end(&frame)
 	overlay_reset(&frame)
 
@@ -82,4 +78,5 @@ overlay_recorder_behaviour :: proc(t: ^testing.T) {
 	testing.expect_value(t, sink_count, 1)
 	testing.expect_value(t, output.main.count, 1)
 	paint_list_set_sink(&output.main, nil, nil)
+	ui_frame_end(&frame)
 }

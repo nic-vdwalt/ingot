@@ -1481,15 +1481,14 @@ draw_docked_panel_over_canvas :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32
 	return y + canvas_h + ui.ui_frame_sc(frame, 12)
 }
 
-// draw_dock_panel is the docked surface: one claim, one matching z scope, and
-// ordinary widgets inside. Nothing here hit-tests raw input.
+// draw_dock_panel is the docked surface: one layer couples the claim, the
+// paint tier, and screen-space drawing. Nothing here hit-tests raw input.
 draw_dock_panel :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32) {
 	assert(frame != nil, "draw_dock_panel: nil frame")
 	assert(panel.w > 0 && panel.h > 0, "draw_dock_panel: empty panel")
 	ui.draw_surface(frame, ui.rect_f32(panel), .Panel, radius = .SM, border = .Hairline)
-	ui.route_claim(frame, ui.rect_f32(panel), ui.Z_PANEL)
-	ui.z_scope_begin(frame, ui.Z_PANEL)
-	defer ui.z_scope_end(frame)
+	ui.layer_begin(frame, ui.Z_PANEL, claim = ui.rect_f32(panel))
+	defer ui.layer_end(frame)
 
 	// A scroll pane inside the claim: pane_begin consults the router, so this
 	// is the exact case that went dead when a panel claimed its own rect.
@@ -1548,16 +1547,23 @@ draw_overlay_confirm :: proc(frame: ^ui.Ui_Frame) {
 	}
 }
 
-// draw_demo_popup records a popup on the overlay layer (drawn above content
+// draw_demo_popup records a popup on its own layer (drawn above content
 // painted later) and claims its rect so widgets underneath are inert.
 draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 	w := ui.ui_frame_sc(frame, 220)
 	h := ui.ui_frame_sc(frame, 130)
 	rect := ui.Rect{f32(x), f32(y), f32(w), f32(h)}
-	ui.overlay_begin(frame, rect, claim_input = true)
-	ui.overlay_rounded(frame, rect, 0.1, 6, ui.ui_frame_theme(frame).bg_popup)
-	ui.overlay_rounded_lines(frame, rect, 0.1, 6, 1.0, ui.ui_frame_theme(frame).border_color)
-	ui.overlay_text(
+	ui.layer_begin(frame, ui.Z_POPUP, claim = rect)
+	ui.draw_rectangle_rounded(frame, rect, 0.1, 6, ui.ui_frame_theme(frame).bg_popup)
+	ui.draw_rectangle_rounded_lines_ex(
+		frame,
+		rect,
+		0.1,
+		6,
+		1.0,
+		ui.ui_frame_theme(frame).border_color,
+	)
+	ui.draw_text_string(
 		frame,
 		"Overlay popup",
 		x + ui.ui_frame_sc(frame, 12),
@@ -1565,7 +1571,7 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 		ui.ui_frame_metrics(frame).FONT_SIZE_BODY,
 		ui.ui_frame_theme(frame).fg_primary,
 	)
-	ui.overlay_text(
+	ui.draw_text_string(
 		frame,
 		"Recorded during the frame,",
 		x + ui.ui_frame_sc(frame, 12),
@@ -1573,7 +1579,7 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 		ui.ui_frame_metrics(frame).FONT_SIZE_LABEL,
 		ui.ui_frame_theme(frame).fg_secondary,
 	)
-	ui.overlay_text(
+	ui.draw_text_string(
 		frame,
 		"replayed above everything.",
 		x + ui.ui_frame_sc(frame, 12),
@@ -1592,10 +1598,10 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 	}
 	close := ui.interact(frame, row)
 	if close.hovered {
-		ui.overlay_rect(frame, ui.Rect(row), ui.ui_frame_theme(frame).bg_active)
+		ui.draw_rectangle_rec(frame, ui.Rect(row), ui.ui_frame_theme(frame).bg_active)
 		ui.request_cursor(frame, .POINTING_HAND)
 	}
-	ui.overlay_text(
+	ui.draw_text_string(
 		frame,
 		"Close",
 		x + ui.ui_frame_sc(frame, 18),
@@ -1606,7 +1612,7 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 	if close.clicked {
 		popup_open = false
 	}
-	ui.overlay_end(frame)
+	ui.layer_end(frame)
 }
 
 // STRESS_BUTTONS is the grid size the section advertises. Every one of them is

@@ -203,7 +203,7 @@ for each concern:
 |---|---|
 | Persistent controls | Caller-owned component structs |
 | Dynamic layout | Bounded, single-pass layout with explicit measurements |
-| Popups and modals | Per-frame overlay records plus bounded input claims |
+| Popups and modals | Layers (`layer_begin`/`layer_end`): one primitive coupling input claims, paint tiers, and screen-space drawing |
 | Keyboard focus | Stable caller-provided IDs and frame registration order |
 | Accessibility | A semantic output buffer rebuilt with the interface |
 | Animation | Caller/runtime state plus explicit redraw deadlines |

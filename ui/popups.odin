@@ -81,8 +81,9 @@ modal_begin :: proc(
 	st.rect = Rect_I32{mx, my, mw, mh}
 	// The whole screen is claimed, not the four bands around the panel: at
 	// Z_MODAL the panel's own widgets are not occluded by an equal-z claim.
-	route_claim(frame, Rectangle{0, 0, f32(screen_w), f32(screen_h)}, Z_MODAL)
-	z_scope_begin(frame, Z_MODAL)
+	// The layer also zeroes the pane origin, so a modal opened from inside a
+	// pane still positions in screen space.
+	layer_begin(frame, Z_MODAL, claim = Rectangle{0, 0, f32(screen_w), f32(screen_h)})
 
 	// Dimmed inside the modal's z scope so it paints at the modal tier and
 	// covers every lower tier, including content submitted after modal_end.
@@ -116,9 +117,9 @@ modal_end :: proc(st: ^Modal_State) {
 	frame := st.frame
 	assert(frame != nil, "modal_end: missing frame")
 	end_scissor_mode(frame)
-	// Both exits must close the scope modal_begin opened, or the balance
+	// Both exits must close the layer modal_begin opened, or the balance
 	// assertion in ui_frame_finalize fires.
-	z_scope_end(frame)
+	layer_end(frame)
 	if is_key_pressed(frame, .ESCAPE) {
 		st.open = false
 		st.dismissed = true
@@ -269,27 +270,28 @@ context_menu :: proc(
 	}
 	st.just_opened = false
 
-	// Record all panel draws on the overlay layer in screen space so the menu
+	// Record all panel draws on a popup layer in screen space so the menu
 	// replays above content painted later in the frame (and outside any pane
-	// scissor); the group rect also claims the covered area with the router.
+	// scissor); the claim rect keeps the covered widgets inert.
 	style := ui_frame_theme(frame)
-	overlay_begin(frame, screen_rect, claim_input = true)
-	overlay_rect(frame, screen_rect, style.bg_popup)
-	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
-	chosen := context_menu_rows(frame, st, items, menu_rect, screen_rect, mouse)
-	overlay_end(frame)
+	mouse_screen := get_mouse_position(frame)
+	layer_begin(frame, Z_POPUP, claim = screen_rect)
+	draw_rectangle_rec(frame, screen_rect, style.bg_popup)
+	draw_rectangle_lines_ex(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
+	chosen := context_menu_rows(frame, st, items, screen_rect, mouse_screen)
+	layer_end(frame)
 	return chosen
 }
 
-// context_menu_rows records the rows on the overlay layer and handles
-// hover/click (hit-testing in pane-local coords, drawing in screen space via
-// the pane offset). Returns the clicked index or -1.
+// context_menu_rows records the rows inside the menu layer. Layout, drawing,
+// and hit-testing all happen in screen space: the layer zeroed the pane
+// origin, and `mouse` arrives untranslated. Returns the clicked index or -1.
 @(private = "file")
 context_menu_rows :: proc(
 	frame: ^Ui_Frame,
 	st: ^Context_Menu_State,
 	items: []Menu_Item,
-	menu_local, menu_screen: Rectangle,
+	menu_screen: Rectangle,
 	mouse: Vector2,
 ) -> int {
 	assert(frame != nil, "context_menu_rows: nil frame")
@@ -299,26 +301,25 @@ context_menu_rows :: proc(
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
 	inset := ui_frame_sc(frame, 2)
-	item_x := menu_local.x + f32(inset)
-	item_w := i32(menu_local.width) - inset * 2
-	item_y := menu_local.y + f32(metrics.MENU_PAD)
+	item_x := menu_screen.x + f32(inset)
+	item_w := i32(menu_screen.width) - inset * 2
+	item_y := menu_screen.y + f32(metrics.MENU_PAD)
 	chosen := -1
 	for it, i in items {
 		if it.separator {
 			sep_h := ui_frame_sc(frame, 5)
 			separator := Rectangle {
 				menu_screen.x + f32(ui_frame_sc(frame, 6)),
-				frame_to_screen(frame, {0, item_y}).y + f32(sep_h / 2),
+				item_y + f32(sep_h / 2),
 				menu_screen.width - f32(ui_frame_sc(frame, 12)),
 				ui_frame_scf(frame, 1),
 			}
-			overlay_rect(frame, separator, style.border_color)
+			draw_rectangle_rec(frame, separator, style.border_color)
 			item_y += f32(sep_h)
 			continue
 		}
-		row_rect := Rectangle{item_x, item_y, f32(item_w), f32(metrics.MENU_ITEM_H)}
-		row_screen := frame_rect_to_screen(frame, row_rect)
-		hovered := point_in_rect(mouse, row_rect)
+		row_screen := Rectangle{item_x, item_y, f32(item_w), f32(metrics.MENU_ITEM_H)}
+		hovered := point_in_rect(mouse, row_screen)
 		sem: Sem_State
 		if it.disabled do sem += {.Disabled}
 		semantic_push(
@@ -329,7 +330,7 @@ context_menu_rows :: proc(
 			sem,
 		)
 		if hovered && !it.disabled && mouse_moved(frame) do st.selected = i
-		if st.selected == i do overlay_rect(frame, row_screen, style.bg_active)
+		if st.selected == i do draw_rectangle_rec(frame, row_screen, style.bg_active)
 		if hovered && !it.disabled do request_cursor(frame, .POINTING_HAND)
 		col := style.fg_disabled if it.disabled else style.fg_primary
 		txt := truncate_to_width_frame(
@@ -338,7 +339,7 @@ context_menu_rows :: proc(
 			item_w - ui_frame_sc(frame, 16),
 			metrics.FONT_SIZE_BODY,
 		)
-		overlay_text(
+		draw_text_string(
 			frame,
 			txt,
 			i32(row_screen.x) + ui_frame_sc(frame, 8),
@@ -425,11 +426,11 @@ tooltip_wrapped_at :: proc(
 	tx := clamp(i32(mouse.x) + ui_frame_sc(frame, 12), 0, max(screen_w - bw, 0))
 	ty := clamp(i32(mouse.y) + ui_frame_sc(frame, 18), 0, max(screen_h - bh, 0))
 	tip := Rectangle{f32(tx), f32(ty), f32(bw), f32(bh)}
-	overlay_begin(frame, tip, claim_input = false, z = Z_TOOLTIP)
-	overlay_rect(frame, tip, style.bg_popup)
-	overlay_rect_lines(frame, tip, ui_frame_scf(frame, 1), style.border_color)
+	layer_begin(frame, Z_TOOLTIP)
+	draw_rectangle_rec(frame, tip, style.bg_popup)
+	draw_rectangle_lines_ex(frame, tip, ui_frame_scf(frame, 1), style.border_color)
 	for line, index in lines {
-		overlay_text(
+		draw_text_string(
 			frame,
 			text[line.start:line.end],
 			tx + metrics.TOOLTIP_PAD,
@@ -438,5 +439,5 @@ tooltip_wrapped_at :: proc(
 			style.fg_primary,
 		)
 	}
-	overlay_end(frame)
+	layer_end(frame)
 }

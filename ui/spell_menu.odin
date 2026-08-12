@@ -265,19 +265,20 @@ spell_menu_draw_row :: proc(
 	assert(frame != nil, "spell_menu_draw_row: nil frame")
 	assert(menu != nil, "spell_menu_draw_row: nil menu")
 	assert(row_local.width >= 0 && row_local.height >= 0, "spell_menu_draw_row: invalid row")
-	row_screen := frame_rect_to_screen(frame, row_local)
 	hovered := point_in_rect(mouse, row_local)
 	if hovered && mouse_moved(frame) do menu.selected = nav_index
-	if menu.selected == nav_index do overlay_rect(frame, row_screen, ui_frame_theme(frame).bg_active)
+	if menu.selected == nav_index {
+		draw_rectangle_rec(frame, row_local, ui_frame_theme(frame).bg_active)
+	}
 	if hovered do request_cursor(frame, .POINTING_HAND)
 	font_size := text_role_size(frame, .Body)
-	item_w, item_h := i32(row_screen.width), i32(row_screen.height)
+	item_w, item_h := i32(row_local.width), i32(row_local.height)
 	text := truncate_to_width_frame(frame, label, item_w - ui_frame_sc(frame, 16), font_size)
-	overlay_text(
+	draw_text_string(
 		frame,
 		text,
-		i32(row_screen.x) + ui_frame_sc(frame, 8),
-		i32(row_screen.y) + (item_h - font_size) / 2,
+		i32(row_local.x) + ui_frame_sc(frame, 8),
+		i32(row_local.y) + (item_h - font_size) / 2,
 		font_size,
 		color,
 	)
@@ -308,15 +309,17 @@ spell_menu_draw_suggestions :: proc(
 			layout.item_w - ui_frame_sc(frame, 16),
 			font_size,
 		)
-		row_screen := frame_rect_to_screen(
-			frame,
-			{f32(layout.item_x), f32(item_y), f32(layout.item_w), f32(layout.item_h)},
-		)
-		overlay_text(
+		row_local := Rectangle {
+			f32(layout.item_x),
+			f32(item_y),
+			f32(layout.item_w),
+			f32(layout.item_h),
+		}
+		draw_text_string(
 			frame,
 			text,
-			i32(row_screen.x) + ui_frame_sc(frame, 8),
-			i32(row_screen.y) + (layout.item_h - font_size) / 2,
+			i32(row_local.x) + ui_frame_sc(frame, 8),
+			i32(row_local.y) + (layout.item_h - font_size) / 2,
 			font_size,
 			text_ink(frame, .Disabled),
 		)
@@ -352,16 +355,13 @@ spell_menu_draw_actions :: proc(
 	assert(layout != nil, "spell_menu_draw_actions: nil layout")
 	style := ui_frame_theme(frame)
 	current_y := item_y
-	separator := frame_rect_to_screen(
-		frame,
-		{
-			f32(layout.menu_x + ui_frame_sc(frame, 6)),
-			f32(current_y + layout.separator_h / 2),
-			f32(layout.menu_w - ui_frame_sc(frame, 12)),
-			ui_frame_scf(frame, 1),
-		},
-	)
-	overlay_rect(frame, separator, style.border_color)
+	separator := Rectangle {
+		f32(layout.menu_x + ui_frame_sc(frame, 6)),
+		f32(current_y + layout.separator_h / 2),
+		f32(layout.menu_w - ui_frame_sc(frame, 12)),
+		ui_frame_scf(frame, 1),
+	}
+	draw_rectangle_rec(frame, separator, style.border_color)
 	current_y += layout.separator_h
 	apply_index := -1
 	learn := strings.concatenate({"Learn \"", menu.word, "\""}, context.temp_allocator)
@@ -403,23 +403,28 @@ spell_menu_draw_overlay :: proc(
 	assert(layout != nil, "spell_menu_draw_overlay: nil layout")
 	style := ui_frame_theme(frame)
 	screen_rect := frame_rect_to_screen(frame, layout.menu_rect)
-	overlay_begin(frame, screen_rect, claim_input = true)
-	overlay_rect(frame, screen_rect, style.bg_popup)
-	overlay_rect_lines(frame, screen_rect, ui_frame_scf(frame, 1), style.border_color)
+	origin := frame_pane_origin(frame)
+	layer_begin(frame, Z_POPUP, claim = screen_rect)
+	// The menu is anchored in the composer's pane space: re-enter that pane so
+	// rows keep their pane-local layout while the layer supplies tier + claim.
+	ui_frame_pane_push(frame, origin)
+	draw_rectangle_rec(frame, layout.menu_rect, style.bg_popup)
+	draw_rectangle_lines_ex(frame, layout.menu_rect, ui_frame_scf(frame, 1), style.border_color)
 	apply_index, item_y := spell_menu_draw_suggestions(frame, menu, layout, mouse)
 	action_index := spell_menu_draw_actions(frame, menu, layout, item_y, mouse)
 	if action_index >= 0 do apply_index = action_index
-	overlay_end(frame)
+	ui_frame_pane_pop(frame)
+	layer_end(frame)
 	return apply_index
 }
 
 // draw_spell_menu renders and drives the popup. Called from text_input while
-// its scissor may still be active: the panel's draws are recorded on the
-// overlay layer, so they replay above all main content at overlay_flush time
+// its scissor may still be active: the panel's draws are recorded on a popup
+// layer, so they replay above all main content when the overlay list replays
 // (and the menu rect is claimed with the input router, so clicks on the menu
-// never leak through to the widgets underneath). Input coords are pane-local,
-// matching the composer's drawing space; recorded draw coords are shifted to
-// screen space because the overlay replays after pane translation is popped.
+// never leak through to the widgets underneath). Input and layout coords are
+// pane-local, matching the composer's drawing space; the layer re-enters the
+// composer's pane so pane translation shifts draws to screen space.
 draw_spell_menu :: proc(
 	frame: ^Ui_Frame,
 	menu: ^Spell_Menu,
