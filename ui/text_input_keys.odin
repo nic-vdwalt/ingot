@@ -228,9 +228,7 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx, mods: bool) {
 						// one-bullet-per-rune display.
 						s := strings.to_string(sb^)
 						target :=
-							ctx.masked \
-							? caret_prev_rune(s, ctx.cursor^) \
-							: caret_prev_grapheme(s, ctx.cursor^)
+							ctx.masked ? caret_prev_rune(s, ctx.cursor^) : caret_prev_grapheme(s, ctx.cursor^)
 						ctx.cursor^ = ti_delete_range(ctx, target, ctx.cursor^)
 					}
 				}
@@ -287,9 +285,7 @@ ti_keys_delete_forward :: proc(ctx: ^TI_Ctx, word: bool) {
 			// per-rune to match their one-bullet-per-rune display.
 			s := strings.to_string(sb^)
 			end :=
-				ctx.masked \
-				? caret_next_rune(s, ctx.cursor^) \
-				: caret_next_grapheme(s, ctx.cursor^)
+				ctx.masked ? caret_next_rune(s, ctx.cursor^) : caret_next_grapheme(s, ctx.cursor^)
 			ctx.cursor^ = ti_delete_range(ctx, ctx.cursor^, end)
 		}
 	}
