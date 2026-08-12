@@ -276,30 +276,36 @@ update_orbit_camera :: proc(
 // scroll zoom would, and the target slides toward the focus by the same
 // proportion, so with the camera direction unchanged the focus point keeps
 // its screen position. Callers typically pass the picked world point under
-// the cursor and fall back to plain scroll zoom when nothing is hit.
+// the cursor and fall back to plain scroll zoom when nothing is hit. The
+// scroll channel is consumed so the same value cannot also reach
+// update_orbit_camera and double-apply.
 orbit_camera_zoom_toward :: proc(
 	state: ^Orbit_Camera_State,
 	focus: Vector3,
-	scroll: f32,
+	scroll: ^f32,
 	config: Orbit_Camera_Config,
 ) {
 	assert(state != nil, "orbit_camera_zoom_toward: nil state")
+	assert(scroll != nil, "orbit_camera_zoom_toward: nil scroll")
 	assert(_camera_vector_is_finite(state.target), "orbit_camera_zoom_toward: invalid target")
 	assert(_camera_vector_is_finite(focus), "orbit_camera_zoom_toward: invalid focus")
-	assert(_f32_is_finite(scroll), "orbit_camera_zoom_toward: invalid scroll")
+	assert(_f32_is_finite(scroll^), "orbit_camera_zoom_toward: invalid scroll")
 	assert(_f32_is_finite(state.distance) && state.distance > 0)
 	assert(config.min_distance > 0, "orbit_camera_zoom_toward: invalid minimum distance")
 	assert(
 		config.max_distance >= config.min_distance,
 		"orbit_camera_zoom_toward: invalid distance range",
 	)
-	if scroll == 0 do return
+	if scroll^ == 0 do return
 	old_distance := state.distance
 	new_distance := clamp(
-		old_distance - scroll * config.scroll_distance,
+		old_distance - scroll^ * config.scroll_distance,
 		config.min_distance,
 		config.max_distance,
 	)
+	// The channel is consumed even when clamping absorbs the change, so the
+	// caller can never double-apply it through update_orbit_camera.
+	scroll^ = 0
 	if new_distance == old_distance do return
 	// Sliding the target by the fractional distance change keeps the ray from
 	// the camera through the focus fixed, which is what makes the point under
@@ -312,6 +318,43 @@ orbit_camera_zoom_toward :: proc(
 		"orbit_camera_zoom_toward: produced invalid target",
 	)
 	assert(state.distance >= config.min_distance && state.distance <= config.max_distance)
+}
+
+// orbit_camera_grab_pan_begin anchors the pan at a picked world point.
+orbit_camera_grab_pan_begin :: proc(pan: ^Orbit_Camera_Grab_Pan, anchor: Vector3) {
+	assert(pan != nil, "orbit_camera_grab_pan_begin: nil state")
+	assert(_camera_vector_is_finite(anchor), "orbit_camera_grab_pan_begin: invalid anchor")
+	pan.active = true
+	pan.anchor = anchor
+}
+
+orbit_camera_grab_pan_end :: proc(pan: ^Orbit_Camera_Grab_Pan) {
+	assert(pan != nil, "orbit_camera_grab_pan_end: nil state")
+	pan^ = {}
+}
+
+// orbit_camera_grab_pan_delta returns the world-space pan that keeps the
+// anchor under the given cursor ray. The plane is horizontal at the anchor
+// height, which keeps the drag stable across ridges and valleys. Feed the
+// result to Orbit_Camera_Input.pan.
+orbit_camera_grab_pan_delta :: proc(
+	pan: Orbit_Camera_Grab_Pan,
+	ray: Ray_3D,
+) -> (
+	Vector3,
+	bool,
+) {
+	assert(_camera_vector_is_finite(pan.anchor), "orbit_camera_grab_pan_delta: invalid anchor")
+	if !pan.active do return {}, false
+	plane := Plane_3D {
+		point  = pan.anchor,
+		normal = CAMERA_WORLD_UP,
+	}
+	hit, ok := intersect_plane(ray, plane)
+	if !ok do return {}, false
+	delta := Vector3{pan.anchor.x - hit.position.x, pan.anchor.y - hit.position.y, 0}
+	assert(_camera_vector_is_finite(delta), "orbit_camera_grab_pan_delta: invalid delta")
+	return delta, true
 }
 
 orbit_camera_apply :: proc(state: Orbit_Camera_State, camera: ^Camera3D) {

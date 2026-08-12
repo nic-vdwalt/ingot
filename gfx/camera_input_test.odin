@@ -86,6 +86,38 @@ when INGOT_INPUT_SIM {
 	}
 
 	@(test)
+	orbit_camera_pointer_intent_gates_rotate_behind_modifier :: proc(t: ^testing.T) {
+		SimReset()
+		defer SimReset()
+		bindings := orbit_camera_bindings_default()
+		bindings.drag_modifier = {
+			primary = .LEFT_ALT,
+		}
+		bindings.pan_button = {
+			button = .LEFT,
+			bound  = true,
+		}
+
+		SimBeginFrame()
+		SimButton(.LEFT, true)
+		testing.expect_value(
+			t,
+			orbit_camera_pointer_intent(bindings),
+			Orbit_Camera_Pointer_Intent.Pan,
+		)
+		// A modifier-less drag must not leak into the rotation channel.
+		testing.expect_value(t, orbit_camera_input_poll(bindings).pointer_drag, Vector2{0, 0})
+
+		SimBeginFrame()
+		SimKey(.LEFT_ALT, true)
+		testing.expect_value(
+			t,
+			orbit_camera_pointer_intent(bindings),
+			Orbit_Camera_Pointer_Intent.Rotate,
+		)
+	}
+
+	@(test)
 	orbit_camera_input_poll_takes_vertical_wheel :: proc(t: ^testing.T) {
 		SimReset()
 		defer SimReset()

@@ -336,8 +336,10 @@ orbit_camera_zoom_toward_keeps_focus_direction :: proc(t: ^testing.T) {
 	applied := camera
 	orbit_camera_apply(state, &applied)
 	direction_before := linalg.normalize(focus - applied.position)
-	orbit_camera_zoom_toward(&state, focus, 1, config)
+	scroll := f32(1)
+	orbit_camera_zoom_toward(&state, focus, &scroll, config)
 	testing.expect(t, state.distance == 8)
+	testing.expect_value(t, scroll, f32(0))
 	orbit_camera_apply(state, &applied)
 	direction_after := linalg.normalize(focus - applied.position)
 	camera_test_vector_near(t, direction_after, direction_before, 1e-5)
@@ -350,17 +352,58 @@ orbit_camera_zoom_toward_respects_clamps_and_zero_scroll :: proc(t: ^testing.T) 
 	config := orbit_camera_config_default()
 	before := state
 	// Zero scroll is the identity.
-	orbit_camera_zoom_toward(&state, {5, 5, 0}, 0, config)
+	scroll := f32(0)
+	orbit_camera_zoom_toward(&state, {5, 5, 0}, &scroll, config)
 	testing.expect_value(t, state, before)
 	// A huge zoom-in clamps at min_distance and still moves the target only
 	// by the clamped fraction.
-	orbit_camera_zoom_toward(&state, {5, 5, 0}, 10000, config)
+	scroll = 10000
+	orbit_camera_zoom_toward(&state, {5, 5, 0}, &scroll, config)
 	testing.expect_value(t, state.distance, config.min_distance)
+	testing.expect_value(t, scroll, f32(0))
 	// Already at the clamp: further zoom-in is the identity, so the target
-	// cannot creep toward the focus without any distance change.
+	// cannot creep toward the focus without any distance change. The scroll
+	// channel is still consumed so it cannot leak into the plain zoom path.
 	at_clamp := state
-	orbit_camera_zoom_toward(&state, {5, 5, 0}, 1, config)
+	scroll = 1
+	orbit_camera_zoom_toward(&state, {5, 5, 0}, &scroll, config)
 	testing.expect_value(t, state, at_clamp)
+	testing.expect_value(t, scroll, f32(0))
+}
+
+@(test)
+orbit_camera_zoom_toward_consumes_scroll :: proc(t: ^testing.T) {
+	state := Orbit_Camera_State {
+		target   = {0, 0, 0},
+		pitch    = 0.5,
+		distance = 10,
+	}
+	config := orbit_camera_config_default()
+	scroll := f32(1)
+	orbit_camera_zoom_toward(&state, {5, 5, 0}, &scroll, config)
+	testing.expect_value(t, scroll, f32(0))
+	testing.expect(t, state.distance < 10, "positive scroll must dolly in")
+}
+
+@(test)
+orbit_camera_grab_pan_keeps_anchor_under_ray :: proc(t: ^testing.T) {
+	pan: Orbit_Camera_Grab_Pan
+	orbit_camera_grab_pan_begin(&pan, {2, 3, 1})
+	// Straight-down ray over (5, 3): world must shift by anchor - hit = (-3, 0).
+	delta, ok := orbit_camera_grab_pan_delta(pan, {origin = {5, 3, 10}, direction = {0, 0, -1}})
+	testing.expect(t, ok)
+	testing.expect_value(t, delta, Vector3{-3, 0, 0})
+	orbit_camera_grab_pan_end(&pan)
+	_, idle := orbit_camera_grab_pan_delta(pan, {origin = {5, 3, 10}, direction = {0, 0, -1}})
+	testing.expect(t, !idle, "inactive grab pan must not produce a delta")
+}
+
+@(test)
+orbit_camera_grab_pan_rejects_parallel_ray :: proc(t: ^testing.T) {
+	pan: Orbit_Camera_Grab_Pan
+	orbit_camera_grab_pan_begin(&pan, {0, 0, 2})
+	_, ok := orbit_camera_grab_pan_delta(pan, {origin = {0, 0, 10}, direction = {1, 0, 0}})
+	testing.expect(t, !ok, "ray parallel to the pan plane must miss")
 }
 
 @(test)

@@ -195,6 +195,13 @@ Orbit_Camera_Key_Pair :: struct {
 	secondary: KeyboardKey,
 }
 
+// Orbit_Camera_Mouse_Binding is an optional mouse-button role. `bound`
+// distinguishes "unset" from LEFT, whose enum value is zero.
+Orbit_Camera_Mouse_Binding :: struct {
+	button: MouseButton,
+	bound:  bool,
+}
+
 // Orbit_Camera_Bindings maps physical input to the semantic Orbit_Camera_Input.
 // It is separate from Orbit_Camera_Config because a binding is a user
 // preference while a config is a camera property: rebinding a key must not be
@@ -210,7 +217,31 @@ Orbit_Camera_Bindings :: struct {
 	pan_left:           Orbit_Camera_Key_Pair,
 	pan_right:          Orbit_Camera_Key_Pair,
 	drag_button:        MouseButton,
+	// drag_modifier gates pointer_drag: when bound (either key non-null),
+	// the drag only rotates while a modifier key is held. Unbound keeps the
+	// historical always-on behaviour.
+	drag_modifier:      Orbit_Camera_Key_Pair,
+	// pan_button marks a button as grab-pan intent, resolved by
+	// orbit_camera_pointer_intent. It may equal drag_button; the modifier
+	// then disambiguates (held = rotate, released = pan).
+	pan_button:         Orbit_Camera_Mouse_Binding,
 	pointer_drag_scale: Vector2,
+}
+
+// Orbit_Camera_Pointer_Intent is the resolved role of the current pointer
+// drag, so poll and app-level pan code agree on who owns the button.
+Orbit_Camera_Pointer_Intent :: enum {
+	None,
+	Rotate,
+	Pan,
+}
+
+// Orbit_Camera_Grab_Pan anchors a world point at press so per-frame ray/plane
+// intersection can keep it pinned under the cursor. The anchor pick is the
+// application's job (terrain raycast, physics query); the plane math is not.
+Orbit_Camera_Grab_Pan :: struct {
+	active: bool,
+	anchor: Vector3,
 }
 
 Camera2D :: struct {
