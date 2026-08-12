@@ -1346,10 +1346,18 @@ ti_mouse_masked :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	sel_set(ctx.sel, ctx.sb, ctx.cursor^, ctx.cursor^)
 }
 
-@(private = "file")
-ti_click_count_update :: proc(sel: ^Input_Sel, offset: int, now: f64) {
+// ti_click_count_update advances the single/double/triple click counter.
+// Two clicks group when they land within 0.4s and within one rune of the
+// previous click - byte distance alone would drop double-clicks on wide
+// (CJK/emoji) runes whose neighbouring boundaries sit 3-4 bytes apart.
+@(private)
+ti_click_count_update :: proc(sel: ^Input_Sel, text: string, offset: int, now: f64) {
 	assert(sel != nil, "ti_click_count_update: nil selection")
-	if now - sel.last_click_time < 0.4 && abs(offset - sel.last_click_byte) <= 2 {
+	assert(offset >= 0 && offset <= len(text), "ti_click_count_update: invalid offset")
+	// The stored offset can outlive edits between clicks; clamp before use.
+	last := caret_clamp(text, sel.last_click_byte)
+	near := offset >= caret_prev_rune(text, last) && offset <= caret_next_rune(text, last)
+	if now - sel.last_click_time < 0.4 && near {
 		sel.click_count = min(sel.click_count + 1, 3)
 	} else {
 		sel.click_count = 1
@@ -1359,6 +1367,28 @@ ti_click_count_update :: proc(sel: ^Input_Sel, offset: int, now: f64) {
 	assert(sel.click_count >= 1 && sel.click_count <= 3, "ti_click_count_update: invalid count")
 }
 
+// ti_word_bounds_pills returns word bounds widened over any intersecting
+// pill: pills are atomic everywhere else, so word selection must never
+// bisect a mention.
+@(private)
+ti_word_bounds_pills :: proc(
+	text: string,
+	pills: ^[dynamic]Mention_Span,
+	offset: int,
+) -> (
+	start: int,
+	end: int,
+) {
+	assert(offset >= 0 && offset <= len(text), "ti_word_bounds_pills: invalid offset")
+	start, end = find_word_bounds(text, offset)
+	if pills != nil {
+		start = pill_snap_left(pills, start)
+		end = pill_snap_right(pills, end)
+	}
+	assert(start >= 0 && start <= end && end <= len(text), "ti_word_bounds_pills: bad bounds")
+	return
+}
+
 @(private = "file")
 ti_click_apply :: proc(ctx: ^TI_Ctx, text: string, offset: int) {
 	assert(ctx != nil && ctx.sel != nil, "ti_click_apply: invalid context")
@@ -1366,7 +1396,7 @@ ti_click_apply :: proc(ctx: ^TI_Ctx, text: string, offset: int) {
 	sel := ctx.sel
 	switch sel.click_count {
 	case 2:
-		start, end := find_word_bounds(text, offset)
+		start, end := ti_word_bounds_pills(text, ctx.pills, offset)
 		sel_set(sel, ctx.sb, start, end)
 		sel.dragging = true
 		ctx.cursor^ = end
@@ -1446,7 +1476,7 @@ ti_mouse_press :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, mouse: Vector2) 
 		sel.dragging = true
 		ctx.cursor^ = off
 	} else {
-		ti_click_count_update(sel, off, frame_input(ctx.frame).time)
+		ti_click_count_update(sel, text, off, frame_input(ctx.frame).time)
 		ti_click_apply(ctx, text, off)
 	}
 	if ctx.desired_col != nil {
@@ -1496,11 +1526,46 @@ ti_mouse_drag :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, mouse: Vector2) -
 			v.vis_end,
 		)
 	}
-	if off == sel.extent do return false
+	if off == sel.extent && sel.click_count != 2 do return false
+	if sel.click_count == 2 {
+		// A drag that follows a double-click (including the press frame
+		// itself, where the button is already down) extends a whole word at
+		// a time and must never shrink below the originally clicked word.
+		anchor, extent := ti_drag_word_sel(text, ctx.pills, sel.last_click_byte, off)
+		if anchor == sel.anchor && extent == sel.extent do return false
+		sel_set(sel, ctx.sb, anchor, extent)
+		ctx.cursor^ = extent
+		return true
+	}
 	sel.extent = off
 	sel.active = sel.anchor != sel.extent
 	ctx.cursor^ = off
 	return true
+}
+
+// ti_drag_word_sel computes the word-granular selection for a drag after a
+// double-click: the anchor word (at the original click byte) stays fully
+// selected and the extent snaps to the boundary of the word under the mouse,
+// matching platform convention. Pure so it is unit-testable without a frame.
+@(private)
+ti_drag_word_sel :: proc(
+	text: string,
+	pills: ^[dynamic]Mention_Span,
+	click_byte, off: int,
+) -> (
+	anchor: int,
+	extent: int,
+) {
+	assert(off >= 0 && off <= len(text), "ti_drag_word_sel: invalid offset")
+	// pills is optional; when present, each span covers at least one byte of
+	// the text, so there can never be more pills than bytes.
+	assert(pills == nil || len(pills) <= len(text), "ti_drag_word_sel: more pills than bytes")
+	// The click byte can outlive edits between frames; clamp before use.
+	wa_s, wa_e := ti_word_bounds_pills(text, pills, caret_clamp(text, click_byte))
+	ws, we := ti_word_bounds_pills(text, pills, off)
+	if off < wa_s do return wa_e, ws
+	assert(we >= wa_s, "ti_drag_word_sel: extent behind anchor")
+	return wa_s, we
 }
 
 // ti_mouse_caret handles press (single/double/triple click, shift-extend),

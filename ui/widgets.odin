@@ -1271,17 +1271,22 @@ truncate_path_middle_frame :: proc(
 	return truncate_to_width_dir_frame(frame, path, max_width, font_size, .Head)
 }
 
+// Bytes >= 0x80 (UTF-8 lead/continuation bytes) count as word bytes so
+// multi-byte runes never split a word; boundaries stay at ASCII non-word
+// bytes. Same byte-wise trick as spell_word_byte.
 @(private = "file")
 is_identifier_byte :: proc(value: u8) -> bool {
 	return(
 		(value >= 'a' && value <= 'z') ||
 		(value >= 'A' && value <= 'Z') ||
 		(value >= '0' && value <= '9') ||
-		value == '_' \
+		value == '_' ||
+		value >= 0x80 \
 	)
 }
 
-// Find word boundaries around a byte offset. A word is alphanumeric + underscore.
+// Find word boundaries around a byte offset. A word is alphanumeric,
+// underscore, or any non-ASCII rune.
 find_word_bounds :: proc(text: string, byte_offset: int) -> (start: int, end: int) {
 	assert(byte_offset >= 0 && byte_offset <= len(text))
 	start = byte_offset

@@ -362,3 +362,69 @@ orbit_camera_zoom_toward_respects_clamps_and_zero_scroll :: proc(t: ^testing.T) 
 	orbit_camera_zoom_toward(&state, {5, 5, 0}, 1, config)
 	testing.expect_value(t, state, at_clamp)
 }
+
+@(test)
+orbit_camera_key_pan_moves_target_camera_relative :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	state, _ := orbit_camera_from_camera(camera)
+	before := state
+	config := orbit_camera_config_default()
+	config.pan_speed = 2
+	// Camera sits at -X looking +X (yaw = pi): forward pans toward +X and
+	// right pans toward -Y.
+	input := Orbit_Camera_Input {
+		pan_rate = {0, 1},
+	}
+	update_orbit_camera(&state, input, config, 0.5)
+	expected := before.target + Vector3{config.pan_speed * before.distance * 0.5, 0, 0}
+	camera_test_vector_near(t, state.target, expected, 1e-4)
+	testing.expect_value(t, state.yaw, before.yaw)
+	testing.expect_value(t, state.distance, before.distance)
+	state = before
+	input = Orbit_Camera_Input {
+		pan_rate = {1, 0},
+	}
+	update_orbit_camera(&state, input, config, 0.5)
+	expected = before.target + Vector3{0, -config.pan_speed * before.distance * 0.5, 0}
+	camera_test_vector_near(t, state.target, expected, 1e-4)
+}
+
+@(test)
+orbit_camera_yaw_clamps_only_when_range_is_set :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	state, _ := orbit_camera_from_camera(camera)
+	config := orbit_camera_config_default()
+	// Default (zero) yaw range never clamps: a full-turn spin accumulates.
+	input := Orbit_Camera_Input {
+		rotate_rate = {1, 0},
+	}
+	start_yaw := state.yaw
+	update_orbit_camera(&state, input, config, 10)
+	testing.expect(t, state.yaw > start_yaw + 6)
+	// A finite range clamps at its bounds.
+	config.min_yaw = start_yaw - 0.25
+	config.max_yaw = start_yaw + 0.25
+	update_orbit_camera(&state, input, config, 10)
+	testing.expect_value(t, state.yaw, config.max_yaw)
+	input.rotate_rate.x = -1
+	update_orbit_camera(&state, input, config, 100)
+	testing.expect_value(t, state.yaw, config.min_yaw)
+}
+
+@(test)
+orbit_camera_pan_rate_defaults_are_identity :: proc(t: ^testing.T) {
+	camera := camera_test_value()
+	state, _ := orbit_camera_from_camera(camera)
+	before := state
+	config := orbit_camera_config_default()
+	// pan_speed defaults to 0, so a pan rate alone must not move the target.
+	input := Orbit_Camera_Input {
+		pan_rate = {1, 1},
+	}
+	update_orbit_camera(&state, input, config, 0.5)
+	testing.expect_value(t, state, before)
+	// A configured pan speed with zero rate is also the identity.
+	config.pan_speed = 3
+	update_orbit_camera(&state, Orbit_Camera_Input{}, config, 0.5)
+	testing.expect_value(t, state, before)
+}
