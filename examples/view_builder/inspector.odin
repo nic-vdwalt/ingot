@@ -176,7 +176,7 @@ inspector_writeback :: proc(data: ^State, kind: view.View_Kind) {
 				set_status(data, "an interactive element needs a key", true)
 			} else if key_collides(&data.doc, node, typed) {
 				set_status(data, fmt.tprintf("key %q already used by a sibling", typed), true)
-			} else if view.doc_set_key(&data.doc, node, typed) {
+			} else if view.doc_set_key(&data.doc, node, typed) == .None {
 				set_status(data, "")
 			}
 		}

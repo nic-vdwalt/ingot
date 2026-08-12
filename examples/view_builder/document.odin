@@ -93,8 +93,8 @@ add_node_into :: proc(data: ^State, parent: i32, kind: view.View_Kind) {
 	}
 	key := fmt.tprintf("n%d", doc.count)
 	label := default_label(kind)
-	index, ok := view.doc_add_keyed(doc, parent, kind, key, label, node)
-	if !ok {
+	index, err := view.doc_add_keyed(doc, parent, kind, key, label, node)
+	if err != .None {
 		set_status(data, "document is full", true)
 		return
 	}
@@ -315,7 +315,7 @@ copy_node :: proc(dst: ^view.View_Doc, src: ^view.View_Doc, index: i32, mapping:
 		dst,
 		view.view_text(source, node.value_offset, node.value_length),
 	)
-	copied, ok := view.doc_add(dst, target, entry)
-	if !ok do return
+	copied, err := view.doc_add(dst, target, entry)
+	if err != .None do return
 	mapping[index] = copied
 }

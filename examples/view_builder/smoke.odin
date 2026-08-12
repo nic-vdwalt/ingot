@@ -125,9 +125,9 @@ when SMOKE {
 		assert(data != nil, "smoke_text_edit: nil state")
 		if data.selected <= 0 || data.selected >= data.doc.count do return
 		node := data.selected
-		ok := view.doc_set_label(&data.doc, node, fmt.tprintf("Edited %d", step))
+		ok := view.doc_set_label(&data.doc, node, fmt.tprintf("Edited %d", step)) == .None
 		if view.view_kind_is_interactive(data.doc.nodes[node].kind) {
-			ok &&= view.doc_set_key(&data.doc, node, fmt.tprintf("edited-%d", step))
+			ok &&= view.doc_set_key(&data.doc, node, fmt.tprintf("edited-%d", step)) == .None
 		}
 		if !ok {
 			fmt.eprintfln("smoke: text edit failed at step %d", step)
