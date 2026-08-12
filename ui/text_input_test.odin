@@ -431,6 +431,34 @@ text_input_backspace_deletes_the_previous_rune :: proc(t: ^testing.T) {
 	testing.expect_value(t, result.cursor, 2)
 }
 
+// A ZWJ emoji sequence is one user-perceived character: a single backspace
+// must remove the whole 18-byte family, not one codepoint of it.
+@(test)
+text_input_backspace_removes_a_whole_emoji_cluster :: proc(t: ^testing.T) {
+	result := ti_key_frame(
+		{text = "a👩‍👩‍👦", cursor = -1, key = .BACKSPACE, height = 30},
+	)
+	testing.expect_value(t, result.text, "a")
+	testing.expect_value(t, result.cursor, 1)
+}
+
+@(test)
+text_input_forward_delete_removes_a_combining_pair :: proc(t: ^testing.T) {
+	// "e" + U+0301 (combining acute) + "x": forward delete at 0 removes the
+	// full 3-byte cluster in one keystroke.
+	result := ti_key_frame({text = "e\u0301x", cursor = 0, key = .DELETE, height = 30})
+	testing.expect_value(t, result.text, "x")
+	testing.expect_value(t, result.cursor, 0)
+}
+
+@(test)
+text_input_arrows_step_over_grapheme_clusters :: proc(t: ^testing.T) {
+	right := ti_key_frame({text = "e\u0301x", cursor = 0, key = .RIGHT, height = 30})
+	testing.expect_value(t, right.cursor, 3)
+	left := ti_key_frame({text = "a👩‍👩‍👦", cursor = -1, key = .LEFT, height = 30})
+	testing.expect_value(t, left.cursor, 1)
+}
+
 @(test)
 text_input_backspace_deletes_in_a_masked_field :: proc(t: ^testing.T) {
 	result := ti_key_frame(

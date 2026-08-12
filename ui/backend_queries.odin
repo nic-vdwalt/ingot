@@ -111,6 +111,24 @@ frame_characters_consume :: proc(frame: ^Ui_Frame) {
 	input.character_count = 0
 }
 
+// frame_preedit returns the in-progress IME composition (empty when not
+// composing) and the caret byte offset within it. The string aliases the
+// input snapshot - valid for this frame only. Committed text arrives via
+// frame_characters as usual; the preedit is display-only.
+frame_preedit :: proc(frame: ^Ui_Frame) -> (text: string, caret: int) {
+	assert(frame != nil, "frame_preedit: nil frame")
+	input := frame_input(frame)
+	assert(
+		input.preedit_len >= 0 && input.preedit_len <= INPUT_PREEDIT_CAP,
+		"frame_preedit: preedit length out of range",
+	)
+	assert(
+		input.preedit_caret >= 0 && input.preedit_caret <= input.preedit_len,
+		"frame_preedit: preedit caret out of range",
+	)
+	return string(input.preedit[:input.preedit_len]), input.preedit_caret
+}
+
 // frame_user_input_active reports whether the user touched the mouse or
 // keyboard this frame, so a caller can stay at full frame rate instead of
 // dropping into the event-driven idle strategy mid-gesture.

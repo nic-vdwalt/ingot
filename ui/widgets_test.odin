@@ -144,6 +144,35 @@ find_word_bounds_multibyte_runes :: proc(t: ^testing.T) {
 }
 
 @(test)
+caret_grapheme_steps_match_rune_steps_on_ascii :: proc(t: ^testing.T) {
+	text := "ab\ncd"
+	for pos in 0 ..= len(text) {
+		testing.expect_value(t, caret_next_grapheme(text, pos), caret_next_rune(text, pos))
+		testing.expect_value(t, caret_prev_grapheme(text, pos), caret_prev_rune(text, pos))
+	}
+}
+
+@(test)
+caret_grapheme_steps_over_clusters :: proc(t: ^testing.T) {
+	// "a" + family emoji (18 bytes: three 4-byte emoji joined by two 3-byte
+	// ZWJs) + "b": one step crosses the whole cluster in both directions.
+	family := "a👩‍👩‍👦b"
+	testing.expect_value(t, caret_next_grapheme(family, 1), 19)
+	testing.expect_value(t, caret_prev_grapheme(family, 19), 1)
+	// Mid-cluster offsets snap out to the cluster edges.
+	testing.expect_value(t, caret_next_grapheme(family, 5), 19)
+	testing.expect_value(t, caret_prev_grapheme(family, 5), 1)
+	// Combining mark: "e" + U+0301 is one cluster of 3 bytes.
+	combining := "e\u0301x"
+	testing.expect_value(t, caret_next_grapheme(combining, 0), 3)
+	testing.expect_value(t, caret_prev_grapheme(combining, 3), 0)
+	// Edges clamp; a caret at a line start steps over the newline.
+	testing.expect_value(t, caret_next_grapheme("x", 1), 1)
+	testing.expect_value(t, caret_prev_grapheme("", 0), 0)
+	testing.expect_value(t, caret_prev_grapheme("a\nb", 2), 1)
+}
+
+@(test)
 wheel_accum_carries_fractions :: proc(t: ^testing.T) {
 	accum: f32
 	// Small deltas accumulate until a whole row is reached.

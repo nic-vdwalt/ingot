@@ -4,6 +4,9 @@ INPUT_KEY_COUNT :: 349
 INPUT_MOUSE_BUTTON_COUNT :: 7
 INPUT_CHAR_CAP :: 64
 INPUT_CLIPBOARD_CAP :: 4096
+// Mirrors the gfx backend's PREEDIT_MAX so a staged IME composition is never
+// truncated crossing the adapter boundary.
+INPUT_PREEDIT_CAP :: 256
 
 Ui_Input :: struct {
 	screen_size:        Vec2,
@@ -27,6 +30,11 @@ Ui_Input :: struct {
 	characters_dropped: int,
 	clipboard:          [INPUT_CLIPBOARD_CAP]u8,
 	clipboard_len:      int,
+	// In-progress IME composition (UTF-8) plus the caret byte offset within
+	// it. Display-only: committed text still arrives via `characters`.
+	preedit:            [INPUT_PREEDIT_CAP]u8,
+	preedit_len:        int,
+	preedit_caret:      int,
 	window_focused:     bool,
 	cursor_on_screen:   bool,
 	window_fullscreen:  bool,

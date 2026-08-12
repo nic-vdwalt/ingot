@@ -268,21 +268,22 @@ caret_next_rune :: proc(s: string, pos: int) -> int {
 
 // Move one grapheme cluster right from `pos`, returning the new byte offset.
 // Emoji ZWJ sequences and combining-mark pairs step as one unit, matching
-// what the user perceives as a single character.
+// what the user perceives as a single character. Scans clusters from the
+// line start so a mid-cluster caret still sees full left context (resuming
+// segmentation mid-sequence would fabricate boundaries).
 caret_next_grapheme :: proc(s: string, pos: int) -> int {
 	assert(pos >= 0, "caret_next_grapheme: negative offset")
 	assert(pos <= len(s), "caret_next_grapheme: offset past end")
 	if pos >= len(s) do return len(s)
 	p := caret_clamp(s, pos)
-	it := utf8.decode_grapheme_iterator_make(s[p:])
-	seen := 0
-	// The iterator yields once per cluster start; the second yield marks the
-	// end of the cluster under the caret.
+	if s[p] == '\n' do return p + 1 // on the newline: step onto the next line
+	start := caret_line_start(s, p)
+	end := caret_line_end(s, p)
+	it := utf8.decode_grapheme_iterator_make(s[start:end])
 	for _, g in utf8.decode_grapheme_iterate(&it) {
-		seen += 1
-		if seen == 2 do return p + g.byte_index
+		if start + g.byte_index > p do return start + g.byte_index
 	}
-	return len(s)
+	return end // caret in the line's last cluster: next stop is the line end
 }
 
 // Move one grapheme cluster left from `pos`, returning the new byte offset.

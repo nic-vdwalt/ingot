@@ -5,6 +5,7 @@ import "ingot:ui"
 
 INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
 #assert(INPUT_CHARACTER_DRAIN_MAX == ui.INPUT_CHAR_CAP)
+#assert(rl.PREEDIT_MAX == ui.INPUT_PREEDIT_CAP)
 
 capture_input :: proc(input: ^ui.Ui_Input) {
 	capture_input_context(rl.default_context(), input)
@@ -76,5 +77,10 @@ capture_input_context :: proc(ctx: ^rl.Context, input: ^ui.Ui_Input) {
 	}
 	assert(input.character_count <= ui.INPUT_CHAR_CAP)
 	assert(characters_drained <= INPUT_CHARACTER_DRAIN_MAX)
+	// Preedit is global backend state (one OS input method), not per-context.
+	preedit, preedit_caret := rl.GetPreedit()
+	input.preedit_len = min(len(preedit), ui.INPUT_PREEDIT_CAP)
+	copy(input.preedit[:input.preedit_len], transmute([]u8)preedit)
+	input.preedit_caret = clamp(preedit_caret, 0, input.preedit_len)
 	pointer_snapshot_sanitize(input)
 }
