@@ -155,17 +155,23 @@ Orbit_Camera_State :: struct {
 
 // Orbit_Camera_Input.pan is a world-space delta applied to the orbit target
 // each update. There is no default binding for it because computing a useful
-// pan (drag a grabbed ground point, edge scrolling, WASD in camera space)
-// needs application knowledge such as picking; callers fill it in after
-// orbit_camera_input_poll.
+// pan (drag a grabbed ground point, edge scrolling) needs application
+// knowledge such as picking; callers fill it in after
+// orbit_camera_input_poll. pan_rate is the camera-relative keyboard channel:
+// x pans right, y pans toward the view direction (ground-projected), scaled
+// by Orbit_Camera_Config.pan_speed and the current distance.
 Orbit_Camera_Input :: struct {
 	rotate_rate:  Vector2,
 	zoom_rate:    f32,
 	pointer_drag: Vector2,
 	scroll:       f32,
 	pan:          Vector3,
+	pan_rate:     Vector2,
 }
 
+// min_yaw/max_yaw clamp the azimuth only when max_yaw > min_yaw; the zero
+// default leaves yaw unbounded, preserving free-orbit behaviour. pan_speed
+// scales the keyboard pan channel; the zero default disables it.
 Orbit_Camera_Config :: struct {
 	world_up:               Vector3,
 	rotate_speed:           f32,
@@ -176,6 +182,9 @@ Orbit_Camera_Config :: struct {
 	max_distance:           f32,
 	min_pitch:              f32,
 	max_pitch:              f32,
+	min_yaw:                f32,
+	max_yaw:                f32,
+	pan_speed:              f32,
 }
 
 // Orbit_Camera_Key_Pair binds one camera axis to up to two keys, because the
@@ -189,12 +198,17 @@ Orbit_Camera_Key_Pair :: struct {
 // Orbit_Camera_Bindings maps physical input to the semantic Orbit_Camera_Input.
 // It is separate from Orbit_Camera_Config because a binding is a user
 // preference while a config is a camera property: rebinding a key must not be
-// able to change the pitch limits.
+// able to change the pitch limits. The pan keys default to KEY_NULL
+// (unbound); RTS-style schemes bind them to WASD and move rotation elsewhere.
 Orbit_Camera_Bindings :: struct {
 	rotate_left:        Orbit_Camera_Key_Pair,
 	rotate_right:       Orbit_Camera_Key_Pair,
 	zoom_in:            Orbit_Camera_Key_Pair,
 	zoom_out:           Orbit_Camera_Key_Pair,
+	pan_forward:        Orbit_Camera_Key_Pair,
+	pan_back:           Orbit_Camera_Key_Pair,
+	pan_left:           Orbit_Camera_Key_Pair,
+	pan_right:          Orbit_Camera_Key_Pair,
 	drag_button:        MouseButton,
 	pointer_drag_scale: Vector2,
 }
