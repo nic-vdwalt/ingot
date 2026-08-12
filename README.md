@@ -90,6 +90,7 @@ harnesses.
 | Package | Role |
 |---|---|
 | `ingot:asset` | Renderer-independent validated cooked meshes and bounds |
+| `ingot:ecs` | Sparse-set entity component system: generational entities, typed component sets, join queries, deferred structural changes, and blittable snapshots |
 | `ingot:procgen` | Seeded, bounded terrain, biome, vegetation, and building generation |
 | `ingot:scene` | Renderer-independent objects, visibility, LOD, sorting, and bounded draw lists |
 | `ingot:scene_gfx` | GPU residency and replay bridge for `scene` draw lists |
