@@ -75,17 +75,23 @@ when INGOT_DEFAULT_FONT {
 	// adds no implicit spacing: raylib's built-in face is a tightly packed
 	// bitmap font needing fontSize/10 added back between glyphs, whereas the
 	// embedded TTF's own advances already include it.
-	DrawText :: proc(text: cstring, posX, posY, fontSize: i32, color: Color) {
+	GetFontDefault :: proc() -> Font {
 		font, ok := _default_font(g)
-		if !ok do return
+		if !ok do return {}
+		return font
+	}
+
+	DrawText :: proc(text: cstring, posX, posY, fontSize: i32, color: Color) {
+		font := GetFontDefault()
+		if font.glyphCount == 0 do return
 		DrawTextEx(font, text, {f32(posX), f32(posY)}, f32(fontSize), 0, color)
 	}
 
 	// MeasureText reads the same atlas DrawText draws from, so its result
 	// always describes what DrawText actually renders.
 	MeasureText :: proc(text: cstring, fontSize: i32) -> i32 {
-		font, ok := _default_font(g)
-		if !ok do return 0
+		font := GetFontDefault()
+		if font.glyphCount == 0 do return 0
 		return i32(MeasureTextEx(font, text, f32(fontSize), 0).x)
 	}
 
