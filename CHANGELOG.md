@@ -11,6 +11,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `view.doc_tail_rebuild`: re-derives the authoring tail cache from a
+  document's links, for callers that write nodes directly instead of through
+  `doc_add`. `view_decode` calls it after a successful decode.
 - `ui.layer_begin`/`ui.layer_end`: the single raised-surface primitive. One
   call couples input occlusion (an optional claim rect), paint order (the z
   tier), and coordinates (the pane origin is zeroed, so every ordinary `draw_*`
@@ -72,11 +75,28 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
+- **Breaking**: `ui.line_chart` and `ui.bar_chart` take `Chart_Facade_Options`
+  only; the positional `(height, opts)` overloads and their proc groups are
+  removed. Call sites migrate mechanically: `line_chart(u, series, &state, 80)`
+  becomes `line_chart(u, series, &state, {height = 80})`.
+- **Breaking**: the `view` document builder reports `view.Build_Error` instead
+  of `bool`. `doc_intern`, `doc_add`, and `doc_add_keyed` return
+  `(value, Build_Error)`; `doc_set_key`, `doc_set_label`, and `doc_set_value`
+  return `Build_Error`. The zero value `.None` means success, so `or_return`
+  composes as before, and a caller can finally distinguish a full node table
+  from a full text blob from an invalid parent.
 - **Breaking**: `gfx.orbit_camera_zoom_toward` takes `scroll: ^f32` and zeroes
   it, consuming the channel so the same scroll value can no longer also reach
   `update_orbit_camera` and double-apply the distance change.
 
 ### Fixed
+
+- `view.doc_add_keyed` is transactional: when the label intern or the node
+  append fails after earlier interns succeeded, the text blob is restored to
+  its entry length instead of silently keeping unreferenced bytes.
+- `view` document authoring is O(n): appending a node links through a per-parent
+  tail cache instead of walking the whole sibling chain, so building a wide
+  document (many children under one parent) no longer costs O(n²) link steps.
 
 - `ui`: z-ordered input claims silently suppressed every click inside the
   claiming surface. `interact_frame_begin` latched press occlusion once per

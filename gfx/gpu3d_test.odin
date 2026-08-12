@@ -425,17 +425,18 @@ test_gpu_3d_pipeline_identity_includes_compatibility_fields :: proc(t: ^testing.
 		style        = .Default,
 		sample_count = 4,
 	}
-	testing.expect(t, _gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default, 4))
-	testing.expect(t, !_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque, 4))
+	testing.expect(t, _gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default, 4, 0))
+	testing.expect(t, !_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque, 4, 0))
 	testing.expect(
 		t,
-		!_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque_Overlay, 4),
+		!_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque_Overlay, 4, 0),
 	)
 	testing.expect(
 		t,
-		!_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque_Outline, 4),
+		!_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Opaque_Outline, 4, 0),
 	)
-	testing.expect(t, !_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default, 1))
+	testing.expect(t, !_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default, 1, 0))
+	testing.expect(t, !_gpu_3d_pipeline_matches(entry, .RGBA8Unorm, .Triangles, .Default, 4, 7))
 }
 
 // -- pool handle mapping -------------------------------------------------------
