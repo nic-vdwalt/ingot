@@ -105,6 +105,19 @@ ti_line_span_px :: proc(
 
 // ti_render_caret_lines draws the visible window of soft-wrapped lines with
 // selection highlight, pill chips, and spell squiggles.
+// ti_span_shift maps a committed-text byte offset into display-text space:
+// while an IME composition is spliced in at the caret, offsets at or after
+// the insertion point shift right by the preedit length.
+@(private = "file")
+ti_span_shift :: proc(v: ^TI_View, pos: int) -> int {
+	assert(v != nil, "ti_span_shift: nil view")
+	assert(v.preedit_lo <= v.preedit_hi, "ti_span_shift: inverted preedit range")
+	if v.preedit_hi > v.preedit_lo && pos >= v.preedit_lo {
+		return pos + v.preedit_hi - v.preedit_lo
+	}
+	return pos
+}
+
 @(private = "file")
 ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles: []Spell_Range) {
 	assert(v.caret_render, "ti_render_caret_lines: caret renderer required")
@@ -125,6 +138,7 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 		// Selection highlight: overlap of this visual line with the range.
 		if sel.active && sel.sb == ctx.sb {
 			lo, hi := sel_range(sel)
+			lo, hi = ti_span_shift(v, lo), ti_span_shift(v, hi)
 			if hl, hl_ok := ti_line_span_px(ctx, text, vl, lo, hi, font_size); hl_ok {
 				draw_rectangle(ctx.frame, hl.x, line_y, hl.w, font_size, style.bg_selection)
 			}
@@ -134,7 +148,8 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 		pill_spans := make([dynamic]TI_Span_Px, context.temp_allocator)
 		if ctx.pills != nil {
 			for p in ctx.pills {
-				if span, p_ok := ti_line_span_px(ctx, text, vl, p.start, p.end, font_size); p_ok {
+				ps, pe := ti_span_shift(v, p.start), ti_span_shift(v, p.end)
+				if span, p_ok := ti_line_span_px(ctx, text, vl, ps, pe, font_size); p_ok {
 					append(&pill_spans, span)
 				}
 			}
@@ -155,6 +170,22 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 					line_y + font_size + ui_frame_sc(ctx.frame, 1),
 					span.w,
 					style.spell_error,
+				)
+			}
+		}
+		// Solid underline beneath the in-progress IME composition, at the
+		// same offset as the spell squiggle so the two never disagree on
+		// baseline position.
+		if v.preedit_hi > v.preedit_lo {
+			if ul, ul_ok := ti_line_span_px(ctx, text, vl, v.preedit_lo, v.preedit_hi, font_size);
+			   ul_ok {
+				draw_rectangle(
+					ctx.frame,
+					ul.x,
+					line_y + font_size + ui_frame_sc(ctx.frame, 1),
+					ul.w,
+					ui_frame_sc(ctx.frame, 1),
+					style.fg_secondary,
 				)
 			}
 		}
@@ -439,16 +470,44 @@ ti_draw_clipped :: proc(ctx: ^TI_Ctx) {
 	assert(ctx.h > 0, "ti_draw_clipped: non-positive height")
 	begin_pane_scissor(ctx.frame, ctx.inner_x, ctx.y, ctx.inner_w, ctx.h)
 	text := strings.to_string(ctx.sb^)
-	view := ti_layout(ctx, text)
-	if ctx.active && view.masked_caret do ti_mouse_masked(ctx, text, &view)
-	if ctx.active && view.caret_render do ti_mouse_caret(ctx, text, &view)
-	spell_squiggles: []Spell_Range
-	if ctx.active && view.caret_render && ctx.pills != nil && ctx.undo != nil {
-		spell_squiggles = ti_spell(ctx, text, &view)
+	// While the OS input method is composing, splice the preedit into the
+	// display text at the caret so wrap and rendering treat it as real text.
+	// Display-only: the builder, undo, pills, and selection stay untouched;
+	// the committed text arrives via the character queue on composition end.
+	display := text
+	pre_lo, pre_hi := 0, 0
+	saved_cursor := 0
+	composing := false
+	if ctx.active && ctx.caret && !ctx.masked {
+		preedit, pre_caret := frame_preedit(ctx.frame)
+		if len(preedit) > 0 {
+			composing = true
+			saved_cursor = ctx.cursor^
+			cur := clamp(saved_cursor, 0, len(text))
+			display = strings.concatenate(
+				{text[:cur], preedit, text[cur:]},
+				context.temp_allocator,
+			)
+			pre_lo, pre_hi = cur, cur + len(preedit)
+			// The caret rides the composition caret so scroll-follow and the
+			// OS candidate-window rect track it; restored before returning.
+			ctx.cursor^ = cur + pre_caret
+		}
 	}
-	ti_render_content(ctx, text, &view, spell_squiggles)
-	if ctx.active do ti_draw_caret(ctx, text, &view)
+	view := ti_layout(ctx, display)
+	view.preedit_lo, view.preedit_hi = pre_lo, pre_hi
+	if ctx.active && view.masked_caret do ti_mouse_masked(ctx, display, &view)
+	// The input method owns the pointer inside the box mid-composition, so
+	// clicks are ignored until commit (display offsets are transient anyway).
+	if ctx.active && view.caret_render && !composing do ti_mouse_caret(ctx, display, &view)
+	spell_squiggles: []Spell_Range
+	if ctx.active && view.caret_render && !composing && ctx.pills != nil && ctx.undo != nil {
+		spell_squiggles = ti_spell(ctx, display, &view)
+	}
+	ti_render_content(ctx, display, &view, spell_squiggles)
+	if ctx.active do ti_draw_caret(ctx, display, &view)
 	end_scissor_mode(ctx.frame)
+	if composing do ctx.cursor^ = saved_cursor
 }
 
 @(private)
