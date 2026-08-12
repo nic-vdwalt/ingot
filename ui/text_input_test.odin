@@ -1276,3 +1276,135 @@ drag_autoscroll_row_steps_are_rate_limited_and_clamped :: proc(t: ^testing.T) {
 	testing.expect(t, !stepped, "a clamped step at the bottom edge is not a step")
 	testing.expect_value(t, row, 9)
 }
+
+// --- IME preedit --------------------------------------------------------------
+
+@(private = "file")
+TI_Preedit_Frame :: struct {
+	text:          string,
+	cursor:        int,
+	preedit:       string,
+	preedit_caret: int,
+	key:           KeyboardKey, // optional press staged alongside the preedit
+	width:         i32, // zero uses 300
+	height:        i32,
+}
+
+@(private = "file")
+Ti_Preedit_Result :: struct {
+	text:       string,
+	cursor:     int,
+	undo_len:   int,
+	caret_rect: Rect, // OS candidate-window rect the frame reported
+}
+
+// ti_preedit_frame drives one real frame with an IME composition staged in
+// the input snapshot, exactly as the platform adapter delivers it.
+@(private = "file")
+ti_preedit_frame :: proc(config: TI_Preedit_Frame) -> Ti_Preedit_Result {
+	assert(config.height > 0, "ti_preedit_frame: non-positive height")
+	assert(len(config.preedit) <= INPUT_PREEDIT_CAP, "ti_preedit_frame: preedit too long")
+	runtime := new(Ui_Runtime)
+	defer free(runtime)
+	ui_runtime_init(runtime)
+	defer ui_runtime_destroy(runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := new(Ui_Frame)
+	defer free(frame)
+	defer ui_frame_destroy(frame)
+	frame.output = output
+
+	input: Ui_Input
+	input.screen_size = {800, 600}
+	input.preedit_len = len(config.preedit)
+	copy(input.preedit[:input.preedit_len], transmute([]u8)config.preedit)
+	input.preedit_caret = clamp(config.preedit_caret, 0, input.preedit_len)
+	if config.key != .KEY_NULL {
+		index := input_key_index(config.key)
+		assert(index >= 0, "ti_preedit_frame: unknown key")
+		input.keys_pressed[index] = true
+	}
+
+	box: Input_Box
+	defer input_box_destroy(&box)
+	strings.write_string(&box.sb, config.text)
+	box.st.cursor = config.cursor
+
+	width := config.width if config.width > 0 else 300
+	ui_frame_begin(frame, runtime, &input)
+	_ = text_input_at(
+		frame,
+		{0, 0, width, config.height},
+		&box,
+		"field",
+		true,
+		semantics = {name = "N"},
+	)
+	ui_frame_end(frame)
+	return {
+		strings.clone(strings.to_string(box.sb), context.temp_allocator),
+		box.st.cursor,
+		len(box.st.undo.undo),
+		output.platform.text_input_rect,
+	}
+}
+
+@(test)
+text_input_preedit_is_display_only :: proc(t: ^testing.T) {
+	// Composing must not touch the builder, the cursor, or undo history.
+	result := ti_preedit_frame(
+		{text = "ab", cursor = 1, preedit = "かな", preedit_caret = 6, height = 30},
+	)
+	testing.expect_value(t, result.text, "ab")
+	testing.expect_value(t, result.cursor, 1)
+	testing.expect_value(t, result.undo_len, 0)
+}
+
+@(test)
+text_input_preedit_caret_tracks_the_composition :: proc(t: ^testing.T) {
+	// 16px per byte: caret at cursor 1 + preedit caret 2 renders after the
+	// display prefix "axy" at x = inner_x (10) + 48. Without a composition
+	// the same field reports x = 10 + 16.
+	base := ti_preedit_frame({text = "ab", cursor = 1, height = 30})
+	testing.expect_value(t, base.caret_rect.x, f32(26))
+	composed := ti_preedit_frame(
+		{text = "ab", cursor = 1, preedit = "xy", preedit_caret = 2, height = 30},
+	)
+	testing.expect_value(t, composed.caret_rect.x, f32(58))
+}
+
+@(test)
+text_input_preedit_suppresses_the_keyboard :: proc(t: ^testing.T) {
+	// The OS input method owns the keys mid-composition: a backspace staged
+	// in the same frame must not delete committed text.
+	result := ti_preedit_frame(
+		{text = "ab", cursor = 2, preedit = "x", preedit_caret = 1, key = .BACKSPACE, height = 30},
+	)
+	testing.expect_value(t, result.text, "ab")
+	testing.expect_value(t, result.cursor, 2)
+}
+
+@(test)
+text_input_preedit_wraps_onto_the_next_row :: proc(t: ^testing.T) {
+	// Inner width 60px fits three 16px runes plus wrap spacing; a four-byte
+	// composition pushes the caret onto the second visual row.
+	result := ti_preedit_frame(
+		{text = "", cursor = 0, preedit = "abcd", preedit_caret = 4, width = 80, height = 90},
+	)
+	base := ti_preedit_frame({text = "", cursor = 0, width = 80, height = 90})
+	testing.expect(
+		t,
+		result.caret_rect.y > base.caret_rect.y,
+		"a wrapped composition must move the caret down a row",
+	)
+}

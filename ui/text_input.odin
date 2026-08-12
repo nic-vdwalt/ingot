@@ -405,6 +405,11 @@ TI_View :: struct {
 	caret_render:  bool, // caret-aware soft-wrap renderer
 	masked_caret:  bool, // caret-aware masked (password) renderer
 	has_newlines:  bool,
+	// IME preedit byte range within the display text (lo == hi when not
+	// composing). The renderer underlines it and shifts committed-text
+	// spans (selection, pills) that sit at or after the insertion point.
+	preedit_lo:    int,
+	preedit_hi:    int,
 }
 
 @(private)
@@ -497,7 +502,12 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	ti_semantic_push(ctx)
 	ti_draw_chrome(ctx)
 	entered := false
-	if ctx.active do entered = ti_keys(ctx)
+	// While an OS input method is composing, it owns the keyboard: nav,
+	// delete, and shortcuts must not fire mid-composition. Committed text
+	// still arrives through the character queue once composition ends.
+	preedit, _ := frame_preedit(ctx.frame)
+	composing := ctx.caret && !ctx.masked && len(preedit) > 0
+	if ctx.active && !composing do entered = ti_keys(ctx)
 	ti_draw_clipped(ctx)
 	ti_draw_spell_popup(ctx)
 	return entered
