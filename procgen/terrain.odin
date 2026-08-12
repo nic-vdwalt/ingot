@@ -84,7 +84,7 @@ terrain_sample :: proc(config: Terrain_Config, world_x, world_y: f32) -> Terrain
 			(height_x - height) * (height_x - height) + (height_y - height) * (height_y - height),
 		) /
 		step
-	biome := _terrain_biome(config, height, moisture, temperature, slope)
+	biome := terrain_biome(config, height, moisture, temperature, slope)
 	return {height, moisture, temperature, slope, biome}
 }
 
@@ -155,8 +155,10 @@ _terrain_unit :: proc(value: f32) -> f32 {
 	return clamp(value * 0.5 + 0.5, 0, 1)
 }
 
-@(private)
-_terrain_biome :: proc(
+// terrain_biome classifies a point from already-computed climate values, so
+// callers that cache height/moisture/temperature (or derive slope from their
+// own height grids) can classify without re-running the noise stack.
+terrain_biome :: proc(
 	config: Terrain_Config,
 	height, moisture, temperature, slope: f32,
 ) -> Biome {
