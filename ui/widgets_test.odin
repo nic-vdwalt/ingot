@@ -125,6 +125,25 @@ find_word_bounds_identifier_chars :: proc(t: ^testing.T) {
 }
 
 @(test)
+find_word_bounds_multibyte_runes :: proc(t: ^testing.T) {
+	// Bytes >= 0x80 are word bytes, so accented words select fully even when
+	// the offset lands mid-rune, and the boundary stays at the ASCII space.
+	text := "héllo wörld"
+	s, e := find_word_bounds(text, 3)
+	testing.expect_value(t, text[s:e], "héllo")
+	s, e = find_word_bounds(text, len(text))
+	testing.expect_value(t, text[s:e], "wörld")
+	// CJK runs (3-byte runes, no spaces) select as one word.
+	cjk := "日本語 テスト"
+	s, e = find_word_bounds(cjk, 4)
+	testing.expect_value(t, cjk[s:e], "日本語")
+	// ASCII punctuation still splits words.
+	hyphen := "self-hosted"
+	s, e = find_word_bounds(hyphen, 2)
+	testing.expect_value(t, hyphen[s:e], "self")
+}
+
+@(test)
 wheel_accum_carries_fractions :: proc(t: ^testing.T) {
 	accum: f32
 	// Small deltas accumulate until a whole row is reached.

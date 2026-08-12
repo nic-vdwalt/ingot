@@ -1039,6 +1039,8 @@ TI_Click_Frame :: struct {
 	mouse:  Vec2, // pane-local press position
 	shift:  bool,
 	height: i32,
+	clicks: int, // number of sequential press frames (0 -> 1)
+	pill:   Mention_Span, // appended to the box's pills when non-empty
 }
 
 @(private = "file")
@@ -1050,9 +1052,10 @@ Ti_Click_Result :: struct {
 	click_count: int,
 }
 
-// ti_click_frame drives one real frame with a left-button press so the
-// press/drag pipeline (shift-extend included) runs exactly as a user's click
-// does.
+// ti_click_frame drives one or more real frames, each with a left-button
+// press at the same position, so the press/drag pipeline (shift-extend and
+// the single/double/triple click machine included) runs exactly as a user's
+// clicks do. Frames are 0.1s apart - inside the 0.4s multi-click window.
 @(private = "file")
 ti_click_frame :: proc(config: TI_Click_Frame) -> Ti_Click_Result {
 	assert(config.height > 0, "ti_click_frame: non-positive height")
@@ -1079,25 +1082,30 @@ ti_click_frame :: proc(config: TI_Click_Frame) -> Ti_Click_Result {
 	input: Ui_Input
 	input.screen_size = {800, 600}
 	input.mouse_position = config.mouse
-	input.mouse_pressed[input_mouse_index(.LEFT)] = true
-	input.mouse_down[input_mouse_index(.LEFT)] = true
 	if config.shift do input.keys_down[input_key_index(.LEFT_SHIFT)] = true
 
 	box: Input_Box
 	defer input_box_destroy(&box)
 	strings.write_string(&box.sb, config.text)
 	box.st.cursor = config.cursor
+	if config.pill.end > config.pill.start do append(&box.st.pills, config.pill)
 
-	ui_frame_begin(frame, runtime, &input)
-	_ = text_input_at(
-		frame,
-		{0, 0, 300, config.height},
-		&box,
-		"field",
-		true,
-		semantics = {name = "N"},
-	)
-	ui_frame_end(frame)
+	clicks := max(config.clicks, 1)
+	for i in 0 ..< clicks {
+		input.time = f64(i) * 0.1
+		input.mouse_pressed[input_mouse_index(.LEFT)] = true
+		input.mouse_down[input_mouse_index(.LEFT)] = true
+		ui_frame_begin(frame, runtime, &input)
+		_ = text_input_at(
+			frame,
+			{0, 0, 300, config.height},
+			&box,
+			"field",
+			true,
+			semantics = {name = "N"},
+		)
+		ui_frame_end(frame)
+	}
 	lo, hi := text_input_selection_range(&box.st)
 	return {box.st.cursor, lo, hi, box.st.sel.active, box.st.sel.click_count}
 }
@@ -1124,6 +1132,102 @@ text_input_plain_click_places_the_caret :: proc(t: ^testing.T) {
 	testing.expect(t, !result.selecting, "a plain click must not select")
 	testing.expect_value(t, result.cursor, 5)
 	testing.expect_value(t, result.click_count, 1)
+}
+
+@(test)
+text_input_double_click_selects_the_whole_word :: proc(t: ^testing.T) {
+	// inner_x = PADDING (10); 16px per byte puts byte 2 at x = 10 + 32. The
+	// same-frame drag (button still down on the press frame) must not shrink
+	// the selection back to the click point.
+	result := ti_click_frame(
+		{text = "hello world", cursor = 0, mouse = {42, 10}, clicks = 2, height = 30},
+	)
+	testing.expect(t, result.selecting, "double-click must select the word")
+	testing.expect_value(t, result.click_count, 2)
+	testing.expect_value(t, result.sel_lo, 0)
+	testing.expect_value(t, result.sel_hi, 5)
+	testing.expect_value(t, result.cursor, 5)
+}
+
+@(test)
+text_input_double_click_selects_the_whole_accented_word :: proc(t: ^testing.T) {
+	// "héllo" is 6 bytes; a double-click after the 'h' (byte 1, x = 10 + 16)
+	// must select the full word - continuation bytes may not stop the scan.
+	result := ti_click_frame(
+		{text = "héllo wörld", cursor = 0, mouse = {26, 10}, clicks = 2, height = 30},
+	)
+	testing.expect(t, result.selecting, "double-click must select the accented word")
+	testing.expect_value(t, result.sel_lo, 0)
+	testing.expect_value(t, result.sel_hi, 6)
+	testing.expect_value(t, result.cursor, 6)
+}
+
+@(test)
+text_input_double_click_selects_the_whole_cjk_word :: proc(t: ^testing.T) {
+	// Two clicks at the same spot on 3-byte runes must still group into a
+	// double-click (the old 2-byte slop broke near wide-rune boundaries).
+	result := ti_click_frame(
+		{text = "日本語 テスト", cursor = 0, mouse = {58, 10}, clicks = 2, height = 30},
+	)
+	testing.expect_value(t, result.click_count, 2)
+	testing.expect_value(t, result.sel_lo, 0)
+	testing.expect_value(t, result.sel_hi, 9)
+}
+
+@(test)
+text_input_double_click_never_bisects_a_pill :: proc(t: ^testing.T) {
+	// Pill covers "@alice" (bytes 3..9); the word under the click is "alice"
+	// (bytes 4..9) and the selection must widen to the full pill.
+	result := ti_click_frame(
+	{
+		text   = "hi @alice yo",
+		cursor = 0,
+		mouse  = {90, 10}, // byte 5, inside the pill
+		clicks = 2,
+		pill   = {3, 9},
+		height = 30,
+	},
+	)
+	testing.expect(t, result.selecting, "double-click in a pill must select it")
+	testing.expect_value(t, result.sel_lo, 3)
+	testing.expect_value(t, result.sel_hi, 9)
+}
+
+@(test)
+click_count_groups_clicks_within_one_rune :: proc(t: ^testing.T) {
+	sel: Input_Sel
+	cjk := "日本語"
+	ti_click_count_update(&sel, cjk, 0, 0.0)
+	testing.expect_value(t, sel.click_count, 1)
+	// One 3-byte rune of travel is still the same double-click target.
+	ti_click_count_update(&sel, cjk, 3, 0.1)
+	testing.expect_value(t, sel.click_count, 2)
+	// More than one rune of ASCII travel resets the counter.
+	sel2: Input_Sel
+	ascii := "hello world"
+	ti_click_count_update(&sel2, ascii, 2, 0.0)
+	ti_click_count_update(&sel2, ascii, 6, 0.1)
+	testing.expect_value(t, sel2.click_count, 1)
+	// Clicks outside the 0.4s window reset even at the same offset.
+	ti_click_count_update(&sel2, ascii, 6, 1.0)
+	testing.expect_value(t, sel2.click_count, 1)
+}
+
+@(test)
+drag_word_sel_keeps_the_anchor_word_selected :: proc(t: ^testing.T) {
+	text := "foo bar baz"
+	// Dragging right from a double-click on "bar" grows by whole words.
+	anchor, extent := ti_drag_word_sel(text, nil, 5, 9)
+	testing.expect_value(t, anchor, 4)
+	testing.expect_value(t, extent, 11)
+	// Dragging left of the anchor word flips direction; "bar" stays covered.
+	anchor, extent = ti_drag_word_sel(text, nil, 5, 1)
+	testing.expect_value(t, anchor, 7)
+	testing.expect_value(t, extent, 0)
+	// Dragging inside the anchor word keeps exactly that word.
+	anchor, extent = ti_drag_word_sel(text, nil, 5, 6)
+	testing.expect_value(t, anchor, 4)
+	testing.expect_value(t, extent, 7)
 }
 
 @(test)
