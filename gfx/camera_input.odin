@@ -25,6 +25,26 @@ orbit_camera_bindings_default :: proc() -> Orbit_Camera_Bindings {
 	}
 }
 
+// orbit_camera_pointer_intent resolves which role owns the pointer this
+// frame. When drag and pan share a button, a held modifier means rotate and
+// a released one means pan; an unbound modifier gives rotate priority.
+orbit_camera_pointer_intent :: proc(
+	bindings: Orbit_Camera_Bindings,
+) -> Orbit_Camera_Pointer_Intent {
+	modifier_bound :=
+		bindings.drag_modifier.primary != .KEY_NULL ||
+		bindings.drag_modifier.secondary != .KEY_NULL
+	modifier_held := _orbit_key_pair_down(bindings.drag_modifier)
+	drag_enabled := bindings.pointer_drag_scale != Vector2{0, 0}
+	if drag_enabled && IsMouseButtonDown(bindings.drag_button) {
+		if !modifier_bound || modifier_held do return .Rotate
+	}
+	if bindings.pan_button.bound && IsMouseButtonDown(bindings.pan_button.button) {
+		return .Pan
+	}
+	return .None
+}
+
 // orbit_camera_input_poll samples the default input context into the semantic
 // input update_orbit_camera consumes. Rates are unitless and accumulate so an
 // application can add its own contribution to the result before stepping.
@@ -46,7 +66,7 @@ orbit_camera_input_poll :: proc(bindings: Orbit_Camera_Bindings) -> Orbit_Camera
 	if _orbit_key_pair_down(bindings.pan_back) do input.pan_rate.y -= 1
 	if _orbit_key_pair_down(bindings.pan_left) do input.pan_rate.x -= 1
 	if _orbit_key_pair_down(bindings.pan_right) do input.pan_rate.x += 1
-	if IsMouseButtonDown(bindings.drag_button) {
+	if orbit_camera_pointer_intent(bindings) == .Rotate {
 		input.pointer_drag = GetMouseDelta() * bindings.pointer_drag_scale
 	}
 	input.scroll = GetMouseWheelMoveV().y

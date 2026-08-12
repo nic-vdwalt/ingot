@@ -11,6 +11,15 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `gfx.Orbit_Camera_Bindings.drag_modifier` and `.pan_button`, with
+  `gfx.orbit_camera_pointer_intent`: a bound modifier key gates drag-rotation
+  and a distinct pan-button role marks grab-pan intent, so MOBA/RTS schemes
+  (left-drag pans, modifier+drag rotates) no longer clear `pointer_drag` by
+  hand. Zero-valued bindings keep the historical always-on drag behaviour.
+- `gfx.Orbit_Camera_Grab_Pan` with `orbit_camera_grab_pan_begin/end/delta`:
+  plane-anchored grab-pan that keeps a picked world point pinned under the
+  cursor ray. The anchor pick stays with the application; the per-frame
+  ray/plane math is now library code and feeds `Orbit_Camera_Input.pan`.
 - `gfx.orbit_camera_input_poll` and `gfx.Orbit_Camera_Bindings`: an optional,
   opt-in binding layer that samples the default input context into
   `Orbit_Camera_Input`. Three examples carried a byte-identical copy of the same
@@ -40,6 +49,12 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - `ui.route_block_z`, `ui.route_block_z_in`, and `ui.Z_NONE`: report the highest
   z claiming a point rather than a yes/no answer relative to one depth.
   `route_occluded_in` is now derived from it, so the two cannot disagree.
+
+### Changed
+
+- **Breaking**: `gfx.orbit_camera_zoom_toward` takes `scroll: ^f32` and zeroes
+  it, consuming the channel so the same scroll value can no longer also reach
+  `update_orbit_camera` and double-apply the distance change.
 
 ### Fixed
 

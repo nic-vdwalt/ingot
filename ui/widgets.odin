@@ -7,6 +7,7 @@ package ui
 import "core:fmt"
 import "core:math"
 import "core:strings"
+import "core:unicode/utf8"
 
 
 begin_pane_scissor :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
@@ -263,6 +264,45 @@ caret_next_rune :: proc(s: string, pos: int) -> int {
 	i := pos + 1
 	for i < len(s) && (s[i] & 0xC0) == 0x80 do i += 1
 	return i
+}
+
+// Move one grapheme cluster right from `pos`, returning the new byte offset.
+// Emoji ZWJ sequences and combining-mark pairs step as one unit, matching
+// what the user perceives as a single character.
+caret_next_grapheme :: proc(s: string, pos: int) -> int {
+	assert(pos >= 0, "caret_next_grapheme: negative offset")
+	assert(pos <= len(s), "caret_next_grapheme: offset past end")
+	if pos >= len(s) do return len(s)
+	p := caret_clamp(s, pos)
+	it := utf8.decode_grapheme_iterator_make(s[p:])
+	seen := 0
+	// The iterator yields once per cluster start; the second yield marks the
+	// end of the cluster under the caret.
+	for _, g in utf8.decode_grapheme_iterate(&it) {
+		seen += 1
+		if seen == 2 do return p + g.byte_index
+	}
+	return len(s)
+}
+
+// Move one grapheme cluster left from `pos`, returning the new byte offset.
+// Scans clusters from the current line start: cluster boundaries never span
+// '\n' (breaks occur around controls), so one line bounds the walk.
+caret_prev_grapheme :: proc(s: string, pos: int) -> int {
+	assert(pos >= 0, "caret_prev_grapheme: negative offset")
+	assert(pos <= len(s), "caret_prev_grapheme: offset past end")
+	if pos <= 0 do return 0
+	p := caret_clamp(s, pos)
+	if p == 0 do return 0
+	start := caret_line_start(s, p)
+	if p == start do return p - 1 // at a line start: step over the newline
+	prev := start
+	it := utf8.decode_grapheme_iterator_make(s[start:p])
+	for _, g in utf8.decode_grapheme_iterate(&it) {
+		if start + g.byte_index >= p do break
+		prev = start + g.byte_index
+	}
+	return prev
 }
 
 // Word-jump left (skip trailing whitespace/newlines, then a run of non-space).

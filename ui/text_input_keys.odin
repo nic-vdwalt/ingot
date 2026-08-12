@@ -214,17 +214,24 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx, mods: bool) {
 					}
 				} else {
 					undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
+					atomic := false
 					if ctx.pills != nil {
 						if idx, ok := pill_ending_at(ctx.pills, ctx.cursor^); ok {
 							// Atomic: delete the whole pill in one keystroke.
 							ctx.cursor^ = pill_delete_atomic(sb, ctx.pills, idx)
-						} else {
-							before := ctx.cursor^
-							ctx.cursor^ = caret_delete_prev(sb, ctx.cursor^)
-							pills_shift_after_delete(ctx.pills, ctx.cursor^, before - ctx.cursor^)
+							atomic = true
 						}
-					} else {
-						ctx.cursor^ = caret_delete_prev(sb, ctx.cursor^)
+					}
+					if !atomic {
+						// Delete one grapheme cluster (whole emoji/combining
+						// pair); masked inputs stay per-rune to match their
+						// one-bullet-per-rune display.
+						s := strings.to_string(sb^)
+						target :=
+							ctx.masked \
+							? caret_prev_rune(s, ctx.cursor^) \
+							: caret_prev_grapheme(s, ctx.cursor^)
+						ctx.cursor^ = ti_delete_range(ctx, target, ctx.cursor^)
 					}
 				}
 			}
@@ -232,8 +239,8 @@ ti_keys_delete :: proc(ctx: ^TI_Ctx, mods: bool) {
 			s := strings.to_string(sb^)
 			if len(s) > 0 {
 				undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
-				// Remove the last whole rune, not the last byte.
-				keep := caret_prev_rune(s, len(s))
+				// Remove the last whole grapheme cluster, not the last byte.
+				keep := ctx.masked ? caret_prev_rune(s, len(s)) : caret_prev_grapheme(s, len(s))
 				strings.builder_reset(sb)
 				strings.write_string(sb, s[:keep])
 			}
@@ -267,21 +274,23 @@ ti_keys_delete_forward :: proc(ctx: ^TI_Ctx, word: bool) {
 			return
 		}
 		undo_record(ctx.frame, ctx.undo, sb, ctx.cursor, ctx.pills, .Delete)
+		atomic := false
 		if ctx.pills != nil {
 			if idx, ok := pill_starting_at(ctx.pills, ctx.cursor^); ok {
 				// Atomic: delete the whole pill range in one keystroke.
 				ctx.cursor^ = pill_delete_atomic(sb, ctx.pills, idx)
-			} else {
-				old_len := strings.builder_len(sb^)
-				ctx.cursor^ = caret_delete_next(sb, ctx.cursor^)
-				pills_shift_after_delete(
-					ctx.pills,
-					ctx.cursor^,
-					old_len - strings.builder_len(sb^),
-				)
+				atomic = true
 			}
-		} else {
-			ctx.cursor^ = caret_delete_next(sb, ctx.cursor^)
+		}
+		if !atomic {
+			// Delete one grapheme cluster forward; masked inputs stay
+			// per-rune to match their one-bullet-per-rune display.
+			s := strings.to_string(sb^)
+			end :=
+				ctx.masked \
+				? caret_next_rune(s, ctx.cursor^) \
+				: caret_next_grapheme(s, ctx.cursor^)
+			ctx.cursor^ = ti_delete_range(ctx, ctx.cursor^, end)
 		}
 	}
 }
@@ -429,14 +438,18 @@ ti_keys_nav :: proc(ctx: ^TI_Ctx, mods, shift: bool) {
 
 	if is_key_pressed(ctx.frame, .LEFT) || is_key_pressed_repeat(ctx.frame, .LEFT) {
 		if !nav_begin(sel, sb, cursor, shift, true) {
-			cursor^ = word ? caret_word_left(s, cursor^) : caret_prev_rune(s, cursor^)
+			// Plain arrows move by grapheme cluster (whole emoji, combining
+			// pairs); masked inputs stay per-rune to match their display.
+			prev := ctx.masked ? caret_prev_rune : caret_prev_grapheme
+			cursor^ = word ? caret_word_left(s, cursor^) : prev(s, cursor^)
 			if ctx.pills != nil do cursor^ = pill_snap_left(ctx.pills, cursor^)
 		}
 		nav_end(sel, cursor, shift)
 	}
 	if is_key_pressed(ctx.frame, .RIGHT) || is_key_pressed_repeat(ctx.frame, .RIGHT) {
 		if !nav_begin(sel, sb, cursor, shift, false) {
-			cursor^ = word ? caret_word_right(s, cursor^) : caret_next_rune(s, cursor^)
+			next := ctx.masked ? caret_next_rune : caret_next_grapheme
+			cursor^ = word ? caret_word_right(s, cursor^) : next(s, cursor^)
 			if ctx.pills != nil do cursor^ = pill_snap_right(ctx.pills, cursor^)
 		}
 		nav_end(sel, cursor, shift)
