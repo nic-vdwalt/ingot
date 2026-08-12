@@ -243,68 +243,34 @@ Chart_Facade_Options :: struct {
 
 // line_chart carves a full-width plot of the given logical height and returns
 // the hovered sample index, or -1.
-@(private = "package")
-line_chart_legacy :: proc(
-	u: ^Ui,
-	series: []Chart_Series,
-	state: ^Chart_State,
-	height: i32,
-	opts: Chart_Opts = {},
-) -> int {
-	assert(u != nil && u.open, "line_chart: frame not open")
-	assert(state != nil, "line_chart: nil state")
-	assert(height > 0, "line_chart: non-positive height")
-	rect := slot_next_px(u, remaining(&u.layout).w, ui_frame_sc(u.frame, height))
-	if !slot_visible(rect) do return -1
-	return line_chart_at(u.frame, rect, series, state, opts)
-}
-
-@(private = "package")
-line_chart_options :: proc(
+line_chart :: proc(
 	u: ^Ui,
 	series: []Chart_Series,
 	state: ^Chart_State,
 	options: Chart_Facade_Options,
 ) -> int {
-	return line_chart_legacy(u, series, state, options.height, options.chart)
-}
-
-line_chart :: proc {
-	line_chart_legacy,
-	line_chart_options,
+	assert(u != nil && u.open, "line_chart: frame not open")
+	assert(state != nil, "line_chart: nil state")
+	assert(options.height > 0, "line_chart: non-positive height")
+	rect := slot_next_px(u, remaining(&u.layout).w, ui_frame_sc(u.frame, options.height))
+	if !slot_visible(rect) do return -1
+	return line_chart_at(u.frame, rect, series, state, options.chart)
 }
 
 // bar_chart carves a full-width plot of the given logical height and returns
 // the hovered sample index, or -1.
-@(private = "package")
-bar_chart_legacy :: proc(
-	u: ^Ui,
-	series: []Chart_Series,
-	state: ^Chart_State,
-	height: i32,
-	opts: Chart_Opts = {},
-) -> int {
-	assert(u != nil && u.open, "bar_chart: frame not open")
-	assert(state != nil, "bar_chart: nil state")
-	assert(height > 0, "bar_chart: non-positive height")
-	rect := slot_next_px(u, remaining(&u.layout).w, ui_frame_sc(u.frame, height))
-	if !slot_visible(rect) do return -1
-	return bar_chart_at(u.frame, rect, series, state, opts)
-}
-
-@(private = "package")
-bar_chart_options :: proc(
+bar_chart :: proc(
 	u: ^Ui,
 	series: []Chart_Series,
 	state: ^Chart_State,
 	options: Chart_Facade_Options,
 ) -> int {
-	return bar_chart_legacy(u, series, state, options.height, options.chart)
-}
-
-bar_chart :: proc {
-	bar_chart_legacy,
-	bar_chart_options,
+	assert(u != nil && u.open, "bar_chart: frame not open")
+	assert(state != nil, "bar_chart: nil state")
+	assert(options.height > 0, "bar_chart: non-positive height")
+	rect := slot_next_px(u, remaining(&u.layout).w, ui_frame_sc(u.frame, options.height))
+	if !slot_visible(rect) do return -1
+	return bar_chart_at(u.frame, rect, series, state, options.chart)
 }
 
 // kv_row carves a full-width row with a key left and a right-aligned value.

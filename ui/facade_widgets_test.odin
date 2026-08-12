@@ -87,7 +87,7 @@ presentational_facade_widgets_register_no_focus :: proc(t: ^testing.T) {
 	progress_bar_animated(&u, 0.5, &anim, Color{0, 120, 255, 255})
 	spinner(&u)
 	sparkline(&u, values[:])
-	_ = line_chart(&u, series[:], &chart, 80)
+	_ = line_chart(&u, series[:], &chart, {height = 80})
 	kv_row(&u, "key", "value", Color{200, 200, 200, 255}, Color{255, 255, 255, 255})
 	end(&u)
 
