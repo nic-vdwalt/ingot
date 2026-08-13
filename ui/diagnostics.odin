@@ -37,6 +37,26 @@ paint_storage_stats :: proc() -> Ui_Paint_Storage_Stats {
 	}
 }
 
+Ui_Fit_Storage_Stats :: struct {
+	prepared_node_capacity: i32,
+	direct_flex_capacity:   i32,
+	layout_depth_capacity:  i32,
+	prepared_node_bytes:    u64,
+	prepared_bytes:         u64,
+	builder_bytes:          u64,
+}
+
+fit_storage_stats :: proc() -> Ui_Fit_Storage_Stats {
+	return {
+		prepared_node_capacity = MAX_PREPARED_NODES,
+		direct_flex_capacity = MAX_LAYOUT_FLEX,
+		layout_depth_capacity = MAX_LAYOUT_DEPTH,
+		prepared_node_bytes = u64(size_of(Prepared_Node)),
+		prepared_bytes = u64(size_of(Prepared_Ui)),
+		builder_bytes = u64(size_of(Fit_Builder)),
+	}
+}
+
 Ui_Frame_Telemetry :: struct {
 	scratch_allocation_count:         u64,
 	scratch_resize_count:             u64,
