@@ -1,6 +1,7 @@
 #+build !js
 package fit
 
+import "base:runtime"
 import "core:testing"
 import "ingot:ui"
 
@@ -8,6 +9,46 @@ Fit_Test_Counts :: struct {
 	measure: i32,
 	render:  i32,
 	rect:    Rect,
+}
+
+Fit_Test_Build_State :: struct {
+	calls: i32,
+	first: Widget_Id,
+}
+
+Fit_Test_Control_State :: struct {
+	checked:  bool,
+	selected: i32,
+	value:    f32,
+	changed:  bool,
+}
+
+@(private = "file")
+fit_test_font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
+	assert(data != nil && size > 0, "fit test font: invalid argument")
+	return ui.Font_Id(size)
+}
+
+@(private = "file")
+fit_test_text_measure :: proc(
+	data: rawptr,
+	font: ui.Font_Id,
+	text: string,
+	size, spacing: f32,
+) -> ui.Vec2 {
+	assert(data != nil && font != 0, "fit test text: invalid backend")
+	assert(size >= 0 && spacing >= 0, "fit test text: invalid geometry")
+	return {f32(len(text)) * max(size * 0.5, 1), size}
+}
+
+@(private = "file")
+fit_test_runtime :: proc(runtime: ^ui.Ui_Runtime, backend: ^i32) {
+	assert(runtime != nil && backend != nil, "fit test runtime: invalid argument")
+	ui.ui_runtime_init(runtime)
+	ui.ui_runtime_set_text_backend(
+		runtime,
+		{data = backend, font_for_size = fit_test_font_for_size, measure = fit_test_text_measure},
+	)
 }
 
 @(private = "file")
@@ -63,6 +104,97 @@ fit_builder_nested_layout_renders_once :: proc(t: ^testing.T) {
 	testing.expect(t, counts.measure >= 3, "custom leaves were not measured")
 }
 
+@(private = "file")
+fit_test_scoped_body :: proc(builder: ^Builder, userdata: rawptr) {
+	assert(builder != nil && userdata != nil, "fit test scoped body: invalid argument")
+	state := cast(^Fit_Test_Build_State)userdata
+	state.calls += 1
+	state.first = Id(builder, "control")
+	Label(builder, "Scoped")
+}
+
+@(private = "file")
+fit_test_controls :: proc(builder: ^Builder, state: ^Fit_Test_Control_State) {
+	assert(builder != nil && state != nil, "fit test controls: invalid argument")
+	Checkbox(builder, "checked", "Checked", &state.checked, {changed = &state.changed})
+	Radio(builder, u64(7), "Choice", &state.selected, 7, {changed = &state.changed})
+	Slider(builder, "value", &state.value, 0, 10, 1, "Value", {changed = &state.changed})
+}
+
+@(test)
+fit_scoped_containers_invoke_once_and_restore_depth :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 320, 240})
+	state: Fit_Test_Build_State
+	Column_With(&builder, fit_test_scoped_body, &state)
+	testing.expect_value(t, state.calls, i32(1))
+	testing.expect_value(t, builder.inner.prepared.depth, i32(0))
+	_ = Render(&builder)
+	builder_close(&builder)
+}
+
+@(test)
+fit_scope_composes_stable_distinct_ids :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 320, 240})
+	Column(&builder)
+	first, second: Fit_Test_Build_State
+	Scope(&builder, "first", fit_test_scoped_body, &first)
+	Scope(&builder, "second", fit_test_scoped_body, &second)
+	End(&builder)
+	testing.expect(t, first.first != second.first, "scoped IDs collided")
+	testing.expect_value(t, first.calls, i32(1))
+	testing.expect_value(t, second.calls, i32(1))
+	_ = Render(&builder)
+	builder_close(&builder)
+}
+
+@(test)
+fit_native_controls_measure_and_render_once :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 320, 240})
+	state := Fit_Test_Control_State{selected = 1, value = 5, changed = true}
+	Column(&builder)
+	fit_test_controls(&builder, &state)
+	End(&builder)
+	size := Measure(&builder)
+	testing.expect(t, size.w > 0 && size.h > 0, "native controls did not measure")
+	Render_At(&builder, {0, 0, size.w, size.h})
+	testing.expect(t, !state.changed, "unchanged controls did not reset output")
+	testing.expect_value(t, builder.root.focus_seq, 3)
+	builder_close(&builder)
+}
+
 @(test)
 fit_public_contract_compiles :: proc(t: ^testing.T) {
 	draw: Draw_Proc = fit_test_draw
@@ -75,10 +207,30 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	set_storage: proc(_: ^Builder, _: Storage) = Set_Storage
 	reset_storage: proc(_: ^Builder) = Reset_Storage
 	storage_capacity: proc(_: ^Builder) -> int = Storage_Capacity
+	row_with: proc(
+		_: ^Builder,
+		_: Build_Proc,
+		_: rawptr,
+		_: Container_Options,
+		_: runtime.Source_Code_Location,
+	) = Row_With
+	id_string: proc(_: ^Builder, _: string) -> Widget_Id = Id
+	checkbox: proc(_: ^Builder, _: string, _: string, _: ^bool, _: Control_Options) = Checkbox
+	radio: proc(_: ^Builder, _: u64, _: string, _: ^i32, _: i32, _: Control_Options) = Radio
+	slider: proc(
+		_: ^Builder,
+		_: Widget_Id,
+		_: ^f32,
+		_, _, _: f32,
+		_: string,
+		_: Control_Options,
+	) = Slider
 	testing.expect(t, draw != nil && run != nil)
 	testing.expect(t, button_string != nil && button_u64 != nil)
 	testing.expect(t, measure != nil && render_at != nil && session_draw != nil)
 	testing.expect(t, set_storage != nil && reset_storage != nil && storage_capacity != nil)
+	testing.expect(t, row_with != nil && id_string != nil)
+	testing.expect(t, checkbox != nil && radio != nil && slider != nil)
 }
 
 @(test)

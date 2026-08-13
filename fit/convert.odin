@@ -73,7 +73,7 @@ to_track :: proc(value: Track) -> ui.Track {
 
 @(private = "package")
 to_transition :: proc(value: Transition) -> ui.Prepared_Transition {
-	state := transmute(^ui.Transition_Rect_State)value.state
+	state := cast(^ui.Transition_Rect_State)value.state
 	return {state = state, options = {speed = value.options.speed}}
 }
 

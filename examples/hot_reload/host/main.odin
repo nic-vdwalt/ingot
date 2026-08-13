@@ -5,8 +5,7 @@ import "core:fmt"
 import "core:os"
 import "core:path/filepath"
 import "core:time"
-import ui "ingot:fit"
-import ui_gfx "ingot:fit"
+import fit "ingot:fit"
 import rl "ingot:gfx"
 
 when ODIN_OS == .Windows {
@@ -24,7 +23,7 @@ GAME_LIBRARY_MAX :: 64
 Game_API :: struct {
 	lib:           dynlib.Library,
 	init:          proc() -> bool,
-	draw:          proc(frame: ^ui.Ui_Frame),
+	draw:          proc(builder: ^fit.Builder),
 	shutdown:      proc(),
 	memory:        proc() -> rawptr,
 	memory_size:   proc() -> u64,
@@ -35,7 +34,7 @@ Game_API :: struct {
 }
 
 Host :: struct {
-	session:   ui_gfx.Host_Session,
+	session:   fit.Session,
 	api:       Game_API,
 	old:       [GAME_LIBRARY_MAX]Game_API,
 	old_count: int,
@@ -133,11 +132,14 @@ reload_if_changed :: proc(state: ^Host) {
 
 frame :: proc() {
 	reload_if_changed(&host)
-	current, acquired := ui_gfx.session_acquire_frame(&host.session)
-	if !acquired do return
+	_ = fit.Session_Draw(&host.session, host_draw)
+}
+
+host_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	assert(builder != nil, "host_draw: nil builder")
+	_ = userdata
 	rl.ClearBackground(rl.Color{22, 24, 32, 255})
-	host.api.draw(current.ui)
-	ui_gfx.session_present_frame(&current)
+	host.api.draw(builder)
 }
 
 main :: proc() {
@@ -161,9 +163,9 @@ main :: proc() {
 	when ODIN_OS == .Darwin do flags += {.WINDOW_HIGHDPI}
 	rl.SetConfigFlags(flags)
 	rl.InitWindow(720, 360, "Ingot hot reload")
-	ui_gfx.session_init(&host.session, {semantics_enabled = true})
+	fit.Session_Init(&host.session, {semantics_enabled = true})
 	rl.run(frame)
-	ui_gfx.session_destroy(&host.session)
+	fit.Session_Destroy(&host.session)
 	rl.CloseWindow()
 	host.api.shutdown()
 	unload_old_apis(&host)

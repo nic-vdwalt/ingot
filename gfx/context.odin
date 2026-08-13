@@ -167,8 +167,6 @@ Context :: struct {
 	// has returned).
 	pending_w, pending_h: i32,
 	frame:                Frame_State,
-	frame_generation:     u64,
-	frame_active:         bool,
 
 	// timing
 	start_time_s:         f64,
@@ -354,92 +352,8 @@ _context_restore :: proc(previous: ^Context) {
 	g = previous
 }
 
-// gfx exposes two drawing surfaces over the same renderer: the raylib-shaped
-// PascalCase procedures, which act on whichever context is globally active, and
-// the ergonomic Frame API (api.odin), which routes each call to frame.owner by
-// activating it for the duration of the call.
-//
-// Mixing them is safe with one context and unsafe with several: a PascalCase
-// draw issued between begin_frame and end_frame lands on the globally active
-// context, which need not be the one that owns the Frame, so the geometry
-// silently reaches the wrong window. These two counters let batch_set catch
-// exactly that case.
-//
-// context_activation_depth is non-zero while an ergonomic wrapper has activated
-// its owner, marking the draw as correctly routed.
 @(thread_local, private)
 context_activation_depth: int
-
-// ergonomic_frames_active counts contexts with a live ergonomic Frame. Contexts
-// are not registered anywhere, so this is maintained alongside
-// Context.frame_active by context_begin_frame, end_frame, and window teardown.
-@(thread_local, private)
-ergonomic_frames_active: int
-
-@(private)
-_ergonomic_frame_opened :: proc(ctx: ^Context) {
-	assert(ctx != nil, "_ergonomic_frame_opened: nil context")
-	assert(ctx.frame_active, "_ergonomic_frame_opened: frame not marked active")
-	ergonomic_frames_active += 1
-}
-
-@(private)
-_ergonomic_frame_closed :: proc(ctx: ^Context) {
-	assert(ctx != nil, "_ergonomic_frame_closed: nil context")
-	assert(!ctx.frame_active, "_ergonomic_frame_closed: frame still marked active")
-	assert(ergonomic_frames_active > 0, "_ergonomic_frame_closed: count underflow")
-	ergonomic_frames_active -= 1
-}
-
-// _ergonomic_frame_closed_on_teardown drops the count for a frame abandoned by
-// window teardown, which clears frame_active by zeroing the whole context and
-// so cannot use the ordinary close path.
-@(private)
-_ergonomic_frame_closed_on_teardown :: proc(ctx: ^Context) {
-	assert(ctx != nil, "_ergonomic_frame_closed_on_teardown: nil context")
-	assert(ctx.frame_active, "_ergonomic_frame_closed_on_teardown: no active frame")
-	assert(ergonomic_frames_active > 0, "_ergonomic_frame_closed_on_teardown: count underflow")
-	ergonomic_frames_active -= 1
-}
-
-// _surface_routing_is_ambiguous decides whether a raylib-shaped draw can be
-// trusted to reach the context its caller meant.
-//
-// activation_depth > 0 means an ergonomic wrapper activated frame.owner for
-// this call, so the draw is routed by construction. At depth zero the draw
-// lands on the globally active context, which is only unambiguous when no
-// *other* context holds a live ergonomic Frame.
-@(private)
-_surface_routing_is_ambiguous :: proc(
-	activation_depth, frames_active: int,
-	active_context_has_frame: bool,
-) -> bool {
-	assert(activation_depth >= 0, "_surface_routing_is_ambiguous: negative depth")
-	assert(frames_active >= 0, "_surface_routing_is_ambiguous: negative frame count")
-	if activation_depth > 0 do return false
-	owned_here := 1 if active_context_has_frame else 0
-	return frames_active - owned_here > 0
-}
-
-// _assert_surface_not_routed_elsewhere fires when a raylib-shaped draw is
-// issued at top level while a context other than the active one owns a live
-// ergonomic Frame. Draws made through an ergonomic wrapper are exempt: those
-// run at a non-zero activation depth and are routed by construction.
-@(private)
-_assert_surface_not_routed_elsewhere :: proc(loc := #caller_location) {
-	ambiguous := _surface_routing_is_ambiguous(
-		context_activation_depth,
-		ergonomic_frames_active,
-		g != nil && g.frame_active,
-	)
-	assert(
-		!ambiguous,
-		"gfx: raylib-shaped draw issued while another context owns an active ergonomic Frame. " +
-		"The draw would land on the globally active context, not that Frame's owner. " +
-		"Use the ergonomic draw_* procedures, or do not interleave frames across contexts.",
-		loc,
-	)
-}
 
 context_epoch :: proc(ctx: ^Context) -> u64 {
 	if ctx == nil do return 0
@@ -754,9 +668,6 @@ _close_window_context :: proc(ctx: ^Context) {
 	context_id := g.id
 	flags := g.config_flags
 	closing_epoch := g.epoch
-	// Teardown zeroes frame_active along with the rest of the context, so an
-	// ergonomic frame abandoned by CloseWindow must be accounted for first.
-	if g.frame_active do _ergonomic_frame_closed_on_teardown(g)
 	mem.zero(g, size_of(Context))
 	g.id = context_id
 	g.epoch = closing_epoch
