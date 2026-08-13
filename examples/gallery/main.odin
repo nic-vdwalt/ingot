@@ -317,11 +317,13 @@ gallery_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) 
 
 gallery_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	_ = userdata
+	fit.Column(builder)
 	fit.Custom(
 		builder,
 		{measure = gallery_measure, render = gallery_render},
 		{size = {width = fit.Grow(), height = fit.Grow()}},
 	)
+	fit.End(builder)
 }
 
 gallery_frame :: proc(frame: ^legacy.Ui_Frame, root: fit.Rect_I32) {

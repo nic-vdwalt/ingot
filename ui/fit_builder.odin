@@ -81,7 +81,8 @@ fit_begin :: proc(builder: ^Fit_Builder, u: ^Ui) {
 	assert(builder.outputs_used >= 0 && builder.outputs_used <= i32(len(outputs)))
 	for index in 0 ..< builder.outputs_used do outputs[index] = nil
 	builder.outputs_used = 0
-	prepared_begin(&builder.prepared, intrinsic_constraints(max_w = remaining_rect(u).w))
+	remaining := remaining_rect(u)
+	prepared_begin(&builder.prepared, intrinsic_constraints(max_w = remaining.w, max_h = remaining.h))
 	builder.prepared.u = u
 }
 
