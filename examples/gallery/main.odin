@@ -133,6 +133,7 @@ palette := Palette.Dark
 reduced_motion := false
 section := Section.Buttons
 debug_on := false
+gallery_root: fit.Rect
 
 // palette_next advances the cycle, wrapping at the end.
 //
@@ -324,6 +325,7 @@ gallery_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 }
 
 gallery_frame :: proc(frame: ^ui.Ui_Frame, root: fit.Rect) {
+	gallery_root = root
 	sw := root.w
 	sh := root.h
 
@@ -365,7 +367,11 @@ shutdown :: proc() {
 }
 
 apply_scale :: proc(scale: f32) {
-	fit.Set_Scale(&app, scale)
+	when CAPTURE {
+		fit.Session_Set_Scale(&capture_session, scale)
+	} else {
+		fit.Set_Scale(&app, scale)
+	}
 }
 
 nav_sidebar_min_height :: proc(frame: ^ui.Ui_Frame) -> i32 {
@@ -567,7 +573,11 @@ apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
 	// both must be able to have both.
 	t := palette_theme(palette)
 	t.reduced_motion = reduced_motion
-	fit.Set_Theme(&app, t)
+	when CAPTURE {
+		fit.Session_Set_Theme(&capture_session, t)
+	} else {
+		fit.Set_Theme(&app, t)
+	}
 	if frame != nil do ui.request_redraw(frame)
 }
 
@@ -1359,8 +1369,7 @@ draw_overlay_context_menu :: proc(frame: ^ui.Ui_Frame, x, info_y: i32) {
 			{separator = true},
 			{label = "Close menu"},
 		}
-		root := fit.Screen_Rect(&app)
-		when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
+		root := gallery_root
 		chosen := ui.context_menu(frame, &ctx_menu, items, root)
 		if chosen == 0 {
 			shielded_clicks = 0
@@ -1379,8 +1388,7 @@ draw_overlay_context_menu :: proc(frame: ^ui.Ui_Frame, x, info_y: i32) {
 
 draw_overlay_modal :: proc(frame: ^ui.Ui_Frame) {
 	if !about_modal.open do return
-	root := fit.Screen_Rect(&app)
-	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
+	root := gallery_root
 	body := ui.modal_begin(
 		frame,
 		&about_modal,
@@ -1428,8 +1436,7 @@ draw_overlay_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	}
 	draw_overlay_modal(frame)
 	draw_overlay_confirm(frame)
-	root := fit.Screen_Rect(&app)
-	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
+	root := gallery_root
 	ui.toasts_draw(frame, &toasts, root)
 	return info_y + ui.ui_frame_sc(frame, 52)
 }
@@ -1546,8 +1553,7 @@ draw_dock_panel :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32) {
 // outcome through a toast, chaining the two lifecycle widgets together.
 draw_overlay_confirm :: proc(frame: ^ui.Ui_Frame) {
 	if !confirm.modal.open do return
-	root := fit.Screen_Rect(&app)
-	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
+	root := gallery_root
 	choice := ui.confirm_dialog(
 		frame,
 		&confirm,

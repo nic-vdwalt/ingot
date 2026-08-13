@@ -50,6 +50,13 @@ Session_Config :: struct {
 	semantics_enabled: bool,
 }
 
+Paint_Peaks :: struct {
+	main_commands:    int,
+	main_text_bytes:  int,
+	overlay_commands: int,
+	overlay_text_bytes: int,
+}
+
 Config :: struct {
 	width:         i32,
 	height:        i32,

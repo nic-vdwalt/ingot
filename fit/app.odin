@@ -97,6 +97,17 @@ Clear_Color :: proc(app: ^App) -> gfx.Color {
 	return ui_gfx.app_clear_color(&app.inner)
 }
 
+Paint_Peak_Usage :: proc(app: ^App) -> Paint_Peaks {
+	assert(app != nil && app.inner.state != .Empty, "Fit.Paint_Peak_Usage: invalid app")
+	output := ui_gfx.session_output(&app.inner.session)
+	return {
+		main_commands = output.main.peak_count,
+		main_text_bytes = output.main.peak_text_len,
+		overlay_commands = output.overlay.peak_count,
+		overlay_text_bytes = output.overlay.peak_text_len,
+	}
+}
+
 Dark_Theme :: ui.theme_dark
 Light_Theme :: ui.theme_light
 
