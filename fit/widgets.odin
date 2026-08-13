@@ -2,14 +2,63 @@ package fit
 
 import "ingot:ui"
 
-Vector2 :: ui.Vector2
-Rectangle :: ui.Rectangle
-Theme :: ui.Theme
-Pigment :: ui.Pigment
-Visual_State :: ui.Visual_State
-Surface_Role :: ui.Surface
-Surface_Kind :: ui.Surface
-Tint :: ui.Tint
+Theme :: struct {
+	inner: ui.Theme,
+}
+Pigment :: enum u8 {
+	Accent,
+	Danger,
+	Success,
+	Tool,
+	Earth,
+	Leaf,
+}
+Visual_State :: enum u8 {
+	Rest,
+	Hover,
+	Pressed,
+	Selected,
+	Disabled,
+}
+Surface_Kind :: enum u8 {
+	App,
+	Panel,
+	Card,
+	Popup,
+	Input,
+	Row,
+	Chip,
+	Code,
+	Table_Header,
+	Button_Primary,
+	Button_Secondary,
+	Button_Danger,
+	Button_Ghost,
+}
+Tint :: enum u8 {
+	Subtle,
+	Light,
+	Medium,
+	Strong,
+}
+Elevation :: enum u8 {
+	Flat,
+	Lifted,
+	Overlay,
+	Modal,
+}
+Substrate_Kind :: enum u8 {
+	None,
+	Ruled,
+	Grid,
+	Dots,
+	Tooth,
+}
+Surface_Colors :: struct {
+	background: Color,
+	foreground: Color,
+	border:     Color,
+}
 
 Input_Box :: struct {
 	inner: ui.Input_Box,
@@ -18,10 +67,12 @@ Text_Input_State :: struct {
 	inner: ui.Text_Input_State,
 }
 Text_Input_Options :: struct {
-	inner: ui.Text_Input_Options,
+	height:    i32,
+	masked:    bool,
+	semantics: Text_Input_Semantics,
 }
 Text_Input_Semantics :: struct {
-	inner: ui.Text_Input_Semantics,
+	name: string,
 }
 Slider_State :: struct {
 	inner: ui.Slider_State,
@@ -33,13 +84,16 @@ Combobox_State :: struct {
 	inner: ui.Combobox_State,
 }
 Combobox_Item :: struct {
-	inner: ui.Combobox_Item,
+	id:    u64,
+	label: string,
 }
 Date_Picker_State :: struct {
 	inner: ui.Date_Picker_State,
 }
 Calendar_Date :: struct {
-	inner: ui.Calendar_Date,
+	year:  i32,
+	month: i32,
+	day:   i32,
 }
 Tooltip_State :: struct {
 	inner: ui.Tooltip_State,
@@ -47,20 +101,49 @@ Tooltip_State :: struct {
 Listbox_State :: struct {
 	inner: ui.Listbox_State,
 }
+Listbox_Keys :: enum u8 {
+	Focused,
+	Owned,
+	Searched,
+}
 Listbox_Config :: struct {
-	inner: ui.Listbox_Config,
+	rect:         Rect,
+	label:        string,
+	stable_id:    string,
+	count:        int,
+	selected:     ^int,
+	wrap:         bool,
+	hover_select: bool,
+	keys:         Listbox_Keys,
+	page_rows:    int,
 }
 Table_Sort :: struct {
-	inner: ui.Table_Sort,
+	column:     i32,
+	descending: bool,
 }
 Table_Column :: struct {
-	inner: ui.Table_Column,
+	label:   string,
+	track:   Track,
+	numeric: bool,
 }
 Chart_State :: struct {
-	inner: ui.Chart_State,
+	enter_anim:  f32,
+	hover_index: int,
 }
 Chart_Series :: struct {
-	inner: ui.Chart_Series,
+	name:   string,
+	values: []f32,
+	color:  Color,
+}
+Chart_Options :: struct {
+	labels:      []string,
+	y_min:       f32,
+	y_max:       f32,
+	y_fixed:     bool,
+	show_grid:   bool,
+	show_axes:   bool,
+	show_legend: bool,
+	fill:        bool,
 }
 Modal_State :: struct {
 	inner: ui.Modal_State,
@@ -69,7 +152,9 @@ Context_Menu_State :: struct {
 	inner: ui.Context_Menu_State,
 }
 Menu_Item :: struct {
-	inner: ui.Menu_Item,
+	label:     string,
+	disabled:  bool,
+	separator: bool,
 }
 Toast_State :: struct {
 	inner: ui.Toast_State,
@@ -127,25 +212,34 @@ Combobox_State_Destroy :: proc(state: ^Combobox_State) {
 }
 
 Calendar_Date_Valid :: proc(value: Calendar_Date) -> bool {
-	return ui.calendar_date_valid(value.inner)
+	return ui.calendar_date_valid({value.year, value.month, value.day})
 }
 
 Calendar_Format :: proc(value: Calendar_Date) -> string {
-	return ui.calendar_format(value.inner)
+	return ui.calendar_format({value.year, value.month, value.day})
 }
 
-Theme_Dark :: ui.theme_dark
-Theme_Light :: ui.theme_light
-Theme_Sketch_Warm :: ui.theme_sketch_warm
-Theme_Sketch_Grey :: ui.theme_sketch_grey
-Theme_High_Contrast :: ui.theme_high_contrast
-Theme_Pigment :: ui.theme_pigment
-Color_Tinted :: ui.color_tinted
-Tint_Alpha :: ui.tint_alpha
-Contrast_Ratio :: ui.contrast_ratio
-Space_Pixels :: ui.space_pixels
-Text_Role_Size :: ui.text_role_size
-Text_Role_Line_Height :: ui.text_role_line_height
+Theme_Dark :: proc() -> Theme {return {inner = ui.theme_dark()}}
+Theme_Light :: proc() -> Theme {return {inner = ui.theme_light()}}
+Theme_Sketch_Warm :: proc() -> Theme {return {inner = ui.theme_sketch_warm()}}
+Theme_Sketch_Grey :: proc() -> Theme {return {inner = ui.theme_sketch_grey()}}
+Theme_High_Contrast :: proc() -> Theme {return {inner = ui.theme_high_contrast()}}
+Theme_Pigment :: proc(theme: Theme, pigment: Pigment) -> Color {
+	inner := theme.inner
+	return Color(ui.theme_pigment(&inner, ui.Pigment(pigment)))
+}
+Theme_Set_Reduced_Motion :: proc(theme: ^Theme, enabled: bool) {
+	assert(theme != nil, "Fit.Theme_Set_Reduced_Motion: nil theme")
+	theme.inner.reduced_motion = enabled
+}
+Theme_Background :: proc(theme: Theme) -> Color {return Color(theme.inner.bg_app)}
+Color_Tinted :: proc(color: Color, tint: Tint) -> Color {
+	return Color(ui.color_tinted(ui.Color(color), ui.Tint(tint)))
+}
+Tint_Alpha :: proc(tint: Tint) -> u8 {return ui.tint_alpha(ui.Tint(tint))}
+Contrast_Ratio :: proc(a, b: Color) -> f64 {
+	return ui.contrast_ratio(ui.Color(a), ui.Color(b))
+}
 
 Checkbox_At :: ui.checkbox_at
 Radio_At :: ui.radio_at

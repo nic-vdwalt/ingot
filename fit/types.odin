@@ -177,6 +177,49 @@ Float_Rect :: struct {
 	x, y, width, height: f32,
 }
 Color :: distinct [4]u8
+Point :: struct {
+	x, y: f32,
+}
+Key :: enum i32 {
+	Escape = 256,
+	Enter  = 257,
+	Tab    = 258,
+	Space  = 32,
+	F12    = 301,
+	Up     = 265,
+	Down   = 264,
+}
+Mouse_Button :: enum i32 {
+	Left,
+	Right,
+	Middle,
+}
+Cursor :: enum i32 {
+	Default,
+	Arrow,
+	IBeam,
+	Crosshair,
+	Pointing_Hand,
+}
+Interaction :: struct {
+	hovered:  bool,
+	pressed:  bool,
+	held:     bool,
+	released: bool,
+	clicked:  bool,
+}
+Metrics :: struct {
+	font_title:     i32,
+	font_body:      i32,
+	font_label:     i32,
+	font_note:      i32,
+	line_height:    i32,
+	tab_bar_height: i32,
+	padding:        i32,
+	row_small:      i32,
+	row_medium:     i32,
+	control_gap:    i32,
+}
 Radius :: enum u8 {
 	None,
 	SM,
@@ -303,6 +346,14 @@ Custom_Options :: struct {
 
 Surface :: struct {
 	inner: ^ui.Ui,
+}
+
+Region :: struct {
+	inner: ui.Ui,
+}
+
+Pane_State :: struct {
+	inner: ui.Pane,
 }
 
 Measure_Proc :: #type proc(constraints: Constraints, userdata: rawptr) -> Size

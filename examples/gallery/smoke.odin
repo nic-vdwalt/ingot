@@ -12,14 +12,12 @@ package main
 import "core:fmt"
 import "core:os"
 import fit "ingot:fit"
-import legacy "ingot:fit"
 import gfx "ingot:gfx"
 
 // Imports are used only under `when SMOKE`; anchor them for non-smoke builds.
 _ :: fmt
 _ :: os
 _ :: fit
-_ :: legacy
 _ :: gfx
 
 when SMOKE {
@@ -77,7 +75,7 @@ when SMOKE {
 			fmt.printfln("smoke: theme %s rm=%v", PALETTE_NAMES[palette], reduced_motion)
 		case step < total:
 			section = Section(step - scale_steps - theme_steps)
-			legacy.pane_reset(&content_pane)
+			fit.Pane_Reset(&content_pane)
 			fmt.printfln("smoke: section %s", SECTION_NAMES[section])
 		case:
 			smoke_report_peaks()
@@ -88,7 +86,7 @@ when SMOKE {
 
 	// smoke_report_peaks prints the high-water marks the run reached against
 	// the capacities reserved for them. Those capacities are static inline
-	// arrays (gfx.BATCH_MAX_VERTICES, legacy.PAINT_COMMAND_CAP), so unused
+	// arrays (gfx.BATCH_MAX_VERTICES, fit.PAINT_COMMAND_CAP), so unused
 	// headroom is memory resident for the whole session - about 20 MB of it
 	// on this app. The smoke run visits every section, including the 1000
 	// button stress grid, so these numbers are the evidence for sizing them.
@@ -126,13 +124,13 @@ when SMOKE {
 		fmt.printfln(
 			"smoke: peak paint main %d/%d cmds %d/%d text, overlay %d/%d cmds %d/%d text",
 			peaks.main_commands,
-			legacy.PAINT_COMMAND_CAP,
+			fit.PAINT_COMMAND_CAP,
 			peaks.main_text_bytes,
-			legacy.PAINT_TEXT_CAP,
+			fit.PAINT_TEXT_CAP,
 			peaks.overlay_commands,
-			legacy.PAINT_COMMAND_CAP,
+			fit.PAINT_COMMAND_CAP,
 			peaks.overlay_text_bytes,
-			legacy.PAINT_TEXT_CAP,
+			fit.PAINT_TEXT_CAP,
 		)
 	}
 }

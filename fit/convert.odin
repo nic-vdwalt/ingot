@@ -40,6 +40,16 @@ to_rect :: proc(value: Rect) -> ui.Rect_I32 {
 }
 
 @(private = "package")
+to_float_rect :: proc(value: Float_Rect) -> ui.Rectangle {
+	return {value.x, value.y, value.width, value.height}
+}
+
+@(private = "package")
+from_point :: proc(value: ui.Vector2) -> Point {
+	return {value.x, value.y}
+}
+
+@(private = "package")
 from_rect :: proc(value: ui.Rect_I32) -> Rect {
 	return {value.x, value.y, value.w, value.h}
 }
@@ -187,4 +197,23 @@ to_control_options :: proc(value: Control_Options) -> ui.Fit_Control_Options {
 @(private = "package")
 to_custom_options :: proc(value: Custom_Options) -> ui.Fit_Custom_Options {
 	return {track = to_track(value.track), size = to_size(value.size), activated = value.activated}
+}
+
+@(private = "package")
+to_text_semantics :: proc(value: Text_Input_Semantics) -> ui.Text_Input_Semantics {
+	return {name = value.name}
+}
+
+@(private = "package")
+to_chart_options :: proc(value: Chart_Options) -> ui.Chart_Opts {
+	return {
+		labels = value.labels,
+		y_min = value.y_min,
+		y_max = value.y_max,
+		y_fixed = value.y_fixed,
+		show_grid = value.show_grid,
+		show_axes = value.show_axes,
+		show_legend = value.show_legend,
+		fill = value.fill,
+	}
 }
