@@ -11,9 +11,9 @@ package main
 
 import "core:fmt"
 import "core:os"
-import gfx "ingot:gfx"
 import ui "ingot:fit"
 import ui_gfx "ingot:fit"
+import gfx "ingot:gfx"
 
 // Imports are used only under `when SMOKE`; anchor them for non-smoke builds.
 _ :: fmt

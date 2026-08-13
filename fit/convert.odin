@@ -6,10 +6,7 @@ import "ingot:ui_gfx"
 @(private = "package")
 to_session_config :: proc(config: Session_Config) -> ui_gfx.Session_Config {
 	assert(config.user_scale >= 0, "Fit: negative user scale")
-	return {
-		user_scale = config.user_scale,
-		semantics_enabled = config.semantics_enabled,
-	}
+	return {user_scale = config.user_scale, semantics_enabled = config.semantics_enabled}
 }
 
 @(private = "package")
@@ -137,9 +134,5 @@ to_button_options :: proc(value: Button_Options) -> ui.Fit_Button_Options {
 
 @(private = "package")
 to_custom_options :: proc(value: Custom_Options) -> ui.Fit_Custom_Options {
-	return {
-		track = value.track,
-		size = to_size(value.size),
-		activated = value.activated,
-	}
+	return {track = value.track, size = to_size(value.size), activated = value.activated}
 }

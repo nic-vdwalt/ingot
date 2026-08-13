@@ -5,9 +5,9 @@ import "core:fmt"
 import "core:os"
 import "core:path/filepath"
 import "core:time"
-import rl "ingot:gfx"
 import ui "ingot:fit"
 import ui_gfx "ingot:fit"
+import rl "ingot:gfx"
 
 when ODIN_OS == .Windows {
 	LIBRARY_EXTENSION :: ".dll"

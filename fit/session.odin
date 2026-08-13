@@ -31,11 +31,7 @@ Session_End :: proc(session: ^Session) {
 	session.open = false
 }
 
-Session_Draw :: proc(
-	session: ^Session,
-	draw: Session_Draw_Proc,
-	userdata: rawptr = nil,
-) -> bool {
+Session_Draw :: proc(session: ^Session, draw: Session_Draw_Proc, userdata: rawptr = nil) -> bool {
 	assert(session != nil && session.inner.initialized, "Fit.Session_Draw: invalid session")
 	assert(draw != nil, "Fit.Session_Draw: nil draw callback")
 	builder, acquired := Session_Begin(session)

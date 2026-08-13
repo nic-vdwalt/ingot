@@ -23,9 +23,9 @@ package main
 import "core:fmt"
 import "core:slice"
 import "core:strings"
-import "ingot:sys"
 import ui "ingot:fit"
 import ui_gfx "ingot:fit"
+import "ingot:sys"
 
 // SMOKE enables the self-driving crash harness in smoke.odin (native only;
 // see scripts/smoke-gallery.sh).
