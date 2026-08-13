@@ -150,7 +150,7 @@ fit_fuzz_description :: proc(
 		if action <= 2 && depth < 8 && nodes + 2 <= target {
 			attachment := fuzzx.int_range(p, 0, 5) == 0
 			if attachment {
-				Attachment(builder, {target_kind = .Viewport, z = ui.Z_POPUP})
+				Attachment(builder, {target_kind = .Viewport, z = Z_Order(200)})
 				fit_fuzz_leaf(builder, p, counts, activations, key)
 				End(builder)
 			} else {

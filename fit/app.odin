@@ -89,7 +89,7 @@ Get_State :: proc(app: ^App) -> State {
 
 Screen_Rect :: proc(app: ^App) -> Rect {
 	assert(app != nil, "Fit.Screen_Rect: nil app")
-	return ui_gfx.app_screen_rect(&app.inner)
+	return from_rect(ui_gfx.app_screen_rect(&app.inner))
 }
 
 Clear_Color :: proc(app: ^App) -> gfx.Color {

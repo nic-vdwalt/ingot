@@ -26,16 +26,63 @@ to_app_config :: proc(config: Config) -> ui_gfx.App_Config {
 }
 
 @(private = "package")
+to_storage :: proc(value: Storage) -> ui.Fit_Storage {
+	assert(value.nodes != nil, "Fit.Storage: nil nodes")
+	assert(value.outputs != nil, "Fit.Storage: nil outputs")
+	assert(len(value.nodes) == len(value.outputs), "Fit.Storage: capacity mismatch")
+	assert(len(value.nodes) <= STORAGE_NODE_HARD_MAX, "Fit.Storage: capacity too large")
+	return {nodes = transmute([]ui.Prepared_Node)value.nodes, outputs = value.outputs}
+}
+
+@(private = "package")
+to_rect :: proc(value: Rect) -> ui.Rect_I32 {
+	return {value.x, value.y, value.w, value.h}
+}
+
+@(private = "package")
+from_rect :: proc(value: ui.Rect_I32) -> Rect {
+	return {value.x, value.y, value.w, value.h}
+}
+
+@(private = "package")
+to_size_value :: proc(value: Size) -> ui.Intrinsic_Size {
+	return {value.w, value.h, value.overflow}
+}
+
+@(private = "package")
+from_size_value :: proc(value: ui.Intrinsic_Size) -> Size {
+	return {value.w, value.h, value.overflow}
+}
+
+@(private = "package")
+from_constraints :: proc(value: ui.Intrinsic_Constraints) -> Constraints {
+	return {value.min_w, value.min_h, value.max_w, value.max_h}
+}
+
+@(private = "package")
+to_track :: proc(value: Track) -> ui.Track {
+	return {
+		kind = ui.Track_Kind(value.kind),
+		basis = value.basis,
+		weight = value.weight,
+		percent = value.percent,
+		min_size = value.min_size,
+		max_size = value.max_size,
+	}
+}
+
+@(private = "package")
 to_transition :: proc(value: Transition) -> ui.Prepared_Transition {
-	return {state = value.state, options = value.options}
+	state := transmute(^ui.Transition_Rect_State)value.state
+	return {state = state, options = {speed = value.options.speed}}
 }
 
 @(private = "package")
 to_size :: proc(value: Size_Options) -> ui.Prepared_Size {
 	return {
-		width = value.width,
-		height = value.height,
-		aspect = value.aspect,
+		width = to_track(value.width),
+		height = to_track(value.height),
+		aspect = {value.aspect.width, value.aspect.height},
 		transition = to_transition(value.transition),
 	}
 }
@@ -44,21 +91,21 @@ to_size :: proc(value: Size_Options) -> ui.Prepared_Size {
 to_effects :: proc(value: Container_Effects) -> ui.Prepared_Container_Effects {
 	return {
 		clip = value.clip,
-		background = value.background,
-		radius = value.radius,
-		border = value.border,
-		border_color = value.border_color,
+		background = ui.Color(value.background),
+		radius = ui.Radius(value.radius),
+		border = ui.Border(value.border),
+		border_color = ui.Color(value.border_color),
 	}
 }
 
 @(private = "package")
 to_container_options :: proc(value: Container_Options) -> ui.Prepared_Container_Options {
 	return {
-		gap = value.gap,
-		padding = value.padding,
-		align = value.align,
-		justify = value.justify,
-		track = value.track,
+		gap = ui.Space(value.gap),
+		padding = ui.Space(value.padding),
+		align = ui.Cross_Align(value.align),
+		justify = ui.Main_Align(value.justify),
+		track = to_track(value.track),
 		size = to_size(value.size),
 		effects = to_effects(value.effects),
 	}
@@ -67,10 +114,10 @@ to_container_options :: proc(value: Container_Options) -> ui.Prepared_Container_
 @(private = "package")
 to_flow_options :: proc(value: Flow_Options) -> ui.Prepared_Flow_Options {
 	return {
-		gap_x = value.gap_x,
-		gap_y = value.gap_y,
-		padding = value.padding,
-		track = value.track,
+		gap_x = ui.Space(value.gap_x),
+		gap_y = ui.Space(value.gap_y),
+		padding = ui.Space(value.padding),
+		track = to_track(value.track),
 		size = to_size(value.size),
 		effects = to_effects(value.effects),
 	}
@@ -83,10 +130,10 @@ to_grid_options :: proc(value: Grid_Options) -> ui.Prepared_Grid_Options {
 	return {
 		columns = value.columns,
 		row_height = value.row_height,
-		gap_x = value.gap_x,
-		gap_y = value.gap_y,
-		padding = value.padding,
-		track = value.track,
+		gap_x = ui.Space(value.gap_x),
+		gap_y = ui.Space(value.gap_y),
+		padding = ui.Space(value.padding),
+		track = to_track(value.track),
 		size = to_size(value.size),
 		effects = to_effects(value.effects),
 	}
@@ -95,14 +142,14 @@ to_grid_options :: proc(value: Grid_Options) -> ui.Prepared_Grid_Options {
 @(private = "package")
 to_attachment_options :: proc(value: Attachment_Options) -> ui.Prepared_Attachment_Options {
 	return {
-		target_kind = value.target_kind,
+		target_kind = ui.Attachment_Target_Kind(value.target_kind),
 		target = ui.Prepared_Handle(value.target),
-		target_screen = value.target_screen,
-		target_point = value.target_point,
-		self_point = value.self_point,
+		target_screen = to_rect(value.target_screen),
+		target_point = ui.Attachment_Point(value.target_point),
+		self_point = ui.Attachment_Point(value.self_point),
 		offset_x = value.offset_x,
 		offset_y = value.offset_y,
-		z = value.z,
+		z = ui.Z_Order(value.z),
 		claim = value.claim,
 		clamp_to_viewport = value.clamp_to_viewport,
 		transition = to_transition(value.transition),
@@ -112,10 +159,10 @@ to_attachment_options :: proc(value: Attachment_Options) -> ui.Prepared_Attachme
 @(private = "package")
 to_label_options :: proc(value: Label_Options) -> ui.Fit_Label_Options {
 	return {
-		role = value.role,
-		ink = value.ink,
+		role = ui.Text_Role(value.role),
+		ink = ui.Ink(value.ink),
 		wrap = value.wrap,
-		track = value.track,
+		track = to_track(value.track),
 		size = to_size(value.size),
 	}
 }
@@ -123,10 +170,10 @@ to_label_options :: proc(value: Label_Options) -> ui.Fit_Label_Options {
 @(private = "package")
 to_button_options :: proc(value: Button_Options) -> ui.Fit_Button_Options {
 	return {
-		style = value.style,
+		style = ui.Btn_Style(value.style),
 		disabled = value.disabled,
 		web_form_id = value.web_form_id,
-		track = value.track,
+		track = to_track(value.track),
 		size = to_size(value.size),
 		activated = value.activated,
 	}
@@ -134,5 +181,5 @@ to_button_options :: proc(value: Button_Options) -> ui.Fit_Button_Options {
 
 @(private = "package")
 to_custom_options :: proc(value: Custom_Options) -> ui.Fit_Custom_Options {
-	return {track = value.track, size = to_size(value.size), activated = value.activated}
+	return {track = to_track(value.track), size = to_size(value.size), activated = value.activated}
 }

@@ -13,7 +13,7 @@ Begin :: proc(builder: ^Builder) {
 Set_Storage :: proc(builder: ^Builder, storage: Storage) {
 	assert(builder != nil && !builder.bound, "Fit.Set_Storage: builder bound")
 	assert(!builder.inner.prepared.open, "Fit.Set_Storage: description open")
-	ui.fit_builder_set_storage(&builder.inner, storage)
+	ui.fit_builder_set_storage(&builder.inner, to_storage(storage))
 }
 
 Reset_Storage :: proc(builder: ^Builder) {
@@ -78,7 +78,7 @@ button_id :: proc(
 	options: Button_Options = {},
 ) {
 	assert(builder != nil && builder.bound, "Fit.Button: builder not bound")
-	ui.fit_builder_button(&builder.inner, widget, label, to_button_options(options))
+	ui.fit_builder_button(&builder.inner, ui.Widget_Id(widget), label, to_button_options(options))
 }
 
 @(private = "package")
@@ -136,17 +136,17 @@ End :: proc(builder: ^Builder) {
 
 Measure :: proc(builder: ^Builder) -> Size {
 	assert(builder != nil && builder.bound, "Fit.Measure: builder not bound")
-	return ui.fit_measure(&builder.inner)
+	return from_size_value(ui.fit_measure(&builder.inner))
 }
 
 Render_At :: proc(builder: ^Builder, rect: Rect) {
 	assert(builder != nil && builder.bound, "Fit.Render_At: builder not bound")
-	ui.fit_render_at(&builder.inner, rect)
+	ui.fit_render_at(&builder.inner, to_rect(rect))
 }
 
 Render :: proc(builder: ^Builder) -> Rect {
 	assert(builder != nil && builder.bound, "Fit.Render: builder not bound")
-	return ui.fit_render(&builder.inner)
+	return from_rect(ui.fit_render(&builder.inner))
 }
 
 @(private = "file")
@@ -154,32 +154,29 @@ custom_measure_bridge :: proc(
 	root: ^ui.Ui,
 	constraints: ui.Intrinsic_Constraints,
 	userdata: rawptr,
-) -> Size {
+) -> ui.Intrinsic_Size {
 	assert(root != nil && userdata != nil, "Fit.Custom: invalid measure bridge")
 	spec := cast(^Custom_Spec)userdata
 	assert(spec.measure != nil, "Fit.Custom: nil measure callback")
-	return spec.measure(
-		{constraints.min_w, constraints.min_h, constraints.max_w, constraints.max_h},
-		spec.userdata,
-	)
+	return to_size_value(spec.measure(from_constraints(constraints), spec.userdata))
 }
 
 @(private = "file")
-custom_render_bridge :: proc(root: ^ui.Ui, rect: Rect, userdata: rawptr) -> bool {
+custom_render_bridge :: proc(root: ^ui.Ui, rect: ui.Rect_I32, userdata: rawptr) -> bool {
 	assert(root != nil && userdata != nil, "Fit.Custom: invalid render bridge")
 	spec := cast(^Custom_Spec)userdata
 	assert(spec.render != nil, "Fit.Custom: nil render callback")
 	surface := Surface {
 		inner = root,
 	}
-	return spec.render(&surface, rect, spec.userdata)
+	return spec.render(&surface, from_rect(rect), spec.userdata)
 }
 
 @(private = "package")
 builder_open :: proc(builder: ^Builder, frame: ^ui.Ui_Frame, rect: Rect) {
 	assert(builder != nil && !builder.bound, "fit builder: already bound")
 	assert(frame != nil && frame.open, "fit builder: frame not open")
-	ui.begin(&builder.root, frame, rect)
+	ui.begin(&builder.root, frame, to_rect(rect))
 	builder.bound = true
 	Begin(builder)
 }

@@ -24,7 +24,6 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 import fit "ingot:fit"
-import ui "ingot:fit"
 import rl "ingot:gfx"
 
 // Imports are used only under `when CAPTURE`; anchor them for normal builds.
@@ -33,7 +32,6 @@ _ :: os
 _ :: strings
 _ :: rl
 _ :: fit
-_ :: ui
 
 // CAPTURE is declared in main.odin so the js target, which excludes this file,
 // can still compile main.odin's `when CAPTURE` guards.
@@ -44,7 +42,7 @@ when CAPTURE {
 	CAPTURE_HEIGHT :: #config(INGOT_CAPTURE_HEIGHT, 1000)
 	CAPTURE_WINDOW_WIDTH :: 1280
 	CAPTURE_WINDOW_HEIGHT :: 800
-	// Frames to hold a state before the shot. ui.eased snaps to its target once
+	// Frames to hold a state before the shot. fit.eased snaps to its target once
 	// it is within 0.001, so a long enough hold makes every eased widget land on
 	// exactly its target value instead of a frame-timing-dependent one. The
 	// slowest easer here is the chart enter animation (rate 6), which needs
@@ -137,7 +135,7 @@ when CAPTURE {
 			reduced_motion = !capture_sequence
 			apply_gallery_theme()
 			apply_scale(CAPTURE_UI_SCALE)
-			ui.pane_reset(&content_pane)
+			fit.pane_reset(&content_pane)
 			capture_seed_inputs()
 			if capture_sequence do capture_replay_animations()
 			capture_state_applied = true
@@ -269,9 +267,16 @@ when CAPTURE {
 		flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}
 		when ODIN_OS == .Darwin do flags += {.WINDOW_HIGHDPI}
 		rl.SetConfigFlags(flags)
-		rl.InitWindow(CAPTURE_WINDOW_WIDTH, CAPTURE_WINDOW_HEIGHT, "ingot widget gallery (capture)")
+		rl.InitWindow(
+			CAPTURE_WINDOW_WIDTH,
+			CAPTURE_WINDOW_HEIGHT,
+			"ingot widget gallery (capture)",
+		)
 		rl.SetTargetFPS(60)
-		fit.Session_Init(&capture_session, {user_scale = CAPTURE_UI_SCALE, semantics_enabled = true})
+		fit.Session_Init(
+			&capture_session,
+			{user_scale = CAPTURE_UI_SCALE, semantics_enabled = true},
+		)
 		capture_target = rl.LoadRenderTexture(CAPTURE_WIDTH, CAPTURE_HEIGHT)
 		if capture_target.texture.id == 0 {
 			fmt.eprintln("capture: render target allocation failed")
