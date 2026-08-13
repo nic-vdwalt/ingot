@@ -8,24 +8,18 @@ Session_Config :: struct {
 	semantics_enabled: bool,
 }
 
-Session_Frame :: struct {
-	owner:      ^Session,
-	ui:         ^ui.Ui_Frame,
-	generation: u64,
-}
+Session_Draw_Proc :: #type proc(session: ^Session, frame: ^ui.Ui_Frame, userdata: rawptr)
 
 Session :: struct {
-	runtime:          ui.Ui_Runtime,
-	frame:            ui.Ui_Frame,
-	input:            ui.Ui_Input,
-	output:           ui.Ui_Output,
-	adapter:          Adapter,
-	config:           Session_Config,
-	gfx_scope:        rl.Context_Scope,
-	frame_generation: u64,
-	initialized:      bool,
-	frame_open:       bool,
-	graphics_open:    bool,
+	runtime:       ui.Ui_Runtime,
+	frame:         ui.Ui_Frame,
+	input:         ui.Ui_Input,
+	output:        ui.Ui_Output,
+	adapter:       Adapter,
+	config:        Session_Config,
+	initialized:   bool,
+	frame_open:    bool,
+	graphics_open: bool,
 }
 
 session_init :: proc(session: ^Session, config: Session_Config = {}) {
@@ -75,29 +69,24 @@ session_begin_frame :: proc(session: ^Session) -> ^ui.Ui_Frame {
 	return &session.frame
 }
 
-session_acquire_frame :: proc(session: ^Session) -> (frame: Session_Frame, acquired: bool) {
-	assert(session != nil && session.initialized, "session_acquire_frame: invalid session")
-	assert(!session.frame_open && !session.frame.open, "session_acquire_frame: frame already open")
+session_draw :: proc(session: ^Session, draw: Session_Draw_Proc, userdata: rawptr = nil) -> bool {
+	assert(session != nil && session.initialized, "session_draw: invalid session")
+	assert(draw != nil, "session_draw: nil callback")
+	assert(!session.frame_open && !session.frame.open, "session_draw: frame already open")
 	assert(!session.graphics_open && !session.adapter.graphics_open)
-	assert(session.frame_generation < max(u64), "session_acquire_frame: generation overflow")
-	session.gfx_scope = rl.context_scope_enter(session.adapter.gfx_context)
+	scope := rl.context_scope_enter(session.adapter.gfx_context)
 	rl.BeginDrawing()
 	if !rl.context_frame_available(session.adapter.gfx_context) {
 		rl.EndDrawing()
-		rl.context_scope_leave(&session.gfx_scope)
-		return {}, false
+		rl.context_scope_leave(&scope)
+		return false
 	}
 	session.graphics_open = true
 	session.adapter.graphics_open = true
-	session.frame_generation += 1
-	ui_frame := session_begin_frame(session)
-	frame = {
-		owner      = session,
-		ui         = ui_frame,
-		generation = session.frame_generation,
-	}
-	assert(frame.generation > 0 && frame.ui == &session.frame)
-	return frame, true
+	frame := session_begin_frame(session)
+	defer session_draw_finish(session, &scope)
+	draw(session, frame, userdata)
+	return true
 }
 
 session_end_frame :: proc(session: ^Session) {
@@ -109,25 +98,20 @@ session_end_frame :: proc(session: ^Session) {
 	assert(!session.frame.open && !session.frame_open)
 }
 
-session_present_frame :: proc(frame: ^Session_Frame) {
-	assert(frame != nil, "session_present_frame: nil frame")
-	assert(frame.owner != nil, "session_present_frame: missing owner")
-	session := frame.owner
-	assert(session.initialized, "session_present_frame: invalid session")
-	assert(session.frame_open, "session_present_frame: no open frame")
-	assert(frame.generation > 0, "session_present_frame: invalid generation")
-	assert(frame.generation == session.frame_generation, "session_present_frame: stale frame")
-	assert(frame.ui == &session.frame, "session_present_frame: UI frame mismatch")
-	assert(session.graphics_open && session.adapter.graphics_open)
+@(private = "file")
+session_draw_finish :: proc(session: ^Session, scope: ^rl.Context_Scope) {
+	assert(session != nil && session.initialized, "session_draw_finish: invalid session")
+	assert(scope != nil, "session_draw_finish: nil scope")
+	assert(session.frame_open && session.graphics_open, "session_draw_finish: no open frame")
+	assert(session.adapter.graphics_open, "session_draw_finish: adapter frame closed")
 	session_end_frame(session)
 	session.adapter.graphics_open = false
 	rl.EndDrawing()
-	rl.context_scope_leave(&session.gfx_scope)
+	rl.context_scope_leave(scope)
 	session.graphics_open = false
-	frame^ = {}
 	free_all(context.temp_allocator)
 	assert(!session.frame_open && !session.graphics_open)
-	assert(!session.adapter.graphics_open && frame.owner == nil)
+	assert(!session.adapter.graphics_open)
 }
 
 session_destroy :: proc(session: ^Session) {

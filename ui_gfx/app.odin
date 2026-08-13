@@ -117,19 +117,24 @@ app_init_context :: proc(
 
 app_frame :: proc(app: ^App) -> bool {
 	assert(app != nil && app.state == .Running, "app_frame: invalid app")
-	frame, acquired := session_acquire_frame(&app.session)
-	if !acquired do return false
+	return session_draw(&app.session, app_frame_draw, app)
+}
+
+@(private = "file")
+app_frame_draw :: proc(session: ^Session, frame: ^ui.Ui_Frame, userdata: rawptr) {
+	assert(session != nil && frame != nil, "app_frame_draw: invalid frame")
+	assert(userdata != nil, "app_frame_draw: nil app")
+	app := cast(^App)userdata
+	assert(&app.session == session, "app_frame_draw: session mismatch")
 	gfx.ClearBackground(app_clear_color(app))
 	if app.callbacks.ui != nil {
-		app_ui_begin(app, frame.ui, &app.form)
+		app_ui_begin(app, frame, &app.form)
 		app.callbacks.ui(app, &app.form, app.userdata)
-		assert(app.form.open, "app_frame: UI callback closed the application root")
+		assert(app.form.open, "app_frame_draw: UI callback closed the application root")
 		ui.end(&app.form)
-	} else {
-		app.callbacks.frame(app, frame.ui, app.userdata)
+		return
 	}
-	session_present_frame(&frame)
-	return true
+	app.callbacks.frame(app, frame, app.userdata)
 }
 
 app_start :: proc(app: ^App) -> bool {
