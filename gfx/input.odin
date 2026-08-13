@@ -18,6 +18,7 @@ Input :: struct {
 	pressed:              [KEY_COUNT]bool,
 	released:             [KEY_COUNT]bool,
 	repeat:               [KEY_COUNT]bool,
+	key_down:             [KEY_COUNT]bool,
 
 	// char / key queues (FIFO ring)
 	char_q:               [CHAR_Q]rune,
@@ -300,11 +301,9 @@ IsKeyReleased :: proc(key: KeyboardKey) -> bool {
 }
 
 IsKeyDown :: proc(key: KeyboardKey) -> bool {
-	when INGOT_INPUT_SIM {
-		return sim_key_down(i32(key))
-	} else {
-		return platform_key_down(i32(key))
-	}
+	i := i32(key)
+	if i < 0 || i >= KEY_COUNT do return false
+	return g.inp.key_down[i]
 }
 
 GetCharPressed :: proc() -> rune {
@@ -344,11 +343,9 @@ IsMouseButtonReleased :: proc(button: MouseButton) -> bool {
 }
 
 IsMouseButtonDown :: proc(button: MouseButton) -> bool {
-	when INGOT_INPUT_SIM {
-		return sim_mouse_button_down(i32(button))
-	} else {
-		return platform_mouse_button(i32(button))
-	}
+	b := int(button)
+	if b < 0 || b >= 8 do return false
+	return g.inp.mb_down[b]
 }
 
 // --- gamepad queries (raylib-named) ----------------------------------------
@@ -424,7 +421,7 @@ GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(g)}
 // derived from the pointer, so a recorded frame is only reproducible when the
 // harness owns the cursor rather than inheriting wherever the user left it.
 SetMousePosition :: proc(x, y: i32) {
-	context_set_mouse_position(default_context(), x, y)
+	context_set_mouse_position(g, x, y)
 }
 
 context_set_mouse_position :: proc(ctx: ^Context, x, y: i32) {

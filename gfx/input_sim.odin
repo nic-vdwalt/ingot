@@ -63,6 +63,7 @@ when INGOT_INPUT_SIM {
 		if down && !g_sim.mb_down[b] do g.inp.mb_pressed[b] = true
 		if !down && g_sim.mb_down[b] do g.inp.mb_released[b] = true
 		g_sim.mb_down[b] = down
+		g.inp.mb_down[b] = down
 	}
 
 	// SimKey transitions a key and derives edges; `repeat` marks an
@@ -77,6 +78,7 @@ when INGOT_INPUT_SIM {
 		if down && repeat do g.inp.repeat[i] = true
 		if !down && g_sim.key_down[i] do g.inp.released[i] = true
 		g_sim.key_down[i] = down
+		g.inp.key_down[i] = down
 	}
 
 	// SimChar stages a typed character (text input path).
