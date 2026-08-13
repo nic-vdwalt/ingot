@@ -9,7 +9,6 @@ Ui_Output :: ui.Ui_Output
 Ui_Runtime :: ui.Ui_Runtime
 Rect_I32 :: ui.Rect_I32
 Pane :: ui.Pane
-Grid_State :: ui.Grid
 Layout :: ui.Layout
 Flow_Layout :: ui.Flow_Layout
 Fit_Column :: ui.Fit_Column
@@ -81,11 +80,29 @@ flow_end :: ui.flow_end
 fit_column_begin :: ui.fit_column_begin
 fit_column_next :: ui.fit_column_next
 fit_column_end :: ui.fit_column_end
-grid_begin :: ui.grid_begin
-grid_next :: ui.grid_next
-grid_skip_to :: ui.grid_skip_to
+grid_begin :: proc(
+	state: ^Grid_State,
+	rect: ui.Rect_I32,
+	columns, row_height: i32,
+	gap_x: i32 = 0,
+	gap_y: i32 = 0,
+) {
+	assert(state != nil, "Fit.grid_begin: nil state")
+	ui.grid_begin(&state.inner, rect, columns, row_height, gap_x, gap_y)
+}
+grid_next :: proc(state: ^Grid_State) -> ui.Rect_I32 {
+	assert(state != nil, "Fit.grid_next: nil state")
+	return ui.grid_next(&state.inner)
+}
+grid_skip_to :: proc(state: ^Grid_State, index: i32) {
+	assert(state != nil, "Fit.grid_skip_to: nil state")
+	ui.grid_skip_to(&state.inner, index)
+}
 grid_visible_range :: ui.grid_visible_range
-grid_end :: ui.grid_end
+grid_end :: proc(state: ^Grid_State) -> ui.Rect_I32 {
+	assert(state != nil, "Fit.grid_end: nil state")
+	return ui.grid_end(&state.inner)
+}
 pane_begin :: ui.pane_begin
 pane_end :: ui.pane_end
 pane_reset :: ui.pane_reset
@@ -149,7 +166,25 @@ draw_rectangle_rounded_lines_ex :: ui.draw_rectangle_rounded_lines_ex
 draw_circle_v :: ui.draw_circle_v
 draw_line_ex :: ui.draw_line_ex
 draw_triangle :: ui.draw_triangle
-draw_surface :: ui.draw_surface
+draw_surface :: proc(
+	frame: ^ui.Ui_Frame,
+	rect: ui.Rectangle,
+	surface: Surface_Kind,
+	state: Visual_State = .Rest,
+	radius: ui.Radius = .MD,
+	border: ui.Border = .Hairline,
+	elevation: ui.Elevation = .Flat,
+) {
+	ui.draw_surface(
+		frame,
+		rect,
+		ui.Surface(surface),
+		ui.Visual_State(state),
+		radius,
+		border,
+		elevation,
+	)
+}
 draw_shadow_hard :: ui.draw_shadow_hard
 draw_app_header :: ui.draw_app_header
 draw_debug_overlay :: ui.draw_debug_overlay
@@ -205,16 +240,28 @@ rect_f32 :: ui.rect_f32
 point_in_rect :: ui.point_in_rect
 contrast_ratio :: ui.contrast_ratio
 space_pixels :: ui.space_pixels
-color_tinted :: ui.color_tinted
-tint_alpha :: ui.tint_alpha
+color_tinted :: proc(color: ui.Color, tint: Tint) -> ui.Color {
+	return ui.color_tinted(color, ui.Tint(tint))
+}
+tint_alpha :: proc(tint: Tint) -> u8 {
+	return ui.tint_alpha(ui.Tint(tint))
+}
 theme_dark :: ui.theme_dark
 theme_light :: ui.theme_light
 theme_sketch_warm :: ui.theme_sketch_warm
 theme_sketch_grey :: ui.theme_sketch_grey
 theme_high_contrast :: ui.theme_high_contrast
-theme_pigment :: ui.theme_pigment
+theme_pigment :: proc(theme: ^ui.Theme, pigment: Pigment) -> ui.Color {
+	return ui.theme_pigment(theme, ui.Pigment(pigment))
+}
 
-surface_colors :: ui.surface_colors
+surface_colors :: proc(
+	frame: ^ui.Ui_Frame,
+	surface: Surface_Kind,
+	state: Visual_State,
+) -> ui.Surface_Colors {
+	return ui.surface_colors(frame, ui.Surface(surface), ui.Visual_State(state))
+}
 scatter_unit :: ui.scatter_unit
 dot_grid_fits :: ui.dot_grid_fits
 draw_rule_lines :: ui.draw_rule_lines

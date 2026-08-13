@@ -207,6 +207,9 @@ odin run examples/gallery -collection:ingot=.
 bash scripts/smoke-gallery.sh   # windowed GPU smoke test; needs a display
 ```
 
+Gallery changes must preserve the checked-in `docs/media/gallery-*.png` exhibits;
+capture and compare them before removing or replacing a demonstrated widget.
+
 Other focused examples: `examples/hello` (application shell and stable IDs),
 `examples/session_loop` (custom-host Session lifecycle),
 [`examples/hot_reload`](examples/hot_reload/) (native code and state hot reload),

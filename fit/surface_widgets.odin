@@ -180,6 +180,117 @@ Surface_Date_Picker :: proc(
 	return changed
 }
 
+Surface_Line_Chart :: proc(
+	surface: ^Surface,
+	rect: Rect,
+	series: []Chart_Series,
+	state: ^Chart_State,
+	options: Chart_Options = {},
+) -> int {
+	u := surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Line_Chart: nil state")
+	assert(len(series) <= ui.CHART_SERIES_COUNT_MAX, "Fit.Surface_Line_Chart: too many series")
+	inner_series: [ui.CHART_SERIES_COUNT_MAX]ui.Chart_Series
+	for item, index in series do inner_series[index] = {item.name, item.values, ui.Color(item.color)}
+	inner_state := ui.Chart_State{state.enter_anim, state.hover_index}
+	hovered := ui.line_chart_at(
+		u.frame,
+		to_rect(rect),
+		inner_series[:len(series)],
+		&inner_state,
+		to_chart_options(options),
+	)
+	state^ = {inner_state.enter_anim, inner_state.hover_idx}
+	return hovered
+}
+
+Surface_Bar_Chart :: proc(
+	surface: ^Surface,
+	rect: Rect,
+	series: []Chart_Series,
+	state: ^Chart_State,
+	options: Chart_Options = {},
+) -> int {
+	u := surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Bar_Chart: nil state")
+	assert(len(series) <= ui.CHART_SERIES_COUNT_MAX, "Fit.Surface_Bar_Chart: too many series")
+	inner_series: [ui.CHART_SERIES_COUNT_MAX]ui.Chart_Series
+	for item, index in series do inner_series[index] = {item.name, item.values, ui.Color(item.color)}
+	inner_state := ui.Chart_State{state.enter_anim, state.hover_index}
+	hovered := ui.bar_chart_at(
+		u.frame,
+		to_rect(rect),
+		inner_series[:len(series)],
+		&inner_state,
+		to_chart_options(options),
+	)
+	state^ = {inner_state.enter_anim, inner_state.hover_idx}
+	return hovered
+}
+
+Surface_Sparkline :: proc(surface: ^Surface, rect: Rect, values: []f32, color: Color = {}) {
+	u := surface_ui(surface)
+	ui.sparkline_at(u.frame, to_rect(rect), values, ui.Color(color))
+}
+
+Surface_Markdown :: proc(
+	surface: ^Surface,
+	rect: Rect,
+	source: string,
+	color: Color,
+) -> Markdown_Result {
+	u := surface_ui(surface)
+	ctx := ui.markdown_context(u.frame)
+	width: i32
+	height := ui.markdown_draw(&ctx, to_rect(rect), source, ui.Color(color), out_w = &width)
+	target, activated := ui.markdown_link_activated(&ctx)
+	return {height, width, activated, target}
+}
+
+Surface_Context_Menu :: proc(
+	surface: ^Surface,
+	state: ^Context_Menu_State,
+	items: []Menu_Item,
+) -> int {
+	u := surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Context_Menu: nil state")
+	assert(len(items) <= 32, "Fit.Surface_Context_Menu: too many items")
+	inner_items: [32]ui.Menu_Item
+	for item, index in items do inner_items[index] = {item.label, item.disabled, item.separator}
+	return ui.context_menu(
+		u.frame,
+		&state.inner,
+		inner_items[:len(items)],
+		ui.frame_viewport(u.frame),
+	)
+}
+
+Surface_Toasts :: proc(surface: ^Surface, state: ^Toast_State) {
+	u := surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Toasts: nil state")
+	ui.toasts_draw(u.frame, &state.inner, ui.frame_viewport(u.frame))
+}
+
+Surface_Confirm_Dialog :: proc(
+	surface: ^Surface,
+	state: ^Confirm_Dialog_State,
+	title, message, confirm_label: string,
+	danger: bool = true,
+) -> Confirm_Choice {
+	u := surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Confirm_Dialog: nil state")
+	result := ui.confirm_dialog(
+		u.frame,
+		&state.inner,
+		title,
+		message,
+		confirm_label,
+		ui.frame_viewport(u.frame),
+		danger,
+	)
+	return Confirm_Choice(result)
+}
+
 Region_Label :: proc(region: ^Region, text: string, role: Text_Role = .Body, ink: Ink = .Primary) {
 	assert(region != nil && region.inner.open, "Fit.Region_Label: region not open")
 	ui.label(&region.inner, text, ui.Text_Role(role), ui.Ink(ink))
@@ -237,6 +348,11 @@ Region_Space :: proc(region: ^Region, space: Space) {
 Region_Section_Header :: proc(region: ^Region, title: string) {
 	assert(region != nil && region.inner.open, "Fit.Region_Section_Header: region not open")
 	_ = ui.section_header(&region.inner, title)
+}
+
+Region_Tab_Bar :: proc(region: ^Region, key: string, labels: []string, active: ^i32) -> bool {
+	assert(region != nil && region.inner.open, "Fit.Region_Tab_Bar: region not open")
+	return ui.tab_bar(&region.inner, key, labels, active)
 }
 
 @(private = "package")
