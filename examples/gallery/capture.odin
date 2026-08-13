@@ -10,10 +10,9 @@
 // fixed CAPTURE_WIDTH x CAPTURE_HEIGHT target also decouples the output from the
 // host window size and HiDPI factor.
 //
-// Why its own loop instead of ui_gfx.app_run: widget paint is replayed in
-// session_end_frame_context, after the frame callback returns. Wrapping the
-// callback alone would capture the direct gfx draws and none of the widgets, so
-// the target has to bracket the whole session frame.
+// Why its own loop instead of fit.Run: Builder paint is replayed by Render.
+// Wrapping the draw callback alone would capture direct draws and none of the
+// widgets, so the target brackets explicit fit.Render in a manual fit.Session.
 //
 // Determinism: capture forces reduced motion, an explicit 1.0 UI scale, and a
 // settle delay before each shot. Caret blink and progress easing are wall-clock
@@ -24,8 +23,8 @@ package main
 import "core:fmt"
 import "core:os"
 import "core:strings"
+import fit "ingot:fit"
 import ui "ingot:fit"
-import ui_gfx "ingot:fit"
 import rl "ingot:gfx"
 
 // Imports are used only under `when CAPTURE`; anchor them for normal builds.
@@ -33,8 +32,8 @@ _ :: fmt
 _ :: os
 _ :: strings
 _ :: rl
+_ :: fit
 _ :: ui
-_ :: ui_gfx
 
 // CAPTURE is declared in main.odin so the js target, which excludes this file,
 // can still compile main.odin's `when CAPTURE` guards.
@@ -104,6 +103,7 @@ when CAPTURE {
 		{"", .Theme, .Sketch_Warm},
 	}
 
+	capture_session: fit.Session
 	capture_target: rl.RenderTexture2D
 	capture_dir: string
 	capture_sequence: bool
@@ -160,9 +160,9 @@ when CAPTURE {
 	// content, selection, and spellcheck rather than three empty placeholders.
 	capture_seed_inputs :: proc() {
 		if section != .Inputs do return
-		ui.input_box_set_text(&input_state.name, "Ada Lovelace")
-		ui.input_box_set_text(&input_state.pass, "correct horse battery")
-		ui.input_box_set_text(
+		fit.Input_Box_Set_Text(&input_state.name, "Ada Lovelace")
+		fit.Input_Box_Set_Text(&input_state.pass, "correct horse battery")
+		fit.Input_Box_Set_Text(
 			&input_state.notes,
 			"Immediate mode all the way up: the caller owns this text, undo, and selection.",
 		)
@@ -219,6 +219,9 @@ when CAPTURE {
 	capture_finish :: proc() {
 		assert(capture_dir != "", "capture_finish: no output directory")
 		if capture_target.texture.id != 0 do rl.UnloadRenderTexture(capture_target)
+		fit.Session_Destroy(&capture_session)
+		rl.CloseWindow()
+		input_state_destroy(&input_state)
 		if capture_sequence do fmt.printfln("capture: %d frames", capture_sequence_frame)
 		os.exit(0)
 	}
@@ -227,22 +230,17 @@ when CAPTURE {
 	// frame - build and paint replay - with the capture target, then blits the
 	// result to the window so the run is visible while it records.
 	capture_frame :: proc() {
-		frame, acquired := ui_gfx.session_acquire_frame(&app.session)
+		builder, acquired := fit.Session_Begin(&capture_session)
 		if !acquired do return
-		frame_state := frame.ui
-		// Window and target share one derived background. This used to be two
-		// values - a fixed configured clear behind a theme-derived target
-		// clear - which is why a light-theme shot showed the dark configured
-		// colour through it. bg_app also carries the vibrancy alpha (dark
-		// windowed is alpha 162), so app_clear_color forces it opaque: a
-		// translucent clear produced PNGs with 0.74 mean alpha that rendered
-		// washed-out grey on any non-white page.
-		background := ui_gfx.app_clear_color(&app)
+		theme := palette_theme(palette)
+		background := rl.Color(theme.bg_app)
+		background.a = 255
 		rl.ClearBackground(background)
 
 		rl.BeginTextureMode(capture_target)
 		rl.ClearBackground(background)
-		gallery_frame(&app, frame_state, nil)
+		gallery_build(builder, nil)
+		fit.Render_At(builder, {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT})
 		rl.EndTextureMode()
 
 		// Negative source height blits the bottom-left-origin target upright
@@ -255,12 +253,12 @@ when CAPTURE {
 			0,
 			rl.WHITE,
 		)
-		ui_gfx.session_present_frame(&frame)
+		fit.Session_End(&capture_session)
 		capture_write()
 		free_all(context.temp_allocator)
 	}
 
-	// capture_main replaces the normal app_run entry point under -define.
+	// capture_main replaces the normal fit.Run entry point under -define.
 	capture_main :: proc() {
 		capture_dir = os.get_env("INGOT_CAPTURE_DIR", context.allocator)
 		if capture_dir == "" do capture_dir = strings.clone("docs/media")
@@ -268,23 +266,12 @@ when CAPTURE {
 		defer delete(sequence_flag)
 		capture_sequence = sequence_flag != ""
 
-		started := ui_gfx.app_init(
-			&app,
-			{
-				width = CAPTURE_WINDOW_WIDTH,
-				height = CAPTURE_WINDOW_HEIGHT,
-				title = "ingot widget gallery (capture)",
-				target_fps = 60,
-				event_waiting = false,
-				session = {semantics_enabled = true},
-			},
-			{frame = gallery_frame, shutdown = shutdown},
-		)
-		if !started {
-			fmt.eprintln("capture: window initialisation failed")
-			os.exit(1)
-		}
-		app.state = .Running
+		flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}
+		when ODIN_OS == .Darwin do flags += {.WINDOW_HIGHDPI}
+		rl.SetConfigFlags(flags)
+		rl.InitWindow(CAPTURE_WINDOW_WIDTH, CAPTURE_WINDOW_HEIGHT, "ingot widget gallery (capture)")
+		rl.SetTargetFPS(60)
+		fit.Session_Init(&capture_session, {user_scale = CAPTURE_UI_SCALE, semantics_enabled = true})
 		capture_target = rl.LoadRenderTexture(CAPTURE_WIDTH, CAPTURE_HEIGHT)
 		if capture_target.texture.id == 0 {
 			fmt.eprintln("capture: render target allocation failed")
