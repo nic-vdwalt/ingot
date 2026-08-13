@@ -1,15 +1,15 @@
 package main
 
+import fit "ingot:fit"
 import rl "ingot:gfx"
-import ui "ingot:ui"
-import "ingot:ui_gfx"
 
 State :: struct {
 	showing: bool,
+	toggle:  bool,
 	items:   [3]u64,
 }
 
-app: ui_gfx.App
+app: fit.App
 state := State {
 	items = {101, 205, 309},
 }
@@ -17,7 +17,7 @@ state := State {
 main :: proc() {
 	flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}
 	when ODIN_OS == .Darwin do flags += {.WINDOW_HIGHDPI}
-	_ = ui_gfx.app_run(
+	_ = fit.Run(
 		&app,
 		{
 			width = 720,
@@ -29,41 +29,28 @@ main :: proc() {
 			event_waiting = true,
 			session = {semantics_enabled = true},
 		},
-		{ui = draw, shutdown = shutdown},
+		draw,
 		&state,
 	)
 }
 
-draw :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
-	assert(app != nil && form != nil, "draw: invalid app or UI")
+draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	assert(builder != nil && userdata != nil, "draw: invalid argument")
 	data := cast(^State)userdata
-	ui.padding(form, .LG)
-	ui.scope_begin(form, "hello")
-	ui.label(form, "Hello from Ingot", ui.ui_frame_metrics(form.frame).FONT_SIZE_TITLE)
-	toggle := false
-	_ = ui.fit_tree(
-		form,
-		ui.fit_row(
-			{gap = .SM, align = .Center},
-			{
-				ui.fit_label("Controls", {role = .Label, track = ui.grow()}),
-				ui.fit_button("toggle", "Toggle list", &toggle),
-			},
-		),
-	)
-	if toggle {
+	if data.toggle {
 		data.showing = !data.showing
+		data.toggle = false
 	}
-	if data.showing do ui.scope(form, "items", draw_items, &data.items)
-	ui.scope_end(form)
-}
-
-draw_items :: proc(form: ^ui.Ui, userdata: rawptr) {
-	assert(form != nil && userdata != nil, "draw_items: invalid state")
-	items := cast(^[3]u64)userdata
-	for item in items do _ = ui.button(form, item, "Stable item")
-}
-
-shutdown :: proc(app: ^ui_gfx.App, userdata: rawptr) {
-	assert(app != nil && userdata != nil, "shutdown: invalid state")
+	fit.Column(builder, {gap = .SM, padding = .LG})
+	fit.Label(builder, "Hello from Ingot", {role = .Title})
+	fit.Row(builder, {gap = .SM, align = .Center})
+	fit.Label(builder, "Controls", {role = .Label, track = fit.Grow()})
+	fit.Button(builder, "toggle", "Toggle list", &data.toggle)
+	fit.End(builder)
+	if data.showing {
+		fit.Column(builder, {gap = .XS})
+		for item in data.items do fit.Button(builder, item, "Stable item")
+		fit.End(builder)
+	}
+	fit.End(builder)
 }

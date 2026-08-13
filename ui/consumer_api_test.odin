@@ -36,18 +36,6 @@ consumer_api_baseline_compiles :: proc(t: ^testing.T) {
 	_ = checkbox(&u, "showing", "Show items", &showing)
 	_ = button(&u, "save", "Save", Button_Options{style = .Primary})
 	apply := false
-	_ = fit_button(
-		"full-options",
-		"Full options",
-		Fit_Button_Options{disabled = true, activated = &apply},
-	)
-	_ = fit_row(
-		{gap = .SM, align = .Center},
-		{
-			fit_label("Actions", {role = .Label, track = grow()}),
-			fit_button("static", "Static", .Primary, &apply),
-		},
-	)
 	builder: Fit_Builder
 	fit_begin(&builder, &u)
 	fit_builder_row(&builder, {gap = .SM, align = .Center})
@@ -62,21 +50,19 @@ consumer_api_baseline_compiles :: proc(t: ^testing.T) {
 	fit_end(&flow_builder)
 	flow_size := fit_measure(&flow_builder)
 	fit_render_at(&flow_builder, {0, 0, flow_size.w, flow_size.h})
-	_ = fit_grid({columns = 2, row_height = 24, gap_x = .XS}, {fit_label("One"), fit_label("Two")})
 	transition: Transition_Rect_State
 	transition_rect_reset(&transition, {0, 0, 40, 20})
-	_ = fit_tree(
-		&u,
-		fit_row(
-			{},
-			{
-				fit_attachment(
-					{target_kind = .Viewport, z = Z_TOOLTIP, transition = {state = &transition}},
-					{fit_label("Attached")},
-				),
-			},
-		),
+	attachment_builder: Fit_Builder
+	fit_begin(&attachment_builder, &u)
+	fit_builder_row(&attachment_builder)
+	fit_builder_attachment(
+		&attachment_builder,
+		{target_kind = .Viewport, z = Z_TOOLTIP, transition = {state = &transition}},
 	)
+	fit_builder_label(&attachment_builder, "Attached")
+	fit_end(&attachment_builder)
+	fit_end(&attachment_builder)
+	_ = fit_render(&attachment_builder)
 	scope(&u, "items", consumer_api_items, &items)
 	canvas(&u, {height = 120}, consumer_api_canvas)
 	scope_end(&u)
