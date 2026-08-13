@@ -80,7 +80,10 @@ layers_nest_ascending :: proc(t: ^testing.T) {
 	testing.expect_value(t, output.overlay.count, 2)
 	testing.expect_value(t, output.overlay.commands[0].tier, u8(1))
 	testing.expect_value(t, output.overlay.commands[1].tier, u8(2))
+	testing.expect_value(t, output.overlay.z_groups[output.overlay.commands[0].z_group], Z_PANEL)
+	testing.expect_value(t, output.overlay.z_groups[output.overlay.commands[1].z_group], Z_POPUP)
 	testing.expect_value(t, output.overlay.current_tier, u8(0))
+	testing.expect_value(t, output.overlay.current_z_group, u8(0))
 	ui_frame_end(&frame)
 }
 

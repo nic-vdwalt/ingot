@@ -305,6 +305,7 @@ explicit rectangles are physical.
 | `Text_Input_State` | yes | no | yes after first allocation | owns undo, pills, and memos |
 | `Chart_State` | yes | no | no | caller-owned values only |
 | `Button_State`, `Slider_State` | yes | no | no | caller-owned values only |
+| `Transition_F32_State`, `Transition_Color_State`, `Transition_Rect_State` | yes | optional reset for entry motion | no | caller-owned values only |
 | popup/dropdown/tooltip state | yes | no | no | caller-owned values only |
 | `Session` | no | `session_init` | yes | owns runtime, frame, output, adapter |
 | `App` | yes | `app_run`/`app_init` | shell on native; host on web | borrows userdata for run lifetime |

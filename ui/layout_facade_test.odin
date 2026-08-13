@@ -568,6 +568,158 @@ layout_facade_fit_render_at_does_not_consume_cursor :: proc(t: ^testing.T) {
 }
 
 @(test)
+layout_facade_prepared_attachment_is_out_of_flow_and_screen_anchored :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	input := Ui_Input {
+		screen_size = {300, 200},
+	}
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	ui_frame_begin(&frame, &runtime, &input)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	counts: Prepared_Custom_Counts
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = 300))
+	prepared_row_begin(&prepared)
+	_ = prepared_attachment_begin(
+		&prepared,
+		{
+			target_kind = .Screen_Rect,
+			target_screen = {100, 50, 20, 10},
+			target_point = .Bottom_Right,
+			self_point = .Top_Left,
+			z = Z_POPUP + 25,
+			claim = true,
+		},
+	)
+	_ = prepared_custom(
+		&prepared,
+		{
+			measure = prepared_custom_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &counts,
+		},
+	)
+	prepared_container_end(&prepared)
+	prepared_container_end(&prepared)
+	size := prepared_measure(&u, &prepared)
+	prepared_render_at(&u, &prepared, {0, 0, size.w, size.h})
+	end(&u)
+
+	testing.expect_value(t, size, Intrinsic_Size{})
+	testing.expect_value(t, counts.rect, Rect_I32{120, 60, 40, 20})
+	testing.expect_value(t, counts.render, i32(1))
+	testing.expect_value(t, frame.route.cur.count, 1)
+	testing.expect_value(t, frame.route.cur.zs[0], Z_POPUP + 25)
+}
+
+@(test)
+layout_facade_fit_attachment_static_and_builder_render_once :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	input := Ui_Input {
+		screen_size = {300, 200},
+	}
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime, &input)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	static_counts: Prepared_Custom_Counts
+	_ = fit_tree(
+		&u,
+		fit_row(
+			{},
+			{
+				fit_attachment(
+					{
+						target_kind = .Viewport,
+						target_point = .Center,
+						self_point = .Center,
+						z = Z_PANEL,
+					},
+					{
+						fit_custom(
+							{
+								measure = prepared_custom_measure_test,
+								render = prepared_custom_render_test,
+								userdata = &static_counts,
+							},
+						),
+					},
+				),
+			},
+		),
+	)
+	builder_counts: Prepared_Custom_Counts
+	builder: Fit_Builder
+	fit_begin(&builder, &u)
+	fit_builder_row(&builder)
+	fit_builder_attachment(&builder, {target_kind = .Viewport, z = Z_POPUP})
+	fit_builder_custom(
+		&builder,
+		{
+			measure = prepared_custom_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &builder_counts,
+		},
+	)
+	fit_end(&builder)
+	fit_end(&builder)
+	_ = fit_render(&builder)
+	end(&u)
+	testing.expect_value(t, static_counts.render, i32(1))
+	testing.expect_value(t, static_counts.rect, Rect_I32{130, 90, 40, 20})
+	testing.expect_value(t, builder_counts.render, i32(1))
+}
+
+@(test)
+layout_facade_prepared_transition_uses_visual_geometry :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	input := Ui_Input {
+		screen_size = {300, 200},
+		frame_time  = 0.05,
+	}
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime, &input)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	state: Transition_Rect_State
+	transition_rect_reset(&state, {0, 0, 10, 10})
+	counts: Prepared_Custom_Counts
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = 300))
+	prepared_row_begin(&prepared)
+	_ = prepared_custom(
+		&prepared,
+		{
+			measure = prepared_custom_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &counts,
+			size = {transition = {state = &state}},
+		},
+	)
+	prepared_container_end(&prepared)
+	size := prepared_measure(&u, &prepared)
+	prepared_render_at(&u, &prepared, {100, 100, size.w, size.h})
+	end(&u)
+	testing.expect(t, counts.rect.x > 0 && counts.rect.x < 100)
+	testing.expect(t, counts.rect.y > 0 && counts.rect.y < 100)
+	testing.expect_value(t, counts.render, i32(1))
+}
+
+@(test)
 layout_facade_prepared_custom_leaf_measures_and_renders_once :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

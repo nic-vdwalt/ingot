@@ -45,6 +45,36 @@ z_scope_promotes_draws_to_the_overlay_at_its_tier :: proc(t: ^testing.T) {
 }
 
 @(test)
+intermediate_z_scope_retains_named_tier_and_restores_content :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+
+	z_scope_begin(&frame, Z_PANEL + 25)
+	begin_scissor_mode(&frame, 2, 3, 20, 30)
+	draw_rectangle(&frame, 4, 5, 6, 7, Color{1, 2, 3, 255})
+	end_scissor_mode(&frame)
+	z_scope_end(&frame)
+
+	testing.expect_value(t, output.overlay.count, 3)
+	for index in 0 ..< output.overlay.count {
+		testing.expect_value(t, output.overlay.commands[index].tier, u8(1))
+	}
+	testing.expect_value(t, output.overlay.current_tier, u8(0))
+	testing.expect_value(t, output.overlay.current_z_group, u8(0))
+	testing.expect_value(t, output.overlay.z_group_count, i32(2))
+	testing.expect_value(t, output.overlay.z_groups[1], Z_PANEL + 25)
+	testing.expect_value(t, output.overlay.commands[0].z_group, u8(1))
+	testing.expect_value(t, output.overlay.clip_count, 0)
+	ui_frame_end(&frame)
+}
+
+@(test)
 passive_overlay_groups_stamp_their_declared_tier :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

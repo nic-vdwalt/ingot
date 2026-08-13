@@ -228,4 +228,8 @@ render, and every leaf still renders exactly once.
 
 Use rect-based `*_at` for canvases, scroll-offset content, overlays, custom hit regions, and geometry whose exact placement is application behavior. Both facade and explicit entry points share interaction, focus, semantics, and paint; they differ only in who supplies the rectangle.
 
+`prepared_attachment_begin`, `fit_attachment`, and `fit_builder_attachment` describe one-child out-of-flow subtrees. Parent, root, prior Prepared handle, explicit screen rectangle, and viewport targets resolve synchronously from current-frame geometry. FIT attachments exclude transient handle targets. Anchor points, scaled offsets, optional viewport clamping, exact `Z_Order`, passive or claiming behavior, and caller-owned rectangle transitions are explicit options. Attachments contribute no size, gap, flex share, Flow item, or Grid cell to their parent and render through the existing layer primitive.
+
+`Transition_F32_State`, `Transition_Color_State`, and `Transition_Rect_State` remain caller-owned. First use snaps unless the caller resets to an entry value; reduced motion snaps; unsettled values request redraw. Prepared transitions animate visual geometry after target layout, so sibling allocation never feeds back into animation. Callers keep declaring a node for an exit transition; omission removes it immediately.
+
 `Flow_Layout`, `Fit_Column`, and `Grid` have no facade entry point by design: all exist so the caller can drive placement itself, which is the opposite of what carving a slot from a container does.

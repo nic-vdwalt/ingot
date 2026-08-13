@@ -43,6 +43,17 @@ fit_builder_grid :: proc(builder: ^Fit_Builder, options: Prepared_Grid_Options) 
 	fit_builder_container_begin_special(builder, .Grid, {}, options)
 }
 
+fit_builder_attachment :: proc(builder: ^Fit_Builder, options: Prepared_Attachment_Options) {
+	assert(builder != nil, "fit_builder_attachment: nil builder")
+	fit_builder_assert_open(builder)
+	assert(builder.prepared.depth > 0, "fit_builder_attachment: attachment cannot be root")
+	fit_builder_add_child(builder)
+	_ = prepared_attachment_begin(&builder.prepared, options)
+	depth := builder.prepared.depth - 1
+	builder.direct_children[depth] = 0
+	builder.container_kinds[depth] = .Attachment
+}
+
 fit_end :: proc(builder: ^Fit_Builder) {
 	fit_builder_assert_open(builder)
 	assert(builder.prepared.depth > 0, "fit_end: no open container")
@@ -333,6 +344,7 @@ fit_builder_add_child :: proc(builder: ^Fit_Builder) {
 	limit := i32(MAX_LAYOUT_FLEX)
 	kind := builder.container_kinds[depth]
 	if kind == .Flow || kind == .Grid do limit = MAX_PREPARED_NODES - 1
+	if kind == .Attachment do limit = 1
 	assert(builder.direct_children[depth] < limit, "fit builder: children full")
 	fit_builder_prepare_node(builder)
 	builder.direct_children[depth] += 1

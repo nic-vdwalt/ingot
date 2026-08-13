@@ -327,7 +327,7 @@ z_scope_begin :: proc(frame: ^Ui_Frame, z: Z_Order) {
 	frame.z_scopes[frame.z_count] = z
 	frame.z_count += 1
 	assert(frame.z_count > 0 && frame.z_count <= MAX_Z_SCOPES)
-	if frame.output != nil do paint_list_set_tier(&frame.output.overlay, z_paint_tier(z))
+	if frame.output != nil do paint_list_set_z(&frame.output.overlay, z)
 }
 
 z_scope_end :: proc(frame: ^Ui_Frame) {
@@ -335,9 +335,7 @@ z_scope_end :: proc(frame: ^Ui_Frame) {
 	assert(frame.z_count > 0, "z_scope_end: no scope open")
 	frame.z_count -= 1
 	assert(frame.z_count >= 0, "z_scope_end: corrupt z scope")
-	if frame.output != nil {
-		paint_list_set_tier(&frame.output.overlay, z_paint_tier(frame_z(frame)))
-	}
+	if frame.output != nil do paint_list_set_z(&frame.output.overlay, frame_z(frame))
 }
 
 frame_to_local :: proc(frame: ^Ui_Frame, point: Vector2) -> Vector2 {

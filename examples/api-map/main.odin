@@ -237,10 +237,10 @@ TIP_OVERLAY ::
 		"Buffered during the frame; replayed after a11y publish at frame end" +
 		`
 ` +
-		"in z-tier order. layer_begin/layer_end is the raised-surface" +
+		"in exact bounded z-order. layer_begin/layer_end is the raised-surface" +
 		`
 ` +
-		"primitive: claim + tier + screen-space draw_* in one call.")
+		"primitive: claim + exact z + screen-space draw_* in one call.")
 
 TIP_PLATFORM ::
 	("Platform output" +

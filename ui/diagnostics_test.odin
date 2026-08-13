@@ -11,6 +11,15 @@ paint_storage_stats_match_bounded_representation :: proc(t: ^testing.T) {
 	testing.expect_value(t, stats.output_bytes, u64(size_of(Ui_Output)))
 	testing.expect_value(t, stats.command_capacity_bytes, stats.command_bytes * PAINT_COMMAND_CAP)
 	testing.expect_value(t, stats.text_capacity_bytes, u64(PAINT_TEXT_CAP))
+	testing.expect_value(t, stats.z_group_capacity, i32(MAX_PAINT_Z_GROUPS))
+	testing.expect_value(t, stats.z_group_bytes, u64(size_of(Z_Order)) * MAX_PAINT_Z_GROUPS)
+}
+
+@(test)
+fit_storage_stats_include_transition_state :: proc(t: ^testing.T) {
+	stats := fit_storage_stats()
+	testing.expect_value(t, stats.prepared_node_capacity, i32(MAX_PREPARED_NODES))
+	testing.expect_value(t, stats.transition_rect_bytes, u64(size_of(Transition_Rect_State)))
 }
 
 @(test)
