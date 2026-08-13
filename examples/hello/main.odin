@@ -45,9 +45,9 @@ draw :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
 		form,
 		ui.fit_row(
 			{gap = .SM, align = .Center},
-			[]ui.Fit_Node {
+			{
 				ui.fit_label("Controls", {role = .Label, track = ui.grow()}),
-				ui.fit_button("toggle", "Toggle list", ui.Fit_Button_Options{activated = &toggle}),
+				ui.fit_button("toggle", "Toggle list", &toggle),
 			},
 		),
 	)

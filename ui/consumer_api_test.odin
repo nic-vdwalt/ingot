@@ -36,17 +36,18 @@ consumer_api_baseline_compiles :: proc(t: ^testing.T) {
 	_ = checkbox(&u, "showing", "Show items", &showing)
 	_ = button(&u, "save", "Save", Button_Options{style = .Primary})
 	apply := false
+	_ = fit_button(
+		"full-options",
+		"Full options",
+		Fit_Button_Options{disabled = true, activated = &apply},
+	)
 	_ = fit_tree(
 		&u,
 		fit_row(
 			{gap = .SM, align = .Center},
-			[]Fit_Node {
+			{
 				fit_label("Actions", {role = .Label, track = grow()}),
-				fit_button(
-					"apply",
-					"Apply",
-					Fit_Button_Options{style = .Primary, activated = &apply},
-				),
+				fit_button("apply", "Apply", .Primary, &apply),
 			},
 		),
 	)

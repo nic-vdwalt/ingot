@@ -114,10 +114,66 @@ fit_button_spec :: proc(spec: Button_Spec, track: Track = {}, activated: ^bool =
 	}
 }
 
+@(private = "package")
+fit_button_string_active :: proc(key, label: string, activated: ^bool) -> Fit_Node {
+	assert(activated != nil, "fit_button: nil activation destination")
+	return fit_button_string(key, label, Fit_Button_Options{activated = activated})
+}
+
+@(private = "package")
+fit_button_string_styled_active :: proc(
+	key, label: string,
+	style: Btn_Style,
+	activated: ^bool,
+) -> Fit_Node {
+	assert(activated != nil, "fit_button: nil activation destination")
+	return fit_button_string(key, label, {style = style, activated = activated})
+}
+
+@(private = "package")
+fit_button_u64_active :: proc(key: u64, label: string, activated: ^bool) -> Fit_Node {
+	assert(activated != nil, "fit_button: nil activation destination")
+	return fit_button_u64(key, label, Fit_Button_Options{activated = activated})
+}
+
+@(private = "package")
+fit_button_u64_styled_active :: proc(
+	key: u64,
+	label: string,
+	style: Btn_Style,
+	activated: ^bool,
+) -> Fit_Node {
+	assert(activated != nil, "fit_button: nil activation destination")
+	return fit_button_u64(key, label, {style = style, activated = activated})
+}
+
+@(private = "package")
+fit_button_id_active :: proc(widget: Widget_Id, label: string, activated: ^bool) -> Fit_Node {
+	assert(activated != nil, "fit_button: nil activation destination")
+	return fit_button_id(widget, label, Fit_Button_Options{activated = activated})
+}
+
+@(private = "package")
+fit_button_id_styled_active :: proc(
+	widget: Widget_Id,
+	label: string,
+	style: Btn_Style,
+	activated: ^bool,
+) -> Fit_Node {
+	assert(activated != nil, "fit_button: nil activation destination")
+	return fit_button_id(widget, label, {style = style, activated = activated})
+}
+
 fit_button :: proc {
 	fit_button_string,
+	fit_button_string_active,
+	fit_button_string_styled_active,
 	fit_button_u64,
+	fit_button_u64_active,
+	fit_button_u64_styled_active,
 	fit_button_id,
+	fit_button_id_active,
+	fit_button_id_styled_active,
 	fit_button_spec,
 }
 
