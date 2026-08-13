@@ -34,7 +34,7 @@ Session_Set_Scale :: proc(session: ^Session, scale: f32) {
 
 Session_Set_Theme :: proc(session: ^Session, theme: Theme) {
 	assert(session != nil && session.inner.initialized, "Fit.Session_Set_Theme: invalid session")
-	ui.ui_runtime_set_theme(ui_gfx.session_runtime(&session.inner), theme)
+	ui.ui_runtime_set_theme(ui_gfx.session_runtime(&session.inner), theme.inner)
 }
 
 @(private = "file")

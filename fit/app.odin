@@ -72,9 +72,9 @@ Run :: proc(app: ^App, config: Config, draw: Draw_Proc, userdata: rawptr = nil) 
 	)
 }
 
-Set_Theme :: proc(app: ^App, theme: ui.Theme) {
+Set_Theme :: proc(app: ^App, theme: Theme) {
 	assert(app != nil, "Fit.Set_Theme: nil app")
-	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app.inner), theme)
+	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app.inner), theme.inner)
 }
 
 Set_Scale :: proc(app: ^App, scale: f32) {
@@ -108,8 +108,8 @@ Paint_Peak_Usage :: proc(app: ^App) -> Paint_Peaks {
 	}
 }
 
-Dark_Theme :: ui.theme_dark
-Light_Theme :: ui.theme_light
+Dark_Theme :: Theme_Dark
+Light_Theme :: Theme_Light
 
 @(private = "file")
 app_draw :: proc(inner: ^ui_gfx.App, root: ^ui.Ui, userdata: rawptr) {

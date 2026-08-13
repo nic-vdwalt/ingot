@@ -75,6 +75,8 @@ LEGACY_SESSION = re.compile(r"\b(?:App_Session(?:_Config)?|app_session_[a-z_0-9]
 BINDING_IMPORT = re.compile(r'"ingot:(libvterm|pty|accesskit)"')
 INTERNAL_UI_IMPORT = re.compile(r'"ingot:(ui|ui_gfx)"')
 FIT_AS_INTERNAL_IMPORT = re.compile(r'(?m)^\s*import\s+(ui|ui_gfx)\s+"ingot:fit"')
+GALLERY_FIT_IMPORT = re.compile(r'(?m)^\s*import\s+(?!fit\s+)[a-zA-Z_][a-zA-Z_0-9]*\s+"ingot:fit"')
+GALLERY_INTERNAL_NAME = re.compile(r"\b(?:Ui|Ui_Frame|Surface_Frame|legacy_[A-Za-z_0-9]*)\b")
 FIT_INTERNAL_NAME = re.compile(
     r"\b(?:ui|ui_gfx)\.|\b(?:Prepared[a-zA-Z_0-9]*|Adapter|Ui|Ui_Frame|Ui_Input|Ui_Output|"
     r"Ui_Runtime|Host_App|Host_Session|Session_Frame)\b"
@@ -256,6 +258,14 @@ def check(root: Path) -> list[str]:
         failures.extend(
             _matches(raw_source, FIT_AS_INTERNAL_IMPORT, "Fit imported as internal UI alias {name}", path, root)
         )
+        if "gallery" in path.relative_to(root / "examples").parts:
+            source = mask_source(raw_source)
+            failures.extend(
+                _matches(raw_source, GALLERY_FIT_IMPORT, "Gallery must import ingot:fit as fit: {name}", path, root)
+            )
+            failures.extend(
+                _matches(source, GALLERY_INTERNAL_NAME, "Gallery exposes compatibility UI name {name}", path, root)
+            )
     for path in sorted((root / "fit").glob("*.odin")):
         source = path.read_text(encoding="utf-8")
         for line, message in fit_public_violations(source):

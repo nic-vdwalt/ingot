@@ -133,6 +133,35 @@ class ConsumerPolicyTests(unittest.TestCase):
         failures = policy.fit_public_violations("Session_Begin :: proc(session: ^Session) {}\n")
         self.assertTrue(any("split session lifecycle" in message for _, message in failures))
 
+    def test_gallery_rejects_compatibility_fit_alias_and_names(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "ui").mkdir()
+            (root / "fit").mkdir()
+            gallery = root / "examples" / "gallery"
+            gallery.mkdir(parents=True)
+            (gallery / "main.odin").write_text(
+                'package main\nimport legacy "ingot:fit"\nf :: proc() { _: legacy_Ui_Frame }\n',
+                encoding="utf-8",
+            )
+            failures = policy.check(root)
+        self.assertTrue(any("must import ingot:fit as fit" in failure for failure in failures))
+        self.assertTrue(any("compatibility UI name" in failure for failure in failures))
+
+    def test_gallery_allows_public_fit_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "ui").mkdir()
+            (root / "fit").mkdir()
+            gallery = root / "examples" / "gallery"
+            gallery.mkdir(parents=True)
+            (gallery / "main.odin").write_text(
+                'package main\nimport fit "ingot:fit"\nf :: proc(surface: ^fit.Surface) {}\n',
+                encoding="utf-8",
+            )
+            failures = policy.check(root)
+        self.assertEqual(failures, [])
+
 
 if __name__ == "__main__":
     unittest.main()
