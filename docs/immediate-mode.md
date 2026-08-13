@@ -116,8 +116,9 @@ must finalize, consume borrowed output, and release in that order.
 
 `ui_gfx.Session` is the custom-loop graphics host. It owns one runtime, reusable
 frame, input/output pair, and backend adapter. It does not own widget/component
-state, the graphics window, or `context.temp_allocator`. Advanced hosts bracket
-frames through the session procedures rather than owning adapter values.
+state, the graphics window, or `context.temp_allocator`. Advanced hosts submit
+one callback-scoped session draw rather than owning adapter or frame values; the
+owned graphics context is restored before that operation returns.
 
 ## Composition and explicit escape hatches
 
@@ -191,7 +192,11 @@ sizing, aspect ratio, clipping, and decoration remain current-frame description
 data. They add no recursion, unbounded allocation, or cross-frame hierarchy.
 Separated `Measure` and `Render_At` consume caller-owned storage synchronously.
 Borrowed strings, userdata, and activation destinations remain valid through
-rendering, where each leaf executes exactly once.
+rendering, where each leaf executes exactly once. A custom leaf may receive a
+borrowed `fit.Surface` for same-frame interaction and explicit geometry. The
+Surface is valid only during that render callback; its frame and implementation
+objects cannot be extracted or retained. Fit-owned control-state wrappers remain
+ordinary caller-owned component state with explicit teardown where required.
 
 ## From immediate-mode library to app framework
 

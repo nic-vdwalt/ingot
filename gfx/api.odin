@@ -54,4 +54,3 @@ context_mouse_position :: proc(ctx: ^Context) -> Vec2 {
 	if ctx == nil do return {}
 	return ctx.inp.mouse
 }
-

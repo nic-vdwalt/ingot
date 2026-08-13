@@ -33,7 +33,11 @@ game_draw :: proc(builder: ^fit.Builder) {
 	fit.Label(builder, fmt.tprintf("Reload generation: %d", g.reload_generation), {role = .Label})
 	fit.Label(builder, fmt.tprintf("Persistent clicks: %d", g.click_count), {role = .Label})
 	fit.Button(builder, "count", "Count persistent click", &clicked)
-	fit.Label(builder, "Edit game/game.odin, then run the build script again.", {role = .Note, ink = .Muted})
+	fit.Label(
+		builder,
+		"Edit game/game.odin, then run the build script again.",
+		{role = .Note, ink = .Muted},
+	)
 	fit.End(builder)
 	if clicked do g.click_count += 1
 }

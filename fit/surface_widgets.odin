@@ -24,7 +24,14 @@ Surface_Radio :: proc(
 ) -> bool {
 	u := surface_ui(surface)
 	assert(widget != Widget_Id(0) && selected != nil, "Fit.Surface_Radio: invalid argument")
-	return ui.radio_at(u.frame, to_rect(rect), label, selected, value, widget = ui.Widget_Id(widget))
+	return ui.radio_at(
+		u.frame,
+		to_rect(rect),
+		label,
+		selected,
+		value,
+		widget = ui.Widget_Id(widget),
+	)
 }
 
 Surface_Slider :: proc(
@@ -37,7 +44,15 @@ Surface_Slider :: proc(
 	u := surface_ui(surface)
 	assert(widget != Widget_Id(0) && value != nil, "Fit.Surface_Slider: invalid argument")
 	assert(minimum <= maximum && step >= 0, "Fit.Surface_Slider: invalid range")
-	return ui.slider_at(u.frame, to_rect(rect), value, minimum, maximum, step, widget = ui.Widget_Id(widget))
+	return ui.slider_at(
+		u.frame,
+		to_rect(rect),
+		value,
+		minimum,
+		maximum,
+		step,
+		widget = ui.Widget_Id(widget),
+	)
 }
 
 Surface_Dropdown :: proc(
@@ -50,10 +65,7 @@ Surface_Dropdown :: proc(
 	a11y_label: string = "Dropdown",
 ) -> bool {
 	u := surface_ui(surface)
-	assert(
-		widget != Widget_Id(0) && selected != nil,
-		"Fit.Surface_Dropdown: invalid argument",
-	)
+	assert(widget != Widget_Id(0) && selected != nil, "Fit.Surface_Dropdown: invalid argument")
 	assert(state != nil && len(items) > 0, "Fit.Surface_Dropdown: invalid state")
 	return ui.dropdown_at(
 		u.frame,
@@ -79,10 +91,7 @@ Surface_Combobox :: proc(
 	a11y_label: string = "Combobox",
 ) -> bool {
 	u := surface_ui(surface)
-	assert(
-		widget != Widget_Id(0) && selected != nil,
-		"Fit.Surface_Combobox: invalid argument",
-	)
+	assert(widget != Widget_Id(0) && selected != nil, "Fit.Surface_Combobox: invalid argument")
 	assert(state != nil, "Fit.Surface_Combobox: nil state")
 	return ui.combobox_at(
 		u.frame,
@@ -108,10 +117,7 @@ Surface_Date_Picker :: proc(
 	a11y_label: string = "Date",
 ) -> bool {
 	u := surface_ui(surface)
-	assert(
-		widget != Widget_Id(0) && value != nil,
-		"Fit.Surface_Date_Picker: invalid argument",
-	)
+	assert(widget != Widget_Id(0) && value != nil, "Fit.Surface_Date_Picker: invalid argument")
 	assert(state != nil, "Fit.Surface_Date_Picker: nil state")
 	return ui.date_picker_at(
 		u.frame,

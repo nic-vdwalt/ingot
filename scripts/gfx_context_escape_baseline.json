@@ -4,7 +4,7 @@
   "gfx/api.odin:key_pressed": 1,
   "gfx/api.odin:measure_text": 1,
   "gfx/api.odin:mouse_position": 1,
-  "gfx/api_tests.odin:context_scope_nested_activation_restores_owner": 2,
+  "gfx/api_tests.odin:context_scope_nested_activation_restores_owner": 3,
   "gfx/api_tests.odin:context_scope_routes_convenience_queries_and_restores_default": 1,
   "gfx/context.odin:CloseWindow": 1,
   "gfx/context.odin:GetFPS": 1,

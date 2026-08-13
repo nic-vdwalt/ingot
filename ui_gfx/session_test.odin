@@ -80,7 +80,8 @@ test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
 
 @(test)
 test_session_draw_api_compiles :: proc(t: ^testing.T) {
-	draw: proc(session: ^Session, callback: Session_Draw_Proc, userdata: rawptr) -> bool = session_draw
+	draw: proc(session: ^Session, callback: Session_Draw_Proc, userdata: rawptr) -> bool =
+		session_draw
 	callback: Session_Draw_Proc = test_session_draw_callback
 
 	testing.expect(t, draw != nil)
