@@ -67,7 +67,10 @@ intrinsic_constrain :: proc(
 	constraints: Intrinsic_Constraints,
 ) -> Intrinsic_Size {
 	assert(value.w >= 0 && value.h >= 0, "intrinsic_constrain: negative size")
-	assert(constraints.min_w >= 0 && constraints.min_h >= 0, "intrinsic_constrain: invalid minimum")
+	assert(
+		constraints.min_w >= 0 && constraints.min_h >= 0,
+		"intrinsic_constrain: invalid minimum",
+	)
 	assert(constraints.max_w == 0 || constraints.max_w >= constraints.min_w)
 	assert(constraints.max_h == 0 || constraints.max_h >= constraints.min_h)
 	w := max(value.w, constraints.min_w)

@@ -68,16 +68,17 @@ Prepared_Ui :: struct {
 	rendered:    bool,
 }
 
-prepared_begin :: proc(
-	prepared: ^Prepared_Ui,
-	constraints: Intrinsic_Constraints = {},
-) {
+prepared_begin :: proc(prepared: ^Prepared_Ui, constraints: Intrinsic_Constraints = {}) {
 	assert(prepared != nil, "prepared_begin: nil description")
 	assert(!prepared.open, "prepared_begin: description already open")
 	assert(constraints.min_w >= 0 && constraints.min_h >= 0, "prepared_begin: invalid minimum")
 	assert(constraints.max_w == 0 || constraints.max_w >= constraints.min_w)
 	assert(constraints.max_h == 0 || constraints.max_h >= constraints.min_h)
-	prepared^ = Prepared_Ui{root = -1, constraints = constraints, open = true}
+	prepared^ = Prepared_Ui {
+		root        = -1,
+		constraints = constraints,
+		open        = true,
+	}
 }
 
 prepared_row_begin :: proc(
@@ -96,7 +97,10 @@ prepared_column_begin :: proc(
 
 prepared_container_end :: proc(prepared: ^Prepared_Ui) {
 	assert(prepared != nil && prepared.open, "prepared_container_end: description not open")
-	assert(prepared.depth > 0 && prepared.depth <= MAX_LAYOUT_DEPTH, "prepared_container_end: no container")
+	assert(
+		prepared.depth > 0 && prepared.depth <= MAX_LAYOUT_DEPTH,
+		"prepared_container_end: no container",
+	)
 	prepared.depth -= 1
 }
 
@@ -105,6 +109,7 @@ prepared_label :: proc(
 	spec: Label_Spec,
 	track: Track = {},
 ) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_label: description not open")
 	assert(spec.text != "", "prepared_label: empty text")
 	return prepared_add(prepared, Prepared_Node{kind = .Label, label = spec, track = track})
 }
@@ -114,6 +119,7 @@ prepared_button :: proc(
 	spec: Button_Spec,
 	track: Track = {},
 ) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_button: description not open")
 	assert(spec.id != WIDGET_ID_NONE, "prepared_button: zero stable id")
 	assert(spec.label != "", "prepared_button: empty label")
 	return prepared_add(prepared, Prepared_Node{kind = .Button, button = spec, track = track})
@@ -138,7 +144,10 @@ prepared_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> Intrinsic_Size {
 	root := &prepared.nodes[prepared.root]
 	root.size = intrinsic_constrain(root.size, prepared.constraints)
 	if prepared_requires_width(prepared, prepared.root) {
-		assert(prepared.constraints.max_w > 0, "prepared_measure: dependent track needs finite width")
+		assert(
+			prepared.constraints.max_w > 0,
+			"prepared_measure: dependent track needs finite width",
+		)
 		root.size.w = prepared.constraints.max_w
 	}
 	prepared_assign_widths(u, prepared)
@@ -154,7 +163,14 @@ prepared_render_at :: proc(u: ^Ui, prepared: ^Prepared_Ui, rect: Rect_I32) {
 	assert(u != nil && u.open && u.frame != nil, "prepared_render_at: invalid UI")
 	assert(prepared != nil && prepared.measured, "prepared_render_at: description not measured")
 	assert(!prepared.rendered && rect.w >= 0 && rect.h >= 0, "prepared_render_at: invalid render")
-	prepared.nodes[prepared.root].rect = rect
+	root := &prepared.nodes[prepared.root]
+	if root.size.w != rect.w {
+		root.size.w = rect.w
+		root.rect = rect
+		prepared_assign_widths(u, prepared)
+		prepared_measure_heights(u, prepared)
+	}
+	root.rect = rect
 	prepared_place(u, prepared)
 	for index in 0 ..< prepared.count {
 		node := &prepared.nodes[index]
@@ -175,6 +191,7 @@ prepared_render_at :: proc(u: ^Ui, prepared: ^Prepared_Ui, rect: Rect_I32) {
 prepared_fit :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> Rect_I32 {
 	assert(u != nil && u.open, "prepared_fit: frame not open")
 	assert(prepared != nil && prepared.open, "prepared_fit: description not open")
+	assert(prepared.root >= 0 && prepared.root < prepared.count, "prepared_fit: invalid root")
 	size := prepared.nodes[prepared.root].size
 	if !prepared.measured do size = prepared_measure(u, prepared)
 	assert(size.w >= 0 && size.h >= 0 && !size.overflow, "prepared_fit: invalid size")
@@ -212,7 +229,10 @@ prepared_container_begin :: proc(
 prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Handle {
 	assert(prepared != nil && prepared.open, "prepared_add: description not open")
 	assert(prepared.count >= 0 && prepared.count < MAX_PREPARED_NODES, "prepared_add: nodes full")
-	assert(prepared.depth >= 0 && prepared.depth <= MAX_LAYOUT_DEPTH, "prepared_add: invalid depth")
+	assert(
+		prepared.depth >= 0 && prepared.depth <= MAX_LAYOUT_DEPTH,
+		"prepared_add: invalid depth",
+	)
 	index := prepared.count
 	value := node
 	value.parent = -1
@@ -227,7 +247,10 @@ prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Ha
 		if parent.first_child < 0 {
 			parent.first_child = index
 		} else {
-			assert(parent.last_child >= 0 && parent.last_child < index, "prepared_add: invalid sibling")
+			assert(
+				parent.last_child >= 0 && parent.last_child < index,
+				"prepared_add: invalid sibling",
+			)
 			prepared.nodes[parent.last_child].next_sibling = index
 		}
 		parent.last_child = index
@@ -266,7 +289,13 @@ prepared_measure_leaf :: proc(u: ^Ui, node: ^Prepared_Node, max_width: i32) {
 			line_height := text_role_line_height(u.frame, node.label.role)
 			node.size = intrinsic_leaf(
 				wrapped_max_line_width_frame(u.frame, node.label.text, max_width, font_size),
-				wrapped_height_px_frame(u.frame, node.label.text, max_width, font_size, line_height),
+				wrapped_height_px_frame(
+					u.frame,
+					node.label.text,
+					max_width,
+					font_size,
+					line_height,
+				),
 			)
 		} else {
 			node.size = intrinsic_text(u, node.label.text, node.label.role)
@@ -282,12 +311,7 @@ prepared_measure_leaf :: proc(u: ^Ui, node: ^Prepared_Node, max_width: i32) {
 }
 
 @(private = "file")
-prepared_measure_container :: proc(
-	u: ^Ui,
-	prepared: ^Prepared_Ui,
-	index: i32,
-	keep_width: bool,
-) {
+prepared_measure_container :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_width: bool) {
 	assert(u != nil && prepared != nil, "prepared_measure_container: invalid argument")
 	assert(index >= 0 && index < prepared.count, "prepared_measure_container: index out of range")
 	node := &prepared.nodes[index]
@@ -296,7 +320,10 @@ prepared_measure_container :: proc(
 	child := node.first_child
 	for _ in 0 ..< MAX_LAYOUT_FLEX {
 		if child < 0 do break
-		assert(child < prepared.count && count < MAX_LAYOUT_FLEX, "prepared_measure_container: bad child")
+		assert(
+			child < prepared.count && count < MAX_LAYOUT_FLEX,
+			"prepared_measure_container: bad child",
+		)
 		children[count] = prepared.nodes[child].size
 		count += 1
 		child = prepared.nodes[child].next_sibling
@@ -313,15 +340,18 @@ prepared_measure_container :: proc(
 @(private = "file")
 prepared_requires_width :: proc(prepared: ^Prepared_Ui, index: i32) -> bool {
 	assert(prepared != nil && index >= 0 && index < prepared.count)
-	node := prepared.nodes[index]
-	child := node.first_child
-	for _ in 0 ..< MAX_LAYOUT_FLEX {
-		if child < 0 do break
-		track := prepared.nodes[child].track
-		if track.kind == .Grow || track.kind == .Percent do return true
-		child = prepared.nodes[child].next_sibling
+	assert(prepared.count > 0 && prepared.count <= MAX_PREPARED_NODES)
+	for node_index in 0 ..< prepared.count {
+		node := prepared.nodes[node_index]
+		child := node.first_child
+		for _ in 0 ..< MAX_LAYOUT_FLEX {
+			if child < 0 do break
+			track := prepared.nodes[child].track
+			if track.kind == .Grow || track.kind == .Percent do return true
+			child = prepared.nodes[child].next_sibling
+		}
+		assert(child < 0, "prepared_requires_width: too many children")
 	}
-	assert(child < 0, "prepared_requires_width: too many children")
 	return false
 }
 
@@ -329,7 +359,10 @@ prepared_requires_width :: proc(prepared: ^Prepared_Ui, index: i32) -> bool {
 prepared_assign_widths :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(u != nil && prepared != nil, "prepared_assign_widths: invalid argument")
 	root := &prepared.nodes[prepared.root]
-	root.rect = {w = root.size.w, h = max(root.size.h, 1)}
+	root.rect = {
+		w = root.size.w,
+		h = max(root.size.h, 1),
+	}
 	for index in 0 ..< prepared.count {
 		node := &prepared.nodes[index]
 		if node.kind != .Row && node.kind != .Column do continue
@@ -383,7 +416,13 @@ prepared_place_children :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, widt
 	}
 	layout: Layout
 	layout_begin(&layout, content.x, content.y, content.w, content.h)
-	layout_push_rect(&layout, node.kind == .Row ? .Row : .Column, content, space_px(u, node.container.gap), node.container.align)
+	layout_push_rect(
+		&layout,
+		node.kind == .Row ? .Row : .Column,
+		content,
+		space_px(u, node.container.gap),
+		node.container.align,
+	)
 	axis: Flex_Axis = .Row if node.kind == .Row else .Column
 	flex_begin(&layout, tracks[:count], node.container.justify, axis)
 	for child_index in 0 ..< count {
@@ -403,7 +442,11 @@ prepared_place_children :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, widt
 }
 
 @(private = "file")
-prepared_children :: proc(prepared: ^Prepared_Ui, first: i32, result: ^[MAX_LAYOUT_FLEX]i32) -> i32 {
+prepared_children :: proc(
+	prepared: ^Prepared_Ui,
+	first: i32,
+	result: ^[MAX_LAYOUT_FLEX]i32,
+) -> i32 {
 	assert(prepared != nil && result != nil, "prepared_children: invalid argument")
 	count: i32
 	child := first

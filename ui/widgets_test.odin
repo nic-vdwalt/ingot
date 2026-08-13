@@ -25,7 +25,11 @@ button_spec_and_facade_share_geometry :: proc(t: ^testing.T) {
 	text_backend: Test_Text_Backend_State
 	ui_runtime_set_text_backend(
 		&runtime,
-		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
 	)
 	frame: Ui_Frame
 	output := new(Ui_Output)

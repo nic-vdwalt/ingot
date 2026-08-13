@@ -129,6 +129,37 @@ One grid accepts at most `MAX_GRID_ITEMS` cells; chunk or virtualize larger coll
 
 Intrinsic measurement is explicit: pass measured text or component extents to `fit`, `flow_next`, or `fit_column_next`. This keeps layout single-pass and avoids recursive measurement.
 
+### Prepared content-sized groups
+
+`Prepared_Ui` is the single-declaration path for a small content-sized tree. It
+is caller-owned frame scratch, records at most `MAX_PREPARED_NODES`, nests no
+deeper than `MAX_LAYOUT_DEPTH`, and is rebuilt with ordinary `if` and `for`.
+
+```odin
+prepared: ui.Prepared_Ui
+ui.prepared_begin(&prepared, ui.intrinsic_constraints(max_w = ui.remaining_rect(form).w))
+ui.prepared_row_begin(&prepared, {gap = .SM, align = .Center})
+save := ui.prepared_button(
+	&prepared,
+	ui.button_spec(form, ui.id(form, "save"), "Save", {style = .Primary}),
+)
+if can_cancel {
+	_ = ui.prepared_button(&prepared, ui.button_spec(form, ui.id(form, "cancel"), "Cancel"))
+}
+ui.prepared_container_end(&prepared)
+_ = ui.prepared_fit(form, &prepared)
+if ui.prepared_activated(&prepared, save) do save_document()
+```
+
+The description borrows its strings and custom userdata only until render. It
+contains geometry and current-frame presentation, not persistent behavior.
+Measurement emits no focus, interaction, semantics, or paint; every leaf renders
+once. Width-constrained labels may change height after a definite width is
+assigned. Height never changes width, and aspect-ratio dependencies are outside
+this protocol. `grow` and `percent` require finite prepared constraints or
+definite `prepared_render_at` bounds; context-free intrinsic measurement rejects
+them.
+
 `Track` is the one sibling-size type, and `fit` / `grow` / `fixed` / `percent` are its one constructor set. The facade tier reads a `Track` in design units and scales it once; the `Layout` tier reads the same struct in screen-space pixels.
 
 `Fit_Column` returns content-height bounds for caller-sized rows. Existing panes own scrolling and clipping; overlays use explicit `*_at` geometry. Compose those facilities instead of adding a second scroll or overlay state model to layout.

@@ -796,7 +796,8 @@ button :: proc {
 button_fit_width :: proc(frame: ^Ui_Frame, label: string, font_size: i32) -> i32 {
 	assert(frame != nil && font_size > 0, "button_fit_width: invalid frame or size")
 	assert(label != "", "button_fit_width: empty label")
-	width := measure_text_string_frame(frame, label, font_size) + ui_frame_metrics(frame).PADDING * 2
+	width :=
+		measure_text_string_frame(frame, label, font_size) + ui_frame_metrics(frame).PADDING * 2
 	assert(width > 0, "button_fit_width: invalid width")
 	return width
 }
