@@ -1,9 +1,31 @@
 package ui
 
-MAX_PREPARED_NODES :: 64
+MAX_PREPARED_NODES_DEFAULT :: 64
+MAX_PREPARED_NODES_HARD :: 256
+MAX_PREPARED_NODES :: #config(INGOT_PREPARED_NODE_CAP, MAX_PREPARED_NODES_DEFAULT)
+#assert(MAX_PREPARED_NODES >= MAX_LAYOUT_DEPTH)
+#assert(MAX_PREPARED_NODES <= MAX_PREPARED_NODES_HARD)
 
 Prepared_Handle :: distinct i32
 PREPARED_HANDLE_NONE :: Prepared_Handle(-1)
+
+Aspect_Ratio :: struct {
+	width, height: i32,
+}
+
+Prepared_Size :: struct {
+	width:  Track,
+	height: Track,
+	aspect: Aspect_Ratio,
+}
+
+Prepared_Container_Effects :: struct {
+	clip:         bool,
+	background:   Color,
+	radius:       Radius,
+	border:       Border,
+	border_color: Color,
+}
 
 Prepared_Container_Options :: struct {
 	gap:     Space,
@@ -11,6 +33,26 @@ Prepared_Container_Options :: struct {
 	align:   Cross_Align,
 	justify: Main_Align,
 	track:   Track,
+	size:    Prepared_Size,
+	effects: Prepared_Container_Effects,
+}
+
+Prepared_Flow_Options :: struct {
+	gap_x, gap_y: Space,
+	padding:      Space,
+	track:        Track,
+	size:         Prepared_Size,
+	effects:      Prepared_Container_Effects,
+}
+
+Prepared_Grid_Options :: struct {
+	columns:      i32,
+	row_height:   i32,
+	gap_x, gap_y: Space,
+	padding:      Space,
+	track:        Track,
+	size:         Prepared_Size,
+	effects:      Prepared_Container_Effects,
 }
 
 Label_Spec :: struct {
@@ -24,6 +66,7 @@ Prepared_Label_Options :: struct {
 	role: Text_Role,
 	ink:  Ink,
 	wrap: bool,
+	size: Prepared_Size,
 }
 
 Prepared_Measure_Proc :: #type proc(
@@ -38,11 +81,14 @@ Prepared_Custom :: struct {
 	measure:  Prepared_Measure_Proc,
 	render:   Prepared_Render_Proc,
 	userdata: rawptr,
+	size:     Prepared_Size,
 }
 
 Prepared_Kind :: enum u8 {
 	Row,
 	Column,
+	Flow,
+	Grid,
 	Label,
 	Button,
 	Custom,
@@ -53,7 +99,10 @@ Prepared_Node :: struct {
 	parent, first_child:      i32,
 	next_sibling, last_child: i32,
 	track:                    Track,
+	sizing:                   Prepared_Size,
 	container:                Prepared_Container_Options,
+	flow:                     Prepared_Flow_Options,
+	grid:                     Prepared_Grid_Options,
 	label:                    Label_Spec,
 	button:                   Button_Spec,
 	custom:                   Prepared_Custom,
@@ -81,11 +130,15 @@ prepared_begin :: proc(prepared: ^Prepared_Ui, constraints: Intrinsic_Constraint
 	assert(constraints.min_w >= 0 && constraints.min_h >= 0, "prepared_begin: invalid minimum")
 	assert(constraints.max_w == 0 || constraints.max_w >= constraints.min_w)
 	assert(constraints.max_h == 0 || constraints.max_h >= constraints.min_h)
-	prepared^ = Prepared_Ui {
-		root        = -1,
-		constraints = constraints,
-		open        = true,
-	}
+	prepared.u = nil
+	assert(prepared.count >= 0 && prepared.count <= MAX_PREPARED_NODES)
+	prepared.count = 0
+	prepared.depth = 0
+	prepared.root = -1
+	prepared.constraints = constraints
+	prepared.open = true
+	prepared.measured = false
+	prepared.rendered = false
 }
 
 prepared_row_begin :: proc(
@@ -100,6 +153,34 @@ prepared_column_begin :: proc(
 	options: Prepared_Container_Options = {},
 ) -> Prepared_Handle {
 	return prepared_container_begin(prepared, .Column, options)
+}
+
+prepared_flow_begin :: proc(
+	prepared: ^Prepared_Ui,
+	options: Prepared_Flow_Options = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_flow_begin: description not open")
+	handle := prepared_add(
+		prepared,
+		Prepared_Node{kind = .Flow, track = options.track, sizing = options.size, flow = options},
+	)
+	prepared_push_container(prepared, handle)
+	return handle
+}
+
+prepared_grid_begin :: proc(
+	prepared: ^Prepared_Ui,
+	options: Prepared_Grid_Options,
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_grid_begin: description not open")
+	assert(options.columns > 0, "prepared_grid_begin: invalid columns")
+	assert(options.row_height >= 0, "prepared_grid_begin: invalid row height")
+	handle := prepared_add(
+		prepared,
+		Prepared_Node{kind = .Grid, track = options.track, sizing = options.size, grid = options},
+	)
+	prepared_push_container(prepared, handle)
+	return handle
 }
 
 prepared_row :: proc(u: ^Ui, prepared: ^Prepared_Ui, options: Prepared_Container_Options = {}) {
@@ -134,10 +215,14 @@ prepared_label_spec :: proc(
 	prepared: ^Prepared_Ui,
 	spec: Label_Spec,
 	track: Track = {},
+	sizing: Prepared_Size = {},
 ) -> Prepared_Handle {
 	assert(prepared != nil && prepared.open, "prepared_label_spec: description not open")
 	assert(spec.text != "", "prepared_label_spec: empty text")
-	return prepared_add(prepared, Prepared_Node{kind = .Label, label = spec, track = track})
+	return prepared_add(
+		prepared,
+		Prepared_Node{kind = .Label, label = spec, track = track, sizing = sizing},
+	)
 }
 
 @(private = "package")
@@ -153,6 +238,7 @@ prepared_label_text :: proc(
 		prepared,
 		{text = text, role = options.role, ink = options.ink, wrap = options.wrap},
 		track,
+		options.size,
 	)
 }
 
@@ -226,7 +312,10 @@ prepared_custom :: proc(
 ) -> Prepared_Handle {
 	assert(spec.measure != nil, "prepared_custom: nil measure procedure")
 	assert(spec.render != nil, "prepared_custom: nil render procedure")
-	return prepared_add(prepared, Prepared_Node{kind = .Custom, custom = spec, track = track})
+	return prepared_add(
+		prepared,
+		Prepared_Node{kind = .Custom, custom = spec, track = track, sizing = spec.size},
+	)
 }
 
 prepared_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> Intrinsic_Size {
@@ -237,13 +326,24 @@ prepared_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> Intrinsic_Size {
 	prepared_measure_natural(u, prepared)
 	root := &prepared.nodes[prepared.root]
 	root.size = intrinsic_constrain(root.size, prepared.constraints)
-	if prepared_requires_width(prepared, prepared.root) {
+	dependencies := prepared_dependencies(prepared)
+	if dependencies.width {
 		assert(
 			prepared.constraints.max_w > 0,
 			"prepared_measure: dependent track needs finite width",
 		)
 		root.size.w = prepared.constraints.max_w
 	}
+	if dependencies.height {
+		assert(
+			prepared.constraints.max_h > 0,
+			"prepared_measure: dependent track needs finite height",
+		)
+		root.size.h = prepared.constraints.max_h
+	}
+	prepared_resolve_sizes(u, prepared)
+	prepared_remeasure_containers(u, prepared)
+	root.size = intrinsic_constrain(root.size, prepared.constraints)
 	prepared_assign_widths(u, prepared)
 	prepared_measure_heights(u, prepared)
 	root.size = intrinsic_constrain(root.size, prepared.constraints)
@@ -257,27 +357,20 @@ prepared_render_at :: proc(u: ^Ui, prepared: ^Prepared_Ui, rect: Rect_I32) {
 	assert(u != nil && u.open && u.frame != nil, "prepared_render_at: invalid UI")
 	assert(prepared != nil && prepared.measured, "prepared_render_at: description not measured")
 	assert(!prepared.rendered && rect.w >= 0 && rect.h >= 0, "prepared_render_at: invalid render")
+	assert(prepared.root >= 0, "prepared_render_at: negative root")
+	assert(prepared.root < MAX_PREPARED_NODES, "prepared_render_at: root out of bounds")
+	assert(prepared.root < prepared.count, "prepared_render_at: root beyond count")
 	root := &prepared.nodes[prepared.root]
-	if root.size.w != rect.w {
+	if root.size.w != rect.w || root.size.h != rect.h {
 		root.size.w = rect.w
+		root.size.h = rect.h
 		root.rect = rect
 		prepared_assign_widths(u, prepared)
 		prepared_measure_heights(u, prepared)
 	}
 	root.rect = rect
 	prepared_place(u, prepared)
-	for index in 0 ..< prepared.count {
-		node := &prepared.nodes[index]
-		switch node.kind {
-		case .Label:
-			prepared_render_label(u, node)
-		case .Button:
-			node.activated = button_spec_at(u, node.button, node.rect)
-		case .Custom:
-			node.activated = node.custom.render(u, node.rect, node.custom.userdata)
-		case .Row, .Column:
-		}
-	}
+	prepared_render_tree(u, prepared)
 	prepared.rendered = true
 	prepared.open = false
 }
@@ -327,11 +420,25 @@ prepared_container_begin :: proc(
 	assert(prepared.depth < MAX_LAYOUT_DEPTH, "prepared_container_begin: depth out of bounds")
 	handle := prepared_add(
 		prepared,
-		Prepared_Node{kind = kind, container = options, track = options.track},
+		Prepared_Node {
+			kind = kind,
+			container = options,
+			track = options.track,
+			sizing = options.size,
+		},
 	)
-	prepared.stack[prepared.depth] = i32(handle)
-	prepared.depth += 1
+	prepared_push_container(prepared, handle)
 	return handle
+}
+
+@(private = "file")
+prepared_push_container :: proc(prepared: ^Prepared_Ui, handle: Prepared_Handle) {
+	assert(prepared != nil && prepared.open, "prepared_push_container: description not open")
+	assert(prepared.depth < MAX_LAYOUT_DEPTH, "prepared_push_container: depth out of bounds")
+	index := i32(handle)
+	assert(index >= 0 && index < prepared.count, "prepared_push_container: invalid handle")
+	prepared.stack[prepared.depth] = index
+	prepared.depth += 1
 }
 
 @(private = "file")
@@ -379,7 +486,11 @@ prepared_measure_natural :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	for offset in 0 ..< prepared.count {
 		index := prepared.count - 1 - offset
 		node := &prepared.nodes[index]
-		if node.kind == .Row || node.kind == .Column {
+		if node.kind == .Flow {
+			prepared_measure_flow(u, prepared, index, false)
+		} else if node.kind == .Grid {
+			prepared_measure_grid(u, prepared, index, false)
+		} else if prepared_kind_is_container(node.kind) {
 			prepared_measure_container(u, prepared, index, false)
 		} else {
 			prepared_measure_leaf(u, node, 0)
@@ -413,7 +524,7 @@ prepared_measure_leaf :: proc(u: ^Ui, node: ^Prepared_Node, max_width: i32) {
 		node.size = button_spec_size(u, node.button)
 	case .Custom:
 		node.size = node.custom.measure(u, {max_w = max_width}, node.custom.userdata)
-	case .Row, .Column:
+	case .Row, .Column, .Flow, .Grid:
 		unreachable()
 	}
 	assert(node.size.w >= 0 && node.size.h >= 0, "prepared_measure_leaf: invalid result")
@@ -447,21 +558,196 @@ prepared_measure_container :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, k
 }
 
 @(private = "file")
-prepared_requires_width :: proc(prepared: ^Prepared_Ui, index: i32) -> bool {
-	assert(prepared != nil && index >= 0 && index < prepared.count)
-	assert(prepared.count > 0 && prepared.count <= MAX_PREPARED_NODES)
-	for node_index in 0 ..< prepared.count {
-		node := prepared.nodes[node_index]
+prepared_measure_flow :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_width: bool) {
+	assert(u != nil && prepared != nil, "prepared_measure_flow: invalid argument")
+	assert(index >= 0 && index < prepared.count, "prepared_measure_flow: index out of range")
+	node := &prepared.nodes[index]
+	padding := insets_of(u, node.flow.padding)
+	max_width := prepared.constraints.max_w
+	if keep_width && node.rect.w > 0 do max_width = node.rect.w
+	assert(max_width > 0, "prepared_measure_flow: finite width required")
+	content_w := max(max_width - padding.left - padding.right, 0)
+	flow: Flow_Layout
+	flow_begin(&flow, {w = content_w}, space_px(u, node.flow.gap_x), space_px(u, node.flow.gap_y))
+	child := node.first_child
+	for _ in 0 ..< MAX_PREPARED_NODES {
+		if child < 0 do break
+		value := &prepared.nodes[child]
+		_ = flow_next(&flow, value.size.w, value.size.h)
+		child = value.next_sibling
+	}
+	assert(child < 0, "prepared_measure_flow: child bound")
+	content := flow_end(&flow)
+	node.size = intrinsic_padding(intrinsic_leaf(content.w, content.h), padding)
+	if keep_width do node.size.w = max_width
+}
+
+@(private = "file")
+prepared_measure_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_width: bool) {
+	assert(u != nil && prepared != nil, "prepared_measure_grid: invalid argument")
+	assert(index >= 0 && index < prepared.count, "prepared_measure_grid: index out of range")
+	node := &prepared.nodes[index]
+	assert(node.grid.columns > 0, "prepared_measure_grid: invalid columns")
+	count := prepared_child_count(prepared, node.first_child)
+	rows := (count + node.grid.columns - 1) / node.grid.columns
+	padding := insets_of(u, node.grid.padding)
+	gap_y := space_px(u, node.grid.gap_y)
+	row_h := ui_frame_sc(u.frame, node.grid.row_height)
+	content_h := rows * row_h + max(rows - 1, 0) * gap_y
+	width := prepared.constraints.max_w
+	if keep_width && node.rect.w > 0 do width = node.rect.w
+	assert(width > 0, "prepared_measure_grid: finite width required")
+	content_w := max(width - padding.left - padding.right, 0)
+	node.size = intrinsic_padding(intrinsic_leaf(content_w, content_h), padding)
+}
+
+@(private = "file")
+prepared_child_count :: proc(prepared: ^Prepared_Ui, first: i32) -> i32 {
+	assert(prepared != nil, "prepared_child_count: nil description")
+	count: i32
+	child := first
+	for _ in 0 ..< MAX_PREPARED_NODES {
+		assert(count >= 0 && count < MAX_PREPARED_NODES, "prepared_child_count: corrupt count")
+		if child < 0 do break
+		count += 1
+		child = prepared.nodes[child].next_sibling
+	}
+	assert(child < 0, "prepared_child_count: child bound")
+	return count
+}
+
+Prepared_Dependencies :: struct {
+	width, height: bool,
+}
+
+@(private = "file")
+prepared_dependencies :: proc(prepared: ^Prepared_Ui) -> Prepared_Dependencies {
+	assert(prepared != nil && prepared.count > 0 && prepared.count <= MAX_PREPARED_NODES)
+	result: Prepared_Dependencies
+	for index in 0 ..< prepared.count {
+		node := prepared.nodes[index]
+		result.width = result.width || prepared_axis_dependent(node.sizing.width)
+		result.height = result.height || prepared_axis_dependent(node.sizing.height)
+		if node.kind == .Flow || node.kind == .Grid do result.width = true
 		child := node.first_child
-		for _ in 0 ..< MAX_LAYOUT_FLEX {
+		for _ in 0 ..< MAX_PREPARED_NODES {
 			if child < 0 do break
 			track := prepared.nodes[child].track
-			if track.kind == .Grow || track.kind == .Percent do return true
+			dependent := track.kind == .Grow || track.kind == .Percent
+			if node.kind == .Row do result.width = result.width || dependent
+			if node.kind == .Column do result.height = result.height || dependent
 			child = prepared.nodes[child].next_sibling
 		}
-		assert(child < 0, "prepared_requires_width: too many children")
+		assert(child < 0, "prepared_dependencies: child bound")
 	}
-	return false
+	return result
+}
+
+@(private = "file")
+prepared_axis_dependent :: proc(track: Track) -> bool {
+	return track.kind == .Grow || track.kind == .Percent
+}
+
+@(private = "file")
+prepared_resolve_sizes :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
+	assert(u != nil && prepared != nil, "prepared_resolve_sizes: invalid argument")
+	for index in 0 ..< prepared.count {
+		node := &prepared.nodes[index]
+		prepared_validate_size(node.sizing)
+		node.size.w = prepared_axis_size(
+			u,
+			node.sizing.width,
+			node.size.w,
+			prepared.constraints.max_w,
+		)
+		node.size.h = prepared_axis_size(
+			u,
+			node.sizing.height,
+			node.size.h,
+			prepared.constraints.max_h,
+		)
+		prepared_apply_aspect(&node.size, node.sizing, prepared.constraints)
+	}
+}
+
+@(private = "file")
+prepared_remeasure_containers :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
+	assert(u != nil && prepared != nil, "prepared_remeasure_containers: invalid argument")
+	for offset in 0 ..< prepared.count {
+		index := prepared.count - 1 - offset
+		node := &prepared.nodes[index]
+		if node.kind == .Flow {
+			prepared_measure_flow(u, prepared, index, false)
+		} else if node.kind == .Grid {
+			prepared_measure_grid(u, prepared, index, false)
+		} else if node.kind == .Row || node.kind == .Column {
+			prepared_measure_container(u, prepared, index, false)
+		}
+	}
+}
+
+@(private = "file")
+prepared_validate_size :: proc(sizing: Prepared_Size) {
+	ratio := sizing.aspect
+	assert(ratio.width >= 0 && ratio.height >= 0, "prepared size: negative aspect")
+	assert((ratio.width == 0) == (ratio.height == 0), "prepared size: incomplete aspect")
+}
+
+@(private = "file")
+prepared_apply_aspect :: proc(
+	size: ^Intrinsic_Size,
+	sizing: Prepared_Size,
+	constraints: Intrinsic_Constraints,
+) {
+	assert(size != nil && size.w >= 0 && size.h >= 0, "prepared aspect: invalid size")
+	ratio := sizing.aspect
+	if ratio.width == 0 do return
+	width_explicit := prepared_axis_explicit(sizing.width)
+	height_explicit := prepared_axis_explicit(sizing.height)
+	if width_explicit && height_explicit do return
+	if width_explicit {
+		size.h = i32(i64(size.w) * i64(ratio.height) / i64(ratio.width))
+	} else if height_explicit {
+		size.w = i32(i64(size.h) * i64(ratio.width) / i64(ratio.height))
+	} else {
+		width := size.w
+		height := i32(i64(width) * i64(ratio.height) / i64(ratio.width))
+		if constraints.max_h > 0 && height > constraints.max_h {
+			height = constraints.max_h
+			width = i32(i64(height) * i64(ratio.width) / i64(ratio.height))
+		}
+		size.w = width
+		size.h = height
+	}
+	size^ = intrinsic_constrain(size^, constraints)
+}
+
+@(private = "file")
+prepared_axis_explicit :: proc(track: Track) -> bool {
+	return track.kind != .Fit || track.basis > 0 || track.min_size > 0 || track.max_size > 0
+}
+
+@(private = "file")
+prepared_axis_size :: proc(u: ^Ui, track: Track, natural, available: i32) -> i32 {
+	assert(u != nil && natural >= 0 && available >= 0, "prepared_axis_size: invalid argument")
+	minimum := ui_frame_sc(u.frame, track.min_size)
+	maximum := ui_frame_sc(u.frame, track.max_size) if track.max_size > 0 else 0
+	result := natural
+	switch track.kind {
+	case .Fit:
+		if track.basis > 0 do result = ui_frame_sc(u.frame, track.basis)
+	case .Fixed:
+		result = ui_frame_sc(u.frame, track.basis)
+	case .Grow:
+		assert(available > 0, "prepared_axis_size: grow needs finite bound")
+		result = available
+	case .Percent:
+		assert(available > 0, "prepared_axis_size: percent needs finite bound")
+		result = i32(f32(available) * track.percent)
+	}
+	result = max(result, minimum)
+	if maximum > 0 do result = min(result, maximum)
+	return result
 }
 
 @(private = "file")
@@ -474,8 +760,13 @@ prepared_assign_widths :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	}
 	for index in 0 ..< prepared.count {
 		node := &prepared.nodes[index]
-		if node.kind != .Row && node.kind != .Column do continue
-		prepared_place_children(u, prepared, index, true)
+		if node.kind == .Row || node.kind == .Column {
+			prepared_place_children(u, prepared, index, true)
+		} else if node.kind == .Flow {
+			prepared_place_flow(u, prepared, index)
+		} else if node.kind == .Grid {
+			prepared_place_grid(u, prepared, index)
+		}
 	}
 }
 
@@ -484,14 +775,31 @@ prepared_measure_heights :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(u != nil && prepared != nil, "prepared_measure_heights: invalid argument")
 	for index in 0 ..< prepared.count {
 		node := &prepared.nodes[index]
-		if node.kind != .Row && node.kind != .Column {
+		if !prepared_kind_is_container(node.kind) {
 			prepared_measure_leaf(u, node, node.rect.w)
+			node.size.w = prepared_axis_size(
+				u,
+				node.sizing.width,
+				node.size.w,
+				prepared.constraints.max_w,
+			)
+			node.size.h = prepared_axis_size(
+				u,
+				node.sizing.height,
+				node.size.h,
+				prepared.constraints.max_h,
+			)
+			prepared_apply_aspect(&node.size, node.sizing, prepared.constraints)
 		}
 	}
 	for offset in 0 ..< prepared.count {
 		index := prepared.count - 1 - offset
 		node := &prepared.nodes[index]
-		if node.kind == .Row || node.kind == .Column {
+		if node.kind == .Flow {
+			prepared_measure_flow(u, prepared, index, true)
+		} else if node.kind == .Grid {
+			prepared_measure_grid(u, prepared, index, true)
+		} else if node.kind == .Row || node.kind == .Column {
 			prepared_measure_container(u, prepared, index, true)
 		}
 	}
@@ -505,8 +813,55 @@ prepared_place :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 		node := &prepared.nodes[index]
 		if node.kind == .Row || node.kind == .Column {
 			prepared_place_children(u, prepared, index, false)
+		} else if node.kind == .Flow {
+			prepared_place_flow(u, prepared, index)
+		} else if node.kind == .Grid {
+			prepared_place_grid(u, prepared, index)
 		}
 	}
+}
+
+@(private = "file")
+prepared_place_flow :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
+	assert(u != nil && prepared != nil, "prepared_place_flow: invalid argument")
+	node := &prepared.nodes[index]
+	content := rect_inset(node.rect, insets_of(u, node.flow.padding))
+	flow: Flow_Layout
+	flow_begin(&flow, content, space_px(u, node.flow.gap_x), space_px(u, node.flow.gap_y))
+	child := node.first_child
+	for _ in 0 ..< MAX_PREPARED_NODES {
+		if child < 0 do break
+		value := &prepared.nodes[child]
+		value.rect = flow_next(&flow, value.size.w, value.size.h)
+		child = value.next_sibling
+	}
+	assert(child < 0, "prepared_place_flow: child bound")
+	_ = flow_end(&flow)
+}
+
+@(private = "file")
+prepared_place_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
+	assert(u != nil && prepared != nil, "prepared_place_grid: invalid argument")
+	node := &prepared.nodes[index]
+	content := rect_inset(node.rect, insets_of(u, node.grid.padding))
+	grid: Grid
+	grid_begin(
+		&grid,
+		content,
+		node.grid.columns,
+		ui_frame_sc(u.frame, node.grid.row_height),
+		space_px(u, node.grid.gap_x),
+		space_px(u, node.grid.gap_y),
+	)
+	child := node.first_child
+	for _ in 0 ..< MAX_PREPARED_NODES {
+		if child < 0 do break
+		value := &prepared.nodes[child]
+		value.rect = grid_next(&grid)
+		child = value.next_sibling
+	}
+	assert(child < 0, "prepared_place_grid: child bound")
+	_ = grid_end(&grid)
 }
 
 @(private = "file")
@@ -592,6 +947,108 @@ prepared_track_px :: proc(u: ^Ui, node: ^Prepared_Node, parent_kind: Prepared_Ki
 		return percent(track.percent, minimum, maximum)
 	}
 	unreachable()
+}
+
+Prepared_Render_Frame :: struct {
+	index:      i32,
+	next_child: i32,
+}
+
+@(private = "file")
+prepared_render_tree :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
+	assert(u != nil && prepared != nil, "prepared_render_tree: invalid argument")
+	root := &prepared.nodes[prepared.root]
+	assert(prepared_kind_is_container(root.kind), "prepared_render_tree: leaf root")
+	stack: [MAX_LAYOUT_DEPTH]Prepared_Render_Frame
+	prepared_render_enter(u, root)
+	stack[0] = {
+		index      = prepared.root,
+		next_child = root.first_child,
+	}
+	depth := 1
+	for depth > 0 {
+		frame := &stack[depth - 1]
+		if frame.next_child < 0 {
+			prepared_render_exit(u, &prepared.nodes[frame.index])
+			depth -= 1
+			continue
+		}
+		child_index := frame.next_child
+		child := &prepared.nodes[child_index]
+		frame.next_child = child.next_sibling
+		if prepared_kind_is_container(child.kind) {
+			assert(depth < MAX_LAYOUT_DEPTH, "prepared_render_tree: depth full")
+			prepared_render_enter(u, child)
+			stack[depth] = {
+				index      = child_index,
+				next_child = child.first_child,
+			}
+			depth += 1
+		} else {
+			prepared_render_leaf(u, child)
+		}
+	}
+}
+
+@(private = "file")
+prepared_kind_is_container :: proc(kind: Prepared_Kind) -> bool {
+	return kind == .Row || kind == .Column || kind == .Flow || kind == .Grid
+}
+
+@(private = "file")
+prepared_render_enter :: proc(u: ^Ui, node: ^Prepared_Node) {
+	assert(u != nil && node != nil, "prepared_render_enter: invalid argument")
+	effects := prepared_container_effects(node)
+	if effects.background.a > 0 {
+		draw_rounded_fill(u.frame, rect_f32(node.rect), effects.radius, effects.background)
+	}
+	if effects.border != .None && effects.border_color.a > 0 {
+		draw_rounded_border(
+			u.frame,
+			rect_f32(node.rect),
+			effects.radius,
+			effects.border,
+			effects.border_color,
+		)
+	}
+	if effects.clip do begin_scissor_mode(u.frame, node.rect.x, node.rect.y, node.rect.w, node.rect.h)
+}
+
+@(private = "file")
+prepared_render_exit :: proc(u: ^Ui, node: ^Prepared_Node) {
+	assert(u != nil && node != nil, "prepared_render_exit: invalid argument")
+	if prepared_container_effects(node).clip do end_scissor_mode(u.frame)
+}
+
+@(private = "file")
+prepared_container_effects :: proc(node: ^Prepared_Node) -> Prepared_Container_Effects {
+	assert(node != nil && prepared_kind_is_container(node.kind), "prepared effects: invalid node")
+	switch node.kind {
+	case .Row, .Column:
+		return node.container.effects
+	case .Flow:
+		return node.flow.effects
+	case .Grid:
+		return node.grid.effects
+	case .Label, .Button, .Custom:
+		unreachable()
+	}
+	unreachable()
+}
+
+@(private = "file")
+prepared_render_leaf :: proc(u: ^Ui, node: ^Prepared_Node) {
+	assert(u != nil && node != nil, "prepared_render_leaf: invalid argument")
+	switch node.kind {
+	case .Label:
+		prepared_render_label(u, node)
+	case .Button:
+		node.activated = button_spec_at(u, node.button, node.rect)
+	case .Custom:
+		node.activated = node.custom.render(u, node.rect, node.custom.userdata)
+	case .Row, .Column, .Flow, .Grid:
+		unreachable()
+	}
 }
 
 @(private = "file")

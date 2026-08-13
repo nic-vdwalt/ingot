@@ -11,6 +11,7 @@ layout_intrinsic_measure :: proc(text: cstring, size: i32) -> i32 {
 
 Prepared_Custom_Counts :: struct {
 	measure, render: i32,
+	rect:            Rect_I32,
 }
 
 @(private = "file")
@@ -32,6 +33,7 @@ prepared_custom_render_test :: proc(u: ^Ui, rect: Rect_I32, userdata: rawptr) ->
 	assert(rect.w >= 0 && rect.h >= 0, "prepared_custom_render_test: invalid rect")
 	counts := cast(^Prepared_Custom_Counts)userdata
 	counts.render += 1
+	counts.rect = rect
 	return false
 }
 
@@ -356,6 +358,79 @@ layout_facade_fit_builder_dynamic_children_and_outputs_are_bounded :: proc(t: ^t
 }
 
 @(test)
+layout_facade_fit_builder_reuse_clears_stale_outputs :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_destroy(&frame)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	active, stale := true, true
+	builder: Fit_Builder
+	fit_begin(&builder, &u)
+	fit_builder_row(&builder)
+	fit_builder_button(&builder, "first", "First", &active)
+	fit_builder_button(&builder, "stale", "Stale", &stale)
+	fit_end(&builder)
+	_ = fit_render(&builder)
+	stale = true
+	active = true
+	fit_begin(&builder, &u)
+	fit_builder_row(&builder)
+	fit_builder_button(&builder, "second", "Second", &active)
+	fit_end(&builder)
+	_ = fit_render(&builder)
+	end(&u)
+	testing.expect_value(t, u.focus_count, 3)
+	testing.expect(t, !active, "second render retained stale activation")
+	testing.expect(t, stale, "second render cleared removed output")
+}
+
+@(test)
+layout_facade_fit_accepts_configured_node_capacity :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	counts: Prepared_Custom_Counts
+	builder: Fit_Builder
+	fit_begin(&builder, &u)
+	fit_builder_flow(&builder)
+	for _ in 0 ..< MAX_PREPARED_NODES - 1 {
+		fit_builder_custom(
+			&builder,
+			{
+				measure = prepared_custom_measure_test,
+				render = prepared_custom_render_test,
+				userdata = &counts,
+			},
+		)
+	}
+	fit_end(&builder)
+	testing.expect_value(t, builder.prepared.count, i32(MAX_PREPARED_NODES))
+	end(&u)
+}
+
+@(test)
 layout_facade_fit_nodes_remains_a_dynamic_slice_escape_hatch :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
@@ -426,6 +501,70 @@ layout_facade_prepared_wrapped_label_remeasures_height_for_width :: proc(t: ^tes
 	prepared_render_at(&u, &wide, {0, 0, wide_size.w, wide_size.h})
 	prepared_render_at(&u, &narrow, {0, wide_size.h, narrow_size.w, narrow_size.h})
 	end(&u)
+}
+
+@(test)
+layout_facade_prepared_two_axis_and_aspect_size_are_deterministic :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	counts: Prepared_Custom_Counts
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = 200, max_h = 100))
+	prepared_row_begin(&prepared)
+	_ = prepared_custom(
+		&prepared,
+		{
+			measure = prepared_custom_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &counts,
+			size = {width = fixed(160), aspect = {16, 9}},
+		},
+	)
+	prepared_container_end(&prepared)
+	size := prepared_measure(&u, &prepared)
+	prepared_render_at(&u, &prepared, {0, 0, size.w, size.h})
+	end(&u)
+	testing.expect_value(t, counts.rect.w, i32(160))
+	testing.expect_value(t, counts.rect.h, i32(90))
+}
+
+@(test)
+layout_facade_fit_render_at_does_not_consume_cursor :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	before := remaining_rect(&u)
+	counts: Prepared_Custom_Counts
+	builder: Fit_Builder
+	fit_begin(&builder, &u)
+	fit_builder_row(&builder)
+	fit_builder_custom(
+		&builder,
+		{
+			measure = prepared_custom_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &counts,
+		},
+	)
+	fit_end(&builder)
+	size := fit_measure(&builder)
+	target := Rect_I32{17, 29, size.w, size.h}
+	fit_render_at(&builder, target)
+	after := remaining_rect(&u)
+	end(&u)
+	testing.expect_value(t, before, after)
+	testing.expect_value(t, counts.rect, target)
 }
 
 @(test)

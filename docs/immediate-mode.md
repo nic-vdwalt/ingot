@@ -186,6 +186,14 @@ synchronization. Emission derives only current-frame geometry; interaction,
 focus, semantics, and paint still execute exactly once during render. All paths
 use named fixed bounds and iterative layout.
 
+Reusing a builder resets logical counts and every previously used output slot;
+unused capacity is not scanned or retained as active state. Flow, Grid, two-axis
+sizing, aspect ratio, clipping, and decoration remain current-frame description
+data. They add no recursion, unbounded allocation, or cross-frame hierarchy.
+Separated measurement and `fit_render_at` consume caller-owned storage
+synchronously. Borrowed strings, userdata, and activation destinations remain
+valid through rendering, where each leaf executes exactly once.
+
 ## From immediate-mode library to app framework
 
 The early success of IMGUI in game tools also narrowed how the idea came to be

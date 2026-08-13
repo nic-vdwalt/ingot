@@ -174,8 +174,11 @@ The builder writes directly into the same prepared engine without allocation,
 an intermediate child slice, or ambient mutable state. Container begin calls
 must balance with `fit_end`, and `fit_render` synchronously consumes the closed
 root. Rebuild and reuse caller storage with `fit_begin`; do not copy an active
-builder. The complete description is bounded by `MAX_PREPARED_NODES`, direct
-siblings by `MAX_LAYOUT_FLEX`, and nesting by `MAX_LAYOUT_DEPTH`.
+builder. The complete description is bounded by compile-time-configurable
+`MAX_PREPARED_NODES` (default 64, hard ceiling 256). Row and Column siblings
+remain bounded by `MAX_LAYOUT_FLEX`, and nesting by `MAX_LAYOUT_DEPTH`. Flow and
+Grid may use the remaining prepared-node capacity; large collections still
+belong on chunked or virtualized paths.
 
 `fit_button(id, text, &activated)` uses the default style, while
 `fit_button(id, text, .Primary, &activated)` selects a style. The corresponding
@@ -192,11 +195,25 @@ interaction, semantics, or paint.
 assembled or passed onward. Its storage comes from active frame scratch and is
 borrowed only until `fit_tree` returns.
 
-Fit-only roots keep their natural width. Grow and percent tracks resolve against
-the remaining width, and wrapped labels derive height after width assignment.
-Height never changes width, and aspect-ratio dependencies remain unsupported.
-String and integer IDs resolve from the active outer scope; use explicit IDs to
-disambiguate reusable subtrees with repeated keys.
+Fit-only roots keep their natural size unless an axis policy requires a finite
+bound. `Prepared_Size` controls width and height independently with the existing
+fit, grow, fixed, and percent tracks; an unspecified axis remains intrinsic. The
+existing `track` field remains shorthand for a child's parent main axis. Wrapped
+labels derive height after width assignment, while Column grow and percent
+tracks require finite height.
+
+A positive integer `Aspect_Ratio{width, height}` derives an unspecified axis and
+contains inside finite constraints using deterministic integer arithmetic. Two
+explicit axes take precedence, so ratio sizing never starts a convergence loop.
+Prepared/FIT Flow wraps measured children left to right. Prepared/FIT Grid uses
+fixed columns and row height with the existing cumulative-division algorithm.
+Container effects can draw a background and border and bracket descendants with
+a clip; balanced iterative enter/exit traversal preserves exactly-once leaves.
+Scrolling remains the caller-owned `Pane` protocol.
+
+Use `fit_measure` followed by `fit_render_at` when caller geometry owns placement;
+this does not consume the facade cursor. String and integer IDs resolve from the
+active outer scope; use explicit IDs to disambiguate reusable subtrees.
 
 Use `Prepared_Ui`, `prepared_begin`, explicit root begin/end,
 `prepared_measure`, and `prepared_render_at` when measurement or placement must
