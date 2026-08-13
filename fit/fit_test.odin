@@ -70,12 +70,12 @@ fit_builder_nested_layout_renders_once :: proc(t: ^testing.T) {
 @(test)
 fit_public_contract_compiles :: proc(t: ^testing.T) {
 	draw: Draw_Proc = fit_test_draw
-	run: proc(^App, Config, Draw_Proc, rawptr) -> bool = Run
-	button_string: proc(^Builder, string, string, ^bool) = Button
-	button_u64: proc(^Builder, u64, string, ^bool) = Button
-	measure: proc(^Builder) -> Size = Measure
-	render_at: proc(^Builder, Rect) = Render_At
-	session_begin: proc(^Session) -> (^Builder, bool) = Session_Begin
+	run: proc(_: ^App, _: Config, _: Draw_Proc, _: rawptr) -> bool = Run
+	button_string: proc(_: ^Builder, _: string, _: string, _: ^bool) = Button
+	button_u64: proc(_: ^Builder, _: u64, _: string, _: ^bool) = Button
+	measure: proc(_: ^Builder) -> Size = Measure
+	render_at: proc(_: ^Builder, _: Rect) = Render_At
+	session_begin: proc(_: ^Session) -> (^Builder, bool) = Session_Begin
 	testing.expect(t, draw != nil && run != nil)
 	testing.expect(t, button_string != nil && button_u64 != nil)
 	testing.expect(t, measure != nil && render_at != nil && session_begin != nil)

@@ -92,10 +92,12 @@ fit_column_builder :: proc(builder: ^Fit_Builder, options: Prepared_Container_Op
 }
 
 fit_builder_row :: proc(builder: ^Fit_Builder, options: Prepared_Container_Options = {}) {
+	assert(builder != nil, "fit_builder_row: nil builder")
 	fit_row_builder(builder, options)
 }
 
 fit_builder_column :: proc(builder: ^Fit_Builder, options: Prepared_Container_Options = {}) {
+	assert(builder != nil, "fit_builder_column: nil builder")
 	fit_column_builder(builder, options)
 }
 
@@ -139,6 +141,7 @@ fit_label_builder :: proc(builder: ^Fit_Builder, text: string, options: Fit_Labe
 }
 
 fit_builder_label :: proc(builder: ^Fit_Builder, text: string, options: Fit_Label_Options = {}) {
+	assert(builder != nil, "fit_builder_label: nil builder")
 	fit_label_builder(builder, text, options)
 }
 
@@ -314,6 +317,7 @@ fit_builder_custom :: proc(
 	spec: Prepared_Custom,
 	options: Fit_Custom_Options = {},
 ) {
+	assert(builder != nil, "fit_builder_custom: nil builder")
 	fit_custom_builder(builder, spec, options)
 }
 

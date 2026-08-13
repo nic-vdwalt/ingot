@@ -3,23 +3,13 @@ package fit
 import "ingot:ui"
 import "ingot:ui_gfx"
 
-Init :: proc(
-	app: ^App,
-	config: Config,
-	callbacks: Callbacks,
-	userdata: rawptr = nil,
-) -> bool {
+Init :: proc(app: ^App, config: Config, callbacks: Callbacks, userdata: rawptr = nil) -> bool {
 	assert(app != nil, "Fit.Init: nil app")
 	assert(callbacks.draw != nil, "Fit.Init: nil draw callback")
 	assert(app.draw == nil, "Fit.Init: app already initialized")
 	app.draw = callbacks.draw
 	app.userdata = userdata
-	return ui_gfx.app_init(
-		&app.inner,
-		config,
-		{ui = app_draw, shutdown = app_shutdown},
-		app,
-	)
+	return ui_gfx.app_init(&app.inner, config, {ui = app_draw, shutdown = app_shutdown}, app)
 }
 
 Start :: proc(app: ^App) -> bool {
@@ -42,22 +32,12 @@ Destroy :: proc(app: ^App) {
 	ui_gfx.app_destroy(&app.inner)
 }
 
-Run :: proc(
-	app: ^App,
-	config: Config,
-	draw: Draw_Proc,
-	userdata: rawptr = nil,
-) -> bool {
+Run :: proc(app: ^App, config: Config, draw: Draw_Proc, userdata: rawptr = nil) -> bool {
 	assert(app != nil, "Fit.Run: nil app")
 	assert(draw != nil, "Fit.Run: nil draw callback")
 	app.draw = draw
 	app.userdata = userdata
-	return ui_gfx.app_run(
-		&app.inner,
-		config,
-		{ui = app_draw, shutdown = app_shutdown},
-		app,
-	)
+	return ui_gfx.app_run(&app.inner, config, {ui = app_draw, shutdown = app_shutdown}, app)
 }
 
 Set_Theme :: proc(app: ^App, theme: ui.Theme) {

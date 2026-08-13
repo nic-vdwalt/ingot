@@ -88,6 +88,16 @@ class ConsumerPolicyTests(unittest.TestCase):
         source = 'package app\n// adapter_init(nil)\ns := "App_Session ingot:pty"\n'
         self.assertEqual(self.check(source), [])
 
+    def test_internal_ui_import_is_rejected(self) -> None:
+        failures = self.check('package app\nimport "ingot:ui"\n')
+        self.assertTrue(any("internal UI import" in failure for failure in failures))
+
+    def test_retired_fit_and_graphics_apis_are_rejected(self) -> None:
+        source = "package app\nf :: proc() { fit_tree(nil, {}); clear_frame(nil, {}) }\n"
+        failures = self.check(source)
+        self.assertTrue(any("retired UI API" in failure for failure in failures))
+        self.assertTrue(any("retired graphics API" in failure for failure in failures))
+
 
 if __name__ == "__main__":
     unittest.main()

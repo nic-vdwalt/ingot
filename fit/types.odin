@@ -10,17 +10,17 @@ Builder :: struct {
 }
 
 App :: struct {
-	inner:   ui_gfx.App,
-	builder: Builder,
-	draw:    Draw_Proc,
+	inner:    ui_gfx.App,
+	builder:  Builder,
+	draw:     Draw_Proc,
 	userdata: rawptr,
 }
 
 Session :: struct {
-	inner:    ui_gfx.Session,
-	frame:    ui_gfx.Session_Frame,
-	builder:  Builder,
-	open:     bool,
+	inner:   ui_gfx.Session,
+	frame:   ui_gfx.Session_Frame,
+	builder: Builder,
+	open:    bool,
 }
 
 State :: ui_gfx.App_State

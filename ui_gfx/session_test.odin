@@ -185,4 +185,3 @@ test_pointer_snapshot_policy :: proc(t: ^testing.T) {
 	testing.expect(t, !outside.mouse_released[1])
 	testing.expect(t, !outside.mouse_down[2])
 }
-
