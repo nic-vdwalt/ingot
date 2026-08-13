@@ -9,6 +9,11 @@ Builder :: struct {
 	bound: bool,
 }
 
+Storage_Node :: ui.Prepared_Node
+Storage :: ui.Fit_Storage
+STORAGE_NODE_DEFAULT :: ui.MAX_PREPARED_NODES
+STORAGE_NODE_HARD_MAX :: ui.MAX_PREPARED_NODES_HARD
+
 App :: struct {
 	inner:    ui_gfx.App,
 	builder:  Builder,

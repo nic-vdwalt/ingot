@@ -6,35 +6,26 @@ import "ingot:ui"
 
 replay :: proc(adapter: ^Adapter, output: ^ui.Ui_Output) {
 	assert(adapter != nil && adapter.initialized, "replay: invalid adapter")
-	assert(adapter.gfx_frame != nil, "replay: no bound graphics frame")
+	assert(adapter.graphics_open, "replay: no open graphics frame")
 	assert(output != nil, "replay: nil output")
-	replay_list(adapter, adapter.gfx_frame, &output.main)
-	replay_list_tiered(adapter, adapter.gfx_frame, &output.overlay)
+	replay_list(adapter, &output.main)
+	replay_list_tiered(adapter, &output.overlay)
 }
 
-replay_list :: proc(adapter: ^Adapter, frame: ^rl.Frame, list: ^ui.Paint_List) {
+replay_list :: proc(adapter: ^Adapter, list: ^ui.Paint_List) {
 	assert(adapter != nil && adapter.initialized, "replay_list: invalid adapter")
-	assert(
-		frame != nil && rl.frame_context(frame) == adapter.gfx_context,
-		"replay_list: invalid frame",
-	)
+	assert(adapter.graphics_open, "replay_list: graphics frame not open")
 	assert(list != nil && list.count >= 0, "replay_list: invalid list")
 	assert(list.count <= len(list.commands), "replay_list: invalid count")
 	for index in 0 ..< list.count {
 		assert(index >= 0 && index < len(list.commands), "replay_list: invalid index")
-		replay_command(adapter, frame, list, list.commands[index])
+		replay_command(adapter, list, list.commands[index])
 	}
 }
 
-// Raised paint orders exact bounded z groups while preserving command order
-// within each group. Sorting the small group-index array avoids command-sized
-// scratch storage and keeps work bounded by groups times retained commands.
-replay_list_tiered :: proc(adapter: ^Adapter, frame: ^rl.Frame, list: ^ui.Paint_List) {
+replay_list_tiered :: proc(adapter: ^Adapter, list: ^ui.Paint_List) {
 	assert(adapter != nil && adapter.initialized, "replay_list_tiered: invalid adapter")
-	assert(
-		frame != nil && rl.frame_context(frame) == adapter.gfx_context,
-		"replay_list_tiered: invalid frame",
-	)
+	assert(adapter.graphics_open, "replay_list_tiered: graphics frame not open")
 	assert(list != nil && list.count >= 0, "replay_list_tiered: invalid list")
 	assert(list.count <= len(list.commands), "replay_list_tiered: invalid count")
 	order := replay_z_group_order(list)
@@ -44,7 +35,7 @@ replay_list_tiered :: proc(adapter: ^Adapter, frame: ^rl.Frame, list: ^ui.Paint_
 			command := list.commands[index]
 			assert(i32(command.z_group) < list.z_group_count, "replay: invalid z group")
 			if command.z_group != group do continue
-			replay_command(adapter, frame, list, command)
+			replay_command(adapter, list, command)
 		}
 	}
 }
@@ -74,20 +65,14 @@ replay_z_group_order :: proc(list: ^ui.Paint_List) -> Replay_Z_Group_Order {
 }
 
 @(private = "file")
-replay_text_command :: proc(
-	adapter: ^Adapter,
-	frame: ^rl.Frame,
-	list: ^ui.Paint_List,
-	command: ui.Paint_Command,
-) {
+replay_text_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Paint_Command) {
 	assert(adapter != nil && adapter.initialized, "replay_text_command: invalid adapter")
-	assert(frame != nil && list != nil, "replay_text_command: nil argument")
+	assert(adapter.graphics_open && list != nil, "replay_text_command: invalid argument")
 	text := ui.paint_text(list, command)
 	font, ok := adapter_font(adapter, command.font)
 	assert(ok, "replay_text_command: invalid font")
 	value := strings.clone_to_cstring(text, context.temp_allocator)
-	rl.draw_text(
-		frame,
+	rl.DrawTextEx(
 		font,
 		value,
 		vec_to_gfx(command.p0),
@@ -98,13 +83,12 @@ replay_text_command :: proc(
 }
 
 @(private = "file")
-replay_codepoint_command :: proc(adapter: ^Adapter, frame: ^rl.Frame, command: ui.Paint_Command) {
+replay_codepoint_command :: proc(adapter: ^Adapter, command: ui.Paint_Command) {
 	assert(adapter != nil && adapter.initialized, "replay_codepoint_command: invalid adapter")
-	assert(frame != nil, "replay_codepoint_command: nil frame")
+	assert(adapter.graphics_open, "replay_codepoint_command: graphics frame not open")
 	font, ok := adapter_font(adapter, command.font)
 	assert(ok, "replay_codepoint_command: invalid font")
-	rl.frame_draw_codepoint(
-		frame,
+	rl.DrawTextCodepoint(
 		font,
 		command.codepoint,
 		vec_to_gfx(command.p0),
@@ -114,12 +98,10 @@ replay_codepoint_command :: proc(adapter: ^Adapter, frame: ^rl.Frame, command: u
 }
 
 @(private = "file")
-replay_clip_begin_command :: proc(frame: ^rl.Frame, command: ui.Paint_Command) {
-	assert(frame != nil, "replay_clip_begin_command: nil frame")
+replay_clip_begin_command :: proc(command: ui.Paint_Command) {
 	assert(command.rect.width >= 0, "replay_clip_begin_command: negative width")
 	assert(command.rect.height >= 0, "replay_clip_begin_command: negative height")
-	rl.frame_scissor_begin(
-		frame,
+	rl.BeginScissorMode(
 		i32(command.rect.x),
 		i32(command.rect.y),
 		i32(command.rect.width),
@@ -128,39 +110,31 @@ replay_clip_begin_command :: proc(frame: ^rl.Frame, command: ui.Paint_Command) {
 }
 
 @(private = "file")
-replay_rectangle_command :: proc(frame: ^rl.Frame, command: ui.Paint_Command) {
-	assert(frame != nil, "replay_rectangle_command: nil frame")
-	assert(
-		command.rect.width >= 0 && command.rect.height >= 0,
-		"replay_rectangle_command: invalid rect",
-	)
+replay_rectangle_command :: proc(command: ui.Paint_Command) {
+	assert(command.rect.width >= 0 && command.rect.height >= 0, "replay rectangle: invalid rect")
+	rect := rect_to_gfx(command.rect)
 	color := color_to_gfx(command.color)
 	#partial switch command.kind {
 	case .Rectangle:
-		rl.draw_rect(frame, rect_to_gfx(command.rect), color)
+		rl.DrawRectangleRec(rect, color)
 	case .Rectangle_Outline:
-		rl.frame_draw_rectangle_lines(frame, rect_to_gfx(command.rect), command.thickness, color)
+		rl.DrawRectangleLinesEx(rect, command.thickness, color)
 	case .Rectangle_Rounded:
-		rl.frame_draw_rectangle_rounded(
-			frame,
-			rect_to_gfx(command.rect),
-			command.roundness,
-			command.segments,
-			color,
-		)
+		rl.DrawRectangleRounded(rect, command.roundness, command.segments, color)
 	case .Rectangle_Rounded_Outline:
-		rl.frame_draw_rectangle_rounded_lines(
-			frame,
-			rect_to_gfx(command.rect),
+		rl.DrawRectangleRoundedLinesEx(
+			rect,
 			command.roundness,
 			command.segments,
 			command.thickness,
 			color,
 		)
 	case .Rectangle_Gradient_V:
-		rl.frame_draw_rectangle_gradient_v(
-			frame,
-			rect_to_gfx(command.rect),
+		rl.DrawRectangleGradientV(
+			i32(rect.x),
+			i32(rect.y),
+			i32(rect.width),
+			i32(rect.height),
 			color,
 			color_to_gfx(command.color_end),
 		)
@@ -169,14 +143,9 @@ replay_rectangle_command :: proc(frame: ^rl.Frame, command: ui.Paint_Command) {
 	}
 }
 
-replay_command :: proc(
-	adapter: ^Adapter,
-	frame: ^rl.Frame,
-	list: ^ui.Paint_List,
-	command: ui.Paint_Command,
-) {
+replay_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Paint_Command) {
 	assert(adapter != nil && adapter.initialized, "replay_command: invalid adapter")
-	assert(frame != nil && list != nil, "replay_command: nil argument")
+	assert(adapter.graphics_open && list != nil, "replay_command: invalid argument")
 	color := color_to_gfx(command.color)
 	switch command.kind {
 	case .Rectangle,
@@ -184,22 +153,15 @@ replay_command :: proc(
 	     .Rectangle_Rounded,
 	     .Rectangle_Rounded_Outline,
 	     .Rectangle_Gradient_V:
-		replay_rectangle_command(frame, command)
+		replay_rectangle_command(command)
 	case .Line:
-		rl.draw_line(
-			frame,
-			vec_to_gfx(command.p0),
-			vec_to_gfx(command.p1),
-			command.thickness,
-			color,
-		)
+		rl.DrawLineEx(vec_to_gfx(command.p0), vec_to_gfx(command.p1), command.thickness, color)
 	case .Circle:
-		rl.draw_circle(frame, vec_to_gfx(command.p0), command.outer_radius, color)
+		rl.DrawCircleV(vec_to_gfx(command.p0), command.outer_radius, color)
 	case .Circle_Outline:
-		rl.frame_draw_circle_lines(frame, vec_to_gfx(command.p0), command.outer_radius, color)
+		rl.DrawCircleLinesV(vec_to_gfx(command.p0), command.outer_radius, color)
 	case .Ring:
-		rl.frame_draw_ring(
-			frame,
+		rl.DrawRing(
 			vec_to_gfx(command.p0),
 			command.inner_radius,
 			command.outer_radius,
@@ -209,21 +171,20 @@ replay_command :: proc(
 			color,
 		)
 	case .Triangle:
-		rl.frame_draw_triangle(
-			frame,
+		rl.DrawTriangle(
 			vec_to_gfx(command.p0),
 			vec_to_gfx(command.p1),
 			vec_to_gfx(command.p2),
 			color,
 		)
 	case .Text:
-		replay_text_command(adapter, frame, list, command)
+		replay_text_command(adapter, list, command)
 	case .Codepoint:
-		replay_codepoint_command(adapter, frame, command)
+		replay_codepoint_command(adapter, command)
 	case .Clip_Begin:
-		replay_clip_begin_command(frame, command)
+		replay_clip_begin_command(command)
 	case .Clip_End:
-		rl.frame_scissor_end(frame)
-		if command.clip_restore do replay_clip_begin_command(frame, command)
+		rl.EndScissorMode()
+		if command.clip_restore do replay_clip_begin_command(command)
 	}
 }

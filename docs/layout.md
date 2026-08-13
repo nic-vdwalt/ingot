@@ -30,6 +30,31 @@ background/border effects, clipping, and caller-owned transitions. Row and
 Column direct children are bounded by `MAX_LAYOUT_FLEX`; total nodes and nesting
 use fixed configured limits.
 
+## Capacity and storage
+
+A zero-value builder uses compile-time-configurable inline storage. The default
+is `fit.STORAGE_NODE_DEFAULT` (128 nodes). Applications with a proven different
+bound may attach reusable caller-owned storage up to
+`fit.STORAGE_NODE_HARD_MAX` (8,192 nodes):
+
+```odin
+builder: fit.Builder
+nodes: [1024]fit.Storage_Node
+outputs: [1024]^bool
+fit.Set_Storage(&builder, {nodes = nodes[:], outputs = outputs[:]})
+```
+
+Node and output slices must be non-nil, equal in length, and at least the layout
+depth bound. Set or reset storage only while the builder is closed. The storage
+must outlive every frame that uses it; do not copy an externally backed active
+builder. `fit.Storage_Capacity` reports the selected capacity and
+`fit.Reset_Storage` restores inline storage. Beginning a frame resets logical
+counts and previously used output slots but never grows or retains a widget
+hierarchy.
+
+Larger capacity raises the bounded work available to one current-frame
+description. Large data collections should still be chunked or virtualized.
+
 ## Tracks and size
 
 `fit.Fit`, `fit.Grow`, `fit.Fixed`, and `fit.Percent` construct the one track

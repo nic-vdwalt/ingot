@@ -71,7 +71,7 @@ frame :: proc() {
 	frame, acquired := ui_gfx.session_acquire_frame(&ui_session)
 	if !acquired do return
 	ui_frame = frame.ui
-	rl.clear_frame(frame.gfx, rl.Color{22, 24, 32, 255})
+	rl.ClearBackground(rl.Color{22, 24, 32, 255})
 	if resources_ready {
 		draw_render_targets()
 		draw_main_fixture()

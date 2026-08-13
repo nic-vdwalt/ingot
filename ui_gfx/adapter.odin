@@ -12,7 +12,6 @@ FONT_CAP :: 64
 Adapter :: struct {
 	gfx_context:      ^rl.Context,
 	gfx_epoch:        u64,
-	gfx_frame:        ^rl.Frame,
 	fonts:            [FONT_CAP]rl.Font,
 	font_sizes:       [FONT_CAP]i32,
 	font_count:       int,
@@ -22,6 +21,7 @@ Adapter :: struct {
 	a11y_focus:       ak.Node_Id,
 	a11y_initialized: bool,
 	initialized:      bool,
+	graphics_open:    bool,
 }
 
 vec_to_ui :: proc(value: rl.Vector2) -> ui.Vec2 {
@@ -118,21 +118,21 @@ adapter_web_form_sync_submit :: proc(
 
 adapter_destroy :: proc(adapter: ^Adapter) {
 	assert(adapter != nil && adapter.initialized, "adapter_destroy: invalid adapter")
-	assert(adapter.gfx_frame == nil, "adapter_destroy: graphics frame still bound")
+	assert(!adapter.graphics_open, "adapter_destroy: graphics frame still open")
 	adapter_a11y_destroy(adapter)
 	adapter_reset_fonts(adapter)
 	delete(adapter.font_codepoints)
 	adapter^ = {}
 	assert(!adapter.initialized)
-	assert(adapter.gfx_frame == nil)
+	assert(!adapter.graphics_open)
 }
 
 adapter_paint_sink :: proc(list: ^ui.Paint_List, command: ui.Paint_Command, userdata: rawptr) {
 	adapter := (^Adapter)(userdata)
 	assert(adapter != nil && adapter.initialized, "adapter_paint_sink: invalid adapter")
-	assert(adapter.gfx_frame != nil, "adapter_paint_sink: no bound graphics frame")
+	assert(adapter.graphics_open, "adapter_paint_sink: no open graphics frame")
 	assert(list != nil, "adapter_paint_sink: nil list")
-	replay_command(adapter, adapter.gfx_frame, list, command)
+	replay_command(adapter, list, command)
 }
 
 adapter_begin_frame :: proc(
@@ -185,18 +185,6 @@ adapter_open_frame :: proc(
 	adapter_a11y_poll(adapter, frame)
 }
 
-adapter_bind_frame :: proc(adapter: ^Adapter, gfx_frame: ^rl.Frame) {
-	assert(adapter != nil && adapter.initialized, "adapter_bind_frame: invalid adapter")
-	assert(gfx_frame != nil, "adapter_bind_frame: nil frame")
-	assert(
-		rl.frame_context(gfx_frame) == adapter.gfx_context,
-		"adapter_bind_frame: owner mismatch",
-	)
-	assert(adapter.gfx_frame == nil, "adapter_bind_frame: frame already bound")
-	adapter.gfx_frame = gfx_frame
-	assert(adapter.gfx_frame == gfx_frame)
-}
-
 adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	assert(adapter != nil && adapter.initialized, "adapter_end_frame: invalid adapter")
 	assert(frame != nil && frame.output != nil, "adapter_end_frame: invalid frame")
@@ -209,14 +197,13 @@ adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	output := frame.output
 	ui.ui_frame_finalize(frame)
 	adapter_a11y_publish(adapter, frame)
-	if adapter.gfx_frame != nil {
-		replay_list_tiered(adapter, adapter.gfx_frame, &output.overlay)
+	if adapter.graphics_open {
+		replay_list_tiered(adapter, &output.overlay)
 	} else {
 		assert(output.overlay.count == 0, "adapter_end_frame: overlay without graphics frame")
 	}
 	apply_platform_output_context(adapter.gfx_context, &output.platform)
 	ui.paint_list_set_sink(&output.main, nil, nil)
 	ui.ui_frame_release(frame)
-	adapter.gfx_frame = nil
-	when ODIN_OS != .JS do assert(adapter.gfx_frame == nil)
+	when ODIN_OS != .JS do assert(adapter.initialized)
 }

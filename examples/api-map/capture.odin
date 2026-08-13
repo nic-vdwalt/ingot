@@ -112,20 +112,19 @@ when MAP_CAPTURE {
 	}
 
 	map_capture_frame :: proc() {
-		gfx_frame, acquired := rl.begin_frame()
+		frame, acquired := ui_gfx.session_acquire_frame(&app.session)
 		if !acquired do return
-		frame_state := ui_gfx.session_begin_frame_context(&app.session, &gfx_frame)
+		frame_state := frame.ui
 		// Captured media is flat artwork: app_clear_color takes the theme
 		// colour and drops the window translucency (see gallery capture.odin
 		// for the full rationale).
 		background := ui_gfx.app_clear_color(&app)
-		rl.clear_frame(&gfx_frame, background)
+		rl.ClearBackground(background)
 
 		map_capture_step()
 		rl.BeginTextureMode(map_capture_target)
 		rl.ClearBackground(background)
 		map_frame(&app, frame_state, nil)
-		ui_gfx.session_end_frame_context(&app.session, &gfx_frame)
 		rl.EndTextureMode()
 
 		// Negative source height blits the bottom-left-origin target upright.
@@ -137,7 +136,7 @@ when MAP_CAPTURE {
 			0,
 			rl.WHITE,
 		)
-		rl.end_frame(&gfx_frame)
+		ui_gfx.session_present_frame(&frame)
 		map_capture_write()
 		free_all(context.temp_allocator)
 	}

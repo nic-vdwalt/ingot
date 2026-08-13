@@ -5,6 +5,7 @@ Vec3 :: Vector3
 RGBA :: Color
 Rect :: Rectangle
 
+@(private = "package")
 Frame :: struct {
 	owner:      ^Context,
 	epoch:      u64,
@@ -12,10 +13,12 @@ Frame :: struct {
 	active:     bool,
 }
 
+@(private = "package")
 begin_frame :: proc() -> (Frame, bool) {
 	return context_begin_frame(default_context())
 }
 
+@(private = "package")
 context_begin_frame :: proc(ctx: ^Context) -> (Frame, bool) {
 	if ctx == nil do return {}, false
 	if !ctx.initialized || ctx.frame_active do return {}, false
@@ -40,6 +43,7 @@ context_begin_frame :: proc(ctx: ^Context) -> (Frame, bool) {
 	return frame, true
 }
 
+@(private = "package")
 end_frame :: proc(frame: ^Frame) {
 	assert(frame != nil)
 	assert(frame.active)
@@ -55,6 +59,7 @@ end_frame :: proc(frame: ^Frame) {
 	assert(!ctx.frame_active)
 }
 
+@(private = "package")
 clear_frame :: proc(frame: ^Frame, color: RGBA) {
 	assert(frame != nil)
 	assert(frame.active)
@@ -66,6 +71,7 @@ clear_frame :: proc(frame: ^Frame, color: RGBA) {
 	assert(frame.generation == ctx.frame_generation)
 }
 
+@(private = "package")
 draw_rect :: proc(frame: ^Frame, rect: Rect, color: RGBA) {
 	assert(frame != nil)
 	assert(rect.width >= 0 && rect.height >= 0)
@@ -76,6 +82,7 @@ draw_rect :: proc(frame: ^Frame, rect: Rect, color: RGBA) {
 	assert(frame.active)
 }
 
+@(private = "package")
 draw_line :: proc(frame: ^Frame, start, end: Vec2, thick: f32, color: RGBA) {
 	assert(frame != nil)
 	assert(thick >= 0)
@@ -86,6 +93,7 @@ draw_line :: proc(frame: ^Frame, start, end: Vec2, thick: f32, color: RGBA) {
 	assert(frame.active)
 }
 
+@(private = "package")
 draw_circle :: proc(frame: ^Frame, center: Vec2, radius: f32, color: RGBA) {
 	assert(frame != nil)
 	assert(radius >= 0)
@@ -96,6 +104,7 @@ draw_circle :: proc(frame: ^Frame, center: Vec2, radius: f32, color: RGBA) {
 	assert(frame.active)
 }
 
+@(private = "package")
 draw_texture :: proc(
 	frame: ^Frame,
 	texture: Texture2D,
@@ -113,6 +122,7 @@ draw_texture :: proc(
 	assert(frame.active)
 }
 
+@(private = "package")
 draw_text :: proc(
 	frame: ^Frame,
 	font: Font,
@@ -130,6 +140,7 @@ draw_text :: proc(
 	assert(frame.active)
 }
 
+@(private = "package")
 frame_draw_rectangle_lines :: proc(frame: ^Frame, rect: Rect, thick: f32, color: RGBA) {
 	assert(frame != nil && thick >= 0, "frame_draw_rectangle_lines: invalid argument")
 	assert(rect.width >= 0 && rect.height >= 0, "frame_draw_rectangle_lines: negative size")
@@ -139,6 +150,7 @@ frame_draw_rectangle_lines :: proc(frame: ^Frame, rect: Rect, thick: f32, color:
 	DrawRectangleLinesEx(rect, thick, color)
 }
 
+@(private = "package")
 frame_draw_rectangle_rounded :: proc(
 	frame: ^Frame,
 	rect: Rect,
@@ -155,6 +167,7 @@ frame_draw_rectangle_rounded :: proc(
 	DrawRectangleRounded(rect, roundness, segments, color)
 }
 
+@(private = "package")
 frame_draw_rectangle_rounded_lines :: proc(
 	frame: ^Frame,
 	rect: Rect,
@@ -175,6 +188,7 @@ frame_draw_rectangle_rounded_lines :: proc(
 	DrawRectangleRoundedLinesEx(rect, roundness, segments, thick, color)
 }
 
+@(private = "package")
 frame_draw_rectangle_gradient_v :: proc(frame: ^Frame, rect: Rect, top, bottom: RGBA) {
 	assert(frame != nil, "frame_draw_rectangle_gradient_v: nil frame")
 	assert(rect.width >= 0 && rect.height >= 0, "frame_draw_rectangle_gradient_v: negative size")
@@ -184,6 +198,7 @@ frame_draw_rectangle_gradient_v :: proc(frame: ^Frame, rect: Rect, top, bottom: 
 	_gradient_v(rect, top, bottom)
 }
 
+@(private = "package")
 frame_draw_circle_lines :: proc(frame: ^Frame, center: Vec2, radius: f32, color: RGBA) {
 	assert(frame != nil && radius >= 0, "frame_draw_circle_lines: invalid argument")
 	if !_frame_valid(frame) do return
@@ -192,6 +207,7 @@ frame_draw_circle_lines :: proc(frame: ^Frame, center: Vec2, radius: f32, color:
 	DrawCircleLinesV(center, radius, color)
 }
 
+@(private = "package")
 frame_draw_ring :: proc(
 	frame: ^Frame,
 	center: Vec2,
@@ -207,6 +223,7 @@ frame_draw_ring :: proc(
 	DrawRing(center, inner_radius, outer_radius, start_angle, end_angle, segments, color)
 }
 
+@(private = "package")
 frame_draw_triangle :: proc(frame: ^Frame, p0, p1, p2: Vec2, color: RGBA) {
 	assert(frame != nil, "frame_draw_triangle: nil frame")
 	if !_frame_valid(frame) do return
@@ -216,6 +233,7 @@ frame_draw_triangle :: proc(frame: ^Frame, p0, p1, p2: Vec2, color: RGBA) {
 	assert(frame.active)
 }
 
+@(private = "package")
 frame_draw_codepoint :: proc(
 	frame: ^Frame,
 	font: Font,
@@ -231,6 +249,7 @@ frame_draw_codepoint :: proc(
 	DrawTextCodepoint(font, codepoint, position, font_size, tint)
 }
 
+@(private = "package")
 frame_scissor_begin :: proc(frame: ^Frame, x, y, width, height: i32) {
 	assert(frame != nil, "frame_scissor_begin: nil frame")
 	assert(width >= 0 && height >= 0, "frame_scissor_begin: negative size")
@@ -240,6 +259,7 @@ frame_scissor_begin :: proc(frame: ^Frame, x, y, width, height: i32) {
 	BeginScissorMode(x, y, width, height)
 }
 
+@(private = "package")
 frame_scissor_end :: proc(frame: ^Frame) {
 	assert(frame != nil, "frame_scissor_end: nil frame")
 	if !_frame_valid(frame) do return
@@ -299,6 +319,7 @@ context_mouse_position :: proc(ctx: ^Context) -> Vec2 {
 	return ctx.inp.mouse
 }
 
+@(private = "package")
 frame_context :: proc(frame: ^Frame) -> ^Context {
 	if !_frame_valid(frame) do return nil
 	return frame.owner

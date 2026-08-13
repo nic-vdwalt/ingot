@@ -74,5 +74,6 @@
   "ui_gfx/app.odin:app_init": 1,
   "ui_gfx/input.odin:capture_input": 1,
   "ui_gfx/platform.odin:apply_platform_output": 1,
+  "ui_gfx/session.odin:session_acquire_frame": 1,
   "ui_gfx/session.odin:session_init": 1
 }

@@ -135,7 +135,7 @@ frame :: proc() {
 	reload_if_changed(&host)
 	current, acquired := ui_gfx.session_acquire_frame(&host.session)
 	if !acquired do return
-	rl.clear_frame(current.gfx, rl.Color{22, 24, 32, 255})
+	rl.ClearBackground(rl.Color{22, 24, 32, 255})
 	host.api.draw(current.ui)
 	ui_gfx.session_present_frame(&current)
 }

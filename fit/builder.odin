@@ -8,6 +8,24 @@ Begin :: proc(builder: ^Builder) {
 	ui.fit_begin(&builder.inner, &builder.root)
 }
 
+Set_Storage :: proc(builder: ^Builder, storage: Storage) {
+	assert(builder != nil && !builder.bound, "Fit.Set_Storage: builder bound")
+	assert(!builder.inner.prepared.open, "Fit.Set_Storage: description open")
+	ui.fit_builder_set_storage(&builder.inner, storage)
+}
+
+Reset_Storage :: proc(builder: ^Builder) {
+	assert(builder != nil && !builder.bound, "Fit.Reset_Storage: builder bound")
+	assert(!builder.inner.prepared.open, "Fit.Reset_Storage: description open")
+	ui.fit_builder_reset_storage(&builder.inner)
+}
+
+Storage_Capacity :: proc(builder: ^Builder) -> int {
+	assert(builder != nil, "Fit.Storage_Capacity: nil builder")
+	assert(!builder.inner.prepared.open || builder.bound, "Fit.Storage_Capacity: invalid state")
+	return ui.prepared_capacity(&builder.inner.prepared)
+}
+
 Row :: proc(builder: ^Builder, options: Container_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Row: builder not bound")
 	ui.fit_builder_row(&builder.inner, options)

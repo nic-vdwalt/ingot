@@ -227,9 +227,9 @@ when CAPTURE {
 	// frame - build and paint replay - with the capture target, then blits the
 	// result to the window so the run is visible while it records.
 	capture_frame :: proc() {
-		gfx_frame, acquired := rl.begin_frame()
+		frame, acquired := ui_gfx.session_acquire_frame(&app.session)
 		if !acquired do return
-		frame_state := ui_gfx.session_begin_frame_context(&app.session, &gfx_frame)
+		frame_state := frame.ui
 		// Window and target share one derived background. This used to be two
 		// values - a fixed configured clear behind a theme-derived target
 		// clear - which is why a light-theme shot showed the dark configured
@@ -238,12 +238,11 @@ when CAPTURE {
 		// translucent clear produced PNGs with 0.74 mean alpha that rendered
 		// washed-out grey on any non-white page.
 		background := ui_gfx.app_clear_color(&app)
-		rl.clear_frame(&gfx_frame, background)
+		rl.ClearBackground(background)
 
 		rl.BeginTextureMode(capture_target)
 		rl.ClearBackground(background)
 		gallery_frame(&app, frame_state, nil)
-		ui_gfx.session_end_frame_context(&app.session, &gfx_frame)
 		rl.EndTextureMode()
 
 		// Negative source height blits the bottom-left-origin target upright
@@ -256,7 +255,7 @@ when CAPTURE {
 			0,
 			rl.WHITE,
 		)
-		rl.end_frame(&gfx_frame)
+		ui_gfx.session_present_frame(&frame)
 		capture_write()
 		free_all(context.temp_allocator)
 	}
