@@ -170,6 +170,13 @@ measurement procedures derive only geometry; interaction, focus, semantics, and
 paint are emitted once when the prepared leaves render. Handles identify results
 inside that one description and must not be retained as widget identity.
 
+`Fit_Node` is a borrowed value facade over the same prepared engine. Application
+code rebuilds the tree from current state, `fit_tree` consumes it synchronously,
+and no node, slice, callback, userdata, or activation pointer is retained. The
+temporary hierarchy is derived frame data rather than framework-owned behavior.
+Lowering and layout use named fixed bounds and iterative walks; paint, semantics,
+focus, and interaction still execute exactly once.
+
 ## From immediate-mode library to app framework
 
 The early success of IMGUI in game tools also narrowed how the idea came to be
