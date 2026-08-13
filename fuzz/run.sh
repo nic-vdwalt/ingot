@@ -125,10 +125,10 @@ run_term() {
 }
 
 run_gfx_frame() {
-	# Windowed: opens a real window + WebGPU device and interleaves resource
-	# destruction (fonts, textures, render targets, UI rescale) inside live
-	# frames - the destroy-before-submit bug class that headless tests can't
-	# reach. Built without a sanitizer flag override is fine, but ASan works.
+	# Windowed: drives the public fit.Session/Builder path on a real WebGPU
+	# device while interleaving resource destruction, UI rescale/theme changes,
+	# and window resizing inside live frames - the destroy-before-submit bug
+	# class that headless tests cannot reach. ASan instruments the Odin side.
 	# INGOT_GPU_STRICT aborts on any wgpu validation message (see header).
 	# shellcheck disable=SC2086
 	odin build "$ROOT/fuzz/gfx_frame" $COL $GUARD $SANFLAGS -define:INGOT_GPU_STRICT=true -out:"$ROOT/fuzz/gfx_frame/fuzz_gfx_frame"

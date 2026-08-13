@@ -272,10 +272,12 @@ ownership or submission lifetime:
 fuzz/run.sh gfx-frame
 ```
 
-It opens a real window and interleaves font-atlas resets, texture and render
-target unloads, UI rescaling, and window resizes inside live frames. It builds
-with `INGOT_GPU_STRICT`, making any WebGPU validation message abort the run.
-Because it needs a display, it is intentionally excluded from `all` and `soak`.
+It opens a real window through `fit.Session`, renders top-level `fit.Builder`
+content, and interleaves texture/render-target unloads, UI scale/theme changes,
+font replacement, GPU resource churn, and window resizes before presentation.
+It builds with `INGOT_GPU_STRICT`, making any WebGPU validation message abort
+the run. Because it needs a display, it remains intentionally excluded from
+the headless `all` and `soak` targets.
 
 The gallery smoke test exercises the same class through real event handlers. The
 multi-context fixture alternates two native windows, closes one, and verifies the

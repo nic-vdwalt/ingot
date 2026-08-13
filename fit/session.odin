@@ -25,7 +25,7 @@ Session_End :: proc(session: ^Session) {
 	assert(session != nil && session.inner.initialized, "Fit.Session_End: invalid session")
 	assert(session.open && session.builder.bound, "Fit.Session_End: no open frame")
 	assert(session.builder.inner.prepared.depth == 0, "Fit.Session_End: unbalanced builder")
-	_ = Render(&session.builder)
+	if !session.builder.inner.prepared.rendered do _ = Render(&session.builder)
 	builder_close(&session.builder)
 	ui_gfx.session_present_frame(&session.frame)
 	session.open = false
