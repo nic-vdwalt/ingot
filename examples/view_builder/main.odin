@@ -28,8 +28,8 @@ package main
 import "core:fmt"
 import rl "ingot:gfx"
 import "ingot:prefs"
-import "ingot:ui"
-import "ingot:ui_gfx"
+import ui "ingot:fit"
+import ui_gfx "ingot:fit"
 import "ingot:view"
 
 APP_NAME :: "ingot-view-builder"
@@ -102,7 +102,7 @@ State :: struct {
 	status:    Status,
 }
 
-app: ui_gfx.App
+app: ui_gfx.Host_App
 state: State
 
 main :: proc() {
@@ -132,7 +132,7 @@ main :: proc() {
 	)
 }
 
-draw :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
+draw :: proc(app: ^ui_gfx.Host_App, form: ^ui.Ui, userdata: rawptr) {
 	assert(app != nil && form != nil, "draw: invalid app or UI")
 	data := cast(^State)userdata
 	assert(data != nil, "draw: nil state")
@@ -153,7 +153,7 @@ draw :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
 	drag_frame(form, data)
 }
 
-shutdown :: proc(app: ^ui_gfx.App, userdata: rawptr) {
+shutdown :: proc(app: ^ui_gfx.Host_App, userdata: rawptr) {
 	assert(app != nil && userdata != nil, "shutdown: invalid state")
 	data := cast(^State)userdata
 	ui.input_box_destroy(&data.box)

@@ -7,7 +7,7 @@
 package main
 
 import "core:fmt"
-import "ingot:ui"
+import ui "ingot:fit"
 import "ingot:view"
 
 PALETTE_CONTAINERS := [?]view.View_Kind{.Row, .Column, .Panel, .Flex_Row, .Flex_Column}
@@ -210,7 +210,7 @@ drag_overlays :: proc(form: ^ui.Ui, data: ^State, mouse: ui.Vector2, target: i32
 	label := fmt.tprintf("%v", data.drag.kind)
 	metrics := ui.ui_frame_metrics(frame)
 	width := ui.measure_text_string_frame(frame, label, metrics.FONT_SIZE_LABEL) + 20
-	chip := ui.Rect{mouse.x + 12, mouse.y + 12, f32(width), 26}
+	chip := ui.Float_Rect{mouse.x + 12, mouse.y + 12, f32(width), 26}
 	ui.draw_rectangle_rounded(frame, chip, 0.4, 8, theme.bg_panel)
 	ui.draw_rectangle_rounded_lines_ex(frame, chip, 0.4, 8, 1, theme.fg_accent)
 	ui.draw_text_string(
@@ -336,7 +336,7 @@ selection_tag :: proc(frame: ^ui.Ui_Frame, data: ^State, selected: ui.Rect_I32) 
 	size := metrics.FONT_SIZE_NOTE
 	width := ui.measure_text_string_frame(frame, label, size) + 10
 	tag_h := size + 6
-	tag := ui.Rect{f32(selected.x), f32(selected.y - tag_h - 2), f32(width), f32(tag_h)}
+	tag := ui.Float_Rect{f32(selected.x), f32(selected.y - tag_h - 2), f32(width), f32(tag_h)}
 	// Keep the tag on screen when the selection touches the canvas top.
 	if tag.y < f32(data.canvas.y) do tag.y = f32(selected.y) + 2
 	ui.draw_rectangle_rounded(frame, tag, 0.5, 6, theme.fg_accent)

@@ -9,7 +9,7 @@
 // Buttons section.
 //
 // Conventions this gallery demonstrates (docs/api-layers.md):
-//   - ui_gfx.App owns the ordinary one-window lifecycle.
+//   - ui_gfx.Host_App owns the ordinary one-window lifecycle.
 //   - ui.Ui is the default for application chrome, forms, and widgets. It owns
 //     slot carving, scaling, stable identity, focus, semantics, and UI paint.
 //   - Explicit UI stays inside named islands where geometry or lifecycle is
@@ -24,8 +24,8 @@ import "core:fmt"
 import "core:slice"
 import "core:strings"
 import "ingot:sys"
-import "ingot:ui"
-import "ingot:ui_gfx"
+import ui "ingot:fit"
+import ui_gfx "ingot:fit"
 
 // SMOKE enables the self-driving crash harness in smoke.odin (native only;
 // see scripts/smoke-gallery.sh).
@@ -206,7 +206,7 @@ spark := [10]f32{3, 4, 3.6, 5, 6.2, 5.8, 7, 8.4, 8.1, 9.3}
 settings_open := false
 settings_sel := 0
 stored_scale: f32 = 0 // 0 = auto
-app: ui_gfx.App
+app: ui_gfx.Host_App
 
 Widget_State :: struct {
 	// One Ui per independently positioned block. Each is a caller-owned
@@ -312,7 +312,7 @@ input_state_destroy :: proc(state: ^Input_State) {
 	ui.combobox_state_destroy(&state.combo)
 }
 
-gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
+gallery_frame :: proc(app: ^ui_gfx.Host_App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	_ = userdata
 	root := ui_gfx.app_screen_rect(app)
 	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
@@ -352,7 +352,7 @@ gallery_frame :: proc(app: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	_ = ui.draw_app_header(frame, "ingot gallery", sw)
 }
 
-shutdown :: proc(app: ^ui_gfx.App, userdata: rawptr) {
+shutdown :: proc(app: ^ui_gfx.Host_App, userdata: rawptr) {
 	assert(app != nil, "shutdown: nil app")
 	_ = userdata
 	input_state_destroy(&input_state)
@@ -520,7 +520,7 @@ draw_nav_strip :: proc(frame: ^ui.Ui_Frame, top, sw: i32) -> i32 {
 	ui.draw_rectangle(frame, 0, top, sw, height, theme.bg_secondary)
 	ui.draw_rectangle(frame, 0, top + height - 1, sw, 1, theme.border_subtle)
 
-	grid: ui.Grid
+	grid: ui.Grid_State
 	ui.grid_begin(&grid, {pad, top + pad, sw - pad * 2, 0}, cols, row_h, gap, gap)
 	for s in Section {
 		style := ui.Btn_Style.Primary if s == section else .Ghost
@@ -533,7 +533,7 @@ draw_nav_strip :: proc(frame: ^ui.Ui_Frame, top, sw: i32) -> i32 {
 
 	// One cell per control, using the compact labels: four short words fit
 	// where the sidebar's full sentences would not.
-	controls: ui.Grid
+	controls: ui.Grid_State
 	ui.grid_begin(
 		&controls,
 		{pad, content.y + content.h + gap, sw - pad * 2, 0},
@@ -993,7 +993,7 @@ draw_widget_backend_list :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Wid
 draw_widget_truncation_card :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	y := ui.section_header_at(frame, {x, y0, w, 0}, "CARD + SHADOW + TRUNCATION")
 	card := ui.Rect_I32{x, y, min(w, ui.ui_frame_sc(frame, 360)), ui.ui_frame_sc(frame, 64)}
-	shadow := ui.Rect{f32(card.x), f32(card.y), f32(card.w), f32(card.h)}
+	shadow := ui.Float_Rect{f32(card.x), f32(card.y), f32(card.w), f32(card.h)}
 	ui.draw_shadow_hard(frame, shadow, .MD, .Lifted)
 	ui.card_bg_at(
 		frame,
@@ -1288,7 +1288,7 @@ draw_overlay_controls :: proc(frame: ^ui.Ui_Frame, x, y: i32) -> i32 {
 	// A two-column grid places the shielded stack and the action stack; no
 	// call site does per-button x/y arithmetic and the columns stay aligned.
 	gap := ui.ui_frame_sc(frame, 8)
-	grid: ui.Grid
+	grid: ui.Grid_State
 	ui.grid_begin(
 		&grid,
 		{x, y, ui.ui_frame_sc(frame, 340), 0},
@@ -1552,7 +1552,7 @@ draw_overlay_confirm :: proc(frame: ^ui.Ui_Frame) {
 draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 	w := ui.ui_frame_sc(frame, 220)
 	h := ui.ui_frame_sc(frame, 130)
-	rect := ui.Rect{f32(x), f32(y), f32(w), f32(h)}
+	rect := ui.Float_Rect{f32(x), f32(y), f32(w), f32(h)}
 	ui.layer_begin(frame, ui.Z_POPUP, claim = rect)
 	ui.draw_rectangle_rounded(frame, rect, 0.1, 6, ui.ui_frame_theme(frame).bg_popup)
 	ui.draw_rectangle_rounded_lines_ex(
@@ -1590,7 +1590,7 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 
 	// Close row: the popup sits in its own Z_POPUP scope, so its own claim
 	// does not occlude it and the ordinary interaction path applies.
-	row := ui.Rect {
+	row := ui.Float_Rect {
 		f32(x + ui.ui_frame_sc(frame, 12)),
 		f32(y + h - ui.ui_frame_sc(frame, 30)),
 		f32(w - ui.ui_frame_sc(frame, 24)),
@@ -1598,7 +1598,7 @@ draw_demo_popup :: proc(frame: ^ui.Ui_Frame, x, y: i32) {
 	}
 	close := ui.interact(frame, row)
 	if close.hovered {
-		ui.draw_rectangle_rec(frame, ui.Rect(row), ui.ui_frame_theme(frame).bg_active)
+		ui.draw_rectangle_rec(frame, row, ui.ui_frame_theme(frame).bg_active)
 		ui.request_cursor(frame, .POINTING_HAND)
 	}
 	ui.draw_text_string(
@@ -1653,7 +1653,7 @@ draw_stress :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		),
 	)
 	assert(y == bounds.y, "draw_stress: header height mismatch")
-	grid: ui.Grid
+	grid: ui.Grid_State
 	ui.grid_begin(&grid, bounds, cols, row_h, gap, gap)
 	ui.grid_skip_to(&grid, first)
 	for i in first ..< end {

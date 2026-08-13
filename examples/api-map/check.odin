@@ -12,8 +12,8 @@ package main
 
 import "core:fmt"
 import "core:os"
-import "ingot:ui"
-import "ingot:ui_gfx"
+import ui "ingot:fit"
+import ui_gfx "ingot:fit"
 
 CHECK_SCALES := [?]f32{0.75, 1.0, 1.25, 1.5, 2.0, 3.0}
 CHECK_WIDTHS := [?]i32{760, 900, 1100, 1440, 1920, 2560}

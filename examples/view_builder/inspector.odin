@@ -14,7 +14,7 @@
 package main
 
 import "core:fmt"
-import "ingot:ui"
+import ui "ingot:fit"
 import "ingot:view"
 
 draw_inspector :: proc(form: ^ui.Ui, data: ^State) {

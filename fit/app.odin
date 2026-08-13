@@ -1,15 +1,42 @@
 package fit
 
+import "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
 Init :: proc(app: ^App, config: Config, callbacks: Callbacks, userdata: rawptr = nil) -> bool {
 	assert(app != nil, "Fit.Init: nil app")
-	assert(callbacks.draw != nil, "Fit.Init: nil draw callback")
-	assert(app.draw == nil, "Fit.Init: app already initialized")
+	return Init_Context(app, nil, config, callbacks, userdata)
+}
+
+Init_Context :: proc(
+	app: ^App,
+	gfx_context: ^gfx.Context,
+	config: Config,
+	callbacks: Callbacks,
+	userdata: rawptr = nil,
+) -> bool {
+	assert(app != nil, "Fit.Init_Context: nil app")
+	assert(callbacks.draw != nil, "Fit.Init_Context: nil draw callback")
+	assert(app.draw == nil, "Fit.Init_Context: app already initialized")
 	app.draw = callbacks.draw
+	app.shutdown = callbacks.shutdown
 	app.userdata = userdata
-	return ui_gfx.app_init(&app.inner, config, {ui = app_draw, shutdown = app_shutdown}, app)
+	if gfx_context == nil {
+		return ui_gfx.app_init(
+			&app.inner,
+			to_app_config(config),
+			{ui = app_draw, shutdown = app_shutdown},
+			app,
+		)
+	}
+	return ui_gfx.app_init_context(
+		&app.inner,
+		gfx_context,
+		to_app_config(config),
+		{ui = app_draw, shutdown = app_shutdown},
+		app,
+	)
 }
 
 Start :: proc(app: ^App) -> bool {
@@ -37,7 +64,12 @@ Run :: proc(app: ^App, config: Config, draw: Draw_Proc, userdata: rawptr = nil) 
 	assert(draw != nil, "Fit.Run: nil draw callback")
 	app.draw = draw
 	app.userdata = userdata
-	return ui_gfx.app_run(&app.inner, config, {ui = app_draw, shutdown = app_shutdown}, app)
+	return ui_gfx.app_run(
+		&app.inner,
+		to_app_config(config),
+		{ui = app_draw, shutdown = app_shutdown},
+		app,
+	)
 }
 
 Set_Theme :: proc(app: ^App, theme: ui.Theme) {
@@ -48,6 +80,21 @@ Set_Theme :: proc(app: ^App, theme: ui.Theme) {
 Set_Scale :: proc(app: ^App, scale: f32) {
 	assert(app != nil, "Fit.Set_Scale: nil app")
 	ui_gfx.session_set_user_scale(&app.inner.session, scale)
+}
+
+Get_State :: proc(app: ^App) -> State {
+	assert(app != nil, "Fit.Get_State: nil app")
+	return State(app.inner.state)
+}
+
+Screen_Rect :: proc(app: ^App) -> Rect {
+	assert(app != nil, "Fit.Screen_Rect: nil app")
+	return ui_gfx.app_screen_rect(&app.inner)
+}
+
+Clear_Color :: proc(app: ^App) -> gfx.Color {
+	assert(app != nil, "Fit.Clear_Color: nil app")
+	return ui_gfx.app_clear_color(&app.inner)
 }
 
 Dark_Theme :: ui.theme_dark
@@ -74,6 +121,8 @@ app_shutdown :: proc(inner: ^ui_gfx.App, userdata: rawptr) {
 	assert(inner != nil && userdata != nil, "fit app: invalid shutdown")
 	app := cast(^App)userdata
 	assert(!app.builder.bound, "fit app: builder still bound")
+	if app.shutdown != nil do app.shutdown(app, app.userdata)
 	app.draw = nil
+	app.shutdown = nil
 	app.userdata = nil
 }

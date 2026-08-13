@@ -27,7 +27,7 @@
 package main
 
 import "core:fmt"
-import "ingot:ui"
+import ui "ingot:fit"
 
 // Column geometry in design units. Everything horizontal is expressed against
 // these so the page has one measure rather than per-section widths.
@@ -336,7 +336,7 @@ draw_surface_states :: proc(page: ^Page) {
 		ui.text(page.frame, fmt.tprint(state), x, head.y, .Note, .Muted)
 	}
 
-	for surface in ui.Surface {
+	for surface in ui.Surface_Kind {
 		row := page_rows(page, 1)
 		ui.text_truncated(
 			page.frame,
@@ -365,7 +365,7 @@ draw_surface_states :: proc(page: ^Page) {
 draw_state_cell :: proc(
 	frame: ^ui.Ui_Frame,
 	cell: ui.Rectangle,
-	surface: ui.Surface,
+	surface: ui.Surface_Kind,
 	state: ui.Visual_State,
 ) {
 	assert(frame != nil, "draw_state_cell: nil frame")

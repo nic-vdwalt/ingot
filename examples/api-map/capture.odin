@@ -18,8 +18,8 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 import rl "ingot:gfx"
-import "ingot:ui"
-import "ingot:ui_gfx"
+import ui "ingot:fit"
+import ui_gfx "ingot:fit"
 
 // Imports are used only under `when MAP_CAPTURE`; anchor them for normal
 // builds, matching examples/gallery/capture.odin.

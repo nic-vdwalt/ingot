@@ -6,7 +6,7 @@ import "ingot:ui_gfx"
 
 Session_Init :: proc(session: ^Session, config: Session_Config = {}) {
 	assert(session != nil && !session.inner.initialized, "Fit.Session_Init: invalid session")
-	ui_gfx.session_init(&session.inner, config)
+	ui_gfx.session_init(&session.inner, to_session_config(config))
 }
 
 Session_Begin :: proc(session: ^Session) -> (^Builder, bool) {
@@ -29,6 +29,20 @@ Session_End :: proc(session: ^Session) {
 	builder_close(&session.builder)
 	ui_gfx.session_present_frame(&session.frame)
 	session.open = false
+}
+
+Session_Draw :: proc(
+	session: ^Session,
+	draw: Session_Draw_Proc,
+	userdata: rawptr = nil,
+) -> bool {
+	assert(session != nil && session.inner.initialized, "Fit.Session_Draw: invalid session")
+	assert(draw != nil, "Fit.Session_Draw: nil draw callback")
+	builder, acquired := Session_Begin(session)
+	if !acquired do return false
+	draw(builder, userdata)
+	Session_End(session)
+	return true
 }
 
 Session_Destroy :: proc(session: ^Session) {

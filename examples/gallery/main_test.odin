@@ -2,7 +2,7 @@
 package main
 
 import "core:testing"
-import "ingot:ui"
+import ui "ingot:fit"
 
 @(test)
 nav_strip_respects_scaled_width_and_sidebar_height :: proc(t: ^testing.T) {

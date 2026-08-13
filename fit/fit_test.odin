@@ -11,12 +11,8 @@ Fit_Test_Counts :: struct {
 }
 
 @(private = "file")
-fit_test_measure :: proc(
-	root: ^ui.Ui,
-	constraints: ui.Intrinsic_Constraints,
-	userdata: rawptr,
-) -> Size {
-	assert(root != nil && userdata != nil, "fit test measure: invalid argument")
+fit_test_measure :: proc(constraints: Constraints, userdata: rawptr) -> Size {
+	assert(userdata != nil, "fit test measure: invalid argument")
 	assert(constraints.max_w >= 0 && constraints.max_h >= 0, "fit test measure: invalid bounds")
 	counts := cast(^Fit_Test_Counts)userdata
 	counts.measure += 1
@@ -24,8 +20,8 @@ fit_test_measure :: proc(
 }
 
 @(private = "file")
-fit_test_render :: proc(root: ^ui.Ui, rect: Rect, userdata: rawptr) -> bool {
-	assert(root != nil && userdata != nil, "fit test render: invalid argument")
+fit_test_render :: proc(surface: ^Surface, rect: Rect, userdata: rawptr) -> bool {
+	assert(surface != nil && userdata != nil, "fit test render: invalid argument")
 	assert(rect.w >= 0 && rect.h >= 0, "fit test render: invalid rect")
 	counts := cast(^Fit_Test_Counts)userdata
 	counts.render += 1

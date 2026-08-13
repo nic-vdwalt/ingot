@@ -6,8 +6,8 @@
 //	odin run examples/chart_demo -collection:ingot=.
 package main
 
-import "ingot:ui"
-import "ingot:ui_gfx"
+import ui "ingot:fit"
+import ui_gfx "ingot:fit"
 
 State :: struct {
 	form:       ui.Ui,
@@ -19,7 +19,7 @@ State :: struct {
 state := State {
 	dark = true,
 }
-app: ui_gfx.App
+app: ui_gfx.Host_App
 
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
 costs := [12]f32{8.1, 8.4, 9.0, 9.7, 10.2, 11.5, 11.1, 12.4, 12.0, 13.6, 13.1, 14.0}
@@ -62,7 +62,7 @@ main :: proc() {
 	)
 }
 
-frame :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
+frame :: proc(app: ^ui_gfx.Host_App, form: ^ui.Ui, userdata: rawptr) {
 	data := cast(^State)userdata
 	ui.padding(form, .LG)
 	ui.flex_row_begin(form, 36, {ui.grow(), ui.fit(132)}, gap = .MD)

@@ -98,6 +98,17 @@ class ConsumerPolicyTests(unittest.TestCase):
         self.assertTrue(any("retired UI API" in failure for failure in failures))
         self.assertTrue(any("retired graphics API" in failure for failure in failures))
 
+    def test_repository_examples_reject_internal_ui_imports(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "ui").mkdir()
+            examples = root / "examples"
+            examples.mkdir()
+            (examples / "main.odin").write_text('package main\nimport "ingot:ui_gfx"\n')
+            failures = policy.check(root)
+        self.assertTrue(any("examples/main.odin" in failure for failure in failures))
+        self.assertTrue(any("internal UI import" in failure for failure in failures))
+
 
 if __name__ == "__main__":
     unittest.main()

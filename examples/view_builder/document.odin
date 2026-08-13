@@ -7,7 +7,7 @@
 package main
 
 import "core:fmt"
-import "ingot:ui"
+import ui "ingot:fit"
 import "ingot:view"
 
 // seed_document gives the builder something to look at on first run. It is the
