@@ -18,6 +18,34 @@ w_mono :: proc(text: cstring, size: i32) -> i32 {
 }
 
 @(test)
+button_spec_and_facade_share_geometry :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 200, 100})
+	spec := button_spec(&u, id(&u, "save"), "Save")
+	size := button_spec_size(&u, spec)
+	before := remaining_rect(&u)
+	_ = button(&u, "legacy", "Save")
+	after := remaining_rect(&u)
+	end(&u)
+	testing.expect_value(t, size.w, button_fit_w_frame(&frame, "Save"))
+	testing.expect_value(t, after.y - before.y, size.h)
+}
+
+@(test)
 input_undo_cap_evicts_oldest :: proc(t: ^testing.T) {
 	u: Input_Undo
 	defer input_undo_destroy(&u)
