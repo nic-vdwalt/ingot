@@ -10,13 +10,19 @@ Surface_Frame :: proc(surface: ^Surface) -> rawptr {
 
 Surface_Viewport :: proc(surface: ^Surface) -> Rect {
 	assert(surface != nil && surface.inner != nil, "Fit.Surface_Viewport: invalid surface")
-	assert(surface.inner.open && surface.inner.frame != nil, "Fit.Surface_Viewport: closed surface")
+	assert(
+		surface.inner.open && surface.inner.frame != nil,
+		"Fit.Surface_Viewport: closed surface",
+	)
 	return ui.frame_viewport(surface.inner.frame)
 }
 
 Surface_Pane_Origin :: proc(surface: ^Surface) -> ui.Vector2 {
 	assert(surface != nil && surface.inner != nil, "Fit.Surface_Pane_Origin: invalid surface")
-	assert(surface.inner.open && surface.inner.frame != nil, "Fit.Surface_Pane_Origin: closed surface")
+	assert(
+		surface.inner.open && surface.inner.frame != nil,
+		"Fit.Surface_Pane_Origin: closed surface",
+	)
 	return ui.frame_pane_origin(surface.inner.frame)
 }
 

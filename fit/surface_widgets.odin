@@ -50,7 +50,10 @@ Surface_Dropdown :: proc(
 	a11y_label: string = "Dropdown",
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != ui.WIDGET_ID_NONE && selected != nil, "Fit.Surface_Dropdown: invalid argument")
+	assert(
+		widget != ui.WIDGET_ID_NONE && selected != nil,
+		"Fit.Surface_Dropdown: invalid argument",
+	)
 	assert(state != nil && len(items) > 0, "Fit.Surface_Dropdown: invalid state")
 	return ui.dropdown_at(
 		u.frame,
@@ -76,7 +79,10 @@ Surface_Combobox :: proc(
 	a11y_label: string = "Combobox",
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != ui.WIDGET_ID_NONE && selected != nil, "Fit.Surface_Combobox: invalid argument")
+	assert(
+		widget != ui.WIDGET_ID_NONE && selected != nil,
+		"Fit.Surface_Combobox: invalid argument",
+	)
 	assert(state != nil, "Fit.Surface_Combobox: nil state")
 	return ui.combobox_at(
 		u.frame,
@@ -102,7 +108,10 @@ Surface_Date_Picker :: proc(
 	a11y_label: string = "Date",
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != ui.WIDGET_ID_NONE && value != nil, "Fit.Surface_Date_Picker: invalid argument")
+	assert(
+		widget != ui.WIDGET_ID_NONE && value != nil,
+		"Fit.Surface_Date_Picker: invalid argument",
+	)
 	assert(state != nil, "Fit.Surface_Date_Picker: nil state")
 	return ui.date_picker_at(
 		u.frame,

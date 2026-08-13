@@ -1,9 +1,9 @@
 package main
 
 import "core:fmt"
-import gfx "ingot:gfx"
 import ui "ingot:fit"
 import ui_gfx "ingot:fit"
+import gfx "ingot:gfx"
 
 FIXTURE_FRAME_LIMIT :: 120
 

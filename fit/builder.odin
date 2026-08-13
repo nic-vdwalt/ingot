@@ -169,7 +169,9 @@ custom_render_bridge :: proc(root: ^ui.Ui, rect: Rect, userdata: rawptr) -> bool
 	assert(root != nil && userdata != nil, "Fit.Custom: invalid render bridge")
 	spec := cast(^Custom_Spec)userdata
 	assert(spec.render != nil, "Fit.Custom: nil render callback")
-	surface := Surface{inner = root}
+	surface := Surface {
+		inner = root,
+	}
 	return spec.render(&surface, rect, spec.userdata)
 }
 

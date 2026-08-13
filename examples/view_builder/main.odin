@@ -26,10 +26,10 @@
 package main
 
 import "core:fmt"
-import rl "ingot:gfx"
-import "ingot:prefs"
 import ui "ingot:fit"
 import ui_gfx "ingot:fit"
+import rl "ingot:gfx"
+import "ingot:prefs"
 import "ingot:view"
 
 APP_NAME :: "ingot-view-builder"

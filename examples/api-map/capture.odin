@@ -17,9 +17,9 @@ package main
 import "core:fmt"
 import "core:os"
 import "core:strings"
-import rl "ingot:gfx"
 import ui "ingot:fit"
 import ui_gfx "ingot:fit"
+import rl "ingot:gfx"
 
 // Imports are used only under `when MAP_CAPTURE`; anchor them for normal
 // builds, matching examples/gallery/capture.odin.

@@ -2,9 +2,9 @@ package main
 
 import "core:fmt"
 import "core:strings"
-import rl "ingot:gfx"
 import ui "ingot:fit"
 import ui_gfx "ingot:fit"
+import rl "ingot:gfx"
 
 FONT_TTF := #load("../../assets/fonts/JetBrainsMono-Regular.ttf")
 FIXTURE_CPS := [?]rune {
