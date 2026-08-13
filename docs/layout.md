@@ -4,6 +4,12 @@
 open `^fit.Builder`, declares one root container, and balances every nested
 container with `fit.End`.
 
+`Row_With`, `Column_With`, `Flow_With`, `Grid_With`, and `Attachment_With` open
+one container, invoke one caller procedure immediately, verify its nested
+containers are balanced, and close the container. The procedure and userdata
+are never retained. The manual open/`End` form remains available for dynamic
+construction.
+
 ```odin
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	fit.Column(builder, {gap = .SM, padding = .LG})
@@ -64,14 +70,20 @@ aspect ratio. Wrapped labels derive height after width assignment.
 
 ## Leaves
 
-`Label` emits semantic text. `Button` accepts stable string, `u64`, or explicit
-widget keys and can write activation into caller-owned `^bool` output. Several
-buttons may share one output; results are OR-combined after resetting the output
-for the current render.
+`Label` emits semantic text. `Button`, `Checkbox`, `Radio`, and `Slider` accept
+stable string, `u64`, or explicit widget keys. Controls keep values in
+caller-owned state and can publish activation or change into caller-owned
+`^bool` output. Several leaves may share one output; results are OR-combined
+after resetting the output for the current render.
 
 `Custom` accepts bounded measure and render callbacks. Borrowed strings,
-userdata, callbacks, and output pointers must remain valid until the builder is
-rendered.
+userdata, callbacks, state, and output pointers must remain valid until the
+builder is rendered.
+
+`Scope` composes an explicit string or nonzero integer component key around one
+immediately invoked procedure. `Id` derives a current-frame `Widget_Id` from the
+active scope. Neither API stores widget behavior; control values and interaction
+state remain caller-owned.
 
 ## Measurement and placement
 

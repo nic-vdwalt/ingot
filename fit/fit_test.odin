@@ -183,7 +183,11 @@ fit_native_controls_measure_and_render_once :: proc(t: ^testing.T) {
 	defer ui.ui_frame_end(&frame)
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
-	state := Fit_Test_Control_State{selected = 1, value = 5, changed = true}
+	state := Fit_Test_Control_State {
+		selected = 1,
+		value    = 5,
+		changed  = true,
+	}
 	Column(&builder)
 	fit_test_controls(&builder, &state)
 	End(&builder)
@@ -208,23 +212,18 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	reset_storage: proc(_: ^Builder) = Reset_Storage
 	storage_capacity: proc(_: ^Builder) -> int = Storage_Capacity
 	row_with: proc(
-		_: ^Builder,
-		_: Build_Proc,
-		_: rawptr,
-		_: Container_Options,
-		_: runtime.Source_Code_Location,
-	) = Row_With
+			_: ^Builder,
+			_: Build_Proc,
+			_: rawptr,
+			_: Container_Options,
+			_: runtime.Source_Code_Location,
+		) =
+		Row_With
 	id_string: proc(_: ^Builder, _: string) -> Widget_Id = Id
 	checkbox: proc(_: ^Builder, _: string, _: string, _: ^bool, _: Control_Options) = Checkbox
 	radio: proc(_: ^Builder, _: u64, _: string, _: ^i32, _: i32, _: Control_Options) = Radio
-	slider: proc(
-		_: ^Builder,
-		_: Widget_Id,
-		_: ^f32,
-		_, _, _: f32,
-		_: string,
-		_: Control_Options,
-	) = Slider
+	slider: proc(_: ^Builder, _: Widget_Id, _: ^f32, _, _, _: f32, _: string, _: Control_Options) =
+		Slider
 	testing.expect(t, draw != nil && run != nil)
 	testing.expect(t, button_string != nil && button_u64 != nil)
 	testing.expect(t, measure != nil && render_at != nil && session_draw != nil)

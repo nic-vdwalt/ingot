@@ -1,12 +1,11 @@
 {
   "gfx/accessibility_native.odin:_a11y_on_action": 1,
-  "gfx/api.odin:begin_frame": 1,
   "gfx/api.odin:key_down": 1,
   "gfx/api.odin:key_pressed": 1,
   "gfx/api.odin:measure_text": 1,
   "gfx/api.odin:mouse_position": 1,
+  "gfx/api_tests.odin:context_scope_nested_activation_restores_owner": 2,
   "gfx/api_tests.odin:context_scope_routes_convenience_queries_and_restores_default": 1,
-  "gfx/api_tests.odin:surface_routing_counters_balance_across_a_frame": 1,
   "gfx/context.odin:CloseWindow": 1,
   "gfx/context.odin:GetFPS": 1,
   "gfx/context.odin:GetFrameTime": 1,
@@ -74,6 +73,6 @@
   "ui_gfx/app.odin:app_init": 1,
   "ui_gfx/input.odin:capture_input": 1,
   "ui_gfx/platform.odin:apply_platform_output": 1,
-  "ui_gfx/session.odin:session_acquire_frame": 1,
+  "ui_gfx/session.odin:session_draw": 1,
   "ui_gfx/session.odin:session_init": 1
 }

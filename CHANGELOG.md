@@ -17,6 +17,13 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `fit.Row_With`, `Column_With`, `Flow_With`, `Grid_With`, and
+  `Attachment_With`: immediately invoked, source-located container helpers that
+  verify callback balance without retaining callbacks or component state.
+- `fit.Scope` and `fit.Id`: explicit bounded component identity composition at
+  the supported builder layer; source locations never participate in IDs.
+- Native `fit.Checkbox`, `fit.Radio`, and `fit.Slider` prepared leaves with
+  caller-owned values and deferred changed-output publication.
 - `fit.Set_Storage`, `fit.Reset_Storage`, and `fit.Storage_Capacity` expose
   caller-provided bounded builder storage up to 8,192 nodes without hidden
   allocation or global struct growth.

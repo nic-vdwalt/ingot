@@ -182,7 +182,10 @@ Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 
 Fit labels take semantic roles and ink tokens, containers use bounded tracks and
 spacing tokens, and interactive leaves take stable string, integer, or explicit
-widget keys. See [application shell](docs/application-shell.md) and
+widget keys. Checkbox, radio, and slider values remain caller-owned. Optional
+`*_With` helpers invoke component procedures immediately and auto-balance their
+own container without retaining callbacks. See
+[application shell](docs/application-shell.md) and
 [layout conventions](docs/layout.md).
 
 `rl.run` blocks on native targets and installs the animation-frame callback on
