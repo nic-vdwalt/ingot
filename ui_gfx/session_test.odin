@@ -38,7 +38,6 @@ test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
 	testing.expect_value(t, session.adapter.font_dpi, f32(1))
 	testing.expect(t, !session.frame_open)
 	testing.expect(t, !session.graphics_open)
-	testing.expect_value(t, session.frame_generation, u64(0))
 	testing.expect_value(t, session.config, config)
 
 	session_destroy(session)
@@ -48,7 +47,6 @@ test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
 	testing.expect(t, !session.adapter.initialized)
 	testing.expect(t, session.adapter.gfx_context == nil)
 	testing.expect(t, !session.adapter.graphics_open)
-	testing.expect_value(t, session.frame_generation, u64(0))
 }
 
 @(test)
@@ -81,13 +79,18 @@ test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_session_frame_api_compiles :: proc(t: ^testing.T) {
-	acquire: proc(session: ^Session) -> (frame: Session_Frame, acquired: bool) =
-		session_acquire_frame
-	present: proc(frame: ^Session_Frame) = session_present_frame
+test_session_draw_api_compiles :: proc(t: ^testing.T) {
+	draw: proc(session: ^Session, callback: Session_Draw_Proc, userdata: rawptr) -> bool = session_draw
+	callback: Session_Draw_Proc = test_session_draw_callback
 
-	testing.expect(t, acquire != nil)
-	testing.expect(t, present != nil)
+	testing.expect(t, draw != nil)
+	testing.expect(t, callback != nil)
+}
+
+@(private = "file")
+test_session_draw_callback :: proc(session: ^Session, frame: ^ui.Ui_Frame, userdata: rawptr) {
+	assert(session != nil && frame != nil, "test_session_draw_callback: invalid frame")
+	_ = userdata
 }
 
 @(test)
