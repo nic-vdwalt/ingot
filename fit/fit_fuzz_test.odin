@@ -126,15 +126,7 @@ fit_fuzz_leaf :: proc(
 	case 4:
 		Radio(builder, key + 1, "Fuzz radio", &selections[index], i32(index))
 	case 5:
-		Slider(
-			builder,
-			key + 1,
-			&values[index],
-			0,
-			f32(FIT_FUZZ_NODE_LIMIT),
-			1,
-			"Fuzz slider",
-		)
+		Slider(builder, key + 1, &values[index], 0, f32(FIT_FUZZ_NODE_LIMIT), 1, "Fuzz slider")
 	}
 }
 

@@ -1,6 +1,5 @@
 {
-  "gfx/api_tests.odin:frame_validation_rejects_inactive_frame": 9,
-  "gfx/api_tests.odin:frame_validation_rejects_stale_generation": 9,
+  "gfx/api_tests.odin:context_scope_nested_activation_restores_owner": 5,
   "gfx/batch.odin:MatrixModePop": 6,
   "gfx/batch.odin:MatrixModePush": 3,
   "gfx/batch.odin:MatrixModeTranslate": 3,
@@ -28,7 +27,6 @@
   "gfx/context.odin:FlushBatch": 3,
   "gfx/context.odin:SetExitKey": 1,
   "gfx/context.odin:_active_pass_begun": 4,
-  "gfx/context.odin:_assert_surface_not_routed_elsewhere": 2,
   "gfx/context.odin:_attachment_px": 5,
   "gfx/context.odin:_close_window_context": 28,
   "gfx/context.odin:_context_activate": 2,

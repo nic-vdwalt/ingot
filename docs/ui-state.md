@@ -205,7 +205,10 @@ record's ID for a different control.
 
 `Widget_Id` is the canonical identity for conditional controls, collections,
 and reusable components. A `Ui` owns a bounded `Id_Context`; scopes compose
-explicit component and domain identity without retaining widget state.
+explicit component and domain identity without retaining widget state. At the
+supported `ingot:fit` layer, `fit.Scope` composes an explicit component or
+domain key and `fit.Id` derives a control identity inside it. Source locations
+improve balance assertions only; they are never hashed into identity.
 
 ```odin
 ui.scope_begin(&form, "settings")

@@ -12,4 +12,6 @@ The supported UI baseline is one import and one declaration model.
 Application code does not own `Ui_Runtime`, `Ui_Frame`, `Ui_Output`, `Adapter`,
 `Prepared_Ui`, or graphics `Frame` values. Compile coverage for the public UI
 contract lives in `fit/fit_test.odin`; renderer-independent engine behavior
-remains covered by `ui` tests.
+remains covered by `ui` tests. Scoped composition, explicit identity scopes,
+and native controls use the same borrowed `fit.Builder`; they do not establish
+another lifecycle or declaration object.

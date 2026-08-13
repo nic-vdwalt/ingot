@@ -53,9 +53,11 @@ Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 
 The builder is bounded and immediate. `Row`, `Column`, `Flow`, `Grid`, and
 `Attachment` open containers; `End` closes one container. `Label`, `Button`,
-and `Custom` emit leaves. `Render` consumes the declaration synchronously.
-`Measure` plus `Render_At` supports caller-owned placement without introducing
-a retained widget tree.
+`Checkbox`, `Radio`, `Slider`, and `Custom` emit leaves. The additive `*_With`
+helpers invoke one child procedure immediately and auto-close their own
+container; `Scope` provides explicit component identity. `Render` consumes the
+declaration synchronously. `Measure` plus `Render_At` supports caller-owned
+placement without introducing a retained widget tree.
 
 For an existing raylib loop, use `fit.Session`:
 

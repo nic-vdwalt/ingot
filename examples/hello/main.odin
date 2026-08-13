@@ -6,6 +6,7 @@ import rl "ingot:gfx"
 State :: struct {
 	showing: bool,
 	toggle:  bool,
+	enabled: bool,
 	items:   [3]u64,
 }
 
@@ -47,6 +48,7 @@ draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	fit.Label(builder, "Controls", {role = .Label, track = fit.Grow()})
 	fit.Button(builder, "toggle", "Toggle list", &data.toggle)
 	fit.End(builder)
+	fit.Checkbox(builder, "enabled", "Enabled", &data.enabled)
 	if data.showing {
 		fit.Column(builder, {gap = .XS})
 		for item in data.items do fit.Button(builder, item, "Stable item")
