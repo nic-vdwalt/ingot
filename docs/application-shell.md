@@ -1,18 +1,15 @@
-# Application shell
+# Fit application shell
 
-`ui_gfx.App` is the common path for a one-window application. The caller owns the
-`App`, application state, and every persistent widget component. `app_run` uses
-the default graphics context and owns `Session` and frame ordering. Native hosts
-that need several windows use `app_init_context`, `app_start`, one bounded
-`app_tick` per host iteration, `app_stop`, and `app_destroy` with caller-owned
-contexts. Browser hosting remains one App and one canvas.
+`fit.App` is the supported one-window UI host. The caller owns the `App`,
+application state, and persistent widget state. `fit.Run` owns window creation,
+input capture, UI frame lifetime, layout rendering, accessibility publication,
+graphics submission, frame scratch reset, and teardown ordering.
 
 ```odin
-app: ui_gfx.App
-state: State
+app: fit.App
 
 main :: proc() {
-	_ = ui_gfx.app_run(
+	_ = fit.Run(
 		&app,
 		{
 			width = 960,
@@ -22,106 +19,46 @@ main :: proc() {
 			target_fps = 60,
 			session = {semantics_enabled = true},
 		},
-		{ui = draw, shutdown = shutdown},
-		&state,
+		Draw,
 	)
 }
 ```
 
-`App_Config.frame_pacing` makes pacing policy explicit. `.Fixed` is the default
-and uses `target_fps`, preserving existing configurations. `.Uncapped` disables
-native sleep pacing. `.Monitor_Refresh` follows the display containing the
-largest area of that App's window and re-evaluates it on each bounded tick; a
-positive `target_fps` is the fallback when refresh information is unavailable.
-Browser Apps ignore native sleep pacing because `requestAnimationFrame` owns
-the callback rate and follows the browser's current display policy.
+`Draw` receives an open `fit.Builder`. It must declare exactly one balanced root
+container. The shell renders that root and closes the hidden UI root after the
+callback returns.
 
-The default UI callback receives the explicit app and the shell-owned open
-`Ui`; the shell closes it after the callback. Use a `frame` callback instead
-when the application owns explicit geometry or mixes direct graphics work. A
-callback set must provide exactly one of `ui` or `frame`. The shutdown callback
-runs while the graphics context is valid, so it must destroy caller-owned
-textures, input boxes, builders, and components there.
+For a manually coordinated native host, use `fit.Init`, `fit.Start`, one bounded
+`fit.Tick` per host iteration, `fit.Stop`, and `fit.Destroy`. `fit.Set_Theme` and
+`fit.Set_Scale` update shell-owned runtime policy without exposing the runtime.
 
-On Windows, accepting an OS close request hides the window immediately. On
-macOS and Linux, native window-manager behavior remains unchanged. On every
-native target, `app_run` remains blocked while shutdown and framework teardown
-run synchronously. Shutdown code retains a valid graphics context but must not
-expect another frame. The native window is destroyed after cleanup. On web it
-installs the browser callback and returns; therefore `App` and userdata
-must have static or otherwise retained lifetime. A managed web host remains
-responsible for stopping the module before replacement.
+## Existing raylib loops
 
-## Choosing the integration level
-
-| Need | API |
-|---|---|
-| Typical one-window app | `ui_gfx.App` |
-| Custom pacing, embedding, or multiple contexts | `ui_gfx.Session` |
-| Renderer/platform bridge implementation | backend `ui_gfx.Adapter` procedures |
-| Forms and panels | Flow UI through `ui.Ui` |
-| Canvas inside flow layout | `canvas` callback plus `*_at` inside it |
-| Manual canvas, scrolling, and overlays | `canvas_begin`/`canvas_end` and explicit geometry |
-| Interactive facade widget | stable string/u64 key or explicit `Widget_Id` |
-
-`Session` is the supported custom-loop owner. It contains `Ui_Runtime`, the
-reusable `Ui_Frame`, the captured `Ui_Input`, `Ui_Output`, and the backend
-adapter. Applications should not declare those values separately.
+`fit.Session` adds the same builder to the default raylib context without
+exposing graphics frames, UI frames, adapters, input snapshots, or output
+buffers.
 
 ```odin
-session: ui_gfx.Session
-ui_gfx.session_init(&session, {semantics_enabled = true})
-defer ui_gfx.session_destroy(&session)
+session: fit.Session
 
-for !gfx.WindowShouldClose() {
-	frame, acquired := ui_gfx.session_acquire_frame(&session)
-	if !acquired do continue
-	gfx.clear_frame(frame.gfx, background)
-	draw(frame.ui)
-	ui_gfx.session_present_frame(&frame)
+Frame :: proc() {
+	builder, acquired := fit.Session_Begin(&session)
+	if !acquired do return
+	fit.Column(builder)
+	fit.Label(builder, "Custom loop")
+	fit.End(builder)
+	fit.Session_End(&session)
 }
 ```
 
-The same custom-host lifecycle is executable in
-[`examples/session_loop`](../examples/session_loop/main.odin).
+`Session_Begin` may report that no frame was acquired. On success, the returned
+builder is borrowed until `Session_End`. `Session_End` renders the balanced root,
+finalizes semantics and platform output, submits graphics, invalidates the frame,
+and resets temporary storage.
 
-`Session_Frame` is a borrowed, single-frame capability. Its `ui` and `gfx`
-pointers are valid only until `session_present_frame` returns. Acquisition can
-fail as an operating condition and leaves the session unopened; the host must
-handle the returned `acquired` value. Presentation finalizes UI and semantics,
-submits graphics, invalidates the capability, and resets temporary frame
-allocations. Retaining, copying, nesting, or presenting a stale capability is a
-programmer error guarded by ownership and generation assertions.
+## Internal ownership
 
-Use `session_begin_frame_context` and `session_end_frame_context` only when a
-host deliberately needs to separate UI and graphics timing, complete UI-only
-frames, or control submission itself. Those calls retain their existing
-contract and require the host to submit graphics and reset temporary storage.
-
-Use `session_runtime`, `session_frame`, `session_input`, and `session_output` only
-when host policy needs those values. Use `session_set_user_scale` instead of
-mutating runtime scale state independently. Direct `adapter_*` lifecycle calls
-are reserved for backend implementation and tests.
-
-`App_Session_Config`, `App_Session`, and `app_session_*` are compatibility
-aliases introduced before `v0.1.1`. They remain available through `v0.2.x` and
-are removed in `v0.3.0`, providing one minor-release migration window. New code
-uses `Session_Config`, `Session`, and `session_*`.
-
-## Ownership and teardown
-
-The shell enforces this order:
-
-1. Acquire graphics and bind the UI session through `session_acquire_frame`.
-2. Expose the borrowed `Session_Frame` capability to the host.
-3. Invoke application drawing.
-4. Finalize semantics and replay UI output through `session_present_frame`.
-5. Submit graphics and invalidate the capability.
-6. Reset frame-temporary allocations.
-7. On a Windows close request, hide the native window.
-8. Invoke caller cleanup while the graphics context remains valid.
-9. Destroy UI frame, adapter, and runtime through `session_destroy`.
-10. Close the graphics context and destroy the native window.
-
-No active application or frame is exposed through `ui`; callbacks always receive
-their owners explicitly.
+The implementation still separates application policy, UI session state, and
+the renderer/platform adapter. Those boundaries keep headless UI tests, input
+snapshotting, accessibility, text measurement, and replay independently
+verifiable. They are not separate consumer integration levels.

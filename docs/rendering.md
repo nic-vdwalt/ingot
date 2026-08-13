@@ -258,22 +258,12 @@ remain compatibility surfaces. In particular, `Vector2`, `Vector3`, `Vector4`,
 `Color`, `Rectangle`, `Texture`, `Font`, `RenderTexture`, and `Mesh` retain their
 fields and layout.
 
-The additive Odin-style aliases preserve those layouts:
-
-```odin
-Vec2 :: Vector2
-Vec3 :: Vector3
-RGBA :: Color
-Rect :: Rectangle
-```
-
-The additive frame API returns a context-, epoch-, and generation-checked
-`Frame`; stale, cross-context, and double-ended handles are rejected. Explicit
-`Context` procedures own window, input, resource, and host integration. Each
-context owns an independent renderer while the PascalCase API remains a thin
-default-context migration facade. New Ingot-native code uses `Frame` and
-`Context`; no deprecation of the documented PascalCase subset is currently
-implied.
+The PascalCase API is the supported graphics vocabulary. The lower-case
+`Frame`/`Context` drawing wrappers remain temporarily available to internal
+multi-context and UI replay code while those paths move to direct context
+routing; application code must not adopt them. Removing the duplicate surface
+must preserve independent renderer ownership and may not route multi-context
+drawing through an ambiguous global context.
 
 ## Event-driven frame scheduling
 

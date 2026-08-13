@@ -19,7 +19,18 @@ paint_storage_stats_match_bounded_representation :: proc(t: ^testing.T) {
 fit_storage_stats_include_transition_state :: proc(t: ^testing.T) {
 	stats := fit_storage_stats()
 	testing.expect_value(t, stats.prepared_node_capacity, i32(MAX_PREPARED_NODES))
+	testing.expect_value(t, stats.prepared_node_hard_max, i32(MAX_PREPARED_NODES_HARD))
+	testing.expect_value(t, stats.prepared_node_bytes, u64(size_of(Prepared_Node)))
+	testing.expect_value(t, stats.fit_output_bytes, u64(size_of(^bool)))
+	testing.expect_value(
+		t,
+		stats.caller_storage_bytes,
+		u64(MAX_PREPARED_NODES) * (u64(size_of(Prepared_Node)) + u64(size_of(^bool))),
+	)
 	testing.expect_value(t, stats.transition_rect_bytes, u64(size_of(Transition_Rect_State)))
+	large := fit_storage_stats(MAX_PREPARED_NODES + 64)
+	testing.expect_value(t, large.prepared_node_capacity, i32(MAX_PREPARED_NODES + 64))
+	testing.expect(t, large.caller_storage_bytes > stats.caller_storage_bytes)
 }
 
 @(test)

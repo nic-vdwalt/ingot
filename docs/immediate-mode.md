@@ -162,37 +162,32 @@ names because their geometry is application behavior. The explicit tier uses a
 caller ownership.
 
 `Prepared_Ui` is a bounded current-frame description, not a persistent widget
-model. Application code rebuilds it from current state, owns its storage, and
-does not synchronize it across frames. The concise `prepared_row` and
+model. Application code rebuilds it from current state, owns either default
+inline or explicitly bound fixed storage, and does not synchronize it across
+frames. Selected storage never grows implicitly. The concise `prepared_row` and
 `prepared_column` facades borrow the active `Ui` only until `prepared_end`; that
 binding adds no framework-owned state or cross-frame synchronization. Its
 measurement procedures derive only geometry; interaction, focus, semantics, and
 paint are emitted once when the prepared leaves render. Handles identify results
 inside that one description and must not be retained as widget identity.
 
-`Fit_Node` is a borrowed value facade over the same prepared engine. Statically
-written children may use an inferred `{ ... }` child literal; runtime-built
-hierarchies may pass `[]Fit_Node` slices. Both forms are current-frame data:
-application code rebuilds the tree from current state, `fit_tree` consumes it
-synchronously, and no node, slice, callback, userdata, or activation pointer is
-retained.
-
-`Fit_Builder` is the caller-owned direct-emission facade for dynamic trees.
-`fit_begin` resets its fixed inline storage, ordinary `if` and `for` statements
-emit children through `fit_builder_*`, balanced `fit_end` calls close containers,
-and `fit_render` consumes the result synchronously. There is no ambient current
-builder, retained widget tree, callback capture, invalidation, or cross-frame
-synchronization. Emission derives only current-frame geometry; interaction,
-focus, semantics, and paint still execute exactly once during render. All paths
-use named fixed bounds and iterative layout.
+`fit.Builder` is the supported caller-facing direct-emission API. The host opens
+it over a hidden UI root; ordinary `if` and `for` statements emit children,
+balanced `End` calls close containers, and the host consumes the result
+synchronously. There is no ambient current builder, retained widget tree,
+callback capture, invalidation, or cross-frame synchronization. Emission derives
+only current-frame geometry; interaction, focus, semantics, and paint execute
+exactly once during render. All paths use named fixed bounds and iterative
+layout.
 
 Reusing a builder resets logical counts and every previously used output slot;
-unused capacity is not scanned or retained as active state. Flow, Grid, two-axis
+unused selected capacity is not scanned or retained as active state. Externally
+backed state must not be copied or rebound while active. Flow, Grid, two-axis
 sizing, aspect ratio, clipping, and decoration remain current-frame description
 data. They add no recursion, unbounded allocation, or cross-frame hierarchy.
-Separated measurement and `fit_render_at` consume caller-owned storage
-synchronously. Borrowed strings, userdata, and activation destinations remain
-valid through rendering, where each leaf executes exactly once.
+Separated `Measure` and `Render_At` consume caller-owned storage synchronously.
+Borrowed strings, userdata, and activation destinations remain valid through
+rendering, where each leaf executes exactly once.
 
 ## From immediate-mode library to app framework
 

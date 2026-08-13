@@ -94,9 +94,10 @@ harnesses.
 | `ingot:procgen` | Seeded, bounded terrain, biome, vegetation, and building generation |
 | `ingot:scene` | Renderer-independent objects, visibility, LOD, sorting, and bounded draw lists |
 | `ingot:scene_gfx` | GPU residency and replay bridge for `scene` draw lists |
-| `ingot:gfx` | Windowing, WebGPU 2D/3D rendering, textured and instanced meshes, configurable lights, frustum queries, shapes, text, input, audio, cameras, and a raylib/rlgl-shaped API |
-| `ingot:ui` | Renderer-independent immediate-mode widgets, layout, paint output, input snapshots, accessibility semantics, and themes |
-| `ingot:ui_gfx` | Adapter that captures `gfx` input, replays UI paint output, and applies platform output |
+| `ingot:gfx` | Supported graphics API: raylib-compatible windowing, WebGPU rendering, input, audio, cameras, and documented `rlgl` compatibility |
+| `ingot:fit` | Supported UI API: one bounded builder plus application and raylib-loop hosts |
+| `ingot:ui` | Internal renderer-independent UI engine, layout, paint, semantics, and themes |
+| `ingot:ui_gfx` | Internal graphics, platform, text, and accessibility bridge |
 | `ingot:prefs` | Native settings files and web `localStorage` behind one API |
 | `ingot:net` | Background HTTP and reconnecting verified `ws://`/`wss://` WebSockets |
 | `ingot:sys` | URLs, native file dialogs, and platform integration |
@@ -128,9 +129,8 @@ repository does not provide a cross toolchain. See
 [Testing Ingot](docs/testing.md#toolchain) for verification commands.
 
 ```odin
+import fit "ingot:fit"
 import rl "ingot:gfx"
-import ui "ingot:ui"
-import "ingot:ui_gfx"
 ```
 
 For editor support, tell [OLS](https://github.com/DanielGavin/ols) about the
@@ -153,71 +153,37 @@ generated deterministically by
 `odin run examples/api-map -collection:ingot=. -define:INGOT_MAP_CAPTURE=true`;
 `bash scripts/capture-media.sh` refreshes all README media the same way.
 
-For a new desktop tool, start with `ui_gfx.App` and the bare `ui.Ui` facade
-shown below. Native multi-window hosts can bind caller-owned contexts with
-`app_init_context` and drive one bounded `app_tick` per host iteration. Drop to
-explicit UI only where application behavior owns geometry or lifecycle. For an
-existing raylib application, begin with the documented `ingot:gfx` import
-migration and keep its graphics loop; add `ui_gfx.App` and the facade later only
-if the application needs Ingot widgets. See
-[Choosing an API layer](docs/api-layers.md) for the complete ownership map.
+New UI applications start with `fit.App` and `fit.Builder`. Existing raylib
+applications keep their PascalCase `ingot:gfx` loop and add `fit.Session` when
+they need UI. The renderer-independent UI runtime and graphics adapter remain
+internal implementation packages. See [Choosing an API layer](docs/api-layers.md).
 
 ## Quick start
 
 ```odin
 package main
 
-import rl "ingot:gfx"
-import ui "ingot:ui"
-import "ingot:ui_gfx"
+import fit "ingot:fit"
 
-App_Data :: struct {
-	continued: bool,
-}
-
-app: ui_gfx.App
-app_data: App_Data
+app: fit.App
+continued: bool
 
 main :: proc() {
-	flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}
-	when ODIN_OS == .Darwin do flags += {.WINDOW_HIGHDPI}
-	_ = ui_gfx.app_run(
-		&app,
-		{
-			width = 960,
-			height = 640,
-			title = "Ingot app",
-			flags = flags,
-			frame_pacing = .Monitor_Refresh,
-			target_fps = 60,
-			session = {semantics_enabled = true},
-		},
-		{ui = frame},
-		&app_data,
-	)
+	_ = fit.Run(&app, {width = 960, height = 640, title = "Ingot app"}, Draw)
 }
 
-frame :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
-	assert(app != nil && form != nil, "frame: invalid app or UI")
-	data := cast(^App_Data)userdata
-	ui.padding(form, .LG)
-	ui.label(form, "Hello from Ingot")
-	if ui.button(form, "continue", "Continue", ui.Button_Options{style = .Primary}) {
-		data.continued = true
-		rl.TraceLog(.INFO, "Continue pressed")
-	}
+Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	fit.Column(builder, {gap = .SM, padding = .LG})
+	fit.Label(builder, "Hello from Ingot")
+	fit.Button(builder, "continue", "Continue", &continued)
+	fit.End(builder)
 }
 ```
 
-Text takes a semantic *role* and *ink* rather than a raw size and color:
-`ui.text` and friends resolve `Text_Role` and `Ink` against the scaled metrics
-and active theme, with explicit `draw_text_frame`/`measure_text_frame` still
-available. Leaf widgets ship in two geometry shapes—the bare facade (`^Ui`,
-logical slot, stable key) and the explicit `*_at` form (`^Ui_Frame`,
-application-owned `Rect_I32`). See
-[application shell](docs/application-shell.md),
-[layout conventions](docs/layout.md), and
-[UI state and stable focus](docs/ui-state.md#widget-tiers).
+Fit labels take semantic roles and ink tokens, containers use bounded tracks and
+spacing tokens, and interactive leaves take stable string, integer, or explicit
+widget keys. See [application shell](docs/application-shell.md) and
+[layout conventions](docs/layout.md).
 
 `rl.run` blocks on native targets and installs the animation-frame callback on
 web, so state used by `frame` must outlive `main` on web; a managed web host

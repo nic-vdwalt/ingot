@@ -73,6 +73,12 @@ ADAPTER_LIFECYCLE = {
 }
 LEGACY_SESSION = re.compile(r"\b(?:App_Session(?:_Config)?|app_session_[a-z_0-9]+)\b")
 BINDING_IMPORT = re.compile(r'"ingot:(libvterm|pty|accesskit)"')
+INTERNAL_UI_IMPORT = re.compile(r'"ingot:(ui|ui_gfx)"')
+RETIRED_UI = re.compile(r"\b(?:Fit_Node|Fit_Prepared|fit_tree|fit_nodes|prepared_[a-z_0-9]+)\b")
+RETIRED_GFX = re.compile(
+    r"\b(?:begin_frame|context_begin_frame|end_frame|clear_frame|draw_rect|draw_circle|"
+    r"frame_draw_[a-z_0-9]+)\s*\("
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -195,7 +201,10 @@ def consumer_violations(consumer_roots: list[Path], binding_allow: set[Path], in
                 continue
             source = mask_source(path.read_text(encoding="utf-8"))
             failures.extend(_matches(source, adapter, "backend adapter call {name}; use Session", path, root))
-            failures.extend(_matches(source, LEGACY_SESSION, "legacy session API {name}; use Session", path, root))
+            failures.extend(_matches(source, LEGACY_SESSION, "legacy session API {name}; use fit.Session", path, root))
+            failures.extend(_matches(source, INTERNAL_UI_IMPORT, "internal UI import {name}; use ingot:fit", path, root))
+            failures.extend(_matches(source, RETIRED_UI, "retired UI API {name}; use fit.Builder", path, root))
+            failures.extend(_matches(source, RETIRED_GFX, "retired graphics API {name}; use PascalCase gfx", path, root))
             if resolved not in binding_allow:
                 failures.extend(
                     _matches(source, BINDING_IMPORT, "binding import {name}; use the higher-level package", path, root)

@@ -43,20 +43,29 @@ paint_storage_stats :: proc() -> Ui_Paint_Storage_Stats {
 
 Ui_Fit_Storage_Stats :: struct {
 	prepared_node_capacity: i32,
+	prepared_node_hard_max: i32,
 	direct_flex_capacity:   i32,
 	layout_depth_capacity:  i32,
 	prepared_node_bytes:    u64,
+	fit_output_bytes:       u64,
+	caller_storage_bytes:   u64,
 	prepared_bytes:         u64,
 	builder_bytes:          u64,
 	transition_rect_bytes:  u64,
 }
 
-fit_storage_stats :: proc() -> Ui_Fit_Storage_Stats {
+fit_storage_stats :: proc(capacity: i32 = MAX_PREPARED_NODES) -> Ui_Fit_Storage_Stats {
+	assert(capacity >= MAX_LAYOUT_DEPTH && capacity <= MAX_PREPARED_NODES_HARD)
+	node_bytes := u64(size_of(Prepared_Node))
+	output_bytes := u64(size_of(^bool))
 	return {
-		prepared_node_capacity = MAX_PREPARED_NODES,
+		prepared_node_capacity = capacity,
+		prepared_node_hard_max = MAX_PREPARED_NODES_HARD,
 		direct_flex_capacity = MAX_LAYOUT_FLEX,
 		layout_depth_capacity = MAX_LAYOUT_DEPTH,
-		prepared_node_bytes = u64(size_of(Prepared_Node)),
+		prepared_node_bytes = node_bytes,
+		fit_output_bytes = output_bytes,
+		caller_storage_bytes = u64(capacity) * (node_bytes + output_bytes),
 		prepared_bytes = u64(size_of(Prepared_Ui)),
 		builder_bytes = u64(size_of(Fit_Builder)),
 		transition_rect_bytes = u64(size_of(Transition_Rect_State)),
