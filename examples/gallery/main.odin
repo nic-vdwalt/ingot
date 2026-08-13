@@ -9,9 +9,10 @@
 // Buttons section.
 //
 // Conventions this gallery demonstrates (docs/api-layers.md):
-//   - ui_gfx.Host_App owns the ordinary one-window lifecycle.
-//   - ui.Ui is the default for application chrome, forms, and widgets. It owns
-//     slot carving, scaling, stable identity, focus, semantics, and UI paint.
+//   - fit.App owns the ordinary one-window lifecycle and supplies fit.Builder.
+//   - The gallery shell is a bounded fit.Custom surface because this catalogue
+//     deliberately demonstrates controls and explicit geometry not yet exposed
+//     as native Builder leaves.
 //   - Explicit UI stays inside named islands where geometry or lifecycle is
 //     behavior: panes, charts, layout, overlays, listboxes, and the stress grid.
 //   - ingot:gfx is absent from this application UI; capture.odin alone uses it
@@ -23,8 +24,8 @@ package main
 import "core:fmt"
 import "core:slice"
 import "core:strings"
+import fit "ingot:fit"
 import ui "ingot:fit"
-import ui_gfx "ingot:fit"
 import "ingot:sys"
 
 // SMOKE enables the self-driving crash harness in smoke.odin (native only;
@@ -160,15 +161,11 @@ palette_theme :: proc(value: Palette) -> ui.Theme {
 	return ui.theme_dark()
 }
 
-nav_ui: ui.Ui
-buttons_ui: ui.Ui
-badge_ui: ui.Ui
 content_pane: ui.Pane
 click_count := 0
 headers_open := [3]bool{true, false, false}
 
 Input_State :: struct {
-	ctx:            ui.Ui,
 	name:           ui.Input_Box,
 	pass:           ui.Input_Box,
 	notes:          ui.Input_Box,
@@ -206,16 +203,9 @@ spark := [10]f32{3, 4, 3.6, 5, 6.2, 5.8, 7, 8.4, 8.1, 9.3}
 settings_open := false
 settings_sel := 0
 stored_scale: f32 = 0 // 0 = auto
-app: ui_gfx.Host_App
+app: fit.App
 
 Widget_State :: struct {
-	// One Ui per independently positioned block. Each is a caller-owned
-	// layout and focus context; the gallery keeps them separate because the
-	// section's own y cursor places the blocks, not a single root.
-	ctx:            ui.Ui,
-	progress_ctx:   ui.Ui,
-	kv_ctx:         ui.Ui,
-	data_ctx:       ui.Ui,
 	check_a:        bool,
 	check_b:        bool,
 	radio_choice:   i32,
@@ -258,7 +248,6 @@ dock_canvas_wheel := 0
 dock_canvas_clicks := 0
 dock_panel_clicks := 0
 dock_panel_pane: ui.Pane
-dock_panel_ui: ui.Ui
 
 stress_clicked := -1
 
@@ -288,7 +277,7 @@ main :: proc() {
 	when CAPTURE {
 		capture_main()
 	} else {
-		_ = ui_gfx.app_run(
+		_ = fit.Run(
 			&app,
 			{
 				width = 1100,
@@ -299,23 +288,42 @@ main :: proc() {
 				event_waiting = !SMOKE,
 				session = {semantics_enabled = true},
 			},
-			{frame = gallery_frame, shutdown = shutdown},
+			gallery_build,
 		)
+		shutdown()
 	}
 }
 
 input_state_destroy :: proc(state: ^Input_State) {
 	assert(state != nil, "input_state_destroy: nil state")
-	ui.input_box_destroy(&state.name)
-	ui.input_box_destroy(&state.pass)
-	ui.input_box_destroy(&state.notes)
-	ui.combobox_state_destroy(&state.combo)
+	fit.Input_Box_Destroy(&state.name)
+	fit.Input_Box_Destroy(&state.pass)
+	fit.Input_Box_Destroy(&state.notes)
+	fit.Combobox_State_Destroy(&state.combo)
 }
 
-gallery_frame :: proc(app: ^ui_gfx.Host_App, frame: ^ui.Ui_Frame, userdata: rawptr) {
+gallery_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
 	_ = userdata
-	root := ui_gfx.app_screen_rect(app)
-	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
+	return {w = max(constraints.max_w, 1), h = max(constraints.max_h, 1)}
+}
+
+gallery_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
+	_ = userdata
+	frame := cast(^ui.Ui_Frame)fit.Surface_Frame(surface)
+	gallery_frame(frame, rect)
+	return false
+}
+
+gallery_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	_ = userdata
+	fit.Custom(
+		builder,
+		{measure = gallery_measure, render = gallery_render},
+		{size = {width = fit.Grow(), height = fit.Grow()}},
+	)
+}
+
+gallery_frame :: proc(frame: ^ui.Ui_Frame, root: fit.Rect) {
 	sw := root.w
 	sh := root.h
 
@@ -352,15 +360,12 @@ gallery_frame :: proc(app: ^ui_gfx.Host_App, frame: ^ui.Ui_Frame, userdata: rawp
 	_ = ui.draw_app_header(frame, "ingot gallery", sw)
 }
 
-shutdown :: proc(app: ^ui_gfx.Host_App, userdata: rawptr) {
-	assert(app != nil, "shutdown: nil app")
-	_ = userdata
+shutdown :: proc() {
 	input_state_destroy(&input_state)
 }
 
 apply_scale :: proc(scale: f32) {
-	resolved := scale if scale > 0 else ui.settings_auto_scale(&app.session.input)
-	ui.ui_runtime_set_scale(ui_gfx.app_ui_runtime(&app), resolved)
+	fit.Set_Scale(&app, scale)
 }
 
 nav_sidebar_min_height :: proc(frame: ^ui.Ui_Frame) -> i32 {
@@ -462,7 +467,8 @@ draw_nav :: proc(frame: ^ui.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
 	ui.draw_rectangle(frame, 0, top, w, sh - top, theme.bg_secondary)
 	ui.draw_rectangle(frame, w - 1, top, 1, sh - top, theme.border_subtle)
 
-	u := &nav_ui
+	u_storage: ui.Ui
+	u := &u_storage
 	ui.begin(u, frame, {0, top, w, sh - top}, gap = .XS)
 	ui.padding(u, .SM)
 	ui.scope_begin(u, "navigation")
@@ -561,7 +567,7 @@ apply_gallery_theme :: proc(frame: ^ui.Ui_Frame = nil) {
 	// both must be able to have both.
 	t := palette_theme(palette)
 	t.reduced_motion = reduced_motion
-	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app), t)
+	fit.Set_Theme(&app, t)
 	if frame != nil do ui.request_redraw(frame)
 }
 
@@ -684,7 +690,8 @@ draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
 	// the previous hardcoded 44 logical px happened to be, so nothing moves on
 	// the unruled palettes.
 	band := ui.ui_frame_metrics(frame).LINE_HEIGHT * 2
-	u := &badge_ui
+	u_storage: ui.Ui
+	u := &u_storage
 	ui.begin(u, frame, {x, y, w, band}, gap = .XS)
 	ui.row_begin(u, 28, gap = .SM, align = .Center)
 	_ = ui.status_pill(u, SECTION_LAYERS[section], ui.Ink.Accent)
@@ -696,7 +703,8 @@ draw_section_layer :: proc(frame: ^ui.Ui_Frame, x, y, w: i32) -> i32 {
 
 draw_buttons :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	assert(frame != nil, "draw_buttons: nil frame")
-	u := &buttons_ui
+	u_storage: ui.Ui
+	u := &u_storage
 	ui.begin(u, frame, {x, y0, w, ui.ROOT_EXTENT_OPEN}, gap = .SM)
 	ui.scope_begin(u, "buttons")
 	_ = ui.section_header(u, "BUTTON STYLES")
@@ -749,50 +757,52 @@ draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	iw := min(w, ui.ui_frame_sc(frame, 420))
 
 	state := &input_state
-	ui.begin(&state.ctx, frame, {x, y, iw, ui.ROOT_EXTENT_OPEN}, gap = .SM)
+	u_storage: ui.Ui
+	u := &u_storage
+	ui.begin(u, frame, {x, y, iw, ui.ROOT_EXTENT_OPEN}, gap = .SM)
 	// One scope per section: identity is composed, never hand-numbered, so
 	// adding or reordering a field cannot move focus to a different control.
-	ui.scope_begin(&state.ctx, "inputs")
+	ui.scope_begin(u, "inputs")
 	ui.text_input(
-		&state.ctx,
-		ui.id(&state.ctx, "name"),
+		u,
+		ui.id(u, "name"),
 		&state.name,
 		"Your name (undo, selection, spellcheck)",
 		semantics = ui.Text_Input_Semantics{name = "Name"},
 	)
 	ui.text_input(
-		&state.ctx,
-		ui.id(&state.ctx, "password"),
+		u,
+		ui.id(u, "password"),
 		&state.pass,
 		"Password (masked)",
 		masked = true,
 		semantics = ui.Text_Input_Semantics{name = "Password"},
 	)
 	ui.text_input(
-		&state.ctx,
-		ui.id(&state.ctx, "notes"),
+		u,
+		ui.id(u, "notes"),
 		&state.notes,
 		"Notes\u2026 (multi-line: Enter for newlines)",
 		height = 90,
 		semantics = ui.Text_Input_Semantics{name = "Notes"},
 	)
 
-	if ui.button(&state.ctx, ui.id(&state.ctx, "reset"), "Reset all") {
-		ui.input_box_reset(&state.name)
-		ui.input_box_reset(&state.pass)
-		ui.input_box_reset(&state.notes)
+	if ui.button(u, ui.id(u, "reset"), "Reset all") {
+		fit.Input_Box_Reset(&state.name)
+		fit.Input_Box_Reset(&state.pass)
+		fit.Input_Box_Reset(&state.notes)
 	}
-	ui.space(&state.ctx, .XS)
+	ui.space(u, .XS)
 
 	summary := fmt.tprintf(
 		"name: %q \u00b7 notes: %d bytes",
-		ui.input_box_text(&state.name),
-		len(ui.input_box_text(&state.notes)),
+		fit.Input_Box_Text(&state.name),
+		len(fit.Input_Box_Text(&state.notes)),
 	)
-	ui.label(&state.ctx, summary, ui.Text_Role.Label, ui.Ink.Secondary)
+	ui.label(u, summary, ui.Text_Role.Label, ui.Ink.Secondary)
 
-	ui.space(&state.ctx, .SM)
-	_ = ui.section_header(&state.ctx, "COMBOBOX (type to filter) + DATE PICKER")
+	ui.space(u, .SM)
+	_ = ui.section_header(u, "COMBOBOX (type to filter) + DATE PICKER")
 	languages := []ui.Combobox_Item {
 		{1, "Odin"},
 		{2, "C"},
@@ -802,7 +812,7 @@ draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		{6, "Hare"},
 	}
 	_ = ui.combobox(
-		&state.ctx,
+		u,
 		"language",
 		&state.combo,
 		languages,
@@ -811,7 +821,7 @@ draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		"Language",
 	)
 	_ = ui.date_picker(
-		&state.ctx,
+		u,
 		"release",
 		&state.date,
 		&state.date_value,
@@ -823,33 +833,35 @@ draw_inputs :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 		state.combo_selected,
 		ui.calendar_format(state.date_value) if ui.calendar_date_valid(state.date_value) else "unset",
 	)
-	ui.label(&state.ctx, picked, ui.Text_Role.Label, ui.Ink.Secondary)
+	ui.label(u, picked, ui.Text_Role.Label, ui.Ink.Secondary)
 
-	ui.scope_end(&state.ctx)
-	ui.space(&state.ctx, .XL)
-	return ui.end(&state.ctx)
+	ui.scope_end(u)
+	ui.space(u, .XL)
+	return ui.end(u)
 }
 
-draw_widget_choices :: proc(state: ^Widget_State) {
+draw_widget_choices :: proc(u: ^ui.Ui, state: ^Widget_State) {
+	assert(u != nil, "draw_widget_choices: nil UI")
 	assert(state != nil, "draw_widget_choices: nil state")
-	ui.row_begin(&state.ctx, 32, gap = .SM)
-	ui.checkbox(&state.ctx, ui.id(&state.ctx, "enable"), "Enable widgets", &state.check_a)
-	ui.checkbox(&state.ctx, ui.id(&state.ctx, "verbose"), "Verbose logs", &state.check_b)
-	ui.row_end(&state.ctx)
-	ui.row_begin(&state.ctx, 32, gap = .SM)
-	ui.radio(&state.ctx, ui.id(&state.ctx, "small"), "Small", &state.radio_choice, 0)
-	ui.radio(&state.ctx, ui.id(&state.ctx, "medium"), "Medium", &state.radio_choice, 1)
-	ui.radio(&state.ctx, ui.id(&state.ctx, "large"), "Large", &state.radio_choice, 2)
-	ui.row_end(&state.ctx)
+	ui.row_begin(u, 32, gap = .SM)
+	ui.checkbox(u, ui.id(u, "enable"), "Enable widgets", &state.check_a)
+	ui.checkbox(u, ui.id(u, "verbose"), "Verbose logs", &state.check_b)
+	ui.row_end(u)
+	ui.row_begin(u, 32, gap = .SM)
+	ui.radio(u, ui.id(u, "small"), "Small", &state.radio_choice, 0)
+	ui.radio(u, ui.id(u, "medium"), "Medium", &state.radio_choice, 1)
+	ui.radio(u, ui.id(u, "large"), "Large", &state.radio_choice, 2)
+	ui.row_end(u)
 }
 
-draw_widget_volume :: proc(frame: ^ui.Ui_Frame, state: ^Widget_State) {
+draw_widget_volume :: proc(u: ^ui.Ui, frame: ^ui.Ui_Frame, state: ^Widget_State) {
+	assert(u != nil, "draw_widget_volume: nil UI")
 	assert(frame != nil, "draw_widget_volume: nil frame")
 	assert(state != nil, "draw_widget_volume: nil state")
-	ui.row_begin(&state.ctx, 32, gap = .SM)
+	ui.row_begin(u, 32, gap = .SM)
 	_ = ui.slider_state(
-		&state.ctx,
-		ui.id(&state.ctx, "volume"),
+		u,
+		ui.id(u, "volume"),
 		&state.slider,
 		&state.volume,
 		0,
@@ -858,8 +870,8 @@ draw_widget_volume :: proc(frame: ^ui.Ui_Frame, state: ^Widget_State) {
 		240,
 		"Volume",
 	)
-	ui.label(&state.ctx, fmt.tprintf("%.0f%%", state.volume), ui.Text_Role.Body, ui.Ink.Secondary)
-	ui.row_end(&state.ctx)
+	ui.label(u, fmt.tprintf("%.0f%%", state.volume), ui.Text_Role.Body, ui.Ink.Secondary)
+	ui.row_end(u)
 }
 
 draw_widget_form_controls :: proc(
@@ -873,29 +885,32 @@ draw_widget_form_controls :: proc(
 		{x, y0, w, 0},
 		"FORM CONTROLS (checkbox / radio / slider / dropdown)",
 	)
-	ui.begin(&state.ctx, frame, {x, y, w, ui.ROOT_EXTENT_OPEN}, gap = .SM)
-	ui.scope_begin(&state.ctx, "form")
-	draw_widget_choices(state)
-	draw_widget_volume(frame, state)
+	u_storage: ui.Ui
+	u := &u_storage
+	ui.begin(u, frame, {x, y, w, ui.ROOT_EXTENT_OPEN}, gap = .SM)
+	ui.scope_begin(u, "form")
+	draw_widget_choices(u, state)
+	draw_widget_volume(u, frame, state)
 	backends := []string{"Metal", "Vulkan", "D3D12", "WebGPU"}
 	ui.dropdown(
-		&state.ctx,
-		ui.id(&state.ctx, "backend"),
+		u,
+		ui.id(u, "backend"),
 		backends,
 		&state.dd_selected,
 		&state.dropdown,
 		a11y_label = "Graphics backend",
 	)
-	ui.scope_end(&state.ctx)
-	ui.space(&state.ctx, .MD)
-	return ui.end(&state.ctx)
+	ui.scope_end(u)
+	ui.space(u, .MD)
+	return ui.end(u)
 }
 
 // The progress / spinner / pill section is pure facade: every widget carves
 // its own slot from a Ui, so no call site does arithmetic on x/y/w/h.
 draw_widget_progress :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_progress: nil state")
-	u := &state.progress_ctx
+	u_storage: ui.Ui
+	u := &u_storage
 	ui.begin(u, frame, {x, y0, w, ui.ROOT_EXTENT_OPEN}, gap = .SM)
 	ui.scope_begin(u, "progress")
 	_ = ui.section_header(u, "PROGRESS / SPINNER / PILLS")
@@ -925,7 +940,8 @@ draw_widget_progress :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_
 // the muted-key / emphasized-value pairing.
 draw_widget_kv_rows :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_kv_rows: nil state")
-	u := &state.kv_ctx
+	u_storage: ui.Ui
+	u := &u_storage
 	width := min(w, ui.ui_frame_sc(frame, 360))
 	ui.begin(u, frame, {x, y0, width, ui.ROOT_EXTENT_OPEN}, gap = .XS)
 	_ = ui.section_header(u, "KV ROWS + LIST ROWS")
@@ -1092,7 +1108,8 @@ WIDGET_TABLE_COLUMNS := [3]ui.Table_Column {
 
 draw_widget_tabs_table :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_tabs_table: nil state")
-	u := &state.data_ctx
+	u_storage: ui.Ui
+	u := &u_storage
 	width := min(w, ui.ui_frame_sc(frame, 420))
 	ui.begin(u, frame, {x, y0, width, ui.ROOT_EXTENT_OPEN}, gap = .SM)
 	ui.scope_begin(u, "data")
@@ -1342,7 +1359,7 @@ draw_overlay_context_menu :: proc(frame: ^ui.Ui_Frame, x, info_y: i32) {
 			{separator = true},
 			{label = "Close menu"},
 		}
-		root := ui_gfx.app_screen_rect(&app)
+		root := fit.Screen_Rect(&app)
 		when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
 		chosen := ui.context_menu(frame, &ctx_menu, items, root)
 		if chosen == 0 {
@@ -1362,7 +1379,7 @@ draw_overlay_context_menu :: proc(frame: ^ui.Ui_Frame, x, info_y: i32) {
 
 draw_overlay_modal :: proc(frame: ^ui.Ui_Frame) {
 	if !about_modal.open do return
-	root := ui_gfx.app_screen_rect(&app)
+	root := fit.Screen_Rect(&app)
 	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
 	body := ui.modal_begin(
 		frame,
@@ -1411,7 +1428,7 @@ draw_overlay_demo :: proc(frame: ^ui.Ui_Frame, x, y0, w: i32) -> i32 {
 	}
 	draw_overlay_modal(frame)
 	draw_overlay_confirm(frame)
-	root := ui_gfx.app_screen_rect(&app)
+	root := fit.Screen_Rect(&app)
 	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
 	ui.toasts_draw(frame, &toasts, root)
 	return info_y + ui.ui_frame_sc(frame, 52)
@@ -1493,7 +1510,8 @@ draw_dock_panel :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32) {
 	// A scroll pane inside the claim: pane_begin consults the router, so this
 	// is the exact case that went dead when a panel claimed its own rect.
 	content_y := ui.pane_begin(frame, &dock_panel_pane, panel, pad = 10)
-	u := &dock_panel_ui
+	u_storage: ui.Ui
+	u := &u_storage
 	ui.begin(
 		u,
 		frame,
@@ -1528,7 +1546,7 @@ draw_dock_panel :: proc(frame: ^ui.Ui_Frame, panel: ui.Rect_I32) {
 // outcome through a toast, chaining the two lifecycle widgets together.
 draw_overlay_confirm :: proc(frame: ^ui.Ui_Frame) {
 	if !confirm.modal.open do return
-	root := ui_gfx.app_screen_rect(&app)
+	root := fit.Screen_Rect(&app)
 	when CAPTURE do root = {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT}
 	choice := ui.confirm_dialog(
 		frame,

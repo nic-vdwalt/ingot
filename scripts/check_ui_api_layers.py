@@ -74,6 +74,12 @@ ADAPTER_LIFECYCLE = {
 LEGACY_SESSION = re.compile(r"\b(?:App_Session(?:_Config)?|app_session_[a-z_0-9]+)\b")
 BINDING_IMPORT = re.compile(r'"ingot:(libvterm|pty|accesskit)"')
 INTERNAL_UI_IMPORT = re.compile(r'"ingot:(ui|ui_gfx)"')
+FIT_AS_INTERNAL_IMPORT = re.compile(r'(?m)^\s*import\s+(ui|ui_gfx)\s+"ingot:fit"')
+FIT_INTERNAL_NAME = re.compile(
+    r"\b(?:ui|ui_gfx)\.|\b(?:Prepared[a-zA-Z_0-9]*|Adapter|Ui|Ui_Frame|Ui_Input|Ui_Output|"
+    r"Ui_Runtime|Host_App|Host_Session|Session_Frame)\b"
+)
+FIT_SPLIT_SESSION = re.compile(r"\b(?:Session_Begin|Session_End|session_acquire_frame|session_present_frame)\b")
 RETIRED_UI = re.compile(r"\b(?:Fit_Node|Fit_Prepared|fit_tree|fit_nodes|prepared_[a-z_0-9]+)\b")
 RETIRED_GFX = re.compile(
     r"\b(?:begin_frame|context_begin_frame|end_frame|clear_frame|draw_rect|draw_circle|"
@@ -174,6 +180,31 @@ def _matches(source: str, pattern: re.Pattern[str], message: str, path: Path, ro
     return failures
 
 
+def fit_public_violations(source: str) -> list[tuple[int, str]]:
+    masked = mask_source(source)
+    failures: list[tuple[int, str]] = []
+    lines = masked.splitlines()
+    private_next = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("@(private"):
+            private_next = True
+            continue
+        if not stripped or stripped.startswith("package ") or stripped.startswith("import "):
+            continue
+        declaration = re.match(r"^([A-Z][A-Za-z_0-9]*)\s*::", stripped)
+        procedure = re.match(r"^([A-Z][A-Za-z_0-9]*)\s*::\s*proc\b", stripped)
+        public = declaration is not None or procedure is not None
+        if public and not private_next:
+            if FIT_INTERNAL_NAME.search(stripped):
+                failures.append((index + 1, "Fit public declaration exposes internal UI type"))
+            if FIT_SPLIT_SESSION.search(stripped):
+                failures.append((index + 1, "Fit public declaration exposes split session lifecycle"))
+        if stripped.endswith("}") or "::" in stripped:
+            private_next = False
+    return failures
+
+
 def _adapter_violations(root: Path) -> list[str]:
     failures: list[str] = []
     pattern = re.compile(r"\b(" + "|".join(sorted(ADAPTER_LIFECYCLE)) + r")\s*\(")
@@ -222,6 +253,13 @@ def check(root: Path) -> list[str]:
         failures.extend(
             _matches(raw_source, INTERNAL_UI_IMPORT, "internal UI import {name}; use ingot:fit", path, root)
         )
+        failures.extend(
+            _matches(raw_source, FIT_AS_INTERNAL_IMPORT, "Fit imported as internal UI alias {name}", path, root)
+        )
+    for path in sorted((root / "fit").glob("*.odin")):
+        source = path.read_text(encoding="utf-8")
+        for line, message in fit_public_violations(source):
+            failures.append(f"{path.relative_to(root)}:{line}: {message}")
     for path in sorted((root / "ui").glob("*.odin")):
         if path.name.endswith("_test.odin"):
             continue

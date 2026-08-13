@@ -102,12 +102,36 @@ class ConsumerPolicyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             (root / "ui").mkdir()
+            (root / "fit").mkdir()
             examples = root / "examples"
             examples.mkdir()
             (examples / "main.odin").write_text('package main\nimport "ingot:ui_gfx"\n')
             failures = policy.check(root)
         self.assertTrue(any("examples/main.odin" in failure for failure in failures))
         self.assertTrue(any("internal UI import" in failure for failure in failures))
+
+    def test_fit_public_alias_to_ui_is_rejected(self) -> None:
+        failures = policy.fit_public_violations("Ui :: ui.Ui\n")
+        self.assertTrue(any("internal UI type" in message for _, message in failures))
+
+    def test_fit_private_conversion_may_reference_ui(self) -> None:
+        source = '@(private = "package")\nto_rect :: proc(rect: Rect) -> ui.Rect_I32 { return {} }\n'
+        self.assertEqual(policy.fit_public_violations(source), [])
+
+    def test_example_cannot_alias_fit_as_ui(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "ui").mkdir()
+            (root / "fit").mkdir()
+            examples = root / "examples"
+            examples.mkdir()
+            (examples / "main.odin").write_text('package main\nimport ui "ingot:fit"\n')
+            failures = policy.check(root)
+        self.assertTrue(any("Fit imported as internal UI alias" in failure for failure in failures))
+
+    def test_split_session_lifecycle_is_rejected(self) -> None:
+        failures = policy.fit_public_violations("Session_Begin :: proc(session: ^Session) {}\n")
+        self.assertTrue(any("split session lifecycle" in message for _, message in failures))
 
 
 if __name__ == "__main__":
