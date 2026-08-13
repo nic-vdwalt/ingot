@@ -38,6 +38,66 @@ rect_inset :: proc(rect: Rect_I32, value: Insets_I32) -> Rect_I32 {
 	return {rect.x + value.left, rect.y + value.top, w, h}
 }
 
+// Intrinsic_Size is an allocation-free content measurement. Overflow means
+// an extent saturated at max(i32); placement still follows normal clipping.
+Intrinsic_Size :: struct {
+	w, h:     i32,
+	overflow: bool,
+}
+
+intrinsic_leaf :: proc(w, h: i32) -> Intrinsic_Size {
+	assert(w >= 0 && h >= 0, "intrinsic_leaf: negative size")
+	return {w = w, h = h}
+}
+
+intrinsic_row :: proc(children: []Intrinsic_Size, gap: i32 = 0) -> Intrinsic_Size {
+	assert(len(children) <= MAX_LAYOUT_FLEX, "intrinsic_row: count out of bounds")
+	assert(gap >= 0, "intrinsic_row: negative gap")
+	width := i64(gap) * i64(max(len(children) - 1, 0))
+	height: i32
+	overflow := false
+	for child in children {
+		assert(child.w >= 0 && child.h >= 0, "intrinsic_row: negative child")
+		width += i64(child.w)
+		height = max(height, child.h)
+		overflow = overflow || child.overflow
+	}
+	w, saturated := _intrinsic_extent(width)
+	return {w = w, h = height, overflow = overflow || saturated}
+}
+
+intrinsic_column :: proc(children: []Intrinsic_Size, gap: i32 = 0) -> Intrinsic_Size {
+	assert(len(children) <= MAX_LAYOUT_FLEX, "intrinsic_column: count out of bounds")
+	assert(gap >= 0, "intrinsic_column: negative gap")
+	width: i32
+	height := i64(gap) * i64(max(len(children) - 1, 0))
+	overflow := false
+	for child in children {
+		assert(child.w >= 0 && child.h >= 0, "intrinsic_column: negative child")
+		width = max(width, child.w)
+		height += i64(child.h)
+		overflow = overflow || child.overflow
+	}
+	h, saturated := _intrinsic_extent(height)
+	return {w = width, h = h, overflow = overflow || saturated}
+}
+
+intrinsic_padding :: proc(value: Intrinsic_Size, padding: Insets_I32) -> Intrinsic_Size {
+	assert(value.w >= 0 && value.h >= 0, "intrinsic_padding: negative size")
+	assert(padding.left >= 0 && padding.top >= 0, "intrinsic_padding: negative leading inset")
+	assert(padding.right >= 0 && padding.bottom >= 0, "intrinsic_padding: negative trailing inset")
+	w, width_overflow := _intrinsic_extent(i64(value.w) + i64(padding.left) + i64(padding.right))
+	h, height_overflow := _intrinsic_extent(i64(value.h) + i64(padding.top) + i64(padding.bottom))
+	return {w = w, h = h, overflow = value.overflow || width_overflow || height_overflow}
+}
+
+@(private = "file")
+_intrinsic_extent :: proc(value: i64) -> (i32, bool) {
+	assert(value >= 0, "_intrinsic_extent: negative extent")
+	if value > i64(max(i32)) do return max(i32), true
+	return i32(value), false
+}
+
 MAX_FIT_COLUMN_ITEMS :: 64
 
 // A separate flow bound keeps large collections on the existing chunked or virtualized paths.
@@ -489,6 +549,22 @@ fit :: proc(basis: i32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
 	assert(min_size >= 0, "fit: negative minimum")
 	assert(max_size == 0 || max_size >= min_size, "fit: invalid maximum")
 	return Track{kind = .Fit, basis = basis, min_size = min_size, max_size = max_size}
+}
+
+intrinsic_fit_width :: proc(value: Intrinsic_Size, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(!value.overflow, "intrinsic_fit_width: overflowed measurement")
+	assert(value.w >= 0 && value.h >= 0, "intrinsic_fit_width: negative size")
+	return fit(value.w, min_size, max_size)
+}
+
+intrinsic_fit_height :: proc(
+	value: Intrinsic_Size,
+	min_size: i32 = 0,
+	max_size: i32 = 0,
+) -> Track {
+	assert(!value.overflow, "intrinsic_fit_height: overflowed measurement")
+	assert(value.w >= 0 && value.h >= 0, "intrinsic_fit_height: negative size")
+	return fit(value.h, min_size, max_size)
 }
 
 // grow shares free space by weight after fixed, fit, and percent bases.

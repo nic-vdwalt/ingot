@@ -3,6 +3,12 @@ package ui
 
 import "core:testing"
 
+@(private = "file")
+layout_intrinsic_measure :: proc(text: cstring, size: i32) -> i32 {
+	assert(size > 0, "layout_intrinsic_measure: invalid size")
+	return i32(len(string(text))) * 7
+}
+
 @(test)
 layout_space_tokens_follow_scale :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
@@ -37,6 +43,35 @@ layout_named_row_resolves_exact_slots :: proc(t: ^testing.T) {
 	end(&u)
 	testing.expect_value(t, first, Rect_I32{0, 0, 80, 40})
 	testing.expect_value(t, second, Rect_I32{88, 0, 212, 40})
+}
+
+@(test)
+layout_facade_composes_intrinsic_toolbar_without_consuming_layout :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	set_measure_backend_with(&runtime.text, layout_intrinsic_measure)
+	ui_runtime_set_scale(&runtime, 1.5)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 100})
+	before := remaining_rect(&u)
+	save := intrinsic_padding_space(&u, intrinsic_text(&u, "Save"), .SM)
+	cancel := intrinsic_padding_space(&u, intrinsic_text(&u, "Cancel"), .SM)
+	gap := space_px(&u, .SM)
+	toolbar := intrinsic_row({save, cancel}, gap)
+	testing.expect_value(t, remaining_rect(&u), before)
+	intrinsic_flex_row_begin(&u, toolbar.h, {intrinsic_fit_width(toolbar), grow()}, gap = .SM)
+	fit_rect := flex_slot_px(&u, toolbar.h)
+	rest_rect := flex_slot_px(&u, toolbar.h)
+	flex_row_end(&u)
+	end(&u)
+	testing.expect_value(t, fit_rect.w, toolbar.w)
+	testing.expect_value(t, fit_rect.h, toolbar.h)
+	testing.expect_value(t, fit_rect.w + rest_rect.w + gap, i32(300))
+	testing.expect_value(t, frame.degenerate_drops, 0)
 }
 
 @(test)
