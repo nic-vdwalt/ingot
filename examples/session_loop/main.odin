@@ -25,11 +25,14 @@ frame :: proc() {
 		click_count += 1
 		clicked = false
 	}
-	builder, acquired := fit.Session_Begin(&session)
-	if !acquired do return
+	_ = fit.Session_Draw(&session, draw)
+}
+
+draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	assert(builder != nil, "draw: nil builder")
+	_ = userdata
 	fit.Column(builder, {gap = .SM, padding = .LG})
 	fit.Label(builder, "Custom Fit session loop", {role = .Title})
 	fit.Button(builder, "count", "Count clicks", &clicked)
 	fit.End(builder)
-	fit.Session_End(&session)
 }

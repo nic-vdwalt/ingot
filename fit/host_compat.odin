@@ -6,7 +6,6 @@ Adapter :: ui_gfx.Adapter
 Host_App :: ui_gfx.App
 Host_App_Callbacks :: ui_gfx.App_Callbacks
 Host_Session :: ui_gfx.Session
-Host_Session_Frame :: ui_gfx.Session_Frame
 
 app_clear_color :: ui_gfx.app_clear_color
 app_destroy :: ui_gfx.app_destroy
@@ -19,8 +18,7 @@ app_stop :: ui_gfx.app_stop
 app_tick :: ui_gfx.app_tick
 app_ui_runtime :: ui_gfx.app_ui_runtime
 color_to_gfx :: ui_gfx.color_to_gfx
-session_acquire_frame :: ui_gfx.session_acquire_frame
 session_destroy :: ui_gfx.session_destroy
+session_draw :: ui_gfx.session_draw
 session_init :: ui_gfx.session_init
 session_output :: ui_gfx.session_output
-session_present_frame :: ui_gfx.session_present_frame

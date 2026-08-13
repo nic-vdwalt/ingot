@@ -230,8 +230,13 @@ when CAPTURE {
 	// frame - build and paint replay - with the capture target, then blits the
 	// result to the window so the run is visible while it records.
 	capture_frame :: proc() {
-		builder, acquired := fit.Session_Begin(&capture_session)
-		if !acquired do return
+		if !fit.Session_Draw(&capture_session, capture_draw) do return
+		capture_write()
+	}
+
+	capture_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+		assert(builder != nil, "capture_draw: nil builder")
+		_ = userdata
 		theme := palette_theme(palette)
 		background := rl.Color(theme.bg_app)
 		background.a = 255
@@ -253,9 +258,6 @@ when CAPTURE {
 			0,
 			rl.WHITE,
 		)
-		fit.Session_End(&capture_session)
-		capture_write()
-		free_all(context.temp_allocator)
 	}
 
 	// capture_main replaces the normal fit.Run entry point under -define.

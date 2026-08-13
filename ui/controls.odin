@@ -7,6 +7,25 @@ package ui
 import "core:math"
 import "core:strings"
 
+Checkbox_Spec :: struct {
+	id:      Widget_Id,
+	label:   string,
+	checked: ^bool,
+}
+
+checkbox_spec_size :: proc(u: ^Ui, spec: Checkbox_Spec) -> Intrinsic_Size {
+	assert(u != nil && u.open && u.frame != nil, "checkbox_spec_size: invalid UI")
+	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.checked != nil)
+	metrics := ui_frame_metrics(u.frame)
+	return intrinsic_leaf(control_row_width(u.frame, spec.label, 0), metrics.ROW_H_SM)
+}
+
+checkbox_spec_at :: proc(u: ^Ui, spec: Checkbox_Spec, rect: Rect_I32) -> bool {
+	assert(u != nil && u.open, "checkbox_spec_at: frame not open")
+	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.checked != nil)
+	fo := focus(u, spec.id) if slot_visible(rect) else Focus_Opt{}
+	return checkbox_at(u.frame, rect, spec.label, spec.checked, fo, spec.id)
+}
 
 // checkbox draws a check control with a label. Toggles checked^ on click or
 // Space/Enter while focused. Returns true on the frame the value changed.
@@ -199,6 +218,27 @@ radio :: proc {
 	radio_u64,
 }
 
+Radio_Spec :: struct {
+	id:       Widget_Id,
+	label:    string,
+	selected: ^i32,
+	value:    i32,
+}
+
+radio_spec_size :: proc(u: ^Ui, spec: Radio_Spec) -> Intrinsic_Size {
+	assert(u != nil && u.open && u.frame != nil, "radio_spec_size: invalid UI")
+	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.selected != nil)
+	metrics := ui_frame_metrics(u.frame)
+	return intrinsic_leaf(control_row_width(u.frame, spec.label, 0), metrics.ROW_H_SM)
+}
+
+radio_spec_at :: proc(u: ^Ui, spec: Radio_Spec, rect: Rect_I32) -> bool {
+	assert(u != nil && u.open, "radio_spec_at: frame not open")
+	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.selected != nil)
+	fo := focus(u, spec.id) if slot_visible(rect) else Focus_Opt{}
+	return radio_at(u.frame, rect, spec.label, spec.selected, spec.value, fo, spec.id)
+}
+
 radio_at :: proc(
 	frame: ^Ui_Frame,
 	rect: Rect_I32,
@@ -283,6 +323,41 @@ slider_keyboard_delta :: proc(lo, hi, step: f32) -> f32 {
 
 Slider_State :: struct {
 	dragging: bool,
+}
+
+Slider_Spec :: struct {
+	id:         Widget_Id,
+	value:      ^f32,
+	minimum:    f32,
+	maximum:    f32,
+	step:       f32,
+	a11y_label: string,
+}
+
+slider_spec_size :: proc(u: ^Ui, spec: Slider_Spec) -> Intrinsic_Size {
+	assert(u != nil && u.open && u.frame != nil, "slider_spec_size: invalid UI")
+	assert(spec.id != WIDGET_ID_NONE && spec.value != nil && spec.maximum > spec.minimum)
+	assert(spec.step >= 0 && spec.a11y_label != "", "slider_spec_size: invalid spec")
+	metrics := ui_frame_metrics(u.frame)
+	return intrinsic_leaf(metrics.MENU_MIN_W + metrics.CONTROL_BOX * 4, metrics.ROW_H_SM)
+}
+
+slider_spec_at :: proc(u: ^Ui, spec: Slider_Spec, rect: Rect_I32) -> bool {
+	assert(u != nil && u.open, "slider_spec_at: frame not open")
+	assert(spec.id != WIDGET_ID_NONE && spec.value != nil && spec.maximum > spec.minimum)
+	assert(spec.step >= 0 && spec.a11y_label != "", "slider_spec_at: invalid spec")
+	fo := focus(u, spec.id) if slot_visible(rect) else Focus_Opt{}
+	return slider_at(
+		u.frame,
+		rect,
+		spec.value,
+		spec.minimum,
+		spec.maximum,
+		spec.step,
+		fo,
+		spec.a11y_label,
+		spec.id,
+	)
 }
 
 // slider draws a horizontal slider over [lo, hi] with optional stepping.

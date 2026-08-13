@@ -426,7 +426,7 @@ _open :: proc(u: ^Ui, x, y, w, h: i32, gap: i32, tab_navigation: bool) {
 //	return ui.end(u)
 end :: proc(u: ^Ui) -> i32 {
 	assert(u != nil && u.open, "end: frame not open")
-	assert(u.ids.depth == 0, "end: unbalanced id scope")
+	assert(u.ids.depth == 0, "end: unbalanced id scope", id_context_open_origin(&u.ids))
 	assert(u.layout.depth == 1, "end: unbalanced layout container")
 	content_end := remaining(&u.layout).y
 	layout_end(&u.layout)
@@ -505,19 +505,31 @@ scope_end :: proc(u: ^Ui) {
 Scope_Proc :: #type proc(u: ^Ui, userdata: rawptr)
 
 @(private = "package")
-scope_string :: proc(u: ^Ui, key: string, body: Scope_Proc, userdata: rawptr = nil) {
+scope_string :: proc(
+	u: ^Ui,
+	key: string,
+	body: Scope_Proc,
+	userdata: rawptr = nil,
+	loc := #caller_location,
+) {
 	assert(u != nil && u.open, "scope: frame not open")
 	assert(body != nil, "scope: nil body")
-	scope_begin(u, key)
+	scope_begin(u, key, loc)
 	defer scope_end(u)
 	body(u, userdata)
 }
 
 @(private = "package")
-scope_u64 :: proc(u: ^Ui, key: u64, body: Scope_Proc, userdata: rawptr = nil) {
+scope_u64 :: proc(
+	u: ^Ui,
+	key: u64,
+	body: Scope_Proc,
+	userdata: rawptr = nil,
+	loc := #caller_location,
+) {
 	assert(u != nil && u.open, "scope: frame not open")
 	assert(body != nil, "scope: nil body")
-	scope_begin(u, key)
+	scope_begin(u, key, loc)
 	defer scope_end(u)
 	body(u, userdata)
 }
