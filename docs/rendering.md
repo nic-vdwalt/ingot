@@ -294,7 +294,10 @@ After activity, a bounded settle burst allows hover and release visuals to
 finish. `RequestRedraw()` is thread-safe and schedules an immediate frame;
 `RequestRedrawIn(seconds)` schedules a timed frame, with the earliest deadline
 winning. Use these calls when background work or animation state changes without
-platform input.
+platform input. Generic UI transitions request immediate redraw only while their
+caller-owned state is unsettled and snap without another deadline under reduced
+motion. Raised paint is buffered in bounded exact `Z_Order` groups and replayed
+stably; equal depths retain declaration order while main paint remains streamable.
 
 Native targets wait for GLFW events with a bounded timeout. Cursor, button,
 refresh, focus, iconify, and framebuffer-size callbacks wake the app. Minimized

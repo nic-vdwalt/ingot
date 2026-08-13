@@ -13,10 +13,50 @@ Aspect_Ratio :: struct {
 	width, height: i32,
 }
 
+Prepared_Transition :: struct {
+	state:   ^Transition_Rect_State,
+	options: Transition_Options,
+}
+
 Prepared_Size :: struct {
-	width:  Track,
-	height: Track,
-	aspect: Aspect_Ratio,
+	width:      Track,
+	height:     Track,
+	aspect:     Aspect_Ratio,
+	transition: Prepared_Transition,
+}
+
+Attachment_Target_Kind :: enum u8 {
+	Parent,
+	Root,
+	Handle,
+	Screen_Rect,
+	Viewport,
+}
+
+Attachment_Point :: enum u8 {
+	Top_Left,
+	Top,
+	Top_Right,
+	Left,
+	Center,
+	Right,
+	Bottom_Left,
+	Bottom,
+	Bottom_Right,
+}
+
+Prepared_Attachment_Options :: struct {
+	target_kind:       Attachment_Target_Kind,
+	target:            Prepared_Handle,
+	target_screen:     Rect_I32,
+	target_point:      Attachment_Point,
+	self_point:        Attachment_Point,
+	offset_x:          i32,
+	offset_y:          i32,
+	z:                 Z_Order,
+	claim:             bool,
+	clamp_to_viewport: bool,
+	transition:        Prepared_Transition,
 }
 
 Prepared_Container_Effects :: struct {
@@ -89,6 +129,7 @@ Prepared_Kind :: enum u8 {
 	Column,
 	Flow,
 	Grid,
+	Attachment,
 	Label,
 	Button,
 	Custom,
@@ -103,11 +144,13 @@ Prepared_Node :: struct {
 	container:                Prepared_Container_Options,
 	flow:                     Prepared_Flow_Options,
 	grid:                     Prepared_Grid_Options,
+	attachment:               Prepared_Attachment_Options,
 	label:                    Label_Spec,
 	button:                   Button_Spec,
 	custom:                   Prepared_Custom,
 	size:                     Intrinsic_Size,
 	rect:                     Rect_I32,
+	target_rect:              Rect_I32,
 	activated:                bool,
 }
 
@@ -183,6 +226,22 @@ prepared_grid_begin :: proc(
 	return handle
 }
 
+prepared_attachment_begin :: proc(
+	prepared: ^Prepared_Ui,
+	options: Prepared_Attachment_Options,
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_attachment_begin: description not open")
+	assert(prepared.depth > 0, "prepared_attachment_begin: attachment cannot be root")
+	assert(options.z == options.z && options.z > Z_CONTENT, "prepared_attachment_begin: invalid z")
+	if options.target_kind == .Handle {
+		target := i32(options.target)
+		assert(target >= 0 && target < prepared.count, "prepared_attachment_begin: invalid target")
+	}
+	handle := prepared_add(prepared, Prepared_Node{kind = .Attachment, attachment = options})
+	prepared_push_container(prepared, handle)
+	return handle
+}
+
 prepared_row :: proc(u: ^Ui, prepared: ^Prepared_Ui, options: Prepared_Container_Options = {}) {
 	assert(u != nil && prepared != nil, "prepared_row: invalid argument")
 	prepared_root_begin(u, prepared, .Row, options)
@@ -207,6 +266,14 @@ prepared_container_end :: proc(prepared: ^Prepared_Ui) {
 		prepared.depth > 0 && prepared.depth <= MAX_LAYOUT_DEPTH,
 		"prepared_container_end: no container",
 	)
+	stack_index := prepared.depth - 1
+	assert(stack_index >= 0 && stack_index < len(prepared.stack))
+	index := prepared.stack[stack_index]
+	assert(index >= 0 && index < prepared.count, "prepared_container_end: invalid index")
+	if prepared.nodes[index].kind == .Attachment {
+		assert(index >= 0 && index < len(prepared.nodes))
+		assert(prepared_child_count(prepared, prepared.nodes[index].first_child) == 1)
+	}
 	prepared.depth -= 1
 }
 
@@ -490,6 +557,8 @@ prepared_measure_natural :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_flow(u, prepared, index, false)
 		} else if node.kind == .Grid {
 			prepared_measure_grid(u, prepared, index, false)
+		} else if node.kind == .Attachment {
+			prepared_measure_attachment(prepared, index)
 		} else if prepared_kind_is_container(node.kind) {
 			prepared_measure_container(u, prepared, index, false)
 		} else {
@@ -524,10 +593,19 @@ prepared_measure_leaf :: proc(u: ^Ui, node: ^Prepared_Node, max_width: i32) {
 		node.size = button_spec_size(u, node.button)
 	case .Custom:
 		node.size = node.custom.measure(u, {max_w = max_width}, node.custom.userdata)
-	case .Row, .Column, .Flow, .Grid:
+	case .Row, .Column, .Flow, .Grid, .Attachment:
 		unreachable()
 	}
 	assert(node.size.w >= 0 && node.size.h >= 0, "prepared_measure_leaf: invalid result")
+}
+
+@(private = "file")
+prepared_measure_attachment :: proc(prepared: ^Prepared_Ui, index: i32) {
+	assert(prepared != nil && index >= 0 && index < prepared.count)
+	node := &prepared.nodes[index]
+	assert(node.kind == .Attachment, "prepared_measure_attachment: wrong kind")
+	assert(node.first_child >= 0 && node.first_child == node.last_child)
+	node.size = prepared.nodes[node.first_child].size
 }
 
 @(private = "file")
@@ -544,9 +622,12 @@ prepared_measure_container :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, k
 			child < prepared.count && count < MAX_LAYOUT_FLEX,
 			"prepared_measure_container: bad child",
 		)
-		children[count] = prepared.nodes[child].size
-		count += 1
-		child = prepared.nodes[child].next_sibling
+		value := &prepared.nodes[child]
+		if value.kind != .Attachment {
+			children[count] = value.size
+			count += 1
+		}
+		child = value.next_sibling
 	}
 	assert(child < 0, "prepared_measure_container: too many children")
 	gap := space_px(u, node.container.gap)
@@ -573,7 +654,7 @@ prepared_measure_flow :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_w
 	for _ in 0 ..< MAX_PREPARED_NODES {
 		if child < 0 do break
 		value := &prepared.nodes[child]
-		_ = flow_next(&flow, value.size.w, value.size.h)
+		if value.kind != .Attachment do _ = flow_next(&flow, value.size.w, value.size.h)
 		child = value.next_sibling
 	}
 	assert(child < 0, "prepared_measure_flow: child bound")
@@ -588,7 +669,7 @@ prepared_measure_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_w
 	assert(index >= 0 && index < prepared.count, "prepared_measure_grid: index out of range")
 	node := &prepared.nodes[index]
 	assert(node.grid.columns > 0, "prepared_measure_grid: invalid columns")
-	count := prepared_child_count(prepared, node.first_child)
+	count := prepared_in_flow_child_count(prepared, node.first_child)
 	rows := (count + node.grid.columns - 1) / node.grid.columns
 	padding := insets_of(u, node.grid.padding)
 	gap_y := space_px(u, node.grid.gap_y)
@@ -613,6 +694,20 @@ prepared_child_count :: proc(prepared: ^Prepared_Ui, first: i32) -> i32 {
 		child = prepared.nodes[child].next_sibling
 	}
 	assert(child < 0, "prepared_child_count: child bound")
+	return count
+}
+
+@(private = "file")
+prepared_in_flow_child_count :: proc(prepared: ^Prepared_Ui, first: i32) -> i32 {
+	assert(prepared != nil, "prepared_in_flow_child_count: nil description")
+	count: i32
+	child := first
+	for _ in 0 ..< MAX_PREPARED_NODES {
+		if child < 0 do break
+		if prepared.nodes[child].kind != .Attachment do count += 1
+		child = prepared.nodes[child].next_sibling
+	}
+	assert(child < 0 && count >= 0, "prepared_in_flow_child_count: child bound")
 	return count
 }
 
@@ -680,6 +775,8 @@ prepared_remeasure_containers :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_flow(u, prepared, index, false)
 		} else if node.kind == .Grid {
 			prepared_measure_grid(u, prepared, index, false)
+		} else if node.kind == .Attachment {
+			prepared_measure_attachment(prepared, index)
 		} else if node.kind == .Row || node.kind == .Column {
 			prepared_measure_container(u, prepared, index, false)
 		}
@@ -811,14 +908,129 @@ prepared_place :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(prepared.count > 0 && prepared.count <= MAX_PREPARED_NODES)
 	for index in 0 ..< prepared.count {
 		node := &prepared.nodes[index]
-		if node.kind == .Row || node.kind == .Column {
-			prepared_place_children(u, prepared, index, false)
-		} else if node.kind == .Flow {
-			prepared_place_flow(u, prepared, index)
-		} else if node.kind == .Grid {
-			prepared_place_grid(u, prepared, index)
+		node.target_rect = node.rect
+		if node.kind == .Attachment {
+			prepared_place_attachment(u, prepared, index)
+		} else {
+			prepared_apply_transition(u, node)
+			prepared_place_container(u, prepared, index)
 		}
 	}
+}
+
+@(private = "file")
+prepared_place_container :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
+	assert(u != nil && prepared != nil && index >= 0 && index < prepared.count)
+	node := &prepared.nodes[index]
+	if node.kind == .Row || node.kind == .Column {
+		prepared_place_children(u, prepared, index, false)
+	} else if node.kind == .Flow {
+		prepared_place_flow(u, prepared, index)
+	} else if node.kind == .Grid {
+		prepared_place_grid(u, prepared, index)
+	}
+}
+
+@(private = "file")
+prepared_apply_transition :: proc(u: ^Ui, node: ^Prepared_Node) {
+	assert(u != nil && node != nil, "prepared_apply_transition: invalid argument")
+	transition := node.sizing.transition
+	if node.kind == .Attachment do transition = node.attachment.transition
+	if transition.state != nil {
+		node.rect = transition_rect(
+			u.frame,
+			transition.state,
+			node.target_rect,
+			transition.options,
+		)
+	}
+}
+
+@(private = "file")
+prepared_place_attachment :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
+	assert(u != nil && prepared != nil && index > 0 && index < prepared.count)
+	node := &prepared.nodes[index]
+	assert(node.kind == .Attachment && node.first_child == node.last_child)
+	assert(node.first_child > index && node.first_child < prepared.count)
+	target := prepared_attachment_target(u, prepared, index)
+	width, height := node.size.w, node.size.h
+	target_point := prepared_attachment_point(target, node.attachment.target_point)
+	self_point := prepared_attachment_point({w = width, h = height}, node.attachment.self_point)
+	x := target_point.x - self_point.x + ui_frame_sc(u.frame, node.attachment.offset_x)
+	y := target_point.y - self_point.y + ui_frame_sc(u.frame, node.attachment.offset_y)
+	node.target_rect = {x, y, width, height}
+	if node.attachment.clamp_to_viewport {
+		node.target_rect.x = clamp(node.target_rect.x, 0, max(u.screen_w - width, 0))
+		node.target_rect.y = clamp(node.target_rect.y, 0, max(u.screen_h - height, 0))
+	}
+	node.rect = node.target_rect
+	prepared_apply_transition(u, node)
+	prepared.nodes[node.first_child].rect = node.rect
+}
+
+@(private = "file")
+prepared_attachment_target :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) -> Rect_I32 {
+	assert(u != nil && prepared != nil && index > 0 && index < prepared.count)
+	node := &prepared.nodes[index]
+	switch node.attachment.target_kind {
+	case .Parent:
+		return prepared_screen_rect(u, prepared.nodes[node.parent].rect)
+	case .Root:
+		return prepared_screen_rect(u, prepared.nodes[prepared.root].rect)
+	case .Handle:
+		target := i32(node.attachment.target)
+		assert(target >= 0 && target < index, "prepared attachment: invalid handle")
+		assert(
+			!prepared_is_ancestor(prepared, index, target),
+			"prepared attachment: descendant target",
+		)
+		return prepared_screen_rect(u, prepared.nodes[target].rect)
+	case .Screen_Rect:
+		return node.attachment.target_screen
+	case .Viewport:
+		return {0, 0, u.screen_w, u.screen_h}
+	}
+	unreachable()
+}
+
+@(private = "file")
+prepared_screen_rect :: proc(u: ^Ui, rect: Rect_I32) -> Rect_I32 {
+	assert(u != nil && u.open && u.frame != nil, "prepared_screen_rect: invalid UI")
+	value := frame_rect_to_screen(u.frame, rect_f32(rect))
+	return {i32(value.x), i32(value.y), rect.w, rect.h}
+}
+
+@(private = "file")
+prepared_is_ancestor :: proc(prepared: ^Prepared_Ui, ancestor, node: i32) -> bool {
+	assert(prepared != nil && ancestor >= 0 && node >= 0)
+	cursor := node
+	for _ in 0 ..< MAX_LAYOUT_DEPTH {
+		if cursor < 0 do return false
+		if cursor == ancestor do return true
+		cursor = prepared.nodes[cursor].parent
+	}
+	assert(cursor < 0, "prepared_is_ancestor: depth bound")
+	return false
+}
+
+@(private = "file")
+prepared_attachment_point :: proc(rect: Rect_I32, point: Attachment_Point) -> [2]i32 {
+	x, y := rect.x, rect.y
+	switch point {
+	case .Top, .Center, .Bottom:
+		x += rect.w / 2
+	case .Top_Right, .Right, .Bottom_Right:
+		x += rect.w
+	case .Top_Left, .Left, .Bottom_Left:
+	}
+	switch point {
+	case .Left, .Center, .Right:
+		y += rect.h / 2
+	case .Bottom_Left, .Bottom, .Bottom_Right:
+		y += rect.h
+	case .Top_Left, .Top, .Top_Right:
+	}
+	return {x, y}
 }
 
 @(private = "file")
@@ -832,7 +1044,7 @@ prepared_place_flow :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 	for _ in 0 ..< MAX_PREPARED_NODES {
 		if child < 0 do break
 		value := &prepared.nodes[child]
-		value.rect = flow_next(&flow, value.size.w, value.size.h)
+		if value.kind != .Attachment do value.rect = flow_next(&flow, value.size.w, value.size.h)
 		child = value.next_sibling
 	}
 	assert(child < 0, "prepared_place_flow: child bound")
@@ -857,7 +1069,7 @@ prepared_place_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 	for _ in 0 ..< MAX_PREPARED_NODES {
 		if child < 0 do break
 		value := &prepared.nodes[child]
-		value.rect = grid_next(&grid)
+		if value.kind != .Attachment do value.rect = grid_next(&grid)
 		child = value.next_sibling
 	}
 	assert(child < 0, "prepared_place_grid: child bound")
@@ -914,12 +1126,16 @@ prepared_children :: proc(
 	assert(prepared != nil && result != nil, "prepared_children: invalid argument")
 	count: i32
 	child := first
-	for _ in 0 ..< MAX_LAYOUT_FLEX {
+	for _ in 0 ..< MAX_PREPARED_NODES {
 		if child < 0 do break
-		assert(child < prepared.count && count < MAX_LAYOUT_FLEX, "prepared_children: bad child")
-		result[count] = child
-		count += 1
-		child = prepared.nodes[child].next_sibling
+		assert(child < prepared.count, "prepared_children: bad child")
+		value := &prepared.nodes[child]
+		if value.kind != .Attachment {
+			assert(count < MAX_LAYOUT_FLEX, "prepared_children: too many children")
+			result[count] = child
+			count += 1
+		}
+		child = value.next_sibling
 	}
 	assert(child < 0, "prepared_children: too many children")
 	return count
@@ -992,12 +1208,20 @@ prepared_render_tree :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 
 @(private = "file")
 prepared_kind_is_container :: proc(kind: Prepared_Kind) -> bool {
-	return kind == .Row || kind == .Column || kind == .Flow || kind == .Grid
+	return kind == .Row || kind == .Column || kind == .Flow || kind == .Grid || kind == .Attachment
 }
 
 @(private = "file")
 prepared_render_enter :: proc(u: ^Ui, node: ^Prepared_Node) {
 	assert(u != nil && node != nil, "prepared_render_enter: invalid argument")
+	if node.kind == .Attachment {
+		claim := Rectangle{}
+		if node.attachment.claim {
+			claim = rect_f32(prepared_rect_union(node.rect, node.target_rect))
+		}
+		layer_begin(u.frame, node.attachment.z, claim)
+		return
+	}
 	effects := prepared_container_effects(node)
 	if effects.background.a > 0 {
 		draw_rounded_fill(u.frame, rect_f32(node.rect), effects.radius, effects.background)
@@ -1017,6 +1241,10 @@ prepared_render_enter :: proc(u: ^Ui, node: ^Prepared_Node) {
 @(private = "file")
 prepared_render_exit :: proc(u: ^Ui, node: ^Prepared_Node) {
 	assert(u != nil && node != nil, "prepared_render_exit: invalid argument")
+	if node.kind == .Attachment {
+		layer_end(u.frame)
+		return
+	}
 	if prepared_container_effects(node).clip do end_scissor_mode(u.frame)
 }
 
@@ -1030,7 +1258,7 @@ prepared_container_effects :: proc(node: ^Prepared_Node) -> Prepared_Container_E
 		return node.flow.effects
 	case .Grid:
 		return node.grid.effects
-	case .Label, .Button, .Custom:
+	case .Attachment, .Label, .Button, .Custom:
 		unreachable()
 	}
 	unreachable()
@@ -1046,9 +1274,20 @@ prepared_render_leaf :: proc(u: ^Ui, node: ^Prepared_Node) {
 		node.activated = button_spec_at(u, node.button, node.rect)
 	case .Custom:
 		node.activated = node.custom.render(u, node.rect, node.custom.userdata)
-	case .Row, .Column, .Flow, .Grid:
+	case .Row, .Column, .Flow, .Grid, .Attachment:
 		unreachable()
 	}
+}
+
+@(private = "file")
+prepared_rect_union :: proc(a, b: Rect_I32) -> Rect_I32 {
+	x0 := min(i64(a.x), i64(b.x))
+	y0 := min(i64(a.y), i64(b.y))
+	x1 := max(i64(a.x) + i64(a.w), i64(b.x) + i64(b.w))
+	y1 := max(i64(a.y) + i64(a.h), i64(b.y) + i64(b.h))
+	assert(x0 >= i64(min(i32)) && y0 >= i64(min(i32)))
+	assert(x1 <= i64(max(i32)) && y1 <= i64(max(i32)))
+	return {i32(x0), i32(y0), i32(x1 - x0), i32(y1 - y0)}
 }
 
 @(private = "file")

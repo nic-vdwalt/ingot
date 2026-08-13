@@ -5,6 +5,7 @@ Fit_Kind :: enum u8 {
 	Column,
 	Flow,
 	Grid,
+	Attachment,
 	Label,
 	Button,
 	Custom,
@@ -51,17 +52,18 @@ Fit_Button :: struct {
 }
 
 Fit_Node :: struct {
-	kind:      Fit_Kind,
-	track:     Track,
-	sizing:    Prepared_Size,
-	container: Prepared_Container_Options,
-	flow:      Prepared_Flow_Options,
-	grid:      Prepared_Grid_Options,
-	label:     Label_Spec,
-	button:    Fit_Button,
-	custom:    Prepared_Custom,
-	activated: ^bool,
-	children:  []Fit_Node,
+	kind:       Fit_Kind,
+	track:      Track,
+	sizing:     Prepared_Size,
+	container:  Prepared_Container_Options,
+	flow:       Prepared_Flow_Options,
+	grid:       Prepared_Grid_Options,
+	attachment: Prepared_Attachment_Options,
+	label:      Label_Spec,
+	button:     Fit_Button,
+	custom:     Prepared_Custom,
+	activated:  ^bool,
+	children:   []Fit_Node,
 }
 
 @(private = "file")
@@ -113,6 +115,12 @@ fit_grid :: proc(options: Prepared_Grid_Options, children: []Fit_Node) -> Fit_No
 		grid = options,
 		children = children,
 	}
+}
+
+fit_attachment :: proc(options: Prepared_Attachment_Options, children: []Fit_Node) -> Fit_Node {
+	assert(options.target_kind != .Handle, "fit_attachment: handle target requires Prepared API")
+	assert(len(children) == 1, "fit_attachment: exactly one child required")
+	return {kind = .Attachment, attachment = options, children = children}
 }
 
 fit_label :: proc(text: string, options: Fit_Label_Options = {}) -> Fit_Node {
@@ -389,7 +397,7 @@ fit_tree_lower :: proc(
 
 @(private = "file")
 fit_kind_is_container :: proc(kind: Fit_Kind) -> bool {
-	return kind == .Row || kind == .Column || kind == .Flow || kind == .Grid
+	return kind == .Row || kind == .Column || kind == .Flow || kind == .Grid || kind == .Attachment
 }
 
 @(private = "file")
@@ -401,9 +409,11 @@ fit_tree_lower_node :: proc(
 ) {
 	assert(u != nil && prepared != nil && node != nil && outputs != nil)
 	switch node.kind {
-	case .Row, .Column, .Flow, .Grid:
+	case .Row, .Column, .Flow, .Grid, .Attachment:
 		if node.kind == .Row || node.kind == .Column {
 			assert(len(node.children) <= MAX_LAYOUT_FLEX, "fit_tree_lower_node: children full")
+		} else if node.kind == .Attachment {
+			assert(len(node.children) == 1, "fit_tree_lower_node: attachment needs one child")
 		} else {
 			assert(len(node.children) < MAX_PREPARED_NODES, "fit_tree_lower_node: children full")
 		}
@@ -417,8 +427,10 @@ fit_tree_lower_node :: proc(
 			_ = prepared_column_begin(prepared, node.container)
 		} else if node.kind == .Flow {
 			_ = prepared_flow_begin(prepared, node.flow)
-		} else {
+		} else if node.kind == .Grid {
 			_ = prepared_grid_begin(prepared, node.grid)
+		} else {
+			_ = prepared_attachment_begin(prepared, node.attachment)
 		}
 	case .Label:
 		assert(len(node.children) == 0 && node.label.text != "", "fit_tree_lower_node: bad label")

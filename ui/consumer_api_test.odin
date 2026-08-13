@@ -63,6 +63,20 @@ consumer_api_baseline_compiles :: proc(t: ^testing.T) {
 	flow_size := fit_measure(&flow_builder)
 	fit_render_at(&flow_builder, {0, 0, flow_size.w, flow_size.h})
 	_ = fit_grid({columns = 2, row_height = 24, gap_x = .XS}, {fit_label("One"), fit_label("Two")})
+	transition: Transition_Rect_State
+	transition_rect_reset(&transition, {0, 0, 40, 20})
+	_ = fit_tree(
+		&u,
+		fit_row(
+			{},
+			{
+				fit_attachment(
+					{target_kind = .Viewport, z = Z_TOOLTIP, transition = {state = &transition}},
+					{fit_label("Attached")},
+				),
+			},
+		),
+	)
 	scope(&u, "items", consumer_api_items, &items)
 	canvas(&u, {height = 120}, consumer_api_canvas)
 	scope_end(&u)

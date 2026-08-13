@@ -24,6 +24,8 @@ Ui_Paint_Storage_Stats :: struct {
 	output_bytes:           u64,
 	command_capacity_bytes: u64,
 	text_capacity_bytes:    u64,
+	z_group_capacity:       i32,
+	z_group_bytes:          u64,
 }
 
 paint_storage_stats :: proc() -> Ui_Paint_Storage_Stats {
@@ -34,6 +36,8 @@ paint_storage_stats :: proc() -> Ui_Paint_Storage_Stats {
 		output_bytes = u64(size_of(Ui_Output)),
 		command_capacity_bytes = command_bytes * PAINT_COMMAND_CAP,
 		text_capacity_bytes = PAINT_TEXT_CAP,
+		z_group_capacity = MAX_PAINT_Z_GROUPS,
+		z_group_bytes = u64(size_of(Z_Order)) * MAX_PAINT_Z_GROUPS,
 	}
 }
 
@@ -44,6 +48,7 @@ Ui_Fit_Storage_Stats :: struct {
 	prepared_node_bytes:    u64,
 	prepared_bytes:         u64,
 	builder_bytes:          u64,
+	transition_rect_bytes:  u64,
 }
 
 fit_storage_stats :: proc() -> Ui_Fit_Storage_Stats {
@@ -54,6 +59,7 @@ fit_storage_stats :: proc() -> Ui_Fit_Storage_Stats {
 		prepared_node_bytes = u64(size_of(Prepared_Node)),
 		prepared_bytes = u64(size_of(Prepared_Ui)),
 		builder_bytes = u64(size_of(Fit_Builder)),
+		transition_rect_bytes = u64(size_of(Transition_Rect_State)),
 	}
 }
 

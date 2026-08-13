@@ -49,6 +49,8 @@ support remain unclaimed until recorded by the production-readiness matrix.
 ## Overlays and modal surfaces
 
 - The topmost interactive overlay owns pointer and keyboard routing.
+- Raised paint and input claims share the same exact finite `Z_Order`; equal depths preserve declaration order.
+- A moving claiming attachment over-occludes the union of current and target rectangles rather than allowing click-through.
 - Opening a modal chooses an intentional initial focus target.
 - Tab and Shift+Tab cannot leave an open modal.
 - Closing a modal restores focus to its surviving opener when possible.
@@ -91,6 +93,7 @@ support remain unclaimed until recorded by the production-readiness matrix.
 - Animation never delays input, focus, dismissal, or confirmation.
 - Reduced motion removes nonessential interpolation and blinking motion.
 - Event-driven hosts request redraws only for visible state changes and bounded animation deadlines.
+- Generic transitions are explicit caller-owned state; omitted declarations disappear immediately rather than becoming retained ghosts.
 - Hover dwell is optional enhancement; essential information also has keyboard and accessibility access.
 
 ## Scale, density, and responsive layout

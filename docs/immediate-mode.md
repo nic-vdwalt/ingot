@@ -239,7 +239,7 @@ for each concern:
 | Popups and modals | Layers (`layer_begin`/`layer_end`): one primitive coupling input claims, paint tiers, and screen-space drawing |
 | Keyboard focus | Stable caller-provided IDs and frame registration order |
 | Accessibility | A semantic output buffer rebuilt with the interface |
-| Animation | Caller/runtime state plus explicit redraw deadlines |
+| Animation | Caller-owned typed transition state plus explicit redraw deadlines |
 | Efficient idle | Event-driven rendering; no frame is built when nothing changes |
 | Large data views | Application-owned data with visible-range rendering |
 

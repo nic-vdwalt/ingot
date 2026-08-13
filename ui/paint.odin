@@ -25,6 +25,11 @@ import "base:runtime"
 PAINT_COMMAND_CAP :: #config(INGOT_PAINT_COMMAND_CAP, 8192)
 PAINT_TEXT_CAP :: #config(INGOT_PAINT_TEXT_CAP, 32768)
 PAINT_CLIP_CAP :: 64
+MAX_PAINT_Z_GROUPS_DEFAULT :: 16
+MAX_PAINT_Z_GROUPS_HARD :: 64
+MAX_PAINT_Z_GROUPS :: #config(INGOT_PAINT_Z_GROUP_CAP, MAX_PAINT_Z_GROUPS_DEFAULT)
+#assert(MAX_PAINT_Z_GROUPS > 0)
+#assert(MAX_PAINT_Z_GROUPS <= MAX_PAINT_Z_GROUPS_HARD)
 
 // Sanity bounds: a capacity below the measured 4K peak would drop commands on
 // an ordinary large display, and the code assumes room for at least one clip
@@ -72,9 +77,10 @@ Paint_Kind :: enum u8 {
 
 Paint_Command :: struct {
 	kind:         Paint_Kind,
-	// Paint tier (0..PAINT_TIER_COUNT-1) stamped at push time from the list's
-	// current tier. Replay walks tiers in ascending order, stable within each.
+	// Named tier remains available for diagnostics and compatibility. Exact
+	// raised ordering uses z_group and the owning list's bounded group table.
 	tier:         u8,
+	z_group:      u8,
 	rect:         Rect,
 	p0:           Vec2,
 	p1:           Vec2,
@@ -108,10 +114,9 @@ Paint_List :: struct {
 	// Origin of each open clip so an unbalanced frame can name the exact
 	// begin_scissor_mode call that leaked instead of only its depth.
 	clip_origin:          [PAINT_CLIP_CAP]runtime.Source_Code_Location,
-	// Tier at which each open clip was begun. A clip pair replayed in two
-	// different scans would unbalance the scissor state, so paint_clip_end
-	// asserts the pair is same-tier.
-	clip_tier:            [PAINT_CLIP_CAP]u8,
+	// Exact z group at which each open clip began. Reordering a pair into
+	// different scans would unbalance the renderer's scissor state.
+	clip_z_group:         [PAINT_CLIP_CAP]u8,
 	clip_count:           int,
 	clip_end_reserved:    int,
 	// Begins rejected after PAINT_CLIP_CAP still need matching ends. Tracking
@@ -132,8 +137,11 @@ Paint_List :: struct {
 	text_bytes_copied:    u64,
 	command_growth_count: u64,
 	text_growth_count:    u64,
-	// Ambient tier stamped onto every pushed command. Maintained by
-	// z_scope_begin/end and passive overlay groups; 0 (content) for main.
+	// Exact raised depths are registered once per frame in declaration order.
+	// Equal depths reuse a group; replay sorts the small group index table.
+	z_groups:             [MAX_PAINT_Z_GROUPS]Z_Order,
+	z_group_count:        i32,
+	current_z_group:      u8,
 	current_tier:         u8,
 	sink:                 Paint_Sink,
 	sink_userdata:        rawptr,
@@ -173,6 +181,9 @@ paint_list_reset :: proc(list: ^Paint_List) {
 	list.clip_overflow_depth = 0
 	list.dropped_commands = 0
 	list.dropped_text_bytes = 0
+	list.z_groups[0] = Z_CONTENT
+	list.z_group_count = 1
+	list.current_z_group = 0
 	list.current_tier = 0
 	when UI_TELEMETRY_ENABLED {
 		list.command_append_count = 0
@@ -244,7 +255,7 @@ paint_clip_begin :: proc(list: ^Paint_List, rect: Rect, loc := #caller_location)
 	list.clip_emitted[list.clip_count] = emitted
 	list.clip_streamed[list.clip_count] = streamed
 	list.clip_origin[list.clip_count] = loc
-	list.clip_tier[list.clip_count] = list.current_tier
+	list.clip_z_group[list.clip_count] = list.current_z_group
 	list.clip_count += 1
 }
 
@@ -268,11 +279,9 @@ paint_clip_end :: proc(list: ^Paint_List) {
 	// An unmatched end is a caller bug, but ignoring it is the safe failure:
 	// driving depth negative would corrupt the next view's clip index.
 	if list.clip_count == 0 do return
-	// Replay walks tiers in separate scans; a pair split across tiers would
-	// leave a Clip_Begin without its End inside one scan.
 	assert(
-		list.clip_tier[list.clip_count - 1] == list.current_tier,
-		"paint_clip_end: clip pair spans paint tiers",
+		list.clip_z_group[list.clip_count - 1] == list.current_z_group,
+		"paint_clip_end: clip pair spans z groups",
 	)
 	list.clip_count -= 1
 	restore := list.clip_count > 0
@@ -300,6 +309,7 @@ paint_push_unreserved :: proc(list: ^Paint_List, command: Paint_Command) -> bool
 	if list.count >= PAINT_COMMAND_CAP do return false
 	command := command
 	command.tier = list.current_tier
+	command.z_group = list.current_z_group
 	list.commands[list.count] = command
 	list.count += 1
 	list.peak_count = max(list.peak_count, list.count)
@@ -313,6 +323,7 @@ paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
 	assert(list.clip_end_reserved >= 0, "paint_push: negative reservation")
 	command := command
 	command.tier = list.current_tier
+	command.z_group = list.current_z_group
 	if list.count >= PAINT_COMMAND_CAP - list.clip_end_reserved {
 		list.dropped_commands += 1
 		if list.sink != nil do list.sink(list, command, list.sink_userdata)
@@ -368,4 +379,24 @@ paint_list_set_tier :: proc(list: ^Paint_List, tier: u8) {
 	assert(list != nil, "paint_list_set_tier: nil list")
 	assert(int(tier) < PAINT_TIER_COUNT, "paint_list_set_tier: tier out of range")
 	list.current_tier = tier
+}
+
+paint_list_set_z :: proc(list: ^Paint_List, z: Z_Order) {
+	assert(list != nil, "paint_list_set_z: nil list")
+	assert(z == z, "paint_list_set_z: z-order is NaN")
+	assert(list.z_group_count > 0 && list.z_group_count <= MAX_PAINT_Z_GROUPS)
+	for index in 0 ..< list.z_group_count {
+		if list.z_groups[index] == z {
+			list.current_z_group = u8(index)
+			list.current_tier = z_paint_tier(z)
+			return
+		}
+	}
+	assert(list.z_group_count < MAX_PAINT_Z_GROUPS, "paint_list_set_z: z groups full")
+	index := list.z_group_count
+	list.z_groups[index] = z
+	list.z_group_count += 1
+	list.current_z_group = u8(index)
+	list.current_tier = z_paint_tier(z)
+	assert(i32(list.current_z_group) < list.z_group_count)
 }

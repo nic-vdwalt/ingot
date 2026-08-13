@@ -26,9 +26,9 @@ replay_list :: proc(adapter: ^Adapter, frame: ^rl.Frame, list: ^ui.Paint_List) {
 	}
 }
 
-// replay_list_tiered walks the retained list once per paint tier, ascending,
-// preserving submission order within each tier. Six bounded scans instead of a
-// sort: no comparator, no reordering buffer, deterministic.
+// Raised paint orders exact bounded z groups while preserving command order
+// within each group. Sorting the small group-index array avoids command-sized
+// scratch storage and keeps work bounded by groups times retained commands.
 replay_list_tiered :: proc(adapter: ^Adapter, frame: ^rl.Frame, list: ^ui.Paint_List) {
 	assert(adapter != nil && adapter.initialized, "replay_list_tiered: invalid adapter")
 	assert(
@@ -37,13 +37,40 @@ replay_list_tiered :: proc(adapter: ^Adapter, frame: ^rl.Frame, list: ^ui.Paint_
 	)
 	assert(list != nil && list.count >= 0, "replay_list_tiered: invalid list")
 	assert(list.count <= len(list.commands), "replay_list_tiered: invalid count")
-	for tier in 0 ..< ui.PAINT_TIER_COUNT {
+	order := replay_z_group_order(list)
+	for order_index in 0 ..< order.count {
+		group := order.groups[order_index]
 		for index in 0 ..< list.count {
 			command := list.commands[index]
-			if int(command.tier) != tier do continue
+			assert(i32(command.z_group) < list.z_group_count, "replay: invalid z group")
+			if command.z_group != group do continue
 			replay_command(adapter, frame, list, command)
 		}
 	}
+}
+
+Replay_Z_Group_Order :: struct {
+	groups: [ui.MAX_PAINT_Z_GROUPS]u8,
+	count:  i32,
+}
+
+replay_z_group_order :: proc(list: ^ui.Paint_List) -> Replay_Z_Group_Order {
+	assert(list != nil, "replay_z_group_order: nil list")
+	assert(list.z_group_count > 0 && list.z_group_count <= ui.MAX_PAINT_Z_GROUPS)
+	result := Replay_Z_Group_Order {
+		count = list.z_group_count,
+	}
+	for index in 0 ..< result.count do result.groups[index] = u8(index)
+	for index in 1 ..< result.count {
+		value := result.groups[index]
+		cursor := index
+		for cursor > 0 && list.z_groups[result.groups[cursor - 1]] > list.z_groups[value] {
+			result.groups[cursor] = result.groups[cursor - 1]
+			cursor -= 1
+		}
+		result.groups[cursor] = value
+	}
+	return result
 }
 
 @(private = "file")
