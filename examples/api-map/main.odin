@@ -30,12 +30,12 @@
 package main
 
 import "core:fmt"
-import "ingot:ui"
-import "ingot:ui_gfx"
+import ui "ingot:fit"
+import ui_gfx "ingot:fit"
 
 // --- caller-owned state ------------------------------------------------------
 
-app: ui_gfx.App
+app: ui_gfx.Host_App
 dark := true
 debug_on := false
 content_pane: ui.Pane
@@ -93,7 +93,7 @@ TIP_CALLER ::
 	("Caller-owned application state" +
 		`
 ` +
-		"Owns: ui_gfx.App plus all widget components, textures, and domain state" +
+		"Owns: ui_gfx.Host_App plus all widget components, textures, and domain state" +
 		`
 ` +
 		"May own: additional ui.Ui roots beside the App default" +
@@ -105,7 +105,7 @@ TIP_CALLER ::
 		"shaders, GPU 3D) bypass UI paint entirely, caller code straight to gfx.")
 
 TIP_APP ::
-	("ui_gfx.App \u00b7 default host \u00b7 START for a new one-window UI app" +
+	("ui_gfx.Host_App \u00b7 default host \u00b7 START for a new one-window UI app" +
 		`
 ` +
 		"Owns: graphics context, Session, reusable ui.Ui form, frame loop, teardown" +
@@ -147,7 +147,7 @@ TIP_EXPLICIT ::
 		"Keep islands narrow; return to the facade at the boundary.")
 
 TIP_SESSION ::
-	("ui_gfx.Session \u00b7 custom host \u00b7 START when the app must own the loop" +
+	("ui_gfx.Host_Session \u00b7 custom host \u00b7 START when the app must own the loop" +
 		`
 ` +
 		"Owns five peers: runtime, frame, input, output, Adapter (session.odin)" +
@@ -1037,7 +1037,7 @@ api_map_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr)
 		frame,
 		state,
 		l.app_box,
-		"ui_gfx.App",
+		"ui_gfx.Host_App",
 		TIP_APP,
 		theme.bg_secondary,
 		pill = "START HERE \u00b7 default host",
@@ -1046,7 +1046,7 @@ api_map_canvas :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr)
 		frame,
 		state,
 		l.session,
-		"ui_gfx.Session",
+		"ui_gfx.Host_Session",
 		TIP_SESSION,
 		theme.bg_code,
 		pill = "custom loop only",
@@ -1239,7 +1239,7 @@ map_fit_scale :: proc(frame: ^ui.Ui_Frame, root: ui.Rect_I32, header_h: i32) {
 	ui.request_redraw(frame)
 }
 
-map_frame :: proc(a: ^ui_gfx.App, frame: ^ui.Ui_Frame, userdata: rawptr) {
+map_frame :: proc(a: ^ui_gfx.Host_App, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	_ = userdata
 	root := ui_gfx.app_screen_rect(a)
 	when MAP_CAPTURE do root = {0, 0, MAP_CAPTURE_WIDTH, MAP_CAPTURE_HEIGHT}

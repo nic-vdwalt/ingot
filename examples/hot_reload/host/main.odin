@@ -6,8 +6,8 @@ import "core:os"
 import "core:path/filepath"
 import "core:time"
 import rl "ingot:gfx"
-import ui "ingot:ui"
-import "ingot:ui_gfx"
+import ui "ingot:fit"
+import ui_gfx "ingot:fit"
 
 when ODIN_OS == .Windows {
 	LIBRARY_EXTENSION :: ".dll"
@@ -35,7 +35,7 @@ Game_API :: struct {
 }
 
 Host :: struct {
-	session:   ui_gfx.Session,
+	session:   ui_gfx.Host_Session,
 	api:       Game_API,
 	old:       [GAME_LIBRARY_MAX]Game_API,
 	old_count: int,

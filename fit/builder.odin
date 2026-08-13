@@ -5,6 +5,8 @@ import "ingot:ui"
 Begin :: proc(builder: ^Builder) {
 	assert(builder != nil && builder.bound, "Fit.Begin: builder not bound")
 	assert(builder.root.open, "Fit.Begin: root not open")
+	assert(builder.customs_used >= 0 && builder.customs_used <= i32(len(builder.customs)))
+	builder.customs_used = 0
 	ui.fit_begin(&builder.inner, &builder.root)
 }
 
@@ -28,44 +30,44 @@ Storage_Capacity :: proc(builder: ^Builder) -> int {
 
 Row :: proc(builder: ^Builder, options: Container_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Row: builder not bound")
-	ui.fit_builder_row(&builder.inner, options)
+	ui.fit_builder_row(&builder.inner, to_container_options(options))
 }
 
 Column :: proc(builder: ^Builder, options: Container_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Column: builder not bound")
-	ui.fit_builder_column(&builder.inner, options)
+	ui.fit_builder_column(&builder.inner, to_container_options(options))
 }
 
 Flow :: proc(builder: ^Builder, options: Flow_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Flow: builder not bound")
-	ui.fit_builder_flow(&builder.inner, options)
+	ui.fit_builder_flow(&builder.inner, to_flow_options(options))
 }
 
 Grid :: proc(builder: ^Builder, options: Grid_Options) {
 	assert(builder != nil && builder.bound, "Fit.Grid: builder not bound")
-	ui.fit_builder_grid(&builder.inner, options)
+	ui.fit_builder_grid(&builder.inner, to_grid_options(options))
 }
 
 Attachment :: proc(builder: ^Builder, options: Attachment_Options) {
 	assert(builder != nil && builder.bound, "Fit.Attachment: builder not bound")
-	ui.fit_builder_attachment(&builder.inner, options)
+	ui.fit_builder_attachment(&builder.inner, to_attachment_options(options))
 }
 
 Label :: proc(builder: ^Builder, text: string, options: Label_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Label: builder not bound")
-	ui.fit_builder_label(&builder.inner, text, options)
+	ui.fit_builder_label(&builder.inner, text, to_label_options(options))
 }
 
 @(private = "package")
 button_string :: proc(builder: ^Builder, key, label: string, options: Button_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Button: builder not bound")
-	ui.fit_builder_button(&builder.inner, key, label, options)
+	ui.fit_builder_button(&builder.inner, key, label, to_button_options(options))
 }
 
 @(private = "package")
 button_u64 :: proc(builder: ^Builder, key: u64, label: string, options: Button_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Button: builder not bound")
-	ui.fit_builder_button(&builder.inner, key, label, options)
+	ui.fit_builder_button(&builder.inner, key, label, to_button_options(options))
 }
 
 @(private = "package")
@@ -76,7 +78,7 @@ button_id :: proc(
 	options: Button_Options = {},
 ) {
 	assert(builder != nil && builder.bound, "Fit.Button: builder not bound")
-	ui.fit_builder_button(&builder.inner, widget, label, options)
+	ui.fit_builder_button(&builder.inner, widget, label, to_button_options(options))
 }
 
 @(private = "package")
@@ -108,8 +110,24 @@ Button :: proc {
 
 Custom :: proc(builder: ^Builder, spec: Custom_Spec, options: Custom_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Custom: builder not bound")
-	ui.fit_builder_custom(&builder.inner, spec, options)
+	assert(spec.measure != nil && spec.render != nil, "Fit.Custom: invalid callbacks")
+	assert(builder.customs_used < i32(len(builder.customs)), "Fit.Custom: custom capacity full")
+	index := builder.customs_used
+	builder.customs[index] = spec
+	builder.customs_used += 1
+	ui.fit_builder_custom(
+		&builder.inner,
+		{
+			measure = custom_measure_bridge,
+			render = custom_render_bridge,
+			userdata = &builder.customs[index],
+			size = to_size(spec.size),
+		},
+		to_custom_options(options),
+	)
 }
+
+Canvas :: Custom
 
 End :: proc(builder: ^Builder) {
 	assert(builder != nil && builder.bound, "Fit.End: builder not bound")
@@ -129,6 +147,30 @@ Render_At :: proc(builder: ^Builder, rect: Rect) {
 Render :: proc(builder: ^Builder) -> Rect {
 	assert(builder != nil && builder.bound, "Fit.Render: builder not bound")
 	return ui.fit_render(&builder.inner)
+}
+
+@(private = "file")
+custom_measure_bridge :: proc(
+	root: ^ui.Ui,
+	constraints: ui.Intrinsic_Constraints,
+	userdata: rawptr,
+) -> Size {
+	assert(root != nil && userdata != nil, "Fit.Custom: invalid measure bridge")
+	spec := cast(^Custom_Spec)userdata
+	assert(spec.measure != nil, "Fit.Custom: nil measure callback")
+	return spec.measure(
+		{constraints.min_w, constraints.min_h, constraints.max_w, constraints.max_h},
+		spec.userdata,
+	)
+}
+
+@(private = "file")
+custom_render_bridge :: proc(root: ^ui.Ui, rect: Rect, userdata: rawptr) -> bool {
+	assert(root != nil && userdata != nil, "Fit.Custom: invalid render bridge")
+	spec := cast(^Custom_Spec)userdata
+	assert(spec.render != nil, "Fit.Custom: nil render callback")
+	surface := Surface{inner = root}
+	return spec.render(&surface, rect, spec.userdata)
 }
 
 @(private = "package")

@@ -217,6 +217,11 @@ def consumer_violations(consumer_roots: list[Path], binding_allow: set[Path], in
 
 def check(root: Path) -> list[str]:
     failures: list[str] = []
+    for path in sorted((root / "examples").rglob("*.odin")):
+        raw_source = path.read_text(encoding="utf-8")
+        failures.extend(
+            _matches(raw_source, INTERNAL_UI_IMPORT, "internal UI import {name}; use ingot:fit", path, root)
+        )
     for path in sorted((root / "ui").glob("*.odin")):
         if path.name.endswith("_test.odin"):
             continue

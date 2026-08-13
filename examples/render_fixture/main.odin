@@ -3,8 +3,8 @@ package main
 import "core:fmt"
 import "core:strings"
 import rl "ingot:gfx"
-import "ingot:ui"
-import "ingot:ui_gfx"
+import ui "ingot:fit"
+import ui_gfx "ingot:fit"
 
 FONT_TTF := #load("../../assets/fonts/JetBrainsMono-Regular.ttf")
 FIXTURE_CPS := [?]rune {
@@ -46,7 +46,7 @@ gpu_textured_quad: rl.Gpu_Mesh
 gpu_overlay_line: rl.Gpu_Mesh
 gpu_overlay_points: rl.Gpu_Mesh
 resources_ready: bool
-ui_session: ui_gfx.Session
+ui_session: ui_gfx.Host_Session
 ui_frame: ^ui.Ui_Frame
 retina_input: ui.Text_Input_State
 retina_text: strings.Builder

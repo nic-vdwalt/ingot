@@ -73,6 +73,19 @@ run_ui() {
 	# shellcheck disable=SC2086
 	odin build "$ROOT/fuzz/ui" $COL $GUARD $SANFLAGS -out:"$ROOT/fuzz/ui/fuzz_ui"
 	"$ROOT/fuzz/ui/fuzz_ui" "$@"
+	local seed_define=()
+	local iteration_define=()
+	if [ -n "$SEED" ]; then
+		seed_define=("-define:INGOT_FUZZ_SEED=$SEED")
+	fi
+	if [ -n "$ITERATIONS" ]; then
+		iteration_define=("-define:INGOT_FUZZ_ITER=$ITERATIONS")
+	fi
+	# shellcheck disable=SC2086
+	odin test "$ROOT/fit" $COL $GUARD $SANFLAGS -define:ODIN_TEST_THREADS=1 \
+		-define:ODIN_TEST_NAMES=fit.fit_public_builder_fuzz \
+		${seed_define[@]+"${seed_define[@]}"} \
+		${iteration_define[@]+"${iteration_define[@]}"}
 }
 
 run_view() {

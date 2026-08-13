@@ -19,7 +19,7 @@ package main
 
 import "core:fmt"
 import "core:os"
-import "ingot:ui"
+import ui "ingot:fit"
 import "ingot:view"
 
 SMOKE :: #config(INGOT_SMOKE, false)

@@ -1,7 +1,7 @@
 package game
 
 import "core:fmt"
-import ui "ingot:ui"
+import ui "ingot:fit"
 
 GAME_STATE_SCHEMA :: u64(1)
 

@@ -2,8 +2,8 @@ package main
 
 import "core:fmt"
 import gfx "ingot:gfx"
-import "ingot:ui"
-import "ingot:ui_gfx"
+import ui "ingot:fit"
+import ui_gfx "ingot:fit"
 
 FIXTURE_FRAME_LIMIT :: 120
 
@@ -11,7 +11,7 @@ Fixture_State :: struct {
 	color: ui.Color,
 }
 
-fixture_frame :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
+fixture_frame :: proc(app: ^ui_gfx.Host_App, form: ^ui.Ui, userdata: rawptr) {
 	assert(app != nil && form != nil, "fixture_frame: invalid app")
 	state := cast(^Fixture_State)userdata
 	assert(state != nil, "fixture_frame: nil state")
@@ -22,8 +22,8 @@ fixture_frame :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
 main :: proc() {
 	primary_context := new(gfx.Context)
 	secondary_context := new(gfx.Context)
-	primary_app := new(ui_gfx.App)
-	secondary_app := new(ui_gfx.App)
+	primary_app := new(ui_gfx.Host_App)
+	secondary_app := new(ui_gfx.Host_App)
 	defer free(primary_context)
 	defer free(secondary_context)
 	defer free(primary_app)
@@ -34,7 +34,7 @@ main :: proc() {
 	secondary_state := Fixture_State {
 		color = {176, 72, 88, 255},
 	}
-	callbacks := ui_gfx.App_Callbacks {
+	callbacks := ui_gfx.Host_App_Callbacks {
 		ui = fixture_frame,
 	}
 	primary_ok := ui_gfx.app_init_context(
