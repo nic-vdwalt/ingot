@@ -710,6 +710,31 @@ insets_of :: proc(u: ^Ui, value: Space) -> Insets_I32 {
 	return insets(space_px(u, value))
 }
 
+intrinsic_leaf_scaled :: proc(u: ^Ui, logical_w, logical_h: i32) -> Intrinsic_Size {
+	assert(u != nil && u.open && u.frame != nil, "intrinsic_leaf_scaled: invalid Ui")
+	assert(logical_w >= 0 && logical_h >= 0, "intrinsic_leaf_scaled: negative size")
+	return intrinsic_leaf(ui_frame_sc(u.frame, logical_w), ui_frame_sc(u.frame, logical_h))
+}
+
+intrinsic_text :: proc(u: ^Ui, text: string, role: Text_Role = .Body) -> Intrinsic_Size {
+	assert(u != nil && u.open && u.frame != nil, "intrinsic_text: invalid Ui")
+	font_size := text_role_size(u.frame, role)
+	line_height := text_role_line_height(u.frame, role)
+	width := measure_text_string_frame(u.frame, text, font_size)
+	assert(width >= 0 && line_height > 0, "intrinsic_text: invalid measurement")
+	return intrinsic_leaf(width, line_height)
+}
+
+intrinsic_padding_space :: proc(
+	u: ^Ui,
+	value: Intrinsic_Size,
+	padding_value: Space,
+) -> Intrinsic_Size {
+	assert(u != nil && u.open && u.frame != nil, "intrinsic_padding_space: invalid Ui")
+	assert(value.w >= 0 && value.h >= 0, "intrinsic_padding_space: negative size")
+	return intrinsic_padding(value, insets_of(u, padding_value))
+}
+
 // space advances the cursor by one spacing token without carving a slot.
 space :: proc(u: ^Ui, value: Space) {
 	assert(u != nil && u.open, "space: frame not open")
@@ -768,6 +793,38 @@ flex_row_begin :: proc(
 flex_row_end :: proc(u: ^Ui) {
 	assert(u != nil && u.open, "flex_row_end: frame not open")
 	row_end(u)
+}
+
+intrinsic_flex_row_begin :: proc(
+	u: ^Ui,
+	height_px: i32,
+	tracks_px: []Track,
+	gap: Space = .None,
+	align: Cross_Align = .Stretch,
+	justify: Main_Align = .Start,
+) {
+	assert(u != nil && u.open, "intrinsic_flex_row_begin: frame not open")
+	assert(height_px >= 0, "intrinsic_flex_row_begin: negative height")
+	parent := remaining(&u.layout)
+	rect := container_rect_px(u, parent.w, height_px)
+	layout_push_rect(&u.layout, .Row, rect, space_px(u, gap), align)
+	flex_begin_px(u, tracks_px, justify)
+}
+
+intrinsic_flex_column_begin :: proc(
+	u: ^Ui,
+	width_px: i32,
+	tracks_px: []Track,
+	gap: Space = .None,
+	align: Cross_Align = .Stretch,
+	justify: Main_Align = .Start,
+) {
+	assert(u != nil && u.open, "intrinsic_flex_column_begin: frame not open")
+	assert(width_px >= 0, "intrinsic_flex_column_begin: negative width")
+	parent := remaining(&u.layout)
+	rect := container_rect_px(u, width_px, parent.h)
+	layout_push_rect(&u.layout, .Column, rect, space_px(u, gap), align)
+	flex_begin_px(u, tracks_px, justify)
 }
 
 column_begin :: proc(u: ^Ui, width: i32, gap: Space = .None, align: Cross_Align = .Stretch) {

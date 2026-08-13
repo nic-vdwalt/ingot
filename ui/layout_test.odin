@@ -445,6 +445,44 @@ layout_weighted_math_handles_large_valid_values :: proc(t: ^testing.T) {
 }
 
 @(test)
+layout_intrinsic_nested_axes_bubble_content :: proc(t: ^testing.T) {
+	buttons := intrinsic_row({intrinsic_leaf(40, 20), intrinsic_leaf(60, 24)}, gap = 8)
+	column := intrinsic_column({intrinsic_leaf(80, 16), buttons}, gap = 6)
+	outer := intrinsic_row({intrinsic_leaf(20, 46), column}, gap = 10)
+	testing.expect_value(t, buttons, Intrinsic_Size{108, 24, false})
+	testing.expect_value(t, column, Intrinsic_Size{108, 46, false})
+	testing.expect_value(t, outer, Intrinsic_Size{138, 46, false})
+}
+
+@(test)
+layout_intrinsic_empty_padding_and_overflow_are_deterministic :: proc(t: ^testing.T) {
+	testing.expect_value(t, intrinsic_row({}, 8), Intrinsic_Size{})
+	testing.expect_value(t, intrinsic_column({}, 8), Intrinsic_Size{})
+	padded := intrinsic_padding(
+		intrinsic_leaf(80, 20),
+		{left = 10, top = 4, right = 12, bottom = 6},
+	)
+	testing.expect_value(t, padded, Intrinsic_Size{102, 30, false})
+	overflow := intrinsic_row({intrinsic_leaf(max(i32), 10), intrinsic_leaf(1, 20)}, gap = 1)
+	testing.expect_value(t, overflow, Intrinsic_Size{max(i32), 20, true})
+}
+
+@(test)
+layout_intrinsic_fit_places_measured_subtree_once :: proc(t: ^testing.T) {
+	toolbar := intrinsic_row({intrinsic_leaf(60, 24), intrinsic_leaf(80, 24)}, gap = 8)
+	l: Layout
+	layout_begin(&l, 0, 0, 300, 24)
+	push_row(&l, toolbar.h, gap = 10)
+	flex_begin(&l, {intrinsic_fit_width(toolbar), grow()})
+	fit_rect := flex_next(&l)
+	remaining_rect := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, fit_rect, Rect_I32{0, 0, 148, 24})
+	testing.expect_value(t, remaining_rect, Rect_I32{158, 0, 142, 24})
+}
+
+@(test)
 layout_flex_justify_center_and_end_offset_the_run :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 400, 80)
