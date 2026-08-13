@@ -224,16 +224,18 @@ layout_facade_fit_tree_is_uniform_content_sized_and_exactly_once :: proc(t: ^tes
 	begin(&u, &frame, {0, 0, 500, 200})
 	counts: Prepared_Custom_Counts
 	string_active, u64_active, widget_active, custom_active: bool
-	nested := []Fit_Node {
-		fit_button("save", "Save", Fit_Button_Options{activated = &string_active}),
-		fit_button(u64(7), "Seven", Fit_Button_Options{activated = &u64_active}),
-	}
 	root := fit_row(
 		{gap = .SM, align = .Center},
-		[]Fit_Node {
+		{
 			fit_label("Actions", {role = .Label}),
-			fit_column({gap = .XS}, nested),
-			fit_button(id(&u, "apply"), "Apply", Fit_Button_Options{activated = &widget_active}),
+			fit_column(
+				{gap = .XS},
+				{
+					fit_button("save", "Save", .Primary, &string_active),
+					fit_button(u64(7), "Seven", &u64_active),
+				},
+			),
+			fit_button(id(&u, "apply"), "Apply", &widget_active),
 			fit_custom(
 				{
 					measure = prepared_custom_measure_test,
@@ -278,14 +280,11 @@ layout_facade_fit_tree_resolves_width_and_wrapping :: proc(t: ^testing.T) {
 	begin(&u, &frame, {0, 0, 120, 300})
 	row_rect := fit_tree(
 		&u,
-		fit_row(
-			{},
-			[]Fit_Node{fit_label("Grow", {track = grow()}), fit_button("button", "Button")},
-		),
+		fit_row({}, {fit_label("Grow", {track = grow()}), fit_button("button", "Button")}),
 	)
 	column_rect := fit_tree(
 		&u,
-		fit_column({}, []Fit_Node{fit_label("alpha beta gamma delta epsilon", {wrap = true})}),
+		fit_column({}, {fit_label("alpha beta gamma delta epsilon", {wrap = true})}),
 	)
 	end(&u)
 	testing.expect_value(t, row_rect.w, i32(120))

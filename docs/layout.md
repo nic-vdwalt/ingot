@@ -141,24 +141,27 @@ _ = ui.fit_tree(
 	form,
 	ui.fit_row(
 		{gap = .SM, align = .Center},
-		[]ui.Fit_Node {
+		{
 			ui.fit_label("Actions", {role = .Label, track = ui.grow()}),
-			ui.fit_button(
-				"save",
-				"Save",
-				ui.Fit_Button_Options{style = .Primary, activated = &activated},
-			),
+			ui.fit_button("save", "Save", .Primary, &activated),
 		},
 	),
 )
 if activated do save_document()
 ```
 
-The tree and its child slices are borrowed only until `fit_tree` returns. Build
-dynamic children with fixed caller storage or `fit_nodes`, whose storage comes
-from active frame scratch. The complete source tree is bounded by
-`MAX_PREPARED_NODES`; direct siblings remain bounded by `MAX_LAYOUT_FLEX`, and
-nesting remains bounded by `MAX_LAYOUT_DEPTH`.
+Use an inferred child literal, `{ ... }`, when children are written statically
+at the call site; the `[]Fit_Node` argument type is already known. Build dynamic
+children with fixed caller storage or `fit_nodes`, whose storage comes from
+active frame scratch, then pass the resulting slice to the same row or column.
+Both forms are borrowed only until `fit_tree` returns. The complete source tree
+is bounded by `MAX_PREPARED_NODES`; direct siblings remain bounded by
+`MAX_LAYOUT_FLEX`, and nesting remains bounded by `MAX_LAYOUT_DEPTH`.
+
+`fit_button(id, text, &activated)` uses the default style, while
+`fit_button(id, text, .Primary, &activated)` selects a style. Use
+`Fit_Button_Options{...}` for disabled state, web form identity, tracks, or
+other combined options.
 
 Activation destinations are current-call outputs. They are reset before render
 and may be shared by several controls, whose results are OR-combined. Strings,
