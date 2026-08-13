@@ -39,22 +39,13 @@ Label :: proc(builder: ^Builder, text: string, options: Label_Options = {}) {
 }
 
 @(private = "package")
-button_string :: proc(
-	builder: ^Builder,
-	key, label: string,
-	options: Button_Options = {},
-) {
+button_string :: proc(builder: ^Builder, key, label: string, options: Button_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Button: builder not bound")
 	ui.fit_builder_button(&builder.inner, key, label, options)
 }
 
 @(private = "package")
-button_u64 :: proc(
-	builder: ^Builder,
-	key: u64,
-	label: string,
-	options: Button_Options = {},
-) {
+button_u64 :: proc(builder: ^Builder, key: u64, label: string, options: Button_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Button: builder not bound")
 	ui.fit_builder_button(&builder.inner, key, label, options)
 }

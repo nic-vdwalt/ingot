@@ -760,10 +760,10 @@ Prepared_Dependencies :: struct {
 
 @(private = "file")
 prepared_dependencies :: proc(prepared: ^Prepared_Ui) -> Prepared_Dependencies {
+	assert(prepared != nil, "prepared_dependencies: nil description")
 	assert(
-		prepared != nil &&
-		prepared.count > 0 &&
-		prepared.count <= i32(prepared_capacity(prepared)),
+		prepared.count > 0 && prepared.count <= i32(prepared_capacity(prepared)),
+		"prepared_dependencies: invalid count",
 	)
 	result: Prepared_Dependencies
 	for index in 0 ..< prepared.count {

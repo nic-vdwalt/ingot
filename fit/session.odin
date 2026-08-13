@@ -15,12 +15,7 @@ Session_Begin :: proc(session: ^Session) -> (^Builder, bool) {
 	frame, acquired := ui_gfx.session_acquire_frame(&session.inner)
 	if !acquired do return nil, false
 	session.frame = frame
-	rect := Rect {
-		0,
-		0,
-		rl.GetScreenWidth(),
-		rl.GetScreenHeight(),
-	}
+	rect := Rect{0, 0, rl.GetScreenWidth(), rl.GetScreenHeight()}
 	builder_open(&session.builder, frame.ui, rect)
 	session.open = true
 	return &session.builder, true
