@@ -137,19 +137,28 @@ deeper than `MAX_LAYOUT_DEPTH`, and is rebuilt with ordinary `if` and `for`.
 
 ```odin
 prepared: ui.Prepared_Ui
-ui.prepared_begin(&prepared, ui.intrinsic_constraints(max_w = ui.remaining_rect(form).w))
-ui.prepared_row_begin(&prepared, {gap = .SM, align = .Center})
-save := ui.prepared_button(
+ui.prepared_row(form, &prepared, {gap = .SM, align = .Center})
+_ = ui.prepared_label(
 	&prepared,
-	ui.button_spec(form, ui.id(form, "save"), "Save", {style = .Primary}),
+	"Actions",
+	ui.Prepared_Label_Options{role = .Label},
+	ui.grow(),
 )
-if can_cancel {
-	_ = ui.prepared_button(&prepared, ui.button_spec(form, ui.id(form, "cancel"), "Cancel"))
-}
-ui.prepared_container_end(&prepared)
-_ = ui.prepared_fit(form, &prepared)
+save := ui.prepared_button(&prepared, "save", "Save", {style = .Primary})
+if can_cancel do _ = ui.prepared_button(&prepared, "cancel", "Cancel")
+_ = ui.prepared_end(&prepared)
 if ui.prepared_activated(&prepared, save) do save_document()
 ```
+
+`prepared_row` and `prepared_column` bind the active `Ui`, cap the group at its
+remaining width, and open the root. `prepared_end` closes only that root and
+fits it; nested rows and columns still use explicit `prepared_*_begin` and
+`prepared_container_end` pairs. A fit-only group keeps its natural width.
+
+Use `prepared_begin`, explicit root begin/end, `prepared_measure`, and
+`prepared_render_at` when measurement or placement must be separated. The
+spec overloads remain available for explicit `Label_Spec` and `Button_Spec`
+composition.
 
 The description borrows its strings and custom userdata only until render. It
 contains geometry and current-frame presentation, not persistent behavior.

@@ -36,15 +36,10 @@ consumer_api_baseline_compiles :: proc(t: ^testing.T) {
 	_ = checkbox(&u, "showing", "Show items", &showing)
 	_ = button(&u, "save", "Save", Button_Options{style = .Primary})
 	prepared: Prepared_Ui
-	prepared_begin(&prepared, intrinsic_constraints(max_w = remaining_rect(&u).w))
-	prepared_row_begin(&prepared, {gap = .SM, align = .Center})
-	_ = prepared_label(&prepared, {text = "Actions", role = .Label})
-	apply := prepared_button(
-		&prepared,
-		button_spec(&u, id(&u, "apply"), "Apply", {style = .Primary}),
-	)
-	prepared_container_end(&prepared)
-	_ = prepared_fit(&u, &prepared)
+	prepared_row(&u, &prepared, {gap = .SM, align = .Center})
+	_ = prepared_label(&prepared, "Actions", Prepared_Label_Options{role = .Label})
+	apply := prepared_button(&prepared, "apply", "Apply", {style = .Primary})
+	_ = prepared_end(&prepared)
 	_ = prepared_activated(&prepared, apply)
 	scope(&u, "items", consumer_api_items, &items)
 	canvas(&u, {height = 120}, consumer_api_canvas)

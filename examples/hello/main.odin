@@ -41,15 +41,15 @@ draw :: proc(app: ^ui_gfx.App, form: ^ui.Ui, userdata: rawptr) {
 	ui.scope_begin(form, "hello")
 	ui.label(form, "Hello from Ingot", ui.ui_frame_metrics(form.frame).FONT_SIZE_TITLE)
 	prepared: ui.Prepared_Ui
-	ui.prepared_begin(&prepared, ui.intrinsic_constraints(max_w = ui.remaining_rect(form).w))
-	ui.prepared_row_begin(&prepared, {gap = .SM, align = .Center})
-	_ = ui.prepared_label(&prepared, {text = "Controls", role = .Label}, ui.grow())
-	toggle := ui.prepared_button(
+	ui.prepared_row(form, &prepared, {gap = .SM, align = .Center})
+	_ = ui.prepared_label(
 		&prepared,
-		ui.button_spec(form, ui.id(form, "toggle"), "Toggle list"),
+		"Controls",
+		ui.Prepared_Label_Options{role = .Label},
+		ui.grow(),
 	)
-	ui.prepared_container_end(&prepared)
-	_ = ui.prepared_fit(form, &prepared)
+	toggle := ui.prepared_button(&prepared, "toggle", "Toggle list")
+	_ = ui.prepared_end(&prepared)
 	if ui.prepared_activated(&prepared, toggle) {
 		data.showing = !data.showing
 	}
