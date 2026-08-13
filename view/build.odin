@@ -37,14 +37,7 @@ doc_reset :: proc(doc: ^View_Doc) {
 // are not deduplicated: dedup would make the encoder's output depend on
 // insertion order in a way that is invisible in a diff, and the blob is bounded
 // anyway.
-doc_intern :: proc(
-	doc: ^View_Doc,
-	text: string,
-) -> (
-	offset: u32,
-	length: u16,
-	err: Build_Error,
-) {
+doc_intern :: proc(doc: ^View_Doc, text: string) -> (offset: u32, length: u16, err: Build_Error) {
 	assert(doc != nil, "doc_intern: nil doc")
 	assert(doc.text_len <= VIEW_TEXT_BYTES_MAX, "doc_intern: text_len out of range")
 	if text == "" do return 0, 0, .None

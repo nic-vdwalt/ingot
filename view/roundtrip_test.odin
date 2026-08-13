@@ -2,6 +2,7 @@
 package view
 
 import "core:strings"
+import "core:sync"
 import "core:testing"
 import "ingot:testx"
 import "ingot:ui"
@@ -34,6 +35,9 @@ Harness :: struct {
 
 @(private = "file")
 MONO_CELL :: f32(8)
+
+@(private = "file")
+g_roundtrip_harness_guard: sync.Mutex
 
 @(private = "file")
 mono_font :: proc(data: rawptr, size: i32) -> ui.Font_Id {
@@ -86,6 +90,8 @@ Paint_Digest :: struct {
 
 @(private = "file")
 play_digest :: proc(source: View, bindings: ^Bindings) -> Paint_Digest {
+	sync.mutex_lock(&g_roundtrip_harness_guard)
+	defer sync.mutex_unlock(&g_roundtrip_harness_guard)
 	h := harness_begin()
 	defer harness_end(h)
 	view_play(&h.u, source, bindings)
