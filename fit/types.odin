@@ -356,6 +356,15 @@ Pane_State :: struct {
 	inner: ui.Pane,
 }
 
+Grid_State :: struct {
+	inner: ui.Grid,
+}
+
+Visible_Range :: struct {
+	first: i32,
+	end:   i32,
+}
+
 Measure_Proc :: #type proc(constraints: Constraints, userdata: rawptr) -> Size
 Render_Proc :: #type proc(surface: ^Surface, rect: Rect, userdata: rawptr) -> bool
 

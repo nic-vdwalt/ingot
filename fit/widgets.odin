@@ -117,6 +117,28 @@ Listbox_Config :: struct {
 	keys:         Listbox_Keys,
 	page_rows:    int,
 }
+Listbox_Result :: struct {
+	selection_changed: bool,
+	activated:         bool,
+	activated_index:   int,
+	reveal:            bool,
+	reveal_index:      int,
+}
+Selectable_Row_Config :: struct {
+	rect:        Rect,
+	label:       string,
+	stable_id:   string,
+	index:       int,
+	disabled:    bool,
+	description: string,
+}
+Selectable_Row_Result :: struct {
+	hovered:   bool,
+	pressed:   bool,
+	held:      bool,
+	selected:  bool,
+	activated: bool,
+}
 Table_Sort :: struct {
 	column:     i32,
 	descending: bool,
@@ -144,6 +166,17 @@ Chart_Options :: struct {
 	show_axes:   bool,
 	show_legend: bool,
 	fill:        bool,
+}
+Markdown_Result :: struct {
+	height:         i32,
+	width:          i32,
+	link_activated: bool,
+	link_target:    string,
+}
+Confirm_Choice :: enum u8 {
+	None,
+	Confirmed,
+	Canceled,
 }
 Modal_State :: struct {
 	inner: ui.Modal_State,
@@ -257,11 +290,31 @@ Card_Background_At :: ui.card_bg_at
 Section_Header_At :: ui.section_header_at
 List_Row_Background_At :: ui.list_row_bg_at
 
-Context_Menu_Open :: ui.context_menu_open
-Context_Menu :: ui.context_menu
-Confirm_Dialog_Open :: ui.confirm_dialog_open
-Confirm_Dialog :: ui.confirm_dialog
-Toast_Push :: ui.toast_push
+Context_Menu_Open :: proc(state: ^Context_Menu_State, point: Point) {
+	assert(state != nil, "Fit.Context_Menu_Open: nil state")
+	ui.context_menu_open(&state.inner, i32(point.x), i32(point.y))
+}
+
+Confirm_Dialog_Open :: proc(state: ^Confirm_Dialog_State) {
+	assert(state != nil, "Fit.Confirm_Dialog_Open: nil state")
+	ui.confirm_dialog_open(&state.inner)
+}
+
+Toast_Push :: proc(state: ^Toast_State, kind: Toast_Kind, message: string) {
+	assert(state != nil, "Fit.Toast_Push: nil state")
+	inner_kind := ui.Toast_Kind.Info
+	switch kind {
+	case .Info:
+		inner_kind = .Info
+	case .Success:
+		inner_kind = .Success
+	case .Warning:
+		inner_kind = .Info
+	case .Error:
+		inner_kind = .Error
+	}
+	ui.toast_push(&state.inner, inner_kind, message)
+}
 
 Rect_F32 :: ui.rect_f32
 Point_In_Rect :: ui.point_in_rect

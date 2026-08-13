@@ -217,3 +217,19 @@ to_chart_options :: proc(value: Chart_Options) -> ui.Chart_Opts {
 		fill = value.fill,
 	}
 }
+
+@(private = "package")
+from_listbox_result :: proc(value: ui.Listbox_Result) -> Listbox_Result {
+	return {
+		selection_changed = value.selection_changed,
+		activated = value.activated,
+		activated_index = value.activated_index,
+		reveal = value.reveal,
+		reveal_index = value.reveal_index,
+	}
+}
+
+@(private = "package")
+from_selectable_row_result :: proc(value: ui.Selectable_Row_Result) -> Selectable_Row_Result {
+	return {value.hovered, value.pressed, value.held, value.selected, value.activated}
+}

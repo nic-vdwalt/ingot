@@ -2,6 +2,11 @@ package fit
 
 import "ingot:ui"
 
+Surface_Borrow_Context :: proc(surface: ^Surface) -> rawptr {
+	u := surface_ui(surface)
+	return u.frame
+}
+
 Surface_Viewport :: proc(surface: ^Surface) -> Rect {
 	u := surface_ui(surface)
 	return from_rect(ui.frame_viewport(u.frame))
@@ -211,4 +216,123 @@ Surface_Pane_End :: proc(
 Pane_Reset :: proc(state: ^Pane_State) {
 	assert(state != nil, "Fit.Pane_Reset: nil state")
 	ui.pane_reset(&state.inner)
+}
+
+Surface_Grid_Begin :: proc(
+	surface: ^Surface,
+	state: ^Grid_State,
+	rect: Rect,
+	columns, row_height: i32,
+	gap_x: i32 = 0,
+	gap_y: i32 = 0,
+) {
+	_ = surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Grid_Begin: nil state")
+	ui.grid_begin(&state.inner, to_rect(rect), columns, row_height, gap_x, gap_y)
+}
+
+Surface_Grid_Next :: proc(surface: ^Surface, state: ^Grid_State) -> Rect {
+	_ = surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Grid_Next: nil state")
+	return from_rect(ui.grid_next(&state.inner))
+}
+
+Surface_Grid_Visible_Range :: proc(
+	surface: ^Surface,
+	rect: Rect,
+	columns, row_height, gap_y, count, top, bottom: i32,
+) -> Visible_Range {
+	_ = surface_ui(surface)
+	first, end := ui.grid_visible_range(
+		to_rect(rect),
+		columns,
+		row_height,
+		gap_y,
+		count,
+		top,
+		bottom,
+	)
+	return {first, end}
+}
+
+Surface_Grid_Skip_To :: proc(surface: ^Surface, state: ^Grid_State, index: i32) {
+	_ = surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Grid_Skip_To: nil state")
+	ui.grid_skip_to(&state.inner, index)
+}
+
+Surface_Grid_End :: proc(surface: ^Surface, state: ^Grid_State) -> Rect {
+	_ = surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Grid_End: nil state")
+	return from_rect(ui.grid_end(&state.inner))
+}
+
+Surface_Draw_Shadow :: proc(
+	surface: ^Surface,
+	rect: Float_Rect,
+	radius: Radius,
+	elevation: Elevation,
+) {
+	u := surface_ui(surface)
+	ui.draw_shadow_hard(u.frame, to_float_rect(rect), ui.Radius(radius), ui.Elevation(elevation))
+}
+
+Surface_Draw_Rules :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_rule_lines(u.frame, to_float_rect(rect), spacing, ui.Color(color))
+}
+
+Surface_Draw_Margin_Rule :: proc(surface: ^Surface, rect: Float_Rect, inset: i32, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_margin_rule(u.frame, to_float_rect(rect), inset, ui.Color(color))
+}
+
+Surface_Draw_Hand_Underline :: proc(surface: ^Surface, x, y, width: i32, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_hand_underline(u.frame, x, y, width, ui.Color(color))
+}
+
+Surface_Draw_Dot_Grid :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_dot_grid(u.frame, to_float_rect(rect), spacing, ui.Color(color))
+}
+
+Surface_Draw_Highlight :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_highlight_swipe(u.frame, to_float_rect(rect), ui.Color(color))
+}
+
+Surface_Draw_Scribble :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_scribble_fill(u.frame, to_float_rect(rect), ui.Color(color))
+}
+
+Surface_Draw_Tape :: proc(surface: ^Surface, rect: Float_Rect, length: f32, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_tape_strip(u.frame, to_float_rect(rect), length, ui.Color(color))
+}
+
+Surface_Draw_Dog_Ear :: proc(surface: ^Surface, rect: Float_Rect, size: f32, fold, shade: Color) {
+	u := surface_ui(surface)
+	ui.draw_dog_ear(u.frame, to_float_rect(rect), size, ui.Color(fold), ui.Color(shade))
+}
+
+Surface_Draw_Paper_Tooth :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_paper_tooth(u.frame, to_float_rect(rect), ui.Color(color))
+}
+
+Surface_Draw_Wash :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_wash(u.frame, to_float_rect(rect), ui.Color(color))
+}
+
+Surface_Draw_Pigment_Block :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_pigment_block(u.frame, to_float_rect(rect), ui.Color(color))
+}
+
+Surface_Draw_Chalk_Highlight :: proc(surface: ^Surface, rect: Float_Rect, radius: Radius) {
+	u := surface_ui(surface)
+	ui.draw_chalk_highlight(u.frame, to_float_rect(rect), ui.Radius(radius))
 }

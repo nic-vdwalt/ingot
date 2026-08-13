@@ -233,6 +233,31 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 }
 
 @(test)
+fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
+	line_chart: proc(
+			_: ^Surface,
+			_: Rect,
+			_: []Chart_Series,
+			_: ^Chart_State,
+			_: Chart_Options,
+		) -> int =
+		Surface_Line_Chart
+	bar_chart: proc(
+			_: ^Surface,
+			_: Rect,
+			_: []Chart_Series,
+			_: ^Chart_State,
+			_: Chart_Options,
+		) -> int =
+		Surface_Bar_Chart
+	markdown: proc(_: ^Surface, _: Rect, _: string, _: Color) -> Markdown_Result = Surface_Markdown
+	toasts: proc(_: ^Surface, _: ^Toast_State) = Surface_Toasts
+	grid_end: proc(_: ^Surface, _: ^Grid_State) -> Rect = Surface_Grid_End
+	testing.expect(t, line_chart != nil && bar_chart != nil)
+	testing.expect(t, markdown != nil && toasts != nil && grid_end != nil)
+}
+
+@(test)
 fit_caller_storage_selects_and_resets_capacity :: proc(t: ^testing.T) {
 	builder: Builder
 	nodes: [STORAGE_NODE_DEFAULT + 64]Storage_Node
