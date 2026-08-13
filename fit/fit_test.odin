@@ -52,7 +52,7 @@ fit_builder_nested_layout_renders_once :: proc(t: ^testing.T) {
 	Custom(&builder, {measure = fit_test_measure, render = fit_test_render, userdata = &counts})
 	End(&builder)
 	Grid(&builder, {columns = 1})
-	Attachment(&builder, {target_kind = .Viewport, z = ui.Z_POPUP})
+	Attachment(&builder, {target_kind = .Viewport, z = Z_Order(200)})
 	Custom(&builder, {measure = fit_test_measure, render = fit_test_render, userdata = &counts})
 	End(&builder)
 	End(&builder)

@@ -12,10 +12,15 @@ Builder :: struct {
 	bound:        bool,
 }
 
-Storage_Node :: ui.Prepared_Node
-Storage :: ui.Fit_Storage
+Storage_Node :: distinct ui.Prepared_Node
+Storage :: struct {
+	nodes:   []Storage_Node,
+	outputs: []^bool,
+}
 STORAGE_NODE_DEFAULT :: ui.MAX_PREPARED_NODES
 STORAGE_NODE_HARD_MAX :: ui.MAX_PREPARED_NODES_HARD
+#assert(size_of(Storage_Node) == size_of(ui.Prepared_Node))
+#assert(align_of(Storage_Node) == align_of(ui.Prepared_Node))
 
 App :: struct {
 	inner:    ui_gfx.App,
@@ -51,9 +56,9 @@ Session_Config :: struct {
 }
 
 Paint_Peaks :: struct {
-	main_commands:    int,
-	main_text_bytes:  int,
-	overlay_commands: int,
+	main_commands:      int,
+	main_text_bytes:    int,
+	overlay_commands:   int,
 	overlay_text_bytes: int,
 }
 
@@ -77,30 +82,113 @@ Callbacks :: struct {
 	shutdown: Shutdown_Proc,
 }
 
-Track :: ui.Track
-Track_Kind :: ui.Track_Kind
-Space :: ui.Space
-Cross_Align :: ui.Cross_Align
-Main_Align :: ui.Main_Align
-Text_Role :: ui.Text_Role
-Ink :: ui.Ink
-Button_Style :: ui.Btn_Style
-Btn_Style :: ui.Btn_Style
-Widget_Id :: ui.Widget_Id
-Rect :: ui.Rect_I32
-Size :: ui.Intrinsic_Size
+Track_Kind :: enum u8 {
+	Fit,
+	Grow,
+	Fixed,
+	Percent,
+}
+Track :: struct {
+	kind:     Track_Kind,
+	basis:    i32,
+	weight:   i32,
+	percent:  f32,
+	min_size: i32,
+	max_size: i32,
+}
+Space :: enum u8 {
+	None,
+	XS,
+	SM,
+	MD,
+	LG,
+	XL,
+}
+Cross_Align :: enum u8 {
+	Stretch,
+	Start,
+	Center,
+	End,
+}
+Main_Align :: enum u8 {
+	Start,
+	Center,
+	End,
+	Space_Between,
+}
+Text_Role :: enum u8 {
+	Body,
+	Title,
+	Label,
+	Note,
+}
+Ink :: enum u8 {
+	Primary,
+	Heading,
+	Secondary,
+	Muted,
+	Accent,
+	Danger,
+	Success,
+	Inverse,
+	Disabled,
+	Label,
+	Accent_Light,
+	Tool,
+	Diff_Add,
+	Diff_Remove,
+	User,
+	Assistant,
+	Plan,
+}
+Button_Style :: enum u8 {
+	Primary,
+	Secondary,
+	Danger,
+	Ghost,
+}
+Btn_Style :: Button_Style
+Widget_Id :: distinct u64
+Rect :: struct {
+	x, y, w, h: i32,
+}
+Size :: struct {
+	w, h:     i32,
+	overflow: bool,
+}
 Constraints :: struct {
 	min_w, min_h: i32,
 	max_w, max_h: i32,
 }
-Z_Order :: ui.Z_Order
-Transition_State :: ui.Transition_Rect_State
-Transition_Options :: ui.Transition_Options
-Aspect_Ratio :: ui.Aspect_Ratio
-Float_Rect :: ui.Rect
-Color :: ui.Color
-Radius :: ui.Radius
-Border :: ui.Border
+Z_Order :: distinct f32
+Transition_State :: struct {
+	current:     Rect,
+	target:      Rect,
+	initialized: bool,
+}
+Transition_Options :: struct {
+	speed: f32,
+}
+Aspect_Ratio :: struct {
+	width, height: i32,
+}
+Float_Rect :: struct {
+	x, y, width, height: f32,
+}
+Color :: distinct [4]u8
+Radius :: enum u8 {
+	None,
+	SM,
+	MD,
+	LG,
+	Pill,
+}
+Border :: enum u8 {
+	None,
+	Hairline,
+	Emphasis,
+	Ink,
+}
 
 Transition :: struct {
 	state:   ^Transition_State,
@@ -150,8 +238,24 @@ Grid_Options :: struct {
 	effects:      Container_Effects,
 }
 
-Attachment_Target :: ui.Attachment_Target_Kind
-Attachment_Point :: ui.Attachment_Point
+Attachment_Target :: enum u8 {
+	Parent,
+	Root,
+	Handle,
+	Screen_Rect,
+	Viewport,
+}
+Attachment_Point :: enum u8 {
+	Top_Left,
+	Top,
+	Top_Right,
+	Left,
+	Center,
+	Right,
+	Bottom_Left,
+	Bottom,
+	Bottom_Right,
+}
 
 Attachment_Options :: struct {
 	target_kind:       Attachment_Target,
@@ -204,7 +308,28 @@ Custom_Spec :: struct {
 	size:     Size_Options,
 }
 
-Fixed :: ui.fixed
-Grow :: ui.grow
-Percent :: ui.percent
-Fit :: ui.fit
+Fixed :: proc(size: i32) -> Track {
+	assert(size >= 0, "Fit.Fixed: negative size")
+	return {kind = .Fixed, basis = size, min_size = size, max_size = size}
+}
+
+Grow :: proc(weight: i32 = 1, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(weight > 0, "Fit.Grow: non-positive weight")
+	assert(min_size >= 0, "Fit.Grow: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "Fit.Grow: invalid maximum")
+	return {kind = .Grow, weight = weight, min_size = min_size, max_size = max_size}
+}
+
+Percent :: proc(value: f32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(value >= 0 && value <= 1, "Fit.Percent: value outside 0..1")
+	assert(min_size >= 0, "Fit.Percent: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "Fit.Percent: invalid maximum")
+	return {kind = .Percent, percent = value, min_size = min_size, max_size = max_size}
+}
+
+Fit :: proc(basis: i32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(basis >= 0, "Fit.Fit: negative basis")
+	assert(min_size >= 0, "Fit.Fit: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "Fit.Fit: invalid maximum")
+	return {kind = .Fit, basis = basis, min_size = min_size, max_size = max_size}
+}

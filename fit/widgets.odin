@@ -11,29 +11,78 @@ Surface_Role :: ui.Surface
 Surface_Kind :: ui.Surface
 Tint :: ui.Tint
 
-Input_Box :: ui.Input_Box
-Text_Input_State :: ui.Text_Input_State
-Text_Input_Options :: ui.Text_Input_Options
-Text_Input_Semantics :: ui.Text_Input_Semantics
-Slider_State :: ui.Slider_State
-Dropdown_State :: ui.Dropdown_State
-Combobox_State :: ui.Combobox_State
-Combobox_Item :: ui.Combobox_Item
-Date_Picker_State :: ui.Date_Picker_State
-Calendar_Date :: ui.Calendar_Date
-Tooltip_State :: ui.Tooltip_State
-Listbox_State :: ui.Listbox_State
-Listbox_Config :: ui.Listbox_Config
-Table_Sort :: ui.Table_Sort
-Table_Column :: ui.Table_Column
-Chart_State :: ui.Chart_State
-Chart_Series :: ui.Chart_Series
-Modal_State :: ui.Modal_State
-Context_Menu_State :: ui.Context_Menu_State
-Menu_Item :: ui.Menu_Item
-Toast_State :: ui.Toast_State
-Toast_Kind :: ui.Toast_Kind
-Confirm_Dialog_State :: ui.Confirm_Dialog_State
+Input_Box :: struct {
+	inner: ui.Input_Box,
+}
+Text_Input_State :: struct {
+	inner: ui.Text_Input_State,
+}
+Text_Input_Options :: struct {
+	inner: ui.Text_Input_Options,
+}
+Text_Input_Semantics :: struct {
+	inner: ui.Text_Input_Semantics,
+}
+Slider_State :: struct {
+	inner: ui.Slider_State,
+}
+Dropdown_State :: struct {
+	inner: ui.Dropdown_State,
+}
+Combobox_State :: struct {
+	inner: ui.Combobox_State,
+}
+Combobox_Item :: struct {
+	inner: ui.Combobox_Item,
+}
+Date_Picker_State :: struct {
+	inner: ui.Date_Picker_State,
+}
+Calendar_Date :: struct {
+	inner: ui.Calendar_Date,
+}
+Tooltip_State :: struct {
+	inner: ui.Tooltip_State,
+}
+Listbox_State :: struct {
+	inner: ui.Listbox_State,
+}
+Listbox_Config :: struct {
+	inner: ui.Listbox_Config,
+}
+Table_Sort :: struct {
+	inner: ui.Table_Sort,
+}
+Table_Column :: struct {
+	inner: ui.Table_Column,
+}
+Chart_State :: struct {
+	inner: ui.Chart_State,
+}
+Chart_Series :: struct {
+	inner: ui.Chart_Series,
+}
+Modal_State :: struct {
+	inner: ui.Modal_State,
+}
+Context_Menu_State :: struct {
+	inner: ui.Context_Menu_State,
+}
+Menu_Item :: struct {
+	inner: ui.Menu_Item,
+}
+Toast_State :: struct {
+	inner: ui.Toast_State,
+}
+Toast_Kind :: enum u8 {
+	Info,
+	Success,
+	Warning,
+	Error,
+}
+Confirm_Dialog_State :: struct {
+	inner: ui.Confirm_Dialog_State,
+}
 
 TABLE_COLUMN_COUNT_MAX :: ui.TABLE_COLUMN_COUNT_MAX
 PAINT_COMMAND_CAP :: ui.PAINT_COMMAND_CAP
@@ -42,15 +91,48 @@ Z_PANEL :: ui.Z_PANEL
 Z_POPUP :: ui.Z_POPUP
 ROOT_EXTENT_OPEN :: ui.ROOT_EXTENT_OPEN
 
-Input_Box_Init :: ui.input_box_init
-Input_Box_Destroy :: ui.input_box_destroy
-Input_Box_Reset :: ui.input_box_reset
-Input_Box_Set_Text :: ui.input_box_set_text
-Input_Box_Text :: ui.input_box_text
-Text_Input_State_Destroy :: ui.text_input_state_destroy
-Combobox_State_Destroy :: ui.combobox_state_destroy
-Calendar_Date_Valid :: ui.calendar_date_valid
-Calendar_Format :: ui.calendar_format
+Input_Box_Init :: proc(box: ^Input_Box) {
+	assert(box != nil, "Fit.Input_Box_Init: nil box")
+	ui.input_box_init(&box.inner)
+}
+
+Input_Box_Destroy :: proc(box: ^Input_Box) {
+	assert(box != nil, "Fit.Input_Box_Destroy: nil box")
+	ui.input_box_destroy(&box.inner)
+}
+
+Input_Box_Reset :: proc(box: ^Input_Box) {
+	assert(box != nil, "Fit.Input_Box_Reset: nil box")
+	ui.input_box_reset(&box.inner)
+}
+
+Input_Box_Set_Text :: proc(box: ^Input_Box, text: string) {
+	assert(box != nil, "Fit.Input_Box_Set_Text: nil box")
+	ui.input_box_set_text(&box.inner, text)
+}
+
+Input_Box_Text :: proc(box: ^Input_Box) -> string {
+	assert(box != nil, "Fit.Input_Box_Text: nil box")
+	return ui.input_box_text(&box.inner)
+}
+
+Text_Input_State_Destroy :: proc(state: ^Text_Input_State) {
+	assert(state != nil, "Fit.Text_Input_State_Destroy: nil state")
+	ui.text_input_state_destroy(&state.inner)
+}
+
+Combobox_State_Destroy :: proc(state: ^Combobox_State) {
+	assert(state != nil, "Fit.Combobox_State_Destroy: nil state")
+	ui.combobox_state_destroy(&state.inner)
+}
+
+Calendar_Date_Valid :: proc(value: Calendar_Date) -> bool {
+	return ui.calendar_date_valid(value.inner)
+}
+
+Calendar_Format :: proc(value: Calendar_Date) -> string {
+	return ui.calendar_format(value.inner)
+}
 
 Theme_Dark :: ui.theme_dark
 Theme_Light :: ui.theme_light

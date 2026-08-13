@@ -14,7 +14,7 @@ Surface_Viewport :: proc(surface: ^Surface) -> Rect {
 		surface.inner.open && surface.inner.frame != nil,
 		"Fit.Surface_Viewport: closed surface",
 	)
-	return ui.frame_viewport(surface.inner.frame)
+	return from_rect(ui.frame_viewport(surface.inner.frame))
 }
 
 Surface_Pane_Origin :: proc(surface: ^Surface) -> ui.Vector2 {

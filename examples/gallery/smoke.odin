@@ -11,16 +11,14 @@ package main
 
 import "core:fmt"
 import "core:os"
-import ui "ingot:fit"
-import ui_gfx "ingot:fit"
+import fit "ingot:fit"
 import gfx "ingot:gfx"
 
 // Imports are used only under `when SMOKE`; anchor them for non-smoke builds.
 _ :: fmt
 _ :: os
+_ :: fit
 _ :: gfx
-_ :: ui
-_ :: ui_gfx
 
 when SMOKE {
 	SMOKE_STEP_FRAMES :: 20 // ~1/3 s per step at 60 fps
@@ -77,7 +75,7 @@ when SMOKE {
 			fmt.printfln("smoke: theme %s rm=%v", PALETTE_NAMES[palette], reduced_motion)
 		case step < total:
 			section = Section(step - scale_steps - theme_steps)
-			ui.pane_reset(&content_pane)
+			fit.pane_reset(&content_pane)
 			fmt.printfln("smoke: section %s", SECTION_NAMES[section])
 		case:
 			smoke_report_peaks()
@@ -88,7 +86,7 @@ when SMOKE {
 
 	// smoke_report_peaks prints the high-water marks the run reached against
 	// the capacities reserved for them. Those capacities are static inline
-	// arrays (gfx.BATCH_MAX_VERTICES, ui.PAINT_COMMAND_CAP), so unused
+	// arrays (gfx.BATCH_MAX_VERTICES, fit.PAINT_COMMAND_CAP), so unused
 	// headroom is memory resident for the whole session - about 20 MB of it
 	// on this app. The smoke run visits every section, including the 1000
 	// button stress grid, so these numbers are the evidence for sizing them.
@@ -121,19 +119,18 @@ when SMOKE {
 			usage.uniform_stream_bytes / 1024,
 			usage.uniform_capacity_bytes / 1024,
 		)
-		output := ui_gfx.session_output(&app.session)
-		if output == nil do return
-		assert(output.main.peak_count > 0, "smoke: no paint peak recorded")
+		peaks := fit.Paint_Peak_Usage(&app)
+		assert(peaks.main_commands > 0, "smoke: no paint peak recorded")
 		fmt.printfln(
 			"smoke: peak paint main %d/%d cmds %d/%d text, overlay %d/%d cmds %d/%d text",
-			output.main.peak_count,
-			ui.PAINT_COMMAND_CAP,
-			output.main.peak_text_len,
-			ui.PAINT_TEXT_CAP,
-			output.overlay.peak_count,
-			ui.PAINT_COMMAND_CAP,
-			output.overlay.peak_text_len,
-			ui.PAINT_TEXT_CAP,
+			peaks.main_commands,
+			fit.PAINT_COMMAND_CAP,
+			peaks.main_text_bytes,
+			fit.PAINT_TEXT_CAP,
+			peaks.overlay_commands,
+			fit.PAINT_COMMAND_CAP,
+			peaks.overlay_text_bytes,
+			fit.PAINT_TEXT_CAP,
 		)
 	}
 }
