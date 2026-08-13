@@ -129,45 +129,54 @@ One grid accepts at most `MAX_GRID_ITEMS` cells; chunk or virtualize larger coll
 
 Intrinsic measurement is explicit: pass measured text or component extents to `fit`, `flow_next`, or `fit_column_next`. This keeps layout single-pass and avoids recursive measurement.
 
-### Prepared content-sized groups
+### Declarative content-sized trees
 
-`Prepared_Ui` is the single-declaration path for a small content-sized tree. It
-is caller-owned frame scratch, records at most `MAX_PREPARED_NODES`, nests no
-deeper than `MAX_LAYOUT_DEPTH`, and is rebuilt with ordinary `if` and `for`.
+`Fit_Node` is the uniform declaration path for a small content-sized tree. Rows
+and columns have the same shape at every depth, and `fit_tree` performs the
+bounded prepare-measure-place-render transaction once.
 
 ```odin
-prepared: ui.Prepared_Ui
-ui.prepared_row(form, &prepared, {gap = .SM, align = .Center})
-_ = ui.prepared_label(
-	&prepared,
-	"Actions",
-	ui.Prepared_Label_Options{role = .Label},
-	ui.grow(),
+activated := false
+_ = ui.fit_tree(
+	form,
+	ui.fit_row(
+		{gap = .SM, align = .Center},
+		[]ui.Fit_Node {
+			ui.fit_label("Actions", {role = .Label, track = ui.grow()}),
+			ui.fit_button(
+				"save",
+				"Save",
+				ui.Fit_Button_Options{style = .Primary, activated = &activated},
+			),
+		},
+	),
 )
-save := ui.prepared_button(&prepared, "save", "Save", {style = .Primary})
-if can_cancel do _ = ui.prepared_button(&prepared, "cancel", "Cancel")
-_ = ui.prepared_end(&prepared)
-if ui.prepared_activated(&prepared, save) do save_document()
+if activated do save_document()
 ```
 
-`prepared_row` and `prepared_column` bind the active `Ui`, cap the group at its
-remaining width, and open the root. `prepared_end` closes only that root and
-fits it; nested rows and columns still use explicit `prepared_*_begin` and
-`prepared_container_end` pairs. A fit-only group keeps its natural width.
+The tree and its child slices are borrowed only until `fit_tree` returns. Build
+dynamic children with fixed caller storage or `fit_nodes`, whose storage comes
+from active frame scratch. The complete source tree is bounded by
+`MAX_PREPARED_NODES`; direct siblings remain bounded by `MAX_LAYOUT_FLEX`, and
+nesting remains bounded by `MAX_LAYOUT_DEPTH`.
 
-Use `prepared_begin`, explicit root begin/end, `prepared_measure`, and
-`prepared_render_at` when measurement or placement must be separated. The
-spec overloads remain available for explicit `Label_Spec` and `Button_Spec`
-composition.
+Activation destinations are current-call outputs. They are reset before render
+and may be shared by several controls, whose results are OR-combined. Strings,
+slices, callbacks, userdata, and output pointers must remain valid through
+`fit_tree`. Constructors emit no focus, interaction, semantics, or paint.
 
-The description borrows its strings and custom userdata only until render. It
-contains geometry and current-frame presentation, not persistent behavior.
-Measurement emits no focus, interaction, semantics, or paint; every leaf renders
-once. Width-constrained labels may change height after a definite width is
-assigned. Height never changes width, and aspect-ratio dependencies are outside
-this protocol. `grow` and `percent` require finite prepared constraints or
-definite `prepared_render_at` bounds; context-free intrinsic measurement rejects
-them.
+Fit-only roots keep their natural width. Grow and percent tracks resolve against
+the remaining width, and wrapped labels derive height after width assignment.
+Height never changes width, and aspect-ratio dependencies remain unsupported.
+String and integer IDs resolve from the active outer scope; use explicit IDs to
+disambiguate reusable subtrees with repeated keys.
+
+Use `Prepared_Ui`, `prepared_begin`, explicit root begin/end,
+`prepared_measure`, and `prepared_render_at` when measurement or placement must
+be separated or when incremental construction and handle inspection are useful.
+The spec overloads remain available for explicit `Label_Spec` and `Button_Spec`
+composition. Prepared descriptions borrow strings and custom userdata only until
+render, and every leaf still renders exactly once.
 
 `Track` is the one sibling-size type, and `fit` / `grow` / `fixed` / `percent` are its one constructor set. The facade tier reads a `Track` in design units and scales it once; the `Layout` tier reads the same struct in screen-space pixels.
 

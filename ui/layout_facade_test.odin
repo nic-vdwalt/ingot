@@ -201,6 +201,148 @@ layout_facade_concise_prepared_group_resolves_width_and_wrap :: proc(t: ^testing
 }
 
 @(test)
+layout_facade_fit_tree_is_uniform_content_sized_and_exactly_once :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 500, 200})
+	counts: Prepared_Custom_Counts
+	string_active, u64_active, widget_active, custom_active: bool
+	nested := []Fit_Node {
+		fit_button("save", "Save", Fit_Button_Options{activated = &string_active}),
+		fit_button(u64(7), "Seven", Fit_Button_Options{activated = &u64_active}),
+	}
+	root := fit_row(
+		{gap = .SM, align = .Center},
+		[]Fit_Node {
+			fit_label("Actions", {role = .Label}),
+			fit_column({gap = .XS}, nested),
+			fit_button(id(&u, "apply"), "Apply", Fit_Button_Options{activated = &widget_active}),
+			fit_custom(
+				{
+					measure = prepared_custom_measure_test,
+					render = prepared_custom_render_test,
+					userdata = &counts,
+				},
+				{activated = &custom_active},
+			),
+		},
+	)
+	rect := fit_tree(&u, root)
+	end(&u)
+	testing.expect(t, rect.w > 0 && rect.w < 500, "fit tree did not retain natural width")
+	testing.expect(t, rect.h > 0, "fit tree has no height")
+	testing.expect(t, !string_active && !u64_active && !widget_active, "idle button activated")
+	testing.expect(t, !custom_active, "idle custom leaf activated")
+	testing.expect_value(t, counts.render, i32(1))
+	testing.expect_value(t, u.focus_count, 3)
+}
+
+@(test)
+layout_facade_fit_tree_resolves_width_and_wrapping :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 120, 300})
+	row_rect := fit_tree(
+		&u,
+		fit_row(
+			{},
+			[]Fit_Node{fit_label("Grow", {track = grow()}), fit_button("button", "Button")},
+		),
+	)
+	column_rect := fit_tree(
+		&u,
+		fit_column({}, []Fit_Node{fit_label("alpha beta gamma delta epsilon", {wrap = true})}),
+	)
+	end(&u)
+	testing.expect_value(t, row_rect.w, i32(120))
+	testing.expect(t, column_rect.w <= 120, "wrapped tree exceeded remaining width")
+	testing.expect(
+		t,
+		column_rect.h > ui_frame_metrics(&frame).FONT_SIZE_BODY,
+		"tree label did not wrap",
+	)
+}
+
+@(test)
+layout_facade_fit_tree_dynamic_children_and_outputs_are_bounded :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	active := true
+	children := fit_nodes(&u, 4)
+	append(&children, fit_label("Actions"))
+	for index in 0 ..< 2 {
+		append(
+			&children,
+			fit_button(u64(index + 1), "Item", Fit_Button_Options{activated = &active}),
+		)
+	}
+	show_cancel := true
+	if show_cancel {
+		append(&children, fit_button("cancel", "Cancel", Fit_Button_Options{activated = &active}))
+	}
+	before := remaining_rect(&u)
+	rect := fit_tree(&u, fit_column({gap = .XS}, children[:]))
+	after := remaining_rect(&u)
+	end(&u)
+	ui_frame_end(&frame)
+	ui_frame_destroy(&frame)
+	testing.expect(t, !active, "activation output was not reset or aggregated")
+	testing.expect_value(t, u.focus_count, 3)
+	testing.expect_value(t, after.y - before.y, rect.h)
+}
+
+@(test)
 layout_facade_prepared_wrapped_label_remeasures_height_for_width :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

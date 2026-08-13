@@ -35,12 +35,21 @@ consumer_api_baseline_compiles :: proc(t: ^testing.T) {
 	_ = text_input(&u, "name", &name, "Name", Text_Input_Options{semantics = {name = "Name"}})
 	_ = checkbox(&u, "showing", "Show items", &showing)
 	_ = button(&u, "save", "Save", Button_Options{style = .Primary})
-	prepared: Prepared_Ui
-	prepared_row(&u, &prepared, {gap = .SM, align = .Center})
-	_ = prepared_label(&prepared, "Actions", Prepared_Label_Options{role = .Label})
-	apply := prepared_button(&prepared, "apply", "Apply", {style = .Primary})
-	_ = prepared_end(&prepared)
-	_ = prepared_activated(&prepared, apply)
+	apply := false
+	_ = fit_tree(
+		&u,
+		fit_row(
+			{gap = .SM, align = .Center},
+			[]Fit_Node {
+				fit_label("Actions", {role = .Label, track = grow()}),
+				fit_button(
+					"apply",
+					"Apply",
+					Fit_Button_Options{style = .Primary, activated = &apply},
+				),
+			},
+		),
+	)
 	scope(&u, "items", consumer_api_items, &items)
 	canvas(&u, {height = 120}, consumer_api_canvas)
 	scope_end(&u)
