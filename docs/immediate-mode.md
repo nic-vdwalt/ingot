@@ -161,6 +161,13 @@ names because their geometry is application behavior. The explicit tier uses a
 `Focus_Opt` over caller-owned `Focus_State` where needed; both paths preserve
 caller ownership.
 
+`Prepared_Ui` is a bounded current-frame description, not a persistent widget
+model. Application code rebuilds it from current state, owns its storage, and
+does not synchronize it across frames. Its measurement procedures derive only
+geometry; interaction, focus, semantics, and paint are emitted once when the
+prepared leaves render. Handles identify results inside that one description and
+must not be retained as widget identity.
+
 ## From immediate-mode library to app framework
 
 The early success of IMGUI in game tools also narrowed how the idea came to be
@@ -202,7 +209,7 @@ for each concern:
 | Capability | Ingot's immediate-mode mechanism |
 |---|---|
 | Persistent controls | Caller-owned component structs |
-| Dynamic layout | Bounded, single-pass layout with explicit measurements |
+| Dynamic layout | Bounded cursor layout or bounded prepare-measure-place-render composition |
 | Popups and modals | Layers (`layer_begin`/`layer_end`): one primitive coupling input claims, paint tiers, and screen-space drawing |
 | Keyboard focus | Stable caller-provided IDs and frame registration order |
 | Accessibility | A semantic output buffer rebuilt with the interface |

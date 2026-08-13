@@ -79,7 +79,11 @@ layout_facade_prepared_toolbar_declares_dynamic_children_once :: proc(t: ^testin
 	text_backend: Test_Text_Backend_State
 	ui_runtime_set_text_backend(
 		&runtime,
-		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
 	)
 	frame: Ui_Frame
 	output := new(Ui_Output)
@@ -93,10 +97,7 @@ layout_facade_prepared_toolbar_declares_dynamic_children_once :: proc(t: ^testin
 	prepared: Prepared_Ui
 	prepared_begin(&prepared, intrinsic_constraints(max_w = before.w))
 	prepared_row_begin(&prepared, {gap = .SM, align = .Center})
-	save := prepared_button(
-		&prepared,
-		button_spec(&u, id(&u, "save"), "Save", {style = .Primary}),
-	)
+	save := prepared_button(&prepared, button_spec(&u, id(&u, "save"), "Save", {style = .Primary}))
 	show_cancel := true
 	if show_cancel {
 		_ = prepared_button(&prepared, button_spec(&u, id(&u, "cancel"), "Cancel"))
@@ -120,7 +121,11 @@ layout_facade_prepared_wrapped_label_remeasures_height_for_width :: proc(t: ^tes
 	text_backend: Test_Text_Backend_State
 	ui_runtime_set_text_backend(
 		&runtime,
-		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
 	)
 	frame: Ui_Frame
 	output := new(Ui_Output)
@@ -164,7 +169,11 @@ layout_facade_prepared_custom_leaf_measures_and_renders_once :: proc(t: ^testing
 	prepared_row_begin(&prepared)
 	_ = prepared_custom(
 		&prepared,
-		{measure = prepared_custom_measure_test, render = prepared_custom_render_test, userdata = &counts},
+		{
+			measure = prepared_custom_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &counts,
+		},
 	)
 	prepared_container_end(&prepared)
 	_ = prepared_fit(&u, &prepared)
