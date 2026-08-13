@@ -37,9 +37,8 @@ test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
 	testing.expect_value(t, session.adapter.gfx_epoch, rl.context_epoch(gfx_context))
 	testing.expect_value(t, session.adapter.font_dpi, f32(1))
 	testing.expect(t, !session.frame_open)
-	testing.expect(t, !session.acquired_frame.active)
+	testing.expect(t, !session.graphics_open)
 	testing.expect_value(t, session.frame_generation, u64(0))
-	testing.expect(t, session.gfx_frame == nil)
 	testing.expect_value(t, session.config, config)
 
 	session_destroy(session)
@@ -48,10 +47,8 @@ test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
 	testing.expect(t, !session.runtime.initialized)
 	testing.expect(t, !session.adapter.initialized)
 	testing.expect(t, session.adapter.gfx_context == nil)
-	testing.expect(t, session.adapter.gfx_frame == nil)
-	testing.expect(t, !session.acquired_frame.active)
+	testing.expect(t, !session.adapter.graphics_open)
 	testing.expect_value(t, session.frame_generation, u64(0))
-	testing.expect(t, session.gfx_frame == nil)
 }
 
 @(test)
@@ -71,15 +68,15 @@ test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
 		testing.expect(t, session.frame_open)
 		testing.expect(t, session.frame.open)
 		testing.expect(t, session.frame.output == &session.output)
-		testing.expect(t, session.adapter.gfx_frame == nil)
-		testing.expect(t, session.gfx_frame == nil)
+		testing.expect(t, !session.adapter.graphics_open)
+		testing.expect(t, !session.graphics_open)
 		testing.expect(t, session.runtime.text_backend.data == &session.adapter)
 
 		session_end_frame(session)
 		testing.expect(t, !session.frame_open)
 		testing.expect(t, !session.frame.open)
-		testing.expect(t, session.adapter.gfx_frame == nil)
-		testing.expect(t, session.gfx_frame == nil)
+		testing.expect(t, !session.adapter.graphics_open)
+		testing.expect(t, !session.graphics_open)
 	}
 }
 

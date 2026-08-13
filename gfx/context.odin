@@ -496,6 +496,11 @@ context_live :: proc(ctx: ^Context) -> bool {
 	}
 }
 
+context_frame_available :: proc(ctx: ^Context) -> bool {
+	if ctx == nil do return false
+	return ctx.frame.has_frame
+}
+
 context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool {
 	assert(ctx != nil && title != nil, "context_init: nil argument")
 	when ODIN_OS == .JS {

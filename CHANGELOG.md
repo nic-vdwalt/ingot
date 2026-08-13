@@ -11,15 +11,15 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
-- Prepared/FIT inline capacity now defaults to 128 nodes instead of 64. Existing
-  zero-value state and `prepared_begin` and `fit_begin` calls remain
-  source-compatible; larger collections should still be chunked or virtualized.
+- Fit inline capacity now defaults to 128 nodes instead of 64. Existing
+  zero-value builders remain source-compatible; larger collections should still
+  be chunked or virtualized.
 
 ### Added
 
-- Caller-provided bounded storage for `ui.Prepared_Ui` and `ui.Fit_Builder`
-  allows per-description capacities up to 8,192 nodes without hidden allocation
-  or global struct growth.
+- `fit.Set_Storage`, `fit.Reset_Storage`, and `fit.Storage_Capacity` expose
+  caller-provided bounded builder storage up to 8,192 nodes without hidden
+  allocation or global struct growth.
 - `view.doc_tail_rebuild`: re-derives the authoring tail cache from a
   document's links, for callers that write nodes directly instead of through
   `doc_add`. `view_decode` calls it after a successful decode.

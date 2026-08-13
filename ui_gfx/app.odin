@@ -119,7 +119,7 @@ app_frame :: proc(app: ^App) -> bool {
 	assert(app != nil && app.state == .Running, "app_frame: invalid app")
 	frame, acquired := session_acquire_frame(&app.session)
 	if !acquired do return false
-	gfx.clear_frame(frame.gfx, app_clear_color(app))
+	gfx.ClearBackground(app_clear_color(app))
 	if app.callbacks.ui != nil {
 		app_ui_begin(app, frame.ui, &app.form)
 		app.callbacks.ui(app, &app.form, app.userdata)

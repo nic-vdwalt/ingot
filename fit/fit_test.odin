@@ -76,9 +76,24 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	measure: proc(_: ^Builder) -> Size = Measure
 	render_at: proc(_: ^Builder, _: Rect) = Render_At
 	session_begin: proc(_: ^Session) -> (^Builder, bool) = Session_Begin
+	set_storage: proc(_: ^Builder, _: Storage) = Set_Storage
+	reset_storage: proc(_: ^Builder) = Reset_Storage
+	storage_capacity: proc(_: ^Builder) -> int = Storage_Capacity
 	testing.expect(t, draw != nil && run != nil)
 	testing.expect(t, button_string != nil && button_u64 != nil)
 	testing.expect(t, measure != nil && render_at != nil && session_begin != nil)
+	testing.expect(t, set_storage != nil && reset_storage != nil && storage_capacity != nil)
+}
+
+@(test)
+fit_caller_storage_selects_and_resets_capacity :: proc(t: ^testing.T) {
+	builder: Builder
+	nodes: [STORAGE_NODE_DEFAULT + 64]Storage_Node
+	outputs: [STORAGE_NODE_DEFAULT + 64]^bool
+	Set_Storage(&builder, {nodes = nodes[:], outputs = outputs[:]})
+	testing.expect_value(t, Storage_Capacity(&builder), len(nodes))
+	Reset_Storage(&builder)
+	testing.expect_value(t, Storage_Capacity(&builder), int(STORAGE_NODE_DEFAULT))
 }
 
 @(private = "file")
