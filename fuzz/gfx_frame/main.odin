@@ -1,7 +1,7 @@
 package fuzz_gfx_frame
 
-// GPU resource-lifecycle fuzzer for ingot:gfx - WINDOWED (opens a real
-// window and a real WebGPU device; excluded from `fuzz/run.sh all`).
+// GPU resource-lifecycle fuzzer for ingot:fit and ingot:gfx - WINDOWED
+// (opens a real window and a real WebGPU device; excluded from `fuzz/run.sh all`).
 //
 // Motivation: the UI-scale crash class. Destroying a texture between
 // BeginDrawing and QueueSubmit while recorded draws still reference it fails
@@ -9,10 +9,10 @@ package fuzz_gfx_frame
 // invisible to headless tests and the parser fuzzers, so this harness runs
 // real frames and interleaves resource churn *inside* them:
 //
-//   - draw text (captures font-atlas references in the command buffer)
+//   - render FIT labels/buttons and draw text (captures font-atlas references)
 //   - draw textures / render-target passes (captures texture references)
-//   - then, mid-frame: reset_font_atlases, UnloadTexture,
-//     UnloadRenderTexture, set_ui_scale, set_theme, dpi changes
+//   - then, mid-frame: UnloadTexture, UnloadRenderTexture,
+//     Session_Set_Scale, Session_Set_Theme, font-size changes
 //
 // Any wgpu validation abort = crash with a reproducible seed (printed
 // FIRST):
@@ -23,9 +23,9 @@ package fuzz_gfx_frame
 
 import "core:fmt"
 import "core:mem"
+import fit "ingot:fit"
 import fuzzx "ingot:fuzz/fuzzx"
 import rl "ingot:gfx"
-import "ingot:ui"
 
 ITERATIONS_DEFAULT :: 400
 MAX_LIVE_TEXTURES :: 8
@@ -42,8 +42,8 @@ live_targets: [MAX_LIVE_TARGETS]rl.RenderTexture2D
 live_gpu_meshes: [MAX_LIVE_GPU_MESHES]rl.Gpu_Mesh
 gpu_target: rl.Gpu_3D_Target
 fuzz_font: rl.Font
-ui_runtime: ui.Ui_Runtime
-ui_frame: ui.Ui_Frame
+session: fit.Session
+button_active: bool
 
 load_font :: proc(pixel_size: i32) -> rl.Font {
 	assert(pixel_size > 0, "load_font: non-positive pixel size")
@@ -140,7 +140,8 @@ draw_gpu3d :: proc(p: ^Prng) {
 // mutate_resources performs one random lifecycle op - the destroy/rescale
 // half of the interleave. Weighted so unload/rescale (the dangerous ops)
 // dominate.
-mutate_resources :: proc(p: ^Prng) {
+mutate_resources :: proc(p: ^Prng, fit_session: ^fit.Session) {
+	assert(p != nil && fit_session != nil, "mutate_resources: invalid argument")
 	switch fuzzx.int_range(p, 0, 13) {
 	case 0, 1:
 		// Load a texture into a random slot (unloading any occupant first).
@@ -171,19 +172,19 @@ mutate_resources :: proc(p: ^Prng) {
 		// The original crash: rescale mid-frame unloads every font atlas
 		// referenced by draws already recorded this frame.
 		scale := f32(fuzzx.int_range(p, 50, 301)) / 100.0
-		ui.ui_runtime_set_scale(&ui_runtime, scale)
+		fit.Session_Set_Scale(fit_session, scale)
 	case 8:
 		switch fuzzx.int_range(p, 0, 3) {
 		case 0:
-			ui.ui_runtime_set_theme(&ui_runtime, ui.theme_dark())
+			fit.Session_Set_Theme(fit_session, fit.Theme_Dark())
 		case 1:
-			ui.ui_runtime_set_theme(&ui_runtime, ui.theme_light())
+			fit.Session_Set_Theme(fit_session, fit.Theme_Light())
 		case 2:
-			ui.ui_runtime_set_theme(&ui_runtime, ui.theme_high_contrast())
+			fit.Session_Set_Theme(fit_session, fit.Theme_High_Contrast())
 		}
 	case 9:
 		font_dpi := f32(fuzzx.int_range(p, 100, 301)) / 100.0
-		ui.set_font_dpi_with(ui.ui_runtime_text(&ui_runtime), font_dpi)
+		fit.Session_Set_Scale(fit_session, font_dpi)
 		rl.UnloadFont(fuzz_font)
 		fuzz_font = load_font(max(i32(16 * font_dpi), 1))
 	case 10, 11:
@@ -200,7 +201,7 @@ mutate_resources :: proc(p: ^Prng) {
 		// Compound case: resize immediately followed by UI rescale - the
 		// swapchain reconfigure + atlas churn interleaving.
 		rl.SetWindowSize(i32(fuzzx.int_range(p, 300, 1601)), i32(fuzzx.int_range(p, 200, 1201)))
-		ui.ui_runtime_set_scale(&ui_runtime, f32(fuzzx.int_range(p, 50, 301)) / 100.0)
+		fit.Session_Set_Scale(fit_session, f32(fuzzx.int_range(p, 50, 301)) / 100.0)
 	}
 
 }
@@ -215,9 +216,8 @@ main :: proc() {
 
 	rl.InitWindow(480, 320, "gfx frame lifecycle fuzz")
 	rl.SetTargetFPS(0) // uncapped: iterations bound the run, not wall time
+	fit.Session_Init(&session, {semantics_enabled = true})
 	fuzz_font = load_font(16)
-	ui.ui_runtime_init(&ui_runtime)
-	ui.ui_runtime_apply_platform_dpi(&ui_runtime)
 
 	for round in 0 ..< rounds {
 		round_seed := seed + u64(round)
@@ -225,24 +225,26 @@ main :: proc() {
 		p := fuzzx.prng_make(round_seed)
 		for i in 0 ..< iterations {
 			if rl.WindowShouldClose() do break
-			ui.ui_frame_begin(&ui_frame, &ui_runtime)
-			rl.BeginDrawing()
-			background := ui.ui_runtime_theme(&ui_runtime).bg_color
-			rl.ClearBackground(rl.Color(background))
+			builder, acquired := fit.Session_Begin(&session)
+			if !acquired do continue
+			rl.ClearBackground(rl.BLACK)
+			fit.Column(builder, {gap = .XS, padding = .SM})
+			fit.Label(builder, "FIT lifecycle fuzz", {role = .Title})
+			fit.Button(builder, "lifecycle", "Lifecycle button", &button_active)
+			fit.End(builder)
+			_ = fit.Render(builder)
 
 			// Interleave draw → mutate → draw so recorded references
-			// always precede the destroy in ordering-sensitive cases.
+			// from FIT and raw gfx precede ordering-sensitive destruction.
 			draw_some(&p)
 			ops := fuzzx.int_range(&p, 0, 5)
 			for _ in 0 ..< ops {
-				mutate_resources(&p)
+				mutate_resources(&p, &session)
 				if fuzzx.int_range(&p, 0, 2) == 0 do draw_some(&p)
 			}
 			draw_gpu3d(&p)
 
-			ui.ui_frame_end(&ui_frame)
-			rl.EndDrawing()
-			free_all(context.temp_allocator)
+			fit.Session_End(&session)
 			_ = i
 		}
 	}
@@ -253,8 +255,7 @@ main :: proc() {
 	for &mesh in live_gpu_meshes do if mesh.id != 0 do rl.destroy_gpu_mesh(&mesh)
 	if gpu_target.texture.texture.id != 0 do rl.destroy_gpu_3d_target(&gpu_target)
 	rl.UnloadFont(fuzz_font)
-	ui.ui_frame_destroy(&ui_frame)
-	ui.ui_runtime_destroy(&ui_runtime)
+	fit.Session_Destroy(&session)
 	rl.CloseWindow()
 
 	fmt.printfln("fuzz_gfx_frame ok")

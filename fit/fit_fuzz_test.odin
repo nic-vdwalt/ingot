@@ -172,111 +172,127 @@ fit_fuzz_description :: proc(
 	}
 }
 
+@(private = "file")
+fit_fuzz_select_storage :: proc(
+	t: ^testing.T,
+	p: ^fuzzx.Prng,
+	builder: ^Builder,
+	nodes: []Storage_Node,
+	outputs: []^bool,
+	seed: u64,
+	iteration: int,
+) -> bool {
+	external := fuzzx.int_range(p, 0, 2) == 0
+	if external {
+		capacity := fuzzx.int_range(p, FIT_FUZZ_NODE_LIMIT, len(nodes) + 1)
+		Set_Storage(builder, {nodes = nodes[:capacity], outputs = outputs[:capacity]})
+		testing.expectf(
+			t,
+			Storage_Capacity(builder) == capacity,
+			"seed %d iteration %d: external storage capacity mismatch",
+			seed,
+			iteration,
+		)
+	} else {
+		testing.expectf(
+			t,
+			Storage_Capacity(builder) == int(STORAGE_NODE_DEFAULT),
+			"seed %d iteration %d: inline storage capacity mismatch",
+			seed,
+			iteration,
+		)
+	}
+	return external
+}
+
+@(private = "file")
+fit_fuzz_iteration :: proc(t: ^testing.T, p: ^fuzzx.Prng, seed: u64, iteration: int) {
+	runtime: ui.Ui_Runtime
+	ui.ui_runtime_init(&runtime)
+	text_backend := i32(1)
+	ui.ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = fit_fuzz_font_for_size,
+			measure = fit_fuzz_text_measure,
+		},
+	)
+	output := new(ui.Ui_Output)
+	frame := ui.Ui_Frame {
+		output = output,
+	}
+	ui.ui_frame_begin(&frame, &runtime)
+	builder: Builder
+	nodes: [FIT_FUZZ_STORAGE_CAPACITY]Storage_Node
+	outputs: [FIT_FUZZ_STORAGE_CAPACITY]^bool
+	external := fit_fuzz_select_storage(t, p, &builder, nodes[:], outputs[:], seed, iteration)
+	width := i32(fuzzx.int_range(p, 64, 1025))
+	height := i32(fuzzx.int_range(p, 64, 769))
+	builder_open(&builder, &frame, {0, 0, width, height})
+	counts: Fit_Fuzz_Counts
+	activations: [FIT_FUZZ_NODE_LIMIT]bool
+	fit_fuzz_description(&builder, p, &counts, &activations)
+	size := Measure(&builder)
+	testing.expectf(
+		t,
+		size.w >= 0 && size.h >= 0,
+		"seed %d iteration %d: negative measurement",
+		seed,
+		iteration,
+	)
+	if iteration % 2 == 0 {
+		Render_At(&builder, {0, 0, max(size.w, 1), max(size.h, 1)})
+	} else {
+		rect := Render(&builder)
+		testing.expectf(
+			t,
+			rect.w >= 0 && rect.h >= 0,
+			"seed %d iteration %d: negative render bounds",
+			seed,
+			iteration,
+		)
+	}
+	testing.expectf(
+		t,
+		counts.render == counts.customs,
+		"seed %d iteration %d: custom render count %d != %d",
+		seed,
+		iteration,
+		counts.render,
+		counts.customs,
+	)
+	testing.expectf(
+		t,
+		counts.measure >= counts.customs,
+		"seed %d iteration %d: custom measure count %d < %d",
+		seed,
+		iteration,
+		counts.measure,
+		counts.customs,
+	)
+	builder_close(&builder)
+	if external {
+		Reset_Storage(&builder)
+		testing.expectf(
+			t,
+			Storage_Capacity(&builder) == int(STORAGE_NODE_DEFAULT),
+			"seed %d iteration %d: storage reset failed",
+			seed,
+			iteration,
+		)
+	}
+	ui.ui_frame_end(&frame)
+	ui.ui_frame_destroy(&frame)
+	free(output)
+	ui.ui_runtime_destroy(&runtime)
+}
+
 @(test)
 fit_public_builder_fuzz :: proc(t: ^testing.T) {
 	seed := u64(FIT_FUZZ_SEED)
 	if seed == 0 do seed = u64(time.now()._nsec)
 	log.infof("fit fuzz seed=%d iterations=%d", seed, FIT_FUZZ_ITER)
 	p := fuzzx.prng_make(seed)
-
-	for iteration in 0 ..< FIT_FUZZ_ITER {
-		runtime: ui.Ui_Runtime
-		ui.ui_runtime_init(&runtime)
-		text_backend := i32(1)
-		ui.ui_runtime_set_text_backend(
-			&runtime,
-			{
-				data = &text_backend,
-				font_for_size = fit_fuzz_font_for_size,
-				measure = fit_fuzz_text_measure,
-			},
-		)
-		output := new(ui.Ui_Output)
-		frame := ui.Ui_Frame {
-			output = output,
-		}
-		ui.ui_frame_begin(&frame, &runtime)
-		builder: Builder
-		nodes: [FIT_FUZZ_STORAGE_CAPACITY]Storage_Node
-		outputs: [FIT_FUZZ_STORAGE_CAPACITY]^bool
-		external := fuzzx.int_range(&p, 0, 2) == 0
-		if external {
-			capacity := fuzzx.int_range(&p, FIT_FUZZ_NODE_LIMIT, FIT_FUZZ_STORAGE_CAPACITY + 1)
-			Set_Storage(&builder, {nodes = nodes[:capacity], outputs = outputs[:capacity]})
-			testing.expectf(
-				t,
-				Storage_Capacity(&builder) == capacity,
-				"seed %d iteration %d: external storage capacity mismatch",
-				seed,
-				iteration,
-			)
-		} else {
-			testing.expectf(
-				t,
-				Storage_Capacity(&builder) == int(STORAGE_NODE_DEFAULT),
-				"seed %d iteration %d: inline storage capacity mismatch",
-				seed,
-				iteration,
-			)
-		}
-		width := i32(fuzzx.int_range(&p, 64, 1025))
-		height := i32(fuzzx.int_range(&p, 64, 769))
-		builder_open(&builder, &frame, {0, 0, width, height})
-		counts: Fit_Fuzz_Counts
-		activations: [FIT_FUZZ_NODE_LIMIT]bool
-		fit_fuzz_description(&builder, &p, &counts, &activations)
-		size := Measure(&builder)
-		testing.expectf(
-			t,
-			size.w >= 0 && size.h >= 0,
-			"seed %d iteration %d: negative measurement",
-			seed,
-			iteration,
-		)
-		if iteration % 2 == 0 {
-			Render_At(&builder, {0, 0, max(size.w, 1), max(size.h, 1)})
-		} else {
-			rect := Render(&builder)
-			testing.expectf(
-				t,
-				rect.w >= 0 && rect.h >= 0,
-				"seed %d iteration %d: negative render bounds",
-				seed,
-				iteration,
-			)
-		}
-		testing.expectf(
-			t,
-			counts.render == counts.customs,
-			"seed %d iteration %d: custom render count %d != %d",
-			seed,
-			iteration,
-			counts.render,
-			counts.customs,
-		)
-		testing.expectf(
-			t,
-			counts.measure >= counts.customs,
-			"seed %d iteration %d: custom measure count %d < %d",
-			seed,
-			iteration,
-			counts.measure,
-			counts.customs,
-		)
-		builder_close(&builder)
-		if external {
-			Reset_Storage(&builder)
-			testing.expectf(
-				t,
-				Storage_Capacity(&builder) == int(STORAGE_NODE_DEFAULT),
-				"seed %d iteration %d: storage reset failed",
-				seed,
-				iteration,
-			)
-		}
-		ui.ui_frame_end(&frame)
-		ui.ui_frame_destroy(&frame)
-		free(output)
-		ui.ui_runtime_destroy(&runtime)
-	}
+	for iteration in 0 ..< FIT_FUZZ_ITER do fit_fuzz_iteration(t, &p, seed, iteration)
 }
