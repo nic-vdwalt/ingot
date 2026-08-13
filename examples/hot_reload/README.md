@@ -1,8 +1,8 @@
 # Ingot hot reload
 
-This native example keeps the Ingot window, WebGPU context, and `ui_gfx.Session`
-in a persistent host while application state and immediate-mode UI code live in
-a reloadable shared library.
+This native example keeps the Ingot window, WebGPU context, and `fit.Session`
+in a persistent host while application state and Builder-based immediate-mode UI
+code live in a reloadable shared library.
 
 ## Run
 

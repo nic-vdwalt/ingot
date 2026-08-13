@@ -57,7 +57,9 @@ The builder is bounded and immediate. `Row`, `Column`, `Flow`, `Grid`, and
 helpers invoke one child procedure immediately and auto-close their own
 container; `Scope` provides explicit component identity. `Render` consumes the
 declaration synchronously. `Measure` plus `Render_At` supports caller-owned
-placement without introducing a retained widget tree.
+placement without introducing a retained widget tree. A `Custom` render callback
+receives a borrowed `fit.Surface` for same-frame interaction and explicit
+geometry; the Surface is valid only for that callback and must not be retained.
 
 For an existing raylib loop, use `fit.Session`:
 
@@ -73,12 +75,14 @@ main :: proc() {
 }
 
 Frame :: proc() {
-	builder, acquired := fit.Session_Begin(&session)
-	if !acquired do return
+	_ = fit.Session_Draw(&session, Draw)
+}
+
+Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	_ = userdata
 	fit.Column(builder)
 	fit.Label(builder, "UI inside a raylib loop")
 	fit.End(builder)
-	fit.Session_End(&session)
 }
 ```
 

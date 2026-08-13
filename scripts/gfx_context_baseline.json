@@ -1,5 +1,5 @@
 {
-  "gfx/api_tests.odin:context_scope_nested_activation_restores_owner": 5,
+  "gfx/api_tests.odin:context_scope_nested_activation_restores_owner": 1,
   "gfx/batch.odin:MatrixModePop": 6,
   "gfx/batch.odin:MatrixModePush": 3,
   "gfx/batch.odin:MatrixModeTranslate": 3,
