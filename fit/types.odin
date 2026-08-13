@@ -32,9 +32,9 @@ App :: struct {
 
 Session :: struct {
 	inner:   ui_gfx.Session,
-	frame:   ui_gfx.Session_Frame,
 	builder: Builder,
-	open:    bool,
+	draw:    Session_Draw_Proc,
+	userdata: rawptr,
 }
 
 State :: enum u8 {
@@ -76,6 +76,7 @@ Config :: struct {
 Draw_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
 Session_Draw_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
 Shutdown_Proc :: #type proc(app: ^App, userdata: rawptr)
+Build_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
 
 Callbacks :: struct {
 	draw:     Draw_Proc,
@@ -286,6 +287,12 @@ Button_Options :: struct {
 	track:       Track,
 	size:        Size_Options,
 	activated:   ^bool,
+}
+
+Control_Options :: struct {
+	track:   Track,
+	size:    Size_Options,
+	changed: ^bool,
 }
 
 Custom_Options :: struct {

@@ -180,6 +180,15 @@ to_button_options :: proc(value: Button_Options) -> ui.Fit_Button_Options {
 }
 
 @(private = "package")
+to_control_options :: proc(value: Control_Options) -> ui.Fit_Control_Options {
+	return {
+		track = to_track(value.track),
+		size = to_size(value.size),
+		changed = value.changed,
+	}
+}
+
+@(private = "package")
 to_custom_options :: proc(value: Custom_Options) -> ui.Fit_Custom_Options {
 	return {track = to_track(value.track), size = to_size(value.size), activated = value.activated}
 }

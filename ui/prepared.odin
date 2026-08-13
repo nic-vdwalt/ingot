@@ -136,6 +136,9 @@ Prepared_Kind :: enum u8 {
 	Attachment,
 	Label,
 	Button,
+	Checkbox,
+	Radio,
+	Slider,
 	Custom,
 }
 
@@ -151,6 +154,9 @@ Prepared_Node :: struct {
 	attachment:               Prepared_Attachment_Options,
 	label:                    Label_Spec,
 	button:                   Button_Spec,
+	checkbox:                 Checkbox_Spec,
+	radio:                    Radio_Spec,
+	slider:                   Slider_Spec,
 	custom:                   Prepared_Custom,
 	size:                     Intrinsic_Size,
 	rect:                     Rect_I32,
@@ -408,6 +414,37 @@ prepared_button :: proc {
 	prepared_button_u64,
 }
 
+prepared_checkbox :: proc(
+	prepared: ^Prepared_Ui,
+	spec: Checkbox_Spec,
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_checkbox: description not open")
+	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.checked != nil)
+	return prepared_add(prepared, Prepared_Node{kind = .Checkbox, checkbox = spec, track = track})
+}
+
+prepared_radio :: proc(
+	prepared: ^Prepared_Ui,
+	spec: Radio_Spec,
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_radio: description not open")
+	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.selected != nil)
+	return prepared_add(prepared, Prepared_Node{kind = .Radio, radio = spec, track = track})
+}
+
+prepared_slider :: proc(
+	prepared: ^Prepared_Ui,
+	spec: Slider_Spec,
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_slider: description not open")
+	assert(spec.id != WIDGET_ID_NONE && spec.value != nil && spec.maximum > spec.minimum)
+	assert(spec.step >= 0 && spec.a11y_label != "", "prepared_slider: invalid spec")
+	return prepared_add(prepared, Prepared_Node{kind = .Slider, slider = spec, track = track})
+}
+
 prepared_custom :: proc(
 	prepared: ^Prepared_Ui,
 	spec: Prepared_Custom,
@@ -631,6 +668,12 @@ prepared_measure_leaf :: proc(u: ^Ui, node: ^Prepared_Node, max_width: i32) {
 		}
 	case .Button:
 		node.size = button_spec_size(u, node.button)
+	case .Checkbox:
+		node.size = checkbox_spec_size(u, node.checkbox)
+	case .Radio:
+		node.size = radio_spec_size(u, node.radio)
+	case .Slider:
+		node.size = slider_spec_size(u, node.slider)
 	case .Custom:
 		node.size = node.custom.measure(u, {max_w = max_width}, node.custom.userdata)
 	case .Row, .Column, .Flow, .Grid, .Attachment:
@@ -1307,7 +1350,7 @@ prepared_container_effects :: proc(node: ^Prepared_Node) -> Prepared_Container_E
 		return node.flow.effects
 	case .Grid:
 		return node.grid.effects
-	case .Attachment, .Label, .Button, .Custom:
+	case .Attachment, .Label, .Button, .Checkbox, .Radio, .Slider, .Custom:
 		unreachable()
 	}
 	unreachable()
@@ -1321,6 +1364,12 @@ prepared_render_leaf :: proc(u: ^Ui, node: ^Prepared_Node) {
 		prepared_render_label(u, node)
 	case .Button:
 		node.activated = button_spec_at(u, node.button, node.rect)
+	case .Checkbox:
+		node.activated = checkbox_spec_at(u, node.checkbox, node.rect)
+	case .Radio:
+		node.activated = radio_spec_at(u, node.radio, node.rect)
+	case .Slider:
+		node.activated = slider_spec_at(u, node.slider, node.rect)
 	case .Custom:
 		node.activated = node.custom.render(u, node.rect, node.custom.userdata)
 	case .Row, .Column, .Flow, .Grid, .Attachment:

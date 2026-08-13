@@ -17,6 +17,12 @@ Fit_Button_Options :: struct {
 	activated:   ^bool,
 }
 
+Fit_Control_Options :: struct {
+	track:   Track,
+	size:    Prepared_Size,
+	changed: ^bool,
+}
+
 Fit_Custom_Options :: struct {
 	track:     Track,
 	size:      Prepared_Size,
@@ -296,6 +302,42 @@ fit_builder_button :: proc {
 	fit_button_builder_id_active,
 	fit_button_builder_id_styled_active,
 	fit_button_builder_spec,
+}
+
+fit_builder_checkbox :: proc(
+	builder: ^Fit_Builder,
+	spec: Checkbox_Spec,
+	options: Fit_Control_Options = {},
+) {
+	assert(builder != nil, "fit_builder_checkbox: nil builder")
+	fit_builder_add_child(builder)
+	handle := prepared_checkbox(&builder.prepared, spec, options.track)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+	fit_builder_output(builder, handle, options.changed)
+}
+
+fit_builder_radio :: proc(
+	builder: ^Fit_Builder,
+	spec: Radio_Spec,
+	options: Fit_Control_Options = {},
+) {
+	assert(builder != nil, "fit_builder_radio: nil builder")
+	fit_builder_add_child(builder)
+	handle := prepared_radio(&builder.prepared, spec, options.track)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+	fit_builder_output(builder, handle, options.changed)
+}
+
+fit_builder_slider :: proc(
+	builder: ^Fit_Builder,
+	spec: Slider_Spec,
+	options: Fit_Control_Options = {},
+) {
+	assert(builder != nil, "fit_builder_slider: nil builder")
+	fit_builder_add_child(builder)
+	handle := prepared_slider(&builder.prepared, spec, options.track)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+	fit_builder_output(builder, handle, options.changed)
 }
 
 @(private = "package")

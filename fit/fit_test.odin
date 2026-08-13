@@ -71,13 +71,13 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	button_u64: proc(_: ^Builder, _: u64, _: string, _: ^bool) = Button
 	measure: proc(_: ^Builder) -> Size = Measure
 	render_at: proc(_: ^Builder, _: Rect) = Render_At
-	session_begin: proc(_: ^Session) -> (^Builder, bool) = Session_Begin
+	session_draw: proc(_: ^Session, _: Session_Draw_Proc, _: rawptr) -> bool = Session_Draw
 	set_storage: proc(_: ^Builder, _: Storage) = Set_Storage
 	reset_storage: proc(_: ^Builder) = Reset_Storage
 	storage_capacity: proc(_: ^Builder) -> int = Storage_Capacity
 	testing.expect(t, draw != nil && run != nil)
 	testing.expect(t, button_string != nil && button_u64 != nil)
-	testing.expect(t, measure != nil && render_at != nil && session_begin != nil)
+	testing.expect(t, measure != nil && render_at != nil && session_draw != nil)
 	testing.expect(t, set_storage != nil && reset_storage != nil && storage_capacity != nil)
 }
 
