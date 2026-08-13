@@ -25,16 +25,16 @@ context_get_char_pressed :: proc(ctx: ^Context) -> rune {
 
 context_is_key_down :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 	if ctx == nil do return false
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return IsKeyDown(key)
+	index := i32(key)
+	if index < 0 || index >= KEY_COUNT do return false
+	return ctx.inp.key_down[index]
 }
 
 context_is_mouse_button_down :: proc(ctx: ^Context, button: MouseButton) -> bool {
 	if ctx == nil do return false
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return IsMouseButtonDown(button)
+	index := int(button)
+	if index < 0 || index >= len(ctx.inp.mb_down) do return false
+	return ctx.inp.mb_down[index]
 }
 
 context_window_focused :: proc(ctx: ^Context) -> bool {

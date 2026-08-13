@@ -275,7 +275,7 @@ context_is_key_pressed :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 }
 
 IsKeyPressed :: proc(key: KeyboardKey) -> bool {
-	return context_is_key_pressed(g, key)
+	return context_is_key_pressed(active_context(), key)
 }
 
 context_is_key_pressed_repeat :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
@@ -286,7 +286,7 @@ context_is_key_pressed_repeat :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 }
 
 IsKeyPressedRepeat :: proc(key: KeyboardKey) -> bool {
-	return context_is_key_pressed_repeat(g, key)
+	return context_is_key_pressed_repeat(active_context(), key)
 }
 
 context_is_key_released :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
@@ -297,13 +297,11 @@ context_is_key_released :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 }
 
 IsKeyReleased :: proc(key: KeyboardKey) -> bool {
-	return context_is_key_released(g, key)
+	return context_is_key_released(active_context(), key)
 }
 
 IsKeyDown :: proc(key: KeyboardKey) -> bool {
-	i := i32(key)
-	if i < 0 || i >= KEY_COUNT do return false
-	return g.inp.key_down[i]
+	return context_is_key_down(active_context(), key)
 }
 
 GetCharPressed :: proc() -> rune {
@@ -328,7 +326,7 @@ context_is_mouse_button_pressed :: proc(ctx: ^Context, button: MouseButton) -> b
 }
 
 IsMouseButtonPressed :: proc(button: MouseButton) -> bool {
-	return context_is_mouse_button_pressed(g, button)
+	return context_is_mouse_button_pressed(active_context(), button)
 }
 
 context_is_mouse_button_released :: proc(ctx: ^Context, button: MouseButton) -> bool {
@@ -339,13 +337,11 @@ context_is_mouse_button_released :: proc(ctx: ^Context, button: MouseButton) -> 
 }
 
 IsMouseButtonReleased :: proc(button: MouseButton) -> bool {
-	return context_is_mouse_button_released(g, button)
+	return context_is_mouse_button_released(active_context(), button)
 }
 
 IsMouseButtonDown :: proc(button: MouseButton) -> bool {
-	b := int(button)
-	if b < 0 || b >= 8 do return false
-	return g.inp.mb_down[b]
+	return context_is_mouse_button_down(active_context(), button)
 }
 
 // --- gamepad queries (raylib-named) ----------------------------------------
@@ -409,8 +405,8 @@ context_get_mouse_wheel_move_v :: proc(ctx: ^Context) -> Vector2 {
 	return ctx == nil ? Vector2{} : ctx.inp.wheel
 }
 
-GetMousePosition :: proc() -> Vector2 {return context_get_mouse_position(g)}
-GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(g)}
+GetMousePosition :: proc() -> Vector2 {return context_get_mouse_position(active_context())}
+GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(active_context())}
 
 // SetMousePosition warps the cursor to window coordinates (raylib parity).
 // The buffered position updates immediately so the frame that requests the warp
@@ -421,7 +417,7 @@ GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(g)}
 // derived from the pointer, so a recorded frame is only reproducible when the
 // harness owns the cursor rather than inheriting wherever the user left it.
 SetMousePosition :: proc(x, y: i32) {
-	context_set_mouse_position(g, x, y)
+	context_set_mouse_position(active_context(), x, y)
 }
 
 context_set_mouse_position :: proc(ctx: ^Context, x, y: i32) {
@@ -443,7 +439,7 @@ GetMouseWheelMove :: proc() -> f32 {
 	if abs(g.inp.wheel.x) > abs(g.inp.wheel.y) do return g.inp.wheel.x
 	return g.inp.wheel.y
 }
-GetMouseWheelMoveV :: proc() -> Vector2 {return context_get_mouse_wheel_move_v(g)}
+GetMouseWheelMoveV :: proc() -> Vector2 {return context_get_mouse_wheel_move_v(active_context())}
 
 GetClipboardText :: proc() -> cstring {
 	s := platform_get_clipboard()
@@ -529,37 +525,40 @@ SyncWebControl :: proc(
 }
 
 SetMouseCursor :: proc(cursor: MouseCursor) {
+	ctx := active_context()
 	i := int(cursor)
 	if i < 0 || i >= 11 do return
-	if cursor == g.inp.cur_cursor do return
-	g.inp.cur_cursor = cursor
-	if !g.inp.cursor_hidden do platform_set_mouse_cursor(cursor)
+	if cursor == ctx.inp.cur_cursor do return
+	ctx.inp.cur_cursor = cursor
+	if !ctx.inp.cursor_hidden do platform_set_mouse_cursor(cursor)
 }
 
 // HideCursor hides the OS cursor over the window; SetMouseCursor calls made
 // while hidden are remembered and reapplied by ShowCursor.
 HideCursor :: proc() {
-	if g.inp.cursor_hidden do return
-	g.inp.cursor_hidden = true
+	ctx := active_context()
+	if ctx.inp.cursor_hidden do return
+	ctx.inp.cursor_hidden = true
 	platform_set_cursor_hidden(true)
 }
 
 ShowCursor :: proc() {
-	if !g.inp.cursor_hidden do return
-	g.inp.cursor_hidden = false
+	ctx := active_context()
+	if !ctx.inp.cursor_hidden do return
+	ctx.inp.cursor_hidden = false
 	platform_set_cursor_hidden(false)
-	platform_set_mouse_cursor(g.inp.cur_cursor)
+	platform_set_mouse_cursor(ctx.inp.cur_cursor)
 }
 
 IsCursorHidden :: proc() -> bool {
-	return g.inp.cursor_hidden
+	return active_context().inp.cursor_hidden
 }
 
 context_is_cursor_on_screen :: proc(ctx: ^Context) -> bool {
 	return ctx != nil && ctx.inp.cursor_on_screen
 }
 
-IsCursorOnScreen :: proc() -> bool {return context_is_cursor_on_screen(g)}
+IsCursorOnScreen :: proc() -> bool {return context_is_cursor_on_screen(active_context())}
 
 // SetTextInputRect reports the focused text field's caret rect (UI logical
 // pixels, top-left origin). Call every frame while a field is active; the OS

@@ -332,6 +332,12 @@ default_context :: proc() -> ^Context {
 }
 
 @(private)
+active_context :: proc() -> ^Context {
+	assert(g != nil, "active_context: nil context")
+	return g
+}
+
+@(private)
 _context_activate :: proc(ctx: ^Context) -> ^Context {
 	assert(ctx != nil, "_context_activate: nil context")
 	previous := g
@@ -1026,16 +1032,16 @@ context_fps :: proc(ctx: ^Context) -> i32 {
 	return i32(1.0 / ctx.real_frame_time + 0.5)
 }
 
-GetScreenWidth :: proc() -> i32 {return context_screen_width(g)}
-GetScreenHeight :: proc() -> i32 {return context_screen_height(g)}
-GetWindowScaleDPI :: proc() -> Vector2 {return context_window_scale_dpi(g)}
-GetRenderWidth :: proc() -> i32 {return context_render_width(g)}
-GetRenderHeight :: proc() -> i32 {return context_render_height(g)}
+GetScreenWidth :: proc() -> i32 {return context_screen_width(active_context())}
+GetScreenHeight :: proc() -> i32 {return context_screen_height(active_context())}
+GetWindowScaleDPI :: proc() -> Vector2 {return context_window_scale_dpi(active_context())}
+GetRenderWidth :: proc() -> i32 {return context_render_width(active_context())}
+GetRenderHeight :: proc() -> i32 {return context_render_height(active_context())}
 
 SetTargetFPS :: proc(fps: i32) {default_context().target_fps = fps}
-GetFrameTime :: proc() -> f32 {return context_frame_time(g)}
-GetTime :: proc() -> f64 {return context_time(g)}
-GetFPS :: proc() -> i32 {return context_fps(g)}
+GetFrameTime :: proc() -> f32 {return context_frame_time(active_context())}
+GetTime :: proc() -> f64 {return context_time(active_context())}
+GetFPS :: proc() -> i32 {return context_fps(active_context())}
 
 SetWindowMinSize :: proc(w, h: i32) {
 	platform_set_window_min_size(w, h)
@@ -1065,7 +1071,7 @@ GetWindowPosition :: proc() -> Vector2 {
 // IsWindowResized reports whether the logical window size changed at the start
 // of the current frame. A DPI-only change is not a resize; see GetWindowScaleDPI.
 IsWindowResized :: proc() -> bool {
-	return context_window_resized(g)
+	return context_window_resized(active_context())
 }
 
 context_window_resized :: proc(ctx: ^Context) -> bool {

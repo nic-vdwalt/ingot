@@ -76,7 +76,7 @@ when INGOT_DEFAULT_FONT {
 	// bitmap font needing fontSize/10 added back between glyphs, whereas the
 	// embedded TTF's own advances already include it.
 	GetFontDefault :: proc() -> Font {
-		font, ok := _default_font(g)
+		font, ok := _default_font(active_context())
 		if !ok do return {}
 		return font
 	}
