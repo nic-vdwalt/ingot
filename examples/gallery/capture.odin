@@ -24,6 +24,7 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 import fit "ingot:fit"
+import legacy "ingot:fit"
 import rl "ingot:gfx"
 
 // Imports are used only under `when CAPTURE`; anchor them for normal builds.
@@ -32,6 +33,7 @@ _ :: os
 _ :: strings
 _ :: rl
 _ :: fit
+_ :: legacy
 
 // CAPTURE is declared in main.odin so the js target, which excludes this file,
 // can still compile main.odin's `when CAPTURE` guards.
@@ -135,7 +137,7 @@ when CAPTURE {
 			reduced_motion = !capture_sequence
 			apply_gallery_theme()
 			apply_scale(CAPTURE_UI_SCALE)
-			fit.pane_reset(&content_pane)
+			legacy.pane_reset(&content_pane)
 			capture_seed_inputs()
 			if capture_sequence do capture_replay_animations()
 			capture_state_applied = true
@@ -158,9 +160,9 @@ when CAPTURE {
 	// content, selection, and spellcheck rather than three empty placeholders.
 	capture_seed_inputs :: proc() {
 		if section != .Inputs do return
-		fit.Input_Box_Set_Text(&input_state.name, "Ada Lovelace")
-		fit.Input_Box_Set_Text(&input_state.pass, "correct horse battery")
-		fit.Input_Box_Set_Text(
+		legacy.input_box_set_text(&input_state.name, "Ada Lovelace")
+		legacy.input_box_set_text(&input_state.pass, "correct horse battery")
+		legacy.input_box_set_text(
 			&input_state.notes,
 			"Immediate mode all the way up: the caller owns this text, undo, and selection.",
 		)

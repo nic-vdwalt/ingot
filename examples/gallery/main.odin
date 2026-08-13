@@ -167,13 +167,13 @@ click_count := 0
 headers_open := [3]bool{true, false, false}
 
 Input_State :: struct {
-	name:           legacy.Input_Box,
-	pass:           legacy.Input_Box,
-	notes:          legacy.Input_Box,
-	combo:          legacy.Combobox_State,
+	name:           legacy.legacy_input_box,
+	pass:           legacy.legacy_input_box,
+	notes:          legacy.legacy_input_box,
+	combo:          legacy.legacy_combobox_state,
 	combo_selected: u64,
-	date:           legacy.Date_Picker_State,
-	date_value:     legacy.Calendar_Date,
+	date:           legacy.legacy_date_picker_state,
+	date_value:     legacy.legacy_calendar_date,
 }
 
 input_state: Input_State
@@ -181,8 +181,8 @@ input_state: Input_State
 progress_anim: f32
 progress_frac: f32 = 0.35
 
-line_state: legacy.Chart_State
-bar_state: legacy.Chart_State
+line_state: legacy.legacy_chart_state
+bar_state: legacy.legacy_chart_state
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
 costs := [12]f32{8.1, 8.4, 9.0, 9.7, 10.2, 11.5, 11.1, 12.4, 12.0, 13.6, 13.1, 14.0}
 MONTHS := [12]string {
@@ -211,15 +211,15 @@ Widget_State :: struct {
 	check_b:        bool,
 	radio_choice:   i32,
 	volume:         f32,
-	slider:         legacy.Slider_State,
+	slider:         legacy.legacy_slider_state,
 	dd_selected:    i32,
-	dropdown:       legacy.Dropdown_State,
-	tooltip:        legacy.Tooltip_State,
-	listbox:        legacy.Listbox_State,
+	dropdown:       legacy.legacy_dropdown_state,
+	tooltip:        legacy.legacy_tooltip_state,
+	listbox:        legacy.legacy_listbox_state,
 	list_selected:  int,
 	list_activated: int,
 	tab_active:     i32,
-	table_sort:     legacy.Table_Sort,
+	table_sort:     legacy.legacy_table_sort,
 }
 
 widget_state := Widget_State {
@@ -230,13 +230,13 @@ widget_state := Widget_State {
 }
 
 // Generic modal + context menu (Overlay section).
-about_modal: legacy.Modal_State
-ctx_menu: legacy.Context_Menu_State
+about_modal: legacy.legacy_modal_state
+ctx_menu: legacy.legacy_context_menu_state
 ctx_note := "right-click in this section for a context menu"
 
 // Toasts + confirm dialog (Overlay section). Zero values are ready to use.
-toasts: legacy.Toast_State
-confirm: legacy.Confirm_Dialog_State
+toasts: legacy.legacy_toast_state
+confirm: legacy.legacy_confirm_dialog_state
 toast_count := 0
 
 popup_open := false
@@ -297,10 +297,10 @@ main :: proc() {
 
 input_state_destroy :: proc(state: ^Input_State) {
 	assert(state != nil, "input_state_destroy: nil state")
-	fit.Input_Box_Destroy(&state.name)
-	fit.Input_Box_Destroy(&state.pass)
-	fit.Input_Box_Destroy(&state.notes)
-	fit.Combobox_State_Destroy(&state.combo)
+	legacy.input_box_destroy(&state.name)
+	legacy.input_box_destroy(&state.pass)
+	legacy.input_box_destroy(&state.notes)
+	legacy.combobox_state_destroy(&state.combo)
 }
 
 gallery_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
@@ -813,7 +813,7 @@ draw_inputs :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 		legacy.id(u, "name"),
 		&state.name,
 		"Your name (undo, selection, spellcheck)",
-		semantics = legacy.Text_Input_Semantics{name = "Name"},
+		semantics = legacy.legacy_text_input_semantics{name = "Name"},
 	)
 	legacy.text_input(
 		u,
@@ -821,7 +821,7 @@ draw_inputs :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 		&state.pass,
 		"Password (masked)",
 		masked = true,
-		semantics = legacy.Text_Input_Semantics{name = "Password"},
+		semantics = legacy.legacy_text_input_semantics{name = "Password"},
 	)
 	legacy.text_input(
 		u,
@@ -829,26 +829,26 @@ draw_inputs :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 		&state.notes,
 		"Notes\u2026 (multi-line: Enter for newlines)",
 		height = 90,
-		semantics = legacy.Text_Input_Semantics{name = "Notes"},
+		semantics = legacy.legacy_text_input_semantics{name = "Notes"},
 	)
 
 	if legacy.button(u, legacy.id(u, "reset"), "Reset all") {
-		fit.Input_Box_Reset(&state.name)
-		fit.Input_Box_Reset(&state.pass)
-		fit.Input_Box_Reset(&state.notes)
+		legacy.input_box_reset(&state.name)
+		legacy.input_box_reset(&state.pass)
+		legacy.input_box_reset(&state.notes)
 	}
 	legacy.space(u, .XS)
 
 	summary := fmt.tprintf(
 		"name: %q \u00b7 notes: %d bytes",
-		fit.Input_Box_Text(&state.name),
-		len(fit.Input_Box_Text(&state.notes)),
+		legacy.input_box_text(&state.name),
+		len(legacy.input_box_text(&state.notes)),
 	)
 	legacy.label(u, summary, legacy.legacy_text_role.Label, legacy.legacy_ink.Secondary)
 
 	legacy.space(u, .SM)
 	_ = legacy.section_header(u, "COMBOBOX (type to filter) + DATE PICKER")
-	languages := []legacy.Combobox_Item {
+	languages := []legacy.legacy_combobox_item {
 		{1, "Odin"},
 		{2, "C"},
 		{3, "Zig"},
@@ -1011,7 +1011,7 @@ draw_widget_backend_list :: proc(
 	labels := [?]string{"Metal", "Vulkan", "D3D12", "WebGPU"}
 	width := min(w, legacy.ui_frame_sc(frame, 360))
 	step := legacy.ui_frame_sc(frame, 26)
-	config := legacy.Listbox_Config {
+	config := legacy.legacy_listbox_config {
 		rect         = {x, y, width, step * i32(len(labels))},
 		label        = "Rendering backends",
 		stable_id    = "gallery:backends",
@@ -1171,7 +1171,7 @@ widget_table_less :: proc(a, b: Widget_Table_Row) -> bool {
 	}
 }
 
-WIDGET_TABLE_COLUMNS := [3]legacy.Table_Column {
+WIDGET_TABLE_COLUMNS := [3]legacy.legacy_table_column {
 	{label = "Widget", track = {kind = .Grow, weight = 1}},
 	{label = "Layer", track = {kind = .Fixed, basis = 150}},
 	{label = "Procs", track = {kind = .Fixed, basis = 60}, numeric = true},
@@ -1251,7 +1251,7 @@ draw_charts :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 		"LINE + BAR + SPARKLINE (hover for overlay tooltips)",
 	)
 	cw := min(w, legacy.ui_frame_sc(frame, 560))
-	series := [2]legacy.Chart_Series {
+	series := [2]legacy.legacy_chart_series {
 		{name = "Revenue", values = revenue[:]},
 		{name = "Costs", values = costs[:]},
 	}
@@ -1429,7 +1429,7 @@ draw_overlay_controls :: proc(frame: ^legacy.Ui_Frame, x, y: i32) -> i32 {
 	if legacy.button_at(frame, legacy.grid_next(&grid), "Shielded 3") do shielded_clicks += 1
 	if legacy.button_at(frame, legacy.grid_next(&grid), "Push toast") {
 		toast_count += 1
-		kind := legacy.Toast_Kind(toast_count % 3)
+		kind := legacy.legacy_toast_kind(toast_count % 3)
 		legacy.toast_push(&toasts, kind, fmt.tprintf("Toast %d \u00b7 newest on top", toast_count))
 	}
 	// The shielded column has only three rows; skip its fourth cell so the
@@ -1462,7 +1462,7 @@ draw_overlay_context_menu :: proc(frame: ^legacy.Ui_Frame, x, info_y: i32) {
 		legacy.context_menu_open(&ctx_menu, i32(mouse.x), i32(mouse.y))
 	}
 	if ctx_menu.open {
-		items := []legacy.Menu_Item {
+		items := []legacy.legacy_menu_item {
 			{label = "Reset shielded clicks"},
 			{label = "Unavailable action", disabled = true},
 			{separator = true},
