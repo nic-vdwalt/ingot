@@ -163,10 +163,12 @@ caller ownership.
 
 `Prepared_Ui` is a bounded current-frame description, not a persistent widget
 model. Application code rebuilds it from current state, owns its storage, and
-does not synchronize it across frames. Its measurement procedures derive only
-geometry; interaction, focus, semantics, and paint are emitted once when the
-prepared leaves render. Handles identify results inside that one description and
-must not be retained as widget identity.
+does not synchronize it across frames. The concise `prepared_row` and
+`prepared_column` facades borrow the active `Ui` only until `prepared_end`; that
+binding adds no framework-owned state or cross-frame synchronization. Its
+measurement procedures derive only geometry; interaction, focus, semantics, and
+paint are emitted once when the prepared leaves render. Handles identify results
+inside that one description and must not be retained as widget identity.
 
 ## From immediate-mode library to app framework
 

@@ -114,6 +114,93 @@ layout_facade_prepared_toolbar_declares_dynamic_children_once :: proc(t: ^testin
 }
 
 @(test)
+layout_facade_concise_prepared_group_fits_content_and_overloads :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 500, 200})
+	prepared: Prepared_Ui
+	prepared_row(&u, &prepared, {gap = .SM, align = .Center})
+	_ = prepared_label(&prepared, "Actions", Prepared_Label_Options{role = .Label})
+	prepared_column_begin(&prepared, {gap = .XS})
+	string_button := prepared_button(&prepared, "save", "Save")
+	u64_button := prepared_button(&prepared, u64(7), "Seven")
+	prepared_container_end(&prepared)
+	widget_button := prepared_button(&prepared, id(&u, "apply"), "Apply")
+	rect := prepared_end(&prepared)
+	end(&u)
+	testing.expect(t, rect.w > 0 && rect.w < 500, "fit group did not retain natural width")
+	testing.expect(t, rect.h > 0, "fit group has no height")
+	testing.expect(t, !prepared_activated(&prepared, string_button), "string button activated")
+	testing.expect(t, !prepared_activated(&prepared, u64_button), "u64 button activated")
+	testing.expect(t, !prepared_activated(&prepared, widget_button), "ID button activated")
+	testing.expect_value(t, u.focus_count, 3)
+}
+
+@(test)
+layout_facade_concise_prepared_group_resolves_width_and_wrap :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 120, 300})
+	row: Prepared_Ui
+	prepared_row(&u, &row)
+	_ = prepared_label(&row, "Grow", Prepared_Label_Options{}, grow())
+	_ = prepared_button(&row, "button", "Button")
+	row_rect := prepared_end(&row)
+	column: Prepared_Ui
+	prepared_column(&u, &column)
+	prepared_column_begin(&column, {gap = .XS})
+	_ = prepared_label(
+		&column,
+		"alpha beta gamma delta epsilon",
+		Prepared_Label_Options{wrap = true},
+	)
+	prepared_container_end(&column)
+	column_rect := prepared_end(&column)
+	end(&u)
+	testing.expect_value(t, row_rect.w, i32(120))
+	testing.expect(t, column_rect.w <= 120, "wrapped group exceeded remaining width")
+	testing.expect(
+		t,
+		column_rect.h > ui_frame_metrics(&frame).FONT_SIZE_BODY,
+		"label did not wrap",
+	)
+}
+
+@(test)
 layout_facade_prepared_wrapped_label_remeasures_height_for_width :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
@@ -138,13 +225,13 @@ layout_facade_prepared_wrapped_label_remeasures_height_for_width :: proc(t: ^tes
 	wide: Prepared_Ui
 	prepared_begin(&wide, intrinsic_constraints(max_w = 200))
 	prepared_column_begin(&wide)
-	_ = prepared_label(&wide, {text = "alpha beta gamma delta", wrap = true})
+	_ = prepared_label(&wide, Label_Spec{text = "alpha beta gamma delta", wrap = true})
 	prepared_container_end(&wide)
 	wide_size := prepared_measure(&u, &wide)
 	narrow: Prepared_Ui
 	prepared_begin(&narrow, intrinsic_constraints(max_w = 60))
 	prepared_column_begin(&narrow)
-	_ = prepared_label(&narrow, {text = "alpha beta gamma delta", wrap = true})
+	_ = prepared_label(&narrow, Label_Spec{text = "alpha beta gamma delta", wrap = true})
 	prepared_container_end(&narrow)
 	narrow_size := prepared_measure(&u, &narrow)
 	testing.expect(t, narrow_size.h > wide_size.h, "narrow label did not grow")

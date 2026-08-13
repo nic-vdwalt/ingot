@@ -20,6 +20,12 @@ Label_Spec :: struct {
 	wrap: bool,
 }
 
+Prepared_Label_Options :: struct {
+	role: Text_Role,
+	ink:  Ink,
+	wrap: bool,
+}
+
 Prepared_Measure_Proc :: #type proc(
 	u: ^Ui,
 	constraints: Intrinsic_Constraints,
@@ -59,6 +65,7 @@ Prepared_Node :: struct {
 Prepared_Ui :: struct {
 	nodes:       [MAX_PREPARED_NODES]Prepared_Node,
 	stack:       [MAX_LAYOUT_DEPTH]i32,
+	u:           ^Ui,
 	count:       i32,
 	depth:       i32,
 	root:        i32,
@@ -95,6 +102,24 @@ prepared_column_begin :: proc(
 	return prepared_container_begin(prepared, .Column, options)
 }
 
+prepared_row :: proc(u: ^Ui, prepared: ^Prepared_Ui, options: Prepared_Container_Options = {}) {
+	assert(u != nil && prepared != nil, "prepared_row: invalid argument")
+	prepared_root_begin(u, prepared, .Row, options)
+}
+
+prepared_column :: proc(u: ^Ui, prepared: ^Prepared_Ui, options: Prepared_Container_Options = {}) {
+	assert(u != nil && prepared != nil, "prepared_column: invalid argument")
+	prepared_root_begin(u, prepared, .Column, options)
+}
+
+prepared_end :: proc(prepared: ^Prepared_Ui) -> Rect_I32 {
+	assert(prepared != nil && prepared.open, "prepared_end: description not open")
+	assert(prepared.u != nil && prepared.u.open, "prepared_end: invalid bound UI")
+	assert(prepared.depth == 1, "prepared_end: nested container still open")
+	prepared_container_end(prepared)
+	return prepared_fit(prepared.u, prepared)
+}
+
 prepared_container_end :: proc(prepared: ^Prepared_Ui) {
 	assert(prepared != nil && prepared.open, "prepared_container_end: description not open")
 	assert(
@@ -104,25 +129,94 @@ prepared_container_end :: proc(prepared: ^Prepared_Ui) {
 	prepared.depth -= 1
 }
 
-prepared_label :: proc(
+@(private = "package")
+prepared_label_spec :: proc(
 	prepared: ^Prepared_Ui,
 	spec: Label_Spec,
 	track: Track = {},
 ) -> Prepared_Handle {
-	assert(prepared != nil && prepared.open, "prepared_label: description not open")
-	assert(spec.text != "", "prepared_label: empty text")
+	assert(prepared != nil && prepared.open, "prepared_label_spec: description not open")
+	assert(spec.text != "", "prepared_label_spec: empty text")
 	return prepared_add(prepared, Prepared_Node{kind = .Label, label = spec, track = track})
 }
 
-prepared_button :: proc(
+@(private = "package")
+prepared_label_text :: proc(
+	prepared: ^Prepared_Ui,
+	text: string,
+	options: Prepared_Label_Options = {},
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_label_text: description not open")
+	assert(text != "", "prepared_label_text: empty text")
+	return prepared_label_spec(
+		prepared,
+		{text = text, role = options.role, ink = options.ink, wrap = options.wrap},
+		track,
+	)
+}
+
+prepared_label :: proc {
+	prepared_label_spec,
+	prepared_label_text,
+}
+
+@(private = "package")
+prepared_button_spec :: proc(
 	prepared: ^Prepared_Ui,
 	spec: Button_Spec,
 	track: Track = {},
 ) -> Prepared_Handle {
-	assert(prepared != nil && prepared.open, "prepared_button: description not open")
-	assert(spec.id != WIDGET_ID_NONE, "prepared_button: zero stable id")
-	assert(spec.label != "", "prepared_button: empty label")
+	assert(prepared != nil && prepared.open, "prepared_button_spec: description not open")
+	assert(spec.id != WIDGET_ID_NONE, "prepared_button_spec: zero stable id")
+	assert(spec.label != "", "prepared_button_spec: empty label")
 	return prepared_add(prepared, Prepared_Node{kind = .Button, button = spec, track = track})
+}
+
+@(private = "package")
+prepared_button_id :: proc(
+	prepared: ^Prepared_Ui,
+	widget: Widget_Id,
+	label: string,
+	options: Button_Options = {},
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_button_id: description not open")
+	assert(widget != WIDGET_ID_NONE && label != "", "prepared_button_id: invalid button")
+	return prepared_button_spec(prepared, button_spec(prepared.u, widget, label, options), track)
+}
+
+@(private = "package")
+prepared_button_string :: proc(
+	prepared: ^Prepared_Ui,
+	key: string,
+	label: string,
+	options: Button_Options = {},
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.u != nil, "prepared_button_string: UI not bound")
+	assert(key != "" && label != "", "prepared_button_string: invalid button")
+	return prepared_button_id(prepared, id(prepared.u, key), label, options, track)
+}
+
+@(private = "package")
+prepared_button_u64 :: proc(
+	prepared: ^Prepared_Ui,
+	key: u64,
+	label: string,
+	options: Button_Options = {},
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.u != nil, "prepared_button_u64: UI not bound")
+	assert(label != "", "prepared_button_u64: empty label")
+	return prepared_button_id(prepared, id(prepared.u, key), label, options, track)
+}
+
+prepared_button :: proc {
+	prepared_button_spec,
+	prepared_button_id,
+	prepared_button_string,
+	prepared_button_u64,
 }
 
 prepared_custom :: proc(
@@ -205,6 +299,21 @@ prepared_activated :: proc(prepared: ^Prepared_Ui, handle: Prepared_Handle) -> b
 	index := i32(handle)
 	assert(index >= 0 && index < prepared.count, "prepared_activated: handle out of range")
 	return prepared.nodes[index].activated
+}
+
+@(private = "file")
+prepared_root_begin :: proc(
+	u: ^Ui,
+	prepared: ^Prepared_Ui,
+	kind: Prepared_Kind,
+	options: Prepared_Container_Options,
+) {
+	assert(u != nil && u.open && u.frame != nil, "prepared_root_begin: invalid UI")
+	assert(prepared != nil && !prepared.open, "prepared_root_begin: description already open")
+	assert(kind == .Row || kind == .Column, "prepared_root_begin: invalid kind")
+	prepared_begin(prepared, intrinsic_constraints(max_w = remaining_rect(u).w))
+	prepared.u = u
+	_ = prepared_container_begin(prepared, kind, options)
 }
 
 @(private = "file")
