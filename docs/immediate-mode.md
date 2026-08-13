@@ -172,13 +172,19 @@ inside that one description and must not be retained as widget identity.
 
 `Fit_Node` is a borrowed value facade over the same prepared engine. Statically
 written children may use an inferred `{ ... }` child literal; runtime-built
-hierarchies pass `[]Fit_Node` slices. Both forms are current-frame data:
+hierarchies may pass `[]Fit_Node` slices. Both forms are current-frame data:
 application code rebuilds the tree from current state, `fit_tree` consumes it
 synchronously, and no node, slice, callback, userdata, or activation pointer is
-retained. The temporary hierarchy is derived frame data rather than
-framework-owned behavior. Lowering and layout use named fixed bounds and
-iterative walks; paint, semantics, focus, and interaction still execute exactly
-once.
+retained.
+
+`Fit_Builder` is the caller-owned direct-emission facade for dynamic trees.
+`fit_begin` resets its fixed inline storage, ordinary `if` and `for` statements
+emit children through `fit_builder_*`, balanced `fit_end` calls close containers,
+and `fit_render` consumes the result synchronously. There is no ambient current
+builder, retained widget tree, callback capture, invalidation, or cross-frame
+synchronization. Emission derives only current-frame geometry; interaction,
+focus, semantics, and paint still execute exactly once during render. All paths
+use named fixed bounds and iterative layout.
 
 ## From immediate-mode library to app framework
 
