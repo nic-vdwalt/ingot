@@ -41,16 +41,20 @@ consumer_api_baseline_compiles :: proc(t: ^testing.T) {
 		"Full options",
 		Fit_Button_Options{disabled = true, activated = &apply},
 	)
-	_ = fit_tree(
-		&u,
-		fit_row(
-			{gap = .SM, align = .Center},
-			{
-				fit_label("Actions", {role = .Label, track = grow()}),
-				fit_button("apply", "Apply", .Primary, &apply),
-			},
-		),
+	_ = fit_row(
+		{gap = .SM, align = .Center},
+		{
+			fit_label("Actions", {role = .Label, track = grow()}),
+			fit_button("static", "Static", .Primary, &apply),
+		},
 	)
+	builder: Fit_Builder
+	fit_begin(&builder, &u)
+	fit_builder_row(&builder, {gap = .SM, align = .Center})
+	fit_builder_label(&builder, "Actions", {role = .Label, track = grow()})
+	fit_builder_button(&builder, "apply", "Apply", .Primary, &apply)
+	fit_end(&builder)
+	_ = fit_render(&builder)
 	scope(&u, "items", consumer_api_items, &items)
 	canvas(&u, {height = 120}, consumer_api_canvas)
 	scope_end(&u)

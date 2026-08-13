@@ -195,24 +195,24 @@ fit_tree :: proc(u: ^Ui, root: Fit_Node) -> Rect_I32 {
 	root_value := root
 	prepared_begin(&prepared, intrinsic_constraints(max_w = remaining_rect(u).w))
 	fit_tree_lower(u, &prepared, &root_value, &outputs)
-	fit_tree_outputs_clear(&outputs)
+	fit_outputs_clear(&outputs)
 	rect := prepared_fit(u, &prepared)
-	fit_tree_outputs_publish(&prepared, &outputs)
+	fit_outputs_publish(&prepared, &outputs)
 	return rect
 }
 
-@(private = "file")
-fit_tree_outputs_clear :: proc(outputs: ^[MAX_PREPARED_NODES]^bool) {
-	assert(outputs != nil, "fit_tree_outputs_clear: nil outputs")
+@(private = "package")
+fit_outputs_clear :: proc(outputs: ^[MAX_PREPARED_NODES]^bool) {
+	assert(outputs != nil, "fit_outputs_clear: nil outputs")
 	for destination in outputs {
 		if destination != nil do destination^ = false
 	}
 }
 
-@(private = "file")
-fit_tree_outputs_publish :: proc(prepared: ^Prepared_Ui, outputs: ^[MAX_PREPARED_NODES]^bool) {
-	assert(prepared != nil && prepared.rendered, "fit_tree_outputs_publish: not rendered")
-	assert(outputs != nil, "fit_tree_outputs_publish: nil outputs")
+@(private = "package")
+fit_outputs_publish :: proc(prepared: ^Prepared_Ui, outputs: ^[MAX_PREPARED_NODES]^bool) {
+	assert(prepared != nil && prepared.rendered, "fit_outputs_publish: not rendered")
+	assert(outputs != nil, "fit_outputs_publish: nil outputs")
 	for destination, index in outputs {
 		if destination != nil {
 			destination^ = destination^ || prepared.nodes[index].activated

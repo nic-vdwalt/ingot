@@ -151,22 +151,46 @@ if activated do save_document()
 ```
 
 Use an inferred child literal, `{ ... }`, when children are written statically
-at the call site; the `[]Fit_Node` argument type is already known. Build dynamic
-children with fixed caller storage or `fit_nodes`, whose storage comes from
-active frame scratch, then pass the resulting slice to the same row or column.
-Both forms are borrowed only until `fit_tree` returns. The complete source tree
-is bounded by `MAX_PREPARED_NODES`; direct siblings remain bounded by
-`MAX_LAYOUT_FLEX`, and nesting remains bounded by `MAX_LAYOUT_DEPTH`.
+at the call site; the `[]Fit_Node` argument type is already known. For dynamic
+children, use caller-owned fixed-capacity `Fit_Builder` storage and ordinary
+control flow:
+
+```odin
+builder: ui.Fit_Builder
+ui.fit_begin(&builder, form)
+ui.fit_builder_column(&builder, {gap = .XS})
+ui.fit_builder_label(&builder, "Actions")
+for item in items {
+	ui.fit_builder_button(&builder, item.id, item.name, &activated)
+}
+if show_cancel {
+	ui.fit_builder_button(&builder, "cancel", "Cancel", .Primary, &activated)
+}
+ui.fit_end(&builder)
+rect := ui.fit_render(&builder)
+```
+
+The builder writes directly into the same prepared engine without allocation,
+an intermediate child slice, or ambient mutable state. Container begin calls
+must balance with `fit_end`, and `fit_render` synchronously consumes the closed
+root. Rebuild and reuse caller storage with `fit_begin`; do not copy an active
+builder. The complete description is bounded by `MAX_PREPARED_NODES`, direct
+siblings by `MAX_LAYOUT_FLEX`, and nesting by `MAX_LAYOUT_DEPTH`.
 
 `fit_button(id, text, &activated)` uses the default style, while
-`fit_button(id, text, .Primary, &activated)` selects a style. Use
-`Fit_Button_Options{...}` for disabled state, web form identity, tracks, or
-other combined options.
+`fit_button(id, text, .Primary, &activated)` selects a style. The corresponding
+builder overloads are under `fit_builder_button`. Use `Fit_Button_Options{...}`
+for disabled state, web form identity, tracks, or other combined options.
 
 Activation destinations are current-call outputs. They are reset before render
 and may be shared by several controls, whose results are OR-combined. Strings,
 slices, callbacks, userdata, and output pointers must remain valid through
-`fit_tree`. Constructors emit no focus, interaction, semantics, or paint.
+`fit_tree` or `fit_render`. Construction and builder emission produce no focus,
+interaction, semantics, or paint.
+
+`fit_nodes` remains the dynamic slice escape hatch when a `[]Fit_Node` must be
+assembled or passed onward. Its storage comes from active frame scratch and is
+borrowed only until `fit_tree` returns.
 
 Fit-only roots keep their natural width. Grow and percent tracks resolve against
 the remaining width, and wrapped labels derive height after width assignment.

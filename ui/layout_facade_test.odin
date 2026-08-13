@@ -297,7 +297,7 @@ layout_facade_fit_tree_resolves_width_and_wrapping :: proc(t: ^testing.T) {
 }
 
 @(test)
-layout_facade_fit_tree_dynamic_children_and_outputs_are_bounded :: proc(t: ^testing.T) {
+layout_facade_fit_builder_dynamic_children_and_outputs_are_bounded :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
@@ -318,27 +318,74 @@ layout_facade_fit_tree_dynamic_children_and_outputs_are_bounded :: proc(t: ^test
 	u: Ui
 	begin(&u, &frame, {0, 0, 300, 200})
 	active := true
-	children := fit_nodes(&u, 4)
-	append(&children, fit_label("Actions"))
+	counts: Prepared_Custom_Counts
+	builder: Fit_Builder
+	fit_begin(&builder, &u)
+	fit_builder_column(&builder, {gap = .XS})
+	fit_builder_label(&builder, "Actions")
+	fit_builder_row(&builder, {gap = .XS})
 	for index in 0 ..< 2 {
-		append(
-			&children,
-			fit_button(u64(index + 1), "Item", Fit_Button_Options{activated = &active}),
-		)
+		fit_builder_button(&builder, u64(index + 1), "Item", &active)
 	}
 	show_cancel := true
 	if show_cancel {
-		append(&children, fit_button("cancel", "Cancel", Fit_Button_Options{activated = &active}))
+		fit_builder_button(&builder, "cancel", "Cancel", .Primary, &active)
 	}
+	fit_end(&builder)
+	fit_builder_button(&builder, id(&u, "apply"), "Apply", &active)
+	fit_builder_custom(
+		&builder,
+		{
+			measure = prepared_custom_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &counts,
+		},
+	)
+	fit_end(&builder)
 	before := remaining_rect(&u)
-	rect := fit_tree(&u, fit_column({gap = .XS}, children[:]))
+	rect := fit_render(&builder)
 	after := remaining_rect(&u)
 	end(&u)
 	ui_frame_end(&frame)
 	ui_frame_destroy(&frame)
 	testing.expect(t, !active, "activation output was not reset or aggregated")
-	testing.expect_value(t, u.focus_count, 3)
+	testing.expect_value(t, u.focus_count, 4)
+	testing.expect_value(t, counts.measure, 2)
+	testing.expect_value(t, counts.render, 1)
 	testing.expect_value(t, after.y - before.y, rect.h)
+}
+
+@(test)
+layout_facade_fit_nodes_remains_a_dynamic_slice_escape_hatch :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_destroy(&frame)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	active := true
+	children := fit_nodes(&u, 1)
+	append(&children, fit_button("item", "Item", &active))
+	rect := fit_tree(&u, fit_row({}, children[:]))
+	end(&u)
+	testing.expect(t, !active, "activation output was not reset")
+	testing.expect_value(t, u.focus_count, 1)
+	testing.expect(t, rect.w > 0 && rect.h > 0, "dynamic slice tree was empty")
 }
 
 @(test)
