@@ -186,21 +186,3 @@ test_pointer_snapshot_policy :: proc(t: ^testing.T) {
 	testing.expect(t, !outside.mouse_down[2])
 }
 
-@(test)
-test_app_session_compatibility_aliases_compile :: proc(t: ^testing.T) {
-	test_context_lock()
-	defer test_context_unlock()
-	gfx_context := new(rl.Context)
-	defer free(gfx_context)
-	session := new(App_Session)
-	defer free(session)
-	config := App_Session_Config {
-		semantics_enabled = false,
-	}
-	app_session_init_context(session, gfx_context, config)
-	frame := app_session_begin_frame(session)
-	testing.expect(t, frame == &session.frame)
-	app_session_end_frame(session)
-	app_session_destroy(session)
-	testing.expect(t, !session.initialized)
-}

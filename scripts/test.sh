@@ -50,7 +50,7 @@ has_define() {
 	return 1
 }
 
-for pkg in asset box3d_workers ecs gfx procgen scene scene_gfx ui ui_gfx view view/generate libvterm term prefs net; do
+for pkg in asset box3d_workers ecs gfx procgen scene scene_gfx ui ui_gfx fit view view/generate libvterm term prefs net; do
 	echo "== testing $pkg =="
 	extra=()
 	# UI tests use deterministic single-thread execution for native graphics

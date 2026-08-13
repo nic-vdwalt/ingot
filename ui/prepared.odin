@@ -210,7 +210,7 @@ prepared_begin :: proc(prepared: ^Prepared_Ui, constraints: Intrinsic_Constraint
 	prepared.u = nil
 	nodes := prepared_nodes(prepared)
 	assert(len(nodes) >= MAX_LAYOUT_DEPTH && len(nodes) <= MAX_PREPARED_NODES_HARD)
-	assert(prepared.count >= 0 && prepared.count <= len(nodes))
+	assert(prepared.count >= 0 && prepared.count <= i32(len(nodes)))
 	prepared.count = 0
 	prepared.depth = 0
 	prepared.root = -1
@@ -307,7 +307,7 @@ prepared_container_end :: proc(prepared: ^Prepared_Ui) {
 	index := prepared.stack[stack_index]
 	assert(index >= 0 && index < prepared.count, "prepared_container_end: invalid index")
 	if prepared_nodes(prepared)[index].kind == .Attachment {
-		assert(index >= 0 && index < len(prepared_nodes(prepared)))
+		assert(index >= 0 && index < i32(len(prepared_nodes(prepared))))
 		assert(prepared_child_count(prepared, prepared_nodes(prepared)[index].first_child) == 1)
 	}
 	prepared.depth -= 1
@@ -461,7 +461,10 @@ prepared_render_at :: proc(u: ^Ui, prepared: ^Prepared_Ui, rect: Rect_I32) {
 	assert(prepared != nil && prepared.measured, "prepared_render_at: description not measured")
 	assert(!prepared.rendered && rect.w >= 0 && rect.h >= 0, "prepared_render_at: invalid render")
 	assert(prepared.root >= 0, "prepared_render_at: negative root")
-	assert(prepared.root < MAX_PREPARED_NODES, "prepared_render_at: root out of bounds")
+	assert(
+		prepared.root < i32(prepared_capacity(prepared)),
+		"prepared_render_at: root out of bounds",
+	)
 	assert(prepared.root < prepared.count, "prepared_render_at: root beyond count")
 	root := &prepared_nodes(prepared)[prepared.root]
 	if root.size.w != rect.w || root.size.h != rect.h {
@@ -547,7 +550,8 @@ prepared_push_container :: proc(prepared: ^Prepared_Ui, handle: Prepared_Handle)
 @(private = "file")
 prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Handle {
 	assert(prepared != nil && prepared.open, "prepared_add: description not open")
-	assert(prepared.count >= 0 && prepared.count < MAX_PREPARED_NODES, "prepared_add: nodes full")
+	nodes := prepared_nodes(prepared)
+	assert(prepared.count >= 0 && prepared.count < i32(len(nodes)), "prepared_add: nodes full")
 	assert(
 		prepared.depth >= 0 && prepared.depth <= MAX_LAYOUT_DEPTH,
 		"prepared_add: invalid depth",
@@ -561,7 +565,7 @@ prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Ha
 	if prepared.depth > 0 {
 		parent_index := prepared.stack[prepared.depth - 1]
 		assert(parent_index >= 0 && parent_index < index, "prepared_add: invalid parent")
-		parent := &prepared_nodes(prepared)[parent_index]
+		parent := &nodes[parent_index]
 		value.parent = parent_index
 		if parent.first_child < 0 {
 			parent.first_child = index
@@ -570,14 +574,14 @@ prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Ha
 				parent.last_child >= 0 && parent.last_child < index,
 				"prepared_add: invalid sibling",
 			)
-			prepared_nodes(prepared)[parent.last_child].next_sibling = index
+			nodes[parent.last_child].next_sibling = index
 		}
 		parent.last_child = index
 	} else {
 		assert(prepared.root < 0, "prepared_add: multiple roots")
 		prepared.root = index
 	}
-	prepared_nodes(prepared)[index] = value
+	nodes[index] = value
 	prepared.count += 1
 	return Prepared_Handle(index)
 }
@@ -585,7 +589,7 @@ prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Ha
 @(private = "file")
 prepared_measure_natural :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(u != nil && prepared != nil, "prepared_measure_natural: invalid argument")
-	assert(prepared.count > 0 && prepared.count <= MAX_PREPARED_NODES)
+	assert(prepared.count > 0 && prepared.count <= i32(prepared_capacity(prepared)))
 	for offset in 0 ..< prepared.count {
 		index := prepared.count - 1 - offset
 		node := &prepared_nodes(prepared)[index]
@@ -687,8 +691,9 @@ prepared_measure_flow :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_w
 	flow: Flow_Layout
 	flow_begin(&flow, {w = content_w}, space_px(u, node.flow.gap_x), space_px(u, node.flow.gap_y))
 	child := node.first_child
-	for _ in 0 ..< MAX_PREPARED_NODES {
+	for _ in 0 ..< prepared.count {
 		if child < 0 do break
+		assert(child < prepared.count, "prepared_measure_flow: child out of range")
 		value := &prepared_nodes(prepared)[child]
 		if value.kind != .Attachment do _ = flow_next(&flow, value.size.w, value.size.h)
 		child = value.next_sibling
@@ -723,9 +728,10 @@ prepared_child_count :: proc(prepared: ^Prepared_Ui, first: i32) -> i32 {
 	assert(prepared != nil, "prepared_child_count: nil description")
 	count: i32
 	child := first
-	for _ in 0 ..< MAX_PREPARED_NODES {
-		assert(count >= 0 && count < MAX_PREPARED_NODES, "prepared_child_count: corrupt count")
+	for _ in 0 ..< prepared.count {
+		assert(count >= 0 && count < prepared.count, "prepared_child_count: corrupt count")
 		if child < 0 do break
+		assert(child < prepared.count, "prepared_child_count: child out of range")
 		count += 1
 		child = prepared_nodes(prepared)[child].next_sibling
 	}
@@ -738,8 +744,9 @@ prepared_in_flow_child_count :: proc(prepared: ^Prepared_Ui, first: i32) -> i32 
 	assert(prepared != nil, "prepared_in_flow_child_count: nil description")
 	count: i32
 	child := first
-	for _ in 0 ..< MAX_PREPARED_NODES {
+	for _ in 0 ..< prepared.count {
 		if child < 0 do break
+		assert(child < prepared.count, "prepared_in_flow_child_count: child out of range")
 		if prepared_nodes(prepared)[child].kind != .Attachment do count += 1
 		child = prepared_nodes(prepared)[child].next_sibling
 	}
@@ -753,7 +760,11 @@ Prepared_Dependencies :: struct {
 
 @(private = "file")
 prepared_dependencies :: proc(prepared: ^Prepared_Ui) -> Prepared_Dependencies {
-	assert(prepared != nil && prepared.count > 0 && prepared.count <= MAX_PREPARED_NODES)
+	assert(
+		prepared != nil &&
+		prepared.count > 0 &&
+		prepared.count <= i32(prepared_capacity(prepared)),
+	)
 	result: Prepared_Dependencies
 	for index in 0 ..< prepared.count {
 		node := prepared_nodes(prepared)[index]
@@ -761,8 +772,9 @@ prepared_dependencies :: proc(prepared: ^Prepared_Ui) -> Prepared_Dependencies {
 		result.height = result.height || prepared_axis_dependent(node.sizing.height)
 		if node.kind == .Flow || node.kind == .Grid do result.width = true
 		child := node.first_child
-		for _ in 0 ..< MAX_PREPARED_NODES {
+		for _ in 0 ..< prepared.count {
 			if child < 0 do break
+			assert(child < prepared.count, "prepared_dependencies: child out of range")
 			track := prepared_nodes(prepared)[child].track
 			dependent := track.kind == .Grow || track.kind == .Percent
 			if node.kind == .Row do result.width = result.width || dependent
@@ -941,7 +953,7 @@ prepared_measure_heights :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 @(private = "file")
 prepared_place :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(u != nil && prepared != nil, "prepared_place: invalid argument")
-	assert(prepared.count > 0 && prepared.count <= MAX_PREPARED_NODES)
+	assert(prepared.count > 0 && prepared.count <= i32(prepared_capacity(prepared)))
 	for index in 0 ..< prepared.count {
 		node := &prepared_nodes(prepared)[index]
 		node.target_rect = node.rect
@@ -1077,7 +1089,7 @@ prepared_place_flow :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 	flow: Flow_Layout
 	flow_begin(&flow, content, space_px(u, node.flow.gap_x), space_px(u, node.flow.gap_y))
 	child := node.first_child
-	for _ in 0 ..< MAX_PREPARED_NODES {
+	for _ in 0 ..< prepared.count {
 		if child < 0 do break
 		value := &prepared_nodes(prepared)[child]
 		if value.kind != .Attachment do value.rect = flow_next(&flow, value.size.w, value.size.h)
@@ -1102,7 +1114,7 @@ prepared_place_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 		space_px(u, node.grid.gap_y),
 	)
 	child := node.first_child
-	for _ in 0 ..< MAX_PREPARED_NODES {
+	for _ in 0 ..< prepared.count {
 		if child < 0 do break
 		value := &prepared_nodes(prepared)[child]
 		if value.kind != .Attachment do value.rect = grid_next(&grid)
@@ -1162,7 +1174,7 @@ prepared_children :: proc(
 	assert(prepared != nil && result != nil, "prepared_children: invalid argument")
 	count: i32
 	child := first
-	for _ in 0 ..< MAX_PREPARED_NODES {
+	for _ in 0 ..< prepared.count {
 		if child < 0 do break
 		assert(child < prepared.count, "prepared_children: bad child")
 		value := &prepared_nodes(prepared)[child]
@@ -1226,6 +1238,7 @@ prepared_render_tree :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			continue
 		}
 		child_index := frame.next_child
+		assert(child_index >= 0 && child_index < prepared.count, "prepared_render_tree: bad child")
 		child := &prepared_nodes(prepared)[child_index]
 		frame.next_child = child.next_sibling
 		if prepared_kind_is_container(child.kind) {

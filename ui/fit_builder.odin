@@ -23,20 +23,57 @@ Fit_Custom_Options :: struct {
 	activated: ^bool,
 }
 
+Fit_Storage :: struct {
+	nodes:   []Prepared_Node,
+	outputs: []^bool,
+}
+
 Fit_Builder :: struct {
 	prepared:        Prepared_Ui,
 	outputs:         [MAX_PREPARED_NODES]^bool,
+	external:        []^bool,
 	outputs_used:    i32,
 	direct_children: [MAX_LAYOUT_DEPTH]i32,
 	container_kinds: [MAX_LAYOUT_DEPTH]Prepared_Kind,
+}
+
+fit_builder_set_storage :: proc(builder: ^Fit_Builder, storage: Fit_Storage) {
+	assert(builder != nil && !builder.prepared.open, "fit_builder_set_storage: builder open")
+	fit_storage_assert_valid(storage)
+	prepared_set_storage(&builder.prepared, {nodes = storage.nodes})
+	builder.external = storage.outputs
+}
+
+fit_builder_reset_storage :: proc(builder: ^Fit_Builder) {
+	assert(builder != nil && !builder.prepared.open, "fit_builder_reset_storage: builder open")
+	assert(builder.outputs_used >= 0, "fit_builder_reset_storage: invalid count")
+	prepared_reset_storage(&builder.prepared)
+	builder.external = nil
+}
+
+@(private = "package")
+fit_storage_assert_valid :: proc(storage: Fit_Storage) {
+	assert(storage.nodes != nil && storage.outputs != nil, "fit storage: nil slices")
+	assert(len(storage.nodes) == len(storage.outputs), "fit storage: capacity mismatch")
+	assert(len(storage.nodes) >= MAX_LAYOUT_DEPTH, "fit storage: capacity too small")
+	assert(len(storage.nodes) <= MAX_PREPARED_NODES_HARD, "fit storage: capacity too large")
+}
+
+@(private = "package")
+fit_builder_outputs :: proc(builder: ^Fit_Builder) -> []^bool {
+	assert(builder != nil, "fit_builder_outputs: nil builder")
+	if builder.external != nil do return builder.external
+	return builder.outputs[:]
 }
 
 fit_begin :: proc(builder: ^Fit_Builder, u: ^Ui) {
 	assert(builder != nil, "fit_begin: nil builder")
 	assert(u != nil && u.open && u.frame != nil, "fit_begin: invalid UI")
 	assert(!builder.prepared.open, "fit_begin: builder already open")
-	assert(builder.outputs_used >= 0 && builder.outputs_used <= MAX_PREPARED_NODES)
-	for index in 0 ..< builder.outputs_used do builder.outputs[index] = nil
+	outputs := fit_builder_outputs(builder)
+	assert(len(outputs) == prepared_capacity(&builder.prepared), "fit_begin: capacity mismatch")
+	assert(builder.outputs_used >= 0 && builder.outputs_used <= i32(len(outputs)))
+	for index in 0 ..< builder.outputs_used do outputs[index] = nil
 	builder.outputs_used = 0
 	prepared_begin(&builder.prepared, intrinsic_constraints(max_w = remaining_rect(u).w))
 	builder.prepared.u = u
@@ -288,18 +325,41 @@ fit_measure :: proc(builder: ^Fit_Builder) -> Intrinsic_Size {
 fit_render_at :: proc(builder: ^Fit_Builder, rect: Rect_I32) {
 	assert(builder != nil && builder.prepared.measured, "fit_render_at: builder not measured")
 	assert(!builder.prepared.rendered, "fit_render_at: builder already rendered")
-	fit_outputs_clear(&builder.outputs, builder.outputs_used)
+	outputs := fit_builder_outputs(builder)
+	fit_outputs_clear(outputs, builder.outputs_used)
 	prepared_render_at(builder.prepared.u, &builder.prepared, rect)
-	fit_outputs_publish(&builder.prepared, &builder.outputs, builder.outputs_used)
+	fit_outputs_publish(&builder.prepared, outputs, builder.outputs_used)
 }
 
 fit_render :: proc(builder: ^Fit_Builder) -> Rect_I32 {
 	assert(builder != nil, "fit_render: nil builder")
 	fit_builder_assert_balanced(builder)
-	fit_outputs_clear(&builder.outputs, builder.outputs_used)
+	outputs := fit_builder_outputs(builder)
+	fit_outputs_clear(outputs, builder.outputs_used)
 	rect := prepared_fit(builder.prepared.u, &builder.prepared)
-	fit_outputs_publish(&builder.prepared, &builder.outputs, builder.outputs_used)
+	fit_outputs_publish(&builder.prepared, outputs, builder.outputs_used)
 	return rect
+}
+
+@(private = "file")
+fit_outputs_clear :: proc(outputs: []^bool, used: i32) {
+	assert(outputs != nil, "fit_outputs_clear: nil outputs")
+	assert(used >= 0 && used <= i32(len(outputs)), "fit_outputs_clear: invalid count")
+	for index in 0 ..< used {
+		destination := outputs[index]
+		if destination != nil do destination^ = false
+	}
+}
+
+@(private = "file")
+fit_outputs_publish :: proc(prepared: ^Prepared_Ui, outputs: []^bool, used: i32) {
+	assert(prepared != nil && prepared.rendered, "fit_outputs_publish: not rendered")
+	assert(outputs != nil && used == prepared.count, "fit_outputs_publish: invalid outputs")
+	nodes := prepared_nodes(prepared)
+	for index in 0 ..< used {
+		destination := outputs[index]
+		if destination != nil do destination^ = destination^ || nodes[index].activated
+	}
 }
 
 @(private = "file")
@@ -379,7 +439,7 @@ fit_builder_add_child :: proc(builder: ^Fit_Builder) {
 	depth := builder.prepared.depth - 1
 	limit := i32(MAX_LAYOUT_FLEX)
 	kind := builder.container_kinds[depth]
-	if kind == .Flow || kind == .Grid do limit = MAX_PREPARED_NODES - 1
+	if kind == .Flow || kind == .Grid do limit = i32(prepared_capacity(&builder.prepared) - 1)
 	if kind == .Attachment do limit = 1
 	assert(builder.direct_children[depth] < limit, "fit builder: children full")
 	fit_builder_prepare_node(builder)
@@ -390,9 +450,10 @@ fit_builder_add_child :: proc(builder: ^Fit_Builder) {
 fit_builder_prepare_node :: proc(builder: ^Fit_Builder) {
 	assert(builder != nil, "fit builder: nil builder")
 	index := builder.prepared.count
-	assert(index >= 0 && index < MAX_PREPARED_NODES, "fit builder: nodes full")
+	outputs := fit_builder_outputs(builder)
+	assert(index >= 0 && index < i32(len(outputs)), "fit builder: nodes full")
 	assert(index == builder.outputs_used, "fit builder: output mismatch")
-	builder.outputs[index] = nil
+	outputs[index] = nil
 	builder.outputs_used += 1
 }
 
@@ -402,7 +463,7 @@ fit_builder_output :: proc(builder: ^Fit_Builder, handle: Prepared_Handle, desti
 	index := i32(handle)
 	assert(index >= 0 && index < builder.prepared.count, "fit builder: invalid handle")
 	assert(index < builder.outputs_used, "fit builder: unused output")
-	builder.outputs[index] = destination
+	fit_builder_outputs(builder)[index] = destination
 }
 
 @(private = "file")

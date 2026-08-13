@@ -9,8 +9,17 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+### Changed
+
+- Prepared/FIT inline capacity now defaults to 128 nodes instead of 64. Existing
+  zero-value state and `prepared_begin` and `fit_begin` calls remain
+  source-compatible; larger collections should still be chunked or virtualized.
+
 ### Added
 
+- Caller-provided bounded storage for `ui.Prepared_Ui` and `ui.Fit_Builder`
+  allows per-description capacities up to 8,192 nodes without hidden allocation
+  or global struct growth.
 - `view.doc_tail_rebuild`: re-derives the authoring tail cache from a
   document's links, for callers that write nodes directly instead of through
   `doc_add`. `view_decode` calls it after a successful decode.
@@ -75,6 +84,11 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
+- **Breaking**: application-facing UI is consolidated under `ingot:fit`.
+  `fit.App`, `fit.Session`, and the PascalCase `fit.Builder` vocabulary replace
+  direct `ingot:ui`/`ingot:ui_gfx` hosting. The immutable `Fit_Node` tree and
+  `App_Session` aliases are removed; direct Prepared, Adapter, UI frame/runtime,
+  and lower-case graphics Frame APIs are implementation-only during migration.
 - **Breaking**: `ui.line_chart` and `ui.bar_chart` take `Chart_Facade_Options`
   only; the positional `(height, opts)` overloads and their proc groups are
   removed. Call sites migrate mechanically: `line_chart(u, series, &state, 80)`

@@ -307,7 +307,7 @@ layout_facade_fit_builder_reuse_clears_stale_outputs :: proc(t: ^testing.T) {
 }
 
 @(test)
-layout_facade_fit_accepts_configured_node_capacity :: proc(t: ^testing.T) {
+layout_facade_fit_accepts_caller_node_capacity :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
@@ -318,9 +318,12 @@ layout_facade_fit_accepts_configured_node_capacity :: proc(t: ^testing.T) {
 	begin(&u, &frame, {0, 0, 300, 200})
 	counts: Prepared_Custom_Counts
 	builder: Fit_Builder
+	nodes: [MAX_PREPARED_NODES + 64]Prepared_Node
+	outputs: [MAX_PREPARED_NODES + 64]^bool
+	fit_builder_set_storage(&builder, {nodes = nodes[:], outputs = outputs[:]})
 	fit_begin(&builder, &u)
 	fit_builder_flow(&builder)
-	for _ in 0 ..< MAX_PREPARED_NODES - 1 {
+	for _ in 0 ..< len(nodes) - 1 {
 		fit_builder_custom(
 			&builder,
 			{
@@ -331,7 +334,49 @@ layout_facade_fit_accepts_configured_node_capacity :: proc(t: ^testing.T) {
 		)
 	}
 	fit_end(&builder)
-	testing.expect_value(t, builder.prepared.count, i32(MAX_PREPARED_NODES))
+	testing.expect_value(t, builder.prepared.count, i32(len(nodes)))
+	testing.expect_value(t, prepared_capacity(&builder.prepared), len(nodes))
+	_ = fit_render(&builder)
+	fit_builder_reset_storage(&builder)
+	testing.expect_value(t, prepared_capacity(&builder.prepared), int(MAX_PREPARED_NODES))
+	end(&u)
+}
+
+@(test)
+layout_facade_prepared_accepts_small_caller_storage :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_destroy(&frame)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	prepared: Prepared_Ui
+	nodes: [MAX_LAYOUT_DEPTH]Prepared_Node
+	prepared_set_storage(&prepared, {nodes = nodes[:]})
+	prepared_begin(&prepared)
+	prepared_row_begin(&prepared)
+	_ = prepared_label(&prepared, "Small")
+	prepared_container_end(&prepared)
+	size := prepared_measure(&u, &prepared)
+	prepared_render_at(&u, &prepared, {0, 0, size.w, size.h})
+	testing.expect_value(t, prepared_capacity(&prepared), len(nodes))
+	prepared_reset_storage(&prepared)
+	testing.expect_value(t, prepared_capacity(&prepared), int(MAX_PREPARED_NODES))
 	end(&u)
 }
 
