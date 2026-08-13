@@ -58,7 +58,7 @@ ui.scope_end(&form)
 ui.end(&form)
 ```
 
-Ordinary `row_begin` and `column_begin` consume intrinsic child sizes. Flex variants resolve a bounded logical `Track` sequence up front. `fit(120)` is a caller-supplied basis; it does not measure later children. A nested container consumes exactly one parent slot before opening its own frame.
+Ordinary `row_begin` and `column_begin` consume sizes as children are called. Flex variants resolve a bounded logical `Track` sequence up front. `fit(120)` is a caller-supplied basis; it does not inspect later children. A nested container consumes exactly one parent slot before opening its own frame.
 
 Flex containers optionally take `justify` (`Main_Align`: `Start`, `Center`, `End`, `Space_Between`) to pack the resolved run along the main axis. Justification is a flex-only feature because only a declared run knows its total size before any child draws; free space exists only when no uncapped `grow` track absorbed it.
 

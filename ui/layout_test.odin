@@ -483,6 +483,21 @@ layout_intrinsic_fit_places_measured_subtree_once :: proc(t: ^testing.T) {
 }
 
 @(test)
+layout_intrinsic_constraints_are_explicit_and_deterministic :: proc(t: ^testing.T) {
+	value := intrinsic_leaf(80, 20)
+	testing.expect_value(
+		t,
+		intrinsic_constrain(value, intrinsic_constraints(100, 24, 120, 30)),
+		Intrinsic_Size{100, 24, false},
+	)
+	testing.expect_value(
+		t,
+		intrinsic_constrain(value, intrinsic_constraints(max_w = 0, max_h = 0)),
+		value,
+	)
+}
+
+@(test)
 layout_flex_justify_center_and_end_offset_the_run :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 400, 80)

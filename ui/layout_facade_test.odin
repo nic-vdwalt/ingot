@@ -9,6 +9,32 @@ layout_intrinsic_measure :: proc(text: cstring, size: i32) -> i32 {
 	return i32(len(string(text))) * 7
 }
 
+Prepared_Custom_Counts :: struct {
+	measure, render: i32,
+}
+
+@(private = "file")
+prepared_custom_measure_test :: proc(
+	u: ^Ui,
+	constraints: Intrinsic_Constraints,
+	userdata: rawptr,
+) -> Intrinsic_Size {
+	assert(u != nil && userdata != nil, "prepared_custom_measure_test: invalid argument")
+	assert(constraints.max_w >= 0, "prepared_custom_measure_test: invalid constraint")
+	counts := cast(^Prepared_Custom_Counts)userdata
+	counts.measure += 1
+	return intrinsic_leaf(40, 20)
+}
+
+@(private = "file")
+prepared_custom_render_test :: proc(u: ^Ui, rect: Rect_I32, userdata: rawptr) -> bool {
+	assert(u != nil && userdata != nil, "prepared_custom_render_test: invalid argument")
+	assert(rect.w >= 0 && rect.h >= 0, "prepared_custom_render_test: invalid rect")
+	counts := cast(^Prepared_Custom_Counts)userdata
+	counts.render += 1
+	return false
+}
+
 @(test)
 layout_space_tokens_follow_scale :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
@@ -46,32 +72,105 @@ layout_named_row_resolves_exact_slots :: proc(t: ^testing.T) {
 }
 
 @(test)
-layout_facade_composes_intrinsic_toolbar_without_consuming_layout :: proc(t: ^testing.T) {
+layout_facade_prepared_toolbar_declares_dynamic_children_once :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
-	set_measure_backend_with(&runtime.text, layout_intrinsic_measure)
-	ui_runtime_set_scale(&runtime, 1.5)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
 	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
 	ui_frame_begin(&frame, &runtime)
 	defer ui_frame_end(&frame)
 	u: Ui
 	begin(&u, &frame, {0, 0, 300, 100})
 	before := remaining_rect(&u)
-	save := intrinsic_padding_space(&u, intrinsic_text(&u, "Save"), .SM)
-	cancel := intrinsic_padding_space(&u, intrinsic_text(&u, "Cancel"), .SM)
-	gap := space_px(&u, .SM)
-	toolbar := intrinsic_row({save, cancel}, gap)
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = before.w))
+	prepared_row_begin(&prepared, {gap = .SM, align = .Center})
+	save := prepared_button(
+		&prepared,
+		button_spec(&u, id(&u, "save"), "Save", {style = .Primary}),
+	)
+	show_cancel := true
+	if show_cancel {
+		_ = prepared_button(&prepared, button_spec(&u, id(&u, "cancel"), "Cancel"))
+	}
+	prepared_container_end(&prepared)
+	toolbar := prepared_measure(&u, &prepared)
 	testing.expect_value(t, remaining_rect(&u), before)
-	intrinsic_flex_row_begin(&u, toolbar.h, {intrinsic_fit_width(toolbar), grow()}, gap = .SM)
-	fit_rect := flex_slot_px(&u, toolbar.h)
-	rest_rect := flex_slot_px(&u, toolbar.h)
-	flex_row_end(&u)
+	fit_rect := prepared_fit(&u, &prepared)
 	end(&u)
 	testing.expect_value(t, fit_rect.w, toolbar.w)
 	testing.expect_value(t, fit_rect.h, toolbar.h)
-	testing.expect_value(t, fit_rect.w + rest_rect.w + gap, i32(300))
+	testing.expect(t, !prepared_activated(&prepared, save), "idle button activated")
 	testing.expect_value(t, frame.degenerate_drops, 0)
+}
+
+@(test)
+layout_facade_prepared_wrapped_label_remeasures_height_for_width :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &text_backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, 200})
+	wide: Prepared_Ui
+	prepared_begin(&wide, intrinsic_constraints(max_w = 200))
+	prepared_column_begin(&wide)
+	_ = prepared_label(&wide, {text = "alpha beta gamma delta", wrap = true})
+	prepared_container_end(&wide)
+	wide_size := prepared_measure(&u, &wide)
+	narrow: Prepared_Ui
+	prepared_begin(&narrow, intrinsic_constraints(max_w = 60))
+	prepared_column_begin(&narrow)
+	_ = prepared_label(&narrow, {text = "alpha beta gamma delta", wrap = true})
+	prepared_container_end(&narrow)
+	narrow_size := prepared_measure(&u, &narrow)
+	testing.expect(t, narrow_size.h > wide_size.h, "narrow label did not grow")
+	prepared_render_at(&u, &wide, {0, 0, wide_size.w, wide_size.h})
+	prepared_render_at(&u, &narrow, {0, wide_size.h, narrow_size.w, narrow_size.h})
+	end(&u)
+}
+
+@(test)
+layout_facade_prepared_custom_leaf_measures_and_renders_once :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 100, 100})
+	counts: Prepared_Custom_Counts
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = 100))
+	prepared_row_begin(&prepared)
+	_ = prepared_custom(
+		&prepared,
+		{measure = prepared_custom_measure_test, render = prepared_custom_render_test, userdata = &counts},
+	)
+	prepared_container_end(&prepared)
+	_ = prepared_fit(&u, &prepared)
+	end(&u)
+	testing.expect_value(t, counts.measure, i32(2))
+	testing.expect_value(t, counts.render, i32(1))
 }
 
 @(test)

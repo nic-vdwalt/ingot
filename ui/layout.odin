@@ -45,6 +45,38 @@ Intrinsic_Size :: struct {
 	overflow: bool,
 }
 
+Intrinsic_Constraints :: struct {
+	min_w, min_h: i32,
+	max_w, max_h: i32,
+}
+
+intrinsic_constraints :: proc(
+	min_w: i32 = 0,
+	min_h: i32 = 0,
+	max_w: i32 = 0,
+	max_h: i32 = 0,
+) -> Intrinsic_Constraints {
+	assert(min_w >= 0 && min_h >= 0, "intrinsic_constraints: negative minimum")
+	assert(max_w == 0 || max_w >= min_w, "intrinsic_constraints: invalid width")
+	assert(max_h == 0 || max_h >= min_h, "intrinsic_constraints: invalid height")
+	return {min_w, min_h, max_w, max_h}
+}
+
+intrinsic_constrain :: proc(
+	value: Intrinsic_Size,
+	constraints: Intrinsic_Constraints,
+) -> Intrinsic_Size {
+	assert(value.w >= 0 && value.h >= 0, "intrinsic_constrain: negative size")
+	assert(constraints.min_w >= 0 && constraints.min_h >= 0, "intrinsic_constrain: invalid minimum")
+	assert(constraints.max_w == 0 || constraints.max_w >= constraints.min_w)
+	assert(constraints.max_h == 0 || constraints.max_h >= constraints.min_h)
+	w := max(value.w, constraints.min_w)
+	h := max(value.h, constraints.min_h)
+	if constraints.max_w > 0 do w = min(w, constraints.max_w)
+	if constraints.max_h > 0 do h = min(h, constraints.max_h)
+	return {w, h, value.overflow}
+}
+
 intrinsic_leaf :: proc(w, h: i32) -> Intrinsic_Size {
 	assert(w >= 0 && h >= 0, "intrinsic_leaf: negative size")
 	return {w = w, h = h}

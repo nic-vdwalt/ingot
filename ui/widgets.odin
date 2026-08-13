@@ -665,6 +665,48 @@ Button_Options :: struct {
 	web_form_id: string,
 }
 
+Button_Spec :: struct {
+	id:      Widget_Id,
+	label:   string,
+	options: Button_Options,
+}
+
+button_spec :: proc(
+	u: ^Ui,
+	id: Widget_Id,
+	label: string,
+	options: Button_Options = {},
+) -> Button_Spec {
+	assert(u != nil && u.open, "button_spec: frame not open")
+	assert(id != WIDGET_ID_NONE && label != "", "button_spec: invalid identity or label")
+	return {id, label, options}
+}
+
+button_spec_size :: proc(u: ^Ui, spec: Button_Spec) -> Intrinsic_Size {
+	assert(u != nil && u.open && u.frame != nil, "button_spec_size: invalid UI")
+	assert(spec.id != WIDGET_ID_NONE && spec.label != "", "button_spec_size: invalid spec")
+	metrics := ui_frame_metrics(u.frame)
+	width := button_fit_width(u.frame, spec.label, metrics.FONT_SIZE_LABEL)
+	return intrinsic_leaf(width, metrics.ROW_H_MD)
+}
+
+button_spec_at :: proc(u: ^Ui, spec: Button_Spec, rect: Rect_I32) -> bool {
+	assert(u != nil && u.open, "button_spec_at: frame not open")
+	assert(spec.id != WIDGET_ID_NONE && spec.label != "", "button_spec_at: invalid spec")
+	enabled := !spec.options.disabled
+	fo := focus(u, spec.id) if enabled && slot_visible(rect) else Focus_Opt{}
+	return button_at(
+		u.frame,
+		rect,
+		spec.label,
+		spec.options.style,
+		enabled = enabled,
+		web_form_id = spec.options.web_form_id,
+		focus = fo,
+		widget = spec.id,
+	)
+}
+
 Button_At_Options :: struct {
 	style:       Btn_Style,
 	font_size:   i32,
@@ -694,18 +736,14 @@ button_id :: proc(
 	assert(u != nil && u.open, "button: frame not open")
 	assert(id != WIDGET_ID_NONE, "button: zero stable id")
 	assert(label != "", "button: empty accessible label")
-	r := btn_slot_px(u, label)
-	fo := focus(u, id) if enabled && slot_visible(r) else Focus_Opt{}
-	return button_at(
-		u.frame,
-		r,
+	spec := button_spec(
+		u,
+		id,
 		label,
-		style,
-		enabled = enabled,
-		web_form_id = web_form_id,
-		focus = fo,
-		widget = id,
+		{style = style, disabled = !enabled, web_form_id = web_form_id},
 	)
+	size := button_spec_size(u, spec)
+	return button_spec_at(u, spec, slot_next_px(u, size.w, size.h))
 }
 
 @(private = "package")
@@ -755,13 +793,12 @@ button :: proc {
 }
 
 @(private = "file")
-btn_slot_px :: proc(u: ^Ui, label: string) -> Rect_I32 {
-	assert(u != nil && u.frame != nil, "btn_slot_px: invalid UI")
-	metrics := ui_frame_metrics(u.frame)
-	width :=
-		measure_text_string_frame(u.frame, label, metrics.FONT_SIZE_LABEL) + metrics.PADDING * 2
-	assert(width > 0, "btn_slot_px: invalid width")
-	return slot_next_px(u, width, metrics.ROW_H_MD)
+button_fit_width :: proc(frame: ^Ui_Frame, label: string, font_size: i32) -> i32 {
+	assert(frame != nil && font_size > 0, "button_fit_width: invalid frame or size")
+	assert(label != "", "button_fit_width: empty label")
+	width := measure_text_string_frame(frame, label, font_size) + ui_frame_metrics(frame).PADDING * 2
+	assert(width > 0, "button_fit_width: invalid width")
+	return width
 }
 
 // button_fit_w_frame returns the pixel width a rect-based button (button_at,
@@ -773,7 +810,7 @@ button_fit_w_frame :: proc(frame: ^Ui_Frame, label: string, font_size: i32 = 0) 
 	assert(label != "", "button_fit_w_frame: empty label")
 	metrics := ui_frame_metrics(frame)
 	fs := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
-	return measure_text_string_frame(frame, label, fs) + metrics.PADDING * 2
+	return button_fit_width(frame, label, fs)
 }
 
 // Fit a button label to the button box: truncate with an ellipsis when it is

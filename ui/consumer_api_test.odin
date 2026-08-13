@@ -35,12 +35,23 @@ consumer_api_baseline_compiles :: proc(t: ^testing.T) {
 	_ = text_input(&u, "name", &name, "Name", Text_Input_Options{semantics = {name = "Name"}})
 	_ = checkbox(&u, "showing", "Show items", &showing)
 	_ = button(&u, "save", "Save", Button_Options{style = .Primary})
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = remaining_rect(&u).w))
+	prepared_row_begin(&prepared, {gap = .SM, align = .Center})
+	_ = prepared_label(&prepared, {text = "Actions", role = .Label})
+	apply := prepared_button(
+		&prepared,
+		button_spec(&u, id(&u, "apply"), "Apply", {style = .Primary}),
+	)
+	prepared_container_end(&prepared)
+	_ = prepared_fit(&u, &prepared)
+	_ = prepared_activated(&prepared, apply)
 	scope(&u, "items", consumer_api_items, &items)
 	canvas(&u, {height = 120}, consumer_api_canvas)
 	scope_end(&u)
 	end(&u)
 
-	testing.expect_value(t, u.focus_count, 6)
+	testing.expect_value(t, u.focus_count, 7)
 }
 
 @(private = "file")
