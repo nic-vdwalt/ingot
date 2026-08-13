@@ -202,101 +202,6 @@ layout_facade_concise_prepared_group_resolves_width_and_wrap :: proc(t: ^testing
 	)
 }
 
-@(test)
-layout_facade_fit_tree_is_uniform_content_sized_and_exactly_once :: proc(t: ^testing.T) {
-	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
-	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
-	frame: Ui_Frame
-	output := new(Ui_Output)
-	defer free(output)
-	frame.output = output
-	ui_frame_begin(&frame, &runtime)
-	defer ui_frame_end(&frame)
-	u: Ui
-	begin(&u, &frame, {0, 0, 500, 200})
-	counts: Prepared_Custom_Counts
-	string_active, u64_active, widget_active, custom_active: bool
-	root := fit_row(
-		{gap = .SM, align = .Center},
-		{
-			fit_label("Actions", {role = .Label}),
-			fit_column(
-				{gap = .XS},
-				{
-					fit_button("save", "Save", .Primary, &string_active),
-					fit_button(u64(7), "Seven", &u64_active),
-				},
-			),
-			fit_button(id(&u, "apply"), "Apply", &widget_active),
-			fit_custom(
-				{
-					measure = prepared_custom_measure_test,
-					render = prepared_custom_render_test,
-					userdata = &counts,
-				},
-				{activated = &custom_active},
-			),
-		},
-	)
-	rect := fit_tree(&u, root)
-	end(&u)
-	testing.expect(t, rect.w > 0 && rect.w < 500, "fit tree did not retain natural width")
-	testing.expect(t, rect.h > 0, "fit tree has no height")
-	testing.expect(t, !string_active && !u64_active && !widget_active, "idle button activated")
-	testing.expect(t, !custom_active, "idle custom leaf activated")
-	testing.expect_value(t, counts.render, i32(1))
-	testing.expect_value(t, u.focus_count, 3)
-}
-
-@(test)
-layout_facade_fit_tree_resolves_width_and_wrapping :: proc(t: ^testing.T) {
-	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
-	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
-	frame: Ui_Frame
-	output := new(Ui_Output)
-	defer free(output)
-	frame.output = output
-	ui_frame_begin(&frame, &runtime)
-	defer ui_frame_end(&frame)
-	u: Ui
-	begin(&u, &frame, {0, 0, 120, 300})
-	row_rect := fit_tree(
-		&u,
-		fit_row({}, {fit_label("Grow", {track = grow()}), fit_button("button", "Button")}),
-	)
-	column_rect := fit_tree(
-		&u,
-		fit_column({}, {fit_label("alpha beta gamma delta epsilon", {wrap = true})}),
-	)
-	end(&u)
-	testing.expect_value(t, row_rect.w, i32(120))
-	testing.expect(t, column_rect.w <= 120, "wrapped tree exceeded remaining width")
-	testing.expect(
-		t,
-		column_rect.h > ui_frame_metrics(&frame).FONT_SIZE_BODY,
-		"tree label did not wrap",
-	)
-}
 
 @(test)
 layout_facade_fit_builder_dynamic_children_and_outputs_are_bounded :: proc(t: ^testing.T) {
@@ -428,39 +333,6 @@ layout_facade_fit_accepts_configured_node_capacity :: proc(t: ^testing.T) {
 	fit_end(&builder)
 	testing.expect_value(t, builder.prepared.count, i32(MAX_PREPARED_NODES))
 	end(&u)
-}
-
-@(test)
-layout_facade_fit_nodes_remains_a_dynamic_slice_escape_hatch :: proc(t: ^testing.T) {
-	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
-	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
-	frame: Ui_Frame
-	output := new(Ui_Output)
-	defer free(output)
-	frame.output = output
-	ui_frame_begin(&frame, &runtime)
-	defer ui_frame_destroy(&frame)
-	defer ui_frame_end(&frame)
-	u: Ui
-	begin(&u, &frame, {0, 0, 300, 200})
-	active := true
-	children := fit_nodes(&u, 1)
-	append(&children, fit_button("item", "Item", &active))
-	rect := fit_tree(&u, fit_row({}, children[:]))
-	end(&u)
-	testing.expect(t, !active, "activation output was not reset")
-	testing.expect_value(t, u.focus_count, 1)
-	testing.expect(t, rect.w > 0 && rect.h > 0, "dynamic slice tree was empty")
 }
 
 @(test)
@@ -621,7 +493,7 @@ layout_facade_prepared_attachment_is_out_of_flow_and_screen_anchored :: proc(t: 
 }
 
 @(test)
-layout_facade_fit_attachment_static_and_builder_render_once :: proc(t: ^testing.T) {
+layout_facade_fit_attachment_builder_renders_once :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
@@ -633,33 +505,7 @@ layout_facade_fit_attachment_static_and_builder_render_once :: proc(t: ^testing.
 	defer ui_frame_end(&frame)
 	u: Ui
 	begin(&u, &frame, {0, 0, 300, 200})
-	static_counts: Prepared_Custom_Counts
-	_ = fit_tree(
-		&u,
-		fit_row(
-			{},
-			{
-				fit_attachment(
-					{
-						target_kind = .Viewport,
-						target_point = .Center,
-						self_point = .Center,
-						z = Z_PANEL,
-					},
-					{
-						fit_custom(
-							{
-								measure = prepared_custom_measure_test,
-								render = prepared_custom_render_test,
-								userdata = &static_counts,
-							},
-						),
-					},
-				),
-			},
-		),
-	)
-	builder_counts: Prepared_Custom_Counts
+	counts: Prepared_Custom_Counts
 	builder: Fit_Builder
 	fit_begin(&builder, &u)
 	fit_builder_row(&builder)
@@ -669,16 +515,14 @@ layout_facade_fit_attachment_static_and_builder_render_once :: proc(t: ^testing.
 		{
 			measure = prepared_custom_measure_test,
 			render = prepared_custom_render_test,
-			userdata = &builder_counts,
+			userdata = &counts,
 		},
 	)
 	fit_end(&builder)
 	fit_end(&builder)
 	_ = fit_render(&builder)
 	end(&u)
-	testing.expect_value(t, static_counts.render, i32(1))
-	testing.expect_value(t, static_counts.rect, Rect_I32{130, 90, 40, 20})
-	testing.expect_value(t, builder_counts.render, i32(1))
+	testing.expect_value(t, counts.render, i32(1))
 }
 
 @(test)

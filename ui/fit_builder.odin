@@ -1,5 +1,28 @@
 package ui
 
+Fit_Label_Options :: struct {
+	role:  Text_Role,
+	ink:   Ink,
+	wrap:  bool,
+	track: Track,
+	size:  Prepared_Size,
+}
+
+Fit_Button_Options :: struct {
+	style:       Btn_Style,
+	disabled:    bool,
+	web_form_id: string,
+	track:       Track,
+	size:        Prepared_Size,
+	activated:   ^bool,
+}
+
+Fit_Custom_Options :: struct {
+	track:     Track,
+	size:      Prepared_Size,
+	activated: ^bool,
+}
+
 Fit_Builder :: struct {
 	prepared:        Prepared_Ui,
 	outputs:         [MAX_PREPARED_NODES]^bool,
@@ -31,8 +54,13 @@ fit_column_builder :: proc(builder: ^Fit_Builder, options: Prepared_Container_Op
 	fit_builder_container_begin(builder, .Column, options)
 }
 
-fit_builder_row :: fit_row_builder
-fit_builder_column :: fit_column_builder
+fit_builder_row :: proc(builder: ^Fit_Builder, options: Prepared_Container_Options = {}) {
+	fit_row_builder(builder, options)
+}
+
+fit_builder_column :: proc(builder: ^Fit_Builder, options: Prepared_Container_Options = {}) {
+	fit_column_builder(builder, options)
+}
 
 fit_builder_flow :: proc(builder: ^Fit_Builder, options: Prepared_Flow_Options = {}) {
 	assert(builder != nil, "fit_builder_flow: nil builder")
@@ -73,7 +101,9 @@ fit_label_builder :: proc(builder: ^Fit_Builder, text: string, options: Fit_Labe
 	)
 }
 
-fit_builder_label :: fit_label_builder
+fit_builder_label :: proc(builder: ^Fit_Builder, text: string, options: Fit_Label_Options = {}) {
+	fit_label_builder(builder, text, options)
+}
 
 @(private = "package")
 fit_button_builder_string :: proc(
@@ -242,7 +272,13 @@ fit_custom_builder :: proc(
 	fit_builder_output(builder, handle, options.activated)
 }
 
-fit_builder_custom :: fit_custom_builder
+fit_builder_custom :: proc(
+	builder: ^Fit_Builder,
+	spec: Prepared_Custom,
+	options: Fit_Custom_Options = {},
+) {
+	fit_custom_builder(builder, spec, options)
+}
 
 fit_measure :: proc(builder: ^Fit_Builder) -> Intrinsic_Size {
 	fit_builder_assert_balanced(builder)
