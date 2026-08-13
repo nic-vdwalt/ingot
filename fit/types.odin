@@ -31,9 +31,9 @@ App :: struct {
 }
 
 Session :: struct {
-	inner:   ui_gfx.Session,
-	builder: Builder,
-	draw:    Session_Draw_Proc,
+	inner:    ui_gfx.Session,
+	builder:  Builder,
+	draw:     Session_Draw_Proc,
 	userdata: rawptr,
 }
 

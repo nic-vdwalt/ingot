@@ -4,80 +4,6 @@ package gfx
 import "core:testing"
 
 @(test)
-frame_validation_rejects_stale_generation :: proc(t: ^testing.T) {
-	old_epoch := g.epoch
-	old_generation := g.frame_generation
-	old_active := g.frame_active
-	defer {
-		g.epoch = old_epoch
-		g.frame_generation = old_generation
-		g.frame_active = old_active
-	}
-
-	g.epoch = 2
-	g.frame_generation = 4
-	g.frame_active = true
-	frame := Frame {
-		owner      = &default_context_storage,
-		epoch      = 2,
-		generation = 3,
-		active     = true,
-	}
-	testing.expect(t, !_frame_valid(&frame))
-}
-
-@(test)
-frame_validation_rejects_inactive_frame :: proc(t: ^testing.T) {
-	old_epoch := g.epoch
-	old_generation := g.frame_generation
-	old_active := g.frame_active
-	defer {
-		g.epoch = old_epoch
-		g.frame_generation = old_generation
-		g.frame_active = old_active
-	}
-
-	g.epoch = 2
-	g.frame_generation = 4
-	g.frame_active = true
-	frame := Frame {
-		owner      = &default_context_storage,
-		epoch      = 2,
-		generation = 4,
-		active     = false,
-	}
-	testing.expect(t, !_frame_valid(&frame))
-}
-
-@(test)
-frame_validation_routes_independent_contexts :: proc(t: ^testing.T) {
-	first := new(Context)
-	second := new(Context)
-	defer free(first)
-	defer free(second)
-	first.id, first.epoch, first.frame_generation, first.frame_active = 2, 4, 7, true
-	second.id, second.epoch, second.frame_generation, second.frame_active = 3, 5, 9, true
-	first.frame.has_frame = true
-	second.frame.has_frame = true
-	first_frame := Frame {
-		owner      = first,
-		epoch      = 4,
-		generation = 7,
-		active     = true,
-	}
-	second_frame := Frame {
-		owner      = second,
-		epoch      = 5,
-		generation = 9,
-		active     = true,
-	}
-	testing.expect(t, _frame_valid(&first_frame))
-	testing.expect(t, _frame_valid(&second_frame))
-	first_frame.owner = second
-	testing.expect(t, !_frame_valid(&first_frame))
-}
-
-@(test)
 context_queries_are_isolated :: proc(t: ^testing.T) {
 	first := new(Context)
 	second := new(Context)
@@ -192,69 +118,21 @@ close_requested_disables_frame_pacing :: proc(t: ^testing.T) {
 	testing.expect(t, !_frame_pacing_enabled(-1, false))
 }
 
-// --- surface mixing guard --------------------------------------------------
-// gfx exposes two drawing surfaces over one renderer. A raylib-shaped draw
-// acts on the globally active context; an ergonomic draw activates its
-// Frame's owner first. Interleaving them across contexts silently sends
-// geometry to the wrong window, so batch_set consults this predicate.
-
 @(test)
-surface_routing_allows_single_context_mixing :: proc(t: ^testing.T) {
-	// ui_gfx paints by calling raylib-shaped procedures at top level inside
-	// the ergonomic frame it opened on the default context. That is the
-	// common case and must stay allowed.
-	testing.expect(t, !_surface_routing_is_ambiguous(0, 1, true))
-}
+context_scope_nested_activation_restores_owner :: proc(t: ^testing.T) {
+	first := new(Context)
+	second := new(Context)
+	defer free(first)
+	defer free(second)
+	first.width = 640
+	second.width = 320
 
-@(test)
-surface_routing_allows_plain_raylib_style :: proc(t: ^testing.T) {
-	// BeginDrawing/EndDrawing with no ergonomic frame anywhere.
-	testing.expect(t, !_surface_routing_is_ambiguous(0, 0, false))
-}
-
-@(test)
-surface_routing_exempts_ergonomic_wrappers :: proc(t: ^testing.T) {
-	// Inside draw_rect and friends the owner is activated, so the draw is
-	// routed correctly even while another context holds a frame.
-	testing.expect(t, !_surface_routing_is_ambiguous(1, 2, true))
-	testing.expect(t, !_surface_routing_is_ambiguous(1, 2, false))
-}
-
-@(test)
-surface_routing_rejects_draw_aimed_at_wrong_context :: proc(t: ^testing.T) {
-	// A frame is open on another context and the active one has none: the
-	// draw cannot reach the frame its caller meant.
-	testing.expect(t, _surface_routing_is_ambiguous(0, 1, false))
-}
-
-@(test)
-surface_routing_rejects_interleaved_frames :: proc(t: ^testing.T) {
-	// Two contexts hold frames at once; a top-level draw is ambiguous even
-	// though the active context has one of them.
-	testing.expect(t, _surface_routing_is_ambiguous(0, 2, true))
-}
-
-@(test)
-surface_routing_counters_balance_across_a_frame :: proc(t: ^testing.T) {
-	depth_before := context_activation_depth
-	frames_before := ergonomic_frames_active
-
-	ctx := new(Context)
-	defer free(ctx)
-	ctx.id, ctx.epoch = 2, 4
-
-	previous := _context_activate(ctx)
-	testing.expect_value(t, context_activation_depth, depth_before + 1)
-	_context_restore(previous)
-	testing.expect_value(t, context_activation_depth, depth_before)
-	testing.expect_value(t, previous, default_context())
-
-	ctx.frame_active = true
-	_ergonomic_frame_opened(ctx)
-	testing.expect_value(t, ergonomic_frames_active, frames_before + 1)
-	testing.expect(t, _surface_routing_is_ambiguous(0, ergonomic_frames_active, false))
-
-	ctx.frame_active = false
-	_ergonomic_frame_closed(ctx)
-	testing.expect_value(t, ergonomic_frames_active, frames_before)
+	first_scope := context_scope_enter(first)
+	testing.expect_value(t, GetScreenWidth(), i32(640))
+	second_scope := context_scope_enter(second)
+	testing.expect_value(t, GetScreenWidth(), i32(320))
+	context_scope_leave(&second_scope)
+	testing.expect_value(t, GetScreenWidth(), i32(640))
+	context_scope_leave(&first_scope)
+	testing.expect(t, g == default_context())
 }

@@ -91,14 +91,17 @@ fit_fuzz_leaf :: proc(
 	p: ^fuzzx.Prng,
 	counts: ^Fit_Fuzz_Counts,
 	activations: ^[FIT_FUZZ_NODE_LIMIT]bool,
+	selections: ^[FIT_FUZZ_NODE_LIMIT]i32,
+	values: ^[FIT_FUZZ_NODE_LIMIT]f32,
 	key: u64,
 ) {
 	assert(
 		builder != nil && p != nil && counts != nil && activations != nil,
 		"fit fuzz leaf: nil argument",
 	)
+	assert(selections != nil && values != nil, "fit fuzz leaf: nil control state")
 	index := int(key % FIT_FUZZ_NODE_LIMIT)
-	switch fuzzx.int_range(p, 0, 3) {
+	switch fuzzx.int_range(p, 0, 6) {
 	case 0:
 		Label(
 			builder,
@@ -118,6 +121,20 @@ fit_fuzz_leaf :: proc(
 			},
 			{track = fit_fuzz_track(p), activated = &activations[index]},
 		)
+	case 3:
+		Checkbox(builder, key + 1, "Fuzz checkbox", &activations[index])
+	case 4:
+		Radio(builder, key + 1, "Fuzz radio", &selections[index], i32(index))
+	case 5:
+		Slider(
+			builder,
+			key + 1,
+			&values[index],
+			0,
+			f32(FIT_FUZZ_NODE_LIMIT),
+			1,
+			"Fuzz slider",
+		)
 	}
 }
 
@@ -127,16 +144,19 @@ fit_fuzz_description :: proc(
 	p: ^fuzzx.Prng,
 	counts: ^Fit_Fuzz_Counts,
 	activations: ^[FIT_FUZZ_NODE_LIMIT]bool,
+	selections: ^[FIT_FUZZ_NODE_LIMIT]i32,
+	values: ^[FIT_FUZZ_NODE_LIMIT]f32,
 ) {
 	assert(
 		builder != nil && p != nil && counts != nil && activations != nil,
 		"fit fuzz description: nil argument",
 	)
+	assert(selections != nil && values != nil, "fit fuzz description: nil control state")
 	fit_fuzz_container(builder, p)
 	depth := 1
 	nodes := 1
 	key: u64 = 1
-	fit_fuzz_leaf(builder, p, counts, activations, key)
+	fit_fuzz_leaf(builder, p, counts, activations, selections, values, key)
 	nodes += 1
 	key += 1
 	target := fuzzx.int_range(p, 8, FIT_FUZZ_NODE_LIMIT + 1)
@@ -151,18 +171,18 @@ fit_fuzz_description :: proc(
 			attachment := fuzzx.int_range(p, 0, 5) == 0
 			if attachment {
 				Attachment(builder, {target_kind = .Viewport, z = Z_Order(200)})
-				fit_fuzz_leaf(builder, p, counts, activations, key)
+				fit_fuzz_leaf(builder, p, counts, activations, selections, values, key)
 				End(builder)
 			} else {
 				fit_fuzz_container(builder, p)
-				fit_fuzz_leaf(builder, p, counts, activations, key)
+				fit_fuzz_leaf(builder, p, counts, activations, selections, values, key)
 				depth += 1
 			}
 			nodes += 2
 			key += 1
 			continue
 		}
-		fit_fuzz_leaf(builder, p, counts, activations, key)
+		fit_fuzz_leaf(builder, p, counts, activations, selections, values, key)
 		nodes += 1
 		key += 1
 	}
@@ -232,7 +252,9 @@ fit_fuzz_iteration :: proc(t: ^testing.T, p: ^fuzzx.Prng, seed: u64, iteration: 
 	builder_open(&builder, &frame, {0, 0, width, height})
 	counts: Fit_Fuzz_Counts
 	activations: [FIT_FUZZ_NODE_LIMIT]bool
-	fit_fuzz_description(&builder, p, &counts, &activations)
+	selections: [FIT_FUZZ_NODE_LIMIT]i32
+	values: [FIT_FUZZ_NODE_LIMIT]f32
+	fit_fuzz_description(&builder, p, &counts, &activations, &selections, &values)
 	size := Measure(&builder)
 	testing.expectf(
 		t,

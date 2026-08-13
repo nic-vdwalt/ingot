@@ -745,7 +745,9 @@ draw_buttons :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 	_ = legacy.section_header(u, "BUTTON STYLES")
 	legacy.row_begin(u, 32, gap = .SM)
 	if legacy.button(u, "primary", "Primary", legacy.legacy_btn_style.Primary) do click_count += 1
-	if legacy.button(u, "secondary", "Secondary", legacy.legacy_btn_style.Secondary) do click_count += 1
+	if legacy.button(u, "secondary", "Secondary", legacy.legacy_btn_style.Secondary) {
+		click_count += 1
+	}
 	if legacy.button(u, "danger", "Danger", legacy.legacy_btn_style.Danger) do click_count += 1
 	if legacy.button(u, "ghost", "Ghost", legacy.legacy_btn_style.Ghost) do click_count += 1
 	legacy.row_end(u)
@@ -873,11 +875,11 @@ draw_inputs :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 		"Release date\u2026",
 		"Release date",
 	)
-	picked := fmt.tprintf(
-		"language id: %d \u00b7 date: %s",
-		state.combo_selected,
-		legacy.calendar_format(state.date_value) if legacy.calendar_date_valid(state.date_value) else "unset",
-	)
+	date_text := "unset"
+	if legacy.calendar_date_valid(state.date_value) {
+		date_text = legacy.calendar_format(state.date_value)
+	}
+	picked := fmt.tprintf("language id: %d \u00b7 date: %s", state.combo_selected, date_text)
 	legacy.label(u, picked, legacy.legacy_text_role.Label, legacy.legacy_ink.Secondary)
 
 	legacy.scope_end(u)

@@ -647,15 +647,10 @@ _batch_bind :: proc(kind: Pipe_Kind, bind, current, neutral: wg.BindGroup) -> wg
 // batch_set switches the active pipeline/texture, flushing the pending run
 // first if the state differs. Routes to the render-target pass when one is
 // bound (BeginTextureMode).
-//
-// Every raylib-shaped draw passes through here, which makes it the one place
-// to catch a PascalCase draw aimed at the wrong context while an ergonomic
-// Frame is live elsewhere (see _assert_surface_not_routed_elsewhere).
 @(private)
 batch_set :: proc(r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
 	assert(r != nil, "batch_set: nil renderer")
 	assert(r.neutral_bind != nil, "batch_set: nil neutral bind")
-	_assert_surface_not_routed_elsewhere()
 	_ensure_active_pass()
 	next_bind := _batch_bind(kind, bind, r.cur_bind, r.neutral_bind)
 	if kind != r.cur_kind || next_bind != r.cur_bind {

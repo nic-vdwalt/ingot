@@ -1,7 +1,7 @@
 package game
 
 import "core:fmt"
-import ui "ingot:fit"
+import fit "ingot:fit"
 
 GAME_STATE_SCHEMA :: u64(1)
 
@@ -23,17 +23,19 @@ game_init :: proc() -> bool {
 }
 
 @(export)
-game_draw :: proc(frame: ^ui.Ui_Frame) {
-	assert(frame != nil && frame.open, "game_draw: invalid frame")
+game_draw :: proc(builder: ^fit.Builder) {
+	assert(builder != nil, "game_draw: nil builder")
 	assert(g != nil, "game_draw: missing state")
-	ui.text(frame, "Ingot hot reload", 32, 32, .Title)
-	ui.text(frame, "The host keeps the window, GPU, and session alive.", 32, 76, .Body, .Secondary)
-	ui.text(frame, fmt.tprintf("Reload generation: %d", g.reload_generation), 32, 116, .Label)
-	ui.text(frame, fmt.tprintf("Persistent clicks: %d", g.click_count), 32, 148, .Label)
-	if ui.button_at(frame, {32, 188, 180, 40}, "Count persistent click", .Primary) {
-		g.click_count += 1
-	}
-	ui.text(frame, "Edit game/game.odin, then run the build script again.", 32, 252, .Note, .Muted)
+	clicked := false
+	fit.Column(builder, {gap = .SM, padding = .LG})
+	fit.Label(builder, "Ingot hot reload", {role = .Title})
+	fit.Label(builder, "The host keeps the window, GPU, and session alive.", {ink = .Secondary})
+	fit.Label(builder, fmt.tprintf("Reload generation: %d", g.reload_generation), {role = .Label})
+	fit.Label(builder, fmt.tprintf("Persistent clicks: %d", g.click_count), {role = .Label})
+	fit.Button(builder, "count", "Count persistent click", &clicked)
+	fit.Label(builder, "Edit game/game.odin, then run the build script again.", {role = .Note, ink = .Muted})
+	fit.End(builder)
+	if clicked do g.click_count += 1
 }
 
 @(export)
