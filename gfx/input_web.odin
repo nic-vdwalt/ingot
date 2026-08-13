@@ -28,11 +28,13 @@ ingot_web_key :: proc "contextless" (key: i32, down: bool, repeat: bool) {
 			ctx.inp.st_repeat[key] = true
 		} else {
 			ctx.inp.st_pressed[key] = true
+			ctx.inp.key_down[key] = true
 			st_held[key] = true
 			_stage_key(&ctx.inp, KeyboardKey(key))
 		}
 	} else {
 		ctx.inp.st_released[key] = true
+		ctx.inp.key_down[key] = false
 		st_held[key] = false
 	}
 }
@@ -123,7 +125,10 @@ ingot_web_hover :: proc "contextless" (hovered: bool) {
 	st_hovered = hovered
 	if !hovered {
 		// releasing focus/hover: clear held keys and buttons so nothing sticks
-		for i in 0 ..< KEY_COUNT do st_held[i] = false
+		for i in 0 ..< KEY_COUNT {
+			g.inp.key_down[i] = false
+			st_held[i] = false
+		}
 		for i in 0 ..< 8 do st_mb[i] = false
 	}
 }

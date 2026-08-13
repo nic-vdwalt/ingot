@@ -534,9 +534,11 @@ _key_cb :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	switch action {
 	case glfw.PRESS:
 		ctx.inp.st_pressed[key] = true
+		ctx.inp.key_down[key] = true
 		_stage_key(&ctx.inp, KeyboardKey(key))
 	case glfw.RELEASE:
 		ctx.inp.st_released[key] = true
+		ctx.inp.key_down[key] = false
 	case glfw.REPEAT:
 		ctx.inp.st_repeat[key] = true
 	}
