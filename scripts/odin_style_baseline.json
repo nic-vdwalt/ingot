@@ -1,4 +1,5 @@
 {
+  "gfx/gpu3d_pipeline.odin:_gpu_3d_pipeline": 104,
   "examples/api-map/main.odin:map_layout": 142,
   "examples/api-map/main.odin:map_edges": 188,
   "examples/api-map/main.odin:api_map_canvas": 116,

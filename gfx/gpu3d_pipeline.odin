@@ -484,11 +484,11 @@ create_gpu_3d_target :: proc(
 	Gpu_3D_Target,
 	bool,
 ) {
-	return _gpu_3d_target_create(g, width, height, antialiasing)
+	return _gpu_3d_target_create(active_context(), width, height, antialiasing)
 }
 
 destroy_gpu_3d_target :: proc(target: ^Gpu_3D_Target) {
-	_gpu_3d_target_destroy(g, target)
+	_gpu_3d_target_destroy(active_context(), target)
 }
 
 gpu_3d_target_size :: proc(target: ^Gpu_3D_Target) -> (width, height: i32, ok: bool) {
@@ -503,7 +503,7 @@ gpu_3d_target_size :: proc(target: ^Gpu_3D_Target) -> (width, height: i32, ok: b
 
 resize_gpu_3d_target :: proc(target: ^Gpu_3D_Target, width, height: i32) -> bool {
 	assert(target != nil, "resize_gpu_3d_target: nil target")
-	ctx := g
+	ctx := active_context()
 	assert(
 		ctx.resources.gpu_3d.active_pass_generation == 0,
 		"resize_gpu_3d_target: active GPU 3D pass",
@@ -525,8 +525,9 @@ resize_gpu_3d_target_to_render_size :: proc(
 	target: ^Gpu_3D_Target,
 ) -> Gpu_3D_Target_Resize_Result {
 	assert(target != nil, "resize_gpu_3d_target_to_render_size: nil target")
-	width := context_render_width(g)
-	height := context_render_height(g)
+	ctx := active_context()
+	width := context_render_width(ctx)
+	height := context_render_height(ctx)
 	if width <= 0 || height <= 0 do return .Deferred
 	current_width, current_height, ok := gpu_3d_target_size(target)
 	if !ok do return .Failed
@@ -545,7 +546,7 @@ _gpu_3d_target_source_rectangle :: proc(target: ^Gpu_3D_Target) -> (Rectangle, b
 
 draw_gpu_3d_target :: proc(target: ^Gpu_3D_Target, destination: Rectangle, tint: Color = WHITE) {
 	assert(target != nil, "draw_gpu_3d_target: nil target")
-	ctx := g
+	ctx := active_context()
 	assert(
 		ctx.resources.gpu_3d.active_pass_generation == 0,
 		"draw_gpu_3d_target: active GPU 3D pass",
@@ -562,8 +563,8 @@ _gpu_3d_compat_ensure :: proc(ctx: ^Context) -> bool {
 	resources := &ctx.resources.gpu_3d
 	if resources.active_pass_generation != 0 do return false
 	compat := &resources.compat
-	width := context_render_width(g)
-	height := context_render_height(g)
+	width := context_render_width(ctx)
+	height := context_render_height(ctx)
 	if width <= 0 || height <= 0 do return false
 	_, _, target_ok := gpu_3d_target_size(&compat.target)
 	if !target_ok {
@@ -952,7 +953,7 @@ create_plane_mesh :: proc(extent: f32, cells: u32) -> (Gpu_Mesh, bool) {
 	assert(extent > 0, "create_plane_mesh: non-positive extent")
 	// The context is read the same way create_gpu_mesh reads it, so a plane
 	// built for an explicitly created context is not gated on the default one.
-	ctx := g
+	ctx := active_context()
 	if !ctx.initialized || cells < 1 || cells > GPU_3D_PLANE_MAX_CELLS do return {}, false
 
 	vertices := make([dynamic]Gpu_3D_Vertex, int(plane_mesh_vertex_count(cells)))
@@ -975,7 +976,7 @@ create_gpu_mesh :: proc(
 	Gpu_Mesh,
 	bool,
 ) {
-	ctx := g
+	ctx := active_context()
 	if !ctx.initialized || !_gpu_3d_geometry_valid(vertices, indices, primitive) do return {}, false
 	resources := &ctx.resources.gpu_3d
 	if resources.mesh_count >= GPU_3D_MAX_MESHES {
@@ -1026,7 +1027,7 @@ create_gpu_mesh :: proc(
 // mesh, and allowing one here would mean silently reallocating the buffer behind
 // a caller that believes it is writing into the geometry it built.
 update_gpu_mesh_vertices :: proc(mesh: Gpu_Mesh, vertices: []Gpu_3D_Vertex) -> bool {
-	ctx := g
+	ctx := active_context()
 	if !ctx.initialized || len(vertices) == 0 do return false
 	entry := _gpu_3d_mesh(&ctx.resources.gpu_3d, mesh)
 	if entry == nil do return false
@@ -1061,7 +1062,7 @@ destroy_gpu_mesh :: proc(mesh: ^Gpu_Mesh) {
 // validation failures surface as skipped draws, not crashes. Pool
 // exhaustion is an operating condition: ok=false, counted.
 create_gpu_3d_shader :: proc(code: string) -> (Gpu_3D_Shader, bool) {
-	ctx := g
+	ctx := active_context()
 	if !ctx.initialized || len(code) == 0 do return {}, false
 	resources := &ctx.resources.gpu_3d
 	if resources.shader_count >= GPU_3D_MAX_SHADERS {
@@ -1070,12 +1071,7 @@ create_gpu_3d_shader :: proc(code: string) -> (Gpu_3D_Shader, bool) {
 	}
 	module := wg.DeviceCreateShaderModule(
 		ctx.device,
-		&{
-			nextInChain = &wg.ShaderSourceWGSL {
-				chain = {sType = .ShaderSourceWGSL},
-				code = code,
-			},
-		},
+		&{nextInChain = &wg.ShaderSourceWGSL{chain = {sType = .ShaderSourceWGSL}, code = code}},
 	)
 	if module == nil do return {}, false
 	for &slot, index in resources.shaders {
@@ -1095,7 +1091,7 @@ create_gpu_3d_shader :: proc(code: string) -> (Gpu_3D_Shader, bool) {
 // zeroed either way. Must not be called inside an active 3D pass.
 destroy_gpu_3d_shader :: proc(shader: ^Gpu_3D_Shader) {
 	assert(shader != nil, "destroy_gpu_3d_shader: nil shader")
-	ctx := g
+	ctx := active_context()
 	defer shader^ = {}
 	if !ctx.initialized || shader.id == 0 do return
 	resources := &ctx.resources.gpu_3d
@@ -1141,6 +1137,7 @@ _gpu_3d_shader_resolve :: proc(
 	if shader.id == 0 do return nil, 0
 	index, generation, ok := _resource_handle_decode(shader.id, len(resources.shaders))
 	if !ok do return nil, 0
+	assert(index >= 0 && index < len(resources.shaders), "_gpu_3d_shader_resolve: invalid index")
 	slot := &resources.shaders[index]
 	if !slot.occupied || slot.generation != generation do return nil, 0
 	return slot.module, shader.id
@@ -1155,7 +1152,7 @@ begin_gpu_3d :: proc(
 	bool,
 ) {
 	assert(target != nil)
-	ctx := g
+	ctx := active_context()
 	resources := &ctx.resources.gpu_3d
 	if resources.active_pass_generation != 0 do return {}, false
 	if !ctx.initialized || target.texture.texture.id == 0 || target.texture.depth.id == 0 {
@@ -1554,7 +1551,8 @@ _gpu_3d_mesh :: proc(resources: ^Gpu_3D_Resources, mesh: Gpu_Mesh) -> ^Gpu_3D_Me
 @(private)
 _gpu_3d_pass_current :: proc(resources: ^Gpu_3D_Resources, pass: ^Gpu_3D_Pass) -> bool {
 	if resources == nil || pass == nil || !pass.active || pass.generation == 0 do return false
-	if pass.owner != g || pass.epoch != g.epoch do return false
+	ctx := active_context()
+	if pass.owner != ctx || pass.epoch != ctx.epoch do return false
 	return pass.generation == resources.active_pass_generation
 }
 

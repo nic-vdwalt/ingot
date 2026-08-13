@@ -36,6 +36,9 @@ second :: proc() {
 second :: proc() {
 	scope := context_scope_enter(ctx)
 }
+third :: proc() {
+	ctx := active_context()
+}
 '''
         self.assertEqual(
             check_gfx_context.counts_for_source(
@@ -43,7 +46,22 @@ second :: proc() {
                 "ui_gfx/x.odin",
                 check_gfx_context.CONTEXT_ESCAPE,
             ),
-            {"ui_gfx/x.odin:first": 1, "ui_gfx/x.odin:second": 1},
+            {
+                "ui_gfx/x.odin:first": 1,
+                "ui_gfx/x.odin:second": 1,
+                "ui_gfx/x.odin:third": 1,
+            },
+        )
+
+    def test_active_context_does_not_hide_other_direct_global_reads(self):
+        source = '''p :: proc() {
+	ctx := active_context()
+	g.frame.has_frame = true
+}
+'''
+        self.assertEqual(
+            check_gfx_context.counts_for_source(source, "gfx/x.odin"),
+            {"gfx/x.odin:p": 1},
         )
 
     def test_baseline_rejects_growth_and_stale_entries(self):

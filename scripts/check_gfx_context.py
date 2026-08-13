@@ -11,7 +11,7 @@ import check_odin_style
 
 EXCLUDED_SUFFIXES = ("_test.odin", "_fuzz_test.odin")
 DIRECT_GLOBAL = re.compile(r"(?<![A-Za-z0-9_])g(?![A-Za-z0-9_])")
-CONTEXT_ESCAPE = re.compile(r"\b(?:default_context|context_scope_enter)\s*\(")
+CONTEXT_ESCAPE = re.compile(r"\b(?:active_context|default_context|context_scope_enter)\s*\(")
 
 
 def tracked_sources(root: Path, patterns: list[str]) -> list[str]:

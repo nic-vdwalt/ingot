@@ -158,10 +158,7 @@ _terrain_unit :: proc(value: f32) -> f32 {
 // terrain_biome classifies a point from already-computed climate values, so
 // callers that cache height/moisture/temperature (or derive slope from their
 // own height grids) can classify without re-running the noise stack.
-terrain_biome :: proc(
-	config: Terrain_Config,
-	height, moisture, temperature, slope: f32,
-) -> Biome {
+terrain_biome :: proc(config: Terrain_Config, height, moisture, temperature, slope: f32) -> Biome {
 	if height < config.sea_level do return .Water
 	if height < config.sea_level + 1.5 do return .Beach
 	if height > config.snow_level || temperature < 0.22 do return .Snow

@@ -29,7 +29,7 @@ iter2_yields_exact_intersection :: proc(t: ^testing.T) {
 	}
 	seen := 0
 	it := iter2(&positions, &speeds)
-	for {
+	for _ in 0 ..< pool.capacity {
 		entity, position, speed, ok := iter2_next(&it)
 		if !ok do break
 		testing.expect(t, is_alive(&pool, entity))
@@ -69,7 +69,7 @@ iter3_and_iter4_match_membership :: proc(t: ^testing.T) {
 	testing.expect(t, add(&c_set, partial, 3))
 	seen3 := 0
 	it3 := iter3(&a_set, &b_set, &c_set)
-	for {
+	for _ in 0 ..< pool.capacity {
 		_, _, _, _, ok := iter3_next(&it3)
 		if !ok do break
 		seen3 += 1
@@ -77,7 +77,7 @@ iter3_and_iter4_match_membership :: proc(t: ^testing.T) {
 	testing.expect_value(t, seen3, 2)
 	seen4 := 0
 	it4 := iter4(&a_set, &b_set, &c_set, &d_set)
-	for {
+	for _ in 0 ..< pool.capacity {
 		entity, _, _, _, _, ok := iter4_next(&it4)
 		if !ok do break
 		testing.expect_value(t, entity, full)

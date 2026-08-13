@@ -3,7 +3,19 @@ package gfx
 
 import "core:math"
 import "core:math/linalg"
+import "core:sync"
 import "core:testing"
+
+@(private = "file")
+g_camera_test_guard: sync.Mutex
+
+camera_test_lock :: proc() {
+	sync.mutex_lock(&g_camera_test_guard)
+}
+
+camera_test_unlock :: proc() {
+	sync.mutex_unlock(&g_camera_test_guard)
+}
 
 camera_test_value :: proc(projection: CameraProjection = .PERSPECTIVE) -> Camera3D {
 	return {
@@ -231,6 +243,8 @@ camera_matrices_use_explicit_dimensions :: proc(t: ^testing.T) {
 
 @(test)
 world_to_screen_does_not_mutate_active_projection :: proc(t: ^testing.T) {
+	camera_test_lock()
+	defer camera_test_unlock()
 	old_width, old_height := g.width, g.height
 	old_projection, old_view, old_vp := cam3d_proj, cam3d_view, cam3d_vp
 	old_available := cam3d_projection_available
@@ -255,6 +269,8 @@ world_to_screen_does_not_mutate_active_projection :: proc(t: ^testing.T) {
 
 @(test)
 world_to_screen_pro_uses_arbitrary_matrix :: proc(t: ^testing.T) {
+	camera_test_lock()
+	defer camera_test_unlock()
 	old_width, old_height := g.width, g.height
 	old_projection, old_view, old_vp := cam3d_proj, cam3d_view, cam3d_vp
 	old_available := cam3d_projection_available
@@ -280,6 +296,8 @@ world_to_screen_pro_uses_arbitrary_matrix :: proc(t: ^testing.T) {
 
 @(test)
 gpu_camera_setup_preserves_window_and_active_camera :: proc(t: ^testing.T) {
+	camera_test_lock()
+	defer camera_test_unlock()
 	old_width, old_height := g.width, g.height
 	old_projection, old_view, old_vp := cam3d_proj, cam3d_view, cam3d_vp
 	old_available := cam3d_projection_available
