@@ -74,17 +74,16 @@ session_draw :: proc(session: ^Session, draw: Session_Draw_Proc, userdata: rawpt
 	assert(draw != nil, "session_draw: nil callback")
 	assert(!session.frame_open && !session.frame.open, "session_draw: frame already open")
 	assert(!session.graphics_open && !session.adapter.graphics_open)
-	scope := rl.context_scope_enter(session.adapter.gfx_context)
-	rl.BeginDrawing()
-	if !rl.context_frame_available(session.adapter.gfx_context) {
-		rl.EndDrawing()
-		rl.context_scope_leave(&scope)
+	graphics_frame: rl.Frame
+	if !rl.frame_begin(&graphics_frame, session.adapter.gfx_context) {
+		rl.frame_end(&graphics_frame)
 		return false
 	}
 	session.graphics_open = true
 	session.adapter.graphics_open = true
+	session.adapter.gfx_frame = &graphics_frame
 	frame := session_begin_frame(session)
-	defer session_draw_finish(session, &scope)
+	defer session_draw_finish(session, &graphics_frame)
 	draw(session, frame, userdata)
 	return true
 }
@@ -99,19 +98,19 @@ session_end_frame :: proc(session: ^Session) {
 }
 
 @(private = "file")
-session_draw_finish :: proc(session: ^Session, scope: ^rl.Context_Scope) {
+session_draw_finish :: proc(session: ^Session, graphics_frame: ^rl.Frame) {
 	assert(session != nil && session.initialized, "session_draw_finish: invalid session")
-	assert(scope != nil, "session_draw_finish: nil scope")
+	assert(graphics_frame != nil && rl.frame_available(graphics_frame))
 	assert(session.frame_open && session.graphics_open, "session_draw_finish: no open frame")
 	assert(session.adapter.graphics_open, "session_draw_finish: adapter frame closed")
 	session_end_frame(session)
+	session.adapter.gfx_frame = nil
 	session.adapter.graphics_open = false
-	rl.EndDrawing()
-	rl.context_scope_leave(scope)
+	rl.frame_end(graphics_frame)
 	session.graphics_open = false
 	free_all(context.temp_allocator)
 	assert(!session.frame_open && !session.graphics_open)
-	assert(!session.adapter.graphics_open)
+	assert(!session.adapter.graphics_open && session.adapter.gfx_frame == nil)
 }
 
 session_destroy :: proc(session: ^Session) {

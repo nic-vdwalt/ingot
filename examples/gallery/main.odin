@@ -132,7 +132,7 @@ palette := Palette.Dark
 reduced_motion := false
 section := Section.Buttons
 debug_on := false
-gallery_root: fit.Rect_I32
+gallery_root: fit.Rect
 
 // palette_next advances the cycle, wrapping at the end.
 //
@@ -316,16 +316,18 @@ gallery_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) 
 
 gallery_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	_ = userdata
-	fit.Column(builder)
-	fit.Custom(
-		builder,
-		{measure = gallery_measure, render = gallery_render},
-		{size = {width = fit.Grow(), height = fit.Grow()}},
-	)
-	fit.End(builder)
+	root_container: {
+		fit.Column(builder)
+		defer fit.End(builder)
+		fit.Custom(
+			builder,
+			{measure = gallery_measure, render = gallery_render},
+			{size = {width = fit.Grow(), height = fit.Grow()}},
+		)
+	}
 }
 
-gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect_I32) {
+gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect) {
 	gallery_root = root
 	sw := root.w
 	sh := root.h

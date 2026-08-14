@@ -95,7 +95,7 @@ harnesses.
 | `ingot:scene` | Renderer-independent objects, visibility, LOD, sorting, and bounded draw lists |
 | `ingot:scene_gfx` | GPU residency and replay bridge for `scene` draw lists |
 | `ingot:gfx` | Supported graphics API: raylib-compatible windowing, WebGPU rendering, input, audio, cameras, and documented `rlgl` compatibility |
-| `ingot:fit` | Supported UI API: one bounded builder plus application and raylib-loop hosts |
+| `ingot:fit` | Supported UI API: application lifecycle, bounded Builder composition, and callback-scoped Surface drawing |
 | `ingot:ui` | Internal renderer-independent UI engine, layout, paint, semantics, and themes |
 | `ingot:ui_gfx` | Internal graphics, platform, text, and accessibility bridge |
 | `ingot:prefs` | Native settings files and web `localStorage` behind one API |
@@ -153,10 +153,11 @@ generated deterministically by
 `odin run examples/api-map -collection:ingot=. -define:INGOT_MAP_CAPTURE=true`;
 `bash scripts/capture-media.sh` refreshes all README media the same way.
 
-New UI applications start with `fit.App` and `fit.Builder`. Existing raylib
-applications keep their PascalCase `ingot:gfx` loop and add `fit.Session` when
-they need UI. The renderer-independent UI runtime and graphics adapter remain
-internal implementation packages. See [Choosing an API layer](docs/api-layers.md).
+UI applications start with `fit.App` and `fit.Builder`; explicit same-frame
+geometry is available only through callback-borrowed `fit.Surface`. Graphics-only
+and hybrid renderer fixtures may use PascalCase `ingot:gfx`, but UI composition
+and lifecycle remain behind Fit. The renderer-independent runtime and graphics
+adapter are internal implementation packages. See [Choosing an API layer](docs/api-layers.md).
 
 ## Quick start
 
@@ -173,18 +174,21 @@ main :: proc() {
 }
 
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	fit.Column(builder, {gap = .SM, padding = .LG})
-	fit.Label(builder, "Hello from Ingot")
-	fit.Button(builder, "continue", "Continue", &continued)
-	fit.End(builder)
+	root_container: {
+		fit.Column(builder, {gap = .SM, padding = .LG})
+		defer fit.End(builder)
+		fit.Label(builder, "Hello from Ingot")
+		fit.Button(builder, "continue", "Continue", &continued)
+	}
 }
 ```
 
 Fit labels take semantic roles and ink tokens, containers use bounded tracks and
 spacing tokens, and interactive leaves take stable string, integer, or explicit
-widget keys. Checkbox, radio, and slider values remain caller-owned. Optional
-`*_With` helpers invoke component procedures immediately and auto-balance their
-own container without retaining callbacks. See
+widget keys. Checkbox, radio, and slider values remain caller-owned. Static
+containers use a lexical block with an immediate `defer fit.End(builder)`;
+dynamic builders may close containers directly. Optional `*_With` helpers invoke
+component procedures immediately and auto-balance their own container. See
 [application shell](docs/application-shell.md) and
 [layout conventions](docs/layout.md).
 
@@ -211,11 +215,11 @@ Gallery changes must preserve the checked-in `docs/media/gallery-*.png` exhibits
 capture and compare them before removing or replacing a demonstrated widget.
 
 Other focused examples: `examples/hello` (application shell and stable IDs),
-`examples/session_loop` (custom-host Session lifecycle),
+`examples/session_loop` (caller-owned App lifecycle),
 [`examples/hot_reload`](examples/hot_reload/) (native code and state hot reload),
 `examples/breakout` (audio, gamepads, web export), `examples/idle_demo` (near-zero
-idle CPU), `examples/chart_demo`, `examples/render_fixture` (renderer, backend,
-and Session lifecycle validation), `examples/procgen_world` (deterministic
+idle CPU), `examples/chart_demo`, `examples/render_fixture` (hybrid renderer and
+Fit integration validation), `examples/procgen_world` (deterministic
 terrain, biome placement, culling, and GPU residency without external assets),
 and `examples/raylib_migration_fixture` (import-only 2D compatibility contract).
 

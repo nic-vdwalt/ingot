@@ -72,7 +72,8 @@ replay_text_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui
 	font, ok := adapter_font(adapter, command.font)
 	assert(ok, "replay_text_command: invalid font")
 	value := strings.clone_to_cstring(text, context.temp_allocator)
-	rl.DrawTextEx(
+	rl.frame_draw_text(
+		adapter.gfx_frame,
 		font,
 		value,
 		vec_to_gfx(command.p0),
@@ -88,7 +89,8 @@ replay_codepoint_command :: proc(adapter: ^Adapter, command: ui.Paint_Command) {
 	assert(adapter.graphics_open, "replay_codepoint_command: graphics frame not open")
 	font, ok := adapter_font(adapter, command.font)
 	assert(ok, "replay_codepoint_command: invalid font")
-	rl.DrawTextCodepoint(
+	rl.frame_draw_codepoint(
+		adapter.gfx_frame,
 		font,
 		command.codepoint,
 		vec_to_gfx(command.p0),
@@ -98,10 +100,12 @@ replay_codepoint_command :: proc(adapter: ^Adapter, command: ui.Paint_Command) {
 }
 
 @(private = "file")
-replay_clip_begin_command :: proc(command: ui.Paint_Command) {
+replay_clip_begin_command :: proc(adapter: ^Adapter, command: ui.Paint_Command) {
+	assert(adapter != nil, "replay_clip_begin_command: nil adapter")
 	assert(command.rect.width >= 0, "replay_clip_begin_command: negative width")
 	assert(command.rect.height >= 0, "replay_clip_begin_command: negative height")
-	rl.BeginScissorMode(
+	rl.frame_scissor_begin(
+		adapter.gfx_frame,
 		i32(command.rect.x),
 		i32(command.rect.y),
 		i32(command.rect.width),
@@ -110,19 +114,27 @@ replay_clip_begin_command :: proc(command: ui.Paint_Command) {
 }
 
 @(private = "file")
-replay_rectangle_command :: proc(command: ui.Paint_Command) {
+replay_rectangle_command :: proc(adapter: ^Adapter, command: ui.Paint_Command) {
+	assert(adapter != nil, "replay_rectangle_command: nil adapter")
 	assert(command.rect.width >= 0 && command.rect.height >= 0, "replay rectangle: invalid rect")
 	rect := rect_to_gfx(command.rect)
 	color := color_to_gfx(command.color)
 	#partial switch command.kind {
 	case .Rectangle:
-		rl.DrawRectangleRec(rect, color)
+		rl.frame_draw_rectangle(adapter.gfx_frame, rect, color)
 	case .Rectangle_Outline:
-		rl.DrawRectangleLinesEx(rect, command.thickness, color)
+		rl.frame_draw_rectangle_lines(adapter.gfx_frame, rect, command.thickness, color)
 	case .Rectangle_Rounded:
-		rl.DrawRectangleRounded(rect, command.roundness, command.segments, color)
+		rl.frame_draw_rectangle_rounded(
+			adapter.gfx_frame,
+			rect,
+			command.roundness,
+			command.segments,
+			color,
+		)
 	case .Rectangle_Rounded_Outline:
-		rl.DrawRectangleRoundedLinesEx(
+		rl.frame_draw_rectangle_rounded_lines(
+			adapter.gfx_frame,
 			rect,
 			command.roundness,
 			command.segments,
@@ -130,11 +142,9 @@ replay_rectangle_command :: proc(command: ui.Paint_Command) {
 			color,
 		)
 	case .Rectangle_Gradient_V:
-		rl.DrawRectangleGradientV(
-			i32(rect.x),
-			i32(rect.y),
-			i32(rect.width),
-			i32(rect.height),
+		rl.frame_draw_rectangle_gradient_v(
+			adapter.gfx_frame,
+			rect,
 			color,
 			color_to_gfx(command.color_end),
 		)
@@ -153,15 +163,32 @@ replay_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Pain
 	     .Rectangle_Rounded,
 	     .Rectangle_Rounded_Outline,
 	     .Rectangle_Gradient_V:
-		replay_rectangle_command(command)
+		replay_rectangle_command(adapter, command)
 	case .Line:
-		rl.DrawLineEx(vec_to_gfx(command.p0), vec_to_gfx(command.p1), command.thickness, color)
+		rl.frame_draw_line(
+			adapter.gfx_frame,
+			vec_to_gfx(command.p0),
+			vec_to_gfx(command.p1),
+			command.thickness,
+			color,
+		)
 	case .Circle:
-		rl.DrawCircleV(vec_to_gfx(command.p0), command.outer_radius, color)
+		rl.frame_draw_circle(
+			adapter.gfx_frame,
+			vec_to_gfx(command.p0),
+			command.outer_radius,
+			color,
+		)
 	case .Circle_Outline:
-		rl.DrawCircleLinesV(vec_to_gfx(command.p0), command.outer_radius, color)
+		rl.frame_draw_circle_lines(
+			adapter.gfx_frame,
+			vec_to_gfx(command.p0),
+			command.outer_radius,
+			color,
+		)
 	case .Ring:
-		rl.DrawRing(
+		rl.frame_draw_ring(
+			adapter.gfx_frame,
 			vec_to_gfx(command.p0),
 			command.inner_radius,
 			command.outer_radius,
@@ -171,7 +198,8 @@ replay_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Pain
 			color,
 		)
 	case .Triangle:
-		rl.DrawTriangle(
+		rl.frame_draw_triangle(
+			adapter.gfx_frame,
 			vec_to_gfx(command.p0),
 			vec_to_gfx(command.p1),
 			vec_to_gfx(command.p2),
@@ -182,9 +210,9 @@ replay_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Pain
 	case .Codepoint:
 		replay_codepoint_command(adapter, command)
 	case .Clip_Begin:
-		replay_clip_begin_command(command)
+		replay_clip_begin_command(adapter, command)
 	case .Clip_End:
-		rl.EndScissorMode()
-		if command.clip_restore do replay_clip_begin_command(command)
+		rl.frame_scissor_end(adapter.gfx_frame)
+		if command.clip_restore do replay_clip_begin_command(adapter, command)
 	}
 }

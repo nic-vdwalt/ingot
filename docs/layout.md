@@ -1,25 +1,44 @@
 # Fit layout
 
 `ingot:fit` exposes one bounded immediate builder. A draw callback receives an
-open `^fit.Builder`, declares one root container, and balances every nested
-container with `fit.End`.
+open `^fit.Builder` and declares one balanced root container. For a static tree,
+put each container and its children in a named lexical block with an immediate
+`defer fit.End(builder)`. The defer closes the container on every block exit and
+makes nesting visible in source.
 
 `Row_With`, `Column_With`, `Flow_With`, `Grid_With`, and `Attachment_With` open
 one container, invoke one caller procedure immediately, verify its nested
 containers are balanced, and close the container. The procedure and userdata
-are never retained. The manual open/`End` form remains available for dynamic
-construction.
+are never retained. A direct `fit.End(builder)` remains available when dynamic
+construction does not correspond to one lexical child block.
 
 ```odin
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	fit.Column(builder, {gap = .SM, padding = .LG})
-	fit.Label(builder, "Settings", {role = .Title})
-	fit.Row(builder, {gap = .SM, align = .Center})
-	fit.Label(builder, "Actions", {track = fit.Grow()})
-	fit.Button(builder, "save", "Save", &saved)
-	fit.End(builder)
-	fit.End(builder)
+	root_container: {
+		fit.Column(builder, {gap = .SM, padding = .LG})
+		defer fit.End(builder)
+		fit.Label(builder, "Settings", {role = .Title})
+		actions_container: {
+			fit.Row(builder, {gap = .SM, align = .Center})
+			defer fit.End(builder)
+			fit.Label(builder, "Actions", {track = fit.Grow()})
+			fit.Button(builder, "save", "Save", &saved)
+		}
+	}
 }
+```
+
+When the container itself is selected dynamically, close the selected container
+directly:
+
+```odin
+if horizontal {
+	fit.Row(builder, {gap = .SM})
+} else {
+	fit.Column(builder, {gap = .SM})
+}
+for item in items do fit.Label(builder, item.label)
+fit.End(builder)
 ```
 
 ## Containers

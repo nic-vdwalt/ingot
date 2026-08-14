@@ -1,9 +1,7 @@
 package main
 
 import "core:fmt"
-import "core:strings"
-import ui "ingot:fit"
-import ui_gfx "ingot:fit"
+import fit "ingot:fit"
 import rl "ingot:gfx"
 
 FONT_TTF := #load("../../assets/fonts/JetBrainsMono-Regular.ttf")
@@ -46,40 +44,28 @@ gpu_textured_quad: rl.Gpu_Mesh
 gpu_overlay_line: rl.Gpu_Mesh
 gpu_overlay_points: rl.Gpu_Mesh
 resources_ready: bool
-ui_session: ui_gfx.Host_Session
-ui_frame: ^ui.Ui_Frame
-retina_input: ui.Text_Input_State
-retina_text: strings.Builder
+ui_session: fit.Session
 
 main :: proc() {
 	rl.InitWindow(960, 720, "ingot renderer fixture")
 	rl.SetTargetFPS(60)
-	ui_gfx.session_init(&ui_session, {semantics_enabled = true})
-	retina_text = strings.builder_make()
-	strings.write_string(&retina_text, "Runtime text input")
+	fit.Session_Init(&ui_session, {semantics_enabled = true})
 	rl.run(frame)
 	when ODIN_OS != .JS {
-		ui.text_input_state_destroy(&retina_input)
-		strings.builder_destroy(&retina_text)
-		ui_gfx.session_destroy(&ui_session)
+		fit.Session_Destroy(&ui_session)
 		rl.CloseWindow()
 	}
 }
 
 frame :: proc() {
 	ensure_resources()
-	frame, acquired := ui_gfx.session_acquire_frame(&ui_session)
-	if !acquired do return
-	ui_frame = frame.ui
 	rl.ClearBackground(rl.Color{22, 24, 32, 255})
 	if resources_ready {
 		draw_render_targets()
 		draw_main_fixture()
 		draw_stream_lifetime_stress()
-		draw_retina_fixture()
 	}
-	ui_gfx.session_present_frame(&frame)
-	ui_frame = nil
+	_ = fit.Session_Draw(&ui_session, draw_fit_overlay)
 
 	when rl.RENDER_STATS_ENABLED {
 		@(static) reported := false
@@ -281,35 +267,35 @@ draw_main_fixture :: proc() {
 	}
 }
 
-draw_retina_fixture :: proc() {
-	style := ui.ui_frame_theme(ui_frame)
-	metrics := ui.ui_frame_metrics(ui_frame)
-	label: cstring = "RETINA 1x/2x RUNTIME TEXT"
-	width := ui.measure_text_frame(ui_frame, label, metrics.FONT_SIZE_BODY)
-	x, y := i32(632), i32(506)
-	ui.draw_text_frame(ui_frame, label, x, y, metrics.FONT_SIZE_BODY, style.fg_primary)
-	rl.DrawRectangleLines(
-		x - 2,
-		y - 2,
-		width + 4,
-		metrics.LINE_HEIGHT,
-		ui_gfx.color_to_gfx(style.fg_accent),
+draw_fit_overlay :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	_ = userdata
+	fit.Custom(
+		builder,
+		{measure = fit_overlay_measure, render = fit_overlay_render},
+		{size = {width = fit.Grow(), height = fit.Grow()}},
 	)
-	ui.draw_text_truncated_frame(
-		ui_frame,
+}
+
+fit_overlay_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
+	_ = userdata
+	return {max(constraints.max_w, 1), max(constraints.max_h, 1), false}
+}
+
+fit_overlay_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
+	_ = rect
+	_ = userdata
+	x, y := i32(632), i32(506)
+	fit.Surface_Text(surface, "RETINA 1x/2x RUNTIME TEXT", x, y)
+	fit.Surface_Text_Truncated(
+		surface,
 		"Truncation uses the same runtime atlas and measurement cache",
 		x,
-		y + metrics.LINE_HEIGHT,
+		y + fit.Surface_Metrics(surface).line_height,
 		280,
-		metrics.FONT_SIZE_NOTE,
-		style.fg_secondary,
+		.Note,
+		.Secondary,
 	)
-	ui.text_input_box(
-		ui_frame,
-		{rect = {x, y + metrics.LINE_HEIGHT * 2, 280, 32}, active = false},
-		&retina_text,
-		&retina_input,
-	)
+	return false
 }
 
 draw_stream_lifetime_stress :: proc() {
@@ -319,34 +305,24 @@ draw_stream_lifetime_stress :: proc() {
 		rl.EndTextureMode()
 	}
 
-	// Living documentation for ui.Layout: the 12x4 chip grid below is laid
-	// out with rows carved from a column instead of hand-computed offsets.
-	// Cell geometry matches the original arithmetic exactly:
-	// x = 24 + col*74, y = 548 + row*34, chip 24px + label 44px, 10px gap.
-	l: ui.Layout
-	ui.layout_begin(&l, 24, 548, 12 * 74, 4 * 34, gap = 10)
-	for _ in 0 ..< 4 {
-		ui.push_row(&l, 24, gap = 2)
-		for _ in 0 ..< 12 {
-			icon := ui.next(&l, 24)
-			label := ui.next(&l, 44)
-			ui.spacer(&l, 2) // pad to the 74px cell pitch (24+2+44+2+2)
+	for row in i32(0) ..< 4 {
+		for column in i32(0) ..< 12 {
+			x := 24 + column * 74
+			y := 548 + row * 34
 			rl.DrawTexturePro(
 				source_texture,
 				{0, 0, 2, 2},
-				{f32(icon.x), f32(icon.y), f32(icon.w), f32(icon.h)},
+				{f32(x), f32(y), 24, 24},
 				{0, 0},
 				0,
 				rl.WHITE,
 			)
-			rl.DrawRectangle(label.x, label.y, label.w, label.h, rl.Color{48, 58, 82, 210})
-			rl.BeginScissorMode(label.x + 2, label.y + 2, label.w - 4, label.h - 4)
-			rl.DrawRectangle(label.x, label.y, label.w, label.h, rl.Color{90, 170, 230, 96})
+			rl.DrawRectangle(x + 26, y, 44, 24, rl.Color{48, 58, 82, 210})
+			rl.BeginScissorMode(x + 28, y + 2, 40, 20)
+			rl.DrawRectangle(x + 26, y, 44, 24, rl.Color{90, 170, 230, 96})
 			rl.EndScissorMode()
 		}
-		ui.layout_pop(&l)
 	}
-	ui.layout_end(&l)
 
 	rl.DrawRectangle(24, 684, 912, 28, rl.Color{28, 32, 44, 255})
 	if font_ready {

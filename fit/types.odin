@@ -1,6 +1,5 @@
 package fit
 
-import "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
@@ -12,13 +11,21 @@ Builder :: struct {
 	bound:        bool,
 }
 
-Storage_Node :: distinct ui.Prepared_Node
+@(private = "package")
+STORAGE_NODE_SIZE :: size_of(ui.Prepared_Node)
+@(private = "package")
+STORAGE_NODE_ALIGNMENT :: align_of(ui.Prepared_Node)
+Storage_Node :: struct #align (STORAGE_NODE_ALIGNMENT) {
+	data: [STORAGE_NODE_SIZE]u8,
+}
 Storage :: struct {
 	nodes:   []Storage_Node,
 	outputs: []^bool,
 }
-STORAGE_NODE_DEFAULT :: ui.MAX_PREPARED_NODES
-STORAGE_NODE_HARD_MAX :: ui.MAX_PREPARED_NODES_HARD
+STORAGE_NODE_DEFAULT :: 128
+STORAGE_NODE_HARD_MAX :: 8192
+#assert(STORAGE_NODE_DEFAULT == ui.MAX_PREPARED_NODES_DEFAULT)
+#assert(STORAGE_NODE_HARD_MAX == ui.MAX_PREPARED_NODES_HARD)
 #assert(size_of(Storage_Node) == size_of(ui.Prepared_Node))
 #assert(align_of(Storage_Node) == align_of(ui.Prepared_Node))
 
@@ -50,6 +57,26 @@ Frame_Pacing :: enum u8 {
 	Monitor_Refresh,
 }
 
+Window_Flag :: enum i32 {
+	Fullscreen          = 1,
+	Resizable           = 2,
+	Undecorated         = 3,
+	Transparent         = 4,
+	Msaa_4x             = 5,
+	Vsync               = 6,
+	Hidden              = 7,
+	Always_Run          = 8,
+	Minimized           = 9,
+	Maximized           = 10,
+	Unfocused           = 11,
+	Topmost             = 12,
+	High_Dpi            = 13,
+	Mouse_Passthrough   = 14,
+	Borderless_Windowed = 15,
+	Interlaced          = 16,
+}
+Window_Flags :: distinct bit_set[Window_Flag;i32]
+
 Session_Config :: struct {
 	user_scale:        f32,
 	semantics_enabled: bool,
@@ -62,11 +89,22 @@ Paint_Peaks :: struct {
 	overlay_text_bytes: int,
 }
 
+Renderer_Peaks :: struct {
+	vertices:                int,
+	vertices_capacity:       int,
+	indices:                 int,
+	indices_capacity:        int,
+	geometry_stream_bytes:   u64,
+	geometry_capacity_bytes: u64,
+	uniform_stream_bytes:    u64,
+	uniform_capacity_bytes:  u64,
+}
+
 Config :: struct {
 	width:         i32,
 	height:        i32,
 	title:         cstring,
-	flags:         gfx.ConfigFlags,
+	flags:         Window_Flags,
 	frame_pacing:  Frame_Pacing,
 	target_fps:    i32,
 	event_waiting: bool,
@@ -148,7 +186,6 @@ Button_Style :: enum u8 {
 	Danger,
 	Ghost,
 }
-Btn_Style :: Button_Style
 Widget_Id :: distinct u64
 Rect :: struct {
 	x, y, w, h: i32,
@@ -188,6 +225,19 @@ Key :: enum i32 {
 	F12    = 301,
 	Up     = 265,
 	Down   = 264,
+}
+
+Test_Input :: struct {
+	mouse_position:  Point,
+	mouse_pressed:   [3]bool,
+	mouse_released:  [3]bool,
+	mouse_down:      [3]bool,
+	keys_pressed:    [512]bool,
+	keys_down:       [512]bool,
+	characters:      [32]rune,
+	character_count: int,
+	time:            f64,
+	screen_size:     Point,
 }
 Mouse_Button :: enum i32 {
 	Left,
@@ -350,6 +400,10 @@ Surface :: struct {
 
 Region :: struct {
 	inner: ui.Ui,
+}
+
+Test_Driver :: struct {
+	inner: rawptr,
 }
 
 Pane_State :: struct {

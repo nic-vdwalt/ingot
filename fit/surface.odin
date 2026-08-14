@@ -166,6 +166,11 @@ Surface_Stroke_Rect :: proc(surface: ^Surface, rect: Rect, color: Color) {
 	ui.draw_rectangle_lines(u.frame, rect.x, rect.y, rect.w, rect.h, ui.Color(color))
 }
 
+Surface_Line :: proc(surface: ^Surface, from, to: Point, thickness: f32, color: Color) {
+	u := surface_ui(surface)
+	ui.draw_line_ex(u.frame, {from.x, from.y}, {to.x, to.y}, thickness, ui.Color(color))
+}
+
 Surface_Fill_Rounded_Rect :: proc(
 	surface: ^Surface,
 	rect: Float_Rect,

@@ -27,15 +27,14 @@ main :: proc() {
 }
 
 draw_context :: proc(ctx: ^rl.Context, background: rl.Color, rectangle: bool) {
-	scope := rl.context_scope_enter(ctx)
-	defer rl.context_scope_leave(&scope)
-	rl.BeginDrawing()
-	defer rl.EndDrawing()
-	if !rl.context_frame_available(ctx) do return
-	rl.ClearBackground(background)
+	frame: rl.Frame
+	available := rl.frame_begin(&frame, ctx)
+	defer rl.frame_end(&frame)
+	if !available do return
+	_ = background
 	if rectangle {
-		rl.DrawRectangleRec({32, 32, 160, 80}, rl.Color{76, 154, 255, 255})
+		rl.frame_draw_rectangle(&frame, {32, 32, 160, 80}, rl.Color{76, 154, 255, 255})
 	} else {
-		rl.DrawCircleV({160, 120}, 48, rl.Color{255, 130, 110, 255})
+		rl.frame_draw_circle(&frame, {160, 120}, 48, rl.Color{255, 130, 110, 255})
 	}
 }

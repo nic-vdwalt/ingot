@@ -222,12 +222,19 @@ Confirm_Dialog_State :: struct {
 	inner: ui.Confirm_Dialog_State,
 }
 
-TABLE_COLUMN_COUNT_MAX :: ui.TABLE_COLUMN_COUNT_MAX
-PAINT_COMMAND_CAP :: ui.PAINT_COMMAND_CAP
-PAINT_TEXT_CAP :: ui.PAINT_TEXT_CAP
-Z_PANEL :: Z_Order(ui.Z_PANEL)
-Z_POPUP :: Z_Order(ui.Z_POPUP)
-ROOT_EXTENT_OPEN :: ui.ROOT_EXTENT_OPEN
+TABLE_COLUMN_COUNT_MAX :: 32
+PAINT_COMMAND_CAP :: 8192
+PAINT_TEXT_CAP :: 32768
+Z_PANEL :: Z_Order(100)
+Z_POPUP :: Z_Order(200)
+ROOT_EXTENT_OPEN :: i32(1 << 20)
+
+#assert(TABLE_COLUMN_COUNT_MAX == ui.TABLE_COLUMN_COUNT_MAX)
+#assert(PAINT_COMMAND_CAP == ui.PAINT_COMMAND_CAP)
+#assert(PAINT_TEXT_CAP == ui.PAINT_TEXT_CAP)
+#assert(Z_PANEL == Z_Order(ui.Z_PANEL))
+#assert(Z_POPUP == Z_Order(ui.Z_POPUP))
+#assert(ROOT_EXTENT_OPEN == ui.ROOT_EXTENT_OPEN)
 
 Input_Box_Init :: proc(box: ^Input_Box) {
 	assert(box != nil, "Fit.Input_Box_Init: nil box")
@@ -311,11 +318,25 @@ Widget_Id_From_U64 :: proc(value: u64) -> Widget_Id {
 	return Widget_Id(ui.widget_id(value))
 }
 
-Theme_Dark :: proc() -> Theme {return {inner = ui.theme_dark()}}
-Theme_Light :: proc() -> Theme {return {inner = ui.theme_light()}}
-Theme_Sketch_Warm :: proc() -> Theme {return {inner = ui.theme_sketch_warm()}}
-Theme_Sketch_Grey :: proc() -> Theme {return {inner = ui.theme_sketch_grey()}}
-Theme_High_Contrast :: proc() -> Theme {return {inner = ui.theme_high_contrast()}}
+Theme_Dark :: proc() -> Theme {
+	return {inner = ui.theme_dark()}
+}
+
+Theme_Light :: proc() -> Theme {
+	return {inner = ui.theme_light()}
+}
+
+Theme_Sketch_Warm :: proc() -> Theme {
+	return {inner = ui.theme_sketch_warm()}
+}
+
+Theme_Sketch_Grey :: proc() -> Theme {
+	return {inner = ui.theme_sketch_grey()}
+}
+
+Theme_High_Contrast :: proc() -> Theme {
+	return {inner = ui.theme_high_contrast()}
+}
 Theme_Pigment :: proc(theme: Theme, pigment: Pigment) -> Color {
 	inner := theme.inner
 	return Color(ui.theme_pigment(&inner, ui.Pigment(pigment)))
@@ -328,26 +349,12 @@ Theme_Background :: proc(theme: Theme) -> Color {return Color(theme.inner.bg_app
 Color_Tinted :: proc(color: Color, tint: Tint) -> Color {
 	return Color(ui.color_tinted(ui.Color(color), ui.Tint(tint)))
 }
-Tint_Alpha :: proc(tint: Tint) -> u8 {return ui.tint_alpha(ui.Tint(tint))}
+Tint_Alpha :: proc(tint: Tint) -> u8 {
+	return ui.tint_alpha(ui.Tint(tint))
+}
 Contrast_Ratio :: proc(a, b: Color) -> f64 {
 	return ui.contrast_ratio(ui.Color(a), ui.Color(b))
 }
-
-Checkbox_At :: ui.checkbox_at
-Radio_At :: ui.radio_at
-Slider_At :: ui.slider_at
-Slider_At_State :: ui.slider_at_state
-Dropdown_At :: ui.dropdown_at
-Combobox_At :: ui.combobox_at
-Date_Picker_At :: ui.date_picker_at
-Text_Input_Box :: ui.text_input_box
-Line_Chart_At :: ui.line_chart_at
-Bar_Chart_At :: ui.bar_chart_at
-Sparkline_At :: ui.sparkline_at
-Tooltip_At :: ui.tooltip_wrapped_at
-Card_Background_At :: ui.card_bg_at
-Section_Header_At :: ui.section_header_at
-List_Row_Background_At :: ui.list_row_bg_at
 
 Context_Menu_Open :: proc(state: ^Context_Menu_State, point: Point) {
 	assert(state != nil, "Fit.Context_Menu_Open: nil state")
@@ -375,5 +382,11 @@ Toast_Push :: proc(state: ^Toast_State, kind: Toast_Kind, message: string) {
 	ui.toast_push(&state.inner, inner_kind, message)
 }
 
-Rect_F32 :: ui.rect_f32
-Point_In_Rect :: ui.point_in_rect
+Point_In_Rect :: proc(point: Point, rect: Float_Rect) -> bool {
+	return(
+		point.x >= rect.x &&
+		point.y >= rect.y &&
+		point.x < rect.x + rect.width &&
+		point.y < rect.y + rect.height \
+	)
+}

@@ -1,5 +1,161 @@
 package gfx
 
+Frame :: struct {
+	owner:     ^Context,
+	epoch:     u64,
+	previous:  ^Context,
+	open:      bool,
+	available: bool,
+}
+
+frame_begin :: proc(frame: ^Frame, ctx: ^Context) -> bool {
+	assert(frame != nil && ctx != nil, "frame_begin: nil argument")
+	assert(!frame.open, "frame_begin: frame already open")
+	frame.owner = ctx
+	frame.epoch = context_epoch(ctx)
+	frame.previous = _context_activate(ctx)
+	frame.open = true
+	BeginDrawing()
+	frame.available = context_frame_available(ctx)
+	assert(frame.owner == ctx && frame.open, "frame_begin: invalid frame")
+	return frame.available
+}
+
+frame_end :: proc(frame: ^Frame) {
+	assert(frame != nil && frame.open, "frame_end: frame not open")
+	assert(
+		frame.owner != nil && frame.epoch == context_epoch(frame.owner),
+		"frame_end: stale owner",
+	)
+	EndDrawing()
+	_context_restore(frame.previous)
+	frame^ = {}
+}
+
+frame_owner :: proc(frame: ^Frame) -> ^Context {
+	assert(frame != nil && frame.open, "frame_owner: frame not open")
+	assert(
+		frame.owner != nil && frame.epoch == context_epoch(frame.owner),
+		"frame_owner: stale owner",
+	)
+	return frame.owner
+}
+
+frame_available :: proc(frame: ^Frame) -> bool {
+	return frame != nil && frame.open && frame.available
+}
+
+frame_draw_text :: proc(
+	frame: ^Frame,
+	font: Font,
+	text: cstring,
+	position: Vector2,
+	font_size, spacing: f32,
+	tint: Color,
+) {
+	_ = frame_owner(frame)
+	DrawTextEx(font, text, position, font_size, spacing, tint)
+}
+
+frame_draw_codepoint :: proc(
+	frame: ^Frame,
+	font: Font,
+	codepoint: rune,
+	position: Vector2,
+	font_size: f32,
+	tint: Color,
+) {
+	_ = frame_owner(frame)
+	DrawTextCodepoint(font, codepoint, position, font_size, tint)
+}
+
+frame_draw_rectangle :: proc(frame: ^Frame, rect: Rectangle, color: Color) {
+	_ = frame_owner(frame)
+	DrawRectangleRec(rect, color)
+}
+
+frame_draw_rectangle_lines :: proc(frame: ^Frame, rect: Rectangle, thickness: f32, color: Color) {
+	_ = frame_owner(frame)
+	DrawRectangleLinesEx(rect, thickness, color)
+}
+
+frame_draw_rectangle_rounded :: proc(
+	frame: ^Frame,
+	rect: Rectangle,
+	roundness: f32,
+	segments: i32,
+	color: Color,
+) {
+	_ = frame_owner(frame)
+	DrawRectangleRounded(rect, roundness, segments, color)
+}
+
+frame_draw_rectangle_rounded_lines :: proc(
+	frame: ^Frame,
+	rect: Rectangle,
+	roundness: f32,
+	segments: i32,
+	thickness: f32,
+	color: Color,
+) {
+	_ = frame_owner(frame)
+	DrawRectangleRoundedLinesEx(rect, roundness, segments, thickness, color)
+}
+
+frame_draw_rectangle_gradient_v :: proc(frame: ^Frame, rect: Rectangle, top, bottom: Color) {
+	assert(frame != nil, "frame_draw_rectangle_gradient_v: nil frame")
+	_ = frame_owner(frame)
+	DrawRectangleGradientV(
+		i32(rect.x),
+		i32(rect.y),
+		i32(rect.width),
+		i32(rect.height),
+		top,
+		bottom,
+	)
+}
+
+frame_draw_line :: proc(frame: ^Frame, from, to: Vector2, thickness: f32, color: Color) {
+	_ = frame_owner(frame)
+	DrawLineEx(from, to, thickness, color)
+}
+
+frame_draw_circle :: proc(frame: ^Frame, center: Vector2, radius: f32, color: Color) {
+	_ = frame_owner(frame)
+	DrawCircleV(center, radius, color)
+}
+
+frame_draw_circle_lines :: proc(frame: ^Frame, center: Vector2, radius: f32, color: Color) {
+	_ = frame_owner(frame)
+	DrawCircleLinesV(center, radius, color)
+}
+
+frame_draw_ring :: proc(
+	frame: ^Frame,
+	center: Vector2,
+	inner_radius, outer_radius, start_angle, end_angle: f32,
+	segments: i32,
+	color: Color,
+) {
+	_ = frame_owner(frame)
+	DrawRing(center, inner_radius, outer_radius, start_angle, end_angle, segments, color)
+}
+
+frame_draw_triangle :: proc(frame: ^Frame, first, second, third: Vector2, color: Color) {
+	_ = frame_owner(frame)
+	DrawTriangle(first, second, third, color)
+}
+
+frame_scissor_begin :: proc(frame: ^Frame, x, y, width, height: i32) {
+	_ = frame_owner(frame)
+	BeginScissorMode(x, y, width, height)
+}
+
+frame_scissor_end :: proc(frame: ^Frame) {
+	_ = frame_owner(frame)
+	EndScissorMode()
+}
+
 Context_Scope :: struct {
 	previous: ^Context,
 	active:   bool,

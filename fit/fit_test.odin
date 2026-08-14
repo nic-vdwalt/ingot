@@ -298,10 +298,12 @@ fit_caller_storage_selects_and_resets_capacity :: proc(t: ^testing.T) {
 fit_test_draw :: proc(builder: ^Builder, userdata: rawptr) {
 	assert(builder != nil, "fit test draw: nil builder")
 	_ = userdata
-	Column(builder)
-	Label(builder, "Hello")
-	active := false
-	Button(builder, "save", "Save", &active)
-	Button(builder, u64(7), "Seven", &active)
-	End(builder)
+	root_container: {
+		Column(builder)
+		defer End(builder)
+		Label(builder, "Hello")
+		active := false
+		Button(builder, "save", "Save", &active)
+		Button(builder, u64(7), "Seven", &active)
+	}
 }

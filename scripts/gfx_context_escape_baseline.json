@@ -4,7 +4,6 @@
   "gfx/api.odin:key_pressed": 1,
   "gfx/api.odin:measure_text": 1,
   "gfx/api.odin:mouse_position": 1,
-  "gfx/api_tests.odin:context_scope_nested_activation_restores_owner": 3,
   "gfx/api_tests.odin:context_scope_routes_convenience_queries_and_restores_default": 1,
   "gfx/context.odin:CloseWindow": 1,
   "gfx/context.odin:GetFPS": 1,
@@ -69,10 +68,6 @@
   "gfx/window_extra.odin:ShowWindow": 1,
   "gfx/window_extra.odin:_drop_cb": 1,
   "ui_gfx/accessibility.odin:adapter_a11y_factory": 1,
-  "ui_gfx/adapter.odin:adapter_init": 1,
   "ui_gfx/app.odin:app_init": 1,
-  "ui_gfx/input.odin:capture_input": 1,
-  "ui_gfx/platform.odin:apply_platform_output": 1,
-  "ui_gfx/session.odin:session_draw": 1,
   "ui_gfx/session.odin:session_init": 1
 }

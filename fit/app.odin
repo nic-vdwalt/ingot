@@ -92,9 +92,23 @@ Screen_Rect :: proc(app: ^App) -> Rect {
 	return from_rect(ui_gfx.app_screen_rect(&app.inner))
 }
 
-Clear_Color :: proc(app: ^App) -> gfx.Color {
+Clear_Color :: proc(app: ^App) -> Color {
 	assert(app != nil, "Fit.Clear_Color: nil app")
-	return ui_gfx.app_clear_color(&app.inner)
+	return Color(ui_gfx.app_clear_color(&app.inner))
+}
+
+Renderer_Peak_Usage :: proc() -> Renderer_Peaks {
+	usage := gfx.renderer_peak_usage()
+	return {
+		vertices = usage.vertices,
+		vertices_capacity = usage.vertices_capacity,
+		indices = usage.indices,
+		indices_capacity = usage.indices_capacity,
+		geometry_stream_bytes = usage.geometry_stream_bytes,
+		geometry_capacity_bytes = usage.geometry_capacity_bytes,
+		uniform_stream_bytes = usage.uniform_stream_bytes,
+		uniform_capacity_bytes = usage.uniform_capacity_bytes,
+	}
 }
 
 Paint_Peak_Usage :: proc(app: ^App) -> Paint_Peaks {
@@ -107,9 +121,6 @@ Paint_Peak_Usage :: proc(app: ^App) -> Paint_Peaks {
 		overlay_text_bytes = output.overlay.peak_text_len,
 	}
 }
-
-Dark_Theme :: Theme_Dark
-Light_Theme :: Theme_Light
 
 @(private = "file")
 app_draw :: proc(inner: ^ui_gfx.App, root: ^ui.Ui, userdata: rawptr) {

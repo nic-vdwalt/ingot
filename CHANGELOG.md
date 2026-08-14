@@ -93,9 +93,12 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 - **Breaking**: application-facing UI is consolidated under `ingot:fit`.
   `fit.App`, `fit.Session`, and the PascalCase `fit.Builder` vocabulary replace
-  direct `ingot:ui`/`ingot:ui_gfx` hosting. The immutable `Fit_Node` tree and
-  `App_Session` aliases are removed; direct Prepared, Adapter, UI frame/runtime,
-  and lower-case graphics Frame APIs are implementation-only during migration.
+  direct `ingot:ui`/`ingot:ui_gfx` hosting. The immutable `Fit_Node` tree,
+  `App_Session` aliases, and legacy `fit` re-exports of `ui` are removed.
+- **Breaking**: mutable active-context scopes and the broad lower-case graphics
+  wrappers are removed from bridge use. Framework replay and documented
+  multi-context hosts use the narrow owner-bound `gfx.Frame` seam; PascalCase
+  remains the default-context raylib migration API.
 - **Breaking**: `ui.line_chart` and `ui.bar_chart` take `Chart_Facade_Options`
   only; the positional `(height, opts)` overloads and their proc groups are
   removed. Call sites migrate mechanically: `line_chart(u, series, &state, 80)`

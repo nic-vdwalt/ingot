@@ -3,68 +3,70 @@ package main
 
 import "core:testing"
 import fit "ingot:fit"
-import "ingot:ui"
+
+Gallery_Input_Test_State :: struct {
+	region: fit.Region,
+	box:    fit.Input_Box,
+}
 
 @(private = "file")
-gallery_input_test_frame :: proc(
-	runtime: ^ui.Ui_Runtime,
-	frame: ^ui.Ui_Frame,
-	output: ^ui.Ui_Output,
-	input: ^ui.Ui_Input,
-	region: ^fit.Region,
-	box: ^fit.Input_Box,
-) {
-	assert(runtime != nil && frame != nil && output != nil && input != nil)
-	assert(region != nil && box != nil)
-	output^ = {}
-	frame.output = output
-	ui.ui_frame_begin(frame, runtime, input)
-	root: ui.Ui
-	ui.begin(&root, frame, {0, 0, 300, 200})
-	surface := fit.Surface {
-		inner = &root,
-	}
-	fit.Surface_Region_Begin(&surface, region, {0, 0, 300, 200})
-	fit.Region_Scope_Begin(region, "inputs")
-	_ = fit.Region_Text_Input(region, "name", box, "Name", {semantics = {name = "Name"}})
-	fit.Region_Scope_End(region)
-	_ = fit.Surface_Region_End(region)
-	_ = ui.end(&root)
-	ui.ui_frame_end(frame)
+gallery_input_test_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	state := cast(^Gallery_Input_Test_State)userdata
+	fit.Custom(
+		builder,
+		{
+			measure = gallery_input_test_measure,
+			render = gallery_input_test_render,
+			userdata = state,
+		},
+	)
+}
+
+@(private = "file")
+gallery_input_test_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
+	assert(userdata != nil)
+	return {min(max(constraints.max_w, 300), 800), min(max(constraints.max_h, 200), 600), false}
+}
+
+@(private = "file")
+gallery_input_test_render :: proc(
+	surface: ^fit.Surface,
+	rect: fit.Rect,
+	userdata: rawptr,
+) -> bool {
+	state := cast(^Gallery_Input_Test_State)userdata
+	fit.Surface_Region_Begin(surface, &state.region, rect)
+	fit.Region_Scope_Begin(&state.region, "inputs")
+	_ = fit.Region_Text_Input(
+		&state.region,
+		"name",
+		&state.box,
+		"Name",
+		{semantics = {name = "Name"}},
+	)
+	fit.Region_Scope_End(&state.region)
+	_ = fit.Surface_Region_End(&state.region)
+	return false
 }
 
 @(test)
 gallery_input_region_retains_focus_between_frames :: proc(t: ^testing.T) {
-	runtime: ui.Ui_Runtime
-	ui.ui_runtime_init(&runtime)
-	defer ui.ui_runtime_destroy(&runtime)
-	text_backend: ui.Test_Text_Backend_State
-	ui.ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = ui.test_text_font_for_size,
-			measure = ui.test_text_measure,
-		},
-	)
-	frame: ui.Ui_Frame
-	defer ui.ui_frame_destroy(&frame)
-	output := new(ui.Ui_Output)
-	defer free(output)
-	region: fit.Region
-	box: fit.Input_Box
-	defer fit.Input_Box_Destroy(&box)
+	driver: fit.Test_Driver
+	fit.Test_Driver_Init(&driver)
+	defer fit.Test_Driver_Destroy(&driver)
+	state: Gallery_Input_Test_State
+	defer fit.Input_Box_Destroy(&state.box)
 
-	pressed: ui.Ui_Input
+	pressed: fit.Test_Input
 	pressed.mouse_position = {10, 10}
-	pressed.mouse_pressed[ui.MouseButton.LEFT] = true
-	gallery_input_test_frame(&runtime, &frame, output, &pressed, &region, &box)
+	pressed.mouse_pressed[0] = true
+	_ = fit.Test_Driver_Frame(&driver, pressed, gallery_input_test_draw, &state)
 
-	typed: ui.Ui_Input
+	typed: fit.Test_Input
 	typed.characters[0] = 'x'
 	typed.character_count = 1
-	gallery_input_test_frame(&runtime, &frame, output, &typed, &region, &box)
-	testing.expect_value(t, fit.Input_Box_Text(&box), "x")
+	_ = fit.Test_Driver_Frame(&driver, typed, gallery_input_test_draw, &state)
+	testing.expect_value(t, fit.Input_Box_Text(&state.box), "x")
 }
 
 @(test)

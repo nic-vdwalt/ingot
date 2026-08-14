@@ -12,13 +12,11 @@ package main
 import "core:fmt"
 import "core:os"
 import fit "ingot:fit"
-import gfx "ingot:gfx"
 
 // Imports are used only under `when SMOKE`; anchor them for non-smoke builds.
 _ :: fmt
 _ :: os
 _ :: fit
-_ :: gfx
 
 when SMOKE {
 	SMOKE_STEP_FRAMES :: 20 // ~1/3 s per step at 60 fps
@@ -91,7 +89,7 @@ when SMOKE {
 	// on this app. The smoke run visits every section, including the 1000
 	// button stress grid, so these numbers are the evidence for sizing them.
 	smoke_report_peaks :: proc() {
-		usage := gfx.renderer_peak_usage()
+		usage := fit.Renderer_Peak_Usage()
 		// A full run that drew every section cannot legitimately report a
 		// zero peak: that means the recording call was lost, and the numbers
 		// the capacities are sized from would silently become fiction. Unit

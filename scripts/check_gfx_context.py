@@ -12,6 +12,10 @@ import check_odin_style
 EXCLUDED_SUFFIXES = ("_test.odin", "_fuzz_test.odin")
 DIRECT_GLOBAL = re.compile(r"(?<![A-Za-z0-9_])g(?![A-Za-z0-9_])")
 CONTEXT_ESCAPE = re.compile(r"\b(?:active_context|default_context|context_scope_enter)\s*\(")
+UI_GFX_IMPLICIT_DRAW = re.compile(
+    r"\b(?:BeginDrawing|EndDrawing|BeginScissorMode|EndScissorMode|Draw[A-Z][A-Za-z0-9_]*|"
+    r"context_scope_enter|context_scope_leave)\s*\("
+)
 
 
 def tracked_sources(root: Path, patterns: list[str]) -> list[str]:
@@ -68,8 +72,15 @@ def main() -> int:
     root = Path(arguments.root).resolve()
     current = current_counts(root)
     escapes = current_counts(root, ["gfx/*.odin", "ui_gfx/*.odin"], CONTEXT_ESCAPE)
+    implicit_draws = current_counts(root, ["ui_gfx/*.odin"], UI_GFX_IMPLICIT_DRAW)
     if arguments.measure:
-        print(json.dumps({"globals": current, "escapes": escapes}, indent=2, sort_keys=True))
+        print(
+            json.dumps(
+                {"globals": current, "escapes": escapes, "ui_gfx_implicit_draws": implicit_draws},
+                indent=2,
+                sort_keys=True,
+            )
+        )
         return 0
     if not arguments.baseline:
         parser.error("--baseline is required unless --measure is used")
@@ -83,6 +94,8 @@ def main() -> int:
     escape_baseline = json.loads(escape_path.read_text(encoding="utf-8"))
     failures = check_counts(current, baseline)
     failures += check_counts(escapes, escape_baseline)
+    for key, count in sorted(implicit_draws.items()):
+        failures.append(f"{key}: ui_gfx implicit graphics routing is forbidden ({count} references)")
     for failure in failures:
         print(failure)
     return 1 if failures else 0
