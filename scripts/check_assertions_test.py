@@ -131,6 +131,25 @@ value :: proc() -> int {
 '''
         self.assertEqual(self.findings(source), [])
 
+    def test_empty_pointer_stub_is_excluded(self):
+        source = '''platform_noop :: proc(context: ^Context) {}
+'''
+        self.assertEqual(self.findings(source), [])
+
+    def test_pointer_stub_with_mutation_is_not_excluded(self):
+        source = '''platform_mutate :: proc(context: ^Context) {
+	context.ready = true
+}
+'''
+        self.assertIn("pointer", self.findings(source)[0].risks)
+
+    def test_return_short_circuit_proves_pointer_is_non_nil(self):
+        source = '''available :: proc(context: ^Context) -> bool {
+	return context != nil && context.ready
+}
+'''
+        self.assertEqual(self.findings(source), [])
+
     def test_risk_categories_are_detected(self):
         source = '''p :: proc(state: ^State, payload: []u8) {
 	context := transmute(^State)raw_data(payload)

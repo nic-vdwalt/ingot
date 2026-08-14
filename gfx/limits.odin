@@ -196,7 +196,7 @@ gpu_negotiate_budget :: proc(adapter: wg.Adapter) -> Gpu_Budget {
 	return budget
 }
 
-// gpu_budget_active returns the negotiated budget, substituting the desktop
+// gpu_budget_context returns the negotiated budget, substituting the desktop
 // default when no negotiation has run (headless test contexts create a device
 // directly). Callers can therefore always size against a usable budget.
 @(private)
@@ -205,9 +205,4 @@ gpu_budget_context :: proc(ctx: ^Context) -> Gpu_Budget {
 	budget := gpu_budget_is_usable(ctx.budget) ? ctx.budget : gpu_budget_default()
 	assert(gpu_budget_is_usable(budget), "gpu_budget_context: unusable budget")
 	return budget
-}
-
-@(private)
-gpu_budget_active :: proc() -> Gpu_Budget {
-	return gpu_budget_context(default_context())
 }

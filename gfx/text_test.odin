@@ -74,7 +74,7 @@ text_test_atlas_accounting :: proc(t: ^testing.T, pixel_size: i32) {
 		i32(len(codepoints)),
 	)
 	defer UnloadFont(font)
-	atlas := get_atlas(font._atlas)
+	atlas := context_get_atlas(g, font._atlas)
 	testing.expect(t, atlas != nil, "accounting font should own an atlas")
 	if atlas == nil do return
 	valid, missing, zero_area, packing_failed := 0, 0, 0, 0
@@ -187,7 +187,7 @@ test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, font.glyphCount == 1, "font should contain only the initial glyph")
 
-	atlas := get_atlas(font._atlas)
+	atlas := context_get_atlas(g, font._atlas)
 	testing.expect(t, atlas != nil, "font should own an atlas")
 	if atlas == nil do return
 	_, was_baked := atlas.glyphs['→']
@@ -218,7 +218,7 @@ test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
 	BeginTextureMode(target)
 	ClearBackground(clear)
 	EndTextureMode()
-	clear_pixels, clear_ok := _screenshot_pixels(target)
+	clear_pixels, clear_ok := context_screenshot_pixels(g, target)
 	testing.expect(t, clear_ok, "clear target should be readable")
 	if clear_ok {
 		testing.expect(t, !text_target_has_non_clear_pixel(clear_pixels, clear))
@@ -228,7 +228,7 @@ test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
 	BeginTextureMode(target)
 	DrawTextCodepoint(font, '→', {4, 4}, 32, WHITE)
 	EndTextureMode()
-	painted_pixels, painted_ok := _screenshot_pixels(target)
+	painted_pixels, painted_ok := context_screenshot_pixels(g, target)
 	testing.expect(t, painted_ok, "painted target should be readable")
 	if painted_ok {
 		testing.expect(t, text_target_has_non_clear_pixel(painted_pixels, clear))
@@ -238,7 +238,7 @@ test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
 	ClearBackground(clear)
 	DrawTextCodepoint(font, '→', {4, 4}, 32, WHITE)
 	EndTextureMode()
-	repainted_pixels, repainted_ok := _screenshot_pixels(target)
+	repainted_pixels, repainted_ok := context_screenshot_pixels(g, target)
 	testing.expect(t, repainted_ok, "repainted target should be readable")
 	if painted_ok && repainted_ok {
 		testing.expect_value(t, len(repainted_pixels), len(painted_pixels))
@@ -251,7 +251,7 @@ test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
 }
 
 test_lazy_glyph_batch_boundary :: proc(t: ^testing.T, font: Font) {
-	atlas := get_atlas(font._atlas)
+	atlas := context_get_atlas(g, font._atlas)
 	testing.expect(t, atlas != nil, "boundary font should own an atlas")
 	if atlas == nil do return
 	cold: rune = '→'
@@ -284,7 +284,7 @@ test_lazy_glyph_batch_boundary :: proc(t: ^testing.T, font: Font) {
 	testing.expect(t, atlas.glyphs[cold].valid, "boundary glyph should bake and upload")
 	EndTextureMode()
 
-	pixels, ok := _screenshot_pixels(target)
+	pixels, ok := context_screenshot_pixels(g, target)
 	testing.expect(t, ok, "boundary target should be readable")
 	if ok {
 		testing.expect(t, text_target_region_has_non_clear_pixel(pixels, clear, 0, 0, 48, 48))
@@ -409,7 +409,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	test_font_measure_invariants(t, f)
 	text_test_atlas_accounting(t, 32)
 	text_test_atlas_accounting(t, 64)
-	atlas := get_atlas(f._atlas)
+	atlas := context_get_atlas(g, f._atlas)
 	testing.expect(t, atlas != nil, "font should own an atlas")
 	for codepoint in ([]rune{'A', 'é', '→', '─', '█'}) {
 		testing.expectf(
@@ -449,7 +449,7 @@ test_default_font_is_real :: proc(t: ^testing.T) {
 	font, ok := _default_font(g)
 	testing.expect(t, ok, "default font should bake")
 	testing.expect(t, font.glyphCount > 0, "default font should bake glyphs")
-	testing.expect(t, get_atlas(font._atlas) != nil, "default font should own an atlas")
+	testing.expect(t, context_get_atlas(g, font._atlas) != nil, "default font should own an atlas")
 
 	again, ok_again := _default_font(g)
 	testing.expect(t, ok_again, "cached default font should stay valid")

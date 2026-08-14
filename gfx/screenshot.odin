@@ -222,11 +222,6 @@ context_screenshot_pixels :: proc(
 	return out, true
 }
 
-@(private)
-_screenshot_pixels :: proc(target: RenderTexture2D) -> (pixels: []u8, ok: bool) {
-	return context_screenshot_pixels(default_context(), target)
-}
-
 // SaveRenderTexturePng reads `target` back from the GPU and writes it to `path`
 // as an upright RGBA8 PNG. Returns false when the target is invalid, its format
 // is not encodable, the readback fails, or the file cannot be written.

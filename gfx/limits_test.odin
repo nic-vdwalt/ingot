@@ -97,7 +97,7 @@ gpu_budget_floors_degenerate_limits :: proc(t: ^testing.T) {
 // which is what the tests above and below cover.
 
 @(test)
-gpu_budget_active_never_returns_zero :: proc(t: ^testing.T) {
+gpu_budget_context_never_returns_zero :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()
 	// Headless contexts (text_test) create a device without negotiating, so
@@ -106,7 +106,7 @@ gpu_budget_active_never_returns_zero :: proc(t: ^testing.T) {
 	saved := g.budget
 	defer g.budget = saved
 	g.budget = Gpu_Budget{}
-	budget := gpu_budget_active()
+	budget := gpu_budget_context(g)
 	testing.expect_value(t, budget, gpu_budget_default())
 	testing.expect(t, budget.geometry_stream_bytes > 0)
 	testing.expect(t, budget.uniform_stream_bytes > 0)
@@ -118,9 +118,9 @@ gpu_budget_active_never_returns_zero :: proc(t: ^testing.T) {
 		geometry_stream_bytes = GPU_BUDGET_GEOMETRY_BYTES_DEFAULT,
 		uniform_stream_bytes  = GPU_BUDGET_UNIFORM_BYTES_DEFAULT,
 	}
-	testing.expect_value(t, gpu_budget_active(), gpu_budget_default())
+	testing.expect_value(t, gpu_budget_context(g), gpu_budget_default())
 
 	// A fully negotiated constrained budget passes through unchanged.
 	g.budget = _gpu_budget_from_limits(_mobile_limits())
-	testing.expect_value(t, gpu_budget_active(), g.budget)
+	testing.expect_value(t, gpu_budget_context(g), g.budget)
 }

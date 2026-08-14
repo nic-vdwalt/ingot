@@ -7,19 +7,19 @@ import "core:testing"
 drop_lifecycle_is_bounded_and_consumed :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()
-	_drop_native_shutdown()
-	defer _drop_native_shutdown()
+	_drop_native_shutdown_context(g)
+	defer _drop_native_shutdown_context(g)
 
-	_drop_hover_stage(true)
+	_drop_hover_stage_context(g, true)
 	testing.expect(t, !IsFileDragOver())
 	_drop_hover_publish(g)
 	testing.expect(t, IsFileDragOver())
-	_drop_complete()
+	_drop_complete_context(g)
 	testing.expect(t, !IsFileDragOver())
 	testing.expect(t, IsFileDropped())
 
 	paths := [2]string{"/tmp/one", "/tmp/two"}
-	testing.expect(t, _drop_paths_replace(paths[:]))
+	testing.expect(t, _drop_paths_replace_context(g, paths[:]))
 	testing.expect_value(t, len(g.drop.paths), 2)
 	files := LoadDroppedFiles()
 	testing.expect_value(t, files.count, u32(2))
@@ -30,13 +30,13 @@ drop_lifecycle_is_bounded_and_consumed :: proc(t: ^testing.T) {
 
 	too_large := make([]u8, MAX_DROPPED_PATH_BYTES + 1, context.temp_allocator)
 	overflow := [1]string{string(too_large)}
-	testing.expect(t, !_drop_paths_replace(overflow[:]))
+	testing.expect(t, !_drop_paths_replace_context(g, overflow[:]))
 	testing.expect_value(t, len(g.drop.paths), 0)
 	testing.expect(t, !IsFileDropped())
 
-	_drop_hover_stage(true)
+	_drop_hover_stage_context(g, true)
 	_drop_hover_publish(g)
-	_drop_state_reset()
+	_drop_state_reset_context(g)
 	testing.expect(t, !IsFileDragOver())
 	testing.expect(t, !IsFileDropped())
 }

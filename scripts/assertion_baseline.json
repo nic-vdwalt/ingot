@@ -20,9 +20,6 @@
   "gfx/context.odin:_retire_texture": [
     "queue"
   ],
-  "gfx/context_api.odin:context_scope_enter": [
-    "state"
-  ],
   "gfx/context_api.odin:frame_draw_rectangle_rounded_lines": [
     "pointer"
   ],
@@ -43,12 +40,6 @@
   ],
   "gfx/idle.odin:_idle_wait_timeout": [
     "pointer"
-  ],
-  "gfx/input.odin:GetCharPressed": [
-    "index"
-  ],
-  "gfx/input.odin:GetKeyPressed": [
-    "index"
   ],
   "gfx/input.odin:_push_char_input": [
     "index"
@@ -78,9 +69,6 @@
     "pointer"
   ],
   "net/ws_sim.odin:ws_net_send": [
-    "pointer"
-  ],
-  "net/ws_sim.odin:ws_net_set_recv_timeout": [
     "pointer"
   ],
   "net/ws_web.odin:ws_close": [

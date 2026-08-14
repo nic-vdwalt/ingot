@@ -28,9 +28,7 @@ key_down :: proc(key: KeyboardKey) -> bool {
 
 context_key_down :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 	if ctx == nil do return false
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return IsKeyDown(key)
+	return context_is_key_down(ctx, key)
 }
 
 key_pressed :: proc(key: KeyboardKey) -> bool {
@@ -39,9 +37,7 @@ key_pressed :: proc(key: KeyboardKey) -> bool {
 
 context_key_pressed :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 	if ctx == nil do return false
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return IsKeyPressed(key)
+	return context_is_key_pressed(ctx, key)
 }
 
 mouse_position :: proc() -> Vec2 {

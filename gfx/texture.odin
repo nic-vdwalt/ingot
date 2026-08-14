@@ -102,11 +102,6 @@ context_get_texture :: proc(ctx: ^Context, id: u32) -> ^Tex_Entry {
 }
 
 @(private)
-get_texture :: proc(id: u32) -> ^Tex_Entry {
-	return context_get_texture(default_context(), id)
-}
-
-@(private)
 _to_rgba_into :: proc(out: []byte, src: [^]byte, w, h: i32, format: PixelFormat) -> bool {
 	n := int(w) * int(h)
 	if src == nil || n <= 0 || len(out) != n * 4 do return false
@@ -247,11 +242,6 @@ context_texture_view :: proc(ctx: ^Context, id: u32) -> wg.TextureView {
 	e := context_get_texture(ctx, id)
 	if e == nil do return nil
 	return e.view
-}
-
-@(private)
-_texture_view :: proc(id: u32) -> wg.TextureView {
-	return context_texture_view(default_context(), id)
 }
 
 // _new_rt_depth creates a Depth24Plus depth attachment registered in the
