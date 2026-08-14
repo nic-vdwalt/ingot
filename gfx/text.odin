@@ -30,7 +30,7 @@ MAX_ATLASES :: 256
 @(private)
 _atlas_dim_supported :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_atlas_dim_supported: nil context")
-	return ctx.budget.atlas_dim >= u32(ATLAS_DIM)
+	return gpu_budget_context(ctx).atlas_dim >= u32(ATLAS_DIM)
 }
 
 Glyph :: struct {
