@@ -12,10 +12,13 @@ import "core:testing"
 @(test)
 prefs_paths_and_roundtrip :: proc(t: ^testing.T) {
 	restore := os.get_env("HOME", context.temp_allocator)
+	restore_appdata := os.get_env("APPDATA", context.temp_allocator)
 	defer os.set_env("HOME", restore)
+	defer os.set_env("APPDATA", restore_appdata)
 
 	// --- data_dir / path resolution ---
 	os.set_env("HOME", "/tmp/ingot_home")
+	os.set_env("APPDATA", "")
 	dir, ok := data_dir("myapp", context.temp_allocator)
 	testing.expect(t, ok, "data_dir resolves with HOME set")
 	when ODIN_OS != .Windows {
