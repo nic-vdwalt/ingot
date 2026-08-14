@@ -820,7 +820,7 @@ create_sphere_mesh :: proc(radius: f32, rings, slices: u32) -> (Gpu_Mesh, bool) 
 	resources := &g.resources.gpu_3d
 	if resources.mesh_count >= GPU_3D_MAX_MESHES {
 		// Pool full: operating condition - caller gets ok=false (counted).
-		_stats_gpu3d_pool_exhaustion()
+		_stats_gpu3d_pool_exhaustion(default_context())
 		return {}, false
 	}
 
@@ -980,7 +980,7 @@ create_gpu_mesh :: proc(
 	if !ctx.initialized || !_gpu_3d_geometry_valid(vertices, indices, primitive) do return {}, false
 	resources := &ctx.resources.gpu_3d
 	if resources.mesh_count >= GPU_3D_MAX_MESHES {
-		_stats_gpu3d_pool_exhaustion()
+		_stats_gpu3d_pool_exhaustion(ctx)
 		return {}, false
 	}
 	entry := new(Gpu_3D_Mesh_Entry)
@@ -1066,7 +1066,7 @@ create_gpu_3d_shader :: proc(code: string) -> (Gpu_3D_Shader, bool) {
 	if !ctx.initialized || len(code) == 0 do return {}, false
 	resources := &ctx.resources.gpu_3d
 	if resources.shader_count >= GPU_3D_MAX_SHADERS {
-		_stats_gpu3d_pool_exhaustion()
+		_stats_gpu3d_pool_exhaustion(ctx)
 		return {}, false
 	}
 	module := wg.DeviceCreateShaderModule(
@@ -1641,7 +1641,7 @@ _gpu_3d_pipeline :: proc(
 		}
 	}
 	if resources.pipeline_count >= GPU_3D_MAX_PIPELINES {
-		_stats_gpu3d_pool_exhaustion()
+		_stats_gpu3d_pool_exhaustion(ctx)
 		return nil
 	}
 	_gpu_3d_init_shared(ctx, resources)

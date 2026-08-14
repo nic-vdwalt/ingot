@@ -53,7 +53,8 @@ _submission_reserve :: proc(tracker: ^Submission_Tracker) -> u64 {
 	assert(tracker != nil)
 	_submission_poll(tracker)
 	if tracker.count >= MAX_IN_FLIGHT_SUBMISSIONS {
-		_stats_submission_tracking_failure()
+		assert(tracker.owner != nil, "_submission_reserve: tracker has no owner")
+		_stats_submission_tracking_failure(tracker.owner)
 		return 0
 	}
 
