@@ -10,7 +10,7 @@
 //
 // Conventions this gallery demonstrates (docs/api-layers.md):
 //   - fit.App owns the ordinary one-window lifecycle and supplies fit.Builder.
-//   - The gallery shell is a bounded fit.Custom surface because this catalogue
+//   - The gallery shell is a bounded fit.Canvas because this catalogue
 //     deliberately demonstrates controls and explicit geometry not yet exposed
 //     as native Builder leaves.
 //   - Explicit UI stays inside named islands where geometry or lifecycle is
@@ -303,31 +303,12 @@ input_state_destroy :: proc(state: ^Input_State) {
 	fit.Combobox_State_Destroy(&state.combo)
 }
 
-gallery_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
-	_ = userdata
-	return {w = max(constraints.max_w, 1), h = max(constraints.max_h, 1)}
-}
-
-gallery_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
-	_ = userdata
-	gallery_frame(surface, {rect.x, rect.y, rect.w, rect.h})
-	return false
-}
-
 gallery_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	_ = userdata
-	root_container: {
-		fit.Column(builder)
-		defer fit.End(builder)
-		fit.Custom(
-			builder,
-			{measure = gallery_measure, render = gallery_render},
-			{size = {width = fit.Grow(), height = fit.Grow()}},
-		)
-	}
+	fit.Canvas(builder, gallery_frame, userdata)
 }
 
-gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect) {
+gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, userdata: rawptr) -> bool {
+	_ = userdata
 	gallery_root = root
 	sw := root.w
 	sh := root.h
@@ -357,12 +338,13 @@ gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect) {
 	if debug_on {
 		fit.Surface_Debug_Overlay(
 			surface,
-			sw - fit.Surface_Scale(surface, 290),
-			header_h + fit.Surface_Scale(surface, 10),
+			sw - fit.Px(surface, 290),
+			header_h + fit.Px(surface, 10),
 		)
 	}
 
 	_ = fit.Surface_App_Header(surface, "ingot gallery", sw)
+	return false
 }
 
 shutdown :: proc() {
@@ -402,12 +384,12 @@ nav_uses_strip_scale :: proc(scale: f32, width, available_height: i32) -> bool {
 
 nav_sidebar_min_height :: proc(surface: ^fit.Surface) -> i32 {
 	assert(surface != nil, "nav_sidebar_min_height: nil surface")
-	return nav_sidebar_min_height_scale(f32(fit.Surface_Scale(surface, 1000)) / 1000)
+	return nav_sidebar_min_height_scale(f32(fit.Px(surface, 1000)) / 1000)
 }
 
 nav_uses_strip :: proc(surface: ^fit.Surface, width, available_height: i32) -> bool {
 	assert(surface != nil, "nav_uses_strip: nil surface")
-	scale := f32(fit.Surface_Scale(surface, 1000)) / 1000
+	scale := f32(fit.Px(surface, 1000)) / 1000
 	return nav_uses_strip_scale(scale, width, available_height)
 }
 
@@ -480,7 +462,7 @@ nav_control_activate :: proc(control: Nav_Control, surface: ^fit.Surface) {
 draw_nav :: proc(surface: ^fit.Surface, top, sw, sh: i32, narrow: bool) -> i32 {
 	assert(surface != nil, "draw_nav: nil surface")
 	if narrow do return draw_nav_strip(surface, top, sw)
-	w := fit.Surface_Scale(surface, NAV_W)
+	w := fit.Px(surface, NAV_W)
 	theme := fit.Surface_Theme_Tokens(surface)
 	fit.Surface_Fill_Rect(surface, {0, top, w, sh - top}, theme.background_secondary)
 	fit.Surface_Fill_Rect(surface, {w - 1, top, 1, sh - top}, theme.border_subtle)
@@ -535,10 +517,10 @@ draw_nav_strip :: proc(surface: ^fit.Surface, top, sw: i32) -> i32 {
 	assert(surface != nil, "draw_nav_strip: nil surface")
 	assert(sw > 0, "draw_nav_strip: empty viewport")
 	theme := fit.Surface_Theme_Tokens(surface)
-	pad := fit.Surface_Scale(surface, 8)
-	gap := fit.Surface_Scale(surface, 6)
-	row_h := fit.Surface_Scale(surface, NAV_STRIP_ROW_H)
-	cols := max((sw - pad * 2 + gap) / (fit.Surface_Scale(surface, NAV_STRIP_CELL_W) + gap), 1)
+	pad := fit.Px(surface, 8)
+	gap := fit.Px(surface, 6)
+	row_h := fit.Px(surface, NAV_STRIP_ROW_H)
+	cols := max((sw - pad * 2 + gap) / (fit.Px(surface, NAV_STRIP_CELL_W) + gap), 1)
 	rows := (i32(len(Section)) + cols - 1) / cols
 	height := pad * 2 + rows * row_h + (rows - 1) * gap + gap + row_h
 
@@ -659,7 +641,7 @@ draw_page_substrate :: proc(surface: ^fit.Surface, pane: fit.Rect, anchor: i32, 
 }
 
 draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
-	x := i32(0) if narrow else fit.Surface_Scale(surface, NAV_W)
+	x := i32(0) if narrow else fit.Px(surface, NAV_W)
 	w := sw - x
 	pane_rect := fit.Rect{x, top, w, sh - top}
 	y := fit.Surface_Pane_Begin(
@@ -670,8 +652,8 @@ draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
 		keyboard = section != .Inputs,
 	)
 	draw_page_substrate(surface, pane_rect, y, narrow)
-	inset := fit.Surface_Scale(surface, 8 if narrow else 18)
-	gutter := fit.Surface_Scale(surface, 20 if narrow else 52)
+	inset := fit.Px(surface, 8 if narrow else 18)
+	gutter := fit.Px(surface, 20 if narrow else 52)
 	cx := x + inset
 	cw := w - gutter
 	y = draw_section_layer(surface, cx, y, cw)
@@ -742,8 +724,8 @@ draw_buttons :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	fit.Region_Row_End(u)
 	fit.Region_Row_Begin(u, 32, gap = .SM)
 	_ = fit.Region_Button(u, "disabled", "Disabled", .Primary, false)
-	if fit.Region_Icon_Button(u, fit.Region_Id(u, "close"), "\u2715") do click_count += 1
-	if fit.Region_Back_Button(u, fit.Region_Id(u, "back"), "Back") do click_count += 1
+	if fit.Region_Icon_Button(u, "close", "\u2715") do click_count += 1
+	if fit.Region_Back_Button(u, "back", "Back") do click_count += 1
 	fit.Region_Row_End(u)
 	fit.Region_Label(u, fmt.tprintf("clicks: %d", click_count), .Body, .Secondary)
 
@@ -760,7 +742,7 @@ draw_buttons :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 		label := fmt.tprintf("Section %d", i + 1)
 		_ = fit.Region_Collapsible_Header(
 			u,
-			fit.Region_Id(u, fmt.tprintf("header:%d", i)),
+			fmt.tprintf("header:%d", i),
 			label,
 			&headers_open[i],
 			{icon = 0x25C6, right_label = "Details"},
@@ -780,7 +762,7 @@ draw_inputs :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 		{x, y0, w, 0},
 		"TEXT INPUTS (Input_Box bundle: builder + caret + undo + pills)",
 	)
-	iw := min(w, fit.Surface_Scale(surface, 420))
+	iw := min(w, fit.Px(surface, 420))
 
 	state := &input_state
 	u := &input_region
@@ -810,7 +792,7 @@ draw_inputs :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 		{height = 90, semantics = {name = "Notes"}},
 	)
 
-	if fit.Region_Button(u, fit.Region_Id(u, "reset"), "Reset all") {
+	if fit.Region_Button(u, "reset", "Reset all") {
 		fit.Input_Box_Reset(&state.name)
 		fit.Input_Box_Reset(&state.pass)
 		fit.Input_Box_Reset(&state.notes)
@@ -867,13 +849,13 @@ draw_widget_choices :: proc(u: ^fit.Region, state: ^Widget_State) {
 	assert(u != nil, "draw_widget_choices: nil region")
 	assert(state != nil, "draw_widget_choices: nil state")
 	fit.Region_Row_Begin(u, 32, gap = .SM)
-	fit.Region_Checkbox(u, fit.Region_Id(u, "enable"), "Enable widgets", &state.check_a)
-	fit.Region_Checkbox(u, fit.Region_Id(u, "verbose"), "Verbose logs", &state.check_b)
+	fit.Region_Checkbox(u, "enable", "Enable widgets", &state.check_a)
+	fit.Region_Checkbox(u, "verbose", "Verbose logs", &state.check_b)
 	fit.Region_Row_End(u)
 	fit.Region_Row_Begin(u, 32, gap = .SM)
-	fit.Region_Radio(u, fit.Region_Id(u, "small"), "Small", &state.radio_choice, 0)
-	fit.Region_Radio(u, fit.Region_Id(u, "medium"), "Medium", &state.radio_choice, 1)
-	fit.Region_Radio(u, fit.Region_Id(u, "large"), "Large", &state.radio_choice, 2)
+	fit.Region_Radio(u, "small", "Small", &state.radio_choice, 0)
+	fit.Region_Radio(u, "medium", "Medium", &state.radio_choice, 1)
+	fit.Region_Radio(u, "large", "Large", &state.radio_choice, 2)
 	fit.Region_Row_End(u)
 }
 
@@ -884,7 +866,7 @@ draw_widget_volume :: proc(u: ^fit.Region, surface: ^fit.Surface, state: ^Widget
 	fit.Region_Row_Begin(u, 32, gap = .SM)
 	_ = fit.Region_Slider(
 		u,
-		fit.Region_Id(u, "volume"),
+		"volume",
 		&state.slider,
 		&state.volume,
 		0,
@@ -917,7 +899,7 @@ draw_widget_form_controls :: proc(
 	backends := []string{"Metal", "Vulkan", "D3D12", "WebGPU"}
 	fit.Region_Dropdown(
 		u,
-		fit.Region_Id(u, "backend"),
+		"backend",
 		backends,
 		&state.dd_selected,
 		&state.dropdown,
@@ -950,7 +932,7 @@ draw_widget_progress :: proc(surface: ^fit.Surface, x, y0, w: i32, state: ^Widge
 	fit.Region_Progress_Bar_Animated(u, progress_frac, &progress_anim, fit.Ink.Success)
 
 	fit.Region_Row_Begin(u, 30, gap = .SM, align = .Start)
-	if fit.Region_Button(u, fit.Region_Id(u, "replay"), "Replay") do progress_anim = 0
+	if fit.Region_Button(u, "replay", "Replay") do progress_anim = 0
 	fit.Region_Row_End(u)
 
 	fit.Region_Scope_End(u)
@@ -965,7 +947,7 @@ draw_widget_kv_rows :: proc(surface: ^fit.Surface, x, y0, w: i32, state: ^Widget
 	assert(state != nil, "draw_widget_kv_rows: nil state")
 	region: fit.Region
 	u := &region
-	width := min(w, fit.Surface_Scale(surface, 360))
+	width := min(w, fit.Px(surface, 360))
 	fit.Surface_Region_Begin(surface, u, {x, y0, width, fit.ROOT_EXTENT_OPEN}, gap = .XS)
 	fit.Region_Section_Header(u, "KV ROWS + LIST ROWS")
 	fit.Region_Key_Value(u, "Renderer", "WebGPU")
@@ -982,8 +964,8 @@ draw_widget_backend_list :: proc(
 	assert(state != nil, "draw_widget_backend_list: nil state")
 	y := y0
 	labels := [?]string{"Metal", "Vulkan", "D3D12", "WebGPU"}
-	width := min(w, fit.Surface_Scale(surface, 360))
-	step := fit.Surface_Scale(surface, 26)
+	width := min(w, fit.Px(surface, 360))
+	step := fit.Px(surface, 26)
 	config := fit.Listbox_Config {
 		rect         = {x, y, width, step * i32(len(labels))},
 		label        = "Rendering backends",
@@ -997,13 +979,13 @@ draw_widget_backend_list :: proc(
 	}
 	result := fit.Surface_Listbox_Begin(surface, &state.listbox, config)
 	for label, i in labels {
-		rect := fit.Rect{x, y, width, fit.Surface_Scale(surface, 24)}
+		rect := fit.Rect{x, y, width, fit.Px(surface, 24)}
 		row := fit.Surface_Selectable_Row(
 			surface,
 			&state.listbox,
 			config,
 			{
-				{x, y, width, fit.Surface_Scale(surface, 24)},
+				{x, y, width, fit.Px(surface, 24)},
 				label,
 				fmt.tprintf("gallery:backend:%d", i),
 				i,
@@ -1016,8 +998,8 @@ draw_widget_backend_list :: proc(
 		fit.Surface_Text(
 			surface,
 			label,
-			x + fit.Surface_Scale(surface, 8),
-			y + fit.Surface_Scale(surface, 4),
+			x + fit.Px(surface, 8),
+			y + fit.Px(surface, 4),
 			.Label,
 		)
 		y += step
@@ -1036,50 +1018,50 @@ draw_widget_backend_list :: proc(
 		)
 		y += step
 	}
-	return y + fit.Surface_Scale(surface, 8)
+	return y + fit.Px(surface, 8)
 }
 
 draw_widget_truncation_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	y := fit.Surface_Section_Header(surface, {x, y0, w, 0}, "CARD + SHADOW + TRUNCATION")
-	card := fit.Rect{x, y, min(w, fit.Surface_Scale(surface, 360)), fit.Surface_Scale(surface, 64)}
+	card := fit.Rect{x, y, min(w, fit.Px(surface, 360)), fit.Px(surface, 64)}
 	shadow := fit.Float_Rect{f32(card.x), f32(card.y), f32(card.w), f32(card.h)}
 	fit.Surface_Draw_Shadow(surface, shadow, .MD, .Lifted)
 	fit.Surface_Card_Background(
 		surface,
 		card,
 		fit.Surface_Theme_Tokens(surface).background_secondary,
-		accent_width = fit.Surface_Scale(surface, 3),
+		accent_width = fit.Px(surface, 3),
 	)
 	fit.Surface_Text_Truncated(
 		surface,
 		"A very long label that will be cut with an ellipsis when it overflows the card",
-		x + fit.Surface_Scale(surface, 12),
-		y + fit.Surface_Scale(surface, 12),
-		card.w - fit.Surface_Scale(surface, 24),
+		x + fit.Px(surface, 12),
+		y + fit.Px(surface, 12),
+		card.w - fit.Px(surface, 24),
 		.Label,
 		.Primary,
 	)
 	path := fit.Surface_Truncate_Path(
 		surface,
 		"ingot/examples/gallery/very/deep/dir/main.odin",
-		card.w - fit.Surface_Scale(surface, 24),
+		card.w - fit.Px(surface, 24),
 		fit.Surface_Metrics(surface).font_label,
 	)
 	fit.Surface_Text(
 		surface,
 		path,
-		x + fit.Surface_Scale(surface, 12),
-		y + fit.Surface_Scale(surface, 34),
+		x + fit.Px(surface, 12),
+		y + fit.Px(surface, 34),
 		.Label,
 		.Secondary,
 	)
-	return y + card.h + fit.Surface_Scale(surface, 16)
+	return y + card.h + fit.Px(surface, 16)
 }
 
 draw_widget_fit_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	y := fit.Surface_Section_Header(surface, {x, y0, w, 0}, "FIT-CONTENT CARD")
-	fit_w := min(w, fit.Surface_Scale(surface, 360))
-	pad := fit.Surface_Scale(surface, 12)
+	fit_w := min(w, fit.Px(surface, 360))
+	pad := fit.Px(surface, 12)
 	column: fit.Fit_Column_State
 	fit.Surface_Fit_Column_Begin(
 		surface,
@@ -1087,10 +1069,10 @@ draw_widget_fit_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 		x + pad,
 		y + pad,
 		fit_w - pad * 2,
-		gap = fit.Surface_Scale(surface, 6),
+		gap = fit.Px(surface, 6),
 	)
-	title := fit.Surface_Fit_Column_Next(surface, &column, fit.Surface_Scale(surface, 18))
-	detail := fit.Surface_Fit_Column_Next(surface, &column, fit.Surface_Scale(surface, 18))
+	title := fit.Surface_Fit_Column_Next(surface, &column, fit.Px(surface, 18))
+	detail := fit.Surface_Fit_Column_Next(surface, &column, fit.Px(surface, 18))
 	content := fit.Surface_Fit_Column_End(surface, &column)
 	card := fit.Rect{x, y, fit_w, content.h + pad * 2}
 	fit.Surface_Card_Background(
@@ -1107,7 +1089,7 @@ draw_widget_fit_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 		.Label,
 		.Secondary,
 	)
-	return y + card.h + fit.Surface_Scale(surface, 16)
+	return y + card.h + fit.Px(surface, 16)
 }
 
 draw_widgets :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
@@ -1161,7 +1143,7 @@ draw_widget_tabs_table :: proc(surface: ^fit.Surface, x, y0, w: i32, state: ^Wid
 	assert(state != nil, "draw_widget_tabs_table: nil state")
 	region: fit.Region
 	u := &region
-	width := min(w, fit.Surface_Scale(surface, 420))
+	width := min(w, fit.Px(surface, 420))
 	fit.Surface_Region_Begin(surface, u, {x, y0, width, fit.ROOT_EXTENT_OPEN}, gap = .SM)
 	fit.Region_Scope_Begin(u, "data")
 
@@ -1213,7 +1195,7 @@ draw_widget_table_cell :: proc(
 	numeric: bool,
 ) {
 	if rect.w <= 0 || rect.h <= 0 do return
-	pad := fit.Surface_Scale(surface, 4)
+	pad := fit.Px(surface, 4)
 	text_x := rect.x + pad
 	if numeric do text_x = rect.x + rect.w - fit.Surface_Text_Width(surface, label, .Label) - pad
 	text_y := rect.y + (rect.h - fit.Surface_Metrics(surface).font_label) / 2
@@ -1226,46 +1208,46 @@ draw_charts :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 		{x, y0, w, 0},
 		"LINE + BAR + SPARKLINE (hover for overlay tooltips)",
 	)
-	cw := min(w, fit.Surface_Scale(surface, 560))
+	cw := min(w, fit.Px(surface, 560))
 	series := [2]fit.Chart_Series {
 		{name = "Revenue", values = revenue[:]},
 		{name = "Costs", values = costs[:]},
 	}
 	fit.Surface_Line_Chart(
 		surface,
-		{x, y, cw, fit.Surface_Scale(surface, 240)},
+		{x, y, cw, fit.Px(surface, 240)},
 		series[:],
 		&line_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true, fill = true},
 	)
-	y += fit.Surface_Scale(surface, 252)
+	y += fit.Px(surface, 252)
 	fit.Surface_Bar_Chart(
 		surface,
-		{x, y, cw, fit.Surface_Scale(surface, 220)},
+		{x, y, cw, fit.Px(surface, 220)},
 		series[:],
 		&bar_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
-	y += fit.Surface_Scale(surface, 232)
+	y += fit.Px(surface, 232)
 	fit.Surface_Text(
 		surface,
 		"sparkline:",
 		x,
-		y + fit.Surface_Scale(surface, 6),
+		y + fit.Px(surface, 6),
 		.Label,
 		.Secondary,
 	)
 	fit.Surface_Sparkline(
 		surface,
 		{
-			x + fit.Surface_Scale(surface, 80),
+			x + fit.Px(surface, 80),
 			y,
-			fit.Surface_Scale(surface, 140),
-			fit.Surface_Scale(surface, 28),
+			fit.Px(surface, 140),
+			fit.Px(surface, 28),
 		},
 		spark[:],
 	)
-	return y + fit.Surface_Scale(surface, 40)
+	return y + fit.Px(surface, 40)
 }
 
 draw_layout_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
@@ -1275,22 +1257,22 @@ draw_layout_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 		"SINGLE-PASS LAYOUT (weights + flex + justify + flow)",
 	)
 	l: fit.Layout_State
-	lw := min(w, fit.Surface_Scale(surface, 520))
+	lw := min(w, fit.Px(surface, 520))
 	fit.Surface_Layout_Begin(
 		surface,
 		&l,
 		x,
 		y,
 		lw,
-		fit.Surface_Scale(surface, 296),
-		gap = fit.Surface_Scale(surface, 8),
+		fit.Px(surface, 296),
+		gap = fit.Px(surface, 8),
 	)
 
 	fit.Surface_Layout_Push_Row(
 		surface,
 		&l,
-		fit.Surface_Scale(surface, 40),
-		gap = fit.Surface_Scale(surface, 8),
+		fit.Px(surface, 40),
+		gap = fit.Px(surface, 8),
 	)
 	fit.Surface_Layout_Row_Weights(surface, &l, {1, 2, 1})
 	cell(surface, fit.Surface_Layout_Next_Weighted(surface, &l, 1), "1fr")
@@ -1301,12 +1283,12 @@ draw_layout_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	fit.Surface_Layout_Push_Row(
 		surface,
 		&l,
-		fit.Surface_Scale(surface, 40),
-		gap = fit.Surface_Scale(surface, 8),
+		fit.Px(surface, 40),
+		gap = fit.Px(surface, 8),
 	)
 	cell(
 		surface,
-		fit.Surface_Layout_Next(surface, &l, fit.Surface_Scale(surface, 120)),
+		fit.Surface_Layout_Next(surface, &l, fit.Px(surface, 120)),
 		"fixed 120",
 	)
 	cell(surface, fit.Surface_Layout_Remaining(surface, &l), "remaining")
@@ -1317,15 +1299,15 @@ draw_layout_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	fit.Surface_Layout_Push_Row(
 		surface,
 		&l,
-		fit.Surface_Scale(surface, 40),
-		gap = fit.Surface_Scale(surface, 8),
+		fit.Px(surface, 40),
+		gap = fit.Px(surface, 8),
 	)
 	fit.Surface_Layout_Flex_Begin(
 		surface,
 		&l,
 		{
-			fit.Fixed(fit.Surface_Scale(surface, 72)),
-			fit.Fit(fit.Surface_Scale(surface, 96), min_size = fit.Surface_Scale(surface, 56)),
+			fit.Fixed(fit.Px(surface, 72)),
+			fit.Fit(fit.Px(surface, 96), min_size = fit.Px(surface, 56)),
 			fit.Percent(0.2),
 			fit.Grow(),
 		},
@@ -1341,16 +1323,16 @@ draw_layout_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	fit.Surface_Layout_Push_Row(
 		surface,
 		&l,
-		fit.Surface_Scale(surface, 40),
-		gap = fit.Surface_Scale(surface, 8),
+		fit.Px(surface, 40),
+		gap = fit.Px(surface, 8),
 	)
 	fit.Surface_Layout_Flex_Begin(
 		surface,
 		&l,
 		{
-			fit.Fixed(fit.Surface_Scale(surface, 90)),
-			fit.Fixed(fit.Surface_Scale(surface, 90)),
-			fit.Fixed(fit.Surface_Scale(surface, 90)),
+			fit.Fixed(fit.Px(surface, 90)),
+			fit.Fixed(fit.Px(surface, 90)),
+			fit.Fixed(fit.Px(surface, 90)),
 		},
 		justify = .Space_Between,
 	)
@@ -1367,39 +1349,39 @@ draw_layout_centered :: proc(surface: ^fit.Surface, layout: ^fit.Layout_State) {
 	fit.Surface_Layout_Push_Row(
 		surface,
 		layout,
-		fit.Surface_Scale(surface, 90),
-		gap = fit.Surface_Scale(surface, 8),
+		fit.Px(surface, 90),
+		gap = fit.Px(surface, 8),
 		align = .Center,
 	)
 	rect := fit.Surface_Layout_Next_Sized(
 		surface,
 		layout,
-		fit.Surface_Scale(surface, 160),
-		fit.Surface_Scale(surface, 50),
+		fit.Px(surface, 160),
+		fit.Px(surface, 50),
 	)
 	cell(surface, rect, "centered")
 	fit.Surface_Layout_Pop(surface, layout)
 }
 
 draw_layout_flow :: proc(surface: ^fit.Surface, x, y, width: i32) -> i32 {
-	flow_y := y + fit.Surface_Scale(surface, 306)
+	flow_y := y + fit.Px(surface, 306)
 	flow: fit.Flow_State
 	fit.Surface_Flow_Begin(
 		surface,
 		&flow,
 		{x, flow_y, width, max(i32) - flow_y},
-		fit.Surface_Scale(surface, 8),
-		fit.Surface_Scale(surface, 8),
+		fit.Px(surface, 8),
+		fit.Px(surface, 8),
 	)
 	labels := [?]string{"measured", "single pass", "caller owned", "bounded", "responsive flow"}
 	for label in labels {
 		item_width :=
-			fit.Surface_Text_Width(surface, label, .Label) + fit.Surface_Scale(surface, 24)
-		item := fit.Surface_Flow_Next(surface, &flow, item_width, fit.Surface_Scale(surface, 32))
+			fit.Surface_Text_Width(surface, label, .Label) + fit.Px(surface, 24)
+		item := fit.Surface_Flow_Next(surface, &flow, item_width, fit.Px(surface, 32))
 		cell(surface, item, label)
 	}
 	bounds := fit.Surface_Flow_End(surface, &flow)
-	return bounds.y + bounds.h + fit.Surface_Scale(surface, 10)
+	return bounds.y + bounds.h + fit.Px(surface, 10)
 }
 
 cell :: proc(surface: ^fit.Surface, r: fit.Rect, label: string) {
@@ -1421,14 +1403,14 @@ cell :: proc(surface: ^fit.Surface, r: fit.Rect, label: string) {
 draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 	// A two-column grid places the shielded stack and the action stack; no
 	// call site does per-button x/y arithmetic and the columns stay aligned.
-	gap := fit.Surface_Scale(surface, 8)
+	gap := fit.Px(surface, 8)
 	grid: fit.Grid_State
 	fit.Surface_Grid_Begin(
 		surface,
 		&grid,
-		{x, y, fit.Surface_Scale(surface, 340), 0},
+		{x, y, fit.Px(surface, 340), 0},
 		columns = 2,
-		row_height = fit.Surface_Scale(surface, 30),
+		row_height = fit.Px(surface, 30),
 		gap_x = gap,
 		gap_y = gap,
 	)
@@ -1527,7 +1509,7 @@ draw_overlay_context_menu :: proc(surface: ^fit.Surface, x, info_y: i32) {
 			ctx_note = "shielded clicks reset via context menu"
 		}
 	}
-	fit.Surface_Text(surface, ctx_note, x, info_y + fit.Surface_Scale(surface, 22), .Label, .Label)
+	fit.Surface_Text(surface, ctx_note, x, info_y + fit.Px(surface, 22), .Label, .Label)
 }
 
 draw_overlay_modal :: proc(surface: ^fit.Surface) {
@@ -1537,7 +1519,7 @@ draw_overlay_modal :: proc(surface: ^fit.Surface) {
 		surface,
 		&about_modal,
 		"Generic modal",
-		{fit.Surface_Scale(surface, 420), fit.Surface_Scale(surface, 190)},
+		{fit.Px(surface, 420), fit.Px(surface, 190)},
 	)
 	metrics := fit.Surface_Metrics(surface)
 	fit.Surface_Text_Wrapped(
@@ -1545,7 +1527,7 @@ draw_overlay_modal :: proc(surface: ^fit.Surface) {
 		"The settings panel is built on this same modal_begin/modal_end pair. " +
 		"Escape or a click outside dismisses it.",
 		body.x + metrics.padding,
-		body.y + fit.Surface_Scale(surface, 4),
+		body.y + fit.Px(surface, 4),
 		body.w - metrics.padding * 2,
 		fit.Surface_Theme_Tokens(surface).foreground_primary,
 		metrics.font_body,
@@ -1557,9 +1539,9 @@ draw_overlay_modal :: proc(surface: ^fit.Surface) {
 		"Close",
 		{
 			body.x + metrics.padding,
-			body.y + body.h - fit.Surface_Scale(surface, 44),
-			fit.Surface_Scale(surface, 90),
-			fit.Surface_Scale(surface, 28),
+			body.y + body.h - fit.Px(surface, 44),
+			fit.Px(surface, 90),
+			fit.Px(surface, 28),
 		},
 		.Primary,
 	) {
@@ -1580,15 +1562,15 @@ draw_overlay_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	if popup_open {
 		draw_demo_popup(
 			surface,
-			x - fit.Surface_Scale(surface, 8),
-			y - fit.Surface_Scale(surface, 8),
+			x - fit.Px(surface, 8),
+			y - fit.Px(surface, 8),
 		)
 	}
 	draw_overlay_modal(surface)
 	draw_overlay_confirm(surface)
 	root := gallery_root
 	fit.Surface_Toasts(surface, &toasts)
-	return info_y + fit.Surface_Scale(surface, 52)
+	return info_y + fit.Px(surface, 52)
 }
 
 // draw_docked_panel_over_canvas is the z-ordered input journey: a full-width
@@ -1608,8 +1590,8 @@ draw_docked_panel_over_canvas :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i
 		{x, y0, w, 0},
 		"Z-ORDERED INPUT (canvas counters stay put under the docked panel)",
 	)
-	canvas_h := fit.Surface_Scale(surface, 150)
-	panel_w := min(fit.Surface_Scale(surface, 190), w)
+	canvas_h := fit.Px(surface, 150)
+	panel_w := min(fit.Px(surface, 190), w)
 	canvas := fit.Rect{x, y, w, canvas_h}
 	panel := fit.Rect{x + w - panel_w, y, panel_w, canvas_h}
 	if w <= 0 || canvas_h <= 0 do return y
@@ -1631,26 +1613,26 @@ draw_docked_panel_over_canvas :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i
 	fit.Surface_Text(
 		surface,
 		fmt.tprintf("canvas wheel: %d", dock_canvas_wheel),
-		x + fit.Surface_Scale(surface, 12),
-		y + fit.Surface_Scale(surface, 12),
+		x + fit.Px(surface, 12),
+		y + fit.Px(surface, 12),
 	)
 	fit.Surface_Text(
 		surface,
 		fmt.tprintf("canvas clicks: %d", dock_canvas_clicks),
-		x + fit.Surface_Scale(surface, 12),
-		y + fit.Surface_Scale(surface, 12) + metrics.line_height,
+		x + fit.Px(surface, 12),
+		y + fit.Px(surface, 12) + metrics.line_height,
 	)
 	fit.Surface_Text(
 		surface,
 		"wheel and click here, then over the panel",
-		x + fit.Surface_Scale(surface, 12),
-		y + fit.Surface_Scale(surface, 12) + metrics.line_height * 2,
+		x + fit.Px(surface, 12),
+		y + fit.Px(surface, 12) + metrics.line_height * 2,
 		.Note,
 		.Secondary,
 	)
 
 	draw_dock_panel(surface, panel)
-	return y + canvas_h + fit.Surface_Scale(surface, 12)
+	return y + canvas_h + fit.Px(surface, 12)
 }
 
 draw_dock_panel :: proc(surface: ^fit.Surface, panel: fit.Rect) {
@@ -1668,9 +1650,9 @@ draw_dock_panel :: proc(surface: ^fit.Surface, panel: fit.Rect) {
 		surface,
 		u,
 		{
-			panel.x + fit.Surface_Scale(surface, 10),
+			panel.x + fit.Px(surface, 10),
 			content_y,
-			panel.w - fit.Surface_Scale(surface, 24),
+			panel.w - fit.Px(surface, 24),
 			fit.ROOT_EXTENT_OPEN,
 		},
 		gap = .XS,
@@ -1711,8 +1693,8 @@ draw_overlay_confirm :: proc(surface: ^fit.Surface) {
 // draw_demo_popup records a popup on its own layer (drawn above content
 // painted later) and claims its rect so widgets underneath are inert.
 draw_demo_popup :: proc(surface: ^fit.Surface, x, y: i32) {
-	w := fit.Surface_Scale(surface, 220)
-	h := fit.Surface_Scale(surface, 130)
+	w := fit.Px(surface, 220)
+	h := fit.Px(surface, 130)
 	rect := fit.Float_Rect{f32(x), f32(y), f32(w), f32(h)}
 	fit.Surface_Layer_Begin(surface, fit.Z_POPUP, claim = rect)
 	fit.Surface_Fill_Rounded_Rect(
@@ -1727,32 +1709,32 @@ draw_demo_popup :: proc(surface: ^fit.Surface, x, y: i32) {
 	fit.Surface_Text(
 		surface,
 		"Overlay popup",
-		x + fit.Surface_Scale(surface, 12),
-		y + fit.Surface_Scale(surface, 10),
+		x + fit.Px(surface, 12),
+		y + fit.Px(surface, 10),
 	)
 	fit.Surface_Text(
 		surface,
 		"Recorded during the frame,",
-		x + fit.Surface_Scale(surface, 12),
-		y + fit.Surface_Scale(surface, 36),
+		x + fit.Px(surface, 12),
+		y + fit.Px(surface, 36),
 		.Label,
 		.Secondary,
 	)
 	fit.Surface_Text(
 		surface,
 		"replayed above everything.",
-		x + fit.Surface_Scale(surface, 12),
-		y + fit.Surface_Scale(surface, 54),
+		x + fit.Px(surface, 12),
+		y + fit.Px(surface, 54),
 		.Label,
 		.Secondary,
 	)
 	// Close row: the popup sits in its own Z_POPUP scope, so its own claim
 	// does not occlude it and the ordinary interaction path applies.
 	row := fit.Float_Rect {
-		f32(x + fit.Surface_Scale(surface, 12)),
-		f32(y + h - fit.Surface_Scale(surface, 30)),
-		f32(w - fit.Surface_Scale(surface, 24)),
-		f32(fit.Surface_Scale(surface, 22)),
+		f32(x + fit.Px(surface, 12)),
+		f32(y + h - fit.Px(surface, 30)),
+		f32(w - fit.Px(surface, 24)),
+		f32(fit.Px(surface, 22)),
 	}
 	close := fit.Surface_Interact(surface, row)
 	if close.hovered {
@@ -1766,8 +1748,8 @@ draw_demo_popup :: proc(surface: ^fit.Surface, x, y: i32) {
 	fit.Surface_Text(
 		surface,
 		"Close",
-		x + fit.Surface_Scale(surface, 18),
-		y + h - fit.Surface_Scale(surface, 28),
+		x + fit.Px(surface, 18),
+		y + h - fit.Px(surface, 28),
 		.Label,
 		.Accent,
 	)
@@ -1784,13 +1766,13 @@ STRESS_BUTTONS :: 1000
 
 draw_stress :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	// The grid owns cell geometry: exact column division, no per-button math.
-	cols := max(w / fit.Surface_Scale(surface, 110), 1)
-	gap := fit.Surface_Scale(surface, 6)
-	row_h := fit.Surface_Scale(surface, 26)
+	cols := max(w / fit.Px(surface, 110), 1)
+	gap := fit.Px(surface, 6)
+	row_h := fit.Px(surface, 26)
 	// The header's height does not depend on its text, so the grid's origin
 	// is known before the label is built - which is what lets the label
 	// report the drawn count.
-	header_h := fit.Surface_Metrics(surface).font_label + fit.Surface_Scale(surface, 11)
+	header_h := fit.Surface_Metrics(surface).font_label + fit.Px(surface, 11)
 	bounds := fit.Rect{x, y0 + header_h, w, 0}
 	// Only the rows intersecting the pane's cull band are built. Without this
 	// the section constructs 1000 labels, measures and interacts with all of
@@ -1836,11 +1818,11 @@ draw_stress :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	// full content height - the pane's scroll range depends on it.
 	fit.Surface_Grid_Skip_To(surface, &grid, STRESS_BUTTONS)
 	content := fit.Surface_Grid_End(surface, &grid)
-	y = content.y + content.h + fit.Surface_Scale(surface, 10)
+	y = content.y + content.h + fit.Px(surface, 10)
 	if stress_clicked >= 0 {
 		msg := fmt.tprintf("last clicked: btn %d", stress_clicked)
 		fit.Surface_Text(surface, msg, x, y, .Label, .Secondary)
-		y += fit.Surface_Scale(surface, 24)
+		y += fit.Px(surface, 24)
 	}
 	return y
 }

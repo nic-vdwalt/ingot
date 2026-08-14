@@ -203,6 +203,9 @@ fit_native_controls_measure_and_render_once :: proc(t: ^testing.T) {
 fit_public_contract_compiles :: proc(t: ^testing.T) {
 	draw: Draw_Proc = fit_test_draw
 	run: proc(_: ^App, _: Config, _: Draw_Proc, _: rawptr) -> bool = Run
+	canvas: proc(_: ^Builder, _: Render_Proc, _: rawptr) = Canvas
+	px_i32: proc(_: ^Surface, _: i32) -> i32 = Px
+	px_f32: proc(_: ^Surface, _: f32) -> f32 = Px
 	button_string: proc(_: ^Builder, _: string, _: string, _: ^bool) = Button
 	button_u64: proc(_: ^Builder, _: u64, _: string, _: ^bool) = Button
 	measure: proc(_: ^Builder) -> Size = Measure
@@ -224,12 +227,70 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	radio: proc(_: ^Builder, _: u64, _: string, _: ^i32, _: i32, _: Control_Options) = Radio
 	slider: proc(_: ^Builder, _: Widget_Id, _: ^f32, _, _, _: f32, _: string, _: Control_Options) =
 		Slider
-	testing.expect(t, draw != nil && run != nil)
+	testing.expect(t, draw != nil && run != nil && canvas != nil)
+	testing.expect(t, px_i32 != nil && px_f32 != nil)
 	testing.expect(t, button_string != nil && button_u64 != nil)
 	testing.expect(t, measure != nil && render_at != nil && session_draw != nil)
 	testing.expect(t, set_storage != nil && reset_storage != nil && storage_capacity != nil)
 	testing.expect(t, row_with != nil && id_string != nil)
 	testing.expect(t, checkbox != nil && radio != nil && slider != nil)
+}
+
+@(test)
+fit_canvas_declares_full_root_and_renders_once :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	ui.ui_runtime_set_scale(&runtime, 1.5)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 320, 240})
+	counts: Fit_Test_Counts
+	Canvas(&builder, fit_test_render, &counts)
+	_ = Render(&builder)
+	testing.expect_value(t, counts.measure, i32(0))
+	testing.expect_value(t, counts.render, i32(1))
+	testing.expect_value(t, counts.rect, Rect{0, 0, 320, 240})
+	builder_close(&builder)
+}
+
+@(test)
+fit_region_managed_scope_balances_and_composes_ids :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	ui.ui_runtime_set_scale(&runtime, 1.5)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	surface := Surface{inner = &root}
+	first, second: Region
+	first_region := Region_Open(&surface, &first, {0, 0, 160, 120}, {scope = "first"})
+	first_id := Region_Id(first_region, "control")
+	first_u64 := Region_Id(first_region, u64(7))
+	_ = Region_Close(first_region)
+	second_region := Region_Open(&surface, &second, {160, 0, 160, 120}, {scope = "second"})
+	second_id := Region_Id(second_region, "control")
+	_ = Region_Close(second_region)
+	testing.expect(t, first_id != second_id, "managed scopes did not compose identity")
+	testing.expect(t, first_id != first_u64, "string and integer identities collided")
+	testing.expect_value(t, first.inner.ids.depth, 0)
+	testing.expect_value(t, second.inner.ids.depth, 0)
+	testing.expect_value(t, Px(&surface, i32(8)), i32(12))
+	testing.expect_value(t, Px(&surface, f32(8)), f32(12))
+	_ = ui.end(&root)
 }
 
 @(test)

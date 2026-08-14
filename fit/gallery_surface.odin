@@ -149,9 +149,19 @@ Surface_Modal_End :: proc(surface: ^Surface, state: ^Modal_State) {
 	ui.modal_end(&state.inner)
 }
 
-Region_Id :: proc(region: ^Region, key: string) -> Widget_Id {
+Region_Id_String :: proc(region: ^Region, key: string) -> Widget_Id {
 	assert(region != nil && region.inner.open, "Fit.Region_Id: region not open")
 	return Widget_Id(ui.id(&region.inner, key))
+}
+
+Region_Id_U64 :: proc(region: ^Region, key: u64) -> Widget_Id {
+	assert(region != nil && region.inner.open, "Fit.Region_Id: region not open")
+	return Widget_Id(ui.id(&region.inner, key))
+}
+
+Region_Id :: proc {
+	Region_Id_String,
+	Region_Id_U64,
 }
 
 Region_Scope_Begin :: proc(region: ^Region, key: string) {
@@ -221,17 +231,45 @@ Region_Flex_Row_End :: proc(region: ^Region) {
 	ui.flex_row_end(&region.inner)
 }
 
-Region_Icon_Button :: proc(region: ^Region, widget: Widget_Id, label: string) -> bool {
+Region_Icon_Button_Id :: proc(region: ^Region, widget: Widget_Id, label: string) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Icon_Button: region not open")
 	return ui.icon_btn(&region.inner, ui.Widget_Id(widget), label)
 }
 
-Region_Back_Button :: proc(region: ^Region, widget: Widget_Id, label: string) -> bool {
+Region_Icon_Button_String :: proc(region: ^Region, key, label: string) -> bool {
+	return Region_Icon_Button_Id(region, Region_Id(region, key), label)
+}
+
+Region_Icon_Button_U64 :: proc(region: ^Region, key: u64, label: string) -> bool {
+	return Region_Icon_Button_Id(region, Region_Id(region, key), label)
+}
+
+Region_Icon_Button :: proc {
+	Region_Icon_Button_String,
+	Region_Icon_Button_U64,
+	Region_Icon_Button_Id,
+}
+
+Region_Back_Button_Id :: proc(region: ^Region, widget: Widget_Id, label: string) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Back_Button: region not open")
 	return ui.back_btn(&region.inner, ui.Widget_Id(widget), label)
 }
 
-Region_Collapsible_Header :: proc(
+Region_Back_Button_String :: proc(region: ^Region, key, label: string) -> bool {
+	return Region_Back_Button_Id(region, Region_Id(region, key), label)
+}
+
+Region_Back_Button_U64 :: proc(region: ^Region, key: u64, label: string) -> bool {
+	return Region_Back_Button_Id(region, Region_Id(region, key), label)
+}
+
+Region_Back_Button :: proc {
+	Region_Back_Button_String,
+	Region_Back_Button_U64,
+	Region_Back_Button_Id,
+}
+
+Region_Collapsible_Header_Id :: proc(
 	region: ^Region,
 	widget: Widget_Id,
 	label: string,
@@ -248,7 +286,32 @@ Region_Collapsible_Header :: proc(
 	)
 }
 
-Region_Slider :: proc(
+Region_Collapsible_Header_String :: proc(
+	region: ^Region,
+	key, label: string,
+	open: ^bool,
+	options: Collapsible_Options = {},
+) -> bool {
+	return Region_Collapsible_Header_Id(region, Region_Id(region, key), label, open, options)
+}
+
+Region_Collapsible_Header_U64 :: proc(
+	region: ^Region,
+	key: u64,
+	label: string,
+	open: ^bool,
+	options: Collapsible_Options = {},
+) -> bool {
+	return Region_Collapsible_Header_Id(region, Region_Id(region, key), label, open, options)
+}
+
+Region_Collapsible_Header :: proc {
+	Region_Collapsible_Header_String,
+	Region_Collapsible_Header_U64,
+	Region_Collapsible_Header_Id,
+}
+
+Region_Slider_Id :: proc(
 	region: ^Region,
 	widget: Widget_Id,
 	state: ^Slider_State,
@@ -271,7 +334,57 @@ Region_Slider :: proc(
 	)
 }
 
-Region_Dropdown :: proc(
+Region_Slider_String :: proc(
+	region: ^Region,
+	key: string,
+	state: ^Slider_State,
+	value: ^f32,
+	minimum, maximum, step: f32,
+	width: i32,
+	label: string,
+) -> bool {
+	return Region_Slider_Id(
+		region,
+		Region_Id(region, key),
+		state,
+		value,
+		minimum,
+		maximum,
+		step,
+		width,
+		label,
+	)
+}
+
+Region_Slider_U64 :: proc(
+	region: ^Region,
+	key: u64,
+	state: ^Slider_State,
+	value: ^f32,
+	minimum, maximum, step: f32,
+	width: i32,
+	label: string,
+) -> bool {
+	return Region_Slider_Id(
+		region,
+		Region_Id(region, key),
+		state,
+		value,
+		minimum,
+		maximum,
+		step,
+		width,
+		label,
+	)
+}
+
+Region_Slider :: proc {
+	Region_Slider_String,
+	Region_Slider_U64,
+	Region_Slider_Id,
+}
+
+Region_Dropdown_Id :: proc(
 	region: ^Region,
 	widget: Widget_Id,
 	items: []string,
@@ -293,7 +406,35 @@ Region_Dropdown :: proc(
 	)
 }
 
-Region_Combobox :: proc(
+Region_Dropdown_String :: proc(
+	region: ^Region,
+	key: string,
+	items: []string,
+	selected: ^i32,
+	state: ^Dropdown_State,
+	a11y_label: string = "Dropdown",
+) -> bool {
+	return Region_Dropdown_Id(region, Region_Id(region, key), items, selected, state, a11y_label)
+}
+
+Region_Dropdown_U64 :: proc(
+	region: ^Region,
+	key: u64,
+	items: []string,
+	selected: ^i32,
+	state: ^Dropdown_State,
+	a11y_label: string = "Dropdown",
+) -> bool {
+	return Region_Dropdown_Id(region, Region_Id(region, key), items, selected, state, a11y_label)
+}
+
+Region_Dropdown :: proc {
+	Region_Dropdown_String,
+	Region_Dropdown_U64,
+	Region_Dropdown_Id,
+}
+
+Region_Combobox :: proc (
 	region: ^Region,
 	key: string,
 	state: ^Combobox_State,
