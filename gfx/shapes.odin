@@ -68,13 +68,13 @@ _shape_geometry_is_finite :: proc(center: Vector2, extent: f32) -> bool {
 // --- filled rectangles -----------------------------------------------------
 
 DrawRectangle :: proc(posX, posY, width, height: i32, color: Color) {
-	batch_set(&g.rend, .Solid, nil)
-	push_quad(&g.rend, {f32(posX), f32(posY), f32(width), f32(height)}, {0, 0, 1, 1}, col_f(color))
+	batch_set(default_context(), &g.rend, .Solid, nil)
+	push_quad(default_context(), &g.rend, {f32(posX), f32(posY), f32(width), f32(height)}, {0, 0, 1, 1}, col_f(color))
 }
 
 DrawRectangleRec :: proc(rec: Rectangle, color: Color) {
-	batch_set(&g.rend, .Solid, nil)
-	push_quad(&g.rend, rec, {0, 0, 1, 1}, col_f(color))
+	batch_set(default_context(), &g.rend, .Solid, nil)
+	push_quad(default_context(), &g.rend, rec, {0, 0, 1, 1}, col_f(color))
 }
 
 DrawRectangleV :: proc(position, size: Vector2, color: Color) {
@@ -144,8 +144,8 @@ DrawRectangleLinesEx :: proc(rec: Rectangle, lineThick: f32, color: Color) {
 
 @(private)
 _rect :: proc(x, y, w, h: f32, color: Color) {
-	batch_set(&g.rend, .Solid, nil)
-	push_quad(&g.rend, {x, y, w, h}, {0, 0, 1, 1}, col_f(color))
+	batch_set(default_context(), &g.rend, .Solid, nil)
+	push_quad(default_context(), &g.rend, {x, y, w, h}, {0, 0, 1, 1}, col_f(color))
 }
 
 // --- rounded rectangles ----------------------------------------------------
@@ -158,19 +158,19 @@ DrawRectangleRounded :: proc(rec: Rectangle, roundness: f32, segments: i32, colo
 	}
 	segs := _shape_segments(segments, 2)
 	c := col_f(color)
-	batch_set(&g.rend, .Solid, nil)
+	batch_set(default_context(), &g.rend, .Solid, nil)
 
 	x, y, w, h := rec.x, rec.y, rec.width, rec.height
 	// center + edge rectangles
-	push_quad(&g.rend, {x + r, y, w - 2 * r, h}, {0, 0, 1, 1}, c) // middle
-	push_quad(&g.rend, {x, y + r, r, h - 2 * r}, {0, 0, 1, 1}, c) // left
-	push_quad(&g.rend, {x + w - r, y + r, r, h - 2 * r}, {0, 0, 1, 1}, c) // right
+	push_quad(default_context(), &g.rend, {x + r, y, w - 2 * r, h}, {0, 0, 1, 1}, c) // middle
+	push_quad(default_context(), &g.rend, {x, y + r, r, h - 2 * r}, {0, 0, 1, 1}, c) // left
+	push_quad(default_context(), &g.rend, {x + w - r, y + r, r, h - 2 * r}, {0, 0, 1, 1}, c) // right
 
 	// four corner fans (center at inset corner)
-	_corner_fan(&g.rend, {x + r, y + r}, r, 180, 270, segs, c) // top-left
-	_corner_fan(&g.rend, {x + w - r, y + r}, r, 270, 360, segs, c) // top-right
-	_corner_fan(&g.rend, {x + w - r, y + h - r}, r, 0, 90, segs, c) // bottom-right
-	_corner_fan(&g.rend, {x + r, y + h - r}, r, 90, 180, segs, c) // bottom-left
+	_corner_fan(default_context(), &g.rend, {x + r, y + r}, r, 180, 270, segs, c) // top-left
+	_corner_fan(default_context(), &g.rend, {x + w - r, y + r}, r, 270, 360, segs, c) // top-right
+	_corner_fan(default_context(), &g.rend, {x + w - r, y + h - r}, r, 0, 90, segs, c) // bottom-right
+	_corner_fan(default_context(), &g.rend, {x + r, y + h - r}, r, 90, 180, segs, c) // bottom-left
 }
 
 DrawRectangleRoundedLinesEx :: proc(
@@ -208,6 +208,7 @@ _corner_radius :: proc(rec: Rectangle, roundness: f32) -> f32 {
 
 @(private)
 _corner_fan :: proc(
+	ctx: ^Context,
 	rend: ^Renderer,
 	center: Vector2,
 	radius: f32,
@@ -215,7 +216,8 @@ _corner_fan :: proc(
 	segments: i32,
 	c: [4]f32,
 ) {
-	assert(rend != nil, "_corner_fan: nil renderer")
+	assert(ctx != nil, "_corner_fan: nil context")
+	assert(rend == &ctx.rend, "_corner_fan: foreign renderer")
 	// Every caller routes through _shape_segments, so the loop below is
 	// bounded. Asserting it here keeps the bound true for future callers
 	// rather than relying on each one to remember.
@@ -233,7 +235,7 @@ _corner_fan :: proc(
 	for i in 1 ..= segments {
 		ang := a0 + step * f32(i)
 		cur := _polar(center, radius, ang)
-		push_tri(rend, center, prev, cur, c)
+		push_tri(ctx, rend, center, prev, cur, c)
 		prev = cur
 	}
 }
@@ -263,13 +265,13 @@ DrawLineEx :: proc(startPos, endPos: Vector2, thick: f32, color: Color) {
 	nx := -dy / length * thick / 2.0
 	ny := dx / length * thick / 2.0
 	c := col_f(color)
-	batch_set(&g.rend, .Solid, nil)
+	batch_set(default_context(), &g.rend, .Solid, nil)
 	a := [2]f32{startPos.x + nx, startPos.y + ny}
 	b := [2]f32{startPos.x - nx, startPos.y - ny}
 	cc := [2]f32{endPos.x - nx, endPos.y - ny}
 	d := [2]f32{endPos.x + nx, endPos.y + ny}
-	push_tri(&g.rend, a, b, cc, c)
-	push_tri(&g.rend, a, cc, d, c)
+	push_tri(default_context(), &g.rend, a, b, cc, c)
+	push_tri(default_context(), &g.rend, a, cc, d, c)
 }
 
 // --- circles / rings -------------------------------------------------------
@@ -281,8 +283,8 @@ DrawCircle :: proc(centerX, centerY: i32, radius: f32, color: Color) {
 DrawCircleV :: proc(center: Vector2, radius: f32, color: Color) {
 	segs := _shape_segments_for_radius(radius, 12)
 	c := col_f(color)
-	batch_set(&g.rend, .Solid, nil)
-	_corner_fan(&g.rend, center, radius, 0, 360, segs, c)
+	batch_set(default_context(), &g.rend, .Solid, nil)
+	_corner_fan(default_context(), &g.rend, center, radius, 0, 360, segs, c)
 }
 
 DrawRing :: proc(
@@ -297,7 +299,7 @@ DrawRing :: proc(
 	)
 	segs := _shape_segments(segments, 2)
 	c := col_f(color)
-	batch_set(&g.rend, .Solid, nil)
+	batch_set(default_context(), &g.rend, .Solid, nil)
 	step := (endAngle - startAngle) / f32(segs)
 	for i in 0 ..< segs {
 		a0 := startAngle + step * f32(i)
@@ -306,8 +308,8 @@ DrawRing :: proc(
 		i1 := _polar(center, innerRadius, a1)
 		o0 := _polar(center, outerRadius, a0)
 		o1 := _polar(center, outerRadius, a1)
-		push_tri(&g.rend, i0, o0, o1, c)
-		push_tri(&g.rend, i0, o1, i1, c)
+		push_tri(default_context(), &g.rend, i0, o0, o1, c)
+		push_tri(default_context(), &g.rend, i0, o1, i1, c)
 	}
 }
 
@@ -425,8 +427,8 @@ CheckCollisionPointRec :: proc(point: Vector2, rec: Rectangle) -> bool {
 // --- triangles / gradients -------------------------------------------------
 
 DrawTriangle :: proc(v1, v2, v3: Vector2, color: Color) {
-	batch_set(&g.rend, .Solid, nil)
-	push_tri(&g.rend, v1, v2, v3, col_f(color))
+	batch_set(default_context(), &g.rend, .Solid, nil)
+	push_tri(default_context(), &g.rend, v1, v2, v3, col_f(color))
 }
 
 DrawCircleLines :: proc(centerX, centerY: i32, radius: f32, color: Color) {
@@ -445,8 +447,8 @@ DrawCircleLinesV :: proc(center: Vector2, radius: f32, color: Color) {
 @(private)
 _gradient_quad :: proc(rec: Rectangle, tl, tr, br, bl: [4]f32) {
 	if !g.frame.has_frame do return
-	batch_set(&g.rend, .Solid, nil)
-	_emit_gradient_quad(&g.rend, rec, tl, tr, br, bl)
+	batch_set(default_context(), &g.rend, .Solid, nil)
+	_emit_gradient_quad(default_context(), &g.rend, rec, tl, tr, br, bl)
 }
 
 @(private)
@@ -457,18 +459,23 @@ _gradient_v :: proc(rec: Rectangle, top, bottom: Color) {
 }
 
 @(private)
-_emit_gradient_v :: proc(r: ^Renderer, rec: Rectangle, top, bottom: Color) {
-	assert(r != nil, "_emit_gradient_v: nil renderer")
+_emit_gradient_v :: proc(ctx: ^Context, r: ^Renderer, rec: Rectangle, top, bottom: Color) {
+	assert(ctx != nil, "_emit_gradient_v: nil context")
+	assert(r == &ctx.rend, "_emit_gradient_v: foreign renderer")
 	assert(rec.width >= 0 && rec.height >= 0, "_emit_gradient_v: negative size")
 	color_top := col_f(top)
 	color_bottom := col_f(bottom)
-	_emit_gradient_quad(r, rec, color_top, color_top, color_bottom, color_bottom)
+	_emit_gradient_quad(ctx, r, rec, color_top, color_top, color_bottom, color_bottom)
 }
 
 @(private)
-_emit_gradient_quad :: proc(r: ^Renderer, rec: Rectangle, tl, tr, br, bl: [4]f32) {
-	assert(r != nil, "_emit_gradient_quad: nil renderer")
-	if !_batch_reserve(r, 4, 6) do return
+_emit_gradient_quad :: proc(
+	ctx: ^Context,
+	r: ^Renderer, rec: Rectangle, tl, tr, br, bl: [4]f32,
+) {
+	assert(ctx != nil, "_emit_gradient_quad: nil context")
+	assert(r == &ctx.rend, "_emit_gradient_quad: foreign renderer")
+	if !_batch_reserve(ctx, r, 4, 6) do return
 	transform := r.model_xf
 	x0, y0 := rec.x, rec.y
 	x1, y1 := rec.x + rec.width, rec.y + rec.height
@@ -542,12 +549,12 @@ DrawEllipse :: proc(centerX, centerY: i32, radiusH, radiusV: f32, color: Color) 
 	center := Vector2{f32(centerX), f32(centerY)}
 	segments := _ellipse_segments(radiusH, radiusV)
 	c := col_f(color)
-	batch_set(&g.rend, .Solid, nil)
+	batch_set(default_context(), &g.rend, .Solid, nil)
 	step := 360.0 / f32(segments)
 	prev := _polar_ellipse(center, radiusH, radiusV, 0)
 	for i in 1 ..= segments {
 		cur := _polar_ellipse(center, radiusH, radiusV, step * f32(i))
-		push_tri(&g.rend, center, prev, cur, c)
+		push_tri(default_context(), &g.rend, center, prev, cur, c)
 		prev = cur
 	}
 }
@@ -578,8 +585,8 @@ DrawCircleSector :: proc(
 	color: Color,
 ) {
 	segs := _shape_segments(segments, 1)
-	batch_set(&g.rend, .Solid, nil)
-	_corner_fan(&g.rend, center, radius, startAngle, endAngle, segs, col_f(color))
+	batch_set(default_context(), &g.rend, .Solid, nil)
+	_corner_fan(default_context(), &g.rend, center, radius, startAngle, endAngle, segs, col_f(color))
 }
 
 // DrawCircleSectorLines outlines the sector: the arc plus the two radii that
@@ -614,8 +621,8 @@ DrawCircleSectorLines :: proc(
 DrawPoly :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color: Color) {
 	if sides < 3 do return
 	segs := _shape_segments(sides, 3)
-	batch_set(&g.rend, .Solid, nil)
-	_corner_fan(&g.rend, center, radius, rotation, rotation + 360, segs, col_f(color))
+	batch_set(default_context(), &g.rend, .Solid, nil)
+	_corner_fan(default_context(), &g.rend, center, radius, rotation, rotation + 360, segs, col_f(color))
 }
 
 DrawPolyLines :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color: Color) {
@@ -669,9 +676,9 @@ DrawTriangleFan :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
 	// error: raylib draws nothing and so does this.
 	if points == nil || pointCount < 3 do return
 	c := col_f(color)
-	batch_set(&g.rend, .Solid, nil)
+	batch_set(default_context(), &g.rend, .Solid, nil)
 	for i in 1 ..< pointCount - 1 {
-		push_tri(&g.rend, points[0], points[i], points[i + 1], c)
+		push_tri(default_context(), &g.rend, points[0], points[i], points[i + 1], c)
 	}
 }
 
@@ -685,12 +692,12 @@ DrawTriangleStrip :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
 	}
 	if points == nil || pointCount < 3 do return
 	c := col_f(color)
-	batch_set(&g.rend, .Solid, nil)
+	batch_set(default_context(), &g.rend, .Solid, nil)
 	for i in 2 ..< pointCount {
 		if i % 2 == 0 {
-			push_tri(&g.rend, points[i], points[i - 2], points[i - 1], c)
+			push_tri(default_context(), &g.rend, points[i], points[i - 2], points[i - 1], c)
 		} else {
-			push_tri(&g.rend, points[i], points[i - 1], points[i - 2], c)
+			push_tri(default_context(), &g.rend, points[i], points[i - 1], points[i - 2], c)
 		}
 	}
 }

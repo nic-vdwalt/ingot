@@ -416,7 +416,7 @@ DrawTextEx :: proc(
 	if a == nil do return
 	sf := fontSize / a.px
 	col := col_f(tint)
-	batch_set(&g.rend, .Solid, a.bind)
+	batch_set(default_context(), &g.rend, .Solid, a.bind)
 
 	pen_x := position.x
 	pen_y := position.y
@@ -442,7 +442,7 @@ DrawTextEx :: proc(
 				f32(gl.w) / ATLAS_DIM,
 				f32(gl.h) / ATLAS_DIM,
 			}
-			push_quad(&g.rend, {dx, dy, dw, dh}, uv, col, .Text)
+			push_quad(default_context(), &g.rend, {dx, dy, dw, dh}, uv, col, .Text)
 		}
 		pen_x += gl.xadvance * sf + spacing
 	}

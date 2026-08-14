@@ -674,30 +674,34 @@ _batch_bind :: proc(kind: Pipe_Kind, bind, current, neutral: wg.BindGroup) -> wg
 // first if the state differs. Routes to the render-target pass when one is
 // bound (BeginTextureMode).
 @(private)
-batch_set :: proc(r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
-	assert(r != nil, "batch_set: nil renderer")
+batch_set :: proc(ctx: ^Context, r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
+	assert(ctx != nil, "batch_set: nil context")
+	assert(r == &ctx.rend, "batch_set: foreign renderer")
 	assert(r.neutral_bind != nil, "batch_set: nil neutral bind")
-	_ensure_active_pass()
+	context_ensure_active_pass(ctx)
 	next_bind := _batch_bind(kind, bind, r.cur_bind, r.neutral_bind)
 	if kind != r.cur_kind || next_bind != r.cur_bind {
 		cause: Flush_Cause = kind != r.cur_kind ? .Pipeline : .Texture
-		if _active_pass_begun() do renderer_flush(default_context(), r, active_pass(), cause)
+		if context_active_pass_begun(ctx) {
+			renderer_flush(ctx, r, context_active_pass(ctx), cause)
+		}
 		r.cur_kind = kind
 		r.cur_bind = next_bind
 	}
 }
 
 @(private)
-_batch_reserve :: proc(r: ^Renderer, vertex_count, index_count: int) -> bool {
-	assert(r != nil)
+_batch_reserve :: proc(ctx: ^Context, r: ^Renderer, vertex_count, index_count: int) -> bool {
+	assert(ctx != nil, "_batch_reserve: nil context")
+	assert(r == &ctx.rend, "_batch_reserve: foreign renderer")
 	assert(vertex_count > 0)
 	assert(index_count > 0)
 	if vertex_count > BATCH_MAX_VERTICES || index_count > BATCH_MAX_INDICES do return false
 	vertices_fit := len(r.verts) <= BATCH_MAX_VERTICES - vertex_count
 	indices_fit := len(r.indices) <= BATCH_MAX_INDICES - index_count
 	if vertices_fit && indices_fit do return true
-	if !_active_pass_begun() do return false
-	renderer_flush(default_context(), r, active_pass(), .Manual)
+	if !context_active_pass_begun(ctx) do return false
+	renderer_flush(ctx, r, context_active_pass(ctx), .Manual)
 	return(
 		len(r.verts) <= BATCH_MAX_VERTICES - vertex_count &&
 		len(r.indices) <= BATCH_MAX_INDICES - index_count \
@@ -712,14 +716,17 @@ _batch_reserve :: proc(r: ^Renderer, vertex_count, index_count: int) -> bool {
 // concurrent tests to race on.
 @(private)
 push_quad :: proc(
+	ctx: ^Context,
 	r: ^Renderer,
 	d: Rectangle,
 	s: Rectangle,
 	col: [4]f32,
 	mode: Vertex_Mode = .Solid,
 ) {
-	if !g.frame.has_frame do return
-	_emit_quad(r, d, s, col, mode)
+	assert(ctx != nil, "push_quad: nil context")
+	assert(r == &ctx.rend, "push_quad: foreign renderer")
+	if !ctx.frame.has_frame do return
+	_emit_quad(ctx, r, d, s, col, mode)
 }
 
 // _emit_quad transforms and appends a rectangle.
@@ -729,17 +736,20 @@ push_quad :: proc(
 // rotation) hands the four corners to the general quad path instead.
 @(private)
 _emit_quad :: proc(
+	ctx: ^Context,
 	r: ^Renderer,
 	d: Rectangle,
 	s: Rectangle,
 	col: [4]f32,
 	mode: Vertex_Mode = .Solid,
 ) {
-	assert(r != nil, "_emit_quad: nil renderer")
+	assert(ctx != nil, "_emit_quad: nil context")
+	assert(r == &ctx.rend, "_emit_quad: foreign renderer")
 	u0, v0 := s.x, s.y
 	u1, v1 := s.x + s.width, s.y + s.height
 	if _affine_rotates(r.model_xf) {
 		_emit_quad4(
+			ctx,
 			r,
 			{d.x, d.y},
 			{d.x + d.width, d.y},
@@ -754,7 +764,7 @@ _emit_quad :: proc(
 		)
 		return
 	}
-	if !_batch_reserve(r, 4, 6) do return
+	if !_batch_reserve(ctx, r, 4, 6) do return
 	p0 := _affine_apply(r.model_xf, {d.x, d.y})
 	p1 := _affine_apply(r.model_xf, {d.x + d.width, d.y + d.height})
 	x0, y0 := p0.x, p0.y
@@ -771,15 +781,18 @@ _emit_quad :: proc(
 }
 
 @(private)
-push_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
-	if !g.frame.has_frame do return
-	_emit_tri(r, a, b, c, col)
+push_tri :: proc(ctx: ^Context, r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
+	assert(ctx != nil, "push_tri: nil context")
+	assert(r == &ctx.rend, "push_tri: foreign renderer")
+	if !ctx.frame.has_frame do return
+	_emit_tri(ctx, r, a, b, c, col)
 }
 
 @(private)
-_emit_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
-	assert(r != nil, "_emit_tri: nil renderer")
-	if !_batch_reserve(r, 3, 3) do return
+_emit_tri :: proc(ctx: ^Context, r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
+	assert(ctx != nil, "_emit_tri: nil context")
+	assert(r == &ctx.rend, "_emit_tri: foreign renderer")
+	if !_batch_reserve(ctx, r, 3, 3) do return
 	pa := _affine_apply(r.model_xf, a)
 	pb := _affine_apply(r.model_xf, b)
 	pc := _affine_apply(r.model_xf, c)
@@ -797,26 +810,31 @@ _emit_tri :: proc(r: ^Renderer, a, b, c: [2]f32, col: [4]f32) {
 // Corners must be given in order tl, tr, br, bl.
 @(private)
 push_quad4 :: proc(
+	ctx: ^Context,
 	r: ^Renderer,
 	tl, tr, br, bl: [2]f32,
 	uv_tl, uv_tr, uv_br, uv_bl: [2]f32,
 	col: [4]f32,
 	mode: Vertex_Mode = .Solid,
 ) {
-	if !g.frame.has_frame do return
-	_emit_quad4(r, tl, tr, br, bl, uv_tl, uv_tr, uv_br, uv_bl, col, mode)
+	assert(ctx != nil, "push_quad4: nil context")
+	assert(r == &ctx.rend, "push_quad4: foreign renderer")
+	if !ctx.frame.has_frame do return
+	_emit_quad4(ctx, r, tl, tr, br, bl, uv_tl, uv_tr, uv_br, uv_bl, col, mode)
 }
 
 @(private)
 _emit_quad4 :: proc(
+	ctx: ^Context,
 	r: ^Renderer,
 	tl, tr, br, bl: [2]f32,
 	uv_tl, uv_tr, uv_br, uv_bl: [2]f32,
 	col: [4]f32,
 	mode: Vertex_Mode = .Solid,
 ) {
-	assert(r != nil, "_emit_quad4: nil renderer")
-	if !_batch_reserve(r, 4, 6) do return
+	assert(ctx != nil, "_emit_quad4: nil context")
+	assert(r == &ctx.rend, "_emit_quad4: foreign renderer")
+	if !_batch_reserve(ctx, r, 4, 6) do return
 	tlo := _affine_apply(r.model_xf, tl)
 	tro := _affine_apply(r.model_xf, tr)
 	bro := _affine_apply(r.model_xf, br)

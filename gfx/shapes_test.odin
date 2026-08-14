@@ -63,7 +63,7 @@ triangle_fan_emits_one_triangle_per_edge :: proc(t: ^testing.T) {
 	points := [4]Vector2{{0, 0}, {10, 0}, {10, 10}, {0, 10}}
 	// A fan of n points spans n-2 triangles, all sharing points[0].
 	for index in 1 ..< i32(len(points)) - 1 {
-		_emit_tri(r, points[0], points[index], points[index + 1], {1, 1, 1, 1})
+		_emit_tri(default_context(), r, points[0], points[index], points[index + 1], {1, 1, 1, 1})
 	}
 	testing.expect_value(t, count_emitted_triangles(r), 2)
 	expect_point_near(t, r.verts[0].pos, {0, 0}, "first triangle starts at the hub")
@@ -93,7 +93,7 @@ pixel_is_a_unit_rectangle :: proc(t: ^testing.T) {
 	r := new_test_renderer()
 	defer free(r)
 
-	_emit_quad(r, {7, 9, 1, 1}, {0, 0, 1, 1}, {1, 1, 1, 1})
+	_emit_quad(default_context(), r, {7, 9, 1, 1}, {0, 0, 1, 1}, {1, 1, 1, 1})
 	testing.expect_value(t, len(r.verts), 4)
 	expect_point_near(t, r.verts[0].pos, {7, 9}, "tl")
 	expect_point_near(t, r.verts[3].pos, {8, 10}, "br")
@@ -111,7 +111,7 @@ gradient_ex_maps_raylib_corner_order :: proc(t: ^testing.T) {
 	bottom_left := [4]f32{0, 1, 0, 1}
 	top_right := [4]f32{0, 0, 1, 1}
 	bottom_right := [4]f32{1, 1, 0, 1}
-	_emit_gradient_quad(r, {0, 0, 10, 10}, top_left, top_right, bottom_right, bottom_left)
+	_emit_gradient_quad(default_context(), r, {0, 0, 10, 10}, top_left, top_right, bottom_right, bottom_left)
 
 	testing.expect_value(t, r.verts[0].col, top_left)
 	testing.expect_value(t, r.verts[1].col, bottom_left)

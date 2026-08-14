@@ -241,10 +241,16 @@ _destroy_rt_attachment :: proc(ctx: ^Context, entry: ^Tex_Entry) {
 // _texture_view returns the wgpu view backing a registered texture id (used as
 // a render-target attachment). nil if not found.
 @(private)
-_texture_view :: proc(id: u32) -> wg.TextureView {
-	e := get_texture(id)
+context_texture_view :: proc(ctx: ^Context, id: u32) -> wg.TextureView {
+	assert(ctx != nil, "context_texture_view: nil context")
+	e := context_get_texture(ctx, id)
 	if e == nil do return nil
 	return e.view
+}
+
+@(private)
+_texture_view :: proc(id: u32) -> wg.TextureView {
+	return context_texture_view(default_context(), id)
 }
 
 // _new_rt_depth creates a Depth24Plus depth attachment registered in the
@@ -482,7 +488,7 @@ DrawTexturePro :: proc(
 ) {
 	e := get_texture(texture.id)
 	if e == nil do return
-	batch_set(&g.rend, .Image, e.bind)
+	batch_set(default_context(), &g.rend, .Image, e.bind)
 	col := col_f(tint)
 
 	tw := f32(e.width)
@@ -527,6 +533,7 @@ DrawTexturePro :: proc(
 	}
 	off := [2]f32{dest.x, dest.y}
 	push_quad4(
+		default_context(),
 		&g.rend,
 		{tl.x + off.x, tl.y + off.y},
 		{tr.x + off.x, tr.y + off.y},

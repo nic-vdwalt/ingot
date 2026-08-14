@@ -224,11 +224,12 @@ _draw_billboard_world :: proc(
 	col := col_f(tint)
 
 	if e != nil {
-		batch_set(&g.rend, .Image, e.bind)
+		batch_set(default_context(), &g.rend, .Image, e.bind)
 	} else {
-		batch_set(&g.rend, .Solid, nil)
+		batch_set(default_context(), &g.rend, .Solid, nil)
 	}
 	push_quad4(
+		default_context(),
 		&g.rend,
 		{tl.x, tl.y},
 		{tr.x, tr.y},
