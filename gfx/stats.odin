@@ -348,9 +348,10 @@ _stats_stream_slot_exhaustion :: proc(ctx: ^Context) {
 // _stats_gpu3d_pool_exhaustion counts GPU-3D fixed-pool exhaustion (mesh or
 // pipeline slots) so hosts can see why 3D draws stopped appearing.
 @(private)
-_stats_gpu3d_pool_exhaustion :: proc() {
+_stats_gpu3d_pool_exhaustion :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {
-		g.stats_current.gpu3d_pool_exhaustions += 1
+		assert(ctx != nil, "_stats_gpu3d_pool_exhaustion: nil context")
+		ctx.stats_current.gpu3d_pool_exhaustions += 1
 	}
 }
 
@@ -388,9 +389,10 @@ _stats_gpu3d_instanced_draw :: proc(ctx: ^Context) {
 }
 
 @(private)
-_stats_submission_tracking_failure :: proc() {
+_stats_submission_tracking_failure :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {
-		g.stats_current.submission_tracking_failures += 1
+		assert(ctx != nil, "_stats_submission_tracking_failure: nil context")
+		ctx.stats_current.submission_tracking_failures += 1
 	}
 }
 
