@@ -301,8 +301,9 @@ platform_should_close :: proc(ctx: ^Context) -> bool {
 }
 
 @(private)
-platform_poll_events :: proc() {
-	_platform_drain_mouse_edges(&g.inp)
+platform_poll_events :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_poll_events: nil context")
+	_platform_drain_mouse_edges(&ctx.inp)
 }
 
 @(private)
@@ -418,7 +419,9 @@ _platform_drain_mouse_edges :: proc(inp: ^Input) {
 }
 
 @(private)
-platform_input_init :: proc() {}
+platform_input_init :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_input_init: nil context")
+}
 
 // IME proxy: a hidden DOM textarea (web/ingot_input.js) is positioned at the
 // caret and focused so browser composition events (Pinyin, Japanese, dead
@@ -429,17 +432,20 @@ platform_set_text_input_rect :: proc(x, y, w, h: i32) {
 }
 
 @(private)
-platform_text_input_deactivate :: proc() {
+platform_text_input_deactivate :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_text_input_deactivate: nil context")
 	_js_ime_rect(0, 0, 0, 0, 0)
 }
 
 @(private)
-platform_web_input_frame_begin :: proc() {
+platform_web_input_frame_begin :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_web_input_frame_begin: nil context")
 	_js_web_input_frame_begin()
 }
 
 @(private)
-platform_web_input_frame_end :: proc() {
+platform_web_input_frame_end :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_web_input_frame_end: nil context")
 	_js_web_input_frame_end()
 }
 
@@ -560,7 +566,8 @@ platform_sync_web_submit_button :: proc(
 }
 
 @(private)
-platform_cursor_pos :: proc() -> (f64, f64) {
+platform_cursor_pos :: proc(ctx: ^Context) -> (f64, f64) {
+	assert(ctx != nil, "platform_cursor_pos: nil context")
 	return f64(st_mouse.x), f64(st_mouse.y)
 }
 
@@ -572,13 +579,15 @@ platform_set_cursor_pos :: proc(x, y: f64) {
 }
 
 @(private)
-platform_mouse_button :: proc(button: i32) -> bool {
+platform_mouse_button :: proc(ctx: ^Context, button: i32) -> bool {
+	assert(ctx != nil, "platform_mouse_button: nil context")
 	if button < 0 || button >= 8 do return false
 	return st_mb[button]
 }
 
 @(private)
-platform_window_hovered :: proc() -> bool {
+platform_window_hovered :: proc(ctx: ^Context) -> bool {
+	assert(ctx != nil, "platform_window_hovered: nil context")
 	return st_hovered
 }
 
@@ -615,8 +624,9 @@ platform_set_clipboard :: proc(text: cstring) {
 }
 
 @(private)
-platform_drop_init :: proc() {
-	_drop_state_reset()
+platform_drop_init :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_drop_init: nil context")
+	_drop_state_reset_context(ctx)
 }
 
 @(private)
@@ -628,7 +638,7 @@ platform_drop_finish_events :: proc() {}
 @(private)
 platform_drop_shutdown :: proc(ctx: ^Context) {
 	assert(ctx != nil, "platform_drop_shutdown: nil context")
-	_drop_state_reset()
+	_drop_state_reset_context(ctx)
 	_js_drop_clear()
 }
 
@@ -637,8 +647,9 @@ platform_drop_shutdown :: proc(ctx: ^Context) {
 // (triggers already converted to the -1..1 GLFW convention); buttons are
 // remapped to the raylib GamepadButton layout via _W3C_PAD_REMAP.
 @(private)
-platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {
+platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State, idle: ^Idle_State) {
 	assert(pads != nil, "platform_gamepad_poll: nil pads")
+	assert(idle != nil, "platform_gamepad_poll: nil idle state")
 	w3c_buttons: [17]u8
 	for slot in 0 ..< MAX_GAMEPADS {
 		pad := &pads[slot]
@@ -654,7 +665,7 @@ platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {
 		)
 		connected := name_len >= 0
 		if connected != pad.connected {
-			_idle_note_activity(&g.idle)
+			_idle_note_activity(idle)
 		}
 		pad.connected = connected
 		if !connected {
@@ -672,7 +683,7 @@ platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {
 			}
 		}
 		if pad.buttons != pad.prev_buttons {
-			_idle_note_activity(&g.idle)
+			_idle_note_activity(idle)
 		}
 	}
 }

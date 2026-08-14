@@ -21,8 +21,10 @@ class GateManifestTest(unittest.TestCase):
         for key in keys:
             for package in MANIFEST[key]:
                 self.assertTrue((ROOT / package).is_dir(), package)
-        for example in MANIFEST["examples"]:
+        for example in MANIFEST["examples"] + MANIFEST["test_examples"]:
             self.assertTrue((ROOT / "examples" / example).is_dir(), example)
+        for package in MANIFEST["hot_reload_packages"]:
+            self.assertTrue((ROOT / "examples" / "hot_reload" / package).is_dir(), package)
 
     def test_test_packages_receive_a_compile_gate(self):
         checked = set(MANIFEST["check_packages"])
@@ -31,10 +33,10 @@ class GateManifestTest(unittest.TestCase):
             self.assertIn(package, checked | bindings, package)
 
     def test_launchers_consume_shared_manifest(self):
-        shell = (ROOT / "scripts/check.sh").read_text(encoding="utf-8")
-        powershell = (ROOT / "scripts/check.ps1").read_text(encoding="utf-8")
-        self.assertIn("gate-manifest.json", shell)
-        self.assertIn("gate-manifest.json", powershell)
+        launchers = ["check.sh", "check.ps1", "test.sh", "test.ps1"]
+        for launcher in launchers:
+            source = (ROOT / "scripts" / launcher).read_text(encoding="utf-8")
+            self.assertIn("gate-manifest.json", source, launcher)
 
 
 if __name__ == "__main__":

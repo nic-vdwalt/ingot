@@ -39,8 +39,14 @@ _drop_complete :: proc "contextless" () {
 }
 
 @(private)
+_drop_state_reset_context :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_drop_state_reset_context: nil context")
+	ctx.drop.hover_staged = false
+	ctx.drop.hover_frame = false
+	ctx.drop.ready = false
+}
+
+@(private)
 _drop_state_reset :: proc() {
-	g.drop.hover_staged = false
-	g.drop.hover_frame = false
-	g.drop.ready = false
+	_drop_state_reset_context(default_context())
 }
