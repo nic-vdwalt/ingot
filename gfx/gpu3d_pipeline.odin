@@ -298,6 +298,8 @@ Gpu_3D_Resources :: struct {
 	bind:                   [STREAM_SLOT_COUNT]wg.BindGroup,
 	next_pass_generation:   u64,
 	active_pass_generation: u64,
+	identity_block:         Gpu_3D_Instance_Uniforms,
+	identity_block_ready:   bool,
 	compat:                 Gpu_3D_Compat,
 }
 
@@ -576,16 +578,26 @@ _gpu_3d_target_source_rectangle :: proc(target: ^Gpu_3D_Target) -> (Rectangle, b
 	return {0, 0, f32(width), f32(height)}, true
 }
 
-draw_gpu_3d_target :: proc(target: ^Gpu_3D_Target, destination: Rectangle, tint: Color = WHITE) {
-	assert(target != nil, "draw_gpu_3d_target: nil target")
-	ctx := active_context()
+context_draw_gpu_3d_target :: proc(
+	ctx: ^Context,
+	target: ^Gpu_3D_Target,
+	destination: Rectangle,
+	tint: Color = WHITE,
+) {
+	assert(ctx != nil, "context_draw_gpu_3d_target: nil context")
+	assert(target != nil, "context_draw_gpu_3d_target: nil target")
 	assert(
 		ctx.resources.gpu_3d.active_pass_generation == 0,
-		"draw_gpu_3d_target: active GPU 3D pass",
+		"context_draw_gpu_3d_target: active GPU 3D pass",
 	)
+	if context_get_texture(ctx, target.texture.texture.id) == nil do return
 	source, ok := _gpu_3d_target_source_rectangle(target)
 	if !ok do return
-	DrawTexturePro(target.texture.texture, source, destination, {}, 0, tint)
+	context_draw_texture_pro(ctx, target.texture.texture, source, destination, {}, 0, tint)
+}
+
+draw_gpu_3d_target :: proc(target: ^Gpu_3D_Target, destination: Rectangle, tint: Color = WHITE) {
+	context_draw_gpu_3d_target(default_context(), target, destination, tint)
 }
 
 @(private)
@@ -604,8 +616,8 @@ _gpu_3d_compat_ensure :: proc(ctx: ^Context) -> bool {
 	} else if context_resize_gpu_3d_target_to_render_size(ctx, &compat.target) == .Failed {
 		return false
 	}
-	if compat.cube.id == 0 do compat.cube, _ = create_cube_mesh()
-	if compat.cube_edges.id == 0 do compat.cube_edges, _ = create_cube_edge_mesh()
+	if compat.cube.id == 0 do compat.cube, _ = _gpu_3d_create_cube_mesh(ctx)
+	if compat.cube_edges.id == 0 do compat.cube_edges, _ = _gpu_3d_create_cube_edge_mesh(ctx)
 	return target_ok && compat.cube.id != 0 && compat.cube_edges.id != 0
 }
 
@@ -616,7 +628,7 @@ _gpu_3d_compat_begin :: proc(ctx: ^Context, camera: Camera3D) -> bool {
 	compat := &resources.compat
 	assert(!compat.pass_available, "_gpu_3d_compat_begin: pass already available")
 	if !ctx.frame.has_frame || !_gpu_3d_compat_ensure(ctx) do return false
-	compat.pass, compat.pass_available = begin_gpu_3d(&compat.target, camera)
+	compat.pass, compat.pass_available = context_begin_gpu_3d(ctx, &compat.target, camera)
 	if !compat.pass_available do return false
 	set_gpu_3d_light(&compat.pass, {direction = CAMERA_WORLD_UP, ambient = 1, diffuse = 0})
 	return true
@@ -630,11 +642,7 @@ _gpu_3d_compat_end :: proc(ctx: ^Context) {
 	assert(compat.pass.active, "_gpu_3d_compat_end: inactive pass")
 	end_gpu_3d(&compat.pass)
 	compat.pass_available = false
-	draw_gpu_3d_target(
-		&compat.target,
-		{0, 0, f32(GetScreenWidth()), f32(GetScreenHeight())},
-		WHITE,
-	)
+	context_draw_gpu_3d_target(ctx, &compat.target, {0, 0, f32(ctx.width), f32(ctx.height)}, WHITE)
 	assert(!compat.pass.active, "_gpu_3d_compat_end: pass still active")
 }
 
@@ -733,18 +741,30 @@ _cube_edge_mesh_geometry :: proc(
 	assert(_gpu_3d_geometry_valid(vertices^[:], indices^[:], .Lines))
 }
 
-create_cube_mesh :: proc() -> (Gpu_Mesh, bool) {
+@(private)
+_gpu_3d_create_cube_mesh :: proc(ctx: ^Context) -> (Gpu_Mesh, bool) {
+	assert(ctx != nil, "_gpu_3d_create_cube_mesh: nil context")
 	vertices: [GPU_3D_CUBE_VERTEX_COUNT]Gpu_3D_Vertex
 	indices: [GPU_3D_CUBE_INDEX_COUNT]u32
 	_cube_mesh_geometry(&vertices, &indices)
-	return create_gpu_mesh(vertices[:], indices[:], .Triangles)
+	return context_create_gpu_mesh(ctx, vertices[:], indices[:], .Triangles)
 }
 
-create_cube_edge_mesh :: proc() -> (Gpu_Mesh, bool) {
+create_cube_mesh :: proc() -> (Gpu_Mesh, bool) {
+	return _gpu_3d_create_cube_mesh(default_context())
+}
+
+@(private)
+_gpu_3d_create_cube_edge_mesh :: proc(ctx: ^Context) -> (Gpu_Mesh, bool) {
+	assert(ctx != nil, "_gpu_3d_create_cube_edge_mesh: nil context")
 	vertices: [GPU_3D_CUBE_CORNER_COUNT]Gpu_3D_Vertex
 	indices: [GPU_3D_CUBE_EDGE_INDEX_COUNT]u32
 	_cube_edge_mesh_geometry(&vertices, &indices)
-	return create_gpu_mesh(vertices[:], indices[:], .Lines)
+	return context_create_gpu_mesh(ctx, vertices[:], indices[:], .Lines)
+}
+
+create_cube_edge_mesh :: proc() -> (Gpu_Mesh, bool) {
+	return _gpu_3d_create_cube_edge_mesh(default_context())
 }
 
 @(private)
@@ -778,8 +798,9 @@ _grid_mesh_geometry :: proc(
 }
 
 @(private)
-_gpu_3d_compat_grid :: proc(resources: ^Gpu_3D_Resources, slices: i32) -> (Gpu_Mesh, bool) {
-	assert(resources != nil, "_gpu_3d_compat_grid: nil resources")
+_gpu_3d_compat_grid :: proc(ctx: ^Context, slices: i32) -> (Gpu_Mesh, bool) {
+	assert(ctx != nil, "_gpu_3d_compat_grid: nil context")
+	resources := &ctx.resources.gpu_3d
 	assert(resources.compat.grid_count <= GPU_3D_COMPAT_GRID_CACHE_COUNT)
 	for grid in resources.compat.grids[:resources.compat.grid_count] {
 		if grid.slices == slices do return grid.mesh, true
@@ -789,7 +810,12 @@ _gpu_3d_compat_grid :: proc(resources: ^Gpu_3D_Resources, slices: i32) -> (Gpu_M
 	indices: [GPU_3D_COMPAT_GRID_MAX_INDICES]u32
 	vertex_count, index_count, geometry_ok := _grid_mesh_geometry(slices, &vertices, &indices)
 	if !geometry_ok do return {}, false
-	mesh, mesh_ok := create_gpu_mesh(vertices[:vertex_count], indices[:index_count], .Lines)
+	mesh, mesh_ok := context_create_gpu_mesh(
+		ctx,
+		vertices[:vertex_count],
+		indices[:index_count],
+		.Lines,
+	)
 	if !mesh_ok do return {}, false
 	index := resources.compat.grid_count
 	resources.compat.grids[index] = {
@@ -1241,7 +1267,8 @@ _gpu_3d_shader_resolve :: proc(
 	return slot.module, shader.id
 }
 
-begin_gpu_3d :: proc(
+context_begin_gpu_3d :: proc(
+	ctx: ^Context,
 	target: ^Gpu_3D_Target,
 	camera: Camera3D,
 	load: Gpu_3D_Load_Action = .Clear,
@@ -1249,8 +1276,8 @@ begin_gpu_3d :: proc(
 	Gpu_3D_Pass,
 	bool,
 ) {
-	assert(target != nil)
-	ctx := active_context()
+	assert(ctx != nil, "context_begin_gpu_3d: nil context")
+	assert(target != nil, "context_begin_gpu_3d: nil target")
 	resources := &ctx.resources.gpu_3d
 	if resources.active_pass_generation != 0 do return {}, false
 	if !ctx.initialized || target.texture.texture.id == 0 || target.texture.depth.id == 0 {
@@ -1319,6 +1346,17 @@ begin_gpu_3d :: proc(
 	return result, true
 }
 
+begin_gpu_3d :: proc(
+	target: ^Gpu_3D_Target,
+	camera: Camera3D,
+	load: Gpu_3D_Load_Action = .Clear,
+) -> (
+	Gpu_3D_Pass,
+	bool,
+) {
+	return context_begin_gpu_3d(default_context(), target, camera, load)
+}
+
 // set_gpu_3d_light overrides the pass light for subsequent draw calls. The
 // direction is normalized and intensities clamped to [0, 1] so the shader
 // contract (unit direction, bounded factors) always holds.
@@ -1345,7 +1383,8 @@ _light_normalize :: proc(light: Gpu_3D_Light) -> (Gpu_3D_Light, bool) {
 		true
 }
 
-begin_gpu_3d_pro :: proc(
+context_begin_gpu_3d_pro :: proc(
+	ctx: ^Context,
 	target: ^Gpu_3D_Target,
 	view_projection: Matrix,
 	load: Gpu_3D_Load_Action = .Clear,
@@ -1353,7 +1392,8 @@ begin_gpu_3d_pro :: proc(
 	Gpu_3D_Pass,
 	bool,
 ) {
-	assert(target != nil)
+	assert(ctx != nil, "context_begin_gpu_3d_pro: nil context")
+	assert(target != nil, "context_begin_gpu_3d_pro: nil target")
 	assert(view_projection != (Matrix{}), "begin_gpu_3d_pro: zero view-projection")
 	camera := Camera3D {
 		position   = -CAMERA_WORLD_FORWARD,
@@ -1362,9 +1402,20 @@ begin_gpu_3d_pro :: proc(
 		fovy       = 60,
 		projection = .PERSPECTIVE,
 	}
-	pass, ok := begin_gpu_3d(target, camera, load)
+	pass, ok := context_begin_gpu_3d(ctx, target, camera, load)
 	if ok do pass.view_projection = view_projection
 	return pass, ok
+}
+
+begin_gpu_3d_pro :: proc(
+	target: ^Gpu_3D_Target,
+	view_projection: Matrix,
+	load: Gpu_3D_Load_Action = .Clear,
+) -> (
+	Gpu_3D_Pass,
+	bool,
+) {
+	return context_begin_gpu_3d_pro(default_context(), target, view_projection, load)
 }
 
 draw_gpu_mesh :: proc(
@@ -1464,11 +1515,6 @@ _gpu_3d_instance_upload :: proc(ctx: ^Context, r: ^Renderer, transforms: []Matri
 	return _uniform_upload(ctx, r, &block, size_of(Gpu_3D_Instance_Uniforms))
 }
 
-@(private)
-_gpu_3d_identity_block: Gpu_3D_Instance_Uniforms
-@(private)
-_gpu_3d_identity_block_ready: bool
-
 // _gpu_3d_identity_instances_upload reserves the shared per-pass instance
 // block. Every slot is identity so a hypothetical out-of-range instance
 // index would render untransformed instead of collapsing geometry through a
@@ -1477,17 +1523,18 @@ _gpu_3d_identity_block_ready: bool
 _gpu_3d_identity_instances_upload :: proc(ctx: ^Context, r: ^Renderer) -> (u32, bool) {
 	assert(ctx != nil, "_gpu_3d_identity_instances_upload: nil context")
 	assert(r == &ctx.rend, "_gpu_3d_identity_instances_upload: foreign renderer")
-	if !_gpu_3d_identity_block_ready {
+	resources := &ctx.resources.gpu_3d
+	if !resources.identity_block_ready {
 		for index in 0 ..< GPU_3D_MAX_INSTANCES_PER_DRAW {
-			_gpu_3d_identity_block.transforms[index] = 1
+			resources.identity_block.transforms[index] = 1
 		}
-		_gpu_3d_identity_block_ready = true
+		resources.identity_block_ready = true
 	}
 	assert(
-		_gpu_3d_identity_block.transforms[0] == Matrix(1),
+		resources.identity_block.transforms[0] == Matrix(1),
 		"_gpu_3d_identity_instances_upload: corrupted identity block",
 	)
-	return _uniform_upload(ctx, r, &_gpu_3d_identity_block, size_of(Gpu_3D_Instance_Uniforms))
+	return _uniform_upload(ctx, r, &resources.identity_block, size_of(Gpu_3D_Instance_Uniforms))
 }
 
 // _gpu_3d_texture_bind resolves the material texture to a bind group. Stale
@@ -1620,7 +1667,7 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 		_stream_slot_abandon(&ctx.rend)
 		_stats_stream_retirement_failure(ctx)
 	}
-	_stats_cpu_times(0, encode_elapsed, submit_elapsed, 0)
+	_stats_context_cpu_times(ctx, 0, encode_elapsed, submit_elapsed, 0)
 	if cmd != nil do wg.CommandBufferRelease(cmd)
 	wg.CommandEncoderRelease(pass.encoder)
 	ctx.resources.gpu_3d.active_pass_generation = 0
@@ -1668,6 +1715,7 @@ _gpu_3d_mesh :: proc(
 @(private)
 _gpu_3d_pass_current :: proc(resources: ^Gpu_3D_Resources, pass: ^Gpu_3D_Pass) -> bool {
 	if resources == nil || pass == nil || pass.owner == nil do return false
+	if resources != &pass.owner.resources.gpu_3d do return false
 	if !pass.active || pass.generation == 0 do return false
 	if pass.epoch != pass.owner.epoch do return false
 	return pass.generation == resources.active_pass_generation

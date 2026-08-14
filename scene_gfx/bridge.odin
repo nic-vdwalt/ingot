@@ -14,6 +14,7 @@ Resident_Mesh :: struct {
 }
 
 Bridge :: struct {
+	owner:           ^gfx.Context,
 	meshes:          [SCENE_GFX_MAX_RESIDENT_MESHES]Resident_Mesh,
 	mesh_count:      u16,
 	epoch:           u64,
@@ -29,8 +30,14 @@ Bridge :: struct {
 // conversion belongs at the import/cook boundary and happens exactly once; the
 // #assert pairs below check only that the two vertex layouts still match in
 // memory, which cannot detect swapped axes or inverted normals.
-bridge_upload_mesh :: proc(bridge: ^Bridge, mesh: asset.Mesh_View) -> bool {
-	assert(bridge != nil, "bridge_upload_mesh: nil bridge")
+bridge_upload_mesh_context :: proc(
+	ctx: ^gfx.Context,
+	bridge: ^Bridge,
+	mesh: asset.Mesh_View,
+) -> bool {
+	assert(ctx != nil, "bridge_upload_mesh_context: nil context")
+	assert(bridge != nil, "bridge_upload_mesh_context: nil bridge")
+	if bridge.owner != nil && bridge.owner != ctx do return false
 	if !asset.mesh_validate(mesh) do return false
 	if _bridge_mesh(bridge, mesh.id) != nil do return false
 	if int(bridge.mesh_count) >= SCENE_GFX_MAX_RESIDENT_MESHES {
@@ -39,7 +46,7 @@ bridge_upload_mesh :: proc(bridge: ^Bridge, mesh: asset.Mesh_View) -> bool {
 	}
 	vertices := transmute([]gfx.Gpu_3D_Vertex)mesh.vertices
 	primitive := gfx.Gpu_Primitive(mesh.primitive)
-	gpu, ok := gfx.create_gpu_mesh(vertices, mesh.indices, primitive)
+	gpu, ok := gfx.context_create_gpu_mesh(ctx, vertices, mesh.indices, primitive)
 	if !ok {
 		bridge.upload_failures += 1
 		return false
@@ -52,6 +59,7 @@ bridge_upload_mesh :: proc(bridge: ^Bridge, mesh: asset.Mesh_View) -> bool {
 			last_epoch = bridge.epoch,
 			occupied   = true,
 		}
+		bridge.owner = ctx
 		bridge.mesh_count += 1
 		return true
 	}
@@ -59,12 +67,22 @@ bridge_upload_mesh :: proc(bridge: ^Bridge, mesh: asset.Mesh_View) -> bool {
 	return false
 }
 
-bridge_destroy :: proc(bridge: ^Bridge) {
-	assert(bridge != nil, "bridge_destroy: nil bridge")
+bridge_upload_mesh :: proc(bridge: ^Bridge, mesh: asset.Mesh_View) -> bool {
+	return bridge_upload_mesh_context(gfx.default_context(), bridge, mesh)
+}
+
+bridge_destroy_context :: proc(ctx: ^gfx.Context, bridge: ^Bridge) {
+	assert(ctx != nil, "bridge_destroy_context: nil context")
+	assert(bridge != nil, "bridge_destroy_context: nil bridge")
+	if bridge.owner != nil && bridge.owner != ctx do return
 	for &entry in bridge.meshes {
-		if entry.occupied do gfx.destroy_gpu_mesh(&entry.gpu)
+		if entry.occupied do gfx.context_destroy_gpu_mesh(ctx, &entry.gpu)
 	}
 	bridge^ = {}
+}
+
+bridge_destroy :: proc(bridge: ^Bridge) {
+	bridge_destroy_context(gfx.default_context(), bridge)
 }
 
 bridge_begin_frame :: proc(bridge: ^Bridge) {

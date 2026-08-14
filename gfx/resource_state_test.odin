@@ -125,23 +125,26 @@ vao_and_vbo_handles_reject_cross_context_lookup :: proc(t: ^testing.T) {
 gpu_3d_pass_rejects_stale_generation :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()
-	resources: Gpu_3D_Resources
+	owner := new(Context)
+	defer free(owner)
+	owner.epoch = 9
+	resources := &owner.resources.gpu_3d
 	resources.active_pass_generation = 12
 	current := Gpu_3D_Pass {
-		owner      = default_context(),
-		epoch      = context_epoch(default_context()),
+		owner      = owner,
+		epoch      = context_epoch(owner),
 		generation = 12,
 		active     = true,
 	}
 	stale := Gpu_3D_Pass {
-		owner      = default_context(),
-		epoch      = context_epoch(default_context()),
+		owner      = owner,
+		epoch      = context_epoch(owner),
 		generation = 11,
 		active     = true,
 	}
-	testing.expect(t, _gpu_3d_pass_current(&resources, &current))
-	testing.expect(t, !_gpu_3d_pass_current(&resources, &stale))
-	testing.expect(t, !_gpu_3d_pass_current(&resources, nil))
+	testing.expect(t, _gpu_3d_pass_current(resources, &current))
+	testing.expect(t, !_gpu_3d_pass_current(resources, &stale))
+	testing.expect(t, !_gpu_3d_pass_current(resources, nil))
 }
 
 @(test)

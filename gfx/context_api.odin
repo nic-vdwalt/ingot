@@ -147,6 +147,38 @@ frame_scissor_end :: proc(frame: ^Frame) {
 	context_scissor_end(frame_owner(frame))
 }
 
+frame_begin_texture_mode :: proc(frame: ^Frame, target: RenderTexture2D) {
+	context_begin_texture_mode(frame_owner(frame), target)
+}
+
+frame_end_texture_mode :: proc(frame: ^Frame) {
+	context_end_texture_mode(frame_owner(frame))
+}
+
+frame_begin_shader_mode :: proc(frame: ^Frame, shader: Shader) {
+	context_begin_shader_mode(frame_owner(frame), shader)
+}
+
+frame_end_shader_mode :: proc(frame: ^Frame) {
+	context_end_shader_mode(frame_owner(frame))
+}
+
+frame_begin_blend_mode :: proc(frame: ^Frame, mode: BlendMode) {
+	context_begin_blend_mode(frame_owner(frame), mode)
+}
+
+frame_end_blend_mode :: proc(frame: ^Frame) {
+	context_end_blend_mode(frame_owner(frame))
+}
+
+frame_begin_mode_3d :: proc(frame: ^Frame, camera: Camera3D) {
+	context_begin_mode_3d(frame_owner(frame), camera)
+}
+
+frame_end_mode_3d :: proc(frame: ^Frame) {
+	context_end_mode_3d(frame_owner(frame))
+}
+
 Context_Scope :: struct {
 	previous: ^Context,
 	active:   bool,

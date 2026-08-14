@@ -378,7 +378,10 @@ orbit_camera_apply :: proc(state: Orbit_Camera_State, camera: ^Camera3D) {
 // GetMatrixProjection). Identity before any BeginMode3D.
 context_get_projection_matrix :: proc(ctx: ^Context) -> Matrix {
 	assert(ctx != nil, "context_get_projection_matrix: nil context")
-	assert(ctx.cam3d_projection_available, "GetProjectionMatrix: unavailable in matrix-only Pro mode")
+	assert(
+		ctx.cam3d_projection_available,
+		"GetProjectionMatrix: unavailable in matrix-only Pro mode",
+	)
 	if ctx.cam3d_proj == (Matrix{}) do return Matrix(1)
 	return ctx.cam3d_proj
 }
@@ -564,7 +567,7 @@ context_draw_line_3d :: proc(ctx: ^Context, startPos, endPos: Vector3, color: Co
 	if !ctx.cam3d_active do return
 	a, oka := context_project(ctx, ctx.cam3d_vp, startPos)
 	b, okb := context_project(ctx, ctx.cam3d_vp, endPos)
-	if oka && okb do context_draw_line_ex(ctx, a, b, 1, color)
+	if oka && okb do context_draw_line(ctx, a, b, 1, color)
 }
 
 DrawLine3D :: proc(startPos, endPos: Vector3, color: Color) {
@@ -573,7 +576,11 @@ DrawLine3D :: proc(startPos, endPos: Vector3, color: Color) {
 
 // GetWorldToScreen projects to the logical window (screen overlays / picking),
 // independent of any active render target.
-context_get_world_to_screen :: proc(ctx: ^Context, position: Vector3, camera: Camera3D) -> Vector2 {
+context_get_world_to_screen :: proc(
+	ctx: ^Context,
+	position: Vector3,
+	camera: Camera3D,
+) -> Vector2 {
 	assert(ctx != nil, "context_get_world_to_screen: nil context")
 	return GetWorldToScreenPro(position, _camera_view_projection(camera, ctx.width, ctx.height))
 }

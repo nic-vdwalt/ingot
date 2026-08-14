@@ -14,6 +14,32 @@ import "core:testing"
 import wg "vendor:wgpu"
 
 @(test)
+gpu_3d_pass_validation_uses_recorded_owner :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	first.epoch = 11
+	second.epoch = 22
+	first.resources.gpu_3d.active_pass_generation = 7
+	second.resources.gpu_3d.active_pass_generation = 7
+	pass := Gpu_3D_Pass {
+		owner      = first,
+		epoch      = first.epoch,
+		generation = 7,
+		active     = true,
+	}
+
+	testing.expect(t, _gpu_3d_pass_current(&first.resources.gpu_3d, &pass))
+	first.resources.gpu_3d.active_pass_generation = 0
+	testing.expect(t, !_gpu_3d_pass_current(&first.resources.gpu_3d, &pass))
+	testing.expect(t, !_gpu_3d_pass_current(&second.resources.gpu_3d, &pass))
+	first.resources.gpu_3d.active_pass_generation = 7
+	pass.epoch += 1
+	testing.expect(t, !_gpu_3d_pass_current(&first.resources.gpu_3d, &pass))
+}
+
+@(test)
 test_gpu_3d_target_size_rejects_invalid_target :: proc(t: ^testing.T) {
 	width, height, ok := gpu_3d_target_size(nil)
 	testing.expect_value(t, width, i32(0))

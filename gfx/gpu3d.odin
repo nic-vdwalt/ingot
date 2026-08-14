@@ -123,7 +123,8 @@ BlendMode :: enum i32 {
 // BeginBlendMode selects one of the precompiled batch blend pipelines. Inputs
 // are premultiplied, so ADDITIVE = One/One. CUSTOM uses the factors last set by
 // rlgl.SetBlendFactors. Switching flushes the pending run first.
-BeginBlendMode :: proc(mode: BlendMode) {
+context_begin_blend_mode :: proc(ctx: ^Context, mode: BlendMode) {
+	assert(ctx != nil, "context_begin_blend_mode: nil context")
 	slot: Blend_Slot = .Alpha
 	#partial switch mode {
 	case .ADDITIVE, .ADD_COLORS:
@@ -133,11 +134,24 @@ BeginBlendMode :: proc(mode: BlendMode) {
 	case .CUSTOM, .CUSTOM_SEPARATE:
 		slot = .Custom
 	}
-	if slot != g.rend.cur_blend {
-		if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Blend)
-		g.rend.cur_blend = slot
+	if slot != ctx.rend.cur_blend {
+		if context_active_pass_begun(ctx) {
+			renderer_flush(ctx, &ctx.rend, context_active_pass(ctx), .Blend)
+		}
+		ctx.rend.cur_blend = slot
 	}
 }
-EndBlendMode :: proc() {BeginBlendMode(.ALPHA)}
+
+BeginBlendMode :: proc(mode: BlendMode) {
+	context_begin_blend_mode(default_context(), mode)
+}
+
+context_end_blend_mode :: proc(ctx: ^Context) {
+	context_begin_blend_mode(ctx, .ALPHA)
+}
+
+EndBlendMode :: proc() {
+	context_end_blend_mode(default_context())
+}
 
 // DrawBillboard / DrawBillboardPro implemented in render3d.odin.

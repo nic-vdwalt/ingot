@@ -3,6 +3,7 @@ package scene_gfx
 
 import "core:testing"
 import "ingot:asset"
+import gfx "ingot:gfx"
 
 @(test)
 bridge_lookup_rejects_missing_mesh :: proc(t: ^testing.T) {
@@ -24,4 +25,18 @@ bridge_epoch_is_monotonic :: proc(t: ^testing.T) {
 	testing.expect_value(t, bridge.epoch, 1)
 	bridge_begin_frame(&bridge)
 	testing.expect_value(t, bridge.epoch, 2)
+}
+
+@(test)
+bridge_owner_is_context_bound :: proc(t: ^testing.T) {
+	first := new(gfx.Context)
+	defer free(first)
+	second := new(gfx.Context)
+	defer free(second)
+	bridge: Bridge
+	bridge.owner = first
+	bridge_destroy_context(second, &bridge)
+	testing.expect(t, bridge.owner == first)
+	bridge_destroy_context(first, &bridge)
+	testing.expect(t, bridge.owner == nil)
 }

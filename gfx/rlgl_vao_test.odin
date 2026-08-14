@@ -59,3 +59,29 @@ vao_layout_rejects_missing_or_short_buffers :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, !_vao_layout_valid(&vao))
 }
+
+@(test)
+rlgl_binding_state_is_context_bound :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	first.id = 2
+	second.id = 3
+	first_vao := ContextRlLoadVertexArray(first)
+	second_vao := ContextRlLoadVertexArray(second)
+	defer ContextRlUnloadVertexArray(first, first_vao)
+	defer ContextRlUnloadVertexArray(second, second_vao)
+
+	testing.expect(t, ContextRlEnableVertexArray(first, first_vao))
+	testing.expect(t, ContextRlEnableVertexArray(second, second_vao))
+	testing.expect(t, !ContextRlEnableVertexArray(second, first_vao))
+	ContextRlEnableInstShader(first, 17)
+	ContextRlEnableInstShader(second, 29)
+	ContextRlDisableVertexArray(first)
+	ContextRlDisableInstShader(first)
+	testing.expect_value(t, first.resources.rlgl.current_vao, u32(0))
+	testing.expect_value(t, first.resources.rlgl.inst_shader, u32(0))
+	testing.expect_value(t, second.resources.rlgl.current_vao, second_vao)
+	testing.expect_value(t, second.resources.rlgl.inst_shader, u32(29))
+}

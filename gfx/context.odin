@@ -137,74 +137,74 @@ Context_Lifecycle :: enum u8 {
 }
 
 Context :: struct {
-	id:                   u32,
-	epoch:                u64,
-	lifecycle:            Context_Lifecycle,
-	win:                  Window_Handle,
-	instance:             wg.Instance,
-	surface:              wg.Surface,
-	adapter:              wg.Adapter,
-	device:               wg.Device,
-	queue:                wg.Queue,
-	format:               wg.TextureFormat,
-	config:               wg.SurfaceConfiguration,
-	config_flags:         ConfigFlags,
+	id:                         u32,
+	epoch:                      u64,
+	lifecycle:                  Context_Lifecycle,
+	win:                        Window_Handle,
+	instance:                   wg.Instance,
+	surface:                    wg.Surface,
+	adapter:                    wg.Adapter,
+	device:                     wg.Device,
+	queue:                      wg.Queue,
+	format:                     wg.TextureFormat,
+	config:                     wg.SurfaceConfiguration,
+	config_flags:               ConfigFlags,
 	// Pool sizes negotiated against the adapter's reported limits before the
 	// device was requested (limits.odin). The renderer and font atlas size
 	// themselves from this rather than from desktop constants.
-	budget:               Gpu_Budget,
+	budget:                     Gpu_Budget,
 
 	// logical (point) size - what GetScreenWidth/Height and the ortho
 	// projection use; physical framebuffer may be larger under HiDPI.
-	width, height:        i32,
-	fb_width, fb_height:  i32,
-	dpi:                  f32,
-	force_reconfigure:    bool,
+	width, height:              i32,
+	fb_width, fb_height:        i32,
+	dpi:                        f32,
+	force_reconfigure:          bool,
 	// Set by _maybe_reconfigure when the logical size changed at the start of
 	// this frame, so IsWindowResized answers for the frame the caller is in.
-	resized_this_frame:   bool,
+	resized_this_frame:         bool,
 
 	// requested window size, stashed at InitWindow for _gpu_finish (needed
 	// because on web the GPU device resolves asynchronously, after InitWindow
 	// has returned).
-	pending_w, pending_h: i32,
-	frame:                Frame_State,
+	pending_w, pending_h:       i32,
+	frame:                      Frame_State,
 
 	// timing
-	start_time_s:         f64,
-	last_time:            f64,
-	frame_time:           f32, // clamped to MAX_FRAME_TIME (what GetFrameTime returns)
-	real_frame_time:      f32, // unclamped, for GetFPS accuracy
-	target_fps:           i32,
+	start_time_s:               f64,
+	last_time:                  f64,
+	frame_time:                 f32, // clamped to MAX_FRAME_TIME (what GetFrameTime returns)
+	real_frame_time:            f32, // unclamped, for GetFPS accuracy
+	target_fps:                 i32,
 
 	// event-driven frame scheduling (idle.odin)
-	idle:                 Idle_State,
+	idle:                       Idle_State,
 
 	// renderer (batch.odin)
-	rend:                 Renderer,
-	cam2d:                Camera2D,
-	cam2d_saved:          Affine,
-	cam2d_active:         bool,
-	cam3d_active:         bool,
-	cam3d_vp:             Matrix,
-	cam3d_proj:           Matrix,
-	cam3d_view:           Matrix,
-	cam3d:                Camera3D,
-	cam3d_right:          Vector3,
-	cam3d_up:             Vector3,
-	cam3d_fwd:            Vector3,
+	rend:                       Renderer,
+	cam2d:                      Camera2D,
+	cam2d_saved:                Affine,
+	cam2d_active:               bool,
+	cam3d_active:               bool,
+	cam3d_vp:                   Matrix,
+	cam3d_proj:                 Matrix,
+	cam3d_view:                 Matrix,
+	cam3d:                      Camera3D,
+	cam3d_right:                Vector3,
+	cam3d_up:                   Vector3,
+	cam3d_fwd:                  Vector3,
 	cam3d_projection_available: bool,
-	resources:            Graphics_Resources,
-	stats_current:        Renderer_Stats,
-	stats_latest:         Renderer_Stats,
+	resources:                  Graphics_Resources,
+	stats_current:              Renderer_Stats,
+	stats_latest:               Renderer_Stats,
 
 	// input (input.odin)
-	inp:                  Input,
-	drop:                 Drop_State,
-	a11y:                 A11y_State,
-	submissions:          Submission_Tracker,
-	initialized:          bool,
-	composite_alpha:      wg.CompositeAlphaMode,
+	inp:                        Input,
+	drop:                       Drop_State,
+	a11y:                       A11y_State,
+	submissions:                Submission_Tracker,
+	initialized:                bool,
+	composite_alpha:            wg.CompositeAlphaMode,
 }
 
 // Retired_Texture is one texture's GPU handles awaiting end-of-frame
@@ -1054,10 +1054,15 @@ IsWindowFocused :: proc() -> bool {
 
 // FlushBatch forces pending 2D geometry to record into the current render pass
 // (raylib rlDrawRenderBatchActive parity - used to order custom draws).
-FlushBatch :: proc() {
-	if g.frame.has_frame && _active_pass_begun() && !g.frame.scissor_empty {
-		renderer_flush(default_context(), &g.rend, active_pass())
+context_flush_batch :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_flush_batch: nil context")
+	if ctx.frame.has_frame && context_active_pass_begun(ctx) && !ctx.frame.scissor_empty {
+		renderer_flush(ctx, &ctx.rend, context_active_pass(ctx))
 	}
+}
+
+FlushBatch :: proc() {
+	context_flush_batch(default_context())
 }
 
 // --- active pass routing (render targets) ----------------------------------
