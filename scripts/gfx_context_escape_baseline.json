@@ -6,6 +6,7 @@
   "gfx/api.odin:mouse_position": 1,
   "gfx/api_tests.odin:context_scope_routes_convenience_queries_and_restores_default": 1,
   "gfx/batch.odin:MatrixModePop": 1,
+  "gfx/batch.odin:MatrixModePush": 1,
   "gfx/batch.odin:MatrixModeTranslate": 1,
   "gfx/batch.odin:SetCustomBlend": 1,
   "gfx/batch.odin:_stream_slots_init": 2,

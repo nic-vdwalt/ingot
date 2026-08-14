@@ -142,6 +142,25 @@ submission_reservation_stops_at_fixed_capacity :: proc(t: ^testing.T) {
 }
 
 @(test)
+submission_tracking_failure_is_owner_bound :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	_submission_init(&first.submissions, first)
+	_submission_init(&second.submissions, second)
+
+	for _ in 0 ..< MAX_IN_FLIGHT_SUBMISSIONS {
+		testing.expect(t, _submission_reserve(&first.submissions) != 0)
+	}
+	testing.expect_value(t, _submission_reserve(&first.submissions), u64(0))
+	when RENDER_STATS_ENABLED {
+		testing.expect_value(t, first.stats_current.submission_tracking_failures, u32(1))
+		testing.expect_value(t, second.stats_current.submission_tracking_failures, u32(0))
+	}
+}
+
+@(test)
 retire_bound_covers_every_destroyable_resource :: proc(t: ^testing.T) {
 	// The bound must stay the physical maximum (one retirement per texture
 	// slot plus one per atlas), otherwise a consumer that legitimately

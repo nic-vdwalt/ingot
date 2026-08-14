@@ -1078,9 +1078,15 @@ _active_pass_begun :: proc() -> bool {
 // with SurfaceConfigure), so scissor rects computed from it can never exceed
 // the attachment even if g.fb_width lags an async web resize for a frame.
 @(private)
+context_attachment_px :: proc(ctx: ^Context) -> (f32, f32) {
+	assert(ctx != nil, "context_attachment_px: nil context")
+	if ctx.frame.rt != 0 do return f32(ctx.frame.rt_w), f32(ctx.frame.rt_h)
+	return f32(max(ctx.config.width, 1)), f32(max(ctx.config.height, 1))
+}
+
+@(private)
 _attachment_px :: proc() -> (f32, f32) {
-	if g.frame.rt != 0 do return f32(g.frame.rt_w), f32(g.frame.rt_h)
-	return f32(max(g.config.width, 1)), f32(max(g.config.height, 1))
+	return context_attachment_px(default_context())
 }
 
 // _ensure_active_pass lazily begins whichever pass is current: the render

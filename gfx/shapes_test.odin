@@ -23,7 +23,6 @@ polygon_helpers_reject_degenerate_side_counts :: proc(t: ^testing.T) {
 	// emitting a malformed fan.
 	ctx := new_test_context()
 	defer free(ctx)
-	r := &ctx.rend
 
 	restore := g.frame.has_frame
 	defer g.frame.has_frame = restore

@@ -1,8 +1,4 @@
 {
-  "gfx/batch.odin:MatrixModePop": 6,
-  "gfx/batch.odin:MatrixModePush": 3,
-  "gfx/batch.odin:MatrixModeTranslate": 3,
-  "gfx/batch.odin:SetCustomBlend": 7,
   "gfx/batch.odin:col_f": 1,
   "gfx/camera.odin:BeginMode2D": 4,
   "gfx/camera.odin:EndMode2D": 3,
@@ -64,7 +60,6 @@
   "gfx/input_web.odin:ingot_web_resize": 1,
   "gfx/input_web.odin:ingot_web_resume": 2,
   "gfx/input_web.odin:ingot_web_wheel": 1,
-  "gfx/loop_web.odin:step": 2,
   "gfx/platform_native.odin:_win": 1,
   "gfx/platform_native.odin:platform_get_clipboard": 1,
   "gfx/platform_native.odin:platform_key_down": 1,

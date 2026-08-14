@@ -67,8 +67,7 @@ frame_draw_codepoint :: proc(
 }
 
 frame_draw_rectangle :: proc(frame: ^Frame, rect: Rectangle, color: Color) {
-	_ = frame_owner(frame)
-	DrawRectangleRec(rect, color)
+	context_draw_rectangle_rec(frame_owner(frame), rect, color)
 }
 
 frame_draw_rectangle_lines :: proc(frame: ^Frame, rect: Rectangle, thickness: f32, color: Color) {
@@ -113,13 +112,11 @@ frame_draw_rectangle_gradient_v :: proc(frame: ^Frame, rect: Rectangle, top, bot
 }
 
 frame_draw_line :: proc(frame: ^Frame, from, to: Vector2, thickness: f32, color: Color) {
-	_ = frame_owner(frame)
-	DrawLineEx(from, to, thickness, color)
+	context_draw_line(frame_owner(frame), from, to, thickness, color)
 }
 
 frame_draw_circle :: proc(frame: ^Frame, center: Vector2, radius: f32, color: Color) {
-	_ = frame_owner(frame)
-	DrawCircleV(center, radius, color)
+	context_draw_circle(frame_owner(frame), center, radius, color)
 }
 
 frame_draw_circle_lines :: proc(frame: ^Frame, center: Vector2, radius: f32, color: Color) {
@@ -139,18 +136,15 @@ frame_draw_ring :: proc(
 }
 
 frame_draw_triangle :: proc(frame: ^Frame, first, second, third: Vector2, color: Color) {
-	_ = frame_owner(frame)
-	DrawTriangle(first, second, third, color)
+	context_draw_triangle(frame_owner(frame), first, second, third, color)
 }
 
 frame_scissor_begin :: proc(frame: ^Frame, x, y, width, height: i32) {
-	_ = frame_owner(frame)
-	BeginScissorMode(x, y, width, height)
+	context_scissor_begin(frame_owner(frame), x, y, width, height)
 }
 
 frame_scissor_end :: proc(frame: ^Frame) {
-	_ = frame_owner(frame)
-	EndScissorMode()
+	context_scissor_end(frame_owner(frame))
 }
 
 Context_Scope :: struct {
