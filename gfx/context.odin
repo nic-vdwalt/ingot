@@ -218,26 +218,28 @@ MAX_RETIRED_PER_FRAME :: RESOURCE_SLOT_COUNT + MAX_ATLASES
 // submitted command buffers reference no destroyed textures).
 @(private)
 _retire_texture :: proc(
+	ctx: ^Context,
 	bind: wg.BindGroup,
 	sampler: wg.Sampler,
 	view: wg.TextureView,
 	tex: wg.Texture,
 ) {
+	assert(ctx != nil, "_retire_texture: nil context")
 	// Why assert: all-nil handles mean the entry was already destroyed - a
 	// double-unload of the same font/texture.
 	assert(
 		bind != nil || sampler != nil || view != nil || tex != nil,
 		"_retire_texture: all handles nil (double unload?)",
 	)
-	if g.frame.has_frame {
+	if ctx.frame.has_frame {
 		// Why assert: the bound is the physical maximum (every texture slot
 		// plus every atlas), so overflowing it means a handle was retired
 		// twice rather than that the caller is simply busy.
 		assert(
-			len(g.resources.retire) < MAX_RETIRED_PER_FRAME,
+			len(ctx.resources.retire) < MAX_RETIRED_PER_FRAME,
 			"_retire_texture: retire queue full (double unload?)",
 		)
-		append(&g.resources.retire, Retired_Texture{bind, sampler, view, tex})
+		append(&ctx.resources.retire, Retired_Texture{bind, sampler, view, tex})
 		return
 	}
 	_destroy_retired(Retired_Texture{bind, sampler, view, tex})
@@ -449,8 +451,8 @@ _graphics_resources_destroy :: proc(ctx: ^Context, resources: ^Graphics_Resource
 	_gpu_3d_resources_destroy(ctx, &resources.gpu_3d)
 	_rlgl_resources_destroy(&resources.rlgl)
 	_shader_resources_destroy(&resources.shaders)
-	_atlas_resources_destroy(&resources.atlases)
-	_texture_resources_destroy(&resources.textures)
+	_atlas_resources_destroy(ctx, &resources.atlases)
+	_texture_resources_destroy(ctx, &resources.textures)
 	_flush_retired(ctx)
 	delete(resources.retire)
 	resources^ = {}

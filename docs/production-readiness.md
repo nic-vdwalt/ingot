@@ -86,10 +86,10 @@ Chromium/WebKit run, screen-reader exercise, audio-unlock test, or WebGPU valida
 
 | Target | Mandatory automated checks | Required release validation | Status |
 |---|---|---|---|
-| macOS | Tests including loopback WSS, strict checks | Native trust-store WSS, real PTY, Metal, Safari, VoiceOver | Not recorded |
-| Linux amd64 | `scripts/check-linux.sh` including loopback WSS and strict checks | Native CA-source WSS, real PTY, Vulkan, AT-SPI | Not recorded |
+| macOS arm64 | `.github/workflows/macos.yml`: pinned-toolchain tests, loopback WSS, strict checks, bindings, and examples | Native trust-store WSS, real PTY, Metal, Safari, VoiceOver | Not recorded |
+| Linux amd64 | `.github/workflows/linux.yml`: `scripts/check-linux.sh`, loopback WSS, strict checks, and web gate | Native CA-source WSS, real PTY, Vulkan, AT-SPI | Not recorded |
 | Linux arm64 | Native dependency, package, strict, and compile-contract checks | Native CA-source WSS, real PTY, Vulkan; AccessKit blocked pending artifact | Not recorded |
-| Windows | Native tests including loopback WSS, strict checks | Native trust-source WSS, ConPTY, D3D12/Vulkan, screen reader | Not recorded |
+| Windows x64 | `.github/workflows/windows.yml`: pinned-toolchain tests, loopback WSS, strict checks, bindings, and examples | Native trust-source WSS, ConPTY, D3D12/Vulkan, screen reader | Not recorded |
 | Browser | `scripts/check-web.sh`, Node tests | Chromium and WebKit lifecycle/input/network/WebGPU runs | Not recorded |
 | Internet TLS | URL/parser and loopback certificate tests | HTTPS/WSS valid, expired, untrusted, wrong-host, timeout, IPv4/IPv6, proxy, downgrade | Not recorded |
 

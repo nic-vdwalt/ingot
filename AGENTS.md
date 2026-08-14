@@ -42,20 +42,24 @@ worked example applied to a subsystem before it is written.
 
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
-- **Test**: `bash scripts/test.sh` - runs `odin test` on `asset box3d_workers gfx procgen scene
-scene_gfx ui ui_gfx view view/generate libvterm term prefs net`, the offline WSS/TLS matrix, then type-checks
-  `sys pty accesskit testx`. Python 3
-  supervises each command. Pass extra Odin flags through, e.g.
-  `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.
+- **Test**: `bash scripts/test.sh` - runs the packages and examples in
+  `scripts/gate-manifest.json`, the offline WSS/TLS matrix, then type-checks
+  packages without tests. Python 3 supervises each command. Pass extra Odin
+  flags through, e.g. `bash scripts/test.sh -define:ODIN_TEST_THREADS=1`.
 - **Check / lint** (Tiger Style gate): `bash scripts/check.sh` - strict
   type-check + `-vet -strict-style -vet-shadowing`, 100-line procedure and
   100-character physical-line checks, plus an `odinfmt` format check.
+- **Windows native gate**: `./scripts/test.ps1` then `./scripts/check.ps1`.
+- **macOS native gate**: `bash scripts/test.sh -define:ODIN_TEST_THREADS=1` then
+  `bash scripts/check.sh`.
 - **Format**: `odinfmt -w .` (settings pinned in `.odinfmt.json`: tabs width 4,
   100-column lines).
 - **Web build**: `bash build_web.sh` → `web/ingot_web.wasm`; serve with
   `(cd web && python3 -m http.server 8000)`.
 - **Web gate**: `bash scripts/check-web.sh` - compiles gallery, Breakout, Box3D,
   and the default demo, then runs `web/test/*.test.mjs` with dependency-free Node.
+  CI runs this target-independent gate on Linux only. Windows and macOS CI are
+  native compile, link, and test evidence, not GPU or accessibility validation.
 - **Rebuild libvterm** (rarely needed): `scripts/build-libvterm.sh` (macOS) /
   `scripts/build-libvterm.bat` (Windows).
 

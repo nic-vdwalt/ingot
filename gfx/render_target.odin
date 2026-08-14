@@ -54,9 +54,14 @@ LoadRenderTextureEx :: proc(
 // UnloadRenderTexture releases the color (and optional depth) textures.
 // Both route through the retire queue (context.odin), so unloading is safe
 // at any point in a frame - destruction defers past this frame's submit.
+context_unload_render_texture :: proc(ctx: ^Context, target: RenderTexture2D) {
+	assert(ctx != nil, "context_unload_render_texture: nil context")
+	if target.texture.id != 0 do context_unload_texture(ctx, target.texture)
+	if target.depth.id != 0 do _unload_depth(ctx, target.depth)
+}
+
 UnloadRenderTexture :: proc(target: RenderTexture2D) {
-	if target.texture.id != 0 do UnloadTexture(target.texture)
-	if target.depth.id != 0 do _unload_depth(target.depth)
+	context_unload_render_texture(default_context(), target)
 }
 
 // BeginTextureMode redirects subsequent draws into `target`. It flushes any

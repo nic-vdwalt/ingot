@@ -423,9 +423,9 @@ _gpu_3d_target_destroy :: proc(ctx: ^Context, target: ^Gpu_3D_Target) {
 		ctx.resources.gpu_3d.active_pass_generation == 0,
 		"_gpu_3d_target_destroy: active GPU 3D pass",
 	)
-	_destroy_rt_attachment(target.multisample_color)
-	_destroy_rt_attachment(target.multisample_depth)
-	if target.texture.texture.id != 0 do UnloadRenderTexture(target.texture)
+	_destroy_rt_attachment(ctx, target.multisample_color)
+	_destroy_rt_attachment(ctx, target.multisample_depth)
+	if target.texture.texture.id != 0 do context_unload_render_texture(ctx, target.texture)
 	target^ = {}
 	assert(target.texture.texture.id == 0)
 	assert(target.multisample_color == nil && target.multisample_depth == nil)

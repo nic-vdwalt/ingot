@@ -36,7 +36,7 @@ foreach ($Example in $Manifest.test_examples) {
     $Command = @("odin", "test", "$Root/examples/$Example", $Collection, $Guard, "-define:ODIN_TEST_FAIL_ON_EMPTY=true")
     Invoke-Supervised $Label $Command
 }
-Write-Host "== testing native WSS loopback TLS =="}]}},{
+Write-Host "== testing native WSS loopback TLS =="
 Invoke-Supervised "wss-loopback" @("python", "$PSScriptRoot/wss-loopback-test.py", "--fixture", "$Root/examples/wss_fixture", "--collection=$Collection")
 foreach ($Package in $Manifest.compile_packages) {
     Write-Host "== checking $Package =="

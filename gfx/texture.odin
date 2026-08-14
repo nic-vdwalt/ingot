@@ -179,7 +179,7 @@ _new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
 	_tex_build_bind(e)
 	id := _texture_register_context(g.id, &g.resources.textures, e)
 	if id == 0 {
-		_texture_entry_destroy(e)
+		_texture_entry_destroy(default_context(), e)
 		return {}
 	}
 	pf: PixelFormat = .UNCOMPRESSED_R8G8B8A8
@@ -232,9 +232,10 @@ _new_rt_attachment :: proc(
 }
 
 @(private)
-_destroy_rt_attachment :: proc(entry: ^Tex_Entry) {
+_destroy_rt_attachment :: proc(ctx: ^Context, entry: ^Tex_Entry) {
+	assert(ctx != nil, "_destroy_rt_attachment: nil context")
 	if entry == nil do return
-	_texture_entry_destroy(entry)
+	_texture_entry_destroy(ctx, entry)
 }
 
 // _texture_view returns the wgpu view backing a registered texture id (used as
@@ -269,7 +270,7 @@ _new_rt_depth :: proc(w, h: i32) -> Texture2D {
 	e.view = wg.TextureCreateView(e.tex, nil)
 	id := _texture_register_context(g.id, &g.resources.textures, e)
 	if id == 0 {
-		_texture_entry_destroy(e)
+		_texture_entry_destroy(default_context(), e)
 		return {}
 	}
 	return Texture2D{id = id, width = w, height = h, mipmaps = 1, format = .UNCOMPRESSED_R32}
@@ -277,8 +278,8 @@ _new_rt_depth :: proc(w, h: i32) -> Texture2D {
 
 // _unload_depth releases a depth texture created by _new_rt_depth.
 @(private)
-_unload_depth :: proc(depth: Texture2D) {
-	UnloadTexture(depth)
+_unload_depth :: proc(ctx: ^Context, depth: Texture2D) {
+	context_unload_texture(ctx, depth)
 }
 
 // LoadTextureFromImage uploads `image` and registers it in the context's
@@ -320,7 +321,7 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 
 	id := _texture_register_context(g.id, &g.resources.textures, e)
 	if id == 0 {
-		_texture_entry_destroy(e)
+		_texture_entry_destroy(default_context(), e)
 		return {}
 	}
 	return Texture2D {
@@ -386,18 +387,20 @@ UpdateTexture :: proc(texture: Texture2D, pixels: rawptr) {
 }
 
 @(private)
-_texture_entry_destroy :: proc(entry: ^Tex_Entry) {
+_texture_entry_destroy :: proc(ctx: ^Context, entry: ^Tex_Entry) {
+	assert(ctx != nil, "_texture_entry_destroy: nil context")
 	assert(entry != nil, "_texture_entry_destroy: nil entry")
-	_retire_texture(entry.bind, entry.sampler, entry.view, entry.tex)
+	_retire_texture(ctx, entry.bind, entry.sampler, entry.view, entry.tex)
 	free(entry)
 }
 
 @(private)
-_texture_resources_destroy :: proc(resources: ^Texture_Resources) {
+_texture_resources_destroy :: proc(ctx: ^Context, resources: ^Texture_Resources) {
+	assert(ctx != nil, "_texture_resources_destroy: nil context")
 	assert(resources != nil, "_texture_resources_destroy: nil resources")
 	for &slot in resources.slots {
 		if !slot.occupied do continue
-		_texture_entry_destroy(slot.entry)
+		_texture_entry_destroy(ctx, slot.entry)
 		slot.entry = nil
 		slot.occupied = false
 	}
@@ -407,14 +410,19 @@ _texture_resources_destroy :: proc(resources: ^Texture_Resources) {
 	resources^ = {}
 }
 
-UnloadTexture :: proc(texture: Texture2D) {
-	slot := _texture_slot_context(g.id, &g.resources.textures, texture.id)
+context_unload_texture :: proc(ctx: ^Context, texture: Texture2D) {
+	assert(ctx != nil, "context_unload_texture: nil context")
+	slot := _texture_slot_context(ctx.id, &ctx.resources.textures, texture.id)
 	if slot == nil do return
-	_texture_entry_destroy(slot.entry)
+	_texture_entry_destroy(ctx, slot.entry)
 	slot.entry = nil
 	slot.occupied = false
-	assert(g.resources.textures.count > 0, "UnloadTexture: count underflow")
-	g.resources.textures.count -= 1
+	assert(ctx.resources.textures.count > 0, "context_unload_texture: count underflow")
+	ctx.resources.textures.count -= 1
+}
+
+UnloadTexture :: proc(texture: Texture2D) {
+	context_unload_texture(default_context(), texture)
 }
 
 // TextureSlotsUsed reports how many of the context's texture slots are
