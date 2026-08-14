@@ -94,10 +94,16 @@ _texture_slot :: proc(resources: ^Texture_Resources, id: u32) -> ^Texture_Slot {
 }
 
 @(private)
-get_texture :: proc(id: u32) -> ^Tex_Entry {
-	slot := _texture_slot_context(g.id, &g.resources.textures, id)
+context_get_texture :: proc(ctx: ^Context, id: u32) -> ^Tex_Entry {
+	assert(ctx != nil, "context_get_texture: nil context")
+	slot := _texture_slot_context(ctx.id, &ctx.resources.textures, id)
 	if slot == nil do return nil
 	return slot.entry
+}
+
+@(private)
+get_texture :: proc(id: u32) -> ^Tex_Entry {
+	return context_get_texture(default_context(), id)
 }
 
 @(private)

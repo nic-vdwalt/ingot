@@ -360,7 +360,7 @@ BeginScissorMode :: proc(x, y, width, height: i32) {
 	if !_active_pass_begun() do return
 	pass := active_pass()
 	if !g.frame.scissor_empty {
-		renderer_flush(&g.rend, pass, .Scissor)
+		renderer_flush(default_context(), &g.rend, pass, .Scissor)
 	} else {
 		clear(&g.rend.verts)
 		clear(&g.rend.indices)
@@ -398,7 +398,7 @@ EndScissorMode :: proc() {
 	if !g.frame.has_frame || !_active_pass_begun() do return
 	pass := active_pass()
 	if !g.frame.scissor_empty {
-		renderer_flush(&g.rend, pass, .Scissor)
+		renderer_flush(default_context(), &g.rend, pass, .Scissor)
 	} else {
 		clear(&g.rend.verts)
 		clear(&g.rend.indices)

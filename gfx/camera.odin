@@ -425,7 +425,7 @@ cam2d: Camera2D
 BeginMode2D :: proc(camera: Camera2D) {
 	assert(!cam2d_active, "BeginMode2D: already inside a 2D camera mode")
 	assert(g != nil, "BeginMode2D: nil context")
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
+	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Matrix)
 	cam2d_saved = g.rend.model_xf
 	cam2d = camera
 	g.rend.model_xf = _affine_from_camera_2d(camera)
@@ -436,7 +436,7 @@ BeginMode2D :: proc(camera: Camera2D) {
 EndMode2D :: proc() {
 	assert(cam2d_active, "EndMode2D: no active 2D camera mode")
 	assert(g != nil, "EndMode2D: nil context")
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
+	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Matrix)
 	g.rend.model_xf = cam2d_saved
 	cam2d_saved = {}
 	cam2d = {}

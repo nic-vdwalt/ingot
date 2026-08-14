@@ -373,7 +373,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	_submission_init(&g.submissions, g)
 	// The test's device is real, so the stream pools must allocate; a false
 	// here means the harness itself is broken, not that a device degraded.
-	renderer_ready := renderer_init(&g.rend)
+	renderer_ready := renderer_init(g, &g.rend)
 	testing.expect(t, renderer_ready, "text test harness: renderer_init failed")
 	if !renderer_ready do return
 
