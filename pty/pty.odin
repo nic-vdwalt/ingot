@@ -216,6 +216,7 @@ when !INGOT_PTY_SIM {
 
 write_bytes :: proc(p: ^Pty, data: []u8) -> (written: int, status: Pty_IO_Status) {
 	assert(p != nil)
+	when INGOT_PTY_SIM do return len(data), .Ok
 	if len(data) == 0 do return 0, .Ok
 	if p.master_fd < 0 do return 0, .Closed
 	n := write(p.master_fd, raw_data(data), len(data))

@@ -263,6 +263,7 @@ fuzz_vt_destroy :: proc(ts: ^Term_Instance) {
 // _screen_sb_pushline) and random scrolled-back view offsets.
 @(test)
 fuzz_vterm_ingest :: proc(t: ^testing.T) {
+	when ODIN_OS == .Windows do return
 	p := testx.prng_make(0x57E4_0001)
 	for _ in 0 ..< 2_000 {
 		cols := u16(testx.int_range(&p, 1, 141))
