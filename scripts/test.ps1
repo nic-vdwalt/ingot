@@ -21,7 +21,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($Package in $Manifest.test_packages) {
     Write-Host "== testing $Package =="
     $Extra = @()
-    if ($Package -eq "ui") { $Extra += "-define:ODIN_TEST_THREADS=1" }
+    if ($Package -eq "gfx" -or $Package -eq "ui") { $Extra += "-define:ODIN_TEST_THREADS=1" }
     if ($Package -eq "term") {
         $Extra += "-define:INGOT_PTY_SIM=true"
         $Extra += "-define:ODIN_TEST_THREADS=1"

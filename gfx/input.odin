@@ -369,7 +369,10 @@ IsGamepadAvailable :: proc(gamepad: i32) -> bool {
 context_get_gamepad_name :: proc(ctx: ^Context, gamepad: i32) -> cstring {
 	if ctx == nil || gamepad < 0 || gamepad >= MAX_GAMEPADS do return ""
 	pad := &ctx.inp.pads[gamepad]
-	assert(pad.name_len >= 0 && pad.name_len <= GAMEPAD_NAME_MAX, "context_get_gamepad_name: corrupt length")
+	assert(
+		pad.name_len >= 0 && pad.name_len <= GAMEPAD_NAME_MAX,
+		"context_get_gamepad_name: corrupt length",
+	)
 	return strings.clone_to_cstring(string(pad.name[:pad.name_len]), context.temp_allocator)
 }
 
@@ -377,7 +380,11 @@ GetGamepadName :: proc(gamepad: i32) -> cstring {
 	return context_get_gamepad_name(default_context(), gamepad)
 }
 
-context_is_gamepad_button_down :: proc(ctx: ^Context, gamepad: i32, button: GamepadButton) -> bool {
+context_is_gamepad_button_down :: proc(
+	ctx: ^Context,
+	gamepad: i32,
+	button: GamepadButton,
+) -> bool {
 	if ctx == nil || gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
 	b := i32(button)
 	if b < 0 || b >= GAMEPAD_BUTTON_COUNT do return false
@@ -388,7 +395,11 @@ IsGamepadButtonDown :: proc(gamepad: i32, button: GamepadButton) -> bool {
 	return context_is_gamepad_button_down(default_context(), gamepad, button)
 }
 
-context_is_gamepad_button_pressed :: proc(ctx: ^Context, gamepad: i32, button: GamepadButton) -> bool {
+context_is_gamepad_button_pressed :: proc(
+	ctx: ^Context,
+	gamepad: i32,
+	button: GamepadButton,
+) -> bool {
 	if ctx == nil || gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
 	b := i32(button)
 	if b < 0 || b >= GAMEPAD_BUTTON_COUNT do return false
@@ -400,7 +411,11 @@ IsGamepadButtonPressed :: proc(gamepad: i32, button: GamepadButton) -> bool {
 	return context_is_gamepad_button_pressed(default_context(), gamepad, button)
 }
 
-context_is_gamepad_button_released :: proc(ctx: ^Context, gamepad: i32, button: GamepadButton) -> bool {
+context_is_gamepad_button_released :: proc(
+	ctx: ^Context,
+	gamepad: i32,
+	button: GamepadButton,
+) -> bool {
 	if ctx == nil || gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
 	b := i32(button)
 	if b < 0 || b >= GAMEPAD_BUTTON_COUNT do return false

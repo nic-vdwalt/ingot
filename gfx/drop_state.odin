@@ -20,7 +20,7 @@ _drop_hover_stage_context :: proc "contextless" (ctx: ^Context, over: bool) {
 
 @(private)
 _drop_hover_stage :: proc "contextless" (over: bool) {
-	_drop_hover_stage_context(default_context(), over)
+	_drop_hover_stage_context(g, over)
 }
 
 @(private)
@@ -39,7 +39,7 @@ _drop_complete_context :: proc "contextless" (ctx: ^Context) {
 
 @(private)
 _drop_complete :: proc "contextless" () {
-	_drop_complete_context(default_context())
+	_drop_complete_context(g)
 }
 
 @(private)
