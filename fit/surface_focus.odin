@@ -6,7 +6,7 @@ Focus_Id :: distinct u64
 FOCUS_ID_NONE :: Focus_Id(0)
 
 Focus_State :: struct {
-	inner: ui.Focus_State,
+	active: Focus_Id,
 }
 
 Focus_Link :: struct {
@@ -60,17 +60,17 @@ Focus_Id_String :: proc(value: string) -> Focus_Id {
 
 Focus_Clear :: proc(state: ^Focus_State) {
 	assert(state != nil, "Fit.Focus_Clear: nil state")
-	ui.focus_clear(&state.inner)
+	state.active = FOCUS_ID_NONE
 }
 
 Focus_Focused :: proc(state: ^Focus_State, id: Focus_Id) -> bool {
 	assert(state != nil, "Fit.Focus_Focused: nil state")
-	return ui.focus_focused(&state.inner, ui.Focus_Id(id))
+	return state.active == id
 }
 
 Focus_Link_To :: proc(state: ^Focus_State, id: Focus_Id) -> Focus_Link {
 	assert(state != nil, "Fit.Focus_Link_To: nil state")
-	return {inner = ui.focus_link(&state.inner, ui.Focus_Id(id))}
+	return {inner = ui.focus_link(cast(^ui.Focus_State)state, ui.Focus_Id(id))}
 }
 
 Surface_Focus_Scope_Begin :: proc(surface: ^Surface, id: Focus_Scope_Id, priority: i32) {
