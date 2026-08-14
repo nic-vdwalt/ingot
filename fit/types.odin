@@ -77,9 +77,14 @@ Window_Flag :: enum i32 {
 }
 Window_Flags :: distinct bit_set[Window_Flag;i32]
 
+Scale_Metrics_Proc :: #type proc(scale: f32)
+Scale_Invalidate_Proc :: #type proc()
+
 Session_Config :: struct {
 	user_scale:        f32,
 	semantics_enabled: bool,
+	scale_metrics:     Scale_Metrics_Proc,
+	scale_invalidate:  Scale_Invalidate_Proc,
 }
 
 Paint_Peaks :: struct {
@@ -87,6 +92,18 @@ Paint_Peaks :: struct {
 	main_text_bytes:    int,
 	overlay_commands:   int,
 	overlay_text_bytes: int,
+}
+
+Paint_Summary :: struct {
+	main_commands:          int,
+	main_text_bytes:        int,
+	main_geometry_commands: int,
+	main_clip_depth:        int,
+	overlay_commands:       int,
+	overlay_text_bytes:     int,
+	overlay_geometry:       int,
+	overlay_clip_depth:     int,
+	semantic_nodes:         int,
 }
 
 Renderer_Peaks :: struct {
@@ -306,16 +323,27 @@ Key :: enum i32 {
 
 Test_Input :: struct {
 	mouse_position:  Point,
-	mouse_pressed:   [3]bool,
-	mouse_released:  [3]bool,
-	mouse_down:      [3]bool,
+	mouse_delta:     Point,
+	mouse_wheel:     Point,
+	mouse_pressed:   [7]bool,
+	mouse_released:  [7]bool,
+	mouse_down:      [7]bool,
 	keys_pressed:    [512]bool,
+	keys_repeat:     [512]bool,
+	keys_released:   [512]bool,
 	keys_down:       [512]bool,
 	characters:      [32]rune,
 	character_count: int,
+	clipboard:       [4096]u8,
+	clipboard_len:   int,
+	frame_time:      f32,
 	time:            f64,
+	dpi_scale:       f32,
+	fps:             i32,
+	monitor_refresh: i32,
 	screen_size:     Point,
 }
+
 Mouse_Button :: enum i32 {
 	Left,
 	Right,

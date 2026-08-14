@@ -1695,6 +1695,7 @@ _gpu_3d_mesh_slot :: proc(
 	if handle_context != context_id do return nil
 	index, generation, ok := _resource_handle_decode(mesh.id, len(resources.meshes))
 	if !ok do return nil
+	assert(index >= 0 && index < len(resources.meshes), "_gpu_3d_mesh_slot: decoded index out of range")
 	slot := &resources.meshes[index]
 	if !slot.occupied || slot.generation != generation do return nil
 	return slot

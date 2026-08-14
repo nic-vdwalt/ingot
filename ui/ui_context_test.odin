@@ -237,6 +237,7 @@ test_ui_runtime_spell_state_is_isolated :: proc(t: ^testing.T) {
 	ui_runtime_init(&a)
 	ui_runtime_init(&b)
 	spell_ignore_session_with(&a.spell, "ingotword")
+	spell_ignore_session_with(&a.spell, "ingotword")
 	testing.expect(t, "ingotword" in a.spell.ignored)
 	testing.expect(t, "ingotword" not_in b.spell.ignored)
 	testing.expect_value(t, a.spell.generation, u64(1))

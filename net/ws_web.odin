@@ -96,11 +96,16 @@ ws_start_connect :: proc(ws: ^Web_Socket, host: string, port: int, max_attempts:
 }
 
 ws_start_connect_url :: proc(ws: ^Web_Socket, raw_url: string, options: WS_Options = {}) -> bool {
+	assert(ws != nil, "ws_start_connect_url: nil ws")
 	url, parse_err := ws_url_parse(raw_url)
 	if parse_err != .None || options.ca_file != "" || len(options.headers) > 0 {
 		ws.last_error = .Invalid_URL
 		ws.state = .Error
 		return false
+	}
+	if ws.id >= 0 {
+		ingot_ws_close(ws.id)
+		ws.id = -1
 	}
 	ws.host = url.host
 	ws.port = int(url.port)
@@ -131,6 +136,7 @@ ws_poll_state :: proc(ws: ^Web_Socket) {
 		ws.state = .Connected
 	case:
 		ws.state = .Error
+		ws.last_error = .Connect
 	}
 	// Bump the generation on each transition into Connected so consumers can
 	// re-establish subscriptions, mirroring the native backend.
@@ -181,14 +187,20 @@ ws_drain :: proc(ws: ^Web_Socket) -> []WS_Message {
 	msgs.allocator = context.temp_allocator
 	message_count := 0
 	byte_count := 0
-	for message_count < WS_MAX_QUEUED_MESSAGES && byte_count <= WS_MAX_QUEUED_BYTES {
+	for message_count < WS_MAX_QUEUED_MESSAGES && byte_count < WS_MAX_QUEUED_BYTES {
 		n := ingot_ws_recv_len(ws.id)
 		if n < 0 do break
-		if n > WS_MAX_PAYLOAD do break
+		if n > WS_MAX_PAYLOAD {
+			ws.last_error = .Connect
+			ws.state = .Error
+			break
+		}
+		if int(n) > WS_MAX_QUEUED_BYTES - byte_count do break
 		is_bin := ingot_ws_recv_binary(ws.id) == 1
 		if n == 0 {
 			got := ingot_ws_recv_copy(ws.id, nil, 0)
 			if got != 0 {
+				ws.last_error = .Connect
 				ws.state = .Error
 				break
 			}
@@ -201,6 +213,7 @@ ws_drain :: proc(ws: ^Web_Socket) -> []WS_Message {
 		got := ingot_ws_recv_copy(ws.id, raw_data(buf), i32(len(buf)))
 		if got != n {
 			delete(buf)
+			ws.last_error = .Connect
 			ws.state = .Error
 			break
 		}

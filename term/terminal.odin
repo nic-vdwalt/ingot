@@ -139,6 +139,9 @@ term_scrollback_count :: proc(ts: ^Term_Instance) -> int {
 
 term_scrollback_line :: proc(ts: ^Term_Instance, index: int) -> []lv.VTerm_Screen_Cell {
 	assert(ts != nil)
+	assert(ts.sb_ring_count >= 0 && ts.sb_ring_count <= TERM_SCROLLBACK_MAX)
+	assert(ts.sb_ring_head >= 0 && ts.sb_ring_head < TERM_SCROLLBACK_MAX)
+	assert(len(ts.sb_ring) == TERM_SCROLLBACK_MAX)
 	assert(index >= 0 && index < ts.sb_ring_count)
 	ring_index := (ts.sb_ring_head + index) % TERM_SCROLLBACK_MAX
 	return ts.sb_ring[ring_index]
@@ -268,11 +271,8 @@ term_init_emulator :: proc(
 	}
 	lv.vterm_screen_set_callbacks(ts.screen, &ts.callbacks, ts)
 
-	// Hard reset fills all cells with the default pen.
-	lv.vterm_screen_reset(ts.screen, 1)
-
-	// Override the default pen colors so text is legible from the first
-	// frame and the background matches the host app's theme.
+	// Install the default pen before reset so the initial blank cells use the
+	// caller's colors from the first frame.
 	def_fg: lv.VTerm_Color
 	def_bg: lv.VTerm_Color
 	def_fg.rgb.type = lv.VTERM_COLOR_RGB
@@ -284,6 +284,9 @@ term_init_emulator :: proc(
 	def_bg.rgb.green = default_bg[1]
 	def_bg.rgb.blue = default_bg[2]
 	lv.vterm_screen_set_default_colors(ts.screen, &def_fg, &def_bg)
+	lv.vterm_screen_reset(ts.screen, 1)
+	assert(ts.screen != nil && ts.state != nil)
+	assert(len(ts.sb_ring) == TERM_SCROLLBACK_MAX)
 	return true
 }
 
