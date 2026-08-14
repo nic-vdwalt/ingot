@@ -241,6 +241,7 @@ write_string :: proc(p: ^Pty, s: string) -> (int, Pty_IO_Status) {
 
 resize :: proc(p: ^Pty, cols: u16, rows: u16) {
 	assert(p != nil)
+	when INGOT_PTY_SIM do return
 	if p.master_fd < 0 do return
 	if cols == 0 || rows == 0 || cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return
 	ws := Winsize {

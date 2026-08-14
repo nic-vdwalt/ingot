@@ -42,7 +42,6 @@ term_pump_resize_fuzz :: proc(t: ^testing.T) {
 			cols := u16(testx.int_range(&p, 2, 200))
 			rows := u16(testx.int_range(&p, 2, 80))
 			testing.expect(t, term_init_emulator(ts, cols, rows))
-			ts.pty.master_fd = -1 // no real fd: pty.resize must no-op
 			ts.pty_running = true
 
 			// Hostile document with multi-byte runes so chunk splits land
