@@ -280,48 +280,50 @@ conpty_spawn_command :: proc(
 	return p, true
 }
 
-read_bytes :: proc(p: ^Pty, buf: []u8) -> (n: int, eof: bool) {
-	assert(p != nil)
-	if p.pipe_out_r == nil do return 0, true
-	if len(buf) == 0 do return 0, false
+when !INGOT_PTY_SIM {
+	read_bytes :: proc(p: ^Pty, buf: []u8) -> (n: int, eof: bool) {
+		assert(p != nil)
+		if p.pipe_out_r == nil do return 0, true
+		if len(buf) == 0 do return 0, false
 
-	// Non-blocking check: see if data is available.
-	avail: win32.DWORD
-	if !PeekNamedPipe(p.pipe_out_r, nil, 0, nil, &avail, nil) {
-		return 0, true // Pipe broken → EOF
-	}
-	if avail == 0 {
-		// Check if process has exited.
-		exit_code: win32.DWORD
-		if win32.GetExitCodeProcess(p.hProcess, &exit_code) {
-			if exit_code != STILL_ACTIVE {
-				return 0, true
-			}
+		// Non-blocking check: see if data is available.
+		avail: win32.DWORD
+		if !PeekNamedPipe(p.pipe_out_r, nil, 0, nil, &avail, nil) {
+			return 0, true // Pipe broken → EOF
 		}
-		return 0, false // No data available, not EOF
+		if avail == 0 {
+			// Check if process has exited.
+			exit_code: win32.DWORD
+			if win32.GetExitCodeProcess(p.hProcess, &exit_code) {
+				if exit_code != STILL_ACTIVE {
+					return 0, true
+				}
+			}
+			return 0, false // No data available, not EOF
+		}
+
+		// Read available data.
+		to_read := min(win32.DWORD(len(buf)), avail)
+		bytes_read: win32.DWORD
+		if !win32.ReadFile(p.pipe_out_r, raw_data(buf), to_read, &bytes_read, nil) {
+			return 0, true
+		}
+		ensure(bytes_read <= to_read && int(bytes_read) <= len(buf))
+		return int(bytes_read), false
 	}
 
-	// Read available data.
-	to_read := min(win32.DWORD(len(buf)), avail)
-	bytes_read: win32.DWORD
-	if !win32.ReadFile(p.pipe_out_r, raw_data(buf), to_read, &bytes_read, nil) {
-		return 0, true
+	drain :: proc(p: ^Pty, buf: []u8) -> (data: []u8, eof: bool) {
+		assert(p != nil)
+		total := 0
+		for total < len(buf) {
+			n, e := read_bytes(p, buf[total:])
+			ensure(n >= 0 && n <= len(buf) - total)
+			total += n
+			if e do return buf[:total], true
+			if n == 0 do break
+		}
+		return buf[:total], false
 	}
-	ensure(bytes_read <= to_read && int(bytes_read) <= len(buf))
-	return int(bytes_read), false
-}
-
-drain :: proc(p: ^Pty, buf: []u8) -> (data: []u8, eof: bool) {
-	assert(p != nil)
-	total := 0
-	for total < len(buf) {
-		n, e := read_bytes(p, buf[total:])
-		ensure(n >= 0 && n <= len(buf) - total)
-		total += n
-		if e do return buf[:total], true
-		if n == 0 do break
-	}
-	return buf[:total], false
 }
 
 write_bytes :: proc(p: ^Pty, data: []u8) -> (written: int, status: Pty_IO_Status) {
