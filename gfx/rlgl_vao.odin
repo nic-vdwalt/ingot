@@ -192,7 +192,12 @@ RlUnloadVertexArray :: proc(id: u32) {
 	context_rl_unload_vertex_array(default_context(), id)
 }
 
-context_rl_load_vertex_buffer :: proc(ctx: ^Context, data: rawptr, size: i32, dynamic_buf: bool) -> u32 {
+context_rl_load_vertex_buffer :: proc(
+	ctx: ^Context,
+	data: rawptr,
+	size: i32,
+	dynamic_buf: bool,
+) -> u32 {
 	assert(ctx != nil, "context_rl_load_vertex_buffer: nil context")
 	if ctx.device == nil || size <= 0 do return 0
 	resources := &ctx.resources.rlgl
@@ -228,7 +233,13 @@ RlLoadVertexBuffer :: proc(data: rawptr, size: i32, dynamic_buf: bool) -> u32 {
 	return context_rl_load_vertex_buffer(default_context(), data, size, dynamic_buf)
 }
 
-context_rl_update_vertex_buffer :: proc(ctx: ^Context, bufferId: u32, data: rawptr, dataSize: i32, offset: i32) {
+context_rl_update_vertex_buffer :: proc(
+	ctx: ^Context,
+	bufferId: u32,
+	data: rawptr,
+	dataSize: i32,
+	offset: i32,
+) {
 	assert(ctx != nil, "context_rl_update_vertex_buffer: nil context")
 	slot := _vbo_slot(ctx.id, &ctx.resources.rlgl, bufferId)
 	if slot == nil || data == nil || dataSize <= 0 || offset < 0 do return
@@ -336,7 +347,15 @@ RlSetVertexAttribute :: proc(
 	stride: i32,
 	offset: i32,
 ) {
-	context_rl_set_vertex_attribute(default_context(), index, compSize, type, normalized, stride, offset)
+	context_rl_set_vertex_attribute(
+		default_context(),
+		index,
+		compSize,
+		type,
+		normalized,
+		stride,
+		offset,
+	)
 }
 
 context_rl_set_vertex_attribute_divisor :: proc(ctx: ^Context, index: u32, divisor: i32) {
@@ -534,12 +553,7 @@ context_rl_draw_vertex_array_instanced :: proc(ctx: ^Context, offset, count, ins
 	pipe := _vao_pipeline(ctx, v, se, _cur_target_format(ctx), ctx.rend.cur_blend)
 	if pipe == nil do return
 
-	u_offset, ok := _uniform_upload(
-		ctx,
-		&ctx.rend,
-		raw_data(se.ushadow),
-		u64(len(se.ushadow)),
-	)
+	u_offset, ok := _uniform_upload(ctx, &ctx.rend, raw_data(se.ushadow), u64(len(se.ushadow)))
 	if !ok || ctx.rend.active_stream_slot < 0 do return
 	wg.RenderPassEncoderSetPipeline(pass, pipe)
 	_stats_pipeline_switch(ctx)

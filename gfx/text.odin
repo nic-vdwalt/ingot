@@ -607,8 +607,14 @@ DrawTextPro :: proc(
 	)
 }
 
-MeasureTextEx :: proc(font: Font, text: cstring, fontSize, spacing: f32) -> Vector2 {
-	a := get_atlas(font._atlas)
+context_measure_text_ex :: proc(
+	ctx: ^Context,
+	font: Font,
+	text: cstring,
+	fontSize, spacing: f32,
+) -> Vector2 {
+	assert(ctx != nil, "context_measure_text_ex: nil context")
+	a := context_get_atlas(ctx, font._atlas)
 	if a == nil do return {0, 0}
 	sf := fontSize / a.px
 	max_w: f32 = 0
@@ -623,13 +629,17 @@ MeasureTextEx :: proc(font: Font, text: cstring, fontSize, spacing: f32) -> Vect
 		}
 		gl, ok := a.glyphs[cp]
 		if !ok {
-			_bake_glyph(default_context(), a, cp)
+			_bake_glyph(ctx, a, cp)
 			gl = a.glyphs[cp]
 		}
 		line_w += gl.xadvance * sf + spacing
 	}
 	if line_w > max_w do max_w = line_w
 	return {max_w, lines * a.line_adv * sf}
+}
+
+MeasureTextEx :: proc(font: Font, text: cstring, fontSize, spacing: f32) -> Vector2 {
+	return context_measure_text_ex(default_context(), font, text, fontSize, spacing)
 }
 
 // DrawText and MeasureText live in font_default.odin: they are the default-font
