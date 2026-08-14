@@ -109,6 +109,7 @@ gpu3d_fuzz_camera :: proc(t: ^testing.T, p: ^testx.Prng) -> bool {
 @(private = "file")
 gpu3d_fuzz_handles :: proc(t: ^testing.T, p: ^testx.Prng) -> bool {
 	resources: Gpu_3D_Resources
+	context_id := u32(2)
 	entries: [GPU_3D_MAX_MESHES]Gpu_3D_Mesh_Entry
 	live: [GPU_3D_MAX_MESHES]Gpu_Mesh
 	for _ in 0 ..< 64 {
@@ -119,16 +120,16 @@ gpu3d_fuzz_handles :: proc(t: ^testing.T, p: ^testx.Prng) -> bool {
 			slot.occupied = false
 			slot.entry = nil
 			live[index] = {}
-			testing.expect(t, _gpu_3d_mesh_slot(&resources, stale) == nil)
+			testing.expect(t, _gpu_3d_mesh_slot(context_id, &resources, stale) == nil)
 		} else {
 			slot.generation = _resource_generation_next(slot.generation)
 			slot.entry = &entries[index]
 			slot.occupied = true
 			live[index] = {
-				id = _resource_handle_make(index, slot.generation),
+				id = _resource_handle_make_context(context_id, index, slot.generation),
 			}
-			testing.expect(t, _gpu_3d_mesh_slot(&resources, live[index]) == slot)
-			if stale.id != 0 do testing.expect(t, _gpu_3d_mesh_slot(&resources, stale) == nil)
+			testing.expect(t, _gpu_3d_mesh_slot(context_id, &resources, live[index]) == slot)
+			if stale.id != 0 do testing.expect(t, _gpu_3d_mesh_slot(context_id, &resources, stale) == nil)
 		}
 	}
 	return !testing.failed(t)

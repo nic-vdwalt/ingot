@@ -64,6 +64,26 @@ atlas_and_shader_pools_reject_stale_handles :: proc(t: ^testing.T) {
 }
 
 @(test)
+atlas_and_shader_handles_reject_cross_context_lookup :: proc(t: ^testing.T) {
+	first := new(Context)
+	second := new(Context)
+	defer free(first)
+	defer free(second)
+	first.id = 2
+	second.id = 3
+
+	atlas_entry: Atlas
+	atlas_id := _atlas_register(first.id, &first.resources.atlases, &atlas_entry)
+	testing.expect(t, context_get_atlas(first, atlas_id) == &atlas_entry)
+	testing.expect(t, context_get_atlas(second, atlas_id) == nil)
+
+	shader_entry: Shader_Entry
+	shader_id := _shader_register(first.id, &first.resources.shaders, &shader_entry)
+	testing.expect(t, context_shader_get(first, shader_id) == &shader_entry)
+	testing.expect(t, context_shader_get(second, shader_id) == nil)
+}
+
+@(test)
 vao_pool_rejects_reused_slot_handle :: proc(t: ^testing.T) {
 	resources: Rlgl_Resources
 	entry: Vao
@@ -71,13 +91,34 @@ vao_pool_rejects_reused_slot_handle :: proc(t: ^testing.T) {
 	slot.generation = _resource_generation_next(slot.generation)
 	slot.entry = &entry
 	slot.occupied = true
-	old_id := _resource_handle_make(0, slot.generation)
-	testing.expect(t, _vao_slot(&resources, old_id) == slot)
+	context_id := u32(2)
+	old_id := _resource_handle_make_context(context_id, 0, slot.generation)
+	testing.expect(t, _vao_slot(context_id, &resources, old_id) == slot)
 	slot.generation = _resource_generation_next(slot.generation)
-	new_id := _resource_handle_make(0, slot.generation)
+	new_id := _resource_handle_make_context(context_id, 0, slot.generation)
 	testing.expect(t, old_id != new_id)
-	testing.expect(t, _vao_slot(&resources, old_id) == nil)
-	testing.expect(t, _vao_slot(&resources, new_id) == slot)
+	testing.expect(t, _vao_slot(context_id, &resources, old_id) == nil)
+	testing.expect(t, _vao_slot(context_id, &resources, new_id) == slot)
+}
+
+@(test)
+vao_and_vbo_handles_reject_cross_context_lookup :: proc(t: ^testing.T) {
+	resources: Rlgl_Resources
+	vao_entry: Vao
+	vao_slot := &resources.vaos[0]
+	vao_slot.generation = 1
+	vao_slot.entry = &vao_entry
+	vao_slot.occupied = true
+	vao_id := _resource_handle_make_context(2, 0, vao_slot.generation)
+	testing.expect(t, _vao_slot(2, &resources, vao_id) == vao_slot)
+	testing.expect(t, _vao_slot(3, &resources, vao_id) == nil)
+
+	vbo_slot := &resources.vbos[0]
+	vbo_slot.generation = 1
+	vbo_slot.occupied = true
+	vbo_id := _resource_handle_make_context(2, 0, vbo_slot.generation)
+	testing.expect(t, _vbo_slot(2, &resources, vbo_id) == vbo_slot)
+	testing.expect(t, _vbo_slot(3, &resources, vbo_id) == nil)
 }
 
 @(test)

@@ -582,7 +582,12 @@ _uniform_type_size :: proc(t: ShaderUniformDataType) -> (size: u32, ok: bool) {
 
 // _shader_pipeline returns (building if needed) the pipeline for `fmt`.
 @(private)
-_shader_pipeline :: proc(e: ^Shader_Entry, format: wg.TextureFormat) -> wg.RenderPipeline {
+_shader_pipeline :: proc(
+	ctx: ^Context,
+	e: ^Shader_Entry,
+	format: wg.TextureFormat,
+) -> wg.RenderPipeline {
+	assert(ctx != nil, "_shader_pipeline: nil context")
 	for i in 0 ..< e.pipe_n {
 		if e.pipe_fmt[i] == format do return e.pipe_obj[i]
 	}
@@ -600,7 +605,7 @@ _shader_pipeline :: proc(e: ^Shader_Entry, format: wg.TextureFormat) -> wg.Rende
 		attributeCount = 4,
 		attributes     = raw_data(attrs[:]),
 	}
-	blend := _blend_for(&g.rend, g.rend.cur_blend)
+	blend := _blend_for(&ctx.rend, ctx.rend.cur_blend)
 	target := wg.ColorTargetState {
 		format    = format,
 		writeMask = wg.ColorWriteMaskFlags_All,
@@ -609,19 +614,19 @@ _shader_pipeline :: proc(e: ^Shader_Entry, format: wg.TextureFormat) -> wg.Rende
 
 	layouts: [4]wg.BindGroupLayout
 	n_layouts := 3
-	layouts[0] = g.rend.ubind_layout
-	layouts[1] = g.rend.tex_layout
+	layouts[0] = ctx.rend.ubind_layout
+	layouts[1] = ctx.rend.tex_layout
 	layouts[2] = e.u_layout
 	if e.extra_count > 0 {
 		layouts[3] = e.extra_layout
 		n_layouts = 4
 	}
 	pl := wg.DeviceCreatePipelineLayout(
-		g.device,
+		ctx.device,
 		&{bindGroupLayoutCount = uint(n_layouts), bindGroupLayouts = raw_data(layouts[:])},
 	)
 	pipe := wg.DeviceCreateRenderPipeline(
-		g.device,
+		ctx.device,
 		&{
 			layout = pl,
 			vertex = {module = e.module, entryPoint = "vs_main", bufferCount = 1, buffers = &vbl},
@@ -698,7 +703,7 @@ _shader_flush :: proc(
 	e := context_shader_get(ctx, r.active_shader)
 	if e == nil do return false
 	format := _cur_target_format(ctx)
-	pipe := _shader_pipeline(e, format)
+	pipe := _shader_pipeline(ctx, e, format)
 	if pipe == nil do return false
 
 	u_offset, ok := _uniform_upload(ctx, r, raw_data(e.ushadow), u64(len(e.ushadow)))
