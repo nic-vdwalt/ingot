@@ -150,8 +150,8 @@ when CAPTURE {
 	// gallery's own "Replay" button resets.
 	capture_replay_animations :: proc() {
 		progress_anim = 0
-		line_state.enter_anim = 0
-		bar_state.enter_anim = 0
+		fit.Chart_Reset(&line_state)
+		fit.Chart_Reset(&bar_state)
 	}
 
 	// capture_seed_inputs fills the text boxes so the Inputs shot shows real
@@ -243,6 +243,7 @@ when CAPTURE {
 		rl.BeginTextureMode(capture_target)
 		rl.ClearBackground(background)
 		gallery_build(builder, nil)
+		_ = fit.Measure(builder)
 		fit.Render_At(builder, {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT})
 		rl.EndTextureMode()
 

@@ -360,6 +360,18 @@ Grid_State :: struct {
 	inner: ui.Grid,
 }
 
+Layout_State :: struct {
+	inner: ui.Layout,
+}
+
+Flow_State :: struct {
+	inner: ui.Flow_Layout,
+}
+
+Fit_Column_State :: struct {
+	inner: ui.Fit_Column,
+}
+
 Visible_Range :: struct {
 	first: i32,
 	end:   i32,

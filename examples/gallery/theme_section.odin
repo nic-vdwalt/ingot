@@ -20,14 +20,14 @@
 // per-chip legible label, and spending the hand-drawn accents sparingly rather
 // than sprinkling them.
 //
-// Placement jitter comes from legacy.scatter_unit, a pure hash of the item index.
+// Placement jitter comes from fit.Surface_Scatter_Unit, a pure hash of the item index.
 // Frames here are event-driven, so an RNG would deal a new layout on every
 // unrelated redraw and the page would crawl while the user typed; it would
 // also break the capture harness, whose output must be byte-reproducible.
 package main
 
 import "core:fmt"
-import legacy "ingot:fit"
+import fit "ingot:fit"
 
 // Column geometry in design units. Everything horizontal is expressed against
 // these so the page has one measure rather than per-section widths.
@@ -50,10 +50,10 @@ SPECIMEN :: "Sphinx of black quartz, judge my vow"
 //
 // The label names the role rather than the pigment, because the role is true
 // on every palette. On the sketch palettes Pigment.Accent is ultramarine; on
-// high contrast there is no pigment table at all and theme_pigment falls back
+// high contrast there is no pigment table at all and Theme_Pigment falls back
 // to gold. A block captioned "ultramarine" while rendering yellow is simply
 // wrong, so the pigment names are a secondary row shown only where they apply.
-PIGMENT_ROLES := [legacy.Pigment]string {
+PIGMENT_ROLES := [fit.Pigment]string {
 	.Accent  = "accent",
 	.Danger  = "danger",
 	.Success = "success",
@@ -62,7 +62,7 @@ PIGMENT_ROLES := [legacy.Pigment]string {
 	.Leaf    = "leaf",
 }
 
-PIGMENT_NAMES := [legacy.Pigment]string {
+PIGMENT_NAMES := [fit.Pigment]string {
 	.Accent  = "ultramarine",
 	.Danger  = "vermilion",
 	.Success = "viridian",
@@ -77,37 +77,37 @@ PIGMENT_NAMES := [legacy.Pigment]string {
 // served. What remains is a bounded cursor, so content still cannot escape the
 // pane, but a block may be any height its content needs.
 Page :: struct {
-	frame:  ^legacy.Ui_Frame,
-	x:      i32, // Left edge of the page, physical.
-	y:      i32, // Current write position, physical. Moves only via page_advance.
-	w:      i32, // Page width, physical.
-	indent: i32, // Body inset, reserving the annotation column. Physical.
-	line:   i32, // One line height, physical. The unit for text rows.
+	surface: ^fit.Surface,
+	x:       i32, // Left edge of the page, physical.
+	y:       i32, // Current write position, physical. Moves only via page_advance.
+	w:       i32, // Page width, physical.
+	indent:  i32, // Body inset, reserving the annotation column. Physical.
+	line:    i32, // One line height, physical. The unit for text rows.
 }
 
-page_begin :: proc(frame: ^legacy.Ui_Frame, x, y, w: i32) -> Page {
-	assert(frame != nil, "page_begin: nil frame")
+page_begin :: proc(surface: ^fit.Surface, x, y, w: i32) -> Page {
+	assert(surface != nil, "page_begin: nil frame")
 	assert(w > 0, "page_begin: non-positive width")
-	line := legacy.ui_frame_metrics(frame).LINE_HEIGHT
+	line := fit.Surface_Metrics(surface).line_height
 	assert(line > 0, "page_begin: metrics carry a non-positive line height")
-	return {frame = frame, x = x, y = y, w = w, indent = page_indent(frame), line = line}
+	return {surface = surface, x = x, y = y, w = w, indent = page_indent(surface), line = line}
 }
 
 // page_advance consumes `height` screen-space pixels and returns the block.
 //
 // The single place the cursor moves, which is what keeps a loose layout from
 // becoming an unbounded one.
-page_advance :: proc(page: ^Page, height: i32) -> legacy.Rect_I32 {
+page_advance :: proc(page: ^Page, height: i32) -> fit.Rect {
 	assert(page != nil, "page_advance: nil page")
 	assert(height > 0, "page_advance: non-positive height")
-	block := legacy.Rect_I32{page.x, page.y, page.w, height}
+	block := fit.Rect{page.x, page.y, page.w, height}
 	page.y += height
 	return block
 }
 
 // page_rows advances a whole number of text lines. Text still wants a line
 // rhythm even on unruled paper; only the graphics are free-form.
-page_rows :: proc(page: ^Page, count: i32) -> legacy.Rect_I32 {
+page_rows :: proc(page: ^Page, count: i32) -> fit.Rect {
 	assert(page != nil, "page_rows: nil page")
 	assert(count > 0, "page_rows: non-positive row count")
 	return page_advance(page, page.line * count)
@@ -126,21 +126,21 @@ page_body :: proc(page: ^Page) -> i32 {
 // one flag until this revision, which made "keep the reserved column, drop the
 // line" impossible to express - and the column is what keeps measurements out
 // of the swatches they describe.
-page_indent :: proc(frame: ^legacy.Ui_Frame) -> i32 {
-	assert(frame != nil, "page_indent: nil frame")
-	if legacy.ui_frame_theme(frame).substrate.kind == .None do return 0
-	return legacy.ui_frame_sc(frame, MARGIN_INSET + 10)
+page_indent :: proc(surface: ^fit.Surface) -> i32 {
+	assert(surface != nil, "page_indent: nil frame")
+	if fit.Surface_Theme_Tokens(surface).substrate == .None do return 0
+	return fit.Surface_Scale(surface, MARGIN_INSET + 10)
 }
 
 // annotate writes a right-aligned note in the reserved margin column.
-annotate :: proc(page: ^Page, row: legacy.Rect_I32, note: string) {
+annotate :: proc(page: ^Page, row: fit.Rect, note: string) {
 	assert(page != nil, "annotate: nil page")
 	if len(note) == 0 || page.indent == 0 do return
-	width := legacy.text_width(page.frame, note, .Note)
-	gap := legacy.ui_frame_sc(page.frame, 8)
+	width := fit.Surface_Text_Width(page.surface, note, .Note)
+	gap := fit.Surface_Scale(page.surface, 8)
 	x := page.x + page.indent - width - gap
 	if x < page.x do return
-	legacy.text(page.frame, note, x, row.y, .Note, .Muted)
+	fit.Surface_Text(page.surface, note, x, row.y, .Note, .Muted)
 }
 
 // page_heading writes a heading underlined in pencil, sized to the words
@@ -152,23 +152,23 @@ annotate :: proc(page: ^Page, row: legacy.Rect_I32, note: string) {
 page_heading :: proc(page: ^Page, title: string) {
 	assert(page != nil, "page_heading: nil page")
 	row := page_rows(page, 1)
-	legacy.text(page.frame, title, page_body(page), row.y, .Title, .Heading)
+	fit.Surface_Text(page.surface, title, page_body(page), row.y, .Title, .Heading)
 
-	theme := legacy.ui_frame_theme(page.frame)
+	theme := fit.Surface_Theme_Tokens(page.surface)
 	color := theme.graphite if theme.graphite.a > 0 else theme.border_subtle
-	legacy.draw_hand_underline(
-		page.frame,
+	fit.Surface_Draw_Hand_Underline(
+		page.surface,
 		page_body(page),
-		row.y + row.h - legacy.ui_frame_sc(page.frame, 5),
-		legacy.text_width(page.frame, title, .Title),
+		row.y + row.h - fit.Surface_Scale(page.surface, 5),
+		fit.Surface_Text_Width(page.surface, title, .Title),
 		color,
 	)
 	page_rows(page, 1)
 }
 
-draw_theme_section :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
-	assert(frame != nil, "draw_theme_section: nil frame")
-	page := page_begin(frame, x, y0, w)
+draw_theme_section :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
+	assert(surface != nil, "draw_theme_section: nil frame")
+	page := page_begin(surface, x, y0, w)
 
 	draw_page_opening(&page)
 	draw_pigment_studies(&page)
@@ -187,8 +187,8 @@ draw_page_opening :: proc(page: ^Page) {
 	assert(page != nil, "draw_page_opening: nil page")
 	page_heading(page, "Design tokens")
 	row := page_rows(page, 1)
-	legacy.text(
-		page.frame,
+	fit.Surface_Text(
+		page.surface,
 		"every value below resolves from the active palette",
 		page_body(page),
 		row.y,
@@ -211,7 +211,7 @@ draw_pigment_studies :: proc(page: ^Page) {
 
 	body := page_body(page)
 	available := page.w - page.indent
-	count := i32(len(legacy.Pigment))
+	count := i32(len(fit.Pigment))
 	// Blocks are wider than their pitch so they overlap, which is where the
 	// bleed produces its darker seam. That means the last block extends past
 	// the last pitch step, so the pitch is solved from the *total* width the
@@ -222,35 +222,34 @@ draw_pigment_studies :: proc(page: ^Page) {
 	// the row read as stacked panes of tinted glass rather than as swatches
 	// laid down beside one another.
 	OVERLAP :: f32(1.06)
-	span := f32(available) - f32(legacy.ui_frame_sc(page.frame, 4))
+	span := f32(available) - f32(fit.Surface_Scale(page.surface, 4))
 	pitch := i32(span / (f32(count - 1) + OVERLAP))
 	block_w := f32(pitch) * OVERLAP
 	band_h := page.line * 4
 	band := page_advance(page, band_h + page.line)
 
-	style := legacy.ui_frame_theme(page.frame)
-	for pigment_role, index in legacy.Pigment {
+	for pigment_role, index in fit.Pigment {
 		i := u32(index)
 		// The pigment table, not the ink table. Paint stays saturated; the
 		// labels below stay legible because they are ink.
-		pigment := legacy.theme_pigment(style, pigment_role)
+		pigment := fit.Surface_Pigment(page.surface, pigment_role)
 		// Bounded jitter: enough that the row is not a ruler, small enough
 		// that nothing escapes its slot or collides with the label below.
-		wobble_x := (legacy.scatter_unit(i, 0) - 0.5) * f32(page.line) * 0.5
-		wobble_y := (legacy.scatter_unit(i, 1) - 0.5) * f32(page.line) * 0.6
-		height := f32(band_h) * (0.72 + legacy.scatter_unit(i, 2) * 0.28)
+		wobble_x := (fit.Surface_Scatter_Unit(i, 0) - 0.5) * f32(page.line) * 0.5
+		wobble_y := (fit.Surface_Scatter_Unit(i, 1) - 0.5) * f32(page.line) * 0.6
+		height := f32(band_h) * (0.72 + fit.Surface_Scatter_Unit(i, 2) * 0.28)
 
-		block := legacy.legacy_rect {
+		block := fit.Float_Rect {
 			f32(body + i32(index) * pitch) + wobble_x,
 			f32(band.y) + wobble_y,
 			block_w,
 			height,
 		}
-		legacy.draw_pigment_block(page.frame, block, pigment)
+		fit.Surface_Draw_Pigment_Block(page.surface, block, pigment)
 		// One block carries a chalk highlight, so the two-direction working
 		// that toned paper exists for is visible in the exhibit that is about
 		// colour. Only one: a lit edge on every block reads as a gloss.
-		if index == 0 do legacy.draw_chalk_highlight(page.frame, block, .None)
+		if index == 0 do fit.Surface_Draw_Chalk_Highlight(page.surface, block, .None)
 	}
 
 	// Names sit under the band rather than on the paint: a label on a wash is
@@ -261,13 +260,13 @@ draw_pigment_studies :: proc(page: ^Page) {
 	// since they describe the sketch palettes rather than the swatches on
 	// screen - on high contrast these same roles resolve to gold and white.
 	label_row := page_rows(page, 1)
-	for pigment_role, index in legacy.Pigment {
-		legacy.text_truncated(
-			page.frame,
+	for pigment_role, index in fit.Pigment {
+		fit.Surface_Text_Truncated(
+			page.surface,
 			PIGMENT_ROLES[pigment_role],
 			body + i32(index) * pitch,
 			label_row.y,
-			pitch - legacy.ui_frame_sc(page.frame, 4),
+			pitch - fit.Surface_Scale(page.surface, 4),
 			.Note,
 			.Secondary,
 		)
@@ -276,15 +275,15 @@ draw_pigment_studies :: proc(page: ^Page) {
 	// The pigment names only under a sketch palette, in muted ink so they read
 	// as a caption rather than as a second set of labels. On a screen palette
 	// they would be a lie: Ink.Accent is gold there, not ultramarine.
-	if legacy.ui_frame_theme(page.frame).substrate.kind != .None {
+	if fit.Surface_Theme_Tokens(page.surface).substrate != .None {
 		pigment_row := page_rows(page, 1)
-		for pigment_role, index in legacy.Pigment {
-			legacy.text_truncated(
-				page.frame,
+		for pigment_role, index in fit.Pigment {
+			fit.Surface_Text_Truncated(
+				page.surface,
 				PIGMENT_NAMES[pigment_role],
 				body + i32(index) * pitch,
 				pigment_row.y,
-				pitch - legacy.ui_frame_sc(page.frame, 4),
+				pitch - fit.Surface_Scale(page.surface, 4),
 				.Note,
 				.Muted,
 			)
@@ -299,19 +298,19 @@ draw_pigment_studies :: proc(page: ^Page) {
 // column width, which is the drift that puts a heading over the wrong column.
 state_cell_width :: proc(page: ^Page, label_w: i32) -> i32 {
 	assert(page != nil, "state_cell_width: nil page")
-	count := i32(len(legacy.Visual_State))
-	gap := legacy.ui_frame_sc(page.frame, 6)
+	count := i32(len(fit.Visual_State))
+	gap := fit.Surface_Scale(page.surface, 6)
 	available := page.w - page.indent - label_w - gap * (count - 1)
-	minimum := legacy.ui_frame_sc(page.frame, 38)
+	minimum := fit.Surface_Scale(page.surface, 38)
 	// Capped rather than filling the column: a cell stretched across the whole
 	// page turns the highlighter into a band over a few pixels of text, which
 	// reads as a fill rather than as a mark.
-	maximum := legacy.ui_frame_sc(page.frame, 76)
+	maximum := fit.Surface_Scale(page.surface, 76)
 	if available < minimum * count do return minimum
 	return min(available / count, maximum)
 }
 
-// Surfaces and their states, one band per legacy.
+// Surfaces and their states, one band per surface kind.
 //
 // The one exhibit that earns a grid: it is a matrix, and reading down a column
 // or across a row is the point. It is also the materials demo - Selected *is*
@@ -321,25 +320,25 @@ draw_surface_states :: proc(page: ^Page) {
 	assert(page != nil, "draw_surface_states: nil page")
 	page_heading(page, "Surfaces")
 
-	label_w := legacy.ui_frame_sc(page.frame, LABEL_COL_W)
-	gap := legacy.ui_frame_sc(page.frame, 6)
+	label_w := fit.Surface_Scale(page.surface, LABEL_COL_W)
+	gap := fit.Surface_Scale(page.surface, 6)
 	cell_w := state_cell_width(page, label_w)
 	body := page_body(page)
 	// Cells are inset vertically so consecutive rows do not touch. Without it,
 	// thirteen highlighter swipes stack into one continuous column with a
 	// sawtooth edge - a rendering fault rather than thirteen marks.
-	inset := legacy.ui_frame_sc(page.frame, 2)
+	inset := fit.Surface_Scale(page.surface, 2)
 
 	head := page_rows(page, 1)
-	for state, index in legacy.Visual_State {
+	for state, index in fit.Visual_State {
 		x := body + label_w + i32(index) * (cell_w + gap)
-		legacy.text(page.frame, fmt.tprint(state), x, head.y, .Note, .Muted)
+		fit.Surface_Text(page.surface, fmt.tprint(state), x, head.y, .Note, .Muted)
 	}
 
-	for surface in legacy.Surface_Kind {
+	for surface in fit.Surface_Kind {
 		row := page_rows(page, 1)
-		legacy.text_truncated(
-			page.frame,
+		fit.Surface_Text_Truncated(
+			page.surface,
 			fmt.tprint(surface),
 			body,
 			row.y,
@@ -347,14 +346,14 @@ draw_surface_states :: proc(page: ^Page) {
 			.Note,
 			.Secondary,
 		)
-		for state, index in legacy.Visual_State {
-			cell := legacy.legacy_rect {
+		for state, index in fit.Visual_State {
+			cell := fit.Float_Rect {
 				f32(body + label_w + i32(index) * (cell_w + gap)),
 				f32(row.y + inset),
 				f32(cell_w),
 				f32(page.line - inset * 2),
 			}
-			draw_state_cell(page.frame, cell, surface, state)
+			draw_state_cell(page.surface, cell, surface, state)
 		}
 	}
 	page_rows(page, 1)
@@ -363,39 +362,39 @@ draw_surface_states :: proc(page: ^Page) {
 // draw_state_cell paints one surface in one state, using the material that
 // state actually means.
 draw_state_cell :: proc(
-	frame: ^legacy.Ui_Frame,
-	cell: legacy.legacy_rect,
-	surface: legacy.Surface_Kind,
-	state: legacy.Visual_State,
+	surface: ^fit.Surface,
+	cell: fit.Float_Rect,
+	kind: fit.Surface_Kind,
+	state: fit.Visual_State,
 ) {
-	assert(frame != nil, "draw_state_cell: nil frame")
-	theme := legacy.ui_frame_theme(frame)
-	colors := legacy.surface_colors(frame, surface, state)
+	assert(surface != nil, "draw_state_cell: nil frame")
+	theme := fit.Surface_Theme_Tokens(surface)
+	colors := fit.Surface_Resolve_Colors(surface, kind, state)
 
 	switch state {
 	case .Selected:
 		// A highlighter is how a person marks a selection on paper. A screen
 		// palette has no marker, so the ordinary selected fill stands in.
 		if theme.highlighter.a > 0 {
-			legacy.draw_highlight_swipe(frame, cell, theme.highlighter)
+			fit.Surface_Draw_Highlight(surface, cell, theme.highlighter)
 		} else {
-			legacy.draw_surface(frame, cell, surface, state, .SM, .None, .Flat)
+			fit.Surface_Draw_Surface(surface, cell, kind, state, .SM, .None, .Flat)
 		}
 	case .Pressed:
 		// Pressed is a scribble over the resting surface: the mark you make
 		// while pushing on something, not a different colour of paint.
-		legacy.draw_surface(frame, cell, surface, .Rest, .SM, .None, .Flat)
-		legacy.draw_scribble_fill(frame, cell, colors.bg)
+		fit.Surface_Draw_Surface(surface, cell, kind, .Rest, .SM, .None, .Flat)
+		fit.Surface_Draw_Scribble(surface, cell, colors.background)
 	case .Rest, .Hover, .Disabled:
-		legacy.draw_surface(frame, cell, surface, state, .SM, .None, .Flat)
+		fit.Surface_Draw_Surface(surface, cell, kind, state, .SM, .None, .Flat)
 	}
 
 	// "Ag" carries an ascender and a descender, so a fill that clips text
 	// shows up here rather than hiding behind an all-caps sample.
-	legacy.text(
-		frame,
+	fit.Surface_Text(
+		surface,
 		"Ag",
-		i32(cell.x) + legacy.ui_frame_sc(frame, 5),
+		i32(cell.x) + fit.Surface_Scale(surface, 5),
 		i32(cell.y),
 		.Note,
 		.Primary,
@@ -408,11 +407,11 @@ draw_state_cell :: proc(
 // A swatch labelled in a fixed colour is only readable across half a palette:
 // the dark inks disappear into their own chips and the light ones into the
 // pale chips, which looks like a rendering fault rather than a swatch.
-legible_on :: proc(frame: ^legacy.Ui_Frame, fill: legacy.legacy_color) -> legacy.legacy_ink {
-	assert(frame != nil, "legible_on: nil frame")
-	dark := legacy.text_ink(frame, .Primary)
-	light := legacy.text_ink(frame, .Inverse)
-	if legacy.contrast_ratio(light, fill) > legacy.contrast_ratio(dark, fill) do return .Inverse
+legible_on :: proc(surface: ^fit.Surface, fill: fit.Color) -> fit.Ink {
+	assert(surface != nil, "legible_on: nil frame")
+	dark := fit.Surface_Theme_Color(surface, .Primary)
+	light := fit.Surface_Theme_Color(surface, .Inverse)
+	if fit.Contrast_Ratio(light, fill) > fit.Contrast_Ratio(dark, fill) do return .Inverse
 	return .Primary
 }
 
@@ -424,42 +423,42 @@ draw_ink_chips :: proc(page: ^Page) {
 	assert(page != nil, "draw_ink_chips: nil page")
 	page_heading(page, "Ink")
 
-	chip_w := legacy.ui_frame_sc(page.frame, CHIP_W)
-	gap := legacy.ui_frame_sc(page.frame, 6)
-	card := legacy.surface_colors(page.frame, .Card, .Rest)
+	chip_w := fit.Surface_Scale(page.surface, CHIP_W)
+	gap := fit.Surface_Scale(page.surface, 6)
+	card := fit.Surface_Resolve_Colors(page.surface, .Card, .Rest)
 	body := page_body(page)
 	per_row := max((page.w - page.indent) / (chip_w + gap), 1)
-	inset := legacy.ui_frame_sc(page.frame, 2)
+	inset := fit.Surface_Scale(page.surface, 2)
 
 	row := page_rows(page, 1)
 	column := i32(0)
 	worst := f64(21)
-	for ink in legacy.legacy_ink {
+	for ink in fit.Ink {
 		if column >= per_row {
 			annotate(page, row, fmt.tprintf("min %.1f:1", worst))
 			row = page_rows(page, 1)
 			column = 0
 			worst = 21
 		}
-		color := legacy.text_ink(page.frame, ink)
-		ratio := legacy.contrast_ratio(color, card.bg)
+		color := fit.Surface_Theme_Color(page.surface, ink)
+		ratio := fit.Contrast_Ratio(color, card.background)
 		if ratio < worst do worst = ratio
 
-		cell := legacy.legacy_rect {
+		cell := fit.Float_Rect {
 			f32(body + column * (chip_w + gap)),
 			f32(row.y + inset),
 			f32(chip_w),
 			f32(page.line - inset * 2),
 		}
-		legacy.draw_wash(page.frame, cell, color)
-		legacy.text_truncated(
-			page.frame,
+		fit.Surface_Draw_Wash(page.surface, cell, color)
+		fit.Surface_Text_Truncated(
+			page.surface,
 			fmt.tprint(ink),
-			i32(cell.x) + legacy.ui_frame_sc(page.frame, 4),
+			i32(cell.x) + fit.Surface_Scale(page.surface, 4),
 			i32(cell.y),
-			chip_w - legacy.ui_frame_sc(page.frame, 8),
+			chip_w - fit.Surface_Scale(page.surface, 8),
 			.Note,
-			legible_on(page.frame, color),
+			legible_on(page.surface, color),
 		)
 		column += 1
 	}
@@ -474,24 +473,24 @@ draw_ink_chips :: proc(page: ^Page) {
 // with a single taped swatch reads as something a person placed deliberately.
 draw_taped_accent :: proc(page: ^Page) {
 	assert(page != nil, "draw_taped_accent: nil page")
-	theme := legacy.ui_frame_theme(page.frame)
-	if theme.tape_color.a == 0 do return
+	theme := fit.Surface_Theme_Tokens(page.surface)
+	if theme.tape.a == 0 do return
 
 	row := page_rows(page, 2)
-	accent := theme.fg_accent
-	swatch := legacy.legacy_rect {
+	accent := theme.foreground_accent
+	swatch := fit.Float_Rect {
 		f32(page_body(page)),
 		f32(row.y),
-		f32(legacy.ui_frame_sc(page.frame, SWATCH_W)),
-		f32(row.h - legacy.ui_frame_sc(page.frame, 6)),
+		f32(fit.Surface_Scale(page.surface, SWATCH_W)),
+		f32(row.h - fit.Surface_Scale(page.surface, 6)),
 	}
-	legacy.draw_shadow_hard(page.frame, swatch, .SM, .Lifted)
-	legacy.draw_pigment_block(page.frame, swatch, accent)
-	legacy.draw_tape_strip(
-		page.frame,
+	fit.Surface_Draw_Shadow(page.surface, swatch, .SM, .Lifted)
+	fit.Surface_Draw_Pigment_Block(page.surface, swatch, accent)
+	fit.Surface_Draw_Tape(
+		page.surface,
 		swatch,
-		f32(legacy.ui_frame_sc(page.frame, 26)),
-		theme.tape_color,
+		f32(fit.Surface_Scale(page.surface, 26)),
+		theme.tape,
 	)
 	annotate(page, row, fmt.tprintf("#%02X%02X%02X", accent.r, accent.g, accent.b))
 	page_rows(page, 1)
@@ -501,12 +500,12 @@ draw_taped_accent :: proc(page: ^Page) {
 draw_type_specimen :: proc(page: ^Page) {
 	assert(page != nil, "draw_type_specimen: nil page")
 	page_heading(page, "Type")
-	for role in legacy.legacy_text_role {
+	for role in fit.Text_Role {
 		count := i32(1)
-		if legacy.text_role_line_height(page.frame, role) > page.line do count = 2
+		if fit.Surface_Text_Line_Height(page.surface, role) > page.line do count = 2
 		row := page_rows(page, count)
-		legacy.text_truncated(
-			page.frame,
+		fit.Surface_Text_Truncated(
+			page.surface,
 			SPECIMEN,
 			page_body(page),
 			row.y,
@@ -514,7 +513,11 @@ draw_type_specimen :: proc(page: ^Page) {
 			role,
 			.Primary,
 		)
-		annotate(page, row, fmt.tprintf("%v %dpx", role, legacy.text_role_size(page.frame, role)))
+		annotate(
+			page,
+			row,
+			fmt.tprintf("%v %dpx", role, fit.Surface_Text_Size(page.surface, role)),
+		)
 	}
 	page_rows(page, 1)
 }
@@ -528,39 +531,39 @@ draw_shape_notes :: proc(page: ^Page) {
 	assert(page != nil, "draw_shape_notes: nil page")
 	page_heading(page, "Shape")
 
-	theme := legacy.ui_frame_theme(page.frame)
+	theme := fit.Surface_Theme_Tokens(page.surface)
 	row := page_rows(page, 3)
-	card := legacy.legacy_rect {
+	card := fit.Float_Rect {
 		f32(page_body(page)),
 		f32(row.y),
-		f32(legacy.ui_frame_sc(page.frame, 150)),
-		f32(row.h - legacy.ui_frame_sc(page.frame, 8)),
+		f32(fit.Surface_Scale(page.surface, 150)),
+		f32(row.h - fit.Surface_Scale(page.surface, 8)),
 	}
-	legacy.draw_surface(page.frame, card, .Card, .Rest, .MD, .Hairline, .Lifted)
+	fit.Surface_Draw_Surface(page.surface, card, .Card, .Rest, .MD, .Hairline, .Lifted)
 	// The lit edge. draw_surface already laid the cast shadow, so the card is
 	// now worked from both directions - which is what a raised sheet on toned
 	// stock actually looks like, and what a white ground cannot express.
-	legacy.draw_chalk_highlight(page.frame, card, .MD)
+	fit.Surface_Draw_Chalk_Highlight(page.surface, card, .MD)
 	// A card is a smaller sheet: it gets its own grain, which is the one place
 	// a bounded texture is affordable.
 	if theme.paper_tooth.a > 0 {
-		legacy.draw_paper_tooth(page.frame, card, theme.paper_tooth)
+		fit.Surface_Draw_Paper_Tooth(page.surface, card, theme.paper_tooth)
 	}
-	legacy.draw_dog_ear(
-		page.frame,
+	fit.Surface_Draw_Dog_Ear(
+		page.surface,
 		card,
-		f32(legacy.ui_frame_sc(page.frame, 14)),
+		f32(fit.Surface_Scale(page.surface, 14)),
 		// The folded flap catches the light, so it takes chalk rather than
 		// borrowing the app background. On a screen palette chalk is zeroed
 		// and the fold falls back to the ground, as before.
-		theme.chalk if theme.chalk.a > 0 else theme.bg_app,
+		theme.chalk if theme.chalk.a > 0 else theme.background_app,
 		theme.border_subtle,
 	)
-	legacy.text(
-		page.frame,
+	fit.Surface_Text(
+		page.surface,
 		"Lifted",
-		i32(card.x) + legacy.ui_frame_sc(page.frame, 10),
-		i32(card.y) + legacy.ui_frame_sc(page.frame, 4),
+		i32(card.x) + fit.Surface_Scale(page.surface, 10),
+		i32(card.y) + fit.Surface_Scale(page.surface, 4),
 		.Note,
 		.Secondary,
 	)
@@ -568,22 +571,22 @@ draw_shape_notes :: proc(page: ^Page) {
 
 	// The radii as an unboxed run beside the card: filled blocks with no
 	// border, so the corner is the only thing that differs between them.
-	block_x := i32(card.x + card.width) + legacy.ui_frame_sc(page.frame, 16)
-	block_w := legacy.ui_frame_sc(page.frame, 52)
-	gap := legacy.ui_frame_sc(page.frame, 8)
-	for radius, index in legacy.legacy_radius {
-		block := legacy.legacy_rect {
+	block_x := i32(card.x + card.width) + fit.Surface_Scale(page.surface, 16)
+	block_w := fit.Surface_Scale(page.surface, 52)
+	gap := fit.Surface_Scale(page.surface, 8)
+	for radius, index in fit.Radius {
+		block := fit.Float_Rect {
 			f32(block_x + i32(index) * (block_w + gap)),
 			card.y,
 			f32(block_w),
 			f32(page.line * 2),
 		}
 		if block.x + block.width > f32(page.x + page.w) do break
-		legacy.draw_surface(page.frame, block, .Chip, .Rest, radius, .None, .Flat)
-		legacy.text(
-			page.frame,
+		fit.Surface_Draw_Surface(page.surface, block, .Chip, .Rest, radius, .None, .Flat)
+		fit.Surface_Text(
+			page.surface,
 			fmt.tprint(radius),
-			i32(block.x) + legacy.ui_frame_sc(page.frame, 4),
+			i32(block.x) + fit.Surface_Scale(page.surface, 4),
 			i32(block.y) + page.line * 2,
 			.Note,
 			.Muted,
@@ -597,36 +600,37 @@ draw_measure_notes :: proc(page: ^Page) {
 	assert(page != nil, "draw_measure_notes: nil page")
 	page_heading(page, "Measure")
 
-	theme := legacy.ui_frame_theme(page.frame)
-	bar_h := legacy.ui_frame_sc(page.frame, 10)
+	theme := fit.Surface_Theme_Tokens(page.surface)
+	bar_h := fit.Surface_Scale(page.surface, 10)
 	body := page_body(page)
-	for space in legacy.legacy_space {
+	for space in fit.Space {
 		row := page_rows(page, 1)
-		width := legacy.space_pixels(page.frame, space)
+		width := fit.Surface_Space(page.surface, space)
 		// A zero-width token still needs a visible row, or None reads as a
 		// missing entry rather than as a deliberate zero.
-		legacy.draw_rectangle(
-			page.frame,
-			body,
-			row.y + legacy.ui_frame_sc(page.frame, 5),
-			max(width, 1),
-			bar_h,
-			theme.fg_accent,
+		fit.Surface_Fill_Rect(
+			page.surface,
+			{body, row.y + fit.Surface_Scale(page.surface, 5), max(width, 1), bar_h},
+			theme.foreground_accent,
 		)
 		annotate(page, row, fmt.tprintf("%v %dpx", space, width))
 	}
 	page_rows(page, 1)
 
-	for tint in legacy.Tint {
+	for tint in fit.Tint {
 		row := page_rows(page, 1)
-		bar := legacy.legacy_rect {
+		bar := fit.Float_Rect {
 			f32(body),
-			f32(row.y + legacy.ui_frame_sc(page.frame, 3)),
-			f32(legacy.ui_frame_sc(page.frame, SWATCH_W)),
-			f32(page.line - legacy.ui_frame_sc(page.frame, 6)),
+			f32(row.y + fit.Surface_Scale(page.surface, 3)),
+			f32(fit.Surface_Scale(page.surface, SWATCH_W)),
+			f32(page.line - fit.Surface_Scale(page.surface, 6)),
 		}
-		legacy.draw_rectangle_rec(page.frame, bar, legacy.color_tinted(theme.fg_accent, tint))
-		annotate(page, row, fmt.tprintf("%v %d", tint, legacy.tint_alpha(tint)))
+		fit.Surface_Fill_Float_Rect(
+			page.surface,
+			bar,
+			fit.Color_Tinted(theme.foreground_accent, tint),
+		)
+		annotate(page, row, fmt.tprintf("%v %d", tint, fit.Tint_Alpha(tint)))
 	}
 	page_rows(page, 1)
 }

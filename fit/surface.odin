@@ -2,11 +2,6 @@ package fit
 
 import "ingot:ui"
 
-Surface_Borrow_Context :: proc(surface: ^Surface) -> rawptr {
-	u := surface_ui(surface)
-	return u.frame
-}
-
 Surface_Viewport :: proc(surface: ^Surface) -> Rect {
 	u := surface_ui(surface)
 	return from_rect(ui.frame_viewport(u.frame))
@@ -20,6 +15,16 @@ Surface_Pane_Origin :: proc(surface: ^Surface) -> Point {
 Surface_Scale :: proc(surface: ^Surface, value: i32) -> i32 {
 	u := surface_ui(surface)
 	return ui.ui_frame_sc(u.frame, value)
+}
+
+Surface_Scale_Float :: proc(surface: ^Surface, value: f32) -> f32 {
+	u := surface_ui(surface)
+	return ui.ui_frame_scf(u.frame, value)
+}
+
+Surface_Cull_Bounds :: proc(surface: ^Surface) -> (top, bottom: i32) {
+	u := surface_ui(surface)
+	return u.frame.text_cull_top, u.frame.text_cull_bottom
 }
 
 Surface_Metrics :: proc(surface: ^Surface) -> Metrics {
@@ -42,6 +47,30 @@ Surface_Metrics :: proc(surface: ^Surface) -> Metrics {
 Surface_Theme :: proc(surface: ^Surface) -> Theme {
 	u := surface_ui(surface)
 	return {inner = ui.ui_frame_theme(u.frame)^}
+}
+
+Surface_Theme_Tokens :: proc(surface: ^Surface) -> Theme_Tokens {
+	theme := Surface_Theme(surface).inner
+	return {
+		background_app = Color(theme.bg_app),
+		background_secondary = Color(theme.bg_secondary),
+		background_active = Color(theme.bg_active),
+		background_popup = Color(theme.bg_popup),
+		foreground_primary = Color(theme.fg_primary),
+		foreground_secondary = Color(theme.fg_secondary),
+		foreground_accent = Color(theme.fg_accent),
+		foreground_label = Color(theme.fg_label),
+		border = Color(theme.border_color),
+		border_subtle = Color(theme.border_subtle),
+		paper_rule = Color(theme.paper_rule),
+		paper_tooth = Color(theme.paper_tooth),
+		graphite = Color(theme.graphite),
+		chalk = Color(theme.chalk),
+		highlighter = Color(theme.highlighter),
+		tape = Color(theme.tape_color),
+		substrate = Substrate_Kind(theme.substrate.kind),
+		margin_rule = theme.substrate.margin_rule,
+	}
 }
 
 Surface_Theme_Color :: proc(surface: ^Surface, ink: Ink) -> Color {
@@ -106,6 +135,22 @@ Surface_Text_Truncated :: proc(
 	ui.text_truncated(u.frame, text, x, y, width, ui.Text_Role(role), ui.Ink(ink))
 }
 
+Surface_Text_Wrapped :: proc(
+	surface: ^Surface,
+	text: string,
+	x, y, width: i32,
+	color: Color,
+	font_size, line_height: i32,
+) {
+	u := surface_ui(surface)
+	ui.draw_text_wrapped_frame(u.frame, x, y, width, text, ui.Color(color), font_size, line_height)
+}
+
+Surface_Truncate_Path :: proc(surface: ^Surface, path: string, width, font_size: i32) -> string {
+	u := surface_ui(surface)
+	return ui.truncate_path_middle_frame(u.frame, path, width, font_size)
+}
+
 Surface_Fill_Rect :: proc(surface: ^Surface, rect: Rect, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_rectangle(u.frame, rect.x, rect.y, rect.w, rect.h, ui.Color(color))
@@ -119,6 +164,36 @@ Surface_Fill_Float_Rect :: proc(surface: ^Surface, rect: Float_Rect, color: Colo
 Surface_Stroke_Rect :: proc(surface: ^Surface, rect: Rect, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_rectangle_lines(u.frame, rect.x, rect.y, rect.w, rect.h, ui.Color(color))
+}
+
+Surface_Fill_Rounded_Rect :: proc(
+	surface: ^Surface,
+	rect: Float_Rect,
+	roundness: f32,
+	segments: i32,
+	color: Color,
+) {
+	u := surface_ui(surface)
+	ui.draw_rectangle_rounded(u.frame, to_float_rect(rect), roundness, segments, ui.Color(color))
+}
+
+Surface_Stroke_Rounded_Rect :: proc(
+	surface: ^Surface,
+	rect: Float_Rect,
+	roundness: f32,
+	segments: i32,
+	thickness: f32,
+	color: Color,
+) {
+	u := surface_ui(surface)
+	ui.draw_rectangle_rounded_lines_ex(
+		u.frame,
+		to_float_rect(rect),
+		roundness,
+		segments,
+		thickness,
+		ui.Color(color),
+	)
 }
 
 Surface_Draw_Surface :: proc(
@@ -158,6 +233,11 @@ Surface_Mouse_Pressed :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
 	return ui.is_mouse_button_pressed(u.frame, ui.Mouse_Button(button))
 }
 
+Surface_Mouse_Down :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
+	u := surface_ui(surface)
+	return ui.is_mouse_button_down(u.frame, ui.Mouse_Button(button))
+}
+
 Surface_Mouse_Position :: proc(surface: ^Surface) -> Point {
 	u := surface_ui(surface)
 	return from_point(ui.get_mouse_position(u.frame))
@@ -176,6 +256,10 @@ Surface_Request_Cursor :: proc(surface: ^Surface, cursor: Cursor) {
 Request_Redraw :: proc(surface: ^Surface) {
 	u := surface_ui(surface)
 	ui.request_redraw(u.frame)
+}
+
+Surface_Settings_Scale_Preset_Index :: proc(value: f32) -> int {
+	return ui.settings_scale_preset_index(value)
 }
 
 Surface_Region_Begin :: proc(surface: ^Surface, region: ^Region, rect: Rect, gap: Space = .None) {
@@ -335,4 +419,23 @@ Surface_Draw_Pigment_Block :: proc(surface: ^Surface, rect: Float_Rect, color: C
 Surface_Draw_Chalk_Highlight :: proc(surface: ^Surface, rect: Float_Rect, radius: Radius) {
 	u := surface_ui(surface)
 	ui.draw_chalk_highlight(u.frame, to_float_rect(rect), ui.Radius(radius))
+}
+
+Surface_Dot_Grid_Fits :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32) -> bool {
+	_ = surface_ui(surface)
+	return ui.dot_grid_fits(to_float_rect(rect), spacing)
+}
+
+Surface_Scatter_Unit :: proc(index, lane: u32) -> f32 {
+	return ui.scatter_unit(index, lane)
+}
+
+Surface_Layer_Begin :: proc(surface: ^Surface, z: Z_Order, claim: Float_Rect = {}) {
+	u := surface_ui(surface)
+	ui.layer_begin(u.frame, ui.Z_Order(z), claim = to_float_rect(claim))
+}
+
+Surface_Layer_End :: proc(surface: ^Surface) {
+	u := surface_ui(surface)
+	ui.layer_end(u.frame)
 }

@@ -59,6 +59,26 @@ Surface_Colors :: struct {
 	foreground: Color,
 	border:     Color,
 }
+Theme_Tokens :: struct {
+	background_app:       Color,
+	background_secondary: Color,
+	background_active:    Color,
+	background_popup:     Color,
+	foreground_primary:   Color,
+	foreground_secondary: Color,
+	foreground_accent:    Color,
+	foreground_label:     Color,
+	border:               Color,
+	border_subtle:        Color,
+	paper_rule:           Color,
+	paper_tooth:          Color,
+	graphite:             Color,
+	chalk:                Color,
+	highlighter:          Color,
+	tape:                 Color,
+	substrate:            Substrate_Kind,
+	margin_rule:          bool,
+}
 
 Input_Box :: struct {
 	inner: ui.Input_Box,
@@ -205,8 +225,8 @@ Confirm_Dialog_State :: struct {
 TABLE_COLUMN_COUNT_MAX :: ui.TABLE_COLUMN_COUNT_MAX
 PAINT_COMMAND_CAP :: ui.PAINT_COMMAND_CAP
 PAINT_TEXT_CAP :: ui.PAINT_TEXT_CAP
-Z_PANEL :: ui.Z_PANEL
-Z_POPUP :: ui.Z_POPUP
+Z_PANEL :: Z_Order(ui.Z_PANEL)
+Z_POPUP :: Z_Order(ui.Z_POPUP)
 ROOT_EXTENT_OPEN :: ui.ROOT_EXTENT_OPEN
 
 Input_Box_Init :: proc(box: ^Input_Box) {
@@ -250,6 +270,45 @@ Calendar_Date_Valid :: proc(value: Calendar_Date) -> bool {
 
 Calendar_Format :: proc(value: Calendar_Date) -> string {
 	return ui.calendar_format({value.year, value.month, value.day})
+}
+
+Chart_Reset :: proc(state: ^Chart_State) {
+	assert(state != nil, "Fit.Chart_Reset: nil state")
+	state.enter_anim = 0
+	state.hover_index = -1
+}
+
+Modal_Open :: proc(state: ^Modal_State) {
+	assert(state != nil, "Fit.Modal_Open: nil state")
+	state.inner.open = true
+}
+
+Modal_Is_Open :: proc(state: ^Modal_State) -> bool {
+	assert(state != nil, "Fit.Modal_Is_Open: nil state")
+	return state.inner.open
+}
+
+Context_Menu_Is_Open :: proc(state: ^Context_Menu_State) -> bool {
+	assert(state != nil, "Fit.Context_Menu_Is_Open: nil state")
+	return state.inner.open
+}
+
+Confirm_Dialog_Is_Open :: proc(state: ^Confirm_Dialog_State) -> bool {
+	assert(state != nil, "Fit.Confirm_Dialog_Is_Open: nil state")
+	return state.inner.modal.open
+}
+
+Modal_Close :: proc(state: ^Modal_State) {
+	assert(state != nil, "Fit.Modal_Close: nil state")
+	state.inner.open = false
+}
+
+Widget_Id_From_String :: proc(value: string) -> Widget_Id {
+	return Widget_Id(ui.widget_id(value))
+}
+
+Widget_Id_From_U64 :: proc(value: u64) -> Widget_Id {
+	return Widget_Id(ui.widget_id(value))
 }
 
 Theme_Dark :: proc() -> Theme {return {inner = ui.theme_dark()}}

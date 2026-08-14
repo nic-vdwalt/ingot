@@ -296,7 +296,7 @@ Region_Label :: proc(region: ^Region, text: string, role: Text_Role = .Body, ink
 	ui.label(&region.inner, text, ui.Text_Role(role), ui.Ink(ink))
 }
 
-Region_Button :: proc(
+Region_Button_String :: proc(
 	region: ^Region,
 	key, label: string,
 	style: Button_Style = .Secondary,
@@ -306,14 +306,78 @@ Region_Button :: proc(
 	return ui.button(&region.inner, key, label, ui.Btn_Style(style), enabled)
 }
 
-Region_Checkbox :: proc(region: ^Region, key, label: string, value: ^bool) -> bool {
+Region_Button_Id :: proc(
+	region: ^Region,
+	widget: Widget_Id,
+	label: string,
+	style: Button_Style = .Secondary,
+	enabled: bool = true,
+) -> bool {
+	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
+	return ui.button(&region.inner, ui.Widget_Id(widget), label, ui.Btn_Style(style), enabled)
+}
+
+Region_Button_U64 :: proc(
+	region: ^Region,
+	key: u64,
+	label: string,
+	style: Button_Style = .Secondary,
+	enabled: bool = true,
+) -> bool {
+	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
+	return ui.button(&region.inner, key, label, ui.Btn_Style(style), enabled)
+}
+
+Region_Button :: proc {
+	Region_Button_String,
+	Region_Button_Id,
+	Region_Button_U64,
+}
+
+Region_Checkbox_String :: proc(region: ^Region, key, label: string, value: ^bool) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Checkbox: region not open")
 	return ui.checkbox(&region.inner, ui.id(&region.inner, key), label, value)
 }
 
-Region_Radio :: proc(region: ^Region, key, label: string, selected: ^i32, value: i32) -> bool {
+Region_Checkbox_Id :: proc(
+	region: ^Region,
+	widget: Widget_Id,
+	label: string,
+	value: ^bool,
+) -> bool {
+	assert(region != nil && region.inner.open, "Fit.Region_Checkbox: region not open")
+	return ui.checkbox(&region.inner, ui.Widget_Id(widget), label, value)
+}
+
+Region_Checkbox :: proc {
+	Region_Checkbox_String,
+	Region_Checkbox_Id,
+}
+
+Region_Radio_String :: proc(
+	region: ^Region,
+	key, label: string,
+	selected: ^i32,
+	value: i32,
+) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Radio: region not open")
 	return ui.radio(&region.inner, ui.id(&region.inner, key), label, selected, value)
+}
+
+Region_Radio_Id :: proc(
+	region: ^Region,
+	widget: Widget_Id,
+	label: string,
+	selected: ^i32,
+	value: i32,
+) -> bool {
+	assert(region != nil && region.inner.open, "Fit.Region_Radio: region not open")
+	return ui.radio(&region.inner, ui.Widget_Id(widget), label, selected, value)
+}
+
+Region_Radio :: proc {
+	Region_Radio_String,
+	Region_Radio_Id,
 }
 
 Region_Text_Input :: proc(

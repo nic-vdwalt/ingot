@@ -253,8 +253,34 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 	markdown: proc(_: ^Surface, _: Rect, _: string, _: Color) -> Markdown_Result = Surface_Markdown
 	toasts: proc(_: ^Surface, _: ^Toast_State) = Surface_Toasts
 	grid_end: proc(_: ^Surface, _: ^Grid_State) -> Rect = Surface_Grid_End
+	chart_reset: proc(_: ^Chart_State) = Chart_Reset
+	modal_open: proc(_: ^Modal_State) = Modal_Open
+	modal_is_open: proc(_: ^Modal_State) -> bool = Modal_Is_Open
+	menu_is_open: proc(_: ^Context_Menu_State) -> bool = Context_Menu_Is_Open
+	confirm_is_open: proc(_: ^Confirm_Dialog_State) -> bool = Confirm_Dialog_Is_Open
 	testing.expect(t, line_chart != nil && bar_chart != nil)
 	testing.expect(t, markdown != nil && toasts != nil && grid_end != nil)
+	testing.expect(t, chart_reset != nil && modal_open != nil && modal_is_open != nil)
+	testing.expect(t, menu_is_open != nil && confirm_is_open != nil)
+}
+
+@(test)
+fit_gallery_state_helpers_round_trip :: proc(t: ^testing.T) {
+	chart := Chart_State {
+		enter_anim  = 1,
+		hover_index = 3,
+	}
+	Chart_Reset(&chart)
+	testing.expect_value(t, chart.enter_anim, f32(0))
+	testing.expect_value(t, chart.hover_index, -1)
+	modal: Modal_State
+	testing.expect(t, !Modal_Is_Open(&modal))
+	Modal_Open(&modal)
+	testing.expect(t, Modal_Is_Open(&modal))
+	menu: Context_Menu_State
+	testing.expect(t, !Context_Menu_Is_Open(&menu))
+	confirm: Confirm_Dialog_State
+	testing.expect(t, !Confirm_Dialog_Is_Open(&confirm))
 }
 
 @(test)
