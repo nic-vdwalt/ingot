@@ -17,6 +17,11 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `fit.Canvas`: a bounded full-parent explicit-geometry root that removes the
+  synthetic `Column` plus `Custom` measure/render bridge from applications.
+- `fit.Px`, `fit.Region_Open`, `fit.Region_Close`, and string/integer-key region
+  control overloads reduce explicit-surface scaling, scope, and identity
+  ceremony while preserving physical `Rect` semantics and caller-owned state.
 - `fit.Row_With`, `Column_With`, `Flow_With`, `Grid_With`, and
   `Attachment_With`: immediately invoked, source-located container helpers that
   verify callback balance without retaining callbacks or component state.

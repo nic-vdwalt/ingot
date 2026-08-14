@@ -434,7 +434,7 @@ Region_Dropdown :: proc {
 	Region_Dropdown_Id,
 }
 
-Region_Combobox :: proc (
+Region_Combobox :: proc(
 	region: ^Region,
 	key: string,
 	state: ^Combobox_State,

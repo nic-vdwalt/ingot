@@ -129,7 +129,7 @@ page_body :: proc(page: ^Page) -> i32 {
 page_indent :: proc(surface: ^fit.Surface) -> i32 {
 	assert(surface != nil, "page_indent: nil frame")
 	if fit.Surface_Theme_Tokens(surface).substrate == .None do return 0
-	return fit.Surface_Scale(surface, MARGIN_INSET + 10)
+	return fit.Px(surface, MARGIN_INSET + 10)
 }
 
 // annotate writes a right-aligned note in the reserved margin column.
@@ -137,7 +137,7 @@ annotate :: proc(page: ^Page, row: fit.Rect, note: string) {
 	assert(page != nil, "annotate: nil page")
 	if len(note) == 0 || page.indent == 0 do return
 	width := fit.Surface_Text_Width(page.surface, note, .Note)
-	gap := fit.Surface_Scale(page.surface, 8)
+	gap := fit.Px(page.surface, 8)
 	x := page.x + page.indent - width - gap
 	if x < page.x do return
 	fit.Surface_Text(page.surface, note, x, row.y, .Note, .Muted)
@@ -159,7 +159,7 @@ page_heading :: proc(page: ^Page, title: string) {
 	fit.Surface_Draw_Hand_Underline(
 		page.surface,
 		page_body(page),
-		row.y + row.h - fit.Surface_Scale(page.surface, 5),
+		row.y + row.h - fit.Px(page.surface, 5),
 		fit.Surface_Text_Width(page.surface, title, .Title),
 		color,
 	)
@@ -222,7 +222,7 @@ draw_pigment_studies :: proc(page: ^Page) {
 	// the row read as stacked panes of tinted glass rather than as swatches
 	// laid down beside one another.
 	OVERLAP :: f32(1.06)
-	span := f32(available) - f32(fit.Surface_Scale(page.surface, 4))
+	span := f32(available) - f32(fit.Px(page.surface, 4))
 	pitch := i32(span / (f32(count - 1) + OVERLAP))
 	block_w := f32(pitch) * OVERLAP
 	band_h := page.line * 4
@@ -266,7 +266,7 @@ draw_pigment_studies :: proc(page: ^Page) {
 			PIGMENT_ROLES[pigment_role],
 			body + i32(index) * pitch,
 			label_row.y,
-			pitch - fit.Surface_Scale(page.surface, 4),
+			pitch - fit.Px(page.surface, 4),
 			.Note,
 			.Secondary,
 		)
@@ -283,7 +283,7 @@ draw_pigment_studies :: proc(page: ^Page) {
 				PIGMENT_NAMES[pigment_role],
 				body + i32(index) * pitch,
 				pigment_row.y,
-				pitch - fit.Surface_Scale(page.surface, 4),
+				pitch - fit.Px(page.surface, 4),
 				.Note,
 				.Muted,
 			)
@@ -299,13 +299,13 @@ draw_pigment_studies :: proc(page: ^Page) {
 state_cell_width :: proc(page: ^Page, label_w: i32) -> i32 {
 	assert(page != nil, "state_cell_width: nil page")
 	count := i32(len(fit.Visual_State))
-	gap := fit.Surface_Scale(page.surface, 6)
+	gap := fit.Px(page.surface, 6)
 	available := page.w - page.indent - label_w - gap * (count - 1)
-	minimum := fit.Surface_Scale(page.surface, 38)
+	minimum := fit.Px(page.surface, 38)
 	// Capped rather than filling the column: a cell stretched across the whole
 	// page turns the highlighter into a band over a few pixels of text, which
 	// reads as a fill rather than as a mark.
-	maximum := fit.Surface_Scale(page.surface, 76)
+	maximum := fit.Px(page.surface, 76)
 	if available < minimum * count do return minimum
 	return min(available / count, maximum)
 }
@@ -320,14 +320,14 @@ draw_surface_states :: proc(page: ^Page) {
 	assert(page != nil, "draw_surface_states: nil page")
 	page_heading(page, "Surfaces")
 
-	label_w := fit.Surface_Scale(page.surface, LABEL_COL_W)
-	gap := fit.Surface_Scale(page.surface, 6)
+	label_w := fit.Px(page.surface, LABEL_COL_W)
+	gap := fit.Px(page.surface, 6)
 	cell_w := state_cell_width(page, label_w)
 	body := page_body(page)
 	// Cells are inset vertically so consecutive rows do not touch. Without it,
 	// thirteen highlighter swipes stack into one continuous column with a
 	// sawtooth edge - a rendering fault rather than thirteen marks.
-	inset := fit.Surface_Scale(page.surface, 2)
+	inset := fit.Px(page.surface, 2)
 
 	head := page_rows(page, 1)
 	for state, index in fit.Visual_State {
@@ -391,14 +391,7 @@ draw_state_cell :: proc(
 
 	// "Ag" carries an ascender and a descender, so a fill that clips text
 	// shows up here rather than hiding behind an all-caps sample.
-	fit.Surface_Text(
-		surface,
-		"Ag",
-		i32(cell.x) + fit.Surface_Scale(surface, 5),
-		i32(cell.y),
-		.Note,
-		.Primary,
-	)
+	fit.Surface_Text(surface, "Ag", i32(cell.x) + fit.Px(surface, 5), i32(cell.y), .Note, .Primary)
 }
 
 // legible_on picks whichever of the palette's two extreme inks reads better on
@@ -423,12 +416,12 @@ draw_ink_chips :: proc(page: ^Page) {
 	assert(page != nil, "draw_ink_chips: nil page")
 	page_heading(page, "Ink")
 
-	chip_w := fit.Surface_Scale(page.surface, CHIP_W)
-	gap := fit.Surface_Scale(page.surface, 6)
+	chip_w := fit.Px(page.surface, CHIP_W)
+	gap := fit.Px(page.surface, 6)
 	card := fit.Surface_Resolve_Colors(page.surface, .Card, .Rest)
 	body := page_body(page)
 	per_row := max((page.w - page.indent) / (chip_w + gap), 1)
-	inset := fit.Surface_Scale(page.surface, 2)
+	inset := fit.Px(page.surface, 2)
 
 	row := page_rows(page, 1)
 	column := i32(0)
@@ -454,9 +447,9 @@ draw_ink_chips :: proc(page: ^Page) {
 		fit.Surface_Text_Truncated(
 			page.surface,
 			fmt.tprint(ink),
-			i32(cell.x) + fit.Surface_Scale(page.surface, 4),
+			i32(cell.x) + fit.Px(page.surface, 4),
 			i32(cell.y),
-			chip_w - fit.Surface_Scale(page.surface, 8),
+			chip_w - fit.Px(page.surface, 8),
 			.Note,
 			legible_on(page.surface, color),
 		)
@@ -481,17 +474,12 @@ draw_taped_accent :: proc(page: ^Page) {
 	swatch := fit.Float_Rect {
 		f32(page_body(page)),
 		f32(row.y),
-		f32(fit.Surface_Scale(page.surface, SWATCH_W)),
-		f32(row.h - fit.Surface_Scale(page.surface, 6)),
+		f32(fit.Px(page.surface, SWATCH_W)),
+		f32(row.h - fit.Px(page.surface, 6)),
 	}
 	fit.Surface_Draw_Shadow(page.surface, swatch, .SM, .Lifted)
 	fit.Surface_Draw_Pigment_Block(page.surface, swatch, accent)
-	fit.Surface_Draw_Tape(
-		page.surface,
-		swatch,
-		f32(fit.Surface_Scale(page.surface, 26)),
-		theme.tape,
-	)
+	fit.Surface_Draw_Tape(page.surface, swatch, f32(fit.Px(page.surface, 26)), theme.tape)
 	annotate(page, row, fmt.tprintf("#%02X%02X%02X", accent.r, accent.g, accent.b))
 	page_rows(page, 1)
 }
@@ -536,8 +524,8 @@ draw_shape_notes :: proc(page: ^Page) {
 	card := fit.Float_Rect {
 		f32(page_body(page)),
 		f32(row.y),
-		f32(fit.Surface_Scale(page.surface, 150)),
-		f32(row.h - fit.Surface_Scale(page.surface, 8)),
+		f32(fit.Px(page.surface, 150)),
+		f32(row.h - fit.Px(page.surface, 8)),
 	}
 	fit.Surface_Draw_Surface(page.surface, card, .Card, .Rest, .MD, .Hairline, .Lifted)
 	// The lit edge. draw_surface already laid the cast shadow, so the card is
@@ -552,7 +540,7 @@ draw_shape_notes :: proc(page: ^Page) {
 	fit.Surface_Draw_Dog_Ear(
 		page.surface,
 		card,
-		f32(fit.Surface_Scale(page.surface, 14)),
+		f32(fit.Px(page.surface, 14)),
 		// The folded flap catches the light, so it takes chalk rather than
 		// borrowing the app background. On a screen palette chalk is zeroed
 		// and the fold falls back to the ground, as before.
@@ -562,8 +550,8 @@ draw_shape_notes :: proc(page: ^Page) {
 	fit.Surface_Text(
 		page.surface,
 		"Lifted",
-		i32(card.x) + fit.Surface_Scale(page.surface, 10),
-		i32(card.y) + fit.Surface_Scale(page.surface, 4),
+		i32(card.x) + fit.Px(page.surface, 10),
+		i32(card.y) + fit.Px(page.surface, 4),
 		.Note,
 		.Secondary,
 	)
@@ -571,9 +559,9 @@ draw_shape_notes :: proc(page: ^Page) {
 
 	// The radii as an unboxed run beside the card: filled blocks with no
 	// border, so the corner is the only thing that differs between them.
-	block_x := i32(card.x + card.width) + fit.Surface_Scale(page.surface, 16)
-	block_w := fit.Surface_Scale(page.surface, 52)
-	gap := fit.Surface_Scale(page.surface, 8)
+	block_x := i32(card.x + card.width) + fit.Px(page.surface, 16)
+	block_w := fit.Px(page.surface, 52)
+	gap := fit.Px(page.surface, 8)
 	for radius, index in fit.Radius {
 		block := fit.Float_Rect {
 			f32(block_x + i32(index) * (block_w + gap)),
@@ -586,7 +574,7 @@ draw_shape_notes :: proc(page: ^Page) {
 		fit.Surface_Text(
 			page.surface,
 			fmt.tprint(radius),
-			i32(block.x) + fit.Surface_Scale(page.surface, 4),
+			i32(block.x) + fit.Px(page.surface, 4),
 			i32(block.y) + page.line * 2,
 			.Note,
 			.Muted,
@@ -601,7 +589,7 @@ draw_measure_notes :: proc(page: ^Page) {
 	page_heading(page, "Measure")
 
 	theme := fit.Surface_Theme_Tokens(page.surface)
-	bar_h := fit.Surface_Scale(page.surface, 10)
+	bar_h := fit.Px(page.surface, 10)
 	body := page_body(page)
 	for space in fit.Space {
 		row := page_rows(page, 1)
@@ -610,7 +598,7 @@ draw_measure_notes :: proc(page: ^Page) {
 		// missing entry rather than as a deliberate zero.
 		fit.Surface_Fill_Rect(
 			page.surface,
-			{body, row.y + fit.Surface_Scale(page.surface, 5), max(width, 1), bar_h},
+			{body, row.y + fit.Px(page.surface, 5), max(width, 1), bar_h},
 			theme.foreground_accent,
 		)
 		annotate(page, row, fmt.tprintf("%v %dpx", space, width))
@@ -621,9 +609,9 @@ draw_measure_notes :: proc(page: ^Page) {
 		row := page_rows(page, 1)
 		bar := fit.Float_Rect {
 			f32(body),
-			f32(row.y + fit.Surface_Scale(page.surface, 3)),
-			f32(fit.Surface_Scale(page.surface, SWATCH_W)),
-			f32(page.line - fit.Surface_Scale(page.surface, 6)),
+			f32(row.y + fit.Px(page.surface, 3)),
+			f32(fit.Px(page.surface, SWATCH_W)),
+			f32(page.line - fit.Px(page.surface, 6)),
 		}
 		fit.Surface_Fill_Float_Rect(
 			page.surface,
