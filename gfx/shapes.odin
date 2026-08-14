@@ -586,7 +586,9 @@ _emit_gradient_quad :: proc(ctx: ^Context, r: ^Renderer, rec: Rectangle, tl, tr,
 	)
 	colors := [4][4]f32{tl, tr, br, bl}
 	for color in colors {
-		for component in color do assert(_f32_is_finite(component), "_emit_gradient_quad: non-finite color")
+		for component in color {
+			assert(_f32_is_finite(component), "_emit_gradient_quad: non-finite color")
+		}
 	}
 	if !_batch_reserve(ctx, r, 4, 6) do return
 	transform := r.model_xf
