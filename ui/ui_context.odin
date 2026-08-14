@@ -298,7 +298,10 @@ ui_frame_pane_pop :: proc(frame: ^Ui_Frame) {
 
 frame_pane_origin :: proc(frame: ^Ui_Frame) -> Vector2 {
 	assert(frame != nil && frame.open, "pane_origin: invalid frame")
-	assert(frame.pane_count >= 0 && frame.pane_count <= MAX_PANE_SCOPES, "pane_origin: corrupt scope")
+	assert(
+		frame.pane_count >= 0 && frame.pane_count <= MAX_PANE_SCOPES,
+		"pane_origin: corrupt scope",
+	)
 	if frame.pane_count == 0 do return {}
 	return frame.pane_origins[frame.pane_count - 1]
 }

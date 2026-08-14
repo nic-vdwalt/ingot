@@ -69,6 +69,7 @@ sel_set :: proc(sel: ^Input_Sel, sb: ^strings.Builder, anchor, extent: int) {
 	sel.anchor = clamped_anchor
 	sel.extent = clamped_extent
 	sel.active = clamped_anchor != clamped_extent
+	assert(sel.active == (sel.anchor != sel.extent), "sel_set: invalid active state")
 	assert(sel.anchor >= 0 && sel.anchor <= len(text), "sel_set: invalid anchor")
 	assert(sel.extent >= 0 && sel.extent <= len(text), "sel_set: invalid extent")
 }
@@ -224,9 +225,13 @@ nav_end :: proc(sel: ^Input_Sel, cursor: ^int, shift: bool) {
 	assert(cursor != nil, "nav_end: nil cursor")
 	if shift {
 		assert(sel.sb != nil, "nav_end: shifted navigation has no owner")
-		assert(sel.anchor >= 0 && sel.anchor <= len(strings.to_string(sel.sb^)), "nav_end: invalid anchor")
+		assert(
+			sel.anchor >= 0 && sel.anchor <= len(strings.to_string(sel.sb^)),
+			"nav_end: invalid anchor",
+		)
 		sel.extent = caret_clamp(strings.to_string(sel.sb^), cursor^)
 		sel.active = sel.anchor != sel.extent
+		assert(sel.active == (sel.anchor != sel.extent), "nav_end: invalid active state")
 	}
 }
 

@@ -172,24 +172,14 @@ value :: proc() -> int {
 '''
         self.assertEqual(self.findings(source), [])
 
-    def test_baseline_rejects_growth_and_stale_entries(self):
+    def test_zero_debt_check_rejects_every_current_finding(self):
         finding = check_assertions.Finding("ui/fixture.odin", "p", 1, ("queue",), 0)
-        current = {finding.key: finding}
-        self.assertEqual(check_assertions.check_findings(current, {finding.key: ["queue"]}), [])
-        self.assertEqual(len(check_assertions.check_findings(current, {})), 1)
-        self.assertEqual(len(check_assertions.check_findings({}, {finding.key: ["queue"]})), 1)
-
-    def test_baseline_rejects_stale_risk_on_live_entry(self):
-        finding = check_assertions.Finding("ui/fixture.odin", "p", 1, ("index",), 0)
-        failures = check_assertions.check_findings(
-            {finding.key: finding}, {finding.key: ["index", "queue"]}
-        )
+        failures = check_assertions.check_findings({finding.key: finding})
         self.assertEqual(len(failures), 1)
         self.assertIn("queue", failures[0])
 
-    def test_empty_baseline_rejects_complete_current_findings(self):
-        finding = check_assertions.Finding("ui/fixture.odin", "new", 2, ("index",), 0)
-        self.assertEqual(len(check_assertions.check_findings({finding.key: finding}, {})), 1)
+    def test_zero_debt_check_accepts_an_empty_measurement(self):
+        self.assertEqual(check_assertions.check_findings({}), [])
 
     def test_measurement_includes_complete_current_findings(self):
         old = check_assertions.Finding("ui/fixture.odin", "old", 1, ("index",), 0)

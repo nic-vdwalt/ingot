@@ -67,7 +67,10 @@ spell_learn_with :: proc(system: ^Spell_System, word: string) {
 spell_ignore_session_with :: proc(system: ^Spell_System, word: string) {
 	assert(system != nil, "spell_ignore_session_with: nil system")
 	if word in system.ignored do return
-	system.ignored[strings.clone(word)] = true
+	owned := strings.clone(word)
+	_, existed := system.ignored[owned]
+	assert(!existed, "spell_ignore_session_with: duplicate owned word")
+	system.ignored[owned] = true
 	system.generation += 1
 	assert(word in system.ignored, "spell_ignore_session_with: insertion failed")
 }

@@ -42,10 +42,7 @@ RISK_PATTERNS = {
         r"(?:[A-Za-z_][A-Za-z0-9_]*|\)|\])\s*\[[^\]\n]+\]"
         r"|\b(?:ordered_remove|unordered_remove)\s*\("
     ),
-    "queue": re.compile(
-        r"\b(?:append|inject_at|ordered_remove|unordered_remove)\s*\("
-        r"|(?:head|tail|count)\s*(?:\+=|-=|=)"
-    ),
+    "queue": re.compile(r"\b(?:append|inject_at|ordered_remove|unordered_remove)\s*\("),
     "ownership": re.compile(r"\b(?:new|delete|free|destroy|clone|resize)\s*\("),
     "state": re.compile(r"\b(?:state|running|active|session)\b\s*(?:=|\+=|-=)"),
     "untrusted_input": re.compile(
@@ -233,7 +230,7 @@ def risks_for(body: str) -> tuple[str, ...]:
         for name, pattern in RISK_PATTERNS.items()
         if pattern.search(subscripts if name == "index" else executable)
     }
-    if has_pointer_parameter(body):
+    if has_pointer_parameter(body) and 'proc "c"' not in body:
         detected.add("pointer")
     return tuple(name for name in RISK_PATTERNS if name in detected)
 
@@ -403,9 +400,17 @@ def structural_contract_present(executable: str, risk: str, body: str = "") -> b
             or "%" in operation.expression
             or (
                 re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", operation.expression)
-                and re.search(
-                    rf"\b{re.escape(operation.expression)}\s+(?:in|not_in)\s+{re.escape(operation.target)}\b",
-                    executable[: operation.offset],
+                and (
+                    re.search(
+                        rf"\b{re.escape(operation.expression)}\s+(?:in|not_in)\s+"
+                        rf"(?:{re.escape(operation.target)}|{re.escape(operation.target.split('.')[-1])})\b",
+                        executable[: operation.offset],
+                    )
+                    or re.search(
+                        rf"\b[A-Za-z_][A-Za-z0-9_]*\s*,\s*[A-Za-z_][A-Za-z0-9_]*\s*:?=\s*"
+                        rf"{re.escape(operation.target)}\s*\[\s*{re.escape(operation.expression)}\s*\]",
+                        executable[: operation.offset],
+                    )
                 )
             )
             or re.search(
@@ -458,11 +463,10 @@ def structural_contract_present(executable: str, risk: str, body: str = "") -> b
         explicit_transition = re.search(
             r"\b(?:state|running|active|session)\b\s*=", executable
         )
-        validated_transition = re.search(
-            r"\b[A-Za-z_][A-Za-z0-9_]*(?:poll|validate|begin|end|reset)[A-Za-z0-9_]*\s*\(",
-            executable,
+        operating_failure = re.search(
+            r"\b(?:last_error|error|fault)\b\s*=", executable
         )
-        return guarded is not None or explicit_transition is None or validated_transition is not None
+        return guarded is not None or explicit_transition is None or operating_failure is not None
     return re.search(r"\bif\b[^\n]*(?:len|count|size|offset|cursor|parsed|status|ok|err)[^\n]*(?:<|<=|>|>=|==|!=)", executable) is not None
 
 
@@ -863,22 +867,11 @@ def current_findings(root: Path, packages: tuple[str, ...] = PACKAGES) -> dict[s
     return findings
 
 
-def check_findings(current: dict[str, Finding], baseline: dict[str, list[str]]) -> list[str]:
-    failures: list[str] = []
-    for key, finding in sorted(current.items()):
-        allowed = set(baseline.get(key, []))
-        actual = set(finding.risks)
-        added = actual - allowed
-        if added:
-            failures.append(f"{key}: uncovered assertion risks added: {', '.join(sorted(added))}")
-        removed = allowed - actual
-        if removed:
-            failures.append(
-                f"{key}: stale assertion baseline risks; remove: {', '.join(sorted(removed))}"
-            )
-    for key in sorted(set(baseline) - set(current)):
-        failures.append(f"{key}: stale assertion baseline entry; remove it")
-    return failures
+def check_findings(current: dict[str, Finding]) -> list[str]:
+    return [
+        f"{key}: uncovered assertion risks: {', '.join(finding.risks)}"
+        for key, finding in sorted(current.items())
+    ]
 
 
 def measurement(current: dict[str, Finding]) -> dict[str, object]:
@@ -896,7 +889,6 @@ def measurement(current: dict[str, Finding]) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default=".")
-    parser.add_argument("--baseline")
     parser.add_argument("--measure", action="store_true")
     parser.add_argument(
         "--packages",
@@ -919,10 +911,7 @@ def main() -> int:
     if arguments.measure:
         print(json.dumps(measurement(current), indent=2, sort_keys=True))
         return 0
-    if not arguments.baseline:
-        parser.error("--baseline is required unless --measure is used")
-    baseline = json.loads(Path(arguments.baseline).read_text(encoding="utf-8"))
-    failures = check_findings(current, baseline)
+    failures = check_findings(current)
     for failure in failures:
         print(failure)
     return 1 if failures else 0

@@ -26,7 +26,7 @@ Invoke-CheckedPython "check_gfx_expected_asserts_test.py"
 Invoke-CheckedPython "check_gfx_expected_asserts.py" @($Root)
 Write-Host "== assertion discipline =="
 Invoke-CheckedPython "check_assertions_test.py"
-Invoke-CheckedPython "check_assertions.py" @("--baseline", "$PSScriptRoot/assertion_baseline.json", $Root)
+Invoke-CheckedPython "check_assertions.py" @($Root)
 Write-Host "== UI API layers =="
 Invoke-CheckedPython "check_ui_api_layers_test.py"
 Invoke-CheckedPython "check_ui_api_layers.py" @($Root)

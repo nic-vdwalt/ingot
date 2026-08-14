@@ -462,13 +462,7 @@ test_validate_rejects_non_finite_numbers :: proc(t: ^testing.T) {
 
 @(test)
 test_validate_accepts_finite_number_edges :: proc(t: ^testing.T) {
-	values := [?]f32 {
-		0,
-		transmute(f32)u32(0x8000_0000),
-		transmute(f32)u32(1),
-		max(f32),
-		min(f32),
-	}
+	values := [?]f32{0, transmute(f32)u32(0x8000_0000), transmute(f32)u32(1), max(f32), min(f32)}
 	for value in values {
 		doc: View_Doc
 		root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")

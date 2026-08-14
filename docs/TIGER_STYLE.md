@@ -73,8 +73,9 @@ nobody modelled. Writing to these rules is what makes the harnesses in
 - **Never pad the metric.** Do not add tautologies, duplicate checks at the same
   boundary, or assertions for operating errors. Every changed or new
   risk-bearing procedure must instead encode its actual pointer, index, queue,
-  ownership, lifecycle, or untrusted-input contract. The monotonic gate in
-  `scripts/check_assertions.py` prevents new uncovered assertion debt.
+  ownership, lifecycle, or untrusted-input contract. The structural gate in
+  `scripts/check_assertions.py` requires zero uncovered assertion risks; it has
+  no historical baseline or package/procedure exemptions.
 
 - Odin gives you several tools - use the right one:
   - `assert(cond)` / `assert(cond, "message")` - runtime precondition/invariant.

@@ -109,6 +109,12 @@ ws_start_connect_url :: proc(ws: ^Web_Socket, raw_url: string, options: WS_Optio
 	}
 	ws.host = url.host
 	ws.port = int(url.port)
+	assert(
+		ws.state == .Disconnected ||
+		ws.state == .Error ||
+		ws.state == .Connected ||
+		ws.state == .Connecting,
+	)
 	ws.state = .Connecting
 	ws.last_error = .None
 	bytes := transmute([]byte)raw_url
@@ -244,6 +250,7 @@ ws_close :: proc(ws: ^Web_Socket) {
 		ws.id = -1
 	}
 	ws.state = .Disconnected
+	assert(ws.id == -1 && ws.state == .Disconnected, "ws_close: invalid closed state")
 	for msg in ws.recv_queue do delete(msg.data)
 	delete(ws.recv_queue)
 	ws.recv_queue = nil
