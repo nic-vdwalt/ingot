@@ -125,8 +125,8 @@ _vao_invalidate_caches :: proc(v: ^Vao) {
 
 // --- VAO / VBO lifecycle ----------------------------------------------------
 
-context_rl_load_vertex_array :: proc(ctx: ^Context) -> u32 {
-	assert(ctx != nil, "context_rl_load_vertex_array: nil context")
+ContextRlLoadVertexArray :: proc(ctx: ^Context) -> u32 {
+	assert(ctx != nil, "ContextRlLoadVertexArray: nil context")
 	resources := &ctx.resources.rlgl
 	if resources.vao_count >= RLGL_MAX_VAOS do return 0
 	for &slot, index in resources.vaos {
@@ -137,32 +137,32 @@ context_rl_load_vertex_array :: proc(ctx: ^Context) -> u32 {
 		resources.vao_count += 1
 		return _resource_handle_make_context(ctx.id, index, slot.generation)
 	}
-	assert(false, "context_rl_load_vertex_array: count mismatch")
+	assert(false, "ContextRlLoadVertexArray: count mismatch")
 	return 0
 }
 
 RlLoadVertexArray :: proc() -> u32 {
-	return context_rl_load_vertex_array(default_context())
+	return ContextRlLoadVertexArray(default_context())
 }
 
-context_rl_enable_vertex_array :: proc(ctx: ^Context, id: u32) -> bool {
-	assert(ctx != nil, "context_rl_enable_vertex_array: nil context")
+ContextRlEnableVertexArray :: proc(ctx: ^Context, id: u32) -> bool {
+	assert(ctx != nil, "ContextRlEnableVertexArray: nil context")
 	if context_vao_get(ctx, id) == nil do return false
 	ctx.resources.rlgl.current_vao = id
 	return true
 }
 
 RlEnableVertexArray :: proc(id: u32) -> bool {
-	return context_rl_enable_vertex_array(default_context(), id)
+	return ContextRlEnableVertexArray(default_context(), id)
 }
 
-context_rl_disable_vertex_array :: proc(ctx: ^Context) {
-	assert(ctx != nil, "context_rl_disable_vertex_array: nil context")
+ContextRlDisableVertexArray :: proc(ctx: ^Context) {
+	assert(ctx != nil, "ContextRlDisableVertexArray: nil context")
 	ctx.resources.rlgl.current_vao = 0
 }
 
 RlDisableVertexArray :: proc() {
-	context_rl_disable_vertex_array(default_context())
+	ContextRlDisableVertexArray(default_context())
 }
 
 @(private)
@@ -175,30 +175,30 @@ _vao_entry_destroy :: proc(entry: ^Vao) {
 	free(entry)
 }
 
-context_rl_unload_vertex_array :: proc(ctx: ^Context, id: u32) {
-	assert(ctx != nil, "context_rl_unload_vertex_array: nil context")
+ContextRlUnloadVertexArray :: proc(ctx: ^Context, id: u32) {
+	assert(ctx != nil, "ContextRlUnloadVertexArray: nil context")
 	resources := &ctx.resources.rlgl
 	slot := _vao_slot(ctx.id, resources, id)
 	if slot == nil do return
 	_vao_entry_destroy(slot.entry)
 	slot.entry = nil
 	slot.occupied = false
-	assert(resources.vao_count > 0, "context_rl_unload_vertex_array: count underflow")
+	assert(resources.vao_count > 0, "ContextRlUnloadVertexArray: count underflow")
 	resources.vao_count -= 1
 	if resources.current_vao == id do resources.current_vao = 0
 }
 
 RlUnloadVertexArray :: proc(id: u32) {
-	context_rl_unload_vertex_array(default_context(), id)
+	ContextRlUnloadVertexArray(default_context(), id)
 }
 
-context_rl_load_vertex_buffer :: proc(
+ContextRlLoadVertexBuffer :: proc(
 	ctx: ^Context,
 	data: rawptr,
 	size: i32,
 	dynamic_buf: bool,
 ) -> u32 {
-	assert(ctx != nil, "context_rl_load_vertex_buffer: nil context")
+	assert(ctx != nil, "ContextRlLoadVertexBuffer: nil context")
 	if ctx.device == nil || size <= 0 do return 0
 	resources := &ctx.resources.rlgl
 	if resources.vbo_count >= RLGL_MAX_VBOS do return 0
@@ -218,7 +218,7 @@ context_rl_load_vertex_buffer :: proc(
 		id = _resource_handle_make_context(ctx.id, index, slot.generation)
 		break
 	}
-	assert(id > 0, "context_rl_load_vertex_buffer: count mismatch")
+	assert(id > 0, "ContextRlLoadVertexBuffer: count mismatch")
 	if v := context_vao_get(ctx, resources.current_vao);
 	   v != nil && len(v.buffers) < RLGL_MAX_BUFFERS_PER_VAO {
 		_vao_invalidate_caches(v)
@@ -230,28 +230,28 @@ context_rl_load_vertex_buffer :: proc(
 }
 
 RlLoadVertexBuffer :: proc(data: rawptr, size: i32, dynamic_buf: bool) -> u32 {
-	return context_rl_load_vertex_buffer(default_context(), data, size, dynamic_buf)
+	return ContextRlLoadVertexBuffer(default_context(), data, size, dynamic_buf)
 }
 
-context_rl_update_vertex_buffer :: proc(
+ContextRlUpdateVertexBuffer :: proc(
 	ctx: ^Context,
 	bufferId: u32,
 	data: rawptr,
 	dataSize: i32,
 	offset: i32,
 ) {
-	assert(ctx != nil, "context_rl_update_vertex_buffer: nil context")
+	assert(ctx != nil, "ContextRlUpdateVertexBuffer: nil context")
 	slot := _vbo_slot(ctx.id, &ctx.resources.rlgl, bufferId)
 	if slot == nil || data == nil || dataSize <= 0 || offset < 0 do return
 	wg.QueueWriteBuffer(ctx.queue, slot.buffer, u64(offset), data, uint(dataSize))
 }
 
 RlUpdateVertexBuffer :: proc(bufferId: u32, data: rawptr, dataSize: i32, offset: i32) {
-	context_rl_update_vertex_buffer(default_context(), bufferId, data, dataSize, offset)
+	ContextRlUpdateVertexBuffer(default_context(), bufferId, data, dataSize, offset)
 }
 
-context_rl_unload_vertex_buffer :: proc(ctx: ^Context, vboId: u32) {
-	assert(ctx != nil, "context_rl_unload_vertex_buffer: nil context")
+ContextRlUnloadVertexBuffer :: proc(ctx: ^Context, vboId: u32) {
+	assert(ctx != nil, "ContextRlUnloadVertexBuffer: nil context")
 	resources := &ctx.resources.rlgl
 	slot := _vbo_slot(ctx.id, resources, vboId)
 	if slot == nil do return
@@ -299,12 +299,12 @@ context_rl_unload_vertex_buffer :: proc(ctx: ^Context, vboId: u32) {
 }
 
 RlUnloadVertexBuffer :: proc(vboId: u32) {
-	context_rl_unload_vertex_buffer(default_context(), vboId)
+	ContextRlUnloadVertexBuffer(default_context(), vboId)
 }
 
 // --- attribute recording ----------------------------------------------------
 
-context_rl_set_vertex_attribute :: proc(
+ContextRlSetVertexAttribute :: proc(
 	ctx: ^Context,
 	index: u32,
 	compSize: i32,
@@ -313,7 +313,7 @@ context_rl_set_vertex_attribute :: proc(
 	stride: i32,
 	offset: i32,
 ) {
-	assert(ctx != nil, "context_rl_set_vertex_attribute: nil context")
+	assert(ctx != nil, "ContextRlSetVertexAttribute: nil context")
 	v := context_vao_get(ctx, ctx.resources.rlgl.current_vao)
 	if v == nil || v.cur_buffer < 0 || v.cur_buffer >= len(v.buffers) do return
 	if compSize < 1 || compSize > 4 || stride <= 0 || offset < 0 do return
@@ -347,7 +347,7 @@ RlSetVertexAttribute :: proc(
 	stride: i32,
 	offset: i32,
 ) {
-	context_rl_set_vertex_attribute(
+	ContextRlSetVertexAttribute(
 		default_context(),
 		index,
 		compSize,
@@ -358,8 +358,8 @@ RlSetVertexAttribute :: proc(
 	)
 }
 
-context_rl_set_vertex_attribute_divisor :: proc(ctx: ^Context, index: u32, divisor: i32) {
-	assert(ctx != nil, "context_rl_set_vertex_attribute_divisor: nil context")
+ContextRlSetVertexAttributeDivisor :: proc(ctx: ^Context, index: u32, divisor: i32) {
+	assert(ctx != nil, "ContextRlSetVertexAttributeDivisor: nil context")
 	v := context_vao_get(ctx, ctx.resources.rlgl.current_vao)
 	if v == nil || divisor < 0 do return
 	assert(divisor >= 0)
@@ -373,29 +373,29 @@ context_rl_set_vertex_attribute_divisor :: proc(ctx: ^Context, index: u32, divis
 }
 
 RlSetVertexAttributeDivisor :: proc(index: u32, divisor: i32) {
-	context_rl_set_vertex_attribute_divisor(default_context(), index, divisor)
+	ContextRlSetVertexAttributeDivisor(default_context(), index, divisor)
 }
 
 RlEnableVertexAttribute :: proc(index: u32) {}
 
 // --- shader binding ---------------------------------------------------------
 
-context_rl_enable_inst_shader :: proc(ctx: ^Context, id: u32) {
-	assert(ctx != nil, "context_rl_enable_inst_shader: nil context")
+ContextRlEnableInstShader :: proc(ctx: ^Context, id: u32) {
+	assert(ctx != nil, "ContextRlEnableInstShader: nil context")
 	ctx.resources.rlgl.inst_shader = id
 }
 
 RlEnableInstShader :: proc(id: u32) {
-	context_rl_enable_inst_shader(default_context(), id)
+	ContextRlEnableInstShader(default_context(), id)
 }
 
-context_rl_disable_inst_shader :: proc(ctx: ^Context) {
-	assert(ctx != nil, "context_rl_disable_inst_shader: nil context")
+ContextRlDisableInstShader :: proc(ctx: ^Context) {
+	assert(ctx != nil, "ContextRlDisableInstShader: nil context")
 	ctx.resources.rlgl.inst_shader = 0
 }
 
 RlDisableInstShader :: proc() {
-	context_rl_disable_inst_shader(default_context())
+	ContextRlDisableInstShader(default_context())
 }
 
 // --- instanced draw ---------------------------------------------------------
@@ -420,8 +420,9 @@ _vao_layout_valid :: proc(v: ^Vao) -> bool {
 	if v == nil || len(v.buffers) == 0 || len(v.attrs) == 0 do return false
 	assert(len(v.buffers) > 0)
 	assert(len(v.attrs) > 0)
+	assert(len(v.buffers) <= RLGL_MAX_BUFFERS_PER_VAO)
 	seen: [32]bool
-	strides := make([]u32, len(v.buffers), context.temp_allocator)
+	strides: [RLGL_MAX_BUFFERS_PER_VAO]u32
 	for b in v.buffers {
 		if b.id == 0 || b.buf == nil || b.size == 0 do return false
 	}
@@ -434,7 +435,7 @@ _vao_layout_valid :: proc(v: ^Vao) -> bool {
 		strides[a.buffer_idx] = a.stride
 		seen[a.location] = true
 	}
-	for stride in strides {
+	for stride in strides[:len(v.buffers)] {
 		if stride == 0 do return false
 	}
 	return true
@@ -536,8 +537,8 @@ _vao_pipeline :: proc(
 	return pipe
 }
 
-context_rl_draw_vertex_array_instanced :: proc(ctx: ^Context, offset, count, instances: i32) {
-	assert(ctx != nil, "context_rl_draw_vertex_array_instanced: nil context")
+ContextRlDrawVertexArrayInstanced :: proc(ctx: ^Context, offset, count, instances: i32) {
+	assert(ctx != nil, "ContextRlDrawVertexArrayInstanced: nil context")
 	if instances <= 0 || count <= 0 || offset < 0 do return
 	v := context_vao_get(ctx, ctx.resources.rlgl.current_vao)
 	se := context_shader_get(ctx, ctx.resources.rlgl.inst_shader)
@@ -567,7 +568,7 @@ context_rl_draw_vertex_array_instanced :: proc(ctx: ^Context, offset, count, ins
 }
 
 RlDrawVertexArrayInstanced :: proc(offset, count, instances: i32) {
-	context_rl_draw_vertex_array_instanced(default_context(), offset, count, instances)
+	ContextRlDrawVertexArrayInstanced(default_context(), offset, count, instances)
 }
 
 RlDrawVertexArrayElementsInstanced :: proc(offset, count: i32, buffer: rawptr, instances: i32) {

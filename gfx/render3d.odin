@@ -33,8 +33,9 @@ LoadMaterialDefault :: proc() -> Material {
 
 // DrawMesh approximates a unit sphere (scaled/positioned by `transform`) as a
 // camera-facing shaded disc at the transformed origin.
-DrawMesh :: proc(mesh: Mesh, material: Material, transform: Matrix) {
-	if !cam3d_active do return
+context_draw_mesh :: proc(ctx: ^Context, mesh: Mesh, material: Material, transform: Matrix) {
+	assert(ctx != nil, "context_draw_mesh: nil context")
+	if !ctx.cam3d_active do return
 	// world position = transform * origin
 	pos := Vector3{transform[3, 0], transform[3, 1], transform[3, 2]}
 	// world radius ≈ length of the transform's x-axis (uniform scale assumed)
@@ -47,7 +48,11 @@ DrawMesh :: proc(mesh: Mesh, material: Material, transform: Matrix) {
 		col = material.maps[ShaderLocationIndex.MAP_ALBEDO].color
 		if col == (Color{}) do col = Color{255, 240, 220, 255}
 	}
-	_draw_disc_world(pos, radius, col)
+	context_draw_disc_world(ctx, pos, radius, col)
+}
+
+DrawMesh :: proc(mesh: Mesh, material: Material, transform: Matrix) {
+	context_draw_mesh(default_context(), mesh, material, transform)
 }
 
 // --- depth-tested primitives -----------------------------------------------
@@ -62,34 +67,36 @@ _cube_transform :: proc(position, size: Vector3) -> Matrix {
 	)
 }
 
-DrawCube :: proc(position: Vector3, width, height, length: f32, color: Color) {
-	DrawCubeV(position, {width, height, length}, color)
-}
-
-DrawCubeV :: proc(position, size: Vector3, color: Color) {
-	DrawCubeTransform(_cube_transform(position, size), color)
-}
-
-DrawCubeTransform :: proc(transform: Matrix, color: Color) {
-	if !cam3d_active do return
+context_draw_cube_transform :: proc(ctx: ^Context, transform: Matrix, color: Color) {
+	assert(ctx != nil, "context_draw_cube_transform: nil context")
+	if !ctx.cam3d_active do return
 	assert(_camera_matrix_is_finite(transform), "DrawCubeTransform: non-finite transform")
-	compat := &default_context_storage.resources.gpu_3d.compat
+	compat := &ctx.resources.gpu_3d.compat
 	if !compat.pass_available do return
 	draw_gpu_mesh(&compat.pass, compat.cube, transform, {color = color})
 }
 
-DrawCubeWires :: proc(position: Vector3, width, height, length: f32, color: Color) {
-	DrawCubeWiresV(position, {width, height, length}, color)
+DrawCube :: proc(position: Vector3, width, height, length: f32, color: Color) {
+	context_draw_cube_transform(
+		default_context(),
+		_cube_transform(position, {width, height, length}),
+		color,
+	)
 }
 
-DrawCubeWiresV :: proc(position, size: Vector3, color: Color) {
-	DrawCubeWiresTransform(_cube_transform(position, size), color)
+DrawCubeV :: proc(position, size: Vector3, color: Color) {
+	context_draw_cube_transform(default_context(), _cube_transform(position, size), color)
 }
 
-DrawCubeWiresTransform :: proc(transform: Matrix, color: Color) {
-	if !cam3d_active do return
+DrawCubeTransform :: proc(transform: Matrix, color: Color) {
+	context_draw_cube_transform(default_context(), transform, color)
+}
+
+context_draw_cube_wires_transform :: proc(ctx: ^Context, transform: Matrix, color: Color) {
+	assert(ctx != nil, "context_draw_cube_wires_transform: nil context")
+	if !ctx.cam3d_active do return
 	assert(_camera_matrix_is_finite(transform), "DrawCubeWiresTransform: non-finite transform")
-	compat := &default_context_storage.resources.gpu_3d.compat
+	compat := &ctx.resources.gpu_3d.compat
 	if !compat.pass_available do return
 	draw_gpu_mesh(
 		&compat.pass,
@@ -99,16 +106,37 @@ DrawCubeWiresTransform :: proc(transform: Matrix, color: Color) {
 	)
 }
 
-DrawGrid :: proc(slices: i32, spacing: f32) {
-	if !cam3d_active do return
+DrawCubeWires :: proc(position: Vector3, width, height, length: f32, color: Color) {
+	context_draw_cube_wires_transform(
+		default_context(),
+		_cube_transform(position, {width, height, length}),
+		color,
+	)
+}
+
+DrawCubeWiresV :: proc(position, size: Vector3, color: Color) {
+	context_draw_cube_wires_transform(default_context(), _cube_transform(position, size), color)
+}
+
+DrawCubeWiresTransform :: proc(transform: Matrix, color: Color) {
+	context_draw_cube_wires_transform(default_context(), transform, color)
+}
+
+context_draw_grid :: proc(ctx: ^Context, slices: i32, spacing: f32) {
+	assert(ctx != nil, "context_draw_grid: nil context")
+	if !ctx.cam3d_active do return
 	assert(_f32_is_finite(spacing), "DrawGrid: non-finite spacing")
 	if spacing <= 0 do return
-	resources := &default_context_storage.resources.gpu_3d
+	resources := &ctx.resources.gpu_3d
 	if !resources.compat.pass_available do return
-	grid, ok := _gpu_3d_compat_grid(resources, slices)
+	grid, ok := _gpu_3d_compat_grid(ctx, slices)
 	if !ok do return
 	transform := MatrixScale(spacing, spacing, 1)
 	draw_gpu_mesh(&resources.compat.pass, grid, transform, {color = GRAY, depth_nudge = 0.0005})
+}
+
+DrawGrid :: proc(slices: i32, spacing: f32) {
+	context_draw_grid(default_context(), slices, spacing)
 }
 
 // --- billboards ------------------------------------------------------------
@@ -121,7 +149,8 @@ DrawBillboard :: proc(
 	tint: Color,
 ) {
 	src := Rectangle{0, 0, f32(texture.width), f32(texture.height)}
-	_draw_billboard_world(
+	context_draw_billboard_world(
+		default_context(),
 		camera,
 		texture,
 		src,
@@ -145,7 +174,18 @@ DrawBillboardPro :: proc(
 	rotation: f32,
 	tint: Color,
 ) {
-	_draw_billboard_world(camera, texture, source, position, up, size, origin, rotation, tint)
+	context_draw_billboard_world(
+		default_context(),
+		camera,
+		texture,
+		source,
+		position,
+		up,
+		size,
+		origin,
+		rotation,
+		tint,
+	)
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -192,7 +232,8 @@ _billboard_world_corners :: proc(
 // Explicit camera geometry keeps matrix-only Pro projection independent from
 // hidden compatibility camera state while preserving the active VP transform.
 @(private)
-_draw_billboard_world :: proc(
+context_draw_billboard_world :: proc(
+	ctx: ^Context,
 	camera: Camera,
 	texture: Texture2D,
 	source: Rectangle,
@@ -201,18 +242,19 @@ _draw_billboard_world :: proc(
 	rotation: f32,
 	tint: Color,
 ) {
-	if !cam3d_active do return
+	assert(ctx != nil, "context_draw_billboard_world: nil context")
+	if !ctx.cam3d_active do return
 	assert(_camera_vector_is_finite(position), "DrawBillboardPro: non-finite position")
 	assert(_camera_vector_is_finite(up), "DrawBillboardPro: non-finite up")
 	assert(_f32_is_finite(size.x) && _f32_is_finite(size.y), "DrawBillboardPro: non-finite size")
 	assert(_f32_is_finite(rotation), "DrawBillboardPro: non-finite rotation")
 	corners, ok := _billboard_world_corners(camera, position, up, size, origin, rotation)
 	if !ok do return
-	e := get_texture(texture.id)
-	tl, ok0 := _project(cam3d_vp, corners[0])
-	tr, ok1 := _project(cam3d_vp, corners[1])
-	br, ok2 := _project(cam3d_vp, corners[2])
-	bl, ok3 := _project(cam3d_vp, corners[3])
+	e := context_get_texture(ctx, texture.id)
+	tl, ok0 := context_project(ctx, ctx.cam3d_vp, corners[0])
+	tr, ok1 := context_project(ctx, ctx.cam3d_vp, corners[1])
+	br, ok2 := context_project(ctx, ctx.cam3d_vp, corners[2])
+	bl, ok3 := context_project(ctx, ctx.cam3d_vp, corners[3])
 	if !(ok0 && ok1 && ok2 && ok3) do return
 
 	tw := f32(max(texture.width, 1))
@@ -224,13 +266,13 @@ _draw_billboard_world :: proc(
 	col := col_f(tint)
 
 	if e != nil {
-		batch_set(default_context(), &g.rend, .Image, e.bind)
+		batch_set(ctx, &ctx.rend, .Image, e.bind)
 	} else {
-		batch_set(default_context(), &g.rend, .Solid, nil)
+		batch_set(ctx, &ctx.rend, .Solid, nil)
 	}
 	push_quad4(
-		default_context(),
-		&g.rend,
+		ctx,
+		&ctx.rend,
 		{tl.x, tl.y},
 		{tr.x, tr.y},
 		{br.x, br.y},
@@ -245,16 +287,17 @@ _draw_billboard_world :: proc(
 
 // _draw_disc_world projects a world sphere to a solid screen-space disc.
 @(private)
-_draw_disc_world :: proc(position: Vector3, radius: f32, tint: Color) {
-	center, ok := _project(cam3d_vp, position)
+context_draw_disc_world :: proc(ctx: ^Context, position: Vector3, radius: f32, tint: Color) {
+	assert(ctx != nil, "context_draw_disc_world: nil context")
+	center, ok := context_project(ctx, ctx.cam3d_vp, position)
 	if !ok do return
 	// estimate screen radius by projecting an offset point along camera-right
 	edge := Vector3 {
-		position.x + cam3d_right.x * radius,
-		position.y + cam3d_right.y * radius,
-		position.z + cam3d_right.z * radius,
+		position.x + ctx.cam3d_right.x * radius,
+		position.y + ctx.cam3d_right.y * radius,
+		position.z + ctx.cam3d_right.z * radius,
 	}
-	ep, oke := _project(cam3d_vp, edge)
+	ep, oke := context_project(ctx, ctx.cam3d_vp, edge)
 	pr: f32 = 6
 	if oke {
 		dx := ep.x - center.x
@@ -262,5 +305,5 @@ _draw_disc_world :: proc(position: Vector3, radius: f32, tint: Color) {
 		pr = math.sqrt(dx * dx + dy * dy)
 	}
 	if pr < 1 do pr = 1
-	DrawCircleV(center, pr, tint)
+	context_draw_circle(ctx, center, pr, tint)
 }

@@ -236,25 +236,25 @@ world_to_screen_does_not_mutate_active_projection :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()
 	old_width, old_height := g.width, g.height
-	old_projection, old_view, old_vp := cam3d_proj, cam3d_view, cam3d_vp
-	old_available := cam3d_projection_available
+	old_projection, old_view, old_vp := g.cam3d_proj, g.cam3d_view, g.cam3d_vp
+	old_available := g.cam3d_projection_available
 	defer {
 		g.width, g.height = old_width, old_height
-		cam3d_proj, cam3d_view, cam3d_vp = old_projection, old_view, old_vp
-		cam3d_projection_available = old_available
+		g.cam3d_proj, g.cam3d_view, g.cam3d_vp = old_projection, old_view, old_vp
+		g.cam3d_projection_available = old_available
 	}
-	cam3d_projection_available = true
+	g.cam3d_projection_available = true
 
 	g.width, g.height = 800, 600
-	cam3d_proj = Matrix(2)
-	cam3d_view = Matrix(3)
-	cam3d_vp = Matrix(4)
+	g.cam3d_proj = Matrix(2)
+	g.cam3d_view = Matrix(3)
+	g.cam3d_vp = Matrix(4)
 	point := GetWorldToScreen({0, 0, 0}, camera_test_value())
 	testing.expect(t, abs(point.x - 400) < 1e-4)
 	testing.expect(t, abs(point.y - 300) < 1e-4)
-	testing.expect_value(t, cam3d_proj, Matrix(2))
-	testing.expect_value(t, cam3d_view, Matrix(3))
-	testing.expect_value(t, cam3d_vp, Matrix(4))
+	testing.expect_value(t, g.cam3d_proj, Matrix(2))
+	testing.expect_value(t, g.cam3d_view, Matrix(3))
+	testing.expect_value(t, g.cam3d_vp, Matrix(4))
 }
 
 @(test)
@@ -262,26 +262,26 @@ world_to_screen_pro_uses_arbitrary_matrix :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()
 	old_width, old_height := g.width, g.height
-	old_projection, old_view, old_vp := cam3d_proj, cam3d_view, cam3d_vp
-	old_available := cam3d_projection_available
+	old_projection, old_view, old_vp := g.cam3d_proj, g.cam3d_view, g.cam3d_vp
+	old_available := g.cam3d_projection_available
 	defer {
 		g.width, g.height = old_width, old_height
-		cam3d_proj, cam3d_view, cam3d_vp = old_projection, old_view, old_vp
-		cam3d_projection_available = old_available
+		g.cam3d_proj, g.cam3d_view, g.cam3d_vp = old_projection, old_view, old_vp
+		g.cam3d_projection_available = old_available
 	}
-	cam3d_projection_available = true
+	g.cam3d_projection_available = true
 	g.width, g.height = 800, 600
-	cam3d_proj = Matrix(2)
-	cam3d_view = Matrix(3)
-	cam3d_vp = Matrix(4)
+	g.cam3d_proj = Matrix(2)
+	g.cam3d_view = Matrix(3)
+	g.cam3d_vp = Matrix(4)
 	view_projection := Matrix(1)
 	view_projection[0, 3] = 0.5
 	view_projection[1, 3] = -0.5
 	point := GetWorldToScreenPro({0, 0, 0}, view_projection)
 	testing.expect_value(t, point, Vector2{600, 450})
-	testing.expect_value(t, cam3d_proj, Matrix(2))
-	testing.expect_value(t, cam3d_view, Matrix(3))
-	testing.expect_value(t, cam3d_vp, Matrix(4))
+	testing.expect_value(t, g.cam3d_proj, Matrix(2))
+	testing.expect_value(t, g.cam3d_view, Matrix(3))
+	testing.expect_value(t, g.cam3d_vp, Matrix(4))
 }
 
 @(test)
@@ -289,19 +289,19 @@ gpu_camera_setup_preserves_window_and_active_camera :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()
 	old_width, old_height := g.width, g.height
-	old_projection, old_view, old_vp := cam3d_proj, cam3d_view, cam3d_vp
-	old_available := cam3d_projection_available
+	old_projection, old_view, old_vp := g.cam3d_proj, g.cam3d_view, g.cam3d_vp
+	old_available := g.cam3d_projection_available
 	defer {
 		g.width, g.height = old_width, old_height
-		cam3d_proj, cam3d_view, cam3d_vp = old_projection, old_view, old_vp
-		cam3d_projection_available = old_available
+		g.cam3d_proj, g.cam3d_view, g.cam3d_vp = old_projection, old_view, old_vp
+		g.cam3d_projection_available = old_available
 	}
-	cam3d_projection_available = true
+	g.cam3d_projection_available = true
 
 	g.width, g.height = 640, 480
-	cam3d_proj = Matrix(2)
-	cam3d_view = Matrix(3)
-	cam3d_vp = Matrix(4)
+	g.cam3d_proj = Matrix(2)
+	g.cam3d_view = Matrix(3)
+	g.cam3d_vp = Matrix(4)
 	target: Gpu_3D_Target
 	target.texture.texture.width = 1920
 	target.texture.texture.height = 1080
@@ -314,9 +314,9 @@ gpu_camera_setup_preserves_window_and_active_camera :: proc(t: ^testing.T) {
 	testing.expect_value(t, pass.view_projection, expected)
 	testing.expect_value(t, g.width, i32(640))
 	testing.expect_value(t, g.height, i32(480))
-	testing.expect_value(t, cam3d_proj, Matrix(2))
-	testing.expect_value(t, cam3d_view, Matrix(3))
-	testing.expect_value(t, cam3d_vp, Matrix(4))
+	testing.expect_value(t, g.cam3d_proj, Matrix(2))
+	testing.expect_value(t, g.cam3d_view, Matrix(3))
+	testing.expect_value(t, g.cam3d_vp, Matrix(4))
 }
 
 @(test)
@@ -478,6 +478,33 @@ orbit_camera_pan_rate_defaults_are_identity :: proc(t: ^testing.T) {
 	config.pan_speed = 3
 	update_orbit_camera(&state, Orbit_Camera_Input{}, config, 0.5)
 	testing.expect_value(t, state, before)
+}
+
+@(test)
+camera_3d_state_is_context_bound :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	first.width, first.height = 800, 600
+	second.width, second.height = 1920, 1080
+	first.frame.rt = 1
+	first.frame.rt_w, first.frame.rt_h = 320, 200
+	camera := camera_test_value()
+	first.cam3d_view, first.cam3d_proj, first.cam3d_vp = _camera_matrices(camera, 320, 200)
+	second.cam3d_view, second.cam3d_proj, second.cam3d_vp = _camera_matrices(camera, 1920, 1080)
+	first.cam3d_active = true
+	first.cam3d_projection_available = true
+
+	testing.expect(t, first.cam3d_vp != second.cam3d_vp)
+	testing.expect_value(t, second.cam3d_active, false)
+	testing.expect_value(t, second.cam3d_projection_available, false)
+	first_width, first_height := context_target_dims_i32(first)
+	second_width, second_height := context_target_dims_i32(second)
+	testing.expect_value(t, first_width, i32(320))
+	testing.expect_value(t, first_height, i32(200))
+	testing.expect_value(t, second_width, i32(1920))
+	testing.expect_value(t, second_height, i32(1080))
 }
 
 @(test)

@@ -98,3 +98,27 @@ shader_uniform_total_validation_checks_ranges :: proc(t: ^testing.T) {
 	testing.expect(t, !_shader_uniforms_valid(bad_size[:], 16))
 	testing.expect(t, !_shader_uniforms_valid(nil, 15))
 }
+
+@(test)
+shader_mode_is_context_bound :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	first.id = 2
+	second.id = 3
+	first_shader := Shader {
+		id = _resource_handle_make_context(first.id, 0, 1),
+	}
+	second_shader := Shader {
+		id = _resource_handle_make_context(second.id, 0, 1),
+	}
+
+	context_begin_shader_mode(first, first_shader)
+	context_begin_shader_mode(second, second_shader)
+	testing.expect_value(t, first.rend.active_shader, first_shader.id)
+	testing.expect_value(t, second.rend.active_shader, second_shader.id)
+	context_end_shader_mode(first)
+	testing.expect_value(t, first.rend.active_shader, u32(0))
+	testing.expect_value(t, second.rend.active_shader, second_shader.id)
+}

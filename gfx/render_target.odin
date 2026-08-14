@@ -24,7 +24,7 @@ _rt_projection_vec :: proc "contextless" (width, height: i32) -> [4]f32 {
 }
 
 // LoadRenderTexture creates a colour render target in the swapchain format
-// (so the existing batch pipelines, built against g.format, can render into it).
+// so the owning context's existing batch pipelines can render into it.
 context_load_render_texture :: proc(ctx: ^Context, width, height: i32) -> RenderTexture2D {
 	assert(ctx != nil, "context_load_render_texture: nil context")
 	if !ctx.initialized do return RenderTexture2D{}
@@ -169,7 +169,11 @@ context_end_texture_mode :: proc(ctx: ^Context) {
 		wg.RenderPassEncoderEnd(ctx.frame.rt_pass)
 		wg.RenderPassEncoderRelease(ctx.frame.rt_pass)
 		assert(_stream_slot_upload(ctx, &ctx.rend))
-		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(ctx, ctx.frame.rt_encoder, true)
+		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
+			ctx,
+			ctx.frame.rt_encoder,
+			true,
+		)
 		_stats_context_cpu_times(ctx, 0, encode_elapsed, submit_elapsed, 0)
 		_stats_queue_submission(ctx)
 		wg.CommandBufferRelease(cmd)
@@ -214,36 +218,36 @@ _pf_to_wg :: proc(ctx: ^Context, pf: PixelFormat) -> wg.TextureFormat {
 
 // RlLoadColorTexture creates a render-target colour texture of `pf` and returns
 // its registry id (rlgl.LoadTexture parity for framebuffer colour attachments).
-context_rl_load_color_texture :: proc(ctx: ^Context, w, h: i32, pf: PixelFormat) -> u32 {
-	assert(ctx != nil, "context_rl_load_color_texture: nil context")
+ContextRlLoadColorTexture :: proc(ctx: ^Context, w, h: i32, pf: PixelFormat) -> u32 {
+	assert(ctx != nil, "ContextRlLoadColorTexture: nil context")
 	if !ctx.initialized do return 0
 	t := _new_rt_color(ctx, w, h, _pf_to_wg(ctx, pf))
 	return t.id
 }
 
 RlLoadColorTexture :: proc(w, h: i32, pf: PixelFormat) -> u32 {
-	return context_rl_load_color_texture(default_context(), w, h, pf)
+	return ContextRlLoadColorTexture(default_context(), w, h, pf)
 }
 
 // RlLoadDepthTexture creates a depth attachment (rlgl.LoadTextureDepth parity).
-context_rl_load_depth_texture :: proc(ctx: ^Context, w, h: i32) -> u32 {
-	assert(ctx != nil, "context_rl_load_depth_texture: nil context")
+ContextRlLoadDepthTexture :: proc(ctx: ^Context, w, h: i32) -> u32 {
+	assert(ctx != nil, "ContextRlLoadDepthTexture: nil context")
 	if !ctx.initialized do return 0
 	t := _new_rt_depth(ctx, w, h)
 	return t.id
 }
 
 RlLoadDepthTexture :: proc(w, h: i32) -> u32 {
-	return context_rl_load_depth_texture(default_context(), w, h)
+	return ContextRlLoadDepthTexture(default_context(), w, h)
 }
 
 // RlUnloadTextureId releases a texture by raw id (rlgl.UnloadTexture parity).
-context_rl_unload_texture_id :: proc(ctx: ^Context, id: u32) {
-	assert(ctx != nil, "context_rl_unload_texture_id: nil context")
+ContextRlUnloadTextureId :: proc(ctx: ^Context, id: u32) {
+	assert(ctx != nil, "ContextRlUnloadTextureId: nil context")
 	if id == 0 do return
 	context_unload_texture(ctx, Texture2D{id = id})
 }
 
 RlUnloadTextureId :: proc(id: u32) {
-	context_rl_unload_texture_id(default_context(), id)
+	ContextRlUnloadTextureId(default_context(), id)
 }
