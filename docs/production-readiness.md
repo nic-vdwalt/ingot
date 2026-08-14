@@ -45,8 +45,9 @@ mesh uploads, draw counts, vertex counts, and pool exhaustion when enabled.
 rejects stale use, and can bind an explicit graphics frame. Native contexts own
 independent windows, renderers, resources, input, timing, statistics, and
 submission tracking; explicit frames route rendering through their recorded
-owner. The PascalCase API remains a default-context facade. Parallel renderer
-threads and browser multi-canvas hosting remain outside the production guarantee.
+owner without changing package-global routing state. The PascalCase API remains
+a default-context facade implemented as thin explicit-owner calls. Parallel
+renderer threads and browser multi-canvas hosting remain outside the production guarantee.
 
 ## PTY and terminal
 

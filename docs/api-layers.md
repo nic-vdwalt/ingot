@@ -24,9 +24,10 @@ main :: proc() {
 }
 ```
 
-The PascalCase API is the supported default-context migration vocabulary. The
-narrow owner-bound `Frame` seam exists for framework bridges and documented
-multi-context hosts; it is not a second general drawing vocabulary.
+The PascalCase API is the supported migration vocabulary and each procedure
+calls an explicit implementation with the default owner. The narrow owner-bound
+`Frame` seam exists for framework bridges and documented multi-context hosts; it
+is not a second general drawing vocabulary and never changes ambient state.
 
 ## `ingot:fit`
 

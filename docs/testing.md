@@ -111,15 +111,15 @@ bash scripts/check.sh
 It checks every package with Odin's vet, strict-style, and shadowing diagnostics,
 runs the graphics-context ownership guard, builds every consumer fixture, and
 requires every tracked Odin source file to match `odinfmt`. The ownership guard
-uses `scripts/gfx_context_baseline.json` to reject growth in direct singleton
-references per procedure. Measure the current inventory with:
+requires zero ambiguous globals, active-context APIs, context scopes, internal
+default-context escapes, and implicit `ui_gfx` drawing. Measure its inventory with:
 
 ```sh
 python3 scripts/check_gfx_context.py --measure .
 ```
 
-Reductions require removing stale baseline entries; intentional compatibility
-facade additions require an explicit reviewed baseline update.
+The documented PascalCase compatibility facade and default constructors are
+recognized structurally; renderer internals cannot be exempted by a baseline.
 
 Validate the browser target with:
 

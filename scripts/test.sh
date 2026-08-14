@@ -43,9 +43,7 @@ run_supervised() {
 require_positive_integer INGOT_TEST_TIMEOUT_SECONDS "$timeout_seconds"
 require_positive_integer INGOT_TEST_OUTPUT_LIMIT_BYTES "$output_limit_bytes"
 "$root/scripts/check-ui-state.sh"
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" \
-	--baseline "$root/scripts/gfx_context_baseline.json" \
-	"$root"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" "$root"
 has_define() {
 	local wanted="$1"
 	shift

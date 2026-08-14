@@ -11,9 +11,10 @@ state, CPU image processing, or low-level `rlgl` rendering require a manual
 WebGPU port.
 
 Compatibility covers the documented PascalCase procedures and public layouts in
-`ingot:gfx` at a pinned Ingot revision. This facade targets the default context;
-new Ingot-native and multi-context code uses the owned `Frame` and `Context`
-APIs. Internal registries, private procedures, and undocumented bridge behavior
+`ingot:gfx` at a pinned Ingot revision. Each facade procedure passes the default
+owner to an explicit implementation; no mutable active context is involved. New
+Ingot-native and multi-context code uses the owned `Frame` and `Context` APIs.
+Internal registries, private procedures, and undocumented bridge behavior
 are not stable APIs. A successful compile proves source compatibility only; it
 does not prove visual, timing, input, audio, browser, or GPU-backend equivalence.
 

@@ -734,7 +734,7 @@ context_restore_window :: proc(ctx: ^Context) {}
 RestoreWindow :: proc() {context_restore_window(default_context())}
 context_focus_window :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_focus_window: nil context")
-	assert(ctx == default_context(), "context_focus_window: non-default web context")
+	assert(_web_context_is_owner(ctx), "context_focus_window: context does not own web canvas")
 }
 FocusWindow :: proc() {context_focus_window(default_context())}
 

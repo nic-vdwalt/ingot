@@ -258,11 +258,11 @@ remain compatibility surfaces. In particular, `Vector2`, `Vector3`, `Vector4`,
 `Color`, `Rectangle`, `Texture`, `Font`, `RenderTexture`, and `Mesh` retain their
 fields and layout.
 
-The PascalCase API is the supported default-context graphics vocabulary. The
-owner-bound `Frame` seam is deliberately narrow: framework replay and documented
-multi-context hosts use it to route every draw through one validated owner. It is
-not a duplicate raylib surface, and multi-context drawing never routes through an
-ambiguous global context.
+The PascalCase API is the supported default-context graphics vocabulary: each
+wrapper passes `default_context()` to an explicit implementation. The owner-bound
+`Frame` seam is deliberately narrow: framework replay and documented
+multi-context hosts pass its validated owner to every draw. It is not a duplicate
+raylib surface, and multi-context drawing never uses ambient context routing.
 
 ## Event-driven frame scheduling
 
