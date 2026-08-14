@@ -27,7 +27,7 @@ _rt_projection_vec :: proc "contextless" (width, height: i32) -> [4]f32 {
 // (so the existing batch pipelines, built against g.format, can render into it).
 LoadRenderTexture :: proc(width, height: i32) -> RenderTexture2D {
 	if !g.initialized do return RenderTexture2D{}
-	tex := _new_rt_color(width, height, g.format)
+	tex := _new_rt_color(default_context(), width, height, g.format)
 	return RenderTexture2D{id = tex.id, texture = tex}
 }
 
@@ -40,13 +40,13 @@ LoadRenderTextureEx :: proc(
 	with_depth: bool,
 ) -> RenderTexture2D {
 	if !g.initialized do return RenderTexture2D{}
-	tex := _new_rt_color(width, height, format)
+	tex := _new_rt_color(default_context(), width, height, format)
 	rt := RenderTexture2D {
 		id      = tex.id,
 		texture = tex,
 	}
 	if with_depth {
-		rt.depth = _new_rt_depth(width, height)
+		rt.depth = _new_rt_depth(default_context(), width, height)
 	}
 	return rt
 }
@@ -190,14 +190,14 @@ _pf_to_wg :: proc(pf: PixelFormat) -> wg.TextureFormat {
 // its registry id (rlgl.LoadTexture parity for framebuffer colour attachments).
 RlLoadColorTexture :: proc(w, h: i32, pf: PixelFormat) -> u32 {
 	if !g.initialized do return 0
-	t := _new_rt_color(w, h, _pf_to_wg(pf))
+	t := _new_rt_color(default_context(), w, h, _pf_to_wg(pf))
 	return t.id
 }
 
 // RlLoadDepthTexture creates a depth attachment (rlgl.LoadTextureDepth parity).
 RlLoadDepthTexture :: proc(w, h: i32) -> u32 {
 	if !g.initialized do return 0
-	t := _new_rt_depth(w, h)
+	t := _new_rt_depth(default_context(), w, h)
 	return t.id
 }
 

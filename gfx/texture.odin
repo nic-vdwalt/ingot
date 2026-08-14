@@ -153,7 +153,8 @@ _to_rgba :: proc(src: [^]byte, w, h: i32, format: PixelFormat) -> []byte {
 // attachment, registered in the texture registry, and returns its Texture2D.
 // Backs LoadRenderTexture (color-only) and the rlgl framebuffer path.
 @(private)
-_new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
+_new_rt_color :: proc(ctx: ^Context, w, h: i32, format: wg.TextureFormat) -> Texture2D {
+	assert(ctx != nil, "_new_rt_color: nil context")
 	e := new(Tex_Entry)
 	e.width = w
 	e.height = h
@@ -165,7 +166,7 @@ _new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
 	// readback must route through a render target. The flag is free on an
 	// already-renderable colour format.
 	e.tex = wg.DeviceCreateTexture(
-		g.device,
+		ctx.device,
 		&{
 			usage = {.RenderAttachment, .TextureBinding, .CopyDst, .CopySrc},
 			dimension = ._2D,
@@ -176,10 +177,10 @@ _new_rt_color :: proc(w, h: i32, format: wg.TextureFormat) -> Texture2D {
 		},
 	)
 	e.view = wg.TextureCreateView(e.tex, nil)
-	_tex_build_bind(e)
-	id := _texture_register_context(g.id, &g.resources.textures, e)
+	_tex_build_bind(ctx, e)
+	id := _texture_register_context(ctx.id, &ctx.resources.textures, e)
 	if id == 0 {
-		_texture_entry_destroy(default_context(), e)
+		_texture_entry_destroy(ctx, e)
 		return {}
 	}
 	pf: PixelFormat = .UNCOMPRESSED_R8G8B8A8
@@ -256,14 +257,15 @@ _texture_view :: proc(id: u32) -> wg.TextureView {
 // _new_rt_depth creates a Depth24Plus depth attachment registered in the
 // texture registry (no sampler/bind - never sampled). Returns its Texture2D.
 @(private)
-_new_rt_depth :: proc(w, h: i32) -> Texture2D {
+_new_rt_depth :: proc(ctx: ^Context, w, h: i32) -> Texture2D {
+	assert(ctx != nil, "_new_rt_depth: nil context")
 	e := new(Tex_Entry)
 	e.width = w
 	e.height = h
 	e.wgformat = .Depth24Plus
 	e.sample_count = 1
 	e.tex = wg.DeviceCreateTexture(
-		g.device,
+		ctx.device,
 		&{
 			usage = {.RenderAttachment},
 			dimension = ._2D,
@@ -274,9 +276,9 @@ _new_rt_depth :: proc(w, h: i32) -> Texture2D {
 		},
 	)
 	e.view = wg.TextureCreateView(e.tex, nil)
-	id := _texture_register_context(g.id, &g.resources.textures, e)
+	id := _texture_register_context(ctx.id, &ctx.resources.textures, e)
 	if id == 0 {
-		_texture_entry_destroy(default_context(), e)
+		_texture_entry_destroy(ctx, e)
 		return {}
 	}
 	return Texture2D{id = id, width = w, height = h, mipmaps = 1, format = .UNCOMPRESSED_R32}
@@ -292,7 +294,8 @@ _unload_depth :: proc(ctx: ^Context, depth: Texture2D) {
 // texture pool. Returns a zero Texture2D when the pool is full (see
 // TextureSlotsUsed) or the image is empty - a full pool is an operating
 // condition, so callers must check IsTextureValid rather than assume success.
-LoadTextureFromImage :: proc(image: Image) -> Texture2D {
+context_load_texture_from_image :: proc(ctx: ^Context, image: Image) -> Texture2D {
+	assert(ctx != nil, "context_load_texture_from_image: nil context")
 	if image.data == nil || image.width <= 0 || image.height <= 0 do return Texture2D{}
 	rgba := _to_rgba(([^]byte)(image.data), image.width, image.height, image.format)
 	defer delete(rgba)
@@ -304,7 +307,7 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 	e.wgformat = .RGBA8Unorm
 	e.sample_count = 1
 	e.tex = wg.DeviceCreateTexture(
-		g.device,
+		ctx.device,
 		&{
 			usage = {.TextureBinding, .CopyDst},
 			dimension = ._2D,
@@ -315,7 +318,7 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 		},
 	)
 	wg.QueueWriteTexture(
-		g.queue,
+		ctx.queue,
 		&{texture = e.tex},
 		raw_data(rgba),
 		uint(len(rgba)),
@@ -323,11 +326,11 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 		&{u32(image.width), u32(image.height), 1},
 	)
 	e.view = wg.TextureCreateView(e.tex, nil)
-	_tex_build_bind(e)
+	_tex_build_bind(ctx, e)
 
-	id := _texture_register_context(g.id, &g.resources.textures, e)
+	id := _texture_register_context(ctx.id, &ctx.resources.textures, e)
 	if id == 0 {
-		_texture_entry_destroy(default_context(), e)
+		_texture_entry_destroy(ctx, e)
 		return {}
 	}
 	return Texture2D {
@@ -339,13 +342,18 @@ LoadTextureFromImage :: proc(image: Image) -> Texture2D {
 	}
 }
 
+LoadTextureFromImage :: proc(image: Image) -> Texture2D {
+	return context_load_texture_from_image(default_context(), image)
+}
+
 @(private)
-_tex_build_bind :: proc(e: ^Tex_Entry) {
+_tex_build_bind :: proc(ctx: ^Context, e: ^Tex_Entry) {
+	assert(ctx != nil, "_tex_build_bind: nil context")
 	if e.sampler != nil do wg.SamplerRelease(e.sampler)
 	if e.bind != nil do wg.BindGroupRelease(e.bind)
 	filt: wg.FilterMode = e.filter == .POINT ? .Nearest : .Linear
 	e.sampler = wg.DeviceCreateSampler(
-		g.device,
+		ctx.device,
 		&{
 			magFilter = filt,
 			minFilter = filt,
@@ -361,35 +369,40 @@ _tex_build_bind :: proc(e: ^Tex_Entry) {
 		{binding = 1, sampler = e.sampler},
 	}
 	e.bind = wg.DeviceCreateBindGroup(
-		g.device,
-		&{layout = g.rend.tex_layout, entryCount = 2, entries = raw_data(entries[:])},
+		ctx.device,
+		&{layout = ctx.rend.tex_layout, entryCount = 2, entries = raw_data(entries[:])},
 	)
 }
 
 // UpdateTexture replaces the full pixel contents (same dimensions/format as the
 // texture was created with; raylib assumes matching size).
-UpdateTexture :: proc(texture: Texture2D, pixels: rawptr) {
-	e := get_texture(texture.id)
+context_update_texture :: proc(ctx: ^Context, texture: Texture2D, pixels: rawptr) {
+	assert(ctx != nil, "context_update_texture: nil context")
+	e := context_get_texture(ctx, texture.id)
 	if e == nil || pixels == nil do return
 	// caller passed data matching the source format used at load; the texture
 	// itself is RGBA8, so expand assuming R8G8B8 (concord's screen frames) when
 	// the byte count differs - otherwise treat as RGBA8.
 	pixel_count := int(e.width) * int(e.height)
 	ensure(pixel_count > 0)
-	resources := &g.resources.textures
+	resources := &ctx.resources.textures
 	if len(resources.upload_scratch) < pixel_count * 4 {
 		resize(&resources.upload_scratch, pixel_count * 4)
 	}
 	rgba := resources.upload_scratch[:pixel_count * 4]
 	ensure(_to_rgba_into(rgba, ([^]byte)(pixels), e.width, e.height, .UNCOMPRESSED_R8G8B8))
 	wg.QueueWriteTexture(
-		g.queue,
+		ctx.queue,
 		&{texture = e.tex},
 		raw_data(rgba),
 		uint(len(rgba)),
 		&{bytesPerRow = u32(e.width) * 4, rowsPerImage = u32(e.height)},
 		&{u32(e.width), u32(e.height), 1},
 	)
+}
+
+UpdateTexture :: proc(texture: Texture2D, pixels: rawptr) {
+	context_update_texture(default_context(), texture, pixels)
 }
 
 @(private)
@@ -436,20 +449,29 @@ UnloadTexture :: proc(texture: Texture2D) {
 // need this to size their own budget: the pool is shared with fonts, UI icons
 // and render targets (capacity is MAX_TEXTURES), and LoadTextureFromImage
 // returns an invalid handle once it is full.
-TextureSlotsUsed :: proc() -> int {
-	count := int(g.resources.textures.count)
+context_texture_slots_used :: proc(ctx: ^Context) -> int {
+	assert(ctx != nil, "context_texture_slots_used: nil context")
+	count := int(ctx.resources.textures.count)
 	// Why assert: the pool hands out a bounded number of slots, so a count
 	// above the bound means a register/unregister pair drifted.
-	assert(count <= MAX_TEXTURES, "TextureSlotsUsed: count exceeds pool")
+	assert(count <= MAX_TEXTURES, "context_texture_slots_used: count exceeds pool")
 	return count
+}
+
+TextureSlotsUsed :: proc() -> int {
+	return context_texture_slots_used(default_context())
 }
 
 // IsTextureValid reports whether `texture` refers to a live slot. A loader
 // returning id == 0 means the pool was full - an operating condition callers
 // must handle, not a programmer error, so this is a query and not an assert.
+context_is_texture_valid :: proc(ctx: ^Context, texture: Texture2D) -> bool {
+	if ctx == nil || texture.id == 0 do return false
+	return context_get_texture(ctx, texture.id) != nil
+}
+
 IsTextureValid :: proc(texture: Texture2D) -> bool {
-	if texture.id == 0 do return false
-	return get_texture(texture.id) != nil
+	return context_is_texture_valid(default_context(), texture)
 }
 
 // --- draw ------------------------------------------------------------------
