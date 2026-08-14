@@ -403,13 +403,6 @@ GetProjectionMatrix :: proc() -> Matrix {
 
 // --- 2D camera -------------------------------------------------------------
 
-@(private)
-cam2d_active: bool
-@(private)
-cam2d_saved: Affine
-@(private)
-cam2d: Camera2D
-
 // BeginMode2D applies `camera` to every 2D draw until EndMode2D, by installing
 // its affine as the batch model transform. Unlike the CPU-projected 3D path
 // this is exact: a Camera2D is an affine, and the batch already transforms
@@ -422,26 +415,38 @@ cam2d: Camera2D
 // The batch is flushed on entry and exit, matching the .Matrix flush the rlgl
 // matrix stack already performs, so a camera change is a visible draw-call
 // boundary in the renderer stats.
+context_begin_mode_2d :: proc(ctx: ^Context, camera: Camera2D) {
+	assert(ctx != nil, "context_begin_mode_2d: nil context")
+	assert(!ctx.cam2d_active, "context_begin_mode_2d: already inside a 2D camera mode")
+	if context_active_pass_begun(ctx) {
+		renderer_flush(ctx, &ctx.rend, context_active_pass(ctx), .Matrix)
+	}
+	ctx.cam2d_saved = ctx.rend.model_xf
+	ctx.cam2d = camera
+	ctx.rend.model_xf = _affine_from_camera_2d(camera)
+	ctx.cam2d_active = true
+	assert(ctx.cam2d_active)
+}
+
 BeginMode2D :: proc(camera: Camera2D) {
-	assert(!cam2d_active, "BeginMode2D: already inside a 2D camera mode")
-	assert(g != nil, "BeginMode2D: nil context")
-	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Matrix)
-	cam2d_saved = g.rend.model_xf
-	cam2d = camera
-	g.rend.model_xf = _affine_from_camera_2d(camera)
-	cam2d_active = true
-	assert(cam2d_active)
+	context_begin_mode_2d(default_context(), camera)
+}
+
+context_end_mode_2d :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_end_mode_2d: nil context")
+	assert(ctx.cam2d_active, "context_end_mode_2d: no active 2D camera mode")
+	if context_active_pass_begun(ctx) {
+		renderer_flush(ctx, &ctx.rend, context_active_pass(ctx), .Matrix)
+	}
+	ctx.rend.model_xf = ctx.cam2d_saved
+	ctx.cam2d_saved = {}
+	ctx.cam2d = {}
+	ctx.cam2d_active = false
+	assert(!ctx.cam2d_active)
 }
 
 EndMode2D :: proc() {
-	assert(cam2d_active, "EndMode2D: no active 2D camera mode")
-	assert(g != nil, "EndMode2D: nil context")
-	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Matrix)
-	g.rend.model_xf = cam2d_saved
-	cam2d_saved = {}
-	cam2d = {}
-	cam2d_active = false
-	assert(!cam2d_active)
+	context_end_mode_2d(default_context())
 }
 
 // GetCameraMatrix2D returns the active-camera transform as a 4x4, matching

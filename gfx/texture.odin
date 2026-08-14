@@ -455,40 +455,69 @@ IsTextureValid :: proc(texture: Texture2D) -> bool {
 // --- draw ------------------------------------------------------------------
 
 DrawTexture :: proc(texture: Texture2D, posX, posY: i32, tint: Color) {
-	DrawTextureV(texture, {f32(posX), f32(posY)}, tint)
+	context_draw_texture_v(default_context(), texture, {f32(posX), f32(posY)}, tint)
 }
 
-DrawTextureV :: proc(texture: Texture2D, position: Vector2, tint: Color) {
-	e := get_texture(texture.id)
+context_draw_texture_v :: proc(ctx: ^Context, texture: Texture2D, position: Vector2, tint: Color) {
+	assert(ctx != nil, "context_draw_texture_v: nil context")
+	e := context_get_texture(ctx, texture.id)
 	if e == nil do return
 	src := Rectangle{0, 0, f32(e.width), f32(e.height)}
 	dst := Rectangle{position.x, position.y, f32(e.width), f32(e.height)}
-	DrawTexturePro(texture, src, dst, {0, 0}, 0, tint)
+	context_draw_texture_pro(ctx, texture, src, dst, {0, 0}, 0, tint)
 }
 
-DrawTextureEx :: proc(texture: Texture2D, position: Vector2, rotation, scale: f32, tint: Color) {
-	e := get_texture(texture.id)
+DrawTextureV :: proc(texture: Texture2D, position: Vector2, tint: Color) {
+	context_draw_texture_v(default_context(), texture, position, tint)
+}
+
+context_draw_texture_ex :: proc(
+	ctx: ^Context,
+	texture: Texture2D,
+	position: Vector2,
+	rotation, scale: f32,
+	tint: Color,
+) {
+	assert(ctx != nil, "context_draw_texture_ex: nil context")
+	e := context_get_texture(ctx, texture.id)
 	if e == nil do return
 	src := Rectangle{0, 0, f32(e.width), f32(e.height)}
 	dst := Rectangle{position.x, position.y, f32(e.width) * scale, f32(e.height) * scale}
-	DrawTexturePro(texture, src, dst, {0, 0}, rotation, tint)
+	context_draw_texture_pro(ctx, texture, src, dst, {0, 0}, rotation, tint)
+}
+
+DrawTextureEx :: proc(texture: Texture2D, position: Vector2, rotation, scale: f32, tint: Color) {
+	context_draw_texture_ex(default_context(), texture, position, rotation, scale, tint)
+}
+
+context_draw_texture_rec :: proc(
+	ctx: ^Context,
+	texture: Texture2D,
+	source: Rectangle,
+	position: Vector2,
+	tint: Color,
+) {
+	assert(ctx != nil, "context_draw_texture_rec: nil context")
+	dst := Rectangle{position.x, position.y, abs(source.width), abs(source.height)}
+	context_draw_texture_pro(ctx, texture, source, dst, {0, 0}, 0, tint)
 }
 
 DrawTextureRec :: proc(texture: Texture2D, source: Rectangle, position: Vector2, tint: Color) {
-	dst := Rectangle{position.x, position.y, abs(source.width), abs(source.height)}
-	DrawTexturePro(texture, source, dst, {0, 0}, 0, tint)
+	context_draw_texture_rec(default_context(), texture, source, position, tint)
 }
 
-DrawTexturePro :: proc(
+context_draw_texture_pro :: proc(
+	ctx: ^Context,
 	texture: Texture2D,
 	source, dest: Rectangle,
 	origin: Vector2,
 	rotation: f32,
 	tint: Color,
 ) {
-	e := get_texture(texture.id)
+	assert(ctx != nil, "context_draw_texture_pro: nil context")
+	e := context_get_texture(ctx, texture.id)
 	if e == nil do return
-	batch_set(default_context(), &g.rend, .Image, e.bind)
+	batch_set(ctx, &ctx.rend, .Image, e.bind)
 	col := col_f(tint)
 
 	tw := f32(e.width)
@@ -533,8 +562,8 @@ DrawTexturePro :: proc(
 	}
 	off := [2]f32{dest.x, dest.y}
 	push_quad4(
-		default_context(),
-		&g.rend,
+		ctx,
+		&ctx.rend,
 		{tl.x + off.x, tl.y + off.y},
 		{tr.x + off.x, tr.y + off.y},
 		{br.x + off.x, br.y + off.y},
@@ -545,6 +574,16 @@ DrawTexturePro :: proc(
 		{u0, v1},
 		col,
 	)
+}
+
+DrawTexturePro :: proc(
+	texture: Texture2D,
+	source, dest: Rectangle,
+	origin: Vector2,
+	rotation: f32,
+	tint: Color,
+) {
+	context_draw_texture_pro(default_context(), texture, source, dest, origin, rotation, tint)
 }
 
 // --- image / icon ----------------------------------------------------------

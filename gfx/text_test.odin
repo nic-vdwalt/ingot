@@ -405,11 +405,16 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	atlas := get_atlas(f._atlas)
 	testing.expect(t, atlas != nil, "font should own an atlas")
 	for codepoint in ([]rune{'A', 'é', '→', '─', '█'}) {
-		testing.expectf(t, _bake_glyph(atlas, codepoint), "font should contain U+%04X", codepoint)
+		testing.expectf(
+			t,
+			_bake_glyph(g, atlas, codepoint),
+			"font should contain U+%04X",
+			codepoint,
+		)
 		testing.expectf(t, atlas.glyphs[codepoint].valid, "glyph U+%04X should render", codepoint)
 	}
 	missing: rune = 0xE000
-	testing.expect(t, !_bake_glyph(atlas, missing), "unbundled icon glyph should be absent")
+	testing.expect(t, !_bake_glyph(g, atlas, missing), "unbundled icon glyph should be absent")
 	testing.expect(t, !atlas.glyphs[missing].valid, "missing glyph should use fallback metrics")
 
 	test_lazy_glyph_first_target_paint(t)

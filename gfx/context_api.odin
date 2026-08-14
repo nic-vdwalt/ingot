@@ -50,8 +50,7 @@ frame_draw_text :: proc(
 	font_size, spacing: f32,
 	tint: Color,
 ) {
-	_ = frame_owner(frame)
-	DrawTextEx(font, text, position, font_size, spacing, tint)
+	context_draw_text_ex(frame_owner(frame), font, text, position, font_size, spacing, tint)
 }
 
 frame_draw_codepoint :: proc(
@@ -62,8 +61,7 @@ frame_draw_codepoint :: proc(
 	font_size: f32,
 	tint: Color,
 ) {
-	_ = frame_owner(frame)
-	DrawTextCodepoint(font, codepoint, position, font_size, tint)
+	context_draw_text_codepoint(frame_owner(frame), font, codepoint, position, font_size, tint)
 }
 
 frame_draw_rectangle :: proc(frame: ^Frame, rect: Rectangle, color: Color) {
@@ -71,8 +69,7 @@ frame_draw_rectangle :: proc(frame: ^Frame, rect: Rectangle, color: Color) {
 }
 
 frame_draw_rectangle_lines :: proc(frame: ^Frame, rect: Rectangle, thickness: f32, color: Color) {
-	_ = frame_owner(frame)
-	DrawRectangleLinesEx(rect, thickness, color)
+	context_draw_rectangle_lines(frame_owner(frame), rect, thickness, color)
 }
 
 frame_draw_rectangle_rounded :: proc(
@@ -82,8 +79,7 @@ frame_draw_rectangle_rounded :: proc(
 	segments: i32,
 	color: Color,
 ) {
-	_ = frame_owner(frame)
-	DrawRectangleRounded(rect, roundness, segments, color)
+	context_draw_rectangle_rounded(frame_owner(frame), rect, roundness, segments, color)
 }
 
 frame_draw_rectangle_rounded_lines :: proc(
@@ -94,21 +90,18 @@ frame_draw_rectangle_rounded_lines :: proc(
 	thickness: f32,
 	color: Color,
 ) {
-	_ = frame_owner(frame)
-	DrawRectangleRoundedLinesEx(rect, roundness, segments, thickness, color)
+	context_draw_rectangle_rounded_lines(
+		frame_owner(frame),
+		rect,
+		roundness,
+		segments,
+		thickness,
+		color,
+	)
 }
 
 frame_draw_rectangle_gradient_v :: proc(frame: ^Frame, rect: Rectangle, top, bottom: Color) {
-	assert(frame != nil, "frame_draw_rectangle_gradient_v: nil frame")
-	_ = frame_owner(frame)
-	DrawRectangleGradientV(
-		i32(rect.x),
-		i32(rect.y),
-		i32(rect.width),
-		i32(rect.height),
-		top,
-		bottom,
-	)
+	context_draw_rectangle_gradient_v(frame_owner(frame), rect, top, bottom)
 }
 
 frame_draw_line :: proc(frame: ^Frame, from, to: Vector2, thickness: f32, color: Color) {
@@ -120,8 +113,7 @@ frame_draw_circle :: proc(frame: ^Frame, center: Vector2, radius: f32, color: Co
 }
 
 frame_draw_circle_lines :: proc(frame: ^Frame, center: Vector2, radius: f32, color: Color) {
-	_ = frame_owner(frame)
-	DrawCircleLinesV(center, radius, color)
+	context_draw_circle_lines(frame_owner(frame), center, radius, color)
 }
 
 frame_draw_ring :: proc(
@@ -131,8 +123,16 @@ frame_draw_ring :: proc(
 	segments: i32,
 	color: Color,
 ) {
-	_ = frame_owner(frame)
-	DrawRing(center, inner_radius, outer_radius, start_angle, end_angle, segments, color)
+	context_draw_ring(
+		frame_owner(frame),
+		center,
+		inner_radius,
+		outer_radius,
+		start_angle,
+		end_angle,
+		segments,
+		color,
+	)
 }
 
 frame_draw_triangle :: proc(frame: ^Frame, first, second, third: Vector2, color: Color) {
