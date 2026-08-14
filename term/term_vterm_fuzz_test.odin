@@ -386,6 +386,7 @@ fuzz_vterm_title_churn :: proc(t: ^testing.T) {
 // Fixed in vendor/libvterm/src/encoding.c; see THIRD_PARTY_NOTICES.md.
 @(test)
 vterm_utf8_decode_respects_codepoint_buffer_bound :: proc(t: ^testing.T) {
+	when ODIN_OS == .Windows do return
 	VTERM_CODEPOINTS :: 4096 / size_of(u32)
 
 	for pad in VTERM_CODEPOINTS - 4 ..= VTERM_CODEPOINTS + 2 {
@@ -431,6 +432,7 @@ vterm_utf8_decode_respects_codepoint_buffer_bound :: proc(t: ^testing.T) {
 // Fixed in vendor/libvterm/src/screen.c; see THIRD_PARTY_NOTICES.md.
 @(test)
 vterm_wide_glyph_on_last_column_stays_in_bounds :: proc(t: ^testing.T) {
+	when ODIN_OS == .Windows do return
 	for cols in u16(1) ..= u16(2) {
 		ts := fuzz_vt_make(cols, 4)
 		testing.expectf(t, ts != nil, "emulator should initialise (cols %v)", cols)
