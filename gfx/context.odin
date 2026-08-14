@@ -258,12 +258,13 @@ _destroy_retired :: proc(r: Retired_Texture) {
 // QueueSubmit: from that point wgpu keeps the submitted work's resources
 // alive internally, so destroy is safe.
 @(private)
-_flush_retired :: proc() {
+_flush_retired :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_flush_retired: nil context")
 	// Why assert: flushing while a frame still records would recreate the
 	// destroy-before-submit validation abort this queue exists to prevent.
-	assert(!g.frame.has_frame, "_flush_retired: called while a frame is recording")
-	for retired in g.resources.retire do _destroy_retired(retired)
-	clear(&g.resources.retire)
+	assert(!ctx.frame.has_frame, "_flush_retired: called while a frame is recording")
+	for retired in ctx.resources.retire do _destroy_retired(retired)
+	clear(&ctx.resources.retire)
 }
 
 // The default context is deliberately NOT statically initialised, and the id
@@ -420,24 +421,18 @@ context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool 
 	when ODIN_OS == .JS {
 		if ctx != default_context() do return false
 	}
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
 	_init_window_context(ctx, width, height, title)
 	return context_live(ctx)
 }
 
 context_close :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_close: nil context")
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
 	_close_window_context(ctx)
 }
 
 context_should_close :: proc(ctx: ^Context) -> bool {
 	if ctx == nil do return true
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return platform_should_close()
+	return platform_should_close(ctx)
 }
 
 @(private)
@@ -456,7 +451,7 @@ _graphics_resources_destroy :: proc(ctx: ^Context, resources: ^Graphics_Resource
 	_shader_resources_destroy(&resources.shaders)
 	_atlas_resources_destroy(&resources.atlases)
 	_texture_resources_destroy(&resources.textures)
-	_flush_retired()
+	_flush_retired(ctx)
 	delete(resources.retire)
 	resources^ = {}
 }
@@ -542,39 +537,39 @@ InitWindow :: proc(width, height: i32, title: cstring) {
 @(private)
 _init_window_context :: proc(ctx: ^Context, width, height: i32, title: cstring) {
 	assert(ctx != nil, "_init_window_context: nil context")
-	assert(g == ctx, "_init_window_context: inactive context")
-	if g.lifecycle != .Empty do return
+	if ctx.lifecycle != .Empty do return
 	if !_context_assign_id(ctx) do return
-	g.epoch += 1
-	g.lifecycle = .Starting
-	if !platform_create_window(width, height, title, g.config_flags) {
+	ctx.epoch += 1
+	ctx.lifecycle = .Starting
+	if !platform_create_window(ctx, width, height, title, ctx.config_flags) {
 		fmt.eprintln("gfx: window creation failed")
-		g.lifecycle = .Empty
+		ctx.lifecycle = .Empty
 		return
 	}
 
-	g.instance = wg.CreateInstance()
-	g.surface = platform_create_surface(g.instance)
-	g.pending_w, g.pending_h = width, height
+	ctx.instance = wg.CreateInstance()
+	ctx.surface = platform_create_surface(ctx, ctx.instance)
+	ctx.pending_w, ctx.pending_h = width, height
 
 	// Acquire the GPU adapter+device. On native this resolves synchronously
 	// (busy-wait) and calls _gpu_finish before returning; on web the requests
 	// resolve on the browser event loop and _gpu_finish runs from the device
-	// callback a few RAF ticks later (g.initialized stays false until then).
-	platform_start_gpu()
+	// callback a few RAF ticks later (ctx.initialized stays false until then).
+	platform_start_gpu(ctx)
 }
 
 // _gpu_finish completes context setup once g.adapter/g.device/g.queue are ready.
 // Shared by both targets (native calls it inline from platform_start_gpu; web
 // calls it from the async device callback). Everything here is pure wgpu.
 @(private)
-_gpu_finish :: proc() {
-	width, height := g.pending_w, g.pending_h
+_gpu_finish :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_gpu_finish: nil context")
+	width, height := ctx.pending_w, ctx.pending_h
 
-	caps, _ := wg.SurfaceGetCapabilities(g.surface, g.adapter)
+	caps, _ := wg.SurfaceGetCapabilities(ctx.surface, ctx.adapter)
 	if caps.formatCount == 0 || caps.formats == nil {
 		fmt.eprintln("gfx: surface reports no supported formats; cannot configure swapchain")
-		g.lifecycle = .Closing
+		ctx.lifecycle = .Closing
 		return
 	}
 	// Prefer a non-sRGB (linear UNORM) surface. raylib writes 8-bit sRGB color
@@ -582,22 +577,22 @@ _gpu_finish :: proc() {
 	// surface re-encodes them linear->sRGB on output, washing the frame out
 	// (too bright). Match raylib by choosing the *Unorm format when offered.
 	ensure(caps.formatCount <= uint(max(int)))
-	g.format = caps.formats[0]
+	ctx.format = caps.formats[0]
 	for i in 0 ..< int(caps.formatCount) {
 		f := caps.formats[i]
 		if f == .BGRA8Unorm || f == .RGBA8Unorm {
-			g.format = f
+			ctx.format = f
 			break
 		}
 	}
 
-	g.width, g.height = width, height
-	fbw, fbh := platform_framebuffer_size()
-	g.fb_width, g.fb_height = fbw, fbh
-	g.dpi = platform_content_scale()
+	ctx.width, ctx.height = width, height
+	fbw, fbh := platform_framebuffer_size(ctx)
+	ctx.fb_width, ctx.fb_height = fbw, fbh
+	ctx.dpi = platform_content_scale(ctx)
 
 	alpha: wg.CompositeAlphaMode = .Opaque
-	if .WINDOW_TRANSPARENT in g.config_flags {
+	if .WINDOW_TRANSPARENT in ctx.config_flags {
 		// pick a surface-supported non-opaque mode for the transparent backdrop
 		want := [?]wg.CompositeAlphaMode{.Premultiplied, .Unpremultiplied, .Inherit, .Auto}
 		outer: for w in want {
@@ -609,37 +604,37 @@ _gpu_finish :: proc() {
 			}
 		}
 	}
-	g.composite_alpha = alpha
+	ctx.composite_alpha = alpha
 	_stats_set_alpha_mode(alpha)
-	g.config = wg.SurfaceConfiguration {
-		device      = g.device,
-		format      = g.format,
+	ctx.config = wg.SurfaceConfiguration {
+		device      = ctx.device,
+		format      = ctx.format,
 		usage       = {.RenderAttachment},
 		width       = u32(fbw),
 		height      = u32(fbh),
 		alphaMode   = alpha,
 		presentMode = .Fifo,
 	}
-	wg.SurfaceConfigure(g.surface, &g.config)
+	wg.SurfaceConfigure(ctx.surface, &ctx.config)
 
-	g.start_time_s = platform_now()
-	g.last_time = _now()
-	g.target_fps = 0
+	ctx.start_time_s = platform_now()
+	ctx.last_time = _now(ctx)
+	ctx.target_fps = 0
 
-	_submission_init(&g.submissions, g)
-	if !renderer_init(&g.rend) {
+	_submission_init(&ctx.submissions, ctx)
+	if !renderer_init(&ctx.rend) {
 		// The device could not supply the stream pools even at the floor.
 		// Closing here surfaces a diagnosable state; the alternative used to
 		// be an assert, which on web traps the module and freezes the canvas.
-		g.lifecycle = .Closing
+		ctx.lifecycle = .Closing
 		return
 	}
-	_graphics_resources_init(&g.resources)
+	_graphics_resources_init(&ctx.resources)
 	platform_input_init()
 	platform_drop_init()
 
-	g.initialized = true
-	g.lifecycle = .Ready
+	ctx.initialized = true
+	ctx.lifecycle = .Ready
 }
 
 CloseWindow :: proc() {
@@ -649,29 +644,28 @@ CloseWindow :: proc() {
 @(private)
 _close_window_context :: proc(ctx: ^Context) {
 	assert(ctx != nil, "_close_window_context: nil context")
-	assert(g == ctx, "_close_window_context: inactive context")
-	if g.instance == nil && g.win == nil do return
-	assert(!g.frame.has_frame, "CloseWindow: frame is still recording")
-	g.lifecycle = .Closing
-	if g.initialized {
-		platform_drop_shutdown()
+	if ctx.instance == nil && ctx.win == nil do return
+	assert(!ctx.frame.has_frame, "CloseWindow: frame is still recording")
+	ctx.lifecycle = .Closing
+	if ctx.initialized {
+		platform_drop_shutdown(ctx)
 		_graphics_resources_destroy(ctx, &ctx.resources)
-		renderer_shutdown(&g.rend)
-		_submission_shutdown(&g.submissions)
+		renderer_shutdown(&ctx.rend)
+		_submission_shutdown(&ctx.submissions)
 	}
-	if g.surface != nil do wg.SurfaceRelease(g.surface)
-	if g.queue != nil do wg.QueueRelease(g.queue)
-	if g.device != nil do wg.DeviceRelease(g.device)
-	if g.adapter != nil do wg.AdapterRelease(g.adapter)
-	if g.instance != nil do wg.InstanceRelease(g.instance)
-	platform_terminate()
-	context_id := g.id
-	flags := g.config_flags
-	closing_epoch := g.epoch
-	mem.zero(g, size_of(Context))
-	g.id = context_id
-	g.epoch = closing_epoch
-	g.config_flags = flags
+	if ctx.surface != nil do wg.SurfaceRelease(ctx.surface)
+	if ctx.queue != nil do wg.QueueRelease(ctx.queue)
+	if ctx.device != nil do wg.DeviceRelease(ctx.device)
+	if ctx.adapter != nil do wg.AdapterRelease(ctx.adapter)
+	if ctx.instance != nil do wg.InstanceRelease(ctx.instance)
+	platform_terminate(ctx)
+	context_id := ctx.id
+	flags := ctx.config_flags
+	closing_epoch := ctx.epoch
+	mem.zero(ctx, size_of(Context))
+	ctx.id = context_id
+	ctx.epoch = closing_epoch
+	ctx.config_flags = flags
 }
 
 WindowShouldClose :: proc() -> bool {
@@ -681,45 +675,50 @@ WindowShouldClose :: proc() -> bool {
 // --- per-frame -------------------------------------------------------------
 
 BeginDrawing :: proc() {
-	ctx := g
-	assert(ctx != nil, "BeginDrawing: nil context")
-	_maybe_reconfigure()
-	_stats_frame_begin()
+	context_begin_drawing(default_context())
+}
+
+context_begin_drawing :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_begin_drawing: nil context")
+	_maybe_reconfigure(ctx)
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
+	_stats_frame_begin(ctx)
 	platform_web_input_frame_begin()
 
-	if !renderer_frame_begin(&g.rend) {
-		g.frame.has_frame = false
+	if !renderer_frame_begin(ctx, &ctx.rend) {
+		ctx.frame.has_frame = false
 		return
 	}
-	g.frame.surf_tex = wg.SurfaceGetCurrentTexture(g.surface)
-	#partial switch g.frame.surf_tex.status {
+	ctx.frame.surf_tex = wg.SurfaceGetCurrentTexture(ctx.surface)
+	#partial switch ctx.frame.surf_tex.status {
 	case .SuccessOptimal, .SuccessSuboptimal:
 	// ok
 	case .Outdated, .Lost:
 		// The swapchain is stale (e.g. display change); reconfigure so the
 		// next frame can acquire a fresh texture.
-		_release_surface_texture()
-		_stream_slot_abandon(&g.rend)
-		if g.fb_width > 0 && g.fb_height > 0 {
-			wg.SurfaceConfigure(g.surface, &g.config)
+		_release_surface_texture(ctx)
+		_stream_slot_abandon(&ctx.rend)
+		if ctx.fb_width > 0 && ctx.fb_height > 0 {
+			wg.SurfaceConfigure(ctx.surface, &ctx.config)
 		}
-		g.frame.has_frame = false
+		ctx.frame.has_frame = false
 		return
 	case:
-		_release_surface_texture()
-		_stream_slot_abandon(&g.rend)
-		g.frame.has_frame = false
+		_release_surface_texture(ctx)
+		_stream_slot_abandon(&ctx.rend)
+		ctx.frame.has_frame = false
 		return
 	}
 	_assert_window_frame_contract(ctx)
 	renderer_window_projection_refresh(&ctx.rend, ctx.queue, ctx.width, ctx.height)
-	g.frame.view = wg.TextureCreateView(g.frame.surf_tex.texture, nil)
-	g.frame.encoder = wg.DeviceCreateCommandEncoder(g.device, nil)
-	g.frame.clear_color = Color{0, 0, 0, 255}
-	g.frame.pass_begun = false
-	g.frame.has_frame = true
-	g.frame.scissor_on = false
-	g.frame.scissor_empty = false
+	ctx.frame.view = wg.TextureCreateView(ctx.frame.surf_tex.texture, nil)
+	ctx.frame.encoder = wg.DeviceCreateCommandEncoder(ctx.device, nil)
+	ctx.frame.clear_color = Color{0, 0, 0, 255}
+	ctx.frame.pass_begun = false
+	ctx.frame.has_frame = true
+	ctx.frame.scissor_on = false
+	ctx.frame.scissor_empty = false
 }
 
 @(private)
@@ -739,29 +738,35 @@ _assert_window_frame_contract :: proc(ctx: ^Context) {
 }
 
 ClearBackground :: proc(c: Color) {
+	context_clear_background(default_context(), c)
+}
+
+context_clear_background :: proc(ctx: ^Context, c: Color) {
+	assert(ctx != nil, "context_clear_background: nil context")
 	// While a render target is bound but its pass hasn't begun yet, the clear
 	// applies to the target (raylib: ClearBackground after BeginTextureMode
 	// clears the target). Otherwise it sets the swapchain clear.
-	if g.frame.rt != 0 && !g.frame.rt_pass_begun {
-		g.frame.rt_clear = c
-		g.frame.rt_should_clear = true
+	if ctx.frame.rt != 0 && !ctx.frame.rt_pass_begun {
+		ctx.frame.rt_clear = c
+		ctx.frame.rt_should_clear = true
 		return
 	}
-	g.frame.clear_color = c
+	ctx.frame.clear_color = c
 }
 
 // _ensure_pass lazily begins the frame render pass so ClearBackground (called
 // after BeginDrawing in raylib order) can set the loadOp clear value first.
 @(private)
-_ensure_pass :: proc() {
-	if !g.frame.has_frame || g.frame.pass_begun do return
-	cc := g.frame.clear_color
-	g.frame.pass = wg.CommandEncoderBeginRenderPass(
-		g.frame.encoder,
+_ensure_pass :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_ensure_pass: nil context")
+	if !ctx.frame.has_frame || ctx.frame.pass_begun do return
+	cc := ctx.frame.clear_color
+	ctx.frame.pass = wg.CommandEncoderBeginRenderPass(
+		ctx.frame.encoder,
 		&{
 			colorAttachmentCount = 1,
 			colorAttachments = &wg.RenderPassColorAttachment {
-				view = g.frame.view,
+				view = ctx.frame.view,
 				depthSlice = wg.DEPTH_SLICE_UNDEFINED,
 				loadOp = .Clear,
 				storeOp = .Store,
@@ -774,26 +779,32 @@ _ensure_pass :: proc() {
 			},
 		},
 	)
-	_stats_render_pass()
-	g.frame.pass_begun = true
+	_stats_render_pass(ctx)
+	ctx.frame.pass_begun = true
 	// A new pass starts with a full-attachment scissor; restore any active clip.
-	if g.frame.scissor_on && !g.frame.scissor_empty {
-		assert(g.frame.sc_w > 0)
-		assert(g.frame.sc_h > 0)
+	if ctx.frame.scissor_on && !ctx.frame.scissor_empty {
+		assert(ctx.frame.sc_w > 0)
+		assert(ctx.frame.sc_h > 0)
 		wg.RenderPassEncoderSetScissorRect(
-			g.frame.pass,
-			g.frame.sc_x,
-			g.frame.sc_y,
-			g.frame.sc_w,
-			g.frame.sc_h,
+			ctx.frame.pass,
+			ctx.frame.sc_x,
+			ctx.frame.sc_y,
+			ctx.frame.sc_w,
+			ctx.frame.sc_h,
 		)
 	}
 }
 
 EndDrawing :: proc() {
-	ctx := g
+	context_end_drawing(default_context())
+}
+
+context_end_drawing :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_end_drawing: nil context")
+	previous := _context_activate(ctx)
+	defer _context_restore(previous)
 	if ctx.frame.has_frame {
-		_ensure_pass() // guarantee a clear even on empty frames
+		_ensure_pass(ctx) // guarantee a clear even on empty frames
 		if !g.frame.scissor_empty {
 			renderer_flush(&g.rend, g.frame.pass, .Frame_End)
 		} else {
@@ -804,29 +815,31 @@ EndDrawing :: proc() {
 		wg.RenderPassEncoderRelease(g.frame.pass)
 
 		retirement := _submission_reserve(&g.submissions)
-		if retirement != 0 do assert(_stream_slot_upload(&g.rend))
+		if retirement != 0 do assert(_stream_slot_upload(ctx, &ctx.rend))
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
 			ctx,
 			g.frame.encoder,
 			retirement != 0,
 		)
 		if retirement != 0 && cmd != nil {
-			_stats_queue_submission()
+			_stats_queue_submission(ctx)
 			assert(_submission_commit(&g.submissions, retirement))
-			if !_stream_slot_submitted(&g.rend, retirement) do _stats_stream_retirement_failure()
+			if !_stream_slot_submitted(&g.rend, retirement) {
+				_stats_stream_retirement_failure(ctx)
+			}
 		} else {
 			if retirement != 0 do assert(_submission_rollback(&g.submissions, retirement))
 			_stream_slot_abandon(&g.rend)
-			_stats_stream_retirement_failure()
+			_stats_stream_retirement_failure(ctx)
 		}
 		if cmd != nil do wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(g.frame.encoder)
 		present_elapsed := _stats_present(ctx)
 		_stats_context_cpu_times(ctx, 0, encode_elapsed, submit_elapsed, present_elapsed)
 		wg.TextureViewRelease(g.frame.view)
-		_release_surface_texture()
+		_release_surface_texture(ctx)
 		g.frame.has_frame = false
-		_flush_retired()
+		_flush_retired(ctx)
 		_renderer_report_overflow(&ctx.rend)
 	} else {
 		clear(&g.rend.verts)
@@ -834,43 +847,45 @@ EndDrawing :: proc() {
 	}
 
 	platform_web_input_frame_end()
-	_stats_frame_end()
+	_stats_frame_end(ctx)
 	when ODIN_OS != .JS {
 		input_poll()
 	}
-	_frame_timing(platform_should_close())
+	_frame_timing(ctx, platform_should_close(ctx))
 }
 
 // _release_surface_texture drops the owned reference returned by
 // SurfaceGetCurrentTexture. Failing to do this leaks one texture per frame
 // until the process runs out of address space.
 @(private)
-_release_surface_texture :: proc() {
-	if g.frame.surf_tex.texture != nil {
-		wg.TextureRelease(g.frame.surf_tex.texture)
-		g.frame.surf_tex.texture = nil
+_release_surface_texture :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_release_surface_texture: nil context")
+	if ctx.frame.surf_tex.texture != nil {
+		wg.TextureRelease(ctx.frame.surf_tex.texture)
+		ctx.frame.surf_tex.texture = nil
 	}
 }
 
 @(private)
-_maybe_reconfigure :: proc() {
-	fbw, fbh := platform_framebuffer_size()
-	w, h := platform_window_size()
-	changed := fbw != g.fb_width || fbh != g.fb_height
+_maybe_reconfigure :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_maybe_reconfigure: nil context")
+	fbw, fbh := platform_framebuffer_size(ctx)
+	w, h := platform_window_size(ctx)
+	changed := fbw != ctx.fb_width || fbh != ctx.fb_height
 	// IsWindowResized reports the logical size the application lays out
 	// against, which is what changes under a user drag. A pure DPI change
 	// moves the framebuffer without moving it, and is reported through
 	// GetWindowScaleDPI instead.
-	g.resized_this_frame = w != g.width || h != g.height
-	g.width, g.height = w, h
-	if (changed || g.force_reconfigure) && fbw > 0 && fbh > 0 {
-		g.fb_width, g.fb_height = fbw, fbh
-		g.config.width = u32(fbw)
-		g.config.height = u32(fbh)
-		wg.SurfaceConfigure(g.surface, &g.config)
-		g.force_reconfigure = false
+	ctx.resized_this_frame = w != ctx.width || h != ctx.height
+	ctx.width, ctx.height = w, h
+	if (changed || ctx.force_reconfigure) && fbw > 0 && fbh > 0 {
+		ctx.fb_width, ctx.fb_height = fbw, fbh
+		ctx.config.width = u32(fbw)
+		ctx.config.height = u32(fbh)
+		wg.SurfaceConfigure(ctx.surface, &ctx.config)
+		ctx.force_reconfigure = false
 	}
-	g.dpi = platform_content_scale()
+	ctx.dpi = platform_content_scale(ctx)
 }
 
 FRAME_PACING_SLEEP_THRESHOLD :: 0.002
@@ -892,18 +907,19 @@ _frame_pacing_enabled :: proc(target_fps: i32, close_requested: bool) -> bool {
 }
 
 @(private)
-_frame_timing :: proc(close_requested: bool) {
+_frame_timing :: proc(ctx: ^Context, close_requested: bool) {
+	assert(ctx != nil, "_frame_timing: nil context")
 	// Native pacing uses a bounded spin so a stalled clock cannot hang a frame.
 	when ODIN_OS != .JS {
-		if _frame_pacing_enabled(g.target_fps, close_requested) {
-			target := 1.0 / f64(g.target_fps)
+		if _frame_pacing_enabled(ctx.target_fps, close_requested) {
+			target := 1.0 / f64(ctx.target_fps)
 			assert(target > 0, "_frame_timing: non-positive target")
-			remaining := _frame_pacing_remaining(_now(), g.last_time, target)
+			remaining := _frame_pacing_remaining(_now(ctx), ctx.last_time, target)
 			if remaining > FRAME_PACING_SLEEP_THRESHOLD {
 				platform_sleep(remaining - FRAME_PACING_SLEEP_MARGIN)
 			}
 			for _ in 0 ..< FRAME_PACING_SPINS_MAX {
-				remaining = _frame_pacing_remaining(_now(), g.last_time, target)
+				remaining = _frame_pacing_remaining(_now(ctx), ctx.last_time, target)
 				if remaining <= 0 do break
 			}
 			if remaining > 0 {
@@ -911,21 +927,22 @@ _frame_timing :: proc(close_requested: bool) {
 			}
 		}
 	}
-	now := _now()
-	raw := f32(max(now - g.last_time, 0))
-	g.real_frame_time = raw
+	now := _now(ctx)
+	raw := f32(max(now - ctx.last_time, 0))
+	ctx.real_frame_time = raw
 	// Clamp dt so a long gap (idle wait, browser tab hidden then resumed)
 	// doesn't feed a huge step into animations/physics on the next frame.
-	g.frame_time = min(raw, MAX_FRAME_TIME)
-	g.last_time = now
+	ctx.frame_time = min(raw, MAX_FRAME_TIME)
+	ctx.last_time = now
 }
 
 // MAX_FRAME_TIME caps GetFrameTime's reported delta (seconds).
 MAX_FRAME_TIME :: 0.25
 
 @(private)
-_now :: proc() -> f64 {
-	return platform_now() - g.start_time_s
+_now :: proc(ctx: ^Context) -> f64 {
+	assert(ctx != nil, "_now: nil context")
+	return platform_now() - ctx.start_time_s
 }
 
 // --- window/screen queries (raylib-named) ----------------------------------
@@ -1062,6 +1079,6 @@ _ensure_active_pass :: proc() {
 	if g.frame.rt != 0 {
 		_ensure_rt_pass()
 	} else {
-		_ensure_pass()
+		_ensure_pass(g)
 	}
 }

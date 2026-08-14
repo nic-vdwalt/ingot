@@ -1165,7 +1165,7 @@ begin_gpu_3d :: proc(
 	if !views_ok do return {}, false
 	owns_stream := !ctx.frame.has_frame
 	if owns_stream && !_stream_slot_acquire(&ctx.rend, _submission_completed(&ctx.submissions)) {
-		_stats_stream_slot_exhaustion()
+		_stats_stream_slot_exhaustion(ctx)
 		return {}, false
 	}
 	identity_offset, identity_ok := _gpu_3d_identity_instances_upload(&ctx.rend)
@@ -1201,7 +1201,7 @@ begin_gpu_3d :: proc(
 	resources.next_pass_generation += 1
 	if resources.next_pass_generation == 0 do resources.next_pass_generation = 1
 	resources.active_pass_generation = resources.next_pass_generation
-	_stats_render_pass()
+	_stats_render_pass(ctx)
 	result := Gpu_3D_Pass {
 		owner                     = ctx,
 		epoch                     = ctx.epoch,
@@ -1501,18 +1501,20 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	retirement := u64(0)
 	if pass.owns_stream do retirement = _submission_reserve(&g.submissions)
 	allow_submit := !pass.owns_stream || retirement != 0
-	if pass.owns_stream && allow_submit do assert(_stream_slot_upload(&g.rend))
+	if pass.owns_stream && allow_submit do assert(_stream_slot_upload(pass.owner, &g.rend))
 	cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(g, pass.encoder, allow_submit)
 	if allow_submit && cmd != nil {
-		_stats_queue_submission()
+		_stats_queue_submission(pass.owner)
 		if pass.owns_stream {
 			assert(_submission_commit(&g.submissions, retirement))
-			if !_stream_slot_submitted(&g.rend, retirement) do _stats_stream_retirement_failure()
+			if !_stream_slot_submitted(&g.rend, retirement) {
+				_stats_stream_retirement_failure(pass.owner)
+			}
 		}
 	} else if pass.owns_stream {
 		if retirement != 0 do assert(_submission_rollback(&g.submissions, retirement))
 		_stream_slot_abandon(&g.rend)
-		_stats_stream_retirement_failure()
+		_stats_stream_retirement_failure(pass.owner)
 	}
 	_stats_cpu_times(0, encode_elapsed, submit_elapsed, 0)
 	if cmd != nil do wg.CommandBufferRelease(cmd)

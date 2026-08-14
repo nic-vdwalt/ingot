@@ -3,7 +3,6 @@ package gfx
 Frame :: struct {
 	owner:     ^Context,
 	epoch:     u64,
-	previous:  ^Context,
 	open:      bool,
 	available: bool,
 }
@@ -13,9 +12,8 @@ frame_begin :: proc(frame: ^Frame, ctx: ^Context) -> bool {
 	assert(!frame.open, "frame_begin: frame already open")
 	frame.owner = ctx
 	frame.epoch = context_epoch(ctx)
-	frame.previous = _context_activate(ctx)
 	frame.open = true
-	BeginDrawing()
+	context_begin_drawing(ctx)
 	frame.available = context_frame_available(ctx)
 	assert(frame.owner == ctx && frame.open, "frame_begin: invalid frame")
 	return frame.available
@@ -27,8 +25,7 @@ frame_end :: proc(frame: ^Frame) {
 		frame.owner != nil && frame.epoch == context_epoch(frame.owner),
 		"frame_end: stale owner",
 	)
-	EndDrawing()
-	_context_restore(frame.previous)
+	context_end_drawing(frame.owner)
 	frame^ = {}
 }
 

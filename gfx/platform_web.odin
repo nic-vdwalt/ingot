@@ -112,17 +112,24 @@ _web_request_live :: proc(request: ^Web_GPU_Request) -> bool {
 }
 
 @(private)
-platform_create_window :: proc(width, height: i32, title: cstring, flags: ConfigFlags) -> bool {
+platform_create_window :: proc(
+	ctx: ^Context,
+	width, height: i32,
+	title: cstring,
+	flags: ConfigFlags,
+) -> bool {
+	assert(ctx != nil, "platform_create_window: nil context")
 	g_web_ctx = context
-	g.win = WEB_WIN_SENTINEL
-	g.width, g.height = width, height
-	g.fb_width, g.fb_height = width, height
-	g.dpi = platform_content_scale()
+	ctx.win = WEB_WIN_SENTINEL
+	ctx.width, ctx.height = width, height
+	ctx.fb_width, ctx.fb_height = width, height
+	ctx.dpi = platform_content_scale(ctx)
 	return true
 }
 
 @(private)
-platform_create_surface :: proc(instance: wg.Instance) -> wg.Surface {
+platform_create_surface :: proc(ctx: ^Context, instance: wg.Instance) -> wg.Surface {
+	assert(ctx != nil, "platform_create_surface: nil context")
 	return wg.InstanceCreateSurface(
 		instance,
 		&wg.SurfaceDescriptor {
@@ -139,8 +146,8 @@ platform_create_surface :: proc(instance: wg.Instance) -> wg.Surface {
 // device callback calls _gpu_finish, which flips g.initialized to true. The web
 // frame loop skips drawing until then.
 @(private)
-platform_start_gpu :: proc() {
-	ctx := g
+platform_start_gpu :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_start_gpu: nil context")
 	request := new(Web_GPU_Request)
 	request.owner = ctx
 	request.epoch = ctx.epoch
@@ -249,7 +256,7 @@ _web_on_device :: proc "c" (
 	free(request)
 	ctx.device = device
 	ctx.queue = wg.DeviceGetQueue(ctx.device)
-	_gpu_finish()
+	_gpu_finish(ctx)
 }
 
 // On web the adapter/device requests resolve on the browser event loop, not via
@@ -258,36 +265,39 @@ _web_on_device :: proc "c" (
 platform_process_events :: proc(instance: wg.Instance) {}
 
 @(private)
-platform_framebuffer_size :: proc() -> (i32, i32) {
+platform_framebuffer_size :: proc(ctx: ^Context) -> (i32, i32) {
+	assert(ctx != nil, "platform_framebuffer_size: nil context")
 	// The host validates and caps the backing store before assigning it. Reading
 	// those integer dimensions here keeps SurfaceConfigure exactly in sync with
 	// the canvas during mobile viewport transitions.
 	w := _js_pixel_width()
 	h := _js_pixel_height()
-	if w <= 0 do w = max(g.fb_width, 1)
-	if h <= 0 do h = max(g.fb_height, 1)
+	if w <= 0 do w = max(ctx.fb_width, 1)
+	if h <= 0 do h = max(ctx.fb_height, 1)
 	return w, h
 }
 
 @(private)
-platform_window_size :: proc() -> (i32, i32) {
+platform_window_size :: proc(ctx: ^Context) -> (i32, i32) {
+	assert(ctx != nil, "platform_window_size: nil context")
 	// Logical (point) size = CSS pixels.
 	w := i32(_js_css_width() + 0.5)
 	h := i32(_js_css_height() + 0.5)
-	if w <= 0 do w = g.width
-	if h <= 0 do h = g.height
+	if w <= 0 do w = ctx.width
+	if h <= 0 do h = ctx.height
 	return w, h
 }
 
 @(private)
-platform_content_scale :: proc() -> f32 {
+platform_content_scale :: proc(ctx: ^Context) -> f32 {
+	assert(ctx != nil, "platform_content_scale: nil context")
 	dpr := _js_dpr()
 	return dpr <= 0 ? 1 : f32(dpr)
 }
 
 @(private)
-platform_should_close :: proc() -> bool {
-	return false
+platform_should_close :: proc(ctx: ^Context) -> bool {
+	return ctx == nil
 }
 
 @(private)
@@ -296,7 +306,10 @@ platform_poll_events :: proc() {
 }
 
 @(private)
-platform_terminate :: proc() {}
+platform_terminate :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_terminate: nil context")
+	ctx.win = nil
+}
 
 @(private)
 platform_now :: proc() -> f64 {
@@ -613,7 +626,8 @@ platform_drop_prepare_events :: proc() {}
 platform_drop_finish_events :: proc() {}
 
 @(private)
-platform_drop_shutdown :: proc() {
+platform_drop_shutdown :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_drop_shutdown: nil context")
 	_drop_state_reset()
 	_js_drop_clear()
 }

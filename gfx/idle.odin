@@ -171,7 +171,7 @@ _idle_timeout :: proc() -> (should_wait: bool, timeout: f64) {
 		if g.idle.strategy == .Event_Driven && platform_window_iconified() {
 			return true, IDLE_MAX_WAIT
 		}
-		now := _now()
+		now := _now(g)
 		if _idle_take_frame(&g.idle, now) {
 			return false, 0
 		}

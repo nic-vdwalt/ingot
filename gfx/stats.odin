@@ -126,14 +126,11 @@ context_renderer_peak_usage :: proc(ctx: ^Context) -> Peak_Usage {
 }
 
 @(private)
-_stats_frame_begin :: proc() {
+_stats_frame_begin :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {
-		index := g.stats_current.frame_index + 1
-		alpha := g.stats_current.composite_alpha_mode
-		g.stats_current = {}
-		g.stats_current.frame_index = index
-		g.stats_current.composite_alpha_mode = alpha
-		_stats_context_frame_started(default_context())
+		assert(ctx != nil, "_stats_frame_begin: nil context")
+		_stats_context_frame_begin(ctx)
+		_stats_context_frame_started(ctx)
 	}
 }
 
@@ -158,10 +155,11 @@ _stats_context_frame_begin :: proc(ctx: ^Context) {
 }
 
 @(private)
-_stats_frame_end :: proc() {
+_stats_frame_end :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {
-		_stats_context_frame_stopped(default_context())
-		g.stats_latest = g.stats_current
+		assert(ctx != nil, "_stats_frame_end: nil context")
+		_stats_context_frame_stopped(ctx)
+		_stats_context_frame_end(ctx)
 	}
 }
 
@@ -224,16 +222,18 @@ _stats_bind_group_switches :: proc(count: u32) {
 }
 
 @(private)
-_stats_render_pass :: proc() {
+_stats_render_pass :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {
-		g.stats_current.render_passes += 1
+		assert(ctx != nil, "_stats_render_pass: nil context")
+		ctx.stats_current.render_passes += 1
 	}
 }
 
 @(private)
-_stats_queue_submission :: proc() {
+_stats_queue_submission :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {
-		g.stats_current.queue_submissions += 1
+		assert(ctx != nil, "_stats_queue_submission: nil context")
+		ctx.stats_current.queue_submissions += 1
 	}
 }
 
@@ -303,18 +303,19 @@ _stats_stream_copy :: proc(elapsed: f64) {
 }
 
 @(private)
-_stats_stream_write :: proc(uniform: bool, bytes: u64, elapsed: f64) {
+_stats_stream_write :: proc(ctx: ^Context, uniform: bool, bytes: u64, elapsed: f64) {
 	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_stream_write: nil context")
 		assert(bytes > 0, "_stats_stream_write: empty write")
 		assert(elapsed >= 0, "_stats_stream_write: negative time")
 		if uniform {
-			g.stats_current.stream_uniform_write_calls += 1
-			g.stats_current.stream_uniform_write_bytes += bytes
+			ctx.stats_current.stream_uniform_write_calls += 1
+			ctx.stats_current.stream_uniform_write_bytes += bytes
 		} else {
-			g.stats_current.stream_geometry_write_calls += 1
-			g.stats_current.stream_geometry_write_bytes += bytes
+			ctx.stats_current.stream_geometry_write_calls += 1
+			ctx.stats_current.stream_geometry_write_bytes += bytes
 		}
-		g.stats_current.stream_write_cpu_seconds += elapsed
+		ctx.stats_current.stream_write_cpu_seconds += elapsed
 	}
 }
 
@@ -330,9 +331,10 @@ _stats_reservation_failure :: proc(uniform: bool) {
 }
 
 @(private)
-_stats_stream_slot_exhaustion :: proc() {
+_stats_stream_slot_exhaustion :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {
-		g.stats_current.stream_slot_exhaustions += 1
+		assert(ctx != nil, "_stats_stream_slot_exhaustion: nil context")
+		ctx.stats_current.stream_slot_exhaustions += 1
 	}
 }
 
@@ -386,8 +388,9 @@ _stats_submission_tracking_failure :: proc() {
 }
 
 @(private)
-_stats_stream_retirement_failure :: proc() {
+_stats_stream_retirement_failure :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {
-		g.stats_current.stream_retirement_failures += 1
+		assert(ctx != nil, "_stats_stream_retirement_failure: nil context")
+		ctx.stats_current.stream_retirement_failures += 1
 	}
 }
