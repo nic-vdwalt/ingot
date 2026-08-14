@@ -489,3 +489,32 @@ orbit_camera_pan_rate_defaults_are_identity :: proc(t: ^testing.T) {
 	update_orbit_camera(&state, Orbit_Camera_Input{}, config, 0.5)
 	testing.expect_value(t, state, before)
 }
+
+@(test)
+camera_2d_mode_is_context_bound :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	first.rend.model_xf = AFFINE_IDENTITY
+	second.rend.model_xf = _affine_translated(AFFINE_IDENTITY, 3, 5)
+	first_saved := first.rend.model_xf
+	second_saved := second.rend.model_xf
+	camera := Camera2D {
+		offset   = {20, 30},
+		target   = {2, 4},
+		rotation = 15,
+		zoom     = 2,
+	}
+
+	context_begin_mode_2d(first, camera)
+	testing.expect(t, first.cam2d_active)
+	testing.expect(t, !second.cam2d_active)
+	testing.expect_value(t, first.cam2d, camera)
+	testing.expect_value(t, second.rend.model_xf, second_saved)
+	context_end_mode_2d(first)
+
+	testing.expect(t, !first.cam2d_active)
+	testing.expect_value(t, first.rend.model_xf, first_saved)
+	testing.expect_value(t, second.rend.model_xf, second_saved)
+}

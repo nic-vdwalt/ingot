@@ -93,15 +93,26 @@ DrawRectangleV :: proc(position, size: Vector2, color: Color) {
 // about `rec.xy + origin` after its corners are offset by `-origin`, so `origin`
 // is both the pivot and the anchor that lands on `rec.x/rec.y`. Corner math
 // mirrors DrawTexturePro.
-DrawRectanglePro :: proc(rec: Rectangle, origin: Vector2, rotation: f32, color: Color) {
+context_draw_rectangle_pro :: proc(
+	ctx: ^Context,
+	rec: Rectangle,
+	origin: Vector2,
+	rotation: f32,
+	color: Color,
+) {
+	assert(ctx != nil, "context_draw_rectangle_pro: nil context")
 	assert(
 		_shape_geometry_is_finite({rec.x, rec.y}, rec.width) &&
 		_f32_is_finite(rec.height) &&
 		_f32_is_finite(rotation),
-		"DrawRectanglePro: non-finite geometry",
+		"context_draw_rectangle_pro: non-finite geometry",
 	)
 	if rotation == 0 {
-		DrawRectangleRec({rec.x - origin.x, rec.y - origin.y, rec.width, rec.height}, color)
+		context_draw_rectangle_rec(
+			ctx,
+			{rec.x - origin.x, rec.y - origin.y, rec.width, rec.height},
+			color,
+		)
 		return
 	}
 
@@ -125,29 +136,36 @@ DrawRectanglePro :: proc(rec: Rectangle, origin: Vector2, rotation: f32, color: 
 	top_right := Vector2{tr.x + off.x, tr.y + off.y}
 	bottom_right := Vector2{br.x + off.x, br.y + off.y}
 	bottom_left := Vector2{bl.x + off.x, bl.y + off.y}
-	// Reuse the existing triangle submission boundary so this compatibility
-	// wrapper does not reach into the default graphics context directly.
-	DrawTriangle(top_left, top_right, bottom_right, color)
-	DrawTriangle(top_left, bottom_right, bottom_left, color)
+	context_draw_triangle(ctx, top_left, top_right, bottom_right, color)
+	context_draw_triangle(ctx, top_left, bottom_right, bottom_left, color)
+}
+
+DrawRectanglePro :: proc(rec: Rectangle, origin: Vector2, rotation: f32, color: Color) {
+	context_draw_rectangle_pro(default_context(), rec, origin, rotation, color)
 }
 
 // --- rectangle outlines ----------------------------------------------------
 
 DrawRectangleLines :: proc(posX, posY, width, height: i32, color: Color) {
-	x, y := f32(posX), f32(posY)
-	w, h := f32(width), f32(height)
-	_rect(x, y, w, 1, color)
-	_rect(x, y + h - 1, w, 1, color)
-	_rect(x, y, 1, h, color)
-	_rect(x + w - 1, y, 1, h, color)
+	context_draw_rectangle_lines(
+		default_context(),
+		{f32(posX), f32(posY), f32(width), f32(height)},
+		1,
+		color,
+	)
+}
+
+context_draw_rectangle_lines :: proc(ctx: ^Context, rec: Rectangle, lineThick: f32, color: Color) {
+	assert(ctx != nil, "context_draw_rectangle_lines: nil context")
+	t := lineThick
+	_context_rect(ctx, rec.x, rec.y, rec.width, t, color)
+	_context_rect(ctx, rec.x, rec.y + rec.height - t, rec.width, t, color)
+	_context_rect(ctx, rec.x, rec.y + t, t, rec.height - 2 * t, color)
+	_context_rect(ctx, rec.x + rec.width - t, rec.y + t, t, rec.height - 2 * t, color)
 }
 
 DrawRectangleLinesEx :: proc(rec: Rectangle, lineThick: f32, color: Color) {
-	t := lineThick
-	_rect(rec.x, rec.y, rec.width, t, color)
-	_rect(rec.x, rec.y + rec.height - t, rec.width, t, color)
-	_rect(rec.x, rec.y + t, t, rec.height - 2 * t, color)
-	_rect(rec.x + rec.width - t, rec.y + t, t, rec.height - 2 * t, color)
+	context_draw_rectangle_lines(default_context(), rec, lineThick, color)
 }
 
 @(private)
@@ -163,27 +181,67 @@ _rect :: proc(x, y, w, h: f32, color: Color) {
 
 // --- rounded rectangles ----------------------------------------------------
 
-DrawRectangleRounded :: proc(rec: Rectangle, roundness: f32, segments: i32, color: Color) {
+context_draw_rectangle_rounded :: proc(
+	ctx: ^Context,
+	rec: Rectangle,
+	roundness: f32,
+	segments: i32,
+	color: Color,
+) {
+	assert(ctx != nil, "context_draw_rectangle_rounded: nil context")
 	r := _corner_radius(rec, roundness)
 	if r <= 0 {
-		DrawRectangleRec(rec, color)
+		context_draw_rectangle_rec(ctx, rec, color)
 		return
 	}
 	segs := _shape_segments(segments, 2)
 	c := col_f(color)
-	batch_set(default_context(), &g.rend, .Solid, nil)
+	batch_set(ctx, &ctx.rend, .Solid, nil)
 
 	x, y, w, h := rec.x, rec.y, rec.width, rec.height
 	// center + edge rectangles
-	push_quad(default_context(), &g.rend, {x + r, y, w - 2 * r, h}, {0, 0, 1, 1}, c) // middle
-	push_quad(default_context(), &g.rend, {x, y + r, r, h - 2 * r}, {0, 0, 1, 1}, c) // left
-	push_quad(default_context(), &g.rend, {x + w - r, y + r, r, h - 2 * r}, {0, 0, 1, 1}, c) // right
+	push_quad(ctx, &ctx.rend, {x + r, y, w - 2 * r, h}, {0, 0, 1, 1}, c) // middle
+	push_quad(ctx, &ctx.rend, {x, y + r, r, h - 2 * r}, {0, 0, 1, 1}, c) // left
+	push_quad(ctx, &ctx.rend, {x + w - r, y + r, r, h - 2 * r}, {0, 0, 1, 1}, c) // right
 
 	// four corner fans (center at inset corner)
-	_corner_fan(default_context(), &g.rend, {x + r, y + r}, r, 180, 270, segs, c) // top-left
-	_corner_fan(default_context(), &g.rend, {x + w - r, y + r}, r, 270, 360, segs, c) // top-right
-	_corner_fan(default_context(), &g.rend, {x + w - r, y + h - r}, r, 0, 90, segs, c) // bottom-right
-	_corner_fan(default_context(), &g.rend, {x + r, y + h - r}, r, 90, 180, segs, c) // bottom-left
+	_corner_fan(ctx, &ctx.rend, {x + r, y + r}, r, 180, 270, segs, c) // top-left
+	_corner_fan(ctx, &ctx.rend, {x + w - r, y + r}, r, 270, 360, segs, c) // top-right
+	_corner_fan(ctx, &ctx.rend, {x + w - r, y + h - r}, r, 0, 90, segs, c) // bottom-right
+	_corner_fan(ctx, &ctx.rend, {x + r, y + h - r}, r, 90, 180, segs, c) // bottom-left
+}
+
+DrawRectangleRounded :: proc(rec: Rectangle, roundness: f32, segments: i32, color: Color) {
+	context_draw_rectangle_rounded(default_context(), rec, roundness, segments, color)
+}
+
+context_draw_rectangle_rounded_lines :: proc(
+	ctx: ^Context,
+	rec: Rectangle,
+	roundness: f32,
+	segments: i32,
+	lineThick: f32,
+	color: Color,
+) {
+	assert(ctx != nil, "context_draw_rectangle_rounded_lines: nil context")
+	r := _corner_radius(rec, roundness)
+	segs := _shape_segments(segments, 2)
+	t := lineThick
+	x, y, w, h := rec.x, rec.y, rec.width, rec.height
+	if r <= 0 {
+		context_draw_rectangle_lines(ctx, rec, t, color)
+		return
+	}
+	// straight edges (between corner arcs)
+	_context_rect(ctx, x + r, y, w - 2 * r, t, color) // top
+	_context_rect(ctx, x + r, y + h - t, w - 2 * r, t, color) // bottom
+	_context_rect(ctx, x, y + r, t, h - 2 * r, color) // left
+	_context_rect(ctx, x + w - t, y + r, t, h - 2 * r, color) // right
+	// corner arcs as thick ring segments
+	context_draw_ring(ctx, {x + r, y + r}, r - t, r, 180, 270, segs, color)
+	context_draw_ring(ctx, {x + w - r, y + r}, r - t, r, 270, 360, segs, color)
+	context_draw_ring(ctx, {x + w - r, y + h - r}, r - t, r, 0, 90, segs, color)
+	context_draw_ring(ctx, {x + r, y + h - r}, r - t, r, 90, 180, segs, color)
 }
 
 DrawRectangleRoundedLinesEx :: proc(
@@ -193,24 +251,14 @@ DrawRectangleRoundedLinesEx :: proc(
 	lineThick: f32,
 	color: Color,
 ) {
-	r := _corner_radius(rec, roundness)
-	segs := _shape_segments(segments, 2)
-	t := lineThick
-	x, y, w, h := rec.x, rec.y, rec.width, rec.height
-	if r <= 0 {
-		DrawRectangleLinesEx(rec, t, color)
-		return
-	}
-	// straight edges (between corner arcs)
-	_rect(x + r, y, w - 2 * r, t, color) // top
-	_rect(x + r, y + h - t, w - 2 * r, t, color) // bottom
-	_rect(x, y + r, t, h - 2 * r, color) // left
-	_rect(x + w - t, y + r, t, h - 2 * r, color) // right
-	// corner arcs as thick ring segments
-	DrawRing({x + r, y + r}, r - t, r, 180, 270, segs, color)
-	DrawRing({x + w - r, y + r}, r - t, r, 270, 360, segs, color)
-	DrawRing({x + w - r, y + h - r}, r - t, r, 0, 90, segs, color)
-	DrawRing({x + r, y + h - r}, r - t, r, 90, 180, segs, color)
+	context_draw_rectangle_rounded_lines(
+		default_context(),
+		rec,
+		roundness,
+		segments,
+		lineThick,
+		color,
+	)
 }
 
 @(private)
@@ -310,19 +358,21 @@ DrawCircleV :: proc(center: Vector2, radius: f32, color: Color) {
 	context_draw_circle(default_context(), center, radius, color)
 }
 
-DrawRing :: proc(
+context_draw_ring :: proc(
+	ctx: ^Context,
 	center: Vector2,
 	innerRadius, outerRadius, startAngle, endAngle: f32,
 	segments: i32,
 	color: Color,
 ) {
+	assert(ctx != nil, "context_draw_ring: nil context")
 	assert(
 		_shape_geometry_is_finite(center, innerRadius) && _f32_is_finite(outerRadius),
-		"DrawRing: non-finite center or radius",
+		"context_draw_ring: non-finite center or radius",
 	)
 	segs := _shape_segments(segments, 2)
 	c := col_f(color)
-	batch_set(default_context(), &g.rend, .Solid, nil)
+	batch_set(ctx, &ctx.rend, .Solid, nil)
 	step := (endAngle - startAngle) / f32(segs)
 	for i in 0 ..< segs {
 		a0 := startAngle + step * f32(i)
@@ -331,9 +381,27 @@ DrawRing :: proc(
 		i1 := _polar(center, innerRadius, a1)
 		o0 := _polar(center, outerRadius, a0)
 		o1 := _polar(center, outerRadius, a1)
-		push_tri(default_context(), &g.rend, i0, o0, o1, c)
-		push_tri(default_context(), &g.rend, i0, o1, i1, c)
+		push_tri(ctx, &ctx.rend, i0, o0, o1, c)
+		push_tri(ctx, &ctx.rend, i0, o1, i1, c)
 	}
+}
+
+DrawRing :: proc(
+	center: Vector2,
+	innerRadius, outerRadius, startAngle, endAngle: f32,
+	segments: i32,
+	color: Color,
+) {
+	context_draw_ring(
+		default_context(),
+		center,
+		innerRadius,
+		outerRadius,
+		startAngle,
+		endAngle,
+		segments,
+		color,
+	)
 }
 
 // --- scissor ---------------------------------------------------------------
@@ -474,9 +542,14 @@ DrawCircleLines :: proc(centerX, centerY: i32, radius: f32, color: Color) {
 	DrawCircleLinesV({f32(centerX), f32(centerY)}, radius, color)
 }
 
-DrawCircleLinesV :: proc(center: Vector2, radius: f32, color: Color) {
+context_draw_circle_lines :: proc(ctx: ^Context, center: Vector2, radius: f32, color: Color) {
+	assert(ctx != nil, "context_draw_circle_lines: nil context")
 	segs := _shape_segments_for_radius(radius, 16)
-	DrawRing(center, radius - 1, radius, 0, 360, segs, color)
+	context_draw_ring(ctx, center, radius - 1, radius, 0, 360, segs, color)
+}
+
+DrawCircleLinesV :: proc(center: Vector2, radius: f32, color: Color) {
+	context_draw_circle_lines(default_context(), center, radius, color)
 }
 
 // _gradient_quad emits a rect whose four corners carry independent colors,
@@ -484,17 +557,18 @@ DrawCircleLinesV :: proc(center: Vector2, radius: f32, color: Color) {
 // like every other primitive, so gradients pan, zoom, and rotate with a
 // Camera2D instead of staying pinned to the screen.
 @(private)
-_gradient_quad :: proc(rec: Rectangle, tl, tr, br, bl: [4]f32) {
-	if !g.frame.has_frame do return
-	batch_set(default_context(), &g.rend, .Solid, nil)
-	_emit_gradient_quad(default_context(), &g.rend, rec, tl, tr, br, bl)
+_context_gradient_quad :: proc(ctx: ^Context, rec: Rectangle, tl, tr, br, bl: [4]f32) {
+	assert(ctx != nil, "_context_gradient_quad: nil context")
+	if !ctx.frame.has_frame do return
+	batch_set(ctx, &ctx.rend, .Solid, nil)
+	_emit_gradient_quad(ctx, &ctx.rend, rec, tl, tr, br, bl)
 }
 
-@(private)
-_gradient_v :: proc(rec: Rectangle, top, bottom: Color) {
+context_draw_rectangle_gradient_v :: proc(ctx: ^Context, rec: Rectangle, top, bottom: Color) {
+	assert(ctx != nil, "context_draw_rectangle_gradient_v: nil context")
 	color_top := col_f(top)
 	color_bottom := col_f(bottom)
-	_gradient_quad(rec, color_top, color_top, color_bottom, color_bottom)
+	_context_gradient_quad(ctx, rec, color_top, color_top, color_bottom, color_bottom)
 }
 
 @(private)
@@ -535,13 +609,13 @@ DrawRectangleGradientH :: proc(posX, posY, width, height: i32, left, right: Colo
 	rec := Rectangle{f32(posX), f32(posY), f32(width), f32(height)}
 	cl := col_f(left)
 	cr := col_f(right)
-	_gradient_quad(rec, cl, cr, cr, cl)
+	_context_gradient_quad(default_context(), rec, cl, cr, cr, cl)
 }
 
 // DrawRectangleGradientV draws a rect with a top→bottom color gradient.
 DrawRectangleGradientV :: proc(posX, posY, width, height: i32, top, bottom: Color) {
 	rec := Rectangle{f32(posX), f32(posY), f32(width), f32(height)}
-	_gradient_v(rec, top, bottom)
+	context_draw_rectangle_gradient_v(default_context(), rec, top, bottom)
 }
 
 // DrawRectangleGradientEx draws a rect with an independent color per corner.
@@ -550,7 +624,14 @@ DrawRectangleGradientEx :: proc(
 	rec: Rectangle,
 	topLeft, bottomLeft, topRight, bottomRight: Color,
 ) {
-	_gradient_quad(rec, col_f(topLeft), col_f(topRight), col_f(bottomRight), col_f(bottomLeft))
+	_context_gradient_quad(
+		default_context(),
+		rec,
+		col_f(topLeft),
+		col_f(topRight),
+		col_f(bottomRight),
+		col_f(bottomLeft),
+	)
 }
 
 // --- pixels ----------------------------------------------------------------
@@ -560,7 +641,7 @@ DrawPixel :: proc(posX, posY: i32, color: Color) {
 }
 
 DrawPixelV :: proc(position: Vector2, color: Color) {
-	_rect(position.x, position.y, 1, 1, color)
+	_context_rect(default_context(), position.x, position.y, 1, 1, color)
 }
 
 // --- ellipses --------------------------------------------------------------
@@ -580,38 +661,74 @@ _ellipse_segments :: proc(radiusH, radiusV: f32) -> i32 {
 	return _shape_segments_for_radius(max(abs(radiusH), abs(radiusV)), 16)
 }
 
-DrawEllipse :: proc(centerX, centerY: i32, radiusH, radiusV: f32, color: Color) {
-	assert(_f32_is_finite(radiusH) && _f32_is_finite(radiusV), "DrawEllipse: non-finite radius")
-	center := Vector2{f32(centerX), f32(centerY)}
+context_draw_ellipse :: proc(ctx: ^Context, center: Vector2, radiusH, radiusV: f32, color: Color) {
+	assert(ctx != nil, "context_draw_ellipse: nil context")
+	assert(
+		_f32_is_finite(radiusH) && _f32_is_finite(radiusV),
+		"context_draw_ellipse: non-finite radius",
+	)
 	segments := _ellipse_segments(radiusH, radiusV)
 	c := col_f(color)
-	batch_set(default_context(), &g.rend, .Solid, nil)
+	batch_set(ctx, &ctx.rend, .Solid, nil)
 	step := 360.0 / f32(segments)
 	prev := _polar_ellipse(center, radiusH, radiusV, 0)
 	for i in 1 ..= segments {
 		cur := _polar_ellipse(center, radiusH, radiusV, step * f32(i))
-		push_tri(default_context(), &g.rend, center, prev, cur, c)
+		push_tri(ctx, &ctx.rend, center, prev, cur, c)
+		prev = cur
+	}
+}
+
+DrawEllipse :: proc(centerX, centerY: i32, radiusH, radiusV: f32, color: Color) {
+	context_draw_ellipse(default_context(), {f32(centerX), f32(centerY)}, radiusH, radiusV, color)
+}
+
+context_draw_ellipse_lines :: proc(
+	ctx: ^Context,
+	center: Vector2,
+	radiusH, radiusV: f32,
+	color: Color,
+) {
+	assert(ctx != nil, "context_draw_ellipse_lines: nil context")
+	assert(
+		_f32_is_finite(radiusH) && _f32_is_finite(radiusV),
+		"context_draw_ellipse_lines: non-finite radius",
+	)
+	segments := _ellipse_segments(radiusH, radiusV)
+	step := 360.0 / f32(segments)
+	prev := _polar_ellipse(center, radiusH, radiusV, 0)
+	for i in 1 ..= segments {
+		cur := _polar_ellipse(center, radiusH, radiusV, step * f32(i))
+		context_draw_line(ctx, prev, cur, 1, color)
 		prev = cur
 	}
 }
 
 DrawEllipseLines :: proc(centerX, centerY: i32, radiusH, radiusV: f32, color: Color) {
-	assert(
-		_f32_is_finite(radiusH) && _f32_is_finite(radiusV),
-		"DrawEllipseLines: non-finite radius",
+	context_draw_ellipse_lines(
+		default_context(),
+		{f32(centerX), f32(centerY)},
+		radiusH,
+		radiusV,
+		color,
 	)
-	center := Vector2{f32(centerX), f32(centerY)}
-	segments := _ellipse_segments(radiusH, radiusV)
-	step := 360.0 / f32(segments)
-	prev := _polar_ellipse(center, radiusH, radiusV, 0)
-	for i in 1 ..= segments {
-		cur := _polar_ellipse(center, radiusH, radiusV, step * f32(i))
-		DrawLineEx(prev, cur, 1, color)
-		prev = cur
-	}
 }
 
 // --- circle sectors --------------------------------------------------------
+
+context_draw_circle_sector :: proc(
+	ctx: ^Context,
+	center: Vector2,
+	radius: f32,
+	startAngle, endAngle: f32,
+	segments: i32,
+	color: Color,
+) {
+	assert(ctx != nil, "context_draw_circle_sector: nil context")
+	segs := _shape_segments(segments, 1)
+	batch_set(ctx, &ctx.rend, .Solid, nil)
+	_corner_fan(ctx, &ctx.rend, center, radius, startAngle, endAngle, segs, col_f(color))
+}
 
 DrawCircleSector :: proc(
 	center: Vector2,
@@ -620,33 +737,32 @@ DrawCircleSector :: proc(
 	segments: i32,
 	color: Color,
 ) {
-	segs := _shape_segments(segments, 1)
-	batch_set(default_context(), &g.rend, .Solid, nil)
-	_corner_fan(
+	context_draw_circle_sector(
 		default_context(),
-		&g.rend,
 		center,
 		radius,
 		startAngle,
 		endAngle,
-		segs,
-		col_f(color),
+		segments,
+		color,
 	)
 }
 
 // DrawCircleSectorLines outlines the sector: the arc plus the two radii that
 // close it back to the center, which is what makes it a sector rather than an
 // arc.
-DrawCircleSectorLines :: proc(
+context_draw_circle_sector_lines :: proc(
+	ctx: ^Context,
 	center: Vector2,
 	radius: f32,
 	startAngle, endAngle: f32,
 	segments: i32,
 	color: Color,
 ) {
+	assert(ctx != nil, "context_draw_circle_sector_lines: nil context")
 	assert(
 		_shape_geometry_is_finite(center, radius),
-		"DrawCircleSectorLines: non-finite center or radius",
+		"context_draw_circle_sector_lines: non-finite center or radius",
 	)
 	segs := _shape_segments(segments, 1)
 	step := (endAngle - startAngle) / f32(segs)
@@ -654,33 +770,80 @@ DrawCircleSectorLines :: proc(
 	prev := first
 	for i in 1 ..= segs {
 		cur := _polar(center, radius, startAngle + step * f32(i))
-		DrawLineEx(prev, cur, 1, color)
+		context_draw_line(ctx, prev, cur, 1, color)
 		prev = cur
 	}
-	DrawLineEx(center, first, 1, color)
-	DrawLineEx(center, prev, 1, color)
+	context_draw_line(ctx, center, first, 1, color)
+	context_draw_line(ctx, center, prev, 1, color)
+}
+
+DrawCircleSectorLines :: proc(
+	center: Vector2,
+	radius: f32,
+	startAngle, endAngle: f32,
+	segments: i32,
+	color: Color,
+) {
+	context_draw_circle_sector_lines(
+		default_context(),
+		center,
+		radius,
+		startAngle,
+		endAngle,
+		segments,
+		color,
+	)
 }
 
 // --- regular polygons ------------------------------------------------------
 
-DrawPoly :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color: Color) {
+context_draw_poly :: proc(
+	ctx: ^Context,
+	center: Vector2,
+	sides: i32,
+	radius: f32,
+	rotation: f32,
+	color: Color,
+) {
+	assert(ctx != nil, "context_draw_poly: nil context")
 	if sides < 3 do return
 	segs := _shape_segments(sides, 3)
-	batch_set(default_context(), &g.rend, .Solid, nil)
-	_corner_fan(
-		default_context(),
-		&g.rend,
-		center,
-		radius,
-		rotation,
-		rotation + 360,
-		segs,
-		col_f(color),
-	)
+	batch_set(ctx, &ctx.rend, .Solid, nil)
+	_corner_fan(ctx, &ctx.rend, center, radius, rotation, rotation + 360, segs, col_f(color))
+}
+
+DrawPoly :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color: Color) {
+	context_draw_poly(default_context(), center, sides, radius, rotation, color)
 }
 
 DrawPolyLines :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color: Color) {
-	DrawPolyLinesEx(center, sides, radius, rotation, 1, color)
+	context_draw_poly_lines(default_context(), center, sides, radius, rotation, 1, color)
+}
+
+context_draw_poly_lines :: proc(
+	ctx: ^Context,
+	center: Vector2,
+	sides: i32,
+	radius: f32,
+	rotation: f32,
+	lineThick: f32,
+	color: Color,
+) {
+	assert(ctx != nil, "context_draw_poly_lines: nil context")
+	assert(
+		_shape_geometry_is_finite(center, radius),
+		"context_draw_poly_lines: non-finite center or radius",
+	)
+	assert(_f32_is_finite(lineThick), "context_draw_poly_lines: non-finite line thickness")
+	if sides < 3 do return
+	segs := _shape_segments(sides, 3)
+	step := 360.0 / f32(segs)
+	prev := _polar(center, radius, rotation)
+	for i in 1 ..= segs {
+		cur := _polar(center, radius, rotation + step * f32(i))
+		context_draw_line(ctx, prev, cur, lineThick, color)
+		prev = cur
+	}
 }
 
 DrawPolyLinesEx :: proc(
@@ -691,20 +854,7 @@ DrawPolyLinesEx :: proc(
 	lineThick: f32,
 	color: Color,
 ) {
-	assert(
-		_shape_geometry_is_finite(center, radius),
-		"DrawPolyLinesEx: non-finite center or radius",
-	)
-	assert(_f32_is_finite(lineThick), "DrawPolyLinesEx: non-finite line thickness")
-	if sides < 3 do return
-	segs := _shape_segments(sides, 3)
-	step := 360.0 / f32(segs)
-	prev := _polar(center, radius, rotation)
-	for i in 1 ..= segs {
-		cur := _polar(center, radius, rotation + step * f32(i))
-		DrawLineEx(prev, cur, lineThick, color)
-		prev = cur
-	}
+	context_draw_poly_lines(default_context(), center, sides, radius, rotation, lineThick, color)
 }
 
 // --- triangle fans and strips ----------------------------------------------
@@ -722,36 +872,64 @@ SHAPE_POINTS_MAX :: BATCH_MAX_VERTICES / 3
 // `points` is a raw multi-pointer, so this cannot verify it really holds
 // `pointCount` elements; that stays the caller's contract. What it can check
 // is the part that is unambiguously a programmer error.
-DrawTriangleFan :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
-	assert(pointCount >= 0, "DrawTriangleFan: negative point count")
-	assert(pointCount <= SHAPE_POINTS_MAX, "DrawTriangleFan: point count exceeds the batch")
-	if pointCount > 0 do assert(points != nil, "DrawTriangleFan: nil points with a positive count")
+context_draw_triangle_fan :: proc(
+	ctx: ^Context,
+	points: [^]Vector2,
+	pointCount: i32,
+	color: Color,
+) {
+	assert(ctx != nil, "context_draw_triangle_fan: nil context")
+	assert(pointCount >= 0, "context_draw_triangle_fan: negative point count")
+	assert(
+		pointCount <= SHAPE_POINTS_MAX,
+		"context_draw_triangle_fan: point count exceeds the batch",
+	)
+	if pointCount > 0 {
+		assert(points != nil, "context_draw_triangle_fan: nil points with a positive count")
+	}
 	// Too few points to form a triangle is ordinary empty input, not an
 	// error: raylib draws nothing and so does this.
 	if points == nil || pointCount < 3 do return
 	c := col_f(color)
-	batch_set(default_context(), &g.rend, .Solid, nil)
+	batch_set(ctx, &ctx.rend, .Solid, nil)
 	for i in 1 ..< pointCount - 1 {
-		push_tri(default_context(), &g.rend, points[0], points[i], points[i + 1], c)
+		push_tri(ctx, &ctx.rend, points[0], points[i], points[i + 1], c)
 	}
+}
+
+DrawTriangleFan :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
+	context_draw_triangle_fan(default_context(), points, pointCount, color)
 }
 
 // DrawTriangleStrip draws each consecutive triple, alternating winding so the
 // strip stays consistently oriented the way raylib's does.
-DrawTriangleStrip :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
-	assert(pointCount >= 0, "DrawTriangleStrip: negative point count")
-	assert(pointCount <= SHAPE_POINTS_MAX, "DrawTriangleStrip: point count exceeds the batch")
+context_draw_triangle_strip :: proc(
+	ctx: ^Context,
+	points: [^]Vector2,
+	pointCount: i32,
+	color: Color,
+) {
+	assert(ctx != nil, "context_draw_triangle_strip: nil context")
+	assert(pointCount >= 0, "context_draw_triangle_strip: negative point count")
+	assert(
+		pointCount <= SHAPE_POINTS_MAX,
+		"context_draw_triangle_strip: point count exceeds the batch",
+	)
 	if pointCount > 0 {
-		assert(points != nil, "DrawTriangleStrip: nil points with a positive count")
+		assert(points != nil, "context_draw_triangle_strip: nil points with a positive count")
 	}
 	if points == nil || pointCount < 3 do return
 	c := col_f(color)
-	batch_set(default_context(), &g.rend, .Solid, nil)
+	batch_set(ctx, &ctx.rend, .Solid, nil)
 	for i in 2 ..< pointCount {
 		if i % 2 == 0 {
-			push_tri(default_context(), &g.rend, points[i], points[i - 2], points[i - 1], c)
+			push_tri(ctx, &ctx.rend, points[i], points[i - 2], points[i - 1], c)
 		} else {
-			push_tri(default_context(), &g.rend, points[i], points[i - 1], points[i - 2], c)
+			push_tri(ctx, &ctx.rend, points[i], points[i - 1], points[i - 2], c)
 		}
 	}
+}
+
+DrawTriangleStrip :: proc(points: [^]Vector2, pointCount: i32, color: Color) {
+	context_draw_triangle_strip(default_context(), points, pointCount, color)
 }

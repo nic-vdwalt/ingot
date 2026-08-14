@@ -180,6 +180,9 @@ Context :: struct {
 
 	// renderer (batch.odin)
 	rend:                 Renderer,
+	cam2d:                Camera2D,
+	cam2d_saved:          Affine,
+	cam2d_active:         bool,
 	resources:            Graphics_Resources,
 	stats_current:        Renderer_Stats,
 	stats_latest:         Renderer_Stats,

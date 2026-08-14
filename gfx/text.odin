@@ -94,10 +94,16 @@ _atlas_slot :: proc(resources: ^Atlas_Resources, id: u32) -> ^Atlas_Slot {
 }
 
 @(private)
-get_atlas :: proc(id: u32) -> ^Atlas {
-	slot := _atlas_slot(&g.resources.atlases, id)
+context_get_atlas :: proc(ctx: ^Context, id: u32) -> ^Atlas {
+	assert(ctx != nil, "context_get_atlas: nil context")
+	slot := _atlas_slot(&ctx.resources.atlases, id)
 	if slot == nil do return nil
 	return slot.entry
+}
+
+@(private)
+get_atlas :: proc(id: u32) -> ^Atlas {
+	return context_get_atlas(default_context(), id)
 }
 
 LoadFontFromMemory :: proc(
@@ -152,7 +158,7 @@ LoadFontFromMemory :: proc(
 	baked: i32 = 0
 	for i in 0 ..< int(codepointCount) {
 		cp := codepoints[i]
-		if _bake_glyph(a, cp) do baked += 1
+		if _bake_glyph(default_context(), a, cp) do baked += 1
 	}
 
 	id := _atlas_register(&g.resources.atlases, a)
@@ -177,7 +183,8 @@ LoadFontFromMemory :: proc(
 }
 
 @(private)
-_bake_glyph :: proc(a: ^Atlas, cp: rune) -> bool {
+_bake_glyph :: proc(ctx: ^Context, a: ^Atlas, cp: rune) -> bool {
+	assert(ctx != nil, "_bake_glyph: nil context")
 	assert(a != nil, "_bake_glyph: nil a")
 	if _, ok := a.glyphs[cp]; ok do return true
 
@@ -216,7 +223,7 @@ _bake_glyph :: proc(a: ^Atlas, cp: rune) -> bool {
 		return false
 	}
 
-	if !_atlas_upload_glyph(a, cp, px, py, gw, gh) {
+	if !_atlas_upload_glyph(ctx, a, cp, px, py, gw, gh) {
 		a.glyphs[cp] = Glyph {
 			xadvance = xadvance,
 			valid    = false,
@@ -266,7 +273,8 @@ _atlas_upload_stride :: proc(width: i32) -> i32 {
 }
 
 @(private)
-_atlas_upload_glyph :: proc(a: ^Atlas, cp: rune, x, y, width, height: i32) -> bool {
+_atlas_upload_glyph :: proc(ctx: ^Context, a: ^Atlas, cp: rune, x, y, width, height: i32) -> bool {
+	assert(ctx != nil, "_atlas_upload_glyph: nil context")
 	assert(a != nil && a.tex != nil, "_atlas_upload_glyph: invalid atlas")
 	assert(width > 0 && height > 0, "_atlas_upload_glyph: invalid glyph size")
 	assert(x >= 0 && y >= 0 && x + width <= ATLAS_DIM && y + height <= ATLAS_DIM)
@@ -283,7 +291,7 @@ _atlas_upload_glyph :: proc(a: ^Atlas, cp: rune, x, y, width, height: i32) -> bo
 		cp,
 	)
 	wg.QueueWriteTexture(
-		g.queue,
+		ctx.queue,
 		&{texture = a.tex, origin = {u32(x), u32(y), 0}},
 		raw_data(pixels),
 		uint(len(pixels)),
@@ -405,18 +413,20 @@ SetTextureFilter :: proc(texture: Texture2D, filter: TextureFilter) {
 
 // DrawTextEx draws `text` at `position` scaled from the baked px size down to
 // `fontSize` (raylib semantics: the atlas may be baked larger for HiDPI).
-DrawTextEx :: proc(
+context_draw_text_ex :: proc(
+	ctx: ^Context,
 	font: Font,
 	text: cstring,
 	position: Vector2,
 	fontSize, spacing: f32,
 	tint: Color,
 ) {
-	a := get_atlas(font._atlas)
+	assert(ctx != nil, "context_draw_text_ex: nil context")
+	a := context_get_atlas(ctx, font._atlas)
 	if a == nil do return
 	sf := fontSize / a.px
 	col := col_f(tint)
-	batch_set(default_context(), &g.rend, .Solid, a.bind)
+	batch_set(ctx, &ctx.rend, .Solid, a.bind)
 
 	pen_x := position.x
 	pen_y := position.y
@@ -428,7 +438,7 @@ DrawTextEx :: proc(
 		}
 		gl, ok := a.glyphs[cp]
 		if !ok {
-			_bake_glyph(a, cp)
+			_bake_glyph(ctx, a, cp)
 			gl = a.glyphs[cp]
 		}
 		if gl.valid {
@@ -442,10 +452,36 @@ DrawTextEx :: proc(
 				f32(gl.w) / ATLAS_DIM,
 				f32(gl.h) / ATLAS_DIM,
 			}
-			push_quad(default_context(), &g.rend, {dx, dy, dw, dh}, uv, col, .Text)
+			push_quad(ctx, &ctx.rend, {dx, dy, dw, dh}, uv, col, .Text)
 		}
 		pen_x += gl.xadvance * sf + spacing
 	}
+}
+
+DrawTextEx :: proc(
+	font: Font,
+	text: cstring,
+	position: Vector2,
+	fontSize, spacing: f32,
+	tint: Color,
+) {
+	context_draw_text_ex(default_context(), font, text, position, fontSize, spacing, tint)
+}
+
+context_draw_text_codepoint :: proc(
+	ctx: ^Context,
+	font: Font,
+	codepoint: rune,
+	position: Vector2,
+	fontSize: f32,
+	tint: Color,
+) {
+	assert(ctx != nil, "context_draw_text_codepoint: nil context")
+	buf: [8]byte
+	n := 0
+	// encode rune to a temporary cstring-ish; simplest is a small local string
+	s := utf8_encode(codepoint, buf[:], &n)
+	context_draw_text_ex(ctx, font, cstring(raw_data(s)), position, fontSize, 0, tint)
 }
 
 DrawTextCodepoint :: proc(
@@ -455,11 +491,7 @@ DrawTextCodepoint :: proc(
 	fontSize: f32,
 	tint: Color,
 ) {
-	buf: [8]byte
-	n := 0
-	// encode rune to a temporary cstring-ish; simplest is a small local string
-	s := utf8_encode(codepoint, buf[:], &n)
-	DrawTextEx(font, cstring(raw_data(s)), position, fontSize, 0, tint)
+	context_draw_text_codepoint(default_context(), font, codepoint, position, fontSize, tint)
 }
 
 // DrawTextPro draws text rotated by `rotation` degrees about `origin`, which
@@ -470,17 +502,19 @@ DrawTextCodepoint :: proc(
 // camera instead of fighting it. No flush is needed around the change: the
 // transform is baked into each vertex as it is emitted, so geometry already in
 // the batch keeps the transform it was drawn under.
-DrawTextPro :: proc(
+context_draw_text_pro :: proc(
+	ctx: ^Context,
 	font: Font,
 	text: cstring,
 	position, origin: Vector2,
 	rotation, fontSize, spacing: f32,
 	tint: Color,
 ) {
-	assert(text != nil, "DrawTextPro: nil text")
-	assert(g != nil, "DrawTextPro: nil context")
+	assert(ctx != nil, "context_draw_text_pro: nil context")
+	assert(text != nil, "context_draw_text_pro: nil text")
 	if rotation == 0 {
-		DrawTextEx(
+		context_draw_text_ex(
+			ctx,
 			font,
 			text,
 			{position.x - origin.x, position.y - origin.y},
@@ -493,18 +527,46 @@ DrawTextPro :: proc(
 	// Paired save/restore across the draw: the transform is process state, so
 	// an early return inside DrawTextEx must not leak the pivot to the next
 	// caller. The defer is the restore half of that pair.
-	saved := g.rend.model_xf
+	saved := ctx.rend.model_xf
 	defer {
-		g.rend.model_xf = saved
-		assert(g.rend.model_xf == saved, "DrawTextPro: model transform not restored")
+		ctx.rend.model_xf = saved
+		assert(ctx.rend.model_xf == saved, "context_draw_text_pro: model transform not restored")
 	}
 
 	// Rotate about `position`, then place the text so `origin` lands there.
 	pivot := _affine_from_camera_2d(
 		Camera2D{offset = position, target = position, rotation = rotation, zoom = 1},
 	)
-	g.rend.model_xf = _affine_compose(saved, pivot)
-	DrawTextEx(font, text, {position.x - origin.x, position.y - origin.y}, fontSize, spacing, tint)
+	ctx.rend.model_xf = _affine_compose(saved, pivot)
+	context_draw_text_ex(
+		ctx,
+		font,
+		text,
+		{position.x - origin.x, position.y - origin.y},
+		fontSize,
+		spacing,
+		tint,
+	)
+}
+
+DrawTextPro :: proc(
+	font: Font,
+	text: cstring,
+	position, origin: Vector2,
+	rotation, fontSize, spacing: f32,
+	tint: Color,
+) {
+	context_draw_text_pro(
+		default_context(),
+		font,
+		text,
+		position,
+		origin,
+		rotation,
+		fontSize,
+		spacing,
+		tint,
+	)
 }
 
 MeasureTextEx :: proc(font: Font, text: cstring, fontSize, spacing: f32) -> Vector2 {
@@ -523,7 +585,7 @@ MeasureTextEx :: proc(font: Font, text: cstring, fontSize, spacing: f32) -> Vect
 		}
 		gl, ok := a.glyphs[cp]
 		if !ok {
-			_bake_glyph(a, cp)
+			_bake_glyph(default_context(), a, cp)
 			gl = a.glyphs[cp]
 		}
 		line_w += gl.xadvance * sf + spacing

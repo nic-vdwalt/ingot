@@ -23,6 +23,12 @@
   "gfx/context_api.odin:context_scope_enter": [
     "state"
   ],
+  "gfx/context_api.odin:frame_draw_rectangle_rounded_lines": [
+    "pointer"
+  ],
+  "gfx/context_api.odin:frame_draw_ring": [
+    "pointer"
+  ],
   "gfx/gpu3d_pipeline.odin:_gpu_3d_mesh_slot": [
     "index"
   ],
