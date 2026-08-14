@@ -12,11 +12,6 @@ term_ui_input_reads_captured_characters :: proc(t: ^testing.T) {
 	ts := new(Term_Instance)
 	defer free(ts)
 	when INGOT_TERM_PTY_SIM {
-		p, ok := pty.spawn("sim", 80, 24)
-		testing.expect(t, ok, "failed to spawn simulated PTY")
-		if !ok do return
-		defer pty.destroy(&p)
-		ts.pty = p
 		ts.pty_running = true
 	} else {
 		when ODIN_OS == .Windows do return

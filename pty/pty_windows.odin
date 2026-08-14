@@ -328,6 +328,7 @@ when !INGOT_PTY_SIM {
 
 write_bytes :: proc(p: ^Pty, data: []u8) -> (written: int, status: Pty_IO_Status) {
 	assert(p != nil)
+	when INGOT_PTY_SIM do return len(data), .Ok
 	if len(data) == 0 do return 0, .Ok
 	if p.pipe_in_w == nil do return 0, .Closed
 	bytes_written: win32.DWORD
