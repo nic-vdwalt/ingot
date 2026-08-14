@@ -344,6 +344,36 @@ test_decode_rejects_document_that_fails_validation :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_decode_rejects_non_finite_numbers_as_invalid_documents :: proc(t: ^testing.T) {
+	defer free_all(context.temp_allocator)
+	values := [?]u32{0x7f80_0000, 0xff80_0000, 0x7fc0_0000}
+	fields := [?]int {
+		TRACK_PERCENT_RECORD_OFFSET,
+		NUMBER_LO_RECORD_OFFSET,
+		NUMBER_HI_RECORD_OFFSET,
+		NUMBER_STEP_RECORD_OFFSET,
+	}
+	for value in values {
+		for field in fields {
+			doc: View_Doc
+			root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+			doc_add_keyed(&doc, root, .Label, "a", "A")
+			bytes := corrupt(encode_to_temp(view_of(&doc)))
+			at := VIEW_HEADER_BYTES + VIEW_RECORD_BYTES + field
+			bytes[at + 0] = u8(value)
+			bytes[at + 1] = u8(value >> 8)
+			bytes[at + 2] = u8(value >> 16)
+			bytes[at + 3] = u8(value >> 24)
+			rewrite_checksum(bytes)
+			result, ok := view_decode(bytes, &doc)
+			testing.expect(t, !ok, "non-finite wire number must not decode")
+			testing.expect_value(t, result.fault, Decode_Fault.Invalid_Document)
+			testing.expect_value(t, result.validate.fault, Validate_Fault.Non_Finite_Number)
+		}
+	}
+}
+
+@(test)
 test_decode_rejects_absurd_length :: proc(t: ^testing.T) {
 	defer free_all(context.temp_allocator)
 	huge := make([]u8, VIEW_FILE_BYTES_MAX + 1, context.temp_allocator)
@@ -415,7 +445,16 @@ test_decode_rejects_negative_track_sizes :: proc(t: ^testing.T) {
 	expect_fault(t, bytes, .Bad_Enum, "negative track basis")
 }
 
-// The byte offset of track.basis inside a record, derived from the field order
-// encode_node writes rather than counted by hand.
+// Record offsets derived from the field order encode_node writes.
 @(private = "file")
-TRACK_BASIS_RECORD_OFFSET :: 1 + 2 + 4 * 3 + (4 + 2) * 3 + 4 + 7 + 1
+TRACK_KIND_RECORD_OFFSET :: 1 + 2 + 4 * 3 + (4 + 2) * 3 + 4 + 7
+@(private = "file")
+TRACK_BASIS_RECORD_OFFSET :: TRACK_KIND_RECORD_OFFSET + 1
+@(private = "file")
+TRACK_PERCENT_RECORD_OFFSET :: TRACK_BASIS_RECORD_OFFSET + 4 + 4
+@(private = "file")
+NUMBER_LO_RECORD_OFFSET :: TRACK_PERCENT_RECORD_OFFSET + 4 + 4 + 4 + 4 + 4
+@(private = "file")
+NUMBER_HI_RECORD_OFFSET :: NUMBER_LO_RECORD_OFFSET + 4
+@(private = "file")
+NUMBER_STEP_RECORD_OFFSET :: NUMBER_HI_RECORD_OFFSET + 4

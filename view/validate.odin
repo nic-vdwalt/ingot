@@ -34,6 +34,7 @@ Validate_Fault :: enum u8 {
 	Focusable_Count,
 	Leaf_Has_Child,
 	Track_Range,
+	Non_Finite_Number,
 }
 
 Validate_Result :: struct {
@@ -139,9 +140,26 @@ validate_payloads :: proc(view: View) -> Validate_Result {
 		// Decode checks this too, but a hand-built document never went through
 		// decode, and a negative track size reaches ui's flex solver directly.
 		if !track_ok(node.track) do return {fault = .Track_Range, node = at}
+		if !node_numbers_finite(node) do return {fault = .Non_Finite_Number, node = at}
 	}
 	if focusables > ui.MAX_FOCUSABLES do return {fault = .Focusable_Count, node = VIEW_NODE_NONE}
 	return {}
+}
+
+@(private = "file")
+f32_finite :: proc(value: f32) -> bool {
+	exponent := transmute(u32)value & 0x7f80_0000
+	return exponent != 0x7f80_0000
+}
+
+@(private = "file")
+node_numbers_finite :: proc(node: View_Node) -> bool {
+	return(
+		f32_finite(node.track.percent) &&
+		f32_finite(node.number_lo) &&
+		f32_finite(node.number_hi) &&
+		f32_finite(node.number_step)
+	)
 }
 
 @(private = "file")

@@ -16,7 +16,7 @@ function Invoke-Supervised {
 }
 
 & "$PSScriptRoot/check-ui-state.ps1"
-& python "$PSScriptRoot/check_gfx_context.py" --baseline "$PSScriptRoot/gfx_context_baseline.json" "$Root"
+& python "$PSScriptRoot/check_gfx_context.py" "$Root"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($Package in $Manifest.test_packages) {
     Write-Host "== testing $Package =="

@@ -116,9 +116,14 @@ exercise_reencode :: proc(c: ^fuzzx.Ctx, doc: ^view.View_Doc) {
 	fuzzx.check(c, decoded_ok, "a re-encoded document did not decode")
 	fuzzx.check(c, again.count == doc.count, "round trip changed the node count")
 	fuzzx.check(c, again.text_len == doc.text_len, "round trip changed the text length")
-	for index in 0 ..< int(doc.count) {
-		if again.nodes[index] != doc.nodes[index] {
-			fuzzx.check(c, false, "round trip changed a node")
+	again_size := view.view_encoded_size(view.view_of(&again))
+	again_buffer := make([]u8, again_size, context.temp_allocator)
+	again_written, again_ok := view.view_encode(view.view_of(&again), again_buffer)
+	fuzzx.check(c, again_ok, "encoding the round-tripped document failed")
+	fuzzx.check(c, again_written == written, "round trip changed the encoded length")
+	for index in 0 ..< min(written, again_written) {
+		if buffer[index] != again_buffer[index] {
+			fuzzx.check(c, false, "round trip changed bytes")
 			return
 		}
 	}

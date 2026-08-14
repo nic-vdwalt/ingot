@@ -432,6 +432,57 @@ test_validate_rejects_text_input_without_label :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_validate_rejects_non_finite_numbers :: proc(t: ^testing.T) {
+	values := [?]f32 {
+		transmute(f32)u32(0x7f80_0000),
+		transmute(f32)u32(0xff80_0000),
+		transmute(f32)u32(0x7fc0_0000),
+	}
+	for value in values {
+		for field in 0 ..< 4 {
+			doc: View_Doc
+			root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+			child, _ := doc_add_keyed(&doc, root, .Label, "a", "A")
+			switch field {
+			case 0:
+				doc.nodes[child].track.percent = value
+			case 1:
+				doc.nodes[child].number_lo = value
+			case 2:
+				doc.nodes[child].number_hi = value
+			case 3:
+				doc.nodes[child].number_step = value
+			}
+			result, ok := view_validate(view_of(&doc))
+			testing.expect(t, !ok, "non-finite number must not validate")
+			testing.expect_value(t, result.fault, Validate_Fault.Non_Finite_Number)
+		}
+	}
+}
+
+@(test)
+test_validate_accepts_finite_number_edges :: proc(t: ^testing.T) {
+	values := [?]f32 {
+		0,
+		transmute(f32)u32(0x8000_0000),
+		transmute(f32)u32(1),
+		max(f32),
+		min(f32),
+	}
+	for value in values {
+		doc: View_Doc
+		root, _ := doc_add_keyed(&doc, VIEW_NODE_NONE, .Column, "root", "")
+		child, _ := doc_add_keyed(&doc, root, .Label, "a", "A")
+		doc.nodes[child].track.percent = value
+		doc.nodes[child].number_lo = value
+		doc.nodes[child].number_hi = value
+		doc.nodes[child].number_step = value
+		result, ok := view_validate(view_of(&doc))
+		testing.expectf(t, ok, "finite edge rejected: %v", result)
+	}
+}
+
+@(test)
 test_validate_rejects_negative_track_sizes :: proc(t: ^testing.T) {
 	// A Track feeds ui's flex solver directly, so a negative size is not a
 	// cosmetic defect: it produces nonsense geometry that nothing downstream

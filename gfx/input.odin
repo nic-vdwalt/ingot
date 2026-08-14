@@ -232,6 +232,8 @@ _input_publish_staged :: proc(inp: ^Input) {
 @(private)
 _push_char_input :: proc "contextless" (inp: ^Input, r: rune) {
 	if inp == nil do return
+	assert_contextless(inp.char_h >= 0 && inp.char_h < CHAR_Q, "_push_char_input: bad head")
+	assert_contextless(inp.char_t >= 0 && inp.char_t < CHAR_Q, "_push_char_input: bad tail")
 	nt := (inp.char_t + 1) % CHAR_Q
 	if nt == inp.char_h do return
 	inp.char_q[inp.char_t] = r
@@ -241,6 +243,8 @@ _push_char_input :: proc "contextless" (inp: ^Input, r: rune) {
 @(private)
 _push_key_input :: proc "contextless" (inp: ^Input, k: KeyboardKey) {
 	if inp == nil do return
+	assert_contextless(inp.key_h >= 0 && inp.key_h < CHAR_Q, "_push_key_input: bad head")
+	assert_contextless(inp.key_t >= 0 && inp.key_t < CHAR_Q, "_push_key_input: bad tail")
 	nt := (inp.key_t + 1) % CHAR_Q
 	if nt == inp.key_h do return
 	inp.key_q[inp.key_t] = k

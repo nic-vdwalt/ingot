@@ -251,6 +251,10 @@ _make_pipe :: proc(
 	format: wg.TextureFormat,
 ) -> wg.RenderPipeline {
 	assert(device != nil, "_make_pipe: nil device")
+	assert(r != nil, "_make_pipe: nil renderer")
+	assert(r.shader != nil, "_make_pipe: nil shader")
+	assert(r.ubind_layout != nil, "_make_pipe: nil uniform layout")
+	if textured do assert(r.tex_layout != nil, "_make_pipe: nil texture layout")
 	attrs := [4]wg.VertexAttribute {
 		{format = .Float32x2, offset = 0, shaderLocation = 0},
 		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
