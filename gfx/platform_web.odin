@@ -134,7 +134,10 @@ platform_create_window :: proc(
 	flags: ConfigFlags,
 ) -> bool {
 	assert(ctx != nil, "platform_create_window: nil context")
-	assert(g_web_owner == nil || _web_context_is_owner(ctx), "platform_create_window: web canvas already owned")
+	assert(
+		g_web_owner == nil || _web_context_is_owner(ctx),
+		"platform_create_window: web canvas already owned",
+	)
 	g_web_ctx = context
 	g_web_owner = ctx
 	g_web_owner_epoch = ctx.epoch
@@ -723,8 +726,12 @@ IsWindowFullscreen :: proc() -> bool {return context_is_window_fullscreen(defaul
 // ToggleFullscreen requests (or exits) the browser Fullscreen API on the canvas.
 // Must be called from a user-gesture handler; the header's fullscreen button
 // forwards a click here, satisfying that requirement.
-ToggleFullscreen :: proc() {_js_toggle_fullscreen()}
-RestoreWindow :: proc() {}
+context_toggle_fullscreen_impl :: proc(ctx: ^Context) {
+	if ctx != nil && _web_context_is_owner(ctx) do _js_toggle_fullscreen()
+}
+ToggleFullscreen :: proc() {context_toggle_fullscreen_impl(default_context())}
+context_restore_window :: proc(ctx: ^Context) {}
+RestoreWindow :: proc() {context_restore_window(default_context())}
 context_focus_window :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_focus_window: nil context")
 	assert(ctx == default_context(), "context_focus_window: non-default web context")
@@ -748,7 +755,10 @@ IsFileDropped :: proc() -> bool {return context_is_file_dropped(default_context(
 context_load_dropped_files :: proc(ctx: ^Context) -> FilePathList {
 	if ctx == nil do return {}
 	count := clamp(_js_drop_count(), 0, MAX_DROPPED_FILES)
-	assert(count >= 0 && count <= MAX_DROPPED_FILES, "context_load_dropped_files: count out of bounds")
+	assert(
+		count >= 0 && count <= MAX_DROPPED_FILES,
+		"context_load_dropped_files: count out of bounds",
+	)
 	for i in 0 ..< count {
 		ctx.drop.web_names[i] = {}
 		n := _js_drop_name_copy(i, raw_data(ctx.drop.web_names[i][:]), DROP_NAME_MAX - 1)

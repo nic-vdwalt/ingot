@@ -70,7 +70,7 @@ _ime_first_rect_imp :: proc "c" (
 	rect := ctx.inp.ime_screen_rect
 	return NS.Rect {
 		origin = {NS.Float(rect[0]), NS.Float(rect[1])},
-		size   = {NS.Float(rect[2]), NS.Float(rect[3])},
+		size = {NS.Float(rect[2]), NS.Float(rect[3])},
 	}
 }
 

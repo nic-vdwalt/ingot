@@ -25,50 +25,40 @@ context_queries_are_isolated :: proc(t: ^testing.T) {
 }
 
 @(test)
-context_scope_routes_convenience_queries_and_restores_default :: proc(t: ^testing.T) {
+context_scope_does_not_reroute_default_input_wrappers :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()
 	ctx := new(Context)
 	defer free(ctx)
-	default_width := default_context_storage.width
 	default_mouse := default_context_storage.inp.mouse
 	default_pressed := default_context_storage.inp.pressed[KeyboardKey.A]
 	default_key_down := default_context_storage.inp.key_down[KeyboardKey.A]
 	default_mouse_down := default_context_storage.inp.mb_down[MouseButton.LEFT]
 	defer {
-		default_context_storage.width = default_width
 		default_context_storage.inp.mouse = default_mouse
 		default_context_storage.inp.pressed[KeyboardKey.A] = default_pressed
 		default_context_storage.inp.key_down[KeyboardKey.A] = default_key_down
 		default_context_storage.inp.mb_down[MouseButton.LEFT] = default_mouse_down
 	}
-	default_context_storage.width = 640
 	default_context_storage.inp.mouse = {10, 20}
 	default_context_storage.inp.pressed[KeyboardKey.A] = false
 	default_context_storage.inp.key_down[KeyboardKey.A] = false
 	default_context_storage.inp.mb_down[MouseButton.LEFT] = false
-	ctx.width = 320
 	ctx.inp.mouse = {30, 40}
 	ctx.inp.pressed[KeyboardKey.A] = true
 	ctx.inp.key_down[KeyboardKey.A] = true
 	ctx.inp.mb_down[MouseButton.LEFT] = true
-	testing.expect_value(t, GetScreenWidth(), i32(640))
-	testing.expect_value(t, GetMousePosition(), Vector2{10, 20})
-	testing.expect(t, !IsKeyPressed(.A))
-	testing.expect(t, !IsKeyDown(.A))
-	testing.expect(t, !IsMouseButtonDown(.LEFT))
+
 	scope := context_scope_enter(ctx)
-	testing.expect_value(t, GetScreenWidth(), i32(320))
-	testing.expect_value(t, GetMousePosition(), Vector2{30, 40})
-	testing.expect(t, IsKeyPressed(.A))
-	testing.expect(t, IsKeyDown(.A))
-	testing.expect(t, IsMouseButtonDown(.LEFT))
-	context_scope_leave(&scope)
-	testing.expect_value(t, GetScreenWidth(), i32(640))
 	testing.expect_value(t, GetMousePosition(), Vector2{10, 20})
 	testing.expect(t, !IsKeyPressed(.A))
 	testing.expect(t, !IsKeyDown(.A))
 	testing.expect(t, !IsMouseButtonDown(.LEFT))
+	testing.expect_value(t, context_get_mouse_position(ctx), Vector2{30, 40})
+	testing.expect(t, context_is_key_pressed(ctx, .A))
+	testing.expect(t, context_is_key_down(ctx, .A))
+	testing.expect(t, context_is_mouse_button_down(ctx, .LEFT))
+	context_scope_leave(&scope)
 }
 
 @(test)

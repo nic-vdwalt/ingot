@@ -55,7 +55,6 @@ Input :: struct {
 	cursor_on_screen:     bool,
 	cur_cursor:           MouseCursor,
 	cursor_hidden:        bool,
-
 	preedit_buf:          [PREEDIT_MAX]u8,
 	preedit_len:          int,
 	preedit_caret:        int,
@@ -246,16 +245,6 @@ _push_key_input :: proc "contextless" (inp: ^Input, k: KeyboardKey) {
 	if nt == inp.key_h do return
 	inp.key_q[inp.key_t] = k
 	inp.key_t = nt
-}
-
-@(private)
-_push_char :: proc "c" (r: rune) {
-	_push_char_input(&g.inp, r)
-}
-
-@(private)
-_push_key :: proc "c" (k: KeyboardKey) {
-	_push_key_input(&g.inp, k)
 }
 
 // --- raylib-named queries --------------------------------------------------
@@ -652,8 +641,14 @@ SetTextInputRect :: proc(x, y, w, h: i32) {
 // internal buffer valid until the next composition event; clone to keep.
 context_get_preedit :: proc(ctx: ^Context) -> (text: string, caret: int) {
 	if ctx == nil do return "", 0
-	assert(ctx.inp.preedit_len >= 0 && ctx.inp.preedit_len <= PREEDIT_MAX, "context_get_preedit: corrupt length")
-	assert(ctx.inp.preedit_caret >= 0 && ctx.inp.preedit_caret <= ctx.inp.preedit_len, "context_get_preedit: corrupt caret")
+	assert(
+		ctx.inp.preedit_len >= 0 && ctx.inp.preedit_len <= PREEDIT_MAX,
+		"context_get_preedit: corrupt length",
+	)
+	assert(
+		ctx.inp.preedit_caret >= 0 && ctx.inp.preedit_caret <= ctx.inp.preedit_len,
+		"context_get_preedit: corrupt caret",
+	)
 	return string(ctx.inp.preedit_buf[:ctx.inp.preedit_len]), ctx.inp.preedit_caret
 }
 
