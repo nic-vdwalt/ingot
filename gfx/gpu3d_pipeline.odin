@@ -1667,7 +1667,8 @@ _gpu_3d_mesh :: proc(
 
 @(private)
 _gpu_3d_pass_current :: proc(resources: ^Gpu_3D_Resources, pass: ^Gpu_3D_Pass) -> bool {
-	if resources == nil || pass == nil || pass.owner == nil || !pass.active || pass.generation == 0 do return false
+	if resources == nil || pass == nil || pass.owner == nil do return false
+	if !pass.active || pass.generation == 0 do return false
 	if pass.epoch != pass.owner.epoch do return false
 	return pass.generation == resources.active_pass_generation
 }
