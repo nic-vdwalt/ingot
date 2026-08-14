@@ -227,6 +227,14 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	radio: proc(_: ^Builder, _: u64, _: string, _: ^i32, _: i32, _: Control_Options) = Radio
 	slider: proc(_: ^Builder, _: Widget_Id, _: ^f32, _, _, _: f32, _: string, _: Control_Options) =
 		Slider
+	layout_begin: proc(_: ^Surface, _: ^Layout_State, _: Rect, _: i32) = Layout_Begin
+	layout_next: proc(_: ^Layout_State, _: i32) -> Rect = Layout_Next
+	grid_next: proc(_: ^Grid_State) -> Rect = Grid_Next
+	flow_next: proc(_: ^Flow_State, _, _: i32) -> Rect = Flow_Next
+	fill_i32: proc(_: ^Surface, _: Rect, _: Color) = Fill_Rect
+	fill_f32: proc(_: ^Surface, _: Float_Rect, _: Color) = Fill_Rect
+	compat_layout: proc(_: ^Surface, _: ^Layout_State, _, _, _, _: i32, _: i32) =
+		Surface_Layout_Begin
 	testing.expect(t, draw != nil && run != nil && canvas != nil)
 	testing.expect(t, px_i32 != nil && px_f32 != nil)
 	testing.expect(t, button_string != nil && button_u64 != nil)
@@ -234,6 +242,9 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	testing.expect(t, set_storage != nil && reset_storage != nil && storage_capacity != nil)
 	testing.expect(t, row_with != nil && id_string != nil)
 	testing.expect(t, checkbox != nil && radio != nil && slider != nil)
+	testing.expect(t, layout_begin != nil && layout_next != nil && grid_next != nil)
+	testing.expect(t, flow_next != nil && fill_i32 != nil && fill_f32 != nil)
+	testing.expect(t, compat_layout != nil)
 }
 
 @(test)
@@ -292,6 +303,65 @@ fit_region_managed_scope_balances_and_composes_ids :: proc(t: ^testing.T) {
 	testing.expect_value(t, second.inner.ids.depth, 0)
 	testing.expect_value(t, Px(&surface, i32(8)), i32(12))
 	testing.expect_value(t, Px(&surface, f32(8)), f32(12))
+	_ = ui.end(&root)
+}
+
+@(test)
+fit_concise_layout_state_reuses_after_end :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	ui.ui_runtime_init(&runtime)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	surface := Surface{inner = &root}
+	layout: Layout_State
+	Layout_Begin(&surface, &layout, {10, 20, 100, 40})
+	first := Layout_Next(&layout, 30)
+	second := Layout_Remaining(&layout)
+	Layout_End(&layout)
+	testing.expect_value(t, first, Rect{10, 20, 100, 30})
+	testing.expect_value(t, second, Rect{10, 50, 100, 10})
+	testing.expect(t, !layout.open && layout.surface == nil, "layout retained borrowed surface")
+	Layout_Begin(&surface, &layout, {0, 0, 50, 20})
+	compat := Surface_Layout_Next(&surface, &layout, 10)
+	Surface_Layout_End(&surface, &layout)
+	testing.expect_value(t, compat, Rect{0, 0, 50, 10})
+	_ = ui.end(&root)
+}
+
+@(test)
+fit_concise_grid_flow_and_fit_column_balance :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	ui.ui_runtime_init(&runtime)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	surface := Surface{inner = &root}
+	grid: Grid_State
+	Grid_Begin(&surface, &grid, {0, 0, 100, 0}, 2, 20)
+	testing.expect_value(t, Grid_Next(&grid), Rect{0, 0, 50, 20})
+	_ = Grid_End(&grid)
+	flow: Flow_State
+	Flow_Begin(&surface, &flow, {0, 0, 100, 0}, 4, 4)
+	testing.expect_value(t, Flow_Next(&flow, 30, 20), Rect{0, 0, 30, 20})
+	_ = Flow_End(&flow)
+	column: Fit_Column_State
+	Fit_Column_Begin(&surface, &column, 0, 0, 100)
+	testing.expect_value(t, Fit_Column_Next(&column, 20), Rect{0, 0, 100, 20})
+	_ = Fit_Column_End(&column)
+	testing.expect(t, !grid.open && !flow.open && !column.open, "explicit state remained open")
 	_ = ui.end(&root)
 }
 

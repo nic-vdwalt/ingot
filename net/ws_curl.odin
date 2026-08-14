@@ -13,6 +13,11 @@ when ODIN_OS == .Windows {
 }
 
 Ws_Curl :: struct {}
+Ws_Curl_Blob :: struct {
+	data:  rawptr,
+	len:   c.size_t,
+	flags: c.uint,
+}
 
 Ws_Curl_Code :: enum c.int {
 	OK                 = 0,
@@ -20,6 +25,7 @@ Ws_Curl_Code :: enum c.int {
 	AGAIN              = 81,
 }
 
+WS_CURL_BLOB_COPY :: c.uint(1)
 WS_CURL_GLOBAL_ALL :: c.long(3)
 WS_CURL_URL :: c.int(10002)
 WS_CURL_SSL_VERIFYPEER :: c.int(64)
@@ -27,6 +33,7 @@ WS_CURL_SSL_VERIFYHOST :: c.int(81)
 WS_CURL_CONNECT_ONLY :: c.int(141)
 WS_CURL_CONNECTTIMEOUT_MS :: c.int(156)
 WS_CURL_CAINFO :: c.int(10065)
+WS_CURL_CAINFO_BLOB :: c.int(40309)
 WS_CURL_DISALLOW_USERNAME_IN_URL :: c.int(234)
 
 @(default_calling_convention = "c")

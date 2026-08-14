@@ -4,6 +4,7 @@ package ingotnet
 import "core:c"
 import "core:fmt"
 import cnet "core:net"
+import "core:os"
 import "core:strings"
 import "core:sync"
 import "core:time"
@@ -107,9 +108,20 @@ when !INGOT_WS_SIM {
 			return false
 		}
 		if ca_file != "" {
-			ca_c, ca_err := strings.clone_to_cstring(ca_file, context.temp_allocator)
-			if ca_err != nil do return false
-			if ws_curl_easy_setopt(handle, WS_CURL_CAINFO, ca_c) != .OK do return false
+			when ODIN_OS == .Windows {
+				ca, ca_err := os.read_entire_file(ca_file, context.temp_allocator)
+				if ca_err != nil || len(ca) == 0 do return false
+				blob := Ws_Curl_Blob {
+					data  = raw_data(ca),
+					len   = c.size_t(len(ca)),
+					flags = WS_CURL_BLOB_COPY,
+				}
+				if ws_curl_easy_setopt(handle, WS_CURL_CAINFO_BLOB, &blob) != .OK do return false
+			} else {
+				ca_c, ca_err := strings.clone_to_cstring(ca_file, context.temp_allocator)
+				if ca_err != nil do return false
+				if ws_curl_easy_setopt(handle, WS_CURL_CAINFO, ca_c) != .OK do return false
+			}
 		}
 		return true
 	}
