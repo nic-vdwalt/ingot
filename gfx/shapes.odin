@@ -580,6 +580,14 @@ _emit_gradient_v :: proc(ctx: ^Context, r: ^Renderer, rec: Rectangle, top, botto
 _emit_gradient_quad :: proc(ctx: ^Context, r: ^Renderer, rec: Rectangle, tl, tr, br, bl: [4]f32) {
 	assert(ctx != nil, "_emit_gradient_quad: nil context")
 	assert(r == &ctx.rend, "_emit_gradient_quad: foreign renderer")
+	assert(
+		_shape_geometry_is_finite({rec.x, rec.y}, rec.width) && _f32_is_finite(rec.height),
+		"_emit_gradient_quad: non-finite geometry",
+	)
+	colors := [4][4]f32{tl, tr, br, bl}
+	for color in colors {
+		for component in color do assert(_f32_is_finite(component), "_emit_gradient_quad: non-finite color")
+	}
 	if !_batch_reserve(ctx, r, 4, 6) do return
 	transform := r.model_xf
 	x0, y0 := rec.x, rec.y

@@ -17,7 +17,7 @@ Write-Host "== repository hygiene =="
 Invoke-CheckedPython "check-repository-hygiene.py"
 Write-Host "== gfx context ownership guard =="
 Invoke-CheckedPython "check_gfx_context_test.py"
-Invoke-CheckedPython "check_gfx_context.py" @("--baseline", "$PSScriptRoot/gfx_context_baseline.json", $Root)
+Invoke-CheckedPython "check_gfx_context.py" @($Root)
 Write-Host "== gfx @(init) ordering guard =="
 Invoke-CheckedPython "check_init_order_test.py"
 Invoke-CheckedPython "check_init_order.py" @($Root)

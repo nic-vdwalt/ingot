@@ -99,6 +99,7 @@ DisableEventWaiting :: proc() {
 
 @(private)
 _idle_note_activity :: proc "contextless" (s: ^Idle_State) {
+	assert_contextless(s != nil, "_idle_note_activity: nil state")
 	s.settle_frames = IDLE_SETTLE_FRAMES
 }
 
@@ -109,6 +110,8 @@ _idle_request_redraw :: proc "contextless" (s: ^Idle_State) {
 
 @(private)
 _idle_request_in :: proc "contextless" (s: ^Idle_State, now, seconds: f64) {
+	assert_contextless(s != nil, "_idle_request_in: nil state")
+	assert_contextless(now == now && seconds == seconds, "_idle_request_in: NaN time")
 	d := now + max(seconds, 0)
 	if s.redraw_deadline == 0 || d < s.redraw_deadline {
 		s.redraw_deadline = d
@@ -121,6 +124,8 @@ _idle_request_in :: proc "contextless" (s: ^Idle_State, now, seconds: f64) {
 // (step()) on web.
 @(private)
 _idle_take_frame :: proc "contextless" (s: ^Idle_State, now: f64) -> bool {
+	assert_contextless(s != nil, "_idle_take_frame: nil state")
+	assert_contextless(now == now, "_idle_take_frame: NaN time")
 	if sync.atomic_exchange(&s.redraw_pending, false) {
 		s.settle_frames = max(s.settle_frames, IDLE_SETTLE_FRAMES)
 	}
@@ -140,6 +145,8 @@ _idle_take_frame :: proc "contextless" (s: ^Idle_State, now: f64) -> bool {
 // next deadline, capped at IDLE_MAX_WAIT.
 @(private)
 _idle_wait_timeout :: proc "contextless" (s: ^Idle_State, now: f64) -> f64 {
+	assert_contextless(s != nil, "_idle_wait_timeout: nil state")
+	assert_contextless(now == now, "_idle_wait_timeout: NaN time")
 	t := f64(IDLE_MAX_WAIT)
 	if s.redraw_deadline != 0 {
 		t = min(t, max(s.redraw_deadline - now, 0.001))
