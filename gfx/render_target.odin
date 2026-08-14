@@ -98,12 +98,13 @@ BeginTextureMode :: proc(target: RenderTexture2D) {
 
 // _ensure_rt_pass lazily begins the render-target pass on its own encoder.
 @(private)
-_ensure_rt_pass :: proc() {
-	if g.frame.rt == 0 || g.frame.rt_pass_begun do return
-	view := _texture_view(g.frame.rt)
+context_ensure_rt_pass :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_ensure_rt_pass: nil context")
+	if ctx.frame.rt == 0 || ctx.frame.rt_pass_begun do return
+	view := context_texture_view(ctx, ctx.frame.rt)
 	if view == nil do return
-	g.frame.rt_encoder = wg.DeviceCreateCommandEncoder(g.device, nil)
-	cc := g.frame.rt_clear
+	ctx.frame.rt_encoder = wg.DeviceCreateCommandEncoder(ctx.device, nil)
+	cc := ctx.frame.rt_clear
 	// Preserve the target's contents by default (raylib: BeginTextureMode does
 	// not clear). Only clear when ClearBackground was called after
 	// BeginTextureMode this frame.
@@ -123,9 +124,14 @@ _ensure_rt_pass :: proc() {
 	// batch pipelines carry no depth-stencil state, so we intentionally do not
 	// attach a depth buffer here (attaching one would mismatch those pipelines).
 	// depth textures created via rlgl.LoadTextureDepth are simply unused.
-	g.frame.rt_pass = wg.CommandEncoderBeginRenderPass(g.frame.rt_encoder, &desc)
-	_stats_render_pass(g)
-	g.frame.rt_pass_begun = true
+	ctx.frame.rt_pass = wg.CommandEncoderBeginRenderPass(ctx.frame.rt_encoder, &desc)
+	_stats_render_pass(ctx)
+	ctx.frame.rt_pass_begun = true
+}
+
+@(private)
+_ensure_rt_pass :: proc() {
+	context_ensure_rt_pass(default_context())
 }
 
 // EndTextureMode flushes and submits the render-target pass, then restores the

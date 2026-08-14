@@ -229,7 +229,7 @@ emit_quad_keeps_rectangles_axis_aligned_without_rotation :: proc(t: ^testing.T) 
 	defer free(r)
 
 	r.model_xf = _affine_from_camera_2d(Camera2D{offset = {5, 7}, zoom = 2})
-	_emit_quad(r, {10, 20, 30, 40}, {0, 0, 1, 1}, {1, 1, 1, 1})
+	_emit_quad(default_context(), r, {10, 20, 30, 40}, {0, 0, 1, 1}, {1, 1, 1, 1})
 
 	testing.expect_value(t, len(r.verts), 4)
 	testing.expect_value(t, len(r.indices), 6)
@@ -252,7 +252,7 @@ emit_quad_rotates_all_four_corners :: proc(t: ^testing.T) {
 	// this generalises, the rectangle would have stayed axis-aligned.
 	r.model_xf = _affine_from_camera_2d(Camera2D{rotation = 90, zoom = 1})
 	testing.expect(t, _affine_rotates(r.model_xf))
-	_emit_quad(r, {10, 0, 20, 10}, {0, 0, 1, 1}, {1, 1, 1, 1})
+	_emit_quad(default_context(), r, {10, 0, 20, 10}, {0, 0, 1, 1}, {1, 1, 1, 1})
 
 	testing.expect_value(t, len(r.verts), 4)
 	testing.expect_value(t, len(r.indices), 6)
@@ -276,7 +276,7 @@ emit_quad_preserves_uv_and_mode_through_the_rotated_path :: proc(t: ^testing.T) 
 	defer free(r)
 
 	r.model_xf = _affine_from_camera_2d(Camera2D{rotation = 45, zoom = 1})
-	_emit_quad(r, {0, 0, 8, 8}, {0.25, 0.5, 0.125, 0.25}, {1, 1, 1, 1}, .Text)
+	_emit_quad(default_context(), r, {0, 0, 8, 8}, {0.25, 0.5, 0.125, 0.25}, {1, 1, 1, 1}, .Text)
 
 	testing.expect_value(t, len(r.verts), 4)
 	for vertex in r.verts do testing.expect_value(t, vertex.mode, Vertex_Mode.Text)
@@ -297,6 +297,7 @@ emit_quad_matches_the_unrotated_path_when_transform_is_identity :: proc(t: ^test
 
 	_emit_quad(direct, {3, 5, 7, 11}, {0, 0, 1, 1}, {1, 1, 1, 1})
 	_emit_quad4(
+		default_context(),
 		general,
 		{3, 5},
 		{10, 5},
@@ -326,7 +327,7 @@ emit_tri_follows_the_model_transform :: proc(t: ^testing.T) {
 	defer free(r)
 
 	r.model_xf = _affine_translated(AFFINE_IDENTITY, 100, 200)
-	_emit_tri(r, {0, 0}, {10, 0}, {0, 10}, {1, 1, 1, 1})
+	_emit_tri(default_context(), r, {0, 0}, {10, 0}, {0, 10}, {1, 1, 1, 1})
 
 	testing.expect_value(t, len(r.verts), 3)
 	expect_point_near(t, r.verts[0].pos, {100, 200}, "a")
@@ -345,7 +346,7 @@ emit_gradient_quad_follows_the_model_transform :: proc(t: ^testing.T) {
 	r.model_xf = _affine_from_camera_2d(Camera2D{offset = {0, 0}, target = {0, 0}, zoom = 2})
 	top := [4]f32{1, 0, 0, 1}
 	bottom := [4]f32{0, 0, 1, 1}
-	_emit_gradient_quad(r, {1, 2, 3, 4}, top, top, bottom, bottom)
+	_emit_gradient_quad(default_context(), r, {1, 2, 3, 4}, top, top, bottom, bottom)
 
 	testing.expect_value(t, len(r.verts), 4)
 	expect_point_near(t, r.verts[0].pos, {2, 4}, "tl scales with zoom")
@@ -443,7 +444,7 @@ nan_camera_would_poison_every_vertex :: proc(t: ^testing.T) {
 	r := new_test_renderer()
 	defer free(r)
 	r.model_xf = poisoned
-	_emit_quad(r, {10, 20, 30, 40}, {0, 0, 1, 1}, {1, 1, 1, 1})
+	_emit_quad(default_context(), r, {10, 20, 30, 40}, {0, 0, 1, 1}, {1, 1, 1, 1})
 
 	testing.expect_value(t, len(r.verts), 4)
 	for vertex, index in r.verts {

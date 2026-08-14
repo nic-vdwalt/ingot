@@ -1034,9 +1034,15 @@ FlushBatch :: proc() {
 
 // active_pass returns the render pass the batch renderer should record into.
 @(private)
+context_active_pass :: proc(ctx: ^Context) -> wg.RenderPassEncoder {
+	assert(ctx != nil, "context_active_pass: nil context")
+	if ctx.frame.rt != 0 do return ctx.frame.rt_pass
+	return ctx.frame.pass
+}
+
+@(private)
 active_pass :: proc() -> wg.RenderPassEncoder {
-	if g.frame.rt != 0 do return g.frame.rt_pass
-	return g.frame.pass
+	return context_active_pass(default_context())
 }
 
 // _cur_target_format returns the wgpu colour format of the pass draws currently
@@ -1052,12 +1058,18 @@ _cur_target_format :: proc(ctx: ^Context) -> wg.TextureFormat {
 	return ctx.format
 }
 
-// _active_pass_begun reports whether the pass active_pass() returns has begun.
+// _active_pass_begun reports whether the active pass has begun.
+@(private)
+context_active_pass_begun :: proc(ctx: ^Context) -> bool {
+	assert(ctx != nil, "context_active_pass_begun: nil context")
+	if !ctx.frame.has_frame do return false
+	if ctx.frame.rt != 0 do return ctx.frame.rt_pass_begun
+	return ctx.frame.pass_begun
+}
+
 @(private)
 _active_pass_begun :: proc() -> bool {
-	if !g.frame.has_frame do return false
-	if g.frame.rt != 0 do return g.frame.rt_pass_begun
-	return g.frame.pass_begun
+	return context_active_pass_begun(default_context())
 }
 
 // _attachment_px returns the real pixel dimensions of the current 2D pass
@@ -1074,10 +1086,16 @@ _attachment_px :: proc() -> (f32, f32) {
 // _ensure_active_pass lazily begins whichever pass is current: the render
 // target's pass while one is bound, otherwise the swapchain pass.
 @(private)
-_ensure_active_pass :: proc() {
-	if g.frame.rt != 0 {
-		_ensure_rt_pass()
+context_ensure_active_pass :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_ensure_active_pass: nil context")
+	if ctx.frame.rt != 0 {
+		context_ensure_rt_pass(ctx)
 	} else {
-		_ensure_pass(g)
+		_ensure_pass(ctx)
 	}
+}
+
+@(private)
+_ensure_active_pass :: proc() {
+	context_ensure_active_pass(default_context())
 }
