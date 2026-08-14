@@ -4,6 +4,21 @@ package gfx
 import "core:testing"
 
 @(test)
+frame_strategy_is_context_bound :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+
+	context_set_frame_strategy(first, .Event_Driven)
+	context_set_frame_strategy(second, .Continuous)
+	testing.expect_value(t, context_get_frame_strategy(first), Frame_Strategy.Event_Driven)
+	testing.expect_value(t, context_get_frame_strategy(second), Frame_Strategy.Continuous)
+	testing.expect_value(t, first.idle.settle_frames, i32(IDLE_SETTLE_FRAMES))
+	testing.expect_value(t, second.idle.settle_frames, i32(IDLE_SETTLE_FRAMES))
+}
+
+@(test)
 idle_continuous_always_runs :: proc(t: ^testing.T) {
 	s := Idle_State{}
 	for _ in 0 ..< 10 {

@@ -52,19 +52,22 @@ run :: proc(frame: Run_Proc) {
 // matching the native pump's bounded-wait floor. Returning false instead
 // would end the module permanently (odin.js stops scheduling), so the loop
 // always stays alive.
-@(export)
-step :: proc(dt: f32) -> bool {
-	context = g_web_ctx
-	if !g.initialized {
-		return true // GPU device still resolving; retry next frame
-	}
-	if !_idle_web_gate(&g.idle, _now()) {
-		return true // idle: keep rAF alive, skip the app frame
-	}
-	input_poll(default_context())
+@(private)
+web_step_context :: proc(ctx: ^Context, now: f64) -> bool {
+	assert(ctx != nil, "web_step_context: nil context")
+	if !ctx.initialized do return true
+	if !_idle_web_gate(&ctx.idle, now) do return true
+	input_poll(ctx)
 	if g_web_callback.active {
-		assert(g_web_callback.frame != nil, "step: active callback has no frame")
+		assert(g_web_callback.frame != nil, "web_step_context: active callback has no frame")
 		g_web_callback.frame(g_web_callback.userdata)
 	}
 	return true
+}
+
+@(export)
+step :: proc(dt: f32) -> bool {
+	context = g_web_ctx
+	ctx := default_context()
+	return web_step_context(ctx, platform_now() - ctx.start_time_s)
 }

@@ -217,6 +217,11 @@ context_set_frame_strategy :: proc(ctx: ^Context, strategy: Frame_Strategy) {
 	_idle_note_activity(&ctx.idle)
 }
 
+context_get_frame_strategy :: proc(ctx: ^Context) -> Frame_Strategy {
+	if ctx == nil do return .Continuous
+	return ctx.idle.strategy
+}
+
 context_set_config_flags :: proc(ctx: ^Context, flags: ConfigFlags) {
 	if ctx == nil do return
 	ctx.config_flags = flags
