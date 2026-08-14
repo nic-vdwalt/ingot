@@ -83,32 +83,38 @@ UnloadRenderTexture :: proc(target: RenderTexture2D) {
 // pending main-pass geometry (keeping the main pass open), switches the batch
 // group(0) uniform to the target's y-flipped projection, and defers beginning
 // the RT pass until the first draw/clear so ClearBackground can set the clear.
-BeginTextureMode :: proc(target: RenderTexture2D) {
-	if !g.frame.has_frame do return
-	e := get_texture(target.texture.id)
+context_begin_texture_mode :: proc(ctx: ^Context, target: RenderTexture2D) {
+	assert(ctx != nil, "context_begin_texture_mode: nil context")
+	if !ctx.frame.has_frame do return
+	e := context_get_texture(ctx, target.texture.id)
 	if e == nil do return
-
-	// finish pending window geometry into the main pass (still open)
-	if g.frame.pass_begun {
-		renderer_flush(default_context(), &g.rend, g.frame.pass, .Target)
+	depth_view: wg.TextureView
+	if target.depth.id != 0 {
+		depth_view = context_texture_view(ctx, target.depth.id)
+		if depth_view == nil do return
 	}
 
-	g.frame.rt = target.texture.id
-	g.frame.rt_w = e.width
-	g.frame.rt_h = e.height
-	g.frame.rt_clear = Color{0, 0, 0, 0}
-	g.frame.rt_should_clear = false
-	g.frame.rt_pass_begun = false
-	g.frame.rt_depth = target.depth.id != 0
-	g.frame.depth_view = g.frame.rt_depth ? _texture_view(target.depth.id) : nil
+	if ctx.frame.pass_begun {
+		renderer_flush(ctx, &ctx.rend, ctx.frame.pass, .Target)
+	}
 
-	// RT projection: y-flipped (p.z = -1) so the texture matches raylib.
+	ctx.frame.rt = target.texture.id
+	ctx.frame.rt_w = e.width
+	ctx.frame.rt_h = e.height
+	ctx.frame.rt_clear = Color{0, 0, 0, 0}
+	ctx.frame.rt_should_clear = false
+	ctx.frame.rt_pass_begun = false
+	ctx.frame.rt_depth = target.depth.id != 0
+	ctx.frame.depth_view = depth_view
+
 	p := _rt_projection_vec(e.width, e.height)
-	wg.QueueWriteBuffer(g.queue, g.rend.rt_ubuf, 0, &p, size_of(p))
-	g.rend.cur_u = g.rend.rt_ubind
+	wg.QueueWriteBuffer(ctx.queue, ctx.rend.rt_ubuf, 0, &p, size_of(p))
+	ctx.rend.cur_u = ctx.rend.rt_ubind
+	renderer_state_reset(&ctx.rend)
+}
 
-	// reset the batch run for the target
-	renderer_state_reset(&g.rend)
+BeginTextureMode :: proc(target: RenderTexture2D) {
+	context_begin_texture_mode(default_context(), target)
 }
 
 // _ensure_rt_pass lazily begins the render-target pass on its own encoder.
@@ -123,7 +129,7 @@ context_ensure_rt_pass :: proc(ctx: ^Context) {
 	// Preserve the target's contents by default (raylib: BeginTextureMode does
 	// not clear). Only clear when ClearBackground was called after
 	// BeginTextureMode this frame.
-	load_op := wg.LoadOp.Load if !g.frame.rt_should_clear else wg.LoadOp.Clear
+	load_op := wg.LoadOp.Load if !ctx.frame.rt_should_clear else wg.LoadOp.Clear
 	color := wg.RenderPassColorAttachment {
 		view       = view,
 		depthSlice = wg.DEPTH_SLICE_UNDEFINED,
@@ -151,32 +157,36 @@ _ensure_rt_pass :: proc() {
 
 // EndTextureMode flushes and submits the render-target pass, then restores the
 // batch to the window projection so the main pass continues correctly.
-EndTextureMode :: proc() {
-	if g.frame.rt == 0 {
-		g.rend.cur_u = g.rend.ubind
+context_end_texture_mode :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_end_texture_mode: nil context")
+	if ctx.frame.rt == 0 {
+		ctx.rend.cur_u = ctx.rend.ubind
 		return
 	}
-	_ensure_rt_pass()
-	if g.frame.rt_pass_begun {
-		renderer_flush(default_context(), &g.rend, g.frame.rt_pass, .Target)
-		wg.RenderPassEncoderEnd(g.frame.rt_pass)
-		wg.RenderPassEncoderRelease(g.frame.rt_pass)
-		assert(_stream_slot_upload(g, &g.rend))
-		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(g, g.frame.rt_encoder, true)
-		_stats_cpu_times(0, encode_elapsed, submit_elapsed, 0)
-		_stats_queue_submission(g)
+	context_ensure_rt_pass(ctx)
+	if ctx.frame.rt_pass_begun {
+		renderer_flush(ctx, &ctx.rend, ctx.frame.rt_pass, .Target)
+		wg.RenderPassEncoderEnd(ctx.frame.rt_pass)
+		wg.RenderPassEncoderRelease(ctx.frame.rt_pass)
+		assert(_stream_slot_upload(ctx, &ctx.rend))
+		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(ctx, ctx.frame.rt_encoder, true)
+		_stats_context_cpu_times(ctx, 0, encode_elapsed, submit_elapsed, 0)
+		_stats_queue_submission(ctx)
 		wg.CommandBufferRelease(cmd)
-		wg.CommandEncoderRelease(g.frame.rt_encoder)
+		wg.CommandEncoderRelease(ctx.frame.rt_encoder)
 	}
-	g.frame.rt = 0
-	g.frame.rt_pass = nil
-	g.frame.rt_pass_begun = false
-	g.frame.rt_depth = false
-	g.frame.depth_view = nil
+	ctx.frame.rt = 0
+	ctx.frame.rt_encoder = nil
+	ctx.frame.rt_pass = nil
+	ctx.frame.rt_pass_begun = false
+	ctx.frame.rt_depth = false
+	ctx.frame.depth_view = nil
+	ctx.rend.cur_u = ctx.rend.ubind
+	renderer_state_reset(&ctx.rend)
+}
 
-	// back to the window projection for the (still-open) main pass
-	g.rend.cur_u = g.rend.ubind
-	renderer_state_reset(&g.rend)
+EndTextureMode :: proc() {
+	context_end_texture_mode(default_context())
 }
 
 // --- rlgl framebuffer backing ----------------------------------------------

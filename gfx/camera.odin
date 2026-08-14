@@ -10,25 +10,6 @@ import "core:math/linalg"
 
 Matrix :: matrix[4, 4]f32
 
-@(private)
-cam3d_active: bool
-@(private)
-cam3d_vp: Matrix
-@(private)
-cam3d_proj: Matrix
-@(private)
-cam3d_view: Matrix
-@(private)
-cam3d: Camera3D
-@(private)
-cam3d_right: Vector3
-@(private)
-cam3d_up: Vector3
-@(private)
-cam3d_fwd: Vector3
-@(private)
-cam3d_projection_available: bool
-
 CAMERA_DEFAULT_NEAR_PLANE :: f32(0.01)
 CAMERA_DEFAULT_FAR_PLANE :: f32(1000.0)
 
@@ -395,10 +376,15 @@ orbit_camera_apply :: proc(state: Orbit_Camera_State, camera: ^Camera3D) {
 
 // GetProjectionMatrix returns the last 3D projection matrix (rlgl parity for
 // GetMatrixProjection). Identity before any BeginMode3D.
+context_get_projection_matrix :: proc(ctx: ^Context) -> Matrix {
+	assert(ctx != nil, "context_get_projection_matrix: nil context")
+	assert(ctx.cam3d_projection_available, "GetProjectionMatrix: unavailable in matrix-only Pro mode")
+	if ctx.cam3d_proj == (Matrix{}) do return Matrix(1)
+	return ctx.cam3d_proj
+}
+
 GetProjectionMatrix :: proc() -> Matrix {
-	assert(cam3d_projection_available, "GetProjectionMatrix: unavailable in matrix-only Pro mode")
-	if cam3d_proj == (Matrix{}) do return Matrix(1)
-	return cam3d_proj
+	return context_get_projection_matrix(default_context())
 }
 
 // --- 2D camera -------------------------------------------------------------
@@ -484,63 +470,75 @@ GetScreenToWorld2D :: proc(position: Vector2, camera: Camera2D) -> Vector2 {
 	return world
 }
 
+context_begin_mode_3d :: proc(ctx: ^Context, camera: Camera3D) {
+	assert(ctx != nil, "context_begin_mode_3d: nil context")
+	assert(!ctx.cam3d_active, "BeginMode3D: already inside a 3D camera mode")
+	width, height := context_target_dims_i32(ctx)
+	ctx.cam3d_view, ctx.cam3d_proj, ctx.cam3d_vp = _camera_matrices(camera, width, height)
+	assert(_camera_matrix_is_finite(ctx.cam3d_vp), "BeginMode3D: non-finite camera matrix")
+	ctx.cam3d = camera
+	ctx.cam3d_fwd = GetCameraForward(camera)
+	ctx.cam3d_right = GetCameraRight(camera)
+	ctx.cam3d_up = GetCameraUp(camera)
+	assert(ctx.cam3d_fwd != (Vector3{}), "BeginMode3D: coincident position and target")
+	assert(ctx.cam3d_right != (Vector3{}), "BeginMode3D: forward and up are parallel")
+	ctx.cam3d_projection_available = true
+	ctx.cam3d_active = true
+	context_flush_batch(ctx)
+	_ = _gpu_3d_compat_begin(ctx, camera)
+	assert(ctx.cam3d_active)
+}
+
 BeginMode3D :: proc(camera: Camera3D) {
-	assert(!cam3d_active, "BeginMode3D: already inside a 3D camera mode")
-	width, height := _target_dims_i32()
-	cam3d_view, cam3d_proj, cam3d_vp = _camera_matrices(camera, width, height)
-	assert(_camera_matrix_is_finite(cam3d_vp), "BeginMode3D: non-finite camera matrix")
-	cam3d = camera
-	cam3d_fwd = GetCameraForward(camera)
-	cam3d_right = GetCameraRight(camera)
-	cam3d_up = GetCameraUp(camera)
-	assert(cam3d_fwd != (Vector3{}), "BeginMode3D: coincident position and target")
-	assert(cam3d_right != (Vector3{}), "BeginMode3D: forward and up are parallel")
-	cam3d_projection_available = true
-	cam3d_active = true
-	// Ordering pending 2D geometry before 3D makes the camera change a visible
-	// draw-call boundary instead of retroactively transforming queued vertices.
-	FlushBatch()
-	_ = _gpu_3d_compat_begin(&default_context_storage, camera)
-	assert(cam3d_active)
+	context_begin_mode_3d(default_context(), camera)
+}
+
+context_begin_mode_3d_pro :: proc(ctx: ^Context, view_projection: Matrix) {
+	assert(ctx != nil, "context_begin_mode_3d_pro: nil context")
+	assert(!ctx.cam3d_active, "BeginMode3DPro: already inside a 3D camera mode")
+	assert(view_projection != (Matrix{}), "BeginMode3DPro: zero view-projection")
+	assert(_camera_matrix_is_finite(view_projection), "BeginMode3DPro: non-finite view-projection")
+	ctx.cam3d_view = {}
+	ctx.cam3d_proj = {}
+	ctx.cam3d_vp = view_projection
+	ctx.cam3d = {}
+	ctx.cam3d_fwd = {}
+	ctx.cam3d_right = {}
+	ctx.cam3d_up = {}
+	ctx.cam3d_projection_available = false
+	ctx.cam3d_active = true
+	context_flush_batch(ctx)
+	assert(ctx.cam3d_active)
 }
 
 BeginMode3DPro :: proc(view_projection: Matrix) {
-	assert(!cam3d_active, "BeginMode3DPro: already inside a 3D camera mode")
-	assert(view_projection != (Matrix{}), "BeginMode3DPro: zero view-projection")
-	assert(_camera_matrix_is_finite(view_projection), "BeginMode3DPro: non-finite view-projection")
-	cam3d_view = {}
-	cam3d_proj = {}
-	cam3d_vp = view_projection
-	cam3d = {}
-	cam3d_fwd = {}
-	cam3d_right = {}
-	cam3d_up = {}
-	cam3d_projection_available = false
-	cam3d_active = true
-	FlushBatch()
-	assert(cam3d_active)
+	context_begin_mode_3d_pro(default_context(), view_projection)
+}
+
+context_end_mode_3d :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_end_mode_3d: nil context")
+	assert(ctx.cam3d_active, "EndMode3D: no active 3D camera mode")
+	context_flush_batch(ctx)
+	_gpu_3d_compat_end(ctx)
+	ctx.cam3d_active = false
+	ctx.cam3d_projection_available = false
+	assert(!ctx.cam3d_active)
 }
 
 EndMode3D :: proc() {
-	assert(cam3d_active, "EndMode3D: no active 3D camera mode")
-	FlushBatch()
-	_gpu_3d_compat_end(&default_context_storage)
-	cam3d_active = false
-	cam3d_projection_available = false
-	assert(!cam3d_active)
-}
-
-// _target_dims returns the pixel dimensions of the pass 3D draws land in: the
-// bound render target while one is active, else the logical window.
-@(private)
-_target_dims_i32 :: proc() -> (i32, i32) {
-	if g.frame.rt != 0 do return g.frame.rt_w, g.frame.rt_h
-	return g.width, g.height
+	context_end_mode_3d(default_context())
 }
 
 @(private)
-_target_dims :: proc() -> (f32, f32) {
-	width, height := _target_dims_i32()
+context_target_dims_i32 :: proc(ctx: ^Context) -> (i32, i32) {
+	assert(ctx != nil, "context_target_dims_i32: nil context")
+	if ctx.frame.rt != 0 do return ctx.frame.rt_w, ctx.frame.rt_h
+	return ctx.width, ctx.height
+}
+
+@(private)
+context_target_dims :: proc(ctx: ^Context) -> (f32, f32) {
+	width, height := context_target_dims_i32(ctx)
 	return f32(width), f32(height)
 }
 
@@ -555,24 +553,33 @@ _project_dims :: proc(vp: Matrix, p: Vector3, w, h: f32) -> (Vector2, bool) {
 	return {sx, sy}, true
 }
 
-// _project maps a world point into the current 3D pass's pixel space.
 @(private)
-_project :: proc(vp: Matrix, p: Vector3) -> (Vector2, bool) {
-	w, h := _target_dims()
+context_project :: proc(ctx: ^Context, vp: Matrix, p: Vector3) -> (Vector2, bool) {
+	w, h := context_target_dims(ctx)
 	return _project_dims(vp, p, w, h)
 }
 
+context_draw_line_3d :: proc(ctx: ^Context, startPos, endPos: Vector3, color: Color) {
+	assert(ctx != nil, "context_draw_line_3d: nil context")
+	if !ctx.cam3d_active do return
+	a, oka := context_project(ctx, ctx.cam3d_vp, startPos)
+	b, okb := context_project(ctx, ctx.cam3d_vp, endPos)
+	if oka && okb do context_draw_line_ex(ctx, a, b, 1, color)
+}
+
 DrawLine3D :: proc(startPos, endPos: Vector3, color: Color) {
-	if !cam3d_active do return
-	a, oka := _project(cam3d_vp, startPos)
-	b, okb := _project(cam3d_vp, endPos)
-	if oka && okb do DrawLineEx(a, b, 1, color)
+	context_draw_line_3d(default_context(), startPos, endPos, color)
 }
 
 // GetWorldToScreen projects to the logical window (screen overlays / picking),
 // independent of any active render target.
+context_get_world_to_screen :: proc(ctx: ^Context, position: Vector3, camera: Camera3D) -> Vector2 {
+	assert(ctx != nil, "context_get_world_to_screen: nil context")
+	return GetWorldToScreenPro(position, _camera_view_projection(camera, ctx.width, ctx.height))
+}
+
 GetWorldToScreen :: proc(position: Vector3, camera: Camera3D) -> Vector2 {
-	return GetWorldToScreenPro(position, _camera_view_projection(camera, g.width, g.height))
+	return context_get_world_to_screen(default_context(), position, camera)
 }
 
 GetWorldToScreenPro :: proc(position: Vector3, view_projection: Matrix) -> Vector2 {
