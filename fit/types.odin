@@ -546,19 +546,27 @@ Pane_State :: struct {
 }
 
 Grid_State :: struct {
-	inner: ui.Grid,
+	inner:   ui.Grid,
+	surface: ^Surface,
+	open:    bool,
 }
 
 Layout_State :: struct {
-	inner: ui.Layout,
+	inner:   ui.Layout,
+	surface: ^Surface,
+	open:    bool,
 }
 
 Flow_State :: struct {
-	inner: ui.Flow_Layout,
+	inner:   ui.Flow_Layout,
+	surface: ^Surface,
+	open:    bool,
 }
 
 Fit_Column_State :: struct {
-	inner: ui.Fit_Column,
+	inner:   ui.Fit_Column,
+	surface: ^Surface,
+	open:    bool,
 }
 
 Visible_Range :: struct {

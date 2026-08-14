@@ -393,7 +393,7 @@ Pane_Reset :: proc(state: ^Pane_State) {
 	ui.pane_reset(&state.inner)
 }
 
-Surface_Grid_Begin :: proc(
+Grid_Begin :: proc(
 	surface: ^Surface,
 	state: ^Grid_State,
 	rect: Rect,
@@ -402,14 +402,48 @@ Surface_Grid_Begin :: proc(
 	gap_y: i32 = 0,
 ) {
 	_ = surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Grid_Begin: nil state")
+	assert(state != nil, "Fit.Grid_Begin: nil state")
+	assert(!state.open, "Fit.Grid_Begin: state already open")
+	state.surface = surface
+	state.open = true
 	ui.grid_begin(&state.inner, to_rect(rect), columns, row_height, gap_x, gap_y)
 }
 
-Surface_Grid_Next :: proc(surface: ^Surface, state: ^Grid_State) -> Rect {
-	_ = surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Grid_Next: nil state")
+Grid_Next :: proc(state: ^Grid_State) -> Rect {
+	assert(state != nil && state.open, "Fit.Grid_Next: state not open")
+	_ = surface_ui(state.surface)
 	return from_rect(ui.grid_next(&state.inner))
+}
+
+Grid_Skip_To :: proc(state: ^Grid_State, index: i32) {
+	assert(state != nil && state.open, "Fit.Grid_Skip_To: state not open")
+	_ = surface_ui(state.surface)
+	ui.grid_skip_to(&state.inner, index)
+}
+
+Grid_End :: proc(state: ^Grid_State) -> Rect {
+	assert(state != nil && state.open, "Fit.Grid_End: state not open")
+	_ = surface_ui(state.surface)
+	result := from_rect(ui.grid_end(&state.inner))
+	state.surface = nil
+	state.open = false
+	return result
+}
+
+Surface_Grid_Begin :: proc(
+	surface: ^Surface,
+	state: ^Grid_State,
+	rect: Rect,
+	columns, row_height: i32,
+	gap_x: i32 = 0,
+	gap_y: i32 = 0,
+) {
+	Grid_Begin(surface, state, rect, columns, row_height, gap_x, gap_y)
+}
+
+Surface_Grid_Next :: proc(surface: ^Surface, state: ^Grid_State) -> Rect {
+	assert(state != nil && state.surface == surface, "Fit.Surface_Grid_Next: surface mismatch")
+	return Grid_Next(state)
 }
 
 Surface_Grid_Visible_Range :: proc(
@@ -431,15 +465,13 @@ Surface_Grid_Visible_Range :: proc(
 }
 
 Surface_Grid_Skip_To :: proc(surface: ^Surface, state: ^Grid_State, index: i32) {
-	_ = surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Grid_Skip_To: nil state")
-	ui.grid_skip_to(&state.inner, index)
+	assert(state != nil && state.surface == surface, "Fit.Surface_Grid_Skip_To: surface mismatch")
+	Grid_Skip_To(state, index)
 }
 
 Surface_Grid_End :: proc(surface: ^Surface, state: ^Grid_State) -> Rect {
-	_ = surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Grid_End: nil state")
-	return from_rect(ui.grid_end(&state.inner))
+	assert(state != nil && state.surface == surface, "Fit.Surface_Grid_End: surface mismatch")
+	return Grid_End(state)
 }
 
 Surface_Draw_Shadow :: proc(
