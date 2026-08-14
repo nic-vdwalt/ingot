@@ -574,7 +574,8 @@ platform_cursor_pos :: proc(ctx: ^Context) -> (f64, f64) {
 // A page cannot warp the system cursor, so the browser keeps ownership and the
 // next pointer event overwrites any buffered position SetMousePosition wrote.
 @(private)
-platform_set_cursor_pos :: proc(x, y: f64) {
+platform_set_cursor_pos :: proc(ctx: ^Context, x, y: f64) {
+	assert(ctx != nil, "platform_set_cursor_pos: nil context")
 	assert(x == x && y == y, "platform_set_cursor_pos: NaN coordinate")
 }
 
@@ -592,24 +593,28 @@ platform_window_hovered :: proc(ctx: ^Context) -> bool {
 }
 
 @(private)
-platform_key_down :: proc(key: i32) -> bool {
+platform_key_down :: proc(ctx: ^Context, key: i32) -> bool {
+	assert(ctx != nil, "platform_key_down: nil context")
 	if key < 0 || key >= KEY_COUNT do return false
 	return st_held[key]
 }
 
 @(private)
-platform_set_mouse_cursor :: proc(cursor: MouseCursor) {
+platform_set_mouse_cursor :: proc(ctx: ^Context, cursor: MouseCursor) {
+	assert(ctx != nil, "platform_set_mouse_cursor: nil context")
 	_js_set_cursor(i32(cursor))
 }
 
 // 11 indexes the "none" entry appended to CURSORS in web/ingot_web.js.
 @(private)
-platform_set_cursor_hidden :: proc(hidden: bool) {
-	_js_set_cursor(11 if hidden else i32(g.inp.cur_cursor))
+platform_set_cursor_hidden :: proc(ctx: ^Context, hidden: bool) {
+	assert(ctx != nil, "platform_set_cursor_hidden: nil context")
+	_js_set_cursor(11 if hidden else i32(ctx.inp.cur_cursor))
 }
 
 @(private)
-platform_get_clipboard :: proc() -> string {
+platform_get_clipboard :: proc(ctx: ^Context) -> string {
+	assert(ctx != nil, "platform_get_clipboard: nil context")
 	length := _js_clipboard_len()
 	if length <= 0 do return ""
 	buffer := make([]byte, length, context.temp_allocator)
@@ -619,7 +624,8 @@ platform_get_clipboard :: proc() -> string {
 }
 
 @(private)
-platform_set_clipboard :: proc(text: cstring) {
+platform_set_clipboard :: proc(ctx: ^Context, text: cstring) {
+	assert(ctx != nil, "platform_set_clipboard: nil context")
 	_js_set_clipboard(text)
 }
 

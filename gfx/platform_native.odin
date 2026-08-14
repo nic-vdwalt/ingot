@@ -401,9 +401,9 @@ platform_sync_web_control :: proc(
 // _ime_* seams (ime_darwin.odin / ime_windows.odin / ime_other.odin) talk to
 // the OS input method directly.
 @(private)
-platform_set_text_input_rect :: proc(x, y, w, h: i32) {
-	if g.win == nil do return
-	_ime_set_rect(x, y, w, h)
+platform_set_text_input_rect :: proc(ctx: ^Context, x, y, w, h: i32) {
+	if ctx == nil || ctx.win == nil do return
+	_ime_set_rect(ctx, x, y, w, h)
 }
 
 @(private)
@@ -419,9 +419,9 @@ platform_cursor_pos :: proc(ctx: ^Context) -> (f64, f64) {
 }
 
 @(private)
-platform_set_cursor_pos :: proc(x, y: f64) {
-	if g.win == nil do return
-	glfw.SetCursorPos(_win(), x, y)
+platform_set_cursor_pos :: proc(ctx: ^Context, x, y: f64) {
+	if ctx == nil || ctx.win == nil do return
+	glfw.SetCursorPos(_context_window(ctx), x, y)
 }
 
 @(private)
@@ -437,36 +437,36 @@ platform_window_hovered :: proc(ctx: ^Context) -> bool {
 }
 
 @(private)
-platform_key_down :: proc(key: i32) -> bool {
-	if g.win == nil do return false
-	return glfw.GetKey(_win(), key) == glfw.PRESS
+platform_key_down :: proc(ctx: ^Context, key: i32) -> bool {
+	if ctx == nil || ctx.win == nil do return false
+	return glfw.GetKey(_context_window(ctx), key) == glfw.PRESS
 }
 
 @(private)
-platform_set_mouse_cursor :: proc(cursor: MouseCursor) {
-	if g.win == nil do return
+platform_set_mouse_cursor :: proc(ctx: ^Context, cursor: MouseCursor) {
+	if ctx == nil || ctx.win == nil do return
 	i := int(cursor)
 	if i < 0 || i >= len(g_cursors) do return
-	glfw.SetCursor(_win(), g_cursors[i])
+	glfw.SetCursor(_context_window(ctx), g_cursors[i])
 }
 
 @(private)
-platform_set_cursor_hidden :: proc(hidden: bool) {
-	if g.win == nil do return
+platform_set_cursor_hidden :: proc(ctx: ^Context, hidden: bool) {
+	if ctx == nil || ctx.win == nil do return
 	mode: i32 = glfw.CURSOR_HIDDEN if hidden else glfw.CURSOR_NORMAL
-	glfw.SetInputMode(_win(), glfw.CURSOR, mode)
+	glfw.SetInputMode(_context_window(ctx), glfw.CURSOR, mode)
 }
 
 @(private)
-platform_get_clipboard :: proc() -> string {
-	if g.win == nil do return ""
-	return glfw.GetClipboardString(_win())
+platform_get_clipboard :: proc(ctx: ^Context) -> string {
+	if ctx == nil || ctx.win == nil do return ""
+	return glfw.GetClipboardString(_context_window(ctx))
 }
 
 @(private)
-platform_set_clipboard :: proc(text: cstring) {
-	if g.win == nil do return
-	glfw.SetClipboardString(_win(), text)
+platform_set_clipboard :: proc(ctx: ^Context, text: cstring) {
+	if ctx == nil || ctx.win == nil do return
+	glfw.SetClipboardString(_context_window(ctx), text)
 }
 
 @(private)

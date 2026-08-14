@@ -6,22 +6,27 @@
 package gfx
 
 // glfw is used only under the Darwin/Windows branches; @(require) keeps the
-// import legal on Linux where the generic branch returns g.win directly.
+// import legal on Linux where the generic branch returns the context window directly.
 @(require) import "vendor:glfw"
 
 when ODIN_OS == .Darwin {
-	GetWindowHandle :: proc() -> rawptr {
-		if g.win == nil do return nil
+	context_get_window_handle :: proc(ctx: ^Context) -> rawptr {
+		if ctx == nil || ctx.win == nil do return nil
 		_ = glfw.GetCurrentContext()
-		return rawptr(glfw.GetCocoaWindow(glfw.WindowHandle(g.win)))
+		return rawptr(glfw.GetCocoaWindow(glfw.WindowHandle(ctx.win)))
 	}
 } else when ODIN_OS == .Windows {
-	GetWindowHandle :: proc() -> rawptr {
-		if g.win == nil do return nil
-		return rawptr(glfw.GetWin32Window(glfw.WindowHandle(g.win)))
+	context_get_window_handle :: proc(ctx: ^Context) -> rawptr {
+		if ctx == nil || ctx.win == nil do return nil
+		return rawptr(glfw.GetWin32Window(glfw.WindowHandle(ctx.win)))
 	}
 } else {
-	GetWindowHandle :: proc() -> rawptr {
-		return rawptr(g.win)
+	context_get_window_handle :: proc(ctx: ^Context) -> rawptr {
+		if ctx == nil do return nil
+		return rawptr(ctx.win)
 	}
+}
+
+GetWindowHandle :: proc() -> rawptr {
+	return context_get_window_handle(default_context())
 }

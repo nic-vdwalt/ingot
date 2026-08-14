@@ -32,10 +32,11 @@ COMPOSITIONFORM :: struct {
 // pixels (ui_scale carries the DPI factor - see ui/dpi.odin), which is what
 // IMM expects.
 @(private)
-_ime_set_rect :: proc(x, y, w, h: i32) {
+_ime_set_rect :: proc(ctx: ^Context, x, y, w, h: i32) {
+	assert(ctx != nil, "_ime_set_rect: nil context")
 	assert(w >= 0 && h >= 0, "_ime_set_rect: negative size")
-	assert(g.win != nil, "_ime_set_rect: no window")
-	hwnd := win32.HWND(GetWindowHandle())
+	assert(ctx.win != nil, "_ime_set_rect: no window")
+	hwnd := win32.HWND(context_get_window_handle(ctx))
 	if hwnd == nil do return
 	himc := ImmGetContext(hwnd)
 	if himc == nil do return

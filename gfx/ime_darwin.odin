@@ -53,10 +53,11 @@ _ime_first_rect_imp :: proc "c" (
 // GLFW content view is flipped) to screen coordinates and stores it for the
 // swizzled method. Installs the method replacement on first use.
 @(private)
-_ime_set_rect :: proc(x, y, w, h: i32) {
+_ime_set_rect :: proc(ctx: ^Context, x, y, w, h: i32) {
+	assert(ctx != nil, "_ime_set_rect: nil context")
 	assert(w >= 0 && h >= 0, "_ime_set_rect: negative size")
-	assert(g.win != nil, "_ime_set_rect: no window")
-	win := cast(^IME_NS_Window)GetWindowHandle()
+	assert(ctx.win != nil, "_ime_set_rect: no window")
+	win := cast(^IME_NS_Window)context_get_window_handle(ctx)
 	if win == nil do return
 	content := intrinsics.objc_send(^IME_NS_View, win, "contentView")
 	if content == nil do return

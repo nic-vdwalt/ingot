@@ -305,18 +305,26 @@ IsKeyDown :: proc(key: KeyboardKey) -> bool {
 	return context_is_key_down(active_context(), key)
 }
 
-GetCharPressed :: proc() -> rune {
-	if g.inp.char_h == g.inp.char_t do return 0
-	r := g.inp.char_q[g.inp.char_h]
-	g.inp.char_h = (g.inp.char_h + 1) % CHAR_Q
+context_get_char_pressed_impl :: proc(ctx: ^Context) -> rune {
+	if ctx == nil || ctx.inp.char_h == ctx.inp.char_t do return 0
+	r := ctx.inp.char_q[ctx.inp.char_h]
+	ctx.inp.char_h = (ctx.inp.char_h + 1) % CHAR_Q
 	return r
 }
 
-GetKeyPressed :: proc() -> KeyboardKey {
-	if g.inp.key_h == g.inp.key_t do return .KEY_NULL
-	k := g.inp.key_q[g.inp.key_h]
-	g.inp.key_h = (g.inp.key_h + 1) % CHAR_Q
+GetCharPressed :: proc() -> rune {
+	return context_get_char_pressed_impl(default_context())
+}
+
+context_get_key_pressed :: proc(ctx: ^Context) -> KeyboardKey {
+	if ctx == nil || ctx.inp.key_h == ctx.inp.key_t do return .KEY_NULL
+	k := ctx.inp.key_q[ctx.inp.key_h]
+	ctx.inp.key_h = (ctx.inp.key_h + 1) % CHAR_Q
 	return k
+}
+
+GetKeyPressed :: proc() -> KeyboardKey {
+	return context_get_key_pressed(default_context())
 }
 
 context_is_mouse_button_pressed :: proc(ctx: ^Context, button: MouseButton) -> bool {
@@ -347,53 +355,77 @@ IsMouseButtonDown :: proc(button: MouseButton) -> bool {
 
 // --- gamepad queries (raylib-named) ----------------------------------------
 
+context_is_gamepad_available :: proc(ctx: ^Context, gamepad: i32) -> bool {
+	if ctx == nil || gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
+	return ctx.inp.pads[gamepad].connected
+}
+
 IsGamepadAvailable :: proc(gamepad: i32) -> bool {
-	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
-	return g.inp.pads[gamepad].connected
+	return context_is_gamepad_available(default_context(), gamepad)
 }
 
 // GetGamepadName returns the backend-reported device name (empty when the
 // slot is empty). The cstring is temp-allocated; clone to keep past the frame.
-GetGamepadName :: proc(gamepad: i32) -> cstring {
-	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return ""
-	pad := &g.inp.pads[gamepad]
-	assert(pad.name_len >= 0 && pad.name_len <= GAMEPAD_NAME_MAX, "GetGamepadName: corrupt length")
+context_get_gamepad_name :: proc(ctx: ^Context, gamepad: i32) -> cstring {
+	if ctx == nil || gamepad < 0 || gamepad >= MAX_GAMEPADS do return ""
+	pad := &ctx.inp.pads[gamepad]
+	assert(pad.name_len >= 0 && pad.name_len <= GAMEPAD_NAME_MAX, "context_get_gamepad_name: corrupt length")
 	return strings.clone_to_cstring(string(pad.name[:pad.name_len]), context.temp_allocator)
 }
 
-IsGamepadButtonDown :: proc(gamepad: i32, button: GamepadButton) -> bool {
-	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
-	b := i32(button)
-	if b < 0 || b >= GAMEPAD_BUTTON_COUNT do return false
-	return g.inp.pads[gamepad].buttons[b]
+GetGamepadName :: proc(gamepad: i32) -> cstring {
+	return context_get_gamepad_name(default_context(), gamepad)
 }
 
-IsGamepadButtonPressed :: proc(gamepad: i32, button: GamepadButton) -> bool {
-	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
+context_is_gamepad_button_down :: proc(ctx: ^Context, gamepad: i32, button: GamepadButton) -> bool {
+	if ctx == nil || gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
 	b := i32(button)
 	if b < 0 || b >= GAMEPAD_BUTTON_COUNT do return false
-	pad := &g.inp.pads[gamepad]
+	return ctx.inp.pads[gamepad].buttons[b]
+}
+
+IsGamepadButtonDown :: proc(gamepad: i32, button: GamepadButton) -> bool {
+	return context_is_gamepad_button_down(default_context(), gamepad, button)
+}
+
+context_is_gamepad_button_pressed :: proc(ctx: ^Context, gamepad: i32, button: GamepadButton) -> bool {
+	if ctx == nil || gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
+	b := i32(button)
+	if b < 0 || b >= GAMEPAD_BUTTON_COUNT do return false
+	pad := &ctx.inp.pads[gamepad]
 	return pad.buttons[b] && !pad.prev_buttons[b]
 }
 
-IsGamepadButtonReleased :: proc(gamepad: i32, button: GamepadButton) -> bool {
-	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
+IsGamepadButtonPressed :: proc(gamepad: i32, button: GamepadButton) -> bool {
+	return context_is_gamepad_button_pressed(default_context(), gamepad, button)
+}
+
+context_is_gamepad_button_released :: proc(ctx: ^Context, gamepad: i32, button: GamepadButton) -> bool {
+	if ctx == nil || gamepad < 0 || gamepad >= MAX_GAMEPADS do return false
 	b := i32(button)
 	if b < 0 || b >= GAMEPAD_BUTTON_COUNT do return false
-	pad := &g.inp.pads[gamepad]
+	pad := &ctx.inp.pads[gamepad]
 	return !pad.buttons[b] && pad.prev_buttons[b]
+}
+
+IsGamepadButtonReleased :: proc(gamepad: i32, button: GamepadButton) -> bool {
+	return context_is_gamepad_button_released(default_context(), gamepad, button)
 }
 
 // GetGamepadAxisMovement returns the axis position in -1..1 (triggers rest at
 // -1, matching raylib/GLFW). 0 for disconnected pads or out-of-range axes.
-GetGamepadAxisMovement :: proc(gamepad: i32, axis: GamepadAxis) -> f32 {
-	if gamepad < 0 || gamepad >= MAX_GAMEPADS do return 0
+context_get_gamepad_axis_movement :: proc(ctx: ^Context, gamepad: i32, axis: GamepadAxis) -> f32 {
+	if ctx == nil || gamepad < 0 || gamepad >= MAX_GAMEPADS do return 0
 	a := i32(axis)
 	if a < 0 || a >= GAMEPAD_AXIS_COUNT do return 0
-	if !g.inp.pads[gamepad].connected do return 0
-	v := g.inp.pads[gamepad].axes[a]
-	assert(v >= -1.001 && v <= 1.001, "GetGamepadAxisMovement: axis out of range")
+	if !ctx.inp.pads[gamepad].connected do return 0
+	v := ctx.inp.pads[gamepad].axes[a]
+	assert(v >= -1.001 && v <= 1.001, "context_get_gamepad_axis_movement: axis out of range")
 	return v
+}
+
+GetGamepadAxisMovement :: proc(gamepad: i32, axis: GamepadAxis) -> f32 {
+	return context_get_gamepad_axis_movement(default_context(), gamepad, axis)
 }
 
 context_get_mouse_position :: proc(ctx: ^Context) -> Vector2 {
@@ -423,32 +455,48 @@ SetMousePosition :: proc(x, y: i32) {
 
 context_set_mouse_position :: proc(ctx: ^Context, x, y: i32) {
 	if ctx == nil || !ctx.initialized do return
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
 	position := Vector2{f32(x), f32(y)}
 	ctx.inp.mouse = position
 	ctx.inp.mouse_delta = {}
-	platform_set_cursor_pos(f64(x), f64(y))
+	platform_set_cursor_pos(ctx, f64(x), f64(y))
 	assert(ctx.inp.mouse == position, "SetMousePosition: buffered position not applied")
 	assert(ctx.inp.mouse_delta == Vector2{}, "SetMousePosition: warp must not report a delta")
 }
 
-GetMouseX :: proc() -> i32 {return i32(g.inp.mouse.x)}
-GetMouseY :: proc() -> i32 {return i32(g.inp.mouse.y)}
+context_get_mouse_x :: proc(ctx: ^Context) -> i32 {return i32(context_get_mouse_position(ctx).x)}
+context_get_mouse_y :: proc(ctx: ^Context) -> i32 {return i32(context_get_mouse_position(ctx).y)}
+
+GetMouseX :: proc() -> i32 {return context_get_mouse_x(default_context())}
+GetMouseY :: proc() -> i32 {return context_get_mouse_y(default_context())}
+
+context_get_mouse_wheel_move :: proc(ctx: ^Context) -> f32 {
+	wheel := context_get_mouse_wheel_move_v(ctx)
+	if abs(wheel.x) > abs(wheel.y) do return wheel.x
+	return wheel.y
+}
 
 GetMouseWheelMove :: proc() -> f32 {
-	if abs(g.inp.wheel.x) > abs(g.inp.wheel.y) do return g.inp.wheel.x
-	return g.inp.wheel.y
+	return context_get_mouse_wheel_move(default_context())
 }
 GetMouseWheelMoveV :: proc() -> Vector2 {return context_get_mouse_wheel_move_v(active_context())}
 
-GetClipboardText :: proc() -> cstring {
-	s := platform_get_clipboard()
+context_get_clipboard_text_impl :: proc(ctx: ^Context) -> cstring {
+	if ctx == nil do return ""
+	s := platform_get_clipboard(ctx)
 	return strings.clone_to_cstring(s, context.temp_allocator)
 }
 
+GetClipboardText :: proc() -> cstring {
+	return context_get_clipboard_text_impl(default_context())
+}
+
+context_set_clipboard_text_impl :: proc(ctx: ^Context, text: cstring) {
+	if ctx == nil do return
+	platform_set_clipboard(ctx, text)
+}
+
 SetClipboardText :: proc(text: cstring) {
-	platform_set_clipboard(text)
+	context_set_clipboard_text_impl(default_context(), text)
 }
 
 Web_Input_Result :: struct {
@@ -525,34 +573,48 @@ SyncWebControl :: proc(
 	)
 }
 
-SetMouseCursor :: proc(cursor: MouseCursor) {
-	ctx := active_context()
+context_set_mouse_cursor_impl :: proc(ctx: ^Context, cursor: MouseCursor) {
+	if ctx == nil do return
 	i := int(cursor)
 	if i < 0 || i >= 11 do return
 	if cursor == ctx.inp.cur_cursor do return
 	ctx.inp.cur_cursor = cursor
-	if !ctx.inp.cursor_hidden do platform_set_mouse_cursor(cursor)
+	if !ctx.inp.cursor_hidden do platform_set_mouse_cursor(ctx, cursor)
+}
+
+SetMouseCursor :: proc(cursor: MouseCursor) {
+	context_set_mouse_cursor_impl(default_context(), cursor)
 }
 
 // HideCursor hides the OS cursor over the window; SetMouseCursor calls made
 // while hidden are remembered and reapplied by ShowCursor.
-HideCursor :: proc() {
-	ctx := active_context()
-	if ctx.inp.cursor_hidden do return
+context_hide_cursor :: proc(ctx: ^Context) {
+	if ctx == nil || ctx.inp.cursor_hidden do return
 	ctx.inp.cursor_hidden = true
-	platform_set_cursor_hidden(true)
+	platform_set_cursor_hidden(ctx, true)
+}
+
+HideCursor :: proc() {
+	context_hide_cursor(default_context())
+}
+
+context_show_cursor :: proc(ctx: ^Context) {
+	if ctx == nil || !ctx.inp.cursor_hidden do return
+	ctx.inp.cursor_hidden = false
+	platform_set_cursor_hidden(ctx, false)
+	platform_set_mouse_cursor(ctx, ctx.inp.cur_cursor)
 }
 
 ShowCursor :: proc() {
-	ctx := active_context()
-	if !ctx.inp.cursor_hidden do return
-	ctx.inp.cursor_hidden = false
-	platform_set_cursor_hidden(false)
-	platform_set_mouse_cursor(ctx.inp.cur_cursor)
+	context_show_cursor(default_context())
+}
+
+context_is_cursor_hidden :: proc(ctx: ^Context) -> bool {
+	return ctx != nil && ctx.inp.cursor_hidden
 }
 
 IsCursorHidden :: proc() -> bool {
-	return active_context().inp.cursor_hidden
+	return context_is_cursor_hidden(default_context())
 }
 
 context_is_cursor_on_screen :: proc(ctx: ^Context) -> bool {
@@ -566,11 +628,16 @@ IsCursorOnScreen :: proc() -> bool {return context_is_cursor_on_screen(active_co
 // input method uses it to place the composition candidate window (macOS /
 // Windows) or the hidden IME proxy element (web). Cheap; safe to call even
 // when no IME is composing.
-SetTextInputRect :: proc(x, y, w, h: i32) {
-	assert(w >= 0 && h >= 0, "SetTextInputRect: negative size")
-	assert(g.win != nil, "SetTextInputRect: window not initialized")
+context_set_text_input_rect_impl :: proc(ctx: ^Context, x, y, w, h: i32) {
+	assert(ctx != nil, "context_set_text_input_rect: nil context")
+	assert(w >= 0 && h >= 0, "context_set_text_input_rect: negative size")
+	assert(ctx.win != nil, "context_set_text_input_rect: window not initialized")
 	ime_rect_armed = true
-	platform_set_text_input_rect(x, y, w, h)
+	platform_set_text_input_rect(ctx, x, y, w, h)
+}
+
+SetTextInputRect :: proc(x, y, w, h: i32) {
+	context_set_text_input_rect_impl(default_context(), x, y, w, h)
 }
 
 // GetPreedit returns the in-progress IME composition string (empty when not
