@@ -107,8 +107,6 @@
   "gfx/shader.odin:ShaderBindRaw": 2,
   "gfx/shader.odin:ShaderUnbindRaw": 2,
   "gfx/shader.odin:UnloadShader": 3,
-  "gfx/shader.odin:_default_tex": 4,
-  "gfx/shader.odin:_shader_get": 1,
   "gfx/shader.odin:_shader_pipeline": 6,
   "gfx/shader.odin:_shader_rebuild_extra": 1,
   "gfx/window_extra.odin:GetDroppedFileData": 2,

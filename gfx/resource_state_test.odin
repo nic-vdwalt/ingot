@@ -54,13 +54,13 @@ atlas_and_shader_pools_reject_stale_handles :: proc(t: ^testing.T) {
 
 	shaders: Shader_Resources
 	shader_entry: Shader_Entry
-	old_shader := _shader_register(&shaders, &shader_entry)
-	shader_slot := _shader_slot(&shaders, old_shader)
+	old_shader := _shader_register(context_id, &shaders, &shader_entry)
+	shader_slot := _shader_slot(context_id, &shaders, old_shader)
 	shader_slot.occupied = false
 	shaders.count -= 1
-	new_shader := _shader_register(&shaders, &shader_entry)
+	new_shader := _shader_register(context_id, &shaders, &shader_entry)
 	testing.expect(t, old_shader != new_shader)
-	testing.expect(t, _shader_slot(&shaders, old_shader) == nil)
+	testing.expect(t, _shader_slot(context_id, &shaders, old_shader) == nil)
 }
 
 @(test)
@@ -193,11 +193,11 @@ shader_pool_reports_exhaustion_instead_of_asserting :: proc(t: ^testing.T) {
 	entries := make([]Shader_Entry, MAX_SHADERS)
 	defer delete(entries)
 	for index in 0 ..< MAX_SHADERS {
-		testing.expect(t, _shader_register(&resources, &entries[index]) != 0)
+		testing.expect(t, _shader_register(DEFAULT_CONTEXT_ID, &resources, &entries[index]) != 0)
 	}
 	testing.expect_value(t, int(resources.count), MAX_SHADERS)
 	overflow: Shader_Entry
-	testing.expect_value(t, _shader_register(&resources, &overflow), u32(0))
+	testing.expect_value(t, _shader_register(DEFAULT_CONTEXT_ID, &resources, &overflow), u32(0))
 	testing.expect_value(t, int(resources.count), MAX_SHADERS)
 }
 

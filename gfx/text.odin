@@ -429,11 +429,7 @@ UnloadFont :: proc(font: Font) {
 	context_unload_font_impl(default_context(), font)
 }
 
-context_set_texture_filter_impl :: proc(
-	ctx: ^Context,
-	texture: Texture2D,
-	filter: TextureFilter,
-) {
+context_set_texture_filter_impl :: proc(ctx: ^Context, texture: Texture2D, filter: TextureFilter) {
 	assert(ctx != nil, "context_set_texture_filter_impl: nil context")
 	if e := context_get_texture(ctx, texture.id); e != nil {
 		if e.filter != filter {
