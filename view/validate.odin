@@ -158,7 +158,7 @@ node_numbers_finite :: proc(node: View_Node) -> bool {
 		f32_finite(node.track.percent) &&
 		f32_finite(node.number_lo) &&
 		f32_finite(node.number_hi) &&
-		f32_finite(node.number_step)
+		f32_finite(node.number_step) \
 	)
 }
 

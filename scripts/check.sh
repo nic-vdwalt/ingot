@@ -46,9 +46,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_expected_asserts.py" 
 
 echo "== assertion discipline =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions_test.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions.py" \
-	--baseline "$root/scripts/assertion_baseline.json" \
-	"$root"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions.py" "$root"
 
 echo "== UI API layers =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_ui_api_layers_test.py"

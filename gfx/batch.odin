@@ -871,6 +871,7 @@ context_matrix_mode_pop :: proc(ctx: ^Context) {
 	}
 	n := len(r.model_stack)
 	if n == 0 {r.model_xf = AFFINE_IDENTITY; return}
+	assert(n > 0 && n <= MODEL_STACK_MAX, "context_matrix_mode_pop: invalid stack depth")
 	r.model_xf = r.model_stack[n - 1]
 	pop(&r.model_stack)
 }

@@ -174,8 +174,14 @@ Ui_Output :: struct {
 
 paint_list_reset :: proc(list: ^Paint_List) {
 	assert(list != nil, "paint_list_reset: nil list")
-	assert(list.count >= 0 && list.count <= PAINT_COMMAND_CAP, "paint_list_reset: invalid command count")
-	assert(list.text_len >= 0 && list.text_len <= PAINT_TEXT_CAP, "paint_list_reset: invalid text length")
+	assert(
+		list.count >= 0 && list.count <= PAINT_COMMAND_CAP,
+		"paint_list_reset: invalid command count",
+	)
+	assert(
+		list.text_len >= 0 && list.text_len <= PAINT_TEXT_CAP,
+		"paint_list_reset: invalid text length",
+	)
 	list.count = 0
 	list.text_len = 0
 	list.clip_count = 0
@@ -201,7 +207,10 @@ paint_list_reset :: proc(list: ^Paint_List) {
 // is returned when the stack is balanced.
 paint_clip_leak_origin :: proc(list: ^Paint_List) -> runtime.Source_Code_Location {
 	assert(list != nil, "paint_clip_leak_origin: nil list")
-	assert(list.clip_count >= 0 && list.clip_count <= PAINT_CLIP_CAP, "paint_clip_leak_origin: invalid depth")
+	assert(
+		list.clip_count >= 0 && list.clip_count <= PAINT_CLIP_CAP,
+		"paint_clip_leak_origin: invalid depth",
+	)
 	if list.clip_count == 0 do return {}
 	return list.clip_origin[0]
 }

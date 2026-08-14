@@ -83,7 +83,10 @@ _texture_slot_context :: proc(
 	if handle_context != context_id do return nil
 	index, generation, ok := _resource_handle_decode(raw_id, len(resources.slots))
 	if !ok do return nil
-	assert(index >= 0 && index < len(resources.slots), "_texture_slot_context: decoded index out of range")
+	assert(
+		index >= 0 && index < len(resources.slots),
+		"_texture_slot_context: decoded index out of range",
+	)
 	slot := &resources.slots[index]
 	if !slot.occupied || slot.generation != generation do return nil
 	return slot

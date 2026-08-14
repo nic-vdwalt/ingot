@@ -334,7 +334,10 @@ platform_input_init :: proc(ctx: ^Context) {
 	glfw.SetFramebufferSizeCallback(win, _fb_size_cb)
 
 	default_cursor := int(MouseCursor.DEFAULT)
-	assert(default_cursor >= 0 && default_cursor < len(g_cursors), "platform_input_init: cursor index")
+	assert(
+		default_cursor >= 0 && default_cursor < len(g_cursors),
+		"platform_input_init: cursor index",
+	)
 	if g_cursors[default_cursor] == nil {
 		g_cursors[MouseCursor.DEFAULT] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
 		g_cursors[MouseCursor.ARROW] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)

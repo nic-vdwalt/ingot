@@ -117,6 +117,13 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Fixed
 
+- `.ingv` validation rejects NaN and infinite track/number fields before they
+  reach layout or widget arithmetic. The decoder reports an invalid document,
+  and the deterministic failing fuzz seed is retained as a byte-stable
+  decode/re-encode regression.
+- The historical assertion-risk baseline is removed. The assertion discipline
+  guard now requires zero uncovered pointer, index, queue, ownership, state, or
+  untrusted-input findings across authored packages.
 - `view.doc_add_keyed` is transactional: when the label intern or the node
   append fails after earlier interns succeeded, the text blob is restored to
   its entry length instead of silently keeping unreferenced bytes.
