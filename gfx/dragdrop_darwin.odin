@@ -35,48 +35,58 @@ g_dd_view: rawptr
 g_dd_original_class: rawptr
 @(private = "file")
 g_dd_subclass: rawptr
+@(private = "file")
+g_dd_owner: ^Context
 
 @(private = "file")
 dd_entered_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) -> u64 {
-	_drop_hover_stage(true)
-	_idle_note_activity(&g.idle)
+	if g_dd_owner != nil {
+		_drop_hover_stage_context(g_dd_owner, true)
+		_idle_note_activity(&g_dd_owner.idle)
+	}
 	if g_dd_orig_entered != nil do return g_dd_orig_entered(self, cmd, sender)
 	return NS_DRAG_OP_COPY
 }
 
 @(private = "file")
 dd_updated_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) -> u64 {
-	_drop_hover_stage(true)
+	if g_dd_owner != nil do _drop_hover_stage_context(g_dd_owner, true)
 	if g_dd_orig_updated != nil do return g_dd_orig_updated(self, cmd, sender)
 	return NS_DRAG_OP_COPY
 }
 
 @(private = "file")
 dd_exited_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) {
-	_drop_hover_stage(false)
-	_idle_note_activity(&g.idle)
+	if g_dd_owner != nil {
+		_drop_hover_stage_context(g_dd_owner, false)
+		_idle_note_activity(&g_dd_owner.idle)
+	}
 	if g_dd_orig_exited != nil do g_dd_orig_exited(self, cmd, sender)
 }
 
 @(private = "file")
 dd_ended_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) {
-	_drop_hover_stage(false)
-	_idle_note_activity(&g.idle)
+	if g_dd_owner != nil {
+		_drop_hover_stage_context(g_dd_owner, false)
+		_idle_note_activity(&g_dd_owner.idle)
+	}
 	if g_dd_orig_ended != nil do g_dd_orig_ended(self, cmd, sender)
 }
 
 @(private = "file")
 dd_perform_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) -> NS.BOOL {
-	_drop_hover_stage(false)
-	_idle_note_activity(&g.idle)
+	if g_dd_owner != nil {
+		_drop_hover_stage_context(g_dd_owner, false)
+		_idle_note_activity(&g_dd_owner.idle)
+	}
 	if g_dd_orig_perform != nil do return g_dd_orig_perform(self, cmd, sender)
 	return false
 }
 
 @(private)
-platform_dragdrop_init :: proc() {
-	if g_dd_subclass != nil do return
-	window := cast(^IME_NS_Window)GetWindowHandle()
+platform_dragdrop_init :: proc(owner: ^Context) {
+	if owner == nil || g_dd_subclass != nil do return
+	window := cast(^IME_NS_Window)context_get_window_handle(owner)
 	if window == nil do return
 	view := intrinsics.objc_send(NS.id, window, "contentView")
 	if view == nil do return
@@ -92,6 +102,7 @@ platform_dragdrop_init :: proc() {
 	g_dd_view = rawptr(view)
 	g_dd_original_class = original_class
 	g_dd_subclass = subclass
+	g_dd_owner = owner
 	object_setClass(g_dd_view, g_dd_subclass)
 }
 
@@ -159,18 +170,18 @@ dd_original_bool :: proc(class: rawptr, name: cstring) -> Drag_Bool_Proc {
 }
 
 @(private)
-platform_dragdrop_tick :: proc() {
-	if g_dd_subclass == nil do platform_dragdrop_init()
-}
+platform_dragdrop_tick :: proc() {}
 
 @(private)
-platform_dragdrop_shutdown :: proc() {
+platform_dragdrop_shutdown :: proc(owner: ^Context) {
+	if owner == nil || owner != g_dd_owner do return
 	if g_dd_view != nil && g_dd_original_class != nil {
 		object_setClass(g_dd_view, g_dd_original_class)
 	}
+	_drop_hover_stage_context(owner, false)
 	if g_dd_subclass != nil do objc_disposeClassPair(g_dd_subclass)
 	g_dd_orig_entered, g_dd_orig_updated = nil, nil
 	g_dd_orig_exited, g_dd_orig_ended, g_dd_orig_perform = nil, nil, nil
 	g_dd_view, g_dd_original_class, g_dd_subclass = nil, nil, nil
-	_drop_hover_stage(false)
+	g_dd_owner = nil
 }

@@ -26,6 +26,8 @@ context_queries_are_isolated :: proc(t: ^testing.T) {
 
 @(test)
 context_scope_routes_convenience_queries_and_restores_default :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	ctx := new(Context)
 	defer free(ctx)
 	default_width := default_context_storage.width
@@ -120,20 +122,22 @@ close_requested_disables_frame_pacing :: proc(t: ^testing.T) {
 	testing.expect(t, !_frame_pacing_enabled(-1, false))
 }
 
-@(test)
-frame_owner_rejects_stale_epoch :: proc(t: ^testing.T) {
-	frame_owner_test_context.epoch = 7
-	frame := Frame {
-		owner     = &frame_owner_test_context,
-		epoch     = 7,
-		open      = true,
-		available = true,
+when ODIN_OS != .Windows || INGOT_GFX_EXPECTED_ASSERTS {
+	@(test)
+	frame_owner_rejects_stale_epoch :: proc(t: ^testing.T) {
+		frame_owner_test_context.epoch = 7
+		frame := Frame {
+			owner     = &frame_owner_test_context,
+			epoch     = 7,
+			open      = true,
+			available = true,
+		}
+		testing.expect(t, frame_owner(&frame) == &frame_owner_test_context)
+		frame_owner_test_context.epoch += 1
+		testing.expect_assert_message(t, "frame_owner: stale owner")
+		_ = frame_owner(&frame)
+		testing.fail_now(t, "frame_owner accepted a stale context epoch")
 	}
-	testing.expect(t, frame_owner(&frame) == &frame_owner_test_context)
-	frame_owner_test_context.epoch += 1
-	testing.expect_assert_message(t, "frame_owner: stale owner")
-	_ = frame_owner(&frame)
-	testing.fail_now(t, "frame_owner accepted a stale context epoch")
 }
 
 @(test)

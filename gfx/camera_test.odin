@@ -3,19 +3,7 @@ package gfx
 
 import "core:math"
 import "core:math/linalg"
-import "core:sync"
 import "core:testing"
-
-@(private = "file")
-g_camera_test_guard: sync.Mutex
-
-camera_test_lock :: proc() {
-	sync.mutex_lock(&g_camera_test_guard)
-}
-
-camera_test_unlock :: proc() {
-	sync.mutex_unlock(&g_camera_test_guard)
-}
 
 camera_test_value :: proc(projection: CameraProjection = .PERSPECTIVE) -> Camera3D {
 	return {
@@ -128,21 +116,23 @@ camera_update_small_speed_large_angle_is_frame_rate_independent :: proc(t: ^test
 	camera_test_vector_near(t, many_steps.target, one_step.target, 2)
 }
 
-@(test)
-camera_update_rejects_parallel_up :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "UpdateCamera: forward and up are parallel")
-	camera := camera_test_value()
-	camera.up = CAMERA_WORLD_FORWARD
-	UpdateCamera(&camera, {}, 1)
-	testing.fail_now(t, "UpdateCamera accepted a parallel up vector")
-}
+when ODIN_OS != .Windows || INGOT_GFX_EXPECTED_ASSERTS {
+	@(test)
+	camera_update_rejects_parallel_up :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "UpdateCamera: forward and up are parallel")
+		camera := camera_test_value()
+		camera.up = CAMERA_WORLD_FORWARD
+		UpdateCamera(&camera, {}, 1)
+		testing.fail_now(t, "UpdateCamera accepted a parallel up vector")
+	}
 
-@(test)
-camera_update_rejects_non_finite_input :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "UpdateCamera: non-finite delta time")
-	camera := camera_test_value()
-	UpdateCamera(&camera, {}, math.inf_f32(1))
-	testing.fail_now(t, "UpdateCamera accepted non-finite delta time")
+	@(test)
+	camera_update_rejects_non_finite_input :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "UpdateCamera: non-finite delta time")
+		camera := camera_test_value()
+		UpdateCamera(&camera, {}, math.inf_f32(1))
+		testing.fail_now(t, "UpdateCamera accepted non-finite delta time")
+	}
 }
 
 @(test)
@@ -243,8 +233,8 @@ camera_matrices_use_explicit_dimensions :: proc(t: ^testing.T) {
 
 @(test)
 world_to_screen_does_not_mutate_active_projection :: proc(t: ^testing.T) {
-	camera_test_lock()
-	defer camera_test_unlock()
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	old_width, old_height := g.width, g.height
 	old_projection, old_view, old_vp := cam3d_proj, cam3d_view, cam3d_vp
 	old_available := cam3d_projection_available
@@ -269,8 +259,8 @@ world_to_screen_does_not_mutate_active_projection :: proc(t: ^testing.T) {
 
 @(test)
 world_to_screen_pro_uses_arbitrary_matrix :: proc(t: ^testing.T) {
-	camera_test_lock()
-	defer camera_test_unlock()
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	old_width, old_height := g.width, g.height
 	old_projection, old_view, old_vp := cam3d_proj, cam3d_view, cam3d_vp
 	old_available := cam3d_projection_available
@@ -296,8 +286,8 @@ world_to_screen_pro_uses_arbitrary_matrix :: proc(t: ^testing.T) {
 
 @(test)
 gpu_camera_setup_preserves_window_and_active_camera :: proc(t: ^testing.T) {
-	camera_test_lock()
-	defer camera_test_unlock()
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	old_width, old_height := g.width, g.height
 	old_projection, old_view, old_vp := cam3d_proj, cam3d_view, cam3d_vp
 	old_available := cam3d_projection_available

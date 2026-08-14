@@ -42,6 +42,10 @@ echo "== gfx @(init) ordering guard =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_init_order_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_init_order.py" "$root"
 
+echo "== gfx expected-assert isolation guard =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_expected_asserts_test.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_expected_asserts.py" "$root"
+
 echo "== assertion discipline =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions.py" \

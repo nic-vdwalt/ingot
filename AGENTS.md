@@ -50,6 +50,8 @@ worked example applied to a subsystem before it is written.
   type-check + `-vet -strict-style -vet-shadowing`, 100-line procedure and
   100-character physical-line checks, plus an `odinfmt` format check.
 - **Windows native gate**: `./scripts/test.ps1` then `./scripts/check.ps1`.
+  Ordinary gfx tests run in parallel; expected-assert gfx tests are isolated per
+  process due to Odin issue #7035, and shared-state gfx tests use one test guard.
 - **macOS native gate**: `bash scripts/test.sh -define:ODIN_TEST_THREADS=1` then
   `bash scripts/check.sh`.
 - **Format**: `odinfmt -w .` (settings pinned in `.odinfmt.json`: tabs width 4,

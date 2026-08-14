@@ -21,6 +21,9 @@ Invoke-CheckedPython "check_gfx_context.py" @("--baseline", "$PSScriptRoot/gfx_c
 Write-Host "== gfx @(init) ordering guard =="
 Invoke-CheckedPython "check_init_order_test.py"
 Invoke-CheckedPython "check_init_order.py" @($Root)
+Write-Host "== gfx expected-assert isolation guard =="
+Invoke-CheckedPython "check_gfx_expected_asserts_test.py"
+Invoke-CheckedPython "check_gfx_expected_asserts.py" @($Root)
 Write-Host "== assertion discipline =="
 Invoke-CheckedPython "check_assertions_test.py"
 Invoke-CheckedPython "check_assertions.py" @("--baseline", "$PSScriptRoot/assertion_baseline.json", $Root)

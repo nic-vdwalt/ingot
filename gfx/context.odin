@@ -88,6 +88,8 @@ Drop_State :: struct {
 	windowed_w:   i32,
 	windowed_h:   i32,
 	paths:        [dynamic]cstring,
+	web_names:    [MAX_DROPPED_FILES][DROP_NAME_MAX]u8,
+	web_cstrs:    [MAX_DROPPED_FILES]cstring,
 }
 
 Frame_State :: struct {
@@ -190,6 +192,7 @@ Context :: struct {
 	// input (input.odin)
 	inp:                  Input,
 	drop:                 Drop_State,
+	a11y:                 A11y_State,
 	submissions:          Submission_Tracker,
 	initialized:          bool,
 	composite_alpha:      wg.CompositeAlphaMode,
@@ -653,6 +656,7 @@ _close_window_context :: proc(ctx: ^Context) {
 	assert(!ctx.frame.has_frame, "CloseWindow: frame is still recording")
 	ctx.lifecycle = .Closing
 	if ctx.initialized {
+		context_close_accessibility(ctx)
 		platform_drop_shutdown(ctx)
 		_graphics_resources_destroy(ctx, &ctx.resources)
 		renderer_shutdown(&ctx.rend)

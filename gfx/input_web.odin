@@ -20,7 +20,8 @@ package gfx
 
 @(export)
 ingot_web_key :: proc "contextless" (key: i32, down: bool, repeat: bool) {
-	ctx := g
+	ctx := _web_owner_context()
+	if ctx == nil do return
 	_idle_note_activity(&ctx.idle)
 	if key < 0 || key >= KEY_COUNT do return
 	if down {
@@ -29,19 +30,18 @@ ingot_web_key :: proc "contextless" (key: i32, down: bool, repeat: bool) {
 		} else {
 			ctx.inp.st_pressed[key] = true
 			ctx.inp.key_down[key] = true
-			st_held[key] = true
 			_stage_key(&ctx.inp, KeyboardKey(key))
 		}
 	} else {
 		ctx.inp.st_released[key] = true
 		ctx.inp.key_down[key] = false
-		st_held[key] = false
 	}
 }
 
 @(export)
 ingot_web_char :: proc "contextless" (codepoint: rune) {
-	ctx := g
+	ctx := _web_owner_context()
+	if ctx == nil do return
 	_idle_note_activity(&ctx.idle)
 	_stage_char(&ctx.inp, codepoint)
 }
@@ -50,9 +50,11 @@ ingot_web_char :: proc "contextless" (codepoint: rune) {
 // from JS on compositionstart/compositionend and before each update.
 @(export)
 ingot_web_preedit_clear :: proc "contextless" () {
-	_idle_note_activity(&g.idle)
-	preedit_len = 0
-	preedit_caret = 0
+	ctx := _web_owner_context()
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
+	ctx.inp.preedit_len = 0
+	ctx.inp.preedit_caret = 0
 }
 
 // ingot_web_preedit_char appends one codepoint of the in-progress composition
@@ -60,7 +62,9 @@ ingot_web_preedit_clear :: proc "contextless" () {
 // Manual UTF-8 encode: core:unicode/utf8 needs a context, this is contextless.
 @(export)
 ingot_web_preedit_char :: proc "contextless" (codepoint: rune) {
-	_idle_note_activity(&g.idle)
+	ctx := _web_owner_context()
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
 	c := u32(codepoint)
 	if c > 0x10FFFF do return
 	n: int
@@ -85,35 +89,40 @@ ingot_web_preedit_char :: proc "contextless" (codepoint: rune) {
 		buf[3] = 0x80 | u8(c & 0x3F)
 		n = 4
 	}
-	if preedit_len + n > PREEDIT_MAX do return // bounded: drop overflow
+	if ctx.inp.preedit_len + n > PREEDIT_MAX do return // bounded: drop overflow
 	for i in 0 ..< n {
-		preedit_buf[preedit_len + i] = buf[i]
+		ctx.inp.preedit_buf[ctx.inp.preedit_len + i] = buf[i]
 	}
-	preedit_len += n
-	preedit_caret = preedit_len
+	ctx.inp.preedit_len += n
+	ctx.inp.preedit_caret = ctx.inp.preedit_len
 }
 
 // x, y are in CSS pixels (logical points) - matching GetScreenWidth/Height and
 // the native macOS GetCursorPos convention.
 @(export)
 ingot_web_mouse_move :: proc "contextless" (x, y: f32) {
-	_idle_note_activity(&g.idle)
-	st_mouse = {x, y}
-	st_hovered = true
+	ctx := _web_owner_context()
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
+	ctx.inp.mouse = {x, y}
+	ctx.inp.cursor_on_screen = true
 }
 
 @(export)
 ingot_web_mouse_button :: proc "contextless" (button: i32, down: bool) {
-	_idle_note_activity(&g.idle)
+	ctx := _web_owner_context()
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
 	if button < 0 || button >= 8 do return
-	if down && !st_mb[button] do st_mb_pressed[button] = true
-	if !down && st_mb[button] do st_mb_released[button] = true
-	st_mb[button] = down
+	if down && !ctx.inp.mb_down[button] do ctx.inp.web_mb_pressed[button] = true
+	if !down && ctx.inp.mb_down[button] do ctx.inp.web_mb_released[button] = true
+	ctx.inp.mb_down[button] = down
 }
 
 @(export)
 ingot_web_wheel :: proc "contextless" (dx, dy: f32) {
-	ctx := g
+	ctx := _web_owner_context()
+	if ctx == nil do return
 	_idle_note_activity(&ctx.idle)
 	ctx.inp.st_wheel.x += dx
 	ctx.inp.st_wheel.y += dy
@@ -121,22 +130,23 @@ ingot_web_wheel :: proc "contextless" (dx, dy: f32) {
 
 @(export)
 ingot_web_hover :: proc "contextless" (hovered: bool) {
-	_idle_note_activity(&g.idle)
-	st_hovered = hovered
+	ctx := _web_owner_context()
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
+	ctx.inp.cursor_on_screen = hovered
 	if !hovered {
 		// releasing focus/hover: clear held keys and buttons so nothing sticks
-		for i in 0 ..< KEY_COUNT {
-			g.inp.key_down[i] = false
-			st_held[i] = false
-		}
-		for i in 0 ..< 8 do st_mb[i] = false
+		ctx.inp.key_down = {}
+		ctx.inp.mb_down = {}
 	}
 }
 
 @(export)
 ingot_web_file_drag_over :: proc "contextless" (over: bool) {
-	_idle_note_activity(&g.idle)
-	_drop_hover_stage(over)
+	ctx := _web_owner_context()
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
+	_drop_hover_stage_context(ctx, over)
 }
 
 // ingot_web_drop_notify is called from JS (ingot_web.js attachDrop) after
@@ -144,8 +154,10 @@ ingot_web_file_drag_over :: proc "contextless" (over: bool) {
 // idle gate wakes so an event-driven app processes the drop immediately.
 @(export)
 ingot_web_drop_notify :: proc "contextless" () {
-	_idle_note_activity(&g.idle)
-	_drop_complete()
+	ctx := _web_owner_context()
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
+	_drop_complete_context(ctx)
 }
 
 // ingot_web_resize is called from web/ingot_web.js on window resize so an
@@ -153,11 +165,15 @@ ingot_web_drop_notify :: proc "contextless" () {
 // _maybe_reconfigure picks the size up at the next BeginDrawing).
 @(export)
 ingot_web_resize :: proc "contextless" () {
-	_idle_note_activity(&g.idle)
+	ctx := _web_owner_context()
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
 }
 
 @(export)
 ingot_web_resume :: proc "contextless" () {
-	g.force_reconfigure = true
-	_idle_note_activity(&g.idle)
+	ctx := _web_owner_context()
+	if ctx == nil do return
+	ctx.force_reconfigure = true
+	_idle_note_activity(&ctx.idle)
 }

@@ -21,13 +21,25 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($Package in $Manifest.test_packages) {
     Write-Host "== testing $Package =="
     $Extra = @()
-    if ($Package -eq "gfx" -or $Package -eq "ui") { $Extra += "-define:ODIN_TEST_THREADS=1" }
+    if ($Package -eq "ui") { $Extra += "-define:ODIN_TEST_THREADS=1" }
     if ($Package -eq "term") {
         $Extra += "-define:INGOT_PTY_SIM=true"
         $Extra += "-define:ODIN_TEST_THREADS=1"
     }
     $Label = $Package.Replace("/", "-")
     $Command = @("odin", "test", "$Root/$Package", $Collection, $Guard, "-define:ODIN_TEST_FAIL_ON_EMPTY=true") + $Extra
+    Invoke-Supervised $Label $Command
+}
+foreach ($TestName in $Manifest.windows_gfx_expected_assert_tests) {
+    Write-Host "== testing isolated $TestName =="
+    $Label = "gfx-expected-assert-" + $TestName.Replace("gfx.", "").Replace("_", "-")
+    $Command = @(
+        "odin", "test", "$Root/gfx", $Collection, $Guard,
+        "-define:INGOT_GFX_EXPECTED_ASSERTS=true",
+        "-define:ODIN_TEST_NAMES=$TestName",
+        "-define:ODIN_TEST_THREADS=1",
+        "-define:ODIN_TEST_FAIL_ON_EMPTY=true"
+    )
     Invoke-Supervised $Label $Command
 }
 foreach ($Example in $Manifest.test_examples) {

@@ -99,6 +99,8 @@ g_dd_registered: bool
 g_dd_ole_owned: bool
 @(private = "file")
 g_dd_has_files: bool
+@(private = "file")
+g_dd_owner: ^Context
 
 @(private = "file")
 dd_guid_equal :: proc "system" (left, right: ^win.GUID) -> bool {
@@ -164,8 +166,8 @@ dd_drag_enter :: proc "system" (
 	medium: DD_Storage_Medium
 	g_dd_has_files = dd_get_medium(data, &medium)
 	if g_dd_has_files do ReleaseStgMedium(&medium)
-	_drop_hover_stage(g_dd_has_files)
-	_idle_note_activity(&g.idle)
+	_drop_hover_stage_context(g_dd_owner, g_dd_has_files)
+	if g_dd_owner != nil do _idle_note_activity(&g_dd_owner.idle)
 	if effect != nil do effect^ = g_dd_has_files ? DD_EFFECT_COPY : DD_EFFECT_NONE
 	return win.S_OK
 }
@@ -184,8 +186,8 @@ dd_drag_over :: proc "system" (
 @(private = "file")
 dd_drag_leave :: proc "system" (this: rawptr) -> win.HRESULT {
 	g_dd_has_files = false
-	_drop_hover_stage(false)
-	_idle_note_activity(&g.idle)
+	_drop_hover_stage_context(g_dd_owner, false)
+	if g_dd_owner != nil do _idle_note_activity(&g_dd_owner.idle)
 	return win.S_OK
 }
 
@@ -197,7 +199,7 @@ dd_drop :: proc "system" (
 	effect: ^win.DWORD,
 ) -> win.HRESULT {
 	context = runtime.default_context()
-	_drop_hover_stage(false)
+	_drop_hover_stage_context(g_dd_owner, false)
 	g_dd_has_files = false
 	if effect != nil do effect^ = DD_EFFECT_NONE
 	medium: DD_Storage_Medium
@@ -224,13 +226,14 @@ dd_drop :: proc "system" (
 			accepted += 1
 		}
 	}
-	if _drop_paths_replace(paths[:accepted]) && effect != nil do effect^ = DD_EFFECT_COPY
-	_idle_note_activity(&g.idle)
+	if _drop_paths_replace_context(g_dd_owner, paths[:accepted]) && effect != nil do effect^ = DD_EFFECT_COPY
+	if g_dd_owner != nil do _idle_note_activity(&g_dd_owner.idle)
 	return win.S_OK
 }
 
 @(private)
-platform_dragdrop_init :: proc() {
+platform_dragdrop_init :: proc(owner: ^Context) {
+	if owner == nil || g_dd_owner != nil do return
 	result := OleInitialize(nil)
 	g_dd_ole_owned = result == win.S_OK || result == win.S_FALSE
 	if !g_dd_ole_owned do return
@@ -244,10 +247,12 @@ platform_dragdrop_init :: proc() {
 		dd_drop,
 	}
 	g_dd_target.vtable = &g_dd_vtable
-	g_dd_hwnd = win.HWND(GetWindowHandle())
+	g_dd_hwnd = win.HWND(context_get_window_handle(owner))
 	if g_dd_hwnd == nil do return
+	g_dd_owner = owner
 	result = RegisterDragDrop(g_dd_hwnd, &g_dd_target)
 	g_dd_registered = !win.FAILED(result)
+	if !g_dd_registered do g_dd_owner = nil
 	if g_dd_registered do win.DragAcceptFiles(g_dd_hwnd, false)
 }
 
@@ -255,7 +260,8 @@ platform_dragdrop_init :: proc() {
 platform_dragdrop_tick :: proc() {}
 
 @(private)
-platform_dragdrop_shutdown :: proc() {
+platform_dragdrop_shutdown :: proc(owner: ^Context) {
+	if owner == nil || owner != g_dd_owner do return
 	if g_dd_registered {
 		RevokeDragDrop(g_dd_hwnd)
 		win.DragAcceptFiles(g_dd_hwnd, true)
@@ -265,4 +271,5 @@ platform_dragdrop_shutdown :: proc() {
 	g_dd_registered = false
 	g_dd_ole_owned = false
 	g_dd_has_files = false
+	g_dd_owner = nil
 }

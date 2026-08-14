@@ -123,6 +123,8 @@ vao_and_vbo_handles_reject_cross_context_lookup :: proc(t: ^testing.T) {
 
 @(test)
 gpu_3d_pass_rejects_stale_generation :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	resources: Gpu_3D_Resources
 	resources.active_pass_generation = 12
 	current := Gpu_3D_Pass {
@@ -157,6 +159,8 @@ texture_handles_reject_cross_context_lookup :: proc(t: ^testing.T) {
 
 @(test)
 submission_reservation_is_nonzero_and_rollback_is_atomic :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	tracker: Submission_Tracker
 	_submission_init(&tracker, default_context())
 	first := _submission_reserve(&tracker)
@@ -173,6 +177,8 @@ submission_reservation_is_nonzero_and_rollback_is_atomic :: proc(t: ^testing.T) 
 
 @(test)
 submission_reservation_stops_at_fixed_capacity :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	tracker: Submission_Tracker
 	_submission_init(&tracker, default_context())
 	for _ in 0 ..< MAX_IN_FLIGHT_SUBMISSIONS {
@@ -185,6 +191,8 @@ submission_reservation_stops_at_fixed_capacity :: proc(t: ^testing.T) {
 
 @(test)
 submission_tracking_failure_is_owner_bound :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	first := new(Context)
 	defer free(first)
 	second := new(Context)
@@ -244,6 +252,8 @@ shader_pool_reports_exhaustion_instead_of_asserting :: proc(t: ^testing.T) {
 
 @(test)
 texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	// Consumers size their caches off these accessors, so the used count must
 	// track registration exactly and IsTextureValid must reject a zero handle.
 	testing.expect(t, !IsTextureValid(Texture2D{}))
@@ -291,6 +301,8 @@ texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
 
 @(test)
 default_context_has_its_reserved_id :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	// @(init) runs before the test runner, so observing the id here is the
 	// same observation any caller makes after startup - but not the same as
 	// one made from another @(init). See the note above.
@@ -335,28 +347,32 @@ no_resource_handle_can_carry_a_zero_context :: proc(t: ^testing.T) {
 	testing.expect_value(t, handle_context, DEFAULT_CONTEXT_ID)
 }
 
-@(test)
-texture_lookup_rejects_an_unassigned_context_id :: proc(t: ^testing.T) {
-	// The oracle itself, rather than the reasoning behind it: looking up with
-	// an unassigned context id aborts instead of silently missing. Without
-	// this the guard in _texture_slot_context could be deleted and every other
-	// test would stay green.
-	testing.expect_assert_message(t, "_texture_slot_context: unassigned context id")
+when ODIN_OS != .Windows || INGOT_GFX_EXPECTED_ASSERTS {
+	@(test)
+	texture_lookup_rejects_an_unassigned_context_id :: proc(t: ^testing.T) {
+		// The oracle itself, rather than the reasoning behind it: looking up with
+		// an unassigned context id aborts instead of silently missing. Without
+		// this the guard in _texture_slot_context could be deleted and every other
+		// test would stay green.
+		testing.expect_assert_message(t, "_texture_slot_context: unassigned context id")
 
-	resources: Texture_Resources
-	entry: Tex_Entry
-	id := _texture_register_context(DEFAULT_CONTEXT_ID, &resources, &entry)
-	_ = _texture_slot_context(0, &resources, id)
+		resources: Texture_Resources
+		entry: Tex_Entry
+		id := _texture_register_context(DEFAULT_CONTEXT_ID, &resources, &entry)
+		_ = _texture_slot_context(0, &resources, id)
 
-	// Only reached if the assertion did not fire. expect_assert_message merely
-	// tolerates an abort, it does not require one, so a test that ends at the
-	// call above passes just as happily with the assertion deleted. fail_now
-	// is what makes this test an oracle rather than a description.
-	testing.fail_now(t, "_texture_slot_context accepted an unassigned context id")
+		// Only reached if the assertion did not fire. expect_assert_message merely
+		// tolerates an abort, it does not require one, so a test that ends at the
+		// call above passes just as happily with the assertion deleted. fail_now
+		// is what makes this test an oracle rather than a description.
+		testing.fail_now(t, "_texture_slot_context accepted an unassigned context id")
+	}
 }
 
 @(test)
 assigned_context_ids_never_collide_with_the_default :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	// _context_assign_id hands out ids from CONTEXT_ID_FIRST. If that ever
 	// started at or below the reserved id, two contexts would share an id and
 	// their resource handles would alias.

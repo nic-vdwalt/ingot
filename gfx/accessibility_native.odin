@@ -1,24 +1,5 @@
 #+build !js
 // ingot:gfx - native accessibility seam over the AccessKit C API.
-//
-// The widget toolkit records a per-frame semantic buffer (ui/semantics.odin);
-// its bridge (ui/a11y_bridge.odin) converts that buffer into AccessKit tree
-// updates through the factory registered here. This file owns only the
-// platform adapter lifecycle and the AT action queue:
-//
-//   InitAccessibility  - attach the adapter to the window (NSWindow content
-//                        view on macOS, HWND subclass on Windows, AT-SPI on
-//                        Linux). Lazy: AccessKit builds nothing until
-//                        assistive tech actually requests the tree, so this
-//                        is free for non-AT users.
-//   PushAccessibilityUpdate - per frame; invokes the factory only while AT
-//                        is active (update_if_active), then raises queued
-//                        platform events.
-//   PollAccessibilityAction - drains AT-initiated actions (Click/Focus/...)
-//                        staged by the adapter callback, which may run off
-//                        the main thread (bounded ring + mutex).
-//
-// Disable at compile time with -define:INGOT_ACCESSKIT=false.
 package gfx
 
 import "base:runtime"
@@ -26,178 +7,211 @@ import "core:sync"
 import ak "ingot:accesskit"
 
 A11Y_ENABLED :: ak.ENABLED
-
-// MAX_A11Y_ACTIONS bounds the staged AT action queue (Tiger Style: put a
-// limit on everything). Overflow drops the newest action - AT retries.
 MAX_A11Y_ACTIONS :: 64
 
-// A11y_Action is one assistive-tech request against a semantic node.
 A11y_Action :: struct {
 	action: ak.Action,
 	node:   ak.Node_Id,
 }
 
-@(private = "file")
-A11y_State :: struct {
-	initialized: bool,
-	factory:     ak.Tree_Update_Factory,
-	userdata:    rawptr,
-	actions:     [MAX_A11Y_ACTIONS]A11y_Action,
-	action_len:  int,
-	action_mu:   sync.Mutex,
-}
-
-@(private = "file")
-g_a11y: A11y_State
-
 when A11Y_ENABLED {
 	when ODIN_OS == .Darwin {
-		@(private = "file")
-		g_a11y_adapter: ak.Macos_Subclassing_Adapter
+		A11y_State :: struct {
+			initialized: bool,
+			factory:     ak.Tree_Update_Factory,
+			userdata:    rawptr,
+			actions:     [MAX_A11Y_ACTIONS]A11y_Action,
+			action_len:  int,
+			action_mu:   sync.Mutex,
+			adapter:     ak.Macos_Subclassing_Adapter,
+		}
 	} else when ODIN_OS == .Windows {
-		@(private = "file")
-		g_a11y_adapter: ak.Windows_Subclassing_Adapter
+		A11y_State :: struct {
+			initialized: bool,
+			factory:     ak.Tree_Update_Factory,
+			userdata:    rawptr,
+			actions:     [MAX_A11Y_ACTIONS]A11y_Action,
+			action_len:  int,
+			action_mu:   sync.Mutex,
+			adapter:     ak.Windows_Subclassing_Adapter,
+		}
 	} else {
-		@(private = "file")
-		g_a11y_adapter: ak.Unix_Adapter
+		A11y_State :: struct {
+			initialized: bool,
+			factory:     ak.Tree_Update_Factory,
+			userdata:    rawptr,
+			actions:     [MAX_A11Y_ACTIONS]A11y_Action,
+			action_len:  int,
+			action_mu:   sync.Mutex,
+			adapter:     ak.Unix_Adapter,
+		}
+	}
+} else {
+	A11y_State :: struct {
+		initialized: bool,
+		factory:     ak.Tree_Update_Factory,
+		userdata:    rawptr,
+		actions:     [MAX_A11Y_ACTIONS]A11y_Action,
+		action_len:  int,
+		action_mu:   sync.Mutex,
 	}
 }
 
-// _a11y_stage appends one action to the bounded queue. Package-private (not
-// file-private) so the TSan stress test can drive it from a producer thread
-// exactly like the adapter callback does.
 @(private)
-_a11y_stage :: proc(action: ak.Action, node: ak.Node_Id) {
-	sync.mutex_lock(&g_a11y.action_mu)
-	if g_a11y.action_len < MAX_A11Y_ACTIONS {
-		g_a11y.actions[g_a11y.action_len] = {action, node}
-		g_a11y.action_len += 1
+_a11y_stage :: proc(state: ^A11y_State, action: ak.Action, node: ak.Node_Id) {
+	assert(state != nil, "_a11y_stage: nil state")
+	sync.mutex_lock(&state.action_mu)
+	if state.action_len < MAX_A11Y_ACTIONS {
+		state.actions[state.action_len] = {action, node}
+		state.action_len += 1
 	}
-	sync.mutex_unlock(&g_a11y.action_mu)
+	sync.mutex_unlock(&state.action_mu)
 }
 
-// _a11y_on_action stages an AT action; AccessKit may invoke it off the main
-// thread (documented for unix, permitted on macOS/Windows), hence the mutex.
+@(private)
+_a11y_poll :: proc(state: ^A11y_State) -> (action: A11y_Action, ok: bool) {
+	if state == nil do return {}, false
+	sync.mutex_lock(&state.action_mu)
+	defer sync.mutex_unlock(&state.action_mu)
+	if state.action_len == 0 do return {}, false
+	action = state.actions[0]
+	state.action_len -= 1
+	copy(state.actions[:state.action_len], state.actions[1:state.action_len + 1])
+	return action, true
+}
+
 @(private = "file")
 _a11y_on_action :: proc "c" (request: ^ak.Action_Request, userdata: rawptr) {
 	context = runtime.default_context()
 	when A11Y_ENABLED {
 		if request == nil do return
-		_a11y_stage(request.action, request.target_node)
+		ctx := cast(^Context)userdata
+		if ctx != nil && ctx.a11y.initialized {
+			_a11y_stage(&ctx.a11y, request.action, request.target_node)
+		}
 		ak.action_request_free(request)
 	}
 }
 
-// InitAccessibility attaches the AccessKit adapter to the current window and
-// registers the tree-update factory (called lazily, only while assistive
-// tech is active). Returns false when accessibility is compiled out or no
-// window exists. Call once, after InitWindow.
-InitAccessibility :: proc(factory: ak.Tree_Update_Factory, userdata: rawptr) -> bool {
-	assert(factory != nil, "InitAccessibility: nil factory")
-	assert(!g_a11y.initialized, "InitAccessibility: already initialized")
+context_init_accessibility :: proc(
+	ctx: ^Context,
+	factory: ak.Tree_Update_Factory,
+	userdata: rawptr,
+) -> bool {
+	assert(ctx != nil, "context_init_accessibility: nil context")
+	assert(factory != nil, "context_init_accessibility: nil factory")
+	assert(!ctx.a11y.initialized, "context_init_accessibility: already initialized")
 	when A11Y_ENABLED {
-		g_a11y.factory = factory
-		g_a11y.userdata = userdata
 		when ODIN_OS == .Darwin {
-			win := GetWindowHandle()
+			win := context_get_window_handle(ctx)
 			if win == nil do return false
-			g_a11y_adapter = ak.macos_subclassing_adapter_for_window(
+			ctx.a11y.adapter = ak.macos_subclassing_adapter_for_window(
 				win,
 				factory,
 				userdata,
 				_a11y_on_action,
-				nil,
+				ctx,
 			)
 		} else when ODIN_OS == .Windows {
-			hwnd := GetWindowHandle()
+			hwnd := context_get_window_handle(ctx)
 			if hwnd == nil do return false
-			g_a11y_adapter = ak.windows_subclassing_adapter_new(
+			ctx.a11y.adapter = ak.windows_subclassing_adapter_new(
 				hwnd,
 				factory,
 				userdata,
 				_a11y_on_action,
-				nil,
+				ctx,
 			)
 		} else {
-			g_a11y_adapter = ak.unix_adapter_new(
+			ctx.a11y.adapter = ak.unix_adapter_new(
 				factory,
 				userdata,
 				_a11y_on_action,
-				nil,
+				ctx,
 				_a11y_on_deactivate,
-				nil,
+				ctx,
 			)
 		}
-		if g_a11y_adapter == nil do return false
-		g_a11y.initialized = true
+		if ctx.a11y.adapter == nil do return false
+		ctx.a11y.factory = factory
+		ctx.a11y.userdata = userdata
+		ctx.a11y.initialized = true
 		return true
 	} else {
 		return false
 	}
 }
 
-when A11Y_ENABLED && ODIN_OS != .Darwin && ODIN_OS != .Windows {
-	@(private = "file")
-	_a11y_on_deactivate :: proc "c" (userdata: rawptr) {
-	}
+InitAccessibility :: proc(factory: ak.Tree_Update_Factory, userdata: rawptr) -> bool {
+	return context_init_accessibility(default_context(), factory, userdata)
 }
 
-// PushAccessibilityUpdate offers this frame's tree to the adapter. The
-// factory only runs while assistive tech consumes the tree (update_if_active)
-// - the per-frame cost without AT is one branch. Call at end of frame, after
-// all UI is drawn.
-PushAccessibilityUpdate :: proc() {
+when A11Y_ENABLED && ODIN_OS != .Darwin && ODIN_OS != .Windows {
+	@(private = "file")
+	_a11y_on_deactivate :: proc "c" (userdata: rawptr) {}
+}
+
+context_push_accessibility_update :: proc(ctx: ^Context) {
+	if ctx == nil do return
 	when A11Y_ENABLED {
-		if !g_a11y.initialized do return
-		assert(g_a11y.factory != nil, "PushAccessibilityUpdate: nil factory")
+		if !ctx.a11y.initialized do return
+		assert(ctx.a11y.factory != nil, "context_push_accessibility_update: nil factory")
 		when ODIN_OS == .Darwin {
 			events := ak.macos_subclassing_adapter_update_if_active(
-				g_a11y_adapter,
-				g_a11y.factory,
-				g_a11y.userdata,
+				ctx.a11y.adapter,
+				ctx.a11y.factory,
+				ctx.a11y.userdata,
 			)
 			if events != nil do ak.macos_queued_events_raise(events)
 		} else when ODIN_OS == .Windows {
 			events := ak.windows_subclassing_adapter_update_if_active(
-				g_a11y_adapter,
-				g_a11y.factory,
-				g_a11y.userdata,
+				ctx.a11y.adapter,
+				ctx.a11y.factory,
+				ctx.a11y.userdata,
 			)
 			if events != nil do ak.windows_queued_events_raise(events)
 		} else {
-			ak.unix_adapter_update_if_active(g_a11y_adapter, g_a11y.factory, g_a11y.userdata)
+			ak.unix_adapter_update_if_active(
+				ctx.a11y.adapter,
+				ctx.a11y.factory,
+				ctx.a11y.userdata,
+			)
 		}
 	}
 }
 
-// PollAccessibilityAction pops one staged AT action. Drain each frame before
-// input handling so Click/Focus requests act on the same frame's widgets.
-PollAccessibilityAction :: proc() -> (action: A11y_Action, ok: bool) {
+PushAccessibilityUpdate :: proc() {
+	context_push_accessibility_update(default_context())
+}
+
+context_poll_accessibility_action :: proc(ctx: ^Context) -> (action: A11y_Action, ok: bool) {
 	when A11Y_ENABLED {
-		sync.mutex_lock(&g_a11y.action_mu)
-		defer sync.mutex_unlock(&g_a11y.action_mu)
-		if g_a11y.action_len == 0 do return {}, false
-		action = g_a11y.actions[0]
-		g_a11y.action_len -= 1
-		copy(g_a11y.actions[:g_a11y.action_len], g_a11y.actions[1:g_a11y.action_len + 1])
-		return action, true
+		if ctx == nil do return {}, false
+		return _a11y_poll(&ctx.a11y)
 	} else {
 		return {}, false
 	}
 }
 
-// CloseAccessibility frees the adapter (window teardown).
-CloseAccessibility :: proc() {
+PollAccessibilityAction :: proc() -> (action: A11y_Action, ok: bool) {
+	return context_poll_accessibility_action(default_context())
+}
+
+context_close_accessibility :: proc(ctx: ^Context) {
+	if ctx == nil do return
 	when A11Y_ENABLED {
-		if !g_a11y.initialized do return
+		if !ctx.a11y.initialized do return
 		when ODIN_OS == .Darwin {
-			ak.macos_subclassing_adapter_free(g_a11y_adapter)
+			ak.macos_subclassing_adapter_free(ctx.a11y.adapter)
 		} else when ODIN_OS == .Windows {
-			ak.windows_subclassing_adapter_free(g_a11y_adapter)
+			ak.windows_subclassing_adapter_free(ctx.a11y.adapter)
 		} else {
-			ak.unix_adapter_free(g_a11y_adapter)
+			ak.unix_adapter_free(ctx.a11y.adapter)
 		}
-		g_a11y_adapter = nil
-		g_a11y = {}
+		ctx.a11y = {}
 	}
+}
+
+CloseAccessibility :: proc() {
+	context_close_accessibility(default_context())
 }

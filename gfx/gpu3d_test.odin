@@ -111,6 +111,8 @@ test_cube_edge_geometry_contract :: proc(t: ^testing.T) {
 
 @(test)
 test_create_cube_meshes_reject_headless :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	cube, cube_ok := create_cube_mesh()
 	edges, edges_ok := create_cube_edge_mesh()
 	testing.expect_value(t, cube_ok, false)
@@ -160,6 +162,8 @@ test_cube_transform_contract :: proc(t: ^testing.T) {
 
 @(test)
 test_transform_primitives_skip_without_mode :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	transform := MatrixTranslate(1, 2, 3) * MatrixScale(4, 5, 6)
 	DrawCubeTransform(transform, WHITE)
 	DrawCubeWiresTransform(transform, WHITE)
@@ -168,6 +172,8 @@ test_transform_primitives_skip_without_mode :: proc(t: ^testing.T) {
 
 @(test)
 test_compat_primitives_skip_without_mode :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	DrawCube({}, 1, 1, 1, WHITE)
 	DrawCubeV({}, {1, 1, 1}, WHITE)
 	DrawCubeWires({}, 1, 1, 1, WHITE)
@@ -321,6 +327,8 @@ test_plane_geometry_winding_faces_up :: proc(t: ^testing.T) {
 // mesh nothing can draw; out-of-range cell counts are refused independently.
 @(test)
 test_create_plane_mesh_rejects_headless_and_out_of_range :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	mesh, ok := create_plane_mesh(1, 4)
 	testing.expect_value(t, ok, false)
 	testing.expect_value(t, mesh.id, u32(0))
@@ -334,6 +342,8 @@ test_create_plane_mesh_rejects_headless_and_out_of_range :: proc(t: ^testing.T) 
 
 @(test)
 test_create_sphere_mesh_rejects_headless :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	// No device in unit tests (g.initialized == false): must refuse with the
 	// invalid handle rather than touching wgpu. Degenerate ring/slice counts
 	// are rejected the same way once a device exists.
@@ -364,6 +374,8 @@ test_gpu_3d_geometry_validation :: proc(t: ^testing.T) {
 
 @(test)
 test_create_gpu_mesh_rejects_headless :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	vertices := [?]Gpu_3D_Vertex {
 		{position = {0, 0, 0}, normal = CAMERA_WORLD_UP},
 		{position = {1, 0, 0}, normal = CAMERA_WORLD_UP},
@@ -380,6 +392,8 @@ test_create_gpu_mesh_rejects_headless :: proc(t: ^testing.T) {
 // and it is the one an app hits when it updates a mesh it never created.
 @(test)
 test_update_gpu_mesh_vertices_rejects_headless :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	vertices := [?]Gpu_3D_Vertex {
 		{position = {0, 0, 0}, normal = CAMERA_WORLD_UP},
 		{position = {1, 0, 0}, normal = CAMERA_WORLD_UP},

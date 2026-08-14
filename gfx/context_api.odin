@@ -233,10 +233,7 @@ context_set_text_input_rect :: proc(ctx: ^Context, x, y, width, height: i32) {
 }
 
 context_toggle_fullscreen :: proc(ctx: ^Context) {
-	if ctx == nil do return
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	ToggleFullscreen()
+	context_toggle_fullscreen_impl(ctx)
 }
 
 context_load_font_from_memory :: proc(
