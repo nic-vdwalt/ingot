@@ -1,7 +1,7 @@
 // ingot:gfx - image/texture support (raylib-named). Covers what the consumer
 // apps use: LoadImageFromMemory/LoadTextureFromImage/LoadTexture, UpdateTexture,
 // UnloadTexture, and DrawTexture*/DrawTexturePro, plus SetWindowIcon. Textures
-// live in the active context's bounded pool above the font-atlas ID domain and
+// live in their owner's bounded pool above the font-atlas ID domain and
 // draw through the batch renderer's `image` pipeline. Non-RGBA source formats
 // (grayscale, RGB) are expanded to RGBA8 on upload since WebGPU has no RGB8.
 package gfx

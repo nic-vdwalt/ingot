@@ -71,15 +71,19 @@ RequestRedrawContext :: proc "contextless" (ctx: ^Context) {
 // RequestRedrawIn schedules a frame after `seconds` (caret blink, delayed
 // animations). Multiple pending requests keep the earliest deadline.
 RequestRedrawIn :: proc(seconds: f64) {
-	RequestRedrawInContext(default_context(), seconds)
+	context_request_redraw_in(default_context(), seconds)
+}
+
+context_request_redraw_in :: proc(ctx: ^Context, seconds: f64) {
+	if ctx == nil do return
+	assert(ctx.start_time_s >= 0, "context_request_redraw_in: invalid start time")
+	assert(seconds == seconds, "context_request_redraw_in: NaN delay")
+	now := platform_now() - ctx.start_time_s
+	_idle_request_in(&ctx.idle, now, seconds)
 }
 
 RequestRedrawInContext :: proc(ctx: ^Context, seconds: f64) {
-	if ctx == nil do return
-	assert(ctx.start_time_s >= 0, "RequestRedrawInContext: invalid start time")
-	assert(seconds == seconds, "RequestRedrawInContext: NaN delay")
-	now := platform_now() - ctx.start_time_s
-	_idle_request_in(&ctx.idle, now, seconds)
+	context_request_redraw_in(ctx, seconds)
 }
 
 // raylib-compat aliases.

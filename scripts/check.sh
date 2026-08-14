@@ -31,9 +31,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check-repository-hygiene.py"
 
 echo "== gfx context ownership guard =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context_test.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" \
-	--baseline "$root/scripts/gfx_context_baseline.json" \
-	"$root"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" "$root"
 
 # @(init) order within a package is filename order, and gfx/context.odin does
 # not sort first. A second @(init) in gfx would run before the one that assigns

@@ -391,7 +391,7 @@ context_ready :: proc(ctx: ^Context) -> bool {
 // logged on either side of the wasm boundary. ui_gfx.app_start shipped exactly
 // that bug, so keep the rule here where both callers share it.
 //
-// Waiting is safe: gfx.step skips the app callback until g.initialized flips,
+// Waiting is safe: gfx.step skips the app callback until ctx.initialized flips,
 // and context_begin_frame refuses to open a frame before then.
 context_live :: proc(ctx: ^Context) -> bool {
 	if ctx == nil do return false
@@ -410,7 +410,7 @@ context_frame_available :: proc(ctx: ^Context) -> bool {
 context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool {
 	assert(ctx != nil && title != nil, "context_init: nil argument")
 	when ODIN_OS == .JS {
-		if ctx != default_context() do return false
+		if ctx != &default_context_storage do return false
 	}
 	_init_window_context(ctx, width, height, title)
 	return context_live(ctx)
@@ -518,7 +518,7 @@ _on_uncaptured_error :: proc "c" (
 
 // SetConfigFlags stashes flags to apply at InitWindow (raylib order).
 SetConfigFlags :: proc(flags: ConfigFlags) {
-	default_context().config_flags = flags
+	context_set_config_flags(default_context(), flags)
 }
 
 InitWindow :: proc(width, height: i32, title: cstring) {
@@ -549,7 +549,7 @@ _init_window_context :: proc(ctx: ^Context, width, height: i32, title: cstring) 
 	platform_start_gpu(ctx)
 }
 
-// _gpu_finish completes context setup once g.adapter/g.device/g.queue are ready.
+// _gpu_finish completes context setup once ctx.adapter/device/queue are ready.
 // Shared by both targets (native calls it inline from platform_start_gpu; web
 // calls it from the async device callback). Everything here is pure wgpu.
 @(private)
@@ -959,7 +959,7 @@ GetWindowScaleDPI :: proc() -> Vector2 {return context_window_scale_dpi(default_
 GetRenderWidth :: proc() -> i32 {return context_render_width(default_context())}
 GetRenderHeight :: proc() -> i32 {return context_render_height(default_context())}
 
-SetTargetFPS :: proc(fps: i32) {default_context().target_fps = fps}
+SetTargetFPS :: proc(fps: i32) {context_set_target_fps(default_context(), fps)}
 GetFrameTime :: proc() -> f32 {return context_frame_time(default_context())}
 GetTime :: proc() -> f64 {return context_time(default_context())}
 GetFPS :: proc() -> i32 {return context_fps(default_context())}
@@ -1016,15 +1016,19 @@ context_window_resized :: proc(ctx: ^Context) -> bool {
 	if ctx == nil do return false
 	return ctx.resized_this_frame
 }
-SetExitKey :: proc(key: KeyboardKey) {default_context().inp.exit_key = key}
+context_set_exit_key :: proc(ctx: ^Context, key: KeyboardKey) {
+	if ctx == nil do return
+	ctx.inp.exit_key = key
+}
+SetExitKey :: proc(key: KeyboardKey) {context_set_exit_key(default_context(), key)}
 
 GetMonitorRefreshRate :: proc(monitor: i32) -> i32 {
-	return platform_monitor_refresh_rate(default_context())
+	return context_monitor_refresh_rate(default_context())
 }
 GetCurrentMonitor :: proc() -> i32 {return 0}
 
 IsWindowFocused :: proc() -> bool {
-	return platform_window_focused(default_context())
+	return context_window_focused(default_context())
 }
 
 // FlushBatch forces pending 2D geometry to record into the current render pass

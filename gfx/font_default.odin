@@ -74,10 +74,14 @@ when INGOT_DEFAULT_FONT {
 	// adds no implicit spacing: raylib's built-in face is a tightly packed
 	// bitmap font needing fontSize/10 added back between glyphs, whereas the
 	// embedded TTF's own advances already include it.
-	GetFontDefault :: proc() -> Font {
-		font, ok := _default_font(default_context())
+	context_get_font_default :: proc(ctx: ^Context) -> Font {
+		font, ok := _default_font(ctx)
 		if !ok do return {}
 		return font
+	}
+
+	GetFontDefault :: proc() -> Font {
+		return context_get_font_default(default_context())
 	}
 
 	DrawText :: proc(text: cstring, posX, posY, fontSize: i32, color: Color) {

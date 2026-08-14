@@ -114,10 +114,10 @@ Requesting one of these is a design discussion, not a bug report.
 
 ## Graphics ownership layers
 
-`ingot:gfx` exposes three layers over one renderer. PascalCase procedures are the
-source-migration facade and act on the default context. The `Frame` API owns
-ordinary drawing and routes every call through `frame.owner`. Explicit `Context`
-procedures own window, input, resource, and host integration.
+`ingot:gfx` exposes three ownership surfaces. PascalCase procedures are the
+source-migration facade and call explicit implementations with `default_context()`.
+The `Frame` API records one owner and passes it to every drawing implementation.
+Explicit `Context` procedures own window, input, resource, and host integration.
 
 New Ingot-native code should use `Frame` and `Context`. PascalCase remains
 supported for the documented raylib migration subset, but is not a second
@@ -129,10 +129,10 @@ Native 3D picking follows the same rule: `screen_to_world_ray`,
 Ingot APIs in the ROS world basis. They do not add PascalCase raylib collision
 aliases or broaden the compatibility facade into complete raymath support.
 
-Mixing is supported only in a single default-context frame. Framework internals
-and multi-context applications must use owned `Frame` or `Context` procedures.
-Ingot asserts when a PascalCase draw could route to a different live context
-rather than silently rendering into the wrong window.
+Mixing is supported only for the default owner. Framework internals and
+multi-context applications must use owned `Frame` or `Context` procedures.
+There is no mutable active context and no scope that can reroute PascalCase calls
+to another live context.
 
 ## Build dependencies
 

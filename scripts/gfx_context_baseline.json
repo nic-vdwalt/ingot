@@ -1,8 +1,0 @@
-{
-  "gfx/batch.odin:col_f": 1,
-  "gfx/context.odin:_ensure_pass": 1,
-  "gfx/drop_state.odin:_drop_complete": 1,
-  "gfx/drop_state.odin:_drop_hover_stage": 1,
-  "gfx/render_target.odin:context_ensure_rt_pass": 1,
-  "gfx/window_extra.odin:_drop_paths_clear": 1
-}

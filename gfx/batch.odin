@@ -1177,7 +1177,12 @@ _stream_buffer_create :: proc(
 // _geometry_upload_transient). Returns false when even the floor-sized pools
 // cannot be allocated, leaving the caller to decide the context's fate.
 @(private)
-_stream_slots_init :: proc(ctx: ^Context, r: ^Renderer, device: wg.Device, budget: Gpu_Budget) -> bool {
+_stream_slots_init :: proc(
+	ctx: ^Context,
+	r: ^Renderer,
+	device: wg.Device,
+	budget: Gpu_Budget,
+) -> bool {
 	assert(ctx != nil, "_stream_slots_init: nil context")
 	assert(r == &ctx.rend, "_stream_slots_init: foreign renderer")
 	assert(device != nil, "_stream_slots_init: nil device")
