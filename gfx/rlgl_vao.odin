@@ -79,8 +79,11 @@ Rlgl_Resources :: struct {
 }
 
 @(private)
-_vao_slot :: proc(resources: ^Rlgl_Resources, id: u32) -> ^Vao_Slot {
+_vao_slot :: proc(context_id: u32, resources: ^Rlgl_Resources, id: u32) -> ^Vao_Slot {
+	assert(context_id != 0, "_vao_slot: zero context id")
 	assert(resources != nil, "_vao_slot: nil resources")
+	handle_context := (id >> RESOURCE_SLOT_BITS) & RESOURCE_CONTEXT_MASK
+	if handle_context != context_id do return nil
 	index, generation, ok := _resource_handle_decode(id, len(resources.vaos))
 	if !ok do return nil
 	slot := &resources.vaos[index]
@@ -89,15 +92,19 @@ _vao_slot :: proc(resources: ^Rlgl_Resources, id: u32) -> ^Vao_Slot {
 }
 
 @(private)
-_vao_get :: proc(id: u32) -> ^Vao {
-	slot := _vao_slot(&g.resources.rlgl, id)
+context_vao_get :: proc(ctx: ^Context, id: u32) -> ^Vao {
+	assert(ctx != nil, "context_vao_get: nil context")
+	slot := _vao_slot(ctx.id, &ctx.resources.rlgl, id)
 	if slot == nil do return nil
 	return slot.entry
 }
 
 @(private)
-_vbo_slot :: proc(resources: ^Rlgl_Resources, id: u32) -> ^Vbo_Slot {
+_vbo_slot :: proc(context_id: u32, resources: ^Rlgl_Resources, id: u32) -> ^Vbo_Slot {
+	assert(context_id != 0, "_vbo_slot: zero context id")
 	assert(resources != nil, "_vbo_slot: nil resources")
+	handle_context := (id >> RESOURCE_SLOT_BITS) & RESOURCE_CONTEXT_MASK
+	if handle_context != context_id do return nil
 	index, generation, ok := _resource_handle_decode(id, len(resources.vbos))
 	if !ok do return nil
 	slot := &resources.vbos[index]
@@ -118,8 +125,9 @@ _vao_invalidate_caches :: proc(v: ^Vao) {
 
 // --- VAO / VBO lifecycle ----------------------------------------------------
 
-RlLoadVertexArray :: proc() -> u32 {
-	resources := &g.resources.rlgl
+context_rl_load_vertex_array :: proc(ctx: ^Context) -> u32 {
+	assert(ctx != nil, "context_rl_load_vertex_array: nil context")
+	resources := &ctx.resources.rlgl
 	if resources.vao_count >= RLGL_MAX_VAOS do return 0
 	for &slot, index in resources.vaos {
 		if slot.occupied do continue
@@ -127,19 +135,35 @@ RlLoadVertexArray :: proc() -> u32 {
 		slot.entry = new(Vao)
 		slot.occupied = true
 		resources.vao_count += 1
-		return _resource_handle_make(index, slot.generation)
+		return _resource_handle_make_context(ctx.id, index, slot.generation)
 	}
-	assert(false, "RlLoadVertexArray: count mismatch")
+	assert(false, "context_rl_load_vertex_array: count mismatch")
 	return 0
 }
 
-RlEnableVertexArray :: proc(id: u32) -> bool {
-	if _vao_get(id) == nil do return false
-	g.resources.rlgl.current_vao = id
+RlLoadVertexArray :: proc() -> u32 {
+	return context_rl_load_vertex_array(default_context())
+}
+
+context_rl_enable_vertex_array :: proc(ctx: ^Context, id: u32) -> bool {
+	assert(ctx != nil, "context_rl_enable_vertex_array: nil context")
+	if context_vao_get(ctx, id) == nil do return false
+	ctx.resources.rlgl.current_vao = id
 	return true
 }
 
-RlDisableVertexArray :: proc() {g.resources.rlgl.current_vao = 0}
+RlEnableVertexArray :: proc(id: u32) -> bool {
+	return context_rl_enable_vertex_array(default_context(), id)
+}
+
+context_rl_disable_vertex_array :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_rl_disable_vertex_array: nil context")
+	ctx.resources.rlgl.current_vao = 0
+}
+
+RlDisableVertexArray :: proc() {
+	context_rl_disable_vertex_array(default_context())
+}
 
 @(private)
 _vao_entry_destroy :: proc(entry: ^Vao) {
@@ -151,27 +175,34 @@ _vao_entry_destroy :: proc(entry: ^Vao) {
 	free(entry)
 }
 
-RlUnloadVertexArray :: proc(id: u32) {
-	slot := _vao_slot(&g.resources.rlgl, id)
+context_rl_unload_vertex_array :: proc(ctx: ^Context, id: u32) {
+	assert(ctx != nil, "context_rl_unload_vertex_array: nil context")
+	resources := &ctx.resources.rlgl
+	slot := _vao_slot(ctx.id, resources, id)
 	if slot == nil do return
 	_vao_entry_destroy(slot.entry)
 	slot.entry = nil
 	slot.occupied = false
-	assert(g.resources.rlgl.vao_count > 0, "RlUnloadVertexArray: count underflow")
-	g.resources.rlgl.vao_count -= 1
-	if g.resources.rlgl.current_vao == id do g.resources.rlgl.current_vao = 0
+	assert(resources.vao_count > 0, "context_rl_unload_vertex_array: count underflow")
+	resources.vao_count -= 1
+	if resources.current_vao == id do resources.current_vao = 0
 }
 
-RlLoadVertexBuffer :: proc(data: rawptr, size: i32, dynamic_buf: bool) -> u32 {
-	if g.device == nil || size <= 0 do return 0
-	resources := &g.resources.rlgl
+RlUnloadVertexArray :: proc(id: u32) {
+	context_rl_unload_vertex_array(default_context(), id)
+}
+
+context_rl_load_vertex_buffer :: proc(ctx: ^Context, data: rawptr, size: i32, dynamic_buf: bool) -> u32 {
+	assert(ctx != nil, "context_rl_load_vertex_buffer: nil context")
+	if ctx.device == nil || size <= 0 do return 0
+	resources := &ctx.resources.rlgl
 	if resources.vbo_count >= RLGL_MAX_VBOS do return 0
 	assert(size > 0)
 	buffer_size := u64(size)
 	usage: wg.BufferUsageFlags = {.Vertex, .CopyDst}
-	buffer := wg.DeviceCreateBuffer(g.device, &{usage = usage, size = buffer_size})
+	buffer := wg.DeviceCreateBuffer(ctx.device, &{usage = usage, size = buffer_size})
 	if buffer == nil do return 0
-	if data != nil do wg.QueueWriteBuffer(g.queue, buffer, 0, data, uint(size))
+	if data != nil do wg.QueueWriteBuffer(ctx.queue, buffer, 0, data, uint(size))
 	id: u32
 	for &slot, index in resources.vbos {
 		if slot.occupied do continue
@@ -179,11 +210,11 @@ RlLoadVertexBuffer :: proc(data: rawptr, size: i32, dynamic_buf: bool) -> u32 {
 		slot.buffer = buffer
 		slot.occupied = true
 		resources.vbo_count += 1
-		id = _resource_handle_make(index, slot.generation)
+		id = _resource_handle_make_context(ctx.id, index, slot.generation)
 		break
 	}
-	assert(id > 0, "RlLoadVertexBuffer: count mismatch")
-	if v := _vao_get(resources.current_vao);
+	assert(id > 0, "context_rl_load_vertex_buffer: count mismatch")
+	if v := context_vao_get(ctx, resources.current_vao);
 	   v != nil && len(v.buffers) < RLGL_MAX_BUFFERS_PER_VAO {
 		_vao_invalidate_caches(v)
 		append(&v.buffers, Vao_Buffer{id = id, buf = buffer, size = buffer_size})
@@ -193,15 +224,25 @@ RlLoadVertexBuffer :: proc(data: rawptr, size: i32, dynamic_buf: bool) -> u32 {
 	return id
 }
 
-RlUpdateVertexBuffer :: proc(bufferId: u32, data: rawptr, dataSize: i32, offset: i32) {
-	slot := _vbo_slot(&g.resources.rlgl, bufferId)
-	if slot == nil || data == nil || dataSize <= 0 || offset < 0 do return
-	wg.QueueWriteBuffer(g.queue, slot.buffer, u64(offset), data, uint(dataSize))
+RlLoadVertexBuffer :: proc(data: rawptr, size: i32, dynamic_buf: bool) -> u32 {
+	return context_rl_load_vertex_buffer(default_context(), data, size, dynamic_buf)
 }
 
-RlUnloadVertexBuffer :: proc(vboId: u32) {
-	resources := &g.resources.rlgl
-	slot := _vbo_slot(resources, vboId)
+context_rl_update_vertex_buffer :: proc(ctx: ^Context, bufferId: u32, data: rawptr, dataSize: i32, offset: i32) {
+	assert(ctx != nil, "context_rl_update_vertex_buffer: nil context")
+	slot := _vbo_slot(ctx.id, &ctx.resources.rlgl, bufferId)
+	if slot == nil || data == nil || dataSize <= 0 || offset < 0 do return
+	wg.QueueWriteBuffer(ctx.queue, slot.buffer, u64(offset), data, uint(dataSize))
+}
+
+RlUpdateVertexBuffer :: proc(bufferId: u32, data: rawptr, dataSize: i32, offset: i32) {
+	context_rl_update_vertex_buffer(default_context(), bufferId, data, dataSize, offset)
+}
+
+context_rl_unload_vertex_buffer :: proc(ctx: ^Context, vboId: u32) {
+	assert(ctx != nil, "context_rl_unload_vertex_buffer: nil context")
+	resources := &ctx.resources.rlgl
+	slot := _vbo_slot(ctx.id, resources, vboId)
 	if slot == nil do return
 	wg.BufferRelease(slot.buffer)
 	slot.buffer = nil
@@ -246,9 +287,14 @@ RlUnloadVertexBuffer :: proc(vboId: u32) {
 	}
 }
 
+RlUnloadVertexBuffer :: proc(vboId: u32) {
+	context_rl_unload_vertex_buffer(default_context(), vboId)
+}
+
 // --- attribute recording ----------------------------------------------------
 
-RlSetVertexAttribute :: proc(
+context_rl_set_vertex_attribute :: proc(
+	ctx: ^Context,
 	index: u32,
 	compSize: i32,
 	type: i32,
@@ -256,7 +302,8 @@ RlSetVertexAttribute :: proc(
 	stride: i32,
 	offset: i32,
 ) {
-	v := _vao_get(g.resources.rlgl.current_vao)
+	assert(ctx != nil, "context_rl_set_vertex_attribute: nil context")
+	v := context_vao_get(ctx, ctx.resources.rlgl.current_vao)
 	if v == nil || v.cur_buffer < 0 || v.cur_buffer >= len(v.buffers) do return
 	if compSize < 1 || compSize > 4 || stride <= 0 || offset < 0 do return
 	if offset + compSize * size_of(f32) > stride do return
@@ -281,8 +328,20 @@ RlSetVertexAttribute :: proc(
 	assert(len(v.attrs) > 0)
 }
 
-RlSetVertexAttributeDivisor :: proc(index: u32, divisor: i32) {
-	v := _vao_get(g.resources.rlgl.current_vao)
+RlSetVertexAttribute :: proc(
+	index: u32,
+	compSize: i32,
+	type: i32,
+	normalized: bool,
+	stride: i32,
+	offset: i32,
+) {
+	context_rl_set_vertex_attribute(default_context(), index, compSize, type, normalized, stride, offset)
+}
+
+context_rl_set_vertex_attribute_divisor :: proc(ctx: ^Context, index: u32, divisor: i32) {
+	assert(ctx != nil, "context_rl_set_vertex_attribute_divisor: nil context")
+	v := context_vao_get(ctx, ctx.resources.rlgl.current_vao)
 	if v == nil || divisor < 0 do return
 	assert(divisor >= 0)
 	for &a in v.attrs {
@@ -294,12 +353,31 @@ RlSetVertexAttributeDivisor :: proc(index: u32, divisor: i32) {
 	}
 }
 
+RlSetVertexAttributeDivisor :: proc(index: u32, divisor: i32) {
+	context_rl_set_vertex_attribute_divisor(default_context(), index, divisor)
+}
+
 RlEnableVertexAttribute :: proc(index: u32) {}
 
 // --- shader binding ---------------------------------------------------------
 
-RlEnableInstShader :: proc(id: u32) {g.resources.rlgl.inst_shader = id}
-RlDisableInstShader :: proc() {g.resources.rlgl.inst_shader = 0}
+context_rl_enable_inst_shader :: proc(ctx: ^Context, id: u32) {
+	assert(ctx != nil, "context_rl_enable_inst_shader: nil context")
+	ctx.resources.rlgl.inst_shader = id
+}
+
+RlEnableInstShader :: proc(id: u32) {
+	context_rl_enable_inst_shader(default_context(), id)
+}
+
+context_rl_disable_inst_shader :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_rl_disable_inst_shader: nil context")
+	ctx.resources.rlgl.inst_shader = 0
+}
+
+RlDisableInstShader :: proc() {
+	context_rl_disable_inst_shader(default_context())
+}
 
 // --- instanced draw ---------------------------------------------------------
 
@@ -347,16 +425,18 @@ _vao_layout_valid :: proc(v: ^Vao) -> bool {
 // layout + shader + current target format + blend.
 @(private)
 _vao_pipeline :: proc(
+	ctx: ^Context,
 	v: ^Vao,
 	se: ^Shader_Entry,
 	format: wg.TextureFormat,
 	blend: Blend_Slot,
 ) -> wg.RenderPipeline {
+	assert(ctx != nil, "_vao_pipeline: nil context")
 	if v == nil || se == nil || !_vao_layout_valid(v) do return nil
 	assert(len(v.buffers) > 0)
 	assert(len(v.attrs) > 0)
 	for cache in v.caches {
-		if cache.shader_id == g.resources.rlgl.inst_shader &&
+		if cache.shader_id == ctx.resources.rlgl.inst_shader &&
 		   cache.format == format &&
 		   cache.blend == blend {
 			return cache.pipe
@@ -393,7 +473,7 @@ _vao_pipeline :: proc(
 		}
 	}
 
-	bl := _blend_for(&g.rend, blend)
+	bl := _blend_for(&ctx.rend, blend)
 	target := wg.ColorTargetState {
 		format    = format,
 		writeMask = wg.ColorWriteMaskFlags_All,
@@ -401,11 +481,11 @@ _vao_pipeline :: proc(
 	if _format_blendable(format) do target.blend = &bl
 	gl := [1]wg.BindGroupLayout{se.u_layout}
 	pl := wg.DeviceCreatePipelineLayout(
-		g.device,
+		ctx.device,
 		&{bindGroupLayoutCount = 1, bindGroupLayouts = raw_data(gl[:])},
 	)
 	pipe := wg.DeviceCreateRenderPipeline(
-		g.device,
+		ctx.device,
 		&{
 			layout = pl,
 			vertex = {
@@ -428,7 +508,7 @@ _vao_pipeline :: proc(
 	append(
 		&v.caches,
 		Vao_PipeCache {
-			shader_id = g.resources.rlgl.inst_shader,
+			shader_id = ctx.resources.rlgl.inst_shader,
 			format = format,
 			blend = blend,
 			pipe = pipe,
@@ -437,38 +517,43 @@ _vao_pipeline :: proc(
 	return pipe
 }
 
-RlDrawVertexArrayInstanced :: proc(offset, count, instances: i32) {
+context_rl_draw_vertex_array_instanced :: proc(ctx: ^Context, offset, count, instances: i32) {
+	assert(ctx != nil, "context_rl_draw_vertex_array_instanced: nil context")
 	if instances <= 0 || count <= 0 || offset < 0 do return
-	v := _vao_get(g.resources.rlgl.current_vao)
-	se := _shader_get(g.resources.rlgl.inst_shader)
+	v := context_vao_get(ctx, ctx.resources.rlgl.current_vao)
+	se := context_shader_get(ctx, ctx.resources.rlgl.inst_shader)
 	if v == nil || se == nil || !_vao_layout_valid(v) do return
-	if !g.frame.has_frame || g.frame.scissor_empty do return
+	if !ctx.frame.has_frame || ctx.frame.scissor_empty do return
 	assert(len(v.buffers) > 0)
 	assert(len(v.attrs) > 0)
-	_ensure_active_pass()
-	if !_active_pass_begun() do return
-	renderer_flush(default_context(), &g.rend, active_pass())
+	context_ensure_active_pass(ctx)
+	if !context_active_pass_begun(ctx) do return
+	renderer_flush(ctx, &ctx.rend, context_active_pass(ctx))
 
-	pass := active_pass()
-	pipe := _vao_pipeline(v, se, _cur_target_format(default_context()), g.rend.cur_blend)
+	pass := context_active_pass(ctx)
+	pipe := _vao_pipeline(ctx, v, se, _cur_target_format(ctx), ctx.rend.cur_blend)
 	if pipe == nil do return
 
 	u_offset, ok := _uniform_upload(
-		default_context(),
-		&g.rend,
+		ctx,
+		&ctx.rend,
 		raw_data(se.ushadow),
 		u64(len(se.ushadow)),
 	)
-	if !ok || g.rend.active_stream_slot < 0 do return
+	if !ok || ctx.rend.active_stream_slot < 0 do return
 	wg.RenderPassEncoderSetPipeline(pass, pipe)
-	_stats_pipeline_switch(default_context())
-	wg.RenderPassEncoderSetBindGroup(pass, 0, se.u_bind[g.rend.active_stream_slot], {u_offset})
-	_stats_bind_group_switches(default_context(), 1)
+	_stats_pipeline_switch(ctx)
+	wg.RenderPassEncoderSetBindGroup(pass, 0, se.u_bind[ctx.rend.active_stream_slot], {u_offset})
+	_stats_bind_group_switches(ctx, 1)
 	for b, i in v.buffers {
 		if b.buf == nil || b.size == 0 do return
 		wg.RenderPassEncoderSetVertexBuffer(pass, u32(i), b.buf, 0, b.size)
 	}
 	wg.RenderPassEncoderDraw(pass, u32(count), u32(instances), u32(offset), 0)
+}
+
+RlDrawVertexArrayInstanced :: proc(offset, count, instances: i32) {
+	context_rl_draw_vertex_array_instanced(default_context(), offset, count, instances)
 }
 
 RlDrawVertexArrayElementsInstanced :: proc(offset, count: i32, buffer: rawptr, instances: i32) {

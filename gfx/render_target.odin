@@ -25,30 +25,45 @@ _rt_projection_vec :: proc "contextless" (width, height: i32) -> [4]f32 {
 
 // LoadRenderTexture creates a colour render target in the swapchain format
 // (so the existing batch pipelines, built against g.format, can render into it).
-LoadRenderTexture :: proc(width, height: i32) -> RenderTexture2D {
-	if !g.initialized do return RenderTexture2D{}
-	tex := _new_rt_color(default_context(), width, height, g.format)
+context_load_render_texture :: proc(ctx: ^Context, width, height: i32) -> RenderTexture2D {
+	assert(ctx != nil, "context_load_render_texture: nil context")
+	if !ctx.initialized do return RenderTexture2D{}
+	tex := _new_rt_color(ctx, width, height, ctx.format)
 	return RenderTexture2D{id = tex.id, texture = tex}
+}
+
+LoadRenderTexture :: proc(width, height: i32) -> RenderTexture2D {
+	return context_load_render_texture(default_context(), width, height)
 }
 
 // LoadRenderTextureEx creates a render target with an explicit colour format
 // (e.g. RGBA16Float HDR) and an optional depth attachment. Used by the rlgl
 // framebuffer path for the galaxy HDR/scene targets.
-LoadRenderTextureEx :: proc(
+context_load_render_texture_ex :: proc(
+	ctx: ^Context,
 	width, height: i32,
 	format: wg.TextureFormat,
 	with_depth: bool,
 ) -> RenderTexture2D {
-	if !g.initialized do return RenderTexture2D{}
-	tex := _new_rt_color(default_context(), width, height, format)
+	assert(ctx != nil, "context_load_render_texture_ex: nil context")
+	if !ctx.initialized do return RenderTexture2D{}
+	tex := _new_rt_color(ctx, width, height, format)
 	rt := RenderTexture2D {
 		id      = tex.id,
 		texture = tex,
 	}
 	if with_depth {
-		rt.depth = _new_rt_depth(default_context(), width, height)
+		rt.depth = _new_rt_depth(ctx, width, height)
 	}
 	return rt
+}
+
+LoadRenderTextureEx :: proc(
+	width, height: i32,
+	format: wg.TextureFormat,
+	with_depth: bool,
+) -> RenderTexture2D {
+	return context_load_render_texture_ex(default_context(), width, height, format, with_depth)
 }
 
 // UnloadRenderTexture releases the color (and optional depth) textures.
@@ -172,7 +187,8 @@ EndTextureMode :: proc() {
 // RenderTexture2D already carries the colour + depth texture ids.
 
 @(private)
-_pf_to_wg :: proc(pf: PixelFormat) -> wg.TextureFormat {
+_pf_to_wg :: proc(ctx: ^Context, pf: PixelFormat) -> wg.TextureFormat {
+	assert(ctx != nil, "_pf_to_wg: nil context")
 	#partial switch pf {
 	case .UNCOMPRESSED_R16G16B16A16:
 		return .RGBA16Float
@@ -183,26 +199,41 @@ _pf_to_wg :: proc(pf: PixelFormat) -> wg.TextureFormat {
 	case .UNCOMPRESSED_R8G8B8A8:
 		return .RGBA8Unorm
 	}
-	return g.format
+	return ctx.format
 }
 
 // RlLoadColorTexture creates a render-target colour texture of `pf` and returns
 // its registry id (rlgl.LoadTexture parity for framebuffer colour attachments).
-RlLoadColorTexture :: proc(w, h: i32, pf: PixelFormat) -> u32 {
-	if !g.initialized do return 0
-	t := _new_rt_color(default_context(), w, h, _pf_to_wg(pf))
+context_rl_load_color_texture :: proc(ctx: ^Context, w, h: i32, pf: PixelFormat) -> u32 {
+	assert(ctx != nil, "context_rl_load_color_texture: nil context")
+	if !ctx.initialized do return 0
+	t := _new_rt_color(ctx, w, h, _pf_to_wg(ctx, pf))
 	return t.id
+}
+
+RlLoadColorTexture :: proc(w, h: i32, pf: PixelFormat) -> u32 {
+	return context_rl_load_color_texture(default_context(), w, h, pf)
 }
 
 // RlLoadDepthTexture creates a depth attachment (rlgl.LoadTextureDepth parity).
-RlLoadDepthTexture :: proc(w, h: i32) -> u32 {
-	if !g.initialized do return 0
-	t := _new_rt_depth(default_context(), w, h)
+context_rl_load_depth_texture :: proc(ctx: ^Context, w, h: i32) -> u32 {
+	assert(ctx != nil, "context_rl_load_depth_texture: nil context")
+	if !ctx.initialized do return 0
+	t := _new_rt_depth(ctx, w, h)
 	return t.id
 }
 
+RlLoadDepthTexture :: proc(w, h: i32) -> u32 {
+	return context_rl_load_depth_texture(default_context(), w, h)
+}
+
 // RlUnloadTextureId releases a texture by raw id (rlgl.UnloadTexture parity).
-RlUnloadTextureId :: proc(id: u32) {
+context_rl_unload_texture_id :: proc(ctx: ^Context, id: u32) {
+	assert(ctx != nil, "context_rl_unload_texture_id: nil context")
 	if id == 0 do return
-	UnloadTexture(Texture2D{id = id})
+	context_unload_texture(ctx, Texture2D{id = id})
+}
+
+RlUnloadTextureId :: proc(id: u32) {
+	context_rl_unload_texture_id(default_context(), id)
 }

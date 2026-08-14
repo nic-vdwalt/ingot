@@ -444,7 +444,8 @@ test_gpu_3d_pipeline_identity_includes_compatibility_fields :: proc(t: ^testing.
 @(test)
 test_gpu_3d_mesh_handle_mapping :: proc(t: ^testing.T) {
 	resources: Gpu_3D_Resources
-	testing.expect(t, _gpu_3d_mesh_slot(&resources, Gpu_Mesh{}) == nil)
+	context_id := u32(2)
+	testing.expect(t, _gpu_3d_mesh_slot(context_id, &resources, Gpu_Mesh{}) == nil)
 
 	entry: Gpu_3D_Mesh_Entry
 	slot := &resources.meshes[0]
@@ -452,23 +453,25 @@ test_gpu_3d_mesh_handle_mapping :: proc(t: ^testing.T) {
 	slot.entry = &entry
 	slot.occupied = true
 	old_mesh := Gpu_Mesh {
-		id = _resource_handle_make(0, slot.generation),
+		id = _resource_handle_make_context(context_id, 0, slot.generation),
 	}
-	testing.expect(t, _gpu_3d_mesh_slot(&resources, old_mesh) == slot)
+	testing.expect(t, _gpu_3d_mesh_slot(context_id, &resources, old_mesh) == slot)
+	testing.expect(t, _gpu_3d_mesh_slot(3, &resources, old_mesh) == nil)
 
 	slot.generation = _resource_generation_next(slot.generation)
 	new_mesh := Gpu_Mesh {
-		id = _resource_handle_make(0, slot.generation),
+		id = _resource_handle_make_context(context_id, 0, slot.generation),
 	}
-	testing.expect(t, _gpu_3d_mesh_slot(&resources, old_mesh) == nil)
-	testing.expect(t, _gpu_3d_mesh_slot(&resources, new_mesh) == slot)
+	testing.expect(t, _gpu_3d_mesh_slot(context_id, &resources, old_mesh) == nil)
+	testing.expect(t, _gpu_3d_mesh_slot(context_id, &resources, new_mesh) == slot)
 }
 
 @(test)
 test_gpu_3d_shader_handle_mapping :: proc(t: ^testing.T) {
 	resources: Gpu_3D_Resources
+	context_id := u32(2)
 	// Zero handle resolves to the built-in shader (nil module, id 0).
-	module, id := _gpu_3d_shader_resolve(&resources, Gpu_3D_Shader{})
+	module, id := _gpu_3d_shader_resolve(context_id, &resources, Gpu_3D_Shader{})
 	testing.expect(t, module == nil)
 	testing.expect_value(t, id, u32(0))
 
@@ -477,25 +480,28 @@ test_gpu_3d_shader_handle_mapping :: proc(t: ^testing.T) {
 	slot.module = wg.ShaderModule(rawptr(uintptr(0xBEEF)))
 	slot.occupied = true
 	old_shader := Gpu_3D_Shader {
-		id = _resource_handle_make(0, slot.generation),
+		id = _resource_handle_make_context(context_id, 0, slot.generation),
 	}
-	module, id = _gpu_3d_shader_resolve(&resources, old_shader)
+	module, id = _gpu_3d_shader_resolve(context_id, &resources, old_shader)
 	testing.expect(t, module == slot.module)
 	testing.expect_value(t, id, old_shader.id)
+	foreign_module, foreign_id := _gpu_3d_shader_resolve(3, &resources, old_shader)
+	testing.expect(t, foreign_module == nil)
+	testing.expect_value(t, foreign_id, u32(0))
 
 	// A stale generation falls back to the built-in shader, matching the
 	// texture fallback policy.
 	slot.generation = _resource_generation_next(slot.generation)
-	module, id = _gpu_3d_shader_resolve(&resources, old_shader)
+	module, id = _gpu_3d_shader_resolve(context_id, &resources, old_shader)
 	testing.expect(t, module == nil)
 	testing.expect_value(t, id, u32(0))
 
 	// Out-of-range and unoccupied handles also fall back.
 	slot.occupied = false
 	current := Gpu_3D_Shader {
-		id = _resource_handle_make(0, slot.generation),
+		id = _resource_handle_make_context(context_id, 0, slot.generation),
 	}
-	module, id = _gpu_3d_shader_resolve(&resources, current)
+	module, id = _gpu_3d_shader_resolve(context_id, &resources, current)
 	testing.expect(t, module == nil)
 	testing.expect_value(t, id, u32(0))
 }
