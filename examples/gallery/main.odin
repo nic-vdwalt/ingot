@@ -315,9 +315,9 @@ gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, userdata: rawptr) -
 	when SMOKE do smoke_step()
 	when CAPTURE do capture_step()
 
-	if fit.Surface_Key_Pressed(surface, .F12) do debug_on = !debug_on
+	if fit.Key_Pressed(surface, .F12) do debug_on = !debug_on
 
-	header_h := fit.Surface_Metrics(surface).tab_bar_height
+	header_h := fit.Get_Metrics(surface).tab_bar_height
 	// One decision, taken in the parent and passed down (Tiger Style: push
 	// ifs up). Below the breakpoint the sidebar would eat 170 of ~390
 	// design units, so the nav becomes a horizontal strip instead.
@@ -462,9 +462,9 @@ draw_nav :: proc(surface: ^fit.Surface, top, sw, sh: i32, narrow: bool) -> i32 {
 	assert(surface != nil, "draw_nav: nil surface")
 	if narrow do return draw_nav_strip(surface, top, sw)
 	w := fit.Px(surface, NAV_W)
-	theme := fit.Surface_Theme_Tokens(surface)
-	fit.Surface_Fill_Rect(surface, {0, top, w, sh - top}, theme.background_secondary)
-	fit.Surface_Fill_Rect(surface, {w - 1, top, 1, sh - top}, theme.border_subtle)
+	theme := fit.Get_Theme_Tokens(surface)
+	fit.Fill_Rect(surface, fit.Rect{0, top, w, sh - top}, theme.background_secondary)
+	fit.Fill_Rect(surface, fit.Rect{w - 1, top, 1, sh - top}, theme.border_subtle)
 
 	region: fit.Region
 	u := fit.Region_Open(
@@ -514,7 +514,7 @@ NAV_CONTROL_IDS := [Nav_Control]string {
 draw_nav_strip :: proc(surface: ^fit.Surface, top, sw: i32) -> i32 {
 	assert(surface != nil, "draw_nav_strip: nil surface")
 	assert(sw > 0, "draw_nav_strip: empty viewport")
-	theme := fit.Surface_Theme_Tokens(surface)
+	theme := fit.Get_Theme_Tokens(surface)
 	pad := fit.Px(surface, 8)
 	gap := fit.Px(surface, 6)
 	row_h := fit.Px(surface, NAV_STRIP_ROW_H)
@@ -522,8 +522,8 @@ draw_nav_strip :: proc(surface: ^fit.Surface, top, sw: i32) -> i32 {
 	rows := (i32(len(Section)) + cols - 1) / cols
 	height := pad * 2 + rows * row_h + (rows - 1) * gap + gap + row_h
 
-	fit.Surface_Fill_Rect(surface, {0, top, sw, height}, theme.background_secondary)
-	fit.Surface_Fill_Rect(surface, {0, top + height - 1, sw, 1}, theme.border_subtle)
+	fit.Fill_Rect(surface, fit.Rect{0, top, sw, height}, theme.background_secondary)
+	fit.Fill_Rect(surface, fit.Rect{0, top + height - 1, sw, 1}, theme.border_subtle)
 
 	grid: fit.Grid_State
 	fit.Surface_Grid_Begin(
@@ -607,7 +607,7 @@ MARGIN_INSET :: 56
 // them one comparison and no draw calls.
 draw_page_substrate :: proc(surface: ^fit.Surface, pane: fit.Rect, anchor: i32, narrow: bool) {
 	assert(surface != nil, "draw_page_substrate: nil surface")
-	theme := fit.Surface_Theme_Tokens(surface)
+	theme := fit.Get_Theme_Tokens(surface)
 	if theme.substrate == .None do return
 
 	height := pane.y + pane.h - anchor
@@ -617,24 +617,24 @@ draw_page_substrate :: proc(surface: ^fit.Surface, pane: fit.Rect, anchor: i32, 
 	switch theme.substrate {
 	case .None:
 	case .Ruled:
-		fit.Surface_Draw_Rules(
+		fit.Draw_Rules(
 			surface,
 			region,
-			fit.Surface_Metrics(surface).line_height,
+			fit.Get_Metrics(surface).line_height,
 			theme.paper_rule,
 		)
 	case .Grid, .Dots:
-		spacing := fit.Surface_Metrics(surface).line_height
+		spacing := fit.Get_Metrics(surface).line_height
 		if fit.Surface_Dot_Grid_Fits(surface, region, spacing) {
-			fit.Surface_Draw_Dot_Grid(surface, region, spacing, theme.paper_rule)
+			fit.Draw_Dot_Grid(surface, region, spacing, theme.paper_rule)
 		}
 	case .Tooth:
-		fit.Surface_Draw_Paper_Tooth(surface, region, theme.paper_tooth)
+		fit.Draw_Paper_Tooth(surface, region, theme.paper_tooth)
 	}
 
 	if theme.margin_rule && !narrow {
 		page := fit.Float_Rect{f32(pane.x), f32(pane.y), f32(pane.w), f32(pane.h)}
-		fit.Surface_Draw_Margin_Rule(surface, page, MARGIN_INSET, theme.graphite)
+		fit.Draw_Margin_Rule(surface, page, MARGIN_INSET, theme.graphite)
 	}
 }
 
@@ -642,7 +642,7 @@ draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
 	x := i32(0) if narrow else fit.Px(surface, NAV_W)
 	w := sw - x
 	pane_rect := fit.Rect{x, top, w, sh - top}
-	y := fit.Surface_Pane_Begin(
+	y := fit.Pane_Begin(
 		surface,
 		&content_pane,
 		pane_rect,
@@ -671,7 +671,7 @@ draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
 			surface,
 			{cx, y, cw, 0},
 			MARKDOWN_SAMPLE,
-			fit.Surface_Theme_Tokens(surface).foreground_primary,
+			fit.Get_Theme_Tokens(surface).foreground_primary,
 		)
 		end_y = y + result.height
 		if result.link_activated {
@@ -689,12 +689,12 @@ draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
 	case .Theme:
 		end_y = draw_theme_section(surface, cx, y, cw)
 	}
-	fit.Surface_Pane_End(surface, &content_pane, pane_rect, end_y, padding = 14)
+	fit.Pane_End(surface, &content_pane, pane_rect, end_y, padding = 14)
 }
 
 draw_section_layer :: proc(surface: ^fit.Surface, x, y, w: i32) -> i32 {
 	assert(surface != nil, "draw_section_layer: nil surface")
-	band := fit.Surface_Metrics(surface).line_height * 2
+	band := fit.Get_Metrics(surface).line_height * 2
 	region: fit.Region
 	fit.Surface_Region_Begin(surface, &region, {x, y, w, band}, gap = .XS)
 	fit.Region_Row_Begin(&region, 28, gap = .SM, align = .Center)
@@ -991,14 +991,14 @@ draw_widget_backend_list :: proc(
 		)
 		fit.Surface_List_Row_Background(surface, rect, row.selected, row.hovered)
 		if row.activated do state.list_activated = i
-		fit.Surface_Text(surface, label, x + fit.Px(surface, 8), y + fit.Px(surface, 4), .Label)
+		fit.Text(surface, label, x + fit.Px(surface, 8), y + fit.Px(surface, 4), .Label)
 		y += step
 	}
 	fit.Surface_Listbox_End(surface, &state.listbox)
 	if result.activated do state.list_activated = result.activated_index
 	if state.list_activated >= 0 {
 		assert(state.list_activated < len(labels), "draw_widget_backend_list: invalid index")
-		fit.Surface_Text(
+		fit.Text(
 			surface,
 			fmt.tprintf("activated: %s", labels[state.list_activated]),
 			x,
@@ -1015,14 +1015,14 @@ draw_widget_truncation_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32
 	y := fit.Surface_Section_Header(surface, {x, y0, w, 0}, "CARD + SHADOW + TRUNCATION")
 	card := fit.Rect{x, y, min(w, fit.Px(surface, 360)), fit.Px(surface, 64)}
 	shadow := fit.Float_Rect{f32(card.x), f32(card.y), f32(card.w), f32(card.h)}
-	fit.Surface_Draw_Shadow(surface, shadow, .MD, .Lifted)
+	fit.Draw_Shadow(surface, shadow, .MD, .Lifted)
 	fit.Surface_Card_Background(
 		surface,
 		card,
-		fit.Surface_Theme_Tokens(surface).background_secondary,
+		fit.Get_Theme_Tokens(surface).background_secondary,
 		accent_width = fit.Px(surface, 3),
 	)
-	fit.Surface_Text_Truncated(
+	fit.Text_Truncated(
 		surface,
 		"A very long label that will be cut with an ellipsis when it overflows the card",
 		x + fit.Px(surface, 12),
@@ -1035,9 +1035,9 @@ draw_widget_truncation_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32
 		surface,
 		"ingot/examples/gallery/very/deep/dir/main.odin",
 		card.w - fit.Px(surface, 24),
-		fit.Surface_Metrics(surface).font_label,
+		fit.Get_Metrics(surface).font_label,
 	)
-	fit.Surface_Text(
+	fit.Text(
 		surface,
 		path,
 		x + fit.Px(surface, 12),
@@ -1068,10 +1068,10 @@ draw_widget_fit_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	fit.Surface_Card_Background(
 		surface,
 		card,
-		fit.Surface_Theme_Tokens(surface).background_secondary,
+		fit.Get_Theme_Tokens(surface).background_secondary,
 	)
-	fit.Surface_Text(surface, "Geometry resolved before drawing", title.x, title.y, .Label)
-	fit.Surface_Text(
+	fit.Text(surface, "Geometry resolved before drawing", title.x, title.y, .Label)
+	fit.Text(
 		surface,
 		"No retained tree or trailing gap",
 		detail.x,
@@ -1189,9 +1189,9 @@ draw_widget_table_cell :: proc(
 	if rect.w <= 0 || rect.h <= 0 do return
 	pad := fit.Px(surface, 4)
 	text_x := rect.x + pad
-	if numeric do text_x = rect.x + rect.w - fit.Surface_Text_Width(surface, label, .Label) - pad
-	text_y := rect.y + (rect.h - fit.Surface_Metrics(surface).font_label) / 2
-	fit.Surface_Text(surface, label, text_x, text_y, .Label)
+	if numeric do text_x = rect.x + rect.w - fit.Text_Width(surface, label, .Label) - pad
+	text_y := rect.y + (rect.h - fit.Get_Metrics(surface).font_label) / 2
+	fit.Text(surface, label, text_x, text_y, .Label)
 }
 
 draw_charts :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
@@ -1221,7 +1221,7 @@ draw_charts :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
 	y += fit.Px(surface, 232)
-	fit.Surface_Text(surface, "sparkline:", x, y + fit.Px(surface, 6), .Label, .Secondary)
+	fit.Text(surface, "sparkline:", x, y + fit.Px(surface, 6), .Label, .Secondary)
 	fit.Surface_Sparkline(
 		surface,
 		{x + fit.Px(surface, 80), y, fit.Px(surface, 140), fit.Px(surface, 28)},
@@ -1323,7 +1323,7 @@ draw_layout_flow :: proc(surface: ^fit.Surface, x, y, width: i32) -> i32 {
 	)
 	labels := [?]string{"measured", "single pass", "caller owned", "bounded", "responsive flow"}
 	for label in labels {
-		item_width := fit.Surface_Text_Width(surface, label, .Label) + fit.Px(surface, 24)
+		item_width := fit.Text_Width(surface, label, .Label) + fit.Px(surface, 24)
 		item := fit.Surface_Flow_Next(surface, &flow, item_width, fit.Px(surface, 32))
 		cell(surface, item, label)
 	}
@@ -1333,15 +1333,15 @@ draw_layout_flow :: proc(surface: ^fit.Surface, x, y, width: i32) -> i32 {
 
 cell :: proc(surface: ^fit.Surface, r: fit.Rect, label: string) {
 	if r.w <= 0 || r.h <= 0 do return
-	theme := fit.Surface_Theme_Tokens(surface)
-	fit.Surface_Fill_Rect(surface, r, theme.background_active)
-	fit.Surface_Stroke_Rect(surface, r, theme.border)
-	tw := fit.Surface_Text_Width(surface, label, .Label)
-	fit.Surface_Text(
+	theme := fit.Get_Theme_Tokens(surface)
+	fit.Fill_Rect(surface, r, theme.background_active)
+	fit.Stroke_Rect(surface, r, theme.border)
+	tw := fit.Text_Width(surface, label, .Label)
+	fit.Text(
 		surface,
 		label,
 		r.x + (r.w - tw) / 2,
-		r.y + (r.h - fit.Surface_Metrics(surface).font_label) / 2,
+		r.y + (r.h - fit.Get_Metrics(surface).font_label) / 2,
 		.Label,
 		.Secondary,
 	)
@@ -1430,16 +1430,16 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 		"shielded clicks: %d (should not rise while the popup covers them)",
 		shielded_clicks,
 	)
-	fit.Surface_Text(surface, summary, x, info_y, .Label, .Secondary)
+	fit.Text(surface, summary, x, info_y, .Label, .Secondary)
 	return info_y
 }
 
 draw_overlay_context_menu :: proc(surface: ^fit.Surface, x, info_y: i32) {
-	if fit.Surface_Mouse_Pressed(surface, .Right) &&
+	if fit.Mouse_Pressed(surface, .Right) &&
 	   !fit.Context_Menu_Is_Open(&ctx_menu) &&
 	   !fit.Modal_Is_Open(&about_modal) &&
 	   !fit.Confirm_Dialog_Is_Open(&confirm) {
-		mouse := fit.Surface_Mouse_Position(surface)
+		mouse := fit.Mouse_Position(surface)
 		fit.Context_Menu_Open(&ctx_menu, mouse)
 	}
 	if fit.Context_Menu_Is_Open(&ctx_menu) {
@@ -1455,7 +1455,7 @@ draw_overlay_context_menu :: proc(surface: ^fit.Surface, x, info_y: i32) {
 			ctx_note = "shielded clicks reset via context menu"
 		}
 	}
-	fit.Surface_Text(surface, ctx_note, x, info_y + fit.Px(surface, 22), .Label, .Label)
+	fit.Text(surface, ctx_note, x, info_y + fit.Px(surface, 22), .Label, .Label)
 }
 
 draw_overlay_modal :: proc(surface: ^fit.Surface) {
@@ -1466,15 +1466,15 @@ draw_overlay_modal :: proc(surface: ^fit.Surface) {
 		"Generic modal",
 		{fit.Px(surface, 420), fit.Px(surface, 190)},
 	)
-	metrics := fit.Surface_Metrics(surface)
-	fit.Surface_Text_Wrapped(
+	metrics := fit.Get_Metrics(surface)
+	fit.Text_Wrapped(
 		surface,
 		"The settings panel is built on this same modal_begin/modal_end pair. " +
 		"Escape or a click outside dismisses it.",
 		body.x + metrics.padding,
 		body.y + fit.Px(surface, 4),
 		body.w - metrics.padding * 2,
-		fit.Surface_Theme_Tokens(surface).foreground_primary,
+		fit.Get_Theme_Tokens(surface).foreground_primary,
 		metrics.font_body,
 		metrics.line_height,
 	)
@@ -1536,33 +1536,33 @@ draw_docked_panel_over_canvas :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i
 	panel := fit.Rect{x + w - panel_w, y, panel_w, canvas_h}
 	if w <= 0 || canvas_h <= 0 do return y
 
-	fit.Surface_Draw_Surface(
+	fit.Draw_Surface(
 		surface,
 		{f32(canvas.x), f32(canvas.y), f32(canvas.w), f32(canvas.h)},
 		.Panel,
 		radius = .SM,
 		border = .Hairline,
 	)
-	canvas_hit := fit.Surface_Interact(
+	canvas_hit := fit.Interact(
 		surface,
 		{f32(canvas.x), f32(canvas.y), f32(canvas.w), f32(canvas.h)},
 	)
-	if canvas_hit.hovered && fit.Surface_Wheel(surface) != 0 do dock_canvas_wheel += 1
+	if canvas_hit.hovered && fit.Wheel(surface) != 0 do dock_canvas_wheel += 1
 	if canvas_hit.clicked do dock_canvas_clicks += 1
-	metrics := fit.Surface_Metrics(surface)
-	fit.Surface_Text(
+	metrics := fit.Get_Metrics(surface)
+	fit.Text(
 		surface,
 		fmt.tprintf("canvas wheel: %d", dock_canvas_wheel),
 		x + fit.Px(surface, 12),
 		y + fit.Px(surface, 12),
 	)
-	fit.Surface_Text(
+	fit.Text(
 		surface,
 		fmt.tprintf("canvas clicks: %d", dock_canvas_clicks),
 		x + fit.Px(surface, 12),
 		y + fit.Px(surface, 12) + metrics.line_height,
 	)
-	fit.Surface_Text(
+	fit.Text(
 		surface,
 		"wheel and click here, then over the panel",
 		x + fit.Px(surface, 12),
@@ -1579,11 +1579,11 @@ draw_dock_panel :: proc(surface: ^fit.Surface, panel: fit.Rect) {
 	assert(surface != nil, "draw_dock_panel: nil surface")
 	assert(panel.w > 0 && panel.h > 0, "draw_dock_panel: empty panel")
 	claim := fit.Float_Rect{f32(panel.x), f32(panel.y), f32(panel.w), f32(panel.h)}
-	fit.Surface_Draw_Surface(surface, claim, .Panel, radius = .SM, border = .Hairline)
-	fit.Surface_Layer_Begin(surface, fit.Z_PANEL, claim = claim)
-	defer fit.Surface_Layer_End(surface)
+	fit.Draw_Surface(surface, claim, .Panel, radius = .SM, border = .Hairline)
+	fit.Layer_Begin(surface, fit.Z_PANEL, claim = claim)
+	defer fit.Layer_End(surface)
 
-	content_y := fit.Surface_Pane_Begin(surface, &dock_panel_pane, panel, padding = 10)
+	content_y := fit.Pane_Begin(surface, &dock_panel_pane, panel, padding = 10)
 	region: fit.Region
 	u := fit.Region_Open(
 		surface,
@@ -1603,7 +1603,7 @@ draw_dock_panel :: proc(surface: ^fit.Surface, panel: fit.Rect) {
 	fit.Region_Label(u, fmt.tprintf("panel clicks: %d", dock_panel_clicks))
 	for row in 0 ..< 8 do fit.Region_Label(u, fmt.tprintf("scroll row %d", row), .Note, .Secondary)
 	end_y := fit.Region_Close(u)
-	fit.Surface_Pane_End(surface, &dock_panel_pane, panel, end_y, padding = 10)
+	fit.Pane_End(surface, &dock_panel_pane, panel, end_y, padding = 10)
 }
 
 // draw_overlay_confirm runs the built-in confirm dialog and reports the
@@ -1632,18 +1632,18 @@ draw_demo_popup :: proc(surface: ^fit.Surface, x, y: i32) {
 	w := fit.Px(surface, 220)
 	h := fit.Px(surface, 130)
 	rect := fit.Float_Rect{f32(x), f32(y), f32(w), f32(h)}
-	fit.Surface_Layer_Begin(surface, fit.Z_POPUP, claim = rect)
-	fit.Surface_Fill_Rounded_Rect(
+	fit.Layer_Begin(surface, fit.Z_POPUP, claim = rect)
+	fit.Fill_Rounded_Rect(
 		surface,
 		rect,
 		0.1,
 		6,
-		fit.Surface_Theme_Tokens(surface).background_popup,
+		fit.Get_Theme_Tokens(surface).background_popup,
 	)
-	theme := fit.Surface_Theme_Tokens(surface)
-	fit.Surface_Stroke_Rounded_Rect(surface, rect, 0.1, 6, 1, theme.border)
-	fit.Surface_Text(surface, "Overlay popup", x + fit.Px(surface, 12), y + fit.Px(surface, 10))
-	fit.Surface_Text(
+	theme := fit.Get_Theme_Tokens(surface)
+	fit.Stroke_Rounded_Rect(surface, rect, 0.1, 6, 1, theme.border)
+	fit.Text(surface, "Overlay popup", x + fit.Px(surface, 12), y + fit.Px(surface, 10))
+	fit.Text(
 		surface,
 		"Recorded during the frame,",
 		x + fit.Px(surface, 12),
@@ -1651,7 +1651,7 @@ draw_demo_popup :: proc(surface: ^fit.Surface, x, y: i32) {
 		.Label,
 		.Secondary,
 	)
-	fit.Surface_Text(
+	fit.Text(
 		surface,
 		"replayed above everything.",
 		x + fit.Px(surface, 12),
@@ -1667,16 +1667,16 @@ draw_demo_popup :: proc(surface: ^fit.Surface, x, y: i32) {
 		f32(w - fit.Px(surface, 24)),
 		f32(fit.Px(surface, 22)),
 	}
-	close := fit.Surface_Interact(surface, row)
+	close := fit.Interact(surface, row)
 	if close.hovered {
-		fit.Surface_Fill_Float_Rect(
+		fit.Fill_Rect(
 			surface,
 			row,
-			fit.Surface_Theme_Tokens(surface).background_active,
+			fit.Get_Theme_Tokens(surface).background_active,
 		)
-		fit.Surface_Request_Cursor(surface, .Pointing_Hand)
+		fit.Request_Cursor(surface, .Pointing_Hand)
 	}
-	fit.Surface_Text(
+	fit.Text(
 		surface,
 		"Close",
 		x + fit.Px(surface, 18),
@@ -1687,7 +1687,7 @@ draw_demo_popup :: proc(surface: ^fit.Surface, x, y: i32) {
 	if close.clicked {
 		popup_open = false
 	}
-	fit.Surface_Layer_End(surface)
+	fit.Layer_End(surface)
 }
 
 // STRESS_BUTTONS is the grid size the section advertises. Every one of them is
@@ -1703,13 +1703,13 @@ draw_stress :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	// The header's height does not depend on its text, so the grid's origin
 	// is known before the label is built - which is what lets the label
 	// report the drawn count.
-	header_h := fit.Surface_Metrics(surface).font_label + fit.Px(surface, 11)
+	header_h := fit.Get_Metrics(surface).font_label + fit.Px(surface, 11)
 	bounds := fit.Rect{x, y0 + header_h, w, 0}
 	// Only the rows intersecting the pane's cull band are built. Without this
 	// the section constructs 1000 labels, measures and interacts with all of
 	// them, and emits ~11 MB of vertex data per frame for the ~25 buttons on
 	// screen - enough to exhaust the geometry stream on a phone.
-	top, bottom := fit.Surface_Cull_Bounds(surface)
+	top, bottom := fit.Cull_Bounds(surface)
 	visible := fit.Surface_Grid_Visible_Range(
 		surface,
 		bounds,
@@ -1752,7 +1752,7 @@ draw_stress :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	y = content.y + content.h + fit.Px(surface, 10)
 	if stress_clicked >= 0 {
 		msg := fmt.tprintf("last clicked: btn %d", stress_clicked)
-		fit.Surface_Text(surface, msg, x, y, .Label, .Secondary)
+		fit.Text(surface, msg, x, y, .Label, .Secondary)
 		y += fit.Px(surface, 24)
 	}
 	return y
