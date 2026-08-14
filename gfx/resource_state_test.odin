@@ -2,6 +2,7 @@
 package gfx
 
 import "core:testing"
+import wg "vendor:wgpu"
 
 @(test)
 resource_handle_round_trip_and_wrap :: proc(t: ^testing.T) {
@@ -321,4 +322,63 @@ assigned_context_ids_never_collide_with_the_default :: proc(t: ^testing.T) {
 	previous := first.id
 	testing.expect(t, _context_assign_id(first))
 	testing.expect_value(t, first.id, previous)
+}
+
+@(test)
+frame_owner_and_availability_are_context_bound :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	first.epoch = 17
+	second.epoch = 29
+	frame := Frame {
+		owner     = first,
+		epoch     = first.epoch,
+		open      = true,
+		available = true,
+	}
+	testing.expect(t, frame_owner(&frame) == first)
+	testing.expect(t, frame_owner(&frame) != second)
+	testing.expect(t, frame_available(&frame))
+	frame.open = false
+	testing.expect(t, !frame_available(&frame))
+	testing.expect(t, !frame_available(nil))
+}
+
+@(test)
+context_renderer_statistics_are_isolated :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	first.stats_latest.flush_count = 11
+	second.stats_latest.flush_count = 23
+	testing.expect_value(t, context_renderer_stats(first).flush_count, u32(11))
+	testing.expect_value(t, context_renderer_stats(second).flush_count, u32(23))
+	context_renderer_stats_reset(first)
+	when RENDER_STATS_ENABLED {
+		testing.expect_value(t, context_renderer_stats(first).flush_count, u64(0))
+	}
+	testing.expect_value(t, context_renderer_stats(second).flush_count, u32(23))
+}
+
+@(test)
+texture_retirement_is_context_bound :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	defer delete(first.resources.retire)
+	second := new(Context)
+	defer free(second)
+	defer delete(second.resources.retire)
+	first.frame.has_frame = true
+	second.frame.has_frame = true
+	first_view := transmute(wg.TextureView)(uintptr(1))
+	second_view := transmute(wg.TextureView)(uintptr(2))
+	_retire_texture(first, nil, nil, first_view, nil)
+	testing.expect_value(t, len(first.resources.retire), 1)
+	testing.expect_value(t, len(second.resources.retire), 0)
+	_retire_texture(second, nil, nil, second_view, nil)
+	testing.expect_value(t, len(first.resources.retire), 1)
+	testing.expect_value(t, len(second.resources.retire), 1)
 }

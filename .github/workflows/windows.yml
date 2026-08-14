@@ -1,24 +1,91 @@
 name: Windows gates
 
 on:
+  push:
+    branches: [main, develop]
+  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   windows:
     runs-on: windows-2022
     timeout-minutes: 60
+    env:
+      INGOT_TEST_FAILURE_LOG_DIR: ${{ runner.temp }}/ingot-test-failures
     steps:
       - uses: actions/checkout@v4
-      - name: Verify provisioned toolchain
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Install pinned Odin toolchain
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $OdinArchive = Join-Path $env:RUNNER_TEMP "odin.zip"
+          $OlsArchive = Join-Path $env:RUNNER_TEMP "ols.zip"
+          $WgpuArchive = Join-Path $env:RUNNER_TEMP "wgpu.zip"
+          $OdinRoot = Join-Path $env:RUNNER_TEMP "odin"
+          $OlsRoot = Join-Path $env:RUNNER_TEMP "ols"
+          $WgpuRoot = Join-Path $env:RUNNER_TEMP "wgpu"
+          New-Item -ItemType Directory -Force -Path $OdinRoot, $OlsRoot, $WgpuRoot | Out-Null
+          gh api repos/odin-lang/Odin/releases/assets/504098430 `
+            -H "Accept: application/octet-stream" > $OdinArchive
+          gh api repos/DanielGavin/ols/releases/assets/487668593 `
+            -H "Accept: application/octet-stream" > $OlsArchive
+          gh api repos/gfx-rs/wgpu-native/releases/assets/455571718 `
+            -H "Accept: application/octet-stream" > $WgpuArchive
+          Expand-Archive -Path $OdinArchive -DestinationPath $OdinRoot
+          Expand-Archive -Path $OlsArchive -DestinationPath $OlsRoot
+          Expand-Archive -Path $WgpuArchive -DestinationPath $WgpuRoot
+          $OdinRoot = Join-Path $OdinRoot "dist"
+          $WgpuTarget = Join-Path $OdinRoot "vendor/wgpu/lib/wgpu-windows-x86_64-msvc-release/lib"
+          New-Item -ItemType Directory -Force -Path $WgpuTarget | Out-Null
+          Copy-Item -Force (Join-Path $WgpuRoot "lib/*") $WgpuTarget
+          Move-Item `
+            (Join-Path $OlsRoot "odinfmt-x86_64-pc-windows-msvc.exe") `
+            (Join-Path $OlsRoot "odinfmt.exe")
+          $OdinRoot | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $OlsRoot | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Verify pinned Windows toolchain
         shell: pwsh
         run: |
-          if (-not (Get-Command odin -ErrorAction SilentlyContinue)) {
-            throw "Provision the exact ODIN_VERSION toolchain before enabling this workflow"
+          if (-not [Environment]::Is64BitOperatingSystem) {
+            throw "Windows x64 is required for committed native libraries"
+          }
+          foreach ($Command in @("python", "odin", "odinfmt", "cl", "link")) {
+            if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) {
+              throw "$Command is required"
+            }
+          }
+          foreach ($Library in @(
+            "accesskit/lib/windows_amd64/accesskit.lib",
+            "libvterm/lib/windows_amd64/vterm.lib"
+          )) {
+            if (-not (Test-Path $Library)) {
+              throw "Missing native library: $Library"
+            }
           }
           python scripts/check-toolchain.py
-      - name: Test
+          odinfmt -help | Out-Null
+      - name: Run Windows native tests
         shell: pwsh
         run: ./scripts/test.ps1
-      - name: Check
+      - name: Run Windows strict gate
         shell: pwsh
         run: ./scripts/check.ps1
+      - name: Upload bounded failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-failures
+          path: ${{ runner.temp }}/ingot-test-failures
+          if-no-files-found: ignore
+          retention-days: 7

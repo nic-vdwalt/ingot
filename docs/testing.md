@@ -50,6 +50,15 @@ local and native; no macOS-to-Linux cross toolchain is supplied. AccessKit is
 validated on Linux amd64 and intentionally unavailable on Linux arm64 until a
 verified arm64 artifact exists.
 
+GitHub Actions also provisions the pinned toolchain on native Windows x64 and
+macOS arm64 runners. Windows runs `scripts/test.ps1` and `scripts/check.ps1`;
+macOS runs `scripts/test.sh -define:ODIN_TEST_THREADS=1` and `scripts/check.sh`.
+Both gates execute package tests, loopback WSS, strict checks, binding links,
+simulation-mode compilation, and consumer-example builds. Linux alone runs the
+headless web gate. Hosted native gates provide compile, link, and headless test
+evidence; they do not establish D3D12, Metal, ConPTY, PTY, accessibility, or
+assistive-technology validation.
+
 ## Standard checks
 
 Run the package tests:
@@ -58,9 +67,9 @@ Run the package tests:
 bash scripts/test.sh
 ```
 
-This runs `odin test` for `gfx`, `ui`, `ui_gfx`, `libvterm`, `term`, `prefs`,
-and `net`, runs the native loopback WSS/TLS matrix, then type-checks packages
-without tests. The matrix uses repository-only test PKI and Python's standard
+This runs every test package and test example in `scripts/gate-manifest.json`,
+runs the native loopback WSS/TLS matrix, then type-checks packages without
+tests. The matrix uses repository-only test PKI and Python's standard
 library to verify trusted, untrusted, wrong-host, upgrade, framing, and teardown
 behavior without Internet access. Extra Odin flags pass through
 to each test command:

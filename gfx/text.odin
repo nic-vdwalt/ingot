@@ -145,7 +145,7 @@ LoadFontFromMemory :: proc(
 	a.glyphs = make(map[rune]Glyph)
 	a.filter = .BILINEAR
 	if !_atlas_gpu_init(a) {
-		_atlas_entry_destroy(a)
+		_atlas_entry_destroy(default_context(), a)
 		return {}
 	}
 
@@ -157,7 +157,7 @@ LoadFontFromMemory :: proc(
 
 	id := _atlas_register(&g.resources.atlases, a)
 	if id == 0 {
-		_atlas_entry_destroy(a)
+		_atlas_entry_destroy(default_context(), a)
 		return {}
 	}
 
@@ -354,10 +354,11 @@ _atlas_build_bind :: proc(a: ^Atlas) {
 }
 
 @(private)
-_atlas_entry_destroy :: proc(entry: ^Atlas) {
+_atlas_entry_destroy :: proc(ctx: ^Context, entry: ^Atlas) {
+	assert(ctx != nil, "_atlas_entry_destroy: nil context")
 	assert(entry != nil, "_atlas_entry_destroy: nil entry")
 	if entry.bind != nil || entry.sampler != nil || entry.view != nil || entry.tex != nil {
-		_retire_texture(entry.bind, entry.sampler, entry.view, entry.tex)
+		_retire_texture(ctx, entry.bind, entry.sampler, entry.view, entry.tex)
 	}
 	delete(entry.glyphs)
 	delete(entry.data)
@@ -365,11 +366,12 @@ _atlas_entry_destroy :: proc(entry: ^Atlas) {
 }
 
 @(private)
-_atlas_resources_destroy :: proc(resources: ^Atlas_Resources) {
+_atlas_resources_destroy :: proc(ctx: ^Context, resources: ^Atlas_Resources) {
+	assert(ctx != nil, "_atlas_resources_destroy: nil context")
 	assert(resources != nil, "_atlas_resources_destroy: nil resources")
 	for &slot in resources.slots {
 		if !slot.occupied do continue
-		_atlas_entry_destroy(slot.entry)
+		_atlas_entry_destroy(ctx, slot.entry)
 		slot.entry = nil
 		slot.occupied = false
 	}
@@ -379,7 +381,7 @@ _atlas_resources_destroy :: proc(resources: ^Atlas_Resources) {
 UnloadFont :: proc(font: Font) {
 	slot := _atlas_slot(&g.resources.atlases, font._atlas)
 	if slot == nil do return
-	_atlas_entry_destroy(slot.entry)
+	_atlas_entry_destroy(default_context(), slot.entry)
 	slot.entry = nil
 	slot.occupied = false
 	assert(g.resources.atlases.count > 0, "UnloadFont: count underflow")

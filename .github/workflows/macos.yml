@@ -1,0 +1,71 @@
+name: macOS gates
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      INGOT_TEST_FAILURE_LOG_DIR: ${{ runner.temp }}/ingot-test-failures
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify macOS architecture
+        run: |
+          [ "$(uname -m)" = arm64 ] || {
+            echo "macOS arm64 is required for the pinned native libraries" >&2
+            exit 1
+          }
+          test -f accesskit/lib/darwin_arm64/libaccesskit.a
+          test -f libvterm/lib/darwin_arm64/libvterm.a
+      - name: Install pinned Odin toolchain
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir "$RUNNER_TEMP/odin" "$RUNNER_TEMP/ols" "$RUNNER_TEMP/wgpu"
+          gh api repos/odin-lang/Odin/releases/assets/504104905 \
+            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/odin.tar.gz"
+          tar -xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
+          gh api repos/DanielGavin/ols/releases/assets/487668580 \
+            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/ols.zip"
+          unzip -q "$RUNNER_TEMP/ols.zip" -d "$RUNNER_TEMP/ols"
+          mv "$RUNNER_TEMP/ols/odinfmt-arm64-darwin" "$RUNNER_TEMP/ols/odinfmt"
+          chmod +x "$RUNNER_TEMP/ols/odinfmt"
+          gh api repos/gfx-rs/wgpu-native/releases/assets/455571728 \
+            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/wgpu.zip"
+          unzip -q "$RUNNER_TEMP/wgpu.zip" -d "$RUNNER_TEMP/wgpu"
+          mkdir -p "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-macos-aarch64-release/lib"
+          cp "$RUNNER_TEMP/wgpu/lib/"* \
+            "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-macos-aarch64-release/lib/"
+          sh "$RUNNER_TEMP/odin/vendor/miniaudio/src/build_miniaudio.sh"
+          sh "$RUNNER_TEMP/odin/vendor/stb/src/build_stb.sh" unix
+          echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/ols" >> "$GITHUB_PATH"
+      - name: Verify pinned macOS toolchain
+        run: |
+          python3 scripts/check-toolchain.py
+          odinfmt -help >/dev/null
+          python3 scripts/check-repository-hygiene.py
+      - name: Run macOS native tests
+        run: bash scripts/test.sh -define:ODIN_TEST_THREADS=1
+      - name: Run macOS strict gate
+        run: bash scripts/check.sh
+      - name: Upload bounded failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-test-failures
+          path: ${{ runner.temp }}/ingot-test-failures
+          if-no-files-found: ignore
+          retention-days: 7
