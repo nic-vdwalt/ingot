@@ -148,6 +148,20 @@ class ConsumerPolicyTests(unittest.TestCase):
         self.assertTrue(any("must import ingot:fit as fit" in failure for failure in failures))
         self.assertTrue(any("compatibility UI name" in failure for failure in failures))
 
+    def test_non_gallery_example_rejects_compatibility_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "ui").mkdir()
+            (root / "fit").mkdir()
+            example = root / "examples" / "chart_demo"
+            example.mkdir(parents=True)
+            (example / "main.odin").write_text(
+                'package main\nimport fit "ingot:fit"\nx: fit.Host_App\n',
+                encoding="utf-8",
+            )
+            failures = policy.check(root)
+        self.assertTrue(any("compatibility UI name" in failure for failure in failures))
+
     def test_gallery_allows_public_fit_surface(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()

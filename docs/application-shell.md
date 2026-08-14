@@ -25,8 +25,10 @@ main :: proc() {
 ```
 
 `Draw` receives an open `fit.Builder`. It must declare exactly one balanced root
-container. The shell renders that root and closes the hidden UI root after the
-callback returns.
+container. Prefer a named lexical block with an immediate
+`defer fit.End(builder)` for
+a static root; use direct closure for dynamic construction. The shell renders
+that root and closes the hidden UI root after the callback returns.
 
 For a manually coordinated native host, use `fit.Init`, `fit.Start`, one bounded
 `fit.Tick` per host iteration, `fit.Stop`, and `fit.Destroy`. `fit.Set_Theme` and
@@ -42,19 +44,23 @@ buffers.
 session: fit.Session
 
 Frame :: proc() {
-	builder, acquired := fit.Session_Begin(&session)
-	if !acquired do return
-	fit.Column(builder)
-	fit.Label(builder, "Custom loop")
-	fit.End(builder)
-	fit.Session_End(&session)
+	_ = fit.Session_Draw(&session, Draw)
+}
+
+Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	_ = userdata
+	root_container: {
+		fit.Column(builder)
+		defer fit.End(builder)
+		fit.Label(builder, "Custom loop")
+	}
 }
 ```
 
-`Session_Begin` may report that no frame was acquired. On success, the returned
-builder is borrowed until `Session_End`. `Session_End` renders the balanced root,
-finalizes semantics and platform output, submits graphics, invalidates the frame,
-and resets temporary storage.
+`Session_Draw` returns false when no graphics frame was acquired. On success,
+the builder is borrowed only for the callback; the session renders the balanced
+root, finalizes semantics and platform output, submits graphics, invalidates the
+frame, and resets temporary storage before returning.
 
 ## Internal ownership
 

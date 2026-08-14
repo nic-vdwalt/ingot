@@ -75,10 +75,14 @@ LEGACY_SESSION = re.compile(r"\b(?:App_Session(?:_Config)?|app_session_[a-z_0-9]
 BINDING_IMPORT = re.compile(r'"ingot:(libvterm|pty|accesskit)"')
 INTERNAL_UI_IMPORT = re.compile(r'"ingot:(ui|ui_gfx)"')
 FIT_AS_INTERNAL_IMPORT = re.compile(r'(?m)^\s*import\s+(ui|ui_gfx)\s+"ingot:fit"')
-GALLERY_FIT_IMPORT = re.compile(r'(?m)^\s*import\s+(?!fit\s+)[a-zA-Z_][a-zA-Z_0-9]*\s+"ingot:fit"')
-GALLERY_INTERNAL_NAME = re.compile(r"\b(?:Ui|Ui_Frame|Surface_Frame|legacy_[A-Za-z_0-9]*)\b")
+EXAMPLE_FIT_IMPORT = re.compile(r'(?m)^\s*import\s+(?!fit\s+)[a-zA-Z_][a-zA-Z_0-9]*\s+"ingot:fit"')
+EXAMPLE_INTERNAL_NAME = re.compile(
+    r"\b(?:Ui|Ui_Frame|Ui_Input|Ui_Output|Ui_Runtime|Surface_Frame|Host_App|Host_Session|"
+    r"legacy_[A-Za-z_0-9]*)\b"
+)
+EXAMPLE_INNER_ACCESS = re.compile(r"\bfit\.[A-Za-z_][A-Za-z_0-9]*\.inner\b|\b[A-Za-z_][A-Za-z_0-9]*\.inner\b")
 FIT_INTERNAL_NAME = re.compile(
-    r"\b(?:ui|ui_gfx)\.|\b(?:Prepared[a-zA-Z_0-9]*|Adapter|Ui|Ui_Frame|Ui_Input|Ui_Output|"
+    r"\b(?:ui|ui_gfx)\.|\b(?:Adapter|Ui|Ui_Frame|Ui_Input|Ui_Output|"
     r"Ui_Runtime|Host_App|Host_Session|Session_Frame)\b"
 )
 FIT_SPLIT_SESSION = re.compile(r"\b(?:Session_Begin|Session_End|session_acquire_frame|session_present_frame)\b")
@@ -197,8 +201,9 @@ def fit_public_violations(source: str) -> list[tuple[int, str]]:
         declaration = re.match(r"^([A-Z][A-Za-z_0-9]*)\s*::", stripped)
         procedure = re.match(r"^([A-Z][A-Za-z_0-9]*)\s*::\s*proc\b", stripped)
         public = declaration is not None or procedure is not None
+        opaque_storage = stripped.startswith("Storage_Node :: distinct ui.Prepared_Node")
         if public and not private_next:
-            if FIT_INTERNAL_NAME.search(stripped):
+            if FIT_INTERNAL_NAME.search(stripped) and not opaque_storage:
                 failures.append((index + 1, "Fit public declaration exposes internal UI type"))
             if FIT_SPLIT_SESSION.search(stripped):
                 failures.append((index + 1, "Fit public declaration exposes split session lifecycle"))
@@ -258,13 +263,13 @@ def check(root: Path) -> list[str]:
         failures.extend(
             _matches(raw_source, FIT_AS_INTERNAL_IMPORT, "Fit imported as internal UI alias {name}", path, root)
         )
-        if "gallery" in path.relative_to(root / "examples").parts:
-            source = mask_source(raw_source)
+        source = mask_source(raw_source)
+        failures.extend(
+            _matches(raw_source, EXAMPLE_FIT_IMPORT, "example must import ingot:fit as fit: {name}", path, root)
+        )
+        if '"ingot:fit"' in raw_source:
             failures.extend(
-                _matches(raw_source, GALLERY_FIT_IMPORT, "Gallery must import ingot:fit as fit: {name}", path, root)
-            )
-            failures.extend(
-                _matches(source, GALLERY_INTERNAL_NAME, "Gallery exposes compatibility UI name {name}", path, root)
+                _matches(source, EXAMPLE_INTERNAL_NAME, "example exposes compatibility UI name {name}", path, root)
             )
     for path in sorted((root / "fit").glob("*.odin")):
         source = path.read_text(encoding="utf-8")

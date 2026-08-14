@@ -22,6 +22,7 @@ Adapter :: struct {
 	a11y_initialized: bool,
 	initialized:      bool,
 	graphics_open:    bool,
+	gfx_frame:        ^rl.Frame,
 }
 
 vec_to_ui :: proc(value: rl.Vector2) -> ui.Vec2 {
@@ -42,10 +43,6 @@ color_to_gfx :: proc(value: ui.Color) -> rl.Color {
 
 color_from_gfx :: proc(value: rl.Color) -> ui.Color {
 	return ui.Color{value.r, value.g, value.b, value.a}
-}
-
-adapter_init :: proc(adapter: ^Adapter) {
-	adapter_init_context(adapter, rl.default_context())
 }
 
 adapter_init_context :: proc(adapter: ^Adapter, gfx_context: ^rl.Context) {
@@ -119,6 +116,7 @@ adapter_web_form_sync_submit :: proc(
 adapter_destroy :: proc(adapter: ^Adapter) {
 	assert(adapter != nil && adapter.initialized, "adapter_destroy: invalid adapter")
 	assert(!adapter.graphics_open, "adapter_destroy: graphics frame still open")
+	assert(adapter.gfx_frame == nil, "adapter_destroy: graphics frame still bound")
 	adapter_a11y_destroy(adapter)
 	adapter_reset_fonts(adapter)
 	delete(adapter.font_codepoints)
@@ -131,6 +129,7 @@ adapter_paint_sink :: proc(list: ^ui.Paint_List, command: ui.Paint_Command, user
 	adapter := (^Adapter)(userdata)
 	assert(adapter != nil && adapter.initialized, "adapter_paint_sink: invalid adapter")
 	assert(adapter.graphics_open, "adapter_paint_sink: no open graphics frame")
+	assert(adapter.gfx_frame != nil && rl.frame_available(adapter.gfx_frame))
 	assert(list != nil, "adapter_paint_sink: nil list")
 	replay_command(adapter, list, command)
 }
@@ -198,6 +197,7 @@ adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	ui.ui_frame_finalize(frame)
 	adapter_a11y_publish(adapter, frame)
 	if adapter.graphics_open {
+		assert(adapter.gfx_frame != nil && rl.frame_available(adapter.gfx_frame))
 		replay_list_tiered(adapter, &output.overlay)
 	} else {
 		assert(output.overlay.count == 0, "adapter_end_frame: overlay without graphics frame")

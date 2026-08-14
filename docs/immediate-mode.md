@@ -174,16 +174,16 @@ inside that one description and must not be retained as widget identity.
 
 `fit.Builder` is the supported caller-facing direct-emission API. The host opens
 it over a hidden UI root; ordinary `if` and `for` statements emit children,
-balanced `End` calls close containers, and the host consumes the result
-synchronously. There is no ambient current builder, retained widget tree,
-callback capture, invalidation, or cross-frame synchronization. The `*_With`
-and `Scope` helpers invoke their child procedure once and return only after
-restoring their container or identity depth; they never append that procedure
-to the prepared description. `Custom` alone stores bounded measure/render
-callbacks until the same description is synchronously consumed. Emission
-derives only current-frame geometry; interaction, focus, semantics, and paint
-execute exactly once during render. All paths use named fixed bounds and
-iterative layout.
+static containers use named lexical blocks with deferred `End` calls, and the host
+consumes the result synchronously. Dynamic builders may close containers
+directly. There is no ambient current builder, retained widget tree, callback
+capture, invalidation, or cross-frame synchronization. The `*_With` and `Scope`
+helpers invoke their child procedure once and return only after restoring their
+container or identity depth; they never append that procedure to the prepared
+description. `Custom` alone stores bounded measure/render callbacks until the
+same description is synchronously consumed. Emission derives only current-frame
+geometry; interaction, focus, semantics, and paint execute exactly once during
+render. All paths use named fixed bounds and iterative layout.
 
 Reusing a builder resets logical counts and every previously used output slot;
 unused selected capacity is not scanned or retained as active state. Externally

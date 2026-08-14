@@ -3,6 +3,8 @@ package gfx
 
 import "core:testing"
 
+frame_owner_test_context: Context
+
 @(test)
 context_queries_are_isolated :: proc(t: ^testing.T) {
 	first := new(Context)
@@ -119,20 +121,30 @@ close_requested_disables_frame_pacing :: proc(t: ^testing.T) {
 }
 
 @(test)
-context_scope_nested_activation_restores_owner :: proc(t: ^testing.T) {
-	first := new(Context)
-	second := new(Context)
-	defer free(first)
-	defer free(second)
-	first.width = 640
-	second.width = 320
+frame_owner_rejects_stale_epoch :: proc(t: ^testing.T) {
+	frame_owner_test_context.epoch = 7
+	frame := Frame {
+		owner     = &frame_owner_test_context,
+		epoch     = 7,
+		open      = true,
+		available = true,
+	}
+	testing.expect(t, frame_owner(&frame) == &frame_owner_test_context)
+	frame_owner_test_context.epoch += 1
+	testing.expect_assert_message(t, "frame_owner: stale owner")
+	_ = frame_owner(&frame)
+	testing.fail_now(t, "frame_owner accepted a stale context epoch")
+}
 
-	first_scope := context_scope_enter(first)
-	testing.expect_value(t, GetScreenWidth(), i32(640))
-	second_scope := context_scope_enter(second)
-	testing.expect_value(t, GetScreenWidth(), i32(320))
-	context_scope_leave(&second_scope)
-	testing.expect_value(t, GetScreenWidth(), i32(640))
-	context_scope_leave(&first_scope)
-	testing.expect(t, g == default_context())
+@(test)
+frame_availability_requires_open_available_frame :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	frame: Frame
+	testing.expect(t, !frame_available(&frame))
+	frame.owner = ctx
+	frame.open = true
+	testing.expect(t, !frame_available(&frame))
+	frame.available = true
+	testing.expect(t, frame_available(&frame))
 }

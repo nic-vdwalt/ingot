@@ -6,7 +6,6 @@ import "core:os"
 import "core:path/filepath"
 import "core:time"
 import fit "ingot:fit"
-import rl "ingot:gfx"
 
 when ODIN_OS == .Windows {
 	LIBRARY_EXTENSION :: ".dll"
@@ -34,7 +33,7 @@ Game_API :: struct {
 }
 
 Host :: struct {
-	session:   fit.Session,
+	app:       fit.App,
 	api:       Game_API,
 	old:       [GAME_LIBRARY_MAX]Game_API,
 	old_count: int,
@@ -130,16 +129,11 @@ reload_if_changed :: proc(state: ^Host) {
 	reload_game(state)
 }
 
-frame :: proc() {
-	reload_if_changed(&host)
-	_ = fit.Session_Draw(&host.session, host_draw)
-}
-
 host_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	assert(builder != nil, "host_draw: nil builder")
-	_ = userdata
-	rl.ClearBackground(rl.Color{22, 24, 32, 255})
-	host.api.draw(builder)
+	assert(builder != nil && userdata != nil, "host_draw: invalid argument")
+	state := cast(^Host)userdata
+	reload_if_changed(state)
+	state.api.draw(builder)
 }
 
 main :: proc() {
@@ -159,14 +153,22 @@ main :: proc() {
 		unload_game_api(&host.api)
 		return
 	}
-	flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}
-	when ODIN_OS == .Darwin do flags += {.WINDOW_HIGHDPI}
-	rl.SetConfigFlags(flags)
-	rl.InitWindow(720, 360, "Ingot hot reload")
-	fit.Session_Init(&host.session, {semantics_enabled = true})
-	rl.run(frame)
-	fit.Session_Destroy(&host.session)
-	rl.CloseWindow()
+	flags: fit.Window_Flags = {.Resizable, .Vsync}
+	when ODIN_OS == .Darwin do flags += {.High_Dpi}
+	_ = fit.Run(
+		&host.app,
+		{
+			width = 720,
+			height = 360,
+			title = "Ingot hot reload",
+			flags = flags,
+			frame_pacing = .Monitor_Refresh,
+			target_fps = 60,
+			session = {semantics_enabled = true},
+		},
+		host_draw,
+		&host,
+	)
 	host.api.shutdown()
 	unload_old_apis(&host)
 	unload_game_api(&host.api)

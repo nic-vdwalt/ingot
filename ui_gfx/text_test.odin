@@ -10,7 +10,7 @@ test_adapter_attach_runtime_installs_text_backend :: proc(t: ^testing.T) {
 	test_context_lock()
 	defer test_context_unlock()
 	adapter: Adapter
-	adapter_init(&adapter)
+	adapter_init_context(&adapter, rl.default_context())
 	defer adapter_destroy(&adapter)
 	runtime: ui.Ui_Runtime
 	ui.ui_runtime_init(&runtime)

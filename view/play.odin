@@ -16,7 +16,6 @@
 // ensure is for.
 package view
 
-import "ingot:fit"
 import "ingot:ui"
 
 // view_play walks the view and emits it into u. bindings supplies the state the
@@ -27,16 +26,6 @@ import "ingot:ui"
 // compatible with immediate mode rather than a retained tree in disguise.
 view_play :: proc(u: ^ui.Ui, view: View, bindings: ^Bindings) {
 	view_play_traced(u, view, bindings, nil)
-}
-
-play_fit :: proc(u: ^fit.Ui, view: View, bindings: ^Bindings) {
-	assert(u != nil, "play_fit: nil Fit UI")
-	view_play(u, view, bindings)
-}
-
-play_fit_traced :: proc(u: ^fit.Ui, view: View, bindings: ^Bindings, trace: ^Play_Trace) {
-	assert(u != nil, "play_fit_traced: nil Fit UI")
-	view_play_traced(u, view, bindings, trace)
 }
 
 // view_play_traced is view_play with an optional per-node rect recording, for

@@ -1,7 +1,6 @@
 package main
 
 import fit "ingot:fit"
-import rl "ingot:gfx"
 
 State :: struct {
 	showing: bool,
@@ -16,8 +15,8 @@ state := State {
 }
 
 main :: proc() {
-	flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}
-	when ODIN_OS == .Darwin do flags += {.WINDOW_HIGHDPI}
+	flags: fit.Window_Flags = {.Resizable, .Vsync}
+	when ODIN_OS == .Darwin do flags += {.High_Dpi}
 	_ = fit.Run(
 		&app,
 		{
@@ -42,17 +41,21 @@ draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 		data.showing = !data.showing
 		data.toggle = false
 	}
-	fit.Column(builder, {gap = .SM, padding = .LG})
-	fit.Label(builder, "Hello from Ingot", {role = .Title})
-	fit.Row(builder, {gap = .SM, align = .Center})
-	fit.Label(builder, "Controls", {role = .Label, track = fit.Grow()})
-	fit.Button(builder, "toggle", "Toggle list", &data.toggle)
-	fit.End(builder)
-	fit.Checkbox(builder, "enabled", "Enabled", &data.enabled)
-	if data.showing {
-		fit.Column(builder, {gap = .XS})
-		for item in data.items do fit.Button(builder, item, "Stable item")
-		fit.End(builder)
+	root_container: {
+		fit.Column(builder, {gap = .SM, padding = .LG})
+		defer fit.End(builder)
+		fit.Label(builder, "Hello from Ingot", {role = .Title})
+		controls_container: {
+			fit.Row(builder, {gap = .SM, align = .Center})
+			defer fit.End(builder)
+			fit.Label(builder, "Controls", {role = .Label, track = fit.Grow()})
+			fit.Button(builder, "toggle", "Toggle list", &data.toggle)
+		}
+		fit.Checkbox(builder, "enabled", "Enabled", &data.enabled)
+		if data.showing {
+			fit.Column(builder, {gap = .XS})
+			defer fit.End(builder)
+			for item in data.items do fit.Button(builder, item, "Stable item")
+		}
 	}
-	fit.End(builder)
 }

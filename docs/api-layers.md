@@ -24,9 +24,9 @@ main :: proc() {
 }
 ```
 
-The lower-case `Frame`/`Context` drawing vocabulary is implementation-only
-while the bridge is migrated to direct context routing. New consumer code must
-not adopt it.
+The PascalCase API is the supported default-context migration vocabulary. The
+narrow owner-bound `Frame` seam exists for framework bridges and documented
+multi-context hosts; it is not a second general drawing vocabulary.
 
 ## `ingot:fit`
 
@@ -44,47 +44,45 @@ main :: proc() {
 }
 
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	fit.Column(builder, {gap = .SM, padding = .LG})
-	fit.Label(builder, "Settings", {role = .Title})
-	fit.Button(builder, "save", "Save", &saved)
-	fit.End(builder)
+	root_container: {
+		fit.Column(builder, {gap = .SM, padding = .LG})
+		defer fit.End(builder)
+		fit.Label(builder, "Settings", {role = .Title})
+		fit.Button(builder, "save", "Save", &saved)
+	}
 }
 ```
 
 The builder is bounded and immediate. `Row`, `Column`, `Flow`, `Grid`, and
-`Attachment` open containers; `End` closes one container. `Label`, `Button`,
+`Attachment` open containers; `End` closes one container. Static containers
+should use a named lexical block with an immediate `defer fit.End(builder)`;
+direct
+closure remains available for dynamic construction. `Label`, `Button`,
 `Checkbox`, `Radio`, `Slider`, and `Custom` emit leaves. The additive `*_With`
-helpers invoke one child procedure immediately and auto-close their own
-container; `Scope` provides explicit component identity. `Render` consumes the
-declaration synchronously. `Measure` plus `Render_At` supports caller-owned
-placement without introducing a retained widget tree. A `Custom` render callback
-receives a borrowed `fit.Surface` for same-frame interaction and explicit
-geometry; the Surface is valid only for that callback and must not be retained.
+helpers auto-close callback-built containers; `Scope` provides explicit
+component identity. `Render` consumes the declaration synchronously. `Measure`
+plus `Render_At` supports caller-owned placement without introducing a retained
+widget tree. A `Custom` render callback receives a borrowed `fit.Surface` for
+same-frame interaction and explicit geometry; the Surface is valid only for that
+callback and must not be retained.
 
-For an existing raylib loop, use `fit.Session`:
+For caller-owned scheduling, use the `fit.App` lifecycle explicitly:
 
 ```odin
-session: fit.Session
-
 main :: proc() {
-	rl.InitWindow(720, 480, "App")
-	fit.Session_Init(&session)
-	defer fit.Session_Destroy(&session)
-	defer rl.CloseWindow()
-	rl.run(Frame)
-}
-
-Frame :: proc() {
-	_ = fit.Session_Draw(&session, Draw)
-}
-
-Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	_ = userdata
-	fit.Column(builder)
-	fit.Label(builder, "UI inside a raylib loop")
-	fit.End(builder)
+	if !fit.Init(&app, {width = 720, height = 480, title = "App"}, {draw = Draw}) do return
+	defer fit.Destroy(&app)
+	if !fit.Start(&app) do return
+	for fit.Get_State(&app) == .Running {
+		if !fit.Tick(&app) do break
+	}
+	if fit.Get_State(&app) == .Running do _ = fit.Stop(&app)
 }
 ```
+
+`fit.Session` is reserved for bounded integration inside an externally owned
+graphics loop. It still yields only `fit.Builder`; it does not expose runtime,
+frame, adapter, paint, or platform internals.
 
 ## Internal packages
 

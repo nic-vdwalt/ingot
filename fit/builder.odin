@@ -127,8 +127,6 @@ Custom :: proc(builder: ^Builder, spec: Custom_Spec, options: Custom_Options = {
 	)
 }
 
-Canvas :: Custom
-
 End :: proc(builder: ^Builder) {
 	assert(builder != nil && builder.bound, "Fit.End: builder not bound")
 	ui.fit_end(&builder.inner)

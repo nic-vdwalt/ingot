@@ -228,10 +228,12 @@ main :: proc() {
 			builder, acquired := fit.Session_Begin(&session)
 			if !acquired do continue
 			rl.ClearBackground(rl.BLACK)
-			fit.Column(builder, {gap = .XS, padding = .SM})
-			fit.Label(builder, "FIT lifecycle fuzz", {role = .Title})
-			fit.Button(builder, "lifecycle", "Lifecycle button", &button_active)
-			fit.End(builder)
+			root_container: {
+				fit.Column(builder, {gap = .XS, padding = .SM})
+				defer fit.End(builder)
+				fit.Label(builder, "FIT lifecycle fuzz", {role = .Title})
+				fit.Button(builder, "lifecycle", "Lifecycle button", &button_active)
+			}
 			_ = fit.Render(builder)
 
 			// Interleave draw → mutate → draw so recorded references

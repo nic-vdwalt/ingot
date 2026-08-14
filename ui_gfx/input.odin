@@ -7,10 +7,6 @@ INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
 #assert(INPUT_CHARACTER_DRAIN_MAX == ui.INPUT_CHAR_CAP)
 #assert(rl.PREEDIT_MAX == ui.INPUT_PREEDIT_CAP)
 
-capture_input :: proc(input: ^ui.Ui_Input) {
-	capture_input_context(rl.default_context(), input)
-}
-
 pointer_snapshot_sanitize :: proc(input: ^ui.Ui_Input) {
 	assert(input != nil, "pointer_snapshot_sanitize: nil input")
 	if input.window_focused && input.cursor_on_screen do return

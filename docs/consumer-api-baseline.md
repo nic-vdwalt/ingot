@@ -6,7 +6,7 @@ The supported UI baseline is one import and one declaration model.
 |---|---:|---:|---|
 | One-window UI app | 1 (`ingot:fit`) | `Run` | `fit.Builder` |
 | Explicit app ticking | 1 (`ingot:fit`) | `Init`, `Start`, `Tick`, `Stop`, `Destroy` | `fit.Builder` |
-| Existing raylib loop with UI | 2 (`ingot:gfx`, `ingot:fit`) | `Session_Init`, `Session_Begin`, `Session_End`, `Session_Destroy` | `fit.Builder` |
+| Existing raylib loop with UI | 2 (`ingot:gfx`, `ingot:fit`) | `Session_Init`, `Session_Draw`, `Session_Destroy` | `fit.Builder` |
 | Graphics-only raylib migration | 1 (`ingot:gfx`) | raylib-compatible lifecycle | PascalCase `gfx` |
 
 Application code does not own `Ui_Runtime`, `Ui_Frame`, `Ui_Output`, `Adapter`,

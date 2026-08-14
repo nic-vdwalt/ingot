@@ -1636,13 +1636,10 @@ _gpu_3d_pipeline :: proc(
 		}
 	}
 	if resources.pipeline_count >= GPU_3D_MAX_PIPELINES {
-		// Pool full: draws to targets in unseen formats are skipped from now
-		// on (bounded pool, never grows) - operating condition, counted.
 		_stats_gpu3d_pool_exhaustion()
 		return nil
 	}
 	_gpu_3d_init_shared(ctx, resources)
-	// A custom module replaces both stages; the built-in module otherwise.
 	module := resources.shader
 	if shader_module != nil do module = shader_module
 	attrs := [4]wg.VertexAttribute {
@@ -1657,8 +1654,6 @@ _gpu_3d_pipeline :: proc(
 		attributeCount = len(attrs),
 		attributes     = raw_data(attrs[:]),
 	}
-	// Group 1 reuses the 2D renderer's texture layout so 3D materials bind
-	// the same per-texture bind groups (and the neutral white fallback).
 	group_layouts := [2]wg.BindGroupLayout{resources.layout, ctx.rend.tex_layout}
 	layout := wg.DeviceCreatePipelineLayout(
 		ctx.device,

@@ -1,25 +1,22 @@
 // Chart widgets demo: line chart with area fill, grouped bar chart, and
 // sparkline stat cards, with a dark/light theme toggle. Redraws are
-// event-driven (EnableEventWaiting): frames only run on input or while a
-// chart's enter animation is settling. Build & run:
+// event-driven while chart animations are settling. Build & run:
 //
 //	odin run examples/chart_demo -collection:ingot=.
 package main
 
-import ui "ingot:fit"
-import ui_gfx "ingot:fit"
+import fit "ingot:fit"
 
 State :: struct {
-	form:       ui.Ui,
 	dark:       bool,
-	line_state: ui.Chart_State,
-	bar_state:  ui.Chart_State,
+	line_state: fit.Chart_State,
+	bar_state:  fit.Chart_State,
 }
 
 state := State {
 	dark = true,
 }
-app: ui_gfx.Host_App
+app: fit.App
 
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
 costs := [12]f32{8.1, 8.4, 9.0, 9.7, 10.2, 11.5, 11.1, 12.4, 12.0, 13.6, 13.1, 14.0}
@@ -46,7 +43,7 @@ MONTHS := [12]string {
 DAYS := [7]string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
 
 main :: proc() {
-	_ = ui_gfx.app_run(
+	_ = fit.Run(
 		&app,
 		{
 			width = 960,
@@ -57,99 +54,123 @@ main :: proc() {
 			event_waiting = true,
 			session = {semantics_enabled = true},
 		},
-		{ui = frame},
+		frame,
 		&state,
 	)
 }
 
-frame :: proc(app: ^ui_gfx.Host_App, form: ^ui.Ui, userdata: rawptr) {
+frame :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	data := cast(^State)userdata
-	ui.padding(form, .LG)
-	ui.flex_row_begin(form, 36, {ui.grow(), ui.fit(132)}, gap = .MD)
-	ui.label(form, "Chart widgets", ui.ui_frame_metrics(form.frame).FONT_SIZE_TITLE)
-	if ui.button(form, "theme", "Light theme" if data.dark else "Dark theme") {
-		data.dark = !data.dark
-		ui.ui_runtime_set_theme(
-			ui_gfx.app_ui_runtime(app),
-			ui.theme_dark() if data.dark else ui.theme_light(),
+	root_container: {
+		fit.Column(builder, {gap = .MD, padding = .LG})
+		defer fit.End(builder)
+		activated := false
+		header_container: {
+			fit.Row(builder, {gap = .MD, size = {height = fit.Fixed(36)}})
+			defer fit.End(builder)
+			fit.Label(builder, "Chart widgets", {role = .Title, track = fit.Grow()})
+			fit.Button(
+				builder,
+				"theme",
+				"Light theme" if data.dark else "Dark theme",
+				fit.Button_Options{track = fit.Fixed(132), activated = &activated},
+			)
+		}
+		if activated {
+			data.dark = !data.dark
+			fit.Set_Theme(&app, fit.Theme_Dark() if data.dark else fit.Theme_Light())
+		}
+		fit.Custom(
+			builder,
+			{measure = dashboard_measure, render = draw_dashboard, userdata = data},
+			{size = {height = fit.Fixed(620)}},
 		)
 	}
-	ui.flex_row_end(form)
-	ui.canvas(form, {height = 620}, draw_dashboard, data)
 }
 
-draw_dashboard :: proc(frame: ^ui.Ui_Frame, rect: ui.Rect_I32, userdata: rawptr) {
+dashboard_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
+	_ = userdata
+	return {max(constraints.max_w, 1), min(max(constraints.max_h, 1), 620), false}
+}
+
+draw_dashboard :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
 	data := cast(^State)userdata
-	style := ui.ui_frame_theme(frame)
-	line_series := [2]ui.Chart_Series {
+	theme := fit.Surface_Theme_Tokens(surface)
+	line_series := [2]fit.Chart_Series {
 		{name = "Revenue", values = revenue[:]},
 		{name = "Costs", values = costs[:]},
 	}
-	bar_series := [2]ui.Chart_Series {
+	bar_series := [2]fit.Chart_Series {
 		{name = "Total h", values = hours[:]},
 		{name = "Billable h", values = billable[:]},
 	}
 	content_w := max(rect.w - 24, 0)
 	chart_w := content_w * 2 / 3
-	side_x := chart_w + 20
+	side_x := rect.x + chart_w + 20
 	side_w := max(content_w - chart_w - 20, 0)
-	ui.line_chart_at(
-		frame,
-		{0, 0, chart_w, 288},
+	_ = fit.Surface_Line_Chart(
+		surface,
+		{rect.x, rect.y, chart_w, 288},
 		line_series[:],
 		&data.line_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true, fill = true},
 	)
-	ui.bar_chart_at(
-		frame,
-		{0, 312, chart_w, 280},
+	_ = fit.Surface_Bar_Chart(
+		surface,
+		{rect.x, rect.y + 312, chart_w, 280},
 		bar_series[:],
 		&data.bar_state,
 		{labels = DAYS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
 	stat_card(
-		frame,
-		side_x,
-		0,
-		side_w,
-		92,
+		surface,
+		{side_x, rect.y, side_w, 92},
 		"ACTIVE PROJECTS",
 		"9.3",
 		spark_up[:],
-		style.fg_success,
+		theme.foreground_accent,
 	)
-	stat_card(frame, side_x, 104, side_w, 92, "OPEN TASKS", "4.8", spark_down[:], style.fg_error)
 	stat_card(
-		frame,
-		side_x,
-		208,
-		side_w,
-		92,
+		surface,
+		{side_x, rect.y + 104, side_w, 92},
+		"OPEN TASKS",
+		"4.8",
+		spark_down[:],
+		theme.foreground_secondary,
+	)
+	stat_card(
+		surface,
+		{side_x, rect.y + 208, side_w, 92},
 		"AVG HOURS / DAY",
 		"5.1",
 		spark_flat[:],
-		style.fg_accent,
+		theme.foreground_accent,
 	)
+	return false
 }
 
 stat_card :: proc(
-	frame: ^ui.Ui_Frame,
-	x, y, w, h: i32,
-	label, value: cstring,
+	surface: ^fit.Surface,
+	rect: fit.Rect,
+	label, value: string,
 	values: []f32,
-	col: ui.Color,
+	color: fit.Color,
 ) {
-	style := ui.ui_frame_theme(frame)
-	metrics := ui.ui_frame_metrics(frame)
-	ui.card_bg_at(frame, {x, y, w, h}, style.bg_secondary)
-	ui.draw_text_frame(frame, label, x + 14, y + 12, metrics.FONT_SIZE_LABEL, style.fg_label)
-	ui.draw_text_frame(
-		frame,
+	theme := fit.Surface_Theme_Tokens(surface)
+	metrics := fit.Surface_Metrics(surface)
+	fit.Surface_Card_Background(surface, rect, theme.background_secondary)
+	fit.Surface_Text(surface, label, rect.x + 14, rect.y + 12, .Label, .Label)
+	fit.Surface_Text(
+		surface,
 		value,
-		x + 14,
-		y + h - metrics.FONT_SIZE_TITLE - 14,
-		metrics.FONT_SIZE_TITLE,
-		style.fg_primary,
+		rect.x + 14,
+		rect.y + rect.h - metrics.font_title - 14,
+		.Title,
 	)
-	ui.sparkline_at(frame, {x + w - 130, y + h / 2 - 16, 110, 32}, values, col)
+	fit.Surface_Sparkline(
+		surface,
+		{rect.x + rect.w - 130, rect.y + rect.h / 2 - 16, 110, 32},
+		values,
+		color,
+	)
 }

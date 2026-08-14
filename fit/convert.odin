@@ -1,5 +1,6 @@
 package fit
 
+import "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
@@ -17,7 +18,7 @@ to_app_config :: proc(config: Config) -> ui_gfx.App_Config {
 		width = config.width,
 		height = config.height,
 		title = config.title,
-		flags = config.flags,
+		flags = transmute(gfx.ConfigFlags)config.flags,
 		frame_pacing = ui_gfx.App_Frame_Pacing(config.frame_pacing),
 		target_fps = config.target_fps,
 		event_waiting = config.event_waiting,

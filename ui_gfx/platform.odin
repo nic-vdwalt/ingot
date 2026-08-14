@@ -11,10 +11,6 @@ import "ingot:ui"
 #assert(int(ui.Frame_Strategy.Event_Driven) == int(rl.Frame_Strategy.Event_Driven))
 #assert(len(ui.Frame_Strategy) == len(rl.Frame_Strategy))
 
-apply_platform_output :: proc(output: ^ui.Platform_Output) {
-	apply_platform_output_context(rl.default_context(), output)
-}
-
 apply_platform_output_context :: proc(ctx: ^rl.Context, output: ^ui.Platform_Output) {
 	assert(ctx != nil && output != nil, "apply_platform_output_context: nil argument")
 	if output.cursor_requested do rl.context_set_mouse_cursor(ctx, rl.MouseCursor(output.cursor))
