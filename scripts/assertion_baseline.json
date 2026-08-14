@@ -1,7 +1,4 @@
 {
-  "gfx/batch.odin:MatrixModePop": [
-    "index"
-  ],
   "gfx/batch.odin:_emit_quad": [
     "queue"
   ],
@@ -13,6 +10,9 @@
   ],
   "gfx/batch.odin:_make_pipe": [
     "queue"
+  ],
+  "gfx/batch.odin:context_matrix_mode_pop": [
+    "index"
   ],
   "gfx/context.odin:_on_uncaptured_error": [
     "pointer"

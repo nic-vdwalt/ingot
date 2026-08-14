@@ -67,20 +67,22 @@ _shape_geometry_is_finite :: proc(center: Vector2, extent: f32) -> bool {
 
 // --- filled rectangles -----------------------------------------------------
 
+context_draw_rectangle_rec :: proc(ctx: ^Context, rec: Rectangle, color: Color) {
+	assert(ctx != nil, "context_draw_rectangle_rec: nil context")
+	batch_set(ctx, &ctx.rend, .Solid, nil)
+	push_quad(ctx, &ctx.rend, rec, {0, 0, 1, 1}, col_f(color))
+}
+
 DrawRectangle :: proc(posX, posY, width, height: i32, color: Color) {
-	batch_set(default_context(), &g.rend, .Solid, nil)
-	push_quad(
+	context_draw_rectangle_rec(
 		default_context(),
-		&g.rend,
 		{f32(posX), f32(posY), f32(width), f32(height)},
-		{0, 0, 1, 1},
-		col_f(color),
+		color,
 	)
 }
 
 DrawRectangleRec :: proc(rec: Rectangle, color: Color) {
-	batch_set(default_context(), &g.rend, .Solid, nil)
-	push_quad(default_context(), &g.rend, rec, {0, 0, 1, 1}, col_f(color))
+	context_draw_rectangle_rec(default_context(), rec, color)
 }
 
 DrawRectangleV :: proc(position, size: Vector2, color: Color) {
@@ -149,9 +151,14 @@ DrawRectangleLinesEx :: proc(rec: Rectangle, lineThick: f32, color: Color) {
 }
 
 @(private)
+_context_rect :: proc(ctx: ^Context, x, y, w, h: f32, color: Color) {
+	assert(ctx != nil, "_context_rect: nil context")
+	context_draw_rectangle_rec(ctx, {x, y, w, h}, color)
+}
+
+@(private)
 _rect :: proc(x, y, w, h: f32, color: Color) {
-	batch_set(default_context(), &g.rend, .Solid, nil)
-	push_quad(default_context(), &g.rend, {x, y, w, h}, {0, 0, 1, 1}, col_f(color))
+	_context_rect(default_context(), x, y, w, h, color)
 }
 
 // --- rounded rectangles ----------------------------------------------------
@@ -262,7 +269,8 @@ DrawLineV :: proc(startPos, endPos: Vector2, color: Color) {
 	DrawLineEx(startPos, endPos, 1.0, color)
 }
 
-DrawLineEx :: proc(startPos, endPos: Vector2, thick: f32, color: Color) {
+context_draw_line :: proc(ctx: ^Context, startPos, endPos: Vector2, thick: f32, color: Color) {
+	assert(ctx != nil, "context_draw_line: nil context")
 	dx := endPos.x - startPos.x
 	dy := endPos.y - startPos.y
 	length := math.sqrt(dx * dx + dy * dy)
@@ -271,13 +279,17 @@ DrawLineEx :: proc(startPos, endPos: Vector2, thick: f32, color: Color) {
 	nx := -dy / length * thick / 2.0
 	ny := dx / length * thick / 2.0
 	c := col_f(color)
-	batch_set(default_context(), &g.rend, .Solid, nil)
+	batch_set(ctx, &ctx.rend, .Solid, nil)
 	a := [2]f32{startPos.x + nx, startPos.y + ny}
 	b := [2]f32{startPos.x - nx, startPos.y - ny}
 	cc := [2]f32{endPos.x - nx, endPos.y - ny}
 	d := [2]f32{endPos.x + nx, endPos.y + ny}
-	push_tri(default_context(), &g.rend, a, b, cc, c)
-	push_tri(default_context(), &g.rend, a, cc, d, c)
+	push_tri(ctx, &ctx.rend, a, b, cc, c)
+	push_tri(ctx, &ctx.rend, a, cc, d, c)
+}
+
+DrawLineEx :: proc(startPos, endPos: Vector2, thick: f32, color: Color) {
+	context_draw_line(default_context(), startPos, endPos, thick, color)
 }
 
 // --- circles / rings -------------------------------------------------------
@@ -286,11 +298,16 @@ DrawCircle :: proc(centerX, centerY: i32, radius: f32, color: Color) {
 	DrawCircleV({f32(centerX), f32(centerY)}, radius, color)
 }
 
-DrawCircleV :: proc(center: Vector2, radius: f32, color: Color) {
+context_draw_circle :: proc(ctx: ^Context, center: Vector2, radius: f32, color: Color) {
+	assert(ctx != nil, "context_draw_circle: nil context")
 	segs := _shape_segments_for_radius(radius, 12)
 	c := col_f(color)
-	batch_set(default_context(), &g.rend, .Solid, nil)
-	_corner_fan(default_context(), &g.rend, center, radius, 0, 360, segs, c)
+	batch_set(ctx, &ctx.rend, .Solid, nil)
+	_corner_fan(ctx, &ctx.rend, center, radius, 0, 360, segs, c)
+}
+
+DrawCircleV :: proc(center: Vector2, radius: f32, color: Color) {
+	context_draw_circle(default_context(), center, radius, color)
 }
 
 DrawRing :: proc(
@@ -362,22 +379,23 @@ _scissor_rect :: proc(
 	return x0, y0, pw, ph, pw > 0 && ph > 0
 }
 
-BeginScissorMode :: proc(x, y, width, height: i32) {
-	if !g.frame.has_frame do return
-	_ensure_active_pass()
-	if !_active_pass_begun() do return
-	pass := active_pass()
-	if !g.frame.scissor_empty {
-		renderer_flush(default_context(), &g.rend, pass, .Scissor)
+context_scissor_begin :: proc(ctx: ^Context, x, y, width, height: i32) {
+	assert(ctx != nil, "context_scissor_begin: nil context")
+	if !ctx.frame.has_frame do return
+	context_ensure_active_pass(ctx)
+	if !context_active_pass_begun(ctx) do return
+	pass := context_active_pass(ctx)
+	if !ctx.frame.scissor_empty {
+		renderer_flush(ctx, &ctx.rend, pass, .Scissor)
 	} else {
-		clear(&g.rend.verts)
-		clear(&g.rend.indices)
+		clear(&ctx.rend.verts)
+		clear(&ctx.rend.indices)
 	}
-	fbw, fbh := _attachment_px()
+	fbw, fbh := context_attachment_px(ctx)
 	logical_w, logical_h := fbw, fbh
-	if g.frame.rt == 0 {
-		logical_w = f32(max(g.width, 1))
-		logical_h = f32(max(g.height, 1))
+	if ctx.frame.rt == 0 {
+		logical_w = f32(max(ctx.width, 1))
+		logical_h = f32(max(ctx.height, 1))
 	}
 	px, py, pw, ph, visible := _scissor_rect(
 		x,
@@ -388,35 +406,45 @@ BeginScissorMode :: proc(x, y, width, height: i32) {
 		logical_h,
 		fbw,
 		fbh,
-		g.frame.rt != 0,
+		ctx.frame.rt != 0,
 	)
-	g.frame.scissor_empty = !visible
+	ctx.frame.scissor_empty = !visible
 	if visible {
 		assert(pw > 0)
 		assert(ph > 0)
 		wg.RenderPassEncoderSetScissorRect(pass, px, py, pw, ph)
 	}
-	if g.frame.rt == 0 {
-		g.frame.scissor_on = true
-		g.frame.sc_x, g.frame.sc_y, g.frame.sc_w, g.frame.sc_h = px, py, pw, ph
+	if ctx.frame.rt == 0 {
+		ctx.frame.scissor_on = true
+		ctx.frame.sc_x, ctx.frame.sc_y = px, py
+		ctx.frame.sc_w, ctx.frame.sc_h = pw, ph
 	}
 }
 
-EndScissorMode :: proc() {
-	if !g.frame.has_frame || !_active_pass_begun() do return
-	pass := active_pass()
-	if !g.frame.scissor_empty {
-		renderer_flush(default_context(), &g.rend, pass, .Scissor)
+BeginScissorMode :: proc(x, y, width, height: i32) {
+	context_scissor_begin(default_context(), x, y, width, height)
+}
+
+context_scissor_end :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_scissor_end: nil context")
+	if !ctx.frame.has_frame || !context_active_pass_begun(ctx) do return
+	pass := context_active_pass(ctx)
+	if !ctx.frame.scissor_empty {
+		renderer_flush(ctx, &ctx.rend, pass, .Scissor)
 	} else {
-		clear(&g.rend.verts)
-		clear(&g.rend.indices)
+		clear(&ctx.rend.verts)
+		clear(&ctx.rend.indices)
 	}
-	fbw, fbh := _attachment_px()
+	fbw, fbh := context_attachment_px(ctx)
 	assert(fbw > 0)
 	assert(fbh > 0)
 	wg.RenderPassEncoderSetScissorRect(pass, 0, 0, u32(fbw), u32(fbh))
-	g.frame.scissor_empty = false
-	if g.frame.rt == 0 do g.frame.scissor_on = false
+	ctx.frame.scissor_empty = false
+	if ctx.frame.rt == 0 do ctx.frame.scissor_on = false
+}
+
+EndScissorMode :: proc() {
+	context_scissor_end(default_context())
 }
 
 // --- collision helper ------------------------------------------------------
@@ -432,9 +460,14 @@ CheckCollisionPointRec :: proc(point: Vector2, rec: Rectangle) -> bool {
 
 // --- triangles / gradients -------------------------------------------------
 
+context_draw_triangle :: proc(ctx: ^Context, v1, v2, v3: Vector2, color: Color) {
+	assert(ctx != nil, "context_draw_triangle: nil context")
+	batch_set(ctx, &ctx.rend, .Solid, nil)
+	push_tri(ctx, &ctx.rend, v1, v2, v3, col_f(color))
+}
+
 DrawTriangle :: proc(v1, v2, v3: Vector2, color: Color) {
-	batch_set(default_context(), &g.rend, .Solid, nil)
-	push_tri(default_context(), &g.rend, v1, v2, v3, col_f(color))
+	context_draw_triangle(default_context(), v1, v2, v3, color)
 }
 
 DrawCircleLines :: proc(centerX, centerY: i32, radius: f32, color: Color) {

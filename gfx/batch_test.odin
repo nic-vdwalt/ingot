@@ -324,6 +324,23 @@ batch_reserve_fits_exactly_to_capacity :: proc(t: ^testing.T) {
 }
 
 @(test)
+batch_emission_is_context_bound :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	first.rend.model_xf = _affine_translated(AFFINE_IDENTITY, 10, 20)
+	second.rend.model_xf = _affine_translated(AFFINE_IDENTITY, 100, 200)
+
+	_emit_tri(first, &first.rend, {0, 0}, {1, 0}, {0, 1}, {1, 1, 1, 1})
+	_emit_tri(second, &second.rend, {0, 0}, {1, 0}, {0, 1}, {1, 1, 1, 1})
+	testing.expect_value(t, len(first.rend.verts), 3)
+	testing.expect_value(t, len(second.rend.verts), 3)
+	testing.expect_value(t, first.rend.verts[0].pos, [2]f32{10, 20})
+	testing.expect_value(t, second.rend.verts[0].pos, [2]f32{100, 200})
+}
+
+@(test)
 batch_peak_tracks_high_water_across_flushes :: proc(t: ^testing.T) {
 	// The peak is what justifies the capacity constants, so it must survive
 	// the per-flush clear rather than reporting only the last batch. Calls
