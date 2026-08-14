@@ -67,7 +67,12 @@ Shader_Resources :: struct {
 }
 
 @(private)
-_shader_register :: proc(resources: ^Shader_Resources, entry: ^Shader_Entry) -> u32 {
+_shader_register :: proc(
+	context_id: u32,
+	resources: ^Shader_Resources,
+	entry: ^Shader_Entry,
+) -> u32 {
+	assert(context_id != 0, "_shader_register: unassigned context id")
 	assert(resources != nil && entry != nil, "_shader_register: invalid arguments")
 	if resources.count >= MAX_SHADERS do return 0
 	for &slot, index in resources.slots {
@@ -76,15 +81,18 @@ _shader_register :: proc(resources: ^Shader_Resources, entry: ^Shader_Entry) -> 
 		slot.entry = entry
 		slot.occupied = true
 		resources.count += 1
-		return _resource_handle_make(index, slot.generation)
+		return _resource_handle_make_context(context_id, index, slot.generation)
 	}
 	assert(false, "_shader_register: count mismatch")
 	return 0
 }
 
 @(private)
-_shader_slot :: proc(resources: ^Shader_Resources, id: u32) -> ^Shader_Slot {
+_shader_slot :: proc(context_id: u32, resources: ^Shader_Resources, id: u32) -> ^Shader_Slot {
+	assert(context_id != 0, "_shader_slot: unassigned context id")
 	assert(resources != nil, "_shader_slot: nil resources")
+	handle_context := (id >> RESOURCE_SLOT_BITS) & RESOURCE_CONTEXT_MASK
+	if handle_context != context_id do return nil
 	index, generation, ok := _resource_handle_decode(id, len(resources.slots))
 	if !ok do return nil
 	slot := &resources.slots[index]
@@ -93,16 +101,23 @@ _shader_slot :: proc(resources: ^Shader_Resources, id: u32) -> ^Shader_Slot {
 }
 
 @(private)
-_shader_get :: proc(id: u32) -> ^Shader_Entry {
-	slot := _shader_slot(&g.resources.shaders, id)
+context_shader_get :: proc(ctx: ^Context, id: u32) -> ^Shader_Entry {
+	assert(ctx != nil, "context_shader_get: nil context")
+	slot := _shader_slot(ctx.id, &ctx.resources.shaders, id)
 	if slot == nil do return nil
 	return slot.entry
 }
 
+@(private)
+_shader_get :: proc(id: u32) -> ^Shader_Entry {
+	return context_shader_get(default_context(), id)
+}
+
 // _default_tex lazily creates a 1×1 white texture to fill unset extra slots.
 @(private)
-_default_tex :: proc() -> u32 {
-	if g.resources.shaders.default_tex != 0 do return g.resources.shaders.default_tex
+_default_tex :: proc(ctx: ^Context) -> u32 {
+	assert(ctx != nil, "_default_tex: nil context")
+	if ctx.resources.shaders.default_tex != 0 do return ctx.resources.shaders.default_tex
 	px := [4]u8{255, 255, 255, 255}
 	img := Image {
 		data    = raw_data(px[:]),
@@ -111,9 +126,9 @@ _default_tex :: proc() -> u32 {
 		mipmaps = 1,
 		format  = .UNCOMPRESSED_R8G8B8A8,
 	}
-	t := LoadTextureFromImage(img)
-	g.resources.shaders.default_tex = t.id
-	return g.resources.shaders.default_tex
+	t := context_load_texture_from_image(ctx, img)
+	ctx.resources.shaders.default_tex = t.id
+	return ctx.resources.shaders.default_tex
 }
 
 // --- WGSL uniform reflection ------------------------------------------------
@@ -292,8 +307,9 @@ _shader_extra_layout_init :: proc(
 	return entry.extra_dirty
 }
 
-LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
-	if !g.initialized do return Shader{}
+context_load_shader_from_memory :: proc(ctx: ^Context, vsCode, fsCode: cstring) -> Shader {
+	assert(ctx != nil, "context_load_shader_from_memory: nil context")
+	if !ctx.initialized do return Shader{}
 	vertex := string(vsCode) if vsCode != nil else ""
 	fragment := string(fsCode) if fsCode != nil else ""
 	combined := vsCode != nil && fsCode != nil
@@ -312,7 +328,7 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 	e.ushadow = make([]u8, int(total))
 	src_clone := strings.clone(src)
 	e.module = wg.DeviceCreateShaderModule(
-		g.device,
+		ctx.device,
 		&{
 			nextInChain = &wg.ShaderSourceWGSL {
 				chain = {sType = .ShaderSourceWGSL},
@@ -327,7 +343,7 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 	}
 
 	e.u_layout = wg.DeviceCreateBindGroupLayout(
-		g.device,
+		ctx.device,
 		&{
 			entryCount = 1,
 			entries = &wg.BindGroupLayoutEntry {
@@ -343,13 +359,13 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 	}
 	for &bind, index in e.u_bind {
 		bind = wg.DeviceCreateBindGroup(
-			g.device,
+			ctx.device,
 			&{
 				layout = e.u_layout,
 				entryCount = 1,
 				entries = &wg.BindGroupEntry {
 					binding = 0,
-					buffer = g.rend.stream_slots[index].uniform_buffer,
+					buffer = ctx.rend.stream_slots[index].uniform_buffer,
 					size = u64(total),
 				},
 			},
@@ -360,17 +376,21 @@ LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
 		}
 	}
 
-	if !_shader_extra_layout_init(g.device, e, src) {
+	if !_shader_extra_layout_init(ctx.device, e, src) {
 		_shader_entry_destroy(e)
 		return {}
 	}
 
-	id := _shader_register(&g.resources.shaders, e)
+	id := _shader_register(ctx.id, &ctx.resources.shaders, e)
 	if id == 0 {
 		_shader_entry_destroy(e)
 		return {}
 	}
 	return Shader{id = id}
+}
+
+LoadShaderFromMemory :: proc(vsCode, fsCode: cstring) -> Shader {
+	return context_load_shader_from_memory(default_context(), vsCode, fsCode)
 }
 
 @(private)
@@ -406,14 +426,19 @@ _shader_resources_destroy :: proc(resources: ^Shader_Resources) {
 	resources^ = {}
 }
 
-UnloadShader :: proc(shader: Shader) {
-	slot := _shader_slot(&g.resources.shaders, shader.id)
+context_unload_shader :: proc(ctx: ^Context, shader: Shader) {
+	assert(ctx != nil, "context_unload_shader: nil context")
+	slot := _shader_slot(ctx.id, &ctx.resources.shaders, shader.id)
 	if slot == nil do return
 	_shader_entry_destroy(slot.entry)
 	slot.entry = nil
 	slot.occupied = false
-	assert(g.resources.shaders.count > 0, "UnloadShader: count underflow")
-	g.resources.shaders.count -= 1
+	assert(ctx.resources.shaders.count > 0, "context_unload_shader: count underflow")
+	ctx.resources.shaders.count -= 1
+}
+
+UnloadShader :: proc(shader: Shader) {
+	context_unload_shader(default_context(), shader)
 }
 
 GetShaderLocation :: proc(shader: Shader, uniformName: cstring) -> i32 {
@@ -488,25 +513,54 @@ SetShaderValueTexture :: proc(shader: Shader, #any_int locIndex: i32, texture: T
 	}
 }
 
+context_begin_shader_mode :: proc(ctx: ^Context, shader: Shader) {
+	assert(ctx != nil, "context_begin_shader_mode: nil context")
+	if context_active_pass_begun(ctx) {
+		renderer_flush(ctx, &ctx.rend, context_active_pass(ctx), .Shader)
+	}
+	ctx.rend.active_shader = shader.id
+}
+
 BeginShaderMode :: proc(shader: Shader) {
-	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Shader)
-	g.rend.active_shader = shader.id
+	context_begin_shader_mode(default_context(), shader)
+}
+
+context_end_shader_mode :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_end_shader_mode: nil context")
+	if context_active_pass_begun(ctx) {
+		renderer_flush(ctx, &ctx.rend, context_active_pass(ctx), .Shader)
+	}
+	ctx.rend.active_shader = 0
 }
 
 EndShaderMode :: proc() {
-	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Shader)
-	g.rend.active_shader = 0
+	context_end_shader_mode(default_context())
 }
 
 // ShaderBindRaw / ShaderUnbindRaw back rlgl.EnableShader/DisableShader: the raw
 // program id equals the registry id assigned by LoadShaderFromMemory.
-ShaderBindRaw :: proc(id: u32) {
-	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Shader)
-	g.rend.active_shader = id
+context_shader_bind_raw :: proc(ctx: ^Context, id: u32) {
+	assert(ctx != nil, "context_shader_bind_raw: nil context")
+	if context_active_pass_begun(ctx) {
+		renderer_flush(ctx, &ctx.rend, context_active_pass(ctx), .Shader)
+	}
+	ctx.rend.active_shader = id
 }
+
+ShaderBindRaw :: proc(id: u32) {
+	context_shader_bind_raw(default_context(), id)
+}
+
+context_shader_unbind_raw :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_shader_unbind_raw: nil context")
+	if context_active_pass_begun(ctx) {
+		renderer_flush(ctx, &ctx.rend, context_active_pass(ctx), .Shader)
+	}
+	ctx.rend.active_shader = 0
+}
+
 ShaderUnbindRaw :: proc() {
-	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Shader)
-	g.rend.active_shader = 0
+	context_shader_unbind_raw(default_context())
 }
 
 @(private)
@@ -589,7 +643,8 @@ _shader_pipeline :: proc(e: ^Shader_Entry, format: wg.TextureFormat) -> wg.Rende
 }
 
 @(private)
-_shader_rebuild_extra :: proc(e: ^Shader_Entry) {
+_shader_rebuild_extra :: proc(ctx: ^Context, e: ^Shader_Entry) {
+	assert(ctx != nil, "_shader_rebuild_extra: nil context")
 	if e.extra_count == 0 do return
 	if e.extra_bind != nil do wg.BindGroupRelease(e.extra_bind)
 	entries := make([]wg.BindGroupEntry, e.extra_count + 1, context.temp_allocator)
@@ -597,9 +652,9 @@ _shader_rebuild_extra :: proc(e: ^Shader_Entry) {
 	samp: wg.Sampler
 	for i in 0 ..< e.extra_count {
 		id := e.extra_tex[i]
-		if id == 0 do id = _default_tex()
-		te := get_texture(id)
-		if te == nil {te = get_texture(_default_tex())}
+		if id == 0 do id = _default_tex(ctx)
+		te := context_get_texture(ctx, id)
+		if te == nil {te = context_get_texture(ctx, _default_tex(ctx))}
 		entries[i] = {
 			binding     = u32(i),
 			textureView = te.view,
@@ -607,7 +662,7 @@ _shader_rebuild_extra :: proc(e: ^Shader_Entry) {
 		if samp == nil do samp = te.sampler
 	}
 	if samp == nil {
-		dt := get_texture(_default_tex())
+		dt := context_get_texture(ctx, _default_tex(ctx))
 		if dt != nil do samp = dt.sampler
 	}
 	entries[e.extra_count] = {
@@ -615,7 +670,7 @@ _shader_rebuild_extra :: proc(e: ^Shader_Entry) {
 		sampler = samp,
 	}
 	e.extra_bind = wg.DeviceCreateBindGroup(
-		g.device,
+		ctx.device,
 		&{
 			layout = e.extra_layout,
 			entryCount = uint(e.extra_count + 1),
@@ -640,7 +695,7 @@ _shader_flush :: proc(
 ) -> bool {
 	assert(ctx != nil, "_shader_flush: nil context")
 	assert(r == &ctx.rend, "_shader_flush: foreign renderer")
-	e := _shader_get(r.active_shader)
+	e := context_shader_get(ctx, r.active_shader)
 	if e == nil do return false
 	format := _cur_target_format(ctx)
 	pipe := _shader_pipeline(e, format)
@@ -648,7 +703,7 @@ _shader_flush :: proc(
 
 	u_offset, ok := _uniform_upload(ctx, r, raw_data(e.ushadow), u64(len(e.ushadow)))
 	if !ok do return false
-	if e.extra_dirty do _shader_rebuild_extra(e)
+	if e.extra_dirty do _shader_rebuild_extra(ctx, e)
 
 	wg.RenderPassEncoderSetPipeline(pass, pipe)
 	_stats_pipeline_switch(ctx)
