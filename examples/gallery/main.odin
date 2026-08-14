@@ -25,7 +25,6 @@ import "core:fmt"
 import "core:slice"
 import "core:strings"
 import fit "ingot:fit"
-import legacy "ingot:fit"
 import "ingot:sys"
 
 // SMOKE enables the self-driving crash harness in smoke.odin (native only;
@@ -170,19 +169,20 @@ Input_State :: struct {
 	name:           fit.Input_Box,
 	pass:           fit.Input_Box,
 	notes:          fit.Input_Box,
-	combo:          legacy.legacy_combobox_state,
+	combo:          fit.Combobox_State,
 	combo_selected: u64,
-	date:           legacy.legacy_date_picker_state,
-	date_value:     legacy.legacy_calendar_date,
+	date:           fit.Date_Picker_State,
+	date_value:     fit.Calendar_Date,
 }
 
 input_state: Input_State
+input_region: fit.Region
 
 progress_anim: f32
 progress_frac: f32 = 0.35
 
-line_state: legacy.legacy_chart_state
-bar_state: legacy.legacy_chart_state
+line_state: fit.Chart_State
+bar_state: fit.Chart_State
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
 costs := [12]f32{8.1, 8.4, 9.0, 9.7, 10.2, 11.5, 11.1, 12.4, 12.0, 13.6, 13.1, 14.0}
 MONTHS := [12]string {
@@ -211,15 +211,15 @@ Widget_State :: struct {
 	check_b:        bool,
 	radio_choice:   i32,
 	volume:         f32,
-	slider:         legacy.legacy_slider_state,
+	slider:         fit.Slider_State,
 	dd_selected:    i32,
-	dropdown:       legacy.legacy_dropdown_state,
-	tooltip:        legacy.legacy_tooltip_state,
-	listbox:        legacy.legacy_listbox_state,
+	dropdown:       fit.Dropdown_State,
+	tooltip:        fit.Tooltip_State,
+	listbox:        fit.Listbox_State,
 	list_selected:  int,
 	list_activated: int,
 	tab_active:     i32,
-	table_sort:     legacy.legacy_table_sort,
+	table_sort:     fit.Table_Sort,
 }
 
 widget_state := Widget_State {
@@ -230,13 +230,13 @@ widget_state := Widget_State {
 }
 
 // Generic modal + context menu (Overlay section).
-about_modal: legacy.legacy_modal_state
-ctx_menu: legacy.legacy_context_menu_state
+about_modal: fit.Modal_State
+ctx_menu: fit.Context_Menu_State
 ctx_note := "right-click in this section for a context menu"
 
 // Toasts + confirm dialog (Overlay section). Zero values are ready to use.
-toasts: legacy.legacy_toast_state
-confirm: legacy.legacy_confirm_dialog_state
+toasts: fit.Toast_State
+confirm: fit.Confirm_Dialog_State
 toast_count := 0
 
 popup_open := false
@@ -248,7 +248,7 @@ leaked_clicks := 0
 dock_canvas_wheel := 0
 dock_canvas_clicks := 0
 dock_panel_clicks := 0
-dock_panel_pane: legacy.Pane
+dock_panel_pane: fit.Pane_State
 
 stress_clicked := -1
 
@@ -300,7 +300,7 @@ input_state_destroy :: proc(state: ^Input_State) {
 	fit.Input_Box_Destroy(&state.name)
 	fit.Input_Box_Destroy(&state.pass)
 	fit.Input_Box_Destroy(&state.notes)
-	legacy.combobox_state_destroy(&state.combo)
+	fit.Combobox_State_Destroy(&state.combo)
 }
 
 gallery_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
@@ -310,8 +310,7 @@ gallery_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.S
 
 gallery_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
 	_ = userdata
-	frame := cast(^legacy.Ui_Frame)fit.Surface_Borrow_Context(surface)
-	gallery_frame(frame, {rect.x, rect.y, rect.w, rect.h})
+	gallery_frame(surface, {rect.x, rect.y, rect.w, rect.h})
 	return false
 }
 
@@ -326,7 +325,7 @@ gallery_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	fit.End(builder)
 }
 
-gallery_frame :: proc(frame: ^legacy.Ui_Frame, root: fit.Rect_I32) {
+gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect_I32) {
 	gallery_root = root
 	sw := root.w
 	sh := root.h
@@ -334,18 +333,18 @@ gallery_frame :: proc(frame: ^legacy.Ui_Frame, root: fit.Rect_I32) {
 	when SMOKE do smoke_step()
 	when CAPTURE do capture_step()
 
-	if legacy.is_key_pressed(frame, .F12) do debug_on = !debug_on
+	if fit.Surface_Key_Pressed(surface, .F12) do debug_on = !debug_on
 
-	header_h := legacy.ui_frame_metrics(frame).TAB_BAR_HEIGHT
+	header_h := fit.Surface_Metrics(surface).tab_bar_height
 	// One decision, taken in the parent and passed down (Tiger Style: push
 	// ifs up). Below the breakpoint the sidebar would eat 170 of ~390
 	// design units, so the nav becomes a horizontal strip instead.
-	narrow := nav_uses_strip(frame, sw, sh - header_h)
-	nav_h := draw_nav(frame, header_h, sw, sh, narrow)
-	draw_content(frame, sw, header_h + nav_h, sh, narrow)
+	narrow := nav_uses_strip(surface, sw, sh - header_h)
+	nav_h := draw_nav(surface, header_h, sw, sh, narrow)
+	draw_content(surface, sw, header_h + nav_h, sh, narrow)
 
 	if settings_open {
-		res := legacy.draw_scale_settings_panel(frame, &settings_sel, stored_scale, sw, sh)
+		res := fit.Surface_Scale_Settings(surface, &settings_sel, stored_scale, sw, sh)
 		if res.applied {
 			stored_scale = res.ui_scale
 			apply_scale(res.ui_scale)
@@ -354,14 +353,14 @@ gallery_frame :: proc(frame: ^legacy.Ui_Frame, root: fit.Rect_I32) {
 	}
 
 	if debug_on {
-		legacy.draw_debug_overlay(
-			frame,
-			sw - legacy.ui_frame_sc(frame, 290),
-			header_h + legacy.ui_frame_sc(frame, 10),
+		fit.Surface_Debug_Overlay(
+			surface,
+			sw - fit.Surface_Scale(surface, 290),
+			header_h + fit.Surface_Scale(surface, 10),
 		)
 	}
 
-	_ = legacy.draw_app_header(frame, "ingot gallery", sw)
+	_ = fit.Surface_App_Header(surface, "ingot gallery", sw)
 }
 
 shutdown :: proc() {
@@ -399,14 +398,14 @@ nav_uses_strip_scale :: proc(scale: f32, width, available_height: i32) -> bool {
 	)
 }
 
-nav_sidebar_min_height :: proc(frame: ^legacy.Ui_Frame) -> i32 {
-	assert(frame != nil, "nav_sidebar_min_height: nil frame")
-	return nav_sidebar_min_height_scale(f32(legacy.ui_frame_sc(frame, 1000)) / 1000)
+nav_sidebar_min_height :: proc(surface: ^fit.Surface) -> i32 {
+	assert(surface != nil, "nav_sidebar_min_height: nil surface")
+	return nav_sidebar_min_height_scale(f32(fit.Surface_Scale(surface, 1000)) / 1000)
 }
 
-nav_uses_strip :: proc(frame: ^legacy.Ui_Frame, width, available_height: i32) -> bool {
-	assert(frame != nil, "nav_uses_strip: nil frame")
-	scale := f32(legacy.ui_frame_sc(frame, 1000)) / 1000
+nav_uses_strip :: proc(surface: ^fit.Surface, width, available_height: i32) -> bool {
+	assert(surface != nil, "nav_uses_strip: nil surface")
+	scale := f32(fit.Surface_Scale(surface, 1000)) / 1000
 	return nav_uses_strip_scale(scale, width, available_height)
 }
 
@@ -417,7 +416,7 @@ nav_uses_strip :: proc(frame: ^legacy.Ui_Frame, width, available_height: i32) ->
 // Nav_Control is the set of non-section buttons both nav layouts carry. It
 // exists so the sidebar and the narrow strip cannot disagree about which
 // controls exist or what they do: an earlier revision duplicated these four
-// as inline `if legacy.button(...)` blocks in each layout, and the strip silently
+// as inline button blocks in each layout, and the strip silently
 // lost Motion. Adding a fifth control now lands in both layouts by
 // construction.
 Nav_Control :: enum {
@@ -459,58 +458,61 @@ nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
 
 // nav_control_activate applies one control's effect. The single owner of these
 // state transitions, so the two layouts cannot drift apart again.
-nav_control_activate :: proc(control: Nav_Control, frame: ^legacy.Ui_Frame) {
-	assert(frame != nil, "nav_control_activate: nil frame")
+nav_control_activate :: proc(control: Nav_Control, surface: ^fit.Surface) {
+	assert(surface != nil, "nav_control_activate: nil surface")
 	switch control {
 	case .Theme:
 		// No force-clear needed: high contrast is a palette now, so choosing
 		// another one leaves it by construction rather than by cleanup.
 		palette = palette_next(palette)
-		apply_gallery_theme(frame)
+		apply_gallery_theme(surface)
 	case .Motion:
 		reduced_motion = !reduced_motion
-		apply_gallery_theme(frame)
+		apply_gallery_theme(surface)
 	case .Scale:
 		settings_open = true
-		settings_sel = legacy.settings_scale_preset_index(stored_scale)
+		settings_sel = fit.Surface_Settings_Scale_Preset_Index(stored_scale)
 	}
 }
 
-draw_nav :: proc(frame: ^legacy.Ui_Frame, top, sw, sh: i32, narrow: bool) -> i32 {
-	assert(frame != nil, "draw_nav: nil frame")
-	if narrow do return draw_nav_strip(frame, top, sw)
-	w := legacy.ui_frame_sc(frame, NAV_W)
-	theme := legacy.ui_frame_theme(frame)
-	legacy.draw_rectangle(frame, 0, top, w, sh - top, theme.bg_secondary)
-	legacy.draw_rectangle(frame, w - 1, top, 1, sh - top, theme.border_subtle)
+draw_nav :: proc(surface: ^fit.Surface, top, sw, sh: i32, narrow: bool) -> i32 {
+	assert(surface != nil, "draw_nav: nil surface")
+	if narrow do return draw_nav_strip(surface, top, sw)
+	w := fit.Surface_Scale(surface, NAV_W)
+	theme := fit.Surface_Theme_Tokens(surface)
+	fit.Surface_Fill_Rect(surface, {0, top, w, sh - top}, theme.background_secondary)
+	fit.Surface_Fill_Rect(surface, {w - 1, top, 1, sh - top}, theme.border_subtle)
 
-	u_storage: legacy.Ui
-	u := &u_storage
-	legacy.begin(u, frame, {0, top, w, sh - top}, gap = .XS)
-	legacy.padding(u, .SM)
-	legacy.scope_begin(u, "navigation")
-	legacy.label(u, "ingot gallery", legacy.legacy_text_role.Title)
-	legacy.separator(u)
+	region: fit.Region
+	fit.Surface_Region_Begin(surface, &region, {0, top, w, sh - top}, gap = .XS)
+	fit.Region_Padding(&region, .SM)
+	fit.Region_Scope_Begin(&region, "navigation")
+	fit.Region_Label(&region, "ingot gallery", .Title)
+	fit.Region_Separator(&region)
 	for s in Section {
-		style := legacy.legacy_btn_style.Primary if s == section else .Ghost
-		legacy.flex_row_begin(u, NAV_SIDEBAR_ROW_H, {legacy.grow()})
-		if legacy.button(u, SECTION_NAMES[s], SECTION_NAMES[s], style) {
+		style := fit.Button_Style.Primary if s == section else .Ghost
+		fit.Region_Flex_Row_Begin(&region, NAV_SIDEBAR_ROW_H, {fit.Grow()})
+		if fit.Region_Button(&region, SECTION_NAMES[s], SECTION_NAMES[s], style) {
 			section = s
 			fit.Pane_Reset(&content_pane)
 		}
-		legacy.flex_row_end(u)
+		fit.Region_Flex_Row_End(&region)
 	}
-	legacy.space(u, .SM)
-	legacy.separator(u)
+	fit.Region_Space(&region, .SM)
+	fit.Region_Separator(&region)
 	for control in Nav_Control {
-		legacy.flex_row_begin(u, NAV_SIDEBAR_ROW_H, {legacy.grow()})
-		if legacy.button(u, NAV_CONTROL_IDS[control], nav_control_label(control, false)) {
-			nav_control_activate(control, frame)
+		fit.Region_Flex_Row_Begin(&region, NAV_SIDEBAR_ROW_H, {fit.Grow()})
+		if fit.Region_Button(
+			&region,
+			NAV_CONTROL_IDS[control],
+			nav_control_label(control, false),
+		) {
+			nav_control_activate(control, surface)
 		}
-		legacy.flex_row_end(u)
+		fit.Region_Flex_Row_End(&region)
 	}
-	legacy.scope_end(u)
-	legacy.end(u)
+	fit.Region_Scope_End(&region)
+	_ = fit.Surface_Region_End(&region)
 	return 0
 }
 
@@ -527,37 +529,44 @@ NAV_CONTROL_IDS := [Nav_Control]string {
 // spending 44% of the width on a sidebar. It carries the same Nav_Control set
 // the sidebar does - a demo that hides its own features on mobile is worse
 // than one that scrolls.
-draw_nav_strip :: proc(frame: ^legacy.Ui_Frame, top, sw: i32) -> i32 {
-	assert(frame != nil, "draw_nav_strip: nil frame")
+draw_nav_strip :: proc(surface: ^fit.Surface, top, sw: i32) -> i32 {
+	assert(surface != nil, "draw_nav_strip: nil surface")
 	assert(sw > 0, "draw_nav_strip: empty viewport")
-	theme := legacy.ui_frame_theme(frame)
-	pad := legacy.ui_frame_sc(frame, 8)
-	gap := legacy.ui_frame_sc(frame, 6)
-	row_h := legacy.ui_frame_sc(frame, NAV_STRIP_ROW_H)
-	// Section buttons wrap into as many rows as the width needs; the control
-	// row always follows on its own line.
-	cols := max((sw - pad * 2 + gap) / (legacy.ui_frame_sc(frame, NAV_STRIP_CELL_W) + gap), 1)
+	theme := fit.Surface_Theme_Tokens(surface)
+	pad := fit.Surface_Scale(surface, 8)
+	gap := fit.Surface_Scale(surface, 6)
+	row_h := fit.Surface_Scale(surface, NAV_STRIP_ROW_H)
+	cols := max((sw - pad * 2 + gap) / (fit.Surface_Scale(surface, NAV_STRIP_CELL_W) + gap), 1)
 	rows := (i32(len(Section)) + cols - 1) / cols
 	height := pad * 2 + rows * row_h + (rows - 1) * gap + gap + row_h
 
-	legacy.draw_rectangle(frame, 0, top, sw, height, theme.bg_secondary)
-	legacy.draw_rectangle(frame, 0, top + height - 1, sw, 1, theme.border_subtle)
+	fit.Surface_Fill_Rect(surface, {0, top, sw, height}, theme.background_secondary)
+	fit.Surface_Fill_Rect(surface, {0, top + height - 1, sw, 1}, theme.border_subtle)
 
-	grid: legacy.Grid_State
-	legacy.grid_begin(&grid, {pad, top + pad, sw - pad * 2, 0}, cols, row_h, gap, gap)
+	grid: fit.Grid_State
+	fit.Surface_Grid_Begin(
+		surface,
+		&grid,
+		{pad, top + pad, sw - pad * 2, 0},
+		cols,
+		row_h,
+		gap,
+		gap,
+	)
 	for s in Section {
-		style := legacy.legacy_btn_style.Primary if s == section else .Ghost
-		if legacy.button_at(frame, legacy.grid_next(&grid), SECTION_NAMES[s], style) {
+		style := fit.Button_Style.Primary if s == section else .Ghost
+		rect := fit.Surface_Grid_Next(surface, &grid)
+		widget := fit.Widget_Id(0x2000 + u64(s))
+		if fit.Surface_Button(surface, widget, SECTION_NAMES[s], rect, style) {
 			section = s
 			fit.Pane_Reset(&content_pane)
 		}
 	}
-	content := legacy.grid_end(&grid)
+	content := fit.Surface_Grid_End(surface, &grid)
 
-	// One cell per control, using the compact labels: four short words fit
-	// where the sidebar's full sentences would not.
-	controls: legacy.Grid_State
-	legacy.grid_begin(
+	controls: fit.Grid_State
+	fit.Surface_Grid_Begin(
+		surface,
 		&controls,
 		{pad, content.y + content.h + gap, sw - pad * 2, 0},
 		i32(len(Nav_Control)),
@@ -566,15 +575,17 @@ draw_nav_strip :: proc(frame: ^legacy.Ui_Frame, top, sw: i32) -> i32 {
 		gap,
 	)
 	for control in Nav_Control {
-		if legacy.button_at(frame, legacy.grid_next(&controls), nav_control_label(control, true)) {
-			nav_control_activate(control, frame)
+		rect := fit.Surface_Grid_Next(surface, &controls)
+		widget := fit.Widget_Id(0x1000 + u64(control))
+		if fit.Surface_Button(surface, widget, nav_control_label(control, true), rect) {
+			nav_control_activate(control, surface)
 		}
 	}
-	_ = legacy.grid_end(&controls)
+	_ = fit.Surface_Grid_End(surface, &controls)
 	return height
 }
 
-apply_gallery_theme :: proc(frame: ^legacy.Ui_Frame = nil) {
+apply_gallery_theme :: proc(surface: ^fit.Surface = nil) {
 	// One lookup. High contrast used to be an override checked ahead of the
 	// palette; folding it into the enum removed the branch along with the
 	// force-clear that kept the two in step.
@@ -589,7 +600,7 @@ apply_gallery_theme :: proc(frame: ^legacy.Ui_Frame = nil) {
 	} else {
 		fit.Set_Theme(&app, t)
 	}
-	if frame != nil do legacy.request_redraw(frame)
+	if surface != nil do fit.Request_Redraw(surface)
 }
 
 // MARGIN_INSET is where the vertical margin rule sits, in design units.
@@ -612,247 +623,208 @@ MARGIN_INSET :: 56
 //
 // Screen palettes set kind = .None and zero the material colors, so this costs
 // them one comparison and no draw calls.
-draw_page_substrate :: proc(
-	frame: ^legacy.Ui_Frame,
-	pane: fit.Rect_I32,
-	anchor: i32,
-	narrow: bool,
-) {
-	assert(frame != nil, "draw_page_substrate: nil frame")
-	theme := legacy.ui_frame_theme(frame)
-	if theme.substrate.kind == .None do return
+draw_page_substrate :: proc(surface: ^fit.Surface, pane: fit.Rect, anchor: i32, narrow: bool) {
+	assert(surface != nil, "draw_page_substrate: nil surface")
+	theme := fit.Surface_Theme_Tokens(surface)
+	if theme.substrate == .None do return
 
-	// The texture runs from the content anchor to the bottom of the pane, so
-	// it scrolls with the content rather than under it.
 	height := pane.y + pane.h - anchor
 	if height <= 0 do return
-	region := legacy.legacy_rect{f32(pane.x), f32(anchor), f32(pane.w), f32(height)}
+	region := fit.Float_Rect{f32(pane.x), f32(anchor), f32(pane.w), f32(height)}
 
-	switch theme.substrate.kind {
+	switch theme.substrate {
 	case .None:
-	// Handled above; listed so a new kind cannot be silently ignored.
 	case .Ruled:
-		legacy.draw_rule_lines(frame, region, color = theme.paper_rule)
+		fit.Surface_Draw_Rules(
+			surface,
+			region,
+			fit.Surface_Metrics(surface).line_height,
+			theme.paper_rule,
+		)
 	case .Grid, .Dots:
-		spacing := legacy.ui_frame_metrics(frame).LINE_HEIGHT
-		if legacy.dot_grid_fits(region, spacing) {
-			legacy.draw_dot_grid(frame, region, spacing, theme.paper_rule)
+		spacing := fit.Surface_Metrics(surface).line_height
+		if fit.Surface_Dot_Grid_Fits(surface, region, spacing) {
+			fit.Surface_Draw_Dot_Grid(surface, region, spacing, theme.paper_rule)
 		}
 	case .Tooth:
-		legacy.draw_paper_tooth(frame, region, theme.paper_tooth)
+		fit.Surface_Draw_Paper_Tooth(surface, region, theme.paper_tooth)
 	}
 
-	// The margin rule is now independent of the body indent, so a palette can
-	// keep the reserved column without the exercise-book line down it.
-	if theme.substrate.margin_rule && !narrow {
-		page := legacy.legacy_rect{f32(pane.x), f32(pane.y), f32(pane.w), f32(pane.h)}
-		legacy.draw_margin_rule(frame, page, MARGIN_INSET, theme.graphite)
+	if theme.margin_rule && !narrow {
+		page := fit.Float_Rect{f32(pane.x), f32(pane.y), f32(pane.w), f32(pane.h)}
+		fit.Surface_Draw_Margin_Rule(surface, page, MARGIN_INSET, theme.graphite)
 	}
 }
 
-draw_content :: proc(frame: ^legacy.Ui_Frame, sw, top, sh: i32, narrow: bool) {
-	// Narrow viewports have no sidebar to sit beside, so the content starts
-	// at the left edge and takes the full width. The inner padding shrinks
-	// too: 18+52 logical px of margin is a third of a phone's width.
-	x := i32(0) if narrow else legacy.ui_frame_sc(frame, NAV_W)
+draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
+	x := i32(0) if narrow else fit.Surface_Scale(surface, NAV_W)
 	w := sw - x
-	pane_rect := fit.Rect_I32{x, top, w, sh - top}
-	y := legacy.pane_begin(
-		frame,
-		&content_pane.inner,
+	pane_rect := fit.Rect{x, top, w, sh - top}
+	y := fit.Surface_Pane_Begin(
+		surface,
+		&content_pane,
 		pane_rect,
-		pad = 14,
+		padding = 14,
 		keyboard = section != .Inputs,
 	)
-	draw_page_substrate(frame, pane_rect, y, narrow)
-	inset := legacy.ui_frame_sc(frame, 8 if narrow else 18)
-	gutter := legacy.ui_frame_sc(frame, 20 if narrow else 52)
+	draw_page_substrate(surface, pane_rect, y, narrow)
+	inset := fit.Surface_Scale(surface, 8 if narrow else 18)
+	gutter := fit.Surface_Scale(surface, 20 if narrow else 52)
 	cx := x + inset
 	cw := w - gutter
-	y = draw_section_layer(frame, cx, y, cw)
+	y = draw_section_layer(surface, cx, y, cw)
 
 	end_y: i32
 	switch section {
 	case .Buttons:
-		end_y = draw_buttons(frame, cx, y, cw)
+		end_y = draw_buttons(surface, cx, y, cw)
 	case .Inputs:
-		end_y = draw_inputs(frame, cx, y, cw)
+		end_y = draw_inputs(surface, cx, y, cw)
 	case .Widgets:
-		end_y = draw_widgets(frame, cx, y, cw)
+		end_y = draw_widgets(surface, cx, y, cw)
 	case .Charts:
-		end_y = draw_charts(frame, cx, y, cw)
+		end_y = draw_charts(surface, cx, y, cw)
 	case .Markdown:
-		md_ctx := legacy.markdown_context(frame)
-		end_y =
-			legacy.markdown_draw(
-				&md_ctx,
-				{cx, y, cw, 0},
-				MARKDOWN_SAMPLE,
-				legacy.ui_frame_theme(frame).fg_primary,
-			) +
-			y
-		// ui reports the click; the application decides what a link means.
-		// That split is forced by the API layers - ui imports only core:* and
-		// cannot reach sys - and it is also correct: an application may route
-		// a relative target internally rather than hand it to a browser.
-		if url, activated := legacy.markdown_link_activated(&md_ctx); activated {
-			// Defaults allow http and https only. A markdown document is
-			// untrusted input, so file:// and custom schemes stay blocked
-			// rather than becoming a way to launch arbitrary handlers.
-			status := sys.open_url(url)
-			if status != .Opened do fmt.eprintfln("gallery: open %s failed (%v)", url, status)
+		result := fit.Surface_Markdown(
+			surface,
+			{cx, y, cw, 0},
+			MARKDOWN_SAMPLE,
+			fit.Surface_Theme_Tokens(surface).foreground_primary,
+		)
+		end_y = y + result.height
+		if result.link_activated {
+			status := sys.open_url(result.link_target)
+			if status != .Opened {
+				fmt.eprintfln("gallery: open %s failed (%v)", result.link_target, status)
+			}
 		}
 	case .Layout:
-		end_y = draw_layout_demo(frame, cx, y, cw)
+		end_y = draw_layout_demo(surface, cx, y, cw)
 	case .Overlay:
-		end_y = draw_overlay_demo(frame, cx, y, cw)
+		end_y = draw_overlay_demo(surface, cx, y, cw)
 	case .Stress:
-		end_y = draw_stress(frame, cx, y, cw)
+		end_y = draw_stress(surface, cx, y, cw)
 	case .Theme:
-		end_y = draw_theme_section(frame, cx, y, cw)
+		end_y = draw_theme_section(surface, cx, y, cw)
 	}
-	legacy.pane_end(frame, &content_pane.inner, pane_rect, end_y, pad = 14)
+	fit.Surface_Pane_End(surface, &content_pane, pane_rect, end_y, padding = 14)
 }
 
-draw_section_layer :: proc(frame: ^legacy.Ui_Frame, x, y, w: i32) -> i32 {
-	assert(frame != nil, "draw_section_layer: nil frame")
-	// Exactly two rule-heights tall. Every section below this band inherits
-	// its starting y from here, so a band of some other height would push all
-	// of them a fraction of a line off the ruled paper. Two lines is also what
-	// the previous hardcoded 44 logical px happened to be, so nothing moves on
-	// the unruled palettes.
-	band := legacy.ui_frame_metrics(frame).LINE_HEIGHT * 2
-	u_storage: legacy.Ui
-	u := &u_storage
-	legacy.begin(u, frame, {x, y, w, band}, gap = .XS)
-	legacy.row_begin(u, 28, gap = .SM, align = .Center)
-	_ = legacy.status_pill(u, SECTION_LAYERS[section], legacy.legacy_ink.Accent)
-	legacy.label(
-		u,
-		SECTION_AXES[section],
-		legacy.legacy_text_role.Body,
-		legacy.legacy_ink.Secondary,
-	)
-	legacy.row_end(u)
-	_ = legacy.end(u)
+draw_section_layer :: proc(surface: ^fit.Surface, x, y, w: i32) -> i32 {
+	assert(surface != nil, "draw_section_layer: nil surface")
+	band := fit.Surface_Metrics(surface).line_height * 2
+	region: fit.Region
+	fit.Surface_Region_Begin(surface, &region, {x, y, w, band}, gap = .XS)
+	fit.Region_Row_Begin(&region, 28, gap = .SM, align = .Center)
+	_ = fit.Region_Status_Pill(&region, SECTION_LAYERS[section], .Accent)
+	fit.Region_Label(&region, SECTION_AXES[section], .Body, .Secondary)
+	fit.Region_Row_End(&region)
+	_ = fit.Surface_Region_End(&region)
 	return y + band
 }
 
-draw_buttons :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
-	assert(frame != nil, "draw_buttons: nil frame")
-	u_storage: legacy.Ui
-	u := &u_storage
-	legacy.begin(u, frame, {x, y0, w, legacy.ROOT_EXTENT_OPEN}, gap = .SM)
-	legacy.scope_begin(u, "buttons")
-	_ = legacy.section_header(u, "BUTTON STYLES")
-	legacy.row_begin(u, 32, gap = .SM)
-	if legacy.button(u, "primary", "Primary", legacy.legacy_btn_style.Primary) do click_count += 1
-	if legacy.button(u, "secondary", "Secondary", legacy.legacy_btn_style.Secondary) {
+draw_buttons :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
+	assert(surface != nil, "draw_buttons: nil surface")
+	region: fit.Region
+	u := &region
+	fit.Surface_Region_Begin(surface, u, {x, y0, w, fit.ROOT_EXTENT_OPEN}, gap = .SM)
+	fit.Region_Scope_Begin(u, "buttons")
+	fit.Region_Section_Header(u, "BUTTON STYLES")
+	fit.Region_Row_Begin(u, 32, gap = .SM)
+	if fit.Region_Button(u, "primary", "Primary", .Primary) do click_count += 1
+	if fit.Region_Button(u, "secondary", "Secondary", .Secondary) {
 		click_count += 1
 	}
-	if legacy.button(u, "danger", "Danger", legacy.legacy_btn_style.Danger) do click_count += 1
-	if legacy.button(u, "ghost", "Ghost", legacy.legacy_btn_style.Ghost) do click_count += 1
-	legacy.row_end(u)
-	legacy.row_begin(u, 32, gap = .SM)
-	_ = legacy.button(u, "disabled", "Disabled", legacy.legacy_btn_style.Primary, false)
-	if legacy.icon_btn(u, legacy.id(u, "close"), "\u2715") do click_count += 1
-	if legacy.back_btn(u, legacy.id(u, "back"), "Back") do click_count += 1
-	legacy.row_end(u)
-	legacy.label(
-		u,
-		fmt.tprintf("clicks: %d", click_count),
-		legacy.legacy_text_role.Body,
-		legacy.legacy_ink.Secondary,
-	)
+	if fit.Region_Button(u, "danger", "Danger", .Danger) do click_count += 1
+	if fit.Region_Button(u, "ghost", "Ghost", .Ghost) do click_count += 1
+	fit.Region_Row_End(u)
+	fit.Region_Row_Begin(u, 32, gap = .SM)
+	_ = fit.Region_Button(u, "disabled", "Disabled", .Primary, false)
+	if fit.Region_Icon_Button(u, fit.Region_Id(u, "close"), "\u2715") do click_count += 1
+	if fit.Region_Back_Button(u, fit.Region_Id(u, "back"), "Back") do click_count += 1
+	fit.Region_Row_End(u)
+	fit.Region_Label(u, fmt.tprintf("clicks: %d", click_count), .Body, .Secondary)
 
-	_ = legacy.section_header(u, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
-	legacy.row_begin(u, 32, gap = .SM)
+	fit.Region_Section_Header(u, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
+	fit.Region_Row_Begin(u, 32, gap = .SM)
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Focusable %d", i + 1)
-		if legacy.button(u, u64(i + 1), label) do click_count += 1
+		if fit.Region_Button(u, u64(i + 1), label) do click_count += 1
 	}
-	legacy.row_end(u)
+	fit.Region_Row_End(u)
 
-	_ = legacy.section_header(u, "COLLAPSIBLE HEADERS")
+	fit.Region_Section_Header(u, "COLLAPSIBLE HEADERS")
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Section %d", i + 1)
-		_ = legacy.collapsible_header(
+		_ = fit.Region_Collapsible_Header(
 			u,
-			legacy.id(u, fmt.tprintf("header:%d", i)),
+			fit.Region_Id(u, fmt.tprintf("header:%d", i)),
 			label,
 			&headers_open[i],
 			{icon = 0x25C6, right_label = "Details"},
 		)
 		if headers_open[i] {
-			legacy.label(
-				u,
-				"Collapsed state is caller-owned.",
-				legacy.legacy_text_role.Body,
-				legacy.legacy_ink.Secondary,
-			)
+			fit.Region_Label(u, "Collapsed state is caller-owned.", .Body, .Secondary)
 		}
 	}
-	legacy.scope_end(u)
-	legacy.space(u, .LG)
-	return legacy.end(u)
+	fit.Region_Scope_End(u)
+	fit.Region_Space(u, .LG)
+	return fit.Surface_Region_End(u)
 }
 
-draw_inputs :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
-	y := legacy.section_header_at(
-		frame,
+draw_inputs :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
+	y := fit.Surface_Section_Header(
+		surface,
 		{x, y0, w, 0},
 		"TEXT INPUTS (Input_Box bundle: builder + caret + undo + pills)",
 	)
-	iw := min(w, legacy.ui_frame_sc(frame, 420))
+	iw := min(w, fit.Surface_Scale(surface, 420))
 
 	state := &input_state
-	u_storage: legacy.Ui
-	u := &u_storage
-	legacy.begin(u, frame, {x, y, iw, legacy.ROOT_EXTENT_OPEN}, gap = .SM)
+	u := &input_region
+	fit.Surface_Region_Begin(surface, u, {x, y, iw, fit.ROOT_EXTENT_OPEN}, gap = .SM)
 	// One scope per section: identity is composed, never hand-numbered, so
 	// adding or reordering a field cannot move focus to a different control.
-	legacy.scope_begin(u, "inputs")
-	legacy.text_input(
+	fit.Region_Scope_Begin(u, "inputs")
+	fit.Region_Text_Input(
 		u,
-		legacy.id(u, "name"),
-		&state.name.inner,
+		"name",
+		&state.name,
 		"Your name (undo, selection, spellcheck)",
-		semantics = legacy.legacy_text_input_semantics{name = "Name"},
+		{semantics = {name = "Name"}},
 	)
-	legacy.text_input(
+	fit.Region_Text_Input(
 		u,
-		legacy.id(u, "password"),
-		&state.pass.inner,
+		"password",
+		&state.pass,
 		"Password (masked)",
-		masked = true,
-		semantics = legacy.legacy_text_input_semantics{name = "Password"},
+		{masked = true, semantics = {name = "Password"}},
 	)
-	legacy.text_input(
+	fit.Region_Text_Input(
 		u,
-		legacy.id(u, "notes"),
-		&state.notes.inner,
-		"Notes\u2026 (multi-line: Enter for newlines)",
-		height = 90,
-		semantics = legacy.legacy_text_input_semantics{name = "Notes"},
+		"notes",
+		&state.notes,
+		"Notes… (multi-line: Enter for newlines)",
+		{height = 90, semantics = {name = "Notes"}},
 	)
 
-	if legacy.button(u, legacy.id(u, "reset"), "Reset all") {
-		legacy.input_box_reset(&state.name.inner)
-		legacy.input_box_reset(&state.pass.inner)
-		legacy.input_box_reset(&state.notes.inner)
+	if fit.Region_Button(u, fit.Region_Id(u, "reset"), "Reset all") {
+		fit.Input_Box_Reset(&state.name)
+		fit.Input_Box_Reset(&state.pass)
+		fit.Input_Box_Reset(&state.notes)
 	}
-	legacy.space(u, .XS)
+	fit.Region_Space(u, .XS)
 
 	summary := fmt.tprintf(
 		"name: %q \u00b7 notes: %d bytes",
-		legacy.input_box_text(&state.name.inner),
-		len(legacy.input_box_text(&state.notes.inner)),
+		fit.Input_Box_Text(&state.name),
+		len(fit.Input_Box_Text(&state.notes)),
 	)
-	legacy.label(u, summary, legacy.legacy_text_role.Label, legacy.legacy_ink.Secondary)
+	fit.Region_Label(u, summary, .Label, .Secondary)
 
-	legacy.space(u, .SM)
-	_ = legacy.section_header(u, "COMBOBOX (type to filter) + DATE PICKER")
-	languages := []legacy.legacy_combobox_item {
+	fit.Region_Space(u, .SM)
+	fit.Region_Section_Header(u, "COMBOBOX (type to filter) + DATE PICKER")
+	languages := []fit.Combobox_Item {
 		{1, "Odin"},
 		{2, "C"},
 		{3, "Zig"},
@@ -860,7 +832,7 @@ draw_inputs :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 		{5, "Go"},
 		{6, "Hare"},
 	}
-	_ = legacy.combobox(
+	_ = fit.Region_Combobox(
 		u,
 		"language",
 		&state.combo,
@@ -869,7 +841,7 @@ draw_inputs :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 		"Language\u2026",
 		"Language",
 	)
-	_ = legacy.date_picker(
+	_ = fit.Region_Date_Picker(
 		u,
 		"release",
 		&state.date,
@@ -878,39 +850,39 @@ draw_inputs :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 		"Release date",
 	)
 	date_text := "unset"
-	if legacy.calendar_date_valid(state.date_value) {
-		date_text = legacy.calendar_format(state.date_value)
+	if fit.Calendar_Date_Valid(state.date_value) {
+		date_text = fit.Calendar_Format(state.date_value)
 	}
 	picked := fmt.tprintf("language id: %d \u00b7 date: %s", state.combo_selected, date_text)
-	legacy.label(u, picked, legacy.legacy_text_role.Label, legacy.legacy_ink.Secondary)
+	fit.Region_Label(u, picked, .Label, .Secondary)
 
-	legacy.scope_end(u)
-	legacy.space(u, .XL)
-	return legacy.end(u)
+	fit.Region_Scope_End(u)
+	fit.Region_Space(u, .XL)
+	return fit.Surface_Region_End(u)
 }
 
-draw_widget_choices :: proc(u: ^legacy.Ui, state: ^Widget_State) {
-	assert(u != nil, "draw_widget_choices: nil UI")
+draw_widget_choices :: proc(u: ^fit.Region, state: ^Widget_State) {
+	assert(u != nil, "draw_widget_choices: nil region")
 	assert(state != nil, "draw_widget_choices: nil state")
-	legacy.row_begin(u, 32, gap = .SM)
-	legacy.checkbox(u, legacy.id(u, "enable"), "Enable widgets", &state.check_a)
-	legacy.checkbox(u, legacy.id(u, "verbose"), "Verbose logs", &state.check_b)
-	legacy.row_end(u)
-	legacy.row_begin(u, 32, gap = .SM)
-	legacy.radio(u, legacy.id(u, "small"), "Small", &state.radio_choice, 0)
-	legacy.radio(u, legacy.id(u, "medium"), "Medium", &state.radio_choice, 1)
-	legacy.radio(u, legacy.id(u, "large"), "Large", &state.radio_choice, 2)
-	legacy.row_end(u)
+	fit.Region_Row_Begin(u, 32, gap = .SM)
+	fit.Region_Checkbox(u, fit.Region_Id(u, "enable"), "Enable widgets", &state.check_a)
+	fit.Region_Checkbox(u, fit.Region_Id(u, "verbose"), "Verbose logs", &state.check_b)
+	fit.Region_Row_End(u)
+	fit.Region_Row_Begin(u, 32, gap = .SM)
+	fit.Region_Radio(u, fit.Region_Id(u, "small"), "Small", &state.radio_choice, 0)
+	fit.Region_Radio(u, fit.Region_Id(u, "medium"), "Medium", &state.radio_choice, 1)
+	fit.Region_Radio(u, fit.Region_Id(u, "large"), "Large", &state.radio_choice, 2)
+	fit.Region_Row_End(u)
 }
 
-draw_widget_volume :: proc(u: ^legacy.Ui, frame: ^legacy.Ui_Frame, state: ^Widget_State) {
-	assert(u != nil, "draw_widget_volume: nil UI")
-	assert(frame != nil, "draw_widget_volume: nil frame")
+draw_widget_volume :: proc(u: ^fit.Region, surface: ^fit.Surface, state: ^Widget_State) {
+	assert(u != nil, "draw_widget_volume: nil region")
+	assert(surface != nil, "draw_widget_volume: nil surface")
 	assert(state != nil, "draw_widget_volume: nil state")
-	legacy.row_begin(u, 32, gap = .SM)
-	_ = legacy.slider_state(
+	fit.Region_Row_Begin(u, 32, gap = .SM)
+	_ = fit.Region_Slider(
 		u,
-		legacy.id(u, "volume"),
+		fit.Region_Id(u, "volume"),
 		&state.slider,
 		&state.volume,
 		0,
@@ -919,103 +891,98 @@ draw_widget_volume :: proc(u: ^legacy.Ui, frame: ^legacy.Ui_Frame, state: ^Widge
 		240,
 		"Volume",
 	)
-	legacy.label(
-		u,
-		fmt.tprintf("%.0f%%", state.volume),
-		legacy.legacy_text_role.Body,
-		legacy.legacy_ink.Secondary,
-	)
-	legacy.row_end(u)
+	fit.Region_Label(u, fmt.tprintf("%.0f%%", state.volume), fit.Text_Role.Body, fit.Ink.Secondary)
+	fit.Region_Row_End(u)
 }
 
 draw_widget_form_controls :: proc(
-	frame: ^legacy.Ui_Frame,
+	surface: ^fit.Surface,
 	x, y0, w: i32,
 	state: ^Widget_State,
 ) -> i32 {
 	assert(state != nil, "draw_widget_form_controls: nil state")
-	y := legacy.section_header_at(
-		frame,
+	y := fit.Surface_Section_Header(
+		surface,
 		{x, y0, w, 0},
 		"FORM CONTROLS (checkbox / radio / slider / dropdown)",
 	)
-	u_storage: legacy.Ui
-	u := &u_storage
-	legacy.begin(u, frame, {x, y, w, legacy.ROOT_EXTENT_OPEN}, gap = .SM)
-	legacy.scope_begin(u, "form")
+	region: fit.Region
+	u := &region
+	fit.Surface_Region_Begin(surface, u, {x, y, w, fit.ROOT_EXTENT_OPEN}, gap = .SM)
+	fit.Region_Scope_Begin(u, "form")
 	draw_widget_choices(u, state)
-	draw_widget_volume(u, frame, state)
+	draw_widget_volume(u, surface, state)
 	backends := []string{"Metal", "Vulkan", "D3D12", "WebGPU"}
-	legacy.dropdown(
+	fit.Region_Dropdown(
 		u,
-		legacy.id(u, "backend"),
+		fit.Region_Id(u, "backend"),
 		backends,
 		&state.dd_selected,
 		&state.dropdown,
 		a11y_label = "Graphics backend",
 	)
-	legacy.scope_end(u)
-	legacy.space(u, .MD)
-	return legacy.end(u)
+	fit.Region_Scope_End(u)
+	fit.Region_Space(u, .MD)
+	return fit.Surface_Region_End(u)
 }
 
 // The progress / spinner / pill section is pure facade: every widget carves
-// its own slot from a Ui, so no call site does arithmetic on x/y/w/h.
-draw_widget_progress :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
+// its own slot from a Region, so no call site does arithmetic on x/y/w/h.
+draw_widget_progress :: proc(surface: ^fit.Surface, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_progress: nil state")
-	u_storage: legacy.Ui
-	u := &u_storage
-	legacy.begin(u, frame, {x, y0, w, legacy.ROOT_EXTENT_OPEN}, gap = .SM)
-	legacy.scope_begin(u, "progress")
-	_ = legacy.section_header(u, "PROGRESS / SPINNER / PILLS")
+	region: fit.Region
+	u := &region
+	fit.Surface_Region_Begin(surface, u, {x, y0, w, fit.ROOT_EXTENT_OPEN}, gap = .SM)
+	fit.Region_Scope_Begin(u, "progress")
+	fit.Region_Section_Header(u, "PROGRESS / SPINNER / PILLS")
 
-	legacy.row_begin(u, 34, gap = .MD, align = .Start)
-	legacy.spinner(u, 28)
-	legacy.spinner(u, 20, {style = .Orbit_Dots, dot_radius = 2.5, speed = 6})
-	_ = legacy.status_pill(u, "active", legacy.legacy_ink.Success)
-	_ = legacy.status_pill(u, "warning", legacy.legacy_ink.Tool)
-	_ = legacy.status_pill(u, "error", legacy.legacy_ink.Danger)
-	legacy.row_end(u)
+	fit.Region_Row_Begin(u, 34, gap = .MD, align = .Start)
+	fit.Region_Spinner(u, 28)
+	fit.Region_Spinner(u, 20, {style = .Orbit_Dots, dot_radius = 2.5, speed = 6})
+	_ = fit.Region_Status_Pill(u, "active", fit.Ink.Success)
+	_ = fit.Region_Status_Pill(u, "warning", fit.Ink.Tool)
+	_ = fit.Region_Status_Pill(u, "error", fit.Ink.Danger)
+	fit.Region_Row_End(u)
 
-	legacy.progress_bar(u, 0.65)
-	legacy.progress_bar_animated(u, progress_frac, &progress_anim, legacy.legacy_ink.Success)
+	fit.Region_Progress_Bar(u, 0.65)
+	fit.Region_Progress_Bar_Animated(u, progress_frac, &progress_anim, fit.Ink.Success)
 
-	legacy.row_begin(u, 30, gap = .SM, align = .Start)
-	if legacy.button(u, legacy.id(u, "replay"), "Replay") do progress_anim = 0
-	legacy.row_end(u)
+	fit.Region_Row_Begin(u, 30, gap = .SM, align = .Start)
+	if fit.Region_Button(u, fit.Region_Id(u, "replay"), "Replay") do progress_anim = 0
+	fit.Region_Row_End(u)
 
-	legacy.scope_end(u)
-	legacy.space(u, .LG)
-	return legacy.end(u)
+	fit.Region_Scope_End(u)
+	fit.Region_Space(u, .LG)
+	return fit.Surface_Region_End(u)
 }
 
 // The key/value rows are facade too: kv_row spans the container width, so the
 // caller never measures the value to right-align it, and the default inks are
 // the muted-key / emphasized-value pairing.
-draw_widget_kv_rows :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32, state: ^Widget_State) -> i32 {
+draw_widget_kv_rows :: proc(surface: ^fit.Surface, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_kv_rows: nil state")
-	u_storage: legacy.Ui
-	u := &u_storage
-	width := min(w, legacy.ui_frame_sc(frame, 360))
-	legacy.begin(u, frame, {x, y0, width, legacy.ROOT_EXTENT_OPEN}, gap = .XS)
-	_ = legacy.section_header(u, "KV ROWS + LIST ROWS")
-	legacy.kv_row(u, "Renderer", "WebGPU")
-	legacy.kv_row(u, "State model", "caller-owned")
-	legacy.space(u, .SM)
-	return legacy.end(u)
+	region: fit.Region
+	u := &region
+	width := min(w, fit.Surface_Scale(surface, 360))
+	fit.Surface_Region_Begin(surface, u, {x, y0, width, fit.ROOT_EXTENT_OPEN}, gap = .XS)
+	fit.Region_Section_Header(u, "KV ROWS + LIST ROWS")
+	fit.Region_Key_Value(u, "Renderer", "WebGPU")
+	fit.Region_Key_Value(u, "State model", "caller-owned")
+	fit.Region_Space(u, .SM)
+	return fit.Surface_Region_End(u)
 }
 
 draw_widget_backend_list :: proc(
-	frame: ^legacy.Ui_Frame,
+	surface: ^fit.Surface,
 	x, y0, w: i32,
 	state: ^Widget_State,
 ) -> i32 {
 	assert(state != nil, "draw_widget_backend_list: nil state")
 	y := y0
 	labels := [?]string{"Metal", "Vulkan", "D3D12", "WebGPU"}
-	width := min(w, legacy.ui_frame_sc(frame, 360))
-	step := legacy.ui_frame_sc(frame, 26)
-	config := legacy.legacy_listbox_config {
+	width := min(w, fit.Surface_Scale(surface, 360))
+	step := fit.Surface_Scale(surface, 26)
+	config := fit.Listbox_Config {
 		rect         = {x, y, width, step * i32(len(labels))},
 		label        = "Rendering backends",
 		stable_id    = "gallery:backends",
@@ -1026,15 +993,15 @@ draw_widget_backend_list :: proc(
 		keys         = .Focused,
 		page_rows    = len(labels),
 	}
-	result := legacy.listbox_begin(frame, &state.listbox, config)
+	result := fit.Surface_Listbox_Begin(surface, &state.listbox, config)
 	for label, i in labels {
-		rect := fit.Rect_I32{x, y, width, legacy.ui_frame_sc(frame, 24)}
-		row := legacy.selectable_row(
-			frame,
+		rect := fit.Rect{x, y, width, fit.Surface_Scale(surface, 24)}
+		row := fit.Surface_Selectable_Row(
+			surface,
 			&state.listbox,
 			config,
 			{
-				{x, y, width, legacy.ui_frame_sc(frame, 24)},
+				{x, y, width, fit.Surface_Scale(surface, 24)},
 				label,
 				fmt.tprintf("gallery:backend:%d", i),
 				i,
@@ -1042,23 +1009,23 @@ draw_widget_backend_list :: proc(
 				"Rendering backend option",
 			},
 		)
-		legacy.list_row_bg_at(frame, rect, row.selected, row.hovered)
+		fit.Surface_List_Row_Background(surface, rect, row.selected, row.hovered)
 		if row.activated do state.list_activated = i
-		legacy.text(
-			frame,
+		fit.Surface_Text(
+			surface,
 			label,
-			x + legacy.ui_frame_sc(frame, 8),
-			y + legacy.ui_frame_sc(frame, 4),
+			x + fit.Surface_Scale(surface, 8),
+			y + fit.Surface_Scale(surface, 4),
 			.Label,
 		)
 		y += step
 	}
-	legacy.listbox_end(frame, &state.listbox)
+	fit.Surface_Listbox_End(surface, &state.listbox)
 	if result.activated do state.list_activated = result.activated_index
 	if state.list_activated >= 0 {
 		assert(state.list_activated < len(labels), "draw_widget_backend_list: invalid index")
-		legacy.text(
-			frame,
+		fit.Surface_Text(
+			surface,
 			fmt.tprintf("activated: %s", labels[state.list_activated]),
 			x,
 			y,
@@ -1067,82 +1034,89 @@ draw_widget_backend_list :: proc(
 		)
 		y += step
 	}
-	return y + legacy.ui_frame_sc(frame, 8)
+	return y + fit.Surface_Scale(surface, 8)
 }
 
-draw_widget_truncation_card :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
-	y := legacy.section_header_at(frame, {x, y0, w, 0}, "CARD + SHADOW + TRUNCATION")
-	card := fit.Rect_I32 {
-		x,
-		y,
-		min(w, legacy.ui_frame_sc(frame, 360)),
-		legacy.ui_frame_sc(frame, 64),
-	}
-	shadow := legacy.legacy_rect{f32(card.x), f32(card.y), f32(card.w), f32(card.h)}
-	legacy.draw_shadow_hard(frame, shadow, .MD, .Lifted)
-	legacy.card_bg_at(
-		frame,
+draw_widget_truncation_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
+	y := fit.Surface_Section_Header(surface, {x, y0, w, 0}, "CARD + SHADOW + TRUNCATION")
+	card := fit.Rect{x, y, min(w, fit.Surface_Scale(surface, 360)), fit.Surface_Scale(surface, 64)}
+	shadow := fit.Float_Rect{f32(card.x), f32(card.y), f32(card.w), f32(card.h)}
+	fit.Surface_Draw_Shadow(surface, shadow, .MD, .Lifted)
+	fit.Surface_Card_Background(
+		surface,
 		card,
-		legacy.ui_frame_theme(frame).bg_secondary,
-		accent_w = legacy.ui_frame_sc(frame, 3),
+		fit.Surface_Theme_Tokens(surface).background_secondary,
+		accent_width = fit.Surface_Scale(surface, 3),
 	)
-	legacy.draw_text_truncated_frame(
-		frame,
+	fit.Surface_Text_Truncated(
+		surface,
 		"A very long label that will be cut with an ellipsis when it overflows the card",
-		x + legacy.ui_frame_sc(frame, 12),
-		y + legacy.ui_frame_sc(frame, 12),
-		card.w - legacy.ui_frame_sc(frame, 24),
-		legacy.ui_frame_metrics(frame).FONT_SIZE_LABEL,
-		legacy.ui_frame_theme(frame).fg_primary,
+		x + fit.Surface_Scale(surface, 12),
+		y + fit.Surface_Scale(surface, 12),
+		card.w - fit.Surface_Scale(surface, 24),
+		.Label,
+		.Primary,
 	)
-	path := legacy.truncate_path_middle_frame(
-		frame,
+	path := fit.Surface_Truncate_Path(
+		surface,
 		"ingot/examples/gallery/very/deep/dir/main.odin",
-		card.w - legacy.ui_frame_sc(frame, 24),
-		legacy.ui_frame_metrics(frame).FONT_SIZE_LABEL,
+		card.w - fit.Surface_Scale(surface, 24),
+		fit.Surface_Metrics(surface).font_label,
 	)
-	legacy.text(
-		frame,
+	fit.Surface_Text(
+		surface,
 		path,
-		x + legacy.ui_frame_sc(frame, 12),
-		y + legacy.ui_frame_sc(frame, 34),
+		x + fit.Surface_Scale(surface, 12),
+		y + fit.Surface_Scale(surface, 34),
 		.Label,
 		.Secondary,
 	)
-	return y + card.h + legacy.ui_frame_sc(frame, 16)
+	return y + card.h + fit.Surface_Scale(surface, 16)
 }
 
-draw_widget_fit_card :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
-	y := legacy.section_header_at(frame, {x, y0, w, 0}, "FIT-CONTENT CARD")
-	fit_w := min(w, legacy.ui_frame_sc(frame, 360))
-	pad := legacy.ui_frame_sc(frame, 12)
-	column: legacy.Fit_Column
-	legacy.fit_column_begin(
+draw_widget_fit_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
+	y := fit.Surface_Section_Header(surface, {x, y0, w, 0}, "FIT-CONTENT CARD")
+	fit_w := min(w, fit.Surface_Scale(surface, 360))
+	pad := fit.Surface_Scale(surface, 12)
+	column: fit.Fit_Column_State
+	fit.Surface_Fit_Column_Begin(
+		surface,
 		&column,
 		x + pad,
 		y + pad,
 		fit_w - pad * 2,
-		gap = legacy.ui_frame_sc(frame, 6),
+		gap = fit.Surface_Scale(surface, 6),
 	)
-	title := legacy.fit_column_next(&column, legacy.ui_frame_sc(frame, 18))
-	detail := legacy.fit_column_next(&column, legacy.ui_frame_sc(frame, 18))
-	content := legacy.fit_column_end(&column)
-	card := fit.Rect_I32{x, y, fit_w, content.h + pad * 2}
-	legacy.card_bg_at(frame, card, legacy.ui_frame_theme(frame).bg_secondary)
-	legacy.text(frame, "Geometry resolved before drawing", title.x, title.y, .Label)
-	legacy.text(frame, "No retained tree or trailing gap", detail.x, detail.y, .Label, .Secondary)
-	return y + card.h + legacy.ui_frame_sc(frame, 16)
+	title := fit.Surface_Fit_Column_Next(surface, &column, fit.Surface_Scale(surface, 18))
+	detail := fit.Surface_Fit_Column_Next(surface, &column, fit.Surface_Scale(surface, 18))
+	content := fit.Surface_Fit_Column_End(surface, &column)
+	card := fit.Rect{x, y, fit_w, content.h + pad * 2}
+	fit.Surface_Card_Background(
+		surface,
+		card,
+		fit.Surface_Theme_Tokens(surface).background_secondary,
+	)
+	fit.Surface_Text(surface, "Geometry resolved before drawing", title.x, title.y, .Label)
+	fit.Surface_Text(
+		surface,
+		"No retained tree or trailing gap",
+		detail.x,
+		detail.y,
+		.Label,
+		.Secondary,
+	)
+	return y + card.h + fit.Surface_Scale(surface, 16)
 }
 
-draw_widgets :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
+draw_widgets :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	state := &widget_state
-	y := draw_widget_form_controls(frame, x, y0, w, state)
-	y = draw_widget_progress(frame, x, y, w, state)
-	y = draw_widget_kv_rows(frame, x, y, w, state)
-	y = draw_widget_backend_list(frame, x, y, w, state)
-	y = draw_widget_tabs_table(frame, x, y, w, state)
-	y = draw_widget_truncation_card(frame, x, y, w)
-	return draw_widget_fit_card(frame, x, y, w)
+	y := draw_widget_form_controls(surface, x, y0, w, state)
+	y = draw_widget_progress(surface, x, y, w, state)
+	y = draw_widget_kv_rows(surface, x, y, w, state)
+	y = draw_widget_backend_list(surface, x, y, w, state)
+	y = draw_widget_tabs_table(surface, x, y, w, state)
+	y = draw_widget_truncation_card(surface, x, y, w)
+	return draw_widget_fit_card(surface, x, y, w)
 }
 
 // The tab bar keeps only a caller-owned active index; the table header owns
@@ -1175,373 +1149,444 @@ widget_table_less :: proc(a, b: Widget_Table_Row) -> bool {
 	}
 }
 
-WIDGET_TABLE_COLUMNS := [3]legacy.legacy_table_column {
+WIDGET_TABLE_COLUMNS := [3]fit.Table_Column {
 	{label = "Widget", track = {kind = .Grow, weight = 1}},
 	{label = "Layer", track = {kind = .Fixed, basis = 150}},
 	{label = "Procs", track = {kind = .Fixed, basis = 60}, numeric = true},
 }
 
-draw_widget_tabs_table :: proc(
-	frame: ^legacy.Ui_Frame,
-	x, y0, w: i32,
-	state: ^Widget_State,
-) -> i32 {
+draw_widget_tabs_table :: proc(surface: ^fit.Surface, x, y0, w: i32, state: ^Widget_State) -> i32 {
 	assert(state != nil, "draw_widget_tabs_table: nil state")
-	u_storage: legacy.Ui
-	u := &u_storage
-	width := min(w, legacy.ui_frame_sc(frame, 420))
-	legacy.begin(u, frame, {x, y0, width, legacy.ROOT_EXTENT_OPEN}, gap = .SM)
-	legacy.scope_begin(u, "data")
+	region: fit.Region
+	u := &region
+	width := min(w, fit.Surface_Scale(surface, 420))
+	fit.Surface_Region_Begin(surface, u, {x, y0, width, fit.ROOT_EXTENT_OPEN}, gap = .SM)
+	fit.Region_Scope_Begin(u, "data")
 
-	_ = legacy.section_header(u, "TAB BAR")
+	fit.Region_Section_Header(u, "TAB BAR")
 	tabs := []string{"Overview", "Details", "Logs"}
-	_ = legacy.tab_bar(u, "tabs", tabs, &state.tab_active)
-	legacy.label(
+	_ = fit.Region_Tab_Bar(u, "tabs", tabs, &state.tab_active)
+	fit.Region_Label(
 		u,
 		fmt.tprintf("active tab: %s \u00b7 state is one caller-owned i32", tabs[state.tab_active]),
-		legacy.legacy_text_role.Label,
-		legacy.legacy_ink.Secondary,
+		fit.Text_Role.Label,
+		fit.Ink.Secondary,
 	)
 
-	legacy.space(u, .SM)
-	_ = legacy.section_header(u, "TABLE (click headers to sort)")
+	fit.Region_Space(u, .SM)
+	fit.Region_Section_Header(u, "TABLE (click headers to sort)")
 	columns := WIDGET_TABLE_COLUMNS[:]
-	_ = legacy.table_header(u, "table", columns, &state.table_sort)
+	_ = fit.Region_Table_Header(u, "table", columns, &state.table_sort)
 	rows := slice.clone(WIDGET_TABLE_ROWS[:], context.temp_allocator)
 	if state.table_sort.column >= 0 do slice.sort_by(rows, widget_table_less)
 	row_h: i32 = 24
-	tracks_buffer: [legacy.TABLE_COLUMN_COUNT_MAX]legacy.legacy_track
+	tracks_buffer: [fit.TABLE_COLUMN_COUNT_MAX]fit.Track
 	for row in rows {
-		legacy.flex_row_begin(
+		fit.Region_Flex_Row_Begin(
 			u,
 			row_h,
-			legacy.table_tracks(columns, tracks_buffer[:]),
+			fit.Table_Tracks(columns, tracks_buffer[:]),
 			align = .Center,
 		)
-		draw_widget_table_cell(frame, legacy.flex_slot_next(u, row_h), row.widget, false)
-		draw_widget_table_cell(frame, legacy.flex_slot_next(u, row_h), row.layer, false)
+		draw_widget_table_cell(surface, fit.Region_Flex_Slot_Next(u, row_h), row.widget, false)
+		draw_widget_table_cell(surface, fit.Region_Flex_Slot_Next(u, row_h), row.layer, false)
 		draw_widget_table_cell(
-			frame,
-			legacy.flex_slot_next(u, row_h),
+			surface,
+			fit.Region_Flex_Slot_Next(u, row_h),
 			fmt.tprintf("%d", row.procs),
 			true,
 		)
-		legacy.flex_row_end(u)
+		fit.Region_Flex_Row_End(u)
 	}
 
-	legacy.scope_end(u)
-	legacy.space(u, .LG)
-	return legacy.end(u)
+	fit.Region_Scope_End(u)
+	fit.Region_Space(u, .LG)
+	return fit.Surface_Region_End(u)
 }
 
 draw_widget_table_cell :: proc(
-	frame: ^legacy.Ui_Frame,
-	rect: fit.Rect_I32,
+	surface: ^fit.Surface,
+	rect: fit.Rect,
 	label: string,
 	numeric: bool,
 ) {
 	if rect.w <= 0 || rect.h <= 0 do return
-	pad := legacy.ui_frame_sc(frame, 4)
+	pad := fit.Surface_Scale(surface, 4)
 	text_x := rect.x + pad
-	if numeric do text_x = rect.x + rect.w - legacy.text_width(frame, label, .Label) - pad
-	text_y := rect.y + (rect.h - legacy.ui_frame_metrics(frame).FONT_SIZE_LABEL) / 2
-	legacy.text(frame, label, text_x, text_y, .Label)
+	if numeric do text_x = rect.x + rect.w - fit.Surface_Text_Width(surface, label, .Label) - pad
+	text_y := rect.y + (rect.h - fit.Surface_Metrics(surface).font_label) / 2
+	fit.Surface_Text(surface, label, text_x, text_y, .Label)
 }
 
-draw_charts :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
-	y := legacy.section_header_at(
-		frame,
+draw_charts :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
+	y := fit.Surface_Section_Header(
+		surface,
 		{x, y0, w, 0},
 		"LINE + BAR + SPARKLINE (hover for overlay tooltips)",
 	)
-	cw := min(w, legacy.ui_frame_sc(frame, 560))
-	series := [2]legacy.legacy_chart_series {
+	cw := min(w, fit.Surface_Scale(surface, 560))
+	series := [2]fit.Chart_Series {
 		{name = "Revenue", values = revenue[:]},
 		{name = "Costs", values = costs[:]},
 	}
-	legacy.line_chart_at(
-		frame,
-		{x, y, cw, legacy.ui_frame_sc(frame, 240)},
+	fit.Surface_Line_Chart(
+		surface,
+		{x, y, cw, fit.Surface_Scale(surface, 240)},
 		series[:],
 		&line_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true, fill = true},
 	)
-	y += legacy.ui_frame_sc(frame, 252)
-	legacy.bar_chart_at(
-		frame,
-		{x, y, cw, legacy.ui_frame_sc(frame, 220)},
+	y += fit.Surface_Scale(surface, 252)
+	fit.Surface_Bar_Chart(
+		surface,
+		{x, y, cw, fit.Surface_Scale(surface, 220)},
 		series[:],
 		&bar_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true},
 	)
-	y += legacy.ui_frame_sc(frame, 232)
-	legacy.text(frame, "sparkline:", x, y + legacy.ui_frame_sc(frame, 6), .Label, .Secondary)
-	legacy.sparkline_at(
-		frame,
+	y += fit.Surface_Scale(surface, 232)
+	fit.Surface_Text(
+		surface,
+		"sparkline:",
+		x,
+		y + fit.Surface_Scale(surface, 6),
+		.Label,
+		.Secondary,
+	)
+	fit.Surface_Sparkline(
+		surface,
 		{
-			x + legacy.ui_frame_sc(frame, 80),
+			x + fit.Surface_Scale(surface, 80),
 			y,
-			legacy.ui_frame_sc(frame, 140),
-			legacy.ui_frame_sc(frame, 28),
+			fit.Surface_Scale(surface, 140),
+			fit.Surface_Scale(surface, 28),
 		},
 		spark[:],
 	)
-	return y + legacy.ui_frame_sc(frame, 40)
+	return y + fit.Surface_Scale(surface, 40)
 }
 
-draw_layout_demo :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
-	y := legacy.section_header_at(
-		frame,
+draw_layout_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
+	y := fit.Surface_Section_Header(
+		surface,
 		{x, y0, w, 0},
 		"SINGLE-PASS LAYOUT (weights + flex + justify + flow)",
 	)
-	l: legacy.Layout
-	lw := min(w, legacy.ui_frame_sc(frame, 520))
-	legacy.layout_begin(
+	l: fit.Layout_State
+	lw := min(w, fit.Surface_Scale(surface, 520))
+	fit.Surface_Layout_Begin(
+		surface,
 		&l,
 		x,
 		y,
 		lw,
-		legacy.ui_frame_sc(frame, 296),
-		gap = legacy.ui_frame_sc(frame, 8),
+		fit.Surface_Scale(surface, 296),
+		gap = fit.Surface_Scale(surface, 8),
 	)
 
-	legacy.push_row(&l, legacy.ui_frame_sc(frame, 40), gap = legacy.ui_frame_sc(frame, 8))
-	legacy.row_weights(&l, {1, 2, 1})
-	cell(frame, legacy.next_weighted(&l, 1), "1fr")
-	cell(frame, legacy.next_weighted(&l, 2), "2fr")
-	cell(frame, legacy.next_weighted(&l, 1), "1fr")
-	legacy.layout_pop(&l)
-
-	legacy.push_row(&l, legacy.ui_frame_sc(frame, 40), gap = legacy.ui_frame_sc(frame, 8))
-	cell(frame, legacy.next(&l, legacy.ui_frame_sc(frame, 120)), "fixed 120")
-	cell(frame, legacy.remaining(&l), "remaining")
-	legacy.layout_pop(&l)
-
-	legacy.push_row(
+	fit.Surface_Layout_Push_Row(
+		surface,
 		&l,
-		legacy.ui_frame_sc(frame, 90),
-		gap = legacy.ui_frame_sc(frame, 8),
-		cross_align = .Center,
+		fit.Surface_Scale(surface, 40),
+		gap = fit.Surface_Scale(surface, 8),
+	)
+	fit.Surface_Layout_Row_Weights(surface, &l, {1, 2, 1})
+	cell(surface, fit.Surface_Layout_Next_Weighted(surface, &l, 1), "1fr")
+	cell(surface, fit.Surface_Layout_Next_Weighted(surface, &l, 2), "2fr")
+	cell(surface, fit.Surface_Layout_Next_Weighted(surface, &l, 1), "1fr")
+	fit.Surface_Layout_Pop(surface, &l)
+
+	fit.Surface_Layout_Push_Row(
+		surface,
+		&l,
+		fit.Surface_Scale(surface, 40),
+		gap = fit.Surface_Scale(surface, 8),
 	)
 	cell(
-		frame,
-		legacy.next_sized(&l, legacy.ui_frame_sc(frame, 160), legacy.ui_frame_sc(frame, 50)),
-		"centered",
+		surface,
+		fit.Surface_Layout_Next(surface, &l, fit.Surface_Scale(surface, 120)),
+		"fixed 120",
 	)
-	legacy.layout_pop(&l)
+	cell(surface, fit.Surface_Layout_Remaining(surface, &l), "remaining")
+	fit.Surface_Layout_Pop(surface, &l)
 
-	legacy.push_row(&l, legacy.ui_frame_sc(frame, 40), gap = legacy.ui_frame_sc(frame, 8))
-	legacy.flex_begin(
+	draw_layout_centered(surface, &l)
+
+	fit.Surface_Layout_Push_Row(
+		surface,
+		&l,
+		fit.Surface_Scale(surface, 40),
+		gap = fit.Surface_Scale(surface, 8),
+	)
+	fit.Surface_Layout_Flex_Begin(
+		surface,
 		&l,
 		{
-			legacy.fixed(legacy.ui_frame_sc(frame, 72)),
-			legacy.fit(legacy.ui_frame_sc(frame, 96), min_size = legacy.ui_frame_sc(frame, 56)),
-			legacy.percent(0.2),
-			legacy.grow(),
+			fit.Fixed(fit.Surface_Scale(surface, 72)),
+			fit.Fit(fit.Surface_Scale(surface, 96), min_size = fit.Surface_Scale(surface, 56)),
+			fit.Percent(0.2),
+			fit.Grow(),
 		},
 	)
-	cell(frame, legacy.flex_next(&l), "fixed")
-	cell(frame, legacy.flex_next(&l), "fit")
-	cell(frame, legacy.flex_next(&l), "20%")
-	cell(frame, legacy.flex_next(&l), "grow")
-	legacy.layout_pop(&l)
+	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "fixed")
+	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "fit")
+	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "20%")
+	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "grow")
+	fit.Surface_Layout_Pop(surface, &l)
 
 	// justify packs a declared run whose tracks leave free space; here the
 	// leftover is distributed between three fixed cells.
-	legacy.push_row(&l, legacy.ui_frame_sc(frame, 40), gap = legacy.ui_frame_sc(frame, 8))
-	legacy.flex_begin(
+	fit.Surface_Layout_Push_Row(
+		surface,
+		&l,
+		fit.Surface_Scale(surface, 40),
+		gap = fit.Surface_Scale(surface, 8),
+	)
+	fit.Surface_Layout_Flex_Begin(
+		surface,
 		&l,
 		{
-			legacy.fixed(legacy.ui_frame_sc(frame, 90)),
-			legacy.fixed(legacy.ui_frame_sc(frame, 90)),
-			legacy.fixed(legacy.ui_frame_sc(frame, 90)),
+			fit.Fixed(fit.Surface_Scale(surface, 90)),
+			fit.Fixed(fit.Surface_Scale(surface, 90)),
+			fit.Fixed(fit.Surface_Scale(surface, 90)),
 		},
 		justify = .Space_Between,
 	)
-	cell(frame, legacy.flex_next(&l), "between")
-	cell(frame, legacy.flex_next(&l), "between")
-	cell(frame, legacy.flex_next(&l), "between")
-	legacy.layout_pop(&l)
+	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "between")
+	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "between")
+	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "between")
+	fit.Surface_Layout_Pop(surface, &l)
 
-	legacy.layout_end(&l)
-	flow_y := y + legacy.ui_frame_sc(frame, 306)
-	flow: legacy.Flow_Layout
-	legacy.flow_begin(
+	fit.Surface_Layout_End(surface, &l)
+	return draw_layout_flow(surface, x, y, lw)
+}
+
+draw_layout_centered :: proc(surface: ^fit.Surface, layout: ^fit.Layout_State) {
+	fit.Surface_Layout_Push_Row(
+		surface,
+		layout,
+		fit.Surface_Scale(surface, 90),
+		gap = fit.Surface_Scale(surface, 8),
+		align = .Center,
+	)
+	rect := fit.Surface_Layout_Next_Sized(
+		surface,
+		layout,
+		fit.Surface_Scale(surface, 160),
+		fit.Surface_Scale(surface, 50),
+	)
+	cell(surface, rect, "centered")
+	fit.Surface_Layout_Pop(surface, layout)
+}
+
+draw_layout_flow :: proc(surface: ^fit.Surface, x, y, width: i32) -> i32 {
+	flow_y := y + fit.Surface_Scale(surface, 306)
+	flow: fit.Flow_State
+	fit.Surface_Flow_Begin(
+		surface,
 		&flow,
-		{x, flow_y, lw, max(i32) - flow_y},
-		legacy.ui_frame_sc(frame, 8),
-		legacy.ui_frame_sc(frame, 8),
+		{x, flow_y, width, max(i32) - flow_y},
+		fit.Surface_Scale(surface, 8),
+		fit.Surface_Scale(surface, 8),
 	)
 	labels := [?]string{"measured", "single pass", "caller owned", "bounded", "responsive flow"}
 	for label in labels {
-		width := legacy.text_width(frame, label, .Label) + legacy.ui_frame_sc(frame, 24)
-		cell(frame, legacy.flow_next(&flow, width, legacy.ui_frame_sc(frame, 32)), label)
+		item_width :=
+			fit.Surface_Text_Width(surface, label, .Label) + fit.Surface_Scale(surface, 24)
+		item := fit.Surface_Flow_Next(surface, &flow, item_width, fit.Surface_Scale(surface, 32))
+		cell(surface, item, label)
 	}
-	flow_bounds := legacy.flow_end(&flow)
-	return flow_bounds.y + flow_bounds.h + legacy.ui_frame_sc(frame, 10)
+	bounds := fit.Surface_Flow_End(surface, &flow)
+	return bounds.y + bounds.h + fit.Surface_Scale(surface, 10)
 }
 
-cell :: proc(frame: ^legacy.Ui_Frame, r: fit.Rect_I32, label: string) {
+cell :: proc(surface: ^fit.Surface, r: fit.Rect, label: string) {
 	if r.w <= 0 || r.h <= 0 do return
-	legacy.draw_rectangle(frame, r.x, r.y, r.w, r.h, legacy.ui_frame_theme(frame).bg_active)
-	legacy.draw_rectangle_lines(
-		frame,
-		r.x,
-		r.y,
-		r.w,
-		r.h,
-		legacy.ui_frame_theme(frame).border_color,
-	)
-	tw := legacy.text_width(frame, label, .Label)
-	legacy.text(
-		frame,
+	theme := fit.Surface_Theme_Tokens(surface)
+	fit.Surface_Fill_Rect(surface, r, theme.background_active)
+	fit.Surface_Stroke_Rect(surface, r, theme.border)
+	tw := fit.Surface_Text_Width(surface, label, .Label)
+	fit.Surface_Text(
+		surface,
 		label,
 		r.x + (r.w - tw) / 2,
-		r.y + (r.h - legacy.ui_frame_metrics(frame).FONT_SIZE_LABEL) / 2,
+		r.y + (r.h - fit.Surface_Metrics(surface).font_label) / 2,
 		.Label,
 		.Secondary,
 	)
 }
 
-draw_overlay_controls :: proc(frame: ^legacy.Ui_Frame, x, y: i32) -> i32 {
+draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 	// A two-column grid places the shielded stack and the action stack; no
 	// call site does per-button x/y arithmetic and the columns stay aligned.
-	gap := legacy.ui_frame_sc(frame, 8)
-	grid: legacy.Grid_State
-	legacy.grid_begin(
+	gap := fit.Surface_Scale(surface, 8)
+	grid: fit.Grid_State
+	fit.Surface_Grid_Begin(
+		surface,
 		&grid,
-		{x, y, legacy.ui_frame_sc(frame, 340), 0},
+		{x, y, fit.Surface_Scale(surface, 340), 0},
 		columns = 2,
-		row_height = legacy.ui_frame_sc(frame, 30),
+		row_height = fit.Surface_Scale(surface, 30),
 		gap_x = gap,
 		gap_y = gap,
 	)
-	if legacy.button_at(frame, legacy.grid_next(&grid), "Shielded 1") do shielded_clicks += 1
-	if legacy.button_at(
-		frame,
-		legacy.grid_next(&grid),
+	if fit.Surface_Button(
+		surface,
+		fit.Widget_Id_From_U64(0x3001),
+		"Shielded 1",
+		fit.Surface_Grid_Next(surface, &grid),
+	) {
+		shielded_clicks += 1
+	}
+	if fit.Surface_Button(
+		surface,
+		fit.Widget_Id_From_U64(0x3006),
 		"Toggle popup",
-		legacy.legacy_btn_style.Primary,
+		fit.Surface_Grid_Next(surface, &grid),
+		.Primary,
 	) {
 		popup_open = !popup_open
 	}
-	if legacy.button_at(frame, legacy.grid_next(&grid), "Shielded 2") do shielded_clicks += 1
-	if legacy.button_at(frame, legacy.grid_next(&grid), "Open modal") {
-		about_modal.open = true
+	if fit.Surface_Button(
+		surface,
+		fit.Widget_Id_From_U64(0x3002),
+		"Shielded 2",
+		fit.Surface_Grid_Next(surface, &grid),
+	) {
+		shielded_clicks += 1
 	}
-	if legacy.button_at(frame, legacy.grid_next(&grid), "Shielded 3") do shielded_clicks += 1
-	if legacy.button_at(frame, legacy.grid_next(&grid), "Push toast") {
+	if fit.Surface_Button(
+		surface,
+		fit.Widget_Id_From_U64(0x3003),
+		"Open modal",
+		fit.Surface_Grid_Next(surface, &grid),
+	) {
+		fit.Modal_Open(&about_modal)
+	}
+	if fit.Surface_Button(
+		surface,
+		fit.Widget_Id_From_U64(0x3004),
+		"Shielded 3",
+		fit.Surface_Grid_Next(surface, &grid),
+	) {
+		shielded_clicks += 1
+	}
+	if fit.Surface_Button(
+		surface,
+		fit.Widget_Id_From_U64(0x3005),
+		"Push toast",
+		fit.Surface_Grid_Next(surface, &grid),
+	) {
 		toast_count += 1
-		kind := legacy.legacy_toast_kind(toast_count % 3)
-		legacy.toast_push(&toasts, kind, fmt.tprintf("Toast %d \u00b7 newest on top", toast_count))
+		kind := fit.Toast_Kind(toast_count % 3)
+		fit.Toast_Push(&toasts, kind, fmt.tprintf("Toast %d \u00b7 newest on top", toast_count))
 	}
 	// The shielded column has only three rows; skip its fourth cell so the
 	// danger action stays in the action column.
-	_ = legacy.grid_next(&grid)
-	if legacy.button_at(
-		frame,
-		legacy.grid_next(&grid),
+	_ = fit.Surface_Grid_Next(surface, &grid)
+	if fit.Surface_Button(
+		surface,
+		fit.Widget_Id_From_U64(0x3007),
 		"Delete\u2026",
-		legacy.legacy_btn_style.Danger,
+		fit.Surface_Grid_Next(surface, &grid),
+		.Danger,
 	) {
-		legacy.confirm_dialog_open(&confirm)
+		fit.Confirm_Dialog_Open(&confirm)
 	}
-	content := legacy.grid_end(&grid)
+	content := fit.Surface_Grid_End(surface, &grid)
 	info_y := content.y + content.h + gap
 	summary := fmt.tprintf(
 		"shielded clicks: %d (should not rise while the popup covers them)",
 		shielded_clicks,
 	)
-	legacy.text(frame, summary, x, info_y, .Label, .Secondary)
+	fit.Surface_Text(surface, summary, x, info_y, .Label, .Secondary)
 	return info_y
 }
 
-draw_overlay_context_menu :: proc(frame: ^legacy.Ui_Frame, x, info_y: i32) {
-	if legacy.is_mouse_button_pressed(frame, .RIGHT) &&
-	   !ctx_menu.open &&
-	   !about_modal.open &&
-	   !confirm.modal.open {
-		mouse := legacy.get_mouse_position(frame)
-		legacy.context_menu_open(&ctx_menu, i32(mouse.x), i32(mouse.y))
+draw_overlay_context_menu :: proc(surface: ^fit.Surface, x, info_y: i32) {
+	if fit.Surface_Mouse_Pressed(surface, .Right) &&
+	   !fit.Context_Menu_Is_Open(&ctx_menu) &&
+	   !fit.Modal_Is_Open(&about_modal) &&
+	   !fit.Confirm_Dialog_Is_Open(&confirm) {
+		mouse := fit.Surface_Mouse_Position(surface)
+		fit.Context_Menu_Open(&ctx_menu, mouse)
 	}
-	if ctx_menu.open {
-		items := []legacy.legacy_menu_item {
+	if fit.Context_Menu_Is_Open(&ctx_menu) {
+		items := []fit.Menu_Item {
 			{label = "Reset shielded clicks"},
 			{label = "Unavailable action", disabled = true},
 			{separator = true},
 			{label = "Close menu"},
 		}
 		root := gallery_root
-		chosen := legacy.context_menu(frame, &ctx_menu, items, root)
+		chosen := fit.Surface_Context_Menu(surface, &ctx_menu, items)
 		if chosen == 0 {
 			shielded_clicks = 0
 			ctx_note = "shielded clicks reset via context menu"
 		}
 	}
-	legacy.draw_text_frame(
-		frame,
-		strings.clone_to_cstring(ctx_note, context.temp_allocator),
-		x,
-		info_y + legacy.ui_frame_sc(frame, 22),
-		legacy.ui_frame_metrics(frame).FONT_SIZE_LABEL,
-		legacy.ui_frame_theme(frame).fg_label,
-	)
+	fit.Surface_Text(surface, ctx_note, x, info_y + fit.Surface_Scale(surface, 22), .Label, .Label)
 }
 
-draw_overlay_modal :: proc(frame: ^legacy.Ui_Frame) {
-	if !about_modal.open do return
+draw_overlay_modal :: proc(surface: ^fit.Surface) {
+	if !fit.Modal_Is_Open(&about_modal) do return
 	root := gallery_root
-	body := legacy.modal_begin(
-		frame,
+	body := fit.Surface_Modal_Begin(
+		surface,
 		&about_modal,
 		"Generic modal",
-		{size = {legacy.ui_frame_sc(frame, 420), legacy.ui_frame_sc(frame, 190)}, screen = root},
+		{fit.Surface_Scale(surface, 420), fit.Surface_Scale(surface, 190)},
 	)
-	legacy.draw_text_wrapped_frame(
-		frame,
-		body.x + legacy.ui_frame_metrics(frame).PADDING,
-		body.y + legacy.ui_frame_sc(frame, 4),
-		body.w - legacy.ui_frame_metrics(frame).PADDING * 2,
+	metrics := fit.Surface_Metrics(surface)
+	fit.Surface_Text_Wrapped(
+		surface,
 		"The settings panel is built on this same modal_begin/modal_end pair. " +
 		"Escape or a click outside dismisses it.",
-		legacy.ui_frame_theme(frame).fg_primary,
-		legacy.ui_frame_metrics(frame).FONT_SIZE_BODY,
-		legacy.ui_frame_metrics(frame).LINE_HEIGHT,
+		body.x + metrics.padding,
+		body.y + fit.Surface_Scale(surface, 4),
+		body.w - metrics.padding * 2,
+		fit.Surface_Theme_Tokens(surface).foreground_primary,
+		metrics.font_body,
+		metrics.line_height,
 	)
-	if legacy.button_at(
-		frame,
-		{
-			body.x + legacy.ui_frame_metrics(frame).PADDING,
-			body.y + body.h - legacy.ui_frame_sc(frame, 44),
-			legacy.ui_frame_sc(frame, 90),
-			legacy.ui_frame_sc(frame, 28),
-		},
+	if fit.Surface_Button(
+		surface,
+		fit.Widget_Id_From_U64(0x3008),
 		"Close",
-		legacy.legacy_btn_style.Primary,
+		{
+			body.x + metrics.padding,
+			body.y + body.h - fit.Surface_Scale(surface, 44),
+			fit.Surface_Scale(surface, 90),
+			fit.Surface_Scale(surface, 28),
+		},
+		.Primary,
 	) {
-		about_modal.open = false
+		fit.Modal_Close(&about_modal)
 	}
-	legacy.modal_end(&about_modal)
+	fit.Surface_Modal_End(surface, &about_modal)
 }
 
-draw_overlay_demo :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
-	y := legacy.section_header_at(
-		frame,
+draw_overlay_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
+	y := fit.Surface_Section_Header(
+		surface,
 		{x, y0, w, 0},
 		"OVERLAY + INPUT ROUTING (popup occludes the buttons under it)",
 	)
-	info_y := draw_overlay_controls(frame, x, y)
-	info_y = draw_docked_panel_over_canvas(frame, x, info_y, w)
-	draw_overlay_context_menu(frame, x, info_y)
+	info_y := draw_overlay_controls(surface, x, y)
+	info_y = draw_docked_panel_over_canvas(surface, x, info_y, w)
+	draw_overlay_context_menu(surface, x, info_y)
 	if popup_open {
-		draw_demo_popup(frame, x - legacy.ui_frame_sc(frame, 8), y - legacy.ui_frame_sc(frame, 8))
+		draw_demo_popup(
+			surface,
+			x - fit.Surface_Scale(surface, 8),
+			y - fit.Surface_Scale(surface, 8),
+		)
 	}
-	draw_overlay_modal(frame)
-	draw_overlay_confirm(frame)
+	draw_overlay_modal(surface)
+	draw_overlay_confirm(surface)
 	root := gallery_root
-	legacy.toasts_draw(frame, &toasts, root)
-	return info_y + legacy.ui_frame_sc(frame, 52)
+	fit.Surface_Toasts(surface, &toasts)
+	return info_y + fit.Surface_Scale(surface, 52)
 }
 
 // draw_docked_panel_over_canvas is the z-ordered input journey: a full-width
@@ -1553,203 +1598,181 @@ draw_overlay_demo :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 // while the pointer is over the panel. Before z-ordering, a panel that claimed
 // its own rect went inert, and one that did not claim leaked input to the canvas
 // underneath - there was no third option.
-draw_docked_panel_over_canvas :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
-	assert(frame != nil, "draw_docked_panel_over_canvas: nil frame")
+draw_docked_panel_over_canvas :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
+	assert(surface != nil, "draw_docked_panel_over_canvas: nil surface")
 	assert(w >= 0, "draw_docked_panel_over_canvas: negative width")
-	y := legacy.section_header_at(
-		frame,
+	y := fit.Surface_Section_Header(
+		surface,
 		{x, y0, w, 0},
 		"Z-ORDERED INPUT (canvas counters stay put under the docked panel)",
 	)
-	canvas_h := legacy.ui_frame_sc(frame, 150)
-	panel_w := min(legacy.ui_frame_sc(frame, 190), w)
-	canvas := fit.Rect_I32{x, y, w, canvas_h}
-	panel := fit.Rect_I32{x + w - panel_w, y, panel_w, canvas_h}
+	canvas_h := fit.Surface_Scale(surface, 150)
+	panel_w := min(fit.Surface_Scale(surface, 190), w)
+	canvas := fit.Rect{x, y, w, canvas_h}
+	panel := fit.Rect{x + w - panel_w, y, panel_w, canvas_h}
 	if w <= 0 || canvas_h <= 0 do return y
 
-	theme := legacy.ui_frame_theme(frame)
-	legacy.draw_surface(frame, legacy.rect_f32(canvas), .Panel, radius = .SM, border = .Hairline)
-
-	// The canvas spans the full width and is drawn first, so the panel floats
-	// over its right edge rather than sitting beside it.
-	canvas_hit := legacy.interact(frame, legacy.rect_f32(canvas))
-	if canvas_hit.hovered {
-		wheel := legacy.get_wheel_move(frame)
-		if wheel != 0 do dock_canvas_wheel += 1
-	}
+	fit.Surface_Draw_Surface(
+		surface,
+		{f32(canvas.x), f32(canvas.y), f32(canvas.w), f32(canvas.h)},
+		.Panel,
+		radius = .SM,
+		border = .Hairline,
+	)
+	canvas_hit := fit.Surface_Interact(
+		surface,
+		{f32(canvas.x), f32(canvas.y), f32(canvas.w), f32(canvas.h)},
+	)
+	if canvas_hit.hovered && fit.Surface_Wheel(surface) != 0 do dock_canvas_wheel += 1
 	if canvas_hit.clicked do dock_canvas_clicks += 1
-	metrics := legacy.ui_frame_metrics(frame)
-	legacy.draw_text_frame(
-		frame,
-		fmt.ctprintf("canvas wheel: %d", dock_canvas_wheel),
-		x + legacy.ui_frame_sc(frame, 12),
-		y + legacy.ui_frame_sc(frame, 12),
-		metrics.FONT_SIZE_BODY,
-		theme.fg_primary,
+	metrics := fit.Surface_Metrics(surface)
+	fit.Surface_Text(
+		surface,
+		fmt.tprintf("canvas wheel: %d", dock_canvas_wheel),
+		x + fit.Surface_Scale(surface, 12),
+		y + fit.Surface_Scale(surface, 12),
 	)
-	legacy.draw_text_frame(
-		frame,
-		fmt.ctprintf("canvas clicks: %d", dock_canvas_clicks),
-		x + legacy.ui_frame_sc(frame, 12),
-		y + legacy.ui_frame_sc(frame, 12) + metrics.LINE_HEIGHT,
-		metrics.FONT_SIZE_BODY,
-		theme.fg_primary,
+	fit.Surface_Text(
+		surface,
+		fmt.tprintf("canvas clicks: %d", dock_canvas_clicks),
+		x + fit.Surface_Scale(surface, 12),
+		y + fit.Surface_Scale(surface, 12) + metrics.line_height,
 	)
-	legacy.draw_text_frame(
-		frame,
+	fit.Surface_Text(
+		surface,
 		"wheel and click here, then over the panel",
-		x + legacy.ui_frame_sc(frame, 12),
-		y + legacy.ui_frame_sc(frame, 12) + metrics.LINE_HEIGHT * 2,
-		metrics.FONT_SIZE_NOTE,
-		theme.fg_secondary,
+		x + fit.Surface_Scale(surface, 12),
+		y + fit.Surface_Scale(surface, 12) + metrics.line_height * 2,
+		.Note,
+		.Secondary,
 	)
 
-	draw_dock_panel(frame, panel)
-	return y + canvas_h + legacy.ui_frame_sc(frame, 12)
+	draw_dock_panel(surface, panel)
+	return y + canvas_h + fit.Surface_Scale(surface, 12)
 }
 
-// draw_dock_panel is the docked surface: one layer couples the claim, the
-// paint tier, and screen-space drawing. Nothing here hit-tests raw input.
-draw_dock_panel :: proc(frame: ^legacy.Ui_Frame, panel: fit.Rect_I32) {
-	assert(frame != nil, "draw_dock_panel: nil frame")
+draw_dock_panel :: proc(surface: ^fit.Surface, panel: fit.Rect) {
+	assert(surface != nil, "draw_dock_panel: nil surface")
 	assert(panel.w > 0 && panel.h > 0, "draw_dock_panel: empty panel")
-	legacy.draw_surface(frame, legacy.rect_f32(panel), .Panel, radius = .SM, border = .Hairline)
-	legacy.layer_begin(frame, legacy.Z_PANEL, claim = legacy.rect_f32(panel))
-	defer legacy.layer_end(frame)
+	claim := fit.Float_Rect{f32(panel.x), f32(panel.y), f32(panel.w), f32(panel.h)}
+	fit.Surface_Draw_Surface(surface, claim, .Panel, radius = .SM, border = .Hairline)
+	fit.Surface_Layer_Begin(surface, fit.Z_PANEL, claim = claim)
+	defer fit.Surface_Layer_End(surface)
 
-	// A scroll pane inside the claim: pane_begin consults the router, so this
-	// is the exact case that went dead when a panel claimed its own rect.
-	content_y := legacy.pane_begin(frame, &dock_panel_pane, panel, pad = 10)
-	u_storage: legacy.Ui
-	u := &u_storage
-	legacy.begin(
+	content_y := fit.Surface_Pane_Begin(surface, &dock_panel_pane, panel, padding = 10)
+	region: fit.Region
+	u := &region
+	fit.Surface_Region_Begin(
+		surface,
 		u,
-		frame,
 		{
-			panel.x + legacy.ui_frame_sc(frame, 10),
+			panel.x + fit.Surface_Scale(surface, 10),
 			content_y,
-			panel.w - legacy.ui_frame_sc(frame, 24),
-			legacy.ROOT_EXTENT_OPEN,
+			panel.w - fit.Surface_Scale(surface, 24),
+			fit.ROOT_EXTENT_OPEN,
 		},
 		gap = .XS,
 	)
-	legacy.scope_begin(u, "dock-panel")
-	legacy.label(u, "DOCKED PANEL", legacy.legacy_text_role.Label, legacy.legacy_ink.Heading)
-	legacy.label(
-		u,
-		"Claims Z_PANEL over the canvas.",
-		legacy.legacy_text_role.Note,
-		legacy.legacy_ink.Secondary,
-	)
-	if legacy.button(u, "dock-a", "Panel button A") do dock_panel_clicks += 1
-	if legacy.button(u, "dock-b", "Panel button B") do dock_panel_clicks += 1
-	legacy.label(
-		u,
-		fmt.tprintf("panel clicks: %d", dock_panel_clicks),
-		legacy.legacy_text_role.Body,
-		legacy.legacy_ink.Primary,
-	)
-	for row in 0 ..< 8 {
-		legacy.label(
-			u,
-			fmt.tprintf("scroll row %d", row),
-			legacy.legacy_text_role.Note,
-			legacy.legacy_ink.Secondary,
-		)
-	}
-	legacy.scope_end(u)
-	end_y := legacy.end(u)
-	legacy.pane_end(frame, &dock_panel_pane, panel, end_y, pad = 10)
+	fit.Region_Scope_Begin(u, "dock-panel")
+	fit.Region_Label(u, "DOCKED PANEL", .Label, .Heading)
+	fit.Region_Label(u, "Claims Z_PANEL over the canvas.", .Note, .Secondary)
+	if fit.Region_Button(u, "dock-a", "Panel button A") do dock_panel_clicks += 1
+	if fit.Region_Button(u, "dock-b", "Panel button B") do dock_panel_clicks += 1
+	fit.Region_Label(u, fmt.tprintf("panel clicks: %d", dock_panel_clicks))
+	for row in 0 ..< 8 do fit.Region_Label(u, fmt.tprintf("scroll row %d", row), .Note, .Secondary)
+	fit.Region_Scope_End(u)
+	end_y := fit.Surface_Region_End(u)
+	fit.Surface_Pane_End(surface, &dock_panel_pane, panel, end_y, padding = 10)
 }
 
 // draw_overlay_confirm runs the built-in confirm dialog and reports the
 // outcome through a toast, chaining the two lifecycle widgets together.
-draw_overlay_confirm :: proc(frame: ^legacy.Ui_Frame) {
-	if !confirm.modal.open do return
+draw_overlay_confirm :: proc(surface: ^fit.Surface) {
+	if !fit.Confirm_Dialog_Is_Open(&confirm) do return
 	root := gallery_root
-	choice := legacy.confirm_dialog(
-		frame,
+	choice := fit.Surface_Confirm_Dialog(
+		surface,
 		&confirm,
 		"Delete everything?",
 		"confirm_dialog wraps the same modal pair; Escape or a click outside cancels.",
 		"Delete",
-		root,
 	)
 	switch choice {
 	case .Confirmed:
-		legacy.toast_push(&toasts, .Error, "Deleted (nothing was actually deleted)")
+		fit.Toast_Push(&toasts, .Error, "Deleted (nothing was actually deleted)")
 	case .Canceled:
-		legacy.toast_push(&toasts, .Info, "Delete canceled")
+		fit.Toast_Push(&toasts, .Info, "Delete canceled")
 	case .None:
 	}
 }
 
 // draw_demo_popup records a popup on its own layer (drawn above content
 // painted later) and claims its rect so widgets underneath are inert.
-draw_demo_popup :: proc(frame: ^legacy.Ui_Frame, x, y: i32) {
-	w := legacy.ui_frame_sc(frame, 220)
-	h := legacy.ui_frame_sc(frame, 130)
-	rect := legacy.legacy_rect{f32(x), f32(y), f32(w), f32(h)}
-	legacy.layer_begin(frame, legacy.Z_POPUP, claim = rect)
-	legacy.draw_rectangle_rounded(frame, rect, 0.1, 6, legacy.ui_frame_theme(frame).bg_popup)
-	legacy.draw_rectangle_rounded_lines_ex(
-		frame,
+draw_demo_popup :: proc(surface: ^fit.Surface, x, y: i32) {
+	w := fit.Surface_Scale(surface, 220)
+	h := fit.Surface_Scale(surface, 130)
+	rect := fit.Float_Rect{f32(x), f32(y), f32(w), f32(h)}
+	fit.Surface_Layer_Begin(surface, fit.Z_POPUP, claim = rect)
+	fit.Surface_Fill_Rounded_Rect(
+		surface,
 		rect,
 		0.1,
 		6,
-		1.0,
-		legacy.ui_frame_theme(frame).border_color,
+		fit.Surface_Theme_Tokens(surface).background_popup,
 	)
-	legacy.draw_text_string(
-		frame,
+	theme := fit.Surface_Theme_Tokens(surface)
+	fit.Surface_Stroke_Rounded_Rect(surface, rect, 0.1, 6, 1, theme.border)
+	fit.Surface_Text(
+		surface,
 		"Overlay popup",
-		x + legacy.ui_frame_sc(frame, 12),
-		y + legacy.ui_frame_sc(frame, 10),
-		legacy.ui_frame_metrics(frame).FONT_SIZE_BODY,
-		legacy.ui_frame_theme(frame).fg_primary,
+		x + fit.Surface_Scale(surface, 12),
+		y + fit.Surface_Scale(surface, 10),
 	)
-	legacy.draw_text_string(
-		frame,
+	fit.Surface_Text(
+		surface,
 		"Recorded during the frame,",
-		x + legacy.ui_frame_sc(frame, 12),
-		y + legacy.ui_frame_sc(frame, 36),
-		legacy.ui_frame_metrics(frame).FONT_SIZE_LABEL,
-		legacy.ui_frame_theme(frame).fg_secondary,
+		x + fit.Surface_Scale(surface, 12),
+		y + fit.Surface_Scale(surface, 36),
+		.Label,
+		.Secondary,
 	)
-	legacy.draw_text_string(
-		frame,
+	fit.Surface_Text(
+		surface,
 		"replayed above everything.",
-		x + legacy.ui_frame_sc(frame, 12),
-		y + legacy.ui_frame_sc(frame, 54),
-		legacy.ui_frame_metrics(frame).FONT_SIZE_LABEL,
-		legacy.ui_frame_theme(frame).fg_secondary,
+		x + fit.Surface_Scale(surface, 12),
+		y + fit.Surface_Scale(surface, 54),
+		.Label,
+		.Secondary,
 	)
-
 	// Close row: the popup sits in its own Z_POPUP scope, so its own claim
 	// does not occlude it and the ordinary interaction path applies.
-	row := legacy.legacy_rect {
-		f32(x + legacy.ui_frame_sc(frame, 12)),
-		f32(y + h - legacy.ui_frame_sc(frame, 30)),
-		f32(w - legacy.ui_frame_sc(frame, 24)),
-		f32(legacy.ui_frame_sc(frame, 22)),
+	row := fit.Float_Rect {
+		f32(x + fit.Surface_Scale(surface, 12)),
+		f32(y + h - fit.Surface_Scale(surface, 30)),
+		f32(w - fit.Surface_Scale(surface, 24)),
+		f32(fit.Surface_Scale(surface, 22)),
 	}
-	close := legacy.interact(frame, row)
+	close := fit.Surface_Interact(surface, row)
 	if close.hovered {
-		legacy.draw_rectangle_rec(frame, row, legacy.ui_frame_theme(frame).bg_active)
-		legacy.request_cursor(frame, .POINTING_HAND)
+		fit.Surface_Fill_Float_Rect(
+			surface,
+			row,
+			fit.Surface_Theme_Tokens(surface).background_active,
+		)
+		fit.Surface_Request_Cursor(surface, .Pointing_Hand)
 	}
-	legacy.draw_text_string(
-		frame,
+	fit.Surface_Text(
+		surface,
 		"Close",
-		x + legacy.ui_frame_sc(frame, 18),
-		y + h - legacy.ui_frame_sc(frame, 28),
-		legacy.ui_frame_metrics(frame).FONT_SIZE_LABEL,
-		legacy.ui_frame_theme(frame).fg_accent,
+		x + fit.Surface_Scale(surface, 18),
+		y + h - fit.Surface_Scale(surface, 28),
+		.Label,
+		.Accent,
 	)
 	if close.clicked {
 		popup_open = false
 	}
-	legacy.layer_end(frame)
+	fit.Surface_Layer_End(surface)
 }
 
 // STRESS_BUTTONS is the grid size the section advertises. Every one of them is
@@ -1757,31 +1780,34 @@ draw_demo_popup :: proc(frame: ^legacy.Ui_Frame, x, y: i32) {
 // built and painted (see draw_stress).
 STRESS_BUTTONS :: 1000
 
-draw_stress :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
+draw_stress :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	// The grid owns cell geometry: exact column division, no per-button math.
-	cols := max(w / legacy.ui_frame_sc(frame, 110), 1)
-	gap := legacy.ui_frame_sc(frame, 6)
-	row_h := legacy.ui_frame_sc(frame, 26)
+	cols := max(w / fit.Surface_Scale(surface, 110), 1)
+	gap := fit.Surface_Scale(surface, 6)
+	row_h := fit.Surface_Scale(surface, 26)
 	// The header's height does not depend on its text, so the grid's origin
 	// is known before the label is built - which is what lets the label
 	// report the drawn count.
-	header_h := legacy.ui_frame_metrics(frame).FONT_SIZE_LABEL + legacy.ui_frame_sc(frame, 11)
-	bounds := fit.Rect_I32{x, y0 + header_h, w, 0}
+	header_h := fit.Surface_Metrics(surface).font_label + fit.Surface_Scale(surface, 11)
+	bounds := fit.Rect{x, y0 + header_h, w, 0}
 	// Only the rows intersecting the pane's cull band are built. Without this
 	// the section constructs 1000 labels, measures and interacts with all of
 	// them, and emits ~11 MB of vertex data per frame for the ~25 buttons on
 	// screen - enough to exhaust the geometry stream on a phone.
-	first, end := legacy.grid_visible_range(
+	top, bottom := fit.Surface_Cull_Bounds(surface)
+	visible := fit.Surface_Grid_Visible_Range(
+		surface,
 		bounds,
 		cols,
 		row_h,
 		gap,
 		STRESS_BUTTONS,
-		frame.text_cull_top,
-		frame.text_cull_bottom,
+		top,
+		bottom,
 	)
-	y := legacy.section_header_at(
-		frame,
+	first, end := visible.first, visible.end
+	y := fit.Surface_Section_Header(
+		surface,
 		{x, y0, w, 0},
 		fmt.tprintf(
 			"STRESS: %d BUTTONS (batcher, hover-anim bound, culling: %d drawn)",
@@ -1790,24 +1816,29 @@ draw_stress :: proc(frame: ^legacy.Ui_Frame, x, y0, w: i32) -> i32 {
 		),
 	)
 	assert(y == bounds.y, "draw_stress: header height mismatch")
-	grid: legacy.Grid_State
-	legacy.grid_begin(&grid, bounds, cols, row_h, gap, gap)
-	legacy.grid_skip_to(&grid, first)
+	grid: fit.Grid_State
+	fit.Surface_Grid_Begin(surface, &grid, bounds, cols, row_h, gap, gap)
+	fit.Surface_Grid_Skip_To(surface, &grid, first)
 	for i in first ..< end {
 		label := fmt.tprintf("btn %d", i)
-		if legacy.button_at(frame, legacy.grid_next(&grid), label) {
+		if fit.Surface_Button(
+			surface,
+			fit.Widget_Id_From_U64(0x4000 + u64(i)),
+			label,
+			fit.Surface_Grid_Next(surface, &grid),
+		) {
 			stress_clicked = int(i)
 		}
 	}
 	// Advance the cursor past the skipped tail so grid_end still measures the
 	// full content height - the pane's scroll range depends on it.
-	legacy.grid_skip_to(&grid, STRESS_BUTTONS)
-	content := legacy.grid_end(&grid)
-	y = content.y + content.h + legacy.ui_frame_sc(frame, 10)
+	fit.Surface_Grid_Skip_To(surface, &grid, STRESS_BUTTONS)
+	content := fit.Surface_Grid_End(surface, &grid)
+	y = content.y + content.h + fit.Surface_Scale(surface, 10)
 	if stress_clicked >= 0 {
 		msg := fmt.tprintf("last clicked: btn %d", stress_clicked)
-		legacy.text(frame, msg, x, y, .Label, .Secondary)
-		y += legacy.ui_frame_sc(frame, 24)
+		fit.Surface_Text(surface, msg, x, y, .Label, .Secondary)
+		y += fit.Surface_Scale(surface, 24)
 	}
 	return y
 }
