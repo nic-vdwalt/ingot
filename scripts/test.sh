@@ -9,6 +9,12 @@ timeout_seconds="${INGOT_TEST_TIMEOUT_SECONDS:-300}"
 output_limit_bytes="${INGOT_TEST_OUTPUT_LIMIT_BYTES:-16777216}"
 log_dir="${INGOT_TEST_FAILURE_LOG_DIR:-${TMPDIR:-/tmp}/ingot-test-failures}"
 supervisor="$root/scripts/test-supervisor.py"
+manifest="$root/scripts/gate-manifest.json"
+
+manifest_values() {
+	python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); print(" ".join(data[sys.argv[2]]))' \
+		"$manifest" "$1"
+}
 
 if [ "$(uname -s)" = "Linux" ]; then
 	bash "$root/scripts/check-linux-dependencies.sh"
@@ -50,7 +56,7 @@ has_define() {
 	return 1
 }
 
-for pkg in asset box3d_workers ecs gfx procgen scene scene_gfx ui ui_gfx fit view view/generate libvterm term prefs net; do
+for pkg in $(manifest_values test_packages); do
 	echo "== testing $pkg =="
 	extra=()
 	# UI tests use deterministic single-thread execution for native graphics
@@ -75,16 +81,18 @@ for pkg in asset box3d_workers ecs gfx procgen scene scene_gfx ui ui_gfx fit vie
 		-define:ODIN_TEST_FAIL_ON_EMPTY=true ${extra[@]+"${extra[@]}"} "$@"
 done
 
-echo "== testing examples/box3d_advanced =="
-run_supervised "box3d-advanced-example" odin test "$root/examples/box3d_advanced" "$col" \
-	"$guard" -define:ODIN_TEST_FAIL_ON_EMPTY=true "$@"
+for example in $(manifest_values test_examples); do
+	echo "== testing examples/$example =="
+	run_supervised "${example//_/-}-example" odin test "$root/examples/$example" "$col" \
+		"$guard" -define:ODIN_TEST_FAIL_ON_EMPTY=true "$@"
+done
 
 echo "== testing native WSS loopback TLS =="
 run_supervised "wss-loopback" python3 "$root/scripts/wss-loopback-test.py" \
 	--fixture "$root/examples/wss_fixture" "--collection=$col"
 
 # Packages without unit tests are still type-checked so they cannot rot.
-for pkg in sys pty accesskit testx; do
+for pkg in $(manifest_values compile_packages); do
 	echo "== checking $pkg =="
 	run_supervised "$pkg-check" odin check "$root/$pkg" "$col" -no-entry-point
 done

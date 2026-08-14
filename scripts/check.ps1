@@ -55,6 +55,20 @@ foreach ($Example in $Manifest.examples) {
     & odin build "$Root/examples/$Example" $Collection "-out:$ExampleOut/$Example.exe"
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
+foreach ($Package in $Manifest.hot_reload_packages) {
+    Write-Host "== building example hot_reload/$Package =="
+    $Arguments = @("build", "$Root/examples/hot_reload/$Package", $Collection)
+    if ($Package -eq "game") {
+        $Arguments += "-build-mode:dll"
+        $Arguments += "-out:$ExampleOut/hot_reload_game.dll"
+    } else {
+        $Arguments += "-out:$ExampleOut/hot_reload_host.exe"
+    }
+    & odin @Arguments
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+Write-Host "== gate manifest =="
+Invoke-CheckedPython "gate_manifest_test.py"
 Write-Host "== Odin TigerStyle checks =="
 Invoke-CheckedPython "check_odin_style_test.py"
 Invoke-CheckedPython "check_odin_style.py" @("--baseline", "$PSScriptRoot/odin_style_baseline.json", $Root)

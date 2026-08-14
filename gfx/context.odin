@@ -630,8 +630,8 @@ _gpu_finish :: proc(ctx: ^Context) {
 		return
 	}
 	_graphics_resources_init(&ctx.resources)
-	platform_input_init()
-	platform_drop_init()
+	platform_input_init(ctx)
+	platform_drop_init(ctx)
 
 	ctx.initialized = true
 	ctx.lifecycle = .Ready
@@ -838,8 +838,8 @@ context_end_drawing :: proc(ctx: ^Context) {
 		_flush_retired(ctx)
 		_renderer_report_overflow(&ctx.rend)
 	} else {
-		clear(&g.rend.verts)
-		clear(&g.rend.indices)
+		clear(&ctx.rend.verts)
+		clear(&ctx.rend.indices)
 	}
 
 	platform_web_input_frame_end(ctx)

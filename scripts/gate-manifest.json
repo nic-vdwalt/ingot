@@ -2,12 +2,14 @@
   "test_packages": [
     "asset",
     "box3d_workers",
+    "ecs",
     "gfx",
     "procgen",
     "scene",
     "scene_gfx",
     "ui",
     "ui_gfx",
+    "fit",
     "view",
     "view/generate",
     "libvterm",
@@ -18,12 +20,14 @@
   "check_packages": [
     "asset",
     "box3d_workers",
+    "ecs",
     "gfx",
     "procgen",
     "scene",
     "scene_gfx",
     "ui",
     "ui_gfx",
+    "fit",
     "view",
     "view/generate",
     "term",
@@ -35,6 +39,7 @@
   ],
   "binding_packages": ["libvterm", "accesskit"],
   "compile_packages": ["sys", "pty", "accesskit", "testx"],
+  "test_examples": ["box3d_advanced"],
   "examples": [
     "hello",
     "session_loop",
@@ -52,6 +57,7 @@
     "view_builder",
     "raylib_migration_fixture"
   ],
+  "hot_reload_packages": ["game", "host"],
   "simulation_modes": [
     ["net", "INGOT_NET_SIM=true"],
     ["net", "INGOT_WS_SIM=true"],

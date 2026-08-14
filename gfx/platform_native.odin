@@ -150,7 +150,8 @@ platform_should_close :: proc(ctx: ^Context) -> bool {
 }
 
 @(private)
-platform_poll_events :: proc() {
+platform_poll_events :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_poll_events: nil context")
 	glfw.PollEvents()
 }
 
@@ -170,9 +171,9 @@ platform_wake :: proc "contextless" () {
 }
 
 @(private)
-platform_window_iconified :: proc() -> bool {
-	if g.win == nil do return false
-	return glfw.GetWindowAttrib(_win(), glfw.ICONIFIED) != 0
+platform_window_iconified :: proc(ctx: ^Context) -> bool {
+	if ctx == nil || ctx.win == nil do return false
+	return glfw.GetWindowAttrib(_context_window(ctx), glfw.ICONIFIED) != 0
 }
 
 @(private)
@@ -314,24 +315,26 @@ platform_set_window_icon :: proc(image: Image) {
 // --- input -----------------------------------------------------------------
 
 @(private)
-platform_input_init :: proc() {
-	if g.win == nil do return
-	glfw.SetKeyCallback(_win(), _key_cb)
-	glfw.SetCharCallback(_win(), _char_cb)
-	glfw.SetScrollCallback(_win(), _scroll_cb)
+platform_input_init :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_input_init: nil context")
+	if ctx.win == nil do return
+	win := _context_window(ctx)
+	glfw.SetKeyCallback(win, _key_cb)
+	glfw.SetCharCallback(win, _char_cb)
+	glfw.SetScrollCallback(win, _scroll_cb)
 
 	// Activity marks for event-driven frame scheduling (idle.odin). Cursor,
 	// button, focus and size events have no state to store (they are polled),
 	// but must still wake the idle gate; WindowRefresh is the OS damage signal
 	// (uncover/resize) - without it an idle window would show stale content.
-	glfw.SetCursorPosCallback(_win(), _cursor_pos_cb)
-	glfw.SetMouseButtonCallback(_win(), _mouse_button_cb)
-	glfw.SetWindowCloseCallback(_win(), _close_cb)
-	glfw.SetWindowRefreshCallback(_win(), _refresh_cb)
-	glfw.SetWindowFocusCallback(_win(), _focus_cb)
-	glfw.SetWindowIconifyCallback(_win(), _iconify_cb)
-	glfw.SetWindowSizeCallback(_win(), _window_size_cb)
-	glfw.SetFramebufferSizeCallback(_win(), _fb_size_cb)
+	glfw.SetCursorPosCallback(win, _cursor_pos_cb)
+	glfw.SetMouseButtonCallback(win, _mouse_button_cb)
+	glfw.SetWindowCloseCallback(win, _close_cb)
+	glfw.SetWindowRefreshCallback(win, _refresh_cb)
+	glfw.SetWindowFocusCallback(win, _focus_cb)
+	glfw.SetWindowIconifyCallback(win, _iconify_cb)
+	glfw.SetWindowSizeCallback(win, _window_size_cb)
+	glfw.SetFramebufferSizeCallback(win, _fb_size_cb)
 
 	if g_cursors[MouseCursor.DEFAULT] == nil {
 		g_cursors[MouseCursor.DEFAULT] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
@@ -347,16 +350,20 @@ platform_input_init :: proc() {
 		g_cursors[MouseCursor.NOT_ALLOWED] = glfw.CreateStandardCursor(glfw.NOT_ALLOWED_CURSOR)
 	}
 
-	mx, my := glfw.GetCursorPos(_win())
-	g.inp.mouse = {f32(mx), f32(my)}
-	g.inp.mouse_prev = g.inp.mouse
+	mx, my := glfw.GetCursorPos(win)
+	ctx.inp.mouse = {f32(mx), f32(my)}
+	ctx.inp.mouse_prev = ctx.inp.mouse
 }
 
 @(private)
-platform_web_input_frame_begin :: proc() {}
+platform_web_input_frame_begin :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_web_input_frame_begin: nil context")
+}
 
 @(private)
-platform_web_input_frame_end :: proc() {}
+platform_web_input_frame_end :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_web_input_frame_end: nil context")
+}
 
 @(private)
 platform_sync_web_text_input :: proc(
@@ -400,14 +407,15 @@ platform_set_text_input_rect :: proc(x, y, w, h: i32) {
 }
 
 @(private)
-platform_text_input_deactivate :: proc() {
-	if g.win == nil do return
+platform_text_input_deactivate :: proc(ctx: ^Context) {
+	if ctx == nil || ctx.win == nil do return
 	_ime_deactivate()
 }
 
 @(private)
-platform_cursor_pos :: proc() -> (f64, f64) {
-	return glfw.GetCursorPos(_win())
+platform_cursor_pos :: proc(ctx: ^Context) -> (f64, f64) {
+	assert(ctx != nil && ctx.win != nil, "platform_cursor_pos: invalid context")
+	return glfw.GetCursorPos(_context_window(ctx))
 }
 
 @(private)
@@ -417,15 +425,15 @@ platform_set_cursor_pos :: proc(x, y: f64) {
 }
 
 @(private)
-platform_mouse_button :: proc(button: i32) -> bool {
-	if g.win == nil do return false
-	return glfw.GetMouseButton(_win(), button) == glfw.PRESS
+platform_mouse_button :: proc(ctx: ^Context, button: i32) -> bool {
+	if ctx == nil || ctx.win == nil do return false
+	return glfw.GetMouseButton(_context_window(ctx), button) == glfw.PRESS
 }
 
 @(private)
-platform_window_hovered :: proc() -> bool {
-	if g.win == nil do return false
-	return glfw.GetWindowAttrib(_win(), glfw.HOVERED) != 0
+platform_window_hovered :: proc(ctx: ^Context) -> bool {
+	if ctx == nil || ctx.win == nil do return false
+	return glfw.GetWindowAttrib(_context_window(ctx), glfw.HOVERED) != 0
 }
 
 @(private)
@@ -462,9 +470,10 @@ platform_set_clipboard :: proc(text: cstring) {
 }
 
 @(private)
-platform_drop_init :: proc() {
-	_drop_state_reset()
-	if g.win != nil do glfw.SetDropCallback(_win(), _drop_cb)
+platform_drop_init :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_drop_init: nil context")
+	_drop_state_reset_context(ctx)
+	if ctx.win != nil do glfw.SetDropCallback(_context_window(ctx), _drop_cb)
 	platform_dragdrop_init()
 }
 
@@ -492,14 +501,15 @@ platform_drop_shutdown :: proc(ctx: ^Context) {
 // set the digital LEFT/RIGHT_TRIGGER_2 buttons (raylib parity - GLFW exposes
 // triggers only as axes).
 @(private)
-platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {
+platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State, idle: ^Idle_State) {
 	assert(pads != nil, "platform_gamepad_poll: nil pads")
+	assert(idle != nil, "platform_gamepad_poll: nil idle state")
 	#assert(MAX_GAMEPADS <= glfw.JOYSTICK_LAST + 1)
 	for jid in 0 ..< MAX_GAMEPADS {
 		pad := &pads[jid]
 		connected := bool(glfw.JoystickIsGamepad(c.int(jid)))
 		if connected != pad.connected {
-			_idle_note_activity(&g.idle)
+			_idle_note_activity(idle)
 		}
 		pad.connected = connected
 		if !connected {
@@ -525,7 +535,7 @@ platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State) {
 		pad.buttons[int(GamepadButton.LEFT_TRIGGER_2)] = state.axes[4] > TRIGGER_PRESS_THRESHOLD
 		pad.buttons[int(GamepadButton.RIGHT_TRIGGER_2)] = state.axes[5] > TRIGGER_PRESS_THRESHOLD
 		if pad.buttons != pad.prev_buttons {
-			_idle_note_activity(&g.idle)
+			_idle_note_activity(idle)
 		}
 		name := glfw.GetGamepadName(c.int(jid))
 		n := min(len(name), GAMEPAD_NAME_MAX)

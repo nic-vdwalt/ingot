@@ -61,7 +61,7 @@ step :: proc(dt: f32) -> bool {
 	if !_idle_web_gate(&g.idle, _now()) {
 		return true // idle: keep rAF alive, skip the app frame
 	}
-	input_poll()
+	input_poll(default_context())
 	if g_web_callback.active {
 		assert(g_web_callback.frame != nil, "step: active callback has no frame")
 		g_web_callback.frame(g_web_callback.userdata)

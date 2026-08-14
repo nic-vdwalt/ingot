@@ -10,7 +10,7 @@ drop_lifecycle_is_bounded_and_consumed :: proc(t: ^testing.T) {
 
 	_drop_hover_stage(true)
 	testing.expect(t, !IsFileDragOver())
-	_drop_hover_publish()
+	_drop_hover_publish(g)
 	testing.expect(t, IsFileDragOver())
 	_drop_complete()
 	testing.expect(t, !IsFileDragOver())
@@ -33,7 +33,7 @@ drop_lifecycle_is_bounded_and_consumed :: proc(t: ^testing.T) {
 	testing.expect(t, !IsFileDropped())
 
 	_drop_hover_stage(true)
-	_drop_hover_publish()
+	_drop_hover_publish(g)
 	_drop_state_reset()
 	testing.expect(t, !IsFileDragOver())
 	testing.expect(t, !IsFileDropped())
