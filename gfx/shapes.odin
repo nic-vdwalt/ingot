@@ -69,7 +69,13 @@ _shape_geometry_is_finite :: proc(center: Vector2, extent: f32) -> bool {
 
 DrawRectangle :: proc(posX, posY, width, height: i32, color: Color) {
 	batch_set(default_context(), &g.rend, .Solid, nil)
-	push_quad(default_context(), &g.rend, {f32(posX), f32(posY), f32(width), f32(height)}, {0, 0, 1, 1}, col_f(color))
+	push_quad(
+		default_context(),
+		&g.rend,
+		{f32(posX), f32(posY), f32(width), f32(height)},
+		{0, 0, 1, 1},
+		col_f(color),
+	)
 }
 
 DrawRectangleRec :: proc(rec: Rectangle, color: Color) {
@@ -469,10 +475,7 @@ _emit_gradient_v :: proc(ctx: ^Context, r: ^Renderer, rec: Rectangle, top, botto
 }
 
 @(private)
-_emit_gradient_quad :: proc(
-	ctx: ^Context,
-	r: ^Renderer, rec: Rectangle, tl, tr, br, bl: [4]f32,
-) {
+_emit_gradient_quad :: proc(ctx: ^Context, r: ^Renderer, rec: Rectangle, tl, tr, br, bl: [4]f32) {
 	assert(ctx != nil, "_emit_gradient_quad: nil context")
 	assert(r == &ctx.rend, "_emit_gradient_quad: foreign renderer")
 	if !_batch_reserve(ctx, r, 4, 6) do return
@@ -586,7 +589,16 @@ DrawCircleSector :: proc(
 ) {
 	segs := _shape_segments(segments, 1)
 	batch_set(default_context(), &g.rend, .Solid, nil)
-	_corner_fan(default_context(), &g.rend, center, radius, startAngle, endAngle, segs, col_f(color))
+	_corner_fan(
+		default_context(),
+		&g.rend,
+		center,
+		radius,
+		startAngle,
+		endAngle,
+		segs,
+		col_f(color),
+	)
 }
 
 // DrawCircleSectorLines outlines the sector: the arc plus the two radii that
@@ -622,7 +634,16 @@ DrawPoly :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color:
 	if sides < 3 do return
 	segs := _shape_segments(sides, 3)
 	batch_set(default_context(), &g.rend, .Solid, nil)
-	_corner_fan(default_context(), &g.rend, center, radius, rotation, rotation + 360, segs, col_f(color))
+	_corner_fan(
+		default_context(),
+		&g.rend,
+		center,
+		radius,
+		rotation,
+		rotation + 360,
+		segs,
+		col_f(color),
+	)
 }
 
 DrawPolyLines :: proc(center: Vector2, sides: i32, radius: f32, rotation: f32, color: Color) {

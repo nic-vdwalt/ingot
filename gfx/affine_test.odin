@@ -217,19 +217,20 @@ model_stack_holds_full_transforms :: proc(t: ^testing.T) {
 // than declared on the stack.
 
 @(private)
-new_test_renderer :: proc() -> ^Renderer {
-	r := new(Renderer)
-	r.model_xf = AFFINE_IDENTITY
-	return r
+new_test_context :: proc() -> ^Context {
+	ctx := new(Context)
+	ctx.rend.model_xf = AFFINE_IDENTITY
+	return ctx
 }
 
 @(test)
 emit_quad_keeps_rectangles_axis_aligned_without_rotation :: proc(t: ^testing.T) {
-	r := new_test_renderer()
-	defer free(r)
+	ctx := new_test_context()
+	defer free(ctx)
+	r := &ctx.rend
 
 	r.model_xf = _affine_from_camera_2d(Camera2D{offset = {5, 7}, zoom = 2})
-	_emit_quad(default_context(), r, {10, 20, 30, 40}, {0, 0, 1, 1}, {1, 1, 1, 1})
+	_emit_quad(ctx, r, {10, 20, 30, 40}, {0, 0, 1, 1}, {1, 1, 1, 1})
 
 	testing.expect_value(t, len(r.verts), 4)
 	testing.expect_value(t, len(r.indices), 6)
@@ -245,14 +246,15 @@ emit_quad_keeps_rectangles_axis_aligned_without_rotation :: proc(t: ^testing.T) 
 
 @(test)
 emit_quad_rotates_all_four_corners :: proc(t: ^testing.T) {
-	r := new_test_renderer()
-	defer free(r)
+	ctx := new_test_context()
+	defer free(ctx)
+	r := &ctx.rend
 
 	// A 90-degree camera about the origin. Under the translation-only offset
 	// this generalises, the rectangle would have stayed axis-aligned.
 	r.model_xf = _affine_from_camera_2d(Camera2D{rotation = 90, zoom = 1})
 	testing.expect(t, _affine_rotates(r.model_xf))
-	_emit_quad(default_context(), r, {10, 0, 20, 10}, {0, 0, 1, 1}, {1, 1, 1, 1})
+	_emit_quad(ctx, r, {10, 0, 20, 10}, {0, 0, 1, 1}, {1, 1, 1, 1})
 
 	testing.expect_value(t, len(r.verts), 4)
 	testing.expect_value(t, len(r.indices), 6)
@@ -272,11 +274,12 @@ emit_quad_preserves_uv_and_mode_through_the_rotated_path :: proc(t: ^testing.T) 
 	// Text draws as textured quads in .Text mode. Routing a rotated glyph
 	// through the four-corner path must not drop its atlas uv or its mode,
 	// which would render it as an opaque solid block.
-	r := new_test_renderer()
-	defer free(r)
+	ctx := new_test_context()
+	defer free(ctx)
+	r := &ctx.rend
 
 	r.model_xf = _affine_from_camera_2d(Camera2D{rotation = 45, zoom = 1})
-	_emit_quad(default_context(), r, {0, 0, 8, 8}, {0.25, 0.5, 0.125, 0.25}, {1, 1, 1, 1}, .Text)
+	_emit_quad(ctx, r, {0, 0, 8, 8}, {0.25, 0.5, 0.125, 0.25}, {1, 1, 1, 1}, .Text)
 
 	testing.expect_value(t, len(r.verts), 4)
 	for vertex in r.verts do testing.expect_value(t, vertex.mode, Vertex_Mode.Text)
@@ -290,14 +293,16 @@ emit_quad_preserves_uv_and_mode_through_the_rotated_path :: proc(t: ^testing.T) 
 emit_quad_matches_the_unrotated_path_when_transform_is_identity :: proc(t: ^testing.T) {
 	// The two paths must agree wherever both are valid, or enabling a camera
 	// would shift geometry by itself.
-	direct := new_test_renderer()
-	defer free(direct)
-	general := new_test_renderer()
-	defer free(general)
+	direct_ctx := new_test_context()
+	defer free(direct_ctx)
+	direct := &direct_ctx.rend
+	general_ctx := new_test_context()
+	defer free(general_ctx)
+	general := &general_ctx.rend
 
-	_emit_quad(direct, {3, 5, 7, 11}, {0, 0, 1, 1}, {1, 1, 1, 1})
+	_emit_quad(direct_ctx, direct, {3, 5, 7, 11}, {0, 0, 1, 1}, {1, 1, 1, 1})
 	_emit_quad4(
-		default_context(),
+		general_ctx,
 		general,
 		{3, 5},
 		{10, 5},
@@ -323,11 +328,12 @@ emit_quad_matches_the_unrotated_path_when_transform_is_identity :: proc(t: ^test
 
 @(test)
 emit_tri_follows_the_model_transform :: proc(t: ^testing.T) {
-	r := new_test_renderer()
-	defer free(r)
+	ctx := new_test_context()
+	defer free(ctx)
+	r := &ctx.rend
 
 	r.model_xf = _affine_translated(AFFINE_IDENTITY, 100, 200)
-	_emit_tri(default_context(), r, {0, 0}, {10, 0}, {0, 10}, {1, 1, 1, 1})
+	_emit_tri(ctx, r, {0, 0}, {10, 0}, {0, 10}, {1, 1, 1, 1})
 
 	testing.expect_value(t, len(r.verts), 3)
 	expect_point_near(t, r.verts[0].pos, {100, 200}, "a")
@@ -340,13 +346,14 @@ emit_gradient_quad_follows_the_model_transform :: proc(t: ^testing.T) {
 	// Gradients used to append vertices directly and so ignored the model
 	// transform entirely: they stayed pinned to the screen while everything
 	// else moved with the camera.
-	r := new_test_renderer()
-	defer free(r)
+	ctx := new_test_context()
+	defer free(ctx)
+	r := &ctx.rend
 
 	r.model_xf = _affine_from_camera_2d(Camera2D{offset = {0, 0}, target = {0, 0}, zoom = 2})
 	top := [4]f32{1, 0, 0, 1}
 	bottom := [4]f32{0, 0, 1, 1}
-	_emit_gradient_quad(default_context(), r, {1, 2, 3, 4}, top, top, bottom, bottom)
+	_emit_gradient_quad(ctx, r, {1, 2, 3, 4}, top, top, bottom, bottom)
 
 	testing.expect_value(t, len(r.verts), 4)
 	expect_point_near(t, r.verts[0].pos, {2, 4}, "tl scales with zoom")
@@ -441,10 +448,11 @@ nan_camera_would_poison_every_vertex :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, !_affine_is_finite(poisoned))
 
-	r := new_test_renderer()
-	defer free(r)
+	ctx := new_test_context()
+	defer free(ctx)
+	r := &ctx.rend
 	r.model_xf = poisoned
-	_emit_quad(default_context(), r, {10, 20, 30, 40}, {0, 0, 1, 1}, {1, 1, 1, 1})
+	_emit_quad(ctx, r, {10, 20, 30, 40}, {0, 0, 1, 1}, {1, 1, 1, 1})
 
 	testing.expect_value(t, len(r.verts), 4)
 	for vertex, index in r.verts {

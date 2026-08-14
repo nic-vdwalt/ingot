@@ -48,12 +48,11 @@ Idle_State :: struct {
 // --- public API -------------------------------------------------------------
 
 SetFrameStrategy :: proc(s: Frame_Strategy) {
-	g.idle.strategy = s
-	_idle_note_activity(&g.idle) // render a settle burst across the transition
+	context_set_frame_strategy(default_context(), s)
 }
 
 GetFrameStrategy :: proc() -> Frame_Strategy {
-	return g.idle.strategy
+	return context_get_frame_strategy(default_context())
 }
 
 // RequestRedraw schedules an immediate frame (plus settle burst). Safe to call
@@ -77,6 +76,8 @@ RequestRedrawIn :: proc(seconds: f64) {
 
 RequestRedrawInContext :: proc(ctx: ^Context, seconds: f64) {
 	if ctx == nil do return
+	assert(ctx.start_time_s >= 0, "RequestRedrawInContext: invalid start time")
+	assert(seconds == seconds, "RequestRedrawInContext: NaN delay")
 	now := platform_now() - ctx.start_time_s
 	_idle_request_in(&ctx.idle, now, seconds)
 }

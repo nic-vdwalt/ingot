@@ -291,36 +291,34 @@ vertex_modes_are_distinct_and_gpu_sized :: proc(t: ^testing.T) {
 
 @(test)
 batch_reserve_refuses_requests_larger_than_capacity :: proc(t: ^testing.T) {
-	// Heap-allocated: Renderer is ~11 MB, far past a safe stack frame - the
-	// very cost this capacity work is about.
-	r := new(Renderer)
+	r := new(Context)
 	defer free(r)
 	// No active pass, so _batch_reserve cannot flush its way out: this
 	// isolates the pure capacity check from the flush path.
 	testing.expect(
 		t,
-		!_batch_reserve(r, BATCH_MAX_VERTICES + 1, 6),
+		!_batch_reserve(r, &r.rend, BATCH_MAX_VERTICES + 1, 6),
 		"a vertex request above the cap must be refused",
 	)
 	testing.expect(
 		t,
-		!_batch_reserve(r, 4, BATCH_MAX_INDICES + 1),
+		!_batch_reserve(r, &r.rend, 4, BATCH_MAX_INDICES + 1),
 		"an index request above the cap must be refused",
 	)
 	// Nothing was written for a refused reservation.
-	testing.expect_value(t, len(r.verts), 0)
-	testing.expect_value(t, len(r.indices), 0)
+	testing.expect_value(t, len(r.rend.verts), 0)
+	testing.expect_value(t, len(r.rend.indices), 0)
 }
 
 @(test)
 batch_reserve_fits_exactly_to_capacity :: proc(t: ^testing.T) {
-	r := new(Renderer)
+	r := new(Context)
 	defer free(r)
 	// The boundary itself must succeed: an off-by-one here would waste the
 	// last slot of a now-measured capacity.
 	testing.expect(
 		t,
-		_batch_reserve(r, BATCH_MAX_VERTICES, BATCH_MAX_INDICES),
+		_batch_reserve(r, &r.rend, BATCH_MAX_VERTICES, BATCH_MAX_INDICES),
 		"a request of exactly the capacity must fit an empty batch",
 	)
 }
