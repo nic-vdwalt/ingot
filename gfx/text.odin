@@ -28,8 +28,9 @@ MAX_ATLASES :: 256
 #assert(u32(ATLAS_DIM) <= GPU_BUDGET_ATLAS_DIM_DEFAULT)
 
 @(private)
-_atlas_dim_supported :: proc() -> bool {
-	return gpu_budget_active().atlas_dim >= u32(ATLAS_DIM)
+_atlas_dim_supported :: proc(ctx: ^Context) -> bool {
+	assert(ctx != nil, "_atlas_dim_supported: nil context")
+	return ctx.budget.atlas_dim >= u32(ATLAS_DIM)
 }
 
 Glyph :: struct {
@@ -68,7 +69,8 @@ Atlas_Resources :: struct {
 }
 
 @(private)
-_atlas_register :: proc(resources: ^Atlas_Resources, entry: ^Atlas) -> u32 {
+_atlas_register :: proc(context_id: u32, resources: ^Atlas_Resources, entry: ^Atlas) -> u32 {
+	assert(context_id != 0, "_atlas_register: unassigned context id")
 	assert(resources != nil && entry != nil, "_atlas_register: invalid arguments")
 	if resources.count >= MAX_ATLASES do return 0
 	for &slot, index in resources.slots {
@@ -77,15 +79,18 @@ _atlas_register :: proc(resources: ^Atlas_Resources, entry: ^Atlas) -> u32 {
 		slot.entry = entry
 		slot.occupied = true
 		resources.count += 1
-		return _resource_handle_make(index, slot.generation)
+		return _resource_handle_make_context(context_id, index, slot.generation)
 	}
 	assert(false, "_atlas_register: count mismatch")
 	return 0
 }
 
 @(private)
-_atlas_slot :: proc(resources: ^Atlas_Resources, id: u32) -> ^Atlas_Slot {
+_atlas_slot :: proc(context_id: u32, resources: ^Atlas_Resources, id: u32) -> ^Atlas_Slot {
+	assert(context_id != 0, "_atlas_slot: unassigned context id")
 	assert(resources != nil, "_atlas_slot: nil resources")
+	handle_context := (id >> RESOURCE_SLOT_BITS) & RESOURCE_CONTEXT_MASK
+	if handle_context != context_id do return nil
 	index, generation, ok := _resource_handle_decode(id, len(resources.slots))
 	if !ok do return nil
 	slot := &resources.slots[index]
@@ -96,7 +101,7 @@ _atlas_slot :: proc(resources: ^Atlas_Resources, id: u32) -> ^Atlas_Slot {
 @(private)
 context_get_atlas :: proc(ctx: ^Context, id: u32) -> ^Atlas {
 	assert(ctx != nil, "context_get_atlas: nil context")
-	slot := _atlas_slot(&ctx.resources.atlases, id)
+	slot := _atlas_slot(ctx.id, &ctx.resources.atlases, id)
 	if slot == nil do return nil
 	return slot.entry
 }
@@ -400,7 +405,7 @@ SetTextureFilter :: proc(texture: Texture2D, filter: TextureFilter) {
 	if e := get_texture(texture.id); e != nil {
 		if e.filter != filter {
 			e.filter = filter
-			_tex_build_bind(e)
+			_tex_build_bind(default_context(), e)
 		}
 		return
 	}
