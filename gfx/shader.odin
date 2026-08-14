@@ -489,23 +489,23 @@ SetShaderValueTexture :: proc(shader: Shader, #any_int locIndex: i32, texture: T
 }
 
 BeginShaderMode :: proc(shader: Shader) {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Shader)
+	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Shader)
 	g.rend.active_shader = shader.id
 }
 
 EndShaderMode :: proc() {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Shader)
+	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Shader)
 	g.rend.active_shader = 0
 }
 
 // ShaderBindRaw / ShaderUnbindRaw back rlgl.EnableShader/DisableShader: the raw
 // program id equals the registry id assigned by LoadShaderFromMemory.
 ShaderBindRaw :: proc(id: u32) {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Shader)
+	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Shader)
 	g.rend.active_shader = id
 }
 ShaderUnbindRaw :: proc() {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Shader)
+	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Shader)
 	g.rend.active_shader = 0
 }
 
@@ -629,6 +629,7 @@ _shader_rebuild_extra :: proc(e: ^Shader_Entry) {
 // Returns true if it handled the draw.
 @(private)
 _shader_flush :: proc(
+	ctx: ^Context,
 	r: ^Renderer,
 	pass: wg.RenderPassEncoder,
 	vbuf: wg.Buffer,
@@ -637,30 +638,32 @@ _shader_flush :: proc(
 	index_offset: u64,
 	index_count: u32,
 ) -> bool {
+	assert(ctx != nil, "_shader_flush: nil context")
+	assert(r == &ctx.rend, "_shader_flush: foreign renderer")
 	e := _shader_get(r.active_shader)
 	if e == nil do return false
-	format := _cur_target_format()
+	format := _cur_target_format(ctx)
 	pipe := _shader_pipeline(e, format)
 	if pipe == nil do return false
 
-	u_offset, ok := _uniform_upload(r, raw_data(e.ushadow), u64(len(e.ushadow)))
+	u_offset, ok := _uniform_upload(ctx, r, raw_data(e.ushadow), u64(len(e.ushadow)))
 	if !ok do return false
 	if e.extra_dirty do _shader_rebuild_extra(e)
 
 	wg.RenderPassEncoderSetPipeline(pass, pipe)
-	_stats_pipeline_switch()
+	_stats_pipeline_switch(ctx)
 	wg.RenderPassEncoderSetBindGroup(pass, 0, r.cur_u != nil ? r.cur_u : r.ubind)
-	_stats_bind_group_switches(1)
+	_stats_bind_group_switches(ctx, 1)
 	if r.cur_bind != nil {
 		wg.RenderPassEncoderSetBindGroup(pass, 1, r.cur_bind)
-		_stats_bind_group_switches(1)
+		_stats_bind_group_switches(ctx, 1)
 	}
 	if r.active_stream_slot < 0 do return false
 	wg.RenderPassEncoderSetBindGroup(pass, 2, e.u_bind[r.active_stream_slot], {u_offset})
-	_stats_bind_group_switches(1)
+	_stats_bind_group_switches(ctx, 1)
 	if e.extra_count > 0 && e.extra_bind != nil {
 		wg.RenderPassEncoderSetBindGroup(pass, 3, e.extra_bind)
-		_stats_bind_group_switches(1)
+		_stats_bind_group_switches(ctx, 1)
 	}
 	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vbuf, vertex_offset, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderSetIndexBuffer(pass, ibuf, .Uint32, index_offset, wg.WHOLE_SIZE)

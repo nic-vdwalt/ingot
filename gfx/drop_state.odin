@@ -20,8 +20,9 @@ _drop_hover_stage :: proc "contextless" (over: bool) {
 }
 
 @(private)
-_drop_hover_publish :: proc() {
-	g.drop.hover_frame = g.drop.hover_staged
+_drop_hover_publish :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_drop_hover_publish: nil context")
+	ctx.drop.hover_frame = ctx.drop.hover_staged
 }
 
 @(private)

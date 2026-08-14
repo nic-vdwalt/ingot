@@ -96,8 +96,9 @@ ime_rect_armed: bool
 // input_poll runs once per frame from EndDrawing: reset frame-scoped state,
 // pump backend events (fills queues/edges), then finalize mouse/wheel/button
 // deltas via the platform seam.
-input_poll :: proc() {
-	inp := &g.inp
+input_poll :: proc(ctx: ^Context) {
+	assert(ctx != nil, "input_poll: nil context")
+	inp := &ctx.inp
 	for i in 0 ..< KEY_COUNT {
 		inp.pressed[i] = false
 		inp.released[i] = false
@@ -114,22 +115,22 @@ input_poll :: proc() {
 	// elapses - this is where idle power saving happens. Web never waits;
 	// its gate lives in step() (loop_web.odin).
 	platform_drop_prepare_events()
-	if should_wait, timeout := _idle_timeout(); should_wait {
+	if should_wait, timeout := _idle_timeout(ctx); should_wait {
 		platform_wait_events(timeout)
 	} else {
-		platform_poll_events()
+		platform_poll_events(ctx)
 	}
 	platform_drop_finish_events()
-	_drop_hover_publish()
+	_drop_hover_publish(ctx)
 	_input_publish_staged(inp)
 
-	mx, my := platform_cursor_pos()
+	mx, my := platform_cursor_pos(ctx)
 	inp.mouse = {f32(mx), f32(my)}
 	inp.mouse_delta = {inp.mouse.x - inp.mouse_prev.x, inp.mouse.y - inp.mouse_prev.y}
 	inp.wheel = inp.wheel_pending
 
 	for b in 0 ..< 8 {
-		cur := platform_mouse_button(i32(b))
+		cur := platform_mouse_button(ctx, i32(b))
 		when ODIN_OS == .JS {
 			inp.mb_pressed[b] = inp.mb_pressed[b] || (cur && !inp.mb_down[b])
 			inp.mb_released[b] = inp.mb_released[b] || (!cur && inp.mb_down[b])
@@ -139,18 +140,18 @@ input_poll :: proc() {
 		}
 		inp.mb_down[b] = cur
 	}
-	inp.cursor_on_screen = platform_window_hovered()
+	inp.cursor_on_screen = platform_window_hovered(ctx)
 
 	// Gamepads: snapshot previous button state for edge queries, then poll.
 	for p in 0 ..< MAX_GAMEPADS {
 		inp.pads[p].prev_buttons = inp.pads[p].buttons
 	}
-	platform_gamepad_poll(&inp.pads)
+	platform_gamepad_poll(&inp.pads, &ctx.idle)
 
 	// IME: if no text field reported a caret rect since the last poll, tell
 	// the platform text input is inactive (web blurs the IME proxy; native
 	// clears the candidate-window rect). Active fields re-arm every frame.
-	if !ime_rect_armed do platform_text_input_deactivate()
+	if !ime_rect_armed do platform_text_input_deactivate(ctx)
 	ime_rect_armed = false
 }
 

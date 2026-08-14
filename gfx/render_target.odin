@@ -70,7 +70,7 @@ BeginTextureMode :: proc(target: RenderTexture2D) {
 
 	// finish pending window geometry into the main pass (still open)
 	if g.frame.pass_begun {
-		renderer_flush(&g.rend, g.frame.pass, .Target)
+		renderer_flush(default_context(), &g.rend, g.frame.pass, .Target)
 	}
 
 	g.frame.rt = target.texture.id
@@ -132,7 +132,7 @@ EndTextureMode :: proc() {
 	}
 	_ensure_rt_pass()
 	if g.frame.rt_pass_begun {
-		renderer_flush(&g.rend, g.frame.rt_pass, .Target)
+		renderer_flush(default_context(), &g.rend, g.frame.rt_pass, .Target)
 		wg.RenderPassEncoderEnd(g.frame.rt_pass)
 		wg.RenderPassEncoderRelease(g.frame.rt_pass)
 		assert(_stream_slot_upload(g, &g.rend))

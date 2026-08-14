@@ -447,18 +447,23 @@ RlDrawVertexArrayInstanced :: proc(offset, count, instances: i32) {
 	assert(len(v.attrs) > 0)
 	_ensure_active_pass()
 	if !_active_pass_begun() do return
-	renderer_flush(&g.rend, active_pass())
+	renderer_flush(default_context(), &g.rend, active_pass())
 
 	pass := active_pass()
-	pipe := _vao_pipeline(v, se, _cur_target_format(), g.rend.cur_blend)
+	pipe := _vao_pipeline(v, se, _cur_target_format(default_context()), g.rend.cur_blend)
 	if pipe == nil do return
 
-	u_offset, ok := _uniform_upload(&g.rend, raw_data(se.ushadow), u64(len(se.ushadow)))
+	u_offset, ok := _uniform_upload(
+		default_context(),
+		&g.rend,
+		raw_data(se.ushadow),
+		u64(len(se.ushadow)),
+	)
 	if !ok || g.rend.active_stream_slot < 0 do return
 	wg.RenderPassEncoderSetPipeline(pass, pipe)
-	_stats_pipeline_switch()
+	_stats_pipeline_switch(default_context())
 	wg.RenderPassEncoderSetBindGroup(pass, 0, se.u_bind[g.rend.active_stream_slot], {u_offset})
-	_stats_bind_group_switches(1)
+	_stats_bind_group_switches(default_context(), 1)
 	for b, i in v.buffers {
 		if b.buf == nil || b.size == 0 do return
 		wg.RenderPassEncoderSetVertexBuffer(pass, u32(i), b.buf, 0, b.size)

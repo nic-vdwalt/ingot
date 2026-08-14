@@ -162,19 +162,20 @@ _idle_web_gate :: proc "contextless" (s: ^Idle_State, now: f64) -> bool {
 // input_poll. Web never waits - rAF paces the loop and step() gates instead
 // (waiting here would block the browser event loop).
 @(private)
-_idle_timeout :: proc() -> (should_wait: bool, timeout: f64) {
+_idle_timeout :: proc(ctx: ^Context) -> (should_wait: bool, timeout: f64) {
+	assert(ctx != nil, "_idle_timeout: nil context")
 	when ODIN_OS == .JS {
 		return false, 0
 	} else {
 		// Minimized: nothing is visible, so render nothing - just wait in
 		// bounded slices (events still wake us; restore marks activity).
-		if g.idle.strategy == .Event_Driven && platform_window_iconified() {
+		if ctx.idle.strategy == .Event_Driven && platform_window_iconified(ctx) {
 			return true, IDLE_MAX_WAIT
 		}
-		now := _now(g)
-		if _idle_take_frame(&g.idle, now) {
+		now := _now(ctx)
+		if _idle_take_frame(&ctx.idle, now) {
 			return false, 0
 		}
-		return true, _idle_wait_timeout(&g.idle, now)
+		return true, _idle_wait_timeout(&ctx.idle, now)
 	}
 }

@@ -181,43 +181,48 @@ _stats_context_frame_end :: proc(ctx: ^Context) {
 }
 
 @(private)
-_stats_set_alpha_mode :: proc(mode: wg.CompositeAlphaMode) {
+_stats_set_alpha_mode :: proc(ctx: ^Context, mode: wg.CompositeAlphaMode) {
 	when RENDER_STATS_ENABLED {
-		g.stats_current.composite_alpha_mode = mode
-		g.stats_latest.composite_alpha_mode = mode
+		assert(ctx != nil, "_stats_set_alpha_mode: nil context")
+		ctx.stats_current.composite_alpha_mode = mode
+		ctx.stats_latest.composite_alpha_mode = mode
 	}
 }
 
 @(private)
-_stats_flush :: proc(vertices, bytes: u64, cause: Flush_Cause) {
+_stats_flush :: proc(ctx: ^Context, vertices, bytes: u64, cause: Flush_Cause) {
 	assert(cause >= min(Flush_Cause) && cause <= max(Flush_Cause))
 	when RENDER_STATS_ENABLED {
-		g.stats_current.flush_count += 1
-		g.stats_current.vertices_uploaded += vertices
-		g.stats_current.bytes_uploaded += bytes
-		g.stats_current.flush_causes[cause] += 1
+		assert(ctx != nil, "_stats_flush: nil context")
+		ctx.stats_current.flush_count += 1
+		ctx.stats_current.vertices_uploaded += vertices
+		ctx.stats_current.bytes_uploaded += bytes
+		ctx.stats_current.flush_causes[cause] += 1
 	}
 }
 
 @(private)
-_stats_buffer_created :: proc(growth: bool) {
+_stats_buffer_created :: proc(ctx: ^Context, growth: bool) {
 	when RENDER_STATS_ENABLED {
-		g.stats_current.buffer_creations += 1
-		if growth do g.stats_current.buffer_growths += 1
+		assert(ctx != nil, "_stats_buffer_created: nil context")
+		ctx.stats_current.buffer_creations += 1
+		if growth do ctx.stats_current.buffer_growths += 1
 	}
 }
 
 @(private)
-_stats_pipeline_switch :: proc() {
+_stats_pipeline_switch :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {
-		g.stats_current.pipeline_switches += 1
+		assert(ctx != nil, "_stats_pipeline_switch: nil context")
+		ctx.stats_current.pipeline_switches += 1
 	}
 }
 
 @(private)
-_stats_bind_group_switches :: proc(count: u32) {
+_stats_bind_group_switches :: proc(ctx: ^Context, count: u32) {
 	when RENDER_STATS_ENABLED {
-		g.stats_current.bind_group_switches += count
+		assert(ctx != nil, "_stats_bind_group_switches: nil context")
+		ctx.stats_current.bind_group_switches += count
 	}
 }
 
@@ -295,10 +300,11 @@ _stats_present :: proc(ctx: ^Context) -> f64 {
 }
 
 @(private)
-_stats_stream_copy :: proc(elapsed: f64) {
+_stats_stream_copy :: proc(ctx: ^Context, elapsed: f64) {
 	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_stream_copy: nil context")
 		assert(elapsed >= 0, "_stats_stream_copy: negative time")
-		g.stats_current.stream_copy_cpu_seconds += elapsed
+		ctx.stats_current.stream_copy_cpu_seconds += elapsed
 	}
 }
 
@@ -320,12 +326,13 @@ _stats_stream_write :: proc(ctx: ^Context, uniform: bool, bytes: u64, elapsed: f
 }
 
 @(private)
-_stats_reservation_failure :: proc(uniform: bool) {
+_stats_reservation_failure :: proc(ctx: ^Context, uniform: bool) {
 	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_reservation_failure: nil context")
 		if uniform {
-			g.stats_current.uniform_reservation_failures += 1
+			ctx.stats_current.uniform_reservation_failures += 1
 		} else {
-			g.stats_current.geometry_reservation_failures += 1
+			ctx.stats_current.geometry_reservation_failures += 1
 		}
 	}
 }

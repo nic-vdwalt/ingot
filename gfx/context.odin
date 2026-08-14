@@ -605,7 +605,7 @@ _gpu_finish :: proc(ctx: ^Context) {
 		}
 	}
 	ctx.composite_alpha = alpha
-	_stats_set_alpha_mode(alpha)
+	_stats_set_alpha_mode(ctx, alpha)
 	ctx.config = wg.SurfaceConfiguration {
 		device      = ctx.device,
 		format      = ctx.format,
@@ -622,7 +622,7 @@ _gpu_finish :: proc(ctx: ^Context) {
 	ctx.target_fps = 0
 
 	_submission_init(&ctx.submissions, ctx)
-	if !renderer_init(&ctx.rend) {
+	if !renderer_init(ctx, &ctx.rend) {
 		// The device could not supply the stream pools even at the floor.
 		// Closing here surfaces a diagnosable state; the alternative used to
 		// be an assert, which on web traps the module and freezes the canvas.
@@ -681,10 +681,8 @@ BeginDrawing :: proc() {
 context_begin_drawing :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_begin_drawing: nil context")
 	_maybe_reconfigure(ctx)
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
 	_stats_frame_begin(ctx)
-	platform_web_input_frame_begin()
+	platform_web_input_frame_begin(ctx)
 
 	if !renderer_frame_begin(ctx, &ctx.rend) {
 		ctx.frame.has_frame = false
@@ -801,44 +799,42 @@ EndDrawing :: proc() {
 
 context_end_drawing :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_end_drawing: nil context")
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
 	if ctx.frame.has_frame {
 		_ensure_pass(ctx) // guarantee a clear even on empty frames
-		if !g.frame.scissor_empty {
-			renderer_flush(&g.rend, g.frame.pass, .Frame_End)
+		if !ctx.frame.scissor_empty {
+			renderer_flush(ctx, &ctx.rend, ctx.frame.pass, .Frame_End)
 		} else {
-			clear(&g.rend.verts)
-			clear(&g.rend.indices)
+			clear(&ctx.rend.verts)
+			clear(&ctx.rend.indices)
 		}
-		wg.RenderPassEncoderEnd(g.frame.pass)
-		wg.RenderPassEncoderRelease(g.frame.pass)
+		wg.RenderPassEncoderEnd(ctx.frame.pass)
+		wg.RenderPassEncoderRelease(ctx.frame.pass)
 
-		retirement := _submission_reserve(&g.submissions)
+		retirement := _submission_reserve(&ctx.submissions)
 		if retirement != 0 do assert(_stream_slot_upload(ctx, &ctx.rend))
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
 			ctx,
-			g.frame.encoder,
+			ctx.frame.encoder,
 			retirement != 0,
 		)
 		if retirement != 0 && cmd != nil {
 			_stats_queue_submission(ctx)
-			assert(_submission_commit(&g.submissions, retirement))
-			if !_stream_slot_submitted(&g.rend, retirement) {
+			assert(_submission_commit(&ctx.submissions, retirement))
+			if !_stream_slot_submitted(&ctx.rend, retirement) {
 				_stats_stream_retirement_failure(ctx)
 			}
 		} else {
-			if retirement != 0 do assert(_submission_rollback(&g.submissions, retirement))
-			_stream_slot_abandon(&g.rend)
+			if retirement != 0 do assert(_submission_rollback(&ctx.submissions, retirement))
+			_stream_slot_abandon(&ctx.rend)
 			_stats_stream_retirement_failure(ctx)
 		}
 		if cmd != nil do wg.CommandBufferRelease(cmd)
-		wg.CommandEncoderRelease(g.frame.encoder)
+		wg.CommandEncoderRelease(ctx.frame.encoder)
 		present_elapsed := _stats_present(ctx)
 		_stats_context_cpu_times(ctx, 0, encode_elapsed, submit_elapsed, present_elapsed)
-		wg.TextureViewRelease(g.frame.view)
+		wg.TextureViewRelease(ctx.frame.view)
 		_release_surface_texture(ctx)
-		g.frame.has_frame = false
+		ctx.frame.has_frame = false
 		_flush_retired(ctx)
 		_renderer_report_overflow(&ctx.rend)
 	} else {
@@ -846,10 +842,10 @@ context_end_drawing :: proc(ctx: ^Context) {
 		clear(&g.rend.indices)
 	}
 
-	platform_web_input_frame_end()
+	platform_web_input_frame_end(ctx)
 	_stats_frame_end(ctx)
 	when ODIN_OS != .JS {
-		input_poll()
+		input_poll(ctx)
 	}
 	_frame_timing(ctx, platform_should_close(ctx))
 }
@@ -1026,7 +1022,7 @@ IsWindowFocused :: proc() -> bool {
 // (raylib rlDrawRenderBatchActive parity - used to order custom draws).
 FlushBatch :: proc() {
 	if g.frame.has_frame && _active_pass_begun() && !g.frame.scissor_empty {
-		renderer_flush(&g.rend, active_pass())
+		renderer_flush(default_context(), &g.rend, active_pass())
 	}
 }
 
@@ -1045,12 +1041,13 @@ active_pass :: proc() -> wg.RenderPassEncoder {
 // target (the swapchain, or the bound render target). Custom-shader pipelines
 // are format-specific, so they are built lazily per target format.
 @(private)
-_cur_target_format :: proc() -> wg.TextureFormat {
-	if g.frame.rt != 0 {
-		e := get_texture(g.frame.rt)
+_cur_target_format :: proc(ctx: ^Context) -> wg.TextureFormat {
+	assert(ctx != nil, "_cur_target_format: nil context")
+	if ctx.frame.rt != 0 {
+		e := context_get_texture(ctx, ctx.frame.rt)
 		if e != nil && e.wgformat != .Undefined do return e.wgformat
 	}
-	return g.format
+	return ctx.format
 }
 
 // _active_pass_begun reports whether the pass active_pass() returns has begun.

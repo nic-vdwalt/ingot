@@ -243,12 +243,14 @@ _format_blendable :: proc(format: wg.TextureFormat) -> bool {
 // can call it.
 @(private)
 _make_pipe :: proc(
+	device: wg.Device,
 	r: ^Renderer,
 	slot: Blend_Slot,
 	fs: string,
 	textured: bool,
 	format: wg.TextureFormat,
 ) -> wg.RenderPipeline {
+	assert(device != nil, "_make_pipe: nil device")
 	attrs := [4]wg.VertexAttribute {
 		{format = .Float32x2, offset = 0, shaderLocation = 0},
 		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
@@ -269,12 +271,12 @@ _make_pipe :: proc(
 	if _format_blendable(format) do target.blend = &blend
 	layouts := [2]wg.BindGroupLayout{r.ubind_layout, r.tex_layout}
 	pl := wg.DeviceCreatePipelineLayout(
-		g.device,
+		device,
 		&{bindGroupLayoutCount = textured ? 2 : 1, bindGroupLayouts = raw_data(layouts[:])},
 	)
 	if pl == nil do return nil
 	pipe := wg.DeviceCreateRenderPipeline(
-		g.device,
+		device,
 		&{
 			layout = pl,
 			vertex = {module = r.shader, entryPoint = "vs_main", bufferCount = 1, buffers = &vbl},
@@ -308,13 +310,15 @@ _fs_for :: proc(kind: Pipe_Kind) -> (string, bool) {
 // _rebuild_custom_pipes recreates the Custom-slot pipelines after the custom
 // blend factors change (swapchain-format set only).
 @(private)
-_rebuild_custom_pipes :: proc(r: ^Renderer) {
+_rebuild_custom_pipes :: proc(ctx: ^Context, r: ^Renderer) {
+	assert(ctx != nil, "_rebuild_custom_pipes: nil context")
+	assert(r == &ctx.rend, "_rebuild_custom_pipes: foreign renderer")
 	for kind in Pipe_Kind {
 		if r.pipes[kind][.Custom] != nil {
 			wg.RenderPipelineRelease(r.pipes[kind][.Custom])
 		}
 		fs, textured := _fs_for(kind)
-		r.pipes[kind][.Custom] = _make_pipe(r, .Custom, fs, textured, g.format)
+		r.pipes[kind][.Custom] = _make_pipe(ctx.device, r, .Custom, fs, textured, ctx.format)
 	}
 	// invalidate alt-format Custom variants so they rebuild on next use
 	for i in 0 ..< r.alt_n {
@@ -326,8 +330,22 @@ _rebuild_custom_pipes :: proc(r: ^Renderer) {
 		}
 		fs_s, ts := _fs_for(.Solid)
 		fs_i, ti := _fs_for(.Image)
-		r.alt_pipes[i][.Solid][.Custom] = _make_pipe(r, .Custom, fs_s, ts, r.alt_fmt[i])
-		r.alt_pipes[i][.Image][.Custom] = _make_pipe(r, .Custom, fs_i, ti, r.alt_fmt[i])
+		r.alt_pipes[i][.Solid][.Custom] = _make_pipe(
+			ctx.device,
+			r,
+			.Custom,
+			fs_s,
+			ts,
+			r.alt_fmt[i],
+		)
+		r.alt_pipes[i][.Image][.Custom] = _make_pipe(
+			ctx.device,
+			r,
+			.Custom,
+			fs_i,
+			ti,
+			r.alt_fmt[i],
+		)
 	}
 }
 
@@ -335,10 +353,16 @@ _rebuild_custom_pipes :: proc(r: ^Renderer) {
 // colour format. Swapchain-format pipelines are prebuilt; other formats (e.g.
 // the galaxy HDR RGBA16Float targets) are built lazily and cached.
 @(private)
-_pipe_for :: proc(r: ^Renderer, kind: Pipe_Kind, slot: Blend_Slot) -> wg.RenderPipeline {
-	assert(r != nil, "_pipe_for: nil r")
-	fmt := _cur_target_format()
-	if fmt == g.format do return r.pipes[kind][slot]
+_pipe_for :: proc(
+	ctx: ^Context,
+	r: ^Renderer,
+	kind: Pipe_Kind,
+	slot: Blend_Slot,
+) -> wg.RenderPipeline {
+	assert(ctx != nil, "_pipe_for: nil context")
+	assert(r == &ctx.rend, "_pipe_for: foreign renderer")
+	fmt := _cur_target_format(ctx)
+	if fmt == ctx.format do return r.pipes[kind][slot]
 	// find or create the alt-format set
 	idx := -1
 	for i in 0 ..< r.alt_n {
@@ -352,7 +376,7 @@ _pipe_for :: proc(r: ^Renderer, kind: Pipe_Kind, slot: Blend_Slot) -> wg.RenderP
 		for k in Pipe_Kind {
 			fs, textured := _fs_for(k)
 			for s in Blend_Slot {
-				r.alt_pipes[idx][k][s] = _make_pipe(r, s, fs, textured, fmt)
+				r.alt_pipes[idx][k][s] = _make_pipe(ctx.device, r, s, fs, textured, fmt)
 			}
 		}
 	}
@@ -477,9 +501,10 @@ _neutral_texture_shutdown :: proc(r: ^Renderer) {
 // renderer_init builds the pipelines and stream pools. Returns false when the
 // device cannot supply even floor-sized stream buffers, so the caller can
 // close the context instead of running with an unusable renderer.
-renderer_init :: proc(r: ^Renderer) -> bool {
-	assert(r != nil, "renderer_init: nil renderer")
-	device, queue, format := g.device, g.queue, g.format
+renderer_init :: proc(ctx: ^Context, r: ^Renderer) -> bool {
+	assert(ctx != nil, "renderer_init: nil context")
+	assert(r == &ctx.rend, "renderer_init: foreign renderer")
+	device, queue, format := ctx.device, ctx.queue, ctx.format
 	assert(device != nil && queue != nil, "renderer_init: invalid context")
 	shader := wg.DeviceCreateShaderModule(
 		device,
@@ -491,7 +516,7 @@ renderer_init :: proc(r: ^Renderer) -> bool {
 		},
 	)
 	r.shader = shader
-	if !_stream_slots_init(r, device, gpu_budget_active()) do return false
+	if !_stream_slots_init(r, device, gpu_budget_context(ctx)) do return false
 
 	// group(0): projection uniform
 	r.ubind_layout = wg.DeviceCreateBindGroupLayout(
@@ -554,7 +579,7 @@ renderer_init :: proc(r: ^Renderer) -> bool {
 	for kind in Pipe_Kind {
 		fs, textured := _fs_for(kind)
 		for slot in Blend_Slot {
-			r.pipes[kind][slot] = _make_pipe(r, slot, fs, textured, format)
+			r.pipes[kind][slot] = _make_pipe(device, r, slot, fs, textured, format)
 		}
 	}
 
@@ -656,7 +681,7 @@ batch_set :: proc(r: ^Renderer, kind: Pipe_Kind, bind: wg.BindGroup) {
 	next_bind := _batch_bind(kind, bind, r.cur_bind, r.neutral_bind)
 	if kind != r.cur_kind || next_bind != r.cur_bind {
 		cause: Flush_Cause = kind != r.cur_kind ? .Pipeline : .Texture
-		if _active_pass_begun() do renderer_flush(r, active_pass(), cause)
+		if _active_pass_begun() do renderer_flush(default_context(), r, active_pass(), cause)
 		r.cur_kind = kind
 		r.cur_bind = next_bind
 	}
@@ -672,7 +697,7 @@ _batch_reserve :: proc(r: ^Renderer, vertex_count, index_count: int) -> bool {
 	indices_fit := len(r.indices) <= BATCH_MAX_INDICES - index_count
 	if vertices_fit && indices_fit do return true
 	if !_active_pass_begun() do return false
-	renderer_flush(r, active_pass(), .Manual)
+	renderer_flush(default_context(), r, active_pass(), .Manual)
 	return(
 		len(r.verts) <= BATCH_MAX_VERTICES - vertex_count &&
 		len(r.indices) <= BATCH_MAX_INDICES - index_count \
@@ -814,14 +839,14 @@ MatrixModePush :: proc() {
 	append(&g.rend.model_stack, g.rend.model_xf)
 }
 MatrixModePop :: proc() {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
+	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Matrix)
 	n := len(g.rend.model_stack)
 	if n == 0 {g.rend.model_xf = AFFINE_IDENTITY; return}
 	g.rend.model_xf = g.rend.model_stack[n - 1]
 	pop(&g.rend.model_stack)
 }
 MatrixModeTranslate :: proc(x, y: f32) {
-	if _active_pass_begun() do renderer_flush(&g.rend, active_pass(), .Matrix)
+	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Matrix)
 	g.rend.model_xf = _affine_translated(g.rend.model_xf, x, y)
 }
 
@@ -849,7 +874,14 @@ _stream_record_peak :: proc(r: ^Renderer, geometry_bytes, uniform_bytes: u64) {
 	assert(r.peak_uniform_bytes <= r.uniform_bytes)
 }
 
-renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Cause = .Manual) {
+renderer_flush :: proc(
+	ctx: ^Context,
+	r: ^Renderer,
+	pass: wg.RenderPassEncoder,
+	cause: Flush_Cause = .Manual,
+) {
+	assert(ctx != nil, "renderer_flush: nil context")
+	assert(r == &ctx.rend, "renderer_flush: foreign renderer")
 	n := len(r.verts)
 	if n == 0 do return
 
@@ -861,13 +893,12 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 	_batch_record_peak(r, n, index_count)
 	vertex_bytes := u64(n) * size_of(Vertex)
 	index_bytes := u64(index_count) * size_of(u32)
-	// Resolved once here so the upload leaves stay context-free.
-	device := g.device
 	vertex_buffer, index_buffer: wg.Buffer
 	vertex_offset, index_offset: u64
 	if STREAMED_RENDERER_ENABLED {
 		buffer, uploaded_vertex_offset, uploaded_index_offset, upload_ok :=
 			_geometry_upload_indexed(
+				ctx,
 				r,
 				raw_data(r.verts[:]),
 				vertex_bytes,
@@ -880,7 +911,7 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 			vertex_offset = uploaded_vertex_offset
 			index_offset = uploaded_index_offset
 		} else {
-			vertex_buffer, index_buffer = _geometry_upload_transient(r, device)
+			vertex_buffer, index_buffer = _geometry_upload_transient(ctx, r)
 			if vertex_buffer == nil || index_buffer == nil {
 				clear(&r.verts)
 				clear(&r.indices)
@@ -888,22 +919,23 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 			}
 		}
 	} else {
-		vertex_buffer, index_buffer = _geometry_upload_transient(r, device)
+		vertex_buffer, index_buffer = _geometry_upload_transient(ctx, r)
 		if vertex_buffer == nil || index_buffer == nil {
 			clear(&r.verts)
 			clear(&r.indices)
 			return
 		}
 	}
-	_stats_flush(u64(n), vertex_bytes + index_bytes, cause)
+	_stats_flush(ctx, u64(n), vertex_bytes + index_bytes, cause)
 	when RENDER_STATS_ENABLED {
-		g.stats_current.indices_uploaded += u64(index_count)
+		ctx.stats_current.indices_uploaded += u64(index_count)
 	}
 
 	// Custom-shader path: an active shader overrides the pipeline + bind groups
 	// for the current draw (fullscreen post-process / custom 2D passes).
 	if r.active_shader != 0 {
 		if _shader_flush(
+			ctx,
 			r,
 			pass,
 			vertex_buffer,
@@ -918,19 +950,19 @@ renderer_flush :: proc(r: ^Renderer, pass: wg.RenderPassEncoder, cause: Flush_Ca
 		}
 	}
 
-	pipe := _pipe_for(r, r.cur_kind, r.cur_blend)
+	pipe := _pipe_for(ctx, r, r.cur_kind, r.cur_blend)
 	if pipe == nil {
 		clear(&r.verts)
 		clear(&r.indices)
 		return
 	}
 	wg.RenderPassEncoderSetPipeline(pass, pipe)
-	_stats_pipeline_switch()
+	_stats_pipeline_switch(ctx)
 	wg.RenderPassEncoderSetBindGroup(pass, 0, r.cur_u != nil ? r.cur_u : r.ubind)
-	_stats_bind_group_switches(1)
+	_stats_bind_group_switches(ctx, 1)
 	if r.cur_bind != nil {
 		wg.RenderPassEncoderSetBindGroup(pass, 1, r.cur_bind)
-		_stats_bind_group_switches(1)
+		_stats_bind_group_switches(ctx, 1)
 	}
 	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vertex_buffer, vertex_offset, vertex_bytes)
 	wg.RenderPassEncoderSetIndexBuffer(pass, index_buffer, .Uint32, index_offset, index_bytes)
@@ -978,9 +1010,9 @@ _renderer_report_overflow :: proc(r: ^Renderer) {
 }
 
 @(private)
-_geometry_upload_transient :: proc(r: ^Renderer, device: wg.Device) -> (wg.Buffer, wg.Buffer) {
-	assert(r != nil, "_geometry_upload_transient: nil renderer")
-	assert(device != nil, "_geometry_upload_transient: nil device")
+_geometry_upload_transient :: proc(ctx: ^Context, r: ^Renderer) -> (wg.Buffer, wg.Buffer) {
+	assert(ctx != nil, "_geometry_upload_transient: nil context")
+	assert(r == &ctx.rend, "_geometry_upload_transient: foreign renderer")
 	// Record the overflow before attempting the allocation: a scene reaching
 	// this path at all is the signal worth reporting, whether or not the
 	// fallback itself succeeds.
@@ -988,22 +1020,23 @@ _geometry_upload_transient :: proc(r: ^Renderer, device: wg.Device) -> (wg.Buffe
 	r.overflow_draws += 1
 	// Two buffers are appended below, so stop one pair short of the cap.
 	if len(r.transient_buffers) > BATCH_TRANSIENT_BUFFERS_MAX - 2 do return nil, nil
-	vertex_buffer := wg.DeviceCreateBufferWithData(device, &{usage = {.Vertex}}, r.verts[:])
+	vertex_buffer := wg.DeviceCreateBufferWithData(ctx.device, &{usage = {.Vertex}}, r.verts[:])
 	if vertex_buffer == nil do return nil, nil
-	index_buffer := wg.DeviceCreateBufferWithData(device, &{usage = {.Index}}, r.indices[:])
+	index_buffer := wg.DeviceCreateBufferWithData(ctx.device, &{usage = {.Index}}, r.indices[:])
 	if index_buffer == nil {
 		wg.BufferRelease(vertex_buffer)
 		return nil, nil
 	}
 	append(&r.transient_buffers, vertex_buffer, index_buffer)
 	assert(len(r.transient_buffers) <= BATCH_TRANSIENT_BUFFERS_MAX)
-	_stats_buffer_created(false)
-	_stats_buffer_created(false)
+	_stats_buffer_created(ctx, false)
+	_stats_buffer_created(ctx, false)
 	return vertex_buffer, index_buffer
 }
 
 @(private)
 _geometry_upload_indexed :: proc(
+	ctx: ^Context,
 	r: ^Renderer,
 	vertex_data: rawptr,
 	vertex_bytes: u64,
@@ -1015,7 +1048,8 @@ _geometry_upload_indexed :: proc(
 	u64,
 	bool,
 ) {
-	assert(r != nil)
+	assert(ctx != nil)
+	assert(r == &ctx.rend)
 	assert(vertex_data != nil)
 	assert(vertex_bytes > 0)
 	assert(index_data != nil)
@@ -1031,23 +1065,23 @@ _geometry_upload_indexed :: proc(
 		r.geometry_bytes,
 	)
 	if !ok {
-		_stats_reservation_failure(false)
+		_stats_reservation_failure(ctx, false)
 		return nil, 0, 0, false
 	}
 
 	copy_started := platform_now()
 	if !_stream_shadow_ensure(&slot.geometry_shadow, slot.geometry_write, r.geometry_bytes) {
 		slot.geometry_write = write_before
-		_stats_reservation_failure(false)
+		_stats_reservation_failure(ctx, false)
 		return nil, 0, 0, false
 	}
 	mem.copy(raw_data(slot.geometry_shadow[vertex_offset:]), vertex_data, int(vertex_bytes))
 	mem.copy(raw_data(slot.geometry_shadow[index_offset:]), index_data, int(index_bytes))
 	_stream_record_peak(r, slot.geometry_write, r.peak_uniform_bytes)
-	_stats_stream_copy(platform_now() - copy_started)
+	_stats_stream_copy(ctx, platform_now() - copy_started)
 	when RENDER_STATS_ENABLED {
-		g.stats_current.peak_geometry_arena_bytes = max(
-			g.stats_current.peak_geometry_arena_bytes,
+		ctx.stats_current.peak_geometry_arena_bytes = max(
+			ctx.stats_current.peak_geometry_arena_bytes,
 			slot.geometry_write,
 		)
 	}
@@ -1136,8 +1170,8 @@ _stream_slots_init :: proc(r: ^Renderer, device: wg.Device, budget: Gpu_Budget) 
 			fmt.eprintln("gfx: GPU stream buffer allocation failed; device out of memory")
 			return false
 		}
-		_stats_buffer_created(false)
-		_stats_buffer_created(false)
+		_stats_buffer_created(default_context(), false)
+		_stats_buffer_created(default_context(), false)
 		slot.geometry_buffer = geometry
 		slot.uniform_buffer = uniform
 		// Every slot shares one reservation bound, so a slot that had to
@@ -1362,8 +1396,9 @@ _stream_slot_reserve_uniform :: proc(
 }
 
 @(private)
-_uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
-	assert(r != nil)
+_uniform_upload :: proc(ctx: ^Context, r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
+	assert(ctx != nil)
+	assert(r == &ctx.rend)
 	assert(data != nil)
 	assert(size > 0)
 	if r.active_stream_slot < 0 do return 0, false
@@ -1371,21 +1406,21 @@ _uniform_upload :: proc(r: ^Renderer, data: rawptr, size: u64) -> (u32, bool) {
 	slot := &r.stream_slots[r.active_stream_slot]
 	offset, ok := _stream_slot_reserve_uniform(slot, size, r.uniform_alignment, r.uniform_bytes)
 	if !ok {
-		_stats_reservation_failure(true)
+		_stats_reservation_failure(ctx, true)
 		return 0, false
 	}
 	copy_started := platform_now()
 	if !_stream_shadow_ensure(&slot.uniform_shadow, slot.uniform_write, r.uniform_bytes) {
 		slot.uniform_write = offset
-		_stats_reservation_failure(true)
+		_stats_reservation_failure(ctx, true)
 		return 0, false
 	}
 	mem.copy(raw_data(slot.uniform_shadow[offset:]), data, int(size))
 	_stream_record_peak(r, r.peak_geometry_bytes, slot.uniform_write)
-	_stats_stream_copy(platform_now() - copy_started)
+	_stats_stream_copy(ctx, platform_now() - copy_started)
 	when RENDER_STATS_ENABLED {
-		g.stats_current.peak_uniform_arena_bytes = max(
-			g.stats_current.peak_uniform_arena_bytes,
+		ctx.stats_current.peak_uniform_arena_bytes = max(
+			ctx.stats_current.peak_uniform_arena_bytes,
 			slot.uniform_write,
 		)
 	}
@@ -1417,7 +1452,7 @@ SetCustomBlend :: proc(src, dst: BlendFactorRL, op: BlendOpRL) {
 	g.rend.cust_src = ns
 	g.rend.cust_dst = nd
 	g.rend.cust_op = no
-	_rebuild_custom_pipes(&g.rend)
+	_rebuild_custom_pipes(default_context(), &g.rend)
 }
 
 // GL blend enum aliases (values match rlgl / OpenGL) so rlgl can forward raw

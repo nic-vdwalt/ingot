@@ -1168,7 +1168,7 @@ begin_gpu_3d :: proc(
 		_stats_stream_slot_exhaustion(ctx)
 		return {}, false
 	}
-	identity_offset, identity_ok := _gpu_3d_identity_instances_upload(&ctx.rend)
+	identity_offset, identity_ok := _gpu_3d_identity_instances_upload(ctx, &ctx.rend)
 	if !identity_ok {
 		// Uniform stream exhausted at pass start: operating condition - the
 		// reservation failure is counted inside _uniform_upload, and a slot
@@ -1320,6 +1320,7 @@ draw_gpu_mesh_instanced :: proc(
 		assert(count > 0, "draw_gpu_mesh_instanced: empty chunk")
 		assert(start + count <= len(transforms), "draw_gpu_mesh_instanced: chunk out of range")
 		instances_offset, upload_ok := _gpu_3d_instance_upload(
+			pass.owner,
 			&pass.owner.rend,
 			transforms[start:start + count],
 		)
@@ -1352,8 +1353,9 @@ _gpu_3d_chunk_count :: proc(transform_count: int) -> int {
 // uniform stream. The full block size is reserved even for partial chunks
 // because the bind group layout's minBindingSize covers the whole array.
 @(private)
-_gpu_3d_instance_upload :: proc(r: ^Renderer, transforms: []Matrix) -> (u32, bool) {
-	assert(r != nil, "_gpu_3d_instance_upload: nil renderer")
+_gpu_3d_instance_upload :: proc(ctx: ^Context, r: ^Renderer, transforms: []Matrix) -> (u32, bool) {
+	assert(ctx != nil, "_gpu_3d_instance_upload: nil context")
+	assert(r == &ctx.rend, "_gpu_3d_instance_upload: foreign renderer")
 	assert(len(transforms) > 0, "_gpu_3d_instance_upload: empty chunk")
 	assert(
 		len(transforms) <= GPU_3D_MAX_INSTANCES_PER_DRAW,
@@ -1361,7 +1363,7 @@ _gpu_3d_instance_upload :: proc(r: ^Renderer, transforms: []Matrix) -> (u32, boo
 	)
 	block: Gpu_3D_Instance_Uniforms
 	copy(block.transforms[:len(transforms)], transforms)
-	return _uniform_upload(r, &block, size_of(Gpu_3D_Instance_Uniforms))
+	return _uniform_upload(ctx, r, &block, size_of(Gpu_3D_Instance_Uniforms))
 }
 
 @(private)
@@ -1374,8 +1376,9 @@ _gpu_3d_identity_block_ready: bool
 // index would render untransformed instead of collapsing geometry through a
 // zero matrix.
 @(private)
-_gpu_3d_identity_instances_upload :: proc(r: ^Renderer) -> (u32, bool) {
-	assert(r != nil, "_gpu_3d_identity_instances_upload: nil renderer")
+_gpu_3d_identity_instances_upload :: proc(ctx: ^Context, r: ^Renderer) -> (u32, bool) {
+	assert(ctx != nil, "_gpu_3d_identity_instances_upload: nil context")
+	assert(r == &ctx.rend, "_gpu_3d_identity_instances_upload: foreign renderer")
 	if !_gpu_3d_identity_block_ready {
 		for index in 0 ..< GPU_3D_MAX_INSTANCES_PER_DRAW {
 			_gpu_3d_identity_block.transforms[index] = 1
@@ -1386,7 +1389,7 @@ _gpu_3d_identity_instances_upload :: proc(r: ^Renderer) -> (u32, bool) {
 		_gpu_3d_identity_block.transforms[0] == Matrix(1),
 		"_gpu_3d_identity_instances_upload: corrupted identity block",
 	)
-	return _uniform_upload(r, &_gpu_3d_identity_block, size_of(Gpu_3D_Instance_Uniforms))
+	return _uniform_upload(ctx, r, &_gpu_3d_identity_block, size_of(Gpu_3D_Instance_Uniforms))
 }
 
 // _gpu_3d_texture_bind resolves the material texture to a bind group. Stale
@@ -1467,7 +1470,7 @@ _gpu_3d_draw_indexed :: proc(
 		use_scalar      = u32(1) if material.use_scalar else 0,
 		use_texture     = u32(1) if textured else 0,
 	}
-	offset, ok := _uniform_upload(&pass.owner.rend, &uniforms, size_of(uniforms))
+	offset, ok := _uniform_upload(pass.owner, &pass.owner.rend, &uniforms, size_of(uniforms))
 	if !ok || pass.owner.rend.active_stream_slot < 0 do return false
 	wg.RenderPassEncoderSetPipeline(pass.pass, pipeline)
 	// Dynamic offsets follow binding order: shared uniforms then instances.
@@ -1489,8 +1492,8 @@ _gpu_3d_draw_indexed :: proc(
 		entry.vertex_count * instance_count,
 		entry.index_count * instance_count,
 	)
-	_stats_pipeline_switch()
-	_stats_bind_group_switches(2)
+	_stats_pipeline_switch(pass.owner)
+	_stats_bind_group_switches(pass.owner, 2)
 	return true
 }
 
@@ -1596,7 +1599,7 @@ _gpu_3d_buffer :: proc(data: rawptr, size: u64, usage: wg.BufferUsageFlags) -> w
 	buffer := wg.DeviceCreateBuffer(g.device, &{usage = usage | {.CopyDst}, size = size})
 	if buffer == nil do return nil
 	wg.QueueWriteBuffer(g.queue, buffer, 0, data, uint(size))
-	_stats_buffer_created(false)
+	_stats_buffer_created(default_context(), false)
 	return buffer
 }
 
