@@ -489,6 +489,10 @@ def pointer_contract_present(executable: str, body: str = "") -> bool:
     contracts = contract_lines(executable)
     return all(
         re.search(rf"\b{re.escape(name)}\b\s*(?:==|!=)\s*nil", contracts)
+        or re.search(
+            rf"\breturn\b[^\n]*\b{re.escape(name)}\b\s*!=\s*nil\s*&&",
+            executable,
+        )
         for name in names
     )
 
@@ -602,6 +606,9 @@ def uncovered_risks(body: str, risks: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def is_trivial(body: str, risks: tuple[str, ...]) -> bool:
+    executable = executable_text(body)
+    if not executable.strip():
+        return True
     masked = check_odin_style.mask_source(body)
     statements = [line for line in masked.splitlines()[1:-1] if line.strip()]
     if len(statements) > 12:

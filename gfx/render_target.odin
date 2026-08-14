@@ -117,7 +117,7 @@ BeginTextureMode :: proc(target: RenderTexture2D) {
 	context_begin_texture_mode(default_context(), target)
 }
 
-// _ensure_rt_pass lazily begins the render-target pass on its own encoder.
+// context_ensure_rt_pass lazily begins the render-target pass on its own encoder.
 @(private)
 context_ensure_rt_pass :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_ensure_rt_pass: nil context")
@@ -148,11 +148,6 @@ context_ensure_rt_pass :: proc(ctx: ^Context) {
 	ctx.frame.rt_pass = wg.CommandEncoderBeginRenderPass(ctx.frame.rt_encoder, &desc)
 	_stats_render_pass(ctx)
 	ctx.frame.rt_pass_begun = true
-}
-
-@(private)
-_ensure_rt_pass :: proc() {
-	context_ensure_rt_pass(default_context())
 }
 
 // EndTextureMode flushes and submits the render-target pass, then restores the

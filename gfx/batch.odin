@@ -516,7 +516,7 @@ renderer_init :: proc(ctx: ^Context, r: ^Renderer) -> bool {
 		},
 	)
 	r.shader = shader
-	if !_stream_slots_init(r, device, gpu_budget_context(ctx)) do return false
+	if !_stream_slots_init(ctx, r, device, gpu_budget_context(ctx)) do return false
 
 	// group(0): projection uniform
 	r.ubind_layout = wg.DeviceCreateBindGroupLayout(
@@ -1177,8 +1177,9 @@ _stream_buffer_create :: proc(
 // _geometry_upload_transient). Returns false when even the floor-sized pools
 // cannot be allocated, leaving the caller to decide the context's fate.
 @(private)
-_stream_slots_init :: proc(r: ^Renderer, device: wg.Device, budget: Gpu_Budget) -> bool {
-	assert(r != nil, "_stream_slots_init: nil renderer")
+_stream_slots_init :: proc(ctx: ^Context, r: ^Renderer, device: wg.Device, budget: Gpu_Budget) -> bool {
+	assert(ctx != nil, "_stream_slots_init: nil context")
+	assert(r == &ctx.rend, "_stream_slots_init: foreign renderer")
 	assert(device != nil, "_stream_slots_init: nil device")
 	assert(budget.geometry_stream_bytes > 0, "_stream_slots_init: empty geometry budget")
 	assert(budget.uniform_stream_bytes > 0, "_stream_slots_init: empty uniform budget")
@@ -1210,8 +1211,8 @@ _stream_slots_init :: proc(r: ^Renderer, device: wg.Device, budget: Gpu_Budget) 
 			fmt.eprintln("gfx: GPU stream buffer allocation failed; device out of memory")
 			return false
 		}
-		_stats_buffer_created(default_context(), false)
-		_stats_buffer_created(default_context(), false)
+		_stats_buffer_created(ctx, false)
+		_stats_buffer_created(ctx, false)
 		slot.geometry_buffer = geometry
 		slot.uniform_buffer = uniform
 		// Every slot shares one reservation bound, so a slot that had to

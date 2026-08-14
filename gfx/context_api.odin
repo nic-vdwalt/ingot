@@ -179,22 +179,6 @@ frame_end_mode_3d :: proc(frame: ^Frame) {
 	context_end_mode_3d(frame_owner(frame))
 }
 
-Context_Scope :: struct {
-	previous: ^Context,
-	active:   bool,
-}
-
-context_scope_enter :: proc(ctx: ^Context) -> Context_Scope {
-	assert(ctx != nil, "context_scope_enter: nil context")
-	return {previous = _context_activate(ctx), active = true}
-}
-
-context_scope_leave :: proc(scope: ^Context_Scope) {
-	assert(scope != nil && scope.active, "context_scope_leave: invalid scope")
-	_context_restore(scope.previous)
-	scope.active = false
-}
-
 context_get_char_pressed :: proc(ctx: ^Context) -> rune {
 	return context_get_char_pressed_impl(ctx)
 }

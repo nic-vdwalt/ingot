@@ -9,7 +9,7 @@ from pathlib import Path
 
 import check_odin_style
 
-EXCLUDED_SUFFIXES = ("_test.odin", "_fuzz_test.odin")
+EXCLUDED_SUFFIXES = ("_test.odin", "_tests.odin", "_fuzz_test.odin")
 DIRECT_GLOBAL = re.compile(r"(?<![A-Za-z0-9_])g(?![A-Za-z0-9_])")
 CONTEXT_ESCAPE = re.compile(r"\b(?:active_context|default_context|context_scope_enter)\s*\(")
 UI_GFX_IMPLICIT_DRAW = re.compile(

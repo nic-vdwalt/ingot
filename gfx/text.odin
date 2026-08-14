@@ -106,11 +106,6 @@ context_get_atlas :: proc(ctx: ^Context, id: u32) -> ^Atlas {
 	return slot.entry
 }
 
-@(private)
-get_atlas :: proc(id: u32) -> ^Atlas {
-	return context_get_atlas(default_context(), id)
-}
-
 context_load_font_from_memory_impl :: proc(
 	ctx: ^Context,
 	fileType: cstring,

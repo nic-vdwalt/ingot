@@ -347,32 +347,6 @@ default_context :: proc() -> ^Context {
 	return &default_context_storage
 }
 
-@(private)
-active_context :: proc() -> ^Context {
-	assert(g != nil, "active_context: nil context")
-	return g
-}
-
-@(private)
-_context_activate :: proc(ctx: ^Context) -> ^Context {
-	assert(ctx != nil, "_context_activate: nil context")
-	previous := g
-	g = ctx
-	context_activation_depth += 1
-	return previous
-}
-
-@(private)
-_context_restore :: proc(previous: ^Context) {
-	assert(previous != nil, "_context_restore: nil context")
-	assert(context_activation_depth > 0, "_context_restore: unbalanced activation")
-	context_activation_depth -= 1
-	g = previous
-}
-
-@(thread_local, private)
-context_activation_depth: int
-
 context_epoch :: proc(ctx: ^Context) -> u64 {
 	if ctx == nil do return 0
 	return ctx.epoch
@@ -770,11 +744,11 @@ context_clear_background :: proc(ctx: ^Context, c: Color) {
 	ctx.frame.clear_color = c
 }
 
-// _ensure_pass lazily begins the frame render pass so ClearBackground (called
-// after BeginDrawing in raylib order) can set the loadOp clear value first.
+// context_ensure_pass lazily begins the frame render pass so ClearBackground
+// (called after BeginDrawing in raylib order) can set the loadOp clear value first.
 @(private)
-_ensure_pass :: proc(ctx: ^Context) {
-	assert(ctx != nil, "_ensure_pass: nil context")
+context_ensure_pass :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_ensure_pass: nil context")
 	if !ctx.frame.has_frame || ctx.frame.pass_begun do return
 	cc := ctx.frame.clear_color
 	ctx.frame.pass = wg.CommandEncoderBeginRenderPass(
@@ -818,7 +792,7 @@ EndDrawing :: proc() {
 context_end_drawing :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_end_drawing: nil context")
 	if ctx.frame.has_frame {
-		_ensure_pass(ctx) // guarantee a clear even on empty frames
+		context_ensure_pass(ctx) // guarantee a clear even on empty frames
 		if !ctx.frame.scissor_empty {
 			renderer_flush(ctx, &ctx.rend, ctx.frame.pass, .Frame_End)
 		} else {
@@ -979,16 +953,16 @@ context_fps :: proc(ctx: ^Context) -> i32 {
 	return i32(1.0 / ctx.real_frame_time + 0.5)
 }
 
-GetScreenWidth :: proc() -> i32 {return context_screen_width(active_context())}
-GetScreenHeight :: proc() -> i32 {return context_screen_height(active_context())}
-GetWindowScaleDPI :: proc() -> Vector2 {return context_window_scale_dpi(active_context())}
-GetRenderWidth :: proc() -> i32 {return context_render_width(active_context())}
-GetRenderHeight :: proc() -> i32 {return context_render_height(active_context())}
+GetScreenWidth :: proc() -> i32 {return context_screen_width(default_context())}
+GetScreenHeight :: proc() -> i32 {return context_screen_height(default_context())}
+GetWindowScaleDPI :: proc() -> Vector2 {return context_window_scale_dpi(default_context())}
+GetRenderWidth :: proc() -> i32 {return context_render_width(default_context())}
+GetRenderHeight :: proc() -> i32 {return context_render_height(default_context())}
 
 SetTargetFPS :: proc(fps: i32) {default_context().target_fps = fps}
-GetFrameTime :: proc() -> f32 {return context_frame_time(active_context())}
-GetTime :: proc() -> f64 {return context_time(active_context())}
-GetFPS :: proc() -> i32 {return context_fps(active_context())}
+GetFrameTime :: proc() -> f32 {return context_frame_time(default_context())}
+GetTime :: proc() -> f64 {return context_time(default_context())}
+GetFPS :: proc() -> i32 {return context_fps(default_context())}
 
 context_set_window_min_size :: proc(ctx: ^Context, w, h: i32) {
 	platform_set_window_min_size(ctx, w, h)
@@ -1024,6 +998,7 @@ SetWindowPosition :: proc(x, y: i32) {
 }
 
 context_get_window_position :: proc(ctx: ^Context) -> Vector2 {
+	assert(ctx != nil, "context_get_window_position: nil context")
 	x, y := platform_window_position(ctx)
 	return {f32(x), f32(y)}
 }
@@ -1034,14 +1009,14 @@ GetWindowPosition :: proc() -> Vector2 {
 // IsWindowResized reports whether the logical window size changed at the start
 // of the current frame. A DPI-only change is not a resize; see GetWindowScaleDPI.
 IsWindowResized :: proc() -> bool {
-	return context_window_resized(active_context())
+	return context_window_resized(default_context())
 }
 
 context_window_resized :: proc(ctx: ^Context) -> bool {
 	if ctx == nil do return false
 	return ctx.resized_this_frame
 }
-SetExitKey :: proc(key: KeyboardKey) {g.inp.exit_key = key}
+SetExitKey :: proc(key: KeyboardKey) {default_context().inp.exit_key = key}
 
 GetMonitorRefreshRate :: proc(monitor: i32) -> i32 {
 	return platform_monitor_refresh_rate(default_context())
@@ -1069,17 +1044,12 @@ FlushBatch :: proc() {
 // When a render target is bound (BeginTextureMode) the batch records into the
 // target's pass on its own command encoder; otherwise the swapchain pass.
 
-// active_pass returns the render pass the batch renderer should record into.
+// context_active_pass returns the render pass the batch renderer should record into.
 @(private)
 context_active_pass :: proc(ctx: ^Context) -> wg.RenderPassEncoder {
 	assert(ctx != nil, "context_active_pass: nil context")
 	if ctx.frame.rt != 0 do return ctx.frame.rt_pass
 	return ctx.frame.pass
-}
-
-@(private)
-active_pass :: proc() -> wg.RenderPassEncoder {
-	return context_active_pass(default_context())
 }
 
 // _cur_target_format returns the wgpu colour format of the pass draws currently
@@ -1095,7 +1065,7 @@ _cur_target_format :: proc(ctx: ^Context) -> wg.TextureFormat {
 	return ctx.format
 }
 
-// _active_pass_begun reports whether the active pass has begun.
+// context_active_pass_begun reports whether the active pass has begun.
 @(private)
 context_active_pass_begun :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "context_active_pass_begun: nil context")
@@ -1104,16 +1074,11 @@ context_active_pass_begun :: proc(ctx: ^Context) -> bool {
 	return ctx.frame.pass_begun
 }
 
-@(private)
-_active_pass_begun :: proc() -> bool {
-	return context_active_pass_begun(default_context())
-}
-
-// _attachment_px returns the real pixel dimensions of the current 2D pass
-// target: the bound render target, else the configured swapchain surface.
-// g.config is authoritative for the swapchain texture size (kept in lockstep
+// context_attachment_px returns the real pixel dimensions of the current 2D
+// pass target: the bound render target, else the configured swapchain surface.
+// ctx.config is authoritative for the swapchain texture size (kept in lockstep
 // with SurfaceConfigure), so scissor rects computed from it can never exceed
-// the attachment even if g.fb_width lags an async web resize for a frame.
+// the attachment even if ctx.fb_width lags an async web resize for a frame.
 @(private)
 context_attachment_px :: proc(ctx: ^Context) -> (f32, f32) {
 	assert(ctx != nil, "context_attachment_px: nil context")
@@ -1121,24 +1086,14 @@ context_attachment_px :: proc(ctx: ^Context) -> (f32, f32) {
 	return f32(max(ctx.config.width, 1)), f32(max(ctx.config.height, 1))
 }
 
-@(private)
-_attachment_px :: proc() -> (f32, f32) {
-	return context_attachment_px(default_context())
-}
-
-// _ensure_active_pass lazily begins whichever pass is current: the render
-// target's pass while one is bound, otherwise the swapchain pass.
+// context_ensure_active_pass lazily begins whichever pass is current: the
+// render target's pass while one is bound, otherwise the swapchain pass.
 @(private)
 context_ensure_active_pass :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_ensure_active_pass: nil context")
 	if ctx.frame.rt != 0 {
 		context_ensure_rt_pass(ctx)
 	} else {
-		_ensure_pass(ctx)
+		context_ensure_pass(ctx)
 	}
-}
-
-@(private)
-_ensure_active_pass :: proc() {
-	context_ensure_active_pass(default_context())
 }

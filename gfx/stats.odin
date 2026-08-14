@@ -243,11 +243,6 @@ _stats_queue_submission :: proc(ctx: ^Context) {
 }
 
 @(private)
-_stats_cpu_times :: proc(frame, encode, submit, present: f64) {
-	_stats_context_cpu_times(default_context(), frame, encode, submit, present)
-}
-
-@(private)
 _stats_context_cpu_times :: proc(ctx: ^Context, frame, encode, submit, present: f64) {
 	when RENDER_STATS_ENABLED {
 		assert(ctx != nil, "_stats_context_cpu_times: nil context")

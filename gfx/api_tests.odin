@@ -25,7 +25,7 @@ context_queries_are_isolated :: proc(t: ^testing.T) {
 }
 
 @(test)
-context_scope_does_not_reroute_default_input_wrappers :: proc(t: ^testing.T) {
+default_input_wrappers_and_explicit_context_are_isolated :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()
 	ctx := new(Context)
@@ -49,7 +49,6 @@ context_scope_does_not_reroute_default_input_wrappers :: proc(t: ^testing.T) {
 	ctx.inp.key_down[KeyboardKey.A] = true
 	ctx.inp.mb_down[MouseButton.LEFT] = true
 
-	scope := context_scope_enter(ctx)
 	testing.expect_value(t, GetMousePosition(), Vector2{10, 20})
 	testing.expect(t, !IsKeyPressed(.A))
 	testing.expect(t, !IsKeyDown(.A))
@@ -58,7 +57,6 @@ context_scope_does_not_reroute_default_input_wrappers :: proc(t: ^testing.T) {
 	testing.expect(t, context_is_key_pressed(ctx, .A))
 	testing.expect(t, context_is_key_down(ctx, .A))
 	testing.expect(t, context_is_mouse_button_down(ctx, .LEFT))
-	context_scope_leave(&scope)
 }
 
 @(test)

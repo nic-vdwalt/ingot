@@ -39,16 +39,15 @@ when INGOT_DEFAULT_FONT {
 	// use. The bake needs a live GPU device, so it reports false until the
 	// context is initialized; callers must not draw with a false result.
 	//
-	// The context is explicit rather than read from the active-context global
-	// so ownership is visible: the atlas is cached on ctx.resources, and
-	// context teardown clears it along with the atlas slot it refers to.
+	// The context is explicit so ownership is visible: the atlas is cached on
+	// ctx.resources, and context teardown clears it with its atlas slot.
 	@(private)
 	_default_font :: proc(ctx: ^Context) -> (Font, bool) {
 		assert(ctx != nil, "_default_font: nil context")
 		resources := &ctx.resources
 		if resources.default_font_baked {
 			font := resources.default_font
-			return font, get_atlas(font._atlas) != nil
+			return font, context_get_atlas(ctx, font._atlas) != nil
 		}
 		if !ctx.initialized do return {}, false
 
@@ -76,7 +75,7 @@ when INGOT_DEFAULT_FONT {
 	// bitmap font needing fontSize/10 added back between glyphs, whereas the
 	// embedded TTF's own advances already include it.
 	GetFontDefault :: proc() -> Font {
-		font, ok := _default_font(active_context())
+		font, ok := _default_font(default_context())
 		if !ok do return {}
 		return font
 	}

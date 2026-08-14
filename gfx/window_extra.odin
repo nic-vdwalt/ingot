@@ -89,11 +89,6 @@ _drop_paths_clear_context :: proc(ctx: ^Context) {
 }
 
 @(private)
-_drop_paths_clear :: proc() {
-	_drop_paths_clear_context(g)
-}
-
-@(private)
 _drop_paths_replace_context :: proc(ctx: ^Context, paths: []string) -> bool {
 	assert(ctx != nil, "_drop_paths_replace_context: nil context")
 	assert(len(paths) <= MAX_DROPPED_FILES, "_drop_paths_replace_context: too many paths")
@@ -108,11 +103,6 @@ _drop_paths_replace_context :: proc(ctx: ^Context, paths: []string) -> bool {
 	for path in paths do append(&ctx.drop.paths, strings.clone_to_cstring(path))
 	_drop_complete_context(ctx)
 	return true
-}
-
-@(private)
-_drop_paths_replace :: proc(paths: []string) -> bool {
-	return _drop_paths_replace_context(default_context(), paths)
 }
 
 @(private)
@@ -185,9 +175,4 @@ _drop_native_shutdown_context :: proc(ctx: ^Context) {
 	assert(ctx != nil, "_drop_native_shutdown_context: nil context")
 	_drop_paths_clear_context(ctx)
 	_drop_state_reset_context(ctx)
-}
-
-@(private)
-_drop_native_shutdown :: proc() {
-	_drop_native_shutdown_context(default_context())
 }

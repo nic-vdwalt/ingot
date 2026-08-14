@@ -541,6 +541,7 @@ context_target_dims_i32 :: proc(ctx: ^Context) -> (i32, i32) {
 
 @(private)
 context_target_dims :: proc(ctx: ^Context) -> (f32, f32) {
+	assert(ctx != nil, "context_target_dims: nil context")
 	width, height := context_target_dims_i32(ctx)
 	return f32(width), f32(height)
 }
@@ -558,6 +559,7 @@ _project_dims :: proc(vp: Matrix, p: Vector3, w, h: f32) -> (Vector2, bool) {
 
 @(private)
 context_project :: proc(ctx: ^Context, vp: Matrix, p: Vector3) -> (Vector2, bool) {
+	assert(ctx != nil, "context_project: nil context")
 	w, h := context_target_dims(ctx)
 	return _project_dims(vp, p, w, h)
 }

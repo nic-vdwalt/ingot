@@ -760,6 +760,7 @@ context_load_dropped_files :: proc(ctx: ^Context) -> FilePathList {
 		"context_load_dropped_files: count out of bounds",
 	)
 	for i in 0 ..< count {
+		assert(i >= 0 && i < len(ctx.drop.web_names), "context_load_dropped_files: bad index")
 		ctx.drop.web_names[i] = {}
 		n := _js_drop_name_copy(i, raw_data(ctx.drop.web_names[i][:]), DROP_NAME_MAX - 1)
 		assert(n < DROP_NAME_MAX, "context_load_dropped_files: name overflow")

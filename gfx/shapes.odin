@@ -174,11 +174,6 @@ _context_rect :: proc(ctx: ^Context, x, y, w, h: f32, color: Color) {
 	context_draw_rectangle_rec(ctx, {x, y, w, h}, color)
 }
 
-@(private)
-_rect :: proc(x, y, w, h: f32, color: Color) {
-	_context_rect(default_context(), x, y, w, h, color)
-}
-
 // --- rounded rectangles ----------------------------------------------------
 
 context_draw_rectangle_rounded :: proc(

@@ -3,6 +3,8 @@ package gfx
 
 import "core:testing"
 
+_ :: testing
+
 when INGOT_INPUT_SIM {
 	@(test)
 	input_sim_isolated_between_contexts :: proc(t: ^testing.T) {

@@ -108,11 +108,6 @@ context_shader_get :: proc(ctx: ^Context, id: u32) -> ^Shader_Entry {
 	return slot.entry
 }
 
-@(private)
-_shader_get :: proc(id: u32) -> ^Shader_Entry {
-	return context_shader_get(default_context(), id)
-}
-
 // _default_tex lazily creates a 1×1 white texture to fill unset extra slots.
 @(private)
 _default_tex :: proc(ctx: ^Context) -> u32 {

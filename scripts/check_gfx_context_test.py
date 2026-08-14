@@ -53,6 +53,26 @@ third :: proc() {
             },
         )
 
+    def test_default_context_facade_is_not_a_direct_global_read(self):
+        source = '''Draw :: proc() {
+	context_draw(default_context())
+}
+'''
+        self.assertEqual(check_gfx_context.counts_for_source(source, "gfx/x.odin"), {})
+        self.assertEqual(
+            check_gfx_context.counts_for_source(
+                source,
+                "gfx/x.odin",
+                check_gfx_context.CONTEXT_ESCAPE,
+            ),
+            {"gfx/x.odin:Draw": 1},
+        )
+
+    def test_test_source_suffixes_are_excluded(self):
+        self.assertTrue("gfx/x_test.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))
+        self.assertTrue("gfx/x_tests.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))
+        self.assertTrue("gfx/x_fuzz_test.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))
+
     def test_active_context_does_not_hide_other_direct_global_reads(self):
         source = '''p :: proc() {
 	ctx := active_context()

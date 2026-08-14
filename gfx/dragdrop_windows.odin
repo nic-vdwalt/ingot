@@ -226,7 +226,9 @@ dd_drop :: proc "system" (
 			accepted += 1
 		}
 	}
-	if _drop_paths_replace_context(g_dd_owner, paths[:accepted]) && effect != nil do effect^ = DD_EFFECT_COPY
+	if _drop_paths_replace_context(g_dd_owner, paths[:accepted]) && effect != nil {
+		effect^ = DD_EFFECT_COPY
+	}
 	if g_dd_owner != nil do _idle_note_activity(&g_dd_owner.idle)
 	return win.S_OK
 }

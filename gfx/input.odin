@@ -288,6 +288,7 @@ IsKeyDown :: proc(key: KeyboardKey) -> bool {
 
 context_get_char_pressed_impl :: proc(ctx: ^Context) -> rune {
 	if ctx == nil || ctx.inp.char_h == ctx.inp.char_t do return 0
+	assert(ctx.inp.char_h >= 0 && ctx.inp.char_h < CHAR_Q, "GetCharPressed: bad head")
 	r := ctx.inp.char_q[ctx.inp.char_h]
 	ctx.inp.char_h = (ctx.inp.char_h + 1) % CHAR_Q
 	return r
@@ -299,6 +300,7 @@ GetCharPressed :: proc() -> rune {
 
 context_get_key_pressed :: proc(ctx: ^Context) -> KeyboardKey {
 	if ctx == nil || ctx.inp.key_h == ctx.inp.key_t do return .KEY_NULL
+	assert(ctx.inp.key_h >= 0 && ctx.inp.key_h < CHAR_Q, "GetKeyPressed: bad head")
 	k := ctx.inp.key_q[ctx.inp.key_h]
 	ctx.inp.key_h = (ctx.inp.key_h + 1) % CHAR_Q
 	return k
@@ -466,6 +468,7 @@ GetMouseX :: proc() -> i32 {return context_get_mouse_x(default_context())}
 GetMouseY :: proc() -> i32 {return context_get_mouse_y(default_context())}
 
 context_get_mouse_wheel_move :: proc(ctx: ^Context) -> f32 {
+	assert(ctx != nil, "context_get_mouse_wheel_move: nil context")
 	wheel := context_get_mouse_wheel_move_v(ctx)
 	if abs(wheel.x) > abs(wheel.y) do return wheel.x
 	return wheel.y

@@ -204,7 +204,9 @@ platform_sleep :: proc(seconds: f64) {
 
 @(private)
 platform_set_window_min_size :: proc(ctx: ^Context, w, h: i32) {
-	if ctx != nil && ctx.win != nil do glfw.SetWindowSizeLimits(_context_window(ctx), w, h, glfw.DONT_CARE, glfw.DONT_CARE)
+	if ctx != nil && ctx.win != nil {
+		glfw.SetWindowSizeLimits(_context_window(ctx), w, h, glfw.DONT_CARE, glfw.DONT_CARE)
+	}
 }
 
 @(private)
