@@ -119,7 +119,7 @@ _ensure_rt_pass :: proc() {
 	// attach a depth buffer here (attaching one would mismatch those pipelines).
 	// depth textures created via rlgl.LoadTextureDepth are simply unused.
 	g.frame.rt_pass = wg.CommandEncoderBeginRenderPass(g.frame.rt_encoder, &desc)
-	_stats_render_pass()
+	_stats_render_pass(g)
 	g.frame.rt_pass_begun = true
 }
 
@@ -135,10 +135,10 @@ EndTextureMode :: proc() {
 		renderer_flush(&g.rend, g.frame.rt_pass, .Target)
 		wg.RenderPassEncoderEnd(g.frame.rt_pass)
 		wg.RenderPassEncoderRelease(g.frame.rt_pass)
-		assert(_stream_slot_upload(&g.rend))
+		assert(_stream_slot_upload(g, &g.rend))
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(g, g.frame.rt_encoder, true)
 		_stats_cpu_times(0, encode_elapsed, submit_elapsed, 0)
-		_stats_queue_submission()
+		_stats_queue_submission(g)
 		wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(g.frame.rt_encoder)
 	}

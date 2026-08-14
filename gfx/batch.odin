@@ -606,10 +606,11 @@ renderer_state_reset :: proc(r: ^Renderer) {
 	r.cur_blend = .Alpha
 }
 
-renderer_frame_begin :: proc(r: ^Renderer) -> bool {
-	assert(r != nil, "renderer_frame_begin: nil r")
-	if !_stream_slot_acquire(r, _submission_completed(&g.submissions)) {
-		_stats_stream_slot_exhaustion()
+renderer_frame_begin :: proc(ctx: ^Context, r: ^Renderer) -> bool {
+	assert(ctx != nil, "renderer_frame_begin: nil context")
+	assert(r == &ctx.rend, "renderer_frame_begin: foreign renderer")
+	if !_stream_slot_acquire(r, _submission_completed(&ctx.submissions)) {
+		_stats_stream_slot_exhaustion(ctx)
 		return false
 	}
 	retired := &r.retired_buffers[r.active_stream_slot]
@@ -1176,8 +1177,9 @@ _stream_shadow_ensure :: proc(shadow: ^[dynamic]byte, required, capacity: u64) -
 }
 
 @(private)
-_stream_slot_upload :: proc(r: ^Renderer) -> bool {
-	assert(r != nil)
+_stream_slot_upload :: proc(ctx: ^Context, r: ^Renderer) -> bool {
+	assert(ctx != nil, "_stream_slot_upload: nil context")
+	assert(r == &ctx.rend, "_stream_slot_upload: foreign renderer")
 	if r.active_stream_slot < 0 do return false
 	assert(r.active_stream_slot < len(r.stream_slots))
 	slot := &r.stream_slots[r.active_stream_slot]
@@ -1189,28 +1191,28 @@ _stream_slot_upload :: proc(r: ^Renderer) -> bool {
 		start := slot.geometry_uploaded
 		byte_count := slot.geometry_write - start
 		wg.QueueWriteBuffer(
-			g.queue,
+			ctx.queue,
 			slot.geometry_buffer,
 			start,
 			raw_data(slot.geometry_shadow[start:slot.geometry_write]),
 			uint(byte_count),
 		)
 		slot.geometry_uploaded = slot.geometry_write
-		_stats_stream_write(false, byte_count, platform_now() - started)
+		_stats_stream_write(ctx, false, byte_count, platform_now() - started)
 	}
 	if slot.uniform_write > slot.uniform_uploaded {
 		started := platform_now()
 		start := slot.uniform_uploaded
 		byte_count := slot.uniform_write - start
 		wg.QueueWriteBuffer(
-			g.queue,
+			ctx.queue,
 			slot.uniform_buffer,
 			start,
 			raw_data(slot.uniform_shadow[start:slot.uniform_write]),
 			uint(byte_count),
 		)
 		slot.uniform_uploaded = slot.uniform_write
-		_stats_stream_write(true, byte_count, platform_now() - started)
+		_stats_stream_write(ctx, true, byte_count, platform_now() - started)
 	}
 	return true
 }

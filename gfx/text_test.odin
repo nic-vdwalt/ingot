@@ -183,7 +183,7 @@ test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
 	)
 	defer {
 		UnloadFont(font)
-		if !g.frame.has_frame do _flush_retired()
+		if !g.frame.has_frame do _flush_retired(g)
 	}
 	testing.expect(t, font.glyphCount == 1, "font should contain only the initial glyph")
 
@@ -199,14 +199,14 @@ test_lazy_glyph_first_target_paint :: proc(t: ^testing.T) {
 	restore_initialized := g.initialized
 	g.initialized = true
 	defer {g.initialized = restore_initialized}
-	frame_ready := renderer_frame_begin(&g.rend)
+	frame_ready := renderer_frame_begin(g, &g.rend)
 	testing.expect(t, frame_ready, "text target test should acquire a stream slot")
 	if !frame_ready do return
 	g.frame.has_frame = true
 	defer {
 		g.frame.has_frame = false
 		_stream_slot_abandon(&g.rend)
-		_flush_retired()
+		_flush_retired(g)
 	}
 
 	target := LoadRenderTexture(TEXT_TARGET_SIZE, TEXT_TARGET_SIZE)
@@ -260,14 +260,14 @@ test_lazy_glyph_batch_boundary :: proc(t: ^testing.T, font: Font) {
 	restore_initialized := g.initialized
 	g.initialized = true
 	defer {g.initialized = restore_initialized}
-	frame_ready := renderer_frame_begin(&g.rend)
+	frame_ready := renderer_frame_begin(g, &g.rend)
 	testing.expect(t, frame_ready, "boundary test should acquire a stream slot")
 	if !frame_ready do return
 	g.frame.has_frame = true
 	defer {
 		g.frame.has_frame = false
 		_stream_slot_abandon(&g.rend)
-		_flush_retired()
+		_flush_retired(g)
 	}
 	target := LoadRenderTexture(TEXT_TARGET_SIZE, TEXT_TARGET_SIZE)
 	testing.expect(t, target.texture.id != 0, "boundary target should load")
@@ -389,7 +389,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	)
 	defer {
 		UnloadFont(f)
-		_flush_retired()
+		_flush_retired(g)
 		delete(g.resources.retire)
 		renderer_shutdown(&g.rend)
 		_submission_shutdown(&g.submissions)
@@ -415,7 +415,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	test_lazy_glyph_first_target_paint(t)
 	test_lazy_glyph_batch_boundary(t, f)
 	test_default_font_is_real(t)
-	_flush_retired()
+	_flush_retired(g)
 }
 
 // test_default_font_is_real checks that DrawText/MeasureText are backed by an

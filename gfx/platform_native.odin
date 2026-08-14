@@ -33,10 +33,22 @@ _win :: proc "contextless" () -> glfw.WindowHandle {
 	return glfw.WindowHandle(g.win)
 }
 
+@(private)
+_context_window :: proc(ctx: ^Context) -> glfw.WindowHandle {
+	assert(ctx != nil, "_context_window: nil context")
+	return glfw.WindowHandle(ctx.win)
+}
+
 // --- window / surface / lifecycle ------------------------------------------
 
 @(private)
-platform_create_window :: proc(width, height: i32, title: cstring, flags: ConfigFlags) -> bool {
+platform_create_window :: proc(
+	ctx: ^Context,
+	width, height: i32,
+	title: cstring,
+	flags: ConfigFlags,
+) -> bool {
+	assert(ctx != nil, "platform_create_window: nil context")
 	if glfw_live_windows == 0 && !glfw.Init() do return false
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 	glfw.WindowHint(glfw.RESIZABLE, .WINDOW_RESIZABLE in flags ? 1 : 0)
@@ -53,31 +65,33 @@ platform_create_window :: proc(width, height: i32, title: cstring, flags: Config
 		if glfw_live_windows == 0 do glfw.Terminate()
 		return false
 	}
-	g.win = Window_Handle(win)
-	glfw.SetWindowUserPointer(win, g)
+	ctx.win = Window_Handle(win)
+	glfw.SetWindowUserPointer(win, ctx)
 	glfw_live_windows += 1
 	return true
 }
 
 @(private)
-platform_create_surface :: proc(instance: wg.Instance) -> wg.Surface {
-	return wgglue.GetSurface(instance, _win())
+platform_create_surface :: proc(ctx: ^Context, instance: wg.Instance) -> wg.Surface {
+	assert(ctx != nil, "platform_create_surface: nil context")
+	return wgglue.GetSurface(instance, _context_window(ctx))
 }
 
 // platform_start_gpu acquires the adapter+device synchronously (wgpu-native
 // resolves the async requests via InstanceProcessEvents) and finishes context
 // setup before returning. g.instance and g.surface are already set.
 @(private)
-platform_start_gpu :: proc() {
+platform_start_gpu :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_start_gpu: nil context")
 	ares: Adapter_Res
 	wg.InstanceRequestAdapter(
-		g.instance,
-		&{compatibleSurface = g.surface},
+		ctx.instance,
+		&{compatibleSurface = ctx.surface},
 		{mode = .AllowProcessEvents, callback = _on_adapter, userdata1 = &ares},
 	)
 	// tigerstyle: allow-unbounded-loop -- adapter callback ends synchronous device setup
-	for !ares.done {wg.InstanceProcessEvents(g.instance)}
-	g.adapter = ares.adapter
+	for !ares.done {wg.InstanceProcessEvents(ctx.instance)}
+	ctx.adapter = ares.adapter
 
 	dres: Device_Res
 	// Read the adapter's limits to size our pools (limits.odin). The device
@@ -85,21 +99,21 @@ platform_start_gpu :: proc() {
 	// identical; see the requiredLimits hazard note in limits.odin.
 	// ares.adapter, not g.adapter: this leaf keeps its context reads in one
 	// place at the top rather than reaching back into the global mid-sequence.
-	g.budget = gpu_negotiate_budget(ares.adapter)
+	ctx.budget = gpu_negotiate_budget(ares.adapter)
 	dev_desc := wg.DeviceDescriptor {
 		uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error},
 	}
 	wg.AdapterRequestDevice(
-		g.adapter,
+		ctx.adapter,
 		&dev_desc,
 		{mode = .AllowProcessEvents, callback = _on_device, userdata1 = &dres},
 	)
 	// tigerstyle: allow-unbounded-loop -- device callback ends synchronous device setup
-	for !dres.done {wg.InstanceProcessEvents(g.instance)}
-	g.device = dres.device
-	g.queue = wg.DeviceGetQueue(g.device)
+	for !dres.done {wg.InstanceProcessEvents(ctx.instance)}
+	ctx.device = dres.device
+	ctx.queue = wg.DeviceGetQueue(ctx.device)
 
-	_gpu_finish()
+	_gpu_finish(ctx)
 }
 
 // platform_process_events pumps the backend event loop while gfx busy-waits for
@@ -111,25 +125,28 @@ platform_process_events :: proc(instance: wg.Instance) {
 }
 
 @(private)
-platform_framebuffer_size :: proc() -> (i32, i32) {
-	return glfw.GetFramebufferSize(_win())
+platform_framebuffer_size :: proc(ctx: ^Context) -> (i32, i32) {
+	assert(ctx != nil, "platform_framebuffer_size: nil context")
+	return glfw.GetFramebufferSize(_context_window(ctx))
 }
 
 @(private)
-platform_window_size :: proc() -> (i32, i32) {
-	return glfw.GetWindowSize(_win())
+platform_window_size :: proc(ctx: ^Context) -> (i32, i32) {
+	assert(ctx != nil, "platform_window_size: nil context")
+	return glfw.GetWindowSize(_context_window(ctx))
 }
 
 @(private)
-platform_content_scale :: proc() -> f32 {
-	sx, _ := glfw.GetWindowContentScale(_win())
+platform_content_scale :: proc(ctx: ^Context) -> f32 {
+	assert(ctx != nil, "platform_content_scale: nil context")
+	sx, _ := glfw.GetWindowContentScale(_context_window(ctx))
 	return sx
 }
 
 @(private)
-platform_should_close :: proc() -> bool {
-	if g.win == nil do return true
-	return bool(glfw.WindowShouldClose(_win()))
+platform_should_close :: proc(ctx: ^Context) -> bool {
+	if ctx == nil || ctx.win == nil do return true
+	return bool(glfw.WindowShouldClose(_context_window(ctx)))
 }
 
 @(private)
@@ -159,11 +176,13 @@ platform_window_iconified :: proc() -> bool {
 }
 
 @(private)
-platform_terminate :: proc() {
-	if g.win != nil {
-		glfw.SetWindowUserPointer(_win(), nil)
-		glfw.DestroyWindow(_win())
-		g.win = nil
+platform_terminate :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_terminate: nil context")
+	if ctx.win != nil {
+		win := _context_window(ctx)
+		glfw.SetWindowUserPointer(win, nil)
+		glfw.DestroyWindow(win)
+		ctx.win = nil
 		assert(glfw_live_windows > 0, "platform_terminate: window count underflow")
 		glfw_live_windows -= 1
 	}
@@ -460,9 +479,10 @@ platform_drop_finish_events :: proc() {
 }
 
 @(private)
-platform_drop_shutdown :: proc() {
+platform_drop_shutdown :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_drop_shutdown: nil context")
 	platform_dragdrop_shutdown()
-	if g.win != nil do glfw.SetDropCallback(_win(), nil)
+	if ctx.win != nil do glfw.SetDropCallback(_context_window(ctx), nil)
 	_drop_native_shutdown()
 }
 
