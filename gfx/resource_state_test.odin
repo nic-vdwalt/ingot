@@ -43,13 +43,14 @@ texture_pool_reuses_slots_without_aliasing :: proc(t: ^testing.T) {
 atlas_and_shader_pools_reject_stale_handles :: proc(t: ^testing.T) {
 	atlases: Atlas_Resources
 	atlas_entry: Atlas
-	old_atlas := _atlas_register(&atlases, &atlas_entry)
-	atlas_slot := _atlas_slot(&atlases, old_atlas)
+	context_id := u32(1)
+	old_atlas := _atlas_register(context_id, &atlases, &atlas_entry)
+	atlas_slot := _atlas_slot(context_id, &atlases, old_atlas)
 	atlas_slot.occupied = false
 	atlases.count -= 1
-	new_atlas := _atlas_register(&atlases, &atlas_entry)
+	new_atlas := _atlas_register(context_id, &atlases, &atlas_entry)
 	testing.expect(t, old_atlas != new_atlas)
-	testing.expect(t, _atlas_slot(&atlases, old_atlas) == nil)
+	testing.expect(t, _atlas_slot(context_id, &atlases, old_atlas) == nil)
 
 	shaders: Shader_Resources
 	shader_entry: Shader_Entry

@@ -111,7 +111,8 @@ get_atlas :: proc(id: u32) -> ^Atlas {
 	return context_get_atlas(default_context(), id)
 }
 
-LoadFontFromMemory :: proc(
+context_load_font_from_memory_impl :: proc(
+	ctx: ^Context,
 	fileType: cstring,
 	fileData: [^]u8,
 	dataSize: i32,
@@ -119,6 +120,7 @@ LoadFontFromMemory :: proc(
 	codepoints: [^]rune,
 	codepointCount: i32,
 ) -> Font {
+	assert(ctx != nil, "context_load_font_from_memory_impl: nil context")
 	// Why assert: a public entry taking a raw multipointer alongside a separate
 	// length, so the two can disagree. A negative dataSize reaches make() and
 	// then slices fileData[:dataSize]; a nil fileData with a positive length
@@ -128,13 +130,13 @@ LoadFontFromMemory :: proc(
 	assert(dataSize > 0, "LoadFontFromMemory: non-positive font data size")
 	assert(codepointCount >= 0, "LoadFontFromMemory: negative codepoint count")
 	if codepointCount > 0 do assert(codepoints != nil, "LoadFontFromMemory: nil codepoints")
-	if !_atlas_dim_supported() {
+	if !_atlas_dim_supported(ctx) {
 		// A device below the WebGPU-guaranteed texture ceiling cannot host
 		// the atlas. Return an empty font (callers already handle
 		// glyphCount == 0) instead of creating an invalid texture.
 		fmt.eprintfln(
 			"gfx: device texture limit %d below atlas dimension %d; font not loaded",
-			gpu_budget_active().atlas_dim,
+			ctx.budget.atlas_dim,
 			ATLAS_DIM,
 		)
 		return Font{}
@@ -155,20 +157,20 @@ LoadFontFromMemory :: proc(
 	a.line_adv = math.round(f32(asc - desc + gap) * a.scale)
 	a.glyphs = make(map[rune]Glyph)
 	a.filter = .BILINEAR
-	if !_atlas_gpu_init(a) {
-		_atlas_entry_destroy(default_context(), a)
+	if !_atlas_gpu_init(ctx, a) {
+		_atlas_entry_destroy(ctx, a)
 		return {}
 	}
 
 	baked: i32 = 0
 	for i in 0 ..< int(codepointCount) {
 		cp := codepoints[i]
-		if _bake_glyph(default_context(), a, cp) do baked += 1
+		if _bake_glyph(ctx, a, cp) do baked += 1
 	}
 
-	id := _atlas_register(&g.resources.atlases, a)
+	id := _atlas_register(ctx.id, &ctx.resources.atlases, a)
 	if id == 0 {
-		_atlas_entry_destroy(default_context(), a)
+		_atlas_entry_destroy(ctx, a)
 		return {}
 	}
 
@@ -185,6 +187,25 @@ LoadFontFromMemory :: proc(
 		format  = .UNCOMPRESSED_GRAYSCALE,
 	}
 	return f
+}
+
+LoadFontFromMemory :: proc(
+	fileType: cstring,
+	fileData: [^]u8,
+	dataSize: i32,
+	fontSize: i32,
+	codepoints: [^]rune,
+	codepointCount: i32,
+) -> Font {
+	return context_load_font_from_memory_impl(
+		default_context(),
+		fileType,
+		fileData,
+		dataSize,
+		fontSize,
+		codepoints,
+		codepointCount,
+	)
 }
 
 @(private)
@@ -308,11 +329,12 @@ _atlas_upload_glyph :: proc(ctx: ^Context, a: ^Atlas, cp: rune, x, y, width, hei
 }
 
 @(private)
-_atlas_gpu_init :: proc(a: ^Atlas) -> bool {
+_atlas_gpu_init :: proc(ctx: ^Context, a: ^Atlas) -> bool {
+	assert(ctx != nil, "_atlas_gpu_init: nil context")
 	assert(a != nil, "_atlas_gpu_init: nil atlas")
-	assert(g.device != nil && g.queue != nil, "_atlas_gpu_init: invalid context")
+	assert(ctx.device != nil && ctx.queue != nil, "_atlas_gpu_init: invalid context")
 	a.tex = wg.DeviceCreateTexture(
-		g.device,
+		ctx.device,
 		&{
 			usage = {.TextureBinding, .CopyDst},
 			dimension = ._2D,
@@ -325,7 +347,7 @@ _atlas_gpu_init :: proc(a: ^Atlas) -> bool {
 	if a.tex == nil do return false
 	zeros := make([]byte, ATLAS_DIM * ATLAS_DIM)
 	wg.QueueWriteTexture(
-		g.queue,
+		ctx.queue,
 		&{texture = a.tex},
 		raw_data(zeros),
 		uint(len(zeros)),
@@ -335,17 +357,18 @@ _atlas_gpu_init :: proc(a: ^Atlas) -> bool {
 	delete(zeros)
 	a.view = wg.TextureCreateView(a.tex, nil)
 	if a.view == nil do return false
-	_atlas_build_bind(a)
+	_atlas_build_bind(ctx, a)
 	return a.bind != nil
 }
 
 @(private)
-_atlas_build_bind :: proc(a: ^Atlas) {
+_atlas_build_bind :: proc(ctx: ^Context, a: ^Atlas) {
+	assert(ctx != nil, "_atlas_build_bind: nil context")
 	if a.sampler != nil do wg.SamplerRelease(a.sampler)
 	if a.bind != nil do wg.BindGroupRelease(a.bind)
 	filt: wg.FilterMode = a.filter == .POINT ? .Nearest : .Linear
 	a.sampler = wg.DeviceCreateSampler(
-		g.device,
+		ctx.device,
 		&{
 			magFilter = filt,
 			minFilter = filt,
@@ -361,8 +384,8 @@ _atlas_build_bind :: proc(a: ^Atlas) {
 		{binding = 1, sampler = a.sampler},
 	}
 	a.bind = wg.DeviceCreateBindGroup(
-		g.device,
-		&{layout = g.rend.tex_layout, entryCount = 2, entries = raw_data(entries[:])},
+		ctx.device,
+		&{layout = ctx.rend.tex_layout, entryCount = 2, entries = raw_data(entries[:])},
 	)
 }
 
@@ -391,29 +414,43 @@ _atlas_resources_destroy :: proc(ctx: ^Context, resources: ^Atlas_Resources) {
 	resources^ = {}
 }
 
-UnloadFont :: proc(font: Font) {
-	slot := _atlas_slot(&g.resources.atlases, font._atlas)
+context_unload_font_impl :: proc(ctx: ^Context, font: Font) {
+	assert(ctx != nil, "context_unload_font_impl: nil context")
+	slot := _atlas_slot(ctx.id, &ctx.resources.atlases, font._atlas)
 	if slot == nil do return
-	_atlas_entry_destroy(default_context(), slot.entry)
+	_atlas_entry_destroy(ctx, slot.entry)
 	slot.entry = nil
 	slot.occupied = false
-	assert(g.resources.atlases.count > 0, "UnloadFont: count underflow")
-	g.resources.atlases.count -= 1
+	assert(ctx.resources.atlases.count > 0, "context_unload_font_impl: count underflow")
+	ctx.resources.atlases.count -= 1
 }
 
-SetTextureFilter :: proc(texture: Texture2D, filter: TextureFilter) {
-	if e := get_texture(texture.id); e != nil {
+UnloadFont :: proc(font: Font) {
+	context_unload_font_impl(default_context(), font)
+}
+
+context_set_texture_filter_impl :: proc(
+	ctx: ^Context,
+	texture: Texture2D,
+	filter: TextureFilter,
+) {
+	assert(ctx != nil, "context_set_texture_filter_impl: nil context")
+	if e := context_get_texture(ctx, texture.id); e != nil {
 		if e.filter != filter {
 			e.filter = filter
-			_tex_build_bind(default_context(), e)
+			_tex_build_bind(ctx, e)
 		}
 		return
 	}
-	a := get_atlas(texture.id)
+	a := context_get_atlas(ctx, texture.id)
 	if a == nil do return
 	if a.filter == filter do return
 	a.filter = filter
-	_atlas_build_bind(a)
+	_atlas_build_bind(ctx, a)
+}
+
+SetTextureFilter :: proc(texture: Texture2D, filter: TextureFilter) {
+	context_set_texture_filter_impl(default_context(), texture, filter)
 }
 
 // DrawTextEx draws `text` at `position` scaled from the baked px size down to
