@@ -852,20 +852,42 @@ _emit_quad4 :: proc(
 
 // --- model transform (rlgl matrix stack + Camera2D) -------------------------
 
+context_matrix_mode_push :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_matrix_mode_push: nil context")
+	r := &ctx.rend
+	if len(r.model_stack) >= MODEL_STACK_MAX do return
+	append(&r.model_stack, r.model_xf)
+}
+
+context_matrix_mode_pop :: proc(ctx: ^Context) {
+	assert(ctx != nil, "context_matrix_mode_pop: nil context")
+	r := &ctx.rend
+	if context_active_pass_begun(ctx) {
+		renderer_flush(ctx, r, context_active_pass(ctx), .Matrix)
+	}
+	n := len(r.model_stack)
+	if n == 0 {r.model_xf = AFFINE_IDENTITY; return}
+	r.model_xf = r.model_stack[n - 1]
+	pop(&r.model_stack)
+}
+
+context_matrix_mode_translate :: proc(ctx: ^Context, x, y: f32) {
+	assert(ctx != nil, "context_matrix_mode_translate: nil context")
+	r := &ctx.rend
+	if context_active_pass_begun(ctx) {
+		renderer_flush(ctx, r, context_active_pass(ctx), .Matrix)
+	}
+	r.model_xf = _affine_translated(r.model_xf, x, y)
+}
+
 MatrixModePush :: proc() {
-	if len(g.rend.model_stack) >= MODEL_STACK_MAX do return
-	append(&g.rend.model_stack, g.rend.model_xf)
+	context_matrix_mode_push(default_context())
 }
 MatrixModePop :: proc() {
-	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Matrix)
-	n := len(g.rend.model_stack)
-	if n == 0 {g.rend.model_xf = AFFINE_IDENTITY; return}
-	g.rend.model_xf = g.rend.model_stack[n - 1]
-	pop(&g.rend.model_stack)
+	context_matrix_mode_pop(default_context())
 }
 MatrixModeTranslate :: proc(x, y: f32) {
-	if _active_pass_begun() do renderer_flush(default_context(), &g.rend, active_pass(), .Matrix)
-	g.rend.model_xf = _affine_translated(g.rend.model_xf, x, y)
+	context_matrix_mode_translate(default_context(), x, y)
 }
 
 // _batch_record_peak folds one flush's batch size into the renderer's
@@ -1462,15 +1484,21 @@ col_f :: proc(c: Color) -> [4]f32 {
 
 // SetCustomBlend records custom blend factors and rebuilds the Custom-slot
 // pipelines. Called by rlgl.SetBlendFactors (GL enums already mapped to wgpu).
-SetCustomBlend :: proc(src, dst: BlendFactorRL, op: BlendOpRL) {
+context_set_custom_blend :: proc(ctx: ^Context, src, dst: BlendFactorRL, op: BlendOpRL) {
+	assert(ctx != nil, "context_set_custom_blend: nil context")
+	r := &ctx.rend
 	ns := _rl_factor(src)
 	nd := _rl_factor(dst)
 	no := _rl_op(op)
-	if ns == g.rend.cust_src && nd == g.rend.cust_dst && no == g.rend.cust_op do return
-	g.rend.cust_src = ns
-	g.rend.cust_dst = nd
-	g.rend.cust_op = no
-	_rebuild_custom_pipes(default_context(), &g.rend)
+	if ns == r.cust_src && nd == r.cust_dst && no == r.cust_op do return
+	r.cust_src = ns
+	r.cust_dst = nd
+	r.cust_op = no
+	_rebuild_custom_pipes(ctx, r)
+}
+
+SetCustomBlend :: proc(src, dst: BlendFactorRL, op: BlendOpRL) {
+	context_set_custom_blend(default_context(), src, dst, op)
 }
 
 // GL blend enum aliases (values match rlgl / OpenGL) so rlgl can forward raw
