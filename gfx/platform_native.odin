@@ -209,29 +209,29 @@ platform_sleep :: proc(seconds: f64) {
 }
 
 @(private)
-platform_set_window_min_size :: proc(w, h: i32) {
-	if g.win != nil do glfw.SetWindowSizeLimits(_win(), w, h, glfw.DONT_CARE, glfw.DONT_CARE)
+platform_set_window_min_size :: proc(ctx: ^Context, w, h: i32) {
+	if ctx != nil && ctx.win != nil do glfw.SetWindowSizeLimits(_context_window(ctx), w, h, glfw.DONT_CARE, glfw.DONT_CARE)
 }
 
 @(private)
-platform_set_window_size :: proc(w, h: i32) {
-	if g.win != nil do glfw.SetWindowSize(_win(), w, h)
+platform_set_window_size :: proc(ctx: ^Context, w, h: i32) {
+	if ctx != nil && ctx.win != nil do glfw.SetWindowSize(_context_window(ctx), w, h)
 }
 
 @(private)
-platform_set_window_title :: proc(title: cstring) {
-	if g.win != nil do glfw.SetWindowTitle(_win(), title)
+platform_set_window_title :: proc(ctx: ^Context, title: cstring) {
+	if ctx != nil && ctx.win != nil do glfw.SetWindowTitle(_context_window(ctx), title)
 }
 
 @(private)
-platform_set_window_position :: proc(x, y: i32) {
-	if g.win != nil do glfw.SetWindowPos(_win(), x, y)
+platform_set_window_position :: proc(ctx: ^Context, x, y: i32) {
+	if ctx != nil && ctx.win != nil do glfw.SetWindowPos(_context_window(ctx), x, y)
 }
 
 @(private)
-platform_window_position :: proc() -> (i32, i32) {
-	if g.win == nil do return 0, 0
-	return glfw.GetWindowPos(_win())
+platform_window_position :: proc(ctx: ^Context) -> (i32, i32) {
+	if ctx == nil || ctx.win == nil do return 0, 0
+	return glfw.GetWindowPos(_context_window(ctx))
 }
 
 PLATFORM_MONITORS_MAX :: 16
@@ -286,8 +286,9 @@ platform_window_monitor :: proc(window: glfw.WindowHandle) -> glfw.MonitorHandle
 }
 
 @(private)
-platform_monitor_refresh_rate :: proc() -> i32 {
-	monitor := platform_window_monitor(_win())
+platform_monitor_refresh_rate :: proc(ctx: ^Context) -> i32 {
+	if ctx == nil || ctx.win == nil do return 0
+	monitor := platform_window_monitor(_context_window(ctx))
 	if monitor == nil do return 0
 	mode := glfw.GetVideoMode(monitor)
 	if mode == nil || mode.refresh_rate <= 0 do return 0
@@ -295,21 +296,21 @@ platform_monitor_refresh_rate :: proc() -> i32 {
 }
 
 @(private)
-platform_window_focused :: proc() -> bool {
-	if g.win == nil do return false
-	return glfw.GetWindowAttrib(_win(), glfw.FOCUSED) != 0
+platform_window_focused :: proc(ctx: ^Context) -> bool {
+	if ctx == nil || ctx.win == nil do return false
+	return glfw.GetWindowAttrib(_context_window(ctx), glfw.FOCUSED) != 0
 }
 
 @(private)
-platform_set_window_icon :: proc(image: Image) {
-	if g.win == nil || image.data == nil do return
+platform_set_window_icon :: proc(ctx: ^Context, image: Image) {
+	if ctx == nil || ctx.win == nil || image.data == nil do return
 	img := glfw.Image {
 		width  = image.width,
 		height = image.height,
 		pixels = ([^]u8)(image.data),
 	}
 	imgs := [1]glfw.Image{img}
-	glfw.SetWindowIcon(_win(), imgs[:])
+	glfw.SetWindowIcon(_context_window(ctx), imgs[:])
 }
 
 // --- input -----------------------------------------------------------------
@@ -492,7 +493,7 @@ platform_drop_shutdown :: proc(ctx: ^Context) {
 	assert(ctx != nil, "platform_drop_shutdown: nil context")
 	platform_dragdrop_shutdown()
 	if ctx.win != nil do glfw.SetDropCallback(_context_window(ctx), nil)
-	_drop_native_shutdown()
+	_drop_native_shutdown_context(ctx)
 }
 
 // platform_gamepad_poll snapshots every gamepad slot from GLFW's SDL-mapping

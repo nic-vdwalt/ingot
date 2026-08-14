@@ -336,39 +336,40 @@ platform_window_iconified :: proc() -> bool {
 }
 
 @(private)
-platform_set_window_min_size :: proc(w, h: i32) {}
+platform_set_window_min_size :: proc(ctx: ^Context, w, h: i32) {}
 
 @(private)
-platform_set_window_size :: proc(w, h: i32) {}
+platform_set_window_size :: proc(ctx: ^Context, w, h: i32) {}
 
 // The page owns the document title, so this is the one window property a
 // browser can honour. Position is genuinely unavailable: a canvas has no
 // position on a monitor, and the page cannot move its own window.
 @(private)
-platform_set_window_title :: proc(title: cstring) {
+platform_set_window_title :: proc(ctx: ^Context, title: cstring) {
+	assert(ctx != nil, "platform_set_window_title: nil context")
 	_js_set_window_title(title)
 }
 
 @(private)
-platform_set_window_position :: proc(x, y: i32) {}
+platform_set_window_position :: proc(ctx: ^Context, x, y: i32) {}
 
 @(private)
-platform_window_position :: proc() -> (i32, i32) {
+platform_window_position :: proc(ctx: ^Context) -> (i32, i32) {
 	return 0, 0
 }
 
 @(private)
-platform_monitor_refresh_rate :: proc() -> i32 {
+platform_monitor_refresh_rate :: proc(ctx: ^Context) -> i32 {
 	return 60
 }
 
 @(private)
-platform_window_focused :: proc() -> bool {
+platform_window_focused :: proc(ctx: ^Context) -> bool {
 	return true
 }
 
 @(private)
-platform_set_window_icon :: proc(image: Image) {}
+platform_set_window_icon :: proc(ctx: ^Context, image: Image) {}
 
 // --- input: DOM → shared Input struct --------------------------------------
 //
@@ -427,7 +428,8 @@ platform_input_init :: proc(ctx: ^Context) {
 // caret and focused so browser composition events (Pinyin, Japanese, dead
 // keys) fire; the canvas alone never receives them.
 @(private)
-platform_set_text_input_rect :: proc(x, y, w, h: i32) {
+platform_set_text_input_rect :: proc(ctx: ^Context, x, y, w, h: i32) {
+	assert(ctx != nil, "platform_set_text_input_rect: nil context")
 	_js_ime_rect(x, y, w, h, 1)
 }
 

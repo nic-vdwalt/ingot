@@ -117,15 +117,20 @@ _screenshot_map_done :: proc "c" (
 // _screenshot_copy copies the whole texture into a fresh MapRead staging buffer
 // and submits that copy. The caller owns the returned buffer.
 @(private)
-_screenshot_copy :: proc(texture: wg.Texture, width, height, padded_bpr: int) -> wg.Buffer {
+_screenshot_copy :: proc(
+	ctx: ^Context,
+	texture: wg.Texture,
+	width, height, padded_bpr: int,
+) -> wg.Buffer {
+	assert(ctx != nil, "_screenshot_copy: nil context")
 	assert(texture != nil, "_screenshot_copy: nil texture")
 	assert(padded_bpr >= width * 4, "_screenshot_copy: row alignment underflow")
 	staging := wg.DeviceCreateBuffer(
-		g.device,
+		ctx.device,
 		&{usage = {.CopyDst, .MapRead}, size = u64(padded_bpr * height)},
 	)
 	if staging == nil do return nil
-	encoder := wg.DeviceCreateCommandEncoder(g.device, nil)
+	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
 	if encoder == nil {
 		wg.BufferRelease(staging)
 		return nil
@@ -141,7 +146,7 @@ _screenshot_copy :: proc(texture: wg.Texture, width, height, padded_bpr: int) ->
 	extent := wg.Extent3D{u32(width), u32(height), 1}
 	wg.CommandEncoderCopyTextureToBuffer(encoder, &source, &destination, &extent)
 	command := wg.CommandEncoderFinish(encoder, nil)
-	wg.QueueSubmit(g.queue, {command})
+	wg.QueueSubmit(ctx.queue, {command})
 	wg.CommandBufferRelease(command)
 	wg.CommandEncoderRelease(encoder)
 	return staging
@@ -150,7 +155,8 @@ _screenshot_copy :: proc(texture: wg.Texture, width, height, padded_bpr: int) ->
 // _screenshot_map blocks until `staging` is host-readable. The poll count is
 // capped so a lost device fails instead of hanging the capture process.
 @(private)
-_screenshot_map :: proc(staging: wg.Buffer, size: int) -> bool {
+_screenshot_map :: proc(ctx: ^Context, staging: wg.Buffer, size: int) -> bool {
+	assert(ctx != nil, "_screenshot_map: nil context")
 	assert(staging != nil, "_screenshot_map: nil staging buffer")
 	assert(size > 0, "_screenshot_map: empty mapping")
 	state := Screenshot_Map{}
@@ -163,7 +169,7 @@ _screenshot_map :: proc(staging: wg.Buffer, size: int) -> bool {
 	)
 	for _ in 0 ..< SCREENSHOT_MAX_POLLS {
 		if state.done do return state.status == .Success
-		wg.DevicePoll(g.device, true, nil)
+		wg.DevicePoll(ctx.device, true, nil)
 	}
 	return false
 }
@@ -172,10 +178,16 @@ _screenshot_map :: proc(staging: wg.Buffer, size: int) -> bool {
 // RGBA8 buffer. Returns ok=false without allocating when the target is invalid,
 // its format is not encodable, or the GPU readback fails.
 @(private)
-_screenshot_pixels :: proc(target: RenderTexture2D) -> (pixels: []u8, ok: bool) {
-	assert(g != nil, "_screenshot_pixels: no active context")
-	if !g.initialized do return nil, false
-	entry := get_texture(target.texture.id)
+context_screenshot_pixels :: proc(
+	ctx: ^Context,
+	target: RenderTexture2D,
+) -> (
+	pixels: []u8,
+	ok: bool,
+) {
+	assert(ctx != nil, "context_screenshot_pixels: nil context")
+	if !ctx.initialized do return nil, false
+	entry := context_get_texture(ctx, target.texture.id)
 	if entry == nil do return nil, false
 	assert(entry.tex != nil, "_screenshot_pixels: registered entry without a texture")
 	width, height := int(entry.width), int(entry.height)
@@ -185,14 +197,14 @@ _screenshot_pixels :: proc(target: RenderTexture2D) -> (pixels: []u8, ok: bool) 
 	if !encodable do return nil, false
 
 	padded_bpr := _screenshot_padded_bpr(width)
-	staging := _screenshot_copy(entry.tex, width, height, padded_bpr)
+	staging := _screenshot_copy(ctx, entry.tex, width, height, padded_bpr)
 	if staging == nil do return nil, false
 	defer {
 		wg.BufferDestroy(staging)
 		wg.BufferRelease(staging)
 	}
 	size := padded_bpr * height
-	if !_screenshot_map(staging, size) do return nil, false
+	if !_screenshot_map(ctx, staging, size) do return nil, false
 	mapped := wg.BufferGetConstMappedRange(staging, 0, uint(size))
 	if mapped == nil do return nil, false
 
@@ -210,20 +222,33 @@ _screenshot_pixels :: proc(target: RenderTexture2D) -> (pixels: []u8, ok: bool) 
 	return out, true
 }
 
+@(private)
+_screenshot_pixels :: proc(target: RenderTexture2D) -> (pixels: []u8, ok: bool) {
+	return context_screenshot_pixels(default_context(), target)
+}
+
 // SaveRenderTexturePng reads `target` back from the GPU and writes it to `path`
 // as an upright RGBA8 PNG. Returns false when the target is invalid, its format
 // is not encodable, the readback fails, or the file cannot be written.
 //
 // Call it outside BeginTextureMode..EndTextureMode: EndTextureMode submits the
 // target's pass, so the contents are complete by the time this copy runs.
-SaveRenderTexturePng :: proc(target: RenderTexture2D, path: string) -> bool {
-	assert(len(path) > 0, "SaveRenderTexturePng: empty path")
-	assert(target.texture.id != 0 || target.id == 0, "SaveRenderTexturePng: torn target handle")
+context_save_render_texture_png :: proc(
+	ctx: ^Context,
+	target: RenderTexture2D,
+	path: string,
+) -> bool {
+	assert(ctx != nil, "context_save_render_texture_png: nil context")
+	assert(len(path) > 0, "context_save_render_texture_png: empty path")
+	assert(
+		target.texture.id != 0 || target.id == 0,
+		"context_save_render_texture_png: torn target handle",
+	)
 	if len(path) == 0 do return false
-	pixels, ok := _screenshot_pixels(target)
+	pixels, ok := context_screenshot_pixels(ctx, target)
 	if !ok do return false
 	defer delete(pixels)
-	entry := get_texture(target.texture.id)
+	entry := context_get_texture(ctx, target.texture.id)
 	if entry == nil do return false
 	assert(len(pixels) == int(entry.width) * int(entry.height) * 4)
 
@@ -238,4 +263,8 @@ SaveRenderTexturePng :: proc(target: RenderTexture2D, path: string) -> bool {
 		entry.width * 4,
 	)
 	return written != 0
+}
+
+SaveRenderTexturePng :: proc(target: RenderTexture2D, path: string) -> bool {
+	return context_save_render_texture_png(default_context(), target, path)
 }

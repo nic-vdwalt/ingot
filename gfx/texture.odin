@@ -630,6 +630,10 @@ UnloadImage :: proc(image: Image) {
 
 // SetWindowIcon sets the window icon from a decoded RGBA image (native only;
 // no-op on web where the browser owns the tab/favicon).
+context_set_window_icon :: proc(ctx: ^Context, image: Image) {
+	platform_set_window_icon(ctx, image)
+}
+
 SetWindowIcon :: proc(image: Image) {
-	platform_set_window_icon(image)
+	context_set_window_icon(default_context(), image)
 }

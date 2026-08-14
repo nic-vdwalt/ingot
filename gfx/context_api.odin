@@ -182,17 +182,11 @@ context_is_mouse_button_down :: proc(ctx: ^Context, button: MouseButton) -> bool
 }
 
 context_window_focused :: proc(ctx: ^Context) -> bool {
-	if ctx == nil do return false
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return IsWindowFocused()
+	return platform_window_focused(ctx)
 }
 
 context_window_fullscreen :: proc(ctx: ^Context) -> bool {
-	if ctx == nil do return false
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return IsWindowFullscreen()
+	return context_is_window_fullscreen(ctx)
 }
 
 context_get_clipboard_text :: proc(ctx: ^Context) -> cstring {
@@ -222,9 +216,7 @@ context_set_target_fps :: proc(ctx: ^Context, fps: i32) {
 
 context_monitor_refresh_rate :: proc(ctx: ^Context) -> i32 {
 	if ctx == nil || !context_ready(ctx) do return 0
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return platform_monitor_refresh_rate()
+	return platform_monitor_refresh_rate(ctx)
 }
 
 context_set_mouse_cursor :: proc(ctx: ^Context, cursor: MouseCursor) {

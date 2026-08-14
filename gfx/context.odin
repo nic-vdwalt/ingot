@@ -977,29 +977,45 @@ GetFrameTime :: proc() -> f32 {return context_frame_time(active_context())}
 GetTime :: proc() -> f64 {return context_time(active_context())}
 GetFPS :: proc() -> i32 {return context_fps(active_context())}
 
+context_set_window_min_size :: proc(ctx: ^Context, w, h: i32) {
+	platform_set_window_min_size(ctx, w, h)
+}
 SetWindowMinSize :: proc(w, h: i32) {
-	platform_set_window_min_size(w, h)
+	context_set_window_min_size(default_context(), w, h)
+}
+context_set_window_size :: proc(ctx: ^Context, w, h: i32) {
+	platform_set_window_size(ctx, w, h)
 }
 SetWindowSize :: proc(w, h: i32) {
-	platform_set_window_size(w, h)
+	context_set_window_size(default_context(), w, h)
 }
 
+context_set_window_title :: proc(ctx: ^Context, title: cstring) {
+	assert(ctx != nil, "context_set_window_title: nil context")
+	assert(title != nil, "context_set_window_title: nil title")
+	platform_set_window_title(ctx, title)
+}
 SetWindowTitle :: proc(title: cstring) {
-	assert(title != nil, "SetWindowTitle: nil title")
-	platform_set_window_title(title)
+	context_set_window_title(default_context(), title)
 }
 
 // SetWindowPosition and GetWindowPosition address the window's placement on a
 // monitor. A browser has no such placement: the page cannot move its own
 // window and a canvas has no monitor coordinates, so on web the setter does
 // nothing and the getter reports the canvas origin.
+context_set_window_position :: proc(ctx: ^Context, x, y: i32) {
+	platform_set_window_position(ctx, x, y)
+}
 SetWindowPosition :: proc(x, y: i32) {
-	platform_set_window_position(x, y)
+	context_set_window_position(default_context(), x, y)
 }
 
-GetWindowPosition :: proc() -> Vector2 {
-	x, y := platform_window_position()
+context_get_window_position :: proc(ctx: ^Context) -> Vector2 {
+	x, y := platform_window_position(ctx)
 	return {f32(x), f32(y)}
+}
+GetWindowPosition :: proc() -> Vector2 {
+	return context_get_window_position(default_context())
 }
 
 // IsWindowResized reports whether the logical window size changed at the start
@@ -1015,12 +1031,12 @@ context_window_resized :: proc(ctx: ^Context) -> bool {
 SetExitKey :: proc(key: KeyboardKey) {g.inp.exit_key = key}
 
 GetMonitorRefreshRate :: proc(monitor: i32) -> i32 {
-	return platform_monitor_refresh_rate()
+	return platform_monitor_refresh_rate(default_context())
 }
 GetCurrentMonitor :: proc() -> i32 {return 0}
 
 IsWindowFocused :: proc() -> bool {
-	return platform_window_focused()
+	return platform_window_focused(default_context())
 }
 
 // FlushBatch forces pending 2D geometry to record into the current render pass
