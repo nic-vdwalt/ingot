@@ -40,3 +40,38 @@ drop_lifecycle_is_bounded_and_consumed :: proc(t: ^testing.T) {
 	testing.expect(t, !IsFileDragOver())
 	testing.expect(t, !IsFileDropped())
 }
+
+@(test)
+drop_lifecycle_isolated_between_contexts :: proc(t: ^testing.T) {
+	first := new(Context)
+	second := new(Context)
+	defer free(first)
+	defer free(second)
+	defer _drop_native_shutdown_context(first)
+	defer _drop_native_shutdown_context(second)
+
+	_drop_hover_stage_context(first, true)
+	_drop_hover_publish(first)
+	_drop_complete_context(second)
+	testing.expect(t, context_is_file_drag_over(first))
+	testing.expect(t, !context_is_file_drag_over(second))
+	testing.expect(t, !context_is_file_dropped(first))
+	testing.expect(t, context_is_file_dropped(second))
+
+	first_paths := [1]string{"/tmp/first"}
+	second_paths := [1]string{"/tmp/second"}
+	testing.expect(t, _drop_paths_replace_context(first, first_paths[:]))
+	testing.expect(t, _drop_paths_replace_context(second, second_paths[:]))
+	first_files := context_load_dropped_files(first)
+	second_files := context_load_dropped_files(second)
+	testing.expect_value(t, first_files.count, u32(1))
+	testing.expect_value(t, second_files.count, u32(1))
+	testing.expect_value(t, string(first_files.paths[0]), "/tmp/first")
+	testing.expect_value(t, string(second_files.paths[0]), "/tmp/second")
+
+	context_unload_dropped_files(first, first_files)
+	testing.expect(t, !context_is_file_dropped(first))
+	testing.expect(t, context_is_file_dropped(second))
+	testing.expect_value(t, len(first.drop.paths), 0)
+	testing.expect_value(t, len(second.drop.paths), 1)
+}

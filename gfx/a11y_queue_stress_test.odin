@@ -25,7 +25,9 @@ Stress_Ctx :: struct {
 a11y_action_queue_stress :: proc(t: ^testing.T) {
 	state := new(A11y_State)
 	defer free(state)
-	ctx := Stress_Ctx{state = state}
+	ctx := Stress_Ctx {
+		state = state,
+	}
 
 	producer :: proc(raw: rawptr) {
 		c := (^Stress_Ctx)(raw)

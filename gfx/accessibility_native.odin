@@ -171,11 +171,7 @@ context_push_accessibility_update :: proc(ctx: ^Context) {
 			)
 			if events != nil do ak.windows_queued_events_raise(events)
 		} else {
-			ak.unix_adapter_update_if_active(
-				ctx.a11y.adapter,
-				ctx.a11y.factory,
-				ctx.a11y.userdata,
-			)
+			ak.unix_adapter_update_if_active(ctx.a11y.adapter, ctx.a11y.factory, ctx.a11y.userdata)
 		}
 	}
 }
