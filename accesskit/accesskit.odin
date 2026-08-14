@@ -163,6 +163,7 @@ when ENABLED {
 	} else when ODIN_OS == .Darwin {
 		foreign import lib "lib/darwin_amd64/libaccesskit.a"
 	} else when ODIN_OS == .Windows {
+		@(extra_linker_flags = "/FORCE:MULTIPLE")
 		foreign import lib "lib/windows_amd64/accesskit.lib"
 	}
 
