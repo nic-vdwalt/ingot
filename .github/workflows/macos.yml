@@ -17,10 +17,10 @@ jobs:
   macos:
     runs-on: macos-26
     timeout-minutes: 60
-    env:
-      INGOT_TEST_FAILURE_LOG_DIR: ${{ runner.temp }}/ingot-test-failures
     steps:
       - uses: actions/checkout@v4
+      - name: Configure bounded failure logs
+        run: echo "INGOT_TEST_FAILURE_LOG_DIR=$RUNNER_TEMP/ingot-test-failures" >> "$GITHUB_ENV"
       - name: Verify macOS architecture
         run: |
           [ "$(uname -m)" = arm64 ] || {

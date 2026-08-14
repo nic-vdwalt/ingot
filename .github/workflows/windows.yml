@@ -17,10 +17,13 @@ jobs:
   windows:
     runs-on: windows-2022
     timeout-minutes: 60
-    env:
-      INGOT_TEST_FAILURE_LOG_DIR: ${{ runner.temp }}/ingot-test-failures
     steps:
       - uses: actions/checkout@v4
+      - name: Configure bounded failure logs
+        shell: pwsh
+        run: |
+          "INGOT_TEST_FAILURE_LOG_DIR=$env:RUNNER_TEMP/ingot-test-failures" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
