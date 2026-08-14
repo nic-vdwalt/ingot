@@ -333,7 +333,9 @@ platform_input_init :: proc(ctx: ^Context) {
 	glfw.SetWindowSizeCallback(win, _window_size_cb)
 	glfw.SetFramebufferSizeCallback(win, _fb_size_cb)
 
-	if g_cursors[MouseCursor.DEFAULT] == nil {
+	default_cursor := int(MouseCursor.DEFAULT)
+	assert(default_cursor >= 0 && default_cursor < len(g_cursors), "platform_input_init: cursor index")
+	if g_cursors[default_cursor] == nil {
 		g_cursors[MouseCursor.DEFAULT] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
 		g_cursors[MouseCursor.ARROW] = glfw.CreateStandardCursor(glfw.ARROW_CURSOR)
 		g_cursors[MouseCursor.IBEAM] = glfw.CreateStandardCursor(glfw.IBEAM_CURSOR)

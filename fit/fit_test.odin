@@ -233,6 +233,35 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 }
 
 @(test)
+fit_surface_input_focus_paint_contract_compiles :: proc(t: ^testing.T) {
+	key_down: proc(_: ^Surface, _: Key) -> bool = Surface_Key_Down
+	key_repeat: proc(_: ^Surface, _: Key) -> bool = Surface_Key_Pressed_Or_Repeat
+	characters: proc(_: ^Surface) -> []rune = Surface_Characters
+	clipboard: proc(_: ^Surface) -> string = Surface_Clipboard
+	focus_id: proc(_: string) -> Focus_Id = Focus_Id_String
+	focus_link: proc(_: ^Focus_State, _: Focus_Id) -> Focus_Link = Focus_Link_To
+	semantic: proc(
+			_: ^Surface,
+			_: Semantic_Role,
+			_: Rect,
+			_: string,
+			_: Semantic_State,
+			_: Focus_Link,
+			_: string,
+			_: string,
+			_: int,
+			_: int,
+		) =
+		Surface_Semantic
+	circle: proc(_: ^Surface, _: Point, _: f32, _: Color) = Surface_Fill_Circle
+	clip: proc(_: ^Surface, _: Rect) = Surface_Clip_Begin
+	testing.expect(t, key_down != nil && key_repeat != nil)
+	testing.expect(t, characters != nil && clipboard != nil)
+	testing.expect(t, focus_id != nil && focus_link != nil && semantic != nil)
+	testing.expect(t, circle != nil && clip != nil)
+}
+
+@(test)
 fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 	line_chart: proc(
 			_: ^Surface,

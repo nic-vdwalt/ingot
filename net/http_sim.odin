@@ -131,20 +131,20 @@ when INGOT_NET_SIM {
 		assert(f != nil)
 		f.running = false
 		reserved := 0
-		for &message in f.in_flight {
-			reserved += message.result_slots
-			sim_message_destroy(&message)
-		}
+		for message in f.in_flight do reserved += message.result_slots
 		assert(f.result_slots == reserved + len(f.results))
 		assert(f.result_slots <= FETCH_MAXIMUM_RESULTS)
+		for &message in f.in_flight do sim_message_destroy(&message)
 		delete(f.in_flight)
 		f.in_flight = nil
 		for result in f.results do delete(result.body)
 		delete(f.results)
 		f.results = nil
 		f.result_slots = 0
+		assert(!f.running)
 		assert(len(f.in_flight) == 0)
 		assert(len(f.results) == 0)
+		assert(f.result_slots == 0)
 	}
 
 	fetcher_request_with_options :: proc(

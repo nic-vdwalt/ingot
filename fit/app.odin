@@ -22,21 +22,31 @@ Init_Context :: proc(
 	app.draw = callbacks.draw
 	app.shutdown = callbacks.shutdown
 	app.userdata = userdata
+	initialized := false
 	if gfx_context == nil {
-		return ui_gfx.app_init(
+		initialized = ui_gfx.app_init(
 			&app.inner,
 			to_app_config(config),
 			{ui = app_draw, shutdown = app_shutdown},
 			app,
 		)
+	} else {
+		initialized = ui_gfx.app_init_context(
+			&app.inner,
+			gfx_context,
+			to_app_config(config),
+			{ui = app_draw, shutdown = app_shutdown},
+			app,
+		)
 	}
-	return ui_gfx.app_init_context(
-		&app.inner,
-		gfx_context,
-		to_app_config(config),
-		{ui = app_draw, shutdown = app_shutdown},
-		app,
-	)
+	if initialized {
+		ui.ui_runtime_set_scale_hooks(
+			ui_gfx.app_ui_runtime(&app.inner),
+			config.session.scale_metrics,
+			config.session.scale_invalidate,
+		)
+	}
+	return initialized
 }
 
 Start :: proc(app: ^App) -> bool {
@@ -80,6 +90,11 @@ Set_Theme :: proc(app: ^App, theme: Theme) {
 Set_Scale :: proc(app: ^App, scale: f32) {
 	assert(app != nil, "Fit.Set_Scale: nil app")
 	ui_gfx.session_set_user_scale(&app.inner.session, scale)
+}
+
+Scale :: proc(app: ^App) -> f32 {
+	assert(app != nil && app.inner.state != .Empty, "Fit.Scale: invalid app")
+	return ui_gfx.app_ui_runtime(&app.inner).scale
 }
 
 Get_State :: proc(app: ^App) -> State {

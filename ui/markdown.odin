@@ -130,6 +130,7 @@ match_url :: proc(line: string, i: int) -> (int, bool) {
 @(private = "file")
 inline_span_append_plain :: proc(state: ^Inline_Span_Parse_State, start, end: int) {
 	assert(state != nil, "inline_span_append_plain: nil state")
+	assert(start >= 0 && end <= len(state.line), "inline_span_append_plain: range out of bounds")
 	if start >= end do return
 	append(&state.spans, Text_Span{text = state.line[start:end], raw_start = start, raw_end = end})
 }
@@ -145,6 +146,7 @@ inline_span_find :: proc(line: string, start: int, marker: u8) -> int {
 @(private = "file")
 inline_span_parse_pill :: proc(state: ^Inline_Span_Parse_State) {
 	assert(state != nil, "inline_span_parse_pill: nil state")
+	assert(state.index >= 0 && state.index < len(state.line), "inline_span_parse_pill: invalid index")
 	inline_span_append_plain(state, state.seg_start, state.index)
 	close := inline_span_find(state.line, state.index + 1, PILL_CLOSE)
 	if close < 0 {
@@ -176,6 +178,7 @@ inline_span_parse_pill :: proc(state: ^Inline_Span_Parse_State) {
 @(private = "file")
 inline_span_parse_code :: proc(state: ^Inline_Span_Parse_State) {
 	assert(state != nil, "inline_span_parse_code: nil state")
+	assert(state.index >= 0 && state.index < len(state.line), "inline_span_parse_code: invalid index")
 	inline_span_append_plain(state, state.seg_start, state.index)
 	close := inline_span_find(state.line, state.index + 1, '`')
 	if close < 0 {
@@ -207,6 +210,7 @@ inline_span_parse_code :: proc(state: ^Inline_Span_Parse_State) {
 @(private = "file")
 inline_span_parse_link :: proc(state: ^Inline_Span_Parse_State) -> bool {
 	assert(state != nil, "inline_span_parse_link: nil state")
+	assert(state.index >= 0 && state.index < len(state.line), "inline_span_parse_link: invalid index")
 	end, ok := match_url(state.line, state.index)
 	if !ok do return false
 	inline_span_append_plain(state, state.seg_start, state.index)
@@ -276,6 +280,7 @@ inline_span_parse_reference_link :: proc(state: ^Inline_Span_Parse_State) -> boo
 @(private = "file")
 inline_span_parse_bold :: proc(state: ^Inline_Span_Parse_State) {
 	assert(state != nil, "inline_span_parse_bold: nil state")
+	assert(state.index >= 0 && state.index + 1 < len(state.line), "inline_span_parse_bold: invalid index")
 	inline_span_append_plain(state, state.seg_start, state.index)
 	close := -1
 	for index := state.index + 2; index + 1 < len(state.line); index += 1 {

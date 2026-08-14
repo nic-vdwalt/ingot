@@ -61,10 +61,16 @@ sel_range :: proc(sel: ^Input_Sel) -> (lo, hi: int) {
 sel_set :: proc(sel: ^Input_Sel, sb: ^strings.Builder, anchor, extent: int) {
 	assert(sel != nil, "sel_set: nil selection")
 	assert(sb != nil, "sel_set: nil builder")
+	assert(!sel.dragging || sel.sb == sb, "sel_set: dragging selection changed owner")
+	text := strings.to_string(sb^)
+	clamped_anchor := caret_clamp(text, anchor)
+	clamped_extent := caret_clamp(text, extent)
 	sel.sb = sb
-	sel.anchor = anchor
-	sel.extent = extent
-	sel.active = anchor != extent
+	sel.anchor = clamped_anchor
+	sel.extent = clamped_extent
+	sel.active = clamped_anchor != clamped_extent
+	assert(sel.anchor >= 0 && sel.anchor <= len(text), "sel_set: invalid anchor")
+	assert(sel.extent >= 0 && sel.extent <= len(text), "sel_set: invalid extent")
 }
 
 @(private)
@@ -72,6 +78,7 @@ sel_reset :: proc(sel: ^Input_Sel) {
 	assert(sel != nil, "sel_reset: nil selection")
 	sel.active = false
 	sel.dragging = false
+	assert(!sel.active && !sel.dragging, "sel_reset: reset failed")
 }
 
 // Delete the selected range from sb, dropping mention pills that intersect it
@@ -216,7 +223,9 @@ nav_end :: proc(sel: ^Input_Sel, cursor: ^int, shift: bool) {
 	assert(sel != nil, "nav_end: nil selection")
 	assert(cursor != nil, "nav_end: nil cursor")
 	if shift {
-		sel.extent = cursor^
+		assert(sel.sb != nil, "nav_end: shifted navigation has no owner")
+		assert(sel.anchor >= 0 && sel.anchor <= len(strings.to_string(sel.sb^)), "nav_end: invalid anchor")
+		sel.extent = caret_clamp(strings.to_string(sel.sb^), cursor^)
 		sel.active = sel.anchor != sel.extent
 	}
 }
@@ -524,6 +533,7 @@ text_input_box :: proc(
 	sb: ^strings.Builder,
 	st: ^Text_Input_State,
 ) -> bool {
+	assert(frame != nil && frame.open, "text_input_box: invalid frame")
 	assert(sb != nil, "text_input_box: nil builder")
 	assert(st != nil, "text_input_box: nil state")
 	assert(cfg.rect.w > 0 && cfg.rect.h > 0, "text_input_box: empty rect")

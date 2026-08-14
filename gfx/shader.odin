@@ -95,6 +95,7 @@ _shader_slot :: proc(context_id: u32, resources: ^Shader_Resources, id: u32) -> 
 	if handle_context != context_id do return nil
 	index, generation, ok := _resource_handle_decode(id, len(resources.slots))
 	if !ok do return nil
+	assert(index >= 0 && index < len(resources.slots), "_shader_slot: decoded index out of range")
 	slot := &resources.slots[index]
 	if !slot.occupied || slot.generation != generation do return nil
 	return slot

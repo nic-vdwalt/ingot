@@ -508,6 +508,9 @@ _on_uncaptured_error :: proc "c" (
 	u1, u2: rawptr,
 ) {
 	context = runtime.default_context()
+	_ = device
+	_ = u1
+	_ = u2
 	fmt.eprintfln("gfx: wgpu uncaptured error (%v): %s", type, string(message))
 	when INGOT_GPU_STRICT {
 		panic("INGOT_GPU_STRICT: aborting on wgpu validation error")

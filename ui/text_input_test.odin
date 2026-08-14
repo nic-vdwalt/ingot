@@ -34,6 +34,10 @@ sel_set_range_reset :: proc(t: ^testing.T) {
 	// Zero-length selection is not active.
 	sel_set(&sel, &sb, 4, 4)
 	testing.expect(t, !sel.active)
+	sel_set(&sel, &sb, -10, 100)
+	lo, hi = sel_range(&sel)
+	testing.expect_value(t, lo, 0)
+	testing.expect_value(t, hi, len("hello world"))
 }
 
 @(test)

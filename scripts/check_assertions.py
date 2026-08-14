@@ -352,7 +352,11 @@ def index_contract_present(executable: str) -> bool:
 def authored_contract_present(executable: str, risk: str) -> bool:
     assertions = [
         match.group()
-        for match in re.finditer(r"(?:assert_contextless|assert|ensure)\s*\([^\n]+", executable)
+        for match in re.finditer(
+            r"(?:assert_contextless|assert|ensure)\s*\((?:(?!\)\s*(?:;|\n|$)).)*\)",
+            executable,
+            re.S,
+        )
     ]
     if not assertions:
         return False
@@ -397,6 +401,13 @@ def structural_contract_present(executable: str, risk: str, body: str = "") -> b
                 )
             )
             or "%" in operation.expression
+            or (
+                re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", operation.expression)
+                and re.search(
+                    rf"\b{re.escape(operation.expression)}\s+(?:in|not_in)\s+{re.escape(operation.target)}\b",
+                    executable[: operation.offset],
+                )
+            )
             or re.search(
                 rf"\bif\b[^\n]*\b{re.escape(operation.expression)}\b[^\n]*(?:<|>=)"
                 rf"[^\n]*\b{re.escape(operation.target)}\b",
@@ -409,23 +420,49 @@ def structural_contract_present(executable: str, risk: str, body: str = "") -> b
             for operation in operations
         )
     if risk == "pointer":
-        # A ^T parameter is not discharged by the absence of a transmute: the
-        # dereference is invisible because Odin performs it implicitly.
-        if pointer_parameter_names(body):
-            return False
+        parameters = pointer_parameter_names(body)
+        if parameters:
+            return all(
+                re.search(
+                    rf"\b(?:assert_contextless|assert|ensure)\s*\([^\n)]*\b{re.escape(parameter)}\b[^\n)]*(?:==|!=)\s*nil",
+                    executable,
+                )
+                or re.search(
+                    rf"\b[A-Za-z_][A-Za-z0-9_]*\s*\(\s*{re.escape(parameter)}\s*\)",
+                    executable,
+                )
+                for parameter in parameters
+            )
         return re.search(r"\bif\b[^\n]*(?:==|!=)\s*nil", executable) is not None or not re.search(
             r"\b(?:transmute|raw_data|raw_ptr)\s*\(", executable
         )
     if risk == "queue":
-        return re.search(r"\bif\b[^\n]*(?:count|head|tail|len\s*\(|cap\s*\()[^\n]*(?:<|<=|>|>=|==)", executable) is not None
+        bounded = re.search(
+            r"\bif\s+!?[A-Za-z_][A-Za-z0-9_]*(?:reserve|append|push)[A-Za-z0-9_]*\s*\([^\n]*\)\s*do\s*(?:return|break|continue)",
+            executable,
+        )
+        checked = re.search(
+            r"\b(?:if|assert|ensure)\b[^\n]*(?:count|head|tail|len\s*\(|cap\s*\()[^\n]*(?:<|<=|>|>=|==)",
+            executable,
+        )
+        return bounded is not None or checked is not None
     if risk == "ownership":
         return re.search(r"\b(?:defer|if)\b[^\n]*(?:nil|ok|err|result|len\s*\(|cap\s*\()", executable) is not None or not re.search(
             r"\b(?:delete|free|destroy)\s*\(", executable
         )
     if risk == "state":
-        return re.search(r"\bif\b[^\n]*(?:state|running|active|session|frame|open)[^\n]*(?:==|!=)", executable) is not None or not re.search(
+        guarded = re.search(
+            r"\b(?:if|assert|ensure)\b[^\n]*(?:state|running|active|session|frame|open)[^\n]*(?:==|!=)",
+            executable,
+        )
+        explicit_transition = re.search(
             r"\b(?:state|running|active|session)\b\s*=", executable
         )
+        validated_transition = re.search(
+            r"\b[A-Za-z_][A-Za-z0-9_]*(?:poll|validate|begin|end|reset)[A-Za-z0-9_]*\s*\(",
+            executable,
+        )
+        return guarded is not None or explicit_transition is None or validated_transition is not None
     return re.search(r"\bif\b[^\n]*(?:len|count|size|offset|cursor|parsed|status|ok|err)[^\n]*(?:<|<=|>|>=|==|!=)", executable) is not None
 
 

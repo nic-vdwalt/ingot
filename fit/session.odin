@@ -6,6 +6,11 @@ import "ingot:ui_gfx"
 Session_Init :: proc(session: ^Session, config: Session_Config = {}) {
 	assert(session != nil && !session.inner.initialized, "Fit.Session_Init: invalid session")
 	ui_gfx.session_init(&session.inner, to_session_config(config))
+	ui.ui_runtime_set_scale_hooks(
+		ui_gfx.session_runtime(&session.inner),
+		config.scale_metrics,
+		config.scale_invalidate,
+	)
 }
 
 Session_Draw :: proc(session: ^Session, draw: Session_Draw_Proc, userdata: rawptr = nil) -> bool {
@@ -30,6 +35,11 @@ Session_Destroy :: proc(session: ^Session) {
 Session_Set_Scale :: proc(session: ^Session, scale: f32) {
 	assert(session != nil && session.inner.initialized, "Fit.Session_Set_Scale: invalid session")
 	ui_gfx.session_set_user_scale(&session.inner, scale)
+}
+
+Session_Scale :: proc(session: ^Session) -> f32 {
+	assert(session != nil && session.inner.initialized, "Fit.Session_Scale: invalid session")
+	return ui_gfx.session_runtime(&session.inner).scale
 }
 
 Session_Set_Theme :: proc(session: ^Session, theme: Theme) {

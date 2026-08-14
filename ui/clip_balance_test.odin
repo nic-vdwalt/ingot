@@ -162,7 +162,11 @@ clip_leak_origin_names_the_open_clip :: proc(t: ^testing.T) {
 	list := new_list()
 	defer free(list)
 	paint_clip_begin(list, {0, 0, 10, 10})
+	outer := paint_clip_leak_origin(list)
+	paint_clip_begin(list, {1, 1, 8, 8})
 	origin := paint_clip_leak_origin(list)
 	testing.expect(t, origin.line > 0, "leak origin must carry a source line")
+	testing.expect_value(t, origin, outer)
+	paint_clip_end(list)
 	paint_clip_end(list)
 }

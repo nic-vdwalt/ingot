@@ -161,6 +161,8 @@ when INGOT_WS_SIM {
 	}
 
 	ws_net_send :: proc(transport: ^Ws_Transport, data: []u8) -> (int, Ws_Net_Err) {
+		assert(transport != nil, "ws_net_send: nil transport")
+		if !ws_transport_open(transport) do return 0, .Other
 		// Capture the Sec-WebSocket-Key from the upgrade request so the
 		// simulated 101 can carry a valid Accept. Worker or main thread.
 		s := string(data)
@@ -268,6 +270,7 @@ when INGOT_WS_SIM {
 
 	@(private)
 	sim_recv_event :: proc(event: Ws_Sim_Event, buf: []u8) -> (int, Ws_Net_Err) {
+		if len(buf) < 4 do return 0, .Other
 		if count, err, handled := sim_recv_data_event(event, buf); handled do return count, err
 		#partial switch event {
 		case .Frame_Ping:
@@ -289,6 +292,9 @@ when INGOT_WS_SIM {
 	}
 
 	ws_net_recv :: proc(transport: ^Ws_Transport, buf: []u8) -> (int, Ws_Net_Err) {
+		assert(transport != nil, "ws_net_recv: nil transport")
+		if !ws_transport_open(transport) do return 0, .Other
+		if len(buf) < 4 do return 0, .Other
 		if count, err, handled := sim_recv_pending_burst(buf); handled do return count, err
 		if count, err, handled := sim_recv_split_tail(buf); handled do return count, err
 		if count, err, handled := sim_recv_handshake(buf); handled do return count, err
