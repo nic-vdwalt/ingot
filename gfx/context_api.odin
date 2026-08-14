@@ -272,9 +272,8 @@ context_load_font_from_memory :: proc(
 ) -> Font {
 	assert(ctx != nil && file_type != nil, "context_load_font_from_memory: nil argument")
 	assert(data_size > 0 && font_size > 0, "context_load_font_from_memory: invalid size")
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return LoadFontFromMemory(
+	return context_load_font_from_memory_impl(
+		ctx,
 		file_type,
 		file_data,
 		data_size,
@@ -285,15 +284,11 @@ context_load_font_from_memory :: proc(
 }
 
 context_unload_font :: proc(ctx: ^Context, font: Font) {
-	if ctx == nil || font.glyphCount <= 0 do return
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	UnloadFont(font)
+	if ctx == nil || font._atlas == 0 do return
+	context_unload_font_impl(ctx, font)
 }
 
 context_set_texture_filter :: proc(ctx: ^Context, texture: Texture2D, filter: TextureFilter) {
 	if ctx == nil || texture.id == 0 do return
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	SetTextureFilter(texture, filter)
+	context_set_texture_filter_impl(ctx, texture, filter)
 }
