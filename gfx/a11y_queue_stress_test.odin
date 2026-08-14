@@ -16,18 +16,21 @@ import ak "ingot:accesskit"
 
 @(private = "file")
 Stress_Ctx :: struct {
+	state:    ^A11y_State,
 	produced: int, // atomic
 	done:     bool, // atomic
 }
 
 @(test)
 a11y_action_queue_stress :: proc(t: ^testing.T) {
-	ctx: Stress_Ctx
+	state := new(A11y_State)
+	defer free(state)
+	ctx := Stress_Ctx{state = state}
 
 	producer :: proc(raw: rawptr) {
 		c := (^Stress_Ctx)(raw)
 		for i in 0 ..< 20_000 {
-			_a11y_stage(.Click, ak.Node_Id(i + 2))
+			_a11y_stage(c.state, .Click, ak.Node_Id(i + 2))
 			sync.atomic_add(&c.produced, 1)
 			if i % 64 == 0 do thread.yield()
 		}
@@ -43,7 +46,7 @@ a11y_action_queue_stress :: proc(t: ^testing.T) {
 	last_node := ak.Node_Id(0)
 	// tigerstyle: allow-unbounded-loop -- producer completion terminates concurrent draining
 	for {
-		action, ok := PollAccessibilityAction()
+		action, ok := _a11y_poll(state)
 		if ok {
 			drained += 1
 			testing.expect(t, action.action == ak.Action.Click, "unexpected action kind")
@@ -56,7 +59,7 @@ a11y_action_queue_stress :: proc(t: ^testing.T) {
 	}
 	// Final drain after the producer stopped.
 	for _ in 0 ..< 20_000 {
-		action, ok := PollAccessibilityAction()
+		action, ok := _a11y_poll(state)
 		if !ok do break
 		drained += 1
 		testing.expect(t, action.node > last_node, "queue reordered actions")
@@ -70,4 +73,45 @@ a11y_action_queue_stress :: proc(t: ^testing.T) {
 	testing.expect(t, drained > 0, "nothing drained")
 
 	thread.join(th)
+}
+
+@(test)
+a11y_action_queues_are_isolated :: proc(t: ^testing.T) {
+	first := new(A11y_State)
+	second := new(A11y_State)
+	defer free(first)
+	defer free(second)
+
+	_a11y_stage(first, .Click, 11)
+	_a11y_stage(second, .Focus, 22)
+
+	first_action, first_ok := _a11y_poll(first)
+	testing.expect(t, first_ok)
+	testing.expect_value(t, first_action.node, ak.Node_Id(11))
+	_, first_empty := _a11y_poll(first)
+	testing.expect(t, !first_empty)
+
+	second_action, second_ok := _a11y_poll(second)
+	testing.expect(t, second_ok)
+	testing.expect_value(t, second_action.node, ak.Node_Id(22))
+	_, second_empty := _a11y_poll(second)
+	testing.expect(t, !second_empty)
+}
+
+@(test)
+a11y_action_queue_drops_newest_on_overflow :: proc(t: ^testing.T) {
+	state := new(A11y_State)
+	defer free(state)
+	for index in 0 ..< MAX_A11Y_ACTIONS {
+		_a11y_stage(state, .Click, ak.Node_Id(index + 1))
+	}
+	_a11y_stage(state, .Focus, ak.Node_Id(999))
+
+	for index in 0 ..< MAX_A11Y_ACTIONS {
+		action, ok := _a11y_poll(state)
+		testing.expect(t, ok)
+		testing.expect_value(t, action.node, ak.Node_Id(index + 1))
+	}
+	_, ok := _a11y_poll(state)
+	testing.expect(t, !ok)
 }

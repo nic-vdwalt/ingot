@@ -108,6 +108,8 @@ gamepad_queries_reject_out_of_range :: proc(t: ^testing.T) {
 
 @(test)
 gamepad_edge_detection_uses_prev_buttons :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	pad := &g.inp.pads[0]
 	old := pad^
 	defer pad^ = old
@@ -129,6 +131,8 @@ gamepad_edge_detection_uses_prev_buttons :: proc(t: ^testing.T) {
 
 @(test)
 load_sound_from_wave_requires_ready_device :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	// Without InitAudioDevice the loader must return the invalid Sound and
 	// touch nothing - verifies the "audio off is a safe no-op" contract.
 	samples := [4]i16{0, 16384, -16384, 0}
@@ -149,6 +153,8 @@ load_sound_from_wave_requires_ready_device :: proc(t: ^testing.T) {
 
 @(test)
 audio_slot_rejects_stale_generation :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	slot := &g_audio.slots[0]
 	old_slot := slot^
 	defer slot^ = old_slot

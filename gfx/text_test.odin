@@ -347,6 +347,8 @@ test_font_measure_invariants :: proc(t: ^testing.T, font: Font) {
 
 @(test)
 test_measure_metrics :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	// --- headless device bring-up (no window/surface) ---
 	g.instance = wg.CreateInstance()
 	ares: Adapter_Res
@@ -371,9 +373,24 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	g.queue = wg.DeviceGetQueue(g.device)
 	g.format = .BGRA8Unorm
 	_submission_init(&g.submissions, g)
+	renderer_ready := false
+	defer {
+		_flush_retired(g)
+		delete(g.resources.retire)
+		if renderer_ready do renderer_shutdown(&g.rend)
+		_submission_shutdown(&g.submissions)
+		wg.QueueRelease(g.queue)
+		wg.DeviceRelease(g.device)
+		wg.AdapterRelease(g.adapter)
+		wg.InstanceRelease(g.instance)
+		g.queue = nil
+		g.device = nil
+		g.adapter = nil
+		g.instance = nil
+	}
 	// The test's device is real, so the stream pools must allocate; a false
 	// here means the harness itself is broken, not that a device degraded.
-	renderer_ready := renderer_init(g, &g.rend)
+	renderer_ready = renderer_init(g, &g.rend)
 	testing.expect(t, renderer_ready, "text test harness: renderer_init failed")
 	if !renderer_ready do return
 
@@ -387,17 +404,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 		raw_data(cps[:]),
 		95,
 	)
-	defer {
-		UnloadFont(f)
-		_flush_retired(g)
-		delete(g.resources.retire)
-		renderer_shutdown(&g.rend)
-		_submission_shutdown(&g.submissions)
-		wg.QueueRelease(g.queue)
-		wg.DeviceRelease(g.device)
-		wg.AdapterRelease(g.adapter)
-		wg.InstanceRelease(g.instance)
-	}
+	defer UnloadFont(f)
 
 	test_font_measure_invariants(t, f)
 	text_test_atlas_accounting(t, 32)

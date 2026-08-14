@@ -29,13 +29,32 @@ IME_NS_View :: struct {
 	using _: intrinsics.objc_object,
 }
 
-// The caret rect in screen coordinates (bottom-left origin), precomputed in
-// _ime_set_rect so the IMP below stays a trivial load (it runs inside AppKit's
-// input-method machinery where we avoid extra message sends).
-@(private = "file")
-g_ime_screen_rect: NS.Rect
 @(private = "file")
 g_ime_swizzled: bool
+@(private = "file")
+g_ime_views: [16]rawptr
+@(private = "file")
+g_ime_owners: [16]^Context
+
+@(private = "file")
+_ime_owner_for_view :: proc "contextless" (view: rawptr) -> ^Context {
+	for index in 0 ..< len(g_ime_views) {
+		if g_ime_views[index] == view do return g_ime_owners[index]
+	}
+	return nil
+}
+
+@(private = "file")
+_ime_bind_view :: proc(view: rawptr, ctx: ^Context) {
+	for index in 0 ..< len(g_ime_views) {
+		if g_ime_views[index] == view || g_ime_views[index] == nil {
+			g_ime_views[index] = view
+			g_ime_owners[index] = ctx
+			return
+		}
+	}
+	assert(false, "_ime_bind_view: too many views")
+}
 
 // Replacement for -[GLFWContentView firstRectForCharacterRange:actualRange:].
 // NSRange in, NSRect out - both pass in registers on arm64/x86_64 C ABI.
@@ -46,7 +65,13 @@ _ime_first_rect_imp :: proc "c" (
 	range: NS.Range,
 	actual: rawptr,
 ) -> NS.Rect {
-	return g_ime_screen_rect
+	ctx := _ime_owner_for_view(self)
+	if ctx == nil do return {}
+	rect := ctx.inp.ime_screen_rect
+	return NS.Rect {
+		origin = {NS.Float(rect[0]), NS.Float(rect[1])},
+		size   = {NS.Float(rect[2]), NS.Float(rect[3])},
+	}
 }
 
 // _ime_set_rect converts the caret rect (view points, top-left origin - the
@@ -61,6 +86,7 @@ _ime_set_rect :: proc(ctx: ^Context, x, y, w, h: i32) {
 	if win == nil do return
 	content := intrinsics.objc_send(^IME_NS_View, win, "contentView")
 	if content == nil do return
+	_ime_bind_view(rawptr(content), ctx)
 
 	if !g_ime_swizzled {
 		cls := object_getClass(rawptr(content))
@@ -87,7 +113,13 @@ _ime_set_rect :: proc(ctx: ^Context, x, y, w, h: i32) {
 		view_rect,
 		rawptr(nil),
 	)
-	g_ime_screen_rect = intrinsics.objc_send(NS.Rect, win, "convertRectToScreen:", win_rect)
+	screen_rect := intrinsics.objc_send(NS.Rect, win, "convertRectToScreen:", win_rect)
+	ctx.inp.ime_screen_rect = {
+		f64(screen_rect.origin.x),
+		f64(screen_rect.origin.y),
+		f64(screen_rect.size.width),
+		f64(screen_rect.size.height),
+	}
 }
 
 // _ime_deactivate: nothing to tear down - the swizzled method keeps returning

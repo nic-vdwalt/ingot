@@ -18,6 +18,8 @@ count_emitted_triangles :: proc(r: ^Renderer) -> int {
 
 @(test)
 polygon_helpers_reject_degenerate_side_counts :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	// Fewer than three sides is not a polygon. raylib silently draws nothing;
 	// so does ingot, but the guard is asserted so it cannot regress into
 	// emitting a malformed fan.
@@ -73,6 +75,8 @@ triangle_fan_emits_one_triangle_per_edge :: proc(t: ^testing.T) {
 
 @(test)
 triangle_fan_and_strip_ignore_degenerate_input :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	restore := g.frame.has_frame
 	defer g.frame.has_frame = restore
 	g.frame.has_frame = false

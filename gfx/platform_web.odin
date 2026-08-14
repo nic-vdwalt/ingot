@@ -92,6 +92,21 @@ WEB_WIN_SENTINEL :: Window_Handle(uintptr(1))
 // platform_create_window, which runs under main's context.
 @(private)
 g_web_ctx: runtime.Context
+@(private)
+g_web_owner: ^Context
+@(private)
+g_web_owner_epoch: u64
+
+@(private)
+_web_owner_context :: proc "contextless" () -> ^Context {
+	if g_web_owner == nil || g_web_owner.epoch != g_web_owner_epoch do return nil
+	return g_web_owner
+}
+
+@(private)
+_web_context_is_owner :: proc "contextless" (ctx: ^Context) -> bool {
+	return ctx != nil && ctx == g_web_owner && ctx.epoch == g_web_owner_epoch
+}
 
 // --- window / surface / lifecycle ------------------------------------------
 
@@ -119,7 +134,10 @@ platform_create_window :: proc(
 	flags: ConfigFlags,
 ) -> bool {
 	assert(ctx != nil, "platform_create_window: nil context")
+	assert(g_web_owner == nil || _web_context_is_owner(ctx), "platform_create_window: web canvas already owned")
 	g_web_ctx = context
+	g_web_owner = ctx
+	g_web_owner_epoch = ctx.epoch
 	ctx.win = WEB_WIN_SENTINEL
 	ctx.width, ctx.height = width, height
 	ctx.fb_width, ctx.fb_height = width, height
@@ -303,13 +321,18 @@ platform_should_close :: proc(ctx: ^Context) -> bool {
 @(private)
 platform_poll_events :: proc(ctx: ^Context) {
 	assert(ctx != nil, "platform_poll_events: nil context")
-	_platform_drain_mouse_edges(&ctx.inp)
+	_platform_drain_mouse_edges(ctx)
 }
 
 @(private)
 platform_terminate :: proc(ctx: ^Context) {
 	assert(ctx != nil, "platform_terminate: nil context")
 	ctx.win = nil
+	if _web_context_is_owner(ctx) {
+		g_web_owner = nil
+		g_web_owner_epoch = 0
+		g_web_ctx = {}
+	}
 }
 
 @(private)
@@ -387,19 +410,6 @@ platform_set_window_icon :: proc(ctx: ^Context, image: Image) {}
 // genuinely must stage: a touch tap replays press and release between two
 // frames, so a level comparison at frame time would miss it entirely.
 
-@(private)
-st_held: [KEY_COUNT]bool // sticky held state, backs platform_key_down
-@(private)
-st_mouse: Vector2 // last cursor position, backs platform_cursor_pos
-@(private)
-st_mb: [8]bool // sticky held state, backs platform_mouse_button
-@(private)
-st_mb_pressed: [8]bool
-@(private)
-st_mb_released: [8]bool
-@(private)
-st_hovered: bool // pointer inside the canvas, backs platform_window_hovered
-
 // _platform_drain_mouse_edges publishes the staged button edges. Called from
 // platform_poll_events (i.e. from input_poll, right after it clears the
 // per-frame edge state and before input_poll's own level comparison, which
@@ -409,19 +419,21 @@ st_hovered: bool // pointer inside the canvas, backs platform_window_hovered
 // g.inp and are published by _input_publish_staged, so no second copy of
 // them can drift out of sync with the shared one.
 @(private)
-_platform_drain_mouse_edges :: proc(inp: ^Input) {
-	assert(inp != nil, "_platform_drain_mouse_edges: nil input")
+_platform_drain_mouse_edges :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_platform_drain_mouse_edges: nil context")
 	for button in 0 ..< 8 {
-		if st_mb_pressed[button] do inp.mb_pressed[button] = true
-		if st_mb_released[button] do inp.mb_released[button] = true
-		st_mb_pressed[button] = false
-		st_mb_released[button] = false
+		if ctx.inp.web_mb_pressed[button] do ctx.inp.mb_pressed[button] = true
+		if ctx.inp.web_mb_released[button] do ctx.inp.mb_released[button] = true
+		ctx.inp.web_mb_pressed[button] = false
+		ctx.inp.web_mb_released[button] = false
 	}
 }
 
 @(private)
 platform_input_init :: proc(ctx: ^Context) {
 	assert(ctx != nil, "platform_input_init: nil context")
+	assert(_web_context_is_owner(ctx), "platform_input_init: context does not own web canvas")
+	ctx.inp = {}
 }
 
 // IME proxy: a hidden DOM textarea (web/ingot_input.js) is positioned at the
@@ -570,7 +582,7 @@ platform_sync_web_submit_button :: proc(
 @(private)
 platform_cursor_pos :: proc(ctx: ^Context) -> (f64, f64) {
 	assert(ctx != nil, "platform_cursor_pos: nil context")
-	return f64(st_mouse.x), f64(st_mouse.y)
+	return f64(ctx.inp.mouse.x), f64(ctx.inp.mouse.y)
 }
 
 // A page cannot warp the system cursor, so the browser keeps ownership and the
@@ -585,20 +597,20 @@ platform_set_cursor_pos :: proc(ctx: ^Context, x, y: f64) {
 platform_mouse_button :: proc(ctx: ^Context, button: i32) -> bool {
 	assert(ctx != nil, "platform_mouse_button: nil context")
 	if button < 0 || button >= 8 do return false
-	return st_mb[button]
+	return ctx.inp.mb_down[button]
 }
 
 @(private)
 platform_window_hovered :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "platform_window_hovered: nil context")
-	return st_hovered
+	return ctx.inp.cursor_on_screen
 }
 
 @(private)
 platform_key_down :: proc(ctx: ^Context, key: i32) -> bool {
 	assert(ctx != nil, "platform_key_down: nil context")
 	if key < 0 || key >= KEY_COUNT do return false
-	return st_held[key]
+	return ctx.inp.key_down[key]
 }
 
 @(private)
@@ -698,10 +710,16 @@ platform_gamepad_poll :: proc(pads: ^[MAX_GAMEPADS]Gamepad_State, idle: ^Idle_St
 
 // --- public window procs (native equivalents live in window_native/extra) --
 
-GetWindowHandle :: proc() -> rawptr {return nil}
-IsWindowMinimized :: proc() -> bool {return false}
-IsWindowHidden :: proc() -> bool {return false}
-IsWindowFullscreen :: proc() -> bool {return _js_is_fullscreen() != 0}
+context_get_window_handle :: proc(ctx: ^Context) -> rawptr {return nil}
+GetWindowHandle :: proc() -> rawptr {return context_get_window_handle(default_context())}
+context_is_window_minimized :: proc(ctx: ^Context) -> bool {return false}
+IsWindowMinimized :: proc() -> bool {return context_is_window_minimized(default_context())}
+context_is_window_hidden :: proc(ctx: ^Context) -> bool {return false}
+IsWindowHidden :: proc() -> bool {return context_is_window_hidden(default_context())}
+context_is_window_fullscreen :: proc(ctx: ^Context) -> bool {
+	return ctx != nil && _web_context_is_owner(ctx) && _js_is_fullscreen() != 0
+}
+IsWindowFullscreen :: proc() -> bool {return context_is_window_fullscreen(default_context())}
 // ToggleFullscreen requests (or exits) the browser Fullscreen API on the canvas.
 // Must be called from a user-gesture handler; the header's fullscreen button
 // forwards a click here, satisfying that requirement.
@@ -721,43 +739,54 @@ FocusWindow :: proc() {context_focus_window(default_context())}
 // real paths - "paths" here are bare file names; use GetDroppedFileData for
 // the contents.
 
-@(private)
-g_drop_names: [MAX_DROPPED_FILES][DROP_NAME_MAX]u8
-@(private)
-g_drop_cstrs: [MAX_DROPPED_FILES]cstring
+context_is_file_dropped :: proc(ctx: ^Context) -> bool {
+	return ctx != nil && ctx.drop.ready
+}
 
-IsFileDropped :: proc() -> bool {return g.drop.ready}
+IsFileDropped :: proc() -> bool {return context_is_file_dropped(default_context())}
 
-LoadDroppedFiles :: proc() -> FilePathList {
+context_load_dropped_files :: proc(ctx: ^Context) -> FilePathList {
+	if ctx == nil do return {}
 	count := clamp(_js_drop_count(), 0, MAX_DROPPED_FILES)
-	assert(count >= 0 && count <= MAX_DROPPED_FILES, "LoadDroppedFiles: count out of bounds")
+	assert(count >= 0 && count <= MAX_DROPPED_FILES, "context_load_dropped_files: count out of bounds")
 	for i in 0 ..< count {
-		g_drop_names[i] = {}
-		n := _js_drop_name_copy(i, raw_data(g_drop_names[i][:]), DROP_NAME_MAX - 1)
-		assert(n < DROP_NAME_MAX, "LoadDroppedFiles: name overflow")
-		g_drop_cstrs[i] = cstring(raw_data(g_drop_names[i][:]))
+		ctx.drop.web_names[i] = {}
+		n := _js_drop_name_copy(i, raw_data(ctx.drop.web_names[i][:]), DROP_NAME_MAX - 1)
+		assert(n < DROP_NAME_MAX, "context_load_dropped_files: name overflow")
+		ctx.drop.web_cstrs[i] = cstring(raw_data(ctx.drop.web_names[i][:]))
 	}
 	return FilePathList {
 		capacity = u32(count),
 		count = u32(count),
-		paths = raw_data(g_drop_cstrs[:]),
+		paths = raw_data(ctx.drop.web_cstrs[:]),
 	}
 }
 
-UnloadDroppedFiles :: proc(files: FilePathList) {
-	g.drop.ready = false
-	for i in 0 ..< MAX_DROPPED_FILES {
-		g_drop_names[i] = {}
-		g_drop_cstrs[i] = nil
-	}
+LoadDroppedFiles :: proc() -> FilePathList {
+	return context_load_dropped_files(default_context())
+}
+
+context_unload_dropped_files :: proc(ctx: ^Context, files: FilePathList) {
+	if ctx == nil do return
+	ctx.drop.ready = false
+	ctx.drop.web_names = {}
+	ctx.drop.web_cstrs = {}
 	_js_drop_clear()
+}
+
+UnloadDroppedFiles :: proc(files: FilePathList) {
+	context_unload_dropped_files(default_context(), files)
 }
 
 // GetDroppedFileData returns the contents of dropped file `index`, allocated
 // from `allocator` (caller frees), or nil when the index is empty. This is
 // the target-portable way to read a drop: on web there is no path to open.
-GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
-	if index < 0 || index >= _js_drop_count() do return nil
+context_get_dropped_file_data :: proc(
+	ctx: ^Context,
+	index: i32,
+	allocator := context.allocator,
+) -> []byte {
+	if ctx == nil || index < 0 || index >= _js_drop_count() do return nil
 	length := _js_drop_data_len(index)
 	assert(length >= 0, "GetDroppedFileData: negative length")
 	if length <= 0 do return nil
@@ -768,4 +797,8 @@ GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte
 		return nil
 	}
 	return buffer[:copied]
+}
+
+GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
+	return context_get_dropped_file_data(default_context(), index, allocator)
 }

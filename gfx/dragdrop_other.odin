@@ -5,12 +5,12 @@
 package gfx
 
 @(private)
-platform_dragdrop_init :: proc() {}
+platform_dragdrop_init :: proc(owner: ^Context) {}
 
 @(private)
 platform_dragdrop_tick :: proc() {}
 
 @(private)
-platform_dragdrop_shutdown :: proc() {
-	_drop_hover_stage(false)
+platform_dragdrop_shutdown :: proc(owner: ^Context) {
+	_drop_hover_stage_context(owner, false)
 }

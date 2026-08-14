@@ -27,12 +27,6 @@ glfw_live_windows: u32
 @(private)
 _mono_epoch := time.tick_now()
 
-// _win returns g.win as a glfw handle for the native calls below.
-@(private)
-_win :: proc "contextless" () -> glfw.WindowHandle {
-	return glfw.WindowHandle(g.win)
-}
-
 @(private)
 _context_window :: proc(ctx: ^Context) -> glfw.WindowHandle {
 	assert(ctx != nil, "_context_window: nil context")
@@ -475,7 +469,7 @@ platform_drop_init :: proc(ctx: ^Context) {
 	assert(ctx != nil, "platform_drop_init: nil context")
 	_drop_state_reset_context(ctx)
 	if ctx.win != nil do glfw.SetDropCallback(_context_window(ctx), _drop_cb)
-	platform_dragdrop_init()
+	platform_dragdrop_init(ctx)
 }
 
 @(private)
@@ -491,7 +485,7 @@ platform_drop_finish_events :: proc() {
 @(private)
 platform_drop_shutdown :: proc(ctx: ^Context) {
 	assert(ctx != nil, "platform_drop_shutdown: nil context")
-	platform_dragdrop_shutdown()
+	platform_dragdrop_shutdown(ctx)
 	if ctx.win != nil do glfw.SetDropCallback(_context_window(ctx), nil)
 	_drop_native_shutdown_context(ctx)
 }

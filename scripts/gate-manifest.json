@@ -40,6 +40,16 @@
   "binding_packages": ["libvterm", "accesskit"],
   "compile_packages": ["sys", "pty", "accesskit", "testx"],
   "test_examples": ["box3d_advanced"],
+  "windows_gfx_expected_assert_tests": [
+    "gfx.frame_owner_rejects_stale_epoch",
+    "gfx.camera_update_rejects_parallel_up",
+    "gfx.camera_update_rejects_non_finite_input",
+    "gfx.screen_to_world_ray_rejects_non_positive_viewport",
+    "gfx.intersections_reject_non_normalized_ray",
+    "gfx.intersections_reject_reversed_bounds",
+    "gfx.intersections_reject_non_positive_sphere",
+    "gfx.texture_lookup_rejects_an_unassigned_context_id"
+  ],
   "examples": [
     "hello",
     "session_loop",

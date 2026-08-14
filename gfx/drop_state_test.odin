@@ -5,6 +5,8 @@ import "core:testing"
 
 @(test)
 drop_lifecycle_is_bounded_and_consumed :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	_drop_native_shutdown()
 	defer _drop_native_shutdown()
 

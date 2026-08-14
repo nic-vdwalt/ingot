@@ -130,39 +130,41 @@ intersect_bounds_handles_parallel_axes_and_misses :: proc(t: ^testing.T) {
 	testing.expect(t, !miss)
 }
 
-@(test)
-screen_to_world_ray_rejects_non_positive_viewport :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "screen_to_world_ray: non-positive viewport width")
-	_ = screen_to_world_ray({}, camera_test_value(), 0, 600)
-	testing.fail_now(t, "screen_to_world_ray accepted a zero-width viewport")
-}
-
-@(test)
-intersections_reject_non_normalized_ray :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "intersect_sphere: invalid ray")
-	ray := Ray_3D {
-		direction = {2, 0, 0},
+when ODIN_OS != .Windows || INGOT_GFX_EXPECTED_ASSERTS {
+	@(test)
+	screen_to_world_ray_rejects_non_positive_viewport :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "screen_to_world_ray: non-positive viewport width")
+		_ = screen_to_world_ray({}, camera_test_value(), 0, 600)
+		testing.fail_now(t, "screen_to_world_ray accepted a zero-width viewport")
 	}
-	_, _ = intersect_sphere(ray, {radius = 1})
-	testing.fail_now(t, "intersect_sphere accepted a non-normalized ray")
-}
 
-@(test)
-intersections_reject_reversed_bounds :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "intersect_bounds: invalid bounds")
-	bounds := Bounds_3D {
-		minimum = {1, 0, 0},
-		maximum = {-1, 0, 0},
+	@(test)
+	intersections_reject_non_normalized_ray :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "intersect_sphere: invalid ray")
+		ray := Ray_3D {
+			direction = {2, 0, 0},
+		}
+		_, _ = intersect_sphere(ray, {radius = 1})
+		testing.fail_now(t, "intersect_sphere accepted a non-normalized ray")
 	}
-	_, _ = intersect_bounds(picking_test_ray(), bounds)
-	testing.fail_now(t, "intersect_bounds accepted reversed bounds")
-}
 
-@(test)
-intersections_reject_non_positive_sphere :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "intersect_sphere: non-positive radius")
-	_, _ = intersect_sphere(picking_test_ray(), {})
-	testing.fail_now(t, "intersect_sphere accepted a zero-radius sphere")
+	@(test)
+	intersections_reject_reversed_bounds :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "intersect_bounds: invalid bounds")
+		bounds := Bounds_3D {
+			minimum = {1, 0, 0},
+			maximum = {-1, 0, 0},
+		}
+		_, _ = intersect_bounds(picking_test_ray(), bounds)
+		testing.fail_now(t, "intersect_bounds accepted reversed bounds")
+	}
+
+	@(test)
+	intersections_reject_non_positive_sphere :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "intersect_sphere: non-positive radius")
+		_, _ = intersect_sphere(picking_test_ray(), {})
+		testing.fail_now(t, "intersect_sphere accepted a zero-radius sphere")
+	}
 }
 
 @(test)

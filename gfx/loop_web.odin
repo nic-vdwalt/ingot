@@ -14,7 +14,7 @@ package gfx
 g_web_callback: Run_Callback
 
 run_data :: proc(frame: Run_Data_Proc, userdata: rawptr) -> bool {
-	if frame == nil || g_web_callback.active do return false
+	if frame == nil || _web_owner_context() == nil || g_web_callback.active do return false
 	g_web_callback = {
 		frame    = frame,
 		userdata = userdata,
@@ -68,6 +68,7 @@ web_step_context :: proc(ctx: ^Context, now: f64) -> bool {
 @(export)
 step :: proc(dt: f32) -> bool {
 	context = g_web_ctx
-	ctx := default_context()
+	ctx := _web_owner_context()
+	if ctx == nil do return true
 	return web_step_context(ctx, platform_now() - ctx.start_time_s)
 }

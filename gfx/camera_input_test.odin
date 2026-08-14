@@ -5,12 +5,7 @@
 #+build !js
 package gfx
 
-import "core:sync"
 import "core:testing"
-
-// sync is only referenced under the INGOT_INPUT_SIM gate below; keep the
-// import satisfied when the sim seam is compiled out.
-_ :: sync
 
 @(test)
 orbit_camera_bindings_default_is_accepted_by_the_camera :: proc(t: ^testing.T) {
@@ -31,24 +26,16 @@ orbit_camera_input_poll_ignores_unbound_keys :: proc(t: ^testing.T) {
 }
 
 when INGOT_INPUT_SIM {
-	// The sim seam is process-global (g_sim plus the default input context),
-	// so the sim-backed tests must not run concurrently.
-	@(private = "file")
-	g_sim_test_guard: sync.Mutex
-
-	// sim_lock serializes the sim-backed tests: the test runner is
-	// multithreaded by default, and two tests staging events into the shared
-	// seam concurrently read each other's keys and wheels.
 	@(private = "file")
 	sim_lock :: proc() {
-		sync.mutex_lock(&g_sim_test_guard)
+		gfx_shared_test_lock()
 		SimReset()
 	}
 
 	@(private = "file")
 	sim_unlock :: proc() {
 		SimReset()
-		sync.mutex_unlock(&g_sim_test_guard)
+		gfx_shared_test_unlock()
 	}
 
 	@(test)

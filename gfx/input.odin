@@ -46,6 +46,8 @@ Input :: struct {
 	mb_down:              [8]bool,
 	mb_pressed:           [8]bool,
 	mb_released:          [8]bool,
+	web_mb_pressed:       [8]bool,
+	web_mb_released:      [8]bool,
 
 	// wheel
 	wheel:                Vector2,
@@ -53,6 +55,12 @@ Input :: struct {
 	cursor_on_screen:     bool,
 	cur_cursor:           MouseCursor,
 	cursor_hidden:        bool,
+
+	preedit_buf:          [PREEDIT_MAX]u8,
+	preedit_len:          int,
+	preedit_caret:        int,
+	ime_rect_armed:       bool,
+	ime_screen_rect:      [4]f64,
 
 	// Gamepads: fixed pool, snapshot-polled once per frame through the
 	// platform seam (GLFW GetGamepadState native, navigator.getGamepads()
@@ -76,22 +84,6 @@ Gamepad_State :: struct {
 
 // PREEDIT_MAX bounds the staged composition (preedit) string in bytes.
 PREEDIT_MAX :: 256
-
-// Preedit staging: written by the platform backend while an OS input method
-// is composing (web composition events; native 3c later), read by the UI via
-// GetPreedit. Absolute state like the mouse position - no edge semantics.
-@(private)
-preedit_buf: [PREEDIT_MAX]u8
-@(private)
-preedit_len: int
-@(private)
-preedit_caret: int
-
-// ime_rect_armed tracks whether any text field reported its caret rect this
-// frame; input_poll deactivates platform text input when none did.
-@(private)
-ime_rect_armed: bool
-
 
 // input_poll runs once per frame from EndDrawing: reset frame-scoped state,
 // pump backend events (fills queues/edges), then finalize mouse/wheel/button
@@ -151,8 +143,8 @@ input_poll :: proc(ctx: ^Context) {
 	// IME: if no text field reported a caret rect since the last poll, tell
 	// the platform text input is inactive (web blurs the IME proxy; native
 	// clears the candidate-window rect). Active fields re-arm every frame.
-	if !ime_rect_armed do platform_text_input_deactivate(ctx)
-	ime_rect_armed = false
+	if !inp.ime_rect_armed do platform_text_input_deactivate(ctx)
+	inp.ime_rect_armed = false
 }
 
 @(private)
@@ -276,7 +268,7 @@ context_is_key_pressed :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 }
 
 IsKeyPressed :: proc(key: KeyboardKey) -> bool {
-	return context_is_key_pressed(active_context(), key)
+	return context_is_key_pressed(default_context(), key)
 }
 
 context_is_key_pressed_repeat :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
@@ -287,7 +279,7 @@ context_is_key_pressed_repeat :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 }
 
 IsKeyPressedRepeat :: proc(key: KeyboardKey) -> bool {
-	return context_is_key_pressed_repeat(active_context(), key)
+	return context_is_key_pressed_repeat(default_context(), key)
 }
 
 context_is_key_released :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
@@ -298,11 +290,11 @@ context_is_key_released :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
 }
 
 IsKeyReleased :: proc(key: KeyboardKey) -> bool {
-	return context_is_key_released(active_context(), key)
+	return context_is_key_released(default_context(), key)
 }
 
 IsKeyDown :: proc(key: KeyboardKey) -> bool {
-	return context_is_key_down(active_context(), key)
+	return context_is_key_down(default_context(), key)
 }
 
 context_get_char_pressed_impl :: proc(ctx: ^Context) -> rune {
@@ -335,7 +327,7 @@ context_is_mouse_button_pressed :: proc(ctx: ^Context, button: MouseButton) -> b
 }
 
 IsMouseButtonPressed :: proc(button: MouseButton) -> bool {
-	return context_is_mouse_button_pressed(active_context(), button)
+	return context_is_mouse_button_pressed(default_context(), button)
 }
 
 context_is_mouse_button_released :: proc(ctx: ^Context, button: MouseButton) -> bool {
@@ -346,11 +338,11 @@ context_is_mouse_button_released :: proc(ctx: ^Context, button: MouseButton) -> 
 }
 
 IsMouseButtonReleased :: proc(button: MouseButton) -> bool {
-	return context_is_mouse_button_released(active_context(), button)
+	return context_is_mouse_button_released(default_context(), button)
 }
 
 IsMouseButtonDown :: proc(button: MouseButton) -> bool {
-	return context_is_mouse_button_down(active_context(), button)
+	return context_is_mouse_button_down(default_context(), button)
 }
 
 // --- gamepad queries (raylib-named) ----------------------------------------
@@ -453,8 +445,8 @@ context_get_mouse_wheel_move_v :: proc(ctx: ^Context) -> Vector2 {
 	return ctx == nil ? Vector2{} : ctx.inp.wheel
 }
 
-GetMousePosition :: proc() -> Vector2 {return context_get_mouse_position(active_context())}
-GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(active_context())}
+GetMousePosition :: proc() -> Vector2 {return context_get_mouse_position(default_context())}
+GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(default_context())}
 
 // SetMousePosition warps the cursor to window coordinates (raylib parity).
 // The buffered position updates immediately so the frame that requests the warp
@@ -465,7 +457,7 @@ GetMouseDelta :: proc() -> Vector2 {return context_get_mouse_delta(active_contex
 // derived from the pointer, so a recorded frame is only reproducible when the
 // harness owns the cursor rather than inheriting wherever the user left it.
 SetMousePosition :: proc(x, y: i32) {
-	context_set_mouse_position(active_context(), x, y)
+	context_set_mouse_position(default_context(), x, y)
 }
 
 context_set_mouse_position :: proc(ctx: ^Context, x, y: i32) {
@@ -493,7 +485,7 @@ context_get_mouse_wheel_move :: proc(ctx: ^Context) -> f32 {
 GetMouseWheelMove :: proc() -> f32 {
 	return context_get_mouse_wheel_move(default_context())
 }
-GetMouseWheelMoveV :: proc() -> Vector2 {return context_get_mouse_wheel_move_v(active_context())}
+GetMouseWheelMoveV :: proc() -> Vector2 {return context_get_mouse_wheel_move_v(default_context())}
 
 context_get_clipboard_text_impl :: proc(ctx: ^Context) -> cstring {
 	if ctx == nil do return ""
@@ -636,7 +628,7 @@ context_is_cursor_on_screen :: proc(ctx: ^Context) -> bool {
 	return ctx != nil && ctx.inp.cursor_on_screen
 }
 
-IsCursorOnScreen :: proc() -> bool {return context_is_cursor_on_screen(active_context())}
+IsCursorOnScreen :: proc() -> bool {return context_is_cursor_on_screen(default_context())}
 
 // SetTextInputRect reports the focused text field's caret rect (UI logical
 // pixels, top-left origin). Call every frame while a field is active; the OS
@@ -647,7 +639,7 @@ context_set_text_input_rect_impl :: proc(ctx: ^Context, x, y, w, h: i32) {
 	assert(ctx != nil, "context_set_text_input_rect: nil context")
 	assert(w >= 0 && h >= 0, "context_set_text_input_rect: negative size")
 	assert(ctx.win != nil, "context_set_text_input_rect: window not initialized")
-	ime_rect_armed = true
+	ctx.inp.ime_rect_armed = true
 	platform_set_text_input_rect(ctx, x, y, w, h)
 }
 
@@ -658,8 +650,13 @@ SetTextInputRect :: proc(x, y, w, h: i32) {
 // GetPreedit returns the in-progress IME composition string (empty when not
 // composing) and the caret byte offset within it. The string aliases an
 // internal buffer valid until the next composition event; clone to keep.
+context_get_preedit :: proc(ctx: ^Context) -> (text: string, caret: int) {
+	if ctx == nil do return "", 0
+	assert(ctx.inp.preedit_len >= 0 && ctx.inp.preedit_len <= PREEDIT_MAX, "context_get_preedit: corrupt length")
+	assert(ctx.inp.preedit_caret >= 0 && ctx.inp.preedit_caret <= ctx.inp.preedit_len, "context_get_preedit: corrupt caret")
+	return string(ctx.inp.preedit_buf[:ctx.inp.preedit_len]), ctx.inp.preedit_caret
+}
+
 GetPreedit :: proc() -> (text: string, caret: int) {
-	assert(preedit_len >= 0 && preedit_len <= PREEDIT_MAX, "GetPreedit: corrupt length")
-	assert(preedit_caret >= 0 && preedit_caret <= preedit_len, "GetPreedit: corrupt caret")
-	return string(preedit_buf[:preedit_len]), preedit_caret
+	return context_get_preedit(default_context())
 }

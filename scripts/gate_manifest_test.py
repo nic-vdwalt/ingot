@@ -32,6 +32,10 @@ class GateManifestTest(unittest.TestCase):
         for package in MANIFEST["test_packages"]:
             self.assertIn(package, checked | bindings, package)
 
+    def test_windows_gfx_expected_assert_tests_are_fully_qualified(self):
+        for test_name in MANIFEST["windows_gfx_expected_assert_tests"]:
+            self.assertRegex(test_name, r"^gfx\.[a-z][a-z0-9_]*$")
+
     def test_launchers_consume_shared_manifest(self):
         launchers = ["check.sh", "check.ps1", "test.sh", "test.ps1"]
         for launcher in launchers:

@@ -98,6 +98,8 @@ gpu_budget_floors_degenerate_limits :: proc(t: ^testing.T) {
 
 @(test)
 gpu_budget_active_never_returns_zero :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
 	// Headless contexts (text_test) create a device without negotiating, so
 	// the renderer must still get a usable budget instead of zero-sized
 	// pools that would divide reservation math by zero.

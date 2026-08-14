@@ -18,96 +18,95 @@ package gfx
 INGOT_INPUT_SIM :: #config(INGOT_INPUT_SIM, false)
 
 when INGOT_INPUT_SIM {
-	@(private)
-	Sim_State :: struct {
-		key_down: [KEY_COUNT]bool,
-		mb_down:  [8]bool,
-	}
-	@(private)
-	g_sim: Sim_State
-
-	// SimBeginFrame clears per-frame edges and promotes pending wheel,
-	// exactly like input_poll's clear phase but without any platform call.
-	// Held state (key_down / mb_down) persists across frames.
-	SimBeginFrame :: proc() {
+	context_sim_begin_frame :: proc(ctx: ^Context) {
+		assert(ctx != nil, "context_sim_begin_frame: nil context")
 		for i in 0 ..< KEY_COUNT {
-			g.inp.pressed[i] = false
-			g.inp.released[i] = false
-			g.inp.repeat[i] = false
+			ctx.inp.pressed[i] = false
+			ctx.inp.released[i] = false
+			ctx.inp.repeat[i] = false
 		}
-		g.inp.char_h, g.inp.char_t = 0, 0
-		g.inp.key_h, g.inp.key_t = 0, 0
+		ctx.inp.char_h, ctx.inp.char_t = 0, 0
+		ctx.inp.key_h, ctx.inp.key_t = 0, 0
 		for i in 0 ..< 8 {
-			g.inp.mb_pressed[i] = false
-			g.inp.mb_released[i] = false
+			ctx.inp.mb_pressed[i] = false
+			ctx.inp.mb_released[i] = false
 		}
-		g.inp.mouse_prev = g.inp.mouse
-		g.inp.mouse_delta = {}
-		g.inp.wheel = g.inp.wheel_pending
-		g.inp.wheel_pending = {}
+		ctx.inp.mouse_prev = ctx.inp.mouse
+		ctx.inp.mouse_delta = {}
+		ctx.inp.wheel = ctx.inp.wheel_pending
+		ctx.inp.wheel_pending = {}
 	}
 
-	// SimMouse moves the cursor; delta accumulates within the frame.
+	SimBeginFrame :: proc() {
+		context_sim_begin_frame(default_context())
+	}
+
+	context_sim_mouse :: proc(ctx: ^Context, x, y: f32) {
+		assert(ctx != nil, "context_sim_mouse: nil context")
+		ctx.inp.mouse_delta.x += x - ctx.inp.mouse.x
+		ctx.inp.mouse_delta.y += y - ctx.inp.mouse.y
+		ctx.inp.mouse = {x, y}
+	}
+
 	SimMouse :: proc(x, y: f32) {
-		g.inp.mouse_delta.x += x - g.inp.mouse.x
-		g.inp.mouse_delta.y += y - g.inp.mouse.y
-		g.inp.mouse = {x, y}
+		context_sim_mouse(default_context(), x, y)
 	}
 
-	// SimButton transitions a button and derives the press/release edge.
-	// Idempotent per state: setting an already-down button down again does
-	// not produce a second pressed edge (matches GLFW behaviour).
-	SimButton :: proc(button: MouseButton, down: bool) {
+	context_sim_button :: proc(ctx: ^Context, button: MouseButton, down: bool) {
+		assert(ctx != nil, "context_sim_button: nil context")
 		b := int(button)
-		assert(b >= 0 && b < 8, "SimButton: button out of range")
-		if down && !g_sim.mb_down[b] do g.inp.mb_pressed[b] = true
-		if !down && g_sim.mb_down[b] do g.inp.mb_released[b] = true
-		g_sim.mb_down[b] = down
-		g.inp.mb_down[b] = down
+		assert(b >= 0 && b < 8, "context_sim_button: button out of range")
+		if down && !ctx.inp.mb_down[b] do ctx.inp.mb_pressed[b] = true
+		if !down && ctx.inp.mb_down[b] do ctx.inp.mb_released[b] = true
+		ctx.inp.mb_down[b] = down
 	}
 
-	// SimKey transitions a key and derives edges; `repeat` marks an
-	// additional repeat edge on an already-held key.
-	SimKey :: proc(key: KeyboardKey, down: bool, repeat := false) {
+	SimButton :: proc(button: MouseButton, down: bool) {
+		context_sim_button(default_context(), button, down)
+	}
+
+	context_sim_key :: proc(ctx: ^Context, key: KeyboardKey, down: bool, repeat := false) {
+		assert(ctx != nil, "context_sim_key: nil context")
 		i := i32(key)
-		assert(i >= 0 && i < KEY_COUNT, "SimKey: key out of range")
-		if down && !g_sim.key_down[i] {
-			g.inp.pressed[i] = true
-			_push_key(key)
+		assert(i >= 0 && i < KEY_COUNT, "context_sim_key: key out of range")
+		if down && !ctx.inp.key_down[i] {
+			ctx.inp.pressed[i] = true
+			_push_key_input(&ctx.inp, key)
 		}
-		if down && repeat do g.inp.repeat[i] = true
-		if !down && g_sim.key_down[i] do g.inp.released[i] = true
-		g_sim.key_down[i] = down
-		g.inp.key_down[i] = down
+		if down && repeat do ctx.inp.repeat[i] = true
+		if !down && ctx.inp.key_down[i] do ctx.inp.released[i] = true
+		ctx.inp.key_down[i] = down
 	}
 
-	// SimChar stages a typed character (text input path).
+	SimKey :: proc(key: KeyboardKey, down: bool, repeat := false) {
+		context_sim_key(default_context(), key, down, repeat)
+	}
+
+	context_sim_char :: proc(ctx: ^Context, r: rune) {
+		assert(ctx != nil, "context_sim_char: nil context")
+		_push_char_input(&ctx.inp, r)
+	}
+
 	SimChar :: proc(r: rune) {
-		_push_char(r)
+		context_sim_char(default_context(), r)
 	}
 
-	// SimWheel stages scroll for this frame (visible immediately, unlike
-	// the real pending buffer - harness frames are already discrete).
+	context_sim_wheel :: proc(ctx: ^Context, dx, dy: f32) {
+		assert(ctx != nil, "context_sim_wheel: nil context")
+		ctx.inp.wheel.x += dx
+		ctx.inp.wheel.y += dy
+	}
+
 	SimWheel :: proc(dx, dy: f32) {
-		g.inp.wheel.x += dx
-		g.inp.wheel.y += dy
+		context_sim_wheel(default_context(), dx, dy)
 	}
 
-	// SimReset clears all input state (teardown between fuzz rounds).
+	context_sim_reset :: proc(ctx: ^Context) {
+		assert(ctx != nil, "context_sim_reset: nil context")
+		ctx.inp = {}
+	}
+
 	SimReset :: proc() {
-		g_sim = {}
-		g.inp = {}
-	}
-
-	@(private)
-	sim_key_down :: proc(i: i32) -> bool {
-		if i < 0 || i >= KEY_COUNT do return false
-		return g_sim.key_down[i]
-	}
-
-	@(private)
-	sim_mouse_button_down :: proc(b: i32) -> bool {
-		if b < 0 || b >= 8 do return false
-		return g_sim.mb_down[b]
+		context_sim_reset(default_context())
 	}
 }
