@@ -4,8 +4,12 @@ MAX_DROPPED_FILES :: 16
 MAX_DROPPED_PATH_BYTES :: 64 * 1024
 DROP_NAME_MAX :: 256
 
+context_is_file_drag_over :: proc(ctx: ^Context) -> bool {
+	return ctx != nil && ctx.drop.hover_frame
+}
+
 IsFileDragOver :: proc() -> bool {
-	return g.drop.hover_frame
+	return context_is_file_drag_over(default_context())
 }
 
 @(private)
@@ -16,7 +20,7 @@ _drop_hover_stage_context :: proc "contextless" (ctx: ^Context, over: bool) {
 
 @(private)
 _drop_hover_stage :: proc "contextless" (over: bool) {
-	_drop_hover_stage_context(g, over)
+	_drop_hover_stage_context(default_context(), over)
 }
 
 @(private)
@@ -35,7 +39,7 @@ _drop_complete_context :: proc "contextless" (ctx: ^Context) {
 
 @(private)
 _drop_complete :: proc "contextless" () {
-	_drop_complete_context(g)
+	_drop_complete_context(default_context())
 }
 
 @(private)

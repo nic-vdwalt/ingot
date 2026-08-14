@@ -164,10 +164,7 @@ context_scope_leave :: proc(scope: ^Context_Scope) {
 }
 
 context_get_char_pressed :: proc(ctx: ^Context) -> rune {
-	if ctx == nil do return 0
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return GetCharPressed()
+	return context_get_char_pressed_impl(ctx)
 }
 
 context_is_key_down :: proc(ctx: ^Context, key: KeyboardKey) -> bool {
@@ -199,10 +196,7 @@ context_window_fullscreen :: proc(ctx: ^Context) -> bool {
 }
 
 context_get_clipboard_text :: proc(ctx: ^Context) -> cstring {
-	if ctx == nil do return ""
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	return GetClipboardText()
+	return context_get_clipboard_text_impl(ctx)
 }
 
 context_set_frame_strategy :: proc(ctx: ^Context, strategy: Frame_Strategy) {
@@ -234,25 +228,16 @@ context_monitor_refresh_rate :: proc(ctx: ^Context) -> i32 {
 }
 
 context_set_mouse_cursor :: proc(ctx: ^Context, cursor: MouseCursor) {
-	if ctx == nil do return
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	SetMouseCursor(cursor)
+	context_set_mouse_cursor_impl(ctx, cursor)
 }
 
 context_set_clipboard_text :: proc(ctx: ^Context, text: cstring) {
 	assert(ctx != nil && text != nil, "context_set_clipboard_text: nil argument")
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	SetClipboardText(text)
+	context_set_clipboard_text_impl(ctx, text)
 }
 
 context_set_text_input_rect :: proc(ctx: ^Context, x, y, width, height: i32) {
-	assert(ctx != nil, "context_set_text_input_rect: nil context")
-	assert(width >= 0 && height >= 0, "context_set_text_input_rect: negative size")
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	SetTextInputRect(x, y, width, height)
+	context_set_text_input_rect_impl(ctx, x, y, width, height)
 }
 
 context_toggle_fullscreen :: proc(ctx: ^Context) {

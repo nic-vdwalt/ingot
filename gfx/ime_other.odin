@@ -7,7 +7,7 @@
 package gfx
 
 @(private)
-_ime_set_rect :: proc(x, y, w, h: i32) {
+_ime_set_rect :: proc(ctx: ^Context, x, y, w, h: i32) {
 }
 
 @(private)
