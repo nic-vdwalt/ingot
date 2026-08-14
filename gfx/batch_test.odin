@@ -341,6 +341,47 @@ batch_emission_is_context_bound :: proc(t: ^testing.T) {
 }
 
 @(test)
+frame_shape_drawing_is_context_bound :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	first.epoch = 11
+	second.epoch = 22
+	first.frame.has_frame = true
+	second.frame.has_frame = true
+	first.frame.pass_begun = true
+	second.frame.pass_begun = true
+	first.rend.model_xf = AFFINE_IDENTITY
+	second.rend.model_xf = AFFINE_IDENTITY
+	first.rend.neutral_bind = transmute(wg.BindGroup)(uintptr(1))
+	second.rend.neutral_bind = transmute(wg.BindGroup)(uintptr(2))
+	first.rend.cur_bind = first.rend.neutral_bind
+	second.rend.cur_bind = second.rend.neutral_bind
+	first_frame := Frame {
+		owner     = first,
+		epoch     = first.epoch,
+		open      = true,
+		available = true,
+	}
+	second_frame := Frame {
+		owner     = second,
+		epoch     = second.epoch,
+		open      = true,
+		available = true,
+	}
+
+	frame_draw_rectangle(&first_frame, {1, 2, 3, 4}, WHITE)
+	testing.expect_value(t, len(first.rend.verts), 4)
+	testing.expect_value(t, len(first.rend.indices), 6)
+	testing.expect_value(t, len(second.rend.verts), 0)
+	frame_draw_triangle(&second_frame, {0, 0}, {2, 0}, {0, 2}, WHITE)
+	testing.expect_value(t, len(first.rend.verts), 4)
+	testing.expect_value(t, len(second.rend.verts), 3)
+	testing.expect_value(t, len(second.rend.indices), 3)
+}
+
+@(test)
 batch_peak_tracks_high_water_across_flushes :: proc(t: ^testing.T) {
 	// The peak is what justifies the capacity constants, so it must survive
 	// the per-flush clear rather than reporting only the last batch. Calls
