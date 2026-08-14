@@ -22,6 +22,10 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - `fit.Px`, `fit.Region_Open`, `fit.Region_Close`, and string/integer-key region
   control overloads reduce explicit-surface scaling, scope, and identity
   ceremony while preserving physical `Rect` semantics and caller-owned state.
+- Concise explicit-surface drawing and interaction calls, plus Surface-bound
+  `Layout_State`, `Grid_State`, `Flow_State`, and `Fit_Column_State` operations,
+  remove repeated prefixes and owner arguments. Existing `Surface_*` spellings
+  remain source-compatible, and all explicit rectangles remain physical.
 - `fit.Row_With`, `Column_With`, `Flow_With`, `Grid_With`, and
   `Attachment_With`: immediately invoked, source-located container helpers that
   verify callback balance without retaining callbacks or component state.

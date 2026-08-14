@@ -1,5 +1,6 @@
 package fit
 
+import "core:strings"
 import "ingot:ui"
 
 Theme :: struct {
@@ -128,13 +129,33 @@ Input_Box :: struct {
 Text_Input_State :: struct {
 	inner: ui.Text_Input_State,
 }
+Text_Input_Submit :: enum u8 {
+	Default,
+	Never,
+	Enter,
+	Ctrl_Enter,
+	Mod_Enter,
+}
+Text_Input_Semantics :: struct {
+	field_id: string,
+	name:     string,
+}
+Text_Input_Config :: struct {
+	rect:         Rect,
+	placeholder:  string,
+	active:       bool,
+	masked:       bool,
+	enable_pills: bool,
+	enable_undo:  bool,
+	max_bytes:    int,
+	single_line:  bool,
+	submit:       Text_Input_Submit,
+	semantics:    Text_Input_Semantics,
+}
 Text_Input_Options :: struct {
 	height:    i32,
 	masked:    bool,
 	semantics: Text_Input_Semantics,
-}
-Text_Input_Semantics :: struct {
-	name: string,
 }
 Slider_State :: struct {
 	inner: ui.Slider_State,
@@ -306,6 +327,90 @@ Input_Box_Text :: proc(box: ^Input_Box) -> string {
 Text_Input_State_Destroy :: proc(state: ^Text_Input_State) {
 	assert(state != nil, "Fit.Text_Input_State_Destroy: nil state")
 	ui.text_input_state_destroy(&state.inner)
+}
+
+Text_Input_State_Cursor :: proc(state: ^Text_Input_State) -> int {
+	assert(state != nil, "Fit.Text_Input_State_Cursor: nil state")
+	return state.inner.cursor
+}
+
+Text_Input_State_Set_Cursor :: proc(state: ^Text_Input_State, cursor: int) {
+	assert(state != nil && cursor >= 0, "Fit.Text_Input_State_Set_Cursor: invalid argument")
+	state.inner.cursor = cursor
+	state.inner.desired_col = 0
+	state.inner.scroll_line = 0
+}
+
+Text_Input_State_Clear :: proc(state: ^Text_Input_State) {
+	assert(state != nil, "Fit.Text_Input_State_Clear: nil state")
+	clear(&state.inner.pills)
+	ui.text_input_selection_clear(&state.inner)
+	ui.input_undo_reset(&state.inner.undo)
+	state.inner.cursor = 0
+	state.inner.desired_col = 0
+	state.inner.scroll_line = 0
+}
+
+Text_Input_State_Selecting :: proc(state: ^Text_Input_State) -> bool {
+	assert(state != nil, "Fit.Text_Input_State_Selecting: nil state")
+	return ui.text_input_selecting(&state.inner)
+}
+
+Text_Input_State_Spell_Menu_Active :: proc(
+	state: ^Text_Input_State,
+	text: ^strings.Builder,
+) -> bool {
+	assert(state != nil && text != nil, "Fit.Text_Input_State_Spell_Menu_Active: invalid argument")
+	return ui.text_input_spell_menu_active(&state.inner, text)
+}
+
+Text_Input_State_Record_Replace :: proc(
+	state: ^Text_Input_State,
+	text: ^strings.Builder,
+	value: string,
+	now: f64,
+) {
+	assert(state != nil && text != nil, "Fit.Text_Input_State_Record_Replace: invalid argument")
+	ui.input_undo_record(
+		&state.inner.undo,
+		strings.to_string(text^),
+		state.inner.cursor,
+		state.inner.pills[:],
+		.Other,
+		now,
+	)
+	strings.builder_reset(text)
+	strings.write_string(text, value)
+	clear(&state.inner.pills)
+	state.inner.cursor = strings.builder_len(text^)
+	_, state.inner.desired_col = ui.caret_row_col(value, state.inner.cursor)
+	state.inner.scroll_line = 0
+}
+
+Text_Input_State_Add_Pill :: proc(state: ^Text_Input_State, start, end: int) {
+	assert(
+		state != nil && start >= 0 && end >= start,
+		"Fit.Text_Input_State_Add_Pill: invalid argument",
+	)
+	ui.pills_shift_after_insert(&state.inner.pills, start, end - start + 1)
+	append(&state.inner.pills, ui.Mention_Span{start, end})
+}
+
+Text_Input_State_Encode_Pills :: proc(state: ^Text_Input_State, text: string) -> string {
+	assert(state != nil, "Fit.Text_Input_State_Encode_Pills: nil state")
+	return ui.encode_pills(text, state.inner.pills[:])
+}
+
+Caret_Row_Column :: proc(text: string, cursor: int) -> (row, column: int) {
+	return ui.caret_row_col(text, cursor)
+}
+
+Caret_Line_Count :: proc(text: string) -> int {
+	return ui.caret_line_count(text)
+}
+
+Strip_Pill_Markers :: proc(text: string) -> string {
+	return ui.strip_pill_markers(text)
 }
 
 Combobox_State_Destroy :: proc(state: ^Combobox_State) {

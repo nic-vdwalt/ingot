@@ -105,6 +105,31 @@ is intended for full-parent explicit geometry. Its callback receives a physical
 rectangle. `Px` converts logical constants once; never pass layout-returned
 physical values through it.
 
+## Explicit layout states
+
+`Layout_Begin`, `Grid_Begin`, `Flow_Begin`, and `Fit_Column_Begin` bind the
+callback's borrowed Surface to zero-value caller-owned state. Operations after
+`Begin` take only that state, and `End` clears the binding:
+
+```odin
+layout: fit.Layout_State
+fit.Layout_Begin(surface, &layout, rect, gap = fit.Px(surface, 8))
+fit.Layout_Row(&layout, fit.Px(surface, 32))
+left := fit.Layout_Next(&layout, fit.Px(surface, 120))
+right := fit.Layout_Remaining(&layout)
+fit.Layout_Pop(&layout)
+fit.Layout_End(&layout)
+```
+
+Every begin/end pair must balance within the borrowed Surface callback. A state
+cannot be reopened while active, used before begin, ended twice, or continued
+through a different Surface. It is reusable after a successful end. Layout
+results are physical rectangles and must not pass through `Px` again.
+
+The concise calls and their longer `Surface_*` compatibility forms share one
+implementation. Existing consumers may migrate incrementally without changing
+layout behavior or bounds.
+
 `Scope` composes an explicit string or nonzero integer component key around one
 immediately invoked procedure. `Id` derives a current-frame `Widget_Id` from the
 active scope. Neither API stores widget behavior; control values and interaction

@@ -172,6 +172,23 @@ Pane_End :: proc(
 	Surface_Pane_End(surface, state, rect, content_y, padding)
 }
 
+Grid_Visible_Range :: proc(
+	surface: ^Surface,
+	rect: Rect,
+	columns, row_height, gap_y, count, top, bottom: i32,
+) -> Visible_Range {
+	return Surface_Grid_Visible_Range(
+		surface,
+		rect,
+		columns,
+		row_height,
+		gap_y,
+		count,
+		top,
+		bottom,
+	)
+}
+
 Layer_Begin :: proc(surface: ^Surface, z: Z_Order, claim: Float_Rect = {}) {
 	Surface_Layer_Begin(surface, z, claim)
 }

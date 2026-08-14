@@ -74,6 +74,32 @@ rectangle. Use `Px(surface, value)` only for logical design constants; rectangle
 returned by layout and render callbacks are already physical. `Region_Open` and
 `Region_Close` may own one optional identity scope for a bounded region.
 
+Explicit drawing keeps the borrowed Surface visible at each paint or interaction
+call. Begun layout helpers instead bind that Surface to caller-owned state until
+`End`, avoiding two repeated owner arguments without introducing ambient state:
+
+```odin
+canvas :: proc(surface: ^fit.Surface, root: fit.Rect, userdata: rawptr) -> bool {
+	layout: fit.Layout_State
+	fit.Layout_Begin(surface, &layout, root, gap = fit.Px(surface, 8))
+	fit.Layout_Row(&layout, fit.Px(surface, 40))
+	cell := fit.Layout_Remaining(&layout)
+	fit.Layout_Pop(&layout)
+	fit.Layout_End(&layout)
+
+	theme := fit.Get_Theme_Tokens(surface)
+	fit.Fill_Rect(surface, cell, theme.background_panel)
+	fit.Text(surface, "Explicit surface", cell.x, cell.y)
+	return false
+}
+```
+
+`Layout_State`, `Grid_State`, `Flow_State`, and `Fit_Column_State` are zero-value
+ready, must be balanced, and may be reused after their `End`. The longer
+`Surface_Layout_*`, `Surface_Grid_*`, `Surface_Flow_*`, and
+`Surface_Fit_Column_*` spellings remain source-compatible. Neither vocabulary
+implicitly scales geometry.
+
 For caller-owned scheduling, use the `fit.App` lifecycle explicitly:
 
 ```odin
