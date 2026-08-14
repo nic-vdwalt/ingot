@@ -127,6 +127,25 @@ Custom :: proc(builder: ^Builder, spec: Custom_Spec, options: Custom_Options = {
 	)
 }
 
+Canvas :: proc(builder: ^Builder, render: Render_Proc, userdata: rawptr = nil) {
+	assert(builder != nil && builder.bound, "Fit.Canvas: builder not bound")
+	assert(render != nil, "Fit.Canvas: nil render callback")
+	assert(builder.inner.prepared.depth == 0, "Fit.Canvas: root already declared")
+	Column(builder)
+	Custom(
+		builder,
+		{measure = canvas_measure, render = render, userdata = userdata},
+		{size = {width = Grow(), height = Grow()}},
+	)
+	End(builder)
+}
+
+@(private = "file")
+canvas_measure :: proc(constraints: Constraints, userdata: rawptr) -> Size {
+	_ = userdata
+	return {w = max(constraints.max_w, 1), h = max(constraints.max_h, 1)}
+}
+
 End :: proc(builder: ^Builder) {
 	assert(builder != nil && builder.bound, "Fit.End: builder not bound")
 	ui.fit_end(&builder.inner)

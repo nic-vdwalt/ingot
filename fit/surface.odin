@@ -22,6 +22,11 @@ Surface_Scale_Float :: proc(surface: ^Surface, value: f32) -> f32 {
 	return ui.ui_frame_scf(u.frame, value)
 }
 
+Px :: proc {
+	Surface_Scale,
+	Surface_Scale_Float,
+}
+
 Surface_Cull_Bounds :: proc(surface: ^Surface) -> (top, bottom: i32) {
 	u := surface_ui(surface)
 	return u.frame.text_cull_top, u.frame.text_cull_bottom
@@ -326,11 +331,36 @@ Surface_Settings_Scale_Preset_Index :: proc(value: f32) -> int {
 Surface_Region_Begin :: proc(surface: ^Surface, region: ^Region, rect: Rect, gap: Space = .None) {
 	u := surface_ui(surface)
 	assert(region != nil && !region.inner.open, "Fit.Surface_Region_Begin: invalid region")
+	assert(!region.managed_scope, "Fit.Surface_Region_Begin: managed scope still open")
 	ui.begin(&region.inner, u.frame, to_rect(rect), gap = ui.Space(gap))
 }
 
 Surface_Region_End :: proc(region: ^Region) -> i32 {
 	assert(region != nil && region.inner.open, "Fit.Surface_Region_End: region not open")
+	assert(!region.managed_scope, "Fit.Surface_Region_End: use Region_Close")
+	return ui.end(&region.inner)
+}
+
+Region_Open :: proc(
+	surface: ^Surface,
+	region: ^Region,
+	rect: Rect,
+	options: Region_Options = {},
+) -> ^Region {
+	Surface_Region_Begin(surface, region, rect, options.gap)
+	if options.scope != "" {
+		ui.scope_begin(&region.inner, options.scope)
+		region.managed_scope = true
+	}
+	return region
+}
+
+Region_Close :: proc(region: ^Region) -> i32 {
+	assert(region != nil && region.inner.open, "Fit.Region_Close: region not open")
+	if region.managed_scope {
+		ui.scope_end(&region.inner)
+		region.managed_scope = false
+	}
 	return ui.end(&region.inner)
 }
 

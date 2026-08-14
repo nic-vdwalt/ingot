@@ -528,7 +528,13 @@ Surface :: struct {
 }
 
 Region :: struct {
-	inner: ui.Ui,
+	inner:         ui.Ui,
+	managed_scope: bool,
+}
+
+Region_Options :: struct {
+	gap:   Space,
+	scope: string,
 }
 
 Test_Driver :: struct {
