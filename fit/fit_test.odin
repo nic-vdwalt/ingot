@@ -275,7 +275,9 @@ fit_region_managed_scope_balances_and_composes_ids :: proc(t: ^testing.T) {
 	defer ui.ui_frame_end(&frame)
 	root: ui.Ui
 	ui.begin(&root, &frame, {0, 0, 320, 240})
-	surface := Surface{inner = &root}
+	surface := Surface {
+		inner = &root,
+	}
 	first, second: Region
 	first_region := Region_Open(&surface, &first, {0, 0, 160, 120}, {scope = "first"})
 	first_id := Region_Id(first_region, "control")

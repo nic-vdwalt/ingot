@@ -54,9 +54,7 @@ Test_Driver_Frame :: proc(
 	impl.frame.output = impl.output
 	ui.ui_frame_begin(impl.frame, &impl.runtime, &inner_input)
 	builder_open(&impl.builder, impl.frame, {0, 0, i32(size.x), i32(size.y)})
-	Column(&impl.builder)
 	draw(&impl.builder, userdata)
-	End(&impl.builder)
 	assert(impl.builder.inner.prepared.depth == 0, "Fit.Test_Driver_Frame: unbalanced builder")
 	if !impl.builder.inner.prepared.rendered do _ = Render(&impl.builder)
 	builder_close(&impl.builder)

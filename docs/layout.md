@@ -99,6 +99,12 @@ after resetting the output for the current render.
 userdata, callbacks, state, and output pointers must remain valid until the
 builder is rendered.
 
+`Canvas` is a complete root, not a leaf to add below another container. It is
+equivalent to one synthetic root container plus one grow-sized `Custom` leaf and
+is intended for full-parent explicit geometry. Its callback receives a physical
+rectangle. `Px` converts logical constants once; never pass layout-returned
+physical values through it.
+
 `Scope` composes an explicit string or nonzero integer component key around one
 immediately invoked procedure. `Id` derives a current-frame `Widget_Id` from the
 active scope. Neither API stores widget behavior; control values and interaction

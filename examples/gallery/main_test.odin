@@ -11,21 +11,7 @@ Gallery_Input_Test_State :: struct {
 
 @(private = "file")
 gallery_input_test_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	state := cast(^Gallery_Input_Test_State)userdata
-	fit.Custom(
-		builder,
-		{
-			measure = gallery_input_test_measure,
-			render = gallery_input_test_render,
-			userdata = state,
-		},
-	)
-}
-
-@(private = "file")
-gallery_input_test_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
-	assert(userdata != nil)
-	return {min(max(constraints.max_w, 300), 800), min(max(constraints.max_h, 200), 600), false}
+	fit.Canvas(builder, gallery_input_test_render, userdata)
 }
 
 @(private = "file")
@@ -35,17 +21,9 @@ gallery_input_test_render :: proc(
 	userdata: rawptr,
 ) -> bool {
 	state := cast(^Gallery_Input_Test_State)userdata
-	fit.Surface_Region_Begin(surface, &state.region, rect)
-	fit.Region_Scope_Begin(&state.region, "inputs")
-	_ = fit.Region_Text_Input(
-		&state.region,
-		"name",
-		&state.box,
-		"Name",
-		{semantics = {name = "Name"}},
-	)
-	fit.Region_Scope_End(&state.region)
-	_ = fit.Surface_Region_End(&state.region)
+	region := fit.Region_Open(surface, &state.region, rect, {scope = "inputs"})
+	_ = fit.Region_Text_Input(region, "name", &state.box, "Name", {semantics = {name = "Name"}})
+	_ = fit.Region_Close(region)
 	return false
 }
 

@@ -67,6 +67,13 @@ widget tree. A `Custom` render callback receives a borrowed `fit.Surface` for
 same-frame interaction and explicit geometry; the Surface is valid only for that
 callback and must not be retained.
 
+`Canvas` is the root convenience for applications whose whole content uses
+explicit geometry. It declares the synthetic Builder root and a grow-sized
+`Custom` leaf, then lends the callback a same-frame `Surface` and physical root
+rectangle. Use `Px(surface, value)` only for logical design constants; rectangles
+returned by layout and render callbacks are already physical. `Region_Open` and
+`Region_Close` may own one optional identity scope for a bounded region.
+
 For caller-owned scheduling, use the `fit.App` lifecycle explicitly:
 
 ```odin
