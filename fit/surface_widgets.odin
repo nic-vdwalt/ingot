@@ -1,5 +1,6 @@
 package fit
 
+import "core:strings"
 import "ingot:ui"
 
 Surface_Button :: proc(
@@ -44,6 +45,46 @@ Surface_Text_Input :: proc(
 		active,
 		masked,
 		inner_semantics,
+	)
+}
+
+Surface_Text_Input_State :: proc(
+	surface: ^Surface,
+	config: Text_Input_Config,
+	text: ^strings.Builder,
+	state: ^Text_Input_State,
+) -> bool {
+	u := surface_ui(surface)
+	assert(text != nil && state != nil, "Fit.Surface_Text_Input_State: invalid argument")
+	return ui.text_input_box(
+		u.frame,
+		{
+			rect = to_rect(config.rect),
+			placeholder = config.placeholder,
+			active = config.active,
+			masked = config.masked,
+			enable_pills = config.enable_pills,
+			enable_undo = config.enable_undo,
+			max_bytes = config.max_bytes,
+			single_line = config.single_line,
+			submit = ui.Text_Input_Submit(config.submit),
+			semantics = {field_id = config.semantics.field_id, name = config.semantics.name},
+		},
+		text,
+		&state.inner,
+	)
+}
+
+Surface_Text_Input_Visual_Line_Count :: proc(
+	surface: ^Surface,
+	state: ^Text_Input_State,
+	text: string,
+	width, font_size: i32,
+) -> int {
+	u := surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Text_Input_Visual_Line_Count: nil state")
+	return len(
+		ui.input_visual_lines_memo_frame(u.frame, &state.inner.memo, text, width, font_size),
 	)
 }
 

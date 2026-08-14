@@ -41,12 +41,18 @@ Surface_Fit_Column_Begin :: proc(
 }
 
 Surface_Fit_Column_Next :: proc(surface: ^Surface, state: ^Fit_Column_State, height: i32) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Fit_Column_Next: surface mismatch")
+	assert(
+		state != nil && state.surface == surface,
+		"Fit.Surface_Fit_Column_Next: surface mismatch",
+	)
 	return Fit_Column_Next(state, height)
 }
 
 Surface_Fit_Column_End :: proc(surface: ^Surface, state: ^Fit_Column_State) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Fit_Column_End: surface mismatch")
+	assert(
+		state != nil && state.surface == surface,
+		"Fit.Surface_Fit_Column_End: surface mismatch",
+	)
 	return Fit_Column_End(state)
 }
 
@@ -152,11 +158,7 @@ Layout_Remaining :: proc(state: ^Layout_State) -> Rect {
 	return from_rect(ui.remaining(&state.inner))
 }
 
-Layout_Flex :: proc(
-	state: ^Layout_State,
-	tracks: []Track,
-	justify: Main_Align = .Start,
-) {
+Layout_Flex :: proc(state: ^Layout_State, tracks: []Track, justify: Main_Align = .Start) {
 	assert(state != nil && state.open, "Fit.Layout_Flex: state not open")
 	_ = surface_ui(state.surface)
 	assert(len(tracks) <= ui.MAX_LAYOUT_FLEX, "Fit.Layout_Flex: too many tracks")
@@ -192,7 +194,10 @@ Surface_Layout_Push_Row :: proc(
 	gap: i32 = 0,
 	align: Cross_Align = .Stretch,
 ) {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Layout_Push_Row: surface mismatch")
+	assert(
+		state != nil && state.surface == surface,
+		"Fit.Surface_Layout_Push_Row: surface mismatch",
+	)
 	Layout_Row(state, height, gap, align)
 }
 
@@ -202,7 +207,10 @@ Surface_Layout_Pop :: proc(surface: ^Surface, state: ^Layout_State) {
 }
 
 Surface_Layout_Row_Weights :: proc(surface: ^Surface, state: ^Layout_State, weights: []i32) {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Layout_Row_Weights: surface mismatch")
+	assert(
+		state != nil && state.surface == surface,
+		"Fit.Surface_Layout_Row_Weights: surface mismatch",
+	)
 	Layout_Weights(state, weights)
 }
 
@@ -211,7 +219,10 @@ Surface_Layout_Next_Weighted :: proc(
 	state: ^Layout_State,
 	weight: i32,
 ) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Layout_Next_Weighted: surface mismatch")
+	assert(
+		state != nil && state.surface == surface,
+		"Fit.Surface_Layout_Next_Weighted: surface mismatch",
+	)
 	return Layout_Weighted(state, weight)
 }
 
@@ -225,12 +236,18 @@ Surface_Layout_Next_Sized :: proc(
 	state: ^Layout_State,
 	main_size, cross_size: i32,
 ) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Layout_Next_Sized: surface mismatch")
+	assert(
+		state != nil && state.surface == surface,
+		"Fit.Surface_Layout_Next_Sized: surface mismatch",
+	)
 	return Layout_Sized(state, main_size, cross_size)
 }
 
 Surface_Layout_Remaining :: proc(surface: ^Surface, state: ^Layout_State) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Layout_Remaining: surface mismatch")
+	assert(
+		state != nil && state.surface == surface,
+		"Fit.Surface_Layout_Remaining: surface mismatch",
+	)
 	return Layout_Remaining(state)
 }
 
@@ -240,11 +257,17 @@ Surface_Layout_Flex_Begin :: proc(
 	tracks: []Track,
 	justify: Main_Align = .Start,
 ) {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Layout_Flex_Begin: surface mismatch")
+	assert(
+		state != nil && state.surface == surface,
+		"Fit.Surface_Layout_Flex_Begin: surface mismatch",
+	)
 	Layout_Flex(state, tracks, justify)
 }
 
 Surface_Layout_Flex_Next :: proc(surface: ^Surface, state: ^Layout_State) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Layout_Flex_Next: surface mismatch")
+	assert(
+		state != nil && state.surface == surface,
+		"Fit.Surface_Layout_Flex_Next: surface mismatch",
+	)
 	return Layout_Flex_Next(state)
 }

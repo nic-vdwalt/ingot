@@ -319,7 +319,9 @@ fit_concise_layout_state_reuses_after_end :: proc(t: ^testing.T) {
 	defer ui.ui_frame_end(&frame)
 	root: ui.Ui
 	ui.begin(&root, &frame, {0, 0, 320, 240})
-	surface := Surface{inner = &root}
+	surface := Surface {
+		inner = &root,
+	}
 	layout: Layout_State
 	Layout_Begin(&surface, &layout, {10, 20, 100, 40})
 	first := Layout_Next(&layout, 30)
@@ -348,7 +350,9 @@ fit_concise_grid_flow_and_fit_column_balance :: proc(t: ^testing.T) {
 	defer ui.ui_frame_end(&frame)
 	root: ui.Ui
 	ui.begin(&root, &frame, {0, 0, 320, 240})
-	surface := Surface{inner = &root}
+	surface := Surface {
+		inner = &root,
+	}
 	grid: Grid_State
 	Grid_Begin(&surface, &grid, {0, 0, 100, 0}, 2, 20)
 	testing.expect_value(t, Grid_Next(&grid), Rect{0, 0, 50, 20})

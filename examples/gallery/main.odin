@@ -526,28 +526,20 @@ draw_nav_strip :: proc(surface: ^fit.Surface, top, sw: i32) -> i32 {
 	fit.Fill_Rect(surface, fit.Rect{0, top + height - 1, sw, 1}, theme.border_subtle)
 
 	grid: fit.Grid_State
-	fit.Surface_Grid_Begin(
-		surface,
-		&grid,
-		{pad, top + pad, sw - pad * 2, 0},
-		cols,
-		row_h,
-		gap,
-		gap,
-	)
+	fit.Grid_Begin(surface, &grid, {pad, top + pad, sw - pad * 2, 0}, cols, row_h, gap, gap)
 	for s in Section {
 		style := fit.Button_Style.Primary if s == section else .Ghost
-		rect := fit.Surface_Grid_Next(surface, &grid)
+		rect := fit.Grid_Next(&grid)
 		widget := fit.Widget_Id(0x2000 + u64(s))
 		if fit.Surface_Button(surface, widget, SECTION_NAMES[s], rect, style) {
 			section = s
 			fit.Pane_Reset(&content_pane)
 		}
 	}
-	content := fit.Surface_Grid_End(surface, &grid)
+	content := fit.Grid_End(&grid)
 
 	controls: fit.Grid_State
-	fit.Surface_Grid_Begin(
+	fit.Grid_Begin(
 		surface,
 		&controls,
 		{pad, content.y + content.h + gap, sw - pad * 2, 0},
@@ -557,13 +549,13 @@ draw_nav_strip :: proc(surface: ^fit.Surface, top, sw: i32) -> i32 {
 		gap,
 	)
 	for control in Nav_Control {
-		rect := fit.Surface_Grid_Next(surface, &controls)
+		rect := fit.Grid_Next(&controls)
 		widget := fit.Widget_Id(0x1000 + u64(control))
 		if fit.Surface_Button(surface, widget, nav_control_label(control, true), rect) {
 			nav_control_activate(control, surface)
 		}
 	}
-	_ = fit.Surface_Grid_End(surface, &controls)
+	_ = fit.Grid_End(&controls)
 	return height
 }
 
@@ -617,12 +609,7 @@ draw_page_substrate :: proc(surface: ^fit.Surface, pane: fit.Rect, anchor: i32, 
 	switch theme.substrate {
 	case .None:
 	case .Ruled:
-		fit.Draw_Rules(
-			surface,
-			region,
-			fit.Get_Metrics(surface).line_height,
-			theme.paper_rule,
-		)
+		fit.Draw_Rules(surface, region, fit.Get_Metrics(surface).line_height, theme.paper_rule)
 	case .Grid, .Dots:
 		spacing := fit.Get_Metrics(surface).line_height
 		if fit.Surface_Dot_Grid_Fits(surface, region, spacing) {
@@ -1037,14 +1024,7 @@ draw_widget_truncation_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32
 		card.w - fit.Px(surface, 24),
 		fit.Get_Metrics(surface).font_label,
 	)
-	fit.Text(
-		surface,
-		path,
-		x + fit.Px(surface, 12),
-		y + fit.Px(surface, 34),
-		.Label,
-		.Secondary,
-	)
+	fit.Text(surface, path, x + fit.Px(surface, 12), y + fit.Px(surface, 34), .Label, .Secondary)
 	return y + card.h + fit.Px(surface, 16)
 }
 
@@ -1053,7 +1033,7 @@ draw_widget_fit_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	fit_w := min(w, fit.Px(surface, 360))
 	pad := fit.Px(surface, 12)
 	column: fit.Fit_Column_State
-	fit.Surface_Fit_Column_Begin(
+	fit.Fit_Column_Begin(
 		surface,
 		&column,
 		x + pad,
@@ -1061,24 +1041,13 @@ draw_widget_fit_card :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 		fit_w - pad * 2,
 		gap = fit.Px(surface, 6),
 	)
-	title := fit.Surface_Fit_Column_Next(surface, &column, fit.Px(surface, 18))
-	detail := fit.Surface_Fit_Column_Next(surface, &column, fit.Px(surface, 18))
-	content := fit.Surface_Fit_Column_End(surface, &column)
+	title := fit.Fit_Column_Next(&column, fit.Px(surface, 18))
+	detail := fit.Fit_Column_Next(&column, fit.Px(surface, 18))
+	content := fit.Fit_Column_End(&column)
 	card := fit.Rect{x, y, fit_w, content.h + pad * 2}
-	fit.Surface_Card_Background(
-		surface,
-		card,
-		fit.Get_Theme_Tokens(surface).background_secondary,
-	)
+	fit.Surface_Card_Background(surface, card, fit.Get_Theme_Tokens(surface).background_secondary)
 	fit.Text(surface, "Geometry resolved before drawing", title.x, title.y, .Label)
-	fit.Text(
-		surface,
-		"No retained tree or trailing gap",
-		detail.x,
-		detail.y,
-		.Label,
-		.Secondary,
-	)
+	fit.Text(surface, "No retained tree or trailing gap", detail.x, detail.y, .Label, .Secondary)
 	return y + card.h + fit.Px(surface, 16)
 }
 
@@ -1238,25 +1207,24 @@ draw_layout_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	)
 	l: fit.Layout_State
 	lw := min(w, fit.Px(surface, 520))
-	fit.Surface_Layout_Begin(surface, &l, x, y, lw, fit.Px(surface, 296), gap = fit.Px(surface, 8))
+	fit.Layout_Begin(surface, &l, {x, y, lw, fit.Px(surface, 296)}, gap = fit.Px(surface, 8))
 
-	fit.Surface_Layout_Push_Row(surface, &l, fit.Px(surface, 40), gap = fit.Px(surface, 8))
-	fit.Surface_Layout_Row_Weights(surface, &l, {1, 2, 1})
-	cell(surface, fit.Surface_Layout_Next_Weighted(surface, &l, 1), "1fr")
-	cell(surface, fit.Surface_Layout_Next_Weighted(surface, &l, 2), "2fr")
-	cell(surface, fit.Surface_Layout_Next_Weighted(surface, &l, 1), "1fr")
-	fit.Surface_Layout_Pop(surface, &l)
+	fit.Layout_Row(&l, fit.Px(surface, 40), gap = fit.Px(surface, 8))
+	fit.Layout_Weights(&l, {1, 2, 1})
+	cell(surface, fit.Layout_Weighted(&l, 1), "1fr")
+	cell(surface, fit.Layout_Weighted(&l, 2), "2fr")
+	cell(surface, fit.Layout_Weighted(&l, 1), "1fr")
+	fit.Layout_Pop(&l)
 
-	fit.Surface_Layout_Push_Row(surface, &l, fit.Px(surface, 40), gap = fit.Px(surface, 8))
-	cell(surface, fit.Surface_Layout_Next(surface, &l, fit.Px(surface, 120)), "fixed 120")
-	cell(surface, fit.Surface_Layout_Remaining(surface, &l), "remaining")
-	fit.Surface_Layout_Pop(surface, &l)
+	fit.Layout_Row(&l, fit.Px(surface, 40), gap = fit.Px(surface, 8))
+	cell(surface, fit.Layout_Next(&l, fit.Px(surface, 120)), "fixed 120")
+	cell(surface, fit.Layout_Remaining(&l), "remaining")
+	fit.Layout_Pop(&l)
 
 	draw_layout_centered(surface, &l)
 
-	fit.Surface_Layout_Push_Row(surface, &l, fit.Px(surface, 40), gap = fit.Px(surface, 8))
-	fit.Surface_Layout_Flex_Begin(
-		surface,
+	fit.Layout_Row(&l, fit.Px(surface, 40), gap = fit.Px(surface, 8))
+	fit.Layout_Flex(
 		&l,
 		{
 			fit.Fixed(fit.Px(surface, 72)),
@@ -1265,17 +1233,16 @@ draw_layout_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 			fit.Grow(),
 		},
 	)
-	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "fixed")
-	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "fit")
-	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "20%")
-	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "grow")
-	fit.Surface_Layout_Pop(surface, &l)
+	cell(surface, fit.Layout_Flex_Next(&l), "fixed")
+	cell(surface, fit.Layout_Flex_Next(&l), "fit")
+	cell(surface, fit.Layout_Flex_Next(&l), "20%")
+	cell(surface, fit.Layout_Flex_Next(&l), "grow")
+	fit.Layout_Pop(&l)
 
 	// justify packs a declared run whose tracks leave free space; here the
 	// leftover is distributed between three fixed cells.
-	fit.Surface_Layout_Push_Row(surface, &l, fit.Px(surface, 40), gap = fit.Px(surface, 8))
-	fit.Surface_Layout_Flex_Begin(
-		surface,
+	fit.Layout_Row(&l, fit.Px(surface, 40), gap = fit.Px(surface, 8))
+	fit.Layout_Flex(
 		&l,
 		{
 			fit.Fixed(fit.Px(surface, 90)),
@@ -1284,37 +1251,26 @@ draw_layout_demo :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 		},
 		justify = .Space_Between,
 	)
-	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "between")
-	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "between")
-	cell(surface, fit.Surface_Layout_Flex_Next(surface, &l), "between")
-	fit.Surface_Layout_Pop(surface, &l)
+	cell(surface, fit.Layout_Flex_Next(&l), "between")
+	cell(surface, fit.Layout_Flex_Next(&l), "between")
+	cell(surface, fit.Layout_Flex_Next(&l), "between")
+	fit.Layout_Pop(&l)
 
-	fit.Surface_Layout_End(surface, &l)
+	fit.Layout_End(&l)
 	return draw_layout_flow(surface, x, y, lw)
 }
 
 draw_layout_centered :: proc(surface: ^fit.Surface, layout: ^fit.Layout_State) {
-	fit.Surface_Layout_Push_Row(
-		surface,
-		layout,
-		fit.Px(surface, 90),
-		gap = fit.Px(surface, 8),
-		align = .Center,
-	)
-	rect := fit.Surface_Layout_Next_Sized(
-		surface,
-		layout,
-		fit.Px(surface, 160),
-		fit.Px(surface, 50),
-	)
+	fit.Layout_Row(layout, fit.Px(surface, 90), gap = fit.Px(surface, 8), align = .Center)
+	rect := fit.Layout_Sized(layout, fit.Px(surface, 160), fit.Px(surface, 50))
 	cell(surface, rect, "centered")
-	fit.Surface_Layout_Pop(surface, layout)
+	fit.Layout_Pop(layout)
 }
 
 draw_layout_flow :: proc(surface: ^fit.Surface, x, y, width: i32) -> i32 {
 	flow_y := y + fit.Px(surface, 306)
 	flow: fit.Flow_State
-	fit.Surface_Flow_Begin(
+	fit.Flow_Begin(
 		surface,
 		&flow,
 		{x, flow_y, width, max(i32) - flow_y},
@@ -1324,10 +1280,10 @@ draw_layout_flow :: proc(surface: ^fit.Surface, x, y, width: i32) -> i32 {
 	labels := [?]string{"measured", "single pass", "caller owned", "bounded", "responsive flow"}
 	for label in labels {
 		item_width := fit.Text_Width(surface, label, .Label) + fit.Px(surface, 24)
-		item := fit.Surface_Flow_Next(surface, &flow, item_width, fit.Px(surface, 32))
+		item := fit.Flow_Next(&flow, item_width, fit.Px(surface, 32))
 		cell(surface, item, label)
 	}
-	bounds := fit.Surface_Flow_End(surface, &flow)
+	bounds := fit.Flow_End(&flow)
 	return bounds.y + bounds.h + fit.Px(surface, 10)
 }
 
@@ -1352,7 +1308,7 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 	// call site does per-button x/y arithmetic and the columns stay aligned.
 	gap := fit.Px(surface, 8)
 	grid: fit.Grid_State
-	fit.Surface_Grid_Begin(
+	fit.Grid_Begin(
 		surface,
 		&grid,
 		{x, y, fit.Px(surface, 340), 0},
@@ -1365,7 +1321,7 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 		surface,
 		fit.Widget_Id_From_U64(0x3001),
 		"Shielded 1",
-		fit.Surface_Grid_Next(surface, &grid),
+		fit.Grid_Next(&grid),
 	) {
 		shielded_clicks += 1
 	}
@@ -1373,7 +1329,7 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 		surface,
 		fit.Widget_Id_From_U64(0x3006),
 		"Toggle popup",
-		fit.Surface_Grid_Next(surface, &grid),
+		fit.Grid_Next(&grid),
 		.Primary,
 	) {
 		popup_open = !popup_open
@@ -1382,7 +1338,7 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 		surface,
 		fit.Widget_Id_From_U64(0x3002),
 		"Shielded 2",
-		fit.Surface_Grid_Next(surface, &grid),
+		fit.Grid_Next(&grid),
 	) {
 		shielded_clicks += 1
 	}
@@ -1390,7 +1346,7 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 		surface,
 		fit.Widget_Id_From_U64(0x3003),
 		"Open modal",
-		fit.Surface_Grid_Next(surface, &grid),
+		fit.Grid_Next(&grid),
 	) {
 		fit.Modal_Open(&about_modal)
 	}
@@ -1398,7 +1354,7 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 		surface,
 		fit.Widget_Id_From_U64(0x3004),
 		"Shielded 3",
-		fit.Surface_Grid_Next(surface, &grid),
+		fit.Grid_Next(&grid),
 	) {
 		shielded_clicks += 1
 	}
@@ -1406,7 +1362,7 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 		surface,
 		fit.Widget_Id_From_U64(0x3005),
 		"Push toast",
-		fit.Surface_Grid_Next(surface, &grid),
+		fit.Grid_Next(&grid),
 	) {
 		toast_count += 1
 		kind := fit.Toast_Kind(toast_count % 3)
@@ -1414,17 +1370,17 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 	}
 	// The shielded column has only three rows; skip its fourth cell so the
 	// danger action stays in the action column.
-	_ = fit.Surface_Grid_Next(surface, &grid)
+	_ = fit.Grid_Next(&grid)
 	if fit.Surface_Button(
 		surface,
 		fit.Widget_Id_From_U64(0x3007),
 		"Delete\u2026",
-		fit.Surface_Grid_Next(surface, &grid),
+		fit.Grid_Next(&grid),
 		.Danger,
 	) {
 		fit.Confirm_Dialog_Open(&confirm)
 	}
-	content := fit.Surface_Grid_End(surface, &grid)
+	content := fit.Grid_End(&grid)
 	info_y := content.y + content.h + gap
 	summary := fmt.tprintf(
 		"shielded clicks: %d (should not rise while the popup covers them)",
@@ -1633,13 +1589,7 @@ draw_demo_popup :: proc(surface: ^fit.Surface, x, y: i32) {
 	h := fit.Px(surface, 130)
 	rect := fit.Float_Rect{f32(x), f32(y), f32(w), f32(h)}
 	fit.Layer_Begin(surface, fit.Z_POPUP, claim = rect)
-	fit.Fill_Rounded_Rect(
-		surface,
-		rect,
-		0.1,
-		6,
-		fit.Get_Theme_Tokens(surface).background_popup,
-	)
+	fit.Fill_Rounded_Rect(surface, rect, 0.1, 6, fit.Get_Theme_Tokens(surface).background_popup)
 	theme := fit.Get_Theme_Tokens(surface)
 	fit.Stroke_Rounded_Rect(surface, rect, 0.1, 6, 1, theme.border)
 	fit.Text(surface, "Overlay popup", x + fit.Px(surface, 12), y + fit.Px(surface, 10))
@@ -1669,11 +1619,7 @@ draw_demo_popup :: proc(surface: ^fit.Surface, x, y: i32) {
 	}
 	close := fit.Interact(surface, row)
 	if close.hovered {
-		fit.Fill_Rect(
-			surface,
-			row,
-			fit.Get_Theme_Tokens(surface).background_active,
-		)
+		fit.Fill_Rect(surface, row, fit.Get_Theme_Tokens(surface).background_active)
 		fit.Request_Cursor(surface, .Pointing_Hand)
 	}
 	fit.Text(
@@ -1710,7 +1656,7 @@ draw_stress :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	// them, and emits ~11 MB of vertex data per frame for the ~25 buttons on
 	// screen - enough to exhaust the geometry stream on a phone.
 	top, bottom := fit.Cull_Bounds(surface)
-	visible := fit.Surface_Grid_Visible_Range(
+	visible := fit.Grid_Visible_Range(
 		surface,
 		bounds,
 		cols,
@@ -1732,23 +1678,23 @@ draw_stress :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	)
 	assert(y == bounds.y, "draw_stress: header height mismatch")
 	grid: fit.Grid_State
-	fit.Surface_Grid_Begin(surface, &grid, bounds, cols, row_h, gap, gap)
-	fit.Surface_Grid_Skip_To(surface, &grid, first)
+	fit.Grid_Begin(surface, &grid, bounds, cols, row_h, gap, gap)
+	fit.Grid_Skip_To(&grid, first)
 	for i in first ..< end {
 		label := fmt.tprintf("btn %d", i)
 		if fit.Surface_Button(
 			surface,
 			fit.Widget_Id_From_U64(0x4000 + u64(i)),
 			label,
-			fit.Surface_Grid_Next(surface, &grid),
+			fit.Grid_Next(&grid),
 		) {
 			stress_clicked = int(i)
 		}
 	}
 	// Advance the cursor past the skipped tail so grid_end still measures the
 	// full content height - the pane's scroll range depends on it.
-	fit.Surface_Grid_Skip_To(surface, &grid, STRESS_BUTTONS)
-	content := fit.Surface_Grid_End(surface, &grid)
+	fit.Grid_Skip_To(&grid, STRESS_BUTTONS)
+	content := fit.Grid_End(&grid)
 	y = content.y + content.h + fit.Px(surface, 10)
 	if stress_clicked >= 0 {
 		msg := fmt.tprintf("last clicked: btn %d", stress_clicked)

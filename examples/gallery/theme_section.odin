@@ -88,7 +88,7 @@ Page :: struct {
 page_begin :: proc(surface: ^fit.Surface, x, y, w: i32) -> Page {
 	assert(surface != nil, "page_begin: nil frame")
 	assert(w > 0, "page_begin: non-positive width")
-	line := fit.Surface_Metrics(surface).line_height
+	line := fit.Get_Metrics(surface).line_height
 	assert(line > 0, "page_begin: metrics carry a non-positive line height")
 	return {surface = surface, x = x, y = y, w = w, indent = page_indent(surface), line = line}
 }
@@ -128,7 +128,7 @@ page_body :: proc(page: ^Page) -> i32 {
 // of the swatches they describe.
 page_indent :: proc(surface: ^fit.Surface) -> i32 {
 	assert(surface != nil, "page_indent: nil frame")
-	if fit.Surface_Theme_Tokens(surface).substrate == .None do return 0
+	if fit.Get_Theme_Tokens(surface).substrate == .None do return 0
 	return fit.Px(surface, MARGIN_INSET + 10)
 }
 
@@ -136,11 +136,11 @@ page_indent :: proc(surface: ^fit.Surface) -> i32 {
 annotate :: proc(page: ^Page, row: fit.Rect, note: string) {
 	assert(page != nil, "annotate: nil page")
 	if len(note) == 0 || page.indent == 0 do return
-	width := fit.Surface_Text_Width(page.surface, note, .Note)
+	width := fit.Text_Width(page.surface, note, .Note)
 	gap := fit.Px(page.surface, 8)
 	x := page.x + page.indent - width - gap
 	if x < page.x do return
-	fit.Surface_Text(page.surface, note, x, row.y, .Note, .Muted)
+	fit.Text(page.surface, note, x, row.y, .Note, .Muted)
 }
 
 // page_heading writes a heading underlined in pencil, sized to the words
@@ -152,15 +152,15 @@ annotate :: proc(page: ^Page, row: fit.Rect, note: string) {
 page_heading :: proc(page: ^Page, title: string) {
 	assert(page != nil, "page_heading: nil page")
 	row := page_rows(page, 1)
-	fit.Surface_Text(page.surface, title, page_body(page), row.y, .Title, .Heading)
+	fit.Text(page.surface, title, page_body(page), row.y, .Title, .Heading)
 
-	theme := fit.Surface_Theme_Tokens(page.surface)
+	theme := fit.Get_Theme_Tokens(page.surface)
 	color := theme.graphite if theme.graphite.a > 0 else theme.border_subtle
-	fit.Surface_Draw_Hand_Underline(
+	fit.Draw_Hand_Underline(
 		page.surface,
 		page_body(page),
 		row.y + row.h - fit.Px(page.surface, 5),
-		fit.Surface_Text_Width(page.surface, title, .Title),
+		fit.Text_Width(page.surface, title, .Title),
 		color,
 	)
 	page_rows(page, 1)
@@ -187,7 +187,7 @@ draw_page_opening :: proc(page: ^Page) {
 	assert(page != nil, "draw_page_opening: nil page")
 	page_heading(page, "Design tokens")
 	row := page_rows(page, 1)
-	fit.Surface_Text(
+	fit.Text(
 		page.surface,
 		"every value below resolves from the active palette",
 		page_body(page),
@@ -232,7 +232,7 @@ draw_pigment_studies :: proc(page: ^Page) {
 		i := u32(index)
 		// The pigment table, not the ink table. Paint stays saturated; the
 		// labels below stay legible because they are ink.
-		pigment := fit.Surface_Pigment(page.surface, pigment_role)
+		pigment := fit.Pigment_Color(page.surface, pigment_role)
 		// Bounded jitter: enough that the row is not a ruler, small enough
 		// that nothing escapes its slot or collides with the label below.
 		wobble_x := (fit.Surface_Scatter_Unit(i, 0) - 0.5) * f32(page.line) * 0.5
@@ -245,11 +245,11 @@ draw_pigment_studies :: proc(page: ^Page) {
 			block_w,
 			height,
 		}
-		fit.Surface_Draw_Pigment_Block(page.surface, block, pigment)
+		fit.Draw_Pigment_Block(page.surface, block, pigment)
 		// One block carries a chalk highlight, so the two-direction working
 		// that toned paper exists for is visible in the exhibit that is about
 		// colour. Only one: a lit edge on every block reads as a gloss.
-		if index == 0 do fit.Surface_Draw_Chalk_Highlight(page.surface, block, .None)
+		if index == 0 do fit.Draw_Chalk_Highlight(page.surface, block, .None)
 	}
 
 	// Names sit under the band rather than on the paint: a label on a wash is
@@ -261,7 +261,7 @@ draw_pigment_studies :: proc(page: ^Page) {
 	// screen - on high contrast these same roles resolve to gold and white.
 	label_row := page_rows(page, 1)
 	for pigment_role, index in fit.Pigment {
-		fit.Surface_Text_Truncated(
+		fit.Text_Truncated(
 			page.surface,
 			PIGMENT_ROLES[pigment_role],
 			body + i32(index) * pitch,
@@ -275,10 +275,10 @@ draw_pigment_studies :: proc(page: ^Page) {
 	// The pigment names only under a sketch palette, in muted ink so they read
 	// as a caption rather than as a second set of labels. On a screen palette
 	// they would be a lie: Ink.Accent is gold there, not ultramarine.
-	if fit.Surface_Theme_Tokens(page.surface).substrate != .None {
+	if fit.Get_Theme_Tokens(page.surface).substrate != .None {
 		pigment_row := page_rows(page, 1)
 		for pigment_role, index in fit.Pigment {
-			fit.Surface_Text_Truncated(
+			fit.Text_Truncated(
 				page.surface,
 				PIGMENT_NAMES[pigment_role],
 				body + i32(index) * pitch,
@@ -332,12 +332,12 @@ draw_surface_states :: proc(page: ^Page) {
 	head := page_rows(page, 1)
 	for state, index in fit.Visual_State {
 		x := body + label_w + i32(index) * (cell_w + gap)
-		fit.Surface_Text(page.surface, fmt.tprint(state), x, head.y, .Note, .Muted)
+		fit.Text(page.surface, fmt.tprint(state), x, head.y, .Note, .Muted)
 	}
 
 	for surface in fit.Surface_Kind {
 		row := page_rows(page, 1)
-		fit.Surface_Text_Truncated(
+		fit.Text_Truncated(
 			page.surface,
 			fmt.tprint(surface),
 			body,
@@ -368,7 +368,7 @@ draw_state_cell :: proc(
 	state: fit.Visual_State,
 ) {
 	assert(surface != nil, "draw_state_cell: nil frame")
-	theme := fit.Surface_Theme_Tokens(surface)
+	theme := fit.Get_Theme_Tokens(surface)
 	colors := fit.Surface_Resolve_Colors(surface, kind, state)
 
 	switch state {
@@ -376,22 +376,22 @@ draw_state_cell :: proc(
 		// A highlighter is how a person marks a selection on paper. A screen
 		// palette has no marker, so the ordinary selected fill stands in.
 		if theme.highlighter.a > 0 {
-			fit.Surface_Draw_Highlight(surface, cell, theme.highlighter)
+			fit.Draw_Highlight(surface, cell, theme.highlighter)
 		} else {
-			fit.Surface_Draw_Surface(surface, cell, kind, state, .SM, .None, .Flat)
+			fit.Draw_Surface(surface, cell, kind, state, .SM, .None, .Flat)
 		}
 	case .Pressed:
 		// Pressed is a scribble over the resting surface: the mark you make
 		// while pushing on something, not a different colour of paint.
-		fit.Surface_Draw_Surface(surface, cell, kind, .Rest, .SM, .None, .Flat)
-		fit.Surface_Draw_Scribble(surface, cell, colors.background)
+		fit.Draw_Surface(surface, cell, kind, .Rest, .SM, .None, .Flat)
+		fit.Draw_Scribble(surface, cell, colors.background)
 	case .Rest, .Hover, .Disabled:
-		fit.Surface_Draw_Surface(surface, cell, kind, state, .SM, .None, .Flat)
+		fit.Draw_Surface(surface, cell, kind, state, .SM, .None, .Flat)
 	}
 
 	// "Ag" carries an ascender and a descender, so a fill that clips text
 	// shows up here rather than hiding behind an all-caps sample.
-	fit.Surface_Text(surface, "Ag", i32(cell.x) + fit.Px(surface, 5), i32(cell.y), .Note, .Primary)
+	fit.Text(surface, "Ag", i32(cell.x) + fit.Px(surface, 5), i32(cell.y), .Note, .Primary)
 }
 
 // legible_on picks whichever of the palette's two extreme inks reads better on
@@ -443,8 +443,8 @@ draw_ink_chips :: proc(page: ^Page) {
 			f32(chip_w),
 			f32(page.line - inset * 2),
 		}
-		fit.Surface_Draw_Wash(page.surface, cell, color)
-		fit.Surface_Text_Truncated(
+		fit.Draw_Wash(page.surface, cell, color)
+		fit.Text_Truncated(
 			page.surface,
 			fmt.tprint(ink),
 			i32(cell.x) + fit.Px(page.surface, 4),
@@ -466,7 +466,7 @@ draw_ink_chips :: proc(page: ^Page) {
 // with a single taped swatch reads as something a person placed deliberately.
 draw_taped_accent :: proc(page: ^Page) {
 	assert(page != nil, "draw_taped_accent: nil page")
-	theme := fit.Surface_Theme_Tokens(page.surface)
+	theme := fit.Get_Theme_Tokens(page.surface)
 	if theme.tape.a == 0 do return
 
 	row := page_rows(page, 2)
@@ -477,9 +477,9 @@ draw_taped_accent :: proc(page: ^Page) {
 		f32(fit.Px(page.surface, SWATCH_W)),
 		f32(row.h - fit.Px(page.surface, 6)),
 	}
-	fit.Surface_Draw_Shadow(page.surface, swatch, .SM, .Lifted)
-	fit.Surface_Draw_Pigment_Block(page.surface, swatch, accent)
-	fit.Surface_Draw_Tape(page.surface, swatch, f32(fit.Px(page.surface, 26)), theme.tape)
+	fit.Draw_Shadow(page.surface, swatch, .SM, .Lifted)
+	fit.Draw_Pigment_Block(page.surface, swatch, accent)
+	fit.Draw_Tape(page.surface, swatch, f32(fit.Px(page.surface, 26)), theme.tape)
 	annotate(page, row, fmt.tprintf("#%02X%02X%02X", accent.r, accent.g, accent.b))
 	page_rows(page, 1)
 }
@@ -490,9 +490,9 @@ draw_type_specimen :: proc(page: ^Page) {
 	page_heading(page, "Type")
 	for role in fit.Text_Role {
 		count := i32(1)
-		if fit.Surface_Text_Line_Height(page.surface, role) > page.line do count = 2
+		if fit.Text_Line_Height(page.surface, role) > page.line do count = 2
 		row := page_rows(page, count)
-		fit.Surface_Text_Truncated(
+		fit.Text_Truncated(
 			page.surface,
 			SPECIMEN,
 			page_body(page),
@@ -501,11 +501,7 @@ draw_type_specimen :: proc(page: ^Page) {
 			role,
 			.Primary,
 		)
-		annotate(
-			page,
-			row,
-			fmt.tprintf("%v %dpx", role, fit.Surface_Text_Size(page.surface, role)),
-		)
+		annotate(page, row, fmt.tprintf("%v %dpx", role, fit.Text_Size(page.surface, role)))
 	}
 	page_rows(page, 1)
 }
@@ -519,7 +515,7 @@ draw_shape_notes :: proc(page: ^Page) {
 	assert(page != nil, "draw_shape_notes: nil page")
 	page_heading(page, "Shape")
 
-	theme := fit.Surface_Theme_Tokens(page.surface)
+	theme := fit.Get_Theme_Tokens(page.surface)
 	row := page_rows(page, 3)
 	card := fit.Float_Rect {
 		f32(page_body(page)),
@@ -527,17 +523,17 @@ draw_shape_notes :: proc(page: ^Page) {
 		f32(fit.Px(page.surface, 150)),
 		f32(row.h - fit.Px(page.surface, 8)),
 	}
-	fit.Surface_Draw_Surface(page.surface, card, .Card, .Rest, .MD, .Hairline, .Lifted)
+	fit.Draw_Surface(page.surface, card, .Card, .Rest, .MD, .Hairline, .Lifted)
 	// The lit edge. draw_surface already laid the cast shadow, so the card is
 	// now worked from both directions - which is what a raised sheet on toned
 	// stock actually looks like, and what a white ground cannot express.
-	fit.Surface_Draw_Chalk_Highlight(page.surface, card, .MD)
+	fit.Draw_Chalk_Highlight(page.surface, card, .MD)
 	// A card is a smaller sheet: it gets its own grain, which is the one place
 	// a bounded texture is affordable.
 	if theme.paper_tooth.a > 0 {
-		fit.Surface_Draw_Paper_Tooth(page.surface, card, theme.paper_tooth)
+		fit.Draw_Paper_Tooth(page.surface, card, theme.paper_tooth)
 	}
-	fit.Surface_Draw_Dog_Ear(
+	fit.Draw_Dog_Ear(
 		page.surface,
 		card,
 		f32(fit.Px(page.surface, 14)),
@@ -547,7 +543,7 @@ draw_shape_notes :: proc(page: ^Page) {
 		theme.chalk if theme.chalk.a > 0 else theme.background_app,
 		theme.border_subtle,
 	)
-	fit.Surface_Text(
+	fit.Text(
 		page.surface,
 		"Lifted",
 		i32(card.x) + fit.Px(page.surface, 10),
@@ -570,8 +566,8 @@ draw_shape_notes :: proc(page: ^Page) {
 			f32(page.line * 2),
 		}
 		if block.x + block.width > f32(page.x + page.w) do break
-		fit.Surface_Draw_Surface(page.surface, block, .Chip, .Rest, radius, .None, .Flat)
-		fit.Surface_Text(
+		fit.Draw_Surface(page.surface, block, .Chip, .Rest, radius, .None, .Flat)
+		fit.Text(
 			page.surface,
 			fmt.tprint(radius),
 			i32(block.x) + fit.Px(page.surface, 4),
@@ -588,17 +584,17 @@ draw_measure_notes :: proc(page: ^Page) {
 	assert(page != nil, "draw_measure_notes: nil page")
 	page_heading(page, "Measure")
 
-	theme := fit.Surface_Theme_Tokens(page.surface)
+	theme := fit.Get_Theme_Tokens(page.surface)
 	bar_h := fit.Px(page.surface, 10)
 	body := page_body(page)
 	for space in fit.Space {
 		row := page_rows(page, 1)
-		width := fit.Surface_Space(page.surface, space)
+		width := fit.Space_Px(page.surface, space)
 		// A zero-width token still needs a visible row, or None reads as a
 		// missing entry rather than as a deliberate zero.
-		fit.Surface_Fill_Rect(
+		fit.Fill_Rect(
 			page.surface,
-			{body, row.y + fit.Px(page.surface, 5), max(width, 1), bar_h},
+			fit.Rect{body, row.y + fit.Px(page.surface, 5), max(width, 1), bar_h},
 			theme.foreground_accent,
 		)
 		annotate(page, row, fmt.tprintf("%v %dpx", space, width))
@@ -613,11 +609,7 @@ draw_measure_notes :: proc(page: ^Page) {
 			f32(fit.Px(page.surface, SWATCH_W)),
 			f32(page.line - fit.Px(page.surface, 6)),
 		}
-		fit.Surface_Fill_Float_Rect(
-			page.surface,
-			bar,
-			fit.Color_Tinted(theme.foreground_accent, tint),
-		)
+		fit.Fill_Rect(page.surface, bar, fit.Color_Tinted(theme.foreground_accent, tint))
 		annotate(page, row, fmt.tprintf("%v %d", tint, fit.Tint_Alpha(tint)))
 	}
 	page_rows(page, 1)

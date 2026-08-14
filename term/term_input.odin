@@ -5,6 +5,7 @@ package term
 
 import "../pty"
 import "core:unicode/utf8"
+import fit "ingot:fit"
 import rl "ingot:gfx"
 import "ingot:ui"
 
@@ -138,6 +139,48 @@ term_handle_ui_input :: proc(
 			b[:],
 		); ok {
 			sent = term_write(ts, b[:n]) || sent
+		}
+	}
+	if sent do ts.sb_view_offset = 0
+	return
+}
+
+term_handle_surface_input :: proc(
+	ts: ^Term_Instance,
+	surface: ^fit.Surface,
+	skip_ctrl_shift: []rl.KeyboardKey = nil,
+) -> (
+	sent: bool,
+) {
+	assert(surface != nil, "term_handle_surface_input: nil surface")
+	if ts == nil || !ts.pty_running do return
+	ctrl :=
+		fit.Surface_Key_Down(surface, .Left_Control) ||
+		fit.Surface_Key_Down(surface, .Right_Control)
+	shift :=
+		fit.Surface_Key_Down(surface, .Left_Shift) || fit.Surface_Key_Down(surface, .Right_Shift)
+	super :=
+		fit.Surface_Key_Down(surface, .Left_Super) || fit.Surface_Key_Down(surface, .Right_Super)
+	if !ctrl && !super {
+		for cp in fit.Surface_Characters(surface) {
+			if cp < 0x20 || cp == 0x7f do continue
+			buf, count := utf8.encode_rune(cp)
+			sent = term_write(ts, buf[:count]) || sent
+		}
+	}
+	for key_value := int(fit.Key.Null) + 1; key_value <= int(fit.Key.Right_Super); key_value += 1 {
+		key := fit.Key(key_value)
+		if !fit.Surface_Key_Pressed_Or_Repeat(surface, key) do continue
+		gfx_key := rl.KeyboardKey(key_value)
+		if gfx_key == .V && (super || (ctrl && shift)) {
+			paste := fit.Surface_Clipboard(surface)
+			if len(paste) <= TERM_PASTE_MAX_BYTES do sent = term_write(ts, transmute([]u8)paste) || sent
+			continue
+		}
+		buffer: [8]u8
+		if count, ok := vt_bytes_for_key(gfx_key, ctrl, shift, super, skip_ctrl_shift, buffer[:]);
+		   ok {
+			sent = term_write(ts, buffer[:count]) || sent
 		}
 	}
 	if sent do ts.sb_view_offset = 0
