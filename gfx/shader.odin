@@ -441,8 +441,9 @@ UnloadShader :: proc(shader: Shader) {
 	context_unload_shader(default_context(), shader)
 }
 
-GetShaderLocation :: proc(shader: Shader, uniformName: cstring) -> i32 {
-	e := _shader_get(shader.id)
+context_get_shader_location :: proc(ctx: ^Context, shader: Shader, uniformName: cstring) -> i32 {
+	assert(ctx != nil, "context_get_shader_location: nil context")
+	e := context_shader_get(ctx, shader.id)
 	if e == nil do return -1
 	name := string(uniformName)
 	for u, i in e.uniforms {
@@ -454,24 +455,40 @@ GetShaderLocation :: proc(shader: Shader, uniformName: cstring) -> i32 {
 	return -1
 }
 
+GetShaderLocation :: proc(shader: Shader, uniformName: cstring) -> i32 {
+	return context_get_shader_location(default_context(), shader, uniformName)
+}
+
+context_set_shader_value :: proc(
+	ctx: ^Context,
+	shader: Shader,
+	#any_int locIndex: i32,
+	value: rawptr,
+	uniformType: ShaderUniformDataType,
+) {
+	context_set_shader_value_v(ctx, shader, locIndex, value, uniformType, 1)
+}
+
 SetShaderValue :: proc(
 	shader: Shader,
 	#any_int locIndex: i32,
 	value: rawptr,
 	uniformType: ShaderUniformDataType,
 ) {
-	SetShaderValueV(shader, locIndex, value, uniformType, 1)
+	context_set_shader_value(default_context(), shader, locIndex, value, uniformType)
 }
 
-SetShaderValueV :: proc(
+context_set_shader_value_v :: proc(
+	ctx: ^Context,
 	shader: Shader,
 	#any_int locIndex: i32,
 	value: rawptr,
 	uniformType: ShaderUniformDataType,
 	count: i32,
 ) {
+	assert(ctx != nil, "context_set_shader_value_v: nil context")
 	if value == nil do return
-	e := _shader_get(shader.id)
+	e := context_shader_get(ctx, shader.id)
 	if e == nil || locIndex < 0 || int(locIndex) >= len(e.uniforms) do return
 	element_size, type_ok := _uniform_type_size(uniformType)
 	if !type_ok do return
@@ -489,8 +506,24 @@ SetShaderValueV :: proc(
 	}
 }
 
-SetShaderValueMatrix :: proc(shader: Shader, #any_int locIndex: i32, mat: Matrix) {
-	e := _shader_get(shader.id)
+SetShaderValueV :: proc(
+	shader: Shader,
+	#any_int locIndex: i32,
+	value: rawptr,
+	uniformType: ShaderUniformDataType,
+	count: i32,
+) {
+	context_set_shader_value_v(default_context(), shader, locIndex, value, uniformType, count)
+}
+
+context_set_shader_value_matrix :: proc(
+	ctx: ^Context,
+	shader: Shader,
+	#any_int locIndex: i32,
+	mat: Matrix,
+) {
+	assert(ctx != nil, "context_set_shader_value_matrix: nil context")
+	e := context_shader_get(ctx, shader.id)
 	if e == nil || locIndex < 0 || int(locIndex) >= len(e.uniforms) do return
 	u := e.uniforms[locIndex]
 	if u.size < 64 do return
@@ -502,15 +535,30 @@ SetShaderValueMatrix :: proc(shader: Shader, #any_int locIndex: i32, mat: Matrix
 	}
 }
 
-SetShaderValueTexture :: proc(shader: Shader, #any_int locIndex: i32, texture: Texture2D) {
-	e := _shader_get(shader.id)
+SetShaderValueMatrix :: proc(shader: Shader, #any_int locIndex: i32, mat: Matrix) {
+	context_set_shader_value_matrix(default_context(), shader, locIndex, mat)
+}
+
+context_set_shader_value_texture :: proc(
+	ctx: ^Context,
+	shader: Shader,
+	#any_int locIndex: i32,
+	texture: Texture2D,
+) {
+	assert(ctx != nil, "context_set_shader_value_texture: nil context")
+	e := context_shader_get(ctx, shader.id)
 	if e == nil do return
 	slot := int(locIndex) - SHADER_TEX_LOC_BASE
 	if slot < 0 || slot >= e.extra_count do return
+	if texture.id != 0 && context_get_texture(ctx, texture.id) == nil do return
 	if e.extra_tex[slot] != texture.id {
 		e.extra_tex[slot] = texture.id
 		e.extra_dirty = true
 	}
+}
+
+SetShaderValueTexture :: proc(shader: Shader, #any_int locIndex: i32, texture: Texture2D) {
+	context_set_shader_value_texture(default_context(), shader, locIndex, texture)
 }
 
 context_begin_shader_mode :: proc(ctx: ^Context, shader: Shader) {

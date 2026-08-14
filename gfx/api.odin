@@ -17,9 +17,7 @@ context_measure_text :: proc(
 ) -> Vec2 {
 	assert(ctx != nil && text != nil)
 	assert(font_size >= 0)
-	previous := _context_activate(ctx)
-	defer _context_restore(previous)
-	result := MeasureTextEx(font, text, font_size, spacing)
+	result := context_measure_text_ex(ctx, font, text, font_size, spacing)
 	assert(result.x >= 0)
 	return result
 }
