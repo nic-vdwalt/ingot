@@ -97,7 +97,9 @@ Gpu_Material :: struct {
 	depth_nudge: f32,
 	// texture with a zero id means untextured: the draw binds the shared
 	// neutral white texture and the shader multiplies by pure white.
-	texture:     Texture2D,
+	texture:              Texture2D,
+	normal_texture:       Texture2D,
+	roughness_ao_texture: Texture2D,
 	// shader with a zero id means the built-in GPU_3D_SHADER; a custom
 	// handle from create_gpu_3d_shader replaces both shader stages. Stale
 	// handles fall back to the built-in shader (operating condition).
@@ -164,9 +166,10 @@ Gpu_3D_Uniforms :: struct {
 	light_direction: [4]f32, // xyz direction toward the light, w unused
 	light_params:    [4]f32, // x ambient, y diffuse, z depth_nudge, w time seconds
 	camera_position: [4]f32, // xyz world-space camera position, w unused
-	use_scalar:      u32,
-	use_texture:     u32,
-	_padding:        [2]u32,
+	use_scalar:       u32,
+	use_texture:      u32,
+	use_normal:       u32,
+	use_roughness_ao: u32,
 }
 
 // Per-instance model transforms for draw_gpu_mesh_instanced, read by the
@@ -296,6 +299,10 @@ Gpu_3D_Resources :: struct {
 	shader:                 wg.ShaderModule,
 	layout:                 wg.BindGroupLayout,
 	bind:                   [STREAM_SLOT_COUNT]wg.BindGroup,
+	neutral_normal_tex:     wg.Texture,
+	neutral_normal_view:    wg.TextureView,
+	neutral_normal_sampler: wg.Sampler,
+	neutral_normal_bind:    wg.BindGroup,
 	next_pass_generation:   u64,
 	active_pass_generation: u64,
 	identity_block:         Gpu_3D_Instance_Uniforms,
@@ -317,7 +324,8 @@ struct Uniforms {
     camera_position: vec4<f32>,
     use_scalar: u32,
     use_texture: u32,
-    padding: vec2<u32>,
+    use_normal: u32,
+    use_roughness_ao: u32,
 };
 // Array length mirrors GPU_3D_MAX_INSTANCES_PER_DRAW.
 struct Instances {
@@ -327,12 +335,17 @@ struct Instances {
 @group(0) @binding(1) var<uniform> instances: Instances;
 @group(1) @binding(0) var mesh_texture: texture_2d<f32>;
 @group(1) @binding(1) var mesh_sampler: sampler;
+@group(2) @binding(0) var mesh_normal_texture: texture_2d<f32>;
+@group(2) @binding(1) var mesh_normal_sampler: sampler;
+@group(3) @binding(0) var mesh_roughness_ao_texture: texture_2d<f32>;
+@group(3) @binding(1) var mesh_roughness_ao_sampler: sampler;
 
 struct VertexOut {
     @builtin(position) position: vec4<f32>,
     @location(0) normal: vec3<f32>,
     @location(1) scalar: f32,
     @location(2) uv: vec2<f32>,
+    @location(3) world_position: vec3<f32>,
 };
 
 @vertex
@@ -345,7 +358,8 @@ fn vs_main(
 ) -> VertexOut {
     var out: VertexOut;
     let model = u.model * instances.transforms[instance_index];
-    out.position = u.view_projection * model * vec4<f32>(position, 1.0);
+    let world = model * vec4<f32>(position, 1.0);
+    out.position = u.view_projection * world;
     // Nudge NDC depth after projection; multiplying by w keeps the offset a
     // constant NDC shift after the perspective divide, which lets overlay
     // materials win the depth test on line and point topologies where
@@ -354,24 +368,55 @@ fn vs_main(
     out.normal = normalize((model * vec4<f32>(normal, 0.0)).xyz);
     out.scalar = scalar;
     out.uv = uv;
+    out.world_position = world.xyz;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let light = normalize(u.light_direction.xyz);
-    let diffuse = u.light_params.x + u.light_params.y * max(dot(normalize(in.normal), light), 0.0);
+    let geometric_normal = normalize(in.normal);
+    let world_dx = dpdx(in.world_position);
+    let world_dy = dpdy(in.world_position);
+    let uv_dx = dpdx(in.uv);
+    let uv_dy = dpdy(in.uv);
+    let determinant = uv_dx.x * uv_dy.y - uv_dx.y * uv_dy.x;
+    let tangent = normalize((world_dx * uv_dy.y - world_dy * uv_dx.y) / max(abs(determinant), 0.00001));
+    let bitangent = normalize(cross(geometric_normal, tangent)) * select(-1.0, 1.0, determinant >= 0.0);
+    let sampled_normal = textureSample(mesh_normal_texture, mesh_normal_sampler, in.uv).xyz * 2.0 - 1.0;
+    let mapped_normal = normalize(mat3x3<f32>(tangent, bitangent, geometric_normal) * sampled_normal);
+    let normal = normalize(mix(geometric_normal, mapped_normal, f32(u.use_normal)));
     // Sample unconditionally and select by flag: textureSample requires
-    // uniform control flow, and the unconditional form is trivially uniform
-    // regardless of analyzer strictness. Untextured draws bind the neutral
-    // white texture, so the multiply is exact identity.
+    // uniform control flow, and the unconditional form is trivially uniform.
     let texel = textureSample(mesh_texture, mesh_sampler, in.uv);
+    let roughness_ao = textureSample(
+        mesh_roughness_ao_texture,
+        mesh_roughness_ao_sampler,
+        in.uv).rg;
+    let roughness = mix(1.0, clamp(roughness_ao.r, 0.04, 1.0), f32(u.use_roughness_ao));
+    let ao = mix(1.0, roughness_ao.g, f32(u.use_roughness_ao));
     var base = u.color;
     if u.use_scalar != 0u {
         base = mix(u.color, u.color_high, clamp(in.scalar, 0.0, 1.0));
     }
     base = mix(base, base * texel, f32(u.use_texture));
-    return vec4<f32>(base.rgb * diffuse * base.a, base.a);
+    let view = normalize(u.camera_position.xyz - in.world_position);
+    let halfway = normalize(view + light);
+    let ndl = max(dot(normal, light), 0.0);
+    let ndv = max(dot(normal, view), 0.001);
+    let ndh = max(dot(normal, halfway), 0.0);
+    let vdh = max(dot(view, halfway), 0.0);
+    let alpha = roughness * roughness;
+    let alpha2 = alpha * alpha;
+    let denominator = ndh * ndh * (alpha2 - 1.0) + 1.0;
+    let distribution = alpha2 / max(3.14159265 * denominator * denominator, 0.0001);
+    let k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+    let visibility = ndv / (ndv * (1.0 - k) + k) * ndl / (ndl * (1.0 - k) + k);
+    let fresnel = vec3<f32>(0.04) + vec3<f32>(0.96) * pow(1.0 - vdh, 5.0);
+    let specular = distribution * visibility * fresnel / max(4.0 * ndv * max(ndl, 0.001), 0.001);
+    let diffuse = base.rgb * (u.light_params.x * ao + u.light_params.y * ndl);
+    let color = diffuse + specular * u.light_params.y * ndl;
+    return vec4<f32>(color * base.a, base.a);
 }
 `
 
@@ -1537,22 +1582,25 @@ _gpu_3d_identity_instances_upload :: proc(ctx: ^Context, r: ^Renderer) -> (u32, 
 	return _uniform_upload(ctx, r, &resources.identity_block, size_of(Gpu_3D_Instance_Uniforms))
 }
 
-// _gpu_3d_texture_bind resolves the material texture to a bind group. Stale
+// _gpu_3d_texture_bind resolves one material texture to a bind group. Stale
 // or destroyed handles are an operating condition (a consumer may destroy a
-// texture between frames): fall back to the neutral white texture instead of
-// failing the draw, matching the 2D batch behavior.
+// texture between frames), so the caller-provided neutral binding is used.
 @(private)
-_gpu_3d_texture_bind :: proc(ctx: ^Context, material: Gpu_Material) -> (wg.BindGroup, bool) {
+_gpu_3d_texture_bind :: proc(
+	ctx: ^Context,
+	texture: Texture2D,
+	fallback: wg.BindGroup,
+) -> (wg.BindGroup, bool) {
 	assert(ctx != nil, "_gpu_3d_texture_bind: nil context")
 	assert(ctx.initialized, "_gpu_3d_texture_bind: uninitialized context")
-	assert(ctx.rend.neutral_bind != nil, "_gpu_3d_texture_bind: missing neutral texture")
-	if material.texture.id != 0 {
-		slot := _texture_slot_context(ctx.id, &ctx.resources.textures, material.texture.id)
+	assert(fallback != nil, "_gpu_3d_texture_bind: missing fallback texture")
+	if texture.id != 0 {
+		slot := _texture_slot_context(ctx.id, &ctx.resources.textures, texture.id)
 		if slot != nil && slot.entry != nil && slot.entry.bind != nil {
 			return slot.entry.bind, true
 		}
 	}
-	return ctx.rend.neutral_bind, false
+	return fallback, false
 }
 
 // _gpu_3d_draw_indexed encodes one indexed draw: uniforms, both bind groups,
@@ -1595,7 +1643,21 @@ _gpu_3d_draw_indexed :: proc(
 		shader_module,
 	)
 	if pipeline == nil do return false
-	texture_bind, textured := _gpu_3d_texture_bind(pass.owner, material)
+	texture_bind, textured := _gpu_3d_texture_bind(
+		pass.owner,
+		material.texture,
+		pass.owner.rend.neutral_bind,
+	)
+	normal_bind, normal_mapped := _gpu_3d_texture_bind(
+		pass.owner,
+		material.normal_texture,
+		pass.owner.resources.gpu_3d.neutral_normal_bind,
+	)
+	roughness_ao_bind, roughness_ao_mapped := _gpu_3d_texture_bind(
+		pass.owner,
+		material.roughness_ao_texture,
+		pass.owner.rend.neutral_bind,
+	)
 
 	color_high := material.color_high
 	if color_high == (Color{}) do color_high = material.color
@@ -1613,8 +1675,10 @@ _gpu_3d_draw_indexed :: proc(
 			pass.camera_position.z,
 			0,
 		},
-		use_scalar      = u32(1) if material.use_scalar else 0,
-		use_texture     = u32(1) if textured else 0,
+		use_scalar       = u32(1) if material.use_scalar else 0,
+		use_texture      = u32(1) if textured else 0,
+		use_normal       = u32(1) if normal_mapped else 0,
+		use_roughness_ao = u32(1) if roughness_ao_mapped else 0,
 	}
 	offset, ok := _uniform_upload(pass.owner, &pass.owner.rend, &uniforms, size_of(uniforms))
 	if !ok || pass.owner.rend.active_stream_slot < 0 do return false
@@ -1628,6 +1692,8 @@ _gpu_3d_draw_indexed :: proc(
 		offsets[:],
 	)
 	wg.RenderPassEncoderSetBindGroup(pass.pass, 1, texture_bind)
+	wg.RenderPassEncoderSetBindGroup(pass.pass, 2, normal_bind)
+	wg.RenderPassEncoderSetBindGroup(pass.pass, 3, roughness_ao_bind)
 	vertex_bytes := u64(entry.vertex_count) * size_of(Gpu_3D_Vertex)
 	index_bytes := u64(entry.index_count) * size_of(u32)
 	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, vertex_bytes)
@@ -1639,7 +1705,7 @@ _gpu_3d_draw_indexed :: proc(
 		entry.index_count * instance_count,
 	)
 	_stats_pipeline_switch(pass.owner)
-	_stats_bind_group_switches(pass.owner, 2)
+	_stats_bind_group_switches(pass.owner, 4)
 	return true
 }
 
@@ -1829,10 +1895,15 @@ _gpu_3d_pipeline :: proc(
 		attributeCount = len(attrs),
 		attributes     = raw_data(attrs[:]),
 	}
-	group_layouts := [2]wg.BindGroupLayout{resources.layout, ctx.rend.tex_layout}
+	group_layouts := [4]wg.BindGroupLayout {
+		resources.layout,
+		ctx.rend.tex_layout,
+		ctx.rend.tex_layout,
+		ctx.rend.tex_layout,
+	}
 	layout := wg.DeviceCreatePipelineLayout(
 		ctx.device,
-		&{bindGroupLayoutCount = 2, bindGroupLayouts = raw_data(group_layouts[:])},
+		&{bindGroupLayoutCount = len(group_layouts), bindGroupLayouts = raw_data(group_layouts[:])},
 	)
 	policy := _gpu_3d_material_policy(style)
 	if primitive != .Triangles do policy.depth_bias = 0
@@ -1927,6 +1998,51 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 		ctx.device,
 		&{entryCount = 2, entries = raw_data(layout_entries[:])},
 	)
+	resources.neutral_normal_tex = wg.DeviceCreateTexture(
+		ctx.device,
+		&{
+			usage = {.TextureBinding, .CopyDst},
+			dimension = ._2D,
+			size = {1, 1, 1},
+			format = .RGBA8Unorm,
+			mipLevelCount = 1,
+			sampleCount = 1,
+		},
+	)
+	neutral_normal := [4]byte{128, 128, 255, 255}
+	wg.QueueWriteTexture(
+		ctx.queue,
+		&{texture = resources.neutral_normal_tex},
+		raw_data(neutral_normal[:]),
+		uint(len(neutral_normal)),
+		&{bytesPerRow = 4, rowsPerImage = 1},
+		&{1, 1, 1},
+	)
+	resources.neutral_normal_view = wg.TextureCreateView(resources.neutral_normal_tex, nil)
+	resources.neutral_normal_sampler = wg.DeviceCreateSampler(
+		ctx.device,
+		&{
+			magFilter = .Linear,
+			minFilter = .Linear,
+			mipmapFilter = .Nearest,
+			addressModeU = .Repeat,
+			addressModeV = .Repeat,
+			addressModeW = .ClampToEdge,
+			maxAnisotropy = 1,
+		},
+	)
+	neutral_normal_entries := [2]wg.BindGroupEntry {
+		{binding = 0, textureView = resources.neutral_normal_view},
+		{binding = 1, sampler = resources.neutral_normal_sampler},
+	}
+	resources.neutral_normal_bind = wg.DeviceCreateBindGroup(
+		ctx.device,
+		&{
+			layout = ctx.rend.tex_layout,
+			entryCount = len(neutral_normal_entries),
+			entries = raw_data(neutral_normal_entries[:]),
+		},
+	)
 	for &bind, index in resources.bind {
 		bind_entries := [2]wg.BindGroupEntry {
 			{
@@ -1947,6 +2063,10 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 	}
 	assert(resources.shader != nil)
 	assert(resources.layout != nil)
+	assert(resources.neutral_normal_tex != nil)
+	assert(resources.neutral_normal_view != nil)
+	assert(resources.neutral_normal_sampler != nil)
+	assert(resources.neutral_normal_bind != nil)
 }
 
 @(private)
@@ -1970,6 +2090,13 @@ _gpu_3d_resources_destroy :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 	}
 	for bind in resources.bind {
 		if bind != nil do wg.BindGroupRelease(bind)
+	}
+	if resources.neutral_normal_bind != nil do wg.BindGroupRelease(resources.neutral_normal_bind)
+	if resources.neutral_normal_sampler != nil do wg.SamplerRelease(resources.neutral_normal_sampler)
+	if resources.neutral_normal_view != nil do wg.TextureViewRelease(resources.neutral_normal_view)
+	if resources.neutral_normal_tex != nil {
+		wg.TextureDestroy(resources.neutral_normal_tex)
+		wg.TextureRelease(resources.neutral_normal_tex)
 	}
 	if resources.layout != nil do wg.BindGroupLayoutRelease(resources.layout)
 	if resources.shader != nil do wg.ShaderModuleRelease(resources.shader)

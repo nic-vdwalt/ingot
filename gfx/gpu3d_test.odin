@@ -10,6 +10,7 @@ package gfx
 
 import "core:math"
 import "core:math/linalg"
+import "core:strings"
 import "core:testing"
 import wg "vendor:wgpu"
 
@@ -573,6 +574,25 @@ test_gpu_3d_uniforms_layout_locked :: proc(t: ^testing.T) {
 		GPU_3D_MAX_INSTANCES_PER_DRAW * size_of(Matrix),
 	)
 	testing.expect(t, size_of(Gpu_3D_Instance_Uniforms) <= 65536, "over uniform-binding floor")
+}
+
+@(test)
+test_gpu_3d_pbr_material_defaults_are_neutral :: proc(t: ^testing.T) {
+	material: Gpu_Material
+	testing.expect_value(t, material.texture.id, u32(0))
+	testing.expect_value(t, material.normal_texture.id, u32(0))
+	testing.expect_value(t, material.roughness_ao_texture.id, u32(0))
+	uniforms: Gpu_3D_Uniforms
+	testing.expect_value(t, uniforms.use_texture, u32(0))
+	testing.expect_value(t, uniforms.use_normal, u32(0))
+	testing.expect_value(t, uniforms.use_roughness_ao, u32(0))
+}
+
+@(test)
+test_gpu_3d_shader_declares_pbr_bind_groups :: proc(t: ^testing.T) {
+	testing.expect(t, strings.contains(GPU_3D_SHADER, "@group(2) @binding(0) var mesh_normal_texture"))
+	testing.expect(t, strings.contains(GPU_3D_SHADER, "@group(3) @binding(0) var mesh_roughness_ao_texture"))
+	testing.expect(t, strings.contains(GPU_3D_SHADER, "use_roughness_ao: u32"))
 }
 
 @(test)
