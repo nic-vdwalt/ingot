@@ -64,16 +64,21 @@ Prepared_Attachment_Options :: struct {
 }
 
 Prepared_Scroll_State :: struct {
-	offset:    f32,
-	content_h: i32,
+	offset:     f32,
+	content_h:  i32,
+	viewport_h: i32,
+	scrollbar:  Scrollbar_State,
 }
 
 Prepared_Scroll_Options :: struct {
 	state:    ^Prepared_Scroll_State,
+	id:       Widget_Id,
 	padding:  Space,
 	keyboard: bool,
+	bar:      bool,
 	track:    Track,
 	size:     Prepared_Size,
+	focus:    Focus_Opt,
 }
 
 Prepared_Container_Surface :: struct {
@@ -324,6 +329,7 @@ prepared_scroll_begin :: proc(
 ) -> Prepared_Handle {
 	assert(prepared != nil && prepared.open, "prepared_scroll_begin: description not open")
 	assert(options.state != nil, "prepared_scroll_begin: nil state")
+	assert(options.id != WIDGET_ID_NONE, "prepared_scroll_begin: invalid id")
 	handle := prepared_add(
 		prepared,
 		Prepared_Node {
@@ -1171,16 +1177,34 @@ prepared_place_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 		"prepared scroll place: child count",
 	)
 	state := node.scroll.state
+	state.viewport_h = node.rect.h
 	maximum := max(state.content_h - node.rect.h, 0)
 	mouse := get_mouse_position(u.frame)
 	screen := frame_rect_to_screen(u.frame, rect_f32(node.rect))
+	node.scroll.focus = focus(u, node.scroll.id) if slot_visible(node.rect) else Focus_Opt{}
+	focus_opt_click(u.frame, node.scroll.focus, node.rect.x, node.rect.y, node.rect.w, node.rect.h)
 	if point_in_rect(mouse, screen) && !route_occluded(u.frame, mouse) {
 		state.offset -= get_wheel_move(u.frame) * f32(ui_frame_sc(u.frame, 24))
+	}
+	if node.scroll.keyboard && focus_opt_focused(node.scroll.focus) {
+		prepared_scroll_keyboard(u.frame, state, node.rect.h)
 	}
 	state.offset = clamp(state.offset, 0, f32(maximum))
 	content := rect_inset(node.rect, insets_of(u, node.scroll.padding))
 	child := &prepared_nodes(prepared)[node.first_child]
 	child.rect = {content.x, content.y - i32(state.offset), content.w, child.size.h}
+}
+
+@(private = "file")
+prepared_scroll_keyboard :: proc(frame: ^Ui_Frame, state: ^Prepared_Scroll_State, height: i32) {
+	assert(frame != nil && state != nil && height >= 0, "prepared scroll keyboard: invalid argument")
+	step := f32(ui_frame_metrics(frame).LINE_HEIGHT)
+	if is_key_pressed_or_repeat(frame, .DOWN) do state.offset += step
+	if is_key_pressed_or_repeat(frame, .UP) do state.offset -= step
+	if is_key_pressed_or_repeat(frame, .PAGE_DOWN) do state.offset += f32(height)
+	if is_key_pressed_or_repeat(frame, .PAGE_UP) do state.offset -= f32(height)
+	if is_key_pressed(frame, .HOME) do state.offset = 0
+	if is_key_pressed(frame, .END) do state.offset = f32(max(state.content_h - height, 0))
 }
 
 prepared_apply_transition :: proc(u: ^Ui, node: ^Prepared_Node) {
@@ -1482,6 +1506,18 @@ prepared_render_enter :: proc(u: ^Ui, node: ^Prepared_Node) {
 		return
 	}
 	if node.kind == .Scroll {
+		state := node.scroll.state
+		semantic_push(
+			u.frame,
+			.Pane,
+			node.rect,
+			"Scrollable content",
+			focus = node.scroll.focus,
+			value = state.offset,
+			lo = 0,
+			hi = f32(max(state.content_h - state.viewport_h, 0)),
+			widget = node.scroll.id,
+		)
 		begin_scissor_mode(u.frame, node.rect.x, node.rect.y, node.rect.w, node.rect.h)
 		return
 	}
@@ -1523,6 +1559,25 @@ prepared_render_exit :: proc(u: ^Ui, node: ^Prepared_Node) {
 	}
 	if node.kind == .Scroll {
 		end_scissor_mode(u.frame)
+		state := node.scroll.state
+		if node.scroll.bar && state.content_h > state.viewport_h {
+			state.offset = f32(scrollbar_ex(
+				u.frame,
+				&state.scrollbar,
+				node.rect.x + node.rect.w - ui_frame_sc(u.frame, 9),
+				node.rect.y + ui_frame_sc(u.frame, 2),
+				ui_frame_sc(u.frame, 5),
+				node.rect.h - ui_frame_sc(u.frame, 4),
+				int(state.content_h),
+				int(state.viewport_h),
+				int(state.offset),
+			))
+		} else {
+			state.scrollbar = {}
+		}
+		if focus_opt_focused(node.scroll.focus) {
+			draw_focus_ring(u.frame, node.rect.x, node.rect.y, node.rect.w, node.rect.h)
+		}
 		return
 	}
 	if prepared_container_effects(node).clip do end_scissor_mode(u.frame)
