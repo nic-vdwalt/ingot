@@ -21,7 +21,9 @@ prefs_paths_and_roundtrip :: proc(t: ^testing.T) {
 	os.set_env("APPDATA", "")
 	dir, ok := data_dir("myapp", context.temp_allocator)
 	testing.expect(t, ok, "data_dir resolves with HOME set")
-	when ODIN_OS != .Windows {
+	when ODIN_OS == .Windows {
+		testing.expect(t, strings.has_suffix(dir, "myapp"), "data_dir ends with app")
+	} else {
 		testing.expect_value(t, dir, "/tmp/ingot_home/.local/share/myapp")
 	}
 
