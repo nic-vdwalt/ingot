@@ -47,3 +47,26 @@ mesh_reset_clears_written_ranges :: proc(t: ^testing.T) {
 	testing.expect_value(t, mesh.vertex_count, 0)
 	testing.expect_value(t, mesh.index_count, 0)
 }
+
+@(test)
+mesh_validate_rejects_non_finite_vertex_channels :: proc(t: ^testing.T) {
+	vertices := [3]Vertex{}
+	indices := [?]u32{0, 1, 2}
+	mesh := Mesh_View{1, vertices[:], indices[:], .Triangles, {{0, 0, 0}, {0, 0, 0}}}
+	vertices[0].scalar = transmute(f32)u32(0x7fc0_0000)
+	testing.expect(t, !mesh_validate(mesh))
+	vertices[0].scalar = 0
+	vertices[0].uv[1] = transmute(f32)u32(0x7f80_0000)
+	testing.expect(t, !mesh_validate(mesh))
+}
+
+@(test)
+mesh_validate_rejects_position_outside_bounds :: proc(t: ^testing.T) {
+	vertices := [3]Vertex{}
+	indices := [?]u32{0, 1, 2}
+	mesh := Mesh_View{1, vertices[:], indices[:], .Triangles, {{0, 0, 0}, {1, 1, 1}}}
+	vertices[0].position = {-0.1, 0, 0}
+	testing.expect(t, !mesh_validate(mesh))
+	vertices[0].position = {0, 0, 1.1}
+	testing.expect(t, !mesh_validate(mesh))
+}

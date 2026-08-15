@@ -329,33 +329,56 @@ paint_clip_end :: proc(list: ^Paint_List) {
 }
 
 @(private = "file")
-paint_push_unreserved :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
-	assert(list != nil, "paint_push_unreserved: nil list")
-	if list.count >= PAINT_COMMAND_CAP do return false
-	command := command
-	command.tier = list.current_tier
-	command.z_group = list.current_z_group
-	list.commands[list.count] = command
+paint_reserve :: proc(list: ^Paint_List, reserve_clip_ends := true) -> ^Paint_Command {
+	assert(list != nil, "paint_reserve: nil list")
+	assert(list.clip_end_reserved >= 0, "paint_reserve: negative reservation")
+	limit := PAINT_COMMAND_CAP
+	if reserve_clip_ends do limit -= list.clip_end_reserved
+	if list.count >= limit do return nil
+	return &list.commands[list.count]
+}
+
+@(private = "file")
+paint_commit :: proc(list: ^Paint_List, command: ^Paint_Command) -> bool {
+	assert(list != nil, "paint_commit: nil list")
+	assert(command == &list.commands[list.count], "paint_commit: invalid reservation")
 	list.count += 1
 	when UI_TELEMETRY_ENABLED do list.command_append_count += 1
-	if list.sink != nil do list.sink(list, command, list.sink_userdata)
+	if list.sink != nil do list.sink(list, command^, list.sink_userdata)
 	return true
+}
+
+@(private = "file")
+paint_reject :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
+	assert(list != nil, "paint_reject: nil list")
+	list.dropped_commands += 1
+	if list.sink != nil {
+		command.tier = list.current_tier
+		command.z_group = list.current_z_group
+		list.sink(list, command, list.sink_userdata)
+	}
+	return false
+}
+
+@(private = "file")
+paint_push_unreserved :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
+	assert(list != nil, "paint_push_unreserved: nil list")
+	reserved := paint_reserve(list, false)
+	if reserved == nil do return false
+	command.tier = list.current_tier
+	command.z_group = list.current_z_group
+	reserved^ = command
+	return paint_commit(list, reserved)
 }
 
 paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
 	assert(list != nil, "paint_push: nil list")
-	assert(list.clip_end_reserved >= 0, "paint_push: negative reservation")
-	if list.count >= PAINT_COMMAND_CAP - list.clip_end_reserved {
-		list.dropped_commands += 1
-		if list.sink != nil {
-			command := command
-			command.tier = list.current_tier
-			command.z_group = list.current_z_group
-			list.sink(list, command, list.sink_userdata)
-		}
-		return false
-	}
-	return paint_push_unreserved(list, command)
+	reserved := paint_reserve(list)
+	if reserved == nil do return paint_reject(list, command)
+	command.tier = list.current_tier
+	command.z_group = list.current_z_group
+	reserved^ = command
+	return paint_commit(list, reserved)
 }
 
 paint_push_text :: proc(list: ^Paint_List, command: Paint_Command, text: string) -> bool {
