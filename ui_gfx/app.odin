@@ -157,7 +157,8 @@ app_tick :: proc(app: ^App) -> bool {
 	if app == nil || app.state != .Running do return false
 	if gfx.context_should_close(app.gfx_context) do return false
 	if app.config.frame_pacing == .Monitor_Refresh do app_apply_frame_pacing(app)
-	return app_frame(app)
+	_ = app_frame(app)
+	return true
 }
 
 app_stop :: proc(app: ^App) -> bool {
