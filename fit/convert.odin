@@ -100,12 +100,24 @@ to_size :: proc(value: Size_Options) -> ui.Prepared_Size {
 
 @(private = "package")
 to_effects :: proc(value: Container_Effects) -> ui.Prepared_Container_Effects {
+	if value.surface.enabled {
+		assert(value.background.a == 0, "Fit container: mixed surface and background")
+		assert(value.border == .None, "Fit container: mixed surface and border")
+	}
 	return {
 		clip = value.clip,
 		background = ui.Color(value.background),
 		radius = ui.Radius(value.radius),
 		border = ui.Border(value.border),
 		border_color = ui.Color(value.border_color),
+		surface = {
+			enabled = value.surface.enabled,
+			kind = ui.Surface(value.surface.kind),
+			state = ui.Visual_State(value.surface.state),
+			radius = ui.Radius(value.surface.radius),
+			border = ui.Border(value.surface.border),
+			elevation = ui.Elevation(value.surface.elevation),
+		},
 	}
 }
 

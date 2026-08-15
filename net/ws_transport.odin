@@ -117,6 +117,10 @@ when !INGOT_WS_SIM {
 					flags = WS_CURL_BLOB_COPY,
 				}
 				if ws_curl_easy_setopt(handle, WS_CURL_CAINFO_BLOB, &blob) != .OK do return false
+				if ws_curl_easy_setopt(handle, WS_CURL_SSL_OPTIONS, WS_CURL_REVOKE_BEST_EFFORT) !=
+				   .OK {
+					return false
+				}
 			} else {
 				ca_c, ca_err := strings.clone_to_cstring(ca_file, context.temp_allocator)
 				if ca_err != nil do return false
