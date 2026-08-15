@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "net-smoke-v1",
+      "target": "net",
+      "path": "net/smoke.ingtape",
+      "seed": 24680,
+      "discovered": "2026-08-15",
+      "fixed": "2026-08-15",
+      "expected": "pass",
+      "timeout_seconds": 30
+    },
+    {
+      "id": "interact-smoke-v1",
+      "target": "interact",
+      "path": "interact/smoke.ingtape",
+      "seed": 24680,
+      "discovered": "2026-08-15",
+      "fixed": "2026-08-15",
+      "expected": "pass",
+      "timeout_seconds": 30
+    }
+  ]
+}

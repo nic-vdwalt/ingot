@@ -85,6 +85,9 @@ for example in $(manifest_values test_examples); do
 		"$guard" -define:ODIN_TEST_FAIL_ON_EMPTY=true "$@"
 done
 
+echo "== replaying fuzz regression corpus =="
+run_supervised "fuzz-corpus" python3 "$root/scripts/fuzz-corpus.py" --root "$root"
+
 echo "== testing native WSS loopback TLS =="
 run_supervised "wss-loopback" python3 "$root/scripts/wss-loopback-test.py" \
 	--fixture "$root/examples/wss_fixture" "--collection=$col"

@@ -35,10 +35,10 @@ Map_Edge :: struct {
 }
 
 Map_Layout :: struct {
-	bounds:     fit.Rect,
-	nodes:      [NODE_COUNT]fit.Rect,
+	bounds:      fit.Rect,
+	nodes:       [NODE_COUNT]fit.Rect,
 	tier_bounds: [TIER_COUNT]fit.Rect,
-	wide:       bool,
+	wide:        bool,
 }
 
 Map_State :: struct {
@@ -54,14 +54,70 @@ Map_State :: struct {
 }
 
 MAP_NODES := [NODE_COUNT]Map_Node {
-	{"ingot:fit", "supported UI entry", "Own lifecycle and describe UI through Builder.", .Supported, 0, .Accent},
-	{"ingot:gfx", "supported graphics entry", "Use the raylib-compatible graphics API directly.", .Supported, 0, .Tool},
-	{"1  fit.App", "lifecycle + input", "Own the window, theme, scale, pacing, and frame input.", .Application, 1, .Success},
-	{"2  fit.Builder", "bounded declaration", "Record responsive containers and stable controls immediately.", .Application, 2, .Accent},
-	{"3  measure + place", "responsive layout", "Measure constraints and place the declaration synchronously.", .Internal, 3, .Plan},
-	{"4  fit.Surface", "borrowed capability", "Interact and draw explicit geometry only inside the callback.", .Callback, 4, .Tool},
-	{"5  UI output", "paint + semantics", "Record bounded paint, accessibility, and platform requests.", .Internal, 5, .Plan},
-	{"6  UI/GFX bridge", "WebGPU presentation", "Replay output through native or web platform adapters.", .Presentation, 6, .Success},
+	{
+		"ingot:fit",
+		"supported UI entry",
+		"Own lifecycle and describe UI through Builder.",
+		.Supported,
+		0,
+		.Accent,
+	},
+	{
+		"ingot:gfx",
+		"supported graphics entry",
+		"Use the raylib-compatible graphics API directly.",
+		.Supported,
+		0,
+		.Tool,
+	},
+	{
+		"1  fit.App",
+		"lifecycle + input",
+		"Own the window, theme, scale, pacing, and frame input.",
+		.Application,
+		1,
+		.Success,
+	},
+	{
+		"2  fit.Builder",
+		"bounded declaration",
+		"Record responsive containers and stable controls immediately.",
+		.Application,
+		2,
+		.Accent,
+	},
+	{
+		"3  measure + place",
+		"responsive layout",
+		"Measure constraints and place the declaration synchronously.",
+		.Internal,
+		3,
+		.Plan,
+	},
+	{
+		"4  fit.Surface",
+		"borrowed capability",
+		"Interact and draw explicit geometry only inside the callback.",
+		.Callback,
+		4,
+		.Tool,
+	},
+	{
+		"5  UI output",
+		"paint + semantics",
+		"Record bounded paint, accessibility, and platform requests.",
+		.Internal,
+		5,
+		.Plan,
+	},
+	{
+		"6  UI/GFX bridge",
+		"WebGPU presentation",
+		"Replay output through native or web platform adapters.",
+		.Presentation,
+		6,
+		.Success,
+	},
 }
 
 MAP_EDGES := [EDGE_COUNT]Map_Edge {
@@ -102,7 +158,10 @@ STAGE_CAPTIONS := [STAGE_COUNT + 1]string {
 }
 
 app: fit.App
-map_state := Map_State{dark = true, hovered_node = -1}
+map_state := Map_State {
+	dark         = true,
+	hovered_node = -1,
+}
 
 main :: proc() {
 	when LAYOUT_CHECK {
@@ -145,6 +204,7 @@ map_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	}
 	fit.Label(builder, STAGE_CAPTIONS[map_state.target_stage], {ink = .Secondary})
 	map_stage_controls(builder)
+	map_playback_controls(builder)
 	fit.Custom(
 		builder,
 		{measure = map_measure, render = map_render},
@@ -173,13 +233,37 @@ map_stage_controls :: proc(builder: ^fit.Builder) {
 	}
 }
 
+map_playback_controls :: proc(builder: ^fit.Builder) {
+	assert(builder != nil, "api map playback: nil builder")
+	assert(map_state.target_stage >= 0 && map_state.target_stage <= STAGE_COUNT)
+	fit.Flow(builder, {gap_x = .XS, gap_y = .XS})
+	defer fit.End(builder)
+	play_clicked := false
+	reset_clicked := false
+	fit.Button(builder, "play", "Pause" if map_state.playing else "Play path", &play_clicked)
+	fit.Button(builder, "reset", "Reset", &reset_clicked)
+	fit.Checkbox(builder, "motion", "Reduced motion", &map_state.reduced_motion)
+	if play_clicked {
+		map_state.playing = !map_state.playing
+		if map_state.playing && map_state.target_stage == 0 do map_select_stage(1)
+	}
+	if reset_clicked {
+		map_state.playing = false
+		map_state.selected_stage = 0
+		map_state.target_stage = 0
+		map_state.progress = 1
+		map_state.hold_seconds = 0
+	}
+}
+
 map_select_stage :: proc(stage: i32) {
 	assert(stage >= 0 && stage <= STAGE_COUNT, "api map: invalid stage")
 	assert(map_state.target_stage >= 0 && map_state.target_stage <= STAGE_COUNT)
+	if stage == map_state.target_stage && map_state.progress >= 1 do return
 	map_state.target_stage = stage
-	map_state.selected_stage = stage
-	map_state.progress = 1
+	map_state.progress = 1 if map_state.reduced_motion else 0
 	map_state.hold_seconds = 0
+	if map_state.progress >= 1 do map_state.selected_stage = stage
 }
 
 map_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
@@ -199,7 +283,10 @@ map_content_height :: proc(width: i32) -> i32 {
 map_layout :: proc(rect: fit.Rect, gap, entry_h, card_h: i32) -> Map_Layout {
 	assert(rect.w > 0 && rect.h > 0, "api map layout: invalid bounds")
 	assert(gap > 0 && entry_h > 0 && card_h > 0, "api map layout: invalid metrics")
-	result := Map_Layout{bounds = rect, wide = rect.w >= WIDE_WIDTH_MIN}
+	result := Map_Layout {
+		bounds = rect,
+		wide   = rect.w >= WIDE_WIDTH_MIN,
+	}
 	inner := fit.Rect{rect.x + gap, rect.y + gap, max(rect.w - gap * 2, 1), rect.h - gap * 2}
 	if rect.w <= NARROW_WIDTH_MAX {
 		map_layout_narrow(&result, inner, gap, entry_h, card_h)
@@ -290,23 +377,66 @@ map_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> b
 	_ = userdata
 	assert(surface != nil && rect.w > 0 && rect.h > 0, "api map render: invalid argument")
 	if fit.Surface_Key_Pressed(surface, .F12) do map_state.debug_on = !map_state.debug_on
+	map_animate(surface)
 	gap := fit.Surface_Space(surface, .MD)
 	layout := map_layout(rect, gap, fit.Px(surface, 62), fit.Px(surface, 88))
 	theme := fit.Surface_Theme_Tokens(surface)
 	fit.Surface_Fill_Rect(surface, rect, theme.background_app)
+	claim := rect_float(rect)
+	fit.Surface_Layer_Begin(surface, fit.Z_Order(1), claim)
+	map_render_tiers(surface, &layout)
+	fit.Surface_Layer_End(surface)
+	fit.Surface_Layer_Begin(surface, fit.Z_Order(2), claim)
 	map_render_edges(surface, &layout)
+	fit.Surface_Layer_End(surface)
+	fit.Surface_Layer_Begin(surface, fit.Z_Order(3), claim)
 	map_render_nodes(surface, &layout)
+	fit.Surface_Layer_End(surface)
+	fit.Surface_Layer_Begin(surface, fit.Z_Order(4), claim)
+	map_render_active(surface, &layout)
+	fit.Surface_Layer_End(surface)
 	if map_state.debug_on do _ = fit.Surface_Debug_Overlay(surface, rect.x + rect.w - 290, rect.y + 10)
 	return false
 }
 
+map_animate :: proc(surface: ^fit.Surface) {
+	assert(surface != nil, "api map animation: nil surface")
+	assert(map_state.progress >= 0 && map_state.progress <= 1)
+	delta := clamp(fit.Surface_Frame_Time(surface), 0, 0.1)
+	if map_state.reduced_motion && map_state.progress < 1 do map_state.progress = 1
+	if map_state.progress < 1 {
+		map_state.progress = map_advance_progress(map_state.progress, delta)
+		if map_state.progress >= 1 do map_state.selected_stage = map_state.target_stage
+	} else if map_state.playing {
+		map_state.hold_seconds += delta
+		if map_state.hold_seconds >= 0.7 {
+			next := map_state.target_stage + 1
+			if next > STAGE_COUNT do next = 1
+			map_select_stage(next)
+		}
+	}
+	if map_state.progress < 1 || map_state.playing do fit.Request_Redraw(surface)
+}
+
+map_render_tiers :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
+	assert(surface != nil && layout != nil, "api map tiers: invalid argument")
+	for bounds, tier in layout.tier_bounds {
+		fit.Surface_Draw_Surface(surface, rect_float(bounds), .Panel, .Rest, .LG)
+		fit.Surface_Text(surface, TIER_LABELS[tier], bounds.x + 6, bounds.y + 4, .Note, .Muted)
+	}
+}
+
 map_render_edges :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(surface != nil && layout != nil, "api map edges: invalid argument")
-	color := fit.Surface_Theme_Tokens(surface).border
+	theme := fit.Surface_Theme_Tokens(surface)
 	for edge in MAP_EDGES {
 		from := rect_center(layout.nodes[edge.from])
 		to := rect_center(layout.nodes[edge.to])
-		fit.Surface_Line(surface, from, to, fit.Px(surface, 2.0), color)
+		fit.Surface_Line(surface, from, to, fit.Px(surface, 2.0), theme.border)
+		amount := map_edge_amount(edge.stage)
+		if amount <= 0 do continue
+		end := point_lerp(from, to, amount)
+		fit.Surface_Line(surface, from, end, fit.Px(surface, 3.0), theme.foreground_accent)
 	}
 }
 
@@ -316,7 +446,7 @@ map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	for node, index in MAP_NODES {
 		rect := layout.nodes[index]
 		interaction := fit.Surface_Interact(surface, rect_float(rect))
-		selected := node.stage > 0 && node.stage == map_state.target_stage
+		selected := node.stage > 0 && node.stage <= map_state.selected_stage
 		state := fit.Visual_State.Selected if selected else fit.Visual_State.Rest
 		if interaction.hovered {
 			map_state.hovered_node = i32(index)
@@ -339,6 +469,47 @@ map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	}
 }
 
+map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
+	assert(surface != nil && layout != nil, "api map active: invalid argument")
+	stage := map_state.target_stage
+	if stage <= 0 do return
+	node_index := stage + 1
+	rect := rect_expand(layout.nodes[node_index], fit.Surface_Space(surface, .XS) / 2)
+	fit.Surface_Stroke_Rounded_Rect(
+		surface,
+		rect_float(rect),
+		0.12,
+		8,
+		fit.Px(surface, 2.0),
+		fit.Surface_Theme_Tokens(surface).foreground_accent,
+	)
+	for edge in MAP_EDGES {
+		if edge.stage != stage do continue
+		from := rect_center(layout.nodes[edge.from])
+		to := rect_center(layout.nodes[edge.to])
+		pulse := point_lerp(from, to, map_ease(map_state.progress))
+		fit.Surface_Fill_Circle(
+			surface,
+			pulse,
+			fit.Px(surface, 5.0),
+			fit.Surface_Theme_Tokens(surface).foreground_accent,
+		)
+		break
+	}
+}
+
+map_edge_amount :: proc(stage: i32) -> f32 {
+	assert(stage >= 1 && stage <= STAGE_COUNT, "api map edge: invalid stage")
+	if stage <= map_state.selected_stage do return 1
+	if stage == map_state.target_stage do return map_ease(map_state.progress)
+	return 0
+}
+
+point_lerp :: proc(from, to: fit.Point, amount: f32) -> fit.Point {
+	assert(amount >= 0 && amount <= 1, "api map lerp: invalid amount")
+	return {from.x + (to.x - from.x) * amount, from.y + (to.y - from.y) * amount}
+}
+
 rect_center :: proc(rect: fit.Rect) -> fit.Point {
 	assert(rect.w > 0 && rect.h > 0, "api map center: invalid rectangle")
 	return {f32(rect.x + rect.w / 2), f32(rect.y + rect.h / 2)}
@@ -347,4 +518,14 @@ rect_center :: proc(rect: fit.Rect) -> fit.Point {
 rect_float :: proc(rect: fit.Rect) -> fit.Float_Rect {
 	assert(rect.w > 0 && rect.h > 0, "api map float rect: invalid rectangle")
 	return {f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+}
+
+map_ease :: proc(value: f32) -> f32 {
+	clamped := clamp(value, 0, 1)
+	return clamped * clamped * (3 - 2 * clamped)
+}
+
+map_advance_progress :: proc(progress, delta: f32) -> f32 {
+	assert(progress >= 0 && progress <= 1, "api map progress: invalid value")
+	return clamp(progress + max(delta, 0) * 3.5, 0, 1)
 }

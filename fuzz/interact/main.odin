@@ -226,11 +226,33 @@ capture_sim_input :: proc(input: ^ui.Ui_Input) {
 // active at any point during the frame - end-of-frame state is not enough
 // because a menu can open and be chosen-from (row release) in one frame,
 // legitimately registering a claim while ending the frame closed.
+Frame_Control :: struct {
+	hide_slider: i32,
+	open_modal: bool,
+	open_menu: bool,
+	menu_x: i32,
+	menu_y: i32,
+}
+
+frame_control_random :: proc(p: ^Prng, s: ^Scene, enabled: bool) -> Frame_Control {
+	assert(p != nil && s != nil, "frame_control_random: nil argument")
+	control: Frame_Control
+	if enabled && s.hide_slider_frames == 0 && fuzzx.int_range(p, 0, 61) == 0 {
+		control.hide_slider = i32(fuzzx.int_range(p, 1, 5))
+	}
+	if enabled && !s.modal.open && fuzzx.int_range(p, 0, 97) == 0 do control.open_modal = true
+	if enabled && !s.menu.open && fuzzx.int_range(p, 0, 89) == 0 {
+		control.open_menu = true
+		control.menu_x = i32(fuzzx.int_range(p, 0, SCREEN_W))
+		control.menu_y = i32(fuzzx.int_range(p, 0, SCREEN_H))
+	}
+	return control
+}
+
 draw_scene :: proc(
 	frame: ^ui.Ui_Frame,
 	s: ^Scene,
-	p: ^Prng,
-	allow_random_overlays: bool,
+	control: Frame_Control,
 ) -> (
 	overlay_active: bool,
 ) {
@@ -248,10 +270,8 @@ draw_scene :: proc(
 	if ui.radio_at(frame, R_RADIO_B, "Radio B", &s.radio_sel, 1, ui.Focus_Opt{&s.focus, 4}) {
 		s.radio_changes += 1
 	}
-	if allow_random_overlays && s.hide_slider_frames == 0 && fuzzx.int_range(p, 0, 61) == 0 {
-		// Stop drawing a latch owner for a few frames, the way switching
-		// tabs or collapsing a panel mid-drag does.
-		s.hide_slider_frames = fuzzx.int_range(p, 1, 5)
+	if control.hide_slider > 0 && s.hide_slider_frames == 0 {
+		s.hide_slider_frames = int(control.hide_slider)
 	}
 	if s.hide_slider_frames > 0 {
 		s.hide_slider_frames -= 1
@@ -277,8 +297,7 @@ draw_scene :: proc(
 	}
 	overlay_active |= s.dd_state.menu.open
 
-	// Randomly open the modal / context menu the way an app handler would.
-	if allow_random_overlays && !s.modal.open && fuzzx.int_range(p, 0, 97) == 0 do s.modal.open = true
+	if control.open_modal && !s.modal.open do s.modal.open = true
 	if s.modal.open {
 		overlay_active = true
 		_ = ui.modal_begin(
@@ -289,12 +308,8 @@ draw_scene :: proc(
 		)
 		ui.modal_end(&s.modal)
 	}
-	if allow_random_overlays && !s.menu.open && fuzzx.int_range(p, 0, 89) == 0 {
-		ui.context_menu_open(
-			&s.menu,
-			i32(fuzzx.int_range(p, 0, SCREEN_W)),
-			i32(fuzzx.int_range(p, 0, SCREEN_H)),
-		)
+	if control.open_menu && !s.menu.open {
+		ui.context_menu_open(&s.menu, control.menu_x, control.menu_y)
 	}
 	overlay_active |= s.menu.open
 	if ui.context_menu(frame, &s.menu, MENU_ITEMS[:], {0, 0, SCREEN_W, SCREEN_H}) >= 0 {
@@ -392,6 +407,7 @@ fuzz_text_measure :: proc(
 }
 
 main :: proc() {
+	if interact_tape_cli() do return
 	seed, iterations, rounds := fuzzx.parse_options(ITERATIONS_DEFAULT)
 	fmt.printfln("fuzz_interact seed=%d iterations=%d rounds=%d", seed, iterations, rounds)
 
@@ -432,7 +448,8 @@ main :: proc() {
 			if !deterministic do inject_events(&p)
 			capture_sim_input(&input)
 			ui.ui_frame_begin(&frame, &runtime, &input)
-			overlay_active := draw_scene(&frame, &s, &p, !deterministic)
+			control := frame_control_random(&p, &s, !deterministic)
+			overlay_active := draw_scene(&frame, &s, control)
 			if overlay_active {
 				overlay_free_frames = 0
 			} else {

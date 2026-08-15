@@ -48,6 +48,8 @@ foreach ($Example in $Manifest.test_examples) {
     $Command = @("odin", "test", "$Root/examples/$Example", $Collection, $Guard, "-define:ODIN_TEST_FAIL_ON_EMPTY=true")
     Invoke-Supervised $Label $Command
 }
+Write-Host "== replaying fuzz regression corpus =="
+Invoke-Supervised "fuzz-corpus" @("python", "$PSScriptRoot/fuzz-corpus.py", "--root", $Root)
 Write-Host "== testing native WSS loopback TLS =="
 Invoke-Supervised "wss-loopback" @("python", "$PSScriptRoot/wss-loopback-test.py", "--fixture", "$Root/examples/wss_fixture", "--collection=$Collection")
 foreach ($Package in $Manifest.compile_packages) {

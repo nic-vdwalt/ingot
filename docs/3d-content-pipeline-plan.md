@@ -85,20 +85,22 @@ Each stage gets an oracle that fails deterministically under a recorded seed.
 The pipeline is the forcing function for four improvements that benefit every
 existing target as well.
 
-1. **Operation tape and shrinking in `fuzz/fuzzx`.** Record the generated
-   operations rather than only the seed, and on failure delete operations by
-   binary search while the invariant still fails. A failing asset or scene run
-   should report a minimal tape, not one hundred thousand operations. This also
-   makes a repro survive a change to the generator, which a bare seed does not.
+1. **Operation tape and shrinking in `fuzz/fuzzx` (foundation complete).**
+   `net` and `interact` record bounded versioned operations and use deterministic
+   failure-class-preserving delta debugging. Future asset and scene targets use
+   the same opaque operation format and target-owned codecs. Exact replay covers
+   every tape; in-process shrinking currently covers structured failures, not
+   process-fatal sanitizer or assertion exits.
 2. **A virtual clock seam (`INGOT_TIME_SIM`).** Streaming, upload pacing, hot
    reload debounce, and idle behavior become tape-driven instead of
    incidentally deterministic.
-3. **A persisted corpus and a seed regression table.** `testdata/seeds/`
-   replayed by `scripts/test.sh` turns each discovered failure into a permanent
-   regression test, which `testing.md` already requires in principle but does
-   not yet mechanize.
-4. **One PRNG.** `testx/prng.odin` and the copy in `fuzz/fuzzx/fuzzx.odin`
-   should not be able to drift apart.
+3. **A persisted corpus and a seed regression table (complete).**
+   `testdata/seeds/manifest.json` is validated and replayed by the Unix and
+   Windows standard test gates. Entries are minimized operation tapes, not a
+   random bulk corpus.
+4. **One PRNG (complete).** `testx/prng.odin` owns harness randomness and
+   `fuzzx` aliases it. The dependency-free network simulator retains an isolated
+   implementation with a parity test that prevents drift.
 
 A headless WebGPU surface would additionally let `gfx-frame` and the upload
 stage join `all` and `soak` instead of requiring a display, but the pipeline
@@ -120,11 +122,13 @@ Each phase ends with a green run of the package tests, the strict gate, the web
 gate, and its own fuzz target. No phase advances while a source, layout,
 ownership, timing, or visual contract differs from the recorded baseline.
 
-### Phase 0 - Harness foundations
+### Phase 0 - Harness foundations (complete)
 
-Operation tape, shrinker, single PRNG, seed corpus replay. No pipeline code.
-Verified by replaying existing `interact` and `net` findings through the new
-tape path.
+The canonical PRNG, bounded operation-tape codec, deterministic shrinker, and
+standard-gate corpus replay are implemented. `net` and `interact` provide the
+first target codecs and smoke regressions. Additional harnesses migrate when a
+stateful reproducer needs tape stability; that migration is not a prerequisite
+for Phase 1.
 
 ### Phase 1 - `ingot:asset` import
 
