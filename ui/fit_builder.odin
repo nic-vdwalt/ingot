@@ -402,11 +402,15 @@ fit_builder_spacer :: proc(builder: ^Fit_Builder, space: Space, options: Fit_Lea
 	assert(builder != nil, "fit_builder_spacer: nil builder")
 	fit_builder_assert_open(builder)
 	assert(builder.prepared.depth > 0, "fit_builder_spacer: no parent")
-	parent := builder.container_kinds[builder.prepared.depth - 1]
+	depth := builder.prepared.depth - 1
+	assert(depth >= 0 && depth < len(builder.container_kinds), "fit_builder_spacer: invalid depth")
+	parent := builder.container_kinds[depth]
 	assert(parent == .Row || parent == .Column, "fit_builder_spacer: invalid parent")
 	fit_builder_add_child(builder)
 	handle := prepared_spacer(&builder.prepared, {space, parent == .Row}, options.track)
-	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+	index := i32(handle)
+	assert(index >= 0 && index < builder.prepared.count, "fit_builder_spacer: invalid handle")
+	prepared_nodes(&builder.prepared)[index].sizing = options.size
 }
 
 fit_builder_table_cell :: proc(
