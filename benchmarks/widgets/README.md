@@ -93,6 +93,11 @@ begin because scale and metrics can change while a frame is open. Pane culling r
 active only inside an established pane band; interaction, state, focus, semantics, and active IME work
 continue for offscreen controls.
 
+The direct paint path also appends rectangles, rounded rectangles, and text commands directly into a
+reserved bounded slot. Generic commands, structural clips, target-space drawing, and sink delivery retain
+their compatibility paths. Whole-slot assignment clears stale fields before the list count exposes an
+accepted command, while rejected text remains available to a configured sink after its bounded copy.
+
 Workloads may declare a `frameworks` list and additional `framework_scales`. Shared scales run on all
 eligible adapters and participate in checksum validation; framework scales characterize larger cases
 without implying parity. Fit uses caller-provided bounded description storage with an 8,192-node hard

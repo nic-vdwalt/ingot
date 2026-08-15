@@ -62,16 +62,74 @@ frame_paint_push_text :: proc(frame: ^Ui_Frame, command: Paint_Command, text: st
 	return paint_push_text(frame_paint_list(frame), command, text)
 }
 
+frame_paint_push_rectangle :: proc(frame: ^Ui_Frame, rect: Rect, color: Color) -> bool {
+	assert(frame != nil && frame.open, "frame_paint_push_rectangle: invalid frame")
+	positioned := rect
+	if frame.pane_count > 0 {
+		origin := frame.pane_origins[frame.pane_count - 1]
+		positioned.x += origin.x
+		positioned.y += origin.y
+	}
+	return paint_push_rectangle(frame_paint_list(frame), positioned, color)
+}
+
+frame_paint_push_rectangle_rounded :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect,
+	roundness: f32,
+	segments: i32,
+	color: Color,
+) -> bool {
+	assert(frame != nil && frame.open, "frame_paint_push_rectangle_rounded: invalid frame")
+	positioned := rect
+	if frame.pane_count > 0 {
+		origin := frame.pane_origins[frame.pane_count - 1]
+		positioned.x += origin.x
+		positioned.y += origin.y
+	}
+	return paint_push_rectangle_rounded(
+		frame_paint_list(frame),
+		positioned,
+		roundness,
+		segments,
+		color,
+	)
+}
+
+frame_paint_push_text_fields :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	position: Vec2,
+	color: Color,
+	font: Font_Id,
+	font_size: f32,
+	spacing: f32 = 0,
+) -> bool {
+	assert(frame != nil && frame.open, "frame_paint_push_text_fields: invalid frame")
+	positioned := position
+	if frame.pane_count > 0 do positioned += frame.pane_origins[frame.pane_count - 1]
+	return paint_push_text_fields(
+		frame_paint_list(frame),
+		text,
+		positioned,
+		color,
+		font,
+		font_size,
+		spacing,
+	)
+}
+
 draw_rectangle :: proc(frame: ^Ui_Frame, x, y, width, height: i32, color: Color) {
 	assert(frame != nil, "draw_rectangle: nil frame")
-	frame_paint_push(
+	frame_paint_push_rectangle(
 		frame,
-		{kind = .Rectangle, rect = {f32(x), f32(y), f32(width), f32(height)}, color = color},
+		{f32(x), f32(y), f32(width), f32(height)},
+		color,
 	)
 }
 
 draw_rectangle_rec :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
-	frame_paint_push(frame, {kind = .Rectangle, rect = rect, color = color})
+	frame_paint_push_rectangle(frame, rect, color)
 }
 
 draw_rectangle_lines :: proc(frame: ^Ui_Frame, x, y, width, height: i32, color: Color) {
@@ -95,16 +153,7 @@ draw_rectangle_rounded :: proc(
 	color: Color,
 ) {
 	assert(frame != nil, "draw_rectangle_rounded: nil frame")
-	frame_paint_push(
-		frame,
-		{
-			kind = .Rectangle_Rounded,
-			rect = rect,
-			roundness = roundness,
-			segments = segments,
-			color = color,
-		},
-	)
+	frame_paint_push_rectangle_rounded(frame, rect, roundness, segments, color)
 }
 
 draw_rectangle_rounded_lines_ex :: proc(
@@ -269,14 +318,14 @@ draw_text_command :: proc(
 	font: Font_Id = 0,
 ) {
 	assert(frame != nil, "draw_text_command: nil frame")
-	command := Paint_Command {
-		kind      = .Text,
-		p0        = {f32(x), f32(y)},
-		color     = color,
-		font      = font,
-		font_size = f32(size),
-	}
-	frame_paint_push_text(frame, command, text)
+	frame_paint_push_text_fields(
+		frame,
+		text,
+		{f32(x), f32(y)},
+		color,
+		font,
+		f32(size),
+	)
 }
 
 draw_cstring_command :: proc(

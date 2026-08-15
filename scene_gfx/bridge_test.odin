@@ -40,3 +40,12 @@ bridge_owner_is_context_bound :: proc(t: ^testing.T) {
 	bridge_destroy_context(first, &bridge)
 	testing.expect(t, bridge.owner == nil)
 }
+
+@(test)
+mesh_view_upload_rejects_invalid_cooked_mesh :: proc(t: ^testing.T) {
+	ctx := new(gfx.Context)
+	defer free(ctx)
+	mesh: asset.Mesh_View
+	_, ok := mesh_view_upload_context(ctx, mesh)
+	testing.expect(t, !ok)
+}
