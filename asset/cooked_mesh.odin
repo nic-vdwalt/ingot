@@ -49,7 +49,11 @@ Cooked_Mesh_Record :: struct {
 cooked_mesh_decode :: proc(
 	bytes: []u8,
 	storage: Cooked_Mesh_Storage,
-) -> (Cooked_Mesh_Bundle, Cooked_Mesh_Result, bool) {
+) -> (
+	Cooked_Mesh_Bundle,
+	Cooked_Mesh_Result,
+	bool,
+) {
 	if len(bytes) < COOKED_MESH_HEADER_SIZE do return _cooked_mesh_fail(.Truncated, len(bytes), 0)
 	magic := COOKED_MESH_MAGIC
 	for index in 0 ..< len(magic) {
@@ -63,7 +67,8 @@ cooked_mesh_decode :: proc(
 	if mesh_count == 0 || mesh_count > COOKED_MESH_MAX_MESHES {
 		return _cooked_mesh_fail(.Invalid_Record, 12, 0)
 	}
-	if int(mesh_count) > len(storage.meshes) || int(vertex_count) > len(storage.vertices) ||
+	if int(mesh_count) > len(storage.meshes) ||
+	   int(vertex_count) > len(storage.vertices) ||
 	   int(index_count) > len(storage.indices) {
 		return _cooked_mesh_fail(.Capacity, 12, 0)
 	}
@@ -106,20 +111,28 @@ _cooked_mesh_records :: proc(
 	bytes: []u8,
 	records: []Cooked_Mesh_Record,
 	vertex_count, index_count: u32,
-) -> (Cooked_Mesh_Result, bool) {
+) -> (
+	Cooked_Mesh_Result,
+	bool,
+) {
 	previous_id: Mesh_Id
 	previous_vertex, previous_index: u32
 	for index in 0 ..< len(records) {
 		offset := COOKED_MESH_HEADER_SIZE + index * COOKED_MESH_RECORD_SIZE
 		record := _cooked_mesh_record(bytes, offset)
-		if record.id == 0 || record.id <= previous_id || record.vertex_count == 0 ||
-		   record.index_count == 0 || record.index_count % 3 != 0 {
+		if record.id == 0 ||
+		   record.id <= previous_id ||
+		   record.vertex_count == 0 ||
+		   record.index_count == 0 ||
+		   record.index_count % 3 != 0 {
 			return {fault = .Invalid_Record, offset = u32(offset), mesh = record.id}, false
 		}
 		vertex_end := u64(record.first_vertex) + u64(record.vertex_count)
 		index_end := u64(record.first_index) + u64(record.index_count)
-		if record.first_vertex != previous_vertex || record.first_index != previous_index ||
-		   vertex_end > u64(vertex_count) || index_end > u64(index_count) ||
+		if record.first_vertex != previous_vertex ||
+		   record.first_index != previous_index ||
+		   vertex_end > u64(vertex_count) ||
+		   index_end > u64(index_count) ||
 		   !bounds_valid(record.bounds) {
 			return {fault = .Invalid_Record, offset = u32(offset), mesh = record.id}, false
 		}
@@ -175,7 +188,11 @@ _cooked_mesh_views :: proc(
 	storage: Cooked_Mesh_Storage,
 	records: []Cooked_Mesh_Record,
 	vertex_count, index_count: u32,
-) -> (Cooked_Mesh_Bundle, Cooked_Mesh_Result, bool) {
+) -> (
+	Cooked_Mesh_Bundle,
+	Cooked_Mesh_Result,
+	bool,
+) {
 	for index in 0 ..< len(records) {
 		record := records[index]
 		vertices := storage.vertices[record.first_vertex:record.first_vertex + record.vertex_count]
@@ -192,8 +209,14 @@ _cooked_mesh_views :: proc(
 
 @(private)
 _cooked_mesh_u32 :: proc(bytes: []u8, offset: int) -> u32 {
-	return u32(bytes[offset]) | u32(bytes[offset + 1]) << 8 | u32(bytes[offset + 2]) << 16 |
-	       u32(bytes[offset + 3]) << 24
+	assert(offset >= 0, "_cooked_mesh_u32: negative offset")
+	assert(offset + size_of(u32) <= len(bytes), "_cooked_mesh_u32: truncated value")
+	return(
+		u32(bytes[offset]) |
+		u32(bytes[offset + 1]) << 8 |
+		u32(bytes[offset + 2]) << 16 |
+		u32(bytes[offset + 3]) << 24 \
+	)
 }
 
 @(private)
@@ -206,7 +229,11 @@ _cooked_mesh_fail :: proc(
 	fault: Cooked_Mesh_Fault,
 	offset: int,
 	mesh: Mesh_Id,
-) -> (Cooked_Mesh_Bundle, Cooked_Mesh_Result, bool) {
+) -> (
+	Cooked_Mesh_Bundle,
+	Cooked_Mesh_Result,
+	bool,
+) {
 	return {}, {fault = fault, offset = u32(max(offset, 0)), mesh = mesh}, false
 }
 

@@ -80,3 +80,30 @@ overlay_recorder_behaviour :: proc(t: ^testing.T) {
 	paint_list_set_sink(&output.main, nil, nil)
 	ui_frame_end(&frame)
 }
+
+@(test)
+overlay_specialized_draws_preserve_channel_order_and_fields :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	overlay_begin(&frame, {0, 0, 100, 100}, claim_input = false)
+	overlay_rect(&frame, {1, 2, 3, 4}, {5, 6, 7, 8})
+	overlay_text(&frame, "overlay", 9, 10, 11, {12, 13, 14, 15})
+	overlay_rounded(&frame, {16, 17, 18, 19}, 0.5, 6, {20, 21, 22, 23})
+	overlay_end(&frame)
+	ui_frame_end(&frame)
+	testing.expect_value(t, output.main.count, 0)
+	testing.expect_value(t, output.overlay.count, 3)
+	testing.expect_value(t, output.overlay.commands[0].kind, Paint_Kind.Rectangle)
+	testing.expect_value(t, output.overlay.commands[1].kind, Paint_Kind.Text)
+	testing.expect_value(t, output.overlay.commands[2].kind, Paint_Kind.Rectangle_Rounded)
+	testing.expect_value(t, output.overlay.commands[0].rect, Rect{1, 2, 3, 4})
+	testing.expect_value(t, output.overlay.commands[1].p0, Vec2{9, 10})
+	testing.expect_value(t, paint_text(&output.overlay, output.overlay.commands[1]), "overlay")
+	testing.expect_value(t, output.overlay.commands[2].rect, Rect{16, 17, 18, 19})
+}

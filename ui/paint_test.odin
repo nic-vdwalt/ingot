@@ -32,6 +32,154 @@ paint_telemetry_counts_successful_writes_and_rejected_command_text :: proc(t: ^t
 }
 
 @(test)
+paint_specialized_fields_match_generic_commands_and_clear_slots :: proc(t: ^testing.T) {
+	generic := new(Paint_List)
+	specialized := new(Paint_List)
+	defer free(generic)
+	defer free(specialized)
+	stale := Paint_Command {
+		kind = .Ring,
+		p0 = {99, 98},
+		p1 = {97, 96},
+		thickness = 95,
+		codepoint = 'Z',
+		clip_restore = true,
+	}
+	generic.commands[0] = stale
+	specialized.commands[0] = stale
+	generic.current_tier = 3
+	generic.current_z_group = 4
+	specialized.current_tier = 3
+	specialized.current_z_group = 4
+	rect := Rect{1, 2, 3, 4}
+	color := Color{5, 6, 7, 8}
+	paint_push(generic, {kind = .Rectangle, rect = rect, color = color, tier = 9, z_group = 9})
+	paint_push_rectangle(specialized, rect, color)
+	testing.expect_value(t, specialized.commands[0], generic.commands[0])
+	paint_push(
+		generic,
+		{
+			kind = .Rectangle_Rounded,
+			rect = rect,
+			roundness = 0.25,
+			segments = 6,
+			color = color,
+		},
+	)
+	paint_push_rectangle_rounded(specialized, rect, 0.25, 6, color)
+	testing.expect_value(t, specialized.commands[1], generic.commands[1])
+}
+
+@(test)
+paint_specialized_text_matches_generic_storage_and_telemetry :: proc(t: ^testing.T) {
+	generic := new(Paint_List)
+	specialized := new(Paint_List)
+	defer free(generic)
+	defer free(specialized)
+	generic.current_tier = 2
+	generic.current_z_group = 3
+	specialized.current_tier = 2
+	specialized.current_z_group = 3
+	command := Paint_Command {
+		kind = .Text,
+		p0 = {4, 5},
+		color = {6, 7, 8, 9},
+		font = 10,
+		font_size = 11,
+		spacing = 12,
+	}
+	paint_push_text(generic, command, "fields")
+	paint_push_text_fields(specialized, "fields", {4, 5}, {6, 7, 8, 9}, 10, 11, 12)
+	testing.expect_value(t, specialized.commands[0], generic.commands[0])
+	testing.expect_value(t, paint_text(specialized, specialized.commands[0]), "fields")
+	testing.expect_value(t, specialized.text_len, generic.text_len)
+	when UI_TELEMETRY_ENABLED {
+		testing.expect_value(t, specialized.command_append_count, generic.command_append_count)
+		testing.expect_value(t, specialized.text_append_count, generic.text_append_count)
+		testing.expect_value(t, specialized.text_bytes_copied, generic.text_bytes_copied)
+	}
+}
+
+@(test)
+paint_specialized_rejection_preserves_reservations_sink_and_text :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	paint_clip_begin(list, {0, 0, 20, 20})
+	list.count = PAINT_COMMAND_CAP - list.clip_end_reserved
+	list.current_tier = 4
+	list.current_z_group = 5
+	streamed := Paint_Command{}
+	sink := proc(list: ^Paint_List, command: Paint_Command, userdata: rawptr) {
+		assert(list.count == PAINT_COMMAND_CAP - list.clip_end_reserved)
+		value := cast(^Paint_Command)userdata
+		value^ = command
+	}
+	paint_list_set_sink(list, sink, &streamed)
+	retained := paint_push_rectangle(list, {1, 2, 3, 4}, {5, 6, 7, 8})
+	testing.expect(t, !retained)
+	testing.expect_value(t, streamed.tier, u8(4))
+	testing.expect_value(t, streamed.z_group, u8(5))
+	testing.expect_value(t, list.dropped_commands, 1)
+	retained = paint_push_text_fields(list, "sink", {9, 10}, {11, 12, 13, 14}, 2, 16)
+	testing.expect(t, !retained)
+	testing.expect_value(t, paint_text(list, streamed), "sink")
+	testing.expect_value(t, list.text_len, len("sink"))
+	testing.expect_value(t, list.dropped_commands, 2)
+	paint_list_set_sink(list, nil, nil)
+	list.count = 1
+	list.current_tier = 0
+	list.current_z_group = 0
+	paint_clip_end(list)
+	testing.expect_value(t, list.clip_end_reserved, 0)
+}
+
+@(test)
+paint_specialized_text_overflow_does_not_append_or_stream :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	list.text_len = PAINT_TEXT_CAP
+	streamed := 0
+	sink := proc(list: ^Paint_List, command: Paint_Command, userdata: rawptr) {
+		value := cast(^int)userdata
+		value^ += 1
+	}
+	paint_list_set_sink(list, sink, &streamed)
+	retained := paint_push_text_fields(list, "x", {1, 2}, {3, 4, 5, 6}, 7, 8)
+	testing.expect(t, !retained)
+	testing.expect_value(t, list.count, 0)
+	testing.expect_value(t, list.text_len, PAINT_TEXT_CAP)
+	testing.expect_value(t, list.dropped_text_bytes, 1)
+	testing.expect_value(t, list.dropped_commands, 0)
+	testing.expect_value(t, streamed, 0)
+}
+
+@(test)
+paint_specialized_frame_paths_translate_once_and_preserve_order :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	ui_frame_pane_push(&frame, {10, 20})
+	draw_rectangle(&frame, 1, 2, 3, 4, {1, 2, 3, 4})
+	draw_rectangle_rec(&frame, {5, 6, 7, 8}, {5, 6, 7, 8})
+	draw_rectangle_rounded(&frame, {9, 10, 11, 12}, 0.5, 6, {9, 10, 11, 12})
+	draw_text_command(&frame, "order", 13, 14, 15, {13, 14, 15, 16}, 2)
+	ui_frame_pane_pop(&frame)
+	ui_frame_end(&frame)
+	testing.expect_value(t, output.main.count, 4)
+	testing.expect_value(t, output.main.commands[0].rect, Rect{11, 22, 3, 4})
+	testing.expect_value(t, output.main.commands[1].rect, Rect{15, 26, 7, 8})
+	testing.expect_value(t, output.main.commands[2].rect, Rect{19, 30, 11, 12})
+	testing.expect_value(t, output.main.commands[3].p0, Vec2{23, 34})
+	testing.expect_value(t, output.main.commands[3].kind, Paint_Kind.Text)
+	testing.expect_value(t, paint_text(&output.main, output.main.commands[3]), "order")
+}
+
+@(test)
 paint_clip_nested_intersection_and_restore :: proc(t: ^testing.T) {
 	list := new(Paint_List)
 	defer free(list)

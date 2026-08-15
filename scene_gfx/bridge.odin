@@ -22,14 +22,27 @@ Bridge :: struct {
 	missing_draws:   u32,
 }
 
-// bridge_upload_mesh makes a cooked mesh resident on the GPU.
-//
 // Vertices are reinterpreted, never converted: cooked data must ALREADY be in
 // Ingot's right-handed ROS basis (+X forward, +Y left, +Z up), with outward
-// counter-clockwise winding to match the pipeline's front-face policy. Axis
-// conversion belongs at the import/cook boundary and happens exactly once; the
-// #assert pairs below check only that the two vertex layouts still match in
-// memory, which cannot detect swapped axes or inverted normals.
+// counter-clockwise winding to match the pipeline's front-face policy.
+mesh_view_upload_context :: proc(
+	ctx: ^gfx.Context,
+	mesh: asset.Mesh_View,
+) -> (
+	gfx.Gpu_Mesh,
+	bool,
+) {
+	assert(ctx != nil, "mesh_view_upload_context: nil context")
+	if !asset.mesh_validate(mesh) do return {}, false
+	vertices := transmute([]gfx.Gpu_3D_Vertex)mesh.vertices
+	primitive := gfx.Gpu_Primitive(mesh.primitive)
+	return gfx.context_create_gpu_mesh(ctx, vertices, mesh.indices, primitive)
+}
+
+mesh_view_upload :: proc(mesh: asset.Mesh_View) -> (gfx.Gpu_Mesh, bool) {
+	return mesh_view_upload_context(gfx.default_context(), mesh)
+}
+
 bridge_upload_mesh_context :: proc(
 	ctx: ^gfx.Context,
 	bridge: ^Bridge,
@@ -38,15 +51,12 @@ bridge_upload_mesh_context :: proc(
 	assert(ctx != nil, "bridge_upload_mesh_context: nil context")
 	assert(bridge != nil, "bridge_upload_mesh_context: nil bridge")
 	if bridge.owner != nil && bridge.owner != ctx do return false
-	if !asset.mesh_validate(mesh) do return false
 	if _bridge_mesh(bridge, mesh.id) != nil do return false
 	if int(bridge.mesh_count) >= SCENE_GFX_MAX_RESIDENT_MESHES {
 		bridge.upload_failures += 1
 		return false
 	}
-	vertices := transmute([]gfx.Gpu_3D_Vertex)mesh.vertices
-	primitive := gfx.Gpu_Primitive(mesh.primitive)
-	gpu, ok := gfx.context_create_gpu_mesh(ctx, vertices, mesh.indices, primitive)
+	gpu, ok := mesh_view_upload_context(ctx, mesh)
 	if !ok {
 		bridge.upload_failures += 1
 		return false
@@ -139,4 +149,8 @@ _bridge_mesh :: proc(bridge: ^Bridge, id: asset.Mesh_Id) -> ^Resident_Mesh {
 #assert(offset_of(asset.Vertex, normal) == offset_of(gfx.Gpu_3D_Vertex, normal))
 #assert(offset_of(asset.Vertex, scalar) == offset_of(gfx.Gpu_3D_Vertex, scalar))
 #assert(offset_of(asset.Vertex, uv) == offset_of(gfx.Gpu_3D_Vertex, uv))
+#assert(size_of(asset.Primitive) == size_of(gfx.Gpu_Primitive))
+#assert(u8(asset.Primitive.Triangles) == u8(gfx.Gpu_Primitive.Triangles))
+#assert(u8(asset.Primitive.Lines) == u8(gfx.Gpu_Primitive.Lines))
+#assert(u8(asset.Primitive.Points) == u8(gfx.Gpu_Primitive.Points))
 #assert(size_of(scene.Matrix_4) == size_of(gfx.Matrix))

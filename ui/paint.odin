@@ -353,9 +353,10 @@ paint_reject :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
 	assert(list != nil, "paint_reject: nil list")
 	list.dropped_commands += 1
 	if list.sink != nil {
-		command.tier = list.current_tier
-		command.z_group = list.current_z_group
-		list.sink(list, command, list.sink_userdata)
+		rejected := command
+		rejected.tier = list.current_tier
+		rejected.z_group = list.current_z_group
+		list.sink(list, rejected, list.sink_userdata)
 	}
 	return false
 }
@@ -365,9 +366,10 @@ paint_push_unreserved :: proc(list: ^Paint_List, command: Paint_Command) -> bool
 	assert(list != nil, "paint_push_unreserved: nil list")
 	reserved := paint_reserve(list, false)
 	if reserved == nil do return false
-	command.tier = list.current_tier
-	command.z_group = list.current_z_group
-	reserved^ = command
+	stored := command
+	stored.tier = list.current_tier
+	stored.z_group = list.current_z_group
+	reserved^ = stored
 	return paint_commit(list, reserved)
 }
 
@@ -375,9 +377,111 @@ paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
 	assert(list != nil, "paint_push: nil list")
 	reserved := paint_reserve(list)
 	if reserved == nil do return paint_reject(list, command)
-	command.tier = list.current_tier
-	command.z_group = list.current_z_group
-	reserved^ = command
+	stored := command
+	stored.tier = list.current_tier
+	stored.z_group = list.current_z_group
+	reserved^ = stored
+	return paint_commit(list, reserved)
+}
+
+paint_push_rectangle :: proc(list: ^Paint_List, rect: Rect, color: Color) -> bool {
+	assert(list != nil, "paint_push_rectangle: nil list")
+	reserved := paint_reserve(list)
+	if reserved == nil {
+		return paint_reject(list, {kind = .Rectangle, rect = rect, color = color})
+	}
+	reserved^ = {
+		kind = .Rectangle,
+		tier = list.current_tier,
+		z_group = list.current_z_group,
+		rect = rect,
+		color = color,
+	}
+	return paint_commit(list, reserved)
+}
+
+paint_push_rectangle_rounded :: proc(
+	list: ^Paint_List,
+	rect: Rect,
+	roundness: f32,
+	segments: i32,
+	color: Color,
+) -> bool {
+	assert(list != nil, "paint_push_rectangle_rounded: nil list")
+	reserved := paint_reserve(list)
+	if reserved == nil {
+		return paint_reject(
+			list,
+			{
+				kind = .Rectangle_Rounded,
+				rect = rect,
+				roundness = roundness,
+				segments = segments,
+				color = color,
+			},
+		)
+	}
+	reserved^ = {
+		kind = .Rectangle_Rounded,
+		tier = list.current_tier,
+		z_group = list.current_z_group,
+		rect = rect,
+		color = color,
+		roundness = roundness,
+		segments = segments,
+	}
+	return paint_commit(list, reserved)
+}
+
+paint_push_text_fields :: proc(
+	list: ^Paint_List,
+	text: string,
+	position: Vec2,
+	color: Color,
+	font: Font_Id,
+	font_size: f32,
+	spacing: f32 = 0,
+) -> bool {
+	assert(list != nil, "paint_push_text_fields: nil list")
+	if len(text) > PAINT_TEXT_CAP - list.text_len {
+		list.dropped_text_bytes += len(text)
+		return false
+	}
+	text_offset := list.text_len
+	copy(list.text[text_offset:], transmute([]u8)text)
+	list.text_len += len(text)
+	when UI_TELEMETRY_ENABLED {
+		list.text_append_count += 1
+		list.text_bytes_copied += u64(len(text))
+	}
+	reserved := paint_reserve(list)
+	if reserved == nil {
+		return paint_reject(
+			list,
+			{
+				kind = .Text,
+				p0 = position,
+				color = color,
+				font = font,
+				font_size = font_size,
+				spacing = spacing,
+				text_offset = text_offset,
+				text_length = len(text),
+			},
+		)
+	}
+	reserved^ = {
+		kind = .Text,
+		tier = list.current_tier,
+		z_group = list.current_z_group,
+		p0 = position,
+		color = color,
+		font = font,
+		font_size = font_size,
+		spacing = spacing,
+		text_offset = text_offset,
+		text_length = len(text),
+	}
 	return paint_commit(list, reserved)
 }
 
