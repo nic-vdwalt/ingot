@@ -77,7 +77,7 @@ session_draw :: proc(session: ^Session, draw: Session_Draw_Proc, userdata: rawpt
 	graphics_frame: rl.Frame
 	if !rl.frame_begin(&graphics_frame, session.adapter.gfx_context) {
 		rl.frame_end(&graphics_frame)
-		return false
+		return true
 	}
 	session.graphics_open = true
 	session.adapter.graphics_open = true
