@@ -50,6 +50,15 @@ Acceptance is data-first: repeated generation is byte-identical, adjacent
 chunks share edges, every index is valid, bounds contain all vertices, placement
 counts remain bounded, draw-list order is stable, and culling is conservative.
 
+## Authored mesh variants
+
+`mesh_scale_variant` derives a validated mesh from an authored `Mesh_View` and
+caller-owned `Mesh_Buffer`. Recipes are deterministic data: callers retain the
+source topology and material UVs, supply positive axis scales, and choose the
+derived mesh identity. Derivation is intended for bounded initialization or
+worker-residency stages, never per-frame rendering. More complex generators may
+build on the same caller-owned storage and validation contract.
+
 ## Follow-on milestones
 
 1. Terrain LOD, seam transitions, streaming, upload budgets, biome texture
