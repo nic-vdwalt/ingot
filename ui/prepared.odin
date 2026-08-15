@@ -176,6 +176,14 @@ Prepared_Kind :: enum u8 {
 	Custom,
 }
 
+Prepared_Measure_Flag :: enum u8 {
+	Natural_Valid,
+	Width_Dependent,
+	Width_Valid,
+}
+
+Prepared_Measure_Flags :: bit_set[Prepared_Measure_Flag; u8]
+
 Prepared_Node :: struct {
 	kind:                     Prepared_Kind,
 	parent, first_child:      i32,
@@ -200,6 +208,9 @@ Prepared_Node :: struct {
 	size:                     Intrinsic_Size,
 	rect:                     Rect_I32,
 	target_rect:              Rect_I32,
+	measured_width:           i32,
+	measure_flags:            Prepared_Measure_Flags,
+	activation:               ^bool,
 	activated:                bool,
 }
 
@@ -573,7 +584,9 @@ prepared_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> Intrinsic_Size {
 	assert(prepared != nil && prepared.open, "prepared_measure: description not open")
 	assert(prepared.depth == 0 && prepared.count > 0, "prepared_measure: unbalanced or empty tree")
 	assert(prepared.root >= 0 && prepared.root < prepared.count, "prepared_measure: invalid root")
+	natural_started := prepared_phase_begin(u.frame, .Measure_Natural)
 	prepared_measure_natural(u, prepared)
+	prepared_phase_end(u.frame, .Measure_Natural, natural_started)
 	root := &prepared_nodes(prepared)[prepared.root]
 	root.size = intrinsic_constrain(root.size, prepared.constraints)
 	dependencies := prepared_dependencies(prepared)
@@ -591,11 +604,15 @@ prepared_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> Intrinsic_Size {
 		)
 		root.size.h = prepared.constraints.max_h
 	}
+	resolve_started := prepared_phase_begin(u.frame, .Resolve_Size)
 	prepared_resolve_sizes(u, prepared)
 	prepared_remeasure_containers(u, prepared)
+	prepared_phase_end(u.frame, .Resolve_Size, resolve_started)
 	root.size = intrinsic_constrain(root.size, prepared.constraints)
+	resolved_started := prepared_phase_begin(u.frame, .Measure_Resolved)
 	prepared_assign_widths(u, prepared)
 	prepared_measure_heights(u, prepared)
+	prepared_phase_end(u.frame, .Measure_Resolved, resolved_started)
 	root.size = intrinsic_constrain(root.size, prepared.constraints)
 	assert(!root.size.overflow, "prepared_measure: intrinsic overflow")
 	prepared.measured = true
@@ -622,8 +639,12 @@ prepared_render_at :: proc(u: ^Ui, prepared: ^Prepared_Ui, rect: Rect_I32) {
 		prepared_measure_heights(u, prepared)
 	}
 	root.rect = rect
+	place_started := prepared_phase_begin(u.frame, .Place)
 	prepared_place(u, prepared)
+	prepared_phase_end(u.frame, .Place, place_started)
+	render_started := prepared_phase_begin(u.frame, .Render_Tree)
 	prepared_render_tree(u, prepared)
+	prepared_phase_end(u.frame, .Render_Tree, render_started)
 	prepared.rendered = true
 	prepared.open = false
 }
@@ -752,8 +773,29 @@ prepared_measure_natural :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_container(u, prepared, index, false)
 		} else {
 			prepared_measure_leaf(u, node, 0)
+			node.measure_flags += {.Natural_Valid}
+			if prepared_leaf_width_dependent(node) {
+				node.measure_flags += {.Width_Dependent}
+			}
+			when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.natural_leaf_measures += 1
 		}
 	}
+}
+
+@(private = "file")
+prepared_leaf_width_dependent :: proc(node: ^Prepared_Node) -> bool {
+	assert(node != nil, "prepared leaf dependency: nil node")
+	assert(!prepared_kind_is_container(node.kind), "prepared leaf dependency: container")
+	return (node.kind == .Label && node.label.wrap) || node.kind == .Custom
+}
+
+@(private = "file")
+prepared_leaf_needs_width_measure :: proc(node: ^Prepared_Node, width: i32) -> bool {
+	assert(node != nil, "prepared leaf measure: nil node")
+	assert(width >= 0, "prepared leaf measure: negative width")
+	if .Natural_Valid not_in node.measure_flags do return true
+	if .Width_Dependent not_in node.measure_flags do return false
+	return .Width_Valid not_in node.measure_flags || node.measured_width != width
 }
 
 @(private = "file")
@@ -1105,7 +1147,12 @@ prepared_measure_heights :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	for index in 0 ..< prepared.count {
 		node := &prepared_nodes(prepared)[index]
 		if !prepared_kind_is_container(node.kind) {
-			prepared_measure_leaf(u, node, node.rect.w)
+			if prepared_leaf_needs_width_measure(node, node.rect.w) {
+				prepared_measure_leaf(u, node, node.rect.w)
+				when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.resolved_leaf_measures += 1
+			}
+			node.measured_width = node.rect.w
+			node.measure_flags += {.Width_Valid}
 			node.size.w = prepared_axis_size(
 				u,
 				node.sizing.width,

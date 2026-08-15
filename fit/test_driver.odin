@@ -93,15 +93,32 @@ Test_Driver_Frame_Timed :: proc(
 		"Fit.Test_Driver_Frame_Timed: unbalanced builder",
 	)
 	finalize_started := time.tick_now()
-	if !impl.builder.inner.prepared.rendered do _ = Render(&impl.builder)
+	measure_started := time.tick_now()
+	size_measured := Measure(&impl.builder)
+	measure_ns := time.duration_nanoseconds(time.tick_since(measure_started))
+	render_started := time.tick_now()
+	Render_At(&impl.builder, {0, 0, size_measured.w, size_measured.h})
+	layout_render_ns := time.duration_nanoseconds(time.tick_since(render_started))
+	close_started := time.tick_now()
 	builder_close(&impl.builder)
+	builder_close_ns := time.duration_nanoseconds(time.tick_since(close_started))
+	frame_finalize_started := time.tick_now()
 	ui.ui_frame_finalize(impl.frame)
+	frame_finalize_ns := time.duration_nanoseconds(time.tick_since(frame_finalize_started))
 	finalize_ns := time.duration_nanoseconds(time.tick_since(finalize_started))
 	frame_ns := time.duration_nanoseconds(time.tick_since(frame_started))
 	impl.telemetry = test_driver_telemetry(ui.ui_frame_telemetry(impl.frame))
 	impl.diagnostics = test_driver_diagnostics(ui.ui_frame_diagnostics(impl.frame))
 	ui.ui_frame_release(impl.frame)
-	return {build_ns, finalize_ns, frame_ns}, true
+	return {
+		build_ns,
+		measure_ns,
+		layout_render_ns,
+		builder_close_ns,
+		frame_finalize_ns,
+		finalize_ns,
+		frame_ns,
+	}, true
 }
 
 Test_Driver_Paint_Summary :: proc(driver: ^Test_Driver) -> Paint_Summary {
@@ -157,6 +174,15 @@ test_driver_telemetry :: proc(value: ui.Ui_Frame_Telemetry) -> Frame_Telemetry {
 		},
 		text_input_full_paths = value.text_input_full_path_count,
 		text_input_inactive_paths = value.text_input_inactive_candidates,
+		natural_leaf_measures = value.prepared.natural_leaf_measures,
+		resolved_leaf_measures = value.prepared.resolved_leaf_measures,
+		container_measures = value.prepared.container_measures,
+		placed_nodes = value.prepared.placed_nodes,
+		rendered_nodes = value.prepared.rendered_nodes,
+		activation_outputs = value.prepared.activation_outputs,
+		render_relayouts = value.prepared.render_relayouts,
+		measure_cache_hits = value.measure_cache_hits,
+		measure_cache_misses = value.measure_cache_misses,
 	}
 }
 

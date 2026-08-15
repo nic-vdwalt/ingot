@@ -131,7 +131,13 @@ frame_telemetry_counts_and_resets_per_frame :: proc(t: ^testing.T) {
 	ui_frame_begin(&frame, &runtime)
 	ui_frame_finalize(&frame)
 	telemetry = ui_frame_telemetry(&frame)
-	testing.expect_value(t, telemetry, Ui_Frame_Telemetry{})
+	testing.expect_value(t, telemetry.scratch_allocation_count, u64(0))
+	testing.expect_value(t, telemetry.main, Ui_Paint_Telemetry{})
+	testing.expect_value(t, telemetry.text_input_full_path_count, u64(0))
+	testing.expect_value(t, telemetry.prepared.natural_leaf_measures, u64(0))
+	when UI_TELEMETRY_ENABLED {
+		testing.expect(t, telemetry.prepared.phase_ns[.Finalize_Routes] >= 0)
+	}
 	ui_frame_release(&frame)
 	ui_frame_destroy(&frame)
 }

@@ -234,7 +234,7 @@ that existing behavior until text recording is redesigned.
 
 1. Add allocation, copy, command, text, and input-path counters. Completed.
 2. Add isolated workloads and establish reproducible baselines. Completed.
-3. Implement direct string-to-paint recording and bounded reservation.
+3. Direct string-to-paint recording is implemented; characterize reservation separately.
 4. Implement and characterize the inactive text-input fast path.
 5. Gate widget-side semantics construction when disabled.
 6. Cache stable benchmark title formatting.
@@ -244,6 +244,16 @@ that existing behavior until text recording is redesigned.
 Each workstream should land independently with before-and-after evidence. If a
 change does not improve representative workloads, or shifts cost into memory,
 p95, active input, or accessibility, it should not be retained.
+
+## Fit layout workstream
+
+Fit optimization preserves the application-facing immediate-mode contract: no
+retained widget tree, no label-keyed behavioral state, bounded caller-owned
+description storage, and deterministic derived frame output. Phase telemetry
+precedes changes. Remove duplicate leaf measurement, specialize fixed grids,
+make activation output sparse, and fuse traversals only when evidence identifies
+a material pass. Runtime text measurement caching is bounded, exact-keyed,
+explicitly invalidated, and remains a resource service rather than widget state.
 
 ## Validation Matrix
 

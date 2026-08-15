@@ -577,15 +577,24 @@ main :: proc() {
 	defer harness_destroy(h)
 	for index in 0 ..< options.warmup do _ = measure_frame(h, options, index)
 	build_samples := make([]i64, options.frames)
+	measure_samples := make([]i64, options.frames)
+	layout_render_samples := make([]i64, options.frames)
+	frame_finalize_samples := make([]i64, options.frames)
 	finalize_samples := make([]i64, options.frames)
 	frame_samples := make([]i64, options.frames)
 	defer delete(build_samples)
+	defer delete(measure_samples)
+	defer delete(layout_render_samples)
+	defer delete(frame_finalize_samples)
 	defer delete(finalize_samples)
 	defer delete(frame_samples)
 	state_checksum := FNV_BASIS
 	for index in 0 ..< options.frames {
 		timing := measure_frame(h, options, index)
 		build_samples[index] = timing.build_ns
+		measure_samples[index] = timing.measure_ns
+		layout_render_samples[index] = timing.layout_render_ns
+		frame_finalize_samples[index] = timing.frame_finalize_ns
 		finalize_samples[index] = timing.finalize_ns
 		frame_samples[index] = timing.frame_ns
 		state_checksum = hash_u64(state_checksum, u64(h.submitted))
@@ -620,6 +629,9 @@ main :: proc() {
 		",\"samples_ns\":{",
 	)
 	print_samples("build", build_samples, true)
+	print_samples("measure", measure_samples, false)
+	print_samples("layout_render", layout_render_samples, false)
+	print_samples("frame_finalize", frame_finalize_samples, false)
 	print_samples("finalize", finalize_samples, false)
 	print_samples("frame", frame_samples, false)
 	fmt.print(
