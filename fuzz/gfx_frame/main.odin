@@ -206,6 +206,26 @@ mutate_resources :: proc(p: ^Prng, fit_session: ^fit.Session) {
 
 }
 
+fuzz_frame :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	assert(builder != nil && userdata != nil, "fuzz_frame: invalid argument")
+	p := cast(^Prng)userdata
+	rl.ClearBackground(rl.BLACK)
+	root_container: {
+		fit.Column(builder, {gap = .XS, padding = .SM})
+		defer fit.End(builder)
+		fit.Label(builder, "FIT lifecycle fuzz", {role = .Title})
+		fit.Button(builder, "lifecycle", "Lifecycle button", &button_active)
+	}
+	_ = fit.Render(builder)
+	draw_some(p)
+	ops := fuzzx.int_range(p, 0, 5)
+	for _ in 0 ..< ops {
+		mutate_resources(p, &session)
+		if fuzzx.int_range(p, 0, 2) == 0 do draw_some(p)
+	}
+	draw_gpu3d(p)
+}
+
 main :: proc() {
 	seed, iterations, rounds := fuzzx.parse_options(ITERATIONS_DEFAULT)
 	fmt.printfln("fuzz_gfx_frame seed=%d iterations=%d rounds=%d", seed, iterations, rounds)
@@ -223,31 +243,9 @@ main :: proc() {
 		round_seed := seed + u64(round)
 		if rounds > 1 do fmt.printfln("fuzz_gfx_frame round %d seed=%d", round, round_seed)
 		p := fuzzx.prng_make(round_seed)
-		for i in 0 ..< iterations {
+		for _ in 0 ..< iterations {
 			if rl.WindowShouldClose() do break
-			builder, acquired := fit.Session_Begin(&session)
-			if !acquired do continue
-			rl.ClearBackground(rl.BLACK)
-			root_container: {
-				fit.Column(builder, {gap = .XS, padding = .SM})
-				defer fit.End(builder)
-				fit.Label(builder, "FIT lifecycle fuzz", {role = .Title})
-				fit.Button(builder, "lifecycle", "Lifecycle button", &button_active)
-			}
-			_ = fit.Render(builder)
-
-			// Interleave draw → mutate → draw so recorded references
-			// from FIT and raw gfx precede ordering-sensitive destruction.
-			draw_some(&p)
-			ops := fuzzx.int_range(&p, 0, 5)
-			for _ in 0 ..< ops {
-				mutate_resources(&p, &session)
-				if fuzzx.int_range(&p, 0, 2) == 0 do draw_some(&p)
-			}
-			draw_gpu3d(&p)
-
-			fit.Session_End(&session)
-			_ = i
+			_ = fit.Session_Draw(&session, fuzz_frame, &p)
 		}
 	}
 
