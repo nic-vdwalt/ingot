@@ -63,12 +63,22 @@ Prepared_Attachment_Options :: struct {
 	transition:        Prepared_Transition,
 }
 
+Prepared_Container_Surface :: struct {
+	enabled:   bool,
+	kind:      Surface,
+	state:     Visual_State,
+	radius:    Radius,
+	border:    Border,
+	elevation: Elevation,
+}
+
 Prepared_Container_Effects :: struct {
 	clip:         bool,
 	background:   Color,
 	radius:       Radius,
 	border:       Border,
 	border_color: Color,
+	surface:      Prepared_Container_Surface,
 }
 
 Prepared_Container_Options :: struct {
@@ -139,6 +149,10 @@ Prepared_Kind :: enum u8 {
 	Checkbox,
 	Radio,
 	Slider,
+	Text_Input,
+	Progress,
+	Separator,
+	Spacer,
 	Custom,
 }
 
@@ -157,6 +171,9 @@ Prepared_Node :: struct {
 	checkbox:                 Checkbox_Spec,
 	radio:                    Radio_Spec,
 	slider:                   Slider_Spec,
+	text_input:               Prepared_Text_Input,
+	progress:                 Prepared_Progress,
+	spacer:                   Prepared_Spacer,
 	custom:                   Prepared_Custom,
 	size:                     Intrinsic_Size,
 	rect:                     Rect_I32,
@@ -445,6 +462,40 @@ prepared_slider :: proc(
 	return prepared_add(prepared, Prepared_Node{kind = .Slider, slider = spec, track = track})
 }
 
+prepared_text_input :: proc(
+	prepared: ^Prepared_Ui,
+	spec: Prepared_Text_Input,
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_text_input: description not open")
+	assert(spec.id != WIDGET_ID_NONE && spec.box != nil, "prepared_text_input: invalid spec")
+	return prepared_add(prepared, Prepared_Node{kind = .Text_Input, text_input = spec, track = track})
+}
+
+prepared_progress :: proc(
+	prepared: ^Prepared_Ui,
+	spec: Prepared_Progress,
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_progress: description not open")
+	assert(spec.value >= 0 && spec.value <= 1, "prepared_progress: invalid value")
+	return prepared_add(prepared, Prepared_Node{kind = .Progress, progress = spec, track = track})
+}
+
+prepared_separator :: proc(prepared: ^Prepared_Ui, track: Track = {}) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_separator: description not open")
+	return prepared_add(prepared, Prepared_Node{kind = .Separator, track = track})
+}
+
+prepared_spacer :: proc(
+	prepared: ^Prepared_Ui,
+	spec: Prepared_Spacer,
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_spacer: description not open")
+	return prepared_add(prepared, Prepared_Node{kind = .Spacer, spacer = spec, track = track})
+}
+
 prepared_custom :: proc(
 	prepared: ^Prepared_Ui,
 	spec: Prepared_Custom,
@@ -674,6 +725,14 @@ prepared_measure_leaf :: proc(u: ^Ui, node: ^Prepared_Node, max_width: i32) {
 		node.size = radio_spec_size(u, node.radio)
 	case .Slider:
 		node.size = slider_spec_size(u, node.slider)
+	case .Text_Input:
+		node.size = prepared_text_input_size(u, node.text_input)
+	case .Progress:
+		node.size = prepared_progress_size(u, node.progress)
+	case .Separator:
+		node.size = prepared_separator_size(u)
+	case .Spacer:
+		node.size = prepared_spacer_size(u, node.spacer)
 	case .Custom:
 		node.size = node.custom.measure(u, {max_w = max_width}, node.custom.userdata)
 	case .Row, .Column, .Flow, .Grid, .Attachment:
@@ -1315,6 +1374,19 @@ prepared_render_enter :: proc(u: ^Ui, node: ^Prepared_Node) {
 		return
 	}
 	effects := prepared_container_effects(node)
+	if effects.surface.enabled {
+		assert(effects.background.a == 0, "prepared container: mixed surface and background")
+		assert(effects.border == .None, "prepared container: mixed surface and border")
+		draw_surface(
+			u.frame,
+			rect_f32(node.rect),
+			effects.surface.kind,
+			effects.surface.state,
+			effects.surface.radius,
+			effects.surface.border,
+			effects.surface.elevation,
+		)
+	}
 	if effects.background.a > 0 {
 		draw_rounded_fill(u.frame, rect_f32(node.rect), effects.radius, effects.background)
 	}
@@ -1350,7 +1422,8 @@ prepared_container_effects :: proc(node: ^Prepared_Node) -> Prepared_Container_E
 		return node.flow.effects
 	case .Grid:
 		return node.grid.effects
-	case .Attachment, .Label, .Button, .Checkbox, .Radio, .Slider, .Custom:
+	case .Attachment, .Label, .Button, .Checkbox, .Radio, .Slider, .Text_Input, .Progress,
+	     .Separator, .Spacer, .Custom:
 		unreachable()
 	}
 	unreachable()
@@ -1370,6 +1443,13 @@ prepared_render_leaf :: proc(u: ^Ui, node: ^Prepared_Node) {
 		node.activated = radio_spec_at(u, node.radio, node.rect)
 	case .Slider:
 		node.activated = slider_spec_at(u, node.slider, node.rect)
+	case .Text_Input:
+		node.activated = prepared_text_input_at(u, node.text_input, node.rect)
+	case .Progress:
+		prepared_progress_at(u, node.progress, node.rect)
+	case .Separator:
+		prepared_separator_at(u, node.rect)
+	case .Spacer:
 	case .Custom:
 		node.activated = node.custom.render(u, node.rect, node.custom.userdata)
 	case .Row, .Column, .Flow, .Grid, .Attachment:

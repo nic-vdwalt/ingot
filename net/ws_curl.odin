@@ -33,8 +33,10 @@ WS_CURL_SSL_VERIFYHOST :: c.int(81)
 WS_CURL_CONNECT_ONLY :: c.int(141)
 WS_CURL_CONNECTTIMEOUT_MS :: c.int(156)
 WS_CURL_CAINFO :: c.int(10065)
+WS_CURL_SSL_OPTIONS :: c.int(216)
 WS_CURL_CAINFO_BLOB :: c.int(40309)
 WS_CURL_DISALLOW_USERNAME_IN_URL :: c.int(234)
+WS_CURL_REVOKE_BEST_EFFORT :: c.long(1 << 3)
 
 @(default_calling_convention = "c")
 foreign ws_curl_lib {

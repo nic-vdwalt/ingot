@@ -222,6 +222,30 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 			_: runtime.Source_Code_Location,
 		) =
 		Row_With
+	section: proc(_: ^Builder, _: string, _: Section_Options) = Section
+	card: proc(_: ^Builder, _: Card_Options) = Card
+	compact: proc(_: ^Builder, _: i32) -> bool = Compact
+	canvas_leaf: proc(_: ^Builder, _: Canvas_Options, _: Render_Proc, _: rawptr) = Canvas_Leaf
+	region_with: proc(
+			_: ^Surface,
+			_: Rect,
+			_: Region_Build_Proc,
+			_: rawptr,
+			_: Region_Options,
+		) -> i32 =
+		Region_With
+	layer_with: proc(_: ^Surface, _: Z_Order, _: Layer_Build_Proc, _: rawptr, _: Float_Rect) =
+		Layer_With
+	pane_with: proc(
+			_: ^Surface,
+			_: ^Pane_State,
+			_: Rect,
+			_: Pane_Build_Proc,
+			_: rawptr,
+			_: i32,
+			_: bool,
+		) =
+		Pane_With
 	id_string: proc(_: ^Builder, _: string) -> Widget_Id = Id
 	checkbox: proc(_: ^Builder, _: string, _: string, _: ^bool, _: Control_Options) = Checkbox
 	radio: proc(_: ^Builder, _: u64, _: string, _: ^i32, _: i32, _: Control_Options) = Radio
@@ -240,7 +264,9 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	testing.expect(t, button_string != nil && button_u64 != nil)
 	testing.expect(t, measure != nil && render_at != nil && session_draw != nil)
 	testing.expect(t, set_storage != nil && reset_storage != nil && storage_capacity != nil)
-	testing.expect(t, row_with != nil && id_string != nil)
+	testing.expect(t, row_with != nil && section != nil && card != nil)
+	testing.expect(t, compact != nil && canvas_leaf != nil && id_string != nil)
+	testing.expect(t, region_with != nil && layer_with != nil && pane_with != nil)
 	testing.expect(t, checkbox != nil && radio != nil && slider != nil)
 	testing.expect(t, layout_begin != nil && layout_next != nil && grid_next != nil)
 	testing.expect(t, flow_next != nil && fill_i32 != nil && fill_f32 != nil)
@@ -269,6 +295,95 @@ fit_canvas_declares_full_root_and_renders_once :: proc(t: ^testing.T) {
 	testing.expect_value(t, counts.render, i32(1))
 	testing.expect_value(t, counts.rect, Rect{0, 0, 320, 240})
 	builder_close(&builder)
+}
+
+@(test)
+fit_declarative_helpers_measure_and_render :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 320, 240})
+	counts: Fit_Test_Counts
+	Column(&builder)
+	Section(&builder, "Section", {container = {gap = .SM}})
+	End(&builder)
+	Card(&builder)
+	Canvas_Leaf(
+		&builder,
+		{intrinsic = {w = 48, h = 24}, size = {width = Fixed(48), height = Fixed(24)}},
+		fit_test_render,
+		&counts,
+	)
+	End(&builder)
+	End(&builder)
+	testing.expect(t, Compact(&builder, 640), "compact branch did not use builder bounds")
+	size := Measure(&builder)
+	testing.expect(t, size.w > 0 && size.h > 24, "declarative tree did not measure")
+	Render_At(&builder, {0, 0, size.w, size.h})
+	testing.expect_value(t, counts.render, i32(1))
+	testing.expect_value(t, counts.rect.w, i32(56))
+	testing.expect_value(t, counts.rect.h, i32(24))
+	builder_close(&builder)
+}
+
+@(private = "file")
+fit_test_region_body :: proc(region: ^Region, userdata: rawptr) {
+	assert(region != nil && region.inner.open && userdata != nil)
+	calls := cast(^i32)userdata
+	calls^ += 1
+	Region_Label(region, "Scoped")
+}
+
+@(private = "file")
+fit_test_layer_body :: proc(surface: ^Surface, userdata: rawptr) {
+	assert(surface != nil && userdata != nil)
+	calls := cast(^i32)userdata
+	calls^ += 1
+}
+
+@(private = "file")
+fit_test_pane_body :: proc(surface: ^Surface, content_y: i32, userdata: rawptr) -> i32 {
+	assert(surface != nil && userdata != nil)
+	calls := cast(^i32)userdata
+	calls^ += 1
+	return content_y + 20
+}
+
+@(test)
+fit_scoped_surface_helpers_restore_depth :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	surface := Surface {
+		inner = &root,
+	}
+	calls: i32
+	_ = Region_With(&surface, {0, 0, 120, 40}, fit_test_region_body, &calls, {scope = "scope"})
+	Layer_With(&surface, Z_Order(100), fit_test_layer_body, &calls)
+	pane: Pane_State
+	Pane_With(&surface, &pane, {0, 40, 120, 80}, fit_test_pane_body, &calls)
+	testing.expect_value(t, calls, i32(3))
+	testing.expect_value(t, frame.z_count, 0)
+	testing.expect_value(t, frame.pane_count, 0)
+	testing.expect(t, !pane.inner.open, "pane helper retained open state")
+	_ = ui.end(&root)
 }
 
 @(test)

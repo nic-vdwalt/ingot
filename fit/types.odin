@@ -132,6 +132,9 @@ Draw_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
 Session_Draw_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
 Shutdown_Proc :: #type proc(app: ^App, userdata: rawptr)
 Build_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
+Region_Build_Proc :: #type proc(region: ^Region, userdata: rawptr)
+Layer_Build_Proc :: #type proc(surface: ^Surface, userdata: rawptr)
+Pane_Build_Proc :: #type proc(surface: ^Surface, content_y: i32, userdata: rawptr) -> i32
 
 Callbacks :: struct {
 	draw:     Draw_Proc,
@@ -425,12 +428,22 @@ Size_Options :: struct {
 	transition: Transition,
 }
 
+Container_Surface :: struct {
+	enabled:   bool,
+	kind:      Surface_Kind,
+	state:     Visual_State,
+	radius:    Radius,
+	border:    Border,
+	elevation: Elevation,
+}
+
 Container_Effects :: struct {
 	clip:         bool,
 	background:   Color,
 	radius:       Radius,
 	border:       Border,
 	border_color: Color,
+	surface:      Container_Surface,
 }
 
 Container_Options :: struct {
@@ -441,6 +454,20 @@ Container_Options :: struct {
 	track:   Track,
 	size:    Size_Options,
 	effects: Container_Effects,
+}
+
+Section_Options :: struct {
+	container: Container_Options,
+	title:     Label_Options,
+}
+
+Card_Options :: struct {
+	container: Container_Options,
+	kind:      Surface_Kind,
+	state:     Visual_State,
+	radius:    Radius,
+	border:    Border,
+	elevation: Elevation,
 }
 
 Flow_Options :: struct {
@@ -523,6 +550,13 @@ Custom_Options :: struct {
 	activated: ^bool,
 }
 
+Canvas_Options :: struct {
+	intrinsic: Size,
+	track:     Track,
+	size:      Size_Options,
+	activated: ^bool,
+}
+
 Surface :: struct {
 	inner: ^ui.Ui,
 }
@@ -578,10 +612,11 @@ Measure_Proc :: #type proc(constraints: Constraints, userdata: rawptr) -> Size
 Render_Proc :: #type proc(surface: ^Surface, rect: Rect, userdata: rawptr) -> bool
 
 Custom_Spec :: struct {
-	measure:  Measure_Proc,
-	render:   Render_Proc,
-	userdata: rawptr,
-	size:     Size_Options,
+	measure:   Measure_Proc,
+	render:    Render_Proc,
+	userdata:  rawptr,
+	size:      Size_Options,
+	intrinsic: Size,
 }
 
 Fixed :: proc(size: i32) -> Track {

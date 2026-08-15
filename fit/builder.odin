@@ -111,7 +111,24 @@ Button :: proc {
 Custom :: proc(builder: ^Builder, spec: Custom_Spec, options: Custom_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Custom: builder not bound")
 	assert(spec.measure != nil && spec.render != nil, "Fit.Custom: invalid callbacks")
-	assert(builder.customs_used < i32(len(builder.customs)), "Fit.Custom: custom capacity full")
+	custom_add(builder, spec, options)
+}
+
+@(private = "package")
+custom_intrinsic :: proc(builder: ^Builder, spec: Custom_Spec, options: Custom_Options) {
+	assert(builder != nil && builder.bound, "fit custom intrinsic: builder not bound")
+	assert(spec.render != nil, "fit custom intrinsic: nil render callback")
+	assert(spec.intrinsic.w >= 0 && spec.intrinsic.h >= 0, "fit custom intrinsic: invalid size")
+	value := spec
+	value.measure = custom_intrinsic_measure
+	custom_add(builder, value, options)
+}
+
+@(private = "file")
+custom_add :: proc(builder: ^Builder, spec: Custom_Spec, options: Custom_Options) {
+	assert(builder != nil && builder.bound, "fit custom add: builder not bound")
+	assert(spec.measure != nil && spec.render != nil, "fit custom add: invalid callbacks")
+	assert(builder.customs_used < i32(len(builder.customs)), "fit custom add: capacity full")
 	index := builder.customs_used
 	builder.customs[index] = spec
 	builder.customs_used += 1
@@ -144,6 +161,17 @@ Canvas :: proc(builder: ^Builder, render: Render_Proc, userdata: rawptr = nil) {
 canvas_measure :: proc(constraints: Constraints, userdata: rawptr) -> Size {
 	_ = userdata
 	return {w = max(constraints.max_w, 1), h = max(constraints.max_h, 1)}
+}
+
+@(private = "file")
+custom_intrinsic_measure :: proc(constraints: Constraints, userdata: rawptr) -> Size {
+	assert(userdata != nil, "fit custom intrinsic measure: nil userdata")
+	assert(
+		constraints.max_w >= 0 && constraints.max_h >= 0,
+		"fit custom intrinsic measure: invalid bounds",
+	)
+	spec := cast(^Custom_Spec)userdata
+	return spec.intrinsic
 }
 
 End :: proc(builder: ^Builder) {
