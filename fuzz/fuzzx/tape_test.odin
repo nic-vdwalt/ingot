@@ -159,7 +159,9 @@ tape_shrinker_is_deterministic_and_class_stable :: proc(t: ^testing.T) {
 	defer delete(second_bytes)
 	testing.expect(t, first_ok && second_ok)
 	testing.expect_value(t, len(first_bytes), len(second_bytes))
-	for index in 0 ..< len(first_bytes) do testing.expect_value(t, first_bytes[index], second_bytes[index])
+	for index in 0 ..< len(first_bytes) {
+		testing.expect_value(t, first_bytes[index], second_bytes[index])
+	}
 }
 
 @(test)
