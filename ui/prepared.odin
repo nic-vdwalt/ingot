@@ -779,7 +779,9 @@ prepared_measure_natural :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			if prepared_leaf_width_dependent(node) {
 				node.measure_flags += {.Width_Dependent}
 			}
-			if prepared_leaf_needs_natural(prepared, index) {
+			if prepared_leaf_size_is_fixed(node) {
+				when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.fixed_leaf_measure_skips += 1
+			} else if prepared_leaf_needs_natural(prepared, index) {
 				prepared_measure_leaf(u, node, 0)
 				node.measure_flags += {.Natural_Valid}
 				when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.natural_leaf_measures += 1
@@ -801,6 +803,18 @@ prepared_leaf_needs_natural :: proc(prepared: ^Prepared_Ui, index: i32) -> bool 
 }
 
 @(private = "file")
+prepared_axis_is_fixed :: proc(track: Track) -> bool {
+	return track.kind == .Fixed || (track.kind == .Fit && track.basis > 0)
+}
+
+@(private = "file")
+prepared_leaf_size_is_fixed :: proc(node: ^Prepared_Node) -> bool {
+	assert(node != nil, "prepared fixed leaf: nil node")
+	assert(!prepared_kind_is_container(node.kind), "prepared fixed leaf: container")
+	return prepared_axis_is_fixed(node.sizing.width) && prepared_axis_is_fixed(node.sizing.height)
+}
+
+@(private = "file")
 prepared_leaf_width_dependent :: proc(node: ^Prepared_Node) -> bool {
 	assert(node != nil, "prepared leaf dependency: nil node")
 	assert(!prepared_kind_is_container(node.kind), "prepared leaf dependency: container")
@@ -811,6 +825,7 @@ prepared_leaf_width_dependent :: proc(node: ^Prepared_Node) -> bool {
 prepared_leaf_needs_width_measure :: proc(node: ^Prepared_Node, width: i32) -> bool {
 	assert(node != nil, "prepared leaf measure: nil node")
 	assert(width >= 0, "prepared leaf measure: negative width")
+	if prepared_leaf_size_is_fixed(node) do return false
 	if .Natural_Valid not_in node.measure_flags do return true
 	if .Width_Dependent not_in node.measure_flags do return false
 	return .Width_Valid not_in node.measure_flags || node.measured_width != width

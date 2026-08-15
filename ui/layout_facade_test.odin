@@ -413,6 +413,73 @@ layout_facade_fixed_grid_measures_direct_leaf_once :: proc(t: ^testing.T) {
 }
 
 @(test)
+layout_facade_fixed_leaf_nested_under_grid_row_skips_measure :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 120, 80})
+	counts: Prepared_Custom_Counts
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = 120, max_h = 80))
+	prepared_grid_begin(&prepared, {columns = 1, row_height = 32})
+	prepared_row_begin(&prepared)
+	_ = prepared_custom(
+		&prepared,
+		{
+			measure = prepared_custom_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &counts,
+			size = {width = fixed(48), height = fixed(16)},
+		},
+	)
+	prepared_container_end(&prepared)
+	prepared_container_end(&prepared)
+	size := prepared_measure(&u, &prepared)
+	prepared_render_at(&u, &prepared, {0, 0, size.w, size.h})
+	end(&u)
+	testing.expect_value(t, counts.measure, i32(0))
+	testing.expect_value(t, counts.render, i32(1))
+	testing.expect_value(t, counts.rect.w, i32(48))
+	testing.expect_value(t, counts.rect.h, i32(32))
+}
+
+@(test)
+layout_facade_partial_fixed_leaf_retains_measure :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 120, 80})
+	counts: Prepared_Custom_Counts
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = 120, max_h = 80))
+	prepared_row_begin(&prepared)
+	_ = prepared_custom(
+		&prepared,
+		{
+			measure = prepared_custom_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &counts,
+			size = {width = fixed(48)},
+		},
+	)
+	prepared_container_end(&prepared)
+	size := prepared_measure(&u, &prepared)
+	prepared_render_at(&u, &prepared, {0, 0, size.w, size.h})
+	end(&u)
+	testing.expect(t, counts.measure > 0, "partial fixed leaf skipped measurement")
+	testing.expect_value(t, counts.rect.w, i32(48))
+	testing.expect_value(t, counts.rect.h, i32(20))
+}
+
+@(test)
 layout_facade_prepared_wrapped_label_remeasures_height_for_width :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

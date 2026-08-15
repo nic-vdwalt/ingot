@@ -25,6 +25,13 @@ ui_runtime_set_text_backend :: proc(runtime: ^Ui_Runtime, backend: Text_Backend)
 	runtime.font_epoch += 1
 }
 
+ui_runtime_set_backend_measure_cache_enabled :: proc(runtime: ^Ui_Runtime, enabled: bool) {
+	assert(runtime != nil && runtime.initialized, "backend measure cache: invalid runtime")
+	if runtime.text.backend_measure_cache_enabled == enabled do return
+	clear_measure_cache_with(&runtime.text)
+	runtime.text.backend_measure_cache_enabled = enabled
+}
+
 text_backend_font :: proc(backend: Text_Backend, size: i32) -> Font_Id {
 	assert(text_backend_valid(backend), "text_backend_font: invalid backend")
 	assert(size > 0, "text_backend_font: invalid size")

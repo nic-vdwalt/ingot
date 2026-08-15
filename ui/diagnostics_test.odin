@@ -135,6 +135,7 @@ frame_telemetry_counts_and_resets_per_frame :: proc(t: ^testing.T) {
 	testing.expect_value(t, telemetry.main, Ui_Paint_Telemetry{})
 	testing.expect_value(t, telemetry.text_input_full_path_count, u64(0))
 	testing.expect_value(t, telemetry.prepared.natural_leaf_measures, u64(0))
+	testing.expect_value(t, telemetry.prepared.fixed_leaf_measure_skips, u64(0))
 	when UI_TELEMETRY_ENABLED {
 		testing.expect(t, telemetry.prepared.phase_ns[.Finalize_Routes] >= 0)
 	}
