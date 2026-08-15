@@ -7,11 +7,11 @@ put each container and its children in a named lexical block with an immediate
 makes nesting visible in source.
 
 `Row_With`, `Column_With`, `Flow_With`, `Grid_With`, `Attachment_With`, and
-`Scroll_With` open one container, invoke one caller procedure immediately,
-verify its nested containers are balanced, and close the container. The
-procedure and userdata are never retained. A direct `fit.End(builder)` remains
-available when dynamic construction does not correspond to one lexical child
-block.
+`Scroll_With`, `Section_With`, and `Card_With` open one container, invoke one
+caller procedure immediately, verify its nested containers are balanced, and
+close the container. The procedure and userdata are never retained. A direct
+`fit.End(builder)` remains available when dynamic construction does not
+correspond to one lexical child block.
 
 ```odin
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {

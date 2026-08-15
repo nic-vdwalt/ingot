@@ -71,6 +71,29 @@ Scroll_With :: proc(
 	build_container_body(builder, body, userdata, loc)
 }
 
+Card_With :: proc(
+	builder: ^Builder,
+	body: Build_Proc,
+	userdata: rawptr = nil,
+	options: Card_Options = {},
+	loc: runtime.Source_Code_Location = #caller_location,
+) {
+	Card(builder, options)
+	build_container_body(builder, body, userdata, loc)
+}
+
+Section_With :: proc(
+	builder: ^Builder,
+	title: string,
+	body: Build_Proc,
+	userdata: rawptr = nil,
+	options: Section_Options = {},
+	loc: runtime.Source_Code_Location = #caller_location,
+) {
+	Section(builder, title, options)
+	build_container_body(builder, body, userdata, loc)
+}
+
 @(private = "file")
 build_container_body :: proc(
 	builder: ^Builder,

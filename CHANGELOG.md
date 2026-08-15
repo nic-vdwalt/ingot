@@ -34,8 +34,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   remove repeated prefixes and owner arguments. Existing `Surface_*` spellings
   remain source-compatible, and all explicit rectangles remain physical.
 - `fit.Row_With`, `Column_With`, `Flow_With`, `Grid_With`, and
-  `Attachment_With`: immediately invoked, source-located container helpers that
-  verify callback balance without retaining callbacks or component state.
+  `Attachment_With`, `Section_With`, and `Card_With`: immediately invoked,
+  source-located container helpers that verify callback balance without
+  retaining callbacks or component state.
 - `fit.Scope` and `fit.Id`: explicit bounded component identity composition at
   the supported builder layer; source locations never participate in IDs.
 - Native `fit.Checkbox`, `fit.Radio`, and `fit.Slider` prepared leaves with
