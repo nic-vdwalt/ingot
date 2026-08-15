@@ -4,6 +4,21 @@ package ui
 import "core:testing"
 
 @(test)
+geometry_tokens_follow_mid_frame_scale_change :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	before_radius := radius_pixels(&frame, .MD, 100)
+	before_border := border_pixels(&frame, .Emphasis)
+	ui_runtime_set_scale(&runtime, 2)
+	testing.expect_value(t, radius_pixels(&frame, .MD, 100), before_radius * 2)
+	testing.expect_value(t, border_pixels(&frame, .Emphasis), before_border * 2)
+}
+
+@(test)
 slider_step_value_snaps_and_clamps :: proc(t: ^testing.T) {
 	// Continuous (step 0): straight lerp.
 	testing.expect_value(t, slider_step_value(0, 10, 0, 0.5), f32(5))

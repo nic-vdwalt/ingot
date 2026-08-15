@@ -74,6 +74,25 @@ python3 benchmarks/widgets/report/ingot_layers.py \
   /tmp/widget-ingot-layers.jsonl --output-dir /tmp/widget-ingot-layers-report
 ```
 
+Collect paired direct-UI/ImGui complete-frame evidence:
+
+```sh
+python3 benchmarks/widgets/runner/ui_imgui.py \
+  --ui-binary benchmarks/widgets/build/ingot-widget-bench \
+  --imgui-binary benchmarks/widgets/build/imgui-widget-bench \
+  --case complex_dashboard:250 \
+  --warmup 300 --frames 2000 --repetitions 7 \
+  --output /tmp/widget-ui-imgui.jsonl
+python3 benchmarks/widgets/report/ui_imgui.py \
+  /tmp/widget-ui-imgui.jsonl --output-dir /tmp/widget-ui-imgui-report
+```
+
+The August 15 direct-UI optimization pass added bounded disabled-subsystem, input-route, interaction,
+text-measurement, and paint-recording fast paths. It deliberately did not snapshot style tokens at frame
+begin because scale and metrics can change while a frame is open. Pane culling remains paint-only and
+active only inside an established pane band; interaction, state, focus, semantics, and active IME work
+continue for offscreen controls.
+
 Workloads may declare a `frameworks` list and additional `framework_scales`. Shared scales run on all
 eligible adapters and participate in checksum validation; framework scales characterize larger cases
 without implying parity. Fit uses caller-provided bounded description storage with an 8,192-node hard

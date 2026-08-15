@@ -115,64 +115,66 @@ checkbox_at :: proc(
 		changed = true
 	}
 
-	metrics := ui_frame_metrics(frame)
-	style := ui_frame_theme(frame)
-	box := metrics.CONTROL_BOX
-	bx := rect.x
-	by := rect.y + (rect.h - box) / 2
-	box_rect := Rectangle{f32(bx), f32(by), f32(box), f32(box)}
-	bg := style.button_bg if checked^ else style.bg_input
-	border := style.fg_accent if hovered || focus_opt_focused(focus) else style.border_color
-	// Radius and segments come from the token layer so the checkbox rounds to
-	// the same curve as the button beside it; the 0.25 literal this replaces
-	// was a fixed ratio that drifted from every other corner in the tree.
-	box_round := radius_ratio(frame, .SM, box_rect)
-	box_segments := radius_segments(radius_pixels(frame, .SM, f32(box)))
-	draw_rectangle_rounded(frame, box_rect, box_round, box_segments, bg)
-	draw_rectangle_rounded_lines_ex(
-		frame,
-		box_rect,
-		box_round,
-		box_segments,
-		border_pixels(frame, .Hairline),
-		border,
-	)
-	if checked^ {
-		// Check mark: two strokes proportional to the box size.
-		cx := f32(bx)
-		cy := f32(by)
-		s := f32(box)
-		draw_line_ex(
+	if !rect_culled_frame(frame, rect) {
+		metrics := ui_frame_metrics(frame)
+		style := ui_frame_theme(frame)
+		box := metrics.CONTROL_BOX
+		bx := rect.x
+		by := rect.y + (rect.h - box) / 2
+		box_rect := Rectangle{f32(bx), f32(by), f32(box), f32(box)}
+		bg := style.button_bg if checked^ else style.bg_input
+		border := style.fg_accent if hovered || focus_opt_focused(focus) else style.border_color
+		// Radius and segments come from the token layer so the checkbox rounds to
+		// the same curve as the button beside it; the 0.25 literal this replaces
+		// was a fixed ratio that drifted from every other corner in the tree.
+		box_round := radius_ratio(frame, .SM, box_rect)
+		box_segments := radius_segments(radius_pixels(frame, .SM, f32(box)))
+		draw_rectangle_rounded(frame, box_rect, box_round, box_segments, bg)
+		draw_rectangle_rounded_lines_ex(
 			frame,
-			{cx + s * 0.22, cy + s * 0.52},
-			{cx + s * 0.44, cy + s * 0.74},
-			2.0,
-			style.button_text,
+			box_rect,
+			box_round,
+			box_segments,
+			border_pixels(frame, .Hairline),
+			border,
 		)
-		draw_line_ex(
+		if checked^ {
+			// Check mark: two strokes proportional to the box size.
+			cx := f32(bx)
+			cy := f32(by)
+			s := f32(box)
+			draw_line_ex(
+				frame,
+				{cx + s * 0.22, cy + s * 0.52},
+				{cx + s * 0.44, cy + s * 0.74},
+				2.0,
+				style.button_text,
+			)
+			draw_line_ex(
+				frame,
+				{cx + s * 0.44, cy + s * 0.74},
+				{cx + s * 0.80, cy + s * 0.28},
+				2.0,
+				style.button_text,
+			)
+		}
+		if focus_opt_focused(focus) {
+			draw_focus_ring(frame, bx, by, box, box)
+		}
+		label_x := bx + box + metrics.CONTROL_GAP
+		fs := control_label_size(frame, font_size)
+		// Why truncate: the label must stay inside the caller's rect; a fixed-width
+		// panel would otherwise spill body text over whatever is painted behind it.
+		draw_text_truncated_frame(
 			frame,
-			{cx + s * 0.44, cy + s * 0.74},
-			{cx + s * 0.80, cy + s * 0.28},
-			2.0,
-			style.button_text,
+			label,
+			label_x,
+			rect.y + (rect.h - fs) / 2,
+			max(rect.x + rect.w - label_x, 0),
+			fs,
+			style.fg_primary,
 		)
 	}
-	if focus_opt_focused(focus) {
-		draw_focus_ring(frame, bx, by, box, box)
-	}
-	label_x := bx + box + metrics.CONTROL_GAP
-	fs := control_label_size(frame, font_size)
-	// Why truncate: the label must stay inside the caller's rect; a fixed-width
-	// panel would otherwise spill body text over whatever is painted behind it.
-	draw_text_truncated_frame(
-		frame,
-		label,
-		label_x,
-		rect.y + (rect.h - fs) / 2,
-		max(rect.x + rect.w - label_x, 0),
-		fs,
-		style.fg_primary,
-	)
 	sem: Sem_State
 	if checked^ do sem += {.Checked}
 	semantic_push(frame, .Checkbox, rect, label, sem, focus, widget = widget)
@@ -532,22 +534,24 @@ slider_resolve_and_paint :: proc(
 	}
 	value^ = clamp(value^, lo, hi)
 
-	// Track + fill + knob.
-	cy := f32(rect.y) + f32(rect.h) / 2
-	th := f32(metrics.SLIDER_TRACK_H)
-	draw_rounded_fill(frame, {track_x, cy - th / 2, track_w, th}, .Pill, style.bg_active)
-	frac := (value^ - lo) / (hi - lo)
-	fill_w := track_w * frac
-	if fill_w > 0 {
-		draw_rounded_fill(frame, {track_x, cy - th / 2, fill_w, th}, .Pill, style.fg_accent)
-	}
-	knob_x := track_x + track_w * frac
-	knob_col := style.fg_accent if knob_active else style.fg_secondary
-	draw_circle_v(frame, {knob_x, cy}, knob_r, style.bg_input)
-	draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
-	draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)
-	if focus_opt_focused(focus) {
-		draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
+	if !rect_culled_frame(frame, rect) {
+		// Track + fill + knob.
+		cy := f32(rect.y) + f32(rect.h) / 2
+		th := f32(metrics.SLIDER_TRACK_H)
+		draw_rounded_fill(frame, {track_x, cy - th / 2, track_w, th}, .Pill, style.bg_active)
+		frac := (value^ - lo) / (hi - lo)
+		fill_w := track_w * frac
+		if fill_w > 0 {
+			draw_rounded_fill(frame, {track_x, cy - th / 2, fill_w, th}, .Pill, style.fg_accent)
+		}
+		knob_x := track_x + track_w * frac
+		knob_col := style.fg_accent if knob_active else style.fg_secondary
+		draw_circle_v(frame, {knob_x, cy}, knob_r, style.bg_input)
+		draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
+		draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)
+		if focus_opt_focused(focus) {
+			draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
+		}
 	}
 	semantic_push(
 		frame,

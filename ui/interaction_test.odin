@@ -166,6 +166,33 @@ interact_test_input :: proc(
 	return input
 }
 
+@(test)
+interaction_idle_no_route_preserves_hover_and_latches :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	latch: bool
+	rect := Rectangle{0, 0, 100, 100}
+
+	input := interact_test_input({10, 10})
+	ui_frame_begin(&frame, &runtime, &input)
+	it := interact(&frame, rect)
+	testing.expect(t, it.hovered)
+	testing.expect(t, !it.pressed && !it.held && !it.released && !it.clicked)
+	testing.expect(t, frame.interaction.active_latch == nil)
+
+	it = interact(&frame, rect, &latch)
+	testing.expect(t, it.hovered)
+	testing.expect(t, !it.pressed && !it.held && !it.released && !it.clicked)
+	testing.expect(t, !latch)
+	testing.expect(t, frame.interaction.active_latch == nil)
+
+	it = interact(&frame, Rectangle{200, 200, 10, 10})
+	testing.expect(t, !it.hovered)
+	ui_frame_end(&frame)
+}
+
 // A latch owner that stops being drawn must not leave the window inert.
 // Without generation reclamation the arbitration slot is only ever released
 // from inside the owner's own interact() call, so a closed tab or swapped

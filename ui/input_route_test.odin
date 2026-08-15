@@ -53,6 +53,14 @@ route_claims_behaviour :: proc(t: ^testing.T) {
 	route_begin_frame(&frame)
 	testing.expect_value(t, route_claim_count(&frame), 2)
 
+	// A whole-surface claim has no rectangle entries. Frame-level fast paths
+	// must test `all` as well as count before treating the route as empty.
+	route_reset(&frame)
+	route_claim_all(&frame, Z_MODAL)
+	route_begin_frame(&frame)
+	testing.expect_value(t, route_block_z(&frame, p), Z_MODAL)
+	testing.expect(t, route_occluded(&frame, p))
+
 	// Overflow saturates to a whole-screen claim (over-blocking is the safe
 	// failure mode) instead of dropping claims.
 	route_reset(&frame)

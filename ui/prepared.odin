@@ -818,6 +818,9 @@ prepared_telemetry_describe :: proc(frame: ^Ui_Frame, prepared: ^Prepared_Ui) {
 		telemetry.leaf_nodes = u64(prepared.summary.leaf_count)
 		telemetry.container_nodes = u64(prepared.summary.container_count)
 		telemetry.maximum_depth = u64(prepared.summary.maximum_depth)
+		telemetry.fixed_leaf_nodes = 0
+		telemetry.intrinsic_leaf_nodes = 0
+		telemetry.width_dependent_leaf_nodes = 0
 		for index in 0 ..< prepared.count {
 			node := &prepared_nodes(prepared)[index]
 			if prepared_kind_is_container(node.kind) do continue

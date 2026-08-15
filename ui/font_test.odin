@@ -129,6 +129,31 @@ text_backend_measure_cache_reuses_and_invalidates :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_backend_measure_l0_is_exact_and_bounded :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	state: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	labels := [?]string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight"}
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	for label in labels do _ = measure_text_string_frame(&frame, label, 16)
+	occupied := 0
+	for entry in runtime.text.measure_l0 do if entry.valid do occupied += 1
+	testing.expect_value(t, occupied, MEASURE_L0_CAPACITY)
+	testing.expect_value(t, runtime.text.measure_l0_next, 1)
+	testing.expect_value(t, state.measure_calls, len(labels))
+	_ = measure_text_string_frame(&frame, "eight", 16)
+	testing.expect_value(t, state.measure_calls, len(labels))
+	ui_frame_end(&frame)
+	ui_frame_destroy(&frame)
+}
+
+@(test)
 text_backend_measure_cache_runtime_policy_isolated :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

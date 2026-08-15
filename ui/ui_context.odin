@@ -267,6 +267,7 @@ ui_frame_finalize :: proc(frame: ^Ui_Frame) {
 	}
 	routes_started := prepared_phase_begin(frame, .Finalize_Routes)
 	ui_finalize_routes(frame)
+	if frame.output != nil do ui_output_finalize(frame.output)
 	prepared_phase_end(frame, .Finalize_Routes, routes_started)
 	semantics_started := prepared_phase_begin(frame, .Finalize_Semantics)
 	ui_finalize_semantics(frame)

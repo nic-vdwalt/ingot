@@ -411,6 +411,7 @@ ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, blink_on: 
 ti_draw_chrome :: proc(ctx: ^TI_Ctx) {
 	assert(ctx != nil, "ti_draw_chrome: nil context")
 	assert(ctx.frame != nil, "ti_draw_chrome: nil frame")
+	if !ctx.active && rect_culled_frame(ctx.frame, {ctx.x, ctx.y, ctx.w, ctx.h}) do return
 	style := ui_frame_theme(ctx.frame)
 	bg := style.bg_input if ctx.active else style.bg_secondary
 	draw_rectangle_rec(ctx.frame, ctx.rect, bg)
@@ -537,6 +538,7 @@ ti_inactive_candidate :: proc(ctx: ^TI_Ctx) -> bool {
 ti_draw_inactive_single_line :: proc(ctx: ^TI_Ctx) {
 	assert(ctx != nil && ti_inactive_candidate(ctx), "inactive input: invalid context")
 	assert(ctx.inner_w > 0 && ctx.h > 0, "inactive input: invalid geometry")
+	if rect_culled_frame(ctx.frame, {ctx.x, ctx.y, ctx.w, ctx.h}) do return
 	begin_pane_scissor(ctx.frame, ctx.inner_x, ctx.y, ctx.inner_w, ctx.h)
 	text := strings.to_string(ctx.sb^)
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY

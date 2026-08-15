@@ -219,17 +219,30 @@ interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Inter
 	}
 	mouse := get_mouse_position(frame)
 	local := frame_to_local(frame, mouse)
-	local_press := frame_to_local(frame, state.press_pos)
-	// The press was latched with the depth that blocked it, not a yes/no
-	// answer, so occlusion resolves here against this surface's own z.
-	press_unblocked := state.press_seen && state.press_block_z <= frame_z(frame)
+	over := point_in_rect(local, rect) && !route_occluded(frame, mouse)
+	pressed := is_mouse_button_pressed(frame, .LEFT)
+	released := is_mouse_button_released(frame, .LEFT)
+	down := is_mouse_button_down(frame, .LEFT)
+	if state.active_latch == nil &&
+	   !state.press_seen && !pressed && !released && !down &&
+	   (latch == nil || !latch^) {
+		return Interaction{hovered = over}
+	}
+	press_over := false
+	if latch == nil && released && state.press_seen {
+		local_press := frame_to_local(frame, state.press_pos)
+		// The press was latched with the depth that blocked it, not a yes/no
+		// answer, so occlusion resolves here against this surface's own z.
+		press_unblocked := state.press_block_z <= frame_z(frame)
+		press_over = press_unblocked && point_in_rect(local_press, rect)
+	}
 	ev := Interact_Event {
-		over       = point_in_rect(local, rect) && !route_occluded(frame, mouse),
-		pressed    = is_mouse_button_pressed(frame, .LEFT),
-		released   = is_mouse_button_released(frame, .LEFT),
-		down       = is_mouse_button_down(frame, .LEFT),
+		over       = over,
+		pressed    = pressed,
+		released   = released,
+		down       = down,
 		blocked    = state.active_latch != nil && state.active_latch != latch,
-		press_over = press_unblocked && point_in_rect(local_press, rect),
+		press_over = press_over,
 	}
 	it := interact_step(ev, latch)
 	if latch != nil {

@@ -126,9 +126,9 @@ Paint_List :: struct {
 	dropped_commands:     int,
 	dropped_text_bytes:   int,
 	// High-water marks across this list's lifetime, surviving the per-frame
-	// reset. Always tracked (two max() per frame) rather than gated behind
-	// UI_TELEMETRY_ENABLED, because these are what justify PAINT_COMMAND_CAP
-	// and PAINT_TEXT_CAP: a bound nobody can measure is a guess. The arrays
+	// reset. Updated once at frame finalization and not gated behind
+	// UI_TELEMETRY_ENABLED, because these justify PAINT_COMMAND_CAP and
+	// PAINT_TEXT_CAP: a bound nobody can measure is a guess. The arrays
 	// are inline, so unused capacity is memory that is always resident.
 	peak_count:           int,
 	peak_text_len:        int,
@@ -170,6 +170,20 @@ Ui_Output :: struct {
 	main:     Paint_List,
 	overlay:  Paint_List,
 	platform: Platform_Output,
+}
+
+paint_list_finalize :: proc(list: ^Paint_List) {
+	assert(list != nil, "paint_list_finalize: nil list")
+	assert(list.count >= 0 && list.count <= PAINT_COMMAND_CAP)
+	assert(list.text_len >= 0 && list.text_len <= PAINT_TEXT_CAP)
+	list.peak_count = max(list.peak_count, list.count)
+	list.peak_text_len = max(list.peak_text_len, list.text_len)
+}
+
+ui_output_finalize :: proc(output: ^Ui_Output) {
+	assert(output != nil, "ui_output_finalize: nil output")
+	paint_list_finalize(&output.main)
+	paint_list_finalize(&output.overlay)
 }
 
 paint_list_reset :: proc(list: ^Paint_List) {
@@ -323,7 +337,6 @@ paint_push_unreserved :: proc(list: ^Paint_List, command: Paint_Command) -> bool
 	command.z_group = list.current_z_group
 	list.commands[list.count] = command
 	list.count += 1
-	list.peak_count = max(list.peak_count, list.count)
 	when UI_TELEMETRY_ENABLED do list.command_append_count += 1
 	if list.sink != nil do list.sink(list, command, list.sink_userdata)
 	return true
@@ -332,12 +345,14 @@ paint_push_unreserved :: proc(list: ^Paint_List, command: Paint_Command) -> bool
 paint_push :: proc(list: ^Paint_List, command: Paint_Command) -> bool {
 	assert(list != nil, "paint_push: nil list")
 	assert(list.clip_end_reserved >= 0, "paint_push: negative reservation")
-	command := command
-	command.tier = list.current_tier
-	command.z_group = list.current_z_group
 	if list.count >= PAINT_COMMAND_CAP - list.clip_end_reserved {
 		list.dropped_commands += 1
-		if list.sink != nil do list.sink(list, command, list.sink_userdata)
+		if list.sink != nil {
+			command := command
+			command.tier = list.current_tier
+			command.z_group = list.current_z_group
+			list.sink(list, command, list.sink_userdata)
+		}
 		return false
 	}
 	return paint_push_unreserved(list, command)
@@ -354,7 +369,6 @@ paint_push_text :: proc(list: ^Paint_List, command: Paint_Command, text: string)
 	stored_command.text_length = len(text)
 	copy(list.text[list.text_len:], transmute([]u8)text)
 	list.text_len += len(text)
-	list.peak_text_len = max(list.peak_text_len, list.text_len)
 	when UI_TELEMETRY_ENABLED {
 		list.text_append_count += 1
 		list.text_bytes_copied += u64(len(text))

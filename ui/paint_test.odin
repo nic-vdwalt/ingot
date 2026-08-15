@@ -156,6 +156,25 @@ paint_clip_main_overlay_and_pane_coordinates_are_isolated :: proc(t: ^testing.T)
 }
 
 @(test)
+paint_peaks_are_finalized_at_frame_end_for_both_channels :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	paint_push(&output.main, {kind = .Rectangle})
+	paint_push_text(&output.overlay, {kind = .Text}, "overlay")
+	ui_frame_end(&frame)
+	testing.expect_value(t, output.main.peak_count, 1)
+	testing.expect_value(t, output.main.peak_text_len, 0)
+	testing.expect_value(t, output.overlay.peak_count, 1)
+	testing.expect_value(t, output.overlay.peak_text_len, len("overlay"))
+}
+
+@(test)
 codepoint_scope_emits_cumulative_screen_coordinates :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

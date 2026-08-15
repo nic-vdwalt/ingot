@@ -328,6 +328,10 @@ semantic_push :: proc(
 		"semantic_push: invalid collection position",
 	)
 	sem := &frame.semantics
+	if !frame.runtime.semantics_enabled &&
+	   (focus.focus == nil || .Disabled in state) {
+		return nil
+	}
 	sem_focus_register(frame, focus, state)
 	if !frame.runtime.semantics_enabled do return nil
 	ordinal := sem.ordinals[role]

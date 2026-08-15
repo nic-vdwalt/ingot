@@ -134,7 +134,10 @@ route_block_z_in :: proc(claims: Route_Claims, point: Vector2) -> Z_Order {
 // this frame.
 route_block_z :: proc(frame: ^Ui_Frame, point: Vector2) -> Z_Order {
 	assert(frame != nil && frame.open, "route_block_z: invalid frame")
-	return route_block_z_in(frame.route.prev, point)
+	claims := &frame.route.prev
+	assert(claims.count >= 0 && claims.count <= MAX_ROUTE_CLAIMS)
+	if !claims.all && claims.count == 0 do return Z_NONE
+	return route_block_z_in(claims^, point)
 }
 
 // route_occluded_in reports whether `point` is covered by a claim strictly
@@ -148,7 +151,10 @@ route_occluded_in :: proc(claims: Route_Claims, point: Vector2, z: Z_Order = Z_C
 // not know their own depth.
 route_occluded :: proc(frame: ^Ui_Frame, point: Vector2) -> bool {
 	assert(frame != nil && frame.open, "route_occluded: invalid frame")
-	return route_occluded_in(frame.route.prev, point, frame_z(frame))
+	claims := &frame.route.prev
+	assert(claims.count >= 0 && claims.count <= MAX_ROUTE_CLAIMS)
+	if !claims.all && claims.count == 0 do return false
+	return route_occluded_in(claims^, point, frame_z(frame))
 }
 
 route_claim_count :: proc(frame: ^Ui_Frame) -> int {
