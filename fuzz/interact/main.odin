@@ -228,10 +228,10 @@ capture_sim_input :: proc(input: ^ui.Ui_Input) {
 // legitimately registering a claim while ending the frame closed.
 Frame_Control :: struct {
 	hide_slider: i32,
-	open_modal: bool,
-	open_menu: bool,
-	menu_x: i32,
-	menu_y: i32,
+	open_modal:  bool,
+	open_menu:   bool,
+	menu_x:      i32,
+	menu_y:      i32,
 }
 
 frame_control_random :: proc(p: ^Prng, s: ^Scene, enabled: bool) -> Frame_Control {

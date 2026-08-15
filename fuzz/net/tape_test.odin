@@ -22,7 +22,10 @@ net_tape_generation_and_replay_are_deterministic :: proc(t: ^testing.T) {
 
 @(test)
 net_tape_rejects_malformed_and_unknown_operations :: proc(t: ^testing.T) {
-	tape := fuzzx.Tape{version = fuzzx.TAPE_VERSION, target = "net"}
+	tape := fuzzx.Tape {
+		version = fuzzx.TAPE_VERSION,
+		target  = "net",
+	}
 	tape.ops = make([dynamic]fuzzx.Tape_Op)
 	append(&tape.ops, fuzzx.Tape_Op{tag = NET_OP_WS})
 	failure := net_tape_execute(&tape)

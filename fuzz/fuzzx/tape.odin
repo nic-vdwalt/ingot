@@ -64,7 +64,11 @@ tape_destroy :: proc(tape: ^Tape, allocator := context.allocator) {
 
 tape_clone :: proc(source: ^Tape, allocator := context.allocator) -> Tape {
 	assert(source != nil, "tape_clone: nil source")
-	result := Tape{version = source.version, target = strings.clone(source.target, allocator), seed = source.seed}
+	result := Tape {
+		version = source.version,
+		target  = strings.clone(source.target, allocator),
+		seed    = source.seed,
+	}
 	result.ops = make([dynamic]Tape_Op, 0, len(source.ops), allocator)
 	for op in source.ops {
 		payload := make([]u8, len(op.payload), allocator)
@@ -110,7 +114,14 @@ tape_encode :: proc(tape: ^Tape, allocator := context.allocator) -> ([]u8, bool)
 	return buffer, true
 }
 
-tape_decode :: proc(data: []u8, expected_target: string = "", allocator := context.allocator) -> (Tape, Tape_Error) {
+tape_decode :: proc(
+	data: []u8,
+	expected_target: string = "",
+	allocator := context.allocator,
+) -> (
+	Tape,
+	Tape_Error,
+) {
 	if len(data) > TAPE_BYTES_MAX do return {}, .Limit
 	if len(data) < TAPE_HEADER_BYTES do return {}, .Truncated
 	for index in 0 ..< len(TAPE_MAGIC) {
@@ -124,7 +135,11 @@ tape_decode :: proc(data: []u8, expected_target: string = "", allocator := conte
 	if target_len > len(data) - TAPE_HEADER_BYTES do return {}, .Truncated
 	target := string(data[TAPE_HEADER_BYTES:TAPE_HEADER_BYTES + target_len])
 	if expected_target != "" && target != expected_target do return {}, .Target
-	result := Tape{version = version, target = strings.clone(target, allocator), seed = read_u64(data, 16)}
+	result := Tape {
+		version = version,
+		target  = strings.clone(target, allocator),
+		seed    = read_u64(data, 16),
+	}
 	result.ops = make([dynamic]Tape_Op, 0, op_count, allocator)
 	offset := TAPE_HEADER_BYTES + target_len
 	for _ in 0 ..< op_count {
@@ -156,7 +171,13 @@ tape_decode :: proc(data: []u8, expected_target: string = "", allocator := conte
 	return result, .None
 }
 
-tape_load :: proc(path, expected_target: string, allocator := context.allocator) -> (Tape, Tape_Error) {
+tape_load :: proc(
+	path, expected_target: string,
+	allocator := context.allocator,
+) -> (
+	Tape,
+	Tape_Error,
+) {
 	if path == "" do return {}, .Io
 	data, err := os.read_entire_file(path, context.temp_allocator)
 	if err != nil do return {}, .Io
@@ -179,7 +200,14 @@ tape_save :: proc(path: string, tape: ^Tape) -> bool {
 tape_summary :: proc(tape: ^Tape) -> string {
 	assert(tape != nil, "tape_summary: nil tape")
 	size, _ := tape_encoded_size(tape)
-	return fmt.tprintf("target=%s version=%d seed=%d operations=%d bytes=%d", tape.target, tape.version, tape.seed, len(tape.ops), size)
+	return fmt.tprintf(
+		"target=%s version=%d seed=%d operations=%d bytes=%d",
+		tape.target,
+		tape.version,
+		tape.seed,
+		len(tape.ops),
+		size,
+	)
 }
 
 tape_shrink :: proc(
@@ -193,7 +221,9 @@ tape_shrink :: proc(
 	assert(predicate != nil, "tape_shrink: nil predicate")
 	assert(options.maximum_runs > 0, "tape_shrink: non-positive run limit")
 	assert(options.minimum_ops >= 0, "tape_shrink: negative minimum")
-	result := Tape_Shrink_Result{tape = tape_clone(source, allocator)}
+	result := Tape_Shrink_Result {
+		tape = tape_clone(source, allocator),
+	}
 	original := predicate(&result.tape, userdata)
 	result.runs = 1
 	result.failure = original
@@ -241,8 +271,15 @@ tape_shrink :: proc(
 @(private)
 tape_without_range :: proc(source: ^Tape, start, end: int, allocator: mem.Allocator) -> Tape {
 	assert(source != nil, "tape_without_range: nil source")
-	assert(start >= 0 && start < end && end <= len(source.ops), "tape_without_range: invalid range")
-	result := Tape{version = source.version, target = strings.clone(source.target, allocator), seed = source.seed}
+	assert(
+		start >= 0 && start < end && end <= len(source.ops),
+		"tape_without_range: invalid range",
+	)
+	result := Tape {
+		version = source.version,
+		target  = strings.clone(source.target, allocator),
+		seed    = source.seed,
+	}
 	result.ops = make([dynamic]Tape_Op, 0, len(source.ops) - (end - start), allocator)
 	for index in 0 ..< len(source.ops) {
 		if index >= start && index < end do continue
