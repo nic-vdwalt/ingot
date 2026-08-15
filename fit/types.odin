@@ -181,6 +181,10 @@ Text_Role :: enum u8 {
 	Label,
 	Note,
 }
+Truncate_Side :: enum u8 {
+	Tail,
+	Head,
+}
 Ink :: enum u8 {
 	Primary,
 	Heading,
@@ -544,6 +548,29 @@ Control_Options :: struct {
 	changed: ^bool,
 }
 
+Leaf_Options :: struct {
+	track: Track,
+	size:  Size_Options,
+}
+
+Builder_Text_Input_Options :: struct {
+	height:    i32,
+	masked:    bool,
+	semantics: Text_Input_Semantics,
+	track:     Track,
+	size:      Size_Options,
+	submitted: ^bool,
+}
+
+Progress_Options :: struct {
+	height:   i32,
+	ink:      Ink,
+	label:    string,
+	field_id: string,
+	track:    Track,
+	size:     Size_Options,
+}
+
 Custom_Options :: struct {
 	track:     Track,
 	size:      Size_Options,
@@ -577,6 +604,17 @@ Test_Driver :: struct {
 
 Pane_State :: struct {
 	inner: ui.Pane,
+}
+
+Scroll_State :: struct {
+	inner: ui.Prepared_Scroll_State,
+}
+
+Scroll_Options :: struct {
+	padding:  Space,
+	keyboard: bool,
+	track:    Track,
+	size:     Size_Options,
 }
 
 Grid_State :: struct {

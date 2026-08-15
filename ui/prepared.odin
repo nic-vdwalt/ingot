@@ -63,6 +63,19 @@ Prepared_Attachment_Options :: struct {
 	transition:        Prepared_Transition,
 }
 
+Prepared_Scroll_State :: struct {
+	offset:    f32,
+	content_h: i32,
+}
+
+Prepared_Scroll_Options :: struct {
+	state:    ^Prepared_Scroll_State,
+	padding:  Space,
+	keyboard: bool,
+	track:    Track,
+	size:     Prepared_Size,
+}
+
 Prepared_Container_Surface :: struct {
 	enabled:   bool,
 	kind:      Surface,
@@ -144,6 +157,7 @@ Prepared_Kind :: enum u8 {
 	Flow,
 	Grid,
 	Attachment,
+	Scroll,
 	Label,
 	Button,
 	Checkbox,
@@ -153,6 +167,7 @@ Prepared_Kind :: enum u8 {
 	Progress,
 	Separator,
 	Spacer,
+	Table_Cell,
 	Custom,
 }
 
@@ -166,6 +181,7 @@ Prepared_Node :: struct {
 	flow:                     Prepared_Flow_Options,
 	grid:                     Prepared_Grid_Options,
 	attachment:               Prepared_Attachment_Options,
+	scroll:                   Prepared_Scroll_Options,
 	label:                    Label_Spec,
 	button:                   Button_Spec,
 	checkbox:                 Checkbox_Spec,
@@ -174,6 +190,7 @@ Prepared_Node :: struct {
 	text_input:               Prepared_Text_Input,
 	progress:                 Prepared_Progress,
 	spacer:                   Prepared_Spacer,
+	table_cell:               Prepared_Table_Cell,
 	custom:                   Prepared_Custom,
 	size:                     Intrinsic_Size,
 	rect:                     Rect_I32,
@@ -301,6 +318,25 @@ prepared_attachment_begin :: proc(
 	return handle
 }
 
+prepared_scroll_begin :: proc(
+	prepared: ^Prepared_Ui,
+	options: Prepared_Scroll_Options,
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_scroll_begin: description not open")
+	assert(options.state != nil, "prepared_scroll_begin: nil state")
+	handle := prepared_add(
+		prepared,
+		Prepared_Node {
+			kind = .Scroll,
+			scroll = options,
+			track = options.track,
+			sizing = options.size,
+		},
+	)
+	prepared_push_container(prepared, handle)
+	return handle
+}
+
 prepared_row :: proc(u: ^Ui, prepared: ^Prepared_Ui, options: Prepared_Container_Options = {}) {
 	assert(u != nil && prepared != nil, "prepared_row: invalid argument")
 	prepared_root_begin(u, prepared, .Row, options)
@@ -329,7 +365,8 @@ prepared_container_end :: proc(prepared: ^Prepared_Ui) {
 	assert(stack_index >= 0 && stack_index < len(prepared.stack))
 	index := prepared.stack[stack_index]
 	assert(index >= 0 && index < prepared.count, "prepared_container_end: invalid index")
-	if prepared_nodes(prepared)[index].kind == .Attachment {
+	kind := prepared_nodes(prepared)[index].kind
+	if kind == .Attachment || kind == .Scroll {
 		assert(index >= 0 && index < i32(len(prepared_nodes(prepared))))
 		assert(prepared_child_count(prepared, prepared_nodes(prepared)[index].first_child) == 1)
 	}
@@ -469,7 +506,10 @@ prepared_text_input :: proc(
 ) -> Prepared_Handle {
 	assert(prepared != nil && prepared.open, "prepared_text_input: description not open")
 	assert(spec.id != WIDGET_ID_NONE && spec.box != nil, "prepared_text_input: invalid spec")
-	return prepared_add(prepared, Prepared_Node{kind = .Text_Input, text_input = spec, track = track})
+	return prepared_add(
+		prepared,
+		Prepared_Node{kind = .Text_Input, text_input = spec, track = track},
+	)
 }
 
 prepared_progress :: proc(
@@ -494,6 +534,19 @@ prepared_spacer :: proc(
 ) -> Prepared_Handle {
 	assert(prepared != nil && prepared.open, "prepared_spacer: description not open")
 	return prepared_add(prepared, Prepared_Node{kind = .Spacer, spacer = spec, track = track})
+}
+
+prepared_table_cell :: proc(
+	prepared: ^Prepared_Ui,
+	spec: Prepared_Table_Cell,
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_table_cell: description not open")
+	assert(spec.text != "", "prepared_table_cell: empty text")
+	return prepared_add(
+		prepared,
+		Prepared_Node{kind = .Table_Cell, table_cell = spec, track = track},
+	)
 }
 
 prepared_custom :: proc(
@@ -687,6 +740,8 @@ prepared_measure_natural :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_grid(u, prepared, index, false)
 		} else if node.kind == .Attachment {
 			prepared_measure_attachment(prepared, index)
+		} else if node.kind == .Scroll {
+			prepared_measure_scroll(u, prepared, index, false)
 		} else if prepared_kind_is_container(node.kind) {
 			prepared_measure_container(u, prepared, index, false)
 		} else {
@@ -733,9 +788,11 @@ prepared_measure_leaf :: proc(u: ^Ui, node: ^Prepared_Node, max_width: i32) {
 		node.size = prepared_separator_size(u)
 	case .Spacer:
 		node.size = prepared_spacer_size(u, node.spacer)
+	case .Table_Cell:
+		node.size = prepared_table_cell_size(u, node.table_cell)
 	case .Custom:
 		node.size = node.custom.measure(u, {max_w = max_width}, node.custom.userdata)
-	case .Row, .Column, .Flow, .Grid, .Attachment:
+	case .Row, .Column, .Flow, .Grid, .Attachment, .Scroll:
 		unreachable()
 	}
 	assert(node.size.w >= 0 && node.size.h >= 0, "prepared_measure_leaf: invalid result")
@@ -748,6 +805,21 @@ prepared_measure_attachment :: proc(prepared: ^Prepared_Ui, index: i32) {
 	assert(node.kind == .Attachment, "prepared_measure_attachment: wrong kind")
 	assert(node.first_child >= 0 && node.first_child == node.last_child)
 	node.size = prepared_nodes(prepared)[node.first_child].size
+}
+
+prepared_measure_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_width: bool) {
+	assert(u != nil && prepared != nil && index >= 0 && index < prepared.count)
+	node := &prepared_nodes(prepared)[index]
+	assert(node.kind == .Scroll && node.scroll.state != nil, "prepared scroll: invalid node")
+	assert(
+		node.first_child >= 0 && node.first_child == node.last_child,
+		"prepared scroll: child count",
+	)
+	child := &prepared_nodes(prepared)[node.first_child]
+	padding := insets_of(u, node.scroll.padding)
+	node.scroll.state.content_h = child.size.h + padding.top + padding.bottom
+	node.size = intrinsic_padding(child.size, padding)
+	if keep_width && node.rect.w > 0 do node.size.w = node.rect.w
 }
 
 @(private = "file")
@@ -872,7 +944,7 @@ prepared_dependencies :: proc(prepared: ^Prepared_Ui) -> Prepared_Dependencies {
 		node := prepared_nodes(prepared)[index]
 		result.width = result.width || prepared_axis_dependent(node.sizing.width)
 		result.height = result.height || prepared_axis_dependent(node.sizing.height)
-		if node.kind == .Flow || node.kind == .Grid do result.width = true
+		if node.kind == .Flow || node.kind == .Grid || node.kind == .Scroll do result.width = true
 		child := node.first_child
 		for _ in 0 ..< prepared.count {
 			if child < 0 do break
@@ -927,6 +999,8 @@ prepared_remeasure_containers :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_grid(u, prepared, index, false)
 		} else if node.kind == .Attachment {
 			prepared_measure_attachment(prepared, index)
+		} else if node.kind == .Scroll {
+			prepared_measure_scroll(u, prepared, index, false)
 		} else if node.kind == .Row || node.kind == .Column {
 			prepared_measure_container(u, prepared, index, false)
 		}
@@ -1013,6 +1087,8 @@ prepared_assign_widths :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_place_flow(u, prepared, index)
 		} else if node.kind == .Grid {
 			prepared_place_grid(u, prepared, index)
+		} else if node.kind == .Scroll {
+			prepared_place_scroll(u, prepared, index)
 		}
 	}
 }
@@ -1046,6 +1122,8 @@ prepared_measure_heights :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_flow(u, prepared, index, true)
 		} else if node.kind == .Grid {
 			prepared_measure_grid(u, prepared, index, true)
+		} else if node.kind == .Scroll {
+			prepared_measure_scroll(u, prepared, index, true)
 		} else if node.kind == .Row || node.kind == .Column {
 			prepared_measure_container(u, prepared, index, true)
 		}
@@ -1078,10 +1156,33 @@ prepared_place_container :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 		prepared_place_flow(u, prepared, index)
 	} else if node.kind == .Grid {
 		prepared_place_grid(u, prepared, index)
+	} else if node.kind == .Scroll {
+		prepared_place_scroll(u, prepared, index)
 	}
 }
 
 @(private = "file")
+prepared_place_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
+	assert(u != nil && prepared != nil && index >= 0 && index < prepared.count)
+	node := &prepared_nodes(prepared)[index]
+	assert(node.kind == .Scroll && node.scroll.state != nil, "prepared scroll place: invalid node")
+	assert(
+		node.first_child >= 0 && node.first_child == node.last_child,
+		"prepared scroll place: child count",
+	)
+	state := node.scroll.state
+	maximum := max(state.content_h - node.rect.h, 0)
+	mouse := get_mouse_position(u.frame)
+	screen := frame_rect_to_screen(u.frame, rect_f32(node.rect))
+	if point_in_rect(mouse, screen) && !route_occluded(u.frame, mouse) {
+		state.offset -= get_wheel_move(u.frame) * f32(ui_frame_sc(u.frame, 24))
+	}
+	state.offset = clamp(state.offset, 0, f32(maximum))
+	content := rect_inset(node.rect, insets_of(u, node.scroll.padding))
+	child := &prepared_nodes(prepared)[node.first_child]
+	child.rect = {content.x, content.y - i32(state.offset), content.w, child.size.h}
+}
+
 prepared_apply_transition :: proc(u: ^Ui, node: ^Prepared_Node) {
 	assert(u != nil && node != nil, "prepared_apply_transition: invalid argument")
 	transition := node.sizing.transition
@@ -1359,7 +1460,14 @@ prepared_render_tree :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 
 @(private = "file")
 prepared_kind_is_container :: proc(kind: Prepared_Kind) -> bool {
-	return kind == .Row || kind == .Column || kind == .Flow || kind == .Grid || kind == .Attachment
+	return(
+		kind == .Row ||
+		kind == .Column ||
+		kind == .Flow ||
+		kind == .Grid ||
+		kind == .Attachment ||
+		kind == .Scroll \
+	)
 }
 
 @(private = "file")
@@ -1371,6 +1479,10 @@ prepared_render_enter :: proc(u: ^Ui, node: ^Prepared_Node) {
 			claim = rect_f32(prepared_rect_union(node.rect, node.target_rect))
 		}
 		layer_begin(u.frame, node.attachment.z, claim)
+		return
+	}
+	if node.kind == .Scroll {
+		begin_scissor_mode(u.frame, node.rect.x, node.rect.y, node.rect.w, node.rect.h)
 		return
 	}
 	effects := prepared_container_effects(node)
@@ -1409,6 +1521,10 @@ prepared_render_exit :: proc(u: ^Ui, node: ^Prepared_Node) {
 		layer_end(u.frame)
 		return
 	}
+	if node.kind == .Scroll {
+		end_scissor_mode(u.frame)
+		return
+	}
 	if prepared_container_effects(node).clip do end_scissor_mode(u.frame)
 }
 
@@ -1422,8 +1538,19 @@ prepared_container_effects :: proc(node: ^Prepared_Node) -> Prepared_Container_E
 		return node.flow.effects
 	case .Grid:
 		return node.grid.effects
-	case .Attachment, .Label, .Button, .Checkbox, .Radio, .Slider, .Text_Input, .Progress,
-	     .Separator, .Spacer, .Custom:
+	case .Attachment,
+	     .Scroll,
+	     .Label,
+	     .Button,
+	     .Checkbox,
+	     .Radio,
+	     .Slider,
+	     .Text_Input,
+	     .Progress,
+	     .Separator,
+	     .Spacer,
+	     .Table_Cell,
+	     .Custom:
 		unreachable()
 	}
 	unreachable()
@@ -1450,9 +1577,11 @@ prepared_render_leaf :: proc(u: ^Ui, node: ^Prepared_Node) {
 	case .Separator:
 		prepared_separator_at(u, node.rect)
 	case .Spacer:
+	case .Table_Cell:
+		prepared_table_cell_at(u, node.table_cell, node.rect)
 	case .Custom:
 		node.activated = node.custom.render(u, node.rect, node.custom.userdata)
-	case .Row, .Column, .Flow, .Grid, .Attachment:
+	case .Row, .Column, .Flow, .Grid, .Attachment, .Scroll:
 		unreachable()
 	}
 }

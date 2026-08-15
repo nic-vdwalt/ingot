@@ -17,6 +17,13 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- Fit declarative composition adds token-styled `Section` and `Card` containers,
+  parent-owned responsive selection, bounded nested Canvas leaves, and checked
+  immediate Region, Pane, and Layer helpers while preserving ordinary Odin
+  lexical nesting and the existing Builder API.
+- Builder-native text input, progress, separator, spacer, shared-track table,
+  and one-child scroll operations keep state caller-owned and lower to the same
+  bounded prepared runtime.
 - `fit.Canvas`: a bounded full-parent explicit-geometry root that removes the
   synthetic `Column` plus `Custom` measure/render bridge from applications.
 - `fit.Px`, `fit.Region_Open`, `fit.Region_Close`, and string/integer-key region

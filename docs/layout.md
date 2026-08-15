@@ -6,11 +6,12 @@ put each container and its children in a named lexical block with an immediate
 `defer fit.End(builder)`. The defer closes the container on every block exit and
 makes nesting visible in source.
 
-`Row_With`, `Column_With`, `Flow_With`, `Grid_With`, and `Attachment_With` open
-one container, invoke one caller procedure immediately, verify its nested
-containers are balanced, and close the container. The procedure and userdata
-are never retained. A direct `fit.End(builder)` remains available when dynamic
-construction does not correspond to one lexical child block.
+`Row_With`, `Column_With`, `Flow_With`, `Grid_With`, `Attachment_With`, and
+`Scroll_With` open one container, invoke one caller procedure immediately,
+verify its nested containers are balanced, and close the container. The
+procedure and userdata are never retained. A direct `fit.End(builder)` remains
+available when dynamic construction does not correspond to one lexical child
+block.
 
 ```odin
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
@@ -49,9 +50,14 @@ fit.End(builder)
 - `Grid` uses fixed columns and a caller-selected row height.
 - `Attachment` places exactly one out-of-flow child against a parent, root,
   screen rectangle, or viewport target.
+- `Scroll` clips and offsets exactly one child using zero-value caller-owned
+  `Scroll_State`.
+- `Section` is a transparent fit-content Column with a title leaf.
+- `Card` is an explicit token-styled fit-content Column.
 
 Containers accept bounded spacing, padding, alignment, tracks, two-axis sizing,
-background/border effects, clipping, and caller-owned transitions. Row and
+background/border effects, clipping, and caller-owned transitions. Structural
+containers remain transparent unless a semantic surface is explicitly selected. Row and
 Column direct children are bounded by `MAX_LAYOUT_FLEX`; total nodes and nesting
 use fixed configured limits.
 
@@ -89,21 +95,22 @@ aspect ratio. Wrapped labels derive height after width assignment.
 
 ## Leaves
 
-`Label` emits semantic text. `Button`, `Checkbox`, `Radio`, and `Slider` accept
-stable string, `u64`, or explicit widget keys. Controls keep values in
-caller-owned state and can publish activation or change into caller-owned
-`^bool` output. Several leaves may share one output; results are OR-combined
-after resetting the output for the current render.
+`Label` emits semantic text. `Button`, `Checkbox`, `Radio`, `Slider`, and
+`Text_Input` accept stable string, `u64`, or explicit widget keys. `Progress`,
+`Separator`, `Spacer`, and bounded shared-track table cells are native leaves.
+Controls keep values in caller-owned state and can publish activation or change
+into caller-owned `^bool` output. Several leaves may share one output; results
+are OR-combined after resetting the output for the current render.
 
 `Custom` accepts bounded measure and render callbacks. Borrowed strings,
 userdata, callbacks, state, and output pointers must remain valid until the
 builder is rendered.
 
-`Canvas` is a complete root, not a leaf to add below another container. It is
-equivalent to one synthetic root container plus one grow-sized `Custom` leaf and
-is intended for full-parent explicit geometry. Its callback receives a physical
-rectangle. `Px` converts logical constants once; never pass layout-returned
-physical values through it.
+`Canvas` remains the complete-root convenience for full-parent explicit
+geometry. `Canvas_Leaf` places the same borrowed Surface callback in a measured
+Builder slot for charts, custom painting, overlays, and other explicit islands.
+Neither callback nor Surface may be retained. `Px` converts logical constants
+once; never pass layout-returned physical values through it.
 
 ## Explicit layout states
 

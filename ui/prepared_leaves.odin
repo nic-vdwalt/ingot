@@ -21,6 +21,14 @@ Prepared_Spacer :: struct {
 	horizontal: bool,
 }
 
+Prepared_Table_Cell :: struct {
+	text:    string,
+	role:    Text_Role,
+	ink:     Ink,
+	trunc:   Truncate_Side,
+	numeric: bool,
+}
+
 prepared_text_input_size :: proc(u: ^Ui, spec: Prepared_Text_Input) -> Intrinsic_Size {
 	assert(u != nil && u.open && u.frame != nil, "prepared text input size: invalid UI")
 	assert(spec.id != WIDGET_ID_NONE && spec.box != nil, "prepared text input size: invalid spec")
@@ -82,4 +90,18 @@ prepared_spacer_size :: proc(u: ^Ui, spec: Prepared_Spacer) -> Intrinsic_Size {
 	pixels := space_px(u, spec.space)
 	if spec.horizontal do return intrinsic_leaf(pixels, 0)
 	return intrinsic_leaf(0, pixels)
+}
+
+prepared_table_cell_size :: proc(u: ^Ui, spec: Prepared_Table_Cell) -> Intrinsic_Size {
+	assert(u != nil && u.open && u.frame != nil, "prepared table cell size: invalid UI")
+	assert(spec.text != "", "prepared table cell size: empty text")
+	font_size := text_role_size(u.frame, spec.role)
+	width := measure_text_string_frame(u.frame, spec.text, font_size)
+	return intrinsic_leaf(width, ui_frame_metrics(u.frame).LINE_HEIGHT)
+}
+
+prepared_table_cell_at :: proc(u: ^Ui, spec: Prepared_Table_Cell, rect: Rect_I32) {
+	assert(u != nil && u.open && u.frame != nil, "prepared table cell: invalid UI")
+	assert(spec.text != "", "prepared table cell: empty text")
+	cell_at(u.frame, rect, spec.text, spec.role, spec.ink, spec.trunc, spec.numeric)
 }
