@@ -187,10 +187,13 @@ render. All paths use named fixed bounds and iterative layout.
 
 Reusing a builder resets logical counts and every previously used output slot;
 unused selected capacity is not scanned or retained as active state. Externally
-backed state must not be copied or rebound while active. Flow, Grid, two-axis
-sizing, aspect ratio, clipping, and decoration remain current-frame description
-data. They add no recursion, unbounded allocation, or cross-frame hierarchy.
-Separated `Measure` and `Render_At` consume caller-owned storage synchronously.
+backed state must not be copied or rebound while active. Flow, Grid, Scroll,
+two-axis sizing, aspect ratio, clipping, and decoration remain current-frame
+description data. Scroll retains only its caller-owned offset and measured
+content extent; responsive code declares one parent-selected branch rather than
+retaining alternatives. They add no recursion, unbounded allocation, or
+cross-frame hierarchy. Separated `Measure` and `Render_At` consume caller-owned
+storage synchronously.
 Borrowed strings, userdata, and activation destinations remain valid through
 rendering, where each leaf executes exactly once. A custom leaf may receive a
 borrowed `fit.Surface` for same-frame interaction and explicit geometry. The

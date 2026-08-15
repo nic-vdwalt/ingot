@@ -180,6 +180,21 @@ to_attachment_options :: proc(value: Attachment_Options) -> ui.Prepared_Attachme
 }
 
 @(private = "package")
+to_scroll_options :: proc(
+	state: ^Scroll_State,
+	value: Scroll_Options,
+) -> ui.Prepared_Scroll_Options {
+	assert(state != nil, "Fit.Scroll: nil state")
+	return {
+		state = &state.inner,
+		padding = ui.Space(value.padding),
+		keyboard = value.keyboard,
+		track = to_track(value.track),
+		size = to_size(value.size),
+	}
+}
+
+@(private = "package")
 to_label_options :: proc(value: Label_Options) -> ui.Fit_Label_Options {
 	return {
 		role = ui.Text_Role(value.role),
@@ -205,6 +220,11 @@ to_button_options :: proc(value: Button_Options) -> ui.Fit_Button_Options {
 @(private = "package")
 to_control_options :: proc(value: Control_Options) -> ui.Fit_Control_Options {
 	return {track = to_track(value.track), size = to_size(value.size), changed = value.changed}
+}
+
+@(private = "package")
+to_leaf_options :: proc(value: Leaf_Options) -> ui.Fit_Leaf_Options {
+	return {track = to_track(value.track), size = to_size(value.size)}
 }
 
 @(private = "package")

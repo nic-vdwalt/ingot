@@ -58,6 +58,19 @@ Attachment_With :: proc(
 	build_container_body(builder, body, userdata, loc)
 }
 
+Scroll_With :: proc(
+	builder: ^Builder,
+	state: ^Scroll_State,
+	body: Build_Proc,
+	userdata: rawptr = nil,
+	options: Scroll_Options = {},
+	loc: runtime.Source_Code_Location = #caller_location,
+) {
+	assert(state != nil, "Fit.Scroll_With: nil state", loc)
+	Scroll(builder, state, options)
+	build_container_body(builder, body, userdata, loc)
+}
+
 @(private = "file")
 build_container_body :: proc(
 	builder: ^Builder,

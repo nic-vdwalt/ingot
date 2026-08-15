@@ -251,6 +251,28 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	radio: proc(_: ^Builder, _: u64, _: string, _: ^i32, _: i32, _: Control_Options) = Radio
 	slider: proc(_: ^Builder, _: Widget_Id, _: ^f32, _, _, _: f32, _: string, _: Control_Options) =
 		Slider
+	text_input: proc(
+			_: ^Builder,
+			_: string,
+			_: ^Input_Box,
+			_: string,
+			_: Builder_Text_Input_Options,
+		) =
+		Text_Input
+	progress: proc(_: ^Builder, _: f32, _: Progress_Options) = Progress
+	separator: proc(_: ^Builder, _: Leaf_Options) = Separator
+	spacer: proc(_: ^Builder, _: Space, _: Leaf_Options) = Spacer
+	table_begin: proc(_: ^Builder, _: ^Table_State, _: []Table_Column) = Table_Begin
+	scroll: proc(_: ^Builder, _: ^Scroll_State, _: Scroll_Options) = Scroll
+	scroll_with: proc(
+			_: ^Builder,
+			_: ^Scroll_State,
+			_: Build_Proc,
+			_: rawptr,
+			_: Scroll_Options,
+			_: runtime.Source_Code_Location,
+		) =
+		Scroll_With
 	layout_begin: proc(_: ^Surface, _: ^Layout_State, _: Rect, _: i32) = Layout_Begin
 	layout_next: proc(_: ^Layout_State, _: i32) -> Rect = Layout_Next
 	grid_next: proc(_: ^Grid_State) -> Rect = Grid_Next
@@ -268,9 +290,82 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	testing.expect(t, compact != nil && canvas_leaf != nil && id_string != nil)
 	testing.expect(t, region_with != nil && layer_with != nil && pane_with != nil)
 	testing.expect(t, checkbox != nil && radio != nil && slider != nil)
+	testing.expect(t, text_input != nil && progress != nil && separator != nil && spacer != nil)
+	testing.expect(t, table_begin != nil && scroll != nil && scroll_with != nil)
 	testing.expect(t, layout_begin != nil && layout_next != nil && grid_next != nil)
 	testing.expect(t, flow_next != nil && fill_i32 != nil && fill_f32 != nil)
 	testing.expect(t, compat_layout != nil)
+}
+
+@(test)
+fit_builder_native_leaves_and_table_render :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	ui.sem_enable(&runtime, true)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 320, 240})
+	box: Input_Box
+	defer Input_Box_Destroy(&box)
+	Column(&builder, {gap = .XS})
+	Text_Input(&builder, "name", &box, "Name", {semantics = {name = "Name"}})
+	Progress(&builder, 0.5, {label = "Progress"})
+	Separator(&builder)
+	Spacer(&builder, .SM)
+	columns := [?]Table_Column{{"Name", Grow(), false}, {"Value", Fixed(80), true}}
+	table: Table_State
+	Table_Begin(&builder, &table, columns[:])
+	Table_Row(&builder, &table, 24)
+	Table_Cell(&builder, &table, "Alpha")
+	Table_Cell(&builder, &table, "42")
+	Table_Row_End(&builder, &table)
+	Table_End(&builder, &table)
+	End(&builder)
+	size := Measure(&builder)
+	testing.expect(t, size.w > 0 && size.h > 0, "native leaves did not measure")
+	Render_At(&builder, {0, 0, 320, size.h})
+	testing.expect_value(t, builder.root.focus_seq, 1)
+	testing.expect(t, !table.open && !table.row, "table retained lifecycle state")
+	testing.expect(t, ui.sem_frame(&frame).count >= 4, "native leaves omitted semantics")
+	builder_close(&builder)
+}
+
+@(test)
+fit_native_scroll_clamps_and_translates_child :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 200, 100})
+	state := Scroll_State {
+		inner = {offset = 999},
+	}
+	Scroll(&builder, &state, {size = {width = Grow(), height = Fixed(100)}})
+	Column(&builder)
+	Spacer(&builder, .XL, {size = {height = Fixed(200)}})
+	End(&builder)
+	End(&builder)
+	size := Measure(&builder)
+	testing.expect_value(t, size.h, i32(100))
+	Render_At(&builder, {0, 0, 200, 100})
+	testing.expect_value(t, state.inner.content_h, i32(200))
+	testing.expect_value(t, state.inner.offset, f32(100))
+	testing.expect_value(t, output.main.clip_count, 0)
+	builder_close(&builder)
 }
 
 @(test)

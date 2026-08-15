@@ -150,3 +150,89 @@ Slider :: proc {
 	slider_u64,
 	slider_id,
 }
+
+@(private = "file")
+builder_text_input_id :: proc(
+	builder: ^Builder,
+	widget: Widget_Id,
+	box: ^Input_Box,
+	placeholder: string,
+	options: Builder_Text_Input_Options,
+) {
+	assert(builder != nil && builder.bound, "Fit.Text_Input: builder not bound")
+	assert(widget != Widget_Id(ui.WIDGET_ID_NONE) && box != nil, "Fit.Text_Input: invalid state")
+	assert(options.semantics.name != "", "Fit.Text_Input: empty accessible label")
+	ui.fit_builder_text_input(
+		&builder.inner,
+		{
+			id = ui.Widget_Id(widget),
+			box = &box.inner,
+			placeholder = placeholder,
+			height = options.height,
+			masked = options.masked,
+			semantics = to_text_semantics(options.semantics),
+		},
+		{
+			track = to_track(options.track),
+			size = to_size(options.size),
+			changed = options.submitted,
+		},
+	)
+}
+
+@(private = "file")
+builder_text_input_string :: proc(
+	builder: ^Builder,
+	key: string,
+	box: ^Input_Box,
+	placeholder: string,
+	options: Builder_Text_Input_Options,
+) {
+	builder_text_input_id(builder, Id(builder, key), box, placeholder, options)
+}
+
+@(private = "file")
+builder_text_input_u64 :: proc(
+	builder: ^Builder,
+	key: u64,
+	box: ^Input_Box,
+	placeholder: string,
+	options: Builder_Text_Input_Options,
+) {
+	builder_text_input_id(builder, Id(builder, key), box, placeholder, options)
+}
+
+Text_Input :: proc {
+	builder_text_input_string,
+	builder_text_input_u64,
+	builder_text_input_id,
+}
+
+Progress :: proc(builder: ^Builder, value: f32, options: Progress_Options = {}) {
+	assert(builder != nil && builder.bound, "Fit.Progress: builder not bound")
+	assert(value >= 0 && value <= 1, "Fit.Progress: value outside 0..1")
+	height := options.height
+	if height == 0 do height = 8
+	ui.fit_builder_progress(
+		&builder.inner,
+		{
+			value = value,
+			ink = ui.Ink(options.ink),
+			height = height,
+			options = {label = options.label, field_id = options.field_id},
+		},
+		{track = to_track(options.track), size = to_size(options.size)},
+	)
+}
+
+Separator :: proc(builder: ^Builder, options: Leaf_Options = {}) {
+	assert(builder != nil && builder.bound, "Fit.Separator: builder not bound")
+	assert(builder.inner.prepared.depth > 0, "Fit.Separator: no parent")
+	ui.fit_builder_separator(&builder.inner, to_leaf_options(options))
+}
+
+Spacer :: proc(builder: ^Builder, space: Space, options: Leaf_Options = {}) {
+	assert(builder != nil && builder.bound, "Fit.Spacer: builder not bound")
+	assert(builder.inner.prepared.depth > 0, "Fit.Spacer: no parent")
+	ui.fit_builder_spacer(&builder.inner, ui.Space(space), to_leaf_options(options))
+}

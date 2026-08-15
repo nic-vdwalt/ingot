@@ -54,12 +54,14 @@ Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 }
 ```
 
-The builder is bounded and immediate. `Row`, `Column`, `Flow`, `Grid`, and
-`Attachment` open containers; `End` closes one container. Static containers
+The builder is bounded and immediate. `Row`, `Column`, `Flow`, `Grid`,
+`Attachment`, `Scroll`, `Section`, and `Card` open containers; `End` closes one
+container. Static containers
 should use a named lexical block with an immediate `defer fit.End(builder)`;
 direct
 closure remains available for dynamic construction. `Label`, `Button`,
-`Checkbox`, `Radio`, `Slider`, and `Custom` emit leaves. The additive `*_With`
+`Checkbox`, `Radio`, `Slider`, `Text_Input`, `Progress`, `Separator`, `Spacer`,
+table cells, `Canvas_Leaf`, and `Custom` emit leaves. The additive `*_With`
 helpers auto-close callback-built containers; `Scope` provides explicit
 component identity. `Render` consumes the declaration synchronously. `Measure`
 plus `Render_At` supports caller-owned placement without introducing a retained
@@ -68,9 +70,10 @@ same-frame interaction and explicit geometry; the Surface is valid only for that
 callback and must not be retained.
 
 `Canvas` is the root convenience for applications whose whole content uses
-explicit geometry. It declares the synthetic Builder root and a grow-sized
-`Custom` leaf, then lends the callback a same-frame `Surface` and physical root
-rectangle. Use `Px(surface, value)` only for logical design constants; rectangles
+explicit geometry. `Canvas_Leaf` provides the same borrowed Surface callback in
+a measured Builder slot, allowing ordinary declarative composition around
+bounded explicit-geometry islands. Use `Px(surface, value)` only for logical
+design constants; rectangles
 returned by layout and render callbacks are already physical. `Region_Open` and
 `Region_Close` may own one optional identity scope for a bounded region.
 

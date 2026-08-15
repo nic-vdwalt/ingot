@@ -23,6 +23,11 @@ Fit_Control_Options :: struct {
 	changed: ^bool,
 }
 
+Fit_Leaf_Options :: struct {
+	track: Track,
+	size:  Prepared_Size,
+}
+
 Fit_Custom_Options :: struct {
 	track:     Track,
 	size:      Prepared_Size,
@@ -129,6 +134,23 @@ fit_builder_attachment :: proc(builder: ^Fit_Builder, options: Prepared_Attachme
 	depth := builder.prepared.depth - 1
 	builder.direct_children[depth] = 0
 	builder.container_kinds[depth] = .Attachment
+}
+
+fit_builder_scroll :: proc(builder: ^Fit_Builder, options: Prepared_Scroll_Options) {
+	assert(builder != nil, "fit_builder_scroll: nil builder")
+	assert(options.state != nil, "fit_builder_scroll: nil state")
+	fit_builder_assert_open(builder)
+	if builder.prepared.depth == 0 {
+		assert(builder.prepared.count == 0, "fit_builder_scroll: root already closed")
+		fit_builder_prepare_node(builder)
+	} else {
+		fit_builder_add_child(builder)
+	}
+	_ = prepared_scroll_begin(&builder.prepared, options)
+	depth := builder.prepared.depth - 1
+	assert(depth >= 0 && depth < MAX_LAYOUT_DEPTH, "fit_builder_scroll: invalid depth")
+	builder.direct_children[depth] = 0
+	builder.container_kinds[depth] = .Scroll
 }
 
 fit_end :: proc(builder: ^Fit_Builder) {
@@ -344,6 +366,61 @@ fit_builder_slider :: proc(
 	fit_builder_output(builder, handle, options.changed)
 }
 
+fit_builder_text_input :: proc(
+	builder: ^Fit_Builder,
+	spec: Prepared_Text_Input,
+	options: Fit_Control_Options = {},
+) {
+	assert(builder != nil, "fit_builder_text_input: nil builder")
+	assert(spec.id != WIDGET_ID_NONE && spec.box != nil, "fit_builder_text_input: invalid spec")
+	fit_builder_add_child(builder)
+	handle := prepared_text_input(&builder.prepared, spec, options.track)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+	fit_builder_output(builder, handle, options.changed)
+}
+
+fit_builder_progress :: proc(
+	builder: ^Fit_Builder,
+	spec: Prepared_Progress,
+	options: Fit_Leaf_Options = {},
+) {
+	assert(builder != nil, "fit_builder_progress: nil builder")
+	assert(spec.value >= 0 && spec.value <= 1, "fit_builder_progress: invalid value")
+	fit_builder_add_child(builder)
+	handle := prepared_progress(&builder.prepared, spec, options.track)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+}
+
+fit_builder_separator :: proc(builder: ^Fit_Builder, options: Fit_Leaf_Options = {}) {
+	assert(builder != nil, "fit_builder_separator: nil builder")
+	fit_builder_add_child(builder)
+	handle := prepared_separator(&builder.prepared, options.track)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+}
+
+fit_builder_spacer :: proc(builder: ^Fit_Builder, space: Space, options: Fit_Leaf_Options = {}) {
+	assert(builder != nil, "fit_builder_spacer: nil builder")
+	fit_builder_assert_open(builder)
+	assert(builder.prepared.depth > 0, "fit_builder_spacer: no parent")
+	parent := builder.container_kinds[builder.prepared.depth - 1]
+	assert(parent == .Row || parent == .Column, "fit_builder_spacer: invalid parent")
+	fit_builder_add_child(builder)
+	handle := prepared_spacer(&builder.prepared, {space, parent == .Row}, options.track)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+}
+
+fit_builder_table_cell :: proc(
+	builder: ^Fit_Builder,
+	spec: Prepared_Table_Cell,
+	options: Fit_Leaf_Options = {},
+) {
+	assert(builder != nil, "fit_builder_table_cell: nil builder")
+	assert(spec.text != "", "fit_builder_table_cell: empty text")
+	fit_builder_add_child(builder)
+	handle := prepared_table_cell(&builder.prepared, spec, options.track)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+}
+
 @(private = "package")
 fit_custom_builder :: proc(
 	builder: ^Fit_Builder,
@@ -490,7 +567,7 @@ fit_builder_add_child :: proc(builder: ^Fit_Builder) {
 	limit := i32(MAX_LAYOUT_FLEX)
 	kind := builder.container_kinds[depth]
 	if kind == .Flow || kind == .Grid do limit = i32(prepared_capacity(&builder.prepared) - 1)
-	if kind == .Attachment do limit = 1
+	if kind == .Attachment || kind == .Scroll do limit = 1
 	assert(builder.direct_children[depth] < limit, "fit builder: children full")
 	fit_builder_prepare_node(builder)
 	builder.direct_children[depth] += 1

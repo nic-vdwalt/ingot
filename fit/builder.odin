@@ -53,6 +53,12 @@ Attachment :: proc(builder: ^Builder, options: Attachment_Options) {
 	ui.fit_builder_attachment(&builder.inner, to_attachment_options(options))
 }
 
+Scroll :: proc(builder: ^Builder, state: ^Scroll_State, options: Scroll_Options = {}) {
+	assert(builder != nil && builder.bound, "Fit.Scroll: builder not bound")
+	assert(state != nil, "Fit.Scroll: nil state")
+	ui.fit_builder_scroll(&builder.inner, to_scroll_options(state, options))
+}
+
 Label :: proc(builder: ^Builder, text: string, options: Label_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Label: builder not bound")
 	ui.fit_builder_label(&builder.inner, text, to_label_options(options))
@@ -203,7 +209,9 @@ custom_measure_bridge :: proc(
 	assert(root != nil && userdata != nil, "Fit.Custom: invalid measure bridge")
 	spec := cast(^Custom_Spec)userdata
 	assert(spec.measure != nil, "Fit.Custom: nil measure callback")
-	return to_size_value(spec.measure(from_constraints(constraints), spec.userdata))
+	measure_userdata := spec.userdata
+	if spec.measure == custom_intrinsic_measure do measure_userdata = spec
+	return to_size_value(spec.measure(from_constraints(constraints), measure_userdata))
 }
 
 @(private = "file")
