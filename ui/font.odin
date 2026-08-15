@@ -8,6 +8,11 @@ UI_TELEMETRY_ENABLED :: #config(INGOT_UI_TELEMETRY, false)
 
 FONT_DATA := #load("../assets/fonts/JetBrainsMono-Regular.ttf")
 
+MEASURE_CACHE_MAX :: 8192
+MEASURE_CACHE_MAX_KEY_LEN :: 256
+MEASURE_L0_CAPACITY :: 8
+MEASURE_L0_MAX_KEY_LEN :: 64
+
 Measure_Key :: struct {
 	text:  string,
 	size:  i32,
@@ -20,10 +25,22 @@ Measure_Entry :: struct {
 	stamp: u64,
 }
 
+Measure_L0_Entry :: struct {
+	text:     [MEASURE_L0_MAX_KEY_LEN]u8,
+	text_len: int,
+	size:     i32,
+	font:     Font_Id,
+	epoch:    u64,
+	width:    i32,
+	valid:    bool,
+}
+
 Text_System :: struct {
 	font_loaded:             bool,
 	font_dpi:                f32,
 	font_codepoints:         []rune,
+	measure_l0:              [MEASURE_L0_CAPACITY]Measure_L0_Entry,
+	measure_l0_next:         int,
 	measure_cache:           map[Measure_Key]Measure_Entry,
 	measure_cache_evictions:       int,
 	measure_cache_hits:            u64,
@@ -40,6 +57,8 @@ Text_System :: struct {
 text_system_init :: proc(system: ^Text_System) {
 	assert(system != nil)
 	assert(!system.font_loaded)
+	system.measure_l0 = {}
+	system.measure_l0_next = 0
 	system.backend_measure_cache_enabled = true
 	if system.font_dpi <= 0 do system.font_dpi = 1.0
 	total := 0
@@ -115,8 +134,50 @@ CODEPOINT_RANGES :: [?]Codepoint_Range {
 	{0x2B00, 0x2B73},
 }
 
+@(private = "file")
+measure_l0_get :: proc(system: ^Text_System, key: Measure_Key) -> (i32, bool) {
+	assert(system != nil, "measure L0 get: nil system")
+	if len(key.text) > MEASURE_L0_MAX_KEY_LEN do return 0, false
+	for index in 0 ..< MEASURE_L0_CAPACITY {
+		entry := &system.measure_l0[index]
+		if entry.valid &&
+		   entry.text_len == len(key.text) &&
+		   entry.size == key.size &&
+		   entry.font == key.font &&
+		   entry.epoch == key.epoch &&
+		   string(entry.text[:entry.text_len]) == key.text {
+			return entry.width, true
+		}
+	}
+	return 0, false
+}
+
+@(private = "file")
+measure_l0_put :: proc(system: ^Text_System, key: Measure_Key, width: i32) {
+	assert(system != nil, "measure L0 put: nil system")
+	assert(
+		system.measure_l0_next >= 0 && system.measure_l0_next < MEASURE_L0_CAPACITY,
+		"measure L0 put: invalid replacement cursor",
+	)
+	if len(key.text) > MEASURE_L0_MAX_KEY_LEN do return
+	entry := &system.measure_l0[system.measure_l0_next]
+	entry^ = {
+		text_len = len(key.text),
+		size = key.size,
+		font = key.font,
+		epoch = key.epoch,
+		width = width,
+		valid = true,
+	}
+	copy(entry.text[:entry.text_len], transmute([]u8)key.text)
+	system.measure_l0_next += 1
+	if system.measure_l0_next == MEASURE_L0_CAPACITY do system.measure_l0_next = 0
+}
+
 clear_measure_cache_with :: proc(system: ^Text_System) {
 	assert(system != nil)
+	system.measure_l0 = {}
+	system.measure_l0_next = 0
 	for key in system.measure_cache {
 		delete(key.text)
 	}
@@ -189,9 +250,6 @@ draw_text_string_frame :: proc(frame: ^Ui_Frame, text: string, x, y, size: i32, 
 	)
 	draw_text_command(frame, text, x, y, size, color, font)
 }
-
-MEASURE_CACHE_MAX :: 8192
-MEASURE_CACHE_MAX_KEY_LEN :: 256
 
 // Refresh an entry's LRU stamp only after it ages by this much, so cache
 // hits are read-only in the common case instead of a map write per measure.
@@ -281,8 +339,13 @@ measure_text_backend_cached :: proc(
 		return i32(measurement.x + 0.5)
 	}
 	key := Measure_Key{text = text, size = size, font = font, epoch = frame.runtime.font_epoch}
+	if width, ok := measure_l0_get(system, key); ok {
+		when UI_TELEMETRY_ENABLED do system.measure_cache_hits += 1
+		return width
+	}
 	if entry, ok := system.measure_cache[key]; ok {
 		when UI_TELEMETRY_ENABLED do system.measure_cache_hits += 1
+		measure_l0_put(system, key, entry.width)
 		return entry.width
 	}
 	when UI_TELEMETRY_ENABLED do system.measure_cache_misses += 1
@@ -298,6 +361,7 @@ measure_text_backend_cached :: proc(
 			epoch = frame.runtime.font_epoch,
 		}
 		system.measure_cache[owned] = {width = width, stamp = system.measure_stamp}
+		measure_l0_put(system, key, width)
 	}
 	return width
 }

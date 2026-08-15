@@ -198,17 +198,26 @@ semantics_focus_registry :: proc(t: ^testing.T) {
 
 	// Registry records focusable widgets in current draw order even while
 	// semantic recording is disabled, then clears before the next frame.
-	slot_a, slot_b: int
+	slot_a, slot_b, disabled_slot: int
 	sem_begin_frame(&frame)
 	semantic_push(&frame, .Button, {0, 0, 1, 1}, "a1", focus = {&slot_a, 1})
 	semantic_push(&frame, .Checkbox, {0, 0, 1, 1}, "a2", focus = {&slot_a, 2})
 	semantic_push(&frame, .Button, {0, 0, 1, 1}, "b1", focus = {&slot_b, 1})
+	semantic_push(
+		&frame,
+		.Button,
+		{0, 0, 1, 1},
+		"disabled",
+		{.Disabled},
+		focus = {&disabled_slot, 1},
+	)
 	semantic_push(&frame, .Label, {0, 0, 1, 1}, "static")
 	list := sem_focus_list(&frame)
 	testing.expect_value(t, list.count, 3)
 	testing.expect(t, list.entries[0] == Sem_Focus_Entry{focus = Focus_Opt{&slot_a, 1}})
 	testing.expect(t, list.entries[1] == Sem_Focus_Entry{focus = Focus_Opt{&slot_a, 2}})
 	testing.expect(t, list.entries[2] == Sem_Focus_Entry{focus = Focus_Opt{&slot_b, 1}})
+	testing.expect_value(t, frame.semantics.action_targets.count, 0)
 	sem_begin_frame(&frame)
 	testing.expect_value(t, sem_focus_list(&frame).count, 0)
 }
