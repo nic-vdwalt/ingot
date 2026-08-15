@@ -82,7 +82,8 @@ def aggregate(records, seed):
         groups[key].append(record)
     rows = []
     for key, group in sorted(groups.items()):
-        for phase in ("build", "finalize", "frame"):
+        phases = sorted({phase for record in group for phase in record["samples_ns"]})
+        for phase in phases:
             samples = [sample for record in group for sample in record["samples_ns"].get(phase, [])]
             if not samples:
                 continue
@@ -140,8 +141,8 @@ def write_markdown(rows, records, path):
         grouped[key][row["phase"]] = row
     lines = [
         "# Widget Benchmark Report", "",
-        "Core CPU timings are reported separately from render finalization. Backend, revision, and layer",
-        "remain explicit; this report does not compute an overall winner.", "",
+        "CPU phases use each adapter's recorded boundaries. Total comparisons use frame-to-frame",
+        "values only; this report does not compute an overall winner.", "",
         "## Core frame latency", "",
         "| Framework | Revision | Workload | Scale | Total median/p95 (µs) | Build median/p95 (µs) | Finalize median/p95 (µs) |",
         "|---|---|---|---:|---:|---:|---:|",
@@ -157,6 +158,24 @@ def write_markdown(rows, records, path):
             f"| {key[0]} | `{key[1][:12]}` | {key[2]} | {key[3]} | {total} | "
             f"{build['median_ns'] / 1000:.2f}/{build['p95_ns'] / 1000:.2f} | "
             f"{finalize['median_ns'] / 1000:.2f}/{finalize['p95_ns'] / 1000:.2f} |"
+        )
+    lines.extend([
+        "", "## Fit phase breakdown", "",
+        "| Workload | Scale | Measure median/p95 (µs) | Layout/render median/p95 (µs) | Frame finalize median/p95 (µs) |",
+        "|---|---:|---:|---:|---:|",
+    ])
+    for key, phases in sorted(grouped.items()):
+        if key[0] != "ingot" or "measure" not in phases or "layout_render" not in phases:
+            continue
+        measure = phases["measure"]
+        render = phases["layout_render"]
+        frame_finalize = phases.get("frame_finalize")
+        finalize_text = "-" if frame_finalize is None else (
+            f"{frame_finalize['median_ns'] / 1000:.2f}/{frame_finalize['p95_ns'] / 1000:.2f}"
+        )
+        lines.append(
+            f"| {key[2]} | {key[3]} | {measure['median_ns'] / 1000:.2f}/{measure['p95_ns'] / 1000:.2f} | "
+            f"{render['median_ns'] / 1000:.2f}/{render['p95_ns'] / 1000:.2f} | {finalize_text} |"
         )
     capacities = capacity_rows(records)
     lines.extend(["", "## Capacity validity", "", "| Framework | Last valid | First invalid |", "|---|---:|---:|"])

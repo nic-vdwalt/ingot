@@ -24,10 +24,10 @@ Fit tests, strict Odin vet checks, benchmark smoke, JSON validation, and checksu
 
 ## Representative Results
 
-Lower is better. Ingot reports directly measured total Fit frame median/p95. Competitor values are
-build plus their separately reported finalize median, shown here as the suite's dominant build median
-because finalize was negligible for Dear ImGui and separately tessellated for egui. Ratios compare
-Ingot total median with competitor build median.
+Lower is better. The table records the original adapter phases, but its ratios compare Ingot's
+complete Fit frame with competitor build-only medians. That convention is inconsistent and must not
+be used as a framework-total comparison. Dear ImGui finalize is negligible; egui total comparisons
+must include its separately measured tessellation/finalize phase.
 
 | Workload | Scale | Ingot Fit total median/p95 | Dear ImGui build | Fit / ImGui | egui build | Fit / egui |
 |---|---:|---:|---:|---:|---:|---:|
@@ -47,8 +47,9 @@ Ingot total median with competitor build median.
 
 - Fit was 1.41-6.38x slower than Dear ImGui in these headless cases. The smallest gap was the
   virtual list; the largest was repeated table cells.
-- Fit was 2.00-3.43x faster than egui by the same median comparison. The accessibility row was the
-  narrowest advantage and includes semantics only for Ingot; Dear ImGui emits none.
+- Fit remained directionally faster than egui in representative complete CPU comparisons, but the
+  original 2.00-3.43x range omitted egui finalize and is withdrawn. The accessibility row includes
+  semantics only for Ingot; Dear ImGui emits none.
 - Fit description construction was not the dominant cost. For the 50-row dashboard, build was
   52.79 us and measure/render/finalization was 145.71 us of the 199.42 us total median.
 - Stable repeated and unique labels had nearly identical Fit totals. At this layer, measurement,

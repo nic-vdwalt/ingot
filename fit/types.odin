@@ -107,9 +107,13 @@ Paint_Summary :: struct {
 }
 
 Frame_Timing :: struct {
-	build_ns:    i64,
-	finalize_ns: i64,
-	frame_ns:    i64,
+	build_ns:          i64,
+	measure_ns:        i64,
+	layout_render_ns:  i64,
+	builder_close_ns:  i64,
+	frame_finalize_ns: i64,
+	finalize_ns:       i64,
+	frame_ns:          i64,
 }
 
 Paint_Telemetry :: struct {
@@ -129,6 +133,15 @@ Frame_Telemetry :: struct {
 	overlay:                   Paint_Telemetry,
 	text_input_full_paths:     u64,
 	text_input_inactive_paths: u64,
+	natural_leaf_measures:     u64,
+	resolved_leaf_measures:    u64,
+	container_measures:        u64,
+	placed_nodes:              u64,
+	rendered_nodes:            u64,
+	activation_outputs:        u64,
+	render_relayouts:          u64,
+	measure_cache_hits:        u64,
+	measure_cache_misses:      u64,
 }
 
 Frame_Diagnostics :: struct {

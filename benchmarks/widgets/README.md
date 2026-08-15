@@ -71,10 +71,11 @@ python3 benchmarks/widgets/report/reproducibility.py \
 ## Interpretation
 
 The Ingot result layer is `fit`; competitor records retain their `core` layer. Ingot build timing covers
-Fit description construction. Finalization covers Fit measurement, layout, interaction, paint, semantic
-work, and frame finalization. Total timing directly spans the complete headless Fit frame. Output counts
-and bounded-drop diagnostics invalidate nominal Ingot runs. Dear ImGui accessibility is unsupported;
-egui does not claim native AccessKit integration without an `eframe` host.
+Fit description construction. Fit also reports measurement, layout/render, and actual frame-finalize
+subphases. Finalization remains their compatibility aggregate, and total timing directly spans the
+complete headless Fit frame. Output counts and bounded-drop diagnostics invalidate nominal Ingot runs.
+Dear ImGui accessibility is unsupported; egui does not claim native AccessKit integration without an
+`eframe` host.
 
 Native GPU, presentation, idle-power, startup, RSS, and wakeup measurements require equivalent native
 hosts and dated platform evidence. They must not be inferred from these core results. Ingot renderer
@@ -93,4 +94,6 @@ configuration, thermal/power state, and framework/compiler revisions with every 
 
 For development evidence, use at least 100 warm-up and 500 measured frames with five fresh processes.
 Accepted Phase 2 evidence uses the default 300 warm-up, 2,000 measured frames, and seven repetitions,
-and reports total, build, and finalization median/p95 values.
+and reports total, build, and finalization median/p95 values. Optimization evidence compares complete
+frames from matching environments. Internal Fit phases identify causes and are not compared with
+competitor build phases.

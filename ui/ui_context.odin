@@ -70,6 +70,7 @@ Ui_Frame :: struct {
 	degenerate_drops:               int,
 	text_input_full_path_count:     u64,
 	text_input_inactive_candidates: u64,
+	prepared_telemetry:             Prepared_Telemetry,
 	finalized:                      bool,
 	open:                           bool,
 }
@@ -237,6 +238,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	when UI_TELEMETRY_ENABLED {
 		frame.text_input_full_path_count = 0
 		frame.text_input_inactive_candidates = 0
+		frame.prepared_telemetry = {}
 	}
 	frame.finalized = false
 	frame.open = true
@@ -263,13 +265,44 @@ ui_frame_finalize :: proc(frame: ^Ui_Frame) {
 			paint_clip_leak_origin(&frame.output.overlay),
 		)
 	}
-	overlay_flush(frame); cursor_apply(frame); focus_scope_frame_end(frame)
+	routes_started := prepared_phase_begin(frame, .Finalize_Routes)
+	ui_finalize_routes(frame)
+	prepared_phase_end(frame, .Finalize_Routes, routes_started)
+	semantics_started := prepared_phase_begin(frame, .Finalize_Semantics)
+	ui_finalize_semantics(frame)
+	prepared_phase_end(frame, .Finalize_Semantics, semantics_started)
+	lifetimes_started := prepared_phase_begin(frame, .Finalize_Lifetimes)
+	ui_finalize_lifetimes(frame)
+	prepared_phase_end(frame, .Finalize_Lifetimes, lifetimes_started)
+	frame.finalized = true
+}
+
+@(private = "file")
+ui_finalize_routes :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "ui finalize routes: invalid frame")
+	assert(!frame.finalized, "ui finalize routes: frame finalized")
+	overlay_flush(frame)
+	cursor_apply(frame)
+	focus_scope_frame_end(frame)
+}
+
+@(private = "file")
+ui_finalize_semantics :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "ui finalize semantics: invalid frame")
+	assert(frame.runtime != nil, "ui finalize semantics: nil runtime")
 	snapshot := &frame.runtime.semantics_snapshot
 	snapshot.count = frame.semantics.cur.count
 	copy(snapshot.nodes[:snapshot.count], frame.semantics.cur.nodes[:snapshot.count])
-	a11y_expire_after_frame(frame.runtime); focus_scope_clear_live(frame)
-	frame.finalized = true
 }
+
+@(private = "file")
+ui_finalize_lifetimes :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "ui finalize lifetimes: invalid frame")
+	assert(frame.runtime != nil, "ui finalize lifetimes: nil runtime")
+	a11y_expire_after_frame(frame.runtime)
+	focus_scope_clear_live(frame)
+}
+
 ui_frame_release :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open && frame.finalized)
 	frame.text_cull_top = min(i32); frame.text_cull_bottom = max(i32)

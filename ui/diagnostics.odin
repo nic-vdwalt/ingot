@@ -1,5 +1,31 @@
 package ui
 
+import "core:time"
+
+Prepared_Phase :: enum u8 {
+	Measure_Natural,
+	Resolve_Size,
+	Measure_Resolved,
+	Place,
+	Render_Tree,
+	Output_Clear,
+	Finalize_Routes,
+	Finalize_Semantics,
+	Finalize_Lifetimes,
+}
+
+Prepared_Telemetry :: struct {
+	phase_ns:               [Prepared_Phase]i64,
+	natural_leaf_measures:  u64,
+	resolved_leaf_measures: u64,
+	container_measures:     u64,
+	width_assignments:      u64,
+	placed_nodes:           u64,
+	rendered_nodes:         u64,
+	activation_outputs:     u64,
+	render_relayouts:       u64,
+}
+
 Ui_Frame_Output_Stats :: struct {
 	main_command_count:    i32,
 	main_text_bytes:       i32,
@@ -81,6 +107,9 @@ Ui_Frame_Telemetry :: struct {
 	overlay:                          Ui_Paint_Telemetry,
 	text_input_full_path_count:       u64,
 	text_input_inactive_candidates:   u64,
+	prepared:                         Prepared_Telemetry,
+	measure_cache_hits:               u64,
+	measure_cache_misses:             u64,
 }
 
 Ui_Frame_Diagnostics :: struct {
@@ -131,6 +160,7 @@ paint_telemetry :: proc(list: ^Paint_List) -> Ui_Paint_Telemetry {
 ui_frame_telemetry :: proc(frame: ^Ui_Frame) -> Ui_Frame_Telemetry {
 	assert(frame != nil && frame.open, "ui_frame_telemetry: invalid frame")
 	assert(frame.finalized, "ui_frame_telemetry: frame not finalized")
+	hits, misses := measure_cache_telemetry_with(&frame.runtime.text)
 	result := Ui_Frame_Telemetry {
 		scratch_allocation_count         = frame.scratch.allocation_count,
 		scratch_resize_count             = frame.scratch.resize_count,
@@ -138,12 +168,32 @@ ui_frame_telemetry :: proc(frame: ^Ui_Frame) -> Ui_Frame_Telemetry {
 		scratch_resize_request_bytes     = frame.scratch.resize_request_bytes,
 		text_input_full_path_count       = frame.text_input_full_path_count,
 		text_input_inactive_candidates   = frame.text_input_inactive_candidates,
+		prepared                         = frame.prepared_telemetry,
+		measure_cache_hits               = hits,
+		measure_cache_misses             = misses,
 	}
 	if frame.output != nil {
 		result.main = paint_telemetry(&frame.output.main)
 		result.overlay = paint_telemetry(&frame.output.overlay)
 	}
 	return result
+}
+
+prepared_phase_begin :: proc(frame: ^Ui_Frame, phase: Prepared_Phase) -> i64 {
+	assert(frame != nil && frame.open, "prepared phase: invalid frame")
+	assert(int(phase) >= 0 && int(phase) < len(Prepared_Phase), "prepared phase: invalid phase")
+	if UI_TELEMETRY_ENABLED do return time.tick_now()._nsec
+	return 0
+}
+
+prepared_phase_end :: proc(frame: ^Ui_Frame, phase: Prepared_Phase, started: i64) {
+	assert(frame != nil && frame.open, "prepared phase: invalid frame")
+	assert(int(phase) >= 0 && int(phase) < len(Prepared_Phase), "prepared phase: invalid phase")
+	if UI_TELEMETRY_ENABLED {
+		finished := time.tick_now()._nsec
+		assert(finished >= started, "prepared phase: non-monotonic time")
+		frame.prepared_telemetry.phase_ns[phase] += finished - started
+	}
 }
 
 ui_frame_diagnostics :: proc(frame: ^Ui_Frame) -> Ui_Frame_Diagnostics {

@@ -730,7 +730,9 @@ fit_test_driver_exposes_bounded_frame_results :: proc(t: ^testing.T) {
 		fit_test_draw,
 	)
 	testing.expect(t, ok, "timed test frame failed")
-	testing.expect(t, timing.build_ns >= 0 && timing.finalize_ns >= 0 && timing.frame_ns >= 0)
+	testing.expect(t, timing.build_ns >= 0 && timing.measure_ns >= 0)
+	testing.expect(t, timing.layout_render_ns >= 0 && timing.frame_finalize_ns >= 0)
+	testing.expect(t, timing.finalize_ns >= timing.measure_ns, "finalize timing excluded measure")
 	testing.expect(t, timing.frame_ns >= timing.build_ns, "frame timing excluded build")
 	summary := Test_Driver_Paint_Summary(&driver)
 	testing.expect(t, summary.main_commands > 0 && summary.semantic_nodes > 0)
