@@ -115,7 +115,9 @@ text_backend_measure_cache_reuses_and_invalidates :: proc(t: ^testing.T) {
 	ui_frame_end(&frame)
 	testing.expect_value(t, width_a, width_b)
 	testing.expect_value(t, first.measure_calls, 1)
-	second := Test_Text_Backend_State{advance = 11}
+	second := Test_Text_Backend_State {
+		advance = 11,
+	}
 	ui_runtime_set_text_backend(
 		&runtime,
 		{data = &second, font_for_size = test_text_font_for_size, measure = test_text_measure},

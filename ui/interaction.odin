@@ -224,7 +224,10 @@ interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Inter
 	released := is_mouse_button_released(frame, .LEFT)
 	down := is_mouse_button_down(frame, .LEFT)
 	if state.active_latch == nil &&
-	   !state.press_seen && !pressed && !released && !down &&
+	   !state.press_seen &&
+	   !pressed &&
+	   !released &&
+	   !down &&
 	   (latch == nil || !latch^) {
 		return Interaction{hovered = over}
 	}
