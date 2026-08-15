@@ -59,6 +59,21 @@ derived mesh identity. Derivation is intended for bounded initialization or
 worker-residency stages, never per-frame rendering. More complex generators may
 build on the same caller-owned storage and validation contract.
 
+`mesh_deform_variant` composes positive axis scale with seeded, low-frequency
+radial and vertical displacement. Noise is keyed by normalized source position,
+so coincident vertices split by UV or authored normal seams move together. The
+generator preserves indices, UVs, and scalar values; rebuilds normals within
+each exported index topology; optionally re-grounds the result; and recomputes
+its AABB. Degenerate triangles reject the whole derivation and output counts
+remain unpublished on failure.
+
+Derived identity consists of the source mesh ID,
+`MESH_DEFORM_GENERATOR_VERSION`, and every recipe field. Results are repeatable
+for the same target and build. Callers must invalidate persisted variants when
+the generator version changes; cross-architecture floating-point byte identity
+is not part of the current contract. Derivation remains initialization or
+worker-residency work and must not run per frame.
+
 ## Follow-on milestones
 
 1. Terrain LOD, seam transitions, streaming, upload budgets, biome texture
