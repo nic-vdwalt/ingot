@@ -106,6 +106,46 @@ Paint_Summary :: struct {
 	semantic_nodes:         int,
 }
 
+Frame_Timing :: struct {
+	build_ns:    i64,
+	finalize_ns: i64,
+	frame_ns:    i64,
+}
+
+Paint_Telemetry :: struct {
+	command_appends: u64,
+	text_appends:    u64,
+	text_bytes:      u64,
+	command_growths: u64,
+	text_growths:    u64,
+}
+
+Frame_Telemetry :: struct {
+	scratch_allocations:       u64,
+	scratch_resizes:           u64,
+	scratch_allocation_bytes:  u64,
+	scratch_resize_bytes:      u64,
+	main:                      Paint_Telemetry,
+	overlay:                   Paint_Telemetry,
+	text_input_full_paths:     u64,
+	text_input_inactive_paths: u64,
+}
+
+Frame_Diagnostics :: struct {
+	input_characters_dropped:   i32,
+	degenerate_widgets_dropped: i32,
+	semantic_nodes_dropped:     i32,
+	semantic_focus_dropped:     i32,
+	semantic_actions_dropped:   i32,
+	semantic_id_collisions:     i32,
+	semantic_text_truncations:  i32,
+	main_commands_dropped:      i32,
+	main_text_bytes_dropped:    i32,
+	overlay_commands_dropped:   i32,
+	overlay_text_bytes_dropped: i32,
+	platform_controls_dropped:  i32,
+}
+
 Renderer_Peaks :: struct {
 	vertices:                int,
 	vertices_capacity:       int,

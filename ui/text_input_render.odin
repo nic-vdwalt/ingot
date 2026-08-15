@@ -518,7 +518,7 @@ ti_draw_spell_popup :: proc(ctx: ^TI_Ctx) {
 	}
 }
 
-@(private = "file")
+@(private = "package")
 ti_inactive_candidate :: proc(ctx: ^TI_Ctx) -> bool {
 	assert(ctx != nil && ctx.sb != nil, "ti_inactive_candidate: invalid context")
 	assert(ctx.sel != nil && ctx.spell_menu != nil, "ti_inactive_candidate: missing state")

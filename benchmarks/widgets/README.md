@@ -1,15 +1,15 @@
 # Scalable Widget Benchmark
 
-This suite compares headless core CPU work for Ingot, Dear ImGui, and egui with pinned revisions,
-deterministic geometry, fixed workloads, randomized process order, correctness validation, and raw
-JSONL output. It does not produce an overall score.
+This suite compares headless CPU work for Ingot Fit, Dear ImGui, and egui with pinned revisions,
+deterministic workloads, randomized process order, correctness validation, and raw JSONL output.
+It does not produce an overall score. The Ingot adapter uses only the public `ingot:fit` package;
+its high-level description, measure, layout, interaction, paint, and semantic work differs from the
+other adapters' fixed-placement paths.
 
-The latest checked-in evidence is the
-[2026-07-29 Apple M2 Max core run](results/2026-07-29-m2-max-core.md), the first run with
-spec-conformant adapters and cross-framework state-checksum agreement. Ingot led every
-representative case except accessibility buttons, where Dear ImGui led while emitting no
-accessibility output. egui used materially more core CPU in these fixed-geometry adapters. Treat
-those as workload-specific headless results, not native application or GPU rankings.
+The latest checked-in direct-`ingot:ui` evidence remains the
+[2026-07-29 Apple M2 Max core run](results/2026-07-29-m2-max-core.md). Fit results are a new
+methodology and must not be compared numerically with that baseline. Cross-framework results are
+workload-specific headless measurements, not native application or GPU rankings.
 
 ## Requirements
 
@@ -39,11 +39,12 @@ A full run uses 300 warm-up frames, 2,000 measured frames, and seven fresh-proce
 every configured core case. Restrict development runs with `--framework`, `--workload`, `--scale`,
 `--warmup`, `--frames`, or `--repetitions`.
 
-Workloads may declare a `frameworks` list. The Phase 2 profiling cases are Ingot-only and are skipped
-for Dear ImGui and egui even when `--framework all` is used. They isolate repeated, stable-unique, and
-changing-unique labels; inactive and active inputs; checkbox, slider, and button construction; and
-paired semantics-disabled/enabled buttons. Stable labels are prepared before warm-up, while changing
-labels are formatted during each measured frame.
+Workloads may declare a `frameworks` list and additional `framework_scales`. Shared scales run on all
+eligible adapters and participate in checksum validation; framework scales characterize larger cases
+without implying parity. Fit uses caller-provided bounded description storage with an 8,192-node hard
+maximum, so shared cases never exceed that contract. Ingot-only profiling cases isolate repeated,
+stable-unique, and changing-unique labels; inactive and active inputs; control construction; paired
+semantics-disabled/enabled buttons; and flow layout.
 
 `complex_dashboard` submits ten elements per row: a unique title, status, checkbox, slider, persistent
 text input, action button, and four data cells. Its fixed geometry isolates deterministic UI
@@ -69,10 +70,11 @@ python3 benchmarks/widgets/report/reproducibility.py \
 
 ## Interpretation
 
-The implemented primary layer is headless core CPU measurement. Build and finalization timings are
-separate. Output counts and bounded-drop diagnostics invalidate nominal Ingot runs; capacity cases are
-reported separately. Dear ImGui accessibility is unsupported. The egui adapter exercises core semantic
-widget construction but does not claim native AccessKit integration without an `eframe` host.
+The Ingot result layer is `fit`; competitor records retain their `core` layer. Ingot build timing covers
+Fit description construction. Finalization covers Fit measurement, layout, interaction, paint, semantic
+work, and frame finalization. Total timing directly spans the complete headless Fit frame. Output counts
+and bounded-drop diagnostics invalidate nominal Ingot runs. Dear ImGui accessibility is unsupported;
+egui does not claim native AccessKit integration without an `eframe` host.
 
 Native GPU, presentation, idle-power, startup, RSS, and wakeup measurements require equivalent native
 hosts and dated platform evidence. They must not be inferred from these core results. Ingot renderer

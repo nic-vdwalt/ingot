@@ -715,6 +715,33 @@ fit_caller_storage_selects_and_resets_capacity :: proc(t: ^testing.T) {
 	testing.expect_value(t, Storage_Capacity(&builder), int(STORAGE_NODE_DEFAULT))
 }
 
+@(test)
+fit_test_driver_exposes_bounded_frame_results :: proc(t: ^testing.T) {
+	driver: Test_Driver
+	Test_Driver_Init(&driver)
+	defer Test_Driver_Destroy(&driver)
+	nodes: [STORAGE_NODE_DEFAULT + 64]Storage_Node
+	outputs: [STORAGE_NODE_DEFAULT + 64]^bool
+	Test_Driver_Set_Storage(&driver, {nodes = nodes[:], outputs = outputs[:]})
+	Test_Driver_Set_Semantics(&driver, true)
+	timing, ok := Test_Driver_Frame_Timed(
+		&driver,
+		{screen_size = {320, 240}, dpi_scale = 1},
+		fit_test_draw,
+	)
+	testing.expect(t, ok, "timed test frame failed")
+	testing.expect(t, timing.build_ns >= 0 && timing.finalize_ns >= 0 && timing.frame_ns >= 0)
+	testing.expect(t, timing.frame_ns >= timing.build_ns, "frame timing excluded build")
+	summary := Test_Driver_Paint_Summary(&driver)
+	testing.expect(t, summary.main_commands > 0 && summary.semantic_nodes > 0)
+	diagnostics := Test_Driver_Diagnostics(&driver)
+	testing.expect_value(t, diagnostics.main_commands_dropped, i32(0))
+	when ui.UI_TELEMETRY_ENABLED {
+		telemetry := Test_Driver_Telemetry(&driver)
+		testing.expect(t, telemetry.main.command_appends > 0)
+	}
+}
+
 @(private = "file")
 fit_test_draw :: proc(builder: ^Builder, userdata: rawptr) {
 	assert(builder != nil, "fit test draw: nil builder")
