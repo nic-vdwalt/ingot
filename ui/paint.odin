@@ -341,6 +341,7 @@ paint_reserve :: proc(list: ^Paint_List, reserve_clip_ends := true) -> ^Paint_Co
 @(private = "file")
 paint_commit :: proc(list: ^Paint_List, command: ^Paint_Command) -> bool {
 	assert(list != nil, "paint_commit: nil list")
+	assert(list.count >= 0 && list.count < PAINT_COMMAND_CAP, "paint_commit: invalid count")
 	assert(command == &list.commands[list.count], "paint_commit: invalid reservation")
 	list.count += 1
 	when UI_TELEMETRY_ENABLED do list.command_append_count += 1

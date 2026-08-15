@@ -590,8 +590,10 @@ test_gpu_3d_pbr_material_defaults_are_neutral :: proc(t: ^testing.T) {
 
 @(test)
 test_gpu_3d_shader_declares_pbr_bind_groups :: proc(t: ^testing.T) {
-	testing.expect(t, strings.contains(GPU_3D_SHADER, "@group(2) @binding(0) var mesh_normal_texture"))
-	testing.expect(t, strings.contains(GPU_3D_SHADER, "@group(3) @binding(0) var mesh_roughness_ao_texture"))
+	normal_declaration := "@group(2) @binding(0) var mesh_normal_texture"
+	roughness_declaration := "@group(3) @binding(0) var mesh_roughness_ao_texture"
+	testing.expect(t, strings.contains(GPU_3D_SHADER, normal_declaration))
+	testing.expect(t, strings.contains(GPU_3D_SHADER, roughness_declaration))
 	testing.expect(t, strings.contains(GPU_3D_SHADER, "use_roughness_ao: u32"))
 }
 

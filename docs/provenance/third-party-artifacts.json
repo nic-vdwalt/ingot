@@ -106,6 +106,18 @@
           "sha256": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad"
         }
       ]
+    },
+    {
+      "name": "UI paint append benchmark evidence",
+      "version": "2026-08-15",
+      "source": "benchmarks/widgets/results/2026-08-15-m2-max-ui-paint-append-development.md",
+      "build": "Seven randomized adjacent fresh-process pairs with the pinned Odin toolchain",
+      "artifacts": [
+        {
+          "path": "benchmarks/widgets/results/artifacts/2026-08-15-ui-paint-append/adjacent-pairs.json",
+          "sha256": "13f2cb734b2c0c63a47a5aa3d1faab0d06ed5c44e388a2b92dc5688133cbc336"
+        }
+      ]
     }
   ]
 }
