@@ -127,17 +127,25 @@ def summarize(records, seed):
 
 
 def accepted(rows):
+    revisions = [row for row in rows if row["pair_kind"] == "revision"]
     dashboard = next(
-        (row for row in rows if row["pair_kind"] == "revision" and
-         row["workload"] == "complex_dashboard" and row["scale"] == 50),
+        (row for row in revisions if row["workload"] == "complex_dashboard" and row["scale"] == 50),
         None,
     )
-    if dashboard is None or dashboard["median_ratio"] > 0.95 or dashboard["ci95_high"] >= 1.0:
+    fixed = next(
+        (row for row in revisions if row["workload"] == "prepared_flat_fixed" and
+         row["scale"] == 2048),
+        None,
+    )
+    if dashboard is not None and (
+        dashboard["median_ratio"] > 0.90 or dashboard["ci95_high"] >= 1.0
+    ):
         return False
-    return all(
-        row["median_ratio"] <= 1.03
-        for row in rows
-        if row["pair_kind"] == "revision" and row is not dashboard
+    if fixed is not None and (fixed["median_ratio"] > 0.80 or fixed["ci95_high"] >= 1.0):
+        return False
+    protected = (dashboard, fixed)
+    return bool(revisions) and all(
+        row["median_ratio"] <= 1.03 for row in revisions if row not in protected
     )
 
 

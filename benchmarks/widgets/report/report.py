@@ -181,6 +181,30 @@ def write_markdown(rows, records, path):
             f"| {key[3]} | {key[4]} | {measure['median_ns'] / 1000:.2f}/{measure['p95_ns'] / 1000:.2f} | "
             f"{render['median_ns'] / 1000:.2f}/{render['p95_ns'] / 1000:.2f} | {finalize_text} |"
         )
+    prepared = [record for record in records if record["framework"] == "ingot" and
+                record["layer"] == "fit" and record["workload"].startswith("prepared_")]
+    lines.extend([
+        "", "## Prepared traversal evidence", "",
+        "Counters come from a representative frame; complete-frame samples above remain authoritative.", "",
+        "| Workload | Scale | Nodes | Depth | Total visits | Visits/node | Specialized | Fallback |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ])
+    for record in sorted(prepared, key=lambda value: (value["workload"], value["scale"])):
+        telemetry = record.get("telemetry", {})
+        nodes = telemetry.get("description_nodes", 0)
+        visit_fields = (
+            "dependency_node_visits", "natural_node_visits", "resolve_node_visits",
+            "remeasure_node_visits", "width_assignment_visits", "resolved_measure_visits",
+            "placement_node_visits", "render_node_visits",
+        )
+        visits = sum(telemetry.get(field, 0) for field in visit_fields)
+        normalized = 0 if nodes == 0 else visits / nodes
+        lines.append(
+            f"| {record['workload']} | {record['scale']} | {nodes} | "
+            f"{telemetry.get('maximum_depth', 0)} | {visits} | {normalized:.2f} | "
+            f"{telemetry.get('specialized_nodes', 0)} | "
+            f"{telemetry.get('generic_fallback_nodes', 0)} |"
+        )
     capacities = capacity_rows(records)
     lines.extend(["", "## Capacity validity", "", "| Framework | Layer | Last valid | First invalid |", "|---|---|---:|---:|"])
     for row in capacities:

@@ -250,10 +250,19 @@ p95, active input, or accessibility, it should not be retained.
 Fit optimization preserves the application-facing immediate-mode contract: no
 retained widget tree, no label-keyed behavioral state, bounded caller-owned
 description storage, and deterministic derived frame output. Phase telemetry
-precedes changes. Remove duplicate leaf measurement, specialize fixed grids,
-make activation output sparse, and fuse traversals only when evidence identifies
-a material pass. Runtime text measurement caching is bounded, exact-keyed,
-explicitly invalidated, and remains a resource service rather than widget state.
+now exposes prepared phase time, topology, node/edge visit amplification,
+measurement callbacks, and specialized versus fallback work. Description
+construction accumulates dependency metadata without allocation. Eligible
+fixed-height grids and fixed nested rows use direct geometry; wrapping, custom,
+effects, scrolling, attachments, transitions, and mixed intrinsic sizing retain
+the bounded generic solver. Runtime text measurement caching is bounded,
+exact-keyed, explicitly invalidated, and remains a resource service rather than
+widget state.
+
+Prepared optimization is accepted on complete paired frame time, never an
+internal phase alone. The direct `ingot:ui` layer is a same-runtime control for
+the layout abstraction tax. Dear ImGui remains contextual because its adapter
+uses fixed placement, a narrower host boundary, and no core accessibility output.
 
 ## Validation Matrix
 

@@ -118,14 +118,15 @@ Test_Driver_Frame_Timed :: proc(
 	impl.diagnostics = test_driver_diagnostics(ui.ui_frame_diagnostics(impl.frame))
 	ui.ui_frame_release(impl.frame)
 	return {
-		build_ns,
-		measure_ns,
-		layout_render_ns,
-		builder_close_ns,
-		frame_finalize_ns,
-		finalize_ns,
-		frame_ns,
-	}, true
+			build_ns,
+			measure_ns,
+			layout_render_ns,
+			builder_close_ns,
+			frame_finalize_ns,
+			finalize_ns,
+			frame_ns,
+		},
+		true
 }
 
 Test_Driver_Paint_Summary :: proc(driver: ^Test_Driver) -> Paint_Summary {

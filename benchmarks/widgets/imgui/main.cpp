@@ -231,10 +231,12 @@ int main(int argc, char** argv) {
     std::vector<std::string> text(state_count, std::string(15, '\0'));
     std::vector<std::int64_t> build_samples(options.frames);
     std::vector<std::int64_t> finalize_samples(options.frames);
+    std::vector<std::int64_t> frame_samples(options.frames);
     std::uint64_t checksum = kFnvBasis;
     int submitted = 0;
     ImDrawData* draw_data = nullptr;
     for (int frame = -options.warmup; frame < options.frames; ++frame) {
+        const auto frame_started = std::chrono::steady_clock::now();
         ImGui::NewFrame();
         ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(1280.0f, 720.0f), ImGuiCond_Always);
@@ -248,11 +250,13 @@ int main(int argc, char** argv) {
         const auto finalize_started = std::chrono::steady_clock::now();
         ImGui::Render();
         const std::int64_t finalize_ns = elapsed_ns(finalize_started);
+        const std::int64_t frame_ns = elapsed_ns(frame_started);
         draw_data = ImGui::GetDrawData();
         if (submitted < 0) return 2;
         if (frame >= 0) {
             build_samples[frame] = build_ns;
             finalize_samples[frame] = finalize_ns;
+            frame_samples[frame] = frame_ns;
             checksum = hash_u64(checksum, static_cast<std::uint64_t>(submitted));
         }
     }
@@ -269,7 +273,9 @@ int main(int argc, char** argv) {
     print_array(build_samples);
     std::cout << "],\"finalize\":[";
     print_array(finalize_samples);
-    std::cout << "],\"frame\":[]},\"output\":{\"submitted_widgets\":" << submitted
+    std::cout << "],\"frame\":[";
+    print_array(frame_samples);
+    std::cout << "]},\"output\":{\"submitted_widgets\":" << submitted
               << ",\"visible_widgets\":" << std::min(submitted, kVirtualRows)
               << ",\"paint_commands\":" << paint_commands << ",\"text_bytes\":0"
               << ",\"dropped_commands\":0,\"dropped_text_bytes\":0},\"renderer\":{\"vertices\":"
