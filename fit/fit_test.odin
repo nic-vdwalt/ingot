@@ -394,7 +394,11 @@ fit_native_scroll_clamps_and_translates_child :: proc(t: ^testing.T) {
 	state := Scroll_State {
 		inner = {offset = 999},
 	}
-	Scroll(&builder, &state, {size = {width = Grow(), height = Fixed(100)}})
+	Scroll(&builder, "content", &state, {
+		keyboard = true,
+		bar = true,
+		size = {width = Grow(), height = Fixed(100)},
+	})
 	Column(&builder)
 	Spacer(&builder, .XL, {size = {height = Fixed(200)}})
 	End(&builder)

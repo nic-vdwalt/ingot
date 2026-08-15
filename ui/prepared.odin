@@ -1181,7 +1181,9 @@ prepared_place_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 	maximum := max(state.content_h - node.rect.h, 0)
 	mouse := get_mouse_position(u.frame)
 	screen := frame_rect_to_screen(u.frame, rect_f32(node.rect))
-	node.scroll.focus = focus(u, node.scroll.id) if slot_visible(node.rect) else Focus_Opt{}
+	if node.scroll.focus.focus == nil && slot_visible(node.rect) {
+		node.scroll.focus = focus(u, node.scroll.id)
+	}
 	focus_opt_click(u.frame, node.scroll.focus, node.rect.x, node.rect.y, node.rect.w, node.rect.h)
 	if point_in_rect(mouse, screen) && !route_occluded(u.frame, mouse) {
 		state.offset -= get_wheel_move(u.frame) * f32(ui_frame_sc(u.frame, 24))

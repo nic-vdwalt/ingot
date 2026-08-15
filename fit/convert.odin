@@ -181,14 +181,17 @@ to_attachment_options :: proc(value: Attachment_Options) -> ui.Prepared_Attachme
 
 @(private = "package")
 to_scroll_options :: proc(
+	widget: Widget_Id,
 	state: ^Scroll_State,
 	value: Scroll_Options,
 ) -> ui.Prepared_Scroll_Options {
-	assert(state != nil, "Fit.Scroll: nil state")
+	assert(widget != Widget_Id(0) && state != nil, "Fit.Scroll: invalid state")
 	return {
 		state = &state.inner,
+		id = ui.Widget_Id(widget),
 		padding = ui.Space(value.padding),
 		keyboard = value.keyboard,
+		bar = value.bar,
 		track = to_track(value.track),
 		size = to_size(value.size),
 	}

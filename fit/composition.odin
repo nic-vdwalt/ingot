@@ -58,7 +58,53 @@ Attachment_With :: proc(
 	build_container_body(builder, body, userdata, loc)
 }
 
-Scroll_With :: proc(
+@(private = "package")
+scroll_with_string :: proc(
+	builder: ^Builder,
+	key: string,
+	state: ^Scroll_State,
+	body: Build_Proc,
+	userdata: rawptr = nil,
+	options: Scroll_Options = {},
+	loc: runtime.Source_Code_Location = #caller_location,
+) {
+	assert(key != "" && state != nil, "Fit.Scroll_With: invalid state", loc)
+	Scroll(builder, key, state, options)
+	build_container_body(builder, body, userdata, loc)
+}
+
+@(private = "package")
+scroll_with_u64 :: proc(
+	builder: ^Builder,
+	key: u64,
+	state: ^Scroll_State,
+	body: Build_Proc,
+	userdata: rawptr = nil,
+	options: Scroll_Options = {},
+	loc: runtime.Source_Code_Location = #caller_location,
+) {
+	assert(key != 0 && state != nil, "Fit.Scroll_With: invalid state", loc)
+	Scroll(builder, key, state, options)
+	build_container_body(builder, body, userdata, loc)
+}
+
+@(private = "package")
+scroll_with_id :: proc(
+	builder: ^Builder,
+	widget: Widget_Id,
+	state: ^Scroll_State,
+	body: Build_Proc,
+	userdata: rawptr = nil,
+	options: Scroll_Options = {},
+	loc: runtime.Source_Code_Location = #caller_location,
+) {
+	assert(widget != Widget_Id(0) && state != nil, "Fit.Scroll_With: invalid state", loc)
+	Scroll(builder, widget, state, options)
+	build_container_body(builder, body, userdata, loc)
+}
+
+@(private = "package")
+scroll_with_compat :: proc(
 	builder: ^Builder,
 	state: ^Scroll_State,
 	body: Build_Proc,
@@ -69,6 +115,13 @@ Scroll_With :: proc(
 	assert(state != nil, "Fit.Scroll_With: nil state", loc)
 	Scroll(builder, state, options)
 	build_container_body(builder, body, userdata, loc)
+}
+
+Scroll_With :: proc {
+	scroll_with_string,
+	scroll_with_u64,
+	scroll_with_id,
+	scroll_with_compat,
 }
 
 Card_With :: proc(

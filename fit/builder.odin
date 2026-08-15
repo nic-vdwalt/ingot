@@ -53,10 +53,69 @@ Attachment :: proc(builder: ^Builder, options: Attachment_Options) {
 	ui.fit_builder_attachment(&builder.inner, to_attachment_options(options))
 }
 
-Scroll :: proc(builder: ^Builder, state: ^Scroll_State, options: Scroll_Options = {}) {
+@(private = "package")
+scroll_string :: proc(
+	builder: ^Builder,
+	key: string,
+	state: ^Scroll_State,
+	options: Scroll_Options = {},
+) {
+	assert(builder != nil && builder.bound, "Fit.Scroll: builder not bound")
+	assert(key != "" && state != nil, "Fit.Scroll: invalid state")
+	scroll_id(builder, Id(builder, key), state, options)
+}
+
+@(private = "package")
+scroll_u64 :: proc(
+	builder: ^Builder,
+	key: u64,
+	state: ^Scroll_State,
+	options: Scroll_Options = {},
+) {
+	assert(builder != nil && builder.bound, "Fit.Scroll: builder not bound")
+	assert(key != 0 && state != nil, "Fit.Scroll: invalid state")
+	scroll_id(builder, Id(builder, key), state, options)
+}
+
+@(private = "package")
+scroll_id :: proc(
+	builder: ^Builder,
+	widget: Widget_Id,
+	state: ^Scroll_State,
+	options: Scroll_Options = {},
+) {
+	assert(builder != nil && builder.bound, "Fit.Scroll: builder not bound")
+	assert(widget != Widget_Id(0) && state != nil, "Fit.Scroll: invalid state")
+	ui.fit_builder_scroll(&builder.inner, to_scroll_options(widget, state, options))
+}
+
+@(private = "package")
+scroll_compat :: proc(builder: ^Builder, state: ^Scroll_State, options: Scroll_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Scroll: builder not bound")
 	assert(state != nil, "Fit.Scroll: nil state")
-	ui.fit_builder_scroll(&builder.inner, to_scroll_options(state, options))
+	scroll_id(builder, Id(builder, u64(0x7363726f6c6c)), state, options)
+}
+
+Scroll :: proc {
+	scroll_string,
+	scroll_u64,
+	scroll_id,
+	scroll_compat,
+}
+
+Scroll_Reset :: proc(state: ^Scroll_State) {
+	assert(state != nil, "Fit.Scroll_Reset: nil state")
+	state.inner = {}
+}
+
+Scroll_Offset :: proc(state: ^Scroll_State) -> f32 {
+	assert(state != nil, "Fit.Scroll_Offset: nil state")
+	return state.inner.offset
+}
+
+Scroll_Content_Height :: proc(state: ^Scroll_State) -> i32 {
+	assert(state != nil, "Fit.Scroll_Content_Height: nil state")
+	return state.inner.content_h
 }
 
 Label :: proc(builder: ^Builder, text: string, options: Label_Options = {}) {
