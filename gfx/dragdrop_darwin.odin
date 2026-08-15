@@ -85,23 +85,27 @@ dd_perform_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) -> NS.BOOL
 
 @(private)
 platform_dragdrop_init :: proc(owner: ^Context) {
-	if owner == nil || g_dd_subclass != nil do return
+	if owner == nil || g_dd_owner != nil do return
 	window := cast(^IME_NS_Window)context_get_window_handle(owner)
 	if window == nil do return
 	view := intrinsics.objc_send(NS.id, window, "contentView")
 	if view == nil do return
 	original_class := rawptr(NS.object_getClass(view))
 	if original_class == nil do return
-	subclass := objc_allocateClassPair(original_class, "IngotDropContentView", 0)
-	if subclass == nil do return
-	if !dd_install_methods(original_class, subclass) {
-		objc_disposeClassPair(subclass)
+	if g_dd_subclass == nil {
+		subclass := objc_allocateClassPair(original_class, "IngotDropContentView", 0)
+		if subclass == nil do return
+		if !dd_install_methods(original_class, subclass) {
+			objc_disposeClassPair(subclass)
+			return
+		}
+		objc_registerClassPair(subclass)
+		g_dd_original_class = original_class
+		g_dd_subclass = subclass
+	} else if original_class != g_dd_original_class {
 		return
 	}
-	objc_registerClassPair(subclass)
 	g_dd_view = rawptr(view)
-	g_dd_original_class = original_class
-	g_dd_subclass = subclass
 	g_dd_owner = owner
 	object_setClass(g_dd_view, g_dd_subclass)
 }
@@ -179,9 +183,6 @@ platform_dragdrop_shutdown :: proc(owner: ^Context) {
 		object_setClass(g_dd_view, g_dd_original_class)
 	}
 	_drop_hover_stage_context(owner, false)
-	if g_dd_subclass != nil do objc_disposeClassPair(g_dd_subclass)
-	g_dd_orig_entered, g_dd_orig_updated = nil, nil
-	g_dd_orig_exited, g_dd_orig_ended, g_dd_orig_perform = nil, nil, nil
-	g_dd_view, g_dd_original_class, g_dd_subclass = nil, nil, nil
+	g_dd_view = nil
 	g_dd_owner = nil
 }

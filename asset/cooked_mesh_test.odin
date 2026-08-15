@@ -31,7 +31,9 @@ _cooked_test_fixture :: proc() -> [280]u8 {
 	_cooked_test_vertex(bytes[:], vertex_offset + 3 * 36, {2, 0, 0}, 0)
 	index_offset := vertex_offset + 4 * 36
 	indices := [?]u32{0, 1, 2, 0, 0, 0}
-	for index in 0 ..< len(indices) do _cooked_test_put_u32(bytes[:], index_offset + index * 4, indices[index])
+	for index in 0 ..< len(indices) {
+		_cooked_test_put_u32(bytes[:], index_offset + index * 4, indices[index])
+	}
 	return bytes
 }
 
