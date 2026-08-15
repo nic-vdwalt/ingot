@@ -250,9 +250,12 @@ The same wave function drives the surface mesh, which is rebuilt each frame
 through `update_gpu_mesh_vertices` rather than reallocated, so the picture and
 the physics can never disagree. Phase advances only inside a simulation step, so
 pause and single-step freeze the water and the bodies together. This covers
-lakes, boats, buoys, and stylized swell; it is not a CFD or SPH solver, so
-splashes, breaking waves, and flowing volumes need a separate fluid simulation
-coupled to Box3D.
+boats, buoys, and stylized swell; it is not a CFD or SPH solver.
+
+`ingot:procgen` separately provides an allocation-free, deterministic finite-water
+solver for terrain grids. Callers own fixed-point ground and depth arrays; bounded
+neighbor transfers conserve volume exactly while filling connected depressions.
+It models lake and trench flow, not splashes or breaking waves.
 
 ```sh
 odin run examples/box3d_water -collection:ingot=.

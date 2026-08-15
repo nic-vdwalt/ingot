@@ -78,6 +78,14 @@ mesh_validate :: proc(mesh: Mesh_View) -> bool {
 		for component in vertex.normal {
 			if math.is_nan(component) || math.is_inf(component, 0) do return false
 		}
+		if math.is_nan(vertex.scalar) || math.is_inf(vertex.scalar, 0) do return false
+		for component in vertex.uv {
+			if math.is_nan(component) || math.is_inf(component, 0) do return false
+		}
+		for axis in 0 ..< 3 {
+			if vertex.position[axis] < mesh.bounds.minimum[axis] do return false
+			if vertex.position[axis] > mesh.bounds.maximum[axis] do return false
+		}
 	}
 	for index in mesh.indices {
 		if int(index) >= len(mesh.vertices) do return false

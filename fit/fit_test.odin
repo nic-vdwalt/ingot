@@ -730,12 +730,18 @@ fit_button_public_overloads_preserve_explicit_size :: proc(t: ^testing.T) {
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
 	Column(&builder)
-	string_options := Button_Options{size = {width = Fixed(40), height = Fixed(16)}}
+	string_options := Button_Options {
+		size = {width = Fixed(40), height = Fixed(16)},
+	}
 	Button(&builder, "string", "String", string_options)
-	integer_options := Button_Options{size = {width = Fixed(50), height = Fixed(18)}}
+	integer_options := Button_Options {
+		size = {width = Fixed(50), height = Fixed(18)},
+	}
 	Button(&builder, u64(7), "Integer", integer_options)
 	widget := Id(&builder, "widget")
-	widget_options := Button_Options{size = {width = Fixed(60), height = Fixed(20)}}
+	widget_options := Button_Options {
+		size = {width = Fixed(60), height = Fixed(20)},
+	}
 	Button(&builder, widget, "Widget", widget_options)
 	End(&builder)
 	size := Measure(&builder)

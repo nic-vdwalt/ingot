@@ -36,12 +36,12 @@ Measure_L0_Entry :: struct {
 }
 
 Text_System :: struct {
-	font_loaded:             bool,
-	font_dpi:                f32,
-	font_codepoints:         []rune,
-	measure_l0:              [MEASURE_L0_CAPACITY]Measure_L0_Entry,
-	measure_l0_next:         int,
-	measure_cache:           map[Measure_Key]Measure_Entry,
+	font_loaded:                   bool,
+	font_dpi:                      f32,
+	font_codepoints:               []rune,
+	measure_l0:                    [MEASURE_L0_CAPACITY]Measure_L0_Entry,
+	measure_l0_next:               int,
+	measure_cache:                 map[Measure_Key]Measure_Entry,
 	measure_cache_evictions:       int,
 	measure_cache_hits:            u64,
 	measure_cache_misses:          u64,
@@ -49,9 +49,9 @@ Text_System :: struct {
 	backend_measure_cache_enabled: bool,
 	measure_stamp:                 u64,
 	measure_backend:               proc(text: cstring, size: i32) -> i32,
-	wrap_cache:              map[Wrap_Key]Wrap_Entry,
-	wrap_cache_evictions:    int,
-	wrap_stamp:              u64,
+	wrap_cache:                    map[Wrap_Key]Wrap_Entry,
+	wrap_cache_evictions:          int,
+	wrap_stamp:                    u64,
 }
 
 text_system_init :: proc(system: ^Text_System) {
@@ -88,7 +88,9 @@ measure_cache_stats_with :: proc(system: ^Text_System) -> (entries: int, evictio
 
 measure_cache_telemetry_with :: proc(system: ^Text_System) -> (hits, misses, bypasses: u64) {
 	assert(system != nil, "measure_cache_telemetry_with: nil system")
-	return system.measure_cache_hits, system.measure_cache_misses, system.measure_cache_policy_bypasses
+	return system.measure_cache_hits,
+		system.measure_cache_misses,
+		system.measure_cache_policy_bypasses
 }
 
 measure_cache_telemetry_reset_with :: proc(system: ^Text_System) {
@@ -163,11 +165,11 @@ measure_l0_put :: proc(system: ^Text_System, key: Measure_Key, width: i32) {
 	entry := &system.measure_l0[system.measure_l0_next]
 	entry^ = {
 		text_len = len(key.text),
-		size = key.size,
-		font = key.font,
-		epoch = key.epoch,
-		width = width,
-		valid = true,
+		size     = key.size,
+		font     = key.font,
+		epoch    = key.epoch,
+		width    = width,
+		valid    = true,
 	}
 	copy(entry.text[:entry.text_len], transmute([]u8)key.text)
 	system.measure_l0_next += 1
@@ -338,7 +340,12 @@ measure_text_backend_cached :: proc(
 		measurement := text_backend_measure(frame.runtime.text_backend, font, text, f32(size), 0)
 		return i32(measurement.x + 0.5)
 	}
-	key := Measure_Key{text = text, size = size, font = font, epoch = frame.runtime.font_epoch}
+	key := Measure_Key {
+		text  = text,
+		size  = size,
+		font  = font,
+		epoch = frame.runtime.font_epoch,
+	}
 	if width, ok := measure_l0_get(system, key); ok {
 		when UI_TELEMETRY_ENABLED do system.measure_cache_hits += 1
 		return width
@@ -355,12 +362,15 @@ measure_text_backend_cached :: proc(
 		if len(system.measure_cache) >= MEASURE_CACHE_MAX do measure_evict_oldest(system)
 		system.measure_stamp += 1
 		owned := Measure_Key {
-			text = strings.clone(text),
-			size = size,
-			font = font,
+			text  = strings.clone(text),
+			size  = size,
+			font  = font,
 			epoch = frame.runtime.font_epoch,
 		}
-		system.measure_cache[owned] = {width = width, stamp = system.measure_stamp}
+		system.measure_cache[owned] = {
+			width = width,
+			stamp = system.measure_stamp,
+		}
 		measure_l0_put(system, key, width)
 	}
 	return width
