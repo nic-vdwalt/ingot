@@ -142,6 +142,15 @@ second :: proc(scope: ^Context_Scope) {
             ["gfx/x.odin:p: debt is forbidden (2 references)"],
         )
 
+    def test_controlled_global_routing_requires_exact_inventory(self):
+        expected = check_gfx_context.CONTROLLED_GLOBAL_ROUTING.copy()
+        self.assertEqual(check_gfx_context.controlled_global_debt(expected), {})
+        expected["gfx/context.odin:default_context"] += 1
+        self.assertEqual(
+            check_gfx_context.controlled_global_debt(expected),
+            {"gfx/context.odin:default_context": 2},
+        )
+
     def test_test_source_suffixes_are_excluded(self):
         self.assertTrue("gfx/x_test.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))
         self.assertTrue("gfx/x_tests.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))

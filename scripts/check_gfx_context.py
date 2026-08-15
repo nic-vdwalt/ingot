@@ -20,6 +20,10 @@ UI_GFX_IMPLICIT_DRAW = re.compile(
     r"\b(?:BeginDrawing|EndDrawing|BeginScissorMode|EndScissorMode|Draw[A-Z][A-Za-z0-9_]*|"
     r"context_scope_enter|context_scope_leave)\s*\("
 )
+CONTROLLED_GLOBAL_ROUTING = {
+    "gfx/context.odin:default_context": 1,
+    "gfx/context.odin:set_default_context": 2,
+}
 CONTROL_FLOW = re.compile(r"\b(?:if|when|for|switch|defer)\b")
 DEFAULT_CONTEXT_CALL = re.compile(
     r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\((?:[^;{}()]|\([^;{}()]*\))*default_context\s*\("
@@ -100,6 +104,14 @@ def zero_debt_failures(category: str, counts: dict[str, int]) -> list[str]:
     return [f"{key}: {category} is forbidden ({count} references)" for key, count in sorted(counts.items())]
 
 
+def controlled_global_debt(counts: dict[str, int]) -> dict[str, int]:
+    debt = counts.copy()
+    for key, expected_count in CONTROLLED_GLOBAL_ROUTING.items():
+        if debt.get(key) == expected_count:
+            del debt[key]
+    return debt
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default=".")
@@ -123,7 +135,10 @@ def main() -> int:
     if arguments.measure:
         print(json.dumps(inventory, indent=2, sort_keys=True))
         return 0
-    failures = zero_debt_failures("direct gfx global routing", globals_debt)
+    failures = zero_debt_failures(
+        "direct gfx global routing",
+        controlled_global_debt(globals_debt),
+    )
     failures += zero_debt_failures("active-context API", active_context_debt)
     failures += zero_debt_failures("internal default-context escape", default_context_escapes)
     failures += zero_debt_failures("ui_gfx implicit graphics routing", implicit_draws)

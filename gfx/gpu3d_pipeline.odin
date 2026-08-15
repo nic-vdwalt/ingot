@@ -381,10 +381,15 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let uv_dx = dpdx(in.uv);
     let uv_dy = dpdy(in.uv);
     let determinant = uv_dx.x * uv_dy.y - uv_dx.y * uv_dy.x;
-    let tangent = normalize((world_dx * uv_dy.y - world_dy * uv_dx.y) / max(abs(determinant), 0.00001));
-    let bitangent = normalize(cross(geometric_normal, tangent)) * select(-1.0, 1.0, determinant >= 0.0);
-    let sampled_normal = textureSample(mesh_normal_texture, mesh_normal_sampler, in.uv).xyz * 2.0 - 1.0;
-    let mapped_normal = normalize(mat3x3<f32>(tangent, bitangent, geometric_normal) * sampled_normal);
+    let tangent = normalize(
+        (world_dx * uv_dy.y - world_dy * uv_dx.y) /
+        max(abs(determinant), 0.00001));
+    let bitangent = normalize(cross(geometric_normal, tangent)) *
+        select(-1.0, 1.0, determinant >= 0.0);
+    let sampled_normal = textureSample(
+        mesh_normal_texture, mesh_normal_sampler, in.uv).xyz * 2.0 - 1.0;
+    let mapped_normal = normalize(
+        mat3x3<f32>(tangent, bitangent, geometric_normal) * sampled_normal);
     let normal = normalize(mix(geometric_normal, mapped_normal, f32(u.use_normal)));
     // Sample unconditionally and select by flag: textureSample requires
     // uniform control flow, and the unconditional form is trivially uniform.
@@ -1603,6 +1608,25 @@ _gpu_3d_texture_bind :: proc(
 	return fallback, false
 }
 
+@(private)
+_gpu_3d_material_binds :: proc(
+	pass: ^Gpu_3D_Pass,
+	material: Gpu_Material,
+) -> (wg.BindGroup, bool, wg.BindGroup, bool, wg.BindGroup, bool) {
+	assert(pass != nil && pass.owner != nil, "_gpu_3d_material_binds: nil pass")
+	resources := &pass.owner.resources.gpu_3d
+	texture_bind, textured := _gpu_3d_texture_bind(
+		pass.owner, material.texture, pass.owner.rend.neutral_bind,
+	)
+	normal_bind, normal_mapped := _gpu_3d_texture_bind(
+		pass.owner, material.normal_texture, resources.neutral_normal_bind,
+	)
+	roughness_bind, roughness_mapped := _gpu_3d_texture_bind(
+		pass.owner, material.roughness_ao_texture, pass.owner.rend.neutral_bind,
+	)
+	return texture_bind, textured, normal_bind, normal_mapped, roughness_bind, roughness_mapped
+}
+
 // _gpu_3d_draw_indexed encodes one indexed draw: uniforms, both bind groups,
 // buffers, and stats. Shared by plain and instanced draws so the two paths
 // cannot drift.
@@ -1643,21 +1667,8 @@ _gpu_3d_draw_indexed :: proc(
 		shader_module,
 	)
 	if pipeline == nil do return false
-	texture_bind, textured := _gpu_3d_texture_bind(
-		pass.owner,
-		material.texture,
-		pass.owner.rend.neutral_bind,
-	)
-	normal_bind, normal_mapped := _gpu_3d_texture_bind(
-		pass.owner,
-		material.normal_texture,
-		pass.owner.resources.gpu_3d.neutral_normal_bind,
-	)
-	roughness_ao_bind, roughness_ao_mapped := _gpu_3d_texture_bind(
-		pass.owner,
-		material.roughness_ao_texture,
-		pass.owner.rend.neutral_bind,
-	)
+	texture_bind, textured, normal_bind, normal_mapped, roughness_ao_bind, roughness_ao_mapped :=
+		_gpu_3d_material_binds(pass, material)
 
 	color_high := material.color_high
 	if color_high == (Color{}) do color_high = material.color
@@ -1870,13 +1881,9 @@ _gpu_3d_pipeline :: proc(
 	assert(ctx != nil, "_gpu_3d_pipeline: nil context")
 	assert(ctx.initialized, "_gpu_3d_pipeline: uninitialized context")
 	assert(sample_count == 1 || sample_count == 4, "_gpu_3d_pipeline: unsupported sample count")
-	assert(
-		(shader_id == 0) == (shader_module == nil),
-		"_gpu_3d_pipeline: shader id and module must agree",
-	)
+	assert((shader_id == 0) == (shader_module == nil))
 	resources := &ctx.resources.gpu_3d
-	for index in 0 ..< resources.pipeline_count {
-		entry := resources.pipelines[index]
+	for entry in resources.pipelines[:resources.pipeline_count] {
 		if _gpu_3d_pipeline_matches(entry, format, primitive, style, sample_count, shader_id) {
 			return entry.pipeline
 		}
@@ -1963,6 +1970,57 @@ _gpu_3d_pipeline :: proc(
 }
 
 @(private)
+_gpu_3d_init_neutral_normal :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
+	assert(ctx != nil, "_gpu_3d_init_neutral_normal: nil context")
+	assert(resources != nil, "_gpu_3d_init_neutral_normal: nil resources")
+	resources.neutral_normal_tex = wg.DeviceCreateTexture(
+		ctx.device,
+		&{
+			usage = {.TextureBinding, .CopyDst},
+			dimension = ._2D,
+			size = {1, 1, 1},
+			format = .RGBA8Unorm,
+			mipLevelCount = 1,
+			sampleCount = 1,
+		},
+	)
+	neutral_normal := [4]byte{128, 128, 255, 255}
+	wg.QueueWriteTexture(
+		ctx.queue,
+		&{texture = resources.neutral_normal_tex},
+		raw_data(neutral_normal[:]),
+		uint(len(neutral_normal)),
+		&{bytesPerRow = 4, rowsPerImage = 1},
+		&{1, 1, 1},
+	)
+	resources.neutral_normal_view = wg.TextureCreateView(resources.neutral_normal_tex, nil)
+	resources.neutral_normal_sampler = wg.DeviceCreateSampler(
+		ctx.device,
+		&{
+			magFilter = .Linear,
+			minFilter = .Linear,
+			mipmapFilter = .Nearest,
+			addressModeU = .Repeat,
+			addressModeV = .Repeat,
+			addressModeW = .ClampToEdge,
+			maxAnisotropy = 1,
+		},
+	)
+	entries := [2]wg.BindGroupEntry {
+		{binding = 0, textureView = resources.neutral_normal_view},
+		{binding = 1, sampler = resources.neutral_normal_sampler},
+	}
+	resources.neutral_normal_bind = wg.DeviceCreateBindGroup(
+		ctx.device,
+		&{
+			layout = ctx.rend.tex_layout,
+			entryCount = len(entries),
+			entries = raw_data(entries[:]),
+		},
+	)
+}
+
+@(private)
 _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 	assert(ctx != nil, "_gpu_3d_init_shared: nil context")
 	assert(resources != nil, "_gpu_3d_init_shared: nil resources")
@@ -2003,51 +2061,7 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 		ctx.device,
 		&{entryCount = 2, entries = raw_data(layout_entries[:])},
 	)
-	resources.neutral_normal_tex = wg.DeviceCreateTexture(
-		ctx.device,
-		&{
-			usage = {.TextureBinding, .CopyDst},
-			dimension = ._2D,
-			size = {1, 1, 1},
-			format = .RGBA8Unorm,
-			mipLevelCount = 1,
-			sampleCount = 1,
-		},
-	)
-	neutral_normal := [4]byte{128, 128, 255, 255}
-	wg.QueueWriteTexture(
-		ctx.queue,
-		&{texture = resources.neutral_normal_tex},
-		raw_data(neutral_normal[:]),
-		uint(len(neutral_normal)),
-		&{bytesPerRow = 4, rowsPerImage = 1},
-		&{1, 1, 1},
-	)
-	resources.neutral_normal_view = wg.TextureCreateView(resources.neutral_normal_tex, nil)
-	resources.neutral_normal_sampler = wg.DeviceCreateSampler(
-		ctx.device,
-		&{
-			magFilter = .Linear,
-			minFilter = .Linear,
-			mipmapFilter = .Nearest,
-			addressModeU = .Repeat,
-			addressModeV = .Repeat,
-			addressModeW = .ClampToEdge,
-			maxAnisotropy = 1,
-		},
-	)
-	neutral_normal_entries := [2]wg.BindGroupEntry {
-		{binding = 0, textureView = resources.neutral_normal_view},
-		{binding = 1, sampler = resources.neutral_normal_sampler},
-	}
-	resources.neutral_normal_bind = wg.DeviceCreateBindGroup(
-		ctx.device,
-		&{
-			layout = ctx.rend.tex_layout,
-			entryCount = len(neutral_normal_entries),
-			entries = raw_data(neutral_normal_entries[:]),
-		},
-	)
+	_gpu_3d_init_neutral_normal(ctx, resources)
 	for &bind, index in resources.bind {
 		bind_entries := [2]wg.BindGroupEntry {
 			{
