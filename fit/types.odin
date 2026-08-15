@@ -613,8 +613,15 @@ Scroll_State :: struct {
 Scroll_Options :: struct {
 	padding:  Space,
 	keyboard: bool,
+	bar:      bool,
 	track:    Track,
 	size:     Size_Options,
+}
+
+Table_Header_Options :: struct {
+	height: i32,
+	track:  Track,
+	size:   Size_Options,
 }
 
 Grid_State :: struct {
