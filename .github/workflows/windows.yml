@@ -78,9 +78,15 @@ jobs:
           }
           python scripts/check-toolchain.py
           odinfmt -help | Out-Null
+      - name: Rebuild patched Windows libvterm
+        shell: pwsh
+        run: cmd /c scripts\build-libvterm.bat
       - name: Run Windows native tests
         shell: pwsh
         run: ./scripts/test.ps1
+      - name: Restore committed Windows libvterm
+        shell: pwsh
+        run: git checkout -- libvterm/lib/windows_amd64/vterm.lib
       - name: Run Windows strict gate
         shell: pwsh
         run: ./scripts/check.ps1
