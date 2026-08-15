@@ -1199,7 +1199,10 @@ prepared_place_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 
 @(private = "file")
 prepared_scroll_keyboard :: proc(frame: ^Ui_Frame, state: ^Prepared_Scroll_State, height: i32) {
-	assert(frame != nil && state != nil && height >= 0, "prepared scroll keyboard: invalid argument")
+	assert(
+		frame != nil && state != nil && height >= 0,
+		"prepared scroll keyboard: invalid argument",
+	)
 	step := f32(ui_frame_metrics(frame).LINE_HEIGHT)
 	if is_key_pressed_or_repeat(frame, .DOWN) do state.offset += step
 	if is_key_pressed_or_repeat(frame, .UP) do state.offset -= step
@@ -1563,17 +1566,19 @@ prepared_render_exit :: proc(u: ^Ui, node: ^Prepared_Node) {
 		end_scissor_mode(u.frame)
 		state := node.scroll.state
 		if node.scroll.bar && state.content_h > state.viewport_h {
-			state.offset = f32(scrollbar_ex(
-				u.frame,
-				&state.scrollbar,
-				node.rect.x + node.rect.w - ui_frame_sc(u.frame, 9),
-				node.rect.y + ui_frame_sc(u.frame, 2),
-				ui_frame_sc(u.frame, 5),
-				node.rect.h - ui_frame_sc(u.frame, 4),
-				int(state.content_h),
-				int(state.viewport_h),
-				int(state.offset),
-			))
+			state.offset = f32(
+				scrollbar_ex(
+					u.frame,
+					&state.scrollbar,
+					node.rect.x + node.rect.w - ui_frame_sc(u.frame, 9),
+					node.rect.y + ui_frame_sc(u.frame, 2),
+					ui_frame_sc(u.frame, 5),
+					node.rect.h - ui_frame_sc(u.frame, 4),
+					int(state.content_h),
+					int(state.viewport_h),
+					int(state.offset),
+				),
+			)
 		} else {
 			state.scrollbar = {}
 		}
