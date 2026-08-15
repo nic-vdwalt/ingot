@@ -472,6 +472,8 @@ ti_sync_web :: proc(ctx: ^TI_Ctx) {
 // stable identity when no focus link exists.
 @(private = "file")
 ti_semantic_push :: proc(ctx: ^TI_Ctx) {
+	assert(ctx != nil && ctx.frame != nil, "ti_semantic_push: invalid context")
+	if !sem_enabled(ctx.frame) do return
 	sem: Sem_State
 	if ctx.active do sem += {.Focused}
 	if ctx.masked do sem += {.Password}
@@ -508,13 +510,18 @@ ti_semantic_push :: proc(ctx: ^TI_Ctx) {
 ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	assert(ctx.sb != nil, "ti_run: nil builder")
 	assert(ctx.sel != nil && ctx.memo != nil, "ti_run: nil selection or memo")
-	when UI_TELEMETRY_ENABLED {
-		ctx.frame.text_input_full_path_count += 1
-		if ti_inactive_candidate(ctx) do ctx.frame.text_input_inactive_candidates += 1
-	}
+	when UI_TELEMETRY_ENABLED do ctx.frame.text_input_full_path_count += 1
 	ti_sync_web(ctx)
+	inactive := ti_inactive_candidate(ctx)
+	when UI_TELEMETRY_ENABLED {
+		if inactive do ctx.frame.text_input_inactive_candidates += 1
+	}
 	ti_semantic_push(ctx)
 	ti_draw_chrome(ctx)
+	if inactive {
+		ti_draw_inactive_single_line(ctx)
+		return false
+	}
 	entered := false
 	// While an OS input method is composing, it owns the keyboard: nav,
 	// delete, and shortcuts must not fire mid-composition. Committed text

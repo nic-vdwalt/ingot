@@ -532,3 +532,32 @@ ti_inactive_candidate :: proc(ctx: ^TI_Ctx) -> bool {
 		!spell_menu_active(ctx.spell_menu, ctx.sb) \
 	)
 }
+
+@(private = "package")
+ti_draw_inactive_single_line :: proc(ctx: ^TI_Ctx) {
+	assert(ctx != nil && ti_inactive_candidate(ctx), "inactive input: invalid context")
+	assert(ctx.inner_w > 0 && ctx.h > 0, "inactive input: invalid geometry")
+	begin_pane_scissor(ctx.frame, ctx.inner_x, ctx.y, ctx.inner_w, ctx.h)
+	text := strings.to_string(ctx.sb^)
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
+	if len(text) == 0 {
+		draw_text_string_frame(
+			ctx.frame,
+			ctx.placeholder,
+			ctx.inner_x,
+			ctx.y + (ctx.h - font_size) / 2,
+			font_size,
+			ui_frame_theme(ctx.frame).fg_secondary,
+		)
+	} else {
+		draw_text_string_frame(
+			ctx.frame,
+			text,
+			ctx.inner_x,
+			ctx.y + (ctx.h - font_size) / 2,
+			font_size,
+			ui_frame_theme(ctx.frame).fg_label,
+		)
+	}
+	end_scissor_mode(ctx.frame)
+}

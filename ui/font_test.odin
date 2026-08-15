@@ -99,6 +99,36 @@ test_measure_text_frame_uses_backend_font :: proc(t: ^testing.T) {
 }
 
 @(test)
+text_backend_measure_cache_reuses_and_invalidates :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	first: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &first, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	width_a := measure_text_string_frame(&frame, "stable", 16)
+	width_b := measure_text_string_frame(&frame, "stable", 16)
+	ui_frame_end(&frame)
+	testing.expect_value(t, width_a, width_b)
+	testing.expect_value(t, first.measure_calls, 1)
+	second := Test_Text_Backend_State{advance = 11}
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &second, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	ui_frame_begin(&frame, &runtime)
+	width_c := measure_text_string_frame(&frame, "stable", 16)
+	ui_frame_end(&frame)
+	ui_frame_destroy(&frame)
+	testing.expect_value(t, second.measure_calls, 1)
+	testing.expect(t, width_c != width_a, "backend change reused stale measurement")
+}
+
+@(test)
 test_frame_text_geometry_uses_render_backend :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

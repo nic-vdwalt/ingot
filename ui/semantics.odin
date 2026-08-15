@@ -156,6 +156,12 @@ sem_enabled :: proc(frame: ^Ui_Frame) -> bool {
 	return frame.runtime.semantics_enabled
 }
 
+semantic_will_emit :: proc(frame: ^Ui_Frame) -> bool {
+	assert(frame != nil && frame.open, "semantic_will_emit: invalid frame")
+	assert(frame.runtime != nil, "semantic_will_emit: nil runtime")
+	return frame.runtime.semantics_enabled
+}
+
 sem_begin_frame :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil, "sem_begin_frame: nil frame")
 	state := &frame.semantics

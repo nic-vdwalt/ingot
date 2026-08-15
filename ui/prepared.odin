@@ -632,11 +632,15 @@ prepared_render_at :: proc(u: ^Ui, prepared: ^Prepared_Ui, rect: Rect_I32) {
 	assert(prepared.root < prepared.count, "prepared_render_at: root beyond count")
 	root := &prepared_nodes(prepared)[prepared.root]
 	if root.size.w != rect.w || root.size.h != rect.h {
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.render_relayouts += 1
+		width_changed := root.size.w != rect.w
 		root.size.w = rect.w
 		root.size.h = rect.h
 		root.rect = rect
-		prepared_assign_widths(u, prepared)
-		prepared_measure_heights(u, prepared)
+		if width_changed {
+			prepared_assign_widths(u, prepared)
+			prepared_measure_heights(u, prepared)
+		}
 	}
 	root.rect = rect
 	place_started := prepared_phase_begin(u.frame, .Place)
@@ -772,14 +776,28 @@ prepared_measure_natural :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 		} else if prepared_kind_is_container(node.kind) {
 			prepared_measure_container(u, prepared, index, false)
 		} else {
-			prepared_measure_leaf(u, node, 0)
-			node.measure_flags += {.Natural_Valid}
 			if prepared_leaf_width_dependent(node) {
 				node.measure_flags += {.Width_Dependent}
 			}
-			when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.natural_leaf_measures += 1
+			if prepared_leaf_needs_natural(prepared, index) {
+				prepared_measure_leaf(u, node, 0)
+				node.measure_flags += {.Natural_Valid}
+				when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.natural_leaf_measures += 1
+			}
 		}
 	}
+}
+
+@(private = "file")
+prepared_leaf_needs_natural :: proc(prepared: ^Prepared_Ui, index: i32) -> bool {
+	assert(prepared != nil && index >= 0, "prepared natural leaf: invalid argument")
+	assert(index < prepared.count, "prepared natural leaf: index out of range")
+	node := &prepared_nodes(prepared)[index]
+	assert(!prepared_kind_is_container(node.kind), "prepared natural leaf: container")
+	if node.parent < 0 do return true
+	assert(node.parent < index, "prepared natural leaf: invalid parent")
+	parent := &prepared_nodes(prepared)[node.parent]
+	return parent.kind != .Grid || parent.grid.row_height <= 0
 }
 
 @(private = "file")
@@ -1692,6 +1710,10 @@ prepared_render_leaf :: proc(u: ^Ui, node: ^Prepared_Node) {
 		node.activated = node.custom.render(u, node.rect, node.custom.userdata)
 	case .Row, .Column, .Flow, .Grid, .Attachment, .Scroll:
 		unreachable()
+	}
+	if node.activation != nil {
+		node.activation^ = node.activation^ || node.activated
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.activation_outputs += 1
 	}
 }
 

@@ -559,6 +559,24 @@ print_telemetry :: proc(value: fit.Frame_Telemetry) {
 		value.text_input_full_paths,
 		",\"text_input_inactive_candidates\":",
 		value.text_input_inactive_paths,
+		",\"natural_leaf_measures\":",
+		value.natural_leaf_measures,
+		",\"resolved_leaf_measures\":",
+		value.resolved_leaf_measures,
+		",\"container_measures\":",
+		value.container_measures,
+		",\"placed_nodes\":",
+		value.placed_nodes,
+		",\"rendered_nodes\":",
+		value.rendered_nodes,
+		",\"activation_outputs\":",
+		value.activation_outputs,
+		",\"render_relayouts\":",
+		value.render_relayouts,
+		",\"measure_cache_hits\":",
+		value.measure_cache_hits,
+		",\"measure_cache_misses\":",
+		value.measure_cache_misses,
 	)
 }
 
@@ -582,12 +600,9 @@ main :: proc() {
 	frame_finalize_samples := make([]i64, options.frames)
 	finalize_samples := make([]i64, options.frames)
 	frame_samples := make([]i64, options.frames)
-	defer delete(build_samples)
-	defer delete(measure_samples)
-	defer delete(layout_render_samples)
-	defer delete(frame_finalize_samples)
-	defer delete(finalize_samples)
-	defer delete(frame_samples)
+	defer delete(build_samples); defer delete(measure_samples)
+	defer delete(layout_render_samples); defer delete(frame_finalize_samples)
+	defer delete(finalize_samples); defer delete(frame_samples)
 	state_checksum := FNV_BASIS
 	for index in 0 ..< options.frames {
 		timing := measure_frame(h, options, index)
