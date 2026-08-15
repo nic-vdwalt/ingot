@@ -121,13 +121,14 @@ def capacity_rows(records):
     groups = defaultdict(list)
     for record in records:
         if record["workload"] == "capacity":
-            groups[record["framework"]].append(record)
+            groups[(record["framework"], record["layer"])].append(record)
     rows = []
-    for framework, group in sorted(groups.items()):
+    for (framework, layer), group in sorted(groups.items()):
         valid = [record["scale"] for record in group if record["valid"]]
         invalid = [record["scale"] for record in group if not record["valid"]]
         rows.append({
             "framework": framework,
+            "layer": layer,
             "last_valid_scale": max(valid) if valid else 0,
             "first_invalid_scale": min(invalid) if invalid else 0,
         })
@@ -137,15 +138,18 @@ def capacity_rows(records):
 def write_markdown(rows, records, path):
     grouped = defaultdict(dict)
     for row in rows:
-        key = (row["framework"], row["framework_revision"], row["workload"], row["scale"])
+        key = (
+            row["framework"], row["framework_revision"], row["layer"],
+            row["workload"], row["scale"],
+        )
         grouped[key][row["phase"]] = row
     lines = [
         "# Widget Benchmark Report", "",
         "CPU phases use each adapter's recorded boundaries. Total comparisons use frame-to-frame",
         "values only; this report does not compute an overall winner.", "",
         "## Core frame latency", "",
-        "| Framework | Revision | Workload | Scale | Total median/p95 (µs) | Build median/p95 (µs) | Finalize median/p95 (µs) |",
-        "|---|---|---|---:|---:|---:|---:|",
+        "| Framework | Layer | Revision | Workload | Scale | Total median/p95 (µs) | Build median/p95 (µs) | Finalize median/p95 (µs) |",
+        "|---|---|---|---|---:|---:|---:|---:|",
     ]
     for key, phases in sorted(grouped.items()):
         build = phases.get("build")
@@ -155,7 +159,7 @@ def write_markdown(rows, records, path):
             continue
         total = "-" if frame is None else f"{frame['median_ns'] / 1000:.2f}/{frame['p95_ns'] / 1000:.2f}"
         lines.append(
-            f"| {key[0]} | `{key[1][:12]}` | {key[2]} | {key[3]} | {total} | "
+            f"| {key[0]} | {key[2]} | `{key[1][:12]}` | {key[3]} | {key[4]} | {total} | "
             f"{build['median_ns'] / 1000:.2f}/{build['p95_ns'] / 1000:.2f} | "
             f"{finalize['median_ns'] / 1000:.2f}/{finalize['p95_ns'] / 1000:.2f} |"
         )
@@ -165,7 +169,7 @@ def write_markdown(rows, records, path):
         "|---|---:|---:|---:|---:|",
     ])
     for key, phases in sorted(grouped.items()):
-        if key[0] != "ingot" or "measure" not in phases or "layout_render" not in phases:
+        if key[0] != "ingot" or key[2] != "fit" or "measure" not in phases or "layout_render" not in phases:
             continue
         measure = phases["measure"]
         render = phases["layout_render"]
@@ -174,13 +178,16 @@ def write_markdown(rows, records, path):
             f"{frame_finalize['median_ns'] / 1000:.2f}/{frame_finalize['p95_ns'] / 1000:.2f}"
         )
         lines.append(
-            f"| {key[2]} | {key[3]} | {measure['median_ns'] / 1000:.2f}/{measure['p95_ns'] / 1000:.2f} | "
+            f"| {key[3]} | {key[4]} | {measure['median_ns'] / 1000:.2f}/{measure['p95_ns'] / 1000:.2f} | "
             f"{render['median_ns'] / 1000:.2f}/{render['p95_ns'] / 1000:.2f} | {finalize_text} |"
         )
     capacities = capacity_rows(records)
-    lines.extend(["", "## Capacity validity", "", "| Framework | Last valid | First invalid |", "|---|---:|---:|"])
+    lines.extend(["", "## Capacity validity", "", "| Framework | Layer | Last valid | First invalid |", "|---|---|---:|---:|"])
     for row in capacities:
-        lines.append(f"| {row['framework']} | {row['last_valid_scale']} | {row['first_invalid_scale']} |")
+        lines.append(
+            f"| {row['framework']} | {row['layer']} | {row['last_valid_scale']} | "
+            f"{row['first_invalid_scale']} |"
+        )
     lines.extend([
         "", "## Interpretation", "",
         "- Invalid or dropped-output nominal samples are rejected before aggregation.",

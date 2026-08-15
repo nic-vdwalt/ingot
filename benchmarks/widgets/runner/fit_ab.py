@@ -9,24 +9,11 @@ from pathlib import Path
 import bench
 
 
-def parse_case(value):
-    workload, separator, scale = value.partition(":")
-    if not separator or not workload:
-        raise argparse.ArgumentTypeError("case must be workload:scale")
-    try:
-        scale = int(scale)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("case scale must be an integer") from error
-    if scale <= 0:
-        raise argparse.ArgumentTypeError("case scale must be positive")
-    return workload, scale
-
-
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
-    parser.add_argument("--case", action="append", type=parse_case, required=True)
+    parser.add_argument("--case", action="append", type=bench.parse_case, required=True)
     parser.add_argument("--warmup", type=int, default=300)
     parser.add_argument("--frames", type=int, default=2000)
     parser.add_argument("--repetitions", type=int, default=7)
@@ -60,13 +47,8 @@ def execute(binary, workload, scale, warmup, frames, repetition, timeout, cache_
         record = json.loads(raw)
     except json.JSONDecodeError as error:
         raise RuntimeError(f"invalid JSON from {binary}: {error}") from error
-    for field in ("framework", "framework_revision", "backend", "layer", "workload", "invalid_reason"):
-        if isinstance(record.get(field), str):
-            record[field] = record[field].strip()
-    for field in ("os", "arch", "cpu", "toolchain"):
-        if isinstance(record.get("environment", {}).get(field), str):
-            record["environment"][field] = record["environment"][field].strip()
-    bench.validate_record(record, "ingot", workload, scale, frames)
+    bench.normalize_record(record)
+    bench.validate_record(record, "ingot", "fit", workload, scale, frames)
     record["runner_environment"] = bench.environment_metadata()
     return record
 

@@ -15,7 +15,7 @@
     {"id": "button_grid", "kind": "buttons", "scales": [100, 250], "framework_scales": {"imgui": [1000, 4000, 5000, 10000], "egui": [1000, 4000, 5000, 10000]}, "columns": 10},
     {"id": "mixed_form", "kind": "mixed_form", "scales": [10, 50], "framework_scales": {"imgui": [100, 250, 1000], "egui": [100, 250, 1000]}, "widgets_per_group": 5},
     {"id": "complex_dashboard", "kind": "complex_dashboard", "scales": [10, 50], "framework_scales": {"imgui": [100, 250], "egui": [100, 250]}, "widgets_per_group": 10},
-    {"id": "layout_flow", "kind": "layout_flow", "scales": [32, 128, 512, 1024], "frameworks": ["ingot"]},
+    {"id": "layout_flow", "kind": "layout_flow", "scales": [32, 128, 512, 1024], "frameworks": ["ingot"], "ingot_layers": ["fit"]},
     {"id": "list_full", "kind": "list", "scales": [100, 1000], "framework_scales": {"imgui": [4000, 5000, 10000], "egui": [4000, 5000, 10000]}, "virtualized": false},
     {"id": "list_virtual", "kind": "list", "scales": [1000, 10000, 100000, 1000000], "virtualized": true, "visible_rows": 40, "overscan": 2},
     {"id": "table_repeated", "kind": "table", "scales": [20, 100, 250], "framework_scales": {"imgui": [1000], "egui": [1000]}, "columns": 4, "unique_text": false, "cell_label_index": "(row * columns + column) % 16384"},
@@ -24,5 +24,5 @@
     {"id": "accessibility", "kind": "buttons", "scales": [25, 100, 250], "accessibility": true},
     {"id": "capacity", "kind": "capacity", "scales": [128, 256], "framework_scales": {"imgui": [512, 1024, 2048, 4096, 8192, 16384], "egui": [512, 1024, 2048, 4096, 8192, 16384]}, "expected_overflow": true}
   ],
-  "modes": ["core", "native", "idle_continuous", "idle_event_driven"]
+  "modes": ["fit", "ui", "core", "native", "idle_continuous", "idle_event_driven"]
 }

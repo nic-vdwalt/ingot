@@ -1,15 +1,16 @@
 # Scalable Widget Benchmark
 
-This suite compares headless CPU work for Ingot Fit, Dear ImGui, and egui with pinned revisions,
-deterministic workloads, randomized process order, correctness validation, and raw JSONL output.
-It does not produce an overall score. The Ingot adapter uses only the public `ingot:fit` package;
-its high-level description, measure, layout, interaction, paint, and semantic work differs from the
-other adapters' fixed-placement paths.
+This suite compares headless CPU work for Ingot Fit, direct Ingot UI, Dear ImGui, and egui with
+pinned revisions, deterministic workloads, randomized process order, correctness validation, and raw
+JSONL output. It does not produce an overall score. The Ingot adapter has two public-package paths.
+`--ingot-layer=fit` builds a transient Fit description, measures it, resolves layout, renders through
+`ingot:ui`, and finalizes the frame. `--ingot-layer=ui` submits resolved rectangles directly through
+`ingot:ui` and finalizes the same core frame. Dear ImGui and egui retain fixed-placement core adapters.
 
-The latest checked-in direct-`ingot:ui` evidence remains the
-[2026-07-29 Apple M2 Max core run](results/2026-07-29-m2-max-core.md). Fit results are a new
-methodology and must not be compared numerically with that baseline. Cross-framework results are
-workload-specific headless measurements, not native application or GPU rankings.
+The [2026-07-29 Apple M2 Max core run](results/2026-07-29-m2-max-core.md) remains historical
+fixed-geometry evidence. Current Fit/UI claims use same-revision paired records instead of comparing
+numerically with that older run. Cross-framework results are workload-specific headless measurements,
+not native application or GPU rankings.
 
 ## Requirements
 
@@ -36,8 +37,42 @@ python3 benchmarks/widgets/report/report.py /tmp/widget-results.jsonl \
 ```
 
 A full run uses 300 warm-up frames, 2,000 measured frames, and seven fresh-process repetitions for
-every configured core case. Restrict development runs with `--framework`, `--workload`, `--scale`,
-`--warmup`, `--frames`, or `--repetitions`.
+every configured core case. Restrict development runs with `--framework`, `--ingot-layer`,
+`--workload`, `--scale`, `--warmup`, `--frames`, or `--repetitions`.
+
+### Ingot package modes
+
+| Mode | Caller supplies | Timed complete frame includes | Intended comparison |
+|---|---|---|---|
+| `fit` | Widget hierarchy, sizing constraints, caller-owned state | Description construction, intrinsic measurement, size resolution, placement, interaction, paint, optional semantics, core finalization | Ergonomic high-level API cost |
+| `ui` | Explicit fixed rectangles, identities, caller-owned state | Direct widget interaction/paint, optional semantics, core finalization | Fixed-placement core comparison with Dear ImGui |
+
+Fit is implemented on top of `ingot:ui`; it is not expected to match direct UI latency because it
+performs work the direct caller has already resolved. The measured Fit/UI delta can include transient
+prepared-node construction, tree traversal, intrinsic measurement for non-fixed leaves, layout and
+placement, prepared-node rendering and activation aggregation, and bounded bookkeeping. Both paths
+share core interaction, paint recording, text backend and cache policy, semantics, route finalization,
+and frame lifetime work. Phase telemetry attributes the total delta but is not primitive-equivalent
+accounting and independently summarized phase medians are not additive.
+
+Run one Ingot mode or both modes with competitors:
+
+```sh
+python3 benchmarks/widgets/runner/bench.py run --framework ingot --ingot-layer ui
+python3 benchmarks/widgets/runner/bench.py run --framework all --ingot-layer both
+```
+
+Collect paired Fit/UI evidence:
+
+```sh
+python3 benchmarks/widgets/runner/ingot_layers.py \
+  --binary benchmarks/widgets/build/ingot-widget-bench \
+  --case complex_dashboard:50 \
+  --warmup 300 --frames 2000 --repetitions 7 \
+  --output /tmp/widget-ingot-layers.jsonl
+python3 benchmarks/widgets/report/ingot_layers.py \
+  /tmp/widget-ingot-layers.jsonl --output-dir /tmp/widget-ingot-layers-report
+```
 
 Workloads may declare a `frameworks` list and additional `framework_scales`. Shared scales run on all
 eligible adapters and participate in checksum validation; framework scales characterize larger cases
@@ -70,10 +105,10 @@ python3 benchmarks/widgets/report/reproducibility.py \
 
 ## Interpretation
 
-The Ingot result layer is `fit`; competitor records retain their `core` layer. Ingot build timing covers
-Fit description construction. Fit also reports measurement, layout/render, and actual frame-finalize
-subphases. Finalization remains their compatibility aggregate, and total timing directly spans the
-complete headless Fit frame. Output counts and bounded-drop diagnostics invalidate nominal Ingot runs.
+Ingot records use `fit` or `ui`; competitor records retain their `core` layer. Fit build timing covers
+description construction and reports measurement, layout/render, and actual frame-finalize subphases.
+Direct UI build timing covers fixed-rectangle widget submission. Both Ingot total timings directly span
+the complete headless frame. Output counts and bounded-drop diagnostics invalidate nominal Ingot runs.
 Dear ImGui accessibility is unsupported; egui does not claim native AccessKit integration without an
 `eframe` host.
 
@@ -96,7 +131,9 @@ For development evidence, use at least 100 warm-up and 500 measured frames with 
 Accepted Phase 2 evidence uses the default 300 warm-up, 2,000 measured frames, and seven repetitions,
 and reports total, build, and finalization median/p95 values. Optimization evidence compares complete
 frames from matching environments. Internal Fit phases identify causes and are not compared with
-competitor build phases.
+direct-UI or competitor build phases. Use complete `frame` versus complete `frame` for Fit/UI. Dear
+ImGui requires a fresh complete boundary from `NewFrame` through `Render`; historical build-only
+values must not be divided into a Fit complete-frame median.
 
 `fixed_leaf_measure_skips` counts leaves whose own fixed width and height avoid intrinsic callbacks.
 `measure_cache_policy_bypasses` proves the backend-cache-disabled A/B arm executed. `input_active`

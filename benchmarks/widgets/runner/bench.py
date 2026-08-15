@@ -41,6 +41,19 @@ def parse_args():
     return args
 
 
+def parse_case(value):
+    workload, separator, scale = value.partition(":")
+    if not separator or not workload:
+        raise argparse.ArgumentTypeError("case must be workload:scale")
+    try:
+        scale = int(scale)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("case scale must be an integer") from error
+    if scale <= 0:
+        raise argparse.ArgumentTypeError("case scale must be positive")
+    return workload, scale
+
+
 def load_json(path):
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
@@ -193,6 +206,16 @@ def environment_metadata():
     }
 
 
+def normalize_record(record):
+    for field in ("framework", "framework_revision", "backend", "layer", "workload", "invalid_reason"):
+        if isinstance(record.get(field), str):
+            record[field] = record[field].strip()
+    for field in ("os", "arch", "cpu", "toolchain"):
+        if isinstance(record.get("environment", {}).get(field), str):
+            record["environment"][field] = record["environment"][field].strip()
+    return record
+
+
 def validate_record(record, framework, layer, workload, scale, frames):
     required = {
         "schema_version", "framework", "framework_revision", "backend", "layer",
@@ -229,12 +252,7 @@ def execute(binary, framework, layer, workload, scale, warmup, frames, repetitio
         record = json.loads(raw)
     except json.JSONDecodeError as error:
         raise RuntimeError(f"invalid JSON from {framework}: {error}") from error
-    for field in ("framework", "framework_revision", "backend", "layer", "workload", "invalid_reason"):
-        if isinstance(record.get(field), str):
-            record[field] = record[field].strip()
-    for field in ("os", "arch", "cpu", "toolchain"):
-        if isinstance(record.get("environment", {}).get(field), str):
-            record["environment"][field] = record["environment"][field].strip()
+    normalize_record(record)
     validate_record(record, framework, layer, workload, scale, frames)
     record["process_wall_ns"] = elapsed
     record["runner_environment"] = environment_metadata()
