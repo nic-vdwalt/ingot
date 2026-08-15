@@ -81,7 +81,12 @@ def ensure_imgui(manifest, timeout):
         run_command([
             "git", "clone", "--quiet", framework["repository"], str(checkout)
         ], timeout=timeout)
-    run_command(["git", "-C", str(checkout), "fetch", "--quiet", "--tags"], timeout=timeout)
+    available = subprocess.run(
+        ["git", "-C", str(checkout), "cat-file", "-e", revision + "^{commit}"],
+        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ).returncode == 0
+    if not available:
+        run_command(["git", "-C", str(checkout), "fetch", "--quiet", "--tags"], timeout=timeout)
     run_command(["git", "-C", str(checkout), "checkout", "--quiet", revision], timeout=timeout)
     actual = run_command(["git", "-C", str(checkout), "rev-parse", "HEAD"], timeout=timeout).decode().strip()
     if actual != revision:
@@ -140,8 +145,15 @@ def workload_cases(args, manifest, frameworks):
         eligible = [framework for framework in frameworks if framework in supported]
         if not eligible:
             continue
-        scales = [args.scale] if args.scale is not None else workload["scales"]
-        cases.extend((workload["id"], scale, eligible) for scale in scales)
+        if args.scale is not None:
+            cases.append((workload["id"], args.scale, eligible))
+            continue
+        shared_scales = workload["scales"]
+        cases.extend((workload["id"], scale, eligible) for scale in shared_scales)
+        for framework, scales in workload.get("framework_scales", {}).items():
+            if framework not in eligible:
+                continue
+            cases.extend((workload["id"], scale, [framework]) for scale in scales)
     if not cases:
         raise RuntimeError("no workload cases selected")
     return cases
@@ -253,6 +265,15 @@ def validate_results(path):
             records.append(record)
     if not records:
         raise RuntimeError("result file is empty")
+    checksum_groups = {}
+    for record in records:
+        key = (record["workload"], record["scale"], record["repetition"])
+        checksum_groups.setdefault(key, {})[record["framework"]] = record["state_checksum"]
+    for key, frameworks in checksum_groups.items():
+        if len(frameworks) < 2:
+            continue
+        if len(set(frameworks.values())) != 1:
+            raise RuntimeError(f"state checksum mismatch for {key}: {frameworks}")
     print(f"validated {len(records)} records")
 
 
