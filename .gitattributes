@@ -1,1 +1,3 @@
 *.odin text eol=lf
+accesskit/include/accesskit.h text eol=lf
+assets/fonts/OFL.txt text eol=lf
