@@ -1709,6 +1709,11 @@ _gpu_3d_draw_indexed :: proc(
 	return true
 }
 
+@(private)
+_gpu_3d_should_upload_stream :: proc(allow_submit: bool) -> bool {
+	return allow_submit
+}
+
 end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	if pass == nil || pass.owner == nil do return
 	ctx := pass.owner
@@ -1718,7 +1723,7 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	retirement := u64(0)
 	if pass.owns_stream do retirement = _submission_reserve(&ctx.submissions)
 	allow_submit := !pass.owns_stream || retirement != 0
-	if pass.owns_stream && allow_submit do assert(_stream_slot_upload(ctx, &ctx.rend))
+	if _gpu_3d_should_upload_stream(allow_submit) do assert(_stream_slot_upload(ctx, &ctx.rend))
 	cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(ctx, pass.encoder, allow_submit)
 	if allow_submit && cmd != nil {
 		_stats_queue_submission(ctx)
