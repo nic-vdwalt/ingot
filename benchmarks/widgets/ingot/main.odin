@@ -4,7 +4,9 @@ import "core:fmt"
 import "core:os"
 import "core:strconv"
 import "core:strings"
+import "core:time"
 import fit "ingot:fit"
+import ui "ingot:ui"
 
 WARMUP_DEFAULT :: 300
 FRAMES_DEFAULT :: 2000
@@ -43,7 +45,22 @@ Workload :: enum {
 	Capacity,
 }
 
+Ingot_Layer :: enum {
+	Fit,
+	Ui,
+}
+
+Frame_Timing :: struct {
+	build_ns:          i64,
+	measure_ns:        i64,
+	layout_render_ns:  i64,
+	frame_finalize_ns: i64,
+	finalize_ns:       i64,
+	frame_ns:          i64,
+}
+
 Options :: struct {
+	layer:         Ingot_Layer,
 	workload:      Workload,
 	scale:         int,
 	warmup:        int,
@@ -53,28 +70,52 @@ Options :: struct {
 }
 
 Harness :: struct {
-	driver:           fit.Test_Driver,
-	input:            fit.Test_Input,
-	nodes:            [FIT_NODE_CAPACITY]fit.Storage_Node,
-	outputs:          [FIT_NODE_CAPACITY]^bool,
-	checked:          [MAX_SCALE]bool,
-	values:           [MAX_SCALE]f32,
-	stable_labels:    [MAX_SCALE][32]u8,
-	changing_labels:  [MAX_SCALE][32]u8,
-	dashboard_inputs: [DASHBOARD_MAX_GROUPS]fit.Input_Box,
-	workload:         Workload,
-	scale:            int,
-	frame_index:      int,
-	submitted:        int,
-	layout_checksum:  u64,
+	driver:             fit.Test_Driver,
+	input:              fit.Test_Input,
+	nodes:              [FIT_NODE_CAPACITY]fit.Storage_Node,
+	outputs:            [FIT_NODE_CAPACITY]^bool,
+	checked:            [MAX_SCALE]bool,
+	values:             [MAX_SCALE]f32,
+	stable_labels:      [MAX_SCALE][32]u8,
+	changing_labels:    [MAX_SCALE][32]u8,
+	dashboard_inputs:   [DASHBOARD_MAX_GROUPS]fit.Input_Box,
+	ui_runtime:         ui.Ui_Runtime,
+	ui_frame:           ^ui.Ui_Frame,
+	ui_output:          ^ui.Ui_Output,
+	ui_input:           ui.Ui_Input,
+	ui_inputs:          [DASHBOARD_MAX_GROUPS]ui.Input_Box,
+	ui_telemetry:       ui.Ui_Frame_Telemetry,
+	ui_diagnostics:     ui.Ui_Frame_Diagnostics,
+	ui_active_input:    int,
+	workload:           Workload,
+	scale:              int,
+	frame_index:        int,
+	submitted:          int,
+	layout_checksum:    u64,
 	active_input_stage: i32,
 }
 
-harness_make :: proc(semantics: bool) -> ^Harness {
+harness_make :: proc(layer: Ingot_Layer, semantics, measure_cache: bool) -> ^Harness {
 	h := new(Harness)
-	fit.Test_Driver_Init(&h.driver)
-	fit.Test_Driver_Set_Storage(&h.driver, {nodes = h.nodes[:], outputs = h.outputs[:]})
-	fit.Test_Driver_Set_Semantics(&h.driver, semantics)
+	if layer == .Fit {
+		fit.Test_Driver_Init(&h.driver)
+		fit.Test_Driver_Set_Storage(&h.driver, {nodes = h.nodes[:], outputs = h.outputs[:]})
+		fit.Test_Driver_Set_Semantics(&h.driver, semantics)
+		fit.Test_Driver_Set_Backend_Measure_Cache(&h.driver, measure_cache)
+	} else {
+		h.ui_frame = new(ui.Ui_Frame)
+		h.ui_output = new(ui.Ui_Output)
+		h.ui_frame.output = h.ui_output
+		ui.ui_runtime_init(&h.ui_runtime)
+		ui.ui_runtime_set_text_backend(
+			&h.ui_runtime,
+			{data = h, font_for_size = benchmark_font, measure = benchmark_measure},
+		)
+		ui.ui_runtime_set_backend_measure_cache_enabled(&h.ui_runtime, measure_cache)
+		ui.sem_enable(&h.ui_runtime, semantics)
+		h.ui_input.screen_size = {1280, 720}
+		h.ui_input.dpi_scale = 1
+	}
 	h.input.screen_size = {1280, 720}
 	h.input.dpi_scale = 1
 	for index in 0 ..< MAX_SCALE {
@@ -83,13 +124,39 @@ harness_make :: proc(semantics: bool) -> ^Harness {
 	return h
 }
 
-harness_destroy :: proc(h: ^Harness) {
+harness_destroy :: proc(h: ^Harness, layer: Ingot_Layer) {
 	assert(h != nil, "harness_destroy: nil harness")
-	for index in 0 ..< DASHBOARD_MAX_GROUPS {
-		fit.Input_Box_Destroy(&h.dashboard_inputs[index])
+	if layer == .Fit {
+		for index in 0 ..< DASHBOARD_MAX_GROUPS {
+			fit.Input_Box_Destroy(&h.dashboard_inputs[index])
+		}
+		fit.Test_Driver_Destroy(&h.driver)
+	} else {
+		for index in 0 ..< DASHBOARD_MAX_GROUPS {
+			ui.input_box_destroy(&h.ui_inputs[index])
+		}
+		ui.ui_frame_destroy(h.ui_frame)
+		ui.ui_runtime_destroy(&h.ui_runtime)
+		free(h.ui_output)
+		free(h.ui_frame)
 	}
-	fit.Test_Driver_Destroy(&h.driver)
 	free(h)
+}
+
+benchmark_font :: proc(data: rawptr, size: i32) -> ui.Font_Id {
+	assert(data != nil && size > 0, "benchmark_font: invalid argument")
+	return ui.Font_Id(size)
+}
+
+benchmark_measure :: proc(
+	data: rawptr,
+	font: ui.Font_Id,
+	text: string,
+	size, spacing: f32,
+) -> ui.Vec2 {
+	assert(data != nil && font != 0, "benchmark_measure: invalid argument")
+	assert(size >= 0 && spacing >= 0, "benchmark_measure: invalid geometry")
+	return {f32(len(text)) * max(size * 0.5, 1), size}
 }
 
 label_for :: proc(h: ^Harness, index: int, unique: bool) -> string {
@@ -344,6 +411,240 @@ run_churn :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 	return count
 }
 
+ui_label_at :: proc(h: ^Harness, text: string, rect: ui.Rect_I32) {
+	assert(h != nil && h.ui_frame != nil && text != "", "ui_label_at: invalid argument")
+	style := ui.ui_frame_theme(h.ui_frame)
+	ui.draw_text_string_frame(h.ui_frame, text, rect.x, rect.y + (rect.h - 16) / 2, 16, style.fg_primary)
+	ui.semantic_push(h.ui_frame, .Label, rect, text, {})
+}
+
+run_labels_ui :: proc(h: ^Harness, count: int, unique: bool) -> int {
+	assert(h != nil && count > 0, "run_labels_ui: invalid argument")
+	for index in 0 ..< count {
+		rect := ui.Rect_I32{i32(index % 10 * 126), i32(index / 10 * 18), 124, 18}
+		ui_label_at(h, label_for(h, index, unique), rect)
+	}
+	return count
+}
+
+run_isolated_labels_ui :: proc(h: ^Harness, count: int, changing: bool) -> int {
+	assert(h != nil && count > 0, "run_isolated_labels_ui: invalid argument")
+	for index in 0 ..< count {
+		label := changing_label_for(h, index) if changing else label_for(h, index, true)
+		rect := ui.Rect_I32{i32(index % 10 * 126), i32(index / 10 * 18), 124, 18}
+		ui_label_at(h, label, rect)
+	}
+	return count
+}
+
+run_inputs_ui :: proc(h: ^Harness, count: int) -> int {
+	assert(h != nil && count > 0 && count <= DASHBOARD_MAX_GROUPS, "run_inputs_ui: invalid argument")
+	for index in 0 ..< count {
+		active := h.ui_active_input == index
+		_ = ui.text_input_at(
+			h.ui_frame,
+			{0, i32(index * 24), 180, 24},
+			&h.ui_inputs[index],
+			"Filter",
+			active,
+			semantics = {name = "Filter"},
+		)
+	}
+	return count
+}
+
+run_checkboxes_ui :: proc(h: ^Harness, count: int) -> int {
+	assert(h != nil && count > 0, "run_checkboxes_ui: invalid argument")
+	for index in 0 ..< count {
+		rect := ui.Rect_I32{i32(index % 10 * 100), i32(index / 10 * 24), 96, 24}
+		_ = ui.checkbox_at(
+			h.ui_frame,
+			rect,
+			"Check",
+			&h.checked[index],
+			widget = ui.widget_id(u64(index + 1)),
+		)
+	}
+	return count
+}
+
+run_sliders_ui :: proc(h: ^Harness, count: int) -> int {
+	assert(h != nil && count > 0, "run_sliders_ui: invalid argument")
+	for index in 0 ..< count {
+		rect := ui.Rect_I32{i32(index % 8 * 148), i32(index / 8 * 24), 144, 24}
+		_ = ui.slider_at(
+			h.ui_frame,
+			rect,
+			&h.values[index],
+			0,
+			1,
+			0.01,
+			a11y_label = "Value",
+			widget = ui.widget_id(u64(index + 1)),
+		)
+	}
+	return count
+}
+
+run_buttons_ui :: proc(h: ^Harness, count: int) -> int {
+	assert(h != nil && count > 0, "run_buttons_ui: invalid argument")
+	for index in 0 ..< count {
+		rect := ui.Rect_I32{i32(index % 10 * 100), i32(index / 10 * 26), 96, 24}
+		_ = ui.button_at(h.ui_frame, rect, "Button", widget = ui.widget_id(u64(index + 1)))
+	}
+	return count
+}
+
+run_mixed_ui :: proc(h: ^Harness, groups: int) -> int {
+	assert(h != nil && groups > 0, "run_mixed_ui: invalid argument")
+	for index in 0 ..< groups {
+		y := i32(index * 30)
+		ui_label_at(h, "Label", {0, y, 100, 24})
+		_ = ui.checkbox_at(
+			h.ui_frame,
+			{105, y, 120, 24},
+			"Check",
+			&h.checked[index],
+			widget = ui.widget_id(u64(index * 4 + 1)),
+		)
+		_ = ui.slider_at(
+			h.ui_frame,
+			{230, y, 140, 24},
+			&h.values[index],
+			0,
+			1,
+			0.01,
+			a11y_label = "Value",
+			widget = ui.widget_id(u64(index * 4 + 2)),
+		)
+		ui_label_at(h, "Input", {375, y, 160, 24})
+		_ = ui.button_at(
+			h.ui_frame,
+			{540, y, 96, 24},
+			"Submit",
+			widget = ui.widget_id(u64(index * 4 + 3)),
+		)
+	}
+	return groups * 5
+}
+
+run_dashboard_ui :: proc(h: ^Harness, groups: int) -> int {
+	assert(h != nil && groups > 0 && groups <= DASHBOARD_MAX_GROUPS, "run_dashboard_ui: invalid argument")
+	for index in 0 ..< groups {
+		y := i32(index * 30)
+		ui_label_at(h, label_for(h, index, true), {0, y, 124, 24})
+		ui_label_at(h, "Healthy", {128, y, 76, 24})
+		_ = ui.checkbox_at(
+			h.ui_frame,
+			{208, y, 88, 24},
+			"Live",
+			&h.checked[index],
+			widget = ui.widget_id(u64(index * 4 + 1)),
+		)
+		_ = ui.slider_at(
+			h.ui_frame,
+			{300, y, 130, 24},
+			&h.values[index],
+			0,
+			1,
+			0.01,
+			a11y_label = "Value",
+			widget = ui.widget_id(u64(index * 4 + 2)),
+		)
+		active := h.ui_active_input == index
+		_ = ui.text_input_at(
+			h.ui_frame,
+			{434, y, 150, 24},
+			&h.ui_inputs[index],
+			"Filter",
+			active,
+			semantics = {name = "Filter"},
+		)
+		_ = ui.button_at(
+			h.ui_frame,
+			{588, y, 72, 24},
+			"Open",
+			widget = ui.widget_id(u64(index * 4 + 4)),
+		)
+		for column in 0 ..< 4 {
+			ui_label_at(h, "Data", {664 + i32(column * 86), y, 82, 24})
+		}
+	}
+	return groups * DASHBOARD_WIDGETS_PER_GROUP
+}
+
+run_virtual_list_ui :: proc(h: ^Harness, logical_count: int) -> int {
+	assert(h != nil && logical_count > 0, "run_virtual_list_ui: invalid argument")
+	submitted := min(logical_count, VIRTUAL_ROWS + VIRTUAL_OVERSCAN * 2)
+	start := clamp(logical_count / 2 - VIRTUAL_OVERSCAN, 0, logical_count - submitted)
+	for offset in 0 ..< submitted {
+		ui_label_at(h, label_for(h, start + offset, true), {0, i32(offset * 18), 320, 18})
+	}
+	return submitted
+}
+
+run_table_ui :: proc(h: ^Harness, rows: int, unique: bool) -> int {
+	assert(h != nil && rows > 0, "run_table_ui: invalid argument")
+	for row in 0 ..< rows {
+		for column in 0 ..< 4 {
+			label := label_for(h, (row * 4 + column) % MAX_SCALE, unique)
+			ui_label_at(h, label, {i32(column * 220), i32(row * 18), 216, 18})
+		}
+	}
+	return rows * 4
+}
+
+run_churn_ui :: proc(h: ^Harness, count: int) -> int {
+	assert(h != nil && count > 0, "run_churn_ui: invalid argument")
+	for position in 0 ..< count {
+		churned := (position + h.frame_index) % 10 == 0
+		index := (position + h.frame_index) % count if churned else position
+		ui_label_at(h, label_for(h, index, true), {0, i32(position * 18), 320, 18})
+	}
+	return count
+}
+
+benchmark_draw_ui :: proc(h: ^Harness) {
+	assert(h != nil && h.ui_frame != nil, "benchmark_draw_ui: invalid argument")
+	switch h.workload {
+	case .Labels_Repeated:
+		h.submitted = run_labels_ui(h, h.scale, false)
+	case .Labels_Unique, .List_Full:
+		h.submitted = run_labels_ui(h, h.scale, true)
+	case .Labels_Stable_Unique:
+		h.submitted = run_isolated_labels_ui(h, h.scale, false)
+	case .Labels_Changing_Unique:
+		h.submitted = run_isolated_labels_ui(h, h.scale, true)
+	case .Input_Inactive, .Input_Active:
+		h.submitted = run_inputs_ui(h, h.scale)
+	case .Checkbox_Only:
+		h.submitted = run_checkboxes_ui(h, h.scale)
+	case .Slider_Only:
+		h.submitted = run_sliders_ui(h, h.scale)
+	case .Button_Only,
+	     .Button_Semantics_Disabled,
+	     .Button_Semantics_Enabled,
+	     .Button_Grid,
+	     .Accessibility,
+	     .Capacity:
+		h.submitted = run_buttons_ui(h, h.scale)
+	case .Mixed_Form:
+		h.submitted = run_mixed_ui(h, h.scale)
+	case .Complex_Dashboard:
+		h.submitted = run_dashboard_ui(h, h.scale)
+	case .List_Virtual:
+		h.submitted = run_virtual_list_ui(h, h.scale)
+	case .Table_Repeated:
+		h.submitted = run_table_ui(h, h.scale, false)
+	case .Table_Unique:
+		h.submitted = run_table_ui(h, h.scale, true)
+	case .Dynamic_Churn:
+		h.submitted = run_churn_ui(h, h.scale)
+	case .Layout_Flow:
+		assert(false, "layout_flow is Fit-only")
+	}
+}
+
 benchmark_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	assert(builder != nil && userdata != nil, "benchmark_draw: invalid argument")
 	h := cast(^Harness)userdata
@@ -471,6 +772,7 @@ parse_workload :: proc(value: string) -> (Workload, bool) {
 
 parse_options :: proc() -> (Options, bool) {
 	options := Options {
+		layer         = .Fit,
 		workload      = .Labels_Repeated,
 		scale         = 100,
 		warmup        = WARMUP_DEFAULT,
@@ -478,7 +780,11 @@ parse_options :: proc() -> (Options, bool) {
 		measure_cache = true,
 	}
 	for argument in os.args[1:] {
-		if strings.has_prefix(argument, "--workload=") {
+		if argument == "--layer=fit" {
+			options.layer = .Fit
+		} else if argument == "--layer=ui" {
+			options.layer = .Ui
+		} else if strings.has_prefix(argument, "--workload=") {
 			workload, ok := parse_workload(argument[len("--workload="):])
 			if !ok do return {}, false
 			options.workload = workload
@@ -506,13 +812,14 @@ parse_options :: proc() -> (Options, bool) {
 	}
 	valid_scale :=
 		options.scale > 0 && (options.scale <= MAX_SCALE || options.workload == .List_Virtual)
-	valid_nodes := required_nodes(options.workload, options.scale) <= FIT_NODE_CAPACITY
+	valid_nodes := options.layer == .Ui || required_nodes(options.workload, options.scale) <= FIT_NODE_CAPACITY
+	valid_layer := options.layer == .Fit || options.workload != .Layout_Flow
 	valid_run := options.warmup >= 0 && options.frames > 0 && options.repetition >= 0
-	return options, valid_scale && valid_nodes && valid_run
+	return options, valid_scale && valid_nodes && valid_layer && valid_run
 }
 
-measure_frame :: proc(h: ^Harness, options: Options, index: int) -> fit.Frame_Timing {
-	assert(h != nil && options.scale > 0, "measure_frame: invalid argument")
+measure_frame_fit :: proc(h: ^Harness, options: Options, index: int) -> Frame_Timing {
+	assert(h != nil && options.scale > 0, "measure_frame_fit: invalid argument")
 	h.workload = options.workload
 	h.scale = options.scale
 	h.frame_index = index
@@ -531,8 +838,47 @@ measure_frame :: proc(h: ^Harness, options: Options, index: int) -> fit.Frame_Ti
 		h.active_input_stage += 1
 	}
 	timing, ok := fit.Test_Driver_Frame_Timed(&h.driver, h.input, benchmark_draw, h)
-	assert(ok, "measure_frame: frame failed")
-	return timing
+	assert(ok, "measure_frame_fit: frame failed")
+	return {
+		timing.build_ns,
+		timing.measure_ns,
+		timing.layout_render_ns,
+		timing.frame_finalize_ns,
+		timing.finalize_ns,
+		timing.frame_ns,
+	}
+}
+
+measure_frame_ui :: proc(h: ^Harness, options: Options, index: int) -> Frame_Timing {
+	assert(h != nil && options.scale > 0, "measure_frame_ui: invalid argument")
+	h.workload = options.workload
+	h.scale = options.scale
+	h.frame_index = index
+	h.ui_active_input = 0 if options.workload == .Input_Active else -1
+	frame_started := time.tick_now()
+	ui.ui_frame_begin(h.ui_frame, &h.ui_runtime, &h.ui_input)
+	build_started := time.tick_now()
+	benchmark_draw_ui(h)
+	build_ns := time.duration_nanoseconds(time.tick_since(build_started))
+	finalize_started := time.tick_now()
+	ui.ui_frame_finalize(h.ui_frame)
+	finalize_ns := time.duration_nanoseconds(time.tick_since(finalize_started))
+	frame_ns := time.duration_nanoseconds(time.tick_since(frame_started))
+	h.ui_telemetry = ui.ui_frame_telemetry(h.ui_frame)
+	h.ui_diagnostics = ui.ui_frame_diagnostics(h.ui_frame)
+	ui.ui_frame_release(h.ui_frame)
+	return {
+		build_ns          = build_ns,
+		frame_finalize_ns = finalize_ns,
+		finalize_ns       = finalize_ns,
+		frame_ns          = frame_ns,
+	}
+}
+
+measure_frame :: proc(h: ^Harness, options: Options, index: int) -> Frame_Timing {
+	assert(h != nil, "measure_frame: nil harness")
+	if options.layer == .Fit do return measure_frame_fit(h, options, index)
+	return measure_frame_ui(h, options, index)
 }
 
 print_samples :: proc(name: string, samples: []i64, first: bool) {
@@ -544,6 +890,76 @@ print_samples :: proc(name: string, samples: []i64, first: bool) {
 		fmt.print(value)
 	}
 	fmt.print("]")
+}
+
+benchmark_evidence :: proc(
+	h: ^Harness,
+	layer: Ingot_Layer,
+) -> (
+	fit.Paint_Summary,
+	fit.Frame_Telemetry,
+	fit.Frame_Diagnostics,
+) {
+	assert(h != nil, "benchmark_evidence: nil harness")
+	if layer == .Fit {
+		return fit.Test_Driver_Paint_Summary(&h.driver),
+		       fit.Test_Driver_Telemetry(&h.driver),
+		       fit.Test_Driver_Diagnostics(&h.driver)
+	}
+	telemetry := fit.Frame_Telemetry {
+		scratch_allocations              = h.ui_telemetry.scratch_allocation_count,
+		scratch_resizes                  = h.ui_telemetry.scratch_resize_count,
+		scratch_allocation_bytes         = h.ui_telemetry.scratch_allocation_request_bytes,
+		scratch_resize_bytes             = h.ui_telemetry.scratch_resize_request_bytes,
+		main                             = {
+			h.ui_telemetry.main.command_append_count,
+			h.ui_telemetry.main.text_append_count,
+			h.ui_telemetry.main.text_bytes_copied,
+			h.ui_telemetry.main.command_growth_count,
+			h.ui_telemetry.main.text_growth_count,
+		},
+		overlay                          = {
+			h.ui_telemetry.overlay.command_append_count,
+			h.ui_telemetry.overlay.text_append_count,
+			h.ui_telemetry.overlay.text_bytes_copied,
+			h.ui_telemetry.overlay.command_growth_count,
+			h.ui_telemetry.overlay.text_growth_count,
+		},
+		text_input_full_paths             = h.ui_telemetry.text_input_full_path_count,
+		text_input_inactive_paths         = h.ui_telemetry.text_input_inactive_candidates,
+		natural_leaf_measures             = h.ui_telemetry.prepared.natural_leaf_measures,
+		resolved_leaf_measures            = h.ui_telemetry.prepared.resolved_leaf_measures,
+		fixed_leaf_measure_skips          = h.ui_telemetry.prepared.fixed_leaf_measure_skips,
+		container_measures                = h.ui_telemetry.prepared.container_measures,
+		placed_nodes                      = h.ui_telemetry.prepared.placed_nodes,
+		rendered_nodes                    = h.ui_telemetry.prepared.rendered_nodes,
+		activation_outputs                = h.ui_telemetry.prepared.activation_outputs,
+		render_relayouts                  = h.ui_telemetry.prepared.render_relayouts,
+		measure_cache_hits                = h.ui_telemetry.measure_cache_hits,
+		measure_cache_misses              = h.ui_telemetry.measure_cache_misses,
+		measure_cache_policy_bypasses     = h.ui_telemetry.measure_cache_policy_bypasses,
+	}
+	diagnostics := fit.Frame_Diagnostics {
+		input_characters_dropped   = h.ui_diagnostics.input_characters_dropped,
+		degenerate_widgets_dropped = h.ui_diagnostics.degenerate_widgets_dropped,
+		semantic_nodes_dropped     = h.ui_diagnostics.semantic_nodes_dropped,
+		semantic_focus_dropped     = h.ui_diagnostics.semantic_focus_dropped,
+		semantic_actions_dropped   = h.ui_diagnostics.semantic_actions_dropped,
+		semantic_id_collisions     = h.ui_diagnostics.semantic_id_collisions,
+		semantic_text_truncations  = h.ui_diagnostics.semantic_text_truncations,
+		main_commands_dropped      = h.ui_diagnostics.main_commands_dropped,
+		main_text_bytes_dropped    = h.ui_diagnostics.main_text_bytes_dropped,
+		overlay_commands_dropped   = h.ui_diagnostics.overlay_commands_dropped,
+		overlay_text_bytes_dropped = h.ui_diagnostics.overlay_text_bytes_dropped,
+		platform_controls_dropped  = h.ui_diagnostics.platform_controls_dropped,
+	}
+	summary := fit.Paint_Summary {
+		main_commands      = h.ui_output.main.count,
+		main_text_bytes    = h.ui_output.main.text_len,
+		overlay_commands   = h.ui_output.overlay.count,
+		overlay_text_bytes = h.ui_output.overlay.text_len,
+	}
+	return summary, telemetry, diagnostics
 }
 
 print_telemetry :: proc(value: fit.Frame_Telemetry) {
@@ -609,16 +1025,15 @@ main :: proc() {
 	options, valid := parse_options()
 	if !valid {
 		fmt.eprintln(
-			"usage: ingot_widget_bench [--workload=ID] [--scale=N] ",
+			"usage: ingot_widget_bench [--layer=fit|ui] [--workload=ID] [--scale=N] ",
 			"[--warmup=N] [--frames=N] [--repetition=N]",
 		)
 		os.exit(2)
 	}
 	semantics :=
 		options.workload == .Accessibility || options.workload == .Button_Semantics_Enabled
-	h := harness_make(semantics)
-	defer harness_destroy(h)
-	fit.Test_Driver_Set_Backend_Measure_Cache(&h.driver, options.measure_cache)
+	h := harness_make(options.layer, semantics, options.measure_cache)
+	defer harness_destroy(h, options.layer)
 	for index in 0 ..< options.warmup do _ = measure_frame(h, options, index)
 	build_samples := make([]i64, options.frames)
 	measure_samples := make([]i64, options.frames)
@@ -644,14 +1059,14 @@ main :: proc() {
 		}
 	}
 	_ = measure_frame(h, options, options.frames)
-	summary := fit.Test_Driver_Paint_Summary(&h.driver)
-	telemetry := fit.Test_Driver_Telemetry(&h.driver)
-	diagnostics := fit.Test_Driver_Diagnostics(&h.driver)
+	summary, telemetry, diagnostics := benchmark_evidence(h, options.layer)
 	valid_output :=
 		diagnostics.main_commands_dropped == 0 && diagnostics.main_text_bytes_dropped == 0
 	fmt.print(
 		"{\"schema_version\":1,\"framework\":\"ingot\",\"framework_revision\":\"workspace\"",
-		",\"backend\":\"headless\",\"layer\":\"fit\",\"workload\":\"",
+		",\"backend\":\"headless\",\"layer\":\"",
+		"fit" if options.layer == .Fit else "ui",
+		"\",\"workload\":\"",
 		workload_name(options.workload),
 		"\",\"scale\":",
 		options.scale,

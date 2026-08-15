@@ -24,6 +24,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("build", "smoke", "run", "validate"))
     parser.add_argument("--framework", choices=("all", "ingot", "imgui", "egui"), default="all")
+    parser.add_argument("--ingot-layer", choices=("fit", "ui", "both"), default="fit")
     parser.add_argument("--workload")
     parser.add_argument("--scale", type=int)
     parser.add_argument("--warmup", type=int)
@@ -135,14 +136,35 @@ def build_all(selection, manifest, timeout):
             for framework in frameworks_for(selection)}
 
 
-def workload_cases(args, manifest, frameworks):
+def ingot_layers(selection):
+    return ("fit", "ui") if selection == "both" else (selection,)
+
+
+def benchmark_variants(frameworks, layer_selection):
+    variants = []
+    for framework in frameworks:
+        if framework == "ingot":
+            variants.extend((framework, layer) for layer in ingot_layers(layer_selection))
+        else:
+            variants.append((framework, "core"))
+    return variants
+
+
+def workload_cases(args, manifest, variants):
     workloads = load_json(SUITE / manifest["workloads"])["workloads"]
     cases = []
     for workload in workloads:
         if args.workload and workload["id"] != args.workload:
             continue
         supported = workload.get("frameworks", ("ingot", "imgui", "egui"))
-        eligible = [framework for framework in frameworks if framework in supported]
+        supported_layers = workload.get("ingot_layers", ("fit", "ui"))
+        eligible = []
+        for framework, layer in variants:
+            if framework not in supported:
+                continue
+            if framework == "ingot" and layer not in supported_layers:
+                continue
+            eligible.append((framework, layer))
         if not eligible:
             continue
         if args.scale is not None:
@@ -151,9 +173,10 @@ def workload_cases(args, manifest, frameworks):
         shared_scales = workload["scales"]
         cases.extend((workload["id"], scale, eligible) for scale in shared_scales)
         for framework, scales in workload.get("framework_scales", {}).items():
-            if framework not in eligible:
+            framework_variants = [variant for variant in eligible if variant[0] == framework]
+            if not framework_variants:
                 continue
-            cases.extend((workload["id"], scale, [framework]) for scale in scales)
+            cases.extend((workload["id"], scale, framework_variants) for scale in scales)
     if not cases:
         raise RuntimeError("no workload cases selected")
     return cases
@@ -170,7 +193,7 @@ def environment_metadata():
     }
 
 
-def validate_record(record, framework, workload, scale, frames):
+def validate_record(record, framework, layer, workload, scale, frames):
     required = {
         "schema_version", "framework", "framework_revision", "backend", "layer",
         "workload", "scale", "repetition", "warmup_frames", "measured_frames",
@@ -179,7 +202,8 @@ def validate_record(record, framework, workload, scale, frames):
     missing = sorted(required - record.keys())
     if missing:
         raise RuntimeError(f"missing result fields: {missing}")
-    if record["framework"] != framework or record["workload"] != workload or record["scale"] != scale:
+    if (record["framework"] != framework or record["layer"] != layer or
+            record["workload"] != workload or record["scale"] != scale):
         raise RuntimeError("result identity mismatch")
     for phase in ("build", "finalize"):
         if len(record["samples_ns"].get(phase, [])) != frames:
@@ -191,11 +215,13 @@ def validate_record(record, framework, workload, scale, frames):
         raise RuntimeError(f"invalid sample: {record.get('invalid_reason', '')}")
 
 
-def execute(binary, framework, workload, scale, warmup, frames, repetition, timeout):
+def execute(binary, framework, layer, workload, scale, warmup, frames, repetition, timeout):
     command = [
         str(binary), f"--workload={workload}", f"--scale={scale}",
         f"--warmup={warmup}", f"--frames={frames}", f"--repetition={repetition}",
     ]
+    if framework == "ingot":
+        command.append(f"--layer={layer}")
     started = time.monotonic_ns()
     raw = run_command(command, timeout=timeout)
     elapsed = time.monotonic_ns() - started
@@ -209,7 +235,7 @@ def execute(binary, framework, workload, scale, warmup, frames, repetition, time
     for field in ("os", "arch", "cpu", "toolchain"):
         if isinstance(record.get("environment", {}).get(field), str):
             record["environment"][field] = record["environment"][field].strip()
-    validate_record(record, framework, workload, scale, frames)
+    validate_record(record, framework, layer, workload, scale, frames)
     record["process_wall_ns"] = elapsed
     record["runner_environment"] = environment_metadata()
     return record
@@ -225,24 +251,25 @@ def result_path(args, command):
 
 def run_suite(args, manifest, smoke):
     binaries = build_all(args.framework, manifest, args.timeout)
-    cases = workload_cases(args, manifest, binaries)
+    variants = benchmark_variants(binaries, args.ingot_layer)
+    cases = workload_cases(args, manifest, variants)
     if smoke:
         cases = cases[:1]
     collection = manifest["collection"]
     warmup = args.warmup if args.warmup is not None else (2 if smoke else collection["warmup_frames"])
     frames = args.frames if args.frames is not None else (3 if smoke else collection["measured_frames"])
     repetitions = args.repetitions if args.repetitions is not None else (1 if smoke else collection["repetitions"])
-    jobs = [(framework, workload, scale, repetition)
+    jobs = [(framework, layer, workload, scale, repetition)
             for workload, scale, eligible in cases
             for repetition in range(repetitions)
-            for framework in eligible]
+            for framework, layer in eligible]
     random.Random(args.seed).shuffle(jobs)
     output = result_path(args, "smoke" if smoke else "run")
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8") as handle:
-        for framework, workload, scale, repetition in jobs:
+        for framework, layer, workload, scale, repetition in jobs:
             record = execute(
-                binaries[framework], framework, workload, scale, warmup,
+                binaries[framework], framework, layer, workload, scale, warmup,
                 frames, repetition, args.timeout,
             )
             handle.write(json.dumps(record, separators=(",", ":"), sort_keys=True) + "\n")
@@ -259,7 +286,7 @@ def validate_results(path):
             except json.JSONDecodeError as error:
                 raise RuntimeError(f"{path}:{line_number}: {error}") from error
             validate_record(
-                record, record["framework"], record["workload"],
+                record, record["framework"], record["layer"], record["workload"],
                 record["scale"], record["measured_frames"],
             )
             records.append(record)
@@ -268,7 +295,8 @@ def validate_results(path):
     checksum_groups = {}
     for record in records:
         key = (record["workload"], record["scale"], record["repetition"])
-        checksum_groups.setdefault(key, {})[record["framework"]] = record["state_checksum"]
+        identity = (record["framework"], record["layer"])
+        checksum_groups.setdefault(key, {})[identity] = record["state_checksum"]
     for key, frameworks in checksum_groups.items():
         if len(frameworks) < 2:
             continue
