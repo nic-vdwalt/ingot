@@ -292,6 +292,7 @@ exercise_ws_stream :: proc(c: ^fuzzx.Ctx, p: ^Prng) {
 }
 
 main :: proc() {
+	if net_tape_cli() do return
 	seed, iterations, rounds := fuzzx.parse_options(ITERATIONS_DEFAULT)
 	fmt.printfln("fuzz_net seed=%d iterations=%d rounds=%d", seed, iterations, rounds)
 

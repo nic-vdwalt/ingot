@@ -170,6 +170,32 @@ Headless targets build with debug information and AddressSanitizer by default.
 Harnesses use `mem.Tracking_Allocator` where applicable so leaks and invalid
 ownership transitions fail the run.
 
+### Operation tapes, shrinking, and regressions
+
+`net` and `interact` can materialize generated work as versioned, bounded
+operation tapes. Replay consumes only the tape and never the generation PRNG,
+so a generator refactor cannot invalidate a committed reproducer:
+
+```sh
+fuzz/net/fuzz_net -record:/tmp/net.ingtape -seed:12345 -iterations:1000
+fuzz/net/fuzz_net -replay:/tmp/net.ingtape
+fuzz/net/fuzz_net -shrink:/tmp/net.ingtape -shrink-output:/tmp/net-min.ingtape
+```
+
+`interact` supports the same options. Its operation unit is one complete frame,
+so shrinking preserves input frame boundaries. The generic shrinker removes
+contiguous operation ranges deterministically, accepts only the original
+failure class, and stops after a bounded number of predicate runs. In-process
+shrinking applies to structured invariant failures. Assertions and sanitizer
+aborts retain exact tape replay, but require a future child-process predicate
+before they can be minimized safely.
+
+`testdata/seeds/manifest.json` lists the small minimized regression corpus.
+`scripts/test.sh`, `scripts/test.ps1`, and `fuzz/run.sh corpus` validate its
+metadata, reject missing or orphaned tapes, build each target once, and replay
+every entry. Promote a finding only after minimizing it, fixing the defect, and
+recording an expected passing replay; never commit random bulk fuzz output.
+
 ### Frame scratch checks
 
 Tests and fuzzers enable `INGOT_FRAME_SCRATCH_GUARD`. They exercise allocations

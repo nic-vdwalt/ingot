@@ -121,6 +121,27 @@ main :: proc() {
 graphics loop. It still yields only `fit.Builder`; it does not expose runtime,
 frame, adapter, paint, or platform internals.
 
+## API map contract
+
+The API map presents `ingot:fit` and `ingot:gfx` as parallel supported entry
+points. Its Fit path crosses five ownership and implementation tiers: supported
+API, application-owned state, callback-scoped capability, internal UI engine,
+and presentation. Internal boxes explain execution; they are not supported
+application imports.
+
+The animated path names six stages of one UI frame:
+
+1. `fit.App` owns lifecycle and captures platform input.
+2. `fit.Builder` records a bounded immediate declaration.
+3. Fit measures constraints and places responsive layout.
+4. Explicit leaves borrow `fit.Surface` for same-frame interaction and drawing.
+5. The UI engine records paint, semantics, and platform requests.
+6. The UI/GFX bridge presents through WebGPU and native or web adapters.
+
+Hover and animation are implemented inside the borrowed Surface callback. The
+map retains only application-owned selection and timing values; it never retains
+the Surface.
+
 ## Internal packages
 
 `ingot:ui` and `ingot:ui_gfx` retain the passive runtime, per-frame input and

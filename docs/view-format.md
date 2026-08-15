@@ -322,8 +322,9 @@ length over cap, offset past `text_length`, binding index out of range, cyclic
 parent links, depth overflow, duplicate sibling keys. Each returns `ok = false`
 and none of them crashes.
 
-`fuzz/view/` drives the decoder from a seed corpus, and the invariant is the same
-one: no input, however malformed, may crash or hang the decoder.
+`fuzz/view/` drives the decoder from seeded built-in templates and generated
+mutations, not the persisted operation-tape regression corpus. The invariant is
+the same: no input, however malformed, may crash or hang the decoder.
 
 The round-trip test asserts `decode(encode(doc))` is byte-identical, and that a
 decoded document and the committed generated literal produce structurally equal

@@ -17,6 +17,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- Versioned bounded fuzz operation tapes, deterministic failure-class-preserving
+  shrinking for `net` and `interact`, a canonical shared harness PRNG, and a
+  committed regression corpus replayed by Unix and Windows test gates.
 - Fit declarative composition adds token-styled `Section` and `Card` containers,
   parent-owned responsive selection, bounded nested Canvas leaves, and checked
   immediate Region, Pane, and Layer helpers while preserving ordinary Odin

@@ -145,13 +145,13 @@ collection with an `ols.json` at your project root:
 
 ## Choose your entry point
 
-[![The Ingot API map: start tiers, ownership, and the six steps of one frame](docs/media/api-map-dark.png)](https://openalloy.ai/demos/ingot-api-map/)
+[![The Ingot API map: supported entry points, ownership tiers, and six UI-frame stages](docs/media/api-map-dark.png)](https://openalloy.ai/demos/ingot-api-map/)
 
 [Explore the interactive API map](https://openalloy.ai/demos/ingot-api-map/) —
-hover any node for its contract, click a step to walk one frame. The still is
-generated deterministically by
-`odin run examples/api-map -collection:ingot=. -define:INGOT_MAP_CAPTURE=true`;
-`bash scripts/capture-media.sh` refreshes all README media the same way.
+hover a node for its contract, click a stage, or play the animated Fit path.
+The checked-in still is a fixed terminal frame; the deterministic topology and
+responsive layouts are verified with
+`odin run examples/api-map -collection:ingot=. -define:INGOT_LAYOUT_CHECK=true`.
 
 UI applications start with `fit.App` and `fit.Builder`; explicit same-frame
 geometry is available only through callback-borrowed `fit.Surface`. Graphics-only

@@ -232,6 +232,9 @@ gpu3d)
 tsan)
 	run_tsan "${ARGS[@]+"${ARGS[@]}"}"
 	;;
+corpus)
+	python3 "$ROOT/scripts/fuzz-corpus.py" --root "$ROOT"
+	;;
 all)
 	run_net "${ARGS[@]+"${ARGS[@]}"}"
 	run_ui "${ARGS[@]+"${ARGS[@]}"}"
@@ -278,7 +281,7 @@ soak)
 	done
 	;;
 *)
-	echo "unknown target '$TARGET' (expected net|ui|view|term|interact|input|wsreconn|procgen|gpu3d|tsan|gfx-frame|all|soak)" >&2
+	echo "unknown target '$TARGET' (expected net|ui|view|term|interact|input|wsreconn|procgen|gpu3d|tsan|gfx-frame|corpus|all|soak)" >&2
 	exit 2
 	;;
 esac

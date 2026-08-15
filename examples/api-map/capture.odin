@@ -1,12 +1,15 @@
 #+build !js
 package main
 
-import "core:fmt"
-import "core:os"
-
 when MAP_CAPTURE {
 	map_capture_main :: proc() {
-		fmt.eprintln("api-map capture requires the native media capture target")
-		os.exit(1)
+		map_state = {
+			selected_stage = STAGE_COUNT,
+			target_stage   = STAGE_COUNT,
+			hovered_node   = -1,
+			dark           = true,
+			progress       = 1,
+		}
+		layout_check()
 	}
 }
