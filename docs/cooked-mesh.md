@@ -56,6 +56,14 @@ The exporter evaluates modifiers, triangulates geometry, splits vertices by
 position/normal/UV/scalar, canonicalizes negative zero, sorts meshes by ID, and
 writes atomically.
 
+Projects with multiple bundles can pass `--manifest path.json`. Version 1
+manifests contain a `meshes` array whose records have exactly `id`, `name`,
+`group`, `grounded`, and `materials` fields. IDs and names must be unique,
+materials must be exporter-supported, and `grounded: true` requires local
+minimum Z at zero. Setting it false preserves shared coordinates for separately
+drawn material components; the consuming project must validate the assembled
+asset's bounds and grounding.
+
 TerraForger's source scene contains `Conifer_A`, `Conifer_B`, `Broadleaf`,
 `Grass_Upright`, `Grass_Crossed`, `Grass_Reed`, `Boulder_A`, `Boulder_B`,
 `Boulder_C`, `Rock_A`, and `Rock_B`, with `ingot_mesh_id` values 1 through 11.
