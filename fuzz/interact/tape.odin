@@ -39,12 +39,25 @@ Frame_Op :: struct {
 	control: Frame_Control,
 }
 
-interact_tape_generate :: proc(seed: u64, iterations: int, allocator := context.allocator) -> fuzzx.Tape {
-	assert(iterations > 0 && iterations <= fuzzx.TAPE_OPS_MAX, "interact_tape_generate: invalid iterations")
+interact_tape_generate :: proc(
+	seed: u64,
+	iterations: int,
+	allocator := context.allocator,
+) -> fuzzx.Tape {
+	assert(
+		iterations > 0 && iterations <= fuzzx.TAPE_OPS_MAX,
+		"interact_tape_generate: invalid iterations",
+	)
 	p := fuzzx.prng_make(seed)
-	tape := fuzzx.Tape{version = fuzzx.TAPE_VERSION, target = strings.clone(INTERACT_TAPE_TARGET, allocator), seed = seed}
+	tape := fuzzx.Tape {
+		version = fuzzx.TAPE_VERSION,
+		target  = strings.clone(INTERACT_TAPE_TARGET, allocator),
+		seed    = seed,
+	}
 	tape.ops = make([dynamic]fuzzx.Tape_Op, 0, iterations, allocator)
-	state := Scene{slider_val = 40}
+	state := Scene {
+		slider_val = 40,
+	}
 	for iteration in 0 ..< iterations {
 		frame := frame_generate(&p, iteration, &state)
 		payload := frame_encode(frame, allocator)
@@ -105,30 +118,58 @@ frame_scenario :: proc(frame: ^Frame_Op, iteration: int, state: ^Scene) {
 	assert(frame != nil && state != nil, "frame_scenario: nil argument")
 	add := proc(frame: ^Frame_Op, kind: Action_Kind, a: i32, b: i32 = 0) {
 		assert(frame.count < INTERACT_ACTIONS_MAX, "frame_scenario: actions full")
-		frame.actions[frame.count] = {kind = kind, a = a, b = b}
+		frame.actions[frame.count] = {
+			kind = kind,
+			a    = a,
+			b    = b,
+		}
 		frame.count += 1
 	}
 	switch iteration {
-	case 0: add(frame, .Mouse, 40, 35); add(frame, .Left, 1)
-	case 1: add(frame, .Mouse, 400, 400)
-	case 2: add(frame, .Left, 0)
-	case 3: add(frame, .Mouse, 30, 190); add(frame, .Left, 1)
-	case 4: add(frame, .Mouse, 215, 190)
-	case 5: add(frame, .Mouse, 40, 35)
-	case 6: add(frame, .Left, 0)
-	case 7: state.focus = FOCUS_COUNT; add(frame, .Key, i32(rl.KeyboardKey.TAB))
-	case 8: add(frame, .Key, i32(rl.KeyboardKey.TAB), 1)
-	case 9: frame.control = {open_menu = true, menu_x = 300, menu_y = 100}
-	case 10, 11, 12: add(frame, .Key, i32(rl.KeyboardKey.DOWN))
-	case 13: add(frame, .Key, i32(rl.KeyboardKey.ENTER))
-	case 14: add(frame, .Mouse, 40, 230); add(frame, .Left, 1)
-	case 15: add(frame, .Left, 0)
-	case 16, 17, 18: add(frame, .Key, i32(rl.KeyboardKey.DOWN))
-	case 19: add(frame, .Key, i32(rl.KeyboardKey.ENTER))
-	case 20: add(frame, .Mouse, 40, 230); add(frame, .Left, 1)
-	case 21: add(frame, .Left, 0)
-	case 22: add(frame, .Key, i32(rl.KeyboardKey.ENTER))
-	case 23: frame.control.open_modal = true; add(frame, .Key, i32(rl.KeyboardKey.ESCAPE))
+	case 0:
+		add(frame, .Mouse, 40, 35); add(frame, .Left, 1)
+	case 1:
+		add(frame, .Mouse, 400, 400)
+	case 2:
+		add(frame, .Left, 0)
+	case 3:
+		add(frame, .Mouse, 30, 190); add(frame, .Left, 1)
+	case 4:
+		add(frame, .Mouse, 215, 190)
+	case 5:
+		add(frame, .Mouse, 40, 35)
+	case 6:
+		add(frame, .Left, 0)
+	case 7:
+		state.focus = FOCUS_COUNT; add(frame, .Key, i32(rl.KeyboardKey.TAB))
+	case 8:
+		add(frame, .Key, i32(rl.KeyboardKey.TAB), 1)
+	case 9:
+		frame.control = {
+			open_menu = true,
+			menu_x    = 300,
+			menu_y    = 100,
+		}
+	case 10, 11, 12:
+		add(frame, .Key, i32(rl.KeyboardKey.DOWN))
+	case 13:
+		add(frame, .Key, i32(rl.KeyboardKey.ENTER))
+	case 14:
+		add(frame, .Mouse, 40, 230); add(frame, .Left, 1)
+	case 15:
+		add(frame, .Left, 0)
+	case 16, 17, 18:
+		add(frame, .Key, i32(rl.KeyboardKey.DOWN))
+	case 19:
+		add(frame, .Key, i32(rl.KeyboardKey.ENTER))
+	case 20:
+		add(frame, .Mouse, 40, 230); add(frame, .Left, 1)
+	case 21:
+		add(frame, .Left, 0)
+	case 22:
+		add(frame, .Key, i32(rl.KeyboardKey.ENTER))
+	case 23:
+		frame.control.open_modal = true; add(frame, .Key, i32(rl.KeyboardKey.ESCAPE))
 	}
 }
 
@@ -136,28 +177,38 @@ frame_apply :: proc(frame: Frame_Op) {
 	for index in 0 ..< frame.count {
 		action := frame.actions[index]
 		#partial switch action.kind {
-		case .Mouse: rl.SimMouse(f32(action.a), f32(action.b))
-		case .Left: rl.SimButton(.LEFT, action.a != 0)
-		case .Right: rl.SimButton(.RIGHT, action.a != 0)
+		case .Mouse:
+			rl.SimMouse(f32(action.a), f32(action.b))
+		case .Left:
+			rl.SimButton(.LEFT, action.a != 0)
+		case .Right:
+			rl.SimButton(.RIGHT, action.a != 0)
 		case .Key:
 			key := rl.KeyboardKey(action.a)
 			if key == .TAB do rl.SimKey(.LEFT_SHIFT, action.b != 0)
 			rl.SimKey(key, true)
 			rl.SimKey(key, false)
 			if key == .TAB do rl.SimKey(.LEFT_SHIFT, false)
-		case .Wheel: rl.SimWheel(0, f32(action.a) / 100)
-		case: return
+		case .Wheel:
+			rl.SimWheel(0, f32(action.a) / 100)
+		case:
+			return
 		}
 	}
 }
 
 interact_tape_execute :: proc(tape: ^fuzzx.Tape, userdata: rawptr = nil) -> fuzzx.Failure {
 	if tape == nil || tape.target != INTERACT_TAPE_TARGET do return fuzzx.failure_make(INTERACT_FAILURE_OPERATION, -1, "invalid interact tape")
-	state := Scene{slider_val = 40}
+	state := Scene {
+		slider_val = 40,
+	}
 	runtime: ui.Ui_Runtime
 	ui.ui_runtime_init(&runtime)
 	defer ui.ui_runtime_destroy(&runtime)
-	ui.ui_runtime_set_text_backend(&runtime, {font_for_size = fuzz_text_font, measure = fuzz_text_measure})
+	ui.ui_runtime_set_text_backend(
+		&runtime,
+		{font_for_size = fuzz_text_font, measure = fuzz_text_measure},
+	)
 	ui.sem_enable(&runtime, true)
 	frame: ui.Ui_Frame
 	defer ui.ui_frame_destroy(&frame)
@@ -186,7 +237,11 @@ interact_tape_execute :: proc(tape: ^fuzzx.Tape, userdata: rawptr = nil) -> fuzz
 	return {}
 }
 
-interact_invariants :: proc(frame: ^ui.Ui_Frame, state: ^Scene, overlay_free_frames, op_index: int) -> fuzzx.Failure {
+interact_invariants :: proc(
+	frame: ^ui.Ui_Frame,
+	state: ^Scene,
+	overlay_free_frames, op_index: int,
+) -> fuzzx.Failure {
 	if ui.route_claim_count(frame) < 0 || ui.route_claim_count(frame) > ui.MAX_ROUTE_CLAIMS do return fuzzx.failure_make(INTERACT_FAILURE_ROUTE, op_index, "route claims out of range")
 	if overlay_free_frames >= 3 && ui.route_claim_count(frame) != 0 do return fuzzx.failure_make(INTERACT_FAILURE_ROUTE, op_index, "route claims leaked")
 	if state.focus < 0 || state.focus > FOCUS_COUNT do return fuzzx.failure_make(INTERACT_FAILURE_STATE, op_index, "focus out of range")
@@ -220,13 +275,25 @@ frame_encode :: proc(frame: Frame_Op, allocator: mem.Allocator) -> []u8 {
 
 frame_decode :: proc(payload: []u8) -> (Frame_Op, bool) {
 	if len(payload) != INTERACT_FRAME_BYTES || int(payload[0]) > INTERACT_ACTIONS_MAX do return {}, false
-	frame := Frame_Op{count = int(payload[0])}
-	frame.control = {hide_slider = i32(payload[1]), open_modal = payload[2] != 0, open_menu = payload[3] != 0, menu_x = get_i32(payload, 4), menu_y = get_i32(payload, 8)}
+	frame := Frame_Op {
+		count = int(payload[0]),
+	}
+	frame.control = {
+		hide_slider = i32(payload[1]),
+		open_modal  = payload[2] != 0,
+		open_menu   = payload[3] != 0,
+		menu_x      = get_i32(payload, 4),
+		menu_y      = get_i32(payload, 8),
+	}
 	for index in 0 ..< frame.count {
 		offset := 12 + index * 7
 		kind := Action_Kind(payload[offset])
 		if kind <= .None || kind > .Wheel do return {}, false
-		frame.actions[index] = {kind = kind, a = get_i32(payload, offset + 1), b = i32(payload[offset + 5]) | i32(payload[offset + 6]) << 8}
+		frame.actions[index] = {
+			kind = kind,
+			a    = get_i32(payload, offset + 1),
+			b    = i32(payload[offset + 5]) | i32(payload[offset + 6]) << 8,
+		}
 	}
 	return frame, true
 }
@@ -240,8 +307,14 @@ interact_tape_cli :: proc() -> bool {
 		if strings.has_prefix(arg, "-record:") do record = arg[len("-record:"):]
 		if strings.has_prefix(arg, "-shrink:") do shrink = arg[len("-shrink:"):]
 		if strings.has_prefix(arg, "-shrink-output:") do output = arg[len("-shrink-output:"):]
-		if strings.has_prefix(arg, "-seed:") {if value, ok := strconv.parse_u64(arg[len("-seed:"):]); ok do seed = value}
-		if strings.has_prefix(arg, "-iterations:") {if value, ok := strconv.parse_int(arg[len("-iterations:"):]); ok do iterations = value}
+		if strings.has_prefix(
+			arg,
+			"-seed:",
+		) {if value, ok := strconv.parse_u64(arg[len("-seed:"):]); ok do seed = value}
+		if strings.has_prefix(
+			arg,
+			"-iterations:",
+		) {if value, ok := strconv.parse_int(arg[len("-iterations:"):]); ok do iterations = value}
 	}
 	modes := int(replay != "") + int(record != "") + int(shrink != "")
 	if modes == 0 do return false
@@ -264,7 +337,12 @@ interact_tape_cli :: proc() -> bool {
 		return true
 	}
 	if output == "" do os.exit(2)
-	result := fuzzx.tape_shrink(&tape, interact_tape_execute, nil, {maximum_runs = 1024, allow_empty = true})
+	result := fuzzx.tape_shrink(
+		&tape,
+		interact_tape_execute,
+		nil,
+		{maximum_runs = 1024, allow_empty = true},
+	)
 	defer fuzzx.tape_destroy(&result.tape)
 	if !result.reproduced || !fuzzx.tape_save(output, &result.tape) do os.exit(1)
 	return true
@@ -272,7 +350,12 @@ interact_tape_cli :: proc() -> bool {
 
 @(private)
 interact_fail :: proc(failure: fuzzx.Failure) {
-	fmt.eprintfln("fuzz_interact replay FAILED: class=%d operation=%d %s", failure.class, failure.op_index, failure.message)
+	fmt.eprintfln(
+		"fuzz_interact replay FAILED: class=%d operation=%d %s",
+		failure.class,
+		failure.op_index,
+		failure.message,
+	)
 	os.exit(1)
 }
 

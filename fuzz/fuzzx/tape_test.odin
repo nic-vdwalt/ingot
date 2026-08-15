@@ -12,7 +12,11 @@ copy_bytes :: proc(source: []u8) -> []u8 {
 
 @(private = "file")
 test_tape :: proc() -> Tape {
-	tape := Tape{version = TAPE_VERSION, target = strings.clone("synthetic"), seed = 42}
+	tape := Tape {
+		version = TAPE_VERSION,
+		target  = strings.clone("synthetic"),
+		seed    = 42,
+	}
 	tape.ops = make([dynamic]Tape_Op)
 	append(&tape.ops, Tape_Op{tag = 7, payload = copy_bytes([]u8{0, 1, 0xFF})})
 	append(&tape.ops, Tape_Op{tag = 65535, payload = make([]u8, 0)})
@@ -36,7 +40,11 @@ tape_codec_round_trip :: proc(t: ^testing.T) {
 		testing.expect_value(t, decoded.ops[index].tag, source.ops[index].tag)
 		testing.expect_value(t, len(decoded.ops[index].payload), len(source.ops[index].payload))
 		for byte_index in 0 ..< len(source.ops[index].payload) {
-			testing.expect_value(t, decoded.ops[index].payload[byte_index], source.ops[index].payload[byte_index])
+			testing.expect_value(
+				t,
+				decoded.ops[index].payload[byte_index],
+				source.ops[index].payload[byte_index],
+			)
 		}
 	}
 	reencoded, reencoded_ok := tape_encode(&decoded)
@@ -78,7 +86,11 @@ tape_decoder_rejects_invalid_inputs :: proc(t: ^testing.T) {
 
 @(test)
 tape_limits_reject_oversized_values :: proc(t: ^testing.T) {
-	tape := Tape{version = TAPE_VERSION, target = strings.clone("synthetic"), seed = 1}
+	tape := Tape {
+		version = TAPE_VERSION,
+		target  = strings.clone("synthetic"),
+		seed    = 1,
+	}
 	defer tape_destroy(&tape)
 	tape.ops = make([dynamic]Tape_Op)
 	append(&tape.ops, Tape_Op{tag = 1, payload = make([]u8, TAPE_PAYLOAD_MAX + 1)})
@@ -113,7 +125,11 @@ shrink_sentinels :: proc(tape: ^Tape, userdata: rawptr) -> Failure {
 
 @(private = "file")
 shrink_fixture :: proc() -> Tape {
-	tape := Tape{version = TAPE_VERSION, target = strings.clone("shrink"), seed = 7}
+	tape := Tape {
+		version = TAPE_VERSION,
+		target  = strings.clone("shrink"),
+		seed    = 7,
+	}
 	tape.ops = make([dynamic]Tape_Op)
 	for tag in ([]u16{1, 2, 3, 4, 5, 6}) do append(&tape.ops, Tape_Op{tag = tag})
 	return tape
@@ -124,7 +140,10 @@ tape_shrinker_is_deterministic_and_class_stable :: proc(t: ^testing.T) {
 	source := shrink_fixture()
 	defer tape_destroy(&source)
 	class := u32(41)
-	options := Tape_Shrink_Options{maximum_runs = 128, allow_empty = true}
+	options := Tape_Shrink_Options {
+		maximum_runs = 128,
+		allow_empty  = true,
+	}
 	first := tape_shrink(&source, shrink_sentinels, &class, options)
 	defer tape_destroy(&first.tape)
 	second := tape_shrink(&source, shrink_sentinels, &class, options)
@@ -156,7 +175,11 @@ tape_shrinker_reports_budget_and_non_failure :: proc(t: ^testing.T) {
 	)
 	defer tape_destroy(&limited.tape)
 	testing.expect(t, limited.reproduced && limited.budget_exhausted)
-	non_failure := Tape{version = TAPE_VERSION, target = strings.clone("empty"), seed = 1}
+	non_failure := Tape {
+		version = TAPE_VERSION,
+		target  = strings.clone("empty"),
+		seed    = 1,
+	}
 	defer tape_destroy(&non_failure)
 	non_failure.ops = make([dynamic]Tape_Op)
 	result := tape_shrink(

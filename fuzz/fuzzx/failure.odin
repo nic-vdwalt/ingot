@@ -1,10 +1,10 @@
 package fuzzx
 
 Failure :: struct {
-	class:     u32,
-	op_index:  i32,
-	message:   string,
-	failed:    bool,
+	class:    u32,
+	op_index: i32,
+	message:  string,
+	failed:   bool,
 }
 
 failure_make :: proc(class: u32, op_index: int, message: string) -> Failure {

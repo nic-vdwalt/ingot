@@ -18,21 +18,33 @@ NET_FAILURE_WS_EXTREME :: u32(4)
 NET_FAILURE_WS_STATUS :: u32(5)
 NET_FAILURE_OPERATION :: u32(6)
 
-net_tape_generate :: proc(seed: u64, iterations: int, allocator := context.allocator) -> fuzzx.Tape {
+net_tape_generate :: proc(
+	seed: u64,
+	iterations: int,
+	allocator := context.allocator,
+) -> fuzzx.Tape {
 	assert(iterations > 0, "net_tape_generate: non-positive iterations")
 	assert(iterations <= fuzzx.TAPE_OPS_MAX / 2, "net_tape_generate: too many iterations")
 	p := fuzzx.prng_make(seed)
-	tape := fuzzx.Tape{version = fuzzx.TAPE_VERSION, target = strings.clone(NET_TAPE_TARGET, allocator), seed = seed}
+	tape := fuzzx.Tape {
+		version = fuzzx.TAPE_VERSION,
+		target  = strings.clone(NET_TAPE_TARGET, allocator),
+		seed    = seed,
+	}
 	tape.ops = make([dynamic]fuzzx.Tape_Op, 0, iterations * 2, allocator)
 	for _ in 0 ..< iterations {
 		http_data: []u8
 		if fuzzx.int_range(&p, 0, 3) == 0 {
-			maximum := MAXIMUM_WIRE_BYTES_LARGE if fuzzx.int_range(&p, 0, 67) == 0 else MAXIMUM_WIRE_BYTES
+			maximum :=
+				MAXIMUM_WIRE_BYTES_LARGE if fuzzx.int_range(&p, 0, 67) == 0 else MAXIMUM_WIRE_BYTES
 			http_data = fuzzx.random_bytes(&p, maximum)
 		} else {
 			http_data = mutated_response(&p)
 		}
-		append(&tape.ops, fuzzx.Tape_Op{tag = NET_OP_HTTP, payload = net_copy_bytes(http_data, allocator)})
+		append(
+			&tape.ops,
+			fuzzx.Tape_Op{tag = NET_OP_HTTP, payload = net_copy_bytes(http_data, allocator)},
+		)
 		ws_data: []u8
 		extreme := false
 		switch fuzzx.int_range(&p, 0, 6) {
@@ -59,7 +71,11 @@ net_tape_execute :: proc(tape: ^fuzzx.Tape, userdata: rawptr = nil) -> fuzzx.Fai
 		op := tape.ops[op_index]
 		switch op.tag {
 		case NET_OP_HTTP:
-			response, ok := ingotnet.parse_http_response(op.payload, MAXIMUM_BODY_LIMIT, context.temp_allocator)
+			response, ok := ingotnet.parse_http_response(
+				op.payload,
+				MAXIMUM_BODY_LIMIT,
+				context.temp_allocator,
+			)
 			if ok && len(response.body) > MAXIMUM_BODY_LIMIT do return fuzzx.failure_make(NET_FAILURE_HTTP_BODY, op_index, "parser exceeded maximum_body")
 			if ok && (response.status < 100 || response.status > 599) do return fuzzx.failure_make(NET_FAILURE_HTTP_STATUS, op_index, "parser accepted invalid status")
 		case NET_OP_WS:
@@ -137,20 +153,35 @@ net_tape_cli :: proc() -> bool {
 		fmt.eprintln("fuzz_net: -shrink-output is required")
 		os.exit(2)
 	}
-	result := fuzzx.tape_shrink(&tape, net_tape_execute, nil, {maximum_runs = 1024, allow_empty = true})
+	result := fuzzx.tape_shrink(
+		&tape,
+		net_tape_execute,
+		nil,
+		{maximum_runs = 1024, allow_empty = true},
+	)
 	defer fuzzx.tape_destroy(&result.tape)
 	if !result.reproduced {
 		fmt.eprintln("fuzz_net: tape does not reproduce a structured failure")
 		os.exit(1)
 	}
 	if !fuzzx.tape_save(shrink_output, &result.tape) do os.exit(1)
-	fmt.printfln("shrunk operations=%d runs=%d complete=%v", len(result.tape.ops), result.runs, result.complete)
+	fmt.printfln(
+		"shrunk operations=%d runs=%d complete=%v",
+		len(result.tape.ops),
+		result.runs,
+		result.complete,
+	)
 	return true
 }
 
 @(private)
 net_tape_fail :: proc(failure: fuzzx.Failure) {
-	fmt.eprintfln("fuzz_net replay FAILED: class=%d operation=%d %s", failure.class, failure.op_index, failure.message)
+	fmt.eprintfln(
+		"fuzz_net replay FAILED: class=%d operation=%d %s",
+		failure.class,
+		failure.op_index,
+		failure.message,
+	)
 	os.exit(1)
 }
 
