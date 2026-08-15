@@ -38,11 +38,11 @@ paint_specialized_fields_match_generic_commands_and_clear_slots :: proc(t: ^test
 	defer free(generic)
 	defer free(specialized)
 	stale := Paint_Command {
-		kind = .Ring,
-		p0 = {99, 98},
-		p1 = {97, 96},
-		thickness = 95,
-		codepoint = 'Z',
+		kind         = .Ring,
+		p0           = {99, 98},
+		p1           = {97, 96},
+		thickness    = 95,
+		codepoint    = 'Z',
 		clip_restore = true,
 	}
 	generic.commands[0] = stale
@@ -58,13 +58,7 @@ paint_specialized_fields_match_generic_commands_and_clear_slots :: proc(t: ^test
 	testing.expect_value(t, specialized.commands[0], generic.commands[0])
 	paint_push(
 		generic,
-		{
-			kind = .Rectangle_Rounded,
-			rect = rect,
-			roundness = 0.25,
-			segments = 6,
-			color = color,
-		},
+		{kind = .Rectangle_Rounded, rect = rect, roundness = 0.25, segments = 6, color = color},
 	)
 	paint_push_rectangle_rounded(specialized, rect, 0.25, 6, color)
 	testing.expect_value(t, specialized.commands[1], generic.commands[1])
@@ -81,12 +75,12 @@ paint_specialized_text_matches_generic_storage_and_telemetry :: proc(t: ^testing
 	specialized.current_tier = 2
 	specialized.current_z_group = 3
 	command := Paint_Command {
-		kind = .Text,
-		p0 = {4, 5},
-		color = {6, 7, 8, 9},
-		font = 10,
+		kind      = .Text,
+		p0        = {4, 5},
+		color     = {6, 7, 8, 9},
+		font      = 10,
 		font_size = 11,
-		spacing = 12,
+		spacing   = 12,
 	}
 	paint_push_text(generic, command, "fields")
 	paint_push_text_fields(specialized, "fields", {4, 5}, {6, 7, 8, 9}, 10, 11, 12)

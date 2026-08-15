@@ -86,15 +86,15 @@ Gpu_Material_Style :: enum {
 }
 
 Gpu_Material :: struct {
-	color:       Color,
-	color_high:  Color,
-	use_scalar:  bool,
-	style:       Gpu_Material_Style,
+	color:                Color,
+	color_high:           Color,
+	use_scalar:           bool,
+	style:                Gpu_Material_Style,
 	// depth_nudge shifts fragments toward the camera by a constant NDC
 	// offset. Unlike pipeline depthBias - which WebGPU forbids on line and
 	// point topologies - it works on every primitive, so overlays (wire
 	// grids, point clouds) can sit on coplanar surfaces without z-fighting.
-	depth_nudge: f32,
+	depth_nudge:          f32,
 	// texture with a zero id means untextured: the draw binds the shared
 	// neutral white texture and the shader multiplies by pure white.
 	texture:              Texture2D,
@@ -103,7 +103,7 @@ Gpu_Material :: struct {
 	// shader with a zero id means the built-in GPU_3D_SHADER; a custom
 	// handle from create_gpu_3d_shader replaces both shader stages. Stale
 	// handles fall back to the built-in shader (operating condition).
-	shader:      Gpu_3D_Shader,
+	shader:               Gpu_3D_Shader,
 }
 
 Gpu_3D_Light :: struct {
@@ -159,13 +159,13 @@ Gpu_3D_Vertex :: struct {
 }
 
 Gpu_3D_Uniforms :: struct {
-	view_projection: Matrix,
-	model:           Matrix,
-	color:           [4]f32,
-	color_high:      [4]f32,
-	light_direction: [4]f32, // xyz direction toward the light, w unused
-	light_params:    [4]f32, // x ambient, y diffuse, z depth_nudge, w time seconds
-	camera_position: [4]f32, // xyz world-space camera position, w unused
+	view_projection:  Matrix,
+	model:            Matrix,
+	color:            [4]f32,
+	color_high:       [4]f32,
+	light_direction:  [4]f32, // xyz direction toward the light, w unused
+	light_params:     [4]f32, // x ambient, y diffuse, z depth_nudge, w time seconds
+	camera_position:  [4]f32, // xyz world-space camera position, w unused
 	use_scalar:       u32,
 	use_texture:      u32,
 	use_normal:       u32,
@@ -1595,7 +1595,10 @@ _gpu_3d_texture_bind :: proc(
 	ctx: ^Context,
 	texture: Texture2D,
 	fallback: wg.BindGroup,
-) -> (wg.BindGroup, bool) {
+) -> (
+	wg.BindGroup,
+	bool,
+) {
 	assert(ctx != nil, "_gpu_3d_texture_bind: nil context")
 	assert(ctx.initialized, "_gpu_3d_texture_bind: uninitialized context")
 	assert(fallback != nil, "_gpu_3d_texture_bind: missing fallback texture")
@@ -1612,17 +1615,30 @@ _gpu_3d_texture_bind :: proc(
 _gpu_3d_material_binds :: proc(
 	pass: ^Gpu_3D_Pass,
 	material: Gpu_Material,
-) -> (wg.BindGroup, bool, wg.BindGroup, bool, wg.BindGroup, bool) {
+) -> (
+	wg.BindGroup,
+	bool,
+	wg.BindGroup,
+	bool,
+	wg.BindGroup,
+	bool,
+) {
 	assert(pass != nil && pass.owner != nil, "_gpu_3d_material_binds: nil pass")
 	resources := &pass.owner.resources.gpu_3d
 	texture_bind, textured := _gpu_3d_texture_bind(
-		pass.owner, material.texture, pass.owner.rend.neutral_bind,
+		pass.owner,
+		material.texture,
+		pass.owner.rend.neutral_bind,
 	)
 	normal_bind, normal_mapped := _gpu_3d_texture_bind(
-		pass.owner, material.normal_texture, resources.neutral_normal_bind,
+		pass.owner,
+		material.normal_texture,
+		resources.neutral_normal_bind,
 	)
 	roughness_bind, roughness_mapped := _gpu_3d_texture_bind(
-		pass.owner, material.roughness_ao_texture, pass.owner.rend.neutral_bind,
+		pass.owner,
+		material.roughness_ao_texture,
+		pass.owner.rend.neutral_bind,
 	)
 	return texture_bind, textured, normal_bind, normal_mapped, roughness_bind, roughness_mapped
 }
@@ -1674,23 +1690,23 @@ _gpu_3d_draw_indexed :: proc(
 	if color_high == (Color{}) do color_high = material.color
 	light := pass.light
 	uniforms := Gpu_3D_Uniforms {
-		view_projection = pass.view_projection,
-		model           = transform,
-		color           = col_f(material.color),
-		color_high      = col_f(color_high),
-		light_direction = {light.direction.x, light.direction.y, light.direction.z, 0},
-		light_params    = {light.ambient, light.diffuse, material.depth_nudge, pass.time},
-		camera_position = {
-			pass.camera_position.x,
-			pass.camera_position.y,
-			pass.camera_position.z,
-			0,
-		},
-		use_scalar       = u32(1) if material.use_scalar else 0,
-		use_texture      = u32(1) if textured else 0,
-		use_normal       = u32(1) if normal_mapped else 0,
-		use_roughness_ao = u32(1) if roughness_ao_mapped else 0,
-	}
+			view_projection  = pass.view_projection,
+			model            = transform,
+			color            = col_f(material.color),
+			color_high       = col_f(color_high),
+			light_direction  = {light.direction.x, light.direction.y, light.direction.z, 0},
+			light_params     = {light.ambient, light.diffuse, material.depth_nudge, pass.time},
+			camera_position  = {
+				pass.camera_position.x,
+				pass.camera_position.y,
+				pass.camera_position.z,
+				0,
+			},
+			use_scalar       = u32(1) if material.use_scalar else 0,
+			use_texture      = u32(1) if textured else 0,
+			use_normal       = u32(1) if normal_mapped else 0,
+			use_roughness_ao = u32(1) if roughness_ao_mapped else 0,
+		}
 	offset, ok := _uniform_upload(pass.owner, &pass.owner.rend, &uniforms, size_of(uniforms))
 	if !ok || pass.owner.rend.active_stream_slot < 0 do return false
 	wg.RenderPassEncoderSetPipeline(pass.pass, pipeline)
@@ -1915,7 +1931,10 @@ _gpu_3d_pipeline :: proc(
 	}
 	layout := wg.DeviceCreatePipelineLayout(
 		ctx.device,
-		&{bindGroupLayoutCount = len(group_layouts), bindGroupLayouts = raw_data(group_layouts[:])},
+		&{
+			bindGroupLayoutCount = len(group_layouts),
+			bindGroupLayouts = raw_data(group_layouts[:]),
+		},
 	)
 	policy := _gpu_3d_material_policy(style)
 	if primitive != .Triangles do policy.depth_bias = 0
@@ -2012,11 +2031,7 @@ _gpu_3d_init_neutral_normal :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources)
 	}
 	resources.neutral_normal_bind = wg.DeviceCreateBindGroup(
 		ctx.device,
-		&{
-			layout = ctx.rend.tex_layout,
-			entryCount = len(entries),
-			entries = raw_data(entries[:]),
-		},
+		&{layout = ctx.rend.tex_layout, entryCount = len(entries), entries = raw_data(entries[:])},
 	)
 }
 
