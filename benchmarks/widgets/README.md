@@ -96,6 +96,16 @@ varying dimensions, validates a deterministic geometry checksum, and emits no pa
 It isolates flow-layout CPU cost and scaling; it is not a Clay comparison and does not measure text
 measurement, rendering, input, accessibility, or application frame time.
 
+The `prepared_*` workloads expose Fit topology directly: fixed versus intrinsic flat grids, container-
+dense rows, bounded depth, width-dependent wrapping, mixed tracks, and generic fallback. Telemetry
+records phase time, description topology, node and child visits, measure callbacks, direct specialization,
+and fallback work. The fixed-grid direct path is expected to report zero generic measure/resolve visits.
+Complete-frame samples remain authoritative because telemetry clocks and counters are diagnostic work.
+
+Paint clipping does not avoid description, layout, interaction, or semantic work. `list_virtual` instead
+reduces the declared rows to the visible range plus bounded overscan; its prepared-node count must remain
+constant as logical size grows.
+
 For two independent runs:
 
 ```sh

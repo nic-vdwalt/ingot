@@ -448,6 +448,50 @@ layout_facade_fixed_leaf_nested_under_grid_row_skips_measure :: proc(t: ^testing
 }
 
 @(test)
+layout_facade_fixed_grid_uses_direct_geometry :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	text_backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{
+			data = &text_backend,
+			font_for_size = test_text_font_for_size,
+			measure = test_text_measure,
+		},
+	)
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 120, 80})
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = 120, max_h = 80))
+	prepared_grid_begin(&prepared, {columns = 2, row_height = 20})
+	_ = prepared_label(
+		&prepared,
+		"One",
+		Prepared_Label_Options{size = {width = fixed(40), height = fixed(20)}},
+	)
+	_ = prepared_label(
+		&prepared,
+		"Two",
+		Prepared_Label_Options{size = {width = fixed(40), height = fixed(20)}},
+	)
+	prepared_container_end(&prepared)
+	size := prepared_measure(&u, &prepared)
+	prepared_render_at(&u, &prepared, {0, 0, size.w, size.h})
+	end(&u)
+	testing.expect(t, prepared.direct_geometry, "fixed grid did not select direct geometry")
+	testing.expect_value(t, prepared_nodes(&prepared)[1].rect, Rect_I32{0, 0, 60, 20})
+	testing.expect_value(t, prepared_nodes(&prepared)[2].rect, Rect_I32{60, 0, 60, 20})
+}
+
+@(test)
 layout_facade_partial_fixed_leaf_retains_measure :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

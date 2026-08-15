@@ -182,7 +182,7 @@ Prepared_Measure_Flag :: enum u8 {
 	Width_Valid,
 }
 
-Prepared_Measure_Flags :: bit_set[Prepared_Measure_Flag; u8]
+Prepared_Measure_Flags :: bit_set[Prepared_Measure_Flag;u8]
 
 Prepared_Node :: struct {
 	kind:                     Prepared_Kind,
@@ -215,27 +215,28 @@ Prepared_Node :: struct {
 }
 
 Prepared_Summary :: struct {
-	leaf_count:       i32,
-	container_count:  i32,
-	maximum_depth:    i32,
-	depends_on_width: bool,
+	leaf_count:        i32,
+	container_count:   i32,
+	maximum_depth:     i32,
+	depends_on_width:  bool,
 	depends_on_height: bool,
+	explicit_sizing:   bool,
 }
 
 Prepared_Ui :: struct {
-	nodes:             [MAX_PREPARED_NODES]Prepared_Node,
-	external:          []Prepared_Node,
-	stack:             [MAX_LAYOUT_DEPTH]i32,
-	u:                 ^Ui,
-	count:             i32,
-	depth:             i32,
-	root:              i32,
-	constraints:       Intrinsic_Constraints,
-	summary:           Prepared_Summary,
-	direct_geometry:   bool,
-	open:              bool,
-	measured:          bool,
-	rendered:          bool,
+	nodes:           [MAX_PREPARED_NODES]Prepared_Node,
+	external:        []Prepared_Node,
+	stack:           [MAX_LAYOUT_DEPTH]i32,
+	u:               ^Ui,
+	count:           i32,
+	depth:           i32,
+	root:            i32,
+	constraints:     Intrinsic_Constraints,
+	summary:         Prepared_Summary,
+	direct_geometry: bool,
+	open:            bool,
+	measured:        bool,
+	rendered:        bool,
 }
 
 prepared_set_storage :: proc(prepared: ^Prepared_Ui, storage: Prepared_Storage) {
@@ -604,7 +605,7 @@ prepared_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> Intrinsic_Size {
 	root := &prepared_nodes(prepared)[prepared.root]
 	root.size = intrinsic_constrain(root.size, prepared.constraints)
 	dependencies := Prepared_Dependencies {
-		width = prepared.summary.depends_on_width,
+		width  = prepared.summary.depends_on_width,
 		height = prepared.summary.depends_on_height,
 	}
 	if dependencies.width {
@@ -622,8 +623,10 @@ prepared_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> Intrinsic_Size {
 		root.size.h = prepared.constraints.max_h
 	}
 	resolve_started := prepared_phase_begin(u.frame, .Resolve_Size)
-	prepared_resolve_sizes(u, prepared)
-	prepared_remeasure_containers(u, prepared)
+	if prepared.summary.explicit_sizing {
+		prepared_resolve_sizes(u, prepared)
+		prepared_remeasure_containers(u, prepared)
+	}
 	prepared_phase_end(u.frame, .Resolve_Size, resolve_started)
 	root.size = intrinsic_constrain(root.size, prepared.constraints)
 	resolved_started := prepared_phase_begin(u.frame, .Measure_Resolved)
@@ -662,7 +665,7 @@ prepared_render_at :: proc(u: ^Ui, prepared: ^Prepared_Ui, rect: Rect_I32) {
 	root.rect = rect
 	place_started := prepared_phase_begin(u.frame, .Place)
 	if prepared.direct_geometry {
-		prepared_place_grid(u, prepared, prepared.root)
+		prepared_direct_grid_place(u, prepared)
 		root.target_rect = root.rect
 	} else {
 		prepared_place(u, prepared)
@@ -781,6 +784,11 @@ prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Ha
 		prepared.summary.depends_on_width || prepared_axis_dependent(value.sizing.width)
 	prepared.summary.depends_on_height =
 		prepared.summary.depends_on_height || prepared_axis_dependent(value.sizing.height)
+	prepared.summary.explicit_sizing =
+		prepared.summary.explicit_sizing ||
+		prepared_axis_explicit(value.sizing.width) ||
+		prepared_axis_explicit(value.sizing.height) ||
+		value.sizing.aspect.width > 0
 	if value.kind == .Flow || value.kind == .Grid || value.kind == .Scroll {
 		prepared.summary.depends_on_width = true
 	}
@@ -829,20 +837,20 @@ prepared_telemetry_describe :: proc(frame: ^Ui_Frame, prepared: ^Prepared_Ui) {
 @(private = "file")
 prepared_direct_grid_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> bool {
 	assert(u != nil && prepared != nil, "prepared direct grid: invalid argument")
-	root := &prepared_nodes(prepared)[prepared.root]
-	if root.kind != .Grid || root.grid.row_height <= 0 do return false
+	if !prepared_direct_grid_eligible(prepared) do return false
 	for index in 1 ..< prepared.count {
 		node := &prepared_nodes(prepared)[index]
-		if node.parent != prepared.root || prepared_kind_is_container(node.kind) do return false
-		if !prepared_leaf_size_is_fixed(node) do return false
-		if node.sizing.aspect.width != 0 || node.sizing.transition.state != nil do return false
-	}
-	for index in 1 ..< prepared.count {
-		node := &prepared_nodes(prepared)[index]
+		if prepared_kind_is_container(node.kind) do continue
 		node.size.w = prepared_axis_size(u, node.sizing.width, 0, prepared.constraints.max_w)
 		node.size.h = prepared_axis_size(u, node.sizing.height, 0, prepared.constraints.max_h)
 		node.measure_flags += {.Width_Valid}
 	}
+	for offset in 0 ..< prepared.count {
+		index := prepared.count - 1 - offset
+		node := &prepared_nodes(prepared)[index]
+		if node.kind == .Row do prepared_measure_container(u, prepared, index, false)
+	}
+	root := &prepared_nodes(prepared)[prepared.root]
 	prepared_measure_grid(u, prepared, prepared.root, false)
 	root.size = intrinsic_constrain(root.size, prepared.constraints)
 	prepared.direct_geometry = true
@@ -853,6 +861,43 @@ prepared_direct_grid_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> bool {
 		u.frame.prepared_telemetry.specialized_nodes += u64(prepared.count)
 	}
 	return true
+}
+
+@(private = "file")
+prepared_direct_grid_eligible :: proc(prepared: ^Prepared_Ui) -> bool {
+	assert(prepared != nil && prepared.root >= 0, "prepared direct grid: invalid description")
+	root := &prepared_nodes(prepared)[prepared.root]
+	if root.kind != .Grid || root.grid.row_height <= 0 do return false
+	if root.grid.effects != (Prepared_Container_Effects{}) do return false
+	if root.sizing != (Prepared_Size{}) do return false
+	for index in 1 ..< prepared.count {
+		node := &prepared_nodes(prepared)[index]
+		if node.kind == .Row {
+			if node.parent != prepared.root ||
+			   node.container.effects != (Prepared_Container_Effects{}) {
+				return false
+			}
+			if node.sizing.aspect.width != 0 || node.sizing.transition.state != nil do return false
+			continue
+		}
+		if prepared_kind_is_container(node.kind) || !prepared_leaf_size_is_fixed(node) do return false
+		parent := &prepared_nodes(prepared)[node.parent]
+		if parent.kind != .Grid && parent.kind != .Row do return false
+		if node.sizing.aspect.width != 0 || node.sizing.transition.state != nil do return false
+	}
+	return true
+}
+
+@(private = "file")
+prepared_direct_grid_place :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
+	assert(u != nil && prepared != nil, "prepared direct place: invalid argument")
+	assert(prepared.direct_geometry, "prepared direct place: generic description")
+	prepared_place_grid(u, prepared, prepared.root)
+	for index in 1 ..< prepared.count {
+		node := &prepared_nodes(prepared)[index]
+		node.target_rect = node.rect
+		if node.kind == .Row do prepared_place_children(u, prepared, index, false)
+	}
 }
 
 prepared_measure_natural :: proc(u: ^Ui, prepared: ^Prepared_Ui) {

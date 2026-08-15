@@ -439,7 +439,11 @@ run_prepared_mixed :: proc(builder: ^fit.Builder, h: ^Harness) -> int {
 		width := fit.Fixed(100)
 		if index % 3 == 1 do width = fit.Grow()
 		if index % 3 == 2 do width = fit.Percent(0.25)
-		fit.Label(builder, label_for(h, index, true), {size = {width = width, height = fit.Fixed(24)}})
+		fit.Label(
+			builder,
+			label_for(h, index, true),
+			{size = {width = width, height = fit.Fixed(24)}},
+		)
 	}
 	fit.End(builder)
 	return h.scale
@@ -516,7 +520,10 @@ run_isolated_labels_ui :: proc(h: ^Harness, count: int, changing: bool) -> int {
 }
 
 run_inputs_ui :: proc(h: ^Harness, count: int) -> int {
-	assert(h != nil && count > 0 && count <= DASHBOARD_MAX_GROUPS, "run_inputs_ui: invalid argument")
+	assert(
+		h != nil && count > 0 && count <= DASHBOARD_MAX_GROUPS,
+		"run_inputs_ui: invalid argument",
+	)
 	for index in 0 ..< count {
 		active := h.ui_active_input == index
 		_ = ui.text_input_at(
@@ -946,7 +953,8 @@ parse_options :: proc() -> (Options, bool) {
 	valid_scale :=
 		options.scale > 0 && (options.scale <= MAX_SCALE || options.workload == .List_Virtual)
 	valid_nodes :=
-		options.layer == .Ui || required_nodes(options.workload, options.scale) <= FIT_NODE_CAPACITY
+		options.layer == .Ui ||
+		required_nodes(options.workload, options.scale) <= FIT_NODE_CAPACITY
 	valid_layer := options.layer == .Fit || options.workload != .Layout_Flow
 	valid_run := options.warmup >= 0 && options.frames > 0 && options.repetition >= 0
 	return options, valid_scale && valid_nodes && valid_layer && valid_run
@@ -1002,10 +1010,10 @@ measure_frame_ui :: proc(h: ^Harness, options: Options, index: int) -> Frame_Tim
 	h.ui_diagnostics = ui.ui_frame_diagnostics(h.ui_frame)
 	ui.ui_frame_release(h.ui_frame)
 	return {
-		build_ns          = build_ns,
+		build_ns = build_ns,
 		frame_finalize_ns = finalize_ns,
-		finalize_ns       = finalize_ns,
-		frame_ns          = frame_ns,
+		finalize_ns = finalize_ns,
+		frame_ns = frame_ns,
 	}
 }
 
@@ -1036,43 +1044,43 @@ benchmark_evidence :: proc(
 ) {
 	assert(h != nil, "benchmark_evidence: nil harness")
 	if layer == .Fit {
-		return fit.Test_Driver_Paint_Summary(&h.driver),
-		       fit.Test_Driver_Telemetry(&h.driver),
-		       fit.Test_Driver_Diagnostics(&h.driver)
+		return fit.Test_Driver_Paint_Summary(
+			&h.driver,
+		), fit.Test_Driver_Telemetry(&h.driver), fit.Test_Driver_Diagnostics(&h.driver)
 	}
 	telemetry := fit.Frame_Telemetry {
-		scratch_allocations              = h.ui_telemetry.scratch_allocation_count,
-		scratch_resizes                  = h.ui_telemetry.scratch_resize_count,
-		scratch_allocation_bytes         = h.ui_telemetry.scratch_allocation_request_bytes,
-		scratch_resize_bytes             = h.ui_telemetry.scratch_resize_request_bytes,
-		main                             = {
+		scratch_allocations           = h.ui_telemetry.scratch_allocation_count,
+		scratch_resizes               = h.ui_telemetry.scratch_resize_count,
+		scratch_allocation_bytes      = h.ui_telemetry.scratch_allocation_request_bytes,
+		scratch_resize_bytes          = h.ui_telemetry.scratch_resize_request_bytes,
+		main                          = {
 			h.ui_telemetry.main.command_append_count,
 			h.ui_telemetry.main.text_append_count,
 			h.ui_telemetry.main.text_bytes_copied,
 			h.ui_telemetry.main.command_growth_count,
 			h.ui_telemetry.main.text_growth_count,
 		},
-		overlay                          = {
+		overlay                       = {
 			h.ui_telemetry.overlay.command_append_count,
 			h.ui_telemetry.overlay.text_append_count,
 			h.ui_telemetry.overlay.text_bytes_copied,
 			h.ui_telemetry.overlay.command_growth_count,
 			h.ui_telemetry.overlay.text_growth_count,
 		},
-		text_input_full_paths             = h.ui_telemetry.text_input_full_path_count,
-		text_input_inactive_paths         = h.ui_telemetry.text_input_inactive_candidates,
-		natural_leaf_measures             = h.ui_telemetry.prepared.natural_leaf_measures,
-		resolved_leaf_measures            = h.ui_telemetry.prepared.resolved_leaf_measures,
-		fixed_leaf_measure_skips          = h.ui_telemetry.prepared.fixed_leaf_measure_skips,
-		container_measures                = h.ui_telemetry.prepared.container_measures,
-		placed_nodes                      = h.ui_telemetry.prepared.placed_nodes,
-		rendered_nodes                    = h.ui_telemetry.prepared.rendered_nodes,
-		activation_outputs                = h.ui_telemetry.prepared.activation_outputs,
-		render_relayouts                  = h.ui_telemetry.prepared.render_relayouts,
-		measure_cache_hits                = h.ui_telemetry.measure_cache_hits,
-		measure_cache_misses              = h.ui_telemetry.measure_cache_misses,
-		measure_cache_policy_bypasses     = h.ui_telemetry.measure_cache_policy_bypasses,
-		phases                           = {
+		text_input_full_paths         = h.ui_telemetry.text_input_full_path_count,
+		text_input_inactive_paths     = h.ui_telemetry.text_input_inactive_candidates,
+		natural_leaf_measures         = h.ui_telemetry.prepared.natural_leaf_measures,
+		resolved_leaf_measures        = h.ui_telemetry.prepared.resolved_leaf_measures,
+		fixed_leaf_measure_skips      = h.ui_telemetry.prepared.fixed_leaf_measure_skips,
+		container_measures            = h.ui_telemetry.prepared.container_measures,
+		placed_nodes                  = h.ui_telemetry.prepared.placed_nodes,
+		rendered_nodes                = h.ui_telemetry.prepared.rendered_nodes,
+		activation_outputs            = h.ui_telemetry.prepared.activation_outputs,
+		render_relayouts              = h.ui_telemetry.prepared.render_relayouts,
+		measure_cache_hits            = h.ui_telemetry.measure_cache_hits,
+		measure_cache_misses          = h.ui_telemetry.measure_cache_misses,
+		measure_cache_policy_bypasses = h.ui_telemetry.measure_cache_policy_bypasses,
+		phases                        = {
 			h.ui_telemetry.prepared.phase_ns[.Measure_Natural],
 			h.ui_telemetry.prepared.phase_ns[.Resolve_Size],
 			h.ui_telemetry.prepared.phase_ns[.Measure_Resolved],
@@ -1108,6 +1116,11 @@ benchmark_evidence :: proc(
 }
 
 print_telemetry :: proc(value: fit.Frame_Telemetry) {
+	print_telemetry_output(value)
+	print_telemetry_prepared(value)
+}
+
+print_telemetry_output :: proc(value: fit.Frame_Telemetry) {
 	fmt.print(
 		"\"scratch_allocations\":",
 		value.scratch_allocations,
@@ -1141,6 +1154,11 @@ print_telemetry :: proc(value: fit.Frame_Telemetry) {
 		value.text_input_full_paths,
 		",\"text_input_inactive_candidates\":",
 		value.text_input_inactive_paths,
+	)
+}
+
+print_telemetry_prepared :: proc(value: fit.Frame_Telemetry) {
+	fmt.print(
 		",\"phase_measure_natural_ns\":",
 		value.phases.measure_natural_ns,
 		",\"phase_resolve_size_ns\":",

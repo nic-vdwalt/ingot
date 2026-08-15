@@ -151,3 +151,41 @@ carves a content-sized slot, places, and renders synchronously.
 
 The prepared layout engine remains internal and independently tested. There is
 no public `Fit_Node` tree or direct `Prepared_Ui` construction path.
+
+## Prepared solver cost model
+
+Fit builds a bounded current-frame description, not a retained behavioral tree.
+Description construction records node counts, maximum depth, axis dependencies,
+and explicit-sizing capabilities while parent and sibling links are created.
+This metadata removes a later structure-discovery pass and selects one of two
+solver paths without allocation.
+
+A fixed-height root grid containing fixed leaves, or fixed rows containing fixed
+leaves, uses direct geometry. Measurement resolves explicit leaf sizes and the
+grid extent; placement walks each grid child once and each nested row once before
+the normal depth-first render. Intrinsic callbacks, generic size resolution,
+container remeasurement, and resolved-height measurement are skipped. The
+eligibility predicate rejects wrapping, custom or nested unsupported containers,
+aspect ratios, transitions, attachments, scrolls, and non-fixed leaves.
+
+All other descriptions retain the generic bounded solver. Its worst case uses
+reverse intrinsic measurement, optional explicit-size resolution and container
+remeasurement, forward width assignment, resolved measurement, placement, and
+rendering. Each whole-tree loop is bounded by the caller-selected prepared-node
+capacity, depth by `MAX_LAYOUT_DEPTH`, and direct flex siblings by
+`MAX_LAYOUT_FLEX`. Telemetry reports phase time, node visits, child-run visits,
+measure callbacks, specialization, and fallback counts. Complete-frame time is
+the acceptance boundary; phase values only explain it.
+
+## Clipping and virtualization
+
+Paint clipping prevents pixels from escaping a viewport, but it does not avoid
+description construction, measurement, interaction, or semantic work. Large
+logical collections must calculate a visible range before declaring expensive
+rows or cells. Caller-owned scroll state and the visible-range calculation remain
+the authoritative model; Fit does not retain hidden virtualized widgets.
+
+The benchmark's virtual-list contract submits only the visible rows plus bounded
+overscan, so its prepared-node count is independent of the logical list size.
+Event-driven frame pacing is a separate outer optimization: when no frame is
+requested, neither description construction nor GPU submission occurs.

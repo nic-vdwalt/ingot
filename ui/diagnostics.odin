@@ -47,14 +47,14 @@ Prepared_Telemetry :: struct {
 }
 
 Ui_Frame_Output_Stats :: struct {
-	main_command_count:    i32,
-	main_text_bytes:       i32,
-	overlay_command_count: i32,
-	overlay_text_bytes:    i32,
-	semantic_node_count:            i32,
-	measure_cache_hits:             u64,
-	measure_cache_misses:           u64,
-	measure_cache_policy_bypasses:  u64,
+	main_command_count:            i32,
+	main_text_bytes:               i32,
+	overlay_command_count:         i32,
+	overlay_text_bytes:            i32,
+	semantic_node_count:           i32,
+	measure_cache_hits:            u64,
+	measure_cache_misses:          u64,
+	measure_cache_policy_bypasses: u64,
 }
 
 Ui_Paint_Telemetry :: struct {

@@ -19,6 +19,7 @@
     "state_checksum": {"type": "integer", "minimum": 0},
     "samples_ns": {"type": "object", "required": ["build", "finalize", "frame"], "properties": {"build": {"type": "array", "items": {"type": "integer", "minimum": 0}}, "finalize": {"type": "array", "items": {"type": "integer", "minimum": 0}}, "frame": {"type": "array", "items": {"type": "integer", "minimum": 0}}}},
     "output": {"type": "object", "required": ["submitted_widgets", "visible_widgets", "paint_commands", "text_bytes", "dropped_commands", "dropped_text_bytes"], "properties": {"submitted_widgets": {"type": "integer", "minimum": 0}, "visible_widgets": {"type": "integer", "minimum": 0}, "paint_commands": {"type": "integer", "minimum": 0}, "text_bytes": {"type": "integer", "minimum": 0}, "dropped_commands": {"type": "integer", "minimum": 0}, "dropped_text_bytes": {"type": "integer", "minimum": 0}}},
+    "telemetry": {"type": "object", "properties": {"description_nodes": {"type": "integer", "minimum": 0}, "leaf_nodes": {"type": "integer", "minimum": 0}, "container_nodes": {"type": "integer", "minimum": 0}, "maximum_depth": {"type": "integer", "minimum": 0}, "specialized_nodes": {"type": "integer", "minimum": 0}, "generic_fallback_nodes": {"type": "integer", "minimum": 0}}},
     "environment": {"type": "object", "required": ["os", "arch", "cpu", "toolchain"], "properties": {"os": {"type": "string"}, "arch": {"type": "string"}, "cpu": {"type": "string"}, "toolchain": {"type": "string"}}}
   }
 }

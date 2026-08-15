@@ -22,7 +22,16 @@
     {"id": "table_unique", "kind": "table", "scales": [20, 100, 250], "framework_scales": {"imgui": [1000], "egui": [1000]}, "columns": 4, "unique_text": true, "cell_label_index": "(row * columns + column) % 16384"},
     {"id": "dynamic_churn", "kind": "churn", "scales": [100, 1000], "churn_percent": 10, "churn_rule": "position p churned when (p + frame) % 10 == 0; churned label index = (p + frame) % scale; other positions draw stable label p"},
     {"id": "accessibility", "kind": "buttons", "scales": [25, 100, 250], "accessibility": true},
-    {"id": "capacity", "kind": "capacity", "scales": [128, 256], "framework_scales": {"imgui": [512, 1024, 2048, 4096, 8192, 16384], "egui": [512, 1024, 2048, 4096, 8192, 16384]}, "expected_overflow": true}
+    {"id": "capacity", "kind": "capacity", "scales": [128, 256], "framework_scales": {"imgui": [512, 1024, 2048, 4096, 8192, 16384], "egui": [512, 1024, 2048, 4096, 8192, 16384]}, "expected_overflow": true},
+    {"id": "prepared_flat_fixed", "kind": "prepared", "scales": [128, 512, 2048, 4096], "topology": "flat_grid", "sizing": "fixed", "frameworks": ["ingot"], "ingot_layers": ["fit"]},
+    {"id": "prepared_flat_intrinsic", "kind": "prepared", "scales": [128, 512, 2048, 4096], "topology": "flat_grid", "sizing": "intrinsic", "frameworks": ["ingot"], "ingot_layers": ["fit"]},
+    {"id": "prepared_rows_fixed", "kind": "prepared", "scales": [128, 512, 2048, 4096], "topology": "grid_rows", "sizing": "fixed", "frameworks": ["ingot"], "ingot_layers": ["fit"]},
+    {"id": "prepared_rows_intrinsic", "kind": "prepared", "scales": [128, 512, 2048, 4096], "topology": "grid_rows", "sizing": "intrinsic", "frameworks": ["ingot"], "ingot_layers": ["fit"]},
+    {"id": "prepared_deep_fixed", "kind": "prepared", "scales": [4, 8, 15], "topology": "nested_columns", "sizing": "fixed", "frameworks": ["ingot"], "ingot_layers": ["fit"]},
+    {"id": "prepared_deep_intrinsic", "kind": "prepared", "scales": [4, 8, 15], "topology": "nested_columns", "sizing": "intrinsic", "frameworks": ["ingot"], "ingot_layers": ["fit"]},
+    {"id": "prepared_wrapped", "kind": "prepared", "scales": [128, 512, 2048], "topology": "flat_grid", "sizing": "width_dependent", "frameworks": ["ingot"], "ingot_layers": ["fit"]},
+    {"id": "prepared_mixed_tracks", "kind": "prepared", "scales": [128, 512, 2048], "topology": "flat_grid", "sizing": "mixed_tracks", "frameworks": ["ingot"], "ingot_layers": ["fit"]},
+    {"id": "prepared_effects", "kind": "prepared", "scales": [128, 512, 2048], "topology": "generic_fallback", "sizing": "mixed_tracks", "frameworks": ["ingot"], "ingot_layers": ["fit"]}
   ],
   "modes": ["fit", "ui", "core", "native", "idle_continuous", "idle_event_driven"]
 }
