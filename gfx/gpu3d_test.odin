@@ -656,6 +656,12 @@ test_gpu_3d_chunk_count_boundaries :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_gpu_3d_stream_upload_follows_submission :: proc(t: ^testing.T) {
+	testing.expect(t, _gpu_3d_should_upload_stream(true))
+	testing.expect(t, !_gpu_3d_should_upload_stream(false))
+}
+
+@(test)
 test_draw_gpu_mesh_instanced_rejects_headless :: proc(t: ^testing.T) {
 	// Without a device there is no active pass; both the nil pass and the
 	// empty transform list must be quiet no-ops, never crashes.
