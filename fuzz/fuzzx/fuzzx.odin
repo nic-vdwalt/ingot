@@ -15,36 +15,13 @@ import "core:os"
 import "core:strconv"
 import "core:strings"
 import "core:time"
+import "ingot:testx"
 
-Prng :: struct {
-	state: u64,
-}
-
-prng_make :: proc(seed: u64) -> Prng {
-	return Prng{state = seed == 0 ? 0x9E3779B97F4A7C15 : seed}
-}
-
-next_u64 :: proc(p: ^Prng) -> u64 {
-	x := p.state
-	x ~= x >> 12
-	x ~= x << 25
-	x ~= x >> 27
-	p.state = x
-	return x * 0x2545F4914F6CDD1D
-}
-
-// int_range returns a value in [lo, hi).
-int_range :: proc(p: ^Prng, lo, hi: int) -> int {
-	if hi <= lo do return lo
-	return lo + int(next_u64(p) % u64(hi - lo))
-}
-
-random_bytes :: proc(p: ^Prng, maximum: int, allocator := context.temp_allocator) -> []u8 {
-	n := int_range(p, 0, maximum)
-	b := make([]u8, n, allocator)
-	for i in 0 ..< n do b[i] = u8(next_u64(p) & 0xFF)
-	return b
-}
+Prng :: testx.Prng
+prng_make :: testx.prng_make
+next_u64 :: testx.next_u64
+int_range :: testx.int_range
+random_bytes :: testx.random_bytes
 
 // parse_options reads -seed:N, -iterations:N, and -rounds:N from os.args.
 // Each round reruns the whole workload with a derived seed (seed + round),

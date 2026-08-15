@@ -15,7 +15,9 @@
     "libvterm",
     "term",
     "prefs",
-    "net"
+    "net",
+    "testx",
+    "fuzz/fuzzx"
   ],
   "check_packages": [
     "asset",
@@ -35,10 +37,11 @@
     "net",
     "sys",
     "pty",
-    "testx"
+    "testx",
+    "fuzz/fuzzx"
   ],
   "binding_packages": ["libvterm", "accesskit"],
-  "compile_packages": ["sys", "pty", "accesskit", "testx"],
+  "compile_packages": ["sys", "pty", "accesskit"],
   "test_examples": ["box3d_advanced"],
   "windows_gfx_expected_assert_tests": [
     "gfx.frame_owner_rejects_stale_epoch",
