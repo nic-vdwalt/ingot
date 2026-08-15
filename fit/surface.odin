@@ -7,10 +7,6 @@ Surface_Viewport :: proc(surface: ^Surface) -> Rect {
 	return from_rect(ui.frame_viewport(u.frame))
 }
 
-Surface_Ui :: proc(surface: ^Surface) -> ^ui.Ui {
-	return surface_ui(surface)
-}
-
 Surface_Pane_Origin :: proc(surface: ^Surface) -> Point {
 	u := surface_ui(surface)
 	return from_point(ui.frame_pane_origin(u.frame))
