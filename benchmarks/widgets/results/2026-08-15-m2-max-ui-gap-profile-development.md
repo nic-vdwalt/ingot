@@ -123,10 +123,13 @@ this profile is attribution evidence, not proof that a proposed rewrite wins.
 - `benchmarks/widgets/results/artifacts/2026-08-15-ui-gap-profile/dashboard-sample-1.txt`
 - `benchmarks/widgets/results/artifacts/2026-08-15-ui-gap-profile/dashboard-sample-2.txt`
 - `benchmarks/widgets/results/artifacts/2026-08-15-ui-gap-profile/dashboard-sample-3.txt`
-- `benchmarks/widgets/results/artifacts/2026-08-15-ui-gap-profile/scaling.jsonl`
+- `benchmarks/widgets/results/artifacts/2026-08-15-ui-gap-profile/scaling.jsonl.gz`
 - `benchmarks/widgets/results/artifacts/2026-08-15-ui-gap-profile/frame-paint-push.asm`
 - `benchmarks/widgets/results/artifacts/2026-08-15-ui-gap-profile/paint-push.asm`
 - `benchmarks/widgets/results/artifacts/2026-08-15-ui-gap-profile/draw-text-command.asm`
+
+The scaling data uses deterministic gzip (`mtime=0`, no stored filename). Decompress it with
+`gzip -dc scaling.jsonl.gz` before passing the JSONL to benchmark reporting tools.
 
 ## Limitations
 
