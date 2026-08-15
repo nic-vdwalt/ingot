@@ -4,7 +4,6 @@ package ingotnet
 import "core:c"
 import "core:fmt"
 import cnet "core:net"
-import "core:os"
 import "core:strings"
 import "core:sync"
 import "core:time"
@@ -109,8 +108,8 @@ when !INGOT_WS_SIM {
 		}
 		if ca_file != "" {
 			when ODIN_OS == .Windows {
-				ca, ca_err := os.read_entire_file(ca_file, context.temp_allocator)
-				if ca_err != nil || len(ca) == 0 do return false
+				ca, ok := ws_read_ca_file(ca_file)
+				if !ok do return false
 				blob := Ws_Curl_Blob {
 					data  = raw_data(ca),
 					len   = c.size_t(len(ca)),

@@ -180,9 +180,10 @@ def violations(source: str) -> list[tuple[int, str]]:
 
 def _matches(source: str, pattern: re.Pattern[str], message: str, path: Path, root: Path) -> list[str]:
     failures: list[str] = []
+    relative_path = path.relative_to(root).as_posix()
     for match in pattern.finditer(source):
         line = source.count("\n", 0, match.start()) + 1
-        failures.append(f"{path.relative_to(root)}:{line}: {message.format(name=match.group(0))}")
+        failures.append(f"{relative_path}:{line}: {message.format(name=match.group(0))}")
     return failures
 
 
