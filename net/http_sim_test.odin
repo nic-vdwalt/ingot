@@ -5,8 +5,18 @@ package ingotnet
 // is enabled: odin test net -collection:ingot=. -define:INGOT_NET_SIM=true
 
 import "core:testing"
+import "ingot:testx"
 
 when INGOT_NET_SIM {
+
+	@(test)
+	test_sim_prng_matches_testx :: proc(t: ^testing.T) {
+		sim := sim_prng_make(0x1234_5678_9ABC_DEF0)
+		shared := testx.prng_make(0x1234_5678_9ABC_DEF0)
+		for _ in 0 ..< 64 {
+			testing.expect_value(t, sim_next_u64(&sim), testx.next_u64(&shared))
+		}
+	}
 
 	@(private = "file")
 	test_respond :: proc(request: Http_Request, prng: ^Sim_Prng) -> Fetch_Result {
