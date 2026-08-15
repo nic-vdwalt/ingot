@@ -43,6 +43,15 @@ Workload :: enum {
 	Dynamic_Churn,
 	Accessibility,
 	Capacity,
+	Prepared_Flat_Fixed,
+	Prepared_Flat_Intrinsic,
+	Prepared_Rows_Fixed,
+	Prepared_Rows_Intrinsic,
+	Prepared_Deep_Fixed,
+	Prepared_Deep_Intrinsic,
+	Prepared_Wrapped,
+	Prepared_Mixed_Tracks,
+	Prepared_Effects,
 }
 
 Ingot_Layer :: enum {
@@ -93,6 +102,7 @@ Harness :: struct {
 	submitted:          int,
 	layout_checksum:    u64,
 	active_input_stage: i32,
+	telemetry:          fit.Frame_Telemetry,
 }
 
 harness_make :: proc(layer: Ingot_Layer, semantics, measure_cache: bool) -> ^Harness {
@@ -374,6 +384,67 @@ run_layout_flow :: proc(builder: ^fit.Builder, h: ^Harness) -> int {
 	return h.scale
 }
 
+run_prepared_flat :: proc(builder: ^fit.Builder, h: ^Harness, fixed: bool) -> int {
+	assert(builder != nil && h != nil && h.scale > 0, "prepared flat: invalid argument")
+	fit.Grid(builder, {columns = 8, row_height = 18})
+	for index in 0 ..< h.scale {
+		options := label_options(124, 18) if fixed else fit.Label_Options{}
+		fit.Label(builder, label_for(h, index, true), options)
+	}
+	fit.End(builder)
+	return h.scale
+}
+
+run_prepared_rows :: proc(builder: ^fit.Builder, h: ^Harness, fixed: bool) -> int {
+	assert(builder != nil && h != nil && h.scale >= 4, "prepared rows: invalid argument")
+	fit.Grid(builder, {columns = 1, row_height = 18})
+	rows := h.scale / 4
+	for row in 0 ..< rows {
+		fit.Row(builder, {size = {height = fit.Fixed(18)}})
+		for column in 0 ..< 4 {
+			index := row * 4 + column
+			options := label_options(124, 18) if fixed else fit.Label_Options{}
+			fit.Label(builder, label_for(h, index, true), options)
+		}
+		fit.End(builder)
+	}
+	fit.End(builder)
+	return rows * 4
+}
+
+run_prepared_deep :: proc(builder: ^fit.Builder, h: ^Harness, fixed: bool) -> int {
+	assert(builder != nil && h != nil && h.scale > 0, "prepared deep: invalid argument")
+	depth := min(h.scale, 15)
+	for _ in 0 ..< depth do fit.Column(builder, {size = {width = fit.Fixed(320)}})
+	options := label_options(124, 18) if fixed else fit.Label_Options{}
+	fit.Label(builder, "Deep", options)
+	for _ in 0 ..< depth do fit.End(builder)
+	return 1
+}
+
+run_prepared_wrapped :: proc(builder: ^fit.Builder, h: ^Harness) -> int {
+	assert(builder != nil && h != nil && h.scale > 0, "prepared wrapped: invalid argument")
+	fit.Grid(builder, {columns = 4, row_height = 36})
+	for _ in 0 ..< h.scale {
+		fit.Label(builder, "Prepared wrapped label content", {wrap = true})
+	}
+	fit.End(builder)
+	return h.scale
+}
+
+run_prepared_mixed :: proc(builder: ^fit.Builder, h: ^Harness) -> int {
+	assert(builder != nil && h != nil && h.scale > 0, "prepared mixed: invalid argument")
+	fit.Grid(builder, {columns = 4, row_height = 24})
+	for index in 0 ..< h.scale {
+		width := fit.Fixed(100)
+		if index % 3 == 1 do width = fit.Grow()
+		if index % 3 == 2 do width = fit.Percent(0.25)
+		fit.Label(builder, label_for(h, index, true), {size = {width = width, height = fit.Fixed(24)}})
+	}
+	fit.End(builder)
+	return h.scale
+}
+
 run_virtual_list :: proc(builder: ^fit.Builder, h: ^Harness, logical_count: int) -> int {
 	assert(builder != nil && h != nil && logical_count > 0, "run_virtual_list: invalid argument")
 	submitted := min(logical_count, VIRTUAL_ROWS + VIRTUAL_OVERSCAN * 2)
@@ -414,7 +485,14 @@ run_churn :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 ui_label_at :: proc(h: ^Harness, text: string, rect: ui.Rect_I32) {
 	assert(h != nil && h.ui_frame != nil && text != "", "ui_label_at: invalid argument")
 	style := ui.ui_frame_theme(h.ui_frame)
-	ui.draw_text_string_frame(h.ui_frame, text, rect.x, rect.y + (rect.h - 16) / 2, 16, style.fg_primary)
+	ui.draw_text_string_frame(
+		h.ui_frame,
+		text,
+		rect.x,
+		rect.y + (rect.h - 16) / 2,
+		16,
+		style.fg_primary,
+	)
 	ui.semantic_push(h.ui_frame, .Label, rect, text, {})
 }
 
@@ -529,7 +607,10 @@ run_mixed_ui :: proc(h: ^Harness, groups: int) -> int {
 }
 
 run_dashboard_ui :: proc(h: ^Harness, groups: int) -> int {
-	assert(h != nil && groups > 0 && groups <= DASHBOARD_MAX_GROUPS, "run_dashboard_ui: invalid argument")
+	assert(
+		h != nil && groups > 0 && groups <= DASHBOARD_MAX_GROUPS,
+		"run_dashboard_ui: invalid argument",
+	)
 	for index in 0 ..< groups {
 		y := i32(index * 30)
 		ui_label_at(h, label_for(h, index, true), {0, y, 124, 24})
@@ -640,8 +721,17 @@ benchmark_draw_ui :: proc(h: ^Harness) {
 		h.submitted = run_table_ui(h, h.scale, true)
 	case .Dynamic_Churn:
 		h.submitted = run_churn_ui(h, h.scale)
-	case .Layout_Flow:
-		assert(false, "layout_flow is Fit-only")
+	case .Layout_Flow,
+	     .Prepared_Flat_Fixed,
+	     .Prepared_Flat_Intrinsic,
+	     .Prepared_Rows_Fixed,
+	     .Prepared_Rows_Intrinsic,
+	     .Prepared_Deep_Fixed,
+	     .Prepared_Deep_Intrinsic,
+	     .Prepared_Wrapped,
+	     .Prepared_Mixed_Tracks,
+	     .Prepared_Effects:
+		assert(false, "workload is Fit-only")
 	}
 }
 
@@ -684,6 +774,22 @@ benchmark_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 		h.submitted = run_table(builder, h, h.scale, true)
 	case .Dynamic_Churn:
 		h.submitted = run_churn(builder, h, h.scale)
+	case .Prepared_Flat_Fixed:
+		h.submitted = run_prepared_flat(builder, h, true)
+	case .Prepared_Flat_Intrinsic:
+		h.submitted = run_prepared_flat(builder, h, false)
+	case .Prepared_Rows_Fixed:
+		h.submitted = run_prepared_rows(builder, h, true)
+	case .Prepared_Rows_Intrinsic:
+		h.submitted = run_prepared_rows(builder, h, false)
+	case .Prepared_Deep_Fixed:
+		h.submitted = run_prepared_deep(builder, h, true)
+	case .Prepared_Deep_Intrinsic:
+		h.submitted = run_prepared_deep(builder, h, false)
+	case .Prepared_Wrapped:
+		h.submitted = run_prepared_wrapped(builder, h)
+	case .Prepared_Mixed_Tracks, .Prepared_Effects:
+		h.submitted = run_prepared_mixed(builder, h)
 	}
 }
 
@@ -699,6 +805,10 @@ required_nodes :: proc(workload: Workload, scale: int) -> int {
 		return 2
 	case .List_Virtual:
 		return 2 + min(scale, VIRTUAL_ROWS + VIRTUAL_OVERSCAN * 2)
+	case .Prepared_Rows_Fixed, .Prepared_Rows_Intrinsic:
+		return 1 + scale / 4 * 5
+	case .Prepared_Deep_Fixed, .Prepared_Deep_Intrinsic:
+		return min(scale, 15) + 1
 	case .Labels_Repeated,
 	     .Labels_Unique,
 	     .Labels_Stable_Unique,
@@ -714,7 +824,12 @@ required_nodes :: proc(workload: Workload, scale: int) -> int {
 	     .List_Full,
 	     .Dynamic_Churn,
 	     .Accessibility,
-	     .Capacity:
+	     .Capacity,
+	     .Prepared_Flat_Fixed,
+	     .Prepared_Flat_Intrinsic,
+	     .Prepared_Wrapped,
+	     .Prepared_Mixed_Tracks,
+	     .Prepared_Effects:
 		return 1 + scale
 	}
 	return FIT_NODE_CAPACITY + 1
@@ -766,6 +881,24 @@ parse_workload :: proc(value: string) -> (Workload, bool) {
 		return .Accessibility, true
 	case "capacity":
 		return .Capacity, true
+	case "prepared_flat_fixed":
+		return .Prepared_Flat_Fixed, true
+	case "prepared_flat_intrinsic":
+		return .Prepared_Flat_Intrinsic, true
+	case "prepared_rows_fixed":
+		return .Prepared_Rows_Fixed, true
+	case "prepared_rows_intrinsic":
+		return .Prepared_Rows_Intrinsic, true
+	case "prepared_deep_fixed":
+		return .Prepared_Deep_Fixed, true
+	case "prepared_deep_intrinsic":
+		return .Prepared_Deep_Intrinsic, true
+	case "prepared_wrapped":
+		return .Prepared_Wrapped, true
+	case "prepared_mixed_tracks":
+		return .Prepared_Mixed_Tracks, true
+	case "prepared_effects":
+		return .Prepared_Effects, true
 	}
 	return {}, false
 }
@@ -812,7 +945,8 @@ parse_options :: proc() -> (Options, bool) {
 	}
 	valid_scale :=
 		options.scale > 0 && (options.scale <= MAX_SCALE || options.workload == .List_Virtual)
-	valid_nodes := options.layer == .Ui || required_nodes(options.workload, options.scale) <= FIT_NODE_CAPACITY
+	valid_nodes :=
+		options.layer == .Ui || required_nodes(options.workload, options.scale) <= FIT_NODE_CAPACITY
 	valid_layer := options.layer == .Fit || options.workload != .Layout_Flow
 	valid_run := options.warmup >= 0 && options.frames > 0 && options.repetition >= 0
 	return options, valid_scale && valid_nodes && valid_layer && valid_run
@@ -938,6 +1072,17 @@ benchmark_evidence :: proc(
 		measure_cache_hits                = h.ui_telemetry.measure_cache_hits,
 		measure_cache_misses              = h.ui_telemetry.measure_cache_misses,
 		measure_cache_policy_bypasses     = h.ui_telemetry.measure_cache_policy_bypasses,
+		phases                           = {
+			h.ui_telemetry.prepared.phase_ns[.Measure_Natural],
+			h.ui_telemetry.prepared.phase_ns[.Resolve_Size],
+			h.ui_telemetry.prepared.phase_ns[.Measure_Resolved],
+			h.ui_telemetry.prepared.phase_ns[.Place],
+			h.ui_telemetry.prepared.phase_ns[.Render_Tree],
+			h.ui_telemetry.prepared.phase_ns[.Output_Clear],
+			h.ui_telemetry.prepared.phase_ns[.Finalize_Routes],
+			h.ui_telemetry.prepared.phase_ns[.Finalize_Semantics],
+			h.ui_telemetry.prepared.phase_ns[.Finalize_Lifetimes],
+		},
 	}
 	diagnostics := fit.Frame_Diagnostics {
 		input_characters_dropped   = h.ui_diagnostics.input_characters_dropped,
@@ -996,6 +1141,62 @@ print_telemetry :: proc(value: fit.Frame_Telemetry) {
 		value.text_input_full_paths,
 		",\"text_input_inactive_candidates\":",
 		value.text_input_inactive_paths,
+		",\"phase_measure_natural_ns\":",
+		value.phases.measure_natural_ns,
+		",\"phase_resolve_size_ns\":",
+		value.phases.resolve_size_ns,
+		",\"phase_measure_resolved_ns\":",
+		value.phases.measure_resolved_ns,
+		",\"phase_place_ns\":",
+		value.phases.place_ns,
+		",\"phase_render_tree_ns\":",
+		value.phases.render_tree_ns,
+		",\"phase_output_clear_ns\":",
+		value.phases.output_clear_ns,
+		",\"phase_finalize_routes_ns\":",
+		value.phases.finalize_routes_ns,
+		",\"phase_finalize_semantics_ns\":",
+		value.phases.finalize_semantics_ns,
+		",\"phase_finalize_lifetimes_ns\":",
+		value.phases.finalize_lifetimes_ns,
+		",\"description_nodes\":",
+		value.description_nodes,
+		",\"leaf_nodes\":",
+		value.leaf_nodes,
+		",\"container_nodes\":",
+		value.container_nodes,
+		",\"maximum_depth\":",
+		value.maximum_depth,
+		",\"fixed_leaf_nodes\":",
+		value.fixed_leaf_nodes,
+		",\"intrinsic_leaf_nodes\":",
+		value.intrinsic_leaf_nodes,
+		",\"width_dependent_leaf_nodes\":",
+		value.width_dependent_leaf_nodes,
+		",\"dependency_node_visits\":",
+		value.dependency_node_visits,
+		",\"dependency_child_visits\":",
+		value.dependency_child_visits,
+		",\"natural_node_visits\":",
+		value.natural_node_visits,
+		",\"resolve_node_visits\":",
+		value.resolve_node_visits,
+		",\"remeasure_node_visits\":",
+		value.remeasure_node_visits,
+		",\"width_assignment_visits\":",
+		value.width_assignment_visits,
+		",\"resolved_measure_visits\":",
+		value.resolved_measure_visits,
+		",\"placement_node_visits\":",
+		value.placement_node_visits,
+		",\"render_node_visits\":",
+		value.render_node_visits,
+		",\"child_run_visits\":",
+		value.child_run_visits,
+		",\"specialized_nodes\":",
+		value.specialized_nodes,
+		",\"generic_fallback_nodes\":",
+		value.generic_fallback_nodes,
 		",\"natural_leaf_measures\":",
 		value.natural_leaf_measures,
 		",\"resolved_leaf_measures\":",
@@ -1004,6 +1205,8 @@ print_telemetry :: proc(value: fit.Frame_Telemetry) {
 		value.fixed_leaf_measure_skips,
 		",\"container_measures\":",
 		value.container_measures,
+		",\"width_assignments\":",
+		value.width_assignments,
 		",\"placed_nodes\":",
 		value.placed_nodes,
 		",\"rendered_nodes\":",
@@ -1053,6 +1256,7 @@ main :: proc() {
 		frame_finalize_samples[index] = timing.frame_finalize_ns
 		finalize_samples[index] = timing.finalize_ns
 		frame_samples[index] = timing.frame_ns
+		_, h.telemetry, _ = benchmark_evidence(h, options.layer)
 		state_checksum = hash_u64(state_checksum, u64(h.submitted))
 		if options.workload == .Layout_Flow {
 			state_checksum = hash_u64(state_checksum, h.layout_checksum)
@@ -1167,6 +1371,24 @@ workload_name :: proc(workload: Workload) -> string {
 		return "accessibility"
 	case .Capacity:
 		return "capacity"
+	case .Prepared_Flat_Fixed:
+		return "prepared_flat_fixed"
+	case .Prepared_Flat_Intrinsic:
+		return "prepared_flat_intrinsic"
+	case .Prepared_Rows_Fixed:
+		return "prepared_rows_fixed"
+	case .Prepared_Rows_Intrinsic:
+		return "prepared_rows_intrinsic"
+	case .Prepared_Deep_Fixed:
+		return "prepared_deep_fixed"
+	case .Prepared_Deep_Intrinsic:
+		return "prepared_deep_intrinsic"
+	case .Prepared_Wrapped:
+		return "prepared_wrapped"
+	case .Prepared_Mixed_Tracks:
+		return "prepared_mixed_tracks"
+	case .Prepared_Effects:
+		return "prepared_effects"
 	}
 	return "unknown"
 }

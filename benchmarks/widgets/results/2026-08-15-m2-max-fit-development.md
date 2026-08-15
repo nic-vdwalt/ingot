@@ -29,27 +29,26 @@ complete Fit frame with competitor build-only medians. That convention is incons
 be used as a framework-total comparison. Dear ImGui finalize is negligible; egui total comparisons
 must include its separately measured tessellation/finalize phase.
 
-| Workload | Scale | Ingot Fit total median/p95 | Dear ImGui build | Fit / ImGui | egui build | Fit / egui |
-|---|---:|---:|---:|---:|---:|---:|
-| Repeated labels | 2,000 | 551.81/621.79 us | 92.96 us | 5.94x | 1,333.96 us | 0.41x |
-| Unique labels | 2,000 | 553.04/615.72 us | 160.62 us | 3.44x | 1,356.60 us | 0.41x |
-| Button grid | 250 | 123.96/139.00 us | 38.42 us | 3.23x | 313.79 us | 0.40x |
-| Mixed form | 50 groups | 110.42/123.38 us | 28.54 us | 3.87x | 278.96 us | 0.40x |
-| Complex dashboard | 50 rows | 199.42/219.50 us | 45.58 us | 4.37x | 466.08 us | 0.43x |
-| Full list | 2,000 rows | 553.88/641.76 us | 160.58 us | 3.45x | 1,350.17 us | 0.41x |
-| Virtual list | 1,000,000 logical / 44 built | 10.54/10.88 us | 7.50 us | 1.41x | 36.12 us | 0.29x |
-| Repeated table cells | 1,000 cells | 273.62/304.67 us | 42.88 us | 6.38x | 644.73 us | 0.42x |
-| Unique table cells | 1,000 cells | 273.71/279.25 us | 73.12 us | 3.74x | 639.42 us | 0.43x |
-| Dynamic churn | 2,000 items | 548.79/555.93 us | 114.71 us | 4.78x | 1,519.46 us | 0.36x |
-| Accessibility buttons | 250 | 158.33/176.75 us | 38.50 us | 4.11x | 315.88 us | 0.50x |
+| Workload | Scale | Ingot Fit total median/p95 | Dear ImGui build (descriptive only) | egui build (descriptive only) |
+|---|---:|---:|---:|---:|
+| Repeated labels | 2,000 | 551.81/621.79 us | 92.96 us | 1,333.96 us |
+| Unique labels | 2,000 | 553.04/615.72 us | 160.62 us | 1,356.60 us |
+| Button grid | 250 | 123.96/139.00 us | 38.42 us | 313.79 us |
+| Mixed form | 50 groups | 110.42/123.38 us | 28.54 us | 278.96 us |
+| Complex dashboard | 50 rows | 199.42/219.50 us | 45.58 us | 466.08 us |
+| Full list | 2,000 rows | 553.88/641.76 us | 160.58 us | 1,350.17 us |
+| Virtual list | 1,000,000 logical / 44 built | 10.54/10.88 us | 7.50 us | 36.12 us |
+| Repeated table cells | 1,000 cells | 273.62/304.67 us | 42.88 us | 644.73 us |
+| Unique table cells | 1,000 cells | 273.71/279.25 us | 73.12 us | 639.42 us |
+| Dynamic churn | 2,000 items | 548.79/555.93 us | 114.71 us | 1,519.46 us |
+| Accessibility buttons | 250 | 158.33/176.75 us | 38.50 us | 315.88 us |
 
 ## Where Fit Stands
 
-- Fit was 1.41-6.38x slower than Dear ImGui in these headless cases. The smallest gap was the
-  virtual list; the largest was repeated table cells.
-- Fit remained directionally faster than egui in representative complete CPU comparisons, but the
-  original 2.00-3.43x range omitted egui finalize and is withdrawn. The accessibility row includes
-  semantics only for Ingot; Dear ImGui emits none.
+- The Dear ImGui and egui columns are build-only historical context. Earlier ratios that divided Fit
+  complete frames by those values are withdrawn because their timing boundaries differ.
+- A current direct-`ingot:ui` mode now provides the fixed-placement Ingot baseline. Fit/UI overhead
+  claims require fresh same-revision paired records; the July 29 direct-UI report remains provenance.
 - Fit description construction was not the dominant cost. For the 50-row dashboard, build was
   52.79 us and measure/render/finalization was 145.71 us of the 199.42 us total median.
 - Stable repeated and unique labels had nearly identical Fit totals. At this layer, measurement,

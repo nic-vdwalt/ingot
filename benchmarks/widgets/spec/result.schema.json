@@ -8,7 +8,7 @@
     "framework": {"enum": ["ingot", "imgui", "egui"]},
     "framework_revision": {"type": "string", "minLength": 1},
     "backend": {"type": "string", "minLength": 1},
-    "layer": {"enum": ["core", "native", "idle_continuous", "idle_event_driven"]},
+    "layer": {"enum": ["fit", "ui", "core", "native", "idle_continuous", "idle_event_driven"]},
     "workload": {"type": "string", "minLength": 1},
     "scale": {"type": "integer", "minimum": 1},
     "repetition": {"type": "integer", "minimum": 0},

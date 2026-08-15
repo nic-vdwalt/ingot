@@ -214,18 +214,28 @@ Prepared_Node :: struct {
 	activated:                bool,
 }
 
+Prepared_Summary :: struct {
+	leaf_count:       i32,
+	container_count:  i32,
+	maximum_depth:    i32,
+	depends_on_width: bool,
+	depends_on_height: bool,
+}
+
 Prepared_Ui :: struct {
-	nodes:       [MAX_PREPARED_NODES]Prepared_Node,
-	external:    []Prepared_Node,
-	stack:       [MAX_LAYOUT_DEPTH]i32,
-	u:           ^Ui,
-	count:       i32,
-	depth:       i32,
-	root:        i32,
-	constraints: Intrinsic_Constraints,
-	open:        bool,
-	measured:    bool,
-	rendered:    bool,
+	nodes:             [MAX_PREPARED_NODES]Prepared_Node,
+	external:          []Prepared_Node,
+	stack:             [MAX_LAYOUT_DEPTH]i32,
+	u:                 ^Ui,
+	count:             i32,
+	depth:             i32,
+	root:              i32,
+	constraints:       Intrinsic_Constraints,
+	summary:           Prepared_Summary,
+	direct_geometry:   bool,
+	open:              bool,
+	measured:          bool,
+	rendered:          bool,
 }
 
 prepared_set_storage :: proc(prepared: ^Prepared_Ui, storage: Prepared_Storage) {
@@ -271,6 +281,8 @@ prepared_begin :: proc(prepared: ^Prepared_Ui, constraints: Intrinsic_Constraint
 	prepared.depth = 0
 	prepared.root = -1
 	prepared.constraints = constraints
+	prepared.summary = {}
+	prepared.direct_geometry = false
 	prepared.open = true
 	prepared.measured = false
 	prepared.rendered = false
@@ -584,12 +596,17 @@ prepared_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> Intrinsic_Size {
 	assert(prepared != nil && prepared.open, "prepared_measure: description not open")
 	assert(prepared.depth == 0 && prepared.count > 0, "prepared_measure: unbalanced or empty tree")
 	assert(prepared.root >= 0 && prepared.root < prepared.count, "prepared_measure: invalid root")
+	prepared_telemetry_describe(u.frame, prepared)
+	if prepared_direct_grid_measure(u, prepared) do return prepared_nodes(prepared)[prepared.root].size
 	natural_started := prepared_phase_begin(u.frame, .Measure_Natural)
 	prepared_measure_natural(u, prepared)
 	prepared_phase_end(u.frame, .Measure_Natural, natural_started)
 	root := &prepared_nodes(prepared)[prepared.root]
 	root.size = intrinsic_constrain(root.size, prepared.constraints)
-	dependencies := prepared_dependencies(prepared)
+	dependencies := Prepared_Dependencies {
+		width = prepared.summary.depends_on_width,
+		height = prepared.summary.depends_on_height,
+	}
 	if dependencies.width {
 		assert(
 			prepared.constraints.max_w > 0,
@@ -644,7 +661,12 @@ prepared_render_at :: proc(u: ^Ui, prepared: ^Prepared_Ui, rect: Rect_I32) {
 	}
 	root.rect = rect
 	place_started := prepared_phase_begin(u.frame, .Place)
-	prepared_place(u, prepared)
+	if prepared.direct_geometry {
+		prepared_place_grid(u, prepared, prepared.root)
+		root.target_rect = root.rect
+	} else {
+		prepared_place(u, prepared)
+	}
 	prepared_phase_end(u.frame, .Place, place_started)
 	render_started := prepared_phase_begin(u.frame, .Render_Tree)
 	prepared_render_tree(u, prepared)
@@ -755,14 +777,89 @@ prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Ha
 	}
 	nodes[index] = value
 	prepared.count += 1
+	prepared.summary.depends_on_width =
+		prepared.summary.depends_on_width || prepared_axis_dependent(value.sizing.width)
+	prepared.summary.depends_on_height =
+		prepared.summary.depends_on_height || prepared_axis_dependent(value.sizing.height)
+	if value.kind == .Flow || value.kind == .Grid || value.kind == .Scroll {
+		prepared.summary.depends_on_width = true
+	}
+	if value.parent >= 0 {
+		parent_kind := nodes[value.parent].kind
+		track_dependent := value.track.kind == .Grow || value.track.kind == .Percent
+		if parent_kind == .Row do prepared.summary.depends_on_width ||= track_dependent
+		if parent_kind == .Column do prepared.summary.depends_on_height ||= track_dependent
+	}
+	if prepared_kind_is_container(value.kind) {
+		prepared.summary.container_count += 1
+	} else {
+		prepared.summary.leaf_count += 1
+	}
+	prepared.summary.maximum_depth = max(prepared.summary.maximum_depth, prepared.depth + 1)
+	assert(prepared.summary.leaf_count + prepared.summary.container_count == prepared.count)
 	return Prepared_Handle(index)
 }
 
 @(private = "file")
+prepared_telemetry_describe :: proc(frame: ^Ui_Frame, prepared: ^Prepared_Ui) {
+	assert(frame != nil && prepared != nil, "prepared telemetry: invalid argument")
+	assert(prepared.count > 0, "prepared telemetry: empty description")
+	when UI_TELEMETRY_ENABLED {
+		telemetry := &frame.prepared_telemetry
+		telemetry.description_nodes = u64(prepared.count)
+		telemetry.leaf_nodes = u64(prepared.summary.leaf_count)
+		telemetry.container_nodes = u64(prepared.summary.container_count)
+		telemetry.maximum_depth = u64(prepared.summary.maximum_depth)
+		for index in 0 ..< prepared.count {
+			node := &prepared_nodes(prepared)[index]
+			if prepared_kind_is_container(node.kind) do continue
+			if prepared_leaf_size_is_fixed(node) {
+				telemetry.fixed_leaf_nodes += 1
+			} else {
+				telemetry.intrinsic_leaf_nodes += 1
+			}
+			if prepared_leaf_width_dependent(node) {
+				telemetry.width_dependent_leaf_nodes += 1
+			}
+		}
+		assert(telemetry.leaf_nodes == telemetry.fixed_leaf_nodes + telemetry.intrinsic_leaf_nodes)
+	}
+}
+
+@(private = "file")
+prepared_direct_grid_measure :: proc(u: ^Ui, prepared: ^Prepared_Ui) -> bool {
+	assert(u != nil && prepared != nil, "prepared direct grid: invalid argument")
+	root := &prepared_nodes(prepared)[prepared.root]
+	if root.kind != .Grid || root.grid.row_height <= 0 do return false
+	for index in 1 ..< prepared.count {
+		node := &prepared_nodes(prepared)[index]
+		if node.parent != prepared.root || prepared_kind_is_container(node.kind) do return false
+		if !prepared_leaf_size_is_fixed(node) do return false
+		if node.sizing.aspect.width != 0 || node.sizing.transition.state != nil do return false
+	}
+	for index in 1 ..< prepared.count {
+		node := &prepared_nodes(prepared)[index]
+		node.size.w = prepared_axis_size(u, node.sizing.width, 0, prepared.constraints.max_w)
+		node.size.h = prepared_axis_size(u, node.sizing.height, 0, prepared.constraints.max_h)
+		node.measure_flags += {.Width_Valid}
+	}
+	prepared_measure_grid(u, prepared, prepared.root, false)
+	root.size = intrinsic_constrain(root.size, prepared.constraints)
+	prepared.direct_geometry = true
+	prepared.measured = true
+	prepared.rendered = false
+	when UI_TELEMETRY_ENABLED {
+		u.frame.prepared_telemetry.fixed_leaf_measure_skips += u64(prepared.summary.leaf_count)
+		u.frame.prepared_telemetry.specialized_nodes += u64(prepared.count)
+	}
+	return true
+}
+
 prepared_measure_natural :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(u != nil && prepared != nil, "prepared_measure_natural: invalid argument")
 	assert(prepared.count > 0 && prepared.count <= i32(prepared_capacity(prepared)))
 	for offset in 0 ..< prepared.count {
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.natural_node_visits += 1
 		index := prepared.count - 1 - offset
 		node := &prepared_nodes(prepared)[index]
 		if node.kind == .Flow {
@@ -906,6 +1003,7 @@ prepared_measure_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep
 @(private = "file")
 prepared_measure_container :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_width: bool) {
 	assert(u != nil && prepared != nil, "prepared_measure_container: invalid argument")
+	when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.container_measures += 1
 	assert(index >= 0 && index < prepared.count, "prepared_measure_container: index out of range")
 	node := &prepared_nodes(prepared)[index]
 	children: [MAX_LAYOUT_FLEX]Intrinsic_Size
@@ -936,6 +1034,7 @@ prepared_measure_container :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, k
 @(private = "file")
 prepared_measure_flow :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_width: bool) {
 	assert(u != nil && prepared != nil, "prepared_measure_flow: invalid argument")
+	when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.container_measures += 1
 	assert(index >= 0 && index < prepared.count, "prepared_measure_flow: index out of range")
 	node := &prepared_nodes(prepared)[index]
 	padding := insets_of(u, node.flow.padding)
@@ -962,6 +1061,7 @@ prepared_measure_flow :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_w
 @(private = "file")
 prepared_measure_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_width: bool) {
 	assert(u != nil && prepared != nil, "prepared_measure_grid: invalid argument")
+	when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.container_measures += 1
 	assert(index >= 0 && index < prepared.count, "prepared_measure_grid: index out of range")
 	node := &prepared_nodes(prepared)[index]
 	assert(node.grid.columns > 0, "prepared_measure_grid: invalid columns")
@@ -1022,6 +1122,7 @@ prepared_dependencies :: proc(prepared: ^Prepared_Ui) -> Prepared_Dependencies {
 	)
 	result: Prepared_Dependencies
 	for index in 0 ..< prepared.count {
+		when UI_TELEMETRY_ENABLED do prepared.u.frame.prepared_telemetry.dependency_node_visits += 1
 		node := prepared_nodes(prepared)[index]
 		result.width = result.width || prepared_axis_dependent(node.sizing.width)
 		result.height = result.height || prepared_axis_dependent(node.sizing.height)
@@ -1029,6 +1130,7 @@ prepared_dependencies :: proc(prepared: ^Prepared_Ui) -> Prepared_Dependencies {
 		child := node.first_child
 		for _ in 0 ..< prepared.count {
 			if child < 0 do break
+			when UI_TELEMETRY_ENABLED do prepared.u.frame.prepared_telemetry.dependency_child_visits += 1
 			assert(child < prepared.count, "prepared_dependencies: child out of range")
 			track := prepared_nodes(prepared)[child].track
 			dependent := track.kind == .Grow || track.kind == .Percent
@@ -1050,6 +1152,7 @@ prepared_axis_dependent :: proc(track: Track) -> bool {
 prepared_resolve_sizes :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(u != nil && prepared != nil, "prepared_resolve_sizes: invalid argument")
 	for index in 0 ..< prepared.count {
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.resolve_node_visits += 1
 		node := &prepared_nodes(prepared)[index]
 		prepared_validate_size(node.sizing)
 		node.size.w = prepared_axis_size(
@@ -1072,6 +1175,7 @@ prepared_resolve_sizes :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 prepared_remeasure_containers :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(u != nil && prepared != nil, "prepared_remeasure_containers: invalid argument")
 	for offset in 0 ..< prepared.count {
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.remeasure_node_visits += 1
 		index := prepared.count - 1 - offset
 		node := &prepared_nodes(prepared)[index]
 		if node.kind == .Flow {
@@ -1161,6 +1265,7 @@ prepared_assign_widths :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 		h = max(root.size.h, 1),
 	}
 	for index in 0 ..< prepared.count {
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.width_assignment_visits += 1
 		node := &prepared_nodes(prepared)[index]
 		if node.kind == .Row || node.kind == .Column {
 			prepared_place_children(u, prepared, index, true)
@@ -1178,6 +1283,7 @@ prepared_assign_widths :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 prepared_measure_heights :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(u != nil && prepared != nil, "prepared_measure_heights: invalid argument")
 	for index in 0 ..< prepared.count {
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.resolved_measure_visits += 1
 		node := &prepared_nodes(prepared)[index]
 		if !prepared_kind_is_container(node.kind) {
 			if prepared_leaf_needs_width_measure(node, node.rect.w) {
@@ -1202,6 +1308,7 @@ prepared_measure_heights :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 		}
 	}
 	for offset in 0 ..< prepared.count {
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.resolved_measure_visits += 1
 		index := prepared.count - 1 - offset
 		node := &prepared_nodes(prepared)[index]
 		if node.kind == .Flow {
@@ -1221,6 +1328,10 @@ prepared_place :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(u != nil && prepared != nil, "prepared_place: invalid argument")
 	assert(prepared.count > 0 && prepared.count <= i32(prepared_capacity(prepared)))
 	for index in 0 ..< prepared.count {
+		when UI_TELEMETRY_ENABLED {
+			u.frame.prepared_telemetry.placement_node_visits += 1
+			u.frame.prepared_telemetry.placed_nodes += 1
+		}
 		node := &prepared_nodes(prepared)[index]
 		node.target_rect = node.rect
 		if node.kind == .Attachment {
@@ -1403,6 +1514,7 @@ prepared_place_flow :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 	child := node.first_child
 	for _ in 0 ..< prepared.count {
 		if child < 0 do break
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.child_run_visits += 1
 		value := &prepared_nodes(prepared)[child]
 		if value.kind != .Attachment do value.rect = flow_next(&flow, value.size.w, value.size.h)
 		child = value.next_sibling
@@ -1428,8 +1540,12 @@ prepared_place_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 	child := node.first_child
 	for _ in 0 ..< prepared.count {
 		if child < 0 do break
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.child_run_visits += 1
 		value := &prepared_nodes(prepared)[child]
-		if value.kind != .Attachment do value.rect = grid_next(&grid)
+		if value.kind != .Attachment {
+			value.rect = grid_next(&grid)
+			when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.width_assignments += 1
+		}
 		child = value.next_sibling
 	}
 	assert(child < 0, "prepared_place_grid: child bound")
@@ -1471,6 +1587,7 @@ prepared_place_children :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, widt
 		} else {
 			child.rect = rect
 		}
+		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.width_assignments += 1
 	}
 	flex_end(&layout)
 	layout_pop(&layout)
@@ -1537,6 +1654,11 @@ prepared_render_tree :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(prepared_kind_is_container(root.kind), "prepared_render_tree: leaf root")
 	stack: [MAX_LAYOUT_DEPTH]Prepared_Render_Frame
 	prepared_render_enter(u, root)
+	when UI_TELEMETRY_ENABLED {
+		u.frame.prepared_telemetry.render_node_visits += 1
+		u.frame.prepared_telemetry.rendered_nodes += 1
+		if !prepared.direct_geometry do u.frame.prepared_telemetry.generic_fallback_nodes += 1
+	}
 	stack[0] = {
 		index      = prepared.root,
 		next_child = root.first_child,
@@ -1552,6 +1674,11 @@ prepared_render_tree :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 		child_index := frame.next_child
 		assert(child_index >= 0 && child_index < prepared.count, "prepared_render_tree: bad child")
 		child := &prepared_nodes(prepared)[child_index]
+		when UI_TELEMETRY_ENABLED {
+			u.frame.prepared_telemetry.render_node_visits += 1
+			u.frame.prepared_telemetry.rendered_nodes += 1
+			if !prepared.direct_geometry do u.frame.prepared_telemetry.generic_fallback_nodes += 1
+		}
 		frame.next_child = child.next_sibling
 		if prepared_kind_is_container(child.kind) {
 			assert(depth < MAX_LAYOUT_DEPTH, "prepared_render_tree: depth full")
