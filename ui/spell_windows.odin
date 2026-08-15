@@ -7,7 +7,6 @@ package ui
 // spellcheck.h bindings. Any HRESULT failure (Windows 7, N editions without
 // the feature, broken COM state) degrades to spell_available() == false.
 
-import "core:strings"
 import win "core:sys/windows"
 
 @(private = "file")
