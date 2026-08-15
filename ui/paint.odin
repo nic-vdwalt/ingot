@@ -392,11 +392,11 @@ paint_push_rectangle :: proc(list: ^Paint_List, rect: Rect, color: Color) -> boo
 		return paint_reject(list, {kind = .Rectangle, rect = rect, color = color})
 	}
 	reserved^ = {
-		kind = .Rectangle,
-		tier = list.current_tier,
+		kind    = .Rectangle,
+		tier    = list.current_tier,
 		z_group = list.current_z_group,
-		rect = rect,
-		color = color,
+		rect    = rect,
+		color   = color,
 	}
 	return paint_commit(list, reserved)
 }
@@ -423,13 +423,13 @@ paint_push_rectangle_rounded :: proc(
 		)
 	}
 	reserved^ = {
-		kind = .Rectangle_Rounded,
-		tier = list.current_tier,
-		z_group = list.current_z_group,
-		rect = rect,
-		color = color,
+		kind      = .Rectangle_Rounded,
+		tier      = list.current_tier,
+		z_group   = list.current_z_group,
+		rect      = rect,
+		color     = color,
 		roundness = roundness,
-		segments = segments,
+		segments  = segments,
 	}
 	return paint_commit(list, reserved)
 }
@@ -472,14 +472,14 @@ paint_push_text_fields :: proc(
 		)
 	}
 	reserved^ = {
-		kind = .Text,
-		tier = list.current_tier,
-		z_group = list.current_z_group,
-		p0 = position,
-		color = color,
-		font = font,
-		font_size = font_size,
-		spacing = spacing,
+		kind        = .Text,
+		tier        = list.current_tier,
+		z_group     = list.current_z_group,
+		p0          = position,
+		color       = color,
+		font        = font,
+		font_size   = font_size,
+		spacing     = spacing,
 		text_offset = text_offset,
 		text_length = len(text),
 	}

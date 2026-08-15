@@ -121,11 +121,7 @@ frame_paint_push_text_fields :: proc(
 
 draw_rectangle :: proc(frame: ^Ui_Frame, x, y, width, height: i32, color: Color) {
 	assert(frame != nil, "draw_rectangle: nil frame")
-	frame_paint_push_rectangle(
-		frame,
-		{f32(x), f32(y), f32(width), f32(height)},
-		color,
-	)
+	frame_paint_push_rectangle(frame, {f32(x), f32(y), f32(width), f32(height)}, color)
 }
 
 draw_rectangle_rec :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
@@ -318,14 +314,7 @@ draw_text_command :: proc(
 	font: Font_Id = 0,
 ) {
 	assert(frame != nil, "draw_text_command: nil frame")
-	frame_paint_push_text_fields(
-		frame,
-		text,
-		{f32(x), f32(y)},
-		color,
-		font,
-		f32(size),
-	)
+	frame_paint_push_text_fields(frame, text, {f32(x), f32(y)}, color, font, f32(size))
 }
 
 draw_cstring_command :: proc(
