@@ -25,11 +25,13 @@ Text_System :: struct {
 	font_dpi:                f32,
 	font_codepoints:         []rune,
 	measure_cache:           map[Measure_Key]Measure_Entry,
-	measure_cache_evictions: int,
-	measure_cache_hits:      u64,
-	measure_cache_misses:    u64,
-	measure_stamp:           u64,
-	measure_backend:         proc(text: cstring, size: i32) -> i32,
+	measure_cache_evictions:       int,
+	measure_cache_hits:            u64,
+	measure_cache_misses:          u64,
+	measure_cache_policy_bypasses: u64,
+	backend_measure_cache_enabled: bool,
+	measure_stamp:                 u64,
+	measure_backend:               proc(text: cstring, size: i32) -> i32,
 	wrap_cache:              map[Wrap_Key]Wrap_Entry,
 	wrap_cache_evictions:    int,
 	wrap_stamp:              u64,
@@ -38,6 +40,7 @@ Text_System :: struct {
 text_system_init :: proc(system: ^Text_System) {
 	assert(system != nil)
 	assert(!system.font_loaded)
+	system.backend_measure_cache_enabled = true
 	if system.font_dpi <= 0 do system.font_dpi = 1.0
 	total := 0
 	for r in CODEPOINT_RANGES {
@@ -64,15 +67,16 @@ measure_cache_stats_with :: proc(system: ^Text_System) -> (entries: int, evictio
 	return len(system.measure_cache), system.measure_cache_evictions
 }
 
-measure_cache_telemetry_with :: proc(system: ^Text_System) -> (hits, misses: u64) {
+measure_cache_telemetry_with :: proc(system: ^Text_System) -> (hits, misses, bypasses: u64) {
 	assert(system != nil, "measure_cache_telemetry_with: nil system")
-	return system.measure_cache_hits, system.measure_cache_misses
+	return system.measure_cache_hits, system.measure_cache_misses, system.measure_cache_policy_bypasses
 }
 
 measure_cache_telemetry_reset_with :: proc(system: ^Text_System) {
 	assert(system != nil, "measure_cache_telemetry_reset_with: nil system")
 	system.measure_cache_hits = 0
 	system.measure_cache_misses = 0
+	system.measure_cache_policy_bypasses = 0
 }
 
 set_measure_backend_with :: proc(system: ^Text_System, fn: proc(text: cstring, size: i32) -> i32) {
@@ -271,6 +275,11 @@ measure_text_backend_cached :: proc(
 	assert(frame != nil && frame.runtime != nil, "measure backend cache: invalid frame")
 	assert(size > 0 && font != 0, "measure backend cache: invalid font")
 	system := &frame.runtime.text
+	if !system.backend_measure_cache_enabled {
+		when UI_TELEMETRY_ENABLED do system.measure_cache_policy_bypasses += 1
+		measurement := text_backend_measure(frame.runtime.text_backend, font, text, f32(size), 0)
+		return i32(measurement.x + 0.5)
+	}
 	key := Measure_Key{text = text, size = size, font = font, epoch = frame.runtime.font_epoch}
 	if entry, ok := system.measure_cache[key]; ok {
 		when UI_TELEMETRY_ENABLED do system.measure_cache_hits += 1

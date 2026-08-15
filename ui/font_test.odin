@@ -129,6 +129,43 @@ text_backend_measure_cache_reuses_and_invalidates :: proc(t: ^testing.T) {
 }
 
 @(test)
+text_backend_measure_cache_runtime_policy_isolated :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	state: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	ui_runtime_set_backend_measure_cache_enabled(&runtime, false)
+	measure_cache_telemetry_reset_with(&runtime.text)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	width_a := measure_text_string_frame(&frame, "stable", 16)
+	width_b := measure_text_string_frame(&frame, "stable", 16)
+	ui_frame_end(&frame)
+	entries, _ := measure_cache_stats_with(&runtime.text)
+	testing.expect_value(t, width_a, width_b)
+	testing.expect_value(t, state.measure_calls, 2)
+	testing.expect_value(t, entries, 0)
+	when UI_TELEMETRY_ENABLED {
+		_, misses, bypasses := measure_cache_telemetry_with(&runtime.text)
+		testing.expect_value(t, misses, u64(0))
+		testing.expect_value(t, bypasses, u64(2))
+	}
+	ui_runtime_set_backend_measure_cache_enabled(&runtime, true)
+	ui_frame_begin(&frame, &runtime)
+	_ = measure_text_string_frame(&frame, "stable", 16)
+	_ = measure_text_string_frame(&frame, "stable", 16)
+	ui_frame_end(&frame)
+	ui_frame_destroy(&frame)
+	entries, _ = measure_cache_stats_with(&runtime.text)
+	testing.expect_value(t, state.measure_calls, 3)
+	testing.expect_value(t, entries, 1)
+}
+
+@(test)
 test_frame_text_geometry_uses_render_backend :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

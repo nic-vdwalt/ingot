@@ -97,3 +97,9 @@ Accepted Phase 2 evidence uses the default 300 warm-up, 2,000 measured frames, a
 and reports total, build, and finalization median/p95 values. Optimization evidence compares complete
 frames from matching environments. Internal Fit phases identify causes and are not compared with
 competitor build phases.
+
+`fixed_leaf_measure_skips` counts leaves whose own fixed width and height avoid intrinsic callbacks.
+`measure_cache_policy_bypasses` proves the backend-cache-disabled A/B arm executed. `input_active`
+keeps exactly one field focused after a deterministic pre-measure activation sequence. Optimization
+acceptance uses randomized adjacent fresh-process pairs and complete `frame` medians; Fit phases and
+telemetry attribute a result but do not replace complete-frame evidence.

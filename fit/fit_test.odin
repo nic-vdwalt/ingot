@@ -716,6 +716,36 @@ fit_caller_storage_selects_and_resets_capacity :: proc(t: ^testing.T) {
 }
 
 @(test)
+fit_button_public_overloads_preserve_explicit_size :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend: i32
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 320, 240})
+	Column(&builder)
+	string_options := Button_Options{size = {width = Fixed(40), height = Fixed(16)}}
+	Button(&builder, "string", "String", string_options)
+	integer_options := Button_Options{size = {width = Fixed(50), height = Fixed(18)}}
+	Button(&builder, u64(7), "Integer", integer_options)
+	widget := Id(&builder, "widget")
+	widget_options := Button_Options{size = {width = Fixed(60), height = Fixed(20)}}
+	Button(&builder, widget, "Widget", widget_options)
+	End(&builder)
+	size := Measure(&builder)
+	Render_At(&builder, {0, 0, size.w, size.h})
+	builder_close(&builder)
+	testing.expect_value(t, size.w, i32(60))
+	testing.expect_value(t, size.h, i32(54))
+}
+
+@(test)
 fit_test_driver_exposes_bounded_frame_results :: proc(t: ^testing.T) {
 	driver: Test_Driver
 	Test_Driver_Init(&driver)

@@ -15,15 +15,16 @@ Prepared_Phase :: enum u8 {
 }
 
 Prepared_Telemetry :: struct {
-	phase_ns:               [Prepared_Phase]i64,
-	natural_leaf_measures:  u64,
-	resolved_leaf_measures: u64,
-	container_measures:     u64,
-	width_assignments:      u64,
-	placed_nodes:           u64,
-	rendered_nodes:         u64,
-	activation_outputs:     u64,
-	render_relayouts:       u64,
+	phase_ns:                 [Prepared_Phase]i64,
+	natural_leaf_measures:    u64,
+	resolved_leaf_measures:   u64,
+	fixed_leaf_measure_skips: u64,
+	container_measures:       u64,
+	width_assignments:        u64,
+	placed_nodes:             u64,
+	rendered_nodes:           u64,
+	activation_outputs:       u64,
+	render_relayouts:         u64,
 }
 
 Ui_Frame_Output_Stats :: struct {
@@ -31,9 +32,10 @@ Ui_Frame_Output_Stats :: struct {
 	main_text_bytes:       i32,
 	overlay_command_count: i32,
 	overlay_text_bytes:    i32,
-	semantic_node_count:   i32,
-	measure_cache_hits:    u64,
-	measure_cache_misses:  u64,
+	semantic_node_count:            i32,
+	measure_cache_hits:             u64,
+	measure_cache_misses:           u64,
+	measure_cache_policy_bypasses:  u64,
 }
 
 Ui_Paint_Telemetry :: struct {
@@ -110,6 +112,7 @@ Ui_Frame_Telemetry :: struct {
 	prepared:                         Prepared_Telemetry,
 	measure_cache_hits:               u64,
 	measure_cache_misses:             u64,
+	measure_cache_policy_bypasses:    u64,
 }
 
 Ui_Frame_Diagnostics :: struct {
@@ -130,11 +133,12 @@ Ui_Frame_Diagnostics :: struct {
 ui_frame_output_stats :: proc(frame: ^Ui_Frame) -> Ui_Frame_Output_Stats {
 	assert(frame != nil && frame.open, "ui_frame_output_stats: invalid frame")
 	assert(frame.finalized, "ui_frame_output_stats: frame not finalized")
-	hits, misses := measure_cache_telemetry_with(&frame.runtime.text)
+	hits, misses, policy_bypasses := measure_cache_telemetry_with(&frame.runtime.text)
 	result := Ui_Frame_Output_Stats {
-		semantic_node_count  = i32(frame.semantics.cur.count),
-		measure_cache_hits   = hits,
-		measure_cache_misses = misses,
+		semantic_node_count           = i32(frame.semantics.cur.count),
+		measure_cache_hits            = hits,
+		measure_cache_misses          = misses,
+		measure_cache_policy_bypasses = policy_bypasses,
 	}
 	if frame.output != nil {
 		result.main_command_count = i32(frame.output.main.count)
@@ -160,7 +164,7 @@ paint_telemetry :: proc(list: ^Paint_List) -> Ui_Paint_Telemetry {
 ui_frame_telemetry :: proc(frame: ^Ui_Frame) -> Ui_Frame_Telemetry {
 	assert(frame != nil && frame.open, "ui_frame_telemetry: invalid frame")
 	assert(frame.finalized, "ui_frame_telemetry: frame not finalized")
-	hits, misses := measure_cache_telemetry_with(&frame.runtime.text)
+	hits, misses, policy_bypasses := measure_cache_telemetry_with(&frame.runtime.text)
 	result := Ui_Frame_Telemetry {
 		scratch_allocation_count         = frame.scratch.allocation_count,
 		scratch_resize_count             = frame.scratch.resize_count,
@@ -171,6 +175,7 @@ ui_frame_telemetry :: proc(frame: ^Ui_Frame) -> Ui_Frame_Telemetry {
 		prepared                         = frame.prepared_telemetry,
 		measure_cache_hits               = hits,
 		measure_cache_misses             = misses,
+		measure_cache_policy_bypasses    = policy_bypasses,
 	}
 	if frame.output != nil {
 		result.main = paint_telemetry(&frame.output.main)

@@ -52,6 +52,13 @@ Test_Driver_Set_Semantics :: proc(driver: ^Test_Driver, enabled: bool) {
 	ui.sem_enable(&impl.runtime, enabled)
 }
 
+Test_Driver_Set_Backend_Measure_Cache :: proc(driver: ^Test_Driver, enabled: bool) {
+	assert(driver != nil && driver.inner != nil, "Fit test driver cache: invalid driver")
+	impl := cast(^Test_Driver_Impl)driver.inner
+	assert(!impl.builder.bound, "Fit test driver cache: frame open")
+	ui.ui_runtime_set_backend_measure_cache_enabled(&impl.runtime, enabled)
+}
+
 Test_Driver_Frame :: proc(
 	driver: ^Test_Driver,
 	input: Test_Input,
@@ -176,6 +183,7 @@ test_driver_telemetry :: proc(value: ui.Ui_Frame_Telemetry) -> Frame_Telemetry {
 		text_input_inactive_paths = value.text_input_inactive_candidates,
 		natural_leaf_measures = value.prepared.natural_leaf_measures,
 		resolved_leaf_measures = value.prepared.resolved_leaf_measures,
+		fixed_leaf_measure_skips = value.prepared.fixed_leaf_measure_skips,
 		container_measures = value.prepared.container_measures,
 		placed_nodes = value.prepared.placed_nodes,
 		rendered_nodes = value.prepared.rendered_nodes,
@@ -183,6 +191,7 @@ test_driver_telemetry :: proc(value: ui.Ui_Frame_Telemetry) -> Frame_Telemetry {
 		render_relayouts = value.prepared.render_relayouts,
 		measure_cache_hits = value.measure_cache_hits,
 		measure_cache_misses = value.measure_cache_misses,
+		measure_cache_policy_bypasses = value.measure_cache_policy_bypasses,
 	}
 }
 

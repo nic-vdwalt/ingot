@@ -193,6 +193,7 @@ fit_button_builder_string :: proc(
 		fit_button_options(options),
 		options.track,
 	)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
 	fit_builder_output(builder, handle, options.activated)
 }
 
@@ -213,6 +214,7 @@ fit_button_builder_u64 :: proc(
 		fit_button_options(options),
 		options.track,
 	)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
 	fit_builder_output(builder, handle, options.activated)
 }
 
@@ -233,6 +235,7 @@ fit_button_builder_id :: proc(
 		fit_button_options(options),
 		options.track,
 	)
+	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
 	fit_builder_output(builder, handle, options.activated)
 }
 

@@ -44,11 +44,12 @@ Workload :: enum {
 }
 
 Options :: struct {
-	workload:   Workload,
-	scale:      int,
-	warmup:     int,
-	frames:     int,
-	repetition: int,
+	workload:      Workload,
+	scale:         int,
+	warmup:        int,
+	frames:        int,
+	repetition:    int,
+	measure_cache: bool,
 }
 
 Harness :: struct {
@@ -66,6 +67,7 @@ Harness :: struct {
 	frame_index:      int,
 	submitted:        int,
 	layout_checksum:  u64,
+	active_input_stage: i32,
 }
 
 harness_make :: proc(semantics: bool) -> ^Harness {
@@ -469,10 +471,11 @@ parse_workload :: proc(value: string) -> (Workload, bool) {
 
 parse_options :: proc() -> (Options, bool) {
 	options := Options {
-		workload = .Labels_Repeated,
-		scale    = 100,
-		warmup   = WARMUP_DEFAULT,
-		frames   = FRAMES_DEFAULT,
+		workload      = .Labels_Repeated,
+		scale         = 100,
+		warmup        = WARMUP_DEFAULT,
+		frames        = FRAMES_DEFAULT,
+		measure_cache = true,
 	}
 	for argument in os.args[1:] {
 		if strings.has_prefix(argument, "--workload=") {
@@ -495,6 +498,10 @@ parse_options :: proc() -> (Options, bool) {
 			value, ok := strconv.parse_i64(argument[len("--repetition="):])
 			if !ok do return {}, false
 			options.repetition = int(value)
+		} else if argument == "--measure-cache=enabled" {
+			options.measure_cache = true
+		} else if argument == "--measure-cache=bypassed" {
+			options.measure_cache = false
 		} else do return {}, false
 	}
 	valid_scale :=
@@ -509,6 +516,20 @@ measure_frame :: proc(h: ^Harness, options: Options, index: int) -> fit.Frame_Ti
 	h.workload = options.workload
 	h.scale = options.scale
 	h.frame_index = index
+	left := int(fit.Mouse_Button.Left)
+	h.input.mouse_pressed[left] = false
+	h.input.mouse_released[left] = false
+	h.input.mouse_down[left] = false
+	if options.workload == .Input_Active && h.active_input_stage < 2 {
+		h.input.mouse_position = {10, 10}
+		if h.active_input_stage == 0 {
+			h.input.mouse_pressed[left] = true
+			h.input.mouse_down[left] = true
+		} else {
+			h.input.mouse_released[left] = true
+		}
+		h.active_input_stage += 1
+	}
 	timing, ok := fit.Test_Driver_Frame_Timed(&h.driver, h.input, benchmark_draw, h)
 	assert(ok, "measure_frame: frame failed")
 	return timing
@@ -563,6 +584,8 @@ print_telemetry :: proc(value: fit.Frame_Telemetry) {
 		value.natural_leaf_measures,
 		",\"resolved_leaf_measures\":",
 		value.resolved_leaf_measures,
+		",\"fixed_leaf_measure_skips\":",
+		value.fixed_leaf_measure_skips,
 		",\"container_measures\":",
 		value.container_measures,
 		",\"placed_nodes\":",
@@ -577,6 +600,8 @@ print_telemetry :: proc(value: fit.Frame_Telemetry) {
 		value.measure_cache_hits,
 		",\"measure_cache_misses\":",
 		value.measure_cache_misses,
+		",\"measure_cache_policy_bypasses\":",
+		value.measure_cache_policy_bypasses,
 	)
 }
 
@@ -593,6 +618,7 @@ main :: proc() {
 		options.workload == .Accessibility || options.workload == .Button_Semantics_Enabled
 	h := harness_make(semantics)
 	defer harness_destroy(h)
+	fit.Test_Driver_Set_Backend_Measure_Cache(&h.driver, options.measure_cache)
 	for index in 0 ..< options.warmup do _ = measure_frame(h, options, index)
 	build_samples := make([]i64, options.frames)
 	measure_samples := make([]i64, options.frames)
