@@ -25,6 +25,18 @@ context_queries_are_isolated :: proc(t: ^testing.T) {
 }
 
 @(test)
+default_context_can_be_bound_across_library_boundaries :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
+	bound := new(Context)
+	defer free(bound)
+	previous := set_default_context(bound)
+	testing.expect(t, default_context() == bound)
+	testing.expect(t, set_default_context(previous) == bound)
+	testing.expect(t, default_context() == previous)
+}
+
+@(test)
 default_input_wrappers_and_explicit_context_are_isolated :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()

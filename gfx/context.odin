@@ -344,7 +344,14 @@ _default_context_init :: proc "contextless" () {
 }
 
 default_context :: proc() -> ^Context {
-	return &default_context_storage
+	return g
+}
+
+set_default_context :: proc(ctx: ^Context) -> ^Context {
+	assert(ctx != nil, "set_default_context: nil context")
+	previous := g
+	g = ctx
+	return previous
 }
 
 context_epoch :: proc(ctx: ^Context) -> u64 {
