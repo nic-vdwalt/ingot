@@ -198,7 +198,9 @@ frame_apply :: proc(frame: Frame_Op) {
 }
 
 interact_tape_execute :: proc(tape: ^fuzzx.Tape, userdata: rawptr = nil) -> fuzzx.Failure {
-	if tape == nil || tape.target != INTERACT_TAPE_TARGET do return fuzzx.failure_make(INTERACT_FAILURE_OPERATION, -1, "invalid interact tape")
+	if tape == nil || tape.target != INTERACT_TAPE_TARGET {
+		return fuzzx.failure_make(INTERACT_FAILURE_OPERATION, -1, "invalid interact tape")
+	}
 	state := Scene {
 		slider_val = 40,
 	}
@@ -220,9 +222,21 @@ interact_tape_execute :: proc(tape: ^fuzzx.Tape, userdata: rawptr = nil) -> fuzz
 	overlay_free_frames := 0
 	for op_index in 0 ..< len(tape.ops) {
 		op := tape.ops[op_index]
-		if op.tag != INTERACT_OP_FRAME do return fuzzx.failure_make(INTERACT_FAILURE_OPERATION, op_index, "unknown frame operation")
+		if op.tag != INTERACT_OP_FRAME {
+			return fuzzx.failure_make(
+				INTERACT_FAILURE_OPERATION,
+				op_index,
+				"unknown frame operation",
+			)
+		}
 		frame_op, ok := frame_decode(op.payload)
-		if !ok do return fuzzx.failure_make(INTERACT_FAILURE_OPERATION, op_index, "malformed frame operation")
+		if !ok {
+			return fuzzx.failure_make(
+				INTERACT_FAILURE_OPERATION,
+				op_index,
+				"malformed frame operation",
+			)
+		}
 		rl.SimBeginFrame()
 		frame_apply(frame_op)
 		capture_sim_input(&input)
@@ -242,15 +256,34 @@ interact_invariants :: proc(
 	state: ^Scene,
 	overlay_free_frames, op_index: int,
 ) -> fuzzx.Failure {
-	if ui.route_claim_count(frame) < 0 || ui.route_claim_count(frame) > ui.MAX_ROUTE_CLAIMS do return fuzzx.failure_make(INTERACT_FAILURE_ROUTE, op_index, "route claims out of range")
-	if overlay_free_frames >= 3 && ui.route_claim_count(frame) != 0 do return fuzzx.failure_make(INTERACT_FAILURE_ROUTE, op_index, "route claims leaked")
-	if state.focus < 0 || state.focus > FOCUS_COUNT do return fuzzx.failure_make(INTERACT_FAILURE_STATE, op_index, "focus out of range")
-	if state.slider_val < 0 || state.slider_val > 100 do return fuzzx.failure_make(INTERACT_FAILURE_STATE, op_index, "slider out of range")
-	if state.radio_sel != 0 && state.radio_sel != 1 do return fuzzx.failure_make(INTERACT_FAILURE_STATE, op_index, "radio out of range")
+	claims := ui.route_claim_count(frame)
+	if claims < 0 || claims > ui.MAX_ROUTE_CLAIMS {
+		return fuzzx.failure_make(INTERACT_FAILURE_ROUTE, op_index, "route claims out of range")
+	}
+	if overlay_free_frames >= 3 && claims != 0 {
+		return fuzzx.failure_make(INTERACT_FAILURE_ROUTE, op_index, "route claims leaked")
+	}
+	if state.focus < 0 || state.focus > FOCUS_COUNT {
+		return fuzzx.failure_make(INTERACT_FAILURE_STATE, op_index, "focus out of range")
+	}
+	if state.slider_val < 0 || state.slider_val > 100 {
+		return fuzzx.failure_make(INTERACT_FAILURE_STATE, op_index, "slider out of range")
+	}
+	if state.radio_sel != 0 && state.radio_sel != 1 {
+		return fuzzx.failure_make(INTERACT_FAILURE_STATE, op_index, "radio out of range")
+	}
 	semantics := ui.sem_frame(frame)
-	if semantics.count < 0 || semantics.count > ui.MAX_SEM_NODES do return fuzzx.failure_make(INTERACT_FAILURE_SEMANTICS, op_index, "semantic count out of range")
+	if semantics.count < 0 || semantics.count > ui.MAX_SEM_NODES {
+		return fuzzx.failure_make(
+			INTERACT_FAILURE_SEMANTICS,
+			op_index,
+			"semantic count out of range",
+		)
+	}
 	for index in 0 ..< semantics.count {
-		if semantics.nodes[index].id <= 1 do return fuzzx.failure_make(INTERACT_FAILURE_SEMANTICS, op_index, "reserved semantic id")
+		if semantics.nodes[index].id <= 1 {
+			return fuzzx.failure_make(INTERACT_FAILURE_SEMANTICS, op_index, "reserved semantic id")
+		}
 	}
 	return {}
 }
@@ -274,7 +307,9 @@ frame_encode :: proc(frame: Frame_Op, allocator: mem.Allocator) -> []u8 {
 }
 
 frame_decode :: proc(payload: []u8) -> (Frame_Op, bool) {
-	if len(payload) != INTERACT_FRAME_BYTES || int(payload[0]) > INTERACT_ACTIONS_MAX do return {}, false
+	if len(payload) != INTERACT_FRAME_BYTES || int(payload[0]) > INTERACT_ACTIONS_MAX {
+		return {}, false
+	}
 	frame := Frame_Op {
 		count = int(payload[0]),
 	}

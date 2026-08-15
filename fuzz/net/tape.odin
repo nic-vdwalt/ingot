@@ -66,7 +66,9 @@ net_tape_generate :: proc(
 }
 
 net_tape_execute :: proc(tape: ^fuzzx.Tape, userdata: rawptr = nil) -> fuzzx.Failure {
-	if tape == nil || tape.target != NET_TAPE_TARGET do return fuzzx.failure_make(NET_FAILURE_OPERATION, -1, "invalid net tape")
+	if tape == nil || tape.target != NET_TAPE_TARGET {
+		return fuzzx.failure_make(NET_FAILURE_OPERATION, -1, "invalid net tape")
+	}
 	for op_index in 0 ..< len(tape.ops) {
 		op := tape.ops[op_index]
 		switch op.tag {
@@ -76,22 +78,72 @@ net_tape_execute :: proc(tape: ^fuzzx.Tape, userdata: rawptr = nil) -> fuzzx.Fai
 				MAXIMUM_BODY_LIMIT,
 				context.temp_allocator,
 			)
-			if ok && len(response.body) > MAXIMUM_BODY_LIMIT do return fuzzx.failure_make(NET_FAILURE_HTTP_BODY, op_index, "parser exceeded maximum_body")
-			if ok && (response.status < 100 || response.status > 599) do return fuzzx.failure_make(NET_FAILURE_HTTP_STATUS, op_index, "parser accepted invalid status")
+			if ok && len(response.body) > MAXIMUM_BODY_LIMIT {
+				return fuzzx.failure_make(
+					NET_FAILURE_HTTP_BODY,
+					op_index,
+					"parser exceeded maximum_body",
+				)
+			}
+			if ok && (response.status < 100 || response.status > 599) {
+				return fuzzx.failure_make(
+					NET_FAILURE_HTTP_STATUS,
+					op_index,
+					"parser accepted invalid status",
+				)
+			}
 		case NET_OP_WS:
-			if len(op.payload) < 1 do return fuzzx.failure_make(NET_FAILURE_OPERATION, op_index, "truncated WebSocket operation")
+			if len(op.payload) < 1 {
+				return fuzzx.failure_make(
+					NET_FAILURE_OPERATION,
+					op_index,
+					"truncated WebSocket operation",
+				)
+			}
 			extreme := op.payload[0] != 0
 			data := op.payload[1:]
 			frame, consumed, status := ingotnet.ws_parse_frame(data)
-			if consumed < 0 || consumed > len(data) do return fuzzx.failure_make(NET_FAILURE_WS_CONSUMED, op_index, "invalid consumed count")
-			if extreme && status == .Ok do return fuzzx.failure_make(NET_FAILURE_WS_EXTREME, op_index, "accepted extreme length")
-			if (status == .Need_More || status == .Too_Big) && consumed != 0 do return fuzzx.failure_make(NET_FAILURE_WS_STATUS, op_index, "incomplete frame consumed bytes")
+			if consumed < 0 || consumed > len(data) {
+				return fuzzx.failure_make(
+					NET_FAILURE_WS_CONSUMED,
+					op_index,
+					"invalid consumed count",
+				)
+			}
+			if extreme && status == .Ok {
+				return fuzzx.failure_make(
+					NET_FAILURE_WS_EXTREME,
+					op_index,
+					"accepted extreme length",
+				)
+			}
+			incomplete := status == .Need_More || status == .Too_Big
+			if incomplete && consumed != 0 {
+				return fuzzx.failure_make(
+					NET_FAILURE_WS_STATUS,
+					op_index,
+					"incomplete frame consumed bytes",
+				)
+			}
 			if status == .Ok {
-				if len(frame.payload) > ingotnet.WS_MAX_PAYLOAD do return fuzzx.failure_make(NET_FAILURE_WS_STATUS, op_index, "payload exceeded bound")
+				if len(frame.payload) > ingotnet.WS_MAX_PAYLOAD {
+					return fuzzx.failure_make(
+						NET_FAILURE_WS_STATUS,
+						op_index,
+						"payload exceeded bound",
+					)
+				}
 				if len(frame.payload) > 0 {
 					start := uintptr(raw_data(data))
 					payload_start := uintptr(raw_data(frame.payload))
-					if payload_start < start || payload_start + uintptr(len(frame.payload)) > start + uintptr(consumed) do return fuzzx.failure_make(NET_FAILURE_WS_STATUS, op_index, "payload escaped frame")
+					payload_end := payload_start + uintptr(len(frame.payload))
+					if payload_start < start || payload_end > start + uintptr(consumed) {
+						return fuzzx.failure_make(
+							NET_FAILURE_WS_STATUS,
+							op_index,
+							"payload escaped frame",
+						)
+					}
 				}
 			}
 		case:
