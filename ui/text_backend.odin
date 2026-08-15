@@ -18,7 +18,11 @@ text_backend_valid :: proc(backend: Text_Backend) -> bool {
 ui_runtime_set_text_backend :: proc(runtime: ^Ui_Runtime, backend: Text_Backend) {
 	assert(runtime != nil && runtime.initialized, "ui_runtime_set_text_backend: invalid runtime")
 	assert(text_backend_valid(backend), "ui_runtime_set_text_backend: invalid backend")
+	clear_measure_cache_with(&runtime.text)
+	clear_wrap_cache_with(&runtime.text)
 	runtime.text_backend = backend
+	assert(runtime.font_epoch < max(u64), "ui_runtime_set_text_backend: epoch exhausted")
+	runtime.font_epoch += 1
 }
 
 text_backend_font :: proc(backend: Text_Backend, size: i32) -> Font_Id {

@@ -10,8 +10,9 @@ layout_intrinsic_measure :: proc(text: cstring, size: i32) -> i32 {
 }
 
 Prepared_Custom_Counts :: struct {
-	measure, render: i32,
-	rect:            Rect_I32,
+	measure, render:  i32,
+	rect:             Rect_I32,
+	last_constraints: Intrinsic_Constraints,
 }
 
 @(private = "file")
@@ -24,6 +25,7 @@ prepared_custom_measure_test :: proc(
 	assert(constraints.max_w >= 0, "prepared_custom_measure_test: invalid constraint")
 	counts := cast(^Prepared_Custom_Counts)userdata
 	counts.measure += 1
+	counts.last_constraints = constraints
 	return intrinsic_leaf(40, 20)
 }
 
@@ -378,6 +380,36 @@ layout_facade_prepared_accepts_small_caller_storage :: proc(t: ^testing.T) {
 	prepared_reset_storage(&prepared)
 	testing.expect_value(t, prepared_capacity(&prepared), int(MAX_PREPARED_NODES))
 	end(&u)
+}
+
+@(test)
+layout_facade_fixed_grid_measures_direct_leaf_once :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 120, 80})
+	counts: Prepared_Custom_Counts
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = 120, max_h = 80))
+	prepared_grid_begin(&prepared, {columns = 2, row_height = 20})
+	_ = prepared_custom(
+		&prepared,
+		{
+			measure = prepared_custom_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &counts,
+		},
+	)
+	prepared_container_end(&prepared)
+	size := prepared_measure(&u, &prepared)
+	prepared_render_at(&u, &prepared, {0, 0, size.w, size.h})
+	end(&u)
+	testing.expect_value(t, counts.measure, i32(1))
+	testing.expect(t, counts.last_constraints.max_w > 0, "grid leaf lacked resolved width")
 }
 
 @(test)

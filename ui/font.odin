@@ -9,8 +9,10 @@ UI_TELEMETRY_ENABLED :: #config(INGOT_UI_TELEMETRY, false)
 FONT_DATA := #load("../assets/fonts/JetBrainsMono-Regular.ttf")
 
 Measure_Key :: struct {
-	text: string,
-	size: i32,
+	text:  string,
+	size:  i32,
+	font:  Font_Id,
+	epoch: u64,
 }
 
 Measure_Entry :: struct {
@@ -259,6 +261,38 @@ measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
 	return measure_text_with(ui_frame_text(frame), text, size)
 }
 
+@(private = "file")
+measure_text_backend_cached :: proc(
+	frame: ^Ui_Frame,
+	text: string,
+	size: i32,
+	font: Font_Id,
+) -> i32 {
+	assert(frame != nil && frame.runtime != nil, "measure backend cache: invalid frame")
+	assert(size > 0 && font != 0, "measure backend cache: invalid font")
+	system := &frame.runtime.text
+	key := Measure_Key{text = text, size = size, font = font, epoch = frame.runtime.font_epoch}
+	if entry, ok := system.measure_cache[key]; ok {
+		when UI_TELEMETRY_ENABLED do system.measure_cache_hits += 1
+		return entry.width
+	}
+	when UI_TELEMETRY_ENABLED do system.measure_cache_misses += 1
+	measurement := text_backend_measure(frame.runtime.text_backend, font, text, f32(size), 0)
+	width := i32(measurement.x + 0.5)
+	if len(text) <= MEASURE_CACHE_MAX_KEY_LEN {
+		if len(system.measure_cache) >= MEASURE_CACHE_MAX do measure_evict_oldest(system)
+		system.measure_stamp += 1
+		owned := Measure_Key {
+			text = strings.clone(text),
+			size = size,
+			font = font,
+			epoch = frame.runtime.font_epoch,
+		}
+		system.measure_cache[owned] = {width = width, stamp = system.measure_stamp}
+	}
+	return width
+}
+
 // measure_text_string_frame is measure_text_frame for string labels: the
 // backend path measures the string directly with no cstring clone.
 measure_text_string_frame :: proc(frame: ^Ui_Frame, text: string, size: i32) -> i32 {
@@ -266,8 +300,7 @@ measure_text_string_frame :: proc(frame: ^Ui_Frame, text: string, size: i32) -> 
 	assert(size > 0, "measure_text_string_frame: invalid size")
 	if text_backend_valid(frame.runtime.text_backend) {
 		font := frame_font_for_size(frame, size)
-		measurement := text_backend_measure(frame.runtime.text_backend, font, text, f32(size), 0)
-		return i32(measurement.x + 0.5)
+		return measure_text_backend_cached(frame, text, size, font)
 	}
 	text_c := strings.clone_to_cstring(text, context.temp_allocator)
 	return measure_text_with(ui_frame_text(frame), text_c, size)

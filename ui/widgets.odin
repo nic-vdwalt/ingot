@@ -1006,9 +1006,11 @@ button_at_state :: proc(
 	if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
 	label_s, text_w := btn_label_fit(frame, label, w, fs)
 	draw_text_string_frame(frame, label_s, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
-	sem: Sem_State
-	if !enabled do sem += {.Disabled}
-	semantic_push(frame, .Button, rect, label, sem, focus, widget = widget)
+	if semantic_will_emit(frame) {
+		sem: Sem_State
+		if !enabled do sem += {.Disabled}
+		semantic_push(frame, .Button, rect, label, sem, focus, widget = widget)
+	}
 	return clicked && enabled
 }
 

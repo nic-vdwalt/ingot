@@ -43,7 +43,7 @@ Fit_Builder :: struct {
 	prepared:        Prepared_Ui,
 	outputs:         [MAX_PREPARED_NODES]^bool,
 	external:        []^bool,
-	outputs_used:    i32,
+	output_count:    i32,
 	direct_children: [MAX_LAYOUT_DEPTH]i32,
 	container_kinds: [MAX_LAYOUT_DEPTH]Prepared_Kind,
 }
@@ -57,7 +57,7 @@ fit_builder_set_storage :: proc(builder: ^Fit_Builder, storage: Fit_Storage) {
 
 fit_builder_reset_storage :: proc(builder: ^Fit_Builder) {
 	assert(builder != nil && !builder.prepared.open, "fit_builder_reset_storage: builder open")
-	assert(builder.outputs_used >= 0, "fit_builder_reset_storage: invalid count")
+	assert(builder.output_count >= 0, "fit_builder_reset_storage: invalid count")
 	prepared_reset_storage(&builder.prepared)
 	builder.external = nil
 }
@@ -83,9 +83,9 @@ fit_begin :: proc(builder: ^Fit_Builder, u: ^Ui) {
 	assert(!builder.prepared.open, "fit_begin: builder already open")
 	outputs := fit_builder_outputs(builder)
 	assert(len(outputs) == prepared_capacity(&builder.prepared), "fit_begin: capacity mismatch")
-	assert(builder.outputs_used >= 0 && builder.outputs_used <= i32(len(outputs)))
-	for index in 0 ..< builder.outputs_used do outputs[index] = nil
-	builder.outputs_used = 0
+	assert(builder.output_count >= 0 && builder.output_count <= i32(len(outputs)))
+	for index in 0 ..< builder.output_count do outputs[index] = nil
+	builder.output_count = 0
 	remaining := remaining_rect(u)
 	prepared_begin(
 		&builder.prepared,
@@ -457,18 +457,20 @@ fit_render_at :: proc(builder: ^Fit_Builder, rect: Rect_I32) {
 	assert(builder != nil && builder.prepared.measured, "fit_render_at: builder not measured")
 	assert(!builder.prepared.rendered, "fit_render_at: builder already rendered")
 	outputs := fit_builder_outputs(builder)
-	fit_outputs_clear(outputs, builder.outputs_used)
+	clear_started := prepared_phase_begin(builder.prepared.u.frame, .Output_Clear)
+	fit_outputs_clear(outputs, builder.output_count)
+	prepared_phase_end(builder.prepared.u.frame, .Output_Clear, clear_started)
 	prepared_render_at(builder.prepared.u, &builder.prepared, rect)
-	fit_outputs_publish(&builder.prepared, outputs, builder.outputs_used)
 }
 
 fit_render :: proc(builder: ^Fit_Builder) -> Rect_I32 {
 	assert(builder != nil, "fit_render: nil builder")
 	fit_builder_assert_balanced(builder)
 	outputs := fit_builder_outputs(builder)
-	fit_outputs_clear(outputs, builder.outputs_used)
+	clear_started := prepared_phase_begin(builder.prepared.u.frame, .Output_Clear)
+	fit_outputs_clear(outputs, builder.output_count)
+	prepared_phase_end(builder.prepared.u.frame, .Output_Clear, clear_started)
 	rect := prepared_fit(builder.prepared.u, &builder.prepared)
-	fit_outputs_publish(&builder.prepared, outputs, builder.outputs_used)
 	return rect
 }
 
@@ -483,23 +485,12 @@ fit_outputs_clear :: proc(outputs: []^bool, used: i32) {
 }
 
 @(private = "file")
-fit_outputs_publish :: proc(prepared: ^Prepared_Ui, outputs: []^bool, used: i32) {
-	assert(prepared != nil && prepared.rendered, "fit_outputs_publish: not rendered")
-	assert(outputs != nil && used == prepared.count, "fit_outputs_publish: invalid outputs")
-	nodes := prepared_nodes(prepared)
-	for index in 0 ..< used {
-		destination := outputs[index]
-		if destination != nil do destination^ = destination^ || nodes[index].activated
-	}
-}
-
-@(private = "file")
 fit_builder_assert_balanced :: proc(builder: ^Fit_Builder) {
 	fit_builder_assert_open(builder)
 	assert(builder.prepared.depth == 0, "fit builder: container still open")
 	assert(builder.prepared.count > 0, "fit builder: empty builder")
 	assert(builder.prepared.root >= 0, "fit builder: missing root")
-	assert(builder.outputs_used == builder.prepared.count, "fit builder: output count mismatch")
+	assert(builder.output_count >= 0, "fit builder: invalid output count")
 }
 
 @(private = "file")
@@ -581,11 +572,8 @@ fit_builder_add_child :: proc(builder: ^Fit_Builder) {
 fit_builder_prepare_node :: proc(builder: ^Fit_Builder) {
 	assert(builder != nil, "fit builder: nil builder")
 	index := builder.prepared.count
-	outputs := fit_builder_outputs(builder)
-	assert(index >= 0 && index < i32(len(outputs)), "fit builder: nodes full")
-	assert(index == builder.outputs_used, "fit builder: output mismatch")
-	outputs[index] = nil
-	builder.outputs_used += 1
+	assert(index >= 0, "fit builder: negative node index")
+	assert(index < i32(prepared_capacity(&builder.prepared)), "fit builder: nodes full")
 }
 
 @(private = "file")
@@ -593,8 +581,12 @@ fit_builder_output :: proc(builder: ^Fit_Builder, handle: Prepared_Handle, desti
 	assert(builder != nil, "fit builder: nil builder")
 	index := i32(handle)
 	assert(index >= 0 && index < builder.prepared.count, "fit builder: invalid handle")
-	assert(index < builder.outputs_used, "fit builder: unused output")
-	fit_builder_outputs(builder)[index] = destination
+	if destination == nil do return
+	outputs := fit_builder_outputs(builder)
+	assert(builder.output_count < i32(len(outputs)), "fit builder: outputs full")
+	outputs[builder.output_count] = destination
+	prepared_nodes(&builder.prepared)[index].activation = destination
+	builder.output_count += 1
 }
 
 @(private = "file")
