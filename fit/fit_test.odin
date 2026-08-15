@@ -13,6 +13,7 @@ Fit_Test_Counts :: struct {
 
 Fit_Test_Build_State :: struct {
 	calls: i32,
+	depth: i32,
 	first: Widget_Id,
 }
 
@@ -109,6 +110,7 @@ fit_test_scoped_body :: proc(builder: ^Builder, userdata: rawptr) {
 	assert(builder != nil && userdata != nil, "fit test scoped body: invalid argument")
 	state := cast(^Fit_Test_Build_State)userdata
 	state.calls += 1
+	state.depth = builder.inner.prepared.depth
 	state.first = Id(builder, "control")
 	Label(builder, "Scoped")
 }
@@ -135,9 +137,25 @@ fit_scoped_containers_invoke_once_and_restore_depth :: proc(t: ^testing.T) {
 	defer ui.ui_frame_end(&frame)
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
-	state: Fit_Test_Build_State
-	Column_With(&builder, fit_test_scoped_body, &state)
-	testing.expect_value(t, state.calls, i32(1))
+	Column(&builder)
+	column_state: Fit_Test_Build_State
+	Column_With(&builder, fit_test_scoped_body, &column_state)
+	testing.expect_value(t, column_state.calls, i32(1))
+	testing.expect_value(t, column_state.depth, i32(2))
+	testing.expect_value(t, builder.inner.prepared.depth, i32(1))
+
+	card_state: Fit_Test_Build_State
+	Card_With(&builder, fit_test_scoped_body, &card_state)
+	testing.expect_value(t, card_state.calls, i32(1))
+	testing.expect_value(t, card_state.depth, i32(2))
+	testing.expect_value(t, builder.inner.prepared.depth, i32(1))
+
+	section_state: Fit_Test_Build_State
+	Section_With(&builder, "Section", fit_test_scoped_body, &section_state)
+	testing.expect_value(t, section_state.calls, i32(1))
+	testing.expect_value(t, section_state.depth, i32(2))
+	testing.expect_value(t, builder.inner.prepared.depth, i32(1))
+	End(&builder)
 	testing.expect_value(t, builder.inner.prepared.depth, i32(0))
 	_ = Render(&builder)
 	builder_close(&builder)
@@ -295,6 +313,28 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	testing.expect(t, layout_begin != nil && layout_next != nil && grid_next != nil)
 	testing.expect(t, flow_next != nil && fill_i32 != nil && fill_f32 != nil)
 	testing.expect(t, compat_layout != nil)
+}
+
+@(test)
+fit_scoped_semantic_contract_compiles :: proc(t: ^testing.T) {
+	section_with: proc(
+			_: ^Builder,
+			_: string,
+			_: Build_Proc,
+			_: rawptr,
+			_: Section_Options,
+			_: runtime.Source_Code_Location,
+		) =
+		Section_With
+	card_with: proc(
+			_: ^Builder,
+			_: Build_Proc,
+			_: rawptr,
+			_: Card_Options,
+			_: runtime.Source_Code_Location,
+		) =
+		Card_With
+	testing.expect(t, section_with != nil && card_with != nil)
 }
 
 @(test)
