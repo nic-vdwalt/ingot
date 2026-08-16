@@ -87,6 +87,17 @@ terrain_v3_volume_mesh_is_deterministic_bounded_and_valid :: proc(t: ^testing.T)
 }
 
 @(test)
+terrain_v3_volume_face_uvs_follow_face_planes :: proc(t: ^testing.T) {
+	position := asset.Vec3{32, 64, 96}
+	testing.expect_value(t, _terrain_volume_face_uv_v3(0, position), asset.Vec2{2, 3})
+	testing.expect_value(t, _terrain_volume_face_uv_v3(1, position), asset.Vec2{2, 3})
+	testing.expect_value(t, _terrain_volume_face_uv_v3(2, position), asset.Vec2{1, 3})
+	testing.expect_value(t, _terrain_volume_face_uv_v3(3, position), asset.Vec2{1, 3})
+	testing.expect_value(t, _terrain_volume_face_uv_v3(4, position), asset.Vec2{1, 2})
+	testing.expect_value(t, _terrain_volume_face_uv_v3(5, position), asset.Vec2{1, 2})
+}
+
+@(test)
 terrain_v3_volume_mesh_rejects_short_capacity_without_publication :: proc(t: ^testing.T) {
 	storage: Terrain_V3_Test_Storage
 	buffer := _terrain_v3_test_buffer(&storage, 1)

@@ -202,7 +202,7 @@ _terrain_volume_emit_face_v3 :: proc(
 			position = position,
 			normal   = normal,
 			scalar   = clamp(normal.z * 0.5 + 0.5, 0, 1),
-			uv       = {position.x / 32, position.y / 32},
+			uv       = _terrain_volume_face_uv_v3(face, position),
 		}
 		for axis in 0 ..< 3 {
 			minimum[axis] = min(minimum[axis], position[axis])
@@ -215,6 +215,14 @@ _terrain_volume_emit_face_v3 :: proc(
 		buffer.mesh.indices[index_cursor^] = base + offset
 		index_cursor^ += 1
 	}
+}
+
+@(private)
+_terrain_volume_face_uv_v3 :: proc(face: int, position: asset.Vec3) -> asset.Vec2 {
+	assert(face >= 0 && face < 6, "_terrain_volume_face_uv_v3: invalid face")
+	if face < 2 do return {position.y / 32, position.z / 32}
+	if face < 4 do return {position.x / 32, position.z / 32}
+	return {position.x / 32, position.y / 32}
 }
 
 @(private)
