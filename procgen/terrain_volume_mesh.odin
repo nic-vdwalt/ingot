@@ -61,6 +61,7 @@ _terrain_volume_sample_v3 :: proc(
 	request: Terrain_Volume_Request_V3,
 	density: []f32,
 ) -> bool {
+	assert(recipe != nil, "_terrain_volume_sample_v3: nil recipe")
 	stride_x := request.cells.x + 2
 	stride_y := request.cells.y + 2
 	// Column-major order so the expensive 2D surface stack runs once per
@@ -212,6 +213,8 @@ _terrain_volume_emit_tetrahedron_v3 :: proc(
 	vertex_cursor, index_cursor: ^int,
 	minimum, maximum: ^asset.Vec3,
 ) {
+	assert(buffer != nil && vertex_cursor != nil && index_cursor != nil, "tetrahedron pointers")
+	assert(minimum != nil && maximum != nil, "tetrahedron bounds pointers")
 	inside_indices, outside_indices: [4]int
 	inside_count, outside_count := 0, 0
 	for density, index in densities {
@@ -281,6 +284,8 @@ _terrain_volume_emit_triangle_v3 :: proc(
 	vertex_cursor, index_cursor: ^int,
 	minimum, maximum: ^asset.Vec3,
 ) {
+	assert(buffer != nil && vertex_cursor != nil && index_cursor != nil, "triangle pointers")
+	assert(minimum != nil && maximum != nil, "triangle bounds pointers")
 	triangle := positions
 	normals := vertex_normals
 	edge_a := triangle[1] - triangle[0]

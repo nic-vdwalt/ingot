@@ -61,7 +61,10 @@ test_gpu_3d_target_sample_textures_reject_invalid_and_msaa_depth :: proc(t: ^tes
 	testing.expect_value(t, depth, Texture2D{})
 	testing.expect(t, !ok)
 	target := Gpu_3D_Target {
-		texture = {texture = {id = 1, width = 8, height = 8}, depth = {id = 2, width = 8, height = 8}},
+		texture = {
+			texture = {id = 1, width = 8, height = 8},
+			depth = {id = 2, width = 8, height = 8},
+		},
 		antialiasing = .MSAA_4X,
 	}
 	testing.expect_value(t, gpu_3d_target_color_texture(&target).id, u32(1))

@@ -31,6 +31,7 @@ terrain_resolve_biome_regions :: proc(
 	output: Terrain_Biome_Region_Output,
 	scratch: Terrain_Biome_Region_Scratch,
 ) -> bool {
+	assert(recipe != nil, "terrain_resolve_biome_regions: nil recipe")
 	cells, ok := _terrain_biome_region_validate(recipe, request, raw, output, scratch)
 	if !ok do return false
 	for index in 0 ..< cells {
@@ -39,7 +40,13 @@ terrain_resolve_biome_regions :: proc(
 	}
 	for _ in 0 ..< TERRAIN_BIOME_REGION_PASS_MAX {
 		components := _terrain_biome_region_label(request, output.biomes, scratch)
-		merges := _terrain_biome_region_choose_merges(recipe, request, output.biomes, scratch, components)
+		merges := _terrain_biome_region_choose_merges(
+			recipe,
+			request,
+			output.biomes,
+			scratch,
+			components,
+		)
 		if merges == 0 do break
 		for index in 0 ..< cells {
 			component := scratch.labels[index] - 1
@@ -62,7 +69,10 @@ _terrain_biome_region_validate :: proc(
 	raw: []Terrain_Biome_Blend_V2,
 	output: Terrain_Biome_Region_Output,
 	scratch: Terrain_Biome_Region_Scratch,
-) -> (int, bool) {
+) -> (
+	int,
+	bool,
+) {
 	if !terrain_recipe_validate_v2(recipe) do return 0, false
 	if request.width < 1 || request.width > TERRAIN_BIOME_REGION_MAX_EDGE do return 0, false
 	if request.height < 1 || request.height > TERRAIN_BIOME_REGION_MAX_EDGE do return 0, false
@@ -120,6 +130,7 @@ _terrain_biome_region_enqueue :: proc(
 	label: u32,
 	tail: ^int,
 ) {
+	assert(tail != nil, "_terrain_biome_region_enqueue: nil tail")
 	x, y := index % request.width, index / request.width
 	next_x, next_y := x + offset_x, y + offset_y
 	if next_x < 0 || next_x >= request.width || next_y < 0 || next_y >= request.height do return
@@ -139,13 +150,21 @@ _terrain_biome_region_choose_merges :: proc(
 	scratch: Terrain_Biome_Region_Scratch,
 	components: int,
 ) -> int {
+	assert(recipe != nil, "_terrain_biome_region_choose_merges: nil recipe")
 	for component in 0 ..< components do scratch.merge_targets[component] = 0
 	merges := 0
 	for component in 0 ..< components {
 		id := scratch.component_ids[component]
 		if int(scratch.component_sizes[component]) >= request.minimum_cells do continue
 		if _terrain_biome_region_protected(request, id) do continue
-		target := _terrain_biome_region_target(recipe, request, biomes, scratch, component, components)
+		target := _terrain_biome_region_target(
+			recipe,
+			request,
+			biomes,
+			scratch,
+			component,
+			components,
+		)
 		if target < 0 do continue
 		scratch.merge_targets[component] = u32(target + 1)
 		merges += 1
@@ -161,6 +180,7 @@ _terrain_biome_region_target :: proc(
 	scratch: Terrain_Biome_Region_Scratch,
 	component, components: int,
 ) -> int {
+	assert(recipe != nil, "_terrain_biome_region_target: nil recipe")
 	for component_index in 0 ..< components do scratch.queue[component_index] = 0
 	cells := request.width * request.height
 	for index in 0 ..< cells {
@@ -200,6 +220,7 @@ _terrain_biome_region_target_better :: proc(
 	scratch: Terrain_Biome_Region_Scratch,
 	candidate, current: int,
 ) -> bool {
+	assert(recipe != nil, "_terrain_biome_region_target_better: nil recipe")
 	if current < 0 do return true
 	if scratch.queue[candidate] != scratch.queue[current] do return scratch.queue[candidate] > scratch.queue[current]
 	if scratch.component_sizes[candidate] != scratch.component_sizes[current] {
@@ -216,6 +237,7 @@ _terrain_biome_region_target_better :: proc(
 
 @(private)
 _terrain_biome_region_priority :: proc(recipe: ^Terrain_Recipe_V2, id: u16) -> u8 {
+	assert(recipe != nil, "_terrain_biome_region_priority: nil recipe")
 	for index in 0 ..< int(recipe.biome_profile_count) {
 		if recipe.biome_profiles[index].id == id do return recipe.biome_profiles[index].priority
 	}
@@ -225,6 +247,7 @@ _terrain_biome_region_priority :: proc(recipe: ^Terrain_Recipe_V2, id: u16) -> u
 
 @(private)
 _terrain_biome_region_id_valid :: proc(recipe: ^Terrain_Recipe_V2, id: u16) -> bool {
+	assert(recipe != nil, "_terrain_biome_region_id_valid: nil recipe")
 	for index in 0 ..< int(recipe.biome_profile_count) do if recipe.biome_profiles[index].id == id do return true
 	return false
 }
