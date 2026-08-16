@@ -205,8 +205,28 @@ terrain_recipe_validate_v3 :: proc(recipe: ^Terrain_Recipe_V3) -> bool {
 terrain_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -> (f32, bool) {
 	if !terrain_recipe_validate_v3(recipe) do return 0, false
 	if !_terrain_finite_v2(x) || !_terrain_finite_v2(y) || !_terrain_finite_v2(z) do return 0, false
-	base_height, _, ruggedness, ok := terrain_height_v2(&recipe.surface, x, y)
+	ground, ok := _terrain_ground_v3(recipe, x, y)
 	if !ok do return 0, false
+	return _terrain_density_from_ground_v3(recipe, ground, x, y, z), true
+}
+
+// _Terrain_Ground_V3 caches the per-column surface terms so a vertical run
+// of density samples pays for the 2D noise stack exactly once.
+_Terrain_Ground_V3 :: struct {
+	height:     f32,
+	ruggedness: f32,
+}
+
+@(private)
+_terrain_ground_v3 :: proc(
+	recipe: ^Terrain_Recipe_V3,
+	x, y: f32,
+) -> (
+	ground: _Terrain_Ground_V3,
+	ok: bool,
+) {
+	base_height, _, ruggedness, height_ok := terrain_height_v2(&recipe.surface, x, y)
+	if !height_ok do return {}, false
 	p := recipe.parameters
 	mountain := max(base_height - recipe.surface.land_height, 0)
 	mountain = math.pow(mountain / max(recipe.surface.mountain_height, 1), p.mountain_sharpness)
@@ -215,9 +235,36 @@ terrain_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -> (f32, bo
 		terrace := math.floor(height / 4 + 0.5) * 4
 		height += (terrace - height) * clamp(p.mountain_terrace_strength / 4, 0, 0.45)
 	}
+	return {height, ruggedness}, true
+}
+
+// _terrain_density_from_ground_v3 evaluates the volumetric terms for one
+// sample. Far from every reachable surface the noise cannot flip the sign,
+// so those samples return the linear base term without running any fractal:
+// overhang is bounded by overhang_strength, cave carving by
+// (1 - cave_threshold) * cave_strength, and floating islands both cap at
+// floating_strength * floating_thickness and live inside their altitude
+// band padded by floating_thickness.
+@(private)
+_terrain_density_from_ground_v3 :: proc(
+	recipe: ^Terrain_Recipe_V3,
+	ground: _Terrain_Ground_V3,
+	x, y, z: f32,
+) -> f32 {
+	p := recipe.parameters
+	base := (ground.height - z) * p.ground_strength / p.surface_softness
+	carve_max := max(1 - p.cave_threshold, 0) * p.cave_strength
+	floating_max := p.floating_strength * p.floating_thickness
+	if base > p.overhang_strength + carve_max && base >= floating_max do return base
+	if base < -p.overhang_strength {
+		floating_possible :=
+			p.floating_strength > 0 &&
+			z >= p.floating_altitude_min - p.floating_thickness &&
+			z <= p.floating_altitude_max + p.floating_thickness
+		if !floating_possible do return base
+	}
 	overhang := fractal_2d(p.overhang_noise, x + z * 0.31, y - z * 0.23)
-	density := (height - z) * p.ground_strength / p.surface_softness
-	density += overhang * p.overhang_strength * ruggedness
+	density := base + overhang * p.overhang_strength * ground.ruggedness
 	if p.floating_strength > 0 {
 		density = max(density, _terrain_floating_density_v3(recipe, x, y, z))
 	}
@@ -226,7 +273,7 @@ terrain_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -> (f32, bo
 		carve := max(cave - p.cave_threshold, 0) * p.cave_strength
 		density -= carve
 	}
-	return density, true
+	return density
 }
 
 terrain_primary_surface_v3 :: proc(

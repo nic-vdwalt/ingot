@@ -63,14 +63,17 @@ _terrain_volume_sample_v3 :: proc(
 ) -> bool {
 	stride_x := request.cells.x + 2
 	stride_y := request.cells.y + 2
-	for z in 0 ..< request.cells.z + 2 {
-		world_z := request.origin.z + f32(z - 1) * request.step
-		for y in 0 ..< request.cells.y + 2 {
-			world_y := request.origin.y + f32(y - 1) * request.step
-			for x in 0 ..< request.cells.x + 2 {
-				world_x := request.origin.x + f32(x - 1) * request.step
-				value, ok := terrain_density_v3(recipe, world_x, world_y, world_z)
-				if !ok do return false
+	// Column-major order so the expensive 2D surface stack runs once per
+	// (x, y) column instead of once per 3D sample.
+	for y in 0 ..< request.cells.y + 2 {
+		world_y := request.origin.y + f32(y - 1) * request.step
+		for x in 0 ..< request.cells.x + 2 {
+			world_x := request.origin.x + f32(x - 1) * request.step
+			ground, ok := _terrain_ground_v3(recipe, world_x, world_y)
+			if !ok do return false
+			for z in 0 ..< request.cells.z + 2 {
+				world_z := request.origin.z + f32(z - 1) * request.step
+				value := _terrain_density_from_ground_v3(recipe, ground, world_x, world_y, world_z)
 				density[(z * stride_y + y) * stride_x + x] = value
 			}
 		}
@@ -114,6 +117,7 @@ _terrain_volume_emit_v3 :: proc(
 	buffer: ^Terrain_Volume_Buffer_V3,
 	vertex_count, index_count: int,
 ) {
+	assert(recipe != nil, "_terrain_volume_emit_v3: nil recipe")
 	assert(buffer != nil, "_terrain_volume_emit_v3: nil buffer")
 	assert(vertex_count > 0 && index_count > 0, "_terrain_volume_emit_v3: empty mesh")
 	stride_x := request.cells.x + 2
@@ -130,16 +134,23 @@ _terrain_volume_emit_v3 :: proc(
 				origin := ((z + 1) * stride_y + y + 1) * stride_x + x + 1
 				positions: [8]asset.Vec3
 				densities: [8]f32
+				normals: [8]asset.Vec3
 				for unit, corner in corner_units {
 					positions[corner] = cell_min + asset.Vec3(unit) * request.step
 					densities[corner] = buffer.density_halo[origin + corner_offsets[corner]]
+					lattice := [3]int{x + 1 + int(unit.x), y + 1 + int(unit.y), z + 1 + int(unit.z)}
+					normals[corner] = _terrain_volume_lattice_normal_v3(
+						buffer.density_halo,
+						request.cells,
+						lattice,
+						request.step,
+					)
 				}
 				_terrain_volume_emit_cell_v3(
-					recipe,
-					request.step,
 					buffer,
 					positions,
 					densities,
+					normals,
 					&written_vertices,
 					&written_indices,
 					&minimum,
@@ -158,11 +169,10 @@ _terrain_volume_emit_v3 :: proc(
 
 @(private)
 _terrain_volume_emit_cell_v3 :: proc(
-	recipe: ^Terrain_Recipe_V3,
-	step: f32,
 	buffer: ^Terrain_Volume_Buffer_V3,
 	positions: [8]asset.Vec3,
 	densities: [8]f32,
+	normals: [8]asset.Vec3,
 	vertex_cursor, index_cursor: ^int,
 	minimum, maximum: ^asset.Vec3,
 ) {
@@ -170,16 +180,17 @@ _terrain_volume_emit_cell_v3 :: proc(
 	for tetrahedron in _terrain_volume_tetrahedra_v3() {
 		tetra_positions: [4]asset.Vec3
 		tetra_densities: [4]f32
+		tetra_normals: [4]asset.Vec3
 		for corner, index in tetrahedron {
 			tetra_positions[index] = positions[corner]
 			tetra_densities[index] = densities[corner]
+			tetra_normals[index] = normals[corner]
 		}
 		_terrain_volume_emit_tetrahedron_v3(
-			recipe,
-			step,
 			buffer,
 			tetra_positions,
 			tetra_densities,
+			tetra_normals,
 			vertex_cursor,
 			index_cursor,
 			minimum,
@@ -190,11 +201,10 @@ _terrain_volume_emit_cell_v3 :: proc(
 
 @(private)
 _terrain_volume_emit_tetrahedron_v3 :: proc(
-	recipe: ^Terrain_Recipe_V3,
-	step: f32,
 	buffer: ^Terrain_Volume_Buffer_V3,
 	positions: [4]asset.Vec3,
 	densities: [4]f32,
+	normals: [4]asset.Vec3,
 	vertex_cursor, index_cursor: ^int,
 	minimum, maximum: ^asset.Vec3,
 ) {
@@ -211,24 +221,26 @@ _terrain_volume_emit_tetrahedron_v3 :: proc(
 	}
 	if inside_count == 0 || inside_count == 4 do return
 	points: [4]asset.Vec3
+	point_normals: [4]asset.Vec3
 	point_count := 0
 	for inside in inside_indices[:inside_count] {
 		for outside in outside_indices[:outside_count] {
-			points[point_count] = _terrain_volume_intersection_v3(
+			points[point_count], point_normals[point_count] = _terrain_volume_intersection_v3(
 				positions[inside],
 				positions[outside],
 				densities[inside],
 				densities[outside],
+				normals[inside],
+				normals[outside],
 			)
 			point_count += 1
 		}
 	}
 	if point_count == 3 {
 		_terrain_volume_emit_triangle_v3(
-			recipe,
-			step,
 			buffer,
 			{points[0], points[1], points[2]},
+			{point_normals[0], point_normals[1], point_normals[2]},
 			vertex_cursor,
 			index_cursor,
 			minimum,
@@ -237,20 +249,18 @@ _terrain_volume_emit_tetrahedron_v3 :: proc(
 	} else {
 		assert(point_count == 4, "_terrain_volume_emit_tetrahedron_v3: crossing count")
 		_terrain_volume_emit_triangle_v3(
-			recipe,
-			step,
 			buffer,
 			{points[0], points[1], points[3]},
+			{point_normals[0], point_normals[1], point_normals[3]},
 			vertex_cursor,
 			index_cursor,
 			minimum,
 			maximum,
 		)
 		_terrain_volume_emit_triangle_v3(
-			recipe,
-			step,
 			buffer,
 			{points[0], points[3], points[2]},
+			{point_normals[0], point_normals[3], point_normals[2]},
 			vertex_cursor,
 			index_cursor,
 			minimum,
@@ -261,19 +271,14 @@ _terrain_volume_emit_tetrahedron_v3 :: proc(
 
 @(private)
 _terrain_volume_emit_triangle_v3 :: proc(
-	recipe: ^Terrain_Recipe_V3,
-	step: f32,
 	buffer: ^Terrain_Volume_Buffer_V3,
 	positions: [3]asset.Vec3,
+	vertex_normals: [3]asset.Vec3,
 	vertex_cursor, index_cursor: ^int,
 	minimum, maximum: ^asset.Vec3,
 ) {
 	triangle := positions
-	normals := [3]asset.Vec3 {
-		_terrain_density_normal_v3(recipe, triangle[0], step * 0.25),
-		_terrain_density_normal_v3(recipe, triangle[1], step * 0.25),
-		_terrain_density_normal_v3(recipe, triangle[2], step * 0.25),
-	}
+	normals := vertex_normals
 	edge_a := triangle[1] - triangle[0]
 	edge_b := triangle[2] - triangle[0]
 	cross := asset.Vec3 {
@@ -311,11 +316,19 @@ _terrain_volume_emit_triangle_v3 :: proc(
 _terrain_volume_intersection_v3 :: proc(
 	inside, outside: asset.Vec3,
 	inside_density, outside_density: f32,
-) -> asset.Vec3 {
+	inside_normal, outside_normal: asset.Vec3,
+) -> (
+	point: asset.Vec3,
+	normal: asset.Vec3,
+) {
 	denominator := inside_density - outside_density
-	if abs(denominator) <= 0.000001 do return (inside + outside) * 0.5
-	factor := clamp(inside_density / denominator, 0, 1)
-	return inside + (outside - inside) * factor
+	factor := f32(0.5)
+	if abs(denominator) > 0.000001 do factor = clamp(inside_density / denominator, 0, 1)
+	point = inside + (outside - inside) * factor
+	blended := inside_normal + (outside_normal - inside_normal) * factor
+	length := math.sqrt(blended.x * blended.x + blended.y * blended.y + blended.z * blended.z)
+	if length <= 0.000001 do return point, {0, 0, 1}
+	return point, blended / length
 }
 
 @(private)
@@ -345,20 +358,34 @@ _terrain_volume_tetrahedra_v3 :: proc() -> [6][4]int {
 	return {{0, 5, 1, 6}, {0, 1, 2, 6}, {0, 2, 3, 6}, {0, 3, 7, 6}, {0, 7, 4, 6}, {0, 4, 5, 6}}
 }
 
+// _terrain_volume_lattice_normal_v3 derives the surface normal at a halo
+// lattice point from central differences of the sampled density field,
+// falling back to one-sided differences at the halo boundary. Reusing the
+// halo keeps normal evaluation free of any additional noise-stack work.
 @(private)
-_terrain_density_normal_v3 :: proc(
-	recipe: ^Terrain_Recipe_V3,
-	position: [3]f32,
+_terrain_volume_lattice_normal_v3 :: proc(
+	density: []f32,
+	cells: [3]int,
+	lattice: [3]int,
 	step: f32,
 ) -> asset.Vec3 {
-	left, _ := terrain_density_v3(recipe, position.x - step, position.y, position.z)
-	right, _ := terrain_density_v3(recipe, position.x + step, position.y, position.z)
-	down, _ := terrain_density_v3(recipe, position.x, position.y - step, position.z)
-	up, _ := terrain_density_v3(recipe, position.x, position.y + step, position.z)
-	below, _ := terrain_density_v3(recipe, position.x, position.y, position.z - step)
-	above, _ := terrain_density_v3(recipe, position.x, position.y, position.z + step)
-	normal := asset.Vec3{left - right, down - up, below - above}
+	assert(step > 0, "_terrain_volume_lattice_normal_v3: step")
+	counts := [3]int{cells.x + 2, cells.y + 2, cells.z + 2}
+	for axis in 0 ..< 3 {
+		assert(lattice[axis] >= 0 && lattice[axis] < counts[axis], "lattice point out of halo")
+	}
+	gradient: [3]f32
+	for axis in 0 ..< 3 {
+		low, high := lattice, lattice
+		low[axis] = max(lattice[axis] - 1, 0)
+		high[axis] = min(lattice[axis] + 1, counts[axis] - 1)
+		low_index := (low.z * counts.y + low.y) * counts.x + low.x
+		high_index := (high.z * counts.y + high.y) * counts.x + high.x
+		span := f32(high[axis] - low[axis]) * step
+		gradient[axis] = (density[high_index] - density[low_index]) / span
+	}
+	normal := asset.Vec3{-gradient.x, -gradient.y, -gradient.z}
 	length := math.sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z)
-	if length <= 0 do return {0, 0, 1}
+	if length <= 0.000001 do return {0, 0, 1}
 	return normal / length
 }
