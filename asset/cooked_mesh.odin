@@ -16,12 +16,29 @@ Cooked_Mesh_Fault :: enum u8 {
 	Capacity,
 	Invalid_Record,
 	Invalid_Mesh,
+	// Version 2 only. Appended rather than interleaved so a stored fault code
+	// from an older build still means what it meant then.
+	Invalid_Flags,
+	Invalid_Lod,
+	Invalid_Cluster,
 }
 
 Cooked_Mesh_Storage :: struct {
 	meshes:   []Mesh_View,
 	vertices: []Vertex,
 	indices:  []u32,
+}
+
+// Version 2 scratch for `cooked_mesh_decode`. It is a separate defaulted
+// parameter rather than extra fields on `Cooked_Mesh_Storage` so that every
+// existing positional call site keeps compiling unchanged. Leaving it empty
+// rejects an INGMESH2 bundle with `.Capacity` instead of degrading to a
+// partial read.
+Cooked_Mesh_V2_Scratch :: struct {
+	chains:   []Cooked_Mesh_Chain,
+	lods:     []Mesh_Lod,
+	clusters: []Cluster,
+	groups:   []Cluster_Group,
 }
 
 Cooked_Mesh_Bundle :: struct {
@@ -46,14 +63,23 @@ Cooked_Mesh_Record :: struct {
 	bounds:       Bounds_3D,
 }
 
+// cooked_mesh_decode reads a version 1 bundle. A version 2 bundle is accepted
+// too and projected onto the same result by exposing each mesh's LOD 0, so a
+// caller that predates LOD chains keeps working against re-cooked assets
+// without a code change. Callers that want the chain use
+// `cooked_mesh_v2_decode` and its larger storage instead.
 cooked_mesh_decode :: proc(
 	bytes: []u8,
 	storage: Cooked_Mesh_Storage,
+	scratch: Cooked_Mesh_V2_Scratch = {},
 ) -> (
 	Cooked_Mesh_Bundle,
 	Cooked_Mesh_Result,
 	bool,
 ) {
+	if cooked_mesh_format(bytes) == .V2 {
+		return _cooked_mesh_decode_v2_base(bytes, storage, scratch)
+	}
 	if len(bytes) < COOKED_MESH_HEADER_SIZE do return _cooked_mesh_fail(.Truncated, len(bytes), 0)
 	magic := COOKED_MESH_MAGIC
 	for index in 0 ..< len(magic) {
@@ -104,6 +130,49 @@ cooked_mesh_find :: proc(bundle: Cooked_Mesh_Bundle, id: Mesh_Id) -> (Mesh_View,
 		}
 	}
 	return {}, false
+}
+
+// A version 2 bundle carries every level's geometry, so the projection keeps
+// the whole payload resident and only narrows the exposed views to LOD 0.
+// Reporting the file's totals rather than LOD 0's keeps `vertex_count` meaning
+// what it always meant: how much of the caller's storage is in use.
+@(private)
+_cooked_mesh_decode_v2_base :: proc(
+	bytes: []u8,
+	storage: Cooked_Mesh_Storage,
+	scratch: Cooked_Mesh_V2_Scratch,
+) -> (
+	Cooked_Mesh_Bundle,
+	Cooked_Mesh_Result,
+	bool,
+) {
+	assert(len(bytes) >= 8, "_cooked_mesh_decode_v2_base: magic already matched")
+	assert(cooked_mesh_format(bytes) == .V2, "_cooked_mesh_decode_v2_base: wrong format")
+	if scratch.chains == nil || scratch.lods == nil {
+		return _cooked_mesh_fail(.Capacity, 12, 0)
+	}
+	v2 := Cooked_Mesh_V2_Storage {
+		meshes   = scratch.chains,
+		lods     = scratch.lods,
+		clusters = scratch.clusters,
+		groups   = scratch.groups,
+		vertices = storage.vertices,
+		indices  = storage.indices,
+	}
+	bundle, result, ok := cooked_mesh_v2_decode(bytes, v2)
+	if !ok do return {}, result, false
+	if len(bundle.meshes) > len(storage.meshes) do return _cooked_mesh_fail(.Capacity, 12, 0)
+	for index in 0 ..< len(bundle.meshes) {
+		chain := bundle.meshes[index]
+		assert(len(chain.lods) > 0, "_cooked_mesh_decode_v2_base: validated empty chain")
+		storage.meshes[index] = chain.lods[0].view
+	}
+	base := Cooked_Mesh_Bundle {
+		meshes       = storage.meshes[:len(bundle.meshes)],
+		vertex_count = bundle.vertex_count,
+		index_count  = bundle.index_count,
+	}
+	return base, {}, true
 }
 
 @(private)
