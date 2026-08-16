@@ -27,16 +27,16 @@ main :: proc() {
 	recipe := procgen.terrain_default_recipe_v2(0x7E44AF0463)
 	request := procgen.Terrain_Field_Request_V2{-128, -128, 2, BENCHMARK_EDGE, BENCHMARK_EDGE}
 	buffer := procgen.Terrain_Field_Buffer_V2 {
-		height_halo = storage.height_halo[:],
-		heights = storage.heights[:],
-		moisture = storage.moisture[:],
-		temperature = storage.temperature[:],
+		height_halo     = storage.height_halo[:],
+		heights         = storage.heights[:],
+		moisture        = storage.moisture[:],
+		temperature     = storage.temperature[:],
 		continentalness = storage.continentalness[:],
-		ruggedness = storage.ruggedness[:],
-		derivative_x = storage.derivative_x[:],
-		derivative_y = storage.derivative_y[:],
-		slope = storage.slope[:],
-		biomes = storage.biomes[:],
+		ruggedness      = storage.ruggedness[:],
+		derivative_x    = storage.derivative_x[:],
+		derivative_y    = storage.derivative_y[:],
+		slope           = storage.slope[:],
+		biomes          = storage.biomes[:],
 	}
 	start := time.now()
 	for _ in 0 ..< BENCHMARK_ITERATIONS {
