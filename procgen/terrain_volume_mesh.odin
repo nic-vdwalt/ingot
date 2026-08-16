@@ -138,7 +138,11 @@ _terrain_volume_emit_v3 :: proc(
 				for unit, corner in corner_units {
 					positions[corner] = cell_min + asset.Vec3(unit) * request.step
 					densities[corner] = buffer.density_halo[origin + corner_offsets[corner]]
-					lattice := [3]int{x + 1 + int(unit.x), y + 1 + int(unit.y), z + 1 + int(unit.z)}
+					lattice := [3]int {
+						x + 1 + int(unit.x),
+						y + 1 + int(unit.y),
+						z + 1 + int(unit.z),
+					}
 					normals[corner] = _terrain_volume_lattice_normal_v3(
 						buffer.density_halo,
 						request.cells,
