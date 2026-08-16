@@ -123,13 +123,7 @@ cluster_dag_root_count :: proc(dag: Cluster_Dag) -> u32 {
 }
 
 @(private)
-_cluster_validate_clusters :: proc(
-	dag: Cluster_Dag,
-	index_count: u32,
-) -> (
-	Cluster_Result,
-	bool,
-) {
+_cluster_validate_clusters :: proc(dag: Cluster_Dag, index_count: u32) -> (Cluster_Result, bool) {
 	assert(len(dag.clusters) > 0, "_cluster_validate_clusters: empty graph")
 	assert(dag.level_count > 0, "_cluster_validate_clusters: zero levels")
 	for index in 0 ..< len(dag.clusters) {

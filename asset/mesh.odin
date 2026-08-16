@@ -147,7 +147,7 @@ quantization_from_mesh :: proc(mesh: Mesh_View) -> (Vertex_Quantization, bool) {
 	assert(len(mesh.vertices) > 0, "quantization_from_mesh: empty vertices")
 	if !bounds_valid(mesh.bounds) do return {}, false
 	result := Vertex_Quantization {
-		bounds    = mesh.bounds,
+		bounds = mesh.bounds,
 		uv_bounds = {minimum = mesh.vertices[0].uv, maximum = mesh.vertices[0].uv},
 	}
 	for vertex in mesh.vertices[1:] {
