@@ -91,6 +91,38 @@ the generator version changes; cross-architecture floating-point byte identity
 is not part of the current contract. Derivation remains initialization or
 worker-residency work and must not run per frame.
 
+## Evolving creature meshes
+
+`creature_mesh_evolve` derives a progression-dependent creature from an authored
+triangle mesh without changing its topology. Applications map game-specific
+strength, vitality, agility, age, genetics, or level into normalized
+`Creature_Morphology` fields. The generator remains independent of game rules
+and preserves source indices, UVs, and scalar values while rebuilding normals
+and bounds.
+
+Profiles interpret the authored model in Ingot's +X forward, +Y left, +Z up
+basis. They identify the head/front threshold and torso center, then bound region
+falloff and maximum deformation. Maturity blends all requested morphology from
+the source proportions. Stature, bulk, muscle, head scale, and reach affect
+stable authored-space regions; seeded curvature and surface detail add organic
+variation. Displacement depends on source position rather than seam-specific
+attributes, so coincident vertices split for UVs or normals remain together.
+
+A consumer loads or cooks the base mesh once, builds a recipe whenever its
+progression state changes, and calls `creature_mesh_key` before doing generation.
+If the key differs from the resident key, it regenerates into caller-owned
+storage outside the render hot path, then updates or replaces the resident GPU
+mesh. The key includes source mesh identity, source content identity, generator
+version, seed, level, progression revision, morphology, and every profile field.
+Persisted variants must be invalidated when the generator version changes.
+
+Generation rejects malformed sources, non-triangle topology, non-finite or
+out-of-range controls, zero-span source bounds, insufficient destination
+capacity, and degenerate output. Destination counts remain zero after failure.
+Generation allocates no storage, imports no GPU package, and must not run each
+frame. Same-target/build results are deterministic; cross-architecture floating
+point byte identity is not guaranteed.
+
 ## Follow-on milestones
 
 1. Bounded erosion, drainage, river/lake generation, and sediment fields.
