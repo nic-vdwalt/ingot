@@ -55,6 +55,26 @@ test_gpu_3d_target_size_rejects_invalid_target :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_gpu_3d_target_sample_textures_reject_invalid_and_msaa_depth :: proc(t: ^testing.T) {
+	testing.expect_value(t, gpu_3d_target_color_texture(nil), Texture2D{})
+	depth, ok := gpu_3d_target_depth_texture(nil)
+	testing.expect_value(t, depth, Texture2D{})
+	testing.expect(t, !ok)
+	target := Gpu_3D_Target {
+		texture = {texture = {id = 1, width = 8, height = 8}, depth = {id = 2, width = 8, height = 8}},
+		antialiasing = .MSAA_4X,
+	}
+	testing.expect_value(t, gpu_3d_target_color_texture(&target).id, u32(1))
+	depth, ok = gpu_3d_target_depth_texture(&target)
+	testing.expect_value(t, depth, Texture2D{})
+	testing.expect(t, !ok)
+	target.antialiasing = .None
+	depth, ok = gpu_3d_target_depth_texture(&target)
+	testing.expect_value(t, depth.id, u32(2))
+	testing.expect(t, ok)
+}
+
+@(test)
 test_cube_geometry_contract :: proc(t: ^testing.T) {
 	vertices: [GPU_3D_CUBE_VERTEX_COUNT]Gpu_3D_Vertex
 	indices: [GPU_3D_CUBE_INDEX_COUNT]u32
