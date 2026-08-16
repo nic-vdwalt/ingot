@@ -146,7 +146,8 @@ terrain_custom_recipe_v3 :: proc(
 
 terrain_recipe_validate_v3 :: proc(recipe: ^Terrain_Recipe_V3) -> bool {
 	if recipe == nil || recipe.version != TERRAIN_RECIPE_VERSION_V3 do return false
-	if recipe.surface.seed != recipe.seed || !terrain_recipe_validate_v2(&recipe.surface) do return false
+	if recipe.surface.seed != recipe.seed do return false
+	if !terrain_recipe_validate_v2(&recipe.surface) do return false
 	p := recipe.parameters
 	values := [?]f32 {
 		p.minimum_z,
@@ -285,7 +286,8 @@ terrain_primary_surface_v3 :: proc(
 	Terrain_Surface_V3,
 	bool,
 ) {
-	if !terrain_recipe_validate_v3(recipe) || step <= 0 || !_terrain_finite_v2(step) do return {}, false
+	if !terrain_recipe_validate_v3(recipe) do return {}, false
+	if step <= 0 || !_terrain_finite_v2(step) do return {}, false
 	return terrain_primary_surface_prevalidated_v3(recipe, x, y, step)
 }
 
