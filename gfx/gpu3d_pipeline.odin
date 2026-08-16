@@ -570,6 +570,17 @@ gpu_3d_target_size :: proc(target: ^Gpu_3D_Target) -> (width, height: i32, ok: b
 	return color.width, color.height, true
 }
 
+gpu_3d_target_color_texture :: proc(target: ^Gpu_3D_Target) -> Texture2D {
+	if target == nil do return {}
+	return target.texture.texture
+}
+
+gpu_3d_target_depth_texture :: proc(target: ^Gpu_3D_Target) -> (Texture2D, bool) {
+	if target == nil || target.antialiasing != .None do return {}, false
+	if _, _, ok := gpu_3d_target_size(target); !ok do return {}, false
+	return target.texture.depth, true
+}
+
 context_resize_gpu_3d_target :: proc(
 	ctx: ^Context,
 	target: ^Gpu_3D_Target,

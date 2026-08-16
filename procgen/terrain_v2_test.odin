@@ -98,7 +98,13 @@ terrain_v2_seed_suite_has_usable_variability :: proc(t: ^testing.T) {
 		storage: Terrain_V2_Test_Storage
 		buffer := _terrain_v2_test_buffer(&storage)
 		recipe := terrain_default_recipe_v2(u64(seed + 1))
-		request := Terrain_Field_Request_V2{-128, -128, 8, TERRAIN_V2_TEST_EDGE, TERRAIN_V2_TEST_EDGE}
+		request := Terrain_Field_Request_V2 {
+			-128,
+			-128,
+			8,
+			TERRAIN_V2_TEST_EDGE,
+			TERRAIN_V2_TEST_EDGE,
+		}
 		testing.expect(t, terrain_generate_field_v2(&recipe, request, buffer))
 		minimum, maximum := storage.heights[0], storage.heights[0]
 		fingerprint := u64(1469598103934665603)

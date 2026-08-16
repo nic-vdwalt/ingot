@@ -249,7 +249,8 @@ context_texture_view :: proc(ctx: ^Context, id: u32) -> wg.TextureView {
 }
 
 // _new_rt_depth creates a Depth24Plus depth attachment registered in the
-// texture registry (no sampler/bind - never sampled). Returns its Texture2D.
+// texture registry. TextureBinding permits read-only depth consumers while
+// existing render-target callers continue using it only as an attachment.
 @(private)
 _new_rt_depth :: proc(ctx: ^Context, w, h: i32) -> Texture2D {
 	assert(ctx != nil, "_new_rt_depth: nil context")
@@ -261,7 +262,7 @@ _new_rt_depth :: proc(ctx: ^Context, w, h: i32) -> Texture2D {
 	e.tex = wg.DeviceCreateTexture(
 		ctx.device,
 		&{
-			usage = {.RenderAttachment},
+			usage = {.RenderAttachment, .TextureBinding},
 			dimension = ._2D,
 			size = {u32(max(w, 1)), u32(max(h, 1)), 1},
 			format = .Depth24Plus,
