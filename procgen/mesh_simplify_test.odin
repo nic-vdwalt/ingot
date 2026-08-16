@@ -9,11 +9,7 @@ import "core:testing"
 // `cells` x `cells` quads on the XY plane. A plane is the sharpest possible
 // oracle for a quadric simplifier - every interior collapse is exactly free, so
 // any reported error above the floating-point floor is a bug in the metric.
-mesh_test_grid :: proc(
-	cells: int,
-	vertices: []asset.Vertex,
-	indices: []u32,
-) -> asset.Mesh_View {
+mesh_test_grid :: proc(cells: int, vertices: []asset.Vertex, indices: []u32) -> asset.Mesh_View {
 	edge := cells + 1
 	for row in 0 ..< edge {
 		for column in 0 ..< edge {
@@ -232,7 +228,10 @@ simplify_never_reports_negative_error :: proc(t: ^testing.T) {
 	scratch := mesh_test_scratch(len(source.vertices), len(source.indices))
 	defer mesh_test_scratch_free(scratch)
 	view := source
-	view.bounds = {minimum = {0, 0, -1}, maximum = {f32(cells), f32(cells), 1}}
+	view.bounds = {
+		minimum = {0, 0, -1},
+		maximum = {f32(cells), f32(cells), 1},
+	}
 	options := Simplify_Options {
 		target_index_count = len(source.indices) / 2,
 	}
@@ -240,4 +239,42 @@ simplify_never_reports_negative_error :: proc(t: ^testing.T) {
 	testing.expect(t, ok)
 	testing.expect(t, result.error >= 0)
 	testing.expect(t, !math.is_nan(result.error))
+}
+
+@(test)
+simplify_scratch_carves_a_byte_block :: proc(t: ^testing.T) {
+	cells := 8
+	source_vertices := make([]asset.Vertex, (cells + 1) * (cells + 1))
+	source_indices := make([]u32, cells * cells * 6)
+	defer delete(source_vertices)
+	defer delete(source_indices)
+	source := mesh_test_grid(cells, source_vertices, source_indices)
+	vertex_count := len(source.vertices)
+	index_count := len(source.indices)
+	size := simplify_scratch_size(vertex_count, index_count)
+	// One byte short must fail, and the block is deliberately offset by one so
+	// the carve has to realign it - a caller may hand in any byte slice.
+	short := make([]u8, size + SIMPLIFY_SCRATCH_PADDING - 1)
+	defer delete(short)
+	_, short_ok := simplify_scratch_make(short, vertex_count, index_count)
+	testing.expect(t, !short_ok)
+	block := make([]u8, size + SIMPLIFY_SCRATCH_PADDING + 1)
+	defer delete(block)
+	scratch, ok := simplify_scratch_make(block[1:], vertex_count, index_count)
+	testing.expect(t, ok)
+	testing.expect(t, len(scratch.quadrics) == vertex_count)
+	testing.expect(t, len(scratch.flags) == vertex_count)
+	testing.expect(t, len(scratch.edges) == index_count)
+	testing.expect(t, uintptr(raw_data(scratch.quadrics)) % SIMPLIFY_SCRATCH_ALIGNMENT == 0)
+	testing.expect(t, uintptr(raw_data(scratch.candidates)) % SIMPLIFY_SCRATCH_ALIGNMENT == 0)
+	out_vertices := make([]asset.Vertex, vertex_count)
+	out_indices := make([]u32, index_count)
+	defer delete(out_vertices)
+	defer delete(out_indices)
+	options := Simplify_Options {
+		target_index_count = index_count / 2,
+	}
+	result, run_ok := simplify_mesh(source, options, nil, out_vertices, out_indices, scratch)
+	testing.expect(t, run_ok)
+	testing.expect(t, result.index_count <= index_count / 2)
 }

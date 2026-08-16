@@ -69,10 +69,7 @@ _cluster_key_less :: proc(first, second: Cluster_Key) -> bool {
 // Applies the sorted order to the index buffer through the working copy, so a
 // group's triangles become one contiguous range.
 @(private)
-_cluster_reorder :: proc(
-	storage: Cluster_Build_Storage,
-	span_first, triangles: int,
-) -> bool {
+_cluster_reorder :: proc(storage: Cluster_Build_Storage, span_first, triangles: int) -> bool {
 	assert(triangles > 0, "_cluster_reorder: empty span")
 	assert(triangles <= len(storage.keys), "_cluster_reorder: key storage too small")
 	if triangles * 3 > len(storage.scratch_indices) do return false
@@ -119,7 +116,10 @@ _cluster_sphere :: proc(
 	for step in 0 ..< index_count {
 		position := storage.vertices[storage.indices[first_index + step]].position
 		delta := position - center
-		radius = max(radius, math.sqrt(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]))
+		radius = max(
+			radius,
+			math.sqrt(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]),
+		)
 	}
 	return center, radius
 }
@@ -145,9 +145,7 @@ _cluster_group_sphere :: proc(
 	for offset in 0 ..< child_count {
 		child := storage.clusters[first_child + offset]
 		delta := child.center - center
-		distance := math.sqrt(
-			delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2],
-		)
+		distance := math.sqrt(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2])
 		radius = max(radius, distance + child.radius)
 	}
 	return center, radius

@@ -125,10 +125,7 @@ cluster_build_converges_to_one_root :: proc(t: ^testing.T) {
 	// Every level after the first must be strictly smaller, which is what
 	// makes the chain terminate.
 	for level in 1 ..< result.level_count {
-		testing.expect(
-			t,
-			result.levels[level].index_count < result.levels[level - 1].index_count,
-		)
+		testing.expect(t, result.levels[level].index_count < result.levels[level - 1].index_count)
 	}
 }
 
