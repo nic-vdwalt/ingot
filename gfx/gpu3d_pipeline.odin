@@ -7,7 +7,9 @@ import wg "vendor:wgpu"
 // is an operating condition, not a programmer error: create_sphere_mesh
 // returns ok=false and draw_gpu_mesh skips draws once the pipeline pool is
 // full - both are counted in renderer_stats().gpu3d_pool_exhaustions.
-GPU_3D_MAX_MESHES :: 256
+// The mesh pool matches RESOURCE_SLOT_COUNT so chunked worlds (hundreds of
+// static terrain meshes) fit without touching the packed handle layout.
+GPU_3D_MAX_MESHES :: 1024
 GPU_3D_MAX_PIPELINES :: 48
 GPU_3D_MAX_SHADERS :: 8
 GPU_3D_MAX_VERTICES :: 1_048_576
