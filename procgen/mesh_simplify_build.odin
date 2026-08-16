@@ -366,14 +366,7 @@ _simplify_normalize :: proc(value: [3]f64) -> ([3]f64, bool) {
 // natural quadric weight: a sliver contributes almost nothing, a large face
 // dominates.
 @(private)
-_simplify_plane :: proc(
-	vertices: []asset.Vertex,
-	corners: [3]u32,
-) -> (
-	[3]f64,
-	f64,
-	bool,
-) {
+_simplify_plane :: proc(vertices: []asset.Vertex, corners: [3]u32) -> ([3]f64, f64, bool) {
 	assert(len(vertices) > 0, "_simplify_plane: empty vertices")
 	assert(int(corners[0]) < len(vertices), "_simplify_plane: corner out of range")
 	first := _simplify_point(vertices[corners[0]].position)
@@ -384,9 +377,7 @@ _simplify_plane :: proc(
 	crossed := _simplify_cross(edge_a, edge_b)
 	normal, ok := _simplify_normalize(crossed)
 	if !ok do return {}, 0, false
-	area := math.sqrt(
-		crossed[0] * crossed[0] + crossed[1] * crossed[1] + crossed[2] * crossed[2],
-	)
+	area := math.sqrt(crossed[0] * crossed[0] + crossed[1] * crossed[1] + crossed[2] * crossed[2])
 	return normal, area, true
 }
 

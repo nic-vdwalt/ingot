@@ -230,10 +230,7 @@ _cluster_finish :: proc(storage: Cluster_Build_Storage, state: ^Cluster_Build_St
 }
 
 @(private)
-_cluster_result_ok :: proc(
-	result: Cluster_Build_Result,
-	storage: Cluster_Build_Storage,
-) -> bool {
+_cluster_result_ok :: proc(result: Cluster_Build_Result, storage: Cluster_Build_Storage) -> bool {
 	assert(result.cluster_count >= 0, "_cluster_result_ok: negative cluster count")
 	assert(result.level_count >= 0, "_cluster_result_ok: negative level count")
 	if result.cluster_count == 0 || result.level_count == 0 do return false

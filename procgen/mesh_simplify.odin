@@ -163,6 +163,70 @@ simplify_scratch_size :: proc(vertex_count, index_count: int) -> int {
 	return total
 }
 
+// simplify_scratch_make carves a caller-owned byte block into the typed scratch
+// `simplify_mesh` expects.
+//
+// The scratch's element types are package private, so without this a caller
+// outside `ingot:procgen` has no way to build one: it can name the struct but
+// not the types of its fields. The block is allowed to start unaligned, which
+// is why it must be `SIMPLIFY_SCRATCH_PADDING` bytes larger than
+// `simplify_scratch_size` reports - a caller handing in a static array should
+// not have to reason about where the linker put it.
+simplify_scratch_make :: proc(
+	block: []u8,
+	vertex_count, index_count: int,
+) -> (
+	Simplify_Scratch,
+	bool,
+) {
+	assert(vertex_count > 0, "simplify_scratch_make: empty vertices")
+	assert(index_count > 0, "simplify_scratch_make: empty indices")
+	required := simplify_scratch_size(vertex_count, index_count) + SIMPLIFY_SCRATCH_PADDING
+	if len(block) < required do return {}, false
+	address := uintptr(raw_data(block))
+	carve := Simplify_Carve {
+		block  = block,
+		offset = int(
+			(SIMPLIFY_SCRATCH_ALIGNMENT - (address & SIMPLIFY_SCRATCH_PADDING)) &
+			SIMPLIFY_SCRATCH_PADDING,
+		),
+	}
+	scratch := Simplify_Scratch {
+		quadrics     = _simplify_carve(&carve, Quadric, vertex_count),
+		group        = _simplify_carve(&carve, u32, vertex_count),
+		collapse     = _simplify_carve(&carve, u32, vertex_count),
+		touched      = _simplify_carve(&carve, u32, vertex_count),
+		compact      = _simplify_carve(&carve, u32, vertex_count),
+		vertex_table = _simplify_carve(&carve, u32, _simplify_table_size(vertex_count)),
+		edge_table   = _simplify_carve(&carve, u32, _simplify_table_size(index_count)),
+		edges        = _simplify_carve(&carve, Simplify_Edge, index_count),
+		candidates   = _simplify_carve(&carve, Simplify_Candidate, index_count),
+		flags        = _simplify_carve(&carve, u8, vertex_count),
+	}
+	assert(carve.offset <= len(block), "simplify_scratch_make: carve overran the block")
+	return scratch, true
+}
+
+SIMPLIFY_SCRATCH_ALIGNMENT :: 8
+SIMPLIFY_SCRATCH_PADDING :: SIMPLIFY_SCRATCH_ALIGNMENT - 1
+
+@(private)
+Simplify_Carve :: struct {
+	block:  []u8,
+	offset: int,
+}
+
+@(private)
+_simplify_carve :: proc(carve: ^Simplify_Carve, $T: typeid, count: int) -> []T {
+	assert(carve != nil, "_simplify_carve: nil carve")
+	assert(count > 0, "_simplify_carve: empty request")
+	size := _simplify_align(count * size_of(T))
+	assert(carve.offset + size <= len(carve.block), "_simplify_carve: block overflow")
+	items := cast([^]T)raw_data(carve.block[carve.offset:])
+	carve.offset += size
+	return items[:count]
+}
+
 @(private)
 Simplify_State :: struct {
 	index_count: int,
