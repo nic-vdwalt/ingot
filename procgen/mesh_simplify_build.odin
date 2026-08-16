@@ -302,6 +302,11 @@ _simplify_rebuild :: proc(indices: []u32, scratch: Simplify_Scratch) -> int {
 }
 
 // Final pass: drop vertices no surviving triangle references and renumber.
+//
+// The move must run in increasing source order. Compacting in index-buffer
+// order instead would let a vertex be written into a slot whose original
+// contents had not been read yet, which silently corrupts exactly the
+// lowest-numbered vertices - on a grid, its entire first row.
 @(private)
 _simplify_compact :: proc(
 	vertices: []asset.Vertex,
@@ -310,17 +315,17 @@ _simplify_compact :: proc(
 ) -> int {
 	assert(len(indices) % 3 == 0, "_simplify_compact: incomplete triangle")
 	assert(len(scratch.compact) >= len(vertices), "_simplify_compact: map too small")
+	used := max(u32) - 1
 	for index in 0 ..< len(vertices) do scratch.compact[index] = max(u32)
+	for index in 0 ..< len(indices) do scratch.compact[indices[index]] = used
 	write := 0
-	for index in 0 ..< len(indices) {
-		original := indices[index]
-		if scratch.compact[original] == max(u32) {
-			scratch.compact[original] = u32(write)
-			vertices[write] = vertices[original]
-			write += 1
-		}
-		indices[index] = scratch.compact[original]
+	for index in 0 ..< len(vertices) {
+		if scratch.compact[index] != used do continue
+		scratch.compact[index] = u32(write)
+		vertices[write] = vertices[index]
+		write += 1
 	}
+	for index in 0 ..< len(indices) do indices[index] = scratch.compact[indices[index]]
 	return write
 }
 

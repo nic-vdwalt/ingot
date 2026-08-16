@@ -1,4 +1,4 @@
-
+#+build !js
 package procgen
 
 import asset "../asset"
