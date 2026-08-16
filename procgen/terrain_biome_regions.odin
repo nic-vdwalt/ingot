@@ -79,12 +79,17 @@ _terrain_biome_region_validate :: proc(
 	cells := request.width * request.height
 	if cells > TERRAIN_BIOME_REGION_MAX_CELLS do return 0, false
 	if request.minimum_cells < 1 || request.minimum_cells > cells do return 0, false
-	if len(raw) < cells || len(output.biomes) < cells || len(output.patch_ids) < cells do return 0, false
+	if len(raw) < cells || len(output.biomes) < cells do return 0, false
+	if len(output.patch_ids) < cells do return 0, false
 	if len(scratch.labels) < cells || len(scratch.queue) < cells do return 0, false
 	if len(scratch.component_sizes) < cells || len(scratch.component_ids) < cells do return 0, false
 	if len(scratch.merge_targets) < cells do return 0, false
-	for id in request.protected_ids do if !_terrain_biome_region_id_valid(recipe, id) do return 0, false
-	for index in 0 ..< cells do if !_terrain_biome_region_id_valid(recipe, raw[index].primary_id) do return 0, false
+	for id in request.protected_ids {
+		if !_terrain_biome_region_id_valid(recipe, id) do return 0, false
+	}
+	for index in 0 ..< cells {
+		if !_terrain_biome_region_id_valid(recipe, raw[index].primary_id) do return 0, false
+	}
 	return cells, true
 }
 
@@ -193,8 +198,10 @@ _terrain_biome_region_target :: proc(
 	best := -1
 	for candidate in 0 ..< components {
 		if scratch.queue[candidate] == 0 do continue
-		if scratch.component_sizes[candidate] < scratch.component_sizes[component] do continue
-		if scratch.component_sizes[candidate] == scratch.component_sizes[component] && candidate > component do continue
+		candidate_size := scratch.component_sizes[candidate]
+		component_size := scratch.component_sizes[component]
+		if candidate_size < component_size do continue
+		if candidate_size == component_size && candidate > component do continue
 		if _terrain_biome_region_target_better(recipe, scratch, candidate, best) do best = candidate
 	}
 	return best
@@ -222,7 +229,9 @@ _terrain_biome_region_target_better :: proc(
 ) -> bool {
 	assert(recipe != nil, "_terrain_biome_region_target_better: nil recipe")
 	if current < 0 do return true
-	if scratch.queue[candidate] != scratch.queue[current] do return scratch.queue[candidate] > scratch.queue[current]
+	if scratch.queue[candidate] != scratch.queue[current] {
+		return scratch.queue[candidate] > scratch.queue[current]
+	}
 	if scratch.component_sizes[candidate] != scratch.component_sizes[current] {
 		return scratch.component_sizes[candidate] > scratch.component_sizes[current]
 	}
@@ -248,7 +257,9 @@ _terrain_biome_region_priority :: proc(recipe: ^Terrain_Recipe_V2, id: u16) -> u
 @(private)
 _terrain_biome_region_id_valid :: proc(recipe: ^Terrain_Recipe_V2, id: u16) -> bool {
 	assert(recipe != nil, "_terrain_biome_region_id_valid: nil recipe")
-	for index in 0 ..< int(recipe.biome_profile_count) do if recipe.biome_profiles[index].id == id do return true
+	for index in 0 ..< int(recipe.biome_profile_count) {
+		if recipe.biome_profiles[index].id == id do return true
+	}
 	return false
 }
 

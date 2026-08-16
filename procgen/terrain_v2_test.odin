@@ -118,7 +118,9 @@ terrain_v2_seed_suite_has_usable_variability :: proc(t: ^testing.T) {
 		fingerprints[seed] = fingerprint
 	}
 	different := false
-	for index in 1 ..< len(fingerprints) do different = different || fingerprints[index] != fingerprints[0]
+	for index in 1 ..< len(fingerprints) {
+		different = different || fingerprints[index] != fingerprints[0]
+	}
 	testing.expect(t, different)
 }
 

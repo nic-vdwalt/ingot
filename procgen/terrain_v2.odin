@@ -174,7 +174,8 @@ terrain_recipe_validate_v2 :: proc(recipe: ^Terrain_Recipe_V2) -> bool {
 	if recipe.ocean_depth <= 0 || recipe.land_height <= 0 || recipe.mountain_height < 0 do return false
 	if recipe.hill_height < 0 || recipe.detail_height < 0 || recipe.coast_fade <= 0 do return false
 	if recipe.mountain_fade <= 0 || recipe.ridge_power <= 0 do return false
-	if recipe.elevation_lapse < 0 || recipe.latitude_weight < 0 || recipe.latitude_weight > 1 do return false
+	if recipe.elevation_lapse < 0 || recipe.latitude_weight < 0 do return false
+	if recipe.latitude_weight > 1 do return false
 	if recipe.latitude_half_extent <= 0 || recipe.biome_profile_count == 0 do return false
 	if int(recipe.biome_profile_count) > TERRAIN_BIOME_PROFILE_MAX_V2 do return false
 	if recipe.fallback_profile_index >= recipe.biome_profile_count do return false
