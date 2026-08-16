@@ -81,6 +81,7 @@ _cluster_owners :: proc(
 	state: ^Cluster_Build_State,
 	settings: Cluster_Settings,
 ) {
+	assert(state != nil, "_cluster_owners: nil state")
 	assert(state.cluster_count > state.level_first, "_cluster_owners: empty level")
 	assert(settings.group_size > 0, "_cluster_owners: zero group size")
 	for index in 0 ..< state.vertex_count {
@@ -113,6 +114,7 @@ _cluster_group :: proc(
 	f32,
 	bool,
 ) {
+	assert(state != nil, "_cluster_group: nil state")
 	assert(child_count > 0, "_cluster_group: empty group")
 	assert(child_count <= asset.CLUSTER_MAX_GROUP_CHILDREN, "_cluster_group: group overflow")
 	gather, gather_ok := _cluster_gather(storage, first_child, child_count)
@@ -274,6 +276,7 @@ _cluster_emit :: proc(
 	first_index, index_count: int,
 	error: f32,
 ) -> bool {
+	assert(state != nil, "_cluster_emit: nil state")
 	assert(index_count > 0, "_cluster_emit: empty span")
 	assert(index_count % 3 == 0, "_cluster_emit: incomplete triangle")
 	triangles := index_count / 3

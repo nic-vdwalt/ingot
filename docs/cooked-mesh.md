@@ -76,3 +76,8 @@ local Z at ground level.
 Version 1 does not contain textures, PBR materials, tangents, UV1, vertex
 colors, node hierarchies, animation, skinning, morph targets, or generated LODs.
 Those features belong to later versions or the general glTF scene pipeline.
+
+LOD chains, cluster LOD, and packed vertices arrived in
+[`INGMESH2`](cooked-mesh-v2.md). Version 1 remains supported unchanged, and
+`cooked_mesh_decode` reads a version 2 bundle by projecting its LOD 0 onto the
+version 1 result, so callers here need no change.

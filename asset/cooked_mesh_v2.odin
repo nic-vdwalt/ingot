@@ -37,13 +37,12 @@ COOKED_MESH_V2_MAX_BYTES :: 256 * 1024 * 1024
 
 COOKED_MESH_V2_FLAG_PACKED_VERTICES :: u32(1 << 0)
 COOKED_MESH_V2_FLAG_CLUSTERS :: u32(1 << 1)
-COOKED_MESH_V2_FLAG_MASK ::
-	COOKED_MESH_V2_FLAG_PACKED_VERTICES | COOKED_MESH_V2_FLAG_CLUSTERS
+COOKED_MESH_V2_FLAG_MASK :: COOKED_MESH_V2_FLAG_PACKED_VERTICES | COOKED_MESH_V2_FLAG_CLUSTERS
 
 Mesh_Lod :: struct {
-	view:  Mesh_View,
+	view:                    Mesh_View,
 	// Geometric error this level introduced against LOD 0, in mesh units.
-	error: f32,
+	error:                   f32,
 	// Projected height in pixels below which this level is preferred. Coarser
 	// levels carry smaller thresholds, so a runtime walks the chain forward
 	// and stops at the first level whose threshold the mesh still exceeds.
@@ -199,11 +198,15 @@ _cooked_v2_layout_spans :: proc(
 	if result.flags & ~u32(COOKED_MESH_V2_FLAG_MASK) != 0 {
 		return {}, {fault = .Invalid_Flags, offset = 36}, false
 	}
-	if result.mesh_count == 0 || result.mesh_count > COOKED_MESH_V2_MAX_MESHES ||
-	   result.lod_count == 0 || result.lod_count > COOKED_MESH_V2_MAX_LODS ||
+	if result.mesh_count == 0 ||
+	   result.mesh_count > COOKED_MESH_V2_MAX_MESHES ||
+	   result.lod_count == 0 ||
+	   result.lod_count > COOKED_MESH_V2_MAX_LODS ||
 	   result.cluster_count > COOKED_MESH_V2_MAX_CLUSTERS ||
 	   result.group_count > COOKED_MESH_V2_MAX_GROUPS ||
-	   result.vertex_count == 0 || result.index_count == 0 || result.index_count % 3 != 0 {
+	   result.vertex_count == 0 ||
+	   result.index_count == 0 ||
+	   result.index_count % 3 != 0 {
 		return {}, {fault = .Invalid_Record, offset = 12}, false
 	}
 	has_clusters := result.flags & COOKED_MESH_V2_FLAG_CLUSTERS != 0
@@ -335,11 +338,7 @@ _cooked_v2_read_clusters :: proc(bytes: []u8, layout: Cooked_V2_Layout, clusters
 }
 
 @(private)
-_cooked_v2_read_groups :: proc(
-	bytes: []u8,
-	layout: Cooked_V2_Layout,
-	groups: []Cluster_Group,
-) {
+_cooked_v2_read_groups :: proc(bytes: []u8, layout: Cooked_V2_Layout, groups: []Cluster_Group) {
 	assert(len(groups) == int(layout.group_count), "_cooked_v2_read_groups: size mismatch")
 	assert(layout.group_offset >= layout.cluster_offset, "_cooked_v2_read_groups: bad layout")
 	for index in 0 ..< len(groups) {

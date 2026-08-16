@@ -36,7 +36,8 @@ _cooked_v2_chains :: proc(
 		storage.meshes[index] = chain
 		cursor.mesh_id = record.id
 	}
-	if cursor.lod != layout.lod_count || cursor.cluster != layout.cluster_count ||
+	if cursor.lod != layout.lod_count ||
+	   cursor.cluster != layout.cluster_count ||
 	   cursor.group != layout.group_count {
 		return {}, {fault = .Invalid_Record, offset = 12}, false
 	}
@@ -136,8 +137,7 @@ _cooked_v2_chain :: proc(
 		return result, {}, true
 	}
 	dag := Cluster_Dag {
-		clusters = storage.clusters[record.cluster_first:record.cluster_first +
-		record.cluster_count],
+		clusters = storage.clusters[record.cluster_first:record.cluster_first + record.cluster_count],
 		groups   = storage.groups[record.group_first:record.group_first + record.group_count],
 	}
 	dag.level_count = _cooked_v2_level_count(dag)
@@ -191,7 +191,11 @@ _cooked_v2_lods :: proc(
 		indices := storage.indices[span[2]:span[2] + span[3]]
 		view := Mesh_View{record.id, vertices, indices, .Triangles, record.bounds}
 		if !mesh_validate(view) do return fail, false
-		lods[level] = {view = view, error = error, screen_height_threshold = threshold}
+		lods[level] = {
+			view                    = view,
+			error                   = error,
+			screen_height_threshold = threshold,
+		}
 		previous_error = error
 		previous_threshold = threshold
 		cursor.vertex = span[0] + span[1]
