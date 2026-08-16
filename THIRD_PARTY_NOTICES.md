@@ -27,14 +27,14 @@ Copyright 2023 The AccessKit Authors. All rights reserved.
 AccessKit C is offered under Apache License 2.0 or the MIT License. Ingot
 redistributes it under the Apache License 2.0 option. The complete license is
 in `LICENSE`. The macOS archives are transformed by
-`scripts/build-accesskit.sh` into prelinked archives exporting AccessKit
-symbols; they are not byte-identical to upstream release artifacts.
+`scripts/build-accesskit.sh` into prelinked, debug-stripped archives exporting
+AccessKit symbols; they are not byte-identical to upstream release artifacts.
 
 SHA-256:
 
 ```text
-4b0f56c6852856ea91790318976f9b06c8ce61afdecfc3e4e5eef955a50ac46c  accesskit/lib/darwin_arm64/libaccesskit.a
-ab7aad4f73228ca03f6c2bdf50ff23c25a8831672dea738a0edf3bc967eb3391  accesskit/lib/darwin_amd64/libaccesskit.a
+02fd1544b972a0217b56f0e975b242c1d729d5a80638c5d9ed51cd5b4df9180a  accesskit/lib/darwin_arm64/libaccesskit.a
+4c0b0c1d614a30b3137567bc54634d9c93f55abea8b55596294bed754feb3fc2  accesskit/lib/darwin_amd64/libaccesskit.a
 b3cb0b7055f3e4cd30d21dca9778f956d49503ef0088d5a7fee8600929e8b70b  accesskit/lib/linux_amd64/libaccesskit.a
 376fceabd2da5860d5fc11cadc5958027875b711445c1c406c387d74529659c2  accesskit/lib/windows_amd64/accesskit.lib
 c7e0dff6b97ba5793d5a092d6ef817d5a4ec5ffe409345f5927fc0da4b06cf61  accesskit/include/accesskit.h

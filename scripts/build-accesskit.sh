@@ -56,15 +56,21 @@ install_lib() { # <release subdir> <dest platform_arch> <lib file>
 # collides on Rust runtime symbols (rust_eh_personality). Prelink the archive
 # into one object exporting only accesskit_* symbols; everything else becomes
 # a private extern and can no longer collide.
+#
+# `ld -r` keeps the upstream debug map (N_OSO stabs) pointing at the temporary
+# unpack directory, so every consumer -debug link warns "unable to open object
+# file" for each Rust codegen unit once that directory is gone. `strip -S` drops
+# the debug symbols and the stale references with them.
 install_lib_macos() { # <ld arch> <dest platform_arch>
     local tmp_o exports
-    tmp_o="$(mktemp -d)/accesskit_prelinked.o"
+    tmp_o="$(mktemp -d)/ak_$1.o"
     exports="$(mktemp)"
     printf '_accesskit_*\n_ACCESSKIT_*\n' > "$exports"
     mkdir -p "$SCRIPT_DIR/accesskit/lib/$2"
     ld -r -arch "$1" -platform_version macos 11.0 11.0 \
         -force_load "$SRC/lib/macos/$1/static/libaccesskit.a" \
         -exported_symbols_list "$exports" -o "$tmp_o"
+    strip -S "$tmp_o"
     rm -f "$SCRIPT_DIR/accesskit/lib/$2/libaccesskit.a"
     ar rcs "$SCRIPT_DIR/accesskit/lib/$2/libaccesskit.a" "$tmp_o"
     echo "Installed accesskit/lib/$2/libaccesskit.a (prelinked, accesskit_* only)"
