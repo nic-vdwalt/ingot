@@ -256,6 +256,14 @@ terrain_primary_surface_v3 :: proc(
 	dy := (up - down) / (2 * step)
 	slope := math.sqrt(dx * dx + dy * dy)
 	upward := 1 / math.sqrt(1 + slope * slope)
+	biomes, biome_ok := terrain_biome_blend_v2(
+		&recipe.surface,
+		height,
+		sample.moisture,
+		sample.temperature,
+		slope,
+	)
+	if !biome_ok do return {}, false
 	return {
 			height = height,
 			moisture = sample.moisture,
@@ -264,7 +272,7 @@ terrain_primary_surface_v3 :: proc(
 			ruggedness = sample.ruggedness,
 			slope = slope,
 			upward_normal = upward,
-			biomes = sample.biomes,
+			biomes = biomes,
 			buildable = height >= p.surface_search_min &&
 			height <= p.surface_search_max &&
 			upward >= p.minimum_upward_normal,

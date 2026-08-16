@@ -9,9 +9,15 @@ TERRAIN_V3_TEST_CELLS :: 6
 TERRAIN_V3_TEST_DENSITY ::
 	(TERRAIN_V3_TEST_CELLS + 2) * (TERRAIN_V3_TEST_CELLS + 2) * (TERRAIN_V3_TEST_CELLS + 2)
 TERRAIN_V3_TEST_VERTICES ::
-	TERRAIN_V3_TEST_CELLS * TERRAIN_V3_TEST_CELLS * TERRAIN_V3_TEST_CELLS * 24
+	TERRAIN_V3_TEST_CELLS *
+	TERRAIN_V3_TEST_CELLS *
+	TERRAIN_V3_TEST_CELLS *
+	TERRAIN_VOLUME_VERTICES_PER_CELL_V3
 TERRAIN_V3_TEST_INDICES ::
-	TERRAIN_V3_TEST_CELLS * TERRAIN_V3_TEST_CELLS * TERRAIN_V3_TEST_CELLS * 36
+	TERRAIN_V3_TEST_CELLS *
+	TERRAIN_V3_TEST_CELLS *
+	TERRAIN_V3_TEST_CELLS *
+	TERRAIN_VOLUME_INDICES_PER_CELL_V3
 
 Terrain_V3_Test_Storage :: struct {
 	density:  [TERRAIN_V3_TEST_DENSITY]f32,
@@ -42,6 +48,28 @@ terrain_v3_normal_primary_surface_matches_v2 :: proc(t: ^testing.T) {
 			v3, ok_v3 := terrain_primary_surface_v3(&recipe, world_x, world_y, 2)
 			testing.expect(t, ok_v2 && ok_v3)
 			testing.expect_value(t, v3.height, v2.height)
+			testing.expect_value(t, v3.biomes, v2.biomes)
+		}
+	}
+}
+
+@(test)
+terrain_v3_abstract_biomes_use_transformed_surface :: proc(t: ^testing.T) {
+	recipe := terrain_abstract_recipe_v3(0xC0FFEE)
+	for y in -8 ..= 8 {
+		for x in -8 ..= 8 {
+			world_x, world_y := f32(x * 8), f32(y * 8)
+			v3, ok := terrain_primary_surface_v3(&recipe, world_x, world_y, 2)
+			testing.expect(t, ok)
+			expected, blend_ok := terrain_biome_blend_v2(
+				&recipe.surface,
+				v3.height,
+				v3.moisture,
+				v3.temperature,
+				v3.slope,
+			)
+			testing.expect(t, blend_ok)
+			testing.expect_value(t, v3.biomes, expected)
 		}
 	}
 }
@@ -73,6 +101,7 @@ terrain_v3_volume_mesh_is_deterministic_bounded_and_valid :: proc(t: ^testing.T)
 	testing.expect(t, terrain_generate_volume_v3(&recipe, request, &buffer_b))
 	testing.expect_value(t, buffer_a.mesh.vertex_count, buffer_b.mesh.vertex_count)
 	testing.expect_value(t, buffer_a.mesh.index_count, buffer_b.mesh.index_count)
+	interpolated := false
 	for vertex, index in buffer_a.mesh.vertices[:buffer_a.mesh.vertex_count] {
 		testing.expect_value(t, vertex, buffer_b.mesh.vertices[index])
 		length := math.sqrt(
@@ -81,20 +110,34 @@ terrain_v3_volume_mesh_is_deterministic_bounded_and_valid :: proc(t: ^testing.T)
 			vertex.normal.z * vertex.normal.z,
 		)
 		testing.expect(t, abs(length - 1) < 0.001)
+		local := (vertex.position - request.origin) / request.step
+		for coordinate in local {
+			interpolated = interpolated || abs(coordinate - math.round(coordinate)) > 0.001
+		}
 	}
+	testing.expect(t, interpolated)
 	view, ok := asset.mesh_view(&buffer_a.mesh)
 	testing.expect(t, ok && asset.mesh_validate(view))
 }
 
 @(test)
-terrain_v3_volume_face_uvs_follow_face_planes :: proc(t: ^testing.T) {
+terrain_v3_volume_projection_uvs_follow_dominant_normal :: proc(t: ^testing.T) {
 	position := asset.Vec3{32, 64, 96}
-	testing.expect_value(t, _terrain_volume_face_uv_v3(0, position), asset.Vec2{2, 3})
-	testing.expect_value(t, _terrain_volume_face_uv_v3(1, position), asset.Vec2{2, 3})
-	testing.expect_value(t, _terrain_volume_face_uv_v3(2, position), asset.Vec2{1, 3})
-	testing.expect_value(t, _terrain_volume_face_uv_v3(3, position), asset.Vec2{1, 3})
-	testing.expect_value(t, _terrain_volume_face_uv_v3(4, position), asset.Vec2{1, 2})
-	testing.expect_value(t, _terrain_volume_face_uv_v3(5, position), asset.Vec2{1, 2})
+	testing.expect_value(
+		t,
+		_terrain_volume_projection_uv_v3({1, 0, 0}, position),
+		asset.Vec2{2, 3},
+	)
+	testing.expect_value(
+		t,
+		_terrain_volume_projection_uv_v3({0, 1, 0}, position),
+		asset.Vec2{1, 3},
+	)
+	testing.expect_value(
+		t,
+		_terrain_volume_projection_uv_v3({0, 0, 1}, position),
+		asset.Vec2{1, 2},
+	)
 }
 
 @(test)

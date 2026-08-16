@@ -62,6 +62,13 @@ data-driven biome-profile blends. Generation validates every recipe and output
 capacity before publication. Storage remains bounded by
 `TERRAIN_FIELD_MAX_EDGE_V2`; no generator allocation or GPU dependency is added.
 
+Biome blends are local suitability data, not spatial ownership. Consumers that
+need categorical terrain call `terrain_resolve_biome_regions` over their complete
+authoritative domain. The resolver publishes one hard biome owner and one
+4-neighbor-connected patch ID per sample, with deterministic minimum-component
+merging. Resolving independent chunks without a shared stitch domain is invalid
+because component size and patch identity depend on neighboring cells.
+
 V2 output is deterministic for the same target and build. Cross-architecture
 floating-point byte identity is not guaranteed. Consumers using generated data
 authoritatively must quantize it, persist or version its recipe, and reject
@@ -87,9 +94,12 @@ version and their selected parameters.
 caller-owned halo and emits a bounded triangle mesh. Capacity is calculated by
 `terrain_volume_requirements_v3` and checked before mesh counts are published.
 The same density coordinates and centered gradients are used at neighboring
-chunk boundaries. V3 does not define navigation, volumetric editing, cave
-water, or multi-level placement; consumers choose how its primary surface
-participates in simulation.
+chunk boundaries. Volume meshes contain the primary ground boundary and
+therefore replace, rather than overlay, a heightfield mesh. Volume
+`Vertex.scalar` describes surface orientation; it is not a biome ID. Consumers
+map resolved biome fields to volume materials explicitly. V3 does not define
+navigation, volumetric editing, cave water, or multi-level placement; consumers
+choose how its primary surface participates in simulation.
 
 ## Authored mesh variants
 
