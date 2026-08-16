@@ -50,6 +50,23 @@ Acceptance is data-first: repeated generation is byte-identical, adjacent
 chunks share edges, every index is valid, bounds contain all vertices, placement
 counts remain bounded, draw-list order is stable, and culling is conservative.
 
+## Terrain fields V2
+
+V1 terrain sampling and chunk generation remain compatibility APIs. V2 adds a
+semantic recipe version and caller-owned fields for applications that need a
+reusable world-generation product rather than independent point samples.
+
+V2 composes continental, mountain, ridge, hill, and detail signals, then fills
+a one-cell height halo before deriving centered gradients, slope, climate, and
+data-driven biome-profile blends. Generation validates every recipe and output
+capacity before publication. Storage remains bounded by
+`TERRAIN_FIELD_MAX_EDGE_V2`; no generator allocation or GPU dependency is added.
+
+V2 output is deterministic for the same target and build. Cross-architecture
+floating-point byte identity is not guaranteed. Consumers using generated data
+authoritatively must quantize it, persist or version its recipe, and reject
+incompatible semantic versions.
+
 ## Authored mesh variants
 
 `mesh_scale_variant` derives a validated mesh from an authored `Mesh_View` and
@@ -76,13 +93,14 @@ worker-residency work and must not run per frame.
 
 ## Follow-on milestones
 
-1. Terrain LOD, seam transitions, streaming, upload budgets, biome texture
+1. Bounded erosion, drainage, river/lake generation, and sediment fields.
+2. Terrain LOD, seam transitions, streaming, upload budgets, biome texture
    blending, normal maps, and water.
-2. Deterministic tree species/placement, generated mesh variants, instancing,
+3. Deterministic tree species/placement, generated mesh variants, instancing,
    alpha-cutout foliage, and impostor LOD.
-3. Bounded building grammars, modular facade/roof generation, instancing, and
+4. Bounded building grammars, modular facade/roof generation, instancing, and
    collision/navigation proxy output.
-4. Versioned cooked files, worker residency, hot reload, and selective glTF
+5. Versioned cooked files, worker residency, hot reload, and selective glTF
    import for authored modules.
 
 ## Example
