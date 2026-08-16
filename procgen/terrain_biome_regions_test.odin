@@ -27,9 +27,32 @@ terrain_biome_regions_are_connected_canonical_and_deterministic :: proc(t: ^test
 		storage_b.raw[index] = storage_a.raw[index]
 	}
 	recipe := terrain_default_recipe_v2(7)
-	request := Terrain_Biome_Region_Request{TERRAIN_REGION_TEST_EDGE, TERRAIN_REGION_TEST_EDGE, 2, nil}
-	testing.expect(t, terrain_resolve_biome_regions(&recipe, request, storage_a.raw[:], _terrain_region_output(&storage_a), _terrain_region_scratch(&storage_a)))
-	testing.expect(t, terrain_resolve_biome_regions(&recipe, request, storage_b.raw[:], _terrain_region_output(&storage_b), _terrain_region_scratch(&storage_b)))
+	request := Terrain_Biome_Region_Request {
+		TERRAIN_REGION_TEST_EDGE,
+		TERRAIN_REGION_TEST_EDGE,
+		2,
+		nil,
+	}
+	testing.expect(
+		t,
+		terrain_resolve_biome_regions(
+			&recipe,
+			request,
+			storage_a.raw[:],
+			_terrain_region_output(&storage_a),
+			_terrain_region_scratch(&storage_a),
+		),
+	)
+	testing.expect(
+		t,
+		terrain_resolve_biome_regions(
+			&recipe,
+			request,
+			storage_b.raw[:],
+			_terrain_region_output(&storage_b),
+			_terrain_region_scratch(&storage_b),
+		),
+	)
 	testing.expect_value(t, storage_a.biomes, storage_b.biomes)
 	testing.expect_value(t, storage_a.patch_ids, storage_b.patch_ids)
 	for biome in storage_a.biomes {
@@ -47,8 +70,22 @@ terrain_biome_regions_merge_by_shared_boundary :: proc(t: ^testing.T) {
 	center := 2 * TERRAIN_REGION_TEST_EDGE + 2
 	storage.raw[center] = {3, 3, 1}
 	recipe := terrain_default_recipe_v2(9)
-	request := Terrain_Biome_Region_Request{TERRAIN_REGION_TEST_EDGE, TERRAIN_REGION_TEST_EDGE, 2, nil}
-	testing.expect(t, terrain_resolve_biome_regions(&recipe, request, storage.raw[:], _terrain_region_output(&storage), _terrain_region_scratch(&storage)))
+	request := Terrain_Biome_Region_Request {
+		TERRAIN_REGION_TEST_EDGE,
+		TERRAIN_REGION_TEST_EDGE,
+		2,
+		nil,
+	}
+	testing.expect(
+		t,
+		terrain_resolve_biome_regions(
+			&recipe,
+			request,
+			storage.raw[:],
+			_terrain_region_output(&storage),
+			_terrain_region_scratch(&storage),
+		),
+	)
 	testing.expect_value(t, storage.biomes[center].primary_id, u16(2))
 	testing.expect_value(t, storage.patch_ids[center], storage.patch_ids[0])
 }
@@ -61,8 +98,22 @@ terrain_biome_regions_keep_protected_components :: proc(t: ^testing.T) {
 	storage.raw[center] = {0, 0, 1}
 	recipe := terrain_default_recipe_v2(11)
 	protected := [?]u16{0}
-	request := Terrain_Biome_Region_Request{TERRAIN_REGION_TEST_EDGE, TERRAIN_REGION_TEST_EDGE, 2, protected[:]}
-	testing.expect(t, terrain_resolve_biome_regions(&recipe, request, storage.raw[:], _terrain_region_output(&storage), _terrain_region_scratch(&storage)))
+	request := Terrain_Biome_Region_Request {
+		TERRAIN_REGION_TEST_EDGE,
+		TERRAIN_REGION_TEST_EDGE,
+		2,
+		protected[:],
+	}
+	testing.expect(
+		t,
+		terrain_resolve_biome_regions(
+			&recipe,
+			request,
+			storage.raw[:],
+			_terrain_region_output(&storage),
+			_terrain_region_scratch(&storage),
+		),
+	)
 	testing.expect_value(t, storage.biomes[center].primary_id, u16(0))
 	testing.expect(t, storage.patch_ids[center] != storage.patch_ids[0])
 }
@@ -76,10 +127,24 @@ terrain_biome_regions_reject_capacity_without_publication :: proc(t: ^testing.T)
 		storage.patch_ids[index] = 99
 	}
 	recipe := terrain_default_recipe_v2(13)
-	request := Terrain_Biome_Region_Request{TERRAIN_REGION_TEST_EDGE, TERRAIN_REGION_TEST_EDGE, 2, nil}
+	request := Terrain_Biome_Region_Request {
+		TERRAIN_REGION_TEST_EDGE,
+		TERRAIN_REGION_TEST_EDGE,
+		2,
+		nil,
+	}
 	output := _terrain_region_output(&storage)
 	output.patch_ids = output.patch_ids[:len(output.patch_ids) - 1]
-	testing.expect(t, !terrain_resolve_biome_regions(&recipe, request, storage.raw[:], output, _terrain_region_scratch(&storage)))
+	testing.expect(
+		t,
+		!terrain_resolve_biome_regions(
+			&recipe,
+			request,
+			storage.raw[:],
+			output,
+			_terrain_region_scratch(&storage),
+		),
+	)
 	for index in 0 ..< TERRAIN_REGION_TEST_CELLS {
 		testing.expect_value(t, storage.biomes[index], Terrain_Biome_Blend_V2{9, 9, 0.25})
 		testing.expect_value(t, storage.patch_ids[index], u32(99))
@@ -87,13 +152,17 @@ terrain_biome_regions_reject_capacity_without_publication :: proc(t: ^testing.T)
 }
 
 @(private)
-_terrain_region_output :: proc(storage: ^Terrain_Region_Test_Storage) -> Terrain_Biome_Region_Output {
+_terrain_region_output :: proc(
+	storage: ^Terrain_Region_Test_Storage,
+) -> Terrain_Biome_Region_Output {
 	assert(storage != nil, "terrain region test output storage")
 	return {storage.biomes[:], storage.patch_ids[:]}
 }
 
 @(private)
-_terrain_region_scratch :: proc(storage: ^Terrain_Region_Test_Storage) -> Terrain_Biome_Region_Scratch {
+_terrain_region_scratch :: proc(
+	storage: ^Terrain_Region_Test_Storage,
+) -> Terrain_Biome_Region_Scratch {
 	assert(storage != nil, "terrain region test scratch storage")
 	return {
 		storage.labels[:],

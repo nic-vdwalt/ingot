@@ -219,6 +219,20 @@ terrain_height_v2 :: proc(
 	ok: bool,
 ) {
 	if !terrain_recipe_validate_v2(recipe) do return 0, 0, 0, false
+	return terrain_height_prevalidated_v2(recipe, world_x, world_y)
+}
+
+// terrain_height_prevalidated_v2 skips the per-call recipe validation for
+// callers that validate once and then sample in bulk; the recipe must
+// already be validated.
+terrain_height_prevalidated_v2 :: proc(
+	recipe: ^Terrain_Recipe_V2,
+	world_x, world_y: f32,
+) -> (
+	height, continentalness, ruggedness: f32,
+	ok: bool,
+) {
+	assert(recipe != nil, "terrain_height_prevalidated_v2: nil recipe")
 	if !_terrain_finite_v2(world_x) || !_terrain_finite_v2(world_y) do return 0, 0, 0, false
 	continentalness = _terrain_unit(fractal_2d(recipe.continental_noise, world_x, world_y))
 	land := _terrain_smoothstep_v2(
@@ -253,6 +267,19 @@ terrain_biome_blend_v2 :: proc(
 	bool,
 ) {
 	if !terrain_recipe_validate_v2(recipe) do return {}, false
+	return terrain_biome_blend_prevalidated_v2(recipe, height, moisture, temperature, slope)
+}
+
+// terrain_biome_blend_prevalidated_v2 skips the per-call recipe validation;
+// the recipe must already be validated.
+terrain_biome_blend_prevalidated_v2 :: proc(
+	recipe: ^Terrain_Recipe_V2,
+	height, moisture, temperature, slope: f32,
+) -> (
+	Terrain_Biome_Blend_V2,
+	bool,
+) {
+	assert(recipe != nil, "terrain_biome_blend_prevalidated_v2: nil recipe")
 	values := [?]f32{height, moisture, temperature, slope}
 	for value in values do if !_terrain_finite_v2(value) do return {}, false
 	best_index, second_index := -1, -1
@@ -294,13 +321,31 @@ terrain_sample_v2 :: proc(
 	Terrain_Sample_V2,
 	bool,
 ) {
+	if !terrain_recipe_validate_v2(recipe) do return {}, false
+	return terrain_sample_prevalidated_v2(recipe, world_x, world_y, derivative_step)
+}
+
+// terrain_sample_prevalidated_v2 skips the per-call recipe validation for
+// bulk sampling; the recipe must already be validated.
+terrain_sample_prevalidated_v2 :: proc(
+	recipe: ^Terrain_Recipe_V2,
+	world_x, world_y, derivative_step: f32,
+) -> (
+	Terrain_Sample_V2,
+	bool,
+) {
+	assert(recipe != nil, "terrain_sample_prevalidated_v2: nil recipe")
 	if !_terrain_finite_v2(derivative_step) || derivative_step <= 0 do return {}, false
-	height, continentalness, ruggedness, ok := terrain_height_v2(recipe, world_x, world_y)
+	height, continentalness, ruggedness, ok := terrain_height_prevalidated_v2(
+		recipe,
+		world_x,
+		world_y,
+	)
 	if !ok do return {}, false
-	left, _, _, _ := terrain_height_v2(recipe, world_x - derivative_step, world_y)
-	right, _, _, _ := terrain_height_v2(recipe, world_x + derivative_step, world_y)
-	down, _, _, _ := terrain_height_v2(recipe, world_x, world_y - derivative_step)
-	up, _, _, _ := terrain_height_v2(recipe, world_x, world_y + derivative_step)
+	left, _, _, _ := terrain_height_prevalidated_v2(recipe, world_x - derivative_step, world_y)
+	right, _, _, _ := terrain_height_prevalidated_v2(recipe, world_x + derivative_step, world_y)
+	down, _, _, _ := terrain_height_prevalidated_v2(recipe, world_x, world_y - derivative_step)
+	up, _, _, _ := terrain_height_prevalidated_v2(recipe, world_x, world_y + derivative_step)
 	derivative_x := (right - left) / (2 * derivative_step)
 	derivative_y := (up - down) / (2 * derivative_step)
 	slope := math.sqrt(derivative_x * derivative_x + derivative_y * derivative_y)
@@ -312,7 +357,13 @@ terrain_sample_v2 :: proc(
 		continentalness,
 		ruggedness,
 	)
-	biomes, blend_ok := terrain_biome_blend_v2(recipe, height, moisture, temperature, slope)
+	biomes, blend_ok := terrain_biome_blend_prevalidated_v2(
+		recipe,
+		height,
+		moisture,
+		temperature,
+		slope,
+	)
 	if !blend_ok do return {}, false
 	return {
 			height,
@@ -343,7 +394,7 @@ terrain_generate_field_v2 :: proc(
 		world_y := request.origin_y + f32(row - 1) * request.step
 		for column in 0 ..< request.width + 2 {
 			world_x := request.origin_x + f32(column - 1) * request.step
-			height, _, _, generated := terrain_height_v2(recipe, world_x, world_y)
+			height, _, _, generated := terrain_height_prevalidated_v2(recipe, world_x, world_y)
 			if !generated do return false
 			buffer.height_halo[row * stride + column] = height
 		}
@@ -377,12 +428,18 @@ _terrain_field_sample_v2 :: proc(
 	center, stride, index: int,
 	buffer: Terrain_Field_Buffer_V2,
 ) -> bool {
+	assert(recipe != nil, "_terrain_field_sample_v2: nil recipe")
+	assert(
+		stride > 2 && center - stride >= 0 && center + stride < len(buffer.height_halo),
+		"_terrain_field_sample_v2: halo index",
+	)
+	assert(index >= 0 && index < len(buffer.heights), "_terrain_field_sample_v2: sample index")
 	height := buffer.height_halo[center]
 	derivative_x := (buffer.height_halo[center + 1] - buffer.height_halo[center - 1]) / (2 * step)
 	derivative_y :=
 		(buffer.height_halo[center + stride] - buffer.height_halo[center - stride]) / (2 * step)
 	slope := math.sqrt(derivative_x * derivative_x + derivative_y * derivative_y)
-	_, continentalness, ruggedness, ok := terrain_height_v2(recipe, world_x, world_y)
+	_, continentalness, ruggedness, ok := terrain_height_prevalidated_v2(recipe, world_x, world_y)
 	if !ok do return false
 	moisture, temperature := _terrain_climate_v2(
 		recipe,
@@ -392,7 +449,13 @@ _terrain_field_sample_v2 :: proc(
 		continentalness,
 		ruggedness,
 	)
-	biomes, blend_ok := terrain_biome_blend_v2(recipe, height, moisture, temperature, slope)
+	biomes, blend_ok := terrain_biome_blend_prevalidated_v2(
+		recipe,
+		height,
+		moisture,
+		temperature,
+		slope,
+	)
 	if !blend_ok do return false
 	buffer.heights[index] = height
 	buffer.moisture[index] = moisture
@@ -413,6 +476,7 @@ _terrain_climate_v2 :: proc(
 ) -> (
 	moisture, temperature: f32,
 ) {
+	assert(recipe != nil, "_terrain_climate_v2: nil recipe")
 	moisture = _terrain_unit(warped_fractal_2d(recipe.moisture_noise, world_x, world_y))
 	coast_bias :=
 		1 - abs(continentalness - recipe.coast_threshold) / max(recipe.coast_fade * 3, 0.001)
@@ -484,6 +548,7 @@ _terrain_profile_better_v2 :: proc(
 	current: int,
 	current_score: f32,
 ) -> bool {
+	assert(recipe != nil, "_terrain_profile_better_v2: nil recipe")
 	if score > current_score do return true
 	if score < current_score || score <= 0 do return false
 	if current < 0 do return true

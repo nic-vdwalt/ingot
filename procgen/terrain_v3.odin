@@ -225,7 +225,8 @@ _terrain_ground_v3 :: proc(
 	ground: _Terrain_Ground_V3,
 	ok: bool,
 ) {
-	base_height, _, ruggedness, height_ok := terrain_height_v2(&recipe.surface, x, y)
+	assert(recipe != nil, "_terrain_ground_v3: nil recipe")
+	base_height, _, ruggedness, height_ok := terrain_height_prevalidated_v2(&recipe.surface, x, y)
 	if !height_ok do return {}, false
 	p := recipe.parameters
 	mountain := max(base_height - recipe.surface.land_height, 0)
@@ -251,6 +252,7 @@ _terrain_density_from_ground_v3 :: proc(
 	ground: _Terrain_Ground_V3,
 	x, y, z: f32,
 ) -> f32 {
+	assert(recipe != nil, "_terrain_density_from_ground_v3: nil recipe")
 	p := recipe.parameters
 	base := (ground.height - z) * p.ground_strength / p.surface_softness
 	carve_max := max(1 - p.cave_threshold, 0) * p.cave_strength
@@ -284,7 +286,21 @@ terrain_primary_surface_v3 :: proc(
 	bool,
 ) {
 	if !terrain_recipe_validate_v3(recipe) || step <= 0 || !_terrain_finite_v2(step) do return {}, false
-	sample, ok := terrain_sample_v2(&recipe.surface, x, y, step)
+	return terrain_primary_surface_prevalidated_v3(recipe, x, y, step)
+}
+
+// terrain_primary_surface_prevalidated_v3 skips the per-call recipe
+// validation for callers that validate once and then sample millions of
+// points (field bakes); recipe and step must already be validated.
+terrain_primary_surface_prevalidated_v3 :: proc(
+	recipe: ^Terrain_Recipe_V3,
+	x, y, step: f32,
+) -> (
+	Terrain_Surface_V3,
+	bool,
+) {
+	assert(recipe != nil, "terrain_primary_surface_prevalidated_v3: nil recipe")
+	sample, ok := terrain_sample_prevalidated_v2(&recipe.surface, x, y, step)
 	if !ok do return {}, false
 	p := recipe.parameters
 	mountain := max(sample.height - recipe.surface.land_height, 0)
@@ -303,7 +319,7 @@ terrain_primary_surface_v3 :: proc(
 	dy := (up - down) / (2 * step)
 	slope := math.sqrt(dx * dx + dy * dy)
 	upward := 1 / math.sqrt(1 + slope * slope)
-	biomes, biome_ok := terrain_biome_blend_v2(
+	biomes, biome_ok := terrain_biome_blend_prevalidated_v2(
 		&recipe.surface,
 		height,
 		sample.moisture,
@@ -329,7 +345,8 @@ terrain_primary_surface_v3 :: proc(
 
 @(private)
 _terrain_primary_height_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y: f32) -> (f32, bool) {
-	height, _, _, ok := terrain_height_v2(&recipe.surface, x, y)
+	assert(recipe != nil, "_terrain_primary_height_v3: nil recipe")
+	height, _, _, ok := terrain_height_prevalidated_v2(&recipe.surface, x, y)
 	if !ok do return 0, false
 	p := recipe.parameters
 	mountain := max(height - recipe.surface.land_height, 0)
@@ -344,6 +361,7 @@ _terrain_primary_height_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y: f32) -> (f3
 
 @(private)
 _terrain_floating_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -> f32 {
+	assert(recipe != nil, "_terrain_floating_density_v3: nil recipe")
 	p := recipe.parameters
 	cell_x := i64(math.floor(x / p.floating_spacing))
 	cell_y := i64(math.floor(y / p.floating_spacing))
@@ -380,6 +398,7 @@ _terrain_floating_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -
 
 @(private)
 _terrain_cave_signal_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -> f32 {
+	assert(recipe != nil, "_terrain_cave_signal_v3: nil recipe")
 	p := recipe.parameters
 	warp_x := fractal_2d(p.cave_chamber_noise, y, z) * p.cave_warp
 	warp_y := fractal_2d(p.cave_chamber_noise, z, x) * p.cave_warp
