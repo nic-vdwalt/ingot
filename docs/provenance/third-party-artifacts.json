@@ -20,11 +20,11 @@
         },
         {
           "path": "accesskit/lib/darwin_arm64/libaccesskit.a",
-          "sha256": "4b0f56c6852856ea91790318976f9b06c8ce61afdecfc3e4e5eef955a50ac46c"
+          "sha256": "02fd1544b972a0217b56f0e975b242c1d729d5a80638c5d9ed51cd5b4df9180a"
         },
         {
           "path": "accesskit/lib/darwin_amd64/libaccesskit.a",
-          "sha256": "ab7aad4f73228ca03f6c2bdf50ff23c25a8831672dea738a0edf3bc967eb3391"
+          "sha256": "4c0b0c1d614a30b3137567bc54634d9c93f55abea8b55596294bed754feb3fc2"
         },
         {
           "path": "accesskit/lib/linux_amd64/libaccesskit.a",
