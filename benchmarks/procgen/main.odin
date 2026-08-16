@@ -50,4 +50,31 @@ main :: proc() {
 		elapsed,
 		elapsed / BENCHMARK_ITERATIONS,
 	)
+	benchmark_v3_density(.Normal)
+	benchmark_v3_density(.Abstract)
+}
+
+benchmark_v3_density :: proc(preset: procgen.Terrain_Preset_V3) {
+	recipe := procgen.terrain_normal_recipe_v3(0x7E44AF0463)
+	if preset == .Abstract do recipe = procgen.terrain_abstract_recipe_v3(0x7E44AF0463)
+	start := time.now()
+	checksum := f32(0)
+	for _ in 0 ..< BENCHMARK_ITERATIONS {
+		for z in 0 ..< 16 {
+			for y in 0 ..< 32 {
+				for x in 0 ..< 32 {
+					value, ok := procgen.terrain_density_v3(
+						&recipe,
+						f32(x * 4),
+						f32(y * 4),
+						f32(z * 4 - 32),
+					)
+					assert(ok)
+					checksum += value
+				}
+			}
+		}
+	}
+	elapsed := time.since(start)
+	fmt.printf("v3 %v density: %v total, checksum %.2f\n", preset, elapsed, checksum)
 }

@@ -67,6 +67,30 @@ floating-point byte identity is not guaranteed. Consumers using generated data
 authoritatively must quantize it, persist or version its recipe, and reject
 incompatible semantic versions.
 
+## Volumetric terrain V3
+
+V3 keeps V1 and V2 unchanged and adds a signed-density product for terrain that
+cannot be represented by one height per X/Y coordinate. Positive density is
+solid. The abstract preset composes the V2 surface with sharper mountains,
+overhang displacement, disconnected floating masses, and subtractive cave
+signals. The normal preset sets every abstract strength to zero and publishes
+the exact V2 primary-surface height.
+
+`Terrain_Parameters_V3` exposes vertical bounds, voxel scale, mountain shape,
+floating-land spacing/altitude/radius/thickness/breakup, cave altitude and
+shape, and the upward-normal policy for a designated buildable surface. Use
+`terrain_normal_recipe_v3`, `terrain_abstract_recipe_v3`, or validated
+`terrain_custom_recipe_v3`; persisted consumers must store the V3 semantic
+version and their selected parameters.
+
+`terrain_generate_volume_v3` samples absolute world coordinates into a
+caller-owned halo and emits a bounded triangle mesh. Capacity is calculated by
+`terrain_volume_requirements_v3` and checked before mesh counts are published.
+The same density coordinates and centered gradients are used at neighboring
+chunk boundaries. V3 does not define navigation, volumetric editing, cave
+water, or multi-level placement; consumers choose how its primary surface
+participates in simulation.
+
 ## Authored mesh variants
 
 `mesh_scale_variant` derives a validated mesh from an authored `Mesh_View` and

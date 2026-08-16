@@ -15,6 +15,7 @@ WORLD_HEIGHT :: 720
 
 State :: struct {
 	config:         procgen.Terrain_Config,
+	terrain_preset: procgen.Terrain_Preset_V3,
 	chunks:         [WORLD_CHUNK_COUNT]procgen.Terrain_Chunk,
 	vertices:       [WORLD_CHUNK_COUNT][procgen.TERRAIN_CHUNK_VERTICES]asset.Vertex,
 	indices:        [WORLD_CHUNK_COUNT][procgen.TERRAIN_CHUNK_INDICES]u32,
@@ -45,6 +46,7 @@ main :: proc() {
 
 initialize :: proc(seed: u64) {
 	state.config = procgen.terrain_default_config(seed)
+	state.terrain_preset = .Normal
 	state.camera = {
 		position   = {-90, 0, 55},
 		target     = {96, 96, 0},
@@ -94,6 +96,9 @@ initialize :: proc(seed: u64) {
 
 frame :: proc() {
 	update_camera()
+	if rl.IsKeyPressed(.T) {
+		state.terrain_preset = .Abstract if state.terrain_preset == .Normal else .Normal
+	}
 	if state.ready {
 		scene_gfx.bridge_begin_frame(&state.bridge)
 		frustum := rl.camera_frustum(state.camera, WORLD_WIDTH, WORLD_HEIGHT)
@@ -127,7 +132,9 @@ frame :: proc() {
 			state.bridge.missing_draws,
 		)
 		rl.DrawText(label, 16, 16, 20, rl.RAYWHITE)
-		rl.DrawText("A/D or left-drag orbit, W/S or wheel zoom", 16, 44, 18, rl.LIGHTGRAY)
+		preset_label := fmt.ctprintf("V3 preset %v (T toggles recipe)", state.terrain_preset)
+		rl.DrawText(preset_label, 16, 44, 18, rl.LIGHTGRAY)
+		rl.DrawText("A/D or left-drag orbit, W/S or wheel zoom", 16, 68, 18, rl.LIGHTGRAY)
 	}
 	rl.EndDrawing()
 }
