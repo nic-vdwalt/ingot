@@ -405,6 +405,7 @@ _simplify_quadric :: proc(normal: [3]f64, offset, weight: f64) -> Quadric {
 			c * c * weight,
 			c * offset * weight,
 			offset * offset * weight,
+			weight,
 		},
 	}
 }
@@ -412,8 +413,8 @@ _simplify_quadric :: proc(normal: [3]f64, offset, weight: f64) -> Quadric {
 @(private)
 _simplify_quadric_add :: proc(target: ^Quadric, source: Quadric) {
 	assert(target != nil, "_simplify_quadric_add: nil target")
-	assert(len(target.m) == 10, "_simplify_quadric_add: unexpected quadric width")
-	for index in 0 ..< 10 do target.m[index] += source.m[index]
+	assert(len(target.m) == 11, "_simplify_quadric_add: unexpected quadric width")
+	for index in 0 ..< 11 do target.m[index] += source.m[index]
 }
 
 @(private)
@@ -422,7 +423,11 @@ _simplify_quadric_error :: proc(quadric: Quadric, point: [3]f64) -> f64 {
 	result := quadric.m[0] * x * x + 2 * quadric.m[1] * x * y + 2 * quadric.m[2] * x * z
 	result += 2 * quadric.m[3] * x + quadric.m[4] * y * y + 2 * quadric.m[5] * y * z
 	result += 2 * quadric.m[6] * y + quadric.m[7] * z * z + 2 * quadric.m[8] * z
-	return result + quadric.m[9]
+	result += quadric.m[9]
+	// Negative results are rounding noise around a zero-cost collapse; the
+	// caller treats the value as a squared distance, so clamp rather than
+	// propagate a negative under a square root.
+	return max(result, 0) / max(quadric.m[10], SIMPLIFY_EPSILON)
 }
 
 // Heapsort: in place, iterative, and O(n log n) regardless of input, so a
