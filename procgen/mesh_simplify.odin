@@ -65,9 +65,14 @@ Simplify_Result :: struct {
 
 @(private)
 Quadric :: struct {
-	// Upper triangle of the symmetric 4x4 error matrix, row major:
-	// a00 a01 a02 a03 a11 a12 a13 a22 a23 a33.
-	m: [10]f64,
+	// Upper triangle of the symmetric 4x4 error matrix, row major -
+	// a00 a01 a02 a03 a11 a12 a13 a22 a23 a33 - followed by the total plane
+	// weight accumulated into it. Dividing the raw form by that weight turns
+	// the metric back into a mean squared distance, which is what a LOD error
+	// has to be: the boundary planes are weighted a thousand times a face, so
+	// without the normalisation the reported error would be a function of how
+	// much boundary a cluster happened to contain.
+	m: [11]f64,
 }
 
 @(private)

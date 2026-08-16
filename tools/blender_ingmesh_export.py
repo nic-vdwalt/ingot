@@ -9,6 +9,9 @@ import tempfile
 import bmesh
 import bpy
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mesh_cook  # noqa: E402  (path must be set first; Blender has no package)
+
 MAGIC = b"INGMESH1"
 VERSION = 1
 MAX_MESHES = 256
@@ -59,6 +62,16 @@ def parse_arguments():
     parser.add_argument("--output", required=True)
     parser.add_argument("--manifest")
     parser.add_argument("--check", action="store_true")
+    # Version 1 stays the default so any existing consumer keeps getting the
+    # bytes it already has committed. TerraForger opts into version 2
+    # explicitly in its build.sh, which is also where the one-off regeneration
+    # of its committed bundles happens.
+    parser.add_argument("--format", choices=("v1", "v2"), default="v1")
+    parser.add_argument(
+        "--unpacked",
+        action="store_true",
+        help="version 2 only: keep 36-byte vertices instead of packing to 16",
+    )
     return parser.parse_args(arguments)
 
 
@@ -76,10 +89,14 @@ def load_manifest(path):
         fail("manifest version must be 1 and meshes must be a non-empty array")
     expected = {}
     names = set()
-    allowed_keys = {"id", "name", "group", "grounded", "materials"}
+    required_keys = {"id", "name", "group", "grounded", "materials"}
+    # Version 2 fields are optional so one manifest can drive both formats.
+    optional_keys = {"lod_policy", "cluster"}
     for index, record in enumerate(manifest["meshes"]):
-        if not isinstance(record, dict) or set(record) != allowed_keys:
+        if not isinstance(record, dict) or not required_keys <= set(record):
             fail(f"manifest mesh {index} has invalid fields")
+        if set(record) - required_keys - optional_keys:
+            fail(f"manifest mesh {index} has unknown fields")
         mesh_id = record["id"]
         name = record["name"]
         group = record["group"]
@@ -99,12 +116,22 @@ def load_manifest(path):
             fail(f"manifest mesh {index} has invalid materials")
         if mesh_id in expected:
             fail(f"manifest contains duplicate id {mesh_id}")
+        policy = record.get("lod_policy", "none")
+        clustered = record.get("cluster", False)
+        if policy not in mesh_cook.LOD_POLICIES:
+            fail(f"manifest mesh {index} has unknown lod_policy {policy!r}")
+        if not isinstance(clustered, bool):
+            fail(f"manifest mesh {index} has invalid cluster flag")
+        if clustered and policy != "none":
+            fail(f"manifest mesh {index} sets both cluster and lod_policy")
         names.add(name)
         expected[mesh_id] = {
             "name": name,
             "group": group,
             "grounded": grounded,
             "materials": set(materials),
+            "lod_policy": policy,
+            "cluster": clustered,
         }
     if len(expected) > MAX_MESHES:
         fail("manifest mesh count exceeds the cooked format limit")
@@ -171,6 +198,29 @@ def mesh_payload(obj, expected):
         return vertices, indices, minimum, maximum
     finally:
         evaluated.to_mesh_clear()
+
+
+def serialize_v2(meshes, expected_objects, packed):
+    """Cook each mesh into a LOD chain or cluster DAG, then assemble INGMESH2.
+
+    The per-mesh policy comes from the manifest, so a grass card and a baobab
+    can sit in one bundle without sharing a triangle budget - which is exactly
+    what the old single fixed decimate could not express.
+    """
+    cooked = []
+    for mesh_id, vertices, indices, _minimum, _maximum in meshes:
+        record = expected_objects[mesh_id]
+        cooked.append(
+            mesh_cook.cook_mesh(
+                mesh_id,
+                vertices,
+                indices,
+                policy=record.get("lod_policy", "none"),
+                clustered=record.get("cluster", False),
+                label=record["name"],
+            )
+        )
+    return mesh_cook.serialize(cooked, packed=packed)
 
 
 def collect_meshes(expected_objects):
@@ -259,18 +309,30 @@ def write_output(path, data, check):
         raise
 
 
-def export_bundle(input_path, output_path, manifest_path, check):
+def export_bundle(input_path, output_path, manifest_path, check, cooked_format, packed):
     expected_objects = load_manifest(manifest_path)
     bpy.ops.wm.open_mainfile(filepath=os.path.abspath(input_path))
-    write_output(output_path, serialize(collect_meshes(expected_objects)), check)
+    meshes = collect_meshes(expected_objects)
+    if cooked_format == "v2":
+        data = serialize_v2(meshes, expected_objects, packed)
+    else:
+        data = serialize(meshes)
+    write_output(output_path, data, check)
 
 
 def main():
     try:
         options = parse_arguments()
-        export_bundle(options.input, options.output, options.manifest, options.check)
+        export_bundle(
+            options.input,
+            options.output,
+            options.manifest,
+            options.check,
+            options.format,
+            not options.unpacked,
+        )
         return 0
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, mesh_cook.CookError) as error:
         print(f"blender_ingmesh_export: {error}", file=sys.stderr)
         return 1
 
