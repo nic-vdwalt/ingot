@@ -206,8 +206,8 @@ _cooked_v2_lods :: proc(
 
 @(private)
 _cooked_v2_lod_span_ok :: proc(span: [4]u32, storage: Cooked_Mesh_V2_Storage) -> bool {
-	assert(len(storage.vertices) <= int(max(u32)), "_cooked_v2_lod_span_ok: vertex overflow")
-	assert(len(storage.indices) <= int(max(u32)), "_cooked_v2_lod_span_ok: index overflow")
+	assert(u64(len(storage.vertices)) <= u64(max(u32)), "_cooked_v2_lod_span_ok: vertex overflow")
+	assert(u64(len(storage.indices)) <= u64(max(u32)), "_cooked_v2_lod_span_ok: index overflow")
 	if span[1] == 0 || span[3] == 0 || span[3] % 3 != 0 do return false
 	if u64(span[0]) + u64(span[1]) > u64(len(storage.vertices)) do return false
 	if u64(span[2]) + u64(span[3]) > u64(len(storage.indices)) do return false
