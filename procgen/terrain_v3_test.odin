@@ -12,17 +12,21 @@ TERRAIN_V3_TEST_VERTICES ::
 	TERRAIN_V3_TEST_CELLS *
 	TERRAIN_V3_TEST_CELLS *
 	TERRAIN_V3_TEST_CELLS *
-	TERRAIN_VOLUME_VERTICES_PER_CELL_V3
+	TERRAIN_VOLUME_EDGES_PER_CELL_V3
 TERRAIN_V3_TEST_INDICES ::
 	TERRAIN_V3_TEST_CELLS *
 	TERRAIN_V3_TEST_CELLS *
 	TERRAIN_V3_TEST_CELLS *
 	TERRAIN_VOLUME_INDICES_PER_CELL_V3
+TERRAIN_V3_TEST_SLOTS :: 16384
 
 Terrain_V3_Test_Storage :: struct {
-	density:  [TERRAIN_V3_TEST_DENSITY]f32,
-	vertices: [TERRAIN_V3_TEST_VERTICES]asset.Vertex,
-	indices:  [TERRAIN_V3_TEST_INDICES]u32,
+	density:     [TERRAIN_V3_TEST_DENSITY]f32,
+	normals:     [TERRAIN_V3_TEST_DENSITY]asset.Vec3,
+	weld_keys:   [TERRAIN_V3_TEST_SLOTS]u64,
+	weld_values: [TERRAIN_V3_TEST_SLOTS]u32,
+	vertices:    [TERRAIN_V3_TEST_VERTICES]asset.Vertex,
+	indices:     [TERRAIN_V3_TEST_INDICES]u32,
 }
 
 @(test)
@@ -92,15 +96,23 @@ terrain_v3_density_is_deterministic_and_abstract_is_volumetric :: proc(t: ^testi
 
 @(test)
 terrain_v3_volume_mesh_is_deterministic_bounded_and_valid :: proc(t: ^testing.T) {
-	storage_a, storage_b: Terrain_V3_Test_Storage
-	buffer_a := _terrain_v3_test_buffer(&storage_a, 1)
-	buffer_b := _terrain_v3_test_buffer(&storage_b, 2)
+	storage_a, storage_b := new(Terrain_V3_Test_Storage), new(Terrain_V3_Test_Storage)
+	defer free(storage_a)
+	defer free(storage_b)
+	buffer_a := _terrain_v3_test_buffer(storage_a, 1)
+	buffer_b := _terrain_v3_test_buffer(storage_b, 2)
 	recipe := terrain_abstract_recipe_v3(77)
 	request := Terrain_Volume_Request_V3{{-12, -12, -12}, {6, 6, 6}, 4}
-	testing.expect(t, terrain_generate_volume_v3(&recipe, request, &buffer_a))
-	testing.expect(t, terrain_generate_volume_v3(&recipe, request, &buffer_b))
-	testing.expect_value(t, buffer_a.mesh.vertex_count, buffer_b.mesh.vertex_count)
-	testing.expect_value(t, buffer_a.mesh.index_count, buffer_b.mesh.index_count)
+	result_a, ok_a := terrain_generate_volume_v3(&recipe, request, &buffer_a)
+	result_b, ok_b := terrain_generate_volume_v3(&recipe, request, &buffer_b)
+	testing.expect(t, ok_a && ok_b)
+	testing.expect_value(t, result_a, result_b)
+	testing.expect_value(t, result_a.occupancy, Terrain_Volume_Occupancy_V3.Mixed)
+	testing.expect_value(t, result_a.vertex_count, buffer_a.mesh.vertex_count)
+	testing.expect_value(t, result_a.index_count, buffer_a.mesh.index_count)
+	// Welding must actually share: three fresh vertices per triangle would
+	// make these equal, and then the index buffer would carry no information.
+	testing.expect(t, result_a.vertex_count < result_a.index_count)
 	interpolated := false
 	for vertex, index in buffer_a.mesh.vertices[:buffer_a.mesh.vertex_count] {
 		testing.expect_value(t, vertex, buffer_b.mesh.vertices[index])
@@ -116,6 +128,9 @@ terrain_v3_volume_mesh_is_deterministic_bounded_and_valid :: proc(t: ^testing.T)
 		}
 	}
 	testing.expect(t, interpolated)
+	for index in buffer_a.mesh.indices[:buffer_a.mesh.index_count] {
+		testing.expect_value(t, buffer_a.mesh.indices[index], buffer_b.mesh.indices[index])
+	}
 	view, ok := asset.mesh_view(&buffer_a.mesh)
 	testing.expect(t, ok && asset.mesh_validate(view))
 }
@@ -125,30 +140,38 @@ terrain_v3_volume_projection_uvs_follow_dominant_normal :: proc(t: ^testing.T) {
 	position := asset.Vec3{32, 64, 96}
 	testing.expect_value(
 		t,
-		_terrain_volume_projection_uv_v3({1, 0, 0}, position),
+		_terrain_volume_projection_uv_v3({1, 0, 0}, position, 32),
 		asset.Vec2{2, 3},
 	)
 	testing.expect_value(
 		t,
-		_terrain_volume_projection_uv_v3({0, 1, 0}, position),
+		_terrain_volume_projection_uv_v3({0, 1, 0}, position, 32),
 		asset.Vec2{1, 3},
 	)
 	testing.expect_value(
 		t,
-		_terrain_volume_projection_uv_v3({0, 0, 1}, position),
+		_terrain_volume_projection_uv_v3({0, 0, 1}, position, 32),
 		asset.Vec2{1, 2},
+	)
+	// The scale is a recipe field, so halving it must double the coordinates.
+	testing.expect_value(
+		t,
+		_terrain_volume_projection_uv_v3({0, 0, 1}, position, 16),
+		asset.Vec2{2, 4},
 	)
 }
 
 @(test)
 terrain_v3_volume_mesh_rejects_short_capacity_without_publication :: proc(t: ^testing.T) {
-	storage: Terrain_V3_Test_Storage
-	buffer := _terrain_v3_test_buffer(&storage, 1)
+	storage := new(Terrain_V3_Test_Storage)
+	defer free(storage)
+	buffer := _terrain_v3_test_buffer(storage, 1)
 	buffer.mesh.vertices = buffer.mesh.vertices[:8]
 	buffer.mesh.vertex_count = 7
-	recipe := terrain_normal_recipe_v3(9)
+	recipe := terrain_abstract_recipe_v3(9)
 	request := Terrain_Volume_Request_V3{{-12, -12, -12}, {6, 6, 6}, 4}
-	testing.expect(t, !terrain_generate_volume_v3(&recipe, request, &buffer))
+	_, ok := terrain_generate_volume_v3(&recipe, request, &buffer)
+	testing.expect(t, !ok)
 	testing.expect_value(t, buffer.mesh.vertex_count, u32(7))
 }
 
@@ -157,7 +180,7 @@ terrain_v3_validation_rejects_invalid_ranges_and_budget :: proc(t: ^testing.T) {
 	recipe := terrain_abstract_recipe_v3(1)
 	recipe.parameters.minimum_z = recipe.parameters.maximum_z
 	testing.expect(t, !terrain_recipe_validate_v3(&recipe))
-	_, _, _, ok := terrain_volume_requirements_v3({65, 1, 1})
+	_, _, _, _, ok := terrain_volume_requirements_v3({65, 1, 1})
 	testing.expect(t, !ok)
 }
 
@@ -177,8 +200,9 @@ terrain_v3_adjacent_volumes_share_boundary_density :: proc(t: ^testing.T) {
 	cells := [3]int{TERRAIN_V3_TEST_CELLS, TERRAIN_V3_TEST_CELLS, TERRAIN_V3_TEST_CELLS}
 	request_a := Terrain_Volume_Request_V3{{-span, 0, -16}, cells, step}
 	request_b := Terrain_Volume_Request_V3{{0, 0, -16}, cells, step}
-	testing.expect(t, terrain_generate_volume_v3(&recipe, request_a, &buffer_a))
-	testing.expect(t, terrain_generate_volume_v3(&recipe, request_b, &buffer_b))
+	_, ok_a := terrain_generate_volume_v3(&recipe, request_a, &buffer_a)
+	_, ok_b := terrain_generate_volume_v3(&recipe, request_b, &buffer_b)
+	testing.expect(t, ok_a && ok_b)
 	// The one-cell halo makes the requests overlap by two lattice planes: the
 	// shared face itself, at A's last halo column and B's second, and the
 	// plane one step behind it.
@@ -233,6 +257,9 @@ _terrain_v3_test_buffer :: proc(
 	assert(storage != nil, "_terrain_v3_test_buffer: nil storage")
 	return {
 		density_halo = storage.density[:],
+		normal_halo = storage.normals[:],
+		weld_keys = storage.weld_keys[:],
+		weld_values = storage.weld_values[:],
 		mesh = {
 			id = asset.Mesh_Id(id),
 			vertices = storage.vertices[:],
