@@ -539,12 +539,18 @@ _terrain_volume_weld_v3 :: proc(
 	// The walk stays deterministic because the table is cleared per call and
 	// filled in cell order.
 	slot := (key * 0x9E3779B97F4A7C15 >> 32) & state.slot_mask
-	for {
+	// The table is sized at twice the vertex ceiling and cleared per call, so
+	// it can never be full and the walk must terminate. Bounding the probe
+	// anyway means a sizing mistake is a failed assertion, not a hang.
+	probes := 0
+	for probes <= int(state.slot_mask) {
 		existing := state.buffer.weld_keys[slot]
 		if existing == key do return state.buffer.weld_values[slot]
 		if existing == TERRAIN_VOLUME_WELD_EMPTY_V3 do break
 		slot = (slot + 1) & state.slot_mask
+		probes += 1
 	}
+	assert(probes <= int(state.slot_mask), "_terrain_volume_weld_v3: weld table full")
 	index := u32(state.vertices)
 	state.buffer.weld_keys[slot] = key
 	state.buffer.weld_values[slot] = index
