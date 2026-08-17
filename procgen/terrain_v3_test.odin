@@ -182,6 +182,96 @@ terrain_v3_validation_rejects_invalid_ranges_and_budget :: proc(t: ^testing.T) {
 	testing.expect(t, !terrain_recipe_validate_v3(&recipe))
 	_, _, _, _, ok := terrain_volume_requirements_v3({65, 1, 1})
 	testing.expect(t, !ok)
+	// The parameters promoted from literals in version 4 must be validated,
+	// or a zero-valued custom recipe would divide by zero while terracing.
+	zeroed := terrain_abstract_recipe_v3(1)
+	zeroed.parameters.mountain_terrace_step = 0
+	testing.expect(t, !terrain_recipe_validate_v3(&zeroed))
+	scaled := terrain_abstract_recipe_v3(1)
+	scaled.parameters.surface_uv_scale = 0
+	testing.expect(t, !terrain_recipe_validate_v3(&scaled))
+	jittered := terrain_abstract_recipe_v3(1)
+	jittered.parameters.floating_jitter = 1.5
+	testing.expect(t, !terrain_recipe_validate_v3(&jittered))
+}
+
+// A chunk far above every surface is air, and one far below is rock. Both are
+// ordinary results in a streaming world, so both must report success with a
+// named occupancy rather than the failure the first version returned.
+@(test)
+terrain_v3_uniform_chunks_report_occupancy_instead_of_failing :: proc(t: ^testing.T) {
+	storage := new(Terrain_V3_Test_Storage)
+	defer free(storage)
+	buffer := _terrain_v3_test_buffer(storage, 1)
+	recipe := terrain_normal_recipe_v3(5)
+	cells := [3]int{TERRAIN_V3_TEST_CELLS, TERRAIN_V3_TEST_CELLS, TERRAIN_V3_TEST_CELLS}
+	sky := Terrain_Volume_Request_V3{{0, 0, 4096}, cells, 4}
+	result, ok := terrain_generate_volume_v3(&recipe, sky, &buffer)
+	testing.expect(t, ok)
+	testing.expect_value(t, result.occupancy, Terrain_Volume_Occupancy_V3.Empty)
+	testing.expect_value(t, result.vertex_count, u32(0))
+	testing.expect_value(t, result.index_count, u32(0))
+	deep := Terrain_Volume_Request_V3{{0, 0, -4096}, cells, 4}
+	deep_result, deep_ok := terrain_generate_volume_v3(&recipe, deep, &buffer)
+	testing.expect(t, deep_ok)
+	testing.expect_value(t, deep_result.occupancy, Terrain_Volume_Occupancy_V3.Solid)
+	testing.expect_value(t, deep_result.index_count, u32(0))
+}
+
+// The cull is only useful if it is never wrong in the direction that drops
+// geometry: Empty and Solid must be certain, Mixed may be pessimistic.
+@(test)
+terrain_v3_occupancy_never_contradicts_generated_geometry :: proc(t: ^testing.T) {
+	storage := new(Terrain_V3_Test_Storage)
+	defer free(storage)
+	recipe := terrain_abstract_recipe_v3(31)
+	cells := [3]int{TERRAIN_V3_TEST_CELLS, TERRAIN_V3_TEST_CELLS, TERRAIN_V3_TEST_CELLS}
+	culled := 0
+	for z in -2 ..= 2 {
+		for x in -1 ..= 1 {
+			buffer := _terrain_v3_test_buffer(storage, 1)
+			request := Terrain_Volume_Request_V3 {
+				origin = {f32(x) * 24, 0, f32(z) * 24},
+				cells  = cells,
+				step   = 4,
+			}
+			occupancy, occupancy_ok := terrain_volume_occupancy_v3(&recipe, request)
+			result, ok := terrain_generate_volume_v3(&recipe, request, &buffer)
+			testing.expect(t, occupancy_ok && ok)
+			if occupancy != .Mixed {
+				culled += 1
+				testing.expectf(
+					t,
+					result.index_count == 0,
+					"occupancy %v culled a chunk that meshed %d indices",
+					occupancy,
+					result.index_count,
+				)
+				testing.expect_value(t, occupancy, result.occupancy)
+			}
+		}
+	}
+	testing.expect(t, culled > 0)
+}
+
+// terrain_volume_count_v3 exists so a streaming caller can size real buffers.
+// If it disagreed with generation by one triangle that caller would either
+// overflow or silently truncate, so the two must be exactly equal.
+@(test)
+terrain_v3_counts_match_generated_output :: proc(t: ^testing.T) {
+	storage := new(Terrain_V3_Test_Storage)
+	defer free(storage)
+	buffer := _terrain_v3_test_buffer(storage, 1)
+	recipe := terrain_abstract_recipe_v3(77)
+	request := Terrain_Volume_Request_V3{{-12, -12, -12}, {6, 6, 6}, 4}
+	vertices, indices, count_ok := terrain_volume_count_v3(&recipe, request, storage.density[:])
+	testing.expect(t, count_ok)
+	result, ok := terrain_generate_volume_v3(&recipe, request, &buffer)
+	testing.expect(t, ok)
+	testing.expect_value(t, u32(indices), result.index_count)
+	// The counting pass bounds vertices before welding, so it is an upper
+	// bound the welded output must stay within.
+	testing.expect(t, u32(vertices) >= result.vertex_count)
 }
 
 // Two chunks that share a face must agree on that face exactly. A difference
