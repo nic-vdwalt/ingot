@@ -5,6 +5,10 @@ import "ingot:asset"
 
 TERRAIN_VOLUME_VERTICES_PER_CELL_V3 :: 36
 TERRAIN_VOLUME_INDICES_PER_CELL_V3 :: 36
+// A crossing that lands exactly on a lattice corner coincides with the next
+// tetrahedron edge's crossing, so the triangle they span has no area. The
+// bound is squared because the test compares squared cross-product length.
+TERRAIN_VOLUME_MIN_AREA_V3 :: f32(1.0e-12)
 
 Terrain_Volume_Request_V3 :: struct {
 	origin: [3]f32,
@@ -43,10 +47,7 @@ terrain_generate_volume_v3 :: proc(
 	density_count, _, _, valid := terrain_volume_requirements_v3(request.cells)
 	if !valid || len(buffer.density_halo) < density_count do return false
 	if !_terrain_volume_sample_v3(recipe, request, buffer.density_halo[:density_count]) do return false
-	vertices, indices := _terrain_volume_count_v3(
-		request.cells,
-		buffer.density_halo[:density_count],
-	)
+	vertices, indices := _terrain_volume_count_v3(request, buffer.density_halo[:density_count])
 	if vertices == 0 || indices == 0 do return false
 	if len(buffer.mesh.vertices) < vertices || len(buffer.mesh.indices) < indices do return false
 	asset.mesh_reset(&buffer.mesh)
@@ -82,30 +83,154 @@ _terrain_volume_sample_v3 :: proc(
 	return true
 }
 
+// _Terrain_Volume_Crossing_V3 is one isosurface crossing on a tetrahedron
+// edge. Keeping the interpolation factor and the two corner indices -- rather
+// than only the position -- lets the counting pass skip normal work entirely
+// while the emit pass rebuilds the normal without recomputing the factor, so
+// both passes classify exactly the same triangles.
 @(private)
-_terrain_volume_count_v3 :: proc(cells: [3]int, density: []f32) -> (vertices, indices: int) {
-	stride_x := cells.x + 2
-	stride_y := cells.y + 2
+_Terrain_Volume_Crossing_V3 :: struct {
+	position: asset.Vec3,
+	factor:   f32,
+	inside:   int,
+	outside:  int,
+}
+
+@(private)
+_terrain_volume_crossings_v3 :: proc(
+	positions: [4]asset.Vec3,
+	densities: [4]f32,
+) -> (
+	crossings: [4]_Terrain_Volume_Crossing_V3,
+	count: int,
+) {
+	inside_indices, outside_indices: [4]int
+	inside_count, outside_count := 0, 0
+	for density, index in densities {
+		if density > 0 {
+			inside_indices[inside_count] = index
+			inside_count += 1
+		} else {
+			outside_indices[outside_count] = index
+			outside_count += 1
+		}
+	}
+	if inside_count == 0 || inside_count == 4 do return {}, 0
+	for inside in inside_indices[:inside_count] {
+		for outside in outside_indices[:outside_count] {
+			position, factor := _terrain_volume_intersection_v3(
+				positions[inside],
+				positions[outside],
+				densities[inside],
+				densities[outside],
+			)
+			crossings[count] = {position, factor, inside, outside}
+			count += 1
+		}
+	}
+	assert(count == 3 || count == 4, "_terrain_volume_crossings_v3: crossing count")
+	return crossings, count
+}
+
+// _terrain_volume_triangles_v3 names the crossing triples each case spans. One
+// inside or one outside corner cuts a triangle; two of each cuts a quad, which
+// is split along the 0-3 diagonal.
+@(private)
+_terrain_volume_triangles_v3 :: proc(count: int) -> (triangles: [2][3]int, triangle_count: int) {
+	assert(count == 3 || count == 4, "_terrain_volume_triangles_v3: crossing count")
+	if count == 3 do return {{0, 1, 2}, {}}, 1
+	return {{0, 1, 3}, {0, 3, 2}}, 2
+}
+
+@(private)
+_terrain_volume_cross_v3 :: proc(triangle: [3]asset.Vec3) -> asset.Vec3 {
+	edge_a := triangle[1] - triangle[0]
+	edge_b := triangle[2] - triangle[0]
+	return {
+		edge_a.y * edge_b.z - edge_a.z * edge_b.y,
+		edge_a.z * edge_b.x - edge_a.x * edge_b.z,
+		edge_a.x * edge_b.y - edge_a.y * edge_b.x,
+	}
+}
+
+@(private)
+_terrain_volume_area_squared_v3 :: proc(triangle: [3]asset.Vec3) -> f32 {
+	cross := _terrain_volume_cross_v3(triangle)
+	return cross.x * cross.x + cross.y * cross.y + cross.z * cross.z
+}
+
+@(private)
+_terrain_volume_cell_corners_v3 :: proc(
+	request: Terrain_Volume_Request_V3,
+	cell: [3]int,
+) -> [8]asset.Vec3 {
+	cell_min := request.origin + [3]f32{f32(cell.x), f32(cell.y), f32(cell.z)} * request.step
+	positions: [8]asset.Vec3
+	for unit, corner in _terrain_volume_corner_units_v3() {
+		positions[corner] = cell_min + asset.Vec3(unit) * request.step
+	}
+	return positions
+}
+
+// _terrain_volume_count_v3 classifies every tetrahedron exactly as the emit
+// pass does, degenerate rejection included, so the two agree on the totals
+// `_terrain_volume_emit_v3` asserts against.
+@(private)
+_terrain_volume_count_v3 :: proc(
+	request: Terrain_Volume_Request_V3,
+	density: []f32,
+) -> (
+	vertices, indices: int,
+) {
+	stride_x := request.cells.x + 2
+	stride_y := request.cells.y + 2
 	corner_offsets := _terrain_volume_corner_offsets_v3(stride_x, stride_y)
-	tetrahedra := _terrain_volume_tetrahedra_v3()
-	for z in 0 ..< cells.z {
-		for y in 0 ..< cells.y {
-			for x in 0 ..< cells.x {
+	for z in 0 ..< request.cells.z {
+		for y in 0 ..< request.cells.y {
+			for x in 0 ..< request.cells.x {
 				origin := ((z + 1) * stride_y + y + 1) * stride_x + x + 1
-				for tetrahedron in tetrahedra {
-					inside := 0
-					for corner in tetrahedron {
-						if density[origin + corner_offsets[corner]] > 0 do inside += 1
-					}
-					if inside == 1 || inside == 3 {
-						vertices += 3
-						indices += 3
-					} else if inside == 2 {
-						vertices += 6
-						indices += 6
-					}
-				}
+				positions := _terrain_volume_cell_corners_v3(request, {x, y, z})
+				triangles := _terrain_volume_count_cell_v3(
+					positions,
+					density,
+					corner_offsets,
+					origin,
+				)
+				vertices += triangles * 3
+				indices += triangles * 3
 			}
+		}
+	}
+	return
+}
+
+@(private)
+_terrain_volume_count_cell_v3 :: proc(
+	positions: [8]asset.Vec3,
+	density: []f32,
+	corner_offsets: [8]int,
+	origin: int,
+) -> (
+	triangles: int,
+) {
+	for tetrahedron in _terrain_volume_tetrahedra_v3() {
+		tetra_positions: [4]asset.Vec3
+		tetra_densities: [4]f32
+		for corner, index in tetrahedron {
+			tetra_positions[index] = positions[corner]
+			tetra_densities[index] = density[origin + corner_offsets[corner]]
+		}
+		crossings, count := _terrain_volume_crossings_v3(tetra_positions, tetra_densities)
+		if count == 0 do continue
+		corner_triples, triple_count := _terrain_volume_triangles_v3(count)
+		for triple in corner_triples[:triple_count] {
+			corners := [3]asset.Vec3 {
+				crossings[triple[0]].position,
+				crossings[triple[1]].position,
+				crossings[triple[2]].position,
+			}
+			if _terrain_volume_area_squared_v3(corners) <= TERRAIN_VOLUME_MIN_AREA_V3 do continue
+			triangles += 1
 		}
 	}
 	return
@@ -131,13 +256,11 @@ _terrain_volume_emit_v3 :: proc(
 	for z in 0 ..< request.cells.z {
 		for y in 0 ..< request.cells.y {
 			for x in 0 ..< request.cells.x {
-				cell_min := request.origin + [3]f32{f32(x), f32(y), f32(z)} * request.step
 				origin := ((z + 1) * stride_y + y + 1) * stride_x + x + 1
-				positions: [8]asset.Vec3
+				positions := _terrain_volume_cell_corners_v3(request, {x, y, z})
 				densities: [8]f32
 				normals: [8]asset.Vec3
 				for unit, corner in corner_units {
-					positions[corner] = cell_min + asset.Vec3(unit) * request.step
 					densities[corner] = buffer.density_halo[origin + corner_offsets[corner]]
 					lattice := [3]int {
 						x + 1 + int(unit.x),
@@ -215,59 +338,27 @@ _terrain_volume_emit_tetrahedron_v3 :: proc(
 ) {
 	assert(buffer != nil && vertex_cursor != nil && index_cursor != nil, "tetrahedron pointers")
 	assert(minimum != nil && maximum != nil, "tetrahedron bounds pointers")
-	inside_indices, outside_indices: [4]int
-	inside_count, outside_count := 0, 0
-	for density, index in densities {
-		if density > 0 {
-			inside_indices[inside_count] = index
-			inside_count += 1
-		} else {
-			outside_indices[outside_count] = index
-			outside_count += 1
-		}
-	}
-	if inside_count == 0 || inside_count == 4 do return
-	points: [4]asset.Vec3
-	point_normals: [4]asset.Vec3
-	point_count := 0
-	for inside in inside_indices[:inside_count] {
-		for outside in outside_indices[:outside_count] {
-			points[point_count], point_normals[point_count] = _terrain_volume_intersection_v3(
-				positions[inside],
-				positions[outside],
-				densities[inside],
-				densities[outside],
-				normals[inside],
-				normals[outside],
+	crossings, count := _terrain_volume_crossings_v3(positions, densities)
+	if count == 0 do return
+	corner_triples, triple_count := _terrain_volume_triangles_v3(count)
+	for triple in corner_triples[:triple_count] {
+		corners: [3]asset.Vec3
+		corner_normals: [3]asset.Vec3
+		for crossing, corner in triple {
+			corners[corner] = crossings[crossing].position
+			corner_normals[corner] = _terrain_volume_blend_normal_v3(
+				normals[crossings[crossing].inside],
+				normals[crossings[crossing].outside],
+				crossings[crossing].factor,
 			)
-			point_count += 1
 		}
-	}
-	if point_count == 3 {
+		// The counting pass ran this same test, so skipping here is what keeps
+		// the two passes' totals equal.
+		if _terrain_volume_area_squared_v3(corners) <= TERRAIN_VOLUME_MIN_AREA_V3 do continue
 		_terrain_volume_emit_triangle_v3(
 			buffer,
-			{points[0], points[1], points[2]},
-			{point_normals[0], point_normals[1], point_normals[2]},
-			vertex_cursor,
-			index_cursor,
-			minimum,
-			maximum,
-		)
-	} else {
-		assert(point_count == 4, "_terrain_volume_emit_tetrahedron_v3: crossing count")
-		_terrain_volume_emit_triangle_v3(
-			buffer,
-			{points[0], points[1], points[3]},
-			{point_normals[0], point_normals[1], point_normals[3]},
-			vertex_cursor,
-			index_cursor,
-			minimum,
-			maximum,
-		)
-		_terrain_volume_emit_triangle_v3(
-			buffer,
-			{points[0], points[3], points[2]},
-			{point_normals[0], point_normals[3], point_normals[2]},
+			corners,
+			corner_normals,
 			vertex_cursor,
 			index_cursor,
 			minimum,
@@ -286,15 +377,13 @@ _terrain_volume_emit_triangle_v3 :: proc(
 ) {
 	assert(buffer != nil && vertex_cursor != nil && index_cursor != nil, "triangle pointers")
 	assert(minimum != nil && maximum != nil, "triangle bounds pointers")
+	assert(
+		_terrain_volume_area_squared_v3(positions) > TERRAIN_VOLUME_MIN_AREA_V3,
+		"_terrain_volume_emit_triangle_v3: degenerate triangle",
+	)
 	triangle := positions
 	normals := vertex_normals
-	edge_a := triangle[1] - triangle[0]
-	edge_b := triangle[2] - triangle[0]
-	cross := asset.Vec3 {
-		edge_a.y * edge_b.z - edge_a.z * edge_b.y,
-		edge_a.z * edge_b.x - edge_a.x * edge_b.z,
-		edge_a.x * edge_b.y - edge_a.y * edge_b.x,
-	}
+	cross := _terrain_volume_cross_v3(triangle)
 	average := normals[0] + normals[1] + normals[2]
 	if cross.x * average.x + cross.y * average.y + cross.z * average.z < 0 {
 		triangle[1], triangle[2] = triangle[2], triangle[1]
@@ -325,19 +414,25 @@ _terrain_volume_emit_triangle_v3 :: proc(
 _terrain_volume_intersection_v3 :: proc(
 	inside, outside: asset.Vec3,
 	inside_density, outside_density: f32,
-	inside_normal, outside_normal: asset.Vec3,
 ) -> (
 	point: asset.Vec3,
-	normal: asset.Vec3,
+	factor: f32,
 ) {
 	denominator := inside_density - outside_density
-	factor := f32(0.5)
+	factor = 0.5
 	if abs(denominator) > 0.000001 do factor = clamp(inside_density / denominator, 0, 1)
-	point = inside + (outside - inside) * factor
+	return inside + (outside - inside) * factor, factor
+}
+
+@(private)
+_terrain_volume_blend_normal_v3 :: proc(
+	inside_normal, outside_normal: asset.Vec3,
+	factor: f32,
+) -> asset.Vec3 {
 	blended := inside_normal + (outside_normal - inside_normal) * factor
 	length := math.sqrt(blended.x * blended.x + blended.y * blended.y + blended.z * blended.z)
-	if length <= 0.000001 do return point, {0, 0, 1}
-	return point, blended / length
+	if length <= 0.000001 do return {0, 0, 1}
+	return blended / length
 }
 
 @(private)
