@@ -68,7 +68,10 @@ _cluster_scene_test_frustum :: proc() -> Frustum {
 	result: Frustum
 	normals := [6][3]f32{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
 	for normal, index in normals {
-		result.planes[index] = {normal = normal, distance = 10_000}
+		result.planes[index] = {
+			normal   = normal,
+			distance = 10_000,
+		}
 	}
 	return result
 }

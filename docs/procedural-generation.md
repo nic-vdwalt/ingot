@@ -215,8 +215,8 @@ point byte identity is not guaranteed.
    alpha-cutout foliage, and impostor LOD.
 4. Bounded building grammars, modular facade/roof generation, instancing, and
    collision/navigation proxy output.
-5. Versioned cooked files, worker residency, hot reload, and selective glTF
-   import for authored modules.
+5. Worker residency, hot reload, and selective glTF import for authored modules.
+   Versioned cooked files are delivered: see *Cooking generated meshes* above.
 
 ## Example
 

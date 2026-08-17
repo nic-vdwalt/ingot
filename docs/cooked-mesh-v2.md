@@ -135,6 +135,40 @@ invalid bounds, out-of-range indices — plus:
 Storage is supplied by the caller. There is no filesystem or GPU policy in
 `ingot:asset`.
 
+## Writing a bundle
+
+`cooked_mesh_v2_encode` is the in-process writer, and
+`cooked_mesh_v2_encoded_size` reports the byte count it will produce so a caller
+can size storage first. It exists so a procedurally generated mesh can be cooked
+at runtime without shelling out to `tools/mesh_cook.py`, which remains the
+offline tool.
+
+The writer refuses everything the reader refuses and reports the same
+`Cooked_Mesh_Fault`, so a producer and a consumer describe a bad bundle in one
+vocabulary rather than two private ones. Learning at cook time that a chain's
+LOD errors are not monotonic names the offending mesh; learning it at load time
+names a byte offset in a file someone has already shipped. Nothing is written
+when the answer is `.Capacity`.
+
+Two layout details a writer has to get right, and which the round-trip test
+pins:
+
+- **LOD indices are local to their own level's vertex span**, the same way
+  version 1 stores them local to a mesh.
+- **Cluster `first_index` is file-global**, because `cluster_dag_validate` is
+  given the whole file's index count and cluster spans are nested inside
+  file-global LOD spans.
+
+The oracle is the round trip — encode, decode, compare — which is why the writer
+lives beside the reader instead of in the package that generates geometry. It is
+additionally checked byte for byte against the independent test writer in
+`cooked_mesh_v2_test.odin`, so agreeing with the format is distinguishable from
+agreeing with itself.
+
+`ingot:procgen` supplies the geometry half through `cook_chain_from_policy` and
+`cook_chain_from_clusters`; see
+[procedural-generation.md](procedural-generation.md).
+
 ## Compatibility
 
 `cooked_mesh_decode` dispatches on the magic's last byte. A version 1 file
