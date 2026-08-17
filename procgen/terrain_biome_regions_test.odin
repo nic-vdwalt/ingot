@@ -151,6 +151,94 @@ terrain_biome_regions_reject_capacity_without_publication :: proc(t: ^testing.T)
 	}
 }
 
+// A province-scale survey needs far more cells than the fixed-layout cases
+// above, so it allocates rather than growing the shared stack storage.
+TERRAIN_REGION_SURVEY_EDGE :: 96
+TERRAIN_REGION_SURVEY_CELLS :: TERRAIN_REGION_SURVEY_EDGE * TERRAIN_REGION_SURVEY_EDGE
+TERRAIN_REGION_SURVEY_STEP :: f32(20)
+TERRAIN_REGION_SURVEY_MINIMUM :: 64
+
+// Biome extent is what makes a seed read as a place. If boundaries follow the
+// top climate octave instead of the base wavelength, the resolver is handed
+// speckle and has to merge nearly everything away; asserting that a large
+// minimum converges without collapsing to a single region pins both ends.
+@(test)
+terrain_biome_regions_resolve_province_scale_climate :: proc(t: ^testing.T) {
+	recipe := terrain_default_recipe_v2(31337)
+	half := f32(TERRAIN_REGION_SURVEY_EDGE) * TERRAIN_REGION_SURVEY_STEP / 2
+	recipe.latitude_half_extent = half
+	testing.expect(t, terrain_recipe_validate_v2(&recipe))
+
+	raw := make([]Terrain_Biome_Blend_V2, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(raw)
+	biomes := make([]Terrain_Biome_Blend_V2, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(biomes)
+	patch_ids := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(patch_ids)
+	labels := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(labels)
+	queue := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(queue)
+	component_sizes := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(component_sizes)
+	component_ids := make([]u16, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(component_ids)
+	merge_targets := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(merge_targets)
+
+	for row in 0 ..< TERRAIN_REGION_SURVEY_EDGE {
+		world_y := f32(row) * TERRAIN_REGION_SURVEY_STEP - half
+		for column in 0 ..< TERRAIN_REGION_SURVEY_EDGE {
+			world_x := f32(column) * TERRAIN_REGION_SURVEY_STEP - half
+			sample, ok := terrain_sample_prevalidated_v2(&recipe, world_x, world_y, 2)
+			if !ok do continue
+			raw[row * TERRAIN_REGION_SURVEY_EDGE + column] = sample.biomes
+		}
+	}
+	request := Terrain_Biome_Region_Request {
+		TERRAIN_REGION_SURVEY_EDGE,
+		TERRAIN_REGION_SURVEY_EDGE,
+		TERRAIN_REGION_SURVEY_MINIMUM,
+		nil,
+	}
+	output := Terrain_Biome_Region_Output{biomes, patch_ids}
+	scratch := Terrain_Biome_Region_Scratch {
+		labels,
+		queue,
+		component_sizes,
+		component_ids,
+		merge_targets,
+	}
+	testing.expect(t, terrain_resolve_biome_regions(&recipe, request, raw, output, scratch))
+
+	sizes := make([]int, TERRAIN_REGION_SURVEY_CELLS + 1)
+	defer delete(sizes)
+	regions := 0
+	for patch in patch_ids {
+		if sizes[patch] == 0 do regions += 1
+		sizes[patch] += 1
+	}
+	testing.expectf(t, regions > 1, "climate collapsed to a single region")
+	for size, patch in sizes {
+		if size == 0 do continue
+		testing.expectf(
+			t,
+			size >= TERRAIN_REGION_SURVEY_MINIMUM,
+			"patch %d survived at %d cells, below the %d minimum",
+			patch,
+			size,
+			TERRAIN_REGION_SURVEY_MINIMUM,
+		)
+	}
+	mean := f32(TERRAIN_REGION_SURVEY_CELLS) / f32(regions)
+	testing.expectf(
+		t,
+		mean >= f32(TERRAIN_REGION_SURVEY_MINIMUM),
+		"mean region %f too small",
+		mean,
+	)
+}
+
 @(private)
 _terrain_region_output :: proc(
 	storage: ^Terrain_Region_Test_Storage,

@@ -153,7 +153,16 @@ terrain_default_recipe_v2 :: proc(seed: u64) -> Terrain_Recipe_V2 {
 	wide := Terrain_Range_V2{-10000, 10000, 1}
 	unit := Terrain_Range_V2{0, 1, 0.2}
 	recipe.biome_profiles[0] = {0, 6, 4, {-10000, -2, 1.5}, wide, unit, unit, wide}
-	recipe.biome_profiles[1] = {1, 5, 2.5, {-2, 0.5, 1.5}, wide, unit, {0.2, 1, 0.2}, {0, 0.5, 0.2}}
+	recipe.biome_profiles[1] = {
+		1,
+		5,
+		2.5,
+		{-2, 0.5, 1.5},
+		wide,
+		unit,
+		{0.2, 1, 0.2},
+		{0, 0.5, 0.2},
+	}
 	recipe.biome_profiles[2] = {
 		2,
 		1,
@@ -443,6 +452,7 @@ terrain_sample_prevalidated_v2 :: proc(
 	biomes, blend_ok := terrain_biome_blend_prevalidated_v2(
 		recipe,
 		height,
+		continentalness,
 		moisture,
 		temperature,
 		slope,
@@ -535,6 +545,7 @@ _terrain_field_sample_v2 :: proc(
 	biomes, blend_ok := terrain_biome_blend_prevalidated_v2(
 		recipe,
 		height,
+		continentalness,
 		moisture,
 		temperature,
 		slope,
@@ -560,11 +571,25 @@ _terrain_climate_v2 :: proc(
 	moisture, temperature: f32,
 ) {
 	assert(recipe != nil, "_terrain_climate_v2: nil recipe")
-	moisture = _terrain_unit(warped_fractal_2d(recipe.moisture_noise, world_x, world_y))
+	// Contrast first: the fractal stack averages octaves, so its raw output
+	// occupies roughly the middle fifth of the unit range. Expanding it about
+	// the midpoint is what makes dry and cold profile windows reachable at
+	// all, and the clamp is deliberate -- saturating at 0 and 1 is what
+	// produces large uniform desert and tundra cores rather than a permanent
+	// gradient.
+	moisture = _terrain_contrast_v2(
+		_terrain_unit(warped_fractal_2d(recipe.moisture_noise, world_x, world_y)),
+		recipe.climate_contrast,
+	)
 	coast_bias :=
 		1 - abs(continentalness - recipe.coast_threshold) / max(recipe.coast_fade * 3, 0.001)
 	moisture = clamp(moisture + clamp(coast_bias, 0, 1) * 0.12 - ruggedness * 0.08, 0, 1)
-	noise := _terrain_unit(warped_fractal_2d(recipe.temperature_noise, world_x, world_y))
+	// The latitude term is identical for every seed, so it blends against a
+	// contrasted noise signal that can actually move against it.
+	noise := _terrain_contrast_v2(
+		_terrain_unit(warped_fractal_2d(recipe.temperature_noise, world_x, world_y)),
+		recipe.climate_contrast,
+	)
 	latitude := clamp(abs(world_y) / recipe.latitude_half_extent, 0, 1)
 	temperature = noise * (1 - recipe.latitude_weight) + (1 - latitude) * recipe.latitude_weight
 	temperature = clamp(
@@ -573,6 +598,14 @@ _terrain_climate_v2 :: proc(
 		1,
 	)
 	return
+}
+
+// _terrain_contrast_v2 expands a unit value about its midpoint. A contrast of
+// 1 is the identity, so a recipe can opt out.
+@(private)
+_terrain_contrast_v2 :: proc(value, contrast: f32) -> f32 {
+	assert(contrast >= TERRAIN_CONTRAST_MIN_V2, "_terrain_contrast_v2: contrast below minimum")
+	return clamp(0.5 + (value - 0.5) * contrast, 0, 1)
 }
 
 @(private)
