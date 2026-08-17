@@ -438,7 +438,7 @@ context_renderer_statistics_are_isolated :: proc(t: ^testing.T) {
 	testing.expect_value(t, context_renderer_stats(second).flush_count, u32(23))
 	context_renderer_stats_reset(first)
 	when RENDER_STATS_ENABLED {
-		testing.expect_value(t, context_renderer_stats(first).flush_count, u64(0))
+		testing.expect_value(t, context_renderer_stats(first).flush_count, u32(0))
 	}
 	testing.expect_value(t, context_renderer_stats(second).flush_count, u32(23))
 }
