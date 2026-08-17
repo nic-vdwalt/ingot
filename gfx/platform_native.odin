@@ -432,7 +432,6 @@ platform_mouse_button :: proc(ctx: ^Context, button: i32) -> bool {
 	return glfw.GetMouseButton(_context_window(ctx), button) == glfw.PRESS
 }
 
-@(private)
 // GLFW derives HOVERED from mouse enter/leave *events*, so it only updates when
 // the pointer moves. A geometry change that slides the frame out from under a
 // stationary cursor - macOS native fullscreen, a Space switch, maximise - emits
@@ -442,7 +441,6 @@ platform_mouse_button :: proc(ctx: ^Context, button: i32) -> bool {
 // the mouse, so fall back to a rect test. The fallback is only trusted while
 // focused: an unfocused window under the pointer is genuinely not hovered for
 // input purposes, and GLFW reports that case correctly through the attribute.
-@(private)
 platform_window_hovered :: proc(ctx: ^Context) -> bool {
 	if ctx == nil || ctx.win == nil do return false
 	win := _context_window(ctx)
@@ -450,6 +448,14 @@ platform_window_hovered :: proc(ctx: ^Context) -> bool {
 	if glfw.GetWindowAttrib(win, glfw.FOCUSED) == 0 do return false
 	x, y := glfw.GetCursorPos(win)
 	width, height := glfw.GetWindowSize(win)
+	return _pointer_inside_window(x, y, width, height)
+}
+
+// Half-open rect test in GLFW window coordinates (origin top-left, content area
+// only). Split out from platform_window_hovered so the latched-attribute
+// fallback is testable without a live window.
+@(private)
+_pointer_inside_window :: proc(x, y: f64, width, height: i32) -> bool {
 	if width <= 0 || height <= 0 do return false
 	return x >= 0 && y >= 0 && x < f64(width) && y < f64(height)
 }
