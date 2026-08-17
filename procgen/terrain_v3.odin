@@ -313,7 +313,7 @@ _terrain_density_from_ground_v3 :: proc(
 			z <= p.floating_altitude_max + p.floating_thickness
 		if !floating_possible do return base
 	}
-	overhang := fractal_2d(p.overhang_noise, x + z * 0.31, y - z * 0.23)
+	overhang := fractal_3d(p.overhang_noise, x, y, z)
 	density := base + overhang * p.overhang_strength * ground.ruggedness
 	if p.floating_strength > 0 {
 		density = max(density, _terrain_floating_density_v3(recipe, x, y, z))
@@ -400,11 +400,11 @@ _terrain_floating_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -
 	p := recipe.parameters
 	cell_x := i64(math.floor(x / p.floating_spacing))
 	cell_y := i64(math.floor(y / p.floating_spacing))
-	// Only the fractal calls are hoisted, not the arithmetic they feed. Both
-	// are invariant across the neighbour loop, so this cuts eighteen noise
-	// stacks per sample to two; leaving the surrounding expressions untouched
-	// keeps the compiler's float contraction -- and therefore the emitted
-	// geometry -- identical at every optimisation level.
+	// The shape fractal does not vary with the neighbour offset, so lifting it
+	// here replaces nine four-octave stacks per sample with one. The breakup
+	// fractal is equally invariant and the compiler lifts it unaided; lifting
+	// it by hand changes which float multiply-adds get contracted, which made
+	// optimised and unoptimised builds disagree on the emitted geometry.
 	shape_noise := fractal_2d(p.floating_shape_noise, x, y)
 	// A legitimate island reaches floating_strength * floating_thickness, so a
 	// finite sentinel could be mistaken for one. Only -max(f32) cannot be.
@@ -431,7 +431,7 @@ _terrain_floating_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -
 			dx := (x - center_x) / p.floating_radius
 			dy := (y - center_y) / p.floating_radius
 			radial := math.sqrt(dx * dx + dy * dy)
-			breakup := _terrain_unit(fractal_2d(p.floating_breakup_noise, x + z, y - z))
+			breakup := _terrain_unit(fractal_3d(p.floating_breakup_noise, x, y, z))
 			shape := shape_noise * p.floating_shape_strength
 			top := 1 - radial + shape
 			vertical := abs(z - center_z) / p.floating_thickness
@@ -447,11 +447,15 @@ _terrain_floating_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -
 _terrain_cave_signal_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -> f32 {
 	assert(recipe != nil, "_terrain_cave_signal_v3: nil recipe")
 	p := recipe.parameters
-	warp_x := fractal_2d(p.cave_chamber_noise, y, z) * p.cave_warp
-	warp_y := fractal_2d(p.cave_chamber_noise, z, x) * p.cave_warp
-	tunnel_a := abs(fractal_2d(p.cave_tunnel_noise, x + warp_x, z + warp_y))
-	tunnel_b := abs(fractal_2d(p.cave_tunnel_noise, y - warp_y, z + warp_x))
+	// Composing three 2D slices made every tunnel extrude along whichever axis
+	// its slice omitted, which is the artefact a volumetric format exists to
+	// avoid. Two independent 3D fields warp a third, so a tunnel can bend on
+	// all three axes at once.
+	warp_x := fractal_3d(p.cave_chamber_noise, y, z, x) * p.cave_warp
+	warp_y := fractal_3d(p.cave_chamber_noise, z, x, y) * p.cave_warp
+	tunnel_a := abs(fractal_3d(p.cave_tunnel_noise, x + warp_x, y, z + warp_y))
+	tunnel_b := abs(fractal_3d(p.cave_tunnel_noise, x, y - warp_y, z + warp_x))
 	tunnel := 1 - min(tunnel_a, tunnel_b) * p.cave_tunnel_scale
-	chamber := _terrain_unit(fractal_2d(p.cave_chamber_noise, x + z * 0.4, y - z * 0.3))
+	chamber := _terrain_unit(fractal_3d(p.cave_chamber_noise, x, y, z))
 	return clamp(max(tunnel, chamber * p.cave_chamber_scale), 0, 1)
 }
