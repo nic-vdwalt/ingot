@@ -98,8 +98,8 @@ Cluster_Result :: struct {
 // must reject one that does not, because every later stage indexes without
 // re-checking.
 cluster_dag_validate :: proc(dag: Cluster_Dag, index_count: u32) -> (Cluster_Result, bool) {
-	assert(len(dag.clusters) <= int(max(u32)), "cluster_dag_validate: cluster count overflow")
-	assert(len(dag.groups) <= int(max(u32)), "cluster_dag_validate: group count overflow")
+	assert(u64(len(dag.clusters)) <= u64(max(u32)), "cluster_dag_validate: cluster count overflow")
+	assert(u64(len(dag.groups)) <= u64(max(u32)), "cluster_dag_validate: group count overflow")
 	if len(dag.clusters) == 0 do return {fault = .Empty}, false
 	if dag.level_count == 0 || int(dag.level_count) > CLUSTER_MAX_LEVELS {
 		return {fault = .Level_Overflow}, false
