@@ -161,6 +161,70 @@ terrain_v3_validation_rejects_invalid_ranges_and_budget :: proc(t: ^testing.T) {
 	testing.expect(t, !ok)
 }
 
+// Two chunks that share a face must agree on that face exactly. A difference
+// of one bit in the shared density plane moves the isosurface crossing, and
+// that is precisely the crack a player walks through.
+@(test)
+terrain_v3_adjacent_volumes_share_boundary_density :: proc(t: ^testing.T) {
+	storage_a, storage_b := new(Terrain_V3_Test_Storage), new(Terrain_V3_Test_Storage)
+	defer free(storage_a)
+	defer free(storage_b)
+	buffer_a := _terrain_v3_test_buffer(storage_a, 1)
+	buffer_b := _terrain_v3_test_buffer(storage_b, 2)
+	recipe := terrain_abstract_recipe_v3(99)
+	step := f32(4)
+	span := f32(TERRAIN_V3_TEST_CELLS) * step
+	cells := [3]int{TERRAIN_V3_TEST_CELLS, TERRAIN_V3_TEST_CELLS, TERRAIN_V3_TEST_CELLS}
+	request_a := Terrain_Volume_Request_V3{{-span, 0, -16}, cells, step}
+	request_b := Terrain_Volume_Request_V3{{0, 0, -16}, cells, step}
+	testing.expect(t, terrain_generate_volume_v3(&recipe, request_a, &buffer_a))
+	testing.expect(t, terrain_generate_volume_v3(&recipe, request_b, &buffer_b))
+	// The one-cell halo makes the requests overlap by two lattice planes: the
+	// shared face itself, at A's last halo column and B's second, and the
+	// plane one step behind it.
+	stride_x := TERRAIN_V3_TEST_CELLS + 2
+	stride_y := TERRAIN_V3_TEST_CELLS + 2
+	for overlap in 0 ..< 2 {
+		left_x := TERRAIN_V3_TEST_CELLS + 1 - overlap
+		right_x := 1 - overlap
+		for z in 0 ..< TERRAIN_V3_TEST_CELLS + 2 {
+			for y in 0 ..< TERRAIN_V3_TEST_CELLS + 2 {
+				left := (z * stride_y + y) * stride_x + left_x
+				right := (z * stride_y + y) * stride_x + right_x
+				testing.expect_value(t, storage_a.density[left], storage_b.density[right])
+			}
+		}
+	}
+	_terrain_v3_test_expect_seam_vertices(t, &buffer_a, &buffer_b, 0)
+}
+
+// _terrain_v3_test_expect_seam_vertices checks that every vertex one chunk
+// places on the shared plane is reproduced exactly by its neighbour. Vertex
+// order differs between chunks, so this compares sets rather than sequences.
+@(private = "file")
+_terrain_v3_test_expect_seam_vertices :: proc(
+	t: ^testing.T,
+	buffer_a, buffer_b: ^Terrain_Volume_Buffer_V3,
+	plane_x: f32,
+) {
+	assert(t != nil, "_terrain_v3_test_expect_seam_vertices: nil test")
+	assert(buffer_a != nil && buffer_b != nil, "_terrain_v3_test_expect_seam_vertices: nil buffer")
+	matched := 0
+	for vertex in buffer_a.mesh.vertices[:buffer_a.mesh.vertex_count] {
+		if vertex.position.x != plane_x do continue
+		found := false
+		for other in buffer_b.mesh.vertices[:buffer_b.mesh.vertex_count] {
+			if other.position == vertex.position {
+				found = true
+				break
+			}
+		}
+		testing.expectf(t, found, "seam vertex %v has no match in the neighbour", vertex.position)
+		matched += 1
+	}
+	testing.expect(t, matched > 0)
+}
+
 @(private)
 _terrain_v3_test_buffer :: proc(
 	storage: ^Terrain_V3_Test_Storage,
