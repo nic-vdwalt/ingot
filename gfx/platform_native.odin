@@ -433,9 +433,25 @@ platform_mouse_button :: proc(ctx: ^Context, button: i32) -> bool {
 }
 
 @(private)
+// GLFW derives HOVERED from mouse enter/leave *events*, so it only updates when
+// the pointer moves. A geometry change that slides the frame out from under a
+// stationary cursor - macOS native fullscreen, a Space switch, maximise - emits
+// no such event and leaves the attribute latched false while the pointer is
+// really inside. Downstream that wipes the whole pointer snapshot
+// (ui_gfx.pointer_snapshot_sanitize) and the UI goes dead until the user jiggles
+// the mouse, so fall back to a rect test. The fallback is only trusted while
+// focused: an unfocused window under the pointer is genuinely not hovered for
+// input purposes, and GLFW reports that case correctly through the attribute.
+@(private)
 platform_window_hovered :: proc(ctx: ^Context) -> bool {
 	if ctx == nil || ctx.win == nil do return false
-	return glfw.GetWindowAttrib(_context_window(ctx), glfw.HOVERED) != 0
+	win := _context_window(ctx)
+	if glfw.GetWindowAttrib(win, glfw.HOVERED) != 0 do return true
+	if glfw.GetWindowAttrib(win, glfw.FOCUSED) == 0 do return false
+	x, y := glfw.GetCursorPos(win)
+	width, height := glfw.GetWindowSize(win)
+	if width <= 0 || height <= 0 do return false
+	return x >= 0 && y >= 0 && x < f64(width) && y < f64(height)
 }
 
 @(private)
