@@ -2,9 +2,16 @@ package procgen
 
 import "core:math"
 
-TERRAIN_RECIPE_VERSION_V3 :: u32(3)
+// Bumped from 3 when vertex welding, the parameterised shaping constants and
+// genuine 3D noise changed both the public buffer shape and the geometry a
+// seed produces. Worlds persisted against version 3 must be regenerated.
+TERRAIN_RECIPE_VERSION_V3 :: u32(4)
 TERRAIN_VOLUME_MAX_EDGE_V3 :: 64
 TERRAIN_VOLUME_MAX_SAMPLES_V3 :: 300_000
+// The terrace blend cannot reach 1 or a terraced slope would become a
+// staircase of exactly vertical risers, which marching tetrahedra cannot
+// represent without degenerate triangles.
+TERRAIN_TERRACE_MAX_BLEND_V3 :: f32(0.45)
 
 Terrain_Preset_V3 :: enum u8 {
 	Normal,
@@ -22,6 +29,7 @@ Terrain_Parameters_V3 :: struct {
 	mountain_scale:            f32,
 	mountain_sharpness:        f32,
 	mountain_terrace_strength: f32,
+	mountain_terrace_step:     f32,
 	floating_strength:         f32,
 	floating_altitude_min:     f32,
 	floating_altitude_max:     f32,
@@ -30,6 +38,8 @@ Terrain_Parameters_V3 :: struct {
 	floating_thickness:        f32,
 	floating_taper:            f32,
 	floating_breakup:          f32,
+	floating_jitter:           f32,
+	floating_shape_strength:   f32,
 	cave_strength:             f32,
 	cave_threshold:            f32,
 	cave_altitude_min:         f32,
@@ -40,6 +50,7 @@ Terrain_Parameters_V3 :: struct {
 	minimum_upward_normal:     f32,
 	surface_search_min:        f32,
 	surface_search_max:        f32,
+	surface_uv_scale:          f32,
 	overhang_noise:            Noise_Config,
 	floating_shape_noise:      Noise_Config,
 	floating_breakup_noise:    Noise_Config,
@@ -76,10 +87,13 @@ terrain_normal_recipe_v3 :: proc(seed: u64) -> Terrain_Recipe_V3 {
 		surface_softness       = 1,
 		mountain_scale         = 1,
 		mountain_sharpness     = 1,
+		mountain_terrace_step  = 4,
 		floating_spacing       = 72,
 		floating_radius        = 24,
 		floating_thickness     = 10,
 		floating_taper         = 1.5,
+		floating_jitter        = 0.7,
+		floating_shape_strength = 0.22,
 		cave_threshold         = 0.62,
 		cave_altitude_min      = -24,
 		cave_altitude_max      = 24,
@@ -88,6 +102,7 @@ terrain_normal_recipe_v3 :: proc(seed: u64) -> Terrain_Recipe_V3 {
 		minimum_upward_normal  = 0.55,
 		surface_search_min     = -40,
 		surface_search_max     = 48,
+		surface_uv_scale       = 32,
 		overhang_noise         = {seed ~ 0x243F6A8885A308D3, 0.018, 4, 2, 0.5, 12},
 		floating_shape_noise   = {seed ~ 0x13198A2E03707344, 0.012, 4, 2, 0.5, 18},
 		floating_breakup_noise = {seed ~ 0xA4093822299F31D0, 0.031, 3, 2, 0.5, 8},
@@ -159,6 +174,7 @@ terrain_recipe_validate_v3 :: proc(recipe: ^Terrain_Recipe_V3) -> bool {
 		p.mountain_scale,
 		p.mountain_sharpness,
 		p.mountain_terrace_strength,
+		p.mountain_terrace_step,
 		p.floating_strength,
 		p.floating_altitude_min,
 		p.floating_altitude_max,
@@ -167,6 +183,8 @@ terrain_recipe_validate_v3 :: proc(recipe: ^Terrain_Recipe_V3) -> bool {
 		p.floating_thickness,
 		p.floating_taper,
 		p.floating_breakup,
+		p.floating_jitter,
+		p.floating_shape_strength,
 		p.cave_strength,
 		p.cave_threshold,
 		p.cave_altitude_min,
@@ -177,6 +195,7 @@ terrain_recipe_validate_v3 :: proc(recipe: ^Terrain_Recipe_V3) -> bool {
 		p.minimum_upward_normal,
 		p.surface_search_min,
 		p.surface_search_max,
+		p.surface_uv_scale,
 	}
 	for value in values do if !_terrain_finite_v2(value) do return false
 	if p.minimum_z >= p.maximum_z || p.cell_size <= 0 do return false
@@ -184,14 +203,18 @@ terrain_recipe_validate_v3 :: proc(recipe: ^Terrain_Recipe_V3) -> bool {
 	if p.ground_strength <= 0 || p.surface_softness <= 0 do return false
 	if p.overhang_strength < 0 || p.mountain_scale <= 0 || p.mountain_sharpness <= 0 do return false
 	if p.mountain_terrace_strength < 0 || p.floating_strength < 0 do return false
+	if p.mountain_terrace_step <= 0 do return false
 	if p.floating_altitude_min > p.floating_altitude_max do return false
 	if p.floating_spacing <= 0 || p.floating_radius <= 0 || p.floating_thickness <= 0 do return false
 	if p.floating_taper <= 0 || p.floating_breakup < 0 || p.floating_breakup > 1 do return false
+	if p.floating_jitter < 0 || p.floating_jitter > 1 do return false
+	if p.floating_shape_strength < 0 do return false
 	if p.cave_strength < 0 || p.cave_threshold < 0 || p.cave_threshold > 1 do return false
 	if p.cave_altitude_min > p.cave_altitude_max do return false
 	if p.cave_tunnel_scale <= 0 || p.cave_chamber_scale <= 0 || p.cave_warp < 0 do return false
 	if p.minimum_upward_normal < 0 || p.minimum_upward_normal > 1 do return false
 	if p.surface_search_min >= p.surface_search_max do return false
+	if p.surface_uv_scale <= 0 do return false
 	noises := [?]Noise_Config {
 		p.overhang_noise,
 		p.floating_shape_noise,
@@ -378,15 +401,19 @@ _terrain_floating_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -
 			jitter_x := f32(hash & 0xffff) / 65535 - 0.5
 			jitter_y := f32((hash >> 16) & 0xffff) / 65535 - 0.5
 			altitude_unit := f32((hash >> 32) & 0xffff) / 65535
-			center_x := (f32(cell_x + i64(offset_x)) + 0.5 + jitter_x * 0.7) * p.floating_spacing
-			center_y := (f32(cell_y + i64(offset_y)) + 0.5 + jitter_y * 0.7) * p.floating_spacing
+			center_x :=
+				(f32(cell_x + i64(offset_x)) + 0.5 + jitter_x * p.floating_jitter) *
+				p.floating_spacing
+			center_y :=
+				(f32(cell_y + i64(offset_y)) + 0.5 + jitter_y * p.floating_jitter) *
+				p.floating_spacing
 			center_z :=
 				p.floating_altitude_min +
 				(p.floating_altitude_max - p.floating_altitude_min) * altitude_unit
 			dx := (x - center_x) / p.floating_radius
 			dy := (y - center_y) / p.floating_radius
 			radial := math.sqrt(dx * dx + dy * dy)
-			shape := fractal_2d(p.floating_shape_noise, x, y) * 0.22
+			shape := fractal_2d(p.floating_shape_noise, x, y) * p.floating_shape_strength
 			breakup := _terrain_unit(fractal_2d(p.floating_breakup_noise, x + z, y - z))
 			top := 1 - radial + shape
 			vertical := abs(z - center_z) / p.floating_thickness
