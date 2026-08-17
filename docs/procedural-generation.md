@@ -83,12 +83,17 @@ overhang displacement, disconnected floating masses, and subtractive cave
 signals. The normal preset sets every abstract strength to zero and publishes
 the exact V2 primary-surface height.
 
+The V3 recipe version is `4`. Version `3` differed in geometry and in the shape
+of its caller-owned buffers, so worlds persisted against it must be regenerated
+rather than reinterpreted; this is exactly the situation the stored semantic
+version exists to detect.
+
 `Terrain_Parameters_V3` exposes vertical bounds, voxel scale, mountain shape,
 floating-land spacing/altitude/radius/thickness/breakup, cave altitude and
-shape, and the upward-normal policy for a designated buildable surface. Use
-`terrain_normal_recipe_v3`, `terrain_abstract_recipe_v3`, or validated
-`terrain_custom_recipe_v3`; persisted consumers must store the V3 semantic
-version and their selected parameters.
+shape, the upward-normal policy for a designated buildable surface, and the
+triplanar UV scale. Use `terrain_normal_recipe_v3`, `terrain_abstract_recipe_v3`,
+or validated `terrain_custom_recipe_v3`; persisted consumers must store the V3
+semantic version and their selected parameters.
 
 `terrain_generate_volume_v3` samples absolute world coordinates into a
 caller-owned halo and emits a bounded triangle mesh. Capacity is calculated by
@@ -100,6 +105,50 @@ therefore replace, rather than overlay, a heightfield mesh. Volume
 map resolved biome fields to volume materials explicitly. V3 does not define
 navigation, volumetric editing, cave water, or multi-level placement; consumers
 choose how its primary surface participates in simulation.
+
+Cave, overhang, and island-breakup signals sample a genuine 3D field through
+`fractal_3d`. Composing 2D slices with an axis swizzle, as version 3 did, made
+every tunnel extrude along whichever axis its slice omitted, which is the
+artifact a volumetric product exists to avoid.
+
+Isosurface crossings are welded on the identity of the lattice edge they cut, so
+a vertex shared by several triangles is stored once and the index buffer carries
+real connectivity. The key is a pair of integer halo indices, never a float
+comparison, so two cells that share a face cannot disagree. Welding typically
+reduces the vertex count around fivefold at an unchanged index count; it does
+not move the surface. `terrain_volume_count_v3` reports the exact counts a
+request will produce so a streaming consumer can size real buffers instead of
+the per-cell worst case.
+
+Occupancy is a separate, cheaper question. `terrain_volume_occupancy_v3` bounds
+each column's density from the recipe alone -- overhang by its strength, carving
+by `(1 - cave_threshold) * cave_strength`, floating mass by
+`floating_strength * floating_thickness` inside its altitude band -- and answers
+from one 2D noise stack per column rather than a full three-dimensional pass.
+The answer is conservative: `Mixed` never promises a surface, but `Empty` and
+`Solid` are certain. A uniform chunk is an ordinary result in a streaming world,
+so generation reports it through `Terrain_Volume_Result_V3` with zero counts
+rather than failing.
+
+## Cooking generated meshes
+
+`cook_chain_from_policy` and `cook_chain_from_clusters` turn a generated
+`Mesh_View` into an `asset.Cooked_Mesh_Chain`, which `asset.cooked_mesh_v2_encode`
+writes as `INGMESH2`. The policy path simplifies repeatedly at fixed ratios; the
+cluster path takes the levels `cluster_build` already produced and adds what the
+format needs that the builder does not supply: a screen threshold per level,
+indices rebased to their own level's vertex span, and strictly increasing error.
+
+Screen thresholds match `tools/mesh_cook.py`, so an asset cooked at runtime and
+the same asset cooked offline select the same level at the same distance. A DAG
+and a discrete chain are alternatives rather than companions, because the DAG
+already carries every level's geometry. A source needing more than
+`COOK_LOD_MAX_LEVELS` levels is rejected rather than truncated; raise
+`simplify_ratio` to converge in fewer.
+
+Cooking is initialization or worker-residency work, the same contract
+`mesh_deform_variant` and `creature_mesh_evolve` carry. It must not run per
+frame.
 
 ## Authored mesh variants
 
