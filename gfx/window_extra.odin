@@ -21,9 +21,15 @@ context_is_window_hidden :: proc(ctx: ^Context) -> bool {
 	return glfw.GetWindowAttrib(glfw.WindowHandle(ctx.win), glfw.VISIBLE) == 0
 }
 IsWindowHidden :: proc() -> bool {return context_is_window_hidden(default_context())}
+// A window is fullscreen if GLFW put it on a monitor (exclusive fullscreen, the
+// only kind ToggleFullscreen below produces) OR if the OS did it behind GLFW's
+// back. The latter is real on macOS - the green traffic-light button moves the
+// window to its own Space with GetWindowMonitor still nil - so a monitor-only
+// check reports windowed while the app visibly fills the display.
 context_is_window_fullscreen :: proc(ctx: ^Context) -> bool {
 	if ctx == nil || ctx.win == nil do return false
-	return glfw.GetWindowMonitor(glfw.WindowHandle(ctx.win)) != nil
+	if glfw.GetWindowMonitor(glfw.WindowHandle(ctx.win)) != nil do return true
+	return _platform_native_fullscreen(ctx)
 }
 IsWindowFullscreen :: proc() -> bool {return context_is_window_fullscreen(default_context())}
 context_toggle_fullscreen_impl :: proc(ctx: ^Context) {
