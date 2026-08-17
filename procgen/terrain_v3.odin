@@ -2,10 +2,11 @@ package procgen
 
 import "core:math"
 
-// Bumped from 3 when vertex welding, the parameterised shaping constants and
-// genuine 3D noise changed both the public buffer shape and the geometry a
-// seed produces. Worlds persisted against version 3 must be regenerated.
-TERRAIN_RECIPE_VERSION_V3 :: u32(4)
+// Bumped from 4 when the V2 surface recipe gained a continentalness biome
+// axis, climate contrast shaping and inland basin carving. The embedded V2
+// recipe changes the classification and the height a seed produces, so worlds
+// persisted against version 4 must be regenerated rather than reinterpreted.
+TERRAIN_RECIPE_VERSION_V3 :: u32(5)
 TERRAIN_VOLUME_MAX_EDGE_V3 :: 64
 TERRAIN_VOLUME_MAX_SAMPLES_V3 :: 300_000
 // The terrace blend cannot reach 1 or a terraced slope would become a
@@ -365,6 +366,7 @@ terrain_primary_surface_prevalidated_v3 :: proc(
 	biomes, biome_ok := terrain_biome_blend_prevalidated_v2(
 		&recipe.surface,
 		height,
+		sample.continentalness,
 		sample.moisture,
 		sample.temperature,
 		slope,

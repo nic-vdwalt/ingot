@@ -56,11 +56,31 @@ V1 terrain sampling and chunk generation remain compatibility APIs. V2 adds a
 semantic recipe version and caller-owned fields for applications that need a
 reusable world-generation product rather than independent point samples.
 
-V2 composes continental, mountain, ridge, hill, and detail signals, then fills
-a one-cell height halo before deriving centered gradients, slope, climate, and
-data-driven biome-profile blends. Generation validates every recipe and output
-capacity before publication. Storage remains bounded by
+V2 composes continental, mountain, ridge, hill, detail, and inland-basin
+signals, then fills a one-cell height halo before deriving centered gradients,
+slope, climate, and data-driven biome-profile blends. Generation validates every
+recipe and output capacity before publication. Storage remains bounded by
 `TERRAIN_FIELD_MAX_EDGE_V2`; no generator allocation or GPU dependency is added.
+
+Climate and continentalness are contrast-shaped by `climate_contrast` and
+`continental_contrast`. The fractal stack averages octaves and divides by summed
+amplitude, so its raw output occupies roughly the middle fifth of the unit
+range; without expansion about the midpoint, profile windows at the dry and cold
+extremes are unreachable and every seed produces the same distribution. Both
+parameters must be at least `TERRAIN_CONTRAST_MIN_V2`, and a value of exactly 1
+is the identity. The clamp at 0 and 1 is intended: saturation is what produces
+large uniform biome cores rather than a permanent gradient.
+
+Biome profiles score five axes: height, continentalness, moisture, temperature,
+and slope. Continentalness is what distinguishes an inland sample from a coastal
+one at the same elevation, so a consumer can separate a lake from an ocean
+without a second classification pass.
+
+`basin_noise`, `basin_threshold`, `basin_fade`, and `basin_depth` carve inland
+depressions toward a floor at `sea_level - basin_depth`, gated to land and away
+from uplift. Interpolating toward a floor rather than subtracting a fixed depth
+guarantees the depression reaches water however high the surrounding land sits,
+and yields a smooth shoreline. A `basin_depth` of zero disables carving.
 
 Biome blends are local suitability data, not spatial ownership. Consumers that
 need categorical terrain call `terrain_resolve_biome_regions` over their complete
@@ -68,6 +88,11 @@ authoritative domain. The resolver publishes one hard biome owner and one
 4-neighbor-connected patch ID per sample, with deterministic minimum-component
 merging. Resolving independent chunks without a shared stitch domain is invalid
 because component size and patch identity depend on neighboring cells.
+
+The V2 recipe version is `3`. Version `2` lacked the continentalness biome axis,
+the contrast parameters, and basin carving, so it classified and shaped a seed
+differently; worlds persisted against it must be regenerated rather than
+reinterpreted.
 
 V2 output is deterministic for the same target and build. Cross-architecture
 floating-point byte identity is not guaranteed. Consumers using generated data
@@ -83,10 +108,11 @@ overhang displacement, disconnected floating masses, and subtractive cave
 signals. The normal preset sets every abstract strength to zero and publishes
 the exact V2 primary-surface height.
 
-The V3 recipe version is `4`. Version `3` differed in geometry and in the shape
-of its caller-owned buffers, so worlds persisted against it must be regenerated
-rather than reinterpreted; this is exactly the situation the stored semantic
-version exists to detect.
+The V3 recipe version is `5`. Version `4` embedded a version-2 surface recipe,
+which classified and shaped a seed differently, and version `3` differed in
+geometry and in the shape of its caller-owned buffers. Worlds persisted against
+either must be regenerated rather than reinterpreted; this is exactly the
+situation the stored semantic version exists to detect.
 
 `Terrain_Parameters_V3` exposes vertical bounds, voxel scale, mountain shape,
 floating-land spacing/altitude/radius/thickness/breakup, cave altitude and

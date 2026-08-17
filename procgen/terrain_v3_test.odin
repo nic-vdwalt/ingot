@@ -68,6 +68,7 @@ terrain_v3_abstract_biomes_use_transformed_surface :: proc(t: ^testing.T) {
 			expected, blend_ok := terrain_biome_blend_v2(
 				&recipe.surface,
 				v3.height,
+				v3.continentalness,
 				v3.moisture,
 				v3.temperature,
 				v3.slope,
