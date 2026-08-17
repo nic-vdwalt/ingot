@@ -162,3 +162,56 @@ vertex_pack_handles_flat_axes :: proc(t: ^testing.T) {
 	testing.expect_value(t, restored.position[2], f32(3))
 	testing.expect_value(t, restored.uv, Vec2{0, 0})
 }
+
+// `mesh_validate` compares positions against the mesh bounds with a strict
+// inequality, so an unpack that overshoots by a single ULP rejects a bundle
+// whose bytes are correct. Clean extents like the unit cube never expose it;
+// these bounds are measured from a cooked flora mesh, where the multiply-add
+// rounds outward on several codes. Every code must land inside the frame.
+@(test)
+vertex_unpack_stays_inside_awkward_bounds :: proc(t: ^testing.T) {
+	quantization := Vertex_Quantization {
+		bounds = {
+			minimum = {-1.3590346574783325, -1.3799999952316284, 0},
+			maximum = {1.3590346574783325, 1.2967758178710938, 5.579999923706055},
+		},
+		uv_bounds = {
+			minimum = {0.0568000003695488, 0.0568000003695488},
+			maximum = {0.9431999921798706, 0.4431999921798706},
+		},
+	}
+	for code in 0 ..= int(max(u16)) {
+		packed := Vertex_Packed {
+			position = {u16(code), u16(code), u16(code)},
+			uv       = {u16(code), u16(code)},
+			normal   = {0, 0},
+		}
+		restored := vertex_unpack(packed, quantization)
+		for axis in 0 ..< 3 {
+			testing.expectf(
+				t,
+				restored.position[axis] >= quantization.bounds.minimum[axis] &&
+				restored.position[axis] <= quantization.bounds.maximum[axis],
+				"code %v axis %v unpacked to %v outside [%v, %v]",
+				code,
+				axis,
+				restored.position[axis],
+				quantization.bounds.minimum[axis],
+				quantization.bounds.maximum[axis],
+			)
+		}
+		for axis in 0 ..< 2 {
+			testing.expectf(
+				t,
+				restored.uv[axis] >= quantization.uv_bounds.minimum[axis] &&
+				restored.uv[axis] <= quantization.uv_bounds.maximum[axis],
+				"code %v uv %v unpacked to %v outside [%v, %v]",
+				code,
+				axis,
+				restored.uv[axis],
+				quantization.uv_bounds.minimum[axis],
+				quantization.uv_bounds.maximum[axis],
+			)
+		}
+	}
+}

@@ -258,7 +258,12 @@ _quantize_channel :: proc(value, minimum, maximum, range: f32) -> u16 {
 _dequantize_channel :: proc(value: u16, minimum, maximum, range: f32) -> f32 {
 	extent := maximum - minimum
 	if extent <= 0 do return minimum
-	return minimum + (f32(value) / range) * extent
+	// The multiply-add rounds in f32, so a value on the frame boundary can
+	// reconstruct one ULP outside it - which `mesh_validate` rejects with a
+	// strict compare, failing a bundle whose bytes are correct. A quantized
+	// channel cannot represent anything outside its own frame, so clamping
+	// removes the round-off without being able to hide a real fault.
+	return clamp(minimum + (f32(value) / range) * extent, minimum, maximum)
 }
 
 @(private)
