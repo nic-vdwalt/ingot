@@ -60,7 +60,7 @@ cooked_mesh_v2_encode :: proc(
 	if !size_ok do return 0, {fault = .Capacity}, false
 	if len(destination) < size do return 0, {fault = .Capacity}, false
 	cursor := _Cooked_V2_Cursor_Out {
-		record  = COOKED_MESH_V2_HEADER_SIZE,
+		record      = COOKED_MESH_V2_HEADER_SIZE,
 		vertex_size = COOKED_MESH_V2_VERTEX_SIZE_FAT,
 	}
 	if flags & COOKED_MESH_V2_FLAG_PACKED_VERTICES != 0 {
@@ -83,18 +83,18 @@ COOKED_MESH_V2_VERTEX_SIZE_PACKED :: size_of(Vertex_Packed)
 // clusters, vertices and indices are all known at the same moment.
 @(private)
 _Cooked_V2_Cursor_Out :: struct {
-	record:       int,
-	lod:          int,
-	cluster:      int,
-	group:        int,
-	vertex:       int,
-	index:        int,
-	vertex_size:  int,
-	first_lod:    u32,
+	record:        int,
+	lod:           int,
+	cluster:       int,
+	group:         int,
+	vertex:        int,
+	index:         int,
+	vertex_size:   int,
+	first_lod:     u32,
 	first_cluster: u32,
-	first_group:  u32,
-	first_vertex: u32,
-	first_index:  u32,
+	first_group:   u32,
+	first_vertex:  u32,
+	first_index:   u32,
 }
 
 @(private)
@@ -233,7 +233,9 @@ _cooked_v2_encode_dag :: proc(
 		offset := cursor.cluster
 		_cooked_v2_put_u32(destination, offset, cluster.first_index + index_base)
 		_cooked_v2_put_u32(destination, offset + 4, cluster.index_count)
-		for axis in 0 ..< 3 do _cooked_v2_put_f32(destination, offset + 8 + axis * 4, cluster.center[axis])
+		for axis in 0 ..< 3 {
+			_cooked_v2_put_f32(destination, offset + 8 + axis * 4, cluster.center[axis])
+		}
 		_cooked_v2_put_f32(destination, offset + 20, cluster.radius)
 		_cooked_v2_put_f32(destination, offset + 24, cluster.error)
 		_cooked_v2_put_f32(destination, offset + 28, cluster.parent_error)
@@ -245,7 +247,9 @@ _cooked_v2_encode_dag :: proc(
 		offset := cursor.group
 		_cooked_v2_put_u32(destination, offset, group.first_child)
 		_cooked_v2_put_u32(destination, offset + 4, group.child_count)
-		for axis in 0 ..< 3 do _cooked_v2_put_f32(destination, offset + 8 + axis * 4, group.center[axis])
+		for axis in 0 ..< 3 {
+			_cooked_v2_put_f32(destination, offset + 8 + axis * 4, group.center[axis])
+		}
 		_cooked_v2_put_f32(destination, offset + 20, group.radius)
 		_cooked_v2_put_f32(destination, offset + 24, group.error)
 		_cooked_v2_put_u32(destination, offset + 28, u32(group.level))

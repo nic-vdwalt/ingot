@@ -11,12 +11,42 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
+- **Breaking:** `TERRAIN_RECIPE_VERSION_V3` is `4`. Volume terrain now welds
+  vertices on lattice-edge identity, derives caves and overhangs from real 3D
+  noise instead of composed 2D slices, and exposes the terrace step, island
+  jitter, island shape strength, and triplanar UV scale as recipe parameters.
+  Persisted V3 worlds cooked against version `3` must be regenerated.
+  `terrain_generate_volume_v3` returns a `Terrain_Volume_Result_V3` and
+  `terrain_volume_requirements_v3` reports a weld-slot count, so both change
+  arity; `Terrain_Volume_Buffer_V3` gains `normal_halo`, `weld_keys`, and
+  `weld_values`. V1 and V2 terrain are untouched.
+- A uniformly empty or solid volume chunk now succeeds with a named occupancy
+  and zero counts instead of failing, because in a streaming world it is the
+  ordinary result rather than an error.
 - Fit inline capacity now defaults to 128 nodes instead of 64. Existing
   zero-value builders remain source-compatible; larger collections should still
   be chunked or virtualized.
 
 ### Added
 
+- `asset.cooked_mesh_v2_encode` and `asset.cooked_mesh_v2_encoded_size`: the
+  first Odin writer for `INGMESH2`. It refuses everything the decoder refuses
+  and reports the same `Cooked_Mesh_Fault`, and is checked both by round trip
+  and byte for byte against the independent test writer.
+- `procgen.cook_chain_from_policy` and `procgen.cook_chain_from_clusters` turn a
+  generated `Mesh_View` into a `Cooked_Mesh_Chain` through the existing
+  simplifier and cluster builder, adding the screen thresholds, per-level index
+  rebasing, and forced error monotonicity `INGMESH2` requires. Thresholds mirror
+  `tools/mesh_cook.py`, so a runtime-cooked asset and an offline-cooked one
+  select the same level at the same distance.
+- `procgen.noise_3d` and `procgen.fractal_3d`: value noise over eight lattice
+  corners, matching `noise_2d`'s hashing, quintic fade, and per-octave seeding.
+- `procgen.terrain_volume_occupancy_v3` culls a chunk from one 2D noise stack
+  per column instead of a full three-dimensional sample pass, and
+  `procgen.terrain_volume_count_v3` publishes exact counts so a streaming caller
+  can size real buffers rather than the per-cell worst case.
+- `procgen.terrain_density_prevalidated_v3` skips per-sample recipe validation
+  for callers that validate once and then sample a field.
 - Versioned bounded fuzz operation tapes, deterministic failure-class-preserving
   shrinking for `net` and `interact`, a canonical shared harness PRNG, and a
   committed regression corpus replayed by Unix and Windows test gates.
