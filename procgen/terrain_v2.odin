@@ -329,6 +329,13 @@ _terrain_basin_v2 :: proc(
 	assert(recipe != nil, "_terrain_basin_v2: nil recipe")
 	assert(recipe.basin_fade > 0, "_terrain_basin_v2: non-positive fade")
 	if recipe.basin_depth <= 0 do return height
+	// The gate is the cheap term and it is zero across every ocean cell and
+	// every mountain peak, which on a typical world is most of the domain.
+	// Testing it before the fractal keeps basins off the hot path there:
+	// height is evaluated five times per sample for the centered slope, so
+	// this noise would otherwise be paid for ten times over per cell.
+	gate := land * (1 - uplift)
+	if gate <= 0 do return height
 	signal := _terrain_unit(warped_fractal_2d(recipe.basin_noise, world_x, world_y))
 	basin :=
 		_terrain_smoothstep_v2(
@@ -336,8 +343,7 @@ _terrain_basin_v2 :: proc(
 			recipe.basin_threshold + recipe.basin_fade,
 			signal,
 		) *
-		land *
-		(1 - uplift)
+		gate
 	if basin <= 0 do return height
 	lake_floor := recipe.sea_level - recipe.basin_depth
 	return height + (lake_floor - height) * basin
