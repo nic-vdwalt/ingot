@@ -34,8 +34,10 @@ test_window_state_queries_nil_safe :: proc(t: ^testing.T) {
 	testing.expect(t, !context_is_window_minimized(nil), "nil context is not minimized")
 	testing.expect(t, !context_is_window_hidden(nil), "nil context is not hidden")
 
-	windowless: Context
-	testing.expect(t, !context_is_window_fullscreen(&windowless), "no window is not fullscreen")
-	testing.expect(t, !_platform_native_fullscreen(&windowless), "no window has no native fullscreen")
-	testing.expect(t, !platform_window_hovered(&windowless), "no window is not hovered")
+	// Context is far too large for the stack; the queries only touch ctx.win.
+	windowless := new(Context)
+	defer free(windowless)
+	testing.expect(t, !context_is_window_fullscreen(windowless), "no window is not fullscreen")
+	testing.expect(t, !_platform_native_fullscreen(windowless), "no window has no native fullscreen")
+	testing.expect(t, !platform_window_hovered(windowless), "no window is not hovered")
 }
