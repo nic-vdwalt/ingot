@@ -441,6 +441,7 @@ platform_mouse_button :: proc(ctx: ^Context, button: i32) -> bool {
 // the mouse, so fall back to a rect test. The fallback is only trusted while
 // focused: an unfocused window under the pointer is genuinely not hovered for
 // input purposes, and GLFW reports that case correctly through the attribute.
+@(private)
 platform_window_hovered :: proc(ctx: ^Context) -> bool {
 	if ctx == nil || ctx.win == nil do return false
 	win := _context_window(ctx)
