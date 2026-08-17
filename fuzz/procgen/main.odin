@@ -9,13 +9,21 @@ ITERATIONS_DEFAULT :: 10_000
 
 FUZZ_VOLUME_CELLS :: 4
 FUZZ_VOLUME_DENSITY :: (FUZZ_VOLUME_CELLS + 2) * (FUZZ_VOLUME_CELLS + 2) * (FUZZ_VOLUME_CELLS + 2)
-FUZZ_VOLUME_VERTICES :: FUZZ_VOLUME_CELLS * FUZZ_VOLUME_CELLS * FUZZ_VOLUME_CELLS * 24
+FUZZ_VOLUME_VERTICES ::
+	FUZZ_VOLUME_CELLS *
+	FUZZ_VOLUME_CELLS *
+	FUZZ_VOLUME_CELLS *
+	procgen.TERRAIN_VOLUME_EDGES_PER_CELL_V3
 FUZZ_VOLUME_INDICES :: FUZZ_VOLUME_CELLS * FUZZ_VOLUME_CELLS * FUZZ_VOLUME_CELLS * 36
+FUZZ_VOLUME_SLOTS :: 4096
 
 Storage :: struct {
 	vertices:        [procgen.TERRAIN_CHUNK_VERTICES]asset.Vertex,
 	indices:         [procgen.TERRAIN_CHUNK_INDICES]u32,
 	volume_density:  [FUZZ_VOLUME_DENSITY]f32,
+	volume_normals:  [FUZZ_VOLUME_DENSITY]asset.Vec3,
+	volume_keys:     [FUZZ_VOLUME_SLOTS]u64,
+	volume_values:   [FUZZ_VOLUME_SLOTS]u32,
 	volume_vertices: [FUZZ_VOLUME_VERTICES]asset.Vertex,
 	volume_indices:  [FUZZ_VOLUME_INDICES]u32,
 }
@@ -78,6 +86,9 @@ exercise_volume :: proc(ctx: ^fuzzx.Ctx, prng: ^fuzzx.Prng) {
 	request := procgen.Terrain_Volume_Request_V3{origin, {4, 4, 4}, 4}
 	buffer := procgen.Terrain_Volume_Buffer_V3 {
 		density_halo = storage.volume_density[:],
+		normal_halo = storage.volume_normals[:],
+		weld_keys = storage.volume_keys[:],
+		weld_values = storage.volume_values[:],
 		mesh = {
 			id = 2,
 			vertices = storage.volume_vertices[:],
@@ -85,8 +96,23 @@ exercise_volume :: proc(ctx: ^fuzzx.Ctx, prng: ^fuzzx.Prng) {
 			primitive = .Triangles,
 		},
 	}
-	if procgen.terrain_generate_volume_v3(&recipe, request, &buffer) {
-		view, ok := asset.mesh_view(&buffer.mesh)
-		fuzzx.check(ctx, ok && asset.mesh_validate(view), "volume mesh invalid")
-	}
+	occupancy, occupancy_ok := procgen.terrain_volume_occupancy_v3(&recipe, request)
+	fuzzx.check(ctx, occupancy_ok, "volume occupancy rejected a valid request")
+	result, ok := procgen.terrain_generate_volume_v3(&recipe, request, &buffer)
+	if !ok do return
+	fuzzx.check(
+		ctx,
+		result.vertex_count <= result.index_count,
+		"welding published more vertices than indices",
+	)
+	// A conservative cull may say Mixed for a uniform chunk, but claiming
+	// Empty or Solid for one that meshed geometry would drop visible terrain.
+	fuzzx.check(
+		ctx,
+		occupancy == .Mixed || result.index_count == 0,
+		"occupancy culled a chunk that produced geometry",
+	)
+	if result.index_count == 0 do return
+	view, view_ok := asset.mesh_view(&buffer.mesh)
+	fuzzx.check(ctx, view_ok && asset.mesh_validate(view), "volume mesh invalid")
 }

@@ -400,11 +400,12 @@ _terrain_floating_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -
 	p := recipe.parameters
 	cell_x := i64(math.floor(x / p.floating_spacing))
 	cell_y := i64(math.floor(y / p.floating_spacing))
-	// Both fractals are invariant across the neighbour loop, so evaluating
-	// them here costs two noise stacks per sample instead of eighteen.
-	shape := fractal_2d(p.floating_shape_noise, x, y) * p.floating_shape_strength
-	breakup := _terrain_unit(fractal_2d(p.floating_breakup_noise, x + z, y - z))
-	carve := max(p.floating_breakup - breakup, 0)
+	// Only the fractal calls are hoisted, not the arithmetic they feed. Both
+	// are invariant across the neighbour loop, so this cuts eighteen noise
+	// stacks per sample to two; leaving the surrounding expressions untouched
+	// keeps the compiler's float contraction -- and therefore the emitted
+	// geometry -- identical at every optimisation level.
+	shape_noise := fractal_2d(p.floating_shape_noise, x, y)
 	// A legitimate island reaches floating_strength * floating_thickness, so a
 	// finite sentinel could be mistaken for one. Only -max(f32) cannot be.
 	best := -max(f32)
@@ -430,10 +431,12 @@ _terrain_floating_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -
 			dx := (x - center_x) / p.floating_radius
 			dy := (y - center_y) / p.floating_radius
 			radial := math.sqrt(dx * dx + dy * dy)
+			breakup := _terrain_unit(fractal_2d(p.floating_breakup_noise, x + z, y - z))
+			shape := shape_noise * p.floating_shape_strength
 			top := 1 - radial + shape
 			vertical := abs(z - center_z) / p.floating_thickness
 			island := min(top * p.floating_taper, 1 - vertical)
-			island -= carve
+			island -= max(p.floating_breakup - breakup, 0)
 			best = max(best, island * p.floating_strength * p.floating_thickness)
 		}
 	}
