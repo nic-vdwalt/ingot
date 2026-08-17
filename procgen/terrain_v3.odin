@@ -80,34 +80,34 @@ Terrain_Surface_V3 :: struct {
 
 terrain_normal_recipe_v3 :: proc(seed: u64) -> Terrain_Recipe_V3 {
 	parameters := Terrain_Parameters_V3 {
-		minimum_z              = -40,
-		maximum_z              = 48,
-		cell_size              = 2,
-		ground_strength        = 1,
-		surface_softness       = 1,
-		mountain_scale         = 1,
-		mountain_sharpness     = 1,
-		mountain_terrace_step  = 4,
-		floating_spacing       = 72,
-		floating_radius        = 24,
-		floating_thickness     = 10,
-		floating_taper         = 1.5,
-		floating_jitter        = 0.7,
+		minimum_z               = -40,
+		maximum_z               = 48,
+		cell_size               = 2,
+		ground_strength         = 1,
+		surface_softness        = 1,
+		mountain_scale          = 1,
+		mountain_sharpness      = 1,
+		mountain_terrace_step   = 4,
+		floating_spacing        = 72,
+		floating_radius         = 24,
+		floating_thickness      = 10,
+		floating_taper          = 1.5,
+		floating_jitter         = 0.7,
 		floating_shape_strength = 0.22,
-		cave_threshold         = 0.62,
-		cave_altitude_min      = -24,
-		cave_altitude_max      = 24,
-		cave_tunnel_scale      = 1,
-		cave_chamber_scale     = 1,
-		minimum_upward_normal  = 0.55,
-		surface_search_min     = -40,
-		surface_search_max     = 48,
-		surface_uv_scale       = 32,
-		overhang_noise         = {seed ~ 0x243F6A8885A308D3, 0.018, 4, 2, 0.5, 12},
-		floating_shape_noise   = {seed ~ 0x13198A2E03707344, 0.012, 4, 2, 0.5, 18},
-		floating_breakup_noise = {seed ~ 0xA4093822299F31D0, 0.031, 3, 2, 0.5, 8},
-		cave_tunnel_noise      = {seed ~ 0x082EFA98EC4E6C89, 0.035, 4, 2, 0.5, 10},
-		cave_chamber_noise     = {seed ~ 0x452821E638D01377, 0.016, 3, 2, 0.5, 16},
+		cave_threshold          = 0.62,
+		cave_altitude_min       = -24,
+		cave_altitude_max       = 24,
+		cave_tunnel_scale       = 1,
+		cave_chamber_scale      = 1,
+		minimum_upward_normal   = 0.55,
+		surface_search_min      = -40,
+		surface_search_max      = 48,
+		surface_uv_scale        = 32,
+		overhang_noise          = {seed ~ 0x243F6A8885A308D3, 0.018, 4, 2, 0.5, 12},
+		floating_shape_noise    = {seed ~ 0x13198A2E03707344, 0.012, 4, 2, 0.5, 18},
+		floating_breakup_noise  = {seed ~ 0xA4093822299F31D0, 0.031, 3, 2, 0.5, 8},
+		cave_tunnel_noise       = {seed ~ 0x082EFA98EC4E6C89, 0.035, 4, 2, 0.5, 10},
+		cave_chamber_noise      = {seed ~ 0x452821E638D01377, 0.016, 3, 2, 0.5, 16},
 	}
 	return {TERRAIN_RECIPE_VERSION_V3, .Normal, seed, terrain_default_recipe_v2(seed), parameters}
 }
@@ -228,6 +228,16 @@ terrain_recipe_validate_v3 :: proc(recipe: ^Terrain_Recipe_V3) -> bool {
 
 terrain_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -> (f32, bool) {
 	if !terrain_recipe_validate_v3(recipe) do return 0, false
+	return terrain_density_prevalidated_v3(recipe, x, y, z)
+}
+
+// terrain_density_prevalidated_v3 skips the per-call recipe validation --
+// which walks 31 floats, 16 biome profiles and 5 noise configs -- for callers
+// that validate once and then sample millions of points. The recipe must
+// already have passed `terrain_recipe_validate_v3`.
+terrain_density_prevalidated_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -> (f32, bool) {
+	assert(recipe != nil, "terrain_density_prevalidated_v3: nil recipe")
+	assert(recipe.parameters.cell_size > 0, "terrain_density_prevalidated_v3: unvalidated recipe")
 	if !_terrain_finite_v2(x) || !_terrain_finite_v2(y) || !_terrain_finite_v2(z) do return 0, false
 	ground, ok := _terrain_ground_v3(recipe, x, y)
 	if !ok do return 0, false
@@ -241,6 +251,28 @@ _Terrain_Ground_V3 :: struct {
 	ruggedness: f32,
 }
 
+// _terrain_shape_height_v3 applies the V3 mountain transform to a V2 base
+// height. Three call sites need it -- the density column, the primary
+// surface, and the surface's finite-difference neighbours -- and if they ever
+// disagree the published `buildable` flag would describe a surface the volume
+// mesh does not have.
+@(private)
+_terrain_shape_height_v3 :: proc(recipe: ^Terrain_Recipe_V3, base_height: f32) -> f32 {
+	assert(recipe != nil, "_terrain_shape_height_v3: nil recipe")
+	assert(recipe.parameters.mountain_terrace_step > 0, "_terrain_shape_height_v3: terrace step")
+	p := recipe.parameters
+	mountain := max(base_height - recipe.surface.land_height, 0)
+	mountain = math.pow(mountain / max(recipe.surface.mountain_height, 1), p.mountain_sharpness)
+	height := base_height + mountain * recipe.surface.mountain_height * (p.mountain_scale - 1)
+	if p.mountain_terrace_strength > 0 && mountain > 0 {
+		step := p.mountain_terrace_step
+		terrace := math.floor(height / step + 0.5) * step
+		blend := clamp(p.mountain_terrace_strength / step, 0, TERRAIN_TERRACE_MAX_BLEND_V3)
+		height += (terrace - height) * blend
+	}
+	return height
+}
+
 @(private)
 _terrain_ground_v3 :: proc(
 	recipe: ^Terrain_Recipe_V3,
@@ -252,15 +284,7 @@ _terrain_ground_v3 :: proc(
 	assert(recipe != nil, "_terrain_ground_v3: nil recipe")
 	base_height, _, ruggedness, height_ok := terrain_height_prevalidated_v2(&recipe.surface, x, y)
 	if !height_ok do return {}, false
-	p := recipe.parameters
-	mountain := max(base_height - recipe.surface.land_height, 0)
-	mountain = math.pow(mountain / max(recipe.surface.mountain_height, 1), p.mountain_sharpness)
-	height := base_height + mountain * recipe.surface.mountain_height * (p.mountain_scale - 1)
-	if p.mountain_terrace_strength > 0 && mountain > 0 {
-		terrace := math.floor(height / 4 + 0.5) * 4
-		height += (terrace - height) * clamp(p.mountain_terrace_strength / 4, 0, 0.45)
-	}
-	return {height, ruggedness}, true
+	return {_terrain_shape_height_v3(recipe, base_height), ruggedness}, true
 }
 
 // _terrain_density_from_ground_v3 evaluates the volumetric terms for one
@@ -328,13 +352,7 @@ terrain_primary_surface_prevalidated_v3 :: proc(
 	sample, ok := terrain_sample_prevalidated_v2(&recipe.surface, x, y, step)
 	if !ok do return {}, false
 	p := recipe.parameters
-	mountain := max(sample.height - recipe.surface.land_height, 0)
-	mountain = math.pow(mountain / max(recipe.surface.mountain_height, 1), p.mountain_sharpness)
-	height := sample.height + mountain * recipe.surface.mountain_height * (p.mountain_scale - 1)
-	if p.mountain_terrace_strength > 0 && mountain > 0 {
-		terrace := math.floor(height / 4 + 0.5) * 4
-		height += (terrace - height) * clamp(p.mountain_terrace_strength / 4, 0, 0.45)
-	}
+	height := _terrain_shape_height_v3(recipe, sample.height)
 	left, left_ok := _terrain_primary_height_v3(recipe, x - step, y)
 	right, right_ok := _terrain_primary_height_v3(recipe, x + step, y)
 	down, down_ok := _terrain_primary_height_v3(recipe, x, y - step)
@@ -373,15 +391,7 @@ _terrain_primary_height_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y: f32) -> (f3
 	assert(recipe != nil, "_terrain_primary_height_v3: nil recipe")
 	height, _, _, ok := terrain_height_prevalidated_v2(&recipe.surface, x, y)
 	if !ok do return 0, false
-	p := recipe.parameters
-	mountain := max(height - recipe.surface.land_height, 0)
-	mountain = math.pow(mountain / max(recipe.surface.mountain_height, 1), p.mountain_sharpness)
-	height += mountain * recipe.surface.mountain_height * (p.mountain_scale - 1)
-	if p.mountain_terrace_strength > 0 && mountain > 0 {
-		terrace := math.floor(height / 4 + 0.5) * 4
-		height += (terrace - height) * clamp(p.mountain_terrace_strength / 4, 0, 0.45)
-	}
-	return height, true
+	return _terrain_shape_height_v3(recipe, height), true
 }
 
 @(private)
@@ -390,7 +400,14 @@ _terrain_floating_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -
 	p := recipe.parameters
 	cell_x := i64(math.floor(x / p.floating_spacing))
 	cell_y := i64(math.floor(y / p.floating_spacing))
-	best := f32(-10000)
+	// Both fractals are invariant across the neighbour loop, so evaluating
+	// them here costs two noise stacks per sample instead of eighteen.
+	shape := fractal_2d(p.floating_shape_noise, x, y) * p.floating_shape_strength
+	breakup := _terrain_unit(fractal_2d(p.floating_breakup_noise, x + z, y - z))
+	carve := max(p.floating_breakup - breakup, 0)
+	// A legitimate island reaches floating_strength * floating_thickness, so a
+	// finite sentinel could be mistaken for one. Only -max(f32) cannot be.
+	best := -max(f32)
 	for offset_y in -1 ..= 1 {
 		for offset_x in -1 ..= 1 {
 			hash := _noise_hash(
@@ -413,12 +430,10 @@ _terrain_floating_density_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -
 			dx := (x - center_x) / p.floating_radius
 			dy := (y - center_y) / p.floating_radius
 			radial := math.sqrt(dx * dx + dy * dy)
-			shape := fractal_2d(p.floating_shape_noise, x, y) * p.floating_shape_strength
-			breakup := _terrain_unit(fractal_2d(p.floating_breakup_noise, x + z, y - z))
 			top := 1 - radial + shape
 			vertical := abs(z - center_z) / p.floating_thickness
 			island := min(top * p.floating_taper, 1 - vertical)
-			island -= max(p.floating_breakup - breakup, 0)
+			island -= carve
 			best = max(best, island * p.floating_strength * p.floating_thickness)
 		}
 	}
