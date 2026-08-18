@@ -48,6 +48,24 @@ Surface_Text_Input :: proc(
 	)
 }
 
+// to_submit maps the public Fit submit mode onto the two modes `ui` actually
+// implements. The declaration orders differ, so a value cast would silently
+// produce an out-of-range `ui` enum: Fit `.Enter` (2) matched neither `.Enter`
+// (0) nor `.Never` (1) in ti_keys_enter, and Enter was swallowed entirely -
+// no submit and no newline. Modifier-gated submission is not implemented in
+// `ui` yet; those modes degrade to `.Never` so plain Enter keeps inserting a
+// newline rather than wrongly submitting.
+@(private)
+to_submit :: proc(mode: Text_Input_Submit) -> ui.Text_Input_Submit {
+	switch mode {
+	case .Default, .Enter:
+		return .Enter
+	case .Never, .Ctrl_Enter, .Mod_Enter:
+		return .Never
+	}
+	unreachable()
+}
+
 Surface_Text_Input_State :: proc(
 	surface: ^Surface,
 	config: Text_Input_Config,
@@ -67,7 +85,7 @@ Surface_Text_Input_State :: proc(
 			enable_undo = config.enable_undo,
 			max_bytes = config.max_bytes,
 			single_line = config.single_line,
-			submit = ui.Text_Input_Submit(config.submit),
+			submit = to_submit(config.submit),
 			semantics = {field_id = config.semantics.field_id, name = config.semantics.name},
 		},
 		text,

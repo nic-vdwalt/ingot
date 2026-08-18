@@ -2,18 +2,21 @@ package procgen
 
 import "core:math"
 
-// Bumped from 2 when biome profiles gained a continentalness axis, the
-// climate stack gained contrast shaping, and the height stack gained inland
-// basin carving. All three change the classification a seed produces, so
-// worlds persisted against version 2 must be regenerated rather than
-// reinterpreted.
-TERRAIN_RECIPE_VERSION_V2 :: u32(3)
+// Bumped from 3 when the climate stack gained additive bias and a movable
+// equator, the land mask gained a tunable jitter, and biome classification
+// moved from the full height onto the landform height. All four change the
+// classification a seed produces, so worlds persisted against version 3 must
+// be regenerated rather than reinterpreted.
+TERRAIN_RECIPE_VERSION_V2 :: u32(4)
 TERRAIN_FIELD_MAX_EDGE_V2 :: 512
 TERRAIN_BIOME_PROFILE_MAX_V2 :: 16
 TERRAIN_FIELD_HALO_V2 :: 1
 // Contrast below 1 would compress an already narrow climate distribution
 // further, which is the defect these parameters exist to correct.
 TERRAIN_CONTRAST_MIN_V2 :: f32(1)
+// A bias beyond the unit range cannot move a clamped channel any further, so
+// anything larger is a recipe authoring error rather than a stronger effect.
+TERRAIN_CLIMATE_BIAS_MAX_V2 :: f32(1)
 
 Terrain_Range_V2 :: struct {
 	minimum: f32,
@@ -56,8 +59,12 @@ Terrain_Recipe_V2 :: struct {
 	elevation_lapse:        f32,
 	latitude_weight:        f32,
 	latitude_half_extent:   f32,
+	latitude_offset:        f32,
 	climate_contrast:       f32,
 	continental_contrast:   f32,
+	moisture_bias:          f32,
+	temperature_bias:       f32,
+	coast_jitter:           f32,
 	continental_noise:      Noise_Config,
 	mountain_noise:         Noise_Config,
 	ridge_noise:            Noise_Config,
@@ -77,8 +84,13 @@ Terrain_Biome_Blend_V2 :: struct {
 	primary_weight: f32,
 }
 
+// height is the surface a consumer renders and walks on; landform is the same
+// surface with the hill and detail octaves removed. Both are published because
+// they answer different questions: height is where the ground is, landform is
+// what kind of place this is.
 Terrain_Sample_V2 :: struct {
 	height:          f32,
+	landform:        f32,
 	moisture:        f32,
 	temperature:     f32,
 	continentalness: f32,
@@ -86,7 +98,18 @@ Terrain_Sample_V2 :: struct {
 	derivative_x:    f32,
 	derivative_y:    f32,
 	slope:           f32,
+	landform_slope:  f32,
 	biomes:          Terrain_Biome_Blend_V2,
+}
+
+// Terrain_Height_Terms_V2 is everything one evaluation of the 2D stack
+// produces. Height and landform share every fractal in that stack, so a
+// caller that needs both must not pay for it twice.
+Terrain_Height_Terms_V2 :: struct {
+	height:          f32,
+	landform:        f32,
+	continentalness: f32,
+	ruggedness:      f32,
 }
 
 Terrain_Field_Request_V2 :: struct {
@@ -99,7 +122,9 @@ Terrain_Field_Request_V2 :: struct {
 
 Terrain_Field_Buffer_V2 :: struct {
 	height_halo:     []f32,
+	landform_halo:   []f32,
 	heights:         []f32,
+	landform:        []f32,
 	moisture:        []f32,
 	temperature:     []f32,
 	continentalness: []f32,
@@ -107,6 +132,7 @@ Terrain_Field_Buffer_V2 :: struct {
 	derivative_x:    []f32,
 	derivative_y:    []f32,
 	slope:           []f32,
+	landform_slope:  []f32,
 	biomes:          []Terrain_Biome_Blend_V2,
 }
 
