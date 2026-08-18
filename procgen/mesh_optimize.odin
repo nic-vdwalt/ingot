@@ -474,18 +474,21 @@ _optimize_mark :: proc(scratch: Optimize_Scratch, vertex: u32, stamp: u32, count
 
 // An indexed binary max-heap over live triangles.
 //
-// The offline tool scans every live triangle on every step, which is O(T^2) and
-// fine for the small props Blender cooks. The runtime cook has to survive a
-// terrain chunk, so the same selection is made in O(T log T) here. The
-// comparator below is a total order, and the maximum under a total order is
-// unique, so this is a data-structure change and not an algorithm change: both
-// implementations pick the same triangle at every step.
+// Selecting by scanning every live triangle each step - which is what both
+// implementations used to do - is O(T^2). That is affordable for the small
+// props Blender cooks and a hang for anything larger, so both sides now use a
+// heap. The comparator below is a total order, and the maximum under a total
+// order is unique, so this was a data-structure change and not an algorithm
+// change: the heap picks the triangle the scan would have picked, every step.
+//
+// The offline tool uses a lazy-deletion heap because `heapq` offers nothing
+// else. This one is indexed - `slots` tracks where each triangle lives - so a
+// rescore repositions the single existing entry instead of pushing a duplicate,
+// which bounds the heap at one entry per triangle rather than one per rescore.
 @(private)
 Optimize_Heap :: struct {
 	items:  []u32,
 	// Position of each triangle within `items`, or -1 once it has been emitted.
-	// Keeping it lets a rescore reposition one triangle instead of pushing a
-	// duplicate, which is what bounds the heap at one entry per triangle.
 	slots:  []i32,
 	scores: []f64,
 	count:  int,

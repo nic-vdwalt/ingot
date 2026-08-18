@@ -640,7 +640,8 @@ _terrain_field_sample_v2 :: proc(
 	landform_x :=
 		(buffer.landform_halo[center + 1] - buffer.landform_halo[center - 1]) / (2 * step)
 	landform_y :=
-		(buffer.landform_halo[center + stride] - buffer.landform_halo[center - stride]) / (2 * step)
+		(buffer.landform_halo[center + stride] - buffer.landform_halo[center - stride]) /
+		(2 * step)
 	landform_slope := math.sqrt(landform_x * landform_x + landform_y * landform_y)
 	terms, ok := terrain_height_terms_prevalidated_v2(recipe, world_x, world_y)
 	if !ok do return false
@@ -709,11 +710,7 @@ _terrain_climate_v2 :: proc(
 	)
 	// A movable equator is the other half of that: with the warm band pinned
 	// to y = 0 every world shares one north-south gradient regardless of seed.
-	latitude := clamp(
-		abs(world_y - recipe.latitude_offset) / recipe.latitude_half_extent,
-		0,
-		1,
-	)
+	latitude := clamp(abs(world_y - recipe.latitude_offset) / recipe.latitude_half_extent, 0, 1)
 	temperature = noise * (1 - recipe.latitude_weight) + (1 - latitude) * recipe.latitude_weight
 	temperature = clamp(
 		temperature - max(height - recipe.sea_level, 0) * recipe.elevation_lapse,

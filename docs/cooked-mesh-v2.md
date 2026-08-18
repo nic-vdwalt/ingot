@@ -192,16 +192,27 @@ Two consequences worth stating outright:
   because `sqrt` is correctly rounded per IEEE-754 and `pow` is not. Equal-
   valence vertices produce exactly tied scores often enough that a last-ulp
   disagreement between two libms would flip a tie and diverge the whole order.
-- **Selection is a heap here and a heap there.** The offline tool's original
-  linear argmax scan was O(T²), which is affordable for a prop and a hang for a
-  terrain chunk. Both sides now use a heap keyed on `(score, lowest index)`,
-  which reproduces the scan's choice exactly rather than approximately: the scan
+- **Selection is a heap on both sides.** Selecting by scanning every live
+  triangle each step is O(T²) — affordable for a prop, a hang for anything
+  larger. Both sides now use a heap keyed on `(score, lowest index)`, which
+  reproduces the scan's choice exactly rather than approximately: the scan
   walked upward taking a strictly better score, so it too kept the lowest index
   among equals.
+- **Rescoring skips what did not change.** A vertex whose modelled cache
+  position and remaining valence both held still scores the same as it did, so
+  the triangles around it are already correctly ordered. Both sides skip those.
+  The skip is exact, which is what lets both take it without diverging — it is
+  worth about 25× on a 32k-triangle mesh.
 
 The cluster path is deliberately exempt. A DAG's index order belongs to
 `cluster_build`, which stores each cluster as a span into the level's indices;
 reordering it would invalidate every span.
+
+Cost, measured on an M-series laptop: 2k triangles in 1.8 ms, 8k in 10 ms, 32k
+in 22 ms. That is initialization or worker-residency work and must not run per
+frame. Inputs above `SIMPLIFY_MAX_VERTICES` vertices or `SIMPLIFY_MAX_INDICES`
+indices are rejected rather than truncated, the same ceiling the simplifier
+enforces.
 
 ## Compatibility
 
