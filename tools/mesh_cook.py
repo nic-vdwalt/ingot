@@ -196,17 +196,24 @@ def optimize_vertex_cache(indices, vertex_count, cache_size=CACHE_SIZE):
             cache_position[vertex] = slot
         touched = set()
         for vertex in set(corners) | set(cache) | set(evicted):
-            scores[vertex] = _vertex_score(cache_position[vertex], remaining[vertex])
+            score = _vertex_score(cache_position[vertex], remaining[vertex])
+            # A vertex whose modelled position and valence both held still
+            # scores the same as it did, so every triangle around it is already
+            # correct. The skip is exact rather than approximate, which is why
+            # both implementations can take it without diverging.
+            if score == scores[vertex]:
+                continue
+            scores[vertex] = score
             touched.update(adjacency[vertex])
         for triangle in touched:
             if not live[triangle]:
                 continue
-            triangle_scores[triangle] = sum(
-                scores[indices[triangle * 3 + corner]] for corner in range(3)
-            )
+            score = sum(scores[indices[triangle * 3 + corner]] for corner in range(3))
+            if score == triangle_scores[triangle]:
+                continue
+            triangle_scores[triangle] = score
             stamp[triangle] += 1
-            entry = (-triangle_scores[triangle], triangle, stamp[triangle])
-            heapq.heappush(heap, entry)
+            heapq.heappush(heap, (-score, triangle, stamp[triangle]))
     if len(output) != len(indices):
         # A disconnected or degenerate input can starve the walk; falling back
         # to the original order is always correct, just not optimised.
