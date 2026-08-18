@@ -137,6 +137,35 @@ floating-point byte identity is not guaranteed. Consumers using generated data
 authoritatively must quantize it, persist or version its recipe, and reject
 incompatible semantic versions.
 
+## Spherical terrain V4
+
+V4 keeps V1, V2, and V3 unchanged and maps the heightfield product onto a closed
+sphere. Its tangent-adjusted cube-face parameterisation gives consumers six
+bounded square charts while every surface signal samples three-dimensional
+world-scale positions. Shared face edges therefore evaluate the same direction
+and noise coordinates instead of carrying the discontinuity produced by six
+independent 2D domains.
+
+`terrain_face_direction_v4`, `terrain_face_locate_v4`, and
+`terrain_face_basis_v4` publish the parameterisation and its local radial frame.
+Noise samples `direction * radius`, so a recipe frequency remains measured in
+world units and existing province wavelengths transfer without dividing by the
+planet radius. Tangent derivatives step by `derivative_step / radius` radians.
+
+V4 preserves V2's distinction between rendered height and landform. One
+spherical stack publishes both surfaces; four tangent probes derive full and
+landform slopes. Biome profiles classify on landform while `upward_normal` and
+`buildable` describe the full surface. Latitude is angular and controlled by
+`latitude_offset_radians` and `latitude_half_extent_radians`; the embedded V2
+world-Y offset must remain zero so it cannot be silently mistaken for a planet
+rotation.
+
+The V4 recipe version is `1`. Generation allocates no storage, imports no GPU
+package, and is deterministic for the same target and build. Cross-architecture
+floating-point byte identity is not guaranteed. V4 defines the primary surface,
+not a radial signed-density volume: caves, overhangs, navigation, water flow,
+face adjacency, editing, and mesh construction remain consumer responsibilities.
+
 ## Volumetric terrain V3
 
 V3 keeps V1 and V2 unchanged and adds a signed-density product for terrain that

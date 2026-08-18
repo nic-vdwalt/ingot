@@ -48,6 +48,11 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- Spherical terrain V4 adds a tangent-adjusted six-face parameterisation,
+  world-scale 3D surface noise, angular latitude, tangent-basis slope, and the
+  same height/landform split V2 uses for stable biome classification. V1-V3 are
+  unchanged. `warped_fractal_3d` supplies seam-free domain warping for the
+  spherical stack; V4 intentionally defines no radial volume or mesh product.
 - `Terrain_Recipe_V2` gains `moisture_bias`, `temperature_bias`,
   `latitude_offset`, and `coast_jitter`. Contrast can only widen a
   distribution about its midpoint, so before the biases no seed could be a
