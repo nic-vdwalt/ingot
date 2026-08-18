@@ -426,7 +426,11 @@ optimize_accepts_a_terraforger_render_chunk :: proc(t: ^testing.T) {
 	testing.expect_value(t, result.index_count, 192 * 192 * 6)
 	testing.expect_value(t, result.vertex_count, 193 * 193)
 	for index, slot in fixture.out_indices[:result.index_count] {
-		testing.expect(t, index < u32(result.vertex_count), "optimized index escaped vertex storage")
+		testing.expect(
+			t,
+			index < u32(result.vertex_count),
+			"optimized index escaped vertex storage",
+		)
 		if slot < result.vertex_count {
 			testing.expect(t, index <= u32(slot), "vertices were not numbered by first use")
 		}
@@ -451,9 +455,9 @@ optimize_rejects_inputs_above_its_capacity :: proc(t: ^testing.T) {
 	defer delete(out_vertices)
 	out_indices := [3]u32{}
 	too_many_vertices := asset.Mesh_View {
-		id = 1,
-		vertices = vertices,
-		indices = indices[:],
+		id        = 1,
+		vertices  = vertices,
+		indices   = indices[:],
 		primitive = .Triangles,
 	}
 	_, vertices_ok := optimize_mesh(too_many_vertices, out_vertices, out_indices[:], {})
@@ -464,9 +468,9 @@ optimize_rejects_inputs_above_its_capacity :: proc(t: ^testing.T) {
 	defer delete(large_out)
 	one_vertex := [1]asset.Vertex{}
 	too_many_indices := asset.Mesh_View {
-		id = 1,
-		vertices = one_vertex[:],
-		indices = large_indices,
+		id        = 1,
+		vertices  = one_vertex[:],
+		indices   = large_indices,
 		primitive = .Triangles,
 	}
 	_, indices_ok := optimize_mesh(too_many_indices, one_vertex[:], large_out, {})
