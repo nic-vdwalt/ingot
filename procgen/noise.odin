@@ -111,6 +111,23 @@ fractal_3d :: proc(config: Noise_Config, x, y, z: f32) -> f32 {
 	return total / normalizer
 }
 
+warped_fractal_3d :: proc(config: Noise_Config, x, y, z: f32) -> f32 {
+	assert(config.frequency > 0, "warped_fractal_3d: non-positive frequency")
+	assert(config.octaves > 0, "warped_fractal_3d: zero octaves")
+	seed_x := config.seed ~ 0xD1B54A32D192ED03
+	seed_y := config.seed ~ 0x94D049BB133111EB
+	seed_z := config.seed ~ 0xDB4F0B9175AE2165
+	warp_x := noise_3d(seed_x, x * config.frequency, y * config.frequency, z * config.frequency)
+	warp_y := noise_3d(seed_y, x * config.frequency, y * config.frequency, z * config.frequency)
+	warp_z := noise_3d(seed_z, x * config.frequency, y * config.frequency, z * config.frequency)
+	return fractal_3d(
+		config,
+		x + warp_x * config.warp,
+		y + warp_y * config.warp,
+		z + warp_z * config.warp,
+	)
+}
+
 @(private)
 _noise_hash :: proc(seed: u64, x, y: i64) -> u64 {
 	value := seed ~ u64(x) * 0x9E3779B185EBCA87 ~ u64(y) * 0xC2B2AE3D27D4EB4F
