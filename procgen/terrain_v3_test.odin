@@ -38,8 +38,10 @@ terrain_v3_presets_are_valid_and_normal_disables_abstract_terms :: proc(t: ^test
 	testing.expect_value(t, normal.preset, Terrain_Preset_V3.Normal)
 	testing.expect_value(t, normal.parameters.floating_strength, f32(0))
 	testing.expect_value(t, normal.parameters.cave_strength, f32(0))
+	testing.expect_value(t, normal.parameters.fissure_strength, f32(0))
 	testing.expect(t, abstract.parameters.floating_strength > 0)
 	testing.expect(t, abstract.parameters.cave_strength > 0)
+	testing.expect(t, abstract.parameters.fissure_strength > 0)
 }
 
 @(test)
@@ -194,6 +196,13 @@ terrain_v3_validation_rejects_invalid_ranges_and_budget :: proc(t: ^testing.T) {
 	jittered := terrain_abstract_recipe_v3(1)
 	jittered.parameters.floating_jitter = 1.5
 	testing.expect(t, !terrain_recipe_validate_v3(&jittered))
+	fissure_bad := terrain_abstract_recipe_v3(1)
+	fissure_bad.parameters.fissure_width = 0
+	testing.expect(t, !terrain_recipe_validate_v3(&fissure_bad))
+	fissure_depth := terrain_abstract_recipe_v3(1)
+	fissure_depth.parameters.fissure_depth_min = 100
+	fissure_depth.parameters.fissure_depth_max = -100
+	testing.expect(t, !terrain_recipe_validate_v3(&fissure_depth))
 }
 
 // A chunk far above every surface is air, and one far below is rock. Both are
@@ -358,4 +367,68 @@ _terrain_v3_test_buffer :: proc(
 			primitive = .Triangles,
 		},
 	}
+}
+
+@(test)
+terrain_v3_fissure_carves_into_solid_ground :: proc(t: ^testing.T) {
+	recipe := terrain_abstract_recipe_v3(0xC0FFEE)
+	no_fissure := recipe
+	no_fissure.parameters.fissure_strength = 0
+	carved := 0
+	for y in -16 ..= 16 {
+		for x in -16 ..= 16 {
+			world_x, world_y := f32(x * 6), f32(y * 6)
+			for z_i in -4 ..= 8 {
+				world_z := f32(z_i * 4)
+				full, ok_f := terrain_density_v3(&recipe, world_x, world_y, world_z)
+				base, ok_b := terrain_density_v3(&no_fissure, world_x, world_y, world_z)
+				testing.expect(t, ok_f && ok_b)
+				if base > 0 && full <= 0 do carved += 1
+			}
+		}
+	}
+	testing.expect(t, carved > 0, "fissures must carve at least one sample")
+}
+
+@(test)
+terrain_v3_fissure_mouth_is_not_buildable :: proc(t: ^testing.T) {
+	recipe := terrain_abstract_recipe_v3(0xC0FFEE)
+	no_fissure := recipe
+	no_fissure.parameters.fissure_strength = 0
+	unbuildable := 0
+	for y in -64 ..= 64 {
+		for x in -64 ..= 64 {
+			world_x, world_y := f32(x * 2), f32(y * 2)
+			full, ok_f := terrain_primary_surface_v3(&recipe, world_x, world_y, 4)
+			base, ok_b := terrain_primary_surface_v3(&no_fissure, world_x, world_y, 4)
+			testing.expect(t, ok_f && ok_b)
+			if base.buildable && !full.buildable do unbuildable += 1
+		}
+	}
+	testing.expect(t, unbuildable > 0, "fissure mouths must suppress buildability")
+}
+
+@(test)
+terrain_v3_cave_creates_enclosed_void :: proc(t: ^testing.T) {
+	recipe := terrain_abstract_recipe_v3(0xC0FFEE)
+	no_cave := recipe
+	no_cave.parameters.cave_strength = 0
+	enclosed := 0
+	for y in -12 ..= 12 {
+		for x in -12 ..= 12 {
+			world_x, world_y := f32(x * 8), f32(y * 8)
+			for z_i in -6 ..= 6 {
+				world_z := f32(z_i * 4)
+				full, ok_f := terrain_density_v3(&recipe, world_x, world_y, world_z)
+				base, ok_b := terrain_density_v3(&no_cave, world_x, world_y, world_z)
+				testing.expect(t, ok_f && ok_b)
+				if base > 0 && full <= 0 {
+					above, ok_a := terrain_density_v3(&recipe, world_x, world_y, world_z + 12)
+					testing.expect(t, ok_a)
+					if above > 0 do enclosed += 1
+				}
+			}
+		}
+	}
+	testing.expect(t, enclosed > 0, "caves must create enclosed voids")
 }

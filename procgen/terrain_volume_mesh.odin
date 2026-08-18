@@ -90,7 +90,8 @@ terrain_volume_count_v3 :: proc(
 // 2D noise stack per column instead of a full (cells+2)^3 sample pass. Every
 // bound it needs is already a recipe field: the overhang term cannot exceed
 // overhang_strength times ruggedness, carving cannot exceed
-// (1 - cave_threshold) * cave_strength, and floating mass is capped by
+// (1 - cave_threshold) * cave_strength plus
+// (1 - fissure_threshold) * fissure_strength, and floating mass is capped by
 // floating_strength * floating_thickness inside its altitude band. The answer
 // is conservative -- Mixed never promises a surface, but Empty and Solid are
 // certain.
@@ -112,6 +113,9 @@ terrain_volume_occupancy_v3 :: proc(
 	carve_bound := f32(0)
 	if p.cave_strength > 0 && p.cave_altitude_min <= z_high && p.cave_altitude_max >= z_low {
 		carve_bound = max(1 - p.cave_threshold, 0) * p.cave_strength
+	}
+	if p.fissure_strength > 0 && p.fissure_depth_min <= z_high && p.fissure_depth_max >= z_low {
+		carve_bound += max(1 - p.fissure_threshold, 0) * p.fissure_strength
 	}
 	floating_bound := -max(f32)
 	float_low := p.floating_altitude_min - p.floating_thickness

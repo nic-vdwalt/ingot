@@ -7,7 +7,7 @@ import "core:math"
 // landform height. The embedded V2 recipe changes both the classification and
 // the height a seed produces, so worlds persisted against version 5 must be
 // regenerated rather than reinterpreted.
-TERRAIN_RECIPE_VERSION_V3 :: u32(6)
+TERRAIN_RECIPE_VERSION_V3 :: u32(7)
 TERRAIN_VOLUME_MAX_EDGE_V3 :: 64
 TERRAIN_VOLUME_MAX_SAMPLES_V3 :: 300_000
 // The terrace blend cannot reach 1 or a terraced slope would become a
@@ -58,6 +58,14 @@ Terrain_Parameters_V3 :: struct {
 	floating_breakup_noise:    Noise_Config,
 	cave_tunnel_noise:         Noise_Config,
 	cave_chamber_noise:        Noise_Config,
+	fissure_strength:          f32,
+	fissure_threshold:         f32,
+	fissure_width:             f32,
+	fissure_depth_min:         f32,
+	fissure_depth_max:         f32,
+	fissure_warp:              f32,
+	fissure_noise:             Noise_Config,
+	fissure_warp_noise:        Noise_Config,
 }
 
 Terrain_Recipe_V3 :: struct {
@@ -111,6 +119,12 @@ terrain_normal_recipe_v3 :: proc(seed: u64) -> Terrain_Recipe_V3 {
 		floating_breakup_noise  = {seed ~ 0xA4093822299F31D0, 0.031, 3, 2, 0.5, 8},
 		cave_tunnel_noise       = {seed ~ 0x082EFA98EC4E6C89, 0.035, 4, 2, 0.5, 10},
 		cave_chamber_noise      = {seed ~ 0x452821E638D01377, 0.016, 3, 2, 0.5, 16},
+		fissure_threshold       = 0.85,
+		fissure_width           = 1,
+		fissure_depth_min       = -24,
+		fissure_depth_max       = 24,
+		fissure_noise           = {seed ~ 0x9216D5D98979FB1B, 0.024, 3, 2, 0.5, 14},
+		fissure_warp_noise      = {seed ~ 0xD1310BA698DFB5AC, 0.032, 2, 2, 0.5, 8},
 	}
 	return {TERRAIN_RECIPE_VERSION_V3, .Normal, seed, terrain_default_recipe_v2(seed), parameters}
 }
@@ -140,6 +154,12 @@ terrain_abstract_recipe_v3 :: proc(seed: u64) -> Terrain_Recipe_V3 {
 	recipe.parameters.cave_tunnel_scale = 1.25
 	recipe.parameters.cave_chamber_scale = 1.1
 	recipe.parameters.cave_warp = 9
+	recipe.parameters.fissure_strength = 14
+	recipe.parameters.fissure_threshold = 0.62
+	recipe.parameters.fissure_width = 1.6
+	recipe.parameters.fissure_depth_min = -36
+	recipe.parameters.fissure_depth_max = 52
+	recipe.parameters.fissure_warp = 10
 	recipe.parameters.surface_search_min = -48
 	recipe.parameters.surface_search_max = 72
 	return recipe
@@ -195,6 +215,12 @@ terrain_recipe_validate_v3 :: proc(recipe: ^Terrain_Recipe_V3) -> bool {
 		p.cave_tunnel_scale,
 		p.cave_chamber_scale,
 		p.cave_warp,
+		p.fissure_strength,
+		p.fissure_threshold,
+		p.fissure_width,
+		p.fissure_depth_min,
+		p.fissure_depth_max,
+		p.fissure_warp,
 		p.minimum_upward_normal,
 		p.surface_search_min,
 		p.surface_search_max,
@@ -215,6 +241,9 @@ terrain_recipe_validate_v3 :: proc(recipe: ^Terrain_Recipe_V3) -> bool {
 	if p.cave_strength < 0 || p.cave_threshold < 0 || p.cave_threshold > 1 do return false
 	if p.cave_altitude_min > p.cave_altitude_max do return false
 	if p.cave_tunnel_scale <= 0 || p.cave_chamber_scale <= 0 || p.cave_warp < 0 do return false
+	if p.fissure_strength < 0 || p.fissure_threshold < 0 || p.fissure_threshold > 1 do return false
+	if p.fissure_width <= 0 || p.fissure_depth_min > p.fissure_depth_max do return false
+	if p.fissure_warp < 0 do return false
 	if p.minimum_upward_normal < 0 || p.minimum_upward_normal > 1 do return false
 	if p.surface_search_min >= p.surface_search_max do return false
 	if p.surface_uv_scale <= 0 do return false
@@ -224,6 +253,8 @@ terrain_recipe_validate_v3 :: proc(recipe: ^Terrain_Recipe_V3) -> bool {
 		p.floating_breakup_noise,
 		p.cave_tunnel_noise,
 		p.cave_chamber_noise,
+		p.fissure_noise,
+		p.fissure_warp_noise,
 	}
 	for noise in noises do if !_terrain_noise_validate_v2(noise) do return false
 	return true
@@ -294,9 +325,10 @@ _terrain_ground_v3 :: proc(
 // sample. Far from every reachable surface the noise cannot flip the sign,
 // so those samples return the linear base term without running any fractal:
 // overhang is bounded by overhang_strength, cave carving by
-// (1 - cave_threshold) * cave_strength, and floating islands both cap at
-// floating_strength * floating_thickness and live inside their altitude
-// band padded by floating_thickness.
+// (1 - cave_threshold) * cave_strength, fissure carving by
+// (1 - fissure_threshold) * fissure_strength, and floating islands both
+// cap at floating_strength * floating_thickness and live inside their
+// altitude band padded by floating_thickness.
 @(private)
 _terrain_density_from_ground_v3 :: proc(
 	recipe: ^Terrain_Recipe_V3,
@@ -307,8 +339,10 @@ _terrain_density_from_ground_v3 :: proc(
 	p := recipe.parameters
 	base := (ground.height - z) * p.ground_strength / p.surface_softness
 	carve_max := max(1 - p.cave_threshold, 0) * p.cave_strength
+	fissure_carve_max := max(1 - p.fissure_threshold, 0) * p.fissure_strength
+	total_carve := carve_max + fissure_carve_max
 	floating_max := p.floating_strength * p.floating_thickness
-	if base > p.overhang_strength + carve_max && base >= floating_max do return base
+	if base > p.overhang_strength + total_carve && base >= floating_max do return base
 	if base < -p.overhang_strength {
 		floating_possible :=
 			p.floating_strength > 0 &&
@@ -325,6 +359,10 @@ _terrain_density_from_ground_v3 :: proc(
 		cave := _terrain_cave_signal_v3(recipe, x, y, z)
 		carve := max(cave - p.cave_threshold, 0) * p.cave_strength
 		density -= carve
+	}
+	if p.fissure_strength > 0 && z >= p.fissure_depth_min && z <= p.fissure_depth_max {
+		fissure := _terrain_fissure_signal_v3(recipe, x, y, z, ground.height)
+		density -= max(fissure - p.fissure_threshold, 0) * p.fissure_strength
 	}
 	return density
 }
@@ -395,7 +433,9 @@ terrain_primary_surface_prevalidated_v3 :: proc(
 			biomes = biomes,
 			buildable = height >= p.surface_search_min &&
 			height <= p.surface_search_max &&
-			upward >= p.minimum_upward_normal,
+			upward >= p.minimum_upward_normal &&
+			(p.fissure_strength <= 0 ||
+				_terrain_fissure_signal_v3(recipe, x, y, height, height) < p.fissure_threshold),
 		},
 		true
 }
@@ -491,4 +531,24 @@ _terrain_cave_signal_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y, z: f32) -> f32
 	tunnel := 1 - min(tunnel_a, tunnel_b) * p.cave_tunnel_scale
 	chamber := _terrain_unit(fractal_3d(p.cave_chamber_noise, x, y, z))
 	return clamp(max(tunnel, chamber * p.cave_chamber_scale), 0, 1)
+}
+
+// _terrain_fissure_signal_v3 generates long warped ridge lines from a 2D
+// noise field, producing narrow vertical tears in the surface. The signal
+// is independent of the cave system and tapers with depth below the ground
+// surface so fissures are widest at the surface and close below.
+@(private)
+_terrain_fissure_signal_v3 :: proc(
+	recipe: ^Terrain_Recipe_V3,
+	x, y, z, ground_height: f32,
+) -> f32 {
+	assert(recipe != nil, "_terrain_fissure_signal_v3: nil recipe")
+	p := recipe.parameters
+	warp_x := fractal_2d(p.fissure_warp_noise, x, y) * p.fissure_warp
+	warp_y := fractal_2d(p.fissure_warp_noise, y, x) * p.fissure_warp
+	ridge := 1 - abs(fractal_2d(p.fissure_noise, x + warp_x, y + warp_y)) * p.fissure_width
+	depth_below := max(ground_height - z, 0)
+	range_z := max(p.fissure_depth_max - p.fissure_depth_min, 1)
+	taper := 1 - clamp(depth_below / range_z, 0, 1)
+	return clamp(ridge * taper, 0, 1)
 }
