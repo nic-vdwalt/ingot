@@ -508,7 +508,11 @@ _optimize_heap_better :: proc(heap: ^Optimize_Heap, first, second: u32) -> bool 
 @(private)
 _optimize_heap_swap :: proc(heap: ^Optimize_Heap, first, second: int) {
 	assert(heap != nil, "_optimize_heap_swap: nil heap")
+	assert(first >= 0 && first < len(heap.items), "_optimize_heap_swap: first past storage")
+	assert(second >= 0 && second < len(heap.items), "_optimize_heap_swap: second past storage")
 	heap.items[first], heap.items[second] = heap.items[second], heap.items[first]
+	assert(int(heap.items[first]) < len(heap.slots), "_optimize_heap_swap: triangle past slots")
+	assert(int(heap.items[second]) < len(heap.slots), "_optimize_heap_swap: triangle past slots")
 	heap.slots[heap.items[first]] = i32(first)
 	heap.slots[heap.items[second]] = i32(second)
 }
