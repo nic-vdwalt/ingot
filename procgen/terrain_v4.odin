@@ -119,7 +119,8 @@ terrain_recipe_validate_v4 :: proc(recipe: ^Terrain_Recipe_V4) -> bool {
 	if p.derivative_step <= 0 || p.derivative_step >= p.radius do return false
 	if p.minimum_upward_normal < 0 || p.minimum_upward_normal > 1 do return false
 	if abs(p.latitude_offset_radians) > math.PI / 2 do return false
-	if p.latitude_half_extent_radians <= 0 || p.latitude_half_extent_radians > math.PI / 2 do return false
+	half := p.latitude_half_extent_radians
+	if half <= 0 || half > math.PI / 2 do return false
 	if recipe.surface.latitude_offset != 0 do return false
 	return true
 }
@@ -166,7 +167,8 @@ terrain_height_terms_prevalidated_v4 :: proc(
 	height += (lake_floor - height) * basin
 	landform := relief + (lake_floor - relief) * basin
 	scale := recipe.parameters.height_scale
-	return {height * scale, landform * scale, continentalness, clamp(uplift * 0.7 + ridge * 0.3, 0, 1)}, true
+	ruggedness := clamp(uplift * 0.7 + ridge * 0.3, 0, 1)
+	return {height * scale, landform * scale, continentalness, ruggedness}, true
 }
 
 terrain_primary_surface_v4 :: proc(
@@ -193,10 +195,14 @@ terrain_primary_surface_prevalidated_v4 :: proc(
 	up, east, north := terrain_face_basis_v4(direction)
 	step := recipe.parameters.derivative_step
 	angle := step / recipe.parameters.radius
-	left, left_ok := terrain_height_terms_prevalidated_v4(recipe, _terrain_tangent_step_v4(up, east, -angle))
-	right, right_ok := terrain_height_terms_prevalidated_v4(recipe, _terrain_tangent_step_v4(up, east, angle))
-	down, down_ok := terrain_height_terms_prevalidated_v4(recipe, _terrain_tangent_step_v4(up, north, -angle))
-	top, top_ok := terrain_height_terms_prevalidated_v4(recipe, _terrain_tangent_step_v4(up, north, angle))
+	d_east_neg := _terrain_tangent_step_v4(up, east, -angle)
+	d_east_pos := _terrain_tangent_step_v4(up, east, angle)
+	d_north_neg := _terrain_tangent_step_v4(up, north, -angle)
+	d_north_pos := _terrain_tangent_step_v4(up, north, angle)
+	left, left_ok := terrain_height_terms_prevalidated_v4(recipe, d_east_neg)
+	right, right_ok := terrain_height_terms_prevalidated_v4(recipe, d_east_pos)
+	down, down_ok := terrain_height_terms_prevalidated_v4(recipe, d_north_neg)
+	top, top_ok := terrain_height_terms_prevalidated_v4(recipe, d_north_pos)
 	if !left_ok || !right_ok || !down_ok || !top_ok do return {}, false
 	dx := (right.height - left.height) / (2 * step)
 	dy := (top.height - down.height) / (2 * step)
@@ -268,7 +274,8 @@ _terrain_climate_v4 :: proc(
 		_terrain_unit(warped_fractal_3d(surface.moisture_noise, position.x, position.y, position.z)),
 		surface.climate_contrast,
 	)
-	coast_bias := 1 - abs(terms.continentalness - surface.coast_threshold) / max(surface.coast_fade * 3, 0.001)
+	coast_dist := abs(terms.continentalness - surface.coast_threshold)
+	coast_bias := 1 - coast_dist / max(surface.coast_fade * 3, 0.001)
 	moisture = clamp(moisture + clamp(coast_bias, 0, 1) * 0.12 - terms.ruggedness * 0.08, 0, 1)
 	moisture = clamp(moisture + surface.moisture_bias, 0, 1)
 	noise := _terrain_contrast_v2(
@@ -279,7 +286,8 @@ _terrain_climate_v4 :: proc(
 	latitude_distance := abs(latitude - recipe.parameters.latitude_offset_radians)
 	latitude_unit := clamp(latitude_distance / recipe.parameters.latitude_half_extent_radians, 0, 1)
 	temperature = noise * (1 - surface.latitude_weight) + (1 - latitude_unit) * surface.latitude_weight
-	temperature = clamp(temperature - max(terms.height - surface.sea_level, 0) * surface.elevation_lapse, 0, 1)
+	lapse := max(terms.height - surface.sea_level, 0) * surface.elevation_lapse
+	temperature = clamp(temperature - lapse, 0, 1)
 	temperature = clamp(temperature + surface.temperature_bias, 0, 1)
 	return
 }
