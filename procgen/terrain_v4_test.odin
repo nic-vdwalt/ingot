@@ -28,8 +28,22 @@ terrain_v4_face_parameterisation_round_trips :: proc(t: ^testing.T) {
 				direction := terrain_face_direction_v4(face, u, v)
 				located, located_u, located_v := terrain_face_locate_v4(direction)
 				testing.expect_value(t, located, face)
-				testing.expectf(t, abs(located_u - u) < 0.00001, "face %v u %v != %v", face, located_u, u)
-				testing.expectf(t, abs(located_v - v) < 0.00001, "face %v v %v != %v", face, located_v, v)
+				testing.expectf(
+					t,
+					abs(located_u - u) < 0.00001,
+					"face %v u %v != %v",
+					face,
+					located_u,
+					u,
+				)
+				testing.expectf(
+					t,
+					abs(located_v - v) < 0.00001,
+					"face %v v %v != %v",
+					face,
+					located_v,
+					v,
+				)
 			}
 		}
 	}
@@ -43,9 +57,12 @@ terrain_v4_shared_edges_agree_across_faces :: proc(t: ^testing.T) {
 				along := f32(index) / 8
 				u, v := along, f32(-1)
 				switch edge {
-				case 1: u, v = 1, along
-				case 2: u, v = along, 1
-				case 3: u, v = -1, along
+				case 1:
+					u, v = 1, along
+				case 2:
+					u, v = along, 1
+				case 3:
+					u, v = -1, along
 				}
 				direction := terrain_face_direction_v4(face, u, v)
 				other, other_u, other_v := terrain_face_locate_v4(direction)
@@ -119,10 +136,26 @@ terrain_v4_basis_is_orthonormal :: proc(t: ^testing.T) {
 				up, east, north := terrain_face_basis_v4(direction)
 				testing.expectf(t, abs(_terrain_dot_v4(up, up) - 1) < 0.00001, "up not unit")
 				testing.expectf(t, abs(_terrain_dot_v4(east, east) - 1) < 0.00001, "east not unit")
-				testing.expectf(t, abs(_terrain_dot_v4(north, north) - 1) < 0.00001, "north not unit")
-				testing.expectf(t, abs(_terrain_dot_v4(up, east)) < 0.00001, "up/east not perpendicular")
-				testing.expectf(t, abs(_terrain_dot_v4(up, north)) < 0.00001, "up/north not perpendicular")
-				testing.expectf(t, abs(_terrain_dot_v4(east, north)) < 0.00001, "east/north not perpendicular")
+				testing.expectf(
+					t,
+					abs(_terrain_dot_v4(north, north) - 1) < 0.00001,
+					"north not unit",
+				)
+				testing.expectf(
+					t,
+					abs(_terrain_dot_v4(up, east)) < 0.00001,
+					"up/east not perpendicular",
+				)
+				testing.expectf(
+					t,
+					abs(_terrain_dot_v4(up, north)) < 0.00001,
+					"up/north not perpendicular",
+				)
+				testing.expectf(
+					t,
+					abs(_terrain_dot_v4(east, north)) < 0.00001,
+					"east/north not perpendicular",
+				)
 			}
 		}
 	}

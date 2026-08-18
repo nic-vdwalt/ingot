@@ -435,7 +435,8 @@ terrain_primary_surface_prevalidated_v3 :: proc(
 			height <= p.surface_search_max &&
 			upward >= p.minimum_upward_normal &&
 			(p.fissure_strength <= 0 ||
-				_terrain_fissure_signal_v3(recipe, x, y, height, height) < p.fissure_threshold),
+					_terrain_fissure_signal_v3(recipe, x, y, height, height) <
+						p.fissure_threshold),
 		},
 		true
 }
