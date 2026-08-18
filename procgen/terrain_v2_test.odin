@@ -20,10 +20,19 @@ TERRAIN_V2_BIOME_STEP :: f32(20)
 TERRAIN_V2_BIOME_CELLS :: TERRAIN_V2_BIOME_EDGE * TERRAIN_V2_BIOME_EDGE
 TERRAIN_V2_BIOME_HALF :: f32(TERRAIN_V2_BIOME_EDGE) * TERRAIN_V2_BIOME_STEP / 2
 TERRAIN_V2_DECILE_COUNT :: 10
+// The shore scan resolves the hill wavelength (~71 units) rather than the
+// province wavelength: coast jitter is a hill-scale effect, and a step near
+// Nyquist for it aliases the crossings it is meant to count.
+TERRAIN_V2_SHORE_EDGE :: 256
+TERRAIN_V2_SHORE_STEP :: f32(4)
+TERRAIN_V2_SHORE_CELLS :: TERRAIN_V2_SHORE_EDGE * TERRAIN_V2_SHORE_EDGE
+TERRAIN_V2_SHORE_HALF :: f32(TERRAIN_V2_SHORE_EDGE) * TERRAIN_V2_SHORE_STEP / 2
 
 Terrain_V2_Test_Storage :: struct {
 	height_halo:     [TERRAIN_V2_TEST_HALO]f32,
+	landform_halo:   [TERRAIN_V2_TEST_HALO]f32,
 	heights:         [TERRAIN_V2_TEST_SAMPLES]f32,
+	landform:        [TERRAIN_V2_TEST_SAMPLES]f32,
 	moisture:        [TERRAIN_V2_TEST_SAMPLES]f32,
 	temperature:     [TERRAIN_V2_TEST_SAMPLES]f32,
 	continentalness: [TERRAIN_V2_TEST_SAMPLES]f32,
@@ -31,6 +40,7 @@ Terrain_V2_Test_Storage :: struct {
 	derivative_x:    [TERRAIN_V2_TEST_SAMPLES]f32,
 	derivative_y:    [TERRAIN_V2_TEST_SAMPLES]f32,
 	slope:           [TERRAIN_V2_TEST_SAMPLES]f32,
+	landform_slope:  [TERRAIN_V2_TEST_SAMPLES]f32,
 	biomes:          [TERRAIN_V2_TEST_SAMPLES]Terrain_Biome_Blend_V2,
 }
 
@@ -264,6 +274,298 @@ terrain_v2_seed_suite_has_usable_variability :: proc(t: ^testing.T) {
 	testing.expect(t, different)
 }
 
+// Contrast can only widen a distribution about its midpoint, so before bias
+// existed no seed could be a globally dry or globally cold world -- every one
+// shared a climate centred on 0.5. This is the oracle for that.
+@(test)
+terrain_v2_climate_bias_shifts_the_distribution :: proc(t: ^testing.T) {
+	neutral := _terrain_v2_bias_recipe(0, 0)
+	dry_cold := _terrain_v2_bias_recipe(-0.3, -0.3)
+	wet_warm := _terrain_v2_bias_recipe(0.3, 0.3)
+	testing.expect(t, terrain_recipe_validate_v2(&neutral))
+	testing.expect(t, terrain_recipe_validate_v2(&dry_cold))
+	testing.expect(t, terrain_recipe_validate_v2(&wet_warm))
+	neutral_moisture, neutral_temperature := _terrain_v2_climate_mean(t, &neutral)
+	dry_moisture, cold_temperature := _terrain_v2_climate_mean(t, &dry_cold)
+	wet_moisture, warm_temperature := _terrain_v2_climate_mean(t, &wet_warm)
+	testing.expectf(
+		t,
+		dry_moisture < neutral_moisture,
+		"negative moisture bias %f did not dry the world below %f",
+		dry_moisture,
+		neutral_moisture,
+	)
+	testing.expectf(
+		t,
+		wet_moisture > neutral_moisture,
+		"positive moisture bias %f did not wet the world above %f",
+		wet_moisture,
+		neutral_moisture,
+	)
+	testing.expectf(
+		t,
+		cold_temperature < neutral_temperature,
+		"negative temperature bias %f did not cool the world below %f",
+		cold_temperature,
+		neutral_temperature,
+	)
+	testing.expectf(
+		t,
+		warm_temperature > neutral_temperature,
+		"positive temperature bias %f did not warm the world above %f",
+		warm_temperature,
+		neutral_temperature,
+	)
+	// A bias that pushes past the clamp must saturate, not wrap or escape.
+	saturated := _terrain_v2_bias_recipe(1, -1)
+	testing.expect(t, terrain_recipe_validate_v2(&saturated))
+	moisture, temperature := _terrain_v2_climate_mean(t, &saturated)
+	testing.expectf(t, moisture > 0.9, "saturating moisture bias reached only %f", moisture)
+	testing.expectf(t, temperature < 0.1, "saturating temperature bias reached only %f", temperature)
+}
+
+// The warm band was pinned to y = 0 for every seed, which is one of the
+// reasons two worlds read the same however different their noise was.
+@(test)
+terrain_v2_latitude_offset_moves_the_warm_band :: proc(t: ^testing.T) {
+	offset := TERRAIN_V2_CLIMATE_HALF * 0.6
+	recipe := _terrain_v2_bias_recipe(0, 0)
+	// Latitude has to dominate for the band to be locatable at all; the
+	// default weight deliberately lets noise win.
+	recipe.latitude_weight = 0.9
+	shifted := recipe
+	shifted.latitude_offset = offset
+	testing.expect(t, terrain_recipe_validate_v2(&recipe))
+	testing.expect(t, terrain_recipe_validate_v2(&shifted))
+	// Each recipe must be warmest at its own equator, and the two equators
+	// are different places.
+	at_origin := _terrain_v2_temperature_row(t, &recipe, 0)
+	at_offset := _terrain_v2_temperature_row(t, &recipe, offset)
+	shifted_origin := _terrain_v2_temperature_row(t, &shifted, 0)
+	shifted_offset := _terrain_v2_temperature_row(t, &shifted, offset)
+	testing.expectf(
+		t,
+		at_origin > at_offset,
+		"unshifted equator %f not warmer than %f",
+		at_origin,
+		at_offset,
+	)
+	testing.expectf(
+		t,
+		shifted_offset > shifted_origin,
+		"shifted equator %f not warmer than %f",
+		shifted_offset,
+		shifted_origin,
+	)
+}
+
+// Jitter is what lets one recipe be a province-scale continent and another a
+// broken archipelago. Without it the land mask roughness is a constant.
+@(test)
+terrain_v2_coast_jitter_controls_land_mask_roughness :: proc(t: ^testing.T) {
+	smooth := _terrain_v2_bias_recipe(0, 0)
+	// Hills and detail also cross the waterline, so they are removed to
+	// isolate what the jitter alone does to the coastline.
+	smooth.hill_height = 0
+	smooth.detail_height = 0
+	smooth.basin_depth = 0
+	smooth.coast_jitter = 0
+	rough := smooth
+	rough.coast_jitter = 0.3
+	testing.expect(t, terrain_recipe_validate_v2(&smooth))
+	testing.expect(t, terrain_recipe_validate_v2(&rough))
+	smooth_crossings := _terrain_v2_shore_crossings(t, &smooth)
+	rough_crossings := _terrain_v2_shore_crossings(t, &rough)
+	testing.expectf(
+		t,
+		rough_crossings > smooth_crossings,
+		"jitter 0.3 gave %d shore crossings, not more than %d at jitter 0",
+		rough_crossings,
+		smooth_crossings,
+	)
+	// A negative jitter is a recipe authoring error, not a smoother coast.
+	rough.coast_jitter = -0.1
+	testing.expect(t, !terrain_recipe_validate_v2(&rough))
+}
+
+// Hills exist to make ground look uneven, not to relabel it. Classifying on
+// the full height meant a single 71-unit bump could flip a cell into a rock or
+// highland profile on otherwise uniform ground, which is what turned one
+// province into a mottle of six.
+@(test)
+terrain_v2_landform_classification_ignores_hill_noise :: proc(t: ^testing.T) {
+	recipe := _terrain_v2_bias_recipe(0, 0)
+	// Exaggerated relief is the condition the split exists to survive.
+	recipe.hill_height = 9
+	recipe.detail_height = 3
+	testing.expect(t, terrain_recipe_validate_v2(&recipe))
+	landform_changes, height_changes, sampled := 0, 0, 0
+	previous_landform, previous_height := u16(0), u16(0)
+	for column in 0 ..< TERRAIN_V2_BIOME_EDGE {
+		world_x := f32(column) * TERRAIN_V2_BIOME_STEP - TERRAIN_V2_BIOME_HALF
+		sample, ok := terrain_sample_prevalidated_v2(&recipe, world_x, 0, 2)
+		if !ok do continue
+		// The same climate and the same profile table, differing only in
+		// which surface the height and slope axes read.
+		full, full_ok := terrain_biome_blend_prevalidated_v2(
+			&recipe,
+			sample.height,
+			sample.continentalness,
+			sample.moisture,
+			sample.temperature,
+			sample.slope,
+		)
+		if !full_ok do continue
+		if sampled > 0 {
+			if sample.biomes.primary_id != previous_landform do landform_changes += 1
+			if full.primary_id != previous_height do height_changes += 1
+		}
+		previous_landform = sample.biomes.primary_id
+		previous_height = full.primary_id
+		sampled += 1
+	}
+	testing.expect_value(t, sampled, TERRAIN_V2_BIOME_EDGE)
+	testing.expectf(
+		t,
+		landform_changes < height_changes,
+		"landform gave %d biome changes, not fewer than the %d full height gives",
+		landform_changes,
+		height_changes,
+	)
+	testing.expect(t, sample_slopes_differ(&recipe))
+}
+
+// The landform slope must actually be the gentler of the two, or the
+// classification win above would be coincidence rather than mechanism.
+@(private)
+sample_slopes_differ :: proc(recipe: ^Terrain_Recipe_V2) -> bool {
+	assert(recipe != nil, "sample_slopes_differ: nil recipe")
+	assert(recipe.hill_height > 0, "sample_slopes_differ: hills disabled")
+	gentler := 0
+	for column in 0 ..< TERRAIN_V2_BIOME_EDGE {
+		world_x := f32(column) * TERRAIN_V2_BIOME_STEP - TERRAIN_V2_BIOME_HALF
+		sample, ok := terrain_sample_prevalidated_v2(recipe, world_x, 0, 2)
+		if !ok do continue
+		if sample.landform_slope <= sample.slope do gentler += 1
+	}
+	return gentler * 4 >= TERRAIN_V2_BIOME_EDGE * 3
+}
+
+@(test)
+terrain_v2_rejects_out_of_range_climate_controls :: proc(t: ^testing.T) {
+	recipe := terrain_default_recipe_v2(17)
+	testing.expect(t, terrain_recipe_validate_v2(&recipe))
+	recipe.moisture_bias = TERRAIN_CLIMATE_BIAS_MAX_V2 + 0.01
+	testing.expect(t, !terrain_recipe_validate_v2(&recipe))
+	recipe.moisture_bias = -TERRAIN_CLIMATE_BIAS_MAX_V2
+	testing.expect(t, terrain_recipe_validate_v2(&recipe))
+	recipe.temperature_bias = -TERRAIN_CLIMATE_BIAS_MAX_V2 - 0.01
+	testing.expect(t, !terrain_recipe_validate_v2(&recipe))
+	recipe.temperature_bias = 0
+	testing.expect(t, terrain_recipe_validate_v2(&recipe))
+	recipe.coast_jitter = -0.001
+	testing.expect(t, !terrain_recipe_validate_v2(&recipe))
+	recipe.coast_jitter = 0
+	testing.expect(t, terrain_recipe_validate_v2(&recipe))
+}
+
+@(private)
+_terrain_v2_bias_recipe :: proc(moisture_bias, temperature_bias: f32) -> Terrain_Recipe_V2 {
+	recipe := terrain_default_recipe_v2(90210)
+	recipe.latitude_half_extent = TERRAIN_V2_CLIMATE_HALF
+	recipe.moisture_bias = moisture_bias
+	recipe.temperature_bias = temperature_bias
+	return recipe
+}
+
+@(private)
+_terrain_v2_climate_mean :: proc(
+	t: ^testing.T,
+	recipe: ^Terrain_Recipe_V2,
+) -> (
+	moisture_mean, temperature_mean: f32,
+) {
+	assert(recipe != nil, "_terrain_v2_climate_mean: nil recipe")
+	assert(t != nil, "_terrain_v2_climate_mean: nil test")
+	moisture_total, temperature_total := f32(0), f32(0)
+	sampled := 0
+	for row in 0 ..< TERRAIN_V2_BIOME_EDGE {
+		world_y := f32(row) * TERRAIN_V2_BIOME_STEP - TERRAIN_V2_BIOME_HALF
+		for column in 0 ..< TERRAIN_V2_BIOME_EDGE {
+			world_x := f32(column) * TERRAIN_V2_BIOME_STEP - TERRAIN_V2_BIOME_HALF
+			terms, ok := terrain_height_terms_prevalidated_v2(recipe, world_x, world_y)
+			if !ok do continue
+			moisture, temperature := _terrain_climate_v2(
+				recipe,
+				world_x,
+				world_y,
+				terms.height,
+				terms.continentalness,
+				terms.ruggedness,
+			)
+			moisture_total += moisture
+			temperature_total += temperature
+			sampled += 1
+		}
+	}
+	testing.expect_value(t, sampled, TERRAIN_V2_BIOME_CELLS)
+	return moisture_total / f32(sampled), temperature_total / f32(sampled)
+}
+
+@(private)
+_terrain_v2_temperature_row :: proc(
+	t: ^testing.T,
+	recipe: ^Terrain_Recipe_V2,
+	world_y: f32,
+) -> f32 {
+	assert(recipe != nil, "_terrain_v2_temperature_row: nil recipe")
+	assert(t != nil, "_terrain_v2_temperature_row: nil test")
+	total := f32(0)
+	sampled := 0
+	for column in 0 ..< TERRAIN_V2_BIOME_EDGE {
+		world_x := f32(column) * TERRAIN_V2_BIOME_STEP - TERRAIN_V2_BIOME_HALF
+		terms, ok := terrain_height_terms_prevalidated_v2(recipe, world_x, world_y)
+		if !ok do continue
+		_, temperature := _terrain_climate_v2(
+			recipe,
+			world_x,
+			world_y,
+			terms.height,
+			terms.continentalness,
+			terms.ruggedness,
+		)
+		total += temperature
+		sampled += 1
+	}
+	testing.expect_value(t, sampled, TERRAIN_V2_BIOME_EDGE)
+	return total / f32(sampled)
+}
+
+// _terrain_v2_shore_crossings counts how often a scanline crosses the
+// waterline. A smooth land mask crosses a handful of times per row; a shredded
+// one crosses constantly, which is what an over-jittered coastline looks like.
+@(private)
+_terrain_v2_shore_crossings :: proc(t: ^testing.T, recipe: ^Terrain_Recipe_V2) -> int {
+	assert(recipe != nil, "_terrain_v2_shore_crossings: nil recipe")
+	assert(t != nil, "_terrain_v2_shore_crossings: nil test")
+	crossings, sampled := 0, 0
+	for row in 0 ..< TERRAIN_V2_SHORE_EDGE {
+		world_y := f32(row) * TERRAIN_V2_SHORE_STEP - TERRAIN_V2_SHORE_HALF
+		previous := false
+		for column in 0 ..< TERRAIN_V2_SHORE_EDGE {
+			world_x := f32(column) * TERRAIN_V2_SHORE_STEP - TERRAIN_V2_SHORE_HALF
+			terms, ok := terrain_height_terms_prevalidated_v2(recipe, world_x, world_y)
+			if !ok do continue
+			dry := terms.height > recipe.sea_level
+			if column > 0 && dry != previous do crossings += 1
+			previous = dry
+			sampled += 1
+		}
+	}
+	testing.expect_value(t, sampled, TERRAIN_V2_SHORE_CELLS)
+	return crossings
+}
+
 @(private)
 _terrain_v2_decile :: proc(value: f32) -> int {
 	return clamp(int(value * TERRAIN_V2_DECILE_COUNT), 0, TERRAIN_V2_DECILE_COUNT - 1)
@@ -311,7 +613,9 @@ _terrain_v2_test_buffer :: proc(storage: ^Terrain_V2_Test_Storage) -> Terrain_Fi
 	assert(storage != nil, "_terrain_v2_test_buffer: nil storage")
 	return {
 		height_halo = storage.height_halo[:],
+		landform_halo = storage.landform_halo[:],
 		heights = storage.heights[:],
+		landform = storage.landform[:],
 		moisture = storage.moisture[:],
 		temperature = storage.temperature[:],
 		continentalness = storage.continentalness[:],
@@ -319,6 +623,7 @@ _terrain_v2_test_buffer :: proc(storage: ^Terrain_V2_Test_Storage) -> Terrain_Fi
 		derivative_x = storage.derivative_x[:],
 		derivative_y = storage.derivative_y[:],
 		slope = storage.slope[:],
+		landform_slope = storage.landform_slope[:],
 		biomes = storage.biomes[:],
 	}
 }

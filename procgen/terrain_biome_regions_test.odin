@@ -7,14 +7,16 @@ TERRAIN_REGION_TEST_EDGE :: 5
 TERRAIN_REGION_TEST_CELLS :: TERRAIN_REGION_TEST_EDGE * TERRAIN_REGION_TEST_EDGE
 
 Terrain_Region_Test_Storage :: struct {
-	raw:             [TERRAIN_REGION_TEST_CELLS]Terrain_Biome_Blend_V2,
-	biomes:          [TERRAIN_REGION_TEST_CELLS]Terrain_Biome_Blend_V2,
-	patch_ids:       [TERRAIN_REGION_TEST_CELLS]u32,
-	labels:          [TERRAIN_REGION_TEST_CELLS]u32,
-	queue:           [TERRAIN_REGION_TEST_CELLS]u32,
-	component_sizes: [TERRAIN_REGION_TEST_CELLS]u32,
-	component_ids:   [TERRAIN_REGION_TEST_CELLS]u16,
-	merge_targets:   [TERRAIN_REGION_TEST_CELLS]u32,
+	raw:               [TERRAIN_REGION_TEST_CELLS]Terrain_Biome_Blend_V2,
+	biomes:            [TERRAIN_REGION_TEST_CELLS]Terrain_Biome_Blend_V2,
+	patch_ids:         [TERRAIN_REGION_TEST_CELLS]u32,
+	labels:            [TERRAIN_REGION_TEST_CELLS]u32,
+	queue:             [TERRAIN_REGION_TEST_CELLS]u32,
+	component_sizes:   [TERRAIN_REGION_TEST_CELLS]u32,
+	component_ids:     [TERRAIN_REGION_TEST_CELLS]u16,
+	merge_targets:     [TERRAIN_REGION_TEST_CELLS]u32,
+	component_offsets: [TERRAIN_REGION_TEST_CELLS + 1]u32,
+	component_cells:   [TERRAIN_REGION_TEST_CELLS]u32,
 }
 
 @(test)
@@ -175,16 +177,8 @@ terrain_biome_regions_resolve_province_scale_climate :: proc(t: ^testing.T) {
 	defer delete(biomes)
 	patch_ids := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
 	defer delete(patch_ids)
-	labels := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
-	defer delete(labels)
-	queue := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
-	defer delete(queue)
-	component_sizes := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
-	defer delete(component_sizes)
-	component_ids := make([]u16, TERRAIN_REGION_SURVEY_CELLS)
-	defer delete(component_ids)
-	merge_targets := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
-	defer delete(merge_targets)
+	scratch := _terrain_region_survey_scratch()
+	defer _terrain_region_survey_scratch_free(scratch)
 
 	for row in 0 ..< TERRAIN_REGION_SURVEY_EDGE {
 		world_y := f32(row) * TERRAIN_REGION_SURVEY_STEP - half
@@ -202,13 +196,6 @@ terrain_biome_regions_resolve_province_scale_climate :: proc(t: ^testing.T) {
 		nil,
 	}
 	output := Terrain_Biome_Region_Output{biomes, patch_ids}
-	scratch := Terrain_Biome_Region_Scratch {
-		labels,
-		queue,
-		component_sizes,
-		component_ids,
-		merge_targets,
-	}
 	testing.expect(t, terrain_resolve_biome_regions(&recipe, request, raw, output, scratch))
 
 	sizes := make([]int, TERRAIN_REGION_SURVEY_CELLS + 1)
@@ -239,6 +226,114 @@ terrain_biome_regions_resolve_province_scale_climate :: proc(t: ^testing.T) {
 	)
 }
 
+// A province-scale minimum puts most components below it, which is the case
+// the bucketed component scan exists for: the sweep it replaced re-walked the
+// whole grid once per undersized component. This asserts the result is still
+// canonical at that scale, and it is slow enough to notice if the quadratic
+// sweep ever comes back.
+@(test)
+terrain_biome_regions_resolve_at_province_minimum :: proc(t: ^testing.T) {
+	recipe := terrain_default_recipe_v2(31337)
+	half := f32(TERRAIN_REGION_SURVEY_EDGE) * TERRAIN_REGION_SURVEY_STEP / 2
+	recipe.latitude_half_extent = half
+	testing.expect(t, terrain_recipe_validate_v2(&recipe))
+	minimum := TERRAIN_REGION_SURVEY_CELLS / 16
+
+	raw := make([]Terrain_Biome_Blend_V2, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(raw)
+	biomes_a := make([]Terrain_Biome_Blend_V2, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(biomes_a)
+	biomes_b := make([]Terrain_Biome_Blend_V2, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(biomes_b)
+	patch_ids_a := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(patch_ids_a)
+	patch_ids_b := make([]u32, TERRAIN_REGION_SURVEY_CELLS)
+	defer delete(patch_ids_b)
+
+	for row in 0 ..< TERRAIN_REGION_SURVEY_EDGE {
+		world_y := f32(row) * TERRAIN_REGION_SURVEY_STEP - half
+		for column in 0 ..< TERRAIN_REGION_SURVEY_EDGE {
+			world_x := f32(column) * TERRAIN_REGION_SURVEY_STEP - half
+			sample, ok := terrain_sample_prevalidated_v2(&recipe, world_x, world_y, 2)
+			if !ok do continue
+			raw[row * TERRAIN_REGION_SURVEY_EDGE + column] = sample.biomes
+		}
+	}
+	request := Terrain_Biome_Region_Request {
+		TERRAIN_REGION_SURVEY_EDGE,
+		TERRAIN_REGION_SURVEY_EDGE,
+		minimum,
+		nil,
+	}
+	first := _terrain_region_survey_scratch()
+	defer _terrain_region_survey_scratch_free(first)
+	second := _terrain_region_survey_scratch()
+	defer _terrain_region_survey_scratch_free(second)
+	testing.expect(
+		t,
+		terrain_resolve_biome_regions(
+			&recipe,
+			request,
+			raw,
+			Terrain_Biome_Region_Output{biomes_a, patch_ids_a},
+			first,
+		),
+	)
+	testing.expect(
+		t,
+		terrain_resolve_biome_regions(
+			&recipe,
+			request,
+			raw,
+			Terrain_Biome_Region_Output{biomes_b, patch_ids_b},
+			second,
+		),
+	)
+	for biome, index in biomes_a do testing.expect_value(t, biome, biomes_b[index])
+	for patch, index in patch_ids_a do testing.expect_value(t, patch, patch_ids_b[index])
+
+	sizes := make([]int, TERRAIN_REGION_SURVEY_CELLS + 1)
+	defer delete(sizes)
+	regions := 0
+	for patch in patch_ids_a {
+		if sizes[patch] == 0 do regions += 1
+		sizes[patch] += 1
+	}
+	testing.expectf(t, regions > 0, "province minimum produced no regions")
+	mean := f32(TERRAIN_REGION_SURVEY_CELLS) / f32(regions)
+	testing.expectf(
+		t,
+		mean >= f32(minimum),
+		"mean region %f below the %d province minimum",
+		mean,
+		minimum,
+	)
+}
+
+@(private)
+_terrain_region_survey_scratch :: proc() -> Terrain_Biome_Region_Scratch {
+	return {
+		make([]u32, TERRAIN_REGION_SURVEY_CELLS),
+		make([]u32, TERRAIN_REGION_SURVEY_CELLS),
+		make([]u32, TERRAIN_REGION_SURVEY_CELLS),
+		make([]u16, TERRAIN_REGION_SURVEY_CELLS),
+		make([]u32, TERRAIN_REGION_SURVEY_CELLS),
+		make([]u32, TERRAIN_REGION_SURVEY_CELLS + 1),
+		make([]u32, TERRAIN_REGION_SURVEY_CELLS),
+	}
+}
+
+@(private)
+_terrain_region_survey_scratch_free :: proc(scratch: Terrain_Biome_Region_Scratch) {
+	delete(scratch.component_cells)
+	delete(scratch.component_offsets)
+	delete(scratch.merge_targets)
+	delete(scratch.component_ids)
+	delete(scratch.component_sizes)
+	delete(scratch.queue)
+	delete(scratch.labels)
+}
+
 @(private)
 _terrain_region_output :: proc(
 	storage: ^Terrain_Region_Test_Storage,
@@ -258,6 +353,8 @@ _terrain_region_scratch :: proc(
 		storage.component_sizes[:],
 		storage.component_ids[:],
 		storage.merge_targets[:],
+		storage.component_offsets[:],
+		storage.component_cells[:],
 	}
 }
 
