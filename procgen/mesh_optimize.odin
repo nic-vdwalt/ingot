@@ -435,7 +435,12 @@ _optimize_rescore :: proc(
 	for slot in 0 ..< count {
 		triangle := scratch.touched[slot]
 		if heap.slots[triangle] < 0 do continue
-		heap.scores[triangle] = _optimize_triangle_score(indices, scratch, int(triangle))
+		score := _optimize_triangle_score(indices, scratch, int(triangle))
+		// A triangle whose vertices all held still scores the same. Skipping
+		// it is exact - the heap is already ordered correctly for it - and it
+		// is worth doing because a sift is the most expensive thing here.
+		if score == heap.scores[triangle] do continue
+		heap.scores[triangle] = score
 		_optimize_heap_refresh(heap, triangle)
 	}
 }
@@ -446,7 +451,14 @@ _optimize_mark :: proc(scratch: Optimize_Scratch, vertex: u32, stamp: u32, count
 	scratch.vertex_mark[vertex] = stamp
 	position := int(scratch.cache_position[vertex])
 	remaining := int(scratch.remaining[vertex])
-	scratch.vertex_scores[vertex] = _optimize_vertex_score(position, remaining)
+	score := _optimize_vertex_score(position, remaining)
+	// A vertex whose modelled position and valence both held still scores the
+	// same as it did, so every triangle around it is already correct. The ring
+	// shifts most of its contents every step, so this does not fire often - but
+	// walking the adjacency is the hottest loop in the pass, and not walking it
+	// is exact rather than approximate.
+	if score == scratch.vertex_scores[vertex] do return count
+	scratch.vertex_scores[vertex] = score
 	written := count
 	for slot in scratch.adjacency_offset[vertex] ..< scratch.adjacency_offset[vertex + 1] {
 		triangle := scratch.adjacency[slot]
