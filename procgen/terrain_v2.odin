@@ -159,8 +159,16 @@ terrain_default_recipe_v2 :: proc(seed: u64) -> Terrain_Recipe_V2 {
 		elevation_lapse        = 0.012,
 		latitude_weight        = 0.35,
 		latitude_half_extent   = 128,
+		// The remaining climate controls default to the identity so a recipe
+		// authored against version 3 keeps its distribution: no bias shift,
+		// the equator on the x axis, and the land jitter this stack has
+		// always applied at its former hardcoded strength.
+		latitude_offset        = 0,
 		climate_contrast       = 2.6,
 		continental_contrast   = 2.2,
+		moisture_bias          = 0,
+		temperature_bias       = 0,
+		coast_jitter           = 0.08,
 		// Climate and continental frequencies set biome extent: at these
 		// wavelengths (~625, ~900, ~1250 world units) a few provinces span a
 		// world instead of a fine-grained mottle. Their octave counts are
@@ -236,8 +244,12 @@ terrain_recipe_validate_v2 :: proc(recipe: ^Terrain_Recipe_V2) -> bool {
 		recipe.elevation_lapse,
 		recipe.latitude_weight,
 		recipe.latitude_half_extent,
+		recipe.latitude_offset,
 		recipe.climate_contrast,
 		recipe.continental_contrast,
+		recipe.moisture_bias,
+		recipe.temperature_bias,
+		recipe.coast_jitter,
 	}
 	for value in values do if !_terrain_finite_v2(value) do return false
 	if recipe.ocean_depth <= 0 || recipe.land_height <= 0 || recipe.mountain_height < 0 do return false
@@ -246,6 +258,9 @@ terrain_recipe_validate_v2 :: proc(recipe: ^Terrain_Recipe_V2) -> bool {
 	if recipe.basin_fade <= 0 || recipe.basin_depth < 0 do return false
 	if recipe.climate_contrast < TERRAIN_CONTRAST_MIN_V2 do return false
 	if recipe.continental_contrast < TERRAIN_CONTRAST_MIN_V2 do return false
+	if abs(recipe.moisture_bias) > TERRAIN_CLIMATE_BIAS_MAX_V2 do return false
+	if abs(recipe.temperature_bias) > TERRAIN_CLIMATE_BIAS_MAX_V2 do return false
+	if recipe.coast_jitter < 0 do return false
 	if recipe.elevation_lapse < 0 || recipe.latitude_weight < 0 do return false
 	if recipe.latitude_weight > 1 do return false
 	if recipe.latitude_half_extent <= 0 || recipe.biome_profile_count == 0 do return false
@@ -307,12 +322,35 @@ terrain_height_prevalidated_v2 :: proc(
 	height, continentalness, ruggedness: f32,
 	ok: bool,
 ) {
-	assert(recipe != nil, "terrain_height_prevalidated_v2: nil recipe")
-	if !_terrain_finite_v2(world_x) || !_terrain_finite_v2(world_y) do return 0, 0, 0, false
+	terms, terms_ok := terrain_height_terms_prevalidated_v2(recipe, world_x, world_y)
+	if !terms_ok do return 0, 0, 0, false
+	return terms.height, terms.continentalness, terms.ruggedness, true
+}
+
+// terrain_height_terms_prevalidated_v2 evaluates the 2D stack once and
+// publishes both surfaces it produces.
+//
+// `height` is the ground: base elevation, ridged uplift, hills and fine
+// detail. `landform` is the same stack with the hill and detail octaves left
+// out. Hills exist to make ground look uneven, not to relabel it -- at
+// hill_height 5 over a ~71-unit wavelength a single bump reaches a slope of
+// roughly 0.44, which is enough to trip a rock profile's slope floor on
+// otherwise uniform ground. Classifying on landform is what keeps one
+// province from reading as a mottle of six.
+terrain_height_terms_prevalidated_v2 :: proc(
+	recipe: ^Terrain_Recipe_V2,
+	world_x, world_y: f32,
+) -> (
+	terms: Terrain_Height_Terms_V2,
+	ok: bool,
+) {
+	assert(recipe != nil, "terrain_height_terms_prevalidated_v2: nil recipe")
+	assert(recipe.coast_fade > 0, "terrain_height_terms_prevalidated_v2: unvalidated recipe")
+	if !_terrain_finite_v2(world_x) || !_terrain_finite_v2(world_y) do return {}, false
 	// Contrast is applied before the coast smoothstep so a seed can be an
 	// archipelago or a single continent. Without it every seed's
 	// continentalness hugs the middle and every coastline looks alike.
-	continentalness = _terrain_contrast_v2(
+	continentalness := _terrain_contrast_v2(
 		_terrain_unit(fractal_2d(recipe.continental_noise, world_x, world_y)),
 		recipe.continental_contrast,
 	)
@@ -321,7 +359,14 @@ terrain_height_prevalidated_v2 :: proc(
 		recipe.coast_threshold + recipe.coast_fade,
 		continentalness,
 	)
-	land = clamp(land + fractal_2d(recipe.hill_noise, world_x, world_y) * 0.08, 0, 1)
+	// Jitter roughens the coastline at hill wavelength. A recipe that wants
+	// province-scale landmasses turns it down; one that wants a broken
+	// archipelago turns it up.
+	land = clamp(
+		land + fractal_2d(recipe.hill_noise, world_x, world_y) * recipe.coast_jitter,
+		0,
+		1,
+	)
 	mountain := _terrain_unit(warped_fractal_2d(recipe.mountain_noise, world_x, world_y))
 	uplift :=
 		_terrain_smoothstep_v2(
@@ -335,44 +380,49 @@ terrain_height_prevalidated_v2 :: proc(
 	hills := warped_fractal_2d(recipe.hill_noise, world_x, world_y) * recipe.hill_height * land
 	detail := fractal_2d(recipe.detail_noise, world_x, world_y) * recipe.detail_height * land
 	base := -recipe.ocean_depth + (recipe.ocean_depth + recipe.land_height) * land
-	height = recipe.base_height + base + ridge * uplift * recipe.mountain_height + hills + detail
-	height = _terrain_basin_v2(recipe, world_x, world_y, height, land, uplift)
-	ruggedness = clamp(uplift * 0.7 + ridge * 0.3, 0, 1)
-	return height, continentalness, ruggedness, true
+	relief := recipe.base_height + base + ridge * uplift * recipe.mountain_height
+	// One basin evaluation drives both surfaces: carving them independently
+	// would run the basin fractal twice and could disagree on whether a cell
+	// is under water at all.
+	basin := _terrain_basin_blend_v2(recipe, world_x, world_y, land, uplift)
+	lake_floor := recipe.sea_level - recipe.basin_depth
+	height := relief + hills + detail
+	height += (lake_floor - height) * basin
+	landform := relief + (lake_floor - relief) * basin
+	ruggedness := clamp(uplift * 0.7 + ridge * 0.3, 0, 1)
+	return {height, landform, continentalness, ruggedness}, true
 }
 
-// _terrain_basin_v2 carves inland depressions that reach below sea level so a
-// consumer's water fill produces lakes with no hydrology pass. Interpolating
-// toward a floor below sea level, rather than subtracting a fixed depth,
-// guarantees the basin actually reaches water however high the surrounding
-// land sits, and yields a smooth shoreline for free. The land gate keeps
-// basins off the ocean and the uplift gate keeps them out of mountains.
+// _terrain_basin_blend_v2 reports how strongly an inland depression pulls this
+// column toward a floor below sea level, so a consumer's water fill produces
+// lakes with no hydrology pass. Returning the blend rather than the carved
+// height lets one evaluation drive both the full height and the landform.
+// Interpolating toward a floor below sea level, rather than subtracting a
+// fixed depth, guarantees the basin actually reaches water however high the
+// surrounding land sits, and yields a smooth shoreline for free. The land
+// gate keeps basins off the ocean and the uplift gate keeps them out of
+// mountains.
 @(private)
-_terrain_basin_v2 :: proc(
-	recipe: ^Terrain_Recipe_V2,
-	world_x, world_y, height, land, uplift: f32,
-) -> f32 {
-	assert(recipe != nil, "_terrain_basin_v2: nil recipe")
-	assert(recipe.basin_fade > 0, "_terrain_basin_v2: non-positive fade")
-	if recipe.basin_depth <= 0 do return height
+_terrain_basin_blend_v2 :: proc(recipe: ^Terrain_Recipe_V2, world_x, world_y, land, uplift: f32) -> f32 {
+	assert(recipe != nil, "_terrain_basin_blend_v2: nil recipe")
+	assert(recipe.basin_fade > 0, "_terrain_basin_blend_v2: non-positive fade")
+	if recipe.basin_depth <= 0 do return 0
 	// The gate is the cheap term and it is zero across every ocean cell and
 	// every mountain peak, which on a typical world is most of the domain.
 	// Testing it before the fractal keeps basins off the hot path there:
 	// height is evaluated five times per sample for the centered slope, so
 	// this noise would otherwise be paid for ten times over per cell.
 	gate := land * (1 - uplift)
-	if gate <= 0 do return height
+	if gate <= 0 do return 0
 	signal := _terrain_unit(warped_fractal_2d(recipe.basin_noise, world_x, world_y))
-	basin :=
+	return(
 		_terrain_smoothstep_v2(
 			recipe.basin_threshold - recipe.basin_fade,
 			recipe.basin_threshold + recipe.basin_fade,
 			signal,
 		) *
-		gate
-	if basin <= 0 do return height
-	lake_floor := recipe.sea_level - recipe.basin_depth
-	return height + (lake_floor - height) * basin
+		gate \
+	)
 }
 
 terrain_biome_blend_v2 :: proc(
@@ -460,45 +510,61 @@ terrain_sample_prevalidated_v2 :: proc(
 ) {
 	assert(recipe != nil, "terrain_sample_prevalidated_v2: nil recipe")
 	if !_terrain_finite_v2(derivative_step) || derivative_step <= 0 do return {}, false
-	height, continentalness, ruggedness, ok := terrain_height_prevalidated_v2(
+	center, ok := terrain_height_terms_prevalidated_v2(recipe, world_x, world_y)
+	if !ok do return {}, false
+	left, left_ok := terrain_height_terms_prevalidated_v2(
 		recipe,
-		world_x,
+		world_x - derivative_step,
 		world_y,
 	)
-	if !ok do return {}, false
-	left, _, _, _ := terrain_height_prevalidated_v2(recipe, world_x - derivative_step, world_y)
-	right, _, _, _ := terrain_height_prevalidated_v2(recipe, world_x + derivative_step, world_y)
-	down, _, _, _ := terrain_height_prevalidated_v2(recipe, world_x, world_y - derivative_step)
-	up, _, _, _ := terrain_height_prevalidated_v2(recipe, world_x, world_y + derivative_step)
-	derivative_x := (right - left) / (2 * derivative_step)
-	derivative_y := (up - down) / (2 * derivative_step)
+	right, right_ok := terrain_height_terms_prevalidated_v2(
+		recipe,
+		world_x + derivative_step,
+		world_y,
+	)
+	down, down_ok := terrain_height_terms_prevalidated_v2(
+		recipe,
+		world_x,
+		world_y - derivative_step,
+	)
+	up, up_ok := terrain_height_terms_prevalidated_v2(recipe, world_x, world_y + derivative_step)
+	if !left_ok || !right_ok || !down_ok || !up_ok do return {}, false
+	derivative_x := (right.height - left.height) / (2 * derivative_step)
+	derivative_y := (up.height - down.height) / (2 * derivative_step)
 	slope := math.sqrt(derivative_x * derivative_x + derivative_y * derivative_y)
+	landform_x := (right.landform - left.landform) / (2 * derivative_step)
+	landform_y := (up.landform - down.landform) / (2 * derivative_step)
+	landform_slope := math.sqrt(landform_x * landform_x + landform_y * landform_y)
 	moisture, temperature := _terrain_climate_v2(
 		recipe,
 		world_x,
 		world_y,
-		height,
-		continentalness,
-		ruggedness,
+		center.height,
+		center.continentalness,
+		center.ruggedness,
 	)
+	// Classification reads the landform pair; the caller still receives the
+	// full height and slope, which are what a mesh and a physics body need.
 	biomes, blend_ok := terrain_biome_blend_prevalidated_v2(
 		recipe,
-		height,
-		continentalness,
+		center.landform,
+		center.continentalness,
 		moisture,
 		temperature,
-		slope,
+		landform_slope,
 	)
 	if !blend_ok do return {}, false
 	return {
-			height,
+			center.height,
+			center.landform,
 			moisture,
 			temperature,
-			continentalness,
-			ruggedness,
+			center.continentalness,
+			center.ruggedness,
 			derivative_x,
 			derivative_y,
 			slope,
+			landform_slope,
 			biomes,
 		},
 		true
@@ -519,9 +585,12 @@ terrain_generate_field_v2 :: proc(
 		world_y := request.origin_y + f32(row - 1) * request.step
 		for column in 0 ..< request.width + 2 {
 			world_x := request.origin_x + f32(column - 1) * request.step
-			height, _, _, generated := terrain_height_prevalidated_v2(recipe, world_x, world_y)
+			terms, generated := terrain_height_terms_prevalidated_v2(recipe, world_x, world_y)
 			if !generated do return false
-			buffer.height_halo[row * stride + column] = height
+			// Both halos are filled from one evaluation, so the landform
+			// derivatives cost the same as the height derivatives already did.
+			buffer.height_halo[row * stride + column] = terms.height
+			buffer.landform_halo[row * stride + column] = terms.landform
 		}
 	}
 	for row in 0 ..< request.height {
@@ -564,8 +633,15 @@ _terrain_field_sample_v2 :: proc(
 	derivative_y :=
 		(buffer.height_halo[center + stride] - buffer.height_halo[center - stride]) / (2 * step)
 	slope := math.sqrt(derivative_x * derivative_x + derivative_y * derivative_y)
-	_, continentalness, ruggedness, ok := terrain_height_prevalidated_v2(recipe, world_x, world_y)
+	landform := buffer.landform_halo[center]
+	landform_x :=
+		(buffer.landform_halo[center + 1] - buffer.landform_halo[center - 1]) / (2 * step)
+	landform_y :=
+		(buffer.landform_halo[center + stride] - buffer.landform_halo[center - stride]) / (2 * step)
+	landform_slope := math.sqrt(landform_x * landform_x + landform_y * landform_y)
+	terms, ok := terrain_height_terms_prevalidated_v2(recipe, world_x, world_y)
 	if !ok do return false
+	continentalness, ruggedness := terms.continentalness, terms.ruggedness
 	moisture, temperature := _terrain_climate_v2(
 		recipe,
 		world_x,
@@ -576,14 +652,15 @@ _terrain_field_sample_v2 :: proc(
 	)
 	biomes, blend_ok := terrain_biome_blend_prevalidated_v2(
 		recipe,
-		height,
+		landform,
 		continentalness,
 		moisture,
 		temperature,
-		slope,
+		landform_slope,
 	)
 	if !blend_ok do return false
 	buffer.heights[index] = height
+	buffer.landform[index] = landform
 	buffer.moisture[index] = moisture
 	buffer.temperature[index] = temperature
 	buffer.continentalness[index] = continentalness
@@ -591,6 +668,7 @@ _terrain_field_sample_v2 :: proc(
 	buffer.derivative_x[index] = derivative_x
 	buffer.derivative_y[index] = derivative_y
 	buffer.slope[index] = slope
+	buffer.landform_slope[index] = landform_slope
 	buffer.biomes[index] = biomes
 	return true
 }
@@ -616,19 +694,30 @@ _terrain_climate_v2 :: proc(
 	coast_bias :=
 		1 - abs(continentalness - recipe.coast_threshold) / max(recipe.coast_fade * 3, 0.001)
 	moisture = clamp(moisture + clamp(coast_bias, 0, 1) * 0.12 - ruggedness * 0.08, 0, 1)
+	// Bias is what lets one seed be a globally dry world and another a wet
+	// one. Contrast can only widen a distribution about its midpoint, so
+	// without an additive shift every seed shares one climate centre.
+	moisture = clamp(moisture + recipe.moisture_bias, 0, 1)
 	// The latitude term is identical for every seed, so it blends against a
 	// contrasted noise signal that can actually move against it.
 	noise := _terrain_contrast_v2(
 		_terrain_unit(warped_fractal_2d(recipe.temperature_noise, world_x, world_y)),
 		recipe.climate_contrast,
 	)
-	latitude := clamp(abs(world_y) / recipe.latitude_half_extent, 0, 1)
+	// A movable equator is the other half of that: with the warm band pinned
+	// to y = 0 every world shares one north-south gradient regardless of seed.
+	latitude := clamp(
+		abs(world_y - recipe.latitude_offset) / recipe.latitude_half_extent,
+		0,
+		1,
+	)
 	temperature = noise * (1 - recipe.latitude_weight) + (1 - latitude) * recipe.latitude_weight
 	temperature = clamp(
 		temperature - max(height - recipe.sea_level, 0) * recipe.elevation_lapse,
 		0,
 		1,
 	)
+	temperature = clamp(temperature + recipe.temperature_bias, 0, 1)
 	return
 }
 
@@ -645,8 +734,9 @@ _terrain_field_capacity_v2 :: proc(
 	buffer: Terrain_Field_Buffer_V2,
 	samples, halo_count: int,
 ) -> bool {
-	if len(buffer.height_halo) < halo_count do return false
+	if len(buffer.height_halo) < halo_count || len(buffer.landform_halo) < halo_count do return false
 	if len(buffer.heights) < samples || len(buffer.moisture) < samples do return false
+	if len(buffer.landform) < samples || len(buffer.landform_slope) < samples do return false
 	if len(buffer.temperature) < samples || len(buffer.continentalness) < samples do return false
 	if len(buffer.ruggedness) < samples || len(buffer.derivative_x) < samples do return false
 	if len(buffer.derivative_y) < samples || len(buffer.slope) < samples do return false

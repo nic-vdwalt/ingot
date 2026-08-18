@@ -57,10 +57,11 @@ semantic recipe version and caller-owned fields for applications that need a
 reusable world-generation product rather than independent point samples.
 
 V2 composes continental, mountain, ridge, hill, detail, and inland-basin
-signals, then fills a one-cell height halo before deriving centered gradients,
-slope, climate, and data-driven biome-profile blends. Generation validates every
-recipe and output capacity before publication. Storage remains bounded by
-`TERRAIN_FIELD_MAX_EDGE_V2`; no generator allocation or GPU dependency is added.
+signals, then fills one-cell height and landform halos before deriving centered
+gradients, slope, climate, and data-driven biome-profile blends. Generation
+validates every recipe and output capacity before publication. Storage remains
+bounded by `TERRAIN_FIELD_MAX_EDGE_V2`; no generator allocation or GPU
+dependency is added.
 
 Climate and continentalness are contrast-shaped by `climate_contrast` and
 `continental_contrast`. The fractal stack averages octaves and divides by summed
@@ -71,10 +72,37 @@ parameters must be at least `TERRAIN_CONTRAST_MIN_V2`, and a value of exactly 1
 is the identity. The clamp at 0 and 1 is intended: saturation is what produces
 large uniform biome cores rather than a permanent gradient.
 
-Biome profiles score five axes: height, continentalness, moisture, temperature,
-and slope. Continentalness is what distinguishes an inland sample from a coastal
-one at the same elevation, so a consumer can separate a lake from an ocean
-without a second classification pass.
+Biome profiles score five axes: landform height, continentalness, moisture,
+temperature, and landform slope. Continentalness is what distinguishes an
+inland sample from a coastal one at the same elevation, so a consumer can
+separate a lake from an ocean without a second classification pass.
+
+Height and landform are two surfaces from one evaluation of the same stack.
+`height` is the ground a consumer renders and walks on: base elevation, ridged
+uplift, hills, and fine detail. `landform` omits the hill and detail octaves.
+Classification reads the landform pair -- `Terrain_Sample_V2.landform` and
+`landform_slope` -- while `height`, `slope`, and the derivatives keep their
+previous meaning. Hills exist to make ground look uneven, not to relabel it: at
+a hill height of 5 over a ~71-unit wavelength a single bump reaches a slope near
+0.44, which is enough to trip a rock profile's slope floor on otherwise uniform
+ground and fragment one province into a mottle of six.
+`terrain_height_terms_prevalidated_v2` publishes both surfaces from a single
+evaluation, so a caller that needs the pair never pays for the stack twice.
+
+`moisture_bias` and `temperature_bias` shift a climate channel additively after
+contrast and before the final clamp, so one seed can be a globally dry world and
+another a globally cold one. Contrast only widens a distribution about its
+midpoint; without a bias every seed shares one climate centre. Both are bounded
+by `TERRAIN_CLIMATE_BIAS_MAX_V2` because a larger value cannot move a clamped
+channel further.
+
+`latitude_offset` is the world-Y the warm band sits on. With the equator pinned
+to zero, every world shares one north-south gradient regardless of seed.
+
+`coast_jitter` is the strength of the hill-wavelength perturbation applied to
+the land mask after the coast smoothstep. A recipe that wants province-scale
+landmasses turns it down; one that wants a broken archipelago turns it up. Zero
+is a legal value and yields the smoothstep coastline unmodified.
 
 `basin_noise`, `basin_threshold`, `basin_fade`, and `basin_depth` carve inland
 depressions toward a floor at `sea_level - basin_depth`, gated to land and away
@@ -89,10 +117,20 @@ authoritative domain. The resolver publishes one hard biome owner and one
 merging. Resolving independent chunks without a shared stitch domain is invalid
 because component size and patch identity depend on neighboring cells.
 
-The V2 recipe version is `3`. Version `2` lacked the continentalness biome axis,
-the contrast parameters, and basin carving, so it classified and shaped a seed
-differently; worlds persisted against it must be regenerated rather than
-reinterpreted.
+The resolver buckets cell indices by component with a counting sort each pass,
+so choosing a merge target walks only that component's own cells.
+`Terrain_Biome_Region_Scratch` therefore requires `component_offsets` of at
+least `cells + 1` entries and `component_cells` of at least `cells`. The
+per-component grid sweep this replaced was quadratic once most components fell
+below the minimum, which is exactly what a province-scale `minimum_cells`
+produces.
+
+The V2 recipe version is `4`. Version `3` lacked climate bias, the movable
+equator, and the tunable coast jitter, and classified on the full height and
+slope rather than the landform pair. Version `2` also lacked the
+continentalness biome axis, the contrast parameters, and basin carving. Both
+classified and shaped a seed differently, so worlds persisted against either
+must be regenerated rather than reinterpreted.
 
 V2 output is deterministic for the same target and build. Cross-architecture
 floating-point byte identity is not guaranteed. Consumers using generated data
@@ -108,11 +146,18 @@ overhang displacement, disconnected floating masses, and subtractive cave
 signals. The normal preset sets every abstract strength to zero and publishes
 the exact V2 primary-surface height.
 
-The V3 recipe version is `5`. Version `4` embedded a version-2 surface recipe,
-which classified and shaped a seed differently, and version `3` differed in
-geometry and in the shape of its caller-owned buffers. Worlds persisted against
-either must be regenerated rather than reinterpreted; this is exactly the
-situation the stored semantic version exists to detect.
+The V3 recipe version is `6`. Version `5` embedded a version-3 surface recipe,
+which lacked climate bias and classified on the full height; version `4`
+embedded a version-2 one; version `3` differed in geometry and in the shape of
+its caller-owned buffers. Worlds persisted against any of them must be
+regenerated rather than reinterpreted; this is exactly the situation the stored
+semantic version exists to detect.
+
+`Terrain_Surface_V3` publishes `landform` alongside `height`. Both are shaped by
+the V3 mountain transform, and the classification slope is taken from shaped
+landform neighbours because that transform is non-linear -- scaling a peak
+changes how steep it reads. `slope`, `upward_normal`, and `buildable` continue
+to describe the full height, which is the surface a player walks on.
 
 `Terrain_Parameters_V3` exposes vertical bounds, voxel scale, mountain shape,
 floating-land spacing/altitude/radius/thickness/breakup, cave altitude and

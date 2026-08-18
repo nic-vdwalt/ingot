@@ -2,11 +2,12 @@ package procgen
 
 import "core:math"
 
-// Bumped from 4 when the V2 surface recipe gained a continentalness biome
-// axis, climate contrast shaping and inland basin carving. The embedded V2
-// recipe changes the classification and the height a seed produces, so worlds
-// persisted against version 4 must be regenerated rather than reinterpreted.
-TERRAIN_RECIPE_VERSION_V3 :: u32(5)
+// Bumped from 5 when the V2 surface recipe gained climate bias, a movable
+// equator and a tunable coast jitter, and biome classification moved onto the
+// landform height. The embedded V2 recipe changes both the classification and
+// the height a seed produces, so worlds persisted against version 5 must be
+// regenerated rather than reinterpreted.
+TERRAIN_RECIPE_VERSION_V3 :: u32(6)
 TERRAIN_VOLUME_MAX_EDGE_V3 :: 64
 TERRAIN_VOLUME_MAX_SAMPLES_V3 :: 300_000
 // The terrace blend cannot reach 1 or a terraced slope would become a
@@ -69,6 +70,7 @@ Terrain_Recipe_V3 :: struct {
 
 Terrain_Surface_V3 :: struct {
 	height:          f32,
+	landform:        f32,
 	moisture:        f32,
 	temperature:     f32,
 	continentalness: f32,
@@ -354,26 +356,36 @@ terrain_primary_surface_prevalidated_v3 :: proc(
 	if !ok do return {}, false
 	p := recipe.parameters
 	height := _terrain_shape_height_v3(recipe, sample.height)
+	landform := _terrain_shape_height_v3(recipe, sample.landform)
 	left, left_ok := _terrain_primary_height_v3(recipe, x - step, y)
 	right, right_ok := _terrain_primary_height_v3(recipe, x + step, y)
 	down, down_ok := _terrain_primary_height_v3(recipe, x, y - step)
 	up, up_ok := _terrain_primary_height_v3(recipe, x, y + step)
 	if !left_ok || !right_ok || !down_ok || !up_ok do return {}, false
-	dx := (right - left) / (2 * step)
-	dy := (up - down) / (2 * step)
+	dx := (right.height - left.height) / (2 * step)
+	dy := (up.height - down.height) / (2 * step)
 	slope := math.sqrt(dx * dx + dy * dy)
 	upward := 1 / math.sqrt(1 + slope * slope)
+	// The mountain transform is non-linear, so the classification slope has
+	// to come from shaped landform neighbours rather than from the V2 sample:
+	// scaling a peak changes how steep it reads.
+	landform_dx := (right.landform - left.landform) / (2 * step)
+	landform_dy := (up.landform - down.landform) / (2 * step)
+	landform_slope := math.sqrt(landform_dx * landform_dx + landform_dy * landform_dy)
+	// Classification reads landform; slope, upward_normal and buildable stay
+	// on the full height because they describe the surface a player walks on.
 	biomes, biome_ok := terrain_biome_blend_prevalidated_v2(
 		&recipe.surface,
-		height,
+		landform,
 		sample.continentalness,
 		sample.moisture,
 		sample.temperature,
-		slope,
+		landform_slope,
 	)
 	if !biome_ok do return {}, false
 	return {
 			height = height,
+			landform = landform,
 			moisture = sample.moisture,
 			temperature = sample.temperature,
 			continentalness = sample.continentalness,
@@ -388,12 +400,31 @@ terrain_primary_surface_prevalidated_v3 :: proc(
 		true
 }
 
+// _Terrain_Shaped_V3 is the shaped pair a neighbour probe produces. Both come
+// from one V2 evaluation, so the landform derivatives the classification needs
+// cost no extra noise over the height derivatives that were already taken.
 @(private)
-_terrain_primary_height_v3 :: proc(recipe: ^Terrain_Recipe_V3, x, y: f32) -> (f32, bool) {
+_Terrain_Shaped_V3 :: struct {
+	height:   f32,
+	landform: f32,
+}
+
+@(private)
+_terrain_primary_height_v3 :: proc(
+	recipe: ^Terrain_Recipe_V3,
+	x, y: f32,
+) -> (
+	_Terrain_Shaped_V3,
+	bool,
+) {
 	assert(recipe != nil, "_terrain_primary_height_v3: nil recipe")
-	height, _, _, ok := terrain_height_prevalidated_v2(&recipe.surface, x, y)
-	if !ok do return 0, false
-	return _terrain_shape_height_v3(recipe, height), true
+	terms, ok := terrain_height_terms_prevalidated_v2(&recipe.surface, x, y)
+	if !ok do return {}, false
+	return {
+			_terrain_shape_height_v3(recipe, terms.height),
+			_terrain_shape_height_v3(recipe, terms.landform),
+		},
+		true
 }
 
 @(private)

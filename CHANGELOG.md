@@ -11,6 +11,25 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
+- **Breaking:** `TERRAIN_RECIPE_VERSION_V2` is `4` and
+  `TERRAIN_RECIPE_VERSION_V3` is `6`. Biome classification now reads a
+  *landform* height and slope -- the same stack with the hill and detail
+  octaves removed -- instead of the full rendered height. Hills exist to make
+  ground look uneven, not to relabel it: at the default hill height a single
+  71-unit bump reaches a slope near 0.44, which is enough to trip a rock
+  profile's slope floor on otherwise uniform ground and fragment one province
+  into a mottle. `Terrain_Sample_V2` gains `landform` and `landform_slope`,
+  `Terrain_Surface_V3` gains `landform`, and `Terrain_Field_Buffer_V2` gains
+  `landform_halo`, `landform`, and `landform_slope`. Persisted V2 and V3
+  worlds must be regenerated rather than reinterpreted.
+- **Breaking:** `Terrain_Biome_Region_Scratch` gains `component_offsets`
+  (`cells + 1` entries) and `component_cells` (`cells`).
+  `terrain_resolve_biome_regions` buckets cells by component with a counting
+  sort each pass, so choosing a merge target walks only that component's own
+  cells rather than sweeping the whole grid once per undersized component.
+  Results are unchanged; the scan it replaced was quadratic once most
+  components fell below `minimum_cells`, which is exactly what a
+  province-scale minimum produces.
 - **Breaking:** `TERRAIN_RECIPE_VERSION_V3` is `4`. Volume terrain now welds
   vertices on lattice-edge identity, derives caves and overhangs from real 3D
   noise instead of composed 2D slices, and exposes the terrace step, island
@@ -29,6 +48,18 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `Terrain_Recipe_V2` gains `moisture_bias`, `temperature_bias`,
+  `latitude_offset`, and `coast_jitter`. Contrast can only widen a
+  distribution about its midpoint, so before the biases no seed could be a
+  globally dry or globally cold world; the equator was pinned to `y = 0`, so
+  every world shared one north-south gradient; and the land-mask perturbation
+  was a hardcoded constant, so coastline roughness could not vary by recipe.
+  All four default to the previous behaviour. The biases are bounded by
+  `TERRAIN_CLIMATE_BIAS_MAX_V2`, because a larger value cannot move a clamped
+  channel any further.
+- `terrain_height_terms_prevalidated_v2` and `Terrain_Height_Terms_V2` publish
+  the height and landform surfaces from one evaluation of the 2D stack, so a
+  caller that needs both never pays for it twice.
 - `asset.cooked_mesh_v2_encode` and `asset.cooked_mesh_v2_encoded_size`: the
   first Odin writer for `INGMESH2`. It refuses everything the decoder refuses
   and reports the same `Cooked_Mesh_Fault`, and is checked both by round trip

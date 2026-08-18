@@ -11,7 +11,9 @@ BENCHMARK_ITERATIONS :: 20
 
 Storage :: struct {
 	height_halo:     [BENCHMARK_HALO]f32,
+	landform_halo:   [BENCHMARK_HALO]f32,
 	heights:         [BENCHMARK_SAMPLES]f32,
+	landform:        [BENCHMARK_SAMPLES]f32,
 	moisture:        [BENCHMARK_SAMPLES]f32,
 	temperature:     [BENCHMARK_SAMPLES]f32,
 	continentalness: [BENCHMARK_SAMPLES]f32,
@@ -19,6 +21,7 @@ Storage :: struct {
 	derivative_x:    [BENCHMARK_SAMPLES]f32,
 	derivative_y:    [BENCHMARK_SAMPLES]f32,
 	slope:           [BENCHMARK_SAMPLES]f32,
+	landform_slope:  [BENCHMARK_SAMPLES]f32,
 	biomes:          [BENCHMARK_SAMPLES]procgen.Terrain_Biome_Blend_V2,
 }
 
@@ -28,7 +31,9 @@ main :: proc() {
 	request := procgen.Terrain_Field_Request_V2{-128, -128, 2, BENCHMARK_EDGE, BENCHMARK_EDGE}
 	buffer := procgen.Terrain_Field_Buffer_V2 {
 		height_halo     = storage.height_halo[:],
+		landform_halo   = storage.landform_halo[:],
 		heights         = storage.heights[:],
+		landform        = storage.landform[:],
 		moisture        = storage.moisture[:],
 		temperature     = storage.temperature[:],
 		continentalness = storage.continentalness[:],
@@ -36,6 +41,7 @@ main :: proc() {
 		derivative_x    = storage.derivative_x[:],
 		derivative_y    = storage.derivative_y[:],
 		slope           = storage.slope[:],
+		landform_slope  = storage.landform_slope[:],
 		biomes          = storage.biomes[:],
 	}
 	start := time.now()
