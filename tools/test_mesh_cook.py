@@ -52,6 +52,23 @@ def grid(cells, ripple=0.0):
     return vertices, indices
 
 
+def acmr(indices, cache_size=cook.CACHE_SIZE):
+    """Average cache misses per triangle under the modelled cache.
+
+    The absolute value depends on the cache size; only the direction of the
+    change matters to the tests that use it.
+    """
+    cache = []
+    misses = 0
+    for index in indices:
+        if index in cache:
+            continue
+        misses += 1
+        cache.insert(0, index)
+        del cache[cache_size:]
+    return misses / (len(indices) / 3)
+
+
 # The contract between this module and `ingot/procgen/mesh_optimize.odin`,
 # written out literally on both sides. A 4x4 grid is small enough to read and
 # large enough that all three passes do real work: 32 triangles fill the
@@ -126,6 +143,24 @@ class OptimizeTest(unittest.TestCase):
         self.assertEqual(result_indices[:3], [0, 1, 2])
         self.assertEqual(result_vertices[0][0], 3.0)
         self.assertEqual(len(result_vertices), 4)
+
+    def test_cache_pass_lowers_average_cache_misses(self):
+        vertices, indices = grid(16)
+        reordered = cook.optimize_vertex_cache(indices, len(vertices))
+        after = acmr(reordered)
+        self.assertLess(after, acmr(indices))
+        self.assertLess(after, 1.0)
+
+    def test_optimization_is_deterministic(self):
+        vertices, indices = grid(12)
+        first = cook.optimize(vertices, indices)
+        second = cook.optimize(vertices, indices)
+        self.assertEqual(first[1], second[1])
+
+    def test_a_lone_triangle_passes_through(self):
+        vertices = [(float(index),) + (0.0,) * 8 for index in range(3)]
+        self.assertEqual(cook.optimize_vertex_cache([2, 0, 1], 3), [2, 0, 1])
+        self.assertEqual(cook.optimize_overdraw(vertices, [2, 0, 1]), [2, 0, 1])
 
 
 class SimplifyTest(unittest.TestCase):

@@ -169,6 +169,40 @@ agreeing with itself.
 `cook_chain_from_clusters`; see
 [procedural-generation.md](procedural-generation.md).
 
+## Index order is part of the contract
+
+A cooked level's index order is not arbitrary. Every level leaves the cook in
+optimised order — vertex cache, then overdraw, then vertex fetch, in that order,
+because each pass assumes the previous one has run. Level 0 is included even
+though it is the source geometry rather than a simplification of it.
+
+Two implementations produce that order and they must agree:
+`procgen/mesh_optimize.odin` for the runtime cook and `tools/mesh_cook.py` for
+the offline one. Neither can call the other — the offline cook runs inside
+Blender's bundled interpreter — so the duplication is structural rather than
+accidental, and the only thing keeping it honest is that
+`procgen/mesh_optimize_test.odin` and `tools/test_mesh_cook.py` assert the same
+golden index order for the same input grid. Change one implementation and the
+other's test fails.
+
+Two consequences worth stating outright:
+
+- **Scoring is spelled to be reproducible, not idiomatic.** Forsyth's score uses
+  `x**1.5` and `n**-0.5`; both sides instead write `x*sqrt(x)` and `2/sqrt(n)`,
+  because `sqrt` is correctly rounded per IEEE-754 and `pow` is not. Equal-
+  valence vertices produce exactly tied scores often enough that a last-ulp
+  disagreement between two libms would flip a tie and diverge the whole order.
+- **Selection is a heap here and a heap there.** The offline tool's original
+  linear argmax scan was O(T²), which is affordable for a prop and a hang for a
+  terrain chunk. Both sides now use a heap keyed on `(score, lowest index)`,
+  which reproduces the scan's choice exactly rather than approximately: the scan
+  walked upward taking a strictly better score, so it too kept the lowest index
+  among equals.
+
+The cluster path is deliberately exempt. A DAG's index order belongs to
+`cluster_build`, which stores each cluster as a span into the level's indices;
+reordering it would invalidate every span.
+
 ## Compatibility
 
 `cooked_mesh_decode` dispatches on the magic's last byte. A version 1 file
