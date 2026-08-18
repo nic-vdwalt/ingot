@@ -390,12 +390,7 @@ optimize_rejects_a_malformed_mesh :: proc(t: ^testing.T) {
 	defer _optimize_fixture_free(fixture)
 	lines := fixture.source
 	lines.primitive = .Lines
-	_, lines_ok := optimize_mesh(
-		lines,
-		fixture.out_vertices,
-		fixture.out_indices,
-		fixture.scratch,
-	)
+	_, lines_ok := optimize_mesh(lines, fixture.out_vertices, fixture.out_indices, fixture.scratch)
 	testing.expect(t, !lines_ok, "optimize_mesh accepted a line list")
 	partial := fixture.source
 	partial.indices = fixture.source.indices[:len(fixture.source.indices) - 1]
@@ -484,7 +479,9 @@ _optimize_test_triangles :: proc(
 				}
 			}
 		}
-		triangles[triangle] = {corners = corners}
+		triangles[triangle] = {
+			corners = corners,
+		}
 	}
 	_heap_sort(triangles, _optimize_test_triangle_less)
 	return triangles
@@ -499,9 +496,7 @@ _optimize_test_before :: proc(first, second: asset.Vec3) -> bool {
 }
 
 @(private = "file")
-_optimize_test_triangle_less :: proc(
-	first, second: Optimize_Test_Triangle,
-) -> bool {
+_optimize_test_triangle_less :: proc(first, second: Optimize_Test_Triangle) -> bool {
 	for corner in 0 ..< 3 {
 		if first.corners[corner] != second.corners[corner] {
 			return _optimize_test_before(first.corners[corner], second.corners[corner])
