@@ -403,7 +403,10 @@ terrain_height_terms_prevalidated_v2 :: proc(
 // gate keeps basins off the ocean and the uplift gate keeps them out of
 // mountains.
 @(private)
-_terrain_basin_blend_v2 :: proc(recipe: ^Terrain_Recipe_V2, world_x, world_y, land, uplift: f32) -> f32 {
+_terrain_basin_blend_v2 :: proc(
+	recipe: ^Terrain_Recipe_V2,
+	world_x, world_y, land, uplift: f32,
+) -> f32 {
 	assert(recipe != nil, "_terrain_basin_blend_v2: nil recipe")
 	assert(recipe.basin_fade > 0, "_terrain_basin_blend_v2: non-positive fade")
 	if recipe.basin_depth <= 0 do return 0
