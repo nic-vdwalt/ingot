@@ -99,7 +99,13 @@ terrain_v4_latitude_is_angular_and_monotonic :: proc(t: ^testing.T) {
 		sample, ok := terrain_primary_surface_v4(&recipe, direction)
 		testing.expect(t, ok)
 		testing.expectf(t, sample.latitude > previous, "latitude did not increase at %d", index)
-		testing.expectf(t, abs(sample.latitude - latitude) < 0.00001, "%v != %v", sample.latitude, latitude)
+		testing.expectf(
+			t,
+			abs(sample.latitude - latitude) < 0.00001,
+			"%v != %v",
+			sample.latitude,
+			latitude,
+		)
 		previous = sample.latitude
 	}
 }
@@ -133,7 +139,8 @@ terrain_v4_tangent_adjusted_cells_have_bounded_area :: proc(t: ^testing.T) {
 			a := terrain_face_direction_v4(.Pos_Z, u, v)
 			b := terrain_face_direction_v4(.Pos_Z, u + step, v)
 			c := terrain_face_direction_v4(.Pos_Z, u, v + step)
-			area := math.sqrt(_terrain_dot_v4(_terrain_cross_v4(b - a, c - a), _terrain_cross_v4(b - a, c - a)))
+			cross := _terrain_cross_v4(b - a, c - a)
+			area := math.sqrt(_terrain_dot_v4(cross, cross))
 			minimum = min(minimum, area)
 			maximum = max(maximum, area)
 		}
