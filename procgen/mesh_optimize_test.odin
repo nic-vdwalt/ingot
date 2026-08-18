@@ -411,6 +411,70 @@ optimize_rejects_a_malformed_mesh :: proc(t: ^testing.T) {
 }
 
 @(test)
+optimize_accepts_a_terraforger_render_chunk :: proc(t: ^testing.T) {
+	fixture := _optimize_fixture(192)
+	defer _optimize_fixture_free(fixture)
+	before := _optimize_test_triangles(fixture.source.vertices, fixture.source.indices)
+	defer delete(before)
+	result, ok := optimize_mesh(
+		fixture.source,
+		fixture.out_vertices,
+		fixture.out_indices,
+		fixture.scratch,
+	)
+	testing.expect(t, ok, "optimize_mesh rejected a 192x192 quad grid")
+	testing.expect_value(t, result.index_count, 192 * 192 * 6)
+	testing.expect_value(t, result.vertex_count, 193 * 193)
+	for index, slot in fixture.out_indices[:result.index_count] {
+		testing.expect(t, index < u32(result.vertex_count), "optimized index escaped vertex storage")
+		if slot < result.vertex_count {
+			testing.expect(t, index <= u32(slot), "vertices were not numbered by first use")
+		}
+	}
+	after := _optimize_test_triangles(
+		fixture.out_vertices[:result.vertex_count],
+		fixture.out_indices[:result.index_count],
+	)
+	defer delete(after)
+	testing.expect_value(t, len(after), len(before))
+	for slot in 0 ..< len(before) {
+		testing.expect(t, before[slot] == after[slot], "large-grid triangle set changed")
+	}
+}
+
+@(test)
+optimize_rejects_inputs_above_its_capacity :: proc(t: ^testing.T) {
+	vertices := make([]asset.Vertex, OPTIMIZE_MAX_VERTICES + 1)
+	defer delete(vertices)
+	indices := [3]u32{0, 1, 2}
+	out_vertices := make([]asset.Vertex, len(vertices))
+	defer delete(out_vertices)
+	out_indices := [3]u32{}
+	too_many_vertices := asset.Mesh_View {
+		id = 1,
+		vertices = vertices,
+		indices = indices[:],
+		primitive = .Triangles,
+	}
+	_, vertices_ok := optimize_mesh(too_many_vertices, out_vertices, out_indices[:], {})
+	testing.expect(t, !vertices_ok, "optimize_mesh accepted too many vertices")
+	large_indices := make([]u32, OPTIMIZE_MAX_INDICES + 3)
+	defer delete(large_indices)
+	large_out := make([]u32, len(large_indices))
+	defer delete(large_out)
+	one_vertex := [1]asset.Vertex{}
+	too_many_indices := asset.Mesh_View {
+		id = 1,
+		vertices = one_vertex[:],
+		indices = large_indices,
+		primitive = .Triangles,
+	}
+	_, indices_ok := optimize_mesh(too_many_indices, one_vertex[:], large_out, {})
+	testing.expect(t, !indices_ok, "optimize_mesh accepted too many indices")
+	testing.expect(t, optimize_scratch_size(OPTIMIZE_MAX_VERTICES, OPTIMIZE_MAX_INDICES) > 0)
+}
+
+@(test)
 optimize_scratch_make_carves_an_unaligned_block :: proc(t: ^testing.T) {
 	vertex_count := 25
 	index_count := 96

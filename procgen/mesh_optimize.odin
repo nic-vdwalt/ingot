@@ -47,8 +47,12 @@ OPTIMIZE_OVERDRAW_RUN_DIVISOR :: f64(8)
 // briefly push it past its modelled size.
 OPTIMIZE_RING_CAPACITY :: OPTIMIZE_CACHE_SIZE + 3
 
+OPTIMIZE_MAX_VERTICES :: SIMPLIFY_MAX_VERTICES
+OPTIMIZE_MAX_INDICES :: OPTIMIZE_MAX_VERTICES * 6
 OPTIMIZE_SCRATCH_ALIGNMENT :: SIMPLIFY_SCRATCH_ALIGNMENT
 OPTIMIZE_SCRATCH_PADDING :: SIMPLIFY_SCRATCH_PADDING
+#assert(OPTIMIZE_MAX_INDICES % 3 == 0)
+#assert(OPTIMIZE_MAX_VERTICES <= max(int) / 6)
 
 Optimize_Result :: struct {
 	vertex_count: int,
@@ -202,7 +206,7 @@ _optimize_inputs_ok :: proc(
 	vertex_count := len(input.vertices)
 	index_count := len(input.indices)
 	if index_count < 3 || index_count % 3 != 0 do return false
-	if vertex_count > SIMPLIFY_MAX_VERTICES || index_count > SIMPLIFY_MAX_INDICES do return false
+	if vertex_count > OPTIMIZE_MAX_VERTICES || index_count > OPTIMIZE_MAX_INDICES do return false
 	if len(out_vertices) < vertex_count || len(out_indices) < index_count do return false
 	triangles := index_count / 3
 	if len(scratch.adjacency_offset) < vertex_count + 1 do return false

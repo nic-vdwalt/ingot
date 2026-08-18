@@ -321,7 +321,12 @@ terrain_v2_climate_bias_shifts_the_distribution :: proc(t: ^testing.T) {
 	testing.expect(t, terrain_recipe_validate_v2(&saturated))
 	moisture, temperature := _terrain_v2_climate_mean(t, &saturated)
 	testing.expectf(t, moisture > 0.9, "saturating moisture bias reached only %f", moisture)
-	testing.expectf(t, temperature < 0.1, "saturating temperature bias reached only %f", temperature)
+	testing.expectf(
+		t,
+		temperature < 0.1,
+		"saturating temperature bias reached only %f",
+		temperature,
+	)
 }
 
 // The warm band was pinned to y = 0 for every seed, which is one of the
