@@ -793,3 +793,20 @@ fit_test_draw :: proc(builder: ^Builder, userdata: rawptr) {
 		Button(builder, u64(7), "Seven", &active)
 	}
 }
+
+// Fit's submit modes were once value-cast straight onto ui's, but the two
+// enums are declared in different orders. Fit `.Enter` (2) landed outside ui's
+// two-variant range, so ti_keys_enter matched neither `.Enter` nor `.Never`
+// and swallowed the key: the box neither submitted nor typed a newline. Pin
+// the mapping so a reordering of either enum fails here instead of in a
+// dialog nobody can dismiss.
+@(test)
+test_text_input_submit_mapping :: proc(t: ^testing.T) {
+	testing.expect_value(t, to_submit(.Default), ui.Text_Input_Submit.Enter)
+	testing.expect_value(t, to_submit(.Enter), ui.Text_Input_Submit.Enter)
+	testing.expect_value(t, to_submit(.Never), ui.Text_Input_Submit.Never)
+	// Modifier-gated submission is not implemented in ui; plain Enter must
+	// keep inserting a newline rather than wrongly submitting.
+	testing.expect_value(t, to_submit(.Ctrl_Enter), ui.Text_Input_Submit.Never)
+	testing.expect_value(t, to_submit(.Mod_Enter), ui.Text_Input_Submit.Never)
+}
