@@ -10,14 +10,14 @@ Terrain_Preset_V4 :: enum u8 {
 }
 
 Terrain_Parameters_V4 :: struct {
-	radius:                        f32,
-	height_scale:                  f32,
-	minimum_radius:                f32,
-	maximum_radius:                f32,
-	derivative_step:               f32,
-	minimum_upward_normal:         f32,
-	latitude_offset_radians:       f32,
-	latitude_half_extent_radians:  f32,
+	radius:                       f32,
+	height_scale:                 f32,
+	minimum_radius:               f32,
+	maximum_radius:               f32,
+	derivative_step:              f32,
+	minimum_upward_normal:        f32,
+	latitude_offset_radians:      f32,
+	latitude_half_extent_radians: f32,
 }
 
 Terrain_Recipe_V4 :: struct {
@@ -88,10 +88,10 @@ terrain_custom_recipe_v4 :: proc(
 	bool,
 ) {
 	recipe := Terrain_Recipe_V4 {
-		version = TERRAIN_RECIPE_VERSION_V4,
-		preset = .Custom,
-		seed = seed,
-		surface = terrain_default_recipe_v2(seed),
+		version    = TERRAIN_RECIPE_VERSION_V4,
+		preset     = .Custom,
+		seed       = seed,
+		surface    = terrain_default_recipe_v2(seed),
 		parameters = parameters,
 	}
 	return recipe, terrain_recipe_validate_v4(&recipe)
@@ -150,11 +150,13 @@ terrain_height_terms_prevalidated_v4 :: proc(
 	mountain := _terrain_unit(
 		warped_fractal_3d(surface.mountain_noise, position.x, position.y, position.z),
 	)
-	uplift := _terrain_smoothstep_v2(
-		surface.mountain_threshold - surface.mountain_fade,
-		surface.mountain_threshold + surface.mountain_fade,
-		mountain,
-	) * land
+	uplift :=
+		_terrain_smoothstep_v2(
+			surface.mountain_threshold - surface.mountain_fade,
+			surface.mountain_threshold + surface.mountain_fade,
+			mountain,
+		) *
+		land
 	ridge_noise := warped_fractal_3d(surface.ridge_noise, position.x, position.y, position.z)
 	ridge := math.pow(clamp(1 - abs(ridge_noise), 0, 1), surface.ridge_power)
 	hills := warped_fractal_3d(surface.hill_noise, position.x, position.y, position.z)
@@ -235,8 +237,8 @@ terrain_primary_surface_prevalidated_v4 :: proc(
 			moisture = moisture,
 			temperature = temperature,
 			buildable = radius >= recipe.parameters.minimum_radius &&
-				radius <= recipe.parameters.maximum_radius &&
-				upward >= recipe.parameters.minimum_upward_normal,
+			radius <= recipe.parameters.maximum_radius &&
+			upward >= recipe.parameters.minimum_upward_normal,
 			biomes = biomes,
 		},
 		true
@@ -253,12 +255,17 @@ _terrain_basin_blend_v4 :: proc(
 	if recipe.basin_depth <= 0 do return 0
 	gate := land * (1 - uplift)
 	if gate <= 0 do return 0
-	signal := _terrain_unit(warped_fractal_3d(recipe.basin_noise, position.x, position.y, position.z))
-	return _terrain_smoothstep_v2(
-		recipe.basin_threshold - recipe.basin_fade,
-		recipe.basin_threshold + recipe.basin_fade,
-		signal,
-	) * gate
+	signal := _terrain_unit(
+		warped_fractal_3d(recipe.basin_noise, position.x, position.y, position.z),
+	)
+	return(
+		_terrain_smoothstep_v2(
+			recipe.basin_threshold - recipe.basin_fade,
+			recipe.basin_threshold + recipe.basin_fade,
+			signal,
+		) *
+		gate \
+	)
 }
 
 @(private)
@@ -266,12 +273,16 @@ _terrain_climate_v4 :: proc(
 	recipe: ^Terrain_Recipe_V4,
 	direction: [3]f32,
 	terms: Terrain_Height_Terms_V4,
-) -> (moisture, temperature, latitude: f32) {
+) -> (
+	moisture, temperature, latitude: f32,
+) {
 	assert(recipe != nil, "_terrain_climate_v4: nil recipe")
 	surface := &recipe.surface
 	position := direction * recipe.parameters.radius
 	moisture = _terrain_contrast_v2(
-		_terrain_unit(warped_fractal_3d(surface.moisture_noise, position.x, position.y, position.z)),
+		_terrain_unit(
+			warped_fractal_3d(surface.moisture_noise, position.x, position.y, position.z),
+		),
 		surface.climate_contrast,
 	)
 	coast_dist := abs(terms.continentalness - surface.coast_threshold)
@@ -279,13 +290,20 @@ _terrain_climate_v4 :: proc(
 	moisture = clamp(moisture + clamp(coast_bias, 0, 1) * 0.12 - terms.ruggedness * 0.08, 0, 1)
 	moisture = clamp(moisture + surface.moisture_bias, 0, 1)
 	noise := _terrain_contrast_v2(
-		_terrain_unit(warped_fractal_3d(surface.temperature_noise, position.x, position.y, position.z)),
+		_terrain_unit(
+			warped_fractal_3d(surface.temperature_noise, position.x, position.y, position.z),
+		),
 		surface.climate_contrast,
 	)
 	latitude = math.asin(clamp(direction.z, -1, 1))
 	latitude_distance := abs(latitude - recipe.parameters.latitude_offset_radians)
-	latitude_unit := clamp(latitude_distance / recipe.parameters.latitude_half_extent_radians, 0, 1)
-	temperature = noise * (1 - surface.latitude_weight) + (1 - latitude_unit) * surface.latitude_weight
+	latitude_unit := clamp(
+		latitude_distance / recipe.parameters.latitude_half_extent_radians,
+		0,
+		1,
+	)
+	temperature =
+		noise * (1 - surface.latitude_weight) + (1 - latitude_unit) * surface.latitude_weight
 	lapse := max(terms.height - surface.sea_level, 0) * surface.elevation_lapse
 	temperature = clamp(temperature - lapse, 0, 1)
 	temperature = clamp(temperature + surface.temperature_bias, 0, 1)
@@ -312,12 +330,18 @@ terrain_face_direction_v4 :: proc(face: Terrain_Face_V4, u, v: f32) -> [3]f32 {
 	b := math.tan(v * math.PI / 4)
 	direction: [3]f32
 	switch face {
-	case .Pos_X: direction = {1, b, -a}
-	case .Neg_X: direction = {-1, b, a}
-	case .Pos_Y: direction = {a, 1, -b}
-	case .Neg_Y: direction = {a, -1, b}
-	case .Pos_Z: direction = {a, b, 1}
-	case .Neg_Z: direction = {-a, b, -1}
+	case .Pos_X:
+		direction = {1, b, -a}
+	case .Neg_X:
+		direction = {-1, b, a}
+	case .Pos_Y:
+		direction = {a, 1, -b}
+	case .Neg_Y:
+		direction = {a, -1, b}
+	case .Pos_Z:
+		direction = {a, b, 1}
+	case .Neg_Z:
+		direction = {-a, b, -1}
 	}
 	return _terrain_normalize_v4(direction)
 }
