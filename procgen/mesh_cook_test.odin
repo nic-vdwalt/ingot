@@ -195,6 +195,7 @@ _cook_test_storage :: proc(
 		clusters = make([]asset.Cluster, asset.CLUSTER_MAX_LEVELS * 4096),
 		groups = make([]asset.Cluster_Group, asset.CLUSTER_MAX_LEVELS * 4096),
 		simplify = mesh_test_scratch(vertex_count, index_count),
+		optimize = mesh_test_optimize_scratch(vertex_count, index_count),
 		work_vertices = make([]asset.Vertex, vertex_count),
 		work_indices = make([]u32, index_count),
 	}
@@ -224,6 +225,7 @@ _cook_test_storage_free :: proc(storage: Cook_Chain_Storage) {
 	delete(storage.clusters)
 	delete(storage.groups)
 	mesh_test_scratch_free(storage.simplify)
+	mesh_test_optimize_scratch_free(storage.optimize)
 	delete(storage.work_vertices)
 	delete(storage.work_indices)
 }

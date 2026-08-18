@@ -12,6 +12,12 @@ import "ingot:asset"
 // that disagreed with the bake tool about LOD thresholds would pop where the
 // bake did not.
 //
+// That agreement extends to index order: every level runs through
+// `mesh_optimize.odin` on the way out, the same three passes in the same order
+// the offline tool applies. Skipping it here would leave the runtime cook
+// shipping unoptimised geometry - which is exactly what terrain built at load
+// time used to get, while the same project's Blender-cooked props did not.
+//
 // This is initialization or worker-residency work, the same contract
 // `mesh_deform_variant` and `creature_mesh_evolve` carry. It must not run per
 // frame.
@@ -38,6 +44,10 @@ Cook_Chain_Storage :: struct {
 	groups:        []asset.Cluster_Group,
 	cluster:       Cluster_Build_Storage,
 	simplify:      Simplify_Scratch,
+	// Scratch for the index-order passes, sized for the source mesh. Only the
+	// policy path uses it: a cluster DAG's index order belongs to
+	// `cluster_build`, which stores each cluster as a span.
+	optimize:      Optimize_Scratch,
 	// Scratch for one simplification step, sized for the source mesh.
 	work_vertices: []asset.Vertex,
 	work_indices:  []u32,
@@ -242,6 +252,10 @@ _cook_level_rebase :: proc(storage: Cook_Chain_Storage, span: Cluster_Level) -> 
 	return true
 }
 
+// Every level leaves here in optimised index order, including level 0, which is
+// the source geometry rather than a simplification of it. The offline tool
+// optimises level 0 too; a cook that skipped it would ship a different index
+// buffer for the same asset depending on which tool ran.
 @(private)
 _cook_level_geometry :: proc(
 	source: asset.Mesh_View,
@@ -255,9 +269,13 @@ _cook_level_geometry :: proc(
 	ok: bool,
 ) {
 	if level == 0 {
-		copy(storage.vertices[vertex_cursor:], source.vertices)
-		copy(storage.indices[index_cursor:], source.indices)
-		return len(source.vertices), len(source.indices), 0, true
+		count, index_count, level_ok := _cook_level_optimize(
+			source,
+			storage,
+			vertex_cursor,
+			index_cursor,
+		)
+		return count, index_count, 0, level_ok
 	}
 	target := int(f32(len(source.indices)) * ratio) / 3 * 3
 	if target < 3 do return 0, 0, 0, false
@@ -273,11 +291,47 @@ _cook_level_geometry :: proc(
 		storage.simplify,
 	)
 	if !simplify_ok || result.index_count == 0 do return 0, 0, 0, false
-	if len(storage.vertices) < vertex_cursor + result.vertex_count do return 0, 0, 0, false
-	if len(storage.indices) < index_cursor + result.index_count do return 0, 0, 0, false
-	copy(storage.vertices[vertex_cursor:], storage.work_vertices[:result.vertex_count])
-	copy(storage.indices[index_cursor:], storage.work_indices[:result.index_count])
-	return result.vertex_count, result.index_count, result.error, true
+	// The simplifier never moves a vertex off an existing one, so the source's
+	// frame still contains the reduced geometry and `mesh_validate` inside the
+	// optimiser accepts this view.
+	reduced := asset.Mesh_View {
+		id        = source.id,
+		vertices  = storage.work_vertices[:result.vertex_count],
+		indices   = storage.work_indices[:result.index_count],
+		primitive = .Triangles,
+		bounds    = source.bounds,
+	}
+	count, index_count, level_ok := _cook_level_optimize(
+		reduced,
+		storage,
+		vertex_cursor,
+		index_cursor,
+	)
+	return count, index_count, result.error, level_ok
+}
+
+// _cook_level_optimize runs the cache, overdraw, and fetch passes straight into
+// the chain's storage. The passes are permutations, so the level cannot grow
+// and the capacity `cook_chain_requirements` already reports still covers it.
+@(private)
+_cook_level_optimize :: proc(
+	level: asset.Mesh_View,
+	storage: Cook_Chain_Storage,
+	vertex_cursor, index_cursor: int,
+) -> (
+	vertices, indices: int,
+	ok: bool,
+) {
+	if len(storage.vertices) < vertex_cursor + len(level.vertices) do return 0, 0, false
+	if len(storage.indices) < index_cursor + len(level.indices) do return 0, 0, false
+	result, optimize_ok := optimize_mesh(
+		level,
+		storage.vertices[vertex_cursor:],
+		storage.indices[index_cursor:],
+		storage.optimize,
+	)
+	if !optimize_ok do return 0, 0, false
+	return result.vertex_count, result.index_count, true
 }
 
 // _cook_chain_finish measures the bounds the packed-vertex quantization is

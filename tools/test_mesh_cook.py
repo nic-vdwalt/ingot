@@ -52,7 +52,52 @@ def grid(cells, ripple=0.0):
     return vertices, indices
 
 
+# The contract between this module and `ingot/procgen/mesh_optimize.odin`,
+# written out literally on both sides. A 4x4 grid is small enough to read and
+# large enough that all three passes do real work: 32 triangles fill the
+# modelled cache and force evictions, and the run split produces more than one
+# run to sort.
+#
+# If either implementation changes, the other's test fails. That is the whole
+# point of pinning it - the two cooks cannot call each other, so nothing else
+# would notice them drifting apart until an asset shipped in two different index
+# orders depending on which tool built it.
+#
+# Regenerate with:
+#
+#   python3 -c "import test_mesh_cook as t, mesh_cook as c; \
+#       v, i = t.grid(4); print(c.optimize(v, i)[1])"
+GOLDEN_CELLS = 4
+
+GOLDEN_INDICES = [
+    0, 1, 2, 0, 3, 1, 2, 4, 5, 1, 6, 4,
+    4, 6, 7, 1, 8, 6, 9, 2, 10, 9, 0, 2,
+    10, 2, 5, 3, 11, 8, 3, 8, 1, 11, 12, 8,
+    6, 13, 7, 8, 12, 14, 8, 14, 6, 15, 9, 10,
+    16, 0, 9, 16, 17, 0, 6, 14, 13, 12, 18, 14,
+    14, 19, 13, 2, 1, 4, 5, 4, 20, 4, 7, 20,
+    17, 3, 0, 17, 21, 3, 21, 11, 3, 22, 23, 15,
+    23, 9, 15, 23, 16, 9, 14, 18, 19, 18, 24, 19,
+]
+
+# Where each output vertex came from in the source. Pinning this as well as the
+# index order catches a fetch pass that renumbered consistently but chose a
+# different first-use walk.
+GOLDEN_SOURCE = [
+    7, 12, 11, 8, 16, 15, 17, 21, 13, 6, 10, 9, 14,
+    22, 18, 5, 2, 3, 19, 23, 20, 4, 0, 1, 24,
+]
+
+
 class OptimizeTest(unittest.TestCase):
+    def test_matches_the_runtime_golden_order(self):
+        vertices, indices = grid(GOLDEN_CELLS)
+        result_vertices, result_indices = cook.optimize(vertices, indices)
+        self.assertEqual(result_indices, GOLDEN_INDICES)
+        self.assertEqual(
+            [vertices.index(vertex) for vertex in result_vertices], GOLDEN_SOURCE
+        )
+
     def test_optimization_is_a_permutation(self):
         vertices, indices = grid(8)
         result_vertices, result_indices = cook.optimize(vertices, indices)

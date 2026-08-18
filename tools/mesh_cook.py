@@ -7,14 +7,16 @@ bundled Python, which is the only interpreter guaranteed to be present when
 
 The simplifier here mirrors `ingot/procgen/mesh_simplify.odin` decision for
 decision - position grouping, collapse onto an existing vertex, locked borders,
-and the frozen fan around a locked vertex. The two implementations exist because
-the cook runs offline in Python and the terrain builder runs at load time in
-Odin; `ingot/docs/cluster-lod.md` is the contract they both answer to.
+and the frozen fan around a locked vertex - and the index-order passes mirror
+`ingot/procgen/mesh_optimize.odin` the same way. The two implementations exist
+because the cook runs offline in Python and the terrain builder runs at load
+time in Odin; `ingot/docs/cluster-lod.md` is the contract they both answer to.
 
 Formats are specified in `ingot/docs/cooked-mesh-v2.md`. Nothing here writes a
 file; `write_bundle` is the only I/O and it writes atomically.
 """
 
+import heapq
 import math
 import os
 import struct
@@ -124,9 +126,23 @@ def validate_mesh(vertices, indices, label):
 
 
 # -- index optimisation -------------------------------------------------------
+# Mirrors `ingot/procgen/mesh_optimize.odin`. The two implementations exist
+# because this cook runs inside Blender's bundled interpreter and the runtime
+# cook runs in Odin, so neither can call the other. `test_mesh_cook.py` and
+# `procgen/mesh_optimize_test.odin` assert the same golden index order, which is
+# what keeps that duplication honest.
+
+CACHE_SIZE = 32
+# The three most recent vertices score flat, so the corners of the triangle just
+# emitted do not compete with each other for the front of the cache.
+CACHE_RECENT = 3
+CACHE_RECENT_SCORE = 0.75
+VALENCE_SCALE = 2.0
+OVERDRAW_THRESHOLD = 1.05
+OVERDRAW_RUN_DIVISOR = 8.0
 
 
-def optimize_vertex_cache(indices, vertex_count, cache_size=32):
+def optimize_vertex_cache(indices, vertex_count, cache_size=CACHE_SIZE):
     """Tom Forsyth's linear-speed vertex cache reordering.
 
     Reorders triangles so a GPU's post-transform cache is reused. It is a pure
@@ -148,25 +164,38 @@ def optimize_vertex_cache(indices, vertex_count, cache_size=32):
         sum(scores[indices[triangle * 3 + corner]] for corner in range(3))
         for triangle in range(triangle_count)
     ]
+    stamp = [0] * triangle_count
+    heap = [
+        (-triangle_scores[triangle], triangle, 0) for triangle in range(triangle_count)
+    ]
+    heapq.heapify(heap)
     cache = []
     output = []
     for _ in range(triangle_count):
-        best = _best_triangle(triangle_scores, live)
+        best = _best_triangle(heap, stamp, live)
         if best < 0:
             break
         live[best] = False
         corners = [indices[best * 3 + corner] for corner in range(3)]
         output.extend(corners)
+        evicted = []
         for vertex in corners:
             remaining[vertex] -= 1
             if vertex in cache:
                 cache.remove(vertex)
             cache.insert(0, vertex)
-        del cache[cache_size:]
+        # Three insertions can push at most three vertices off the end. Their
+        # modelled position has to be cleared: leaving the stale slot behind
+        # would keep the cache bonus in an evicted vertex's score indefinitely
+        # and inflate every triangle that still references it.
+        while len(cache) > cache_size:
+            dropped = cache.pop()
+            cache_position[dropped] = -1
+            evicted.append(dropped)
         for slot, vertex in enumerate(cache):
             cache_position[vertex] = slot
         touched = set()
-        for vertex in set(corners) | set(cache):
+        for vertex in set(corners) | set(cache) | set(evicted):
             scores[vertex] = _vertex_score(cache_position[vertex], remaining[vertex])
             touched.update(adjacency[vertex])
         for triangle in touched:
@@ -175,6 +204,9 @@ def optimize_vertex_cache(indices, vertex_count, cache_size=32):
             triangle_scores[triangle] = sum(
                 scores[indices[triangle * 3 + corner]] for corner in range(3)
             )
+            stamp[triangle] += 1
+            entry = (-triangle_scores[triangle], triangle, stamp[triangle])
+            heapq.heappush(heap, entry)
     if len(output) != len(indices):
         # A disconnected or degenerate input can starve the walk; falling back
         # to the original order is always correct, just not optimised.
@@ -182,31 +214,58 @@ def optimize_vertex_cache(indices, vertex_count, cache_size=32):
     return output
 
 
-def _best_triangle(triangle_scores, live):
-    best = -1
-    best_score = -1.0
-    for triangle, score in enumerate(triangle_scores):
-        if not live[triangle]:
+def _best_triangle(heap, stamp, live):
+    """Highest-scoring live triangle, ties resolved to the lowest index.
+
+    A lazy-deletion heap: a rescored triangle is pushed again under a fresh
+    stamp and the stale entry is discarded on the way past. This replaced a
+    linear scan over every live triangle, which was O(T^2) - fine for the small
+    props Blender cooks, a hang for the terrain chunks the runtime cook sees.
+
+    The `(-score, triangle)` key reproduces that scan exactly rather than
+    merely closely: the scan walked upward taking a strictly better score, so it
+    too kept the lowest index among equals. `procgen/mesh_optimize.odin` orders
+    its heap the same way.
+    """
+    while heap:
+        negated, triangle, entry = heapq.heappop(heap)
+        if not live[triangle] or entry != stamp[triangle]:
             continue
-        if score > best_score:
-            best = triangle
-            best_score = score
-    return best
+        # The rejection floor. Reaching it means every remaining triangle has a
+        # vertex with no work left, which a well-formed mesh cannot produce.
+        if -negated <= -1.0:
+            return -1
+        return triangle
+    return -1
 
 
 def _vertex_score(cache_position, remaining):
+    """Forsyth's score, spelled so another language reproduces it bit for bit.
+
+    `sqrt` is correctly rounded per IEEE-754 where `pow` is not, and
+    equal-valence vertices produce exactly tied scores often enough that a
+    last-ulp disagreement between two libms would flip a tie and diverge the
+    whole output order. So x**1.5 is written x*sqrt(x) and 2*n**-0.5 is written
+    2/sqrt(n) - the same values, reproducible on every platform.
+    `procgen/mesh_optimize.odin` spells them the same way, and that is the only
+    reason the golden order is shareable at all.
+    """
+    # A vertex with no triangles left is worthless, and scoring it below every
+    # reachable score is what lets the walk detect a starved mesh.
     if remaining <= 0:
         return -1.0
     score = 0.0
     if cache_position >= 0:
-        if cache_position < 3:
-            score = 0.75
+        if cache_position < CACHE_RECENT:
+            score = CACHE_RECENT_SCORE
         else:
-            score = (1.0 - (cache_position - 3) / (32 - 3)) ** 1.5
-    return score + 2.0 * (remaining ** -0.5)
+            offset = cache_position - CACHE_RECENT
+            ramp = 1.0 - offset / (CACHE_SIZE - CACHE_RECENT)
+            score = ramp * math.sqrt(ramp)
+    return score + VALENCE_SCALE / math.sqrt(remaining)
 
 
-def optimize_overdraw(vertices, indices, threshold=1.05):
+def optimize_overdraw(vertices, indices, threshold=OVERDRAW_THRESHOLD):
     """View-independent overdraw reduction.
 
     Splits the cache-optimised order into hard boundaries, then sorts those runs
@@ -220,7 +279,8 @@ def optimize_overdraw(vertices, indices, threshold=1.05):
     center = [
         sum(vertex[axis] for vertex in vertices) / len(vertices) for axis in range(3)
     ]
-    runs = _split_runs(indices, max(1, int(triangle_count / max(1.0, threshold * 8))))
+    divisor = max(1.0, threshold * OVERDRAW_RUN_DIVISOR)
+    runs = _split_runs(indices, max(1, int(triangle_count / divisor)))
     keyed = []
     for start, count in runs:
         distance = 0.0
