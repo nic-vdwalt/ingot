@@ -252,11 +252,7 @@ _optimize_vertex_score :: proc(cache_position, remaining: int) -> f64 {
 }
 
 @(private)
-_optimize_triangle_score :: proc(
-	indices: []u32,
-	scratch: Optimize_Scratch,
-	triangle: int,
-) -> f64 {
+_optimize_triangle_score :: proc(indices: []u32, scratch: Optimize_Scratch, triangle: int) -> f64 {
 	assert(triangle >= 0, "_optimize_triangle_score: negative triangle")
 	total := f64(0)
 	for corner in 0 ..< 3 do total += scratch.vertex_scores[indices[triangle * 3 + corner]]
@@ -368,11 +364,7 @@ Optimize_Ring :: struct {
 }
 
 @(private)
-_optimize_ring_insert :: proc(
-	ring: ^Optimize_Ring,
-	corners: [3]u32,
-	scratch: Optimize_Scratch,
-) {
+_optimize_ring_insert :: proc(ring: ^Optimize_Ring, corners: [3]u32, scratch: Optimize_Scratch) {
 	assert(ring != nil, "_optimize_ring_insert: nil ring")
 	ring.evicted_count = 0
 	for vertex in corners {
@@ -449,12 +441,7 @@ _optimize_rescore :: proc(
 }
 
 @(private)
-_optimize_mark :: proc(
-	scratch: Optimize_Scratch,
-	vertex: u32,
-	stamp: u32,
-	count: int,
-) -> int {
+_optimize_mark :: proc(scratch: Optimize_Scratch, vertex: u32, stamp: u32, count: int) -> int {
 	if scratch.vertex_mark[vertex] == stamp do return count
 	scratch.vertex_mark[vertex] = stamp
 	position := int(scratch.cache_position[vertex])
