@@ -20,6 +20,7 @@ Adapter :: struct {
 	a11y_snapshot:    ui.Sem_Frame,
 	a11y_focus:       ak.Node_Id,
 	a11y_initialized: bool,
+	a11y_published:   bool,
 	initialized:      bool,
 	graphics_open:    bool,
 	gfx_frame:        ^rl.Frame,

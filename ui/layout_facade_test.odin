@@ -39,6 +39,98 @@ prepared_custom_render_test :: proc(u: ^Ui, rect: Rect_I32, userdata: rawptr) ->
 	return false
 }
 
+// grow_leaf_measure_test mimics a canvas-style custom leaf whose natural
+// height is a 1px floor: the leaf expects its Grow sizing to supply the real
+// height. This is the api-map/chart_demo shape that exposed the height-only
+// relayout skip.
+@(private = "file")
+grow_leaf_measure_test :: proc(
+	u: ^Ui,
+	constraints: Intrinsic_Constraints,
+	userdata: rawptr,
+) -> Intrinsic_Size {
+	assert(u != nil && userdata != nil, "grow_leaf_measure_test: invalid argument")
+	assert(constraints.max_w >= 0, "grow_leaf_measure_test: invalid constraint")
+	counts := cast(^Prepared_Custom_Counts)userdata
+	counts.measure += 1
+	counts.last_constraints = constraints
+	return intrinsic_leaf(40, 1)
+}
+
+// layout_grow_height_case builds the multi-child column shape (fixed header
+// above a Grow-height custom leaf), measures it under `measure_h`, renders it
+// at `render_h`, and returns the leaf's rendered rect. Pass-idempotent layout
+// must give the leaf the same rect for the same render height regardless of
+// the measure-time constraint.
+@(private = "file")
+layout_grow_height_case :: proc(measure_h, render_h: i32, sole_child: bool) -> Rect_I32 {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 300, render_h})
+	defer end(&u)
+	header, body: Prepared_Custom_Counts
+	prepared: Prepared_Ui
+	prepared_begin(&prepared, intrinsic_constraints(max_w = 300, max_h = measure_h))
+	prepared_column_begin(&prepared)
+	if !sole_child {
+		_ = prepared_custom(
+			&prepared,
+			{
+				measure = prepared_custom_measure_test,
+				render = prepared_custom_render_test,
+				userdata = &header,
+			},
+			fixed(20),
+		)
+	}
+	_ = prepared_custom(
+		&prepared,
+		{
+			measure = grow_leaf_measure_test,
+			render = prepared_custom_render_test,
+			userdata = &body,
+			size = {width = grow(), height = grow()},
+		},
+	)
+	prepared_container_end(&prepared)
+	_ = prepared_measure(&u, &prepared)
+	prepared_render_at(&u, &prepared, {0, 0, 300, render_h})
+	return body.rect
+}
+
+@(test)
+layout_facade_grow_height_fills_taller_render_rect :: proc(t: ^testing.T) {
+	// Measured under a 500px bound, rendered into 800px: the Grow leaf must
+	// take the leftover under the 20px header, not its stale 500px resolution.
+	body := layout_grow_height_case(500, 800, false)
+	testing.expect_value(t, body.h, i32(780))
+	testing.expect_value(t, body.y, i32(20))
+}
+
+@(test)
+layout_facade_render_is_pass_idempotent :: proc(t: ^testing.T) {
+	// Same tree, same final rect, different measurement histories: the layout
+	// must be identical (this is the a11y re-measure disagreement in miniature).
+	matched := layout_grow_height_case(800, 800, false)
+	stretched := layout_grow_height_case(500, 800, false)
+	testing.expect_value(t, stretched, matched)
+}
+
+@(test)
+layout_facade_grow_height_shape_parity :: proc(t: ^testing.T) {
+	// The sole-Grow-child column (gallery shape) and the multi-child column
+	// (api-map/chart_demo shape) must both fill the render rect.
+	sole := layout_grow_height_case(500, 800, true)
+	testing.expect_value(t, sole.h, i32(800))
+	multi := layout_grow_height_case(500, 800, false)
+	testing.expect_value(t, multi.h, i32(780))
+}
+
 @(test)
 layout_space_tokens_follow_scale :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
