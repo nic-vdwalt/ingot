@@ -9,9 +9,13 @@ UI_TELEMETRY_ENABLED :: #config(INGOT_UI_TELEMETRY, false)
 FONT_DATA := #load("../assets/fonts/JetBrainsMono-Regular.ttf")
 
 MEASURE_CACHE_MAX :: 8192
-MEASURE_CACHE_MAX_KEY_LEN :: 256
+MEASURE_CACHE_MAX_KEY_LEN :: 1024
 MEASURE_L0_CAPACITY :: 8
 MEASURE_L0_MAX_KEY_LEN :: 64
+ADVANCE_SLOT_CAPACITY :: 8
+ADVANCE_ASCII_FIRST :: 0x20
+ADVANCE_ASCII_COUNT :: 95
+ADVANCE_CACHE_MAX :: 4096
 
 Measure_Key :: struct {
 	text:  string,
@@ -35,12 +39,35 @@ Measure_L0_Entry :: struct {
 	valid:    bool,
 }
 
+// Advance_Slot caches per-rune advances for one (font, size, epoch) so the
+// wrap/truncate hot paths never issue a backend measure per rune. ASCII
+// (0x20-0x7E) lives in a fixed array; everything else falls back to the
+// shared advance_cache map.
+Advance_Slot :: struct {
+	ascii:       [ADVANCE_ASCII_COUNT]i32,
+	ascii_valid: [ADVANCE_ASCII_COUNT]bool,
+	size:        i32,
+	font:        Font_Id,
+	epoch:       u64,
+	valid:       bool,
+}
+
+Advance_Key :: struct {
+	value: rune,
+	size:  i32,
+	font:  Font_Id,
+	epoch: u64,
+}
+
 Text_System :: struct {
 	font_loaded:                   bool,
 	font_dpi:                      f32,
 	font_codepoints:               []rune,
 	measure_l0:                    [MEASURE_L0_CAPACITY]Measure_L0_Entry,
 	measure_l0_next:               int,
+	advance_slots:                 [ADVANCE_SLOT_CAPACITY]Advance_Slot,
+	advance_slot_next:             int,
+	advance_cache:                 map[Advance_Key]i32,
 	measure_cache:                 map[Measure_Key]Measure_Entry,
 	measure_cache_evictions:       int,
 	measure_cache_hits:            u64,
@@ -50,6 +77,7 @@ Text_System :: struct {
 	measure_stamp:                 u64,
 	measure_backend:               proc(text: cstring, size: i32) -> i32,
 	wrap_cache:                    map[Wrap_Key]Wrap_Entry,
+	wrap_frame_cache:              map[Wrap_Frame_Key]Wrap_Entry,
 	wrap_cache_evictions:          int,
 	wrap_stamp:                    u64,
 }
@@ -180,6 +208,10 @@ clear_measure_cache_with :: proc(system: ^Text_System) {
 	assert(system != nil)
 	system.measure_l0 = {}
 	system.measure_l0_next = 0
+	system.advance_slots = {}
+	system.advance_slot_next = 0
+	delete(system.advance_cache)
+	system.advance_cache = nil
 	for key in system.measure_cache {
 		delete(key.text)
 	}
@@ -257,20 +289,19 @@ draw_text_string_frame :: proc(frame: ^Ui_Frame, text: string, x, y, size: i32, 
 // hits are read-only in the common case instead of a map write per measure.
 MEASURE_CACHE_STAMP_SLACK :: 1024
 
+// measure_cache_drop_all is the measure cache's eviction policy: when the
+// cache fills, drop every entry. This is O(1) amortized per miss — the
+// visible working set repopulates within a frame — unlike the previous
+// evict-oldest linear scan, which cost O(MEASURE_CACHE_MAX) on every miss
+// once a long chat pushed the working set past capacity.
 @(private)
-measure_evict_oldest :: proc(system: ^Text_System) {
+measure_cache_drop_all :: proc(system: ^Text_System) {
 	assert(system != nil)
 	assert(len(system.measure_cache) > 0)
-	oldest: Measure_Key
-	oldest_stamp := max(u64)
-	for key, entry in system.measure_cache {
-		if entry.stamp < oldest_stamp {
-			oldest = key
-			oldest_stamp = entry.stamp
-		}
+	for key in system.measure_cache {
+		delete(key.text)
 	}
-	delete_key(&system.measure_cache, oldest)
-	delete(oldest.text)
+	clear(&system.measure_cache)
 	system.measure_cache_evictions += 1
 }
 
@@ -294,7 +325,7 @@ measure_text_with :: proc(system: ^Text_System, text: cstring, size: i32) -> i32
 	when UI_TELEMETRY_ENABLED do system.measure_cache_misses += 1
 	width := measure_raw_with(system, text, size)
 	if len(key.text) <= MEASURE_CACHE_MAX_KEY_LEN {
-		if len(system.measure_cache) >= MEASURE_CACHE_MAX do measure_evict_oldest(system)
+		if len(system.measure_cache) >= MEASURE_CACHE_MAX do measure_cache_drop_all(system)
 		system.measure_stamp += 1
 		owned := Measure_Key {
 			text = strings.clone(string(text)),
@@ -313,14 +344,7 @@ measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
 	assert(size > 0, "measure_text_frame: invalid size")
 	if text_backend_valid(frame.runtime.text_backend) {
 		font := frame_font_for_size(frame, size)
-		measurement := text_backend_measure(
-			frame.runtime.text_backend,
-			font,
-			string(text),
-			f32(size),
-			0,
-		)
-		return i32(measurement.x + 0.5)
+		return measure_text_backend_cached(frame, string(text), size, font)
 	}
 	return measure_text_with(ui_frame_text(frame), text, size)
 }
@@ -359,7 +383,7 @@ measure_text_backend_cached :: proc(
 	measurement := text_backend_measure(frame.runtime.text_backend, font, text, f32(size), 0)
 	width := i32(measurement.x + 0.5)
 	if len(text) <= MEASURE_CACHE_MAX_KEY_LEN {
-		if len(system.measure_cache) >= MEASURE_CACHE_MAX do measure_evict_oldest(system)
+		if len(system.measure_cache) >= MEASURE_CACHE_MAX do measure_cache_drop_all(system)
 		system.measure_stamp += 1
 		owned := Measure_Key {
 			text  = strings.clone(text),
@@ -422,9 +446,97 @@ rune_width_with :: proc(system: ^Text_System, value: rune, size: i32) -> i32 {
 rune_width_frame :: proc(frame: ^Ui_Frame, value: rune, size: i32) -> i32 {
 	assert(frame != nil && frame.open, "rune_width_frame: invalid frame")
 	assert(size > 0, "rune_width_frame: invalid size")
+	if text_backend_valid(frame.runtime.text_backend) {
+		font := frame_font_for_size(frame, size)
+		return rune_advance_backend_cached(frame, value, size, font)
+	}
 	buf: [5]u8
 	rune_utf8_encode(value, &buf)
 	return measure_text_frame(frame, cstring(&buf[0]), size)
+}
+
+@(private = "file")
+advance_slot_for :: proc(
+	system: ^Text_System,
+	size: i32,
+	font: Font_Id,
+	epoch: u64,
+) -> ^Advance_Slot {
+	assert(system != nil, "advance slot: nil system")
+	for index in 0 ..< ADVANCE_SLOT_CAPACITY {
+		slot := &system.advance_slots[index]
+		if slot.valid && slot.size == size && slot.font == font && slot.epoch == epoch {
+			return slot
+		}
+	}
+	assert(
+		system.advance_slot_next >= 0 && system.advance_slot_next < ADVANCE_SLOT_CAPACITY,
+		"advance slot: invalid replacement cursor",
+	)
+	slot := &system.advance_slots[system.advance_slot_next]
+	system.advance_slot_next += 1
+	if system.advance_slot_next == ADVANCE_SLOT_CAPACITY do system.advance_slot_next = 0
+	slot^ = {
+		size  = size,
+		font  = font,
+		epoch = epoch,
+		valid = true,
+	}
+	return slot
+}
+
+@(private = "file")
+rune_advance_measure_backend :: proc(
+	frame: ^Ui_Frame,
+	value: rune,
+	size: i32,
+	font: Font_Id,
+) -> i32 {
+	buf: [5]u8
+	n := rune_utf8_encode(value, &buf)
+	measurement := text_backend_measure(
+		frame.runtime.text_backend,
+		font,
+		string(buf[:n]),
+		f32(size),
+		0,
+	)
+	return i32(measurement.x + 0.5)
+}
+
+@(private = "file")
+rune_advance_backend_cached :: proc(
+	frame: ^Ui_Frame,
+	value: rune,
+	size: i32,
+	font: Font_Id,
+) -> i32 {
+	assert(frame != nil && frame.runtime != nil, "rune advance cache: invalid frame")
+	assert(size > 0 && font != 0, "rune advance cache: invalid font")
+	system := &frame.runtime.text
+	epoch := frame.runtime.font_epoch
+	if value >= ADVANCE_ASCII_FIRST && value < ADVANCE_ASCII_FIRST + ADVANCE_ASCII_COUNT {
+		slot := advance_slot_for(system, size, font, epoch)
+		index := int(value) - ADVANCE_ASCII_FIRST
+		if !slot.ascii_valid[index] {
+			slot.ascii[index] = rune_advance_measure_backend(frame, value, size, font)
+			slot.ascii_valid[index] = true
+		}
+		return slot.ascii[index]
+	}
+	key := Advance_Key {
+		value = value,
+		size  = size,
+		font  = font,
+		epoch = epoch,
+	}
+	if width, ok := system.advance_cache[key]; ok do return width
+	width := rune_advance_measure_backend(frame, value, size, font)
+	// Generational eviction: dropping the whole map is O(1) amortized and the
+	// working set repopulates within a frame, unlike a per-miss linear scan.
+	if len(system.advance_cache) >= ADVANCE_CACHE_MAX do clear(&system.advance_cache)
+	system.advance_cache[key] = width
+	return width
 }
 
 draw_codepoint_with :: proc(

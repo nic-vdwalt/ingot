@@ -1210,6 +1210,16 @@ text_measure_width_string :: proc(measure: Text_Measure, text: string, font_size
 	return measure_text_with(measure.system, text_c, font_size)
 }
 
+// text_measure_rune_width resolves a single rune advance through the same
+// measurement path the truncator verifies with, using the frame's cached
+// per-rune advances when a backend is installed.
+@(private)
+text_measure_rune_width :: proc(measure: Text_Measure, value: rune, font_size: i32) -> i32 {
+	assert(measure.frame != nil || measure.system != nil, "text_measure_rune_width: no measurer")
+	if measure.frame != nil do return rune_width_frame(measure.frame, value, font_size)
+	return rune_width_with(measure.system, value, font_size)
+}
+
 // Return text truncated with an ellipsis on `side` so it fits max_width.
 // The returned string is allocated in the temp allocator (or is the input
 // unchanged when it already fits).
@@ -1228,25 +1238,48 @@ truncate_to_width_dir_measure :: proc(
 	}
 	avail := max_width - text_measure_width_string(measure, "…", font_size)
 	if side == .Tail {
-		// Walk runes forward accumulating width until we run out of room.
+		// Accumulate cached rune advances forward — O(n) — then verify with a
+		// full measure and shrink by whole runes if advances under-estimated.
+		// The old loop re-measured the whole prefix per rune step: O(n²).
 		end := 0
+		acc: i32 = 0
 		for end < len(text) {
-			next_i := end + 1
-			for next_i < len(text) && (text[next_i] & 0xC0) == 0x80 do next_i += 1
-			if text_measure_width_string(measure, text[:next_i], font_size) > avail do break
-			end = next_i
+			r, n := utf8.decode_rune_in_string(text[end:])
+			advance := text_measure_rune_width(measure, r, font_size)
+			if acc + advance > avail do break
+			acc += advance
+			end += n
 		}
-		return strings.concatenate({text[:end], "…"}, context.temp_allocator)
+		for end > 0 {
+			candidate := strings.concatenate({text[:end], "…"}, context.temp_allocator)
+			if text_measure_width_string(measure, candidate, font_size) <= max_width {
+				return candidate
+			}
+			_, n := utf8.decode_last_rune_in_string(text[:end])
+			end -= n
+		}
+		return strings.clone("…", context.temp_allocator)
 	}
-	// Walk runes backward accumulating width until we run out of room.
+	// Accumulate cached rune advances backward — O(n) — then verify with a
+	// full measure and shrink by whole runes if advances under-estimated.
 	start := len(text)
+	acc: i32 = 0
 	for start > 0 {
-		prev := start - 1
-		for prev > 0 && (text[prev] & 0xC0) == 0x80 do prev -= 1
-		if text_measure_width_string(measure, text[prev:], font_size) > avail do break
-		start = prev
+		r, n := utf8.decode_last_rune_in_string(text[:start])
+		advance := text_measure_rune_width(measure, r, font_size)
+		if acc + advance > avail do break
+		acc += advance
+		start -= n
 	}
-	return strings.concatenate({"…", text[start:]}, context.temp_allocator)
+	for start < len(text) {
+		candidate := strings.concatenate({"…", text[start:]}, context.temp_allocator)
+		if text_measure_width_string(measure, candidate, font_size) <= max_width {
+			return candidate
+		}
+		_, n := utf8.decode_rune_in_string(text[start:])
+		start += n
+	}
+	return strings.clone("…", context.temp_allocator)
 }
 
 truncate_to_width_dir_with :: proc(

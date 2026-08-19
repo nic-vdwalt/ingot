@@ -15,6 +15,18 @@ Wrap_Key :: struct {
 	size:  i32,
 }
 
+// Wrap_Frame_Key identifies wrapped text by content hash instead of an owned
+// clone, so arbitrarily large messages are cacheable with no key-length cap
+// and no per-entry string allocation.
+Wrap_Frame_Key :: struct {
+	hash:  u64,
+	len:   int,
+	width: i32,
+	size:  i32,
+	font:  Font_Id,
+	epoch: u64,
+}
+
 Wrap_Entry :: struct {
 	lines: []Wrap_Line,
 	stamp: u64,
@@ -30,6 +42,11 @@ clear_wrap_cache_with :: proc(system: ^Text_System) {
 	}
 	delete(system.wrap_cache)
 	system.wrap_cache = nil
+	for _, entry in system.wrap_frame_cache {
+		delete(entry.lines)
+	}
+	delete(system.wrap_frame_cache)
+	system.wrap_frame_cache = nil
 	system.wrap_stamp = 0
 }
 
@@ -41,22 +58,18 @@ fnv1a64 :: proc(s: string) -> u64 {
 	return h
 }
 
+// wrap_cache_drop_all: generational eviction — dropping every entry when the
+// cache fills is O(1) amortized per miss, unlike the previous evict-oldest
+// linear scan which cost O(WRAP_CACHE_MAX) on every miss once full.
 @(private)
-wrap_evict_oldest :: proc(system: ^Text_System) {
+wrap_cache_drop_all :: proc(system: ^Text_System) {
 	assert(system != nil)
 	assert(len(system.wrap_cache) > 0)
-	oldest: Wrap_Key
-	oldest_stamp := max(u64)
 	for key, entry in system.wrap_cache {
-		if entry.stamp < oldest_stamp {
-			oldest = key
-			oldest_stamp = entry.stamp
-		}
+		delete(key.text)
+		delete(entry.lines)
 	}
-	entry := system.wrap_cache[oldest]
-	delete_key(&system.wrap_cache, oldest)
-	delete(oldest.text)
-	delete(entry.lines)
+	clear(&system.wrap_cache)
 	system.wrap_cache_evictions += 1
 }
 
@@ -80,7 +93,7 @@ wrap_text_with :: proc(
 		return entry.lines
 	}
 	lines := wrap_compute_with(system, text, max_width, font_size)
-	if len(system.wrap_cache) >= WRAP_CACHE_MAX do wrap_evict_oldest(system)
+	if len(system.wrap_cache) >= WRAP_CACHE_MAX do wrap_cache_drop_all(system)
 	owned_lines := make([]Wrap_Line, len(lines))
 	copy(owned_lines, lines)
 	system.wrap_stamp += 1
@@ -104,7 +117,39 @@ wrap_text_frame :: proc(
 ) -> []Wrap_Line {
 	assert(frame != nil && frame.open, "wrap_text_frame: invalid frame")
 	assert(max_width >= 0 && font_size > 0, "wrap_text_frame: invalid dimensions")
-	return wrap_compute_frame(frame, text, max_width, font_size)
+	if !text_backend_valid(frame.runtime.text_backend) {
+		return wrap_compute_frame(frame, text, max_width, font_size)
+	}
+	system := ui_frame_text(frame)
+	key := Wrap_Frame_Key {
+		hash  = fnv1a64(text),
+		len   = len(text),
+		width = max_width,
+		size  = font_size,
+		font  = frame_font_for_size(frame, font_size),
+		epoch = frame.runtime.font_epoch,
+	}
+	if entry, ok := system.wrap_frame_cache[key]; ok {
+		return entry.lines
+	}
+	lines := wrap_compute_frame(frame, text, max_width, font_size)
+	// Generational eviction: dropping the whole cache is O(1) amortized; the
+	// visible working set repopulates within one frame.
+	if len(system.wrap_frame_cache) >= WRAP_CACHE_MAX {
+		for _, entry in system.wrap_frame_cache {
+			delete(entry.lines)
+		}
+		clear(&system.wrap_frame_cache)
+		system.wrap_cache_evictions += 1
+	}
+	owned := make([]Wrap_Line, len(lines))
+	copy(owned, lines)
+	system.wrap_stamp += 1
+	system.wrap_frame_cache[key] = Wrap_Entry {
+		lines = owned,
+		stamp = system.wrap_stamp,
+	}
+	return owned
 }
 
 @(private)
