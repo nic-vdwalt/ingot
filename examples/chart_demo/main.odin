@@ -80,17 +80,21 @@ frame :: proc(builder: ^fit.Builder, userdata: rawptr) {
 			data.dark = !data.dark
 			fit.Set_Theme(&app, fit.Theme_Dark() if data.dark else fit.Theme_Light())
 		}
+		// The dashboard fills the leftover column height; Grow resolves the
+		// same on every layout pass, so the panel tracks window resizes.
 		fit.Custom(
 			builder,
 			{measure = dashboard_measure, render = draw_dashboard, userdata = data},
-			{size = {height = fit.Fixed(620)}},
+			{size = {width = fit.Grow(), height = fit.Grow()}},
 		)
 	}
 }
 
 dashboard_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
 	_ = userdata
-	return {max(constraints.max_w, 1), min(max(constraints.max_h, 1), 620), false}
+	// The height comes from the Grow sizing in frame; the measured height is
+	// only a minimal floor.
+	return {max(constraints.max_w, 1), 1, false}
 }
 
 draw_dashboard :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
