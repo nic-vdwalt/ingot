@@ -194,7 +194,8 @@ adapter_a11y_publish :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	// snapshot copy and PushAccessibilityUpdate made every animation frame do
 	// accessibility work (and provoked platform-side re-reads) even when the
 	// semantics were byte-identical.
-	if adapter.a11y_published && a11y_snapshot_equal(&adapter.a11y_snapshot, &frame.semantics.cur) {
+	if adapter.a11y_published &&
+	   a11y_snapshot_equal(&adapter.a11y_snapshot, &frame.semantics.cur) {
 		return
 	}
 	adapter.a11y_snapshot = frame.semantics.cur

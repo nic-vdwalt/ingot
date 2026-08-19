@@ -12,9 +12,9 @@ VIEW_FILE :: "views/scratch.ingv"
 SMOKE :: #config(INGOT_SMOKE, false)
 
 State :: struct {
-	doc:      view.View_Doc,
-	selected: i32,
-	status:   string,
+	doc:            view.View_Doc,
+	selected:       i32,
+	status:         string,
 	// Written by fit during Render (after draw returns); consumed and
 	// cleared at the start of the next build.
 	save_clicked:   bool,
