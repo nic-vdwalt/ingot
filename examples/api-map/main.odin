@@ -21,7 +21,7 @@ Pkg :: enum u8 {
 	App,
 	Fit,
 	Ui_Gfx,
-	Ui,
+	Ui_Lib,
 	Gfx,
 }
 
@@ -148,7 +148,7 @@ MAP_NODES := [NODE_COUNT]Map_Node {
 		"3  ui layout",
 		"library - not an entry",
 		"Immediate mode: per-frame arena, describe and place, no I/O.",
-		.Ui,
+		.Ui_Lib,
 		3,
 		.Plan,
 		true,
@@ -166,7 +166,7 @@ MAP_NODES := [NODE_COUNT]Map_Node {
 		"5  ui output",
 		"paint + semantics",
 		"Draw list and Platform_Output describe work for the host.",
-		.Ui,
+		.Ui_Lib,
 		5,
 		.Plan,
 		false,
@@ -203,7 +203,7 @@ LANE_OF_PKG := [Pkg]i32 {
 	.Fit    = 0,
 	.App    = 1,
 	.Ui_Gfx = 2,
-	.Ui     = 3,
+	.Ui_Lib = 3,
 	.Gfx    = 4,
 }
 

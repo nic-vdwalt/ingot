@@ -92,6 +92,20 @@ class ConsumerPolicyTests(unittest.TestCase):
         failures = self.check('package app\nimport "ingot:ui"\n')
         self.assertTrue(any("internal UI import" in failure for failure in failures))
 
+    def test_string_literal_mentioning_internal_package_is_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "ui").mkdir()
+            (root / "fit").mkdir()
+            examples = root / "examples"
+            examples.mkdir()
+            (examples / "main.odin").write_text(
+                'package main\nimport fit "ingot:fit"\ntitle := "ingot:ui_gfx"\n',
+                encoding="utf-8",
+            )
+            failures = policy.check(root)
+        self.assertEqual(failures, [])
+
     def test_retired_fit_and_graphics_apis_are_rejected(self) -> None:
         source = "package app\nf :: proc() { fit_tree(nil, {}); clear_frame(nil, {}) }\n"
         failures = self.check(source)

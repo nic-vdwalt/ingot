@@ -73,7 +73,7 @@ ADAPTER_LIFECYCLE = {
 }
 LEGACY_SESSION = re.compile(r"\b(?:App_Session(?:_Config)?|app_session_[a-z_0-9]+)\b")
 BINDING_IMPORT = re.compile(r'"ingot:(libvterm|pty|accesskit)"')
-INTERNAL_UI_IMPORT = re.compile(r'"ingot:(ui|ui_gfx)"')
+INTERNAL_UI_IMPORT = re.compile(r'(?m)^\s*import\s+(?:[A-Za-z_][A-Za-z_0-9]*\s+)?"ingot:(?:ui|ui_gfx)"')
 FIT_AS_INTERNAL_IMPORT = re.compile(r'(?m)^\s*import\s+(ui|ui_gfx)\s+"ingot:fit"')
 EXAMPLE_FIT_IMPORT = re.compile(r'(?m)^\s*import\s+(?!fit\s+)[a-zA-Z_][a-zA-Z_0-9]*\s+"ingot:fit"')
 EXAMPLE_INTERNAL_NAME = re.compile(
