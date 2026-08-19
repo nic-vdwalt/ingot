@@ -10,11 +10,11 @@ CHECK_WIDTHS := [?]i32{320, 760, 1180, 1920, 2560}
 // Fixed metrics stand in for one scale so the sweep is deterministic; every
 // field is positive and the breakpoints match the runtime logical constants.
 CHECK_METRICS := Map_Metrics {
-	gap        = 12,
-	margin     = 36,
-	header_h   = 24,
-	entry_h    = 56,
-	card_h     = 92,
+	gap        = 10,
+	margin     = 26,
+	gutter_w   = 104,
+	strip_h    = 40,
+	card_h     = 96,
 	narrow_max = NARROW_WIDTH_MAX,
 	wide_min   = WIDE_WIDTH_MIN,
 }
@@ -52,32 +52,35 @@ map_check_topology :: proc() {
 
 map_check_layout :: proc(layout: ^Map_Layout) {
 	assert(layout != nil && layout.bounds.w > 0 && layout.bounds.h > 0)
+	assert(layout.strip.w > 0 && layout.strip.h > 0)
 	for rect, index in layout.nodes {
 		assert(rect.w > 0 && rect.h > 0)
 		assert(rect.x >= layout.bounds.x && rect.y >= layout.bounds.y)
 		assert(rect.x + rect.w <= layout.bounds.x + layout.bounds.w)
 		assert(rect.y + rect.h <= layout.bounds.y + layout.bounds.h)
+		assert(rect.y >= layout.strip.y + layout.strip.h)
 		for other_index in index + 1 ..< NODE_COUNT {
 			assert(!rects_overlap(rect, layout.nodes[other_index]))
 		}
 	}
-	map_check_tiers(layout)
+	if layout.columns > 1 do map_check_lanes(layout)
 }
 
-map_check_tiers :: proc(layout: ^Map_Layout) {
-	assert(layout != nil && layout.metrics.header_h > 0)
-	for bounds, tier in layout.tier_bounds {
+map_check_lanes :: proc(layout: ^Map_Layout) {
+	assert(layout != nil && layout.columns > 1, "lane check: narrow layout")
+	for lane in 0 ..< LANE_COUNT {
+		bounds := layout.lane_bounds[lane]
 		assert(bounds.w > 0 && bounds.h > 0)
-		for other_index in tier + 1 ..< TIER_COUNT {
-			assert(!rects_overlap(bounds, layout.tier_bounds[other_index]))
+		for other in lane + 1 ..< LANE_COUNT {
+			assert(!rects_overlap(bounds, layout.lane_bounds[other]))
 		}
+		assert(!rects_overlap(bounds, layout.strip))
 	}
 	for node, index in MAP_NODES {
 		rect := layout.nodes[index]
-		band := layout.tier_bounds[node.tier]
-		assert(rect.x >= band.x && rect.x + rect.w <= band.x + band.w)
-		assert(rect.y >= band.y + layout.metrics.header_h)
-		assert(rect.y + rect.h <= band.y + band.h)
+		lane := layout.lane_bounds[LANE_OF_PKG[node.pkg]]
+		assert(rect.x >= lane.x && rect.x + rect.w <= lane.x + lane.w)
+		assert(rect.y >= lane.y && rect.y + rect.h <= lane.y + lane.h)
 	}
 }
 

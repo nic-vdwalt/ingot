@@ -319,6 +319,7 @@ gallery_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, userdata: rawptr) -> bool {
 	_ = userdata
 	gallery_root = root
+	fmt.eprintfln("[gallery] frame root = %v", root)
 	sw := root.w
 	sh := root.h
 
