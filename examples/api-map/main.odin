@@ -221,14 +221,7 @@ NODE_COLS_WIDE := [NODE_COUNT]i32{0, 0, 0, 1, 2, 3, 4, 5, 6}
 GRID_COLS_MEDIUM :: 4
 GRID_COLS_WIDE :: 7
 
-STAGE_LABELS := [STAGE_COUNT]string {
-	"1 fit",
-	"2 ui_gfx",
-	"3 ui",
-	"4 callback",
-	"5 output",
-	"6 gfx",
-}
+STAGE_LABELS := [STAGE_COUNT]string{"1 fit", "2 ui_gfx", "3 ui", "4 callback", "5 output", "6 gfx"}
 
 // Static strip titles avoid core:fmt, which would drag core:os into any
 // future js build of this package.
