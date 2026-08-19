@@ -5,29 +5,43 @@ import fit "ingot:fit"
 
 LAYOUT_CHECK :: #config(INGOT_LAYOUT_CHECK, false)
 MAP_CAPTURE :: #config(INGOT_MAP_CAPTURE, false)
-NODE_COUNT :: 8
+NODE_COUNT :: 9
 STAGE_COUNT :: 6
-EDGE_COUNT :: 7
-TIER_COUNT :: 5
+EDGE_COUNT :: 8
+PKG_COUNT :: 5
+LANE_COUNT :: 5
 MAX_EDGE_POINTS :: 4
+PROGRESS_SEGMENTS :: STAGE_COUNT
 NARROW_WIDTH_MAX :: 560
 WIDE_WIDTH_MIN :: 980
 
-Tier :: enum u8 {
-	Supported,
-	Application,
-	Callback,
-	Internal,
-	Presentation,
+// Pkg is the ingot package (or the caller) that owns a card. Each swimlane is
+// one package, so the entry level of every card reads directly from its row.
+Pkg :: enum u8 {
+	App,
+	Fit,
+	Ui_Gfx,
+	Ui,
+	Gfx,
+}
+
+Node_Phase :: enum u8 {
+	Entry,
+	Upcoming,
+	Done,
+	Active,
 }
 
 Map_Node :: struct {
 	title:    string,
 	detail:   string,
 	contract: string,
-	tier:     Tier,
+	pkg:      Pkg,
 	stage:    i32,
 	ink:      fit.Ink,
+	// library marks cards that are never an entry point, so the detail line can
+	// keep a distinct ink even while the card is in the muted Upcoming phase.
+	library:  bool,
 }
 
 Map_Edge :: struct {
@@ -41,8 +55,8 @@ Map_Edge :: struct {
 Map_Metrics :: struct {
 	gap:        i32,
 	margin:     i32,
-	header_h:   i32,
-	entry_h:    i32,
+	gutter_w:   i32,
+	strip_h:    i32,
 	card_h:     i32,
 	narrow_max: i32,
 	wide_min:   i32,
@@ -51,8 +65,9 @@ Map_Metrics :: struct {
 Map_Layout :: struct {
 	bounds:      fit.Rect,
 	metrics:     Map_Metrics,
+	strip:       fit.Rect,
 	nodes:       [NODE_COUNT]fit.Rect,
-	tier_bounds: [TIER_COUNT]fit.Rect,
+	lane_bounds: [LANE_COUNT]fit.Rect,
 	columns:     i32,
 }
 
@@ -73,128 +88,161 @@ Map_State :: struct {
 	hold_seconds:   f32,
 }
 
+// The entry rail (stage 0) states the three supported ways in: fit (the
+// supported facade), ui_gfx (the pro loop), and gfx (raw graphics, no UI
+// stack). ui appears only mid-path because it is a library, never an entry.
 MAP_NODES := [NODE_COUNT]Map_Node {
 	{
-		"ingot:fit",
-		"supported UI entry",
-		"Own lifecycle and describe UI through Builder.",
-		.Supported,
+		"your app",
+		"owns main + state",
+		"Pick an entry: fit (supported), ui_gfx (pro), gfx (raw).",
+		.App,
 		0,
 		.Accent,
+		false,
+	},
+	{
+		"ingot:ui_gfx",
+		"pro entry",
+		"Own the loop with app_init and app_tick; skip fit's sugar.",
+		.Ui_Gfx,
+		0,
+		.Tool,
+		false,
 	},
 	{
 		"ingot:gfx",
-		"supported graphics entry",
-		"Use the raylib-compatible graphics API directly.",
-		.Supported,
+		"raw graphics entry",
+		"Draw raylib-style immediately; no UI stack at all.",
+		.Gfx,
 		0,
 		.Tool,
+		false,
 	},
 	{
 		"1  fit.App",
-		"lifecycle + input",
-		"Own the window, theme, scale, pacing, and frame input.",
-		.Application,
+		"supported entry",
+		"Run, or Init/Start/Tick; a thin facade over ui_gfx.app_*.",
+		.Fit,
 		1,
 		.Success,
+		false,
 	},
 	{
-		"2  fit.Builder",
-		"bounded declaration",
-		"Record responsive containers and stable controls immediately.",
-		.Application,
+		"2  ui_gfx loop",
+		"window + input + pacing",
+		"The real runtime; fit delegates every call here.",
+		.Ui_Gfx,
 		2,
 		.Accent,
+		false,
 	},
 	{
-		"3  measure + place",
-		"responsive layout",
-		"Measure constraints and place the declaration synchronously.",
-		.Internal,
+		"3  ui layout",
+		"library - not an entry",
+		"Immediate mode: per-frame arena, describe and place, no I/O.",
+		.Ui,
 		3,
 		.Plan,
+		true,
 	},
 	{
 		"4  fit.Surface",
-		"borrowed capability",
-		"Interact and draw explicit geometry only inside the callback.",
-		.Callback,
+		"your callback",
+		"Your leaves borrow Surface for same-frame explicit work.",
+		.App,
 		4,
 		.Tool,
+		false,
 	},
 	{
-		"5  UI output",
+		"5  ui output",
 		"paint + semantics",
-		"Record bounded paint, accessibility, and platform requests.",
-		.Internal,
+		"Draw list and Platform_Output describe work for the host.",
+		.Ui,
 		5,
 		.Plan,
+		false,
 	},
 	{
-		"6  UI/GFX bridge",
+		"6  gfx present",
 		"WebGPU presentation",
-		"Replay output through native or web platform adapters.",
-		.Presentation,
+		"ui_gfx replays ui output through gfx, native or web.",
+		.Gfx,
 		6,
 		.Success,
+		false,
 	},
 }
 
+// The two stage-0 alternates (ui_gfx pro entry, raw gfx) merge into the main
+// path: three entries, one presentation. Edge 0 must stay the app-to-fit
+// entry edge because the elbow router gives index 0 the left rail.
 MAP_EDGES := [EDGE_COUNT]Map_Edge {
-	{0, 2, 1},
-	{2, 3, 2},
-	{3, 4, 3},
-	{4, 5, 4},
-	{5, 6, 5},
-	{6, 7, 6},
-	{1, 7, 6},
+	{0, 3, 1},
+	{3, 4, 2},
+	{1, 4, 2},
+	{4, 5, 3},
+	{5, 6, 4},
+	{6, 7, 5},
+	{7, 8, 6},
+	{2, 8, 6},
 }
 
-// Bands are stacked in stage order (Internal before Callback) so the animated
-// path only ever hops one band at a time except for the two bridge edges.
-BAND_ORDER := [TIER_COUNT]Tier{.Supported, .Application, .Internal, .Callback, .Presentation}
-
-// Column assignments per column count keep every straight edge clear of
-// unrelated cards; the router falls back to a margin elbow when blocked.
-NODE_COLUMNS := [3][NODE_COUNT]i32 {
-	{0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 1, 0, 1, 0, 0, 1, 1},
-	{0, 2, 0, 1, 0, 0, 1, 2},
+// Swimlane rows ordered so the animated stage path only ever hops one or two
+// adjacent lanes, keeping connectors short and readable. APP sits between FIT
+// and UI-GFX so the return-to-callback hop stays short.
+LANE_OF_PKG := [Pkg]i32 {
+	.Fit    = 0,
+	.App    = 1,
+	.Ui_Gfx = 2,
+	.Ui     = 3,
+	.Gfx    = 4,
 }
 
-NODE_ROWS_NARROW := [NODE_COUNT]i32{0, 1, 0, 1, 0, 0, 1, 0}
+// Single-word lane labels fit the left gutter without wrapping at any scale.
+LANE_LABELS := [LANE_COUNT]string{"FIT", "APP", "UI-GFX", "UI", "GFX"}
 
-// Elbow edges sharing a margin get distinct lanes so overlapping verticals do
-// not repaint each other in conflicting colors while the path animates.
-EDGE_LANES := [EDGE_COUNT]i32{0, 0, 0, 1, 0, 2, 0}
-
-EDGE_SIDE_RIGHT := [EDGE_COUNT]bool{false, false, false, false, false, false, true}
-
-TIER_LABELS := [TIER_COUNT]string {
-	"SUPPORTED API",
-	"APPLICATION-OWNED STATE",
-	"CALLBACK-SCOPED CAPABILITY",
-	"INTERNAL UI ENGINE",
-	"PRESENTATION",
-}
+// Grid columns per breakpoint. Wide places the three entries in a column-0
+// rail and the six stages left to right; medium pairs stages into columns so
+// the path snakes. Cells are chosen so no two cards share a cell and every
+// straight card-to-card connector clears all unrelated cards; the elbow
+// router covers any crossing that remains (check.odin verifies clearance at
+// every width).
+NODE_COLS_MEDIUM := [NODE_COUNT]i32{0, 0, 0, 1, 1, 2, 2, 3, 3}
+NODE_COLS_WIDE := [NODE_COUNT]i32{0, 0, 0, 1, 2, 3, 4, 5, 6}
+GRID_COLS_MEDIUM :: 4
+GRID_COLS_WIDE :: 7
 
 STAGE_LABELS := [STAGE_COUNT]string {
-	"1 App",
-	"2 Builder",
-	"3 Layout",
-	"4 Surface",
-	"5 Output",
-	"6 Present",
+	"1 fit",
+	"2 ui_gfx",
+	"3 ui",
+	"4 callback",
+	"5 output",
+	"6 gfx",
+}
+
+// Static strip titles avoid core:fmt, which would drag core:os into any
+// future js build of this package.
+STAGE_TITLES := [STAGE_COUNT + 1]string {
+	"OVERVIEW",
+	"STAGE 1 / 6",
+	"STAGE 2 / 6",
+	"STAGE 3 / 6",
+	"STAGE 4 / 6",
+	"STAGE 5 / 6",
+	"STAGE 6 / 6",
 }
 
 STAGE_CAPTIONS := [STAGE_COUNT + 1]string {
-	"Choose a stage or play the complete path",
-	"App owns lifecycle and captures platform input",
-	"Builder records one bounded immediate declaration",
-	"Fit measures constraints and places responsive layout",
-	"Explicit leaves borrow Surface for same-frame work",
-	"The UI engine records paint, semantics, and platform requests",
-	"The UI/GFX bridge presents through WebGPU on native and web",
+	"Three entries: fit (supported), ui_gfx (pro), gfx (raw); ui is a library, no window, no loop",
+	"fit.App is the supported entry: Run or Init/Start/Tick, a thin facade over ui_gfx",
+	"ui_gfx is the pro entry: it owns the window, input pump, and frame pacing",
+	"ui is immediate-mode and I/O-free - a library that never runs the app",
+	"Your callback borrows fit.Surface for same-frame explicit work",
+	"ui records the draw list, semantics, and Platform_Output requests",
+	"ui_gfx replays ui output through gfx WebGPU; raw gfx apps skip the UI stack",
 }
 
 app: fit.App
@@ -202,6 +250,15 @@ map_state := Map_State {
 	dark         = true,
 	hovered_node = -1,
 }
+
+// map_chrome_h caches the pixel height consumed by the header, controls, and
+// column padding above and below the map body. It is captured during render
+// (where a Surface is available) so map_build can give the map body a Fixed
+// height equal to the leftover window height. A Fixed height resolves
+// identically on every layout pass - including the accessibility re-measure -
+// which a Grow track does not, avoiding the collapse/jitter that occurs when
+// the two passes disagree.
+map_chrome_h: i32 = -1
 
 main :: proc() {
 	when LAYOUT_CHECK {
@@ -231,6 +288,18 @@ main :: proc() {
 
 map_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	_ = userdata
+	// Live window: give the body a Fixed height equal to the leftover after the
+	// cached chrome. A Fixed height resolves identically on the fit, render, and
+	// accessibility re-measure passes, so the body neither collapses at rest nor
+	// jitters the way a Grow track does. Under the capture harness the global
+	// app is not running, so fall back to Grow and let the explicit render rect
+	// supply the height.
+	body_height := fit.Grow()
+	if fit.Get_State(&app) != .Empty {
+		win_h := fit.Screen_Rect(&app).h
+		body_h := win_h if map_chrome_h < 0 else max(win_h - map_chrome_h, 1)
+		body_height = fit.Fixed(body_h)
+	}
 	fit.Column(builder, {gap = .SM, padding = .LG})
 	defer fit.End(builder)
 	fit.Row(builder, {gap = .SM, align = .Center})
@@ -242,13 +311,12 @@ map_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 		map_state.dark = !map_state.dark
 		fit.Set_Theme(&app, fit.Theme_Dark() if map_state.dark else fit.Theme_Light())
 	}
-	fit.Label(builder, STAGE_CAPTIONS[map_state.target_stage], {ink = .Secondary})
 	map_stage_controls(builder)
 	map_playback_controls(builder)
 	fit.Custom(
 		builder,
 		{measure = map_measure, render = map_render},
-		{size = {width = fit.Grow(), height = fit.Grow()}},
+		{size = {width = fit.Grow(), height = body_height}},
 	)
 }
 
@@ -309,25 +377,25 @@ map_select_stage :: proc(stage: i32) {
 map_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
 	_ = userdata
 	assert(constraints.max_w >= 0 && constraints.max_h >= 0, "api map: invalid constraints")
-	// Fill the granted space; the layout clamps card heights to fit, so the
-	// leaf never needs an unscaled intrinsic height that would break at 2x.
-	return {max(constraints.max_w, 1), max(constraints.max_h, 1), false}
+	// The body height comes from the Fixed sizing in map_build; the measured
+	// height is only a minimal floor.
+	return {max(constraints.max_w, 1), 1, false}
 }
 
 map_metrics :: proc(surface: ^fit.Surface) -> Map_Metrics {
 	assert(surface != nil, "api map metrics: nil surface")
-	label_h := fit.Surface_Text_Line_Height(surface, .Note)
+	title_h := fit.Surface_Text_Line_Height(surface, .Title)
 	metrics := Map_Metrics {
-		gap        = fit.Surface_Space(surface, .MD),
-		margin     = fit.Px(surface, 36),
-		header_h   = label_h + fit.Surface_Space(surface, .XS) * 2,
-		entry_h    = fit.Px(surface, 56),
-		card_h     = fit.Px(surface, 92),
+		gap        = fit.Surface_Space(surface, .SM),
+		margin     = fit.Px(surface, 26),
+		gutter_w   = fit.Px(surface, 104),
+		strip_h    = title_h + fit.Surface_Space(surface, .XS) * 2 + fit.Px(surface, 6),
+		card_h     = fit.Px(surface, 80),
 		narrow_max = fit.Px(surface, NARROW_WIDTH_MAX),
 		wide_min   = fit.Px(surface, WIDE_WIDTH_MIN),
 	}
-	assert(metrics.gap > 0 && metrics.margin > 0 && metrics.header_h > 0)
-	assert(metrics.entry_h > 0 && metrics.card_h > 0)
+	assert(metrics.gap > 0 && metrics.margin > 0 && metrics.gutter_w > 0)
+	assert(metrics.strip_h > 0 && metrics.card_h > 0)
 	return metrics
 }
 
@@ -335,86 +403,89 @@ map_columns :: proc(width: i32, metrics: Map_Metrics) -> i32 {
 	assert(width > 0, "api map columns: non-positive width")
 	assert(metrics.wide_min > metrics.narrow_max, "api map columns: invalid breakpoints")
 	if width <= metrics.narrow_max do return 1
-	if width < metrics.wide_min do return 2
-	return 3
-}
-
-map_band_rows :: proc(tier: Tier, columns: i32) -> i32 {
-	assert(columns >= 1 && columns <= 3, "api map rows: invalid column count")
-	count: i32
-	for node in MAP_NODES {
-		if node.tier == tier do count += 1
-	}
-	assert(count > 0, "api map rows: empty tier")
-	return count if columns == 1 else 1
+	if width < metrics.wide_min do return GRID_COLS_MEDIUM
+	return GRID_COLS_WIDE
 }
 
 map_content_height :: proc(width: i32, metrics: Map_Metrics) -> i32 {
 	assert(width > 0, "api map height: non-positive width")
-	assert(metrics.gap > 0 && metrics.header_h > 0, "api map height: invalid metrics")
+	assert(metrics.gap > 0 && metrics.card_h > 0, "api map height: invalid metrics")
 	columns := map_columns(width, metrics)
-	total := metrics.gap
-	for tier in Tier {
-		rows := map_band_rows(tier, columns)
-		row_h := metrics.entry_h if tier == .Supported else metrics.card_h
-		total += metrics.header_h + rows * row_h + (rows - 1) * metrics.gap + metrics.gap
+	total := metrics.gap * 2 + metrics.strip_h + metrics.gap
+	if columns == 1 {
+		total += NODE_COUNT * (metrics.card_h + metrics.gap)
+	} else {
+		lane_h := metrics.card_h + metrics.gap
+		total += LANE_COUNT * lane_h + (LANE_COUNT - 1) * max(metrics.gap / 2, 2)
 	}
 	return total
 }
 
 map_layout :: proc(rect: fit.Rect, metrics: Map_Metrics) -> Map_Layout {
 	assert(rect.w > 0 && rect.h > 0, "api map layout: invalid bounds")
-	assert(metrics.gap > 0 && metrics.margin > 0 && metrics.header_h > 0)
-	assert(metrics.entry_h > 0 && metrics.card_h > 0, "api map layout: invalid heights")
-	columns := map_columns(rect.w, metrics)
-	entry_rows, card_rows, intra_gaps: i32
-	for tier in Tier {
-		rows := map_band_rows(tier, columns)
-		if tier == .Supported {
-			entry_rows += rows
-		} else {
-			card_rows += rows
-		}
-		intra_gaps += rows - 1
-	}
-	fixed := metrics.gap * 2 + TIER_COUNT * metrics.header_h
-	fixed += (TIER_COUNT - 1) * metrics.gap + intra_gaps * metrics.gap
-	// Entry rows weigh 2 and card rows weigh 3 so short windows shrink both
-	// kinds of card proportionally instead of overflowing the leaf.
-	weight := entry_rows * 2 + card_rows * 3
-	available := max(rect.h - fixed, weight)
-	unit := available / weight
-	entry_h := clamp(unit * 2, 2, metrics.entry_h)
-	card_h := clamp(unit * 3, 3, metrics.card_h)
+	assert(metrics.gap > 0 && metrics.strip_h > 0, "api map layout: invalid metrics")
 	result := Map_Layout {
 		bounds  = rect,
 		metrics = metrics,
-		columns = columns,
+		columns = map_columns(rect.w, metrics),
 	}
-	side := metrics.gap + metrics.margin
-	content_x := rect.x + side
-	content_w := max(rect.w - side * 2, columns)
-	cell_w := (content_w - (columns - 1) * metrics.gap) / columns
-	y := rect.y + metrics.gap
-	for tier in BAND_ORDER {
-		rows := map_band_rows(tier, columns)
-		row_h := entry_h if tier == .Supported else card_h
-		band_h := metrics.header_h + rows * row_h + (rows - 1) * metrics.gap
-		result.tier_bounds[tier] = {rect.x + metrics.gap, y, rect.w - metrics.gap * 2, band_h}
-		for node, index in MAP_NODES {
-			if node.tier != tier do continue
-			column := NODE_COLUMNS[columns - 1][index]
-			row := NODE_ROWS_NARROW[index] if columns == 1 else 0
-			result.nodes[index] = fit.Rect {
-				content_x + column * (cell_w + metrics.gap),
-				y + metrics.header_h + row * (row_h + metrics.gap),
-				cell_w,
-				row_h,
-			}
-		}
-		y += band_h + metrics.gap
+	inner := fit.Rect{rect.x + metrics.gap, rect.y + metrics.gap, rect.w - metrics.gap * 2, 0}
+	inner.h = max(rect.h - metrics.gap * 2, metrics.strip_h + metrics.gap + NODE_COUNT * 3)
+	result.strip = {inner.x, inner.y, max(inner.w, 1), metrics.strip_h}
+	body := fit.Rect {
+		inner.x,
+		inner.y + metrics.strip_h + metrics.gap,
+		max(inner.w, 1),
+		max(inner.h - metrics.strip_h - metrics.gap, NODE_COUNT * 3),
+	}
+	if result.columns == 1 {
+		map_layout_stack(&result, body)
+	} else {
+		map_layout_grid(&result, body)
 	}
 	return result
+}
+
+map_layout_grid :: proc(layout: ^Map_Layout, body: fit.Rect) {
+	assert(layout != nil && layout.columns > 1, "api map grid: invalid layout")
+	assert(body.w > 0 && body.h > 0, "api map grid: invalid body")
+	metrics := layout.metrics
+	lane_gap := max(metrics.gap / 2, 2)
+	lane_h := max((body.h - (LANE_COUNT - 1) * lane_gap) / LANE_COUNT, 3)
+	cols := layout.columns
+	region_x := body.x + metrics.gutter_w
+	region_w := max(body.w - metrics.gutter_w - metrics.margin, cols)
+	cell_w := max((region_w - (cols - 1) * metrics.gap) / cols, 1)
+	card_h := clamp(lane_h - metrics.gap, 2, metrics.card_h)
+	cols_table := NODE_COLS_WIDE if cols == GRID_COLS_WIDE else NODE_COLS_MEDIUM
+	for lane in 0 ..< i32(LANE_COUNT) {
+		layout.lane_bounds[lane] = {body.x, body.y + lane * (lane_h + lane_gap), body.w, lane_h}
+	}
+	for node, index in MAP_NODES {
+		lane := layout.lane_bounds[LANE_OF_PKG[node.pkg]]
+		column := cols_table[index]
+		layout.nodes[index] = fit.Rect {
+			region_x + column * (cell_w + metrics.gap),
+			lane.y + (lane.h - card_h) / 2,
+			cell_w,
+			card_h,
+		}
+	}
+}
+
+map_layout_stack :: proc(layout: ^Map_Layout, body: fit.Rect) {
+	assert(layout != nil && layout.columns == 1, "api map stack: invalid layout")
+	assert(body.w > 0 && body.h > 0, "api map stack: invalid body")
+	metrics := layout.metrics
+	card_w := max(body.w - metrics.margin * 2, 1)
+	card_h := clamp((body.h - (NODE_COUNT - 1) * metrics.gap) / NODE_COUNT, 2, metrics.card_h)
+	y := body.y
+	// Declaration order already reads entry, entry, entry, stage 1..6 top to
+	// bottom.
+	for index in 0 ..< NODE_COUNT {
+		layout.nodes[index] = {body.x + metrics.margin, y, card_w, card_h}
+		y += card_h + metrics.gap
+	}
 }
 
 map_edge_path :: proc(layout: ^Map_Layout, edge_index: i32) -> Edge_Path {
@@ -425,10 +496,13 @@ map_edge_path :: proc(layout: ^Map_Layout, edge_index: i32) -> Edge_Path {
 	to := layout.nodes[edge.to]
 	start, finish: fit.Point
 	if rows_overlap(from, to) {
-		left, right := from, to
-		if to.x < from.x do left, right = to, from
-		start = {f32(left.x + left.w), f32(left.y + left.h / 2)}
-		finish = {f32(right.x), f32(right.y + right.h / 2)}
+		if to.x >= from.x {
+			start = {f32(from.x + from.w), f32(from.y + from.h / 2)}
+			finish = {f32(to.x), f32(to.y + to.h / 2)}
+		} else {
+			start = {f32(from.x), f32(from.y + from.h / 2)}
+			finish = {f32(to.x + to.w), f32(to.y + to.h / 2)}
+		}
 	} else if to.y > from.y {
 		start = {f32(from.x + from.w / 2), f32(from.y + from.h)}
 		finish = {f32(to.x + to.w / 2), f32(to.y)}
@@ -450,18 +524,19 @@ map_edge_elbow :: proc(layout: ^Map_Layout, edge_index: i32) -> Edge_Path {
 	edge := MAP_EDGES[edge_index]
 	from := layout.nodes[edge.from]
 	to := layout.nodes[edge.to]
-	lane_w := max(layout.metrics.margin / 3, 1)
-	offset := lane_w / 2 + EDGE_LANES[edge_index] * lane_w
 	start, finish: fit.Point
 	channel_x: f32
-	if EDGE_SIDE_RIGHT[edge_index] {
-		channel_x = f32(layout.bounds.x + layout.bounds.w - layout.metrics.gap - offset)
-		start = {f32(from.x + from.w), f32(from.y + from.h / 2)}
-		finish = {f32(to.x + to.w), f32(to.y + to.h / 2)}
-	} else {
-		channel_x = f32(layout.bounds.x + layout.metrics.gap + offset)
+	// The app-to-fit entry edge keeps the left rail beside its cards; everything
+	// else that needs an elbow (the long same-lane hops in the narrow stack)
+	// uses the right rail.
+	if edge_index == 0 {
+		channel_x = f32(min(from.x, to.x)) - f32(layout.metrics.margin) / 2
 		start = {f32(from.x), f32(from.y + from.h / 2)}
 		finish = {f32(to.x), f32(to.y + to.h / 2)}
+	} else {
+		channel_x = f32(layout.bounds.x + layout.bounds.w) - f32(layout.metrics.margin) / 2
+		start = {f32(from.x + from.w), f32(from.y + from.h / 2)}
+		finish = {f32(to.x + to.w), f32(to.y + to.h / 2)}
 	}
 	return {{start, {channel_x, start.y}, {channel_x, finish.y}, finish}, 4}
 }
@@ -557,15 +632,21 @@ point_distance :: proc(from, to: fit.Point) -> f32 {
 map_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
 	_ = userdata
 	assert(surface != nil && rect.w > 0 && rect.h > 0, "api map render: invalid argument")
+	// Chrome height is everything above the body (rect.y) plus the column's
+	// bottom padding. It is independent of the body height, so caching it lets
+	// map_build size the body to exactly fill the window on the next frame and
+	// self-correct when the controls wrap on narrow widths.
+	map_chrome_h = rect.y + fit.Surface_Space(surface, .LG)
 	if fit.Surface_Key_Pressed(surface, .F12) do map_state.debug_on = !map_state.debug_on
 	map_animate(surface)
 	metrics := map_metrics(surface)
 	layout := map_layout(rect, metrics)
 	theme := fit.Surface_Theme_Tokens(surface)
 	fit.Surface_Fill_Rect(surface, rect, theme.background_app)
-	// Submission order already paints back-to-front; opening claimed layers
-	// here would occlude Surface_Interact for everything below the top claim.
-	map_render_tiers(surface, &layout)
+	// Submission order paints back-to-front: lanes, connectors, cards, then
+	// the active overlay. Claimed layers would occlude Surface_Interact.
+	map_render_strip(surface, &layout)
+	if layout.columns > 1 do map_render_lanes(surface, &layout)
 	map_render_edges(surface, &layout)
 	map_render_nodes(surface, &layout)
 	map_render_active(surface, &layout)
@@ -594,16 +675,58 @@ map_animate :: proc(surface: ^fit.Surface) {
 	if map_state.progress < 1 || map_state.playing do fit.Request_Redraw(surface)
 }
 
-map_render_tiers :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
-	assert(surface != nil && layout != nil, "api map tiers: invalid argument")
-	inset := fit.Surface_Space(surface, .XS)
-	for bounds, tier in layout.tier_bounds {
-		fit.Surface_Draw_Surface(surface, rect_float(bounds), .Panel, .Rest, .LG)
+// map_render_strip is the in-map status readout: stage title, caption, and a
+// six-segment progress bar. It exists so Play and Reset change the map itself
+// rather than only the small controls above it.
+map_render_strip :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
+	assert(surface != nil && layout != nil, "api map strip: invalid argument")
+	assert(layout.strip.w > 0 && layout.strip.h > 0, "api map strip: invalid rect")
+	theme := fit.Surface_Theme_Tokens(surface)
+	strip := layout.strip
+	stage := map_state.target_stage
+	title_ink := fit.Ink.Accent if stage > 0 else fit.Ink.Secondary
+	fit.Surface_Text(surface, STAGE_TITLES[stage], strip.x, strip.y, .Title, title_ink)
+	title_h := fit.Surface_Text_Line_Height(surface, .Title)
+	caption_x := strip.x + fit.Px(surface, 130)
+	caption_y := strip.y + (title_h - fit.Surface_Text_Line_Height(surface, .Body)) / 2
+	caption_w := max(strip.w - fit.Px(surface, 130), 1)
+	fit.Surface_Text_Truncated(
+		surface,
+		STAGE_CAPTIONS[stage],
+		caption_x,
+		caption_y,
+		caption_w,
+		.Body,
+		.Secondary,
+	)
+	bar_h := fit.Px(surface, 6)
+	bar_y := strip.y + strip.h - bar_h
+	seg_gap := fit.Surface_Space(surface, .XS)
+	seg_w := max((strip.w - (PROGRESS_SEGMENTS - 1) * seg_gap) / PROGRESS_SEGMENTS, 1)
+	for segment in 0 ..< i32(PROGRESS_SEGMENTS) {
+		seg_x := strip.x + segment * (seg_w + seg_gap)
+		fit.Surface_Fill_Rect(surface, {seg_x, bar_y, seg_w, bar_h}, theme.border)
+		amount := map_edge_amount(segment + 1)
+		if amount <= 0 do continue
+		fill_w := i32(f32(seg_w) * amount)
+		if fill_w <= 0 do continue
+		fit.Surface_Fill_Rect(surface, {seg_x, bar_y, fill_w, bar_h}, theme.foreground_accent)
+	}
+}
+
+map_render_lanes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
+	assert(surface != nil && layout != nil, "api map lanes: invalid argument")
+	assert(layout.columns > 1, "api map lanes: narrow layout has no lanes")
+	note_h := fit.Surface_Text_Line_Height(surface, .Note)
+	inset := fit.Surface_Space(surface, .SM)
+	for lane in 0 ..< i32(LANE_COUNT) {
+		bounds := layout.lane_bounds[lane]
+		fit.Surface_Draw_Surface(surface, rect_float(bounds), .Panel, .Rest, .MD)
 		fit.Surface_Text(
 			surface,
-			TIER_LABELS[tier],
-			bounds.x + layout.metrics.margin,
-			bounds.y + inset,
+			LANE_LABELS[lane],
+			bounds.x + inset,
+			bounds.y + (bounds.h - note_h) / 2,
 			.Note,
 			.Muted,
 		)
@@ -631,6 +754,7 @@ map_draw_edge :: proc(surface: ^fit.Surface, path: ^Edge_Path, amount: f32) {
 			theme.border,
 		)
 	}
+	map_draw_arrowhead(surface, path, theme.border)
 	if amount <= 0 do return
 	target := path_length(path) * amount
 	walked: f32
@@ -653,24 +777,96 @@ map_draw_edge :: proc(surface: ^fit.Surface, path: ^Edge_Path, amount: f32) {
 		if partial do break
 		walked += segment
 	}
+	if amount >= 1 do map_draw_arrowhead(surface, path, theme.foreground_accent)
+}
+
+map_draw_arrowhead :: proc(surface: ^fit.Surface, path: ^Edge_Path, color: fit.Color) {
+	assert(surface != nil && path != nil, "api map arrowhead: invalid argument")
+	assert(path.count >= 2, "api map arrowhead: degenerate path")
+	tip := path.points[path.count - 1]
+	tail := path.points[path.count - 2]
+	length := point_distance(tail, tip)
+	if length <= 0 do return
+	direction := fit.Point{(tip.x - tail.x) / length, (tip.y - tail.y) / length}
+	size := fit.Px(surface, 7.0)
+	spread: f32 = 0.45
+	sin_s := math.sin(spread)
+	cos_s := math.cos(spread)
+	back := fit.Point{-direction.x, -direction.y}
+	left := fit.Point{back.x * cos_s - back.y * sin_s, back.x * sin_s + back.y * cos_s}
+	right := fit.Point{back.x * cos_s + back.y * sin_s, -back.x * sin_s + back.y * cos_s}
+	thickness := fit.Px(surface, 2.0)
+	fit.Surface_Line(
+		surface,
+		tip,
+		{tip.x + left.x * size, tip.y + left.y * size},
+		thickness,
+		color,
+	)
+	fit.Surface_Line(
+		surface,
+		tip,
+		{tip.x + right.x * size, tip.y + right.y * size},
+		thickness,
+		color,
+	)
+}
+
+map_node_phase :: proc(stage: i32) -> Node_Phase {
+	assert(stage >= 0 && stage <= STAGE_COUNT, "api map phase: invalid stage")
+	assert(map_state.selected_stage <= STAGE_COUNT, "api map phase: invalid selection")
+	if stage == 0 do return .Entry
+	if stage == map_state.target_stage do return .Active
+	if stage <= map_state.selected_stage do return .Done
+	return .Upcoming
 }
 
 map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(surface != nil && layout != nil, "api map nodes: invalid argument")
 	map_state.hovered_node = -1
 	inset := fit.Surface_Space(surface, .SM)
+	theme := fit.Surface_Theme_Tokens(surface)
 	for node, index in MAP_NODES {
 		rect := layout.nodes[index]
 		interaction := fit.Surface_Interact(surface, rect_float(rect))
-		selected := node.stage > 0 && node.stage <= map_state.selected_stage
-		state := fit.Visual_State.Selected if selected else fit.Visual_State.Rest
+		phase := map_node_phase(node.stage)
+		state := fit.Visual_State.Rest
+		border := fit.Border.Hairline
+		title_ink := node.ink
+		detail_ink := fit.Ink.Secondary
+		switch phase {
+		case .Entry:
+		case .Upcoming:
+			title_ink = .Muted
+			detail_ink = .Muted
+		case .Done:
+			state = .Selected
+		case .Active:
+			state = .Selected
+			border = .Emphasis
+		}
 		if interaction.hovered {
 			map_state.hovered_node = i32(index)
 			state = .Hover
 			fit.Surface_Request_Cursor(surface, .Pointing_Hand)
 		}
-		fit.Surface_Draw_Surface(surface, rect_float(rect), .Card, state, .MD, .Hairline, .Lifted)
-		fit.Surface_Text(surface, node.title, rect.x + inset, rect.y + inset, .Title, node.ink)
+		// Library cards keep a distinct detail ink in every phase so "not an
+		// entry" stays readable at rest, not only in the hover contract.
+		if node.library do detail_ink = .Plan
+		fit.Surface_Draw_Surface(surface, rect_float(rect), .Card, state, .MD, border, .Lifted)
+		if phase == .Done || phase == .Active {
+			bar := fit.Rect{rect.x + 1, rect.y + 2, fit.Px(surface, 3), rect.h - 4}
+			fit.Surface_Fill_Rect(surface, bar, theme.foreground_accent)
+		}
+		fit.Surface_Text_Truncated(
+			surface,
+			node.title,
+			rect.x + inset,
+			rect.y + inset,
+			max(rect.w - inset * 2, 1),
+			.Title,
+			title_ink,
+		)
 		fit.Surface_Text_Truncated(
 			surface,
 			node.contract if interaction.hovered else node.detail,
@@ -678,10 +874,24 @@ map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 			rect.y + inset + fit.Surface_Text_Line_Height(surface, .Title),
 			max(rect.w - inset * 2, 1),
 			.Note,
-			.Secondary,
+			detail_ink,
 		)
+		if layout.columns == 1 do map_render_pkg_chip(surface, layout, i32(index))
 		if interaction.clicked && node.stage > 0 do map_select_stage(node.stage)
 	}
+}
+
+// map_render_pkg_chip stands in for lane backgrounds at narrow widths, where
+// full swimlanes would waste most of the column.
+map_render_pkg_chip :: proc(surface: ^fit.Surface, layout: ^Map_Layout, index: i32) {
+	assert(surface != nil && layout != nil, "api map chip: invalid argument")
+	assert(index >= 0 && index < NODE_COUNT, "api map chip: invalid index")
+	node := MAP_NODES[index]
+	rect := layout.nodes[index]
+	label := LANE_LABELS[LANE_OF_PKG[node.pkg]]
+	inset := fit.Surface_Space(surface, .SM)
+	chip_w := fit.Px(surface, 92)
+	fit.Surface_Text(surface, label, rect.x + rect.w - chip_w, rect.y + inset, .Note, .Muted)
 }
 
 map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
@@ -689,14 +899,15 @@ map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	stage := map_state.target_stage
 	if stage <= 0 do return
 	assert(stage <= STAGE_COUNT, "api map active: invalid stage")
-	node_index := stage + 1
+	// Stage N's card sits after the three entry cards.
+	node_index := stage + 2
 	ring := rect_expand(layout.nodes[node_index], fit.Surface_Space(surface, .XS) / 2)
 	fit.Surface_Stroke_Rounded_Rect(
 		surface,
 		rect_float(ring),
 		0.12,
 		8,
-		fit.Px(surface, 2.0),
+		fit.Px(surface, 3.0),
 		fit.Surface_Theme_Tokens(surface).foreground_accent,
 	)
 	// The pulse only exists while the path is moving; a resting dot after the
@@ -710,7 +921,7 @@ map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 		fit.Surface_Fill_Circle(
 			surface,
 			pulse,
-			fit.Px(surface, 5.0),
+			fit.Px(surface, 6.0),
 			fit.Surface_Theme_Tokens(surface).foreground_accent,
 		)
 		break

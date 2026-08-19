@@ -22,6 +22,7 @@ _ :: fmt
 _ :: os
 _ :: strings
 _ :: rl
+_ :: fit
 
 when MAP_CAPTURE {
 	// Fixed output geometry: identical PNGs regardless of host display.
@@ -32,9 +33,10 @@ when MAP_CAPTURE {
 	// Stills settle fast because state is re-pinned every frame; the hold only
 	// needs to cover font-atlas warmup on the first shot.
 	CAPTURE_SETTLE_FRAMES :: 20
-	// The narrow shot renders into the left strip of the full-size target so
-	// one render target serves every shot.
+	// The narrow and medium shots render into a left strip of the full-size
+	// target so one render target serves every shot.
 	CAPTURE_NARROW_WIDTH :: 520
+	CAPTURE_MEDIUM_WIDTH :: 780
 	// Sequence pass: every 5th frame for 150 frames covers several complete
 	// stage transitions (progress rate 3.5/s plus the 0.7 s autoplay hold).
 	CAPTURE_SEQUENCE_STRIDE :: 5
@@ -53,11 +55,7 @@ when MAP_CAPTURE {
 	// One shot per visually distinct playback state, both themes, plus the
 	// narrow responsive variant.
 	CAPTURE_SHOTS := [?]Map_Shot {
-		{
-			"map-idle-dark.png",
-			{dark = true, hovered_node = -1, progress = 1},
-			CAPTURE_WIDTH,
-		},
+		{"map-idle-dark.png", {dark = true, hovered_node = -1, progress = 1}, CAPTURE_WIDTH},
 		{
 			"map-stage3-mid.png",
 			{
@@ -81,21 +79,16 @@ when MAP_CAPTURE {
 			},
 			CAPTURE_WIDTH,
 		},
-		{
-			"map-idle-light.png",
-			{dark = false, hovered_node = -1, progress = 1},
-			CAPTURE_WIDTH,
-		},
+		{"map-idle-light.png", {dark = false, hovered_node = -1, progress = 1}, CAPTURE_WIDTH},
 		{
 			"map-narrow-dark.png",
-			{
-				dark = true,
-				hovered_node = -1,
-				selected_stage = 4,
-				target_stage = 4,
-				progress = 1,
-			},
+			{dark = true, hovered_node = -1, selected_stage = 4, target_stage = 4, progress = 1},
 			CAPTURE_NARROW_WIDTH,
+		},
+		{
+			"map-medium-dark.png",
+			{dark = true, hovered_node = -1, selected_stage = 5, target_stage = 5, progress = 1},
+			CAPTURE_MEDIUM_WIDTH,
 		},
 	}
 
