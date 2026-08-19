@@ -14,12 +14,17 @@ Fit_Button_Options :: struct {
 	web_form_id: string,
 	track:       Track,
 	size:        Prepared_Size,
+	// activated is written during fit_render/fit_render_at, after the build
+	// code has run. It must point to storage that outlives the build (global
+	// or app state, never a build-scope local), and is typically consumed
+	// and cleared at the start of the next build.
 	activated:   ^bool,
 }
 
 Fit_Control_Options :: struct {
 	track:   Track,
 	size:    Prepared_Size,
+	// changed follows the activated lifetime contract on Fit_Button_Options.
 	changed: ^bool,
 }
 
@@ -31,6 +36,7 @@ Fit_Leaf_Options :: struct {
 Fit_Custom_Options :: struct {
 	track:     Track,
 	size:      Prepared_Size,
+	// activated follows the lifetime contract on Fit_Button_Options.
 	activated: ^bool,
 }
 

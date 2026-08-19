@@ -185,7 +185,10 @@ Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 
 Fit labels take semantic roles and ink tokens, containers use bounded tracks and
 spacing tokens, and interactive leaves take stable string, integer, or explicit
-widget keys. Checkbox, radio, and slider values remain caller-owned. Static
+widget keys. Checkbox, radio, and slider values remain caller-owned. Activation
+destinations (`&continued`) are written during `Render`, after the draw
+callback's build code has run — they must be globals or app-state fields,
+consumed at the start of the next build, never build-proc locals. Static
 containers use a lexical block with an immediate `defer fit.End(builder)`;
 dynamic builders may close containers directly. Optional `*_With` helpers invoke
 component procedures immediately and auto-balance their own container. See

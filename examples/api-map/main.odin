@@ -86,6 +86,13 @@ Map_State :: struct {
 	playing:        bool,
 	progress:       f32,
 	hold_seconds:   f32,
+	// Button activations are written by fit during Render, after map_build
+	// has returned, so their destinations must outlive the build: they live
+	// here and are consumed (then cleared) at the start of the next build.
+	theme_clicked:  bool,
+	play_clicked:   bool,
+	reset_clicked:  bool,
+	stage_clicked:  [STAGE_COUNT]bool,
 }
 
 // The entry rail (stage 0) states the three supported ways in: fit (the
@@ -279,17 +286,17 @@ main :: proc() {
 
 map_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	_ = userdata
+	if map_state.theme_clicked {
+		map_state.theme_clicked = false
+		map_state.dark = !map_state.dark
+		fit.Set_Theme(&app, fit.Theme_Dark() if map_state.dark else fit.Theme_Light())
+	}
 	fit.Column(builder, {gap = .SM, padding = .LG})
 	defer fit.End(builder)
 	fit.Row(builder, {gap = .SM, align = .Center})
 	fit.Label(builder, "INGOT API MAP", {role = .Title, track = fit.Grow()})
-	theme_clicked := false
-	fit.Button(builder, "theme", "Light" if map_state.dark else "Dark", &theme_clicked)
+	fit.Button(builder, "theme", "Light" if map_state.dark else "Dark", &map_state.theme_clicked)
 	fit.End(builder)
-	if theme_clicked {
-		map_state.dark = !map_state.dark
-		fit.Set_Theme(&app, fit.Theme_Dark() if map_state.dark else fit.Theme_Light())
-	}
 	map_stage_controls(builder)
 	map_playback_controls(builder)
 	// The body fills the leftover column height with a plain Grow track; the
@@ -308,42 +315,49 @@ map_stage_controls :: proc(builder: ^fit.Builder) {
 	fit.Flow(builder, {gap_x = .XS, gap_y = .XS})
 	defer fit.End(builder)
 	for stage in 0 ..< STAGE_COUNT {
-		clicked := false
 		value := i32(stage + 1)
+		if map_state.stage_clicked[stage] {
+			map_state.stage_clicked[stage] = false
+			map_select_stage(value)
+		}
 		fit.Button(
 			builder,
 			u64(value),
 			STAGE_LABELS[stage],
 			fit.Button_Options {
 				style = .Primary if map_state.target_stage == value else .Ghost,
-				activated = &clicked,
+				activated = &map_state.stage_clicked[stage],
 			},
 		)
-		if clicked do map_select_stage(value)
 	}
 }
 
 map_playback_controls :: proc(builder: ^fit.Builder) {
 	assert(builder != nil, "api map playback: nil builder")
 	assert(map_state.target_stage >= 0 && map_state.target_stage <= STAGE_COUNT)
-	fit.Flow(builder, {gap_x = .XS, gap_y = .XS})
-	defer fit.End(builder)
-	play_clicked := false
-	reset_clicked := false
-	fit.Button(builder, "play", "Pause" if map_state.playing else "Play path", &play_clicked)
-	fit.Button(builder, "reset", "Reset", &reset_clicked)
-	fit.Checkbox(builder, "motion", "Reduced motion", &map_state.reduced_motion)
-	if play_clicked {
+	if map_state.play_clicked {
+		map_state.play_clicked = false
 		map_state.playing = !map_state.playing
 		if map_state.playing && map_state.target_stage == 0 do map_select_stage(1)
 	}
-	if reset_clicked {
+	if map_state.reset_clicked {
+		map_state.reset_clicked = false
 		map_state.playing = false
 		map_state.selected_stage = 0
 		map_state.target_stage = 0
 		map_state.progress = 1
 		map_state.hold_seconds = 0
 	}
+	fit.Flow(builder, {gap_x = .XS, gap_y = .XS})
+	defer fit.End(builder)
+	fit.Button(
+		builder,
+		"play",
+		"Pause" if map_state.playing else "Play path",
+		&map_state.play_clicked,
+	)
+	fit.Button(builder, "reset", "Reset", &map_state.reset_clicked)
+	fit.Checkbox(builder, "motion", "Reduced motion", &map_state.reduced_motion)
 }
 
 map_select_stage :: proc(stage: i32) {
