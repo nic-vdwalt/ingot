@@ -147,9 +147,27 @@ adapter_a11y_poll :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	}
 }
 
+// a11y_snapshot_equal reports whether two semantic frames would produce the
+// same accessibility tree. semantic_push zero-initializes every node before
+// filling it, so whole-struct comparison is deterministic (no stale bytes
+// beyond label_len). Used to skip re-publishing an unchanged tree every
+// frame; a false negative only costs one redundant publish, never a missed
+// update.
+a11y_snapshot_equal :: proc(a, b: ^ui.Sem_Frame) -> bool {
+	assert(a != nil && b != nil, "a11y_snapshot_equal: nil frame")
+	assert(a.count >= 0 && a.count <= len(a.nodes), "a11y_snapshot_equal: corrupt count")
+	if a.count != b.count do return false
+	for index in 0 ..< a.count {
+		if a.nodes[index] != b.nodes[index] do return false
+	}
+	return true
+}
+
 adapter_a11y_publish :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	assert(adapter != nil && adapter.initialized, "adapter_a11y_publish: invalid adapter")
 	assert(frame != nil && frame.finalized, "adapter_a11y_publish: frame not finalized")
+	// The JS loop stays unconditional: SyncWebControl both mirrors the tree
+	// into the DOM and harvests activations, so skipping it would drop clicks.
 	when ODIN_OS == .JS {
 		for index in 0 ..< frame.semantics.cur.count {
 			node := &frame.semantics.cur.nodes[index]
@@ -172,7 +190,15 @@ adapter_a11y_publish :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 		}
 	}
 	if !adapter.a11y_initialized do return
+	// Publish only when the tree actually changed. An unconditional per-frame
+	// snapshot copy and PushAccessibilityUpdate made every animation frame do
+	// accessibility work (and provoked platform-side re-reads) even when the
+	// semantics were byte-identical.
+	if adapter.a11y_published && a11y_snapshot_equal(&adapter.a11y_snapshot, &frame.semantics.cur) {
+		return
+	}
 	adapter.a11y_snapshot = frame.semantics.cur
+	adapter.a11y_published = true
 	adapter.a11y_focus = ak.Node_Id(ui.SEM_ID_ROOT)
 	for index in 0 ..< adapter.a11y_snapshot.count {
 		if .Focused in adapter.a11y_snapshot.nodes[index].state {
@@ -189,5 +215,6 @@ adapter_a11y_destroy :: proc(adapter: ^Adapter) {
 		if adapter.a11y_initialized do rl.CloseAccessibility()
 	}
 	adapter.a11y_initialized = false
+	adapter.a11y_published = false
 	adapter.a11y_snapshot = {}
 }

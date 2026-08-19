@@ -653,14 +653,24 @@ prepared_render_at :: proc(u: ^Ui, prepared: ^Prepared_Ui, rect: Rect_I32) {
 	root := &prepared_nodes(prepared)[prepared.root]
 	if root.size.w != rect.w || root.size.h != rect.h {
 		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.render_relayouts += 1
-		width_changed := root.size.w != rect.w
 		root.size.w = rect.w
 		root.size.h = rect.h
 		root.rect = rect
-		if width_changed {
-			prepared_assign_widths(u, prepared)
-			prepared_measure_heights(u, prepared)
+		// The render rect is the authoritative bound: re-resolve explicit
+		// tracks against it so Grow and Percent land identically no matter
+		// what constraints the measure pass ran under. Rendering the same
+		// tree at the same rect must produce the same layout (pass
+		// idempotence); skipping the height half of this left Grow-height
+		// children at their stale measure-time resolution whenever only the
+		// height changed, collapsing them to their natural floor.
+		prepared.constraints = intrinsic_constraints(max_w = rect.w, max_h = rect.h)
+		if prepared.summary.explicit_sizing {
+			prepared_resolve_sizes(u, prepared)
+			prepared_remeasure_containers(u, prepared)
+			root.size = intrinsic_constrain(root.size, prepared.constraints)
 		}
+		prepared_assign_widths(u, prepared)
+		prepared_measure_heights(u, prepared)
 	}
 	root.rect = rect
 	place_started := prepared_phase_begin(u.frame, .Place)

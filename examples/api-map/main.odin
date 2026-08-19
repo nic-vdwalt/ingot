@@ -251,15 +251,6 @@ map_state := Map_State {
 	hovered_node = -1,
 }
 
-// map_chrome_h caches the pixel height consumed by the header, controls, and
-// column padding above and below the map body. It is captured during render
-// (where a Surface is available) so map_build can give the map body a Fixed
-// height equal to the leftover window height. A Fixed height resolves
-// identically on every layout pass - including the accessibility re-measure -
-// which a Grow track does not, avoiding the collapse/jitter that occurs when
-// the two passes disagree.
-map_chrome_h: i32 = -1
-
 main :: proc() {
 	when LAYOUT_CHECK {
 		layout_check()
@@ -288,18 +279,6 @@ main :: proc() {
 
 map_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	_ = userdata
-	// Live window: give the body a Fixed height equal to the leftover after the
-	// cached chrome. A Fixed height resolves identically on the fit, render, and
-	// accessibility re-measure passes, so the body neither collapses at rest nor
-	// jitters the way a Grow track does. Under the capture harness the global
-	// app is not running, so fall back to Grow and let the explicit render rect
-	// supply the height.
-	body_height := fit.Grow()
-	if fit.Get_State(&app) != .Empty {
-		win_h := fit.Screen_Rect(&app).h
-		body_h := win_h if map_chrome_h < 0 else max(win_h - map_chrome_h, 1)
-		body_height = fit.Fixed(body_h)
-	}
 	fit.Column(builder, {gap = .SM, padding = .LG})
 	defer fit.End(builder)
 	fit.Row(builder, {gap = .SM, align = .Center})
@@ -313,10 +292,13 @@ map_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	}
 	map_stage_controls(builder)
 	map_playback_controls(builder)
+	// The body fills the leftover column height with a plain Grow track; the
+	// layout engine resolves it identically on every pass (measure, render,
+	// and the accessibility path), so no chrome-height caching is needed.
 	fit.Custom(
 		builder,
 		{measure = map_measure, render = map_render},
-		{size = {width = fit.Grow(), height = body_height}},
+		{size = {width = fit.Grow(), height = fit.Grow()}},
 	)
 }
 
@@ -377,7 +359,7 @@ map_select_stage :: proc(stage: i32) {
 map_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
 	_ = userdata
 	assert(constraints.max_w >= 0 && constraints.max_h >= 0, "api map: invalid constraints")
-	// The body height comes from the Fixed sizing in map_build; the measured
+	// The body height comes from the Grow sizing in map_build; the measured
 	// height is only a minimal floor.
 	return {max(constraints.max_w, 1), 1, false}
 }
@@ -632,11 +614,6 @@ point_distance :: proc(from, to: fit.Point) -> f32 {
 map_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
 	_ = userdata
 	assert(surface != nil && rect.w > 0 && rect.h > 0, "api map render: invalid argument")
-	// Chrome height is everything above the body (rect.y) plus the column's
-	// bottom padding. It is independent of the body height, so caching it lets
-	// map_build size the body to exactly fill the window on the next frame and
-	// self-correct when the controls wrap on narrow widths.
-	map_chrome_h = rect.y + fit.Surface_Space(surface, .LG)
 	if fit.Surface_Key_Pressed(surface, .F12) do map_state.debug_on = !map_state.debug_on
 	map_animate(surface)
 	metrics := map_metrics(surface)
