@@ -7,15 +7,28 @@ import fit "ingot:fit"
 
 CHECK_WIDTHS := [?]i32{320, 760, 1180, 1920, 2560}
 
+// Fixed metrics stand in for one scale so the sweep is deterministic; every
+// field is positive and the breakpoints match the runtime logical constants.
+CHECK_METRICS := Map_Metrics {
+	gap        = 12,
+	margin     = 36,
+	header_h   = 24,
+	entry_h    = 56,
+	card_h     = 92,
+	narrow_max = NARROW_WIDTH_MAX,
+	wide_min   = WIDE_WIDTH_MIN,
+}
+
 layout_check :: proc() {
 	assert(len(MAP_NODES) == NODE_COUNT)
 	assert(len(MAP_EDGES) == EDGE_COUNT)
 	assert(len(STAGE_LABELS) == STAGE_COUNT)
 	map_check_topology()
 	for width in CHECK_WIDTHS {
-		height := map_content_height(width)
-		layout := map_layout({0, 0, width, height}, 12, 62, 88)
+		height := map_content_height(width, CHECK_METRICS)
+		layout := map_layout({0, 0, width, height}, CHECK_METRICS)
 		map_check_layout(&layout)
+		map_check_edges(&layout)
 		fmt.printfln("layout-check: width %d ok", width)
 	}
 	map_check_animation()
@@ -48,11 +61,40 @@ map_check_layout :: proc(layout: ^Map_Layout) {
 			assert(!rects_overlap(rect, layout.nodes[other_index]))
 		}
 	}
-	for edge in MAP_EDGES {
-		from := rect_center(layout.nodes[edge.from])
-		to := rect_center(layout.nodes[edge.to])
-		assert(point_in_rect(from, layout.bounds))
-		assert(point_in_rect(to, layout.bounds))
+	map_check_tiers(layout)
+}
+
+map_check_tiers :: proc(layout: ^Map_Layout) {
+	assert(layout != nil && layout.metrics.header_h > 0)
+	for bounds, tier in layout.tier_bounds {
+		assert(bounds.w > 0 && bounds.h > 0)
+		for other_index in tier + 1 ..< TIER_COUNT {
+			assert(!rects_overlap(bounds, layout.tier_bounds[other_index]))
+		}
+	}
+	for node, index in MAP_NODES {
+		rect := layout.nodes[index]
+		band := layout.tier_bounds[node.tier]
+		assert(rect.x >= band.x && rect.x + rect.w <= band.x + band.w)
+		assert(rect.y >= band.y + layout.metrics.header_h)
+		assert(rect.y + rect.h <= band.y + band.h)
+	}
+}
+
+map_check_edges :: proc(layout: ^Map_Layout) {
+	assert(layout != nil && layout.bounds.w > 0)
+	for edge, index in MAP_EDGES {
+		path := map_edge_path(layout, i32(index))
+		assert(path.count >= 2 && path.count <= MAX_EDGE_POINTS)
+		assert(path_length(&path) > 0)
+		for point_index in 0 ..< path.count {
+			assert(point_in_rect(path.points[point_index], layout.bounds))
+		}
+		for segment_index in 0 ..< path.count - 1 {
+			start := path.points[segment_index]
+			finish := path.points[segment_index + 1]
+			assert(map_segment_clear(layout, start, finish, edge.from, edge.to))
+		}
 	}
 }
 
