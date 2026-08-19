@@ -60,6 +60,7 @@
     "breakout",
     "idle_demo",
     "chart_demo",
+    "api-map",
     "render_fixture",
     "procgen_world",
     "box3d_stack",

@@ -1,5 +1,6 @@
 package main
 
+import "core:math"
 import fit "ingot:fit"
 
 LAYOUT_CHECK :: #config(INGOT_LAYOUT_CHECK, false)
@@ -8,6 +9,7 @@ NODE_COUNT :: 8
 STAGE_COUNT :: 6
 EDGE_COUNT :: 7
 TIER_COUNT :: 5
+MAX_EDGE_POINTS :: 4
 NARROW_WIDTH_MAX :: 560
 WIDE_WIDTH_MIN :: 980
 
@@ -34,11 +36,29 @@ Map_Edge :: struct {
 	stage: i32,
 }
 
+// All metric fields are in already-scaled pixels because custom-leaf rects and
+// Surface helpers share that space; unscaled constants here would break at 2x.
+Map_Metrics :: struct {
+	gap:        i32,
+	margin:     i32,
+	header_h:   i32,
+	entry_h:    i32,
+	card_h:     i32,
+	narrow_max: i32,
+	wide_min:   i32,
+}
+
 Map_Layout :: struct {
 	bounds:      fit.Rect,
+	metrics:     Map_Metrics,
 	nodes:       [NODE_COUNT]fit.Rect,
 	tier_bounds: [TIER_COUNT]fit.Rect,
-	wide:        bool,
+	columns:     i32,
+}
+
+Edge_Path :: struct {
+	points: [MAX_EDGE_POINTS]fit.Point,
+	count:  i32,
 }
 
 Map_State :: struct {
@@ -129,6 +149,26 @@ MAP_EDGES := [EDGE_COUNT]Map_Edge {
 	{6, 7, 6},
 	{1, 7, 6},
 }
+
+// Bands are stacked in stage order (Internal before Callback) so the animated
+// path only ever hops one band at a time except for the two bridge edges.
+BAND_ORDER := [TIER_COUNT]Tier{.Supported, .Application, .Internal, .Callback, .Presentation}
+
+// Column assignments per column count keep every straight edge clear of
+// unrelated cards; the router falls back to a margin elbow when blocked.
+NODE_COLUMNS := [3][NODE_COUNT]i32 {
+	{0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 1, 0, 1, 0, 0, 1, 1},
+	{0, 2, 0, 1, 0, 0, 1, 2},
+}
+
+NODE_ROWS_NARROW := [NODE_COUNT]i32{0, 1, 0, 1, 0, 0, 1, 0}
+
+// Elbow edges sharing a margin get distinct lanes so overlapping verticals do
+// not repaint each other in conflicting colors while the path animates.
+EDGE_LANES := [EDGE_COUNT]i32{0, 0, 0, 1, 0, 2, 0}
+
+EDGE_SIDE_RIGHT := [EDGE_COUNT]bool{false, false, false, false, false, false, true}
 
 TIER_LABELS := [TIER_COUNT]string {
 	"SUPPORTED API",
@@ -269,108 +309,249 @@ map_select_stage :: proc(stage: i32) {
 map_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
 	_ = userdata
 	assert(constraints.max_w >= 0 && constraints.max_h >= 0, "api map: invalid constraints")
-	height := map_content_height(max(constraints.max_w, 1))
-	return {max(constraints.max_w, 1), max(constraints.max_h, height), false}
+	// Fill the granted space; the layout clamps card heights to fit, so the
+	// leaf never needs an unscaled intrinsic height that would break at 2x.
+	return {max(constraints.max_w, 1), max(constraints.max_h, 1), false}
 }
 
-map_content_height :: proc(width: i32) -> i32 {
-	assert(width > 0, "api map: non-positive width")
-	if width <= NARROW_WIDTH_MAX do return 960
-	if width < WIDE_WIDTH_MIN do return 650
-	return 460
+map_metrics :: proc(surface: ^fit.Surface) -> Map_Metrics {
+	assert(surface != nil, "api map metrics: nil surface")
+	label_h := fit.Surface_Text_Line_Height(surface, .Note)
+	metrics := Map_Metrics {
+		gap        = fit.Surface_Space(surface, .MD),
+		margin     = fit.Px(surface, 36),
+		header_h   = label_h + fit.Surface_Space(surface, .XS) * 2,
+		entry_h    = fit.Px(surface, 56),
+		card_h     = fit.Px(surface, 92),
+		narrow_max = fit.Px(surface, NARROW_WIDTH_MAX),
+		wide_min   = fit.Px(surface, WIDE_WIDTH_MIN),
+	}
+	assert(metrics.gap > 0 && metrics.margin > 0 && metrics.header_h > 0)
+	assert(metrics.entry_h > 0 && metrics.card_h > 0)
+	return metrics
 }
 
-map_layout :: proc(rect: fit.Rect, gap, entry_h, card_h: i32) -> Map_Layout {
+map_columns :: proc(width: i32, metrics: Map_Metrics) -> i32 {
+	assert(width > 0, "api map columns: non-positive width")
+	assert(metrics.wide_min > metrics.narrow_max, "api map columns: invalid breakpoints")
+	if width <= metrics.narrow_max do return 1
+	if width < metrics.wide_min do return 2
+	return 3
+}
+
+map_band_rows :: proc(tier: Tier, columns: i32) -> i32 {
+	assert(columns >= 1 && columns <= 3, "api map rows: invalid column count")
+	count: i32
+	for node in MAP_NODES {
+		if node.tier == tier do count += 1
+	}
+	assert(count > 0, "api map rows: empty tier")
+	return count if columns == 1 else 1
+}
+
+map_content_height :: proc(width: i32, metrics: Map_Metrics) -> i32 {
+	assert(width > 0, "api map height: non-positive width")
+	assert(metrics.gap > 0 && metrics.header_h > 0, "api map height: invalid metrics")
+	columns := map_columns(width, metrics)
+	total := metrics.gap
+	for tier in Tier {
+		rows := map_band_rows(tier, columns)
+		row_h := metrics.entry_h if tier == .Supported else metrics.card_h
+		total += metrics.header_h + rows * row_h + (rows - 1) * metrics.gap + metrics.gap
+	}
+	return total
+}
+
+map_layout :: proc(rect: fit.Rect, metrics: Map_Metrics) -> Map_Layout {
 	assert(rect.w > 0 && rect.h > 0, "api map layout: invalid bounds")
-	assert(gap > 0 && entry_h > 0 && card_h > 0, "api map layout: invalid metrics")
+	assert(metrics.gap > 0 && metrics.margin > 0 && metrics.header_h > 0)
+	assert(metrics.entry_h > 0 && metrics.card_h > 0, "api map layout: invalid heights")
+	columns := map_columns(rect.w, metrics)
+	entry_rows, card_rows, intra_gaps: i32
+	for tier in Tier {
+		rows := map_band_rows(tier, columns)
+		if tier == .Supported {
+			entry_rows += rows
+		} else {
+			card_rows += rows
+		}
+		intra_gaps += rows - 1
+	}
+	fixed := metrics.gap * 2 + TIER_COUNT * metrics.header_h
+	fixed += (TIER_COUNT - 1) * metrics.gap + intra_gaps * metrics.gap
+	// Entry rows weigh 2 and card rows weigh 3 so short windows shrink both
+	// kinds of card proportionally instead of overflowing the leaf.
+	weight := entry_rows * 2 + card_rows * 3
+	available := max(rect.h - fixed, weight)
+	unit := available / weight
+	entry_h := clamp(unit * 2, 2, metrics.entry_h)
+	card_h := clamp(unit * 3, 3, metrics.card_h)
 	result := Map_Layout {
-		bounds = rect,
-		wide   = rect.w >= WIDE_WIDTH_MIN,
+		bounds  = rect,
+		metrics = metrics,
+		columns = columns,
 	}
-	inner := fit.Rect{rect.x + gap, rect.y + gap, max(rect.w - gap * 2, 1), rect.h - gap * 2}
-	if rect.w <= NARROW_WIDTH_MAX {
-		map_layout_narrow(&result, inner, gap, entry_h, card_h)
-	} else if rect.w < WIDE_WIDTH_MIN {
-		map_layout_medium(&result, inner, gap, entry_h, card_h)
-	} else {
-		map_layout_wide(&result, inner, gap, entry_h, card_h)
+	side := metrics.gap + metrics.margin
+	content_x := rect.x + side
+	content_w := max(rect.w - side * 2, columns)
+	cell_w := (content_w - (columns - 1) * metrics.gap) / columns
+	y := rect.y + metrics.gap
+	for tier in BAND_ORDER {
+		rows := map_band_rows(tier, columns)
+		row_h := entry_h if tier == .Supported else card_h
+		band_h := metrics.header_h + rows * row_h + (rows - 1) * metrics.gap
+		result.tier_bounds[tier] = {rect.x + metrics.gap, y, rect.w - metrics.gap * 2, band_h}
+		for node, index in MAP_NODES {
+			if node.tier != tier do continue
+			column := NODE_COLUMNS[columns - 1][index]
+			row := NODE_ROWS_NARROW[index] if columns == 1 else 0
+			result.nodes[index] = fit.Rect {
+				content_x + column * (cell_w + metrics.gap),
+				y + metrics.header_h + row * (row_h + metrics.gap),
+				cell_w,
+				row_h,
+			}
+		}
+		y += band_h + metrics.gap
 	}
-	map_layout_tiers(&result, gap)
 	return result
 }
 
-map_layout_narrow :: proc(layout: ^Map_Layout, inner: fit.Rect, gap, entry_h, card_h: i32) {
-	assert(layout != nil && inner.w > 0, "api map narrow layout: invalid argument")
-	assert(gap > 0 && entry_h > 0 && card_h > 0)
-	layout.nodes[0] = {inner.x, inner.y, inner.w, entry_h}
-	layout.nodes[1] = {inner.x, inner.y + entry_h + gap, inner.w, entry_h}
-	y := inner.y + (entry_h + gap) * 2 + gap
-	for index in 0 ..< STAGE_COUNT {
-		layout.nodes[index + 2] = {inner.x, y, inner.w, card_h}
-		y += card_h + gap
+map_edge_path :: proc(layout: ^Map_Layout, edge_index: i32) -> Edge_Path {
+	assert(layout != nil, "api map edge path: nil layout")
+	assert(edge_index >= 0 && edge_index < EDGE_COUNT, "api map edge path: invalid index")
+	edge := MAP_EDGES[edge_index]
+	from := layout.nodes[edge.from]
+	to := layout.nodes[edge.to]
+	start, finish: fit.Point
+	if rows_overlap(from, to) {
+		left, right := from, to
+		if to.x < from.x do left, right = to, from
+		start = {f32(left.x + left.w), f32(left.y + left.h / 2)}
+		finish = {f32(right.x), f32(right.y + right.h / 2)}
+	} else if to.y > from.y {
+		start = {f32(from.x + from.w / 2), f32(from.y + from.h)}
+		finish = {f32(to.x + to.w / 2), f32(to.y)}
+	} else {
+		start = {f32(from.x + from.w / 2), f32(from.y)}
+		finish = {f32(to.x + to.w / 2), f32(to.y + to.h)}
 	}
+	if map_segment_clear(layout, start, finish, edge.from, edge.to) {
+		return {{start, finish, {}, {}}, 2}
+	}
+	return map_edge_elbow(layout, edge_index)
 }
 
-map_layout_medium :: proc(layout: ^Map_Layout, inner: fit.Rect, gap, entry_h, card_h: i32) {
-	assert(layout != nil && inner.w > gap, "api map medium layout: invalid argument")
-	assert(gap > 0 && entry_h > 0 && card_h > 0)
-	column_w := (inner.w - gap) / 2
-	layout.nodes[0] = {inner.x, inner.y, column_w, entry_h}
-	layout.nodes[1] = {inner.x + column_w + gap, inner.y, column_w, entry_h}
-	y := inner.y + entry_h + gap * 2
-	for index in 0 ..< STAGE_COUNT {
-		column := i32(index % 2)
-		row := i32(index / 2)
-		x := inner.x + column * (column_w + gap)
-		layout.nodes[index + 2] = {x, y + row * (card_h + gap), column_w, card_h}
+// Blocked edges route through the reserved side margins, which are card-free
+// at every width by construction, instead of drawing lines under cards.
+map_edge_elbow :: proc(layout: ^Map_Layout, edge_index: i32) -> Edge_Path {
+	assert(layout != nil, "api map elbow: nil layout")
+	assert(edge_index >= 0 && edge_index < EDGE_COUNT, "api map elbow: invalid index")
+	edge := MAP_EDGES[edge_index]
+	from := layout.nodes[edge.from]
+	to := layout.nodes[edge.to]
+	lane_w := max(layout.metrics.margin / 3, 1)
+	offset := lane_w / 2 + EDGE_LANES[edge_index] * lane_w
+	start, finish: fit.Point
+	channel_x: f32
+	if EDGE_SIDE_RIGHT[edge_index] {
+		channel_x = f32(layout.bounds.x + layout.bounds.w - layout.metrics.gap - offset)
+		start = {f32(from.x + from.w), f32(from.y + from.h / 2)}
+		finish = {f32(to.x + to.w), f32(to.y + to.h / 2)}
+	} else {
+		channel_x = f32(layout.bounds.x + layout.metrics.gap + offset)
+		start = {f32(from.x), f32(from.y + from.h / 2)}
+		finish = {f32(to.x), f32(to.y + to.h / 2)}
 	}
+	return {{start, {channel_x, start.y}, {channel_x, finish.y}, finish}, 4}
 }
 
-map_layout_wide :: proc(layout: ^Map_Layout, inner: fit.Rect, gap, entry_h, card_h: i32) {
-	assert(layout != nil && inner.w > gap * 2, "api map wide layout: invalid argument")
-	assert(gap > 0 && entry_h > 0 && card_h > 0)
-	entry_w := (inner.w - gap) / 2
-	layout.nodes[0] = {inner.x, inner.y, entry_w, entry_h}
-	layout.nodes[1] = {inner.x + entry_w + gap, inner.y, entry_w, entry_h}
-	column_w := (inner.w - gap * 2) / 3
-	y := inner.y + entry_h + gap * 2
-	for index in 0 ..< STAGE_COUNT {
-		column := i32(index % 3)
-		row := i32(index / 3)
-		x := inner.x + column * (column_w + gap)
-		layout.nodes[index + 2] = {x, y + row * (card_h + gap), column_w, card_h}
+map_segment_clear :: proc(
+	layout: ^Map_Layout,
+	start, finish: fit.Point,
+	skip_from, skip_to: i32,
+) -> bool {
+	assert(layout != nil, "api map clear: nil layout")
+	assert(skip_from >= 0 && skip_from < NODE_COUNT, "api map clear: invalid from")
+	assert(skip_to >= 0 && skip_to < NODE_COUNT, "api map clear: invalid to")
+	for rect, index in layout.nodes {
+		if i32(index) == skip_from || i32(index) == skip_to do continue
+		if segment_hits_rect(start, finish, rect) do return false
 	}
+	return true
 }
 
-map_layout_tiers :: proc(layout: ^Map_Layout, gap: i32) {
-	assert(layout != nil && gap > 0, "api map tiers: invalid argument")
-	for tier in Tier {
-		bounds: fit.Rect
-		found := false
-		for node, index in MAP_NODES {
-			if node.tier != tier do continue
-			bounds = rect_union(bounds, layout.nodes[index], found)
-			found = true
+segment_hits_rect :: proc(start, finish: fit.Point, rect: fit.Rect) -> bool {
+	assert(rect.w > 0 && rect.h > 0, "api map hit: invalid rectangle")
+	// Shrink by half a pixel so a segment touching a border does not count.
+	enter: f32 = 0
+	exit: f32 = 1
+	if !segment_clip_axis(
+		start.x,
+		finish.x - start.x,
+		f32(rect.x) + 0.5,
+		f32(rect.x + rect.w) - 0.5,
+		&enter,
+		&exit,
+	) {
+		return false
+	}
+	if !segment_clip_axis(
+		start.y,
+		finish.y - start.y,
+		f32(rect.y) + 0.5,
+		f32(rect.y + rect.h) - 0.5,
+		&enter,
+		&exit,
+	) {
+		return false
+	}
+	return enter < exit
+}
+
+segment_clip_axis :: proc(origin, delta, lo, hi: f32, enter, exit: ^f32) -> bool {
+	assert(enter != nil && exit != nil, "api map clip: nil range")
+	assert(lo < hi, "api map clip: empty slab")
+	if delta == 0 do return origin > lo && origin < hi
+	first := (lo - origin) / delta
+	second := (hi - origin) / delta
+	if first > second do first, second = second, first
+	enter^ = max(enter^, first)
+	exit^ = min(exit^, second)
+	return enter^ < exit^
+}
+
+path_length :: proc(path: ^Edge_Path) -> f32 {
+	assert(path != nil, "api map path: nil path")
+	assert(path.count >= 2 && path.count <= MAX_EDGE_POINTS, "api map path: invalid count")
+	total: f32
+	for index in 0 ..< path.count - 1 {
+		total += point_distance(path.points[index], path.points[index + 1])
+	}
+	return total
+}
+
+path_point :: proc(path: ^Edge_Path, amount: f32) -> fit.Point {
+	assert(path != nil && path.count >= 2, "api map path point: invalid path")
+	assert(amount >= 0 && amount <= 1, "api map path point: invalid amount")
+	target := path_length(path) * amount
+	walked: f32
+	for index in 0 ..< path.count - 1 {
+		segment := point_distance(path.points[index], path.points[index + 1])
+		if segment <= 0 do continue
+		if walked + segment >= target {
+			fraction := clamp((target - walked) / segment, 0, 1)
+			return point_lerp(path.points[index], path.points[index + 1], fraction)
 		}
-		assert(found, "api map tiers: empty tier")
-		layout.tier_bounds[tier] = rect_expand(bounds, gap / 2)
+		walked += segment
 	}
+	return path.points[path.count - 1]
 }
 
-rect_union :: proc(a, b: fit.Rect, has_a: bool) -> fit.Rect {
-	assert(b.w > 0 && b.h > 0, "api map union: invalid rectangle")
-	if !has_a do return b
-	x := min(a.x, b.x)
-	y := min(a.y, b.y)
-	right := max(a.x + a.w, b.x + b.w)
-	bottom := max(a.y + a.h, b.y + b.h)
-	return {x, y, right - x, bottom - y}
-}
-
-rect_expand :: proc(rect: fit.Rect, amount: i32) -> fit.Rect {
-	assert(rect.w > 0 && rect.h > 0, "api map expand: invalid rectangle")
-	assert(amount >= 0, "api map expand: negative amount")
-	return {rect.x - amount, rect.y - amount, rect.w + amount * 2, rect.h + amount * 2}
+point_distance :: proc(from, to: fit.Point) -> f32 {
+	delta_x := to.x - from.x
+	delta_y := to.y - from.y
+	return math.sqrt(delta_x * delta_x + delta_y * delta_y)
 }
 
 map_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
@@ -378,24 +559,19 @@ map_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> b
 	assert(surface != nil && rect.w > 0 && rect.h > 0, "api map render: invalid argument")
 	if fit.Surface_Key_Pressed(surface, .F12) do map_state.debug_on = !map_state.debug_on
 	map_animate(surface)
-	gap := fit.Surface_Space(surface, .MD)
-	layout := map_layout(rect, gap, fit.Px(surface, 62), fit.Px(surface, 88))
+	metrics := map_metrics(surface)
+	layout := map_layout(rect, metrics)
 	theme := fit.Surface_Theme_Tokens(surface)
 	fit.Surface_Fill_Rect(surface, rect, theme.background_app)
-	claim := rect_float(rect)
-	fit.Surface_Layer_Begin(surface, fit.Z_Order(1), claim)
+	// Submission order already paints back-to-front; opening claimed layers
+	// here would occlude Surface_Interact for everything below the top claim.
 	map_render_tiers(surface, &layout)
-	fit.Surface_Layer_End(surface)
-	fit.Surface_Layer_Begin(surface, fit.Z_Order(2), claim)
 	map_render_edges(surface, &layout)
-	fit.Surface_Layer_End(surface)
-	fit.Surface_Layer_Begin(surface, fit.Z_Order(3), claim)
 	map_render_nodes(surface, &layout)
-	fit.Surface_Layer_End(surface)
-	fit.Surface_Layer_Begin(surface, fit.Z_Order(4), claim)
 	map_render_active(surface, &layout)
-	fit.Surface_Layer_End(surface)
-	if map_state.debug_on do _ = fit.Surface_Debug_Overlay(surface, rect.x + rect.w - 290, rect.y + 10)
+	if map_state.debug_on {
+		_ = fit.Surface_Debug_Overlay(surface, rect.x + rect.w - 290, rect.y + 10)
+	}
 	return false
 }
 
@@ -420,29 +596,69 @@ map_animate :: proc(surface: ^fit.Surface) {
 
 map_render_tiers :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(surface != nil && layout != nil, "api map tiers: invalid argument")
+	inset := fit.Surface_Space(surface, .XS)
 	for bounds, tier in layout.tier_bounds {
 		fit.Surface_Draw_Surface(surface, rect_float(bounds), .Panel, .Rest, .LG)
-		fit.Surface_Text(surface, TIER_LABELS[tier], bounds.x + 6, bounds.y + 4, .Note, .Muted)
+		fit.Surface_Text(
+			surface,
+			TIER_LABELS[tier],
+			bounds.x + layout.metrics.margin,
+			bounds.y + inset,
+			.Note,
+			.Muted,
+		)
 	}
 }
 
 map_render_edges :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(surface != nil && layout != nil, "api map edges: invalid argument")
+	for edge, index in MAP_EDGES {
+		path := map_edge_path(layout, i32(index))
+		map_draw_edge(surface, &path, map_edge_amount(edge.stage))
+	}
+}
+
+map_draw_edge :: proc(surface: ^fit.Surface, path: ^Edge_Path, amount: f32) {
+	assert(surface != nil && path != nil, "api map draw edge: invalid argument")
+	assert(amount >= 0 && amount <= 1, "api map draw edge: invalid amount")
 	theme := fit.Surface_Theme_Tokens(surface)
-	for edge in MAP_EDGES {
-		from := rect_center(layout.nodes[edge.from])
-		to := rect_center(layout.nodes[edge.to])
-		fit.Surface_Line(surface, from, to, fit.Px(surface, 2.0), theme.border)
-		amount := map_edge_amount(edge.stage)
-		if amount <= 0 do continue
-		end := point_lerp(from, to, amount)
-		fit.Surface_Line(surface, from, end, fit.Px(surface, 3.0), theme.foreground_accent)
+	for index in 0 ..< path.count - 1 {
+		fit.Surface_Line(
+			surface,
+			path.points[index],
+			path.points[index + 1],
+			fit.Px(surface, 2.0),
+			theme.border,
+		)
+	}
+	if amount <= 0 do return
+	target := path_length(path) * amount
+	walked: f32
+	for index in 0 ..< path.count - 1 {
+		segment := point_distance(path.points[index], path.points[index + 1])
+		if segment <= 0 do continue
+		finish := path.points[index + 1]
+		partial := walked + segment > target
+		if partial {
+			fraction := clamp((target - walked) / segment, 0, 1)
+			finish = point_lerp(path.points[index], path.points[index + 1], fraction)
+		}
+		fit.Surface_Line(
+			surface,
+			path.points[index],
+			finish,
+			fit.Px(surface, 3.0),
+			theme.foreground_accent,
+		)
+		if partial do break
+		walked += segment
 	}
 }
 
 map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(surface != nil && layout != nil, "api map nodes: invalid argument")
 	map_state.hovered_node = -1
+	inset := fit.Surface_Space(surface, .SM)
 	for node, index in MAP_NODES {
 		rect := layout.nodes[index]
 		interaction := fit.Surface_Interact(surface, rect_float(rect))
@@ -454,7 +670,6 @@ map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 			fit.Surface_Request_Cursor(surface, .Pointing_Hand)
 		}
 		fit.Surface_Draw_Surface(surface, rect_float(rect), .Card, state, .MD, .Hairline, .Lifted)
-		inset := fit.Surface_Space(surface, .SM)
 		fit.Surface_Text(surface, node.title, rect.x + inset, rect.y + inset, .Title, node.ink)
 		fit.Surface_Text_Truncated(
 			surface,
@@ -473,21 +688,25 @@ map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(surface != nil && layout != nil, "api map active: invalid argument")
 	stage := map_state.target_stage
 	if stage <= 0 do return
+	assert(stage <= STAGE_COUNT, "api map active: invalid stage")
 	node_index := stage + 1
-	rect := rect_expand(layout.nodes[node_index], fit.Surface_Space(surface, .XS) / 2)
+	ring := rect_expand(layout.nodes[node_index], fit.Surface_Space(surface, .XS) / 2)
 	fit.Surface_Stroke_Rounded_Rect(
 		surface,
-		rect_float(rect),
+		rect_float(ring),
 		0.12,
 		8,
 		fit.Px(surface, 2.0),
 		fit.Surface_Theme_Tokens(surface).foreground_accent,
 	)
-	for edge in MAP_EDGES {
+	// The pulse only exists while the path is moving; a resting dot after the
+	// transition finished reads as a stray artifact.
+	if map_state.reduced_motion do return
+	if map_state.progress >= 1 && !map_state.playing do return
+	for edge, index in MAP_EDGES {
 		if edge.stage != stage do continue
-		from := rect_center(layout.nodes[edge.from])
-		to := rect_center(layout.nodes[edge.to])
-		pulse := point_lerp(from, to, map_ease(map_state.progress))
+		path := map_edge_path(layout, i32(index))
+		pulse := path_point(&path, map_ease(map_state.progress))
 		fit.Surface_Fill_Circle(
 			surface,
 			pulse,
@@ -510,9 +729,15 @@ point_lerp :: proc(from, to: fit.Point, amount: f32) -> fit.Point {
 	return {from.x + (to.x - from.x) * amount, from.y + (to.y - from.y) * amount}
 }
 
-rect_center :: proc(rect: fit.Rect) -> fit.Point {
-	assert(rect.w > 0 && rect.h > 0, "api map center: invalid rectangle")
-	return {f32(rect.x + rect.w / 2), f32(rect.y + rect.h / 2)}
+rows_overlap :: proc(a, b: fit.Rect) -> bool {
+	assert(a.h > 0 && b.h > 0, "api map rows: invalid rectangle")
+	return a.y < b.y + b.h && b.y < a.y + a.h
+}
+
+rect_expand :: proc(rect: fit.Rect, amount: i32) -> fit.Rect {
+	assert(rect.w > 0 && rect.h > 0, "api map expand: invalid rectangle")
+	assert(amount >= 0, "api map expand: negative amount")
+	return {rect.x - amount, rect.y - amount, rect.w + amount * 2, rect.h + amount * 2}
 }
 
 rect_float :: proc(rect: fit.Rect) -> fit.Float_Rect {
