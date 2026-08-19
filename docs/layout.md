@@ -29,6 +29,10 @@ Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 }
 ```
 
+Activation destinations (`&saved`) are written during `Render`, after the draw
+callback returns — they must be globals or app-state fields, consumed at the
+start of the next build, never build-proc locals.
+
 When the container itself is selected dynamically, close the selected container
 directly:
 

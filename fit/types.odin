@@ -627,12 +627,18 @@ Button_Options :: struct {
 	web_form_id: string,
 	track:       Track,
 	size:        Size_Options,
+	// activated is written during Render, after the build callback has
+	// returned. It must point to storage that outlives the build (global or
+	// app state, never a build-proc local), and is typically consumed and
+	// cleared at the start of the next build. See examples/session_loop.
 	activated:   ^bool,
 }
 
 Control_Options :: struct {
 	track:   Track,
 	size:    Size_Options,
+	// changed follows the activated lifetime contract on Button_Options: it
+	// is written during Render and must outlive the build callback.
 	changed: ^bool,
 }
 
@@ -662,6 +668,8 @@ Progress_Options :: struct {
 Custom_Options :: struct {
 	track:     Track,
 	size:      Size_Options,
+	// activated follows the lifetime contract on Button_Options: it is
+	// written during Render and must outlive the build callback.
 	activated: ^bool,
 }
 

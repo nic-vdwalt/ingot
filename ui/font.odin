@@ -492,6 +492,7 @@ rune_advance_measure_backend :: proc(
 	size: i32,
 	font: Font_Id,
 ) -> i32 {
+	assert(frame != nil && frame.runtime != nil, "rune advance measure: invalid frame")
 	buf: [5]u8
 	n := rune_utf8_encode(value, &buf)
 	measurement := text_backend_measure(

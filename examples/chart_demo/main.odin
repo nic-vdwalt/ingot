@@ -8,9 +8,12 @@ package main
 import fit "ingot:fit"
 
 State :: struct {
-	dark:       bool,
-	line_state: fit.Chart_State,
-	bar_state:  fit.Chart_State,
+	dark:          bool,
+	line_state:    fit.Chart_State,
+	bar_state:     fit.Chart_State,
+	// Written by fit during Render (after frame returns); consumed and
+	// cleared at the start of the next build.
+	theme_clicked: bool,
 }
 
 state := State {
@@ -61,10 +64,14 @@ main :: proc() {
 
 frame :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	data := cast(^State)userdata
+	if data.theme_clicked {
+		data.theme_clicked = false
+		data.dark = !data.dark
+		fit.Set_Theme(&app, fit.Theme_Dark() if data.dark else fit.Theme_Light())
+	}
 	root_container: {
 		fit.Column(builder, {gap = .MD, padding = .LG})
 		defer fit.End(builder)
-		activated := false
 		header_container: {
 			fit.Row(builder, {gap = .MD, size = {height = fit.Fixed(36)}})
 			defer fit.End(builder)
@@ -73,12 +80,8 @@ frame :: proc(builder: ^fit.Builder, userdata: rawptr) {
 				builder,
 				"theme",
 				"Light theme" if data.dark else "Dark theme",
-				fit.Button_Options{track = fit.Fixed(132), activated = &activated},
+				fit.Button_Options{track = fit.Fixed(132), activated = &data.theme_clicked},
 			)
-		}
-		if activated {
-			data.dark = !data.dark
-			fit.Set_Theme(&app, fit.Theme_Dark() if data.dark else fit.Theme_Light())
 		}
 		// The dashboard fills the leftover column height; Grow resolves the
 		// same on every layout pass, so the panel tracks window resizes.

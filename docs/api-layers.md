@@ -63,7 +63,10 @@ closure remains available for dynamic construction. `Label`, `Button`,
 `Checkbox`, `Radio`, `Slider`, `Text_Input`, `Progress`, `Separator`, `Spacer`,
 table cells, `Canvas_Leaf`, and `Custom` emit leaves. The additive `*_With`
 helpers auto-close callback-built containers; `Scope` provides explicit
-component identity. `Render` consumes the declaration synchronously. `Measure`
+component identity. `Render` consumes the declaration synchronously. Activation
+destinations (`&saved`) are written during `Render`, after the draw callback's
+build code has run — they must be globals or app-state fields, consumed at the
+start of the next build, never build-proc locals. `Measure`
 plus `Render_At` supports caller-owned placement without introducing a retained
 widget tree. A `Custom` render callback receives a borrowed `fit.Surface` for
 same-frame interaction and explicit geometry; the Surface is valid only for that
