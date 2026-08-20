@@ -29,22 +29,22 @@ Surface_Monitor_Refresh :: proc(surface: ^Surface) -> i32 {
 
 Surface_Key_Pressed_Repeat :: proc(surface: ^Surface, key: Key) -> bool {
 	u := surface_ui(surface)
-	return ui.is_key_pressed_repeat(u.frame, ui.Key(key))
+	return ui.is_key_pressed_repeat(u.frame, to_key(key))
 }
 
 Surface_Key_Pressed_Or_Repeat :: proc(surface: ^Surface, key: Key) -> bool {
 	u := surface_ui(surface)
-	return ui.is_key_pressed_or_repeat(u.frame, ui.Key(key))
+	return ui.is_key_pressed_or_repeat(u.frame, to_key(key))
 }
 
 Surface_Key_Released :: proc(surface: ^Surface, key: Key) -> bool {
 	u := surface_ui(surface)
-	return ui.is_key_released(u.frame, ui.Key(key))
+	return ui.is_key_released(u.frame, to_key(key))
 }
 
 Surface_Key_Down :: proc(surface: ^Surface, key: Key) -> bool {
 	u := surface_ui(surface)
-	return ui.is_key_down(u.frame, ui.Key(key))
+	return ui.is_key_down(u.frame, to_key(key))
 }
 
 Surface_Modifier_Down :: proc(surface: ^Surface) -> bool {
@@ -58,7 +58,7 @@ Surface_Modifier_Down :: proc(surface: ^Surface) -> bool {
 
 Surface_Mouse_Released :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
 	u := surface_ui(surface)
-	return ui.is_mouse_button_released(u.frame, ui.Mouse_Button(button))
+	return ui.is_mouse_button_released(u.frame, to_mouse_button(button))
 }
 
 Surface_Mouse_Delta :: proc(surface: ^Surface) -> Point {

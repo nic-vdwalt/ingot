@@ -62,11 +62,7 @@ Surface_Caption_Buttons :: proc(
 	minimize_inner, maximize_inner, close_inner := ui.draw_caption_buttons(
 		u.frame,
 		screen_width,
-		{
-			hover = ui.Caption_Button(input.hover),
-			pressed = ui.Caption_Button(input.pressed),
-			maximized = input.maximized,
-		},
+		{hover = input.hover, pressed = input.pressed, maximized = input.maximized},
 	)
 	return Float_Rect(minimize_inner), Float_Rect(maximize_inner), Float_Rect(close_inner)
 }

@@ -136,7 +136,7 @@ Surface_Theme_Tokens :: proc(surface: ^Surface) -> Theme_Tokens {
 
 Surface_Theme_Color :: proc(surface: ^Surface, ink: Ink) -> Color {
 	u := surface_ui(surface)
-	return Color(ui.text_ink(u.frame, ui.Ink(ink)))
+	return Color(ui.text_ink(u.frame, ink))
 }
 
 Surface_Resolve_Colors :: proc(
@@ -145,7 +145,7 @@ Surface_Resolve_Colors :: proc(
 	state: Visual_State = .Rest,
 ) -> Surface_Colors {
 	u := surface_ui(surface)
-	colors := ui.surface_colors(u.frame, ui.Surface(kind), ui.Visual_State(state))
+	colors := ui.surface_colors(u.frame, kind, state)
 	return {Color(colors.bg), Color(colors.fg), Color(colors.border)}
 }
 
@@ -156,22 +156,22 @@ Surface_Pigment :: proc(surface: ^Surface, pigment: Pigment) -> Color {
 
 Surface_Space :: proc(surface: ^Surface, space: Space) -> i32 {
 	u := surface_ui(surface)
-	return ui.space_pixels(u.frame, ui.Space(space))
+	return ui.space_pixels(u.frame, space)
 }
 
 Surface_Text_Size :: proc(surface: ^Surface, role: Text_Role) -> i32 {
 	u := surface_ui(surface)
-	return ui.text_role_size(u.frame, ui.Text_Role(role))
+	return ui.text_role_size(u.frame, role)
 }
 
 Surface_Text_Line_Height :: proc(surface: ^Surface, role: Text_Role) -> i32 {
 	u := surface_ui(surface)
-	return ui.text_role_line_height(u.frame, ui.Text_Role(role))
+	return ui.text_role_line_height(u.frame, role)
 }
 
 Surface_Text_Width :: proc(surface: ^Surface, text: string, role: Text_Role = .Body) -> i32 {
 	u := surface_ui(surface)
-	return ui.text_width(u.frame, text, ui.Text_Role(role))
+	return ui.text_width(u.frame, text, role)
 }
 
 Surface_Text :: proc(
@@ -182,7 +182,7 @@ Surface_Text :: proc(
 	ink: Ink = .Primary,
 ) {
 	u := surface_ui(surface)
-	ui.text(u.frame, text, x, y, ui.Text_Role(role), ui.Ink(ink))
+	ui.text(u.frame, text, x, y, role, ink)
 }
 
 Surface_Text_Truncated :: proc(
@@ -193,7 +193,7 @@ Surface_Text_Truncated :: proc(
 	ink: Ink = .Primary,
 ) {
 	u := surface_ui(surface)
-	ui.text_truncated(u.frame, text, x, y, width, ui.Text_Role(role), ui.Ink(ink))
+	ui.text_truncated(u.frame, text, x, y, width, role, ink)
 }
 
 Surface_Text_Wrapped :: proc(
@@ -272,15 +272,7 @@ Surface_Draw_Surface :: proc(
 	elevation: Elevation = .Flat,
 ) {
 	u := surface_ui(surface)
-	ui.draw_surface(
-		u.frame,
-		to_float_rect(rect),
-		ui.Surface(kind),
-		ui.Visual_State(state),
-		ui.Radius(radius),
-		ui.Border(border),
-		ui.Elevation(elevation),
-	)
+	ui.draw_surface(u.frame, to_float_rect(rect), kind, state, radius, border, elevation)
 }
 
 Surface_Interact :: proc(surface: ^Surface, rect: Float_Rect) -> Interaction {
@@ -291,17 +283,17 @@ Surface_Interact :: proc(surface: ^Surface, rect: Float_Rect) -> Interaction {
 
 Surface_Key_Pressed :: proc(surface: ^Surface, key: Key) -> bool {
 	u := surface_ui(surface)
-	return ui.is_key_pressed(u.frame, ui.Key(key))
+	return ui.is_key_pressed(u.frame, to_key(key))
 }
 
 Surface_Mouse_Pressed :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
 	u := surface_ui(surface)
-	return ui.is_mouse_button_pressed(u.frame, ui.Mouse_Button(button))
+	return ui.is_mouse_button_pressed(u.frame, to_mouse_button(button))
 }
 
 Surface_Mouse_Down :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
 	u := surface_ui(surface)
-	return ui.is_mouse_button_down(u.frame, ui.Mouse_Button(button))
+	return ui.is_mouse_button_down(u.frame, to_mouse_button(button))
 }
 
 Surface_Mouse_Position :: proc(surface: ^Surface) -> Point {
@@ -316,7 +308,7 @@ Surface_Wheel :: proc(surface: ^Surface) -> f32 {
 
 Surface_Request_Cursor :: proc(surface: ^Surface, cursor: Cursor) {
 	u := surface_ui(surface)
-	ui.request_cursor(u.frame, ui.Cursor(cursor))
+	ui.request_cursor(u.frame, to_cursor(cursor))
 }
 
 Request_Redraw :: proc(surface: ^Surface) {
@@ -332,7 +324,7 @@ Surface_Region_Begin :: proc(surface: ^Surface, region: ^Region, rect: Rect, gap
 	u := surface_ui(surface)
 	assert(region != nil && !region.inner.open, "Fit.Surface_Region_Begin: invalid region")
 	assert(!region.managed_scope, "Fit.Surface_Region_Begin: managed scope still open")
-	ui.begin(&region.inner, u.frame, to_rect(rect), gap = ui.Space(gap))
+	ui.begin(&region.inner, u.frame, to_rect(rect), gap = gap)
 }
 
 Surface_Region_End :: proc(region: ^Region) -> i32 {
@@ -481,7 +473,7 @@ Surface_Draw_Shadow :: proc(
 	elevation: Elevation,
 ) {
 	u := surface_ui(surface)
-	ui.draw_shadow_hard(u.frame, to_float_rect(rect), ui.Radius(radius), ui.Elevation(elevation))
+	ui.draw_shadow_hard(u.frame, to_float_rect(rect), radius, elevation)
 }
 
 Surface_Draw_Rules :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32, color: Color) {
@@ -541,7 +533,7 @@ Surface_Draw_Pigment_Block :: proc(surface: ^Surface, rect: Float_Rect, color: C
 
 Surface_Draw_Chalk_Highlight :: proc(surface: ^Surface, rect: Float_Rect, radius: Radius) {
 	u := surface_ui(surface)
-	ui.draw_chalk_highlight(u.frame, to_float_rect(rect), ui.Radius(radius))
+	ui.draw_chalk_highlight(u.frame, to_float_rect(rect), radius)
 }
 
 Surface_Dot_Grid_Fits :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32) -> bool {

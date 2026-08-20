@@ -52,9 +52,9 @@ Table_Cell :: proc(table: ^Table_State, text: string, options: Table_Cell_Option
 		&builder.inner,
 		{
 			text = text,
-			role = ui.Text_Role(options.role),
-			ink = ui.Ink(options.ink),
-			trunc = ui.Truncate_Side(options.trunc),
+			role = options.role,
+			ink = options.ink,
+			trunc = options.trunc,
 			numeric = column.numeric,
 		},
 		{track = to_track(column.track), size = to_size(options.size)},

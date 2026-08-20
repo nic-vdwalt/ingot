@@ -617,6 +617,7 @@ _gpu_finish :: proc(ctx: ^Context) {
 		presentMode = .Fifo,
 	}
 	wg.SurfaceConfigure(ctx.surface, &ctx.config)
+	when ODIN_OS != .JS do ctx.force_reconfigure = true
 
 	ctx.start_time_s = platform_now()
 	ctx.last_time = _now(ctx)
@@ -867,6 +868,11 @@ _release_surface_texture :: proc(ctx: ^Context) {
 }
 
 @(private)
+_surface_should_reconfigure :: proc(changed, forced: bool, fbw, fbh: i32) -> bool {
+	return (changed || forced) && fbw > 0 && fbh > 0
+}
+
+@(private)
 _maybe_reconfigure :: proc(ctx: ^Context) {
 	assert(ctx != nil, "_maybe_reconfigure: nil context")
 	fbw, fbh := platform_framebuffer_size(ctx)
@@ -878,7 +884,7 @@ _maybe_reconfigure :: proc(ctx: ^Context) {
 	// GetWindowScaleDPI instead.
 	ctx.resized_this_frame = w != ctx.width || h != ctx.height
 	ctx.width, ctx.height = w, h
-	if (changed || ctx.force_reconfigure) && fbw > 0 && fbh > 0 {
+	if _surface_should_reconfigure(changed, ctx.force_reconfigure, fbw, fbh) {
 		ctx.fb_width, ctx.fb_height = fbw, fbh
 		ctx.config.width = u32(fbw)
 		ctx.config.height = u32(fbh)

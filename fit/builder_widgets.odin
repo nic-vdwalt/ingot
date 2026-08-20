@@ -226,7 +226,7 @@ Progress :: proc(parent: Parent, value: f32, options: Progress_Options = {}) {
 		&builder.inner,
 		{
 			value = value,
-			ink = ui.Ink(options.ink),
+			ink = options.ink,
 			height = height,
 			options = {label = options.label, field_id = options.field_id},
 		},
@@ -243,6 +243,6 @@ Separator :: proc(parent: Parent, options: Leaf_Options = {}) {
 
 Spacer :: proc(parent: Parent, space: Space, options: Leaf_Options = {}) {
 	builder := parent_select(parent)
-	ui.fit_builder_spacer(&builder.inner, ui.Space(space), to_leaf_options(options))
+	ui.fit_builder_spacer(&builder.inner, space, to_leaf_options(options))
 	parent_clear(builder)
 }

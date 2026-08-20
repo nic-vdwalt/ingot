@@ -18,12 +18,62 @@ to_app_config :: proc(config: Config) -> ui_gfx.App_Config {
 		width = config.width,
 		height = config.height,
 		title = config.title,
-		flags = transmute(gfx.ConfigFlags)config.flags,
-		frame_pacing = ui_gfx.App_Frame_Pacing(config.frame_pacing),
+		flags = to_window_flags(config.flags),
+		frame_pacing = to_frame_pacing(config.frame_pacing),
 		target_fps = config.target_fps,
 		event_waiting = config.event_waiting,
 		session = to_session_config(config.session),
 	}
+}
+
+@(private = "package")
+to_frame_pacing :: proc(value: Frame_Pacing) -> ui_gfx.App_Frame_Pacing {
+	switch value {
+	case .Fixed:
+		return .Fixed
+	case .Uncapped:
+		return .Uncapped
+	case .Monitor_Refresh:
+		return .Monitor_Refresh
+	}
+	unreachable()
+}
+
+@(private = "package")
+from_app_state :: proc(value: ui_gfx.App_State) -> State {
+	switch value {
+	case .Empty:
+		return .Empty
+	case .Ready:
+		return .Ready
+	case .Running:
+		return .Running
+	case .Stopped:
+		return .Stopped
+	}
+	unreachable()
+}
+
+@(private = "package")
+to_window_flags :: proc(value: Window_Flags) -> gfx.ConfigFlags {
+	result: gfx.ConfigFlags
+	if .Fullscreen in value do result += {.FULLSCREEN_MODE}
+	if .Resizable in value do result += {.WINDOW_RESIZABLE}
+	if .Undecorated in value do result += {.WINDOW_UNDECORATED}
+	if .Transparent in value do result += {.WINDOW_TRANSPARENT}
+	if .Msaa_4x in value do result += {.MSAA_4X_HINT}
+	if .Vsync in value do result += {.VSYNC_HINT}
+	if .Hidden in value do result += {.WINDOW_HIDDEN}
+	if .Always_Run in value do result += {.WINDOW_ALWAYS_RUN}
+	if .Minimized in value do result += {.WINDOW_MINIMIZED}
+	if .Maximized in value do result += {.WINDOW_MAXIMIZED}
+	if .Unfocused in value do result += {.WINDOW_UNFOCUSED}
+	if .Topmost in value do result += {.WINDOW_TOPMOST}
+	if .High_Dpi in value do result += {.WINDOW_HIGHDPI}
+	if .Mouse_Passthrough in value do result += {.WINDOW_MOUSE_PASSTHROUGH}
+	if .Borderless_Windowed in value do result += {.BORDERLESS_WINDOWED_MODE}
+	if .Interlaced in value do result += {.INTERLACED_HINT}
+	return result
 }
 
 @(private = "package")
@@ -71,21 +121,63 @@ from_constraints :: proc(value: ui.Intrinsic_Constraints) -> Constraints {
 }
 
 @(private = "package")
-to_track :: proc(value: Track) -> ui.Track {
-	return {
-		kind = ui.Track_Kind(value.kind),
-		basis = value.basis,
-		weight = value.weight,
-		percent = value.percent,
-		min_size = value.min_size,
-		max_size = value.max_size,
+to_mouse_button :: proc(value: Mouse_Button) -> ui.Mouse_Button {
+	switch value {
+	case .Left:
+		return .LEFT
+	case .Right:
+		return .RIGHT
+	case .Middle:
+		return .MIDDLE
+	case .Side:
+		return .SIDE
+	case .Extra:
+		return .EXTRA
+	case .Forward:
+		return .FORWARD
+	case .Back:
+		return .BACK
 	}
+	unreachable()
+}
+
+@(private = "package")
+to_cursor :: proc(value: Cursor) -> ui.Cursor {
+	switch value {
+	case .Default:
+		return .DEFAULT
+	case .Arrow:
+		return .ARROW
+	case .IBeam:
+		return .IBEAM
+	case .Crosshair:
+		return .CROSSHAIR
+	case .Pointing_Hand:
+		return .POINTING_HAND
+	case .Resize_EW:
+		return .RESIZE_EW
+	case .Resize_NS:
+		return .RESIZE_NS
+	case .Resize_NWSE:
+		return .RESIZE_NWSE
+	case .Resize_NESW:
+		return .RESIZE_NESW
+	case .Resize_All:
+		return .RESIZE_ALL
+	case .Not_Allowed:
+		return .NOT_ALLOWED
+	}
+	unreachable()
+}
+
+@(private = "package")
+to_track :: proc(value: Track) -> ui.Track {
+	return value
 }
 
 @(private = "package")
 to_transition :: proc(value: Transition) -> ui.Prepared_Transition {
-	state := cast(^ui.Transition_Rect_State)value.state
-	return {state = state, options = {speed = value.options.speed}}
+	return {state = value.state, options = {speed = value.options.speed}}
 }
 
 @(private = "package")
@@ -107,16 +199,16 @@ to_effects :: proc(value: Container_Effects) -> ui.Prepared_Container_Effects {
 	return {
 		clip = value.clip,
 		background = ui.Color(value.background),
-		radius = ui.Radius(value.radius),
-		border = ui.Border(value.border),
+		radius = value.radius,
+		border = value.border,
 		border_color = ui.Color(value.border_color),
 		surface = {
 			enabled = value.surface.enabled,
-			kind = ui.Surface(value.surface.kind),
-			state = ui.Visual_State(value.surface.state),
-			radius = ui.Radius(value.surface.radius),
-			border = ui.Border(value.surface.border),
-			elevation = ui.Elevation(value.surface.elevation),
+			kind = value.surface.kind,
+			state = value.surface.state,
+			radius = value.surface.radius,
+			border = value.surface.border,
+			elevation = value.surface.elevation,
 		},
 	}
 }
@@ -124,10 +216,10 @@ to_effects :: proc(value: Container_Effects) -> ui.Prepared_Container_Effects {
 @(private = "package")
 to_container_options :: proc(value: Container_Options) -> ui.Prepared_Container_Options {
 	return {
-		gap = ui.Space(value.gap),
-		padding = ui.Space(value.padding),
-		align = ui.Cross_Align(value.align),
-		justify = ui.Main_Align(value.justify),
+		gap = value.gap,
+		padding = value.padding,
+		align = value.align,
+		justify = value.justify,
 		track = to_track(value.track),
 		size = to_size(value.size),
 		effects = to_effects(value.effects),
@@ -137,9 +229,9 @@ to_container_options :: proc(value: Container_Options) -> ui.Prepared_Container_
 @(private = "package")
 to_flow_options :: proc(value: Flow_Options) -> ui.Prepared_Flow_Options {
 	return {
-		gap_x = ui.Space(value.gap_x),
-		gap_y = ui.Space(value.gap_y),
-		padding = ui.Space(value.padding),
+		gap_x = value.gap_x,
+		gap_y = value.gap_y,
+		padding = value.padding,
 		track = to_track(value.track),
 		size = to_size(value.size),
 		effects = to_effects(value.effects),
@@ -153,9 +245,9 @@ to_grid_options :: proc(value: Grid_Options) -> ui.Prepared_Grid_Options {
 	return {
 		columns = value.columns,
 		row_height = value.row_height,
-		gap_x = ui.Space(value.gap_x),
-		gap_y = ui.Space(value.gap_y),
-		padding = ui.Space(value.padding),
+		gap_x = value.gap_x,
+		gap_y = value.gap_y,
+		padding = value.padding,
 		track = to_track(value.track),
 		size = to_size(value.size),
 		effects = to_effects(value.effects),
@@ -165,11 +257,11 @@ to_grid_options :: proc(value: Grid_Options) -> ui.Prepared_Grid_Options {
 @(private = "package")
 to_attachment_options :: proc(value: Attachment_Options) -> ui.Prepared_Attachment_Options {
 	return {
-		target_kind = ui.Attachment_Target_Kind(value.target_kind),
+		target_kind = value.target_kind,
 		target = ui.Prepared_Handle(value.target),
 		target_screen = to_rect(value.target_screen),
-		target_point = ui.Attachment_Point(value.target_point),
-		self_point = ui.Attachment_Point(value.self_point),
+		target_point = value.target_point,
+		self_point = value.self_point,
 		offset_x = value.offset_x,
 		offset_y = value.offset_y,
 		z = ui.Z_Order(value.z),
@@ -189,7 +281,7 @@ to_scroll_options :: proc(
 	return {
 		state = &state.inner,
 		id = ui.Widget_Id(widget),
-		padding = ui.Space(value.padding),
+		padding = value.padding,
 		keyboard = value.keyboard,
 		bar = value.bar,
 		track = to_track(value.track),
@@ -200,8 +292,8 @@ to_scroll_options :: proc(
 @(private = "package")
 to_label_options :: proc(value: Label_Options) -> ui.Fit_Label_Options {
 	return {
-		role = ui.Text_Role(value.role),
-		ink = ui.Ink(value.ink),
+		role = value.role,
+		ink = value.ink,
 		wrap = value.wrap,
 		track = to_track(value.track),
 		size = to_size(value.size),
@@ -211,7 +303,7 @@ to_label_options :: proc(value: Label_Options) -> ui.Fit_Label_Options {
 @(private = "package")
 to_button_options :: proc(value: Button_Options) -> ui.Fit_Button_Options {
 	return {
-		style = ui.Btn_Style(value.style),
+		style = value.style,
 		disabled = value.disabled,
 		web_form_id = value.web_form_id,
 		track = to_track(value.track),

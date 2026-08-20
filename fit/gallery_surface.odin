@@ -78,7 +78,7 @@ Surface_Listbox_Begin :: proc(
 		selected     = config.selected,
 		wrap         = config.wrap,
 		hover_select = config.hover_select,
-		keys         = ui.Listbox_Keys(config.keys),
+		keys         = config.keys,
 		page_rows    = config.page_rows,
 	}
 	return from_listbox_result(ui.listbox_begin(u.frame, &state.inner, inner))
@@ -100,7 +100,7 @@ Surface_Selectable_Row :: proc(
 		selected     = config.selected,
 		wrap         = config.wrap,
 		hover_select = config.hover_select,
-		keys         = ui.Listbox_Keys(config.keys),
+		keys         = config.keys,
 		page_rows    = config.page_rows,
 	}
 	inner_row := ui.Selectable_Row_Config {
@@ -173,7 +173,7 @@ Region_Scope_End :: proc(region: ^Region) {
 
 Region_Padding :: proc(region: ^Region, space: Space) {
 	assert(region != nil && region.inner.open, "Fit.Region_Padding: region not open")
-	ui.padding(&region.inner, ui.Space(space))
+	ui.padding(&region.inner, space)
 }
 
 Region_Separator :: proc(region: ^Region) {
@@ -188,7 +188,7 @@ Region_Row_Begin :: proc(
 	align: Cross_Align = .Stretch,
 ) {
 	assert(region != nil && region.inner.open, "Fit.Region_Row_Begin: region not open")
-	ui.row_begin(&region.inner, height, ui.Space(gap), ui.Cross_Align(align))
+	ui.row_begin(&region.inner, height, gap, align)
 }
 
 Region_Row_End :: proc(region: ^Region) {
@@ -208,14 +208,7 @@ Region_Flex_Row_Begin :: proc(
 	assert(len(tracks) <= ui.MAX_LAYOUT_FLEX, "Fit.Region_Flex_Row_Begin: too many tracks")
 	inner: [ui.MAX_LAYOUT_FLEX]ui.Track
 	for track, index in tracks do inner[index] = to_track(track)
-	ui.flex_row_begin(
-		&region.inner,
-		height,
-		inner[:len(tracks)],
-		ui.Space(gap),
-		ui.Cross_Align(align),
-		ui.Main_Align(justify),
-	)
+	ui.flex_row_begin(&region.inner, height, inner[:len(tracks)], gap, align, justify)
 }
 
 Region_Flex_Slot_Next :: proc(region: ^Region, cross_size: i32) -> Rect {
@@ -443,15 +436,7 @@ Region_Combobox :: proc(
 		region != nil && region.inner.open && state != nil,
 		"Fit.Region_Combobox: invalid state",
 	)
-	return ui.combobox(
-		&region.inner,
-		key,
-		&state.inner,
-		transmute([]ui.Combobox_Item)items,
-		selected,
-		placeholder,
-		a11y_label,
-	)
+	return ui.combobox(&region.inner, key, &state.inner, items, selected, placeholder, a11y_label)
 }
 
 Region_Date_Picker :: proc(
@@ -476,17 +461,13 @@ Region_Spinner :: proc(region: ^Region, diameter: i32, options: Spinner_Options 
 	ui.spinner(
 		&region.inner,
 		diameter,
-		{
-			style = ui.Spinner_Style(options.style),
-			dot_radius = options.dot_radius,
-			speed = options.speed,
-		},
+		{style = options.style, dot_radius = options.dot_radius, speed = options.speed},
 	)
 }
 
 Region_Status_Pill :: proc(region: ^Region, text: string, ink: Ink) -> i32 {
 	assert(region != nil && region.inner.open, "Fit.Region_Status_Pill: region not open")
-	return ui.status_pill(&region.inner, text, ui.Ink(ink))
+	return ui.status_pill(&region.inner, text, ink)
 }
 
 Region_Progress_Bar :: proc(region: ^Region, fraction: f32) {
@@ -496,7 +477,7 @@ Region_Progress_Bar :: proc(region: ^Region, fraction: f32) {
 
 Region_Progress_Bar_Animated :: proc(region: ^Region, fraction: f32, animation: ^f32, ink: Ink) {
 	assert(region != nil && region.inner.open, "Fit.Region_Progress_Bar_Animated: region not open")
-	ui.progress_bar_animated(&region.inner, fraction, animation, ui.Ink(ink))
+	ui.progress_bar_animated(&region.inner, fraction, animation, ink)
 }
 
 Region_Key_Value :: proc(region: ^Region, key, value: string) {
