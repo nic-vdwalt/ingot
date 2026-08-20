@@ -45,8 +45,8 @@ git -C libs/ingot checkout 0.1.7
 odin build src -collection:ingot=libs/ingot
 ```
 
-Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION). For UI
-applications, use the supported `ingot:fit` entry point:
+Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION). The recommended
+entry point for UI applications is `ingot:fit`:
 
 ```odin
 package main
@@ -81,7 +81,8 @@ Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 }
 ```
 
-Or use `ui_gfx` directly for immediate-mode UI:
+The same interface can be written against the lower-level `ui` and `ui_gfx`
+implementation packages when working on Ingot itself:
 
 ```odin
 package main
