@@ -94,17 +94,17 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 }
 
 Interaction_State :: struct {
-	active_latch:   ^bool,
-	latch_gen:      u64,
-	press_pos:      Vector2,
-	press_block_z:  Z_Order,
-	press_seen:     bool,
-	pointer_pos:    Vector2,
-	pointer_block_z: Z_Order,
-	primary_pressed: bool,
+	active_latch:     ^bool,
+	latch_gen:        u64,
+	press_pos:        Vector2,
+	press_block_z:    Z_Order,
+	press_seen:       bool,
+	pointer_pos:      Vector2,
+	pointer_block_z:  Z_Order,
+	primary_pressed:  bool,
 	primary_released: bool,
-	primary_down:    bool,
-	route_empty:     bool,
+	primary_down:     bool,
+	route_empty:      bool,
 }
 
 // interact_frame_begin snapshots the primary press origin for this frame.
@@ -274,7 +274,8 @@ pressable :: proc(frame: ^Ui_Frame, config: Pressable_Config) -> Pressable_Resul
 		result.pressed = it.pressed
 		result.held = it.held
 		result.activated =
-			it.clicked || focus_opt_activated(frame, config.focus, config.role, field_id = config.stable_id)
+			it.clicked ||
+			focus_opt_activated(frame, config.focus, config.role, field_id = config.stable_id)
 		if result.hovered do request_cursor(frame, .POINTING_HAND)
 	}
 	state: Sem_State

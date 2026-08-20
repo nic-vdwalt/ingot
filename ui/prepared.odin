@@ -191,7 +191,7 @@ Prepared_Node :: struct {
 	child_count:              i32,
 	track:                    Track,
 	sizing:                   Prepared_Size,
-	using _: struct #raw_union {
+	using _:                  struct #raw_union {
 		container:  Prepared_Container_Options,
 		flow:       Prepared_Flow_Options,
 		grid:       Prepared_Grid_Options,
