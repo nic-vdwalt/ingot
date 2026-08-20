@@ -56,9 +56,22 @@ adapter_register_font :: proc(adapter: ^Adapter, size: i32, font: rl.Font) -> ui
 	assert(adapter != nil && adapter.initialized, "adapter_register_font: invalid adapter")
 	assert(size > 0 && font.glyphCount > 0, "adapter_register_font: invalid font")
 	for index in 0 ..< adapter.font_count {
-		if adapter.font_sizes[index] == size do return ui.Font_Id(index + 1)
+		if adapter.font_sizes[index] == size && adapter.fonts[index]._atlas == font._atlas {
+			return ui.Font_Id(index + 1)
+		}
 	}
-	assert(adapter.font_count < FONT_CAP, "adapter_register_font: font limit")
+	if adapter.font_count >= FONT_CAP {
+		closest := 0
+		closest_distance := abs(adapter.font_sizes[0] - size)
+		for index in 1 ..< adapter.font_count {
+			distance := abs(adapter.font_sizes[index] - size)
+			if distance < closest_distance {
+				closest = index
+				closest_distance = distance
+			}
+		}
+		return ui.Font_Id(closest + 1)
+	}
 	index := adapter.font_count
 	adapter.fonts[index] = font
 	adapter.font_sizes[index] = size
@@ -83,7 +96,18 @@ adapter_font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
 	for index in 0 ..< adapter.font_count {
 		if adapter.font_sizes[index] == size do return ui.Font_Id(index + 1)
 	}
-	assert(adapter.font_count < FONT_CAP, "adapter_font_for_size: font limit")
+	if adapter.font_count >= FONT_CAP {
+		closest := 0
+		closest_distance := abs(adapter.font_sizes[0] - size)
+		for index in 1 ..< adapter.font_count {
+			distance := abs(adapter.font_sizes[index] - size)
+			if distance < closest_distance {
+				closest = index
+				closest_distance = distance
+			}
+		}
+		return ui.Font_Id(closest + 1)
+	}
 	pixel_size := i32(f32(size) * adapter.font_dpi + 0.5)
 	if pixel_size < 1 do pixel_size = 1
 	font := rl.context_load_font_from_memory(
@@ -110,6 +134,7 @@ adapter_measure :: proc(
 	assert(adapter != nil && adapter.initialized, "adapter_measure: invalid adapter")
 	font, ok := adapter_font(adapter, font_id)
 	assert(ok, "adapter_measure: invalid font")
+	for byte in transmute([]u8)text do if byte == 0 do return {}
 	value := strings.clone_to_cstring(text, context.temp_allocator)
 	return vec_to_ui(rl.context_measure_text(adapter.gfx_context, font, value, size, spacing))
 }

@@ -71,6 +71,7 @@ replay_text_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui
 	text := ui.paint_text(list, command)
 	font, ok := adapter_font(adapter, command.font)
 	assert(ok, "replay_text_command: invalid font")
+	for byte in transmute([]u8)text do if byte == 0 do return
 	value := strings.clone_to_cstring(text, context.temp_allocator)
 	rl.frame_draw_text(
 		adapter.gfx_frame,
