@@ -9,6 +9,10 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+## [0.1.7] - 2026-08-20
+
+This is a source-only release; no binaries, installers, or web bundles are attached.
+
 ### Changed
 
 - **Breaking:** `TERRAIN_RECIPE_VERSION_V2` is `4` and
@@ -688,7 +692,8 @@ Not validated:
 - Prevented a libvterm UTF-8 decode buffer overflow.
 - Validated `LoadFontFromMemory`'s caller-supplied buffer.
 
-[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.1.5...HEAD
+[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.1.7...HEAD
+[0.1.7]: https://github.com/Nic-vdwalt/ingot/compare/0.1.5...0.1.7
 [0.1.5]: https://github.com/Nic-vdwalt/ingot/compare/0.1.3...0.1.5
 [0.1.3]: https://github.com/Nic-vdwalt/ingot/compare/0.1.2...0.1.3
 [0.1.2]: https://github.com/Nic-vdwalt/ingot/compare/0.1.1...0.1.2
