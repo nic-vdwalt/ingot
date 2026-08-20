@@ -33,7 +33,7 @@ game_draw :: proc(builder: ^fit.Builder) {
 	assert(builder != nil, "game_draw: nil builder")
 	assert(g != nil, "game_draw: missing state")
 	root_container: {
-		fit.Column(builder, {gap = .SM, padding = .LG})
+		fit.Center(builder, {gap = .SM, padding = .LG})
 		defer fit.End(builder)
 		fit.Label(builder, "Ingot hot reload", {role = .Title})
 		fit.Label(
