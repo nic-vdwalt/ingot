@@ -69,18 +69,33 @@ fit_fuzz_track :: proc(p: ^fuzzx.Prng) -> Track {
 }
 
 @(private = "file")
-fit_fuzz_container :: proc(builder: ^Builder, p: ^fuzzx.Prng) {
-	assert(builder != nil && p != nil, "fit fuzz container: invalid argument")
+fit_fuzz_root :: proc(builder: ^Builder, p: ^fuzzx.Prng) -> Parent {
 	switch fuzzx.int_range(p, 0, 4) {
 	case 0:
-		Row(builder, {gap = .XS, padding = .XS, track = fit_fuzz_track(p)})
+		return Row(builder, {gap = .XS, padding = .XS, track = fit_fuzz_track(p)})
 	case 1:
-		Column(builder, {gap = .SM, padding = .XS, track = fit_fuzz_track(p)})
+		return Column(builder, {gap = .SM, padding = .XS, track = fit_fuzz_track(p)})
 	case 2:
-		Flow(builder, {gap_x = .XS, gap_y = .SM, padding = .XS, track = fit_fuzz_track(p)})
+		return Flow(builder, {gap_x = .XS, gap_y = .SM, padding = .XS, track = fit_fuzz_track(p)})
 	case 3:
-		Grid(
-			builder,
+		return Grid(builder, {columns = 2, gap_x = .XS, gap_y = .SM, padding = .XS})
+	}
+	unreachable()
+}
+
+@(private = "file")
+fit_fuzz_container :: proc(parent: Parent, p: ^fuzzx.Prng) -> Parent {
+	assert(parent.builder != nil && p != nil, "fit fuzz container: invalid argument")
+	switch fuzzx.int_range(p, 0, 4) {
+	case 0:
+		return Row(parent, {gap = .XS, padding = .XS, track = fit_fuzz_track(p)})
+	case 1:
+		return Column(parent, {gap = .SM, padding = .XS, track = fit_fuzz_track(p)})
+	case 2:
+		return Flow(parent, {gap_x = .XS, gap_y = .SM, padding = .XS, track = fit_fuzz_track(p)})
+	case 3:
+		return Grid(
+			parent,
 			{
 				columns = i32(fuzzx.int_range(p, 1, 5)),
 				row_height = i32(fuzzx.int_range(p, 0, 49)),
@@ -91,11 +106,12 @@ fit_fuzz_container :: proc(builder: ^Builder, p: ^fuzzx.Prng) {
 			},
 		)
 	}
+	unreachable()
 }
 
 @(private = "file")
 fit_fuzz_leaf :: proc(
-	builder: ^Builder,
+	parent: Parent,
 	p: ^fuzzx.Prng,
 	counts: ^Fit_Fuzz_Counts,
 	activations: ^[FIT_FUZZ_NODE_LIMIT]bool,
@@ -105,7 +121,7 @@ fit_fuzz_leaf :: proc(
 	key: u64,
 ) {
 	assert(
-		builder != nil && p != nil && counts != nil && activations != nil,
+		parent.builder != nil && p != nil && counts != nil && activations != nil,
 		"fit fuzz leaf: nil argument",
 	)
 	assert(signals != nil && selections != nil && values != nil, "fit fuzz leaf: nil state")
@@ -113,25 +129,25 @@ fit_fuzz_leaf :: proc(
 	switch fuzzx.int_range(p, 0, 6) {
 	case 0:
 		Label(
-			builder,
+			parent,
 			"fuzz label alpha beta",
 			{role = .Body, wrap = fuzzx.int_range(p, 0, 2) == 0, track = fit_fuzz_track(p)},
 		)
 	case 1:
 		switch fuzzx.int_range(p, 0, 4) {
 		case 0:
-			Button(builder, key + 1, "Fuzz button", &activations[index])
+			Button(parent, key + 1, "Fuzz button", &activations[index])
 		case 1:
-			_ = Button_Delayed(builder, key + 1, "Fuzz button", &signals[index])
+			_ = Button_Delayed(parent, key + 1, "Fuzz button", &signals[index])
 		case 2:
-			Button(builder, key + 1, "Fuzz button", On(fit_fuzz_action, counts))
+			Button(parent, key + 1, "Fuzz button", On(fit_fuzz_action, counts))
 		case 3:
-			Button(builder, key + 1, "Fuzz button")
+			Button(parent, key + 1, "Fuzz button")
 		}
 	case 2:
 		counts.customs += 1
 		Custom(
-			builder,
+			parent,
 			{
 				measure = fit_fuzz_custom_measure,
 				render = fit_fuzz_custom_render,
@@ -140,11 +156,11 @@ fit_fuzz_leaf :: proc(
 			{track = fit_fuzz_track(p), activated = &activations[index]},
 		)
 	case 3:
-		Checkbox(builder, key + 1, "Fuzz checkbox", &activations[index])
+		Checkbox(parent, key + 1, "Fuzz checkbox", &activations[index])
 	case 4:
-		Radio(builder, key + 1, "Fuzz radio", &selections[index], i32(index))
+		Radio(parent, key + 1, "Fuzz radio", &selections[index], i32(index))
 	case 5:
-		Slider(builder, key + 1, &values[index], 0, f32(FIT_FUZZ_NODE_LIMIT), 1, "Fuzz slider")
+		Slider(parent, key + 1, &values[index], 0, f32(FIT_FUZZ_NODE_LIMIT), 1, "Fuzz slider")
 	}
 }
 
@@ -158,51 +174,34 @@ fit_fuzz_description :: proc(
 	selections: ^[FIT_FUZZ_NODE_LIMIT]i32,
 	values: ^[FIT_FUZZ_NODE_LIMIT]f32,
 ) {
-	assert(
-		builder != nil && p != nil && counts != nil && activations != nil,
-		"fit fuzz description: nil argument",
-	)
-	assert(signals != nil && selections != nil && values != nil, "fit fuzz description: nil state")
-	fit_fuzz_container(builder, p)
-	depth := 1
+	assert(builder != nil && p != nil && counts != nil && activations != nil)
+	assert(signals != nil && selections != nil && values != nil)
+	parents: [8]Parent
+	parents[0] = fit_fuzz_root(builder, p)
+	parent_count := 1
 	nodes := 1
 	key: u64 = 1
-	fit_fuzz_leaf(builder, p, counts, activations, signals, selections, values, key)
-	nodes += 1
-	key += 1
 	target := fuzzx.int_range(p, 8, FIT_FUZZ_NODE_LIMIT + 1)
 	for nodes < target {
-		action := fuzzx.int_range(p, 0, 5)
-		if action == 0 && depth > 1 {
-			End(builder)
-			depth -= 1
-			continue
+		parent := parents[fuzzx.int_range(p, 0, parent_count)]
+		if nodes + 2 <= target && parent_count < len(parents) && fuzzx.int_range(p, 0, 3) == 0 {
+			child := fit_fuzz_container(parent, p)
+			parents[parent_count] = child
+			parent_count += 1
+			nodes += 1
+			parent = child
 		}
-		if action <= 2 && depth < 8 && nodes + 2 <= target {
-			attachment := fuzzx.int_range(p, 0, 5) == 0
-			if attachment {
-				Attachment(builder, {target_kind = .Viewport, z = Z_Order(200)})
-				fit_fuzz_leaf(builder, p, counts, activations, signals, selections, values, key)
-				End(builder)
-			} else {
-				fit_fuzz_container(builder, p)
-				fit_fuzz_leaf(builder, p, counts, activations, signals, selections, values, key)
-				depth += 1
-			}
+		if nodes + 2 <= target && fuzzx.int_range(p, 0, 8) == 0 {
+			attachment := Attachment(parent, {target_kind = .Viewport, z = Z_Order(200)})
+			fit_fuzz_leaf(attachment, p, counts, activations, signals, selections, values, key)
 			nodes += 2
-			key += 1
-			continue
+		} else {
+			fit_fuzz_leaf(parent, p, counts, activations, signals, selections, values, key)
+			nodes += 1
 		}
-		fit_fuzz_leaf(builder, p, counts, activations, signals, selections, values, key)
-		nodes += 1
 		key += 1
 	}
-	for depth > 0 {
-		End(builder)
-		depth -= 1
-	}
 }
-
 @(private = "file")
 fit_fuzz_select_storage :: proc(
 	t: ^testing.T,

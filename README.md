@@ -53,15 +53,21 @@ package main
 import fit "ingot:fit"
 
 app: fit.App
+click_count: u64
 
 main :: proc() {
 	_ = fit.Run(&app, {width = 960, height = 640, title = "Ingot app"}, Draw)
 }
 
+Count_Click :: proc(userdata: rawptr) {
+	_ = userdata
+	click_count += 1
+}
+
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	fit.Center(builder, {gap = .SM, padding = .LG})
-	defer fit.End(builder)
-	fit.Label(builder, "Hello from Ingot")
+	root := fit.Center(builder, {gap = .SM, padding = .LG})
+	fit.Label(root, "Hello from Ingot")
+	fit.Button(root, "count", "Count clicks", fit.On(Count_Click))
 }
 ```
 

@@ -111,6 +111,33 @@ fit_begin :: proc(builder: ^Fit_Builder, u: ^Ui) {
 	builder.prepared.u = u
 }
 
+fit_parent_select :: proc(builder: ^Fit_Builder, parent: Prepared_Handle) {
+	fit_builder_assert_open(builder)
+	assert(builder.prepared.depth == 0, "fit parent: selection already active")
+	index := i32(parent)
+	assert(index >= 0 && index < builder.prepared.count, "fit parent: invalid handle")
+	node := prepared_nodes(&builder.prepared)[index]
+	assert(prepared_kind_is_container(node.kind), "fit parent: handle is not container")
+	builder.prepared.stack[0] = index
+	builder.prepared.depth = 1
+	builder.direct_children[0] = node.child_count
+	builder.container_kinds[0] = node.kind
+}
+
+fit_parent_created :: proc(builder: ^Fit_Builder) -> Prepared_Handle {
+	fit_builder_assert_open(builder)
+	assert(builder.prepared.depth == 1 || builder.prepared.depth == 2, "fit parent: invalid creation depth")
+	handle := Prepared_Handle(builder.prepared.stack[builder.prepared.depth - 1])
+	builder.prepared.depth = 0
+	return handle
+}
+
+fit_parent_clear :: proc(builder: ^Fit_Builder) {
+	fit_builder_assert_open(builder)
+	assert(builder.prepared.depth == 1, "fit parent: invalid selection depth")
+	builder.prepared.depth = 0
+}
+
 @(private = "package")
 fit_row_builder :: proc(builder: ^Fit_Builder, options: Prepared_Container_Options = {}) {
 	assert(builder != nil, "fit_builder_row: nil builder")
@@ -550,6 +577,13 @@ fit_builder_assert_balanced :: proc(builder: ^Fit_Builder) {
 	assert(builder.prepared.count > 0, "fit builder: empty builder")
 	assert(builder.prepared.root >= 0, "fit builder: missing root")
 	assert(builder.output_count >= 0, "fit builder: invalid output count")
+	nodes := prepared_nodes(&builder.prepared)
+	for index in 0 ..< builder.prepared.count {
+		node := nodes[index]
+		if node.kind == .Attachment || node.kind == .Scroll {
+			assert(node.child_count == 1, "fit builder: special container requires one child")
+		}
+	}
 }
 
 @(private = "file")
