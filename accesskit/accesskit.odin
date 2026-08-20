@@ -44,12 +44,18 @@ Role :: enum u8 {
 	Text_Input      = 17,
 	Button          = 18,
 	Pane            = 20,
+	List            = 24,
 	Menu            = 30,
+	Multiline_Input = 31,
 	Password_Input  = 40,
 	Combo_Box       = 56,
 	Dialog          = 66,
 	List_Box        = 87,
+	Progress        = 101,
 	Slider          = 113,
+	Status          = 116,
+	Tab             = 120,
+	Tab_Panel       = 122,
 	Window          = 133,
 }
 
@@ -174,10 +180,13 @@ when ENABLED {
 		node_new :: proc(role: Role) -> Node ---
 		node_free :: proc(node: Node) ---
 		node_set_label_with_length :: proc(node: Node, value: [^]u8, length: c.size_t) ---
+		node_set_description_with_length :: proc(node: Node, value: [^]u8, length: c.size_t) ---
 		node_set_value_with_length :: proc(node: Node, value: [^]u8, length: c.size_t) ---
 		node_set_bounds :: proc(node: Node, value: Rect) ---
 		node_set_toggled :: proc(node: Node, value: Toggled) ---
 		node_set_disabled :: proc(node: Node) ---
+		node_set_read_only :: proc(node: Node) ---
+		node_set_text_selection :: proc(node: Node, value: Text_Selection) ---
 		node_set_expanded :: proc(node: Node, value: bool) ---
 		node_set_numeric_value :: proc(node: Node, value: f64) ---
 		node_set_min_numeric_value :: proc(node: Node, value: f64) ---

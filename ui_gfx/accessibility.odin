@@ -11,8 +11,10 @@ when ak.ENABLED {
 	adapter_a11y_role :: proc(node: ^ui.Sem_Node) -> ak.Role {
 		assert(node != nil, "adapter_a11y_role: nil node")
 		#partial switch node.role {
-		case .Button, .Tab:
+		case .Button:
 			return .Button
+		case .Tab:
+			return .Tab
 		case .List_Item:
 			return .List_Item
 		case .Option:
@@ -23,24 +25,47 @@ when ak.ENABLED {
 			return .Check_Box
 		case .Radio:
 			return .Radio_Button
-		case .Slider, .Progress:
+		case .Slider:
 			return .Slider
+		case .Progress:
+			return .Progress
 		case .Text_Input:
-			return .Password_Input if .Password in node.state else .Text_Input
+			if .Password in node.state do return .Password_Input
+			if .Multiline in node.state do return .Multiline_Input
+			return .Text_Input
 		case .Dropdown:
 			return .Combo_Box
 		case .Menu_Item:
 			return .Menu_Item
-		case .Label, .Status:
+		case .Label:
 			return .Label
-		case .Pane, .Tab_Panel, .List:
+		case .Status:
+			return .Status
+		case .Pane:
 			return .Pane
+		case .Tab_Panel:
+			return .Tab_Panel
+		case .List:
+			return .List
 		case .Modal:
 			return .Dialog
 		case .None:
 			return .Unknown
 		}
 		return .Unknown
+	}
+
+	adapter_a11y_actions :: proc(source: ^ui.Sem_Node) -> (click, focus: bool) {
+		assert(source != nil, "adapter_a11y_actions: nil source")
+		if .Disabled in source.state do return false, false
+		#partial switch source.role {
+		case .Button, .Tab, .Checkbox, .Radio, .Option, .Dropdown, .Menu_Item:
+			return true, true
+		case .Slider, .Text_Input:
+			return false, true
+		case:
+			return false, false
+		}
 	}
 
 	adapter_a11y_node :: proc(source: ^ui.Sem_Node) -> ak.Node {
@@ -53,6 +78,13 @@ when ak.ENABLED {
 				node,
 				raw_data(source.label[:]),
 				c.size_t(source.label_len),
+			)
+		}
+		if source.description_len > 0 {
+			ak.node_set_description_with_length(
+				node,
+				raw_data(source.description[:]),
+				c.size_t(source.description_len),
 			)
 		}
 		if source.text_value_len > 0 {
@@ -68,7 +100,19 @@ when ak.ENABLED {
 			{f64(rect.x), f64(rect.y), f64(rect.x + rect.w), f64(rect.y + rect.h)},
 		)
 		if .Disabled in source.state do ak.node_set_disabled(node)
-		if source.role == .Option do ak.node_set_selected(node, .Selected in source.state)
+		if .Read_Only in source.state do ak.node_set_read_only(node)
+		if source.role == .Text_Input && source.selection_start >= 0 && source.selection_end >= 0 {
+			ak.node_set_text_selection(
+				node,
+				{
+					anchor = {ak.Node_Id(source.id), c.size_t(source.selection_start)},
+					focus  = {ak.Node_Id(source.id), c.size_t(source.selection_end)},
+				},
+			)
+		}
+		if source.role == .Option || source.role == .Tab {
+			ak.node_set_selected(node, .Selected in source.state)
+		}
 		if source.position_in_set > 0 {
 			ak.node_set_position_in_set(node, c.size_t(source.position_in_set))
 			ak.node_set_size_of_set(node, c.size_t(source.size_of_set))
@@ -83,14 +127,30 @@ when ak.ENABLED {
 			ak.node_set_min_numeric_value(node, f64(source.lo))
 			ak.node_set_max_numeric_value(node, f64(source.hi))
 		}
-		if source.role != .Label &&
-		   source.role != .Pane &&
-		   source.role != .Modal &&
-		   source.role != .List_Box {
-			ak.node_add_action(node, .Click)
-			ak.node_add_action(node, .Focus)
-		}
+		click, focus := adapter_a11y_actions(source)
+		if click do ak.node_add_action(node, .Click)
+		if focus do ak.node_add_action(node, .Focus)
 		return node
+	}
+
+	adapter_a11y_parent :: proc(frame: ^ui.Sem_Frame, index: int) -> u64 {
+		assert(frame != nil && index >= 0 && index < frame.count, "adapter_a11y_parent: invalid node")
+		parent := frame.nodes[index].parent_id
+		if parent <= ui.SEM_ID_ROOT do return ui.SEM_ID_ROOT
+		current := parent
+		for _ in 0 ..< ui.MAX_SEM_NODES {
+			found := -1
+			for candidate in 0 ..< frame.count {
+				if frame.nodes[candidate].id == current {
+					found = candidate
+					break
+				}
+			}
+			if found < 0 || found == index do return ui.SEM_ID_ROOT
+			current = frame.nodes[found].parent_id
+			if current <= ui.SEM_ID_ROOT do return parent
+		}
+		return ui.SEM_ID_ROOT
 	}
 
 	adapter_a11y_factory :: proc "c" (userdata: rawptr) -> ak.Tree_Update {
@@ -103,11 +163,21 @@ when ak.ENABLED {
 			adapter.a11y_focus,
 		)
 		root := ak.node_new(.Window)
-		for index in 0 ..< frame.count do ak.node_push_child(root, ak.Node_Id(frame.nodes[index].id))
+		for index in 0 ..< frame.count {
+			if adapter_a11y_parent(frame, index) == ui.SEM_ID_ROOT {
+				ak.node_push_child(root, ak.Node_Id(frame.nodes[index].id))
+			}
+		}
 		ak.tree_update_push_node(update, ak.Node_Id(ui.SEM_ID_ROOT), root)
 		for index in 0 ..< frame.count {
 			source := &frame.nodes[index]
-			ak.tree_update_push_node(update, ak.Node_Id(source.id), adapter_a11y_node(source))
+			node := adapter_a11y_node(source)
+			for child_index in 0 ..< frame.count {
+				if adapter_a11y_parent(frame, child_index) == source.id {
+					ak.node_push_child(node, ak.Node_Id(frame.nodes[child_index].id))
+				}
+			}
+			ak.tree_update_push_node(update, ak.Node_Id(source.id), node)
 		}
 		tree := ak.tree_new(ak.Node_Id(ui.SEM_ID_ROOT))
 		ak.tree_update_set_tree(update, tree)

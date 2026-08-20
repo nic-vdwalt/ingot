@@ -10,9 +10,26 @@ import "ingot:ui"
 #assert(int(ui.Frame_Strategy.Continuous) == int(rl.Frame_Strategy.Continuous))
 #assert(int(ui.Frame_Strategy.Event_Driven) == int(rl.Frame_Strategy.Event_Driven))
 #assert(len(ui.Frame_Strategy) == len(rl.Frame_Strategy))
+#assert(int(ui.Cursor.DEFAULT) == int(rl.MouseCursor.DEFAULT))
+#assert(int(ui.Cursor.NOT_ALLOWED) == int(rl.MouseCursor.NOT_ALLOWED))
+#assert(len(ui.Cursor) == len(rl.MouseCursor))
+
+platform_output_valid :: proc(output: ^ui.Platform_Output) -> bool {
+	if output == nil do return false
+	if output.clipboard_text_len < 0 || output.clipboard_text_len > ui.PLATFORM_TEXT_CAP do return false
+	if output.cursor_requested && (int(output.cursor) < 0 || int(output.cursor) >= len(ui.Cursor)) {
+		return false
+	}
+	if output.frame_strategy_requested &&
+	   (int(output.frame_strategy) < 0 || int(output.frame_strategy) >= len(ui.Frame_Strategy)) {
+		return false
+	}
+	return true
+}
 
 apply_platform_output_context :: proc(ctx: ^rl.Context, output: ^ui.Platform_Output) {
 	assert(ctx != nil && output != nil, "apply_platform_output_context: nil argument")
+	if !platform_output_valid(output) do return
 	if output.cursor_requested do rl.context_set_mouse_cursor(ctx, rl.MouseCursor(output.cursor))
 	if output.clipboard_write {
 		text := string(output.clipboard_text[:output.clipboard_text_len])

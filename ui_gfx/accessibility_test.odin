@@ -22,6 +22,35 @@ adapter_maps_listbox_roles :: proc(t: ^testing.T) {
 }
 
 @(test)
+adapter_maps_structural_roles_and_actions :: proc(t: ^testing.T) {
+	when ak.ENABLED {
+		testing.expect_value(t, adapter_a11y_role(&ui.Sem_Node{role = .Tab}), ak.Role.Tab)
+		testing.expect_value(t, adapter_a11y_role(&ui.Sem_Node{role = .Progress}), ak.Role.Progress)
+		testing.expect_value(t, adapter_a11y_role(&ui.Sem_Node{role = .List}), ak.Role.List)
+		click, focus := adapter_a11y_actions(&ui.Sem_Node{role = .Progress})
+		testing.expect(t, !click && !focus)
+		click, focus = adapter_a11y_actions(&ui.Sem_Node{role = .Button, state = {.Disabled}})
+		testing.expect(t, !click && !focus)
+	}
+}
+
+@(test)
+adapter_validates_accessibility_parents :: proc(t: ^testing.T) {
+	when ak.ENABLED {
+		frame: ui.Sem_Frame
+		frame.count = 4
+		frame.nodes[0] = {id = 2, parent_id = ui.SEM_ID_ROOT, role = .Pane}
+		frame.nodes[1] = {id = 3, parent_id = 2, role = .Button}
+		frame.nodes[2] = {id = 4, parent_id = 99, role = .Label}
+		frame.nodes[3] = {id = 5, parent_id = 5, role = .Pane}
+		testing.expect_value(t, adapter_a11y_parent(&frame, 0), ui.SEM_ID_ROOT)
+		testing.expect_value(t, adapter_a11y_parent(&frame, 1), u64(2))
+		testing.expect_value(t, adapter_a11y_parent(&frame, 2), ui.SEM_ID_ROOT)
+		testing.expect_value(t, adapter_a11y_parent(&frame, 3), ui.SEM_ID_ROOT)
+	}
+}
+
+@(test)
 a11y_snapshot_equal_detects_identity_and_change :: proc(t: ^testing.T) {
 	a, b: ui.Sem_Frame
 	// Empty frames are equal.
