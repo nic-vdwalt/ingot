@@ -138,40 +138,8 @@ combobox_at :: proc(
 
 	query := input_box_text(&st.box)
 	lowered_query := strings.to_lower(query, context.temp_allocator)
-	match_count := 0
-	for item in items {
-		if combobox_filter_match_lowered(item.label, lowered_query) do match_count += 1
-	}
-	st.match_count = match_count
-	max_window := max(match_count - COMBOBOX_VISIBLE_MAX, 0)
-	st.window = clamp(st.window, 0, max_window)
-	visible_count := min(match_count - st.window, COMBOBOX_VISIBLE_MAX)
-	st.hover = clamp(st.hover, 0, max(visible_count - 1, 0))
-	if is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN) {
-		if st.hover + 1 < visible_count {
-			st.hover += 1
-		} else if st.window < max_window {
-			st.window += 1
-		}
-	}
-	if is_key_pressed(frame, .UP) || is_key_pressed_repeat(frame, .UP) {
-		if st.hover > 0 {
-			st.hover -= 1
-		} else if st.window > 0 {
-			st.window -= 1
-		}
-	}
 	visible: [COMBOBOX_VISIBLE_MAX]int
-	visible_count = 0
-	match_index := 0
-	for item, index in items {
-		if !combobox_filter_match_lowered(item.label, lowered_query) do continue
-		if match_index >= st.window && visible_count < COMBOBOX_VISIBLE_MAX {
-			visible[visible_count] = index
-			visible_count += 1
-		}
-		match_index += 1
-	}
+	visible_count := combobox_visible(frame, st, items, lowered_query, &visible)
 	if is_key_pressed(frame, .ESCAPE) {
 		st.open = false
 		return false
@@ -198,6 +166,45 @@ combobox_at :: proc(
 		widget,
 	)
 	return changed
+}
+
+@(private = "file")
+combobox_visible :: proc(
+	frame: ^Ui_Frame,
+	st: ^Combobox_State,
+	items: []Combobox_Item,
+	query: string,
+	visible: ^[COMBOBOX_VISIBLE_MAX]int,
+) -> int {
+	assert(frame != nil && st != nil && visible != nil, "combobox_visible: invalid argument")
+	match_count := 0
+	for item in items {
+		if combobox_filter_match_lowered(item.label, query) do match_count += 1
+	}
+	st.match_count = match_count
+	max_window := max(match_count - COMBOBOX_VISIBLE_MAX, 0)
+	st.window = clamp(st.window, 0, max_window)
+	count := min(match_count - st.window, COMBOBOX_VISIBLE_MAX)
+	st.hover = clamp(st.hover, 0, max(count - 1, 0))
+	if is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN) {
+		if st.hover + 1 < count do st.hover += 1
+		else if st.window < max_window do st.window += 1
+	}
+	if is_key_pressed(frame, .UP) || is_key_pressed_repeat(frame, .UP) {
+		if st.hover > 0 do st.hover -= 1
+		else if st.window > 0 do st.window -= 1
+	}
+	count = 0
+	match_index := 0
+	for item, index in items {
+		if !combobox_filter_match_lowered(item.label, query) do continue
+		if match_index >= st.window && count < COMBOBOX_VISIBLE_MAX {
+			visible[count] = index
+			count += 1
+		}
+		match_index += 1
+	}
+	return count
 }
 
 // key_activated reports Space/Enter activation for keyboard-opened popups.
@@ -271,6 +278,40 @@ combobox_popup :: proc(
 			style.fg_secondary,
 		)
 	}
+	changed = combobox_popup_rows(
+		frame,
+		st,
+		items,
+		visible,
+		selected,
+		screen_rect,
+		mouse_screen,
+		menu_w,
+		menu_h,
+		focus,
+		widget,
+	)
+	layer_end(frame)
+	return changed
+}
+
+@(private = "file")
+combobox_popup_rows :: proc(
+	frame: ^Ui_Frame,
+	st: ^Combobox_State,
+	items: []Combobox_Item,
+	visible: []int,
+	selected: ^u64,
+	screen_rect: Rectangle,
+	mouse: Vector2,
+	menu_w, menu_h: i32,
+	focus: Focus_Opt,
+	widget: Widget_Id,
+) -> bool {
+	assert(frame != nil && st != nil && selected != nil, "combobox_popup_rows: invalid argument")
+	metrics := ui_frame_metrics(frame)
+	style := ui_frame_theme(frame)
+	row_h := metrics.MENU_ITEM_H
 	item_y := screen_rect.y + f32(metrics.MENU_PAD)
 	owner_id := sem_node_id(.Dropdown, focus, "", 0, widget)
 	visible_rows := int(max((menu_h - metrics.MENU_PAD * 2) / row_h, 0))
@@ -278,7 +319,7 @@ combobox_popup :: proc(
 		if row >= visible_rows do break
 		item := items[index]
 		row_screen := Rectangle{screen_rect.x, item_y, f32(menu_w), f32(row_h)}
-		hovered := point_in_rect(mouse_screen, row_screen)
+		hovered := point_in_rect(mouse, row_screen)
 		if hovered && mouse_moved(frame) do st.hover = row
 		if st.hover == row do draw_rectangle_rec(frame, row_screen, style.bg_active)
 		if hovered do request_cursor(frame, .POINTING_HAND)
@@ -313,13 +354,13 @@ combobox_popup :: proc(
 		activated := hovered && is_mouse_button_pressed(frame, .LEFT)
 		activated = activated || a11y_take_click(frame.runtime, option_id)
 		if activated {
-			changed = selected^ != item.id
+			changed := selected^ != item.id
 			selected^ = item.id
 			input_box_set_text(&st.box, item.label)
 			st.open = false
+			return changed
 		}
 		item_y += f32(row_h)
 	}
-	layer_end(frame)
-	return changed
+	return false
 }
