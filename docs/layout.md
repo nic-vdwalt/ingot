@@ -1,90 +1,90 @@
 # Fit layout
 
-`ingot:fit` exposes one bounded immediate builder. A draw callback receives an
-open `^fit.Builder` and declares one balanced root container. For a static tree,
-put each container and its children in a named lexical block with an immediate
-`defer fit.End(builder)`. The defer closes the container on every block exit and
-makes nesting visible in source.
-
-`Center` opens a root-only Column that grows to the viewport and centers its
-children on both axes. Caller-selected spacing, padding, and effects remain in
-force. Close it with `End` like every other manual container.
-
-`Row_With`, `Column_With`, `Flow_With`, `Grid_With`, `Attachment_With`, and
-`Scroll_With`, `Section_With`, and `Card_With` open one container, invoke one
-caller procedure immediately, verify its nested containers are balanced, and
-close the container. The procedure and userdata are never retained. A direct
-`fit.End(builder)` remains available when dynamic construction does not
-correspond to one lexical child block.
+`ingot:fit` exposes one bounded immediate builder. A draw callback declares one
+root container and receives a `fit.Parent` from it. Containers and leaves take
+that Parent explicitly, so hierarchy is visible in ordinary values and there is
+no open-container state to balance.
 
 ```odin
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	root_container: {
-		fit.Center(builder, {gap = .SM, padding = .LG})
-		defer fit.End(builder)
-		fit.Label(builder, "Settings", {role = .Title})
-		actions_container: {
-			fit.Row(builder, {gap = .SM, align = .Center})
-			defer fit.End(builder)
-			fit.Label(builder, "Actions", {track = fit.Grow()})
-			fit.Button(builder, "save", "Save", fit.On(Save))
-		}
-	}
+	root := fit.Center(builder, {gap = .SM, padding = .LG})
+	fit.Label(root, "Settings", {role = .Title})
+	actions := fit.Row(root, {gap = .SM, align = .Center})
+	fit.Label(actions, "Actions", {track = fit.Grow()})
+	fit.Button(actions, "save", "Save", fit.On(Save))
 }
 ```
 
-### Activation timing
+A Parent is an opaque current-build capability. It identifies its Builder,
+build generation, prepared parent node, and identity scope. It is allocation-free
+and valid only during the draw that created it; never retain it in application
+state or use it with another Builder. Stale and cross-Builder values assert
+before changing the description.
+
+## Dynamic composition
+
+Containers return Parent values and do not change an ambient current parent.
+This allows conditional layout and returning to an ancestor directly:
+
+```odin
+root := fit.Column(builder, {gap = .SM})
+controls := fit.Row(root)
+fit.Button(controls, "save", "Save", fit.On(Save))
+fit.Label(root, "After controls")
+
+content := fit.Row(root) if horizontal else fit.Column(root)
+for item in items do fit.Label(content, item.label)
+```
+
+`fit.Scope(parent, key)` returns a Parent with the same layout node and a derived
+identity seed. `fit.Id` and keyed controls derive identity from that seed:
+
+```odin
+for item, index in items {
+	item_parent := fit.Scope(content, u64(index + 1))
+	fit.Button(item_parent, "open", item.label)
+}
+```
+
+Scope values do not add layout nodes or invoke callbacks.
+
+## Activation timing
 
 An `Action` is the primary prepared Button result. Fit dispatches it once, in
 declaration order, after the complete tree renders in the activating frame.
 Actions may mutate caller-owned state or enqueue work but cannot alter the
 current prepared description. `Button_Delayed` uses zero-value caller-owned
 `Signal` state when activation must instead be consumed during a later Builder
-call. `Signal_Peek`, `Signal_Take`, and `Signal_Reset` support conditional
-controls and explicit lifecycle handling. Signals must outlive render and are
-never build-procedure locals.
-
-When the container itself is selected dynamically, close the selected container
-directly:
-
-```odin
-if horizontal {
-	fit.Row(builder, {gap = .SM})
-} else {
-	fit.Column(builder, {gap = .SM})
-}
-for item in items do fit.Label(builder, item.label)
-fit.End(builder)
-```
+call. Signals and raw output pointers must outlive render.
 
 ## Containers
 
 - `Center` is root-only shorthand for a Column with centered cross/main
-  alignment and `Grow()` on both axes. It fills the Builder's available
-  rectangle, centers the child sequence vertically as a group, and centers each
-  child horizontally. Caller size/alignment/justification are overridden; gap,
-  padding, and effects remain available.
+  alignment and `Grow()` on both axes.
 - `Column` lays children on the vertical axis.
 - `Row` lays children on the horizontal axis.
 - `Flow` wraps measured children left to right.
 - `Grid` uses fixed columns and a caller-selected row height.
-- `Attachment` places exactly one out-of-flow child against a parent, root,
-  screen rectangle, or viewport target.
-- `Scroll` clips and offsets exactly one child using zero-value caller-owned
-  `Scroll_State`.
-- `Section` is a transparent fit-content Column with a title leaf.
-- `Card` is an explicit token-styled fit-content Column.
+- `Attachment` places exactly one out-of-flow child against a target.
+- `Scroll` clips and offsets exactly one child using caller-owned `Scroll_State`.
+- `Section` returns a transparent Column after adding its title leaf.
+- `Card` returns a token-styled Column.
+
+Root-capable Row, Column, Flow, and Grid accept `^fit.Builder`; their child
+overloads accept `fit.Parent`. Center accepts only Builder. Attachment and
+Scroll accept Parent because they cannot be roots. Attachment and Scroll must
+receive exactly one child; Fit validates this bounded invariant before measure
+or render.
 
 Containers accept bounded spacing, padding, alignment, tracks, two-axis sizing,
-background/border effects, clipping, and caller-owned transitions. Structural
-containers remain transparent unless a semantic surface is explicitly selected. Row and
-Column direct children are bounded by `MAX_LAYOUT_FLEX`; total nodes and nesting
-use fixed configured limits.
+effects, clipping, and caller-owned transitions. Row and Column direct children
+are bounded by `MAX_LAYOUT_FLEX`; total nodes and traversal depth use fixed
+configured limits.
 
 ## Capacity and storage
 
-A zero-value builder uses compile-time-configurable inline storage. The default
-is `fit.STORAGE_NODE_DEFAULT` (128 nodes). Applications with a proven different
+A zero-value builder uses inline storage. The default is
+`fit.STORAGE_NODE_DEFAULT` (128 nodes). Applications with a proven different
 bound may attach reusable caller-owned storage up to
 `fit.STORAGE_NODE_HARD_MAX` (8,192 nodes):
 
@@ -96,50 +96,30 @@ fit.Set_Storage(&builder, {nodes = nodes[:], outputs = outputs[:]})
 ```
 
 Node and output slices must be non-nil, equal in length, and at least the layout
-depth bound. Set or reset storage only while the builder is closed. The storage
-must outlive every frame that uses it; do not copy an externally backed active
-builder. `fit.Storage_Capacity` reports the selected capacity and
-`fit.Reset_Storage` restores inline storage. Beginning a frame resets logical
-counts and previously used output slots but never grows or retains a widget
+depth bound. Set or reset storage only while the builder is closed. Beginning a
+frame resets logical counts and output slots but never grows or retains a widget
 hierarchy.
 
-Larger capacity raises the bounded work available to one current-frame
-description. Large data collections should still be chunked or virtualized.
+## Tracks, leaves, and custom content
 
-## Tracks and size
+`fit.Fit`, `fit.Grow`, `fit.Fixed`, and `fit.Percent` construct tracks. A leaf's
+`track` controls its parent main axis; `Size_Options` controls both axes.
 
-`fit.Fit`, `fit.Grow`, `fit.Fixed`, and `fit.Percent` construct the one track
-type. A leaf's `track` controls its parent main axis. `Size_Options` controls
-width and height independently and can derive one axis from a positive integer
-aspect ratio. Wrapped labels derive height after width assignment.
+`Label`, `Button`, `Checkbox`, `Radio`, `Slider`, `Text_Input`, `Progress`,
+`Separator`, `Spacer`, table cells, `Canvas_Leaf`, and `Custom` consume Parent.
+Controls keep values in caller-owned state. Prepared Button Actions live in
+existing bounded node storage. `Custom` callbacks, borrowed strings, userdata,
+state, signals, and output pointers must remain valid until render.
 
-## Leaves
+`Canvas` is the complete-root convenience for full-parent explicit geometry.
+`Canvas_Leaf` places the same borrowed Surface callback in a measured Parent.
+Neither callback nor Surface may be retained.
 
-`Label` emits semantic text. `Button`, `Checkbox`, `Radio`, `Slider`, and
-`Text_Input` accept stable string, `u64`, or explicit widget keys. `Progress`,
-`Separator`, `Spacer`, and bounded shared-track table cells are native leaves.
-Controls keep values in caller-owned state. Prepared Buttons use allocation-free
-`Action` callbacks by default; actions live in existing node storage and require
-no additional storage slice. `Button_Delayed` publishes activation through a
-caller-owned `Signal`. The legacy `^bool` output and options fields remain
-available for compatibility and advanced fan-in; several leaves may share one
-raw output and results are OR-combined during render.
+## Explicit Surface layout
 
-`Custom` accepts bounded measure and render callbacks. Borrowed strings,
-userdata, callbacks, state, signals, and output pointers must remain valid until
-the builder is rendered.
-
-`Canvas` remains the complete-root convenience for full-parent explicit
-geometry. `Canvas_Leaf` places the same borrowed Surface callback in a measured
-Builder slot for charts, custom painting, overlays, and other explicit islands.
-Neither callback nor Surface may be retained. `Px` converts logical constants
-once; never pass layout-returned physical values through it.
-
-## Explicit layout states
-
-`Layout_Begin`, `Grid_Begin`, `Flow_Begin`, and `Fit_Column_Begin` bind the
-callback's borrowed Surface to zero-value caller-owned state. Operations after
-`Begin` take only that state, and `End` clears the binding:
+The explicit-geometry layer remains separate. `Layout_Begin`, `Grid_Begin`,
+`Flow_Begin`, and `Fit_Column_Begin` bind a borrowed Surface to caller-owned
+state and retain their matching End calls:
 
 ```odin
 layout: fit.Layout_State
@@ -151,64 +131,12 @@ fit.Layout_Pop(&layout)
 fit.Layout_End(&layout)
 ```
 
-Every begin/end pair must balance within the borrowed Surface callback. A state
-cannot be reopened while active, used before begin, ended twice, or continued
-through a different Surface. It is reusable after a successful end. Layout
-results are physical rectangles and must not pass through `Px` again.
-
-The concise calls and their longer `Surface_*` compatibility forms share one
-implementation. Existing consumers may migrate incrementally without changing
-layout behavior or bounds.
-
-`Scope` composes an explicit string or nonzero integer component key around one
-immediately invoked procedure. `Id` derives a current-frame `Widget_Id` from the
-active scope. Neither API stores widget behavior; control values and interaction
-state remain caller-owned.
+These explicit states are reusable after End. Their physical rectangle results
+must not pass through `Px` again.
 
 ## Measurement and placement
 
 The application host renders automatically. Internal or advanced composition
-may call `Measure` followed by `Render_At` to place a measured tree in a
-caller-owned rectangle without consuming the root cursor. `Render` measures,
-carves a content-sized slot, places, and renders synchronously.
-
-The prepared layout engine remains internal and independently tested. There is
-no public `Fit_Node` tree or direct `Prepared_Ui` construction path.
-
-## Prepared solver cost model
-
-Fit builds a bounded current-frame description, not a retained behavioral tree.
-Description construction records node counts, maximum depth, axis dependencies,
-and explicit-sizing capabilities while parent and sibling links are created.
-This metadata removes a later structure-discovery pass and selects one of two
-solver paths without allocation.
-
-A fixed-height root grid containing fixed leaves, or fixed rows containing fixed
-leaves, uses direct geometry. Measurement resolves explicit leaf sizes and the
-grid extent; placement walks each grid child once and each nested row once before
-the normal depth-first render. Intrinsic callbacks, generic size resolution,
-container remeasurement, and resolved-height measurement are skipped. The
-eligibility predicate rejects wrapping, custom or nested unsupported containers,
-aspect ratios, transitions, attachments, scrolls, and non-fixed leaves.
-
-All other descriptions retain the generic bounded solver. Its worst case uses
-reverse intrinsic measurement, optional explicit-size resolution and container
-remeasurement, forward width assignment, resolved measurement, placement, and
-rendering. Each whole-tree loop is bounded by the caller-selected prepared-node
-capacity, depth by `MAX_LAYOUT_DEPTH`, and direct flex siblings by
-`MAX_LAYOUT_FLEX`. Telemetry reports phase time, node visits, child-run visits,
-measure callbacks, specialization, and fallback counts. Complete-frame time is
-the acceptance boundary; phase values only explain it.
-
-## Clipping and virtualization
-
-Paint clipping prevents pixels from escaping a viewport, but it does not avoid
-description construction, measurement, interaction, or semantic work. Large
-logical collections must calculate a visible range before declaring expensive
-rows or cells. Caller-owned scroll state and the visible-range calculation remain
-the authoritative model; Fit does not retain hidden virtualized widgets.
-
-The benchmark's virtual-list contract submits only the visible rows plus bounded
-overscan, so its prepared-node count is independent of the logical list size.
-Event-driven frame pacing is a separate outer optimization: when no frame is
-requested, neither description construction nor GPU submission occurs.
+may call `Measure` followed by `Render_At`; `Render` measures, places, and
+renders synchronously. The prepared engine remains internal: Parent is a
+current-description capability, not a public retained node tree.

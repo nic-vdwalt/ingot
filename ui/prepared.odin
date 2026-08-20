@@ -758,6 +758,8 @@ prepared_push_container :: proc(prepared: ^Prepared_Ui, handle: Prepared_Handle)
 
 @(private = "file")
 prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_add: description not open")
+	assert(prepared.depth >= 0 && prepared.depth <= len(prepared.stack), "prepared_add: invalid depth")
 	parent := i32(-1)
 	if prepared.depth > 0 do parent = prepared.stack[prepared.depth - 1]
 	return prepared_add_to(prepared, parent, node)

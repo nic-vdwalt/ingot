@@ -32,28 +32,17 @@ game_init :: proc() -> bool {
 game_draw :: proc(builder: ^fit.Builder) {
 	assert(builder != nil, "game_draw: nil builder")
 	assert(g != nil, "game_draw: missing state")
-	root_container: {
-		fit.Center(builder, {gap = .SM, padding = .LG})
-		defer fit.End(builder)
-		fit.Label(builder, "Ingot hot reload", {role = .Title})
-		fit.Label(
-			builder,
-			"The host keeps the window, GPU, and session alive.",
-			{ink = .Secondary},
-		)
-		fit.Label(
-			builder,
-			fmt.tprintf("Reload generation: %d", g.reload_generation),
-			{role = .Label},
-		)
-		fit.Label(builder, fmt.tprintf("Persistent clicks: %d", g.click_count), {role = .Label})
-		fit.Button(builder, "count", "Count persistent click", fit.On(count_click))
-		fit.Label(
-			builder,
-			"Edit game/game.odin, then run the build script again.",
-			{role = .Note, ink = .Muted},
-		)
-	}
+	root := fit.Center(builder, {gap = .SM, padding = .LG})
+	fit.Label(root, "Ingot hot reload", {role = .Title})
+	fit.Label(root, "The host keeps the window, GPU, and session alive.", {ink = .Secondary})
+	fit.Label(root, fmt.tprintf("Reload generation: %d", g.reload_generation), {role = .Label})
+	fit.Label(root, fmt.tprintf("Persistent clicks: %d", g.click_count), {role = .Label})
+	fit.Button(root, "count", "Count persistent click", fit.On(count_click))
+	fit.Label(
+		root,
+		"Edit game/game.odin, then run the build script again.",
+		{role = .Note, ink = .Muted},
+	)
 }
 
 @(export)

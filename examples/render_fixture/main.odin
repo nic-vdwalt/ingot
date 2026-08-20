@@ -269,8 +269,9 @@ draw_main_fixture :: proc() {
 
 draw_fit_overlay :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	_ = userdata
+	root := fit.Column(builder)
 	fit.Custom(
-		builder,
+		root,
 		{measure = fit_overlay_measure, render = fit_overlay_render},
 		{size = {width = fit.Grow(), height = fit.Grow()}},
 	)

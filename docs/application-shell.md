@@ -24,12 +24,12 @@ main :: proc() {
 }
 ```
 
-`Draw` receives an open `fit.Builder`. It must declare exactly one balanced root
-container. `fit.Center` opens a full-window centered root; `fit.Canvas` owns a
-full-window explicit-geometry root. Otherwise prefer a named lexical block with
-an immediate `defer fit.End(builder)` for a static root; use direct closure for
-dynamic construction. The shell renders that root and closes the hidden UI root
-after the callback returns.
+`Draw` receives an open `fit.Builder` and declares exactly one root. Layout
+constructors return current-build `fit.Parent` values; child containers and
+leaves consume those values, so prepared layout requires no balancing calls.
+`fit.Center` creates a full-window centered root and `fit.Canvas` owns a
+full-window explicit-geometry root. The shell renders the description after the
+callback returns.
 
 For a manually coordinated native host, use `fit.Init`, `fit.Start`, one bounded
 `fit.Tick` per host iteration, `fit.Stop`, and `fit.Destroy`. `fit.Set_Theme` and
@@ -50,16 +50,13 @@ Frame :: proc() {
 
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	_ = userdata
-	root_container: {
-		fit.Column(builder)
-		defer fit.End(builder)
-		fit.Label(builder, "Custom loop")
-	}
+	root := fit.Column(builder)
+	fit.Label(root, "Custom loop")
 }
 ```
 
 `Session_Draw` returns false when no graphics frame was acquired. On success,
-the builder is borrowed only for the callback; the session renders the balanced
+the builder is borrowed only for the callback; the session renders the declared
 root, finalizes semantics and platform output, submits graphics, invalidates the
 frame, and resets temporary storage before returning.
 

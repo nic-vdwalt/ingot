@@ -49,25 +49,18 @@ main :: proc() {
 }
 
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	root_container: {
-		fit.Center(builder, {gap = .SM, padding = .LG})
-		defer fit.End(builder)
-		fit.Label(builder, "Settings", {role = .Title})
-		fit.Button(builder, "save", "Save", fit.On(Save))
-	}
+	root := fit.Center(builder, {gap = .SM, padding = .LG})
+	fit.Label(root, "Settings", {role = .Title})
+	fit.Button(root, "save", "Save", fit.On(Save))
 }
 ```
 
-The builder is bounded and immediate. `Row`, `Column`, `Flow`, `Grid`,
-`Attachment`, `Scroll`, `Section`, and `Card` open containers; `End` closes one
-container. Static containers
-should use a named lexical block with an immediate `defer fit.End(builder)`;
-direct
-closure remains available for dynamic construction. `Label`, `Button`,
-`Checkbox`, `Radio`, `Slider`, `Text_Input`, `Progress`, `Separator`, `Spacer`,
-table cells, `Canvas_Leaf`, and `Custom` emit leaves. The additive `*_With`
-helpers auto-close callback-built containers; `Scope` provides explicit
-component identity. `Center` is the root-only full-window centering convenience.
+The builder is bounded and immediate. Root containers return an opaque
+current-build `fit.Parent`; child containers and leaves consume Parent values.
+There is no prepared-container open state or balancing call. `Scope` returns a
+Parent with a derived component identity and no additional layout node. `Center`
+is the root-only full-window centering convenience. Parent values are invalid
+outside the draw that created them and must never be retained.
 `Render` consumes the declaration synchronously and dispatches activated Builder
 actions before returning. Actions run in the activating frame but cannot change
 the description already being rendered. `Button_Delayed` plus `Signal` is the

@@ -304,16 +304,13 @@ input_state_destroy :: proc(state: ^Input_State) {
 
 gallery_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	assert(builder != nil, "gallery_build: nil builder")
-	root: {
-		fit.Column(builder, {size = {width = fit.Grow(), height = fit.Grow()}})
-		defer fit.End(builder)
-		fit.Canvas_Leaf(
-			builder,
-			{size = {width = fit.Grow(), height = fit.Grow()}},
-			gallery_frame,
-			userdata,
-		)
-	}
+	root := fit.Column(builder, {size = {width = fit.Grow(), height = fit.Grow()}})
+	fit.Canvas_Leaf(
+		root,
+		{size = {width = fit.Grow(), height = fit.Grow()}},
+		gallery_frame,
+		userdata,
+	)
 }
 
 gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, userdata: rawptr) -> bool {

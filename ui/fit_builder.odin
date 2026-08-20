@@ -126,8 +126,14 @@ fit_parent_select :: proc(builder: ^Fit_Builder, parent: Prepared_Handle) {
 
 fit_parent_created :: proc(builder: ^Fit_Builder) -> Prepared_Handle {
 	fit_builder_assert_open(builder)
-	assert(builder.prepared.depth == 1 || builder.prepared.depth == 2, "fit parent: invalid creation depth")
-	handle := Prepared_Handle(builder.prepared.stack[builder.prepared.depth - 1])
+	depth := builder.prepared.depth
+	assert(depth == 1 || depth == 2, "fit parent: invalid creation depth")
+	stack_index := depth - 1
+	assert(
+		stack_index >= 0 && stack_index < len(builder.prepared.stack),
+		"fit parent: invalid stack index",
+	)
+	handle := Prepared_Handle(builder.prepared.stack[stack_index])
 	builder.prepared.depth = 0
 	return handle
 }
