@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-`0.1.5` is the latest source release. Security fixes land on `main` first and
+`0.1.7` is the latest source release. Security fixes land on `main` first and
 are included in a replacement source tag when a release is required; older tags
 do not receive separate maintenance branches. Source availability does not imply
 production or binary-release readiness; review `docs/production-readiness.md`
