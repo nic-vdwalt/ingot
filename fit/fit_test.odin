@@ -25,9 +25,9 @@ Fit_Test_Control_State :: struct {
 }
 
 Fit_Test_Readme_State :: struct {
-	continue_clicked:     Signal,
 	continued:            bool,
 	confirmation_visible: bool,
+	action_calls:         i32,
 }
 
 Fit_Test_Legacy_Button_State :: struct {
@@ -119,21 +119,27 @@ fit_root_grow_container_centers_children_in_viewport :: proc(t: ^testing.T) {
 }
 
 @(private = "file")
+fit_test_continue :: proc(userdata: rawptr) {
+	assert(userdata != nil, "fit test action: nil state")
+	state := cast(^Fit_Test_Readme_State)userdata
+	state.continued = true
+	state.action_calls += 1
+}
+
+@(private = "file")
 fit_test_readme_draw :: proc(builder: ^Builder, userdata: rawptr) {
 	assert(builder != nil && userdata != nil, "fit readme test: invalid argument")
 	state := cast(^Fit_Test_Readme_State)userdata
 	Center(builder, {gap = .SM, padding = .LG})
 	Label(builder, "Hello from Ingot")
-	if Button(builder, "continue", "Continue", &state.continue_clicked) {
-		state.continued = true
-	}
+	Button(builder, "continue", "Continue", On(fit_test_continue, state))
 	state.confirmation_visible = state.continued
 	if state.continued do Label(builder, "Continued")
 	End(builder)
 }
 
 @(test)
-fit_readme_button_activation_persists_on_next_build :: proc(t: ^testing.T) {
+fit_button_action_runs_once_in_activating_frame :: proc(t: ^testing.T) {
 	driver: Test_Driver
 	Test_Driver_Init(&driver)
 	defer Test_Driver_Destroy(&driver)
@@ -147,21 +153,20 @@ fit_readme_button_activation_persists_on_next_build :: proc(t: ^testing.T) {
 		dpi_scale      = 1,
 	}
 	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_readme_draw, &state))
-	testing.expect(t, !Signal_Peek(&state.continue_clicked) && !state.continued)
+	testing.expect(t, !state.continued && !state.confirmation_visible)
 	pressed := base
 	pressed.mouse_pressed[0] = true
 	pressed.mouse_down[0] = true
 	testing.expect(t, Test_Driver_Frame(&driver, pressed, fit_test_readme_draw, &state))
-	testing.expect(t, !Signal_Peek(&state.continue_clicked) && !state.continued)
+	testing.expect(t, !state.continued && state.action_calls == 0)
 	released := base
 	released.mouse_released[0] = true
 	testing.expect(t, Test_Driver_Frame(&driver, released, fit_test_readme_draw, &state))
-	testing.expect(t, Signal_Peek(&state.continue_clicked) && !state.continued)
+	testing.expect(t, state.continued && !state.confirmation_visible)
+	testing.expect_value(t, state.action_calls, i32(1))
 	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_readme_draw, &state))
-	testing.expect(t, !Signal_Peek(&state.continue_clicked))
-	testing.expect(t, state.continued && state.confirmation_visible)
-	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_readme_draw, &state))
-	testing.expect(t, state.continued && !Signal_Peek(&state.continue_clicked))
+	testing.expect(t, state.confirmation_visible)
+	testing.expect_value(t, state.action_calls, i32(1))
 }
 
 @(test)
@@ -175,6 +180,46 @@ fit_signal_is_zero_value_and_one_shot :: proc(t: ^testing.T) {
 	signal.pending = true
 	Signal_Reset(&signal)
 	testing.expect(t, !Signal_Peek(&signal))
+}
+
+Fit_Test_Delayed_State :: struct {
+	signal:   Signal,
+	consumed: i32,
+}
+
+@(private = "file")
+fit_test_delayed_draw :: proc(builder: ^Builder, userdata: rawptr) {
+	assert(builder != nil && userdata != nil, "fit delayed test: invalid argument")
+	state := cast(^Fit_Test_Delayed_State)userdata
+	Center(builder)
+	if Button_Delayed(builder, "delayed", "Delayed", &state.signal) do state.consumed += 1
+	End(builder)
+}
+
+@(test)
+fit_button_delayed_consumes_activation_on_later_build :: proc(t: ^testing.T) {
+	driver: Test_Driver
+	Test_Driver_Init(&driver)
+	defer Test_Driver_Destroy(&driver)
+	state: Fit_Test_Delayed_State
+	base := Test_Input {
+		mouse_position = {400, 300},
+		screen_size    = {800, 600},
+		dpi_scale      = 1,
+	}
+	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_delayed_draw, &state))
+	pressed := base
+	pressed.mouse_pressed[0] = true
+	pressed.mouse_down[0] = true
+	testing.expect(t, Test_Driver_Frame(&driver, pressed, fit_test_delayed_draw, &state))
+	released := base
+	released.mouse_released[0] = true
+	testing.expect(t, Test_Driver_Frame(&driver, released, fit_test_delayed_draw, &state))
+	testing.expect(t, Signal_Peek(&state.signal) && state.consumed == 0)
+	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_delayed_draw, &state))
+	testing.expect(t, !Signal_Peek(&state.signal) && state.consumed == 1)
+	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_delayed_draw, &state))
+	testing.expect_value(t, state.consumed, i32(1))
 }
 
 @(private = "file")
@@ -361,6 +406,21 @@ fit_native_controls_measure_and_render_once :: proc(t: ^testing.T) {
 }
 
 @(test)
+fit_button_action_contract_compiles :: proc(t: ^testing.T) {
+	button_string: proc(_: ^Builder, _: string, _: string, _: Action) = Button
+	button_u64: proc(_: ^Builder, _: u64, _: string, _: Action) = Button
+	button_id: proc(_: ^Builder, _: Widget_Id, _: string, _: Action) = Button
+	button_string_delayed: proc(_: ^Builder, _: string, _: string, _: ^Signal) -> bool =
+		Button_Delayed
+	button_u64_delayed: proc(_: ^Builder, _: u64, _: string, _: ^Signal) -> bool = Button_Delayed
+	button_id_delayed: proc(_: ^Builder, _: Widget_Id, _: string, _: ^Signal) -> bool =
+		Button_Delayed
+	testing.expect(t, button_string != nil && button_u64 != nil && button_id != nil)
+	testing.expect(t, button_string_delayed != nil && button_u64_delayed != nil)
+	testing.expect(t, button_id_delayed != nil)
+}
+
+@(test)
 fit_public_contract_compiles :: proc(t: ^testing.T) {
 	draw: Draw_Proc = fit_test_draw
 	run: proc(_: ^App, _: Config, _: Draw_Proc, _: rawptr) -> bool = Run
@@ -369,9 +429,6 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	px_f32: proc(_: ^Surface, _: f32) -> f32 = Px
 	button_string: proc(_: ^Builder, _: string, _: string, _: ^bool) = Button
 	button_u64: proc(_: ^Builder, _: u64, _: string, _: ^bool) = Button
-	button_string_signal: proc(_: ^Builder, _: string, _: string, _: ^Signal) -> bool = Button
-	button_u64_signal: proc(_: ^Builder, _: u64, _: string, _: ^Signal) -> bool = Button
-	button_id_signal: proc(_: ^Builder, _: Widget_Id, _: string, _: ^Signal) -> bool = Button
 	center: proc(_: ^Builder, _: Container_Options) = Center
 	measure: proc(_: ^Builder) -> Size = Measure
 	render_at: proc(_: ^Builder, _: Rect) = Render_At
@@ -449,7 +506,7 @@ fit_public_contract_compiles :: proc(t: ^testing.T) {
 	testing.expect(t, draw != nil && run != nil && canvas != nil)
 	testing.expect(t, px_i32 != nil && px_f32 != nil)
 	testing.expect(t, button_string != nil && button_u64 != nil)
-	testing.expect(t, measure != nil && render_at != nil && session_draw != nil)
+	testing.expect(t, center != nil && measure != nil && render_at != nil && session_draw != nil)
 	testing.expect(t, set_storage != nil && reset_storage != nil && storage_capacity != nil)
 	testing.expect(t, row_with != nil && section != nil && card != nil)
 	testing.expect(t, compact != nil && canvas_leaf != nil && id_string != nil)

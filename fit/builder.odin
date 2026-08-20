@@ -154,6 +154,23 @@ Signal_Reset :: proc(signal: ^Signal) {
 }
 
 @(private = "package")
+on_action :: proc(procedure: Action_Proc, userdata: rawptr = nil) -> Action {
+	assert(procedure != nil, "Fit.On: nil procedure")
+	return {procedure = procedure, userdata = userdata}
+}
+
+@(private = "package")
+on_tagged_action :: proc(procedure: Tagged_Action_Proc, userdata: rawptr, tag: u64) -> Action {
+	assert(procedure != nil, "Fit.On: nil tagged procedure")
+	return {tagged_procedure = procedure, userdata = userdata, tag = tag}
+}
+
+On :: proc {
+	on_action,
+	on_tagged_action,
+}
+
+@(private = "package")
 button_string :: proc(builder: ^Builder, key, label: string, options: Button_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Button: builder not bound")
 	ui.fit_builder_button(&builder.inner, key, label, to_button_options(options))
@@ -177,15 +194,30 @@ button_id :: proc(
 }
 
 @(private = "package")
+button_string_action :: proc(builder: ^Builder, key, label: string, action: Action) {
+	button_string(builder, key, label, {action = action})
+}
+
+@(private = "package")
 button_string_active :: proc(builder: ^Builder, key, label: string, activated: ^bool) {
 	assert(activated != nil, "Fit.Button: nil activation destination")
 	button_string(builder, key, label, {activated = activated})
 }
 
 @(private = "package")
+button_u64_action :: proc(builder: ^Builder, key: u64, label: string, action: Action) {
+	button_u64(builder, key, label, {action = action})
+}
+
+@(private = "package")
 button_u64_active :: proc(builder: ^Builder, key: u64, label: string, activated: ^bool) {
 	assert(activated != nil, "Fit.Button: nil activation destination")
 	button_u64(builder, key, label, {activated = activated})
+}
+
+@(private = "package")
+button_id_action :: proc(builder: ^Builder, widget: Widget_Id, label: string, action: Action) {
+	button_id(builder, widget, label, {action = action})
 }
 
 @(private = "package")
@@ -225,13 +257,19 @@ button_id_signal :: proc(
 
 Button :: proc {
 	button_string,
+	button_string_action,
 	button_string_active,
-	button_string_signal,
 	button_u64,
+	button_u64_action,
 	button_u64_active,
-	button_u64_signal,
 	button_id,
+	button_id_action,
 	button_id_active,
+}
+
+Button_Delayed :: proc {
+	button_string_signal,
+	button_u64_signal,
 	button_id_signal,
 }
 

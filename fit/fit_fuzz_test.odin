@@ -14,6 +14,7 @@ FIT_FUZZ_STORAGE_CAPACITY :: STORAGE_NODE_DEFAULT + 64
 
 Fit_Fuzz_Counts :: struct {
 	customs: i32,
+	actions: i32,
 	measure: i32,
 	render:  i32,
 }
@@ -52,6 +53,13 @@ fit_fuzz_custom_render :: proc(surface: ^Surface, rect: Rect, userdata: rawptr) 
 	counts := cast(^Fit_Fuzz_Counts)userdata
 	counts.render += 1
 	return false
+}
+
+@(private = "file")
+fit_fuzz_action :: proc(userdata: rawptr) {
+	assert(userdata != nil, "fit fuzz action: nil state")
+	counts := cast(^Fit_Fuzz_Counts)userdata
+	counts.actions += 1
 }
 
 @(private = "file")
@@ -110,12 +118,14 @@ fit_fuzz_leaf :: proc(
 			{role = .Body, wrap = fuzzx.int_range(p, 0, 2) == 0, track = fit_fuzz_track(p)},
 		)
 	case 1:
-		switch fuzzx.int_range(p, 0, 3) {
+		switch fuzzx.int_range(p, 0, 4) {
 		case 0:
 			Button(builder, key + 1, "Fuzz button", &activations[index])
 		case 1:
-			_ = Button(builder, key + 1, "Fuzz button", &signals[index])
+			_ = Button_Delayed(builder, key + 1, "Fuzz button", &signals[index])
 		case 2:
+			Button(builder, key + 1, "Fuzz button", On(fit_fuzz_action, counts))
+		case 3:
 			Button(builder, key + 1, "Fuzz button")
 		}
 	case 2:

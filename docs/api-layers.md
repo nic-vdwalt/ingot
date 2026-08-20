@@ -38,7 +38,11 @@ and the callback receives the only supported declaration object: `fit.Builder`.
 import fit "ingot:fit"
 
 app: fit.App
-save_signal: fit.Signal
+
+Save :: proc(userdata: rawptr) {
+	_ = userdata
+	save()
+}
 
 main :: proc() {
 	_ = fit.Run(&app, {width = 720, height = 480, title = "App"}, Draw)
@@ -49,7 +53,7 @@ Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 		fit.Center(builder, {gap = .SM, padding = .LG})
 		defer fit.End(builder)
 		fit.Label(builder, "Settings", {role = .Title})
-		if fit.Button(builder, "save", "Save", &save_signal) do save()
+		fit.Button(builder, "save", "Save", fit.On(Save))
 	}
 }
 ```
@@ -64,10 +68,12 @@ closure remains available for dynamic construction. `Label`, `Button`,
 table cells, `Canvas_Leaf`, and `Custom` emit leaves. The additive `*_With`
 helpers auto-close callback-built containers; `Scope` provides explicit
 component identity. `Center` is the root-only full-window centering convenience.
-`Render` consumes the declaration synchronously. Builder Button signals are
-written during render and returned once from the next build's declaration;
-borrowed Surface controls instead return same-frame interaction directly.
-`Measure` plus `Render_At` supports caller-owned placement without introducing a
+`Render` consumes the declaration synchronously and dispatches activated Builder
+actions before returning. Actions run in the activating frame but cannot change
+the description already being rendered. `Button_Delayed` plus `Signal` is the
+advanced later-build path; borrowed Surface and Region controls return
+interaction directly inside their render callback. `Measure` plus `Render_At`
+supports caller-owned placement without introducing a
 retained widget tree. A `Custom` render callback receives a borrowed
 `fit.Surface` for same-frame interaction and explicit geometry; the Surface is
 valid only for that callback and must not be retained.
@@ -137,7 +143,8 @@ The animated path names six stages of one UI frame:
 1. `fit.App` owns lifecycle and captures platform input.
 2. `fit.Builder` records a bounded immediate declaration.
 3. Fit measures constraints and places responsive layout.
-4. Explicit leaves borrow `fit.Surface` for same-frame interaction and drawing.
+4. Render dispatches Builder actions and lends explicit leaves a `fit.Surface`;
+   both support same-frame action without changing the built structure.
 5. The UI engine records paint, semantics, and platform requests.
 6. The UI/GFX bridge presents through WebGPU and native or web adapters.
 

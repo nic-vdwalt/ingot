@@ -212,6 +212,7 @@ Prepared_Node :: struct {
 	measure_flags:            Prepared_Measure_Flags,
 	activation:               ^bool,
 	activated:                bool,
+	action:                   Fit_Action,
 }
 
 Prepared_Summary :: struct {

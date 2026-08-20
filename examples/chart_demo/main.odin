@@ -8,18 +8,22 @@ package main
 import fit "ingot:fit"
 
 State :: struct {
-	dark:          bool,
-	line_state:    fit.Chart_State,
-	bar_state:     fit.Chart_State,
-	// Written by fit during Render (after frame returns); consumed and
-	// cleared at the start of the next build.
-	theme_clicked: bool,
+	dark:       bool,
+	line_state: fit.Chart_State,
+	bar_state:  fit.Chart_State,
 }
 
 state := State {
 	dark = true,
 }
 app: fit.App
+
+toggle_theme :: proc(userdata: rawptr) {
+	data := cast(^State)userdata
+	assert(data != nil, "toggle_theme: nil state")
+	data.dark = !data.dark
+	fit.Set_Theme(&app, fit.Theme_Dark() if data.dark else fit.Theme_Light())
+}
 
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
 costs := [12]f32{8.1, 8.4, 9.0, 9.7, 10.2, 11.5, 11.1, 12.4, 12.0, 13.6, 13.1, 14.0}
@@ -64,11 +68,6 @@ main :: proc() {
 
 frame :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	data := cast(^State)userdata
-	if data.theme_clicked {
-		data.theme_clicked = false
-		data.dark = !data.dark
-		fit.Set_Theme(&app, fit.Theme_Dark() if data.dark else fit.Theme_Light())
-	}
 	root_container: {
 		fit.Column(builder, {gap = .MD, padding = .LG})
 		defer fit.End(builder)
@@ -80,7 +79,7 @@ frame :: proc(builder: ^fit.Builder, userdata: rawptr) {
 				builder,
 				"theme",
 				"Light theme" if data.dark else "Dark theme",
-				fit.Button_Options{track = fit.Fixed(132), activated = &data.theme_clicked},
+				fit.Button_Options{track = fit.Fixed(132), action = fit.On(toggle_theme, data)},
 			)
 		}
 		// The dashboard fills the leftover column height; Grow resolves the

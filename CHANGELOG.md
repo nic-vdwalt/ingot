@@ -9,6 +9,15 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** prepared `fit.Button` now uses allocation-free same-frame Actions
+  as its primary activation API. Construct actions with `fit.On`; tagged Actions
+  support bounded loop-generated controls. The former Signal overload is now
+  `fit.Button_Delayed`, making its later-build timing explicit. Raw `^bool`
+  outputs remain available for compatibility and advanced fan-in; Surface and
+  Region button APIs remain direct bool-returning explicit-geometry controls.
+
 ## [0.1.7] - 2026-08-20
 
 This is a source-only release; no binaries, installers, or web bundles are attached.

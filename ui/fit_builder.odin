@@ -1,5 +1,15 @@
 package ui
 
+Fit_Action_Proc :: #type proc(userdata: rawptr)
+Fit_Tagged_Action_Proc :: #type proc(userdata: rawptr, tag: u64)
+
+Fit_Action :: struct {
+	procedure:        Fit_Action_Proc,
+	tagged_procedure: Fit_Tagged_Action_Proc,
+	userdata:         rawptr,
+	tag:              u64,
+}
+
 Fit_Label_Options :: struct {
 	role:  Text_Role,
 	ink:   Ink,
@@ -19,6 +29,7 @@ Fit_Button_Options :: struct {
 	// or app state, never a build-scope local), and is typically consumed
 	// and cleared at the start of the next build.
 	activated:   ^bool,
+	action:      Fit_Action,
 }
 
 Fit_Control_Options :: struct {
@@ -199,7 +210,9 @@ fit_button_builder_string :: proc(
 		fit_button_options(options),
 		options.track,
 	)
-	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+	node := &prepared_nodes(&builder.prepared)[i32(handle)]
+	node.sizing = options.size
+	fit_builder_action_set(node, options.activated, options.action)
 	fit_builder_output(builder, handle, options.activated)
 }
 
@@ -220,7 +233,9 @@ fit_button_builder_u64 :: proc(
 		fit_button_options(options),
 		options.track,
 	)
-	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+	node := &prepared_nodes(&builder.prepared)[i32(handle)]
+	node.sizing = options.size
+	fit_builder_action_set(node, options.activated, options.action)
 	fit_builder_output(builder, handle, options.activated)
 }
 
@@ -241,7 +256,9 @@ fit_button_builder_id :: proc(
 		fit_button_options(options),
 		options.track,
 	)
-	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
+	node := &prepared_nodes(&builder.prepared)[i32(handle)]
+	node.sizing = options.size
+	fit_builder_action_set(node, options.activated, options.action)
 	fit_builder_output(builder, handle, options.activated)
 }
 
@@ -256,6 +273,8 @@ fit_button_builder_spec :: proc(
 	fit_builder_add_child(builder)
 	assert(spec.id != WIDGET_ID_NONE && spec.label != "", "fit_button: invalid spec")
 	handle := prepared_button(&builder.prepared, spec, track)
+	node := &prepared_nodes(&builder.prepared)[i32(handle)]
+	fit_builder_action_set(node, activated, {})
 	fit_builder_output(builder, handle, activated)
 }
 
@@ -470,6 +489,7 @@ fit_render_at :: proc(builder: ^Fit_Builder, rect: Rect_I32) {
 	fit_outputs_clear(outputs, builder.output_count)
 	prepared_phase_end(builder.prepared.u.frame, .Output_Clear, clear_started)
 	prepared_render_at(builder.prepared.u, &builder.prepared, rect)
+	fit_actions_dispatch(builder)
 }
 
 fit_render :: proc(builder: ^Fit_Builder) -> Rect_I32 {
@@ -480,7 +500,37 @@ fit_render :: proc(builder: ^Fit_Builder) -> Rect_I32 {
 	fit_outputs_clear(outputs, builder.output_count)
 	prepared_phase_end(builder.prepared.u.frame, .Output_Clear, clear_started)
 	rect := prepared_fit(builder.prepared.u, &builder.prepared)
+	fit_actions_dispatch(builder)
 	return rect
+}
+
+@(private = "file")
+fit_builder_action_set :: proc(node: ^Prepared_Node, activated: ^bool, action: Fit_Action) {
+	assert(node != nil && node.kind == .Button, "fit action: invalid node")
+	has_simple := action.procedure != nil
+	has_tagged := action.tagged_procedure != nil
+	assert(!has_simple || !has_tagged, "fit action: ambiguous procedure")
+	assert(activated == nil || (!has_simple && !has_tagged), "fit action: duplicate delivery")
+	node.action = action
+}
+
+@(private = "file")
+fit_actions_dispatch :: proc(builder: ^Fit_Builder) {
+	assert(builder != nil && builder.prepared.rendered, "fit actions: builder not rendered")
+	nodes := prepared_nodes(&builder.prepared)
+	assert(builder.prepared.count >= 0 && builder.prepared.count <= i32(len(nodes)))
+	for index in 0 ..< builder.prepared.count {
+		node := &nodes[index]
+		if !node.activated do continue
+		action := node.action
+		if action.procedure == nil && action.tagged_procedure == nil do continue
+		node.activated = false
+		if action.procedure != nil {
+			action.procedure(action.userdata)
+		} else {
+			action.tagged_procedure(action.userdata, action.tag)
+		}
+	}
 }
 
 @(private = "file")

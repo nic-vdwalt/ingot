@@ -217,6 +217,12 @@ to_button_options :: proc(value: Button_Options) -> ui.Fit_Button_Options {
 		track = to_track(value.track),
 		size = to_size(value.size),
 		activated = value.activated,
+		action = {
+			procedure = ui.Fit_Action_Proc(value.action.procedure),
+			tagged_procedure = ui.Fit_Tagged_Action_Proc(value.action.tagged_procedure),
+			userdata = value.action.userdata,
+			tag = value.action.tag,
+		},
 	}
 }
 

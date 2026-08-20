@@ -167,8 +167,12 @@ package main
 import fit "ingot:fit"
 
 app: fit.App
-continue_clicked: fit.Signal
 continued: bool
+
+Continue :: proc(userdata: rawptr) {
+	_ = userdata
+	continued = true
+}
 
 main :: proc() {
 	_ = fit.Run(&app, {width = 960, height = 640, title = "Ingot app"}, Draw)
@@ -179,19 +183,20 @@ Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 		fit.Center(builder, {gap = .SM, padding = .LG})
 		defer fit.End(builder)
 		fit.Label(builder, "Hello from Ingot")
-		if fit.Button(builder, "continue", "Continue", &continue_clicked) {
-			continued = true
-		}
+		fit.Button(builder, "continue", "Continue", fit.On(Continue))
 		if continued do fit.Label(builder, "Continued")
 	}
 }
 ```
 
-`fit.Center` opens a full-window centered root column. A caller-owned `fit.Signal`
-receives activation during `Render`; the signal Button overload consumes that
-activation when the button is declared in the next build and returns it once.
-Signals must therefore be globals or app-state fields, never build-proc locals.
-Checkbox, radio, and slider values remain caller-owned. Static containers use a
+`fit.Center` opens a root-only Column that fills the available Builder rectangle,
+centers the child group vertically, and centers each child horizontally. The
+Button action runs during `Render` in the activating frame. It may update
+caller-owned state or enqueue work, but the current Builder description is
+already fixed; conditional structure reflects the change on the next redraw.
+`fit.Button_Delayed` and caller-owned `fit.Signal` remain the advanced path when
+activation must be consumed during a later build. Checkbox, radio, and slider
+values remain caller-owned. Static containers use a
 lexical block with an immediate `defer fit.End(builder)`;
 dynamic builders may close containers directly. Optional `*_With` helpers invoke
 component procedures immediately and auto-balance their own container. See
