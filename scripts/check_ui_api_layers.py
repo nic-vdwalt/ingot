@@ -85,6 +85,35 @@ FIT_INTERNAL_NAME = re.compile(
     r"\b(?:ui|ui_gfx)\.|\b(?:Adapter|Ui|Ui_Frame|Ui_Input|Ui_Output|"
     r"Ui_Runtime|Host_App|Host_Session|Session_Frame)\b"
 )
+FIT_PUBLIC_ALIAS_ALLOW = {
+    "Attachment_Point :: ui.Attachment_Point",
+    "Attachment_Target :: ui.Attachment_Target_Kind",
+    "Border :: ui.Border",
+    "Button_Style :: ui.Btn_Style",
+    "Caption_Button :: ui.Caption_Button",
+    "Combobox_Item :: ui.Combobox_Item",
+    "Cross_Align :: ui.Cross_Align",
+    "Diff_Layout :: ui.Diff_Layout",
+    "Diff_Row_Kind :: ui.Diff_Row_Kind",
+    "Elevation :: ui.Elevation",
+    "Focus_Id :: ui.Focus_Id",
+    "Focus_State :: ui.Focus_State",
+    "Ink :: ui.Ink",
+    "Listbox_Keys :: ui.Listbox_Keys",
+    "Main_Align :: ui.Main_Align",
+    "Pigment :: ui.Pigment",
+    "Radius :: ui.Radius",
+    "Space :: ui.Space",
+    "Spinner_Style :: ui.Spinner_Style",
+    "Surface_Kind :: ui.Surface",
+    "Text_Role :: ui.Text_Role",
+    "Tint :: ui.Tint",
+    "Track :: ui.Track",
+    "Track_Kind :: ui.Track_Kind",
+    "Transition_State :: ui.Transition_Rect_State",
+    "Truncate_Side :: ui.Truncate_Side",
+    "Visual_State :: ui.Visual_State",
+}
 FIT_SPLIT_SESSION = re.compile(r"\b(?:Session_Begin|Session_End|session_acquire_frame|session_present_frame)\b")
 RETIRED_UI = re.compile(r"\b(?:Fit_Node|Fit_Prepared|fit_tree|fit_nodes|prepared_[a-z_0-9]+)\b")
 RETIRED_GFX = re.compile(
@@ -203,8 +232,9 @@ def fit_public_violations(source: str) -> list[tuple[int, str]]:
         procedure = re.match(r"^([A-Z][A-Za-z_0-9]*)\s*::\s*proc\b", stripped)
         public = declaration is not None or procedure is not None
         opaque_storage = stripped.startswith("Storage_Node :: distinct ui.Prepared_Node")
+        allowed_alias = stripped in FIT_PUBLIC_ALIAS_ALLOW
         if public and not private_next:
-            if FIT_INTERNAL_NAME.search(stripped) and not opaque_storage:
+            if FIT_INTERNAL_NAME.search(stripped) and not opaque_storage and not allowed_alias:
                 failures.append((index + 1, "Fit public declaration exposes internal UI type"))
             if FIT_SPLIT_SESSION.search(stripped):
                 failures.append((index + 1, "Fit public declaration exposes split session lifecycle"))
