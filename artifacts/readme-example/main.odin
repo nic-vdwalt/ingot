@@ -10,13 +10,13 @@ main :: proc() {
 	_ = fit.Run(&app, {width = 960, height = 640, title = "Ingot app"}, Draw)
 }
 
-Continue :: proc(userdata: rawptr) {
-	_ = userdata
+Continue :: proc(ctx: rawptr) {
+	_ = ctx
 	button_clicks += 1
 }
 
-Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	_ = userdata
+Draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
+	_ = ctx
 	root := fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Hello from Ingot")
 	fit.Label(root, fmt.tprintf("Button clicks: %d", button_clicks))

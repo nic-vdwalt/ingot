@@ -302,19 +302,14 @@ input_state_destroy :: proc(state: ^Input_State) {
 	fit.Combobox_State_Destroy(&state.combo)
 }
 
-gallery_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
+gallery_build :: proc(builder: ^fit.Builder, ctx: rawptr) {
 	assert(builder != nil, "gallery_build: nil builder")
 	root := fit.Column(builder, {size = {width = fit.Grow(), height = fit.Grow()}})
-	fit.Canvas_Leaf(
-		root,
-		{size = {width = fit.Grow(), height = fit.Grow()}},
-		gallery_frame,
-		userdata,
-	)
+	fit.Canvas_Leaf(root, {size = {width = fit.Grow(), height = fit.Grow()}}, gallery_frame, ctx)
 }
 
-gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, userdata: rawptr) -> bool {
-	_ = userdata
+gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, ctx: rawptr) -> bool {
+	_ = ctx
 	gallery_root = root
 	fmt.eprintfln("[gallery] frame root = %v", root)
 	sw := root.w

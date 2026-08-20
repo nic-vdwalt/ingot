@@ -176,9 +176,9 @@ when MAP_CAPTURE {
 		capture_write()
 	}
 
-	capture_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	capture_draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
 		assert(builder != nil, "capture_draw: nil builder")
-		_ = userdata
+		_ = ctx
 		theme := fit.Theme_Dark() if map_state.dark else fit.Theme_Light()
 		background := rl.Color(fit.Theme_Background(theme))
 		background.a = 255

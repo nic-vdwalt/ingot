@@ -39,8 +39,8 @@ import fit "ingot:fit"
 
 app: fit.App
 
-Save :: proc(userdata: rawptr) {
-	_ = userdata
+Save :: proc(ctx: rawptr) {
+	_ = ctx
 	save()
 }
 
@@ -48,7 +48,7 @@ main :: proc() {
 	_ = fit.Run(&app, {width = 720, height = 480, title = "App"}, Draw)
 }
 
-Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+Draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
 	root := fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Settings", {role = .Title})
 	fit.Button(root, "save", "Save", fit.action(Save))
@@ -84,7 +84,7 @@ call. Begun layout helpers instead bind that Surface to caller-owned state until
 `End`, avoiding two repeated owner arguments without introducing ambient state:
 
 ```odin
-canvas :: proc(surface: ^fit.Surface, root: fit.Rect, userdata: rawptr) -> bool {
+canvas :: proc(surface: ^fit.Surface, root: fit.Rect, ctx: rawptr) -> bool {
 	layout: fit.Layout_State
 	fit.Layout_Begin(surface, &layout, root, gap = fit.Px(surface, 8))
 	fit.Layout_Row(&layout, fit.Px(surface, 40))

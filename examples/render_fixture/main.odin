@@ -267,8 +267,8 @@ draw_main_fixture :: proc() {
 	}
 }
 
-draw_fit_overlay :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	_ = userdata
+draw_fit_overlay :: proc(builder: ^fit.Builder, ctx: rawptr) {
+	_ = ctx
 	root := fit.Column(builder)
 	fit.Custom(
 		root,
@@ -277,14 +277,14 @@ draw_fit_overlay :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	)
 }
 
-fit_overlay_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
-	_ = userdata
+fit_overlay_measure :: proc(constraints: fit.Constraints, ctx: rawptr) -> fit.Size {
+	_ = ctx
 	return {max(constraints.max_w, 1), max(constraints.max_h, 1), false}
 }
 
-fit_overlay_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
+fit_overlay_render :: proc(surface: ^fit.Surface, rect: fit.Rect, ctx: rawptr) -> bool {
 	_ = rect
-	_ = userdata
+	_ = ctx
 	x, y := i32(632), i32(506)
 	fit.Surface_Text(surface, "RETINA 1x/2x RUNTIME TEXT", x, y)
 	fit.Surface_Text_Truncated(

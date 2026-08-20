@@ -129,9 +129,9 @@ reload_if_changed :: proc(state: ^Host) {
 	reload_game(state)
 }
 
-host_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	assert(builder != nil && userdata != nil, "host_draw: invalid argument")
-	state := cast(^Host)userdata
+host_draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
+	assert(builder != nil && ctx != nil, "host_draw: invalid argument")
+	state := cast(^Host)ctx
 	reload_if_changed(state)
 	state.api.draw(builder)
 }

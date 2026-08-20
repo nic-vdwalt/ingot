@@ -10,17 +10,13 @@ Gallery_Input_Test_State :: struct {
 }
 
 @(private = "file")
-gallery_input_test_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	fit.Canvas(builder, gallery_input_test_render, userdata)
+gallery_input_test_draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
+	fit.Canvas(builder, gallery_input_test_render, ctx)
 }
 
 @(private = "file")
-gallery_input_test_render :: proc(
-	surface: ^fit.Surface,
-	rect: fit.Rect,
-	userdata: rawptr,
-) -> bool {
-	state := cast(^Gallery_Input_Test_State)userdata
+gallery_input_test_render :: proc(surface: ^fit.Surface, rect: fit.Rect, ctx: rawptr) -> bool {
+	state := cast(^Gallery_Input_Test_State)ctx
 	region := fit.Region_Open(surface, &state.region, rect, {scope = "inputs"})
 	_ = fit.Region_Text_Input(region, "name", &state.box, "Name", {semantics = {name = "Name"}})
 	_ = fit.Region_Close(region)

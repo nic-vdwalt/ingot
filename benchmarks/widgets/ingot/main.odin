@@ -350,9 +350,9 @@ run_dashboard :: proc(builder: ^fit.Builder, h: ^Harness, groups: int) -> int {
 	return groups * DASHBOARD_WIDGETS_PER_GROUP
 }
 
-layout_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
-	assert(surface != nil && userdata != nil, "layout_render: invalid argument")
-	h := cast(^Harness)userdata
+layout_render :: proc(surface: ^fit.Surface, rect: fit.Rect, ctx: rawptr) -> bool {
+	assert(surface != nil && ctx != nil, "layout_render: invalid argument")
+	h := cast(^Harness)ctx
 	flow: fit.Flow_State
 	fit.Flow_Begin(surface, &flow, rect, 6, 4)
 	checksum := FNV_BASIS
@@ -724,9 +724,9 @@ benchmark_draw_ui :: proc(h: ^Harness) {
 	}
 }
 
-benchmark_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	assert(builder != nil && userdata != nil, "benchmark_draw: invalid argument")
-	h := cast(^Harness)userdata
+benchmark_draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
+	assert(builder != nil && ctx != nil, "benchmark_draw: invalid argument")
+	h := cast(^Harness)ctx
 	switch h.workload {
 	case .Labels_Repeated:
 		h.submitted = run_labels(builder, h, h.scale, false)
