@@ -5,6 +5,7 @@ import "core:sync"
 import wg "vendor:wgpu"
 
 MAX_IN_FLIGHT_SUBMISSIONS :: 64
+SUBMISSION_SHUTDOWN_MAX_POLLS :: 4096
 #assert(size_of(u64) == 8)
 
 // At sixty submissions per second, a 64-bit identity cannot wrap in any physical runtime.
@@ -27,6 +28,7 @@ Submission_Tracker :: struct {
 	head:      u32,
 	count:     u32,
 	completed: u64,
+	closing:   bool,
 }
 
 @(private)
@@ -42,15 +44,27 @@ _submission_init :: proc(tracker: ^Submission_Tracker, owner: ^Context) {
 }
 
 @(private)
-_submission_shutdown :: proc(tracker: ^Submission_Tracker) {
-	assert(tracker != nil)
-	_submission_poll(tracker)
+_submission_shutdown :: proc(tracker: ^Submission_Tracker) -> bool {
+	assert(tracker != nil, "_submission_shutdown: nil tracker")
+	tracker.closing = true
+	for _ in 0 ..< SUBMISSION_SHUTDOWN_MAX_POLLS {
+		_submission_poll(tracker)
+		if tracker.count == 0 {
+			tracker.owner = nil
+			tracker.queue = nil
+			return true
+		}
+		if tracker.owner == nil || tracker.owner.device == nil do break
+		wg.DevicePoll(tracker.owner.device, true, nil)
+	}
 	assert(tracker.count <= MAX_IN_FLIGHT_SUBMISSIONS)
+	return false
 }
 
 @(private)
 _submission_reserve :: proc(tracker: ^Submission_Tracker) -> u64 {
 	assert(tracker != nil)
+	if tracker.closing do return 0
 	_submission_poll(tracker)
 	if tracker.count >= MAX_IN_FLIGHT_SUBMISSIONS {
 		assert(tracker.owner != nil, "_submission_reserve: tracker has no owner")
@@ -160,8 +174,6 @@ _submission_done :: proc "c" (
 	tracker := cast(^Submission_Tracker)userdata1
 	id := u64(uintptr(userdata2))
 	if tracker == nil || id == 0 do return
-	owner := tracker.owner
-	if owner == nil || owner.epoch != tracker.epoch do return
 	ticket := _submission_find(tracker, id)
 	if ticket == nil || ticket.epoch != tracker.epoch do return
 	assert(ticket.id == id)

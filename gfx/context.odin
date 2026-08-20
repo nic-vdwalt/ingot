@@ -459,11 +459,13 @@ _graphics_resources_destroy :: proc(ctx: ^Context, resources: ^Graphics_Resource
 @(private)
 Adapter_Res :: struct {
 	adapter: wg.Adapter,
+	status:  wg.RequestAdapterStatus,
 	done:    bool,
 }
 @(private)
 Device_Res :: struct {
 	device: wg.Device,
+	status: wg.RequestDeviceStatus,
 	done:   bool,
 }
 
@@ -474,8 +476,11 @@ _on_adapter :: proc "c" (
 	msg: wg.StringView,
 	u1, u2: rawptr,
 ) {
+	context = runtime.default_context()
 	r := (^Adapter_Res)(u1)
+	assert(r != nil, "_on_adapter: nil result")
 	r.adapter = adapter
+	r.status = status
 	r.done = true
 }
 
@@ -486,12 +491,14 @@ _on_device :: proc "c" (
 	msg: wg.StringView,
 	u1, u2: rawptr,
 ) {
+	context = runtime.default_context()
 	if status != .Success {
-		context = runtime.default_context()
 		fmt.eprintfln("gfx: device request failed (status=%v): %s", status, string(msg))
 	}
 	r := (^Device_Res)(u1)
+	assert(r != nil, "_on_device: nil result")
 	r.device = device
+	r.status = status
 	r.done = true
 }
 
@@ -549,7 +556,17 @@ _init_window_context :: proc(ctx: ^Context, width, height: i32, title: cstring) 
 	}
 
 	ctx.instance = wg.CreateInstance()
+	if ctx.instance == nil {
+		fmt.eprintln("gfx: WebGPU instance creation failed")
+		_close_window_context(ctx)
+		return
+	}
 	ctx.surface = platform_create_surface(ctx, ctx.instance)
+	if ctx.surface == nil {
+		fmt.eprintln("gfx: WebGPU surface creation failed")
+		_close_window_context(ctx)
+		return
+	}
 	ctx.pending_w, ctx.pending_h = width, height
 
 	// Acquire the GPU adapter+device. On native this resolves synchronously
@@ -563,15 +580,25 @@ _init_window_context :: proc(ctx: ^Context, width, height: i32, title: cstring) 
 // Shared by both targets (native calls it inline from platform_start_gpu; web
 // calls it from the async device callback). Everything here is pure wgpu.
 @(private)
-_gpu_finish :: proc(ctx: ^Context) {
+_gpu_finish :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_gpu_finish: nil context")
+	if ctx.surface == nil || ctx.adapter == nil || ctx.device == nil || ctx.queue == nil {
+		fmt.eprintln("gfx: incomplete GPU state; cannot configure swapchain")
+		_close_window_context(ctx)
+		return false
+	}
 	width, height := ctx.pending_w, ctx.pending_h
+	if width <= 0 || height <= 0 {
+		fmt.eprintln("gfx: invalid pending window dimensions")
+		_close_window_context(ctx)
+		return false
+	}
 
-	caps, _ := wg.SurfaceGetCapabilities(ctx.surface, ctx.adapter)
-	if caps.formatCount == 0 || caps.formats == nil {
+	caps, status := wg.SurfaceGetCapabilities(ctx.surface, ctx.adapter)
+	if status != .Success || caps.formatCount == 0 || caps.formats == nil {
 		fmt.eprintln("gfx: surface reports no supported formats; cannot configure swapchain")
-		ctx.lifecycle = .Closing
-		return
+		_close_window_context(ctx)
+		return false
 	}
 	// Prefer a non-sRGB (linear UNORM) surface. raylib writes 8-bit sRGB color
 	// values straight to a UNORM framebuffer with no gamma applied; an sRGB
@@ -628,8 +655,8 @@ _gpu_finish :: proc(ctx: ^Context) {
 		// The device could not supply the stream pools even at the floor.
 		// Closing here surfaces a diagnosable state; the alternative used to
 		// be an assert, which on web traps the module and freezes the canvas.
-		ctx.lifecycle = .Closing
-		return
+		_close_window_context(ctx)
+		return false
 	}
 	_graphics_resources_init(&ctx.resources)
 	platform_input_init(ctx)
@@ -637,6 +664,8 @@ _gpu_finish :: proc(ctx: ^Context) {
 
 	ctx.initialized = true
 	ctx.lifecycle = .Ready
+	assert(context_ready(ctx), "_gpu_finish: context not ready")
+	return true
 }
 
 CloseWindow :: proc() {
@@ -654,7 +683,7 @@ _close_window_context :: proc(ctx: ^Context) {
 		platform_drop_shutdown(ctx)
 		_graphics_resources_destroy(ctx, &ctx.resources)
 		renderer_shutdown(&ctx.rend)
-		_submission_shutdown(&ctx.submissions)
+		ensure(_submission_shutdown(&ctx.submissions), "gfx: submissions did not drain")
 	}
 	if ctx.surface != nil do wg.SurfaceRelease(ctx.surface)
 	if ctx.queue != nil do wg.QueueRelease(ctx.queue)

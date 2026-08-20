@@ -277,7 +277,12 @@ _web_on_device :: proc "c" (
 	free(request)
 	ctx.device = device
 	ctx.queue = wg.DeviceGetQueue(ctx.device)
-	_gpu_finish(ctx)
+	if ctx.queue == nil {
+		fmt.eprintln("gfx: web device returned no queue")
+		_close_window_context(ctx)
+		return
+	}
+	_ = _gpu_finish(ctx)
 }
 
 // On web the adapter/device requests resolve on the browser event loop, not via
