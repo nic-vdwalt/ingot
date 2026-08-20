@@ -25,8 +25,7 @@ and browser WASM/WebGPU.
 - Event-driven rendering with near-zero idle work
 - Deterministic, bounded test harnesses
 
-> [!IMPORTANT]
-> `0.1.7` is the latest source tag for a young `0.x` API. Pin an exact revision
+> [!IMPORTANT] > `0.1.7` is the latest source tag for a young `0.x` API. Pin an exact revision
 > and validate every platform your application ships on.
 
 ## The experiment
@@ -45,7 +44,9 @@ git -C libs/ingot checkout 0.1.7
 odin build src -collection:ingot=libs/ingot
 ```
 
-Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION). The recommended
+Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION).
+
+The recommended
 entry point for UI applications is `ingot:fit`:
 
 ```odin
