@@ -45,8 +45,8 @@ git -C libs/ingot checkout 0.1.7
 odin build src -collection:ingot=libs/ingot
 ```
 
-Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION). Prepared Fit uses explicit
-parent values, so no `defer fit.End(...)` is needed.
+Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION). For UI
+applications, use the supported `ingot:fit` entry point:
 
 ```odin
 package main
