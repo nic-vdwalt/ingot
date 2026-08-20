@@ -270,26 +270,26 @@ main :: proc() {
 	}
 }
 
-toggle_theme_action :: proc(userdata: rawptr) {
-	_ = userdata
+toggle_theme_action :: proc(ctx: rawptr) {
+	_ = ctx
 	map_state.dark = !map_state.dark
 	fit.Set_Theme(&app, fit.Theme_Dark() if map_state.dark else fit.Theme_Light())
 }
 
-select_stage_action :: proc(userdata: rawptr, tag: u64) {
-	_ = userdata
+select_stage_action :: proc(ctx: rawptr, tag: u64) {
+	_ = ctx
 	assert(tag > 0 && tag <= STAGE_COUNT, "select_stage_action: invalid stage")
 	map_select_stage(i32(tag))
 }
 
-play_action :: proc(userdata: rawptr) {
-	_ = userdata
+play_action :: proc(ctx: rawptr) {
+	_ = ctx
 	map_state.playing = !map_state.playing
 	if map_state.playing && map_state.target_stage == 0 do map_select_stage(1)
 }
 
-reset_action :: proc(userdata: rawptr) {
-	_ = userdata
+reset_action :: proc(ctx: rawptr) {
+	_ = ctx
 	map_state.playing = false
 	map_state.selected_stage = 0
 	map_state.target_stage = 0
@@ -297,8 +297,8 @@ reset_action :: proc(userdata: rawptr) {
 	map_state.hold_seconds = 0
 }
 
-map_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	_ = userdata
+map_build :: proc(builder: ^fit.Builder, ctx: rawptr) {
+	_ = ctx
 	root := fit.Column(builder, {gap = .SM, padding = .LG})
 	header := fit.Row(root, {gap = .SM, align = .Center})
 	fit.Label(header, "INGOT API MAP", {role = .Title, track = fit.Grow()})
@@ -357,8 +357,8 @@ map_select_stage :: proc(stage: i32) {
 	if map_state.progress >= 1 do map_state.selected_stage = stage
 }
 
-map_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {
-	_ = userdata
+map_measure :: proc(constraints: fit.Constraints, ctx: rawptr) -> fit.Size {
+	_ = ctx
 	assert(constraints.max_w >= 0 && constraints.max_h >= 0, "api map: invalid constraints")
 	// The body height comes from the Grow sizing in map_build; the measured
 	// height is only a minimal floor.
@@ -612,8 +612,8 @@ point_distance :: proc(from, to: fit.Point) -> f32 {
 	return math.sqrt(delta_x * delta_x + delta_y * delta_y)
 }
 
-map_render :: proc(surface: ^fit.Surface, rect: fit.Rect, userdata: rawptr) -> bool {
-	_ = userdata
+map_render :: proc(surface: ^fit.Surface, rect: fit.Rect, ctx: rawptr) -> bool {
+	_ = ctx
 	assert(surface != nil && rect.w > 0 && rect.h > 0, "api map render: invalid argument")
 	if fit.Surface_Key_Pressed(surface, .F12) do map_state.debug_on = !map_state.debug_on
 	map_animate(surface)

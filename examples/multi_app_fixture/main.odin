@@ -9,8 +9,8 @@ Fixture_State :: struct {
 	label: string,
 }
 
-fixture_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	state := cast(^Fixture_State)userdata
+fixture_draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
+	state := cast(^Fixture_State)ctx
 	root := fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Multi-App fixture", {role = .Title})
 	fit.Label(root, state.label)

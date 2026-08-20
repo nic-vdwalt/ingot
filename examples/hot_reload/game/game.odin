@@ -12,8 +12,8 @@ Game_State :: struct {
 
 g: ^Game_State
 
-count_click :: proc(userdata: rawptr) {
-	_ = userdata
+count_click :: proc(ctx: rawptr) {
+	_ = ctx
 	assert(g != nil, "count_click: missing state")
 	g.click_count += 1
 }

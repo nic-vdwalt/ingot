@@ -6,7 +6,7 @@ that Parent explicitly, so hierarchy is visible in ordinary values and there is
 no open-container state to balance.
 
 ```odin
-Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+Draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
 	root := fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Settings", {role = .Title})
 	actions := fit.Row(root, {gap = .SM, align = .Center})
@@ -108,7 +108,7 @@ hierarchy.
 `Label`, `Button`, `Checkbox`, `Radio`, `Slider`, `Text_Input`, `Progress`,
 `Separator`, `Spacer`, table cells, `Canvas_Leaf`, and `Custom` consume Parent.
 Controls keep values in caller-owned state. Prepared Button Actions live in
-existing bounded node storage. `Custom` callbacks, borrowed strings, userdata,
+existing bounded node storage. `Custom` callbacks, borrowed strings, ctx,
 state, signals, and output pointers must remain valid until render.
 
 `Canvas` is the complete-root convenience for full-parent explicit geometry.

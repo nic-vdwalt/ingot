@@ -41,8 +41,8 @@ main :: proc() {
 	)
 }
 
-draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	data := cast(^State)userdata
+draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
+	data := cast(^State)ctx
 	when SMOKE do smoke_step(data)
 	root := fit.Column(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Ingot view builder", {role = .Title})
@@ -71,26 +71,26 @@ draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	}
 }
 
-save_action :: proc(userdata: rawptr) {
-	data := cast(^State)userdata
+save_action :: proc(ctx: rawptr) {
+	data := cast(^State)ctx
 	assert(data != nil, "save_action: nil state")
 	save(data)
 }
 
-load_action :: proc(userdata: rawptr) {
-	data := cast(^State)userdata
+load_action :: proc(ctx: rawptr) {
+	data := cast(^State)ctx
 	assert(data != nil, "load_action: nil state")
 	load(data)
 }
 
-add_action :: proc(userdata: rawptr) {
-	data := cast(^State)userdata
+add_action :: proc(ctx: rawptr) {
+	data := cast(^State)ctx
 	assert(data != nil, "add_action: nil state")
 	add_label(data)
 }
 
-delete_action :: proc(userdata: rawptr) {
-	data := cast(^State)userdata
+delete_action :: proc(ctx: rawptr) {
+	data := cast(^State)ctx
 	assert(data != nil, "delete_action: nil state")
 	delete_last(data)
 }

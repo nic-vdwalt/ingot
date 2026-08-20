@@ -202,7 +202,7 @@ content extent; responsive code declares one parent-selected branch rather than
 retaining alternatives. They add no recursion, unbounded allocation, or
 cross-frame hierarchy. Separated `Measure` and `Render_At` consume caller-owned
 storage synchronously.
-Borrowed strings, userdata, and activation destinations remain valid through
+Borrowed strings, ctx, and activation destinations remain valid through
 rendering, where each leaf executes exactly once. A custom leaf may receive a
 borrowed `fit.Surface` for same-frame interaction and explicit geometry. The
 Surface is valid only during that render callback; its frame and implementation
