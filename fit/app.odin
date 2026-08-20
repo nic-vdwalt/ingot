@@ -4,9 +4,9 @@ import "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
-Init :: proc(app: ^App, config: Config, callbacks: Callbacks, ctx: rawptr = nil) -> bool {
+Init :: proc(app: ^App, config: Config, callbacks: Callbacks, user_data: rawptr = nil) -> bool {
 	assert(app != nil, "Fit.Init: nil app")
-	return Init_Context(app, nil, config, callbacks, ctx)
+	return Init_Context(app, nil, config, callbacks, user_data)
 }
 
 Init_Context :: proc(
@@ -14,14 +14,14 @@ Init_Context :: proc(
 	gfx_context: ^gfx.Context,
 	config: Config,
 	callbacks: Callbacks,
-	ctx: rawptr = nil,
+	user_data: rawptr = nil,
 ) -> bool {
 	assert(app != nil, "Fit.Init_Context: nil app")
 	assert(callbacks.draw != nil, "Fit.Init_Context: nil draw callback")
 	assert(app.inner.state == .Empty, "Fit.Init_Context: app already initialized")
 	assert(app.draw == nil, "Fit.Init_Context: draw callback already bound")
 	assert(app.shutdown == nil, "Fit.Init_Context: shutdown callback already bound")
-	assert(app.ctx == nil, "Fit.Init_Context: context already bound")
+	assert(app.user_data == nil, "Fit.Init_Context: context already bound")
 	initialized := false
 	if gfx_context == nil {
 		initialized = ui_gfx.app_init(
@@ -39,33 +39,33 @@ Init_Context :: proc(
 			app,
 		)
 	}
-	if !initialized do return app_init_finish(app, callbacks, ctx, false)
+	if !initialized do return app_init_finish(app, callbacks, user_data, false)
 	ui.ui_runtime_set_scale_hooks(
 		ui_gfx.app_ui_runtime(&app.inner),
 		config.session.scale_metrics,
 		config.session.scale_invalidate,
 	)
-	return app_init_finish(app, callbacks, ctx, true)
+	return app_init_finish(app, callbacks, user_data, true)
 }
 
 @(private = "package")
 app_init_finish :: proc(
 	app: ^App,
 	callbacks: Callbacks,
-	ctx: rawptr,
+	user_data: rawptr,
 	initialized: bool,
 ) -> bool {
 	assert(app != nil, "Fit app init: nil app")
 	assert(callbacks.draw != nil, "Fit app init: nil draw callback")
 	if !initialized {
 		assert(app.inner.state == .Empty, "Fit app init: failed app not empty")
-		assert(app.draw == nil && app.shutdown == nil && app.ctx == nil)
+		assert(app.draw == nil && app.shutdown == nil && app.user_data == nil)
 		return false
 	}
 	assert(app.inner.state == .Ready, "Fit app init: initialized app not ready")
 	app.draw = callbacks.draw
 	app.shutdown = callbacks.shutdown
-	app.ctx = ctx
+	app.user_data = user_data
 	assert(app.draw != nil, "Fit app init: draw callback not bound")
 	return true
 }
@@ -90,15 +90,15 @@ Destroy :: proc(app: ^App) {
 	ui_gfx.app_destroy(&app.inner)
 }
 
-Run :: proc(app: ^App, config: Config, draw: Draw_Proc, ctx: rawptr = nil) -> bool {
+Run :: proc(app: ^App, config: Config, draw: Draw_Proc, user_data: rawptr = nil) -> bool {
 	assert(app != nil, "Fit.Run: nil app")
 	assert(draw != nil, "Fit.Run: nil draw callback")
 	assert(app.inner.state == .Empty, "Fit.Run: app already initialized")
 	assert(app.draw == nil, "Fit.Run: draw callback already bound")
 	assert(app.shutdown == nil, "Fit.Run: shutdown callback already bound")
-	assert(app.ctx == nil, "Fit.Run: context already bound")
+	assert(app.user_data == nil, "Fit.Run: context already bound")
 	app.draw = draw
-	app.ctx = ctx
+	app.user_data = user_data
 	ok := ui_gfx.app_run(
 		&app.inner,
 		to_app_config(config),
@@ -173,7 +173,7 @@ app_draw :: proc(inner: ^ui_gfx.App, root: ^ui.Ui, userdata: rawptr) {
 	app.builder.root = root^
 	app.builder.bound = true
 	Begin(&app.builder)
-	app.draw(&app.builder, app.ctx)
+	app.draw(&app.builder, app.user_data)
 	assert(app.builder.inner.prepared.depth == 0, "fit app: unbalanced builder")
 	_ = Render(&app.builder)
 	root^ = app.builder.root
@@ -186,7 +186,7 @@ app_callbacks_reset :: proc(app: ^App) {
 	assert(!app.builder.bound, "fit app: builder bound during callback reset")
 	app.draw = nil
 	app.shutdown = nil
-	app.ctx = nil
+	app.user_data = nil
 }
 
 @(private = "file")
@@ -194,6 +194,6 @@ app_shutdown :: proc(inner: ^ui_gfx.App, userdata: rawptr) {
 	assert(inner != nil && userdata != nil, "fit app: invalid shutdown")
 	app := cast(^App)userdata
 	assert(!app.builder.bound, "fit app: builder still bound")
-	if app.shutdown != nil do app.shutdown(app, app.ctx)
+	if app.shutdown != nil do app.shutdown(app, app.user_data)
 	app_callbacks_reset(app)
 }

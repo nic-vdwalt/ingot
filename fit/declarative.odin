@@ -38,13 +38,13 @@ Canvas_Leaf :: proc(
 	parent: Parent,
 	options: Canvas_Options,
 	render: Render_Proc,
-	ctx: rawptr = nil,
+	user_data: rawptr = nil,
 ) {
 	assert(render != nil, "Fit.Canvas_Leaf: nil render callback")
 	assert(options.intrinsic.w >= 0 && options.intrinsic.h >= 0, "Fit.Canvas_Leaf: invalid size")
 	custom_intrinsic(
 		parent,
-		{render = render, ctx = ctx, intrinsic = options.intrinsic},
+		{render = render, user_data = user_data, intrinsic = options.intrinsic},
 		{track = options.track, size = options.size, activated = options.activated},
 	)
 }

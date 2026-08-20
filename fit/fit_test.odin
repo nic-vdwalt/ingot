@@ -65,19 +65,19 @@ fit_test_runtime :: proc(runtime: ^ui.Ui_Runtime, backend: ^i32) {
 }
 
 @(private = "file")
-fit_test_measure :: proc(constraints: Constraints, ctx: rawptr) -> Size {
-	assert(ctx != nil, "fit test measure: invalid argument")
+fit_test_measure :: proc(constraints: Constraints, user_data: rawptr) -> Size {
+	assert(user_data != nil, "fit test measure: invalid argument")
 	assert(constraints.max_w >= 0 && constraints.max_h >= 0, "fit test measure: invalid bounds")
-	counts := cast(^Fit_Test_Counts)ctx
+	counts := cast(^Fit_Test_Counts)user_data
 	counts.measure += 1
 	return {48, 24, false}
 }
 
 @(private = "file")
-fit_test_render :: proc(surface: ^Surface, rect: Rect, ctx: rawptr) -> bool {
-	assert(surface != nil && ctx != nil, "fit test render: invalid argument")
+fit_test_render :: proc(surface: ^Surface, rect: Rect, user_data: rawptr) -> bool {
+	assert(surface != nil && user_data != nil, "fit test render: invalid argument")
 	assert(rect.w >= 0 && rect.h >= 0, "fit test render: invalid rect")
-	counts := cast(^Fit_Test_Counts)ctx
+	counts := cast(^Fit_Test_Counts)user_data
 	counts.render += 1
 	counts.rect = rect
 	return false
@@ -119,17 +119,17 @@ fit_root_grow_container_centers_children_in_viewport :: proc(t: ^testing.T) {
 }
 
 @(private = "file")
-fit_test_continue :: proc(ctx: rawptr) {
-	assert(ctx != nil, "fit test action: nil state")
-	state := cast(^Fit_Test_Readme_State)ctx
+fit_test_continue :: proc(user_data: rawptr) {
+	assert(user_data != nil, "fit test action: nil state")
+	state := cast(^Fit_Test_Readme_State)user_data
 	state.continued = true
 	state.action_calls += 1
 }
 
 @(private = "file")
-fit_test_readme_draw :: proc(builder: ^Builder, ctx: rawptr) {
-	assert(builder != nil && ctx != nil, "fit readme test: invalid argument")
-	state := cast(^Fit_Test_Readme_State)ctx
+fit_test_readme_draw :: proc(builder: ^Builder, user_data: rawptr) {
+	assert(builder != nil && user_data != nil, "fit readme test: invalid argument")
+	state := cast(^Fit_Test_Readme_State)user_data
 	root := Center(builder, {gap = .SM, padding = .LG})
 	Label(root, "Hello from Ingot")
 	Button(root, "continue", "Continue", action(fit_test_continue, state))
@@ -191,9 +191,9 @@ Fit_Test_Delayed_State :: struct {
 }
 
 @(private = "file")
-fit_test_delayed_draw :: proc(builder: ^Builder, ctx: rawptr) {
-	assert(builder != nil && ctx != nil, "fit delayed test: invalid argument")
-	state := cast(^Fit_Test_Delayed_State)ctx
+fit_test_delayed_draw :: proc(builder: ^Builder, user_data: rawptr) {
+	assert(builder != nil && user_data != nil, "fit delayed test: invalid argument")
+	state := cast(^Fit_Test_Delayed_State)user_data
 	root := Center(builder)
 	if Button_Delayed(root, "delayed", "Delayed", &state.signal) do state.consumed += 1
 }
@@ -225,9 +225,9 @@ fit_button_delayed_consumes_activation_on_later_build :: proc(t: ^testing.T) {
 }
 
 @(private = "file")
-fit_test_legacy_button_draw :: proc(builder: ^Builder, ctx: rawptr) {
-	assert(builder != nil && ctx != nil, "fit legacy button test: invalid argument")
-	state := cast(^Fit_Test_Legacy_Button_State)ctx
+fit_test_legacy_button_draw :: proc(builder: ^Builder, user_data: rawptr) {
+	assert(builder != nil && user_data != nil, "fit legacy button test: invalid argument")
+	state := cast(^Fit_Test_Legacy_Button_State)user_data
 	if state.clicked do state.consumed = true
 	root := Center(builder)
 	Button(root, "legacy", "Legacy", &state.clicked)
@@ -277,12 +277,12 @@ fit_builder_nested_layout_renders_once :: proc(t: ^testing.T) {
 	counts: Fit_Test_Counts
 	root := Column(&builder, {gap = .SM})
 	row := Row(root, {gap = .XS})
-	Custom(row, {measure = fit_test_measure, render = fit_test_render, ctx = &counts})
+	Custom(row, {measure = fit_test_measure, render = fit_test_render, user_data = &counts})
 	flow := Flow(root, {gap_x = .XS, gap_y = .SM})
-	Custom(flow, {measure = fit_test_measure, render = fit_test_render, ctx = &counts})
+	Custom(flow, {measure = fit_test_measure, render = fit_test_render, user_data = &counts})
 	grid := Grid(root, {columns = 1})
 	attachment := Attachment(grid, {target_kind = .Viewport, z = Z_Order(200)})
-	Custom(attachment, {measure = fit_test_measure, render = fit_test_render, ctx = &counts})
+	Custom(attachment, {measure = fit_test_measure, render = fit_test_render, user_data = &counts})
 	_ = Render(&builder)
 	builder_close(&builder)
 	testing.expect_value(t, counts.render, i32(3))
@@ -503,24 +503,24 @@ fit_declarative_helpers_measure_and_render :: proc(t: ^testing.T) {
 }
 
 @(private = "file")
-fit_test_region_body :: proc(region: ^Region, ctx: rawptr) {
-	assert(region != nil && region.inner.open && ctx != nil)
-	calls := cast(^i32)ctx
+fit_test_region_body :: proc(region: ^Region, user_data: rawptr) {
+	assert(region != nil && region.inner.open && user_data != nil)
+	calls := cast(^i32)user_data
 	calls^ += 1
 	Region_Label(region, "Scoped")
 }
 
 @(private = "file")
-fit_test_layer_body :: proc(surface: ^Surface, ctx: rawptr) {
-	assert(surface != nil && ctx != nil)
-	calls := cast(^i32)ctx
+fit_test_layer_body :: proc(surface: ^Surface, user_data: rawptr) {
+	assert(surface != nil && user_data != nil)
+	calls := cast(^i32)user_data
 	calls^ += 1
 }
 
 @(private = "file")
-fit_test_pane_body :: proc(surface: ^Surface, content_y: i32, ctx: rawptr) -> i32 {
-	assert(surface != nil && ctx != nil)
-	calls := cast(^i32)ctx
+fit_test_pane_body :: proc(surface: ^Surface, content_y: i32, user_data: rawptr) -> i32 {
+	assert(surface != nil && user_data != nil)
+	calls := cast(^i32)user_data
 	calls^ += 1
 	return content_y + 20
 }
@@ -808,9 +808,9 @@ fit_test_driver_exposes_bounded_frame_results :: proc(t: ^testing.T) {
 }
 
 @(private = "file")
-fit_test_draw :: proc(builder: ^Builder, ctx: rawptr) {
+fit_test_draw :: proc(builder: ^Builder, user_data: rawptr) {
 	assert(builder != nil, "fit test draw: nil builder")
-	_ = ctx
+	_ = user_data
 	root := Column(builder)
 	Label(root, "Hello")
 	active := false
@@ -848,10 +848,10 @@ fit_failed_init_binding_is_retryable :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, !app_init_finish(app, callbacks, &first, false))
 	testing.expect_value(t, Get_State(app), State.Empty)
-	testing.expect(t, app.draw == nil && app.shutdown == nil && app.ctx == nil)
+	testing.expect(t, app.draw == nil && app.shutdown == nil && app.user_data == nil)
 	testing.expect_value(t, Storage_Capacity(&app.builder), len(nodes))
 	testing.expect(t, !app_init_finish(app, callbacks, &second, false))
-	testing.expect(t, app.draw == nil && app.shutdown == nil && app.ctx == nil)
+	testing.expect(t, app.draw == nil && app.shutdown == nil && app.user_data == nil)
 }
 
 @(test)

@@ -206,9 +206,9 @@ mutate_resources :: proc(p: ^Prng, fit_session: ^fit.Session) {
 
 }
 
-fuzz_frame :: proc(builder: ^fit.Builder, ctx: rawptr) {
-	assert(builder != nil && ctx != nil, "fuzz_frame: invalid argument")
-	p := cast(^Prng)ctx
+fuzz_frame :: proc(builder: ^fit.Builder, user_data: rawptr) {
+	assert(builder != nil && user_data != nil, "fuzz_frame: invalid argument")
+	p := cast(^Prng)user_data
 	rl.ClearBackground(rl.BLACK)
 	root := fit.Column(builder, {gap = .XS, padding = .SM})
 	fit.Label(root, "FIT lifecycle fuzz", {role = .Title})

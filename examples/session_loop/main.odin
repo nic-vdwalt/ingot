@@ -5,8 +5,8 @@ import fit "ingot:fit"
 app: fit.App
 click_count: u64
 
-count_click :: proc(ctx: rawptr) {
-	_ = ctx
+count_click :: proc(user_data: rawptr) {
+	_ = user_data
 	click_count += 1
 }
 
@@ -36,9 +36,9 @@ main :: proc() {
 	if fit.Get_State(&app) == .Running do _ = fit.Stop(&app)
 }
 
-draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
+draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	assert(builder != nil, "draw: nil builder")
-	_ = ctx
+	_ = user_data
 	root := fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Custom Fit application loop", {role = .Title})
 	fit.Label(root, "The caller owns Init, Start, Tick, Stop, and Destroy.")

@@ -230,8 +230,8 @@ widget_state := Widget_State {
 
 // Generic modal + context menu (Overlay section).
 about_modal: fit.Modal_State
-ctx_menu: fit.Context_Menu_State
-ctx_note := "right-click in this section for a context menu"
+user_data_menu: fit.Context_Menu_State
+user_data_note := "right-click in this section for a context menu"
 
 // Toasts + confirm dialog (Overlay section). Zero values are ready to use.
 toasts: fit.Toast_State
@@ -302,14 +302,19 @@ input_state_destroy :: proc(state: ^Input_State) {
 	fit.Combobox_State_Destroy(&state.combo)
 }
 
-gallery_build :: proc(builder: ^fit.Builder, ctx: rawptr) {
+gallery_build :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	assert(builder != nil, "gallery_build: nil builder")
 	root := fit.Column(builder, {size = {width = fit.Grow(), height = fit.Grow()}})
-	fit.Canvas_Leaf(root, {size = {width = fit.Grow(), height = fit.Grow()}}, gallery_frame, ctx)
+	fit.Canvas_Leaf(
+		root,
+		{size = {width = fit.Grow(), height = fit.Grow()}},
+		gallery_frame,
+		user_data,
+	)
 }
 
-gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, ctx: rawptr) -> bool {
-	_ = ctx
+gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, user_data: rawptr) -> bool {
+	_ = user_data
 	gallery_root = root
 	fmt.eprintfln("[gallery] frame root = %v", root)
 	sw := root.w
@@ -1395,26 +1400,26 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 
 draw_overlay_context_menu :: proc(surface: ^fit.Surface, x, info_y: i32) {
 	if fit.Mouse_Pressed(surface, .Right) &&
-	   !fit.Context_Menu_Is_Open(&ctx_menu) &&
+	   !fit.Context_Menu_Is_Open(&user_data_menu) &&
 	   !fit.Modal_Is_Open(&about_modal) &&
 	   !fit.Confirm_Dialog_Is_Open(&confirm) {
 		mouse := fit.Mouse_Position(surface)
-		fit.Context_Menu_Open(&ctx_menu, mouse)
+		fit.Context_Menu_Open(&user_data_menu, mouse)
 	}
-	if fit.Context_Menu_Is_Open(&ctx_menu) {
+	if fit.Context_Menu_Is_Open(&user_data_menu) {
 		items := []fit.Menu_Item {
 			{label = "Reset shielded clicks"},
 			{label = "Unavailable action", disabled = true},
 			{separator = true},
 			{label = "Close menu"},
 		}
-		chosen := fit.Surface_Context_Menu(surface, &ctx_menu, items)
+		chosen := fit.Surface_Context_Menu(surface, &user_data_menu, items)
 		if chosen == 0 {
 			shielded_clicks = 0
-			ctx_note = "shielded clicks reset via context menu"
+			user_data_note = "shielded clicks reset via context menu"
 		}
 	}
-	fit.Text(surface, ctx_note, x, info_y + fit.Px(surface, 22), .Label, .Label)
+	fit.Text(surface, user_data_note, x, info_y + fit.Px(surface, 22), .Label, .Label)
 }
 
 draw_overlay_modal :: proc(surface: ^fit.Surface) {
