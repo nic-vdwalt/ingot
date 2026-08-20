@@ -50,6 +50,7 @@ Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION).
 ```odin
 package main
 
+import "core:fmt"
 import fit "ingot:fit"
 
 app: fit.App
@@ -67,6 +68,7 @@ Count_Click :: proc(userdata: rawptr) {
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	root := fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Hello from Ingot")
+	fit.Label(root, fmt.tprintf("Count: %d", click_count))
 	fit.Button(root, "count", "Count clicks", fit.On(Count_Click))
 }
 ```

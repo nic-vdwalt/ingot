@@ -129,6 +129,16 @@ Test_Driver_Frame_Timed :: proc(
 		true
 }
 
+Test_Driver_Redraw_Requested :: proc(driver: ^Test_Driver) -> bool {
+	assert(
+		driver != nil && driver.inner != nil,
+		"Fit.Test_Driver_Redraw_Requested: invalid driver",
+	)
+	impl := cast(^Test_Driver_Impl)driver.inner
+	assert(!impl.builder.bound, "Fit.Test_Driver_Redraw_Requested: frame open")
+	return impl.output.platform.request_redraw
+}
+
 Test_Driver_Paint_Summary :: proc(driver: ^Test_Driver) -> Paint_Summary {
 	assert(driver != nil && driver.inner != nil, "Fit.Test_Driver_Paint_Summary: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner

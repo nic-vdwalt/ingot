@@ -332,7 +332,12 @@ map_stage_controls :: proc(parent: fit.Parent) {
 map_playback_controls :: proc(parent: fit.Parent) {
 	assert(map_state.target_stage >= 0 && map_state.target_stage <= STAGE_COUNT)
 	controls := fit.Flow(parent, {gap_x = .XS, gap_y = .XS})
-	fit.Button(controls, "play", "Pause" if map_state.playing else "Play path", fit.On(play_action))
+	fit.Button(
+		controls,
+		"play",
+		"Pause" if map_state.playing else "Play path",
+		fit.On(play_action),
+	)
 	fit.Button(controls, "reset", "Reset", fit.On(reset_action))
 	fit.Checkbox(controls, "motion", "Reduced motion", &map_state.reduced_motion)
 }

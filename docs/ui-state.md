@@ -255,11 +255,12 @@ if ui.button_at(frame, rect, "Save", .Primary, focus = save_focus) {
 ```
 
 Direct `ui.button` calls return interaction while explicit UI code runs. At the
-supported Fit layer, prepared Button actions run during render in the activating
-frame; Surface and Region controls return interaction directly inside that
-render callback; and `Button_Delayed`/`Signal` intentionally bridges activation
-to a later Builder declaration. None of the render-time paths can revise a
-prepared description that has already been constructed.
+supported Fit layer, current-build Parent values describe hierarchy without
+retaining widget state, and prepared Button actions run during render in the
+activating frame. Surface and Region controls return interaction directly inside
+that render callback; `Button_Delayed`/`Signal` intentionally bridges activation
+to a later Builder declaration. None of the render-time paths can revise an
+already constructed prepared description.
 
 Each leaf-widget behavior variant has one canonical geometry shape per tier.
 The `*_at` suffix marks explicit leaf geometry; `_state` and `_animated` mark

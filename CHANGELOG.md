@@ -11,6 +11,12 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
+- **Breaking:** prepared Fit layout now uses allocation-free current-build
+  `fit.Parent` values. Root containers return Parent; child containers and leaves
+  consume Parent, and `fit.Scope` derives identity by returning another Parent.
+  Remove prepared `fit.End`, balancing blocks, and callback `*_With` helpers.
+  Explicit-geometry Surface, Region, Layer, Pane, and layout begin/end APIs are
+  unchanged.
 - **Breaking:** prepared `fit.Button` now uses allocation-free same-frame Actions
   as its primary activation API. Construct actions with `fit.On`; tagged Actions
   support bounded loop-generated controls. The former Signal overload is now
