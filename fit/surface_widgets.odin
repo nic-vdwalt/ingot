@@ -17,7 +17,7 @@ Surface_Button :: proc(
 		u.frame,
 		to_rect(rect),
 		label,
-		ui.Btn_Style(style),
+		style,
 		enabled = enabled,
 		widget = ui.Widget_Id(widget),
 	)
@@ -201,7 +201,7 @@ Surface_Combobox :: proc(
 		u.frame,
 		to_rect(rect),
 		&state.inner,
-		transmute([]ui.Combobox_Item)items,
+		items,
 		selected,
 		placeholder,
 		u.screen_w,
@@ -352,7 +352,7 @@ Surface_Confirm_Dialog :: proc(
 
 Region_Label :: proc(region: ^Region, text: string, role: Text_Role = .Body, ink: Ink = .Primary) {
 	assert(region != nil && region.inner.open, "Fit.Region_Label: region not open")
-	ui.label(&region.inner, text, ui.Text_Role(role), ui.Ink(ink))
+	ui.label(&region.inner, text, role, ink)
 }
 
 Region_Button_String :: proc(
@@ -362,7 +362,7 @@ Region_Button_String :: proc(
 	enabled: bool = true,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
-	return ui.button(&region.inner, key, label, ui.Btn_Style(style), enabled)
+	return ui.button(&region.inner, key, label, style, enabled)
 }
 
 Region_Button_Id :: proc(
@@ -373,7 +373,7 @@ Region_Button_Id :: proc(
 	enabled: bool = true,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
-	return ui.button(&region.inner, ui.Widget_Id(widget), label, ui.Btn_Style(style), enabled)
+	return ui.button(&region.inner, ui.Widget_Id(widget), label, style, enabled)
 }
 
 Region_Button_U64 :: proc(
@@ -384,7 +384,7 @@ Region_Button_U64 :: proc(
 	enabled: bool = true,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
-	return ui.button(&region.inner, key, label, ui.Btn_Style(style), enabled)
+	return ui.button(&region.inner, key, label, style, enabled)
 }
 
 Region_Button :: proc {
@@ -465,7 +465,7 @@ Region_Text_Input :: proc(
 
 Region_Space :: proc(region: ^Region, space: Space) {
 	assert(region != nil && region.inner.open, "Fit.Region_Space: region not open")
-	ui.space(&region.inner, ui.Space(space))
+	ui.space(&region.inner, space)
 }
 
 Region_Section_Header :: proc(region: ^Region, title: string) {

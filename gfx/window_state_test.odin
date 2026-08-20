@@ -31,6 +31,25 @@ test_window_initial_focus_policy :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_surface_reconfigure_policy :: proc(t: ^testing.T) {
+	testing.expect(
+		t,
+		_surface_should_reconfigure(false, true, 800, 600),
+		"forced startup reconfigures an unchanged framebuffer",
+	)
+	testing.expect(
+		t,
+		!_surface_should_reconfigure(false, false, 800, 600),
+		"unchanged framebuffer does not reconfigure without a request",
+	)
+	testing.expect(
+		t,
+		!_surface_should_reconfigure(false, true, 0, 600),
+		"zero-sized framebuffer waits before reconfiguring",
+	)
+}
+
+@(test)
 test_pointer_inside_window :: proc(t: ^testing.T) {
 	testing.expect(t, _pointer_inside_window(0, 0, 800, 600), "top-left corner is inside")
 	testing.expect(t, _pointer_inside_window(400, 300, 800, 600), "centre is inside")

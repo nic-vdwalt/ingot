@@ -2,7 +2,9 @@
 package fit
 
 import "core:testing"
+import "ingot:gfx"
 import "ingot:ui"
+import "ingot:ui_gfx"
 
 Fit_Test_Counts :: struct {
 	measure: i32,
@@ -830,4 +832,100 @@ test_text_input_submit_mapping :: proc(t: ^testing.T) {
 	// keep inserting a newline rather than wrongly submitting.
 	testing.expect_value(t, to_submit(.Ctrl_Enter), ui.Text_Input_Submit.Never)
 	testing.expect_value(t, to_submit(.Mod_Enter), ui.Text_Input_Submit.Never)
+}
+
+@(test)
+fit_failed_init_binding_is_retryable :: proc(t: ^testing.T) {
+	app := new(App)
+	defer free(app)
+	nodes: [STORAGE_NODE_DEFAULT + 1]Storage_Node
+	outputs: [STORAGE_NODE_DEFAULT + 1]^bool
+	Set_Storage(&app.builder, {nodes = nodes[:], outputs = outputs[:]})
+	first := i32(1)
+	second := i32(2)
+	callbacks := Callbacks {
+		draw = fit_test_draw,
+	}
+	testing.expect(t, !app_init_finish(app, callbacks, &first, false))
+	testing.expect_value(t, Get_State(app), State.Empty)
+	testing.expect(t, app.draw == nil && app.shutdown == nil && app.userdata == nil)
+	testing.expect_value(t, Storage_Capacity(&app.builder), len(nodes))
+	testing.expect(t, !app_init_finish(app, callbacks, &second, false))
+	testing.expect(t, app.draw == nil && app.shutdown == nil && app.userdata == nil)
+}
+
+@(test)
+fit_app_state_and_pacing_mappings_are_semantic :: proc(t: ^testing.T) {
+	testing.expect_value(t, to_frame_pacing(.Fixed), ui_gfx.App_Frame_Pacing.Fixed)
+	testing.expect_value(t, to_frame_pacing(.Uncapped), ui_gfx.App_Frame_Pacing.Uncapped)
+	testing.expect_value(
+		t,
+		to_frame_pacing(.Monitor_Refresh),
+		ui_gfx.App_Frame_Pacing.Monitor_Refresh,
+	)
+	testing.expect_value(t, from_app_state(.Empty), State.Empty)
+	testing.expect_value(t, from_app_state(.Ready), State.Ready)
+	testing.expect_value(t, from_app_state(.Running), State.Running)
+	testing.expect_value(t, from_app_state(.Stopped), State.Stopped)
+}
+
+@(test)
+fit_window_flag_mapping_is_semantic :: proc(t: ^testing.T) {
+	all := Window_Flags {
+		.Fullscreen,
+		.Resizable,
+		.Undecorated,
+		.Transparent,
+		.Msaa_4x,
+		.Vsync,
+		.Hidden,
+		.Always_Run,
+		.Minimized,
+		.Maximized,
+		.Unfocused,
+		.Topmost,
+		.High_Dpi,
+		.Mouse_Passthrough,
+		.Borderless_Windowed,
+		.Interlaced,
+	}
+	expected := gfx.ConfigFlags {
+		.FULLSCREEN_MODE,
+		.WINDOW_RESIZABLE,
+		.WINDOW_UNDECORATED,
+		.WINDOW_TRANSPARENT,
+		.MSAA_4X_HINT,
+		.VSYNC_HINT,
+		.WINDOW_HIDDEN,
+		.WINDOW_ALWAYS_RUN,
+		.WINDOW_MINIMIZED,
+		.WINDOW_MAXIMIZED,
+		.WINDOW_UNFOCUSED,
+		.WINDOW_TOPMOST,
+		.WINDOW_HIGHDPI,
+		.WINDOW_MOUSE_PASSTHROUGH,
+		.BORDERLESS_WINDOWED_MODE,
+		.INTERLACED_HINT,
+	}
+	testing.expect_value(t, to_window_flags({}), gfx.ConfigFlags{})
+	testing.expect_value(t, to_window_flags(all), expected)
+}
+
+@(test)
+fit_input_and_semantic_mappings_are_semantic :: proc(t: ^testing.T) {
+	testing.expect_value(t, to_key(.Null), ui.Key.KEY_NULL)
+	testing.expect_value(t, to_key(.A), ui.Key.A)
+	testing.expect_value(t, to_key(.Keypad_Enter), ui.Key.KP_ENTER)
+	testing.expect_value(t, to_key(.Right_Super), ui.Key.RIGHT_SUPER)
+	testing.expect_value(t, to_mouse_button(.Left), ui.Mouse_Button.LEFT)
+	testing.expect_value(t, to_mouse_button(.Back), ui.Mouse_Button.BACK)
+	testing.expect_value(t, to_cursor(.Default), ui.Cursor.DEFAULT)
+	testing.expect_value(t, to_cursor(.Not_Allowed), ui.Cursor.NOT_ALLOWED)
+	testing.expect_value(t, to_semantic_role(.None), ui.Sem_Role.None)
+	testing.expect_value(t, to_semantic_role(.List_Box), ui.Sem_Role.List_Box)
+	state := Semantic_State{.Checked, .Disabled, .Focused, .Expanded}
+	state += {.Selected, .Read_Only, .Password, .Multiline}
+	expected := ui.Sem_State{.Checked, .Disabled, .Focused, .Expanded}
+	expected += {.Selected, .Read_Only, .Password, .Multiline}
+	testing.expect_value(t, to_semantic_state(state), expected)
 }

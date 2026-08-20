@@ -442,7 +442,7 @@ Theme_High_Contrast :: proc() -> Theme {
 }
 Theme_Pigment :: proc(theme: Theme, pigment: Pigment) -> Color {
 	inner := theme.inner
-	return Color(ui.theme_pigment(&inner, ui.Pigment(pigment)))
+	return Color(ui.theme_pigment(&inner, pigment))
 }
 Theme_Set_Reduced_Motion :: proc(theme: ^Theme, enabled: bool) {
 	assert(theme != nil, "Fit.Theme_Set_Reduced_Motion: nil theme")
@@ -450,10 +450,10 @@ Theme_Set_Reduced_Motion :: proc(theme: ^Theme, enabled: bool) {
 }
 Theme_Background :: proc(theme: Theme) -> Color {return Color(theme.inner.bg_app)}
 Color_Tinted :: proc(color: Color, tint: Tint) -> Color {
-	return Color(ui.color_tinted(ui.Color(color), ui.Tint(tint)))
+	return Color(ui.color_tinted(ui.Color(color), tint))
 }
 Tint_Alpha :: proc(tint: Tint) -> u8 {
-	return ui.tint_alpha(ui.Tint(tint))
+	return ui.tint_alpha(tint)
 }
 Contrast_Ratio :: proc(a, b: Color) -> f64 {
 	return ui.contrast_ratio(ui.Color(a), ui.Color(b))

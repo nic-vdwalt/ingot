@@ -39,17 +39,34 @@ Init_Context :: proc(
 			app,
 		)
 	}
-	if !initialized do return false
-	app.draw = callbacks.draw
-	app.shutdown = callbacks.shutdown
-	app.userdata = userdata
+	if !initialized do return app_init_finish(app, callbacks, userdata, false)
 	ui.ui_runtime_set_scale_hooks(
 		ui_gfx.app_ui_runtime(&app.inner),
 		config.session.scale_metrics,
 		config.session.scale_invalidate,
 	)
-	assert(app.inner.state == .Ready, "Fit.Init_Context: invalid initialized state")
-	assert(app.draw != nil, "Fit.Init_Context: draw callback not bound")
+	return app_init_finish(app, callbacks, userdata, true)
+}
+
+@(private = "package")
+app_init_finish :: proc(
+	app: ^App,
+	callbacks: Callbacks,
+	userdata: rawptr,
+	initialized: bool,
+) -> bool {
+	assert(app != nil, "Fit app init: nil app")
+	assert(callbacks.draw != nil, "Fit app init: nil draw callback")
+	if !initialized {
+		assert(app.inner.state == .Empty, "Fit app init: failed app not empty")
+		assert(app.draw == nil && app.shutdown == nil && app.userdata == nil)
+		return false
+	}
+	assert(app.inner.state == .Ready, "Fit app init: initialized app not ready")
+	app.draw = callbacks.draw
+	app.shutdown = callbacks.shutdown
+	app.userdata = userdata
+	assert(app.draw != nil, "Fit app init: draw callback not bound")
 	return true
 }
 
@@ -109,7 +126,7 @@ Scale :: proc(app: ^App) -> f32 {
 
 Get_State :: proc(app: ^App) -> State {
 	assert(app != nil, "Fit.Get_State: nil app")
-	return State(app.inner.state)
+	return from_app_state(app.inner.state)
 }
 
 Screen_Rect :: proc(app: ^App) -> Rect {

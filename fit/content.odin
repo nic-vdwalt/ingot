@@ -158,7 +158,7 @@ Surface_Diff_View :: proc(
 	u := surface_ui(surface)
 	inner_rows := make([]ui.Diff_Row, len(rows), context.temp_allocator)
 	for row, index in rows {
-		inner_rows[index] = {ui.Diff_Row_Kind(row.kind), row.old_no, row.new_no, row.text}
+		inner_rows[index] = {row.kind, row.old_no, row.new_no, row.text}
 	}
 	result := ui.diff_view(
 		u.frame,
@@ -167,7 +167,7 @@ Surface_Diff_View :: proc(
 		width,
 		inner_rows,
 		{
-			layout = ui.Diff_Layout(options.layout),
+			layout = options.layout,
 			max_rows = options.max_rows,
 			selected = options.selected,
 			semantic_label = options.semantic_label,

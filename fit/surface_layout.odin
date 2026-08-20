@@ -119,7 +119,7 @@ Layout_Row :: proc(
 ) {
 	assert(state != nil && state.open, "Fit.Layout_Row: state not open")
 	_ = surface_ui(state.surface)
-	ui.push_row(&state.inner, height, gap, ui.Cross_Align(align))
+	ui.push_row(&state.inner, height, gap, align)
 }
 
 Layout_Pop :: proc(state: ^Layout_State) {
@@ -164,7 +164,7 @@ Layout_Flex :: proc(state: ^Layout_State, tracks: []Track, justify: Main_Align =
 	assert(len(tracks) <= ui.MAX_LAYOUT_FLEX, "Fit.Layout_Flex: too many tracks")
 	inner: [ui.MAX_LAYOUT_FLEX]ui.Track
 	for track, index in tracks do inner[index] = to_track(track)
-	ui.flex_begin(&state.inner, inner[:len(tracks)], ui.Main_Align(justify))
+	ui.flex_begin(&state.inner, inner[:len(tracks)], justify)
 }
 
 Layout_Flex_Next :: proc(state: ^Layout_State) -> Rect {

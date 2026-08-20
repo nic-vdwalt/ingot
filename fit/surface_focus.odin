@@ -101,10 +101,10 @@ Surface_Semantic :: proc(
 	u := surface_ui(surface)
 	_ = ui.semantic_push(
 		u.frame,
-		ui.Sem_Role(role),
+		to_semantic_role(role),
 		to_rect(rect),
 		label,
-		transmute(ui.Sem_State)state,
+		to_semantic_state(state),
 		focus.inner,
 		field_id,
 		description = description,
