@@ -25,10 +25,11 @@ main :: proc() {
 ```
 
 `Draw` receives an open `fit.Builder`. It must declare exactly one balanced root
-container. Prefer a named lexical block with an immediate
-`defer fit.End(builder)` for
-a static root; use direct closure for dynamic construction. The shell renders
-that root and closes the hidden UI root after the callback returns.
+container. `fit.Center` opens a full-window centered root; `fit.Canvas` owns a
+full-window explicit-geometry root. Otherwise prefer a named lexical block with
+an immediate `defer fit.End(builder)` for a static root; use direct closure for
+dynamic construction. The shell renders that root and closes the hidden UI root
+after the callback returns.
 
 For a manually coordinated native host, use `fit.Init`, `fit.Start`, one bounded
 `fit.Tick` per host iteration, `fit.Stop`, and `fit.Destroy`. `fit.Set_Theme` and

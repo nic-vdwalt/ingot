@@ -11,6 +11,10 @@ Builder :: struct {
 	bound:        bool,
 }
 
+Signal :: struct {
+	pending: bool,
+}
+
 @(private = "package")
 STORAGE_NODE_SIZE :: size_of(ui.Prepared_Node)
 @(private = "package")
