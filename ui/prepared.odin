@@ -1211,22 +1211,22 @@ prepared_resolve_sizes :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	assert(u != nil && prepared != nil, "prepared_resolve_sizes: invalid argument")
 	for index in 0 ..< prepared.count {
 		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.resolve_node_visits += 1
-		node := &prepared_nodes(prepared)[index]
-		prepared_validate_size(node.sizing)
-		node.size.w = prepared_axis_size(
-			u,
-			node.sizing.width,
-			node.size.w,
-			prepared.constraints.max_w,
-		)
-		node.size.h = prepared_axis_size(
-			u,
-			node.sizing.height,
-			node.size.h,
-			prepared.constraints.max_h,
-		)
-		prepared_apply_aspect(&node.size, node.sizing, prepared.constraints)
+		prepared_resolve_node_size(u, prepared, &prepared_nodes(prepared)[index])
 	}
+}
+
+@(private = "file")
+prepared_resolve_node_size :: proc(u: ^Ui, prepared: ^Prepared_Ui, node: ^Prepared_Node) {
+	assert(u != nil && prepared != nil && node != nil, "prepared resolve node: invalid argument")
+	prepared_validate_size(node.sizing)
+	node.size.w = prepared_axis_size(u, node.sizing.width, node.size.w, prepared.constraints.max_w)
+	node.size.h = prepared_axis_size(
+		u,
+		node.sizing.height,
+		node.size.h,
+		prepared.constraints.max_h,
+	)
+	prepared_apply_aspect(&node.size, node.sizing, prepared.constraints)
 }
 
 @(private = "file")
@@ -1246,7 +1246,10 @@ prepared_remeasure_containers :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_scroll(u, prepared, index, false)
 		} else if node.kind == .Row || node.kind == .Column {
 			prepared_measure_container(u, prepared, index, false)
+		} else {
+			continue
 		}
+		prepared_resolve_node_size(u, prepared, node)
 	}
 }
 
@@ -1377,7 +1380,10 @@ prepared_measure_heights :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_scroll(u, prepared, index, true)
 		} else if node.kind == .Row || node.kind == .Column {
 			prepared_measure_container(u, prepared, index, true)
+		} else {
+			continue
 		}
+		prepared_resolve_node_size(u, prepared, node)
 	}
 }
 
