@@ -6,48 +6,11 @@ import "ingot:ui"
 Theme :: struct {
 	inner: ui.Theme,
 }
-Pigment :: enum u8 {
-	Accent,
-	Danger,
-	Success,
-	Tool,
-	Earth,
-	Leaf,
-}
-Visual_State :: enum u8 {
-	Rest,
-	Hover,
-	Pressed,
-	Selected,
-	Disabled,
-}
-Surface_Kind :: enum u8 {
-	App,
-	Panel,
-	Card,
-	Popup,
-	Input,
-	Row,
-	Chip,
-	Code,
-	Table_Header,
-	Button_Primary,
-	Button_Secondary,
-	Button_Danger,
-	Button_Ghost,
-}
-Tint :: enum u8 {
-	Subtle,
-	Light,
-	Medium,
-	Strong,
-}
-Elevation :: enum u8 {
-	Flat,
-	Lifted,
-	Overlay,
-	Modal,
-}
+Pigment :: ui.Pigment
+Visual_State :: ui.Visual_State
+Surface_Kind :: ui.Surface
+Tint :: ui.Tint
+Elevation :: ui.Elevation
 Substrate_Kind :: enum u8 {
 	None,
 	Ruled,
@@ -166,10 +129,7 @@ Dropdown_State :: struct {
 Combobox_State :: struct {
 	inner: ui.Combobox_State,
 }
-Combobox_Item :: struct {
-	id:    u64,
-	label: string,
-}
+Combobox_Item :: ui.Combobox_Item
 Date_Picker_State :: struct {
 	inner: ui.Date_Picker_State,
 }
@@ -184,11 +144,7 @@ Tooltip_State :: struct {
 Listbox_State :: struct {
 	inner: ui.Listbox_State,
 }
-Listbox_Keys :: enum u8 {
-	Focused,
-	Owned,
-	Searched,
-}
+Listbox_Keys :: ui.Listbox_Keys
 Listbox_Config :: struct {
 	rect:         Rect,
 	label:        string,
