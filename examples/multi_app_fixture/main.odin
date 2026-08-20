@@ -11,7 +11,7 @@ Fixture_State :: struct {
 
 fixture_draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	state := cast(^Fixture_State)userdata
-	fit.Column(builder, {gap = .SM, padding = .LG})
+	fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(builder, "Multi-App fixture", {role = .Title})
 	fit.Label(builder, state.label)
 	fit.Label(builder, "Each App owns an isolated Fit lifecycle.", {ink = .Success})

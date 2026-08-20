@@ -39,7 +39,7 @@ main :: proc() {
 draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	assert(builder != nil, "draw: nil builder")
 	_ = userdata
-	fit.Column(builder, {gap = .SM, padding = .LG})
+	fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(builder, "Custom Fit application loop", {role = .Title})
 	fit.Label(builder, "The caller owns Init, Start, Tick, Stop, and Destroy.")
 	fit.Button(builder, "count", "Count clicks", fit.On(count_click))
