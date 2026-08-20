@@ -47,18 +47,26 @@ _submission_init :: proc(tracker: ^Submission_Tracker, owner: ^Context) {
 _submission_shutdown :: proc(tracker: ^Submission_Tracker) -> bool {
 	assert(tracker != nil, "_submission_shutdown: nil tracker")
 	tracker.closing = true
-	for _ in 0 ..< SUBMISSION_SHUTDOWN_MAX_POLLS {
-		_submission_poll(tracker)
-		if tracker.count == 0 {
-			tracker.owner = nil
-			tracker.queue = nil
-			return true
+	when ODIN_OS == .JS {
+		tracker.tickets = {}
+		tracker.count = 0
+		tracker.owner = nil
+		tracker.queue = nil
+		return true
+	} else {
+		for _ in 0 ..< SUBMISSION_SHUTDOWN_MAX_POLLS {
+			_submission_poll(tracker)
+			if tracker.count == 0 {
+				tracker.owner = nil
+				tracker.queue = nil
+				return true
+			}
+			if tracker.owner == nil || tracker.owner.device == nil do break
+			wg.DevicePoll(tracker.owner.device, true, nil)
 		}
-		if tracker.owner == nil || tracker.owner.device == nil do break
-		wg.DevicePoll(tracker.owner.device, true, nil)
+		assert(tracker.count <= MAX_IN_FLIGHT_SUBMISSIONS)
+		return false
 	}
-	assert(tracker.count <= MAX_IN_FLIGHT_SUBMISSIONS)
-	return false
 }
 
 @(private)
