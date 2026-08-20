@@ -101,13 +101,7 @@ Workspace_Has_Path :: proc(workspace_files: []string, reference: string) -> bool
 	return ui.workspace_has_path_with(workspace_files, reference)
 }
 
-Diff_Row_Kind :: enum u8 {
-	Context,
-	Add,
-	Del,
-	Hunk,
-	Metadata,
-}
+Diff_Row_Kind :: ui.Diff_Row_Kind
 
 Diff_Row :: struct {
 	kind:   Diff_Row_Kind,
@@ -122,11 +116,7 @@ Diff_Parse_Result :: struct {
 	malformed: bool,
 }
 
-Diff_Layout :: enum u8 {
-	Auto,
-	Unified,
-	Split,
-}
+Diff_Layout :: ui.Diff_Layout
 
 Diff_View_Options :: struct {
 	layout:          Diff_Layout,

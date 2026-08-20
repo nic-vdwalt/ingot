@@ -7,10 +7,7 @@ Collapsible_Options :: struct {
 	right_label: string,
 }
 
-Spinner_Style :: enum u8 {
-	Arc,
-	Orbit_Dots,
-}
+Spinner_Style :: ui.Spinner_Style
 
 Spinner_Options :: struct {
 	style:      Spinner_Style,

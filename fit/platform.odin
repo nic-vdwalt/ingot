@@ -4,12 +4,7 @@ import "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
-Caption_Button :: enum u8 {
-	None,
-	Minimize,
-	Maximize,
-	Close,
-}
+Caption_Button :: ui.Caption_Button
 
 Caption_Input :: struct {
 	hover:     Caption_Button,

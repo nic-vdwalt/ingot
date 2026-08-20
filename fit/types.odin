@@ -250,75 +250,15 @@ Callbacks :: struct {
 	shutdown: Shutdown_Proc,
 }
 
-Track_Kind :: enum u8 {
-	Fit,
-	Grow,
-	Fixed,
-	Percent,
-}
-Track :: struct {
-	kind:     Track_Kind,
-	basis:    i32,
-	weight:   i32,
-	percent:  f32,
-	min_size: i32,
-	max_size: i32,
-}
-Space :: enum u8 {
-	None,
-	XS,
-	SM,
-	MD,
-	LG,
-	XL,
-}
-Cross_Align :: enum u8 {
-	Stretch,
-	Start,
-	Center,
-	End,
-}
-Main_Align :: enum u8 {
-	Start,
-	Center,
-	End,
-	Space_Between,
-}
-Text_Role :: enum u8 {
-	Body,
-	Title,
-	Label,
-	Note,
-}
-Truncate_Side :: enum u8 {
-	Tail,
-	Head,
-}
-Ink :: enum u8 {
-	Primary,
-	Heading,
-	Secondary,
-	Muted,
-	Accent,
-	Danger,
-	Success,
-	Inverse,
-	Disabled,
-	Label,
-	Accent_Light,
-	Tool,
-	Diff_Add,
-	Diff_Remove,
-	User,
-	Assistant,
-	Plan,
-}
-Button_Style :: enum u8 {
-	Primary,
-	Secondary,
-	Danger,
-	Ghost,
-}
+Track_Kind :: ui.Track_Kind
+Track :: ui.Track
+Space :: ui.Space
+Cross_Align :: ui.Cross_Align
+Main_Align :: ui.Main_Align
+Text_Role :: ui.Text_Role
+Truncate_Side :: ui.Truncate_Side
+Ink :: ui.Ink
+Button_Style :: ui.Btn_Style
 Widget_Id :: distinct u64
 Rect :: struct {
 	x, y, w, h: i32,
@@ -332,11 +272,7 @@ Constraints :: struct {
 	max_w, max_h: i32,
 }
 Z_Order :: distinct f32
-Transition_State :: struct {
-	current:     Rect,
-	target:      Rect,
-	initialized: bool,
-}
+Transition_State :: ui.Transition_Rect_State
 Transition_Options :: struct {
 	speed: f32,
 }
@@ -515,19 +451,8 @@ Metrics :: struct {
 	table_cell_padding: i32,
 	split_divider_w:    i32,
 }
-Radius :: enum u8 {
-	None,
-	SM,
-	MD,
-	LG,
-	Pill,
-}
-Border :: enum u8 {
-	None,
-	Hairline,
-	Emphasis,
-	Ink,
-}
+Radius :: ui.Radius
+Border :: ui.Border
 
 Transition :: struct {
 	state:   ^Transition_State,
@@ -601,24 +526,8 @@ Grid_Options :: struct {
 	effects:      Container_Effects,
 }
 
-Attachment_Target :: enum u8 {
-	Parent,
-	Root,
-	Handle,
-	Screen_Rect,
-	Viewport,
-}
-Attachment_Point :: enum u8 {
-	Top_Left,
-	Top,
-	Top_Right,
-	Left,
-	Center,
-	Right,
-	Bottom_Left,
-	Bottom,
-	Bottom_Right,
-}
+Attachment_Target :: ui.Attachment_Target_Kind
+Attachment_Point :: ui.Attachment_Point
 
 Attachment_Options :: struct {
 	target_kind:       Attachment_Target,
