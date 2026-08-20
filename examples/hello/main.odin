@@ -46,7 +46,7 @@ draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	fit.Label(root, "Hello from Ingot", {role = .Title})
 	controls := fit.Row(root, {gap = .SM, align = .Center})
 	fit.Label(controls, "Controls", {role = .Label, track = fit.Grow()})
-	fit.Button(controls, "toggle", "Toggle list", fit.On(toggle_list, data))
+	fit.Button(controls, "toggle", "Toggle list", fit.action(toggle_list, data))
 	fit.Checkbox(root, "enabled", "Enabled", &data.enabled)
 	if data.showing {
 		items := fit.Column(root, {gap = .XS})

@@ -18,7 +18,7 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   Explicit-geometry Surface, Region, Layer, Pane, and layout begin/end APIs are
   unchanged.
 - **Breaking:** prepared `fit.Button` now uses allocation-free same-frame Actions
-  as its primary activation API. Construct actions with `fit.On`; tagged Actions
+  as its primary activation API. Construct actions with `fit.action`; tagged Actions
   support bounded loop-generated controls. The former Signal overload is now
   `fit.Button_Delayed`, making its later-build timing explicit. Raw `^bool`
   outputs remain available for compatibility and advanced fan-in; Surface and

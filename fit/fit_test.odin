@@ -132,7 +132,7 @@ fit_test_readme_draw :: proc(builder: ^Builder, userdata: rawptr) {
 	state := cast(^Fit_Test_Readme_State)userdata
 	root := Center(builder, {gap = .SM, padding = .LG})
 	Label(root, "Hello from Ingot")
-	Button(root, "continue", "Continue", On(fit_test_continue, state))
+	Button(root, "continue", "Continue", action(fit_test_continue, state))
 	state.confirmation_visible = state.continued
 	if state.continued do Label(root, "Continued")
 }
