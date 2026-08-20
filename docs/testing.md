@@ -139,6 +139,17 @@ the dependency-free JavaScript lifecycle and semantic DOM tests. These tests do
 not launch a browser; see `production-readiness.md` for the real browser,
 operating-system, PTY, GPU, networking, and accessibility matrix.
 
+Graphics package tests additionally cover explicit capability reporting,
+checked texture format conversion, alpha preservation, submission shutdown,
+and context identity capacity. The `ui_gfx` package covers accessibility parent
+validation, role/action policy, UTF-8 clipboard clipping, platform-output bounds,
+and font-cache saturation. Run strict WebGPU validation while changing command
+submission or rendering:
+
+```sh
+odin test gfx -all-packages -collection:ingot=. -define:INGOT_GPU_STRICT=true
+```
+
 The ordinary `term` run enables `INGOT_PTY_SIM=true`. It validates terminal pump
 behavior without spawning a shell. Real Unix PTY and Windows ConPTY validation is
 a separate platform integration gate.

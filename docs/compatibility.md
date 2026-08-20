@@ -71,6 +71,17 @@ both backends refill internally: native music streams on the miniaudio device
 thread and browser music is fully decoded. Calling it is harmless, and omitting
 it changes nothing.
 
+`gfx.capabilities()` reports runtime-independent support boundaries for default
+text, path texture loading, IME positioning, window controls, render targets,
+the explicit GPU 3D API, raylib mesh compatibility, and general `rlgl`. Check it
+before selecting platform-limited paths. The explicit GPU 3D API is supported;
+legacy `GenMeshSphere`/`DrawMesh` remains an approximation and is reported
+separately as unsupported raylib mesh compatibility.
+
+`UpdateTexture` accepts RGBA8 data, matching the raylib facade. Code receiving
+RGB, grayscale, or gray-alpha buffers uses `UpdateTextureChecked`, which requires
+an explicit byte count and `PixelFormat` and rejects mismatched sizes.
+
 ## Compatibility and binding layers
 
 The following surfaces exist for source migration, FFI, or framework

@@ -16,8 +16,12 @@ import "ingot:ui"
 
 platform_output_valid :: proc(output: ^ui.Platform_Output) -> bool {
 	if output == nil do return false
-	if output.clipboard_text_len < 0 || output.clipboard_text_len > ui.PLATFORM_TEXT_CAP do return false
-	if output.cursor_requested && (int(output.cursor) < 0 || int(output.cursor) >= len(ui.Cursor)) {
+	if output.clipboard_text_len < 0 ||
+	   output.clipboard_text_len > ui.PLATFORM_TEXT_CAP {
+		return false
+	}
+	if output.cursor_requested &&
+	   (int(output.cursor) < 0 || int(output.cursor) >= len(ui.Cursor)) {
 		return false
 	}
 	if output.frame_strategy_requested &&

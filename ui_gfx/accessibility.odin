@@ -106,7 +106,7 @@ when ak.ENABLED {
 				node,
 				{
 					anchor = {ak.Node_Id(source.id), c.size_t(source.selection_start)},
-					focus  = {ak.Node_Id(source.id), c.size_t(source.selection_end)},
+					focus = {ak.Node_Id(source.id), c.size_t(source.selection_end)},
 				},
 			)
 		}
@@ -134,7 +134,10 @@ when ak.ENABLED {
 	}
 
 	adapter_a11y_parent :: proc(frame: ^ui.Sem_Frame, index: int) -> u64 {
-		assert(frame != nil && index >= 0 && index < frame.count, "adapter_a11y_parent: invalid node")
+		assert(
+			frame != nil && index >= 0 && index < frame.count,
+			"adapter_a11y_parent: invalid node",
+		)
 		parent := frame.nodes[index].parent_id
 		if parent <= ui.SEM_ID_ROOT do return ui.SEM_ID_ROOT
 		current := parent
