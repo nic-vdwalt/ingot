@@ -22,7 +22,9 @@ Combobox_State :: struct {
 	box:         Input_Box,
 	open:        bool,
 	just_opened: bool,
-	hover:       int, // index into the *visible* (filtered) list
+	hover:       int, // index into the visible filtered window
+	window:      int, // first matching item shown in the bounded popup
+	match_count: int,
 }
 
 combobox_state_destroy :: proc(st: ^Combobox_State) {
@@ -130,19 +132,31 @@ combobox_at :: proc(
 	semantic_push(frame, .Dropdown, rect, a11y_label, sem, focus, widget = widget)
 	if !st.open do return false
 
-	// Visible = filtered indices, bounded for the popup.
 	query := input_box_text(&st.box)
 	visible := make([dynamic]int, 0, COMBOBOX_VISIBLE_MAX, ui_frame_allocator(frame))
+	match_count := 0
 	for item, index in items {
-		if len(visible) >= COMBOBOX_VISIBLE_MAX do break
-		if combobox_filter_match(item.label, query) do append(&visible, index)
+		if !combobox_filter_match(item.label, query) do continue
+		if match_count >= st.window && len(visible) < COMBOBOX_VISIBLE_MAX do append(&visible, index)
+		match_count += 1
 	}
+	st.match_count = match_count
+	max_window := max(match_count - COMBOBOX_VISIBLE_MAX, 0)
+	st.window = clamp(st.window, 0, max_window)
 	if st.hover >= len(visible) do st.hover = max(len(visible) - 1, 0)
 	if is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN) {
-		if st.hover + 1 < len(visible) do st.hover += 1
+		if st.hover + 1 < len(visible) {
+			st.hover += 1
+		} else if st.window < max_window {
+			st.window += 1
+		}
 	}
 	if is_key_pressed(frame, .UP) || is_key_pressed_repeat(frame, .UP) {
-		if st.hover > 0 do st.hover -= 1
+		if st.hover > 0 {
+			st.hover -= 1
+		} else if st.window > 0 {
+			st.window -= 1
+		}
 	}
 	if is_key_pressed(frame, .ESCAPE) {
 		st.open = false

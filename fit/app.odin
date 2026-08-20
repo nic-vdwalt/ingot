@@ -175,7 +175,7 @@ app_draw :: proc(inner: ^ui_gfx.App, root: ^ui.Ui, userdata: rawptr) {
 	Begin(&app.builder)
 	app.draw(&app.builder, app.user_data)
 	assert(app.builder.inner.prepared.depth == 0, "fit app: unbalanced builder")
-	_ = Render(&app.builder)
+	if !app.builder.inner.prepared.rendered do _ = Render(&app.builder)
 	root^ = app.builder.root
 	app.builder.bound = false
 }

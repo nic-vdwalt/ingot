@@ -40,6 +40,7 @@ test_session_init_destroy_round_trip :: proc(t: ^testing.T) {
 	testing.expect(t, !session.graphics_open)
 	testing.expect_value(t, session.config, config)
 
+	testing.expect(t, !session.adapter.a11y_initialized)
 	session_destroy(session)
 	testing.expect(t, !session.initialized)
 	testing.expect(t, !session.frame_open)
@@ -69,6 +70,8 @@ test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
 		testing.expect(t, !session.adapter.graphics_open)
 		testing.expect(t, !session.graphics_open)
 		testing.expect(t, session.runtime.text_backend.data == &session.adapter)
+		testing.expect(t, session.output.main.sink == nil)
+		ui.paint_push(&session.output.main, {kind = .Rectangle})
 
 		session_end_frame(session)
 		testing.expect(t, !session.frame_open)

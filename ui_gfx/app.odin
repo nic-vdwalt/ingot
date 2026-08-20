@@ -126,7 +126,7 @@ app_frame_draw :: proc(session: ^Session, frame: ^ui.Ui_Frame, userdata: rawptr)
 	assert(userdata != nil, "app_frame_draw: nil app")
 	app := cast(^App)userdata
 	assert(&app.session == session, "app_frame_draw: session mismatch")
-	gfx.ClearBackground(app_clear_color(app))
+	gfx.context_clear_background(app.gfx_context, app_clear_color(app))
 	if app.callbacks.ui != nil {
 		app_ui_begin(app, frame, &app.form)
 		app.callbacks.ui(app, &app.form, app.userdata)

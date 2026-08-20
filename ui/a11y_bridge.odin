@@ -3,6 +3,8 @@ package ui
 A11y_Action_Kind :: enum u8 {
 	Click,
 	Focus,
+	Increment,
+	Decrement,
 }
 
 A11y_Action :: struct {
@@ -12,6 +14,7 @@ A11y_Action :: struct {
 
 A11y_Pending_Action :: struct {
 	node_id:            u64,
+	action:             A11y_Action_Kind,
 	expires_generation: u64,
 	pending:            bool,
 }
@@ -47,6 +50,7 @@ a11y_stage_click :: proc(runtime: ^Ui_Runtime, node_id: u64) {
 	assert(node_id > SEM_ID_ROOT, "a11y_stage_click: invalid node id")
 	runtime.pending_a11y = {
 		node_id            = node_id,
+		action             = .Click,
 		expires_generation = runtime.frame_generation + 1,
 		pending            = true,
 	}
@@ -68,7 +72,7 @@ a11y_take_click :: proc(runtime: ^Ui_Runtime, node_id: u64) -> bool {
 	assert(runtime != nil && runtime.initialized, "a11y_take_click: invalid runtime")
 	pending := &runtime.pending_a11y
 	if !pending.pending || runtime.frame_generation != pending.expires_generation do return false
-	if node_id != pending.node_id do return false
+	if pending.action != .Click || node_id != pending.node_id do return false
 	pending^ = {}
 	return true
 }
@@ -86,6 +90,16 @@ a11y_apply_action :: proc(frame: ^Ui_Frame, action: A11y_Action) {
 		if ok {
 			focus_opt_set(focus)
 			if frame.output != nil do request_redraw(frame)
+		}
+	case .Increment, .Decrement:
+		if sem_has_interactive_node(frame, action.node) {
+			frame.runtime.pending_a11y = {
+				node_id            = action.node,
+				action             = action.action,
+				expires_generation = frame.runtime.frame_generation + 1,
+				pending            = true,
+			}
+			request_redraw(frame)
 		}
 	}
 }

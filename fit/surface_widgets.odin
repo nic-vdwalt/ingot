@@ -48,20 +48,19 @@ Surface_Text_Input :: proc(
 	)
 }
 
-// to_submit maps the public Fit submit mode onto the two modes `ui` actually
-// implements. The declaration orders differ, so a value cast would silently
-// produce an out-of-range `ui` enum: Fit `.Enter` (2) matched neither `.Enter`
-// (0) nor `.Never` (1) in ti_keys_enter, and Enter was swallowed entirely -
-// no submit and no newline. Modifier-gated submission is not implemented in
-// `ui` yet; those modes degrade to `.Never` so plain Enter keeps inserting a
-// newline rather than wrongly submitting.
+// to_submit maps the public façade enum explicitly because its declaration
+// order is part of Fit's compatibility surface and differs from ui.
 @(private)
 to_submit :: proc(mode: Text_Input_Submit) -> ui.Text_Input_Submit {
 	switch mode {
 	case .Default, .Enter:
 		return .Enter
-	case .Never, .Ctrl_Enter, .Mod_Enter:
+	case .Never:
 		return .Never
+	case .Ctrl_Enter:
+		return .Ctrl_Enter
+	case .Mod_Enter:
+		return .Mod_Enter
 	}
 	unreachable()
 }

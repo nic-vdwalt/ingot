@@ -46,7 +46,11 @@ color_from_gfx :: proc(value: rl.Color) -> ui.Color {
 	return ui.Color{value.r, value.g, value.b, value.a}
 }
 
-adapter_init_context :: proc(adapter: ^Adapter, gfx_context: ^rl.Context) {
+adapter_init_context :: proc(
+	adapter: ^Adapter,
+	gfx_context: ^rl.Context,
+	semantics_enabled: bool = false,
+) {
 	assert(adapter != nil, "adapter_init_context: nil adapter")
 	assert(gfx_context != nil, "adapter_init_context: nil graphics context")
 	assert(!adapter.initialized, "adapter_init_context: already initialized")
@@ -55,7 +59,7 @@ adapter_init_context :: proc(adapter: ^Adapter, gfx_context: ^rl.Context) {
 	adapter.font_dpi = 1
 	adapter.initialized = true
 	adapter_text_init(adapter)
-	adapter.a11y_initialized = adapter_a11y_init(adapter)
+	if semantics_enabled do adapter.a11y_initialized = adapter_a11y_init(adapter)
 	assert(adapter.initialized)
 	assert(adapter.gfx_context == gfx_context)
 	assert(adapter.gfx_epoch == rl.context_epoch(gfx_context))
@@ -66,6 +70,15 @@ adapter_attach_runtime :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime) {
 	assert(runtime != nil && runtime.initialized, "adapter_attach_runtime: invalid runtime")
 	ui.ui_runtime_set_text_backend(runtime, adapter_text_backend(adapter))
 	ui.ui_runtime_set_web_form_backend(runtime, adapter_web_form_backend())
+}
+
+adapter_detach_runtime :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime) {
+	assert(adapter != nil && adapter.initialized, "adapter_detach_runtime: invalid adapter")
+	assert(runtime != nil && runtime.initialized, "adapter_detach_runtime: invalid runtime")
+	if runtime.text_backend.data == adapter {
+		runtime.text_backend = {}
+		runtime.web_form = {}
+	}
 }
 
 // adapter_web_form_backend bridges the ui web-form hooks to the gfx browser
@@ -178,7 +191,11 @@ adapter_open_frame :: proc(
 		"adapter_open_frame: nil argument",
 	)
 	frame.output = output
-	ui.paint_list_set_sink(&output.main, adapter_paint_sink, adapter)
+	if adapter.graphics_open {
+		ui.paint_list_set_sink(&output.main, adapter_paint_sink, adapter)
+	} else {
+		ui.paint_list_set_sink(&output.main, nil, nil)
+	}
 	ui.ui_frame_begin(frame, runtime, input)
 	assert(frame.open)
 	assert(frame.output == output)

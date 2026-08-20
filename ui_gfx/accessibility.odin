@@ -55,16 +55,18 @@ when ak.ENABLED {
 		return .Unknown
 	}
 
-	adapter_a11y_actions :: proc(source: ^ui.Sem_Node) -> (click, focus: bool) {
+	adapter_a11y_actions :: proc(source: ^ui.Sem_Node) -> (click, focus, adjust: bool) {
 		assert(source != nil, "adapter_a11y_actions: nil source")
-		if .Disabled in source.state do return false, false
+		if .Disabled in source.state do return false, false, false
 		#partial switch source.role {
 		case .Button, .Tab, .Checkbox, .Radio, .Option, .Dropdown, .Menu_Item:
-			return true, true
-		case .Slider, .Text_Input:
-			return false, true
+			return true, true, false
+		case .Slider:
+			return false, true, .Read_Only not_in source.state
+		case .Text_Input:
+			return false, true, false
 		case:
-			return false, false
+			return false, false, false
 		}
 	}
 
@@ -127,9 +129,13 @@ when ak.ENABLED {
 			ak.node_set_min_numeric_value(node, f64(source.lo))
 			ak.node_set_max_numeric_value(node, f64(source.hi))
 		}
-		click, focus := adapter_a11y_actions(source)
+		click, focus, adjust := adapter_a11y_actions(source)
 		if click do ak.node_add_action(node, .Click)
 		if focus do ak.node_add_action(node, .Focus)
+		if adjust {
+			ak.node_add_action(node, .Increment)
+			ak.node_add_action(node, .Decrement)
+		}
 		return node
 	}
 
@@ -193,7 +199,7 @@ when ak.ENABLED {
 adapter_a11y_init :: proc(adapter: ^Adapter) -> bool {
 	assert(adapter != nil && adapter.initialized, "adapter_a11y_init: invalid adapter")
 	when rl.A11Y_ENABLED {
-		return rl.InitAccessibility(adapter_a11y_factory, adapter)
+		return rl.context_init_accessibility(adapter.gfx_context, adapter_a11y_factory, adapter)
 	}
 	return false
 }
@@ -204,7 +210,7 @@ adapter_a11y_poll :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	when rl.A11Y_ENABLED {
 		if !adapter.a11y_initialized do return
 		for _ in 0 ..< rl.MAX_A11Y_ACTIONS {
-			action, ok := rl.PollAccessibilityAction()
+			action, ok := rl.context_poll_accessibility_action(adapter.gfx_context)
 			if !ok do return
 			kind: ui.A11y_Action_Kind
 			#partial switch action.action {
@@ -212,6 +218,10 @@ adapter_a11y_poll :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 				kind = .Focus
 			case .Click:
 				kind = .Click
+			case .Increment:
+				kind = .Increment
+			case .Decrement:
+				kind = .Decrement
 			case:
 				continue
 			}
@@ -280,13 +290,13 @@ adapter_a11y_publish :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 			break
 		}
 	}
-	when rl.A11Y_ENABLED do rl.PushAccessibilityUpdate()
+	when rl.A11Y_ENABLED do rl.context_push_accessibility_update(adapter.gfx_context)
 }
 
 adapter_a11y_destroy :: proc(adapter: ^Adapter) {
 	assert(adapter != nil && adapter.initialized, "adapter_a11y_destroy: invalid adapter")
 	when rl.A11Y_ENABLED {
-		if adapter.a11y_initialized do rl.CloseAccessibility()
+		if adapter.a11y_initialized do rl.context_close_accessibility(adapter.gfx_context)
 	}
 	adapter.a11y_initialized = false
 	adapter.a11y_published = false

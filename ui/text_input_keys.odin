@@ -291,37 +291,40 @@ ti_keys_delete_forward :: proc(ctx: ^TI_Ctx, word: bool) {
 	}
 }
 
-// ti_keys_enter handles Enter (submit) and Shift+Enter (newline). Returns
-// true when the input was submitted this frame.
+// ti_keys_enter handles configured Enter submission and inserts a newline
+// whenever the configured modifier is absent. Returns true on submission.
 @(private = "file")
 ti_keys_enter :: proc(ctx: ^TI_Ctx) -> bool {
 	assert(ctx.sb != nil, "ti_keys_enter: nil builder")
 	assert(ctx.sel != nil, "ti_keys_enter: nil selection")
 	sb := ctx.sb
-	entered := false
 	shift_down := is_key_down(ctx.frame, .LEFT_SHIFT) || is_key_down(ctx.frame, .RIGHT_SHIFT)
-	// Enter is the spell menu's accept key while it is open, so neither
-	// submission nor newline insertion may claim it in that frame.
+	ctrl_down := is_key_down(ctx.frame, .LEFT_CONTROL) || is_key_down(ctx.frame, .RIGHT_CONTROL)
+	super_down := is_key_down(ctx.frame, .LEFT_SUPER) || is_key_down(ctx.frame, .RIGHT_SUPER)
+	mod_down := super_down if ODIN_OS == .Darwin else ctrl_down
+	pressed := is_key_pressed(ctx.frame, .ENTER)
 	spelling := spell_menu_active(ctx.spell_menu, sb)
-	// Enter submits. Suppressed while the spell menu is open so Enter applies
-	// the highlighted suggestion instead of sending.
-	if ctx.submit == .Enter && is_key_pressed(ctx.frame, .ENTER) && !shift_down && !spelling {
-		entered = true
-		sel_reset(ctx.sel)
+	submit := false
+	switch ctx.submit {
+	case .Enter:
+		submit = !shift_down
+	case .Never:
+		submit = false
+	case .Ctrl_Enter:
+		submit = ctrl_down
+	case .Mod_Enter:
+		submit = mod_down
 	}
-	// Enter inserts a newline in a box that does not submit on Enter (a text
-	// area); where Enter submits, Shift+Enter is the newline. A field that
-	// swallowed Enter entirely would read as a broken text area.
-	newline := ctx.submit == .Never || shift_down
-	if !ctx.single_line && is_key_pressed(ctx.frame, .ENTER) && newline && !spelling {
-		// The caret path clamps inside caret_insert; the legacy path obeys
-		// the same per-box byte budget as every other edit, not the global
-		// cap it used to check.
+	if pressed && submit && !spelling {
+		sel_reset(ctx.sel)
+		return true
+	}
+	if !ctx.single_line && pressed && !spelling {
 		if ctx.caret || ti_budget_len(ctx) < ctx.max_bytes {
 			ti_insert_text(ctx, "\n", .Other)
 		}
 	}
-	return entered
+	return false
 }
 
 // ti_nav_visual moves the caret `delta` visual (soft-wrapped) rows,
