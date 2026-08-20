@@ -29,6 +29,14 @@ and browser WASM/WebGPU.
 > `0.1.7` is the latest source tag for a young `0.x` API. Pin an exact revision
 > and validate every platform your application ships on.
 
+## The experiment
+
+Ingot explores whether deterministic simulation testing can shape an application
+framework from the start. Explicit state, bounded work, and compile-gated seams
+let seeded harnesses exercise production code without requiring a window, GPU,
+network, shell, or assistive technology. This is an engineering experiment—not
+a claim of correctness or production readiness. See [Testing](docs/testing.md).
+
 ## Quick start
 
 ```sh
