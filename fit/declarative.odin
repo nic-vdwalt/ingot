@@ -2,15 +2,14 @@ package fit
 
 import "ingot:ui"
 
-Section :: proc(builder: ^Builder, title: string, options: Section_Options = {}) {
-	assert(builder != nil && builder.bound, "Fit.Section: builder not bound")
+Section :: proc(parent: Parent, title: string, options: Section_Options = {}) -> Parent {
 	assert(title != "", "Fit.Section: empty title")
-	Column(builder, options.container)
-	Label(builder, title, options.title)
+	section := Column(parent, options.container)
+	Label(section, title, options.title)
+	return section
 }
 
-Card :: proc(builder: ^Builder, options: Card_Options = {}) {
-	assert(builder != nil && builder.bound, "Fit.Card: builder not bound")
+Card :: proc(parent: Parent, options: Card_Options = {}) -> Parent {
 	container := options.container
 	kind := options.kind
 	if kind == .App do kind = .Card
@@ -26,7 +25,7 @@ Card :: proc(builder: ^Builder, options: Card_Options = {}) {
 		border    = border,
 		elevation = options.elevation,
 	}
-	Column(builder, container)
+	return Column(parent, container)
 }
 
 Compact :: proc(builder: ^Builder, breakpoint: i32 = 640) -> bool {
@@ -36,16 +35,15 @@ Compact :: proc(builder: ^Builder, breakpoint: i32 = 640) -> bool {
 }
 
 Canvas_Leaf :: proc(
-	builder: ^Builder,
+	parent: Parent,
 	options: Canvas_Options,
 	render: Render_Proc,
 	userdata: rawptr = nil,
 ) {
-	assert(builder != nil && builder.bound, "Fit.Canvas_Leaf: builder not bound")
 	assert(render != nil, "Fit.Canvas_Leaf: nil render callback")
 	assert(options.intrinsic.w >= 0 && options.intrinsic.h >= 0, "Fit.Canvas_Leaf: invalid size")
 	custom_intrinsic(
-		builder,
+		parent,
 		{render = render, userdata = userdata, intrinsic = options.intrinsic},
 		{track = options.track, size = options.size, activated = options.activated},
 	)

@@ -188,6 +188,7 @@ Prepared_Node :: struct {
 	kind:                     Prepared_Kind,
 	parent, first_child:      i32,
 	next_sibling, last_child: i32,
+	child_count:              i32,
 	track:                    Track,
 	sizing:                   Prepared_Size,
 	container:                Prepared_Container_Options,
@@ -757,46 +758,58 @@ prepared_push_container :: proc(prepared: ^Prepared_Ui, handle: Prepared_Handle)
 
 @(private = "file")
 prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Handle {
-	assert(prepared != nil && prepared.open, "prepared_add: description not open")
+	parent := i32(-1)
+	if prepared.depth > 0 do parent = prepared.stack[prepared.depth - 1]
+	return prepared_add_to(prepared, parent, node)
+}
+
+prepared_add_to :: proc(
+	prepared: ^Prepared_Ui,
+	parent_index: i32,
+	node: Prepared_Node,
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_add_to: description not open")
 	nodes := prepared_nodes(prepared)
-	assert(prepared.count >= 0 && prepared.count < i32(len(nodes)), "prepared_add: nodes full")
-	assert(
-		prepared.depth >= 0 && prepared.depth <= MAX_LAYOUT_DEPTH,
-		"prepared_add: invalid depth",
-	)
+	assert(prepared.count >= 0 && prepared.count < i32(len(nodes)), "prepared_add_to: nodes full")
 	index := prepared.count
+	assert(parent_index >= -1 && parent_index < index, "prepared_add_to: invalid parent")
 	value := node
-	value.parent = -1
+	value.parent = parent_index
 	value.first_child = -1
 	value.next_sibling = -1
 	value.last_child = -1
-	if prepared.depth > 0 {
-		parent_index := prepared.stack[prepared.depth - 1]
-		assert(parent_index >= 0 && parent_index < index, "prepared_add: invalid parent")
+	value.child_count = 0
+	depth := i32(1)
+	if parent_index >= 0 {
 		parent := &nodes[parent_index]
-		value.parent = parent_index
+		assert(prepared_kind_is_container(parent.kind), "prepared_add_to: parent is not container")
+		limit := i32(MAX_LAYOUT_FLEX)
+		if parent.kind == .Flow || parent.kind == .Grid do limit = i32(len(nodes) - 1)
+		if parent.kind == .Attachment || parent.kind == .Scroll do limit = 1
+		assert(parent.child_count < limit, "prepared_add_to: children full")
 		if parent.first_child < 0 {
 			parent.first_child = index
 		} else {
-			assert(
-				parent.last_child >= 0 && parent.last_child < index,
-				"prepared_add: invalid sibling",
-			)
+			assert(parent.last_child >= 0 && parent.last_child < index, "prepared_add_to: invalid sibling")
 			nodes[parent.last_child].next_sibling = index
 		}
 		parent.last_child = index
+		parent.child_count += 1
+		ancestor := parent_index
+		for ancestor >= 0 {
+			assert(depth < MAX_LAYOUT_DEPTH, "prepared_add_to: depth full")
+			ancestor = nodes[ancestor].parent
+			depth += 1
+		}
 	} else {
-		assert(prepared.root < 0, "prepared_add: multiple roots")
+		assert(prepared.root < 0, "prepared_add_to: multiple roots")
 		prepared.root = index
 	}
 	nodes[index] = value
 	prepared.count += 1
-	prepared.summary.depends_on_width =
-		prepared.summary.depends_on_width || prepared_axis_dependent(value.sizing.width)
-	prepared.summary.depends_on_height =
-		prepared.summary.depends_on_height || prepared_axis_dependent(value.sizing.height)
-	prepared.summary.explicit_sizing =
-		prepared.summary.explicit_sizing ||
+	prepared.summary.depends_on_width ||= prepared_axis_dependent(value.sizing.width)
+	prepared.summary.depends_on_height ||= prepared_axis_dependent(value.sizing.height)
+	prepared.summary.explicit_sizing ||=
 		prepared_axis_explicit(value.sizing.width) ||
 		prepared_axis_explicit(value.sizing.height) ||
 		value.sizing.aspect.width > 0
@@ -814,7 +827,7 @@ prepared_add :: proc(prepared: ^Prepared_Ui, node: Prepared_Node) -> Prepared_Ha
 	} else {
 		prepared.summary.leaf_count += 1
 	}
-	prepared.summary.maximum_depth = max(prepared.summary.maximum_depth, prepared.depth + 1)
+	prepared.summary.maximum_depth = max(prepared.summary.maximum_depth, depth)
 	assert(prepared.summary.leaf_count + prepared.summary.container_count == prepared.count)
 	return Prepared_Handle(index)
 }
@@ -1759,7 +1772,7 @@ prepared_render_tree :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 	}
 }
 
-@(private = "file")
+@(private = "package")
 prepared_kind_is_container :: proc(kind: Prepared_Kind) -> bool {
 	return(
 		kind == .Row ||

@@ -8,7 +8,15 @@ Builder :: struct {
 	root:         ui.Ui,
 	customs:      [STORAGE_NODE_DEFAULT]Custom_Spec,
 	customs_used: i32,
+	generation:   u64,
 	bound:        bool,
+}
+
+Parent :: struct {
+	builder:    ^Builder,
+	generation: u64,
+	handle:     ui.Prepared_Handle,
+	identity:   ui.Widget_Id,
 }
 
 Signal :: struct {
@@ -233,7 +241,6 @@ Config :: struct {
 Draw_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
 Session_Draw_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
 Shutdown_Proc :: #type proc(app: ^App, userdata: rawptr)
-Build_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
 Region_Build_Proc :: #type proc(region: ^Region, userdata: rawptr)
 Layer_Build_Proc :: #type proc(surface: ^Surface, userdata: rawptr)
 Pane_Build_Proc :: #type proc(surface: ^Surface, content_y: i32, userdata: rawptr) -> i32

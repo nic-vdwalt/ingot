@@ -99,6 +99,22 @@ id_context_id :: proc {
 	id_context_derive_string,
 }
 
+fit_identity_root :: proc() -> Widget_Id {
+	return id_finish(id_hash_u64(ID_FNV_OFFSET, ID_HASH_VERSION))
+}
+
+fit_identity_string :: proc(parent: Widget_Id, value: string) -> Widget_Id {
+	assert(parent != WIDGET_ID_NONE && value != "", "fit identity: invalid string")
+	hash := id_hash_byte(u64(parent), 2)
+	for byte in transmute([]u8)value do hash = id_hash_byte(hash, byte)
+	return id_finish(hash)
+}
+
+fit_identity_u64 :: proc(parent: Widget_Id, value: u64) -> Widget_Id {
+	assert(parent != WIDGET_ID_NONE && value != 0, "fit identity: invalid integer")
+	return id_finish(id_hash_u64(id_hash_byte(u64(parent), 1), value))
+}
+
 id_context_push_id :: proc(ids: ^Id_Context, id: Widget_Id, loc := #caller_location) {
 	assert(ids != nil && id != WIDGET_ID_NONE, "id_context_push: invalid id")
 	assert(ids.depth < MAX_ID_DEPTH, "id_context_push: maximum depth reached")

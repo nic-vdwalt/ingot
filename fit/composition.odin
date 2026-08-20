@@ -1,201 +1,25 @@
 package fit
 
-import "base:runtime"
 import "ingot:ui"
 
-Row_With :: proc(
-	builder: ^Builder,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	options: Container_Options = {},
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	Row(builder, options)
-	build_container_body(builder, body, userdata, loc)
-}
-
-Column_With :: proc(
-	builder: ^Builder,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	options: Container_Options = {},
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	Column(builder, options)
-	build_container_body(builder, body, userdata, loc)
-}
-
-Flow_With :: proc(
-	builder: ^Builder,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	options: Flow_Options = {},
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	Flow(builder, options)
-	build_container_body(builder, body, userdata, loc)
-}
-
-Grid_With :: proc(
-	builder: ^Builder,
-	options: Grid_Options,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	Grid(builder, options)
-	build_container_body(builder, body, userdata, loc)
-}
-
-Attachment_With :: proc(
-	builder: ^Builder,
-	options: Attachment_Options,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	Attachment(builder, options)
-	build_container_body(builder, body, userdata, loc)
-}
-
-@(private = "package")
-scroll_with_string :: proc(
-	builder: ^Builder,
-	key: string,
-	state: ^Scroll_State,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	options: Scroll_Options = {},
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	assert(key != "" && state != nil, "Fit.Scroll_With: invalid state", loc)
-	Scroll(builder, key, state, options)
-	build_container_body(builder, body, userdata, loc)
-}
-
-@(private = "package")
-scroll_with_u64 :: proc(
-	builder: ^Builder,
-	key: u64,
-	state: ^Scroll_State,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	options: Scroll_Options = {},
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	assert(key != 0 && state != nil, "Fit.Scroll_With: invalid state", loc)
-	Scroll(builder, key, state, options)
-	build_container_body(builder, body, userdata, loc)
-}
-
-@(private = "package")
-scroll_with_id :: proc(
-	builder: ^Builder,
-	widget: Widget_Id,
-	state: ^Scroll_State,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	options: Scroll_Options = {},
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	assert(widget != Widget_Id(0) && state != nil, "Fit.Scroll_With: invalid state", loc)
-	Scroll(builder, widget, state, options)
-	build_container_body(builder, body, userdata, loc)
-}
-
-@(private = "package")
-scroll_with_compat :: proc(
-	builder: ^Builder,
-	state: ^Scroll_State,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	options: Scroll_Options = {},
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	assert(state != nil, "Fit.Scroll_With: nil state", loc)
-	Scroll(builder, state, options)
-	build_container_body(builder, body, userdata, loc)
-}
-
-Scroll_With :: proc {
-	scroll_with_string,
-	scroll_with_u64,
-	scroll_with_id,
-	scroll_with_compat,
-}
-
-Card_With :: proc(
-	builder: ^Builder,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	options: Card_Options = {},
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	Card(builder, options)
-	build_container_body(builder, body, userdata, loc)
-}
-
-Section_With :: proc(
-	builder: ^Builder,
-	title: string,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	options: Section_Options = {},
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	Section(builder, title, options)
-	build_container_body(builder, body, userdata, loc)
+@(private = "file")
+scope_string :: proc(parent: Parent, key: string) -> Parent {
+	builder := parent_validate(parent)
+	assert(key != "", "Fit.Scope: empty key")
+	result := parent
+	result.builder = builder
+	result.identity = ui.fit_identity_string(parent.identity, key)
+	return result
 }
 
 @(private = "file")
-build_container_body :: proc(
-	builder: ^Builder,
-	body: Build_Proc,
-	userdata: rawptr,
-	loc: runtime.Source_Code_Location,
-) {
-	assert(builder != nil && builder.bound, "Fit container: builder not bound", loc)
-	assert(body != nil, "Fit container: nil body", loc)
-	entry_depth := builder.inner.prepared.depth
-	assert(entry_depth > 0, "Fit container: container not opened", loc)
-	body(builder, userdata)
-	assert(builder.inner.prepared.depth == entry_depth, "Fit container: body unbalanced", loc)
-	End(builder)
-	assert(builder.inner.prepared.depth == entry_depth - 1, "Fit container: close failed", loc)
-}
-
-@(private = "file")
-scope_string :: proc(
-	builder: ^Builder,
-	key: string,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	assert(builder != nil && builder.bound, "Fit.Scope: builder not bound", loc)
-	assert(key != "" && body != nil, "Fit.Scope: invalid argument", loc)
-	entry_depth := builder.inner.prepared.depth
-	ui.scope_begin(&builder.root, key, loc)
-	defer ui.scope_end(&builder.root)
-	body(builder, userdata)
-	assert(builder.inner.prepared.depth == entry_depth, "Fit.Scope: body unbalanced", loc)
-}
-
-@(private = "file")
-scope_u64 :: proc(
-	builder: ^Builder,
-	key: u64,
-	body: Build_Proc,
-	userdata: rawptr = nil,
-	loc: runtime.Source_Code_Location = #caller_location,
-) {
-	assert(builder != nil && builder.bound, "Fit.Scope: builder not bound", loc)
-	assert(key != 0 && body != nil, "Fit.Scope: invalid argument", loc)
-	entry_depth := builder.inner.prepared.depth
-	ui.scope_begin(&builder.root, key, loc)
-	defer ui.scope_end(&builder.root)
-	body(builder, userdata)
-	assert(builder.inner.prepared.depth == entry_depth, "Fit.Scope: body unbalanced", loc)
+scope_u64 :: proc(parent: Parent, key: u64) -> Parent {
+	builder := parent_validate(parent)
+	assert(key != 0, "Fit.Scope: zero key")
+	result := parent
+	result.builder = builder
+	result.identity = ui.fit_identity_u64(parent.identity, key)
+	return result
 }
 
 Scope :: proc {
@@ -259,17 +83,17 @@ Pane_With :: proc(
 }
 
 @(private = "file")
-id_string :: proc(builder: ^Builder, key: string) -> Widget_Id {
-	assert(builder != nil && builder.bound, "Fit.Id: builder not bound")
+id_string :: proc(parent: Parent, key: string) -> Widget_Id {
+	_ = parent_validate(parent)
 	assert(key != "", "Fit.Id: empty key")
-	return Widget_Id(ui.id(&builder.root, key))
+	return Widget_Id(ui.fit_identity_string(parent.identity, key))
 }
 
 @(private = "file")
-id_u64 :: proc(builder: ^Builder, key: u64) -> Widget_Id {
-	assert(builder != nil && builder.bound, "Fit.Id: builder not bound")
+id_u64 :: proc(parent: Parent, key: u64) -> Widget_Id {
+	_ = parent_validate(parent)
 	assert(key != 0, "Fit.Id: zero key")
-	return Widget_Id(ui.id(&builder.root, key))
+	return Widget_Id(ui.fit_identity_u64(parent.identity, key))
 }
 
 Id :: proc {
