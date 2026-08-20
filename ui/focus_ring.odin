@@ -88,12 +88,16 @@ focus_opt_click :: proc(frame: ^Ui_Frame, f: Focus_Opt, x, y, w, h: i32) {
 	form_focus_input(frame, f.focus, f.id, x, y, w, h)
 }
 
-focus_activated :: proc(frame: ^Ui_Frame, focus: ^int, id: int) -> bool {
+focus_activated :: proc(
+	frame: ^Ui_Frame,
+	focus: ^int,
+	id: int,
+	node_id: u64 = SEM_ID_ROOT,
+) -> bool {
 	assert(frame != nil && frame.open, "focus_activated: invalid frame")
 	assert(focus != nil, "focus_activated: nil focus")
 	assert(id > 0, "focus_activated: focus ids are positive")
-	node_id := sem_node_id(.Button, {focus, id}, "", 0)
-	if a11y_take_click(frame.runtime, node_id) {
+	if node_id > SEM_ID_ROOT && a11y_take_click(frame.runtime, node_id) {
 		focus^ = id
 		return true
 	}
@@ -101,9 +105,16 @@ focus_activated :: proc(frame: ^Ui_Frame, focus: ^int, id: int) -> bool {
 	return is_key_pressed(frame, .SPACE) || is_key_pressed(frame, .ENTER)
 }
 
-focus_opt_activated :: proc(frame: ^Ui_Frame, f: Focus_Opt) -> bool {
+focus_opt_activated :: proc(
+	frame: ^Ui_Frame,
+	f: Focus_Opt,
+	role: Sem_Role = .Button,
+	widget: Widget_Id = WIDGET_ID_NONE,
+	field_id: string = "",
+) -> bool {
 	if f.focus == nil do return false
-	return focus_activated(frame, f.focus, f.id)
+	node_id := sem_node_id(role, f, field_id, 0, widget)
+	return focus_activated(frame, f.focus, f.id, node_id)
 }
 
 draw_focus_ring :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {

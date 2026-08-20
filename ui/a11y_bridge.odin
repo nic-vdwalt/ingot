@@ -45,15 +45,20 @@ a11y_frame_end :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "a11y_frame_end: invalid frame")
 }
 
-a11y_stage_click :: proc(runtime: ^Ui_Runtime, node_id: u64) {
-	assert(runtime != nil && runtime.initialized, "a11y_stage_click: invalid runtime")
-	assert(node_id > SEM_ID_ROOT, "a11y_stage_click: invalid node id")
+a11y_stage_action :: proc(runtime: ^Ui_Runtime, node_id: u64, action: A11y_Action_Kind) {
+	assert(runtime != nil && runtime.initialized, "a11y_stage_action: invalid runtime")
+	assert(node_id > SEM_ID_ROOT, "a11y_stage_action: invalid node id")
+	assert(action != .Focus, "a11y_stage_action: focus is immediate")
 	runtime.pending_a11y = {
 		node_id            = node_id,
-		action             = .Click,
+		action             = action,
 		expires_generation = runtime.frame_generation + 1,
 		pending            = true,
 	}
+}
+
+a11y_stage_click :: proc(runtime: ^Ui_Runtime, node_id: u64) {
+	a11y_stage_action(runtime, node_id, .Click)
 }
 
 a11y_expire_before_frame :: proc(runtime: ^Ui_Runtime) {
@@ -68,21 +73,26 @@ a11y_expire_after_frame :: proc(runtime: ^Ui_Runtime) {
 	if pending.pending && runtime.frame_generation >= pending.expires_generation do pending^ = {}
 }
 
-a11y_take_click :: proc(runtime: ^Ui_Runtime, node_id: u64) -> bool {
-	assert(runtime != nil && runtime.initialized, "a11y_take_click: invalid runtime")
+a11y_take_action :: proc(runtime: ^Ui_Runtime, node_id: u64, action: A11y_Action_Kind) -> bool {
+	assert(runtime != nil && runtime.initialized, "a11y_take_action: invalid runtime")
+	assert(action != .Focus, "a11y_take_action: focus is immediate")
 	pending := &runtime.pending_a11y
 	if !pending.pending || runtime.frame_generation != pending.expires_generation do return false
-	if pending.action != .Click || node_id != pending.node_id do return false
+	if pending.action != action || node_id != pending.node_id do return false
 	pending^ = {}
 	return true
+}
+
+a11y_take_click :: proc(runtime: ^Ui_Runtime, node_id: u64) -> bool {
+	return a11y_take_action(runtime, node_id, .Click)
 }
 
 a11y_apply_action :: proc(frame: ^Ui_Frame, action: A11y_Action) {
 	assert(frame != nil && frame.open, "a11y_apply_action: invalid frame")
 	#partial switch action.action {
-	case .Click:
-		if sem_has_interactive_node(frame, action.node) {
-			a11y_stage_click(frame.runtime, action.node)
+	case .Click, .Increment, .Decrement:
+		if sem_node_accepts_action(frame, action.node, action.action) {
+			a11y_stage_action(frame.runtime, action.node, action.action)
 			request_redraw(frame)
 		}
 	case .Focus:
@@ -90,16 +100,6 @@ a11y_apply_action :: proc(frame: ^Ui_Frame, action: A11y_Action) {
 		if ok {
 			focus_opt_set(focus)
 			if frame.output != nil do request_redraw(frame)
-		}
-	case .Increment, .Decrement:
-		if sem_has_interactive_node(frame, action.node) {
-			frame.runtime.pending_a11y = {
-				node_id            = action.node,
-				action             = action.action,
-				expires_generation = frame.runtime.frame_generation + 1,
-				pending            = true,
-			}
-			request_redraw(frame)
 		}
 	}
 }

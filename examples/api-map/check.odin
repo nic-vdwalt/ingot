@@ -24,6 +24,7 @@ layout_check :: proc() {
 	assert(len(MAP_EDGES) == EDGE_COUNT)
 	assert(len(STAGE_LABELS) == STAGE_COUNT)
 	map_check_topology()
+	map_check_api_tiers()
 	for width in CHECK_WIDTHS {
 		height := map_content_height(width, CHECK_METRICS)
 		layout := map_layout({0, 0, width, height}, CHECK_METRICS)
@@ -37,17 +38,44 @@ layout_check :: proc() {
 }
 
 map_check_topology :: proc() {
-	seen := [STAGE_COUNT]bool{}
+	nodes_seen := [STAGE_COUNT]bool{}
+	edges_seen := [STAGE_COUNT]bool{}
 	for edge in MAP_EDGES {
 		assert(edge.from >= 0 && edge.from < NODE_COUNT)
 		assert(edge.to >= 0 && edge.to < NODE_COUNT)
 		assert(edge.stage >= 1 && edge.stage <= STAGE_COUNT)
+		edges_seen[edge.stage - 1] = true
 	}
 	for node in MAP_NODES {
 		assert(node.title != "" && node.contract != "")
-		if node.stage > 0 do seen[node.stage - 1] = true
+		if node.stage > 0 do nodes_seen[node.stage - 1] = true
 	}
-	for value in seen do assert(value)
+	for value in nodes_seen do assert(value)
+	for value in edges_seen do assert(value)
+	for stage in 1 ..= STAGE_COUNT {
+		assert(map_stage_node_count(i32(stage)) >= 1)
+		assert(map_stage_edge_count(i32(stage)) >= 1)
+	}
+	assert(map_stage_node_count(STAGE_COUNT) == 2)
+	assert(map_stage_edge_count(STAGE_COUNT) == 3)
+}
+
+map_check_api_tiers :: proc() {
+	for label in TIER_LABELS do assert(label != "")
+	for node in MAP_NODES {
+		assert(node.tier >= .Caller && node.tier <= .Internal)
+		if node.tier == .Internal do assert(node.stage > 0)
+	}
+	assert(MAP_NODES[0].tier == .Caller)
+	assert(MAP_NODES[1].tier == .Advanced)
+	assert(MAP_NODES[2].tier == .Primary)
+	assert(MAP_NODES[3].tier == .Primary)
+	assert(MAP_NODES[4].tier == .Advanced)
+	assert(MAP_NODES[5].tier == .Advanced)
+	assert(MAP_NODES[6].tier == .Caller)
+	assert(MAP_NODES[7].tier == .Advanced)
+	assert(MAP_NODES[8].tier == .Internal)
+	assert(MAP_NODES[9].tier == .Primary)
 }
 
 map_check_layout :: proc(layout: ^Map_Layout) {
@@ -123,4 +151,19 @@ map_check_animation :: proc() {
 	assert(map_advance_progress(0, 0) == 0)
 	assert(map_advance_progress(0, 10) == 1)
 	assert(map_advance_progress(0.75, -1) == 0.75)
+	saved := map_state
+	defer map_state = saved
+	map_state = {
+		reduced_motion = true,
+	}
+	map_select_stage(STAGE_COUNT)
+	assert(map_state.selected_stage == STAGE_COUNT)
+	assert(map_state.target_stage == STAGE_COUNT)
+	assert(map_state.progress == 1)
+	for edge in MAP_EDGES {
+		if edge.stage == STAGE_COUNT do assert(map_edge_amount(edge.stage) == 1)
+	}
+	next := map_state.target_stage + 1
+	if next > STAGE_COUNT do next = 1
+	assert(next == 1)
 }

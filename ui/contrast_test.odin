@@ -24,54 +24,13 @@ package ui
 
 import "core:testing"
 
-// Inks that carry prose a user is expected to read, and must therefore clear a
-// reading bar on any surface. Disabled/Muted/Inverse are excluded above and
-// audited separately, so this list plus those three is the whole Ink enum;
-// ink_audit_covers_every_ink asserts that, which is what stops a new ink from
-// being silently unaudited.
-READING_INKS :: [?]Ink {
-	.Primary,
-	.Heading,
-	.Secondary,
-	.Accent,
-	.Danger,
-	.Success,
-	.Label,
-	.Accent_Light,
-	.Tool,
-	.Diff_Add,
-	.Diff_Remove,
-	.User,
-	.Assistant,
-	.Plan,
-}
-
 // Inks exempt from the reading bar. Kept as a named set so the coverage test
 // can prove READING_INKS + DIM_INKS + Inverse is exactly the Ink enum.
 DIM_INKS :: [?]Ink{.Disabled, .Muted}
 
-// Surfaces that host prose. These are resting backgrounds; interaction tints
-// are excluded per the file header.
-theme_reading_surfaces :: proc(style: ^Theme) -> [6]Color {
-	assert(style != nil, "theme_reading_surfaces: nil theme")
-	return [6]Color {
-		style.bg_color,
-		style.bg_secondary,
-		style.bg_input,
-		style.bg_code,
-		style.bg_popup,
-		style.bg_tool_card,
-	}
-}
-
 builtin_themes :: proc() -> [3]Theme {
 	return [3]Theme{THEME_DARK, THEME_LIGHT, THEME_HIGH_CONTRAST}
 }
-
-// MIN_TEXT_CONTRAST_LARGE is WCAG 2.1 AA for large text (>=18pt, or >=14pt
-// bold). It is the floor the current dark and light palettes actually hold at
-// their weakest reading pair; see reading_inks_hold_measured_floor.
-MIN_TEXT_CONTRAST_LARGE :: 3.0
 
 // MIN_DIM_CONTRAST is the floor for intentionally-dim inks. WCAG sets no
 // requirement for inactive components, but "no requirement" is not "invisible":

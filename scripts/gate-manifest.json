@@ -54,6 +54,7 @@
     "gfx.texture_lookup_rejects_an_unassigned_context_id"
   ],
   "examples": [
+    "advanced_ui",
     "hello",
     "session_loop",
     "gallery",

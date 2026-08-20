@@ -116,7 +116,7 @@ dropdown_at :: proc(
 
 	// Open on click or keyboard activation; the opening click must not also
 	// register as the popup's click-away (just_opened swallows it).
-	if !st.menu.open && (it.clicked || focus_opt_activated(frame, focus)) {
+	if !st.menu.open && (it.clicked || focus_opt_activated(frame, focus, .Dropdown, widget)) {
 		context_menu_open(&st.menu, rect.x, rect.y + rect.h + 2)
 		st.menu.selected = int(selected^)
 	}

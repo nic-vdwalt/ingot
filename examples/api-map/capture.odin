@@ -52,12 +52,17 @@ when MAP_CAPTURE {
 		width: i32,
 	}
 
-	// One shot per visually distinct playback state, both themes, plus the
-	// narrow responsive variant.
+	// Captures cover each API tier, grouped final-stage rendering, both themes,
+	// and the narrow and medium responsive variants.
 	CAPTURE_SHOTS := [?]Map_Shot {
-		{"map-idle-dark.png", {dark = true, hovered_node = -1, progress = 1}, CAPTURE_WIDTH},
+		{"map-overview-dark.png", {dark = true, hovered_node = -1, progress = 1}, CAPTURE_WIDTH},
 		{
-			"map-stage3-mid.png",
+			"map-primary-dark.png",
+			{dark = true, hovered_node = -1, selected_stage = 1, target_stage = 1, progress = 1},
+			CAPTURE_WIDTH,
+		},
+		{
+			"map-advanced-mid.png",
 			{
 				dark = true,
 				hovered_node = -1,
@@ -69,7 +74,7 @@ when MAP_CAPTURE {
 			CAPTURE_WIDTH,
 		},
 		{
-			"map-complete-dark.png",
+			"map-internal-dark.png",
 			{
 				dark = true,
 				hovered_node = -1,
@@ -79,7 +84,17 @@ when MAP_CAPTURE {
 			},
 			CAPTURE_WIDTH,
 		},
-		{"map-idle-light.png", {dark = false, hovered_node = -1, progress = 1}, CAPTURE_WIDTH},
+		{
+			"map-complete-light.png",
+			{
+				dark = false,
+				hovered_node = -1,
+				selected_stage = STAGE_COUNT,
+				target_stage = STAGE_COUNT,
+				progress = 1,
+			},
+			CAPTURE_WIDTH,
+		},
 		{
 			"map-narrow-dark.png",
 			{dark = true, hovered_node = -1, selected_stage = 4, target_stage = 4, progress = 1},
@@ -87,7 +102,13 @@ when MAP_CAPTURE {
 		},
 		{
 			"map-medium-dark.png",
-			{dark = true, hovered_node = -1, selected_stage = 5, target_stage = 5, progress = 1},
+			{
+				dark = true,
+				hovered_node = -1,
+				selected_stage = STAGE_COUNT,
+				target_stage = STAGE_COUNT,
+				progress = 1,
+			},
 			CAPTURE_MEDIUM_WIDTH,
 		},
 	}

@@ -83,11 +83,11 @@ tooltip_wrapped_at_waits_then_emits_multiline_overlay :: proc(t: ^testing.T) {
 	input.time = TOOLTIP_DELAY
 	tooltip_wrapped_at(&frame, &state, target, text, 120, 80, {max_width = 48})
 	list := &output.overlay
-	testing.expect_value(t, list.count, 6)
+	testing.expect_value(t, list.count, 5)
 	testing.expect_value(t, list.commands[0].rect.x, f32(32))
 	testing.expect_value(t, list.commands[0].rect.y, f32(0))
 	testing.expect_value(t, list.commands[0].rect.width, f32(44))
-	testing.expect_value(t, list.commands[0].rect.height, f32(100))
+	testing.expect_value(t, list.commands[0].rect.height, f32(80))
 }
 
 @(test)

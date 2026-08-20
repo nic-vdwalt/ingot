@@ -73,7 +73,6 @@ ADAPTER_LIFECYCLE = {
 }
 LEGACY_SESSION = re.compile(r"\b(?:App_Session(?:_Config)?|app_session_[a-z_0-9]+)\b")
 BINDING_IMPORT = re.compile(r'"ingot:(libvterm|pty|accesskit)"')
-INTERNAL_UI_IMPORT = re.compile(r'(?m)^\s*import\s+(?:[A-Za-z_][A-Za-z_0-9]*\s+)?"ingot:(?:ui|ui_gfx)"')
 FIT_AS_INTERNAL_IMPORT = re.compile(r'(?m)^\s*import\s+(ui|ui_gfx)\s+"ingot:fit"')
 EXAMPLE_FIT_IMPORT = re.compile(r'(?m)^\s*import\s+(?!fit\s+)[a-zA-Z_][a-zA-Z_0-9]*\s+"ingot:fit"')
 EXAMPLE_INTERNAL_NAME = re.compile(
@@ -272,9 +271,6 @@ def consumer_violations(consumer_roots: list[Path], binding_allow: set[Path], in
             source = mask_source(raw_source)
             failures.extend(_matches(source, adapter, "backend adapter call {name}; use Session", path, root))
             failures.extend(_matches(source, LEGACY_SESSION, "legacy session API {name}; use fit.Session", path, root))
-            failures.extend(
-                _matches(raw_source, INTERNAL_UI_IMPORT, "internal UI import {name}; use ingot:fit", path, root)
-            )
             failures.extend(_matches(source, RETIRED_UI, "retired UI API {name}; use fit.Builder", path, root))
             failures.extend(_matches(source, RETIRED_GFX, "retired graphics API {name}; use PascalCase gfx", path, root))
             if resolved not in binding_allow:
@@ -288,9 +284,6 @@ def check(root: Path) -> list[str]:
     failures: list[str] = []
     for path in sorted((root / "examples").rglob("*.odin")):
         raw_source = path.read_text(encoding="utf-8")
-        failures.extend(
-            _matches(raw_source, INTERNAL_UI_IMPORT, "internal UI import {name}; use ingot:fit", path, root)
-        )
         failures.extend(
             _matches(raw_source, FIT_AS_INTERNAL_IMPORT, "Fit imported as internal UI alias {name}", path, root)
         )

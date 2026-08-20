@@ -1,6 +1,6 @@
 # Supported API layers
 
-Ingot has two supported consumer entry points.
+Ingot has two primary consumer entry points and two advanced UI layers.
 
 ## `ingot:gfx`
 
@@ -32,7 +32,7 @@ is not a second general drawing vocabulary and never changes ambient state.
 ## `ingot:fit`
 
 Use `ingot:fit` for UI applications. `fit.App` owns the graphics/UI lifecycle,
-and the callback receives the only supported declaration object: `fit.Builder`.
+and the callback receives the recommended declaration object: `fit.Builder`.
 
 ```odin
 import fit "ingot:fit"
@@ -125,33 +125,34 @@ frame, adapter, paint, or platform internals.
 
 ## API map contract
 
-The API map presents `ingot:fit` and `ingot:gfx` as parallel supported entry
-points. Its Fit path crosses five ownership and implementation tiers: supported
-API, application-owned state, callback-scoped capability, internal UI engine,
-and presentation. Internal boxes explain execution; they are not supported
-application imports.
+The API map presents `ingot:fit` and `ingot:gfx` as parallel primary entry
+points. Package swimlanes show implementation ownership, while permanent badges
+classify cards as `PRIMARY`, `ADVANCED`, or `INTERNAL`. The advanced
+`ingot:ui` and managed `ingot:ui_gfx` hosts remain supported application APIs;
+direct Adapter lifecycle calls remain internal.
 
 The animated path names six stages of one UI frame:
 
-1. `fit.App` owns lifecycle and captures platform input.
-2. `fit.Builder` records a bounded immediate declaration.
-3. Fit measures constraints and places responsive layout.
-4. Render dispatches Builder actions and lends explicit leaves a `fit.Surface`;
-   both support same-frame action without changing the built structure.
-5. The UI engine records paint, semantics, and platform requests.
-6. The UI/GFX bridge presents through WebGPU and native or web adapters.
+1. `fit.App` provides the primary managed UI lifecycle.
+2. Managed `ui_gfx.App` and `ui_gfx.Session` hosts provide the advanced
+   lifecycle path.
+3. `ui` records renderer-independent immediate-mode UI work.
+4. Application callbacks perform same-frame work through the selected API layer.
+5. `ui` produces paint, semantics, and platform output.
+6. The internal Adapter replays output through primary `gfx` presentation.
 
 Hover and animation are implemented inside the borrowed Surface callback. The
 map retains only application-owned selection and timing values; it never retains
 the Surface.
 
-## Internal packages
+## Advanced UI layers
 
 `ingot:ui` and `ingot:ui_gfx` retain the passive runtime, per-frame input and
 paint state, prepared layout engine, explicit widget primitives, text backend,
-platform output, accessibility bridge, and replay implementation. They remain
-independently tested but are not supported application imports.
+platform output, accessibility bridge, and replay implementation. They are
+supported advanced application imports for callers that need direct control and
+can own the additional lifecycle and layout responsibilities.
 
-Likewise, `Prepared_Ui`, adapter lifecycle calls, raw `Ui`/`Ui_Frame` ownership,
-and the removed `Fit_Node` tree are implementation details rather than parallel
-consumer APIs.
+`ui_gfx.App` and `ui_gfx.Session` are the managed graphics hosts for this layer.
+`Prepared_Ui`, direct Adapter lifecycle calls, undocumented bridge details, and
+the removed `Fit_Node` tree remain implementation details rather than public APIs.

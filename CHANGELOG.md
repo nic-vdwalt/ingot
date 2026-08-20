@@ -11,6 +11,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
+- `ingot:ui` and the managed `ingot:ui_gfx.App` and `ui_gfx.Session` hosts are
+  documented as advanced application APIs. `ingot:fit` remains the recommended
+  default; direct `ui_gfx.Adapter` lifecycle calls remain backend-only.
 - **Breaking:** prepared Fit layout now uses allocation-free current-build
   `fit.Parent` values. Root containers return Parent; child containers and leaves
   consume Parent, and `fit.Scope` derives identity by returning another Parent.

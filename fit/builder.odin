@@ -476,6 +476,7 @@ Render_At :: proc(builder: ^Builder, rect: Rect) {
 
 Render :: proc(builder: ^Builder) -> Rect {
 	assert(builder != nil && builder.bound, "Fit.Render: builder not bound")
+	assert(!builder.inner.prepared.rendered, "Fit.Render: builder already rendered")
 	return from_rect(ui.fit_render(&builder.inner))
 }
 

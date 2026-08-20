@@ -179,6 +179,32 @@ menu_nav_next :: proc(items: []Menu_Item, current, delta: int) -> int {
 	return current
 }
 
+Popup_Layout :: struct {
+	rect:        Rectangle,
+	content_w:   i32,
+	content_h:   i32,
+	constrained: bool,
+}
+
+popup_layout :: proc(
+	anchor: Vector2,
+	preferred_w, preferred_h: i32,
+	viewport: Rect_I32,
+) -> Popup_Layout {
+	assert(preferred_w >= 0 && preferred_h >= 0, "popup_layout: negative size")
+	assert(viewport.w >= 0 && viewport.h >= 0, "popup_layout: negative viewport")
+	width := min(preferred_w, viewport.w)
+	height := min(preferred_h, viewport.h)
+	x := clamp(i32(anchor.x), viewport.x, max(viewport.x + viewport.w - width, viewport.x))
+	y := clamp(i32(anchor.y), viewport.y, max(viewport.y + viewport.h - height, viewport.y))
+	return {
+		rect = {f32(x), f32(y), f32(width), f32(height)},
+		content_w = width,
+		content_h = height,
+		constrained = width < preferred_w || height < preferred_h,
+	}
+}
+
 // context_menu_height returns the popup's pixel height for an item list, so
 // callers can pre-position the anchor (e.g. open upward above an input box).
 context_menu_height_frame :: proc(frame: ^Ui_Frame, items: []Menu_Item) -> i32 {
@@ -235,9 +261,8 @@ context_menu :: proc(
 	menu_w := context_menu_width_frame(frame, items, screen.w)
 	menu_h := context_menu_height_frame(frame, items)
 	anchor := frame_to_screen(frame, {f32(st.anchor_x), f32(st.anchor_y)})
-	sx := clamp(i32(anchor.x), screen.x, max(i32(screen_right) - menu_w, screen.x))
-	sy := clamp(i32(anchor.y), screen.y, max(i32(screen_bottom) - menu_h, screen.y))
-	screen_rect := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
+	layout := popup_layout(anchor, menu_w, menu_h, screen)
+	screen_rect := layout.rect
 	menu_rect := frame_rect_to_local(frame, screen_rect)
 
 	// Caller-owned state may outlive or be reused with a different item slice.
@@ -423,18 +448,20 @@ tooltip_wrapped_at :: proc(
 	line_height := metrics.LINE_HEIGHT
 	bw := tw + metrics.TOOLTIP_PAD * 2
 	bh := i32(len(lines)) * line_height + metrics.TOOLTIP_PAD * 2
-	tx := clamp(i32(mouse.x) + ui_frame_sc(frame, 12), 0, max(screen_w - bw, 0))
-	ty := clamp(i32(mouse.y) + ui_frame_sc(frame, 18), 0, max(screen_h - bh, 0))
-	tip := Rectangle{f32(tx), f32(ty), f32(bw), f32(bh)}
-	layer_begin(frame, Z_TOOLTIP)
+	anchor := Vector2{mouse.x + ui_frame_scf(frame, 12), mouse.y + ui_frame_scf(frame, 18)}
+	layout := popup_layout(anchor, bw, bh, {0, 0, screen_w, screen_h})
+	tip := layout.rect
+	visible_lines := int(max((layout.content_h - metrics.TOOLTIP_PAD * 2) / line_height, 0))
+	layer_begin(frame, Z_TOOLTIP, claim = tip)
 	draw_rectangle_rec(frame, tip, style.bg_popup)
 	draw_rectangle_lines_ex(frame, tip, ui_frame_scf(frame, 1), style.border_color)
 	for line, index in lines {
+		if index >= visible_lines do break
 		draw_text_string(
 			frame,
 			text[line.start:line.end],
-			tx + metrics.TOOLTIP_PAD,
-			ty + metrics.TOOLTIP_PAD + i32(index) * line_height,
+			i32(tip.x) + metrics.TOOLTIP_PAD,
+			i32(tip.y) + metrics.TOOLTIP_PAD + i32(index) * line_height,
 			metrics.FONT_SIZE_LABEL,
 			style.fg_primary,
 		)

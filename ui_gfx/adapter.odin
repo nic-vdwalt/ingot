@@ -12,6 +12,7 @@ FONT_CAP :: 64
 Adapter :: struct {
 	gfx_context:      ^rl.Context,
 	gfx_epoch:        u64,
+	attached_runtime: ^ui.Ui_Runtime,
 	fonts:            [FONT_CAP]rl.Font,
 	font_sizes:       [FONT_CAP]i32,
 	font_count:       int,
@@ -68,24 +69,46 @@ adapter_init_context :: proc(
 adapter_attach_runtime :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime) {
 	assert(adapter != nil && adapter.initialized, "adapter_attach_runtime: invalid adapter")
 	assert(runtime != nil && runtime.initialized, "adapter_attach_runtime: invalid runtime")
+	assert(
+		adapter.attached_runtime == nil || adapter.attached_runtime == runtime,
+		"adapter_attach_runtime: adapter already attached",
+	)
+	if adapter.attached_runtime == runtime do return
 	ui.ui_runtime_set_text_backend(runtime, adapter_text_backend(adapter))
-	ui.ui_runtime_set_web_form_backend(runtime, adapter_web_form_backend())
+	ui.ui_runtime_set_web_form_backend(runtime, adapter_web_form_backend(adapter))
+	adapter.attached_runtime = runtime
 }
 
 adapter_detach_runtime :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime) {
 	assert(adapter != nil && adapter.initialized, "adapter_detach_runtime: invalid adapter")
 	assert(runtime != nil && runtime.initialized, "adapter_detach_runtime: invalid runtime")
-	if runtime.text_backend.data == adapter {
+	assert(
+		adapter.attached_runtime == nil || adapter.attached_runtime == runtime,
+		"adapter_detach_runtime: runtime does not own adapter",
+	)
+	text := adapter_text_backend(adapter)
+	if runtime.text_backend.data == text.data &&
+	   runtime.text_backend.font_for_size == text.font_for_size &&
+	   runtime.text_backend.measure == text.measure &&
+	   runtime.text_backend.reset == text.reset {
 		runtime.text_backend = {}
+	}
+	web := adapter_web_form_backend(adapter)
+	if runtime.web_form.data == web.data &&
+	   runtime.web_form.sync_text_input == web.sync_text_input &&
+	   runtime.web_form.sync_submit_button == web.sync_submit_button {
 		runtime.web_form = {}
 	}
+	if adapter.attached_runtime == runtime do adapter.attached_runtime = nil
 }
 
 // adapter_web_form_backend bridges the ui web-form hooks to the gfx browser
 // overlay. Installed on every target: outside JS the gfx procs are no-op
 // stubs, so the bridge costs nothing while keeping call sites unconditional.
-adapter_web_form_backend :: proc() -> ui.Web_Form_Backend {
+adapter_web_form_backend :: proc(adapter: ^Adapter) -> ui.Web_Form_Backend {
+	assert(adapter != nil && adapter.initialized, "adapter_web_form_backend: invalid adapter")
 	return ui.Web_Form_Backend {
+		data = adapter,
 		sync_text_input = adapter_web_form_sync_text,
 		sync_submit_button = adapter_web_form_sync_submit,
 	}
@@ -98,7 +121,8 @@ adapter_web_form_sync_text :: proc(
 	x, y, w, h, input_type, autocomplete: i32,
 	active: bool,
 ) -> ui.Web_Form_Text_Result {
-	_ = data
+	adapter := cast(^Adapter)data
+	assert(adapter != nil && adapter.initialized, "adapter_web_form_sync_text: invalid adapter")
 	result := rl.SyncWebTextInput(
 		form_id,
 		field_id,
@@ -123,7 +147,8 @@ adapter_web_form_sync_submit :: proc(
 	x, y, w, h, style, font_size: i32,
 	enabled: bool,
 ) -> bool {
-	_ = data
+	adapter := cast(^Adapter)data
+	assert(adapter != nil && adapter.initialized, "adapter_web_form_sync_submit: invalid adapter")
 	return rl.SyncWebSubmitButton(form_id, label, x, y, w, h, style, font_size, enabled)
 }
 
@@ -131,6 +156,7 @@ adapter_destroy :: proc(adapter: ^Adapter) {
 	assert(adapter != nil && adapter.initialized, "adapter_destroy: invalid adapter")
 	assert(!adapter.graphics_open, "adapter_destroy: graphics frame still open")
 	assert(adapter.gfx_frame == nil, "adapter_destroy: graphics frame still bound")
+	assert(adapter.attached_runtime == nil, "adapter_destroy: runtime still attached")
 	adapter_a11y_destroy(adapter)
 	adapter_reset_fonts(adapter)
 	delete(adapter.font_codepoints)
@@ -217,8 +243,6 @@ adapter_end_frame :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	if adapter.graphics_open {
 		assert(adapter.gfx_frame != nil && rl.frame_available(adapter.gfx_frame))
 		replay_list_tiered(adapter, &output.overlay)
-	} else {
-		assert(output.overlay.count == 0, "adapter_end_frame: overlay without graphics frame")
 	}
 	apply_platform_output_context(adapter.gfx_context, &output.platform)
 	ui.paint_list_set_sink(&output.main, nil, nil)

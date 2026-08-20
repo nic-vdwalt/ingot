@@ -234,7 +234,7 @@ selectable_row :: proc(
 		result.pressed = it.pressed
 		result.held = it.held && state.pressed_index == row.index
 		result.activated = it.clicked && state.pressed_index == row.index
-		if a11y_take_click(frame.runtime, sem_node_id(.Option, {}, row.stable_id, 0)) {
+		if a11y_take_action(frame.runtime, sem_node_id(.Option, {}, row.stable_id, 0), .Click) {
 			result.activated = true
 			focus_opt_set(focus_link(&state.focus, focus_id(1)))
 		}

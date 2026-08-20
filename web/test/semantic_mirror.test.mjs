@@ -12,7 +12,7 @@ const hookP = install();
 // Sem_Role ordinals (ui/semantics.odin) and Sem_State bits used by
 // syncSemanticControl.
 const ROLE_BUTTON = 1, ROLE_CHECKBOX = 2, ROLE_SLIDER = 4, ROLE_DROPDOWN = 6;
-const ROLE_OPTION = 15, ROLE_LISTBOX = 18;
+const ROLE_OPTION = 15, ROLE_LISTBOX = 18, ROLE_LINK = 19;
 const STATE_CHECKED = 1, STATE_DISABLED = 2, STATE_EXPANDED = 8, STATE_SELECTED = 16;
 
 test("text input mirror: creation, aria-label, GC by frame stamp", async () => {
@@ -126,6 +126,21 @@ test("control mirror: listbox roles and collection state", async () => {
 	hook.beginSemanticFrame();
 	hook.endSemanticFrame();
 	assert.equal(semanticControls.size, 0, "listbox controls GC'd");
+});
+
+test("control mirror: links expose and stage activation", async () => {
+	const { hook } = await hookP;
+	hook.beginSemanticFrame();
+	hook.syncSemanticControl("3:1", ROLE_LINK, "Docs", 0, 0, 80, 20, 0, 0, 0, 0);
+	const link = hook.semanticState().semanticControls.get("3:1").el;
+	assert.equal(link.tagName, "A");
+	assert.equal(link.getAttribute("role"), "link");
+	link.dispatch("click");
+	const flags = hook.syncSemanticControl("3:1", ROLE_LINK, "Docs", 0, 0, 80, 20, 0, 0, 0, 0);
+	assert.equal(flags & 1, 1, "link activation reported");
+	hook.endSemanticFrame();
+	hook.beginSemanticFrame();
+	hook.endSemanticFrame();
 });
 
 test("control mirror: role change replaces the element", async () => {

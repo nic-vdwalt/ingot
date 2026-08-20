@@ -119,7 +119,7 @@ adapter_font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
 		raw_data(adapter.font_codepoints),
 		i32(len(adapter.font_codepoints)),
 	)
-	assert(font.glyphCount > 0, "adapter_font_for_size: bundled font failed to load")
+	if font.glyphCount <= 0 do return 0
 	rl.context_set_texture_filter(adapter.gfx_context, font.texture, .BILINEAR)
 	return adapter_register_font(adapter, size, font)
 }
@@ -133,7 +133,7 @@ adapter_measure :: proc(
 	adapter := cast(^Adapter)data
 	assert(adapter != nil && adapter.initialized, "adapter_measure: invalid adapter")
 	font, ok := adapter_font(adapter, font_id)
-	assert(ok, "adapter_measure: invalid font")
+	if !ok do return {}
 	for byte in transmute([]u8)text do if byte == 0 do return {}
 	value := strings.clone_to_cstring(text, context.temp_allocator)
 	return vec_to_ui(rl.context_measure_text(adapter.gfx_context, font, value, size, spacing))

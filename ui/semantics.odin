@@ -66,6 +66,7 @@ Sem_Role :: enum u8 {
 	Status,
 	Progress,
 	List_Box,
+	Link,
 }
 
 Sem_Flag :: enum u8 {
@@ -412,13 +413,20 @@ sem_action_target :: proc(frame: ^Ui_Frame, id: u64) -> (Focus_Opt, bool) {
 	return {}, false
 }
 
-sem_has_interactive_node :: proc(frame: ^Ui_Frame, id: u64) -> bool {
-	assert(frame != nil && frame.open, "sem_has_interactive_node: invalid frame")
+sem_node_accepts_action :: proc(frame: ^Ui_Frame, id: u64, action: A11y_Action_Kind) -> bool {
+	assert(frame != nil && frame.open, "sem_node_accepts_action: invalid frame")
+	assert(action != .Focus, "sem_node_accepts_action: focus is resolved separately")
 	sem := sem_frame(frame)
 	for i in 0 ..< sem.count {
 		node := &sem.nodes[i]
 		if node.id != id do continue
-		return node.role != .Label && node.role != .Pane && node.role != .Modal
+		if .Disabled in node.state do return false
+		#partial switch action {
+		case .Click:
+			return node.role != .Label && node.role != .Pane && node.role != .Modal
+		case .Increment, .Decrement:
+			return node.role == .Slider && .Read_Only not_in node.state
+		}
 	}
 	return false
 }

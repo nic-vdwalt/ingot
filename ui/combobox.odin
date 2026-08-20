@@ -35,11 +35,15 @@ combobox_state_destroy :: proc(st: ^Combobox_State) {
 
 // combobox_filter_match reports whether label matches the query with a
 // case-insensitive substring test. An empty query matches everything.
-combobox_filter_match :: proc(label, query: string) -> bool {
-	if query == "" do return true
+combobox_filter_match_lowered :: proc(label, lowered_query: string) -> bool {
+	if lowered_query == "" do return true
 	lowered_label := strings.to_lower(label, context.temp_allocator)
-	lowered_query := strings.to_lower(query, context.temp_allocator)
 	return strings.contains(lowered_label, lowered_query)
+}
+
+combobox_filter_match :: proc(label, query: string) -> bool {
+	lowered_query := strings.to_lower(query, context.temp_allocator)
+	return combobox_filter_match_lowered(label, lowered_query)
 }
 
 // combobox_selected_label returns the label whose id equals selected, or "".
@@ -133,19 +137,18 @@ combobox_at :: proc(
 	if !st.open do return false
 
 	query := input_box_text(&st.box)
-	visible := make([dynamic]int, 0, COMBOBOX_VISIBLE_MAX, ui_frame_allocator(frame))
+	lowered_query := strings.to_lower(query, context.temp_allocator)
 	match_count := 0
-	for item, index in items {
-		if !combobox_filter_match(item.label, query) do continue
-		if match_count >= st.window && len(visible) < COMBOBOX_VISIBLE_MAX do append(&visible, index)
-		match_count += 1
+	for item in items {
+		if combobox_filter_match_lowered(item.label, lowered_query) do match_count += 1
 	}
 	st.match_count = match_count
 	max_window := max(match_count - COMBOBOX_VISIBLE_MAX, 0)
 	st.window = clamp(st.window, 0, max_window)
-	if st.hover >= len(visible) do st.hover = max(len(visible) - 1, 0)
+	visible_count := min(match_count - st.window, COMBOBOX_VISIBLE_MAX)
+	st.hover = clamp(st.hover, 0, max(visible_count - 1, 0))
 	if is_key_pressed(frame, .DOWN) || is_key_pressed_repeat(frame, .DOWN) {
-		if st.hover + 1 < len(visible) {
+		if st.hover + 1 < visible_count {
 			st.hover += 1
 		} else if st.window < max_window {
 			st.window += 1
@@ -158,11 +161,22 @@ combobox_at :: proc(
 			st.window -= 1
 		}
 	}
+	visible: [COMBOBOX_VISIBLE_MAX]int
+	visible_count = 0
+	match_index := 0
+	for item, index in items {
+		if !combobox_filter_match_lowered(item.label, lowered_query) do continue
+		if match_index >= st.window && visible_count < COMBOBOX_VISIBLE_MAX {
+			visible[visible_count] = index
+			visible_count += 1
+		}
+		match_index += 1
+	}
 	if is_key_pressed(frame, .ESCAPE) {
 		st.open = false
 		return false
 	}
-	if submitted && len(visible) > 0 {
+	if submitted && visible_count > 0 {
 		chosen := items[visible[st.hover]]
 		changed = selected^ != chosen.id
 		selected^ = chosen.id
@@ -171,7 +185,18 @@ combobox_at :: proc(
 		return changed
 	}
 
-	changed = combobox_popup(frame, st, items, visible[:], selected, rect, screen_w, screen_h)
+	changed = combobox_popup(
+		frame,
+		st,
+		items,
+		visible[:visible_count],
+		selected,
+		rect,
+		screen_w,
+		screen_h,
+		focus,
+		widget,
+	)
 	return changed
 }
 
@@ -192,6 +217,8 @@ combobox_popup :: proc(
 	selected: ^u64,
 	rect: Rect_I32,
 	screen_w, screen_h: i32,
+	focus: Focus_Opt,
+	widget: Widget_Id,
 ) -> (
 	changed: bool,
 ) {
@@ -206,10 +233,17 @@ combobox_popup :: proc(
 	assert(screen_w >= 0 && screen_h >= 0, "combobox_popup: negative screen bounds")
 	assert(menu_w >= 0 && menu_h >= 0, "combobox_popup: negative menu size")
 	box_screen := frame_to_screen(frame, {f32(rect.x), f32(rect.y)})
-	sx := clamp(i32(box_screen.x), 0, max(screen_w - menu_w, 0))
-	sy := i32(box_screen.y) + rect.h + 2
-	if sy + menu_h > screen_h do sy = max(i32(box_screen.y) - menu_h - 2, 0)
-	screen_rect := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
+	anchor_y := i32(box_screen.y) + rect.h + 2
+	if anchor_y + menu_h > screen_h do anchor_y = max(i32(box_screen.y) - menu_h - 2, 0)
+	layout := popup_layout(
+		{box_screen.x, f32(anchor_y)},
+		menu_w,
+		menu_h,
+		{0, 0, screen_w, screen_h},
+	)
+	screen_rect := layout.rect
+	menu_w = layout.content_w
+	menu_h = layout.content_h
 	menu_rect := frame_rect_to_local(frame, screen_rect)
 
 	mouse := frame_to_local(frame, get_mouse_position(frame))
@@ -231,14 +265,17 @@ combobox_popup :: proc(
 		draw_text_string(
 			frame,
 			"No matches",
-			sx + metrics.PADDING,
-			sy + metrics.MENU_PAD + (row_h - metrics.FONT_SIZE_BODY) / 2,
+			i32(screen_rect.x) + metrics.PADDING,
+			i32(screen_rect.y) + metrics.MENU_PAD + (row_h - metrics.FONT_SIZE_BODY) / 2,
 			metrics.FONT_SIZE_BODY,
 			style.fg_secondary,
 		)
 	}
 	item_y := screen_rect.y + f32(metrics.MENU_PAD)
+	owner_id := sem_node_id(.Dropdown, focus, "", 0, widget)
+	visible_rows := int(max((menu_h - metrics.MENU_PAD * 2) / row_h, 0))
 	for index, row in visible {
+		if row >= visible_rows do break
 		item := items[index]
 		row_screen := Rectangle{screen_rect.x, item_y, f32(menu_w), f32(row_h)}
 		hovered := point_in_rect(mouse_screen, row_screen)
@@ -261,14 +298,21 @@ combobox_popup :: proc(
 		)
 		sem: Sem_State
 		if item.id == selected^ do sem += {.Selected}
+		option_widget := Widget_Id(id_finish(id_hash_u64(owner_id, item.id)))
 		semantic_push(
 			frame,
 			.Option,
 			{i32(row_screen.x), i32(row_screen.y), menu_w, row_h},
 			item.label,
 			sem,
+			position_in_set = st.window + row + 1,
+			size_of_set = st.match_count,
+			widget = option_widget,
 		)
-		if hovered && is_mouse_button_pressed(frame, .LEFT) {
+		option_id := sem_node_id(.Option, {}, "", 0, option_widget)
+		activated := hovered && is_mouse_button_pressed(frame, .LEFT)
+		activated = activated || a11y_take_click(frame.runtime, option_id)
+		if activated {
 			changed = selected^ != item.id
 			selected^ = item.id
 			input_box_set_text(&st.box, item.label)

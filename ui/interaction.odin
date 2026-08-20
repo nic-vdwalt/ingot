@@ -94,26 +94,17 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 }
 
 Interaction_State :: struct {
-	active_latch:  ^bool,
-	// Runtime frame generation in which active_latch was last confirmed by
-	// the widget that owns it. A latch whose owner stops being drawn is
-	// otherwise never released, and `blocked` above then makes every widget
-	// in the window inert. Compared, never used to reach the owner.
-	latch_gen:     u64,
-	press_pos:     Vector2,
-	// Highest z-order claiming the press origin, or Z_NONE when nothing
-	// claimed it. Not a bool: the same press is occluding for a widget at
-	// content depth and not occluding for the panel that claimed the rect,
-	// so the answer depends on the reader's depth. The origin is captured at
-	// frame begin, where no z scope is open, so resolving occlusion there
-	// would pin every reader to the ambient depth and make a claiming
-	// surface unable to activate its own widgets.
-	press_block_z: Z_Order,
-	// True only while a primary press is in flight: set on the press edge,
-	// cleared once the button is up and its release edge has been consumed.
-	// press_over below is derived from press_pos, so an unbounded press_seen
-	// would let a stale origin outlive the gesture that produced it.
-	press_seen:    bool,
+	active_latch:   ^bool,
+	latch_gen:      u64,
+	press_pos:      Vector2,
+	press_block_z:  Z_Order,
+	press_seen:     bool,
+	pointer_pos:    Vector2,
+	pointer_block_z: Z_Order,
+	primary_pressed: bool,
+	primary_released: bool,
+	primary_down:    bool,
+	route_empty:     bool,
 }
 
 // interact_frame_begin snapshots the primary press origin for this frame.
@@ -134,8 +125,15 @@ interact_frame_begin :: proc(frame: ^Ui_Frame) {
 		state.active_latch = nil
 		state.latch_gen = 0
 	}
-	down := is_mouse_button_down(frame, .LEFT)
-	released := is_mouse_button_released(frame, .LEFT)
+	state.pointer_pos = get_mouse_position(frame)
+	state.primary_pressed = is_mouse_button_pressed(frame, .LEFT)
+	state.primary_released = is_mouse_button_released(frame, .LEFT)
+	state.primary_down = is_mouse_button_down(frame, .LEFT)
+	state.route_empty = !frame.route.prev.all && frame.route.prev.count == 0
+	state.pointer_block_z = Z_NONE
+	if !state.route_empty do state.pointer_block_z = route_block_z(frame, state.pointer_pos)
+	down := state.primary_down
+	released := state.primary_released
 	// Retire a finished gesture. The release edge still needs press_pos this
 	// frame, so the origin only expires once the button is up and no release
 	// remains to be consumed.
@@ -144,15 +142,15 @@ interact_frame_begin :: proc(frame: ^Ui_Frame) {
 		state.press_pos = {}
 		state.press_block_z = Z_NONE
 	}
-	if is_mouse_button_pressed(frame, .LEFT) {
-		frame.interaction.press_pos = get_mouse_position(frame)
+	if state.primary_pressed {
+		frame.interaction.press_pos = state.pointer_pos
 		frame.interaction.press_block_z = route_block_z(frame, frame.interaction.press_pos)
 		frame.interaction.press_seen = true
 	}
 	// Why assert: press_over is only meaningful for a live gesture; a
 	// press_seen with no button activity means the origin outlived its press.
 	assert(
-		!state.press_seen || down || released || is_mouse_button_pressed(frame, .LEFT),
+		!state.press_seen || down || released || state.primary_pressed,
 		"interact_frame_begin: press origin outlived its gesture",
 	)
 }
@@ -217,12 +215,12 @@ interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Inter
 		state.active_latch = nil
 		state.latch_gen = 0
 	}
-	mouse := get_mouse_position(frame)
+	mouse := state.pointer_pos
 	local := frame_to_local(frame, mouse)
-	over := point_in_rect(local, rect) && !route_occluded(frame, mouse)
-	pressed := is_mouse_button_pressed(frame, .LEFT)
-	released := is_mouse_button_released(frame, .LEFT)
-	down := is_mouse_button_down(frame, .LEFT)
+	over := point_in_rect(local, rect) && state.pointer_block_z <= frame_z(frame)
+	pressed := state.primary_pressed
+	released := state.primary_released
+	down := state.primary_down
 	if state.active_latch == nil &&
 	   !state.press_seen &&
 	   !pressed &&
@@ -275,7 +273,8 @@ pressable :: proc(frame: ^Ui_Frame, config: Pressable_Config) -> Pressable_Resul
 		result.hovered = it.hovered
 		result.pressed = it.pressed
 		result.held = it.held
-		result.activated = it.clicked || focus_opt_activated(frame, config.focus)
+		result.activated =
+			it.clicked || focus_opt_activated(frame, config.focus, config.role, field_id = config.stable_id)
 		if result.hovered do request_cursor(frame, .POINTING_HAND)
 	}
 	state: Sem_State

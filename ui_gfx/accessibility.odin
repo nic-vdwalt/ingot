@@ -13,6 +13,8 @@ when ak.ENABLED {
 		#partial switch node.role {
 		case .Button:
 			return .Button
+		case .Link:
+			return .Link
 		case .Tab:
 			return .Tab
 		case .List_Item:
@@ -59,7 +61,7 @@ when ak.ENABLED {
 		assert(source != nil, "adapter_a11y_actions: nil source")
 		if .Disabled in source.state do return false, false, false
 		#partial switch source.role {
-		case .Button, .Tab, .Checkbox, .Radio, .Option, .Dropdown, .Menu_Item:
+		case .Button, .Link, .Tab, .Checkbox, .Radio, .Option, .Dropdown, .Menu_Item:
 			return true, true, false
 		case .Slider:
 			return false, true, .Read_Only not_in source.state
@@ -74,7 +76,7 @@ when ak.ENABLED {
 		assert(source != nil, "adapter_a11y_node: nil source")
 		assert(source.id > ui.SEM_ID_ROOT, "adapter_a11y_node: invalid id")
 		node := ak.node_new(adapter_a11y_role(source))
-		assert(node != nil, "adapter_a11y_node: allocation failed")
+		if node == nil do return nil
 		if source.label_len > 0 {
 			ak.node_set_label_with_length(
 				node,
@@ -139,6 +141,14 @@ when ak.ENABLED {
 		return node
 	}
 
+	adapter_a11y_find :: proc(frame: ^ui.Sem_Frame, id: u64) -> int {
+		assert(frame != nil, "adapter_a11y_find: nil frame")
+		for index in 0 ..< frame.count {
+			if frame.nodes[index].id == id do return index
+		}
+		return -1
+	}
+
 	adapter_a11y_parent :: proc(frame: ^ui.Sem_Frame, index: int) -> u64 {
 		assert(
 			frame != nil && index >= 0 && index < frame.count,
@@ -148,13 +158,7 @@ when ak.ENABLED {
 		if parent <= ui.SEM_ID_ROOT do return ui.SEM_ID_ROOT
 		current := parent
 		for _ in 0 ..< ui.MAX_SEM_NODES {
-			found := -1
-			for candidate in 0 ..< frame.count {
-				if frame.nodes[candidate].id == current {
-					found = candidate
-					break
-				}
-			}
+			found := adapter_a11y_find(frame, current)
 			if found < 0 || found == index do return ui.SEM_ID_ROOT
 			current = frame.nodes[found].parent_id
 			if current <= ui.SEM_ID_ROOT do return parent
@@ -162,18 +166,33 @@ when ak.ENABLED {
 		return ui.SEM_ID_ROOT
 	}
 
+	adapter_a11y_resolve_parents :: proc(frame: ^ui.Sem_Frame, parents: ^[ui.MAX_SEM_NODES]u64) {
+		assert(frame != nil && parents != nil, "adapter_a11y_resolve_parents: invalid argument")
+		assert(frame.count >= 0 && frame.count <= ui.MAX_SEM_NODES)
+		for index in 0 ..< frame.count {
+			parents[index] = adapter_a11y_parent(frame, index)
+		}
+	}
+
 	adapter_a11y_factory :: proc "c" (userdata: rawptr) -> ak.Tree_Update {
 		context = runtime.default_context()
 		adapter := (^Adapter)(userdata)
 		assert(adapter != nil && adapter.initialized, "adapter_a11y_factory: invalid adapter")
 		frame := &adapter.a11y_snapshot
+		parents: [ui.MAX_SEM_NODES]u64
+		adapter_a11y_resolve_parents(frame, &parents)
 		update := ak.tree_update_with_capacity_and_focus(
 			c.size_t(frame.count + 1),
 			adapter.a11y_focus,
 		)
+		if update == nil do return nil
 		root := ak.node_new(.Window)
+		if root == nil {
+			ak.tree_update_free(update)
+			return nil
+		}
 		for index in 0 ..< frame.count {
-			if adapter_a11y_parent(frame, index) == ui.SEM_ID_ROOT {
+			if parents[index] == ui.SEM_ID_ROOT {
 				ak.node_push_child(root, ak.Node_Id(frame.nodes[index].id))
 			}
 		}
@@ -181,14 +200,22 @@ when ak.ENABLED {
 		for index in 0 ..< frame.count {
 			source := &frame.nodes[index]
 			node := adapter_a11y_node(source)
+			if node == nil {
+				ak.tree_update_free(update)
+				return nil
+			}
 			for child_index in 0 ..< frame.count {
-				if adapter_a11y_parent(frame, child_index) == source.id {
+				if parents[child_index] == source.id {
 					ak.node_push_child(node, ak.Node_Id(frame.nodes[child_index].id))
 				}
 			}
 			ak.tree_update_push_node(update, ak.Node_Id(source.id), node)
 		}
 		tree := ak.tree_new(ak.Node_Id(ui.SEM_ID_ROOT))
+		if tree == nil {
+			ak.tree_update_free(update)
+			return nil
+		}
 		ak.tree_update_set_tree(update, tree)
 		ak.tree_update_set_focus(update, adapter.a11y_focus)
 		return update

@@ -790,10 +790,12 @@ fit_test_driver_exposes_bounded_frame_results :: proc(t: ^testing.T) {
 	outputs: [STORAGE_NODE_DEFAULT + 64]^bool
 	Test_Driver_Set_Storage(&driver, {nodes = nodes[:], outputs = outputs[:]})
 	Test_Driver_Set_Semantics(&driver, true)
+	active := false
 	timing, ok := Test_Driver_Frame_Timed(
 		&driver,
 		{screen_size = {320, 240}, dpi_scale = 1},
 		fit_test_draw,
+		&active,
 	)
 	testing.expect(t, ok, "timed test frame failed")
 	testing.expect(t, timing.build_ns >= 0 && timing.measure_ns >= 0)
@@ -812,13 +814,12 @@ fit_test_driver_exposes_bounded_frame_results :: proc(t: ^testing.T) {
 
 @(private = "file")
 fit_test_draw :: proc(builder: ^Builder, user_data: rawptr) {
-	assert(builder != nil, "fit test draw: nil builder")
-	_ = user_data
+	assert(builder != nil && user_data != nil, "fit test draw: invalid argument")
+	active := cast(^bool)user_data
 	root := Column(builder)
 	Label(root, "Hello")
-	active := false
-	Button(root, "save", "Save", &active)
-	Button(root, u64(7), "Seven", &active)
+	Button(root, "save", "Save", active)
+	Button(root, u64(7), "Seven", active)
 }
 // Fit's submit modes are mapped explicitly because the façade declaration
 // order remains independent from ui's implementation enum.

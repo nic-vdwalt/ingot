@@ -72,6 +72,7 @@ test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
 		testing.expect(t, session.runtime.text_backend.data == &session.adapter)
 		testing.expect(t, session.output.main.sink == nil)
 		ui.paint_push(&session.output.main, {kind = .Rectangle})
+		ui.paint_push(&session.output.overlay, {kind = .Rectangle})
 
 		session_end_frame(session)
 		testing.expect(t, !session.frame_open)
