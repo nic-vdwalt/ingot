@@ -140,7 +140,7 @@ fit_fuzz_leaf :: proc(
 		case 1:
 			_ = Button_Delayed(parent, key + 1, "Fuzz button", &signals[index])
 		case 2:
-			Button(parent, key + 1, "Fuzz button", On(fit_fuzz_action, counts))
+			Button(parent, key + 1, "Fuzz button", action(fit_fuzz_action, counts))
 		case 3:
 			Button(parent, key + 1, "Fuzz button")
 		}

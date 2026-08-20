@@ -71,7 +71,7 @@ Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	root := fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Hello from Ingot")
 	fit.Label(root, fmt.tprintf("Button clicks: %d", button_clicks))
-	fit.Button(root, "continue", "Continue", fit.On(Continue))
+	fit.Button(root, "continue", "Continue", fit.action(Continue))
 }
 ```
 

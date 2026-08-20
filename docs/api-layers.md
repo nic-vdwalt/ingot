@@ -51,7 +51,7 @@ main :: proc() {
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	root := fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Settings", {role = .Title})
-	fit.Button(root, "save", "Save", fit.On(Save))
+	fit.Button(root, "save", "Save", fit.action(Save))
 }
 ```
 

@@ -4,177 +4,199 @@ import "ingot:ui"
 
 @(private = "package")
 to_key :: proc(value: Key) -> ui.Key {
-	switch value {
-	case .Null:
-		return .KEY_NULL
-	case .Space:
-		return .SPACE
-	case .Apostrophe:
-		return .APOSTROPHE
-	case .Comma:
-		return .COMMA
-	case .Minus:
-		return .MINUS
-	case .Period:
-		return .PERIOD
-	case .Slash:
-		return .SLASH
-	case .Zero:
-		return .ZERO
-	case .One:
-		return .ONE
-	case .Two:
-		return .TWO
-	case .Three:
-		return .THREE
-	case .Four:
-		return .FOUR
-	case .Five:
-		return .FIVE
-	case .Six:
-		return .SIX
-	case .Seven:
-		return .SEVEN
-	case .Eight:
-		return .EIGHT
-	case .Nine:
-		return .NINE
-	case .Semicolon:
-		return .SEMICOLON
-	case .Equal:
-		return .EQUAL
-	case .A:
-		return .A
-	case .B:
-		return .B
-	case .C:
-		return .C
-	case .D:
-		return .D
-	case .E:
-		return .E
-	case .F:
-		return .F
-	case .G:
-		return .G
-	case .H:
-		return .H
-	case .I:
-		return .I
-	case .J:
-		return .J
-	case .K:
-		return .K
-	case .L:
-		return .L
-	case .M:
-		return .M
-	case .N:
-		return .N
-	case .O:
-		return .O
-	case .P:
-		return .P
-	case .Q:
-		return .Q
-	case .R:
-		return .R
-	case .S:
-		return .S
-	case .T:
-		return .T
-	case .U:
-		return .U
-	case .V:
-		return .V
-	case .W:
-		return .W
-	case .X:
-		return .X
-	case .Y:
-		return .Y
-	case .Z:
-		return .Z
-	case .Left_Bracket:
-		return .LEFT_BRACKET
-	case .Backslash:
-		return .BACKSLASH
-	case .Right_Bracket:
-		return .RIGHT_BRACKET
-	case .Grave:
-		return .GRAVE
-	case .Escape:
-		return .ESCAPE
-	case .Enter:
-		return .ENTER
-	case .Tab:
-		return .TAB
-	case .Backspace:
-		return .BACKSPACE
-	case .Insert:
-		return .INSERT
-	case .Delete:
-		return .DELETE
-	case .Right:
-		return .RIGHT
-	case .Left:
-		return .LEFT
-	case .Down:
-		return .DOWN
-	case .Up:
-		return .UP
-	case .Page_Up:
-		return .PAGE_UP
-	case .Page_Down:
-		return .PAGE_DOWN
-	case .Home:
-		return .HOME
-	case .End:
-		return .END
-	case .F1:
-		return .F1
-	case .F2:
-		return .F2
-	case .F3:
-		return .F3
-	case .F4:
-		return .F4
-	case .F5:
-		return .F5
-	case .F6:
-		return .F6
-	case .F7:
-		return .F7
-	case .F8:
-		return .F8
-	case .F9:
-		return .F9
-	case .F10:
-		return .F10
-	case .F11:
-		return .F11
-	case .F12:
-		return .F12
-	case .Keypad_Enter:
-		return .KP_ENTER
-	case .Left_Shift:
-		return .LEFT_SHIFT
-	case .Left_Control:
-		return .LEFT_CONTROL
-	case .Left_Alt:
-		return .LEFT_ALT
-	case .Left_Super:
-		return .LEFT_SUPER
-	case .Right_Shift:
-		return .RIGHT_SHIFT
-	case .Right_Control:
-		return .RIGHT_CONTROL
-	case .Right_Alt:
-		return .RIGHT_ALT
-	case .Right_Super:
-		return .RIGHT_SUPER
-	}
+	if result, ok := to_key_text(value); ok do return result
+	if result, ok := to_key_letter(value); ok do return result
+	if result, ok := to_key_control(value); ok do return result
 	unreachable()
+}
+
+@(private = "file")
+to_key_text :: proc(value: Key) -> (ui.Key, bool) {
+	#partial switch value {
+	case .Null:
+		return .KEY_NULL, true
+	case .Space:
+		return .SPACE, true
+	case .Apostrophe:
+		return .APOSTROPHE, true
+	case .Comma:
+		return .COMMA, true
+	case .Minus:
+		return .MINUS, true
+	case .Period:
+		return .PERIOD, true
+	case .Slash:
+		return .SLASH, true
+	case .Zero:
+		return .ZERO, true
+	case .One:
+		return .ONE, true
+	case .Two:
+		return .TWO, true
+	case .Three:
+		return .THREE, true
+	case .Four:
+		return .FOUR, true
+	case .Five:
+		return .FIVE, true
+	case .Six:
+		return .SIX, true
+	case .Seven:
+		return .SEVEN, true
+	case .Eight:
+		return .EIGHT, true
+	case .Nine:
+		return .NINE, true
+	case .Semicolon:
+		return .SEMICOLON, true
+	case .Equal:
+		return .EQUAL, true
+	case .Left_Bracket:
+		return .LEFT_BRACKET, true
+	case .Backslash:
+		return .BACKSLASH, true
+	case .Right_Bracket:
+		return .RIGHT_BRACKET, true
+	case .Grave:
+		return .GRAVE, true
+	}
+	return .KEY_NULL, false
+}
+
+@(private = "file")
+to_key_letter :: proc(value: Key) -> (ui.Key, bool) {
+	#partial switch value {
+	case .A:
+		return .A, true
+	case .B:
+		return .B, true
+	case .C:
+		return .C, true
+	case .D:
+		return .D, true
+	case .E:
+		return .E, true
+	case .F:
+		return .F, true
+	case .G:
+		return .G, true
+	case .H:
+		return .H, true
+	case .I:
+		return .I, true
+	case .J:
+		return .J, true
+	case .K:
+		return .K, true
+	case .L:
+		return .L, true
+	case .M:
+		return .M, true
+	case .N:
+		return .N, true
+	case .O:
+		return .O, true
+	case .P:
+		return .P, true
+	case .Q:
+		return .Q, true
+	case .R:
+		return .R, true
+	case .S:
+		return .S, true
+	case .T:
+		return .T, true
+	case .U:
+		return .U, true
+	case .V:
+		return .V, true
+	case .W:
+		return .W, true
+	case .X:
+		return .X, true
+	case .Y:
+		return .Y, true
+	case .Z:
+		return .Z, true
+	}
+	return .KEY_NULL, false
+}
+
+@(private = "file")
+to_key_control :: proc(value: Key) -> (ui.Key, bool) {
+	#partial switch value {
+	case .Escape:
+		return .ESCAPE, true
+	case .Enter:
+		return .ENTER, true
+	case .Tab:
+		return .TAB, true
+	case .Backspace:
+		return .BACKSPACE, true
+	case .Insert:
+		return .INSERT, true
+	case .Delete:
+		return .DELETE, true
+	case .Right:
+		return .RIGHT, true
+	case .Left:
+		return .LEFT, true
+	case .Down:
+		return .DOWN, true
+	case .Up:
+		return .UP, true
+	case .Page_Up:
+		return .PAGE_UP, true
+	case .Page_Down:
+		return .PAGE_DOWN, true
+	case .Home:
+		return .HOME, true
+	case .End:
+		return .END, true
+	case .F1:
+		return .F1, true
+	case .F2:
+		return .F2, true
+	case .F3:
+		return .F3, true
+	case .F4:
+		return .F4, true
+	case .F5:
+		return .F5, true
+	case .F6:
+		return .F6, true
+	case .F7:
+		return .F7, true
+	case .F8:
+		return .F8, true
+	case .F9:
+		return .F9, true
+	case .F10:
+		return .F10, true
+	case .F11:
+		return .F11, true
+	case .F12:
+		return .F12, true
+	case .Keypad_Enter:
+		return .KP_ENTER, true
+	case .Left_Shift:
+		return .LEFT_SHIFT, true
+	case .Left_Control:
+		return .LEFT_CONTROL, true
+	case .Left_Alt:
+		return .LEFT_ALT, true
+	case .Left_Super:
+		return .LEFT_SUPER, true
+	case .Right_Shift:
+		return .RIGHT_SHIFT, true
+	case .Right_Control:
+		return .RIGHT_CONTROL, true
+	case .Right_Alt:
+		return .RIGHT_ALT, true
+	case .Right_Super:
+		return .RIGHT_SUPER, true
+	}
+	return .KEY_NULL, false
 }
 
 @(private = "package")

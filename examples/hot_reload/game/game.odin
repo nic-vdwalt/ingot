@@ -37,7 +37,7 @@ game_draw :: proc(builder: ^fit.Builder) {
 	fit.Label(root, "The host keeps the window, GPU, and session alive.", {ink = .Secondary})
 	fit.Label(root, fmt.tprintf("Reload generation: %d", g.reload_generation), {role = .Label})
 	fit.Label(root, fmt.tprintf("Persistent clicks: %d", g.click_count), {role = .Label})
-	fit.Button(root, "count", "Count persistent click", fit.On(count_click))
+	fit.Button(root, "count", "Count persistent click", fit.action(count_click))
 	fit.Label(
 		root,
 		"Edit game/game.odin, then run the build script again.",

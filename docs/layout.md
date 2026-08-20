@@ -11,7 +11,7 @@ Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	fit.Label(root, "Settings", {role = .Title})
 	actions := fit.Row(root, {gap = .SM, align = .Center})
 	fit.Label(actions, "Actions", {track = fit.Grow()})
-	fit.Button(actions, "save", "Save", fit.On(Save))
+	fit.Button(actions, "save", "Save", fit.action(Save))
 }
 ```
 
@@ -29,7 +29,7 @@ This allows conditional layout and returning to an ancestor directly:
 ```odin
 root := fit.Column(builder, {gap = .SM})
 controls := fit.Row(root)
-fit.Button(controls, "save", "Save", fit.On(Save))
+fit.Button(controls, "save", "Save", fit.action(Save))
 fit.Label(root, "After controls")
 
 content := fit.Row(root) if horizontal else fit.Column(root)

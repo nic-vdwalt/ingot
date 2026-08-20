@@ -302,7 +302,12 @@ map_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	root := fit.Column(builder, {gap = .SM, padding = .LG})
 	header := fit.Row(root, {gap = .SM, align = .Center})
 	fit.Label(header, "INGOT API MAP", {role = .Title, track = fit.Grow()})
-	fit.Button(header, "theme", "Light" if map_state.dark else "Dark", fit.On(toggle_theme_action))
+	fit.Button(
+		header,
+		"theme",
+		"Light" if map_state.dark else "Dark",
+		fit.action(toggle_theme_action),
+	)
 	map_stage_controls(root)
 	map_playback_controls(root)
 	fit.Custom(
@@ -323,7 +328,7 @@ map_stage_controls :: proc(parent: fit.Parent) {
 			STAGE_LABELS[stage],
 			fit.Button_Options {
 				style = .Primary if map_state.target_stage == value else .Ghost,
-				action = fit.On(select_stage_action, nil, u64(value)),
+				action = fit.action(select_stage_action, nil, u64(value)),
 			},
 		)
 	}
@@ -336,9 +341,9 @@ map_playback_controls :: proc(parent: fit.Parent) {
 		controls,
 		"play",
 		"Pause" if map_state.playing else "Play path",
-		fit.On(play_action),
+		fit.action(play_action),
 	)
-	fit.Button(controls, "reset", "Reset", fit.On(reset_action))
+	fit.Button(controls, "reset", "Reset", fit.action(reset_action))
 	fit.Checkbox(controls, "motion", "Reduced motion", &map_state.reduced_motion)
 }
 

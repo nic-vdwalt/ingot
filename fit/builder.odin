@@ -265,20 +265,20 @@ Signal_Reset :: proc(signal: ^Signal) {
 }
 
 @(private = "package")
-on_action :: proc(procedure: Action_Proc, userdata: rawptr = nil) -> Action {
-	assert(procedure != nil, "Fit.On: nil procedure")
+action_plain :: proc(procedure: Action_Proc, userdata: rawptr = nil) -> Action {
+	assert(procedure != nil, "fit.action: nil procedure")
 	return {procedure = procedure, userdata = userdata}
 }
 
 @(private = "package")
-on_tagged_action :: proc(procedure: Tagged_Action_Proc, userdata: rawptr, tag: u64) -> Action {
-	assert(procedure != nil, "Fit.On: nil tagged procedure")
+action_tagged :: proc(procedure: Tagged_Action_Proc, userdata: rawptr, tag: u64) -> Action {
+	assert(procedure != nil, "fit.action: nil tagged procedure")
 	return {tagged_procedure = procedure, userdata = userdata, tag = tag}
 }
 
-On :: proc {
-	on_action,
-	on_tagged_action,
+action :: proc {
+	action_plain,
+	action_tagged,
 }
 
 @(private = "package")

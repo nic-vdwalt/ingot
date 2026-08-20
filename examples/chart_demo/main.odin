@@ -75,7 +75,7 @@ frame :: proc(builder: ^fit.Builder, userdata: rawptr) {
 		header,
 		"theme",
 		"Light theme" if data.dark else "Dark theme",
-		fit.Button_Options{track = fit.Fixed(132), action = fit.On(toggle_theme, data)},
+		fit.Button_Options{track = fit.Fixed(132), action = fit.action(toggle_theme, data)},
 	)
 	fit.Custom(
 		root,
