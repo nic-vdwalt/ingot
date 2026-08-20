@@ -13,6 +13,8 @@ MARKDOWN_TABLE_ROWS_MAX :: 512
 Markdown_Context :: struct {
 	frame:           ^Ui_Frame,
 	workspace_files: []string,
+	document:        Widget_Id,
+	link_focus:      ^int,
 	cull_top:        i32,
 	cull_bottom:     i32,
 	// Link under the pointer this frame, filled in during the draw pass.
@@ -31,11 +33,22 @@ Markdown_Context :: struct {
 	link_pressed:    bool,
 }
 
-markdown_context :: proc(frame: ^Ui_Frame, workspace_files: []string = nil) -> Markdown_Context {
+markdown_context :: proc(
+	frame: ^Ui_Frame,
+	workspace_files: []string = nil,
+	document: Widget_Id = WIDGET_ID_NONE,
+	link_focus: ^int = nil,
+) -> Markdown_Context {
 	assert(frame != nil && frame.open, "markdown_context: invalid frame")
+	assert(
+		document != WIDGET_ID_NONE || link_focus == nil,
+		"markdown_context: focus requires identity",
+	)
 	return Markdown_Context {
 		frame = frame,
 		workspace_files = workspace_files,
+		document = document,
+		link_focus = link_focus,
 		cull_top = min(i32),
 		cull_bottom = max(i32),
 	}
@@ -570,6 +583,46 @@ markdown_track_link :: proc(
 	if len(span.href) == 0 || width <= 0 do return
 	pad := ui_frame_sc(ctx.frame, 2)
 	box := Rect{f32(x - pad), f32(y - pad), f32(width + pad * 2), f32(font_size + pad * 2)}
+	link_widget := WIDGET_ID_NONE
+	link_focus := Focus_Opt{}
+	if ctx.document != WIDGET_ID_NONE {
+		hash := id_hash_u64(u64(ctx.document), u64(span.raw_start))
+		hash = id_hash_u64(hash, u64(span.raw_end))
+		link_widget = Widget_Id(id_finish(hash))
+		if ctx.link_focus != nil do link_focus = {ctx.link_focus, span.raw_start + 1}
+		link_id := sem_node_id(.Link, link_focus, "", 0, link_widget)
+		existing: ^Sem_Node
+		sem := sem_frame(ctx.frame)
+		for index in 0 ..< sem.count {
+			if sem.nodes[index].id == link_id {
+				existing = &sem.nodes[index]
+				break
+			}
+		}
+		if existing != nil {
+			right := max(existing.rect.x + existing.rect.w, x + width)
+			bottom := max(existing.rect.y + existing.rect.h, y + font_size)
+			existing.rect.x = min(existing.rect.x, x)
+			existing.rect.y = min(existing.rect.y, y)
+			existing.rect.w = right - existing.rect.x
+			existing.rect.h = bottom - existing.rect.y
+		} else {
+			semantic_push(
+				ctx.frame,
+				.Link,
+				{x, y, width, font_size},
+				span.text,
+				focus = link_focus,
+				description = span.href,
+				widget = link_widget,
+			)
+		}
+		if link_focus.focus != nil &&
+		   focus_opt_activated(ctx.frame, link_focus, .Link, link_widget) {
+			ctx.hovered_link = span.href
+			ctx.link_pressed = true
+		}
+	}
 	if !point_in_rect(get_mouse_position(ctx.frame), box) do return
 	ctx.hovered_link = span.href
 	request_cursor(ctx.frame, .POINTING_HAND)

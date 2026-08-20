@@ -81,8 +81,10 @@ Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 }
 ```
 
-The same interface can be written against the lower-level `ui` and `ui_gfx`
-implementation packages when working on Ingot itself:
+Advanced applications that need direct control over UI state and rendering can
+use the lower-level `ui` and `ui_gfx` packages. These expose more lifecycle and
+layout details than `fit`, so the application assumes more integration
+responsibility:
 
 ```odin
 package main

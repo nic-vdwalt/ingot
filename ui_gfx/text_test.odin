@@ -17,9 +17,11 @@ test_adapter_attach_runtime_installs_text_backend :: proc(t: ^testing.T) {
 	defer ui.ui_runtime_destroy(&runtime)
 
 	adapter_attach_runtime(&adapter, &runtime)
+	defer adapter_detach_runtime(&adapter, &runtime)
 
 	testing.expect(t, ui.text_backend_valid(runtime.text_backend))
 	testing.expect(t, runtime.text_backend.data == &adapter)
+	testing.expect(t, runtime.web_form.data == &adapter)
 }
 
 @(test)

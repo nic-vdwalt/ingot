@@ -87,8 +87,7 @@ capture_input_context :: proc(ctx: ^rl.Context, input: ^ui.Ui_Input) {
 	}
 	assert(input.character_count <= ui.INPUT_CHAR_CAP)
 	assert(characters_drained <= INPUT_CHARACTER_DRAIN_MAX)
-	// Preedit is global backend state (one OS input method), not per-context.
-	preedit, preedit_caret := rl.GetPreedit()
+	preedit, preedit_caret := rl.context_get_preedit(ctx)
 	input.preedit_len = min(len(preedit), ui.INPUT_PREEDIT_CAP)
 	copy(input.preedit[:input.preedit_len], transmute([]u8)preedit)
 	input.preedit_caret = clamp(preedit_caret, 0, input.preedit_len)

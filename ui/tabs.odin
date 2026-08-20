@@ -41,7 +41,7 @@ tab_bar :: proc(
 		rrect := rect_f32(rect)
 		it := interact(frame, rrect)
 		if it.hovered do request_cursor(frame, .POINTING_HAND)
-		if it.clicked || focus_opt_activated(frame, fo) {
+		if it.clicked || focus_opt_activated(frame, fo, .Tab, widget) {
 			changed |= active^ != i32(index)
 			active^ = i32(index)
 		}

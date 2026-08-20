@@ -884,7 +884,7 @@ button_at :: proc(
 	clicked := enabled && it.clicked
 	if enabled {
 		focus_opt_click(frame, focus, x, y, w, h)
-		clicked = clicked || focus_opt_activated(frame, focus)
+		clicked = clicked || focus_opt_activated(frame, focus, .Button, widget)
 	}
 	clicked =
 		clicked || btn_sync_web_submit(frame, web_form_id, label, x, y, w, h, style, fs, enabled)
@@ -978,7 +978,7 @@ button_at_state :: proc(
 	clicked := enabled && it.clicked
 	if enabled {
 		focus_opt_click(frame, focus, x, y, w, h)
-		clicked = clicked || focus_opt_activated(frame, focus)
+		clicked = clicked || focus_opt_activated(frame, focus, .Button, widget)
 	}
 	clicked =
 		clicked || btn_sync_web_submit(frame, web_form_id, label, x, y, w, h, style, fs, enabled)

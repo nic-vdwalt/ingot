@@ -42,6 +42,8 @@ Storage_Node :: struct #align (STORAGE_NODE_ALIGNMENT) {
 	data: [STORAGE_NODE_SIZE]u8,
 }
 Storage :: struct {
+	// Storage is borrowed and must outlive every build and render that uses it.
+	// Node, output, and custom capacities are independent.
 	nodes:   []Storage_Node,
 	outputs: []^bool,
 	customs: []Custom_Spec,
@@ -584,6 +586,7 @@ Builder_Text_Input_Options :: struct {
 	semantics: Text_Input_Semantics,
 	track:     Track,
 	size:      Size_Options,
+	// submitted is written during Render and must outlive the build callback.
 	submitted: ^bool,
 }
 
@@ -608,6 +611,7 @@ Canvas_Options :: struct {
 	intrinsic: Size,
 	track:     Track,
 	size:      Size_Options,
+	// activated is written during Render and must outlive the build callback.
 	activated: ^bool,
 }
 

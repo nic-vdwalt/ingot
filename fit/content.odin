@@ -8,16 +8,7 @@ Markdown_Context :: struct {
 	cull_bottom: i32,
 }
 
-Text_Span :: struct {
-	text:      string,
-	raw_start: int,
-	raw_end:   int,
-	bold:      bool,
-	pill:      bool,
-	code:      bool,
-	link:      bool,
-	href:      string,
-}
+Text_Span :: ui.Text_Span
 
 Markdown_Context_Create :: proc(
 	surface: ^Surface,
@@ -76,21 +67,7 @@ Markdown_Draw :: proc(
 }
 
 Markdown_Parse_Inline :: proc(text: string, allocator := context.temp_allocator) -> []Text_Span {
-	inner := ui.parse_inline_spans_with(text, allocator)
-	result := make([]Text_Span, len(inner), allocator)
-	for span, index in inner {
-		result[index] = {
-			text      = span.text,
-			raw_start = span.raw_start,
-			raw_end   = span.raw_end,
-			bold      = span.bold,
-			pill      = span.pill,
-			code      = span.code,
-			link      = span.link,
-			href      = span.href,
-		}
-	}
-	return result
+	return ui.parse_inline_spans_with(text, allocator)
 }
 
 Workspace_Reference_Path :: proc(reference: string) -> string {
@@ -103,12 +80,7 @@ Workspace_Has_Path :: proc(workspace_files: []string, reference: string) -> bool
 
 Diff_Row_Kind :: ui.Diff_Row_Kind
 
-Diff_Row :: struct {
-	kind:   Diff_Row_Kind,
-	old_no: int,
-	new_no: int,
-	text:   string,
-}
+Diff_Row :: ui.Diff_Row
 
 Diff_Parse_Result :: struct {
 	rows:      []Diff_Row,
@@ -118,21 +90,8 @@ Diff_Parse_Result :: struct {
 
 Diff_Layout :: ui.Diff_Layout
 
-Diff_View_Options :: struct {
-	layout:          Diff_Layout,
-	max_rows:        int,
-	selected:        bool,
-	semantic_label:  string,
-	field_id:        string,
-	minimum_columns: i32,
-}
-
-Diff_View_Result :: struct {
-	next_y:     i32,
-	shown:      int,
-	hidden:     int,
-	used_split: bool,
-}
+Diff_View_Options :: ui.Diff_View_Options
+Diff_View_Result :: ui.Diff_View_Result
 
 Diff_Parse_Hunk_Header :: proc(line: string) -> (old_start, new_start: int) {
 	return ui.parse_hunk_header(line)
@@ -142,11 +101,7 @@ Surface_Diff_Parse :: proc(surface: ^Surface, text: string) -> Diff_Parse_Result
 	u := surface_ui(surface)
 	parsed := ui.parse_unified_diff(u.frame, text)
 	rows := ui.frame_view_items(u.frame, parsed.rows)
-	result_rows := make([]Diff_Row, len(rows), context.temp_allocator)
-	for row, index in rows {
-		result_rows[index] = {Diff_Row_Kind(row.kind), row.old_no, row.new_no, row.text}
-	}
-	return {result_rows, parsed.truncated, parsed.malformed}
+	return {rows, parsed.truncated, parsed.malformed}
 }
 
 Surface_Diff_View :: proc(
@@ -156,26 +111,7 @@ Surface_Diff_View :: proc(
 	options: Diff_View_Options = {},
 ) -> Diff_View_Result {
 	u := surface_ui(surface)
-	inner_rows := make([]ui.Diff_Row, len(rows), context.temp_allocator)
-	for row, index in rows {
-		inner_rows[index] = {row.kind, row.old_no, row.new_no, row.text}
-	}
-	result := ui.diff_view(
-		u.frame,
-		x,
-		y,
-		width,
-		inner_rows,
-		{
-			layout = options.layout,
-			max_rows = options.max_rows,
-			selected = options.selected,
-			semantic_label = options.semantic_label,
-			field_id = options.field_id,
-			minimum_columns = options.minimum_columns,
-		},
-	)
-	return {result.next_y, result.shown, result.hidden, result.used_split}
+	return ui.diff_view(u.frame, x, y, width, rows, options)
 }
 
 Frame_View_Items :: proc(surface: ^Surface, items: $T) -> T {

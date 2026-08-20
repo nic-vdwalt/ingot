@@ -88,9 +88,9 @@ class ConsumerPolicyTests(unittest.TestCase):
         source = 'package app\n// adapter_init(nil)\ns := "App_Session ingot:pty"\n'
         self.assertEqual(self.check(source), [])
 
-    def test_internal_ui_import_is_rejected(self) -> None:
-        failures = self.check('package app\nimport "ingot:ui"\n')
-        self.assertTrue(any("internal UI import" in failure for failure in failures))
+    def test_advanced_ui_imports_are_allowed(self) -> None:
+        source = 'package app\nimport "ingot:ui"\nimport "ingot:ui_gfx"\n'
+        self.assertEqual(self.check(source), [])
 
     def test_string_literal_mentioning_internal_package_is_allowed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -112,7 +112,7 @@ class ConsumerPolicyTests(unittest.TestCase):
         self.assertTrue(any("retired UI API" in failure for failure in failures))
         self.assertTrue(any("retired graphics API" in failure for failure in failures))
 
-    def test_repository_examples_reject_internal_ui_imports(self) -> None:
+    def test_repository_examples_allow_advanced_ui_imports(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             (root / "ui").mkdir()
@@ -121,8 +121,7 @@ class ConsumerPolicyTests(unittest.TestCase):
             examples.mkdir()
             (examples / "main.odin").write_text('package main\nimport "ingot:ui_gfx"\n')
             failures = policy.check(root)
-        self.assertTrue(any("examples/main.odin" in failure for failure in failures))
-        self.assertTrue(any("internal UI import" in failure for failure in failures))
+        self.assertEqual(failures, [])
 
     def test_fit_public_alias_to_ui_is_rejected(self) -> None:
         failures = policy.fit_public_violations("Ui :: ui.Ui\n")

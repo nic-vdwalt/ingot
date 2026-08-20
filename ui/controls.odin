@@ -110,7 +110,7 @@ checkbox_at :: proc(
 	hovered := it.hovered
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
 	if hovered do request_cursor(frame, .POINTING_HAND)
-	if it.clicked || focus_opt_activated(frame, focus) {
+	if it.clicked || focus_opt_activated(frame, focus, .Checkbox, widget) {
 		checked^ = !checked^
 		changed = true
 	}
@@ -262,7 +262,7 @@ radio_at :: proc(
 	hovered := it.hovered
 	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
 	if hovered do request_cursor(frame, .POINTING_HAND)
-	if (it.clicked || focus_opt_activated(frame, focus)) && selected^ != value {
+	if (it.clicked || focus_opt_activated(frame, focus, .Radio, widget)) && selected^ != value {
 		selected^ = value
 		changed = true
 	}
@@ -523,8 +523,17 @@ slider_resolve_and_paint :: proc(
 		t := clamp((mouse_x - track_x) / track_w, 0, 1)
 		value^ = slider_step_value(lo, hi, step, t)
 	}
+	node_id := sem_node_id(.Slider, focus, "", 0, widget)
+	d := slider_keyboard_delta(lo, hi, step)
+	if a11y_take_action(frame.runtime, node_id, .Decrement) {
+		value^ = clamp(value^ - d, lo, hi)
+		focus_opt_set(focus)
+	}
+	if a11y_take_action(frame.runtime, node_id, .Increment) {
+		value^ = clamp(value^ + d, lo, hi)
+		focus_opt_set(focus)
+	}
 	if focus_opt_focused(focus) {
-		d := slider_keyboard_delta(lo, hi, step)
 		if is_key_pressed(frame, .LEFT) || is_key_pressed_repeat(frame, .LEFT) {
 			value^ = clamp(value^ - d, lo, hi)
 		}

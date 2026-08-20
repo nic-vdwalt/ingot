@@ -666,6 +666,49 @@ contrast_ratio :: proc(a, b: Color) -> f64 {
 
 // MIN_TEXT_CONTRAST is WCAG 2.1 AA for normal text.
 MIN_TEXT_CONTRAST :: 4.5
+MIN_TEXT_CONTRAST_LARGE :: 3.0
+
+READING_INKS :: [?]Ink {
+	.Primary,
+	.Heading,
+	.Secondary,
+	.Accent,
+	.Danger,
+	.Success,
+	.Label,
+	.Accent_Light,
+	.Tool,
+	.Diff_Add,
+	.Diff_Remove,
+	.User,
+	.Assistant,
+	.Plan,
+}
+
+theme_reading_surfaces :: proc(style: ^Theme) -> [6]Color {
+	assert(style != nil, "theme_reading_surfaces: nil theme")
+	return [6]Color {
+		style.bg_color,
+		style.bg_secondary,
+		style.bg_input,
+		style.bg_code,
+		style.bg_popup,
+		style.bg_tool_card,
+	}
+}
+
+theme_reading_matrix_min_ratio :: proc(style: ^Theme) -> f64 {
+	assert(style != nil, "theme_reading_matrix_min_ratio: nil theme")
+	minimum := f64(21)
+	for ink in READING_INKS {
+		color := theme_ink(style, ink)
+		for surface in theme_reading_surfaces(style) {
+			minimum = min(minimum, contrast_ratio(color, surface))
+		}
+	}
+	assert(minimum >= 1 && minimum <= 21, "theme_reading_matrix_min_ratio: invalid ratio")
+	return minimum
+}
 
 theme_validate_tokens :: proc(value: Theme) {
 	foregrounds := [?]Color {
@@ -715,6 +758,11 @@ ui_runtime_set_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
 	assert(
 		contrast_ratio(value.button_text, value.button_bg) >= MIN_TEXT_CONTRAST,
 		"set_theme: button_text on button_bg below WCAG AA (4.5:1)",
+	)
+	style := value
+	assert(
+		theme_reading_matrix_min_ratio(&style) >= MIN_TEXT_CONTRAST_LARGE,
+		"set_theme: reading matrix below the 3.0:1 visibility floor",
 	)
 	runtime.style = value
 	runtime.style.bg_app = value.bg_app_windowed

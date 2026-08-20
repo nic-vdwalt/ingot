@@ -8,6 +8,9 @@ import "core:fmt"
 import "core:strconv"
 import "core:strings"
 
+CALENDAR_YEAR_MIN :: i32(1)
+CALENDAR_YEAR_MAX :: i32(9999)
+
 // Calendar_Date is a plain caller-owned date. day == 0 means "unset".
 Calendar_Date :: struct {
 	year:  i32,
@@ -68,6 +71,7 @@ calendar_weekday :: proc(year, month, day: i32) -> i32 {
 }
 
 calendar_date_valid :: proc(date: Calendar_Date) -> bool {
+	if date.year < CALENDAR_YEAR_MIN || date.year > CALENDAR_YEAR_MAX do return false
 	if date.month < 1 || date.month > 12 do return false
 	if date.day < 1 do return false
 	return date.day <= calendar_days_in_month(date.year, date.month)
@@ -87,6 +91,8 @@ calendar_parse :: proc(value: string) -> (date: Calendar_Date, ok: bool) {
 	month, month_ok := strconv.parse_int(parts[1])
 	day, day_ok := strconv.parse_int(parts[2])
 	if !year_ok || !month_ok || !day_ok do return {}, false
+	if year < int(CALENDAR_YEAR_MIN) || year > int(CALENDAR_YEAR_MAX) do return {}, false
+	if month < 1 || month > 12 || day < 1 || day > 31 do return {}, false
 	date = Calendar_Date{i32(year), i32(month), i32(day)}
 	if !calendar_date_valid(date) do return {}, false
 	return date, true
@@ -181,10 +187,7 @@ date_picker_at :: proc(
 	)
 	if focus_opt_focused(focus) do draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 
-	activated :=
-		it.clicked ||
-		(focus_opt_focused(focus) &&
-				(is_key_pressed(frame, .ENTER) || is_key_pressed(frame, .SPACE)))
+	activated := it.clicked || focus_opt_activated(frame, focus, .Dropdown, widget)
 	if !st.open && activated {
 		st.open = true
 		st.just_opened = true
@@ -219,7 +222,7 @@ date_picker_at :: proc(
 			return selection_changed
 		}
 	}
-	return date_picker_popup(frame, st, value, rect, screen_w, screen_h)
+	return date_picker_popup(frame, st, value, rect, screen_w, screen_h, focus, widget)
 }
 
 Date_Picker_Popup_Layout :: struct {
@@ -248,10 +251,10 @@ date_picker_popup_layout :: proc(
 	menu_h := header_h + cell * 7 + metrics.PADDING * 2
 	assert(menu_w >= 0 && menu_h >= 0, "date_picker_popup_layout: negative menu")
 	anchor := frame_to_screen(frame, {f32(rect.x), f32(rect.y)})
-	sx := clamp(i32(anchor.x), 0, max(screen_w - menu_w, 0))
-	sy := i32(anchor.y) + rect.h + 2
-	if sy + menu_h > screen_h do sy = max(i32(anchor.y) - menu_h - 2, 0)
-	screen := Rectangle{f32(sx), f32(sy), f32(menu_w), f32(menu_h)}
+	anchor_y := i32(anchor.y) + rect.h + 2
+	if anchor_y + menu_h > screen_h do anchor_y = max(i32(anchor.y) - menu_h - 2, 0)
+	popup := popup_layout({anchor.x, f32(anchor_y)}, menu_w, menu_h, {0, 0, screen_w, screen_h})
+	screen := popup.rect
 	local := frame_rect_to_local(frame, screen)
 	return {
 		local,
@@ -296,6 +299,8 @@ date_picker_popup :: proc(
 	value: ^Calendar_Date,
 	rect: Rect_I32,
 	screen_w, screen_h: i32,
+	focus: Focus_Opt,
+	widget: Widget_Id,
 ) -> (
 	changed: bool,
 ) {
@@ -313,12 +318,21 @@ date_picker_popup :: proc(
 
 	style := ui_frame_theme(frame)
 	mouse_screen := get_mouse_position(frame)
+	owner_id := sem_node_id(.Dropdown, focus, "", 0, widget)
+	popup_widget := Widget_Id(id_finish(id_hash_u64(owner_id, 1)))
+	popup_rect := Rect_I32 {
+		i32(layout.screen.x),
+		i32(layout.screen.y),
+		i32(layout.screen.width),
+		i32(layout.screen.height),
+	}
+	semantic_push(frame, .Pane, popup_rect, "Calendar", widget = popup_widget)
 	layer_begin(frame, Z_POPUP, claim = layout.screen)
 	draw_rectangle_rec(frame, layout.screen, style.bg_popup)
 	draw_rectangle_lines_ex(frame, layout.screen, ui_frame_scf(frame, 1), style.border_color)
-	date_picker_popup_header(frame, st, layout, mouse_screen, pressed)
+	date_picker_popup_header(frame, st, layout, mouse_screen, pressed, owner_id)
 	date_picker_popup_weekdays(frame, layout)
-	changed = date_picker_days(frame, st, value, layout, mouse_screen, pressed)
+	changed = date_picker_days(frame, st, value, layout, mouse_screen, pressed, owner_id)
 	layer_end(frame)
 	return changed
 }
@@ -330,6 +344,7 @@ date_picker_popup_header :: proc(
 	layout: Date_Picker_Popup_Layout,
 	mouse: Vector2,
 	pressed: bool,
+	owner_id: u64,
 ) {
 	assert(frame != nil && st != nil, "date_picker_popup_header: invalid call")
 	month_index := int(st.view_month - 1)
@@ -346,14 +361,42 @@ date_picker_popup_header :: proc(
 	}
 	next_rect := prev_rect
 	next_rect.x = layout.screen.x + layout.screen.width - f32(layout.pad + nav_w)
-	if point_in_rect(mouse, prev_rect) {
-		request_cursor(frame, .POINTING_HAND)
-		if pressed do date_picker_shift_month(st, -1)
-	}
-	if point_in_rect(mouse, next_rect) {
-		request_cursor(frame, .POINTING_HAND)
-		if pressed do date_picker_shift_month(st, 1)
-	}
+	prev_enabled := st.view_year > CALENDAR_YEAR_MIN || st.view_month > 1
+	next_enabled := st.view_year < CALENDAR_YEAR_MAX || st.view_month < 12
+	prev_widget := Widget_Id(id_finish(id_hash_u64(owner_id, 2)))
+	next_widget := Widget_Id(id_finish(id_hash_u64(owner_id, 3)))
+	prev_state: Sem_State
+	next_state: Sem_State
+	if !prev_enabled do prev_state += {.Disabled}
+	if !next_enabled do next_state += {.Disabled}
+	semantic_push(
+		frame,
+		.Button,
+		{i32(prev_rect.x), i32(prev_rect.y), i32(prev_rect.width), i32(prev_rect.height)},
+		"Previous month",
+		prev_state,
+		widget = prev_widget,
+	)
+	semantic_push(
+		frame,
+		.Button,
+		{i32(next_rect.x), i32(next_rect.y), i32(next_rect.width), i32(next_rect.height)},
+		"Next month",
+		next_state,
+		widget = next_widget,
+	)
+	prev_activated := prev_enabled && point_in_rect(mouse, prev_rect) && pressed
+	prev_activated =
+		prev_activated ||
+		a11y_take_click(frame.runtime, sem_node_id(.Button, {}, "", 0, prev_widget))
+	next_activated := next_enabled && point_in_rect(mouse, next_rect) && pressed
+	next_activated =
+		next_activated ||
+		a11y_take_click(frame.runtime, sem_node_id(.Button, {}, "", 0, next_widget))
+	if point_in_rect(mouse, prev_rect) && prev_enabled do request_cursor(frame, .POINTING_HAND)
+	if point_in_rect(mouse, next_rect) && next_enabled do request_cursor(frame, .POINTING_HAND)
+	if prev_activated do date_picker_shift_month(st, -1)
+	if next_activated do date_picker_shift_month(st, 1)
 	sx, sy := i32(layout.screen.x), i32(layout.screen.y)
 	draw_text_string(
 		frame,
@@ -391,6 +434,7 @@ date_picker_days :: proc(
 	layout: Date_Picker_Popup_Layout,
 	mouse: Vector2,
 	pressed: bool,
+	owner_id: u64,
 ) -> (
 	changed: bool,
 ) {
@@ -429,8 +473,25 @@ date_picker_days :: proc(
 			metrics.FONT_SIZE_LABEL,
 			day_color,
 		)
-		if hovered && pressed {
-			chosen := Calendar_Date{st.view_year, st.view_month, day}
+		chosen := Calendar_Date{st.view_year, st.view_month, day}
+		day_widget := Widget_Id(id_finish(id_hash_u64(owner_id, u64(day + 3))))
+		sem: Sem_State
+		if is_selected do sem += {.Selected}
+		semantic_push(
+			frame,
+			.Option,
+			{i32(screen_cell.x), i32(screen_cell.y), layout.cell, layout.cell},
+			calendar_format(chosen),
+			sem,
+			position_in_set = int(day),
+			size_of_set = int(day_count),
+			widget = day_widget,
+		)
+		activated := hovered && pressed
+		activated =
+			activated ||
+			a11y_take_click(frame.runtime, sem_node_id(.Option, {}, "", 0, day_widget))
+		if activated {
 			assert(calendar_date_valid(chosen), "date_picker_days: produced invalid date")
 			changed = value^ != chosen
 			value^ = chosen
@@ -462,6 +523,8 @@ date_picker_move_day :: proc(st: ^Date_Picker_State, delta: i32) {
 date_picker_shift_month :: proc(st: ^Date_Picker_State, delta: i32) {
 	assert(st != nil, "date_picker_shift_month: nil state")
 	assert(delta == 1 || delta == -1, "date_picker_shift_month: delta must be +/-1")
+	if delta < 0 && st.view_year == CALENDAR_YEAR_MIN && st.view_month == 1 do return
+	if delta > 0 && st.view_year == CALENDAR_YEAR_MAX && st.view_month == 12 do return
 	st.view_month += delta
 	if st.view_month < 1 {
 		st.view_month = 12
@@ -471,5 +534,6 @@ date_picker_shift_month :: proc(st: ^Date_Picker_State, delta: i32) {
 		st.view_month = 1
 		st.view_year += 1
 	}
+	assert(st.view_year >= CALENDAR_YEAR_MIN && st.view_year <= CALENDAR_YEAR_MAX)
 	assert(st.view_month >= 1 && st.view_month <= 12, "date_picker_shift_month: bad month")
 }

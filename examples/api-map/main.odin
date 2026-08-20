@@ -5,9 +5,9 @@ import fit "ingot:fit"
 
 LAYOUT_CHECK :: #config(INGOT_LAYOUT_CHECK, false)
 MAP_CAPTURE :: #config(INGOT_MAP_CAPTURE, false)
-NODE_COUNT :: 9
+NODE_COUNT :: 10
 STAGE_COUNT :: 6
-EDGE_COUNT :: 8
+EDGE_COUNT :: 9
 PKG_COUNT :: 5
 LANE_COUNT :: 5
 MAX_EDGE_POINTS :: 4
@@ -25,6 +25,13 @@ Pkg :: enum u8 {
 	Gfx,
 }
 
+Api_Tier :: enum u8 {
+	Caller,
+	Primary,
+	Advanced,
+	Internal,
+}
+
 Node_Phase :: enum u8 {
 	Entry,
 	Upcoming,
@@ -39,9 +46,7 @@ Map_Node :: struct {
 	pkg:      Pkg,
 	stage:    i32,
 	ink:      fit.Ink,
-	// library marks cards that are never an entry point, so the detail line can
-	// keep a distinct ink even while the card is in the muted Upcoming phase.
-	library:  bool,
+	tier:     Api_Tier,
 }
 
 Map_Edge :: struct {
@@ -88,96 +93,99 @@ Map_State :: struct {
 	hold_seconds:   f32,
 }
 
-// The entry rail (stage 0) states the three supported ways in: fit (the
-// supported facade), ui_gfx (the pro loop), and gfx (raw graphics, no UI
-// stack). ui appears only mid-path because it is a library, never an entry.
 MAP_NODES := [NODE_COUNT]Map_Node {
 	{
 		"your app",
 		"owns main + state",
-		"Pick an entry: fit (supported), ui_gfx (pro), gfx (raw).",
+		"Start with fit for UI apps or gfx for graphics; ui and ui_gfx are advanced.",
 		.App,
 		0,
 		.Accent,
-		false,
+		.Caller,
 	},
 	{
 		"ingot:ui_gfx",
-		"pro entry",
-		"Own the loop with app_init and app_tick; skip fit's sugar.",
+		"supported advanced API",
+		"Use the managed App or Session host for explicit lifecycle control.",
 		.Ui_Gfx,
 		0,
 		.Tool,
-		false,
+		.Advanced,
 	},
 	{
 		"ingot:gfx",
-		"raw graphics entry",
-		"Draw raylib-style immediately; no UI stack at all.",
+		"primary graphics API",
+		"Draw through the supported graphics API without the UI stack.",
 		.Gfx,
 		0,
-		.Tool,
-		false,
+		.Success,
+		.Primary,
 	},
 	{
 		"1  fit.App",
-		"supported entry",
-		"Run, or Init/Start/Tick; a thin facade over ui_gfx.app_*.",
+		"primary UI API",
+		"Run, or Init/Start/Tick, through the recommended managed UI lifecycle.",
 		.Fit,
 		1,
 		.Success,
-		false,
+		.Primary,
 	},
 	{
-		"2  ui_gfx loop",
-		"window + input + pacing",
-		"The real runtime; fit delegates every call here.",
+		"2  ui_gfx.App / Session",
+		"managed advanced host",
+		"Own the window, input, pacing, and UI frame lifecycle explicitly.",
 		.Ui_Gfx,
 		2,
-		.Accent,
-		false,
+		.Tool,
+		.Advanced,
 	},
 	{
 		"3  ui layout",
-		"library - not an entry",
-		"Immediate mode: per-frame arena, describe and place, no I/O.",
+		"supported advanced API",
+		"Describe renderer-independent immediate-mode UI with caller-owned state.",
 		.Ui_Lib,
 		3,
-		.Plan,
-		true,
+		.Tool,
+		.Advanced,
 	},
 	{
-		"4  fit.Surface",
-		"your callback",
-		"Your leaves borrow Surface for same-frame explicit work.",
+		"4  your callback",
+		"application-owned work",
+		"Perform same-frame work through the selected API layer.",
 		.App,
 		4,
-		.Tool,
-		false,
+		.Accent,
+		.Caller,
 	},
 	{
 		"5  ui output",
-		"paint + semantics",
-		"Draw list and Platform_Output describe work for the host.",
+		"advanced data boundary",
+		"Paint, semantics, and Platform_Output describe work for the host.",
 		.Ui_Lib,
 		5,
+		.Tool,
+		.Advanced,
+	},
+	{
+		"6  ui_gfx.Adapter",
+		"internal bridge",
+		"Applications use App or Session instead of direct Adapter lifecycle calls.",
+		.Ui_Gfx,
+		6,
 		.Plan,
-		false,
+		.Internal,
 	},
 	{
 		"6  gfx present",
-		"WebGPU presentation",
-		"ui_gfx replays ui output through gfx, native or web.",
+		"primary graphics + presentation",
+		"The internal bridge replays UI output through gfx, native or web.",
 		.Gfx,
 		6,
 		.Success,
-		false,
+		.Primary,
 	},
 }
 
-// The two stage-0 alternates (ui_gfx pro entry, raw gfx) merge into the main
-// path: three entries, one presentation. Edge 0 must stay the app-to-fit
-// entry edge because the elbow router gives index 0 the left rail.
 MAP_EDGES := [EDGE_COUNT]Map_Edge {
 	{0, 3, 1},
 	{3, 4, 2},
@@ -186,7 +194,8 @@ MAP_EDGES := [EDGE_COUNT]Map_Edge {
 	{5, 6, 4},
 	{6, 7, 5},
 	{7, 8, 6},
-	{2, 8, 6},
+	{8, 9, 6},
+	{2, 9, 6},
 }
 
 // Swimlane rows ordered so the animated stage path only ever hops one or two
@@ -202,6 +211,12 @@ LANE_OF_PKG := [Pkg]i32 {
 
 // Single-word lane labels fit the left gutter without wrapping at any scale.
 LANE_LABELS := [LANE_COUNT]string{"FIT", "APP", "UI-GFX", "UI", "GFX"}
+TIER_LABELS := [Api_Tier]string {
+	.Caller   = "APP",
+	.Primary  = "PRIMARY",
+	.Advanced = "ADVANCED",
+	.Internal = "INTERNAL",
+}
 
 // Grid columns per breakpoint. Wide places the three entries in a column-0
 // rail and the six stages left to right; medium pairs stages into columns so
@@ -209,12 +224,19 @@ LANE_LABELS := [LANE_COUNT]string{"FIT", "APP", "UI-GFX", "UI", "GFX"}
 // straight card-to-card connector clears all unrelated cards; the elbow
 // router covers any crossing that remains (check.odin verifies clearance at
 // every width).
-NODE_COLS_MEDIUM := [NODE_COUNT]i32{0, 0, 0, 1, 1, 2, 2, 3, 3}
-NODE_COLS_WIDE := [NODE_COUNT]i32{0, 0, 0, 1, 2, 3, 4, 5, 6}
+NODE_COLS_MEDIUM := [NODE_COUNT]i32{0, 0, 0, 1, 1, 2, 2, 3, 3, 3}
+NODE_COLS_WIDE := [NODE_COUNT]i32{0, 0, 0, 1, 2, 3, 4, 5, 6, 6}
 GRID_COLS_MEDIUM :: 4
 GRID_COLS_WIDE :: 7
 
-STAGE_LABELS := [STAGE_COUNT]string{"1 fit", "2 ui_gfx", "3 ui", "4 callback", "5 output", "6 gfx"}
+STAGE_LABELS := [STAGE_COUNT]string {
+	"1 fit",
+	"2 ui_gfx",
+	"3 ui",
+	"4 callback",
+	"5 output",
+	"6 present",
+}
 
 // Static strip titles avoid core:fmt, which would drag core:os into any
 // future js build of this package.
@@ -229,13 +251,13 @@ STAGE_TITLES := [STAGE_COUNT + 1]string {
 }
 
 STAGE_CAPTIONS := [STAGE_COUNT + 1]string {
-	"Three entries: fit (supported), ui_gfx (pro), gfx (raw); ui is a library, no window, no loop",
-	"fit.App is the supported entry: Run or Init/Start/Tick, a thin facade over ui_gfx",
-	"ui_gfx is the pro entry: it owns the window, input pump, and frame pacing",
-	"ui is immediate-mode and I/O-free - a library that never runs the app",
-	"Your callback borrows fit.Surface for same-frame explicit work",
-	"ui records the draw list, semantics, and Platform_Output requests",
-	"ui_gfx replays ui output through gfx WebGPU; raw gfx apps skip the UI stack",
+	"fit and gfx are primary; ui and managed ui_gfx are advanced; Adapter is internal",
+	"fit.App is the primary managed UI entry: Run or Init/Start/Tick",
+	"ui_gfx.App and Session are supported advanced hosts for explicit lifecycle control",
+	"ui is a renderer-independent supported advanced immediate-mode API",
+	"Application callbacks perform same-frame work through the selected API layer",
+	"ui produces paint, semantics, and Platform_Output at an advanced data boundary",
+	"The internal Adapter replays output through primary gfx presentation",
 }
 
 app: fit.App
@@ -799,6 +821,20 @@ map_node_phase :: proc(stage: i32) -> Node_Phase {
 	return .Upcoming
 }
 
+map_tier_ink :: proc(tier: Api_Tier) -> fit.Ink {
+	switch tier {
+	case .Caller:
+		return .Secondary
+	case .Primary:
+		return .Success
+	case .Advanced:
+		return .Tool
+	case .Internal:
+		return .Plan
+	}
+	return .Muted
+}
+
 map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(surface != nil && layout != nil, "api map nodes: invalid argument")
 	map_state.hovered_node = -1
@@ -823,28 +859,41 @@ map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 			state = .Selected
 			border = .Emphasis
 		}
+		if node.tier == .Internal {
+			title_ink = .Muted
+			detail_ink = .Muted
+		}
 		if interaction.hovered {
 			map_state.hovered_node = i32(index)
 			state = .Hover
-			fit.Surface_Request_Cursor(surface, .Pointing_Hand)
+			if node.tier != .Internal do fit.Surface_Request_Cursor(surface, .Pointing_Hand)
 		}
-		// Library cards keep a distinct detail ink in every phase so "not an
-		// entry" stays readable at rest, not only in the hover contract.
-		if node.library do detail_ink = .Plan
 		fit.Surface_Draw_Surface(surface, rect_float(rect), .Card, state, .MD, border, .Lifted)
 		if phase == .Done || phase == .Active {
 			bar := fit.Rect{rect.x + 1, rect.y + 2, fit.Px(surface, 3), rect.h - 4}
 			fit.Surface_Fill_Rect(surface, bar, theme.foreground_accent)
 		}
+		badge_w := fit.Px(surface, 74)
+		title_w := max(rect.w - inset * 3 - badge_w, 1)
 		fit.Surface_Text_Truncated(
 			surface,
 			node.title,
 			rect.x + inset,
 			rect.y + inset,
-			max(rect.w - inset * 2, 1),
+			title_w,
 			.Title,
 			title_ink,
 		)
+		if layout.columns > 1 {
+			fit.Surface_Text(
+				surface,
+				TIER_LABELS[node.tier],
+				rect.x + rect.w - badge_w,
+				rect.y + inset,
+				.Note,
+				map_tier_ink(node.tier),
+			)
+		}
 		fit.Surface_Text_Truncated(
 			surface,
 			node.contract if interaction.hovered else node.detail,
@@ -854,22 +903,50 @@ map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 			.Note,
 			detail_ink,
 		)
-		if layout.columns == 1 do map_render_pkg_chip(surface, layout, i32(index))
-		if interaction.clicked && node.stage > 0 do map_select_stage(node.stage)
+		if layout.columns == 1 do map_render_tier_chip(surface, layout, i32(index))
+		if interaction.clicked && node.stage > 0 && node.tier != .Internal {
+			map_select_stage(node.stage)
+		}
 	}
 }
 
-// map_render_pkg_chip stands in for lane backgrounds at narrow widths, where
-// full swimlanes would waste most of the column.
-map_render_pkg_chip :: proc(surface: ^fit.Surface, layout: ^Map_Layout, index: i32) {
+// map_render_tier_chip reinforces the API tier where narrow layouts have no
+// package swimlanes.
+map_render_tier_chip :: proc(surface: ^fit.Surface, layout: ^Map_Layout, index: i32) {
 	assert(surface != nil && layout != nil, "api map chip: invalid argument")
 	assert(index >= 0 && index < NODE_COUNT, "api map chip: invalid index")
 	node := MAP_NODES[index]
 	rect := layout.nodes[index]
-	label := LANE_LABELS[LANE_OF_PKG[node.pkg]]
 	inset := fit.Surface_Space(surface, .SM)
 	chip_w := fit.Px(surface, 92)
-	fit.Surface_Text(surface, label, rect.x + rect.w - chip_w, rect.y + inset, .Note, .Muted)
+	fit.Surface_Text(
+		surface,
+		TIER_LABELS[node.tier],
+		rect.x + rect.w - chip_w,
+		rect.y + inset,
+		.Note,
+		map_tier_ink(node.tier),
+	)
+}
+
+map_stage_node_count :: proc(stage: i32) -> i32 {
+	assert(stage >= 1 && stage <= STAGE_COUNT, "api map node count: invalid stage")
+	count: i32
+	for node in MAP_NODES {
+		if node.stage == stage do count += 1
+	}
+	assert(count > 0 && count <= NODE_COUNT, "api map node count: invalid count")
+	return count
+}
+
+map_stage_edge_count :: proc(stage: i32) -> i32 {
+	assert(stage >= 1 && stage <= STAGE_COUNT, "api map edge count: invalid stage")
+	count: i32
+	for edge in MAP_EDGES {
+		if edge.stage == stage do count += 1
+	}
+	assert(count > 0 && count <= EDGE_COUNT, "api map edge count: invalid count")
+	return count
 }
 
 map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
@@ -877,21 +954,27 @@ map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	stage := map_state.target_stage
 	if stage <= 0 do return
 	assert(stage <= STAGE_COUNT, "api map active: invalid stage")
-	// Stage N's card sits after the three entry cards.
-	node_index := stage + 2
-	ring := rect_expand(layout.nodes[node_index], fit.Surface_Space(surface, .XS) / 2)
-	fit.Surface_Stroke_Rounded_Rect(
-		surface,
-		rect_float(ring),
-		0.12,
-		8,
-		fit.Px(surface, 3.0),
-		fit.Surface_Theme_Tokens(surface).foreground_accent,
-	)
-	// The pulse only exists while the path is moving; a resting dot after the
-	// transition finished reads as a stray artifact.
+	node_count := map_stage_node_count(stage)
+	edge_count := map_stage_edge_count(stage)
+	drawn_nodes: i32
+	for node, index in MAP_NODES {
+		if node.stage != stage do continue
+		ring := rect_expand(layout.nodes[index], fit.Surface_Space(surface, .XS) / 2)
+		fit.Surface_Stroke_Rounded_Rect(
+			surface,
+			rect_float(ring),
+			0.12,
+			8,
+			fit.Px(surface, 3.0),
+			fit.Surface_Theme_Tokens(surface).foreground_accent,
+		)
+		drawn_nodes += 1
+	}
+	assert(drawn_nodes == node_count, "api map active: node count mismatch")
+	// Pulses exist only while the path is moving; resting dots read as artifacts.
 	if map_state.reduced_motion do return
 	if map_state.progress >= 1 && !map_state.playing do return
+	drawn_edges: i32
 	for edge, index in MAP_EDGES {
 		if edge.stage != stage do continue
 		path := map_edge_path(layout, i32(index))
@@ -902,8 +985,9 @@ map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 			fit.Px(surface, 6.0),
 			fit.Surface_Theme_Tokens(surface).foreground_accent,
 		)
-		break
+		drawn_edges += 1
 	}
+	assert(drawn_edges == edge_count, "api map active: edge count mismatch")
 }
 
 map_edge_amount :: proc(stage: i32) -> f32 {

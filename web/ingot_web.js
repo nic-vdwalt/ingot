@@ -409,6 +409,7 @@
 		7: { tag: "button" },                     // Menu_Item
 		15: { tag: "div", ariaRole: "option" },   // Option
 		18: { tag: "div", ariaRole: "listbox" },  // List_Box
+		19: { tag: "a", ariaRole: "link" },        // Link
 	};
 
 	function createSemanticControl(key, role) {

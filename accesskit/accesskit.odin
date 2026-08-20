@@ -36,6 +36,7 @@ Tree_Id :: struct {
 Role :: enum u8 {
 	Unknown         = 0,
 	Label           = 3,
+	Link            = 5,
 	List_Item       = 7,
 	List_Box_Option = 10,
 	Menu_Item       = 11,
