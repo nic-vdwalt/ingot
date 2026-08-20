@@ -128,6 +128,13 @@ class ConsumerPolicyTests(unittest.TestCase):
         failures = policy.fit_public_violations("Ui :: ui.Ui\n")
         self.assertTrue(any("internal UI type" in message for _, message in failures))
 
+    def test_fit_approved_public_alias_to_ui_is_allowed(self) -> None:
+        self.assertEqual(policy.fit_public_violations("Track :: ui.Track\n"), [])
+
+    def test_fit_unapproved_public_alias_to_ui_is_rejected(self) -> None:
+        failures = policy.fit_public_violations("Unexpected :: ui.Track\n")
+        self.assertTrue(any("internal UI type" in message for _, message in failures))
+
     def test_fit_private_conversion_may_reference_ui(self) -> None:
         source = '@(private = "package")\nto_rect :: proc(rect: Rect) -> ui.Rect_I32 { return {} }\n'
         self.assertEqual(policy.fit_public_violations(source), [])
