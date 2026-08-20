@@ -44,22 +44,21 @@ main :: proc() {
 draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	data := cast(^State)userdata
 	when SMOKE do smoke_step(data)
-	fit.Column(builder, {gap = .SM, padding = .LG})
-	fit.Label(builder, "Ingot view builder", {role = .Title})
+	root := fit.Column(builder, {gap = .SM, padding = .LG})
+	fit.Label(root, "Ingot view builder", {role = .Title})
 	fit.Label(
-		builder,
+		root,
 		"The document is caller-owned; Fit rebuilds this editor every frame.",
 		{ink = .Secondary},
 	)
-	fit.Row(builder, {gap = .SM})
-	fit.Button(builder, "save", "Save", fit.On(save_action, data))
-	fit.Button(builder, "load", "Load", fit.On(load_action, data))
-	fit.Button(builder, "add", "Add label", fit.On(add_action, data))
-	fit.Button(builder, "delete", "Delete last", fit.On(delete_action, data))
-	fit.End(builder)
-	fit.Label(builder, fmt.tprintf("%d nodes", data.doc.count), {role = .Label})
-	if data.status != "" do fit.Label(builder, data.status, {ink = .Secondary})
-	fit.Column(builder, {gap = .XS})
+	actions := fit.Row(root, {gap = .SM})
+	fit.Button(actions, "save", "Save", fit.On(save_action, data))
+	fit.Button(actions, "load", "Load", fit.On(load_action, data))
+	fit.Button(actions, "add", "Add label", fit.On(add_action, data))
+	fit.Button(actions, "delete", "Delete last", fit.On(delete_action, data))
+	fit.Label(root, fmt.tprintf("%d nodes", data.doc.count), {role = .Label})
+	if data.status != "" do fit.Label(root, data.status, {ink = .Secondary})
+	nodes := fit.Column(root, {gap = .XS})
 	source := view.view_of(&data.doc)
 	walk := view.walk_begin(source)
 	for _ in 0 ..< view.WALK_STEPS_MAX {
@@ -68,10 +67,8 @@ draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 		if step.event != .Enter do continue
 		node := data.doc.nodes[step.node]
 		label := view.view_text(source, node.label_offset, node.label_length)
-		fit.Label(builder, fmt.tprintf("%*s%v %s", int(step.depth) * 2, "", node.kind, label))
+		fit.Label(nodes, fmt.tprintf("%*s%v %s", int(step.depth) * 2, "", node.kind, label))
 	}
-	fit.End(builder)
-	fit.End(builder)
 }
 
 save_action :: proc(userdata: rawptr) {

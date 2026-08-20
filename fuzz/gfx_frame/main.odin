@@ -210,12 +210,9 @@ fuzz_frame :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	assert(builder != nil && userdata != nil, "fuzz_frame: invalid argument")
 	p := cast(^Prng)userdata
 	rl.ClearBackground(rl.BLACK)
-	root_container: {
-		fit.Column(builder, {gap = .XS, padding = .SM})
-		defer fit.End(builder)
-		fit.Label(builder, "FIT lifecycle fuzz", {role = .Title})
-		fit.Button(builder, "lifecycle", "Lifecycle button", &button_active)
-	}
+	root := fit.Column(builder, {gap = .XS, padding = .SM})
+	fit.Label(root, "FIT lifecycle fuzz", {role = .Title})
+	fit.Button(root, "lifecycle", "Lifecycle button", &button_active)
 	_ = fit.Render(builder)
 	draw_some(p)
 	ops := fuzzx.int_range(p, 0, 5)

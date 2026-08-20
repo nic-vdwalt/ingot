@@ -68,28 +68,20 @@ main :: proc() {
 
 frame :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	data := cast(^State)userdata
-	root_container: {
-		fit.Column(builder, {gap = .MD, padding = .LG})
-		defer fit.End(builder)
-		header_container: {
-			fit.Row(builder, {gap = .MD, size = {height = fit.Fixed(36)}})
-			defer fit.End(builder)
-			fit.Label(builder, "Chart widgets", {role = .Title, track = fit.Grow()})
-			fit.Button(
-				builder,
-				"theme",
-				"Light theme" if data.dark else "Dark theme",
-				fit.Button_Options{track = fit.Fixed(132), action = fit.On(toggle_theme, data)},
-			)
-		}
-		// The dashboard fills the leftover column height; Grow resolves the
-		// same on every layout pass, so the panel tracks window resizes.
-		fit.Custom(
-			builder,
-			{measure = dashboard_measure, render = draw_dashboard, userdata = data},
-			{size = {width = fit.Grow(), height = fit.Grow()}},
-		)
-	}
+	root := fit.Column(builder, {gap = .MD, padding = .LG})
+	header := fit.Row(root, {gap = .MD, size = {height = fit.Fixed(36)}})
+	fit.Label(header, "Chart widgets", {role = .Title, track = fit.Grow()})
+	fit.Button(
+		header,
+		"theme",
+		"Light theme" if data.dark else "Dark theme",
+		fit.Button_Options{track = fit.Fixed(132), action = fit.On(toggle_theme, data)},
+	)
+	fit.Custom(
+		root,
+		{measure = dashboard_measure, render = draw_dashboard, userdata = data},
+		{size = {width = fit.Grow(), height = fit.Grow()}},
+	)
 }
 
 dashboard_measure :: proc(constraints: fit.Constraints, userdata: rawptr) -> fit.Size {

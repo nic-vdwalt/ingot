@@ -42,21 +42,14 @@ main :: proc() {
 draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	assert(builder != nil && userdata != nil, "draw: invalid argument")
 	data := cast(^State)userdata
-	root_container: {
-		fit.Center(builder, {gap = .SM, padding = .LG})
-		defer fit.End(builder)
-		fit.Label(builder, "Hello from Ingot", {role = .Title})
-		controls_container: {
-			fit.Row(builder, {gap = .SM, align = .Center})
-			defer fit.End(builder)
-			fit.Label(builder, "Controls", {role = .Label, track = fit.Grow()})
-			fit.Button(builder, "toggle", "Toggle list", fit.On(toggle_list, data))
-		}
-		fit.Checkbox(builder, "enabled", "Enabled", &data.enabled)
-		if data.showing {
-			fit.Column(builder, {gap = .XS})
-			defer fit.End(builder)
-			for item in data.items do fit.Button(builder, item, "Stable item")
-		}
+	root := fit.Center(builder, {gap = .SM, padding = .LG})
+	fit.Label(root, "Hello from Ingot", {role = .Title})
+	controls := fit.Row(root, {gap = .SM, align = .Center})
+	fit.Label(controls, "Controls", {role = .Label, track = fit.Grow()})
+	fit.Button(controls, "toggle", "Toggle list", fit.On(toggle_list, data))
+	fit.Checkbox(root, "enabled", "Enabled", &data.enabled)
+	if data.showing {
+		items := fit.Column(root, {gap = .XS})
+		for item in data.items do fit.Button(items, item, "Stable item")
 	}
 }

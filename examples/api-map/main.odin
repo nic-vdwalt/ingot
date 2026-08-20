@@ -299,38 +299,26 @@ reset_action :: proc(userdata: rawptr) {
 
 map_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	_ = userdata
-	fit.Column(builder, {gap = .SM, padding = .LG})
-	defer fit.End(builder)
-	fit.Row(builder, {gap = .SM, align = .Center})
-	fit.Label(builder, "INGOT API MAP", {role = .Title, track = fit.Grow()})
-	fit.Button(
-		builder,
-		"theme",
-		"Light" if map_state.dark else "Dark",
-		fit.On(toggle_theme_action),
-	)
-	fit.End(builder)
-	map_stage_controls(builder)
-	map_playback_controls(builder)
-	// The body fills the leftover column height with a plain Grow track; the
-	// layout engine resolves it identically on every pass (measure, render,
-	// and the accessibility path), so no chrome-height caching is needed.
+	root := fit.Column(builder, {gap = .SM, padding = .LG})
+	header := fit.Row(root, {gap = .SM, align = .Center})
+	fit.Label(header, "INGOT API MAP", {role = .Title, track = fit.Grow()})
+	fit.Button(header, "theme", "Light" if map_state.dark else "Dark", fit.On(toggle_theme_action))
+	map_stage_controls(root)
+	map_playback_controls(root)
 	fit.Custom(
-		builder,
+		root,
 		{measure = map_measure, render = map_render},
 		{size = {width = fit.Grow(), height = fit.Grow()}},
 	)
 }
 
-map_stage_controls :: proc(builder: ^fit.Builder) {
-	assert(builder != nil, "api map controls: nil builder")
+map_stage_controls :: proc(parent: fit.Parent) {
 	assert(map_state.target_stage >= 0 && map_state.target_stage <= STAGE_COUNT)
-	fit.Flow(builder, {gap_x = .XS, gap_y = .XS})
-	defer fit.End(builder)
+	controls := fit.Flow(parent, {gap_x = .XS, gap_y = .XS})
 	for stage in 0 ..< STAGE_COUNT {
 		value := i32(stage + 1)
 		fit.Button(
-			builder,
+			controls,
 			u64(value),
 			STAGE_LABELS[stage],
 			fit.Button_Options {
@@ -341,14 +329,12 @@ map_stage_controls :: proc(builder: ^fit.Builder) {
 	}
 }
 
-map_playback_controls :: proc(builder: ^fit.Builder) {
-	assert(builder != nil, "api map playback: nil builder")
+map_playback_controls :: proc(parent: fit.Parent) {
 	assert(map_state.target_stage >= 0 && map_state.target_stage <= STAGE_COUNT)
-	fit.Flow(builder, {gap_x = .XS, gap_y = .XS})
-	defer fit.End(builder)
-	fit.Button(builder, "play", "Pause" if map_state.playing else "Play path", fit.On(play_action))
-	fit.Button(builder, "reset", "Reset", fit.On(reset_action))
-	fit.Checkbox(builder, "motion", "Reduced motion", &map_state.reduced_motion)
+	controls := fit.Flow(parent, {gap_x = .XS, gap_y = .XS})
+	fit.Button(controls, "play", "Pause" if map_state.playing else "Play path", fit.On(play_action))
+	fit.Button(controls, "reset", "Reset", fit.On(reset_action))
+	fit.Checkbox(controls, "motion", "Reduced motion", &map_state.reduced_motion)
 }
 
 map_select_stage :: proc(stage: i32) {
