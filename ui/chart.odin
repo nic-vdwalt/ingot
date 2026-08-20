@@ -346,7 +346,9 @@ chart_draw_legend :: proc(frame: ^Ui_Frame, cl: Chart_Layout, series: []Chart_Se
 	ly := i32(cl.chart.y + cl.chart.height) - chart_text_size(frame) - ui_frame_sc(frame, 2)
 	lx := i32(cl.plot.x)
 	sw := ui_frame_sc(frame, 10)
+	right := i32(cl.chart.x + cl.chart.width)
 	for s, i in series {
+		if lx + sw >= right do break
 		col := s.color if s.color != {} else chart_series_color(frame, i)
 		draw_rounded_fill(
 			frame,
@@ -356,9 +358,20 @@ chart_draw_legend :: proc(frame: ^Ui_Frame, cl: Chart_Layout, series: []Chart_Se
 		)
 		lx += sw + ui_frame_sc(frame, 5)
 		name := s.name if len(s.name) > 0 else "series"
-		c := strings.clone_to_cstring(name, context.temp_allocator)
-		draw_text_frame(frame, c, lx, ly, chart_text_size(frame), style.fg_secondary)
-		lx += measure_text_frame(frame, c, chart_text_size(frame)) + ui_frame_sc(frame, 14)
+		available := max(right - lx, 0)
+		if available == 0 do break
+		draw_text_truncated_frame(
+			frame,
+			name,
+			lx,
+			ly,
+			available,
+			chart_text_size(frame),
+			style.fg_secondary,
+		)
+		name_c := strings.clone_to_cstring(name, context.temp_allocator)
+		name_width := measure_text_frame(frame, name_c, chart_text_size(frame))
+		lx += min(name_width, available) + ui_frame_sc(frame, 14)
 	}
 }
 

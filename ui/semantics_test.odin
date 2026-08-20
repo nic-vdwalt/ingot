@@ -104,6 +104,36 @@ semantics_label_truncation :: proc(t: ^testing.T) {
 }
 
 @(test)
+semantics_description_and_value_truncate_at_rune_boundaries :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	sem_enable(&runtime, true)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	description_bytes := make([]u8, SEM_DESCRIPTION_MAX + 2, context.temp_allocator)
+	value_bytes := make([]u8, SEM_VALUE_MAX + 2, context.temp_allocator)
+	for index in 0 ..< SEM_DESCRIPTION_MAX - 1 do description_bytes[index] = 'a'
+	for index in 0 ..< SEM_VALUE_MAX - 1 do value_bytes[index] = 'a'
+	copy(description_bytes[SEM_DESCRIPTION_MAX - 1:], "€")
+	copy(value_bytes[SEM_VALUE_MAX - 1:], "€")
+	description := string(description_bytes)
+	value := string(value_bytes)
+	node := semantic_push(
+		&frame,
+		.Text_Input,
+		{0, 0, 10, 10},
+		"Text",
+		description = description,
+		text_value = value,
+	)
+	testing.expect_value(t, int(node.description_len), SEM_DESCRIPTION_MAX - 1)
+	testing.expect_value(t, int(node.text_value_len), SEM_VALUE_MAX - 1)
+	ui_frame_end(&frame)
+	ui_frame_destroy(&frame)
+}
+
+@(test)
 semantics_node_identity :: proc(t: ^testing.T) {
 	// Focus-linked ids are stable across frames and distinct across forms
 	// even with identical 1-based ids.

@@ -667,10 +667,47 @@ contrast_ratio :: proc(a, b: Color) -> f64 {
 // MIN_TEXT_CONTRAST is WCAG 2.1 AA for normal text.
 MIN_TEXT_CONTRAST :: 4.5
 
+theme_validate_tokens :: proc(value: Theme) {
+	foregrounds := [?]Color {
+		value.fg_primary,
+		value.fg_secondary,
+		value.fg_code_inline,
+		value.fg_heading,
+		value.button_text,
+		value.button_danger_fg,
+		value.fg_disabled,
+	}
+	backgrounds := [?]Color {
+		value.bg_app_windowed,
+		value.bg_app_fullscreen,
+		value.bg_panel_windowed,
+		value.bg_panel_fullscreen,
+		value.bg_tool_card,
+		value.bg_popup,
+		value.bg_input,
+		value.bg_chip,
+		value.bg_code,
+		value.bg_table_header,
+		value.button_bg,
+		value.bg_active,
+		value.button_danger_bg,
+		value.bg_color,
+		value.button_hover,
+		value.button_danger_hover,
+		value.bg_chip_hover,
+		value.bg_tool_card_hover,
+		value.bg_hover,
+		value.button_pressed,
+		value.surface_pressed,
+		value.button_disabled_bg,
+	}
+	for color in foregrounds do assert(color.a > 0, "theme_validate_tokens: transparent foreground")
+	for color in backgrounds do assert(color.a > 0, "theme_validate_tokens: transparent background")
+}
+
 ui_runtime_set_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
 	assert(runtime != nil && runtime.initialized, "set_theme: invalid runtime")
-	assert(value.fg_primary.a != 0, "set_theme: fg_primary must be opaque-ish")
-	assert(value.bg_color.a != 0, "set_theme: bg_color must have alpha")
+	theme_validate_tokens(value)
 	assert(
 		contrast_ratio(value.fg_primary, value.bg_color) >= MIN_TEXT_CONTRAST,
 		"set_theme: fg_primary on bg_color below WCAG AA (4.5:1)",

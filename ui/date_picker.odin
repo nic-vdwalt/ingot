@@ -17,10 +17,12 @@ Calendar_Date :: struct {
 
 // Date_Picker_State is the caller-owned lifecycle of one picker.
 Date_Picker_State :: struct {
-	open:        bool,
-	just_opened: bool,
-	view_year:   i32,
-	view_month:  i32,
+	open:         bool,
+	just_opened:  bool,
+	view_year:    i32,
+	view_month:   i32,
+	initial_date: Calendar_Date,
+	active_day:   i32,
 }
 
 CALENDAR_MONTH_NAMES := [12]string {
@@ -186,9 +188,12 @@ date_picker_at :: proc(
 	if !st.open && activated {
 		st.open = true
 		st.just_opened = true
-		seed := value^ if calendar_date_valid(value^) else Calendar_Date{2026, 1, 1}
+		seed := value^
+		if !calendar_date_valid(seed) do seed = st.initial_date
+		if !calendar_date_valid(seed) do seed = Calendar_Date{2000, 1, 1}
 		st.view_year = seed.year
 		st.view_month = seed.month
+		st.active_day = seed.day
 	}
 	sem: Sem_State
 	if st.open do sem += {.Expanded}
@@ -198,6 +203,21 @@ date_picker_at :: proc(
 	if is_key_pressed(frame, .ESCAPE) {
 		st.open = false
 		return false
+	}
+	if is_key_pressed(frame, .LEFT) do date_picker_move_day(st, -1)
+	if is_key_pressed(frame, .RIGHT) do date_picker_move_day(st, 1)
+	if is_key_pressed(frame, .UP) do date_picker_move_day(st, -7)
+	if is_key_pressed(frame, .DOWN) do date_picker_move_day(st, 7)
+	if is_key_pressed(frame, .PAGE_UP) do date_picker_shift_month(st, -1)
+	if is_key_pressed(frame, .PAGE_DOWN) do date_picker_shift_month(st, 1)
+	if is_key_pressed(frame, .ENTER) || is_key_pressed(frame, .SPACE) {
+		chosen := Calendar_Date{st.view_year, st.view_month, st.active_day}
+		if calendar_date_valid(chosen) {
+			selection_changed := value^ != chosen
+			value^ = chosen
+			st.open = false
+			return selection_changed
+		}
 	}
 	return date_picker_popup(frame, st, value, rect, screen_w, screen_h)
 }
@@ -392,7 +412,8 @@ date_picker_days :: proc(
 		hovered := point_in_rect(mouse, screen_cell)
 		is_selected :=
 			value.day == day && value.month == st.view_month && value.year == st.view_year
-		if is_selected || hovered {
+		is_active := st.active_day == day
+		if is_selected || hovered || is_active {
 			color := style.fg_accent if is_selected else style.bg_active
 			draw_rectangle_rec(frame, screen_cell, color)
 		}
@@ -420,6 +441,24 @@ date_picker_days :: proc(
 }
 
 @(private = "package")
+date_picker_move_day :: proc(st: ^Date_Picker_State, delta: i32) {
+	assert(st != nil, "date_picker_move_day: nil state")
+	assert(delta == -7 || delta == -1 || delta == 1 || delta == 7)
+	if st.active_day <= 0 do st.active_day = 1
+	st.active_day += delta
+	for st.active_day < 1 {
+		date_picker_shift_month(st, -1)
+		st.active_day += calendar_days_in_month(st.view_year, st.view_month)
+	}
+	for st.active_day > calendar_days_in_month(st.view_year, st.view_month) {
+		st.active_day -= calendar_days_in_month(st.view_year, st.view_month)
+		date_picker_shift_month(st, 1)
+	}
+	assert(
+		st.active_day >= 1 && st.active_day <= calendar_days_in_month(st.view_year, st.view_month),
+	)
+}
+
 date_picker_shift_month :: proc(st: ^Date_Picker_State, delta: i32) {
 	assert(st != nil, "date_picker_shift_month: nil state")
 	assert(delta == 1 || delta == -1, "date_picker_shift_month: delta must be +/-1")

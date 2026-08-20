@@ -4,12 +4,13 @@ import "ingot:ui"
 import "ingot:ui_gfx"
 
 Builder :: struct {
-	inner:        ui.Fit_Builder,
-	root:         ui.Ui,
-	customs:      [STORAGE_NODE_DEFAULT]Custom_Spec,
-	customs_used: i32,
-	generation:   u64,
-	bound:        bool,
+	inner:          ui.Fit_Builder,
+	root:           ui.Ui,
+	customs:        [STORAGE_NODE_DEFAULT]Custom_Spec,
+	custom_storage: []Custom_Spec,
+	customs_used:   i32,
+	generation:     u64,
+	bound:          bool,
 }
 
 Parent :: struct {
@@ -43,6 +44,7 @@ Storage_Node :: struct #align (STORAGE_NODE_ALIGNMENT) {
 Storage :: struct {
 	nodes:   []Storage_Node,
 	outputs: []^bool,
+	customs: []Custom_Spec,
 }
 STORAGE_NODE_DEFAULT :: 128
 STORAGE_NODE_HARD_MAX :: 8192

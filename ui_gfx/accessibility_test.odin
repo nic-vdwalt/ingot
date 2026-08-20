@@ -31,10 +31,14 @@ adapter_maps_structural_roles_and_actions :: proc(t: ^testing.T) {
 			ak.Role.Progress,
 		)
 		testing.expect_value(t, adapter_a11y_role(&ui.Sem_Node{role = .List}), ak.Role.List)
-		click, focus := adapter_a11y_actions(&ui.Sem_Node{role = .Progress})
-		testing.expect(t, !click && !focus)
-		click, focus = adapter_a11y_actions(&ui.Sem_Node{role = .Button, state = {.Disabled}})
-		testing.expect(t, !click && !focus)
+		click, focus, adjust := adapter_a11y_actions(&ui.Sem_Node{role = .Progress})
+		testing.expect(t, !click && !focus && !adjust)
+		click, focus, adjust = adapter_a11y_actions(&ui.Sem_Node{role = .Slider})
+		testing.expect(t, !click && focus && adjust)
+		click, focus, adjust = adapter_a11y_actions(
+			&ui.Sem_Node{role = .Button, state = {.Disabled}},
+		)
+		testing.expect(t, !click && !focus && !adjust)
 	}
 }
 

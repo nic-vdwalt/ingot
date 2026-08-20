@@ -737,10 +737,13 @@ fit_caller_storage_selects_and_resets_capacity :: proc(t: ^testing.T) {
 	builder: Builder
 	nodes: [STORAGE_NODE_DEFAULT + 64]Storage_Node
 	outputs: [STORAGE_NODE_DEFAULT + 64]^bool
-	Set_Storage(&builder, {nodes = nodes[:], outputs = outputs[:]})
+	customs: [STORAGE_NODE_DEFAULT + 64]Custom_Spec
+	Set_Storage(&builder, {nodes = nodes[:], outputs = outputs[:], customs = customs[:]})
 	testing.expect_value(t, Storage_Capacity(&builder), len(nodes))
+	testing.expect_value(t, Custom_Capacity(&builder), len(customs))
 	Reset_Storage(&builder)
 	testing.expect_value(t, Storage_Capacity(&builder), int(STORAGE_NODE_DEFAULT))
+	testing.expect_value(t, Custom_Capacity(&builder), int(STORAGE_NODE_DEFAULT))
 }
 
 @(test)
@@ -817,21 +820,15 @@ fit_test_draw :: proc(builder: ^Builder, user_data: rawptr) {
 	Button(root, "save", "Save", &active)
 	Button(root, u64(7), "Seven", &active)
 }
-// Fit's submit modes were once value-cast straight onto ui's, but the two
-// enums are declared in different orders. Fit `.Enter` (2) landed outside ui's
-// two-variant range, so ti_keys_enter matched neither `.Enter` nor `.Never`
-// and swallowed the key: the box neither submitted nor typed a newline. Pin
-// the mapping so a reordering of either enum fails here instead of in a
-// dialog nobody can dismiss.
+// Fit's submit modes are mapped explicitly because the façade declaration
+// order remains independent from ui's implementation enum.
 @(test)
 test_text_input_submit_mapping :: proc(t: ^testing.T) {
 	testing.expect_value(t, to_submit(.Default), ui.Text_Input_Submit.Enter)
 	testing.expect_value(t, to_submit(.Enter), ui.Text_Input_Submit.Enter)
 	testing.expect_value(t, to_submit(.Never), ui.Text_Input_Submit.Never)
-	// Modifier-gated submission is not implemented in ui; plain Enter must
-	// keep inserting a newline rather than wrongly submitting.
-	testing.expect_value(t, to_submit(.Ctrl_Enter), ui.Text_Input_Submit.Never)
-	testing.expect_value(t, to_submit(.Mod_Enter), ui.Text_Input_Submit.Never)
+	testing.expect_value(t, to_submit(.Ctrl_Enter), ui.Text_Input_Submit.Ctrl_Enter)
+	testing.expect_value(t, to_submit(.Mod_Enter), ui.Text_Input_Submit.Mod_Enter)
 }
 
 @(test)

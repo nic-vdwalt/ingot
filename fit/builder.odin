@@ -5,7 +5,7 @@ import "ingot:ui"
 Begin :: proc(builder: ^Builder) {
 	assert(builder != nil && builder.bound, "Fit.Begin: builder not bound")
 	assert(builder.root.open, "Fit.Begin: root not open")
-	assert(builder.customs_used >= 0 && builder.customs_used <= i32(len(builder.customs)))
+	assert(builder.customs_used >= 0 && builder.customs_used <= i32(custom_capacity(builder)))
 	assert(builder.generation < max(u64), "Fit.Begin: generation exhausted")
 	builder.customs_used = 0
 	builder.generation += 1
@@ -16,18 +16,39 @@ Set_Storage :: proc(builder: ^Builder, storage: Storage) {
 	assert(builder != nil && !builder.bound, "Fit.Set_Storage: builder bound")
 	assert(!builder.inner.prepared.open, "Fit.Set_Storage: description open")
 	ui.fit_builder_set_storage(&builder.inner, to_storage(storage))
+	builder.custom_storage = storage.customs
 }
 
 Reset_Storage :: proc(builder: ^Builder) {
 	assert(builder != nil && !builder.bound, "Fit.Reset_Storage: builder bound")
 	assert(!builder.inner.prepared.open, "Fit.Reset_Storage: description open")
 	ui.fit_builder_reset_storage(&builder.inner)
+	builder.custom_storage = nil
 }
 
 Storage_Capacity :: proc(builder: ^Builder) -> int {
 	assert(builder != nil, "Fit.Storage_Capacity: nil builder")
 	assert(!builder.inner.prepared.open || builder.bound, "Fit.Storage_Capacity: invalid state")
 	return ui.prepared_capacity(&builder.inner.prepared)
+}
+
+Custom_Capacity :: proc(builder: ^Builder) -> int {
+	assert(builder != nil, "Fit.Custom_Capacity: nil builder")
+	return custom_capacity(builder)
+}
+
+@(private = "file")
+custom_capacity :: proc(builder: ^Builder) -> int {
+	assert(builder != nil, "fit custom capacity: nil builder")
+	if builder.custom_storage != nil do return len(builder.custom_storage)
+	return len(builder.customs)
+}
+
+@(private = "file")
+custom_at :: proc(builder: ^Builder, index: int) -> ^Custom_Spec {
+	assert(builder != nil && index >= 0 && index < custom_capacity(builder))
+	if builder.custom_storage != nil do return &builder.custom_storage[index]
+	return &builder.customs[index]
 }
 
 @(private = "package")
@@ -396,16 +417,17 @@ custom_intrinsic :: proc(parent: Parent, spec: Custom_Spec, options: Custom_Opti
 custom_add :: proc(parent: Parent, spec: Custom_Spec, options: Custom_Options) {
 	builder := parent_select(parent)
 	assert(spec.measure != nil && spec.render != nil, "fit custom add: invalid callbacks")
-	assert(builder.customs_used < i32(len(builder.customs)), "fit custom add: capacity full")
-	index := builder.customs_used
-	builder.customs[index] = spec
+	assert(builder.customs_used < i32(custom_capacity(builder)), "fit custom add: capacity full")
+	index := int(builder.customs_used)
+	stored := custom_at(builder, index)
+	stored^ = spec
 	builder.customs_used += 1
 	ui.fit_builder_custom(
 		&builder.inner,
 		{
 			measure = custom_measure_bridge,
 			render = custom_render_bridge,
-			userdata = &builder.customs[index],
+			userdata = stored,
 			size = to_size(spec.size),
 		},
 		to_custom_options(options),

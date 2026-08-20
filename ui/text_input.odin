@@ -267,6 +267,8 @@ Text_Input_Autocomplete :: enum i32 {
 Text_Input_Submit :: enum u8 {
 	Enter,
 	Never,
+	Ctrl_Enter,
+	Mod_Enter,
 }
 
 // text_input_visible_lines reports how many lines of text a box of this pixel

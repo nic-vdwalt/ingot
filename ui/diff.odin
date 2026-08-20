@@ -3,6 +3,7 @@ package ui
 import "core:fmt"
 import "core:strconv"
 import "core:strings"
+import "core:unicode/utf8"
 
 DIFF_PARSE_MAX_ROWS :: 16_384
 DIFF_PARSE_MAX_BYTES :: 4 * 1024 * 1024
@@ -184,15 +185,26 @@ diff_draw_gutter :: proc(frame: ^Ui_Frame, x, y, width, cell_width: i32, number:
 	text(frame, value, x + width - cell_width - value_width, y, .Label, .Muted)
 }
 
+diff_rune_prefix :: proc(value: string, rune_count: int) -> string {
+	assert(rune_count >= 0, "diff_rune_prefix: negative count")
+	byte_end := 0
+	for count := 0; count < rune_count && byte_end < len(value); count += 1 {
+		_, size := utf8.decode_rune(value[byte_end:])
+		if size <= 0 do break
+		byte_end += size
+	}
+	return value[:byte_end]
+}
+
 diff_draw_cell :: proc(frame: ^Ui_Frame, x, y: i32, value: string, max_characters: int, ink: Ink) {
 	assert(frame != nil && frame.open, "diff_draw_cell: invalid frame")
 	assert(max_characters > 0, "diff_draw_cell: invalid character limit")
 	display := value
-	if len(display) > max_characters {
+	if utf8.rune_count_in_string(display) > max_characters {
 		if max_characters > 3 {
-			display = fmt.tprintf("%s...", display[:max_characters - 3])
+			display = fmt.tprintf("%s...", diff_rune_prefix(display, max_characters - 3))
 		} else {
-			display = display[:max_characters]
+			display = diff_rune_prefix(display, max_characters)
 		}
 	}
 	text(frame, display, x, y, .Label, ink)

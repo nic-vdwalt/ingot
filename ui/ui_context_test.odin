@@ -4,6 +4,27 @@ package ui
 import "core:testing"
 import "core:unicode/utf8"
 
+@(test)
+ui_frame_normalizes_hostile_input_lengths :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	input: Ui_Input
+	input.character_count = INPUT_CHAR_CAP + 9
+	input.clipboard_len = INPUT_CLIPBOARD_CAP + 9
+	input.preedit_len = INPUT_PREEDIT_CAP + 9
+	input.preedit_caret = INPUT_PREEDIT_CAP + 9
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect_value(t, input.character_count, INPUT_CHAR_CAP)
+	testing.expect_value(t, input.characters_dropped, 9)
+	testing.expect_value(t, input.clipboard_len, INPUT_CLIPBOARD_CAP)
+	testing.expect_value(t, input.preedit_len, INPUT_PREEDIT_CAP)
+	_, ok := input_character(&input, INPUT_CHAR_CAP)
+	testing.expect(t, !ok)
+	ui_frame_end(&frame)
+	ui_frame_destroy(&frame)
+}
 
 @(test)
 ui_frame_style_matches_individual_accessors :: proc(t: ^testing.T) {

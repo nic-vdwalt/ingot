@@ -33,9 +33,11 @@ insets :: proc(all: i32) -> Insets_I32 {
 rect_inset :: proc(rect: Rect_I32, value: Insets_I32) -> Rect_I32 {
 	assert(value.left >= 0 && value.top >= 0, "rect_inset: negative leading inset")
 	assert(value.right >= 0 && value.bottom >= 0, "rect_inset: negative trailing inset")
-	w := max(rect.w - value.left - value.right, 0)
-	h := max(rect.h - value.top - value.bottom, 0)
-	return {rect.x + value.left, rect.y + value.top, w, h}
+	width := max(i64(rect.w) - i64(value.left) - i64(value.right), i64(0))
+	height := max(i64(rect.h) - i64(value.top) - i64(value.bottom), i64(0))
+	x := clamp(i64(rect.x) + i64(value.left), i64(min(i32)), i64(max(i32)))
+	y := clamp(i64(rect.y) + i64(value.top), i64(min(i32)), i64(max(i32)))
+	return {i32(x), i32(y), i32(min(width, i64(max(i32)))), i32(min(height, i64(max(i32))))}
 }
 
 // Intrinsic_Size is an allocation-free content measurement. Overflow means
@@ -563,6 +565,9 @@ Layout_Frame :: struct {
 	weight_space: i32, // main-axis pixels being divided
 	weight_acc:   i32, // sum of weights consumed so far
 	weight_left:  i32, // declared children not yet consumed
+	weight_count: i32,
+	weight_index: i32,
+	weights:      [MAX_LAYOUT_WEIGHTS]i32,
 	// Flex sizing is resolved up front and consumed by flex_next in order.
 	flex_sizes:   [MAX_LAYOUT_FLEX]i32,
 	flex_count:   i32,
@@ -933,6 +938,9 @@ row_weights :: proc(l: ^Layout, weights: []i32) {
 	f.weight_space = i32(space)
 	f.weight_acc = 0
 	f.weight_left = i32(len(weights))
+	f.weight_count = i32(len(weights))
+	f.weight_index = 0
+	for weight, index in weights do f.weights[index] = weight
 }
 
 // next_weighted carves the next weighted child's share. The weight must match
@@ -944,6 +952,8 @@ next_weighted :: proc(l: ^Layout, weight: i32) -> Rect_I32 {
 	assert(weight > 0, "next_weighted: weight must be positive")
 	f := _top(l)
 	assert(f.weight_left > 0, "next_weighted: no weights declared (call row_weights)")
+	assert(f.weight_index >= 0 && f.weight_index < f.weight_count)
+	assert(weight == f.weights[f.weight_index], "next_weighted: weight differs from declaration")
 	// Cumulative division: share_i = floor(acc+w * S/T) - floor(acc * S/T)
 	// guarantees the shares sum exactly to weight_space.
 	before := i64(f.weight_acc) * i64(f.weight_space) / i64(f.weight_total)
@@ -951,10 +961,14 @@ next_weighted :: proc(l: ^Layout, weight: i32) -> Rect_I32 {
 	assert(after >= before && after - before <= i64(max(i32)), "next_weighted: invalid share")
 	f.weight_acc += weight
 	f.weight_left -= 1
+	f.weight_index += 1
 	if f.weight_left == 0 {
+		assert(f.weight_index == f.weight_count)
 		f.weight_total = 0
 		f.weight_space = 0
 		f.weight_acc = 0
+		f.weight_count = 0
+		f.weight_index = 0
 	}
 	return next(l, i32(after - before))
 }

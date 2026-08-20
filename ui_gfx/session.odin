@@ -36,7 +36,7 @@ session_init_context :: proc(
 	assert(gfx_context != nil, "session_init_context: nil graphics context")
 	assert(config.user_scale >= 0, "session_init_context: negative user scale")
 	ui.ui_runtime_init(&session.runtime)
-	adapter_init_context(&session.adapter, gfx_context)
+	adapter_init_context(&session.adapter, gfx_context, config.semantics_enabled)
 	ui.ui_runtime_apply_platform_dpi(&session.runtime, user_scale = config.user_scale)
 	if config.semantics_enabled do _ = ui.a11y_init(&session.runtime)
 	session.config = config
@@ -108,7 +108,6 @@ session_draw_finish :: proc(session: ^Session, graphics_frame: ^rl.Frame) {
 	session.adapter.graphics_open = false
 	rl.frame_end(graphics_frame)
 	session.graphics_open = false
-	free_all(context.temp_allocator)
 	assert(!session.frame_open && !session.graphics_open)
 	assert(!session.adapter.graphics_open && session.adapter.gfx_frame == nil)
 }
@@ -120,6 +119,7 @@ session_destroy :: proc(session: ^Session) {
 	assert(!session.graphics_open, "session_destroy: graphics frame open")
 	assert(!session.adapter.graphics_open, "session_destroy: adapter graphics open")
 	ui.ui_frame_destroy(&session.frame)
+	adapter_detach_runtime(&session.adapter, &session.runtime)
 	adapter_destroy(&session.adapter)
 	ui.ui_runtime_destroy(&session.runtime)
 	session^ = {}

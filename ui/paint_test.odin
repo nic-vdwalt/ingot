@@ -18,10 +18,11 @@ paint_telemetry_counts_successful_writes_and_rejected_command_text :: proc(t: ^t
 	}
 	list.count = PAINT_COMMAND_CAP
 	paint_push_text(list, {kind = .Text}, "lost")
+	testing.expect_value(t, list.text_len, len("abc"))
 	when UI_TELEMETRY_ENABLED {
 		testing.expect_value(t, list.command_append_count, u64(2))
-		testing.expect_value(t, list.text_append_count, u64(2))
-		testing.expect_value(t, list.text_bytes_copied, u64(7))
+		testing.expect_value(t, list.text_append_count, u64(1))
+		testing.expect_value(t, list.text_bytes_copied, u64(3))
 	}
 	paint_list_reset(list)
 	when UI_TELEMETRY_ENABLED {
@@ -116,8 +117,8 @@ paint_specialized_rejection_preserves_reservations_sink_and_text :: proc(t: ^tes
 	testing.expect_value(t, list.dropped_commands, 1)
 	retained = paint_push_text_fields(list, "sink", {9, 10}, {11, 12, 13, 14}, 2, 16)
 	testing.expect(t, !retained)
-	testing.expect_value(t, paint_text(list, streamed), "sink")
-	testing.expect_value(t, list.text_len, len("sink"))
+	testing.expect_value(t, streamed.text_length, len("sink"))
+	testing.expect_value(t, list.text_len, 0)
 	testing.expect_value(t, list.dropped_commands, 2)
 	paint_list_set_sink(list, nil, nil)
 	list.count = 1
@@ -202,6 +203,19 @@ paint_clip_disjoint_intersection_is_empty :: proc(t: ^testing.T) {
 	testing.expect_value(t, list.clip_stack[1], Rect{20, 30, 0, 0})
 	paint_clip_end(list)
 	paint_clip_end(list)
+}
+
+@(test)
+paint_clip_nested_negative_extent_is_empty_and_balanced :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	paint_clip_begin(list, {0, 0, 10, 10})
+	paint_clip_begin(list, {4, 5, -2, -3})
+	testing.expect_value(t, list.clip_stack[1], Rect{4, 5, 0, 0})
+	paint_clip_end(list)
+	paint_clip_end(list)
+	testing.expect_value(t, list.clip_count, 0)
+	testing.expect_value(t, list.count, 4)
 }
 
 @(test)
@@ -484,7 +498,7 @@ paint_sink_streams_text_after_command_recording_saturates :: proc(t: ^testing.T)
 	testing.expect(t, !retained)
 	testing.expect_value(t, streamed_text, "include")
 	testing.expect_value(t, list.count, PAINT_COMMAND_CAP)
-	testing.expect_value(t, list.text_len, len("include"))
+	testing.expect_value(t, list.text_len, 0)
 	testing.expect_value(t, list.dropped_commands, 1)
 }
 
