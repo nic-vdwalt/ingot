@@ -29,6 +29,11 @@ Ui_Runtime :: struct {
 	font_epoch:            u64,
 	pending_a11y:          A11y_Pending_Action,
 	semantics_enabled:     bool,
+	// focus_visible carries the focus-visible modality across frames: the
+	// keyboard-focus ring is drawn only while true. A pointer press clears it
+	// (a click leaves no lingering ring on the button it hit); Tab navigation
+	// sets it, so keyboard users keep a visible focus indicator.
+	focus_visible:         bool,
 	semantics_snapshot:    Sem_Frame,
 	scale_metrics_hook:    proc(scale: f32),
 	scale_invalidate_hook: proc(),
@@ -221,6 +226,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame_scratch_begin(&frame.scratch)
 	runtime.frame_generation += 1
 	frame.input = input if input != nil else &frame.input_default
+	ui_runtime_update_focus_modality(runtime, frame.input)
 	if frame.output != nil do ui_output_reset(frame.output)
 	a11y_expire_before_frame(runtime)
 	frame.runtime = runtime
@@ -245,6 +251,25 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	route_begin_frame(frame)
 	interact_frame_begin(frame)
 	sem_begin_frame(frame)
+}
+
+// ui_runtime_update_focus_modality tracks the focus-visible modality once per
+// frame from the raw input. A pointer press means "the user is aiming, not
+// tabbing", so the keyboard-focus ring is suppressed; Tab means keyboard
+// navigation, so it is restored. Every other frame leaves the modality as it
+// was, which is what lets a ring persist while the user keeps tabbing and stay
+// hidden while they keep clicking.
+@(private = "file")
+ui_runtime_update_focus_modality :: proc(runtime: ^Ui_Runtime, input: ^Ui_Input) {
+	assert(runtime != nil, "ui_runtime_update_focus_modality: nil runtime")
+	if input == nil do return
+	if input_mouse_pressed(input, .LEFT) ||
+	   input_mouse_pressed(input, .RIGHT) ||
+	   input_mouse_pressed(input, .MIDDLE) {
+		runtime.focus_visible = false
+	} else if input_key_pressed(input, .TAB) {
+		runtime.focus_visible = true
+	}
 }
 
 ui_frame_finalize :: proc(frame: ^Ui_Frame) {

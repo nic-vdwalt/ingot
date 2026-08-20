@@ -109,15 +109,24 @@ focus_opt_activated :: proc(frame: ^Ui_Frame, f: Focus_Opt) -> bool {
 draw_focus_ring :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
 	assert(frame != nil, "draw_focus_ring: nil frame")
 	if ui_frame_drop_degenerate(frame, w <= 0 || h <= 0) do return
+	// Keyboard focus-visible only: a pointer press clears the modality, so the
+	// button the user just clicked is not left wearing a ring.
+	if frame.runtime != nil && !frame.runtime.focus_visible do return
 	style := ui_frame_theme(frame)
 	if style.focus_ring.a == 0 do return
 	inset := ui_frame_sc(frame, 2)
 	r := Rectangle{f32(x - inset), f32(y - inset), f32(w + inset * 2), f32(h + inset * 2)}
+	// Round the ring with the same Radius.MD token the button fills use, offset
+	// by the inset so the ring stays concentric with the control's corners
+	// rather than following the old fixed BTN_ROUNDNESS ratio.
+	min_dim := min(r.width, r.height)
+	radius_px := radius_pixels(frame, .MD, min_dim) + f32(inset)
+	roundness := clamp((radius_px * 2) / min_dim, 0, 1) if min_dim > 0 else 0
 	draw_rectangle_rounded_lines_ex(
 		frame,
 		r,
-		BTN_ROUNDNESS,
-		BTN_SEGMENTS,
+		roundness,
+		radius_segments(radius_px),
 		ui_frame_scf(frame, 2.0),
 		style.focus_ring,
 	)
