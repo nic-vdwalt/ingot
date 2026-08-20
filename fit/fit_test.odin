@@ -24,6 +24,12 @@ Fit_Test_Control_State :: struct {
 	changed:  bool,
 }
 
+Fit_Test_Readme_State :: struct {
+	continue_clicked:     bool,
+	continued:            bool,
+	confirmation_visible: bool,
+}
+
 @(private = "file")
 fit_test_font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
 	assert(data != nil && size > 0, "fit test font: invalid argument")
@@ -69,6 +75,102 @@ fit_test_render :: proc(surface: ^Surface, rect: Rect, userdata: rawptr) -> bool
 	counts.render += 1
 	counts.rect = rect
 	return false
+}
+
+@(test)
+fit_root_grow_container_centers_children_in_viewport :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	ui.sem_enable(&runtime, true)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 960, 640})
+	Column(
+		&builder,
+		{
+			gap = .SM,
+			padding = .LG,
+			align = .Center,
+			justify = .Center,
+			size = {width = Grow(), height = Grow()},
+		},
+	)
+	Label(&builder, "Hello from Ingot")
+	Button(&builder, "continue", "Continue")
+	End(&builder)
+	size := Measure(&builder)
+	testing.expect_value(t, size, Size{960, 640, false})
+	Render_At(&builder, {0, 0, size.w, size.h})
+	semantics := ui.sem_frame(&frame)
+	testing.expect_value(t, semantics.count, 2)
+	label, button := semantics.nodes[0].rect, semantics.nodes[1].rect
+	testing.expect(t, abs((label.x * 2 + label.w) - 960) <= 1, "label not horizontally centered")
+	testing.expect(
+		t,
+		abs((button.x * 2 + button.w) - 960) <= 1,
+		"button not horizontally centered",
+	)
+	group_top, group_bottom := label.y, button.y + button.h
+	testing.expect(t, abs((group_top + group_bottom) - 640) <= 1, "group not vertically centered")
+	builder_close(&builder)
+}
+
+@(private = "file")
+fit_test_readme_draw :: proc(builder: ^Builder, userdata: rawptr) {
+	assert(builder != nil && userdata != nil, "fit readme test: invalid argument")
+	state := cast(^Fit_Test_Readme_State)userdata
+	if state.continue_clicked do state.continued = true
+	state.confirmation_visible = state.continued
+	Column(
+		builder,
+		{
+			gap = .SM,
+			padding = .LG,
+			align = .Center,
+			justify = .Center,
+			size = {width = Grow(), height = Grow()},
+		},
+	)
+	Label(builder, "Hello from Ingot")
+	Button(builder, "continue", "Continue", &state.continue_clicked)
+	if state.continued do Label(builder, "Continued")
+	End(builder)
+}
+
+@(test)
+fit_readme_button_activation_persists_on_next_build :: proc(t: ^testing.T) {
+	driver: Test_Driver
+	Test_Driver_Init(&driver)
+	defer Test_Driver_Destroy(&driver)
+	nodes: [STORAGE_NODE_DEFAULT + 64]Storage_Node
+	outputs: [STORAGE_NODE_DEFAULT + 64]^bool
+	Test_Driver_Set_Storage(&driver, {nodes = nodes[:], outputs = outputs[:]})
+	state: Fit_Test_Readme_State
+	base := Test_Input {
+		mouse_position = {480, 332},
+		screen_size    = {960, 640},
+		dpi_scale      = 1,
+	}
+	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_readme_draw, &state))
+	testing.expect(t, !state.continue_clicked && !state.continued)
+	pressed := base
+	pressed.mouse_pressed[0] = true
+	pressed.mouse_down[0] = true
+	testing.expect(t, Test_Driver_Frame(&driver, pressed, fit_test_readme_draw, &state))
+	testing.expect(t, !state.continue_clicked && !state.continued)
+	released := base
+	released.mouse_released[0] = true
+	testing.expect(t, Test_Driver_Frame(&driver, released, fit_test_readme_draw, &state))
+	testing.expect(t, state.continue_clicked && !state.continued)
+	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_readme_draw, &state))
+	testing.expect(t, state.continued && state.confirmation_visible)
 }
 
 @(test)
