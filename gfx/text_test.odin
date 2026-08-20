@@ -378,7 +378,7 @@ test_measure_metrics :: proc(t: ^testing.T) {
 		_flush_retired(g)
 		delete(g.resources.retire)
 		if renderer_ready do renderer_shutdown(&g.rend)
-		_submission_shutdown(&g.submissions)
+		testing.expect(t, _submission_shutdown(&g.submissions))
 		wg.QueueRelease(g.queue)
 		wg.DeviceRelease(g.device)
 		wg.AdapterRelease(g.adapter)

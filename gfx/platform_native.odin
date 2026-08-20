@@ -10,6 +10,7 @@
 package gfx
 
 import "core:c"
+import "core:fmt"
 import "core:time"
 import "vendor:glfw"
 import wg "vendor:wgpu"
@@ -102,6 +103,11 @@ platform_start_gpu :: proc(ctx: ^Context) {
 	)
 	// tigerstyle: allow-unbounded-loop -- adapter callback ends synchronous device setup
 	for !ares.done {wg.InstanceProcessEvents(ctx.instance)}
+	if ares.status != .Success || ares.adapter == nil {
+		fmt.eprintln("gfx: adapter request failed")
+		_close_window_context(ctx)
+		return
+	}
 	ctx.adapter = ares.adapter
 
 	dres: Device_Res
@@ -121,10 +127,20 @@ platform_start_gpu :: proc(ctx: ^Context) {
 	)
 	// tigerstyle: allow-unbounded-loop -- device callback ends synchronous device setup
 	for !dres.done {wg.InstanceProcessEvents(ctx.instance)}
+	if dres.status != .Success || dres.device == nil {
+		fmt.eprintln("gfx: device request failed")
+		_close_window_context(ctx)
+		return
+	}
 	ctx.device = dres.device
 	ctx.queue = wg.DeviceGetQueue(ctx.device)
+	if ctx.queue == nil {
+		fmt.eprintln("gfx: device returned no queue")
+		_close_window_context(ctx)
+		return
+	}
 
-	_gpu_finish(ctx)
+	_ = _gpu_finish(ctx)
 }
 
 // platform_process_events pumps the backend event loop while gfx busy-waits for
