@@ -38,27 +38,27 @@ fit_fuzz_text_measure :: proc(
 }
 
 @(private = "file")
-fit_fuzz_custom_measure :: proc(constraints: Constraints, userdata: rawptr) -> Size {
-	assert(userdata != nil, "fit fuzz measure: invalid argument")
+fit_fuzz_custom_measure :: proc(constraints: Constraints, ctx: rawptr) -> Size {
+	assert(ctx != nil, "fit fuzz measure: invalid argument")
 	assert(constraints.max_w >= 0 && constraints.max_h >= 0, "fit fuzz measure: invalid bounds")
-	counts := cast(^Fit_Fuzz_Counts)userdata
+	counts := cast(^Fit_Fuzz_Counts)ctx
 	counts.measure += 1
 	return {32, 18, false}
 }
 
 @(private = "file")
-fit_fuzz_custom_render :: proc(surface: ^Surface, rect: Rect, userdata: rawptr) -> bool {
-	assert(surface != nil && userdata != nil, "fit fuzz render: invalid argument")
+fit_fuzz_custom_render :: proc(surface: ^Surface, rect: Rect, ctx: rawptr) -> bool {
+	assert(surface != nil && ctx != nil, "fit fuzz render: invalid argument")
 	assert(rect.w >= 0 && rect.h >= 0, "fit fuzz render: invalid rect")
-	counts := cast(^Fit_Fuzz_Counts)userdata
+	counts := cast(^Fit_Fuzz_Counts)ctx
 	counts.render += 1
 	return false
 }
 
 @(private = "file")
-fit_fuzz_action :: proc(userdata: rawptr) {
-	assert(userdata != nil, "fit fuzz action: nil state")
-	counts := cast(^Fit_Fuzz_Counts)userdata
+fit_fuzz_action :: proc(ctx: rawptr) {
+	assert(ctx != nil, "fit fuzz action: nil state")
+	counts := cast(^Fit_Fuzz_Counts)ctx
 	counts.actions += 1
 }
 
@@ -151,7 +151,7 @@ fit_fuzz_leaf :: proc(
 			{
 				measure = fit_fuzz_custom_measure,
 				render = fit_fuzz_custom_render,
-				userdata = counts,
+				ctx = counts,
 			},
 			{track = fit_fuzz_track(p), activated = &activations[index]},
 		)

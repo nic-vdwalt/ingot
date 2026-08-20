@@ -63,9 +63,9 @@ Test_Driver_Frame :: proc(
 	driver: ^Test_Driver,
 	input: Test_Input,
 	draw: Draw_Proc,
-	userdata: rawptr = nil,
+	ctx: rawptr = nil,
 ) -> bool {
-	_, ok := Test_Driver_Frame_Timed(driver, input, draw, userdata)
+	_, ok := Test_Driver_Frame_Timed(driver, input, draw, ctx)
 	return ok
 }
 
@@ -73,7 +73,7 @@ Test_Driver_Frame_Timed :: proc(
 	driver: ^Test_Driver,
 	input: Test_Input,
 	draw: Draw_Proc,
-	userdata: rawptr = nil,
+	ctx: rawptr = nil,
 ) -> (
 	Frame_Timing,
 	bool,
@@ -93,7 +93,7 @@ Test_Driver_Frame_Timed :: proc(
 	ui.ui_frame_begin(impl.frame, &impl.runtime, &inner_input)
 	builder_open(&impl.builder, impl.frame, {0, 0, i32(size.x), i32(size.y)})
 	build_started := time.tick_now()
-	draw(&impl.builder, userdata)
+	draw(&impl.builder, ctx)
 	build_ns := time.duration_nanoseconds(time.tick_since(build_started))
 	assert(
 		impl.builder.inner.prepared.depth == 0,

@@ -265,15 +265,15 @@ Signal_Reset :: proc(signal: ^Signal) {
 }
 
 @(private = "package")
-action_plain :: proc(procedure: Action_Proc, userdata: rawptr = nil) -> Action {
+action_plain :: proc(procedure: Action_Proc, ctx: rawptr = nil) -> Action {
 	assert(procedure != nil, "fit.action: nil procedure")
-	return {procedure = procedure, userdata = userdata}
+	return {procedure = procedure, ctx = ctx}
 }
 
 @(private = "package")
-action_tagged :: proc(procedure: Tagged_Action_Proc, userdata: rawptr, tag: u64) -> Action {
+action_tagged :: proc(procedure: Tagged_Action_Proc, ctx: rawptr, tag: u64) -> Action {
 	assert(procedure != nil, "fit.action: nil tagged procedure")
-	return {tagged_procedure = procedure, userdata = userdata, tag = tag}
+	return {tagged_procedure = procedure, ctx = ctx, tag = tag}
 }
 
 action :: proc {
@@ -413,32 +413,32 @@ custom_add :: proc(parent: Parent, spec: Custom_Spec, options: Custom_Options) {
 	parent_clear(builder)
 }
 
-Canvas :: proc(builder: ^Builder, render: Render_Proc, userdata: rawptr = nil) {
+Canvas :: proc(builder: ^Builder, render: Render_Proc, ctx: rawptr = nil) {
 	assert(builder != nil && builder.bound, "Fit.Canvas: builder not bound")
 	assert(render != nil, "Fit.Canvas: nil render callback")
 	assert(builder.inner.prepared.count == 0, "Fit.Canvas: root already declared")
 	root := Column(builder)
 	Custom(
 		root,
-		{measure = canvas_measure, render = render, userdata = userdata},
+		{measure = canvas_measure, render = render, ctx = ctx},
 		{size = {width = Grow(), height = Grow()}},
 	)
 }
 
 @(private = "file")
-canvas_measure :: proc(constraints: Constraints, userdata: rawptr) -> Size {
-	_ = userdata
+canvas_measure :: proc(constraints: Constraints, ctx: rawptr) -> Size {
+	_ = ctx
 	return {w = max(constraints.max_w, 1), h = max(constraints.max_h, 1)}
 }
 
 @(private = "file")
-custom_intrinsic_measure :: proc(constraints: Constraints, userdata: rawptr) -> Size {
-	assert(userdata != nil, "fit custom intrinsic measure: nil userdata")
+custom_intrinsic_measure :: proc(constraints: Constraints, ctx: rawptr) -> Size {
+	assert(ctx != nil, "fit custom intrinsic measure: nil context")
 	assert(
 		constraints.max_w >= 0 && constraints.max_h >= 0,
 		"fit custom intrinsic measure: invalid bounds",
 	)
-	spec := cast(^Custom_Spec)userdata
+	spec := cast(^Custom_Spec)ctx
 	return spec.intrinsic
 }
 
@@ -466,9 +466,9 @@ custom_measure_bridge :: proc(
 	assert(root != nil && userdata != nil, "Fit.Custom: invalid measure bridge")
 	spec := cast(^Custom_Spec)userdata
 	assert(spec.measure != nil, "Fit.Custom: nil measure callback")
-	measure_userdata := spec.userdata
-	if spec.measure == custom_intrinsic_measure do measure_userdata = spec
-	return to_size_value(spec.measure(from_constraints(constraints), measure_userdata))
+	measure_ctx := spec.ctx
+	if spec.measure == custom_intrinsic_measure do measure_ctx = spec
+	return to_size_value(spec.measure(from_constraints(constraints), measure_ctx))
 }
 
 @(private = "file")
@@ -479,7 +479,7 @@ custom_render_bridge :: proc(root: ^ui.Ui, rect: ui.Rect_I32, userdata: rawptr) 
 	surface := Surface {
 		inner = root,
 	}
-	return spec.render(&surface, from_rect(rect), spec.userdata)
+	return spec.render(&surface, from_rect(rect), spec.ctx)
 }
 
 @(private = "package")

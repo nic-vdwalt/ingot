@@ -23,13 +23,13 @@ Signal :: struct {
 	pending: bool,
 }
 
-Action_Proc :: #type proc(userdata: rawptr)
-Tagged_Action_Proc :: #type proc(userdata: rawptr, tag: u64)
+Action_Proc :: #type proc(ctx: rawptr)
+Tagged_Action_Proc :: #type proc(ctx: rawptr, tag: u64)
 
 Action :: struct {
 	procedure:        Action_Proc,
 	tagged_procedure: Tagged_Action_Proc,
-	userdata:         rawptr,
+	ctx:          rawptr,
 	tag:              u64,
 }
 
@@ -56,14 +56,14 @@ App :: struct {
 	builder:  Builder,
 	draw:     Draw_Proc,
 	shutdown: Shutdown_Proc,
-	userdata: rawptr,
+	ctx:  rawptr,
 }
 
 Session :: struct {
-	inner:    ui_gfx.Session,
-	builder:  Builder,
-	draw:     Session_Draw_Proc,
-	userdata: rawptr,
+	inner:   ui_gfx.Session,
+	builder: Builder,
+	draw:    Session_Draw_Proc,
+	ctx: rawptr,
 }
 
 State :: enum u8 {
@@ -238,12 +238,12 @@ Config :: struct {
 	session:       Session_Config,
 }
 
-Draw_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
-Session_Draw_Proc :: #type proc(builder: ^Builder, userdata: rawptr)
-Shutdown_Proc :: #type proc(app: ^App, userdata: rawptr)
-Region_Build_Proc :: #type proc(region: ^Region, userdata: rawptr)
-Layer_Build_Proc :: #type proc(surface: ^Surface, userdata: rawptr)
-Pane_Build_Proc :: #type proc(surface: ^Surface, content_y: i32, userdata: rawptr) -> i32
+Draw_Proc :: #type proc(builder: ^Builder, ctx: rawptr)
+Session_Draw_Proc :: #type proc(builder: ^Builder, ctx: rawptr)
+Shutdown_Proc :: #type proc(app: ^App, ctx: rawptr)
+Region_Build_Proc :: #type proc(region: ^Region, ctx: rawptr)
+Layer_Build_Proc :: #type proc(surface: ^Surface, ctx: rawptr)
+Pane_Build_Proc :: #type proc(surface: ^Surface, content_y: i32, ctx: rawptr) -> i32
 
 Callbacks :: struct {
 	draw:     Draw_Proc,
@@ -678,13 +678,13 @@ Visible_Range :: struct {
 	end:   i32,
 }
 
-Measure_Proc :: #type proc(constraints: Constraints, userdata: rawptr) -> Size
-Render_Proc :: #type proc(surface: ^Surface, rect: Rect, userdata: rawptr) -> bool
+Measure_Proc :: #type proc(constraints: Constraints, ctx: rawptr) -> Size
+Render_Proc :: #type proc(surface: ^Surface, rect: Rect, ctx: rawptr) -> bool
 
 Custom_Spec :: struct {
 	measure:   Measure_Proc,
 	render:    Render_Proc,
-	userdata:  rawptr,
+	ctx:   rawptr,
 	size:      Size_Options,
 	intrinsic: Size,
 }

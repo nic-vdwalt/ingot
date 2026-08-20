@@ -13,14 +13,14 @@ Session_Init :: proc(session: ^Session, config: Session_Config = {}) {
 	)
 }
 
-Session_Draw :: proc(session: ^Session, draw: Session_Draw_Proc, userdata: rawptr = nil) -> bool {
+Session_Draw :: proc(session: ^Session, draw: Session_Draw_Proc, ctx: rawptr = nil) -> bool {
 	assert(session != nil && session.inner.initialized, "Fit.Session_Draw: invalid session")
 	assert(draw != nil && session.draw == nil, "Fit.Session_Draw: invalid callback")
 	session.draw = draw
-	session.userdata = userdata
+	session.ctx = ctx
 	defer {
 		session.draw = nil
-		session.userdata = nil
+		session.ctx = nil
 	}
 	return ui_gfx.session_draw(&session.inner, session_draw_bridge, session)
 }
@@ -55,7 +55,7 @@ session_draw_bridge :: proc(inner: ^ui_gfx.Session, frame: ^ui.Ui_Frame, userdat
 	size := ui_gfx.session_input(inner).screen_size
 	rect := Rect{0, 0, i32(size.x), i32(size.y)}
 	builder_open(&session.builder, frame, rect)
-	session.draw(&session.builder, session.userdata)
+	session.draw(&session.builder, session.ctx)
 	assert(session.builder.inner.prepared.depth == 0, "fit session: unbalanced builder")
 	if !session.builder.inner.prepared.rendered do _ = Render(&session.builder)
 	builder_close(&session.builder)
