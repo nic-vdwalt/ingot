@@ -45,7 +45,8 @@ git -C libs/ingot checkout 0.1.7
 odin build src -collection:ingot=libs/ingot
 ```
 
-Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION).
+Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION). Prepared Fit uses explicit
+parent values, so no `defer fit.End(...)` is needed.
 
 ```odin
 package main
@@ -54,22 +55,23 @@ import "core:fmt"
 import fit "ingot:fit"
 
 app: fit.App
-click_count: u64
+button_clicks: u64
 
 main :: proc() {
 	_ = fit.Run(&app, {width = 960, height = 640, title = "Ingot app"}, Draw)
 }
 
-Count_Click :: proc(userdata: rawptr) {
+Continue :: proc(userdata: rawptr) {
 	_ = userdata
-	click_count += 1
+	button_clicks += 1
 }
 
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
+	_ = userdata
 	root := fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Hello from Ingot")
-	fit.Label(root, fmt.tprintf("Count: %d", click_count))
-	fit.Button(root, "count", "Count clicks", fit.On(Count_Click))
+	fit.Label(root, fmt.tprintf("Button clicks: %d", button_clicks))
+	fit.Button(root, "continue", "Continue", fit.On(Continue))
 }
 ```
 
