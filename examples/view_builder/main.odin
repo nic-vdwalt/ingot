@@ -15,12 +15,10 @@ State :: struct {
 	doc:            view.View_Doc,
 	selected:       i32,
 	status:         string,
-	// Written by fit during Render (after draw returns); consumed and
-	// cleared at the start of the next build.
-	save_clicked:   bool,
-	load_clicked:   bool,
-	add_clicked:    bool,
-	delete_clicked: bool,
+	save_clicked:   fit.Signal,
+	load_clicked:   fit.Signal,
+	add_clicked:    fit.Signal,
+	delete_clicked: fit.Signal,
 }
 
 app: fit.App
@@ -50,22 +48,6 @@ main :: proc() {
 draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	data := cast(^State)userdata
 	when SMOKE do smoke_step(data)
-	if data.save_clicked {
-		data.save_clicked = false
-		save(data)
-	}
-	if data.load_clicked {
-		data.load_clicked = false
-		load(data)
-	}
-	if data.add_clicked {
-		data.add_clicked = false
-		add_label(data)
-	}
-	if data.delete_clicked {
-		data.delete_clicked = false
-		delete_last(data)
-	}
 	fit.Column(builder, {gap = .SM, padding = .LG})
 	fit.Label(builder, "Ingot view builder", {role = .Title})
 	fit.Label(
@@ -74,10 +56,10 @@ draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 		{ink = .Secondary},
 	)
 	fit.Row(builder, {gap = .SM})
-	fit.Button(builder, "save", "Save", &data.save_clicked)
-	fit.Button(builder, "load", "Load", &data.load_clicked)
-	fit.Button(builder, "add", "Add label", &data.add_clicked)
-	fit.Button(builder, "delete", "Delete last", &data.delete_clicked)
+	if fit.Button(builder, "save", "Save", &data.save_clicked) do save(data)
+	if fit.Button(builder, "load", "Load", &data.load_clicked) do load(data)
+	if fit.Button(builder, "add", "Add label", &data.add_clicked) do add_label(data)
+	if fit.Button(builder, "delete", "Delete last", &data.delete_clicked) do delete_last(data)
 	fit.End(builder)
 	fit.Label(builder, fmt.tprintf("%d nodes", data.doc.count), {role = .Label})
 	if data.status != "" do fit.Label(builder, data.status, {ink = .Secondary})
