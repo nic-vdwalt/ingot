@@ -175,7 +175,16 @@ main :: proc() {
 
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	root_container: {
-		fit.Column(builder, {gap = .SM, padding = .LG, align = .Center, justify = .Center})
+		fit.Column(
+			builder,
+			{
+				gap = .SM,
+				padding = .LG,
+				align = .Center,
+				justify = .Center,
+				size = {width = fit.Grow(), height = fit.Grow()},
+			},
+		)
 		defer fit.End(builder)
 		fit.Label(builder, "Hello from Ingot")
 		fit.Button(builder, "continue", "Continue", &continued)
