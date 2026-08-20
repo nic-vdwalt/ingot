@@ -86,12 +86,9 @@ Map_State :: struct {
 	playing:        bool,
 	progress:       f32,
 	hold_seconds:   f32,
-	// Button activations are written by fit during Render, after map_build
-	// has returned, so their destinations must outlive the build: they live
-	// here and are consumed (then cleared) at the start of the next build.
-	theme_clicked:  bool,
-	play_clicked:   bool,
-	reset_clicked:  bool,
+	theme_clicked:  fit.Signal,
+	play_clicked:   fit.Signal,
+	reset_clicked:  fit.Signal,
 	stage_clicked:  [STAGE_COUNT]bool,
 }
 
@@ -279,16 +276,19 @@ main :: proc() {
 
 map_build :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	_ = userdata
-	if map_state.theme_clicked {
-		map_state.theme_clicked = false
-		map_state.dark = !map_state.dark
-		fit.Set_Theme(&app, fit.Theme_Dark() if map_state.dark else fit.Theme_Light())
-	}
 	fit.Column(builder, {gap = .SM, padding = .LG})
 	defer fit.End(builder)
 	fit.Row(builder, {gap = .SM, align = .Center})
 	fit.Label(builder, "INGOT API MAP", {role = .Title, track = fit.Grow()})
-	fit.Button(builder, "theme", "Light" if map_state.dark else "Dark", &map_state.theme_clicked)
+	if fit.Button(
+		builder,
+		"theme",
+		"Light" if map_state.dark else "Dark",
+		&map_state.theme_clicked,
+	) {
+		map_state.dark = !map_state.dark
+		fit.Set_Theme(&app, fit.Theme_Dark() if map_state.dark else fit.Theme_Light())
+	}
 	fit.End(builder)
 	map_stage_controls(builder)
 	map_playback_controls(builder)
@@ -328,28 +328,24 @@ map_stage_controls :: proc(builder: ^fit.Builder) {
 map_playback_controls :: proc(builder: ^fit.Builder) {
 	assert(builder != nil, "api map playback: nil builder")
 	assert(map_state.target_stage >= 0 && map_state.target_stage <= STAGE_COUNT)
-	if map_state.play_clicked {
-		map_state.play_clicked = false
+	fit.Flow(builder, {gap_x = .XS, gap_y = .XS})
+	defer fit.End(builder)
+	if fit.Button(
+		builder,
+		"play",
+		"Pause" if map_state.playing else "Play path",
+		&map_state.play_clicked,
+	) {
 		map_state.playing = !map_state.playing
 		if map_state.playing && map_state.target_stage == 0 do map_select_stage(1)
 	}
-	if map_state.reset_clicked {
-		map_state.reset_clicked = false
+	if fit.Button(builder, "reset", "Reset", &map_state.reset_clicked) {
 		map_state.playing = false
 		map_state.selected_stage = 0
 		map_state.target_stage = 0
 		map_state.progress = 1
 		map_state.hold_seconds = 0
 	}
-	fit.Flow(builder, {gap_x = .XS, gap_y = .XS})
-	defer fit.End(builder)
-	fit.Button(
-		builder,
-		"play",
-		"Pause" if map_state.playing else "Play path",
-		&map_state.play_clicked,
-	)
-	fit.Button(builder, "reset", "Reset", &map_state.reset_clicked)
 	fit.Checkbox(builder, "motion", "Reduced motion", &map_state.reduced_motion)
 }
 
