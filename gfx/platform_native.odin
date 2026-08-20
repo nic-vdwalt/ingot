@@ -36,6 +36,16 @@ _context_window :: proc(ctx: ^Context) -> glfw.WindowHandle {
 // --- window / surface / lifecycle ------------------------------------------
 
 @(private)
+_window_wants_initial_focus :: proc(flags: ConfigFlags) -> bool {
+	return .WINDOW_UNFOCUSED not_in flags
+}
+
+@(private)
+_window_should_activate :: proc(flags: ConfigFlags) -> bool {
+	return _window_wants_initial_focus(flags) && .WINDOW_HIDDEN not_in flags
+}
+
+@(private)
 platform_create_window :: proc(
 	ctx: ^Context,
 	width, height: i32,
@@ -48,6 +58,9 @@ platform_create_window :: proc(
 	glfw.WindowHint(glfw.RESIZABLE, .WINDOW_RESIZABLE in flags ? 1 : 0)
 	glfw.WindowHint(glfw.TRANSPARENT_FRAMEBUFFER, .WINDOW_TRANSPARENT in flags ? 1 : 0)
 	glfw.WindowHint(glfw.DECORATED, .WINDOW_UNDECORATED in flags ? 0 : 1)
+	focused := _window_wants_initial_focus(flags)
+	glfw.WindowHint(glfw.FOCUSED, focused ? 1 : 0)
+	glfw.WindowHint(glfw.FOCUS_ON_SHOW, focused ? 1 : 0)
 	// WINDOW_HIDDEN defers the first show so a caller can attach platform state
 	// that must exist before the window is visible. Windows' AccessKit
 	// subclassing adapter is the motivating case: it must be installed before
@@ -61,6 +74,10 @@ platform_create_window :: proc(
 	}
 	ctx.win = Window_Handle(win)
 	glfw.SetWindowUserPointer(win, ctx)
+	if _window_should_activate(flags) {
+		_platform_activate_application()
+		glfw.FocusWindow(win)
+	}
 	glfw_live_windows += 1
 	return true
 }

@@ -10,6 +10,27 @@ package gfx
 import "core:testing"
 
 @(test)
+test_window_initial_focus_policy :: proc(t: ^testing.T) {
+	testing.expect(t, _window_wants_initial_focus({}), "default window requests focus")
+	testing.expect(t, _window_should_activate({}), "default visible window activates")
+	testing.expect(
+		t,
+		!_window_wants_initial_focus({.WINDOW_UNFOCUSED}),
+		"unfocused window does not request focus",
+	)
+	testing.expect(
+		t,
+		!_window_should_activate({.WINDOW_UNFOCUSED}),
+		"unfocused window does not activate",
+	)
+	testing.expect(
+		t,
+		!_window_should_activate({.WINDOW_HIDDEN}),
+		"hidden window does not activate",
+	)
+}
+
+@(test)
 test_pointer_inside_window :: proc(t: ^testing.T) {
 	testing.expect(t, _pointer_inside_window(0, 0, 800, 600), "top-left corner is inside")
 	testing.expect(t, _pointer_inside_window(400, 300, 800, 600), "centre is inside")

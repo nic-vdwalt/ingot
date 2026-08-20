@@ -18,10 +18,10 @@ Init_Context :: proc(
 ) -> bool {
 	assert(app != nil, "Fit.Init_Context: nil app")
 	assert(callbacks.draw != nil, "Fit.Init_Context: nil draw callback")
-	assert(app.draw == nil, "Fit.Init_Context: app already initialized")
-	app.draw = callbacks.draw
-	app.shutdown = callbacks.shutdown
-	app.userdata = userdata
+	assert(app.inner.state == .Empty, "Fit.Init_Context: app already initialized")
+	assert(app.draw == nil, "Fit.Init_Context: draw callback already bound")
+	assert(app.shutdown == nil, "Fit.Init_Context: shutdown callback already bound")
+	assert(app.userdata == nil, "Fit.Init_Context: userdata already bound")
 	initialized := false
 	if gfx_context == nil {
 		initialized = ui_gfx.app_init(
@@ -39,14 +39,18 @@ Init_Context :: proc(
 			app,
 		)
 	}
-	if initialized {
-		ui.ui_runtime_set_scale_hooks(
-			ui_gfx.app_ui_runtime(&app.inner),
-			config.session.scale_metrics,
-			config.session.scale_invalidate,
-		)
-	}
-	return initialized
+	if !initialized do return false
+	app.draw = callbacks.draw
+	app.shutdown = callbacks.shutdown
+	app.userdata = userdata
+	ui.ui_runtime_set_scale_hooks(
+		ui_gfx.app_ui_runtime(&app.inner),
+		config.session.scale_metrics,
+		config.session.scale_invalidate,
+	)
+	assert(app.inner.state == .Ready, "Fit.Init_Context: invalid initialized state")
+	assert(app.draw != nil, "Fit.Init_Context: draw callback not bound")
+	return true
 }
 
 Start :: proc(app: ^App) -> bool {
@@ -72,14 +76,20 @@ Destroy :: proc(app: ^App) {
 Run :: proc(app: ^App, config: Config, draw: Draw_Proc, userdata: rawptr = nil) -> bool {
 	assert(app != nil, "Fit.Run: nil app")
 	assert(draw != nil, "Fit.Run: nil draw callback")
+	assert(app.inner.state == .Empty, "Fit.Run: app already initialized")
+	assert(app.draw == nil, "Fit.Run: draw callback already bound")
+	assert(app.shutdown == nil, "Fit.Run: shutdown callback already bound")
+	assert(app.userdata == nil, "Fit.Run: userdata already bound")
 	app.draw = draw
 	app.userdata = userdata
-	return ui_gfx.app_run(
+	ok := ui_gfx.app_run(
 		&app.inner,
 		to_app_config(config),
 		{ui = app_draw, shutdown = app_shutdown},
 		app,
 	)
+	if app.inner.state == .Empty do app_callbacks_reset(app)
+	return ok
 }
 
 Set_Theme :: proc(app: ^App, theme: Theme) {
@@ -154,12 +164,19 @@ app_draw :: proc(inner: ^ui_gfx.App, root: ^ui.Ui, userdata: rawptr) {
 }
 
 @(private = "file")
+app_callbacks_reset :: proc(app: ^App) {
+	assert(app != nil, "fit app: nil callback reset")
+	assert(!app.builder.bound, "fit app: builder bound during callback reset")
+	app.draw = nil
+	app.shutdown = nil
+	app.userdata = nil
+}
+
+@(private = "file")
 app_shutdown :: proc(inner: ^ui_gfx.App, userdata: rawptr) {
 	assert(inner != nil && userdata != nil, "fit app: invalid shutdown")
 	app := cast(^App)userdata
 	assert(!app.builder.bound, "fit app: builder still bound")
 	if app.shutdown != nil do app.shutdown(app, app.userdata)
-	app.draw = nil
-	app.shutdown = nil
-	app.userdata = nil
+	app_callbacks_reset(app)
 }
