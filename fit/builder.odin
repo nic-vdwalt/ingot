@@ -38,6 +38,19 @@ Column :: proc(builder: ^Builder, options: Container_Options = {}) {
 	ui.fit_builder_column(&builder.inner, to_container_options(options))
 }
 
+Center :: proc(builder: ^Builder, options: Container_Options = {}) {
+	assert(builder != nil && builder.bound, "Fit.Center: builder not bound")
+	assert(builder.inner.prepared.depth == 0, "Fit.Center: root already declared")
+	resolved := options
+	resolved.align = .Center
+	resolved.justify = .Center
+	resolved.size = {
+		width  = Grow(),
+		height = Grow(),
+	}
+	Column(builder, resolved)
+}
+
 Flow :: proc(builder: ^Builder, options: Flow_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Flow: builder not bound")
 	ui.fit_builder_flow(&builder.inner, to_flow_options(options))
@@ -123,6 +136,23 @@ Label :: proc(builder: ^Builder, text: string, options: Label_Options = {}) {
 	ui.fit_builder_label(&builder.inner, text, to_label_options(options))
 }
 
+Signal_Peek :: proc(signal: ^Signal) -> bool {
+	assert(signal != nil, "Fit.Signal_Peek: nil signal")
+	return signal.pending
+}
+
+Signal_Take :: proc(signal: ^Signal) -> bool {
+	assert(signal != nil, "Fit.Signal_Take: nil signal")
+	pending := signal.pending
+	signal.pending = false
+	return pending
+}
+
+Signal_Reset :: proc(signal: ^Signal) {
+	assert(signal != nil, "Fit.Signal_Reset: nil signal")
+	signal.pending = false
+}
+
 @(private = "package")
 button_string :: proc(builder: ^Builder, key, label: string, options: Button_Options = {}) {
 	assert(builder != nil && builder.bound, "Fit.Button: builder not bound")
@@ -164,13 +194,45 @@ button_id_active :: proc(builder: ^Builder, widget: Widget_Id, label: string, ac
 	button_id(builder, widget, label, {activated = activated})
 }
 
+@(private = "package")
+button_string_signal :: proc(builder: ^Builder, key, label: string, signal: ^Signal) -> bool {
+	assert(signal != nil, "Fit.Button: nil signal")
+	activated := Signal_Take(signal)
+	button_string(builder, key, label, {activated = &signal.pending})
+	return activated
+}
+
+@(private = "package")
+button_u64_signal :: proc(builder: ^Builder, key: u64, label: string, signal: ^Signal) -> bool {
+	assert(signal != nil, "Fit.Button: nil signal")
+	activated := Signal_Take(signal)
+	button_u64(builder, key, label, {activated = &signal.pending})
+	return activated
+}
+
+@(private = "package")
+button_id_signal :: proc(
+	builder: ^Builder,
+	widget: Widget_Id,
+	label: string,
+	signal: ^Signal,
+) -> bool {
+	assert(signal != nil, "Fit.Button: nil signal")
+	activated := Signal_Take(signal)
+	button_id(builder, widget, label, {activated = &signal.pending})
+	return activated
+}
+
 Button :: proc {
 	button_string,
 	button_string_active,
+	button_string_signal,
 	button_u64,
 	button_u64_active,
+	button_u64_signal,
 	button_id,
 	button_id_active,
+	button_id_signal,
 }
 
 Custom :: proc(builder: ^Builder, spec: Custom_Spec, options: Custom_Options = {}) {

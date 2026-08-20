@@ -185,6 +185,11 @@ same description is synchronously consumed. Emission derives only current-frame
 geometry; interaction, focus, semantics, and paint execute exactly once during
 render. All paths use named fixed bounds and iterative layout.
 
+Caller-owned `fit.Signal` values bridge render activation into the next build.
+The signal Button overload consumes the prior render's value before declaring
+and arming the current button, so it supports ordinary `if` control flow without
+a retained result map, a second build, or same-frame interaction claims.
+
 Reusing a builder resets logical counts and every previously used output slot;
 unused selected capacity is not scanned or retained as active state. Externally
 backed state must not be copied or rebound while active. Flow, Grid, Scroll,

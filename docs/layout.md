@@ -6,6 +6,10 @@ put each container and its children in a named lexical block with an immediate
 `defer fit.End(builder)`. The defer closes the container on every block exit and
 makes nesting visible in source.
 
+`Center` opens a root-only Column that grows to the viewport and centers its
+children on both axes. Caller-selected spacing, padding, and effects remain in
+force. Close it with `End` like every other manual container.
+
 `Row_With`, `Column_With`, `Flow_With`, `Grid_With`, `Attachment_With`, and
 `Scroll_With`, `Section_With`, and `Card_With` open one container, invoke one
 caller procedure immediately, verify its nested containers are balanced, and
@@ -16,22 +20,27 @@ correspond to one lexical child block.
 ```odin
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	root_container: {
-		fit.Column(builder, {gap = .SM, padding = .LG})
+		fit.Center(builder, {gap = .SM, padding = .LG})
 		defer fit.End(builder)
 		fit.Label(builder, "Settings", {role = .Title})
 		actions_container: {
 			fit.Row(builder, {gap = .SM, align = .Center})
 			defer fit.End(builder)
 			fit.Label(builder, "Actions", {track = fit.Grow()})
-			fit.Button(builder, "save", "Save", &saved)
+			if fit.Button(builder, "save", "Save", &save_signal) do save()
 		}
 	}
 }
 ```
 
-Activation destinations (`&saved`) are written during `Render`, after the draw
-callback returns — they must be globals or app-state fields, consumed at the
-start of the next build, never build-proc locals.
+`Signal` is zero-value caller-owned activation state. Render writes activation
+after the draw callback returns. A signal Button overload consumes and returns
+that value once when the same button is declared in the next build, then arms
+the signal for the current render. `Signal_Peek`, `Signal_Take`, and
+`Signal_Reset` support conditional controls and explicit lifecycle handling.
+Signals must outlive render and are never build-proc locals. If a signal control
+is absent from a build, use `Signal_Take` or `Signal_Reset` to consume or discard
+its pending event.
 
 When the container itself is selected dynamically, close the selected container
 directly:
@@ -48,6 +57,7 @@ fit.End(builder)
 
 ## Containers
 
+- `Center` opens a full-viewport centered root Column.
 - `Column` lays children on the vertical axis.
 - `Row` lays children on the horizontal axis.
 - `Flow` wraps measured children left to right.
@@ -102,13 +112,16 @@ aspect ratio. Wrapped labels derive height after width assignment.
 `Label` emits semantic text. `Button`, `Checkbox`, `Radio`, `Slider`, and
 `Text_Input` accept stable string, `u64`, or explicit widget keys. `Progress`,
 `Separator`, `Spacer`, and bounded shared-track table cells are native leaves.
-Controls keep values in caller-owned state and can publish activation or change
-into caller-owned `^bool` output. Several leaves may share one output; results
-are OR-combined after resetting the output for the current render.
+Controls keep values in caller-owned state and can publish Button activation
+through caller-owned `Signal`. The legacy `^bool` output and options fields
+remain available for compatibility and advanced fan-in; several leaves may
+share one raw output and results are OR-combined during render. If several
+buttons share one Signal, the first declaration in the next build consumes the
+aggregate activation.
 
 `Custom` accepts bounded measure and render callbacks. Borrowed strings,
-userdata, callbacks, state, and output pointers must remain valid until the
-builder is rendered.
+userdata, callbacks, state, signals, and output pointers must remain valid until
+the builder is rendered.
 
 `Canvas` remains the complete-root convenience for full-parent explicit
 geometry. `Canvas_Leaf` places the same borrowed Surface callback in a measured

@@ -167,7 +167,7 @@ package main
 import fit "ingot:fit"
 
 app: fit.App
-continue_clicked: bool
+continue_clicked: fit.Signal
 continued: bool
 
 main :: proc() {
@@ -175,33 +175,24 @@ main :: proc() {
 }
 
 Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
-	if continue_clicked do continued = true
 	root_container: {
-		fit.Column(
-			builder,
-			{
-				gap = .SM,
-				padding = .LG,
-				align = .Center,
-				justify = .Center,
-				size = {width = fit.Grow(), height = fit.Grow()},
-			},
-		)
+		fit.Center(builder, {gap = .SM, padding = .LG})
 		defer fit.End(builder)
 		fit.Label(builder, "Hello from Ingot")
-		fit.Button(builder, "continue", "Continue", &continue_clicked)
+		if fit.Button(builder, "continue", "Continue", &continue_clicked) {
+			continued = true
+		}
 		if continued do fit.Label(builder, "Continued")
 	}
 }
 ```
 
-Fit labels take semantic roles and ink tokens, containers use bounded tracks and
-spacing tokens, and interactive leaves take stable string, integer, or explicit
-widget keys. Checkbox, radio, and slider values remain caller-owned. Activation
-destinations (`&continue_clicked`) are written during `Render`, after the draw
-callback's build code has run — they must be globals or app-state fields,
-consumed at the start of the next build, never build-proc locals. Static
-containers use a lexical block with an immediate `defer fit.End(builder)`;
+`fit.Center` opens a full-window centered root column. A caller-owned `fit.Signal`
+receives activation during `Render`; the signal Button overload consumes that
+activation when the button is declared in the next build and returns it once.
+Signals must therefore be globals or app-state fields, never build-proc locals.
+Checkbox, radio, and slider values remain caller-owned. Static containers use a
+lexical block with an immediate `defer fit.End(builder)`;
 dynamic builders may close containers directly. Optional `*_With` helpers invoke
 component procedures immediately and auto-balance their own container. See
 [application shell](docs/application-shell.md) and
