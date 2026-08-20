@@ -234,9 +234,11 @@ paint_clip_intersection :: proc(a, b: Rect) -> Rect {
 	assert(b.width >= 0 && b.height >= 0, "paint_clip_intersection: invalid second rect")
 	x0 := max(a.x, b.x)
 	y0 := max(a.y, b.y)
-	x1 := min(a.x + a.width, b.x + b.width)
-	y1 := min(a.y + a.height, b.y + b.height)
-	return {x0, y0, max(f32(0), x1 - x0), max(f32(0), y1 - y0)}
+	x1 := min(f64(a.x) + f64(a.width), f64(b.x) + f64(b.width))
+	y1 := min(f64(a.y) + f64(a.height), f64(b.y) + f64(b.height))
+	width := f32(max(f64(0), x1 - f64(x0)))
+	height := f32(max(f64(0), y1 - f64(y0)))
+	return {x0, y0, width, height}
 }
 
 // The clip stack is maintained even when the command buffer is full, because a
@@ -251,7 +253,7 @@ paint_clip_begin :: proc(list: ^Paint_List, rect: Rect, loc := #caller_location)
 	clamped := Rect{rect.x, rect.y, max(f32(0), rect.width), max(f32(0), rect.height)}
 	effective := clamped
 	if list.clip_count > 0 {
-		effective = paint_clip_intersection(list.clip_stack[list.clip_count - 1], rect)
+		effective = paint_clip_intersection(list.clip_stack[list.clip_count - 1], clamped)
 	}
 	command := Paint_Command {
 		kind = .Clip_Begin,
@@ -448,16 +450,12 @@ paint_push_text_fields :: proc(
 		list.dropped_text_bytes += len(text)
 		return false
 	}
-	text_offset := list.text_len
-	copy(list.text[text_offset:], transmute([]u8)text)
-	list.text_len += len(text)
-	when UI_TELEMETRY_ENABLED {
-		list.text_append_count += 1
-		list.text_bytes_copied += u64(len(text))
-	}
 	reserved := paint_reserve(list)
 	if reserved == nil {
-		return paint_reject(
+		text_offset := list.text_len
+		copy(list.text[text_offset:], transmute([]u8)text)
+		list.text_len += len(text)
+		retained := paint_reject(
 			list,
 			{
 				kind = .Text,
@@ -470,6 +468,15 @@ paint_push_text_fields :: proc(
 				text_length = len(text),
 			},
 		)
+		list.text_len = text_offset
+		return retained
+	}
+	text_offset := list.text_len
+	copy(list.text[text_offset:], transmute([]u8)text)
+	list.text_len += len(text)
+	when UI_TELEMETRY_ENABLED {
+		list.text_append_count += 1
+		list.text_bytes_copied += u64(len(text))
 	}
 	reserved^ = {
 		kind        = .Text,
@@ -492,6 +499,17 @@ paint_push_text :: proc(list: ^Paint_List, command: Paint_Command, text: string)
 		list.dropped_text_bytes += len(text)
 		return false
 	}
+	reserved := paint_reserve(list)
+	if reserved == nil {
+		stored_command := command
+		stored_command.text_offset = list.text_len
+		stored_command.text_length = len(text)
+		copy(list.text[list.text_len:], transmute([]u8)text)
+		list.text_len += len(text)
+		retained := paint_reject(list, stored_command)
+		list.text_len -= len(text)
+		return retained
+	}
 	stored_command := command
 	stored_command.text_offset = list.text_len
 	stored_command.text_length = len(text)
@@ -501,7 +519,10 @@ paint_push_text :: proc(list: ^Paint_List, command: Paint_Command, text: string)
 		list.text_append_count += 1
 		list.text_bytes_copied += u64(len(text))
 	}
-	return paint_push(list, stored_command)
+	stored_command.tier = list.current_tier
+	stored_command.z_group = list.current_z_group
+	reserved^ = stored_command
+	return paint_commit(list, reserved)
 }
 
 paint_text :: proc(list: ^Paint_List, command: Paint_Command) -> string {

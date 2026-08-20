@@ -226,6 +226,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame_scratch_begin(&frame.scratch)
 	runtime.frame_generation += 1
 	frame.input = input if input != nil else &frame.input_default
+	input_normalize(frame.input)
 	ui_runtime_update_focus_modality(runtime, frame.input)
 	if frame.output != nil do ui_output_reset(frame.output)
 	a11y_expire_before_frame(runtime)

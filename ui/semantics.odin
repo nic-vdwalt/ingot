@@ -251,23 +251,24 @@ sem_node_id :: proc(
 	return id
 }
 
-// sem_label_clip returns the byte length of the longest valid-UTF-8 prefix
-// of `label` that fits SEM_LABEL_MAX. Truncation never splits a rune, and an
-// invalid byte sequence ends the label early - stored labels must always be
-// valid UTF-8 because they cross into AccessKit (Rust: panics on invalid
-// str) and the browser DOM. Pure.
-sem_label_clip :: proc(label: string) -> int {
+// sem_text_clip returns the byte length of the longest valid-UTF-8 prefix
+// that fits limit. Semantic strings cross into AccessKit and the browser DOM,
+// so truncation must not split a rune and malformed input ends the value early.
+sem_text_clip :: proc(value: string, limit: int) -> int {
+	assert(limit >= 0, "sem_text_clip: negative limit")
 	n := 0
-	for n < len(label) && n < SEM_LABEL_MAX {
-		r, size := utf8.decode_rune(label[n:])
-		// decode_rune reports a malformed sequence as RUNE_ERROR with
-		// size 1; a genuine U+FFFD in the input decodes with size 3.
+	for n < len(value) && n < limit {
+		r, size := utf8.decode_rune(value[n:])
 		if r == utf8.RUNE_ERROR && size == 1 do break
-		if n + size > SEM_LABEL_MAX do break
+		if n + size > limit do break
 		n += size
 	}
-	assert(n >= 0 && n <= SEM_LABEL_MAX, "sem_label_clip: clip out of range")
+	assert(n >= 0 && n <= limit, "sem_text_clip: clip out of range")
 	return n
+}
+
+sem_label_clip :: proc(label: string) -> int {
+	return sem_text_clip(label, SEM_LABEL_MAX)
 }
 
 sem_focus_register :: proc(frame: ^Ui_Frame, focus: Focus_Opt, state: Sem_State) {
@@ -372,11 +373,11 @@ semantic_push :: proc(
 	if n < len(label) do sem.text_truncations += 1
 	copy(node.label[:n], label[:n])
 	node.label_len = u8(n)
-	description_len := min(len(description), SEM_DESCRIPTION_MAX)
+	description_len := sem_text_clip(description, SEM_DESCRIPTION_MAX)
 	if description_len < len(description) do sem.text_truncations += 1
 	copy(node.description[:description_len], description[:description_len])
 	node.description_len = u8(description_len)
-	text_value_len := min(len(text_value), SEM_VALUE_MAX)
+	text_value_len := sem_text_clip(text_value, SEM_VALUE_MAX)
 	if text_value_len < len(text_value) do sem.text_truncations += 1
 	copy(node.text_value[:text_value_len], text_value[:text_value_len])
 	node.text_value_len = u16(text_value_len)
