@@ -172,18 +172,17 @@ measurement procedures derive only geometry; interaction, focus, semantics, and
 paint are emitted once when the prepared leaves render. Handles identify results
 inside that one description and must not be retained as widget identity.
 
-`fit.Builder` is the supported caller-facing direct-emission API. The host opens
-it over a hidden UI root; ordinary `if` and `for` statements emit children,
-static containers use named lexical blocks with deferred `End` calls, and the host
-consumes the result synchronously. Dynamic builders may close containers
-directly. There is no ambient current builder, retained widget tree, callback
-capture, invalidation, or cross-frame synchronization. The `*_With` and `Scope`
-helpers invoke their child procedure once and return only after restoring their
-container or identity depth; they never append that procedure to the prepared
-description. `Custom` alone stores bounded measure/render callbacks until the
-same description is synchronously consumed. Emission derives only current-frame
-geometry; interaction, focus, semantics, and paint execute exactly once during
-render. All paths use named fixed bounds and iterative layout.
+`fit.Builder` is the supported caller-facing direct-emission API. Root
+constructors return bounded current-build `fit.Parent` capabilities; child
+containers and leaves consume them. Ordinary `if` and `for` statements compose
+trees without an ambient parent stack or balancing calls. `Scope` returns a
+Parent with derived identity and no retained behavior. Parent values validate
+their Builder and build generation and must not be retained. There is no
+retained widget tree, callback capture, invalidation, or cross-frame
+synchronization. `Custom` alone stores bounded measure/render callbacks until
+the same description is synchronously consumed. Interaction, focus, semantics,
+and paint execute exactly once during render. All paths use named fixed bounds
+and iterative layout.
 
 Prepared Button actions execute after the complete tree renders in the same
 frame that accepts activation. They may mutate caller-owned state or enqueue

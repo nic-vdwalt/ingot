@@ -552,6 +552,7 @@ fit_actions_dispatch :: proc(builder: ^Fit_Builder) {
 	assert(builder != nil && builder.prepared.rendered, "fit actions: builder not rendered")
 	nodes := prepared_nodes(&builder.prepared)
 	assert(builder.prepared.count >= 0 && builder.prepared.count <= i32(len(nodes)))
+	dispatched := false
 	for index in 0 ..< builder.prepared.count {
 		node := &nodes[index]
 		if !node.activated do continue
@@ -563,7 +564,9 @@ fit_actions_dispatch :: proc(builder: ^Fit_Builder) {
 		} else {
 			action.tagged_procedure(action.userdata, action.tag)
 		}
+		dispatched = true
 	}
+	if dispatched do request_redraw(builder.prepared.u.frame)
 }
 
 @(private = "file")

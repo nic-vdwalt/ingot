@@ -151,19 +151,23 @@ fit_button_action_runs_once_in_activating_frame :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_readme_draw, &state))
 	testing.expect(t, !state.continued && !state.confirmation_visible)
+	testing.expect(t, !Test_Driver_Redraw_Requested(&driver))
 	pressed := base
 	pressed.mouse_pressed[0] = true
 	pressed.mouse_down[0] = true
 	testing.expect(t, Test_Driver_Frame(&driver, pressed, fit_test_readme_draw, &state))
 	testing.expect(t, !state.continued && state.action_calls == 0)
+	testing.expect(t, !Test_Driver_Redraw_Requested(&driver))
 	released := base
 	released.mouse_released[0] = true
 	testing.expect(t, Test_Driver_Frame(&driver, released, fit_test_readme_draw, &state))
 	testing.expect(t, state.continued && !state.confirmation_visible)
 	testing.expect_value(t, state.action_calls, i32(1))
+	testing.expect(t, Test_Driver_Redraw_Requested(&driver))
 	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_readme_draw, &state))
 	testing.expect(t, state.confirmation_visible)
 	testing.expect_value(t, state.action_calls, i32(1))
+	testing.expect(t, !Test_Driver_Redraw_Requested(&driver))
 }
 
 @(test)

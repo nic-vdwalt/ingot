@@ -231,7 +231,7 @@ run_inputs :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 	grid := fit.Grid(builder, {columns = 1, row_height = 24})
 	for index in 0 ..< count {
 		fit.Text_Input(
-			builder,
+			grid,
 			u64(index + 1),
 			&h.dashboard_inputs[index],
 			"Filter",
@@ -258,7 +258,7 @@ run_sliders :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 	grid := fit.Grid(builder, {columns = 8, row_height = 24})
 	for index in 0 ..< count {
 		fit.Slider(
-			builder,
+			grid,
 			u64(index + 1),
 			&h.values[index],
 			0,
@@ -287,14 +287,14 @@ run_mixed :: proc(builder: ^fit.Builder, h: ^Harness, groups: int) -> int {
 		row_parent := fit.Row(grid, {size = {height = fit.Fixed(30)}})
 		fit.Label(row_parent, "Label", label_options(100, 24))
 		fit.Checkbox(
-			builder,
+			row_parent,
 			u64(index * 4 + 1),
 			"Check",
 			&h.checked[index],
 			control_options(120, 24),
 		)
 		fit.Slider(
-			builder,
+			row_parent,
 			u64(index * 4 + 2),
 			&h.values[index],
 			0,
@@ -318,14 +318,14 @@ run_dashboard :: proc(builder: ^fit.Builder, h: ^Harness, groups: int) -> int {
 		fit.Label(row_parent, label_for(h, index, true), label_options(124, 24))
 		fit.Label(row_parent, "Healthy", label_options(76, 24))
 		fit.Checkbox(
-			builder,
+			row_parent,
 			u64(index * 4 + 1),
 			"Live",
 			&h.checked[index],
 			control_options(88, 24),
 		)
 		fit.Slider(
-			builder,
+			row_parent,
 			u64(index * 4 + 2),
 			&h.values[index],
 			0,
@@ -335,7 +335,7 @@ run_dashboard :: proc(builder: ^fit.Builder, h: ^Harness, groups: int) -> int {
 			control_options(130, 24),
 		)
 		fit.Text_Input(
-			builder,
+			row_parent,
 			u64(index * 4 + 3),
 			&h.dashboard_inputs[index],
 			"Filter",
@@ -426,7 +426,7 @@ run_prepared_mixed :: proc(builder: ^fit.Builder, h: ^Harness) -> int {
 		if index % 3 == 1 do width = fit.Grow()
 		if index % 3 == 2 do width = fit.Percent(0.25)
 		fit.Label(
-			builder,
+			grid,
 			label_for(h, index, true),
 			{size = {width = width, height = fit.Fixed(24)}},
 		)
