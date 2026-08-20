@@ -48,8 +48,8 @@ Frame :: proc() {
 	_ = fit.Session_Draw(&session, Draw)
 }
 
-Draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
-	_ = ctx
+Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
+	_ = user_data
 	root := fit.Column(builder)
 	fit.Label(root, "Custom loop")
 }

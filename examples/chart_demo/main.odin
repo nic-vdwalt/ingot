@@ -18,8 +18,8 @@ state := State {
 }
 app: fit.App
 
-toggle_theme :: proc(ctx: rawptr) {
-	data := cast(^State)ctx
+toggle_theme :: proc(user_data: rawptr) {
+	data := cast(^State)user_data
 	assert(data != nil, "toggle_theme: nil state")
 	data.dark = !data.dark
 	fit.Set_Theme(&app, fit.Theme_Dark() if data.dark else fit.Theme_Light())
@@ -66,8 +66,8 @@ main :: proc() {
 	)
 }
 
-frame :: proc(builder: ^fit.Builder, ctx: rawptr) {
-	data := cast(^State)ctx
+frame :: proc(builder: ^fit.Builder, user_data: rawptr) {
+	data := cast(^State)user_data
 	root := fit.Column(builder, {gap = .MD, padding = .LG})
 	header := fit.Row(root, {gap = .MD, size = {height = fit.Fixed(36)}})
 	fit.Label(header, "Chart widgets", {role = .Title, track = fit.Grow()})
@@ -79,20 +79,20 @@ frame :: proc(builder: ^fit.Builder, ctx: rawptr) {
 	)
 	fit.Custom(
 		root,
-		{measure = dashboard_measure, render = draw_dashboard, ctx = data},
+		{measure = dashboard_measure, render = draw_dashboard, user_data = data},
 		{size = {width = fit.Grow(), height = fit.Grow()}},
 	)
 }
 
-dashboard_measure :: proc(constraints: fit.Constraints, ctx: rawptr) -> fit.Size {
-	_ = ctx
+dashboard_measure :: proc(constraints: fit.Constraints, user_data: rawptr) -> fit.Size {
+	_ = user_data
 	// The height comes from the Grow sizing in frame; the measured height is
 	// only a minimal floor.
 	return {max(constraints.max_w, 1), 1, false}
 }
 
-draw_dashboard :: proc(surface: ^fit.Surface, rect: fit.Rect, ctx: rawptr) -> bool {
-	data := cast(^State)ctx
+draw_dashboard :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: rawptr) -> bool {
+	data := cast(^State)user_data
 	theme := fit.Surface_Theme_Tokens(surface)
 	line_series := [2]fit.Chart_Series {
 		{name = "Revenue", values = revenue[:]},

@@ -31,14 +31,14 @@ Region_With :: proc(
 	surface: ^Surface,
 	rect: Rect,
 	body: Region_Build_Proc,
-	ctx: rawptr = nil,
+	user_data: rawptr = nil,
 	options: Region_Options = {},
 ) -> i32 {
 	assert(surface != nil && body != nil, "Fit.Region_With: invalid argument")
 	region: Region
 	opened := Region_Open(surface, &region, rect, options)
 	entry_ids := opened.inner.ids.depth
-	body(opened, ctx)
+	body(opened, user_data)
 	assert(opened.inner.open, "Fit.Region_With: body closed region")
 	assert(opened.inner.ids.depth == entry_ids, "Fit.Region_With: body unbalanced")
 	return Region_Close(opened)
@@ -48,7 +48,7 @@ Layer_With :: proc(
 	surface: ^Surface,
 	z: Z_Order,
 	body: Layer_Build_Proc,
-	ctx: rawptr = nil,
+	user_data: rawptr = nil,
 	claim: Float_Rect = {},
 ) {
 	assert(surface != nil && body != nil, "Fit.Layer_With: invalid argument")
@@ -56,7 +56,7 @@ Layer_With :: proc(
 	z_depth := u.frame.z_count
 	pane_depth := u.frame.pane_count
 	Layer_Begin(surface, z, claim)
-	body(surface, ctx)
+	body(surface, user_data)
 	assert(u.frame.z_count == z_depth + 1, "Fit.Layer_With: layer body unbalanced")
 	assert(u.frame.pane_count == pane_depth + 1, "Fit.Layer_With: pane body unbalanced")
 	Layer_End(surface)
@@ -68,14 +68,14 @@ Pane_With :: proc(
 	state: ^Pane_State,
 	rect: Rect,
 	body: Pane_Build_Proc,
-	ctx: rawptr = nil,
+	user_data: rawptr = nil,
 	padding: i32 = 8,
 	keyboard: bool = true,
 ) {
 	assert(surface != nil && state != nil && body != nil, "Fit.Pane_With: invalid argument")
 	content_y := Pane_Begin(surface, state, rect, padding, keyboard)
 	assert(state.inner.open, "Fit.Pane_With: begin failed")
-	end_y := body(surface, content_y, ctx)
+	end_y := body(surface, content_y, user_data)
 	assert(state.inner.open, "Fit.Pane_With: body closed pane")
 	assert(end_y >= content_y, "Fit.Pane_With: content moved backwards")
 	Pane_End(surface, state, rect, end_y, padding)

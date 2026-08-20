@@ -13,8 +13,8 @@ state := State {
 	items = {101, 205, 309},
 }
 
-toggle_list :: proc(ctx: rawptr) {
-	data := cast(^State)ctx
+toggle_list :: proc(user_data: rawptr) {
+	data := cast(^State)user_data
 	assert(data != nil, "toggle_list: nil state")
 	data.showing = !data.showing
 }
@@ -39,9 +39,9 @@ main :: proc() {
 	)
 }
 
-draw :: proc(builder: ^fit.Builder, ctx: rawptr) {
-	assert(builder != nil && ctx != nil, "draw: invalid argument")
-	data := cast(^State)ctx
+draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
+	assert(builder != nil && user_data != nil, "draw: invalid argument")
+	data := cast(^State)user_data
 	root := fit.Center(builder, {gap = .SM, padding = .LG})
 	fit.Label(root, "Hello from Ingot", {role = .Title})
 	controls := fit.Row(root, {gap = .SM, align = .Center})
