@@ -87,6 +87,14 @@ PREEDIT_MAX :: 256
 // input_poll runs once per frame from EndDrawing: reset frame-scoped state,
 // pump backend events (fills queues/edges), then finalize mouse/wheel/button
 // deltas via the platform seam.
+@(private)
+input_service_events :: proc(ctx: ^Context) {
+	assert(ctx != nil, "input_service_events: nil context")
+	platform_drop_prepare_events()
+	platform_poll_events(ctx)
+	platform_drop_finish_events()
+}
+
 input_poll :: proc(ctx: ^Context) {
 	assert(ctx != nil, "input_poll: nil context")
 	inp := &ctx.inp
@@ -105,13 +113,13 @@ input_poll :: proc(ctx: ^Context) {
 	// (platform_wait_events) until input/OS damage arrives or the timeout
 	// elapses - this is where idle power saving happens. Web never waits;
 	// its gate lives in step() (loop_web.odin).
-	platform_drop_prepare_events()
 	if should_wait, timeout := _idle_timeout(ctx); should_wait {
+		platform_drop_prepare_events()
 		platform_wait_events(timeout)
+		platform_drop_finish_events()
 	} else {
-		platform_poll_events(ctx)
+		input_service_events(ctx)
 	}
-	platform_drop_finish_events()
 	_drop_hover_publish(ctx)
 	_input_publish_staged(inp)
 

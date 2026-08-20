@@ -682,6 +682,7 @@ BeginDrawing :: proc() {
 
 context_begin_drawing :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_begin_drawing: nil context")
+	when ODIN_OS != .JS do input_service_events(ctx)
 	_maybe_reconfigure(ctx)
 	_stats_frame_begin(ctx)
 	platform_web_input_frame_begin(ctx)
@@ -832,6 +833,7 @@ context_end_drawing :: proc(ctx: ^Context) {
 		}
 		if cmd != nil do wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(ctx.frame.encoder)
+		when ODIN_OS != .JS do input_service_events(ctx)
 		present_elapsed := _stats_present(ctx)
 		_stats_context_cpu_times(ctx, 0, encode_elapsed, submit_elapsed, present_elapsed)
 		wg.TextureViewRelease(ctx.frame.view)
