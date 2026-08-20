@@ -185,10 +185,14 @@ same description is synchronously consumed. Emission derives only current-frame
 geometry; interaction, focus, semantics, and paint execute exactly once during
 render. All paths use named fixed bounds and iterative layout.
 
-Caller-owned `fit.Signal` values bridge render activation into the next build.
-The signal Button overload consumes the prior render's value before declaring
-and arming the current button, so it supports ordinary `if` control flow without
-a retained result map, a second build, or same-frame interaction claims.
+Prepared Button actions execute after the complete tree renders in the same
+frame that accepts activation. They may mutate caller-owned state or enqueue
+work, but cannot revise the bounded description being consumed. State-dependent
+additions, removals, and ordering are evaluated by a later build.
+
+`fit.Button_Delayed` with caller-owned `fit.Signal` is the advanced delayed
+alternative. Render records activation and a later build consumes it, allowing
+Builder-time structural branching without a retained result map or second build.
 
 Reusing a builder resets logical counts and every previously used output slot;
 unused selected capacity is not scanned or retained as active state. Externally

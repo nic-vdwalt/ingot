@@ -12,6 +12,12 @@ Game_State :: struct {
 
 g: ^Game_State
 
+count_click :: proc(userdata: rawptr) {
+	_ = userdata
+	assert(g != nil, "count_click: missing state")
+	g.click_count += 1
+}
+
 @(export)
 game_init :: proc() -> bool {
 	assert(g == nil, "game_init: state already initialized")
@@ -26,7 +32,6 @@ game_init :: proc() -> bool {
 game_draw :: proc(builder: ^fit.Builder) {
 	assert(builder != nil, "game_draw: nil builder")
 	assert(g != nil, "game_draw: missing state")
-	clicked := false
 	root_container: {
 		fit.Column(builder, {gap = .SM, padding = .LG})
 		defer fit.End(builder)
@@ -42,14 +47,13 @@ game_draw :: proc(builder: ^fit.Builder) {
 			{role = .Label},
 		)
 		fit.Label(builder, fmt.tprintf("Persistent clicks: %d", g.click_count), {role = .Label})
-		fit.Button(builder, "count", "Count persistent click", &clicked)
+		fit.Button(builder, "count", "Count persistent click", fit.On(count_click))
 		fit.Label(
 			builder,
 			"Edit game/game.odin, then run the build script again.",
 			{role = .Note, ink = .Muted},
 		)
 	}
-	if clicked do g.click_count += 1
 }
 
 @(export)

@@ -12,13 +12,9 @@ VIEW_FILE :: "views/scratch.ingv"
 SMOKE :: #config(INGOT_SMOKE, false)
 
 State :: struct {
-	doc:            view.View_Doc,
-	selected:       i32,
-	status:         string,
-	save_clicked:   fit.Signal,
-	load_clicked:   fit.Signal,
-	add_clicked:    fit.Signal,
-	delete_clicked: fit.Signal,
+	doc:      view.View_Doc,
+	selected: i32,
+	status:   string,
 }
 
 app: fit.App
@@ -56,10 +52,10 @@ draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 		{ink = .Secondary},
 	)
 	fit.Row(builder, {gap = .SM})
-	if fit.Button(builder, "save", "Save", &data.save_clicked) do save(data)
-	if fit.Button(builder, "load", "Load", &data.load_clicked) do load(data)
-	if fit.Button(builder, "add", "Add label", &data.add_clicked) do add_label(data)
-	if fit.Button(builder, "delete", "Delete last", &data.delete_clicked) do delete_last(data)
+	fit.Button(builder, "save", "Save", fit.On(save_action, data))
+	fit.Button(builder, "load", "Load", fit.On(load_action, data))
+	fit.Button(builder, "add", "Add label", fit.On(add_action, data))
+	fit.Button(builder, "delete", "Delete last", fit.On(delete_action, data))
 	fit.End(builder)
 	fit.Label(builder, fmt.tprintf("%d nodes", data.doc.count), {role = .Label})
 	if data.status != "" do fit.Label(builder, data.status, {ink = .Secondary})
@@ -76,6 +72,30 @@ draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 	}
 	fit.End(builder)
 	fit.End(builder)
+}
+
+save_action :: proc(userdata: rawptr) {
+	data := cast(^State)userdata
+	assert(data != nil, "save_action: nil state")
+	save(data)
+}
+
+load_action :: proc(userdata: rawptr) {
+	data := cast(^State)userdata
+	assert(data != nil, "load_action: nil state")
+	load(data)
+}
+
+add_action :: proc(userdata: rawptr) {
+	data := cast(^State)userdata
+	assert(data != nil, "add_action: nil state")
+	add_label(data)
+}
+
+delete_action :: proc(userdata: rawptr) {
+	data := cast(^State)userdata
+	assert(data != nil, "delete_action: nil state")
+	delete_last(data)
 }
 
 save :: proc(data: ^State) {

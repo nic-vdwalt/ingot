@@ -4,7 +4,6 @@ import fit "ingot:fit"
 
 State :: struct {
 	showing: bool,
-	toggle:  fit.Signal,
 	enabled: bool,
 	items:   [3]u64,
 }
@@ -12,6 +11,12 @@ State :: struct {
 app: fit.App
 state := State {
 	items = {101, 205, 309},
+}
+
+toggle_list :: proc(userdata: rawptr) {
+	data := cast(^State)userdata
+	assert(data != nil, "toggle_list: nil state")
+	data.showing = !data.showing
 }
 
 main :: proc() {
@@ -45,9 +50,7 @@ draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 			fit.Row(builder, {gap = .SM, align = .Center})
 			defer fit.End(builder)
 			fit.Label(builder, "Controls", {role = .Label, track = fit.Grow()})
-			if fit.Button(builder, "toggle", "Toggle list", &data.toggle) {
-				data.showing = !data.showing
-			}
+			fit.Button(builder, "toggle", "Toggle list", fit.On(toggle_list, data))
 		}
 		fit.Checkbox(builder, "enabled", "Enabled", &data.enabled)
 		if data.showing {

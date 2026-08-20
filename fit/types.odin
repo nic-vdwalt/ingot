@@ -15,6 +15,16 @@ Signal :: struct {
 	pending: bool,
 }
 
+Action_Proc :: #type proc(userdata: rawptr)
+Tagged_Action_Proc :: #type proc(userdata: rawptr, tag: u64)
+
+Action :: struct {
+	procedure:        Action_Proc,
+	tagged_procedure: Tagged_Action_Proc,
+	userdata:         rawptr,
+	tag:              u64,
+}
+
 @(private = "package")
 STORAGE_NODE_SIZE :: size_of(ui.Prepared_Node)
 @(private = "package")
@@ -631,11 +641,10 @@ Button_Options :: struct {
 	web_form_id: string,
 	track:       Track,
 	size:        Size_Options,
-	// activated is written during Render, after the build callback has
-	// returned. It must point to storage that outlives the build (global or
-	// app state, never a build-proc local), and is typically consumed and
-	// cleared at the start of the next build. See examples/session_loop.
+	// activated is the advanced raw-output path. Render writes it after the
+	// build callback returns, so it must outlive the build and render.
 	activated:   ^bool,
+	action:      Action,
 }
 
 Control_Options :: struct {

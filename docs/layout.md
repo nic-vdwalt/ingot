@@ -27,20 +27,22 @@ Draw :: proc(builder: ^fit.Builder, userdata: rawptr) {
 			fit.Row(builder, {gap = .SM, align = .Center})
 			defer fit.End(builder)
 			fit.Label(builder, "Actions", {track = fit.Grow()})
-			if fit.Button(builder, "save", "Save", &save_signal) do save()
+			fit.Button(builder, "save", "Save", fit.On(Save))
 		}
 	}
 }
 ```
 
-`Signal` is zero-value caller-owned activation state. Render writes activation
-after the draw callback returns. A signal Button overload consumes and returns
-that value once when the same button is declared in the next build, then arms
-the signal for the current render. `Signal_Peek`, `Signal_Take`, and
-`Signal_Reset` support conditional controls and explicit lifecycle handling.
-Signals must outlive render and are never build-proc locals. If a signal control
-is absent from a build, use `Signal_Take` or `Signal_Reset` to consume or discard
-its pending event.
+### Activation timing
+
+An `Action` is the primary prepared Button result. Fit dispatches it once, in
+declaration order, after the complete tree renders in the activating frame.
+Actions may mutate caller-owned state or enqueue work but cannot alter the
+current prepared description. `Button_Delayed` uses zero-value caller-owned
+`Signal` state when activation must instead be consumed during a later Builder
+call. `Signal_Peek`, `Signal_Take`, and `Signal_Reset` support conditional
+controls and explicit lifecycle handling. Signals must outlive render and are
+never build-procedure locals.
 
 When the container itself is selected dynamically, close the selected container
 directly:
@@ -57,7 +59,11 @@ fit.End(builder)
 
 ## Containers
 
-- `Center` opens a full-viewport centered root Column.
+- `Center` is root-only shorthand for a Column with centered cross/main
+  alignment and `Grow()` on both axes. It fills the Builder's available
+  rectangle, centers the child sequence vertically as a group, and centers each
+  child horizontally. Caller size/alignment/justification are overridden; gap,
+  padding, and effects remain available.
 - `Column` lays children on the vertical axis.
 - `Row` lays children on the horizontal axis.
 - `Flow` wraps measured children left to right.
@@ -112,12 +118,12 @@ aspect ratio. Wrapped labels derive height after width assignment.
 `Label` emits semantic text. `Button`, `Checkbox`, `Radio`, `Slider`, and
 `Text_Input` accept stable string, `u64`, or explicit widget keys. `Progress`,
 `Separator`, `Spacer`, and bounded shared-track table cells are native leaves.
-Controls keep values in caller-owned state and can publish Button activation
-through caller-owned `Signal`. The legacy `^bool` output and options fields
-remain available for compatibility and advanced fan-in; several leaves may
-share one raw output and results are OR-combined during render. If several
-buttons share one Signal, the first declaration in the next build consumes the
-aggregate activation.
+Controls keep values in caller-owned state. Prepared Buttons use allocation-free
+`Action` callbacks by default; actions live in existing node storage and require
+no additional storage slice. `Button_Delayed` publishes activation through a
+caller-owned `Signal`. The legacy `^bool` output and options fields remain
+available for compatibility and advanced fan-in; several leaves may share one
+raw output and results are OR-combined during render.
 
 `Custom` accepts bounded measure and render callbacks. Borrowed strings,
 userdata, callbacks, state, signals, and output pointers must remain valid until
