@@ -416,6 +416,22 @@ assigned_context_ids_never_collide_with_the_default :: proc(t: ^testing.T) {
 }
 
 @(test)
+context_id_capacity_exceeds_sequential_lifetime_baseline :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
+	saved := context_id_next
+	defer context_id_next = saved
+	context_id_next = CONTEXT_ID_FIRST
+	ctx := new(Context)
+	defer free(ctx)
+	for expected in CONTEXT_ID_FIRST ..= u32(128) {
+		ctx.id = 0
+		testing.expect(t, _context_assign_id(ctx))
+		testing.expect_value(t, ctx.id, expected)
+	}
+}
+
+@(test)
 frame_owner_and_availability_are_context_bound :: proc(t: ^testing.T) {
 	first := new(Context)
 	defer free(first)

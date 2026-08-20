@@ -369,23 +369,41 @@ _tex_build_bind :: proc(ctx: ^Context, e: ^Tex_Entry) {
 	)
 }
 
-// UpdateTexture replaces the full pixel contents (same dimensions/format as the
-// texture was created with; raylib assumes matching size).
-context_update_texture :: proc(ctx: ^Context, texture: Texture2D, pixels: rawptr) {
-	assert(ctx != nil, "context_update_texture: nil context")
-	e := context_get_texture(ctx, texture.id)
-	if e == nil || pixels == nil do return
-	// caller passed data matching the source format used at load; the texture
-	// itself is RGBA8, so expand assuming R8G8B8 (concord's screen frames) when
-	// the byte count differs - otherwise treat as RGBA8.
-	pixel_count := int(e.width) * int(e.height)
-	ensure(pixel_count > 0)
-	resources := &ctx.resources.textures
-	if len(resources.upload_scratch) < pixel_count * 4 {
-		resize(&resources.upload_scratch, pixel_count * 4)
+texture_format_bytes :: proc(format: PixelFormat) -> int {
+	#partial switch format {
+	case .UNCOMPRESSED_GRAYSCALE:
+		return 1
+	case .UNCOMPRESSED_GRAY_ALPHA:
+		return 2
+	case .UNCOMPRESSED_R8G8B8:
+		return 3
+	case .UNCOMPRESSED_R8G8B8A8:
+		return 4
+	case:
+		return 0
 	}
-	rgba := resources.upload_scratch[:pixel_count * 4]
-	ensure(_to_rgba_into(rgba, ([^]byte)(pixels), e.width, e.height, .UNCOMPRESSED_R8G8B8))
+}
+
+context_update_texture_checked :: proc(
+	ctx: ^Context,
+	texture: Texture2D,
+	pixels: rawptr,
+	byte_count: int,
+	format: PixelFormat,
+) -> bool {
+	assert(ctx != nil, "context_update_texture_checked: nil context")
+	e := context_get_texture(ctx, texture.id)
+	if e == nil || pixels == nil || byte_count < 0 do return false
+	bytes_per_pixel := texture_format_bytes(format)
+	if bytes_per_pixel == 0 do return false
+	pixel_count := i64(e.width) * i64(e.height)
+	if pixel_count <= 0 || pixel_count > i64(max(int)) / 4 do return false
+	if i64(byte_count) != pixel_count * i64(bytes_per_pixel) do return false
+	resources := &ctx.resources.textures
+	output_size := int(pixel_count) * 4
+	if len(resources.upload_scratch) < output_size do resize(&resources.upload_scratch, output_size)
+	rgba := resources.upload_scratch[:output_size]
+	if !_to_rgba_into(rgba, ([^]byte)(pixels), e.width, e.height, format) do return false
 	wg.QueueWriteTexture(
 		ctx.queue,
 		&{texture = e.tex},
@@ -394,6 +412,24 @@ context_update_texture :: proc(ctx: ^Context, texture: Texture2D, pixels: rawptr
 		&{bytesPerRow = u32(e.width) * 4, rowsPerImage = u32(e.height)},
 		&{u32(e.width), u32(e.height), 1},
 	)
+	return true
+}
+
+UpdateTextureChecked :: proc(
+	texture: Texture2D,
+	pixels: rawptr,
+	byte_count: int,
+	format: PixelFormat,
+) -> bool {
+	return context_update_texture_checked(default_context(), texture, pixels, byte_count, format)
+}
+
+context_update_texture :: proc(ctx: ^Context, texture: Texture2D, pixels: rawptr) {
+	assert(ctx != nil, "context_update_texture: nil context")
+	e := context_get_texture(ctx, texture.id)
+	if e == nil || pixels == nil do return
+	byte_count := int(e.width) * int(e.height) * 4
+	_ = context_update_texture_checked(ctx, texture, pixels, byte_count, .UNCOMPRESSED_R8G8B8A8)
 }
 
 UpdateTexture :: proc(texture: Texture2D, pixels: rawptr) {
