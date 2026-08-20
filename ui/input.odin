@@ -40,6 +40,21 @@ Ui_Input :: struct {
 	window_fullscreen:  bool,
 }
 
+input_normalize :: proc(input: ^Ui_Input) {
+	assert(input != nil, "input_normalize: nil input")
+	if input.character_count < 0 {
+		input.character_count = 0
+	} else if input.character_count > INPUT_CHAR_CAP {
+		input.characters_dropped += input.character_count - INPUT_CHAR_CAP
+		input.character_count = INPUT_CHAR_CAP
+	}
+	input.clipboard_len = clamp(input.clipboard_len, 0, INPUT_CLIPBOARD_CAP)
+	input.preedit_len = clamp(input.preedit_len, 0, INPUT_PREEDIT_CAP)
+	input.preedit_caret = clamp(input.preedit_caret, 0, input.preedit_len)
+	assert(input.character_count >= 0 && input.character_count <= INPUT_CHAR_CAP)
+	assert(input.preedit_caret >= 0 && input.preedit_caret <= input.preedit_len)
+}
+
 input_key_index :: proc(key: Key) -> int {
 	index := int(key)
 	if index < 0 || index >= INPUT_KEY_COUNT do return -1
@@ -96,7 +111,8 @@ input_mouse_down :: proc(input: ^Ui_Input, button: Mouse_Button) -> bool {
 
 input_character :: proc(input: ^Ui_Input, index: int) -> (rune, bool) {
 	assert(input != nil, "input_character: nil input")
-	if index < 0 || index >= input.character_count do return 0, false
+	count := clamp(input.character_count, 0, INPUT_CHAR_CAP)
+	if index < 0 || index >= count do return 0, false
 	return input.characters[index], true
 }
 
