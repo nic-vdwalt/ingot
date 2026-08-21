@@ -63,3 +63,22 @@ stable_focus_clear_is_idempotent :: proc(t: ^testing.T) {
 	focus_clear(&state)
 	testing.expect_value(t, state.active, FOCUS_ID_NONE)
 }
+
+@(test)
+form_focus_input_uses_pane_local_coordinates :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+	input: Ui_Input
+	input.mouse_position = {125, 65}
+	input.mouse_pressed[input_mouse_index(.LEFT)] = true
+	ui_frame_begin(&frame, &runtime, &input)
+	ui_frame_pane_push(&frame, {100, 50})
+	focus := 0
+	form_focus_input(&frame, &focus, 3, 20, 10, 40, 20)
+	ui_frame_pane_pop(&frame)
+	ui_frame_end(&frame)
+	testing.expect_value(t, focus, 3)
+}

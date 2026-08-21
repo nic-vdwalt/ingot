@@ -423,6 +423,17 @@ test_gpu_3d_geometry_validation :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_gpu_3d_material_custom_parameters_reach_uniforms :: proc(t: ^testing.T) {
+	material := Gpu_Material {
+		custom_params = {1, 2, 3, 4},
+	}
+	uniforms := Gpu_3D_Uniforms {
+		custom_params = material.custom_params,
+	}
+	testing.expect_value(t, uniforms.custom_params, [4]f32{1, 2, 3, 4})
+}
+
+@(test)
 test_create_gpu_mesh_rejects_headless :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()

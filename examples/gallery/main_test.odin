@@ -47,6 +47,65 @@ gallery_input_region_retains_focus_between_frames :: proc(t: ^testing.T) {
 	testing.expect_value(t, fit.Input_Box_Text(&state.box), "x")
 }
 
+Gallery_Buttons_Test_State :: struct {
+	region: fit.Region,
+	clicks: int,
+}
+
+@(private = "file")
+gallery_buttons_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
+	fit.Canvas(builder, gallery_buttons_test_render, user_data)
+}
+
+@(private = "file")
+gallery_buttons_test_render :: proc(
+	surface: ^fit.Surface,
+	rect: fit.Rect,
+	user_data: rawptr,
+) -> bool {
+	state := cast(^Gallery_Buttons_Test_State)user_data
+	region := fit.Region_Open(surface, &state.region, rect, {scope = "buttons"})
+	for index in 0 ..< 3 {
+		if fit.Region_Button(region, u64(index + 1), "Focusable") do state.clicks += 1
+	}
+	_ = fit.Region_Close(region)
+	return false
+}
+
+@(test)
+gallery_buttons_region_retains_tab_focus_between_frames :: proc(t: ^testing.T) {
+	driver: fit.Test_Driver
+	fit.Test_Driver_Init(&driver)
+	defer fit.Test_Driver_Destroy(&driver)
+	state: Gallery_Buttons_Test_State
+	_ = fit.Test_Driver_Frame(&driver, {}, gallery_buttons_test_draw, &state)
+
+	activate: fit.Test_Input
+	activate.keys_pressed[int(fit.Key.Tab)] = true
+	activate.keys_pressed[int(fit.Key.Enter)] = true
+	_ = fit.Test_Driver_Frame(&driver, activate, gallery_buttons_test_draw, &state)
+	testing.expect_value(t, state.clicks, 1)
+}
+
+@(test)
+gallery_buttons_click_before_keyboard_focus :: proc(t: ^testing.T) {
+	driver: fit.Test_Driver
+	fit.Test_Driver_Init(&driver)
+	defer fit.Test_Driver_Destroy(&driver)
+	state: Gallery_Buttons_Test_State
+
+	pressed: fit.Test_Input
+	pressed.mouse_position = {10, 10}
+	pressed.mouse_pressed[0] = true
+	pressed.mouse_down[0] = true
+	_ = fit.Test_Driver_Frame(&driver, pressed, gallery_buttons_test_draw, &state)
+	resolved: fit.Test_Input
+	resolved.mouse_position = pressed.mouse_position
+	resolved.mouse_released[0] = true
+	_ = fit.Test_Driver_Frame(&driver, resolved, gallery_buttons_test_draw, &state)
+	testing.expect_value(t, state.clicks, 1)
+}
+
 @(test)
 nav_strip_respects_scaled_width_and_sidebar_height :: proc(t: ^testing.T) {
 	scales := [?]f32{0.5, 1, 1.5, 2, 3}
