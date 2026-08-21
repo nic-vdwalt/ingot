@@ -102,6 +102,7 @@ Gpu_Material :: struct {
 	texture:              Texture2D,
 	normal_texture:       Texture2D,
 	roughness_ao_texture: Texture2D,
+	custom_params:        [4]f32,
 	// shader with a zero id means the built-in GPU_3D_SHADER; a custom
 	// handle from create_gpu_3d_shader replaces both shader stages. Stale
 	// handles fall back to the built-in shader (operating condition).
@@ -168,6 +169,7 @@ Gpu_3D_Uniforms :: struct {
 	light_direction:  [4]f32, // xyz direction toward the light, w unused
 	light_params:     [4]f32, // x ambient, y diffuse, z depth_nudge, w time seconds
 	camera_position:  [4]f32, // xyz world-space camera position, w unused
+	custom_params:    [4]f32,
 	use_scalar:       u32,
 	use_texture:      u32,
 	use_normal:       u32,
@@ -183,13 +185,13 @@ Gpu_3D_Instance_Uniforms :: struct {
 }
 
 // The dynamic-offset uniform bind group declares minBindingSize =
-// size_of(Gpu_3D_Uniforms). The WGSL view of the struct is 224 bytes (two
-// mat4x4 + five vec4 + one 16-byte u32 block); Odin may append tail padding
+// size_of(Gpu_3D_Uniforms). The WGSL view is two matrices, six vec4 values,
+// and one 16-byte u32 block; Odin may append tail padding
 // (matrix alignment is target-dependent), and WebGPU permits a binding
 // larger than the shader view. Lock the invariants a struct edit could
 // silently break: never smaller than the shader view, always 16-byte
 // aligned as dynamic offsets require.
-#assert(size_of(Gpu_3D_Uniforms) >= 224)
+#assert(size_of(Gpu_3D_Uniforms) >= 240)
 #assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
 #assert(size_of(Gpu_3D_Vertex) == 36)
 #assert(size_of(Matrix) == 64)
@@ -324,6 +326,7 @@ struct Uniforms {
     light_direction: vec4<f32>,
     light_params: vec4<f32>,
     camera_position: vec4<f32>,
+    custom_params: vec4<f32>,
     use_scalar: u32,
     use_texture: u32,
     use_normal: u32,
@@ -1715,6 +1718,7 @@ _gpu_3d_draw_indexed :: proc(
 				pass.camera_position.z,
 				0,
 			},
+			custom_params    = material.custom_params,
 			use_scalar       = u32(1) if material.use_scalar else 0,
 			use_texture      = u32(1) if textured else 0,
 			use_normal       = u32(1) if normal_mapped else 0,
