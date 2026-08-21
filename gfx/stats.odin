@@ -31,6 +31,7 @@ Renderer_Stats :: struct {
 	render_passes:                 u32,
 	queue_submissions:             u32,
 	frame_cpu_seconds:             f64,
+	acquire_cpu_seconds:           f64,
 	encode_cpu_seconds:            f64,
 	submit_cpu_seconds:            f64,
 	present_cpu_seconds:           f64,
@@ -49,6 +50,7 @@ Renderer_Stats :: struct {
 	stream_retirement_failures:    u32,
 	gpu3d_pool_exhaustions:        u32,
 	gpu3d_mesh_uploads:            u32,
+	gpu3d_mesh_upload_bytes:       u64,
 	gpu3d_draws:                   u32,
 	gpu3d_instanced_draws:         u32,
 	gpu3d_vertices_resident:       u64,
@@ -60,6 +62,15 @@ Renderer_Stats :: struct {
 
 renderer_stats :: proc() -> Renderer_Stats {
 	return context_renderer_stats(default_context())
+}
+
+renderer_stats_latest :: proc() -> Renderer_Stats {
+	return context_renderer_stats_latest(default_context())
+}
+
+context_renderer_stats_latest :: proc(ctx: ^Context) -> Renderer_Stats {
+	if ctx == nil do return {}
+	return ctx.stats_latest
 }
 
 context_renderer_stats :: proc(ctx: ^Context) -> Renderer_Stats {
@@ -243,12 +254,14 @@ _stats_queue_submission :: proc(ctx: ^Context) {
 }
 
 @(private)
-_stats_context_cpu_times :: proc(ctx: ^Context, frame, encode, submit, present: f64) {
+_stats_context_cpu_times :: proc(ctx: ^Context, frame, acquire, encode, submit, present: f64) {
 	when RENDER_STATS_ENABLED {
 		assert(ctx != nil, "_stats_context_cpu_times: nil context")
-		assert(frame >= 0 && encode >= 0, "_stats_context_cpu_times: negative frame time")
+		assert(frame >= 0 && acquire >= 0, "_stats_context_cpu_times: negative frame time")
+		assert(encode >= 0, "_stats_context_cpu_times: negative encode time")
 		assert(submit >= 0 && present >= 0, "_stats_context_cpu_times: negative queue time")
 		ctx.stats_current.frame_cpu_seconds += frame
+		ctx.stats_current.acquire_cpu_seconds += acquire
 		ctx.stats_current.encode_cpu_seconds += encode
 		ctx.stats_current.submit_cpu_seconds += submit
 		ctx.stats_current.present_cpu_seconds += present
@@ -357,6 +370,8 @@ _stats_gpu3d_mesh_upload :: proc(ctx: ^Context, vertices, indices: u32) {
 	assert(indices > 0, "_stats_gpu3d_mesh_upload: empty indices")
 	when RENDER_STATS_ENABLED {
 		ctx.stats_current.gpu3d_mesh_uploads += 1
+		ctx.stats_current.gpu3d_mesh_upload_bytes +=
+			u64(vertices) * size_of(Gpu_3D_Vertex) + u64(indices) * size_of(u32)
 		ctx.stats_current.gpu3d_vertices_resident += u64(vertices)
 	}
 }

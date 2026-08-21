@@ -169,7 +169,7 @@ context_end_texture_mode :: proc(ctx: ^Context) {
 			ctx.frame.rt_encoder,
 			true,
 		)
-		_stats_context_cpu_times(ctx, 0, encode_elapsed, submit_elapsed, 0)
+		_stats_context_cpu_times(ctx, 0, 0, encode_elapsed, submit_elapsed, 0)
 		_stats_queue_submission(ctx)
 		wg.CommandBufferRelease(cmd)
 		wg.CommandEncoderRelease(ctx.frame.rt_encoder)

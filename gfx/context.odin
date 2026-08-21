@@ -721,7 +721,10 @@ context_begin_drawing :: proc(ctx: ^Context) {
 		ctx.frame.has_frame = false
 		return
 	}
+	acquire_started := platform_now()
 	ctx.frame.surf_tex = wg.SurfaceGetCurrentTexture(ctx.surface)
+	acquire_elapsed := platform_now() - acquire_started
+	_stats_context_cpu_times(ctx, 0, acquire_elapsed, 0, 0, 0)
 	#partial switch ctx.frame.surf_tex.status {
 	case .SuccessOptimal, .SuccessSuboptimal:
 	// ok
@@ -865,7 +868,7 @@ context_end_drawing :: proc(ctx: ^Context) {
 		wg.CommandEncoderRelease(ctx.frame.encoder)
 		when ODIN_OS != .JS do input_service_events(ctx)
 		present_elapsed := _stats_present(ctx)
-		_stats_context_cpu_times(ctx, 0, encode_elapsed, submit_elapsed, present_elapsed)
+		_stats_context_cpu_times(ctx, 0, 0, encode_elapsed, submit_elapsed, present_elapsed)
 		wg.TextureViewRelease(ctx.frame.view)
 		_release_surface_texture(ctx)
 		ctx.frame.has_frame = false

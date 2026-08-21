@@ -36,6 +36,56 @@ Cook_Lod_Policy :: enum u8 {
 	Tree_4,
 }
 
+Mesh_Workspace :: struct {
+	block:           []u8,
+	vertex_capacity: int,
+	index_capacity:  int,
+}
+
+mesh_workspace_size :: proc(vertex_capacity, index_capacity: int) -> int {
+	assert(vertex_capacity > 0, "mesh_workspace_size: empty vertices")
+	assert(index_capacity >= 3, "mesh_workspace_size: empty indices")
+	assert(index_capacity % 3 == 0, "mesh_workspace_size: incomplete triangle")
+	assert(vertex_capacity <= OPTIMIZE_MAX_VERTICES, "mesh_workspace_size: vertex overflow")
+	assert(index_capacity <= OPTIMIZE_MAX_INDICES, "mesh_workspace_size: index overflow")
+	required := optimize_scratch_size(vertex_capacity, index_capacity)
+	if index_capacity <= SIMPLIFY_MAX_INDICES {
+		required = max(required, simplify_scratch_size(vertex_capacity, index_capacity))
+	}
+	return required + max(SIMPLIFY_SCRATCH_PADDING, OPTIMIZE_SCRATCH_PADDING)
+}
+
+mesh_workspace_make :: proc(
+	block: []u8,
+	vertex_capacity, index_capacity: int,
+) -> (Mesh_Workspace, bool) {
+	required := mesh_workspace_size(vertex_capacity, index_capacity)
+	if len(block) < required do return {}, false
+	return {
+		block           = block,
+		vertex_capacity = vertex_capacity,
+		index_capacity  = index_capacity,
+	}, true
+}
+
+mesh_workspace_simplify :: proc(
+	workspace: Mesh_Workspace,
+	vertex_count, index_count: int,
+) -> (Simplify_Scratch, bool) {
+	if vertex_count > workspace.vertex_capacity do return {}, false
+	if index_count > workspace.index_capacity || index_count > SIMPLIFY_MAX_INDICES do return {}, false
+	return simplify_scratch_make(workspace.block, vertex_count, index_count)
+}
+
+mesh_workspace_optimize :: proc(
+	workspace: Mesh_Workspace,
+	vertex_count, index_count: int,
+) -> (Optimize_Scratch, bool) {
+	if vertex_count > workspace.vertex_capacity do return {}, false
+	if index_count > workspace.index_capacity do return {}, false
+	return optimize_scratch_make(workspace.block, vertex_count, index_count)
+}
+
 Cook_Chain_Storage :: struct {
 	lods:          []asset.Mesh_Lod,
 	vertices:      []asset.Vertex,
