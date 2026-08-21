@@ -23,6 +23,39 @@ Tex_Entry :: struct {
 	filter:       TextureFilter,
 	wgformat:     wg.TextureFormat, // backing wgpu format (for render-target pipelines)
 	sample_count: u32,
+	mip_count:    u32,
+	usage:        wg.TextureUsageFlags,
+}
+
+Gpu_Buffer :: struct {id: u32}
+Gpu_Texture :: struct {id: u32}
+Gpu_Texture_View :: struct {id: u32}
+Gpu_Sampler :: struct {id: u32}
+
+Gpu_Buffer_Desc :: struct {
+	size:  u64,
+	usage: wg.BufferUsageFlags,
+}
+
+Gpu_Texture_Desc :: struct {
+	width:        u32,
+	height:       u32,
+	layers:       u32,
+	mip_count:    u32,
+	sample_count: u32,
+	format:       wg.TextureFormat,
+	usage:        wg.TextureUsageFlags,
+}
+
+gpu_buffer_desc_valid :: proc(desc: Gpu_Buffer_Desc) -> bool {
+	return desc.size > 0 && desc.usage != {}
+}
+
+gpu_texture_desc_valid :: proc(desc: Gpu_Texture_Desc) -> bool {
+	if desc.width == 0 || desc.height == 0 || desc.layers == 0 do return false
+	if desc.mip_count == 0 || desc.sample_count == 0 do return false
+	if desc.sample_count > 1 && desc.mip_count > 1 do return false
+	return desc.usage != {}
 }
 
 @(private)

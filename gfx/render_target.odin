@@ -12,6 +12,36 @@ package gfx
 
 import wg "vendor:wgpu"
 
+Gpu_Render_Target_Desc :: struct {
+	colors:       []Gpu_Texture_View,
+	depth:        Gpu_Texture_View,
+	sample_count: u32,
+}
+
+Gpu_History_Texture :: struct {
+	textures: [2]Gpu_Texture,
+	index:    u32,
+	valid:    bool,
+}
+
+gpu_history_texture_reset :: proc(history: ^Gpu_History_Texture) {
+	assert(history != nil, "gpu_history_texture_reset: nil history")
+	history.index = 0
+	history.valid = false
+}
+
+gpu_history_texture_swap :: proc(history: ^Gpu_History_Texture) {
+	assert(history != nil, "gpu_history_texture_swap: nil history")
+	history.index = (history.index + 1) % 2
+	history.valid = true
+}
+
+gpu_render_target_desc_valid :: proc(desc: Gpu_Render_Target_Desc) -> bool {
+	if len(desc.colors) == 0 || desc.sample_count == 0 do return false
+	for color in desc.colors do if color.id == 0 do return false
+	return true
+}
+
 RT_PROJECTION_Y_FLIP :: f32(-1.0)
 
 // _rt_projection_vec builds the group(0) projection vector for a render
