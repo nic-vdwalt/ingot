@@ -55,8 +55,9 @@ form_focus_input :: proc(frame: ^Ui_Frame, focus: ^int, id: int, x, y, w, h: i32
 	assert(h > 0)
 	if !is_mouse_button_pressed(frame, .LEFT) do return
 	rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
-	mouse := get_mouse_position(frame)
-	if point_in_rect(mouse, rect) && !route_occluded(frame, mouse) {
+	mouse_screen := get_mouse_position(frame)
+	mouse_local := frame_to_local(frame, mouse_screen)
+	if point_in_rect(mouse_local, rect) && !route_occluded(frame, mouse_screen) {
 		focus^ = id
 		assert(focus^ == id)
 	}

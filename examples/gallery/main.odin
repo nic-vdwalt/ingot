@@ -161,6 +161,7 @@ palette_theme :: proc(value: Palette) -> fit.Theme {
 }
 
 content_pane: fit.Pane_State
+buttons_region: fit.Region
 click_count := 0
 headers_open := [3]bool{true, false, false}
 
@@ -702,10 +703,9 @@ draw_section_layer :: proc(surface: ^fit.Surface, x, y, w: i32) -> i32 {
 
 draw_buttons :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	assert(surface != nil, "draw_buttons: nil surface")
-	region: fit.Region
 	u := fit.Region_Open(
 		surface,
-		&region,
+		&buttons_region,
 		{x, y0, w, fit.ROOT_EXTENT_OPEN},
 		{gap = .SM, scope = "buttons"},
 	)
@@ -725,7 +725,7 @@ draw_buttons :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	fit.Region_Row_End(u)
 	fit.Region_Label(u, fmt.tprintf("clicks: %d", click_count), .Body, .Secondary)
 
-	fit.Region_Section_Header(u, "KEYBOARD FOCUS (Tab cycles, Space/Enter activates)")
+	fit.Region_Section_Header(u, "KEYBOARD FOCUS (Tab shows ring, Space/Enter activates)")
 	fit.Region_Row_Begin(u, 32, gap = .SM)
 	for i in 0 ..< 3 {
 		label := fmt.tprintf("Focusable %d", i + 1)
