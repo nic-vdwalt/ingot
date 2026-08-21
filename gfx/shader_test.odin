@@ -50,6 +50,13 @@ shader_reflection_accepts_empty_and_mixed_layouts :: proc(t: ^testing.T) {
 	testing.expect_value(t, uniforms[0].offset, u32(0))
 	testing.expect_value(t, uniforms[1].offset, u32(12))
 	testing.expect_value(t, total, u32(16))
+
+	projection_source := "struct Uniforms { projection: vec4<f32>, };\nstruct U { exposure: f32, quality: f32 }"
+	custom, custom_total, custom_ok := _reflect_uniforms(projection_source)
+	defer _shader_uniforms_destroy(custom)
+	testing.expect(t, custom_ok)
+	testing.expect_value(t, len(custom), 2)
+	testing.expect_value(t, custom_total, u32(16))
 }
 
 @(test)
