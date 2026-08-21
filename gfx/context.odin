@@ -9,6 +9,34 @@ import "core:fmt"
 import "core:mem"
 import wg "vendor:wgpu"
 
+Gpu_Command_List :: struct {
+	owner:   ^Context,
+	epoch:   u64,
+	encoder: wg.CommandEncoder,
+	active:  bool,
+}
+
+context_begin_gpu_commands :: proc(ctx: ^Context) -> (Gpu_Command_List, bool) {
+	assert(ctx != nil, "context_begin_gpu_commands: nil context")
+	if !ctx.initialized do return {}, false
+	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
+	if encoder == nil do return {}, false
+	return {owner = ctx, epoch = ctx.epoch, encoder = encoder, active = true}, true
+}
+
+context_submit_gpu_commands :: proc(commands: ^Gpu_Command_List) -> bool {
+	assert(commands != nil, "context_submit_gpu_commands: nil commands")
+	if !commands.active || commands.owner == nil do return false
+	if commands.epoch != commands.owner.epoch do return false
+	command := wg.CommandEncoderFinish(commands.encoder, nil)
+	if command == nil do return false
+	wg.QueueSubmit(commands.owner.queue, {command})
+	wg.CommandBufferRelease(command)
+	wg.CommandEncoderRelease(commands.encoder)
+	commands^ = {}
+	return true
+}
+
 KEY_COUNT :: 349 // KB_MENU (348) + 1
 RESOURCE_SLOT_BITS :: 10
 RESOURCE_CONTEXT_BITS :: 10

@@ -19,6 +19,37 @@ package gfx
 import "core:strings"
 import wg "vendor:wgpu"
 
+Gpu_Shader_Stage :: enum {
+	Vertex,
+	Fragment,
+	Compute,
+}
+
+Gpu_Binding_Kind :: enum {
+	Uniform_Buffer,
+	Read_Only_Storage_Buffer,
+	Storage_Buffer,
+	Sampled_Texture,
+	Depth_Texture,
+	Storage_Texture,
+	Sampler,
+	Comparison_Sampler,
+}
+
+Gpu_Bind_Group_Layout :: struct {id: u32}
+Gpu_Bind_Group :: struct {id: u32}
+Gpu_Shader_Module :: struct {id: u32}
+
+Gpu_Binding_Desc :: struct {
+	binding:    u32,
+	visibility: bit_set[Gpu_Shader_Stage],
+	kind:       Gpu_Binding_Kind,
+}
+
+gpu_binding_desc_valid :: proc(desc: Gpu_Binding_Desc) -> bool {
+	return card(desc.visibility) > 0
+}
+
 SHADER_TEX_LOC_BASE :: 1000
 SHADER_MAX_TEX :: 4
 MAX_SHADERS :: 256
