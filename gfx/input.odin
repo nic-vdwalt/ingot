@@ -600,7 +600,7 @@ SetMouseCursor :: proc(cursor: MouseCursor) {
 // HideCursor hides the OS cursor over the window; SetMouseCursor calls made
 // while hidden are remembered and reapplied by ShowCursor.
 context_hide_cursor :: proc(ctx: ^Context) {
-	if ctx == nil || ctx.inp.cursor_hidden do return
+	if ctx == nil do return
 	ctx.inp.cursor_hidden = true
 	platform_set_cursor_hidden(ctx, true)
 }
@@ -610,7 +610,7 @@ HideCursor :: proc() {
 }
 
 context_show_cursor :: proc(ctx: ^Context) {
-	if ctx == nil || !ctx.inp.cursor_hidden do return
+	if ctx == nil do return
 	ctx.inp.cursor_hidden = false
 	platform_set_cursor_hidden(ctx, false)
 	platform_set_mouse_cursor(ctx, ctx.inp.cur_cursor)
