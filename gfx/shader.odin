@@ -225,7 +225,7 @@ _reflect_uniform_member :: proc(
 @(private)
 _reflect_uniforms :: proc(src: string) -> (out: []Shader_Uniform, total: u32, ok: bool) {
 	list: [dynamic]Shader_Uniform
-	si := strings.index(src, "struct U")
+	si := strings.index(src, "struct U {")
 	if si < 0 do return list[:], 16, true
 	opening := strings.index(src[si:], "{")
 	if opening < 0 do return nil, 0, false
@@ -252,6 +252,12 @@ _reflect_uniforms :: proc(src: string) -> (out: []Shader_Uniform, total: u32, ok
 	if !aligned || aligned_total > SHADER_UNIFORM_BYTES_MAX {
 		_shader_uniforms_destroy(list[:])
 		return nil, 0, false
+	}
+	if len(list) > 0 {
+		last := list[len(list) - 1]
+		member_end := last.offset + last.size
+		if aligned_total > member_end do last.size += aligned_total - member_end
+		list[len(list) - 1] = last
 	}
 	if aligned_total == 0 do aligned_total = 16
 	return list[:], aligned_total, true

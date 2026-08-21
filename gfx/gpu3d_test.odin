@@ -425,12 +425,23 @@ test_gpu_3d_geometry_validation :: proc(t: ^testing.T) {
 @(test)
 test_gpu_3d_material_custom_parameters_reach_uniforms :: proc(t: ^testing.T) {
 	material := Gpu_Material {
-		custom_params = {1, 2, 3, 4},
+		custom_params   = {1, 2, 3, 4},
+		custom_params_2 = {5, 6, 7, 8},
+		custom_params_3 = {9, 10, 11, 12},
+		custom_params_4 = {13, 14, 15, 16},
 	}
 	uniforms := Gpu_3D_Uniforms {
-		custom_params = material.custom_params,
+		custom_params   = material.custom_params,
+		custom_params_2 = material.custom_params_2,
+		custom_params_3 = material.custom_params_3,
+		custom_params_4 = material.custom_params_4,
 	}
 	testing.expect_value(t, uniforms.custom_params, [4]f32{1, 2, 3, 4})
+	testing.expect_value(t, uniforms.custom_params_2, [4]f32{5, 6, 7, 8})
+	testing.expect_value(t, uniforms.custom_params_3, [4]f32{9, 10, 11, 12})
+	testing.expect_value(t, uniforms.custom_params_4, [4]f32{13, 14, 15, 16})
+	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 288)
+	testing.expect_value(t, size_of(Gpu_3D_Uniforms) % 16, 0)
 }
 
 @(test)
