@@ -494,6 +494,8 @@ optimize_scratch_make_carves_an_unaligned_block :: proc(t: ^testing.T) {
 		testing.expect(t, ok, "optimize_scratch_make refused a padded block")
 		testing.expect_value(t, len(scratch.order), index_count)
 		testing.expect_value(t, len(scratch.adjacency_offset), vertex_count + 1)
+		testing.expect_value(t, raw_data(scratch.adjacency_cursor), raw_data(scratch.remap))
+		testing.expect_value(t, len(scratch.runs), _optimize_run_capacity(index_count / 3))
 	}
 }
 

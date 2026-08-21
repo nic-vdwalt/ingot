@@ -155,10 +155,8 @@ simplify_scratch_size :: proc(vertex_count, index_count: int) -> int {
 	edge_slots := _simplify_table_size(index_count)
 	total := _simplify_align(vertex_count * size_of(Quadric))
 	total += _simplify_align(vertex_count * size_of(u32)) * 4
-	total += _simplify_align(vertex_slots * size_of(u32))
-	total += _simplify_align(edge_slots * size_of(u32))
+	total += _simplify_align(max(vertex_slots, edge_slots) * size_of(u32))
 	total += _simplify_align(index_count * size_of(Simplify_Edge))
-	total += _simplify_align(index_count * size_of(Simplify_Candidate))
 	total += _simplify_align(vertex_count * size_of(u8))
 	return total
 }
@@ -191,17 +189,32 @@ simplify_scratch_make :: proc(
 			SIMPLIFY_SCRATCH_PADDING,
 		),
 	}
+	quadrics := _simplify_carve(&carve, Quadric, vertex_count)
+	group := _simplify_carve(&carve, u32, vertex_count)
+	collapse := _simplify_carve(&carve, u32, vertex_count)
+	touched := _simplify_carve(&carve, u32, vertex_count)
+	compact := _simplify_carve(&carve, u32, vertex_count)
+	table := _simplify_carve(
+		&carve,
+		u32,
+		max(_simplify_table_size(vertex_count), _simplify_table_size(index_count)),
+	)
+	edges := _simplify_carve(&carve, Simplify_Edge, index_count)
+	flags := _simplify_carve(&carve, u8, vertex_count)
+	#assert(size_of(Simplify_Edge) == size_of(Simplify_Candidate))
+	#assert(SIMPLIFY_SCRATCH_ALIGNMENT >= align_of(Simplify_Candidate))
+	candidates := cast([^]Simplify_Candidate)raw_data(edges)
 	scratch := Simplify_Scratch {
-		quadrics     = _simplify_carve(&carve, Quadric, vertex_count),
-		group        = _simplify_carve(&carve, u32, vertex_count),
-		collapse     = _simplify_carve(&carve, u32, vertex_count),
-		touched      = _simplify_carve(&carve, u32, vertex_count),
-		compact      = _simplify_carve(&carve, u32, vertex_count),
-		vertex_table = _simplify_carve(&carve, u32, _simplify_table_size(vertex_count)),
-		edge_table   = _simplify_carve(&carve, u32, _simplify_table_size(index_count)),
-		edges        = _simplify_carve(&carve, Simplify_Edge, index_count),
-		candidates   = _simplify_carve(&carve, Simplify_Candidate, index_count),
-		flags        = _simplify_carve(&carve, u8, vertex_count),
+		quadrics     = quadrics,
+		group        = group,
+		collapse     = collapse,
+		touched      = touched,
+		compact      = compact,
+		vertex_table = table[:_simplify_table_size(vertex_count)],
+		edge_table   = table[:_simplify_table_size(index_count)],
+		edges        = edges,
+		candidates   = candidates[:index_count],
+		flags        = flags,
 	}
 	assert(carve.offset <= len(block), "simplify_scratch_make: carve overran the block")
 	return scratch, true

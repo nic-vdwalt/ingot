@@ -201,6 +201,28 @@ _cook_test_storage :: proc(
 	}
 }
 
+@(test)
+mesh_workspace_carves_both_scratch_views :: proc(t: ^testing.T) {
+	vertex_count := 81
+	index_count := 384
+	bytes := mesh_workspace_size(vertex_count, index_count)
+	block := make([]u8, bytes)
+	defer delete(block)
+	workspace, ok := mesh_workspace_make(block, vertex_count, index_count)
+	testing.expect(t, ok)
+	simplify, simplify_ok := mesh_workspace_simplify(workspace, vertex_count, index_count)
+	testing.expect(t, simplify_ok)
+	optimize, optimize_ok := mesh_workspace_optimize(workspace, vertex_count, index_count)
+	testing.expect(t, optimize_ok)
+	testing.expect_value(
+		t,
+		uintptr(raw_data(simplify.quadrics)),
+		uintptr(raw_data(optimize.adjacency_offset)),
+	)
+	_, short_ok := mesh_workspace_make(block[:len(block) - 1], vertex_count, index_count)
+	testing.expect(t, !short_ok)
+}
+
 @(private = "file")
 _cook_test_cluster_storage :: proc(
 	vertex_count, index_count: int,

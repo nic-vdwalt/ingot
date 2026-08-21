@@ -265,6 +265,12 @@ simplify_scratch_carves_a_byte_block :: proc(t: ^testing.T) {
 	testing.expect(t, len(scratch.quadrics) == vertex_count)
 	testing.expect(t, len(scratch.flags) == vertex_count)
 	testing.expect(t, len(scratch.edges) == index_count)
+	testing.expect_value(t, raw_data(scratch.vertex_table), raw_data(scratch.edge_table))
+	testing.expect_value(
+		t,
+		uintptr(raw_data(scratch.edges)),
+		uintptr(raw_data(scratch.candidates)),
+	)
 	testing.expect(t, uintptr(raw_data(scratch.quadrics)) % SIMPLIFY_SCRATCH_ALIGNMENT == 0)
 	testing.expect(t, uintptr(raw_data(scratch.candidates)) % SIMPLIFY_SCRATCH_ALIGNMENT == 0)
 	out_vertices := make([]asset.Vertex, vertex_count)

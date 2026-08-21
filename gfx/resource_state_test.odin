@@ -461,8 +461,12 @@ context_renderer_statistics_are_isolated :: proc(t: ^testing.T) {
 	defer free(second)
 	first.stats_latest.flush_count = 11
 	second.stats_latest.flush_count = 23
+	first.stats_latest.acquire_cpu_seconds = 0.25
+	first.stats_latest.gpu3d_mesh_upload_bytes = 4096
 	testing.expect_value(t, context_renderer_stats(first).flush_count, u32(11))
 	testing.expect_value(t, context_renderer_stats(second).flush_count, u32(23))
+	testing.expect_value(t, context_renderer_stats_latest(first).acquire_cpu_seconds, f64(0.25))
+	testing.expect_value(t, context_renderer_stats_latest(first).gpu3d_mesh_upload_bytes, u64(4096))
 	context_renderer_stats_reset(first)
 	when RENDER_STATS_ENABLED {
 		testing.expect_value(t, context_renderer_stats(first).flush_count, u32(0))

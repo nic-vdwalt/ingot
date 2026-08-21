@@ -136,15 +136,23 @@ optimize_scratch_size :: proc(vertex_count, index_count: int) -> int {
 	assert(index_count % 3 == 0, "optimize_scratch_size: incomplete triangle")
 	triangle_count := index_count / 3
 	total := _simplify_align((vertex_count + 1) * size_of(u32))
-	total += _simplify_align(vertex_count * size_of(u32)) * 4
+	total += _simplify_align(vertex_count * size_of(u32)) * 3
 	total += _simplify_align(vertex_count * size_of(i32))
 	total += _simplify_align(vertex_count * size_of(f64))
 	total += _simplify_align(index_count * size_of(u32)) * 2
 	total += _simplify_align(triangle_count * size_of(u32)) * 3
 	total += _simplify_align(triangle_count * size_of(i32))
 	total += _simplify_align(triangle_count * size_of(f64))
-	total += _simplify_align(triangle_count * size_of(Optimize_Run))
+	total += _simplify_align(_optimize_run_capacity(triangle_count) * size_of(Optimize_Run))
 	return total
+}
+
+@(private)
+_optimize_run_capacity :: proc(triangle_count: int) -> int {
+	assert(triangle_count > 0, "_optimize_run_capacity: empty mesh")
+	divisor := max(f64(1), OPTIMIZE_OVERDRAW_THRESHOLD * OPTIMIZE_OVERDRAW_RUN_DIVISOR)
+	run_length := max(1, int(f64(triangle_count) / divisor))
+	return (triangle_count + run_length - 1) / run_length
 }
 
 // optimize_scratch_make carves a caller-owned byte block into the typed scratch
@@ -172,21 +180,23 @@ optimize_scratch_make :: proc(
 			OPTIMIZE_SCRATCH_PADDING,
 		),
 	}
+	adjacency_offset := _simplify_carve(&carve, u32, vertex_count + 1)
+	cursor_remap := _simplify_carve(&carve, u32, vertex_count)
 	scratch := Optimize_Scratch {
-		adjacency_offset = _simplify_carve(&carve, u32, vertex_count + 1),
-		adjacency_cursor = _simplify_carve(&carve, u32, vertex_count),
+		adjacency_offset = adjacency_offset,
+		adjacency_cursor = cursor_remap,
 		adjacency        = _simplify_carve(&carve, u32, index_count),
 		remaining        = _simplify_carve(&carve, u32, vertex_count),
 		cache_position   = _simplify_carve(&carve, i32, vertex_count),
 		vertex_scores    = _simplify_carve(&carve, f64, vertex_count),
 		vertex_mark      = _simplify_carve(&carve, u32, vertex_count),
-		remap            = _simplify_carve(&carve, u32, vertex_count),
+		remap            = cursor_remap,
 		triangle_scores  = _simplify_carve(&carve, f64, triangles),
 		heap_items       = _simplify_carve(&carve, u32, triangles),
 		heap_slots       = _simplify_carve(&carve, i32, triangles),
 		touched          = _simplify_carve(&carve, u32, triangles),
 		touched_mark     = _simplify_carve(&carve, u32, triangles),
-		runs             = _simplify_carve(&carve, Optimize_Run, triangles),
+		runs             = _simplify_carve(&carve, Optimize_Run, _optimize_run_capacity(triangles)),
 		order            = _simplify_carve(&carve, u32, index_count),
 	}
 	assert(carve.offset <= len(block), "optimize_scratch_make: carve overran the block")
@@ -219,7 +229,7 @@ _optimize_inputs_ok :: proc(
 	if len(scratch.triangle_scores) < triangles do return false
 	if len(scratch.heap_items) < triangles || len(scratch.heap_slots) < triangles do return false
 	if len(scratch.touched) < triangles || len(scratch.touched_mark) < triangles do return false
-	if len(scratch.runs) < triangles do return false
+	if len(scratch.runs) < _optimize_run_capacity(triangles) do return false
 	return true
 }
 

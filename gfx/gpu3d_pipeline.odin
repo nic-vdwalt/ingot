@@ -1778,7 +1778,7 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 		_stream_slot_abandon(&ctx.rend)
 		_stats_stream_retirement_failure(ctx)
 	}
-	_stats_context_cpu_times(ctx, 0, encode_elapsed, submit_elapsed, 0)
+	_stats_context_cpu_times(ctx, 0, 0, encode_elapsed, submit_elapsed, 0)
 	if cmd != nil do wg.CommandBufferRelease(cmd)
 	wg.CommandEncoderRelease(pass.encoder)
 	ctx.resources.gpu_3d.active_pass_generation = 0
