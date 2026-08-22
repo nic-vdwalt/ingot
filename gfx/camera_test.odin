@@ -258,6 +258,31 @@ world_to_screen_does_not_mutate_active_projection :: proc(t: ^testing.T) {
 }
 
 @(test)
+world_to_screen_visible_reports_camera_hemisphere_without_mutation :: proc(t: ^testing.T) {
+	gfx_shared_test_lock()
+	defer gfx_shared_test_unlock()
+	old_width, old_height := g.width, g.height
+	old_projection, old_view, old_vp := g.cam3d_proj, g.cam3d_view, g.cam3d_vp
+	defer {
+		g.width, g.height = old_width, old_height
+		g.cam3d_proj, g.cam3d_view, g.cam3d_vp = old_projection, old_view, old_vp
+	}
+	g.width, g.height = 800, 600
+	g.cam3d_proj = Matrix(2)
+	g.cam3d_view = Matrix(3)
+	g.cam3d_vp = Matrix(4)
+	camera := camera_test_value()
+	point, visible := WorldToScreenVisible({0, 0, 0}, camera)
+	testing.expect(t, visible)
+	testing.expect(t, abs(point.x - 400) < 1e-4 && abs(point.y - 300) < 1e-4)
+	_, behind_visible := WorldToScreenVisible(camera.position - CAMERA_WORLD_FORWARD, camera)
+	testing.expect(t, !behind_visible)
+	testing.expect_value(t, g.cam3d_proj, Matrix(2))
+	testing.expect_value(t, g.cam3d_view, Matrix(3))
+	testing.expect_value(t, g.cam3d_vp, Matrix(4))
+}
+
+@(test)
 world_to_screen_pro_uses_arbitrary_matrix :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()

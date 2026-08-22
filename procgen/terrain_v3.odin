@@ -7,7 +7,7 @@ import "core:math"
 // landform height. The embedded V2 recipe changes both the classification and
 // the height a seed produces, so worlds persisted against version 5 must be
 // regenerated rather than reinterpreted.
-TERRAIN_RECIPE_VERSION_V3 :: u32(7)
+TERRAIN_RECIPE_VERSION_V3 :: u32(8)
 TERRAIN_VOLUME_MAX_EDGE_V3 :: 64
 TERRAIN_VOLUME_MAX_SAMPLES_V3 :: 300_000
 // The terrace blend cannot reach 1 or a terraced slope would become a
@@ -395,6 +395,14 @@ terrain_primary_surface_prevalidated_v3 :: proc(
 	p := recipe.parameters
 	height := _terrain_shape_height_v3(recipe, sample.height)
 	landform := _terrain_shape_height_v3(recipe, sample.landform)
+	moisture, temperature := _terrain_climate_v2(
+		&recipe.surface,
+		x,
+		y,
+		height,
+		sample.continentalness,
+		sample.ruggedness,
+	)
 	left, left_ok := _terrain_primary_height_v3(recipe, x - step, y)
 	right, right_ok := _terrain_primary_height_v3(recipe, x + step, y)
 	down, down_ok := _terrain_primary_height_v3(recipe, x, y - step)
@@ -416,16 +424,16 @@ terrain_primary_surface_prevalidated_v3 :: proc(
 		&recipe.surface,
 		landform,
 		sample.continentalness,
-		sample.moisture,
-		sample.temperature,
+		moisture,
+		temperature,
 		landform_slope,
 	)
 	if !biome_ok do return {}, false
 	return {
 			height = height,
 			landform = landform,
-			moisture = sample.moisture,
-			temperature = sample.temperature,
+			moisture = moisture,
+			temperature = temperature,
 			continentalness = sample.continentalness,
 			ruggedness = sample.ruggedness,
 			slope = slope,

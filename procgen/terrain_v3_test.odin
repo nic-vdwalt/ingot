@@ -54,6 +54,8 @@ terrain_v3_normal_primary_surface_matches_v2 :: proc(t: ^testing.T) {
 			v3, ok_v3 := terrain_primary_surface_v3(&recipe, world_x, world_y, 2)
 			testing.expect(t, ok_v2 && ok_v3)
 			testing.expect_value(t, v3.height, v2.height)
+			testing.expect_value(t, v3.moisture, v2.moisture)
+			testing.expect_value(t, v3.temperature, v2.temperature)
 			testing.expect_value(t, v3.biomes, v2.biomes)
 		}
 	}

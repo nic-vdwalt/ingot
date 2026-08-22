@@ -2,7 +2,8 @@ package procgen
 
 import "core:math"
 
-TERRAIN_RECIPE_VERSION_V4 :: u32(1)
+TERRAIN_RECIPE_VERSION_V4 :: u32(2)
+TERRAIN_SHELL_MAX_SAMPLES_V4 :: 300_000
 
 Terrain_Preset_V4 :: enum u8 {
 	Normal,
@@ -18,6 +19,17 @@ Terrain_Parameters_V4 :: struct {
 	minimum_upward_normal:        f32,
 	latitude_offset_radians:      f32,
 	latitude_half_extent_radians: f32,
+	cave_strength:                f32,
+	cave_threshold:               f32,
+	cave_radial_min:              f32,
+	cave_radial_max:              f32,
+	cave_tunnel_scale:            f32,
+	cave_chamber_scale:           f32,
+	cave_warp:                    f32,
+	fissure_strength:             f32,
+	fissure_threshold:            f32,
+	fissure_width:                f32,
+	fissure_radial_depth:         f32,
 }
 
 Terrain_Recipe_V4 :: struct {
@@ -26,6 +38,19 @@ Terrain_Recipe_V4 :: struct {
 	seed:       u64,
 	surface:    Terrain_Recipe_V2,
 	parameters: Terrain_Parameters_V4,
+}
+
+Terrain_Shell_Request_V4 :: struct {
+	face:         Terrain_Face_V4,
+	u_min:        f32,
+	v_min:        f32,
+	u_cells:      i32,
+	v_cells:      i32,
+	u_step:       f32,
+	v_step:       f32,
+	radial_min:   f32,
+	radial_cells: i32,
+	radial_step:  f32,
 }
 
 Terrain_Height_Terms_V4 :: struct {
@@ -76,6 +101,17 @@ terrain_normal_recipe_v4 :: proc(seed: u64) -> Terrain_Recipe_V4 {
 			minimum_upward_normal = 0.55,
 			latitude_offset_radians = 0,
 			latitude_half_extent_radians = math.PI / 2,
+			cave_strength = 0,
+			cave_threshold = 0.52,
+			cave_radial_min = -36,
+			cave_radial_max = 36,
+			cave_tunnel_scale = 1.3,
+			cave_chamber_scale = 1.2,
+			cave_warp = 12,
+			fissure_strength = 0,
+			fissure_threshold = 0.72,
+			fissure_width = 4,
+			fissure_radial_depth = 24,
 		},
 	}
 }
@@ -111,6 +147,17 @@ terrain_recipe_validate_v4 :: proc(recipe: ^Terrain_Recipe_V4) -> bool {
 		p.minimum_upward_normal,
 		p.latitude_offset_radians,
 		p.latitude_half_extent_radians,
+		p.cave_strength,
+		p.cave_threshold,
+		p.cave_radial_min,
+		p.cave_radial_max,
+		p.cave_tunnel_scale,
+		p.cave_chamber_scale,
+		p.cave_warp,
+		p.fissure_strength,
+		p.fissure_threshold,
+		p.fissure_width,
+		p.fissure_radial_depth,
 	}
 	for value in values do if !_terrain_finite_v2(value) do return false
 	if p.radius <= 0 || p.height_scale <= 0 do return false
@@ -121,6 +168,11 @@ terrain_recipe_validate_v4 :: proc(recipe: ^Terrain_Recipe_V4) -> bool {
 	if abs(p.latitude_offset_radians) > math.PI / 2 do return false
 	half := p.latitude_half_extent_radians
 	if half <= 0 || half > math.PI / 2 do return false
+	if p.cave_strength < 0 || p.cave_threshold < 0 || p.cave_threshold > 1 do return false
+	if p.cave_radial_min >= p.cave_radial_max do return false
+	if p.cave_tunnel_scale <= 0 || p.cave_chamber_scale <= 0 || p.cave_warp < 0 do return false
+	if p.fissure_strength < 0 || p.fissure_threshold < 0 || p.fissure_threshold > 1 do return false
+	if p.fissure_width <= 0 || p.fissure_radial_depth <= 0 do return false
 	if recipe.surface.latitude_offset != 0 do return false
 	return true
 }
@@ -215,7 +267,7 @@ terrain_primary_surface_prevalidated_v4 :: proc(
 	moisture, temperature, latitude := _terrain_climate_v4(recipe, direction, center)
 	biomes, biome_ok := terrain_biome_blend_prevalidated_v2(
 		&recipe.surface,
-		center.landform,
+		center.landform / recipe.parameters.height_scale,
 		center.continentalness,
 		moisture,
 		temperature,
@@ -304,10 +356,124 @@ _terrain_climate_v4 :: proc(
 	)
 	temperature =
 		noise * (1 - surface.latitude_weight) + (1 - latitude_unit) * surface.latitude_weight
-	lapse := max(terms.height - surface.sea_level, 0) * surface.elevation_lapse
+	source_height := terms.height / recipe.parameters.height_scale
+	lapse := max(source_height - surface.sea_level, 0) * surface.elevation_lapse
 	temperature = clamp(temperature - lapse, 0, 1)
 	temperature = clamp(temperature + surface.temperature_bias, 0, 1)
 	return
+}
+
+terrain_density_v4 :: proc(recipe: ^Terrain_Recipe_V4, position: [3]f32) -> (f32, bool) {
+	if !terrain_recipe_validate_v4(recipe) do return 0, false
+	return terrain_density_prevalidated_v4(recipe, position)
+}
+
+terrain_density_prevalidated_v4 :: proc(
+	recipe: ^Terrain_Recipe_V4,
+	position: [3]f32,
+) -> (
+	f32,
+	bool,
+) {
+	assert(recipe != nil, "terrain_density_prevalidated_v4: nil recipe")
+	length_squared := _terrain_dot_v4(position, position)
+	if !_terrain_finite_v2(length_squared) || length_squared <= 0 do return 0, false
+	radial_distance := math.sqrt(length_squared)
+	direction := position / radial_distance
+	terms, ok := terrain_height_terms_prevalidated_v4(recipe, direction)
+	if !ok do return 0, false
+	p := recipe.parameters
+	surface_radius := p.radius + terms.height
+	density := surface_radius - radial_distance
+	radial_offset := radial_distance - p.radius
+	if p.cave_strength > 0 &&
+	   radial_offset >= p.cave_radial_min &&
+	   radial_offset <= p.cave_radial_max {
+		cave := _terrain_cave_signal_v4(recipe, position)
+		density -= max(cave - p.cave_threshold, 0) * p.cave_strength
+	}
+	if p.fissure_strength > 0 && radial_distance <= surface_radius {
+		depth := surface_radius - radial_distance
+		if depth <= p.fissure_radial_depth {
+			fissure := _terrain_fissure_signal_v4(recipe, direction, depth)
+			density -= max(fissure - p.fissure_threshold, 0) * p.fissure_strength
+		}
+	}
+	return density, true
+}
+
+terrain_shell_sample_v4 :: proc(
+	recipe: ^Terrain_Recipe_V4,
+	request: Terrain_Shell_Request_V4,
+	density: []f32,
+) -> bool {
+	if !terrain_recipe_validate_v4(recipe) do return false
+	values := [?]f32 {
+		request.u_min,
+		request.v_min,
+		request.u_step,
+		request.v_step,
+		request.radial_min,
+		request.radial_step,
+	}
+	for value in values do if !_terrain_finite_v2(value) do return false
+	if request.u_cells <= 0 || request.v_cells <= 0 || request.radial_cells <= 0 do return false
+	if request.u_step <= 0 || request.v_step <= 0 || request.radial_step <= 0 do return false
+	u_max := request.u_min + f32(request.u_cells) * request.u_step
+	v_max := request.v_min + f32(request.v_cells) * request.v_step
+	if request.u_min < -1 || request.v_min < -1 || u_max > 1 || v_max > 1 do return false
+	u_samples := int(request.u_cells) + 1
+	v_samples := int(request.v_cells) + 1
+	radial_samples := int(request.radial_cells) + 1
+	sample_count := u_samples * v_samples * radial_samples
+	if sample_count <= 0 || sample_count > TERRAIN_SHELL_MAX_SAMPLES_V4 do return false
+	if len(density) < sample_count do return false
+	cursor := 0
+	for radial_index in 0 ..< radial_samples {
+		radial := recipe.parameters.radius + request.radial_min + f32(radial_index) * request.radial_step
+		if radial <= 0 do return false
+		for v_index in 0 ..< v_samples {
+			v := request.v_min + f32(v_index) * request.v_step
+			for u_index in 0 ..< u_samples {
+				u := request.u_min + f32(u_index) * request.u_step
+				direction := terrain_face_direction_v4(request.face, u, v)
+				value, ok := terrain_density_prevalidated_v4(recipe, direction * radial)
+				if !ok do return false
+				density[cursor] = value
+				cursor += 1
+			}
+		}
+	}
+	return true
+}
+
+@(private)
+_terrain_cave_signal_v4 :: proc(recipe: ^Terrain_Recipe_V4, position: [3]f32) -> f32 {
+	assert(recipe != nil, "_terrain_cave_signal_v4: nil recipe")
+	p := recipe.parameters
+	noise := recipe.surface.detail_noise
+	warp_x := fractal_3d(noise, position.y, position.z, position.x) * p.cave_warp
+	warp_y := fractal_3d(noise, position.z, position.x, position.y) * p.cave_warp
+	tunnel_a := abs(fractal_3d(noise, position.x + warp_x, position.y, position.z + warp_y))
+	tunnel_b := abs(fractal_3d(noise, position.x, position.y - warp_y, position.z + warp_x))
+	tunnel := 1 - min(tunnel_a, tunnel_b) * p.cave_tunnel_scale
+	chamber := _terrain_unit(fractal_3d(recipe.surface.mountain_noise, position.x, position.y, position.z))
+	return clamp(max(tunnel, chamber * p.cave_chamber_scale), 0, 1)
+}
+
+@(private)
+_terrain_fissure_signal_v4 :: proc(
+	recipe: ^Terrain_Recipe_V4,
+	direction: [3]f32,
+	depth: f32,
+) -> f32 {
+	assert(recipe != nil, "_terrain_fissure_signal_v4: nil recipe")
+	p := recipe.parameters
+	position := direction * p.radius
+	warp := fractal_3d(recipe.surface.detail_noise, position.y, position.z, position.x) * p.cave_warp
+	ridge := 1 - abs(fractal_3d(recipe.surface.ridge_noise, position.x + warp, position.y, position.z)) * p.fissure_width
+	taper := 1 - clamp(depth / p.fissure_radial_depth, 0, 1)
+	return clamp(ridge * taper, 0, 1)
 }
 
 @(private)
