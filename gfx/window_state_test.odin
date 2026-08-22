@@ -12,7 +12,7 @@ import "core:testing"
 @(test)
 test_window_initial_focus_policy :: proc(t: ^testing.T) {
 	testing.expect(t, _window_wants_initial_focus({}), "default window requests focus")
-	testing.expect(t, _window_should_activate({}), "default visible window activates")
+	testing.expect(t, _window_should_activate({}), "ready visible window activates")
 	testing.expect(
 		t,
 		!_window_wants_initial_focus({.WINDOW_UNFOCUSED}),
@@ -21,12 +21,17 @@ test_window_initial_focus_policy :: proc(t: ^testing.T) {
 	testing.expect(
 		t,
 		!_window_should_activate({.WINDOW_UNFOCUSED}),
-		"unfocused window does not activate",
+		"ready unfocused window does not activate",
 	)
 	testing.expect(
 		t,
 		!_window_should_activate({.WINDOW_HIDDEN}),
-		"hidden window does not activate",
+		"ready hidden window does not activate",
+	)
+	testing.expect(
+		t,
+		!_window_should_activate({.WINDOW_HIDDEN, .WINDOW_UNFOCUSED}),
+		"ready hidden unfocused window does not activate",
 	)
 }
 

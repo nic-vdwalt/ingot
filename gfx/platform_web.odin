@@ -149,6 +149,12 @@ platform_create_window :: proc(
 }
 
 @(private)
+platform_window_ready :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_window_ready: nil context")
+	assert(_web_context_is_owner(ctx), "platform_window_ready: context does not own web canvas")
+}
+
+@(private)
 platform_create_surface :: proc(ctx: ^Context, instance: wg.Instance) -> wg.Surface {
 	assert(ctx != nil, "platform_create_surface: nil context")
 	return wg.InstanceCreateSurface(
