@@ -110,6 +110,18 @@ Gpu_Material :: struct {
 	custom_params_5:      [4]f32,
 	custom_params_6:      [4]f32,
 	custom_params_7:      [4]f32,
+	custom_params_8:      [4]f32,
+	custom_params_9:      [4]f32,
+	custom_params_10:     [4]f32,
+	custom_params_11:     [4]f32,
+	custom_params_12:     [4]f32,
+	custom_params_13:     [4]f32,
+	custom_params_14:     [4]f32,
+	custom_params_15:     [4]f32,
+	custom_params_16:     [4]f32,
+	custom_params_17:     [4]f32,
+	custom_params_18:     [4]f32,
+	custom_params_19:     [4]f32,
 	// shader with a zero id means the built-in GPU_3D_SHADER; a custom
 	// handle from create_gpu_3d_shader replaces both shader stages. Stale
 	// handles fall back to the built-in shader (operating condition).
@@ -187,6 +199,18 @@ Gpu_3D_Uniforms :: struct {
 	custom_params_5:  [4]f32,
 	custom_params_6:  [4]f32,
 	custom_params_7:  [4]f32,
+	custom_params_8:  [4]f32,
+	custom_params_9:  [4]f32,
+	custom_params_10: [4]f32,
+	custom_params_11: [4]f32,
+	custom_params_12: [4]f32,
+	custom_params_13: [4]f32,
+	custom_params_14: [4]f32,
+	custom_params_15: [4]f32,
+	custom_params_16: [4]f32,
+	custom_params_17: [4]f32,
+	custom_params_18: [4]f32,
+	custom_params_19: [4]f32,
 }
 
 // Per-instance model transforms for draw_gpu_mesh_instanced, read by the
@@ -204,7 +228,7 @@ Gpu_3D_Instance_Uniforms :: struct {
 // larger than the shader view. Lock the invariants a struct edit could
 // silently break: never smaller than the shader view, always 16-byte
 // aligned as dynamic offsets require.
-#assert(size_of(Gpu_3D_Uniforms) >= 288)
+#assert(size_of(Gpu_3D_Uniforms) >= 480)
 #assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
 #assert(size_of(Gpu_3D_Vertex) == 36)
 #assert(size_of(Matrix) == 64)
@@ -350,6 +374,18 @@ struct Uniforms {
     custom_params_5: vec4<f32>,
     custom_params_6: vec4<f32>,
     custom_params_7: vec4<f32>,
+    custom_params_8: vec4<f32>,
+    custom_params_9: vec4<f32>,
+    custom_params_10: vec4<f32>,
+    custom_params_11: vec4<f32>,
+    custom_params_12: vec4<f32>,
+    custom_params_13: vec4<f32>,
+    custom_params_14: vec4<f32>,
+    custom_params_15: vec4<f32>,
+    custom_params_16: vec4<f32>,
+    custom_params_17: vec4<f32>,
+    custom_params_18: vec4<f32>,
+    custom_params_19: vec4<f32>,
 };
 // Array length mirrors GPU_3D_MAX_INSTANCES_PER_DRAW.
 struct Instances {
@@ -1748,6 +1784,18 @@ _gpu_3d_draw_indexed :: proc(
 			custom_params_5  = material.custom_params_5,
 			custom_params_6  = material.custom_params_6,
 			custom_params_7  = material.custom_params_7,
+			custom_params_8  = material.custom_params_8,
+			custom_params_9  = material.custom_params_9,
+			custom_params_10 = material.custom_params_10,
+			custom_params_11 = material.custom_params_11,
+			custom_params_12 = material.custom_params_12,
+			custom_params_13 = material.custom_params_13,
+			custom_params_14 = material.custom_params_14,
+			custom_params_15 = material.custom_params_15,
+			custom_params_16 = material.custom_params_16,
+			custom_params_17 = material.custom_params_17,
+			custom_params_18 = material.custom_params_18,
+			custom_params_19 = material.custom_params_19,
 		}
 	offset, ok := _uniform_upload(pass.owner, &pass.owner.rend, &uniforms, size_of(uniforms))
 	if !ok || pass.owner.rend.active_stream_slot < 0 do return false
