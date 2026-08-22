@@ -645,6 +645,7 @@ test_gpu_3d_shader_declares_pbr_bind_groups :: proc(t: ^testing.T) {
 	testing.expect(t, strings.contains(GPU_3D_SHADER, normal_declaration))
 	testing.expect(t, strings.contains(GPU_3D_SHADER, roughness_declaration))
 	testing.expect(t, strings.contains(GPU_3D_SHADER, "use_roughness_ao: u32"))
+	testing.expect(t, strings.contains(GPU_3D_SHADER, "@group(1) @binding(0) var mesh_texture"))
 }
 
 @(test)
