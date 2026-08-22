@@ -96,6 +96,7 @@ Graphics_Resources :: struct {
 	shaders:            Shader_Resources,
 	rlgl:               Rlgl_Resources,
 	gpu_3d:             Gpu_3D_Resources,
+	compute:            Gpu_Compute_Resources,
 	retire:             [dynamic]Retired_Texture,
 
 	// Lazily baked default font backing DrawText/MeasureText
@@ -472,6 +473,7 @@ _graphics_resources_destroy :: proc(ctx: ^Context, resources: ^Graphics_Resource
 	assert(ctx != nil, "_graphics_resources_destroy: nil context")
 	assert(resources != nil, "_graphics_resources_destroy: nil resources")
 	assert(!ctx.frame.has_frame, "_graphics_resources_destroy: active frame")
+	_gpu_compute_resources_destroy(&resources.compute)
 	_gpu_3d_resources_destroy(ctx, &resources.gpu_3d)
 	_rlgl_resources_destroy(&resources.rlgl)
 	_shader_resources_destroy(&resources.shaders)

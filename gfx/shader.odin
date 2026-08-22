@@ -39,15 +39,41 @@ Gpu_Binding_Kind :: enum {
 Gpu_Bind_Group_Layout :: struct {id: u32}
 Gpu_Bind_Group :: struct {id: u32}
 Gpu_Shader_Module :: struct {id: u32}
+Gpu_Compute_Pipeline :: struct {id: u32}
+Gpu_Sampler_Kind :: enum u8 {
+	Filtering,
+	Non_Filtering,
+	Comparison,
+}
+Gpu_Storage_Access :: enum u8 {
+	Write_Only,
+	Read_Only,
+	Read_Write,
+}
 
 Gpu_Binding_Desc :: struct {
-	binding:    u32,
-	visibility: bit_set[Gpu_Shader_Stage],
-	kind:       Gpu_Binding_Kind,
+	binding:        u32,
+	visibility:     bit_set[Gpu_Shader_Stage],
+	kind:           Gpu_Binding_Kind,
+	minimum_size:   u64,
+	texture_format: wg.TextureFormat,
+	storage_access: Gpu_Storage_Access,
+	sampler_kind:   Gpu_Sampler_Kind,
+}
+
+Gpu_Bind_Entry :: struct {
+	binding: u32,
+	buffer:  Gpu_Buffer,
+	texture: Gpu_Texture,
+	sampler: Gpu_Sampler,
+	offset:  u64,
+	size:    u64,
 }
 
 gpu_binding_desc_valid :: proc(desc: Gpu_Binding_Desc) -> bool {
-	return card(desc.visibility) > 0
+	if card(desc.visibility) == 0 do return false
+	if desc.kind == .Storage_Texture && desc.texture_format == .Undefined do return false
+	return true
 }
 
 SHADER_TEX_LOC_BASE :: 1000
