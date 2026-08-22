@@ -225,7 +225,8 @@ context_create_gpu_texture :: proc(ctx: ^Context, desc: Gpu_Texture_Desc) -> Gpu
 		free(entry)
 		return {}
 	}
-	if .TextureBinding in desc.usage do _tex_build_bind(ctx, entry)
+	filterable := desc.format != .R32Float && desc.format != .RG32Float && desc.format != .RGBA32Float
+	if .TextureBinding in desc.usage && filterable do _tex_build_bind(ctx, entry)
 	id := _texture_register_context(ctx.id, &ctx.resources.textures, entry)
 	if id == 0 {
 		_texture_entry_destroy(ctx, entry)
@@ -353,7 +354,9 @@ context_create_gpu_bind_group_layout :: proc(
 		case .Storage_Buffer:
 			entry.buffer = {type = .Storage, minBindingSize = desc.minimum_size}
 		case .Sampled_Texture:
-			entry.texture = {sampleType = .Float, viewDimension = ._2D}
+			sample_type: wg.TextureSampleType = .Float
+			if desc.texture_sample_type == .Unfilterable_Float do sample_type = .UnfilterableFloat
+			entry.texture = {sampleType = sample_type, viewDimension = ._2D}
 		case .Depth_Texture:
 			entry.texture = {sampleType = .Depth, viewDimension = ._2D}
 		case .Storage_Texture:

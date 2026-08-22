@@ -45,6 +45,10 @@ Gpu_Sampler_Kind :: enum u8 {
 	Non_Filtering,
 	Comparison,
 }
+Gpu_Texture_Sample_Type :: enum u8 {
+	Filterable_Float,
+	Unfilterable_Float,
+}
 Gpu_Storage_Access :: enum u8 {
 	Write_Only,
 	Read_Only,
@@ -52,13 +56,14 @@ Gpu_Storage_Access :: enum u8 {
 }
 
 Gpu_Binding_Desc :: struct {
-	binding:        u32,
-	visibility:     bit_set[Gpu_Shader_Stage],
-	kind:           Gpu_Binding_Kind,
-	minimum_size:   u64,
-	texture_format: wg.TextureFormat,
-	storage_access: Gpu_Storage_Access,
-	sampler_kind:   Gpu_Sampler_Kind,
+	binding:            u32,
+	visibility:         bit_set[Gpu_Shader_Stage],
+	kind:               Gpu_Binding_Kind,
+	minimum_size:       u64,
+	texture_format:     wg.TextureFormat,
+	texture_sample_type: Gpu_Texture_Sample_Type,
+	storage_access:     Gpu_Storage_Access,
+	sampler_kind:       Gpu_Sampler_Kind,
 }
 
 Gpu_Bind_Entry :: struct {

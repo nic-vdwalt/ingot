@@ -25,6 +25,12 @@ gpu_compute_descriptors_reject_invalid_resources :: proc(t: ^testing.T) {
 	testing.expect(t, !gpu_binding_desc_valid(invalid_storage))
 	invalid_storage.texture_format = .RGBA16Float
 	testing.expect(t, gpu_binding_desc_valid(invalid_storage))
+	sampled := Gpu_Binding_Desc {
+		visibility = {.Compute},
+		kind = .Sampled_Texture,
+		texture_sample_type = .Unfilterable_Float,
+	}
+	testing.expect(t, gpu_binding_desc_valid(sampled))
 }
 
 @(test)
