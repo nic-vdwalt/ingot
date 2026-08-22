@@ -563,10 +563,10 @@ renderer_init :: proc(ctx: ^Context, r: ^Renderer) -> bool {
 	tex_entries := [2]wg.BindGroupLayoutEntry {
 		{
 			binding = 0,
-			visibility = {.Fragment},
+			visibility = {.Vertex, .Fragment},
 			texture = {sampleType = .Float, viewDimension = ._2D},
 		},
-		{binding = 1, visibility = {.Fragment}, sampler = {type = .Filtering}},
+		{binding = 1, visibility = {.Vertex, .Fragment}, sampler = {type = .Filtering}},
 	}
 	r.tex_layout = wg.DeviceCreateBindGroupLayout(
 		device,
