@@ -225,6 +225,7 @@ context_create_gpu_texture :: proc(ctx: ^Context, desc: Gpu_Texture_Desc) -> Gpu
 		free(entry)
 		return {}
 	}
+	if .TextureBinding in desc.usage do _tex_build_bind(ctx, entry)
 	id := _texture_register_context(ctx.id, &ctx.resources.textures, entry)
 	if id == 0 {
 		_texture_entry_destroy(ctx, entry)
@@ -235,6 +236,18 @@ context_create_gpu_texture :: proc(ctx: ^Context, desc: Gpu_Texture_Desc) -> Gpu
 
 create_gpu_texture :: proc(desc: Gpu_Texture_Desc) -> Gpu_Texture {
 	return context_create_gpu_texture(default_context(), desc)
+}
+
+gpu_texture_as_texture_2d :: proc(handle: Gpu_Texture) -> Texture2D {
+	entry := context_get_texture(default_context(), handle.id)
+	if entry == nil do return {}
+	return {
+		id = handle.id,
+		width = entry.width,
+		height = entry.height,
+		mipmaps = i32(entry.mip_count),
+		format = .UNCOMPRESSED_R16G16B16A16,
+	}
 }
 
 context_destroy_gpu_texture :: proc(ctx: ^Context, handle: ^Gpu_Texture) {
@@ -526,6 +539,86 @@ end_gpu_compute_pass :: proc(pass: ^Gpu_Compute_Pass) -> bool {
 	wg.ComputePassEncoderRelease(pass.pass)
 	pass^ = {}
 	return true
+}
+
+context_destroy_gpu_sampler :: proc(ctx: ^Context, handle: ^Gpu_Sampler) {
+	assert(ctx != nil && handle != nil, "context_destroy_gpu_sampler: invalid argument")
+	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.samplers))
+	if !ok do return
+	slot := &ctx.resources.compute.samplers[index]
+	if !slot.occupied || slot.generation != generation do return
+	wg.SamplerRelease(slot.value)
+	slot^ = {generation = slot.generation}
+	ctx.resources.compute.sampler_n -= 1
+	handle^ = {}
+}
+
+destroy_gpu_sampler :: proc(handle: ^Gpu_Sampler) {
+	context_destroy_gpu_sampler(default_context(), handle)
+}
+
+context_destroy_gpu_bind_group :: proc(ctx: ^Context, handle: ^Gpu_Bind_Group) {
+	assert(ctx != nil && handle != nil, "context_destroy_gpu_bind_group: invalid argument")
+	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.groups))
+	if !ok do return
+	slot := &ctx.resources.compute.groups[index]
+	if !slot.occupied || slot.generation != generation do return
+	wg.BindGroupRelease(slot.value)
+	slot^ = {generation = slot.generation}
+	ctx.resources.compute.group_n -= 1
+	handle^ = {}
+}
+
+destroy_gpu_bind_group :: proc(handle: ^Gpu_Bind_Group) {
+	context_destroy_gpu_bind_group(default_context(), handle)
+}
+
+context_destroy_gpu_bind_group_layout :: proc(ctx: ^Context, handle: ^Gpu_Bind_Group_Layout) {
+	assert(ctx != nil && handle != nil, "context_destroy_gpu_bind_group_layout: invalid argument")
+	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.layouts))
+	if !ok do return
+	slot := &ctx.resources.compute.layouts[index]
+	if !slot.occupied || slot.generation != generation do return
+	wg.BindGroupLayoutRelease(slot.value)
+	slot^ = {generation = slot.generation}
+	ctx.resources.compute.layout_n -= 1
+	handle^ = {}
+}
+
+destroy_gpu_bind_group_layout :: proc(handle: ^Gpu_Bind_Group_Layout) {
+	context_destroy_gpu_bind_group_layout(default_context(), handle)
+}
+
+context_destroy_gpu_shader_module :: proc(ctx: ^Context, handle: ^Gpu_Shader_Module) {
+	assert(ctx != nil && handle != nil, "context_destroy_gpu_shader_module: invalid argument")
+	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.modules))
+	if !ok do return
+	slot := &ctx.resources.compute.modules[index]
+	if !slot.occupied || slot.generation != generation do return
+	wg.ShaderModuleRelease(slot.value)
+	slot^ = {generation = slot.generation}
+	ctx.resources.compute.module_n -= 1
+	handle^ = {}
+}
+
+destroy_gpu_shader_module :: proc(handle: ^Gpu_Shader_Module) {
+	context_destroy_gpu_shader_module(default_context(), handle)
+}
+
+context_destroy_gpu_compute_pipeline :: proc(ctx: ^Context, handle: ^Gpu_Compute_Pipeline) {
+	assert(ctx != nil && handle != nil, "context_destroy_gpu_compute_pipeline: invalid argument")
+	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.pipelines))
+	if !ok do return
+	slot := &ctx.resources.compute.pipelines[index]
+	if !slot.occupied || slot.generation != generation do return
+	wg.ComputePipelineRelease(slot.value)
+	slot^ = {generation = slot.generation}
+	ctx.resources.compute.pipeline_n -= 1
+	handle^ = {}
+}
+
+destroy_gpu_compute_pipeline :: proc(handle: ^Gpu_Compute_Pipeline) {
+	context_destroy_gpu_compute_pipeline(default_context(), handle)
 }
 
 @(private)

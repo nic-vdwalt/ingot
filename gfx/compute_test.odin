@@ -29,17 +29,20 @@ gpu_compute_descriptors_reject_invalid_resources :: proc(t: ^testing.T) {
 
 @(test)
 gpu_compute_handles_reject_stale_and_foreign_contexts :: proc(t: ^testing.T) {
-	first, second: Context
+	first := new(Context)
+	second := new(Context)
+	defer free(first)
+	defer free(second)
 	first.id = 2
 	second.id = 3
 	slot := &first.resources.compute.buffers[0]
 	slot.generation = 1
 	slot.occupied = true
 	handle := Gpu_Buffer{id = _gpu_compute_handle(first.id, 0, slot.generation)}
-	testing.expect(t, _gpu_buffer_get(&first, handle) == nil)
-	testing.expect(t, _gpu_buffer_get(&second, handle) == nil)
+	testing.expect(t, _gpu_buffer_get(first, handle) == nil)
+	testing.expect(t, _gpu_buffer_get(second, handle) == nil)
 	slot.generation = 2
-	testing.expect(t, _gpu_buffer_get(&first, handle) == nil)
+	testing.expect(t, _gpu_buffer_get(first, handle) == nil)
 }
 
 @(test)
