@@ -429,18 +429,27 @@ test_gpu_3d_material_custom_parameters_reach_uniforms :: proc(t: ^testing.T) {
 		custom_params_2 = {5, 6, 7, 8},
 		custom_params_3 = {9, 10, 11, 12},
 		custom_params_4 = {13, 14, 15, 16},
+		custom_params_5 = {17, 18, 19, 20},
+		custom_params_6 = {21, 22, 23, 24},
+		custom_params_7 = {25, 26, 27, 28},
 	}
 	uniforms := Gpu_3D_Uniforms {
 		custom_params   = material.custom_params,
 		custom_params_2 = material.custom_params_2,
 		custom_params_3 = material.custom_params_3,
 		custom_params_4 = material.custom_params_4,
+		custom_params_5 = material.custom_params_5,
+		custom_params_6 = material.custom_params_6,
+		custom_params_7 = material.custom_params_7,
 	}
 	testing.expect_value(t, uniforms.custom_params, [4]f32{1, 2, 3, 4})
 	testing.expect_value(t, uniforms.custom_params_2, [4]f32{5, 6, 7, 8})
 	testing.expect_value(t, uniforms.custom_params_3, [4]f32{9, 10, 11, 12})
 	testing.expect_value(t, uniforms.custom_params_4, [4]f32{13, 14, 15, 16})
-	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 288)
+	testing.expect_value(t, uniforms.custom_params_5, [4]f32{17, 18, 19, 20})
+	testing.expect_value(t, uniforms.custom_params_6, [4]f32{21, 22, 23, 24})
+	testing.expect_value(t, uniforms.custom_params_7, [4]f32{25, 26, 27, 28})
+	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 336)
 	testing.expect_value(t, size_of(Gpu_3D_Uniforms) % 16, 0)
 }
 
@@ -614,7 +623,7 @@ test_gpu_3d_shader_pool_bounds :: proc(t: ^testing.T) {
 test_gpu_3d_uniforms_layout_locked :: proc(t: ^testing.T) {
 	// The Odin structs are copied raw into the uniform stream and read back
 	// through the WGSL views, so their sizes are load-bearing contracts.
-	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 224, "uniforms smaller than WGSL view")
+	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 336, "uniforms smaller than extended WGSL view")
 	testing.expect_value(t, size_of(Gpu_3D_Uniforms) % 16, 0)
 	testing.expect_value(t, size_of(Gpu_3D_Vertex), 36)
 	testing.expect_value(t, size_of(Matrix), 64)

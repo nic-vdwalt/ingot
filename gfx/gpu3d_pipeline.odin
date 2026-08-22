@@ -107,6 +107,9 @@ Gpu_Material :: struct {
 	custom_params_2:      [4]f32,
 	custom_params_3:      [4]f32,
 	custom_params_4:      [4]f32,
+	custom_params_5:      [4]f32,
+	custom_params_6:      [4]f32,
+	custom_params_7:      [4]f32,
 	// shader with a zero id means the built-in GPU_3D_SHADER; a custom
 	// handle from create_gpu_3d_shader replaces both shader stages. Stale
 	// handles fall back to the built-in shader (operating condition).
@@ -181,6 +184,9 @@ Gpu_3D_Uniforms :: struct {
 	use_texture:      u32,
 	use_normal:       u32,
 	use_roughness_ao: u32,
+	custom_params_5:  [4]f32,
+	custom_params_6:  [4]f32,
+	custom_params_7:  [4]f32,
 }
 
 // Per-instance model transforms for draw_gpu_mesh_instanced, read by the
@@ -341,6 +347,9 @@ struct Uniforms {
     use_texture: u32,
     use_normal: u32,
     use_roughness_ao: u32,
+    custom_params_5: vec4<f32>,
+    custom_params_6: vec4<f32>,
+    custom_params_7: vec4<f32>,
 };
 // Array length mirrors GPU_3D_MAX_INSTANCES_PER_DRAW.
 struct Instances {
@@ -1736,6 +1745,9 @@ _gpu_3d_draw_indexed :: proc(
 			use_texture      = u32(1) if textured else 0,
 			use_normal       = u32(1) if normal_mapped else 0,
 			use_roughness_ao = u32(1) if roughness_ao_mapped else 0,
+			custom_params_5  = material.custom_params_5,
+			custom_params_6  = material.custom_params_6,
+			custom_params_7  = material.custom_params_7,
 		}
 	offset, ok := _uniform_upload(pass.owner, &pass.owner.rend, &uniforms, size_of(uniforms))
 	if !ok || pass.owner.rend.active_stream_slot < 0 do return false
