@@ -180,3 +180,29 @@ terrain_v4_tangent_adjusted_cells_have_bounded_area :: proc(t: ^testing.T) {
 	}
 	testing.expectf(t, maximum / minimum < 1.42, "cell area ratio %v", maximum / minimum)
 }
+
+@(test)
+terrain_v4_density_changes_sign_at_the_surface :: proc(t: ^testing.T) {
+	recipe := terrain_normal_recipe_v4(71)
+	direction := terrain_face_direction_v4(.Pos_X, 0.2, -0.3)
+	surface, surface_ok := terrain_primary_surface_v4(&recipe, direction)
+	testing.expect(t, surface_ok)
+	inside, inside_ok := terrain_density_v4(&recipe, direction * (surface.radius - 1))
+	outside, outside_ok := terrain_density_v4(&recipe, direction * (surface.radius + 1))
+	testing.expect(t, inside_ok && outside_ok)
+	testing.expect(t, inside > 0)
+	testing.expect(t, outside < 0)
+}
+
+@(test)
+terrain_v4_shell_sampling_matches_direct_density :: proc(t: ^testing.T) {
+	recipe := terrain_normal_recipe_v4(73)
+	request := Terrain_Shell_Request_V4{.Pos_Z, -0.25, -0.25, 2, 2, 0.25, 0.25, -2, 2, 2}
+	density: [27]f32
+	testing.expect(t, terrain_shell_sample_v4(&recipe, request, density[:]))
+	direction := terrain_face_direction_v4(.Pos_Z, -0.25, -0.25)
+	direct, ok := terrain_density_v4(&recipe, direction * (recipe.parameters.radius - 2))
+	testing.expect(t, ok)
+	testing.expect_value(t, density[0], direct)
+	testing.expect(t, !terrain_shell_sample_v4(&recipe, request, density[:26]))
+}
