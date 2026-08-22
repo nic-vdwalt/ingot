@@ -691,6 +691,7 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 	_graphics_resources_init(&ctx.resources)
 	platform_input_init(ctx)
 	platform_drop_init(ctx)
+	platform_window_ready(ctx)
 
 	ctx.initialized = true
 	ctx.lifecycle = .Ready

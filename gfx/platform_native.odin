@@ -75,12 +75,17 @@ platform_create_window :: proc(
 	}
 	ctx.win = Window_Handle(win)
 	glfw.SetWindowUserPointer(win, ctx)
-	if _window_should_activate(flags) {
-		_platform_activate_application()
-		glfw.FocusWindow(win)
-	}
 	glfw_live_windows += 1
 	return true
+}
+
+@(private)
+platform_window_ready :: proc(ctx: ^Context) {
+	assert(ctx != nil, "platform_window_ready: nil context")
+	assert(ctx.win != nil, "platform_window_ready: no window")
+	if !_window_should_activate(ctx.config_flags) do return
+	_platform_activate_application()
+	glfw.FocusWindow(_context_window(ctx))
 }
 
 @(private)
