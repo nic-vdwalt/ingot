@@ -267,7 +267,9 @@ Gpu_3D_Material_Policy :: struct {
 _gpu_3d_material_policy :: proc(style: Gpu_Material_Style) -> Gpu_3D_Material_Policy {
 	return {
 		blend = style == .Default || style == .Transparent,
-		depth_write = style != .Transparent && style != .Opaque_Overlay && style != .Opaque_Outline,
+		depth_write = style != .Transparent &&
+		style != .Opaque_Overlay &&
+		style != .Opaque_Outline,
 		depth_compare = .LessEqual if style == .Opaque_Outline else .Less,
 		depth_bias = -2 if style == .Opaque_Overlay else 0,
 	}
@@ -1714,6 +1716,58 @@ _gpu_3d_material_binds :: proc(
 	return texture_bind, textured, normal_bind, normal_mapped, roughness_bind, roughness_mapped
 }
 
+@(private)
+_gpu_3d_uniforms :: proc(
+	pass: ^Gpu_3D_Pass,
+	material: Gpu_Material,
+	transform: Matrix,
+	textured: bool,
+	normal_mapped: bool,
+	roughness_ao_mapped: bool,
+) -> Gpu_3D_Uniforms {
+	assert(pass != nil, "_gpu_3d_uniforms: nil pass")
+	color_high := material.color_high
+	if color_high == (Color{}) do color_high = material.color
+	light := pass.light
+	return {
+		view_projection = pass.view_projection,
+		model = transform,
+		color = col_f(material.color),
+		color_high = col_f(color_high),
+		light_direction = {light.direction.x, light.direction.y, light.direction.z, 0},
+		light_params = {light.ambient, light.diffuse, material.depth_nudge, pass.time},
+		camera_position = {
+			pass.camera_position.x,
+			pass.camera_position.y,
+			pass.camera_position.z,
+			0,
+		},
+		custom_params = material.custom_params,
+		custom_params_2 = material.custom_params_2,
+		custom_params_3 = material.custom_params_3,
+		custom_params_4 = material.custom_params_4,
+		use_scalar = u32(1) if material.use_scalar else 0,
+		use_texture = u32(1) if textured else 0,
+		use_normal = u32(1) if normal_mapped else 0,
+		use_roughness_ao = u32(1) if roughness_ao_mapped else 0,
+		custom_params_5 = material.custom_params_5,
+		custom_params_6 = material.custom_params_6,
+		custom_params_7 = material.custom_params_7,
+		custom_params_8 = material.custom_params_8,
+		custom_params_9 = material.custom_params_9,
+		custom_params_10 = material.custom_params_10,
+		custom_params_11 = material.custom_params_11,
+		custom_params_12 = material.custom_params_12,
+		custom_params_13 = material.custom_params_13,
+		custom_params_14 = material.custom_params_14,
+		custom_params_15 = material.custom_params_15,
+		custom_params_16 = material.custom_params_16,
+		custom_params_17 = material.custom_params_17,
+		custom_params_18 = material.custom_params_18,
+		custom_params_19 = material.custom_params_19,
+	}
+}
+
 // _gpu_3d_draw_indexed encodes one indexed draw: uniforms, both bind groups,
 // buffers, and stats. Shared by plain and instanced draws so the two paths
 // cannot drift.
@@ -1756,47 +1810,14 @@ _gpu_3d_draw_indexed :: proc(
 	if pipeline == nil do return false
 	texture_bind, textured, normal_bind, normal_mapped, roughness_ao_bind, roughness_ao_mapped :=
 		_gpu_3d_material_binds(pass, material)
-
-	color_high := material.color_high
-	if color_high == (Color{}) do color_high = material.color
-	light := pass.light
-	uniforms := Gpu_3D_Uniforms {
-			view_projection  = pass.view_projection,
-			model            = transform,
-			color            = col_f(material.color),
-			color_high       = col_f(color_high),
-			light_direction  = {light.direction.x, light.direction.y, light.direction.z, 0},
-			light_params     = {light.ambient, light.diffuse, material.depth_nudge, pass.time},
-			camera_position  = {
-				pass.camera_position.x,
-				pass.camera_position.y,
-				pass.camera_position.z,
-				0,
-			},
-			custom_params    = material.custom_params,
-			custom_params_2  = material.custom_params_2,
-			custom_params_3  = material.custom_params_3,
-			custom_params_4  = material.custom_params_4,
-			use_scalar       = u32(1) if material.use_scalar else 0,
-			use_texture      = u32(1) if textured else 0,
-			use_normal       = u32(1) if normal_mapped else 0,
-			use_roughness_ao = u32(1) if roughness_ao_mapped else 0,
-			custom_params_5  = material.custom_params_5,
-			custom_params_6  = material.custom_params_6,
-			custom_params_7  = material.custom_params_7,
-			custom_params_8  = material.custom_params_8,
-			custom_params_9  = material.custom_params_9,
-			custom_params_10 = material.custom_params_10,
-			custom_params_11 = material.custom_params_11,
-			custom_params_12 = material.custom_params_12,
-			custom_params_13 = material.custom_params_13,
-			custom_params_14 = material.custom_params_14,
-			custom_params_15 = material.custom_params_15,
-			custom_params_16 = material.custom_params_16,
-			custom_params_17 = material.custom_params_17,
-			custom_params_18 = material.custom_params_18,
-			custom_params_19 = material.custom_params_19,
-		}
+	uniforms := _gpu_3d_uniforms(
+		pass,
+		material,
+		transform,
+		textured,
+		normal_mapped,
+		roughness_ao_mapped,
+	)
 	offset, ok := _uniform_upload(pass.owner, &pass.owner.rend, &uniforms, size_of(uniforms))
 	if !ok || pass.owner.rend.active_stream_slot < 0 do return false
 	wg.RenderPassEncoderSetPipeline(pass.pass, pipeline)

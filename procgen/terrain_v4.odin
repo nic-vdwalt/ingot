@@ -430,7 +430,8 @@ terrain_shell_sample_v4 :: proc(
 	if len(density) < sample_count do return false
 	cursor := 0
 	for radial_index in 0 ..< radial_samples {
-		radial := recipe.parameters.radius + request.radial_min + f32(radial_index) * request.radial_step
+		radial :=
+			recipe.parameters.radius + request.radial_min + f32(radial_index) * request.radial_step
 		if radial <= 0 do return false
 		for v_index in 0 ..< v_samples {
 			v := request.v_min + f32(v_index) * request.v_step
@@ -457,7 +458,8 @@ _terrain_cave_signal_v4 :: proc(recipe: ^Terrain_Recipe_V4, position: [3]f32) ->
 	tunnel_a := abs(fractal_3d(noise, position.x + warp_x, position.y, position.z + warp_y))
 	tunnel_b := abs(fractal_3d(noise, position.x, position.y - warp_y, position.z + warp_x))
 	tunnel := 1 - min(tunnel_a, tunnel_b) * p.cave_tunnel_scale
-	chamber := _terrain_unit(fractal_3d(recipe.surface.mountain_noise, position.x, position.y, position.z))
+	chamber_noise := recipe.surface.mountain_noise
+	chamber := _terrain_unit(fractal_3d(chamber_noise, position.x, position.y, position.z))
 	return clamp(max(tunnel, chamber * p.cave_chamber_scale), 0, 1)
 }
 
@@ -470,8 +472,15 @@ _terrain_fissure_signal_v4 :: proc(
 	assert(recipe != nil, "_terrain_fissure_signal_v4: nil recipe")
 	p := recipe.parameters
 	position := direction * p.radius
-	warp := fractal_3d(recipe.surface.detail_noise, position.y, position.z, position.x) * p.cave_warp
-	ridge := 1 - abs(fractal_3d(recipe.surface.ridge_noise, position.x + warp, position.y, position.z)) * p.fissure_width
+	warp :=
+		fractal_3d(recipe.surface.detail_noise, position.y, position.z, position.x) * p.cave_warp
+	ridge_noise := fractal_3d(
+		recipe.surface.ridge_noise,
+		position.x + warp,
+		position.y,
+		position.z,
+	)
+	ridge := 1 - abs(ridge_noise) * p.fissure_width
 	taper := 1 - clamp(depth / p.fissure_radial_depth, 0, 1)
 	return clamp(ridge * taper, 0, 1)
 }
