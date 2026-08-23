@@ -114,6 +114,11 @@ Set_Theme :: proc(app: ^App, theme: Theme) {
 	ui.ui_runtime_set_theme(ui_gfx.app_ui_runtime(&app.inner), theme.inner)
 }
 
+Try_Set_Theme :: proc(app: ^App, theme: Theme) -> Theme_Validation {
+	assert(app != nil, "Fit.Try_Set_Theme: nil app")
+	return ui.ui_runtime_try_set_theme(ui_gfx.app_ui_runtime(&app.inner), theme.inner)
+}
+
 Set_Scale :: proc(app: ^App, scale: f32) {
 	assert(app != nil, "Fit.Set_Scale: nil app")
 	ui_gfx.session_set_user_scale(&app.inner.session, scale)

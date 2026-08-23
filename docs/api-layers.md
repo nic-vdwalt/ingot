@@ -55,6 +55,35 @@ Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 }
 ```
 
+Custom themes use the same value-owned path. Every interaction swatch is
+explicit; Ingot does not synthesize colors:
+
+```odin
+theme := fit.Theme_From_Palette({
+	basis = .Dark,
+	ground = {18, 20, 24, 255},
+	surface = {28, 31, 36, 255},
+	surface_raised = {38, 42, 48, 255},
+	control = {48, 53, 61, 255},
+	control_hover = {62, 69, 79, 255},
+	control_pressed = {78, 87, 99, 255},
+	foreground = {238, 241, 244, 255},
+	foreground_muted = {174, 182, 190, 255},
+	accent = {126, 200, 255, 255},
+	foreground_on_accent = {17, 19, 24, 255},
+	danger = {255, 145, 145, 255},
+	foreground_on_danger = {17, 19, 24, 255},
+	success = {142, 226, 166, 255},
+	border = {104, 115, 126, 255},
+	focus = {126, 200, 255, 230},
+})
+fit.Set_Theme(&app, theme)
+```
+
+Use `Theme_Set_Color` for an advanced single-role override. Validate editable
+palettes with `Theme_Validate`, or use `Try_Set_Theme` to reject an invalid value
+without changing the active theme.
+
 The builder is bounded and immediate. Root containers return an opaque
 current-build `fit.Parent`; child containers and leaves consume Parent values.
 There is no prepared-container open state or balancing call. `Scope` returns a

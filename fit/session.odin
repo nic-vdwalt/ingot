@@ -47,6 +47,14 @@ Session_Set_Theme :: proc(session: ^Session, theme: Theme) {
 	ui.ui_runtime_set_theme(ui_gfx.session_runtime(&session.inner), theme.inner)
 }
 
+Session_Try_Set_Theme :: proc(session: ^Session, theme: Theme) -> Theme_Validation {
+	assert(
+		session != nil && session.inner.initialized,
+		"Fit.Session_Try_Set_Theme: invalid session",
+	)
+	return ui.ui_runtime_try_set_theme(ui_gfx.session_runtime(&session.inner), theme.inner)
+}
+
 @(private = "file")
 session_draw_bridge :: proc(inner: ^ui_gfx.Session, frame: ^ui.Ui_Frame, userdata: rawptr) {
 	assert(inner != nil && frame != nil && userdata != nil, "fit session: invalid callback")

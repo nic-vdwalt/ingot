@@ -36,6 +36,49 @@ Fit_Test_Legacy_Button_State :: struct {
 	consumed: bool,
 }
 
+@(test)
+fit_theme_facade_builds_and_validates_palette :: proc(t: ^testing.T) {
+	theme := Theme_From_Palette(
+		{
+			basis = .Dark,
+			ground = {18, 20, 24, 255},
+			surface = {28, 31, 36, 255},
+			surface_raised = {38, 42, 48, 255},
+			control = {48, 53, 61, 255},
+			control_hover = {62, 69, 79, 255},
+			control_pressed = {78, 87, 99, 255},
+			foreground = {238, 241, 244, 255},
+			foreground_muted = {174, 182, 190, 255},
+			accent = {126, 200, 255, 255},
+			foreground_on_accent = {17, 19, 24, 255},
+			danger = {255, 145, 145, 255},
+			foreground_on_danger = {17, 19, 24, 255},
+			success = {142, 226, 166, 255},
+			border = {104, 115, 126, 255},
+			focus = {126, 200, 255, 230},
+		},
+	)
+	testing.expect(t, Theme_Is_Valid(theme))
+	Theme_Set_Color(&theme, .Background_Selection, Color{50, 70, 96, 255})
+	testing.expect_value(t, Theme_Get_Color(theme, .Background_Selection), Color{50, 70, 96, 255})
+}
+
+@(test)
+fit_session_try_theme_rejects_without_mutation :: proc(t: ^testing.T) {
+	session := new(Session)
+	defer free(session)
+	Session_Init(session)
+	defer Session_Destroy(session)
+	before := ui_gfx.session_runtime(&session.inner).style
+	generation := ui_gfx.session_runtime(&session.inner).generation
+	invalid := Theme_Dark()
+	Theme_Set_Color(&invalid, .Foreground_Primary, Theme_Get_Color(invalid, .Background))
+	validation := Session_Try_Set_Theme(session, invalid)
+	testing.expect_value(t, validation.code, Theme_Validation_Code.Primary_Contrast)
+	testing.expect_value(t, ui_gfx.session_runtime(&session.inner).style, before)
+	testing.expect_value(t, ui_gfx.session_runtime(&session.inner).generation, generation)
+}
+
 @(private = "file")
 fit_test_font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
 	assert(data != nil && size > 0, "fit test font: invalid argument")

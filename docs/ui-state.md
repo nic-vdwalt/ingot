@@ -94,6 +94,31 @@ variants. They return plain `Theme` structs swapped at runtime by
 than by a branch at the draw site, which is how the high-contrast theme opts out
 of shadows and the screen themes opt out of paper materials.
 
+## Custom themes
+
+The ordinary application path is `fit.Theme_From_Palette`. Its named palette
+fields provide explicit ground, surface, control-state, ink, semantic, border,
+and focus swatches. `basis` selects a complete dark or light foundation for
+specialist roles; construction only assigns colors to roles and never computes
+a lighter hover or darker press.
+
+Build the value when application settings change, retain it with the application
+state if needed, and pass it to `fit.Set_Theme` or `fit.Session_Set_Theme`. This
+keeps the application as the source of truth and creates no hidden theme object
+or per-widget synchronization.
+
+Use `fit.Theme_Validate` before installing editable or file-derived colors.
+`fit.Try_Set_Theme` and `fit.Session_Try_Set_Theme` return the first bounded,
+actionable validation failure and leave the current runtime unchanged. The
+existing setters continue to assert because an invalid program-authored theme is
+a programmer error.
+
+For a specialist token, fork any theme value and call `fit.Theme_Set_Color` with
+a `Theme_Role`. Pigments and page texture remain separate typed decisions through
+`Theme_Set_Pigment` and `Theme_Set_Substrate`; reduced motion remains orthogonal.
+Widgets still consume semantic `Ink`, `Pigment`, and `Surface` tokens rather than
+custom colors directly.
+
 Colour splits into two tables, and the split is load-bearing. `Ink` is text and
 must clear WCAG AA against the ground; `Pigment` is paint, carries no text, and
 stays saturated. They were once the same values, which quietly forced every
