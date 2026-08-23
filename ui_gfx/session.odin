@@ -17,6 +17,7 @@ Session :: struct {
 	output:        ui.Ui_Output,
 	adapter:       Adapter,
 	config:        Session_Config,
+	pending_scale: bool,
 	initialized:   bool,
 	frame_open:    bool,
 	graphics_open: bool,
@@ -51,11 +52,20 @@ session_begin_frame :: proc(session: ^Session) -> ^ui.Ui_Frame {
 	assert(!session.frame_open, "session_begin_frame: frame already open")
 	assert(!session.frame.open, "session_begin_frame: UI frame already open")
 	adapter_prepare_frame(&session.adapter, &session.runtime, &session.input)
-	_ = ui.ui_runtime_dpi_refresh(
-		&session.runtime,
-		user_scale = session.config.user_scale,
-		dpi_scale = session.input.dpi_scale,
-	)
+	if session.pending_scale {
+		ui.ui_runtime_apply_platform_dpi(
+			&session.runtime,
+			user_scale = session.config.user_scale,
+			dpi_scale = session.input.dpi_scale,
+		)
+		session.pending_scale = false
+	} else {
+		_ = ui.ui_runtime_dpi_refresh(
+			&session.runtime,
+			user_scale = session.config.user_scale,
+			dpi_scale = session.input.dpi_scale,
+		)
+	}
 	adapter_open_frame(
 		&session.adapter,
 		&session.frame,
@@ -151,5 +161,9 @@ session_set_user_scale :: proc(session: ^Session, user_scale: f32) {
 	assert(session != nil && session.initialized, "session_set_user_scale: invalid session")
 	assert(user_scale >= 0, "session_set_user_scale: negative scale")
 	session.config.user_scale = user_scale
+	if session.frame_open || session.graphics_open {
+		session.pending_scale = true
+		return
+	}
 	ui.ui_runtime_apply_platform_dpi(&session.runtime, user_scale)
 }

@@ -83,6 +83,51 @@ test_session_plain_frame_round_trip :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_session_scale_applies_immediately_outside_frame :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
+	gfx_context := new(rl.Context)
+	defer free(gfx_context)
+	session := new(Session)
+	defer free(session)
+	session_init_context(session, gfx_context)
+	defer session_destroy(session)
+
+	session_set_user_scale(session, 1.5)
+	testing.expect_value(t, session.config.user_scale, f32(1.5))
+	testing.expect_value(t, session.runtime.scale, f32(1.5))
+	testing.expect(t, !session.pending_scale)
+}
+
+@(test)
+test_session_scale_defers_until_next_frame :: proc(t: ^testing.T) {
+	test_context_lock()
+	defer test_context_unlock()
+	gfx_context := new(rl.Context)
+	defer free(gfx_context)
+	session := new(Session)
+	defer free(session)
+	session_init_context(session, gfx_context)
+	defer session_destroy(session)
+
+	_ = session_begin_frame(session)
+	active_scale := session.runtime.scale
+	active_font_epoch := session.runtime.font_epoch
+	session_set_user_scale(session, 1.5)
+	testing.expect_value(t, session.config.user_scale, f32(1.5))
+	testing.expect_value(t, session.runtime.scale, active_scale)
+	testing.expect_value(t, session.runtime.font_epoch, active_font_epoch)
+	testing.expect(t, session.pending_scale)
+	session_end_frame(session)
+
+	_ = session_begin_frame(session)
+	testing.expect_value(t, session.runtime.scale, f32(1.5))
+	testing.expect(t, session.runtime.font_epoch > active_font_epoch)
+	testing.expect(t, !session.pending_scale)
+	session_end_frame(session)
+}
+
+@(test)
 test_session_draw_api_compiles :: proc(t: ^testing.T) {
 	draw: proc(session: ^Session, callback: Session_Draw_Proc, userdata: rawptr) -> bool =
 		session_draw
