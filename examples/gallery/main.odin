@@ -112,6 +112,7 @@ NAV_SIDEBAR_ROW_H :: 28
 // the button walks screen themes, then sketchbook, then the accessibility
 // palette last: a progression rather than a jumble.
 Palette :: enum {
+	Retro_Orange,
 	Dark,
 	Light,
 	Sketch_Warm,
@@ -120,6 +121,7 @@ Palette :: enum {
 }
 
 PALETTE_NAMES := [Palette]string {
+	.Retro_Orange  = "Retro orange",
 	.Dark          = "Dark",
 	.Light         = "Light",
 	.Sketch_Warm   = "Sketch warm",
@@ -127,8 +129,9 @@ PALETTE_NAMES := [Palette]string {
 	.High_Contrast = "High contrast",
 }
 
-palette := Palette.Dark
+palette := Palette.Retro_Orange
 reduced_motion := false
+initial_theme_pending := false
 section := Section.Buttons
 debug_on := false
 gallery_root: fit.Rect
@@ -146,6 +149,8 @@ palette_next :: proc(current: Palette) -> Palette {
 // palette_theme resolves a palette to its Theme value.
 palette_theme :: proc(value: Palette) -> fit.Theme {
 	switch value {
+	case .Retro_Orange:
+		return fit.Theme_Retro_Orange()
 	case .Dark:
 		return fit.Theme_Dark()
 	case .Light:
@@ -157,7 +162,7 @@ palette_theme :: proc(value: Palette) -> fit.Theme {
 	case .High_Contrast:
 		return fit.Theme_High_Contrast()
 	}
-	return fit.Theme_Dark()
+	return fit.Theme_Retro_Orange()
 }
 
 content_pane: fit.Pane_State
@@ -278,6 +283,7 @@ main :: proc() {
 	when CAPTURE {
 		capture_main()
 	} else {
+		initial_theme_pending = true
 		_ = fit.Run(
 			&app,
 			{
@@ -305,6 +311,10 @@ input_state_destroy :: proc(state: ^Input_State) {
 
 gallery_build :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	assert(builder != nil, "gallery_build: nil builder")
+	if initial_theme_pending {
+		apply_gallery_theme()
+		initial_theme_pending = false
+	}
 	root := fit.Column(builder, {size = {width = fit.Grow(), height = fit.Grow()}})
 	fit.Canvas_Leaf(
 		root,
