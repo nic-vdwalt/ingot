@@ -25,6 +25,7 @@ libvterm/lib/linux_arm64/
 /render_fixture
 /artifacts/box3d_advanced
 /artifacts/box3d_water
+/artifacts/ingot-gallery-native
 /artifacts/readme-example/readme-example
 fuzz/net/fuzz_net
 fuzz/ui/fuzz_ui
