@@ -27,10 +27,18 @@ Tex_Entry :: struct {
 	usage:        wg.TextureUsageFlags,
 }
 
-Gpu_Buffer :: struct {id: u32}
-Gpu_Texture :: struct {id: u32}
-Gpu_Texture_View :: struct {id: u32}
-Gpu_Sampler :: struct {id: u32}
+Gpu_Buffer :: struct {
+	id: u32,
+}
+Gpu_Texture :: struct {
+	id: u32,
+}
+Gpu_Texture_View :: struct {
+	id: u32,
+}
+Gpu_Sampler :: struct {
+	id: u32,
+}
 
 Gpu_Buffer_Desc :: struct {
 	size:  u64,

@@ -36,10 +36,18 @@ Gpu_Binding_Kind :: enum {
 	Comparison_Sampler,
 }
 
-Gpu_Bind_Group_Layout :: struct {id: u32}
-Gpu_Bind_Group :: struct {id: u32}
-Gpu_Shader_Module :: struct {id: u32}
-Gpu_Compute_Pipeline :: struct {id: u32}
+Gpu_Bind_Group_Layout :: struct {
+	id: u32,
+}
+Gpu_Bind_Group :: struct {
+	id: u32,
+}
+Gpu_Shader_Module :: struct {
+	id: u32,
+}
+Gpu_Compute_Pipeline :: struct {
+	id: u32,
+}
 Gpu_Sampler_Kind :: enum u8 {
 	Filtering,
 	Non_Filtering,
@@ -56,14 +64,14 @@ Gpu_Storage_Access :: enum u8 {
 }
 
 Gpu_Binding_Desc :: struct {
-	binding:            u32,
-	visibility:         bit_set[Gpu_Shader_Stage],
-	kind:               Gpu_Binding_Kind,
-	minimum_size:       u64,
-	texture_format:     wg.TextureFormat,
+	binding:             u32,
+	visibility:          bit_set[Gpu_Shader_Stage],
+	kind:                Gpu_Binding_Kind,
+	minimum_size:        u64,
+	texture_format:      wg.TextureFormat,
 	texture_sample_type: Gpu_Texture_Sample_Type,
-	storage_access:     Gpu_Storage_Access,
-	sampler_kind:       Gpu_Sampler_Kind,
+	storage_access:      Gpu_Storage_Access,
+	sampler_kind:        Gpu_Sampler_Kind,
 }
 
 Gpu_Bind_Entry :: struct {
