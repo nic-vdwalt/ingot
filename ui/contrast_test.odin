@@ -28,8 +28,15 @@ import "core:testing"
 // can prove READING_INKS + DIM_INKS + Inverse is exactly the Ink enum.
 DIM_INKS :: [?]Ink{.Disabled, .Muted}
 
-builtin_themes :: proc() -> [3]Theme {
-	return [3]Theme{THEME_DARK, THEME_LIGHT, THEME_HIGH_CONTRAST}
+builtin_themes :: proc() -> [6]Theme {
+	return [6]Theme {
+		THEME_DARK,
+		THEME_LIGHT,
+		THEME_HIGH_CONTRAST,
+		theme_retro_orange(),
+		theme_retro_ingot(),
+		theme_terra(),
+	}
 }
 
 // MIN_DIM_CONTRAST is the floor for intentionally-dim inks. WCAG sets no

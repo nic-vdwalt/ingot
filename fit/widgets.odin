@@ -433,12 +433,12 @@ Theme_Retro_Orange :: proc() -> Theme {
 	return {inner = ui.theme_retro_orange()}
 }
 
-Theme_Sketch_Warm :: proc() -> Theme {
-	return {inner = ui.theme_sketch_warm()}
+Theme_Retro_Ingot :: proc() -> Theme {
+	return {inner = ui.theme_retro_ingot()}
 }
 
-Theme_Sketch_Grey :: proc() -> Theme {
-	return {inner = ui.theme_sketch_grey()}
+Theme_Terra :: proc() -> Theme {
+	return {inner = ui.theme_terra()}
 }
 
 Theme_High_Contrast :: proc() -> Theme {
