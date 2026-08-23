@@ -13,6 +13,7 @@ examples/hot_reload/build/
 libvterm/lib/linux_amd64/
 libvterm/lib/linux_arm64/
 /gallery
+/examples/gallery/gallery
 /api-map
 /chart_demo
 /idle_demo

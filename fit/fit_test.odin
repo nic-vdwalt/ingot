@@ -36,6 +36,64 @@ Fit_Test_Legacy_Button_State :: struct {
 	consumed: bool,
 }
 
+fit_test_icon_render :: proc(surface: ^Surface, _: Rect, _: rawptr) -> bool {
+	_ = Surface_Icon_Button(surface, Widget_Id(1), .Settings, "Settings", {10, 10, 28, 28})
+	return false
+}
+
+fit_test_icon_draw :: proc(builder: ^Builder, _: rawptr) {
+	Canvas(builder, fit_test_icon_render)
+}
+
+fit_test_noop_render :: proc(_: ^Surface, _: Rect, _: rawptr) -> bool {
+	return false
+}
+
+fit_test_overflow_draw :: proc(builder: ^Builder, _: rawptr) {
+	root := Column(builder)
+	Canvas_Leaf(
+		root,
+		{intrinsic = {w = 80, h = 60}, size = {width = Fixed(80), height = Fixed(60)}},
+		fit_test_noop_render,
+	)
+}
+
+@(test)
+fit_standard_icon_button_is_font_independent :: proc(t: ^testing.T) {
+	driver: Test_Driver
+	Test_Driver_Init(&driver)
+	defer Test_Driver_Destroy(&driver)
+	Test_Driver_Set_Semantics(&driver, true)
+	testing.expect(t, Test_Driver_Frame(&driver, {}, fit_test_icon_draw))
+	summary := Test_Driver_Paint_Summary(&driver)
+	diagnostics := Test_Driver_Diagnostics(&driver)
+	testing.expect(t, summary.main_geometry_commands >= 11)
+	testing.expect_value(t, summary.semantic_nodes, 1)
+	testing.expect_value(t, diagnostics.unsupported_glyphs, i32(0))
+}
+
+@(test)
+fit_reports_constrained_layout_overflow :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 100, 100})
+	fit_test_overflow_draw(&builder, nil)
+	_ = Measure(&builder)
+	Render_At(&builder, {0, 0, 40, 30})
+	testing.expect_value(t, ui.ui_frame_diagnostics(&frame).layout_overflows, i32(1))
+	builder_close(&builder)
+	ui.ui_frame_end(&frame)
+	ui.ui_frame_destroy(&frame)
+}
+
 @(test)
 fit_theme_facade_builds_and_validates_palette :: proc(t: ^testing.T) {
 	theme := Theme_From_Palette(

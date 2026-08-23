@@ -51,6 +51,7 @@ Theme_Tokens :: struct {
 	background_chip_hover:       Color,
 	background_user_card:        Color,
 	background_band_error:       Color,
+	modal_dim:                   Color,
 	foreground_primary:          Color,
 	foreground_secondary:        Color,
 	foreground_accent:           Color,

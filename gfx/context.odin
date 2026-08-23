@@ -19,6 +19,9 @@ Gpu_Command_List :: struct {
 context_begin_gpu_commands :: proc(ctx: ^Context) -> (Gpu_Command_List, bool) {
 	assert(ctx != nil, "context_begin_gpu_commands: nil context")
 	if !ctx.initialized do return {}, false
+	assert(ctx.lifecycle == .Ready, "context_begin_gpu_commands: context is not ready")
+	assert(ctx.device != nil, "context_begin_gpu_commands: initialized context requires device")
+	assert(!ctx.frame.has_frame, "context_begin_gpu_commands: frame is open")
 	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
 	if encoder == nil do return {}, false
 	return {owner = ctx, epoch = ctx.epoch, encoder = encoder, active = true}, true

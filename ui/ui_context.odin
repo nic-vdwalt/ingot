@@ -73,6 +73,8 @@ Ui_Frame :: struct {
 	// takes the whole app down. Counting the drops keeps that from hiding real
 	// layout bugs - tests assert the counter is zero on golden-path frames.
 	degenerate_drops:               int,
+	layout_overflows:               int,
+	unsupported_glyphs:             int,
 	text_input_full_path_count:     u64,
 	text_input_inactive_candidates: u64,
 	prepared_telemetry:             Prepared_Telemetry,
@@ -92,6 +94,12 @@ ui_frame_drop_degenerate :: proc(frame: ^Ui_Frame, degenerate: bool) -> bool {
 	// crashes.
 	if frame != nil do frame.degenerate_drops += 1
 	return true
+}
+
+ui_frame_record_layout_overflow :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "layout overflow: invalid frame")
+	assert(frame.layout_overflows < max(int), "layout overflow: counter exhausted")
+	frame.layout_overflows += 1
 }
 
 ui_runtime_init :: proc(runtime: ^Ui_Runtime) {
@@ -242,6 +250,8 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame.text_cull_bottom = max(i32)
 	frame.open_roots = 0
 	frame.degenerate_drops = 0
+	frame.layout_overflows = 0
+	frame.unsupported_glyphs = 0
 	when UI_TELEMETRY_ENABLED {
 		frame.text_input_full_path_count = 0
 		frame.text_input_inactive_candidates = 0

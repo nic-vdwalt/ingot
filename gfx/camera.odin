@@ -591,12 +591,25 @@ GetWorldToScreen :: proc(position: Vector3, camera: Camera3D) -> Vector2 {
 	return context_get_world_to_screen(default_context(), position, camera)
 }
 
-WorldToScreenVisible :: proc(position: Vector3, camera: Camera3D) -> (Vector2, bool) {
-	ctx := default_context()
-	assert(ctx != nil, "WorldToScreenVisible: nil context")
-	assert(_camera_vector_is_finite(position), "WorldToScreenVisible: non-finite position")
+context_world_to_screen_visible :: proc(
+	ctx: ^Context,
+	position: Vector3,
+	camera: Camera3D,
+) -> (
+	Vector2,
+	bool,
+) {
+	assert(ctx != nil, "context_world_to_screen_visible: nil context")
+	assert(
+		_camera_vector_is_finite(position),
+		"context_world_to_screen_visible: non-finite position",
+	)
 	view_projection := _camera_view_projection(camera, ctx.width, ctx.height)
 	return _project_dims(view_projection, position, f32(ctx.width), f32(ctx.height))
+}
+
+WorldToScreenVisible :: proc(position: Vector3, camera: Camera3D) -> (Vector2, bool) {
+	return context_world_to_screen_visible(default_context(), position, camera)
 }
 
 GetWorldToScreenPro :: proc(position: Vector3, view_projection: Matrix) -> Vector2 {

@@ -90,6 +90,7 @@ adapter_detach_runtime :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime) {
 	if runtime.text_backend.data == text.data &&
 	   runtime.text_backend.font_for_size == text.font_for_size &&
 	   runtime.text_backend.measure == text.measure &&
+	   runtime.text_backend.has_glyph == text.has_glyph &&
 	   runtime.text_backend.reset == text.reset {
 		runtime.text_backend = {}
 	}

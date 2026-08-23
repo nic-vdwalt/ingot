@@ -137,6 +137,8 @@ Ui_Frame_Telemetry :: struct {
 Ui_Frame_Diagnostics :: struct {
 	input_characters_dropped:   i32,
 	degenerate_widgets_dropped: i32,
+	layout_overflows:           i32,
+	unsupported_glyphs:         i32,
 	semantic_nodes_dropped:     i32,
 	semantic_focus_dropped:     i32,
 	semantic_actions_dropped:   i32,
@@ -226,6 +228,8 @@ ui_frame_diagnostics :: proc(frame: ^Ui_Frame) -> Ui_Frame_Diagnostics {
 	result := Ui_Frame_Diagnostics {
 		input_characters_dropped   = i32(frame.input.characters_dropped),
 		degenerate_widgets_dropped = i32(frame.degenerate_drops),
+		layout_overflows           = i32(frame.layout_overflows),
+		unsupported_glyphs         = i32(frame.unsupported_glyphs),
 		semantic_nodes_dropped     = i32(frame.semantics.nodes_dropped),
 		semantic_focus_dropped     = i32(frame.semantics.focus_dropped),
 		semantic_actions_dropped   = i32(frame.semantics.action_targets_dropped),

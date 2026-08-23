@@ -278,6 +278,12 @@ context_unload_font :: proc(ctx: ^Context, font: Font) {
 	context_unload_font_impl(ctx, font)
 }
 
+context_font_has_glyph :: proc(ctx: ^Context, font: Font, value: rune) -> bool {
+	assert(ctx != nil, "context_font_has_glyph: nil context")
+	assert(value >= 0 && value <= 0x10FFFF, "context_font_has_glyph: invalid codepoint")
+	return context_font_has_glyph_impl(ctx, font, value)
+}
+
 context_set_texture_filter :: proc(ctx: ^Context, texture: Texture2D, filter: TextureFilter) {
 	if ctx == nil || texture.id == 0 do return
 	context_set_texture_filter_impl(ctx, texture, filter)
