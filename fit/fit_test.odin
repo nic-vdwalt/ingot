@@ -459,7 +459,9 @@ fit_native_scroll_preserves_offset_until_final_placement :: proc(t: ^testing.T) 
 	defer ui.ui_frame_end(&frame)
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 200, 100})
-	state := Scroll_State{inner = {offset = 72}}
+	state := Scroll_State {
+		inner = {offset = 72},
+	}
 	root := Column(&builder, {track = Grow()})
 	scroll := Scroll(root, "content", &state, {track = Grow()})
 	content := Column(scroll)
@@ -677,6 +679,39 @@ fit_concise_grid_flow_and_fit_column_balance :: proc(t: ^testing.T) {
 	testing.expect_value(t, Fit_Column_Next(&column, 20), Rect{0, 0, 100, 20})
 	_ = Fit_Column_End(&column)
 	testing.expect(t, !grid.open && !flow.open && !column.open, "explicit state remained open")
+	_ = ui.end(&root)
+}
+
+@(test)
+fit_vertical_cursor_composes_and_reuses_caller_state :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	surface := Surface {
+		inner = &root,
+	}
+	cursor: Vertical_Cursor_State
+	Vertical_Cursor_Begin(&surface, &cursor, 10, 20, 180, gap = 6)
+	line := Vertical_Cursor_Text(&cursor, "Summary", .Label, .Secondary)
+	header := Vertical_Cursor_Section_Header(&cursor, "DETAILS")
+	bounds := Vertical_Cursor_End(&cursor)
+	testing.expect_value(t, header.y, line.y + line.h + 6)
+	testing.expect_value(t, bounds.h, line.h + 6 + header.h)
+	testing.expect(t, !cursor.open && cursor.surface == nil, "cursor retained borrowed surface")
+	Vertical_Cursor_Begin_Bounded(&surface, &cursor, {0, 0, 100, 10})
+	clamped := Vertical_Cursor_Next(&cursor, 20)
+	_ = Vertical_Cursor_End(&cursor)
+	testing.expect_value(t, clamped, Rect{0, 0, 100, 10})
+	testing.expect_value(t, Vertical_Cursor_Overflow(&cursor), i32(10))
 	_ = ui.end(&root)
 }
 

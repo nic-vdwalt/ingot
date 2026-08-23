@@ -47,6 +47,11 @@ Surface_Section_Header :: proc(surface: ^Surface, rect: Rect, label: string) -> 
 	return ui.section_header_at(u.frame, to_rect(rect), label)
 }
 
+Surface_Section_Header_Height :: proc(surface: ^Surface) -> i32 {
+	u := surface_ui(surface)
+	return ui.section_header_height(u.frame)
+}
+
 Surface_Card_Background :: proc(
 	surface: ^Surface,
 	rect: Rect,

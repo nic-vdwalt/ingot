@@ -28,13 +28,15 @@ import "core:testing"
 // can prove READING_INKS + DIM_INKS + Inverse is exactly the Ink enum.
 DIM_INKS :: [?]Ink{.Disabled, .Muted}
 
-builtin_themes :: proc() -> [6]Theme {
-	return [6]Theme {
+builtin_themes :: proc() -> [8]Theme {
+	return [8]Theme {
 		THEME_DARK,
 		THEME_LIGHT,
 		THEME_HIGH_CONTRAST,
 		theme_retro_orange(),
+		theme_retro_orange_dark(),
 		theme_retro_ingot(),
+		theme_retro_ingot_dark(),
 		theme_terra(),
 	}
 }

@@ -134,6 +134,25 @@ fit.Layout_End(&layout)
 These explicit states are reusable after End. Their physical rectangle results
 must not pass through `Px` again.
 
+Use `Vertical_Cursor_State` when authored Surface content flows downward. It
+allocates each block before drawing it, so text, section headers, controls, and
+spacers share one advancement rule instead of manually threading Y coordinates:
+
+```odin
+cursor: fit.Vertical_Cursor_State
+fit.Vertical_Cursor_Begin(surface, &cursor, x, y, width, gap = fit.Px(surface, 8))
+fit.Vertical_Cursor_Text(&cursor, "Status", .Label, .Secondary)
+fit.Vertical_Cursor_Section_Header(&cursor, "DETAILS")
+button_rect := fit.Vertical_Cursor_Next(&cursor, fit.Px(surface, 30))
+_ = fit.Surface_Button(surface, button_id, "Continue", button_rect)
+content := fit.Vertical_Cursor_End(&cursor)
+```
+
+Use `Vertical_Cursor_Begin_Bounded` when the cursor must stay inside a fixed
+rectangle. `Vertical_Cursor_Remaining` and `Vertical_Cursor_Overflow` expose the
+budget; semantic helpers do not draw partially granted rows. Cursor state is
+zero-value ready, balanced, reusable after End, and never retained by Surface.
+
 ## Measurement and placement
 
 The application host renders automatically. Internal or advanced composition
