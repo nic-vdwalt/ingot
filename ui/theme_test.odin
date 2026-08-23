@@ -142,3 +142,113 @@ theme_pigment_falls_back_to_matching_ink :: proc(t: ^testing.T) {
 		testing.expect_value(t, theme_pigment(&style, pigment), expected)
 	}
 }
+
+@(test)
+theme_validation_reports_first_failure :: proc(t: ^testing.T) {
+	style := theme_dark()
+	style.fg_primary = {}
+	validation := Theme_Validate(style)
+	testing.expect_value(t, validation.code, Theme_Validation_Code.Transparent_Foreground)
+	testing.expect_value(t, validation.role, Theme_Role.Foreground_Primary)
+	style = theme_dark()
+	style.bg_popup = {}
+	validation = Theme_Validate(style)
+	testing.expect_value(t, validation.code, Theme_Validation_Code.Transparent_Background)
+	testing.expect_value(t, validation.role, Theme_Role.Background_Popup)
+}
+
+@(test)
+theme_try_set_rejects_without_runtime_mutation :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	before := runtime.style
+	generation := runtime.generation
+	invalid := theme_dark()
+	invalid.fg_primary = invalid.bg_color
+	validation := ui_runtime_try_set_theme(&runtime, invalid)
+	testing.expect_value(t, validation.code, Theme_Validation_Code.Primary_Contrast)
+	testing.expect_value(t, runtime.style, before)
+	testing.expect_value(t, runtime.generation, generation)
+}
+
+@(test)
+theme_palette_maps_explicit_dark_swatches :: proc(t: ^testing.T) {
+	palette := Theme_Palette {
+		basis                = .Dark,
+		ground               = {18, 20, 24, 255},
+		surface              = {28, 31, 36, 255},
+		surface_raised       = {38, 42, 48, 255},
+		control              = {48, 53, 61, 255},
+		control_hover        = {62, 69, 79, 255},
+		control_pressed      = {78, 87, 99, 255},
+		foreground           = {238, 241, 244, 255},
+		foreground_muted     = {174, 182, 190, 255},
+		accent               = {126, 200, 255, 255},
+		foreground_on_accent = {17, 19, 24, 255},
+		danger               = {255, 145, 145, 255},
+		foreground_on_danger = {17, 19, 24, 255},
+		success              = {142, 226, 166, 255},
+		border               = {104, 115, 126, 255},
+		focus                = {126, 200, 255, 230},
+	}
+	style := Theme_From_Palette(palette)
+	testing.expect_value(t, style.bg_color, palette.ground)
+	testing.expect_value(t, style.bg_panel, palette.surface)
+	testing.expect_value(t, style.bg_popup, palette.surface_raised)
+	testing.expect_value(t, style.button_bg, palette.control)
+	testing.expect_value(t, style.button_hover, palette.control_hover)
+	testing.expect_value(t, style.button_pressed, palette.control_pressed)
+	testing.expect_value(t, style.fg_primary, palette.foreground)
+	testing.expect_value(t, style.fg_accent, palette.accent)
+	testing.expect_value(t, style.fg_error, palette.danger)
+	testing.expect_value(t, style.fg_success, palette.success)
+	testing.expect(t, Theme_Is_Valid(style))
+}
+
+@(test)
+theme_palette_maps_explicit_light_swatches :: proc(t: ^testing.T) {
+	style := Theme_From_Palette(
+		{
+			basis = .Light,
+			ground = {250, 250, 252, 255},
+			surface = {240, 241, 244, 255},
+			surface_raised = {232, 234, 238, 255},
+			control = {215, 219, 225, 255},
+			control_hover = {198, 204, 212, 255},
+			control_pressed = {178, 186, 196, 255},
+			foreground = {20, 24, 30, 255},
+			foreground_muted = {68, 76, 86, 255},
+			accent = {0, 76, 140, 255},
+			foreground_on_accent = {20, 24, 30, 255},
+			danger = {140, 24, 30, 255},
+			foreground_on_danger = {255, 255, 255, 255},
+			success = {20, 104, 54, 255},
+			border = {112, 120, 130, 255},
+			focus = {0, 76, 140, 230},
+		},
+	)
+	testing.expect(t, Theme_Is_Valid(style))
+	testing.expect_value(t, style.bg_app_windowed, style.bg_color)
+	testing.expect_value(t, style.bg_panel_fullscreen, style.bg_secondary)
+}
+
+@(test)
+theme_role_access_round_trips_every_color :: proc(t: ^testing.T) {
+	style := theme_dark()
+	for role in Theme_Role {
+		value := Color{u8(int(role) + 1), 91, 137, 211}
+		Theme_Set_Color(&style, role, value)
+		testing.expect_value(t, Theme_Get_Color(style, role), value)
+	}
+}
+
+@(test)
+theme_non_color_properties_are_explicit :: proc(t: ^testing.T) {
+	style := theme_dark()
+	Theme_Set_Pigment(&style, .Accent, Color{12, 34, 56, 255})
+	Theme_Set_Substrate(&style, {kind = .Ruled, margin_rule = true})
+	testing.expect_value(t, style.pigments[.Accent], Color{12, 34, 56, 255})
+	testing.expect_value(t, style.substrate.kind, Substrate_Kind.Ruled)
+	testing.expect(t, style.substrate.margin_rule)
+}

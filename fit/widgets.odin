@@ -6,6 +6,11 @@ import "ingot:ui"
 Theme :: struct {
 	inner: ui.Theme,
 }
+Theme_Basis :: ui.Theme_Basis
+Theme_Palette :: ui.Theme_Palette
+Theme_Role :: ui.Theme_Role
+Theme_Validation_Code :: ui.Theme_Validation_Code
+Theme_Validation :: ui.Theme_Validation
 Pigment :: ui.Pigment
 Visual_State :: ui.Visual_State
 Surface_Kind :: ui.Surface
@@ -452,9 +457,36 @@ Theme_Terra :: proc() -> Theme {
 Theme_High_Contrast :: proc() -> Theme {
 	return {inner = ui.theme_high_contrast()}
 }
+Theme_From_Palette :: proc(palette: Theme_Palette) -> Theme {
+	return {inner = ui.Theme_From_Palette(palette)}
+}
+Theme_Get_Color :: proc(theme: Theme, role: Theme_Role) -> Color {
+	return Color(ui.Theme_Get_Color(theme.inner, role))
+}
+Theme_Set_Color :: proc(theme: ^Theme, role: Theme_Role, color: Color) {
+	assert(theme != nil, "Fit.Theme_Set_Color: nil theme")
+	ui.Theme_Set_Color(&theme.inner, role, ui.Color(color))
+}
+Theme_Validate :: proc(theme: Theme) -> Theme_Validation {
+	return ui.Theme_Validate(theme.inner)
+}
+Theme_Is_Valid :: proc(theme: Theme) -> bool {
+	return ui.Theme_Is_Valid(theme.inner)
+}
 Theme_Pigment :: proc(theme: Theme, pigment: Pigment) -> Color {
 	inner := theme.inner
 	return Color(ui.theme_pigment(&inner, pigment))
+}
+Theme_Set_Pigment :: proc(theme: ^Theme, pigment: Pigment, color: Color) {
+	assert(theme != nil, "Fit.Theme_Set_Pigment: nil theme")
+	ui.Theme_Set_Pigment(&theme.inner, pigment, ui.Color(color))
+}
+Theme_Set_Substrate :: proc(theme: ^Theme, kind: Substrate_Kind, margin_rule: bool = false) {
+	assert(theme != nil, "Fit.Theme_Set_Substrate: nil theme")
+	ui.Theme_Set_Substrate(
+		&theme.inner,
+		{kind = ui.Substrate_Kind(kind), margin_rule = margin_rule},
+	)
 }
 Theme_Set_Reduced_Motion :: proc(theme: ^Theme, enabled: bool) {
 	assert(theme != nil, "Fit.Theme_Set_Reduced_Motion: nil theme")

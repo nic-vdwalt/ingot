@@ -1122,66 +1122,32 @@ theme_reading_matrix_min_ratio :: proc(style: ^Theme) -> f64 {
 	return minimum
 }
 
-theme_validate_tokens :: proc(value: Theme) {
-	foregrounds := [?]Color {
-		value.fg_primary,
-		value.fg_secondary,
-		value.fg_code_inline,
-		value.fg_heading,
-		value.button_text,
-		value.button_danger_fg,
-		value.fg_disabled,
-	}
-	backgrounds := [?]Color {
-		value.bg_app_windowed,
-		value.bg_app_fullscreen,
-		value.bg_panel_windowed,
-		value.bg_panel_fullscreen,
-		value.bg_tool_card,
-		value.bg_popup,
-		value.bg_input,
-		value.bg_chip,
-		value.bg_code,
-		value.bg_table_header,
-		value.button_bg,
-		value.bg_active,
-		value.button_danger_bg,
-		value.bg_color,
-		value.button_hover,
-		value.button_danger_hover,
-		value.bg_chip_hover,
-		value.bg_tool_card_hover,
-		value.bg_hover,
-		value.button_pressed,
-		value.surface_pressed,
-		value.button_disabled_bg,
-	}
-	for color in foregrounds do assert(color.a > 0, "theme_validate_tokens: transparent foreground")
-	for color in backgrounds do assert(color.a > 0, "theme_validate_tokens: transparent background")
-}
-
-ui_runtime_set_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
-	assert(runtime != nil && runtime.initialized, "set_theme: invalid runtime")
-	theme_validate_tokens(value)
-	assert(
-		contrast_ratio(value.fg_primary, value.bg_color) >= MIN_TEXT_CONTRAST,
-		"set_theme: fg_primary on bg_color below WCAG AA (4.5:1)",
-	)
-	assert(
-		contrast_ratio(value.button_text, value.button_bg) >= MIN_TEXT_CONTRAST,
-		"set_theme: button_text on button_bg below WCAG AA (4.5:1)",
-	)
-	style := value
-	assert(
-		theme_reading_matrix_min_ratio(&style) >= MIN_TEXT_CONTRAST_LARGE,
-		"set_theme: reading matrix below the 3.0:1 visibility floor",
-	)
+ui_runtime_apply_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
+	assert(runtime != nil, "apply_theme: nil runtime")
+	assert(runtime.initialized, "apply_theme: runtime not initialized")
 	runtime.style = value
 	runtime.style.bg_app = value.bg_app_windowed
 	runtime.style.bg_chat = value.bg_chat_windowed
 	runtime.style.bg_panel = value.bg_panel_windowed
 	if runtime.scale_invalidate_hook != nil do runtime.scale_invalidate_hook()
 	runtime.generation += 1
+}
+
+ui_runtime_try_set_theme :: proc(runtime: ^Ui_Runtime, value: Theme) -> Theme_Validation {
+	assert(runtime != nil, "try_set_theme: nil runtime")
+	assert(runtime.initialized, "try_set_theme: runtime not initialized")
+	validation := Theme_Validate(value)
+	if validation.code != .Valid do return validation
+	ui_runtime_apply_theme(runtime, value)
+	return validation
+}
+
+ui_runtime_set_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
+	assert(runtime != nil, "set_theme: nil runtime")
+	assert(runtime.initialized, "set_theme: runtime not initialized")
+	validation := Theme_Validate(value)
+	assert(validation.code == .Valid, "set_theme: invalid theme")
+	ui_runtime_apply_theme(runtime, value)
 }
 
 ui_runtime_set_glass_fullscreen :: proc(runtime: ^Ui_Runtime, fullscreen: bool) {

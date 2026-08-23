@@ -181,14 +181,26 @@ Theme_Get_Color :: proc(theme: Theme, role: Theme_Role) -> Color {
 
 Theme_Set_Color :: proc(theme: ^Theme, role: Theme_Role, color: Color) {
 	assert(theme != nil, "Theme_Set_Color: nil theme")
-	if role <= .Foreground_Diff_Add do return theme_set_color_core(theme, role, color)
-	if role <= .Drop_Zone_Border do return theme_set_color_controls(theme, role, color)
-	if role <= .Button_Gradient_Bottom do return theme_set_color_states(theme, role, color)
+	if role <= .Foreground_Diff_Add {
+		theme_set_color_core(theme, role, color)
+		return
+	}
+	if role <= .Drop_Zone_Border {
+		theme_set_color_controls(theme, role, color)
+		return
+	}
+	if role <= .Button_Gradient_Bottom {
+		theme_set_color_states(theme, role, color)
+		return
+	}
 	theme_set_color_materials(theme, role, color)
 }
 
 Theme_From_Palette :: proc(palette: Theme_Palette) -> Theme {
-	assert(theme_palette_colors_present(palette), "Theme_From_Palette: transparent required swatch")
+	assert(
+		theme_palette_colors_present(palette),
+		"Theme_From_Palette: transparent required swatch",
+	)
 	result := theme_dark() if palette.basis == .Dark else theme_light()
 	theme_palette_apply_surfaces(&result, palette)
 	theme_palette_apply_inks(&result, palette)
@@ -235,7 +247,20 @@ Theme_Is_Valid :: proc(theme: Theme) -> bool {
 
 Theme_Set_Pigment :: proc(theme: ^Theme, pigment: Pigment, color: Color) {
 	assert(theme != nil, "Theme_Set_Pigment: nil theme")
-	theme.pigments[pigment] = color
+	switch pigment {
+	case .Accent:
+		theme.pigments[.Accent] = color
+	case .Danger:
+		theme.pigments[.Danger] = color
+	case .Success:
+		theme.pigments[.Success] = color
+	case .Tool:
+		theme.pigments[.Tool] = color
+	case .Earth:
+		theme.pigments[.Earth] = color
+	case .Leaf:
+		theme.pigments[.Leaf] = color
+	}
 }
 
 Theme_Set_Substrate :: proc(theme: ^Theme, substrate: Substrate) {
@@ -346,16 +371,17 @@ theme_palette_apply_semantics :: proc(theme: ^Theme, palette: Theme_Palette) {
 	theme.button_danger_fg = palette.foreground_on_danger
 	theme.fg_success = palette.success
 	theme.fg_diff_add = palette.success
-	theme.button_text = palette.foreground_on_accent
+	theme.button_text = palette.foreground
 	theme.fg_on_accent = palette.foreground_on_accent
-	theme.pigments[.Accent] = palette.accent
-	theme.pigments[.Danger] = palette.danger
-	theme.pigments[.Success] = palette.success
-	theme.pigments[.Tool] = palette.accent
+	Theme_Set_Pigment(theme, .Accent, palette.accent)
+	Theme_Set_Pigment(theme, .Danger, palette.danger)
+	Theme_Set_Pigment(theme, .Success, palette.success)
+	Theme_Set_Pigment(theme, .Tool, palette.accent)
 }
 
 @(private = "file")
-theme_validate_reading :: proc(theme: Theme) -> Theme_Validation {
+theme_validate_reading :: proc(value: Theme) -> Theme_Validation {
+	theme := value
 	surfaces := theme_reading_surfaces(&theme)
 	for ink in READING_INKS {
 		foreground := theme_ink(&theme, ink)
@@ -377,23 +403,40 @@ theme_validate_reading :: proc(theme: Theme) -> Theme_Validation {
 @(private = "file")
 theme_role_for_ink :: proc(ink: Ink) -> Theme_Role {
 	switch ink {
-	case .Primary: return .Foreground_Primary
-	case .Heading: return .Foreground_Heading
-	case .Secondary: return .Foreground_Secondary
-	case .Muted: return .Foreground_Muted
-	case .Accent: return .Foreground_Accent
-	case .Danger: return .Foreground_Error
-	case .Success: return .Foreground_Success
-	case .Inverse: return .Button_Text
-	case .Disabled: return .Foreground_Disabled
-	case .Label: return .Foreground_Label
-	case .Accent_Light: return .Foreground_Accent_Light
-	case .Tool: return .Foreground_Tool
-	case .Diff_Add: return .Foreground_Diff_Add
-	case .Diff_Remove: return .Foreground_Diff_Remove
-	case .User: return .Foreground_User
-	case .Assistant: return .Foreground_Assistant
-	case .Plan: return .Foreground_Plan
+	case .Primary:
+		return .Foreground_Primary
+	case .Heading:
+		return .Foreground_Heading
+	case .Secondary:
+		return .Foreground_Secondary
+	case .Muted:
+		return .Foreground_Muted
+	case .Accent:
+		return .Foreground_Accent
+	case .Danger:
+		return .Foreground_Error
+	case .Success:
+		return .Foreground_Success
+	case .Inverse:
+		return .Button_Text
+	case .Disabled:
+		return .Foreground_Disabled
+	case .Label:
+		return .Foreground_Label
+	case .Accent_Light:
+		return .Foreground_Accent_Light
+	case .Tool:
+		return .Foreground_Tool
+	case .Diff_Add:
+		return .Foreground_Diff_Add
+	case .Diff_Remove:
+		return .Foreground_Diff_Remove
+	case .User:
+		return .Foreground_User
+	case .Assistant:
+		return .Foreground_Assistant
+	case .Plan:
+		return .Foreground_Plan
 	}
 	return .Foreground_Primary
 }
@@ -401,31 +444,56 @@ theme_role_for_ink :: proc(ink: Ink) -> Theme_Role {
 @(private = "file")
 theme_get_color_core :: proc(theme: Theme, role: Theme_Role) -> Color {
 	#partial switch role {
-	case .Background_App: return theme.bg_app
-	case .Background_Chat: return theme.bg_chat
-	case .Background_Panel: return theme.bg_panel
-	case .Background_App_Windowed: return theme.bg_app_windowed
-	case .Background_Chat_Windowed: return theme.bg_chat_windowed
-	case .Background_Panel_Windowed: return theme.bg_panel_windowed
-	case .Background_App_Fullscreen: return theme.bg_app_fullscreen
-	case .Background_Chat_Fullscreen: return theme.bg_chat_fullscreen
-	case .Background_Panel_Fullscreen: return theme.bg_panel_fullscreen
-	case .Background: return theme.bg_color
-	case .Background_Secondary: return theme.bg_secondary
-	case .Background_Active: return theme.bg_active
-	case .Background_Hover: return theme.bg_hover
-	case .Background_Input: return theme.bg_input
-	case .Background_Code: return theme.bg_code
-	case .Foreground_Primary: return theme.fg_primary
-	case .Foreground_Secondary: return theme.fg_secondary
-	case .Foreground_Accent: return theme.fg_accent
-	case .Foreground_User: return theme.fg_user
-	case .Foreground_Assistant: return theme.fg_assistant
-	case .Foreground_Error: return theme.fg_error
-	case .Foreground_Success: return theme.fg_success
-	case .Foreground_Tool: return theme.fg_tool
-	case .Foreground_Diff_Remove: return theme.fg_diff_remove
-	case .Foreground_Diff_Add: return theme.fg_diff_add
+	case .Background_App:
+		return theme.bg_app
+	case .Background_Chat:
+		return theme.bg_chat
+	case .Background_Panel:
+		return theme.bg_panel
+	case .Background_App_Windowed:
+		return theme.bg_app_windowed
+	case .Background_Chat_Windowed:
+		return theme.bg_chat_windowed
+	case .Background_Panel_Windowed:
+		return theme.bg_panel_windowed
+	case .Background_App_Fullscreen:
+		return theme.bg_app_fullscreen
+	case .Background_Chat_Fullscreen:
+		return theme.bg_chat_fullscreen
+	case .Background_Panel_Fullscreen:
+		return theme.bg_panel_fullscreen
+	case .Background:
+		return theme.bg_color
+	case .Background_Secondary:
+		return theme.bg_secondary
+	case .Background_Active:
+		return theme.bg_active
+	case .Background_Hover:
+		return theme.bg_hover
+	case .Background_Input:
+		return theme.bg_input
+	case .Background_Code:
+		return theme.bg_code
+	case .Foreground_Primary:
+		return theme.fg_primary
+	case .Foreground_Secondary:
+		return theme.fg_secondary
+	case .Foreground_Accent:
+		return theme.fg_accent
+	case .Foreground_User:
+		return theme.fg_user
+	case .Foreground_Assistant:
+		return theme.fg_assistant
+	case .Foreground_Error:
+		return theme.fg_error
+	case .Foreground_Success:
+		return theme.fg_success
+	case .Foreground_Tool:
+		return theme.fg_tool
+	case .Foreground_Diff_Remove:
+		return theme.fg_diff_remove
+	case .Foreground_Diff_Add:
+		return theme.fg_diff_add
 	}
 	return {}
 }
@@ -433,34 +501,62 @@ theme_get_color_core :: proc(theme: Theme, role: Theme_Role) -> Color {
 @(private = "file")
 theme_get_color_controls :: proc(theme: Theme, role: Theme_Role) -> Color {
 	#partial switch role {
-	case .Background_Diff_Remove: return theme.bg_diff_remove
-	case .Background_Diff_Add: return theme.bg_diff_add
-	case .Foreground_Diff_Gutter: return theme.fg_diff_gutter
-	case .Border: return theme.border_color
-	case .Border_Subtle: return theme.border_subtle
-	case .Badge: return theme.badge_color
-	case .Merge_Link: return theme.merge_link_color
-	case .Button_Background: return theme.button_bg
-	case .Button_Hover: return theme.button_hover
-	case .Button_Text: return theme.button_text
-	case .Background_Popup: return theme.bg_popup
-	case .Foreground_Disabled: return theme.fg_disabled
-	case .Background_Plan_Bar: return theme.bg_plan_bar
-	case .Foreground_Plan: return theme.fg_plan
-	case .Foreground_Planning: return theme.fg_planning
-	case .Background_Selection: return theme.bg_selection
-	case .Background_Plan_Title: return theme.bg_plan_title
-	case .Background_Tool_Card: return theme.bg_tool_card
-	case .Background_Tool_Card_Hover: return theme.bg_tool_card_hover
-	case .Foreground_Heading: return theme.fg_heading
-	case .Foreground_Bullet: return theme.fg_bullet
-	case .Foreground_Bold: return theme.fg_bold
-	case .Foreground_Code_Inline: return theme.fg_code_inline
-	case .Background_Table_Header: return theme.bg_table_header
-	case .Wave_A: return theme.wave_color_a
-	case .Wave_B: return theme.wave_color_b
-	case .Drop_Zone_Background: return theme.drop_zone_bg
-	case .Drop_Zone_Border: return theme.drop_zone_border
+	case .Background_Diff_Remove:
+		return theme.bg_diff_remove
+	case .Background_Diff_Add:
+		return theme.bg_diff_add
+	case .Foreground_Diff_Gutter:
+		return theme.fg_diff_gutter
+	case .Border:
+		return theme.border_color
+	case .Border_Subtle:
+		return theme.border_subtle
+	case .Badge:
+		return theme.badge_color
+	case .Merge_Link:
+		return theme.merge_link_color
+	case .Button_Background:
+		return theme.button_bg
+	case .Button_Hover:
+		return theme.button_hover
+	case .Button_Text:
+		return theme.button_text
+	case .Background_Popup:
+		return theme.bg_popup
+	case .Foreground_Disabled:
+		return theme.fg_disabled
+	case .Background_Plan_Bar:
+		return theme.bg_plan_bar
+	case .Foreground_Plan:
+		return theme.fg_plan
+	case .Foreground_Planning:
+		return theme.fg_planning
+	case .Background_Selection:
+		return theme.bg_selection
+	case .Background_Plan_Title:
+		return theme.bg_plan_title
+	case .Background_Tool_Card:
+		return theme.bg_tool_card
+	case .Background_Tool_Card_Hover:
+		return theme.bg_tool_card_hover
+	case .Foreground_Heading:
+		return theme.fg_heading
+	case .Foreground_Bullet:
+		return theme.fg_bullet
+	case .Foreground_Bold:
+		return theme.fg_bold
+	case .Foreground_Code_Inline:
+		return theme.fg_code_inline
+	case .Background_Table_Header:
+		return theme.bg_table_header
+	case .Wave_A:
+		return theme.wave_color_a
+	case .Wave_B:
+		return theme.wave_color_b
+	case .Drop_Zone_Background:
+		return theme.drop_zone_bg
+	case .Drop_Zone_Border:
+		return theme.drop_zone_border
 	}
 	return {}
 }
@@ -468,29 +564,52 @@ theme_get_color_controls :: proc(theme: Theme, role: Theme_Role) -> Color {
 @(private = "file")
 theme_get_color_states :: proc(theme: Theme, role: Theme_Role) -> Color {
 	#partial switch role {
-	case .Foreground_Debug: return theme.fg_debug
-	case .Background_Debug_Title: return theme.bg_debug_title
-	case .Foreground_Debug_Changed: return theme.fg_debug_changed
-	case .Foreground_Debug_Annotation: return theme.fg_debug_annotation
-	case .Background_Chip: return theme.bg_chip
-	case .Background_Chip_Hover: return theme.bg_chip_hover
-	case .Background_User_Card: return theme.bg_user_card
-	case .Border_User_Card: return theme.border_user_card
-	case .Background_Band_Error: return theme.bg_band_error
-	case .Foreground_Label: return theme.fg_label
-	case .Button_Danger_Background: return theme.button_danger_bg
-	case .Button_Danger_Hover: return theme.button_danger_hover
-	case .Button_Danger_Foreground: return theme.button_danger_fg
-	case .Button_Disabled_Background: return theme.button_disabled_bg
-	case .Button_Pressed: return theme.button_pressed
-	case .Surface_Pressed: return theme.surface_pressed
-	case .Foreground_Accent_Light: return theme.fg_accent_light
-	case .Foreground_Muted: return theme.fg_muted_dim
-	case .Modal_Dim: return theme.modal_dim
-	case .Focus_Ring: return theme.focus_ring
-	case .Shadow: return theme.shadow_color
-	case .Button_Gradient_Top: return theme.button_primary_grad_top
-	case .Button_Gradient_Bottom: return theme.button_primary_grad_bottom
+	case .Foreground_Debug:
+		return theme.fg_debug
+	case .Background_Debug_Title:
+		return theme.bg_debug_title
+	case .Foreground_Debug_Changed:
+		return theme.fg_debug_changed
+	case .Foreground_Debug_Annotation:
+		return theme.fg_debug_annotation
+	case .Background_Chip:
+		return theme.bg_chip
+	case .Background_Chip_Hover:
+		return theme.bg_chip_hover
+	case .Background_User_Card:
+		return theme.bg_user_card
+	case .Border_User_Card:
+		return theme.border_user_card
+	case .Background_Band_Error:
+		return theme.bg_band_error
+	case .Foreground_Label:
+		return theme.fg_label
+	case .Button_Danger_Background:
+		return theme.button_danger_bg
+	case .Button_Danger_Hover:
+		return theme.button_danger_hover
+	case .Button_Danger_Foreground:
+		return theme.button_danger_fg
+	case .Button_Disabled_Background:
+		return theme.button_disabled_bg
+	case .Button_Pressed:
+		return theme.button_pressed
+	case .Surface_Pressed:
+		return theme.surface_pressed
+	case .Foreground_Accent_Light:
+		return theme.fg_accent_light
+	case .Foreground_Muted:
+		return theme.fg_muted_dim
+	case .Modal_Dim:
+		return theme.modal_dim
+	case .Focus_Ring:
+		return theme.focus_ring
+	case .Shadow:
+		return theme.shadow_color
+	case .Button_Gradient_Top:
+		return theme.button_primary_grad_top
+	case .Button_Gradient_Bottom:
+		return theme.button_primary_grad_bottom
 	}
 	return {}
 }
@@ -498,132 +617,238 @@ theme_get_color_states :: proc(theme: Theme, role: Theme_Role) -> Color {
 @(private = "file")
 theme_get_color_materials :: proc(theme: Theme, role: Theme_Role) -> Color {
 	#partial switch role {
-	case .Paper_Rule: return theme.paper_rule
-	case .Paper_Tooth: return theme.paper_tooth
-	case .Graphite: return theme.graphite
-	case .Chalk: return theme.chalk
-	case .Highlighter: return theme.highlighter
-	case .Tape: return theme.tape_color
-	case .Ink_Faded: return theme.ink_faded
-	case .Foreground_On_Accent: return theme.fg_on_accent
-	case .Caption_Hover: return theme.caption_hover
-	case .Caption_Pressed: return theme.caption_pressed
-	case .Caption_Close_Hover: return theme.caption_close_hover
-	case .Caption_Close_Pressed: return theme.caption_close_pressed
-	case .Spell_Error: return theme.spell_error
+	case .Paper_Rule:
+		return theme.paper_rule
+	case .Paper_Tooth:
+		return theme.paper_tooth
+	case .Graphite:
+		return theme.graphite
+	case .Chalk:
+		return theme.chalk
+	case .Highlighter:
+		return theme.highlighter
+	case .Tape:
+		return theme.tape_color
+	case .Ink_Faded:
+		return theme.ink_faded
+	case .Foreground_On_Accent:
+		return theme.fg_on_accent
+	case .Caption_Hover:
+		return theme.caption_hover
+	case .Caption_Pressed:
+		return theme.caption_pressed
+	case .Caption_Close_Hover:
+		return theme.caption_close_hover
+	case .Caption_Close_Pressed:
+		return theme.caption_close_pressed
+	case .Spell_Error:
+		return theme.spell_error
 	}
 	return {}
 }
 
 @(private = "file")
 theme_set_color_core :: proc(theme: ^Theme, role: Theme_Role, color: Color) {
+	assert(theme != nil, "theme set core: nil theme")
 	#partial switch role {
-	case .Background_App: theme.bg_app = color
-	case .Background_Chat: theme.bg_chat = color
-	case .Background_Panel: theme.bg_panel = color
-	case .Background_App_Windowed: theme.bg_app_windowed = color
-	case .Background_Chat_Windowed: theme.bg_chat_windowed = color
-	case .Background_Panel_Windowed: theme.bg_panel_windowed = color
-	case .Background_App_Fullscreen: theme.bg_app_fullscreen = color
-	case .Background_Chat_Fullscreen: theme.bg_chat_fullscreen = color
-	case .Background_Panel_Fullscreen: theme.bg_panel_fullscreen = color
-	case .Background: theme.bg_color = color
-	case .Background_Secondary: theme.bg_secondary = color
-	case .Background_Active: theme.bg_active = color
-	case .Background_Hover: theme.bg_hover = color
-	case .Background_Input: theme.bg_input = color
-	case .Background_Code: theme.bg_code = color
-	case .Foreground_Primary: theme.fg_primary = color
-	case .Foreground_Secondary: theme.fg_secondary = color
-	case .Foreground_Accent: theme.fg_accent = color
-	case .Foreground_User: theme.fg_user = color
-	case .Foreground_Assistant: theme.fg_assistant = color
-	case .Foreground_Error: theme.fg_error = color
-	case .Foreground_Success: theme.fg_success = color
-	case .Foreground_Tool: theme.fg_tool = color
-	case .Foreground_Diff_Remove: theme.fg_diff_remove = color
-	case .Foreground_Diff_Add: theme.fg_diff_add = color
+	case .Background_App:
+		theme.bg_app = color
+	case .Background_Chat:
+		theme.bg_chat = color
+	case .Background_Panel:
+		theme.bg_panel = color
+	case .Background_App_Windowed:
+		theme.bg_app_windowed = color
+	case .Background_Chat_Windowed:
+		theme.bg_chat_windowed = color
+	case .Background_Panel_Windowed:
+		theme.bg_panel_windowed = color
+	case .Background_App_Fullscreen:
+		theme.bg_app_fullscreen = color
+	case .Background_Chat_Fullscreen:
+		theme.bg_chat_fullscreen = color
+	case .Background_Panel_Fullscreen:
+		theme.bg_panel_fullscreen = color
+	case .Background:
+		theme.bg_color = color
+	case .Background_Secondary:
+		theme.bg_secondary = color
+	case .Background_Active:
+		theme.bg_active = color
+	case .Background_Hover:
+		theme.bg_hover = color
+	case .Background_Input:
+		theme.bg_input = color
+	case .Background_Code:
+		theme.bg_code = color
+	case .Foreground_Primary:
+		theme.fg_primary = color
+	case .Foreground_Secondary:
+		theme.fg_secondary = color
+	case .Foreground_Accent:
+		theme.fg_accent = color
+	case .Foreground_User:
+		theme.fg_user = color
+	case .Foreground_Assistant:
+		theme.fg_assistant = color
+	case .Foreground_Error:
+		theme.fg_error = color
+	case .Foreground_Success:
+		theme.fg_success = color
+	case .Foreground_Tool:
+		theme.fg_tool = color
+	case .Foreground_Diff_Remove:
+		theme.fg_diff_remove = color
+	case .Foreground_Diff_Add:
+		theme.fg_diff_add = color
 	}
 }
 
 @(private = "file")
 theme_set_color_controls :: proc(theme: ^Theme, role: Theme_Role, color: Color) {
+	assert(theme != nil, "theme set controls: nil theme")
 	#partial switch role {
-	case .Background_Diff_Remove: theme.bg_diff_remove = color
-	case .Background_Diff_Add: theme.bg_diff_add = color
-	case .Foreground_Diff_Gutter: theme.fg_diff_gutter = color
-	case .Border: theme.border_color = color
-	case .Border_Subtle: theme.border_subtle = color
-	case .Badge: theme.badge_color = color
-	case .Merge_Link: theme.merge_link_color = color
-	case .Button_Background: theme.button_bg = color
-	case .Button_Hover: theme.button_hover = color
-	case .Button_Text: theme.button_text = color
-	case .Background_Popup: theme.bg_popup = color
-	case .Foreground_Disabled: theme.fg_disabled = color
-	case .Background_Plan_Bar: theme.bg_plan_bar = color
-	case .Foreground_Plan: theme.fg_plan = color
-	case .Foreground_Planning: theme.fg_planning = color
-	case .Background_Selection: theme.bg_selection = color
-	case .Background_Plan_Title: theme.bg_plan_title = color
-	case .Background_Tool_Card: theme.bg_tool_card = color
-	case .Background_Tool_Card_Hover: theme.bg_tool_card_hover = color
-	case .Foreground_Heading: theme.fg_heading = color
-	case .Foreground_Bullet: theme.fg_bullet = color
-	case .Foreground_Bold: theme.fg_bold = color
-	case .Foreground_Code_Inline: theme.fg_code_inline = color
-	case .Background_Table_Header: theme.bg_table_header = color
-	case .Wave_A: theme.wave_color_a = color
-	case .Wave_B: theme.wave_color_b = color
-	case .Drop_Zone_Background: theme.drop_zone_bg = color
-	case .Drop_Zone_Border: theme.drop_zone_border = color
+	case .Background_Diff_Remove:
+		theme.bg_diff_remove = color
+	case .Background_Diff_Add:
+		theme.bg_diff_add = color
+	case .Foreground_Diff_Gutter:
+		theme.fg_diff_gutter = color
+	case .Border:
+		theme.border_color = color
+	case .Border_Subtle:
+		theme.border_subtle = color
+	case .Badge:
+		theme.badge_color = color
+	case .Merge_Link:
+		theme.merge_link_color = color
+	case .Button_Background:
+		theme.button_bg = color
+	case .Button_Hover:
+		theme.button_hover = color
+	case .Button_Text:
+		theme.button_text = color
+	case .Background_Popup:
+		theme.bg_popup = color
+	case .Foreground_Disabled:
+		theme.fg_disabled = color
+	case .Background_Plan_Bar:
+		theme.bg_plan_bar = color
+	case .Foreground_Plan:
+		theme.fg_plan = color
+	case .Foreground_Planning:
+		theme.fg_planning = color
+	case .Background_Selection:
+		theme.bg_selection = color
+	case .Background_Plan_Title:
+		theme.bg_plan_title = color
+	case .Background_Tool_Card:
+		theme.bg_tool_card = color
+	case .Background_Tool_Card_Hover:
+		theme.bg_tool_card_hover = color
+	case .Foreground_Heading:
+		theme.fg_heading = color
+	case .Foreground_Bullet:
+		theme.fg_bullet = color
+	case .Foreground_Bold:
+		theme.fg_bold = color
+	case .Foreground_Code_Inline:
+		theme.fg_code_inline = color
+	case .Background_Table_Header:
+		theme.bg_table_header = color
+	case .Wave_A:
+		theme.wave_color_a = color
+	case .Wave_B:
+		theme.wave_color_b = color
+	case .Drop_Zone_Background:
+		theme.drop_zone_bg = color
+	case .Drop_Zone_Border:
+		theme.drop_zone_border = color
 	}
 }
 
 @(private = "file")
 theme_set_color_states :: proc(theme: ^Theme, role: Theme_Role, color: Color) {
+	assert(theme != nil, "theme set states: nil theme")
 	#partial switch role {
-	case .Foreground_Debug: theme.fg_debug = color
-	case .Background_Debug_Title: theme.bg_debug_title = color
-	case .Foreground_Debug_Changed: theme.fg_debug_changed = color
-	case .Foreground_Debug_Annotation: theme.fg_debug_annotation = color
-	case .Background_Chip: theme.bg_chip = color
-	case .Background_Chip_Hover: theme.bg_chip_hover = color
-	case .Background_User_Card: theme.bg_user_card = color
-	case .Border_User_Card: theme.border_user_card = color
-	case .Background_Band_Error: theme.bg_band_error = color
-	case .Foreground_Label: theme.fg_label = color
-	case .Button_Danger_Background: theme.button_danger_bg = color
-	case .Button_Danger_Hover: theme.button_danger_hover = color
-	case .Button_Danger_Foreground: theme.button_danger_fg = color
-	case .Button_Disabled_Background: theme.button_disabled_bg = color
-	case .Button_Pressed: theme.button_pressed = color
-	case .Surface_Pressed: theme.surface_pressed = color
-	case .Foreground_Accent_Light: theme.fg_accent_light = color
-	case .Foreground_Muted: theme.fg_muted_dim = color
-	case .Modal_Dim: theme.modal_dim = color
-	case .Focus_Ring: theme.focus_ring = color
-	case .Shadow: theme.shadow_color = color
-	case .Button_Gradient_Top: theme.button_primary_grad_top = color
-	case .Button_Gradient_Bottom: theme.button_primary_grad_bottom = color
+	case .Foreground_Debug:
+		theme.fg_debug = color
+	case .Background_Debug_Title:
+		theme.bg_debug_title = color
+	case .Foreground_Debug_Changed:
+		theme.fg_debug_changed = color
+	case .Foreground_Debug_Annotation:
+		theme.fg_debug_annotation = color
+	case .Background_Chip:
+		theme.bg_chip = color
+	case .Background_Chip_Hover:
+		theme.bg_chip_hover = color
+	case .Background_User_Card:
+		theme.bg_user_card = color
+	case .Border_User_Card:
+		theme.border_user_card = color
+	case .Background_Band_Error:
+		theme.bg_band_error = color
+	case .Foreground_Label:
+		theme.fg_label = color
+	case .Button_Danger_Background:
+		theme.button_danger_bg = color
+	case .Button_Danger_Hover:
+		theme.button_danger_hover = color
+	case .Button_Danger_Foreground:
+		theme.button_danger_fg = color
+	case .Button_Disabled_Background:
+		theme.button_disabled_bg = color
+	case .Button_Pressed:
+		theme.button_pressed = color
+	case .Surface_Pressed:
+		theme.surface_pressed = color
+	case .Foreground_Accent_Light:
+		theme.fg_accent_light = color
+	case .Foreground_Muted:
+		theme.fg_muted_dim = color
+	case .Modal_Dim:
+		theme.modal_dim = color
+	case .Focus_Ring:
+		theme.focus_ring = color
+	case .Shadow:
+		theme.shadow_color = color
+	case .Button_Gradient_Top:
+		theme.button_primary_grad_top = color
+	case .Button_Gradient_Bottom:
+		theme.button_primary_grad_bottom = color
 	}
 }
 
 @(private = "file")
 theme_set_color_materials :: proc(theme: ^Theme, role: Theme_Role, color: Color) {
+	assert(theme != nil, "theme set materials: nil theme")
 	#partial switch role {
-	case .Paper_Rule: theme.paper_rule = color
-	case .Paper_Tooth: theme.paper_tooth = color
-	case .Graphite: theme.graphite = color
-	case .Chalk: theme.chalk = color
-	case .Highlighter: theme.highlighter = color
-	case .Tape: theme.tape_color = color
-	case .Ink_Faded: theme.ink_faded = color
-	case .Foreground_On_Accent: theme.fg_on_accent = color
-	case .Caption_Hover: theme.caption_hover = color
-	case .Caption_Pressed: theme.caption_pressed = color
-	case .Caption_Close_Hover: theme.caption_close_hover = color
-	case .Caption_Close_Pressed: theme.caption_close_pressed = color
-	case .Spell_Error: theme.spell_error = color
+	case .Paper_Rule:
+		theme.paper_rule = color
+	case .Paper_Tooth:
+		theme.paper_tooth = color
+	case .Graphite:
+		theme.graphite = color
+	case .Chalk:
+		theme.chalk = color
+	case .Highlighter:
+		theme.highlighter = color
+	case .Tape:
+		theme.tape_color = color
+	case .Ink_Faded:
+		theme.ink_faded = color
+	case .Foreground_On_Accent:
+		theme.fg_on_accent = color
+	case .Caption_Hover:
+		theme.caption_hover = color
+	case .Caption_Pressed:
+		theme.caption_pressed = color
+	case .Caption_Close_Hover:
+		theme.caption_close_hover = color
+	case .Caption_Close_Pressed:
+		theme.caption_close_pressed = color
+	case .Spell_Error:
+		theme.spell_error = color
 	}
 }

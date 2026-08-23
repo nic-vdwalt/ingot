@@ -119,6 +119,7 @@ Palette :: enum {
 	Light,
 	Retro_Orange,
 	Retro_Orange_Dark,
+	Custom_Blue,
 	High_Contrast,
 }
 
@@ -130,6 +131,7 @@ PALETTE_NAMES := [Palette]string {
 	.Light             = "Light",
 	.Retro_Orange      = "Retro orange",
 	.Retro_Orange_Dark = "Retro orange dark",
+	.Custom_Blue       = "Custom blue",
 	.High_Contrast     = "High contrast",
 }
 
@@ -150,6 +152,29 @@ palette_next :: proc(current: Palette) -> Palette {
 	return Palette((int(current) + 1) % len(Palette))
 }
 
+custom_blue_theme :: proc() -> fit.Theme {
+	return fit.Theme_From_Palette(
+		{
+			basis = .Dark,
+			ground = {18, 20, 24, 255},
+			surface = {28, 31, 36, 255},
+			surface_raised = {38, 42, 48, 255},
+			control = {48, 53, 61, 255},
+			control_hover = {62, 69, 79, 255},
+			control_pressed = {78, 87, 99, 255},
+			foreground = {238, 241, 244, 255},
+			foreground_muted = {174, 182, 190, 255},
+			accent = {126, 200, 255, 255},
+			foreground_on_accent = {17, 19, 24, 255},
+			danger = {255, 145, 145, 255},
+			foreground_on_danger = {17, 19, 24, 255},
+			success = {142, 226, 166, 255},
+			border = {104, 115, 126, 255},
+			focus = {126, 200, 255, 230},
+		},
+	)
+}
+
 // palette_theme resolves a palette to its Theme value.
 palette_theme :: proc(value: Palette) -> fit.Theme {
 	switch value {
@@ -167,6 +192,8 @@ palette_theme :: proc(value: Palette) -> fit.Theme {
 		return fit.Theme_Retro_Orange()
 	case .Retro_Orange_Dark:
 		return fit.Theme_Retro_Orange_Dark()
+	case .Custom_Blue:
+		return custom_blue_theme()
 	case .High_Contrast:
 		return fit.Theme_High_Contrast()
 	}

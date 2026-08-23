@@ -29,6 +29,10 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- Allocation-free custom themes through `fit.Theme_From_Palette`, explicit
+  `Theme_Role` get/set access, pure bounded validation, and non-crashing
+  `Try_Set_Theme` application/session installers. Themes remain caller-owned
+  values and every interaction color is supplied rather than synthesized.
 - `theme_retro_ingot_dark` / `fit.Theme_Retro_Ingot_Dark` and
   `theme_retro_orange_dark` / `fit.Theme_Retro_Orange_Dark`: explicit dark
   counterparts to the branded Ingot and Retro Orange palettes, with dedicated
