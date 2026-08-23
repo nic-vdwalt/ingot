@@ -636,6 +636,84 @@ theme_light :: proc() -> Theme {
 	return THEME_LIGHT
 }
 
+theme_retro_orange :: proc() -> Theme {
+	result := THEME_LIGHT
+	paper := Color{250, 246, 236, 255}
+	panel := Color{255, 250, 239, 255}
+	card := Color{255, 253, 246, 255}
+	pale := Color{249, 213, 166, 255}
+	hover := Color{244, 184, 112, 255}
+	pressed := Color{232, 149, 62, 255}
+	orange := Color{159, 72, 19, 255}
+	ink := Color{53, 35, 24, 255}
+	muted := Color{102, 75, 55, 255}
+	result.bg_app = paper
+	result.bg_chat = paper
+	result.bg_panel = panel
+	result.bg_app_windowed = paper
+	result.bg_chat_windowed = paper
+	result.bg_panel_windowed = panel
+	result.bg_app_fullscreen = paper
+	result.bg_chat_fullscreen = paper
+	result.bg_panel_fullscreen = panel
+	result.bg_color = paper
+	result.bg_secondary = panel
+	result.bg_active = pale
+	result.bg_hover = hover
+	result.bg_input = card
+	result.bg_code = Color{246, 235, 215, 255}
+	result.fg_primary = ink
+	result.fg_secondary = muted
+	result.fg_accent = orange
+	result.fg_user = Color{126, 57, 21, 255}
+	result.fg_assistant = Color{67, 91, 51, 255}
+	result.fg_tool = Color{127, 78, 15, 255}
+	result.border_color = orange
+	result.border_subtle = Color{198, 128, 71, 255}
+	result.button_bg = pale
+	result.button_hover = hover
+	result.button_text = ink
+	result.bg_popup = card
+	result.bg_selection = Color{247, 196, 132, 255}
+	result.bg_plan_bar = Color{247, 220, 180, 255}
+	result.fg_plan = orange
+	result.fg_planning = orange
+	result.bg_plan_title = Color{250, 228, 195, 255}
+	result.bg_tool_card = card
+	result.bg_tool_card_hover = Color{250, 224, 188, 255}
+	result.fg_heading = ink
+	result.fg_bullet = orange
+	result.fg_bold = Color{37, 24, 17, 255}
+	result.fg_code_inline = Color{133, 60, 17, 255}
+	result.bg_table_header = Color{249, 218, 177, 255}
+	result.wave_color_a = orange
+	result.wave_color_b = pressed
+	result.drop_zone_bg = Color{250, 221, 181, 235}
+	result.drop_zone_border = orange
+	result.bg_chip = Color{248, 222, 187, 255}
+	result.bg_chip_hover = hover
+	result.bg_user_card = Color{252, 232, 204, 255}
+	result.border_user_card = Color{196, 112, 53, 255}
+	result.bg_band_error = Color{252, 225, 210, 255}
+	result.fg_label = Color{116, 72, 42, 255}
+	result.button_danger_bg = Color{247, 211, 190, 255}
+	result.button_danger_hover = Color{239, 178, 145, 255}
+	result.button_danger_fg = Color{130, 38, 20, 255}
+	result.button_disabled_bg = Color{235, 226, 211, 255}
+	result.button_pressed = pressed
+	result.surface_pressed = Color{235, 170, 97, 255}
+	result.fg_accent_light = orange
+	result.fg_muted_dim = Color{143, 119, 99, 255}
+	result.focus_ring = Color{159, 72, 19, 220}
+	result.shadow_color = Color{91, 51, 24, 55}
+	result.button_primary_grad_top = Color{255, 255, 255, 70}
+	result.ink_faded = Color{142, 104, 75, 255}
+	result.fg_on_accent = ink
+	result.caption_hover = Color{247, 207, 157, 255}
+	result.caption_pressed = pressed
+	return result
+}
+
 // theme_high_contrast returns the built-in high-contrast palette.
 theme_high_contrast :: proc() -> Theme {
 	return THEME_HIGH_CONTRAST

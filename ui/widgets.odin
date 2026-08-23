@@ -605,7 +605,7 @@ hover_anim_frac :: proc(frame: ^Ui_Frame, state: ^Button_State, hovered: bool) -
 
 // btn_palette returns the (rest, hovered) bg/fg/border colors for a style so
 // btn can blend between them with the eased hover fraction.
-@(private = "file")
+@(private = "package")
 btn_palette :: proc(theme: ^Theme, style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0, bd1: Color) {
 	assert(theme != nil, "btn_palette: nil theme")
 	switch style {
@@ -614,14 +614,14 @@ btn_palette :: proc(theme: ^Theme, style: Btn_Style) -> (bg0, bg1, fg0, fg1, bd0
 			theme.button_hover,
 			theme.button_text,
 			theme.button_text,
-			theme.button_bg,
+			theme.border_color,
 			theme.fg_accent
 	case .Secondary:
 		return theme.bg_active,
 			theme.bg_hover,
 			theme.fg_secondary,
 			theme.fg_primary,
-			Color{},
+			theme.border_color,
 			theme.fg_accent
 	case .Danger:
 		return theme.button_danger_bg,

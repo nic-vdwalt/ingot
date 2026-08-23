@@ -50,6 +50,21 @@ button_spec_and_facade_share_geometry :: proc(t: ^testing.T) {
 }
 
 @(test)
+button_palette_uses_theme_borders_and_interaction_fills :: proc(t: ^testing.T) {
+	style := theme_retro_orange()
+	p0, p1, _, _, pb0, pb1 := btn_palette(&style, .Primary)
+	s0, s1, _, _, sb0, sb1 := btn_palette(&style, .Secondary)
+	testing.expect_value(t, p0, style.button_bg)
+	testing.expect_value(t, p1, style.button_hover)
+	testing.expect_value(t, pb0, style.border_color)
+	testing.expect_value(t, pb1, style.fg_accent)
+	testing.expect_value(t, s0, style.bg_active)
+	testing.expect_value(t, s1, style.bg_hover)
+	testing.expect_value(t, sb0, style.border_color)
+	testing.expect_value(t, sb1, style.fg_accent)
+}
+
+@(test)
 input_undo_cap_evicts_oldest :: proc(t: ^testing.T) {
 	u: Input_Undo
 	defer input_undo_destroy(&u)

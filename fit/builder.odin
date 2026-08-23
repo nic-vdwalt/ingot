@@ -257,6 +257,25 @@ Scroll_Offset :: proc(state: ^Scroll_State) -> f32 {
 	return state.inner.offset
 }
 
+Scroll_Viewport_Height :: proc(state: ^Scroll_State) -> i32 {
+	assert(state != nil, "Fit.Scroll_Viewport_Height: nil state")
+	return state.inner.viewport_h
+}
+
+Scroll_Reveal_Range :: proc(state: ^Scroll_State, top, bottom: i32) {
+	assert(state != nil, "Fit.Scroll_Reveal_Range: nil state")
+	assert(top >= 0 && bottom >= top, "Fit.Scroll_Reveal_Range: invalid range")
+	viewport := state.inner.viewport_h
+	if viewport <= 0 do return
+	if f32(top) < state.inner.offset {
+		state.inner.offset = f32(top)
+	} else if f32(bottom) > state.inner.offset + f32(viewport) {
+		state.inner.offset = f32(bottom - viewport)
+	}
+	maximum := max(state.inner.content_h - viewport, 0)
+	state.inner.offset = clamp(state.inner.offset, 0, f32(maximum))
+}
+
 Scroll_Content_Height :: proc(state: ^Scroll_State) -> i32 {
 	assert(state != nil, "Fit.Scroll_Content_Height: nil state")
 	return state.inner.content_h

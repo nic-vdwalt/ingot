@@ -1861,19 +1861,18 @@ prepared_render_exit :: proc(u: ^Ui, node: ^Prepared_Node) {
 		end_scissor_mode(u.frame)
 		state := node.scroll.state
 		if node.scroll.bar && state.content_h > state.viewport_h {
-			state.offset = f32(
-				scrollbar_ex(
-					u.frame,
-					&state.scrollbar,
-					node.rect.x + node.rect.w - ui_frame_sc(u.frame, 9),
-					node.rect.y + ui_frame_sc(u.frame, 2),
-					ui_frame_sc(u.frame, 5),
-					node.rect.h - ui_frame_sc(u.frame, 4),
-					int(state.content_h),
-					int(state.viewport_h),
-					int(state.offset),
-				),
+			scrollbar_offset := scrollbar_ex(
+				u.frame,
+				&state.scrollbar,
+				node.rect.x + node.rect.w - ui_frame_sc(u.frame, 9),
+				node.rect.y + ui_frame_sc(u.frame, 2),
+				ui_frame_sc(u.frame, 5),
+				node.rect.h - ui_frame_sc(u.frame, 4),
+				int(state.content_h),
+				int(state.viewport_h),
+				int(state.offset),
 			)
+			if state.scrollbar.dragging do state.offset = f32(scrollbar_offset)
 		} else {
 			state.scrollbar = {}
 		}
