@@ -1359,7 +1359,7 @@ prepared_assign_widths :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 		} else if node.kind == .Grid {
 			prepared_place_grid(u, prepared, index)
 		} else if node.kind == .Scroll {
-			prepared_place_scroll(u, prepared, index)
+			prepared_place_scroll(u, prepared, index, false)
 		}
 	}
 }
@@ -1442,12 +1442,17 @@ prepared_place_container :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 	} else if node.kind == .Grid {
 		prepared_place_grid(u, prepared, index)
 	} else if node.kind == .Scroll {
-		prepared_place_scroll(u, prepared, index)
+		prepared_place_scroll(u, prepared, index, true)
 	}
 }
 
 @(private = "file")
-prepared_place_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
+prepared_place_scroll :: proc(
+	u: ^Ui,
+	prepared: ^Prepared_Ui,
+	index: i32,
+	interactive: bool,
+) {
 	assert(u != nil && prepared != nil && index >= 0 && index < prepared.count)
 	node := &prepared_nodes(prepared)[index]
 	assert(node.kind == .Scroll && node.scroll.state != nil, "prepared scroll place: invalid node")
@@ -1456,21 +1461,23 @@ prepared_place_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 		"prepared scroll place: child count",
 	)
 	state := node.scroll.state
-	state.viewport_h = node.rect.h
-	maximum := max(state.content_h - node.rect.h, 0)
-	mouse := get_mouse_position(u.frame)
-	screen := frame_rect_to_screen(u.frame, rect_f32(node.rect))
-	if node.scroll.focus.focus == nil && slot_visible(node.rect) {
-		node.scroll.focus = focus(u, node.scroll.id)
+	if interactive {
+		state.viewport_h = node.rect.h
+		maximum := max(state.content_h - node.rect.h, 0)
+		mouse := get_mouse_position(u.frame)
+		screen := frame_rect_to_screen(u.frame, rect_f32(node.rect))
+		if node.scroll.focus.focus == nil && slot_visible(node.rect) {
+			node.scroll.focus = focus(u, node.scroll.id)
+		}
+		focus_opt_click(u.frame, node.scroll.focus, node.rect.x, node.rect.y, node.rect.w, node.rect.h)
+		if point_in_rect(mouse, screen) && !route_occluded(u.frame, mouse) {
+			state.offset -= get_wheel_move(u.frame) * f32(ui_frame_sc(u.frame, 24))
+		}
+		if node.scroll.keyboard && focus_opt_focused(node.scroll.focus) {
+			prepared_scroll_keyboard(u.frame, state, node.rect.h)
+		}
+		state.offset = clamp(state.offset, 0, f32(maximum))
 	}
-	focus_opt_click(u.frame, node.scroll.focus, node.rect.x, node.rect.y, node.rect.w, node.rect.h)
-	if point_in_rect(mouse, screen) && !route_occluded(u.frame, mouse) {
-		state.offset -= get_wheel_move(u.frame) * f32(ui_frame_sc(u.frame, 24))
-	}
-	if node.scroll.keyboard && focus_opt_focused(node.scroll.focus) {
-		prepared_scroll_keyboard(u.frame, state, node.rect.h)
-	}
-	state.offset = clamp(state.offset, 0, f32(maximum))
 	content := rect_inset(node.rect, insets_of(u, node.scroll.padding))
 	child := &prepared_nodes(prepared)[node.first_child]
 	child.rect = {content.x, content.y - i32(state.offset), content.w, child.size.h}
