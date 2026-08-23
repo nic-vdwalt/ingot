@@ -15,6 +15,14 @@
   <a href="https://openalloy.ai/ingot">Live demo and benchmarks</a>
 </p>
 
+<p align="center">
+  <a href="https://openalloy.ai/demos/ingot-gallery/"><img src="docs/media/ingot-gallery.gif" width="960" alt="Ingot widget gallery running natively and in WebAssembly with WebGPU"></a>
+</p>
+
+<p align="center">
+  <a href="https://openalloy.ai/demos/ingot-gallery/">Open the interactive WebAssembly/WebGPU gallery</a>
+</p>
+
 Ingot is a self-contained immediate-mode framework built on Odin's bundled
 `vendor:wgpu`. One renderer targets macOS/Metal, Windows/D3D12, Linux/Vulkan,
 and browser WASM/WebGPU.

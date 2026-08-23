@@ -4,12 +4,13 @@ package ui
 import "core:testing"
 
 @(test)
-theme_runtime_defaults_to_dark :: proc(t: ^testing.T) {
+theme_runtime_defaults_to_ingot :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
-	testing.expect_value(t, runtime.style.bg_color, theme_dark().bg_color)
-	testing.expect_value(t, runtime.style.fg_primary, theme_dark().fg_primary)
+	ingot := theme_retro_ingot()
+	testing.expect_value(t, runtime.style.bg_color, ingot.bg_color)
+	testing.expect_value(t, runtime.style.fg_primary, ingot.fg_primary)
 }
 
 @(test)
@@ -38,7 +39,14 @@ theme_runtime_glass_fullscreen_toggle :: proc(t: ^testing.T) {
 
 @(test)
 theme_palettes_are_readable :: proc(t: ^testing.T) {
-	for pal in ([3]Theme{theme_dark(), theme_light(), theme_retro_orange()}) {
+	palettes := [5]Theme {
+		theme_dark(),
+		theme_light(),
+		theme_retro_orange(),
+		theme_retro_ingot(),
+		theme_terra(),
+	}
+	for pal in palettes {
 		testing.expect_value(t, pal.fg_primary.a, u8(255))
 		testing.expect_value(t, pal.fg_heading.a, u8(255))
 		fg := int(pal.fg_primary.r) + int(pal.fg_primary.g) + int(pal.fg_primary.b)
@@ -55,5 +63,32 @@ retro_orange_theme_has_distinct_control_states :: proc(t: ^testing.T) {
 	testing.expect(t, style.button_bg != style.button_hover)
 	testing.expect(t, style.button_hover != style.button_pressed)
 	testing.expect(t, style.border_color != style.button_bg)
+	testing.expect(t, contrast_ratio(style.button_text, style.button_bg) >= MIN_TEXT_CONTRAST)
+}
+
+@(test)
+retro_ingot_theme_uses_logo_grays_and_distinct_control_states :: proc(t: ^testing.T) {
+	style := theme_retro_ingot()
+	testing.expect_value(t, style.bg_color, Color{245, 245, 247, 255})
+	testing.expect_value(t, style.fg_primary, Color{17, 19, 24, 255})
+	testing.expect_value(t, style.border_color, Color{115, 122, 130, 255})
+	testing.expect(t, style.button_bg != style.button_hover)
+	testing.expect(t, style.button_hover != style.button_pressed)
+	testing.expect(t, style.caption_hover != style.caption_pressed)
+	testing.expect(t, contrast_ratio(style.button_text, style.button_bg) >= MIN_TEXT_CONTRAST)
+}
+
+@(test)
+terra_theme_preserves_crt_channels_and_control_states :: proc(t: ^testing.T) {
+	style := theme_terra()
+	testing.expect_value(t, style.bg_color, Color{6, 10, 8, 255})
+	testing.expect_value(t, style.fg_primary, Color{176, 255, 206, 255})
+	testing.expect_value(t, style.fg_tool, Color{255, 190, 90, 255})
+	testing.expect_value(t, style.fg_error, Color{255, 106, 84, 255})
+	testing.expect(t, style.button_bg != style.button_hover)
+	testing.expect(t, style.button_hover != style.button_pressed)
+	testing.expect(t, style.caption_hover != style.caption_pressed)
+	testing.expect(t, style.bg_hover != style.surface_pressed)
+	testing.expect(t, style.substrate.kind == .Grid)
 	testing.expect(t, contrast_ratio(style.button_text, style.button_bg) >= MIN_TEXT_CONTRAST)
 }

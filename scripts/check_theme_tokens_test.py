@@ -25,12 +25,12 @@ class RawColorTests(unittest.TestCase):
         counts = gate.counts_for_source(source, "ui/caption_buttons.odin")
         self.assertNotIn("ui/caption_buttons.odin:raw_color", counts)
 
-    def test_ignores_palette_files(self) -> None:
-        """A theme is data; literal colors are the point of these files."""
+    def test_ignores_palette_file(self) -> None:
+        """A theme is data; literal colors are the point of this file."""
         source = "fg_primary = Color{44, 42, 38, 255},\n"
-        for path in ("ui/theme.odin", "ui/sketch.odin"):
-            counts = gate.counts_for_source(source, path)
-            self.assertNotIn(f"{path}:raw_color", counts)
+        path = "ui/theme.odin"
+        counts = gate.counts_for_source(source, path)
+        self.assertNotIn(f"{path}:raw_color", counts)
 
     def test_ignores_colors_inside_comments(self) -> None:
         """mask_source blanks comments, so documentation may cite a literal."""

@@ -459,7 +459,9 @@ chalk_highlight_cost_is_independent_of_size :: proc(t: ^testing.T) {
 		material_frame(&runtime, &frame, output, 1.0)
 		defer ui_runtime_destroy(&runtime)
 
-		ui_runtime_set_theme(&runtime, THEME_SKETCH_WARM)
+		style := theme_terra()
+		style.chalk = Color{214, 255, 228, 255}
+		ui_runtime_set_theme(&runtime, style)
 		draw_chalk_highlight(&frame, {0, 0, size[0], size[1]}, .MD)
 		ui_frame_end(&frame)
 		counts[index] = output.main.count

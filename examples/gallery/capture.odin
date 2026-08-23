@@ -80,9 +80,7 @@ when CAPTURE {
 		{"gallery-buttons-light.png", .Buttons, .Light},
 		{"gallery-inputs-light.png", .Inputs, .Light},
 		{"gallery-stress-dark.png", .Stress, .Dark},
-		// The Theme page on paper: the one shot where the substrate, the
-		// margin and the hand-drawn accents are all visible at once.
-		{"gallery-theme-sketch.png", .Theme, .Sketch_Warm},
+		{"gallery-theme-terra.png", .Theme, .Terra},
 	}
 
 	// The GIF script: every section in order, alternating theme so the motion
@@ -96,9 +94,7 @@ when CAPTURE {
 		{"", .Layout, .Light},
 		{"", .Overlay, .Dark},
 		{"", .Stress, .Dark},
-		// End on paper so the sequence closes on the aesthetic rather than on
-		// the stress grid.
-		{"", .Theme, .Sketch_Warm},
+		{"", .Theme, .Terra},
 	}
 
 	capture_session: fit.Session

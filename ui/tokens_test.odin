@@ -29,17 +29,17 @@ all_surfaces :: proc() -> [13]Surface {
 	}
 }
 
-// Every palette the library ships, screen and paper alike. The token
-// guarantees are palette-independent by design, so they are checked against
-// all five rather than a representative one; every defect these tests replace
-// was itself palette-specific.
-token_themes :: proc() -> [5]Theme {
-	return [5]Theme {
+// Every palette the library ships. The token guarantees are palette-independent
+// by design, so they are checked against all six rather than a representative
+// one; every defect these tests replace was itself palette-specific.
+token_themes :: proc() -> [6]Theme {
+	return [6]Theme {
 		THEME_DARK,
 		THEME_LIGHT,
 		THEME_HIGH_CONTRAST,
-		THEME_SKETCH_WARM,
-		THEME_SKETCH_GREY,
+		theme_retro_orange(),
+		theme_retro_ingot(),
+		theme_terra(),
 	}
 }
 

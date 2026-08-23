@@ -99,7 +99,7 @@ ui_runtime_init :: proc(runtime: ^Ui_Runtime) {
 	assert(!runtime.initialized, "ui_runtime_init: already initialized")
 	runtime.scale = 1
 	runtime.metrics = ui_metrics(runtime.scale)
-	runtime.style = THEME_DARK
+	runtime.style = theme_retro_ingot()
 	text_system_init(&runtime.text)
 	runtime.initialized = true
 }
