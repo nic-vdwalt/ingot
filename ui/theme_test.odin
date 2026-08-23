@@ -39,11 +39,13 @@ theme_runtime_glass_fullscreen_toggle :: proc(t: ^testing.T) {
 
 @(test)
 theme_palettes_are_readable :: proc(t: ^testing.T) {
-	palettes := [5]Theme {
+	palettes := [7]Theme {
 		theme_dark(),
 		theme_light(),
 		theme_retro_orange(),
+		theme_retro_orange_dark(),
 		theme_retro_ingot(),
+		theme_retro_ingot_dark(),
 		theme_terra(),
 	}
 	for pal in palettes {
@@ -67,11 +69,34 @@ retro_orange_theme_has_distinct_control_states :: proc(t: ^testing.T) {
 }
 
 @(test)
+retro_orange_dark_theme_has_distinct_control_states :: proc(t: ^testing.T) {
+	style := theme_retro_orange_dark()
+	testing.expect_value(t, style.bg_color, Color{28, 20, 15, 255})
+	testing.expect_value(t, style.fg_accent, Color{255, 170, 92, 255})
+	testing.expect(t, style.button_bg != style.button_hover)
+	testing.expect(t, style.button_hover != style.button_pressed)
+	testing.expect(t, style.caption_hover != style.caption_pressed)
+	testing.expect(t, contrast_ratio(style.button_text, style.button_bg) >= MIN_TEXT_CONTRAST)
+}
+
+@(test)
 retro_ingot_theme_uses_logo_grays_and_distinct_control_states :: proc(t: ^testing.T) {
 	style := theme_retro_ingot()
 	testing.expect_value(t, style.bg_color, Color{245, 245, 247, 255})
 	testing.expect_value(t, style.fg_primary, Color{17, 19, 24, 255})
 	testing.expect_value(t, style.border_color, Color{115, 122, 130, 255})
+	testing.expect(t, style.button_bg != style.button_hover)
+	testing.expect(t, style.button_hover != style.button_pressed)
+	testing.expect(t, style.caption_hover != style.caption_pressed)
+	testing.expect(t, contrast_ratio(style.button_text, style.button_bg) >= MIN_TEXT_CONTRAST)
+}
+
+@(test)
+retro_ingot_dark_theme_uses_steel_grays_and_distinct_control_states :: proc(t: ^testing.T) {
+	style := theme_retro_ingot_dark()
+	testing.expect_value(t, style.bg_color, Color{18, 20, 24, 255})
+	testing.expect_value(t, style.fg_primary, Color{238, 241, 244, 255})
+	testing.expect_value(t, style.border_color, Color{119, 132, 144, 255})
 	testing.expect(t, style.button_bg != style.button_hover)
 	testing.expect(t, style.button_hover != style.button_pressed)
 	testing.expect(t, style.caption_hover != style.caption_pressed)

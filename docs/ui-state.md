@@ -87,8 +87,9 @@ Two rules follow from this, and both are enforced rather than advisory:
   press cannot be right for both a light and a dark palette; add a palette
   role instead, as `surface_pressed` does.
 
-Palettes are values, not code: the built-in dark, light, high-contrast, retro,
-and Terra constructors return plain `Theme` structs swapped at runtime by
+Palettes are values, not code: the built-in dark, light, high-contrast, Terra,
+Retro Orange, and Ingot constructors include explicit branded light and dark
+variants. They return plain `Theme` structs swapped at runtime by
 `ui_runtime_set_theme`. A palette disables an effect by zeroing its alpha rather
 than by a branch at the draw site, which is how the high-contrast theme opts out
 of shadows and the screen themes opt out of paper materials.

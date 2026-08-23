@@ -113,20 +113,24 @@ NAV_SIDEBAR_ROW_H :: 28
 // accessibility palette last: a progression rather than a jumble.
 Palette :: enum {
 	Ingot,
+	Ingot_Dark,
 	Terra,
 	Dark,
 	Light,
 	Retro_Orange,
+	Retro_Orange_Dark,
 	High_Contrast,
 }
 
 PALETTE_NAMES := [Palette]string {
-	.Ingot         = "Ingot",
-	.Terra         = "Terra",
-	.Dark          = "Dark",
-	.Light         = "Light",
-	.Retro_Orange  = "Retro orange",
-	.High_Contrast = "High contrast",
+	.Ingot             = "Ingot",
+	.Ingot_Dark        = "Ingot dark",
+	.Terra             = "Terra",
+	.Dark              = "Dark",
+	.Light             = "Light",
+	.Retro_Orange      = "Retro orange",
+	.Retro_Orange_Dark = "Retro orange dark",
+	.High_Contrast     = "High contrast",
 }
 
 palette := Palette.Ingot
@@ -151,6 +155,8 @@ palette_theme :: proc(value: Palette) -> fit.Theme {
 	switch value {
 	case .Ingot:
 		return fit.Theme_Retro_Ingot()
+	case .Ingot_Dark:
+		return fit.Theme_Retro_Ingot_Dark()
 	case .Terra:
 		return fit.Theme_Terra()
 	case .Dark:
@@ -159,6 +165,8 @@ palette_theme :: proc(value: Palette) -> fit.Theme {
 		return fit.Theme_Light()
 	case .Retro_Orange:
 		return fit.Theme_Retro_Orange()
+	case .Retro_Orange_Dark:
+		return fit.Theme_Retro_Orange_Dark()
 	case .High_Contrast:
 		return fit.Theme_High_Contrast()
 	}
@@ -1404,9 +1412,12 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 		"shielded clicks: %d (should not rise while the popup covers them)",
 		shielded_clicks,
 	)
-	fit.Text(surface, summary, x, info_y, .Label, .Secondary)
-	metrics := fit.Get_Metrics(surface)
-	return info_y + metrics.line_height + gap
+	cursor: fit.Vertical_Cursor_State
+	fit.Vertical_Cursor_Begin(surface, &cursor, x, info_y, fit.Px(surface, 340))
+	_ = fit.Vertical_Cursor_Text(&cursor, summary, .Label, .Secondary)
+	fit.Vertical_Cursor_Space(&cursor, gap)
+	bounds := fit.Vertical_Cursor_End(&cursor)
+	return bounds.y + bounds.h
 }
 
 draw_overlay_context_menu :: proc(surface: ^fit.Surface, x, info_y: i32) {

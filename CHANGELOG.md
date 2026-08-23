@@ -27,6 +27,13 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   outputs remain available for compatibility and advanced fan-in; Surface and
   Region button APIs remain direct bool-returning explicit-geometry controls.
 
+### Added
+
+- `theme_retro_ingot_dark` / `fit.Theme_Retro_Ingot_Dark` and
+  `theme_retro_orange_dark` / `fit.Theme_Retro_Orange_Dark`: explicit dark
+  counterparts to the branded Ingot and Retro Orange palettes, with dedicated
+  surface, ink, interaction, focus, and window-caption colors.
+
 ## [0.1.7] - 2026-08-20
 
 This is a source-only release; no binaries, installers, or web bundles are attached.

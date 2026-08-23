@@ -1491,8 +1491,14 @@ spinner_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, options: Spinner_Options = 
 	)
 }
 
+section_header_height :: proc(frame: ^Ui_Frame) -> i32 {
+	assert(frame != nil && frame.open, "section_header_height: invalid frame")
+	metrics := ui_frame_metrics(frame)
+	return metrics.FONT_SIZE_LABEL + ui_frame_sc(frame, 11)
+}
+
 section_header_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, label: string) -> i32 {
-	assert(frame != nil, "section_header_at: nil frame")
+	assert(frame != nil && frame.open, "section_header_at: invalid frame")
 	x, y, w := rect.x, rect.y, rect.w
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
@@ -1505,7 +1511,7 @@ section_header_at :: proc(frame: ^Ui_Frame, rect: Rect_I32, label: string) -> i3
 		1,
 		style.border_subtle,
 	)
-	return y + metrics.FONT_SIZE_LABEL + ui_frame_sc(frame, 11)
+	return y + section_header_height(frame)
 }
 
 // status_pill_at draws a pill whose background is the fg color tinted to

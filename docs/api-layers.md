@@ -99,11 +99,11 @@ canvas :: proc(surface: ^fit.Surface, root: fit.Rect, user_data: rawptr) -> bool
 }
 ```
 
-`Layout_State`, `Grid_State`, `Flow_State`, and `Fit_Column_State` are zero-value
-ready, must be balanced, and may be reused after their `End`. The longer
-`Surface_Layout_*`, `Surface_Grid_*`, `Surface_Flow_*`, and
-`Surface_Fit_Column_*` spellings remain source-compatible. Neither vocabulary
-implicitly scales geometry.
+`Layout_State`, `Grid_State`, `Flow_State`, `Fit_Column_State`, and
+`Vertical_Cursor_State` are zero-value ready, must be balanced, and may be reused
+after their `End`. The longer `Surface_Layout_*`, `Surface_Grid_*`,
+`Surface_Flow_*`, and `Surface_Fit_Column_*` spellings remain source-compatible.
+Neither vocabulary implicitly scales geometry.
 
 For caller-owned scheduling, use the `fit.App` lifecycle explicitly:
 

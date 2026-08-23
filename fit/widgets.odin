@@ -433,8 +433,16 @@ Theme_Retro_Orange :: proc() -> Theme {
 	return {inner = ui.theme_retro_orange()}
 }
 
+Theme_Retro_Orange_Dark :: proc() -> Theme {
+	return {inner = ui.theme_retro_orange_dark()}
+}
+
 Theme_Retro_Ingot :: proc() -> Theme {
 	return {inner = ui.theme_retro_ingot()}
+}
+
+Theme_Retro_Ingot_Dark :: proc() -> Theme {
+	return {inner = ui.theme_retro_ingot_dark()}
 }
 
 Theme_Terra :: proc() -> Theme {

@@ -673,6 +673,12 @@ Flow_State :: struct {
 	open:    bool,
 }
 
+Vertical_Cursor_State :: struct {
+	inner:   ui.Fit_Column,
+	surface: ^Surface,
+	open:    bool,
+}
+
 Fit_Column_State :: struct {
 	inner:   ui.Fit_Column,
 	surface: ^Surface,
