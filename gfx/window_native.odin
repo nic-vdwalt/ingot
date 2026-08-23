@@ -18,6 +18,7 @@ when ODIN_OS == .Darwin {
 } else when ODIN_OS == .Windows {
 	context_get_window_handle :: proc(ctx: ^Context) -> rawptr {
 		if ctx == nil || ctx.win == nil do return nil
+		_ = glfw.GetCurrentContext()
 		return rawptr(glfw.GetWin32Window(glfw.WindowHandle(ctx.win)))
 	}
 } else {
