@@ -1405,7 +1405,8 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 		shielded_clicks,
 	)
 	fit.Text(surface, summary, x, info_y, .Label, .Secondary)
-	return info_y
+	metrics := fit.Get_Metrics(surface)
+	return info_y + metrics.line_height + gap
 }
 
 draw_overlay_context_menu :: proc(surface: ^fit.Surface, x, info_y: i32) {
