@@ -429,6 +429,10 @@ Theme_Light :: proc() -> Theme {
 	return {inner = ui.theme_light()}
 }
 
+Theme_Retro_Orange :: proc() -> Theme {
+	return {inner = ui.theme_retro_orange()}
+}
+
 Theme_Sketch_Warm :: proc() -> Theme {
 	return {inner = ui.theme_sketch_warm()}
 }

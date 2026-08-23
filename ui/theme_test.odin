@@ -38,7 +38,7 @@ theme_runtime_glass_fullscreen_toggle :: proc(t: ^testing.T) {
 
 @(test)
 theme_palettes_are_readable :: proc(t: ^testing.T) {
-	for pal in ([2]Theme{theme_dark(), theme_light()}) {
+	for pal in ([3]Theme{theme_dark(), theme_light(), theme_retro_orange()}) {
 		testing.expect_value(t, pal.fg_primary.a, u8(255))
 		testing.expect_value(t, pal.fg_heading.a, u8(255))
 		fg := int(pal.fg_primary.r) + int(pal.fg_primary.g) + int(pal.fg_primary.b)
@@ -46,4 +46,14 @@ theme_palettes_are_readable :: proc(t: ^testing.T) {
 		diff := fg - bg if fg > bg else bg - fg
 		testing.expect(t, diff > 300, "fg/bg contrast too low")
 	}
+}
+
+@(test)
+retro_orange_theme_has_distinct_control_states :: proc(t: ^testing.T) {
+	style := theme_retro_orange()
+	testing.expect(t, style.bg_color.r > style.bg_color.b)
+	testing.expect(t, style.button_bg != style.button_hover)
+	testing.expect(t, style.button_hover != style.button_pressed)
+	testing.expect(t, style.border_color != style.button_bg)
+	testing.expect(t, contrast_ratio(style.button_text, style.button_bg) >= MIN_TEXT_CONTRAST)
 }

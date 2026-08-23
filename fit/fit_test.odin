@@ -424,7 +424,7 @@ fit_native_scroll_clamps_and_translates_child :: proc(t: ^testing.T) {
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 200, 100})
 	state := Scroll_State {
-		inner = {offset = 999},
+		inner = {offset = 99.5},
 	}
 	root := Column(&builder)
 	scroll := Scroll(
@@ -439,7 +439,7 @@ fit_native_scroll_clamps_and_translates_child :: proc(t: ^testing.T) {
 	testing.expect_value(t, size.h, i32(100))
 	Render_At(&builder, {0, 0, 200, 100})
 	testing.expect_value(t, state.inner.content_h, i32(200))
-	testing.expect_value(t, state.inner.offset, f32(100))
+	testing.expect_value(t, state.inner.offset, f32(99.5))
 	testing.expect_value(t, output.main.clip_count, 0)
 	builder_close(&builder)
 }
