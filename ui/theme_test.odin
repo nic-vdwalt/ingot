@@ -117,3 +117,28 @@ terra_theme_preserves_crt_channels_and_control_states :: proc(t: ^testing.T) {
 	testing.expect(t, style.substrate.kind == .Grid)
 	testing.expect(t, contrast_ratio(style.button_text, style.button_bg) >= MIN_TEXT_CONTRAST)
 }
+
+@(test)
+theme_installation_preserves_runtime_contract :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	generation := runtime.generation
+	style := theme_dark()
+	style.reduced_motion = true
+	ui_runtime_set_theme(&runtime, style)
+	testing.expect_value(t, runtime.generation, generation + 1)
+	testing.expect(t, runtime.style.reduced_motion)
+	testing.expect_value(t, runtime.style.bg_app, style.bg_app_windowed)
+	testing.expect_value(t, runtime.style.bg_chat, style.bg_chat_windowed)
+	testing.expect_value(t, runtime.style.bg_panel, style.bg_panel_windowed)
+}
+
+@(test)
+theme_pigment_falls_back_to_matching_ink :: proc(t: ^testing.T) {
+	style := theme_dark()
+	for pigment in Pigment {
+		expected := theme_ink(&style, pigment_ink(pigment))
+		testing.expect_value(t, theme_pigment(&style, pigment), expected)
+	}
+}

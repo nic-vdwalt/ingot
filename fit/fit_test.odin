@@ -707,11 +707,13 @@ fit_vertical_cursor_composes_and_reuses_caller_state :: proc(t: ^testing.T) {
 	testing.expect_value(t, header.y, line.y + line.h + 6)
 	testing.expect_value(t, bounds.h, line.h + 6 + header.h)
 	testing.expect(t, !cursor.open && cursor.surface == nil, "cursor retained borrowed surface")
+	paint_count := output.main.count
 	Vertical_Cursor_Begin_Bounded(&surface, &cursor, {0, 0, 100, 10})
-	clamped := Vertical_Cursor_Next(&cursor, 20)
+	clamped := Vertical_Cursor_Section_Header(&cursor, "CLAMPED")
 	_ = Vertical_Cursor_End(&cursor)
 	testing.expect_value(t, clamped, Rect{0, 0, 100, 10})
-	testing.expect_value(t, Vertical_Cursor_Overflow(&cursor), i32(10))
+	testing.expect_value(t, output.main.count, paint_count)
+	testing.expect_value(t, Vertical_Cursor_Overflow(&cursor), header.h - 10)
 	_ = ui.end(&root)
 }
 
