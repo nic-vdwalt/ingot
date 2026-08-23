@@ -13,7 +13,67 @@ TERM_PASTE_MAX_BYTES :: 1024 * 1024
 TERM_WRITE_MAX_ATTEMPTS :: 16
 TERM_INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
 TERM_INPUT_KEY_DRAIN_MAX :: rl.CHAR_Q
+TERM_SURFACE_KEYS :: [?]fit.Key {
+	.A,
+	.B,
+	.C,
+	.D,
+	.E,
+	.F,
+	.G,
+	.H,
+	.I,
+	.J,
+	.K,
+	.L,
+	.M,
+	.N,
+	.O,
+	.P,
+	.Q,
+	.R,
+	.S,
+	.T,
+	.U,
+	.V,
+	.W,
+	.X,
+	.Y,
+	.Z,
+	.Left_Bracket,
+	.Backslash,
+	.Right_Bracket,
+	.Grave,
+	.Escape,
+	.Enter,
+	.Tab,
+	.Backspace,
+	.Insert,
+	.Delete,
+	.Right,
+	.Left,
+	.Down,
+	.Up,
+	.Page_Up,
+	.Page_Down,
+	.Home,
+	.End,
+	.F1,
+	.F2,
+	.F3,
+	.F4,
+	.F5,
+	.F6,
+	.F7,
+	.F8,
+	.F9,
+	.F10,
+	.F11,
+	.F12,
+	.Keypad_Enter,
+}
 #assert(ui.INPUT_KEY_COUNT <= int(rl.KeyboardKey.KB_MENU) + 1)
+#assert(len(TERM_SURFACE_KEYS) <= TERM_INPUT_KEY_DRAIN_MAX)
 
 @(private = "file")
 term_write :: proc(ts: ^Term_Instance, data: []u8) -> bool {
@@ -168,10 +228,9 @@ term_handle_surface_input :: proc(
 			sent = term_write(ts, buf[:count]) || sent
 		}
 	}
-	for key_value := int(fit.Key.Null) + 1; key_value <= int(fit.Key.Right_Super); key_value += 1 {
-		key := fit.Key(key_value)
+	for key in TERM_SURFACE_KEYS {
 		if !fit.Surface_Key_Pressed_Or_Repeat(surface, key) do continue
-		gfx_key := rl.KeyboardKey(key_value)
+		gfx_key := rl.KeyboardKey(key)
 		if gfx_key == .V && (super || (ctrl && shift)) {
 			paste := fit.Surface_Clipboard(surface)
 			if len(paste) <= TERM_PASTE_MAX_BYTES do sent = term_write(ts, transmute([]u8)paste) || sent

@@ -1,6 +1,7 @@
 package term
 
 import "core:testing"
+import fit "ingot:fit"
 import rl "ingot:gfx"
 import "ingot:pty"
 import "ingot:ui"
@@ -29,6 +30,79 @@ term_ui_input_reads_captured_characters :: proc(t: ^testing.T) {
 
 	testing.expect(t, term_handle_ui_input(ts, &input))
 	testing.expect_value(t, ts.sb_view_offset, 0)
+}
+
+@(test)
+term_surface_keys_are_declared_and_complete :: proc(t: ^testing.T) {
+	expected := [?]fit.Key {
+		.A,
+		.B,
+		.C,
+		.D,
+		.E,
+		.F,
+		.G,
+		.H,
+		.I,
+		.J,
+		.K,
+		.L,
+		.M,
+		.N,
+		.O,
+		.P,
+		.Q,
+		.R,
+		.S,
+		.T,
+		.U,
+		.V,
+		.W,
+		.X,
+		.Y,
+		.Z,
+		.Left_Bracket,
+		.Backslash,
+		.Right_Bracket,
+		.Grave,
+		.Escape,
+		.Enter,
+		.Tab,
+		.Backspace,
+		.Insert,
+		.Delete,
+		.Right,
+		.Left,
+		.Down,
+		.Up,
+		.Page_Up,
+		.Page_Down,
+		.Home,
+		.End,
+		.F1,
+		.F2,
+		.F3,
+		.F4,
+		.F5,
+		.F6,
+		.F7,
+		.F8,
+		.F9,
+		.F10,
+		.F11,
+		.F12,
+		.Keypad_Enter,
+	}
+	testing.expect_value(t, len(TERM_SURFACE_KEYS), len(expected))
+	actual := TERM_SURFACE_KEYS
+	found_tab := false
+	for key, index in actual {
+		testing.expect_value(t, key, expected[index])
+		if key == .Tab do found_tab = true
+		for prior in 0 ..< index do testing.expect(t, key != actual[prior])
+	}
+	testing.expect(t, found_tab)
+	testing.expect_value(t, actual[0], fit.Key.A)
 }
 
 @(test)
