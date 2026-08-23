@@ -263,6 +263,7 @@ Text_Role :: ui.Text_Role
 Truncate_Side :: ui.Truncate_Side
 Ink :: ui.Ink
 Button_Style :: ui.Btn_Style
+Icon :: ui.Icon
 Widget_Id :: distinct u64
 Rect :: struct {
 	x, y, w, h: i32,
