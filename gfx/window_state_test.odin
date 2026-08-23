@@ -36,6 +36,22 @@ test_window_initial_focus_policy :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_window_focus_resolution :: proc(t: ^testing.T) {
+	testing.expect(t, _window_focus_resolve(true, false, false), "GLFW focus is the fallback")
+	testing.expect(t, !_window_focus_resolve(false, true, false), "GLFW blur is the fallback")
+	testing.expect(
+		t,
+		_window_focus_resolve(false, true, true),
+		"native focus repairs stale GLFW blur",
+	)
+	testing.expect(
+		t,
+		!_window_focus_resolve(true, false, true),
+		"native blur overrides stale GLFW focus",
+	)
+}
+
+@(test)
 test_surface_reconfigure_policy :: proc(t: ^testing.T) {
 	testing.expect(
 		t,

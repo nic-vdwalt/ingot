@@ -332,7 +332,15 @@ platform_monitor_refresh_rate :: proc(ctx: ^Context) -> i32 {
 @(private)
 platform_window_focused :: proc(ctx: ^Context) -> bool {
 	if ctx == nil || ctx.win == nil do return false
-	return glfw.GetWindowAttrib(_context_window(ctx), glfw.FOCUSED) != 0
+	glfw_focused := glfw.GetWindowAttrib(_context_window(ctx), glfw.FOCUSED) != 0
+	native_focused, native_known := _platform_native_window_focus(ctx)
+	return _window_focus_resolve(glfw_focused, native_focused, native_known)
+}
+
+@(private)
+_window_focus_resolve :: proc(glfw_focused, native_focused, native_known: bool) -> bool {
+	if native_known do return native_focused
+	return glfw_focused
 }
 
 @(private)
