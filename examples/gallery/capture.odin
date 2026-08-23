@@ -83,17 +83,17 @@ when CAPTURE {
 		{"gallery-theme-terra.png", .Theme, .Terra},
 	}
 
-	// The GIF script: every section in order, alternating theme so the motion
-	// shows both navigation and theming without any synthetic input.
+	// The GIF script: every section in order using the default Ingot theme,
+	// then Terra so the motion shows both navigation and branded theming.
 	CAPTURE_SEQUENCE := [?]Capture_Shot {
-		{"", .Buttons, .Dark},
-		{"", .Inputs, .Dark},
-		{"", .Widgets, .Dark},
-		{"", .Charts, .Dark},
-		{"", .Markdown, .Light},
-		{"", .Layout, .Light},
-		{"", .Overlay, .Dark},
-		{"", .Stress, .Dark},
+		{"", .Buttons, .Ingot},
+		{"", .Inputs, .Ingot},
+		{"", .Widgets, .Ingot},
+		{"", .Charts, .Ingot},
+		{"", .Markdown, .Ingot},
+		{"", .Layout, .Ingot},
+		{"", .Overlay, .Ingot},
+		{"", .Stress, .Ingot},
 		{"", .Theme, .Terra},
 	}
 

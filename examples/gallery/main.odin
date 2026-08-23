@@ -112,12 +112,8 @@ NAV_SIDEBAR_ROW_H :: 28
 // the button walks the branded palettes, then screen themes, then the
 // accessibility palette last: a progression rather than a jumble.
 Palette :: enum {
-<<<<<<< Updated upstream
-	Retro_Orange,
-=======
 	Ingot,
 	Terra,
->>>>>>> Stashed changes
 	Dark,
 	Light,
 	Retro_Orange,
@@ -125,23 +121,15 @@ Palette :: enum {
 }
 
 PALETTE_NAMES := [Palette]string {
-<<<<<<< Updated upstream
-	.Retro_Orange  = "Retro orange",
-=======
 	.Ingot         = "Ingot",
 	.Terra         = "Terra",
->>>>>>> Stashed changes
 	.Dark          = "Dark",
 	.Light         = "Light",
 	.Retro_Orange  = "Retro orange",
 	.High_Contrast = "High contrast",
 }
 
-<<<<<<< Updated upstream
-palette := Palette.Retro_Orange
-=======
 palette := Palette.Ingot
->>>>>>> Stashed changes
 reduced_motion := false
 initial_theme_pending := false
 section := Section.Buttons
@@ -161,15 +149,10 @@ palette_next :: proc(current: Palette) -> Palette {
 // palette_theme resolves a palette to its Theme value.
 palette_theme :: proc(value: Palette) -> fit.Theme {
 	switch value {
-<<<<<<< Updated upstream
-	case .Retro_Orange:
-		return fit.Theme_Retro_Orange()
-=======
 	case .Ingot:
 		return fit.Theme_Retro_Ingot()
 	case .Terra:
 		return fit.Theme_Terra()
->>>>>>> Stashed changes
 	case .Dark:
 		return fit.Theme_Dark()
 	case .Light:
@@ -179,11 +162,7 @@ palette_theme :: proc(value: Palette) -> fit.Theme {
 	case .High_Contrast:
 		return fit.Theme_High_Contrast()
 	}
-<<<<<<< Updated upstream
-	return fit.Theme_Retro_Orange()
-=======
 	return fit.Theme_Retro_Ingot()
->>>>>>> Stashed changes
 }
 
 content_pane: fit.Pane_State
