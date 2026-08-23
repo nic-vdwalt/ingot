@@ -123,6 +123,8 @@ nav_strip_respects_scaled_width_and_sidebar_height :: proc(t: ^testing.T) {
 @(test)
 gallery_contract_keeps_sections_geometry_and_stress_scale :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(Section), 9)
+	testing.expect_value(t, len(Palette), 6)
+	testing.expect_value(t, palette, Palette.Retro_Orange)
 	testing.expect_value(t, len(SECTION_NAMES), len(Section))
 	testing.expect_value(t, len(SECTION_LAYERS), len(Section))
 	testing.expect_value(t, len(SECTION_AXES), len(Section))
