@@ -439,8 +439,36 @@ fit_native_scroll_clamps_and_translates_child :: proc(t: ^testing.T) {
 	testing.expect_value(t, size.h, i32(100))
 	Render_At(&builder, {0, 0, 200, 100})
 	testing.expect_value(t, state.inner.content_h, i32(200))
+	testing.expect_value(t, state.inner.viewport_h, i32(100))
 	testing.expect_value(t, state.inner.offset, f32(99.5))
 	testing.expect_value(t, output.main.clip_count, 0)
+	builder_close(&builder)
+}
+
+@(test)
+fit_native_scroll_preserves_offset_until_final_placement :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 200, 100})
+	state := Scroll_State{inner = {offset = 72}}
+	root := Column(&builder, {track = Grow()})
+	scroll := Scroll(root, "content", &state, {track = Grow()})
+	content := Column(scroll)
+	Spacer(content, .XL, {size = {height = Fixed(240)}})
+	_ = Measure(&builder)
+	Render_At(&builder, {0, 0, 200, 100})
+	testing.expect_value(t, state.inner.content_h, i32(240))
+	testing.expect_value(t, state.inner.viewport_h, i32(100))
+	testing.expect_value(t, state.inner.offset, f32(72))
 	builder_close(&builder)
 }
 
