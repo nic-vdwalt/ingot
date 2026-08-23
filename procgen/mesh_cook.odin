@@ -58,20 +58,23 @@ mesh_workspace_size :: proc(vertex_capacity, index_capacity: int) -> int {
 mesh_workspace_make :: proc(
 	block: []u8,
 	vertex_capacity, index_capacity: int,
-) -> (Mesh_Workspace, bool) {
+) -> (
+	Mesh_Workspace,
+	bool,
+) {
 	required := mesh_workspace_size(vertex_capacity, index_capacity)
 	if len(block) < required do return {}, false
-	return {
-		block           = block,
-		vertex_capacity = vertex_capacity,
-		index_capacity  = index_capacity,
-	}, true
+	return {block = block, vertex_capacity = vertex_capacity, index_capacity = index_capacity},
+		true
 }
 
 mesh_workspace_simplify :: proc(
 	workspace: Mesh_Workspace,
 	vertex_count, index_count: int,
-) -> (Simplify_Scratch, bool) {
+) -> (
+	Simplify_Scratch,
+	bool,
+) {
 	if vertex_count > workspace.vertex_capacity do return {}, false
 	if index_count > workspace.index_capacity || index_count > SIMPLIFY_MAX_INDICES do return {}, false
 	return simplify_scratch_make(workspace.block, vertex_count, index_count)
@@ -80,7 +83,10 @@ mesh_workspace_simplify :: proc(
 mesh_workspace_optimize :: proc(
 	workspace: Mesh_Workspace,
 	vertex_count, index_count: int,
-) -> (Optimize_Scratch, bool) {
+) -> (
+	Optimize_Scratch,
+	bool,
+) {
 	if vertex_count > workspace.vertex_capacity do return {}, false
 	if index_count > workspace.index_capacity do return {}, false
 	return optimize_scratch_make(workspace.block, vertex_count, index_count)

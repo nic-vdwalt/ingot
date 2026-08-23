@@ -196,7 +196,11 @@ optimize_scratch_make :: proc(
 		heap_slots       = _simplify_carve(&carve, i32, triangles),
 		touched          = _simplify_carve(&carve, u32, triangles),
 		touched_mark     = _simplify_carve(&carve, u32, triangles),
-		runs             = _simplify_carve(&carve, Optimize_Run, _optimize_run_capacity(triangles)),
+		runs             = _simplify_carve(
+			&carve,
+			Optimize_Run,
+			_optimize_run_capacity(triangles),
+		),
 		order            = _simplify_carve(&carve, u32, index_count),
 	}
 	assert(carve.offset <= len(block), "optimize_scratch_make: carve overran the block")

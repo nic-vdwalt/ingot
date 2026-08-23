@@ -86,7 +86,11 @@ _gpu_compute_slot :: proc(context_id, id: u32, capacity: int) -> (int, u32, bool
 @(private)
 _gpu_buffer_get :: proc(ctx: ^Context, handle: Gpu_Buffer) -> wg.Buffer {
 	assert(ctx != nil, "_gpu_buffer_get: nil context")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.buffers))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.buffers),
+	)
 	if !ok do return nil
 	assert(index >= 0 && index < len(ctx.resources.compute.buffers))
 	slot := &ctx.resources.compute.buffers[index]
@@ -97,7 +101,11 @@ _gpu_buffer_get :: proc(ctx: ^Context, handle: Gpu_Buffer) -> wg.Buffer {
 @(private)
 _gpu_sampler_get :: proc(ctx: ^Context, handle: Gpu_Sampler) -> wg.Sampler {
 	assert(ctx != nil, "_gpu_sampler_get: nil context")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.samplers))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.samplers),
+	)
 	if !ok do return nil
 	assert(index >= 0 && index < len(ctx.resources.compute.samplers))
 	slot := &ctx.resources.compute.samplers[index]
@@ -108,7 +116,11 @@ _gpu_sampler_get :: proc(ctx: ^Context, handle: Gpu_Sampler) -> wg.Sampler {
 @(private)
 _gpu_layout_get :: proc(ctx: ^Context, handle: Gpu_Bind_Group_Layout) -> wg.BindGroupLayout {
 	assert(ctx != nil, "_gpu_layout_get: nil context")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.layouts))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.layouts),
+	)
 	if !ok do return nil
 	assert(index >= 0 && index < len(ctx.resources.compute.layouts))
 	slot := &ctx.resources.compute.layouts[index]
@@ -119,7 +131,11 @@ _gpu_layout_get :: proc(ctx: ^Context, handle: Gpu_Bind_Group_Layout) -> wg.Bind
 @(private)
 _gpu_group_get :: proc(ctx: ^Context, handle: Gpu_Bind_Group) -> wg.BindGroup {
 	assert(ctx != nil, "_gpu_group_get: nil context")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.groups))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.groups),
+	)
 	if !ok do return nil
 	assert(index >= 0 && index < len(ctx.resources.compute.groups))
 	slot := &ctx.resources.compute.groups[index]
@@ -130,7 +146,11 @@ _gpu_group_get :: proc(ctx: ^Context, handle: Gpu_Bind_Group) -> wg.BindGroup {
 @(private)
 _gpu_module_get :: proc(ctx: ^Context, handle: Gpu_Shader_Module) -> wg.ShaderModule {
 	assert(ctx != nil, "_gpu_module_get: nil context")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.modules))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.modules),
+	)
 	if !ok do return nil
 	assert(index >= 0 && index < len(ctx.resources.compute.modules))
 	slot := &ctx.resources.compute.modules[index]
@@ -141,7 +161,11 @@ _gpu_module_get :: proc(ctx: ^Context, handle: Gpu_Shader_Module) -> wg.ShaderMo
 @(private)
 _gpu_pipeline_get :: proc(ctx: ^Context, handle: Gpu_Compute_Pipeline) -> wg.ComputePipeline {
 	assert(ctx != nil, "_gpu_pipeline_get: nil context")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.pipelines))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.pipelines),
+	)
 	if !ok do return nil
 	assert(index >= 0 && index < len(ctx.resources.compute.pipelines))
 	slot := &ctx.resources.compute.pipelines[index]
@@ -192,7 +216,11 @@ write_gpu_buffer :: proc(buffer: Gpu_Buffer, offset: u64, data: []u8) -> bool {
 
 context_destroy_gpu_buffer :: proc(ctx: ^Context, handle: ^Gpu_Buffer) {
 	assert(ctx != nil && handle != nil, "context_destroy_gpu_buffer: invalid argument")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.buffers))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.buffers),
+	)
 	if !ok do return
 	assert(index >= 0 && index < len(ctx.resources.compute.buffers))
 	slot := &ctx.resources.compute.buffers[index]
@@ -219,14 +247,17 @@ context_create_gpu_texture :: proc(ctx: ^Context, desc: Gpu_Texture_Desc) -> Gpu
 	entry.sample_count = desc.sample_count
 	entry.mip_count = desc.mip_count
 	entry.usage = desc.usage
-	entry.tex = wg.DeviceCreateTexture(ctx.device, &{
-		usage = desc.usage,
-		dimension = ._2D,
-		size = {desc.width, desc.height, desc.layers},
-		format = desc.format,
-		mipLevelCount = desc.mip_count,
-		sampleCount = desc.sample_count,
-	})
+	entry.tex = wg.DeviceCreateTexture(
+		ctx.device,
+		&{
+			usage = desc.usage,
+			dimension = ._2D,
+			size = {desc.width, desc.height, desc.layers},
+			format = desc.format,
+			mipLevelCount = desc.mip_count,
+			sampleCount = desc.sample_count,
+		},
+	)
 	if entry.tex == nil {
 		free(entry)
 		return {}
@@ -237,7 +268,8 @@ context_create_gpu_texture :: proc(ctx: ^Context, desc: Gpu_Texture_Desc) -> Gpu
 		free(entry)
 		return {}
 	}
-	filterable := desc.format != .R32Float && desc.format != .RG32Float && desc.format != .RGBA32Float
+	filterable :=
+		desc.format != .R32Float && desc.format != .RG32Float && desc.format != .RGBA32Float
 	if .TextureBinding in desc.usage && filterable do _tex_build_bind(ctx, entry)
 	id := _texture_register_context(ctx.id, &ctx.resources.textures, entry)
 	if id == 0 {
@@ -291,16 +323,19 @@ context_create_gpu_sampler :: proc(ctx: ^Context, kind: Gpu_Sampler_Kind) -> Gpu
 	for &slot, index in resources.samplers {
 		if slot.occupied do continue
 		filter: wg.FilterMode = .Linear if kind == .Filtering else .Nearest
-		value := wg.DeviceCreateSampler(ctx.device, &{
-			magFilter = filter,
-			minFilter = filter,
-			mipmapFilter = .Nearest,
-			addressModeU = .Repeat,
-			addressModeV = .Repeat,
-			addressModeW = .Repeat,
-			compare = .Undefined,
-			maxAnisotropy = 1,
-		})
+		value := wg.DeviceCreateSampler(
+			ctx.device,
+			&{
+				magFilter = filter,
+				minFilter = filter,
+				mipmapFilter = .Nearest,
+				addressModeU = .Repeat,
+				addressModeV = .Repeat,
+				addressModeW = .Repeat,
+				compare = .Undefined,
+				maxAnisotropy = 1,
+			},
+		)
 		if value == nil do return {}
 		slot.generation = _resource_generation_next(slot.generation)
 		slot.value = value
@@ -322,12 +357,15 @@ context_create_gpu_shader_module :: proc(ctx: ^Context, source: string) -> Gpu_S
 	if resources.module_n >= GPU_COMPUTE_RESOURCE_MAX do return {}
 	for &slot, index in resources.modules {
 		if slot.occupied do continue
-		value := wg.DeviceCreateShaderModule(ctx.device, &{
-			nextInChain = &wg.ShaderSourceWGSL{
-				chain = {sType = .ShaderSourceWGSL},
-				code = source,
+		value := wg.DeviceCreateShaderModule(
+			ctx.device,
+			&{
+				nextInChain = &wg.ShaderSourceWGSL {
+					chain = {sType = .ShaderSourceWGSL},
+					code = source,
+				},
 			},
-		})
+		)
 		if value == nil do return {}
 		slot.generation = _resource_generation_next(slot.generation)
 		slot.value = value
@@ -365,42 +403,61 @@ context_create_gpu_bind_group_layout :: proc(
 		entry.visibility = _gpu_stage_flags(desc.visibility)
 		switch desc.kind {
 		case .Uniform_Buffer:
-			entry.buffer = {type = .Uniform, minBindingSize = desc.minimum_size}
+			entry.buffer = {
+				type           = .Uniform,
+				minBindingSize = desc.minimum_size,
+			}
 		case .Read_Only_Storage_Buffer:
-			entry.buffer = {type = .ReadOnlyStorage, minBindingSize = desc.minimum_size}
+			entry.buffer = {
+				type           = .ReadOnlyStorage,
+				minBindingSize = desc.minimum_size,
+			}
 		case .Storage_Buffer:
-			entry.buffer = {type = .Storage, minBindingSize = desc.minimum_size}
+			entry.buffer = {
+				type           = .Storage,
+				minBindingSize = desc.minimum_size,
+			}
 		case .Sampled_Texture:
 			sample_type: wg.TextureSampleType = .Float
 			if desc.texture_sample_type == .Unfilterable_Float do sample_type = .UnfilterableFloat
-			entry.texture = {sampleType = sample_type, viewDimension = ._2D}
+			entry.texture = {
+				sampleType    = sample_type,
+				viewDimension = ._2D,
+			}
 		case .Depth_Texture:
-			entry.texture = {sampleType = .Depth, viewDimension = ._2D}
+			entry.texture = {
+				sampleType    = .Depth,
+				viewDimension = ._2D,
+			}
 		case .Storage_Texture:
 			access: wg.StorageTextureAccess = .WriteOnly
 			if desc.storage_access == .Read_Only do access = .ReadOnly
 			if desc.storage_access == .Read_Write do access = .ReadWrite
 			entry.storageTexture = {
-				access = access,
-				format = desc.texture_format,
+				access        = access,
+				format        = desc.texture_format,
 				viewDimension = ._2D,
 			}
 		case .Sampler:
 			type: wg.SamplerBindingType = .Filtering
 			if desc.sampler_kind == .Non_Filtering do type = .NonFiltering
-			entry.sampler = {type = type}
+			entry.sampler = {
+				type = type,
+			}
 		case .Comparison_Sampler:
-			entry.sampler = {type = .Comparison}
+			entry.sampler = {
+				type = .Comparison,
+			}
 		}
 	}
 	resources := &ctx.resources.compute
 	if resources.layout_n >= GPU_COMPUTE_RESOURCE_MAX do return {}
 	for &slot, index in resources.layouts {
 		if slot.occupied do continue
-		value := wg.DeviceCreateBindGroupLayout(ctx.device, &{
-			entryCount = uint(len(descs)),
-			entries = raw_data(entries[:len(descs)]),
-		})
+		value := wg.DeviceCreateBindGroupLayout(
+			ctx.device,
+			&{entryCount = uint(len(descs)), entries = raw_data(entries[:len(descs)])},
+		)
 		if value == nil do return {}
 		slot.generation = _resource_generation_next(slot.generation)
 		slot.value = value
@@ -447,11 +504,14 @@ context_create_gpu_bind_group :: proc(
 	if resources.group_n >= GPU_COMPUTE_RESOURCE_MAX do return {}
 	for &slot, index in resources.groups {
 		if slot.occupied do continue
-		value := wg.DeviceCreateBindGroup(ctx.device, &{
-			layout = layout_value,
-			entryCount = uint(len(bindings)),
-			entries = raw_data(entries[:len(bindings)]),
-		})
+		value := wg.DeviceCreateBindGroup(
+			ctx.device,
+			&{
+				layout = layout_value,
+				entryCount = uint(len(bindings)),
+				entries = raw_data(entries[:len(bindings)]),
+			},
+		)
 		if value == nil do return {}
 		slot.generation = _resource_generation_next(slot.generation)
 		slot.value = value
@@ -480,20 +540,23 @@ context_create_gpu_compute_pipeline :: proc(
 	layout_value := _gpu_layout_get(ctx, layout)
 	if module_value == nil || layout_value == nil || len(entry_point) == 0 do return {}
 	layouts := [1]wg.BindGroupLayout{layout_value}
-	pipeline_layout := wg.DeviceCreatePipelineLayout(ctx.device, &{
-		bindGroupLayoutCount = 1,
-		bindGroupLayouts = raw_data(layouts[:]),
-	})
+	pipeline_layout := wg.DeviceCreatePipelineLayout(
+		ctx.device,
+		&{bindGroupLayoutCount = 1, bindGroupLayouts = raw_data(layouts[:])},
+	)
 	if pipeline_layout == nil do return {}
 	defer wg.PipelineLayoutRelease(pipeline_layout)
 	resources := &ctx.resources.compute
 	if resources.pipeline_n >= GPU_COMPUTE_RESOURCE_MAX do return {}
 	for &slot, index in resources.pipelines {
 		if slot.occupied do continue
-		value := wg.DeviceCreateComputePipeline(ctx.device, &{
-			layout = pipeline_layout,
-			compute = {module = module_value, entryPoint = entry_point},
-		})
+		value := wg.DeviceCreateComputePipeline(
+			ctx.device,
+			&{
+				layout = pipeline_layout,
+				compute = {module = module_value, entryPoint = entry_point},
+			},
+		)
 		if value == nil do return {}
 		slot.generation = _resource_generation_next(slot.generation)
 		slot.value = value
@@ -525,7 +588,10 @@ begin_gpu_compute_pass :: proc(commands: ^Gpu_Command_List) -> (Gpu_Compute_Pass
 	return context_begin_gpu_compute_pass(commands)
 }
 
-compute_pass_set_pipeline :: proc(pass: ^Gpu_Compute_Pass, pipeline: Gpu_Compute_Pipeline) -> bool {
+compute_pass_set_pipeline :: proc(
+	pass: ^Gpu_Compute_Pass,
+	pipeline: Gpu_Compute_Pipeline,
+) -> bool {
 	assert(pass != nil, "compute_pass_set_pipeline: nil pass")
 	if !pass.active || pass.owner == nil || pass.epoch != pass.owner.epoch do return false
 	value := _gpu_pipeline_get(pass.owner, pipeline)
@@ -567,13 +633,19 @@ end_gpu_compute_pass :: proc(pass: ^Gpu_Compute_Pass) -> bool {
 
 context_destroy_gpu_sampler :: proc(ctx: ^Context, handle: ^Gpu_Sampler) {
 	assert(ctx != nil && handle != nil, "context_destroy_gpu_sampler: invalid argument")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.samplers))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.samplers),
+	)
 	if !ok do return
 	assert(index >= 0 && index < len(ctx.resources.compute.samplers))
 	slot := &ctx.resources.compute.samplers[index]
 	if !slot.occupied || slot.generation != generation do return
 	wg.SamplerRelease(slot.value)
-	slot^ = {generation = slot.generation}
+	slot^ = {
+		generation = slot.generation,
+	}
 	ctx.resources.compute.sampler_n -= 1
 	handle^ = {}
 }
@@ -584,13 +656,19 @@ destroy_gpu_sampler :: proc(handle: ^Gpu_Sampler) {
 
 context_destroy_gpu_bind_group :: proc(ctx: ^Context, handle: ^Gpu_Bind_Group) {
 	assert(ctx != nil && handle != nil, "context_destroy_gpu_bind_group: invalid argument")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.groups))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.groups),
+	)
 	if !ok do return
 	assert(index >= 0 && index < len(ctx.resources.compute.groups))
 	slot := &ctx.resources.compute.groups[index]
 	if !slot.occupied || slot.generation != generation do return
 	wg.BindGroupRelease(slot.value)
-	slot^ = {generation = slot.generation}
+	slot^ = {
+		generation = slot.generation,
+	}
 	ctx.resources.compute.group_n -= 1
 	handle^ = {}
 }
@@ -601,13 +679,19 @@ destroy_gpu_bind_group :: proc(handle: ^Gpu_Bind_Group) {
 
 context_destroy_gpu_bind_group_layout :: proc(ctx: ^Context, handle: ^Gpu_Bind_Group_Layout) {
 	assert(ctx != nil && handle != nil, "context_destroy_gpu_bind_group_layout: invalid argument")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.layouts))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.layouts),
+	)
 	if !ok do return
 	assert(index >= 0 && index < len(ctx.resources.compute.layouts))
 	slot := &ctx.resources.compute.layouts[index]
 	if !slot.occupied || slot.generation != generation do return
 	wg.BindGroupLayoutRelease(slot.value)
-	slot^ = {generation = slot.generation}
+	slot^ = {
+		generation = slot.generation,
+	}
 	ctx.resources.compute.layout_n -= 1
 	handle^ = {}
 }
@@ -618,13 +702,19 @@ destroy_gpu_bind_group_layout :: proc(handle: ^Gpu_Bind_Group_Layout) {
 
 context_destroy_gpu_shader_module :: proc(ctx: ^Context, handle: ^Gpu_Shader_Module) {
 	assert(ctx != nil && handle != nil, "context_destroy_gpu_shader_module: invalid argument")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.modules))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.modules),
+	)
 	if !ok do return
 	assert(index >= 0 && index < len(ctx.resources.compute.modules))
 	slot := &ctx.resources.compute.modules[index]
 	if !slot.occupied || slot.generation != generation do return
 	wg.ShaderModuleRelease(slot.value)
-	slot^ = {generation = slot.generation}
+	slot^ = {
+		generation = slot.generation,
+	}
 	ctx.resources.compute.module_n -= 1
 	handle^ = {}
 }
@@ -635,13 +725,19 @@ destroy_gpu_shader_module :: proc(handle: ^Gpu_Shader_Module) {
 
 context_destroy_gpu_compute_pipeline :: proc(ctx: ^Context, handle: ^Gpu_Compute_Pipeline) {
 	assert(ctx != nil && handle != nil, "context_destroy_gpu_compute_pipeline: invalid argument")
-	index, generation, ok := _gpu_compute_slot(ctx.id, handle.id, len(ctx.resources.compute.pipelines))
+	index, generation, ok := _gpu_compute_slot(
+		ctx.id,
+		handle.id,
+		len(ctx.resources.compute.pipelines),
+	)
 	if !ok do return
 	assert(index >= 0 && index < len(ctx.resources.compute.pipelines))
 	slot := &ctx.resources.compute.pipelines[index]
 	if !slot.occupied || slot.generation != generation do return
 	wg.ComputePipelineRelease(slot.value)
-	slot^ = {generation = slot.generation}
+	slot^ = {
+		generation = slot.generation,
+	}
 	ctx.resources.compute.pipeline_n -= 1
 	handle^ = {}
 }
