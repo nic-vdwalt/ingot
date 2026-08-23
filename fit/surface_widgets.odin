@@ -23,6 +23,27 @@ Surface_Button :: proc(
 	)
 }
 
+Surface_Icon_Button :: proc(
+	surface: ^Surface,
+	widget: Widget_Id,
+	icon: Icon,
+	accessible_label: string,
+	rect: Rect,
+	enabled: bool = true,
+) -> bool {
+	u := surface_ui(surface)
+	assert(widget != Widget_Id(0), "Fit.Surface_Icon_Button: zero widget")
+	assert(accessible_label != "", "Fit.Surface_Icon_Button: empty accessible label")
+	return ui.icon_button_at(
+		u.frame,
+		to_rect(rect),
+		icon,
+		accessible_label,
+		enabled,
+		widget = ui.Widget_Id(widget),
+	)
+}
+
 Surface_Text_Input :: proc(
 	surface: ^Surface,
 	widget: Widget_Id,

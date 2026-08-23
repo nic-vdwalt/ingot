@@ -1649,6 +1649,45 @@ icon_btn_at :: proc(
 	)
 }
 
+icon_button_at :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	icon: Icon,
+	accessible_label: string,
+	enabled: bool = true,
+	focus: Focus_Opt = {},
+	widget: Widget_Id = WIDGET_ID_NONE,
+) -> bool {
+	assert(frame != nil && frame.open, "icon_button_at: invalid frame")
+	assert(accessible_label != "", "icon_button_at: empty accessible label")
+	interaction := interact(frame, rect_f32(rect))
+	hovered := enabled && interaction.hovered
+	clicked := enabled && interaction.clicked
+	if enabled {
+		focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+		clicked = clicked || focus_opt_activated(frame, focus, .Button, widget)
+	}
+	if hovered do request_cursor(frame, .POINTING_HAND)
+	if !rect_culled_frame(frame, rect) {
+		theme := ui_frame_theme(frame)
+		background := theme.button_hover if hovered else theme.button_bg
+		foreground := theme.fg_accent if hovered else theme.fg_primary
+		if !enabled {
+			background = theme.button_disabled_bg
+			foreground = theme.fg_disabled
+		}
+		draw_rounded_fill(frame, rect_f32(rect), .MD, background)
+		if enabled && focus_opt_focused(focus) {
+			draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
+		}
+		draw_icon_frame(frame, icon, rect, foreground)
+	}
+	semantics: Sem_State
+	if !enabled do semantics += {.Disabled}
+	semantic_push(frame, .Button, rect, accessible_label, semantics, focus, widget = widget)
+	return clicked && enabled
+}
+
 // kv_row_at draws a key on the left and a right-aligned value inside rect's
 // width. Only the origin and width are used; the row is one text line tall.
 kv_row_at :: proc(
