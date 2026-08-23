@@ -70,17 +70,21 @@ frame_diagnostics_aggregate_bounded_drops :: proc(t: ^testing.T) {
 	}
 	ui_frame_begin(&frame, &runtime, &input)
 	frame.degenerate_drops = 3
-	frame.semantics.nodes_dropped = 4
-	output.main.dropped_commands = 5
-	output.overlay.dropped_text_bytes = 6
-	output.platform.controls_dropped = 7
+	frame.layout_overflows = 4
+	frame.unsupported_glyphs = 5
+	frame.semantics.nodes_dropped = 6
+	output.main.dropped_commands = 7
+	output.overlay.dropped_text_bytes = 8
+	output.platform.controls_dropped = 9
 	diagnostics := ui_frame_diagnostics(&frame)
 	testing.expect_value(t, diagnostics.input_characters_dropped, i32(2))
 	testing.expect_value(t, diagnostics.degenerate_widgets_dropped, i32(3))
-	testing.expect_value(t, diagnostics.semantic_nodes_dropped, i32(4))
-	testing.expect_value(t, diagnostics.main_commands_dropped, i32(5))
-	testing.expect_value(t, diagnostics.overlay_text_bytes_dropped, i32(6))
-	testing.expect_value(t, diagnostics.platform_controls_dropped, i32(7))
+	testing.expect_value(t, diagnostics.layout_overflows, i32(4))
+	testing.expect_value(t, diagnostics.unsupported_glyphs, i32(5))
+	testing.expect_value(t, diagnostics.semantic_nodes_dropped, i32(6))
+	testing.expect_value(t, diagnostics.main_commands_dropped, i32(7))
+	testing.expect_value(t, diagnostics.overlay_text_bytes_dropped, i32(8))
+	testing.expect_value(t, diagnostics.platform_controls_dropped, i32(9))
 	ui_frame_end(&frame)
 	ui_frame_destroy(&frame)
 }

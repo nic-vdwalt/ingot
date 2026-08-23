@@ -240,18 +240,20 @@ test_driver_telemetry :: proc(value: ui.Ui_Frame_Telemetry) -> Frame_Telemetry {
 @(private = "file")
 test_driver_diagnostics :: proc(value: ui.Ui_Frame_Diagnostics) -> Frame_Diagnostics {
 	return {
-		value.input_characters_dropped,
-		value.degenerate_widgets_dropped,
-		value.semantic_nodes_dropped,
-		value.semantic_focus_dropped,
-		value.semantic_actions_dropped,
-		value.semantic_id_collisions,
-		value.semantic_text_truncations,
-		value.main_commands_dropped,
-		value.main_text_bytes_dropped,
-		value.overlay_commands_dropped,
-		value.overlay_text_bytes_dropped,
-		value.platform_controls_dropped,
+		input_characters_dropped = value.input_characters_dropped,
+		degenerate_widgets_dropped = value.degenerate_widgets_dropped,
+		layout_overflows = value.layout_overflows,
+		unsupported_glyphs = value.unsupported_glyphs,
+		semantic_nodes_dropped = value.semantic_nodes_dropped,
+		semantic_focus_dropped = value.semantic_focus_dropped,
+		semantic_actions_dropped = value.semantic_actions_dropped,
+		semantic_id_collisions = value.semantic_id_collisions,
+		semantic_text_truncations = value.semantic_text_truncations,
+		main_commands_dropped = value.main_commands_dropped,
+		main_text_bytes_dropped = value.main_text_bytes_dropped,
+		overlay_commands_dropped = value.overlay_commands_dropped,
+		overlay_text_bytes_dropped = value.overlay_text_bytes_dropped,
+		platform_controls_dropped = value.platform_controls_dropped,
 	}
 }
 

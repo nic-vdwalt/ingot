@@ -564,6 +564,11 @@ draw_codepoint_frame :: proc(
 		frame.output == nil || font != 0,
 		"draw_codepoint_frame: paint output requires a text backend",
 	)
+	backend := frame.runtime.text_backend
+	if backend.has_glyph != nil && !backend.has_glyph(backend.data, font, codepoint) {
+		frame.unsupported_glyphs += 1
+		return
+	}
 	draw_codepoint_command(frame, codepoint, x, y, size, color, font)
 }
 

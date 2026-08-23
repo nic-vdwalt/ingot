@@ -85,6 +85,7 @@ adapter_text_backend :: proc(adapter: ^Adapter) -> ui.Text_Backend {
 		data = adapter,
 		font_for_size = adapter_font_for_size,
 		measure = adapter_measure,
+		has_glyph = adapter_has_glyph,
 		reset = adapter_reset_fonts,
 	}
 }
@@ -137,6 +138,15 @@ adapter_measure :: proc(
 	for byte in transmute([]u8)text do if byte == 0 do return {}
 	value := strings.clone_to_cstring(text, context.temp_allocator)
 	return vec_to_ui(rl.context_measure_text(adapter.gfx_context, font, value, size, spacing))
+}
+
+adapter_has_glyph :: proc(data: rawptr, font_id: ui.Font_Id, value: rune) -> bool {
+	adapter := cast(^Adapter)data
+	assert(adapter != nil && adapter.initialized, "adapter_has_glyph: invalid adapter")
+	assert(value >= 0 && value <= 0x10FFFF, "adapter_has_glyph: invalid codepoint")
+	font, ok := adapter_font(adapter, font_id)
+	if !ok do return false
+	return rl.context_font_has_glyph(adapter.gfx_context, font, value)
 }
 
 adapter_set_font_dpi :: proc(adapter: ^Adapter, scale: f32) {

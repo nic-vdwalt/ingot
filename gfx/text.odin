@@ -107,6 +107,15 @@ context_get_atlas :: proc(ctx: ^Context, id: u32) -> ^Atlas {
 	return slot.entry
 }
 
+@(private)
+context_font_has_glyph_impl :: proc(ctx: ^Context, font: Font, value: rune) -> bool {
+	assert(ctx != nil, "context_font_has_glyph_impl: nil context")
+	assert(value >= 0 && value <= 0x10FFFF, "context_font_has_glyph_impl: invalid codepoint")
+	atlas := context_get_atlas(ctx, font._atlas)
+	if atlas == nil do return false
+	return tt.FindGlyphIndex(&atlas.info, value) != 0 || value == ' '
+}
+
 context_load_font_from_memory_impl :: proc(
 	ctx: ^Context,
 	fileType: cstring,

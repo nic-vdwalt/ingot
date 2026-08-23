@@ -93,6 +93,7 @@ Surface_Theme_Tokens :: proc(surface: ^Surface) -> Theme_Tokens {
 		background_chip_hover = Color(theme.bg_chip_hover),
 		background_user_card = Color(theme.bg_user_card),
 		background_band_error = Color(theme.bg_band_error),
+		modal_dim = Color(theme.modal_dim),
 		foreground_primary = Color(theme.fg_primary),
 		foreground_secondary = Color(theme.fg_secondary),
 		foreground_accent = Color(theme.fg_accent),

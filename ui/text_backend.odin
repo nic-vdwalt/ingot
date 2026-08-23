@@ -2,12 +2,14 @@ package ui
 
 Text_Measure_Proc :: proc(data: rawptr, font: Font_Id, text: string, size, spacing: f32) -> Vec2
 Text_Font_Proc :: proc(data: rawptr, size: i32) -> Font_Id
+Text_Has_Glyph_Proc :: proc(data: rawptr, font: Font_Id, value: rune) -> bool
 Text_Reset_Proc :: proc(data: rawptr)
 
 Text_Backend :: struct {
 	data:          rawptr,
 	font_for_size: Text_Font_Proc,
 	measure:       Text_Measure_Proc,
+	has_glyph:     Text_Has_Glyph_Proc,
 	reset:         Text_Reset_Proc,
 }
 

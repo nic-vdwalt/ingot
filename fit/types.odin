@@ -208,6 +208,8 @@ Frame_Telemetry :: struct {
 Frame_Diagnostics :: struct {
 	input_characters_dropped:   i32,
 	degenerate_widgets_dropped: i32,
+	layout_overflows:           i32,
+	unsupported_glyphs:         i32,
 	semantic_nodes_dropped:     i32,
 	semantic_focus_dropped:     i32,
 	semantic_actions_dropped:   i32,
