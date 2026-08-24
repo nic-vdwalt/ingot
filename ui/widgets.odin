@@ -555,6 +555,53 @@ scrollbar_ex :: proc(
 	return off
 }
 
+scrollbar_horizontal_ex :: proc(
+	frame: ^Ui_Frame,
+	st: ^Scrollbar_State,
+	x, y, w, h: i32,
+	total, visible, offset: int,
+) -> int {
+	assert(st != nil, "scrollbar_horizontal_ex: nil state")
+	assert(total >= 0 && visible >= 0, "scrollbar_horizontal_ex: negative counts")
+	assert(h > 0, "scrollbar_horizontal_ex: non-positive height")
+	if total <= visible || w <= 0 {
+		if st.dragging {
+			st.dragging = false
+			interact_forget(frame, &st.dragging)
+		}
+		return 0
+	}
+	max_off := total - visible
+	off := clamp(offset, 0, max_off)
+	style := ui_frame_theme(frame)
+	draw_rectangle(frame, x, y, w, h, style.bg_secondary)
+	thumb_w := max(ui_frame_sc(frame, 20), w * i32(visible) / i32(total))
+	track_range := max(w - thumb_w, 1)
+	thumb_x := x + i32(f32(track_range) * f32(off) / f32(max_off))
+	mouse := frame_to_local(frame, get_mouse_position(frame))
+	thumb_rect := Rectangle{f32(thumb_x), f32(y), f32(thumb_w), f32(h)}
+	track_rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	it := interact(frame, track_rect, &st.dragging)
+	if it.pressed {
+		if point_in_rect(mouse, thumb_rect) {
+			st.grab_dy = mouse.x - f32(thumb_x)
+		} else {
+			st.grab_dy = f32(thumb_w) / 2
+		}
+	}
+	if it.held {
+		t := (mouse.x - st.grab_dy - f32(x)) / f32(track_range)
+		off = clamp(int(t * f32(max_off) + 0.5), 0, max_off)
+	}
+	thumb_x = x + i32(f32(track_range) * f32(off) / f32(max_off))
+	thumb_hover :=
+		it.hovered && point_in_rect(mouse, Rectangle{f32(thumb_x), f32(y), f32(thumb_w), f32(h)})
+	col := style.border_color
+	if st.dragging || thumb_hover do col = style.fg_accent
+	draw_rectangle(frame, thumb_x, y, thumb_w, h, col)
+	return off
+}
+
 // Button visual style variants.
 Btn_Style :: enum {
 	Primary, // Accent-colored bg, white text.
