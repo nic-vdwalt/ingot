@@ -29,6 +29,18 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `ingot:ui` interactive tables: a caller-owned `Table_State` plus
+  `table_header_ex` (drag column borders to resize, drag headers to reorder,
+  click to sort), `table_begin`/`table_row`/`table_end` (a pinned header over a
+  virtual-scrolled body with configurable borders, gridlines, and zebra
+  striping via `Table_Style`), and `table_visibility_menu` (hide/show columns,
+  refusing to hide the last one). Widths, order, visibility, and sort live in
+  the caller's `Table_State`; the library retains nothing. Layout is persistable
+  with the pure `table_layout_encode`/`table_layout_decode` codec, which
+  validates against the current columns and falls back cleanly on schema drift.
+  The `examples/table_demo` app shows the full stack, including saving and
+  restoring the layout through `ingot:prefs`. The existing `table_header` and
+  `table_row_begin`/`table_row_end` primitives are unchanged.
 - Allocation-free custom themes through `fit.Theme_From_Palette`, explicit
   `Theme_Role` get/set access, pure bounded validation, and non-crashing
   `Try_Set_Theme` application/session installers. Themes remain caller-owned
