@@ -193,11 +193,14 @@ Surface_Modal_Builder_With :: proc(
 	draw: Draw_Proc,
 	user_data: rawptr = nil,
 	options: Modal_Options = {dismiss_escape = true},
+	padding: i32 = 8,
 ) -> Modal_Close_Reason {
 	assert(surface != nil && state != nil, "Fit modal builder: invalid state")
 	assert(builder != nil && draw != nil, "Fit modal builder: invalid body")
+	assert(padding >= 0, "Fit modal builder: negative padding")
 	body := Surface_Modal_Begin(surface, state, title, size, options)
-	Surface_Builder_With(surface, builder, body, draw, user_data)
+	content := from_rect(ui.rect_inset(to_rect(body), ui.insets(padding)))
+	Surface_Builder_With(surface, builder, content, draw, user_data)
 	Surface_Modal_End(surface, state)
 	return Modal_Take_Close(state)
 }
