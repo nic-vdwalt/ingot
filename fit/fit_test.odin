@@ -1,6 +1,7 @@
 #+build !js
 package fit
 
+import "core:strings"
 import "core:testing"
 import "ingot:gfx"
 import "ingot:ui"
@@ -49,6 +50,33 @@ fit_test_noop_render :: proc(_: ^Surface, _: Rect, _: rawptr) -> bool {
 	return false
 }
 
+fit_test_bridge_draw :: proc(builder: ^Builder, state: rawptr) {
+	root := Column(builder)
+	Label(root, "Bridge")
+	Label(root, "Body")
+	if s := cast(^Fit_Test_Build_State)state; s != nil do s.calls += 1
+}
+
+Fit_Buffer_Field :: struct {
+	text:  ^strings.Builder,
+	state: ^Text_Input_State,
+	built: bool,
+}
+
+fit_buffer_field_draw :: proc(builder: ^Builder, user_data: rawptr) {
+	f := cast(^Fit_Buffer_Field)user_data
+	root := Column(builder, {gap = .XS})
+	Text_Input(
+		root,
+		"field",
+		f.text,
+		f.state,
+		"Name",
+		{semantics = {name = "Name"}, size = {width = Grow()}},
+	)
+	f.built = true
+}
+
 fit_test_overflow_draw :: proc(builder: ^Builder, _: rawptr) {
 	root := Column(builder)
 	Canvas_Leaf(
@@ -92,6 +120,69 @@ fit_reports_constrained_layout_overflow :: proc(t: ^testing.T) {
 	builder_close(&builder)
 	ui.ui_frame_end(&frame)
 	ui.ui_frame_destroy(&frame)
+}
+
+@(test)
+fit_surface_builder_bridge_renders_in_subrect :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	surface := Surface {
+		inner = &root,
+	}
+	builder: Builder
+	state: Fit_Test_Build_State
+	Surface_Builder_With(&surface, &builder, {20, 20, 200, 120}, fit_test_bridge_draw, &state)
+	testing.expect_value(t, state.calls, i32(1))
+	testing.expect(t, !builder.bound, "bridge left builder bound")
+	testing.expect(t, builder.inner.prepared.rendered, "bridge did not render")
+	_ = ui.end(&root)
+}
+
+@(test)
+fit_builder_text_input_accepts_caller_buffer :: proc(t: ^testing.T) {
+	// The declarative Text_Input must accept app-owned (strings.Builder,
+	// Text_Input_State) state, not only a bundled Input_Box.
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	surface := Surface {
+		inner = &root,
+	}
+	text: strings.Builder
+	strings.builder_init(&text)
+	defer strings.builder_destroy(&text)
+	strings.write_string(&text, "hello")
+	state: Text_Input_State
+	defer Text_Input_State_Destroy(&state)
+	builder: Builder
+	ctx := Fit_Buffer_Field {
+		text  = &text,
+		state = &state,
+	}
+	Surface_Builder_With(&surface, &builder, {20, 20, 240, 80}, fit_buffer_field_draw, &ctx)
+	testing.expect(t, ctx.built, "declarative caller-buffer text input did not build")
+	testing.expect(t, !builder.bound, "bridge left builder bound")
+	testing.expect(t, builder.inner.prepared.rendered, "buffer input did not render")
+	_ = ui.end(&root)
 }
 
 @(test)

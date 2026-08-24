@@ -1,5 +1,6 @@
 package fit
 
+import "core:strings"
 import "ingot:ui"
 
 @(private = "file")
@@ -210,10 +211,49 @@ builder_text_input_u64 :: proc(
 	builder_text_input_id(parent, Id(parent, key), box, placeholder, options)
 }
 
+// builder_text_input_state binds a declarative text input to caller-owned
+// state (strings.Builder + Text_Input_State) instead of a bundled Input_Box,
+// so app code can reuse buffers it already maintains. Mirrors the imperative
+// Surface_Text_Input_State path through ui.text_input_box.
+@(private = "file")
+builder_text_input_state :: proc(
+	parent: Parent,
+	key: string,
+	text: ^strings.Builder,
+	state: ^Text_Input_State,
+	placeholder: string,
+	options: Builder_Text_Input_Options,
+) {
+	assert(parent.builder != nil, "Fit.Text_Input: builder not bound")
+	assert(text != nil && state != nil, "Fit.Text_Input: invalid state")
+	assert(options.semantics.name != "", "Fit.Text_Input: empty accessible label")
+	widget := Id(parent, key)
+	builder := parent_select(parent)
+	ui.fit_builder_text_input(
+		&builder.inner,
+		{
+			id = ui.Widget_Id(widget),
+			text = text,
+			state = &state.inner,
+			placeholder = placeholder,
+			height = options.height,
+			masked = options.masked,
+			semantics = to_text_semantics(options.semantics),
+		},
+		{
+			track = to_track(options.track),
+			size = to_size(options.size),
+			changed = options.submitted,
+		},
+	)
+	parent_clear(builder)
+}
+
 Text_Input :: proc {
 	builder_text_input_string,
 	builder_text_input_u64,
 	builder_text_input_id,
+	builder_text_input_state,
 }
 
 Progress :: proc(parent: Parent, value: f32, options: Progress_Options = {}) {

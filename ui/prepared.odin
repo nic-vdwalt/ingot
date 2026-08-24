@@ -547,7 +547,10 @@ prepared_text_input :: proc(
 	track: Track = {},
 ) -> Prepared_Handle {
 	assert(prepared != nil && prepared.open, "prepared_text_input: description not open")
-	assert(spec.id != WIDGET_ID_NONE && spec.box != nil, "prepared_text_input: invalid spec")
+	assert(
+		spec.id != WIDGET_ID_NONE && prepared_text_input_source_ok(spec),
+		"prepared_text_input: invalid spec",
+	)
 	return prepared_add(
 		prepared,
 		Prepared_Node{kind = .Text_Input, text_input = spec, track = track},

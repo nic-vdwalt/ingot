@@ -433,7 +433,10 @@ fit_builder_text_input :: proc(
 	options: Fit_Control_Options = {},
 ) {
 	assert(builder != nil, "fit_builder_text_input: nil builder")
-	assert(spec.id != WIDGET_ID_NONE && spec.box != nil, "fit_builder_text_input: invalid spec")
+	assert(
+		spec.id != WIDGET_ID_NONE && prepared_text_input_source_ok(spec),
+		"fit_builder_text_input: invalid spec",
+	)
 	fit_builder_add_child(builder)
 	handle := prepared_text_input(&builder.prepared, spec, options.track)
 	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
