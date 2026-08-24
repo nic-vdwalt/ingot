@@ -70,7 +70,8 @@
     "multi_context_fixture",
     "multi_app_fixture",
     "view_builder",
-    "raylib_migration_fixture"
+    "raylib_migration_fixture",
+    "table_demo"
   ],
   "hot_reload_packages": ["game", "host"],
   "simulation_modes": [

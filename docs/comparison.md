@@ -147,7 +147,7 @@ normally supplied by third-party crates.
 | Integration boundary | App framework with UI, WebGPU graphics, frame pacing, platform effects, settings, networking, and terminal packages | Renderer-agnostic UI core with official renderer and platform backends; normally embedded in a host | Renderer-agnostic UI core with official `winit`, `wgpu`, `glow`, and `eframe` integrations |
 | Persistent UI behavior | Component state such as editing, scrolling, menus, and interaction latches is caller-owned | Application values are caller-owned; the context retains window, table, navigation, and interaction state keyed by widget identity | Application values are caller-owned; `Context` and `Memory` retain focus, window, scroll, collapse, and text-edit state keyed by IDs |
 | Identity | Stable IDs identify current-frame focus and accessibility targets, not a general widget-state store | Labels and an ID stack produce stable widget IDs | Sequential widgets often receive IDs automatically; persistent state requires stable IDs |
-| Layout | Bounded cursor-style explicit layout plus a prepared Fit solver with a direct fixed-grid path and bounded multi-pass intrinsic fallback; measurement and geometry escape hatches remain application-owned | Cursor-driven layout, explicit composition, child regions, and mature tables | Closure-based rows, columns, panels, grids, wrapping, scroll areas, and occasional extra layout passes |
+| Layout | Bounded cursor-style explicit layout plus a prepared Fit solver with a direct fixed-grid path and bounded multi-pass intrinsic fallback; measurement and geometry escape hatches remain application-owned. Tables support resizable, reorderable, sortable, hideable columns with a pinned virtual-scrolled body and persistable layout | Cursor-driven layout, explicit composition, child regions, and mature tables | Closure-based rows, columns, panels, grids, wrapping, scroll areas, and occasional extra layout passes |
 | Rendering output | Bounded renderer-independent paint lists replayed by the integrated WebGPU adapter | Batched indexed triangle draw lists consumed by a renderer backend | Shapes, texture updates, and platform output tessellated and painted by an integration |
 | Performance model | Bounded frame storage, reusable scratch memory, batched drawing, renderer statistics, and optional event-driven frames | Allocation-conscious core and mature batching; host renderer, backend, and frame loop determine end-to-end cost | Retained caches, tessellation, repaint scheduling, and integration choices determine end-to-end cost |
 | Idle scheduling | `Frame_Pacer` can skip UI construction and GPU submission until input, application work, or a redraw deadline | Commonly rebuilt in a continuous engine loop; event-driven hosting is possible but not the primary integration model | Repaint requests and deadlines allow integrations to sleep while idle |
@@ -178,10 +178,12 @@ so Ingot does not claim those ideas as unprecedented.
 Ingot's bounds provide explicit workload and storage ceilings, not automatic
 superiority. They can simplify failure analysis and deterministic testing, but
 large or highly dynamic interfaces must fit the capacities and widget set that
-exist today. Dear ImGui has substantially deeper tables, docking, backend
-coverage, and operational history. egui has richer general layout, an
-established Rust crate ecosystem, and more mature accessibility integration.
-Neither comparison should imply current feature parity.
+exist today. Dear ImGui still has deeper tables (its cell-level clipping,
+sorting specifications, and horizontal-scroll frozen columns go beyond Ingot's
+current tables), docking, backend coverage, and operational history. egui has
+richer general layout, an established Rust crate ecosystem, and more mature
+accessibility integration. Neither comparison should imply current feature
+parity.
 
 For performance, Ingot is designed to reuse bounded frame storage, batch paint,
 and avoid both UI construction and GPU submission while idle. Dear ImGui is
