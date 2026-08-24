@@ -133,7 +133,14 @@ canvas :: proc(surface: ^fit.Surface, root: fit.Rect, user_data: rawptr) -> bool
 Open with `fit.Surface_Modal_Open` before ordinary input processing, then render
 with `fit.Surface_Modal_Builder_With`. The modal owns pointer, keyboard, focus,
 paint tier, clipping, and semantics until closed. Outside dismissal is opt-in.
-Use `fit.Modal_Take_Close` when the close source matters.
+Use `fit.Modal_Take_Close` when the close source matters. Set `Modal_Options.scope`
+to `.Host` with a positive `host` rectangle for a pane-bounded modal; viewport
+scope remains the default.
+
+Custom-content anchored surfaces use `fit.Surface_Popup_Open` followed by
+`fit.Surface_Popup_Builder_With`. Popup options provide anchor, viewport,
+preferred size, placement, focus, and dismissal policy. Consume a child-handled
+key with `fit.Key_Pressed_Consume` before the owning modal or popup ends.
 
 `Layout_State`, `Grid_State`, `Flow_State`, `Fit_Column_State`, and
 `Vertical_Cursor_State` are zero-value ready, must be balanced, and may be reused

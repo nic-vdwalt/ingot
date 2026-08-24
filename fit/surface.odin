@@ -287,6 +287,11 @@ Surface_Key_Pressed :: proc(surface: ^Surface, key: Key) -> bool {
 	return ui.is_key_pressed(u.frame, to_key(key))
 }
 
+Surface_Key_Pressed_Consume :: proc(surface: ^Surface, key: Key) {
+	u := surface_ui(surface)
+	ui.key_pressed_consume(u.frame, to_key(key))
+}
+
 Surface_Mouse_Pressed :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
 	u := surface_ui(surface)
 	return ui.is_mouse_button_pressed(u.frame, to_mouse_button(button))

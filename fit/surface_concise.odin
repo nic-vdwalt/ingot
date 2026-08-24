@@ -132,6 +132,10 @@ Key_Pressed :: proc(surface: ^Surface, key: Key) -> bool {
 	return Surface_Key_Pressed(surface, key)
 }
 
+Key_Pressed_Consume :: proc(surface: ^Surface, key: Key) {
+	Surface_Key_Pressed_Consume(surface, key)
+}
+
 Mouse_Pressed :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
 	return Surface_Mouse_Pressed(surface, button)
 }

@@ -132,13 +132,19 @@ modal_config :: proc(surface: ^Surface, size: [2]i32, options: Modal_Options) ->
 	dismiss: ui.Modal_Dismiss_Policy
 	if options.dismiss_escape do dismiss += {.Escape}
 	if options.dismiss_outside do dismiss += {.Outside_Click}
+	host := ui.frame_viewport(u.frame)
+	if options.scope == .Host {
+		assert(options.host.w > 0 && options.host.h > 0, "Fit modal: empty host")
+		host = to_rect(options.host)
+	}
 	return {
 		size = size,
-		screen = ui.frame_viewport(u.frame),
+		screen = host,
 		dismiss = dismiss,
 		focus_scope = options.focus_scope,
 		initial_focus = options.initial_focus,
 		restore_focus = options.restore_focus,
+		host_scoped = options.scope == .Host,
 	}
 }
 
@@ -194,6 +200,63 @@ Surface_Modal_Builder_With :: proc(
 	Surface_Builder_With(surface, builder, body, draw, user_data)
 	Surface_Modal_End(surface, state)
 	return Modal_Take_Close(state)
+}
+
+popup_config :: proc(options: Popup_Options) -> ui.Popup_Config {
+	return {
+		anchor = to_rect(options.anchor),
+		viewport = to_rect(options.viewport),
+		preferred_size = options.preferred_size,
+		placement = ui.Popup_Placement(options.placement),
+		dismiss_escape = options.dismiss_escape,
+		dismiss_outside = options.dismiss_outside,
+		focus_scope = options.focus_scope,
+		initial_focus = options.initial_focus,
+		restore_focus = options.restore_focus,
+	}
+}
+
+Surface_Popup_Open :: proc(
+	surface: ^Surface,
+	state: ^Popup_State,
+	id: Popup_Id,
+	options: Popup_Options,
+) {
+	u := surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Popup_Open: nil state")
+	ui.popup_open(u.frame, &state.inner, ui.Popup_Id(id), popup_config(options))
+}
+
+Surface_Popup_Begin :: proc(
+	surface: ^Surface,
+	state: ^Popup_State,
+	options: Popup_Options,
+) -> Rect {
+	u := surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Popup_Begin: nil state")
+	return from_rect(ui.popup_begin(u.frame, &state.inner, popup_config(options)))
+}
+
+Surface_Popup_End :: proc(surface: ^Surface, state: ^Popup_State) {
+	_ = surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Popup_End: nil state")
+	ui.popup_end(&state.inner)
+}
+
+Surface_Popup_Builder_With :: proc(
+	surface: ^Surface,
+	state: ^Popup_State,
+	builder: ^Builder,
+	draw: Draw_Proc,
+	user_data: rawptr = nil,
+	options: Popup_Options,
+) -> Popup_Close_Reason {
+	assert(surface != nil && state != nil, "Fit popup builder: invalid state")
+	assert(builder != nil && draw != nil, "Fit popup builder: invalid body")
+	body := Surface_Popup_Begin(surface, state, options)
+	Surface_Builder_With(surface, builder, body, draw, user_data)
+	Surface_Popup_End(surface, state)
+	return Popup_Take_Close(state)
 }
 
 Region_Id_String :: proc(region: ^Region, key: string) -> Widget_Id {

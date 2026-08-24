@@ -229,8 +229,42 @@ Modal_State :: struct {
 Modal_Id :: distinct u64
 Modal_Close_Reason :: ui.Modal_Close_Reason
 Modal_Dismiss_Policy :: ui.Modal_Dismiss_Policy
+Modal_Scope :: enum u8 {
+	Viewport,
+	Host,
+}
 Modal_Options :: struct {
 	dismiss_escape:  bool,
+	dismiss_outside: bool,
+	focus_scope:     ui.Focus_Scope_Id,
+	initial_focus:   ui.Focus_Opt,
+	restore_focus:   ui.Focus_Opt,
+	scope:           Modal_Scope,
+	host:            Rect,
+}
+Popup_State :: struct {
+	inner: ui.Popup_State,
+}
+Popup_Id :: distinct u64
+Popup_Close_Reason :: enum u8 {
+	None,
+	Accepted,
+	Escape,
+	Outside_Click,
+	Programmatic,
+}
+Popup_Placement :: enum u8 {
+	Auto,
+	Above,
+	Below,
+	Point,
+}
+Popup_Options :: struct {
+	anchor:          Rect,
+	viewport:        Rect,
+	preferred_size: [2]i32,
+	placement:       Popup_Placement,
+	dismiss_escape: bool,
 	dismiss_outside: bool,
 	focus_scope:     ui.Focus_Scope_Id,
 	initial_focus:   ui.Focus_Opt,
@@ -437,6 +471,26 @@ Modal_Close_With :: proc(state: ^Modal_State, reason: Modal_Close_Reason) {
 Modal_Take_Close :: proc(state: ^Modal_State) -> Modal_Close_Reason {
 	assert(state != nil, "Fit.Modal_Take_Close: nil state")
 	return ui.modal_take_close(&state.inner)
+}
+
+Popup_Is_Open :: proc(state: ^Popup_State) -> bool {
+	assert(state != nil, "Fit.Popup_Is_Open: nil state")
+	return ui.popup_is_open(&state.inner)
+}
+
+Popup_Close :: proc(state: ^Popup_State) {
+	assert(state != nil, "Fit.Popup_Close: nil state")
+	ui.popup_close(&state.inner)
+}
+
+Popup_Close_With :: proc(state: ^Popup_State, reason: Popup_Close_Reason) {
+	assert(state != nil, "Fit.Popup_Close_With: nil state")
+	ui.popup_close(&state.inner, ui.Popup_Close_Reason(reason))
+}
+
+Popup_Take_Close :: proc(state: ^Popup_State) -> Popup_Close_Reason {
+	assert(state != nil, "Fit.Popup_Take_Close: nil state")
+	return Popup_Close_Reason(ui.popup_take_close(&state.inner))
 }
 
 Widget_Id_From_String :: proc(value: string) -> Widget_Id {

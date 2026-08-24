@@ -32,8 +32,12 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 ### Added
 
 - `ingot:fit` safe modal lifecycle and `Surface_Modal_Builder_With`, including
-  bounded stacking, keyboard ownership, focus containment, and distinguishable
-  close reasons.
+  bounded stacking, keyboard ownership, focus containment, distinguishable
+  close reasons, and optional host-scoped bounds.
+- `ingot:fit` custom-content popup lifecycle and `Surface_Popup_Builder_With`,
+  with anchored placement, viewport clamping, input claims, and close reasons.
+- `Surface_Key_Pressed_Consume` and `Key_Pressed_Consume` expose single-use key
+  edges for child overlays and hierarchical dialogs.
 - `ingot:ui` interactive tables: a caller-owned `Table_State` plus
   `table_header_ex` (drag column borders to resize, drag headers to reorder,
   click to sort), `table_begin`/`table_row`/`table_end` (a pinned header over a
