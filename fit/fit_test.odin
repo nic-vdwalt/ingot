@@ -190,6 +190,15 @@ fit_surface_modal_builder_bridge_renders :: proc(t: ^testing.T) {
 	testing.expect_value(t, reason, Modal_Close_Reason.None)
 	testing.expect_value(t, state.calls, i32(1))
 	testing.expect(t, !builder.bound)
+	root_node := builder.inner.prepared.nodes[builder.inner.prepared.root]
+	testing.expect_value(t, root_node.rect.x, modal.inner.rect.x + 8)
+	testing.expect_value(t, root_node.rect.y, modal.inner.rect.y + ui.ui_frame_sc(&frame, 40) + 8)
+	testing.expect_value(t, builder.inner.prepared.constraints.max_w, modal.inner.rect.w - 16)
+	testing.expect_value(
+		t,
+		builder.inner.prepared.constraints.max_h,
+		modal.inner.rect.h - ui.ui_frame_sc(&frame, 40) - 16,
+	)
 	_ = ui.end(&root)
 }
 
@@ -1055,6 +1064,7 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 			_: Draw_Proc,
 			_: rawptr,
 			_: Modal_Options,
+			_: i32,
 		) -> Modal_Close_Reason =
 		Surface_Modal_Builder_With
 	menu_is_open: proc(_: ^Context_Menu_State) -> bool = Context_Menu_Is_Open
