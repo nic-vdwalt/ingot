@@ -28,6 +28,8 @@ Modal_Runtime_Entry :: struct {
 	id:              Modal_Id,
 	z:               Z_Order,
 	seen_generation: u64,
+	claim:           Rectangle,
+	claim_all:       bool,
 }
 
 Modal_Runtime :: struct {
@@ -57,12 +59,16 @@ modal_frame_begin :: proc(frame: ^Ui_Frame) {
 		write += 1
 	}
 	runtime.count = write
-	for i in 0 ..< runtime.count do runtime.entries[i].z = Z_MODAL + Z_Order(i)
-	if runtime.overflow || runtime.count > 0 {
-		z := Z_MODAL
-		if runtime.count > 0 do z = runtime.entries[runtime.count - 1].z
-		route_claim_all(frame, z)
+	for i in 0 ..< runtime.count {
+		entry := &runtime.entries[i]
+		entry.z = Z_MODAL + Z_Order(i)
+		if entry.claim_all {
+			route_claim_all(frame, entry.z)
+		} else {
+			route_claim(frame, entry.claim, entry.z)
+		}
 	}
+	if runtime.overflow do route_claim_all(frame, Z_TOOLTIP)
 }
 
 modal_frame_finalize :: proc(frame: ^Ui_Frame) {
@@ -85,19 +91,30 @@ modal_runtime_remove :: proc(runtime: ^Modal_Runtime, id: Modal_Id) {
 	runtime.count -= 1
 }
 
-modal_runtime_register :: proc(frame: ^Ui_Frame, id: Modal_Id, z: Z_Order) -> bool {
+modal_runtime_register :: proc(
+	frame: ^Ui_Frame,
+	id: Modal_Id,
+	z: Z_Order,
+	claim: Rectangle,
+	claim_all: bool,
+) -> bool {
 	assert(frame != nil && frame.open, "modal runtime register: invalid frame")
 	assert(id != Modal_Id(0), "modal runtime register: zero id")
+	assert(claim_all || (claim.width > 0 && claim.height > 0), "modal runtime register: empty claim")
 	runtime := &frame.runtime.modals
 	index := modal_runtime_find(runtime, id)
 	if index >= 0 {
 		entry := runtime.entries[index]
 		entry.z = z
 		entry.seen_generation = frame.runtime.frame_generation
+		entry.claim = claim
+		entry.claim_all = claim_all
 		for i in index ..< runtime.count - 1 do runtime.entries[i] = runtime.entries[i + 1]
 		runtime.entries[runtime.count - 1] = entry
 		for i in 0 ..< runtime.count do runtime.entries[i].z = Z_MODAL + Z_Order(i)
-		route_claim_all(frame, runtime.entries[runtime.count - 1].z)
+		entry = runtime.entries[runtime.count - 1]
+		if entry.claim_all do route_claim_all(frame, entry.z)
+		else do route_claim(frame, entry.claim, entry.z)
 		return true
 	}
 	if runtime.count >= MAX_MODAL_STACK {
@@ -109,9 +126,12 @@ modal_runtime_register :: proc(frame: ^Ui_Frame, id: Modal_Id, z: Z_Order) -> bo
 		id              = id,
 		z               = z,
 		seen_generation = frame.runtime.frame_generation,
+		claim           = claim,
+		claim_all       = claim_all,
 	}
 	runtime.count += 1
-	route_claim_all(frame, z)
+	if claim_all do route_claim_all(frame, z)
+	else do route_claim(frame, claim, z)
 	return true
 }
 

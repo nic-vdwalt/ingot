@@ -65,6 +65,7 @@ Modal_Config :: struct {
 	focus_scope:   Focus_Scope_Id,
 	initial_focus: Focus_Opt,
 	restore_focus: Focus_Opt,
+	host_scoped:   bool,
 }
 
 modal_open :: proc(
@@ -76,7 +77,8 @@ modal_open :: proc(
 	assert(frame != nil && frame.open, "modal_open: invalid frame")
 	assert(state != nil && id != Modal_Id(0), "modal_open: invalid state")
 	z := Z_MODAL + Z_Order(frame.runtime.modals.count)
-	if !modal_runtime_register(frame, id, z) do return false
+	claim := Rectangle{f32(config.screen.x), f32(config.screen.y), f32(config.screen.w), f32(config.screen.h)}
+	if !modal_runtime_register(frame, id, z, claim, !config.host_scoped) do return false
 	if !state.open {
 		state.opened_generation = frame.runtime.frame_generation
 		state.close_reason = .None
@@ -131,7 +133,13 @@ modal_begin :: proc(
 	if st.id == Modal_Id(0) {
 		_ = modal_open(frame, st, Modal_Id(uintptr(st)), config)
 	} else {
-		_ = modal_runtime_register(frame, st.id, st.z)
+		claim := Rectangle {
+			f32(config.screen.x),
+			f32(config.screen.y),
+			f32(config.screen.w),
+			f32(config.screen.h),
+		}
+		_ = modal_runtime_register(frame, st.id, st.z, claim, !config.host_scoped)
 		index := modal_runtime_find(&frame.runtime.modals, st.id)
 		assert(index >= 0, "modal_begin: state not registered")
 		st.z = frame.runtime.modals.entries[index].z
@@ -149,18 +157,20 @@ modal_begin :: proc(
 
 	mw := min(w, screen_w - metrics.PADDING * 4)
 	mh := min(h, screen_h - metrics.PADDING * 2)
-	mx := (screen_w - mw) / 2
-	my := (screen_h - mh) / 2
+	mx := config.screen.x + (screen_w - mw) / 2
+	my := config.screen.y + (screen_h - mh) / 2
 	st.rect = Rect_I32{mx, my, mw, mh}
-	// The whole screen is claimed, not the four bands around the panel: at
-	// Z_MODAL the panel's own widgets are not occluded by an equal-z claim.
-	// The layer also zeroes the pane origin, so a modal opened from inside a
-	// pane still positions in screen space.
-	layer_begin(frame, st.z, claim = Rectangle{0, 0, f32(screen_w), f32(screen_h)})
+	claim := Rectangle {
+		f32(config.screen.x),
+		f32(config.screen.y),
+		f32(screen_w),
+		f32(screen_h),
+	}
+	layer_begin(frame, st.z, claim = claim)
 
 	// Dimmed inside the modal's z scope so it paints at the modal tier and
 	// covers every lower tier, including content submitted after modal_end.
-	draw_rectangle(frame, 0, 0, screen_w, screen_h, style.modal_dim)
+	draw_rectangle(frame, config.screen.x, config.screen.y, screen_w, screen_h, style.modal_dim)
 	draw_rectangle(frame, mx, my, mw, mh, style.bg_secondary)
 	draw_rectangle_lines(frame, mx, my, mw, mh, style.border_color)
 	begin_scissor_mode(frame, mx, my, mw, mh)
@@ -207,6 +217,142 @@ modal_end :: proc(st: ^Modal_State) {
 	}
 	modal_owner_end(frame, st)
 	st.frame = nil
+}
+
+// --- Custom popup ------------------------------------------------------------
+
+Popup_Id :: distinct u64
+
+Popup_Close_Reason :: enum u8 {
+	None,
+	Accepted,
+	Escape,
+	Outside_Click,
+	Programmatic,
+}
+
+Popup_Placement :: enum u8 {
+	Auto,
+	Above,
+	Below,
+	Point,
+}
+
+Popup_Config :: struct {
+	anchor:          Rect_I32,
+	viewport:        Rect_I32,
+	preferred_size: [2]i32,
+	placement:       Popup_Placement,
+	dismiss_escape: bool,
+	dismiss_outside: bool,
+	focus_scope:     Focus_Scope_Id,
+	initial_focus:   Focus_Opt,
+	restore_focus:   Focus_Opt,
+}
+
+Popup_State :: struct {
+	open:              bool,
+	close_reason:      Popup_Close_Reason,
+	id:                Popup_Id,
+	opened_generation: u64,
+	rect:              Rect_I32,
+	config:            Popup_Config,
+	frame:             ^Ui_Frame,
+	drawing:           bool,
+}
+
+popup_open :: proc(frame: ^Ui_Frame, state: ^Popup_State, id: Popup_Id, config: Popup_Config) {
+	assert(frame != nil && frame.open, "popup_open: invalid frame")
+	assert(state != nil && id != Popup_Id(0), "popup_open: invalid state")
+	assert(config.viewport.w > 0 && config.viewport.h > 0, "popup_open: empty viewport")
+	assert(config.preferred_size.x > 0 && config.preferred_size.y > 0, "popup_open: empty size")
+	state^ = {open = true, id = id, opened_generation = frame.runtime.frame_generation, config = config}
+}
+
+popup_is_open :: proc(state: ^Popup_State) -> bool {
+	assert(state != nil, "popup_is_open: nil state")
+	return state.open
+}
+
+popup_close :: proc(state: ^Popup_State, reason: Popup_Close_Reason = .Programmatic) {
+	assert(state != nil, "popup_close: nil state")
+	if !state.open do return
+	state.open = false
+	state.close_reason = reason
+}
+
+popup_take_close :: proc(state: ^Popup_State) -> Popup_Close_Reason {
+	assert(state != nil, "popup_take_close: nil state")
+	reason := state.close_reason
+	state.close_reason = .None
+	return reason
+}
+
+popup_placed_layout :: proc(config: Popup_Config) -> Popup_Layout {
+	assert(config.viewport.w > 0 && config.viewport.h > 0, "popup layout: empty viewport")
+	width, height := config.preferred_size.x, config.preferred_size.y
+	anchor := Vector2{f32(config.anchor.x), f32(config.anchor.y)}
+	placement := config.placement
+	if placement == .Auto {
+		below := config.viewport.y + config.viewport.h - (config.anchor.y + config.anchor.h)
+		above := config.anchor.y - config.viewport.y
+		placement = .Below if below >= height || below >= above else .Above
+	}
+	switch placement {
+	case .Above:
+		anchor.y = f32(config.anchor.y - height)
+	case .Below:
+		anchor.y = f32(config.anchor.y + config.anchor.h)
+	case .Point:
+	case .Auto:
+		unreachable()
+	}
+	return popup_layout(anchor, width, height, config.viewport)
+}
+
+popup_begin :: proc(frame: ^Ui_Frame, state: ^Popup_State, config: Popup_Config) -> Rect_I32 {
+	assert(frame != nil && frame.open, "popup_begin: invalid frame")
+	assert(state != nil && state.open && !state.drawing, "popup_begin: invalid state")
+	state.config = config
+	layout := popup_placed_layout(config)
+	state.rect = {
+		i32(layout.rect.x),
+		i32(layout.rect.y),
+		i32(layout.rect.width),
+		i32(layout.rect.height),
+	}
+	state.frame = frame
+	state.drawing = true
+	if config.focus_scope != FOCUS_SCOPE_NONE do focus_scope_begin(frame, config.focus_scope, 900)
+	layer_begin(frame, Z_POPUP, claim = layout.rect)
+	style := ui_frame_theme(frame)
+	draw_rectangle_rec(frame, layout.rect, style.bg_popup)
+	draw_rectangle_lines_ex(frame, layout.rect, ui_frame_scf(frame, 1), style.border_color)
+	semantic_push(frame, .List, state.rect, "Popup")
+	return state.rect
+}
+
+popup_end :: proc(state: ^Popup_State) {
+	assert(state != nil && state.drawing, "popup_end: invalid state")
+	frame := state.frame
+	assert(frame != nil, "popup_end: missing frame")
+	layer_end(frame)
+	if state.config.focus_scope != FOCUS_SCOPE_NONE do focus_scope_end(frame, state.config.focus_scope)
+	if state.open && state.config.dismiss_escape && is_key_pressed(frame, .ESCAPE) {
+		key_pressed_consume(frame, .ESCAPE)
+		popup_close(state, .Escape)
+	}
+	mouse := get_mouse_position(frame)
+	rect := Rectangle{f32(state.rect.x), f32(state.rect.y), f32(state.rect.w), f32(state.rect.h)}
+	if state.open &&
+	   state.config.dismiss_outside &&
+	   frame.runtime.frame_generation > state.opened_generation &&
+	   (is_mouse_button_pressed(frame, .LEFT) || is_mouse_button_pressed(frame, .RIGHT)) &&
+	   !point_in_rect(mouse, rect) {
+		popup_close(state, .Outside_Click)
+	}
+	state.frame = nil
+	state.drawing = false
 }
 
 // --- Context menu ------------------------------------------------------------

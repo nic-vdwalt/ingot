@@ -60,6 +60,77 @@ route_claim_backdrop_handles_fullscreen_panel :: proc(t: ^testing.T) {
 }
 
 @(test)
+popup_layout_clamps_to_offset_viewport :: proc(t: ^testing.T) {
+	viewport := Rect_I32{20, 10, 280, 190}
+	layout := popup_layout({290, 190}, 120, 80, viewport)
+	testing.expect_value(t, layout.rect, Rectangle{180, 120, 120, 80})
+	testing.expect_value(t, layout.content_w, i32(120))
+	testing.expect_value(t, layout.content_h, i32(80))
+	testing.expect(t, !layout.constrained)
+
+	constrained := popup_layout({0, 0}, 400, 300, viewport)
+	testing.expect_value(t, constrained.rect, Rectangle{20, 10, 280, 190})
+	testing.expect(t, constrained.constrained)
+}
+
+@(test)
+popup_placement_flips_and_clamps :: proc(t: ^testing.T) {
+	viewport := Rect_I32{0, 0, 300, 200}
+	below := popup_placed_layout({
+		anchor = {100, 20, 40, 20},
+		viewport = viewport,
+		preferred_size = {120, 80},
+		placement = .Auto,
+	})
+	testing.expect_value(t, below.rect, Rectangle{100, 40, 120, 80})
+	above := popup_placed_layout({
+		anchor = {100, 170, 40, 20},
+		viewport = viewport,
+		preferred_size = {120, 80},
+		placement = .Auto,
+	})
+	testing.expect_value(t, above.rect, Rectangle{100, 90, 120, 80})
+}
+
+@(test)
+popup_ignores_opening_click_and_reports_escape :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	input := Ui_Input{screen_size = {300, 200}}
+	input.mouse_pressed[0] = true
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime, &input)
+	config := Popup_Config {
+		anchor = {20, 20, 1, 1},
+		viewport = {0, 0, 300, 200},
+		preferred_size = {120, 80},
+		placement = .Point,
+		dismiss_escape = true,
+		dismiss_outside = true,
+	}
+	state: Popup_State
+	popup_open(&frame, &state, Popup_Id(1), config)
+	_ = popup_begin(&frame, &state, config)
+	popup_end(&state)
+	testing.expect(t, popup_is_open(&state))
+	input.keys_pressed[input_key_index(.ESCAPE)] = true
+	_ = popup_begin(&frame, &state, config)
+	popup_end(&state)
+	testing.expect(t, !popup_is_open(&state))
+	testing.expect_value(t, popup_take_close(&state), Popup_Close_Reason.Escape)
+	ui_frame_end(&frame)
+}
+
+@(test)
 tooltip_wrapped_at_waits_then_emits_multiline_overlay :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
