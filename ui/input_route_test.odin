@@ -34,22 +34,22 @@ route_claims_behaviour :: proc(t: ^testing.T) {
 	frame.runtime = &runtime
 	frame.open = true
 
-	// Double buffer: claims take effect next frame and expire when not renewed.
+	// Claims take effect immediately, survive one frame, and expire when not renewed.
 	route_reset(&frame)
 	defer route_reset(&frame)
 	p := Vector2{5, 5}
 	route_claim(&frame, Rectangle{0, 0, 10, 10})
-	testing.expect(t, !route_occluded(&frame, p)) // same frame: not yet occluding
+	testing.expect(t, route_occluded(&frame, p)) // same frame: immediately occluding
 	route_begin_frame(&frame)
-	testing.expect(t, route_occluded(&frame, p)) // next frame: occluding
+	testing.expect(t, route_occluded(&frame, p)) // next frame: still occluding
 	route_begin_frame(&frame)
 	testing.expect(t, !route_occluded(&frame, p)) // not renewed: expired
 
-	// Claim count reports the previous (active) frame.
+	// Claim count reports the bounded current/previous union.
 	route_reset(&frame)
 	route_claim(&frame, Rectangle{0, 0, 1, 1})
 	route_claim(&frame, Rectangle{5, 5, 1, 1})
-	testing.expect_value(t, route_claim_count(&frame), 0)
+	testing.expect_value(t, route_claim_count(&frame), 2)
 	route_begin_frame(&frame)
 	testing.expect_value(t, route_claim_count(&frame), 2)
 

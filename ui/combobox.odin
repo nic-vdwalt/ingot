@@ -141,6 +141,7 @@ combobox_at :: proc(
 	visible: [COMBOBOX_VISIBLE_MAX]int
 	visible_count := combobox_visible(frame, st, items, lowered_query, &visible)
 	if is_key_pressed(frame, .ESCAPE) {
+		key_pressed_consume(frame, .ESCAPE)
 		st.open = false
 		return false
 	}

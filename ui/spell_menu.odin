@@ -213,6 +213,7 @@ spell_menu_handle_keyboard :: proc(
 	assert(menu != nil, "spell_menu_handle_keyboard: nil menu")
 	assert(system != nil, "spell_menu_handle_keyboard: nil system")
 	if is_key_pressed(frame, .ESCAPE) {
+		key_pressed_consume(frame, .ESCAPE)
 		spell_menu_close(menu)
 		return true
 	}
@@ -225,6 +226,7 @@ spell_menu_handle_keyboard :: proc(
 	if is_key_pressed(frame, .ENTER) &&
 	   !is_key_down(frame, .LEFT_SHIFT) &&
 	   !is_key_down(frame, .RIGHT_SHIFT) {
+		key_pressed_consume(frame, .ENTER)
 		spell_menu_apply(frame, menu, system, menu.selected)
 		return true
 	}

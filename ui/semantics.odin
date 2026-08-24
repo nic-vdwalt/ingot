@@ -39,6 +39,7 @@ FOCUS_SCOPE_NONE :: Focus_Scope_Id(0)
 Focus_Scope_Stamp :: struct {
 	id:       Focus_Scope_Id,
 	priority: i32,
+	modal:    Modal_Id,
 }
 
 Focus_Scope_Stack :: struct {
@@ -114,6 +115,7 @@ Sem_Focus_Entry :: struct {
 	focus:    Focus_Opt,
 	scope_id: Focus_Scope_Id,
 	priority: i32,
+	modal:    Modal_Id,
 }
 
 Sem_Focus_List :: struct {
@@ -294,6 +296,7 @@ sem_focus_register :: proc(frame: ^Ui_Frame, focus: Focus_Opt, state: Sem_State)
 		focus    = focus,
 		scope_id = scope.id,
 		priority = scope.priority,
+		modal    = scope.modal,
 	}
 	list.count += 1
 }

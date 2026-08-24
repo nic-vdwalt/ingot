@@ -34,6 +34,7 @@ Ui_Runtime :: struct {
 	// (a click leaves no lingering ring on the button it hit); Tab navigation
 	// sets it, so keyboard users keep a visible focus indicator.
 	focus_visible:         bool,
+	modals:                Modal_Runtime,
 	semantics_snapshot:    Sem_Frame,
 	scale_metrics_hook:    proc(scale: f32),
 	scale_invalidate_hook: proc(),
@@ -44,6 +45,7 @@ MAX_PANE_SCOPES :: 16
 // Content, panel, popup, modal, toast, tooltip is six; eight leaves room for
 // one application tier between two of them without an unbounded stack.
 MAX_Z_SCOPES :: 8
+MAX_MODAL_STACK :: 8
 
 Ui_Frame :: struct {
 	runtime:                        ^Ui_Runtime,
@@ -54,6 +56,7 @@ Ui_Frame :: struct {
 	cursor:                         Cursor_State,
 	overlay:                        Overlay_State,
 	route:                          Input_Route_State,
+	modal:                          Modal_Frame,
 	interaction:                    Interaction_State,
 	semantics:                      Semantics_State,
 	pane_origins:                   [MAX_PANE_SCOPES]Vector2,
@@ -260,6 +263,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame.finalized = false
 	frame.open = true
 	route_begin_frame(frame)
+	modal_frame_begin(frame)
 	interact_frame_begin(frame)
 	sem_begin_frame(frame)
 }
@@ -309,6 +313,7 @@ ui_frame_finalize :: proc(frame: ^Ui_Frame) {
 	ui_finalize_semantics(frame)
 	prepared_phase_end(frame, .Finalize_Semantics, semantics_started)
 	lifetimes_started := prepared_phase_begin(frame, .Finalize_Lifetimes)
+	modal_frame_finalize(frame)
 	ui_finalize_lifetimes(frame)
 	prepared_phase_end(frame, .Finalize_Lifetimes, lifetimes_started)
 	frame.finalized = true

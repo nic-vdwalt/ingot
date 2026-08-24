@@ -128,6 +128,7 @@ focus_scope_prefers_highest_priority_and_preserves_order :: proc(t: ^testing.T) 
 @(test)
 focus_scope_equal_priority_scopes_merge_in_draw_order :: proc(t: ^testing.T) {
 	a, b: int
+	frame: Ui_Frame
 	list: Sem_Focus_List
 	list.entries[0] = {
 		focus    = {&a, 1},
@@ -145,10 +146,10 @@ focus_scope_equal_priority_scopes_merge_in_draw_order :: proc(t: ^testing.T) {
 		priority = 5,
 	}
 	list.count = 3
-	priority, present := focus_scope_active_priority(&list)
+	priority, present := focus_scope_active_priority(&frame, &list)
 	testing.expect(t, present)
-	testing.expect_value(t, focus_scope_next_index_at(&list, -1, priority, false), 0)
-	testing.expect_value(t, focus_scope_next_index_at(&list, 0, priority, false), 1)
-	testing.expect_value(t, focus_scope_next_index_at(&list, 1, priority, false), 2)
-	testing.expect_value(t, focus_scope_next_index_at(&list, 0, priority, true), 2)
+	testing.expect_value(t, focus_scope_next_index_at(&frame, &list, -1, priority, false), 0)
+	testing.expect_value(t, focus_scope_next_index_at(&frame, &list, 0, priority, false), 1)
+	testing.expect_value(t, focus_scope_next_index_at(&frame, &list, 1, priority, false), 2)
+	testing.expect_value(t, focus_scope_next_index_at(&frame, &list, 0, priority, true), 2)
 }

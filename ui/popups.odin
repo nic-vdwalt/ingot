@@ -15,11 +15,20 @@ import "core:strings"
 // it; `dismissed` is true only on the frame Escape or a click outside closed
 // it (open is cleared at the same time).
 Modal_State :: struct {
-	open:      bool,
-	dismissed: bool,
-	rect:      Rect_I32,
-	frame:     ^Ui_Frame,
-	drawing:   bool,
+	open:              bool,
+	dismissed:         bool,
+	close_reason:      Modal_Close_Reason,
+	id:                Modal_Id,
+	z:                 Z_Order,
+	opened_generation: u64,
+	seen_generation:   u64,
+	dismiss:           Modal_Dismiss_Policy,
+	focus_scope:       Focus_Scope_Id,
+	initial_focus:     Focus_Opt,
+	restore_focus:     Focus_Opt,
+	rect:              Rect_I32,
+	frame:             ^Ui_Frame,
+	drawing:           bool,
 }
 
 // route_claim_backdrop claims pointer input for the region *around* a panel so
@@ -50,8 +59,62 @@ route_claim_backdrop :: proc(frame: ^Ui_Frame, panel: Rect_I32, screen_w, screen
 }
 
 Modal_Config :: struct {
-	size:   [2]i32,
-	screen: Rect_I32,
+	size:          [2]i32,
+	screen:        Rect_I32,
+	dismiss:       Modal_Dismiss_Policy,
+	focus_scope:   Focus_Scope_Id,
+	initial_focus: Focus_Opt,
+	restore_focus: Focus_Opt,
+}
+
+modal_open :: proc(
+	frame: ^Ui_Frame,
+	state: ^Modal_State,
+	id: Modal_Id,
+	config: Modal_Config,
+) -> bool {
+	assert(frame != nil && frame.open, "modal_open: invalid frame")
+	assert(state != nil && id != Modal_Id(0), "modal_open: invalid state")
+	z := Z_MODAL + Z_Order(frame.runtime.modals.count)
+	if !modal_runtime_register(frame, id, z) do return false
+	if !state.open {
+		state.opened_generation = frame.runtime.frame_generation
+		state.close_reason = .None
+	}
+	state.open = true
+	state.dismissed = false
+	state.id = id
+	state.z = z
+	state.seen_generation = frame.runtime.frame_generation
+	state.dismiss = config.dismiss
+	state.focus_scope = config.focus_scope
+	if state.focus_scope == FOCUS_SCOPE_NONE do state.focus_scope = focus_scope_id(u64(id))
+	state.initial_focus = config.initial_focus
+	state.restore_focus = config.restore_focus
+	return true
+}
+
+modal_close :: proc(state: ^Modal_State, reason: Modal_Close_Reason = .Programmatic) {
+	assert(state != nil, "modal_close: nil state")
+	if !state.open do return
+	state.open = false
+	state.dismissed = reason == .Escape || reason == .Outside_Click
+	state.close_reason = reason
+	if state.frame != nil && state.frame.runtime != nil {
+		modal_runtime_remove(&state.frame.runtime.modals, state.id)
+	}
+}
+
+modal_take_close :: proc(state: ^Modal_State) -> Modal_Close_Reason {
+	assert(state != nil, "modal_take_close: nil state")
+	reason := state.close_reason
+	state.close_reason = .None
+	return reason
+}
+
+modal_is_open :: proc(state: ^Modal_State) -> bool {
+	assert(state != nil, "modal_is_open: nil state")
+	return state.open
 }
 
 // modal_begin dims the screen, claims backdrop input (nothing under the dim
@@ -65,12 +128,22 @@ modal_begin :: proc(
 ) -> Rect_I32 {
 	assert(st != nil && st.open, "modal_begin: modal not open")
 	assert(!st.drawing, "modal_begin: unbalanced begin (missing modal_end)")
+	if st.id == Modal_Id(0) {
+		_ = modal_open(frame, st, Modal_Id(uintptr(st)), config)
+	} else {
+		_ = modal_runtime_register(frame, st.id, st.z)
+		index := modal_runtime_find(&frame.runtime.modals, st.id)
+		assert(index >= 0, "modal_begin: state not registered")
+		st.z = frame.runtime.modals.entries[index].z
+	}
 	w, h := config.size.x, config.size.y
 	screen_w, screen_h := config.screen.w, config.screen.h
 	assert(w > 0 && h > 0, "modal_begin: empty modal size")
 	st.drawing = true
 	st.frame = frame
 	st.dismissed = false
+	modal_owner_begin(frame, st)
+	focus_scope_begin(frame, st.focus_scope, 1000 + i32(st.z - Z_MODAL))
 	style := ui_frame_theme(frame)
 	metrics := ui_frame_metrics(frame)
 
@@ -83,7 +156,7 @@ modal_begin :: proc(
 	// Z_MODAL the panel's own widgets are not occluded by an equal-z claim.
 	// The layer also zeroes the pane origin, so a modal opened from inside a
 	// pane still positions in screen space.
-	layer_begin(frame, Z_MODAL, claim = Rectangle{0, 0, f32(screen_w), f32(screen_h)})
+	layer_begin(frame, st.z, claim = Rectangle{0, 0, f32(screen_w), f32(screen_h)})
 
 	// Dimmed inside the modal's z scope so it paints at the modal tier and
 	// covers every lower tier, including content submitted after modal_end.
@@ -117,20 +190,22 @@ modal_end :: proc(st: ^Modal_State) {
 	frame := st.frame
 	assert(frame != nil, "modal_end: missing frame")
 	end_scissor_mode(frame)
-	// Both exits must close the layer modal_begin opened, or the balance
-	// assertion in ui_frame_finalize fires.
+	focus_scope_end(frame, st.focus_scope)
 	layer_end(frame)
-	if is_key_pressed(frame, .ESCAPE) {
-		st.open = false
-		st.dismissed = true
-		st.frame = nil
-		return
+	if modal_is_top(frame, st) && .Escape in st.dismiss && is_key_pressed(frame, .ESCAPE) {
+		key_pressed_consume(frame, .ESCAPE)
+		modal_close(st, .Escape)
 	}
 	mrect := Rectangle{f32(st.rect.x), f32(st.rect.y), f32(st.rect.w), f32(st.rect.h)}
-	if is_mouse_button_pressed(frame, .LEFT) && !point_in_rect(get_mouse_position(frame), mrect) {
-		st.open = false
-		st.dismissed = true
+	if st.open &&
+	   modal_is_top(frame, st) &&
+	   frame.runtime.frame_generation > st.opened_generation &&
+	   .Outside_Click in st.dismiss &&
+	   is_mouse_button_pressed(frame, .LEFT) &&
+	   !point_in_rect(get_mouse_position(frame), mrect) {
+		modal_close(st, .Outside_Click)
 	}
+	modal_owner_end(frame, st)
 	st.frame = nil
 }
 
@@ -271,6 +346,7 @@ context_menu :: proc(
 		st.selected = menu_nav_next(items, st.selected, 1)
 	}
 	if is_key_pressed(frame, .ESCAPE) {
+		key_pressed_consume(frame, .ESCAPE)
 		st.open = false
 		return -1
 	}
@@ -281,6 +357,7 @@ context_menu :: proc(
 		st.selected = menu_nav_next(items, st.selected, 1)
 	}
 	if is_key_pressed(frame, .ENTER) {
+		key_pressed_consume(frame, .ENTER)
 		st.open = false
 		return st.selected
 	}

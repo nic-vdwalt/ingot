@@ -226,6 +226,16 @@ Confirm_Choice :: enum u8 {
 Modal_State :: struct {
 	inner: ui.Modal_State,
 }
+Modal_Id :: distinct u64
+Modal_Close_Reason :: ui.Modal_Close_Reason
+Modal_Dismiss_Policy :: ui.Modal_Dismiss_Policy
+Modal_Options :: struct {
+	dismiss_escape:  bool,
+	dismiss_outside: bool,
+	focus_scope:     ui.Focus_Scope_Id,
+	initial_focus:   ui.Focus_Opt,
+	restore_focus:   ui.Focus_Opt,
+}
 Context_Menu_State :: struct {
 	inner: ui.Context_Menu_State,
 }
@@ -401,7 +411,7 @@ Modal_Open :: proc(state: ^Modal_State) {
 
 Modal_Is_Open :: proc(state: ^Modal_State) -> bool {
 	assert(state != nil, "Fit.Modal_Is_Open: nil state")
-	return state.inner.open
+	return ui.modal_is_open(&state.inner)
 }
 
 Context_Menu_Is_Open :: proc(state: ^Context_Menu_State) -> bool {
@@ -416,7 +426,17 @@ Confirm_Dialog_Is_Open :: proc(state: ^Confirm_Dialog_State) -> bool {
 
 Modal_Close :: proc(state: ^Modal_State) {
 	assert(state != nil, "Fit.Modal_Close: nil state")
-	state.inner.open = false
+	ui.modal_close(&state.inner)
+}
+
+Modal_Close_With :: proc(state: ^Modal_State, reason: Modal_Close_Reason) {
+	assert(state != nil, "Fit.Modal_Close_With: nil state")
+	ui.modal_close(&state.inner, reason)
+}
+
+Modal_Take_Close :: proc(state: ^Modal_State) -> Modal_Close_Reason {
+	assert(state != nil, "Fit.Modal_Take_Close: nil state")
+	return ui.modal_take_close(&state.inner)
 }
 
 Widget_Id_From_String :: proc(value: string) -> Widget_Id {

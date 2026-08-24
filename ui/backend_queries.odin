@@ -41,19 +41,29 @@ get_mouse_delta :: proc(frame: ^Ui_Frame) -> Vector2 {
 }
 
 get_mouse_wheel_move :: proc(frame: ^Ui_Frame) -> f32 {
+	if !modal_keyboard_visible(frame) do return 0
 	return frame_input(frame).mouse_wheel.y
 }
 
 get_mouse_wheel_move_v :: proc(frame: ^Ui_Frame) -> Vector2 {
+	if !modal_keyboard_visible(frame) do return {}
 	return frame_input(frame).mouse_wheel
 }
 
 is_key_pressed :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
-	return input_key_pressed(frame_input(frame), key)
+	return(
+		modal_keyboard_visible(frame) &&
+		!modal_key_consumed(frame, key, .Pressed) &&
+		input_key_pressed(frame_input(frame), key) \
+	)
 }
 
 is_key_pressed_repeat :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
-	return input_key_pressed_repeat(frame_input(frame), key)
+	return(
+		modal_keyboard_visible(frame) &&
+		!modal_key_consumed(frame, key, .Repeated) &&
+		input_key_pressed_repeat(frame_input(frame), key) \
+	)
 }
 
 // is_key_pressed_or_repeat is the binding every navigation key must use. The
@@ -62,28 +72,31 @@ is_key_pressed_repeat :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
 // keys_repeat), so a widget that reads only one of them either drops the first
 // tap or never repeats while the key is held.
 is_key_pressed_or_repeat :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
-	input := frame_input(frame)
-	return input_key_pressed(input, key) || input_key_pressed_repeat(input, key)
+	return is_key_pressed(frame, key) || is_key_pressed_repeat(frame, key)
 }
 
 is_key_released :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
-	return input_key_released(frame_input(frame), key)
+	return(
+		modal_keyboard_visible(frame) &&
+		!modal_key_consumed(frame, key, .Released) &&
+		input_key_released(frame_input(frame), key) \
+	)
 }
 
 is_key_down :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
-	return input_key_down(frame_input(frame), key)
+	return modal_keyboard_visible(frame) && input_key_down(frame_input(frame), key)
 }
 
 is_mouse_button_pressed :: proc(frame: ^Ui_Frame, button: MouseButton) -> bool {
-	return input_mouse_pressed(frame_input(frame), button)
+	return modal_keyboard_visible(frame) && input_mouse_pressed(frame_input(frame), button)
 }
 
 is_mouse_button_released :: proc(frame: ^Ui_Frame, button: MouseButton) -> bool {
-	return input_mouse_released(frame_input(frame), button)
+	return modal_keyboard_visible(frame) && input_mouse_released(frame_input(frame), button)
 }
 
 is_mouse_button_down :: proc(frame: ^Ui_Frame, button: MouseButton) -> bool {
-	return input_mouse_down(frame_input(frame), button)
+	return modal_keyboard_visible(frame) && input_mouse_down(frame_input(frame), button)
 }
 
 // frame_characters returns the printable characters typed this frame.
@@ -93,6 +106,7 @@ is_mouse_button_down :: proc(frame: ^Ui_Frame, button: MouseButton) -> bool {
 // nothing - the queue is already empty. Views must read this snapshot instead.
 frame_characters :: proc(frame: ^Ui_Frame) -> []rune {
 	assert(frame != nil, "frame_characters: nil frame")
+	if !modal_keyboard_visible(frame) do return nil
 	input := frame_input(frame)
 	assert(
 		input.character_count >= 0 && input.character_count <= INPUT_CHAR_CAP,
@@ -109,6 +123,11 @@ frame_characters_consume :: proc(frame: ^Ui_Frame) {
 	input := frame_input(frame)
 	assert(input != nil, "frame_characters_consume: nil input")
 	input.character_count = 0
+}
+
+key_pressed_consume :: proc(frame: ^Ui_Frame, key: KeyboardKey) {
+	assert(frame != nil && frame.open, "key_pressed_consume: invalid frame")
+	modal_key_consume(frame, key, .Pressed)
 }
 
 // frame_preedit returns the in-progress IME composition (empty when not
