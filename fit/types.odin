@@ -644,7 +644,10 @@ Scroll_State :: struct {
 	inner: ui.Prepared_Scroll_State,
 }
 
-Scroll_Axis :: ui.Scroll_Axis
+Scroll_Axis :: enum u8 {
+	Vertical,
+	Horizontal,
+}
 
 Scroll_Options :: struct {
 	padding:  Space,
