@@ -284,6 +284,7 @@ to_scroll_options :: proc(
 		padding = value.padding,
 		keyboard = value.keyboard,
 		bar = value.bar,
+		axis = ui.Scroll_Axis(value.axis),
 		track = to_track(value.track),
 		size = to_size(value.size),
 	}

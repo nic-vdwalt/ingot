@@ -644,10 +644,13 @@ Scroll_State :: struct {
 	inner: ui.Prepared_Scroll_State,
 }
 
+Scroll_Axis :: ui.Scroll_Axis
+
 Scroll_Options :: struct {
 	padding:  Space,
 	keyboard: bool,
 	bar:      bool,
+	axis:     Scroll_Axis,
 	track:    Track,
 	size:     Size_Options,
 }
