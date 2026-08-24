@@ -82,6 +82,33 @@ Pane_With :: proc(
 	assert(!state.inner.open, "Fit.Pane_With: close failed")
 }
 
+// Surface_Builder_With runs the declarative builder API inside an existing
+// imperative Surface frame, scoped to `rect` (typically a modal panel). The
+// Surface API otherwise has no way to reach the declarative Row/Column/Grid
+// builder: it can only be driven from App/Session top-level draw callbacks. The
+// caller owns `builder` so its node storage persists across frames, mirroring
+// how App and Session own theirs. `body` describes one frame of declarative UI
+// from the builder root; this binds the builder to the surface's frame at
+// `rect`, renders it there, and unbinds again.
+Surface_Builder_With :: proc(
+	surface: ^Surface,
+	builder: ^Builder,
+	rect: Rect,
+	body: Draw_Proc,
+	user_data: rawptr = nil,
+) {
+	assert(surface != nil, "Fit.Surface_Builder_With: nil surface")
+	assert(builder != nil && !builder.bound, "Fit.Surface_Builder_With: builder already bound")
+	assert(body != nil, "Fit.Surface_Builder_With: nil body")
+	frame := surface_ui(surface).frame
+	assert(frame != nil && frame.open, "Fit.Surface_Builder_With: frame not open")
+	builder_open(builder, frame, rect)
+	body(builder, user_data)
+	assert(builder.inner.prepared.depth == 0, "Fit.Surface_Builder_With: unbalanced builder")
+	if !builder.inner.prepared.rendered do _ = Render(builder)
+	builder_close(builder)
+}
+
 @(private = "file")
 id_string :: proc(parent: Parent, key: string) -> Widget_Id {
 	_ = parent_validate(parent)

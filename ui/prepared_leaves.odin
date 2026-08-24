@@ -1,12 +1,30 @@
 package ui
 
+import "core:strings"
+
 Prepared_Text_Input :: struct {
 	id:          Widget_Id,
 	box:         ^Input_Box,
+	// Caller-owned buffer variant: when text+state are set (and box is nil),
+	// the widget renders app-owned state via text_input_box instead of a
+	// bundled Input_Box. This lets declarative fit reuse state the app already
+	// holds, matching immediate mode's caller-owns-state contract.
+	text:        ^strings.Builder,
+	state:       ^Text_Input_State,
 	placeholder: string,
 	height:      i32,
 	masked:      bool,
 	semantics:   Text_Input_Semantics,
+}
+
+// A prepared text input is fed by exactly one source: a bundled Input_Box, or a
+// caller-owned (strings.Builder, Text_Input_State) pair. Enforcing XOR here
+// keeps the widget forgiving about *where* its state lives while rejecting a
+// nil/ambiguous binding that would render a blank field.
+prepared_text_input_source_ok :: proc(spec: Prepared_Text_Input) -> bool {
+	has_box := spec.box != nil
+	has_buffer := spec.text != nil && spec.state != nil
+	return has_box != has_buffer
 }
 
 Prepared_Progress :: struct {
@@ -31,7 +49,10 @@ Prepared_Table_Cell :: struct {
 
 prepared_text_input_size :: proc(u: ^Ui, spec: Prepared_Text_Input) -> Intrinsic_Size {
 	assert(u != nil && u.open && u.frame != nil, "prepared text input size: invalid UI")
-	assert(spec.id != WIDGET_ID_NONE && spec.box != nil, "prepared text input size: invalid spec")
+	assert(
+		spec.id != WIDGET_ID_NONE && prepared_text_input_source_ok(spec),
+		"prepared text input size: invalid spec",
+	)
 	metrics := ui_frame_metrics(u.frame)
 	height := metrics.ROW_H_MD + metrics.CONTROL_GAP
 	if spec.height > 0 do height = ui_frame_sc(u.frame, spec.height)
@@ -40,7 +61,10 @@ prepared_text_input_size :: proc(u: ^Ui, spec: Prepared_Text_Input) -> Intrinsic
 
 prepared_text_input_at :: proc(u: ^Ui, spec: Prepared_Text_Input, rect: Rect_I32) -> bool {
 	assert(u != nil && u.open && u.frame != nil, "prepared text input: invalid UI")
-	assert(spec.id != WIDGET_ID_NONE && spec.box != nil, "prepared text input: invalid spec")
+	assert(
+		spec.id != WIDGET_ID_NONE && prepared_text_input_source_ok(spec),
+		"prepared text input: invalid spec",
+	)
 	assert(spec.semantics.name != "", "prepared text input: empty accessible label")
 	fo := focus(u, spec.id) if slot_visible(rect) else Focus_Opt{}
 	focus_opt_click(u.frame, fo, rect.x, rect.y, rect.w, rect.h)
@@ -48,6 +72,19 @@ prepared_text_input_at :: proc(u: ^Ui, spec: Prepared_Text_Input, rect: Rect_I32
 	semantics.focus = fo.focus
 	semantics.focus_id = fo.id
 	semantics.widget = spec.id
+	if spec.text != nil && spec.state != nil {
+		cfg := Text_Input_Config {
+			rect         = rect,
+			placeholder  = spec.placeholder,
+			active       = focus_opt_focused(fo),
+			masked       = spec.masked,
+			enable_pills = true,
+			enable_undo  = true,
+			submit       = text_input_default_submit(u.frame, rect.h),
+			semantics    = semantics,
+		}
+		return text_input_box(u.frame, cfg, spec.text, spec.state)
+	}
 	return text_input_at(
 		u.frame,
 		rect,
