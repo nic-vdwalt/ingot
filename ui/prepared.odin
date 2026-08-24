@@ -1908,7 +1908,9 @@ prepared_render_exit :: proc(u: ^Ui, node: ^Prepared_Node) {
 	if node.kind == .Scroll {
 		end_scissor_mode(u.frame)
 		state := node.scroll.state
-		if node.scroll.axis == .Horizontal && node.scroll.bar && state.content_w > state.viewport_w {
+		if node.scroll.axis == .Horizontal &&
+		   node.scroll.bar &&
+		   state.content_w > state.viewport_w {
 			scrollbar_offset := scrollbar_horizontal_ex(
 				u.frame,
 				&state.scrollbar,
@@ -1921,7 +1923,9 @@ prepared_render_exit :: proc(u: ^Ui, node: ^Prepared_Node) {
 				int(state.offset),
 			)
 			if state.scrollbar.dragging do state.offset = f32(scrollbar_offset)
-		} else if node.scroll.axis == .Vertical && node.scroll.bar && state.content_h > state.viewport_h {
+		} else if node.scroll.axis == .Vertical &&
+		   node.scroll.bar &&
+		   state.content_h > state.viewport_h {
 			scrollbar_offset := scrollbar_ex(
 				u.frame,
 				&state.scrollbar,

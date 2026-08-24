@@ -560,13 +560,20 @@ fit_native_horizontal_scroll_clamps_wide_row :: proc(t: ^testing.T) {
 	defer ui.ui_frame_end(&frame)
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 200, 100})
-	state := Scroll_State{inner = {offset = 150}}
+	state := Scroll_State {
+		inner = {offset = 150},
+	}
 	root := Column(&builder)
 	scroll := Scroll(
 		root,
 		"cards",
 		&state,
-		{axis = .Horizontal, keyboard = true, bar = true, size = {width = Grow(), height = Fixed(100)}},
+		{
+			axis = .Horizontal,
+			keyboard = true,
+			bar = true,
+			size = {width = Grow(), height = Fixed(100)},
+		},
 	)
 	content := Row(scroll, {size = {width = Fixed(320), height = Fixed(80)}})
 	Spacer(content, .XL, {size = {width = Fixed(320), height = Fixed(80)}})
