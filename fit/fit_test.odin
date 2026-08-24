@@ -57,6 +57,12 @@ fit_test_bridge_draw :: proc(builder: ^Builder, state: rawptr) {
 	if s := cast(^Fit_Test_Build_State)state; s != nil do s.calls += 1
 }
 
+fit_test_modal_draw :: proc(builder: ^Builder, state: rawptr) {
+	root := Column(builder)
+	Label(root, "Modal body")
+	if s := cast(^Fit_Test_Build_State)state; s != nil do s.calls += 1
+}
+
 Fit_Buffer_Field :: struct {
 	text:  ^strings.Builder,
 	state: ^Text_Input_State,
@@ -145,6 +151,45 @@ fit_surface_builder_bridge_renders_in_subrect :: proc(t: ^testing.T) {
 	testing.expect_value(t, state.calls, i32(1))
 	testing.expect(t, !builder.bound, "bridge left builder bound")
 	testing.expect(t, builder.inner.prepared.rendered, "bridge did not render")
+	_ = ui.end(&root)
+}
+
+@(test)
+fit_surface_modal_builder_bridge_renders :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	input := ui.Ui_Input {
+		screen_size = {320, 240},
+	}
+	ui.ui_frame_begin(&frame, &runtime, &input)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	surface := Surface {
+		inner = &root,
+	}
+	modal: Modal_State
+	builder: Builder
+	state: Fit_Test_Build_State
+	testing.expect(t, Surface_Modal_Open(&surface, &modal, Modal_Id(42)))
+	reason := Surface_Modal_Builder_With(
+		&surface,
+		&modal,
+		"Modal",
+		{200, 160},
+		&builder,
+		fit_test_modal_draw,
+		&state,
+	)
+	testing.expect_value(t, reason, Modal_Close_Reason.None)
+	testing.expect_value(t, state.calls, i32(1))
+	testing.expect(t, !builder.bound)
 	_ = ui.end(&root)
 }
 
@@ -1001,11 +1046,23 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 	chart_reset: proc(_: ^Chart_State) = Chart_Reset
 	modal_open: proc(_: ^Modal_State) = Modal_Open
 	modal_is_open: proc(_: ^Modal_State) -> bool = Modal_Is_Open
+	modal_builder: proc(
+			_: ^Surface,
+			_: ^Modal_State,
+			_: string,
+			_: [2]i32,
+			_: ^Builder,
+			_: Draw_Proc,
+			_: rawptr,
+			_: Modal_Options,
+		) -> Modal_Close_Reason =
+		Surface_Modal_Builder_With
 	menu_is_open: proc(_: ^Context_Menu_State) -> bool = Context_Menu_Is_Open
 	confirm_is_open: proc(_: ^Confirm_Dialog_State) -> bool = Confirm_Dialog_Is_Open
 	testing.expect(t, line_chart != nil && bar_chart != nil)
 	testing.expect(t, markdown != nil && toasts != nil && grid_end != nil)
 	testing.expect(t, chart_reset != nil && modal_open != nil && modal_is_open != nil)
+	testing.expect(t, modal_builder != nil)
 	testing.expect(t, menu_is_open != nil && confirm_is_open != nil)
 }
 

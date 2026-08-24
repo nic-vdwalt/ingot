@@ -36,12 +36,13 @@ confirm_dialog :: proc(
 	assert(confirm_label != "", "confirm_dialog: empty confirm label")
 	if !st.modal.open do return .None
 	metrics := ui_frame_metrics(frame)
-	body := modal_begin(
-		frame,
-		&st.modal,
-		title,
-		{size = {ui_frame_sc(frame, 420), ui_frame_sc(frame, 190)}, screen = screen},
-	)
+	config := Modal_Config {
+		size    = {ui_frame_sc(frame, 420), ui_frame_sc(frame, 190)},
+		screen  = screen,
+		dismiss = {.Escape, .Outside_Click},
+	}
+	if st.modal.id == Modal_Id(0) do _ = modal_open(frame, &st.modal, Modal_Id(uintptr(st)), config)
+	body := modal_begin(frame, &st.modal, title, config)
 	message_x := body.x + metrics.PADDING
 	message_w := body.w - metrics.PADDING * 2
 	_ = draw_text_wrapped_frame(
@@ -72,16 +73,14 @@ confirm_dialog :: proc(
 	choice := Confirm_Choice.None
 	if button_at(frame, cancel_rect, "Cancel", .Ghost) {
 		choice = .Canceled
+		modal_close(&st.modal, .Canceled)
 	}
 	confirm_style: Btn_Style = .Danger if danger else .Primary
 	if button_at(frame, confirm_rect, confirm_label, confirm_style) {
 		choice = .Confirmed
+		modal_close(&st.modal, .Accepted)
 	}
 	modal_end(&st.modal)
 	if st.modal.dismissed do choice = .Canceled
-	if choice != .None {
-		st.modal.open = false
-		st.modal.dismissed = false
-	}
 	return choice
 }

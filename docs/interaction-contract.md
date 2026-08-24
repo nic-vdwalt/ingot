@@ -49,6 +49,9 @@ support remain unclaimed until recorded by the production-readiness matrix.
 ## Overlays and modal surfaces
 
 - The topmost interactive overlay owns pointer and keyboard routing.
+- A modal registered before ordinary content blocks that content on its opening frame.
+- Handled modal and child-popup key edges are consumed exactly once.
+- Modal stack overflow fails closed rather than exposing covered controls.
 - Raised paint and input claims share the same exact finite `Z_Order`; equal depths preserve declaration order.
 - A moving claiming attachment over-occludes the union of current and target rectangles rather than allowing click-through.
 - Opening a modal chooses an intentional initial focus target.

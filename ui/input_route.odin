@@ -70,7 +70,8 @@ route_begin_frame :: proc(frame: ^Ui_Frame) {
 }
 
 // route_claim marks a rectangle as owned by the caller at z-order `z` for the
-// NEXT frame, so widgets beneath it neither hover nor click.
+// current frame and, when renewed, the next frame. Queries combine current and
+// previous claims so late-submitted overlays cannot expose lower content.
 //
 // A widget is occluded only by claims STRICTLY ABOVE its own z-order, so a
 // surface may claim its own rect and stay interactive: pair the claim with a
@@ -130,14 +131,14 @@ route_block_z_in :: proc(claims: Route_Claims, point: Vector2) -> Z_Order {
 	return top
 }
 
-// route_block_z reports the highest z claiming `point` among the claims active
-// this frame.
+// route_block_z reports the highest active current- or previous-frame claim.
 route_block_z :: proc(frame: ^Ui_Frame, point: Vector2) -> Z_Order {
 	assert(frame != nil && frame.open, "route_block_z: invalid frame")
-	claims := &frame.route.prev
-	assert(claims.count >= 0 && claims.count <= MAX_ROUTE_CLAIMS)
-	if !claims.all && claims.count == 0 do return Z_NONE
-	return route_block_z_in(claims^, point)
+	assert(frame.route.prev.count >= 0 && frame.route.prev.count <= MAX_ROUTE_CLAIMS)
+	assert(frame.route.cur.count >= 0 && frame.route.cur.count <= MAX_ROUTE_CLAIMS)
+	previous := route_block_z_in(frame.route.prev, point)
+	current := route_block_z_in(frame.route.cur, point)
+	return max(previous, current)
 }
 
 // route_occluded_in reports whether `point` is covered by a claim strictly
@@ -151,14 +152,12 @@ route_occluded_in :: proc(claims: Route_Claims, point: Vector2, z: Z_Order = Z_C
 // not know their own depth.
 route_occluded :: proc(frame: ^Ui_Frame, point: Vector2) -> bool {
 	assert(frame != nil && frame.open, "route_occluded: invalid frame")
-	claims := &frame.route.prev
-	assert(claims.count >= 0 && claims.count <= MAX_ROUTE_CLAIMS)
-	if !claims.all && claims.count == 0 do return false
-	return route_occluded_in(claims^, point, frame_z(frame))
+	return route_block_z(frame, point) > frame_z(frame)
 }
 
 route_claim_count :: proc(frame: ^Ui_Frame) -> int {
 	assert(frame != nil, "route_claim_count: nil frame")
-	if frame.route.prev.all do return max(frame.route.prev.count, 1)
-	return frame.route.prev.count
+	count := frame.route.prev.count + frame.route.cur.count
+	if frame.route.prev.all || frame.route.cur.all do count = max(count, 1)
+	return min(count, MAX_ROUTE_CLAIMS)
 }

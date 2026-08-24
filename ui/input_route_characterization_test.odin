@@ -62,11 +62,10 @@ route_claim_occludes_its_own_claimant :: proc(t: ^testing.T) {
 	testing.expect(t, route_occluded(&frame, Vector2{700, 100}), "claimant occludes itself")
 }
 
-// Claims are one frame late by construction: the router answers from the
-// previous frame's set, so an immediate-mode caller never depends on draw order
-// within a frame.
+// Claims activate immediately, remain protective through the next frame, and
+// expire once neither the current nor previous frame renews them.
 @(test)
-route_claims_activate_next_frame_and_expire_when_not_renewed :: proc(t: ^testing.T) {
+route_claims_activate_current_frame_and_expire_when_not_renewed :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
@@ -76,9 +75,9 @@ route_claims_activate_next_frame_and_expire_when_not_renewed :: proc(t: ^testing
 
 	point := Vector2{5, 5}
 	route_claim(&frame, Rectangle{0, 0, 10, 10})
-	testing.expect(t, !route_occluded(&frame, point), "same frame does not occlude")
+	testing.expect(t, route_occluded(&frame, point), "same frame occludes")
 	route_begin_frame(&frame)
-	testing.expect(t, route_occluded(&frame, point), "next frame occludes")
+	testing.expect(t, route_occluded(&frame, point), "next frame remains protected")
 	route_begin_frame(&frame)
 	testing.expect(t, !route_occluded(&frame, point), "unrenewed claim expires")
 }

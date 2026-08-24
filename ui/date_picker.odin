@@ -204,6 +204,7 @@ date_picker_at :: proc(
 	semantic_push(frame, .Dropdown, rect, sem_label, sem, focus, widget = widget)
 	if !st.open do return false
 	if is_key_pressed(frame, .ESCAPE) {
+		key_pressed_consume(frame, .ESCAPE)
 		st.open = false
 		return false
 	}
@@ -214,6 +215,8 @@ date_picker_at :: proc(
 	if is_key_pressed(frame, .PAGE_UP) do date_picker_shift_month(st, -1)
 	if is_key_pressed(frame, .PAGE_DOWN) do date_picker_shift_month(st, 1)
 	if is_key_pressed(frame, .ENTER) || is_key_pressed(frame, .SPACE) {
+		if is_key_pressed(frame, .ENTER) do key_pressed_consume(frame, .ENTER)
+		if is_key_pressed(frame, .SPACE) do key_pressed_consume(frame, .SPACE)
 		chosen := Calendar_Date{st.view_year, st.view_month, st.active_day}
 		if calendar_date_valid(chosen) {
 			selection_changed := value^ != chosen

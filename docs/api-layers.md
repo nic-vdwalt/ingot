@@ -128,6 +128,13 @@ canvas :: proc(surface: ^fit.Surface, root: fit.Rect, user_data: rawptr) -> bool
 }
 ```
 
+### Modal Builder composition
+
+Open with `fit.Surface_Modal_Open` before ordinary input processing, then render
+with `fit.Surface_Modal_Builder_With`. The modal owns pointer, keyboard, focus,
+paint tier, clipping, and semantics until closed. Outside dismissal is opt-in.
+Use `fit.Modal_Take_Close` when the close source matters.
+
 `Layout_State`, `Grid_State`, `Flow_State`, `Fit_Column_State`, and
 `Vertical_Cursor_State` are zero-value ready, must be balanced, and may be reused
 after their `End`. The longer `Surface_Layout_*`, `Surface_Grid_*`,

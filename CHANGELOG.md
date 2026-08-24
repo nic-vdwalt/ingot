@@ -11,6 +11,8 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
+- Input route claims now occlude against the union of current and previous frame
+  claims, preventing first-frame click-through while preserving late renewal.
 - `ingot:ui` and the managed `ingot:ui_gfx.App` and `ui_gfx.Session` hosts are
   documented as advanced application APIs. `ingot:fit` remains the recommended
   default; direct `ui_gfx.Adapter` lifecycle calls remain backend-only.
@@ -29,6 +31,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `ingot:fit` safe modal lifecycle and `Surface_Modal_Builder_With`, including
+  bounded stacking, keyboard ownership, focus containment, and distinguishable
+  close reasons.
 - `ingot:ui` interactive tables: a caller-owned `Table_State` plus
   `table_header_ex` (drag column borders to resize, drag headers to reorder,
   click to sort), `table_begin`/`table_row`/`table_end` (a pinned header over a

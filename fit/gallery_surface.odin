@@ -127,21 +127,48 @@ Surface_Listbox_End :: proc(surface: ^Surface, state: ^Listbox_State) {
 	ui.listbox_end(u.frame, &state.inner)
 }
 
+modal_config :: proc(surface: ^Surface, size: [2]i32, options: Modal_Options) -> ui.Modal_Config {
+	u := surface_ui(surface)
+	dismiss: ui.Modal_Dismiss_Policy
+	if options.dismiss_escape do dismiss += {.Escape}
+	if options.dismiss_outside do dismiss += {.Outside_Click}
+	return {
+		size = size,
+		screen = ui.frame_viewport(u.frame),
+		dismiss = dismiss,
+		focus_scope = options.focus_scope,
+		initial_focus = options.initial_focus,
+		restore_focus = options.restore_focus,
+	}
+}
+
+Surface_Modal_Open :: proc(
+	surface: ^Surface,
+	state: ^Modal_State,
+	id: Modal_Id,
+	options: Modal_Options = {dismiss_escape = true},
+) -> bool {
+	u := surface_ui(surface)
+	assert(state != nil, "Fit.Surface_Modal_Open: nil state")
+	return ui.modal_open(
+		u.frame,
+		&state.inner,
+		ui.Modal_Id(id),
+		modal_config(surface, {1, 1}, options),
+	)
+}
+
 Surface_Modal_Begin :: proc(
 	surface: ^Surface,
 	state: ^Modal_State,
 	title: string,
 	size: [2]i32,
+	options: Modal_Options = {dismiss_escape = true},
 ) -> Rect {
 	u := surface_ui(surface)
 	assert(state != nil, "Fit.Surface_Modal_Begin: nil state")
 	return from_rect(
-		ui.modal_begin(
-			u.frame,
-			&state.inner,
-			title,
-			{size = size, screen = ui.frame_viewport(u.frame)},
-		),
+		ui.modal_begin(u.frame, &state.inner, title, modal_config(surface, size, options)),
 	)
 }
 
@@ -149,6 +176,24 @@ Surface_Modal_End :: proc(surface: ^Surface, state: ^Modal_State) {
 	_ = surface_ui(surface)
 	assert(state != nil, "Fit.Surface_Modal_End: nil state")
 	ui.modal_end(&state.inner)
+}
+
+Surface_Modal_Builder_With :: proc(
+	surface: ^Surface,
+	state: ^Modal_State,
+	title: string,
+	size: [2]i32,
+	builder: ^Builder,
+	draw: Draw_Proc,
+	user_data: rawptr = nil,
+	options: Modal_Options = {dismiss_escape = true},
+) -> Modal_Close_Reason {
+	assert(surface != nil && state != nil, "Fit modal builder: invalid state")
+	assert(builder != nil && draw != nil, "Fit modal builder: invalid body")
+	body := Surface_Modal_Begin(surface, state, title, size, options)
+	Surface_Builder_With(surface, builder, body, draw, user_data)
+	Surface_Modal_End(surface, state)
+	return Modal_Take_Close(state)
 }
 
 Region_Id_String :: proc(region: ^Region, key: string) -> Widget_Id {
