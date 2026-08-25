@@ -3,7 +3,7 @@ package ui
 INPUT_KEY_COUNT :: 349
 INPUT_MOUSE_BUTTON_COUNT :: 7
 INPUT_CHAR_CAP :: 64
-INPUT_CLIPBOARD_CAP :: 4096
+INPUT_CLIPBOARD_CAP :: 16 * 1024
 // Mirrors the gfx backend's PREEDIT_MAX so a staged IME composition is never
 // truncated crossing the adapter boundary.
 INPUT_PREEDIT_CAP :: 256
@@ -28,8 +28,7 @@ Ui_Input :: struct {
 	characters:         [INPUT_CHAR_CAP]rune,
 	character_count:    int,
 	characters_dropped: int,
-	clipboard:          [INPUT_CLIPBOARD_CAP]u8,
-	clipboard_len:      int,
+	clipboard:          string,
 	// In-progress IME composition (UTF-8) plus the caret byte offset within
 	// it. Display-only: committed text still arrives via `characters`.
 	preedit:            [INPUT_PREEDIT_CAP]u8,
@@ -48,11 +47,20 @@ input_normalize :: proc(input: ^Ui_Input) {
 		input.characters_dropped += input.character_count - INPUT_CHAR_CAP
 		input.character_count = INPUT_CHAR_CAP
 	}
-	input.clipboard_len = clamp(input.clipboard_len, 0, INPUT_CLIPBOARD_CAP)
+	input.clipboard = input.clipboard[:input_clip_utf8(input.clipboard, INPUT_CLIPBOARD_CAP)]
 	input.preedit_len = clamp(input.preedit_len, 0, INPUT_PREEDIT_CAP)
 	input.preedit_caret = clamp(input.preedit_caret, 0, input.preedit_len)
 	assert(input.character_count >= 0 && input.character_count <= INPUT_CHAR_CAP)
+	assert(len(input.clipboard) <= INPUT_CLIPBOARD_CAP)
 	assert(input.preedit_caret >= 0 && input.preedit_caret <= input.preedit_len)
+}
+
+input_clip_utf8 :: proc(text: string, capacity: int) -> int {
+	assert(capacity >= 0, "input_clip_utf8: negative capacity")
+	count := min(len(text), capacity)
+	for count > 0 && count < len(text) && (text[count] & 0xc0) == 0x80 do count -= 1
+	assert(count >= 0 && count <= capacity, "input_clip_utf8: invalid result")
+	return count
 }
 
 input_key_index :: proc(key: Key) -> int {
@@ -118,9 +126,6 @@ input_character :: proc(input: ^Ui_Input, index: int) -> (rune, bool) {
 
 input_clipboard :: proc(input: ^Ui_Input) -> string {
 	assert(input != nil, "input_clipboard: nil input")
-	assert(
-		input.clipboard_len >= 0 && input.clipboard_len <= INPUT_CLIPBOARD_CAP,
-		"input_clipboard: invalid length",
-	)
-	return string(input.clipboard[:input.clipboard_len])
+	assert(len(input.clipboard) <= INPUT_CLIPBOARD_CAP, "input_clipboard: invalid length")
+	return input.clipboard
 }

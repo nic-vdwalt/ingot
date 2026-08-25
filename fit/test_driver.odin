@@ -302,8 +302,8 @@ test_driver_input :: proc(input: Test_Input) -> ui.Ui_Input {
 	result.screen_size = {input.screen_size.x, input.screen_size.y}
 	result.character_count = min(input.character_count, len(result.characters))
 	for index in 0 ..< result.character_count do result.characters[index] = input.characters[index]
-	result.clipboard_len = min(input.clipboard_len, len(result.clipboard))
-	for index in 0 ..< result.clipboard_len do result.clipboard[index] = input.clipboard[index]
+	clipboard_len := ui.input_clip_utf8(input.clipboard, ui.INPUT_CLIPBOARD_CAP)
+	result.clipboard = input.clipboard[:clipboard_len]
 	for pressed, index in input.mouse_pressed do result.mouse_pressed[index] = pressed
 	for released, index in input.mouse_released do result.mouse_released[index] = released
 	for down, index in input.mouse_down do result.mouse_down[index] = down

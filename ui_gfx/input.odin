@@ -13,14 +13,6 @@ INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
 #assert(int(ui.Mouse_Button.LEFT) == int(rl.MouseButton.LEFT))
 #assert(int(ui.Mouse_Button.BACK) == int(rl.MouseButton.BACK))
 
-input_clip_utf8 :: proc(text: string, capacity: int) -> int {
-	assert(capacity >= 0, "input_clip_utf8: negative capacity")
-	count := min(len(text), capacity)
-	for count > 0 && count < len(text) && (text[count] & 0xc0) == 0x80 do count -= 1
-	assert(count >= 0 && count <= capacity, "input_clip_utf8: invalid result")
-	return count
-}
-
 pointer_snapshot_sanitize :: proc(input: ^ui.Ui_Input) {
 	assert(input != nil, "pointer_snapshot_sanitize: nil input")
 	if input.window_focused && input.cursor_on_screen do return
@@ -32,6 +24,22 @@ pointer_snapshot_sanitize :: proc(input: ^ui.Ui_Input) {
 	input.mouse_released = {}
 	input.mouse_down = {}
 	assert(input.mouse_delta == {} && input.mouse_wheel == {})
+}
+
+capture_clipboard_context :: proc(ctx: ^rl.Context, input: ^ui.Ui_Input) {
+	assert(ctx != nil && input != nil, "capture_clipboard_context: nil argument")
+	paste := ui.input_key_pressed(input, .V) || ui.input_key_pressed_repeat(input, .V)
+	modifier :=
+		ui.input_key_down(input, .LEFT_CONTROL) ||
+		ui.input_key_down(input, .RIGHT_CONTROL) ||
+		ui.input_key_down(input, .LEFT_SUPER) ||
+		ui.input_key_down(input, .RIGHT_SUPER)
+	if !paste || !modifier do return
+	clipboard := rl.context_get_clipboard_text(ctx)
+	if clipboard == nil do return
+	text := string(clipboard)
+	input.clipboard = text[:ui.input_clip_utf8(text, ui.INPUT_CLIPBOARD_CAP)]
+	assert(len(input.clipboard) <= ui.INPUT_CLIPBOARD_CAP)
 }
 
 capture_input_context :: proc(ctx: ^rl.Context, input: ^ui.Ui_Input) {
@@ -49,16 +57,6 @@ capture_input_context :: proc(ctx: ^rl.Context, input: ^ui.Ui_Input) {
 	input.window_focused = rl.context_window_focused(ctx)
 	input.cursor_on_screen = rl.context_is_cursor_on_screen(ctx)
 	input.window_fullscreen = rl.context_window_fullscreen(ctx)
-	clipboard := rl.context_get_clipboard_text(ctx)
-	if clipboard != nil {
-		clipboard_text := string(clipboard)
-		input.clipboard_len = input_clip_utf8(clipboard_text, ui.INPUT_CLIPBOARD_CAP)
-		copy(input.clipboard[:input.clipboard_len], transmute([]u8)clipboard_text)
-	}
-	assert(
-		input.clipboard_len >= 0 && input.clipboard_len <= ui.INPUT_CLIPBOARD_CAP,
-		"capture_input: invalid clipboard length",
-	)
 
 	for index in 0 ..< ui.INPUT_KEY_COUNT {
 		key := rl.KeyboardKey(index)
@@ -67,6 +65,7 @@ capture_input_context :: proc(ctx: ^rl.Context, input: ^ui.Ui_Input) {
 		input.keys_released[index] = rl.context_is_key_released(ctx, key)
 		input.keys_down[index] = rl.context_is_key_down(ctx, key)
 	}
+	capture_clipboard_context(ctx, input)
 	for index in 0 ..< ui.INPUT_MOUSE_BUTTON_COUNT {
 		button := rl.MouseButton(index)
 		input.mouse_pressed[index] = rl.context_is_mouse_button_pressed(ctx, button)
@@ -92,4 +91,5 @@ capture_input_context :: proc(ctx: ^rl.Context, input: ^ui.Ui_Input) {
 	copy(input.preedit[:input.preedit_len], transmute([]u8)preedit)
 	input.preedit_caret = clamp(preedit_caret, 0, input.preedit_len)
 	pointer_snapshot_sanitize(input)
+	assert(len(input.clipboard) <= ui.INPUT_CLIPBOARD_CAP)
 }
