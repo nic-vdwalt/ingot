@@ -1342,6 +1342,8 @@ prepared_axis_size :: proc(u: ^Ui, track: Track, natural, available: i32) -> i32
 	switch track.kind {
 	case .Fit:
 		if track.basis > 0 do result = ui_frame_sc(u.frame, track.basis)
+	case .Hug:
+		result = natural
 	case .Fixed:
 		result = ui_frame_sc(u.frame, track.basis)
 	case .Grow:
@@ -1762,13 +1764,18 @@ prepared_track_px :: proc(u: ^Ui, node: ^Prepared_Node, parent_kind: Prepared_Ki
 	track := node.track
 	if track.kind == .Fit && track.basis == 0 && track.min_size == 0 && track.max_size == 0 {
 		basis := node.size.w if parent_kind == .Row else node.size.h
-		return fit(basis)
+		assert(basis >= 0, "prepared_track_px: negative intrinsic basis")
+		return hug(basis)
 	}
 	minimum := ui_frame_sc(u.frame, track.min_size)
 	maximum := ui_frame_sc(u.frame, track.max_size) if track.max_size > 0 else 0
 	switch track.kind {
 	case .Fit:
 		return fit(ui_frame_sc(u.frame, track.basis), minimum, maximum)
+	case .Hug:
+		basis := node.size.w if parent_kind == .Row else node.size.h
+		assert(basis >= 0, "prepared_track_px: negative hug basis")
+		return hug(basis, minimum, maximum)
 	case .Grow:
 		return grow(track.weight, minimum, maximum)
 	case .Fixed:

@@ -320,6 +320,18 @@ fit_test_measure :: proc(constraints: Constraints, user_data: rawptr) -> Size {
 }
 
 @(private = "file")
+fit_test_measure_wide :: proc(constraints: Constraints, user_data: rawptr) -> Size {
+	assert(user_data != nil, "fit test wide measure: invalid argument")
+	assert(
+		constraints.max_w >= 0 && constraints.max_h >= 0,
+		"fit test wide measure: invalid bounds",
+	)
+	counts := cast(^Fit_Test_Counts)user_data
+	counts.measure += 1
+	return {100, 24, false}
+}
+
+@(private = "file")
 fit_test_render :: proc(surface: ^Surface, rect: Rect, user_data: rawptr) -> bool {
 	assert(surface != nil && user_data != nil, "fit test render: invalid argument")
 	assert(rect.w >= 0 && rect.h >= 0, "fit test render: invalid rect")
@@ -616,6 +628,47 @@ fit_parent_public_contract_compiles :: proc(t: ^testing.T) {
 	testing.expect(t, button != nil && delayed != nil && scope != nil && id != nil)
 	testing.expect(t, section != nil && card != nil)
 }
+
+@(test)
+fit_track_public_contract_compiles :: proc(t: ^testing.T) {
+	fixed: proc(_: i32) -> Track = Fixed
+	grow: proc(_: i32, _: i32, _: i32) -> Track = Grow
+	percent: proc(_: f32, _: i32, _: i32) -> Track = Percent
+	fit: proc(_: i32, _: i32, _: i32) -> Track = Fit
+	hug: proc(_: i32, _: i32) -> Track = Hug
+	testing.expect(t, fixed != nil && grow != nil && percent != nil)
+	testing.expect(t, fit != nil && hug != nil)
+}
+
+@(test)
+fit_default_intrinsic_child_hugs_before_explicit_fit :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 140, 24})
+	first, second: Fit_Test_Counts
+	root := Row(&builder, {size = {width = Fixed(140), height = Fixed(24)}})
+	Custom(root, {measure = fit_test_measure_wide, render = fit_test_render, user_data = &first})
+	Custom(
+		root,
+		{measure = fit_test_measure_wide, render = fit_test_render, user_data = &second},
+		{track = Fit(100)},
+	)
+	_ = Measure(&builder)
+	Render_At(&builder, {0, 0, 140, 24})
+	builder_close(&builder)
+	testing.expect_value(t, first.rect.w, i32(100))
+	testing.expect_value(t, second.rect.w, i32(40))
+}
+
 @(test)
 fit_builder_native_leaves_and_table_render :: proc(t: ^testing.T) {
 	runtime: ui.Ui_Runtime

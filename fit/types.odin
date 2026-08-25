@@ -735,3 +735,9 @@ Fit :: proc(basis: i32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
 	assert(max_size == 0 || max_size >= min_size, "Fit.Fit: invalid maximum")
 	return {kind = .Fit, basis = basis, min_size = min_size, max_size = max_size}
 }
+
+Hug :: proc(min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(min_size >= 0, "Fit.Hug: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "Fit.Hug: invalid maximum")
+	return {kind = .Hug, min_size = min_size, max_size = max_size}
+}

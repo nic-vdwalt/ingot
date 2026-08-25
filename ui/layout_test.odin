@@ -260,6 +260,58 @@ layout_flex_compresses_fit_to_minimum :: proc(t: ^testing.T) {
 }
 
 @(test)
+layout_flex_compresses_fit_before_hug :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 140, 40)
+	push_row(&l, 40)
+	flex_begin(&l, {hug(100), fit(100)})
+	intrinsic := flex_next(&l)
+	shrinkable := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, intrinsic.w, i32(100))
+	testing.expect_value(t, shrinkable.w, i32(40))
+}
+
+@(test)
+layout_flex_compresses_hug_only_after_fit_capacity :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 50, 40)
+	push_row(&l, 40)
+	flex_begin(&l, {hug(100), fit(100)})
+	intrinsic := flex_next(&l)
+	shrinkable := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, intrinsic.w, i32(50))
+	testing.expect_value(t, shrinkable.w, i32(0))
+}
+
+@(test)
+layout_flex_hug_rounding_is_exact :: proc(t: ^testing.T) {
+	l: Layout
+	layout_begin(&l, 0, 0, 100, 20)
+	push_row(&l, 20)
+	flex_begin(&l, {hug(51), hug(51), hug(51)})
+	a := flex_next(&l)
+	b := flex_next(&l)
+	c := flex_next(&l)
+	layout_pop(&l)
+	layout_end(&l)
+	testing.expect_value(t, a.w + b.w + c.w, i32(100))
+	testing.expect(t, max(a.w, max(b.w, c.w)) - min(a.w, min(b.w, c.w)) <= 1)
+}
+
+@(test)
+layout_track_kind_wire_ordinals_are_stable :: proc(t: ^testing.T) {
+	testing.expect_value(t, u8(Track_Kind.Fit), u8(0))
+	testing.expect_value(t, u8(Track_Kind.Grow), u8(1))
+	testing.expect_value(t, u8(Track_Kind.Fixed), u8(2))
+	testing.expect_value(t, u8(Track_Kind.Percent), u8(3))
+	testing.expect_value(t, u8(Track_Kind.Hug), u8(4))
+}
+
+@(test)
 layout_flex_constraints_rounding_and_column :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 40, 303, gap = 1)

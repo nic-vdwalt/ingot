@@ -113,6 +113,29 @@ test_roundtrip_preserves_every_field :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_track_kind_wire_ordinals_and_hug_roundtrip :: proc(t: ^testing.T) {
+	testing.expect_value(t, u8(ui.Track_Kind.Fit), u8(0))
+	testing.expect_value(t, u8(ui.Track_Kind.Grow), u8(1))
+	testing.expect_value(t, u8(ui.Track_Kind.Fixed), u8(2))
+	testing.expect_value(t, u8(ui.Track_Kind.Percent), u8(3))
+	testing.expect_value(t, u8(ui.Track_Kind.Hug), u8(4))
+	defer free_all(context.temp_allocator)
+	source: View_Doc
+	sample_doc(&source)
+	source.nodes[5].track = {
+		kind     = .Hug,
+		basis    = 96,
+		min_size = 44,
+		max_size = 160,
+	}
+	bytes := encode_to_temp(view_of(&source))
+	decoded: View_Doc
+	result, ok := view_decode(bytes, &decoded)
+	testing.expectf(t, ok, "decode failed: %v", result)
+	testing.expect_value(t, decoded.nodes[5].track, source.nodes[5].track)
+}
+
+@(test)
 test_reencode_is_byte_identical :: proc(t: ^testing.T) {
 	defer free_all(context.temp_allocator)
 	source: View_Doc

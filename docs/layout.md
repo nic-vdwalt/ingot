@@ -102,8 +102,14 @@ hierarchy.
 
 ## Tracks, leaves, and custom content
 
-`fit.Fit`, `fit.Grow`, `fit.Fixed`, and `fit.Percent` construct tracks. A leaf's
-`track` controls its parent main axis; `Size_Options` controls both axes.
+`fit.Fit`, `fit.Grow`, `fit.Fixed`, `fit.Percent`, and `fit.Hug` construct
+tracks. A leaf's `track` controls its parent main axis; `Size_Options` controls
+both axes. Default prepared children and explicit `Hug()` tracks use their
+current-frame intrinsic measurement as the preferred main-axis size. Under
+constraint, explicit `Fit` and `Grow` capacity compresses before Hug. If the
+layout remains impossible, Hug compresses deterministically so geometry stays
+inside the bounded parent. Use explicit `Fit` when content is intentionally
+shrinkable before intrinsic controls.
 
 `Label`, `Button`, `Checkbox`, `Radio`, `Slider`, `Text_Input`, `Progress`,
 `Separator`, `Spacer`, table cells, `Canvas_Leaf`, and `Custom` consume Parent.

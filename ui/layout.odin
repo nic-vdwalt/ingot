@@ -539,6 +539,7 @@ Track_Kind :: enum u8 {
 	Grow,
 	Fixed,
 	Percent,
+	Hug,
 }
 
 // Track describes one sibling on the active frame's main axis. max_size is
@@ -589,6 +590,15 @@ fit :: proc(basis: i32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
 	assert(min_size >= 0, "fit: negative minimum")
 	assert(max_size == 0 || max_size >= min_size, "fit: invalid maximum")
 	return Track{kind = .Fit, basis = basis, min_size = min_size, max_size = max_size}
+}
+
+// hug preserves a measured intrinsic basis until explicitly shrinkable tracks
+// have consumed their compression capacity.
+hug :: proc(basis: i32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(basis >= 0, "hug: negative basis")
+	assert(min_size >= 0, "hug: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "hug: invalid maximum")
+	return Track{kind = .Hug, basis = basis, min_size = min_size, max_size = max_size}
 }
 
 intrinsic_fit_width :: proc(value: Intrinsic_Size, min_size: i32 = 0, max_size: i32 = 0) -> Track {
@@ -1010,28 +1020,63 @@ _flex_clamp :: proc(size, min_size, max_size: i32) -> i32 {
 }
 
 @(private = "file")
-_flex_compress :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Track, overflow: i32) {
-	assert(resolved != nil, "_flex_compress: nil sizes")
-	assert(overflow > 0, "_flex_compress: non-positive overflow")
+_flex_compression_priority :: proc(track: Track) -> i32 {
+	switch track.kind {
+	case .Fit, .Grow:
+		return 0
+	case .Hug:
+		return 1
+	case .Fixed, .Percent:
+		return -1
+	}
+	unreachable()
+}
+
+@(private = "file")
+_flex_compress_priority :: proc(
+	resolved: ^[MAX_LAYOUT_FLEX]i32,
+	sizes: []Track,
+	overflow: i32,
+	priority: i32,
+) -> i32 {
+	assert(resolved != nil, "_flex_compress_priority: nil sizes")
+	assert(len(sizes) <= MAX_LAYOUT_FLEX, "_flex_compress_priority: count out of bounds")
+	assert(overflow > 0, "_flex_compress_priority: non-positive overflow")
+	assert(priority >= 0 && priority <= 1, "_flex_compress_priority: invalid priority")
 	capacity: i64
 	for size, index in sizes {
-		if size.kind == .Fit || size.kind == .Grow {
-			capacity += i64(resolved[index] - size.min_size)
-		}
+		if _flex_compression_priority(size) != priority do continue
+		item_capacity := resolved[index] - size.min_size
+		assert(item_capacity >= 0, "_flex_compress_priority: size below minimum")
+		capacity += i64(item_capacity)
 	}
+	if capacity == 0 do return overflow
 	shrink := min(i64(overflow), capacity)
 	consumed: i64
 	acc: i64
 	for size, index in sizes {
-		if size.kind != .Fit && size.kind != .Grow do continue
+		if _flex_compression_priority(size) != priority do continue
 		item_capacity := i64(resolved[index] - size.min_size)
-		before := acc * shrink / max(capacity, 1)
+		before := acc * shrink / capacity
 		acc += item_capacity
-		after := acc * shrink / max(capacity, 1)
+		after := acc * shrink / capacity
 		resolved[index] -= i32(after - before)
 		consumed += after - before
 	}
-	assert(consumed == shrink, "_flex_compress: incomplete distribution")
+	assert(consumed == shrink, "_flex_compress_priority: incomplete distribution")
+	return overflow - i32(shrink)
+}
+
+@(private = "file")
+_flex_compress :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Track, overflow: i32) {
+	assert(resolved != nil, "_flex_compress: nil sizes")
+	assert(len(sizes) <= MAX_LAYOUT_FLEX, "_flex_compress: count out of bounds")
+	assert(overflow > 0, "_flex_compress: non-positive overflow")
+	remaining := _flex_compress_priority(resolved, sizes, overflow, 0)
+	if remaining > 0 {
+		remaining = _flex_compress_priority(resolved, sizes, remaining, 1)
+	}
+	assert(remaining >= 0 && remaining <= overflow, "_flex_compress: invalid remainder")
 }
 
 @(private = "file")
@@ -1082,6 +1127,9 @@ _flex_resolve :: proc(f: ^Layout_Frame, sizes: []Track, space: i32) {
 		switch size.kind {
 		case .Fit:
 			assert(size.basis >= 0, "_flex_resolve: negative fit basis")
+			resolved = _flex_clamp(size.basis, size.min_size, size.max_size)
+		case .Hug:
+			assert(size.basis >= 0, "_flex_resolve: negative hug basis")
 			resolved = _flex_clamp(size.basis, size.min_size, size.max_size)
 		case .Grow:
 			assert(size.weight > 0, "_flex_resolve: invalid grow weight")
