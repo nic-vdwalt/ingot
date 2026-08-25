@@ -235,7 +235,7 @@ run_inputs :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 			u64(index + 1),
 			&h.dashboard_inputs[index],
 			"Filter",
-			{
+			fit.Builder_Text_Input_Options {
 				semantics = {name = "Filter"},
 				size = {width = fit.Fixed(180), height = fit.Fixed(24)},
 			},
@@ -339,7 +339,7 @@ run_dashboard :: proc(builder: ^fit.Builder, h: ^Harness, groups: int) -> int {
 			u64(index * 4 + 3),
 			&h.dashboard_inputs[index],
 			"Filter",
-			{
+			fit.Builder_Text_Input_Options {
 				semantics = {name = "Filter"},
 				size = {width = fit.Fixed(150), height = fit.Fixed(24)},
 			},
