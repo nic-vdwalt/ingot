@@ -84,9 +84,14 @@ above the scissor each frame, so it stays pinned while the body scrolls.
 
 `freeze_cols` and `visible_h` are accepted by `table_begin`. `visible_h` caps
 the body height. Horizontal scrolling is not yet engaged (columns are sized to
-fit the body width via `grow`/`fixed`/`percent` tracks), so leading columns are
-always visible; `freeze_cols` reserves the API for a future horizontal-scroll
-mode.
+fit the body width via `grow`/`fixed`/`percent` or caller-measured `hug` tracks),
+so leading columns are always visible; `freeze_cols` reserves the API for a
+future horizontal-scroll mode.
+
+Tables do not retain or scan body cells to discover a widest intrinsic column.
+A table Hug track therefore carries a basis measured by the caller for the
+current declaration. Interactive resizing continues to replace it with the
+same explicit fixed-width override used for every other track kind.
 
 ## Hiding columns
 

@@ -147,6 +147,13 @@ View_Node :: struct {
 }
 ```
 
+`track.kind` is encoded directly as an append-only `u8`. `Fit`, `Grow`,
+`Fixed`, and `Percent` retain ordinals 0 through 3; `Hug` is ordinal 4. Existing
+version-1 documents remain byte-compatible. A version-1 reader built before
+`Hug` rejects a document containing that newer kind as `Bad_Enum`. Decoding does
+not infer intrinsic sizes; prepared layout measures Hug content in the current
+frame.
+
 `key` is identity and is never drawn. `label` is what the user sees. They are
 separate so that renaming a button in the builder cannot reset its state —
 `ui-state.md` requires identity be independent of display text.

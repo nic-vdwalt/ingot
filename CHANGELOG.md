@@ -11,6 +11,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
+- Prepared Fit rows preserve intrinsic controls until explicit `Fit` and `Grow`
+  compression capacity is exhausted; impossible layouts still compress Hug
+  tracks deterministically within the existing sibling bound.
 - Input route claims now occlude against the union of current and previous frame
   claims, preventing first-frame click-through while preserving late renewal.
 - `ingot:ui` and the managed `ingot:ui_gfx.App` and `ui_gfx.Session` hosts are
@@ -31,6 +34,10 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `fit.Hug()` and append-only `ui.Track_Kind.Hug` provide current-frame
+  intrinsic-priority sizing without retained widget state. Existing serialized
+  track ordinals and documents remain unchanged; older readers safely reject
+  new documents that contain Hug tracks.
 - `ingot:fit` safe modal lifecycle and `Surface_Modal_Builder_With`, including
   bounded stacking, keyboard ownership, focus containment, distinguishable
   close reasons, and optional host-scoped bounds.

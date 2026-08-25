@@ -704,6 +704,8 @@ track_px :: proc(u: ^Ui, track: Track) -> Track {
 	switch track.kind {
 	case .Fit:
 		return fit(basis, minimum, maximum)
+	case .Hug:
+		return hug(basis, minimum, maximum)
 	case .Grow:
 		return grow(track.weight, minimum, maximum)
 	case .Fixed:
