@@ -128,14 +128,33 @@ workspace_reference_path :: proc(reference: string) -> string {
 	if len(reference) == 0 || len(reference) > 256 do return reference
 	colon := strings.last_index_byte(reference, ':')
 	if colon <= 0 || colon + 1 >= len(reference) do return reference
-	line: u64 = 0
-	for digit in reference[colon + 1:] {
-		if digit < '0' || digit > '9' do return reference
-		line = line * 10 + u64(digit - '0')
-		if line > u64(max(i32)) do return reference
+	location := reference[colon + 1:]
+	dash := strings.index_byte(location, '-')
+	start_text := location
+	end_text := ""
+	if dash >= 0 {
+		if dash == 0 || dash + 1 >= len(location) do return reference
+		start_text = location[:dash]
+		end_text = location[dash + 1:]
 	}
-	if line == 0 do return reference
+	start, start_ok := workspace_reference_line(start_text)
+	if !start_ok do return reference
+	if len(end_text) > 0 {
+		end, end_ok := workspace_reference_line(end_text)
+		if !end_ok || end < start do return reference
+	}
 	return reference[:colon]
+}
+
+workspace_reference_line :: proc(value: string) -> (i32, bool) {
+	if len(value) == 0 || len(value) > 10 do return 0, false
+	line: u64
+	for digit in value {
+		if digit < '0' || digit > '9' do return 0, false
+		line = line * 10 + u64(digit - '0')
+		if line > u64(max(i32)) do return 0, false
+	}
+	return i32(line), line > 0
 }
 
 workspace_has_path_with :: proc(files: []string, rel: string) -> bool {

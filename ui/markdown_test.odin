@@ -72,6 +72,24 @@ md_heading_measure_matches_draw_size :: proc(t: ^testing.T) {
 }
 
 @(test)
+markdown_source_y_tracks_rendered_lines :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	ctx := markdown_context(&frame)
+	text := "# Heading\nplain\n- bullet"
+	heading_y := markdown_source_y(&ctx, 400, text, 0)
+	plain_y := markdown_source_y(&ctx, 400, text, len("# Heading\n"))
+	bullet_y := markdown_source_y(&ctx, 400, text, len("# Heading\nplain\n"))
+	testing.expect_value(t, heading_y, i32(0))
+	testing.expect(t, plain_y > heading_y)
+	testing.expect(t, bullet_y > plain_y)
+}
+
+@(test)
 md_match_url :: proc(t: ^testing.T) {
 	// Trailing sentence punctuation is trimmed from the URL.
 	src := "see http://x.com."
