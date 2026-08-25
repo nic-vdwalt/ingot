@@ -697,6 +697,7 @@ Ti_Clip_Result :: struct {
 ti_clip_frame :: proc(config: TI_Clip_Frame) -> Ti_Clip_Result {
 	assert(config.height > 0, "ti_clip_frame: non-positive height")
 	assert(config.sel_lo <= config.sel_hi, "ti_clip_frame: inverted selection")
+	assert(len(config.clipboard) <= INPUT_CLIPBOARD_CAP, "ti_clip_frame: clipboard over cap")
 	runtime := new(Ui_Runtime)
 	defer free(runtime)
 	ui_runtime_init(runtime)
@@ -721,8 +722,7 @@ ti_clip_frame :: proc(config: TI_Clip_Frame) -> Ti_Clip_Result {
 	input.screen_size = {800, 600}
 	input.keys_down[input_key_index(.LEFT_CONTROL)] = true
 	input.keys_pressed[input_key_index(config.key)] = true
-	copy(input.clipboard[:], transmute([]u8)config.clipboard)
-	input.clipboard_len = len(config.clipboard)
+	input.clipboard = config.clipboard
 
 	sb := strings.builder_make()
 	defer strings.builder_destroy(&sb)
@@ -813,6 +813,14 @@ text_input_paste_over_selection_budgets_after_the_delete :: proc(t: ^testing.T) 
 text_input_paste_strips_carriage_returns :: proc(t: ^testing.T) {
 	result := ti_clip_frame({text = "", key = .V, clipboard = "a\r\nb\r", height = 90})
 	testing.expect_value(t, result.text, "a\nb")
+}
+
+@(test)
+text_input_paste_accepts_more_than_legacy_clipboard_cap :: proc(t: ^testing.T) {
+	clipboard := strings.repeat("x", 4096 * 3, context.temp_allocator)
+	result := ti_clip_frame({key = .V, clipboard = clipboard, height = 90})
+	testing.expect_value(t, len(result.text), 4096 * 3)
+	testing.expect_value(t, result.text, clipboard)
 }
 
 // --- Pixel-to-column and incremental rewrap equivalence ----------------------
