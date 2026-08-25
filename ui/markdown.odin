@@ -2142,3 +2142,32 @@ hit_test_markdown :: proc(
 	}
 	return -1
 }
+
+markdown_source_y :: proc(ctx: ^Markdown_Context, width: i32, text: string, offset: int) -> i32 {
+	assert(ctx != nil && ctx.frame != nil, "markdown_source_y: invalid context")
+	assert(width > 0, "markdown_source_y: non-positive width")
+	assert(offset >= 0 && offset <= len(text), "markdown_source_y: invalid offset")
+	state := Markdown_Hit_State {
+		ctx       = ctx,
+		text      = text,
+		max_width = width,
+		mouse_x   = min(i32) / 4,
+		mouse_y   = min(i32) / 4,
+	}
+	line_start := 0
+	for index := 0; index <= len(text); index += 1 {
+		is_end := index == len(text)
+		if !is_end && text[index] != '\n' do continue
+		if offset >= line_start && offset <= index do return state.current_y
+		_, next, skipped := markdown_hit_line(&state, text[line_start:index], line_start, index)
+		if skipped {
+			assert(next > line_start, "markdown_source_y: table made no progress")
+			if offset < next do return state.current_y
+			line_start = next
+			index = next - 1
+			continue
+		}
+		line_start = index + 1
+	}
+	return state.current_y
+}

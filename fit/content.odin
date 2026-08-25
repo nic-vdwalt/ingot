@@ -62,6 +62,12 @@ Markdown_Hit_Test :: proc(
 	return ui.hit_test_markdown(&ctx.inner, x, y, width, text, mouse_x, mouse_y)
 }
 
+Markdown_Source_Y :: proc(ctx: ^Markdown_Context, width: i32, text: string, offset: int) -> i32 {
+	assert(ctx != nil, "Fit.Markdown_Source_Y: nil context")
+	assert(offset >= 0 && offset <= len(text), "Fit.Markdown_Source_Y: invalid offset")
+	return ui.markdown_source_y(&ctx.inner, width, text, offset)
+}
+
 Markdown_Draw :: proc(
 	ctx: ^Markdown_Context,
 	rect: Rect,
