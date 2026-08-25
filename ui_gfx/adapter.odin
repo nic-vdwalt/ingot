@@ -13,6 +13,7 @@ Adapter :: struct {
 	gfx_context:      ^rl.Context,
 	gfx_epoch:        u64,
 	attached_runtime: ^ui.Ui_Runtime,
+	clipboard:        [ui.INPUT_CLIPBOARD_CAP]u8,
 	fonts:            [FONT_CAP]rl.Font,
 	font_sizes:       [FONT_CAP]i32,
 	font_count:       int,
@@ -196,7 +197,7 @@ adapter_prepare_frame :: proc(adapter: ^Adapter, runtime: ^ui.Ui_Runtime, input:
 		)
 	}
 	assert(runtime != nil && input != nil, "adapter_prepare_frame: nil argument")
-	capture_input_context(adapter.gfx_context, input)
+	capture_input_context(adapter, input)
 	adapter_attach_runtime(adapter, runtime)
 	when ODIN_OS == .Darwin || ODIN_OS == .JS {
 		adapter_set_font_dpi(adapter, input.dpi_scale)
