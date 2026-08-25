@@ -30,8 +30,14 @@ table_test_frame :: proc(
 
 @(private = "file")
 resize_columns :: proc(buffer: []Table_Column) -> []Table_Column {
-	buffer[0] = {label = "Name", track = fixed(100)}
-	buffer[1] = {label = "Rest", track = grow(1, 0)}
+	buffer[0] = {
+		label = "Name",
+		track = fixed(100),
+	}
+	buffer[1] = {
+		label = "Rest",
+		track = grow(1, 0),
+	}
 	return buffer[:2]
 }
 
@@ -181,9 +187,18 @@ test_table_header_click_still_sorts :: proc(t: ^testing.T) {
 
 @(private = "file")
 reorder_columns :: proc(buffer: []Table_Column) -> []Table_Column {
-	buffer[0] = {label = "A", track = fixed(100)}
-	buffer[1] = {label = "B", track = fixed(100)}
-	buffer[2] = {label = "C", track = fixed(100)}
+	buffer[0] = {
+		label = "A",
+		track = fixed(100),
+	}
+	buffer[1] = {
+		label = "B",
+		track = fixed(100),
+	}
+	buffer[2] = {
+		label = "C",
+		track = fixed(100),
+	}
 	return buffer[:3]
 }
 
@@ -281,4 +296,3 @@ test_table_header_border_press_prefers_resize :: proc(t: ^testing.T) {
 	testing.expect(t, !st.reorder.active, "border press never starts a reorder")
 	testing.expect_value(t, int(st.order[0]), 0) // order untouched
 }
-

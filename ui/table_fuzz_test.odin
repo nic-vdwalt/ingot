@@ -14,16 +14,27 @@ fuzz_table_columns :: proc(buffer: []Table_Column, count: int) -> []Table_Column
 	for index in 0 ..< count {
 		// Alternate Grow and Fixed so both width paths are exercised.
 		if index % 2 == 0 {
-			buffer[index] = {label = "col", track = grow(1, 0)}
+			buffer[index] = {
+				label = "col",
+				track = grow(1, 0),
+			}
 		} else {
-			buffer[index] = {label = "col", track = fixed(40)}
+			buffer[index] = {
+				label = "col",
+				track = fixed(40),
+			}
 		}
 	}
 	return buffer[:count]
 }
 
 @(private = "file")
-fuzz_table_check :: proc(t: ^testing.T, st: ^Table_State, specs: []Table_Column, iter: int) -> bool {
+fuzz_table_check :: proc(
+	t: ^testing.T,
+	st: ^Table_State,
+	specs: []Table_Column,
+	iter: int,
+) -> bool {
 	// order is a permutation of 0..count-1.
 	seen: [TABLE_COLUMN_COUNT_MAX]bool
 	ok := true

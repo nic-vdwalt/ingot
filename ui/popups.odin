@@ -77,7 +77,12 @@ modal_open :: proc(
 	assert(frame != nil && frame.open, "modal_open: invalid frame")
 	assert(state != nil && id != Modal_Id(0), "modal_open: invalid state")
 	z := Z_MODAL + Z_Order(frame.runtime.modals.count)
-	claim := Rectangle{f32(config.screen.x), f32(config.screen.y), f32(config.screen.w), f32(config.screen.h)}
+	claim := Rectangle {
+		f32(config.screen.x),
+		f32(config.screen.y),
+		f32(config.screen.w),
+		f32(config.screen.h),
+	}
 	if !modal_runtime_register(frame, id, z, claim, !config.host_scoped) do return false
 	if !state.open {
 		state.opened_generation = frame.runtime.frame_generation
@@ -160,12 +165,7 @@ modal_begin :: proc(
 	mx := config.screen.x + (screen_w - mw) / 2
 	my := config.screen.y + (screen_h - mh) / 2
 	st.rect = Rect_I32{mx, my, mw, mh}
-	claim := Rectangle {
-		f32(config.screen.x),
-		f32(config.screen.y),
-		f32(screen_w),
-		f32(screen_h),
-	}
+	claim := Rectangle{f32(config.screen.x), f32(config.screen.y), f32(screen_w), f32(screen_h)}
 	layer_begin(frame, st.z, claim = claim)
 
 	// Dimmed inside the modal's z scope so it paints at the modal tier and
@@ -241,9 +241,9 @@ Popup_Placement :: enum u8 {
 Popup_Config :: struct {
 	anchor:          Rect_I32,
 	viewport:        Rect_I32,
-	preferred_size: [2]i32,
+	preferred_size:  [2]i32,
 	placement:       Popup_Placement,
-	dismiss_escape: bool,
+	dismiss_escape:  bool,
 	dismiss_outside: bool,
 	focus_scope:     Focus_Scope_Id,
 	initial_focus:   Focus_Opt,
@@ -266,7 +266,12 @@ popup_open :: proc(frame: ^Ui_Frame, state: ^Popup_State, id: Popup_Id, config: 
 	assert(state != nil && id != Popup_Id(0), "popup_open: invalid state")
 	assert(config.viewport.w > 0 && config.viewport.h > 0, "popup_open: empty viewport")
 	assert(config.preferred_size.x > 0 && config.preferred_size.y > 0, "popup_open: empty size")
-	state^ = {open = true, id = id, opened_generation = frame.runtime.frame_generation, config = config}
+	state^ = {
+		open              = true,
+		id                = id,
+		opened_generation = frame.runtime.frame_generation,
+		config            = config,
+	}
 }
 
 popup_is_open :: proc(state: ^Popup_State) -> bool {

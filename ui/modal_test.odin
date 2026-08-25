@@ -48,14 +48,19 @@ modal_viewport_centers_and_clamps_panel :: proc(t: ^testing.T) {
 		&runtime,
 		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
 	)
-	input := Ui_Input{screen_size = {320, 240}}
+	input := Ui_Input {
+		screen_size = {320, 240},
+	}
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
 	frame.output = output
 	ui_frame_begin(&frame, &runtime, &input)
 	state: Modal_State
-	config := Modal_Config{size = {200, 120}, screen = {0, 0, 320, 240}}
+	config := Modal_Config {
+		size   = {200, 120},
+		screen = {0, 0, 320, 240},
+	}
 	testing.expect(t, modal_open(&frame, &state, Modal_Id(1), config))
 	body := modal_begin(&frame, &state, "Modal", config)
 	testing.expect_value(t, state.rect, Rect_I32{60, 60, 200, 120})
@@ -75,7 +80,9 @@ modal_host_centers_and_claims_only_host :: proc(t: ^testing.T) {
 		&runtime,
 		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
 	)
-	input := Ui_Input{screen_size = {640, 480}}
+	input := Ui_Input {
+		screen_size = {640, 480},
+	}
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
@@ -83,8 +90,8 @@ modal_host_centers_and_claims_only_host :: proc(t: ^testing.T) {
 	ui_frame_begin(&frame, &runtime, &input)
 	state: Modal_State
 	config := Modal_Config {
-		size = {200, 120},
-		screen = {40, 30, 300, 220},
+		size        = {200, 120},
+		screen      = {40, 30, 300, 220},
 		host_scoped = true,
 	}
 	testing.expect(t, modal_open(&frame, &state, Modal_Id(1), config))

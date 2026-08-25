@@ -192,7 +192,12 @@ table_end :: proc(u: ^Ui, st: ^Table_State) {
 		}
 	}
 	if b.style.borders_outer {
-		draw_rectangle_lines_ex(frame, rect_f32(b.full), ui_frame_scf(frame, 1), theme.border_color)
+		draw_rectangle_lines_ex(
+			frame,
+			rect_f32(b.full),
+			ui_frame_scf(frame, 1),
+			theme.border_color,
+		)
 	}
 	b.active = false
 }
@@ -202,6 +207,7 @@ table_end :: proc(u: ^Ui, st: ^Table_State) {
 // match what flex_begin_tracks lays out for each row.
 @(private = "file")
 table_scale_track :: proc(frame: ^Ui_Frame, track: Track) -> Track {
+	assert(frame != nil && frame.open, "table scale track: invalid frame")
 	basis := ui_frame_sc(frame, track.basis)
 	minimum := ui_frame_sc(frame, track.min_size)
 	maximum := ui_frame_sc(frame, track.max_size) if track.max_size > 0 else 0
