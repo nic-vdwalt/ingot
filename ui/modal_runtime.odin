@@ -100,7 +100,10 @@ modal_runtime_register :: proc(
 ) -> bool {
 	assert(frame != nil && frame.open, "modal runtime register: invalid frame")
 	assert(id != Modal_Id(0), "modal runtime register: zero id")
-	assert(claim_all || (claim.width > 0 && claim.height > 0), "modal runtime register: empty claim")
+	assert(
+		claim_all || (claim.width > 0 && claim.height > 0),
+		"modal runtime register: empty claim",
+	)
 	runtime := &frame.runtime.modals
 	index := modal_runtime_find(runtime, id)
 	if index >= 0 {
@@ -138,6 +141,7 @@ modal_runtime_register :: proc(
 modal_top_id :: proc(frame: ^Ui_Frame) -> Modal_Id {
 	assert(frame != nil && frame.runtime != nil, "modal top: invalid frame")
 	runtime := &frame.runtime.modals
+	assert(runtime.count >= 0 && runtime.count <= MAX_MODAL_STACK, "modal top: invalid count")
 	if runtime.count == 0 do return Modal_Id(0)
 	return runtime.entries[runtime.count - 1].id
 }
@@ -149,6 +153,10 @@ modal_is_top :: proc(frame: ^Ui_Frame, state: ^Modal_State) -> bool {
 
 modal_owner_current :: proc(frame: ^Ui_Frame) -> Modal_Id {
 	assert(frame != nil, "modal owner current: nil frame")
+	assert(
+		frame.modal.owner_count >= 0 && frame.modal.owner_count <= MAX_MODAL_STACK,
+		"modal owner current: invalid count",
+	)
 	if frame.modal.owner_count == 0 do return Modal_Id(0)
 	return frame.modal.owners[frame.modal.owner_count - 1]
 }

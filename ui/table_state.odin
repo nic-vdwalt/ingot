@@ -54,10 +54,10 @@ Table_Build :: struct {
 // Table_Resize is the active border drag: which original column is being sized,
 // where the pointer grabbed it, and the column's width at grab time.
 Table_Resize :: struct {
-	active:   bool,
-	column:   i32,
-	start_x:  f32,
-	start_w:  i32,
+	active:  bool,
+	column:  i32,
+	start_x: f32,
+	start_w: i32,
 }
 
 // Table_Reorder is the active header drag: the display slot picked up, the x

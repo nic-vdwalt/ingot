@@ -262,9 +262,9 @@ Popup_Placement :: enum u8 {
 Popup_Options :: struct {
 	anchor:          Rect,
 	viewport:        Rect,
-	preferred_size: [2]i32,
+	preferred_size:  [2]i32,
 	placement:       Popup_Placement,
-	dismiss_escape: bool,
+	dismiss_escape:  bool,
 	dismiss_outside: bool,
 	focus_scope:     ui.Focus_Scope_Id,
 	initial_focus:   ui.Focus_Opt,

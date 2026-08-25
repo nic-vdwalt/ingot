@@ -26,8 +26,15 @@ scroll_frame :: proc(
 
 @(private = "file")
 scroll_columns :: proc(buffer: []Table_Column) -> []Table_Column {
-	buffer[0] = {label = "Name", track = grow(1, 0)}
-	buffer[1] = {label = "Value", track = grow(1, 0), numeric = true}
+	buffer[0] = {
+		label = "Name",
+		track = grow(1, 0),
+	}
+	buffer[1] = {
+		label   = "Value",
+		track   = grow(1, 0),
+		numeric = true,
+	}
 	return buffer[:2]
 }
 

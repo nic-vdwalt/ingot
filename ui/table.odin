@@ -237,7 +237,16 @@ table_header_ex :: proc(
 	flex_row_end(u)
 	scope_end(u)
 
-	if table_header_pointer(u, st, style, rects[:n], bounds[:n + 1], cols[:n], header_y, header_h) {
+	if table_header_pointer(
+		u,
+		st,
+		style,
+		rects[:n],
+		bounds[:n + 1],
+		cols[:n],
+		header_y,
+		header_h,
+	) {
 		changed = true
 	}
 	return changed
@@ -299,11 +308,7 @@ table_header_pointer :: proc(
 // table_header_hovered_slot returns the display slot under the pointer, or -1
 // when the pointer is outside the header band.
 @(private = "file")
-table_header_hovered_slot :: proc(
-	rects: []Rect_I32,
-	mouse: Vec2,
-	header_y, header_h: i32,
-) -> int {
+table_header_hovered_slot :: proc(rects: []Rect_I32, mouse: Vec2, header_y, header_h: i32) -> int {
 	if mouse.y < f32(header_y) || mouse.y >= f32(header_y + header_h) do return -1
 	for rect, slot in rects {
 		if mouse.x >= f32(rect.x) && mouse.x < f32(rect.x + rect.w) do return slot

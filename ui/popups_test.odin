@@ -76,19 +76,23 @@ popup_layout_clamps_to_offset_viewport :: proc(t: ^testing.T) {
 @(test)
 popup_placement_flips_and_clamps :: proc(t: ^testing.T) {
 	viewport := Rect_I32{0, 0, 300, 200}
-	below := popup_placed_layout({
-		anchor = {100, 20, 40, 20},
-		viewport = viewport,
-		preferred_size = {120, 80},
-		placement = .Auto,
-	})
+	below := popup_placed_layout(
+		{
+			anchor = {100, 20, 40, 20},
+			viewport = viewport,
+			preferred_size = {120, 80},
+			placement = .Auto,
+		},
+	)
 	testing.expect_value(t, below.rect, Rectangle{100, 40, 120, 80})
-	above := popup_placed_layout({
-		anchor = {100, 170, 40, 20},
-		viewport = viewport,
-		preferred_size = {120, 80},
-		placement = .Auto,
-	})
+	above := popup_placed_layout(
+		{
+			anchor = {100, 170, 40, 20},
+			viewport = viewport,
+			preferred_size = {120, 80},
+			placement = .Auto,
+		},
+	)
 	testing.expect_value(t, above.rect, Rectangle{100, 90, 120, 80})
 }
 
@@ -102,7 +106,9 @@ popup_ignores_opening_click_and_reports_escape :: proc(t: ^testing.T) {
 		&runtime,
 		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
 	)
-	input := Ui_Input{screen_size = {300, 200}}
+	input := Ui_Input {
+		screen_size = {300, 200},
+	}
 	input.mouse_pressed[0] = true
 	frame: Ui_Frame
 	output := new(Ui_Output)
@@ -110,11 +116,11 @@ popup_ignores_opening_click_and_reports_escape :: proc(t: ^testing.T) {
 	frame.output = output
 	ui_frame_begin(&frame, &runtime, &input)
 	config := Popup_Config {
-		anchor = {20, 20, 1, 1},
-		viewport = {0, 0, 300, 200},
-		preferred_size = {120, 80},
-		placement = .Point,
-		dismiss_escape = true,
+		anchor          = {20, 20, 1, 1},
+		viewport        = {0, 0, 300, 200},
+		preferred_size  = {120, 80},
+		placement       = .Point,
+		dismiss_escape  = true,
 		dismiss_outside = true,
 	}
 	state: Popup_State

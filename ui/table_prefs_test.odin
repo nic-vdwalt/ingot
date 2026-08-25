@@ -5,9 +5,19 @@ import "core:testing"
 
 @(private = "file")
 prefs_columns :: proc(buffer: []Table_Column) -> []Table_Column {
-	buffer[0] = {label = "Name", track = grow(1, 0)}
-	buffer[1] = {label = "Count", track = fixed(80), numeric = true}
-	buffer[2] = {label = "State", track = grow(1, 0)}
+	buffer[0] = {
+		label = "Name",
+		track = grow(1, 0),
+	}
+	buffer[1] = {
+		label   = "Count",
+		track   = fixed(80),
+		numeric = true,
+	}
+	buffer[2] = {
+		label = "State",
+		track = grow(1, 0),
+	}
 	return buffer[:3]
 }
 

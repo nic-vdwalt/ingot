@@ -66,13 +66,37 @@ main :: proc() {
 
 seed_rows :: proc(data: ^App_State) {
 	names := []string {
-		"alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel",
-		"india", "juliet", "kilo", "lima", "mike", "november", "oscar", "papa",
-		"quebec", "romeo", "sierra", "tango", "uniform", "victor", "whiskey", "xray",
+		"alpha",
+		"bravo",
+		"charlie",
+		"delta",
+		"echo",
+		"foxtrot",
+		"golf",
+		"hotel",
+		"india",
+		"juliet",
+		"kilo",
+		"lima",
+		"mike",
+		"november",
+		"oscar",
+		"papa",
+		"quebec",
+		"romeo",
+		"sierra",
+		"tango",
+		"uniform",
+		"victor",
+		"whiskey",
+		"xray",
 	}
 	states := []string{"idle", "running", "blocked", "done"}
 	for name, index in names {
-		append(&data.rows, Row{name = name, count = (index * 37) % 500, state = states[index % len(states)]})
+		append(
+			&data.rows,
+			Row{name = name, count = (index * 37) % 500, state = states[index % len(states)]},
+		)
 	}
 }
 
@@ -82,10 +106,7 @@ draw :: proc(app: ^ui_gfx.App, form: ^ui.Ui, user_data: rawptr) {
 
 	ui.padding(form, .MD)
 	ui.label(form, "Ingot tables demo", ui.ui_frame_metrics(form.frame).FONT_SIZE_TITLE)
-	ui.label(
-		form,
-		"Resize borders, drag headers to reorder, click to sort, tick Columns to hide.",
-	)
+	ui.label(form, "Resize borders, drag headers to reorder, click to sort, tick Columns to hide.")
 	ui.space(form, .SM)
 
 	ui.row_begin(form, 30, .SM, .Center)
@@ -109,11 +130,25 @@ draw :: proc(app: ^ui_gfx.App, form: ^ui.Ui, user_data: rawptr) {
 	ui.space(form, .SM)
 	sort_rows(data)
 
-	win := ui.table_begin(form, "tbl", data.columns[:], &data.table, data.style, 28, len(data.rows))
+	win := ui.table_begin(
+		form,
+		"tbl",
+		data.columns[:],
+		&data.table,
+		data.style,
+		28,
+		len(data.rows),
+	)
 	last := min(win.first + win.visible_rows, len(data.rows))
 	for index in win.first ..< last {
 		row := data.rows[index]
-		result := ui.table_row(form, &data.table, index, row.name, selected = data.selected == index)
+		result := ui.table_row(
+			form,
+			&data.table,
+			index,
+			row.name,
+			selected = data.selected == index,
+		)
 		if result.clicked do data.selected = index
 		ui.cell(form, row.name)
 		ui.cell_value(form, fmt.tprintf("%d", row.count))
