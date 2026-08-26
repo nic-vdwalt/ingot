@@ -29,6 +29,7 @@ and browser WASM/WebGPU.
 
 - Native and web builds from one source
 - Immediate-mode UI for desktop tools
+- Bounded named commands and contextual keyboard shortcuts
 - Batched 2D graphics, input, audio, networking, accessibility, and terminals
 - Event-driven rendering with near-zero idle work
 - Deterministic, bounded test harnesses
@@ -153,6 +154,8 @@ odin run examples/gallery -collection:ingot=.
 ## Documentation
 
 - [API layers](docs/api-layers.md)
+- [Commands and shortcuts](docs/commands.md)
+- [Borrowed UI ideas](docs/borrowed-ui-ideas.md)
 - [Testing](docs/testing.md)
 - [Compatibility](docs/compatibility.md)
 - [Rendering](docs/rendering.md)

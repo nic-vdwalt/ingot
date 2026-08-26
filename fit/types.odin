@@ -1,5 +1,6 @@
 package fit
 
+import "ingot:action"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
@@ -33,6 +34,16 @@ Action :: struct {
 	user_data:        rawptr,
 	tag:              u64,
 }
+
+Command_Id :: action.Command_Id
+Command_Context_Id :: action.Context_Id
+Command_Keymap :: action.Keymap
+Command_Binding :: action.Binding
+Command_Keystroke :: action.Keystroke
+Command_Modifier :: action.Modifier
+Command_Modifiers :: action.Modifiers
+COMMAND_ID_NONE :: action.COMMAND_ID_NONE
+COMMAND_CONTEXT_NONE :: action.CONTEXT_ID_NONE
 
 @(private = "package")
 STORAGE_NODE_SIZE :: size_of(ui.Prepared_Node)

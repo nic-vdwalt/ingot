@@ -1,5 +1,6 @@
 {
   "test_packages": [
+    "action",
     "asset",
     "box3d_workers",
     "ecs",
@@ -20,6 +21,7 @@
     "fuzz/fuzzx"
   ],
   "check_packages": [
+    "action",
     "asset",
     "box3d_workers",
     "ecs",
