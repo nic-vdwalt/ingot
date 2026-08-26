@@ -34,6 +34,11 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- Bounded frame-local raw pointer events across `gfx`, `ui`, `ui_gfx`, and
+  `fit`, including browser mouse/touch/pen identity, simultaneous contacts,
+  pressure, cancellation, deterministic injection, and explicit overflow.
+  Existing mouse controls and web tap-to-click/drag-to-scroll behavior remain
+  unchanged; applications own all persistent pointer and gesture state.
 - `ingot:action` bounded command IDs, exact-modifier keystrokes, contextual
   bindings, and transactional keymap replacement. `ui.command_take` and the
   `fit.Command_Take`/`Surface_Command_Take` facades resolve one command against

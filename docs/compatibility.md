@@ -73,8 +73,9 @@ it changes nothing.
 
 `gfx.capabilities()` reports runtime-independent support boundaries for default
 text, text shaping and fallback, path texture loading, SVG and animated images,
-IME positioning, window controls, render targets, the explicit GPU 3D API,
-raylib mesh compatibility, and general `rlgl`. Check it
+raw pointer events, multi-pointer input, pointer pressure, IME positioning,
+window controls, render targets, the explicit GPU 3D API, raylib mesh
+compatibility, and general `rlgl`. Check it
 before selecting platform-limited paths. The explicit GPU 3D API is supported;
 legacy `GenMeshSphere`/`DrawMesh` remains an approximation and is reported
 separately as unsupported raylib mesh compatibility.
@@ -114,7 +115,9 @@ classified without waiting on a future release:
 - Models, meshes, materials, and skeletal animation. Use Ingot's explicit GPU
   3D API for depth-capable mesh work.
 - All `DrawSpline*` procedures.
-- Gestures and touch input.
+- Framework-owned gesture recognition. Raw pointer events are available, but
+  applications own gesture state and policy. Native GLFW currently reports
+  mouse pointers only; web builds report bounded mouse, touch, and pen events.
 - VR and stereo rendering.
 - Complete raymath. Ingot exposes only the few helpers its own consumers use.
   `core:math/linalg` is Odin's general-purpose vector and matrix package and

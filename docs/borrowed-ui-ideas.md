@@ -18,7 +18,7 @@ model or require callers to synchronize a widget tree.
 | Named commands and configurable shortcuts | Current-frame command contexts over caller-owned handlers and state | Adopt only for concrete editor/tool workflows after existing keyboard, text-input, focus, and modal behavior is characterized |
 | Shaped multilingual text and fallback | A bounded runtime shaping service producing immutable derived glyph runs | Approve only after a dependency, safety, native/web reproducibility, memory, and editing-correctness review |
 | SVG and animated images | Explicit bounded assets plus caller-owned playback state and redraw deadlines | Adopt formats independently when parser attack surface, decode bounds, and product demand justify them |
-| Pointer and touch input | A bounded pointer-event stream with pure recognizers using caller-owned state | Add the smallest gestures required by demonstrated browser or touch-device workflows |
+| Pointer and touch input | Accepted raw slice: a bounded current-frame pointer-event stream; gesture state remains caller-owned | Add recognizers separately only when a demonstrated workflow requires them |
 | Reusing passive derived output | Optional immutable paint/measurement snapshots; behavior always rebuilds from caller data | Implement only when active-frame benchmarks show a meaningful end-to-end win |
 | Better diagnostics and examples | Test-driver injection, debug-overlay state, focused examples, and machine-readable capabilities | Add alongside each accepted feature rather than as a parity checklist |
 | Platform evidence | Revision-pinned records for behavior Ingot actually claims | Record evidence per shipped capability; unsupported work remains absent or explicitly blocked |

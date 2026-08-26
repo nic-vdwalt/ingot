@@ -305,10 +305,9 @@ test_driver_input :: proc(input: Test_Input) -> ui.Ui_Input {
 		input.pointer_events_overflowed ||
 		input.pointer_event_count < 0 ||
 		input.pointer_event_count > ui.INPUT_POINTER_EVENT_CAP
-	copy(
-		result.pointer_events[:result.pointer_event_count],
-		input.pointer_events[:result.pointer_event_count],
-	)
+	for index in 0 ..< result.pointer_event_count {
+		result.pointer_events[index] = input.pointer_events[index]
+	}
 	result.character_count = min(input.character_count, len(result.characters))
 	for index in 0 ..< result.character_count do result.characters[index] = input.characters[index]
 	clipboard_len := ui.input_clip_utf8(input.clipboard, ui.INPUT_CLIPBOARD_CAP)

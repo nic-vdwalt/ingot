@@ -33,11 +33,12 @@ ingot_web_pointer :: proc "contextless" (
 	if kind < i32(Pointer_Event_Kind.Move) || kind > i32(Pointer_Event_Kind.Cancel) do return
 	if button < -1 || button > i32(Pointer_Button.Back) do return
 	if buttons & ~u32(POINTER_BUTTON_MASK) != 0 do return
-	if !(pressure >= 0 && pressure <= 1) do pressure = 0
+	resolved_pressure := pressure
+	if !(resolved_pressure >= 0 && resolved_pressure <= 1) do resolved_pressure = 0
 	event := Pointer_Event {
 		id           = Pointer_Id(id),
 		position     = {x, y},
-		pressure     = pressure,
+		pressure     = resolved_pressure,
 		buttons      = Pointer_Buttons(buttons),
 		kind         = Pointer_Event_Kind(kind),
 		pointer_type = Pointer_Type(pointer_type),
