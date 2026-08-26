@@ -53,6 +53,36 @@ frame_characters_reports_typed_runes :: proc(t: ^testing.T) {
 }
 
 @(test)
+frame_pointer_events_reports_order_and_overflow :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	input: Ui_Input
+	input.pointer_events[0] = {
+		id           = 3,
+		kind         = .Down,
+		pointer_type = .Touch,
+		button       = .Left,
+	}
+	input.pointer_events[1] = {
+		id           = 4,
+		kind         = .Move,
+		pointer_type = .Pen,
+		button       = .None,
+	}
+	input.pointer_event_count = 2
+	input.pointer_events_overflowed = true
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime, &input)
+	defer ui_frame_end(&frame)
+	events := frame_pointer_events(&frame)
+	testing.expect_value(t, len(events), 2)
+	testing.expect_value(t, events[0].id, Pointer_Id(3))
+	testing.expect_value(t, events[1].id, Pointer_Id(4))
+	testing.expect(t, frame_pointer_events_overflowed(&frame))
+}
+
+@(test)
 frame_characters_consume_clears_queue :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
@@ -98,6 +128,14 @@ frame_user_input_active_detects_every_source :: proc(t: ^testing.T) {
 	typed: Ui_Input
 	typed.character_count = 1
 	expect_active(t, &runtime, &typed, true)
+
+	pointer: Ui_Input
+	pointer.pointer_event_count = 1
+	expect_active(t, &runtime, &pointer, true)
+
+	pointer_overflow: Ui_Input
+	pointer_overflow.pointer_events_overflowed = true
+	expect_active(t, &runtime, &pointer_overflow, true)
 
 	clicked: Ui_Input
 	clicked.mouse_down[MouseButton.LEFT] = true
