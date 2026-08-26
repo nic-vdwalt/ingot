@@ -40,6 +40,21 @@ get_mouse_delta :: proc(frame: ^Ui_Frame) -> Vector2 {
 	return frame_input(frame).mouse_delta
 }
 
+frame_pointer_events :: proc(frame: ^Ui_Frame) -> []Pointer_Event {
+	assert(frame != nil, "frame_pointer_events: nil frame")
+	input := frame_input(frame)
+	assert(
+		input.pointer_event_count >= 0 && input.pointer_event_count <= INPUT_POINTER_EVENT_CAP,
+		"frame_pointer_events: pointer event count out of range",
+	)
+	return input.pointer_events[:input.pointer_event_count]
+}
+
+frame_pointer_events_overflowed :: proc(frame: ^Ui_Frame) -> bool {
+	assert(frame != nil, "frame_pointer_events_overflowed: nil frame")
+	return frame_input(frame).pointer_events_overflowed
+}
+
 get_mouse_wheel_move :: proc(frame: ^Ui_Frame) -> f32 {
 	if !modal_keyboard_visible(frame) do return 0
 	return frame_input(frame).mouse_wheel.y
@@ -159,6 +174,7 @@ frame_user_input_active :: proc(frame: ^Ui_Frame) -> bool {
 	input := frame_input(frame)
 	assert(input != nil, "frame_user_input_active: nil input")
 	if input.mouse_delta != {0, 0} do return true
+	if input.pointer_event_count > 0 || input.pointer_events_overflowed do return true
 	if input.mouse_wheel != {0, 0} do return true
 	if input.character_count > 0 do return true
 	for down in input.mouse_down {
