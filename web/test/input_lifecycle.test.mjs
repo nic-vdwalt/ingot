@@ -10,6 +10,7 @@ const exports = {
 	ingot_web_char() {},
 	ingot_web_preedit_clear() {},
 	ingot_web_preedit_char() {},
+	ingot_web_pointer() {},
 	ingot_web_mouse_move() {},
 	ingot_web_mouse_button() {},
 	ingot_web_wheel() {},
@@ -51,6 +52,7 @@ function recorder() {
 		events,
 		exports: {
 			...exports,
+			ingot_web_pointer: (...args) => events.push(["pointer", ...args]),
 			ingot_web_mouse_move: (x, y) => events.push(["move", x, y]),
 			ingot_web_mouse_button: (b, down) => events.push(["button", b, down]),
 			ingot_web_wheel: (dx, dy) => events.push(["wheel", dx, dy]),
@@ -76,6 +78,10 @@ test("a touch tap under the slop presses and releases once", async () => {
 	const buttons = events.filter((e) => e[0] === "button");
 	assert.deepEqual(buttons, [["button", 0, true], ["button", 0, false]]);
 	assert.equal(events.some((e) => e[0] === "wheel"), false, "a tap must not scroll");
+	assert.deepEqual(
+		events.filter((e) => e[0] === "pointer").map((e) => e[3]),
+		[1, 0, 2],
+	);
 	detach();
 });
 
@@ -124,6 +130,7 @@ test("a cancelled touch abandons the pending tap", async () => {
 	await canvas.dispatch("pointercancel", touch(1, 50, 50));
 	await canvas.dispatch("pointerup", touch(1, 50, 50));
 	assert.equal(events.some((e) => e[0] === "button"), false);
+	assert.equal(events.filter((e) => e[0] === "pointer").at(-1)[3], 3);
 	detach();
 });
 
@@ -143,6 +150,44 @@ test("mouse input is unaffected by the touch path", async () => {
 		[["button", 0, true], ["button", 0, false]],
 	);
 	assert.equal(events.some((e) => e[0] === "wheel"), false);
+	detach();
+});
+
+test("simultaneous pointer IDs and pen pressure remain distinct", async () => {
+	const canvas = stubDocument.getElementById("ingot-canvas");
+	const { events, exports: ex } = recorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+
+	await canvas.dispatch("pointerdown", { ...touch(21, 10, 20), buttons: 1, pressure: 0.75, isPrimary: true });
+	await canvas.dispatch("pointerdown", { ...touch(22, 30, 40), buttons: 1, pressure: 0.5 });
+	await canvas.dispatch("pointerdown", {
+		pointerType: "pen", pointerId: 23, button: 0, buttons: 1,
+		offsetX: 50, offsetY: 60, pressure: 0.625, isPrimary: true,
+	});
+	const raw = events.filter((e) => e[0] === "pointer");
+	assert.deepEqual(raw.map((e) => e[1]), [21, 22, 23]);
+	assert.deepEqual(raw.map((e) => e[2]), [2, 2, 3]);
+	assert.equal(raw[2][8], 0.625);
+	assert.equal(raw[2][9], true);
+	detach();
+});
+
+test("pointer buttons remap browser right and middle bits", async () => {
+	const canvas = stubDocument.getElementById("ingot-canvas");
+	const { events, exports: ex } = recorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	await canvas.dispatch("pointerdown", {
+		pointerType: "mouse", pointerId: 31, button: 2, buttons: 2,
+		offsetX: 5, offsetY: 6,
+	});
+	await canvas.dispatch("pointermove", {
+		pointerType: "mouse", pointerId: 31, button: -1, buttons: 6,
+		offsetX: 6, offsetY: 7,
+	});
+	const raw = events.filter((e) => e[0] === "pointer");
+	assert.equal(raw[0][4], 1);
+	assert.equal(raw[0][5], 2);
+	assert.equal(raw[1][5], 6);
 	detach();
 });
 

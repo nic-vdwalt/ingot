@@ -33,12 +33,34 @@ when INGOT_INPUT_SIM {
 		}
 		ctx.inp.mouse_prev = ctx.inp.mouse
 		ctx.inp.mouse_delta = {}
+		ctx.inp.pointer_event_count = 0
+		ctx.inp.pointer_events_overflowed = false
 		ctx.inp.wheel = ctx.inp.wheel_pending
 		ctx.inp.wheel_pending = {}
 	}
 
 	SimBeginFrame :: proc() {
 		context_sim_begin_frame(default_context())
+	}
+
+	context_sim_pointer :: proc(ctx: ^Context, event: Pointer_Event) -> bool {
+		assert(ctx != nil, "context_sim_pointer: nil context")
+		assert(pointer_event_valid(event), "context_sim_pointer: invalid event")
+		assert(
+			ctx.inp.pointer_event_count >= 0 && ctx.inp.pointer_event_count <= POINTER_EVENTS_MAX,
+			"context_sim_pointer: invalid count",
+		)
+		if ctx.inp.pointer_event_count == POINTER_EVENTS_MAX {
+			ctx.inp.pointer_events_overflowed = true
+			return false
+		}
+		ctx.inp.pointer_events[ctx.inp.pointer_event_count] = event
+		ctx.inp.pointer_event_count += 1
+		return true
+	}
+
+	SimPointer :: proc(event: Pointer_Event) -> bool {
+		return context_sim_pointer(default_context(), event)
 	}
 
 	context_sim_mouse :: proc(ctx: ^Context, x, y: f32) {
