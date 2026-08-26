@@ -240,3 +240,45 @@ test("key repeat is reported as repeat, not as a fresh press", async () => {
 	assert.deepEqual(keys, [[259, true, false], [259, true, true], [259, false, false]]);
 	detach();
 });
+
+test("pointer events synchronize Option held before canvas focus", async () => {
+	const { keys, exports: ex } = keyRecorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	const canvas = stubDocument.getElementById("ingot-canvas");
+	const pointer = {
+		pointerType: "mouse", pointerId: 7, button: 0,
+		offsetX: 5, offsetY: 6, altKey: true,
+		shiftKey: false, ctrlKey: false, metaKey: false,
+	};
+
+	await canvas.dispatch("pointerdown", pointer);
+	await canvas.dispatch("pointermove", pointer);
+	assert.deepEqual(keys, [[342, true, false]]);
+	await canvas.dispatch("pointerup", { ...pointer, altKey: false });
+	assert.deepEqual(keys, [[342, true, false], [342, false, false]]);
+	detach();
+});
+
+test("pointer leave preserves captured drag input", async () => {
+	const events = [];
+	const ex = {
+		...exports,
+		ingot_web_key: (k, down, repeat) => events.push(["key", k, down, repeat]),
+		ingot_web_mouse_button: (b, down) => events.push(["button", b, down]),
+		ingot_web_hover: (hovered) => events.push(["hover", hovered]),
+	};
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	const canvas = stubDocument.getElementById("ingot-canvas");
+	const pointer = {
+		pointerType: "mouse", pointerId: 7, button: 0,
+		offsetX: 5, offsetY: 6, altKey: true,
+		shiftKey: false, ctrlKey: false, metaKey: false,
+	};
+
+	await canvas.dispatch("pointerdown", pointer);
+	await canvas.dispatch("pointerleave", pointer);
+	assert.equal(events.some((event) => event[0] === "hover" && event[1] === false), false);
+	assert.equal(events.some((event) => event[0] === "key" && event[2] === false), false);
+	assert.equal(events.some((event) => event[0] === "button" && event[2] === false), false);
+	detach();
+});

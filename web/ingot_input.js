@@ -134,6 +134,25 @@
 			if (x && k !== undefined) x.ingot_web_key(k, false, false);
 		}
 
+		function syncModifiers(e) {
+			const x = ex();
+			if (!x) return;
+			for (const [key, down] of [
+				[KEY.ShiftLeft, e.shiftKey],
+				[KEY.ControlLeft, e.ctrlKey],
+				[KEY.AltLeft, e.altKey],
+				[KEY.MetaLeft, e.metaKey],
+			]) {
+				if (down && !pressedKeys.has(key)) {
+					pressedKeys.add(key);
+					x.ingot_web_key(key, true, false);
+				} else if (!down && pressedKeys.has(key)) {
+					pressedKeys.delete(key);
+					x.ingot_web_key(key, false, false);
+				}
+			}
+		}
+
 		listen(canvas, "keydown", onKeydown);
 		listen(canvas, "keyup", onKeyup);
 		listen(ime, "keydown", onKeydown);
@@ -175,6 +194,7 @@
 		listen(canvas, "pointermove", function (e) {
 			const x = ex();
 			if (!x) return;
+			syncModifiers(e);
 			if (isTouch(e)) {
 				const touch = touches.get(e.pointerId);
 				if (touch === undefined) return;
@@ -205,6 +225,7 @@
 			const x = ex();
 			if (!x) return;
 			canvas.focus();
+			syncModifiers(e);
 			canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
 			x.ingot_web_mouse_move(e.offsetX, e.offsetY);
 			const b = BTN[e.button];
@@ -231,6 +252,7 @@
 		listen(canvas, "pointerup", function (e) {
 			const x = ex();
 			if (!x) return;
+			syncModifiers(e);
 			if (isTouch(e)) {
 				const touch = touches.get(e.pointerId);
 				touches.delete(e.pointerId);
@@ -298,10 +320,15 @@
 		listen(document, "visibilitychange", function () {
 			if (document.visibilityState !== "visible") releaseHeldInput();
 		});
-		listen(canvas, "pointerenter", function () {
-			const x = ex(); if (x) x.ingot_web_hover(true);
+		listen(canvas, "pointerenter", function (e) {
+			const x = ex();
+			if (!x) return;
+			x.ingot_web_hover(true);
+			syncModifiers(e);
 		});
 		listen(canvas, "pointerleave", function () {
+			if (pressedButtons.size > 0) return;
+			releaseHeldInput();
 			const x = ex(); if (x) x.ingot_web_hover(false);
 		});
 		listen(canvas, "blur", function (e) {
