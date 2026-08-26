@@ -34,6 +34,13 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- `ingot:action` bounded command IDs, exact-modifier keystrokes, contextual
+  bindings, and transactional keymap replacement. `ui.command_take` and the
+  `fit.Command_Take`/`Surface_Command_Take` facades resolve one command against
+  the current frame, consume matching text input, and retain no application behavior.
+- A borrowed-ideas guide records how concepts from other UI frameworks are
+  evaluated independently against concrete Ingot workloads, immediate-mode
+  ownership, Tiger Style limits, measurements, and platform evidence.
 - `fit.Hug()` and append-only `ui.Track_Kind.Hug` provide current-frame
   intrinsic-priority sizing without retained widget state. Existing serialized
   track ordinals and documents remain unchanged; older readers safely reject
