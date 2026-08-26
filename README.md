@@ -156,6 +156,7 @@ odin run examples/gallery -collection:ingot=.
 - [API layers](docs/api-layers.md)
 - [Commands and shortcuts](docs/commands.md)
 - [Borrowed UI ideas](docs/borrowed-ui-ideas.md)
+- [Text and asset dependency policy](docs/text-asset-dependency-policy.md)
 - [Testing](docs/testing.md)
 - [Compatibility](docs/compatibility.md)
 - [Rendering](docs/rendering.md)
