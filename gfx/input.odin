@@ -43,6 +43,9 @@ Input :: struct {
 	mouse:                Vector2,
 	mouse_prev:           Vector2,
 	mouse_delta:          Vector2,
+	st_mouse:             Vector2,
+	st_mouse_valid:       bool,
+	mouse_initialized:    bool,
 	mb_down:              [8]bool,
 	mb_pressed:           [8]bool,
 	mb_released:          [8]bool,
@@ -107,7 +110,7 @@ input_poll :: proc(ctx: ^Context) {
 	inp.char_h, inp.char_t = 0, 0
 	inp.key_h, inp.key_t = 0, 0
 	inp.wheel_pending = {0, 0}
-	inp.mouse_prev = inp.mouse
+	when ODIN_OS != .JS do inp.mouse_prev = inp.mouse
 
 	// Pump backend events. In event-driven mode the gate may block here
 	// (platform_wait_events) until input/OS damage arrives or the timeout
@@ -123,9 +126,13 @@ input_poll :: proc(ctx: ^Context) {
 	_drop_hover_publish(ctx)
 	_input_publish_staged(inp)
 
-	mx, my := platform_cursor_pos(ctx)
-	inp.mouse = {f32(mx), f32(my)}
-	inp.mouse_delta = {inp.mouse.x - inp.mouse_prev.x, inp.mouse.y - inp.mouse_prev.y}
+	when ODIN_OS == .JS {
+		_input_publish_staged_mouse(inp)
+	} else {
+		mx, my := platform_cursor_pos(ctx)
+		inp.mouse = {f32(mx), f32(my)}
+		inp.mouse_delta = {inp.mouse.x - inp.mouse_prev.x, inp.mouse.y - inp.mouse_prev.y}
+	}
 	inp.wheel = inp.wheel_pending
 
 	for b in 0 ..< 8 {
@@ -161,6 +168,24 @@ _input_reset_mouse_edges :: proc(inp: ^Input) {
 		inp.mb_pressed[button] = false
 		inp.mb_released[button] = false
 	}
+}
+
+@(private)
+_input_publish_staged_mouse :: proc(inp: ^Input) {
+	assert(inp != nil, "_input_publish_staged_mouse: nil input")
+	inp.mouse_delta = {}
+	if !inp.st_mouse_valid do return
+	position := inp.st_mouse
+	inp.st_mouse_valid = false
+	if !inp.mouse_initialized {
+		inp.mouse = position
+		inp.mouse_prev = position
+		inp.mouse_initialized = true
+		return
+	}
+	inp.mouse_prev = inp.mouse
+	inp.mouse = position
+	inp.mouse_delta = inp.mouse - inp.mouse_prev
 }
 
 // --- queue helpers (shared; called by the platform input backend) ----------

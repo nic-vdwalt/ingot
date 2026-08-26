@@ -104,7 +104,8 @@ ingot_web_mouse_move :: proc "contextless" (x, y: f32) {
 	ctx := _web_owner_context()
 	if ctx == nil do return
 	_idle_note_activity(&ctx.idle)
-	ctx.inp.mouse = {x, y}
+	ctx.inp.st_mouse = {x, y}
+	ctx.inp.st_mouse_valid = true
 	ctx.inp.cursor_on_screen = true
 }
 
@@ -138,6 +139,8 @@ ingot_web_hover :: proc "contextless" (hovered: bool) {
 		// releasing focus/hover: clear held keys and buttons so nothing sticks
 		ctx.inp.key_down = {}
 		ctx.inp.mb_down = {}
+		ctx.inp.st_mouse_valid = false
+		ctx.inp.mouse_initialized = false
 	}
 }
 

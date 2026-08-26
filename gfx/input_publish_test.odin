@@ -120,3 +120,52 @@ input_publish_staged_accumulates_wheel :: proc(t: ^testing.T) {
 	testing.expect_value(t, inp.wheel_pending, Vector2{4, 6})
 	testing.expect_value(t, inp.st_wheel, Vector2{})
 }
+
+@(test)
+input_publish_staged_mouse_initializes_without_jump :: proc(t: ^testing.T) {
+	inp := new(Input)
+	defer free(inp)
+	inp.st_mouse = {320, 180}
+	inp.st_mouse_valid = true
+
+	_input_publish_staged_mouse(inp)
+
+	testing.expect_value(t, inp.mouse, Vector2{320, 180})
+	testing.expect_value(t, inp.mouse_prev, Vector2{320, 180})
+	testing.expect_value(t, inp.mouse_delta, Vector2{})
+	testing.expect(t, inp.mouse_initialized)
+	testing.expect(t, !inp.st_mouse_valid)
+}
+
+@(test)
+input_publish_staged_mouse_reports_latest_frame_delta :: proc(t: ^testing.T) {
+	inp := new(Input)
+	defer free(inp)
+	inp.mouse = {320, 180}
+	inp.mouse_prev = inp.mouse
+	inp.mouse_initialized = true
+	inp.st_mouse = {327, 191}
+	inp.st_mouse_valid = true
+
+	_input_publish_staged_mouse(inp)
+
+	testing.expect_value(t, inp.mouse_prev, Vector2{320, 180})
+	testing.expect_value(t, inp.mouse, Vector2{327, 191})
+	testing.expect_value(t, inp.mouse_delta, Vector2{7, 11})
+	testing.expect(t, !inp.st_mouse_valid)
+}
+
+@(test)
+input_publish_staged_mouse_clears_delta_without_event :: proc(t: ^testing.T) {
+	inp := new(Input)
+	defer free(inp)
+	inp.mouse = {327, 191}
+	inp.mouse_prev = {320, 180}
+	inp.mouse_delta = {7, 11}
+	inp.mouse_initialized = true
+
+	_input_publish_staged_mouse(inp)
+
+	testing.expect_value(t, inp.mouse, Vector2{327, 191})
+	testing.expect_value(t, inp.mouse_delta, Vector2{})
+}
