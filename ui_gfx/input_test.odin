@@ -3,6 +3,7 @@ package ui_gfx
 
 import "core:strings"
 import "core:testing"
+import rl "ingot:gfx"
 import "ingot:ui"
 
 @(test)
@@ -14,6 +15,35 @@ clipboard_snapshot_owns_bounded_bytes :: proc(t: ^testing.T) {
 	copy(adapter.clipboard[:4], "safe")
 	testing.expect_value(t, len(input.clipboard), ui.INPUT_CLIPBOARD_CAP)
 	testing.expect_value(t, input.clipboard[:4], "safe")
+}
+
+@(test)
+pointer_snapshot_copies_values_and_overflow :: proc(t: ^testing.T) {
+	source: [2]rl.Pointer_Event
+	source[0] = {
+		id           = 7,
+		position     = {10, 20},
+		pressure     = 0.75,
+		buttons      = 1,
+		kind         = .Down,
+		pointer_type = .Pen,
+		button       = .Left,
+		primary      = true,
+	}
+	source[1] = {
+		id           = 7,
+		position     = {11, 22},
+		kind         = .Cancel,
+		pointer_type = .Pen,
+		button       = .None,
+	}
+	input: ui.Ui_Input
+	snapshot_pointer_events(&input, source[:], true)
+	testing.expect_value(t, input.pointer_event_count, 2)
+	testing.expect_value(t, input.pointer_events[0].id, ui.Pointer_Id(7))
+	testing.expect_value(t, input.pointer_events[0].pressure, f32(0.75))
+	testing.expect_value(t, input.pointer_events[1].kind, ui.Pointer_Event_Kind.Cancel)
+	testing.expect(t, input.pointer_events_overflowed)
 }
 
 @(test)

@@ -213,6 +213,13 @@ test_pointer_snapshot_policy :: proc(t: ^testing.T) {
 
 	unfocused := focused
 	unfocused.window_focused = false
+	unfocused.pointer_events[0] = {
+		id           = 4,
+		kind         = .Cancel,
+		pointer_type = .Touch,
+		button       = .None,
+	}
+	unfocused.pointer_event_count = 1
 	pointer_snapshot_sanitize(&unfocused)
 	testing.expect(t, !unfocused.window_focused)
 	testing.expect(t, !unfocused.cursor_on_screen)
@@ -222,6 +229,8 @@ test_pointer_snapshot_policy :: proc(t: ^testing.T) {
 	testing.expect(t, !unfocused.mouse_pressed[0])
 	testing.expect(t, !unfocused.mouse_released[1])
 	testing.expect(t, !unfocused.mouse_down[2])
+	testing.expect_value(t, unfocused.pointer_event_count, 1)
+	testing.expect_value(t, unfocused.pointer_events[0].kind, ui.Pointer_Event_Kind.Cancel)
 
 	outside := focused
 	outside.cursor_on_screen = false

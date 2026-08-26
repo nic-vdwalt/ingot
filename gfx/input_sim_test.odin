@@ -18,6 +18,19 @@ when INGOT_INPUT_SIM {
 		context_sim_mouse(first, 12, 18)
 		context_sim_char(first, 'a')
 		context_sim_wheel(first, 2, -3)
+		_ = context_sim_pointer(
+			first,
+			{
+				id = 9,
+				position = {12, 18},
+				pressure = 1,
+				buttons = 1,
+				kind = .Down,
+				pointer_type = .Touch,
+				button = .Left,
+				primary = true,
+			},
+		)
 
 		testing.expect(t, context_is_key_pressed(first, .A))
 		testing.expect(t, context_is_key_down(first, .A))
@@ -33,8 +46,11 @@ when INGOT_INPUT_SIM {
 		testing.expect_value(t, context_get_char_pressed_impl(second), rune(0))
 		testing.expect_value(t, first.inp.wheel, Vector2{2, -3})
 		testing.expect_value(t, second.inp.wheel, Vector2{})
+		testing.expect_value(t, len(context_pointer_events(first)), 1)
+		testing.expect_value(t, len(context_pointer_events(second)), 0)
 
 		context_sim_begin_frame(first)
+		testing.expect_value(t, len(context_pointer_events(first)), 0)
 		testing.expect(t, !context_is_key_pressed(first, .A))
 		testing.expect(t, context_is_key_down(first, .A))
 		testing.expect(t, !context_is_mouse_button_pressed(first, .LEFT))

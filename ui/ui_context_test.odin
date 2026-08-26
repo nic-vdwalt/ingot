@@ -12,6 +12,7 @@ ui_frame_normalizes_hostile_input_lengths :: proc(t: ^testing.T) {
 	defer ui_runtime_destroy(&runtime)
 	input: Ui_Input
 	input.character_count = INPUT_CHAR_CAP + 9
+	input.pointer_event_count = INPUT_POINTER_EVENT_CAP + 9
 	input.clipboard = strings.repeat("x", INPUT_CLIPBOARD_CAP + 9, context.temp_allocator)
 	input.preedit_len = INPUT_PREEDIT_CAP + 9
 	input.preedit_caret = INPUT_PREEDIT_CAP + 9
@@ -19,6 +20,8 @@ ui_frame_normalizes_hostile_input_lengths :: proc(t: ^testing.T) {
 	ui_frame_begin(&frame, &runtime, &input)
 	testing.expect_value(t, input.character_count, INPUT_CHAR_CAP)
 	testing.expect_value(t, input.characters_dropped, 9)
+	testing.expect_value(t, input.pointer_event_count, INPUT_POINTER_EVENT_CAP)
+	testing.expect(t, input.pointer_events_overflowed)
 	testing.expect_value(t, len(input.clipboard), INPUT_CLIPBOARD_CAP)
 	testing.expect_value(t, input.preedit_len, INPUT_PREEDIT_CAP)
 	_, ok := input_character(&input, INPUT_CHAR_CAP)

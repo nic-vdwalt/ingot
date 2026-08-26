@@ -5,6 +5,7 @@ import "ingot:ui"
 
 INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
 #assert(INPUT_CHARACTER_DRAIN_MAX == ui.INPUT_CHAR_CAP)
+#assert(rl.POINTER_EVENTS_MAX == ui.INPUT_POINTER_EVENT_CAP)
 #assert(rl.PREEDIT_MAX == ui.INPUT_PREEDIT_CAP)
 #assert(ui.INPUT_KEY_COUNT == 349)
 #assert(ui.INPUT_MOUSE_BUTTON_COUNT == 7)
@@ -12,6 +13,12 @@ INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
 #assert(int(ui.Key.RIGHT_SUPER) == int(rl.KeyboardKey.RIGHT_SUPER))
 #assert(int(ui.Mouse_Button.LEFT) == int(rl.MouseButton.LEFT))
 #assert(int(ui.Mouse_Button.BACK) == int(rl.MouseButton.BACK))
+#assert(int(ui.Pointer_Type.Mouse) == int(rl.Pointer_Type.Mouse))
+#assert(int(ui.Pointer_Type.Pen) == int(rl.Pointer_Type.Pen))
+#assert(int(ui.Pointer_Event_Kind.Move) == int(rl.Pointer_Event_Kind.Move))
+#assert(int(ui.Pointer_Event_Kind.Cancel) == int(rl.Pointer_Event_Kind.Cancel))
+#assert(int(ui.Pointer_Button.None) == int(rl.Pointer_Button.None))
+#assert(int(ui.Pointer_Button.Back) == int(rl.Pointer_Button.Back))
 
 pointer_snapshot_sanitize :: proc(input: ^ui.Ui_Input) {
 	assert(input != nil, "pointer_snapshot_sanitize: nil input")
@@ -32,6 +39,32 @@ snapshot_clipboard :: proc(adapter: ^Adapter, input: ^ui.Ui_Input, text: string)
 	copy(adapter.clipboard[:count], text)
 	input.clipboard = string(adapter.clipboard[:count])
 	assert(len(input.clipboard) <= ui.INPUT_CLIPBOARD_CAP)
+}
+
+snapshot_pointer_events :: proc(
+	input: ^ui.Ui_Input,
+	events: []rl.Pointer_Event,
+	overflowed: bool,
+) {
+	assert(input != nil, "snapshot_pointer_events: nil input")
+	input.pointer_event_count = min(len(events), ui.INPUT_POINTER_EVENT_CAP)
+	input.pointer_events_overflowed = overflowed || len(events) > ui.INPUT_POINTER_EVENT_CAP
+	for index in 0 ..< input.pointer_event_count {
+		event := events[index]
+		input.pointer_events[index] = {
+			id           = ui.Pointer_Id(event.id),
+			position     = vec_to_ui(event.position),
+			pressure     = event.pressure,
+			buttons      = ui.Pointer_Buttons(event.buttons),
+			kind         = ui.Pointer_Event_Kind(event.kind),
+			pointer_type = ui.Pointer_Type(event.pointer_type),
+			button       = ui.Pointer_Button(event.button),
+			primary      = event.primary,
+		}
+	}
+	assert(
+		input.pointer_event_count >= 0 && input.pointer_event_count <= ui.INPUT_POINTER_EVENT_CAP,
+	)
 }
 
 capture_clipboard_context :: proc(adapter: ^Adapter, input: ^ui.Ui_Input) {
@@ -85,6 +118,11 @@ capture_input_context :: proc(adapter: ^Adapter, input: ^ui.Ui_Input) {
 		input.mouse_released[index] = rl.context_is_mouse_button_released(ctx, button)
 		input.mouse_down[index] = rl.context_is_mouse_button_down(ctx, button)
 	}
+	snapshot_pointer_events(
+		input,
+		rl.context_pointer_events(ctx),
+		rl.context_pointer_events_overflowed(ctx),
+	)
 	characters_drained := 0
 	for characters_drained < INPUT_CHARACTER_DRAIN_MAX {
 		character := rl.context_get_char_pressed(ctx)
