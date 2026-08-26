@@ -366,10 +366,9 @@ platform_input_init :: proc(ctx: ^Context) {
 	glfw.SetCharCallback(win, _char_cb)
 	glfw.SetScrollCallback(win, _scroll_cb)
 
-	// Activity marks for event-driven frame scheduling (idle.odin). Cursor,
-	// button, focus and size events have no state to store (they are polled),
-	// but must still wake the idle gate; WindowRefresh is the OS damage signal
-	// (uncover/resize) - without it an idle window would show stale content.
+	// Cursor and button callbacks stage ordered raw pointer events while legacy
+	// mouse state remains snapshot-polled. Focus, size, and WindowRefresh events
+	// wake the idle gate; WindowRefresh is the OS damage signal (uncover/resize).
 	glfw.SetCursorPosCallback(win, _cursor_pos_cb)
 	glfw.SetMouseButtonCallback(win, _mouse_button_cb)
 	glfw.SetWindowCloseCallback(win, _close_cb)
@@ -662,17 +661,71 @@ _scroll_cb :: proc "c" (win: glfw.WindowHandle, xoffset, yoffset: f64) {
 	ctx.inp.st_wheel.y += f32(yoffset)
 }
 
-// The callbacks below carry no input state (their data is polled per frame);
-// they exist solely to wake the event-driven idle gate.
+@(private)
+_native_pointer_buttons :: proc "contextless" (
+	win: glfw.WindowHandle,
+	changed_button, changed_action: i32,
+) -> Pointer_Buttons {
+	if win == nil do return 0
+	buttons: u16
+	for button in 0 ..< 7 {
+		down := glfw.GetMouseButton(win, i32(button)) == glfw.PRESS
+		if i32(button) == changed_button do down = changed_action == glfw.PRESS
+		if down do buttons |= u16(1) << u16(button)
+	}
+	return Pointer_Buttons(buttons)
+}
+
+@(private)
+_pointer_mouse_pressure :: proc "contextless" (buttons: Pointer_Buttons) -> f32 {
+	return buttons != 0 ? 0.5 : 0
+}
 
 @(private)
 _cursor_pos_cb :: proc "c" (win: glfw.WindowHandle, xpos, ypos: f64) {
-	if ctx := _callback_context(win); ctx != nil do _idle_note_activity(&ctx.idle)
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
+	buttons := _native_pointer_buttons(win, -1, -1)
+	_ = pointer_stage(
+		&ctx.inp,
+		{
+			id = POINTER_ID_NATIVE_MOUSE,
+			position = {f32(xpos), f32(ypos)},
+			pressure = _pointer_mouse_pressure(buttons),
+			buttons = buttons,
+			kind = .Move,
+			pointer_type = .Mouse,
+			button = .None,
+			primary = true,
+		},
+	)
 }
 
 @(private)
 _mouse_button_cb :: proc "c" (win: glfw.WindowHandle, button, action, mods: i32) {
-	if ctx := _callback_context(win); ctx != nil do _idle_note_activity(&ctx.idle)
+	ctx := _callback_context(win)
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
+	if button < 0 || button > i32(Pointer_Button.Back) do return
+	if action != glfw.PRESS && action != glfw.RELEASE do return
+	x, y := glfw.GetCursorPos(win)
+	down := action == glfw.PRESS
+	buttons := _native_pointer_buttons(win, button, action)
+	ctx.inp.pointer_native_mouse_active = down || buttons != 0
+	_ = pointer_stage(
+		&ctx.inp,
+		{
+			id = POINTER_ID_NATIVE_MOUSE,
+			position = {f32(x), f32(y)},
+			pressure = _pointer_mouse_pressure(buttons),
+			buttons = buttons,
+			kind = down ? Pointer_Event_Kind.Down : .Up,
+			pointer_type = .Mouse,
+			button = Pointer_Button(button),
+			primary = true,
+		},
+	)
 }
 
 @(private)
@@ -694,6 +747,21 @@ _refresh_cb :: proc "c" (win: glfw.WindowHandle) {
 _focus_cb :: proc "c" (win: glfw.WindowHandle, focused: i32) {
 	ctx := _callback_context(win)
 	if ctx == nil do return
+	if focused == 0 && ctx.inp.pointer_native_mouse_active {
+		x, y := glfw.GetCursorPos(win)
+		_ = pointer_stage(
+			&ctx.inp,
+			{
+				id = POINTER_ID_NATIVE_MOUSE,
+				position = {f32(x), f32(y)},
+				kind = .Cancel,
+				pointer_type = .Mouse,
+				button = .None,
+				primary = true,
+			},
+		)
+		ctx.inp.pointer_native_mouse_active = false
+	}
 	if focused != 0 do ctx.force_reconfigure = true
 	_idle_note_activity(&ctx.idle)
 }

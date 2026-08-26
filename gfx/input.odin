@@ -12,62 +12,69 @@ import "core:strings"
 CHAR_Q :: 64
 
 Input :: struct {
-	exit_key:             KeyboardKey,
+	exit_key:                     KeyboardKey,
 
 	// per-frame edge/repeat (set by the backend, cleared each poll cycle)
-	pressed:              [KEY_COUNT]bool,
-	released:             [KEY_COUNT]bool,
-	repeat:               [KEY_COUNT]bool,
-	key_down:             [KEY_COUNT]bool,
+	pressed:                      [KEY_COUNT]bool,
+	released:                     [KEY_COUNT]bool,
+	repeat:                       [KEY_COUNT]bool,
+	key_down:                     [KEY_COUNT]bool,
 
 	// char / key queues (FIFO ring)
-	char_q:               [CHAR_Q]rune,
-	char_h, char_t:       int,
-	key_q:                [CHAR_Q]KeyboardKey,
-	key_h, key_t:         int,
+	char_q:                       [CHAR_Q]rune,
+	char_h, char_t:               int,
+	key_q:                        [CHAR_Q]KeyboardKey,
+	key_h, key_t:                 int,
 
 	// Platform event callbacks stage per-window events here until that
 	// context publishes its next frame-visible input snapshot. Every backend
 	// writes these and only _input_publish_staged reads them, so the browser
 	// and GLFW paths cannot disagree about who owns an edge.
-	st_pressed:           [KEY_COUNT]bool,
-	st_released:          [KEY_COUNT]bool,
-	st_repeat:            [KEY_COUNT]bool,
-	st_char_q:            [CHAR_Q]rune,
-	st_char_h, st_char_t: int,
-	st_key_q:             [CHAR_Q]KeyboardKey,
-	st_key_h, st_key_t:   int,
-	st_wheel:             Vector2,
+	st_pressed:                   [KEY_COUNT]bool,
+	st_released:                  [KEY_COUNT]bool,
+	st_repeat:                    [KEY_COUNT]bool,
+	st_char_q:                    [CHAR_Q]rune,
+	st_char_h, st_char_t:         int,
+	st_key_q:                     [CHAR_Q]KeyboardKey,
+	st_key_h, st_key_t:           int,
+	st_wheel:                     Vector2,
+	st_pointer_events:            [POINTER_EVENTS_MAX]Pointer_Event,
+	st_pointer_event_count:       int,
+	st_pointer_events_overflowed: bool,
+	pointer_events:               [POINTER_EVENTS_MAX]Pointer_Event,
+	pointer_event_count:          int,
+	pointer_events_overflowed:    bool,
+	pointer_native_mouse_active:  bool,
 
 	// mouse
-	mouse:                Vector2,
-	mouse_prev:           Vector2,
-	mouse_delta:          Vector2,
-	st_mouse:             Vector2,
-	st_mouse_valid:       bool,
-	mouse_initialized:    bool,
-	mb_down:              [8]bool,
-	mb_pressed:           [8]bool,
-	mb_released:          [8]bool,
-	web_mb_pressed:       [8]bool,
-	web_mb_released:      [8]bool,
+	mouse:                        Vector2,
+	mouse_prev:                   Vector2,
+	mouse_delta:                  Vector2,
+	st_mouse:                     Vector2,
+	st_mouse_valid:               bool,
+	mouse_initialized:            bool,
+	mb_down:                      [8]bool,
+	mb_pressed:                   [8]bool,
+	mb_released:                  [8]bool,
+	web_mb_pressed:               [8]bool,
+	web_mb_released:              [8]bool,
 
 	// wheel
-	wheel:                Vector2,
-	wheel_pending:        Vector2,
-	cursor_on_screen:     bool,
-	cur_cursor:           MouseCursor,
-	cursor_hidden:        bool,
-	preedit_buf:          [PREEDIT_MAX]u8,
-	preedit_len:          int,
-	preedit_caret:        int,
-	ime_rect_armed:       bool,
-	ime_screen_rect:      [4]f64,
+	wheel:                        Vector2,
+	wheel_pending:                Vector2,
+	cursor_on_screen:             bool,
+	cur_cursor:                   MouseCursor,
+	cursor_hidden:                bool,
+	preedit_buf:                  [PREEDIT_MAX]u8,
+	preedit_len:                  int,
+	preedit_caret:                int,
+	ime_rect_armed:               bool,
+	ime_screen_rect:              [4]f64,
 
 	// Gamepads: fixed pool, snapshot-polled once per frame through the
 	// platform seam (GLFW GetGamepadState native, navigator.getGamepads()
 	// web). prev_buttons gives pressed/released edge detection.
-	pads:                 [MAX_GAMEPADS]Gamepad_State,
+	pads:                         [MAX_GAMEPADS]Gamepad_State,
 }
 
 MAX_GAMEPADS :: 4
@@ -125,6 +132,7 @@ input_poll :: proc(ctx: ^Context) {
 	}
 	_drop_hover_publish(ctx)
 	_input_publish_staged(inp)
+	pointer_publish_staged(inp)
 
 	when ODIN_OS == .JS {
 		_input_publish_staged_mouse(inp)

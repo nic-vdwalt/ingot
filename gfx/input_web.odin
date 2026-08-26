@@ -19,6 +19,36 @@
 package gfx
 
 @(export)
+ingot_web_pointer :: proc "contextless" (
+	id: u32,
+	pointer_type, kind, button: i32,
+	buttons: u32,
+	x, y, pressure: f32,
+	primary: bool,
+) {
+	ctx := _web_owner_context()
+	if ctx == nil do return
+	_idle_note_activity(&ctx.idle)
+	if pointer_type < i32(Pointer_Type.Unknown) || pointer_type > i32(Pointer_Type.Pen) do return
+	if kind < i32(Pointer_Event_Kind.Move) || kind > i32(Pointer_Event_Kind.Cancel) do return
+	if button < -1 || button > i32(Pointer_Button.Back) do return
+	if buttons & ~u32(POINTER_BUTTON_MASK) != 0 do return
+	if !(pressure >= 0 && pressure <= 1) do pressure = 0
+	event := Pointer_Event {
+		id           = Pointer_Id(id),
+		position     = {x, y},
+		pressure     = pressure,
+		buttons      = Pointer_Buttons(buttons),
+		kind         = Pointer_Event_Kind(kind),
+		pointer_type = Pointer_Type(pointer_type),
+		button       = Pointer_Button(button),
+		primary      = primary,
+	}
+	if !pointer_event_valid(event) do return
+	_ = pointer_stage(&ctx.inp, event)
+}
+
+@(export)
 ingot_web_key :: proc "contextless" (key: i32, down: bool, repeat: bool) {
 	ctx := _web_owner_context()
 	if ctx == nil do return

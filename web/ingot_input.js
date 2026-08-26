@@ -37,6 +37,15 @@
 
 	// browser MouseEvent.button → ingot MouseButton (LEFT=0, RIGHT=1, MIDDLE=2)
 	const BTN = { 0: 0, 1: 2, 2: 1, 3: 3, 4: 4 };
+	const POINTER_TYPE = { mouse: 1, touch: 2, pen: 3 };
+	const POINTER_KIND = { move: 0, down: 1, up: 2, cancel: 3 };
+	const ACTIVE_POINTERS_MAX = 12;
+	const pointerButtons = (buttons) =>
+		((buttons & 1) ? 1 << 0 : 0) |
+		((buttons & 2) ? 1 << 1 : 0) |
+		((buttons & 4) ? 1 << 2 : 0) |
+		((buttons & 8) ? 1 << 3 : 0) |
+		((buttons & 16) ? 1 << 4 : 0);
 
 	// Keys we consume so the browser doesn't scroll/navigate when the canvas has
 	// focus (arrows, space, tab, backspace, enter, page up/down, home/end).
@@ -78,6 +87,7 @@
 		const listeners = [];
 		const pressedKeys = new Set();
 		const pressedButtons = new Set();
+		const activePointers = new Map();
 		// pointerId -> { startX, startY, lastY, button, panning }
 		const touches = new Map();
 		const listen = (target, type, handler, options) => {
@@ -190,11 +200,33 @@
 		// Pen reports its own type and keeps the mouse path: a stylus has the
 		// precision to hit a scrollbar, a fingertip does not.
 		const isTouch = (e) => e.pointerType === "touch";
+		const pointerRecord = (e) => ({
+			id: e.pointerId >>> 0,
+			type: POINTER_TYPE[e.pointerType] || 0,
+			button: BTN[e.button] === undefined ? -1 : BTN[e.button],
+			buttons: pointerButtons(e.buttons || 0),
+			x: Number.isFinite(e.offsetX) ? e.offsetX : 0,
+			y: Number.isFinite(e.offsetY) ? e.offsetY : 0,
+			pressure: Number.isFinite(e.pressure) ? Math.max(0, Math.min(1, e.pressure)) : 0,
+			primary: !!e.isPrimary,
+		});
+		const forwardPointer = (kind, record) => {
+			const x = ex();
+			if (!x || !x.ingot_web_pointer) return;
+			x.ingot_web_pointer(
+				record.id, record.type, kind, record.button, record.buttons,
+				record.x, record.y, record.pressure, record.primary,
+			);
+		};
 
 		listen(canvas, "pointermove", function (e) {
 			const x = ex();
 			if (!x) return;
 			syncModifiers(e);
+			const record = pointerRecord(e);
+			if (isTouch(e) && !activePointers.has(record.id)) return;
+			if (activePointers.has(record.id)) activePointers.set(record.id, record);
+			forwardPointer(POINTER_KIND.move, { ...record, button: -1 });
 			if (isTouch(e)) {
 				const touch = touches.get(e.pointerId);
 				if (touch === undefined) return;
@@ -226,6 +258,10 @@
 			if (!x) return;
 			canvas.focus();
 			syncModifiers(e);
+			const record = pointerRecord(e);
+			if (!activePointers.has(record.id) && activePointers.size >= ACTIVE_POINTERS_MAX) return;
+			activePointers.set(record.id, record);
+			forwardPointer(POINTER_KIND.down, record);
 			canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
 			x.ingot_web_mouse_move(e.offsetX, e.offsetY);
 			const b = BTN[e.button];
@@ -253,6 +289,10 @@
 			const x = ex();
 			if (!x) return;
 			syncModifiers(e);
+			const record = pointerRecord(e);
+			if (!activePointers.has(record.id)) return;
+			forwardPointer(POINTER_KIND.up, record);
+			activePointers.delete(record.id);
 			if (isTouch(e)) {
 				const touch = touches.get(e.pointerId);
 				touches.delete(e.pointerId);
@@ -301,21 +341,42 @@
 			e.preventDefault();
 		}, { passive: false });
 
+		const cancelPointer = (e) => {
+			const record = pointerRecord(e);
+			const active = activePointers.get(record.id);
+			if (active === undefined) return;
+			forwardPointer(POINTER_KIND.cancel, {
+				...active, button: -1, buttons: 0, pressure: 0,
+			});
+			activePointers.delete(record.id);
+			touches.delete(record.id);
+			if (active.type !== POINTER_TYPE.touch && active.button >= 0) {
+				pressedButtons.delete(active.button);
+				const x = ex();
+				if (x) x.ingot_web_mouse_button(active.button, false);
+			}
+		};
 		const releaseHeldInput = () => {
 			const x = ex();
 			if (x) {
+				for (const pointer of activePointers.values()) {
+					forwardPointer(POINTER_KIND.cancel, {
+						...pointer, button: -1, buttons: 0, pressure: 0,
+					});
+				}
 				for (const key of pressedKeys) x.ingot_web_key(key, false, false);
 				for (const button of pressedButtons) x.ingot_web_mouse_button(button, false);
 			}
 			pressedKeys.clear();
 			pressedButtons.clear();
+			activePointers.clear();
 			// Pending taps are abandoned, never activated: a cancelled
 			// gesture is the OS taking the touch away (a system swipe, an
 			// incoming call), which must not press a button.
 			touches.clear();
 		};
-		listen(canvas, "pointercancel", releaseHeldInput);
-		listen(canvas, "lostpointercapture", releaseHeldInput);
+		listen(canvas, "pointercancel", cancelPointer);
+		listen(canvas, "lostpointercapture", cancelPointer);
 		listen(window, "blur", releaseHeldInput);
 		listen(document, "visibilitychange", function () {
 			if (document.visibilityState !== "visible") releaseHeldInput();
