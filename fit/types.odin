@@ -45,6 +45,14 @@ Command_Modifiers :: action.Modifiers
 COMMAND_ID_NONE :: action.COMMAND_ID_NONE
 COMMAND_CONTEXT_NONE :: action.CONTEXT_ID_NONE
 
+Pointer_Id :: ui.Pointer_Id
+Pointer_Type :: ui.Pointer_Type
+Pointer_Event_Kind :: ui.Pointer_Event_Kind
+Pointer_Button :: ui.Pointer_Button
+Pointer_Buttons :: ui.Pointer_Buttons
+Pointer_Event :: ui.Pointer_Event
+POINTER_EVENT_CAP :: ui.INPUT_POINTER_EVENT_CAP
+
 @(private = "package")
 STORAGE_NODE_SIZE :: size_of(ui.Prepared_Node)
 @(private = "package")
@@ -392,13 +400,16 @@ Key :: enum i32 {
 }
 
 Test_Input :: struct {
-	mouse_position:  Point,
-	mouse_delta:     Point,
-	mouse_wheel:     Point,
-	mouse_pressed:   [7]bool,
-	mouse_released:  [7]bool,
-	mouse_down:      [7]bool,
-	keys_pressed:    [512]bool,
+	mouse_position:            Point,
+	mouse_delta:               Point,
+	mouse_wheel:               Point,
+	mouse_pressed:             [7]bool,
+	mouse_released:            [7]bool,
+	mouse_down:                [7]bool,
+	pointer_events:            [POINTER_EVENT_CAP]Pointer_Event,
+	pointer_event_count:       int,
+	pointer_events_overflowed: bool,
+	keys_pressed:              [512]bool,
 	keys_repeat:     [512]bool,
 	keys_released:   [512]bool,
 	keys_down:       [512]bool,
