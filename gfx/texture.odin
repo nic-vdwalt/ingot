@@ -10,6 +10,10 @@ import "core:math"
 import stbi "vendor:stb/image"
 import wg "vendor:wgpu"
 
+IMAGE_DECODE_BYTE_MAX :: 64 * 1024 * 1024
+IMAGE_DECODE_DIMENSION_MAX :: 8192
+IMAGE_DECODE_PIXEL_MAX :: 32 * 1024 * 1024
+
 TEX_ID_BASE :: u32(0x4000_0000)
 MAX_TEXTURES :: RESOURCE_SLOT_COUNT
 
@@ -683,10 +687,21 @@ DrawTexturePro :: proc(
 // --- image / icon ----------------------------------------------------------
 
 // LoadImageFromMemory decodes a compressed image (PNG/JPG/...) via stb_image.
+// The metadata pass rejects dimensions that exceed Ingot's decode budget before
+// stb allocates the RGBA output; malformed and oversized assets are operating
+// errors and return an empty image.
 LoadImageFromMemory :: proc(fileType: cstring, fileData: [^]u8, dataSize: i32) -> Image {
+	_ = fileType
+	if fileData == nil || dataSize <= 0 || dataSize > IMAGE_DECODE_BYTE_MAX do return {}
 	w, h, comp: i32
+	if stbi.info_from_memory(fileData, dataSize, &w, &h, &comp) == 0 do return {}
+	if !image_decode_dimensions_valid(w, h) do return {}
 	pixels := stbi.load_from_memory(fileData, dataSize, &w, &h, &comp, 4)
 	if pixels == nil do return Image{}
+	if !image_decode_dimensions_valid(w, h) {
+		stbi.image_free(pixels)
+		return {}
+	}
 	return Image {
 		data = pixels,
 		width = w,
@@ -694,6 +709,14 @@ LoadImageFromMemory :: proc(fileType: cstring, fileData: [^]u8, dataSize: i32) -
 		mipmaps = 1,
 		format = .UNCOMPRESSED_R8G8B8A8,
 	}
+}
+
+@(private = "package")
+image_decode_dimensions_valid :: proc(width, height: i32) -> bool {
+	if width <= 0 || height <= 0 do return false
+	if width > IMAGE_DECODE_DIMENSION_MAX || height > IMAGE_DECODE_DIMENSION_MAX do return false
+	pixels := i64(width) * i64(height)
+	return pixels <= IMAGE_DECODE_PIXEL_MAX
 }
 
 UnloadImage :: proc(image: Image) {

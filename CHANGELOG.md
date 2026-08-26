@@ -41,6 +41,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - A borrowed-ideas guide records how concepts from other UI frameworks are
   evaluated independently against concrete Ingot workloads, immediate-mode
   ownership, Tiger Style limits, measurements, and platform evidence.
+- A text and asset dependency policy keeps scalar text and bounded raster images
+  as the honest current scope and defines the provenance, reproducibility, FFI,
+  bounds, fuzzing, and native/web gates required before adding shaping or SVG.
 - `fit.Hug()` and append-only `ui.Track_Kind.Hug` provide current-frame
   intrinsic-priority sizing without retained widget state. Existing serialized
   track ordinals and documents remain unchanged; older readers safely reject
