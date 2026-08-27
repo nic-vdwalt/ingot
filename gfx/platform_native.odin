@@ -47,6 +47,11 @@ _window_should_activate :: proc(flags: ConfigFlags) -> bool {
 }
 
 @(private)
+_window_should_focus_on_show :: proc(flags: ConfigFlags) -> bool {
+	return _window_wants_initial_focus(flags)
+}
+
+@(private)
 platform_create_window :: proc(
 	ctx: ^Context,
 	width, height: i32,
