@@ -350,10 +350,10 @@ Gpu_3D_Resources :: struct {
 	neutral_normal_view:    wg.TextureView,
 	neutral_normal_sampler: wg.Sampler,
 	neutral_normal_bind:    wg.BindGroup,
-	scene_depth_layout:     wg.BindGroupLayout,
+	scene_layout:           wg.BindGroupLayout,
 	neutral_depth_tex:      wg.Texture,
 	neutral_depth_view:     wg.TextureView,
-	neutral_depth_bind:     wg.BindGroup,
+	neutral_scene_bind:     wg.BindGroup,
 	next_pass_generation:   u64,
 	active_pass_generation: u64,
 	identity_block:         Gpu_3D_Instance_Uniforms,
@@ -1788,31 +1788,55 @@ _gpu_3d_material_binds :: proc(
 }
 
 @(private)
-_gpu_3d_scene_binds :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.BindGroup, wg.BindGroup) {
-	assert(pass != nil && pass.owner != nil, "_gpu_3d_scene_binds: nil pass")
+_gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> wg.BindGroup {
+	assert(pass != nil && pass.owner != nil, "_gpu_3d_scene_bind: nil pass")
 	resources := &pass.owner.resources.gpu_3d
-	color_bind, _ := _gpu_3d_texture_bind(
-		pass.owner,
-		material.scene_color_texture,
-		pass.owner.rend.neutral_bind,
-	)
-	depth_bind := resources.neutral_depth_bind
+	roughness_view := pass.owner.rend.neutral_view
+	roughness_sampler := pass.owner.rend.neutral_sampler
+	if material.roughness_ao_texture.id != 0 {
+		slot := _texture_slot_context(
+			pass.owner.id,
+			&pass.owner.resources.textures,
+			material.roughness_ao_texture.id,
+		)
+		if slot != nil && slot.entry != nil {
+			roughness_view = slot.entry.view
+			roughness_sampler = slot.entry.sampler
+		}
+	}
+	color_view := pass.owner.rend.neutral_view
+	color_sampler := pass.owner.rend.neutral_sampler
+	if material.scene_color_texture.id != 0 {
+		slot := _texture_slot_context(
+			pass.owner.id,
+			&pass.owner.resources.textures,
+			material.scene_color_texture.id,
+		)
+		if slot != nil && slot.entry != nil {
+			color_view = slot.entry.view
+			color_sampler = slot.entry.sampler
+		}
+	}
+	depth_view := resources.neutral_depth_view
 	if material.scene_depth_texture.id != 0 {
 		slot := _texture_slot_context(
 			pass.owner.id,
 			&pass.owner.resources.textures,
 			material.scene_depth_texture.id,
 		)
-		if slot != nil && slot.entry != nil {
-			entry := wg.BindGroupEntry{binding = 0, textureView = slot.entry.view}
-			candidate := wg.DeviceCreateBindGroup(
-				pass.owner.device,
-				&{layout = resources.scene_depth_layout, entryCount = 1, entries = &entry},
-			)
-			if candidate != nil do depth_bind = candidate
-		}
+		if slot != nil && slot.entry != nil do depth_view = slot.entry.view
 	}
-	return color_bind, depth_bind
+	entries := [5]wg.BindGroupEntry {
+		{binding = 0, textureView = roughness_view},
+		{binding = 1, sampler = roughness_sampler},
+		{binding = 2, textureView = color_view},
+		{binding = 3, sampler = color_sampler},
+		{binding = 4, textureView = depth_view},
+	}
+	return wg.DeviceCreateBindGroup(
+		pass.owner.device,
+		&{layout = resources.scene_layout, entryCount = len(entries), entries = raw_data(entries[:])},
+	)
 }
 
 @(private)
@@ -1907,9 +1931,10 @@ _gpu_3d_draw_indexed :: proc(
 		shader_module,
 	)
 	if pipeline == nil do return false
-	texture_bind, textured, normal_bind, normal_mapped, roughness_ao_bind, roughness_ao_mapped :=
+	texture_bind, textured, normal_bind, normal_mapped, _, roughness_ao_mapped :=
 		_gpu_3d_material_binds(pass, material)
-	scene_color_bind, scene_depth_bind := _gpu_3d_scene_binds(pass, material)
+	scene_bind := _gpu_3d_scene_bind(pass, material)
+	if scene_bind == nil do return false
 	uniforms := _gpu_3d_uniforms(
 		pass,
 		material,
@@ -1931,9 +1956,7 @@ _gpu_3d_draw_indexed :: proc(
 	)
 	wg.RenderPassEncoderSetBindGroup(pass.pass, 1, texture_bind)
 	wg.RenderPassEncoderSetBindGroup(pass.pass, 2, normal_bind)
-	wg.RenderPassEncoderSetBindGroup(pass.pass, 3, roughness_ao_bind)
-	wg.RenderPassEncoderSetBindGroup(pass.pass, 4, scene_color_bind)
-	wg.RenderPassEncoderSetBindGroup(pass.pass, 5, scene_depth_bind)
+	wg.RenderPassEncoderSetBindGroup(pass.pass, 3, scene_bind)
 	vertex_bytes := u64(entry.vertex_count) * size_of(Gpu_3D_Vertex)
 	index_bytes := u64(entry.index_count) * size_of(u32)
 	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, vertex_bytes)
@@ -1945,10 +1968,8 @@ _gpu_3d_draw_indexed :: proc(
 		entry.index_count * instance_count,
 	)
 	_stats_pipeline_switch(pass.owner)
-	_stats_bind_group_switches(pass.owner, 6)
-	if scene_depth_bind != pass.owner.resources.gpu_3d.neutral_depth_bind {
-		wg.BindGroupRelease(scene_depth_bind)
-	}
+	_stats_bind_group_switches(pass.owner, 4)
+	wg.BindGroupRelease(scene_bind)
 	return true
 }
 
@@ -2139,13 +2160,11 @@ _gpu_3d_pipeline :: proc(
 		attributeCount = len(attrs),
 		attributes     = raw_data(attrs[:]),
 	}
-	group_layouts := [6]wg.BindGroupLayout {
+	group_layouts := [4]wg.BindGroupLayout {
 		resources.layout,
 		ctx.rend.tex_layout,
 		ctx.rend.tex_layout,
-		ctx.rend.tex_layout,
-		ctx.rend.tex_layout,
-		resources.scene_depth_layout,
+		resources.scene_layout,
 	}
 	layout := wg.DeviceCreatePipelineLayout(
 		ctx.device,
@@ -2295,14 +2314,16 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 		&{entryCount = 2, entries = raw_data(layout_entries[:])},
 	)
 	_gpu_3d_init_neutral_normal(ctx, resources)
-	depth_layout_entry := wg.BindGroupLayoutEntry {
-		binding = 0,
-		visibility = {.Fragment},
-		texture = {sampleType = .Depth, viewDimension = ._2D},
+	scene_layout_entries := [5]wg.BindGroupLayoutEntry {
+		{binding = 0, visibility = {.Vertex, .Fragment}, texture = {sampleType = .Float, viewDimension = ._2D}},
+		{binding = 1, visibility = {.Vertex, .Fragment}, sampler = {type = .Filtering}},
+		{binding = 2, visibility = {.Vertex, .Fragment}, texture = {sampleType = .Float, viewDimension = ._2D}},
+		{binding = 3, visibility = {.Vertex, .Fragment}, sampler = {type = .Filtering}},
+		{binding = 4, visibility = {.Fragment}, texture = {sampleType = .Depth, viewDimension = ._2D}},
 	}
-	resources.scene_depth_layout = wg.DeviceCreateBindGroupLayout(
+	resources.scene_layout = wg.DeviceCreateBindGroupLayout(
 		ctx.device,
-		&{entryCount = 1, entries = &depth_layout_entry},
+		&{entryCount = len(scene_layout_entries), entries = raw_data(scene_layout_entries[:])},
 	)
 	resources.neutral_depth_tex = wg.DeviceCreateTexture(
 		ctx.device,
@@ -2316,10 +2337,20 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 		},
 	)
 	resources.neutral_depth_view = wg.TextureCreateView(resources.neutral_depth_tex, nil)
-	neutral_depth_entry := wg.BindGroupEntry{binding = 0, textureView = resources.neutral_depth_view}
-	resources.neutral_depth_bind = wg.DeviceCreateBindGroup(
+	neutral_scene_entries := [5]wg.BindGroupEntry {
+		{binding = 0, textureView = ctx.rend.neutral_view},
+		{binding = 1, sampler = ctx.rend.neutral_sampler},
+		{binding = 2, textureView = ctx.rend.neutral_view},
+		{binding = 3, sampler = ctx.rend.neutral_sampler},
+		{binding = 4, textureView = resources.neutral_depth_view},
+	}
+	resources.neutral_scene_bind = wg.DeviceCreateBindGroup(
 		ctx.device,
-		&{layout = resources.scene_depth_layout, entryCount = 1, entries = &neutral_depth_entry},
+		&{
+			layout = resources.scene_layout,
+			entryCount = len(neutral_scene_entries),
+			entries = raw_data(neutral_scene_entries[:]),
+		},
 	)
 	for &bind, index in resources.bind {
 		bind_entries := [2]wg.BindGroupEntry {
@@ -2345,10 +2376,10 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 	assert(resources.neutral_normal_view != nil)
 	assert(resources.neutral_normal_sampler != nil)
 	assert(resources.neutral_normal_bind != nil)
-	assert(resources.scene_depth_layout != nil)
+	assert(resources.scene_layout != nil)
 	assert(resources.neutral_depth_tex != nil)
 	assert(resources.neutral_depth_view != nil)
-	assert(resources.neutral_depth_bind != nil)
+	assert(resources.neutral_scene_bind != nil)
 }
 
 @(private)
@@ -2380,13 +2411,13 @@ _gpu_3d_resources_destroy :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 		wg.TextureDestroy(resources.neutral_normal_tex)
 		wg.TextureRelease(resources.neutral_normal_tex)
 	}
-	if resources.neutral_depth_bind != nil do wg.BindGroupRelease(resources.neutral_depth_bind)
+	if resources.neutral_scene_bind != nil do wg.BindGroupRelease(resources.neutral_scene_bind)
 	if resources.neutral_depth_view != nil do wg.TextureViewRelease(resources.neutral_depth_view)
 	if resources.neutral_depth_tex != nil {
 		wg.TextureDestroy(resources.neutral_depth_tex)
 		wg.TextureRelease(resources.neutral_depth_tex)
 	}
-	if resources.scene_depth_layout != nil do wg.BindGroupLayoutRelease(resources.scene_depth_layout)
+	if resources.scene_layout != nil do wg.BindGroupLayoutRelease(resources.scene_layout)
 	if resources.layout != nil do wg.BindGroupLayoutRelease(resources.layout)
 	if resources.shader != nil do wg.ShaderModuleRelease(resources.shader)
 	resources^ = {}

@@ -6,16 +6,16 @@ import "core:testing"
 @(test)
 virtual_list_window_geometry_is_bounded :: proc(t: ^testing.T) {
 	state := Virtual_List_State {
-		open = true,
-		region = {10, 20, 200, 120},
-		count = 100,
+		open    = true,
+		region  = {10, 20, 200, 120},
+		count   = 100,
 		visible = 6,
 	}
 	window := Virtual_List_Window {
-		first = 40,
+		first        = 40,
 		visible_rows = 6,
-		row_height = 20,
-		row_width = 200,
+		row_height   = 20,
+		row_width    = 200,
 	}
 	first := virtual_list_row(window, &state, 40)
 	last := virtual_list_row(window, &state, 45)

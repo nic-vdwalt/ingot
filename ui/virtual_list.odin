@@ -30,7 +30,10 @@ virtual_list_begin :: proc(
 	assert(u != nil && u.open, "virtual_list_begin: frame not open")
 	assert(key != "" && state != nil && !state.open, "virtual_list_begin: invalid state")
 	assert(row_height > 0, "virtual_list_begin: non-positive row height")
-	assert(count >= 0 && count <= VIRTUAL_LIST_ITEM_COUNT_MAX, "virtual_list_begin: count out of range")
+	assert(
+		count >= 0 && count <= VIRTUAL_LIST_ITEM_COUNT_MAX,
+		"virtual_list_begin: count out of range",
+	)
 	region := remaining_rect(u)
 	if visible_height > 0 do region.h = min(region.h, ui_frame_sc(u.frame, visible_height))
 	row_height_px := ui_frame_sc(u.frame, row_height)
@@ -55,7 +58,11 @@ virtual_list_begin :: proc(
 	}
 }
 
-virtual_list_row :: proc(window: Virtual_List_Window, state: ^Virtual_List_State, index: int) -> Rect_I32 {
+virtual_list_row :: proc(
+	window: Virtual_List_Window,
+	state: ^Virtual_List_State,
+	index: int,
+) -> Rect_I32 {
 	assert(state != nil && state.open, "virtual_list_row: list not open")
 	assert(index >= window.first && index < state.count, "virtual_list_row: index out of range")
 	assert(index - window.first < window.visible_rows, "virtual_list_row: index outside window")

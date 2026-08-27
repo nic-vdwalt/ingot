@@ -47,7 +47,10 @@ command_palette_filter :: proc(
 	assert(len(items) <= COMMAND_PALETTE_ITEM_MAX, "command_palette_filter: too many items")
 	state.match_count = 0
 	for item, index in items {
-		assert(item.command != action.COMMAND_ID_NONE && item.label != "", "command palette: invalid item")
+		assert(
+			item.command != action.COMMAND_ID_NONE && item.label != "",
+			"command palette: invalid item",
+		)
 		for previous in 0 ..< index {
 			assert(items[previous].command != item.command, "command palette: duplicate command")
 		}

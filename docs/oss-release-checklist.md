@@ -56,6 +56,11 @@ native binary, installer, or web bundle.
 - [ ] Review platform SDK and runtime redistribution terms for each binary
   target.
 - [ ] Generate an SBOM and archive it with release evidence.
+- [ ] Record the exact package composition and prove minimal GUI artifacts do
+  not link optional terminal, networking, AccessKit, ECS, scene, or procedural
+  generation packages they do not import.
+- [ ] Archive end-to-end benchmark inputs and runtime evidence separately;
+  compile-only fixtures are not performance evidence.
 
 ## Final verification
 

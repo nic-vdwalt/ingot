@@ -94,10 +94,14 @@ Chromium/WebKit run, screen-reader exercise, audio-unlock test, or WebGPU valida
 | Browser | `scripts/check-web.sh`, Node tests | Chromium and WebKit lifecycle/input/network/WebGPU runs | Not recorded |
 | Internet TLS | URL/parser and loopback certificate tests | HTTPS/WSS valid, expired, untrusted, wrong-host, timeout, IPv4/IPv6, proxy, downgrade | Not recorded |
 
-Record operating system, architecture, Ingot/Odin revision, browser, GPU, driver,
-backend, date, commands, and outcome with `scripts/validation-evidence.py` and
+Record operating system, architecture, Ingot/Odin revision, browser, GPU,
+driver, backend, monitor/DPI, window system, presentation mode, assistive
+technology, input devices, locale, network mode, package composition, date,
+commands, and outcome with `scripts/validation-evidence.py` or the explicit
+operator recorder `scripts/validate-platform.py` and
 `docs/validation/schema.json`. Generate matrix rows with
-`scripts/validation-matrix.py`; missing evidence remains Not recorded. Use only
+`scripts/validation-matrix.py`; missing evidence remains Not recorded. A built
+fixture is `compiled`, never `validated`. Use only
 these status terms:
 
 - `compiled` - source built for the target; runtime behavior is unverified.
