@@ -48,3 +48,49 @@ unmodified printable key or an additional modifier from activating a shortcut.
 The initial API supports one-stroke bindings. Chords and untrusted text-file
 parsing are intentionally absent until an Ingot application demonstrates the
 need and their timeout, parser, and diagnostic contracts are designed.
+
+## Optional typed command queues
+
+`fit.Typed_Commands(T, Capacity)` is a caller-owned fixed-capacity queue for
+applications that want buttons, menus, shortcuts, and integration completions
+to converge on one typed vocabulary. It is not an application runtime or
+reducer, and ordinary immediate results and `fit.Action` remain the shortest
+primary APIs.
+
+```odin
+Command :: enum u8 {
+	Save,
+	Reset,
+}
+
+commands: fit.Typed_Commands(Command, 16)
+
+Draw :: proc(builder: ^fit.Builder, _: rawptr) {
+	fit.Typed_Commands_Begin(&commands)
+	command: Command
+	for fit.Typed_Commands_Take(&commands, &command) {
+		switch command {
+		case .Save:
+			save()
+		case .Reset:
+			reset()
+		}
+	}
+	fit.Typed_Commands_End(&commands)
+
+	root := fit.Column(builder)
+	_ = fit.Button_Command(root, "save", "Save", &commands, Command.Save)
+}
+```
+
+The queue copies values into fixed storage. `Begin` promotes activations from
+the preceding rendered declaration and captures the drain limit. Entries
+appended while draining wait for the next explicit drain, so dispatch is never
+recursive. `Button_Command` reports `.Full` if no activation slot remains;
+`Typed_Commands_Append` reports `.Full` when ready storage is saturated. Drop
+counts remain inspectable through `Typed_Commands_Dropped`.
+
+Command payloads must own everything they carry. Borrowed strings, slices,
+frame pointers, and callback closures are not safe queue payloads. An
+integration boundary must copy asynchronous completion data into an
+application-owned bounded value before appending it and requesting a redraw.

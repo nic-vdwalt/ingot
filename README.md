@@ -93,7 +93,11 @@ Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 ```
 
 See the [layout guide](docs/layout.md) for responsive Flow, track Grid, sizing,
-and placement options.
+and placement options. Larger applications can optionally converge buttons,
+menus, shortcuts, and integration completions on a caller-owned bounded typed
+queue; the direct Action API above remains the shortest primary path. See
+[Commands and contextual shortcuts](docs/commands.md) and
+`examples/typed_commands`.
 
 Advanced applications that need direct control over UI state and rendering can
 use the lower-level `ui` and `ui_gfx` packages. These expose more lifecycle and
