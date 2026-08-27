@@ -63,8 +63,10 @@ call. Signals and raw output pointers must outlive render.
   alignment and `Grow()` on both axes.
 - `Column` lays children on the vertical axis.
 - `Row` lays children on the horizontal axis.
-- `Flow` wraps measured children left to right.
-- `Grid` uses fixed columns and a caller-selected row height.
+- `Flow` wraps measured children left to right and can align, justify, or grow
+  children independently on each bounded line.
+- `Grid` supports the source-compatible uniform form or borrowed fixed, fit,
+  grow, and percent tracks with deterministic placement and spans.
 - `Attachment` places exactly one out-of-flow child against a target.
 - `Scroll` clips and offsets exactly one child using caller-owned `Scroll_State`.
 - `Section` returns a transparent Column after adding its title leaf.
@@ -80,6 +82,56 @@ Containers accept bounded spacing, padding, alignment, tracks, two-axis sizing,
 effects, clipping, and caller-owned transitions. Row and Column direct children
 are bounded by `MAX_LAYOUT_FLEX`; total nodes and traversal depth use fixed
 configured limits.
+
+## Responsive flow
+
+```odin
+tags := fit.Flow(root, {
+	gap_x = .SM,
+	gap_y = .XS,
+	align = .Center,
+	justify = .Space_Between,
+})
+for tag in state.tags do fit.Button(tags, tag.id, tag.label)
+```
+
+Flow remains current-frame data. At most `fit.FLOW_GROW_ITEM_MAX` grow children
+may occur on one line; ordinary wrapped children retain the existing bounded
+flow capacity. Default start justification and stretch alignment preserve the
+legacy geometry. A child's explicit `Grow()` track consumes the line's remaining
+width without storing state across frames.
+
+## Track grid
+
+```odin
+columns := [3]fit.Track{fit.Fixed(180), fit.Grow(), fit.Fit(120)}
+grid := fit.Grid(root, {
+	column_tracks = columns[:],
+	row_height = 36,
+	gap_x = .MD,
+	gap_y = .SM,
+})
+fit.Label(grid, "Name")
+wide := fit.Grid_Cell(grid, {column_span = 2})
+fit.Label(wide, "Spans two columns")
+```
+
+Track slices are borrowed through synchronous render and must remain valid and
+unchanged until rendering finishes. Grid placement is stable declaration-order
+first-fit. Negative row or column values request automatic placement and zero
+spans normalize to one. A `Grid_Cell` is a current-frame one-child wrapper, not
+retained widget state. Grids are bounded by `fit.GRID_TRACK_MAX` tracks on each
+axis and `fit.GRID_CELL_MAX` cells.
+
+The legacy `{columns, row_height}` form remains available and retains its fixed
+uniform-grid fast path. Choose either `columns` or `column_tracks`, never both.
+Track grids use the generic measured path.
+
+## Existing sizing and placement conveniences
+
+Use `Size_Options.aspect` for aspect ratio, Track `min_size` and `max_size` for
+constraints, container `padding` for inset content, and `Attachment` for overlay
+or viewport-bound placement. These remain one vocabulary rather than aliases.
 
 ## Capacity and storage
 

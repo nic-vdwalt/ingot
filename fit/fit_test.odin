@@ -624,9 +624,11 @@ fit_parent_public_contract_compiles :: proc(t: ^testing.T) {
 	id: proc(_: Parent, _: string) -> Widget_Id = Id
 	section: proc(_: Parent, _: string, _: Section_Options) -> Parent = Section
 	card: proc(_: Parent, _: Card_Options) -> Parent = Card
+	grid: proc(_: Parent, _: Grid_Options) -> Parent = Grid
+	grid_cell: proc(_: Parent, _: Grid_Cell_Options) -> Parent = Grid_Cell
 	testing.expect(t, center != nil && row != nil && label != nil)
 	testing.expect(t, button != nil && delayed != nil && scope != nil && id != nil)
-	testing.expect(t, section != nil && card != nil)
+	testing.expect(t, section != nil && card != nil && grid != nil && grid_cell != nil)
 }
 
 @(test)

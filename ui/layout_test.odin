@@ -216,6 +216,34 @@ layout_flex_fixed_fit_grow :: proc(t: ^testing.T) {
 }
 
 @(test)
+track_resolve_supports_fixed_fit_grow_and_percent :: proc(t: ^testing.T) {
+	tracks := [4]Track{fixed(20), fit(30), grow(1), percent(0.25)}
+	sizes: [4]i32
+	result := track_resolve(tracks[:], 200, 4, sizes[:])
+	testing.expect_value(t, result.overflow, i32(0))
+	testing.expect_value(t, result.used, i32(200))
+	testing.expect_value(t, sizes, [4]i32{20, 30, 91, 47})
+}
+
+@(test)
+grid_auto_place_is_stable_and_respects_spans :: proc(t: ^testing.T) {
+	placements := [3]Grid_Placement {
+		{column = 0, row = 0, column_span = 2, row_span = 1},
+		{column = -1, row = -1, column_span = 1, row_span = 1},
+		{column = -1, row = -1, column_span = 2, row_span = 1},
+	}
+	resolved: [3]Grid_Resolved_Placement
+	unplaced := grid_auto_place(placements[:], 3, 2, .Row, resolved[:])
+	testing.expect_value(t, unplaced, i32(0))
+	testing.expect_value(t, resolved[1].column, i32(2))
+	testing.expect_value(t, resolved[2].row, i32(1))
+	columns := [3]i32{20, 30, 40}
+	rows := [2]i32{10, 15}
+	rect := grid_span_rect({5, 7, 98, 29}, columns[:], rows[:], 4, 4, resolved[2])
+	testing.expect_value(t, rect, Rect_I32{5, 21, 54, 15})
+}
+
+@(test)
 layout_flex_percent_uses_content_space :: proc(t: ^testing.T) {
 	l: Layout
 	layout_begin(&l, 0, 0, 400, 40)

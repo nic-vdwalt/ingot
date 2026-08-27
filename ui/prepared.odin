@@ -120,19 +120,30 @@ Prepared_Container_Options :: struct {
 Prepared_Flow_Options :: struct {
 	gap_x, gap_y: Space,
 	padding:      Space,
+	align:        Cross_Align,
+	justify:      Main_Align,
 	track:        Track,
 	size:         Prepared_Size,
 	effects:      Prepared_Container_Effects,
 }
 
 Prepared_Grid_Options :: struct {
-	columns:      i32,
-	row_height:   i32,
-	gap_x, gap_y: Space,
-	padding:      Space,
-	track:        Track,
-	size:         Prepared_Size,
-	effects:      Prepared_Container_Effects,
+	columns:       i32,
+	row_height:    i32,
+	column_tracks: []Track,
+	row_tracks:    []Track,
+	auto_flow:     Grid_Auto_Flow,
+	gap_x, gap_y:  Space,
+	padding:       Space,
+	track:         Track,
+	size:          Prepared_Size,
+	effects:       Prepared_Container_Effects,
+}
+
+Prepared_Grid_Cell_Options :: struct {
+	placement: Grid_Placement,
+	align_x:   Cross_Align,
+	align_y:   Cross_Align,
 }
 
 Label_Spec :: struct {
@@ -169,6 +180,7 @@ Prepared_Kind :: enum u8 {
 	Column,
 	Flow,
 	Grid,
+	Grid_Cell,
 	Attachment,
 	Scroll,
 	Label,
@@ -203,6 +215,7 @@ Prepared_Node :: struct {
 		container:  Prepared_Container_Options,
 		flow:       Prepared_Flow_Options,
 		grid:       Prepared_Grid_Options,
+		grid_cell:  Prepared_Grid_Cell_Options,
 		attachment: Prepared_Attachment_Options,
 		scroll:     Prepared_Scroll_Options,
 		label:      Label_Spec,
@@ -333,12 +346,29 @@ prepared_grid_begin :: proc(
 	options: Prepared_Grid_Options,
 ) -> Prepared_Handle {
 	assert(prepared != nil && prepared.open, "prepared_grid_begin: description not open")
-	assert(options.columns > 0, "prepared_grid_begin: invalid columns")
+	assert(
+		(options.columns > 0) != (len(options.column_tracks) > 0),
+		"prepared_grid_begin: invalid columns",
+	)
 	assert(options.row_height >= 0, "prepared_grid_begin: invalid row height")
+	assert(len(options.column_tracks) <= MAX_GRID_TRACKS, "prepared_grid_begin: too many columns")
+	assert(len(options.row_tracks) <= MAX_GRID_TRACKS, "prepared_grid_begin: too many rows")
 	handle := prepared_add(
 		prepared,
 		Prepared_Node{kind = .Grid, track = options.track, sizing = options.size, grid = options},
 	)
+	prepared_push_container(prepared, handle)
+	return handle
+}
+
+prepared_grid_cell_begin :: proc(
+	prepared: ^Prepared_Ui,
+	options: Prepared_Grid_Cell_Options = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_grid_cell_begin: description not open")
+	assert(options.placement.column >= -1 && options.placement.row >= -1)
+	assert(options.placement.column_span >= 0 && options.placement.row_span >= 0)
+	handle := prepared_add(prepared, Prepared_Node{kind = .Grid_Cell, grid_cell = options})
 	prepared_push_container(prepared, handle)
 	return handle
 }
@@ -408,9 +438,13 @@ prepared_container_end :: proc(prepared: ^Prepared_Ui) {
 	index := prepared.stack[stack_index]
 	assert(index >= 0 && index < prepared.count, "prepared_container_end: invalid index")
 	kind := prepared_nodes(prepared)[index].kind
-	if kind == .Attachment || kind == .Scroll {
+	if kind == .Attachment || kind == .Scroll || kind == .Grid_Cell {
 		assert(index >= 0 && index < i32(len(prepared_nodes(prepared))))
 		assert(prepared_child_count(prepared, prepared_nodes(prepared)[index].first_child) == 1)
+	}
+	if kind == .Grid_Cell {
+		parent := prepared_nodes(prepared)[index].parent
+		assert(parent >= 0 && prepared_nodes(prepared)[parent].kind == .Grid)
 	}
 	prepared.depth -= 1
 }
@@ -805,8 +839,12 @@ prepared_add_to :: proc(
 		parent := &nodes[parent_index]
 		assert(prepared_kind_is_container(parent.kind), "prepared_add_to: parent is not container")
 		limit := i32(MAX_LAYOUT_FLEX)
-		if parent.kind == .Flow || parent.kind == .Grid do limit = i32(len(nodes) - 1)
-		if parent.kind == .Attachment || parent.kind == .Scroll do limit = 1
+		if parent.kind == .Flow || parent.kind == .Grid {
+			limit = min(i32(len(nodes) - 1), i32(MAX_GRID_CELLS))
+		}
+		if parent.kind == .Attachment || parent.kind == .Scroll || parent.kind == .Grid_Cell {
+			limit = 1
+		}
 		assert(parent.child_count < limit, "prepared_add_to: children full")
 		if parent.first_child < 0 {
 			parent.first_child = index
@@ -919,6 +957,7 @@ prepared_direct_grid_eligible :: proc(prepared: ^Prepared_Ui) -> bool {
 	assert(prepared != nil && prepared.root >= 0, "prepared direct grid: invalid description")
 	root := &prepared_nodes(prepared)[prepared.root]
 	if root.kind != .Grid || root.grid.row_height <= 0 do return false
+	if len(root.grid.column_tracks) > 0 || len(root.grid.row_tracks) > 0 do return false
 	if root.grid.effects != (Prepared_Container_Effects{}) do return false
 	if root.sizing != (Prepared_Size{}) do return false
 	for index in 1 ..< prepared.count {
@@ -962,6 +1001,8 @@ prepared_measure_natural :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_flow(u, prepared, index, false)
 		} else if node.kind == .Grid {
 			prepared_measure_grid(u, prepared, index, false)
+		} else if node.kind == .Grid_Cell {
+			prepared_measure_grid_cell(prepared, index)
 		} else if node.kind == .Attachment {
 			prepared_measure_attachment(prepared, index)
 		} else if node.kind == .Scroll {
@@ -1066,7 +1107,7 @@ prepared_measure_leaf :: proc(u: ^Ui, node: ^Prepared_Node, max_width: i32) {
 		node.size = prepared_table_cell_size(u, node.table_cell)
 	case .Custom:
 		node.size = node.custom.measure(u, {max_w = max_width}, node.custom.userdata)
-	case .Row, .Column, .Flow, .Grid, .Attachment, .Scroll:
+	case .Row, .Column, .Flow, .Grid, .Grid_Cell, .Attachment, .Scroll:
 		unreachable()
 	}
 	assert(node.size.w >= 0 && node.size.h >= 0, "prepared_measure_leaf: invalid result")
@@ -1077,6 +1118,15 @@ prepared_measure_attachment :: proc(prepared: ^Prepared_Ui, index: i32) {
 	assert(prepared != nil && index >= 0 && index < prepared.count)
 	node := &prepared_nodes(prepared)[index]
 	assert(node.kind == .Attachment, "prepared_measure_attachment: wrong kind")
+	assert(node.first_child >= 0 && node.first_child == node.last_child)
+	node.size = prepared_nodes(prepared)[node.first_child].size
+}
+
+@(private = "file")
+prepared_measure_grid_cell :: proc(prepared: ^Prepared_Ui, index: i32) {
+	assert(prepared != nil && index >= 0 && index < prepared.count)
+	node := &prepared_nodes(prepared)[index]
+	assert(node.kind == .Grid_Cell, "prepared_measure_grid_cell: wrong kind")
 	assert(node.first_child >= 0 && node.first_child == node.last_child)
 	node.size = prepared_nodes(prepared)[node.first_child].size
 }
@@ -1161,18 +1211,48 @@ prepared_measure_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, keep_w
 	when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.container_measures += 1
 	assert(index >= 0 && index < prepared.count, "prepared_measure_grid: index out of range")
 	node := &prepared_nodes(prepared)[index]
-	assert(node.grid.columns > 0, "prepared_measure_grid: invalid columns")
-	count := prepared_in_flow_child_count(prepared, node.first_child)
-	rows := (count + node.grid.columns - 1) / node.grid.columns
 	padding := insets_of(u, node.grid.padding)
-	gap_y := space_px(u, node.grid.gap_y)
-	row_h := ui_frame_sc(u.frame, node.grid.row_height)
-	content_h := rows * row_h + max(rows - 1, 0) * gap_y
 	width := prepared.constraints.max_w
 	if keep_width && node.rect.w > 0 do width = node.rect.w
 	assert(width > 0, "prepared_measure_grid: finite width required")
-	content_w := max(width - padding.left - padding.right, 0)
-	node.size = intrinsic_padding(intrinsic_leaf(content_w, content_h), padding)
+	if len(node.grid.column_tracks) == 0 {
+		assert(node.grid.columns > 0, "prepared_measure_grid: invalid columns")
+		count := prepared_in_flow_child_count(prepared, node.first_child)
+		rows := (count + node.grid.columns - 1) / node.grid.columns
+		gap_y := space_px(u, node.grid.gap_y)
+		row_h := ui_frame_sc(u.frame, node.grid.row_height)
+		content_h := rows * row_h + max(rows - 1, 0) * gap_y
+		content_w := max(width - padding.left - padding.right, 0)
+		node.size = intrinsic_padding(intrinsic_leaf(content_w, content_h), padding)
+		return
+	}
+	rows := len(node.grid.row_tracks)
+	if rows == 0 {
+		count := prepared_in_flow_child_count(prepared, node.first_child)
+		rows = int(
+			(count + i32(len(node.grid.column_tracks)) - 1) / i32(len(node.grid.column_tracks)),
+		)
+	}
+	row_h := ui_frame_sc(u.frame, node.grid.row_height)
+	content_h := i32(rows) * row_h + max(i32(rows) - 1, 0) * space_px(u, node.grid.gap_y)
+	if len(node.grid.row_tracks) > 0 {
+		row_tracks: [MAX_GRID_TRACKS]Track
+		row_sizes: [MAX_GRID_TRACKS]i32
+		for track, track_index in node.grid.row_tracks {
+			row_tracks[track_index] = prepared_scale_track(u, track)
+		}
+		result := track_resolve(
+			row_tracks[:rows],
+			prepared.constraints.max_h,
+			space_px(u, node.grid.gap_y),
+			row_sizes[:],
+		)
+		content_h = result.used
+	}
+	node.size = intrinsic_padding(
+		intrinsic_leaf(width - padding.left - padding.right, content_h),
+		padding,
+	)
 }
 
 @(private = "file")
@@ -1279,6 +1359,8 @@ prepared_remeasure_containers :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_flow(u, prepared, index, false)
 		} else if node.kind == .Grid {
 			prepared_measure_grid(u, prepared, index, false)
+		} else if node.kind == .Grid_Cell {
+			prepared_measure_grid_cell(prepared, index)
 		} else if node.kind == .Attachment {
 			prepared_measure_attachment(prepared, index)
 		} else if node.kind == .Scroll {
@@ -1375,6 +1457,8 @@ prepared_assign_widths :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_place_flow(u, prepared, index)
 		} else if node.kind == .Grid {
 			prepared_place_grid(u, prepared, index)
+		} else if node.kind == .Grid_Cell {
+			prepared_place_grid_cell(prepared, index)
 		} else if node.kind == .Scroll {
 			prepared_place_scroll(u, prepared, index, false)
 		}
@@ -1419,6 +1503,8 @@ prepared_measure_heights :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_grid(u, prepared, index, true)
 		} else if node.kind == .Scroll {
 			prepared_measure_scroll(u, prepared, index, true)
+		} else if node.kind == .Grid_Cell {
+			prepared_measure_grid_cell(prepared, index)
 		} else if node.kind == .Row || node.kind == .Column {
 			prepared_measure_container(u, prepared, index, true)
 		} else {
@@ -1458,6 +1544,8 @@ prepared_place_container :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 		prepared_place_flow(u, prepared, index)
 	} else if node.kind == .Grid {
 		prepared_place_grid(u, prepared, index)
+	} else if node.kind == .Grid_Cell {
+		prepared_place_grid_cell(prepared, index)
 	} else if node.kind == .Scroll {
 		prepared_place_scroll(u, prepared, index, true)
 	}
@@ -1644,22 +1732,234 @@ prepared_attachment_point :: proc(rect: Rect_I32, point: Attachment_Point) -> [2
 }
 
 @(private = "file")
+prepared_flow_line_end :: proc(
+	prepared: ^Prepared_Ui,
+	first: i32,
+	width, gap: i32,
+) -> (
+	end: i32,
+	count, used, height: i32,
+) {
+	assert(prepared != nil && first >= 0 && first < prepared.count)
+	assert(width >= 0 && gap >= 0, "prepared flow line: invalid bounds")
+	child := first
+	for _ in 0 ..< prepared.count {
+		if child < 0 do break
+		value := &prepared_nodes(prepared)[child]
+		if value.kind == .Attachment {
+			child = value.next_sibling
+			continue
+		}
+		item_width := value.size.w
+		if value.track.kind == .Grow do item_width = ui_frame_sc(prepared.u.frame, value.track.min_size)
+		before := gap if count > 0 else 0
+		if count > 0 && i64(used) + i64(before) + i64(item_width) > i64(width) do break
+		used = min(width, used + before + item_width)
+		height = max(height, value.size.h)
+		count += 1
+		child = value.next_sibling
+	}
+	assert(count > 0, "prepared flow line: empty line")
+	return child, count, used, height
+}
+
+@(private = "file")
+prepared_flow_grow_sizes :: proc(
+	u: ^Ui,
+	prepared: ^Prepared_Ui,
+	first, end, free: i32,
+	result: ^[MAX_FLOW_GROW_ITEMS]i32,
+) -> i32 {
+	assert(u != nil && prepared != nil && result != nil, "prepared flow grow: invalid argument")
+	tracks: [MAX_FLOW_GROW_ITEMS]Track
+	count: i32
+	child := first
+	for _ in 0 ..< prepared.count {
+		if child < 0 || child == end do break
+		value := &prepared_nodes(prepared)[child]
+		if value.kind != .Attachment && value.track.kind == .Grow {
+			assert(count < MAX_FLOW_GROW_ITEMS, "prepared flow grow: line capacity exceeded")
+			tracks[count] = prepared_scale_track(u, value.track)
+			count += 1
+		}
+		child = value.next_sibling
+	}
+	if count > 0 do _ = track_resolve(tracks[:count], free, 0, result[:])
+	return count
+}
+
+@(private = "file")
+prepared_place_flow_line :: proc(
+	u: ^Ui,
+	prepared: ^Prepared_Ui,
+	node: ^Prepared_Node,
+	first, end, count, used, height, y: i32,
+	content: Rect_I32,
+) {
+	assert(
+		u != nil && prepared != nil && node != nil,
+		"prepared flow place line: invalid argument",
+	)
+	gap := space_px(u, node.flow.gap_x)
+	free := max(content.w - used, 0)
+	grow_sizes: [MAX_FLOW_GROW_ITEMS]i32
+	grow_count := prepared_flow_grow_sizes(u, prepared, first, end, free, &grow_sizes)
+	resolved_used := content.w if grow_count > 0 else used
+	leftover := max(content.w - resolved_used, 0)
+	x := content.x
+	between: i32
+	if node.flow.justify == .Center do x += leftover / 2
+	if node.flow.justify == .End do x += leftover
+	if node.flow.justify == .Space_Between && count > 1 do between = leftover
+	child, item_index, grow_index := first, i32(0), i32(0)
+	for _ in 0 ..< prepared.count {
+		if child < 0 || child == end do break
+		value := &prepared_nodes(prepared)[child]
+		if value.kind != .Attachment {
+			width := value.size.w
+			if value.track.kind == .Grow {
+				width = grow_sizes[grow_index]
+				grow_index += 1
+			}
+			offset_y: i32
+			if node.flow.align == .Center do offset_y = (height - value.size.h) / 2
+			if node.flow.align == .End do offset_y = height - value.size.h
+			value.rect = {x, y + offset_y, min(width, content.w), value.size.h}
+			x += width
+			if item_index + 1 < count {
+				x += gap
+				if between > 0 {
+					share := i64(item_index + 1) * i64(between) / i64(count - 1)
+					before := i64(item_index) * i64(between) / i64(count - 1)
+					x += i32(share - before)
+				}
+			}
+			item_index += 1
+		}
+		child = value.next_sibling
+	}
+	assert(grow_index == grow_count && item_index == count, "prepared flow place line: incomplete")
+}
+
+@(private = "file")
 prepared_place_flow :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 	assert(u != nil && prepared != nil, "prepared_place_flow: invalid argument")
 	node := &prepared_nodes(prepared)[index]
 	content := rect_inset(node.rect, insets_of(u, node.flow.padding))
-	flow: Flow_Layout
-	flow_begin(&flow, content, space_px(u, node.flow.gap_x), space_px(u, node.flow.gap_y))
+	child := node.first_child
+	y := content.y
+	for _ in 0 ..< prepared.count {
+		for child >= 0 && prepared_nodes(prepared)[child].kind == .Attachment {
+			child = prepared_nodes(prepared)[child].next_sibling
+		}
+		if child < 0 do break
+		end, count, used, height := prepared_flow_line_end(
+			prepared,
+			child,
+			content.w,
+			space_px(u, node.flow.gap_x),
+		)
+		prepared_place_flow_line(u, prepared, node, child, end, count, used, height, y, content)
+		y += height + space_px(u, node.flow.gap_y)
+		child = end
+	}
+	assert(child < 0, "prepared_place_flow: child bound")
+}
+
+@(private = "file")
+prepared_grid_items :: proc(
+	prepared: ^Prepared_Ui,
+	node: ^Prepared_Node,
+	indices: ^[MAX_GRID_CELLS]i32,
+	placements: ^[MAX_GRID_CELLS]Grid_Placement,
+) -> i32 {
+	assert(prepared != nil && node != nil, "prepared grid items: invalid argument")
+	assert(indices != nil && placements != nil, "prepared grid items: nil output")
+	count: i32
 	child := node.first_child
 	for _ in 0 ..< prepared.count {
 		if child < 0 do break
-		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.child_run_visits += 1
 		value := &prepared_nodes(prepared)[child]
-		if value.kind != .Attachment do value.rect = flow_next(&flow, value.size.w, value.size.h)
+		if value.kind != .Attachment {
+			assert(count < MAX_GRID_CELLS, "prepared grid items: capacity exceeded")
+			indices[count] = child
+			placements[count] =
+				value.grid_cell.placement if value.kind == .Grid_Cell else {-1, -1, 1, 1}
+			count += 1
+		}
 		child = value.next_sibling
 	}
-	assert(child < 0, "prepared_place_flow: child bound")
-	_ = flow_end(&flow)
+	assert(child < 0, "prepared grid items: child bound")
+	return count
+}
+
+@(private = "file")
+prepared_place_track_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, content: Rect_I32) {
+	assert(u != nil && prepared != nil, "prepared track grid: invalid argument")
+	node := &prepared_nodes(prepared)[index]
+	column_count := len(node.grid.column_tracks)
+	indices: [MAX_GRID_CELLS]i32
+	placements: [MAX_GRID_CELLS]Grid_Placement
+	resolved: [MAX_GRID_CELLS]Grid_Resolved_Placement
+	count := prepared_grid_items(prepared, node, &indices, &placements)
+	row_count := len(node.grid.row_tracks)
+	if row_count == 0 {
+		row_count = min((int(count) + column_count - 1) / column_count, MAX_GRID_TRACKS)
+	}
+	row_count = max(row_count, 1)
+	columns: [MAX_GRID_TRACKS]Track
+	rows: [MAX_GRID_TRACKS]Track
+	for track, track_index in node.grid.column_tracks {
+		columns[track_index] = prepared_scale_track(u, track)
+	}
+	for track, track_index in node.grid.row_tracks {
+		rows[track_index] = prepared_scale_track(u, track)
+	}
+	if len(node.grid.row_tracks) == 0 {
+		row_height := fixed(ui_frame_sc(u.frame, node.grid.row_height))
+		for track_index in 0 ..< row_count do rows[track_index] = row_height
+	}
+	for item_index in 0 ..< count {
+		placement := placements[item_index]
+		placement.column_span = max(placement.column_span, 1)
+		placement.row_span = max(placement.row_span, 1)
+		if placement.column < 0 || placement.column_span != 1 do continue
+		item := &prepared_nodes(prepared)[indices[item_index]]
+		column := &columns[placement.column]
+		if column.kind == .Fit || column.kind == .Hug do column.basis = max(column.basis, item.size.w)
+	}
+	column_sizes: [MAX_GRID_TRACKS]i32
+	row_sizes: [MAX_GRID_TRACKS]i32
+	_ = track_resolve(
+		columns[:column_count],
+		content.w,
+		space_px(u, node.grid.gap_x),
+		column_sizes[:],
+	)
+	_ = track_resolve(rows[:row_count], content.h, space_px(u, node.grid.gap_y), row_sizes[:])
+	unplaced := grid_auto_place(
+		placements[:count],
+		i32(column_count),
+		i32(row_count),
+		node.grid.auto_flow,
+		resolved[:],
+	)
+	for _ in 0 ..< unplaced do ui_frame_record_layout_overflow(u.frame)
+	for item_index in 0 ..< count {
+		item := &prepared_nodes(prepared)[indices[item_index]]
+		if resolved[item_index].placed {
+			item.rect = grid_span_rect(
+				content,
+				column_sizes[:column_count],
+				row_sizes[:row_count],
+				space_px(u, node.grid.gap_x),
+				space_px(u, node.grid.gap_y),
+				resolved[item_index],
+			)
+		} else {
+			item.rect = {content.x, content.y, 0, 0}
+		}
+	}
 }
 
 @(private = "file")
@@ -1667,6 +1967,10 @@ prepared_place_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 	assert(u != nil && prepared != nil, "prepared_place_grid: invalid argument")
 	node := &prepared_nodes(prepared)[index]
 	content := rect_inset(node.rect, insets_of(u, node.grid.padding))
+	if len(node.grid.column_tracks) > 0 {
+		prepared_place_track_grid(u, prepared, index, content)
+		return
+	}
 	grid: Grid
 	grid_begin(
 		&grid,
@@ -1681,14 +1985,30 @@ prepared_place_grid :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 		if child < 0 do break
 		when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.child_run_visits += 1
 		value := &prepared_nodes(prepared)[child]
-		if value.kind != .Attachment {
-			value.rect = grid_next(&grid)
-			when UI_TELEMETRY_ENABLED do u.frame.prepared_telemetry.width_assignments += 1
-		}
+		if value.kind != .Attachment do value.rect = grid_next(&grid)
 		child = value.next_sibling
 	}
 	assert(child < 0, "prepared_place_grid: child bound")
 	_ = grid_end(&grid)
+}
+
+@(private = "file")
+prepared_place_grid_cell :: proc(prepared: ^Prepared_Ui, index: i32) {
+	assert(prepared != nil && index >= 0 && index < prepared.count)
+	node := &prepared_nodes(prepared)[index]
+	assert(node.kind == .Grid_Cell && node.first_child == node.last_child)
+	child := &prepared_nodes(prepared)[node.first_child]
+	width := child.size.w
+	height := child.size.h
+	if node.grid_cell.align_x == .Stretch do width = node.rect.w
+	if node.grid_cell.align_y == .Stretch do height = node.rect.h
+	x := node.rect.x
+	y := node.rect.y
+	if node.grid_cell.align_x == .Center do x += (node.rect.w - width) / 2
+	if node.grid_cell.align_x == .End do x += node.rect.w - width
+	if node.grid_cell.align_y == .Center do y += (node.rect.h - height) / 2
+	if node.grid_cell.align_y == .End do y += node.rect.h - height
+	child.rect = {x, y, min(width, node.rect.w), min(height, node.rect.h)}
 }
 
 @(private = "file")
@@ -1758,6 +2078,27 @@ prepared_children :: proc(
 }
 
 @(private = "file")
+prepared_scale_track :: proc(u: ^Ui, track: Track) -> Track {
+	assert(u != nil && u.frame != nil, "prepared scale track: invalid UI")
+	assert(track.min_size >= 0 && (track.max_size == 0 || track.max_size >= track.min_size))
+	minimum := ui_frame_sc(u.frame, track.min_size)
+	maximum := ui_frame_sc(u.frame, track.max_size) if track.max_size > 0 else 0
+	switch track.kind {
+	case .Fit:
+		return fit(ui_frame_sc(u.frame, track.basis), minimum, maximum)
+	case .Hug:
+		return hug(ui_frame_sc(u.frame, track.basis), minimum, maximum)
+	case .Grow:
+		return grow(track.weight, minimum, maximum)
+	case .Fixed:
+		return fixed(ui_frame_sc(u.frame, track.basis))
+	case .Percent:
+		return percent(track.percent, minimum, maximum)
+	}
+	unreachable()
+}
+
+@(private = "file")
 prepared_track_px :: proc(u: ^Ui, node: ^Prepared_Node, parent_kind: Prepared_Kind) -> Track {
 	assert(u != nil && node != nil, "prepared_track_px: invalid argument")
 	assert(parent_kind == .Row || parent_kind == .Column, "prepared_track_px: invalid parent")
@@ -1767,23 +2108,14 @@ prepared_track_px :: proc(u: ^Ui, node: ^Prepared_Node, parent_kind: Prepared_Ki
 		assert(basis >= 0, "prepared_track_px: negative intrinsic basis")
 		return hug(basis)
 	}
-	minimum := ui_frame_sc(u.frame, track.min_size)
-	maximum := ui_frame_sc(u.frame, track.max_size) if track.max_size > 0 else 0
-	switch track.kind {
-	case .Fit:
-		return fit(ui_frame_sc(u.frame, track.basis), minimum, maximum)
-	case .Hug:
+	if track.kind == .Hug {
 		basis := node.size.w if parent_kind == .Row else node.size.h
-		assert(basis >= 0, "prepared_track_px: negative hug basis")
-		return hug(basis, minimum, maximum)
-	case .Grow:
-		return grow(track.weight, minimum, maximum)
-	case .Fixed:
-		return fixed(ui_frame_sc(u.frame, track.basis))
-	case .Percent:
-		return percent(track.percent, minimum, maximum)
+		track.basis = basis
+		track.min_size = ui_frame_sc(u.frame, track.min_size)
+		track.max_size = ui_frame_sc(u.frame, track.max_size) if track.max_size > 0 else 0
+		return track
 	}
-	unreachable()
+	return prepared_scale_track(u, track)
 }
 
 Prepared_Render_Frame :: struct {
@@ -1845,6 +2177,7 @@ prepared_kind_is_container :: proc(kind: Prepared_Kind) -> bool {
 		kind == .Column ||
 		kind == .Flow ||
 		kind == .Grid ||
+		kind == .Grid_Cell ||
 		kind == .Attachment ||
 		kind == .Scroll \
 	)
@@ -1969,6 +2302,8 @@ prepared_container_effects :: proc(node: ^Prepared_Node) -> Prepared_Container_E
 		return node.flow.effects
 	case .Grid:
 		return node.grid.effects
+	case .Grid_Cell:
+		return {}
 	case .Attachment,
 	     .Scroll,
 	     .Label,
@@ -2012,7 +2347,7 @@ prepared_render_leaf :: proc(u: ^Ui, node: ^Prepared_Node) {
 		prepared_table_cell_at(u, node.table_cell, node.rect)
 	case .Custom:
 		node.activated = node.custom.render(u, node.rect, node.custom.userdata)
-	case .Row, .Column, .Flow, .Grid, .Attachment, .Scroll:
+	case .Row, .Column, .Flow, .Grid, .Grid_Cell, .Attachment, .Scroll:
 		unreachable()
 	}
 	if node.activation != nil {

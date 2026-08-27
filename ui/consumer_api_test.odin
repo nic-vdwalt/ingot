@@ -50,6 +50,16 @@ consumer_api_baseline_compiles :: proc(t: ^testing.T) {
 	fit_end(&flow_builder)
 	flow_size := fit_measure(&flow_builder)
 	fit_render_at(&flow_builder, {0, 0, flow_size.w, flow_size.h})
+	tracks := [3]Track{fixed(80), grow(), fit(120)}
+	grid_builder: Fit_Builder
+	fit_begin(&grid_builder, &u)
+	fit_builder_grid(&grid_builder, {column_tracks = tracks[:], row_height = 24})
+	fit_builder_grid_cell(&grid_builder, {placement = {column_span = 2}})
+	fit_builder_label(&grid_builder, "Spanning")
+	fit_end(&grid_builder)
+	fit_builder_label(&grid_builder, "Automatic")
+	fit_end(&grid_builder)
+	_ = fit_render(&grid_builder)
 	transition: Transition_Rect_State
 	transition_rect_reset(&transition, {0, 0, 40, 20})
 	attachment_builder: Fit_Builder

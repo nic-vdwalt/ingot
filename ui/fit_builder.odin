@@ -172,7 +172,21 @@ fit_builder_flow :: proc(builder: ^Fit_Builder, options: Prepared_Flow_Options =
 }
 
 fit_builder_grid :: proc(builder: ^Fit_Builder, options: Prepared_Grid_Options) {
+	assert(builder != nil, "fit_builder_grid: nil builder")
 	fit_builder_container_begin_special(builder, .Grid, {}, options)
+}
+
+fit_builder_grid_cell :: proc(builder: ^Fit_Builder, options: Prepared_Grid_Cell_Options = {}) {
+	assert(builder != nil, "fit_builder_grid_cell: nil builder")
+	fit_builder_assert_open(builder)
+	assert(builder.prepared.depth > 0, "fit_builder_grid_cell: cell cannot be root")
+	depth := builder.prepared.depth - 1
+	assert(builder.container_kinds[depth] == .Grid, "fit_builder_grid_cell: parent is not grid")
+	fit_builder_add_child(builder)
+	_ = prepared_grid_cell_begin(&builder.prepared, options)
+	depth = builder.prepared.depth - 1
+	builder.direct_children[depth] = 0
+	builder.container_kinds[depth] = .Grid_Cell
 }
 
 fit_builder_attachment :: proc(builder: ^Fit_Builder, options: Prepared_Attachment_Options) {
@@ -592,8 +606,14 @@ fit_builder_assert_balanced :: proc(builder: ^Fit_Builder) {
 	nodes := prepared_nodes(&builder.prepared)
 	for index in 0 ..< builder.prepared.count {
 		node := nodes[index]
-		if node.kind == .Attachment || node.kind == .Scroll {
+		if node.kind == .Attachment || node.kind == .Scroll || node.kind == .Grid_Cell {
 			assert(node.child_count == 1, "fit builder: special container requires one child")
+		}
+		if node.kind == .Grid_Cell {
+			assert(
+				node.parent >= 0 && nodes[node.parent].kind == .Grid,
+				"fit builder: invalid grid cell",
+			)
 		}
 	}
 }
@@ -666,8 +686,10 @@ fit_builder_add_child :: proc(builder: ^Fit_Builder) {
 	depth := builder.prepared.depth - 1
 	limit := i32(MAX_LAYOUT_FLEX)
 	kind := builder.container_kinds[depth]
-	if kind == .Flow || kind == .Grid do limit = i32(prepared_capacity(&builder.prepared) - 1)
-	if kind == .Attachment || kind == .Scroll do limit = 1
+	if kind == .Flow || kind == .Grid {
+		limit = min(i32(prepared_capacity(&builder.prepared) - 1), i32(MAX_GRID_CELLS))
+	}
+	if kind == .Attachment || kind == .Scroll || kind == .Grid_Cell do limit = 1
 	assert(builder.direct_children[depth] < limit, "fit builder: children full")
 	fit_builder_prepare_node(builder)
 	builder.direct_children[depth] += 1

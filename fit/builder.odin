@@ -187,6 +187,13 @@ Grid :: proc {
 	grid_child,
 }
 
+Grid_Cell :: proc(parent: Parent, options: Grid_Cell_Options = {}) -> Parent {
+	builder := parent_select(parent)
+	ui.fit_builder_grid_cell(&builder.inner, to_grid_cell_options(options))
+	handle := ui.fit_parent_created(&builder.inner)
+	return parent_child(parent, handle)
+}
+
 Attachment :: proc(parent: Parent, options: Attachment_Options) -> Parent {
 	builder := parent_select(parent)
 	ui.fit_builder_attachment(&builder.inner, to_attachment_options(options))
