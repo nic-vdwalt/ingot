@@ -63,6 +63,31 @@ Layer_With :: proc(
 	assert(u.frame.z_count == z_depth && u.frame.pane_count == pane_depth)
 }
 
+Layer_With_Reserved_Paint :: proc(
+	surface: ^Surface,
+	z: Z_Order,
+	command_count: int,
+	body: Layer_Build_Proc,
+	user_data: rawptr = nil,
+	claim: Float_Rect = {},
+) -> bool {
+	assert(surface != nil && body != nil, "Fit.Layer_With_Reserved_Paint: invalid argument")
+	assert(command_count > 0 && command_count <= PAINT_COMMAND_CAP)
+	u := surface_ui(surface)
+	z_depth := u.frame.z_count
+	pane_depth := u.frame.pane_count
+	Layer_Begin(surface, z, claim)
+	accepted := ui.paint_commands_reservation_begin(&u.frame.output.overlay, command_count)
+	if accepted {
+		body(surface, user_data)
+		ui.paint_commands_reservation_end(&u.frame.output.overlay)
+	}
+	assert(u.frame.z_count == z_depth + 1 && u.frame.pane_count == pane_depth + 1)
+	Layer_End(surface)
+	assert(u.frame.z_count == z_depth && u.frame.pane_count == pane_depth)
+	return accepted
+}
+
 Pane_With :: proc(
 	surface: ^Surface,
 	state: ^Pane_State,
