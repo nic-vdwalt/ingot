@@ -163,6 +163,8 @@ Gpu_3D_Pass :: struct {
 	// Pass start time in seconds since context start, fed to shaders via
 	// light_params.w for animation.
 	time:                      f32,
+	underwater_primary:        [4]f32,
+	underwater_secondary:      [4]f32,
 	generation:                u64,
 	active:                    bool,
 	sample_count:              u32,
@@ -1490,6 +1492,15 @@ set_gpu_3d_light :: proc(pass: ^Gpu_3D_Pass, light: Gpu_3D_Light) {
 	pass.light = normalized
 }
 
+set_gpu_3d_underwater_medium :: proc(
+	pass: ^Gpu_3D_Pass,
+	absorption_blend, scattering_turbidity: [4]f32,
+) {
+	assert(pass != nil, "set_gpu_3d_underwater_medium: nil pass")
+	pass.underwater_primary = absorption_blend
+	pass.underwater_secondary = scattering_turbidity
+}
+
 // _light_normalize is the pure core of set_gpu_3d_light, split out so the
 // clamping and normalization contract is headless-testable.
 @(private)
@@ -1750,8 +1761,8 @@ _gpu_3d_uniforms :: proc(
 		use_texture = u32(1) if textured else 0,
 		use_normal = u32(1) if normal_mapped else 0,
 		use_roughness_ao = u32(1) if roughness_ao_mapped else 0,
-		custom_params_5 = material.custom_params_5,
-		custom_params_6 = material.custom_params_6,
+		custom_params_5 = pass.underwater_primary,
+		custom_params_6 = pass.underwater_secondary,
 		custom_params_7 = material.custom_params_7,
 		custom_params_8 = material.custom_params_8,
 		custom_params_9 = material.custom_params_9,
