@@ -232,6 +232,8 @@ to_flow_options :: proc(value: Flow_Options) -> ui.Prepared_Flow_Options {
 		gap_x = value.gap_x,
 		gap_y = value.gap_y,
 		padding = value.padding,
+		align = value.align,
+		justify = value.justify,
 		track = to_track(value.track),
 		size = to_size(value.size),
 		effects = to_effects(value.effects),
@@ -240,17 +242,41 @@ to_flow_options :: proc(value: Flow_Options) -> ui.Prepared_Flow_Options {
 
 @(private = "package")
 to_grid_options :: proc(value: Grid_Options) -> ui.Prepared_Grid_Options {
-	assert(value.columns > 0, "Fit.Grid: invalid columns")
+	assert(
+		(value.columns > 0) != (len(value.column_tracks) > 0),
+		"Fit.Grid: choose columns or tracks",
+	)
 	assert(value.row_height >= 0, "Fit.Grid: negative row height")
+	assert(len(value.column_tracks) <= GRID_TRACK_MAX, "Fit.Grid: too many columns")
+	assert(len(value.row_tracks) <= GRID_TRACK_MAX, "Fit.Grid: too many rows")
 	return {
 		columns = value.columns,
 		row_height = value.row_height,
+		column_tracks = value.column_tracks,
+		row_tracks = value.row_tracks,
+		auto_flow = ui.Grid_Auto_Flow(value.auto_flow),
 		gap_x = value.gap_x,
 		gap_y = value.gap_y,
 		padding = value.padding,
 		track = to_track(value.track),
 		size = to_size(value.size),
 		effects = to_effects(value.effects),
+	}
+}
+
+@(private = "package")
+to_grid_cell_options :: proc(value: Grid_Cell_Options) -> ui.Prepared_Grid_Cell_Options {
+	assert(value.column >= -1 && value.row >= -1, "Fit.Grid_Cell: invalid placement")
+	assert(value.column_span >= 0 && value.row_span >= 0, "Fit.Grid_Cell: invalid span")
+	return {
+		placement = {
+			column = value.column,
+			row = value.row,
+			column_span = value.column_span,
+			row_span = value.row_span,
+		},
+		align_x = value.align_x,
+		align_y = value.align_y,
 	}
 }
 

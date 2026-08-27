@@ -90,6 +90,12 @@ There is no prepared-container open state or balancing call. `Scope` returns a
 Parent with a derived component identity and no additional layout node. `Center`
 is the root-only full-window centering convenience. Parent values are invalid
 outside the draw that created them and must never be retained.
+
+Responsive Flow and track Grid are part of this same declaration model. Their
+track slices and `Grid_Cell` values are borrowed current-build inputs; they do
+not create retained layout or widget state. Descend to `fit.Surface` or
+`ingot:ui` only when the application owns explicit geometry or host lifecycle.
+
 `Render` consumes the declaration synchronously and dispatches activated Builder
 actions before returning. Actions run in the activating frame but cannot change
 the description already being rendered. `Button_Delayed` plus `Signal` is the

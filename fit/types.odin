@@ -69,6 +69,9 @@ Storage :: struct {
 }
 STORAGE_NODE_DEFAULT :: 128
 STORAGE_NODE_HARD_MAX :: 8192
+GRID_TRACK_MAX :: 32
+GRID_CELL_MAX :: GRID_TRACK_MAX * GRID_TRACK_MAX
+FLOW_GROW_ITEM_MAX :: 32
 #assert(STORAGE_NODE_DEFAULT == ui.MAX_PREPARED_NODES_DEFAULT)
 #assert(STORAGE_NODE_HARD_MAX == ui.MAX_PREPARED_NODES_HARD)
 #assert(size_of(Storage_Node) == size_of(ui.Prepared_Node))
@@ -539,19 +542,36 @@ Card_Options :: struct {
 Flow_Options :: struct {
 	gap_x, gap_y: Space,
 	padding:      Space,
+	align:        Cross_Align,
+	justify:      Main_Align,
 	track:        Track,
 	size:         Size_Options,
 	effects:      Container_Effects,
 }
 
+Grid_Auto_Flow :: enum u8 {
+	Row,
+	Column,
+}
+
 Grid_Options :: struct {
-	columns:      i32,
-	row_height:   i32,
-	gap_x, gap_y: Space,
-	padding:      Space,
-	track:        Track,
-	size:         Size_Options,
-	effects:      Container_Effects,
+	columns:       i32,
+	row_height:    i32,
+	column_tracks: []Track,
+	row_tracks:    []Track,
+	auto_flow:     Grid_Auto_Flow,
+	gap_x, gap_y:  Space,
+	padding:       Space,
+	track:         Track,
+	size:          Size_Options,
+	effects:       Container_Effects,
+}
+
+Grid_Cell_Options :: struct {
+	column, row:           i32,
+	column_span, row_span: i32,
+	align_x:               Cross_Align,
+	align_y:               Cross_Align,
 }
 
 Attachment_Target :: ui.Attachment_Target_Kind

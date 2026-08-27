@@ -18,6 +18,9 @@ MAX_LAYOUT_WEIGHTS :: 32
 
 // MAX_LAYOUT_FLEX bounds one flex declaration to fixed caller-owned storage.
 MAX_LAYOUT_FLEX :: 32
+MAX_GRID_TRACKS :: MAX_LAYOUT_FLEX
+MAX_GRID_CELLS :: MAX_GRID_TRACKS * MAX_GRID_TRACKS
+MAX_FLOW_GROW_ITEMS :: MAX_LAYOUT_FLEX
 
 // Rect_I32 and its float paint counterpart live in types.odin.
 
@@ -555,6 +558,155 @@ Track :: struct {
 	max_size: i32,
 }
 
+Grid_Auto_Flow :: enum u8 {
+	Row,
+	Column,
+}
+
+Grid_Placement :: struct {
+	column, row:           i32,
+	column_span, row_span: i32,
+}
+
+Grid_Resolved_Placement :: struct {
+	column, row:           i32,
+	column_span, row_span: i32,
+	placed:                bool,
+}
+
+Track_Resolve_Result :: struct {
+	used:     i32,
+	overflow: i32,
+}
+
+@(private = "file")
+grid_placement_normalize :: proc(value: Grid_Placement) -> Grid_Placement {
+	assert(value.column >= -1 && value.row >= -1, "grid placement: invalid coordinate")
+	assert(value.column_span >= 0 && value.row_span >= 0, "grid placement: invalid span")
+	result := value
+	result.column_span = max(result.column_span, 1)
+	result.row_span = max(result.row_span, 1)
+	return result
+}
+
+@(private = "file")
+grid_candidate_fits :: proc(
+	occupied: ^[MAX_GRID_CELLS]bool,
+	columns, rows, column, row, column_span, row_span: i32,
+) -> bool {
+	assert(occupied != nil && columns > 0 && rows > 0, "grid candidate: invalid grid")
+	assert(column >= 0 && row >= 0 && column_span > 0 && row_span > 0)
+	if column + column_span > columns || row + row_span > rows do return false
+	for y in row ..< row + row_span {
+		for x in column ..< column + column_span {
+			if occupied[y * columns + x] do return false
+		}
+	}
+	return true
+}
+
+@(private = "file")
+grid_candidate_mark :: proc(
+	occupied: ^[MAX_GRID_CELLS]bool,
+	columns, column, row, column_span, row_span: i32,
+) {
+	assert(occupied != nil && columns > 0, "grid mark: invalid grid")
+	assert(column >= 0 && row >= 0 && column_span > 0 && row_span > 0)
+	for y in row ..< row + row_span {
+		for x in column ..< column + column_span do occupied[y * columns + x] = true
+	}
+}
+
+@(private = "file")
+grid_place_one :: proc(
+	value: Grid_Placement,
+	columns, rows: i32,
+	flow: Grid_Auto_Flow,
+	occupied: ^[MAX_GRID_CELLS]bool,
+) -> Grid_Resolved_Placement {
+	assert(columns > 0 && rows > 0 && occupied != nil, "grid place: invalid grid")
+	placement := grid_placement_normalize(value)
+	for candidate in 0 ..< columns * rows {
+		column := candidate % columns
+		row := candidate / columns
+		if flow == .Column {
+			column = candidate / rows
+			row = candidate % rows
+		}
+		if placement.column >= 0 && column != placement.column do continue
+		if placement.row >= 0 && row != placement.row do continue
+		fits := grid_candidate_fits(
+			occupied,
+			columns,
+			rows,
+			column,
+			row,
+			placement.column_span,
+			placement.row_span,
+		)
+		if !fits do continue
+		grid_candidate_mark(
+			occupied,
+			columns,
+			column,
+			row,
+			placement.column_span,
+			placement.row_span,
+		)
+		return {column, row, placement.column_span, placement.row_span, true}
+	}
+	return {column_span = placement.column_span, row_span = placement.row_span}
+}
+
+grid_auto_place :: proc(
+	placements: []Grid_Placement,
+	columns, rows: i32,
+	flow: Grid_Auto_Flow,
+	resolved: []Grid_Resolved_Placement,
+) -> i32 {
+	assert(columns > 0 && columns <= MAX_GRID_TRACKS, "grid auto place: invalid columns")
+	assert(rows > 0 && rows <= MAX_GRID_TRACKS, "grid auto place: invalid rows")
+	assert(len(resolved) >= len(placements), "grid auto place: insufficient output")
+	occupied: [MAX_GRID_CELLS]bool
+	unplaced: i32
+	for pass in 0 ..< 3 {
+		for value, index in placements {
+			explicit := int(value.column >= 0) + int(value.row >= 0)
+			if explicit != 2 - pass do continue
+			resolved[index] = grid_place_one(value, columns, rows, flow, &occupied)
+			if !resolved[index].placed do unplaced += 1
+		}
+	}
+	return unplaced
+}
+
+grid_span_rect :: proc(
+	bounds: Rect_I32,
+	columns, rows: []i32,
+	gap_x, gap_y: i32,
+	placement: Grid_Resolved_Placement,
+) -> Rect_I32 {
+	assert(len(columns) > 0 && len(rows) > 0, "grid span rect: empty tracks")
+	assert(gap_x >= 0 && gap_y >= 0 && placement.placed, "grid span rect: invalid input")
+	assert(placement.column >= 0 && placement.row >= 0, "grid span rect: negative coordinate")
+	assert(placement.column + placement.column_span <= i32(len(columns)))
+	assert(placement.row + placement.row_span <= i32(len(rows)))
+	x, y := i64(bounds.x), i64(bounds.y)
+	for index in 0 ..< placement.column do x += i64(columns[index]) + i64(gap_x)
+	for index in 0 ..< placement.row do y += i64(rows[index]) + i64(gap_y)
+	width := i64(gap_x) * i64(placement.column_span - 1)
+	height := i64(gap_y) * i64(placement.row_span - 1)
+	for index in placement.column ..< placement.column + placement.column_span {
+		width += i64(columns[index])
+	}
+	for index in placement.row ..< placement.row + placement.row_span {
+		height += i64(rows[index])
+	}
+	assert(x <= i64(max(i32)) && y <= i64(max(i32)), "grid span rect: coordinate overflow")
+	assert(width <= i64(max(i32)) && height <= i64(max(i32)), "grid span rect: size overflow")
+	return {i32(x), i32(y), i32(width), i32(height)}
+}
+
 Layout_Frame :: struct {
 	kind:         Layout_Kind,
 	rect:         Rect_I32, // full frame area
@@ -1034,12 +1186,12 @@ _flex_compression_priority :: proc(track: Track) -> i32 {
 
 @(private = "file")
 _flex_compress_priority :: proc(
-	resolved: ^[MAX_LAYOUT_FLEX]i32,
+	resolved: []i32,
 	sizes: []Track,
 	overflow: i32,
 	priority: i32,
 ) -> i32 {
-	assert(resolved != nil, "_flex_compress_priority: nil sizes")
+	assert(len(resolved) >= len(sizes), "_flex_compress_priority: insufficient output")
 	assert(len(sizes) <= MAX_LAYOUT_FLEX, "_flex_compress_priority: count out of bounds")
 	assert(overflow > 0, "_flex_compress_priority: non-positive overflow")
 	assert(priority >= 0 && priority <= 1, "_flex_compress_priority: invalid priority")
@@ -1068,8 +1220,8 @@ _flex_compress_priority :: proc(
 }
 
 @(private = "file")
-_flex_compress :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Track, overflow: i32) {
-	assert(resolved != nil, "_flex_compress: nil sizes")
+_flex_compress :: proc(resolved: []i32, sizes: []Track, overflow: i32) -> i32 {
+	assert(len(resolved) >= len(sizes), "_flex_compress: insufficient output")
 	assert(len(sizes) <= MAX_LAYOUT_FLEX, "_flex_compress: count out of bounds")
 	assert(overflow > 0, "_flex_compress: non-positive overflow")
 	remaining := _flex_compress_priority(resolved, sizes, overflow, 0)
@@ -1077,11 +1229,12 @@ _flex_compress :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Track, overflow
 		remaining = _flex_compress_priority(resolved, sizes, remaining, 1)
 	}
 	assert(remaining >= 0 && remaining <= overflow, "_flex_compress: invalid remainder")
+	return remaining
 }
 
 @(private = "file")
-_flex_expand :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Track, free: i32) {
-	assert(resolved != nil, "_flex_expand: nil sizes")
+_flex_expand :: proc(resolved: []i32, sizes: []Track, free: i32) -> i32 {
+	assert(len(resolved) >= len(sizes), "_flex_expand: insufficient output")
 	assert(free > 0, "_flex_expand: non-positive free space")
 	remaining_free := free
 	for _ in 0 ..< MAX_LAYOUT_FLEX {
@@ -1111,44 +1264,59 @@ _flex_expand :: proc(resolved: ^[MAX_LAYOUT_FLEX]i32, sizes: []Track, free: i32)
 		remaining_free -= applied
 	}
 	assert(remaining_free >= 0, "_flex_expand: negative remainder")
+	return remaining_free
+}
+
+track_resolve :: proc(
+	tracks: []Track,
+	available: i32,
+	gap: i32,
+	sizes: []i32,
+) -> Track_Resolve_Result {
+	assert(len(tracks) > 0 && len(tracks) <= MAX_LAYOUT_FLEX, "track_resolve: invalid count")
+	assert(len(sizes) >= len(tracks), "track_resolve: insufficient output")
+	assert(available >= 0 && gap >= 0, "track_resolve: invalid space")
+	gap_total := min(i64(gap) * i64(len(tracks) - 1), i64(available))
+	space := available - i32(gap_total)
+	total: i64
+	for track, index in tracks {
+		assert(track.min_size >= 0 && (track.max_size == 0 || track.max_size >= track.min_size))
+		switch track.kind {
+		case .Fit, .Hug:
+			assert(track.basis >= 0, "track_resolve: negative intrinsic basis")
+			sizes[index] = _flex_clamp(track.basis, track.min_size, track.max_size)
+		case .Grow:
+			assert(track.weight > 0, "track_resolve: invalid grow weight")
+			sizes[index] = track.min_size
+		case .Fixed:
+			assert(track.basis >= 0, "track_resolve: negative fixed basis")
+			sizes[index] = track.basis
+		case .Percent:
+			assert(track.percent >= 0 && track.percent <= 1, "track_resolve: invalid percent")
+			sizes[index] = _flex_clamp(
+				i32(f32(space) * track.percent),
+				track.min_size,
+				track.max_size,
+			)
+		}
+		total += i64(sizes[index])
+	}
+	overflow: i32
+	if total > i64(space) {
+		overflow = _flex_compress(sizes, tracks, i32(min(total - i64(space), i64(max(i32)))))
+	} else if total < i64(space) {
+		_ = _flex_expand(sizes, tracks, i32(i64(space) - total))
+	}
+	used: i64 = gap_total
+	for size in sizes[:len(tracks)] do used += i64(size)
+	return {i32(min(used, i64(max(i32)))), overflow}
 }
 
 @(private = "file")
 _flex_resolve :: proc(f: ^Layout_Frame, sizes: []Track, space: i32) {
 	assert(f != nil, "_flex_resolve: nil frame")
 	assert(space >= 0 && len(sizes) <= MAX_LAYOUT_FLEX, "_flex_resolve: invalid input")
-	total: i64
-	for size, index in sizes {
-		assert(
-			size.min_size >= 0 && (size.max_size == 0 || size.max_size >= size.min_size),
-			"_flex_resolve: invalid constraints",
-		)
-		resolved: i32
-		switch size.kind {
-		case .Fit:
-			assert(size.basis >= 0, "_flex_resolve: negative fit basis")
-			resolved = _flex_clamp(size.basis, size.min_size, size.max_size)
-		case .Hug:
-			assert(size.basis >= 0, "_flex_resolve: negative hug basis")
-			resolved = _flex_clamp(size.basis, size.min_size, size.max_size)
-		case .Grow:
-			assert(size.weight > 0, "_flex_resolve: invalid grow weight")
-			resolved = size.min_size
-		case .Fixed:
-			assert(size.basis >= 0, "_flex_resolve: negative fixed basis")
-			resolved = size.basis
-		case .Percent:
-			assert(size.percent >= 0 && size.percent <= 1, "_flex_resolve: invalid percent")
-			resolved = _flex_clamp(i32(f32(space) * size.percent), size.min_size, size.max_size)
-		}
-		f.flex_sizes[index] = resolved
-		total += i64(resolved)
-	}
-	if total > i64(space) {
-		_flex_compress(&f.flex_sizes, sizes, i32(min(total - i64(space), i64(max(i32)))))
-	} else if total < i64(space) {
-		_flex_expand(&f.flex_sizes, sizes, i32(i64(space) - total))
-	}
+	_ = track_resolve(sizes, space, 0, f.flex_sizes[:])
 	f.flex_count = i32(len(sizes))
 	f.flex_index = 0
 	assert(f.flex_count > 0 && f.flex_count <= MAX_LAYOUT_FLEX, "_flex_resolve: invalid result")
