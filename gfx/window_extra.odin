@@ -72,12 +72,14 @@ context_show_window :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_show_window: nil context")
 	assert(ctx.win != nil, "context_show_window: no window")
 	glfw.ShowWindow(glfw.WindowHandle(ctx.win))
+	if _window_should_focus_on_show(ctx.config_flags) do context_focus_window(ctx)
 }
 ShowWindow :: proc() {
 	context_show_window(default_context())
 }
 context_focus_window :: proc(ctx: ^Context) {
 	if ctx == nil || ctx.win == nil do return
+	_platform_activate_window(ctx)
 	glfw.FocusWindow(glfw.WindowHandle(ctx.win))
 }
 FocusWindow :: proc() {
