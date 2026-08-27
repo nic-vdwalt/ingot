@@ -7,10 +7,10 @@ import "ingot:action"
 @(test)
 command_palette_matches_bounded_metadata :: proc(t: ^testing.T) {
 	item := Command_Palette_Item {
-		command = action.Command_Id(1),
-		label = "Save Document",
+		command     = action.Command_Id(1),
+		label       = "Save Document",
 		description = "Writes the active file",
-		keywords = "persist disk",
+		keywords    = "persist disk",
 	}
 	testing.expect(t, command_palette_match(item, "SAVE"))
 	testing.expect(t, command_palette_match(item, "active"))

@@ -18,7 +18,7 @@ def main():
         if path.name == "schema.json":
             continue
         data = json.loads(path.read_text(encoding="utf-8"))
-        if data.get("schema_version") != 1 or len(data.get("checks", [])) == 0:
+        if data.get("schema_version") not in (1, 2) or len(data.get("checks", [])) == 0:
             raise SystemExit(f"invalid evidence: {path}")
         for check in data["checks"]:
             if check.get("status") not in STATUS:

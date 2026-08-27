@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "artifact_bytes_max": 67108864,
+  "workloads": [
+    {"id": "hello", "example": "hello", "kind": "startup-frame-floor"},
+    {"id": "gallery", "example": "gallery", "kind": "widget-ceiling"},
+    {"id": "virtual-list", "example": "widget_parity", "kind": "bounded-visible-work"},
+    {"id": "table", "example": "table_demo", "kind": "interactive-table"},
+    {"id": "idle", "example": "idle_demo", "kind": "idle-scheduling"}
+  ],
+  "required_environment": [
+    "INGOT_BENCH_BACKEND",
+    "INGOT_BENCH_DISPLAY",
+    "INGOT_BENCH_DPI",
+    "INGOT_BENCH_GPU",
+    "INGOT_BENCH_DRIVER",
+    "INGOT_BENCH_POWER_MODE",
+    "INGOT_BENCH_PRESENT_MODE"
+  ]
+}

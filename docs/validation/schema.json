@@ -6,11 +6,20 @@
   "additionalProperties": false,
   "required": ["schema_version", "target", "ingot_revision", "odin_revision", "date_utc", "platform", "checks"],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"enum": [1, 2]},
     "target": {"enum": ["macOS", "Linux", "Windows", "Browser", "Internet TLS"]},
     "ingot_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "odin_revision": {"type": "string", "minLength": 1, "maxLength": 128},
     "date_utc": {"type": "string", "format": "date-time"},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
     "platform": {
       "type": "object",
       "additionalProperties": false,
@@ -22,7 +31,16 @@
         "browser": {"type": "string", "maxLength": 128},
         "gpu": {"type": "string", "maxLength": 256},
         "driver": {"type": "string", "maxLength": 256},
-        "backend": {"type": "string", "maxLength": 64}
+        "backend": {"type": "string", "maxLength": 64},
+        "monitor": {"type": "string", "maxLength": 256},
+        "dpi": {"type": "string", "maxLength": 64},
+        "window_system": {"type": "string", "maxLength": 64},
+        "presentation_mode": {"type": "string", "maxLength": 64},
+        "assistive_technology": {"type": "string", "maxLength": 128},
+        "input_devices": {"type": "string", "maxLength": 256},
+        "locale": {"type": "string", "maxLength": 64},
+        "network_mode": {"type": "string", "maxLength": 128},
+        "package_composition": {"type": "string", "maxLength": 256}
       }
     },
     "checks": {

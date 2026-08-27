@@ -11,9 +11,14 @@ Time_Of_Day :: struct {
 
 time_of_day_valid :: proc(value: Time_Of_Day) -> bool {
 	if !value.set do return false
-	return value.hour >= 0 && value.hour <= 23 &&
-	       value.minute >= 0 && value.minute <= 59 &&
-	       value.second >= 0 && value.second <= 59
+	return(
+		value.hour >= 0 &&
+		value.hour <= 23 &&
+		value.minute >= 0 &&
+		value.minute <= 59 &&
+		value.second >= 0 &&
+		value.second <= 59 \
+	)
 }
 
 time_of_day_format :: proc(value: Time_Of_Day, show_seconds: bool = false) -> string {

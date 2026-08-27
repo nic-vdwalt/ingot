@@ -34,6 +34,22 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- Optional caller-owned `fit.Typed_Commands(T, Capacity)` queues and
+  `Button_Command`: typed fixed-capacity activation delivery without a reducer,
+  recursive dispatch, retained behavior, or framework-owned application state.
+  Direct Actions, activation destinations, and explicit delayed Signals remain
+  supported.
+- Bounded GUI foundations for virtual lists, split panes, flattened caller-owned
+  trees, command-palette filtering, and strict time/color value parsing. Their
+  state and persistent behavior remain application-owned; large collections
+  derive only bounded visible output.
+- A checked GUI parity matrix, compile-time package-boundary guard, dependency
+  composition guide, end-to-end benchmark fixture/evidence contract, and
+  expanded platform-validation evidence schema. Built fixtures and compile-only
+  CI remain explicitly distinct from runtime performance or validation claims.
+- Scalar font resource limits and explicit capability fields for bidi and
+  COLR/CBDT/sbix support, all false until independently implemented and
+  validated.
 - Bounded frame-local raw pointer events across `gfx`, `ui`, `ui_gfx`, and
   `fit`, including browser mouse/touch/pen identity, simultaneous contacts,
   pressure, cancellation, deterministic injection, and explicit overflow.

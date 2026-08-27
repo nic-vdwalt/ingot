@@ -27,6 +27,15 @@ def arguments():
     parser.add_argument("--driver", default="")
     parser.add_argument("--backend", default="")
     parser.add_argument("--note", default="")
+    parser.add_argument("--monitor", default="")
+    parser.add_argument("--dpi", default="")
+    parser.add_argument("--window-system", default="")
+    parser.add_argument("--presentation-mode", default="")
+    parser.add_argument("--assistive-technology", default="")
+    parser.add_argument("--input-devices", default="")
+    parser.add_argument("--locale", default="")
+    parser.add_argument("--network-mode", default="")
+    parser.add_argument("--package-composition", default="")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     result = parser.parse_args()
     if result.command and result.command[0] == "--":
@@ -57,7 +66,7 @@ def main():
     if process.returncode != 0 and status != "blocked":
         status = "failed"
     evidence = {
-        "schema_version": 1,
+        "schema_version": 2,
         "target": args.target,
         "ingot_revision": git_revision(),
         "odin_revision": args.odin_revision,
@@ -77,7 +86,11 @@ def main():
             }
         ],
     }
-    for key in ("browser", "gpu", "driver", "backend"):
+    for key in (
+        "browser", "gpu", "driver", "backend", "monitor", "dpi",
+        "window_system", "presentation_mode", "assistive_technology",
+        "input_devices", "locale", "network_mode", "package_composition",
+    ):
         value = getattr(args, key)
         if value:
             evidence["platform"][key] = value

@@ -46,6 +46,13 @@ let seeded harnesses exercise production code without requiring a window, GPU,
 network, shell, or assistive technology. This is an engineering experiment—not
 a claim of correctness or production readiness. See [Testing](docs/testing.md).
 
+## API paths
+
+Use `ingot:fit` for applications and `ingot:gfx` for graphics-first programs.
+`ingot:ui` and managed `ingot:ui_gfx` hosts are advanced application layers.
+Optional networking, terminal, engine, and accessibility packages compose
+through explicit imports; there is no umbrella runtime profile.
+
 ## Quick start
 
 ```sh
@@ -158,11 +165,17 @@ odin run examples/gallery -collection:ingot=.
 - [Choosing Ingot](docs/comparison.md)
 - [Examples](examples/)
 - [Widget benchmarks](benchmarks/widgets/README.md)
+- [End-to-end performance evidence](docs/performance.md)
+- [GUI parity target](docs/gui-parity.md)
 
 ## Documentation
 
 - [API layers](docs/api-layers.md)
 - [Commands and shortcuts](docs/commands.md)
+- [Widget reference](docs/widgets.md)
+- [Choosing a widget](docs/widget-choice.md)
+- [Dependencies and package composition](docs/dependencies.md)
+- [Performance evidence](docs/performance.md)
 - [Pointer input](docs/pointer-input.md)
 - [Borrowed UI ideas](docs/borrowed-ui-ideas.md)
 - [Text and asset dependency policy](docs/text-asset-dependency-policy.md)

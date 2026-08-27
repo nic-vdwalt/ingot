@@ -14,9 +14,9 @@ Tree_Item :: struct {
 }
 
 Tree_State :: struct {
-	listbox:       Listbox_State,
+	listbox:        Listbox_State,
 	selected_index: int,
-	initialized:   bool,
+	initialized:    bool,
 }
 
 Tree_Config :: struct {
@@ -92,7 +92,11 @@ tree_row :: proc(
 	list_config: Listbox_Config,
 	index: int,
 ) -> Selectable_Row_Result {
+	assert(frame != nil && frame.open, "tree_row: invalid frame")
+	assert(state != nil, "tree_row: nil state")
+	assert(index >= 0 && index < len(config.items), "tree_row: index out of range")
 	item := &config.items[index]
+	assert(!item.has_children || item.expanded != nil, "tree_row: missing expansion state")
 	rect := Rect_I32 {
 		config.rect.x,
 		config.rect.y + i32(index) * config.row_height,
@@ -117,19 +121,41 @@ tree_row :: proc(
 	text_x := rect.x + config.indent * i32(item.depth) + metrics.CONTROL_GAP
 	if item.has_children {
 		marker := "▾" if item.expanded^ else "▸"
-		draw_text_string_frame(frame, marker, text_x, rect.y, metrics.FONT_SIZE_BODY, ui_frame_theme(frame).fg_secondary)
+		draw_text_string_frame(
+			frame,
+			marker,
+			text_x,
+			rect.y,
+			metrics.FONT_SIZE_BODY,
+			ui_frame_theme(frame).fg_secondary,
+		)
 		text_x += config.indent
 	}
-	draw_text_string_frame(frame, item.label, text_x, rect.y, metrics.FONT_SIZE_BODY, ui_frame_theme(frame).fg_primary)
+	draw_text_string_frame(
+		frame,
+		item.label,
+		text_x,
+		rect.y,
+		metrics.FONT_SIZE_BODY,
+		ui_frame_theme(frame).fg_primary,
+	)
 	return result
 }
 
 tree :: proc(frame: ^Ui_Frame, state: ^Tree_State, config: Tree_Config) -> Tree_Result {
 	assert(frame != nil && frame.open && state != nil, "tree: invalid frame")
-	assert(config.selected != nil && config.label != "" && config.stable_id != "", "tree: invalid config")
-	assert(config.row_height > 0 && config.indent > 0 && config.page_rows >= 0, "tree: invalid geometry")
+	assert(
+		config.selected != nil && config.label != "" && config.stable_id != "",
+		"tree: invalid config",
+	)
+	assert(
+		config.row_height > 0 && config.indent > 0 && config.page_rows >= 0,
+		"tree: invalid geometry",
+	)
 	tree_validate(config.items)
-	result := Tree_Result{reveal_index = -1}
+	result := Tree_Result {
+		reveal_index = -1,
+	}
 	if len(config.items) == 0 {
 		config.selected^ = 0
 		state.selected_index = -1
@@ -144,15 +170,15 @@ tree :: proc(frame: ^Ui_Frame, state: ^Tree_State, config: Tree_Config) -> Tree_
 	}
 	state.selected_index = selected
 	list_config := Listbox_Config {
-		rect = config.rect,
-		label = config.label,
-		stable_id = config.stable_id,
-		count = len(config.items),
-		selected = &state.selected_index,
-		wrap = config.wrap,
+		rect         = config.rect,
+		label        = config.label,
+		stable_id    = config.stable_id,
+		count        = len(config.items),
+		selected     = &state.selected_index,
+		wrap         = config.wrap,
 		hover_select = config.hover_select,
-		keys = config.keys,
-		page_rows = config.page_rows,
+		keys         = config.keys,
+		page_rows    = config.page_rows,
 	}
 	list_result := listbox_begin(frame, &state.listbox, list_config)
 	for index in 0 ..< len(config.items) {
@@ -163,7 +189,8 @@ tree :: proc(frame: ^Ui_Frame, state: ^Tree_State, config: Tree_Config) -> Tree_
 		}
 	}
 	listbox_end(frame, &state.listbox)
-	result.selection_changed = list_result.selection_changed || config.selected^ != config.items[state.selected_index].id
+	result.selection_changed =
+		list_result.selection_changed || config.selected^ != config.items[state.selected_index].id
 	config.selected^ = config.items[state.selected_index].id
 	result.reveal = list_result.reveal
 	result.reveal_index = list_result.reveal_index
