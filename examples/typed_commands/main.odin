@@ -23,7 +23,8 @@ main :: proc() {
 Draw :: proc(builder: ^fit.Builder, _: rawptr) {
 	fit.Typed_Commands_Begin(&state.commands)
 	command: Command
-	for fit.Typed_Commands_Take(&state.commands, &command) {
+	for _ in 0 ..< 16 {
+		if !fit.Typed_Commands_Take(&state.commands, &command) do break
 		switch command {
 		case .Continue:
 			state.clicks += 1

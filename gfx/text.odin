@@ -18,6 +18,10 @@ ATLAS_DIM :: 2048
 ATLAS_PAD :: 1
 ATLAS_UPLOAD_ALIGN :: 256
 MAX_ATLASES :: 256
+FONT_DATA_BYTES_MAX :: 32 * 1024 * 1024
+FONT_CODEPOINTS_MAX :: 65536
+FONT_PIXEL_SIZE_MAX :: 512
+FONT_GLYPHS_MAX :: 16384
 
 // The atlas dimension stays a compile-time constant because glyph UVs, the
 // bitmap stride, and the copy layout all derive from it. WebGPU guarantees
@@ -48,6 +52,7 @@ Atlas :: struct {
 	ascent:                f32, // baked px
 	line_adv:              f32, // baked px (ascent - descent + line gap)
 	glyphs:                map[rune]Glyph,
+	glyphs_dropped:        u64,
 	cur_x, cur_y, shelf_h: i32,
 	tex:                   wg.Texture,
 	view:                  wg.TextureView,
@@ -135,6 +140,12 @@ context_load_font_from_memory_impl :: proc(
 	assert(dataSize > 0, "LoadFontFromMemory: non-positive font data size")
 	assert(codepointCount >= 0, "LoadFontFromMemory: negative codepoint count")
 	if codepointCount > 0 do assert(codepoints != nil, "LoadFontFromMemory: nil codepoints")
+	if dataSize > FONT_DATA_BYTES_MAX ||
+	   fontSize <= 0 ||
+	   fontSize > FONT_PIXEL_SIZE_MAX ||
+	   codepointCount > FONT_CODEPOINTS_MAX {
+		return {}
+	}
 	if !_atlas_dim_supported(ctx) {
 		// A device below the WebGPU-guaranteed texture ceiling cannot host
 		// the atlas. Return an empty font (callers already handle
@@ -218,6 +229,10 @@ _bake_glyph :: proc(ctx: ^Context, a: ^Atlas, cp: rune) -> bool {
 	assert(ctx != nil, "_bake_glyph: nil context")
 	assert(a != nil, "_bake_glyph: nil a")
 	if _, ok := a.glyphs[cp]; ok do return true
+	if len(a.glyphs) >= FONT_GLYPHS_MAX {
+		a.glyphs_dropped += 1
+		return false
+	}
 
 	gi := tt.FindGlyphIndex(&a.info, cp)
 	adv, lsb: c.int

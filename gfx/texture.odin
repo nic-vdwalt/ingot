@@ -307,7 +307,7 @@ _new_rt_depth :: proc(ctx: ^Context, w, h: i32) -> Texture2D {
 	e.tex = wg.DeviceCreateTexture(
 		ctx.device,
 		&{
-			usage = {.RenderAttachment, .TextureBinding},
+			usage = {.RenderAttachment, .TextureBinding, .CopySrc, .CopyDst},
 			dimension = ._2D,
 			size = {u32(max(w, 1)), u32(max(h, 1)), 1},
 			format = .Depth24Plus,

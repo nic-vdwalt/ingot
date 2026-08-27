@@ -14,21 +14,29 @@ Typed_Command_Activation :: struct($T: typeid) {
 }
 
 Typed_Commands :: struct($T: typeid, $Capacity: int) {
-	ready:             [Capacity]T,
-	activations:       [Capacity]Typed_Command_Activation(T),
+	ready:              [Capacity]T,
+	activations:        [Capacity]Typed_Command_Activation(T),
 	ready_count:        int,
 	ready_index:        int,
 	drain_limit:        int,
 	activation_count:   int,
 	dropped_ready:      u64,
 	dropped_activation: u64,
-	collect_pending:   bool,
+	collect_pending:    bool,
 }
 
-Typed_Commands_Append :: proc(queue: ^Typed_Commands($T, $Capacity), value: T) -> Typed_Command_Result
-	where Capacity > 0, Capacity <= TYPED_COMMAND_CAPACITY_MAX {
+Typed_Commands_Append :: proc(
+	queue: ^Typed_Commands($T, $Capacity),
+	value: T,
+) -> Typed_Command_Result where Capacity >
+	0,
+	Capacity <=
+	TYPED_COMMAND_CAPACITY_MAX {
 	assert(queue != nil, "Fit.Typed_Commands_Append: nil queue")
-	assert(queue.ready_count >= 0 && queue.ready_count <= Capacity, "Fit typed commands: invalid count")
+	assert(
+		queue.ready_count >= 0 && queue.ready_count <= Capacity,
+		"Fit typed commands: invalid count",
+	)
 	if queue.ready_count >= Capacity {
 		queue.dropped_ready += 1
 		return .Full
@@ -38,8 +46,8 @@ Typed_Commands_Append :: proc(queue: ^Typed_Commands($T, $Capacity), value: T) -
 	return .Accepted
 }
 
-Typed_Commands_Begin :: proc(queue: ^Typed_Commands($T, $Capacity))
-	where Capacity > 0, Capacity <= TYPED_COMMAND_CAPACITY_MAX {
+Typed_Commands_Begin :: proc(queue: ^Typed_Commands($T, $Capacity)) where Capacity > 0,
+	Capacity <= TYPED_COMMAND_CAPACITY_MAX {
 	assert(queue != nil, "Fit.Typed_Commands_Begin: nil queue")
 	assert(!queue.collect_pending, "Fit.Typed_Commands_Begin: build already open")
 	assert(queue.activation_count >= 0 && queue.activation_count <= Capacity)
@@ -55,8 +63,13 @@ Typed_Commands_Begin :: proc(queue: ^Typed_Commands($T, $Capacity))
 	queue.collect_pending = true
 }
 
-Typed_Commands_Take :: proc(queue: ^Typed_Commands($T, $Capacity), value: ^T) -> bool
-	where Capacity > 0, Capacity <= TYPED_COMMAND_CAPACITY_MAX {
+Typed_Commands_Take :: proc(
+	queue: ^Typed_Commands($T, $Capacity),
+	value: ^T,
+) -> bool where Capacity >
+	0,
+	Capacity <=
+	TYPED_COMMAND_CAPACITY_MAX {
 	assert(queue != nil && value != nil, "Fit.Typed_Commands_Take: invalid argument")
 	assert(queue.collect_pending, "Fit.Typed_Commands_Take: build not open")
 	assert(queue.ready_index >= 0 && queue.ready_index <= queue.drain_limit)
@@ -67,8 +80,8 @@ Typed_Commands_Take :: proc(queue: ^Typed_Commands($T, $Capacity), value: ^T) ->
 	return true
 }
 
-Typed_Commands_End :: proc(queue: ^Typed_Commands($T, $Capacity))
-	where Capacity > 0, Capacity <= TYPED_COMMAND_CAPACITY_MAX {
+Typed_Commands_End :: proc(queue: ^Typed_Commands($T, $Capacity)) where Capacity > 0,
+	Capacity <= TYPED_COMMAND_CAPACITY_MAX {
 	assert(queue != nil, "Fit.Typed_Commands_End: nil queue")
 	assert(queue.collect_pending, "Fit.Typed_Commands_End: build not open")
 	remaining := queue.ready_count - queue.drain_limit
@@ -82,8 +95,8 @@ Typed_Commands_End :: proc(queue: ^Typed_Commands($T, $Capacity))
 	queue.collect_pending = false
 }
 
-Typed_Commands_Reset :: proc(queue: ^Typed_Commands($T, $Capacity))
-	where Capacity > 0, Capacity <= TYPED_COMMAND_CAPACITY_MAX {
+Typed_Commands_Reset :: proc(queue: ^Typed_Commands($T, $Capacity)) where Capacity > 0,
+	Capacity <= TYPED_COMMAND_CAPACITY_MAX {
 	assert(queue != nil, "Fit.Typed_Commands_Reset: nil queue")
 	queue.ready_count = 0
 	queue.ready_index = 0
@@ -92,8 +105,14 @@ Typed_Commands_Reset :: proc(queue: ^Typed_Commands($T, $Capacity))
 	queue.collect_pending = false
 }
 
-Typed_Commands_Dropped :: proc(queue: ^Typed_Commands($T, $Capacity)) -> (ready, activation: u64)
-	where Capacity > 0, Capacity <= TYPED_COMMAND_CAPACITY_MAX {
+Typed_Commands_Dropped :: proc(
+	queue: ^Typed_Commands($T, $Capacity),
+) -> (
+	ready, activation: u64,
+) where Capacity >
+	0,
+	Capacity <=
+	TYPED_COMMAND_CAPACITY_MAX {
 	assert(queue != nil, "Fit.Typed_Commands_Dropped: nil queue")
 	return queue.dropped_ready, queue.dropped_activation
 }
@@ -102,8 +121,13 @@ Typed_Commands_Dropped :: proc(queue: ^Typed_Commands($T, $Capacity)) -> (ready,
 typed_command_reserve :: proc(
 	queue: ^Typed_Commands($T, $Capacity),
 	value: T,
-) -> (^bool, Typed_Command_Result)
-	where Capacity > 0, Capacity <= TYPED_COMMAND_CAPACITY_MAX {
+) -> (
+	^bool,
+	Typed_Command_Result,
+) where Capacity >
+	0,
+	Capacity <=
+	TYPED_COMMAND_CAPACITY_MAX {
 	assert(queue != nil, "Fit typed command reserve: nil queue")
 	assert(queue.collect_pending, "Fit typed command reserve: build not open")
 	if queue.activation_count >= Capacity {
@@ -124,8 +148,10 @@ Button_Command :: proc(
 	queue: ^Typed_Commands($T, $Capacity),
 	value: T,
 	options: Button_Options = {},
-) -> Typed_Command_Result
-	where Capacity > 0, Capacity <= TYPED_COMMAND_CAPACITY_MAX {
+) -> Typed_Command_Result where Capacity >
+	0,
+	Capacity <=
+	TYPED_COMMAND_CAPACITY_MAX {
 	activated, result := typed_command_reserve(queue, value)
 	if result != .Accepted do return result
 	resolved := options
