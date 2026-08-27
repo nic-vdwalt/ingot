@@ -84,7 +84,7 @@ platform_window_ready :: proc(ctx: ^Context) {
 	assert(ctx != nil, "platform_window_ready: nil context")
 	assert(ctx.win != nil, "platform_window_ready: no window")
 	if !_window_should_activate(ctx.config_flags) do return
-	_platform_activate_application()
+	_platform_activate_window(ctx)
 	glfw.FocusWindow(_context_window(ctx))
 }
 
