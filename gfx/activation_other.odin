@@ -3,7 +3,7 @@ package gfx
 
 @(private)
 _platform_activate_window :: proc(ctx: ^Context) {
-	_ = ctx
+	assert(ctx != nil, "_platform_activate_window: nil context")
 }
 
 @(private)

@@ -33,6 +33,22 @@ test_window_initial_focus_policy :: proc(t: ^testing.T) {
 		!_window_should_activate({.WINDOW_HIDDEN, .WINDOW_UNFOCUSED}),
 		"ready hidden unfocused window does not activate",
 	)
+	testing.expect(t, _window_should_focus_on_show({}), "shown default window requests focus")
+	testing.expect(
+		t,
+		_window_should_focus_on_show({.WINDOW_HIDDEN}),
+		"shown deferred window requests focus",
+	)
+	testing.expect(
+		t,
+		!_window_should_focus_on_show({.WINDOW_UNFOCUSED}),
+		"shown unfocused window does not request focus",
+	)
+	testing.expect(
+		t,
+		!_window_should_focus_on_show({.WINDOW_HIDDEN, .WINDOW_UNFOCUSED}),
+		"shown deferred unfocused window does not request focus",
+	)
 }
 
 @(test)
