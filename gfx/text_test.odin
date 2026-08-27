@@ -62,6 +62,16 @@ text_atlas_upload_stride_is_aligned_and_bounded :: proc(t: ^testing.T) {
 	}
 }
 
+@(test)
+text_public_limits_are_named_and_consistent :: proc(t: ^testing.T) {
+	testing.expect(t, FONT_DATA_BYTES_MAX > 0)
+	testing.expect(t, FONT_CODEPOINTS_MAX > 0)
+	testing.expect(t, FONT_PIXEL_SIZE_MAX > 0)
+	testing.expect(t, FONT_GLYPHS_MAX > 0)
+	testing.expect(t, FONT_GLYPHS_MAX <= FONT_CODEPOINTS_MAX)
+	testing.expect(t, FONT_GLYPHS_MAX < max(int))
+}
+
 text_test_atlas_accounting :: proc(t: ^testing.T, pixel_size: i32) {
 	codepoints := text_test_codepoints()
 	defer delete(codepoints)

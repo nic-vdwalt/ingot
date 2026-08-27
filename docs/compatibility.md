@@ -72,8 +72,8 @@ thread and browser music is fully decoded. Calling it is harmless, and omitting
 it changes nothing.
 
 `gfx.capabilities()` reports runtime-independent support boundaries for default
-text, text shaping and fallback, path texture loading, SVG and animated images,
-raw pointer events, multi-pointer input, pointer pressure, IME positioning,
+text, shaping, fallback, bidi, COLR, CBDT, sbix, path texture loading, SVG and
+animated images, raw pointer events, multi-pointer input, pointer pressure, IME positioning,
 window controls, render targets, the explicit GPU 3D API, raylib mesh
 compatibility, and general `rlgl`. Check it
 before selecting platform-limited paths. The explicit GPU 3D API is supported;
@@ -110,8 +110,9 @@ classified without waiting on a future release:
   `LoadImageFromMemory`, then process pixels in application code or a library.
 - General SVG and animated-image playback. Preprocess SVG into pinned raster
   assets and keep any playback state in application data.
-- Complex-script shaping, bidirectional layout, ligatures, and font fallback.
-  The shared renderer currently measures and draws scalar codepoints from one font.
+- Complex-script shaping, bidirectional layout, ligatures, font fallback, and
+  COLR/CBDT/sbix color fonts. The shared renderer currently measures and draws
+  scalar codepoints from one font.
 - Models, meshes, materials, and skeletal animation. Use Ingot's explicit GPU
   3D API for depth-capable mesh work.
 - All `DrawSpline*` procedures.

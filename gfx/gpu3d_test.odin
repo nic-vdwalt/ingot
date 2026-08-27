@@ -78,6 +78,14 @@ test_gpu_3d_target_sample_textures_reject_invalid_and_msaa_depth :: proc(t: ^tes
 }
 
 @(test)
+test_gpu_3d_target_copy_rejects_invalid_and_msaa_targets :: proc(t: ^testing.T) {
+	testing.expect(t, !copy_gpu_3d_target(nil, nil))
+	source := Gpu_3D_Target{antialiasing = .MSAA_4X}
+	destination := Gpu_3D_Target{antialiasing = .MSAA_4X}
+	testing.expect(t, !copy_gpu_3d_target(&source, &destination))
+}
+
+@(test)
 test_cube_geometry_contract :: proc(t: ^testing.T) {
 	vertices: [GPU_3D_CUBE_VERTEX_COUNT]Gpu_3D_Vertex
 	indices: [GPU_3D_CUBE_INDEX_COUNT]u32
