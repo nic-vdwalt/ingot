@@ -888,6 +888,15 @@ fit_test_layer_body :: proc(surface: ^Surface, user_data: rawptr) {
 }
 
 @(private = "file")
+fit_test_reserved_layer_body :: proc(surface: ^Surface, user_data: rawptr) {
+	assert(surface != nil && user_data != nil)
+	calls := cast(^i32)user_data
+	calls^ += 1
+	Surface_Fill_Rect(surface, {0, 0, 10, 10}, {255, 0, 0, 255})
+	Surface_Fill_Rect(surface, {10, 0, 10, 10}, {0, 255, 0, 255})
+}
+
+@(private = "file")
 fit_test_pane_body :: proc(surface: ^Surface, content_y: i32, user_data: rawptr) -> i32 {
 	assert(surface != nil && user_data != nil)
 	calls := cast(^i32)user_data
@@ -921,6 +930,79 @@ fit_scoped_surface_helpers_restore_depth :: proc(t: ^testing.T) {
 	testing.expect_value(t, frame.z_count, 0)
 	testing.expect_value(t, frame.pane_count, 0)
 	testing.expect(t, !pane.inner.open, "pane helper retained open state")
+	_ = ui.end(&root)
+}
+
+@(test)
+fit_reserved_layer_retains_exact_paint_and_restores_depth :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	surface := Surface {
+		inner = &root,
+	}
+	calls: i32
+	accepted := Layer_With_Reserved_Paint(
+		&surface,
+		Z_Order(600),
+		2,
+		fit_test_reserved_layer_body,
+		&calls,
+	)
+	testing.expect(t, accepted)
+	testing.expect_value(t, calls, i32(1))
+	testing.expect_value(t, output.overlay.count, 2)
+	testing.expect_value(t, frame.z_count, 0)
+	testing.expect_value(t, frame.pane_count, 0)
+	_ = ui.end(&root)
+}
+
+@(test)
+fit_reserved_layer_rejects_atomically_when_overlay_is_saturated :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	surface := Surface {
+		inner = &root,
+	}
+	ui.layer_begin(&frame, ui.Z_Order(700))
+	for _ in 0 ..< PAINT_COMMAND_CAP - 1 {
+		ui.draw_rectangle(&frame, 0, 0, 1, 1, {255, 255, 255, 255})
+	}
+	ui.layer_end(&frame)
+	before := output.overlay.count
+	calls: i32
+	accepted := Layer_With_Reserved_Paint(
+		&surface,
+		Z_Order(600),
+		2,
+		fit_test_reserved_layer_body,
+		&calls,
+	)
+	testing.expect(t, !accepted)
+	testing.expect_value(t, calls, i32(0))
+	testing.expect_value(t, output.overlay.count, before)
+	testing.expect_value(t, output.overlay.dropped_commands, 0)
+	testing.expect_value(t, frame.z_count, 0)
+	testing.expect_value(t, frame.pane_count, 0)
 	_ = ui.end(&root)
 }
 
@@ -1080,10 +1162,19 @@ fit_surface_input_focus_paint_contract_compiles :: proc(t: ^testing.T) {
 		Surface_Semantic
 	circle: proc(_: ^Surface, _: Point, _: f32, _: Color) = Surface_Fill_Circle
 	clip: proc(_: ^Surface, _: Rect) = Surface_Clip_Begin
+	reserved: proc(
+			_: ^Surface,
+			_: Z_Order,
+			_: int,
+			_: Layer_Build_Proc,
+			_: rawptr,
+			_: Float_Rect,
+		) -> bool =
+		Layer_With_Reserved_Paint
 	testing.expect(t, key_down != nil && key_repeat != nil)
 	testing.expect(t, characters != nil && clipboard != nil)
 	testing.expect(t, focus_id != nil && focus_link != nil && semantic != nil)
-	testing.expect(t, circle != nil && clip != nil)
+	testing.expect(t, circle != nil && clip != nil && reserved != nil)
 }
 
 @(test)

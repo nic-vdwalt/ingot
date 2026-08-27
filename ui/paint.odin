@@ -106,6 +106,8 @@ Paint_Command :: struct {
 Paint_List :: struct {
 	commands:             [PAINT_COMMAND_CAP]Paint_Command,
 	count:                int,
+	reserved_commands:    int,
+	reservation_active:   bool,
 	text:                 [PAINT_TEXT_CAP]u8,
 	text_len:             int,
 	clip_stack:           [PAINT_CLIP_CAP]Rect,
@@ -175,6 +177,8 @@ Ui_Output :: struct {
 paint_list_finalize :: proc(list: ^Paint_List) {
 	assert(list != nil, "paint_list_finalize: nil list")
 	assert(list.count >= 0 && list.count <= PAINT_COMMAND_CAP)
+	assert(!list.reservation_active, "paint_list_finalize: active paint reservation")
+	assert(list.reserved_commands == 0, "paint_list_finalize: unconsumed paint reservation")
 	assert(list.text_len >= 0 && list.text_len <= PAINT_TEXT_CAP)
 	list.peak_count = max(list.peak_count, list.count)
 	list.peak_text_len = max(list.peak_text_len, list.text_len)
@@ -188,6 +192,8 @@ ui_output_finalize :: proc(output: ^Ui_Output) {
 
 paint_list_reset :: proc(list: ^Paint_List) {
 	assert(list != nil, "paint_list_reset: nil list")
+	assert(!list.reservation_active, "paint_list_reset: active paint reservation")
+	assert(list.reserved_commands == 0, "paint_list_reset: unconsumed paint reservation")
 	assert(
 		list.count >= 0 && list.count <= PAINT_COMMAND_CAP,
 		"paint_list_reset: invalid command count",
@@ -197,6 +203,8 @@ paint_list_reset :: proc(list: ^Paint_List) {
 		"paint_list_reset: invalid text length",
 	)
 	list.count = 0
+	list.reserved_commands = 0
+	list.reservation_active = false
 	list.text_len = 0
 	list.clip_count = 0
 	list.clip_end_reserved = 0
@@ -246,8 +254,32 @@ paint_clip_intersection :: proc(a, b: Rect) -> Rect {
 // success leaves the stack unbalanced for the rest of the frame. clip_emitted
 // records whether the paired command reached the buffer so the replayed stream
 // stays balanced too.
+paint_commands_reservation_begin :: proc(list: ^Paint_List, command_count: int) -> bool {
+	assert(list != nil, "paint reservation begin: nil list")
+	assert(command_count > 0 && command_count <= PAINT_COMMAND_CAP)
+	assert(!list.reservation_active, "paint reservation begin: nested reservation")
+	assert(list.sink == nil, "paint reservation begin: sink-backed list")
+	assert(list.clip_count == 0, "paint reservation begin: open clip")
+	assert(list.clip_end_reserved == 0, "paint reservation begin: reserved clip end")
+	assert(list.count >= 0 && list.count <= PAINT_COMMAND_CAP)
+	if command_count > PAINT_COMMAND_CAP - list.count - list.clip_end_reserved {
+		return false
+	}
+	list.reservation_active = true
+	list.reserved_commands = command_count
+	return true
+}
+
+paint_commands_reservation_end :: proc(list: ^Paint_List) {
+	assert(list != nil, "paint reservation end: nil list")
+	assert(list.reservation_active, "paint reservation end: no reservation")
+	assert(list.reserved_commands == 0, "paint reservation end: incomplete reservation")
+	list.reservation_active = false
+}
+
 paint_clip_begin :: proc(list: ^Paint_List, rect: Rect, loc := #caller_location) {
 	assert(list != nil, "paint_clip_begin: nil list")
+	assert(!list.reservation_active, "paint_clip_begin: active paint reservation")
 	// Layout-derived negative extents mean an empty clip, not a malformed
 	// command. Clamp them before intersection so the stack remains balanced.
 	clamped := Rect{rect.x, rect.y, max(f32(0), rect.width), max(f32(0), rect.height)}
@@ -288,6 +320,7 @@ paint_clip_begin :: proc(list: ^Paint_List, rect: Rect, loc := #caller_location)
 
 paint_clip_end :: proc(list: ^Paint_List) {
 	assert(list != nil, "paint_clip_end: nil list")
+	assert(!list.reservation_active, "paint_clip_end: active paint reservation")
 	if list.clip_overflow_depth > 0 {
 		list.clip_overflow_depth -= 1
 		if list.sink != nil {
@@ -334,6 +367,9 @@ paint_clip_end :: proc(list: ^Paint_List) {
 paint_reserve :: proc(list: ^Paint_List, reserve_clip_ends := true) -> ^Paint_Command {
 	assert(list != nil, "paint_reserve: nil list")
 	assert(list.clip_end_reserved >= 0, "paint_reserve: negative reservation")
+	if list.reservation_active {
+		assert(list.reserved_commands > 0, "paint_reserve: reservation over-consumed")
+	}
 	limit := PAINT_COMMAND_CAP
 	if reserve_clip_ends do limit -= list.clip_end_reserved
 	if list.count >= limit do return nil
@@ -345,6 +381,10 @@ paint_commit :: proc(list: ^Paint_List, command: ^Paint_Command) -> bool {
 	assert(list != nil, "paint_commit: nil list")
 	assert(list.count >= 0 && list.count < PAINT_COMMAND_CAP, "paint_commit: invalid count")
 	assert(command == &list.commands[list.count], "paint_commit: invalid reservation")
+	if list.reservation_active {
+		assert(list.reserved_commands > 0, "paint_commit: reservation over-consumed")
+		list.reserved_commands -= 1
+	}
 	list.count += 1
 	when UI_TELEMETRY_ENABLED do list.command_append_count += 1
 	if list.sink != nil do list.sink(list, command^, list.sink_userdata)
