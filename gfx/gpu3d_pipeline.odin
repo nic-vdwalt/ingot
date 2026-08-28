@@ -492,9 +492,13 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let diffuse = base.rgb * (u.light_params.x * ao + u.light_params.y * ndl);
     let color = diffuse + specular * u.light_params.y * ndl;
     let underwater_blend = clamp(u.custom_params_5.w, 0.0, 1.0);
-    let underwater_path = min(length(u.camera_position.xyz - in.world_position), mix(90.0, 24.0, clamp(u.custom_params_6.w, 0.0, 1.0)));
-    let underwater_transmittance = exp(-max(u.custom_params_5.xyz, vec3<f32>(0.0)) * underwater_path * 0.035);
-    let underwater_scatter = max(u.custom_params_6.xyz, vec3<f32>(0.0)) * (vec3<f32>(1.0) - underwater_transmittance);
+    let underwater_distance = length(u.camera_position.xyz - in.world_position);
+    let underwater_range = mix(90.0, 24.0, clamp(u.custom_params_6.w, 0.0, 1.0));
+    let underwater_path = min(underwater_distance, underwater_range);
+    let absorption = max(u.custom_params_5.xyz, vec3<f32>(0.0));
+    let underwater_transmittance = exp(-absorption * underwater_path * 0.035);
+    let scatter_color = max(u.custom_params_6.xyz, vec3<f32>(0.0));
+    let underwater_scatter = scatter_color * (vec3<f32>(1.0) - underwater_transmittance);
     let medium_color = color * underwater_transmittance + underwater_scatter;
     let final_color = mix(color, medium_color, underwater_blend);
     return vec4<f32>(final_color * base.a, base.a);
@@ -674,7 +678,8 @@ context_copy_gpu_3d_target :: proc(
 	source_depth := context_get_texture(ctx, source.texture.depth.id)
 	destination_color := context_get_texture(ctx, destination.texture.texture.id)
 	destination_depth := context_get_texture(ctx, destination.texture.depth.id)
-	if source_color == nil || source_depth == nil || destination_color == nil || destination_depth == nil {
+	if source_color == nil || source_depth == nil ||
+	   destination_color == nil || destination_depth == nil {
 		return false
 	}
 	if source_color.wgformat != destination_color.wgformat ||
@@ -2214,12 +2219,9 @@ _gpu_3d_pipeline :: proc(
 	wg.PipelineLayoutRelease(layout)
 	index := resources.pipeline_count
 	resources.pipelines[index] = {
-		format       = format,
-		primitive    = primitive,
-		style        = style,
-		sample_count = sample_count,
-		shader_id    = shader_id,
-		pipeline     = pipeline,
+		format = format, primitive = primitive,
+		style = style, sample_count = sample_count,
+		shader_id = shader_id, pipeline = pipeline,
 	}
 	resources.pipeline_count += 1
 	return pipeline
@@ -2314,12 +2316,55 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 		&{entryCount = 2, entries = raw_data(layout_entries[:])},
 	)
 	_gpu_3d_init_neutral_normal(ctx, resources)
+	_gpu_3d_init_neutral_scene(ctx, resources)
+	for &bind, index in resources.bind {
+		bind_entries := [2]wg.BindGroupEntry {
+			{
+				binding = 0,
+				buffer = ctx.rend.stream_slots[index].uniform_buffer,
+				size = size_of(Gpu_3D_Uniforms),
+			},
+			{
+				binding = 1,
+				buffer = ctx.rend.stream_slots[index].uniform_buffer,
+				size = size_of(Gpu_3D_Instance_Uniforms),
+			},
+		}
+		bind = wg.DeviceCreateBindGroup(
+			ctx.device,
+			&{layout = resources.layout, entryCount = 2, entries = raw_data(bind_entries[:])},
+		)
+	}
+	assert(resources.shader != nil)
+	assert(resources.layout != nil)
+	assert(resources.neutral_normal_tex != nil)
+	assert(resources.neutral_normal_view != nil)
+	assert(resources.neutral_normal_sampler != nil)
+	assert(resources.neutral_normal_bind != nil)
+}
+
+@(private)
+_gpu_3d_init_neutral_scene :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
+	assert(ctx != nil, "_gpu_3d_init_neutral_scene: nil context")
+	assert(resources != nil, "_gpu_3d_init_neutral_scene: nil resources")
 	scene_layout_entries := [5]wg.BindGroupLayoutEntry {
-		{binding = 0, visibility = {.Vertex, .Fragment}, texture = {sampleType = .Float, viewDimension = ._2D}},
+		{
+			binding = 0,
+			visibility = {.Vertex, .Fragment},
+			texture = {sampleType = .Float, viewDimension = ._2D},
+		},
 		{binding = 1, visibility = {.Vertex, .Fragment}, sampler = {type = .Filtering}},
-		{binding = 2, visibility = {.Vertex, .Fragment}, texture = {sampleType = .Float, viewDimension = ._2D}},
+		{
+			binding = 2,
+			visibility = {.Vertex, .Fragment},
+			texture = {sampleType = .Float, viewDimension = ._2D},
+		},
 		{binding = 3, visibility = {.Vertex, .Fragment}, sampler = {type = .Filtering}},
-		{binding = 4, visibility = {.Fragment}, texture = {sampleType = .Depth, viewDimension = ._2D}},
+		{
+			binding = 4,
+			visibility = {.Fragment},
+			texture = {sampleType = .Depth, viewDimension = ._2D},
+		},
 	}
 	resources.scene_layout = wg.DeviceCreateBindGroupLayout(
 		ctx.device,
@@ -2352,30 +2397,6 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 			entries = raw_data(neutral_scene_entries[:]),
 		},
 	)
-	for &bind, index in resources.bind {
-		bind_entries := [2]wg.BindGroupEntry {
-			{
-				binding = 0,
-				buffer = ctx.rend.stream_slots[index].uniform_buffer,
-				size = size_of(Gpu_3D_Uniforms),
-			},
-			{
-				binding = 1,
-				buffer = ctx.rend.stream_slots[index].uniform_buffer,
-				size = size_of(Gpu_3D_Instance_Uniforms),
-			},
-		}
-		bind = wg.DeviceCreateBindGroup(
-			ctx.device,
-			&{layout = resources.layout, entryCount = 2, entries = raw_data(bind_entries[:])},
-		)
-	}
-	assert(resources.shader != nil)
-	assert(resources.layout != nil)
-	assert(resources.neutral_normal_tex != nil)
-	assert(resources.neutral_normal_view != nil)
-	assert(resources.neutral_normal_sampler != nil)
-	assert(resources.neutral_normal_bind != nil)
 	assert(resources.scene_layout != nil)
 	assert(resources.neutral_depth_tex != nil)
 	assert(resources.neutral_depth_view != nil)
