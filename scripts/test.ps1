@@ -42,6 +42,18 @@ foreach ($TestName in $Manifest.windows_gfx_expected_assert_tests) {
     )
     Invoke-Supervised $Label $Command
 }
+foreach ($TestName in $Manifest.windows_ui_expected_assert_tests) {
+    Write-Host "== testing isolated $TestName =="
+    $Label = "ui-expected-assert-" + $TestName.Replace("ui.", "").Replace("_", "-")
+    $Command = @(
+        "odin", "test", "$Root/ui", $Collection, $Guard,
+        "-define:INGOT_UI_EXPECTED_ASSERTS=true",
+        "-define:ODIN_TEST_NAMES=$TestName",
+        "-define:ODIN_TEST_THREADS=1",
+        "-define:ODIN_TEST_FAIL_ON_EMPTY=true"
+    )
+    Invoke-Supervised $Label $Command
+}
 foreach ($Example in $Manifest.test_examples) {
     Write-Host "== testing examples/$Example =="
     $Label = $Example.Replace("_", "-") + "-example"
