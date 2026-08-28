@@ -55,6 +55,15 @@
     "gfx.intersections_reject_non_positive_sphere",
     "gfx.texture_lookup_rejects_an_unassigned_context_id"
   ],
+  "windows_ui_expected_assert_tests": [
+    "ui.paint_command_reservation_rejects_nested_scope",
+    "ui.paint_command_reservation_rejects_sink_backed_list",
+    "ui.paint_command_reservation_rejects_open_clip",
+    "ui.paint_command_reservation_rejects_over_consumption",
+    "ui.paint_command_reservation_rejects_under_consumption",
+    "ui.paint_command_reservation_rejects_reset_while_active",
+    "ui.paint_command_reservation_rejects_finalize_while_active"
+  ],
   "examples": [
     "advanced_ui",
     "hello",

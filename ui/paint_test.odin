@@ -3,6 +3,8 @@ package ui
 
 import "core:testing"
 
+INGOT_UI_EXPECTED_ASSERTS :: #config(INGOT_UI_EXPECTED_ASSERTS, false)
+
 paint_reservation_assert_list: Paint_List
 
 @(test)
@@ -32,76 +34,78 @@ paint_command_reservation_rejects_one_over_remaining_capacity :: proc(t: ^testin
 	testing.expect_value(t, list.dropped_commands, 0)
 }
 
-@(test)
-paint_command_reservation_rejects_nested_scope :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "paint reservation begin: nested reservation")
-	list := &paint_reservation_assert_list
-	list^ = {}
-	_ = paint_commands_reservation_begin(list, 2)
-	_ = paint_commands_reservation_begin(list, 1)
-	testing.fail_now(t, "paint command reservation accepted a nested scope")
-}
+when ODIN_OS != .Windows || INGOT_UI_EXPECTED_ASSERTS {
+	@(test)
+	paint_command_reservation_rejects_nested_scope :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "paint reservation begin: nested reservation")
+		list := &paint_reservation_assert_list
+		list^ = {}
+		_ = paint_commands_reservation_begin(list, 2)
+		_ = paint_commands_reservation_begin(list, 1)
+		testing.fail_now(t, "paint command reservation accepted a nested scope")
+	}
 
-@(test)
-paint_command_reservation_rejects_sink_backed_list :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "paint reservation begin: sink-backed list")
-	list := &paint_reservation_assert_list
-	list^ = {}
-	list.sink = proc(_: ^Paint_List, _: Paint_Command, _: rawptr) {}
-	_ = paint_commands_reservation_begin(list, 1)
-	testing.fail_now(t, "paint command reservation accepted a sink-backed list")
-}
+	@(test)
+	paint_command_reservation_rejects_sink_backed_list :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "paint reservation begin: sink-backed list")
+		list := &paint_reservation_assert_list
+		list^ = {}
+		list.sink = proc(_: ^Paint_List, _: Paint_Command, _: rawptr) {}
+		_ = paint_commands_reservation_begin(list, 1)
+		testing.fail_now(t, "paint command reservation accepted a sink-backed list")
+	}
 
-@(test)
-paint_command_reservation_rejects_open_clip :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "paint reservation begin: open clip")
-	list := &paint_reservation_assert_list
-	list^ = {}
-	paint_clip_begin(list, {0, 0, 20, 20})
-	_ = paint_commands_reservation_begin(list, 1)
-	testing.fail_now(t, "paint command reservation accepted an open clip")
-}
+	@(test)
+	paint_command_reservation_rejects_open_clip :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "paint reservation begin: open clip")
+		list := &paint_reservation_assert_list
+		list^ = {}
+		paint_clip_begin(list, {0, 0, 20, 20})
+		_ = paint_commands_reservation_begin(list, 1)
+		testing.fail_now(t, "paint command reservation accepted an open clip")
+	}
 
-@(test)
-paint_command_reservation_rejects_over_consumption :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "paint_reserve: reservation over-consumed")
-	list := &paint_reservation_assert_list
-	list^ = {}
-	_ = paint_commands_reservation_begin(list, 1)
-	_ = paint_push(list, {kind = .Rectangle})
-	_ = paint_push(list, {kind = .Rectangle})
-	testing.fail_now(t, "paint command reservation allowed over-consumption")
-}
+	@(test)
+	paint_command_reservation_rejects_over_consumption :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "paint_reserve: reservation over-consumed")
+		list := &paint_reservation_assert_list
+		list^ = {}
+		_ = paint_commands_reservation_begin(list, 1)
+		_ = paint_push(list, {kind = .Rectangle})
+		_ = paint_push(list, {kind = .Rectangle})
+		testing.fail_now(t, "paint command reservation allowed over-consumption")
+	}
 
-@(test)
-paint_command_reservation_rejects_under_consumption :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "paint reservation end: incomplete reservation")
-	list := &paint_reservation_assert_list
-	list^ = {}
-	_ = paint_commands_reservation_begin(list, 2)
-	_ = paint_push(list, {kind = .Rectangle})
-	paint_commands_reservation_end(list)
-	testing.fail_now(t, "paint command reservation allowed under-consumption")
-}
+	@(test)
+	paint_command_reservation_rejects_under_consumption :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "paint reservation end: incomplete reservation")
+		list := &paint_reservation_assert_list
+		list^ = {}
+		_ = paint_commands_reservation_begin(list, 2)
+		_ = paint_push(list, {kind = .Rectangle})
+		paint_commands_reservation_end(list)
+		testing.fail_now(t, "paint command reservation allowed under-consumption")
+	}
 
-@(test)
-paint_command_reservation_rejects_reset_while_active :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "paint_list_reset: active paint reservation")
-	list := &paint_reservation_assert_list
-	list^ = {}
-	_ = paint_commands_reservation_begin(list, 1)
-	paint_list_reset(list)
-	testing.fail_now(t, "paint list reset an active reservation")
-}
+	@(test)
+	paint_command_reservation_rejects_reset_while_active :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "paint_list_reset: active paint reservation")
+		list := &paint_reservation_assert_list
+		list^ = {}
+		_ = paint_commands_reservation_begin(list, 1)
+		paint_list_reset(list)
+		testing.fail_now(t, "paint list reset an active reservation")
+	}
 
-@(test)
-paint_command_reservation_rejects_finalize_while_active :: proc(t: ^testing.T) {
-	testing.expect_assert_message(t, "paint_list_finalize: active paint reservation")
-	list := &paint_reservation_assert_list
-	list^ = {}
-	_ = paint_commands_reservation_begin(list, 1)
-	paint_list_finalize(list)
-	testing.fail_now(t, "paint list finalized an active reservation")
+	@(test)
+	paint_command_reservation_rejects_finalize_while_active :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "paint_list_finalize: active paint reservation")
+		list := &paint_reservation_assert_list
+		list^ = {}
+		_ = paint_commands_reservation_begin(list, 1)
+		paint_list_finalize(list)
+		testing.fail_now(t, "paint list finalized an active reservation")
+	}
 }
 
 @(test)

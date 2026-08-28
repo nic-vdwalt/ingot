@@ -661,25 +661,27 @@ gpu_3d_target_depth_texture :: proc(target: ^Gpu_3D_Target) -> (Texture2D, bool)
 	return target.texture.depth, true
 }
 
-context_copy_gpu_3d_target :: proc(
-	ctx: ^Context,
-	source, destination: ^Gpu_3D_Target,
-) -> bool {
+context_copy_gpu_3d_target :: proc(ctx: ^Context, source, destination: ^Gpu_3D_Target) -> bool {
 	assert(ctx != nil, "context_copy_gpu_3d_target: nil context")
 	if source == nil || destination == nil do return false
 	if ctx.resources.gpu_3d.active_pass_generation != 0 do return false
 	if source.antialiasing != .None || destination.antialiasing != .None do return false
 	width, height, source_ok := gpu_3d_target_size(source)
 	destination_width, destination_height, destination_ok := gpu_3d_target_size(destination)
-	if !source_ok || !destination_ok || width != destination_width || height != destination_height {
+	if !source_ok ||
+	   !destination_ok ||
+	   width != destination_width ||
+	   height != destination_height {
 		return false
 	}
 	source_color := context_get_texture(ctx, source.texture.texture.id)
 	source_depth := context_get_texture(ctx, source.texture.depth.id)
 	destination_color := context_get_texture(ctx, destination.texture.texture.id)
 	destination_depth := context_get_texture(ctx, destination.texture.depth.id)
-	if source_color == nil || source_depth == nil ||
-	   destination_color == nil || destination_depth == nil {
+	if source_color == nil ||
+	   source_depth == nil ||
+	   destination_color == nil ||
+	   destination_depth == nil {
 		return false
 	}
 	if source_color.wgformat != destination_color.wgformat ||
@@ -689,10 +691,22 @@ context_copy_gpu_3d_target :: proc(
 	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
 	if encoder == nil do return false
 	extent := wg.Extent3D{u32(width), u32(height), 1}
-	color_source := wg.TexelCopyTextureInfo{texture = source_color.tex, aspect = .All}
-	color_destination := wg.TexelCopyTextureInfo{texture = destination_color.tex, aspect = .All}
-	depth_source := wg.TexelCopyTextureInfo{texture = source_depth.tex, aspect = .DepthOnly}
-	depth_destination := wg.TexelCopyTextureInfo{texture = destination_depth.tex, aspect = .DepthOnly}
+	color_source := wg.TexelCopyTextureInfo {
+		texture = source_color.tex,
+		aspect  = .All,
+	}
+	color_destination := wg.TexelCopyTextureInfo {
+		texture = destination_color.tex,
+		aspect  = .All,
+	}
+	depth_source := wg.TexelCopyTextureInfo {
+		texture = source_depth.tex,
+		aspect  = .DepthOnly,
+	}
+	depth_destination := wg.TexelCopyTextureInfo {
+		texture = destination_depth.tex,
+		aspect  = .DepthOnly,
+	}
 	wg.CommandEncoderCopyTextureToTexture(encoder, &color_source, &color_destination, &extent)
 	wg.CommandEncoderCopyTextureToTexture(encoder, &depth_source, &depth_destination, &extent)
 	command := wg.CommandEncoderFinish(encoder, nil)
@@ -1840,7 +1854,11 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> wg.Bin
 	}
 	return wg.DeviceCreateBindGroup(
 		pass.owner.device,
-		&{layout = resources.scene_layout, entryCount = len(entries), entries = raw_data(entries[:])},
+		&{
+			layout = resources.scene_layout,
+			entryCount = len(entries),
+			entries = raw_data(entries[:]),
+		},
 	)
 }
 
@@ -2127,6 +2145,14 @@ _gpu_3d_primitive_topology :: proc(primitive: Gpu_Primitive) -> wg.PrimitiveTopo
 }
 
 @(private)
+_gpu_3d_pipeline_store :: proc(resources: ^Gpu_3D_Resources, entry: Gpu_3D_Pipeline_Entry) {
+	assert(resources != nil, "_gpu_3d_pipeline_store: nil resources")
+	assert(resources.pipeline_count < GPU_3D_MAX_PIPELINES)
+	resources.pipelines[resources.pipeline_count] = entry
+	resources.pipeline_count += 1
+}
+
+@(private)
 _gpu_3d_pipeline :: proc(
 	ctx: ^Context,
 	format: wg.TextureFormat,
@@ -2217,13 +2243,10 @@ _gpu_3d_pipeline :: proc(
 		},
 	)
 	wg.PipelineLayoutRelease(layout)
-	index := resources.pipeline_count
-	resources.pipelines[index] = {
-		format = format, primitive = primitive,
-		style = style, sample_count = sample_count,
-		shader_id = shader_id, pipeline = pipeline,
-	}
-	resources.pipeline_count += 1
+	_gpu_3d_pipeline_store(
+		resources,
+		{format, primitive, style, sample_count, shader_id, pipeline},
+	)
 	return pipeline
 }
 
