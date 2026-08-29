@@ -7,7 +7,16 @@
 package main
 
 import "core:math"
+import "core:strings"
 import "core:testing"
+
+@(test)
+water_shader_uses_the_authoritative_phase_and_physical_fresnel :: proc(t: ^testing.T) {
+	testing.expect(t, WATER_FRESNEL_F0 > 0.02 && WATER_FRESNEL_F0 < 0.021)
+	testing.expect(t, strings.contains(WATER_SHADER, "let phase = u.custom_params.x"))
+	testing.expect(t, strings.contains(WATER_SHADER, "u.custom_params_2.z * phase"))
+	testing.expect(t, strings.contains(WATER_SHADER, "pow(1.0 - ndv, 5.0)"))
+}
 
 @(test)
 box_light_preserves_visible_fill :: proc(t: ^testing.T) {
