@@ -629,24 +629,26 @@ fit_parent_public_contract_compiles :: proc(t: ^testing.T) {
 	grid_cell: proc(_: Parent, _: Grid_Cell_Options) -> Parent = Grid_Cell
 	toggle: proc(_: Parent, _: string, _: string, _: ^bool, _: Control_Options) = Toggle
 	dropdown: proc(
-		_: Parent,
-		_: string,
-		_: []string,
-		_: ^i32,
-		_: ^Dropdown_State,
-		_: string,
-		_: Control_Options,
-	) = Dropdown
+			_: Parent,
+			_: string,
+			_: []string,
+			_: ^i32,
+			_: ^Dropdown_State,
+			_: string,
+			_: Control_Options,
+		) =
+		Dropdown
 	combobox: proc(
-		_: Parent,
-		_: string,
-		_: ^Combobox_State,
-		_: []Combobox_Item,
-		_: ^u64,
-		_: string,
-		_: string,
-		_: Control_Options,
-	) = Combobox
+			_: Parent,
+			_: string,
+			_: ^Combobox_State,
+			_: []Combobox_Item,
+			_: ^u64,
+			_: string,
+			_: string,
+			_: Control_Options,
+		) =
+		Combobox
 	testing.expect(t, center != nil && row != nil && label != nil)
 	testing.expect(t, button != nil && delayed != nil && scope != nil && id != nil)
 	testing.expect(t, section != nil && card != nil && grid != nil && grid_cell != nil)

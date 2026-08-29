@@ -105,13 +105,7 @@ tab_bar_string :: proc(
 	return tab_bar_id(u, id(u, key), labels, active, height)
 }
 
-tab_bar_u64 :: proc(
-	u: ^Ui,
-	key: u64,
-	labels: []string,
-	active: ^i32,
-	height: i32 = 36,
-) -> bool {
+tab_bar_u64 :: proc(u: ^Ui, key: u64, labels: []string, active: ^i32, height: i32 = 36) -> bool {
 	assert(u != nil && u.open && key != 0, "tab_bar: invalid argument")
 	return tab_bar_id(u, id(u, key), labels, active, height)
 }

@@ -183,8 +183,8 @@ Prepared_Composite_Kind :: enum u8 {
 }
 
 Prepared_Composite :: struct {
-	kind: Prepared_Composite_Kind,
-	size: Prepared_Size,
+	kind:    Prepared_Composite_Kind,
+	size:    Prepared_Size,
 	using _: struct #raw_union {
 		toggle:   Toggle_Spec,
 		dropdown: Dropdown_Spec,
