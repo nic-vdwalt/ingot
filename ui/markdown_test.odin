@@ -347,3 +347,49 @@ markdown_link_activated_handles_a_cleared_link :: proc(t: ^testing.T) {
 	testing.expect(t, !activated)
 	testing.expect_value(t, len(url), 0)
 }
+
+@(test)
+markdown_prepared_queries_share_frame_layout :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	ctx := markdown_context(&frame)
+	source := "# Heading\nplain **bold** text\n- bullet"
+	prepared := markdown_prepare(&ctx, 180, source)
+	width: i32
+	height := markdown_prepared_measure(&ctx, &prepared, &width)
+	testing.expect_value(t, height, prepared.content_h)
+	testing.expect_value(t, width, prepared.content_w)
+	testing.expect_value(t, prepared.source, source)
+	testing.expect_value(t, prepared.status, Markdown_Prepare_Status.Complete)
+	testing.expect_value(t, markdown_prepared_source_y(&ctx, &prepared, 0), i32(0))
+	_ = markdown_prepared_hit_test(&ctx, &prepared, 10, 20, 10, 20)
+}
+
+@(test)
+markdown_prepared_matches_legacy_queries :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	ctx := markdown_context(&frame)
+	source := "plain\n| a | b |\n|---|---|\n| c | d |\n```\ncode\n```"
+	prepared := markdown_prepare(&ctx, 240, source)
+	prepared_y := markdown_prepared_source_y(&ctx, &prepared, len("plain\n"))
+	legacy_y := markdown_source_y_unprepared(&ctx, 240, source, len("plain\n"))
+	testing.expect_value(t, prepared_y, legacy_y)
+	prepared_hit := markdown_prepared_hit_test(&ctx, &prepared, 0, 0, 4, prepared_y)
+	legacy_hit := hit_test_markdown_unprepared(&ctx, 0, 0, 240, source, 4, legacy_y)
+	testing.expect_value(t, prepared_hit, legacy_hit)
+	when UI_TELEMETRY_ENABLED {
+		testing.expect_value(t, frame.markdown_telemetry.preparations, u64(1))
+		testing.expect_value(t, frame.markdown_telemetry.measure_queries, u64(0))
+		testing.expect_value(t, frame.markdown_telemetry.hit_queries, u64(1))
+		testing.expect_value(t, frame.markdown_telemetry.source_y_queries, u64(1))
+	}
+}

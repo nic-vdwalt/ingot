@@ -1220,6 +1220,14 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 		) -> int =
 		Surface_Bar_Chart
 	markdown: proc(_: ^Surface, _: Rect, _: string, _: Color) -> Markdown_Result = Surface_Markdown
+	markdown_prepare: proc(_: ^Markdown_Context, _: i32, _: string) -> Markdown_Prepared =
+		Markdown_Prepare
+	markdown_measure: proc(_: ^Markdown_Context, _: ^Markdown_Prepared, _: ^i32) -> i32 =
+		Markdown_Prepared_Measure
+	markdown_hit: proc(_: ^Markdown_Context, _: ^Markdown_Prepared, _, _, _, _: i32) -> int =
+		Markdown_Prepared_Hit_Test
+	markdown_source_y: proc(_: ^Markdown_Context, _: ^Markdown_Prepared, _: int) -> i32 =
+		Markdown_Prepared_Source_Y
 	toasts: proc(_: ^Surface, _: ^Toast_State) = Surface_Toasts
 	grid_end: proc(_: ^Surface, _: ^Grid_State) -> Rect = Surface_Grid_End
 	chart_reset: proc(_: ^Chart_State) = Chart_Reset
@@ -1240,7 +1248,11 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 	menu_is_open: proc(_: ^Context_Menu_State) -> bool = Context_Menu_Is_Open
 	confirm_is_open: proc(_: ^Confirm_Dialog_State) -> bool = Confirm_Dialog_Is_Open
 	testing.expect(t, line_chart != nil && bar_chart != nil)
-	testing.expect(t, markdown != nil && toasts != nil && grid_end != nil)
+	testing.expect(t, markdown != nil && markdown_prepare != nil && markdown_measure != nil)
+	testing.expect(
+		t,
+		markdown_hit != nil && markdown_source_y != nil && toasts != nil && grid_end != nil,
+	)
 	testing.expect(t, chart_reset != nil && modal_open != nil && modal_is_open != nil)
 	testing.expect(t, modal_builder != nil)
 	testing.expect(t, menu_is_open != nil && confirm_is_open != nil)

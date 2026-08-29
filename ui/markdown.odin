@@ -10,6 +10,21 @@ import "core:strings"
 MARKDOWN_TABLE_COLS_MAX :: 64
 MARKDOWN_TABLE_ROWS_MAX :: 512
 
+Markdown_Prepare_Status :: enum u8 {
+	Complete,
+	Truncated,
+	Malformed,
+}
+
+Markdown_Prepared :: struct {
+	source:     string,
+	width:      i32,
+	content_w:  i32,
+	content_h:  i32,
+	generation: u64,
+	status:     Markdown_Prepare_Status,
+}
+
 Markdown_Context :: struct {
 	frame:           ^Ui_Frame,
 	workspace_files: []string,
@@ -58,6 +73,14 @@ markdown_line_culled :: proc(ctx: ^Markdown_Context, y, line_height: i32) -> boo
 	assert(ctx != nil && ctx.frame != nil, "markdown_line_culled: invalid context")
 	assert(line_height > 0, "markdown_line_culled: invalid line height")
 	return y + line_height < ctx.cull_top || y > ctx.cull_bottom
+}
+
+@(private = "file")
+markdown_prepared_validate :: proc(ctx: ^Markdown_Context, prepared: ^Markdown_Prepared) {
+	assert(ctx != nil && ctx.frame != nil && ctx.frame.open, "markdown prepared: invalid context")
+	assert(prepared != nil && prepared.width > 0, "markdown prepared: invalid layout")
+	assert(prepared.generation == ctx.frame.scratch.generation, "markdown prepared: stale layout")
+	assert(prepared.content_w >= 0 && prepared.content_h >= 0, "markdown prepared: invalid extent")
 }
 
 Heading_Match :: struct {
@@ -1466,7 +1489,7 @@ draw_markdown_context :: proc(
 	draw: bool = true,
 ) -> i32 {
 	assert(ctx != nil && ctx.frame != nil, "draw_markdown_context: invalid context")
-	return markdown_draw(
+	return markdown_draw_unprepared(
 		ctx,
 		{x, y, max_width, 0},
 		text,
@@ -1485,7 +1508,7 @@ hit_test_markdown_context :: proc(
 	mouse_x, mouse_y: i32,
 ) -> int {
 	assert(ctx != nil && ctx.frame != nil, "hit_test_markdown_context: invalid context")
-	return hit_test_markdown(ctx, x, y, max_width, text, mouse_x, mouse_y)
+	return hit_test_markdown_unprepared(ctx, x, y, max_width, text, mouse_x, mouse_y)
 }
 
 measure_markdown_context :: proc(
@@ -1809,7 +1832,7 @@ markdown_draw_line :: proc(
 // markdown_draw renders markdown with optional selection highlighting. Bounds
 // are physical: x/y are the origin and w is the wrapping width. Height is not
 // a clip; the returned content height may exceed bounds.h.
-markdown_draw :: proc(
+markdown_draw_unprepared :: proc(
 	ctx: ^Markdown_Context,
 	bounds: Rect_I32,
 	text: string,
@@ -1866,7 +1889,31 @@ markdown_draw :: proc(
 		line_start = i + 1
 	}
 	if out_w != nil do out_w^ = state.max_w
+	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.layout_walks += 1
 	return state.current_y - y
+}
+
+markdown_prepare :: proc(ctx: ^Markdown_Context, width: i32, source: string) -> Markdown_Prepared {
+	assert(ctx != nil && ctx.frame != nil && ctx.frame.open, "markdown prepare: invalid context")
+	assert(width > 0, "markdown prepare: non-positive width")
+	content_width: i32
+	content_height := markdown_draw_unprepared(
+		ctx,
+		{0, 0, width, 0},
+		source,
+		ui_frame_theme(ctx.frame).fg_assistant,
+		out_w = &content_width,
+		draw = false,
+	)
+	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.preparations += 1
+	return {
+		source = source,
+		width = width,
+		content_w = content_width,
+		content_h = content_height,
+		generation = ctx.frame.scratch.generation,
+		status = .Complete,
+	}
 }
 
 // measure_markdown returns the pixel height draw_markdown would produce for
@@ -1884,18 +1931,8 @@ measure_markdown :: proc(
 	assert(ctx != nil, "measure_markdown: nil ctx")
 	assert(out_w != nil, "measure_markdown: nil out_w")
 	if len(text) == 0 do return 0
-	// draw=false runs the identical layout math but emits no glyph quads.
-	h := markdown_draw(
-		ctx,
-		{0, 0, width, 0},
-		text,
-		ui_frame_theme(ctx.frame).fg_assistant,
-		-1,
-		-1,
-		out_w,
-		false,
-	)
-	return h
+	prepared := markdown_prepare(ctx, width, text)
+	return markdown_prepared_measure(ctx, &prepared, out_w)
 }
 @(private = "file")
 Markdown_Hit_State :: struct {
@@ -2097,7 +2134,7 @@ markdown_hit_line :: proc(
 }
 
 // Mirrors draw_markdown layout exactly.
-hit_test_markdown :: proc(
+hit_test_markdown_unprepared :: proc(
 	ctx: ^Markdown_Context,
 	x, y, max_width: i32,
 	text: string,
@@ -2143,7 +2180,12 @@ hit_test_markdown :: proc(
 	return -1
 }
 
-markdown_source_y :: proc(ctx: ^Markdown_Context, width: i32, text: string, offset: int) -> i32 {
+markdown_source_y_unprepared :: proc(
+	ctx: ^Markdown_Context,
+	width: i32,
+	text: string,
+	offset: int,
+) -> i32 {
 	assert(ctx != nil && ctx.frame != nil, "markdown_source_y: invalid context")
 	assert(width > 0, "markdown_source_y: non-positive width")
 	assert(offset >= 0 && offset <= len(text), "markdown_source_y: invalid offset")
@@ -2170,4 +2212,92 @@ markdown_source_y :: proc(ctx: ^Markdown_Context, width: i32, text: string, offs
 		line_start = index + 1
 	}
 	return state.current_y
+}
+
+markdown_prepared_measure :: proc(
+	ctx: ^Markdown_Context,
+	prepared: ^Markdown_Prepared,
+	out_w: ^i32 = nil,
+) -> i32 {
+	markdown_prepared_validate(ctx, prepared)
+	if out_w != nil do out_w^ = prepared.content_w
+	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.measure_queries += 1
+	return prepared.content_h
+}
+
+markdown_prepared_draw :: proc(
+	ctx: ^Markdown_Context,
+	prepared: ^Markdown_Prepared,
+	bounds: Rect_I32,
+	color: Color,
+	sel_start: int = -1,
+	sel_end: int = -1,
+	out_w: ^i32 = nil,
+) -> i32 {
+	markdown_prepared_validate(ctx, prepared)
+	assert(bounds.w == prepared.width, "markdown prepared draw: width mismatch")
+	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.draw_queries += 1
+	return markdown_draw_unprepared(ctx, bounds, prepared.source, color, sel_start, sel_end, out_w)
+}
+
+markdown_prepared_hit_test :: proc(
+	ctx: ^Markdown_Context,
+	prepared: ^Markdown_Prepared,
+	x, y, mouse_x, mouse_y: i32,
+) -> int {
+	markdown_prepared_validate(ctx, prepared)
+	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.hit_queries += 1
+	return hit_test_markdown_unprepared(
+		ctx,
+		x,
+		y,
+		prepared.width,
+		prepared.source,
+		mouse_x,
+		mouse_y,
+	)
+}
+
+markdown_prepared_source_y :: proc(
+	ctx: ^Markdown_Context,
+	prepared: ^Markdown_Prepared,
+	offset: int,
+) -> i32 {
+	markdown_prepared_validate(ctx, prepared)
+	assert(
+		offset >= 0 && offset <= len(prepared.source),
+		"markdown prepared source y: invalid offset",
+	)
+	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.source_y_queries += 1
+	return markdown_source_y_unprepared(ctx, prepared.width, prepared.source, offset)
+}
+
+markdown_draw :: proc(
+	ctx: ^Markdown_Context,
+	bounds: Rect_I32,
+	text: string,
+	base_color: Color,
+	sel_start: int = -1,
+	sel_end: int = -1,
+	out_w: ^i32 = nil,
+	draw: bool = true,
+) -> i32 {
+	prepared := markdown_prepare(ctx, bounds.w, text)
+	if !draw do return markdown_prepared_measure(ctx, &prepared, out_w)
+	return markdown_prepared_draw(ctx, &prepared, bounds, base_color, sel_start, sel_end, out_w)
+}
+
+hit_test_markdown :: proc(
+	ctx: ^Markdown_Context,
+	x, y, max_width: i32,
+	text: string,
+	mouse_x, mouse_y: i32,
+) -> int {
+	prepared := markdown_prepare(ctx, max_width, text)
+	return markdown_prepared_hit_test(ctx, &prepared, x, y, mouse_x, mouse_y)
+}
+
+markdown_source_y :: proc(ctx: ^Markdown_Context, width: i32, text: string, offset: int) -> i32 {
+	prepared := markdown_prepare(ctx, width, text)
+	return markdown_prepared_source_y(ctx, &prepared, offset)
 }
