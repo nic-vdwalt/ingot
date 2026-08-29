@@ -44,6 +44,9 @@ check_box3d_artifacts
 echo "== wasm compile: examples/hello =="
 bash "$ROOT/build_web.sh" examples/hello >/dev/null
 
+echo "== wasm compile: examples/builder_controls =="
+bash "$ROOT/build_web.sh" examples/builder_controls >/dev/null
+
 echo "== wasm compile: examples/gallery =="
 bash "$ROOT/build_web.sh" examples/gallery >/dev/null
 
