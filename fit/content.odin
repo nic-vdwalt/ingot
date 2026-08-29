@@ -8,6 +8,12 @@ Markdown_Context :: struct {
 	cull_bottom: i32,
 }
 
+Markdown_Prepare_Status :: ui.Markdown_Prepare_Status
+
+Markdown_Prepared :: struct {
+	inner: ui.Markdown_Prepared,
+}
+
 Text_Span :: struct {
 	text:      string,
 	raw_start: int,
@@ -36,6 +42,63 @@ Markdown_Context_Create :: proc(
 	u := surface_ui(surface)
 	inner := ui.markdown_context(u.frame, workspace_files)
 	return {inner = inner, cull_top = inner.cull_top, cull_bottom = inner.cull_bottom}
+}
+
+Markdown_Prepare :: proc(ctx: ^Markdown_Context, width: i32, text: string) -> Markdown_Prepared {
+	assert(ctx != nil, "Fit.Markdown_Prepare: nil context")
+	ctx.inner.cull_top = ctx.cull_top
+	ctx.inner.cull_bottom = ctx.cull_bottom
+	return {inner = ui.markdown_prepare(&ctx.inner, width, text)}
+}
+
+Markdown_Prepared_Measure :: proc(
+	ctx: ^Markdown_Context,
+	prepared: ^Markdown_Prepared,
+	out_width: ^i32 = nil,
+) -> i32 {
+	assert(ctx != nil && prepared != nil, "Fit.Markdown_Prepared_Measure: invalid argument")
+	return ui.markdown_prepared_measure(&ctx.inner, &prepared.inner, out_width)
+}
+
+Markdown_Prepared_Hit_Test :: proc(
+	ctx: ^Markdown_Context,
+	prepared: ^Markdown_Prepared,
+	x, y, mouse_x, mouse_y: i32,
+) -> int {
+	assert(ctx != nil && prepared != nil, "Fit.Markdown_Prepared_Hit_Test: invalid argument")
+	return ui.markdown_prepared_hit_test(&ctx.inner, &prepared.inner, x, y, mouse_x, mouse_y)
+}
+
+Markdown_Prepared_Source_Y :: proc(
+	ctx: ^Markdown_Context,
+	prepared: ^Markdown_Prepared,
+	offset: int,
+) -> i32 {
+	assert(ctx != nil && prepared != nil, "Fit.Markdown_Prepared_Source_Y: invalid argument")
+	return ui.markdown_prepared_source_y(&ctx.inner, &prepared.inner, offset)
+}
+
+Markdown_Prepared_Draw :: proc(
+	ctx: ^Markdown_Context,
+	prepared: ^Markdown_Prepared,
+	rect: Rect,
+	color: Color,
+	selection_start: int = -1,
+	selection_end: int = -1,
+	out_width: ^i32 = nil,
+) -> i32 {
+	assert(ctx != nil && prepared != nil, "Fit.Markdown_Prepared_Draw: invalid argument")
+	ctx.inner.cull_top = ctx.cull_top
+	ctx.inner.cull_bottom = ctx.cull_bottom
+	return ui.markdown_prepared_draw(
+		&ctx.inner,
+		&prepared.inner,
+		to_rect(rect),
+		ui.Color(color),
+		selection_start,
+		selection_end,
+		out_width,
+	)
 }
 
 Markdown_Measure :: proc(

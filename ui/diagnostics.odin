@@ -14,6 +14,15 @@ Prepared_Phase :: enum u8 {
 	Finalize_Lifetimes,
 }
 
+Markdown_Telemetry :: struct {
+	preparations:     u64,
+	measure_queries:  u64,
+	draw_queries:     u64,
+	hit_queries:      u64,
+	source_y_queries: u64,
+	layout_walks:     u64,
+}
+
 Prepared_Telemetry :: struct {
 	phase_ns:                   [Prepared_Phase]i64,
 	description_nodes:          u64,
@@ -129,6 +138,7 @@ Ui_Frame_Telemetry :: struct {
 	text_input_full_path_count:       u64,
 	text_input_inactive_candidates:   u64,
 	prepared:                         Prepared_Telemetry,
+	markdown:                         Markdown_Telemetry,
 	measure_cache_hits:               u64,
 	measure_cache_misses:             u64,
 	measure_cache_policy_bypasses:    u64,
@@ -194,6 +204,7 @@ ui_frame_telemetry :: proc(frame: ^Ui_Frame) -> Ui_Frame_Telemetry {
 		text_input_full_path_count       = frame.text_input_full_path_count,
 		text_input_inactive_candidates   = frame.text_input_inactive_candidates,
 		prepared                         = frame.prepared_telemetry,
+		markdown                         = frame.markdown_telemetry,
 		measure_cache_hits               = hits,
 		measure_cache_misses             = misses,
 		measure_cache_policy_bypasses    = policy_bypasses,

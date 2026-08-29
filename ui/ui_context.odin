@@ -81,6 +81,7 @@ Ui_Frame :: struct {
 	text_input_full_path_count:     u64,
 	text_input_inactive_candidates: u64,
 	prepared_telemetry:             Prepared_Telemetry,
+	markdown_telemetry:             Markdown_Telemetry,
 	finalized:                      bool,
 	open:                           bool,
 }
@@ -259,6 +260,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 		frame.text_input_full_path_count = 0
 		frame.text_input_inactive_candidates = 0
 		frame.prepared_telemetry = {}
+		frame.markdown_telemetry = {}
 	}
 	frame.finalized = false
 	frame.open = true
