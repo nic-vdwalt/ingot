@@ -11,9 +11,9 @@ package gfx
 
 when !INGOT_GFX_SDL3 {
 
-@(private)
-_platform_native_fullscreen :: proc(ctx: ^Context) -> bool {
-	return false
-}
+	@(private)
+	_platform_native_fullscreen :: proc(ctx: ^Context) -> bool {
+		return false
+	}
 
 }
