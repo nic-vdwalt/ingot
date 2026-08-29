@@ -27,6 +27,40 @@ Combobox_State :: struct {
 	match_count: int,
 }
 
+Combobox_Spec :: struct {
+	id:          Widget_Id,
+	state:       ^Combobox_State,
+	items:       []Combobox_Item,
+	selected:    ^u64,
+	placeholder: string,
+	a11y_label:  string,
+}
+
+combobox_spec_size :: proc(u: ^Ui, spec: Combobox_Spec) -> Intrinsic_Size {
+	assert(u != nil && u.open && spec.id != WIDGET_ID_NONE, "combobox spec: invalid UI")
+	assert(spec.state != nil && spec.selected != nil && spec.a11y_label != "")
+	metrics := ui_frame_metrics(u.frame)
+	return intrinsic_leaf(metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2, metrics.ROW_H_MD)
+}
+
+combobox_spec_at :: proc(u: ^Ui, spec: Combobox_Spec, rect: Rect_I32) -> bool {
+	assert(u != nil && u.open && spec.id != WIDGET_ID_NONE, "combobox spec: invalid UI")
+	focus := focus(u, spec.id) if slot_visible(rect) else Focus_Opt{}
+	return combobox_at(
+		u.frame,
+		rect,
+		spec.state,
+		spec.items,
+		spec.selected,
+		spec.placeholder,
+		u.screen_w,
+		u.screen_h,
+		focus,
+		spec.a11y_label,
+		spec.id,
+	)
+}
+
 combobox_state_destroy :: proc(st: ^Combobox_State) {
 	assert(st != nil, "combobox_state_destroy: nil state")
 	input_box_destroy(&st.box)

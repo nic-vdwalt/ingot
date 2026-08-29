@@ -175,6 +175,24 @@ Prepared_Custom :: struct {
 	size:     Prepared_Size,
 }
 
+Prepared_Composite_Kind :: enum u8 {
+	Toggle,
+	Dropdown,
+	Combobox,
+	Tabs,
+}
+
+Prepared_Composite :: struct {
+	kind: Prepared_Composite_Kind,
+	size: Prepared_Size,
+	using _: struct #raw_union {
+		toggle:   Toggle_Spec,
+		dropdown: Dropdown_Spec,
+		combobox: Combobox_Spec,
+		tabs:     Tabs_Spec,
+	},
+}
+
 Prepared_Kind :: enum u8 {
 	Row,
 	Column,
@@ -193,6 +211,7 @@ Prepared_Kind :: enum u8 {
 	Separator,
 	Spacer,
 	Table_Cell,
+	Composite,
 	Custom,
 }
 
@@ -227,6 +246,7 @@ Prepared_Node :: struct {
 		progress:   Prepared_Progress,
 		spacer:     Prepared_Spacer,
 		table_cell: Prepared_Table_Cell,
+		composite:  Prepared_Composite,
 		custom:     Prepared_Custom,
 	},
 	size:                     Intrinsic_Size,
@@ -626,6 +646,52 @@ prepared_table_cell :: proc(
 		prepared,
 		Prepared_Node{kind = .Table_Cell, table_cell = spec, track = track},
 	)
+}
+
+prepared_composite :: proc(
+	prepared: ^Prepared_Ui,
+	spec: Prepared_Composite,
+	track: Track = {},
+) -> Prepared_Handle {
+	assert(prepared != nil && prepared.open, "prepared_composite: description not open")
+	return prepared_add(
+		prepared,
+		Prepared_Node{kind = .Composite, composite = spec, track = track, sizing = spec.size},
+	)
+}
+
+prepared_composite_size :: proc(
+	u: ^Ui,
+	spec: Prepared_Composite,
+	max_width: i32,
+) -> Intrinsic_Size {
+	assert(u != nil && u.open && max_width >= 0, "prepared composite size: invalid argument")
+	switch spec.kind {
+	case .Toggle:
+		return toggle_spec_size(u, spec.toggle)
+	case .Dropdown:
+		return dropdown_spec_size(u, spec.dropdown)
+	case .Combobox:
+		return combobox_spec_size(u, spec.combobox)
+	case .Tabs:
+		return tabs_spec_size(u, spec.tabs)
+	}
+	unreachable()
+}
+
+prepared_composite_at :: proc(u: ^Ui, spec: Prepared_Composite, rect: Rect_I32) -> bool {
+	assert(u != nil && u.open, "prepared composite render: invalid UI")
+	switch spec.kind {
+	case .Toggle:
+		return toggle_spec_at(u, spec.toggle, rect)
+	case .Dropdown:
+		return dropdown_spec_at(u, spec.dropdown, rect)
+	case .Combobox:
+		return combobox_spec_at(u, spec.combobox, rect)
+	case .Tabs:
+		return tabs_spec_at(u, spec.tabs, rect)
+	}
+	unreachable()
 }
 
 prepared_custom :: proc(
@@ -1105,6 +1171,8 @@ prepared_measure_leaf :: proc(u: ^Ui, node: ^Prepared_Node, max_width: i32) {
 		node.size = prepared_spacer_size(u, node.spacer)
 	case .Table_Cell:
 		node.size = prepared_table_cell_size(u, node.table_cell)
+	case .Composite:
+		node.size = prepared_composite_size(u, node.composite, max_width)
 	case .Custom:
 		node.size = node.custom.measure(u, {max_w = max_width}, node.custom.userdata)
 	case .Row, .Column, .Flow, .Grid, .Grid_Cell, .Attachment, .Scroll:
@@ -2316,6 +2384,7 @@ prepared_container_effects :: proc(node: ^Prepared_Node) -> Prepared_Container_E
 	     .Separator,
 	     .Spacer,
 	     .Table_Cell,
+	     .Composite,
 	     .Custom:
 		unreachable()
 	}
@@ -2345,6 +2414,8 @@ prepared_render_leaf :: proc(u: ^Ui, node: ^Prepared_Node) {
 	case .Spacer:
 	case .Table_Cell:
 		prepared_table_cell_at(u, node.table_cell, node.rect)
+	case .Composite:
+		node.activated = prepared_composite_at(u, node.composite, node.rect)
 	case .Custom:
 		node.activated = node.custom.render(u, node.rect, node.custom.userdata)
 	case .Row, .Column, .Flow, .Grid, .Grid_Cell, .Attachment, .Scroll:

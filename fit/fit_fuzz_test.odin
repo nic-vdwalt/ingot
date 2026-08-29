@@ -126,7 +126,7 @@ fit_fuzz_leaf :: proc(
 	)
 	assert(signals != nil && selections != nil && values != nil, "fit fuzz leaf: nil state")
 	index := int(key % FIT_FUZZ_NODE_LIMIT)
-	switch fuzzx.int_range(p, 0, 6) {
+	switch fuzzx.int_range(p, 0, 7) {
 	case 0:
 		Label(
 			parent,
@@ -161,6 +161,8 @@ fit_fuzz_leaf :: proc(
 		Radio(parent, key + 1, "Fuzz radio", &selections[index], i32(index))
 	case 5:
 		Slider(parent, key + 1, &values[index], 0, f32(FIT_FUZZ_NODE_LIMIT), 1, "Fuzz slider")
+	case 6:
+		Toggle(parent, key + 1, "Fuzz toggle", &activations[index])
 	}
 }
 
