@@ -24,8 +24,8 @@ WORKSPACE_ITEMS := [4]fit.Combobox_Item {
 app: fit.App
 state := State {
 	notifications_enabled = true,
-	quality = 1,
-	workspace = 101,
+	quality               = 1,
+	workspace             = 101,
 }
 
 main :: proc() {
@@ -63,10 +63,7 @@ draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 		{ink = .Secondary},
 	)
 	fit.Tabs(root, "settings.tabs", TAB_LABELS[:], &data.active_tab)
-	content := fit.Card(
-		root,
-		{container = {padding = .LG, size = {width = fit.Grow()}}},
-	)
+	content := fit.Card(root, {container = {padding = .LG, size = {width = fit.Grow()}}})
 	switch data.active_tab {
 	case 0:
 		draw_general(content, data)
@@ -81,12 +78,7 @@ draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 draw_general :: proc(parent: fit.Parent, data: ^State) {
 	assert(data != nil, "builder controls general: nil state")
 	fit.Label(parent, "General", {role = .Title})
-	fit.Toggle(
-		parent,
-		"notifications",
-		"Enable notifications",
-		&data.notifications_enabled,
-	)
+	fit.Toggle(parent, "notifications", "Enable notifications", &data.notifications_enabled)
 	fit.Dropdown(
 		parent,
 		"quality",

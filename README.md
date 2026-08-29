@@ -160,6 +160,7 @@ odin run examples/gallery -collection:ingot=.
 ## Explore
 
 - [Widget gallery](examples/gallery/)
+- [Builder controls example](examples/builder_controls/)
 - [API map](https://openalloy.ai/demos/ingot-api-map/)
 - [Why immediate mode](docs/immediate-mode.md)
 - [Choosing Ingot](docs/comparison.md)

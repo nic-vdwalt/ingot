@@ -1,3 +1,4 @@
+#+build !js
 package main
 
 import "core:testing"
@@ -10,7 +11,10 @@ builder_controls_test_frame :: proc(
 	press_key: bool = false,
 ) -> bool {
 	assert(driver != nil && state != nil, "builder controls test frame: invalid argument")
-	input := fit.Test_Input {screen_size = {760, 560}, dpi_scale = 1}
+	input := fit.Test_Input {
+		screen_size = {760, 560},
+		dpi_scale   = 1,
+	}
 	if press_key do input.keys_pressed[int(key)] = true
 	return fit.Test_Driver_Frame(driver, input, draw, state)
 }
@@ -21,7 +25,11 @@ builder_controls_builds_and_emits_semantics :: proc(t: ^testing.T) {
 	fit.Test_Driver_Init(&driver)
 	defer fit.Test_Driver_Destroy(&driver)
 	fit.Test_Driver_Set_Semantics(&driver, true)
-	state := State {notifications_enabled = true, quality = 1, workspace = 101}
+	state := State {
+		notifications_enabled = true,
+		quality               = 1,
+		workspace             = 101,
+	}
 	defer fit.Combobox_State_Destroy(&state.workspace_combobox)
 
 	testing.expect(t, builder_controls_test_frame(&driver, &state, .Tab))
@@ -36,7 +44,11 @@ builder_controls_keyboard_changes_caller_owned_state :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
 	fit.Test_Driver_Init(&driver)
 	defer fit.Test_Driver_Destroy(&driver)
-	state := State {notifications_enabled = true, quality = 1, workspace = 101}
+	state := State {
+		notifications_enabled = true,
+		quality               = 1,
+		workspace             = 101,
+	}
 	defer fit.Combobox_State_Destroy(&state.workspace_combobox)
 
 	testing.expect(t, builder_controls_test_frame(&driver, &state, .Tab))
@@ -54,7 +66,11 @@ builder_controls_keyboard_changes_tabs_and_persists :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
 	fit.Test_Driver_Init(&driver)
 	defer fit.Test_Driver_Destroy(&driver)
-	state := State {notifications_enabled = true, quality = 1, workspace = 101}
+	state := State {
+		notifications_enabled = true,
+		quality               = 1,
+		workspace             = 101,
+	}
 	defer fit.Combobox_State_Destroy(&state.workspace_combobox)
 
 	testing.expect(t, builder_controls_test_frame(&driver, &state, .Tab))

@@ -37,7 +37,8 @@ toggle_spec_size :: proc(u: ^Ui, spec: Toggle_Spec) -> Intrinsic_Size {
 	assert(u != nil && u.open && u.frame != nil, "toggle_spec_size: invalid UI")
 	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.checked != nil)
 	metrics := ui_frame_metrics(u.frame)
-	width := metrics.CONTROL_BOX * 2 + metrics.CONTROL_GAP + text_width(u.frame, spec.label, .Label)
+	width :=
+		metrics.CONTROL_BOX * 2 + metrics.CONTROL_GAP + text_width(u.frame, spec.label, .Label)
 	return intrinsic_leaf(width, metrics.ROW_H_SM)
 }
 
@@ -85,13 +86,18 @@ toggle_draw :: proc(
 	track := Rect_I32{rect.x, rect.y + (rect.h - track_h) / 2, track_w, track_h}
 	style := ui_frame_theme(frame)
 	background := style.fg_accent if checked else style.bg_input
-	draw_rectangle_rounded(frame, rect_f32(track), 1, 8, background)
+	track_rect := rect_f32(track)
+	track_round := radius_ratio(frame, .Pill, track_rect)
+	track_segments := radius_segments(radius_pixels(frame, .Pill, f32(track_h)))
+	draw_rectangle_rounded(frame, track_rect, track_round, track_segments, background)
 	knob_r := f32(max(track_h / 2 - ui_frame_sc(frame, 2), 1))
 	knob_x := f32(track.x) + knob_r + f32(ui_frame_sc(frame, 2))
 	if checked do knob_x = f32(track.x + track.w) - knob_r - f32(ui_frame_sc(frame, 2))
 	knob := style.button_text if checked else style.fg_secondary
 	draw_circle_v(frame, {knob_x, f32(track.y) + f32(track.h) / 2}, knob_r, knob)
-	if hovered || focus_opt_focused(focus) do draw_focus_ring(frame, track.x, track.y, track.w, track.h)
+	if hovered || focus_opt_focused(focus) {
+		draw_focus_ring(frame, track.x, track.y, track.w, track.h)
+	}
 	text(frame, label, track.x + track.w + metrics.CONTROL_GAP, rect.y, .Label, .Primary)
 }
 

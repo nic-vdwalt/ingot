@@ -39,7 +39,11 @@ toggle_spec_measures_and_emits_checked_semantics :: proc(t: ^testing.T) {
 	begin(&u, &frame, {0, 0, 200, 40})
 	defer end(&u)
 	checked := true
-	spec := Toggle_Spec{id = Widget_Id(7), label = "Enabled", checked = &checked}
+	spec := Toggle_Spec {
+		id      = Widget_Id(7),
+		label   = "Enabled",
+		checked = &checked,
+	}
 	size := toggle_spec_size(&u, spec)
 	testing.expect(t, size.w > size.h && size.h > 0)
 	_ = toggle_spec_at(&u, spec, {0, 0, size.w, size.h})

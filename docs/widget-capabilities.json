@@ -51,7 +51,7 @@
         "ui/controls_test.odin",
         "fit/fit_test.odin"
       ],
-      "example": "",
+      "example": "examples/builder_controls/main.odin",
       "semantics": "Checkbox",
       "validation": "not_recorded"
     },
@@ -125,7 +125,7 @@
         "ui/dropdown_test.odin",
         "fit/fit_test.odin"
       ],
-      "example": "examples/gallery/main.odin",
+      "example": "examples/builder_controls/main.odin",
       "semantics": "Dropdown",
       "validation": "not_recorded"
     },
@@ -145,7 +145,7 @@
         "ui/combobox_test.odin",
         "fit/fit_test.odin"
       ],
-      "example": "examples/gallery/main.odin",
+      "example": "examples/builder_controls/main.odin",
       "semantics": "Dropdown",
       "validation": "not_recorded"
     },
@@ -163,7 +163,7 @@
       "tests": [
         "fit/fit_test.odin"
       ],
-      "example": "examples/gallery/main.odin",
+      "example": "examples/builder_controls/main.odin",
       "semantics": "Tab",
       "validation": "not_recorded"
     },
