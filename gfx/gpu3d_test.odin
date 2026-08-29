@@ -643,7 +643,7 @@ test_gpu_3d_shader_pool_bounds :: proc(t: ^testing.T) {
 test_gpu_3d_uniforms_layout_locked :: proc(t: ^testing.T) {
 	// The Odin structs are copied raw into the uniform stream and read back
 	// through the WGSL views, so their sizes are load-bearing contracts.
-	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 336, "uniforms smaller than extended WGSL view")
+	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 512, "uniforms smaller than extended WGSL view")
 	testing.expect_value(t, size_of(Gpu_3D_Uniforms) % 16, 0)
 	testing.expect_value(t, size_of(Gpu_3D_Vertex), 36)
 	testing.expect_value(t, size_of(Matrix), 64)
@@ -675,6 +675,22 @@ test_gpu_3d_shader_declares_pbr_bind_groups :: proc(t: ^testing.T) {
 	testing.expect(t, strings.contains(GPU_3D_SHADER, roughness_declaration))
 	testing.expect(t, strings.contains(GPU_3D_SHADER, "use_roughness_ao: u32"))
 	testing.expect(t, strings.contains(GPU_3D_SHADER, "@group(1) @binding(0) var mesh_texture"))
+	testing.expect(t, strings.contains(GPU_3D_SHADER, "clip_plane: vec4<f32>"))
+	testing.expect(t, strings.contains(GPU_3D_SHADER, "dot(u.clip_plane.xyz, in.world_position)"))
+}
+
+@(test)
+test_gpu_3d_clip_plane_contract :: proc(t: ^testing.T) {
+	pass: Gpu_3D_Pass
+	set_gpu_3d_clip_plane(&pass, {0, 3, 0, 12}, true)
+	testing.expect_value(t, pass.clip_plane, [4]f32{0, 1, 0, 12})
+	testing.expect_value(t, pass.clip_enabled, u32(1))
+	uniforms := _gpu_3d_uniforms(&pass, {}, Matrix(1), false, false, false)
+	testing.expect_value(t, uniforms.clip_plane, pass.clip_plane)
+	testing.expect_value(t, uniforms.clip_enabled, u32(1))
+	set_gpu_3d_clip_plane(&pass, {}, false)
+	testing.expect_value(t, pass.clip_plane, [4]f32{})
+	testing.expect_value(t, pass.clip_enabled, u32(0))
 }
 
 @(test)
