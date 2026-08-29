@@ -1,8 +1,8 @@
 #+build !js
 package gfx
 
-import "core:testing"
-import sdl "vendor:sdl3"
+@(require) import "core:testing"
+@(require) import sdl "vendor:sdl3"
 
 when INGOT_GFX_SDL3 {
 
