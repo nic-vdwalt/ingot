@@ -1,10 +1,10 @@
 #+build !js
 package gfx
 
-import "base:intrinsics"
-import "core:os"
-import "core:strings"
-import sdl "vendor:sdl3"
+@(require) import "base:intrinsics"
+@(require) import "core:os"
+@(require) import "core:strings"
+@(require) import sdl "vendor:sdl3"
 
 when INGOT_GFX_SDL3 {
 

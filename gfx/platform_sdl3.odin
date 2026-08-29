@@ -1,13 +1,13 @@
 #+build !js
 package gfx
 
-import "core:c"
-import "core:fmt"
-import "core:strings"
-import "core:unicode/utf8"
-import sdl "vendor:sdl3"
-import wg "vendor:wgpu"
-import sdlglue "vendor:wgpu/sdl3glue"
+@(require) import "core:c"
+@(require) import "core:fmt"
+@(require) import "core:strings"
+@(require) import "core:unicode/utf8"
+@(require) import sdl "vendor:sdl3"
+@(require) import wg "vendor:wgpu"
+@(require) import sdlglue "vendor:wgpu/sdl3glue"
 
 when INGOT_GFX_SDL3 {
 
