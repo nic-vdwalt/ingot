@@ -86,6 +86,7 @@ Gpu_Material_Style :: enum {
 	Opaque,
 	Opaque_Overlay,
 	Opaque_Outline,
+	Silhouette_Outline,
 }
 
 Gpu_Material :: struct {
@@ -273,7 +274,8 @@ _gpu_3d_material_policy :: proc(style: Gpu_Material_Style) -> Gpu_3D_Material_Po
 		blend = style == .Default || style == .Transparent,
 		depth_write = style != .Transparent &&
 		style != .Opaque_Overlay &&
-		style != .Opaque_Outline,
+		style != .Opaque_Outline &&
+		style != .Silhouette_Outline,
 		depth_compare = .LessEqual if style == .Opaque_Outline else .Less,
 		depth_bias = -2 if style == .Opaque_Overlay else 0,
 	}
@@ -2221,6 +2223,8 @@ _gpu_3d_pipeline :: proc(
 		depthBias         = policy.depth_bias,
 	}
 	topology := _gpu_3d_primitive_topology(primitive)
+	cull_mode := wg.CullMode.None
+	if style == .Silhouette_Outline && primitive == .Triangles do cull_mode = .Front
 	pipeline := wg.DeviceCreateRenderPipeline(
 		ctx.device,
 		&{
@@ -2231,7 +2235,7 @@ _gpu_3d_pipeline :: proc(
 				bufferCount = 1,
 				buffers = &vertex_layout,
 			},
-			primitive = {topology = topology, frontFace = .CCW, cullMode = .None},
+			primitive = {topology = topology, frontFace = .CCW, cullMode = cull_mode},
 			depthStencil = &depth,
 			multisample = {count = sample_count, mask = ~u32(0)},
 			fragment = &wg.FragmentState {

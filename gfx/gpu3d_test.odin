@@ -15,6 +15,14 @@ import "core:testing"
 import wg "vendor:wgpu"
 
 @(test)
+gpu_3d_silhouette_outline_is_depth_read_only :: proc(t: ^testing.T) {
+	policy := _gpu_3d_material_policy(.Silhouette_Outline)
+	testing.expect(t, !policy.blend)
+	testing.expect(t, !policy.depth_write)
+	testing.expect_value(t, policy.depth_compare, wg.CompareFunction.Less)
+}
+
+@(test)
 gpu_3d_pass_validation_uses_recorded_owner :: proc(t: ^testing.T) {
 	first := new(Context)
 	defer free(first)
