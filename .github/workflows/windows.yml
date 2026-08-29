@@ -99,10 +99,10 @@ jobs:
         run: ./scripts/check.ps1
       - name: Run Windows SDL3 tests
         shell: pwsh
-        run: ./scripts/test.ps1 -define:INGOT_GFX_SDL3=true
+        run: ./scripts/test.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
       - name: Run Windows SDL3 strict gate
         shell: pwsh
-        run: ./scripts/check.ps1 -define:INGOT_GFX_SDL3=true
+        run: ./scripts/check.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
       - name: Upload bounded failure logs
         if: failure()
         uses: actions/upload-artifact@v4
