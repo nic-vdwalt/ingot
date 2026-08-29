@@ -1,3 +1,5 @@
+param([Parameter(ValueFromRemainingArguments = $true)][string[]]$OdinFlags)
+
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Collection = "-collection:ingot=$Root"
@@ -39,26 +41,26 @@ Invoke-CheckedPython "check_theme_tokens.py" @("--baseline", "$PSScriptRoot/them
 
 foreach ($Package in $Manifest.check_packages) {
     Write-Host "== checking $Package =="
-    & odin check "$Root/$Package" $Collection -vet -strict-style -vet-shadowing -no-entry-point
+    & odin check "$Root/$Package" $Collection -vet -strict-style -vet-shadowing -no-entry-point @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 foreach ($Mode in $Manifest.simulation_modes) {
     $Package = $Mode[0]
     $Define = $Mode[1]
     Write-Host "== checking $Package ($Define) =="
-    & odin test "$Root/$Package" $Collection "-define:$Define" -define:ODIN_TEST_NAMES=__compile_only__
+    & odin test "$Root/$Package" $Collection "-define:$Define" -define:ODIN_TEST_NAMES=__compile_only__ @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 foreach ($Package in $Manifest.binding_packages) {
     Write-Host "== checking binding $Package =="
-    & odin check "$Root/$Package" $Collection -no-entry-point
+    & odin check "$Root/$Package" $Collection -no-entry-point @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 $ExampleOut = Join-Path $env:TEMP "ingot-example-check"
 New-Item -ItemType Directory -Force -Path $ExampleOut | Out-Null
 foreach ($Example in $Manifest.examples) {
     Write-Host "== building example $Example =="
-    & odin build "$Root/examples/$Example" $Collection "-out:$ExampleOut/$Example.exe"
+    & odin build "$Root/examples/$Example" $Collection "-out:$ExampleOut/$Example.exe" @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 foreach ($Package in $Manifest.hot_reload_packages) {
@@ -70,6 +72,7 @@ foreach ($Package in $Manifest.hot_reload_packages) {
     } else {
         $Arguments += "-out:$ExampleOut/hot_reload_host.exe"
     }
+    $Arguments += $OdinFlags
     & odin @Arguments
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }

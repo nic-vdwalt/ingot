@@ -25,7 +25,8 @@
 
 Ingot is a self-contained immediate-mode framework built on Odin's bundled
 `vendor:wgpu`. One renderer targets macOS/Metal, Windows/D3D12, Linux/Vulkan,
-and browser WASM/WebGPU.
+and browser WASM/WebGPU. GLFW remains the default native host backend; install
+SDL3 and pass `-define:INGOT_GFX_SDL3=true` to select the optional SDL3 host.
 
 - Native and web builds from one source
 - Immediate-mode UI for desktop tools

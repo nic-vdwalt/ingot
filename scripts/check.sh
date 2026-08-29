@@ -14,7 +14,7 @@ manifest_values() {
 }
 
 if [ "$(uname -s)" = "Linux" ]; then
-	bash "$root/scripts/check-linux-dependencies.sh"
+	bash "$root/scripts/check-linux-dependencies.sh" "$@"
 fi
 
 echo "== Odin toolchain =="

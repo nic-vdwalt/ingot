@@ -9,25 +9,29 @@ package gfx
 // import legal on Linux where the generic branch returns the context window directly.
 @(require) import "vendor:glfw"
 
-when ODIN_OS == .Darwin {
-	context_get_window_handle :: proc(ctx: ^Context) -> rawptr {
-		if ctx == nil || ctx.win == nil do return nil
-		_ = glfw.GetCurrentContext()
-		return rawptr(glfw.GetCocoaWindow(glfw.WindowHandle(ctx.win)))
-	}
-} else when ODIN_OS == .Windows {
-	context_get_window_handle :: proc(ctx: ^Context) -> rawptr {
-		if ctx == nil || ctx.win == nil do return nil
-		_ = glfw.GetCurrentContext()
-		return rawptr(glfw.GetWin32Window(glfw.WindowHandle(ctx.win)))
-	}
-} else {
-	context_get_window_handle :: proc(ctx: ^Context) -> rawptr {
-		if ctx == nil do return nil
-		return rawptr(ctx.win)
-	}
-}
+when !INGOT_GFX_SDL3 {
 
-GetWindowHandle :: proc() -> rawptr {
-	return context_get_window_handle(default_context())
+	when ODIN_OS == .Darwin {
+		context_get_window_handle :: proc(ctx: ^Context) -> rawptr {
+			if ctx == nil || ctx.win == nil do return nil
+			_ = glfw.GetCurrentContext()
+			return rawptr(glfw.GetCocoaWindow(glfw.WindowHandle(ctx.win)))
+		}
+	} else when ODIN_OS == .Windows {
+		context_get_window_handle :: proc(ctx: ^Context) -> rawptr {
+			if ctx == nil || ctx.win == nil do return nil
+			_ = glfw.GetCurrentContext()
+			return rawptr(glfw.GetWin32Window(glfw.WindowHandle(ctx.win)))
+		}
+	} else {
+		context_get_window_handle :: proc(ctx: ^Context) -> rawptr {
+			if ctx == nil do return nil
+			return rawptr(ctx.win)
+		}
+	}
+
+	GetWindowHandle :: proc() -> rawptr {
+		return context_get_window_handle(default_context())
+	}
+
 }

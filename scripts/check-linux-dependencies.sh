@@ -3,6 +3,12 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 errors=0
+sdl_backend=0
+for argument in "$@"; do
+	if [ "$argument" = "-define:INGOT_GFX_SDL3=true" ]; then
+		sdl_backend=1
+	fi
+done
 
 fail() {
 	echo "linux dependency: $1" >&2
@@ -38,6 +44,9 @@ if command -v pkg-config >/dev/null 2>&1; then
 		fi
 	done
 	[ "$x11_ok" -eq 0 ] || true
+	if [ "$sdl_backend" -eq 1 ]; then
+		pkg-config --exists sdl3 || fail "SDL3 development files are required by INGOT_GFX_SDL3"
+	fi
 fi
 
 case "$(uname -m)" in

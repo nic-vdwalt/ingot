@@ -1,3 +1,5 @@
+param([Parameter(ValueFromRemainingArguments = $true)][string[]]$OdinFlags)
+
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Collection = "-collection:ingot=$Root"
@@ -27,7 +29,7 @@ foreach ($Package in $Manifest.test_packages) {
         $Extra += "-define:ODIN_TEST_THREADS=1"
     }
     $Label = $Package.Replace("/", "-")
-    $Command = @("odin", "test", "$Root/$Package", $Collection, $Guard, "-define:ODIN_TEST_FAIL_ON_EMPTY=true") + $Extra
+    $Command = @("odin", "test", "$Root/$Package", $Collection, $Guard, "-define:ODIN_TEST_FAIL_ON_EMPTY=true") + $Extra + $OdinFlags
     Invoke-Supervised $Label $Command
 }
 foreach ($TestName in $Manifest.windows_gfx_expected_assert_tests) {
@@ -39,7 +41,7 @@ foreach ($TestName in $Manifest.windows_gfx_expected_assert_tests) {
         "-define:ODIN_TEST_NAMES=$TestName",
         "-define:ODIN_TEST_THREADS=1",
         "-define:ODIN_TEST_FAIL_ON_EMPTY=true"
-    )
+    ) + $OdinFlags
     Invoke-Supervised $Label $Command
 }
 foreach ($TestName in $Manifest.windows_ui_expected_assert_tests) {
@@ -51,13 +53,13 @@ foreach ($TestName in $Manifest.windows_ui_expected_assert_tests) {
         "-define:ODIN_TEST_NAMES=$TestName",
         "-define:ODIN_TEST_THREADS=1",
         "-define:ODIN_TEST_FAIL_ON_EMPTY=true"
-    )
+    ) + $OdinFlags
     Invoke-Supervised $Label $Command
 }
 foreach ($Example in $Manifest.test_examples) {
     Write-Host "== testing examples/$Example =="
     $Label = $Example.Replace("_", "-") + "-example"
-    $Command = @("odin", "test", "$Root/examples/$Example", $Collection, $Guard, "-define:ODIN_TEST_FAIL_ON_EMPTY=true")
+    $Command = @("odin", "test", "$Root/examples/$Example", $Collection, $Guard, "-define:ODIN_TEST_FAIL_ON_EMPTY=true") + $OdinFlags
     Invoke-Supervised $Label $Command
 }
 Write-Host "== replaying fuzz regression corpus =="
@@ -66,5 +68,6 @@ Write-Host "== testing native WSS loopback TLS =="
 Invoke-Supervised "wss-loopback" @("python", "$PSScriptRoot/wss-loopback-test.py", "--fixture", "$Root/examples/wss_fixture", "--collection=$Collection")
 foreach ($Package in $Manifest.compile_packages) {
     Write-Host "== checking $Package =="
-    Invoke-Supervised "$Package-check" @("odin", "check", "$Root/$Package", $Collection, "-no-entry-point")
+    $Command = @("odin", "check", "$Root/$Package", $Collection, "-no-entry-point") + $OdinFlags
+    Invoke-Supervised "$Package-check" $Command
 }

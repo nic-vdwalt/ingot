@@ -8,12 +8,12 @@ linked. These are compile-time compositions, not runtime profiles.
 
 | Application | Imports | Additional boundary |
 |---|---|---|
-| Minimal GUI | `ingot:fit` | WebGPU/wgpu-native, GLFW, stb, bundled font |
+| Minimal GUI | `ingot:fit` | WebGPU/wgpu-native, GLFW by default or opt-in SDL3, stb, bundled font |
 | Advanced GUI | `ingot:ui`, `ingot:ui_gfx`, `ingot:gfx` | Same graphics boundary; more lifecycle responsibility |
 | Accessible GUI | GUI packages; `ui_gfx` owns the host bridge | Native AccessKit where available; semantic DOM in browser |
 | Networked tool | GUI packages plus `ingot:net` | Native libcurl; browser Fetch/WebSocket APIs |
 | Terminal tool | GUI packages plus `ingot:term` | `ingot:pty`, `ingot:libvterm`, platform PTY/ConPTY |
-| Graphics application | `ingot:gfx` | WebGPU/wgpu-native and GLFW only |
+| Graphics application | `ingot:gfx` | WebGPU/wgpu-native and exactly one native host: GLFW or SDL3 |
 | Engine application | Explicit `asset`, `ecs`, `procgen`, `scene`, or `scene_gfx` imports | No GUI dependency is implied |
 
 A minimal GUI must not import `net`, `term`, `pty`, `libvterm`, `accesskit`,
@@ -24,17 +24,21 @@ package.
 ## Toolchain
 
 Use the exact Odin revision in [`ODIN_VERSION`](../ODIN_VERSION). Its bundled
-`vendor:wgpu`, `vendor:glfw`, `vendor:stb`, and `vendor:miniaudio` packages are
-part of the tested build boundary. A newer compiler or vendor archive is not
-assumed compatible.
+`vendor:wgpu`, `vendor:glfw`, `vendor:sdl3`, `vendor:stb`, and
+`vendor:miniaudio` packages are part of the tested build boundary. A newer
+compiler or vendor archive is not assumed compatible.
+
+GLFW is the default native host. `-define:INGOT_GFX_SDL3=true` selects SDL3
+3.4.x at compile time while retaining `vendor:wgpu`; the unselected host is not
+linked. Browser builds continue using DOM events and WebGPU directly.
 
 ## Platform prerequisites
 
 | Target | Required | Optional application services |
 |---|---|---|
-| macOS | Pinned Odin and the bundled wgpu-native/GLFW inputs | AccessKit, libcurl, libvterm according to imported packages |
-| Windows | Pinned Odin and bundled wgpu-native/GLFW inputs | AccessKit, libcurl, ConPTY/libvterm according to imports |
-| Linux | C toolchain, `pkg-config`, Vulkan and GLFW/X11 development files | libcurl for `net`; libvterm for `term`; desktop dialog helpers |
+| macOS | Pinned Odin and bundled wgpu-native/GLFW inputs; SDL3 3.4.x for SDL builds | AccessKit, libcurl, libvterm according to imported packages |
+| Windows | Pinned Odin and bundled wgpu-native/GLFW inputs; SDL3 3.4.x for SDL builds | AccessKit, libcurl, ConPTY/libvterm according to imports |
+| Linux | C toolchain, `pkg-config`, Vulkan and GLFW/X11 files; SDL3 3.4.x for SDL builds | libcurl for `net`; libvterm for `term`; desktop dialog helpers |
 | Browser | Pinned Odin, Node for repository checks, a WebGPU-capable browser at runtime | Browser networking and semantic DOM according to application use |
 
 Run `bash scripts/check-linux-dependencies.sh` on Linux. Windows and macOS CI

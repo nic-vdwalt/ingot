@@ -9,7 +9,11 @@
 // windows and consumers size to the client rect either way.
 package gfx
 
+when !INGOT_GFX_SDL3 {
+
 @(private)
 _platform_native_fullscreen :: proc(ctx: ^Context) -> bool {
 	return false
+}
+
 }
