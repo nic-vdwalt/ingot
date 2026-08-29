@@ -106,3 +106,8 @@ stay within the length/width limits. Existing code is upgraded to the standard
 when it is next touched - improve on contact, don't mass-rewrite.
 
 `term/term_pump.odin` (`term_pump`) carries worked-example assertions to copy.
+
+GPU-3D clip planes are pass state. `set_gpu_3d_clip_plane` removes fragments
+where `dot(normal, world_position) > distance`; clipping defaults off. Every
+custom GPU-3D shader must mirror the append-only uniform fields and explicitly
+apply the same predicate when its material should obey the plane.
