@@ -210,10 +210,10 @@ draw_world :: proc(value: ^State) {
 		value.water,
 		rl.Matrix(1),
 		{
-			color           = WATER_COLOR_LOW,
-			color_high      = WATER_COLOR_HIGH,
-			shader          = value.water_shader,
-			custom_params   = {value.phase, WATER_AMPLITUDE, WATER_CROSS_AMPLITUDE, WATER_BASE_Z},
+			color = WATER_COLOR_LOW,
+			color_high = WATER_COLOR_HIGH,
+			shader = value.water_shader,
+			custom_params = {value.phase, WATER_AMPLITUDE, WATER_CROSS_AMPLITUDE, WATER_BASE_Z},
 			custom_params_2 = {
 				WATER_WAVE_NUMBER_X,
 				WATER_WAVE_NUMBER_Y,

@@ -148,7 +148,9 @@ when INGOT_GFX_SDL3 {
 			&{compatibleSurface = ctx.surface},
 			{mode = .AllowProcessEvents, callback = _on_adapter, userdata1 = &ares},
 		)
-		for event_count := 0; event_count < SDL_GPU_EVENT_PUMP_MAX && !ares.done; event_count += 1 {
+		for event_count := 0;
+		    event_count < SDL_GPU_EVENT_PUMP_MAX && !ares.done;
+		    event_count += 1 {
 			wg.InstanceProcessEvents(ctx.instance)
 		}
 		assert(ares.done, "platform_start_gpu: adapter request did not finish")
@@ -168,7 +170,9 @@ when INGOT_GFX_SDL3 {
 			&dev_desc,
 			{mode = .AllowProcessEvents, callback = _on_device, userdata1 = &dres},
 		)
-		for event_count := 0; event_count < SDL_GPU_EVENT_PUMP_MAX && !dres.done; event_count += 1 {
+		for event_count := 0;
+		    event_count < SDL_GPU_EVENT_PUMP_MAX && !dres.done;
+		    event_count += 1 {
 			wg.InstanceProcessEvents(ctx.instance)
 		}
 		assert(dres.done, "platform_start_gpu: device request did not finish")
