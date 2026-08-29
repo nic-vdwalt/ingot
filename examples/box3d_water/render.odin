@@ -1,28 +1,130 @@
-// examples/box3d_water - graphics. The water surface is one indexed grid mesh
-// whose topology never changes; only its vertex positions and normals are
-// rewritten each frame from the same wave function the physics samples. That
-// shared source is what makes the picture trustworthy: if the mesh and the
-// buoyancy ever disagreed, the cubes would visibly float in the wrong place.
+// examples/box3d_water - graphics. The water surface is one static indexed
+// grid; its custom vertex shader evaluates the same phase-driven analytical
+// wave the fixed-step physics samples. That shared source is what makes the
+// picture trustworthy: if the mesh and buoyancy ever disagreed, the cubes
+// would visibly float in the wrong place.
 package main
 
 import rl "ingot:gfx"
 
-// The pool surface is drawn under the floaters, so it uses the blended default
-// material with a colour ramp keyed to surface height: troughs read as deep
-// water and crests as foam, which is what makes the motion legible without a
-// custom shader.
 WATER_COLOR_LOW :: rl.Color{18, 62, 112, 205}
 WATER_COLOR_HIGH :: rl.Color{140, 210, 240, 205}
+WATER_IOR :: f32(1.33)
+WATER_FRESNEL_F0 :: ((WATER_IOR - 1) / (WATER_IOR + 1)) * ((WATER_IOR - 1) / (WATER_IOR + 1))
 BOX_LIGHT :: rl.Gpu_3D_Light {
 	direction = {-0.35, 0.45, 0.82},
 	ambient   = 0.30,
 	diffuse   = 0.70,
 }
 
-// Vertex storage lives at package scope rather than on the stack: it is
-// POOL_VERTEX_COUNT * size_of(Gpu_3D_Vertex) bytes, rebuilt every frame, and a
-// buffer that large has no business being copied through a stack frame.
-water_vertices: [POOL_VERTEX_COUNT]rl.Gpu_3D_Vertex
+WATER_SHADER :: `
+struct Uniforms {
+    view_projection: mat4x4<f32>,
+    model: mat4x4<f32>,
+    color: vec4<f32>,
+    color_high: vec4<f32>,
+    light_direction: vec4<f32>,
+    light_params: vec4<f32>,
+    camera_position: vec4<f32>,
+    custom_params: vec4<f32>,
+    custom_params_2: vec4<f32>,
+    custom_params_3: vec4<f32>,
+    custom_params_4: vec4<f32>,
+    use_scalar: u32,
+    use_texture: u32,
+    use_normal: u32,
+    use_roughness_ao: u32,
+    custom_params_5: vec4<f32>,
+    custom_params_6: vec4<f32>,
+    custom_params_7: vec4<f32>,
+    custom_params_8: vec4<f32>,
+    custom_params_9: vec4<f32>,
+    custom_params_10: vec4<f32>,
+    custom_params_11: vec4<f32>,
+    custom_params_12: vec4<f32>,
+    custom_params_13: vec4<f32>,
+    custom_params_14: vec4<f32>,
+    custom_params_15: vec4<f32>,
+    custom_params_16: vec4<f32>,
+    custom_params_17: vec4<f32>,
+    custom_params_18: vec4<f32>,
+    custom_params_19: vec4<f32>,
+};
+struct Instances {
+    transforms: array<mat4x4<f32>, 256>,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(1) var<uniform> instances: Instances;
+@group(1) @binding(0) var mesh_texture: texture_2d<f32>;
+@group(1) @binding(1) var mesh_sampler: sampler;
+@group(2) @binding(0) var mesh_normal_texture: texture_2d<f32>;
+@group(2) @binding(1) var mesh_normal_sampler: sampler;
+@group(3) @binding(0) var mesh_roughness_ao_texture: texture_2d<f32>;
+@group(3) @binding(1) var mesh_roughness_ao_sampler: sampler;
+@group(3) @binding(2) var scene_color_texture: texture_2d<f32>;
+@group(3) @binding(3) var scene_color_sampler: sampler;
+@group(3) @binding(4) var scene_depth_texture: texture_depth_2d;
+struct VertexOut {
+    @builtin(position) position: vec4<f32>,
+    @location(0) world: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) height_mix: f32,
+};
+@vertex
+fn vs_main(
+    @builtin(instance_index) index: u32,
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) scalar: f32,
+    @location(3) uv: vec2<f32>,
+) -> VertexOut {
+    let model = u.model * instances.transforms[index];
+    var world = (model * vec4<f32>(position, 1.0)).xyz;
+    let phase = u.custom_params.x;
+    let primary_angle = u.custom_params_2.x * world.x + phase;
+    let cross_angle = u.custom_params_2.y * world.y + u.custom_params_2.z * phase;
+    world.z = u.custom_params.w + u.custom_params.y * sin(primary_angle) +
+        u.custom_params.z * sin(cross_angle);
+    let slope_x = u.custom_params.y * u.custom_params_2.x * cos(primary_angle);
+    let slope_y = u.custom_params.z * u.custom_params_2.y * cos(cross_angle);
+    var out: VertexOut;
+    out.world = world;
+    out.normal = normalize(vec3<f32>(-slope_x, -slope_y, 1.0));
+    out.height_mix = clamp(
+        (world.z - u.custom_params.w) / (2.0 * u.custom_params_3.x) + 0.5,
+        0.0,
+        1.0);
+    out.position = u.view_projection * vec4<f32>(world, 1.0);
+    return out;
+}
+@fragment
+fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+    let view_delta = u.camera_position.xyz - in.world;
+    let distance = length(view_delta);
+    let view = view_delta / max(distance, 0.001);
+    let light = normalize(u.light_direction.xyz);
+    let detail_fade = 1.0 - smoothstep(28.0, 70.0, distance);
+    let ripple = vec2<f32>(
+        sin(in.world.x * 2.7 + in.world.y * 1.9 + u.custom_params.x * 1.7),
+        cos(in.world.x * 1.6 - in.world.y * 2.3 - u.custom_params.x * 1.3));
+    let surface_normal = normalize(
+        in.normal + vec3<f32>(ripple * 0.055 * detail_fade, 0.0));
+    let ndv = max(dot(surface_normal, view), 0.0);
+    let fresnel = u.custom_params_2.w +
+        (1.0 - u.custom_params_2.w) * pow(1.0 - ndv, 5.0);
+    let reflected = reflect(-view, surface_normal);
+    let sky = mix(
+        vec3<f32>(0.18, 0.30, 0.42),
+        vec3<f32>(0.025, 0.07, 0.14),
+        pow(clamp(reflected.z, 0.0, 1.0), 0.45));
+    var water = mix(u.color.rgb, u.color_high.rgb, in.height_mix);
+    water = mix(water, sky, fresnel);
+    let halfway = normalize(view + light);
+    water += vec3<f32>(pow(max(dot(surface_normal, halfway), 0.0), 128.0) * 0.7);
+    let alpha = mix(u.color.a, 0.96, fresnel);
+    return vec4<f32>(water * alpha, alpha);
+}
+`
 
 graphics_create :: proc(value: ^State) -> bool {
 	assert(value != nil, "graphics_create: nil state")
@@ -39,7 +141,7 @@ graphics_create :: proc(value: ^State) -> bool {
 	value.orbit_config.min_distance = 12
 	value.orbit_config.max_distance = 120
 	value.orbit_bindings = rl.orbit_camera_bindings_default()
-	target_ok, cube_ok, edges_ok: bool
+	target_ok, cube_ok, edges_ok, shader_ok: bool
 	value.target, target_ok = rl.create_gpu_3d_target(
 		rl.GetRenderWidth(),
 		rl.GetRenderHeight(),
@@ -47,8 +149,9 @@ graphics_create :: proc(value: ^State) -> bool {
 	)
 	value.cube, cube_ok = rl.create_cube_mesh()
 	value.cube_edges, edges_ok = rl.create_cube_edge_mesh()
+	value.water_shader, shader_ok = rl.create_gpu_3d_shader(WATER_SHADER)
 	water_ok := water_mesh_create(value)
-	value.graphics_ready = target_ok && cube_ok && edges_ok && water_ok
+	value.graphics_ready = target_ok && cube_ok && edges_ok && shader_ok && water_ok
 	return value.graphics_ready
 }
 
@@ -78,37 +181,7 @@ water_mesh_create :: proc(value: ^State) -> bool {
 	mesh, ok := rl.create_plane_mesh(POOL_EXTENT, POOL_CELLS)
 	if !ok do return false
 	value.water = mesh
-	// The engine's plane is flat; the first displaced surface is uploaded here
-	// so frame zero already shows the wave rather than a plate of glass.
-	water_vertices_fill(value.phase)
-	if !rl.update_gpu_mesh_vertices(value.water, water_vertices[:]) do return false
 	return true
-}
-
-// water_vertices_fill evaluates the same wave the physics uses. `scalar` is the
-// normalized height, which the material maps between the deep and foam colours,
-// so the ramp stays correct no matter how the amplitudes are retuned.
-water_vertices_fill :: proc(phase: f32) {
-	assert(POOL_CELLS > 0, "water_vertices_fill: empty grid")
-	assert(WATER_HEIGHT_SPAN > 0, "water_vertices_fill: zero wave span")
-	step := 2 * POOL_EXTENT / f32(POOL_CELLS)
-	index := 0
-	for row in 0 ..= POOL_CELLS {
-		y := -POOL_EXTENT + f32(row) * step
-		for column in 0 ..= POOL_CELLS {
-			x := -POOL_EXTENT + f32(column) * step
-			height := water_height(x, y, phase)
-			offset := (height - WATER_BASE_Z) / (2 * WATER_HEIGHT_SPAN) + 0.5
-			water_vertices[index] = {
-				position = {x, y, height},
-				normal   = water_normal(x, y, phase),
-				scalar   = clamp(offset, 0, 1),
-				uv       = {f32(column) / f32(POOL_CELLS), f32(row) / f32(POOL_CELLS)},
-			}
-			index += 1
-		}
-	}
-	assert(index == POOL_VERTEX_COUNT, "water_vertices_fill: vertex count mismatch")
 }
 
 camera_update :: proc(value: ^State, frame_dt: f32) {
@@ -122,11 +195,6 @@ camera_update :: proc(value: ^State, frame_dt: f32) {
 draw_world :: proc(value: ^State) {
 	assert(value != nil, "draw_world: nil state")
 	assert(value.floater_count <= FLOATER_MAX, "draw_world: floater count overflow")
-	water_vertices_fill(value.phase)
-	// A failed upload leaves the previous frame's surface resident, which is
-	// stale but coherent; refusing to draw would be a worse answer than one
-	// frame of lag on a transient device error.
-	_ = rl.update_gpu_mesh_vertices(value.water, water_vertices[:])
 	pass, ok := rl.begin_gpu_3d(&value.target, value.camera)
 	if !ok do return
 	rl.set_gpu_3d_light(&pass, BOX_LIGHT)
@@ -141,7 +209,19 @@ draw_world :: proc(value: ^State) {
 		&pass,
 		value.water,
 		rl.Matrix(1),
-		{color = WATER_COLOR_LOW, color_high = WATER_COLOR_HIGH, use_scalar = true},
+		{
+			color           = WATER_COLOR_LOW,
+			color_high      = WATER_COLOR_HIGH,
+			shader          = value.water_shader,
+			custom_params   = {value.phase, WATER_AMPLITUDE, WATER_CROSS_AMPLITUDE, WATER_BASE_Z},
+			custom_params_2 = {
+				WATER_WAVE_NUMBER_X,
+				WATER_WAVE_NUMBER_Y,
+				WATER_CROSS_PHASE_RATE,
+				WATER_FRESNEL_F0,
+			},
+			custom_params_3 = {WATER_HEIGHT_SPAN, 0, 0, 0},
+		},
 	)
 	rl.end_gpu_3d(&pass)
 }

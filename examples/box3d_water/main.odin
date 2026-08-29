@@ -76,6 +76,7 @@ State :: struct {
 	cube:            rl.Gpu_Mesh,
 	cube_edges:      rl.Gpu_Mesh,
 	water:           rl.Gpu_Mesh,
+	water_shader:    rl.Gpu_3D_Shader,
 	camera:          rl.Camera3D,
 	orbit:           rl.Orbit_Camera_State,
 	orbit_config:    rl.Orbit_Camera_Config,
@@ -162,6 +163,7 @@ shutdown :: proc(value: ^State) {
 	assert(value != nil, "shutdown: nil state")
 	assert(value.floater_count <= FLOATER_MAX, "shutdown: floater count overflow")
 	physics_destroy(value)
+	rl.destroy_gpu_3d_shader(&value.water_shader)
 	if value.water.id != 0 do rl.destroy_gpu_mesh(&value.water)
 	if value.cube_edges.id != 0 do rl.destroy_gpu_mesh(&value.cube_edges)
 	if value.cube.id != 0 do rl.destroy_gpu_mesh(&value.cube)
