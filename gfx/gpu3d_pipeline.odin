@@ -168,6 +168,8 @@ Gpu_3D_Pass :: struct {
 	time:                      f32,
 	underwater_primary:        [4]f32,
 	underwater_secondary:      [4]f32,
+	clip_plane:                [4]f32,
+	clip_enabled:              u32,
 	generation:                u64,
 	active:                    bool,
 	sample_count:              u32,
@@ -216,6 +218,9 @@ Gpu_3D_Uniforms :: struct {
 	custom_params_17: [4]f32,
 	custom_params_18: [4]f32,
 	custom_params_19: [4]f32,
+	clip_plane:       [4]f32,
+	clip_enabled:     u32,
+	clip_padding:     [3]u32,
 }
 
 // Per-instance model transforms for draw_gpu_mesh_instanced, read by the
@@ -233,7 +238,7 @@ Gpu_3D_Instance_Uniforms :: struct {
 // larger than the shader view. Lock the invariants a struct edit could
 // silently break: never smaller than the shader view, always 16-byte
 // aligned as dynamic offsets require.
-#assert(size_of(Gpu_3D_Uniforms) >= 480)
+#assert(size_of(Gpu_3D_Uniforms) >= 512)
 #assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
 #assert(size_of(Gpu_3D_Vertex) == 36)
 #assert(size_of(Matrix) == 64)
@@ -398,6 +403,9 @@ struct Uniforms {
     custom_params_17: vec4<f32>,
     custom_params_18: vec4<f32>,
     custom_params_19: vec4<f32>,
+    clip_plane: vec4<f32>,
+    clip_enabled: u32,
+    clip_padding: vec3<u32>,
 };
 // Array length mirrors GPU_3D_MAX_INSTANCES_PER_DRAW.
 struct Instances {
@@ -446,6 +454,10 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+    if u.clip_enabled != 0u &&
+        dot(u.clip_plane.xyz, in.world_position) > u.clip_plane.w {
+        discard;
+    }
     let light = normalize(u.light_direction.xyz);
     let geometric_normal = normalize(in.normal);
     let world_dx = dpdx(in.world_position);
@@ -1582,6 +1594,18 @@ set_gpu_3d_underwater_medium :: proc(
 	pass.underwater_secondary = scattering_turbidity
 }
 
+set_gpu_3d_clip_plane :: proc(pass: ^Gpu_3D_Pass, plane: [4]f32, enabled: bool) {
+	assert(pass != nil, "set_gpu_3d_clip_plane: nil pass")
+	if enabled {
+		normalized, ok := _camera_vector_normalize(plane.xyz)
+		assert(ok, "set_gpu_3d_clip_plane: degenerate plane normal")
+		pass.clip_plane = {normalized.x, normalized.y, normalized.z, plane.w}
+	} else {
+		pass.clip_plane = {}
+	}
+	pass.clip_enabled = 1 if enabled else 0
+}
+
 // _light_normalize is the pure core of set_gpu_3d_light, split out so the
 // clamping and normalization contract is headless-testable.
 @(private)
@@ -1913,6 +1937,8 @@ _gpu_3d_uniforms :: proc(
 		custom_params_17 = material.custom_params_17,
 		custom_params_18 = material.custom_params_18,
 		custom_params_19 = material.custom_params_19,
+		clip_plane = pass.clip_plane,
+		clip_enabled = pass.clip_enabled,
 	}
 }
 
