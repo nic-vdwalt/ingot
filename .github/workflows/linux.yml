@@ -31,6 +31,7 @@ jobs:
             libvulkan-dev \
             mesa-vulkan-drivers \
             libglfw3-dev \
+            libsdl3-dev \
             libx11-dev \
             libxrandr-dev \
             libxi-dev \
@@ -60,5 +61,9 @@ jobs:
         run: python3 scripts/check-toolchain.py
       - name: Run Linux native gate
         run: bash scripts/check-linux.sh
+      - name: Run Linux SDL3 tests
+        run: bash scripts/test.sh -define:ODIN_TEST_THREADS=1 -define:INGOT_GFX_SDL3=true
+      - name: Run Linux SDL3 strict gate
+        run: bash scripts/check.sh -define:INGOT_GFX_SDL3=true
       - name: Run headless web gate
         run: bash scripts/check-web.sh

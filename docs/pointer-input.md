@@ -79,8 +79,9 @@ types, primary status, and normalized pen pressure. Browser cancellation,
 pointer-capture loss, focus loss, visibility loss, and teardown produce bounded
 cancellation behavior.
 
-Current native GLFW builds expose ordered mouse events only. GLFW does not supply
-native touch, pen, pressure, or simultaneous-contact data. Check
+Current native GLFW and SDL3 builds expose ordered mouse events only. The SDL3
+backend does not yet expose native touch, pen, pressure, or simultaneous-contact
+data. Check
 `gfx.capabilities()` before selecting platform-dependent interactions:
 
 - `pointer_events` reports the raw stream.

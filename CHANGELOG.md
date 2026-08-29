@@ -34,6 +34,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Added
 
+- An experimental SDL3 3.4.x native window/input backend selected with
+  `-define:INGOT_GFX_SDL3=true`. It continues using `vendor:wgpu`, preserves the
+  existing graphics APIs, and leaves GLFW as the default and reference backend.
 - Optional caller-owned `fit.Typed_Commands(T, Capacity)` queues and
   `Button_Command`: typed fixed-capacity activation delivery without a reducer,
   recursive dispatch, retained behavior, or framework-owned application state.

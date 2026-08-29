@@ -164,7 +164,8 @@ enables peer and hostname verification; deployments must provide libcurl's CA
 trust source.
 
 Linux additionally requires a C toolchain, `pkg-config`, libcurl and Vulkan
-development files, plus the X11 libraries used by Odin's GLFW package. Run
+development files, plus the X11 libraries used by Odin's GLFW package. SDL3
+builds additionally require SDL3 3.4.x development and runtime files. Run
 `bash scripts/check-linux-dependencies.sh` before compiling; it validates these
 inputs and builds the architecture-matched libvterm archive from pinned vendored
 source. `xdg-open`, `zenity`, and `kdialog` are optional runtime helpers. Linux

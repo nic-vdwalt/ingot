@@ -29,6 +29,8 @@ jobs:
           }
           test -f accesskit/lib/darwin_arm64/libaccesskit.a
           test -f libvterm/lib/darwin_arm64/libvterm.a
+      - name: Install SDL3
+        run: brew install sdl3
       - name: Install pinned Odin toolchain
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -61,6 +63,10 @@ jobs:
         run: bash scripts/test.sh -define:ODIN_TEST_THREADS=1
       - name: Run macOS strict gate
         run: bash scripts/check.sh
+      - name: Run macOS SDL3 tests
+        run: bash scripts/test.sh -define:ODIN_TEST_THREADS=1 -define:INGOT_GFX_SDL3=true
+      - name: Run macOS SDL3 strict gate
+        run: bash scripts/check.sh -define:INGOT_GFX_SDL3=true
       - name: Upload bounded failure logs
         if: failure()
         uses: actions/upload-artifact@v4

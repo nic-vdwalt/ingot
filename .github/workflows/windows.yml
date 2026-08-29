@@ -27,6 +27,13 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - name: Install SDL3
+        shell: pwsh
+        run: |
+          vcpkg install sdl3:x64-windows
+          $SdlRoot = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed/x64-windows"
+          "LIB=$SdlRoot/lib;$env:LIB" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "$SdlRoot/bin" | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Install pinned Odin toolchain
         shell: pwsh
         env:
@@ -90,6 +97,12 @@ jobs:
       - name: Run Windows strict gate
         shell: pwsh
         run: ./scripts/check.ps1
+      - name: Run Windows SDL3 tests
+        shell: pwsh
+        run: ./scripts/test.ps1 -define:INGOT_GFX_SDL3=true
+      - name: Run Windows SDL3 strict gate
+        shell: pwsh
+        run: ./scripts/check.ps1 -define:INGOT_GFX_SDL3=true
       - name: Upload bounded failure logs
         if: failure()
         uses: actions/upload-artifact@v4

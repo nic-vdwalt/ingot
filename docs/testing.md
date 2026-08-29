@@ -81,7 +81,11 @@ to each test command:
 
 ```sh
 bash scripts/test.sh -define:ODIN_TEST_THREADS=1
+bash scripts/test.sh -define:ODIN_TEST_THREADS=1 -define:INGOT_GFX_SDL3=true
 ```
+
+The SDL3 composition requires SDL3 3.4.x development and runtime files. Omission
+of `INGOT_GFX_SDL3` keeps the default GLFW composition.
 
 Each package gets a 300-second wall-clock limit and a 16 MiB output budget. The
 supervisor owns a separate process group, so timeout, excessive output, or an
