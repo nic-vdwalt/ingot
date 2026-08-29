@@ -101,6 +101,7 @@ FIT_PUBLIC_ALIAS_ALLOW = {
     "Ink :: ui.Ink",
     "Listbox_Keys :: ui.Listbox_Keys",
     "Main_Align :: ui.Main_Align",
+    "Markdown_Prepare_Status :: ui.Markdown_Prepare_Status",
     "Modal_Close_Reason :: ui.Modal_Close_Reason",
     "Modal_Dismiss_Policy :: ui.Modal_Dismiss_Policy",
     "Pigment :: ui.Pigment",
