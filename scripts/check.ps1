@@ -30,7 +30,10 @@ Invoke-CheckedPython "check_assertions.py" @($Root)
 Write-Host "== UI API layers =="
 Invoke-CheckedPython "check_ui_api_layers_test.py"
 Invoke-CheckedPython "check_ui_api_layers.py" @($Root)
-Write-Host "== UI design tokens =="
+Write-Host "== widget capabilities =="
+Invoke-CheckedPython "check_widget_capabilities_test.py"
+Invoke-CheckedPython "check_widget_capabilities.py"
+Write-Host "== UI design tokens =="}]}},{
 Invoke-CheckedPython "check_theme_tokens_test.py"
 Invoke-CheckedPython "check_theme_tokens.py" @("--baseline", "$PSScriptRoot/theme_token_baseline.json", $Root)
 

@@ -1,25 +1,364 @@
 {
   "schema_version": 1,
   "capabilities": [
-    {"name":"button","ui":"complete","fit_surface":"complete","fit_builder":"complete","symbols":["ui.button","fit.Button"],"state_owner":"caller","tests":["ui/widgets_test.odin","fit/fit_test.odin"],"example":"examples/gallery/main.odin","semantics":"Button","validation":"not_recorded"},
-    {"name":"checkbox","ui":"complete","fit_surface":"complete","fit_builder":"complete","symbols":["ui.checkbox","fit.Checkbox"],"state_owner":"caller","tests":["ui/controls_test.odin","fit/fit_test.odin"],"example":"examples/gallery/main.odin","semantics":"Checkbox","validation":"not_recorded"},
-    {"name":"radio","ui":"complete","fit_surface":"complete","fit_builder":"complete","symbols":["ui.radio","fit.Radio"],"state_owner":"caller","tests":["ui/controls_test.odin","fit/fit_test.odin"],"example":"examples/gallery/main.odin","semantics":"Radio","validation":"not_recorded"},
-    {"name":"slider","ui":"complete","fit_surface":"complete","fit_builder":"complete","symbols":["ui.slider","fit.Slider"],"state_owner":"caller","tests":["ui/controls_test.odin","fit/fit_test.odin"],"example":"examples/gallery/main.odin","semantics":"Slider","validation":"not_recorded"},
-    {"name":"text_input","ui":"complete","fit_surface":"complete","fit_builder":"complete","symbols":["ui.text_input_box","fit.Text_Input"],"state_owner":"caller","tests":["ui/text_input_test.odin","fit/fit_test.odin"],"example":"examples/gallery/main.odin","semantics":"Text_Input","validation":"not_recorded"},
-    {"name":"dropdown","ui":"complete","fit_surface":"complete","fit_builder":"absent","symbols":["ui.dropdown","fit.Surface_Dropdown","fit.Region_Dropdown"],"state_owner":"caller","tests":["ui/dropdown_test.odin"],"example":"examples/gallery/main.odin","semantics":"Dropdown","validation":"not_recorded"},
-    {"name":"combobox","ui":"complete","fit_surface":"complete","fit_builder":"absent","symbols":["ui.combobox","fit.Surface_Combobox","fit.Region_Combobox"],"state_owner":"caller","tests":["ui/combobox_test.odin"],"example":"examples/gallery/main.odin","semantics":"Dropdown","validation":"not_recorded"},
-    {"name":"tabs","ui":"complete","fit_surface":"complete","fit_builder":"absent","symbols":["ui.tab_bar","fit.Region_Tab_Bar"],"state_owner":"caller","tests":[],"example":"examples/gallery/main.odin","semantics":"Tab","validation":"not_recorded"},
-    {"name":"listbox","ui":"complete","fit_surface":"complete","fit_builder":"absent","symbols":["ui.listbox_begin","fit.Surface_Listbox_Begin"],"state_owner":"caller","tests":["ui/listbox_test.odin"],"example":"examples/gallery/main.odin","semantics":"List_Box","validation":"not_recorded"},
-    {"name":"virtual_list","ui":"complete","fit_surface":"complete","fit_builder":"absent","symbols":["ui.virtual_list_begin","fit.Virtual_List_Begin"],"state_owner":"caller","tests":["ui/virtual_list_test.odin"],"example":"","semantics":"List_Box","validation":"not_recorded"},
-    {"name":"split_pane","ui":"complete","fit_surface":"complete","fit_builder":"absent","symbols":["ui.split_pane","fit.Split_Pane"],"state_owner":"caller","tests":["ui/split_pane_test.odin"],"example":"","semantics":"Slider","validation":"not_recorded"},
-    {"name":"tree","ui":"complete","fit_surface":"absent","fit_builder":"absent","symbols":["ui.tree"],"state_owner":"caller","tests":["ui/tree_test.odin"],"example":"","semantics":"List_Box","validation":"not_recorded"},
-    {"name":"command_palette","ui":"foundation","fit_surface":"absent","fit_builder":"absent","symbols":["ui.command_palette_filter"],"state_owner":"caller","tests":["ui/command_palette_test.odin"],"example":"","semantics":"None","validation":"not_recorded"},
-    {"name":"date_picker","ui":"complete","fit_surface":"complete","fit_builder":"absent","symbols":["ui.date_picker","fit.Surface_Date_Picker"],"state_owner":"caller","tests":["ui/date_picker_test.odin"],"example":"examples/gallery/main.odin","semantics":"Dropdown","validation":"not_recorded"},
-    {"name":"time_picker","ui":"foundation","fit_surface":"foundation","fit_builder":"absent","symbols":["ui.time_of_day_parse","fit.Time_Of_Day_Parse"],"state_owner":"caller","tests":["ui/time_picker_test.odin"],"example":"","semantics":"None","validation":"not_recorded"},
-    {"name":"color_picker","ui":"foundation","fit_surface":"foundation","fit_builder":"absent","symbols":["ui.color_parse_hex","fit.Color_Parse_Hex"],"state_owner":"caller","tests":["ui/color_picker_test.odin"],"example":"","semantics":"None","validation":"not_recorded"},
-    {"name":"table","ui":"complete","fit_surface":"complete","fit_builder":"partial","symbols":["ui.table_begin","fit.Table_Begin"],"state_owner":"caller","tests":["ui/table_state_test.odin","fit/fit_test.odin"],"example":"examples/table_demo/main.odin","semantics":"List_Box","validation":"not_recorded"},
-    {"name":"chart","ui":"complete","fit_surface":"complete","fit_builder":"absent","symbols":["ui.line_chart_at","fit.Surface_Line_Chart"],"state_owner":"caller","tests":["ui/chart_test.odin"],"example":"examples/chart_demo/main.odin","semantics":"None","validation":"not_recorded"},
-    {"name":"image","ui":"absent","fit_surface":"absent","fit_builder":"absent","symbols":[],"state_owner":"caller","tests":[],"example":"","semantics":"None","validation":"not_recorded"},
-    {"name":"docking","ui":"absent","fit_surface":"absent","fit_builder":"absent","symbols":[],"state_owner":"caller","tests":[],"example":"","semantics":"None","validation":"not_recorded"}
+    {
+      "name": "button",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "complete",
+      "symbols": [
+        "ui.button",
+        "fit.Button"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/widgets_test.odin",
+        "fit/fit_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "Button",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "checkbox",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "complete",
+      "symbols": [
+        "ui.checkbox",
+        "fit.Checkbox"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/controls_test.odin",
+        "fit/fit_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "Checkbox",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "toggle",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "complete",
+      "symbols": [
+        "ui.toggle_at",
+        "fit.Toggle"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/controls_test.odin",
+        "fit/fit_test.odin"
+      ],
+      "example": "",
+      "semantics": "Checkbox",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "radio",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "complete",
+      "symbols": [
+        "ui.radio",
+        "fit.Radio"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/controls_test.odin",
+        "fit/fit_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "Radio",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "slider",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "complete",
+      "symbols": [
+        "ui.slider",
+        "fit.Slider"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/controls_test.odin",
+        "fit/fit_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "Slider",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "text_input",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "complete",
+      "symbols": [
+        "ui.text_input_box",
+        "fit.Text_Input"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/text_input_test.odin",
+        "fit/fit_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "Text_Input",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "dropdown",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "complete",
+      "symbols": [
+        "ui.dropdown",
+        "fit.Surface_Dropdown",
+        "fit.Region_Dropdown",
+        "fit.Dropdown"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/dropdown_test.odin",
+        "fit/fit_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "Dropdown",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "combobox",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "complete",
+      "symbols": [
+        "ui.combobox",
+        "fit.Surface_Combobox",
+        "fit.Region_Combobox",
+        "fit.Combobox"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/combobox_test.odin",
+        "fit/fit_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "Dropdown",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "tabs",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "complete",
+      "symbols": [
+        "ui.tab_bar",
+        "fit.Region_Tab_Bar",
+        "fit.Tabs"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "fit/fit_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "Tab",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "listbox",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "absent",
+      "symbols": [
+        "ui.listbox_begin",
+        "fit.Surface_Listbox_Begin"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/listbox_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "List_Box",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "virtual_list",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "absent",
+      "symbols": [
+        "ui.virtual_list_begin",
+        "fit.Virtual_List_Begin"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/virtual_list_test.odin"
+      ],
+      "example": "",
+      "semantics": "List_Box",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "split_pane",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "absent",
+      "symbols": [
+        "ui.split_pane",
+        "fit.Split_Pane"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/split_pane_test.odin"
+      ],
+      "example": "",
+      "semantics": "Slider",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "tree",
+      "ui": "complete",
+      "fit_surface": "absent",
+      "fit_builder": "absent",
+      "symbols": [
+        "ui.tree"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/tree_test.odin"
+      ],
+      "example": "",
+      "semantics": "List_Box",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "command_palette",
+      "ui": "foundation",
+      "fit_surface": "absent",
+      "fit_builder": "absent",
+      "symbols": [
+        "ui.command_palette_filter"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/command_palette_test.odin"
+      ],
+      "example": "",
+      "semantics": "None",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "date_picker",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "absent",
+      "symbols": [
+        "ui.date_picker",
+        "fit.Surface_Date_Picker"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/date_picker_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "Dropdown",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "time_picker",
+      "ui": "foundation",
+      "fit_surface": "foundation",
+      "fit_builder": "absent",
+      "symbols": [
+        "ui.time_of_day_parse",
+        "fit.Time_Of_Day_Parse"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/time_picker_test.odin"
+      ],
+      "example": "",
+      "semantics": "None",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "color_picker",
+      "ui": "foundation",
+      "fit_surface": "foundation",
+      "fit_builder": "absent",
+      "symbols": [
+        "ui.color_parse_hex",
+        "fit.Color_Parse_Hex"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/color_picker_test.odin"
+      ],
+      "example": "",
+      "semantics": "None",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "table",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "partial",
+      "symbols": [
+        "ui.table_begin",
+        "fit.Table_Begin"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/table_state_test.odin",
+        "fit/fit_test.odin"
+      ],
+      "example": "examples/table_demo/main.odin",
+      "semantics": "List_Box",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "chart",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "absent",
+      "symbols": [
+        "ui.line_chart_at",
+        "fit.Surface_Line_Chart"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/chart_test.odin"
+      ],
+      "example": "examples/chart_demo/main.odin",
+      "semantics": "None",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "image",
+      "ui": "absent",
+      "fit_surface": "absent",
+      "fit_builder": "absent",
+      "symbols": [],
+      "state_owner": "caller",
+      "tests": [],
+      "example": "",
+      "semantics": "None",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "docking",
+      "ui": "absent",
+      "fit_surface": "absent",
+      "fit_builder": "absent",
+      "symbols": [],
+      "state_owner": "caller",
+      "tests": [],
+      "example": "",
+      "semantics": "None",
+      "validation": "not_recorded"
+    }
   ]
 }

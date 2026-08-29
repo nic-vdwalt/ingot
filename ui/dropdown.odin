@@ -10,6 +10,38 @@ Dropdown_State :: struct {
 	menu: Context_Menu_State,
 }
 
+Dropdown_Spec :: struct {
+	id:         Widget_Id,
+	items:      []string,
+	selected:   ^i32,
+	state:      ^Dropdown_State,
+	a11y_label: string,
+}
+
+dropdown_spec_size :: proc(u: ^Ui, spec: Dropdown_Spec) -> Intrinsic_Size {
+	assert(u != nil && u.open && spec.id != WIDGET_ID_NONE, "dropdown spec: invalid UI")
+	assert(spec.selected != nil && spec.state != nil && spec.a11y_label != "")
+	metrics := ui_frame_metrics(u.frame)
+	return intrinsic_leaf(metrics.MENU_MIN_W + metrics.CONTROL_BOX * 2, metrics.ROW_H_MD)
+}
+
+dropdown_spec_at :: proc(u: ^Ui, spec: Dropdown_Spec, rect: Rect_I32) -> bool {
+	assert(u != nil && u.open && spec.id != WIDGET_ID_NONE, "dropdown spec: invalid UI")
+	focus := focus(u, spec.id) if slot_visible(rect) else Focus_Opt{}
+	return dropdown_at(
+		u.frame,
+		rect,
+		spec.items,
+		spec.selected,
+		spec.state,
+		u.screen_w,
+		u.screen_h,
+		focus,
+		spec.a11y_label,
+		spec.id,
+	)
+}
+
 // dropdown draws a combo box over `items`. Clicking (or Space/Enter while
 // focused) opens the item popup below the box; choosing an item stores its
 // index into selected^. Returns true on the frame the selection changed.

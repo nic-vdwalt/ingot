@@ -5,45 +5,48 @@ is an implementation and evidence checklist, not a claim that every listed
 control is already production-ready. `fit` is the recommended application API;
 `ui` is the advanced immediate-mode toolkit.
 
-Status terms:
+Status terms are evidence-derived from [`widget-capabilities.json`](widget-capabilities.json):
 
-- `supported` — public API, deterministic tests, and a maintained example exist.
-- `partial` — useful implementation exists, but API exposure or quality evidence
-  is incomplete.
-- `missing` — agreed scope with no complete implementation.
+- `builder` — complete recommended `fit.Builder` control.
+- `surface` — complete `ui` control with a Fit Surface or Region facade.
+- `ui` — complete advanced `ui` control without an established Fit facade.
+- `foundation` — bounded state, parser, layout, or filtering exists, but the interactive control is incomplete.
+- `absent` — agreed scope with no implementation.
 - `deferred` — deliberately excluded from this plan.
 - `out of scope` — not an intended Ingot capability.
 
+The capability gate checks public symbols and evidence paths so this matrix cannot silently outrun the code. Runtime validation is recorded separately and remains `not_recorded` unless dated evidence exists.
+
 ## Widget matrix
 
-| Capability | `fit` | `ui` | Completion evidence |
-|---|---|---|---|
-| Button | supported | supported | Builder/direct tests and gallery |
-| Checkbox | supported | supported | Builder/direct tests and gallery |
-| Radio | supported | supported | Builder/direct tests and gallery |
-| Toggle | partial | supported | Promote through Builder and add parity fixture |
-| Slider | supported | supported | Builder/direct tests and gallery |
-| Progress | supported | supported | Builder/direct tests and gallery |
-| Select/dropdown | partial | supported | Unify Builder exposure and interaction evidence |
-| Combobox | partial | supported | Unify Builder exposure and interaction evidence |
-| Single-line text input | supported | supported | Editing, IME, semantics, and gallery tests |
-| Multi-line text input | supported | supported | Editing, wrapping, semantics, and gallery tests |
-| Tabs | partial | supported | Promote caller-owned selection through Builder |
-| Menus/context menus | partial | supported | Promote Builder composition and focus evidence |
-| Modal/dialog | partial | supported | Promote Builder composition and focus evidence |
-| Image | partial | supported | Add ordinary Builder leaf and gallery fixture |
-| Split pane | missing | missing | Caller-owned ratio, keyboard, semantics, tests |
-| Toast | partial | supported | Promote Builder rendering and saturation evidence |
-| Drag and drop | partial | supported | Promote Builder hooks and native/browser fixture |
-| Command palette | missing | missing | Bounded filter over named commands |
-| Tree | missing | missing | Bounded visible traversal with caller-owned state |
-| Date picker | partial | supported | Promote Builder API and complete keyboard evidence |
-| Time picker | missing | missing | Popup-based caller-owned picker |
-| Color picker | missing | missing | Popup-based caller-owned picker |
-| Table | supported | supported | Builder table demo and deterministic tests |
-| Virtual list/grid | missing | partial | Public bounded culling API and parity fixture |
-| Charts | partial | supported | Promote Builder API and gallery coverage |
-| Accessibility semantics | supported | supported | Native/browser bridges; runtime evidence pending |
+| Capability | Evidence level | Completion evidence |
+|---|---|---|
+| Button | builder | Builder/direct tests and gallery |
+| Checkbox | builder | Builder/direct tests and gallery |
+| Radio | builder | Builder/direct tests and gallery |
+| Toggle | absent | Add a first-party control rather than restyling checkbox at call sites |
+| Slider | builder | Builder/direct tests and gallery |
+| Progress | builder | Builder/direct tests and gallery |
+| Select/dropdown | surface | Complete UI control and Fit Surface/Region facade; Builder promotion pending |
+| Combobox | surface | Complete UI control and Fit Surface/Region facade; Builder promotion pending |
+| Single-line text input | builder | Editing, IME, semantics, and gallery tests |
+| Multi-line text input | builder | Editing, wrapping, semantics, and gallery tests |
+| Tabs | surface | Complete UI tab bar and Fit Region facade; Builder promotion and focused tests pending |
+| Menus/context menus | surface | Context menu exists; menu bar and nested menus are absent |
+| Modal/dialog | surface | Modal, popup, and confirmation APIs exist; ordinary Builder conveniences pending |
+| Image | absent | Renderer-independent paint has no image command |
+| Split pane | surface | Caller-owned ratio, keyboard, semantics, and layout tests exist |
+| Toast | surface | UI and Fit Surface APIs exist; Builder promotion pending |
+| Drag and drop | absent | Table column reorder is specialized, not a reusable payload API |
+| Command palette | foundation | Bounded filtering and state tests exist; interactive control is incomplete |
+| Tree | ui | Complete bounded flattened tree; Fit facade, semantics depth, and gallery pending |
+| Date picker | surface | Complete UI control and Fit Surface/Region facade; Builder promotion pending |
+| Time picker | foundation | Strict value parser/formatter only |
+| Color picker | foundation | Strict hexadecimal parser/formatter only |
+| Table | surface | Interactive virtual UI table and simple prepared cells; APIs remain split |
+| Virtual list/grid | surface | Public bounded culling protocol and tests exist; Builder container pending |
+| Charts | surface | Complete UI charts and Fit Surface facade; Builder promotion pending |
+| Accessibility semantics | surface | Native/browser bridges exist; runtime evidence remains not recorded |
 
 ## Deferred text capabilities
 

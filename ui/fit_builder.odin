@@ -517,6 +517,19 @@ fit_custom_builder :: proc(
 	fit_builder_output(builder, handle, options.activated)
 }
 
+fit_builder_composite :: proc(
+	builder: ^Fit_Builder,
+	spec: Prepared_Composite,
+	options: Fit_Control_Options = {},
+) {
+	assert(builder != nil, "fit_builder_composite: nil builder")
+	fit_builder_add_child(builder)
+	value := spec
+	if options.size != (Prepared_Size{}) do value.size = options.size
+	handle := prepared_composite(&builder.prepared, value, options.track)
+	fit_builder_output(builder, handle, options.changed)
+}
+
 fit_builder_custom :: proc(
 	builder: ^Fit_Builder,
 	spec: Prepared_Custom,

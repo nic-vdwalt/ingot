@@ -5,11 +5,32 @@ package ui
 
 TAB_COUNT_MAX :: 16
 
+Tabs_Spec :: struct {
+	id:     Widget_Id,
+	labels: []string,
+	active: ^i32,
+	height: i32,
+}
+
+tabs_spec_size :: proc(u: ^Ui, spec: Tabs_Spec) -> Intrinsic_Size {
+	assert(u != nil && u.open && spec.id != WIDGET_ID_NONE, "tabs spec: invalid UI")
+	assert(spec.active != nil && len(spec.labels) > 0 && len(spec.labels) <= TAB_COUNT_MAX)
+	height := spec.height if spec.height > 0 else 36
+	return intrinsic_leaf(remaining(&u.layout).w, ui_frame_sc(u.frame, height))
+}
+
+tabs_spec_at :: proc(u: ^Ui, spec: Tabs_Spec, rect: Rect_I32) -> bool {
+	assert(u != nil && u.open && spec.id != WIDGET_ID_NONE, "tabs spec: invalid UI")
+	layout_push_rect(&u.layout, .Column, rect, 0, .Start)
+	defer layout_pop(&u.layout)
+	return tab_bar_id(u, spec.id, spec.labels, spec.active, spec.height)
+}
+
 // tab_bar carves one row of focusable tabs. Returns true on the frame the
 // active tab changed. Labels must be non-empty and stable for identity.
-tab_bar :: proc(
+tab_bar_id :: proc(
 	u: ^Ui,
-	key: string,
+	key: Widget_Id,
 	labels: []string,
 	active: ^i32,
 	height: i32 = 36,
@@ -25,7 +46,7 @@ tab_bar :: proc(
 	frame := u.frame
 	metrics := ui_frame_metrics(frame)
 	style := ui_frame_theme(frame)
-	scope_begin(u, key)
+	scope_begin(u, u64(key))
 	defer scope_end(u)
 	row_begin(u, height, gap = .MD, align = .Center)
 	defer row_end(u)
@@ -71,4 +92,32 @@ tab_bar :: proc(
 		semantic_push(frame, .Tab, rect, label, sem, fo, widget = widget)
 	}
 	return changed
+}
+
+tab_bar_string :: proc(
+	u: ^Ui,
+	key: string,
+	labels: []string,
+	active: ^i32,
+	height: i32 = 36,
+) -> bool {
+	assert(u != nil && u.open && key != "", "tab_bar: invalid argument")
+	return tab_bar_id(u, id(u, key), labels, active, height)
+}
+
+tab_bar_u64 :: proc(
+	u: ^Ui,
+	key: u64,
+	labels: []string,
+	active: ^i32,
+	height: i32 = 36,
+) -> bool {
+	assert(u != nil && u.open && key != 0, "tab_bar: invalid argument")
+	return tab_bar_id(u, id(u, key), labels, active, height)
+}
+
+tab_bar :: proc {
+	tab_bar_string,
+	tab_bar_u64,
+	tab_bar_id,
 }

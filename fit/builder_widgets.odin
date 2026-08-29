@@ -51,6 +51,53 @@ Checkbox :: proc {
 }
 
 @(private = "file")
+toggle_id :: proc(
+	parent: Parent,
+	widget: Widget_Id,
+	label: string,
+	checked: ^bool,
+	options: Control_Options = {},
+) {
+	assert(parent.builder != nil, "Fit.Toggle: builder not bound")
+	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "Fit.Toggle: zero widget")
+	assert(label != "" && checked != nil, "Fit.Toggle: invalid argument")
+	builder := parent_select(parent)
+	ui.fit_builder_composite(
+		&builder.inner,
+		{kind = .Toggle, toggle = {id = ui.Widget_Id(widget), label = label, checked = checked}},
+		to_control_options(options),
+	)
+	parent_clear(builder)
+}
+
+@(private = "file")
+toggle_string :: proc(
+	parent: Parent,
+	key, label: string,
+	checked: ^bool,
+	options: Control_Options = {},
+) {
+	toggle_id(parent, Id(parent, key), label, checked, options)
+}
+
+@(private = "file")
+toggle_u64 :: proc(
+	parent: Parent,
+	key: u64,
+	label: string,
+	checked: ^bool,
+	options: Control_Options = {},
+) {
+	toggle_id(parent, Id(parent, key), label, checked, options)
+}
+
+Toggle :: proc {
+	toggle_string,
+	toggle_u64,
+	toggle_id,
+}
+
+@(private = "file")
 radio_id :: proc(
 	parent: Parent,
 	widget: Widget_Id,

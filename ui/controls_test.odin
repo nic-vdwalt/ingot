@@ -19,6 +19,36 @@ geometry_tokens_follow_mid_frame_scale_change :: proc(t: ^testing.T) {
 }
 
 @(test)
+toggle_spec_measures_and_emits_checked_semantics :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	sem_enable(&runtime, true)
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	u: Ui
+	begin(&u, &frame, {0, 0, 200, 40})
+	defer end(&u)
+	checked := true
+	spec := Toggle_Spec{id = Widget_Id(7), label = "Enabled", checked = &checked}
+	size := toggle_spec_size(&u, spec)
+	testing.expect(t, size.w > size.h && size.h > 0)
+	_ = toggle_spec_at(&u, spec, {0, 0, size.w, size.h})
+	testing.expect_value(t, frame.semantics.cur.count, 1)
+	testing.expect_value(t, frame.semantics.cur.nodes[0].role, Sem_Role.Checkbox)
+	testing.expect(t, .Checked in frame.semantics.cur.nodes[0].state)
+}
+
+@(test)
 slider_step_value_snaps_and_clamps :: proc(t: ^testing.T) {
 	// Continuous (step 0): straight lerp.
 	testing.expect_value(t, slider_step_value(0, 10, 0, 0.5), f32(5))

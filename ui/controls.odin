@@ -13,6 +13,12 @@ Checkbox_Spec :: struct {
 	checked: ^bool,
 }
 
+Toggle_Spec :: struct {
+	id:      Widget_Id,
+	label:   string,
+	checked: ^bool,
+}
+
 checkbox_spec_size :: proc(u: ^Ui, spec: Checkbox_Spec) -> Intrinsic_Size {
 	assert(u != nil && u.open && u.frame != nil, "checkbox_spec_size: invalid UI")
 	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.checked != nil)
@@ -25,6 +31,68 @@ checkbox_spec_at :: proc(u: ^Ui, spec: Checkbox_Spec, rect: Rect_I32) -> bool {
 	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.checked != nil)
 	fo := focus(u, spec.id) if slot_visible(rect) else Focus_Opt{}
 	return checkbox_at(u.frame, rect, spec.label, spec.checked, fo, spec.id)
+}
+
+toggle_spec_size :: proc(u: ^Ui, spec: Toggle_Spec) -> Intrinsic_Size {
+	assert(u != nil && u.open && u.frame != nil, "toggle_spec_size: invalid UI")
+	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.checked != nil)
+	metrics := ui_frame_metrics(u.frame)
+	width := metrics.CONTROL_BOX * 2 + metrics.CONTROL_GAP + text_width(u.frame, spec.label, .Label)
+	return intrinsic_leaf(width, metrics.ROW_H_SM)
+}
+
+toggle_spec_at :: proc(u: ^Ui, spec: Toggle_Spec, rect: Rect_I32) -> bool {
+	assert(u != nil && u.open, "toggle_spec_at: frame not open")
+	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.checked != nil)
+	fo := focus(u, spec.id) if slot_visible(rect) else Focus_Opt{}
+	return toggle_at(u.frame, rect, spec.label, spec.checked, fo, spec.id)
+}
+
+toggle_at :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	label: string,
+	checked: ^bool,
+	focus: Focus_Opt = {},
+	widget: Widget_Id = WIDGET_ID_NONE,
+) -> bool {
+	assert(frame != nil && frame.open && checked != nil, "toggle_at: invalid argument")
+	assert(label != "", "toggle_at: empty accessible label")
+	if ui_frame_drop_degenerate(frame, rect.w <= 0 || rect.h <= 0) do return false
+	it := interact(frame, rect_f32(rect))
+	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	if it.hovered do request_cursor(frame, .POINTING_HAND)
+	changed := it.clicked || focus_opt_activated(frame, focus, .Checkbox, widget)
+	if changed do checked^ = !checked^
+	toggle_draw(frame, rect, label, checked^, it.hovered, focus)
+	sem: Sem_State
+	if checked^ do sem += {.Checked}
+	semantic_push(frame, .Checkbox, rect, label, sem, focus, widget = widget)
+	return changed
+}
+
+toggle_draw :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	label: string,
+	checked, hovered: bool,
+	focus: Focus_Opt,
+) {
+	assert(frame != nil && frame.open && label != "", "toggle_draw: invalid argument")
+	metrics := ui_frame_metrics(frame)
+	track_h := metrics.CONTROL_BOX
+	track_w := track_h * 2
+	track := Rect_I32{rect.x, rect.y + (rect.h - track_h) / 2, track_w, track_h}
+	style := ui_frame_theme(frame)
+	background := style.fg_accent if checked else style.bg_input
+	draw_rectangle_rounded(frame, rect_f32(track), 1, 8, background)
+	knob_r := f32(max(track_h / 2 - ui_frame_sc(frame, 2), 1))
+	knob_x := f32(track.x) + knob_r + f32(ui_frame_sc(frame, 2))
+	if checked do knob_x = f32(track.x + track.w) - knob_r - f32(ui_frame_sc(frame, 2))
+	knob := style.button_text if checked else style.fg_secondary
+	draw_circle_v(frame, {knob_x, f32(track.y) + f32(track.h) / 2}, knob_r, knob)
+	if hovered || focus_opt_focused(focus) do draw_focus_ring(frame, track.x, track.y, track.w, track.h)
+	text(frame, label, track.x + track.w + metrics.CONTROL_GAP, rect.y, .Label, .Primary)
 }
 
 // checkbox draws a check control with a label. Toggles checked^ on click or
