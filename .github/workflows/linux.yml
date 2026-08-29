@@ -37,7 +37,8 @@ jobs:
             libxrandr-dev \
             libxi-dev \
             libxcursor-dev \
-            libxinerama-dev
+            libxinerama-dev \
+            libxss-dev
       - name: Install pinned Odin toolchain
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
