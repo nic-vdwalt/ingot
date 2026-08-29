@@ -13,6 +13,7 @@ when INGOT_GFX_SDL3 {
 
 	SDL_WINDOW_MAX :: 16
 	SDL_EVENT_PUMP_MAX :: 4096
+	SDL_GPU_EVENT_PUMP_MAX :: 1_000_000
 	SDL_WAKE_EVENT :: sdl.EventType.USER
 
 	Sdl_Window_State :: struct {
@@ -147,7 +148,10 @@ when INGOT_GFX_SDL3 {
 			&{compatibleSurface = ctx.surface},
 			{mode = .AllowProcessEvents, callback = _on_adapter, userdata1 = &ares},
 		)
-		for !ares.done {wg.InstanceProcessEvents(ctx.instance)}
+		for event_count := 0; event_count < SDL_GPU_EVENT_PUMP_MAX && !ares.done; event_count += 1 {
+			wg.InstanceProcessEvents(ctx.instance)
+		}
+		assert(ares.done, "platform_start_gpu: adapter request did not finish")
 		if ares.status != .Success || ares.adapter == nil {
 			fmt.eprintln("gfx: adapter request failed")
 			_close_window_context(ctx)
@@ -164,7 +168,10 @@ when INGOT_GFX_SDL3 {
 			&dev_desc,
 			{mode = .AllowProcessEvents, callback = _on_device, userdata1 = &dres},
 		)
-		for !dres.done {wg.InstanceProcessEvents(ctx.instance)}
+		for event_count := 0; event_count < SDL_GPU_EVENT_PUMP_MAX && !dres.done; event_count += 1 {
+			wg.InstanceProcessEvents(ctx.instance)
+		}
+		assert(dres.done, "platform_start_gpu: device request did not finish")
 		if dres.status != .Success || dres.device == nil {
 			fmt.eprintln("gfx: device request failed")
 			_close_window_context(ctx)
@@ -211,6 +218,7 @@ when INGOT_GFX_SDL3 {
 	platform_should_close :: proc(ctx: ^Context) -> bool {
 		if ctx == nil || ctx.win == nil do return true
 		state := _sdl_state_for_window(_sdl_window(ctx))
+		assert(state == nil || state.owner == ctx, "platform_should_close: invalid window owner")
 		return state == nil || state.close_requested
 	}
 
@@ -294,7 +302,9 @@ when INGOT_GFX_SDL3 {
 
 	@(private)
 	platform_set_window_size :: proc(ctx: ^Context, width, height: i32) {
-		if ctx != nil && ctx.win != nil do _ = sdl.SetWindowSize(_sdl_window(ctx), c.int(width), c.int(height))
+		if ctx != nil && ctx.win != nil {
+			_ = sdl.SetWindowSize(_sdl_window(ctx), c.int(width), c.int(height))
+		}
 	}
 
 	@(private)
@@ -571,6 +581,7 @@ when INGOT_GFX_SDL3 {
 
 	@(private)
 	_sdl_gamepad_button :: proc(gamepad: ^sdl.Gamepad, button: GamepadButton) -> bool {
+		assert(gamepad != nil, "_sdl_gamepad_button: nil gamepad")
 		sdl_button: sdl.GamepadButton
 		#partial switch button {
 		case .UNKNOWN, .LEFT_TRIGGER_2, .RIGHT_TRIGGER_2:
@@ -718,6 +729,14 @@ when INGOT_GFX_SDL3 {
 			return .PAUSE
 		case .F1 ..= .F12:
 			return KeyboardKey(int(KeyboardKey.F1) + int(scancode) - int(sdl.Scancode.F1))
+		case:
+			return _sdl_key_extended(scancode)
+		}
+	}
+
+	@(private)
+	_sdl_key_extended :: proc(scancode: sdl.Scancode) -> KeyboardKey {
+		#partial switch scancode {
 		case .KP_0:
 			return .KP_0
 		case .KP_1 ..= .KP_9:
@@ -794,6 +813,7 @@ when INGOT_GFX_SDL3 {
 
 	@(private)
 	_sdl_dispatch_key :: proc(event: ^sdl.Event) {
+		assert(event != nil, "_sdl_dispatch_key: nil event")
 		state := _sdl_state_for_id(event.key.windowID)
 		if state == nil do return
 		ctx := state.owner
@@ -801,6 +821,7 @@ when INGOT_GFX_SDL3 {
 		_idle_note_activity(&ctx.idle)
 		if key == .KEY_NULL do return
 		index := int(key)
+		assert(index >= 0 && index < KEY_COUNT, "_sdl_dispatch_key: invalid key")
 		if event.key.down {
 			ctx.inp.key_down[index] = true
 			if event.key.repeat do ctx.inp.st_repeat[index] = true

@@ -2234,6 +2234,7 @@ markdown_prepared_draw :: proc(
 	sel_end: int = -1,
 	out_w: ^i32 = nil,
 ) -> i32 {
+	assert(ctx != nil && prepared != nil, "markdown prepared draw: invalid argument")
 	markdown_prepared_validate(ctx, prepared)
 	assert(bounds.w == prepared.width, "markdown prepared draw: width mismatch")
 	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.draw_queries += 1
@@ -2245,6 +2246,7 @@ markdown_prepared_hit_test :: proc(
 	prepared: ^Markdown_Prepared,
 	x, y, mouse_x, mouse_y: i32,
 ) -> int {
+	assert(ctx != nil && prepared != nil, "markdown prepared hit test: invalid argument")
 	markdown_prepared_validate(ctx, prepared)
 	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.hit_queries += 1
 	return hit_test_markdown_unprepared(
@@ -2263,6 +2265,7 @@ markdown_prepared_source_y :: proc(
 	prepared: ^Markdown_Prepared,
 	offset: int,
 ) -> i32 {
+	assert(ctx != nil && prepared != nil, "markdown prepared source y: invalid argument")
 	markdown_prepared_validate(ctx, prepared)
 	assert(
 		offset >= 0 && offset <= len(prepared.source),
@@ -2282,6 +2285,7 @@ markdown_draw :: proc(
 	out_w: ^i32 = nil,
 	draw: bool = true,
 ) -> i32 {
+	assert(ctx != nil, "markdown draw: nil context")
 	prepared := markdown_prepare(ctx, bounds.w, text)
 	if !draw do return markdown_prepared_measure(ctx, &prepared, out_w)
 	return markdown_prepared_draw(ctx, &prepared, bounds, base_color, sel_start, sel_end, out_w)

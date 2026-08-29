@@ -24,6 +24,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
+            cmake \
+            ninja-build \
             pkg-config \
             python3 \
             lld \
@@ -31,7 +33,6 @@ jobs:
             libvulkan-dev \
             mesa-vulkan-drivers \
             libglfw3-dev \
-            libsdl3-dev \
             libx11-dev \
             libxrandr-dev \
             libxi-dev \
@@ -53,6 +54,14 @@ jobs:
             -H "Accept: application/octet-stream" > "$RUNNER_TEMP/wgpu.zip"
           mkdir "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
           unzip -q "$RUNNER_TEMP/wgpu.zip" -d "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
+          gh api repos/libsdl-org/SDL/releases/assets/500597597 \
+            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/sdl.tar.gz"
+          mkdir "$RUNNER_TEMP/sdl"
+          tar -xzf "$RUNNER_TEMP/sdl.tar.gz" -C "$RUNNER_TEMP/sdl" --strip-components=1
+          cmake -S "$RUNNER_TEMP/sdl" -B "$RUNNER_TEMP/sdl-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF
+          cmake --build "$RUNNER_TEMP/sdl-build"
+          sudo cmake --install "$RUNNER_TEMP/sdl-build"
           sh "$RUNNER_TEMP/odin/vendor/miniaudio/src/build_miniaudio.sh"
           sh "$RUNNER_TEMP/odin/vendor/stb/src/build_stb.sh" unix
           echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"
