@@ -12,12 +12,21 @@ interaction, semantics, and paint.
 | `Button` | Direct `Action` or activation destination |
 | `Button_Command` | Optional typed value copied into a caller-owned bounded queue |
 | `Checkbox` | Caller-owned `^bool` |
+| `Toggle` | Caller-owned `^bool` |
 | `Radio` | Caller-owned selected value |
 | `Slider` | Caller-owned `^f32` |
+| `Dropdown` | Caller-owned selected index and `Dropdown_State` |
+| `Combobox` | Caller-owned selected ID and destroyable `Combobox_State` |
+| `Tabs` | Caller-owned active index |
 | `Text_Input` | Caller-owned `Input_Box`, or string builder plus `Text_Input_State` |
 | `Progress` | Passive bounded `0..1` value |
 | `Table_*` | Caller-owned columns, sort, widths, order, visibility, and scroll |
 | `Scroll` | Caller-owned offset and scrollbar state |
+
+[`examples/builder_controls`](../examples/builder_controls/) is the copyable
+Builder-only settings example. The broader [gallery](../examples/gallery/) is
+the complete catalogue and intentionally retains Surface and Region islands for
+controls whose geometry or lifecycle is part of the demonstration.
 
 ## Advanced caller-owned controls
 
@@ -39,10 +48,11 @@ fixed 256-item match buffer and retain no command behavior.
 
 ## Existing composites
 
-Tabs, toasts, dropdowns, comboboxes, date pickers, context menus, modals,
-confirmation dialogs, charts, markdown, and interactive tables are available in
-`ingot:ui`; Fit exposes their state and Surface facades where the public boundary
-is established. See [`gui-parity.md`](gui-parity.md) for promotion status.
+Tabs, dropdowns, and comboboxes have Builder APIs as well as advanced facades.
+Toasts, date pickers, context menus, modals, confirmation dialogs, charts,
+markdown, and interactive tables are available in `ingot:ui`; Fit exposes their
+state and Surface facades where the public boundary is established. See
+[`gui-parity.md`](gui-parity.md) for promotion status.
 
 ## Text boundary
 
