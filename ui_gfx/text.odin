@@ -86,6 +86,7 @@ adapter_text_backend :: proc(adapter: ^Adapter) -> ui.Text_Backend {
 		font_for_size = adapter_font_for_size,
 		measure = adapter_measure,
 		has_glyph = adapter_has_glyph,
+		metrics = adapter_metrics,
 		reset = adapter_reset_fonts,
 	}
 }
@@ -138,6 +139,23 @@ adapter_measure :: proc(
 	for byte in transmute([]u8)text do if byte == 0 do return {}
 	value := strings.clone_to_cstring(text, context.temp_allocator)
 	return vec_to_ui(rl.context_measure_text(adapter.gfx_context, font, value, size, spacing))
+}
+
+adapter_metrics :: proc(data: rawptr, font_id: ui.Font_Id, size: f32) -> (ui.Text_Metrics, bool) {
+	adapter := cast(^Adapter)data
+	assert(adapter != nil && adapter.initialized, "adapter_metrics: invalid adapter")
+	assert(size > 0, "adapter_metrics: invalid size")
+	font, font_ok := adapter_font(adapter, font_id)
+	if !font_ok do return {}, false
+	metrics, metrics_ok := rl.context_font_metrics(adapter.gfx_context, font, size)
+	if !metrics_ok do return {}, false
+	return {
+			ascent = metrics.ascent,
+			descent = metrics.descent,
+			line_gap = metrics.line_gap,
+			line_advance = metrics.line_advance,
+		},
+		true
 }
 
 adapter_has_glyph :: proc(data: rawptr, font_id: ui.Font_Id, value: rune) -> bool {

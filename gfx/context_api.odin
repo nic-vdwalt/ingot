@@ -284,6 +284,13 @@ context_font_has_glyph :: proc(ctx: ^Context, font: Font, value: rune) -> bool {
 	return context_font_has_glyph_impl(ctx, font, value)
 }
 
+context_font_metrics :: proc(ctx: ^Context, font: Font, font_size: f32) -> (Font_Metrics, bool) {
+	assert(ctx != nil, "context_font_metrics: nil context")
+	assert(_f32_is_finite(font_size), "context_font_metrics: non-finite size")
+	assert(font_size > 0, "context_font_metrics: non-positive size")
+	return context_font_metrics_impl(ctx, font, font_size)
+}
+
 context_set_texture_filter :: proc(ctx: ^Context, texture: Texture2D, filter: TextureFilter) {
 	if ctx == nil || texture.id == 0 do return
 	context_set_texture_filter_impl(ctx, texture, filter)

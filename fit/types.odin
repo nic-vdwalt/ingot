@@ -284,6 +284,12 @@ Space :: ui.Space
 Cross_Align :: ui.Cross_Align
 Main_Align :: ui.Main_Align
 Text_Role :: ui.Text_Role
+Text_Metrics :: struct {
+	ascent:       f32,
+	descent:      f32,
+	line_gap:     f32,
+	line_advance: f32,
+}
 Truncate_Side :: ui.Truncate_Side
 Ink :: ui.Ink
 Button_Style :: ui.Btn_Style

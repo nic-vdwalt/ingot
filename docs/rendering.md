@@ -35,6 +35,28 @@ hosting remains one managed canvas per module session.
 Audio has a separate lifecycle. Pair `InitAudioDevice` with `CloseAudioDevice`;
 `CloseWindow` does not close audio.
 
+## Text metrics and caret ownership
+
+Font metrics are graphics facts returned as plain values. Queries are fallible:
+an invalid or unavailable font returns `ok=false` through `gfx`, `ui_gfx`, `ui`,
+and `fit` rather than asserting. Renderer-independent UI policy decides how to
+fall back when a backend deliberately omits the optional metrics capability.
+
+Text draw coordinates are the top-left of a logical line. Its baseline is
+`line_origin_y + ascent`. Public descent is a positive distance below that
+baseline, line gap is non-negative, and line advance preserves the font's
+combined scaled metric. An insertion caret spans `ascent + descent` and excludes
+line gap; selection and row backgrounds may still span the full line advance.
+
+Text-input state, including the caret blink epoch, is caller-owned. Each frame
+derives blink visibility and the next redraw delay from explicit frame time;
+there is no retained visual node, hidden timer, callback subscription, or global
+caret manager. The painted caret and OS input-method rectangle use the same
+purely derived rectangle even while the visual caret is in its off phase.
+
+Vertical metrics do not provide shaping, kerning, bidirectional layout, script
+segmentation, cluster layout, or script-aware cursor placement.
+
 ## Submission lifetime
 
 WebGPU commands reference resources until their queue submission completes.

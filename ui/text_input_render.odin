@@ -280,131 +280,144 @@ ti_render_single :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bool)
 	)
 }
 
-// ti_draw_caret draws the blinking caret and updates the OS text-input rect
-// so IME candidate windows track it. Caret position is computed every frame
-// (not only blink-on); only the caret line itself blinks.
+TEXT_INPUT_CARET_BLINK_INTERVAL_SECONDS :: 0.5
+
+Caret_Blink :: struct {
+	visible:              bool,
+	seconds_until_toggle: f64,
+	animate:              bool,
+}
+
+text_input_caret_blink :: proc(
+	now: f64,
+	epoch: f64,
+	interval_seconds: f64,
+	reduced_motion: bool,
+) -> Caret_Blink {
+	assert(!math.is_nan(now) && !math.is_inf(now, 0), "caret blink: invalid time")
+	assert(!math.is_nan(epoch) && !math.is_inf(epoch, 0), "caret blink: invalid epoch")
+	assert(interval_seconds > 0, "caret blink: invalid interval")
+	if reduced_motion do return {visible = true}
+	elapsed := max(now - epoch, 0)
+	phase := math.floor(elapsed / interval_seconds)
+	within := math.mod(elapsed, interval_seconds)
+	until := interval_seconds - within
+	if until <= 0 || until > interval_seconds do until = interval_seconds
+	return {visible = i64(phase) % 2 == 0, seconds_until_toggle = until, animate = true}
+}
+
+text_input_caret_metrics_or_fallback :: proc(
+	metrics: Text_Metrics,
+	metrics_ok: bool,
+	font_size: f32,
+	line_advance: f32,
+) -> Text_Metrics {
+	assert(font_size > 0, "caret metrics fallback: invalid font size")
+	assert(line_advance > 0, "caret metrics fallback: invalid line advance")
+	if metrics_ok && text_metrics_valid(metrics) do return metrics
+	return {ascent = font_size, line_advance = line_advance}
+}
+
+text_input_caret_rect :: proc(
+	line_origin: Vec2,
+	caret_x: f32,
+	metrics: Text_Metrics,
+	width: f32,
+) -> Rect {
+	assert(text_metrics_valid(metrics), "text_input_caret_rect: invalid metrics")
+	assert(width > 0, "text_input_caret_rect: invalid width")
+	baseline_y := line_origin.y + metrics.ascent
+	return {caret_x, baseline_y - metrics.ascent, width, metrics.ascent + metrics.descent}
+}
+
+@(private = "file")
+ti_caret_metrics :: proc(ctx: ^TI_Ctx, font_size, line_height: i32) -> Text_Metrics {
+	assert(ctx != nil && ctx.frame != nil, "ti_caret_metrics: invalid context")
+	assert(font_size > 0 && line_height > 0, "ti_caret_metrics: invalid dimensions")
+	metrics, ok := text_metrics_for_size_frame(ctx.frame, font_size)
+	return text_input_caret_metrics_or_fallback(metrics, ok, f32(font_size), f32(line_height))
+}
+
+@(private = "file")
+ti_emit_caret :: proc(ctx: ^TI_Ctx, rect: Rect, visible: bool) {
+	assert(ctx != nil && ctx.frame != nil, "ti_emit_caret: invalid context")
+	assert(rect.width > 0 && rect.height > 0, "ti_emit_caret: invalid rectangle")
+	set_text_input_rect(ctx.frame, i32(rect.x), i32(rect.y), i32(rect.width), i32(rect.height))
+	if visible do draw_rectangle_rec(ctx.frame, rect, ui_frame_theme(ctx.frame).fg_accent)
+}
+
 @(private = "file")
 ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
-	assert(ctx != nil, "ti_draw_caret: nil ctx")
-	assert(v != nil, "ti_draw_caret: nil v")
-	assert(ctx.active, "ti_draw_caret: input not active")
-	assert(ctx.h > 0, "ti_draw_caret: non-positive height")
-	metrics := ui_frame_metrics(ctx.frame)
+	assert(ctx != nil && v != nil, "ti_draw_caret: nil argument")
+	assert(ctx.active && ctx.h > 0, "ti_draw_caret: invalid input")
+	ui_metrics := ui_frame_metrics(ctx.frame)
+	font_size := ui_metrics.FONT_SIZE_BODY
+	line_height := ui_metrics.LINE_HEIGHT
+	metrics := ti_caret_metrics(ctx, font_size, line_height)
 	style := ui_frame_theme(ctx.frame)
-	font_size := metrics.FONT_SIZE_BODY
-	line_height := metrics.LINE_HEIGHT
-	t := frame_input(ctx.frame).time
-	blink_on := true
-	if !style.reduced_motion {
-		// Blink is time-driven: in event-driven frame mode nothing else
-		// forces a repaint while the user pauses typing, so schedule one at
-		// the next half-second toggle boundary. Reduced motion keeps the
-		// caret steady (no blink, no scheduled repaints).
-		request_redraw_in(ctx.frame, 0.5 - math.mod(t, 0.5))
-		blink_on = int(t * 2) % 2 == 0
-	}
+	blink := text_input_caret_blink(
+		frame_input(ctx.frame).time,
+		ctx.caret_epoch^,
+		TEXT_INPUT_CARET_BLINK_INTERVAL_SECONDS,
+		style.reduced_motion,
+	)
+	if blink.animate do request_redraw_in(ctx.frame, blink.seconds_until_toggle)
 	if v.caret_render {
-		// Caret at its true visual (row, x) within the visible window.
 		if v.cur_vrow >= v.vis_start && v.cur_vrow < v.vis_end {
-			cursor_x := ctx.inner_x + v.cur_caret_x
-			cursor_line_y :=
+			x := ctx.inner_x + v.cur_caret_x
+			y :=
 				ctx.y +
 				ui_frame_sc(ctx.frame, TI_PAD_TOP) +
 				i32(v.cur_vrow - v.vis_start) * line_height
-			set_text_input_rect(ctx.frame, cursor_x, cursor_line_y, 1, font_size)
-			if blink_on {
-				draw_line(
-					ctx.frame,
-					cursor_x,
-					cursor_line_y,
-					cursor_x,
-					cursor_line_y + font_size,
-					style.fg_accent,
-				)
-			}
+			rect := text_input_caret_rect({f32(ctx.inner_x), f32(y)}, f32(x), metrics, 1)
+			ti_emit_caret(ctx, rect, blink.visible)
 		}
 		return
 	}
 	if v.has_newlines {
-		// Multiline cursor: position at end of last line.
 		lines := strings.split(text, "\n", context.temp_allocator)
 		last_line := lines[len(lines) - 1]
 		last_line_c := strings.clone_to_cstring(last_line, context.temp_allocator)
-		cursor_text_w := measure_text_frame(ctx.frame, last_line_c, font_size)
-		cursor_offset: i32 = 0
-		if cursor_text_w > ctx.inner_w {
-			cursor_offset = cursor_text_w - ctx.inner_w
-		}
-		cursor_x := ctx.inner_x + cursor_text_w - cursor_offset
+		text_width := measure_text_frame(ctx.frame, last_line_c, font_size)
+		offset := max(text_width - ctx.inner_w, 0)
+		x := ctx.inner_x + text_width - offset
 		visible_count := min(i32(len(lines)), v.visible_lines)
-		cursor_line_y :=
-			ctx.y + ui_frame_sc(ctx.frame, TI_PAD_TOP) + (visible_count - 1) * line_height
-		set_text_input_rect(ctx.frame, cursor_x, cursor_line_y, 1, font_size)
-		if blink_on {
-			draw_line(
-				ctx.frame,
-				cursor_x,
-				cursor_line_y,
-				cursor_x,
-				cursor_line_y + font_size,
-				style.fg_accent,
-			)
-		}
+		y := ctx.y + ui_frame_sc(ctx.frame, TI_PAD_TOP) + (visible_count - 1) * line_height
+		rect := text_input_caret_rect({f32(ctx.inner_x), f32(y)}, f32(x), metrics, 1)
+		ti_emit_caret(ctx, rect, blink.visible)
 		return
 	}
-	ti_draw_caret_single(ctx, text, v, blink_on)
+	ti_draw_caret_single(ctx, text, v, metrics, blink.visible)
 }
 
-// ti_draw_caret_single draws the caret for the single-line render path,
-// mapping the byte cursor through the (possibly masked) display string.
 @(private = "file")
-ti_draw_caret_single :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, blink_on: bool) {
-	assert(ctx != nil, "ti_draw_caret_single: nil ctx")
-	assert(ctx.active, "ti_draw_caret_single: input not active")
-	assert(ctx.h > 0, "ti_draw_caret_single: non-positive height")
+ti_draw_caret_single :: proc(
+	ctx: ^TI_Ctx,
+	text: string,
+	v: ^TI_View,
+	metrics: Text_Metrics,
+	blink_on: bool,
+) {
+	assert(ctx != nil && v != nil, "ti_draw_caret_single: nil argument")
+	assert(ctx.active && ctx.h > 0, "ti_draw_caret_single: invalid input")
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
-	style := ui_frame_theme(ctx.frame)
-	display_for_cursor := v.masked_text if ctx.masked else text
-	cursor_text_w := measure_text_frame(
-		ctx.frame,
-		strings.clone_to_cstring(display_for_cursor, context.temp_allocator),
-		font_size,
-	)
-	cursor_offset: i32 = 0
-	if cursor_text_w > ctx.inner_w {
-		cursor_offset = cursor_text_w - ctx.inner_w
-	}
-	cursor_prefix := display_for_cursor
+	display := v.masked_text if ctx.masked else text
+	text_width := measure_text_string_frame(ctx.frame, display, font_size)
+	offset := max(text_width - ctx.inner_w, 0)
+	prefix := display
 	if ctx.caret {
-		col := 0
-		byte := 0
+		col, byte := 0, 0
 		for byte < ctx.cursor^ {
 			byte = caret_next_rune(text, byte)
 			col += 1
 		}
-		prefix_end := caret_col_to_byte(display_for_cursor, col)
-		cursor_prefix = display_for_cursor[:prefix_end]
+		prefix = display[:caret_col_to_byte(display, col)]
 	}
-	cursor_prefix_w := measure_text_frame(
-		ctx.frame,
-		strings.clone_to_cstring(cursor_prefix, context.temp_allocator),
-		font_size,
-	)
-	cursor_x := ctx.inner_x + cursor_prefix_w - cursor_offset
-	// The IME rect and the drawn caret share one scaled inset, or the
-	// candidate window drifts from the caret at UI scales other than 1.
-	inset := ui_frame_sc(ctx.frame, TI_CARET_INSET)
-	set_text_input_rect(ctx.frame, cursor_x, ctx.y + inset, 1, ctx.h - inset * 2)
-	if blink_on {
-		draw_line(
-			ctx.frame,
-			cursor_x,
-			ctx.y + inset,
-			cursor_x,
-			ctx.y + ctx.h - inset,
-			style.fg_accent,
-		)
-	}
+	prefix_width := measure_text_string_frame(ctx.frame, prefix, font_size)
+	x := ctx.inner_x + prefix_width - offset
+	y := ctx.y + (ctx.h - font_size) / 2
+	rect := text_input_caret_rect({f32(ctx.inner_x), f32(y)}, f32(x), metrics, 1)
+	ti_emit_caret(ctx, rect, blink_on)
 }
 
 @(private)
@@ -497,10 +510,15 @@ ti_draw_clipped :: proc(ctx: ^TI_Ctx) {
 	}
 	view := ti_layout(ctx, display)
 	view.preedit_lo, view.preedit_hi = pre_lo, pre_hi
+	cursor_before_mouse := ctx.cursor^ if ctx.caret else 0
 	if ctx.active && view.masked_caret do ti_mouse_masked(ctx, display, &view)
 	// The input method owns the pointer inside the box mid-composition, so
 	// clicks are ignored until commit (display offsets are transient anyway).
 	if ctx.active && view.caret_render && !composing do ti_mouse_caret(ctx, display, &view)
+	ctx.caret_activity ||= ctx.caret && ctx.cursor^ != cursor_before_mouse
+	if ctx.caret_activity {
+		text_input_caret_wake(ctx.owner_state, frame_input(ctx.frame).time)
+	}
 	spell_squiggles: []Spell_Range
 	if ctx.active && view.caret_render && !composing && ctx.pills != nil && ctx.undo != nil {
 		spell_squiggles = ti_spell(ctx, display, &view)

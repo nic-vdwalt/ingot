@@ -417,6 +417,12 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	defer UnloadFont(f)
 
 	test_font_measure_invariants(t, f)
+	metrics, metrics_ok := context_font_metrics(g, f, 32)
+	testing.expect(t, metrics_ok, "loaded font should expose metrics")
+	testing.expect(t, metrics.ascent > 0 && metrics.descent >= 0)
+	testing.expect(t, metrics.line_gap >= 0 && metrics.line_advance > 0)
+	_, stale_ok := context_font_metrics(g, Font{}, 32)
+	testing.expect(t, !stale_ok, "invalid font metrics must fail")
 	text_test_atlas_accounting(t, 32)
 	text_test_atlas_accounting(t, 64)
 	atlas := context_get_atlas(g, f._atlas)
