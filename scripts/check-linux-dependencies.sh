@@ -37,9 +37,9 @@ if command -v pkg-config >/dev/null 2>&1; then
 	pkg-config --exists libcurl || fail "libcurl development files are required"
 	pkg-config --exists vulkan || fail "Vulkan loader development files are required"
 	x11_ok=0
-	for package in x11 xrandr xi xcursor xinerama; do
+	for package in x11 xrandr xi xtst xcursor xinerama xscrnsaver; do
 		if ! pkg-config --exists "$package"; then
-			fail "$package development files are required by native GLFW/X11"
+			fail "$package development files are required by native GLFW/SDL3 X11"
 			x11_ok=1
 		fi
 	done
