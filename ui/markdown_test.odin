@@ -2,6 +2,7 @@
 package ui
 
 import "core:testing"
+import "core:unicode/utf8"
 import "ingot:testx"
 
 @(test)
@@ -216,7 +217,37 @@ markdown_reference_link_covers_its_source :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(spans), 3)
 	testing.expect_value(t, spans[1].raw_start, 2)
 	testing.expect_value(t, spans[1].raw_end, 8)
+	testing.expect_value(t, spans[1].text_raw_start, 3)
+	testing.expect_value(t, spans[1].text_raw_end, 4)
 	testing.expect_value(t, line[spans[1].raw_start:spans[1].raw_end], "[b](c)")
+}
+
+@(test)
+markdown_reference_link_display_offsets_map_only_to_the_label :: proc(t: ^testing.T) {
+	line := "a [docs](target) z"
+	spans := parse_inline_spans_with(line, context.allocator)
+	defer delete(spans)
+	label_display := len("a ")
+	for byte in 0 ..= len("docs") {
+		raw := display_to_raw(spans, label_display + byte)
+		testing.expect_value(t, raw, len("a [") + byte)
+		testing.expect_value(t, raw_to_display(spans, raw), label_display + byte)
+	}
+}
+
+@(test)
+markdown_utf8_span_offsets_remain_source_boundaries :: proc(t: ^testing.T) {
+	line := "[hé🙂](target)"
+	spans := parse_inline_spans_with(line, context.allocator)
+	defer delete(spans)
+	offset := 0
+	for offset <= len(spans[0].text) {
+		raw := display_to_raw(spans, offset)
+		testing.expect(t, raw >= spans[0].text_raw_start && raw <= spans[0].text_raw_end)
+		if offset == len(spans[0].text) do break
+		_, size := utf8.decode_rune_in_string(spans[0].text[offset:])
+		offset += size
+	}
 }
 
 // A bare URL is its own target, so display and destination coincide and a

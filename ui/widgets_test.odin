@@ -265,14 +265,18 @@ settings_preset_index_lookup :: proc(t: ^testing.T) {
 
 @(test)
 markdown_offset_roundtrip :: proc(t: ^testing.T) {
-	line := "a **bold** `code` end"
-	spans := parse_inline_spans_with(line)
-	display_len := spans_display_len(spans)
-	// display -> raw -> display is identity for every display position.
-	for d in 0 ..< display_len {
-		raw := display_to_raw(spans, d)
-		testing.expect(t, raw >= 0 && raw <= len(line), "raw offset out of bounds")
-		back := raw_to_display(spans, raw)
-		testing.expect_value(t, back, d)
+	lines := []string {
+		"a **bold** `code` end",
+		"a [hé🙂](target) end",
+		"go https://example.com now",
+		"open \x02src/main.odin\x03 now",
+	}
+	for line in lines {
+		spans := parse_inline_spans_with(line)
+		for display in 0 ..< spans_display_len(spans) {
+			raw := display_to_raw(spans, display)
+			testing.expect(t, raw >= 0 && raw <= len(line), "raw offset out of bounds")
+			testing.expect_value(t, raw_to_display(spans, raw), display)
+		}
 	}
 }

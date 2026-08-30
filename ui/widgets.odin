@@ -1079,6 +1079,19 @@ hit_test_wrapped_frame :: proc(
 	return lines[row].start + caret_col_to_byte(line, col)
 }
 
+text_selection_rect :: proc(frame: ^Ui_Frame, x, y, width, font_size, line_height: i32) -> Rect {
+	assert(frame != nil && frame.open, "text selection: invalid frame")
+	assert(width > 0 && font_size > 0 && line_height > 0, "text selection: invalid dimensions")
+	font_metrics, metrics_ok := text_metrics_for_size_frame(frame, font_size)
+	metrics := caret_metrics_or_fallback(
+		font_metrics,
+		metrics_ok,
+		f32(font_size),
+		f32(line_height),
+	)
+	return caret_rect({f32(x), f32(y)}, f32(x), metrics, f32(width))
+}
+
 // Draw a single line with optional selection highlight behind it.
 // Uses measured substrings for pixel-accurate highlight positioning.
 draw_line_with_selection_frame :: proc(
@@ -1099,8 +1112,9 @@ draw_line_with_selection_frame :: proc(
 		prefix_c := strings.clone_to_cstring(line[:local_start], context.temp_allocator)
 		hl_x := x + measure_text_frame(frame, prefix_c, font_size)
 		span_c := strings.clone_to_cstring(line[local_start:local_end], context.temp_allocator)
-		hl_w := measure_text_frame(frame, span_c, font_size)
-		draw_rectangle(frame, hl_x, y, hl_w, line_height, ui_frame_theme(frame).bg_selection)
+		hl_w := max(measure_text_frame(frame, span_c, font_size), 1)
+		highlight := text_selection_rect(frame, hl_x, y, hl_w, font_size, line_height)
+		draw_rectangle_rec(frame, highlight, ui_frame_theme(frame).bg_selection)
 	}
 	line_c := strings.clone_to_cstring(line, context.temp_allocator)
 	draw_text_frame(frame, line_c, x, y, font_size, color)

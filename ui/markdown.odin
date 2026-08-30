@@ -106,19 +106,21 @@ match_heading :: proc(line: string) -> (Heading_Match, bool) {
 // --- Inline bold (**) parsing ---
 
 Text_Span :: struct {
-	text:      string, // Display text (no ** markers)
-	raw_start: int, // Byte offset into original text where this span's source begins
-	raw_end:   int, // Byte offset where source ends (exclusive)
-	bold:      bool,
-	pill:      bool, // PILL_OPEN..PILL_CLOSE file-mention chip
-	code:      bool, // `backtick` inline code; rendered as a file pill when it
+	text:           string, // Display text without inline markers.
+	raw_start:      int, // Complete source span start.
+	raw_end:        int, // Complete source span end, exclusive.
+	text_raw_start: int, // Source byte represented by text[0].
+	text_raw_end:   int, // Source boundary represented by text[len(text)].
+	bold:           bool,
+	pill:           bool, // PILL_OPEN..PILL_CLOSE file-mention chip
+	code:           bool, // `backtick` inline code; rendered as a file pill when it
 	// names a real workspace path, else as inline-code text.
-	link:      bool, // Rendered accent + underline, and activates on click.
+	link:           bool, // Rendered accent + underline, and activates on click.
 	// Where a link span points. Held separately from `text` because the two
 	// differ for [label](target) syntax: the label is what the reader sees,
 	// the target is where the click goes. A bare URL sets both to the same
 	// string, so a consumer never has to ask which spelling it came from.
-	href:      string,
+	href:           string,
 }
 
 @(private = "file")
@@ -168,7 +170,16 @@ inline_span_append_plain :: proc(state: ^Inline_Span_Parse_State, start, end: in
 	assert(state != nil, "inline_span_append_plain: nil state")
 	assert(start >= 0 && end <= len(state.line), "inline_span_append_plain: range out of bounds")
 	if start >= end do return
-	append(&state.spans, Text_Span{text = state.line[start:end], raw_start = start, raw_end = end})
+	append(
+		&state.spans,
+		Text_Span {
+			text = state.line[start:end],
+			raw_start = start,
+			raw_end = end,
+			text_raw_start = start,
+			text_raw_end = end,
+		},
+	)
 }
 
 @(private = "file")
@@ -195,6 +206,8 @@ inline_span_parse_pill :: proc(state: ^Inline_Span_Parse_State) {
 				text = state.line[state.index + 1:],
 				raw_start = state.index,
 				raw_end = len(state.line),
+				text_raw_start = state.index + 1,
+				text_raw_end = len(state.line),
 			},
 		)
 		state.index = len(state.line)
@@ -207,6 +220,8 @@ inline_span_parse_pill :: proc(state: ^Inline_Span_Parse_State) {
 			text = state.line[state.index + 1:close],
 			raw_start = state.index,
 			raw_end = close + 1,
+			text_raw_start = state.index + 1,
+			text_raw_end = close,
 			pill = true,
 		},
 	)
@@ -230,6 +245,8 @@ inline_span_parse_code :: proc(state: ^Inline_Span_Parse_State) {
 				text = state.line[state.index:state.index + 1],
 				raw_start = state.index,
 				raw_end = state.index + 1,
+				text_raw_start = state.index,
+				text_raw_end = state.index + 1,
 			},
 		)
 		state.index += 1
@@ -242,6 +259,8 @@ inline_span_parse_code :: proc(state: ^Inline_Span_Parse_State) {
 			text = state.line[state.index + 1:close],
 			raw_start = state.index,
 			raw_end = close + 1,
+			text_raw_start = state.index + 1,
+			text_raw_end = close,
 			code = true,
 		},
 	)
@@ -263,12 +282,14 @@ inline_span_parse_link :: proc(state: ^Inline_Span_Parse_State) -> bool {
 	append(
 		&state.spans,
 		Text_Span {
-			text      = url,
-			raw_start = state.index,
-			raw_end   = end,
-			link      = true,
+			text           = url,
+			raw_start      = state.index,
+			raw_end        = end,
+			text_raw_start = state.index,
+			text_raw_end   = end,
+			link           = true,
 			// A bare URL is its own target: display and destination coincide.
-			href      = url,
+			href           = url,
 		},
 	)
 	state.index = end
@@ -308,13 +329,15 @@ inline_span_parse_reference_link :: proc(state: ^Inline_Span_Parse_State) -> boo
 	append(
 		&state.spans,
 		Text_Span {
-			text      = label,
+			text           = label,
 			// The raw range covers the whole [label](target) source, so text
 			// selection offsets stay aligned with the original document.
-			raw_start = state.index,
-			raw_end   = target_end + 1,
-			link      = true,
-			href      = target,
+			raw_start      = state.index,
+			raw_end        = target_end + 1,
+			text_raw_start = state.index + 1,
+			text_raw_end   = label_end,
+			link           = true,
+			href           = target,
 		},
 	)
 	state.index = target_end + 1
@@ -344,6 +367,8 @@ inline_span_parse_bold :: proc(state: ^Inline_Span_Parse_State) {
 				text = state.line[state.index:state.index + 2],
 				raw_start = state.index,
 				raw_end = state.index + 2,
+				text_raw_start = state.index,
+				text_raw_end = state.index + 2,
 			},
 		)
 		state.index += 2
@@ -356,6 +381,8 @@ inline_span_parse_bold :: proc(state: ^Inline_Span_Parse_State) {
 			text = state.line[state.index + 2:close],
 			raw_start = state.index,
 			raw_end = close + 2,
+			text_raw_start = state.index + 2,
+			text_raw_end = close,
 			bold = true,
 		},
 	)
@@ -375,9 +402,11 @@ parse_inline_spans_with :: proc(line: string, allocator := context.temp_allocato
 	if !has_bold && !has_pill && !has_code && !has_link && !has_reference {
 		spans := make([]Text_Span, 1, allocator)
 		spans[0] = Text_Span {
-			text      = line,
-			raw_start = 0,
-			raw_end   = len(line),
+			text           = line,
+			raw_start      = 0,
+			raw_end        = len(line),
+			text_raw_start = 0,
+			text_raw_end   = len(line),
 		}
 		return spans
 	}
@@ -447,21 +476,10 @@ raw_to_display :: proc(spans: []Text_Span, raw_off: int) -> int {
 			continue
 		}
 		// raw_off is inside this span's raw range.
-		if s.bold || s.pill || s.code {
-			// Opening marker before the text: 2 bytes for bold (**), 1 for pill/code.
-			marker_len := 1 if (s.pill || s.code) else 2
-			text_raw_start := s.raw_start + marker_len
-			if raw_off < text_raw_start {
-				return display_pos
-			}
-			inner_off := raw_off - text_raw_start
-			if inner_off > len(s.text) do inner_off = len(s.text)
-			return display_pos + inner_off
-		} else {
-			inner_off := raw_off - s.raw_start
-			if inner_off > len(s.text) do inner_off = len(s.text)
-			return display_pos + inner_off
-		}
+		if raw_off < s.text_raw_start do return display_pos
+		inner_off := raw_off - s.text_raw_start
+		if inner_off > len(s.text) do inner_off = len(s.text)
+		return display_pos + inner_off
 	}
 	return display_pos
 }
@@ -469,24 +487,19 @@ raw_to_display :: proc(spans: []Text_Span, raw_off: int) -> int {
 // Convert a display char position to raw byte offset.
 display_to_raw :: proc(spans: []Text_Span, display_pos: int) -> int {
 	remaining := display_pos
-	for &s in spans {
-		if remaining <= 0 {
-			return s.raw_start
+	for &s, index in spans {
+		if remaining <= 0 do return s.text_raw_start
+		if remaining == len(s.text) {
+			if s.text_raw_end < s.raw_end do return s.text_raw_end
+			if index + 1 < len(spans) do return spans[index + 1].text_raw_start
+			return s.text_raw_end
 		}
-		if remaining >= len(s.text) {
+		if remaining > len(s.text) {
 			remaining -= len(s.text)
 			continue
 		}
 		// Position is inside this span's text.
-		if s.pill {
-			return s.raw_start + 1 + remaining // skip opening pill sentinel
-		} else if s.code {
-			return s.raw_start + 1 + remaining // skip opening backtick
-		} else if s.bold {
-			return s.raw_start + 2 + remaining // skip opening **
-		} else {
-			return s.raw_start + remaining
-		}
+		return min(s.text_raw_start + remaining, s.text_raw_end)
 	}
 	// Past end - return raw end of last span.
 	if len(spans) > 0 {
@@ -516,15 +529,16 @@ draw_markdown_span_selection :: proc(
 	)
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
 	highlight_x := cursor_x + measure_text_frame(ctx.frame, pre, font_size)
-	highlight_w := measure_text_frame(ctx.frame, selected, font_size)
-	draw_rectangle(
+	highlight_w := max(measure_text_frame(ctx.frame, selected, font_size), 1)
+	highlight := text_selection_rect(
 		ctx.frame,
 		highlight_x,
 		y,
 		highlight_w,
+		font_size,
 		ui_frame_metrics(ctx.frame).LINE_HEIGHT,
-		ui_frame_theme(ctx.frame).bg_selection,
 	)
+	draw_rectangle_rec(ctx.frame, highlight, ui_frame_theme(ctx.frame).bg_selection)
 }
 
 @(private = "file")
@@ -726,10 +740,40 @@ draw_markdown_line_spans :: proc(
 			has_sel,
 		)
 		draw_markdown_span_style(ctx, &span, segment_c, cursor_x, y, base_color)
-		cursor_x +=
-			measure_text_frame(ctx.frame, segment_c, ui_frame_metrics(ctx.frame).FONT_SIZE_BODY) +
-			1
+		cursor_x += measure_text_frame(
+			ctx.frame,
+			segment_c,
+			ui_frame_metrics(ctx.frame).FONT_SIZE_BODY,
+		)
 	}
+}
+
+markdown_line_spans_hit :: proc(
+	ctx: ^Markdown_Context,
+	x, mouse_x, font_size: i32,
+	dl_start, dl_end: int,
+	spans: []Text_Span,
+) -> int {
+	assert(ctx != nil && ctx.frame != nil, "markdown span hit: invalid context")
+	assert(dl_start >= 0 && dl_end >= dl_start, "markdown span hit: invalid range")
+	cursor_x, display_offset := x, 0
+	for &span in spans {
+		span_start := display_offset
+		span_end := display_offset + len(span.text)
+		display_offset = span_end
+		segment_start := max(span_start, dl_start)
+		segment_end := min(span_end, dl_end)
+		if segment_start >= segment_end do continue
+		segment := span.text[segment_start - span_start:segment_end - span_start]
+		segment_c := strings.clone_to_cstring(segment, context.temp_allocator)
+		width := measure_text_frame(ctx.frame, segment_c, font_size)
+		if mouse_x <= cursor_x + width {
+			column := caret_pixel_to_col_frame(ctx.frame, segment, mouse_x - cursor_x, font_size)
+			return segment_start + caret_col_to_byte(segment, column)
+		}
+		cursor_x += width
+	}
+	return dl_end
 }
 
 // Like draw_text_wrapped but handles **bold** inline spans as pills.
@@ -846,10 +890,8 @@ hit_test_wrapped_md :: proc(
 	assert(ctx != nil, "hit_test_wrapped_md: nil ctx")
 	if len(text) == 0 do return -1
 
-	// Fast path: no inline markers.
-	if !strings.contains(text, "**") &&
-	   strings.index_byte(text, PILL_OPEN) < 0 &&
-	   strings.index_byte(text, '`') < 0 {
+	spans := frame_view_items(ctx.frame, parse_inline_spans(ctx.frame, text))
+	if len(spans) == 1 && !spans[0].bold && !spans[0].pill && !spans[0].code && !spans[0].link {
 		return hit_test_wrapped_frame(
 			ctx.frame,
 			x,
@@ -862,21 +904,18 @@ hit_test_wrapped_md :: proc(
 		)
 	}
 
-	spans := frame_view_items(ctx.frame, parse_inline_spans(ctx.frame, text))
 	display_text := frame_string_value(ctx.frame, spans_display_string(ctx.frame, spans))
-
-	display_offset := hit_test_wrapped_frame(
-		ctx.frame,
+	lines := wrap_text_frame(ctx.frame, display_text, max_width, font_size)
+	row := clamp(int((mouse_y - y) / ui_frame_metrics(ctx.frame).LINE_HEIGHT), 0, len(lines) - 1)
+	display_offset := markdown_line_spans_hit(
+		ctx,
 		x,
-		y,
-		max_width,
-		display_text,
 		mouse_x,
-		mouse_y,
 		font_size,
+		lines[row].start,
+		lines[row].end,
+		spans,
 	)
-	if display_offset < 0 do return -1
-
 	return display_to_raw(spans, display_offset)
 }
 
@@ -1971,8 +2010,8 @@ markdown_hit_code :: proc(state: ^Markdown_Hit_State, line: string, line_start: 
 	assert(state != nil, "markdown_hit_code: nil state")
 	metrics := ui_frame_metrics(state.ctx.frame)
 	if state.mouse_y >= state.current_y && state.mouse_y < state.current_y + metrics.LINE_HEIGHT {
-		column := caret_pixel_to_col_with(
-			ui_frame_text(state.ctx.frame),
+		column := caret_pixel_to_col_frame(
+			state.ctx.frame,
 			line,
 			state.mouse_x - (state.x + metrics.CODE_BLOCK_PAD),
 			metrics.FONT_SIZE_BODY,

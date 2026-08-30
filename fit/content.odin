@@ -15,20 +15,24 @@ Markdown_Prepared :: struct {
 }
 
 Text_Span :: struct {
-	text:      string,
-	raw_start: int,
-	raw_end:   int,
-	bold:      bool,
-	pill:      bool,
-	code:      bool,
-	link:      bool,
-	href:      string,
+	text:           string,
+	raw_start:      int,
+	raw_end:        int,
+	text_raw_start: int,
+	text_raw_end:   int,
+	bold:           bool,
+	pill:           bool,
+	code:           bool,
+	link:           bool,
+	href:           string,
 }
 #assert(size_of(Text_Span) == size_of(ui.Text_Span))
 #assert(align_of(Text_Span) == align_of(ui.Text_Span))
 #assert(offset_of(Text_Span, text) == offset_of(ui.Text_Span, text))
 #assert(offset_of(Text_Span, raw_start) == offset_of(ui.Text_Span, raw_start))
 #assert(offset_of(Text_Span, raw_end) == offset_of(ui.Text_Span, raw_end))
+#assert(offset_of(Text_Span, text_raw_start) == offset_of(ui.Text_Span, text_raw_start))
+#assert(offset_of(Text_Span, text_raw_end) == offset_of(ui.Text_Span, text_raw_end))
 #assert(offset_of(Text_Span, bold) == offset_of(ui.Text_Span, bold))
 #assert(offset_of(Text_Span, pill) == offset_of(ui.Text_Span, pill))
 #assert(offset_of(Text_Span, code) == offset_of(ui.Text_Span, code))

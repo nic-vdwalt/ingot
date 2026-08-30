@@ -56,6 +56,14 @@ Surface_Text_Sized_Width :: proc(surface: ^Surface, text: string, size: i32) -> 
 	return ui.measure_text_frame(u.frame, value, size)
 }
 
+Surface_Text_Sized_Byte_At_X :: proc(surface: ^Surface, text: string, x, size: i32) -> int {
+	assert(surface != nil, "Fit.Surface_Text_Sized_Byte_At_X: nil surface")
+	assert(size > 0, "Fit.Surface_Text_Sized_Byte_At_X: invalid size")
+	u := surface_ui(surface)
+	column := ui.caret_pixel_to_col_frame(u.frame, text, x, size)
+	return ui.caret_col_to_byte(text, column)
+}
+
 Surface_Rune_Width :: proc(surface: ^Surface, value: rune, size: i32) -> i32 {
 	u := surface_ui(surface)
 	return ui.rune_width_frame(u.frame, value, size)
