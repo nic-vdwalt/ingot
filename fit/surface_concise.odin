@@ -40,6 +40,10 @@ Text_Metrics_For_Size :: proc(surface: ^Surface, font_size: i32) -> (Text_Metric
 	return Surface_Text_Metrics(surface, font_size)
 }
 
+Reduced_Motion :: proc(surface: ^Surface) -> bool {
+	return Surface_Reduced_Motion(surface)
+}
+
 Text_Width :: proc(surface: ^Surface, text: string, role: Text_Role = .Body) -> i32 {
 	return Surface_Text_Width(surface, text, role)
 }

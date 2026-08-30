@@ -288,7 +288,7 @@ Caret_Blink :: struct {
 	animate:              bool,
 }
 
-text_input_caret_blink :: proc(
+caret_blink_phase :: proc(
 	now: f64,
 	epoch: f64,
 	interval_seconds: f64,
@@ -306,7 +306,9 @@ text_input_caret_blink :: proc(
 	return {visible = i64(phase) % 2 == 0, seconds_until_toggle = until, animate = true}
 }
 
-text_input_caret_metrics_or_fallback :: proc(
+text_input_caret_blink :: caret_blink_phase
+
+caret_metrics_or_fallback :: proc(
 	metrics: Text_Metrics,
 	metrics_ok: bool,
 	font_size: f32,
@@ -318,17 +320,21 @@ text_input_caret_metrics_or_fallback :: proc(
 	return {ascent = font_size, line_advance = line_advance}
 }
 
-text_input_caret_rect :: proc(
+text_input_caret_metrics_or_fallback :: caret_metrics_or_fallback
+
+caret_rect :: proc(
 	line_origin: Vec2,
 	caret_x: f32,
 	metrics: Text_Metrics,
 	width: f32,
 ) -> Rect {
-	assert(text_metrics_valid(metrics), "text_input_caret_rect: invalid metrics")
-	assert(width > 0, "text_input_caret_rect: invalid width")
+	assert(text_metrics_valid(metrics), "caret_rect: invalid metrics")
+	assert(width > 0, "caret_rect: invalid width")
 	baseline_y := line_origin.y + metrics.ascent
 	return {caret_x, baseline_y - metrics.ascent, width, metrics.ascent + metrics.descent}
 }
+
+text_input_caret_rect :: caret_rect
 
 @(private = "file")
 ti_caret_metrics :: proc(ctx: ^TI_Ctx, font_size, line_height: i32) -> Text_Metrics {
