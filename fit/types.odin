@@ -290,6 +290,11 @@ Text_Metrics :: struct {
 	line_gap:     f32,
 	line_advance: f32,
 }
+Caret_Blink :: struct {
+	visible:              bool,
+	seconds_until_toggle: f64,
+	animate:              bool,
+}
 Truncate_Side :: ui.Truncate_Side
 Ink :: ui.Ink
 Button_Style :: ui.Btn_Style

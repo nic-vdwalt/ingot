@@ -185,6 +185,70 @@ Surface_Text_Metrics :: proc(surface: ^Surface, font_size: i32) -> (Text_Metrics
 		true
 }
 
+Caret_Blink_Phase :: proc(
+	now: f64,
+	epoch: f64,
+	interval_seconds: f64,
+	reduced_motion: bool,
+) -> Caret_Blink {
+	blink := ui.caret_blink_phase(now, epoch, interval_seconds, reduced_motion)
+	return {
+		visible = blink.visible,
+		seconds_until_toggle = blink.seconds_until_toggle,
+		animate = blink.animate,
+	}
+}
+
+Caret_Metrics_Or_Fallback :: proc(
+	metrics: Text_Metrics,
+	metrics_ok: bool,
+	font_size: f32,
+	line_advance: f32,
+) -> Text_Metrics {
+	resolved := ui.caret_metrics_or_fallback(
+		{
+			ascent = metrics.ascent,
+			descent = metrics.descent,
+			line_gap = metrics.line_gap,
+			line_advance = metrics.line_advance,
+		},
+		metrics_ok,
+		font_size,
+		line_advance,
+	)
+	return {
+		ascent = resolved.ascent,
+		descent = resolved.descent,
+		line_gap = resolved.line_gap,
+		line_advance = resolved.line_advance,
+	}
+}
+
+Caret_Rect :: proc(
+	line_origin: Point,
+	caret_x: f32,
+	metrics: Text_Metrics,
+	width: f32,
+) -> Float_Rect {
+	rect := ui.caret_rect(
+		{line_origin.x, line_origin.y},
+		caret_x,
+		{
+			ascent = metrics.ascent,
+			descent = metrics.descent,
+			line_gap = metrics.line_gap,
+			line_advance = metrics.line_advance,
+		},
+		width,
+	)
+	return {rect.x, rect.y, rect.width, rect.height}
+}
+
+Surface_Reduced_Motion :: proc(surface: ^Surface) -> bool {
+	u := surface_ui(surface)
+	return ui.ui_frame_theme(u.frame).reduced_motion
+}
+
 Surface_Text_Width :: proc(surface: ^Surface, text: string, role: Text_Role = .Body) -> i32 {
 	u := surface_ui(surface)
 	return ui.text_width(u.frame, text, role)
