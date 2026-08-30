@@ -36,6 +36,7 @@ jobs:
             libx11-dev \
             libxrandr-dev \
             libxi-dev \
+            libxtst-dev \
             libxcursor-dev \
             libxinerama-dev \
             libxss-dev
