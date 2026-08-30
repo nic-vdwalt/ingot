@@ -3,6 +3,7 @@ package ui
 Text_Measure_Proc :: proc(data: rawptr, font: Font_Id, text: string, size, spacing: f32) -> Vec2
 Text_Font_Proc :: proc(data: rawptr, size: i32) -> Font_Id
 Text_Has_Glyph_Proc :: proc(data: rawptr, font: Font_Id, value: rune) -> bool
+Text_Metrics_Proc :: proc(data: rawptr, font: Font_Id, size: f32) -> (Text_Metrics, bool)
 Text_Reset_Proc :: proc(data: rawptr)
 
 Text_Backend :: struct {
@@ -10,11 +11,16 @@ Text_Backend :: struct {
 	font_for_size: Text_Font_Proc,
 	measure:       Text_Measure_Proc,
 	has_glyph:     Text_Has_Glyph_Proc,
+	metrics:       Text_Metrics_Proc,
 	reset:         Text_Reset_Proc,
 }
 
 text_backend_valid :: proc(backend: Text_Backend) -> bool {
 	return backend.font_for_size != nil && backend.measure != nil
+}
+
+text_backend_has_metrics :: proc(backend: Text_Backend) -> bool {
+	return text_backend_valid(backend) && backend.metrics != nil
 }
 
 ui_runtime_set_text_backend :: proc(runtime: ^Ui_Runtime, backend: Text_Backend) {
@@ -49,4 +55,18 @@ text_backend_measure :: proc(
 	assert(text_backend_valid(backend), "text_backend_measure: invalid backend")
 	assert(size > 0, "text_backend_measure: invalid size")
 	return backend.measure(backend.data, font, text, size, spacing)
+}
+
+text_backend_metrics :: proc(
+	backend: Text_Backend,
+	font: Font_Id,
+	size: f32,
+) -> (
+	Text_Metrics,
+	bool,
+) {
+	assert(text_backend_has_metrics(backend), "text_backend_metrics: unavailable capability")
+	assert(font != 0, "text_backend_metrics: invalid font")
+	assert(size > 0, "text_backend_metrics: invalid size")
+	return backend.metrics(backend.data, font, size)
 }

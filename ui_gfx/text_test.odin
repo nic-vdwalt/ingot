@@ -20,8 +20,18 @@ test_adapter_attach_runtime_installs_text_backend :: proc(t: ^testing.T) {
 	defer adapter_detach_runtime(&adapter, &runtime)
 
 	testing.expect(t, ui.text_backend_valid(runtime.text_backend))
+	testing.expect(t, ui.text_backend_has_metrics(runtime.text_backend))
 	testing.expect(t, runtime.text_backend.data == &adapter)
 	testing.expect(t, runtime.web_form.data == &adapter)
+}
+
+@(test)
+test_adapter_metrics_rejects_an_unknown_font :: proc(t: ^testing.T) {
+	adapter: Adapter
+	adapter.initialized = true
+	metrics, ok := adapter_metrics(&adapter, ui.Font_Id(1), 16)
+	testing.expect(t, !ok)
+	testing.expect_value(t, metrics, ui.Text_Metrics{})
 }
 
 @(test)

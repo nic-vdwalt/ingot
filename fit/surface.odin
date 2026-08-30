@@ -170,6 +170,21 @@ Surface_Text_Line_Height :: proc(surface: ^Surface, role: Text_Role) -> i32 {
 	return ui.text_role_line_height(u.frame, role)
 }
 
+Surface_Text_Metrics :: proc(surface: ^Surface, font_size: i32) -> (Text_Metrics, bool) {
+	assert(surface != nil, "Fit.Surface_Text_Metrics: nil surface")
+	assert(font_size > 0, "Fit.Surface_Text_Metrics: invalid size")
+	u := surface_ui(surface)
+	metrics, ok := ui.text_metrics_for_size_frame(u.frame, font_size)
+	if !ok do return {}, false
+	return {
+			ascent = metrics.ascent,
+			descent = metrics.descent,
+			line_gap = metrics.line_gap,
+			line_advance = metrics.line_advance,
+		},
+		true
+}
+
 Surface_Text_Width :: proc(surface: ^Surface, text: string, role: Text_Role = .Body) -> i32 {
 	u := surface_ui(surface)
 	return ui.text_width(u.frame, text, role)

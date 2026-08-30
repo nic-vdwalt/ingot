@@ -23,6 +23,43 @@ test_text_measure :: proc(data: rawptr, font: Font_Id, text: string, size, spaci
 	return {f32(len(text)) * advance, size}
 }
 
+@(private = "file")
+test_text_metrics :: proc(data: rawptr, font: Font_Id, size: f32) -> (Text_Metrics, bool) {
+	assert(data != nil && font != 0, "test_text_metrics: invalid backend state")
+	assert(size > 0, "test_text_metrics: invalid size")
+	return {ascent = size * 0.75, descent = size * 0.25, line_advance = size}, true
+}
+
+@(test)
+text_backend_metrics_are_optional_and_fallible :: proc(t: ^testing.T) {
+	state: Test_Text_Backend_State
+	backend := Text_Backend {
+		data          = &state,
+		font_for_size = test_text_font_for_size,
+		measure       = test_text_measure,
+	}
+	testing.expect(t, text_backend_valid(backend))
+	testing.expect(t, !text_backend_has_metrics(backend))
+	backend.metrics = test_text_metrics
+	testing.expect(t, text_backend_has_metrics(backend))
+	metrics, ok := text_backend_metrics(backend, Font_Id(16), 16)
+	testing.expect(t, ok)
+	testing.expect_value(t, metrics, Text_Metrics{12, 4, 0, 16})
+}
+
+@(test)
+text_caret_policy_is_typographic_and_deterministic :: proc(t: ^testing.T) {
+	fallback := text_input_caret_metrics_or_fallback({}, false, 16, 20)
+	testing.expect_value(t, fallback, Text_Metrics{16, 0, 0, 20})
+	rect := text_input_caret_rect({10, 20}, 34, Text_Metrics{12, 4, 3, 19}, 1)
+	testing.expect_value(t, rect, Rect{34, 20, 1, 16})
+	blink := text_input_caret_blink(0.5, 0, 0.5, false)
+	testing.expect(t, !blink.visible && blink.animate)
+	testing.expect_value(t, blink.seconds_until_toggle, f64(0.5))
+	reduced := text_input_caret_blink(10, 0, 0.5, true)
+	testing.expect(t, reduced.visible && !reduced.animate)
+}
+
 @(test)
 test_draw_text_frame_copies_text_with_backend_font :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime

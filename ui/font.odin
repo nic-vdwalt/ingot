@@ -1,6 +1,7 @@
 // LIB-CANDIDATE: imports only core:*.
 package ui
 
+import "core:math"
 import "core:strings"
 
 
@@ -249,6 +250,43 @@ frame_font_for_size :: proc(frame: ^Ui_Frame, size: i32) -> Font_Id {
 		frame.font_memo_epoch = epoch
 	}
 	return font
+}
+
+text_metrics_valid :: proc(metrics: Text_Metrics) -> bool {
+	values := [4]f32{metrics.ascent, metrics.descent, metrics.line_gap, metrics.line_advance}
+	for value in values {
+		if math.is_nan(value) || math.is_inf(value, 0) do return false
+	}
+	return(
+		metrics.ascent > 0 &&
+		metrics.descent >= 0 &&
+		metrics.line_gap >= 0 &&
+		metrics.line_advance > 0 \
+	)
+}
+
+text_metrics_frame :: proc(
+	frame: ^Ui_Frame,
+	font: Font_Id,
+	font_size: f32,
+) -> (
+	Text_Metrics,
+	bool,
+) {
+	assert(frame != nil && frame.runtime != nil, "text_metrics_frame: invalid frame")
+	assert(font_size > 0, "text_metrics_frame: invalid size")
+	backend := frame.runtime.text_backend
+	if font == 0 || !text_backend_has_metrics(backend) do return {}, false
+	metrics, ok := text_backend_metrics(backend, font, font_size)
+	if !ok || !text_metrics_valid(metrics) do return {}, false
+	return metrics, true
+}
+
+text_metrics_for_size_frame :: proc(frame: ^Ui_Frame, font_size: i32) -> (Text_Metrics, bool) {
+	assert(frame != nil && frame.runtime != nil, "text metrics for size: invalid frame")
+	assert(font_size > 0, "text metrics for size: invalid size")
+	font := frame_font_for_size(frame, font_size)
+	return text_metrics_frame(frame, font, f32(font_size))
 }
 
 draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color: Color) {

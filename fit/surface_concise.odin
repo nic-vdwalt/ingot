@@ -36,6 +36,10 @@ Text_Line_Height :: proc(surface: ^Surface, role: Text_Role) -> i32 {
 	return Surface_Text_Line_Height(surface, role)
 }
 
+Text_Metrics_For_Size :: proc(surface: ^Surface, font_size: i32) -> (Text_Metrics, bool) {
+	return Surface_Text_Metrics(surface, font_size)
+}
+
 Text_Width :: proc(surface: ^Surface, text: string, role: Text_Role = .Body) -> i32 {
 	return Surface_Text_Width(surface, text, role)
 }

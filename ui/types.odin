@@ -30,6 +30,13 @@ rect_f32 :: proc(rect: Rect_I32) -> Rect {
 
 Font_Id :: distinct u32
 
+Text_Metrics :: struct {
+	ascent:       f32,
+	descent:      f32,
+	line_gap:     f32,
+	line_advance: f32,
+}
+
 Mouse_Button :: enum i32 {
 	LEFT,
 	RIGHT,

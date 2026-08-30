@@ -50,7 +50,9 @@ Atlas :: struct {
 	px:                    f32, // baked pixel size
 	scale:                 f32,
 	ascent:                f32, // baked px
-	line_adv:              f32, // baked px (ascent - descent + line gap)
+	descent:               f32, // positive baked px below the baseline
+	line_gap:              f32, // non-negative baked px
+	line_adv:              f32, // baked px (ascent + descent + line gap)
 	glyphs:                map[rune]Glyph,
 	glyphs_dropped:        u64,
 	cur_x, cur_y, shelf_h: i32,
@@ -170,6 +172,8 @@ context_load_font_from_memory_impl :: proc(
 	asc, desc, gap: c.int
 	tt.GetFontVMetrics(&a.info, &asc, &desc, &gap)
 	a.ascent = math.round(f32(asc) * a.scale)
+	a.descent = math.round(f32(-desc) * a.scale)
+	a.line_gap = max(math.round(f32(gap) * a.scale), 0)
 	a.line_adv = math.round(f32(asc - desc + gap) * a.scale)
 	a.glyphs = make(map[rune]Glyph)
 	a.filter = .BILINEAR
@@ -625,6 +629,41 @@ DrawTextPro :: proc(
 		spacing,
 		tint,
 	)
+}
+
+context_font_metrics_impl :: proc(
+	ctx: ^Context,
+	font: Font,
+	font_size: f32,
+) -> (
+	Font_Metrics,
+	bool,
+) {
+	assert(ctx != nil, "context_font_metrics_impl: nil context")
+	assert(_f32_is_finite(font_size), "context_font_metrics_impl: non-finite size")
+	assert(font_size > 0, "context_font_metrics_impl: non-positive size")
+	atlas := context_get_atlas(ctx, font._atlas)
+	if atlas == nil || atlas.px <= 0 do return {}, false
+	scale := font_size / atlas.px
+	metrics := Font_Metrics {
+		ascent       = atlas.ascent * scale,
+		descent      = atlas.descent * scale,
+		line_gap     = atlas.line_gap * scale,
+		line_advance = atlas.line_adv * scale,
+	}
+	if !_f32_is_finite(metrics.ascent) ||
+	   !_f32_is_finite(metrics.descent) ||
+	   !_f32_is_finite(metrics.line_gap) ||
+	   !_f32_is_finite(metrics.line_advance) {
+		return {}, false
+	}
+	if metrics.ascent <= 0 ||
+	   metrics.descent < 0 ||
+	   metrics.line_gap < 0 ||
+	   metrics.line_advance <= 0 {
+		return {}, false
+	}
+	return metrics, true
 }
 
 context_measure_text_ex :: proc(

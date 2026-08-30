@@ -10,6 +10,7 @@
 //     existing consumers; it routes through module-level selection/memo slots.
 package ui
 
+import "core:math"
 import "core:strings"
 
 // Vertical padding above the first text line inside the box. Mouse
@@ -325,12 +326,19 @@ Text_Input_State :: struct {
 	desired_col: int,
 	desired_x:   i32, // preserved caret x (px) for visual-row Up/Down
 	scroll_line: int,
+	caret_epoch: f64,
 	sel:         Input_Sel,
 	undo:        Input_Undo,
 	pills:       [dynamic]Mention_Span,
 	memo:        Input_Vlines_Memo,
 	spell_memo:  Spellcheck_Memo,
 	spell_menu:  Spell_Menu,
+}
+
+text_input_caret_wake :: proc(st: ^Text_Input_State, now: f64) {
+	assert(st != nil, "text_input_caret_wake: nil state")
+	assert(!math.is_nan(now) && !math.is_inf(now, 0), "text_input_caret_wake: invalid time")
+	st.caret_epoch = now
 }
 
 // text_input_state_destroy releases all heap state owned by a state struct.
@@ -381,31 +389,34 @@ text_input_selection_clear :: proc(st: ^Text_Input_State) {
 // phase procedures below stay under the length limit without 14-arg calls.
 @(private)
 TI_Ctx :: struct {
-	frame:       ^Ui_Frame,
-	sb:          ^strings.Builder,
-	cursor:      ^int, // nil = end-anchored legacy input (no caret model)
-	desired_col: ^int,
-	desired_x:   ^i32,
-	scroll_line: ^int,
-	pills:       ^[dynamic]Mention_Span,
-	undo:        ^Input_Undo,
-	sel:         ^Input_Sel,
-	memo:        ^Input_Vlines_Memo,
-	spell_memo:  ^Spellcheck_Memo,
-	spell_menu:  ^Spell_Menu,
-	x, y, w, h:  i32,
-	rect:        Rectangle,
-	inner_x:     i32,
-	inner_w:     i32,
-	placeholder: string,
-	masked:      bool,
-	max_bytes:   int,
-	single_line: bool,
-	submit:      Text_Input_Submit,
-	filter:      Text_Input_Filter,
-	semantics:   Text_Input_Semantics,
-	active:      bool,
-	caret:       bool, // cursor != nil
+	frame:          ^Ui_Frame,
+	sb:             ^strings.Builder,
+	cursor:         ^int, // nil = end-anchored legacy input (no caret model)
+	desired_col:    ^int,
+	desired_x:      ^i32,
+	scroll_line:    ^int,
+	caret_epoch:    ^f64,
+	owner_state:    ^Text_Input_State,
+	pills:          ^[dynamic]Mention_Span,
+	undo:           ^Input_Undo,
+	sel:            ^Input_Sel,
+	memo:           ^Input_Vlines_Memo,
+	spell_memo:     ^Spellcheck_Memo,
+	spell_menu:     ^Spell_Menu,
+	x, y, w, h:     i32,
+	rect:           Rectangle,
+	inner_x:        i32,
+	inner_w:        i32,
+	placeholder:    string,
+	masked:         bool,
+	max_bytes:      int,
+	single_line:    bool,
+	submit:         Text_Input_Submit,
+	filter:         Text_Input_Filter,
+	semantics:      Text_Input_Semantics,
+	active:         bool,
+	caret:          bool, // cursor != nil
+	caret_activity: bool,
 }
 
 // TI_View is the per-frame layout of the visible window of visual lines.
@@ -530,7 +541,16 @@ ti_run :: proc(ctx: ^TI_Ctx) -> bool {
 	// still arrives through the character queue once composition ends.
 	preedit, _ := frame_preedit(ctx.frame)
 	composing := ctx.caret && !ctx.masked && len(preedit) > 0
+	cursor_before := ctx.cursor^ if ctx.caret else 0
+	length_before := strings.builder_len(ctx.sb^)
+	undo_before := len(ctx.undo.undo) if ctx.undo != nil else 0
 	if ctx.active && !composing do entered = ti_keys(ctx)
+	caret_activity :=
+		ctx.caret &&
+		(ctx.cursor^ != cursor_before ||
+				strings.builder_len(ctx.sb^) != length_before ||
+				(ctx.undo != nil && len(ctx.undo.undo) != undo_before))
+	ctx.caret_activity = caret_activity
 	ti_draw_clipped(ctx)
 	ti_draw_spell_popup(ctx)
 	return entered
@@ -559,6 +579,8 @@ text_input_box :: proc(
 		desired_col = &st.desired_col,
 		desired_x   = &st.desired_x,
 		scroll_line = &st.scroll_line,
+		caret_epoch = &st.caret_epoch,
+		owner_state = st,
 		pills       = &st.pills if cfg.enable_pills else nil,
 		undo        = &st.undo if cfg.enable_undo else nil,
 		sel         = &st.sel,

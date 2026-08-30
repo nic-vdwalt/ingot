@@ -97,6 +97,13 @@ Font :: struct {
 	_atlas:       u32,
 }
 
+Font_Metrics :: struct {
+	ascent:       f32,
+	descent:      f32,
+	line_gap:     f32,
+	line_advance: f32,
+}
+
 // --- camera ----------------------------------------------------------------
 
 CameraProjection :: enum i32 {

@@ -5,6 +5,10 @@ Vec3 :: Vector3
 RGBA :: Color
 Rect :: Rectangle
 
+font_metrics :: proc(font: Font, font_size: f32) -> (Font_Metrics, bool) {
+	return context_font_metrics(default_context(), font, font_size)
+}
+
 measure_text :: proc(font: Font, text: cstring, font_size, spacing: f32) -> Vec2 {
 	return context_measure_text(default_context(), font, text, font_size, spacing)
 }
