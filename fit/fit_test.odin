@@ -1202,6 +1202,39 @@ fit_surface_input_focus_paint_contract_compiles :: proc(t: ^testing.T) {
 }
 
 @(test)
+fit_caret_policy_preserves_canonical_behavior :: proc(t: ^testing.T) {
+	at_epoch := Caret_Blink_Phase(5, 5, 0.5, false)
+	testing.expect(t, at_epoch.visible && at_epoch.animate)
+	testing.expect_value(t, at_epoch.seconds_until_toggle, f64(0.5))
+	before_epoch := Caret_Blink_Phase(4, 5, 0.5, false)
+	testing.expect(t, before_epoch.visible && before_epoch.animate)
+	hidden := Caret_Blink_Phase(5.5, 5, 0.5, false)
+	testing.expect(t, !hidden.visible && hidden.animate)
+	visible := Caret_Blink_Phase(6, 5, 0.5, false)
+	testing.expect(t, visible.visible && visible.animate)
+	reduced := Caret_Blink_Phase(100, 5, 0.5, true)
+	testing.expect(t, reduced.visible && !reduced.animate)
+	testing.expect_value(t, reduced.seconds_until_toggle, f64(0))
+	metrics := Text_Metrics{12, 4, 3, 19}
+	resolved := Caret_Metrics_Or_Fallback(metrics, true, 16, 20)
+	testing.expect_value(t, resolved, metrics)
+	fallback := Caret_Metrics_Or_Fallback({}, false, 16, 20)
+	testing.expect_value(t, fallback, Text_Metrics{16, 0, 0, 20})
+	rect := Caret_Rect({10, 20}, 34, metrics, 2)
+	testing.expect_value(t, rect, Float_Rect{34, 20, 2, 16})
+}
+
+@(test)
+fit_caret_surface_contract_compiles :: proc(t: ^testing.T) {
+	timestamp: proc(_: ^Surface) -> f64 = Surface_Timestamp
+	metrics: proc(_: ^Surface, _: i32) -> (Text_Metrics, bool) = Surface_Text_Metrics
+	redraw: proc(_: ^Surface, _: f64) = Request_Redraw_In
+	reduced: proc(_: ^Surface) -> bool = Surface_Reduced_Motion
+	testing.expect(t, timestamp != nil && metrics != nil)
+	testing.expect(t, redraw != nil && reduced != nil)
+}
+
+@(test)
 fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 	line_chart: proc(
 			_: ^Surface,
