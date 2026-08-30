@@ -1228,9 +1228,10 @@ fit_caret_policy_preserves_canonical_behavior :: proc(t: ^testing.T) {
 fit_caret_surface_contract_compiles :: proc(t: ^testing.T) {
 	timestamp: proc(_: ^Surface) -> f64 = Surface_Timestamp
 	metrics: proc(_: ^Surface, _: i32) -> (Text_Metrics, bool) = Surface_Text_Metrics
+	hit: proc(_: ^Surface, _: string, _: i32, _: i32) -> int = Surface_Text_Sized_Byte_At_X
 	redraw: proc(_: ^Surface, _: f64) = Request_Redraw_In
 	reduced: proc(_: ^Surface) -> bool = Surface_Reduced_Motion
-	testing.expect(t, timestamp != nil && metrics != nil)
+	testing.expect(t, timestamp != nil && metrics != nil && hit != nil)
 	testing.expect(t, redraw != nil && reduced != nil)
 }
 
