@@ -322,12 +322,7 @@ caret_metrics_or_fallback :: proc(
 
 text_input_caret_metrics_or_fallback :: caret_metrics_or_fallback
 
-caret_rect :: proc(
-	line_origin: Vec2,
-	caret_x: f32,
-	metrics: Text_Metrics,
-	width: f32,
-) -> Rect {
+caret_rect :: proc(line_origin: Vec2, caret_x: f32, metrics: Text_Metrics, width: f32) -> Rect {
 	assert(text_metrics_valid(metrics), "caret_rect: invalid metrics")
 	assert(width > 0, "caret_rect: invalid width")
 	baseline_y := line_origin.y + metrics.ascent
