@@ -64,6 +64,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF
           cmake --build "$RUNNER_TEMP/sdl-build"
           sudo cmake --install "$RUNNER_TEMP/sdl-build"
+          sudo ldconfig
           sh "$RUNNER_TEMP/odin/vendor/miniaudio/src/build_miniaudio.sh"
           sh "$RUNNER_TEMP/odin/vendor/stb/src/build_stb.sh" unix
           echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"
