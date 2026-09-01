@@ -41,6 +41,7 @@ md_heading_measure_matches_draw_size :: proc(t: ^testing.T) {
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
 	ui_frame_begin(&frame, &runtime)
 	defer ui_frame_end(&frame)
 	ctx := markdown_context(&frame)
@@ -78,6 +79,7 @@ markdown_source_y_tracks_rendered_lines :: proc(t: ^testing.T) {
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
 	ui_frame_begin(&frame, &runtime)
 	defer ui_frame_end(&frame)
 	ctx := markdown_context(&frame)
@@ -385,6 +387,7 @@ markdown_prepared_queries_share_frame_layout :: proc(t: ^testing.T) {
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
 	ui_frame_begin(&frame, &runtime)
 	defer ui_frame_end(&frame)
 	ctx := markdown_context(&frame)
@@ -406,6 +409,7 @@ markdown_prepared_matches_legacy_queries :: proc(t: ^testing.T) {
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
 	ui_frame_begin(&frame, &runtime)
 	defer ui_frame_end(&frame)
 	ctx := markdown_context(&frame)
