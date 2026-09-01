@@ -36,7 +36,8 @@ SDL3 and pass `-define:INGOT_GFX_SDL3=true` to select the optional SDL3 host.
 - Event-driven rendering with near-zero idle work
 - Deterministic, bounded test harnesses
 
-> [!IMPORTANT] > `0.1.7` is the latest source tag for a young `0.x` API. Pin an exact revision
+> [!IMPORTANT]
+> `0.2.0` is the latest source tag for a young `0.x` API. Pin an exact revision
 > and validate every platform your application ships on.
 
 ## The experiment
@@ -58,7 +59,7 @@ through explicit imports; there is no umbrella runtime profile.
 
 ```sh
 git submodule add https://github.com/Nic-vdwalt/ingot.git libs/ingot
-git -C libs/ingot checkout 0.1.7
+git -C libs/ingot checkout 0.2.0
 odin build src -collection:ingot=libs/ingot
 ```
 
