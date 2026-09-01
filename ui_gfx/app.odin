@@ -73,6 +73,11 @@ App :: struct {
 	state:       App_State,
 }
 
+@(private)
+app_show_after_init :: proc(flags: gfx.ConfigFlags, windows: bool) -> bool {
+	return windows && .WINDOW_HIDDEN not_in flags
+}
+
 app_init :: proc(
 	app: ^App,
 	config: App_Config,
@@ -104,7 +109,9 @@ app_init_context :: proc(
 	if !gfx.context_init(gfx_context, config.width, config.height, config.title) do return false
 	if config.event_waiting do gfx.context_set_frame_strategy(gfx_context, .Event_Driven)
 	session_init_context(&app.session, gfx_context, config.session)
-	when ODIN_OS == .Windows do gfx.context_show_window(gfx_context)
+	when ODIN_OS == .Windows {
+		if app_show_after_init(config.flags, true) do gfx.context_show_window(gfx_context)
+	}
 	app.gfx_context = gfx_context
 	app.config = config
 	app_apply_frame_pacing(app)
