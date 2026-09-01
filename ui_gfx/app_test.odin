@@ -18,6 +18,13 @@ app_lifecycle_rejects_invalid_transitions :: proc(t: ^testing.T) {
 }
 
 @(test)
+app_explicit_hidden_flag_defers_windows_show :: proc(t: ^testing.T) {
+	testing.expect(t, app_show_after_init({}, true))
+	testing.expect(t, !app_show_after_init({.WINDOW_HIDDEN}, true))
+	testing.expect(t, !app_show_after_init({}, false))
+}
+
+@(test)
 app_pacing_resolves_explicit_modes :: proc(t: ^testing.T) {
 	config := App_Config {
 		target_fps = 60,
