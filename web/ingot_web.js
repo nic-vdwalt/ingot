@@ -229,7 +229,24 @@
 	// swapchain that does not match the canvas.
 	const CANVAS_DPR_MAX = 2;
 	const CANVAS_DIMENSION_MAX = 8192;
-	const CANVAS_PIXELS_MAX = 4 * 1024 * 1024;
+	// The pixel budget exists for phones, where a swapchain of 12 MB buffers
+	// is what gets the tab killed. On a desktop it is the wrong trade: a
+	// Retina laptop in fullscreen is already 5.6 MP and a 5K iMac 14.7 MP, so
+	// a 4 MP cap engaged on every one of them and the whole frame was
+	// rendered small and stretched back up - the blur that made the demos
+	// look worse than the native build. Coarse pointer is the cheapest proxy
+	// for "memory-constrained touch device" that every browser exposes.
+	const CANVAS_PIXELS_MAX_COARSE = 4 * 1024 * 1024;
+	const CANVAS_PIXELS_MAX_FINE = 16 * 1024 * 1024;
+	// How many CSS pixels fitCanvas may shave off the box to find a size
+	// whose product with the ratio is a whole device pixel. 1.25 needs a
+	// multiple of 4, 1.5 an even number; 16 covers every ratio browsers
+	// report in practice and bounds the loop.
+	const CANVAS_SNAP_STEPS_MAX = 16;
+	// Scale the pixel budget applied on top of canvasDpr(), 1 when it did
+	// not engage. Reported to the engine so fonts rasterise at the size
+	// they are actually drawn at, rather than at dpr and then minified.
+	let canvasCapScale = 1;
 
 	function canvasDpr() {
 		const dpr = Number(window.devicePixelRatio);
@@ -237,23 +254,78 @@
 		return Math.min(dpr, CANVAS_DPR_MAX);
 	}
 
+	// The ratio between the backing store and the CSS box after every cap,
+	// which is the only number that keeps gfx's swapchain and font atlas in
+	// agreement with what the compositor puts on screen.
+	function canvasEffectiveDpr() {
+		return canvasDpr() * canvasCapScale;
+	}
+
+	function canvasPixelsMax() {
+		if (typeof window.matchMedia === "function") {
+			const coarse = window.matchMedia("(pointer: coarse)");
+			if (coarse && coarse.matches) return CANVAS_PIXELS_MAX_COARSE;
+		}
+		return CANVAS_PIXELS_MAX_FINE;
+	}
+
+	// Largest whole CSS size not above `value` whose product with `dpr` is a
+	// whole number of device pixels. A fractional product cannot be honoured
+	// by a bitmap, and rounding it leaves the browser resampling every frame
+	// by a fraction of a pixel, which is exactly what reads as blur.
+	function snapCssDimension(value, dpr) {
+		if (!Number.isFinite(value) || value < 1) return 1;
+		const floored = Math.floor(value);
+		for (let step = 0; step <= CANVAS_SNAP_STEPS_MAX; step += 1) {
+			const candidate = floored - step;
+			if (candidate < 1) break;
+			const pixels = candidate * dpr;
+			if (Math.abs(pixels - Math.round(pixels)) < 1e-6) return candidate;
+		}
+		return Math.max(1, floored);
+	}
+
+	// Content box of the canvas. clientWidth excludes a CSS border, which
+	// getBoundingClientRect includes; a bitmap sized to the border box paints
+	// two pixels wider than the area it is drawn into. The node DOM stub only
+	// offers the rect, so fall back to it there.
+	function canvasContentBox(c) {
+		const clientW = Number(c.clientWidth);
+		const clientH = Number(c.clientHeight);
+		if (clientW > 0 && clientH > 0) return { width: clientW, height: clientH };
+		const rect = c.getBoundingClientRect();
+		return { width: rect.width, height: rect.height };
+	}
+
 	function fitCanvas() {
 		const c = document.getElementById(CANVAS_ID);
 		if (!c) return;
 		const dpr = canvasDpr();
-		const rect = c.getBoundingClientRect();
-		const dimension = (value) => Number.isFinite(value)
-			? Math.min(CANVAS_DIMENSION_MAX, Math.max(1, Math.round(value * dpr)))
-			: 1;
-		let w = dimension(rect.width);
-		let h = dimension(rect.height);
-		if (w * h > CANVAS_PIXELS_MAX) {
-			const scale = Math.sqrt(CANVAS_PIXELS_MAX / (w * h));
+		// Release the pin from the previous fit before measuring, otherwise
+		// the canvas can never grow back after a shrink.
+		c.style.width = "";
+		c.style.height = "";
+		const box = canvasContentBox(c);
+		const cssW = snapCssDimension(box.width, dpr);
+		const cssH = snapCssDimension(box.height, dpr);
+		let w = Math.min(CANVAS_DIMENSION_MAX, Math.max(1, Math.round(cssW * dpr)));
+		let h = Math.min(CANVAS_DIMENSION_MAX, Math.max(1, Math.round(cssH * dpr)));
+		const budget = canvasPixelsMax();
+		canvasCapScale = 1;
+		if (w * h > budget) {
+			const scale = Math.sqrt(budget / (w * h));
 			w = Math.max(1, Math.floor(w * scale));
 			h = Math.max(1, Math.floor(h * scale));
+			canvasCapScale = Math.min(w / (cssW * dpr), h / (cssH * dpr));
 		}
 		if (c.width !== w) c.width = w;
 		if (c.height !== h) c.height = h;
+		// Pin the element to the snapped CSS size so it covers exactly the
+		// device pixels the bitmap has. The slack (under one CSS pixel per
+		// axis) shows the stage background, which the demo pages colour to
+		// match.
+		c.style.width = `${cssW}px`;
+		c.style.height = `${cssH}px`;
 	}
 
 	function semanticForm(formId) {
@@ -516,13 +588,16 @@
 	function ingotImports() {
 		return {
 			ingot_perf_now: () => performance.now(),
+			// Logical size must be the same content box fitCanvas sized the
+			// bitmap from, or the engine lays out against a border it cannot
+			// paint into.
 			ingot_canvas_css_width: () => {
 				const c = document.getElementById(CANVAS_ID);
-				return c ? c.getBoundingClientRect().width : 0;
+				return c ? canvasContentBox(c).width : 0;
 			},
 			ingot_canvas_css_height: () => {
 				const c = document.getElementById(CANVAS_ID);
-				return c ? c.getBoundingClientRect().height : 0;
+				return c ? canvasContentBox(c).height : 0;
 			},
 			ingot_canvas_pixel_width: () => {
 				const c = document.getElementById(CANVAS_ID);
@@ -532,7 +607,7 @@
 				const c = document.getElementById(CANVAS_ID);
 				return c ? c.height : 0;
 			},
-			ingot_device_pixel_ratio: () => canvasDpr(),
+			ingot_device_pixel_ratio: () => canvasEffectiveDpr(),
 			ingot_set_cursor: (cur) => {
 				const c = document.getElementById(CANVAS_ID);
 				if (c) c.style.cursor = CURSORS[cur] || "default";
@@ -1054,7 +1129,8 @@
 				const c = document.getElementById(CANVAS_ID);
 				if (!c) return null;
 				const mib = (c.width * c.height * 4) / (1024 * 1024);
-				return `${c.width}x${c.height}@${canvasDpr()}=${mib.toFixed(1)}MiB`;
+				const scale = canvasEffectiveDpr().toFixed(3);
+				return `${c.width}x${c.height}@${scale}=${mib.toFixed(1)}MiB`;
 			});
 			// Chrome (and CriOS) expose the JS heap; Safari does not, so this
 			// probe simply reports nothing there rather than guessing.
