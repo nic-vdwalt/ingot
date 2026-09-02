@@ -112,6 +112,43 @@ workspace_path_registry :: proc(t: ^testing.T) {
 	testing.expect(t, !workspace_has_path_with(files, ""))
 }
 
+workspace_reference_test_resolver :: proc(
+	reference: string,
+	files: []string,
+	resolver_context: string,
+) -> bool {
+	return(
+		reference == "alias/src/main.odin:42" &&
+		len(files) == 1 &&
+		files[0] == "src/main.odin" &&
+		resolver_context == "/workspace" \
+	)
+}
+
+@(test)
+workspace_reference_resolver_is_authoritative_when_present :: proc(t: ^testing.T) {
+	files := []string{"src/main.odin"}
+	testing.expect(
+		t,
+		workspace_reference_resolves_with(
+			files,
+			"alias/src/main.odin:42",
+			workspace_reference_test_resolver,
+			"/workspace",
+		),
+	)
+	testing.expect(
+		t,
+		!workspace_reference_resolves_with(
+			files,
+			"src/main.odin",
+			workspace_reference_test_resolver,
+			"/workspace",
+		),
+	)
+	testing.expect(t, workspace_reference_resolves_with(files, "src/main.odin"))
+}
+
 @(test)
 mention_matching_prefers_names_and_handles_separators :: proc(t: ^testing.T) {
 	testing.expect_value(

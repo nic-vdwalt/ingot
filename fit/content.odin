@@ -2,6 +2,8 @@ package fit
 
 import "ingot:ui"
 
+Markdown_Reference_Resolver :: ui.Markdown_Reference_Resolver
+
 Markdown_Context :: struct {
 	inner:       ui.Markdown_Context,
 	cull_top:    i32,
@@ -42,9 +44,16 @@ Text_Span :: struct {
 Markdown_Context_Create :: proc(
 	surface: ^Surface,
 	workspace_files: []string = nil,
+	reference_resolver: Markdown_Reference_Resolver = nil,
+	reference_resolver_context: string = "",
 ) -> Markdown_Context {
 	u := surface_ui(surface)
-	inner := ui.markdown_context(u.frame, workspace_files)
+	inner := ui.markdown_context(
+		u.frame,
+		workspace_files,
+		reference_resolver = reference_resolver,
+		reference_resolver_context = reference_resolver_context,
+	)
 	return {inner = inner, cull_top = inner.cull_top, cull_bottom = inner.cull_bottom}
 }
 

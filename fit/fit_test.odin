@@ -1254,6 +1254,13 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 		) -> int =
 		Surface_Bar_Chart
 	markdown: proc(_: ^Surface, _: Rect, _: string, _: Color) -> Markdown_Result = Surface_Markdown
+	markdown_context: proc(
+			_: ^Surface,
+			_: []string,
+			_: Markdown_Reference_Resolver,
+			_: string,
+		) -> Markdown_Context =
+		Markdown_Context_Create
 	markdown_prepare: proc(_: ^Markdown_Context, _: i32, _: string) -> Markdown_Prepared =
 		Markdown_Prepare
 	markdown_measure: proc(_: ^Markdown_Context, _: ^Markdown_Prepared, _: ^i32) -> i32 =

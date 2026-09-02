@@ -26,12 +26,14 @@ Markdown_Prepared :: struct {
 }
 
 Markdown_Context :: struct {
-	frame:           ^Ui_Frame,
-	workspace_files: []string,
-	document:        Widget_Id,
-	link_focus:      ^int,
-	cull_top:        i32,
-	cull_bottom:     i32,
+	frame:                      ^Ui_Frame,
+	workspace_files:            []string,
+	reference_resolver:         Markdown_Reference_Resolver,
+	reference_resolver_context: string,
+	document:                   Widget_Id,
+	link_focus:                 ^int,
+	cull_top:                   i32,
+	cull_bottom:                i32,
 	// Link under the pointer this frame, filled in during the draw pass.
 	//
 	// Recorded while drawing rather than found by a second traversal: the draw
@@ -41,11 +43,11 @@ Markdown_Context :: struct {
 	// Empty when the pointer is over no link. Borrowed from the text the
 	// caller passed to markdown_draw, so it stays valid exactly as long as
 	// that text does.
-	hovered_link:    string,
+	hovered_link:               string,
 	// Whether the pointer was pressed on that link this frame. This package
 	// imports only core:*, so it cannot open a URL itself: activation is
 	// reported and the application decides what following a link means.
-	link_pressed:    bool,
+	link_pressed:               bool,
 }
 
 markdown_context :: proc(
@@ -53,6 +55,8 @@ markdown_context :: proc(
 	workspace_files: []string = nil,
 	document: Widget_Id = WIDGET_ID_NONE,
 	link_focus: ^int = nil,
+	reference_resolver: Markdown_Reference_Resolver = nil,
+	reference_resolver_context: string = "",
 ) -> Markdown_Context {
 	assert(frame != nil && frame.open, "markdown_context: invalid frame")
 	assert(
@@ -62,6 +66,8 @@ markdown_context :: proc(
 	return Markdown_Context {
 		frame = frame,
 		workspace_files = workspace_files,
+		reference_resolver = reference_resolver,
+		reference_resolver_context = reference_resolver_context,
 		document = document,
 		link_focus = link_focus,
 		cull_top = min(i32),
@@ -560,7 +566,12 @@ draw_markdown_span_code :: proc(
 ) {
 	assert(ctx != nil, "draw_markdown_span_code: nil ctx")
 	assert(span != nil, "draw_markdown_span_code: nil span")
-	if workspace_has_path_with(ctx.workspace_files, span.text) {
+	if workspace_reference_resolves_with(
+		ctx.workspace_files,
+		span.text,
+		ctx.reference_resolver,
+		ctx.reference_resolver_context,
+	) {
 		draw_markdown_span_chip(ctx, text, x, y)
 		return
 	}
@@ -696,7 +707,23 @@ draw_markdown_span_style :: proc(
 	assert(ctx != nil, "draw_markdown_span_style: nil ctx")
 	assert(span != nil, "draw_markdown_span_style: nil span")
 	if span.pill {
-		draw_markdown_span_chip(ctx, text, x, y)
+		if workspace_reference_resolves_with(
+			ctx.workspace_files,
+			span.text,
+			ctx.reference_resolver,
+			ctx.reference_resolver_context,
+		) {
+			draw_markdown_span_chip(ctx, text, x, y)
+		} else {
+			draw_text_frame(
+				ctx.frame,
+				text,
+				x,
+				y,
+				ui_frame_metrics(ctx.frame).FONT_SIZE_BODY,
+				base_color,
+			)
+		}
 	} else if span.code {
 		draw_markdown_span_code(ctx, span, text, x, y)
 	} else {

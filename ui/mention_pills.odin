@@ -124,6 +124,12 @@ tagged_option_row :: proc(frame: ^Ui_Frame, config: Tagged_Option_Config) -> Tag
 
 // --- Markdown file-pill context ---------------------------------------------
 
+Markdown_Reference_Resolver :: #type proc(
+	reference: string,
+	workspace_files: []string,
+	resolver_context: string,
+) -> bool
+
 workspace_reference_path :: proc(reference: string) -> string {
 	if len(reference) == 0 || len(reference) > 256 do return reference
 	colon := strings.last_index_byte(reference, ':')
@@ -166,6 +172,16 @@ workspace_has_path_with :: proc(files: []string, rel: string) -> bool {
 		if path == path_reference || path == directory do return true
 	}
 	return false
+}
+
+workspace_reference_resolves_with :: proc(
+	files: []string,
+	reference: string,
+	resolver: Markdown_Reference_Resolver = nil,
+	resolver_context: string = "",
+) -> bool {
+	if resolver != nil do return resolver(reference, files, resolver_context)
+	return workspace_has_path_with(files, reference)
 }
 
 // --- Range maintenance (composer) -------------------------------------------
