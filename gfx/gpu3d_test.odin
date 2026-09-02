@@ -643,7 +643,7 @@ test_gpu_3d_shader_pool_bounds :: proc(t: ^testing.T) {
 test_gpu_3d_uniforms_layout_locked :: proc(t: ^testing.T) {
 	// The Odin structs are copied raw into the uniform stream and read back
 	// through the WGSL views, so their sizes are load-bearing contracts.
-	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 512, "uniforms smaller than extended WGSL view")
+	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 544, "uniforms smaller than extended WGSL view")
 	testing.expect_value(t, size_of(Gpu_3D_Uniforms) % 16, 0)
 	testing.expect_value(t, size_of(Gpu_3D_Vertex), 36)
 	testing.expect_value(t, size_of(Matrix), 64)
@@ -700,6 +700,22 @@ test_gpu_3d_default_light_matches_legacy_shader :: proc(t: ^testing.T) {
 	testing.expect_value(t, GPU_3D_DEFAULT_LIGHT.direction, Vector3{0.4, 0.8, 0.3})
 	testing.expect_value(t, GPU_3D_DEFAULT_LIGHT.ambient, f32(0.25))
 	testing.expect_value(t, GPU_3D_DEFAULT_LIGHT.diffuse, f32(0.75))
+	testing.expect_value(t, GPU_3D_DEFAULT_SECONDARY_LIGHT.ambient, f32(0))
+	testing.expect_value(t, GPU_3D_DEFAULT_SECONDARY_LIGHT.diffuse, f32(0))
+}
+
+@(test)
+test_gpu_3d_secondary_light_is_normalized_and_packed :: proc(t: ^testing.T) {
+	pass := Gpu_3D_Pass {
+		light = GPU_3D_DEFAULT_LIGHT,
+	}
+	set_gpu_3d_secondary_light(&pass, {direction = {0, 0, 10}, ambient = -1, diffuse = 0.04})
+	testing.expect_value(t, pass.secondary_light.direction, Vector3{0, 0, 1})
+	testing.expect_value(t, pass.secondary_light.ambient, f32(0))
+	testing.expect_value(t, pass.secondary_light.diffuse, f32(0.04))
+	uniforms := _gpu_3d_uniforms(&pass, {}, Matrix(1), false, false, false)
+	testing.expect_value(t, uniforms.secondary_light_direction, [4]f32{0, 0, 1, 0})
+	testing.expect_value(t, uniforms.secondary_light_params, [4]f32{0, 0.04, 0, 0})
 }
 
 @(test)
