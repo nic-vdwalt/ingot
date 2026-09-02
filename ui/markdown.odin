@@ -29,7 +29,8 @@ Markdown_Context :: struct {
 	frame:                      ^Ui_Frame,
 	workspace_files:            []string,
 	reference_resolver:         Markdown_Reference_Resolver,
-	reference_resolver_context: string,
+	reference_resolver_context: rawptr,
+	reference_cache:            map[string]bool,
 	document:                   Widget_Id,
 	link_focus:                 ^int,
 	cull_top:                   i32,
@@ -56,9 +57,10 @@ markdown_context :: proc(
 	document: Widget_Id = WIDGET_ID_NONE,
 	link_focus: ^int = nil,
 	reference_resolver: Markdown_Reference_Resolver = nil,
-	reference_resolver_context: string = "",
+	reference_resolver_context: rawptr = nil,
 ) -> Markdown_Context {
 	assert(frame != nil && frame.open, "markdown_context: invalid frame")
+	assert(len(workspace_files) >= 0, "markdown_context: invalid workspace files")
 	assert(
 		document != WIDGET_ID_NONE || link_focus == nil,
 		"markdown_context: focus requires identity",
@@ -68,6 +70,7 @@ markdown_context :: proc(
 		workspace_files = workspace_files,
 		reference_resolver = reference_resolver,
 		reference_resolver_context = reference_resolver_context,
+		reference_cache = make(map[string]bool, context.temp_allocator),
 		document = document,
 		link_focus = link_focus,
 		cull_top = min(i32),
@@ -557,6 +560,19 @@ draw_markdown_span_chip :: proc(ctx: ^Markdown_Context, text: cstring, x, y: i32
 	draw_text_frame(ctx.frame, text, x, y, font_size, ui_frame_theme(ctx.frame).fg_accent)
 }
 
+markdown_reference_resolves_cached :: proc(ctx: ^Markdown_Context, reference: string) -> bool {
+	assert(ctx != nil, "markdown reference cache: nil ctx")
+	if resolved, found := ctx.reference_cache[reference]; found do return resolved
+	resolved := workspace_reference_resolves_with(
+		ctx.workspace_files,
+		reference,
+		ctx.reference_resolver,
+		ctx.reference_resolver_context,
+	)
+	ctx.reference_cache[reference] = resolved
+	return resolved
+}
+
 @(private = "file")
 draw_markdown_span_code :: proc(
 	ctx: ^Markdown_Context,
@@ -566,12 +582,7 @@ draw_markdown_span_code :: proc(
 ) {
 	assert(ctx != nil, "draw_markdown_span_code: nil ctx")
 	assert(span != nil, "draw_markdown_span_code: nil span")
-	if workspace_reference_resolves_with(
-		ctx.workspace_files,
-		span.text,
-		ctx.reference_resolver,
-		ctx.reference_resolver_context,
-	) {
+	if markdown_reference_resolves_cached(ctx, span.text) {
 		draw_markdown_span_chip(ctx, text, x, y)
 		return
 	}
@@ -707,12 +718,7 @@ draw_markdown_span_style :: proc(
 	assert(ctx != nil, "draw_markdown_span_style: nil ctx")
 	assert(span != nil, "draw_markdown_span_style: nil span")
 	if span.pill {
-		if workspace_reference_resolves_with(
-			ctx.workspace_files,
-			span.text,
-			ctx.reference_resolver,
-			ctx.reference_resolver_context,
-		) {
+		if markdown_reference_resolves_cached(ctx, span.text) {
 			draw_markdown_span_chip(ctx, text, x, y)
 		} else {
 			draw_text_frame(

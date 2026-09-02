@@ -1258,7 +1258,7 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 			_: ^Surface,
 			_: []string,
 			_: Markdown_Reference_Resolver,
-			_: string,
+			_: rawptr,
 		) -> Markdown_Context =
 		Markdown_Context_Create
 	markdown_prepare: proc(_: ^Markdown_Context, _: i32, _: string) -> Markdown_Prepared =

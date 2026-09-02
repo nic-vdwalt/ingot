@@ -127,7 +127,7 @@ tagged_option_row :: proc(frame: ^Ui_Frame, config: Tagged_Option_Config) -> Tag
 Markdown_Reference_Resolver :: #type proc(
 	reference: string,
 	workspace_files: []string,
-	resolver_context: string,
+	resolver_context: rawptr,
 ) -> bool
 
 workspace_reference_path :: proc(reference: string) -> string {
@@ -178,7 +178,7 @@ workspace_reference_resolves_with :: proc(
 	files: []string,
 	reference: string,
 	resolver: Markdown_Reference_Resolver = nil,
-	resolver_context: string = "",
+	resolver_context: rawptr = nil,
 ) -> bool {
 	if resolver != nil do return resolver(reference, files, resolver_context)
 	return workspace_has_path_with(files, reference)

@@ -5,6 +5,32 @@ import "core:testing"
 import "core:unicode/utf8"
 import "ingot:testx"
 
+markdown_reference_counting_resolver :: proc(
+	reference: string,
+	workspace_files: []string,
+	resolver_context: rawptr,
+) -> bool {
+	_ = workspace_files
+	calls := cast(^int)resolver_context
+	calls^ += 1
+	return reference == "src/main.odin"
+}
+
+@(test)
+markdown_reference_resolution_is_memoized_per_context :: proc(t: ^testing.T) {
+	calls := 0
+	ctx := Markdown_Context {
+		reference_resolver         = markdown_reference_counting_resolver,
+		reference_resolver_context = rawptr(&calls),
+		reference_cache            = make(map[string]bool, context.temp_allocator),
+	}
+	testing.expect(t, markdown_reference_resolves_cached(&ctx, "src/main.odin"))
+	testing.expect(t, markdown_reference_resolves_cached(&ctx, "src/main.odin"))
+	testing.expect(t, !markdown_reference_resolves_cached(&ctx, "not-a-file"))
+	testing.expect(t, !markdown_reference_resolves_cached(&ctx, "not-a-file"))
+	testing.expect_value(t, calls, 2)
+}
+
 @(test)
 md_spans_examples :: proc(t: ^testing.T) {
 	spans := parse_inline_spans_with("a **bold** `code` http://x.com.")
