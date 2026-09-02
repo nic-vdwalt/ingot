@@ -49,6 +49,30 @@ function reportedSize() {
 	return [imports.ingot_canvas_pixel_width(), imports.ingot_canvas_pixel_height()];
 }
 
+function reportedCssSize() {
+	const imports = globalThis.ingotWeb.ingotImports();
+	return [imports.ingot_canvas_css_width(), imports.ingot_canvas_css_height()];
+}
+
+function pinnedCss(element) {
+	assert.match(element.style.width, /^\d+px$/);
+	assert.match(element.style.height, /^\d+px$/);
+	return [parseInt(element.style.width, 10), parseInt(element.style.height, 10)];
+}
+
+// The stub has no matchMedia, which fitCanvas treats as a fine pointer. A
+// coarse pointer is what selects the phone-sized pixel budget.
+function withCoarsePointer(coarse, body) {
+	const previous = globalThis.matchMedia;
+	globalThis.matchMedia = (query) => ({ matches: coarse && query === "(pointer: coarse)" });
+	try {
+		return body();
+	} finally {
+		if (previous === undefined) delete globalThis.matchMedia;
+		else globalThis.matchMedia = previous;
+	}
+}
+
 test("threaded binaries receive serial fallback imports", () => {
 	const imports = installed.hook.box3dWorkerImports(null);
 	assert.equal(imports.schedule(0, 0), false);
@@ -154,9 +178,127 @@ test("invalid and enormous css dimensions stay within WebGPU's portable bound", 
 		globalThis.ingotWeb.fitCanvas();
 		assert.ok(element.width >= 1 && element.width <= 8192);
 		assert.ok(element.height >= 1 && element.height <= 8192);
-		assert.ok(element.width * element.height <= 4 * 1024 * 1024);
+		assert.ok(element.width * element.height <= 16 * 1024 * 1024);
 		assert.deepEqual(reportedSize(), [element.width, element.height]);
 	}
+});
+
+test("a fractional css box is pinned to a whole device-pixel multiple", () => {
+	// An iframe sized with w-full inside an aspect-ratio box hands the canvas
+	// a size like 1097.33px. Rounding css x dpr to a bitmap and letting the
+	// browser fit it into a fractional box resamples every frame by a
+	// fraction of a pixel, which reads as blur across the whole canvas.
+	const element = canvas();
+	element.setBoundingClientRect({ width: 1097.33, height: 685.83 });
+	withRatio(2, () => {
+		globalThis.ingotWeb.fitCanvas();
+		const [cssW, cssH] = pinnedCss(element);
+		assert.equal(cssW, 1097);
+		assert.equal(cssH, 685);
+		assert.equal(element.width, cssW * 2);
+		assert.equal(element.height, cssH * 2);
+		assert.equal(reportedRatio(), 2);
+	});
+});
+
+test("fractional ratios snap the css box so the bitmap scale is exact", () => {
+	// Windows at 125% or 150% reports 1.25 / 1.5. 1097 x 1.25 is 1371.25
+	// device pixels, which no bitmap can be; the css box must give up a few
+	// pixels so the product is whole and the scale stays exactly the ratio.
+	const element = canvas();
+	for (const ratio of [1.25, 1.5]) {
+		element.setBoundingClientRect({ width: 1097.6, height: 685.2 });
+		withRatio(ratio, () => {
+			globalThis.ingotWeb.fitCanvas();
+			const [cssW, cssH] = pinnedCss(element);
+			assert.ok(cssW <= 1097 && cssW > 1097 - 16);
+			assert.ok(cssH <= 685 && cssH > 685 - 16);
+			assert.equal(element.width / cssW, ratio);
+			assert.equal(element.height / cssH, ratio);
+			assert.equal(reportedRatio(), ratio);
+		});
+	}
+});
+
+test("the pinned css box is what the engine lays out against", () => {
+	// gfx rounds the css size to its logical size and computes scale as
+	// framebuffer / logical. If the reported css size were the unpinned
+	// fractional box the scale would drift from the ratio by a fraction.
+	const element = canvas();
+	element.setBoundingClientRect({ width: 1097.33, height: 685.83 });
+	withRatio(2, () => {
+		globalThis.ingotWeb.fitCanvas();
+		// The stub rect does not follow style; emulate a live layout by
+		// applying the pin the way a browser would.
+		const [cssW, cssH] = pinnedCss(element);
+		element.setBoundingClientRect({ width: cssW, height: cssH });
+		assert.deepEqual(reportedCssSize(), [cssW, cssH]);
+		assert.deepEqual(reportedSize(), [cssW * 2, cssH * 2]);
+	});
+});
+
+test("the engine reads the effective ratio when the pixel budget engages", () => {
+	// The invariant this file exists for, on the capped branch: whatever
+	// scale the backing store ended up at is what fonts must rasterise at,
+	// otherwise glyphs are drawn at dpr and then minified into the smaller
+	// bitmap.
+	const element = canvas();
+	element.setBoundingClientRect({ width: 4000, height: 2250 });
+	withRatio(2, () => {
+		globalThis.ingotWeb.fitCanvas();
+		const [cssW, cssH] = pinnedCss(element);
+		assert.ok(element.width * element.height <= 16 * 1024 * 1024);
+		assert.ok(element.width < cssW * 2, "budget should have engaged");
+		const ratio = reportedRatio();
+		assert.ok(ratio < 2);
+		assert.ok(Math.abs(ratio - element.width / cssW) < 0.01);
+		assert.ok(Math.abs(ratio - element.height / cssH) < 0.01);
+	});
+	// And the cap releases: the next uncapped fit reports the plain ratio.
+	element.setBoundingClientRect({ width: 1200, height: 800 });
+	withRatio(2, () => {
+		globalThis.ingotWeb.fitCanvas();
+		assert.equal(reportedRatio(), 2);
+	});
+});
+
+test("a retina desktop in fullscreen is not squeezed into the phone budget", () => {
+	// 1728x1117 at dpr 2 is 7.7 MP. Under the phone budget that rendered at
+	// 0.73 scale and was stretched back up on every MacBook.
+	const element = canvas();
+	element.setBoundingClientRect({ width: 1728, height: 1117 });
+	withRatio(2, () => {
+		withCoarsePointer(false, () => globalThis.ingotWeb.fitCanvas());
+		assert.equal(element.width, 3456);
+		assert.equal(element.height, 2234);
+		assert.equal(reportedRatio(), 2);
+	});
+});
+
+test("a coarse pointer keeps the phone pixel budget", () => {
+	// A tablet at the same css size must still be capped: the budget exists
+	// because its swapchain buffers are what get the tab killed.
+	const element = canvas();
+	element.setBoundingClientRect({ width: 1728, height: 1117 });
+	withRatio(2, () => {
+		withCoarsePointer(true, () => globalThis.ingotWeb.fitCanvas());
+		assert.ok(element.width * element.height <= 4 * 1024 * 1024);
+		assert.ok(element.width < 3456);
+		assert.ok(reportedRatio() < 2);
+	});
+});
+
+test("a shrunk pin does not stop the canvas growing back", () => {
+	// The pin is an inline style; if it were measured on the next fit the
+	// canvas could only ever get smaller.
+	const element = canvas();
+	element.setBoundingClientRect({ width: 600, height: 400 });
+	withRatio(2, () => globalThis.ingotWeb.fitCanvas());
+	assert.equal(element.width, 1200);
+	element.setBoundingClientRect({ width: 1200, height: 800 });
+	withRatio(2, () => globalThis.ingotWeb.fitCanvas());
+	assert.equal(element.width, 2400);
+	assert.deepEqual(pinnedCss(element), [1200, 800]);
 });
 
 test("the engine reads the validated backing store during viewport transitions", () => {
