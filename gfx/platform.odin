@@ -12,6 +12,17 @@ package gfx
 INGOT_GFX_SDL3 :: #config(INGOT_GFX_SDL3, false)
 #assert(ODIN_OS != .JS || !INGOT_GFX_SDL3)
 
+ACTIVATION_RETRY_LIMIT :: u8(3)
+
+@(private)
+_activation_retry_advance :: proc(pending: u8, focused: bool) -> (next: u8, retry: bool) {
+	assert(pending <= ACTIVATION_RETRY_LIMIT, "activation retry count out of range")
+	if focused || pending == 0 do return 0, false
+	next = pending - 1
+	assert(next < pending, "activation retry count did not decrease")
+	return next, true
+}
+
 @(private)
 _window_wants_initial_focus :: proc(flags: ConfigFlags) -> bool {
 	return .WINDOW_UNFOCUSED not_in flags

@@ -7,6 +7,11 @@ _platform_activate_window :: proc(ctx: ^Context) {
 }
 
 @(private)
+_platform_activation_poll :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_platform_activation_poll: nil context")
+}
+
+@(private)
 _platform_native_window_focus :: proc(ctx: ^Context) -> (focused, known: bool) {
 	_ = ctx
 	return false, false

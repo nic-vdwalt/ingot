@@ -17,6 +17,11 @@ _platform_activate_window :: proc(ctx: ^Context) {
 }
 
 @(private)
+_platform_activation_poll :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_platform_activation_poll: nil context")
+}
+
+@(private)
 _platform_native_window_focus :: proc(ctx: ^Context) -> (focused, known: bool) {
 	if ctx == nil || ctx.win == nil do return false, false
 	hwnd := win32.HWND(context_get_window_handle(ctx))

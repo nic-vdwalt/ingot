@@ -10,9 +10,9 @@ Focus_NS_Window :: struct {
 	using _: intrinsics.objc_object,
 }
 
-@(private)
-_platform_activate_window :: proc(ctx: ^Context) {
-	assert(ctx != nil, "_platform_activate_window: nil context")
+@(private = "file")
+_darwin_activate_window :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_darwin_activate_window: nil context")
 	window := cast(^Focus_NS_Window)context_get_window_handle(ctx)
 	if window == nil do return
 	application := NS.Application_sharedApplication()
@@ -20,6 +20,24 @@ _platform_activate_window :: proc(ctx: ^Context) {
 	_ = NS.Application_setActivationPolicy(application, .Regular)
 	NS.Application_activateIgnoringOtherApps(application, true)
 	intrinsics.objc_send(nil, window, "makeKeyAndOrderFront:", rawptr(nil))
+}
+
+@(private)
+_platform_activate_window :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_platform_activate_window: nil context")
+	ctx.activation_retries_pending = ACTIVATION_RETRY_LIMIT
+	_darwin_activate_window(ctx)
+	assert(ctx.activation_retries_pending == ACTIVATION_RETRY_LIMIT)
+}
+
+@(private)
+_platform_activation_poll :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_platform_activation_poll: nil context")
+	focused, known := _platform_native_window_focus(ctx)
+	next, retry := _activation_retry_advance(ctx.activation_retries_pending, known && focused)
+	ctx.activation_retries_pending = next
+	if retry do _darwin_activate_window(ctx)
+	assert(ctx.activation_retries_pending <= ACTIVATION_RETRY_LIMIT)
 }
 
 @(private)
