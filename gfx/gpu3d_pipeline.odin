@@ -145,6 +145,10 @@ GPU_3D_DEFAULT_LIGHT :: Gpu_3D_Light {
 	diffuse   = 0.75,
 }
 
+GPU_3D_DEFAULT_SECONDARY_LIGHT :: Gpu_3D_Light {
+	direction = {0.4, 0.8, 0.3},
+}
+
 Gpu_3D_Load_Action :: enum {
 	Clear,
 	Preserve,
@@ -158,6 +162,7 @@ Gpu_3D_Pass :: struct {
 	target:                    ^Gpu_3D_Target,
 	view_projection:           Matrix,
 	light:                     Gpu_3D_Light,
+	secondary_light:           Gpu_3D_Light,
 	// World-space camera eye fed to shaders for view-dependent shading.
 	// begin_gpu_3d fills it from the camera; begin_gpu_3d_pro supplies a
 	// synthetic camera, so callers wanting meaningful view-dependent
@@ -216,11 +221,13 @@ Gpu_3D_Uniforms :: struct {
 	custom_params_15: [4]f32,
 	custom_params_16: [4]f32,
 	custom_params_17: [4]f32,
-	custom_params_18: [4]f32,
-	custom_params_19: [4]f32,
-	clip_plane:       [4]f32,
-	clip_enabled:     u32,
-	clip_padding:     [3]u32,
+	custom_params_18:          [4]f32,
+	custom_params_19:          [4]f32,
+	clip_plane:               [4]f32,
+	clip_enabled:             u32,
+	clip_padding:             [3]u32,
+	secondary_light_direction: [4]f32,
+	secondary_light_params:    [4]f32,
 }
 
 // Per-instance model transforms for draw_gpu_mesh_instanced, read by the
@@ -232,13 +239,12 @@ Gpu_3D_Instance_Uniforms :: struct {
 }
 
 // The dynamic-offset uniform bind group declares minBindingSize =
-// size_of(Gpu_3D_Uniforms). The WGSL view is two matrices, nine vec4 values,
-// and one 16-byte u32 block; Odin may append tail padding
-// (matrix alignment is target-dependent), and WebGPU permits a binding
-// larger than the shader view. Lock the invariants a struct edit could
-// silently break: never smaller than the shader view, always 16-byte
-// aligned as dynamic offsets require.
-#assert(size_of(Gpu_3D_Uniforms) >= 512)
+// size_of(Gpu_3D_Uniforms). The WGSL view ends with two appended secondary-light
+// vectors; Odin may append tail padding (matrix alignment is target-dependent),
+// and WebGPU permits a binding larger than the shader view. Lock the invariants
+// a struct edit could silently break: never smaller than the shader view, always
+// 16-byte aligned as dynamic offsets require.
+#assert(size_of(Gpu_3D_Uniforms) >= 544)
 #assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
 #assert(size_of(Gpu_3D_Vertex) == 36)
 #assert(size_of(Matrix) == 64)
@@ -406,6 +412,8 @@ struct Uniforms {
     clip_plane: vec4<f32>,
     clip_enabled: u32,
     clip_padding: vec3<u32>,
+    secondary_light_direction: vec4<f32>,
+    secondary_light_params: vec4<f32>,
 };
 // Array length mirrors GPU_3D_MAX_INSTANCES_PER_DRAW.
 struct Instances {
@@ -1552,6 +1560,7 @@ context_begin_gpu_3d :: proc(
 		pass                      = pass,
 		target                    = target,
 		light                     = GPU_3D_DEFAULT_LIGHT,
+		secondary_light           = GPU_3D_DEFAULT_SECONDARY_LIGHT,
 		camera_position           = camera.position,
 		time                      = f32(context_time(ctx)),
 		generation                = resources.active_pass_generation,
