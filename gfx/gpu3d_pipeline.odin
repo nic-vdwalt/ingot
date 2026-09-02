@@ -193,39 +193,39 @@ Gpu_3D_Vertex :: struct {
 }
 
 Gpu_3D_Uniforms :: struct {
-	view_projection:  Matrix,
-	model:            Matrix,
-	color:            [4]f32,
-	color_high:       [4]f32,
-	light_direction:  [4]f32, // xyz direction toward the light, w unused
-	light_params:     [4]f32, // x ambient, y diffuse, z depth_nudge, w time seconds
-	camera_position:  [4]f32, // xyz world-space camera position, w unused
-	custom_params:    [4]f32,
-	custom_params_2:  [4]f32,
-	custom_params_3:  [4]f32,
-	custom_params_4:  [4]f32,
-	use_scalar:       u32,
-	use_texture:      u32,
-	use_normal:       u32,
-	use_roughness_ao: u32,
-	custom_params_5:  [4]f32,
-	custom_params_6:  [4]f32,
-	custom_params_7:  [4]f32,
-	custom_params_8:  [4]f32,
-	custom_params_9:  [4]f32,
-	custom_params_10: [4]f32,
-	custom_params_11: [4]f32,
-	custom_params_12: [4]f32,
-	custom_params_13: [4]f32,
-	custom_params_14: [4]f32,
-	custom_params_15: [4]f32,
-	custom_params_16: [4]f32,
-	custom_params_17: [4]f32,
+	view_projection:           Matrix,
+	model:                     Matrix,
+	color:                     [4]f32,
+	color_high:                [4]f32,
+	light_direction:           [4]f32, // xyz direction toward the light, w unused
+	light_params:              [4]f32, // x ambient, y diffuse, z depth_nudge, w time seconds
+	camera_position:           [4]f32, // xyz world-space camera position, w unused
+	custom_params:             [4]f32,
+	custom_params_2:           [4]f32,
+	custom_params_3:           [4]f32,
+	custom_params_4:           [4]f32,
+	use_scalar:                u32,
+	use_texture:               u32,
+	use_normal:                u32,
+	use_roughness_ao:          u32,
+	custom_params_5:           [4]f32,
+	custom_params_6:           [4]f32,
+	custom_params_7:           [4]f32,
+	custom_params_8:           [4]f32,
+	custom_params_9:           [4]f32,
+	custom_params_10:          [4]f32,
+	custom_params_11:          [4]f32,
+	custom_params_12:          [4]f32,
+	custom_params_13:          [4]f32,
+	custom_params_14:          [4]f32,
+	custom_params_15:          [4]f32,
+	custom_params_16:          [4]f32,
+	custom_params_17:          [4]f32,
 	custom_params_18:          [4]f32,
 	custom_params_19:          [4]f32,
-	clip_plane:               [4]f32,
-	clip_enabled:             u32,
-	clip_padding:             [3]u32,
+	clip_plane:                [4]f32,
+	clip_enabled:              u32,
+	clip_padding:              [3]u32,
 	secondary_light_direction: [4]f32,
 	secondary_light_params:    [4]f32,
 }
@@ -467,6 +467,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
         discard;
     }
     let light = normalize(u.light_direction.xyz);
+    let secondary_light = normalize(u.secondary_light_direction.xyz);
     let geometric_normal = normalize(in.normal);
     let world_dx = dpdx(in.world_position);
     let world_dy = dpdy(in.world_position);
@@ -499,10 +500,14 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     base = mix(base, base * texel, f32(u.use_texture));
     let view = normalize(u.camera_position.xyz - in.world_position);
     let halfway = normalize(view + light);
+    let secondary_halfway = normalize(view + secondary_light);
     let ndl = max(dot(normal, light), 0.0);
+    let secondary_ndl = max(dot(normal, secondary_light), 0.0);
     let ndv = max(dot(normal, view), 0.001);
     let ndh = max(dot(normal, halfway), 0.0);
+    let secondary_ndh = max(dot(normal, secondary_halfway), 0.0);
     let vdh = max(dot(view, halfway), 0.0);
+    let secondary_vdh = max(dot(view, secondary_halfway), 0.0);
     let alpha = roughness * roughness;
     let alpha2 = alpha * alpha;
     let denominator = ndh * ndh * (alpha2 - 1.0) + 1.0;
@@ -511,8 +516,19 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let visibility = ndv / (ndv * (1.0 - k) + k) * ndl / (ndl * (1.0 - k) + k);
     let fresnel = vec3<f32>(0.04) + vec3<f32>(0.96) * pow(1.0 - vdh, 5.0);
     let specular = distribution * visibility * fresnel / max(4.0 * ndv * max(ndl, 0.001), 0.001);
-    let diffuse = base.rgb * (u.light_params.x * ao + u.light_params.y * ndl);
-    let color = diffuse + specular * u.light_params.y * ndl;
+    let secondary_denominator = secondary_ndh * secondary_ndh * (alpha2 - 1.0) + 1.0;
+    let secondary_distribution = alpha2 /
+        max(3.14159265 * secondary_denominator * secondary_denominator, 0.0001);
+    let secondary_visibility = ndv / (ndv * (1.0 - k) + k) *
+        secondary_ndl / (secondary_ndl * (1.0 - k) + k);
+    let secondary_fresnel = vec3<f32>(0.04) +
+        vec3<f32>(0.96) * pow(1.0 - secondary_vdh, 5.0);
+    let secondary_specular = secondary_distribution * secondary_visibility * secondary_fresnel /
+        max(4.0 * ndv * max(secondary_ndl, 0.001), 0.001);
+    let diffuse = base.rgb * (u.light_params.x * ao + u.light_params.y * ndl +
+        u.secondary_light_params.x * ao + u.secondary_light_params.y * secondary_ndl);
+    let color = diffuse + specular * u.light_params.y * ndl +
+        secondary_specular * u.secondary_light_params.y * secondary_ndl;
     let underwater_blend = clamp(u.custom_params_5.w, 0.0, 1.0);
     let underwater_distance = length(u.camera_position.xyz - in.world_position);
     let underwater_range = mix(90.0, 24.0, clamp(u.custom_params_6.w, 0.0, 1.0));
@@ -1594,6 +1610,13 @@ set_gpu_3d_light :: proc(pass: ^Gpu_3D_Pass, light: Gpu_3D_Light) {
 	pass.light = normalized
 }
 
+set_gpu_3d_secondary_light :: proc(pass: ^Gpu_3D_Pass, light: Gpu_3D_Light) {
+	assert(pass != nil, "set_gpu_3d_secondary_light: nil pass")
+	normalized, ok := _light_normalize(light)
+	assert(ok, "set_gpu_3d_secondary_light: degenerate light direction")
+	pass.secondary_light = normalized
+}
+
 set_gpu_3d_underwater_medium :: proc(
 	pass: ^Gpu_3D_Pass,
 	absorption_blend, scattering_turbidity: [4]f32,
@@ -1910,6 +1933,7 @@ _gpu_3d_uniforms :: proc(
 	color_high := material.color_high
 	if color_high == (Color{}) do color_high = material.color
 	light := pass.light
+	secondary_light := pass.secondary_light
 	return {
 		view_projection = pass.view_projection,
 		model = transform,
@@ -1948,6 +1972,13 @@ _gpu_3d_uniforms :: proc(
 		custom_params_19 = material.custom_params_19,
 		clip_plane = pass.clip_plane,
 		clip_enabled = pass.clip_enabled,
+		secondary_light_direction = {
+			secondary_light.direction.x,
+			secondary_light.direction.y,
+			secondary_light.direction.z,
+			0,
+		},
+		secondary_light_params = {secondary_light.ambient, secondary_light.diffuse, 0, 0},
 	}
 }
 
