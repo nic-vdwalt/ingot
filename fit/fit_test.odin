@@ -1289,6 +1289,7 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 	menu_is_open: proc(_: ^Context_Menu_State) -> bool = Context_Menu_Is_Open
 	confirm_is_open: proc(_: ^Confirm_Dialog_State) -> bool = Confirm_Dialog_Is_Open
 	testing.expect(t, line_chart != nil && bar_chart != nil)
+	testing.expect(t, markdown_context != nil)
 	testing.expect(t, markdown != nil && markdown_prepare != nil && markdown_measure != nil)
 	testing.expect(
 		t,
