@@ -2,7 +2,11 @@ package fit
 
 import "ingot:ui"
 
-Markdown_Reference_Resolver :: ui.Markdown_Reference_Resolver
+Markdown_Reference_Resolver :: #type proc(
+	reference: string,
+	workspace_files: []string,
+	resolver_context: string,
+) -> bool
 
 Markdown_Context :: struct {
 	inner:       ui.Markdown_Context,
@@ -48,10 +52,11 @@ Markdown_Context_Create :: proc(
 	reference_resolver_context: string = "",
 ) -> Markdown_Context {
 	u := surface_ui(surface)
+	ui_resolver := cast(ui.Markdown_Reference_Resolver)reference_resolver
 	inner := ui.markdown_context(
 		u.frame,
 		workspace_files,
-		reference_resolver = reference_resolver,
+		reference_resolver = ui_resolver,
 		reference_resolver_context = reference_resolver_context,
 	)
 	return {inner = inner, cull_top = inner.cull_top, cull_bottom = inner.cull_bottom}
