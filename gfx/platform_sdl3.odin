@@ -241,6 +241,7 @@ when INGOT_GFX_SDL3 {
 	platform_poll_events :: proc(ctx: ^Context) {
 		assert(ctx != nil, "platform_poll_events: nil context")
 		_sdl_poll_all()
+		_platform_activation_poll(ctx)
 	}
 
 	@(private)

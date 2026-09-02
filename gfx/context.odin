@@ -181,6 +181,7 @@ Context :: struct {
 	format:                     wg.TextureFormat,
 	config:                     wg.SurfaceConfiguration,
 	config_flags:               ConfigFlags,
+	activation_retries_pending: u8,
 	// Pool sizes negotiated against the adapter's reported limits before the
 	// device was requested (limits.odin). The renderer and font atlas size
 	// themselves from this rather than from desktop constants.

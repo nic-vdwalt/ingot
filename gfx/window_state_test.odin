@@ -68,6 +68,24 @@ test_window_focus_resolution :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_window_activation_retry_policy :: proc(t: ^testing.T) {
+	pending := ACTIVATION_RETRY_LIMIT
+	for attempt in 0 ..< int(ACTIVATION_RETRY_LIMIT) {
+		next, retry := _activation_retry_advance(pending, false)
+		testing.expect(t, retry, "unfocused window retries within the fixed budget")
+		testing.expect_value(t, next, pending - 1)
+		pending = next
+		_ = attempt
+	}
+	next, retry := _activation_retry_advance(pending, false)
+	testing.expect(t, !retry, "exhausted window does not keep stealing focus")
+	testing.expect_value(t, next, u8(0))
+	next, retry = _activation_retry_advance(ACTIVATION_RETRY_LIMIT, true)
+	testing.expect(t, !retry, "focused window stops retrying immediately")
+	testing.expect_value(t, next, u8(0))
+}
+
+@(test)
 test_surface_reconfigure_policy :: proc(t: ^testing.T) {
 	testing.expect(
 		t,
