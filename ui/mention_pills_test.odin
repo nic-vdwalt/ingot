@@ -115,26 +115,29 @@ workspace_path_registry :: proc(t: ^testing.T) {
 workspace_reference_test_resolver :: proc(
 	reference: string,
 	files: []string,
-	resolver_context: string,
+	resolver_context: rawptr,
 ) -> bool {
+	workspace := cast(^string)resolver_context
 	return(
 		reference == "alias/src/main.odin:42" &&
 		len(files) == 1 &&
 		files[0] == "src/main.odin" &&
-		resolver_context == "/workspace" \
+		workspace != nil &&
+		workspace^ == "/workspace" \
 	)
 }
 
 @(test)
 workspace_reference_resolver_is_authoritative_when_present :: proc(t: ^testing.T) {
 	files := []string{"src/main.odin"}
+	workspace := "/workspace"
 	testing.expect(
 		t,
 		workspace_reference_resolves_with(
 			files,
 			"alias/src/main.odin:42",
 			workspace_reference_test_resolver,
-			"/workspace",
+			rawptr(&workspace),
 		),
 	)
 	testing.expect(
@@ -143,7 +146,7 @@ workspace_reference_resolver_is_authoritative_when_present :: proc(t: ^testing.T
 			files,
 			"src/main.odin",
 			workspace_reference_test_resolver,
-			"/workspace",
+			rawptr(&workspace),
 		),
 	)
 	testing.expect(t, workspace_reference_resolves_with(files, "src/main.odin"))

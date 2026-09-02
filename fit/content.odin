@@ -5,7 +5,7 @@ import "ingot:ui"
 Markdown_Reference_Resolver :: #type proc(
 	reference: string,
 	workspace_files: []string,
-	resolver_context: string,
+	resolver_context: rawptr,
 ) -> bool
 
 Markdown_Context :: struct {
@@ -49,7 +49,7 @@ Markdown_Context_Create :: proc(
 	surface: ^Surface,
 	workspace_files: []string = nil,
 	reference_resolver: Markdown_Reference_Resolver = nil,
-	reference_resolver_context: string = "",
+	reference_resolver_context: rawptr = nil,
 ) -> Markdown_Context {
 	u := surface_ui(surface)
 	ui_resolver := cast(ui.Markdown_Reference_Resolver)reference_resolver
