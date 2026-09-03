@@ -182,6 +182,8 @@ Context :: struct {
 	config:                     wg.SurfaceConfiguration,
 	config_flags:               ConfigFlags,
 	activation_retries_pending: u8,
+	refresh_link:               rawptr,
+	refresh_target:             rawptr,
 	// Pool sizes negotiated against the adapter's reported limits before the
 	// device was requested (limits.odin). The renderer and font atlas size
 	// themselves from this rather than from desktop constants.
@@ -677,7 +679,7 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 		alphaMode   = alpha,
 		presentMode = .Fifo,
 	}
-	wg.SurfaceConfigure(ctx.surface, &ctx.config)
+	_surface_configure(ctx)
 	when ODIN_OS != .JS do ctx.force_reconfigure = true
 
 	ctx.start_time_s = platform_now()
@@ -716,6 +718,7 @@ _close_window_context :: proc(ctx: ^Context) {
 	if ctx.initialized {
 		context_close_accessibility(ctx)
 		platform_drop_shutdown(ctx)
+		platform_refresh_shutdown(ctx)
 		_graphics_resources_destroy(ctx, &ctx.resources)
 		renderer_shutdown(&ctx.rend)
 		ensure(_submission_shutdown(&ctx.submissions), "gfx: submissions did not drain")
@@ -768,7 +771,7 @@ context_begin_drawing :: proc(ctx: ^Context) {
 		_release_surface_texture(ctx)
 		_stream_slot_abandon(&ctx.rend)
 		if ctx.fb_width > 0 && ctx.fb_height > 0 {
-			wg.SurfaceConfigure(ctx.surface, &ctx.config)
+			_surface_configure(ctx)
 		}
 		ctx.frame.has_frame = false
 		return
@@ -933,6 +936,14 @@ _release_surface_texture :: proc(ctx: ^Context) {
 }
 
 @(private)
+_surface_configure :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_surface_configure: nil context")
+	assert(ctx.surface != nil, "_surface_configure: nil surface")
+	wg.SurfaceConfigure(ctx.surface, &ctx.config)
+	platform_promote_refresh(ctx)
+}
+
+@(private)
 _surface_should_reconfigure :: proc(changed, forced: bool, fbw, fbh: i32) -> bool {
 	return (changed || forced) && fbw > 0 && fbh > 0
 }
@@ -953,7 +964,7 @@ _maybe_reconfigure :: proc(ctx: ^Context) {
 		ctx.fb_width, ctx.fb_height = fbw, fbh
 		ctx.config.width = u32(fbw)
 		ctx.config.height = u32(fbh)
-		wg.SurfaceConfigure(ctx.surface, &ctx.config)
+		_surface_configure(ctx)
 		ctx.force_reconfigure = false
 	}
 	ctx.dpi = platform_content_scale(ctx)
