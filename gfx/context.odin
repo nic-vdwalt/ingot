@@ -634,8 +634,6 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 		_close_window_context(ctx)
 		return false
 	}
-	ensure(caps.presentModeCount <= uint(max(int)))
-	fmt.eprintln("gfx: surface present modes", caps.presentModes[:caps.presentModeCount])
 	// Prefer a non-sRGB (linear UNORM) surface. raylib writes 8-bit sRGB color
 	// values straight to a UNORM framebuffer with no gamma applied; an sRGB
 	// surface re-encodes them linear->sRGB on output, washing the frame out
