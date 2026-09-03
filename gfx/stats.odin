@@ -28,6 +28,7 @@ Renderer_Stats :: struct {
 	buffer_growths:                u32,
 	pipeline_switches:             u32,
 	bind_group_switches:           u32,
+	gpu3d_scene_bind_creations:    u32,
 	render_passes:                 u32,
 	queue_submissions:             u32,
 	frame_cpu_seconds:             f64,
@@ -234,6 +235,14 @@ _stats_bind_group_switches :: proc(ctx: ^Context, count: u32) {
 	when RENDER_STATS_ENABLED {
 		assert(ctx != nil, "_stats_bind_group_switches: nil context")
 		ctx.stats_current.bind_group_switches += count
+	}
+}
+
+@(private)
+_stats_gpu3d_scene_bind_creation :: proc(ctx: ^Context) {
+	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_gpu3d_scene_bind_creation: nil context")
+		ctx.stats_current.gpu3d_scene_bind_creations += 1
 	}
 }
 
