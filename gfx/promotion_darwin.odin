@@ -93,7 +93,7 @@ when !INGOT_GFX_SDL3 {
 		}
 		rate := f32(platform_monitor_refresh_rate(ctx))
 		if rate <= 0 do rate = 120
-		range := CA_Frame_Rate_Range{minimum = 30, maximum = rate, preferred = rate}
+		range := CA_Frame_Rate_Range{minimum = 0, maximum = rate, preferred = rate}
 		intrinsics.objc_send(nil, link, "setPreferredFrameRateRange:", range)
 		run_loop := NS.RunLoop_mainRunLoop()
 		if run_loop == nil {
