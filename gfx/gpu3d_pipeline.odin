@@ -50,6 +50,7 @@ GPU_3D_PLANE_MAX_INDICES :: GPU_3D_PLANE_MAX_CELLS * GPU_3D_PLANE_MAX_CELLS * 6
 // maxUniformBufferBindingSize floor WebGPU guarantees on every adapter, and
 // large enough that per-chunk overhead amortizes to one upload and one draw.
 GPU_3D_MAX_INSTANCES_PER_DRAW :: 256
+GPU_3D_SCENE_BINDS_PER_PASS :: 64
 
 Gpu_Mesh :: struct {
 	id: u32,
@@ -154,6 +155,19 @@ Gpu_3D_Load_Action :: enum {
 	Preserve,
 }
 
+@(private)
+Gpu_3D_Scene_Bind_Key :: struct {
+	roughness_texture: u32,
+	color_texture:     u32,
+	depth_texture:     u32,
+}
+
+@(private)
+Gpu_3D_Scene_Bind_Entry :: struct {
+	key:  Gpu_3D_Scene_Bind_Key,
+	bind: wg.BindGroup,
+}
+
 Gpu_3D_Pass :: struct {
 	owner:                     ^Context,
 	epoch:                     u64,
@@ -183,6 +197,8 @@ Gpu_3D_Pass :: struct {
 	// plain draw_gpu_mesh calls reuse it so the instance binding's
 	// minBindingSize cost is paid once per pass, not once per draw.
 	identity_instances_offset: u32,
+	scene_binds:               [GPU_3D_SCENE_BINDS_PER_PASS]Gpu_3D_Scene_Bind_Entry,
+	scene_bind_count:          u32,
 }
 
 Gpu_3D_Vertex :: struct {
@@ -1865,9 +1881,18 @@ _gpu_3d_material_binds :: proc(
 }
 
 @(private)
-_gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> wg.BindGroup {
+_gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.BindGroup, bool) {
 	assert(pass != nil && pass.owner != nil, "_gpu_3d_scene_bind: nil pass")
 	resources := &pass.owner.resources.gpu_3d
+	key := Gpu_3D_Scene_Bind_Key {
+		roughness_texture = material.roughness_ao_texture.id,
+		color_texture = material.scene_color_texture.id,
+		depth_texture = material.scene_depth_texture.id,
+	}
+	for index in 0 ..< pass.scene_bind_count {
+		entry := &pass.scene_binds[index]
+		if entry.key == key do return entry.bind, true
+	}
 	roughness_view := pass.owner.rend.neutral_view
 	roughness_sampler := pass.owner.rend.neutral_sampler
 	if material.roughness_ao_texture.id != 0 {
@@ -1910,7 +1935,7 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> wg.Bin
 		{binding = 3, sampler = color_sampler},
 		{binding = 4, textureView = depth_view},
 	}
-	return wg.DeviceCreateBindGroup(
+	bind := wg.DeviceCreateBindGroup(
 		pass.owner.device,
 		&{
 			layout = resources.scene_layout,
@@ -1918,6 +1943,14 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> wg.Bin
 			entries = raw_data(entries[:]),
 		},
 	)
+	if bind == nil do return nil, false
+	_stats_gpu3d_scene_bind_creation(pass.owner)
+	if pass.scene_bind_count < GPU_3D_SCENE_BINDS_PER_PASS {
+		pass.scene_binds[pass.scene_bind_count] = {key = key, bind = bind}
+		pass.scene_bind_count += 1
+		return bind, true
+	}
+	return bind, false
 }
 
 @(private)
@@ -2024,7 +2057,7 @@ _gpu_3d_draw_indexed :: proc(
 	if pipeline == nil do return false
 	texture_bind, textured, normal_bind, normal_mapped, _, roughness_ao_mapped :=
 		_gpu_3d_material_binds(pass, material)
-	scene_bind := _gpu_3d_scene_bind(pass, material)
+	scene_bind, scene_bind_cached := _gpu_3d_scene_bind(pass, material)
 	if scene_bind == nil do return false
 	uniforms := _gpu_3d_uniforms(
 		pass,
@@ -2060,7 +2093,7 @@ _gpu_3d_draw_indexed :: proc(
 	)
 	_stats_pipeline_switch(pass.owner)
 	_stats_bind_group_switches(pass.owner, 4)
-	wg.BindGroupRelease(scene_bind)
+	if !scene_bind_cached do wg.BindGroupRelease(scene_bind)
 	return true
 }
 
@@ -2096,6 +2129,9 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	_stats_context_cpu_times(ctx, 0, 0, encode_elapsed, submit_elapsed, 0)
 	if cmd != nil do wg.CommandBufferRelease(cmd)
 	wg.CommandEncoderRelease(pass.encoder)
+	for index in 0 ..< pass.scene_bind_count {
+		if pass.scene_binds[index].bind != nil do wg.BindGroupRelease(pass.scene_binds[index].bind)
+	}
 	ctx.resources.gpu_3d.active_pass_generation = 0
 	pass^ = {}
 }
