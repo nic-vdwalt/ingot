@@ -1886,8 +1886,8 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.Bi
 	resources := &pass.owner.resources.gpu_3d
 	key := Gpu_3D_Scene_Bind_Key {
 		roughness_texture = material.roughness_ao_texture.id,
-		color_texture = material.scene_color_texture.id,
-		depth_texture = material.scene_depth_texture.id,
+		color_texture     = material.scene_color_texture.id,
+		depth_texture     = material.scene_depth_texture.id,
 	}
 	for index in 0 ..< pass.scene_bind_count {
 		entry := &pass.scene_binds[index]
@@ -1946,7 +1946,10 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.Bi
 	if bind == nil do return nil, false
 	_stats_gpu3d_scene_bind_creation(pass.owner)
 	if pass.scene_bind_count < GPU_3D_SCENE_BINDS_PER_PASS {
-		pass.scene_binds[pass.scene_bind_count] = {key = key, bind = bind}
+		pass.scene_binds[pass.scene_bind_count] = {
+			key  = key,
+			bind = bind,
+		}
 		pass.scene_bind_count += 1
 		return bind, true
 	}

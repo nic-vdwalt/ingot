@@ -15,6 +15,40 @@ import "core:testing"
 import wg "vendor:wgpu"
 
 @(test)
+gpu_3d_scene_bind_keys_include_every_scene_texture :: proc(t: ^testing.T) {
+	base := Gpu_3D_Scene_Bind_Key {
+		roughness_texture = 1,
+		color_texture     = 2,
+		depth_texture     = 3,
+	}
+	testing.expect(
+		t,
+		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 4, color_texture = 2, depth_texture = 3},
+	)
+	testing.expect(
+		t,
+		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 4, depth_texture = 3},
+	)
+	testing.expect(
+		t,
+		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 2, depth_texture = 4},
+	)
+	testing.expect(t, GPU_3D_SCENE_BINDS_PER_PASS > 0)
+}
+
+@(test)
+gpu_3d_scene_bind_cache_is_bounded :: proc(t: ^testing.T) {
+	pass: Gpu_3D_Pass
+	for index in 0 ..< GPU_3D_SCENE_BINDS_PER_PASS {
+		pass.scene_binds[index].key = {
+			roughness_texture = u32(index + 1),
+		}
+		pass.scene_bind_count += 1
+	}
+	testing.expect_value(t, pass.scene_bind_count, u32(GPU_3D_SCENE_BINDS_PER_PASS))
+}
+
+@(test)
 gpu_3d_silhouette_outline_is_depth_read_only :: proc(t: ^testing.T) {
 	policy := _gpu_3d_material_policy(.Silhouette_Outline)
 	testing.expect(t, !policy.blend)
