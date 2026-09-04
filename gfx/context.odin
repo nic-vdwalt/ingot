@@ -26,12 +26,13 @@ context_begin_gpu_commands :: proc(ctx: ^Context) -> (Gpu_Command_List, bool) {
 	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
 	if encoder == nil do return {}, false
 	return {
-		owner = ctx,
-		epoch = ctx.epoch,
-		encoder = encoder,
-		timing = _gpu_timing_encoder_begin(ctx, encoder),
-		active = true,
-	}, true
+			owner = ctx,
+			epoch = ctx.epoch,
+			encoder = encoder,
+			timing = _gpu_timing_encoder_begin(ctx, encoder),
+			active = true,
+		},
+		true
 }
 
 context_submit_gpu_commands :: proc(commands: ^Gpu_Command_List) -> bool {
