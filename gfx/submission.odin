@@ -13,11 +13,12 @@ SUBMISSION_SHUTDOWN_MAX_POLLS :: 4096
 g_submission_id_next: u64 = 1
 
 Submission_Ticket :: struct {
-	id:       u64,
-	epoch:    u64,
-	active:   bool,
-	complete: bool,
-	failed:   bool,
+	id:          u64,
+	frame_index: u64,
+	epoch:       u64,
+	active:      bool,
+	complete:    bool,
+	failed:      bool,
 }
 
 Submission_Tracker :: struct {
@@ -97,11 +98,19 @@ _submission_reserve :: proc(tracker: ^Submission_Tracker) -> u64 {
 }
 
 @(private)
-_submission_commit :: proc(tracker: ^Submission_Tracker, ticket_id: u64) -> bool {
+_submission_commit :: proc(
+	tracker: ^Submission_Tracker,
+	ticket_id: u64,
+	frame_index: u64 = 0,
+) -> bool {
 	assert(tracker != nil)
 	assert(tracker.queue != nil)
 	ticket := _submission_find(tracker, ticket_id)
 	if ticket == nil do return false
+	ticket.frame_index = frame_index
+	if frame_index > 0 {
+		_frame_delivery_submitted(tracker.owner, frame_index, platform_now())
+	}
 	wg.QueueOnSubmittedWorkDone(
 		tracker.queue,
 		{
@@ -185,6 +194,10 @@ _submission_done :: proc "c" (
 	ticket := _submission_find(tracker, id)
 	if ticket == nil || ticket.epoch != tracker.epoch do return
 	assert(ticket.id == id)
-	sync.atomic_store(&ticket.failed, status != .Success)
+	failed := status != .Success
+	if ticket.frame_index > 0 {
+		_frame_delivery_gpu_complete(tracker.owner, ticket.frame_index, platform_now(), !failed)
+	}
+	sync.atomic_store(&ticket.failed, failed)
 	sync.atomic_store(&ticket.complete, true)
 }

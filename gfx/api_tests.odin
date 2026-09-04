@@ -152,3 +152,52 @@ frame_availability_requires_open_available_frame :: proc(t: ^testing.T) {
 	frame.available = true
 	testing.expect(t, frame_available(&frame))
 }
+
+@(test)
+frame_delivery_correlates_cpu_gpu_and_presentation :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 3
+	ctx.delivery.supported = true
+	_frame_delivery_begin(ctx, 7)
+	_frame_delivery_submitted(ctx, 7, 10)
+	_frame_delivery_cpu(ctx, {frame_index = 7, frame_cpu_seconds = 0.004})
+	_frame_delivery_gpu_complete(ctx, 7, 10.006, true)
+	_frame_delivery_presented(ctx, 7, 10.008)
+	out: [1]Frame_Delivery_Timing
+	count, dropped := context_frame_delivery_drain(ctx, out[:])
+	testing.expect_value(t, count, 1)
+	testing.expect_value(t, dropped, u64(0))
+	testing.expect_value(t, out[0].frame_index, u64(7))
+	testing.expect(t, abs(out[0].gpu_complete_seconds - 0.006) < 0.000001)
+	testing.expect_value(t, out[0].renderer_cpu_seconds, f64(0.004))
+	testing.expect(t, out[0].presented_valid)
+}
+
+@(test)
+frame_delivery_is_bounded_and_counts_overflow :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 1
+	ctx.delivery.supported = true
+	for frame in 1 ..= FRAME_DELIVERY_MAX + 1 do _frame_delivery_begin(ctx, u64(frame))
+	out: [FRAME_DELIVERY_MAX]Frame_Delivery_Timing
+	_, dropped := context_frame_delivery_drain(ctx, out[:])
+	testing.expect_value(t, dropped, u64(1))
+}
+
+@(test)
+frame_delivery_rejects_reversed_completion_timestamp :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 1
+	ctx.delivery.supported = true
+	_frame_delivery_begin(ctx, 1)
+	_frame_delivery_submitted(ctx, 1, 10)
+	_frame_delivery_cpu(ctx, {frame_index = 1, frame_cpu_seconds = 0.001})
+	_frame_delivery_gpu_complete(ctx, 1, 9, true)
+	_frame_delivery_presented(ctx, 1, 11)
+	out: [1]Frame_Delivery_Timing
+	count, _ := context_frame_delivery_drain(ctx, out[:])
+	testing.expect_value(t, count, 0)
+}
