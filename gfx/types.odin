@@ -517,8 +517,15 @@ ConfigFlag :: enum i32 {
 	WINDOW_MOUSE_PASSTHROUGH = 14,
 	BORDERLESS_WINDOWED_MODE = 15,
 	INTERLACED_HINT          = 16,
+	PRESENT_IMMEDIATE        = 17,
 }
 ConfigFlags :: distinct bit_set[ConfigFlag;i32]
+
+Surface_Present_Mode :: enum u8 {
+	Fifo,
+	Immediate,
+	Other,
+}
 
 // Convenience alias used by some call sites (raylib exposes KEY_NULL sentinel).
 KEY_NULL :: KeyboardKey.KEY_NULL

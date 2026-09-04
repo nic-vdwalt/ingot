@@ -630,6 +630,16 @@ _init_window_context :: proc(ctx: ^Context, width, height: i32, title: cstring) 
 // Shared by both targets (native calls it inline from platform_start_gpu; web
 // calls it from the async device callback). Everything here is pure wgpu.
 @(private)
+_surface_present_mode :: proc(flags: ConfigFlags, supported: []wg.PresentMode) -> wg.PresentMode {
+	if .PRESENT_IMMEDIATE in flags {
+		for mode in supported {
+			if mode == .Immediate do return .Immediate
+		}
+	}
+	return .Fifo
+}
+
+@(private)
 _gpu_finish :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_gpu_finish: nil context")
 	if ctx.surface == nil || ctx.adapter == nil || ctx.device == nil || ctx.queue == nil {
@@ -684,6 +694,7 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 	}
 	ctx.composite_alpha = alpha
 	_stats_set_alpha_mode(ctx, alpha)
+	present_mode := _surface_present_mode(ctx.config_flags, caps.presentModes[:caps.presentModeCount])
 	ctx.config = wg.SurfaceConfiguration {
 		device      = ctx.device,
 		format      = ctx.format,
@@ -691,7 +702,7 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 		width       = u32(fbw),
 		height      = u32(fbh),
 		alphaMode   = alpha,
-		presentMode = .Fifo,
+		presentMode = present_mode,
 	}
 	wg.SurfaceConfigure(ctx.surface, &ctx.config)
 	when ODIN_OS != .JS do ctx.force_reconfigure = true
