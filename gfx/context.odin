@@ -701,6 +701,7 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 		// The device could not supply the stream pools even at the floor.
 		// Closing here surfaces a diagnosable state; the alternative used to
 		// be an assert, which on web traps the module and freezes the canvas.
+		_gpu_timing_shutdown(ctx)
 		_close_window_context(ctx)
 		return false
 	}

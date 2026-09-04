@@ -129,8 +129,8 @@ _gpu_timing_pair_reserve :: proc(state: ^Gpu_Timing_State) -> Gpu_Timing_Token {
 	if slot.in_flight || slot.query_count > GPU_TIMING_QUERY_COUNT - 2 do return {}
 	token := Gpu_Timing_Token {
 		query_begin = slot.query_count,
-		query_end = slot.query_count + 1,
-		valid = true,
+		query_end   = slot.query_count + 1,
+		valid       = true,
 	}
 	slot.query_count += 2
 	return token
@@ -176,11 +176,7 @@ _gpu_timing_frame_submitted :: proc(ctx: ^Context) {
 		{.Read},
 		0,
 		uint(u64(slot.query_count) * size_of(u64)),
-		{
-			mode = .AllowSpontaneos,
-			callback = _gpu_timing_map_done,
-			userdata1 = slot,
-		},
+		{mode = .AllowSpontaneos, callback = _gpu_timing_map_done, userdata1 = slot},
 	)
 }
 
@@ -216,8 +212,8 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 			if ok && slot.frame_index >= ctx.gpu_timing.latest.frame_index {
 				ctx.gpu_timing.latest = {
 					frame_index = slot.frame_index,
-					seconds = seconds,
-					valid = true,
+					seconds     = seconds,
+					valid       = true,
 				}
 			}
 		}
