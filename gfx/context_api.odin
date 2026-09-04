@@ -235,6 +235,18 @@ context_monitor_refresh_rate :: proc(ctx: ^Context) -> i32 {
 	return platform_monitor_refresh_rate(ctx)
 }
 
+context_surface_present_mode :: proc(ctx: ^Context) -> Surface_Present_Mode {
+	if ctx == nil || !context_ready(ctx) do return .Other
+	#partial switch ctx.config.presentMode {
+	case .Fifo:
+		return .Fifo
+	case .Immediate:
+		return .Immediate
+	case:
+		return .Other
+	}
+}
+
 context_set_mouse_cursor :: proc(ctx: ^Context, cursor: MouseCursor) {
 	context_set_mouse_cursor_impl(ctx, cursor)
 }

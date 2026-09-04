@@ -8,6 +8,7 @@
 package gfx
 
 import "core:testing"
+import wg "vendor:wgpu"
 
 @(test)
 test_window_initial_focus_policy :: proc(t: ^testing.T) {
@@ -101,6 +102,22 @@ test_surface_reconfigure_policy :: proc(t: ^testing.T) {
 		t,
 		!_surface_should_reconfigure(false, true, 0, 600),
 		"zero-sized framebuffer waits before reconfiguring",
+	)
+}
+
+@(test)
+test_surface_present_mode_is_explicit_and_capability_checked :: proc(t: ^testing.T) {
+	supported := [?]wg.PresentMode{.Fifo, .Immediate}
+	testing.expect_value(t, _surface_present_mode({}, supported[:]), wg.PresentMode.Fifo)
+	testing.expect_value(
+		t,
+		_surface_present_mode({.PRESENT_IMMEDIATE}, supported[:]),
+		wg.PresentMode.Immediate,
+	)
+	testing.expect_value(
+		t,
+		_surface_present_mode({.PRESENT_IMMEDIATE}, supported[:1]),
+		wg.PresentMode.Fifo,
 	)
 }
 
