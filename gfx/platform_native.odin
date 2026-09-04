@@ -80,10 +80,12 @@ when !INGOT_GFX_SDL3 {
 		glfw.FocusWindow(_context_window(ctx))
 	}
 
-	@(private)
-	platform_create_surface :: proc(ctx: ^Context, instance: wg.Instance) -> wg.Surface {
-		assert(ctx != nil, "platform_create_surface: nil context")
-		return wgglue.GetSurface(instance, _context_window(ctx))
+	when ODIN_OS != .Darwin {
+		@(private)
+		platform_create_surface :: proc(ctx: ^Context, instance: wg.Instance) -> wg.Surface {
+			assert(ctx != nil, "platform_create_surface: nil context")
+			return wgglue.GetSurface(instance, _context_window(ctx))
+		}
 	}
 
 	// platform_start_gpu acquires the adapter+device synchronously (wgpu-native

@@ -246,6 +246,7 @@ Context :: struct {
 	stats_current:              Renderer_Stats,
 	stats_latest:               Renderer_Stats,
 	gpu_timing:                 Gpu_Timing_State,
+	delivery:                   Frame_Delivery_State,
 
 	// input (input.odin)
 	inp:                        Input,
@@ -712,6 +713,7 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 	ctx.target_fps = 0
 
 	_submission_init(&ctx.submissions, ctx)
+	_frame_delivery_init(ctx)
 	_ = _gpu_timing_init(ctx)
 	if !renderer_init(ctx, &ctx.rend) {
 		// The device could not supply the stream pools even at the floor.
@@ -748,6 +750,7 @@ _close_window_context :: proc(ctx: ^Context) {
 		_graphics_resources_destroy(ctx, &ctx.resources)
 		renderer_shutdown(&ctx.rend)
 		ensure(_submission_shutdown(&ctx.submissions), "gfx: submissions did not drain")
+		_frame_delivery_shutdown(ctx)
 		_gpu_timing_shutdown(ctx)
 	}
 	if ctx.surface != nil do wg.SurfaceRelease(ctx.surface)
@@ -779,6 +782,7 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_begin_drawing: nil context")
 	_maybe_reconfigure(ctx)
 	_stats_frame_begin(ctx)
+	_frame_delivery_begin(ctx, ctx.stats_current.frame_index)
 	platform_web_input_frame_begin(ctx)
 
 	if !renderer_frame_begin(ctx, &ctx.rend) {
@@ -923,7 +927,7 @@ context_end_drawing :: proc(ctx: ^Context) {
 		if retirement != 0 && cmd != nil {
 			_gpu_timing_frame_submitted(ctx)
 			_stats_queue_submission(ctx)
-			assert(_submission_commit(&ctx.submissions, retirement))
+			assert(_submission_commit(&ctx.submissions, retirement, ctx.stats_current.frame_index))
 			if !_stream_slot_submitted(&ctx.rend, retirement) {
 				_stats_stream_retirement_failure(ctx)
 			}
@@ -949,6 +953,7 @@ context_end_drawing :: proc(ctx: ^Context) {
 
 	platform_web_input_frame_end(ctx)
 	_stats_frame_end(ctx)
+	_frame_delivery_cpu(ctx, ctx.stats_latest)
 	when ODIN_OS != .JS {
 		input_poll(ctx)
 	}
