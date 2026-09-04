@@ -69,6 +69,16 @@ renderer_stats_latest :: proc() -> Renderer_Stats {
 	return context_renderer_stats_latest(default_context())
 }
 
+renderer_gpu_frame_timing :: proc() -> Gpu_Frame_Timing {
+	return context_renderer_gpu_frame_timing(default_context())
+}
+
+context_renderer_gpu_frame_timing :: proc(ctx: ^Context) -> Gpu_Frame_Timing {
+	if ctx == nil do return {}
+	_gpu_timing_collect(ctx)
+	return ctx.gpu_timing.latest
+}
+
 context_renderer_stats_latest :: proc(ctx: ^Context) -> Renderer_Stats {
 	if ctx == nil do return {}
 	return ctx.stats_latest
@@ -141,7 +151,9 @@ context_renderer_peak_usage :: proc(ctx: ^Context) -> Peak_Usage {
 _stats_frame_begin :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {
 		assert(ctx != nil, "_stats_frame_begin: nil context")
+		_gpu_timing_collect(ctx)
 		_stats_context_frame_begin(ctx)
+		_gpu_timing_frame_begin(ctx)
 		_stats_context_frame_started(ctx)
 	}
 }

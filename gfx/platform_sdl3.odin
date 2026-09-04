@@ -161,8 +161,16 @@ when INGOT_GFX_SDL3 {
 		}
 		ctx.adapter = ares.adapter
 		ctx.budget = gpu_negotiate_budget(ares.adapter)
+		features: [1]wg.FeatureName
+		feature_count := uint(0)
+		if wg.AdapterHasFeature(ares.adapter, .TimestampQuery) {
+			features[0] = .TimestampQuery
+			feature_count = 1
+		}
 		dres: Device_Res
 		dev_desc := wg.DeviceDescriptor {
+			requiredFeatureCount = feature_count,
+			requiredFeatures = raw_data(features[:]),
 			uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error},
 		}
 		wg.AdapterRequestDevice(

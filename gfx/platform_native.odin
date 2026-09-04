@@ -114,7 +114,15 @@ when !INGOT_GFX_SDL3 {
 		// ares.adapter, not g.adapter: this leaf keeps its context reads in one
 		// place at the top rather than reaching back into the global mid-sequence.
 		ctx.budget = gpu_negotiate_budget(ares.adapter)
+		features: [1]wg.FeatureName
+		feature_count := uint(0)
+		if wg.AdapterHasFeature(ares.adapter, .TimestampQuery) {
+			features[0] = .TimestampQuery
+			feature_count = 1
+		}
 		dev_desc := wg.DeviceDescriptor {
+			requiredFeatureCount = feature_count,
+			requiredFeatures = raw_data(features[:]),
 			uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error},
 		}
 		wg.AdapterRequestDevice(
