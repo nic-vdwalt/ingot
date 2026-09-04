@@ -155,6 +155,7 @@ context_ensure_rt_pass :: proc(ctx: ^Context) {
 	view := context_texture_view(ctx, ctx.frame.rt)
 	if view == nil do return
 	ctx.frame.rt_encoder = wg.DeviceCreateCommandEncoder(ctx.device, nil)
+	ctx.frame.rt_timing = _gpu_timing_encoder_begin(ctx, ctx.frame.rt_encoder)
 	cc := ctx.frame.rt_clear
 	// Preserve the target's contents by default (raylib: BeginTextureMode does
 	// not clear). Only clear when ClearBackground was called after
@@ -193,6 +194,7 @@ context_end_texture_mode :: proc(ctx: ^Context) {
 		renderer_flush(ctx, &ctx.rend, ctx.frame.rt_pass, .Target)
 		wg.RenderPassEncoderEnd(ctx.frame.rt_pass)
 		wg.RenderPassEncoderRelease(ctx.frame.rt_pass)
+		_gpu_timing_encoder_end(ctx, ctx.frame.rt_encoder, ctx.frame.rt_timing)
 		assert(_stream_slot_upload(ctx, &ctx.rend))
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
 			ctx,
@@ -206,6 +208,7 @@ context_end_texture_mode :: proc(ctx: ^Context) {
 	}
 	ctx.frame.rt = 0
 	ctx.frame.rt_encoder = nil
+	ctx.frame.rt_timing = {}
 	ctx.frame.rt_pass = nil
 	ctx.frame.rt_pass_begun = false
 	ctx.frame.rt_depth = false

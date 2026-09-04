@@ -172,6 +172,7 @@ Gpu_3D_Pass :: struct {
 	owner:                     ^Context,
 	epoch:                     u64,
 	encoder:                   wg.CommandEncoder,
+	timing:                    Gpu_Timing_Token,
 	pass:                      wg.RenderPassEncoder,
 	target:                    ^Gpu_3D_Target,
 	view_projection:           Matrix,
@@ -744,6 +745,7 @@ context_copy_gpu_3d_target :: proc(ctx: ^Context, source, destination: ^Gpu_3D_T
 	}
 	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
 	if encoder == nil do return false
+	timing := _gpu_timing_encoder_begin(ctx, encoder)
 	extent := wg.Extent3D{u32(width), u32(height), 1}
 	color_source := wg.TexelCopyTextureInfo {
 		texture = source_color.tex,
@@ -763,6 +765,7 @@ context_copy_gpu_3d_target :: proc(ctx: ^Context, source, destination: ^Gpu_3D_T
 	}
 	wg.CommandEncoderCopyTextureToTexture(encoder, &color_source, &color_destination, &extent)
 	wg.CommandEncoderCopyTextureToTexture(encoder, &depth_source, &depth_destination, &extent)
+	_gpu_timing_encoder_end(ctx, encoder, timing)
 	command := wg.CommandEncoderFinish(encoder, nil)
 	if command == nil {
 		wg.CommandEncoderRelease(encoder)
@@ -1577,6 +1580,7 @@ context_begin_gpu_3d :: proc(
 		stencilStoreOp  = .Undefined,
 	}
 	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
+	timing := _gpu_timing_encoder_begin(ctx, encoder)
 	pass := wg.CommandEncoderBeginRenderPass(
 		encoder,
 		&{colorAttachmentCount = 1, colorAttachments = &color, depthStencilAttachment = &depth},
@@ -1589,6 +1593,7 @@ context_begin_gpu_3d :: proc(
 		owner                     = ctx,
 		epoch                     = ctx.epoch,
 		encoder                   = encoder,
+		timing                    = timing,
 		pass                      = pass,
 		target                    = target,
 		light                     = GPU_3D_DEFAULT_LIGHT,
@@ -2111,6 +2116,7 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	if !_gpu_3d_pass_current(&ctx.resources.gpu_3d, pass) do return
 	wg.RenderPassEncoderEnd(pass.pass)
 	wg.RenderPassEncoderRelease(pass.pass)
+	_gpu_timing_encoder_end(ctx, pass.encoder, pass.timing)
 	retirement := u64(0)
 	if pass.owns_stream do retirement = _submission_reserve(&ctx.submissions)
 	allow_submit := !pass.owns_stream || retirement != 0

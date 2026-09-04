@@ -13,6 +13,7 @@ Gpu_Command_List :: struct {
 	owner:   ^Context,
 	epoch:   u64,
 	encoder: wg.CommandEncoder,
+	timing:  Gpu_Timing_Token,
 	active:  bool,
 }
 
@@ -24,13 +25,20 @@ context_begin_gpu_commands :: proc(ctx: ^Context) -> (Gpu_Command_List, bool) {
 	assert(!ctx.frame.has_frame, "context_begin_gpu_commands: frame is open")
 	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
 	if encoder == nil do return {}, false
-	return {owner = ctx, epoch = ctx.epoch, encoder = encoder, active = true}, true
+	return {
+		owner = ctx,
+		epoch = ctx.epoch,
+		encoder = encoder,
+		timing = _gpu_timing_encoder_begin(ctx, encoder),
+		active = true,
+	}, true
 }
 
 context_submit_gpu_commands :: proc(commands: ^Gpu_Command_List) -> bool {
 	assert(commands != nil, "context_submit_gpu_commands: nil commands")
 	if !commands.active || commands.owner == nil do return false
 	if commands.epoch != commands.owner.epoch do return false
+	_gpu_timing_encoder_end(commands.owner, commands.encoder, commands.timing)
 	command := wg.CommandEncoderFinish(commands.encoder, nil)
 	if command == nil do return false
 	wg.QueueSubmit(commands.owner.queue, {command})
@@ -128,6 +136,7 @@ Frame_State :: struct {
 	surf_tex:               wg.SurfaceTexture,
 	view:                   wg.TextureView,
 	encoder:                wg.CommandEncoder,
+	timing:                 Gpu_Timing_Token,
 	pass:                   wg.RenderPassEncoder,
 	clear_color:            Color,
 	pass_begun:             bool,
@@ -144,6 +153,7 @@ Frame_State :: struct {
 	// submitted at EndTextureMode, instead of the swapchain pass.
 	rt:                     u32,
 	rt_encoder:             wg.CommandEncoder,
+	rt_timing:              Gpu_Timing_Token,
 	rt_pass:                wg.RenderPassEncoder,
 	rt_pass_begun:          bool,
 	rt_clear:               Color,
@@ -230,6 +240,7 @@ Context :: struct {
 	resources:                  Graphics_Resources,
 	stats_current:              Renderer_Stats,
 	stats_latest:               Renderer_Stats,
+	gpu_timing:                 Gpu_Timing_State,
 
 	// input (input.odin)
 	inp:                        Input,
@@ -685,6 +696,7 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 	ctx.target_fps = 0
 
 	_submission_init(&ctx.submissions, ctx)
+	_ = _gpu_timing_init(ctx)
 	if !renderer_init(ctx, &ctx.rend) {
 		// The device could not supply the stream pools even at the floor.
 		// Closing here surfaces a diagnosable state; the alternative used to
@@ -719,6 +731,7 @@ _close_window_context :: proc(ctx: ^Context) {
 		_graphics_resources_destroy(ctx, &ctx.resources)
 		renderer_shutdown(&ctx.rend)
 		ensure(_submission_shutdown(&ctx.submissions), "gfx: submissions did not drain")
+		_gpu_timing_shutdown(ctx)
 	}
 	if ctx.surface != nil do wg.SurfaceRelease(ctx.surface)
 	if ctx.queue != nil do wg.QueueRelease(ctx.queue)
@@ -782,6 +795,7 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	renderer_window_projection_refresh(&ctx.rend, ctx.queue, ctx.width, ctx.height)
 	ctx.frame.view = wg.TextureCreateView(ctx.frame.surf_tex.texture, nil)
 	ctx.frame.encoder = wg.DeviceCreateCommandEncoder(ctx.device, nil)
+	ctx.frame.timing = _gpu_timing_encoder_begin(ctx, ctx.frame.encoder)
 	ctx.frame.clear_color = Color{0, 0, 0, 255}
 	ctx.frame.pass_begun = false
 	ctx.frame.has_frame = true
@@ -882,18 +896,22 @@ context_end_drawing :: proc(ctx: ^Context) {
 
 		retirement := _submission_reserve(&ctx.submissions)
 		if retirement != 0 do assert(_stream_slot_upload(ctx, &ctx.rend))
+		_gpu_timing_encoder_end(ctx, ctx.frame.encoder, ctx.frame.timing)
+		_gpu_timing_frame_resolve(ctx, ctx.frame.encoder)
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
 			ctx,
 			ctx.frame.encoder,
 			retirement != 0,
 		)
 		if retirement != 0 && cmd != nil {
+			_gpu_timing_frame_submitted(ctx)
 			_stats_queue_submission(ctx)
 			assert(_submission_commit(&ctx.submissions, retirement))
 			if !_stream_slot_submitted(&ctx.rend, retirement) {
 				_stats_stream_retirement_failure(ctx)
 			}
 		} else {
+			_gpu_timing_frame_abandon(ctx)
 			if retirement != 0 do assert(_submission_rollback(&ctx.submissions, retirement))
 			_stream_slot_abandon(&ctx.rend)
 			_stats_stream_retirement_failure(ctx)
