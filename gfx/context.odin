@@ -17,8 +17,8 @@ Gpu_Command_List :: struct {
 	active:  bool,
 }
 
-context_begin_gpu_commands :: proc(ctx: ^Context) -> (Gpu_Command_List, bool) {
-	assert(ctx != nil, "context_begin_gpu_commands: nil context")
+context_begin_gpu_commands_named :: proc(ctx: ^Context, name: string) -> (Gpu_Command_List, bool) {
+	assert(ctx != nil, "context_begin_gpu_commands_named: nil context")
 	if !ctx.initialized do return {}, false
 	assert(ctx.lifecycle == .Ready, "context_begin_gpu_commands: context is not ready")
 	assert(ctx.device != nil, "context_begin_gpu_commands: initialized context requires device")
@@ -29,10 +29,14 @@ context_begin_gpu_commands :: proc(ctx: ^Context) -> (Gpu_Command_List, bool) {
 			owner = ctx,
 			epoch = ctx.epoch,
 			encoder = encoder,
-			timing = _gpu_timing_encoder_begin(ctx, encoder),
+			timing = _gpu_timing_encoder_begin(ctx, encoder, name),
 			active = true,
 		},
 		true
+}
+
+context_begin_gpu_commands :: proc(ctx: ^Context) -> (Gpu_Command_List, bool) {
+	return context_begin_gpu_commands_named(ctx, "gpu-commands")
 }
 
 context_submit_gpu_commands :: proc(commands: ^Gpu_Command_List) -> bool {
@@ -797,7 +801,7 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	renderer_window_projection_refresh(&ctx.rend, ctx.queue, ctx.width, ctx.height)
 	ctx.frame.view = wg.TextureCreateView(ctx.frame.surf_tex.texture, nil)
 	ctx.frame.encoder = wg.DeviceCreateCommandEncoder(ctx.device, nil)
-	ctx.frame.timing = _gpu_timing_encoder_begin(ctx, ctx.frame.encoder)
+	ctx.frame.timing = _gpu_timing_encoder_begin(ctx, ctx.frame.encoder, "window")
 	ctx.frame.clear_color = Color{0, 0, 0, 255}
 	ctx.frame.pass_begun = false
 	ctx.frame.has_frame = true
