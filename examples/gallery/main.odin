@@ -384,6 +384,7 @@ gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, user_data: rawptr) 
 		if res.applied {
 			stored_scale = res.ui_scale
 			apply_scale(res.ui_scale)
+			settings_open = false
 		}
 		if res.dismissed do settings_open = false
 	}

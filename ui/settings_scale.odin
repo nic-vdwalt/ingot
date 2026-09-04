@@ -57,10 +57,9 @@ settings_scale_preset_index :: proc(ui_scale: f32) -> int {
 // draw_scale_settings_panel draws the settings modal overlay and returns the
 // result of user interaction this frame. `selected` is the caller-owned
 // highlighted row; `current_scale` is the stored preference (0 = auto).
-// Applying a preset keeps the panel open so the user can preview other
-// scales; Escape (or clicking outside) dismisses - the caller closes the
-// panel on `dismissed`. Chrome, input claiming, and dismissal ride on the
-// generic modal widget (popups.odin); this proc owns only the preset rows.
+// Applying a preset, pressing Escape, or clicking outside dismisses the panel.
+// Chrome, input claiming, and dismissal ride on the generic modal widget
+// (popups.odin); this proc owns only the preset rows.
 draw_scale_settings_panel :: proc(
 	frame: ^Ui_Frame,
 	selected: ^int,
@@ -100,7 +99,11 @@ draw_scale_settings_panel :: proc(
 		frame,
 		&st,
 		"Settings",
-		{size = {modal_w, modal_h}, screen = {0, 0, screen_width, screen_height}},
+		{
+			size    = {modal_w, modal_h},
+			screen  = {0, 0, screen_width, screen_height},
+			dismiss = {.Escape, .Outside_Click},
+		},
 	)
 	modal_x := st.rect.x
 	modal_y := st.rect.y
@@ -138,7 +141,11 @@ draw_scale_settings_panel :: proc(
 	}
 	// Enter - apply the highlighted preset.
 	if is_key_pressed(frame, .ENTER) {
-		return Settings_Panel_Result{applied = true, ui_scale = presets[selected^].value}
+		return Settings_Panel_Result {
+			applied   = true,
+			ui_scale  = presets[selected^].value,
+			dismissed = true,
+		}
 	}
 	return {}
 }
@@ -205,8 +212,9 @@ settings_scale_rows :: proc(
 		// Mouse click applies this preset.
 		if hovered && is_mouse_button_released(frame, .LEFT) {
 			result = Settings_Panel_Result {
-				applied  = true,
-				ui_scale = p.value,
+				applied   = true,
+				ui_scale  = p.value,
+				dismissed = true,
 			}
 			applied = true
 		}
