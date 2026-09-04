@@ -716,8 +716,12 @@ gpu_3d_target_depth_texture :: proc(target: ^Gpu_3D_Target) -> (Texture2D, bool)
 	return target.texture.depth, true
 }
 
-context_copy_gpu_3d_target :: proc(ctx: ^Context, source, destination: ^Gpu_3D_Target) -> bool {
-	assert(ctx != nil, "context_copy_gpu_3d_target: nil context")
+context_copy_gpu_3d_target_named :: proc(
+	ctx: ^Context,
+	source, destination: ^Gpu_3D_Target,
+	name: string,
+) -> bool {
+	assert(ctx != nil, "context_copy_gpu_3d_target_named: nil context")
 	if source == nil || destination == nil do return false
 	if ctx.resources.gpu_3d.active_pass_generation != 0 do return false
 	if source.antialiasing != .None || destination.antialiasing != .None do return false
@@ -745,7 +749,7 @@ context_copy_gpu_3d_target :: proc(ctx: ^Context, source, destination: ^Gpu_3D_T
 	}
 	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
 	if encoder == nil do return false
-	timing := _gpu_timing_encoder_begin(ctx, encoder)
+	timing := _gpu_timing_encoder_begin(ctx, encoder, name)
 	extent := wg.Extent3D{u32(width), u32(height), 1}
 	color_source := wg.TexelCopyTextureInfo {
 		texture = source_color.tex,
@@ -775,6 +779,14 @@ context_copy_gpu_3d_target :: proc(ctx: ^Context, source, destination: ^Gpu_3D_T
 	wg.CommandBufferRelease(command)
 	wg.CommandEncoderRelease(encoder)
 	return true
+}
+
+context_copy_gpu_3d_target :: proc(ctx: ^Context, source, destination: ^Gpu_3D_Target) -> bool {
+	return context_copy_gpu_3d_target_named(ctx, source, destination, "gpu3d-copy")
+}
+
+copy_gpu_3d_target_named :: proc(source, destination: ^Gpu_3D_Target, name: string) -> bool {
+	return context_copy_gpu_3d_target_named(default_context(), source, destination, name)
 }
 
 copy_gpu_3d_target :: proc(source, destination: ^Gpu_3D_Target) -> bool {
@@ -1528,16 +1540,17 @@ _gpu_3d_shader_resolve :: proc(
 	return slot.module, shader.id
 }
 
-context_begin_gpu_3d :: proc(
+context_begin_gpu_3d_named :: proc(
 	ctx: ^Context,
 	target: ^Gpu_3D_Target,
 	camera: Camera3D,
-	load: Gpu_3D_Load_Action = .Clear,
+	load: Gpu_3D_Load_Action,
+	name: string,
 ) -> (
 	Gpu_3D_Pass,
 	bool,
 ) {
-	assert(ctx != nil, "context_begin_gpu_3d: nil context")
+	assert(ctx != nil, "context_begin_gpu_3d_named: nil context")
 	assert(target != nil, "context_begin_gpu_3d: nil target")
 	resources := &ctx.resources.gpu_3d
 	if resources.active_pass_generation != 0 do return {}, false
@@ -1580,7 +1593,7 @@ context_begin_gpu_3d :: proc(
 		stencilStoreOp  = .Undefined,
 	}
 	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
-	timing := _gpu_timing_encoder_begin(ctx, encoder)
+	timing := _gpu_timing_encoder_begin(ctx, encoder, name)
 	pass := wg.CommandEncoderBeginRenderPass(
 		encoder,
 		&{colorAttachmentCount = 1, colorAttachments = &color, depthStencilAttachment = &depth},
@@ -1608,6 +1621,30 @@ context_begin_gpu_3d :: proc(
 	}
 	_gpu_3d_set_camera(&result, camera)
 	return result, true
+}
+
+context_begin_gpu_3d :: proc(
+	ctx: ^Context,
+	target: ^Gpu_3D_Target,
+	camera: Camera3D,
+	load: Gpu_3D_Load_Action = .Clear,
+) -> (
+	Gpu_3D_Pass,
+	bool,
+) {
+	return context_begin_gpu_3d_named(ctx, target, camera, load, "gpu3d")
+}
+
+begin_gpu_3d_named :: proc(
+	target: ^Gpu_3D_Target,
+	camera: Camera3D,
+	load: Gpu_3D_Load_Action,
+	name: string,
+) -> (
+	Gpu_3D_Pass,
+	bool,
+) {
+	return context_begin_gpu_3d_named(default_context(), target, camera, load, name)
 }
 
 begin_gpu_3d :: proc(

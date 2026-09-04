@@ -7,9 +7,16 @@ import wg "vendor:wgpu"
 
 GPU_TIMING_FRAME_SLOTS :: 8
 GPU_TIMING_MAX_SPANS :: 64
+GPU_TIMING_MAX_GROUPS :: 16
+GPU_TIMING_LABEL_MAX :: 32
 GPU_TIMING_QUERY_COUNT :: GPU_TIMING_MAX_SPANS * 2
 GPU_TIMING_BUFFER_BYTES :: u64(GPU_TIMING_QUERY_COUNT * size_of(u64))
 GPU_TIMING_SHUTDOWN_POLLS :: 4096
+
+Gpu_Timing_Label :: struct {
+	bytes:  [GPU_TIMING_LABEL_MAX]u8,
+	length: u8,
+}
 
 Gpu_Timing_Token :: struct {
 	query_begin: u32,
@@ -23,12 +30,27 @@ Gpu_Frame_Timing :: struct {
 	valid:       bool,
 }
 
+Gpu_Timing_Group :: struct {
+	label:   Gpu_Timing_Label,
+	seconds: f64,
+	count:   u32,
+}
+
+Gpu_Frame_Timing_Detail :: struct {
+	frame_index: u64,
+	seconds:     f64,
+	groups:      [GPU_TIMING_MAX_GROUPS]Gpu_Timing_Group,
+	group_count: u32,
+	valid:       bool,
+}
+
 Gpu_Timing_Slot :: struct {
 	query_set:   wg.QuerySet,
 	resolve:     wg.Buffer,
 	readback:    wg.Buffer,
 	frame_index: u64,
 	query_count: u32,
+	labels:      [GPU_TIMING_MAX_SPANS]Gpu_Timing_Label,
 	ticks:       [GPU_TIMING_QUERY_COUNT]u64,
 	map_done:    bool,
 	map_ok:      bool,
@@ -40,6 +62,7 @@ Gpu_Timing_State :: struct {
 	active_slot:      int,
 	timestamp_period: f64,
 	latest:           Gpu_Frame_Timing,
+	latest_detail:    Gpu_Frame_Timing_Detail,
 	available:        bool,
 }
 
@@ -123,7 +146,26 @@ _gpu_timing_frame_begin :: proc(ctx: ^Context) {
 	}
 }
 
-_gpu_timing_pair_reserve :: proc(state: ^Gpu_Timing_State) -> Gpu_Timing_Token {
+_gpu_timing_label :: proc(name: string) -> Gpu_Timing_Label {
+	result: Gpu_Timing_Label
+	length := min(len(name), GPU_TIMING_LABEL_MAX)
+	if length > 0 do copy(result.bytes[:length], transmute([]u8)name[:length])
+	result.length = u8(length)
+	return result
+}
+
+_gpu_timing_label_equal :: proc(a, b: Gpu_Timing_Label) -> bool {
+	if a.length != b.length do return false
+	for index in 0 ..< int(a.length) {
+		if a.bytes[index] != b.bytes[index] do return false
+	}
+	return true
+}
+
+_gpu_timing_pair_reserve :: proc(
+	state: ^Gpu_Timing_State,
+	name: string = "gpu3d",
+) -> Gpu_Timing_Token {
 	if state == nil || !state.available do return {}
 	if state.active_slot < 0 || state.active_slot >= GPU_TIMING_FRAME_SLOTS do return {}
 	slot := &state.slots[state.active_slot]
@@ -133,13 +175,18 @@ _gpu_timing_pair_reserve :: proc(state: ^Gpu_Timing_State) -> Gpu_Timing_Token {
 		query_end   = slot.query_count + 1,
 		valid       = true,
 	}
+	slot.labels[slot.query_count / 2] = _gpu_timing_label(name)
 	slot.query_count += 2
 	return token
 }
 
-_gpu_timing_encoder_begin :: proc(ctx: ^Context, encoder: wg.CommandEncoder) -> Gpu_Timing_Token {
+_gpu_timing_encoder_begin :: proc(
+	ctx: ^Context,
+	encoder: wg.CommandEncoder,
+	name: string = "gpu3d",
+) -> Gpu_Timing_Token {
 	if ctx == nil || encoder == nil do return {}
-	token := _gpu_timing_pair_reserve(&ctx.gpu_timing)
+	token := _gpu_timing_pair_reserve(&ctx.gpu_timing, name)
 	if !token.valid do return {}
 	slot := &ctx.gpu_timing.slots[ctx.gpu_timing.active_slot]
 	wg.CommandEncoderWriteTimestamp(encoder, slot.query_set, token.query_begin)
@@ -200,22 +247,62 @@ _gpu_timing_seconds :: proc(ticks: []u64, span_count: u32, period_ns: f64) -> (f
 	return f64(total) * period_ns * 1e-9, true
 }
 
+_gpu_timing_detail :: proc(
+	ticks: []u64,
+	labels: []Gpu_Timing_Label,
+	span_count: u32,
+	period_ns: f64,
+) -> (
+	Gpu_Frame_Timing_Detail,
+	bool,
+) {
+	seconds, ok := _gpu_timing_seconds(ticks, span_count, period_ns)
+	if !ok || int(span_count) > len(labels) do return {}, false
+	result := Gpu_Frame_Timing_Detail {
+		seconds = seconds,
+		valid   = true,
+	}
+	for span in 0 ..< int(span_count) {
+		label := labels[span]
+		group_index := -1
+		for index in 0 ..< int(result.group_count) {
+			if _gpu_timing_label_equal(result.groups[index].label, label) {
+				group_index = index
+				break
+			}
+		}
+		if group_index < 0 {
+			if result.group_count >= GPU_TIMING_MAX_GROUPS do continue
+			group_index = int(result.group_count)
+			result.groups[group_index].label = label
+			result.group_count += 1
+		}
+		delta := ticks[span * 2 + 1] - ticks[span * 2]
+		result.groups[group_index].seconds += f64(delta) * period_ns * 1e-9
+		result.groups[group_index].count += 1
+	}
+	return result, true
+}
+
 _gpu_timing_collect :: proc(ctx: ^Context) {
 	if ctx == nil || !ctx.gpu_timing.available do return
 	for &slot in ctx.gpu_timing.slots {
 		if !slot.in_flight || !sync.atomic_load(&slot.map_done) do continue
 		if sync.atomic_load(&slot.map_ok) {
-			seconds, ok := _gpu_timing_seconds(
+			detail, ok := _gpu_timing_detail(
 				slot.ticks[:],
+				slot.labels[:],
 				slot.query_count / 2,
 				ctx.gpu_timing.timestamp_period,
 			)
 			if ok && slot.frame_index >= ctx.gpu_timing.latest.frame_index {
+				detail.frame_index = slot.frame_index
 				ctx.gpu_timing.latest = {
 					frame_index = slot.frame_index,
-					seconds     = seconds,
+					seconds     = detail.seconds,
 					valid       = true,
 				}
+				ctx.gpu_timing.latest_detail = detail
 			}
 		}
 		wg.BufferUnmap(slot.readback)

@@ -79,6 +79,22 @@ context_renderer_gpu_frame_timing :: proc(ctx: ^Context) -> Gpu_Frame_Timing {
 	return ctx.gpu_timing.latest
 }
 
+renderer_gpu_frame_timing_detail :: proc() -> Gpu_Frame_Timing_Detail {
+	return context_renderer_gpu_frame_timing_detail(default_context())
+}
+
+context_renderer_gpu_frame_timing_detail :: proc(ctx: ^Context) -> Gpu_Frame_Timing_Detail {
+	if ctx == nil do return {}
+	_gpu_timing_collect(ctx)
+	return ctx.gpu_timing.latest_detail
+}
+
+gpu_timing_label_string :: proc(label: ^Gpu_Timing_Label) -> string {
+	if label == nil do return ""
+	length := min(int(label.length), GPU_TIMING_LABEL_MAX)
+	return string(label.bytes[:length])
+}
+
 context_renderer_stats_latest :: proc(ctx: ^Context) -> Renderer_Stats {
 	if ctx == nil do return {}
 	return ctx.stats_latest

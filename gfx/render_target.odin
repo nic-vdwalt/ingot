@@ -155,7 +155,7 @@ context_ensure_rt_pass :: proc(ctx: ^Context) {
 	view := context_texture_view(ctx, ctx.frame.rt)
 	if view == nil do return
 	ctx.frame.rt_encoder = wg.DeviceCreateCommandEncoder(ctx.device, nil)
-	ctx.frame.rt_timing = _gpu_timing_encoder_begin(ctx, ctx.frame.rt_encoder)
+	ctx.frame.rt_timing = _gpu_timing_encoder_begin(ctx, ctx.frame.rt_encoder, "render-target")
 	cc := ctx.frame.rt_clear
 	// Preserve the target's contents by default (raylib: BeginTextureMode does
 	// not clear). Only clear when ClearBackground was called after
