@@ -3,6 +3,7 @@ package gfx
 import "core:sync"
 
 FRAME_DELIVERY_MAX :: 128
+FRAME_DELIVERY_RETIRE_LAG :: 64
 
 Frame_Delivery_Timing :: struct {
 	frame_index:            u64,
@@ -68,13 +69,16 @@ context_frame_delivery_drain :: proc(
 	defer sync.mutex_unlock(&ctx.delivery.mutex)
 	dropped = ctx.delivery.dropped
 	ctx.delivery.dropped = 0
+	latest_frame := ctx.stats_latest.frame_index
 	for &slot in ctx.delivery.slots {
 		if count >= len(out) do break
-		if !slot.active || !slot.timing.cpu_valid || !slot.gpu_done || !slot.present_done do continue
-		if slot.timing.gpu_complete_valid && slot.timing.presented_valid {
-			out[count] = slot.timing
-			count += 1
-		}
+		if !slot.active || !slot.timing.cpu_valid do continue
+		terminal := slot.gpu_done && slot.present_done
+		stale := latest_frame > slot.timing.frame_index &&
+			latest_frame - slot.timing.frame_index >= FRAME_DELIVERY_RETIRE_LAG
+		if !terminal && !stale do continue
+		out[count] = slot.timing
+		count += 1
 		slot = {}
 	}
 	return
@@ -110,7 +114,7 @@ _frame_delivery_slot :: proc(ctx: ^Context, frame_index: u64) -> ^Frame_Delivery
 
 @(private)
 _frame_delivery_begin :: proc(ctx: ^Context, frame_index: u64) {
-	if ctx == nil || !ctx.delivery.supported || frame_index == 0 do return
+	if ctx == nil || frame_index == 0 do return
 	sync.mutex_lock(&ctx.delivery.mutex)
 	defer sync.mutex_unlock(&ctx.delivery.mutex)
 	if ctx.delivery.closing do return
@@ -120,6 +124,7 @@ _frame_delivery_begin :: proc(ctx: ^Context, frame_index: u64) {
 			timing = {frame_index = frame_index},
 			epoch = ctx.epoch,
 			active = true,
+			present_done = !ctx.delivery.supported,
 		}
 		return
 	}

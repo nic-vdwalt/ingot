@@ -199,5 +199,57 @@ frame_delivery_rejects_reversed_completion_timestamp :: proc(t: ^testing.T) {
 	_frame_delivery_presented(ctx, 1, 11)
 	out: [1]Frame_Delivery_Timing
 	count, _ := context_frame_delivery_drain(ctx, out[:])
-	testing.expect_value(t, count, 0)
+	testing.expect_value(t, count, 1)
+	testing.expect(t, !out[0].gpu_complete_valid)
+	testing.expect(t, out[0].presented_valid)
+}
+
+@(test)
+frame_delivery_emits_failed_gpu_completion :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 1
+	ctx.delivery.supported = true
+	_frame_delivery_begin(ctx, 2)
+	_frame_delivery_submitted(ctx, 2, 10)
+	_frame_delivery_cpu(ctx, {frame_index = 2, frame_cpu_seconds = 0.001})
+	_frame_delivery_gpu_complete(ctx, 2, 11, false)
+	_frame_delivery_presented(ctx, 2, 12)
+	out: [1]Frame_Delivery_Timing
+	count, _ := context_frame_delivery_drain(ctx, out[:])
+	testing.expect_value(t, count, 1)
+	testing.expect(t, !out[0].gpu_complete_valid)
+	testing.expect(t, out[0].presented_valid)
+}
+
+@(test)
+frame_delivery_emits_cpu_gpu_without_presentation_support :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 1
+	_frame_delivery_begin(ctx, 3)
+	_frame_delivery_submitted(ctx, 3, 10)
+	_frame_delivery_cpu(ctx, {frame_index = 3, frame_cpu_seconds = 0.001})
+	_frame_delivery_gpu_complete(ctx, 3, 11, true)
+	out: [1]Frame_Delivery_Timing
+	count, _ := context_frame_delivery_drain(ctx, out[:])
+	testing.expect_value(t, count, 1)
+	testing.expect(t, out[0].gpu_complete_valid)
+	testing.expect(t, !out[0].presented_valid)
+}
+
+@(test)
+frame_delivery_retires_stale_missing_callback :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 1
+	ctx.delivery.supported = true
+	_frame_delivery_begin(ctx, 4)
+	_frame_delivery_cpu(ctx, {frame_index = 4, frame_cpu_seconds = 0.001})
+	ctx.stats_latest.frame_index = 4 + FRAME_DELIVERY_RETIRE_LAG
+	out: [1]Frame_Delivery_Timing
+	count, _ := context_frame_delivery_drain(ctx, out[:])
+	testing.expect_value(t, count, 1)
+	testing.expect(t, !out[0].gpu_complete_valid)
+	testing.expect(t, !out[0].presented_valid)
 }
