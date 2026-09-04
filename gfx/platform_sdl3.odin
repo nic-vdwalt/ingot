@@ -161,11 +161,13 @@ when INGOT_GFX_SDL3 {
 		}
 		ctx.adapter = ares.adapter
 		ctx.budget = gpu_negotiate_budget(ares.adapter)
-		features: [1]wg.FeatureName
+		features: [2]wg.FeatureName
 		feature_count := uint(0)
-		if wg.AdapterHasFeature(ares.adapter, .TimestampQuery) {
+		if wg.AdapterHasFeature(ares.adapter, .TimestampQuery) &&
+		   wg.AdapterHasFeature(ares.adapter, .TimestampQueryInsideEncoders) {
 			features[0] = .TimestampQuery
-			feature_count = 1
+			features[1] = .TimestampQueryInsideEncoders
+			feature_count = 2
 		}
 		dres: Device_Res
 		dev_desc := wg.DeviceDescriptor {

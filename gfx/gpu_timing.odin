@@ -48,7 +48,10 @@ _gpu_timing_init :: proc(ctx: ^Context) -> bool {
 	ctx.gpu_timing.active_slot = -1
 	when !RENDER_STATS_ENABLED do return false
 	when ODIN_OS == .JS do return false
-	if !wg.DeviceHasFeature(ctx.device, .TimestampQuery) do return false
+	if !wg.DeviceHasFeature(ctx.device, .TimestampQuery) ||
+	   !wg.DeviceHasFeature(ctx.device, .TimestampQueryInsideEncoders) {
+		return false
+	}
 	period := f64(wg.QueueGetTimestampPeriod(ctx.queue))
 	if period <= 0 do return false
 	for &slot in ctx.gpu_timing.slots {
@@ -88,7 +91,6 @@ _gpu_timing_shutdown :: proc(ctx: ^Context) {
 	}
 	for &slot in ctx.gpu_timing.slots {
 		if slot.readback != nil {
-			if wg.BufferGetMapState(slot.readback) == .Mapped do wg.BufferUnmap(slot.readback)
 			wg.BufferDestroy(slot.readback)
 			wg.BufferRelease(slot.readback)
 		}
@@ -112,7 +114,6 @@ _gpu_timing_frame_begin :: proc(ctx: ^Context) {
 	if !ctx.gpu_timing.available do return
 	for &slot, index in ctx.gpu_timing.slots {
 		if slot.in_flight do continue
-		assert(wg.BufferGetMapState(slot.readback) == .Unmapped)
 		slot.frame_index = ctx.stats_current.frame_index
 		slot.query_count = 0
 		slot.map_done = false
