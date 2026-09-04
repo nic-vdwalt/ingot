@@ -71,18 +71,6 @@ draw_scale_settings_panel :: proc(
 	presets := SETTINGS_SCALE_PRESETS
 	n := len(presets)
 
-	// Keyboard navigation with wraparound.
-	if is_key_pressed(frame, .UP) {
-		selected^ -= 1
-		if selected^ < 0 do selected^ = n - 1
-	}
-	if is_key_pressed(frame, .DOWN) {
-		selected^ += 1
-		if selected^ >= n do selected^ = 0
-	}
-	if selected^ < 0 do selected^ = 0
-	if selected^ >= n do selected^ = n - 1
-
 	// Modal dimensions.
 	metrics := ui_frame_metrics(frame)
 	item_h := ui_frame_sc(frame, 28)
@@ -107,6 +95,19 @@ draw_scale_settings_panel :: proc(
 	)
 	modal_x := st.rect.x
 	modal_y := st.rect.y
+
+	// Keyboard navigation with wraparound.
+	if is_key_pressed(frame, .UP) {
+		selected^ -= 1
+		if selected^ < 0 do selected^ = n - 1
+	}
+	if is_key_pressed(frame, .DOWN) {
+		selected^ += 1
+		if selected^ >= n do selected^ = 0
+	}
+	if selected^ < 0 do selected^ = 0
+	if selected^ >= n do selected^ = n - 1
+	enter_pressed := is_key_pressed(frame, .ENTER)
 
 	// Section header.
 	text(frame, "UI SCALE", modal_x + modal_padding, body.y + 4, .Label, .Label)
@@ -133,14 +134,17 @@ draw_scale_settings_panel :: proc(
 	)
 
 	modal_end(&st)
-	if st.dismissed {
+	modal_rect := Rectangle{f32(st.rect.x), f32(st.rect.y), f32(st.rect.w), f32(st.rect.h)}
+	outside_pressed :=
+		is_mouse_button_pressed(frame, .LEFT) && !point_in_rect(get_mouse_position(frame), modal_rect)
+	if st.dismissed || outside_pressed {
 		return Settings_Panel_Result{dismissed = true}
 	}
 	if have_result {
 		return pending_result
 	}
 	// Enter - apply the highlighted preset.
-	if is_key_pressed(frame, .ENTER) {
+	if enter_pressed {
 		return Settings_Panel_Result {
 			applied   = true,
 			ui_scale  = presets[selected^].value,
