@@ -40,17 +40,9 @@ Frame_Delivery_State :: struct {
 	closing:        bool,
 }
 
-frame_delivery_supported :: proc() -> bool {
-	return context_frame_delivery_supported(default_context())
-}
-
 context_frame_delivery_supported :: proc(ctx: ^Context) -> bool {
 	if ctx == nil do return false
 	return ctx.delivery.supported
-}
-
-frame_delivery_record_host :: proc(host_cpu_seconds, pacer_wait_seconds: f64) {
-	context_frame_delivery_record_host(default_context(), host_cpu_seconds, pacer_wait_seconds)
 }
 
 context_frame_delivery_record_host :: proc(
@@ -65,10 +57,6 @@ context_frame_delivery_record_host :: proc(
 	if slot == nil || slot.epoch != ctx.epoch do return
 	slot.timing.host_cpu_seconds = host_cpu_seconds
 	slot.timing.pacer_wait_seconds = pacer_wait_seconds
-}
-
-frame_delivery_drain :: proc(out: []Frame_Delivery_Timing) -> (count: int, dropped: u64) {
-	return context_frame_delivery_drain(default_context(), out)
 }
 
 context_frame_delivery_drain :: proc(
