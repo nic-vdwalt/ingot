@@ -4,6 +4,27 @@ package ui
 import "core:testing"
 
 @(test)
+modal_bottom_geometry_is_bounded :: proc(t: ^testing.T) {
+	extents := [?]i32{1, 20, 240, 480}
+	paddings := [?]i32{0, 8, 16, 32}
+	for extent in extents {
+		for padding in paddings {
+			config := Modal_Config {
+				size = {200, 120}, screen = {40, 30, extent, extent}, placement = .Bottom,
+			}
+			rect := modal_panel_rect(config, padding)
+			testing.expect(t, rect.w > 0 && rect.h > 0)
+			testing.expect(t, rect.x >= 40 && rect.y >= 30)
+			testing.expect(t, rect.x + rect.w <= 40 + extent)
+			testing.expect(t, rect.y + rect.h <= 30 + extent)
+			testing.expect_value(t, rect.x, 40 + (extent - rect.w) / 2)
+			testing.expect_value(t, rect.y + rect.h,
+				30 + extent - min(padding, (extent - rect.h) / 2))
+		}
+	}
+}
+
+@(test)
 modal_owns_keyboard_on_opening_frame :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
