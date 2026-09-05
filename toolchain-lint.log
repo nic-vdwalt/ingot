@@ -1,0 +1,148 @@
+== Odin toolchain ==
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.002s
+
+OK
+Odin toolchain: dev-2026-08-nightly:902106f
+== repository hygiene ==
+repository hygiene: PASS
+== gfx context ownership guard ==
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 0.001s
+
+OK
+== gfx @(init) ordering guard ==
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.000s
+
+OK
+== gfx expected-assert isolation guard ==
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.002s
+
+OK
+== assertion discipline ==
+..................................
+----------------------------------------------------------------------
+Ran 34 tests in 0.143s
+
+OK
+== UI API layers ==
+...........................
+----------------------------------------------------------------------
+Ran 27 tests in 0.012s
+
+OK
+== widget capabilities ==
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.120s
+
+OK
+widget capabilities: PASS
+== package boundaries ==}]}},{
+package boundaries: PASS
+== UI design tokens ==
+...................
+----------------------------------------------------------------------
+Ran 19 tests in 0.001s
+
+OK
+== checking action ==
+== checking asset ==
+== checking box3d_workers ==
+== checking ecs ==
+== checking gfx ==
+== checking procgen ==
+== checking scene ==
+== checking scene_gfx ==
+== checking ui ==
+== checking ui_gfx ==
+== checking fit ==
+== checking view ==
+== checking view/generate ==
+== checking term ==
+== checking prefs ==
+== checking net ==
+== checking sys ==
+== checking pty ==
+== checking testx ==
+== checking fuzz/fuzzx ==
+== checking net (INGOT_NET_SIM=true) ==
+No test found for the name: "__compile_only__"
+== checking net (INGOT_WS_SIM=true) ==
+No test found for the name: "__compile_only__"
+== checking pty (INGOT_PTY_SIM=true) ==
+No test found for the name: "__compile_only__"
+== checking term (INGOT_PTY_SIM=true) ==
+No test found for the name: "__compile_only__"
+== checking gfx (INGOT_INPUT_SIM=true) ==
+No test found for the name: "__compile_only__"
+== checking binding libvterm ==
+== checking binding accesskit ==
+== building example advanced_ui ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example builder_controls ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example hello ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example session_loop ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example gallery ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example breakout ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example idle_demo ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example chart_demo ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example api-map ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example render_fixture ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example procgen_world ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example box3d_stack ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example box3d_advanced ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example box3d_water ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example multi_context_fixture ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example multi_app_fixture ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example view_builder ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example raylib_migration_fixture ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example table_demo ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example typed_commands ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== building example hot_reload/game ==
+== building example hot_reload/host ==
+ld: warning: ignoring duplicate libraries: '-lobjc'
+== gate manifest ==
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
+== Odin TigerStyle checks ==
+............
+----------------------------------------------------------------------
+Ran 12 tests in 0.003s
+
+OK
+== wasm bloat guard tests ==
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.006s
+
+OK
+== odinfmt (verify formatting) ==
