@@ -4,6 +4,26 @@ package gfx
 import "core:testing"
 
 @(test)
+gpu_timing_pass_boundaries_reserve_distinct_indices :: proc(t: ^testing.T) {
+	state: Gpu_Timing_State
+	unavailable := _gpu_timing_pass_writes(&state, "window")
+	testing.expect(t, unavailable.querySet == nil)
+	testing.expect_value(t, state.slots[0].query_count, u32(0))
+	state.available = true
+	first := _gpu_timing_pass_writes(&state, "world.opaque")
+	second := _gpu_timing_pass_writes(&state, "world.ocean")
+	testing.expect_value(t, first.beginningOfPassWriteIndex, u32(0))
+	testing.expect_value(t, first.endOfPassWriteIndex, u32(1))
+	testing.expect_value(t, second.beginningOfPassWriteIndex, u32(2))
+	testing.expect_value(t, second.endOfPassWriteIndex, u32(3))
+	testing.expect_value(t, state.slots[0].query_count, u32(4))
+	testing.expect(
+		t,
+		_gpu_timing_label_equal(state.slots[0].labels[1], _gpu_timing_label("world.ocean")),
+	)
+}
+
+@(test)
 gpu_timing_query_pairs_are_bounded :: proc(t: ^testing.T) {
 	state: Gpu_Timing_State
 	state.available = true

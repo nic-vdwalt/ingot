@@ -182,6 +182,18 @@ _gpu_timing_pair_reserve :: proc(
 	return token
 }
 
+_gpu_timing_pass_writes :: proc(state: ^Gpu_Timing_State, name: string) -> wg.PassTimestampWrites {
+	assert(state != nil)
+	token := _gpu_timing_pair_reserve(state, name)
+	if !token.valid do return {}
+	assert(state.active_slot >= 0 && state.active_slot < GPU_TIMING_FRAME_SLOTS)
+	return {
+		querySet = state.slots[state.active_slot].query_set,
+		beginningOfPassWriteIndex = token.query_begin,
+		endOfPassWriteIndex = token.query_end,
+	}
+}
+
 _gpu_timing_encoder_begin :: proc(
 	ctx: ^Context,
 	encoder: wg.CommandEncoder,
