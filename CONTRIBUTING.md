@@ -37,6 +37,22 @@ Add deterministic tests for behavior changes. Start with the affected package,
 then run the complete native, strict, and web gates. Include reproducible seeds
 for fuzz failures and do not weaken a baseline to conceal a new finding.
 
+## API-change checklist
+
+- Identify the canonical owner: Fit consumer API, UI behavior/layout, or graphics
+  integration. Keep overloads as adapters to one implementation.
+- Classify each boundary as an intentional alias, semantic conversion, selected
+  projection, or binary storage contract; retain its matching checks.
+- Specify caller ownership, borrowed lifetimes, callback timing, cleanup, and
+  capacity/overflow behavior. Preserve immediate versus delayed activation.
+- Forward options consistently across string and explicit IDs. Prefer an options
+  field over another family of positional overloads.
+- Extend existing consumer fixtures and exhaustive mapping tests; include failure,
+  retry, and cleanup paths. Keep old spellings compiling unless an explicitly
+  approved breaking change includes a migration.
+- Run package tests and the native, strict, and web gates with the pinned compiler.
+  Do not confuse compile or headless evidence with platform runtime validation.
+
 ## Pull requests
 
 Keep each pull request scoped to one coherent change. Explain the motivation,
