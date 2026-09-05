@@ -71,7 +71,11 @@ modal_panel_rect :: proc(config: Modal_Config, padding: i32) -> Rect_I32 {
 	x := config.screen.x + (config.screen.w - width) / 2
 	y := config.screen.y + (config.screen.h - height) / 2
 	if config.placement == .Bottom {
-		y = config.screen.y + config.screen.h - height - min(padding, (config.screen.h - height) / 2)
+		y =
+			config.screen.y +
+			config.screen.h -
+			height -
+			min(padding, (config.screen.h - height) / 2)
 	}
 	return {x, y, width, height}
 }
@@ -188,8 +192,15 @@ modal_begin :: proc(
 	// covers every lower tier, including content submitted after modal_end.
 	draw_rectangle(frame, config.screen.x, config.screen.y, screen_w, screen_h, style.modal_dim)
 	if config.placement == .Bottom {
-		draw_surface(frame, {f32(mx), f32(my), f32(mw), f32(mh)}, .Popup,
-			.Rest, .LG, .Hairline, .Modal)
+		draw_surface(
+			frame,
+			{f32(mx), f32(my), f32(mw), f32(mh)},
+			.Popup,
+			.Rest,
+			.LG,
+			.Hairline,
+			.Modal,
+		)
 	} else {
 		draw_rectangle(frame, mx, my, mw, mh, style.bg_secondary)
 		draw_rectangle_lines(frame, mx, my, mw, mh, style.border_color)

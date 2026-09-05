@@ -233,9 +233,12 @@ Modal_Scope :: enum u8 {
 	Viewport,
 	Host,
 }
-Modal_Placement :: ui.Modal_Placement
+Modal_Placement :: enum u8 {
+	Center,
+	Bottom,
+}
 Modal_Options :: struct {
-	placement:      Modal_Placement,
+	placement:       Modal_Placement,
 	dismiss_escape:  bool,
 	dismiss_outside: bool,
 	focus_scope:     ui.Focus_Scope_Id,
