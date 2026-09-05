@@ -89,6 +89,18 @@ context_renderer_gpu_frame_timing_detail :: proc(ctx: ^Context) -> Gpu_Frame_Tim
 	return ctx.gpu_timing.latest_detail
 }
 
+context_renderer_gpu_timing_drain :: proc(
+	ctx: ^Context,
+	output: []Gpu_Frame_Timing_Detail,
+) -> (
+	int,
+	Gpu_Timing_Health,
+) {
+	if ctx == nil do return 0, {}
+	_gpu_timing_collect(ctx)
+	return _gpu_timing_drain(&ctx.gpu_timing, output)
+}
+
 gpu_timing_label_string :: proc(label: ^Gpu_Timing_Label) -> string {
 	if label == nil do return ""
 	length := min(int(label.length), GPU_TIMING_LABEL_MAX)

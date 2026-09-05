@@ -5,6 +5,7 @@ import "core:mem"
 import "core:sync"
 import wg "vendor:wgpu"
 
+GPU_TIMING_COMPLETION_CAPACITY :: 128
 GPU_TIMING_FRAME_SLOTS :: 8
 GPU_TIMING_MAX_SPANS :: 64
 GPU_TIMING_MAX_GROUPS :: 16
@@ -37,14 +38,17 @@ Gpu_Timing_Group :: struct {
 }
 
 Gpu_Frame_Timing_Detail :: struct {
-	frame_index: u64,
-	seconds:     f64,
-	groups:      [GPU_TIMING_MAX_GROUPS]Gpu_Timing_Group,
-	group_count: u32,
-	valid:       bool,
+	epoch:            u64,
+	groups_truncated: u32,
+	frame_index:      u64,
+	seconds:          f64,
+	groups:           [GPU_TIMING_MAX_GROUPS]Gpu_Timing_Group,
+	group_count:      u32,
+	valid:            bool,
 }
 
 Gpu_Timing_Slot :: struct {
+	epoch:       u64,
 	query_set:   wg.QuerySet,
 	resolve:     wg.Buffer,
 	readback:    wg.Buffer,
@@ -57,7 +61,20 @@ Gpu_Timing_Slot :: struct {
 	in_flight:   bool,
 }
 
+Gpu_Timing_Health :: struct {
+	overflow:           u64,
+	no_free_slot:       u64,
+	pair_exhaustion:    u64,
+	map_failure:        u64,
+	group_truncation:   u64,
+	invalid_timestamps: u64,
+}
+
 Gpu_Timing_State :: struct {
+	completed:        [GPU_TIMING_COMPLETION_CAPACITY]Gpu_Frame_Timing_Detail,
+	completed_head:   u32,
+	completed_count:  u32,
+	health:           Gpu_Timing_Health,
 	slots:            [GPU_TIMING_FRAME_SLOTS]Gpu_Timing_Slot,
 	active_slot:      int,
 	timestamp_period: f64,
@@ -140,12 +157,14 @@ _gpu_timing_frame_begin :: proc(ctx: ^Context) {
 	for &slot, index in ctx.gpu_timing.slots {
 		if slot.in_flight do continue
 		slot.frame_index = ctx.stats_current.frame_index
+		slot.epoch = ctx.epoch
 		slot.query_count = 0
 		slot.map_done = false
 		slot.map_ok = false
 		ctx.gpu_timing.active_slot = index
 		return
 	}
+	ctx.gpu_timing.health.no_free_slot += 1
 }
 
 _gpu_timing_label :: proc(name: string) -> Gpu_Timing_Label {
@@ -171,7 +190,11 @@ _gpu_timing_pair_reserve :: proc(
 	if state == nil || !state.available do return {}
 	if state.active_slot < 0 || state.active_slot >= GPU_TIMING_FRAME_SLOTS do return {}
 	slot := &state.slots[state.active_slot]
-	if slot.in_flight || slot.query_count > GPU_TIMING_QUERY_COUNT - 2 do return {}
+	if slot.in_flight do return {}
+	if slot.query_count > GPU_TIMING_QUERY_COUNT - 2 {
+		state.health.pair_exhaustion += 1
+		return {}
+	}
 	token := Gpu_Timing_Token {
 		query_begin = slot.query_count,
 		query_end   = slot.query_count + 1,
@@ -288,7 +311,10 @@ _gpu_timing_detail :: proc(
 			}
 		}
 		if group_index < 0 {
-			if result.group_count >= GPU_TIMING_MAX_GROUPS do continue
+			if result.group_count >= GPU_TIMING_MAX_GROUPS {
+				result.groups_truncated += 1
+				continue
+			}
 			group_index = int(result.group_count)
 			result.groups[group_index].label = label
 			result.group_count += 1
@@ -311,22 +337,65 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 				slot.query_count / 2,
 				ctx.gpu_timing.timestamp_period,
 			)
-			if ok && slot.frame_index >= ctx.gpu_timing.latest.frame_index {
+			if ok {
 				detail.frame_index = slot.frame_index
-				ctx.gpu_timing.latest = {
-					frame_index = slot.frame_index,
-					seconds     = detail.seconds,
-					valid       = true,
-				}
-				ctx.gpu_timing.latest_detail = detail
+				detail.epoch = slot.epoch
+				_gpu_timing_enqueue(&ctx.gpu_timing, detail)
+			} else {
+				ctx.gpu_timing.health.invalid_timestamps += 1
 			}
+		} else {
+			ctx.gpu_timing.health.map_failure += 1
 		}
-		wg.BufferUnmap(slot.readback)
+		if slot.readback != nil do wg.BufferUnmap(slot.readback)
 		slot.in_flight = false
 		slot.query_count = 0
 		slot.map_done = false
 		slot.map_ok = false
 	}
+}
+
+_gpu_timing_enqueue :: proc(state: ^Gpu_Timing_State, detail: Gpu_Frame_Timing_Detail) {
+	assert(state != nil)
+	assert(state.completed_count <= GPU_TIMING_COMPLETION_CAPACITY)
+	assert(state.completed_head < GPU_TIMING_COMPLETION_CAPACITY)
+	state.health.group_truncation += u64(detail.groups_truncated)
+	if detail.frame_index >= state.latest.frame_index {
+		state.latest = {
+			frame_index = detail.frame_index,
+			seconds     = detail.seconds,
+			valid       = detail.valid,
+		}
+		state.latest_detail = detail
+	}
+	if state.completed_count == GPU_TIMING_COMPLETION_CAPACITY {
+		state.health.overflow += 1
+		return
+	}
+	index := (state.completed_head + state.completed_count) % GPU_TIMING_COMPLETION_CAPACITY
+	state.completed[index] = detail
+	state.completed_count += 1
+}
+
+_gpu_timing_drain :: proc(
+	state: ^Gpu_Timing_State,
+	output: []Gpu_Frame_Timing_Detail,
+) -> (
+	int,
+	Gpu_Timing_Health,
+) {
+	assert(state != nil)
+	assert(state.completed_count <= GPU_TIMING_COMPLETION_CAPACITY)
+	assert(state.completed_head < GPU_TIMING_COMPLETION_CAPACITY)
+	count := min(len(output), int(state.completed_count))
+	for index in 0 ..< count {
+		output[index] = state.completed[state.completed_head]
+		state.completed_head = (state.completed_head + 1) % GPU_TIMING_COMPLETION_CAPACITY
+	}
+	state.completed_count -= u32(count)
+	health := state.health
+	state.health = {}
+	return count, health
 }
 
 _gpu_timing_map_done :: proc "c" (

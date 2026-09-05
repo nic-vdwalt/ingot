@@ -6,22 +6,26 @@ FRAME_DELIVERY_MAX :: 128
 FRAME_DELIVERY_RETIRE_LAG :: 64
 
 Frame_Delivery_Timing :: struct {
-	frame_index:            u64,
-	renderer_cpu_seconds:   f64,
-	acquire_cpu_seconds:    f64,
-	encode_cpu_seconds:     f64,
-	submit_cpu_seconds:     f64,
-	present_cpu_seconds:    f64,
-	host_cpu_seconds:       f64,
-	pacer_wait_seconds:     f64,
-	submit_timestamp:       f64,
-	gpu_complete_timestamp: f64,
-	gpu_complete_seconds:   f64,
-	presented_timestamp:    f64,
-	presentation_seconds:   f64,
-	cpu_valid:              bool,
-	gpu_complete_valid:     bool,
-	presented_valid:        bool,
+	epoch:                    u64,
+	presentation_supported:   bool,
+	missing_gpu_callback:     bool,
+	missing_present_callback: bool,
+	frame_index:              u64,
+	renderer_cpu_seconds:     f64,
+	acquire_cpu_seconds:      f64,
+	encode_cpu_seconds:       f64,
+	submit_cpu_seconds:       f64,
+	present_cpu_seconds:      f64,
+	host_cpu_seconds:         f64,
+	pacer_wait_seconds:       f64,
+	submit_timestamp:         f64,
+	gpu_complete_timestamp:   f64,
+	gpu_complete_seconds:     f64,
+	presented_timestamp:      f64,
+	presentation_seconds:     f64,
+	cpu_valid:                bool,
+	gpu_complete_valid:       bool,
+	presented_valid:          bool,
 }
 
 Frame_Delivery_Slot :: struct {
@@ -82,6 +86,8 @@ context_frame_delivery_drain :: proc(
 			latest_frame > slot.timing.frame_index &&
 			latest_frame - slot.timing.frame_index >= FRAME_DELIVERY_RETIRE_LAG
 		if !terminal && !stale do continue
+		slot.timing.missing_gpu_callback = !slot.gpu_done
+		slot.timing.missing_present_callback = !slot.present_done
 		out[count] = slot.timing
 		count += 1
 		slot = {}
@@ -126,7 +132,11 @@ _frame_delivery_begin :: proc(ctx: ^Context, frame_index: u64) {
 	for &slot in ctx.delivery.slots {
 		if slot.active do continue
 		slot = {
-			timing = {frame_index = frame_index},
+			timing = {
+				frame_index = frame_index,
+				epoch = ctx.epoch,
+				presentation_supported = ctx.delivery.supported,
+			},
 			epoch = ctx.epoch,
 			active = true,
 			present_done = !ctx.delivery.supported,

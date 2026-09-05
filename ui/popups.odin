@@ -58,7 +58,26 @@ route_claim_backdrop :: proc(frame: ^Ui_Frame, panel: Rect_I32, screen_w, screen
 	)
 }
 
+Modal_Placement :: enum u8 {
+	Center,
+	Bottom,
+}
+
+modal_panel_rect :: proc(config: Modal_Config, padding: i32) -> Rect_I32 {
+	assert(config.screen.w > 0 && config.screen.h > 0)
+	assert(config.size.x > 0 && config.size.y > 0 && padding >= 0)
+	width := min(config.size.x, max(1, config.screen.w - padding * 4))
+	height := min(config.size.y, max(1, config.screen.h - padding * 2))
+	x := config.screen.x + (config.screen.w - width) / 2
+	y := config.screen.y + (config.screen.h - height) / 2
+	if config.placement == .Bottom {
+		y = config.screen.y + config.screen.h - height - min(padding, (config.screen.h - height) / 2)
+	}
+	return {x, y, width, height}
+}
+
 Modal_Config :: struct {
+	placement:     Modal_Placement,
 	size:          [2]i32,
 	screen:        Rect_I32,
 	dismiss:       Modal_Dismiss_Policy,
@@ -160,23 +179,25 @@ modal_begin :: proc(
 	style := ui_frame_theme(frame)
 	metrics := ui_frame_metrics(frame)
 
-	mw := min(w, screen_w - metrics.PADDING * 4)
-	mh := min(h, screen_h - metrics.PADDING * 2)
-	mx := config.screen.x + (screen_w - mw) / 2
-	my := config.screen.y + (screen_h - mh) / 2
-	st.rect = Rect_I32{mx, my, mw, mh}
+	st.rect = modal_panel_rect(config, metrics.PADDING)
+	mx, my, mw, mh := st.rect.x, st.rect.y, st.rect.w, st.rect.h
 	claim := Rectangle{f32(config.screen.x), f32(config.screen.y), f32(screen_w), f32(screen_h)}
 	layer_begin(frame, st.z, claim = claim)
 
 	// Dimmed inside the modal's z scope so it paints at the modal tier and
 	// covers every lower tier, including content submitted after modal_end.
 	draw_rectangle(frame, config.screen.x, config.screen.y, screen_w, screen_h, style.modal_dim)
-	draw_rectangle(frame, mx, my, mw, mh, style.bg_secondary)
-	draw_rectangle_lines(frame, mx, my, mw, mh, style.border_color)
+	if config.placement == .Bottom {
+		draw_surface(frame, {f32(mx), f32(my), f32(mw), f32(mh)}, .Popup,
+			.Rest, .LG, .Hairline, .Modal)
+	} else {
+		draw_rectangle(frame, mx, my, mw, mh, style.bg_secondary)
+		draw_rectangle_lines(frame, mx, my, mw, mh, style.border_color)
+	}
 	begin_scissor_mode(frame, mx, my, mw, mh)
 	semantic_push(frame, .Modal, st.rect, title)
 
-	title_h := ui_frame_sc(frame, 40)
+	title_h := min(mh, ui_frame_sc(frame, 40))
 	title_c := strings.clone_to_cstring(title, context.temp_allocator)
 	draw_text_frame(
 		frame,

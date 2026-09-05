@@ -4,6 +4,99 @@ package gfx
 import "core:testing"
 
 @(test)
+gpu_timing_completion_queue_retains_order_and_reports_loss :: proc(t: ^testing.T) {
+	state: Gpu_Timing_State
+	_gpu_timing_enqueue(&state, {frame_index = 9, valid = true})
+	_gpu_timing_enqueue(&state, {frame_index = 3, valid = true})
+	output: [2]Gpu_Frame_Timing_Detail
+	count, health := _gpu_timing_drain(&state, output[:1])
+	testing.expect_value(t, count, 1)
+	testing.expect_value(t, output[0].frame_index, u64(9))
+	testing.expect_value(t, health.overflow, u64(0))
+	count, health = _gpu_timing_drain(&state, output[:])
+	testing.expect_value(t, count, 1)
+	testing.expect_value(t, output[0].frame_index, u64(3))
+	testing.expect_value(t, state.latest.frame_index, u64(9))
+	for index in 0 ..< GPU_TIMING_COMPLETION_CAPACITY + 2 {
+		_gpu_timing_enqueue(&state, {frame_index = u64(index + 10), valid = true})
+	}
+	count, health = _gpu_timing_drain(&state, output[:])
+	testing.expect_value(t, count, 2)
+	testing.expect_value(t, health.overflow, u64(2))
+	testing.expect_value(t, output[0].frame_index, u64(10))
+	_, health = _gpu_timing_drain(&state, nil)
+	testing.expect_value(t, health.overflow, u64(0))
+}
+
+@(test)
+gpu_timing_collect_preserves_every_completion :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.gpu_timing.available = true
+	ctx.gpu_timing.timestamp_period = 1
+	for &slot, index in ctx.gpu_timing.slots {
+		slot.in_flight = true
+		slot.map_done = true
+		slot.map_ok = true
+		slot.frame_index = u64(GPU_TIMING_FRAME_SLOTS - index)
+		slot.query_count = 2
+		slot.ticks[0] = 10
+		slot.ticks[1] = 20
+	}
+	output: [GPU_TIMING_FRAME_SLOTS]Gpu_Frame_Timing_Detail
+	count, health := context_renderer_gpu_timing_drain(ctx, output[:])
+	testing.expect_value(t, count, GPU_TIMING_FRAME_SLOTS)
+	testing.expect_value(t, health.map_failure, u64(0))
+	for detail, index in output {
+		testing.expect_value(t, detail.frame_index, u64(GPU_TIMING_FRAME_SLOTS - index))
+	}
+	for &slot in ctx.gpu_timing.slots do slot.in_flight = true
+	_gpu_timing_frame_begin(ctx)
+	testing.expect_value(t, ctx.gpu_timing.health.no_free_slot, u64(1))
+	ctx.gpu_timing.slots[0].map_done = true
+	ctx.gpu_timing.slots[0].map_ok = false
+	_gpu_timing_collect(ctx)
+	testing.expect_value(t, ctx.gpu_timing.health.map_failure, u64(1))
+}
+
+@(test)
+gpu_timing_health_preserves_invalid_and_truncated_evidence :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 12
+	ctx.gpu_timing.available = true
+	ctx.gpu_timing.timestamp_period = 1
+	_gpu_timing_frame_begin(ctx)
+	slot := &ctx.gpu_timing.slots[0]
+	testing.expect_value(t, slot.epoch, u64(12))
+	for index in 0 ..< GPU_TIMING_MAX_SPANS {
+		label := [1]u8{u8(index + 1)}
+		testing.expect(t, _gpu_timing_pair_reserve(&ctx.gpu_timing, string(label[:])).valid)
+		slot.ticks[index * 2] = u64(index * 2)
+		slot.ticks[index * 2 + 1] = u64(index * 2 + 1)
+	}
+	testing.expect(t, !_gpu_timing_pair_reserve(&ctx.gpu_timing).valid)
+	slot.in_flight = true
+	slot.map_done = true
+	slot.map_ok = true
+	output: [1]Gpu_Frame_Timing_Detail
+	count, health := context_renderer_gpu_timing_drain(ctx, output[:])
+	testing.expect_value(t, count, 1)
+	testing.expect_value(t, output[0].epoch, u64(12))
+	testing.expect_value(t, health.pair_exhaustion, u64(1))
+	testing.expect_value(t, health.group_truncation, u64(GPU_TIMING_MAX_SPANS - GPU_TIMING_MAX_GROUPS))
+	slot.in_flight = true
+	slot.map_done = true
+	slot.map_ok = true
+	slot.query_count = 2
+	slot.ticks[0] = 20
+	slot.ticks[1] = 10
+	count, health = context_renderer_gpu_timing_drain(ctx, output[:])
+	testing.expect_value(t, count, 0)
+	testing.expect_value(t, health.invalid_timestamps, u64(1))
+}
+
+@(test)
 gpu_timing_pass_boundaries_reserve_distinct_indices :: proc(t: ^testing.T) {
 	state: Gpu_Timing_State
 	unavailable := _gpu_timing_pass_writes(&state, "window")
