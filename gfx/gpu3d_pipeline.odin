@@ -747,7 +747,7 @@ context_copy_gpu_3d_target_named :: proc(
 	   source_depth.wgformat != destination_depth.wgformat {
 		return false
 	}
-	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
+	encoder := wg.DeviceCreateCommandEncoder(ctx.device, &{label = name})
 	if encoder == nil do return false
 	timing := _gpu_timing_encoder_begin(ctx, encoder, name)
 	extent := wg.Extent3D{u32(width), u32(height), 1}
@@ -1592,11 +1592,17 @@ context_begin_gpu_3d_named :: proc(
 		stencilLoadOp   = .Undefined,
 		stencilStoreOp  = .Undefined,
 	}
-	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
-	timing := _gpu_timing_encoder_begin(ctx, encoder, name)
+	encoder := wg.DeviceCreateCommandEncoder(ctx.device, &{label = name})
+	writes := _gpu_timing_pass_writes(&ctx.gpu_timing, name)
 	pass := wg.CommandEncoderBeginRenderPass(
 		encoder,
-		&{colorAttachmentCount = 1, colorAttachments = &color, depthStencilAttachment = &depth},
+		&{
+			label = name,
+			colorAttachmentCount = 1,
+			colorAttachments = &color,
+			depthStencilAttachment = &depth,
+			timestampWrites = writes.querySet != nil ? &writes : nil,
+		},
 	)
 	resources.next_pass_generation += 1
 	if resources.next_pass_generation == 0 do resources.next_pass_generation = 1
@@ -1606,7 +1612,7 @@ context_begin_gpu_3d_named :: proc(
 		owner                     = ctx,
 		epoch                     = ctx.epoch,
 		encoder                   = encoder,
-		timing                    = timing,
+		timing                    = {},
 		pass                      = pass,
 		target                    = target,
 		light                     = GPU_3D_DEFAULT_LIGHT,
@@ -2376,6 +2382,7 @@ _gpu_3d_pipeline :: proc(
 	pipeline := wg.DeviceCreateRenderPipeline(
 		ctx.device,
 		&{
+			label = "gpu3d",
 			layout = layout,
 			vertex = {
 				module = module,

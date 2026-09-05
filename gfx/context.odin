@@ -825,8 +825,8 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	_assert_window_frame_contract(ctx)
 	renderer_window_projection_refresh(&ctx.rend, ctx.queue, ctx.width, ctx.height)
 	ctx.frame.view = wg.TextureCreateView(ctx.frame.surf_tex.texture, nil)
-	ctx.frame.encoder = wg.DeviceCreateCommandEncoder(ctx.device, nil)
-	ctx.frame.timing = _gpu_timing_encoder_begin(ctx, ctx.frame.encoder, "window")
+	ctx.frame.encoder = wg.DeviceCreateCommandEncoder(ctx.device, &{label = "window"})
+	ctx.frame.timing = {}
 	ctx.frame.clear_color = Color{0, 0, 0, 255}
 	ctx.frame.pass_begun = false
 	ctx.frame.has_frame = true
@@ -874,9 +874,12 @@ context_ensure_pass :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_ensure_pass: nil context")
 	if !ctx.frame.has_frame || ctx.frame.pass_begun do return
 	cc := ctx.frame.clear_color
+	writes := _gpu_timing_pass_writes(&ctx.gpu_timing, "window")
 	ctx.frame.pass = wg.CommandEncoderBeginRenderPass(
 		ctx.frame.encoder,
 		&{
+			label = "window",
+			timestampWrites = writes.querySet != nil ? &writes : nil,
 			colorAttachmentCount = 1,
 			colorAttachments = &wg.RenderPassColorAttachment {
 				view = ctx.frame.view,

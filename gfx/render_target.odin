@@ -154,8 +154,9 @@ context_ensure_rt_pass :: proc(ctx: ^Context) {
 	if ctx.frame.rt == 0 || ctx.frame.rt_pass_begun do return
 	view := context_texture_view(ctx, ctx.frame.rt)
 	if view == nil do return
-	ctx.frame.rt_encoder = wg.DeviceCreateCommandEncoder(ctx.device, nil)
-	ctx.frame.rt_timing = _gpu_timing_encoder_begin(ctx, ctx.frame.rt_encoder, "render-target")
+	ctx.frame.rt_encoder = wg.DeviceCreateCommandEncoder(ctx.device, &{label = "render-target"})
+	ctx.frame.rt_timing = {}
+	writes := _gpu_timing_pass_writes(&ctx.gpu_timing, "render-target")
 	cc := ctx.frame.rt_clear
 	// Preserve the target's contents by default (raylib: BeginTextureMode does
 	// not clear). Only clear when ClearBackground was called after
@@ -169,6 +170,8 @@ context_ensure_rt_pass :: proc(ctx: ^Context) {
 		clearValue = {f64(cc.r) / 255.0, f64(cc.g) / 255.0, f64(cc.b) / 255.0, f64(cc.a) / 255.0},
 	}
 	desc := wg.RenderPassDescriptor {
+		label                = "render-target",
+		timestampWrites      = writes.querySet != nil ? &writes : nil,
 		colorAttachmentCount = 1,
 		colorAttachments     = &color,
 	}

@@ -54,6 +54,7 @@ context_frame_delivery_record_host :: proc(
 	sync.mutex_lock(&ctx.delivery.mutex)
 	defer sync.mutex_unlock(&ctx.delivery.mutex)
 	frame_index := ctx.stats_latest.frame_index
+	if frame_index == 0 do return
 	slot := _frame_delivery_slot(ctx, frame_index)
 	if slot == nil || slot.epoch != ctx.epoch do return
 	slot.timing.host_cpu_seconds = host_cpu_seconds
@@ -137,7 +138,7 @@ _frame_delivery_begin :: proc(ctx: ^Context, frame_index: u64) {
 
 @(private)
 _frame_delivery_submitted :: proc(ctx: ^Context, frame_index: u64, timestamp: f64) {
-	if ctx == nil || timestamp <= 0 do return
+	if ctx == nil || frame_index == 0 || timestamp <= 0 do return
 	sync.mutex_lock(&ctx.delivery.mutex)
 	defer sync.mutex_unlock(&ctx.delivery.mutex)
 	slot := _frame_delivery_slot(ctx, frame_index)
