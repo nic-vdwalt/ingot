@@ -695,7 +695,10 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 	}
 	ctx.composite_alpha = alpha
 	_stats_set_alpha_mode(ctx, alpha)
-	present_mode := _surface_present_mode(ctx.config_flags, caps.presentModes[:caps.presentModeCount])
+	present_mode := _surface_present_mode(
+		ctx.config_flags,
+		caps.presentModes[:caps.presentModeCount],
+	)
 	ctx.config = wg.SurfaceConfiguration {
 		device      = ctx.device,
 		format      = ctx.format,

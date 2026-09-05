@@ -558,10 +558,7 @@ Theme_Set_Pigment :: proc(theme: ^Theme, pigment: Pigment, color: Color) {
 }
 Theme_Set_Substrate :: proc(theme: ^Theme, kind: Substrate_Kind, margin_rule: bool = false) {
 	assert(theme != nil, "Fit.Theme_Set_Substrate: nil theme")
-	ui.Theme_Set_Substrate(
-		&theme.inner,
-		{kind = to_substrate(kind), margin_rule = margin_rule},
-	)
+	ui.Theme_Set_Substrate(&theme.inner, {kind = to_substrate(kind), margin_rule = margin_rule})
 }
 Theme_Set_Reduced_Motion :: proc(theme: ^Theme, enabled: bool) {
 	assert(theme != nil, "Fit.Theme_Set_Reduced_Motion: nil theme")

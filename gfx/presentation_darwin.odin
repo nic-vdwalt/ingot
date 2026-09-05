@@ -2,11 +2,11 @@
 package gfx
 
 import "base:intrinsics"
-import "base:runtime"
-import NS "core:sys/darwin/Foundation"
-import CA "vendor:darwin/QuartzCore"
-import "vendor:glfw"
-import wg "vendor:wgpu"
+@(require) import "base:runtime"
+@(require) import NS "core:sys/darwin/Foundation"
+@(require) import CA "vendor:darwin/QuartzCore"
+@(require) import "vendor:glfw"
+@(require) import wg "vendor:wgpu"
 
 when !INGOT_GFX_SDL3 {
 	Presentation_Next_Proc :: #type proc "c" (self: NS.id, cmd: NS.SEL) -> ^CA.MetalDrawable
@@ -82,7 +82,10 @@ when !INGOT_GFX_SDL3 {
 		if g_presentation_subclass == nil {
 			subclass := allocateClassPair(original_class, "IngotPresentationMetalLayer", 0)
 			if subclass == nil do return false
-			method := NS.class_getInstanceMethod(NS.Class(original_class), NS.sel_registerName("nextDrawable"))
+			method := NS.class_getInstanceMethod(
+				NS.Class(original_class),
+				NS.sel_registerName("nextDrawable"),
+			)
 			if method == nil {
 				disposeClassPair(subclass)
 				return false

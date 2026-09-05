@@ -1,3 +1,4 @@
+#+build !js
 package gfx
 
 import "core:testing"
@@ -10,6 +11,27 @@ gpu_timing_query_pairs_are_bounded :: proc(t: ^testing.T) {
 	state.slots[0].query_count = GPU_TIMING_QUERY_COUNT - 2
 	testing.expect(t, _gpu_timing_pair_reserve(&state).valid)
 	testing.expect(t, !_gpu_timing_pair_reserve(&state).valid)
+}
+
+@(test)
+gpu_timing_query_pairs_require_active_available_slot :: proc(t: ^testing.T) {
+	testing.expect(t, !_gpu_timing_pair_reserve(nil).valid)
+	state: Gpu_Timing_State
+	testing.expect(t, !_gpu_timing_pair_reserve(&state).valid)
+	state.available = true
+	state.active_slot = -1
+	testing.expect(t, !_gpu_timing_pair_reserve(&state).valid)
+	state.active_slot = GPU_TIMING_FRAME_SLOTS
+	testing.expect(t, !_gpu_timing_pair_reserve(&state).valid)
+	state.active_slot = GPU_TIMING_FRAME_SLOTS - 1
+	state.slots[state.active_slot].in_flight = true
+	testing.expect(t, !_gpu_timing_pair_reserve(&state).valid)
+	state.slots[state.active_slot].in_flight = false
+	token := _gpu_timing_pair_reserve(&state)
+	testing.expect(t, token.valid)
+	testing.expect_value(t, token.query_begin, u32(0))
+	testing.expect_value(t, token.query_end, u32(1))
+	testing.expect_value(t, state.slots[state.active_slot].query_count, u32(2))
 }
 
 @(test)
