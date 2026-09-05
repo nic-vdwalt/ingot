@@ -1,3 +1,4 @@
+#+build !js
 package fit
 
 import "core:testing"
@@ -10,10 +11,12 @@ fit_configured_session_installs_hooks :: proc(t: ^testing.T) {
 	defer free(graphics)
 	session := new(ui_gfx.Session)
 	defer free(session)
-	config := Config{session = {
-		scale_metrics = contract_scale_metrics,
-		scale_invalidate = contract_scale_invalidate,
-	}}
+	config := Config {
+		session = {
+			scale_metrics = contract_scale_metrics,
+			scale_invalidate = contract_scale_invalidate,
+		},
+	}
 	for _ in 0 ..< 2 {
 		ui_gfx.session_init_context(session, graphics, to_app_config(config).session)
 		testing.expect(t, session.runtime.scale_metrics_hook == contract_scale_metrics)

@@ -25,10 +25,10 @@ Frame_Delivery_Timing :: struct {
 }
 
 Frame_Delivery_Slot :: struct {
-	timing:      Frame_Delivery_Timing,
-	epoch:       u64,
-	active:      bool,
-	gpu_done:    bool,
+	timing:       Frame_Delivery_Timing,
+	epoch:        u64,
+	active:       bool,
+	gpu_done:     bool,
 	present_done: bool,
 }
 
@@ -63,7 +63,10 @@ context_frame_delivery_record_host :: proc(
 context_frame_delivery_drain :: proc(
 	ctx: ^Context,
 	out: []Frame_Delivery_Timing,
-) -> (count: int, dropped: u64) {
+) -> (
+	count: int,
+	dropped: u64,
+) {
 	if ctx == nil || len(out) == 0 do return 0, 0
 	sync.mutex_lock(&ctx.delivery.mutex)
 	defer sync.mutex_unlock(&ctx.delivery.mutex)
@@ -74,7 +77,8 @@ context_frame_delivery_drain :: proc(
 		if count >= len(out) do break
 		if !slot.active || !slot.timing.cpu_valid do continue
 		terminal := slot.gpu_done && slot.present_done
-		stale := latest_frame > slot.timing.frame_index &&
+		stale :=
+			latest_frame > slot.timing.frame_index &&
 			latest_frame - slot.timing.frame_index >= FRAME_DELIVERY_RETIRE_LAG
 		if !terminal && !stale do continue
 		out[count] = slot.timing
@@ -157,7 +161,12 @@ _frame_delivery_cpu :: proc(ctx: ^Context, stats: Renderer_Stats) {
 }
 
 @(private)
-_frame_delivery_gpu_complete :: proc(ctx: ^Context, frame_index: u64, timestamp: f64, valid: bool) {
+_frame_delivery_gpu_complete :: proc(
+	ctx: ^Context,
+	frame_index: u64,
+	timestamp: f64,
+	valid: bool,
+) {
 	if ctx == nil || frame_index == 0 do return
 	sync.mutex_lock(&ctx.delivery.mutex)
 	defer sync.mutex_unlock(&ctx.delivery.mutex)

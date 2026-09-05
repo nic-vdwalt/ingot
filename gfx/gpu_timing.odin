@@ -75,7 +75,10 @@ _gpu_timing_init :: proc(ctx: ^Context) -> bool {
 	   !wg.DeviceHasFeature(ctx.device, .TimestampQueryInsideEncoders) {
 		return false
 	}
-	period := f64(wg.QueueGetTimestampPeriod(ctx.queue))
+	period: f64
+	when ODIN_OS != .JS {
+		period = f64(wg.QueueGetTimestampPeriod(ctx.queue))
+	}
 	if period <= 0 do return false
 	for &slot in ctx.gpu_timing.slots {
 		slot.query_set = wg.DeviceCreateQuerySet(
@@ -188,6 +191,8 @@ _gpu_timing_encoder_begin :: proc(
 	if ctx == nil || encoder == nil do return {}
 	token := _gpu_timing_pair_reserve(&ctx.gpu_timing, name)
 	if !token.valid do return {}
+	assert(ctx.gpu_timing.active_slot >= 0)
+	assert(ctx.gpu_timing.active_slot < GPU_TIMING_FRAME_SLOTS)
 	slot := &ctx.gpu_timing.slots[ctx.gpu_timing.active_slot]
 	wg.CommandEncoderWriteTimestamp(encoder, slot.query_set, token.query_begin)
 	return token

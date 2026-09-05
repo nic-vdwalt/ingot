@@ -5,11 +5,16 @@ import "ingot:ui"
 @(private = "package")
 to_substrate :: proc(value: Substrate_Kind) -> ui.Substrate_Kind {
 	switch value {
-	case .None: return .None
-	case .Ruled: return .Ruled
-	case .Grid: return .Grid
-	case .Dots: return .Dots
-	case .Tooth: return .Tooth
+	case .None:
+		return .None
+	case .Ruled:
+		return .Ruled
+	case .Grid:
+		return .Grid
+	case .Dots:
+		return .Dots
+	case .Tooth:
+		return .Tooth
 	}
 	unreachable()
 }
@@ -17,11 +22,16 @@ to_substrate :: proc(value: Substrate_Kind) -> ui.Substrate_Kind {
 @(private = "package")
 from_substrate :: proc(value: ui.Substrate_Kind) -> Substrate_Kind {
 	switch value {
-	case .None: return .None
-	case .Ruled: return .Ruled
-	case .Grid: return .Grid
-	case .Dots: return .Dots
-	case .Tooth: return .Tooth
+	case .None:
+		return .None
+	case .Ruled:
+		return .Ruled
+	case .Grid:
+		return .Grid
+	case .Dots:
+		return .Dots
+	case .Tooth:
+		return .Tooth
 	}
 	unreachable()
 }
