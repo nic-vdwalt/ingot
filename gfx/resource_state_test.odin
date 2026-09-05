@@ -179,6 +179,27 @@ submission_reservation_is_nonzero_and_rollback_is_atomic :: proc(t: ^testing.T) 
 }
 
 @(test)
+submission_completed_preserves_pending_head_without_device :: proc(t: ^testing.T) {
+	tracker: Submission_Tracker
+	tracker.count = 2
+	tracker.tickets[0] = {
+		id     = 1,
+		active = true,
+	}
+	tracker.tickets[1] = {
+		id       = 2,
+		active   = true,
+		complete = true,
+	}
+	testing.expect_value(t, _submission_completed(&tracker), u64(0))
+	testing.expect_value(t, tracker.count, u32(2))
+	tracker.tickets[0].complete = true
+	testing.expect_value(t, _submission_completed(&tracker), u64(2))
+	testing.expect_value(t, tracker.count, u32(0))
+	testing.expect_value(t, _submission_completed(&tracker), u64(2))
+}
+
+@(test)
 submission_shutdown_blocks_new_reservations :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()

@@ -19,6 +19,23 @@ frame_strategy_is_context_bound :: proc(t: ^testing.T) {
 }
 
 @(test)
+idle_surface_retry_is_bounded_and_context_local :: proc(t: ^testing.T) {
+	blocked := new(Context)
+	defer free(blocked)
+	visible := new(Context)
+	defer free(visible)
+	blocked.idle.surface_unavailable = true
+	wait, timeout := _idle_timeout(blocked)
+	testing.expect(t, wait)
+	testing.expect_value(t, timeout, f64(SURFACE_RETRY_WAIT))
+	visible_wait, _ := _idle_timeout(visible)
+	testing.expect(t, !visible_wait)
+	blocked.idle.surface_unavailable = false
+	recovered_wait, _ := _idle_timeout(blocked)
+	testing.expect(t, !recovered_wait)
+}
+
+@(test)
 idle_continuous_always_runs :: proc(t: ^testing.T) {
 	s := Idle_State{}
 	for _ in 0 ..< 10 {

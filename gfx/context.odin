@@ -787,6 +787,12 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	_stats_frame_begin(ctx)
 	_frame_delivery_begin(ctx, ctx.stats_current.frame_index)
 	platform_web_input_frame_begin(ctx)
+	ctx.idle.surface_unavailable = ctx.fb_width <= 0 || ctx.fb_height <= 0
+	if ctx.idle.surface_unavailable {
+		_ = _submission_completed(&ctx.submissions)
+		ctx.frame.has_frame = false
+		return
+	}
 
 	if !renderer_frame_begin(ctx, &ctx.rend) {
 		ctx.frame.has_frame = false
@@ -794,6 +800,7 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	}
 	acquire_started := platform_now()
 	ctx.frame.surf_tex = wg.SurfaceGetCurrentTexture(ctx.surface)
+	ctx.idle.surface_unavailable = ctx.frame.surf_tex.status == .Occluded
 	acquire_elapsed := platform_now() - acquire_started
 	_stats_context_cpu_times(ctx, 0, acquire_elapsed, 0, 0, 0)
 	#partial switch ctx.frame.surf_tex.status {

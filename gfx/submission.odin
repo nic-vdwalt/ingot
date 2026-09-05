@@ -166,6 +166,11 @@ _submission_poll :: proc(tracker: ^Submission_Tracker) {
 @(private)
 _submission_completed :: proc(tracker: ^Submission_Tracker) -> u64 {
 	assert(tracker != nil)
+	when ODIN_OS != .JS {
+		if tracker.count > 0 && tracker.owner != nil && tracker.owner.device != nil {
+			wg.DevicePoll(tracker.owner.device, false, nil)
+		}
+	}
 	_submission_poll(tracker)
 	return tracker.completed
 }
