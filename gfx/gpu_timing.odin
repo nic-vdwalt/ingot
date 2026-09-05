@@ -125,7 +125,6 @@ _gpu_timing_shutdown :: proc(ctx: ^Context) {
 			wg.BufferRelease(slot.resolve)
 		}
 		if slot.query_set != nil {
-			wg.QuerySetDestroy(slot.query_set)
 			wg.QuerySetRelease(slot.query_set)
 		}
 		slot = {}

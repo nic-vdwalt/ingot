@@ -37,12 +37,15 @@ IDLE_SETTLE_FRAMES :: 3
 // becomes visible within IDLE_MAX_WAIT on every target.
 IDLE_MAX_WAIT :: 1.0
 
+SURFACE_RETRY_WAIT :: 0.016
+
 Idle_State :: struct {
-	strategy:        Frame_Strategy,
-	settle_frames:   i32, // full frames still owed after the last activity
-	redraw_deadline: f64, // absolute _now() time of earliest RequestRedrawIn; 0 = none
-	redraw_pending:  bool, // worker-published redraw request; accessed atomically
-	last_frame_time: f64, // _now() of the last granted frame (web idle floor)
+	surface_unavailable: bool,
+	strategy:            Frame_Strategy,
+	settle_frames:       i32, // full frames still owed after the last activity
+	redraw_deadline:     f64, // absolute _now() time of earliest RequestRedrawIn; 0 = none
+	redraw_pending:      bool, // worker-published redraw request; accessed atomically
+	last_frame_time:     f64, // _now() of the last granted frame (web idle floor)
 }
 
 // --- public API -------------------------------------------------------------
@@ -179,6 +182,9 @@ _idle_timeout :: proc(ctx: ^Context) -> (should_wait: bool, timeout: f64) {
 	when ODIN_OS == .JS {
 		return false, 0
 	} else {
+		if ctx.idle.surface_unavailable {
+			return true, SURFACE_RETRY_WAIT
+		}
 		// Minimized: nothing is visible, so render nothing - just wait in
 		// bounded slices (events still wake us; restore marks activity).
 		if ctx.idle.strategy == .Event_Driven && platform_window_iconified(ctx) {
