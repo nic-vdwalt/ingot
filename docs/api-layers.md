@@ -172,6 +172,39 @@ main :: proc() {
 graphics loop. It still yields only `fit.Builder`; it does not expose runtime,
 frame, adapter, paint, or platform internals.
 
+### Ownership and cleanup
+
+`App` owns the graphics/UI lifecycle. Its callback user data must remain valid
+until destruction; shutdown runs before the session and graphics context are
+released. Destroy only a ready or stopped App, and stop a running App first.
+Destruction resets callback bindings but retains caller-configured Builder
+storage for reuse. That storage remains caller-owned and must outlive its use.
+
+`Session` integrates into an externally owned graphics loop and does not close
+that graphics context. `Session_Destroy` clears the wrapper, including Builder
+storage bindings; rebind custom storage after reinitialization. Its draw callback
+and user data are borrowed for `Session_Draw` only. A successful draw call may
+skip the callback when no graphics frame is available; success does not promise
+that a frame was presented. Callback bindings are cleared on that path too.
+
+Parents and Surfaces must not escape their build/render callbacks. Balance begun
+layout and region scopes before returning; never destroy an App or Session with
+an open frame. Scale hooks are installed by shared session initialization for
+explicit and convenience App entry points alike. As before, hooks are installed
+after initial DPI setup and observe subsequent scale changes.
+
+### Theme snapshots
+
+`Get_Theme_Tokens` / `Surface_Theme_Tokens` returns a value snapshot of selected
+active-theme colors and substrate settings. It is not a mirror of every backend
+theme field. Fetch it again after changing the theme or window appearance; an
+existing snapshot does not update itself. Active backgrounds are distinct from
+the source swatches used to derive windowed and fullscreen appearance.
+
+Use `Theme_Get_Color` for named theme roles, `Theme_Pigment` for pigments, and
+`Surface_Reduced_Motion` for the active reduced-motion preference. New backend
+fields do not automatically become public snapshot fields.
+
 ## Boundary maintenance contract
 
 `fit` owns the consumer vocabulary, `ui` owns renderer-independent behavior and

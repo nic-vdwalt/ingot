@@ -27,6 +27,25 @@ fit_configured_session_installs_hooks :: proc(t: ^testing.T) {
 	}
 }
 
+@(test)
+fit_session_destroy_resets_storage :: proc(t: ^testing.T) {
+	session := new(Session)
+	defer free(session)
+	graphics := new(gfx.Context)
+	defer free(graphics)
+	nodes: [STORAGE_NODE_DEFAULT + 1]Storage_Node
+	outputs: [STORAGE_NODE_DEFAULT + 1]^bool
+	for _ in 0 ..< 2 {
+		ui_gfx.session_init_context(&session.inner, graphics)
+		Set_Storage(&session.builder, {nodes = nodes[:], outputs = outputs[:]})
+		testing.expect_value(t, Storage_Capacity(&session.builder), len(nodes))
+		Session_Destroy(session)
+		testing.expect(t, !session.inner.initialized && !session.builder.bound)
+		testing.expect(t, session.draw == nil && session.user_data == nil)
+		testing.expect_value(t, Storage_Capacity(&session.builder), int(STORAGE_NODE_DEFAULT))
+	}
+}
+
 @(private = "file")
 contract_metrics_calls: int
 @(private = "file")
